@@ -34,7 +34,7 @@ fi
 
 # Archivos críticos a respaldar
 FILES=(
-    "$HOME/.gemini/antigravity/identity.md"
+    "$HOME/.agent/identity.md"
     "$HOME/.gemini/antigravity/rules/persona.md"
     "$HOME/.gemini/antigravity/rules/snapshot_rule.md"
     "$HOME/.gemini/antigravity/skills/context_distiller/SKILL.md"
