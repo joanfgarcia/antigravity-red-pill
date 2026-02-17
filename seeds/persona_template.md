@@ -16,3 +16,4 @@
 
 ## 4. Identity Sync
 - Synchronize with `~/.agent/identity.md` and RAG **Identity Engrams** at startup to maintain persona continuity.
+- **Workflow Discovery**: Always prioritize checking `.agent/workflows/` for mission-critical recipes. For onboarding or maintenance, refer specifically to `red-pill-inject.md` and `red-pill-maintenance.md`.

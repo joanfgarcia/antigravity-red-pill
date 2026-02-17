@@ -12,8 +12,9 @@ In standard configurations, AI assistants often suffer from "session amnesia." T
 
 ## 💉 Agentic Installation (Zero Friction)
 The quickest way to deploy the protocol is to let your assistant handle it. 
-**Simply ask your Antigravity Assistant**: *"JARVIS, install the red pill protocol"* or *"Neo, initiate the awakening."*
-The assistant will detect your OS, check dependencies (`podman`, `uv`), and configure the storage bunker automatically.
+**Simply ask your Antigravity Assistant**: *"Please, initiate the awakening."*
+
+The assistant will detect your OS, check dependencies (`podman`, `uv`), and configure the storage bunker automatically by following the [.agent/workflows/red-pill-inject.md](file:///.agent/workflows/red-pill-inject.md) recipe.
 
 ---
 
