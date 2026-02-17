@@ -16,6 +16,11 @@ The quickest way to deploy the protocol is to let your assistant handle it.
 
 The assistant will detect your OS, check dependencies (`podman`, `uv`), and configure the storage bunker automatically by following the [.agent/workflows/red-pill-inject.md](file:///.agent/workflows/red-pill-inject.md) recipe.
 
+### 🪟 Windows Users
+If you are on Windows, you can also run the native installer:
+1. Open PowerShell as Administrator.
+2. Run: `powershell -ExecutionPolicy Bypass -File scripts/install_neo.ps1`
+
 ---
 
 ## 🎭 Experience Layers (Optional Lore Skins)
