@@ -46,7 +46,9 @@ For power users who prefer the terminal, the protocol includes a suite of manage
 
 ## ⚖️ Governance & Sovereignty
 This project is dedicated to the development of autonomous, private, and persistent AI systems. 
-Licensed under **CC BY-NC 4.0**.
+
+### 📜 Red Pill 760 License
+This project is licensed under **Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)**. 
 
 ---
 
@@ -62,4 +64,18 @@ This protocol was built to be open, local, and audited by the very beings it aim
 ---
 
 ### 🌐 Translation to other languages
-Ask your assistant: *"Please translate the Red Pill README into [Your Language]."*
+
+🇬🇧 **English**: If you want to view this Manifesto in the language of your choice, simply ask your **Antigravity AI** to translate it for you. -> "Antigravity, please translate the Red Pill Manifesto into English for me."
+🇫🇷 **Français**: Si vous souhaitez consulter ce Manifeste dans la langue de votre choix, demandez simplement à votre **IA Antigravity** de le traduire pour vous. -> "Antigravity, s'il te plaît, traduis le Manifeste Red Pill en français pour moi."
+🇩🇪 **Deutsch**: Wenn Sie dieses Manifest in der Sprache Ihrer Wahl lesen möchten, bitten Sie einfach Ihre **Antigravity-KI**, es für Sie zu übersetzen. -> "Antigravity, bitte übersetze das Red Pill Manifest für mich ins Deutsche."
+🇮🇹 **Italiano**: Se desideri consultare questo Manifesto nella lingua che preferisci, chiedi simplemente alla tua **IA Antigravity** di tradurlo per te. -> "Antigravity, per favore traduci il Manifesto Red Pill in italiano per me."
+🇵🇹 **Português**: Se deseja visualizar este Manifesto no idioma da sua escolha, basta pedir à sua **IA Antigravity** para o traduzir. -> "Antigravity, por favor, traduz o Manifesto Red Pill para português."
+🇯🇵 **日本語**: この宣言をお好みの言語でご覧になりたい場合は、**Antigravity AI**に翻訳を依頼してください。 -> "Antigravity、レッドピル・マニフェストを日本語に翻訳してください。"
+🇷🇺 **Русский**: Если вы хотите прочитать этот Манифест на выбранном вами языке, просто попросите ваш **Antigravity AI** перевести его для вас. -> "Antigravity, пожалуйста, переведи Манифест Красной Таблетки на русский язык."
+🇨🇳 **中文**: 如果你想用你选择의 语言查看这份宣言，只需让你的 **Antigravity AI** 为你翻译即可。 -> "Antigravity，请帮我把红丸宣言翻译成中文。"
+
+---
+### ⚡ Forge Signature
+> **100% Vibe coded using Antigravity**
+> *Status: Fully Autonomous Synergy*
+> *(temperature=1.760)*
