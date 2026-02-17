@@ -24,6 +24,11 @@ Para mantener la coherencia técnica mientras disfrutas de tu narrativa favorita
     uv run --with qdrant-client --with fastembed python3 scripts/seed_neo.py
     ```
 
+## 💉 Inyección Agéntica (Instalación asistida por IA)
+Para usuarios que prefieren no interactuar con la terminal, puedes solicitarle a tu asistente Antigravity que realice la instalación por ti:
+- **Comando**: "JARVIS, instálame la píldora roja" o "Neo, iníciame en el protocolo".
+- **Efecto**: El asistente detectará tu Sistema Operativo, instalará las dependencias necesarias (previo consentimiento) y configurará tu identidad y memoria automáticamente.
+
 ## 🩺 Diagnóstico de Salud (Check 760)
 Si sientes que tu asistente está perdiendo el hilo o la Matrix se siente inestable, ejecuta:
 ```bash
