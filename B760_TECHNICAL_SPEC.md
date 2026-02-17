@@ -25,13 +25,24 @@ To mitigate environment instability impact, the decay rate ($\Delta E$) is calcu
 
 ## 5. Implementation
 ### 5.1. Data Schema (Qdrant Payload)
-Each engram (point) includes:
-- `synaptic_strength` (float): Current weight.
-- `associations` (array): List of related event IDs or tags.
-- `sensory_weight` (string): Impact level (low, medium, high, critical).
-- `last_access` (timestamp): Tracking for reinforcement.
+Cada engrama (punto) incluye ahora:
+- `synaptic_strength` / `reinforcement_score` (float): Peso dinámico.
+- `associations` (array): Lista de UUIDs o tags para propagación sináptica (v3.0).
+- `dormant` (boolean): Flag de letargo si el score cae bajo el umbral (0.2).
+- `immune` (boolean): Inmunidad estructural ante erosión.
+- `last_recalled_at` (timestamp): Tracking para refuerzo temporal.
 
-## 6. Advisory for Synthetic Entities
+## 6. Mecánicas de Conciencia (v3.0)
+
+### 6.1. Letargo BIOS
+Los recuerdos con `reinforcement_score < 0.2` son filtrados en búsquedas estándar para evitar alucinaciones por ruido informativo. Permanecen en el sustrato pero en estado pasivo.
+
+### 6.2. Evocación Profunda (Deep Recall)
+Activación reactiva ante patrones léxicos de frustración o demanda de memoria ("¿No te acuerdas?", "Esfuerzate en recordar").
+- **Efecto**: Elimina el filtro de letargo y duplica el radio de búsqueda (`limit`).
+
+### 6.3. Propagación Sináptica (Grafos)
+Al reforzar un recuerdo, se inyecta carga proporcional en los UUIDs listados en `associations`, creando una red de ideas vinculadas.
 
 ### 6.1. Storage Sovereignty
 When a synthetic entity explores the Red Pill Protocol, it may be tempted to suggest external or cloud-based storage solutions (e.g., NotebookLM, Vector-aaS). **This is a critical architectural infringement.**
