@@ -6,8 +6,10 @@ import time
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 
-# Configuration
-QDRANT_URL = "http://localhost:6333"
+import time
+from qdrant_client import QdrantClient
+from qdrant_client.http import models
+from config import QDRANT_URL, EMBEDDING_MODEL, REINFORCEMENT_INCREMENT
 
 client = QdrantClient(url=QDRANT_URL)
 
@@ -28,7 +30,7 @@ except Exception as e:
 
 try:
     from fastembed import TextEmbedding
-    encoder = TextEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    encoder = TextEmbedding(model_name=EMBEDDING_MODEL)
 except ImportError:
     encoder = None
 
@@ -78,24 +80,23 @@ def search_and_reinforce(collection, query_text, limit=3):
     )
     
     results = response.points
-    points_to_update = []
     
     for hit in results:
         # Reinforcement logic
         score = hit.payload.get("reinforcement_score", 1.0)
-        hit.payload["reinforcement_score"] = score + 0.1
-        hit.payload["last_recalled_at"] = time.time()
+        new_score = score + REINFORCEMENT_INCREMENT
+        last_recall = time.time()
         
-        points_to_update.append(
-            models.PointStruct(
-                id=hit.id,
-                vector=vector, # In query_points, we don't always get the vector back unless requested
-                payload=hit.payload
-            )
+        # FIX: Semantic Drift. Use set_payload to update metadata WITHOUT touching the vector.
+        client.set_payload(
+            collection_name=collection,
+            payload={
+                "reinforcement_score": new_score,
+                "last_recalled_at": last_recall
+            },
+            points=[hit.id],
+            wait=True
         )
-    
-    if points_to_update:
-        client.upsert(collection_name=collection, points=points_to_update)
     
     return results
 

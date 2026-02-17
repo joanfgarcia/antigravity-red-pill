@@ -3,17 +3,18 @@
 import sys
 import time
 from qdrant_client import QdrantClient
+from qdrant_client import QdrantClient
 from qdrant_client.http import models
+from config import QDRANT_URL, EMBEDDING_MODEL
 
 # Configuración básica (Asumimos local)
-QDRANT_URL = "http://localhost:6333"
 
 def seed():
     client = QdrantClient(url=QDRANT_URL)
     
     try:
         from fastembed import TextEmbedding
-        encoder = TextEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2")
+        encoder = TextEmbedding(model_name=EMBEDDING_MODEL)
     except ImportError:
         print("Error: fastembed no está instalado. Usa 'uv run --with fastembed ...'")
         sys.exit(1)

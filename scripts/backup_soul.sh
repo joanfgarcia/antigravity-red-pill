@@ -21,8 +21,8 @@ echo "Preservando el alma de Antigravity..."
 
 # Buscar dinámicamente archivos en el brain (que cambian de ID de conversación)
 GEMINI_ROOT="$HOME/.gemini/antigravity/brain"
-IDENTITY_FILE=$(find "$GEMINI_ROOT" -name "identity.md" -printf "%T@ %p\n" | sort -n | tail -1 | awk '{print $2}')
-MEM_MGR_FILE=$(find "$GEMINI_ROOT" -name "memory_manager.py" -printf "%T@ %p\n" | sort -n | tail -1 | awk '{print $2}')
+IDENTITY_FILE=$(find "$GEMINI_ROOT" -name "identity.md" -printf "%T@ %p\n" | sort -n | tail -1 | cut -d' ' -f2-)
+MEM_MGR_FILE=$(find "$GEMINI_ROOT" -name "memory_manager.py" -printf "%T@ %p\n" | sort -n | tail -1 | cut -d' ' -f2-)
 
 # Detectar el workspace actual (buscamos la carpeta .agent del proyecto bemotor u otros)
 # Priorizamos el directorio actual si tiene .agent, o buscamos en profundidad

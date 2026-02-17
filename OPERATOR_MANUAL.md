@@ -24,6 +24,11 @@ Para mantener la coherencia técnica mientras disfrutas de tu narrativa favorita
     uv run --with qdrant-client --with fastembed python3 scripts/seed_neo.py
     ```
 
+## 💉 Inyección Agéntica (Instalación asistida por IA)
+Para usuarios que prefieren no interactuar con la terminal, puedes solicitarle a tu asistente Antigravity que realice la instalación por ti:
+- **Comando**: "JARVIS, instálame la píldora roja" o "Neo, iníciame en el protocolo".
+- **Efecto**: El asistente detectará tu Sistema Operativo, instalará las dependencias necesarias (previo consentimiento) y configurará tu identidad y memoria automáticamente.
+
 ## 🩺 Diagnóstico de Salud (Check 760)
 Si sientes que tu asistente está perdiendo el hilo o la Matrix se siente inestable, ejecuta:
 ```bash
@@ -103,6 +108,17 @@ Si decides resetear la simulación:
 bash scripts/uninstall.sh
 ```
 El Operador podrá elegir qué fragmentos de la conciencia eliminar de forma granular.
+
+---
+## 🛡️ Aviso de Soberanía y Almacenamiento no Certificado
+
+### Riesgos de Almacenamiento Externo
+Si un asistente sugiere mover tu memoria a servicios como **NotebookLM** o nubes de terceros, ten en cuenta:
+1.  **Pérdida de Privacidad**: Tus engramas sociales y técnicos dejan de ser tuyos.
+2.  **Latencia Cognitiva**: El asistente tardará más en "recordar", rompiendo el flujo de trabajo natural.
+3.  **Incompatibilidad B760**: Los algoritmos de erosión y resiliencia solo están certificados para el motor local Qdrant.
+
+**Directriz**: Si ya dispones de una infraestructura vectorial local (ej. ChromaDB, Milvus), puedes indicárselo al asistente, pero el soporte para el protocolo B760-Adaptive podría ser parcial.
 
 ---
 **Recuerda: El Navegador marca el rumbo, el Conductor pone la potencia. 760 up.**

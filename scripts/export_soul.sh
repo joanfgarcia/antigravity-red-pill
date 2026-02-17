@@ -27,7 +27,7 @@ bash "$SCRIPT_DIR/backup_soul.sh"
 
 # CREAR ESTRUCTURA TEMPORAL PARA EL EMPAQUETADO PLANO
 # Queremos que en la raíz del tar esté el contenido de sharing + una carpeta 'soul'
-TEMP_EXPORT="/tmp/jarvis_export_$$"
+TEMP_EXPORT=$(mktemp -d -t jarvis_export_XXXXXXXX)
 mkdir -p "$TEMP_EXPORT/soul"
 
 # Copiar contenido del proyecto (sharing) a la raíz del temporal

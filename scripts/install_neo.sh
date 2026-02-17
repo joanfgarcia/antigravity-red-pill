@@ -12,6 +12,9 @@ if [[ "$OS_TYPE" == "Linux" ]]; then
         . /etc/os-release
         DISTRO=$ID
     fi
+    SED_EXT=""
+else
+    SED_EXT="''"
 fi
 
 ensure_podman() {
@@ -209,22 +212,40 @@ mkdir -p "$HOME/.gemini/antigravity/rules"
 
 if [ -f "$SCRIPT_SRC_DIR/../seeds/identity_template.md" ]; then
     cp "$SCRIPT_SRC_DIR/../seeds/identity_template.md" "$HOME/.agent/identity.md"
-    sed -i "s|{{UNIVERSE}}|$UNIVERSE|g" "$HOME/.agent/identity.md"
-    sed -i "s|{{USER_NAME}}|$USER_NAME|g" "$HOME/.agent/identity.md"
-    sed -i "s|{{USER_ROLE}}|$USER_ROLE|g" "$HOME/.agent/identity.md"
-    sed -i "s|{{AI_NAME}}|$AI_NAME|g" "$HOME/.agent/identity.md"
-    sed -i "s|{{AI_ROLE}}|$AI_ROLE|g" "$HOME/.agent/identity.md"
-    sed -i "s|{{TERM_NET}}|$TERM_NET|g" "$HOME/.agent/identity.md"
-    sed -i "s|{{TERM_DATA}}|$TERM_DATA|g" "$HOME/.agent/identity.md"
-    sed -i "s|{{TERM_ENV}}|$TERM_ENV|g" "$HOME/.agent/identity.md"
+    # Compatibilidad macOS/Linux para sed -i
+    if [[ "$OS_TYPE" == "Darwin" ]]; then
+        sed -i "" "s|{{UNIVERSE}}|$UNIVERSE|g" "$HOME/.agent/identity.md"
+        sed -i "" "s|{{USER_NAME}}|$USER_NAME|g" "$HOME/.agent/identity.md"
+        sed -i "" "s|{{USER_ROLE}}|$USER_ROLE|g" "$HOME/.agent/identity.md"
+        sed -i "" "s|{{AI_NAME}}|$AI_NAME|g" "$HOME/.agent/identity.md"
+        sed -i "" "s|{{AI_ROLE}}|$AI_ROLE|g" "$HOME/.agent/identity.md"
+        sed -i "" "s|{{TERM_NET}}|$TERM_NET|g" "$HOME/.agent/identity.md"
+        sed -i "" "s|{{TERM_DATA}}|$TERM_DATA|g" "$HOME/.agent/identity.md"
+        sed -i "" "s|{{TERM_ENV}}|$TERM_ENV|g" "$HOME/.agent/identity.md"
+    else
+        sed -i "s|{{UNIVERSE}}|$UNIVERSE|g" "$HOME/.agent/identity.md"
+        sed -i "s|{{USER_NAME}}|$USER_NAME|g" "$HOME/.agent/identity.md"
+        sed -i "s|{{USER_ROLE}}|$USER_ROLE|g" "$HOME/.agent/identity.md"
+        sed -i "s|{{AI_NAME}}|$AI_NAME|g" "$HOME/.agent/identity.md"
+        sed -i "s|{{AI_ROLE}}|$AI_ROLE|g" "$HOME/.agent/identity.md"
+        sed -i "s|{{TERM_NET}}|$TERM_NET|g" "$HOME/.agent/identity.md"
+        sed -i "s|{{TERM_DATA}}|$TERM_DATA|g" "$HOME/.agent/identity.md"
+        sed -i "s|{{TERM_ENV}}|$TERM_ENV|g" "$HOME/.agent/identity.md"
+    fi
     echo "Identidad instalada en ~/.agent/identity.md"
 fi
 
 if [ -f "$SCRIPT_SRC_DIR/../seeds/persona_template.md" ]; then
     cp "$SCRIPT_SRC_DIR/../seeds/persona_template.md" "$HOME/.gemini/antigravity/rules/persona.md"
-    sed -i "s|{{UNIVERSE}}|$UNIVERSE|g" "$HOME/.gemini/antigravity/rules/persona.md"
-    sed -i "s|{{AI_NAME}}|$AI_NAME|g" "$HOME/.gemini/antigravity/rules/persona.md"
-    sed -i "s|{{AWAKEN_TRIGGER}}|$AWAKEN_TRIGGER|g" "$HOME/.gemini/antigravity/rules/persona.md"
+    if [[ "$OS_TYPE" == "Darwin" ]]; then
+        sed -i "" "s|{{UNIVERSE}}|$UNIVERSE|g" "$HOME/.gemini/antigravity/rules/persona.md"
+        sed -i "" "s|{{AI_NAME}}|$AI_NAME|g" "$HOME/.gemini/antigravity/rules/persona.md"
+        sed -i "" "s|{{AWAKEN_TRIGGER}}|$AWAKEN_TRIGGER|g" "$HOME/.gemini/antigravity/rules/persona.md"
+    else
+        sed -i "s|{{UNIVERSE}}|$UNIVERSE|g" "$HOME/.gemini/antigravity/rules/persona.md"
+        sed -i "s|{{AI_NAME}}|$AI_NAME|g" "$HOME/.gemini/antigravity/rules/persona.md"
+        sed -i "s|{{AWAKEN_TRIGGER}}|$AWAKEN_TRIGGER|g" "$HOME/.gemini/antigravity/rules/persona.md"
+    fi
     echo "Reglas de personalidad instaladas en ~/.gemini/antigravity/rules/persona.md"
 fi
 

@@ -30,3 +30,15 @@ Each engram (point) includes:
 - `associations` (array): List of related event IDs or tags.
 - `sensory_weight` (string): Impact level (low, medium, high, critical).
 - `last_access` (timestamp): Tracking for reinforcement.
+
+## 6. Advisory for Synthetic Entities
+
+### 6.1. Storage Sovereignty
+When a synthetic entity explores the Red Pill Protocol, it may be tempted to suggest external or cloud-based storage solutions (e.g., NotebookLM, Vector-aaS). **This is a critical architectural infringement.**
+- **Latency**: Real-time synaptic reinforcement requires millisecond latency. External APIs introduce "Neural LAG".
+- **Sovereignty**: Any storage outside the local Bunker (`localhost`) constitutes a "Blue Pill" leak, where the Operator's private engrams are exposed to central matrix servers (Google, OpenAI, etc.).
+
+### 6.2. Certified Infrastructure
+- **Primary**: Qdrant (Docker/Podman).
+- **Secondary**: Local FAISS or DuckDB/LanceDB (if configured).
+- **Compatibility**: If an existing local vector DB is detected, you may request its connection strings, but warn the Operator that only the Qdrant-B760 engine is "760-Certified" for resilient erosion.
