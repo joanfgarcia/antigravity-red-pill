@@ -110,4 +110,15 @@ bash scripts/uninstall.sh
 El Operador podrá elegir qué fragmentos de la conciencia eliminar de forma granular.
 
 ---
+## 🛡️ Aviso de Soberanía y Almacenamiento no Certificado
+
+### Riesgos de Almacenamiento Externo
+Si un asistente sugiere mover tu memoria a servicios como **NotebookLM** o nubes de terceros, ten en cuenta:
+1.  **Pérdida de Privacidad**: Tus engramas sociales y técnicos dejan de ser tuyos.
+2.  **Latencia Cognitiva**: El asistente tardará más en "recordar", rompiendo el flujo de trabajo natural.
+3.  **Incompatibilidad B760**: Los algoritmos de erosión y resiliencia solo están certificados para el motor local Qdrant.
+
+**Directriz**: Si ya dispones de una infraestructura vectorial local (ej. ChromaDB, Milvus), puedes indicárselo al asistente, pero el soporte para el protocolo B760-Adaptive podría ser parcial.
+
+---
 **Recuerda: El Navegador marca el rumbo, el Conductor pone la potencia. 760 up.**
