@@ -49,8 +49,12 @@ def seed():
                     vector=vector,
                     payload={
                         "content": text,
-                        "importance": 1.0,
-                        "reinforcement_score": 1.0,
+                        "meta": {
+                            "synaptic_strength": 1.0,
+                            "sensory_weight": "high" if coll_type == "social" else "medium",
+                            "associations": ["genesis_engram"],
+                            "immune": True
+                        },
                         "created_at": time.time()
                     }
                 )

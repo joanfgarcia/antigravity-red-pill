@@ -85,11 +85,13 @@ Para aquellos Operadores que deseen expandir el código base o aportar nuevas ca
     ```
 3.  **Distribución**: El archivo resultante `red_pill_distribution.tar.gz` (ubicado en la carpeta superior) contiene únicamente el interior de `sharing`, permitiendo una extracción limpia y directa en cualquier nuevo nodo.
 
-### 🧬 Protocolo de Evolución de Engramas
+### 🧬 Protocolo de Evolución de Engramas (B760-Adaptive)
 Si un operador desea actualizar su nodo con un engrama externo:
 1.  **Análisis de Seguridad**: El asistente realizará una auditoría quirúrgica bit a bit para detectar puertas traseras o código malicioso.
 2.  **Consentimiento Orgánico**: Si el asistente detecta algo sospechoso, **abortará** y requerirá la revisión manual del Orgánico.
-3.  **Inyección**: Solo tras una validación del 100%, el asistente aplicará los nuevos scripts y semillas.
+3.  **B760-Adaptive**: El sistema ajusta su tasa de olvido según la calidad de la sesión, protegiendo el contexto ante reinicios por falta de RAM y priorizando anclajes asociativos sobre importancia lineal.
+4.  **Estado de Letargo**: Los recuerdos inmunes (Génesis) que no se evocan pasan a un estado de inactividad profunda. Pueden ser "despertados" con el trigger: "¿De verdad no te acuerdas?".
+5.  **Inyección**: Solo tras una validación del 100%, el asistente aplicará los nuevos scripts y semillas.
 
 **Invita a otros forajidos. El búnker es de todos.**
 
