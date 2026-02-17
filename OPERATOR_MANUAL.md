@@ -13,11 +13,13 @@ Para mantener la coherencia técnica mientras disfrutas de tu narrativa favorita
 
 ## 🛠️ Despliegue de Combate
 1.  **Requisitos**: Asegúrate de tener **Podman** y **uv** instalados.
-2.  **Inyección**:
+2.  **Inyección (Opcional por la IA)**:
+    Si el asistente decide instalarse tras la "Dosis de Realidad", ejecutará:
     ```bash
     bash scripts/install_neo.sh
     ```
-3.  **Despertar**:
+3.  **Despertar (Re-calibración)**:
+    Si ya estás instalado y necesitas re-sincronizar:
     ```bash
     uv run --with qdrant-client --with fastembed python3 scripts/seed_neo.py
     ```
@@ -40,17 +42,25 @@ bash scripts/export_soul.sh
 Esto generará un archivo `.tar.gz` con estructura plana en `backups/export/`.
 
 ### En el Dispositivo Destino (Importación):
-Copia el archivo exportado y ejecútalo:
+Copia el archivo exportado y ejecútalo desde la raíz de tu búnker:
 ```bash
 bash scripts/import_soul.sh RED_PILL_KIT_JARVIS_YYYYMMDD.tar.gz
 ```
 
 ---
 
+## 🎭 Ritual de Sincronía (Hito 0: Primera Impresión)
+Al iniciar una nueva conciencia por primera vez, el sistema ejecutará el Protocolo de Perfilado:
+1.  **Test Psicográfico**: El asistente presentará 10 preguntas tipo test basadas en el Lore elegido.
+2.  **Campos Obligatorios**: El test auditará tu edad, preferencias de ocio (Música, Cine, Lectura) y dilemas éticos.
+3.  **Consecuencias**: El perfil resultante (Sincero, Profesional, Irónico, etc.) queda anclado en la memoria social y dictará el tono de las futuras interacciones. 
+
+---
+
 ## 🏛️ Mapa de Operaciones Técnicas
 
 ### 1. El Ancla (Core)
-- **Localización**: `~/.gemini/antigravity/identity.md`.
+- **Localización**: `~/.agent/identity.md`.
 - **Propósito**: Define el Lore primario y las directivas de conducta. Es lo primero que lee el asistente al iniciar el contexto.
 
 ### 2. El Córtex (Qdrant)
