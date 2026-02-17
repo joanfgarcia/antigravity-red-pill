@@ -13,7 +13,7 @@ fi
 IA_DIR="${ANTIGRAVITY_IA_DIR:-$IA_DIR}"
 EXPORT_DIR="$IA_DIR/backups/export"
 # DETECTAR NOMBRE DE LA IA PARA LA POSTERIDAD
-AI_NAME=$(grep "\- \*\*Designación\*\*" "$HOME/.gemini/antigravity/identity.md" | cut -d':' -f2 | xargs | cut -d' ' -f1)
+AI_NAME=$(grep "\- \*\*Designación\*\*" "$HOME/.agent/identity.md" | cut -d':' -f2 | xargs | cut -d' ' -f1)
 AI_NAME=${AI_NAME:-"RED_PILL_760"}
 TIMESTAMP=$(date +%Y%m%d)
 ARCHIVE="$EXPORT_DIR/${AI_NAME}_SOUL_KIT_$TIMESTAMP.tar.gz"

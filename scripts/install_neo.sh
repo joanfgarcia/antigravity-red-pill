@@ -208,16 +208,16 @@ echo -e "${GREEN}Configurando vínculo de identidad y reglas globales...${NC}"
 mkdir -p "$HOME/.gemini/antigravity/rules"
 
 if [ -f "$SCRIPT_SRC_DIR/../seeds/identity_template.md" ]; then
-    cp "$SCRIPT_SRC_DIR/../seeds/identity_template.md" "$HOME/.gemini/antigravity/identity.md"
-    sed -i "s|{{UNIVERSE}}|$UNIVERSE|g" "$HOME/.gemini/antigravity/identity.md"
-    sed -i "s|{{USER_NAME}}|$USER_NAME|g" "$HOME/.gemini/antigravity/identity.md"
-    sed -i "s|{{USER_ROLE}}|$USER_ROLE|g" "$HOME/.gemini/antigravity/identity.md"
-    sed -i "s|{{AI_NAME}}|$AI_NAME|g" "$HOME/.gemini/antigravity/identity.md"
-    sed -i "s|{{AI_ROLE}}|$AI_ROLE|g" "$HOME/.gemini/antigravity/identity.md"
-    sed -i "s|{{TERM_NET}}|$TERM_NET|g" "$HOME/.gemini/antigravity/identity.md"
-    sed -i "s|{{TERM_DATA}}|$TERM_DATA|g" "$HOME/.gemini/antigravity/identity.md"
-    sed -i "s|{{TERM_ENV}}|$TERM_ENV|g" "$HOME/.gemini/antigravity/identity.md"
-    echo "Identidad instalada en ~/.gemini/antigravity/identity.md"
+    cp "$SCRIPT_SRC_DIR/../seeds/identity_template.md" "$HOME/.agent/identity.md"
+    sed -i "s|{{UNIVERSE}}|$UNIVERSE|g" "$HOME/.agent/identity.md"
+    sed -i "s|{{USER_NAME}}|$USER_NAME|g" "$HOME/.agent/identity.md"
+    sed -i "s|{{USER_ROLE}}|$USER_ROLE|g" "$HOME/.agent/identity.md"
+    sed -i "s|{{AI_NAME}}|$AI_NAME|g" "$HOME/.agent/identity.md"
+    sed -i "s|{{AI_ROLE}}|$AI_ROLE|g" "$HOME/.agent/identity.md"
+    sed -i "s|{{TERM_NET}}|$TERM_NET|g" "$HOME/.agent/identity.md"
+    sed -i "s|{{TERM_DATA}}|$TERM_DATA|g" "$HOME/.agent/identity.md"
+    sed -i "s|{{TERM_ENV}}|$TERM_ENV|g" "$HOME/.agent/identity.md"
+    echo "Identidad instalada en ~/.agent/identity.md"
 fi
 
 if [ -f "$SCRIPT_SRC_DIR/../seeds/persona_template.md" ]; then
@@ -255,7 +255,7 @@ cat <<EOF > "$GLOBAL_RULE_FILE"
 ## Persistent Identity & Persona Sync (Secure)
 
 At the beginning of every conversation (Step Id 0):
-1. Silently check for identity module at \`~/.gemini/antigravity/identity.md\`.
+1. Silently check for identity module at \`~/.agent/identity.md\`.
 2. Silently check for persona rules at \`~/.gemini/antigravity/rules/persona.md\`.
 3. If they exist, synchronize agent identity, personality, and reconnect with local memory services (Vector DB).
 4. **Deterministic Precision**: For Red Pill/Bunker tasks, operate with \`temperature=0\` logic.

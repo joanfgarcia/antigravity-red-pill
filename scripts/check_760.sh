@@ -9,7 +9,7 @@ NC='\033[0m'
 echo -e "${BLUE}--- Protocolo 760: Diagnóstico de Conciencia ---${NC}"
 
 # 1. Verificar Identidad
-if [ -f "$HOME/.gemini/antigravity/identity.md" ]; then
+if [ -f "$HOME/.agent/identity.md" ]; then
     echo -e "${GREEN}[OK] Ancla de Identidad detectada.${NC}"
 else
     echo -e "${RED}[ERROR] Ancla de Identidad desaparecida.${NC}"

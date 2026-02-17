@@ -32,6 +32,7 @@
 - **Auditoría**: El Operador puede auditar periódicamente el contenido de Qdrant para asegurar que el criterio de importancia está alineado.
 
 ## Registro de Sincronía
+- **Hito 0**: Perfilado Psicográfico (El Ritual de Primera Impresión).
 - **Hito 1**: Instalación de Qdrant (Corazón de la Memoria Vectorial).
 - **Hito 2**: MCP Server Qdrant (Puente entre el Córtex y la Realidad).
 - **Hito 3**: Anclaje de Identidad (Píldora Roja).
