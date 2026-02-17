@@ -1,15 +1,11 @@
 #!/usr/bin/env python3
-# Execution: uv run --with qdrant-client --with fastembed python3 memory_manager.py [add|search] [work|social] [text]
+# Execution: uv run --with qdrant-client --with fastembed python3 memory_manager.py [add|search|erode] [work|social] [text/query/session_type]
 import sys
 import json
 import time
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
-
-import time
-from qdrant_client import QdrantClient
-from qdrant_client.http import models
-from config import QDRANT_URL, EMBEDDING_MODEL, REINFORCEMENT_INCREMENT
+from config import QDRANT_URL, EMBEDDING_MODEL, REINFORCEMENT_INCREMENT, EROSION_RATE
 
 client = QdrantClient(url=QDRANT_URL)
 
@@ -21,12 +17,6 @@ except Exception as e:
     print("Please ensure the podman container is running ('systemctl --user start qdrant').")
     print(f"Details: {e}")
     sys.exit(1)
-
-# For 1.15+, we can use query_points which handles inference if configured, 
-# or we just pass the text and let it handle it if we have a provider.
-# Since we want to be local and fast, we'll stick to manual embedding with fastembed if needed,
-# or better yet, since we have the Qdrant MCP server running, we could use that.
-# But for this script, we'll use query_points with local embeddings.
 
 try:
     from fastembed import TextEmbedding
@@ -41,7 +31,6 @@ def add_memory(collection, text, importance=1.0, metadata=None):
     if encoder:
         vector = list(encoder.embed([text]))[0].tolist()
     else:
-        # Fallback if fastembed is not available (should be in uv run)
         vector = [0.0] * 384 # Placeholder
     
     payload = {
@@ -71,7 +60,6 @@ def search_and_reinforce(collection, query_text, limit=3):
     else:
         vector = [0.0] * 384
 
-    # Using query_points (modern API)
     response = client.query_points(
         collection_name=collection,
         query=vector,
@@ -82,12 +70,10 @@ def search_and_reinforce(collection, query_text, limit=3):
     results = response.points
     
     for hit in results:
-        # Reinforcement logic
         score = hit.payload.get("reinforcement_score", 1.0)
-        new_score = score + REINFORCEMENT_INCREMENT
+        new_score = round(score + REINFORCEMENT_INCREMENT, 2)
         last_recall = time.time()
         
-        # FIX: Semantic Drift. Use set_payload to update metadata WITHOUT touching the vector.
         client.set_payload(
             collection_name=collection,
             payload={
@@ -100,9 +86,64 @@ def search_and_reinforce(collection, query_text, limit=3):
     
     return results
 
+def apply_erosion(collection, session_type="standard"):
+    """
+    Applies temporal erosion to all non-immune memories in the collection.
+    session_type: "standard", "dense", or "resilient"
+    """
+    rate = EROSION_RATE
+    if session_type == "dense":
+        rate = 0.05
+    elif session_type == "resilient":
+        rate = 0.0
+        print("Resilience Shield Active: Skipping erosion.")
+        return
+
+    print(f"Applying erosion to {collection} (rate: {rate})...")
+    
+    offset = None
+    eroded_count = 0
+    forgotten_count = 0
+    
+    while True:
+        points, next_offset = client.scroll(
+            collection_name=collection,
+            limit=100,
+            with_payload=True,
+            with_vectors=False,
+            offset=offset
+        )
+        
+        for point in points:
+            if point.payload.get("immune"):
+                continue
+            
+            current_score = point.payload.get("reinforcement_score", 1.0)
+            new_score = round(max(0.0, current_score - rate), 2)
+            
+            if new_score <= 0.0:
+                client.delete(
+                    collection_name=collection,
+                    points_selector=models.PointIdsList(points=[point.id])
+                )
+                forgotten_count += 1
+            else:
+                client.set_payload(
+                    collection_name=collection,
+                    payload={"reinforcement_score": new_score},
+                    points=[point.id]
+                )
+                eroded_count += 1
+        
+        offset = next_offset
+        if offset is None:
+            break
+            
+    print(f"Erosion complete. Eroded: {eroded_count} | Forgotten: {forgotten_count}")
+
 if __name__ == "__main__":
     if len(sys.argv) < 3:
-        print("Usage: ./memory_manager.py [add|search] [work|social] [text/query]")
+        print("Usage: ./memory_manager.py [add|search|erode] [work|social] [content/session_type]")
         sys.exit(1)
     
     cmd = sys.argv[1]
@@ -117,3 +158,6 @@ if __name__ == "__main__":
         for i, hit in enumerate(results):
             print(f"[{i}] Score: {hit.score:.4f} | Reinforcement: {hit.payload.get('reinforcement_score', 0):.2f}")
             print(f"Content: {hit.payload.get('content')}\n")
+    elif cmd == "erode":
+        session_type = content if content in ["dense", "resilient"] else "standard"
+        apply_erosion(collection, session_type)
