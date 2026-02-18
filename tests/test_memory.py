@@ -1,11 +1,5 @@
 import pytest
-import sys
-import os
 from unittest.mock import MagicMock, patch
-
-# Add src to path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
-
 from red_pill.memory import MemoryManager
 import red_pill.config as config
 
@@ -31,6 +25,13 @@ def test_exponential_decay(manager):
     assert manager._calculate_decay(1.0, 0.05) == 0.95
     # 2.0 * (1 - 0.1) = 1.8
     assert manager._calculate_decay(2.0, 0.1) == 1.8
+
+def test_exponential_decay_floor(manager):
+    config.DECAY_STRATEGY = "exponential"
+    # Test bug where 0.01 rounded to 2 decimal places stays 0.01
+    # current=0.01, rate=0.05 -> 0.01 * 0.95 = 0.0095 -> round(0.01)
+    # Our fix should force it down to 0.00
+    assert manager._calculate_decay(0.01, 0.05) == 0.0
 
 def test_immunity_promotion(manager, mock_qdrant):
     mock_hit = MagicMock()
@@ -85,20 +86,45 @@ def test_erosion_cycle(manager, mock_qdrant):
     config.DECAY_STRATEGY = "linear"
     config.EROSION_RATE = 0.1
     
-    # Mock scroll result
+    # Mock scroll result: one normal, one immune
     mock_hit = MagicMock()
     mock_hit.payload = {"reinforcement_score": 0.5, "immune": False}
     mock_hit.id = "123"
     mock_hit.vector = [0.1] * 384
     
+    mock_immune = MagicMock()
+    mock_immune.payload = {"reinforcement_score": 10.0, "immune": True}
+    mock_immune.id = "immune_1"
+    
     manager.client.scroll.side_effect = [
-        ([mock_hit], "next"),
+        ([mock_hit, mock_immune], "next"),
         ([], None)
     ]
     
     manager.apply_erosion("test_col")
     
-    # Check upsert
+    # Check upsert was called with ONLY the non-immune point
     assert manager.client.upsert.called
     args, kwargs = manager.client.upsert.call_args
-    assert kwargs['points'][0].payload['reinforcement_score'] == 0.4
+    points = kwargs['points']
+    assert len(points) == 1
+    assert points[0].id == "123"
+    assert points[0].payload['reinforcement_score'] == 0.4
+
+def test_dormancy_filter(manager, mock_qdrant):
+    mock_response = MagicMock()
+    mock_response.points = []
+    manager.client.query_points.return_value = mock_response
+    
+    # Normal search: should have filter
+    manager.search_and_reinforce("test_col", "query", deep_recall=False)
+    args, kwargs = manager.client.query_points.call_args
+    assert kwargs['query_filter'] is not None
+    # Check that filter has gte=0.2
+    range_cond = kwargs['query_filter'].must[0].range
+    assert range_cond.gte == 0.2
+    
+    # Deep Recall: filter should be None
+    manager.search_and_reinforce("test_col", "query", deep_recall=True)
+    args, kwargs = manager.client.query_points.call_args
+    assert kwargs['query_filter'] is None

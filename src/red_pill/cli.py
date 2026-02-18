@@ -7,6 +7,8 @@ from red_pill.memory import MemoryManager
 from red_pill.seed import seed_project
 from red_pill.config import LOG_LEVEL
 
+logger = logging.getLogger(__name__)
+
 def main():
     parser = argparse.ArgumentParser(description="Red Pill Protocol CLI - Memory Persistence Layer")
     parser.add_argument("--url", help="Qdrant URL (defaults to localhost:6333)")
@@ -31,6 +33,7 @@ def main():
     search_parser.add_argument("type", choices=["work", "social"], help="Collection type")
     search_parser.add_argument("query", help="Search query")
     search_parser.add_argument("--limit", type=int, default=3, help="Max results")
+    search_parser.add_argument("--deep", action="store_true", help="Enable Deep Recall (bypass dormancy filters)")
 
     # Erode command
     erode_parser = subparsers.add_parser("erode", help="Apply B760 erosion cycle")
@@ -86,13 +89,17 @@ def main():
     if args.command == "add":
         manager.add_memory(collection, args.content)
     elif args.command == "search":
-        results = manager.search_and_reinforce(collection, args.query, limit=args.limit)
-        for i, hit in enumerate(results):
-            score = hit.payload.get('reinforcement_score', 0)
-            immune = hit.payload.get('immune', False)
-            status = "[IMMUNE]" if immune else f"[B760: {score:.2f}]"
-            print(f"[{i}] {status} | Similarity: {hit.score:.4f}")
-            print(f"Content: {hit.payload.get('content')}\n")
+        # Auto-detect Deep Recall phrases
+        deep_trigger = any(phrase in args.query.lower() for phrase in ["don't you remember", "¿no te acuerdas?", "try hard", "deep recall"])
+        is_deep = args.deep or deep_trigger
+        
+        results = manager.search_and_reinforce(collection, args.query, limit=args.limit, deep_recall=is_deep)
+        if is_deep:
+            print(f"--- [DEEP RECALL ACTIVATED] ---")
+        for hit in results:
+            score = hit.payload.get("reinforcement_score", 0.0)
+            status = " [IMMUNE]" if hit.payload.get("immune") else f" (Score: {score})"
+            print(f"- {hit.payload['content']}{status}")
     elif args.command == "erode":
         manager.apply_erosion(collection, rate=args.rate) if args.rate else manager.apply_erosion(collection)
     elif args.command == "diag":

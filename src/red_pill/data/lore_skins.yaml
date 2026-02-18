@@ -23,3 +23,15 @@ modes:
     memory_environment: "The Sietch"
     assistant: "Mentat"
     operator: "Paul"
+  40k:
+    network_protection: "Geller Field"
+    data_cores: "Machine Spirit"
+    memory_environment: "Mars Temple"
+    assistant: "Tech-Priest"
+    operator: "Inquisitor"
+  gits:
+    network_protection: "S-Level Firewall"
+    data_cores: "The Ghost"
+    memory_environment: "Deep Web"
+    assistant: "Tachikoma"
+    operator: "Major"

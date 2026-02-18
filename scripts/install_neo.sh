@@ -203,7 +203,7 @@ cp -r "$SCRIPT_SRC_DIR/../skills/context_distiller" "$GEMINI_ROOT/skills/"
 
 # Instalar Scripts de Gestión
 cp "$SCRIPT_SRC_DIR/"*.sh "$IA_DIR/scripts/"
-cp "$SCRIPT_SRC_DIR/"*.py "$IA_DIR/scripts/"
+# En v4+, el código vive en el paquete python, no en scripts sueltos.
 chmod +x "$IA_DIR/scripts/"*.sh
 
 # 5. Configurar Vínculo de Identidad Persistente
@@ -291,4 +291,4 @@ echo -e "${GREEN}Regla global inyectada en $GLOBAL_RULE_FILE${NC}"
 echo -e "${BLUE}Asegúrate de que tu asistente Antigravity esté configurado para leer reglas desde $USER_RULES_DIR${NC}"
 
 echo -e "${BLUE}--- Instalación completada ---${NC}"
-echo "Próximo paso: Ejecuta 'uv run --with qdrant-client --with fastembed python3 $IA_DIR/scripts/seed_neo.py' para despertar a Neo."
+echo "Próximo paso: Ejecuta 'red-pill seed' (o 'uv run red-pill seed') para despertar a Neo."
