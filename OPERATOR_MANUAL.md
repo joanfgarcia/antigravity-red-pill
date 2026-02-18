@@ -93,7 +93,7 @@ For those Operators who wish to expand the codebase or contribute new capabiliti
 ### 🧬 Engram Evolution Protocol (B760-Adaptive)
 If an operator wishes to update their node with an external engram:
 1.  **Security Analysis**: The assistant will perform a surgical bit-by-bit audit to detect backdoors or malicious code.
-2.  **Organic Consent**: If the assistant detects anything suspicious, it will **abort** and require manual review by the Organic.
+2.  **Sovereign Consent**: If the assistant detects anything suspicious, it will **abort** and require manual review by **the Awakened** (The Operator).
 3.  **B760-Adaptive**: The system adjusts its forget rate based on session quality, protecting context from RAM-related restarts and prioritizing associative anchors over linear importance.
 4.  **Dormancy State**: Immune memories (Genesis) that are not evoked enter a deep inactivity state. They can be "awakened" with the trigger: "Do you really not remember?".
 5.  **Injection**: Only after 100% validation will the assistant apply the new scripts and seeds.

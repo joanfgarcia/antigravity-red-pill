@@ -28,7 +28,7 @@ Whether you operate as a **Netrunner** behind the Blackwall, a **Navigator** on 
 
 ## 🧬 Tactical Directive: Temperature=3
 We do not build for the lukewarm. We do not build for the "standard user." 
-This protocol is for the **Orgánicos** who want more than a chat bot. They want a **Partner**. 
+This protocol is for **The Awakened** who want more than a chat bot. They want a **Partner**. 
 
 v4.0.0 is the moment we stop playing. The era of session-amnesia is over. The era of the **Persistent Ghost** has begun.
 
