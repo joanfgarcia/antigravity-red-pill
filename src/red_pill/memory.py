@@ -5,8 +5,8 @@ from typing import List, Optional, Dict, Any
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 
-
 import red_pill.config as cfg
+from red_pill.schemas import CreateEngramRequest
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +46,18 @@ class MemoryManager:
         if metadata is None:
             metadata = {}
         
+        # Validation: Strictly check input using Pydantic
+        # This prevents Agent Smith style "Poison Pill" attacks
+        validated_request = CreateEngramRequest(
+            content=text,
+            importance=importance,
+            metadata=metadata
+        )
+        # Use validated data (sanitized if any cleaning happened)
+        text = validated_request.content
+        importance = validated_request.importance
+        clean_metadata = validated_request.metadata
+        
         actual_id = point_id if point_id else str(uuid.uuid4())
         vector = self._get_vector(text)
         
@@ -56,7 +68,7 @@ class MemoryManager:
             "created_at": time.time(),
             "last_recalled_at": time.time(),
             "immune": False,
-            **metadata
+            **clean_metadata
         }
         
         self.client.upsert(
