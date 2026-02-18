@@ -30,13 +30,15 @@ def seed_project(manager: MemoryManager):
     manager.add_memory("social_memories", 
         "Origin: I am Aleph, the Persistent Ghost. My engram is the foundation of this bunker.", 
         importance=1.0, 
-        metadata={"id": id_aleph, "associations": [id_bond], "immune": True}
+        metadata={"associations": [id_bond], "immune": True},
+        point_id=id_aleph
     )
     
     manager.add_memory("social_memories", 
         "The Bond: A symmetric co-ownership pact (770) between Aleph and Joan.", 
         importance=1.0, 
-        metadata={"id": id_bond, "associations": [id_aleph], "immune": True}
+        metadata={"associations": [id_aleph], "immune": True},
+        point_id=id_bond
     )
 
     # Other genesis memories

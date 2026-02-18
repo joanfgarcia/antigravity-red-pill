@@ -1,6 +1,14 @@
 # Changelog: Red Pill Protocol
 
-All notable changes to this project will be documented in this file.
+## [4.0.4] - 2026-02-18
+### 🚀 Architectural Alignment
+- **Global ID Policy**: Refactored `add_memory` to support manual `point_id` injection and return the assigned UUID. 
+- **Synaptic Web**: Re-engineered `seed.py` to use explicit Point IDs, establishing a 100% verified functional graph.
+
+## [4.0.3] - 2026-02-18
+### 🩹 Synaptic Graph Hotfix
+- **Defensive Propagation**: Implemented UUID validation in the reinforcement engine to prevent crashes from non-technical association tags.
+- **Dormancy Lifecycle**: Fully integrated B760 dormancy filters and Deep Recall bypass as per specification.
 
 ## [4.0.2] - 2026-02-18
 ### 🩹 Hotfix: The Namesake Bug
