@@ -2,7 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
-## [4.0.0] - 2026-02-18
+## [4.0.2] - 2026-02-18
+### 🩹 Hotfix: The Namesake Bug
+- **YAML Restoration**: Fixed a critical bug where the `760` skin key was parsed as an integer, causing it to be "not found" by the CLI.
+- **Defensive Parsing**: Added string conversion to lore skin loader to prevent future numeric collisions.
+
+## [4.0.1] - 2026-02-18
 ### 🚀 Structural Evolution
 - **Package Architecture**: Restructured project into a standard Python package under `src/red_pill/`.
 - **Global CLI**: Introduced the `red-pill` command for easier deployment and memory management.
