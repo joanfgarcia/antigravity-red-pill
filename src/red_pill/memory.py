@@ -71,9 +71,26 @@ class MemoryManager:
         if not point_ids:
             return []
             
+        # Filter valid IDs (UUID strings or integers)
+        valid_ids = []
+        for pid in point_ids:
+            if isinstance(pid, int):
+                valid_ids.append(pid)
+            elif isinstance(pid, str):
+                try:
+                    # Check if it's a valid UUID
+                    uuid.UUID(pid)
+                    valid_ids.append(pid)
+                except ValueError:
+                    logger.debug(f"Skipping non-UUID association: {pid}")
+                    continue
+        
+        if not valid_ids:
+            return []
+
         points = self.client.retrieve(
             collection_name=collection,
-            ids=point_ids,
+            ids=valid_ids,
             with_payload=True,
             with_vectors=True
         )
