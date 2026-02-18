@@ -1,5 +1,12 @@
 # Changelog: Red Pill Protocol
 
+## [4.0.8] - 2026-02-18
+### 🩹 Emergency Hotfix (The Patch)
+- **[CRITICAL] Pydantic Dependency**: Fixed missing `pydantic>=2.0.0` in `pyproject.toml` which broke new installations.
+- **[FIX] Test Mocks**: Corrected `test_memory.py` to use valid UUIDs, ensuring tests validate real logic instead of bypassing filters.
+- **[FIX] Deprecated API**: Replaced `recreate_collection` with `delete`+`create` in stress tests to support modern Qdrant clients.
+- **[CLEANUP] Dead Code**: Removed unused `EngramMetadata` class from `schemas.py`.
+
 ## [4.0.7] - 2026-02-18
 ### 🛡️ Ontological Integrity & Scale
 - **[FEAT] Pydantic Schemas**: Implemented strict `EngramMetadata` validation to reject "Poison Pill" attacks.
