@@ -66,30 +66,20 @@ class MemoryManager:
         logger.info(f"Memory added to {collection} with ID: {actual_id}")
         return actual_id
 
-    def _reinforce_points(self, collection: str, point_ids: List[str], increment: float) -> List[models.PointStruct]:
+    def _reinforce_points(self, collection: str, point_ids: List[str], increments: Dict[str, float]) -> List[models.PointStruct]:
         """
-        Retrieves points by ID, applies reinforcement, and returns them.
+        Retrieves points by ID, applies reinforcement stacking, and returns them.
         """
         if not point_ids:
             return []
             
-        # Filter valid IDs (UUID strings or integers)
+        # Filter valid IDs
         valid_ids = []
         for pid in point_ids:
-            if isinstance(pid, int):
+            if isinstance(pid, (int, str)): # uuid.UUID check already done or simplified here
                 valid_ids.append(pid)
-            elif isinstance(pid, str):
-                try:
-                    # Check if it's a valid UUID
-                    uuid.UUID(pid)
-                    valid_ids.append(pid)
-                except ValueError:
-                    logger.debug(f"Skipping non-UUID association: {pid}")
-                    continue
         
-        if not valid_ids:
-            return []
-
+        # Verify IDs against Qdrant strictly
         points = self.client.retrieve(
             collection_name=collection,
             ids=valid_ids,
@@ -100,7 +90,9 @@ class MemoryManager:
         updated_points = []
         for p in points:
             score = p.payload.get("reinforcement_score", 1.0)
-            new_score = min(score + increment, cfg.IMMUNITY_THRESHOLD)
+            inc = increments.get(str(p.id), increments.get(p.id, 0.0))
+            
+            new_score = min(score + inc, cfg.IMMUNITY_THRESHOLD)
             p.payload["reinforcement_score"] = round(new_score, 2)
             p.payload["last_recalled_at"] = time.time()
             
@@ -148,45 +140,37 @@ class MemoryManager:
             with_vectors=True
         )
         
-        points_to_update = []
-        associations_to_reinforce = []
-
+        # Reinforcement Increment Map
+        # stacks increments from hits (0.1) and synaptic propagation (0.05)
+        increment_map: Dict[str, float] = {}
+        
+        # 1. Direct Hits
         for hit in response.points:
-            # Primary reinforcement
-            score = hit.payload.get("reinforcement_score", 1.0)
-            new_score = min(score + cfg.REINFORCEMENT_INCREMENT, cfg.IMMUNITY_THRESHOLD)
-            hit.payload["reinforcement_score"] = round(new_score, 2)
-            hit.payload["last_recalled_at"] = time.time()
+            increment_map[hit.id] = cfg.REINFORCEMENT_INCREMENT
             
-            if hit.payload["reinforcement_score"] >= cfg.IMMUNITY_THRESHOLD:
-                hit.payload["immune"] = True
-                logger.info(f"Memory {hit.id} promoted to IMMUNE status.")
-            
-            points_to_update.append(
-                models.PointStruct(
-                    id=hit.id,
-                    vector=hit.vector,
-                    payload=hit.payload
-                )
-            )
-            
-            # Collect unique associations for propagation
+        # 2. Synaptic Propagation
+        propagation_increment = cfg.REINFORCEMENT_INCREMENT * cfg.PROPAGATION_FACTOR
+        for hit in response.points:
             assocs = hit.payload.get("associations", [])
             for assoc_id in assocs:
-                if assoc_id not in associations_to_reinforce:
-                    associations_to_reinforce.append(assoc_id)
+                # Stack the increment if it's already in the map (multi-path reinforcement)
+                increment_map[assoc_id] = increment_map.get(assoc_id, 0.0) + propagation_increment
 
-        # Synaptic Propagation
-        if associations_to_reinforce:
-            propagation_increment = cfg.REINFORCEMENT_INCREMENT * cfg.PROPAGATION_FACTOR
-            propagated_points = self._reinforce_points(collection, associations_to_reinforce, propagation_increment)
-            points_to_update.extend(propagated_points)
+        if not increment_map:
+            return response.points
 
-        if points_to_update:
-            # Ensure we don't duplicate points in upsert if an association was also a hit
-            unique_points = {p.id: p for p in points_to_update}.values()
-            self.client.upsert(collection_name=collection, points=list(unique_points))
+        # 3. Apply reinforcements in bulk
+        points_to_update = self._reinforce_points(collection, list(increment_map.keys()), increment_map)
         
+        if points_to_update:
+            self.client.upsert(collection_name=collection, points=points_to_update)
+            # Map reinforced payloads back to response hits for immediate usage
+            update_map = {p.id: p.payload for p in points_to_update}
+            for hit in response.points:
+                if hit.id in update_map:
+                    hit.payload.update(update_map[hit.id])
+        
+        # Note: we return response.points but the actual DB state is now updated with stacked scores.
         return response.points
 
     def _calculate_decay(self, current_score: float, rate: float) -> float:
