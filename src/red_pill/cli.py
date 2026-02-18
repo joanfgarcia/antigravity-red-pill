@@ -50,7 +50,10 @@ def main():
     log_level = logging.DEBUG if args.verbose else getattr(logging, LOG_LEVEL.upper(), logging.INFO)
     logging.basicConfig(level=log_level, format="%(levelname)s: %(message)s")
     
-    manager = MemoryManager(url=args.url) if args.url else MemoryManager()
+    # manager = MemoryManager(url=args.url) if args.url else MemoryManager() 
+    # REMOVED: Premature instantiation. We'll instantiate it only when needed.
+    # But wait, seed command needs manager. And other commands too.
+    # We should instantiate it inside the command blocks or helper.
     
     if not args.command:
         parser.print_help()
@@ -82,6 +85,7 @@ def main():
         return
 
     if args.command == "seed":
+        manager = MemoryManager(url=args.url) if args.url else MemoryManager()
         seed_project(manager)
         return # Exit after seed command as it doesn't require 'type'
 
@@ -89,6 +93,7 @@ def main():
     collection = "social_memories" if args.type == "social" else "work_memories"
 
     try:
+        manager = MemoryManager(url=args.url) if args.url else MemoryManager()
         if args.command == "add":
             manager.add_memory(collection, args.content)
         elif args.command == "search":
