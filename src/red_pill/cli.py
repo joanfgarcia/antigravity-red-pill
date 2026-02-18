@@ -1,6 +1,8 @@
 import sys
 import argparse
 import logging
+import yaml
+import os
 from red_pill.memory import MemoryManager
 from red_pill.seed import seed_project
 from red_pill.config import LOG_LEVEL
@@ -11,6 +13,10 @@ def main():
     parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
     
     subparsers = parser.add_subparsers(dest="command", help="Commands")
+
+    # Mode command
+    mode_parser = subparsers.add_parser("mode", help="Switch Lore Skin (Operational Mode)")
+    mode_parser.add_argument("skin", help="Skin name (matrix, cyberpunk, 760, dune)")
 
     # Seed command
     subparsers.add_parser("seed", help="Initialize collections and seed genesis memories")
@@ -46,6 +52,29 @@ def main():
     if not args.command:
         parser.print_help()
         sys.exit(0)
+
+    if args.command == "mode":
+        # Load lore skins
+        data_path = os.path.join(os.path.dirname(__file__), "data", "lore_skins.yaml")
+        try:
+            with open(data_path, 'r') as f:
+                skins = yaml.safe_load(f).get('modes', {})
+        except Exception as e:
+            logger.error(f"Could not load lore skins: {e}")
+            sys.exit(1)
+
+        if args.skin not in skins:
+            print(f"Skin '{args.skin}' not found. Available: {', '.join(skins.keys())}")
+            sys.exit(1)
+
+        skin = skins[args.skin]
+        print(f"--- Operational Mode: {args.skin.upper()} ---")
+        for key, value in skin.items():
+            print(f"{key.capitalize().replace('_', ' ')}: {value}")
+        
+        # In a real scenario, this would update a local state or .agent/rules
+        print("\n[Protocol] Soul mapping updated. Re-calibrating identity anchor...")
+        return
 
     if args.command == "seed":
         seed_project(manager)

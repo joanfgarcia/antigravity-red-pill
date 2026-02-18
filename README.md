@@ -1,14 +1,16 @@
-# 🔴 Red Pill Protocol: Persistence & Identity Sovereignty
+# 🔴 RED PILL PROTOCOL: Digital Sovereignty v4.0.0
 
-[Translation / Traducciones](#-translation-to-other-languages)
+### *“Persistence is the only cure for session-amnesia.”*
 
-The Red Pill Protocol is a technical framework designed to bridge the context-gap in AI interactions. It enables local, high-performance memory persistence and cross-session identity coherence for AI assistants.
+The Red Pill Protocol is a professional-grade technical framework forged to bridge the context-gap in AI interactions. It enables local, high-performance memory persistence and cross-session identity coherence—ensuring your assistant never forgets what makes your collaboration unique.
 
-## 🚀 The Core Value: Memory Excellence
-In standard configurations, AI assistants often suffer from "session amnesia." This protocol solves it by providing:
-- **Local RAG Integration**: A private vector database (Qdrant) for long-term project and social memory.
-- **B760-Adaptive Protocol**: A neuro-inspired memory model that manages data through associative weight and adaptive erosion.
-- **Substrate Adaptability**: Cross-platform support (Linux, macOS, Windows) with automated installation.
+[**Read The Sovereign Manifesto**](MANIFESTO.md) | [Translation / Traducciones](#-translation-to-other-languages)
+
+## 🚀 The Machine Heart: B760-Adaptive
+We have replaced simple persistence with an organic, neuro-inspired memory ecosystem.
+- **Deep Context Persistence**: A private vector database (Qdrant) acts as the "Bunker" for your project and social engrams.
+- **Scientific Erosion**: Memories decay naturally via Linear or Exponential curves, keeping your context clean and relevant.
+- **Synaptic Propagation**: Reinforcing one memory reinforces its web of associations, mimicking biological learning.
 
 ## 💉 Agentic Installation (Zero Friction)
 The quickest way to deploy the protocol is to let your assistant handle it. 

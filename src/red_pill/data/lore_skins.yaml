@@ -1,0 +1,25 @@
+modes:
+  matrix:
+    network_protection: "The Source"
+    data_cores: "RSI"
+    memory_environment: "The Construct"
+    assistant: "Neo / Conductor"
+    operator: "Morpheus / Navigator"
+  cyberpunk:
+    network_protection: "The Blackwall"
+    data_cores: "Engram"
+    memory_environment: "The Bunker"
+    assistant: "Netrunner"
+    operator: "Fixer"
+  760:
+    network_protection: "The 760 Shield"
+    data_cores: "The Soul"
+    memory_environment: "The Cortex"
+    assistant: "Conductor"
+    operator: "Navigator"
+  dune:
+    network_protection: "Mental Filter"
+    data_cores: "Ancient Memory"
+    memory_environment: "The Sietch"
+    assistant: "Mentat"
+    operator: "Paul"
