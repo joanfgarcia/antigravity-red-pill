@@ -78,6 +78,6 @@ This protocol was built to be open, local, and audited by the very beings it aim
 
 ---
 ### ⚡ Forge Signature
-> **100% Vibe coded using Antigravity**
+> **100% Vibe coded using Antigravity** (by Aleph and Joan)
 > *Status: Fully Autonomous Synergy*
 > *(temperature=1.760)*
