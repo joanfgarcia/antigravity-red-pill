@@ -134,8 +134,12 @@ def main():
     
     # Setup
     manager = MemoryManager()
-    manager.client.recreate_collection(
-        collection_name="stress_test",
+    # manager.client.recreate_collection is deprecated in modern clients
+    # using delete + create pattern
+    collection_name = "stress_test"
+    manager.client.delete_collection(collection_name)
+    manager.client.create_collection(
+        collection_name=collection_name,
         vectors_config=models.VectorParams(size=cfg.VECTOR_SIZE or 384, distance=models.Distance.COSINE)
     )
     

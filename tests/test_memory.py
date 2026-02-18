@@ -37,7 +37,7 @@ def test_exponential_decay_floor(manager):
 def test_immunity_promotion(manager, mock_qdrant):
     mock_hit = MagicMock()
     mock_hit.payload = {"reinforcement_score": 9.9, "content": "test"}
-    mock_hit.id = "123"
+    mock_hit.id = str(uuid.uuid4())
     
     mock_response = MagicMock()
     mock_response.points = [mock_hit]
@@ -54,8 +54,8 @@ def test_synaptic_propagation(manager, mock_qdrant):
     
     # Mock search result with association
     mock_hit = MagicMock()
-    mock_hit.payload = {"reinforcement_score": 1.0, "content": "primary", "associations": ["assoc_1"]}
-    mock_hit.id = "123"
+    mock_hit.payload = {"reinforcement_score": 1.0, "content": "primary", "associations": [str(uuid.uuid4())]}
+    mock_hit.id = str(uuid.uuid4())
     mock_hit.vector = [0.1] * 384
     
     mock_response = MagicMock()
@@ -65,7 +65,8 @@ def test_synaptic_propagation(manager, mock_qdrant):
     # Mock retrieval of BOTH primary and association
     mock_assoc = MagicMock()
     mock_assoc.payload = {"reinforcement_score": 1.0, "content": "associated"}
-    mock_assoc.id = "assoc_1"
+    mock_assoc.id = str(uuid.uuid4()) # assoc_1
+    mock_hit.payload["associations"] = [mock_assoc.id] # Link them dynamically
     mock_assoc.vector = [0.2] * 384
     manager.client.retrieve.return_value = [mock_hit, mock_assoc]
     
@@ -91,11 +92,11 @@ def test_synaptic_propagation(manager, mock_qdrant):
         payload = kwargs['payload']
         payloads[pid] = payload
         
-    assert "123" in payloads
-    assert "assoc_1" in payloads
+    assert mock_hit.id in payloads
+    assert mock_assoc.id in payloads
     
-    assert payloads["123"]['reinforcement_score'] == 1.1
-    assert payloads["assoc_1"]['reinforcement_score'] == 1.05
+    assert payloads[mock_hit.id]['reinforcement_score'] == 1.1
+    assert payloads[mock_assoc.id]['reinforcement_score'] == 1.05
 
 def test_erosion_cycle(manager, mock_qdrant):
     config.DECAY_STRATEGY = "linear"
@@ -104,7 +105,7 @@ def test_erosion_cycle(manager, mock_qdrant):
     # Mock scroll result: one normal, one immune
     mock_hit = MagicMock()
     mock_hit.payload = {"reinforcement_score": 0.5, "immune": False}
-    mock_hit.id = "123"
+    mock_hit.id = str(uuid.uuid4())
     mock_hit.vector = [0.1] * 384
     
     mock_immune = MagicMock()
@@ -131,7 +132,7 @@ def test_erosion_cycle(manager, mock_qdrant):
     assert manager.client.set_payload.call_count == 1
     
     args, kwargs = manager.client.set_payload.call_args
-    assert kwargs['points'] == ["123"]
+    assert kwargs['points'] == [mock_hit.id]
     assert kwargs['payload']['reinforcement_score'] == 0.4
 
 def test_dormancy_filter(manager, mock_qdrant):

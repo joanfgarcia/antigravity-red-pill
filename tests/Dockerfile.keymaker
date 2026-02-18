@@ -1,0 +1,16 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install git just in case dependencies need it
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+
+# Copy project root
+COPY . .
+
+# Install the package in editable mode or standard mode
+# We use standard install to simulate a real user
+RUN pip install .
+
+# Default command
+CMD ["red-pill", "diag", "work"]

@@ -84,7 +84,7 @@ class MemoryManager:
         logger.info(f"Memory added to {collection} with ID: {actual_id}")
         return actual_id
 
-    def _reinforce_points(self, collection: str, point_ids: List[str], increments: Dict[str, float]) -> List[models.PointStruct]:
+    def _reinforce_points(self, collection: str, point_ids: List[str], increments: Dict[str, float]) -> List[PointUpdate]:
         """
         Retrieves points by ID, applies reinforcement stacking, and returns them.
         """
