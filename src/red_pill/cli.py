@@ -2,12 +2,18 @@ import sys
 import argparse
 import logging
 from red_pill.memory import MemoryManager
+from red_pill.seed import seed_project
+from red_pill.config import LOG_LEVEL
 
 def main():
     parser = argparse.ArgumentParser(description="Red Pill Protocol CLI - Memory Persistence Layer")
     parser.add_argument("--url", help="Qdrant URL (defaults to localhost:6333)")
+    parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
     
     subparsers = parser.add_subparsers(dest="command", help="Commands")
+
+    # Seed command
+    subparsers.add_parser("seed", help="Initialize collections and seed genesis memories")
 
     # Add command
     add_parser = subparsers.add_parser("add", help="Add a new memory engram")
@@ -32,9 +38,20 @@ def main():
     args = parser.parse_args()
 
     # Configure logging
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    log_level = logging.DEBUG if args.verbose else getattr(logging, LOG_LEVEL.upper(), logging.INFO)
+    logging.basicConfig(level=log_level, format="%(levelname)s: %(message)s")
     
     manager = MemoryManager(url=args.url) if args.url else MemoryManager()
+    
+    if not args.command:
+        parser.print_help()
+        sys.exit(0)
+
+    if args.command == "seed":
+        seed_project(manager)
+        return # Exit after seed command as it doesn't require 'type'
+
+    # For commands that require 'type'
     collection = "social_memories" if args.type == "social" else "work_memories"
 
     if args.command == "add":
