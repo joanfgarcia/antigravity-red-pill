@@ -5,7 +5,8 @@ from typing import List, Optional, Dict, Any
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 
-from red_pill.config import QDRANT_URL, EMBEDDING_MODEL, EROSION_RATE, REINFORCEMENT_INCREMENT, IMMUNITY_THRESHOLD
+import math
+import red_pill.config as cfg
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +16,7 @@ class MemoryManager:
     Handles semantic storage, reinforcement, and erosion of engrams.
     """
     
-    def __init__(self, url: str = QDRANT_URL):
+    def __init__(self, url: str = cfg.QDRANT_URL):
         self.client = QdrantClient(url=url)
         self.encoder = None
         self._initialize_encoder()
@@ -23,7 +24,7 @@ class MemoryManager:
     def _initialize_encoder(self):
         try:
             from fastembed import TextEmbedding
-            self.encoder = TextEmbedding(model_name=EMBEDDING_MODEL)
+            self.encoder = TextEmbedding(model_name=cfg.EMBEDDING_MODEL)
         except ImportError:
             logger.warning("fastembed not found. Falling back to zero-vectors (dry-run mode).")
 
@@ -80,12 +81,12 @@ class MemoryManager:
         for hit in response.points:
             score = hit.payload.get("reinforcement_score", 1.0)
             # Apply B760 reinforcement
-            new_score = min(score + REINFORCEMENT_INCREMENT, IMMUNITY_THRESHOLD)
+            new_score = min(score + cfg.REINFORCEMENT_INCREMENT, cfg.IMMUNITY_THRESHOLD)
             hit.payload["reinforcement_score"] = round(new_score, 2)
             hit.payload["last_recalled_at"] = time.time()
             
             # Immunity check
-            if hit.payload["reinforcement_score"] >= IMMUNITY_THRESHOLD:
+            if hit.payload["reinforcement_score"] >= cfg.IMMUNITY_THRESHOLD:
                 hit.payload["immune"] = True
                 logger.info(f"Memory {hit.id} promoted to IMMUNE status.")
             
@@ -102,14 +103,34 @@ class MemoryManager:
         
         return response.points
 
-    def apply_erosion(self, collection: str, rate: float = EROSION_RATE):
+    def _calculate_decay(self, current_score: float, rate: float) -> float:
         """
-        Decays non-immune memories. Memories with score <= 0 are forgotten.
+        Calculates the new score based on the configured strategy.
         """
+        if cfg.DECAY_STRATEGY == "exponential":
+            # Exponential decay: score * (1 - rate)
+            # rate of 0.05 means it keeps 95% of its strength
+            new_score = current_score * (1.0 - rate)
+        else:
+            # Default to linear decay: score - rate
+            new_score = current_score - rate
+            
+        return round(max(new_score, 0.0), 2)
+
+    def apply_erosion(self, collection: str, rate: float = None):
+        """
+        Decays non-immune memories using the configured DECAY_STRATEGY.
+        Memories with score <= 0 are forgotten.
+        """
+        if rate is None:
+            rate = cfg.EROSION_RATE
+
         offset = None
         eroded_count = 0
         deleted_count = 0
         
+        logger.info(f"Starting erosion cycle on {collection} using {cfg.DECAY_STRATEGY} strategy.")
+
         while True:
             response = self.client.scroll(
                 collection_name=collection,
@@ -127,7 +148,7 @@ class MemoryManager:
                     continue
                 
                 current_score = hit.payload.get("reinforcement_score", 1.0)
-                new_score = round(max(current_score - rate, 0.0), 2)
+                new_score = self._calculate_decay(current_score, rate)
                 
                 if new_score <= 0:
                     points_to_delete.append(hit.id)
