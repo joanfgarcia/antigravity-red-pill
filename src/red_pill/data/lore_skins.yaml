@@ -11,7 +11,7 @@ modes:
     memory_environment: "The Bunker"
     assistant: "Netrunner"
     operator: "Fixer"
-  760:
+  "760":
     network_protection: "The 760 Shield"
     data_cores: "The Soul"
     memory_environment: "The Cortex"

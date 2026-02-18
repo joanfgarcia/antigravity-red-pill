@@ -61,7 +61,9 @@ def main():
         data_path = os.path.join(os.path.dirname(__file__), "data", "lore_skins.yaml")
         try:
             with open(data_path, 'r') as f:
-                skins = yaml.safe_load(f).get('modes', {})
+                raw_skins = yaml.safe_load(f).get('modes', {})
+                # Ensure all keys are strings (fixes naming bugs like integer 760)
+                skins = {str(k): v for k, v in raw_skins.items()}
         except Exception as e:
             logger.error(f"Could not load lore skins: {e}")
             sys.exit(1)
