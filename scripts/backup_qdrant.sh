@@ -18,8 +18,28 @@ mkdir -p "$BACKUP_DIR"
 
 echo "Iniciando Snapshot de Qdrant..."
 
-# Trigger snapshot via API
-curl -X POST "http://localhost:6333/collections/social_memories/snapshots" -o "$BACKUP_DIR/social_memories_$TIMESTAMP.snapshot"
-curl -X POST "http://localhost:6333/collections/work_memories/snapshots" -o "$BACKUP_DIR/work_memories_$TIMESTAMP.snapshot"
+# Function to perform two-step snapshot (create + download)
+take_snapshot() {
+    local collection=$1
+    echo "Triggering snapshot for $collection..."
+    
+    # 1. POST to create snapshot and capture response
+    local response=$(curl -s -X POST "http://localhost:6333/collections/$collection/snapshots")
+    
+    # 2. Extract snapshot name using python
+    local snap_name=$(echo "$response" | python3 -c "import sys, json; print(json.load(sys.stdin)['result']['name'])")
+    
+    if [ -n "$snap_name" ]; then
+        echo "Downloading snapshot: $snap_name"
+        # 3. GET to download binary
+        curl -s "http://localhost:6333/collections/$collection/snapshots/$snap_name" -o "$BACKUP_DIR/${collection}_${TIMESTAMP}.snapshot"
+        echo "Success: $collection snapshot saved."
+    else
+        echo "Error: Failed to create snapshot for $collection. Response: $response"
+    fi
+}
 
-echo "Snapshot completado en $BACKUP_DIR"
+take_snapshot "social_memories"
+take_snapshot "work_memories"
+
+echo "Backup process finished in $BACKUP_DIR"

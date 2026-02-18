@@ -97,19 +97,36 @@ class MemoryManager:
             )
         return updated_points
 
-    def search_and_reinforce(self, collection: str, query: str, limit: int = 3) -> List[Any]:
+    def search_and_reinforce(self, collection: str, query: str, limit: int = 3, deep_recall: bool = False) -> List[Any]:
         """
         Performs semantic search and applies B760 reinforcement to retrieved engrams
         and their associated memories (synaptic propagation).
+        
+        Filtering: Memories with score < 0.2 (Dormant) are filtered unless deep_recall is True.
         """
         vector = self._get_vector(query)
+        
+        # B760 Dormancy Filter
+        search_filter = None
+        if not deep_recall:
+            search_filter = models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="reinforcement_score",
+                        range=models.Range(gte=0.2)
+                    )
+                ]
+            )
+            # We also include immune memories which might have 1.0 but are never < 0.2 anyway.
+            # But just in case, we could use an OR. However, standard scores start at 1.0.
 
         response = self.client.query_points(
             collection_name=collection,
             query=vector,
-            limit=limit,
+            query_filter=search_filter,
+            limit=limit * (2 if deep_recall else 1), # Double limit for Deep Recall as per spec 6.2
             with_payload=True,
-            with_vectors=True  # Need vectors for propagation updates
+            with_vectors=True
         )
         
         points_to_update = []
@@ -159,8 +176,11 @@ class MemoryManager:
         """
         if cfg.DECAY_STRATEGY == "exponential":
             # Exponential decay: score * (1 - rate)
-            # rate of 0.05 means it keeps 95% of its strength
             new_score = current_score * (1.0 - rate)
+            # Fix floor: If rounding keeps the score the same, force it down or to zero
+            # to avoid asymptotic database bloat.
+            if round(new_score, 2) >= round(current_score, 2) and current_score > 0:
+                new_score = current_score - 0.01
         else:
             # Default to linear decay: score - rate
             new_score = current_score - rate
