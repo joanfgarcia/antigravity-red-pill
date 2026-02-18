@@ -1,5 +1,19 @@
 # Changelog: Red Pill Protocol
 
+## [4.0.7] - 2026-02-18
+### 🛡️ Ontological Integrity & Scale
+- **[FEAT] Pydantic Schemas**: Implemented strict `EngramMetadata` validation to reject "Poison Pill" attacks.
+- **[FIX] Concurrency**: Solved race conditions in memory reinforcement using optimistic locking.
+- **[PERF] Erosion**: Optimized decay cycles to avoid unnecessary vector transport (payload-only updates).
+- **[SEC] API Auth**: Added support for `QDRANT_API_KEY` for secured remote deployments.
+- **[DOCS] The Architect's Report**: Added `ARCHITECTURE.md` analyzing system limits.
+- **[DOCS] Smith's Audit**: Added `SMITH_AUDIT.md` confirming resistance to stress tests.
+
+## [4.0.6] - 2026-02-18
+### 🛡️ Final Correction
+- **[FIX] UUID Validation**: Restored strict defensive filtering for Point IDs in synaptic propagation.
+- **[QA] Verified IDs**: Added tests for manual ID injection and strict validation.
+
 ## [4.0.5] - 2026-02-18
 ### 🛡️ Absolute Integrity Patch
 - **[FIX] Synaptic Cancellation**: Engineered an additive reinforcement map to ensure multiple paths (search + graph) stack correctly without overwriting.

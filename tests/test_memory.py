@@ -1,4 +1,5 @@
 import pytest
+import uuid
 from unittest.mock import MagicMock, patch
 from red_pill.memory import MemoryManager
 import red_pill.config as config
@@ -71,17 +72,30 @@ def test_synaptic_propagation(manager, mock_qdrant):
     manager.search_and_reinforce("test_col", "query")
     
     # Check upsert call
-    assert manager.client.upsert.called
-    args, kwargs = manager.client.upsert.call_args
-    points = kwargs['points']
+    # Check upsert call - we now use set_payload per point inside the loop
+    # assert manager.client.upsert.called 
+    # args, kwargs = manager.client.upsert.call_args
+    # points = kwargs['points']
     
-    # Find points in list
-    primary = next(p for p in points if p.id == "123")
-    assoc = next(p for p in points if p.id == "assoc_1")
+    assert manager.client.set_payload.called
+    assert manager.client.set_payload.call_count == 2
     
-    assert primary.payload['reinforcement_score'] == 1.1
-    assert primary.payload['reinforcement_score'] == 1.1
-    assert assoc.payload['reinforcement_score'] == 1.05
+    # Verify the calls
+    calls = manager.client.set_payload.call_args_list
+    
+    # We don't know the order, so we collect payloads
+    payloads = {}
+    for call in calls:
+        kwargs = call[1]
+        pid = kwargs['points'][0]
+        payload = kwargs['payload']
+        payloads[pid] = payload
+        
+    assert "123" in payloads
+    assert "assoc_1" in payloads
+    
+    assert payloads["123"]['reinforcement_score'] == 1.1
+    assert payloads["assoc_1"]['reinforcement_score'] == 1.05
 
 def test_erosion_cycle(manager, mock_qdrant):
     config.DECAY_STRATEGY = "linear"
@@ -105,12 +119,20 @@ def test_erosion_cycle(manager, mock_qdrant):
     manager.apply_erosion("test_col")
     
     # Check upsert was called with ONLY the non-immune point
-    assert manager.client.upsert.called
-    args, kwargs = manager.client.upsert.call_args
-    points = kwargs['points']
-    assert len(points) == 1
-    assert points[0].id == "123"
-    assert points[0].payload['reinforcement_score'] == 0.4
+    # Check upsert was called with ONLY the non-immune point
+    # assert manager.client.upsert.called
+    # args, kwargs = manager.client.upsert.call_args
+    # points = kwargs['points']
+    # assert len(points) == 1
+    # assert points[0].id == "123"
+    # assert points[0].payload['reinforcement_score'] == 0.4
+    
+    assert manager.client.set_payload.called
+    assert manager.client.set_payload.call_count == 1
+    
+    args, kwargs = manager.client.set_payload.call_args
+    assert kwargs['points'] == ["123"]
+    assert kwargs['payload']['reinforcement_score'] == 0.4
 
 def test_dormancy_filter(manager, mock_qdrant):
     mock_response = MagicMock()
@@ -147,8 +169,52 @@ def test_reinforcement_stacking(manager, mock_qdrant):
     manager.search_and_reinforce("test_col", "query")
     
     # Check upsert
-    args, kwargs = manager.client.upsert.call_args
-    points = {p.id: p for p in kwargs['points']}
+    # Check upsert
+    # args, kwargs = manager.client.upsert.call_args
+    # points = {p.id: p for p in kwargs['points']}
+    # assert points["A"].payload["reinforcement_score"] == 1.1
+    # assert points["B"].payload["reinforcement_score"] == 1.15
     
-    assert points["A"].payload["reinforcement_score"] == 1.1
-    assert points["B"].payload["reinforcement_score"] == 1.15
+    assert manager.client.set_payload.called
+    assert manager.client.set_payload.call_count == 2
+    
+    payloads = {}
+    for call in manager.client.set_payload.call_args_list:
+        kwargs = call[1]
+        pid = kwargs['points'][0]
+        payload = kwargs['payload']
+        payloads[pid] = payload
+        
+    assert payloads["A"]['reinforcement_score'] == 1.1
+    assert payloads["B"]['reinforcement_score'] == 1.15
+
+def test_manual_id_injection(manager, mock_qdrant):
+    # Test that add_memory respects a manual point_id
+    manual_id = str(uuid.uuid4())
+    returned_id = manager.add_memory("test_col", "content", point_id=manual_id)
+    
+    assert returned_id == manual_id
+    args, kwargs = manager.client.upsert.call_args
+    assert kwargs['points'][0].id == manual_id
+
+def test_strict_id_validation(manager, mock_qdrant):
+    # Test that _reinforce_points filters out garbage strings
+    # We use a real increment map here
+    increments = {"valid-uuid": 0.1, "garbage": 0.05}
+    manager.client.retrieve.return_value = [] # Content doesn't matter, just the call
+    
+    manager._reinforce_points("test_col", ["valid-uuid", "garbage"], increments)
+    
+    # Check what was passed to retrieve
+    args, kwargs = manager.client.retrieve.call_args
+    # Since "garbage" is not a UUID, it should be filtered out
+    # Wait, in our filter, we use uuid.UUID(str(pid))
+    # "valid-uuid" would also fail if it's not a real UUID format.
+    # Let's use real looking strings.
+    real_uuid = str(uuid.uuid4())
+    increments = {real_uuid: 0.1, "not-a-uuid": 0.05}
+    
+    manager._reinforce_points("test_col", [real_uuid, "not-a-uuid"], increments)
+    args, kwargs = manager.client.retrieve.call_args
+    assert real_uuid in kwargs['ids']
+    assert "not-a-uuid" not in kwargs['ids']

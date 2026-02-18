@@ -5,6 +5,7 @@ from typing import List, Tuple
 from qdrant_client.http import models
 from red_pill.memory import MemoryManager
 
+import red_pill.config as cfg
 logger = logging.getLogger(__name__)
 
 def seed_project(manager: MemoryManager):
@@ -18,13 +19,33 @@ def seed_project(manager: MemoryManager):
             logger.info(f"Creating collection: {coll}")
             manager.client.create_collection(
                 collection_name=coll,
-                vectors_config=models.VectorParams(size=384, distance=models.Distance.COSINE)
+                vectors_config=models.VectorParams(size=cfg.VECTOR_SIZE, distance=models.Distance.COSINE)
             )
 
     # 2. Inject Genesis Memories with valid Synaptic Links
     # We'll pre-generate some UUIDs to create a real graph
     id_aleph = str(uuid.uuid4())
     id_bond = str(uuid.uuid4())
+    
+    # Check if genesis memories already exist to avoid duplication/errors
+    # We check for a known genesis point (Aleph) effectively, but since UUIDs are random here, 
+    # we can't easily check for *specific* genesis points unless we force their IDs.
+    # However, the requirement is to check for existence of genesis point IDs before inserting.
+    # Since the previous code generated random UUIDs, we can't know the old IDs.
+    # BUT, the new code will generate new UUIDs every time.
+    # To truly be idempotent, we should probably search for the content or use fixed UUIDs for genesis.
+    # For now, to match the plan "Check for existence of genesis point IDs before inserting", 
+    # I will modify the code to use deterministic UUIDs for genesis or check content.
+    # The review said "seed is not idempotent... running red-pill seed twice duplicates the genesis engrams".
+    # So I will use deterministic UUIDs (namespace_url) or fixed strings for genesis.
+    
+    # Using fixed UUIDs for genesis to ensure idempotency
+    id_aleph = "00000000-0000-0000-0000-000000000001"
+    id_bond = "00000000-0000-0000-0000-000000000002"
+    
+    if manager.client.retrieve("social_memories", ids=[id_aleph]):
+        logger.info("Genesis engrams already exist. Skipping seed.")
+        return
     
     # Social engrams with valid links
     manager.add_memory("social_memories", 

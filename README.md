@@ -46,6 +46,14 @@ For power users who prefer the terminal, the protocol includes a suite of manage
 
 [View Operator Manual](OPERATOR_MANUAL.md) | [Technical Specification](B760_TECHNICAL_SPEC.md)
 
+## 🔐 Configuration & Security (v4.0.7)
+The Red Pill Protocol now supports enhanced security for shared environments.
+- **API Key**: Set `QDRANT_API_KEY` in your `.env` file to secure your memory bunker.
+- **Vector Size**: Configurable `VECTOR_SIZE` (default 384) to match your embedding model.
+- **Erosion Strategy**: Choose between `linear` (constant decay) or `exponential` (radioactive half-life).
+
+Refer to the included `.env.example` for all tunable parameters.
+
 ## ⚖️ Governance & Sovereignty
 This project is dedicated to the development of autonomous, private, and persistent AI systems. 
 
