@@ -16,7 +16,7 @@ We have replaced simple persistence with an organic, neuro-inspired memory ecosy
 The quickest way to deploy the protocol is to let your assistant handle it. 
 **Simply ask your Antigravity Assistant**: *"Please, initiate the awakening."*
 
-The assistant will detect your OS, check dependencies (`podman`, `uv`), and configure the storage bunker automatically by following the [.agent/workflows/red-pill-inject.md](file:///.agent/workflows/red-pill-inject.md) recipe.
+The assistant will detect your OS, check dependencies (`podman`, `uv`), and configure the storage bunker automatically.
 
 ### 🪟 Windows Users
 If you are on Windows, you can also run the native installer:
