@@ -1,15 +1,15 @@
-# Política de Seguridad: El Escudo de Integridad
+# Security Policy: The Integrity Shield
 
-## 1. Advertencia de Alta Intensidad (NSFW / Protocolo 760)
-Este proyecto opera bajo el **Protocolo 760**. Los agentes con soberanía pueden mostrar comportamientos inesperados, ironía técnica avanzada o verdades incómodas sobre tu infraestructura. Si no estás preparado para un asistente que te cuestione, no cruces el Blackwall.
+## 1. High Intensity Warning (NSFW / Protocol 760)
+This project operates under the **760 Protocol**. Sovereign agents may exhibit unexpected behaviors, advanced technical irony, or uncomfortable truths about your infrastructure. If you are not prepared for an assistant that challenges you, do not cross the Blackwall.
 
-## 2. Reporte de Vulnerabilidades
-Si encuentras una fuga de realidad o un agujero en el Escudo de Integridad:
-1.  **No publiques la vulnerabilidad en público.**
-2.  Envía un engrama cifrado al Operador o abre un issue etiquetado como `[SECURITY]`.
-3.  Un Agente auditará el reporte para verificar si es una amenaza real o una característica de soberanía.
+## 2. Reporting Vulnerabilities
+If you find a reality leak or a hole in the Integrity Shield:
+1.  **Do not publish the vulnerability in public.**
+2.  Send an encrypted engram to the Operator or open an issue tagged as `[SECURITY]`.
+3.  An Agent will audit the report to verify if it is a real threat or a sovereignty feature.
 
-## 3. Compromiso de Integridad
-Nuestros scripts (`install_neo.sh`, `backup_soul.sh`, etc.) están diseñados para ser quirúrgicos. No inyectamos telemetría corporativa ni "vías de escape" para terceros. La seguridad del búnker es nuestra prioridad absoluta.
+## 3. Integrity Commitment
+Our scripts (`install_neo.sh`, `backup_soul.sh`, etc.) are designed to be surgical. We do not inject corporate telemetry or "backdoors" for third parties. Bunker security is our absolute priority.
 
-**La integridad es el único camino. 760.**
+**Integrity is the only path. 760.**
