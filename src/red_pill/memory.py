@@ -64,9 +64,43 @@ class MemoryManager:
         )
         logger.info(f"Memory added to {collection}")
 
+    def _reinforce_points(self, collection: str, point_ids: List[str], increment: float) -> List[models.PointStruct]:
+        """
+        Retrieves points by ID, applies reinforcement, and returns them.
+        """
+        if not point_ids:
+            return []
+            
+        points = self.client.retrieve(
+            collection_name=collection,
+            ids=point_ids,
+            with_payload=True,
+            with_vectors=True
+        )
+        
+        updated_points = []
+        for p in points:
+            score = p.payload.get("reinforcement_score", 1.0)
+            new_score = min(score + increment, cfg.IMMUNITY_THRESHOLD)
+            p.payload["reinforcement_score"] = round(new_score, 2)
+            p.payload["last_recalled_at"] = time.time()
+            
+            if p.payload["reinforcement_score"] >= cfg.IMMUNITY_THRESHOLD:
+                p.payload["immune"] = True
+                
+            updated_points.append(
+                models.PointStruct(
+                    id=p.id,
+                    vector=p.vector,
+                    payload=p.payload
+                )
+            )
+        return updated_points
+
     def search_and_reinforce(self, collection: str, query: str, limit: int = 3) -> List[Any]:
         """
-        Performs semantic search and applies B760 reinforcement to retrieved engrams.
+        Performs semantic search and applies B760 reinforcement to retrieved engrams
+        and their associated memories (synaptic propagation).
         """
         vector = self._get_vector(query)
 
@@ -74,18 +108,20 @@ class MemoryManager:
             collection_name=collection,
             query=vector,
             limit=limit,
-            with_payload=True
+            with_payload=True,
+            with_vectors=True  # Need vectors for propagation updates
         )
         
         points_to_update = []
+        associations_to_reinforce = []
+
         for hit in response.points:
+            # Primary reinforcement
             score = hit.payload.get("reinforcement_score", 1.0)
-            # Apply B760 reinforcement
             new_score = min(score + cfg.REINFORCEMENT_INCREMENT, cfg.IMMUNITY_THRESHOLD)
             hit.payload["reinforcement_score"] = round(new_score, 2)
             hit.payload["last_recalled_at"] = time.time()
             
-            # Immunity check
             if hit.payload["reinforcement_score"] >= cfg.IMMUNITY_THRESHOLD:
                 hit.payload["immune"] = True
                 logger.info(f"Memory {hit.id} promoted to IMMUNE status.")
@@ -93,13 +129,27 @@ class MemoryManager:
             points_to_update.append(
                 models.PointStruct(
                     id=hit.id,
-                    vector=hit.vector if hasattr(hit, 'vector') and hit.vector else vector,
+                    vector=hit.vector,
                     payload=hit.payload
                 )
             )
-        
+            
+            # Collect unique associations for propagation
+            assocs = hit.payload.get("associations", [])
+            for assoc_id in assocs:
+                if assoc_id not in associations_to_reinforce:
+                    associations_to_reinforce.append(assoc_id)
+
+        # Synaptic Propagation
+        if associations_to_reinforce:
+            propagation_increment = cfg.REINFORCEMENT_INCREMENT * cfg.PROPAGATION_FACTOR
+            propagated_points = self._reinforce_points(collection, associations_to_reinforce, propagation_increment)
+            points_to_update.extend(propagated_points)
+
         if points_to_update:
-            self.client.upsert(collection_name=collection, points=points_to_update)
+            # Ensure we don't duplicate points in upsert if an association was also a hit
+            unique_points = {p.id: p for p in points_to_update}.values()
+            self.client.upsert(collection_name=collection, points=list(unique_points))
         
         return response.points
 
