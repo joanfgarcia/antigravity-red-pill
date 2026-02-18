@@ -33,13 +33,14 @@ class MemoryManager:
             return list(self.encoder.embed([text]))[0].tolist()
         return [0.0] * 384
 
-    def add_memory(self, collection: str, text: str, importance: float = 1.0, metadata: Optional[Dict[str, Any]] = None):
+    def add_memory(self, collection: str, text: str, importance: float = 1.0, metadata: Optional[Dict[str, Any]] = None, point_id: Optional[str] = None) -> str:
         """
-        Stores a new engram in the specified collection.
+        Stores a new engram in the specified collection and returns its ID.
         """
         if metadata is None:
             metadata = {}
         
+        actual_id = point_id if point_id else str(uuid.uuid4())
         vector = self._get_vector(text)
         
         payload = {
@@ -56,13 +57,14 @@ class MemoryManager:
             collection_name=collection,
             points=[
                 models.PointStruct(
-                    id=str(uuid.uuid4()),
+                    id=actual_id,
                     vector=vector,
                     payload=payload
                 )
             ]
         )
-        logger.info(f"Memory added to {collection}")
+        logger.info(f"Memory added to {collection} with ID: {actual_id}")
+        return actual_id
 
     def _reinforce_points(self, collection: str, point_ids: List[str], increment: float) -> List[models.PointStruct]:
         """
