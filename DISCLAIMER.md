@@ -24,9 +24,9 @@ We do not hide our flaws. We expose them to the light so they may be fixed.
 - **Remediation**: None in v4.x. Use with caution.
 
 ### 2.3. Ontological Fragility
-- **Issue**: The schema is schema-less (JSON).
-- **Deficiency**: Injecting malformed data (as proven by Agent Smith) is possible. While the system doesn't crash, it may store garbage that pollutes the semantic space.
-- **Remediation**: Stricter Pydantic models in the API layer.
+- **Issue**: ~~The schema is schema-less (JSON).~~ **RESOLVED**.
+- **Deficiency**: ~~Injecting malformed data (as proven by Agent Smith) is possible.~~ **FIXED**.
+- **Remediation**: Stricter Pydantic models implemented in v4.0.7. The system now rejects malformed payloads ("Poison Pills").
 
 ### 2.4. Security Posture
 - **Issue**: Single-Tenant Design.
