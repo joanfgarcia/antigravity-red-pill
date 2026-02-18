@@ -28,3 +28,12 @@ IMMUNITY_THRESHOLD = float(os.getenv("IMMUNITY_THRESHOLD", "10.0"))
 
 # Logging Configuration
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+# Deep Recall Configuration
+DEEP_RECALL_TRIGGERS = [
+    "don't you remember",
+    "¿no te acuerdas?",
+    "deep recall",
+    "do you really not remember?",
+    "esfuerzate en recordar",
+    "try hard!" # Tightened with exclamation mark to avoid accidental overlap
+]

@@ -159,8 +159,10 @@ def test_reinforcement_stacking(manager, mock_qdrant):
     config.REINFORCEMENT_INCREMENT = 0.1
     config.PROPAGATION_FACTOR = 0.5
     
-    hit_a = MagicMock(id="A", payload={"reinforcement_score": 1.0, "associations": ["B"]}, vector=[0.1]*384)
-    hit_b = MagicMock(id="B", payload={"reinforcement_score": 1.0, "associations": []}, vector=[0.1]*384)
+    id_a = str(uuid.uuid4())
+    id_b = str(uuid.uuid4())
+    hit_a = MagicMock(id=id_a, payload={"reinforcement_score": 1.0, "associations": [id_b]}, vector=[0.1]*384)
+    hit_b = MagicMock(id=id_b, payload={"reinforcement_score": 1.0, "associations": []}, vector=[0.1]*384)
     
     mock_response = MagicMock()
     mock_response.points = [hit_a, hit_b]
@@ -186,8 +188,8 @@ def test_reinforcement_stacking(manager, mock_qdrant):
         payload = kwargs['payload']
         payloads[pid] = payload
         
-    assert payloads["A"]['reinforcement_score'] == 1.1
-    assert payloads["B"]['reinforcement_score'] == 1.15
+    assert payloads[id_a]['reinforcement_score'] == 1.1
+    assert payloads[id_b]['reinforcement_score'] == 1.15
 
 def test_manual_id_injection(manager, mock_qdrant):
     # Test that add_memory respects a manual point_id

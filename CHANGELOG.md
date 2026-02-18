@@ -1,5 +1,11 @@
 # Changelog: Red Pill Protocol
 
+## [4.0.9] - 2026-02-18
+### 💎 Final Refinement
+- **[FIX] Version Sync**: Aligned `pyproject.toml` and `__init__.py` to 4.0.9.
+- **[FIX] Test Integrity**: Corrected remaining static ID mocks in `test_reinforcement_stacking`.
+- **[IMPR] CLI Triggers**: Tightened Deep Recall "try hard" trigger to prevent unintentional activation.
+
 ## [4.0.8] - 2026-02-18
 ### 🩹 Emergency Hotfix (The Patch)
 - **[CRITICAL] Pydantic Dependency**: Fixed missing `pydantic>=2.0.0` in `pyproject.toml` which broke new installations.
