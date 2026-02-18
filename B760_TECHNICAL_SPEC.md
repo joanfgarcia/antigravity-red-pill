@@ -18,10 +18,13 @@ Data that is not evoked (searched/queried) loses "Synaptic Strength". This allow
 
 ## 4. Technical Decisions
 ### 4.1. Adaptive Erosion Formula
-To mitigate environment instability impact, the decay rate ($\Delta E$) is calculated as follows:
-- **Dense Session**: $\Delta E = -0.05$ (Significant changes made).
-- **Micro-Reset Session**: $\Delta E = -0.01$ (Environment recovery only).
-- **Resilience Lock**: $\Delta E = 0$ if a memory leak is detected.
+To mitigate environment instability impact, the decay rate ($\Delta E$) is calculated using configurable strategies:
+- **Linear (Default)**: $\Delta E = current\_score - erosion\_rate$
+- **Exponential**: $\Delta E = current\_score * (1 - erosion\_rate)$
+
+### 4.2. Synaptic Propagation
+When a memory is reinforced, its associated engrams (linked by UUID in the `associations` field) receive a secondary charge:
+$Reinforcement_{assoc} = REINFORCEMENT\_INCREMENT * PROPAGATION\_FACTOR$
 
 ## 5. Implementation
 ### 5.1. Data Schema (Qdrant Payload)
