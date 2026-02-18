@@ -1,5 +1,10 @@
 # Changelog: Red Pill Protocol
 
+## [4.0.6] - 2026-02-18
+### 🛡️ Final Correction
+- **[FIX] UUID Validation**: Restored strict defensive filtering for Point IDs in synaptic propagation.
+- **[QA] Verified IDs**: Added tests for manual ID injection and strict validation.
+
 ## [4.0.5] - 2026-02-18
 ### 🛡️ Absolute Integrity Patch
 - **[FIX] Synaptic Cancellation**: Engineered an additive reinforcement map to ensure multiple paths (search + graph) stack correctly without overwriting.

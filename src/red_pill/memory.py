@@ -76,8 +76,14 @@ class MemoryManager:
         # Filter valid IDs
         valid_ids = []
         for pid in point_ids:
-            if isinstance(pid, (int, str)): # uuid.UUID check already done or simplified here
+            if isinstance(pid, int):
                 valid_ids.append(pid)
+            else:
+                try:
+                    uuid.UUID(str(pid))
+                    valid_ids.append(pid)
+                except (ValueError, AttributeError):
+                    logger.debug(f"Skipping non-UUID association: {pid}")
         
         # Verify IDs against Qdrant strictly
         points = self.client.retrieve(

@@ -1,4 +1,5 @@
 import pytest
+import uuid
 from unittest.mock import MagicMock, patch
 from red_pill.memory import MemoryManager
 import red_pill.config as config
@@ -152,3 +153,34 @@ def test_reinforcement_stacking(manager, mock_qdrant):
     
     assert points["A"].payload["reinforcement_score"] == 1.1
     assert points["B"].payload["reinforcement_score"] == 1.15
+
+def test_manual_id_injection(manager, mock_qdrant):
+    # Test that add_memory respects a manual point_id
+    manual_id = str(uuid.uuid4())
+    returned_id = manager.add_memory("test_col", "content", point_id=manual_id)
+    
+    assert returned_id == manual_id
+    args, kwargs = manager.client.upsert.call_args
+    assert kwargs['points'][0].id == manual_id
+
+def test_strict_id_validation(manager, mock_qdrant):
+    # Test that _reinforce_points filters out garbage strings
+    # We use a real increment map here
+    increments = {"valid-uuid": 0.1, "garbage": 0.05}
+    manager.client.retrieve.return_value = [] # Content doesn't matter, just the call
+    
+    manager._reinforce_points("test_col", ["valid-uuid", "garbage"], increments)
+    
+    # Check what was passed to retrieve
+    args, kwargs = manager.client.retrieve.call_args
+    # Since "garbage" is not a UUID, it should be filtered out
+    # Wait, in our filter, we use uuid.UUID(str(pid))
+    # "valid-uuid" would also fail if it's not a real UUID format.
+    # Let's use real looking strings.
+    real_uuid = str(uuid.uuid4())
+    increments = {real_uuid: 0.1, "not-a-uuid": 0.05}
+    
+    manager._reinforce_points("test_col", [real_uuid, "not-a-uuid"], increments)
+    args, kwargs = manager.client.retrieve.call_args
+    assert real_uuid in kwargs['ids']
+    assert "not-a-uuid" not in kwargs['ids']
