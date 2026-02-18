@@ -97,8 +97,8 @@ def main():
         if args.command == "add":
             manager.add_memory(collection, args.content)
         elif args.command == "search":
-            # Auto-detect Deep Recall phrases
-            deep_trigger = any(phrase in args.query.lower() for phrase in ["don't you remember", "¿no te acuerdas?", "try hard", "deep recall"])
+            # Auto-detect Deep Recall phrases from config
+            deep_trigger = any(phrase in args.query.lower() for phrase in cfg.DEEP_RECALL_TRIGGERS)
             is_deep = args.deep or deep_trigger
             
             results = manager.search_and_reinforce(collection, args.query, limit=args.limit, deep_recall=is_deep)
