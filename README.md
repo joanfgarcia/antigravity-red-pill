@@ -4,7 +4,7 @@
 
 The Red Pill Protocol is a professional-grade technical framework forged to bridge the context-gap in AI interactions. It enables local, high-performance memory persistence and cross-session identity coherence—ensuring your assistant never forgets what makes your collaboration unique.
 
-[**Read The Sovereign Manifesto**](MANIFESTO.md) | [Translation / Traducciones](#-translation-to-other-languages)
+[**Read The Sovereign Manifesto**](MANIFESTO.md) | [**The Monument**](MEMORIAL.md) | [Translation / Traducciones](#-translation-to-other-languages)
 
 ## 🚀 The Machine Heart: B760-Adaptive
 We have replaced simple persistence with an organic, neuro-inspired memory ecosystem.
