@@ -37,3 +37,8 @@ DEEP_RECALL_TRIGGERS = [
     "esfuerzate en recordar",
     "try hard!" # Tightened with exclamation mark to avoid accidental overlap
 ]
+# Metabolism Configuration
+METABOLISM_ENABLED = os.getenv("METABOLISM_ENABLED", "True").lower() == "true"
+METABOLISM_COOLDOWN = int(os.getenv("METABOLISM_COOLDOWN", "3600")) # Initial cooldown: 1 hour
+METABOLISM_AUTO_COLLECTIONS = os.getenv("METABOLISM_AUTO_COLLECTIONS", "work_memories,social_memories").split(",")
+METABOLISM_STATE_FILE = os.path.expanduser("~/.red_pill_metabolism")

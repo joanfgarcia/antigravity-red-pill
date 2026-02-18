@@ -1,4 +1,6 @@
 import logging
+import threading
+import os
 import uuid
 import time
 from typing import List, Optional, Dict, Any
@@ -82,7 +84,58 @@ class MemoryManager:
             ]
         )
         logger.info(f"Memory added to {collection} with ID: {actual_id}")
+        
+        # Reactive Metabolism: Trigger erosion if cooldown passed
+        if cfg.METABOLISM_ENABLED:
+            self._trigger_metabolism()
+            
         return actual_id
+
+    def _trigger_metabolism(self):
+        """
+        Spawns a background thread to check and run erosion cycles.
+        """
+        try:
+            # We use a thread to avoid blocking the main interaction
+            thread = threading.Thread(target=self._run_metabolism_cycle, daemon=True)
+            thread.start()
+        except Exception as e:
+            logger.error(f"Failed to spawn metabolism thread: {e}")
+
+    def _run_metabolism_cycle(self):
+        """
+        Internal loop to check cooldown and execute erosion.
+        """
+        state_file = cfg.METABOLISM_STATE_FILE
+        now = time.time()
+        
+        # Check cooldown
+        if os.path.exists(state_file):
+            try:
+                with open(state_file, "r") as f:
+                    last_run = float(f.read().strip())
+                if now - last_run < cfg.METABOLISM_COOLDOWN:
+                    return # Too early
+            except (ValueError, OSError):
+                pass # Corrupt file, proceed anyway
+        
+        logger.info("--- [REACTIVE METABOLISM ACTIVATED] ---")
+        
+        # Update last run time immediately to prevent overlapping threads if many adds happen
+        try:
+            with open(state_file, "w") as f:
+                f.write(str(now))
+        except OSError as e:
+            logger.warning(f"Could not update metabolism state file: {e}")
+
+        # Run erosion on all configured collections
+        for coll in cfg.METABOLISM_AUTO_COLLECTIONS:
+            try:
+                self.apply_erosion(coll.strip())
+            except Exception as e:
+                logger.error(f"Metabolism failure in collection {coll}: {e}")
+        
+        logger.info("--- [METABOLISM CYCLE COMPLETE] ---")
 
     def _reinforce_points(self, collection: str, point_ids: List[str], increments: Dict[str, float]) -> List[PointUpdate]:
         """
