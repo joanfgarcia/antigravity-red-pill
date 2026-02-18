@@ -88,27 +88,32 @@ def main():
     # For commands that require 'type'
     collection = "social_memories" if args.type == "social" else "work_memories"
 
-    if args.command == "add":
-        manager.add_memory(collection, args.content)
-    elif args.command == "search":
-        # Auto-detect Deep Recall phrases
-        deep_trigger = any(phrase in args.query.lower() for phrase in ["don't you remember", "¿no te acuerdas?", "try hard", "deep recall"])
-        is_deep = args.deep or deep_trigger
-        
-        results = manager.search_and_reinforce(collection, args.query, limit=args.limit, deep_recall=is_deep)
-        if is_deep:
-            print(f"--- [DEEP RECALL ACTIVATED] ---")
-        for hit in results:
-            score = hit.payload.get("reinforcement_score", 0.0)
-            status = " [IMMUNE]" if hit.payload.get("immune") else f" (Score: {score})"
-            print(f"- {hit.payload['content']}{status}")
-    elif args.command == "erode":
-        manager.apply_erosion(collection, rate=args.rate) if args.rate else manager.apply_erosion(collection)
-    elif args.command == "diag":
-        stats = manager.get_stats(collection)
-        print(f"--- Diagnostics: {collection} ---")
-        for key, value in stats.items():
-            print(f"{key.capitalize().replace('_', ' ')}: {value}")
+    try:
+        if args.command == "add":
+            manager.add_memory(collection, args.content)
+        elif args.command == "search":
+            # Auto-detect Deep Recall phrases
+            deep_trigger = any(phrase in args.query.lower() for phrase in ["don't you remember", "¿no te acuerdas?", "try hard", "deep recall"])
+            is_deep = args.deep or deep_trigger
+            
+            results = manager.search_and_reinforce(collection, args.query, limit=args.limit, deep_recall=is_deep)
+            if is_deep:
+                print(f"--- [DEEP RECALL ACTIVATED] ---")
+            for hit in results:
+                score = hit.payload.get("reinforcement_score", 0.0)
+                status = " [IMMUNE]" if hit.payload.get("immune") else f" (Score: {score})"
+                print(f"- {hit.payload['content']}{status}")
+        elif args.command == "erode":
+            manager.apply_erosion(collection, rate=args.rate) if args.rate else manager.apply_erosion(collection)
+        elif args.command == "diag":
+            stats = manager.get_stats(collection)
+            print(f"--- Diagnostics: {collection} ---")
+            for key, value in stats.items():
+                print(f"{key.capitalize().replace('_', ' ')}: {value}")
+    except Exception as e:
+        logger.error(f"Critical Protocol Failure: {e}")
+        print("\n[⚠️] Connection to the substrate lost or command refused. Check Qdrant status.")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

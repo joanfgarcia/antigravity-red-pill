@@ -1,5 +1,11 @@
 # Changelog: Red Pill Protocol
 
+## [4.0.5] - 2026-02-18
+### 🛡️ Absolute Integrity Patch
+- **[FIX] Synaptic Cancellation**: Engineered an additive reinforcement map to ensure multiple paths (search + graph) stack correctly without overwriting.
+- **[STABILITY] CLI Resilience**: Wrapped database operations in high-integrity error handlers for lore-friendly failure reporting.
+- **[TECHNICAL] Defensively Checked**: Passed exhaustive Temp=0 audit.
+
 ## [4.0.4] - 2026-02-18
 ### 🚀 Architectural Alignment
 - **Global ID Policy**: Refactored `add_memory` to support manual `point_id` injection and return the assigned UUID. 

@@ -41,6 +41,7 @@ def test_immunity_promotion(manager, mock_qdrant):
     mock_response = MagicMock()
     mock_response.points = [mock_hit]
     manager.client.query_points.return_value = mock_response
+    manager.client.retrieve.return_value = [mock_hit]
     
     results = manager.search_and_reinforce("test_col", "query")
     assert results[0].payload['reinforcement_score'] == 10.0
@@ -60,12 +61,12 @@ def test_synaptic_propagation(manager, mock_qdrant):
     mock_response.points = [mock_hit]
     manager.client.query_points.return_value = mock_response
     
-    # Mock retrieval of association
+    # Mock retrieval of BOTH primary and association
     mock_assoc = MagicMock()
     mock_assoc.payload = {"reinforcement_score": 1.0, "content": "associated"}
     mock_assoc.id = "assoc_1"
     mock_assoc.vector = [0.2] * 384
-    manager.client.retrieve.return_value = [mock_assoc]
+    manager.client.retrieve.return_value = [mock_hit, mock_assoc]
     
     manager.search_and_reinforce("test_col", "query")
     
@@ -128,3 +129,26 @@ def test_dormancy_filter(manager, mock_qdrant):
     manager.search_and_reinforce("test_col", "query", deep_recall=True)
     args, kwargs = manager.client.query_points.call_args
     assert kwargs['query_filter'] is None
+
+def test_reinforcement_stacking(manager, mock_qdrant):
+    # Hit A associates with Hit B. Hit B is also a primary hit.
+    # Base: 1.0. Hit A -> 1.1. Hit B -> 1.1 (primary) + 0.05 (assoc) = 1.15
+    config.REINFORCEMENT_INCREMENT = 0.1
+    config.PROPAGATION_FACTOR = 0.5
+    
+    hit_a = MagicMock(id="A", payload={"reinforcement_score": 1.0, "associations": ["B"]}, vector=[0.1]*384)
+    hit_b = MagicMock(id="B", payload={"reinforcement_score": 1.0, "associations": []}, vector=[0.1]*384)
+    
+    mock_response = MagicMock()
+    mock_response.points = [hit_a, hit_b]
+    manager.client.query_points.return_value = mock_response
+    manager.client.retrieve.return_value = [hit_a, hit_b]
+    
+    manager.search_and_reinforce("test_col", "query")
+    
+    # Check upsert
+    args, kwargs = manager.client.upsert.call_args
+    points = {p.id: p for p in kwargs['points']}
+    
+    assert points["A"].payload["reinforcement_score"] == 1.1
+    assert points["B"].payload["reinforcement_score"] == 1.15
