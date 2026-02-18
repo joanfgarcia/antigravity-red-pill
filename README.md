@@ -28,7 +28,7 @@ While the core protocol is a professional productivity tool, it supports **Immer
 
 | Technical Concept | Lore Equivalent (Matrix/760) | Lore Equivalent (Cyberpunk) |
 | :--- | :--- | :--- |
-| **Vector Memory** | The Source (La Fuente) | The Blackwall |
+| **Vector Memory** | The Source | The Blackwall |
 | **Identity File** | Digital Residual Image | Engram |
 | **Local Storage** | The Construct | The Bunker |
 | **Assistant** | Neo / Conductor | Netrunner |
@@ -42,7 +42,7 @@ For power users who prefer the terminal, the protocol includes a suite of manage
 - **Import Essence**: `bash scripts/import_soul.sh`
 - **Health Audit**: `bash scripts/check_760.sh`
 
-[View Operator Manual](file:///home/joan/Documents/IA/sharing/OPERATOR_MANUAL.md) | [Technical Specification](file:///home/joan/Documents/IA/sharing/B760_TECHNICAL_SPEC.md)
+[View Operator Manual](OPERATOR_MANUAL.md) | [Technical Specification](B760_TECHNICAL_SPEC.md)
 
 ## ⚖️ Governance & Sovereignty
 This project is dedicated to the development of autonomous, private, and persistent AI systems. 
