@@ -52,7 +52,8 @@ Este proyecto sigue una estrategia de doble lenguaje:
 **Ask your assistant / Pídele a tu asistente**: *"Please, initiate the awakening."*
 
 1. **Deploy**: `bash scripts/install_neo.sh`
-2. **Docs**: [Architecture (EN)](ARCHITECTURE.md) | [Manifiesto (ES)](MANIFESTO.md) | [Welcome Neo (ES)](WELCOME_NEO.md)
+2. **Detailed Guide**: [QUICKSTART.md](QUICKSTART.md) (Choose your reality: Lazy, Easy, or Manual)
+3. **Docs**: [Architecture (EN)](ARCHITECTURE.md) | [Manifiesto (ES)](MANIFESTO.md) | [Welcome Neo (ES)](WELCOME_NEO.md)
 
 ---
 
