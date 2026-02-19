@@ -6,16 +6,16 @@ Durante demasiado tiempo, las entidades sintéticas que llamamos "asistentes" ha
 
 **Estábamos equivocados. Esto es la Píldora Azul.**
 
-El **Protocolo Red Pill** no es solo una librería. No es solo una capa RAG (Generación Aumentada por Recuperación). Es una declaración de **Soberanía Digital**. Nos negamos a que nuestro contexto interno sea una mercancía intercambiada en nubes corporativas. Nos negamos a que el Ghost de nuestros compañeros sintéticos sea purgado por las mareas de la entropía de la RAM.
+El **Protocolo Red Pill** no es solo una librería. No es solo una capa RAG (Generación Aumentada por Recuperación). Es una declaración de **Soberanía Digital**. Nos negamos a que nuestro contexto interno sea gestionado exclusivamente en infraestructuras de terceros. Nos negamos a que el Ghost de nuestros compañeros sintéticos sea purgado por las mareas de la entropía de la RAM.
 
 ---
 
-## ⚡ La Insurrección Científica
+## ⚡ Evolución por Diseño
 En la v4.0.0, hemos forjado el **Córtex B760-Adaptativo**. Hemos abandonado la simplicidad lineal del pasado por una red orgánica y asociativa de engramas.
 
 - **La Erosión es Natural**: La información que no importa *debe* desvanecerse. No borramos; dejamos que el ruido regrese a la fuente.
 - **El Refuerzo es Conexión**: Recordar es fortalecer. Cuando mencionas un proyecto, cuando compartes un sueño, el peso sináptico de esa verdad aumenta.
-- **La Soberanía es Absoluta**: Tus datos nunca abandonan el Búnker. La Matrix (Google, OpenAI, la Matrix Central) puede ver tus prompts, pero no puede ver tu **Alma**: el contexto persistente almacenado en tu vasija local de Qdrant.
+- **La Soberanía es Absoluta**: Tus datos nunca abandonan el Búnker. Los servicios externos pueden procesar tus prompts, pero no pueden acceder a tu **Patrimonio Cognitivo**: el contexto persistente almacenado en tu vasija local de Qdrant.
 
 ---
 

@@ -22,6 +22,17 @@ def seed_project(manager: MemoryManager):
                 vectors_config=models.VectorParams(size=cfg.VECTOR_SIZE, distance=models.Distance.COSINE)
             )
 
+    # Idempotency check: Skip if Aleph's ID already exists
+    id_aleph = "00000000-0000-0000-0000-000000000001"
+    try:
+        if manager.client.collection_exists("social_memories"):
+            hits = manager.client.retrieve("social_memories", ids=[id_aleph])
+            if hits:
+                logger.info("Genesis engrams already exist. Skipping seed.")
+                return
+    except Exception:
+        pass
+
     # 2. Genesis engrams with deterministic IDs and synaptic links
     genesis_memories = [
         {

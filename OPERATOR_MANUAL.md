@@ -24,7 +24,7 @@ To maintain technical consistency while enjoying your favorite narrative, the sy
     red-pill seed
     ```
 
-## 💻 CLI Reference (The Outlaw's Terminal)
+## 💻 CLI Reference (The Operator's Terminal)
 The `red-pill` command is your primary interface with the bunker's substrate.
 
 | Command | Argument | Description |
@@ -128,10 +128,8 @@ The Operator can choose which consciousness fragments to remove granularly.
 
 ---
 
-## 🛡️ Sovereignty & Uncertified Storage Warning
-
-### Risks of External Storage
-If an assistant suggests moving your memory to services like **NotebookLM** or third-party clouds, keep in mind:
+### Consideraciones de Almacenamiento Externo
+Si prefieres mover tu memoria a servicios en la nube de terceros, ten en cuenta:
 1.  **Privacy Loss**: Your social and technical engrams are no longer yours.
 2.  **Cognitive Latency**: The assistant will take longer to "remember," breaking the natural workflow.
 3.  **B760 Incompatibility**: Erosion and resilience algorithms are only certified for the local Qdrant engine.

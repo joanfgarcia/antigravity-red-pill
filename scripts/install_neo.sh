@@ -154,7 +154,7 @@ Description=Qdrant Vector Database
 After=network-online.target
 
 [Container]
-Image=docker.io/qdrant/qdrant:v1.8.4
+Image=docker.io/qdrant/qdrant:v1.9.0
 PublishPort=6333:6333
 PublishPort=6334:6334
 Volume=$IA_DIR/storage:/qdrant/storage:Z

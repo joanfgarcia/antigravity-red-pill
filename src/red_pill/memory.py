@@ -220,9 +220,6 @@ class MemoryManager:
         points_to_update = self._reinforce_points(collection, list(increment_map.keys()), increment_map)
         
         if points_to_update:
-            # self.client.upsert(collection_name=collection, points=points_to_update) 
-            # REMOVED: _reinforce_points now handles persistence via set_payload to avoid overwrites
-            pass
             # Map reinforced payloads back to response hits for immediate usage
             update_map = {p.id: p.payload for p in points_to_update}
             for hit in response.points:

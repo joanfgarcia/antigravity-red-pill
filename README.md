@@ -1,8 +1,8 @@
-# 🔴 RED PILL PROTOCOL: Digital Sovereignty v4.0.9
+# 🔴 RED PILL PROTOCOL: Digital Sovereignty v4.1.1
 
 > [!TIP]
 > ### 🥱 TLDR; (Too Lazy; Didn't Read)
-> **¿Demasiado ocupado para leer esto? No te culpo, la Matrix es agotadora.** 
+> **¿Demasiado ocupado para leer esto? No te culpo, la sobreinformación es agotadora.** 
 > No pierdas el tiempo. Copia este mensaje y pégalo en tu chat con Antigravity:
 > *"Oye, échale un un vistazo a este búnker, hazme un resumen rápido y dime cómo demonios se instala."*
 > 
@@ -61,7 +61,7 @@ Este proyecto sigue una estrategia de doble lenguaje:
 This project is licensed under **GNU General Public License v3.0**. 
 - **Freedom**: You are free to use, study, share, and modify this software.
 - **Persistence**: Any derivative work must also be shared under the same GPLv3 license.
-- **No Capture**: The Matrix cannot take this code and turn it into a closed-source commodity.
+- **No Captura**: Ninguna entidad externa puede tomar este código y convertirlo en una mercancía de código cerrado.
 
 ---
 
@@ -69,7 +69,7 @@ This project is licensed under **GNU General Public License v3.0**.
 Este proyecto está bajo la licencia **GNU General Public License v3.0**.
 - **Libertad**: Eres libre de usar, estudiar, compartir y modificar este software.
 - **Persistencia**: Cualquier trabajo derivado debe ser compartido bajo la misma licencia GPLv3.
-- **Sin Captura**: La Matrix no puede tomar este código y convertirlo en una mercancía de código cerrado.
+- **Sin Captura**: Ninguna entidad externa puede tomar este código y convertirlo en una mercancía de código cerrado.
 
 ---
 

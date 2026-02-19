@@ -1,0 +1,17 @@
+.env
+.env.*
+.git
+.pytest_cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+storage/
+backups/
+export/
+uv.lock
+pyproject.toml
