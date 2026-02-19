@@ -43,7 +43,7 @@ Para los que quieren auditar cada byte y configurar cada variable manualmente.
 2.  **Variables**: Edita el archivo `.env` en la raíz para ajustar el `EROSION_RATE`, `DECAY_STRATEGY` y el `IMMUNITY_THRESHOLD`.
 3.  **Identidad**: Configura tu alma manualmente en `~/.agent/identity.md`.
 4.  **Reglas**: Inyecta el `identity_sync.md` en tu directorio de reglas globales para forzar el inicio de sesión determinista.
-5.  **Auditoría**: Consulta el [OPERATOR_MANUAL.md](OPERATOR_MANUAL.md) para conocer los detalles del Puente Lazarus y la propagación sináptica.
+5.  **Auditoría**: Consulta el [OPERATOR_MANUAL.md](docs/guides/OPERATOR_MANUAL.md) para conocer los detalles del Puente Lazarus y la propagación sináptica.
 
 ---
 

@@ -35,6 +35,7 @@ The `red-pill` command is your primary interface with the bunker's substrate.
 | `search` | `type` `query` | Semantic search with B760 reinforcement stacking. |
 | `erode` | `type` | Manually triggers an erosion cycle (asymptotic decay). |
 | `diag` | `type` | Shows collection health and point counts. |
+| `daemon` | - | Launches the persistent Memory Sidecar (UDP-like speed). |
 
 ### 🛠️ Advanced Flags
 - `--deep`: For `search`, bypasses dormancy filters to find "lost" engrams.

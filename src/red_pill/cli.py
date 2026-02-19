@@ -45,28 +45,46 @@ def main():
     diag_parser = subparsers.add_parser("diag", help="Collection diagnostics")
     diag_parser.add_argument("type", choices=["work", "social"], help="Collection type")
 
+    # Daemon command
+    subparsers.add_parser("daemon", help="Launch the persistent Memory Sidecar (Daemon)")
+
     args = parser.parse_args()
 
     # Configure logging
     log_level = logging.DEBUG if args.verbose else getattr(logging, LOG_LEVEL.upper(), logging.INFO)
     logging.basicConfig(level=log_level, format="%(levelname)s: %(message)s")
     
-    # manager = MemoryManager(url=args.url) if args.url else MemoryManager() 
-    # REMOVED: Premature instantiation. We'll instantiate it only when needed.
-    # But wait, seed command needs manager. And other commands too.
-    # We should instantiate it inside the command blocks or helper.
-    
     if not args.command:
         parser.print_help()
         sys.exit(0)
 
+    # 1. Logic-less commands (Daemon)
+    if args.command == "daemon":
+        try:
+            from red_pill.memory_daemon import MemoryDaemon
+            import signal
+            print("\n--- Despertando Sidecar de Memoria (Aleph-Minion) ---")
+            daemon = MemoryDaemon()
+            
+            def stop_daemon(sig, frame):
+                print("\nDeteniendo Sidecar...")
+                daemon.stop()
+                sys.exit(0)
+                
+            signal.signal(signal.SIGINT, stop_daemon)
+            signal.signal(signal.SIGTERM, stop_daemon)
+            daemon.start()
+        except Exception as e:
+            print(f"Error starting daemon: {e}")
+            sys.exit(1)
+        return
+
+    # 2. Mode command
     if args.command == "mode":
-        # Load lore skins
         data_path = os.path.join(os.path.dirname(__file__), "data", "lore_skins.yaml")
         try:
             with open(data_path, 'r') as f:
                 raw_skins = yaml.safe_load(f).get('modes', {})
-                # Ensure all keys are strings (fixes naming bugs like integer 760)
                 skins = {str(k): v for k, v in raw_skins.items()}
         except Exception as e:
             logger.error(f"Could not load lore skins: {e}")
@@ -80,17 +98,16 @@ def main():
         print(f"--- Operational Mode: {args.skin.upper()} ---")
         for key, value in skin.items():
             print(f"{key.capitalize().replace('_', ' ')}: {value}")
-        
-        # In a real scenario, this would update a local state or .agent/rules
         print("\n[Protocol] Soul mapping updated. Re-calibrating identity anchor...")
         return
 
+    # 3. Seed command
     if args.command == "seed":
         manager = MemoryManager(url=args.url) if args.url else MemoryManager()
         seed_project(manager)
-        return # Exit after seed command as it doesn't require 'type'
+        return
 
-    # For commands that require 'type'
+    # 4. Commands that require 'type'
     collection = "social_memories" if args.type == "social" else "work_memories"
 
     try:
@@ -98,7 +115,6 @@ def main():
         if args.command == "add":
             manager.add_memory(collection, args.content)
         elif args.command == "search":
-            # Auto-detect Deep Recall phrases from config
             deep_trigger = any(phrase in args.query.lower() for phrase in cfg.DEEP_RECALL_TRIGGERS)
             is_deep = args.deep or deep_trigger
             

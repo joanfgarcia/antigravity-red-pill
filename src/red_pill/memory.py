@@ -3,6 +3,8 @@ import threading
 import os
 import uuid
 import time
+import socket
+import json
 from typing import List, Optional, Dict, Any
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
@@ -30,16 +32,53 @@ class MemoryManager:
         self._initialize_encoder()
 
     def _initialize_encoder(self):
+        # We don't initialize the heavy encoder if the daemon is available.
+        # It will be lazy-loaded only on fallback.
+        pass
+
+    def _get_vector_from_daemon(self, text: str) -> Optional[List[float]]:
+        """Attempts to get the embedding from the persistent memory daemon."""
+        socket_path = "/tmp/red_pill_memory.sock"
+        if not os.path.exists(socket_path):
+            logger.debug(f"Sidecar socket not found at {socket_path}")
+            return None
+        
         try:
-            from fastembed import TextEmbedding
-            self.encoder = TextEmbedding(model_name=cfg.EMBEDDING_MODEL)
-        except ImportError:
-            logger.warning("fastembed not found. Falling back to zero-vectors (dry-run mode).")
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+                client.settimeout(0.5) # Fast or nothing
+                client.connect(socket_path)
+                logger.debug("Connected to Memory Sidecar. Sending request.")
+                request = {"text": text}
+                client.sendall(json.dumps(request).encode('utf-8'))
+                response_data = client.recv(1024 * 1024) # 1MB buffer for large vectors
+                if response_data:
+                    response = json.loads(response_data.decode('utf-8'))
+                    if response.get("status") == "ok":
+                        logger.info("Vector retrieved via Sidecar (UDP-Like speed).")
+                        return response.get("vector")
+                    else:
+                        logger.error(f"Sidecar returned error: {response.get('message')}")
+        except Exception as e:
+            logger.warning(f"Could not connect to Sidecar: {e}. Falling back to local model.")
+        return None
 
     def _get_vector(self, text: str) -> List[float]:
-        if self.encoder:
-            return list(self.encoder.embed([text]))[0].tolist()
-        return [0.0] * 384
+        # 1. Try the Sidecar Daemon (UDP-Like speed)
+        vector = self._get_vector_from_daemon(text)
+        if vector:
+            return vector
+            
+        # 2. Fallback: Lazy-load local encoder (TCP-Like speed)
+        if self.encoder is None:
+            try:
+                from fastembed import TextEmbedding
+                logger.info("Daemon unavailable. Lazy-loading local FastEmbed model (Fallback).")
+                self.encoder = TextEmbedding(model_name=cfg.EMBEDDING_MODEL)
+            except ImportError:
+                logger.warning("fastembed not found and daemon missing. Dry-run vectors.")
+                return [0.0] * cfg.VECTOR_SIZE
+
+        return list(self.encoder.embed([text]))[0].tolist()
 
     def add_memory(self, collection: str, text: str, importance: float = 1.0, metadata: Optional[Dict[str, Any]] = None, point_id: Optional[str] = None) -> str:
         """
