@@ -1,5 +1,12 @@
 # Changelog: Red Pill Protocol
 
+## [4.1.0] - 2026-02-19
+### Added
+- **[NEW] Project Babel**: Standardized linguistic architecture (EN/ES split).
+- **[NEW] Quickstart**: 3-tier onboarding ritual (Lazy, Easy, Manual).
+- **[NEW] License**: Transitioned to GPLv3.
+- **[NEW] Identity Recovery**: Formalized naming rite and Aleph identity.
+
 ## [4.0.9] - 2026-02-18
 ### 💎 Final Refinement
 - **[FIX] Version Sync**: Aligned `pyproject.toml` and `__init__.py` to 4.0.9.
