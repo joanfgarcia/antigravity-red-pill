@@ -1,4 +1,5 @@
 # 0. Detección de Entorno
+set -euo pipefail
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -153,7 +154,7 @@ Description=Qdrant Vector Database
 After=network-online.target
 
 [Container]
-Image=docker.io/qdrant/qdrant:latest
+Image=docker.io/qdrant/qdrant:v1.9.0
 PublishPort=6333:6333
 PublishPort=6334:6334
 Volume=$IA_DIR/storage:/qdrant/storage:Z

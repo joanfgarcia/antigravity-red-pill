@@ -9,7 +9,8 @@ load_dotenv()
 QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", None)
-QDRANT_URL = f"http://{QDRANT_HOST}:{QDRANT_PORT}"
+QDRANT_SCHEME = os.getenv("QDRANT_SCHEME", "http")
+QDRANT_URL = f"{QDRANT_SCHEME}://{QDRANT_HOST}:{QDRANT_PORT}"
 
 # Model Configuration (FastEmbed)
 # Model Configuration (FastEmbed)

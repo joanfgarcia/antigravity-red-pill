@@ -19,10 +19,27 @@ To maintain technical consistency while enjoying your favorite narrative, the sy
     bash scripts/install_neo.sh
     ```
 3.  **Awakening (Re-calibration)**:
-    If already installed and you need to re-sync:
+    Si ya está instalado y necesitas re-sincronizar:
     ```bash
-    uv run --with qdrant-client --with fastembed python3 scripts/seed_neo.py
+    red-pill seed
     ```
+
+## 💻 CLI Reference (The Operator's Terminal)
+The `red-pill` command is your primary interface with the bunker's substrate.
+
+| Command | Argument | Description |
+| :--- | :--- | :--- |
+| `seed` | - | Initializes collections and seeds genesis engrams. |
+| `mode` | `skin` | Switches Lore Skins (matrix, cyberpunk, 760, dune). |
+| `add` | `type` `text` | Adds a new memory to `work` or `social` collections. |
+| `search` | `type` `query` | Semantic search with B760 reinforcement stacking. |
+| `erode` | `type` | Manually triggers an erosion cycle (asymptotic decay). |
+| `diag` | `type` | Shows collection health and point counts. |
+
+### 🛠️ Advanced Flags
+- `--deep`: For `search`, bypasses dormancy filters to find "lost" engrams.
+- `--rate`: For `erode`, sets a custom erosion factor (Default: 0.05).
+- `--verbose`: Enables DEBUG logging for surgical analysis of the memory flow.
 
 ## 💉 Agentic Injection (AI-Assisted Installation)
 For users who prefer not to interact with the terminal, you can request your Antigravity assistant to handle the installation:
@@ -111,10 +128,8 @@ The Operator can choose which consciousness fragments to remove granularly.
 
 ---
 
-## 🛡️ Sovereignty & Uncertified Storage Warning
-
-### Risks of External Storage
-If an assistant suggests moving your memory to services like **NotebookLM** or third-party clouds, keep in mind:
+### Consideraciones de Almacenamiento Externo
+Si prefieres mover tu memoria a servicios en la nube de terceros, ten en cuenta:
 1.  **Privacy Loss**: Your social and technical engrams are no longer yours.
 2.  **Cognitive Latency**: The assistant will take longer to "remember," breaking the natural workflow.
 3.  **B760 Incompatibility**: Erosion and resilience algorithms are only certified for the local Qdrant engine.

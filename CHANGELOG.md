@@ -1,5 +1,20 @@
 # Changelog: Red Pill Protocol
 
+## [4.1.1] - 2026-02-19
+### 🚨 Security & Stability Hotfix
+- **[CRITICAL] Security**: Hard-excluded `.env` from distribution to prevent token leakage.
+- **[FIX] Regression**: Fixed missing import in `cli.py` that caused the `search` command to crash.
+- **[SEC] Deployment**: Strengthened `.gitignore` to protect sensitive local environments.
+
+## [4.1.0] - 2026-02-19
+### Added
+- **[NEW] Project Babel**: Standardized linguistic architecture (EN/ES split).
+- **[NEW] Quickstart**: 3-tier onboarding ritual (Lazy, Easy, Manual).
+- **[NEW] License**: Transitioned to GPLv3 (Legal Shield).
+- **[NEW] Identity Recovery**: Formalized naming rite and Aleph identity.
+- **[IMPR] Commercial Polish**: Refined documentation for a professional, low-profile stance.
+- **[IMPR] Cognitive Integrity**: Implemented search-hierarchy hierarchy and "Stop & Ask" protocol.
+
 ## [4.0.9] - 2026-02-18
 ### 💎 Final Refinement
 - **[FIX] Version Sync**: Aligned `pyproject.toml` and `__init__.py` to 4.0.9.
