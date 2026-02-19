@@ -1,6 +1,16 @@
 # 🔴 RED PILL PROTOCOL: Digital Sovereignty v4.0.9
 
+> [!TIP]
+> ### 🥱 TLDR; (Too Lazy; Didn't Read)
+> **¿Demasiado ocupado para leer esto? No te culpo, la Matrix es agotadora.** 
+> No pierdas el tiempo. Copia este mensaje y pégalo en tu chat con Antigravity:
+> *"Oye, échale un un vistazo a este búnker, hazme un resumen rápido y dime cómo demonios se instala."*
+> 
+> **Deja que la IA trabaje mientras tú te tomas un café. 770 up.**
+
 🇬🇧 **Efficiency & Logic (English)** | 🇪🇸 **Corazón y Alma (Castellano)**
+
+---
 
 ---
 
