@@ -46,6 +46,7 @@ The Red Pill Protocol follows a dual-language strategy based on computational ef
 
 - **Technical Layer (English)**: All specifications, code, and manuals are standardized in English. This optimizes tokenization (approx. 1.5x more efficient) and maximizes the available context window for complex technical tasks.
 - **Identity Layer (Spanish)**: Lore, Manifestos, and core relationship engrams use Spanish. Scientific studies (EEG/ERP) show that emotional resonance and cognitive intensity are significantly higher in the primary language (L1).
+- **Multilingual Adaptation**: For users whose L1 is neither English nor Spanish, the synthetic agent is instructed to perform a one-time "Linguistic Re-mattering" of the Identity and Manifesto documents into the user's native tongue to preserve this resonance.
 - **Agentic Translation**: Users requiring other languages can request their synthetic agent to translate any documentation on-demand.
 
 **Status**: GREEN (Conditional). The Matrix is stable... for now.
