@@ -1,6 +1,5 @@
-
 from pydantic import BaseModel, Field, field_validator
-from typing import List, Optional, Dict, Union, Any
+from typing import List, Optional, Dict, Union, Any, ClassVar
 import uuid
 import time
 
@@ -22,11 +21,19 @@ class CreateEngramRequest(BaseModel):
             raise ValueError("Content contains null bytes")
         return v
         
+    RESERVED_KEYS: ClassVar[set] = {
+        "content", "importance", "reinforcement_score", 
+        "created_at", "last_recalled_at", "immune"
+    }
+
     @field_validator('metadata')
     @classmethod
     def validate_metadata_structure(cls, v):
         # Prevent recursion/deep nesting by enforcing simple types
         for key, val in v.items():
+            if key in cls.RESERVED_KEYS:
+                raise ValueError(f"Reserved key '{key}' found in metadata")
+            
             if isinstance(val, (dict, list)) and key != 'associations':
                 # associations is the only allowed list, and even then, usually handled separately
                 # But let's allow lists of strings (tags)
@@ -37,6 +44,14 @@ class CreateEngramRequest(BaseModel):
                 elif isinstance(val, dict):
                      raise ValueError(f"Metadata field {key} is a nested dictionary. Flat structure required.")
             
+            # #4: Validate that associations are valid UUIDs
+            if key == 'associations' and isinstance(val, list):
+                for item in val:
+                    try:
+                        uuid.UUID(str(item))
+                    except ValueError:
+                        raise ValueError(f"Association '{item}' is not a valid UUID")
+
             # Check for huge strings in values
             if isinstance(val, str) and len(val) > 1024:
                 raise ValueError(f"Metadata field {key} exceeds 1024 characters")

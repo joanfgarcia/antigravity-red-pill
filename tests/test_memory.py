@@ -1,5 +1,6 @@
 import pytest
 import uuid
+from pydantic import ValidationError
 from unittest.mock import MagicMock, patch
 from red_pill.memory import MemoryManager
 import red_pill.config as config
@@ -202,18 +203,6 @@ def test_manual_id_injection(manager, mock_qdrant):
 
 def test_strict_id_validation(manager, mock_qdrant):
     # Test that _reinforce_points filters out garbage strings
-    # We use a real increment map here
-    increments = {"valid-uuid": 0.1, "garbage": 0.05}
-    manager.client.retrieve.return_value = [] # Content doesn't matter, just the call
-    
-    manager._reinforce_points("test_col", ["valid-uuid", "garbage"], increments)
-    
-    # Check what was passed to retrieve
-    args, kwargs = manager.client.retrieve.call_args
-    # Since "garbage" is not a UUID, it should be filtered out
-    # Wait, in our filter, we use uuid.UUID(str(pid))
-    # "valid-uuid" would also fail if it's not a real UUID format.
-    # Let's use real looking strings.
     real_uuid = str(uuid.uuid4())
     increments = {real_uuid: 0.1, "not-a-uuid": 0.05}
     
@@ -221,3 +210,16 @@ def test_strict_id_validation(manager, mock_qdrant):
     args, kwargs = manager.client.retrieve.call_args
     assert real_uuid in kwargs['ids']
     assert "not-a-uuid" not in kwargs['ids']
+
+def test_immunity_bypass_blocked(manager, mock_qdrant):
+    # Test that reserved keys like 'immune' are blocked in metadata
+    with pytest.raises(ValidationError) as excinfo:
+        manager.add_memory("test_col", "content", metadata={"immune": True})
+    
+    assert "Reserved key 'immune' found in metadata" in str(excinfo.value)
+
+def test_system_keys_bypass_blocked(manager, mock_qdrant):
+    # Test other reserved keys as well
+    for key in ["reinforcement_score", "created_at", "last_recalled_at"]:
+        with pytest.raises(ValidationError):
+            manager.add_memory("test_col", "content", metadata={key: 123})

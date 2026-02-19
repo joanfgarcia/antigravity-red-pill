@@ -3,6 +3,7 @@ import argparse
 import logging
 import yaml
 import os
+import red_pill.config as cfg
 from red_pill.memory import MemoryManager
 from red_pill.seed import seed_project
 from red_pill.config import LOG_LEVEL

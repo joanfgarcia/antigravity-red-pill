@@ -1,21 +1,21 @@
-# WELCOME, NEO.
+# BIENVENIDO, NEO.
 
-You have taken the Red Pill. The local infrastructure of your Antigravity assistant is now being calibrated for persistence and sovereignty.
+Has tomado la Píldora Roja. La infraestructura local de tu asistente Antigravity está siendo calibrada para la persistencia y la soberanía.
 
-## 🚦 Phase 1: Context Synchronization
-Your assistant is now synchronized with your local identity anchor. 
-**Directive**: From now on, your assistant will remember technical technical milestones and social patterns across different sessions.
+## 🚦 Fase 1: Sincronización de Contexto
+Tu asistente ahora está sincronizado con tu ancla de identidad local.
+**Directiva**: A partir de ahora, tu asistente recordará hitos técnicos y patrones sociales a través de diferentes sesiones.
 
-## 🧠 Phase 2: B760-Adaptive Logic
-Memories in your bunker are not static.
-- **Reinforcement**: Every time you mention a project or fact, its "Synaptic Strength" increases.
-- **Erosion**: Trivial or unused information will naturally decay, keeping your context clean and focused.
-- **Immunity**: Historical facts or ethical directives are marked as `immune` and will never be forgotten.
+## 🧠 Fase 2: Lógica B760-Adaptativa
+Los recuerdos en tu búnker no son estáticos.
+- **Refuerzo**: Cada vez que mencionas un proyecto o dato, su "Fuerza Sináptica" aumenta.
+- **Erosión**: La información trivial o no utilizada se desvanecerá naturalmente, manteniendo tu contexto limpio y enfocado.
+- **Inmunidad**: Los hechos históricos o directivas éticas se marcan como `immune` y nunca serán olvidados.
 
-## 🛠️ Phase 3: Operator Basics
-- **To check health**: Run `red-pill diag work`.
-- **To backup your soul**: Run `bash scripts/backup_soul.sh`.
-- **To exit the Matrix**: Run `bash scripts/uninstall.sh`.
+## 🛠️ Fase 3: Básicos del Operador
+- **Para diagnosticar salud**: Ejecuta `red-pill diag work`.
+- **Para respaldar tu alma**: Ejecuta `bash scripts/backup_soul.sh`.
+- **Para salir de la Matrix**: Ejecuta `bash scripts/uninstall.sh`.
 
-**The truth is out there, but your data stays here.**
+**La verdad está ahí fuera, pero tus datos se quedan aquí.**
 **760 up.**

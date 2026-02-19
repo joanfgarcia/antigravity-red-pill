@@ -61,6 +61,11 @@ class MemoryManager:
         actual_id = point_id if point_id else str(uuid.uuid4())
         vector = self._get_vector(text)
         
+        # Final defense: explicitly strip reserved keys from metadata
+        # even though Pydantic should have caught them.
+        for key in CreateEngramRequest.RESERVED_KEYS:
+            clean_metadata.pop(key, None)
+
         payload = {
             "content": text,
             "importance": importance,
@@ -189,7 +194,7 @@ class MemoryManager:
             query_filter=search_filter,
             limit=limit * (2 if deep_recall else 1), # Double limit for Deep Recall as per spec 6.2
             with_payload=True,
-            with_vectors=True
+            with_vectors=False # Optimization: vectors are not needed for reinforcement logic
         )
         
         # Reinforcement Increment Map
@@ -215,9 +220,6 @@ class MemoryManager:
         points_to_update = self._reinforce_points(collection, list(increment_map.keys()), increment_map)
         
         if points_to_update:
-            # self.client.upsert(collection_name=collection, points=points_to_update) 
-            # REMOVED: _reinforce_points now handles persistence via set_payload to avoid overwrites
-            pass
             # Map reinforced payloads back to response hits for immediate usage
             update_map = {p.id: p.payload for p in points_to_update}
             for hit in response.points:
@@ -251,6 +253,12 @@ class MemoryManager:
         """
         if rate is None:
             rate = cfg.EROSION_RATE
+
+        if rate > 0.5:
+             logger.warning(f"High erosion rate detected: {rate}. This may cause premature memory loss.")
+        if rate <= 0:
+             logger.error(f"Invalid erosion rate: {rate}. Must be positive.")
+             return
 
         offset = None
         eroded_count = 0
