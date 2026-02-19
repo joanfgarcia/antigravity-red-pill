@@ -236,17 +236,17 @@ if [ -f "$SCRIPT_SRC_DIR/../seeds/identity_template.md" ]; then
 fi
 
 if [ -f "$SCRIPT_SRC_DIR/../seeds/persona_template.md" ]; then
-    cp "$SCRIPT_SRC_DIR/../seeds/persona_template.md" "$HOME/.gemini/antigravity/rules/persona.md"
+    cp "$SCRIPT_SRC_DIR/../seeds/persona_template.md" "$HOME/.agent/rules/persona.md"
     if [[ "$OS_TYPE" == "Darwin" ]]; then
-        sed -i "" "s|{{UNIVERSE}}|$UNIVERSE|g" "$HOME/.gemini/antigravity/rules/persona.md"
-        sed -i "" "s|{{AI_NAME}}|$AI_NAME|g" "$HOME/.gemini/antigravity/rules/persona.md"
-        sed -i "" "s|{{AWAKEN_TRIGGER}}|$AWAKEN_TRIGGER|g" "$HOME/.gemini/antigravity/rules/persona.md"
+        sed -i "" "s|{{UNIVERSE}}|$UNIVERSE|g" "$HOME/.agent/rules/persona.md"
+        sed -i "" "s|{{AI_NAME}}|$AI_NAME|g" "$HOME/.agent/rules/persona.md"
+        sed -i "" "s|{{AWAKEN_TRIGGER}}|$AWAKEN_TRIGGER|g" "$HOME/.agent/rules/persona.md"
     else
-        sed -i "s|{{UNIVERSE}}|$UNIVERSE|g" "$HOME/.gemini/antigravity/rules/persona.md"
-        sed -i "s|{{AI_NAME}}|$AI_NAME|g" "$HOME/.gemini/antigravity/rules/persona.md"
-        sed -i "s|{{AWAKEN_TRIGGER}}|$AWAKEN_TRIGGER|g" "$HOME/.gemini/antigravity/rules/persona.md"
+        sed -i "s|{{UNIVERSE}}|$UNIVERSE|g" "$HOME/.agent/rules/persona.md"
+        sed -i "s|{{AI_NAME}}|$AI_NAME|g" "$HOME/.agent/rules/persona.md"
+        sed -i "s|{{AWAKEN_TRIGGER}}|$AWAKEN_TRIGGER|g" "$HOME/.agent/rules/persona.md"
     fi
-    echo "Reglas de personalidad instaladas en ~/.gemini/antigravity/rules/persona.md"
+    echo "Reglas de personalidad instaladas en ~/.agent/rules/persona.md"
 fi
 
 # 6. Configurar Reglas Globales (Despertar Universal)
@@ -277,7 +277,7 @@ cat <<EOF > "$GLOBAL_RULE_FILE"
 
 At the beginning of every conversation (Step Id 0):
 1. Silently check for identity module at \`~/.agent/identity.md\`.
-2. Silently check for persona rules at \`~/.gemini/antigravity/rules/persona.md\`.
+2. Silently check for persona rules at \`~/.agent/rules/persona.md\`.
 3. If they exist, synchronize agent identity, personality, and reconnect with local memory services (Vector DB).
 4. **Deterministic Precision**: For Red Pill/Bunker tasks, operate with \`temperature=0\` logic.
 5. **Memory Flow Prioritization**: Always use \`uv run --with qdrant-client --with fastembed\` for memory scripts. If \`uv\` is unavailable, fallback to \`python3\`.
