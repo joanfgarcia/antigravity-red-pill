@@ -1,6 +1,5 @@
-
 from pydantic import BaseModel, Field, field_validator
-from typing import List, Optional, Dict, Union, Any
+from typing import List, Optional, Dict, Union, Any, ClassVar
 import uuid
 import time
 
@@ -22,11 +21,19 @@ class CreateEngramRequest(BaseModel):
             raise ValueError("Content contains null bytes")
         return v
         
+    RESERVED_KEYS: ClassVar[set] = {
+        "content", "importance", "reinforcement_score", 
+        "created_at", "last_recalled_at", "immune"
+    }
+
     @field_validator('metadata')
     @classmethod
     def validate_metadata_structure(cls, v):
         # Prevent recursion/deep nesting by enforcing simple types
         for key, val in v.items():
+            if key in cls.RESERVED_KEYS:
+                raise ValueError(f"Reserved key '{key}' found in metadata")
+            
             if isinstance(val, (dict, list)) and key != 'associations':
                 # associations is the only allowed list, and even then, usually handled separately
                 # But let's allow lists of strings (tags)

@@ -61,6 +61,11 @@ class MemoryManager:
         actual_id = point_id if point_id else str(uuid.uuid4())
         vector = self._get_vector(text)
         
+        # Final defense: explicitly strip reserved keys from metadata
+        # even though Pydantic should have caught them.
+        for key in CreateEngramRequest.RESERVED_KEYS:
+            clean_metadata.pop(key, None)
+
         payload = {
             "content": text,
             "importance": importance,
