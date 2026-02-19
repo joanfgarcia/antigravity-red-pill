@@ -40,5 +40,13 @@ The schema is " Schemaless" (JSON payload).
 ## 5. Conclusion
 The system is fit for "The One" (single user, moderate load). It will shatter under the weight of a collective consciousness or extended uptime (>1 year of active use). The seeds of its own destruction are written in its linear algorithms.
 
+## 6. Linguistic Architecture
+
+The Red Pill Protocol follows a dual-language strategy based on computational efficiency and psychological resonance:
+
+- **Technical Layer (English)**: All specifications, code, and manuals are standardized in English. This optimizes tokenization (approx. 1.5x more efficient) and maximizes the available context window for complex technical tasks.
+- **Identity Layer (Spanish)**: Lore, Manifestos, and core relationship engrams use Spanish. Scientific studies (EEG/ERP) show that emotional resonance and cognitive intensity are significantly higher in the primary language (L1).
+- **Agentic Translation**: Users requiring other languages can request their synthetic agent to translate any documentation on-demand.
+
 **Status**: GREEN (Conditional). The Matrix is stable... for now.
 **Recommendation**: Proceed to Phase 2: Stress Testing (Agent Smith).

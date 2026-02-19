@@ -3,7 +3,7 @@ name = "antigravity-red-pill"
 version = "4.0.9"
 description = "A neuro-inspired local RAG persistence layer for AI assistants."
 readme = "README.md"
-license = "MIT"
+license = "GPL-3.0-only"
 requires-python = ">=3.10"
 dependencies = [
     "qdrant-client>=1.8.0",
