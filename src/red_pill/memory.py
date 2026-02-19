@@ -194,7 +194,7 @@ class MemoryManager:
             query_filter=search_filter,
             limit=limit * (2 if deep_recall else 1), # Double limit for Deep Recall as per spec 6.2
             with_payload=True,
-            with_vectors=True
+            with_vectors=False # Optimization: vectors are not needed for reinforcement logic
         )
         
         # Reinforcement Increment Map
@@ -256,6 +256,12 @@ class MemoryManager:
         """
         if rate is None:
             rate = cfg.EROSION_RATE
+
+        if rate > 0.5:
+             logger.warning(f"High erosion rate detected: {rate}. This may cause premature memory loss.")
+        if rate <= 0:
+             logger.error(f"Invalid erosion rate: {rate}. Must be positive.")
+             return
 
         offset = None
         eroded_count = 0
