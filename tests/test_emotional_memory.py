@@ -11,7 +11,9 @@ def mock_qdrant():
 
 @pytest.fixture
 def manager(mock_qdrant):
-	return MemoryManager()
+	mgr = MemoryManager()
+	mgr._get_vector = MagicMock(return_value=[0.1] * cfg.VECTOR_SIZE)
+	return mgr
 
 def test_emotional_erosion(manager, mock_qdrant):
 	# Setup multipliers

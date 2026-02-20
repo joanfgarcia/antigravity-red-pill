@@ -12,7 +12,9 @@ def mock_qdrant():
 
 @pytest.fixture
 def manager(mock_qdrant):
-    return MemoryManager()
+	mgr = MemoryManager()
+	mgr._get_vector = MagicMock(return_value=[0.1] * config.VECTOR_SIZE)
+	return mgr
 
 def test_linear_decay(manager):
     config.DECAY_STRATEGY = "linear"

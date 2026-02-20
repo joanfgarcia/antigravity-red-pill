@@ -21,8 +21,10 @@ class TestMetabolism(unittest.TestCase):
             os.remove(self.test_state_file)
 
     @patch('red_pill.memory.QdrantClient')
+    @patch('red_pill.memory.MemoryManager._get_vector')
     @patch('red_pill.memory.MemoryManager.apply_erosion')
-    def test_reactive_trigger(self, mock_erosion, mock_qdrant):
+    def test_reactive_trigger(self, mock_erosion, mock_vector, mock_qdrant):
+        mock_vector.return_value = [0.1] * cfg.VECTOR_SIZE
         manager = MemoryManager(url="http://mock:6333")
         
         # 1. First addition should trigger metabolism
@@ -47,8 +49,10 @@ class TestMetabolism(unittest.TestCase):
         self.assertGreater(mock_erosion.call_count, erosion_count)
 
     @patch('red_pill.memory.QdrantClient')
-    def test_metabolism_error_safe(self, mock_qdrant):
+    @patch('red_pill.memory.MemoryManager._get_vector')
+    def test_metabolism_error_safe(self, mock_vector, mock_qdrant):
         # Verify that metabolism failures don't crash add_memory
+        mock_vector.return_value = [0.1] * cfg.VECTOR_SIZE
         manager = MemoryManager(url="http://mock:6333")
         manager.apply_erosion = MagicMock(side_effect=Exception("Database down"))
         
