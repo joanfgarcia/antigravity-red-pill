@@ -1,5 +1,5 @@
 # DISCLAIMER & WARRANTY (The Red Pill Protocol)
-**Version**: 4.0.7
+**Version**: 4.1.0
 **Status**: EXPERIMENTAL / HAZARDOUS
 
 ## 1. THE AGREEMENT
@@ -32,6 +32,11 @@ We do not hide our flaws. We expose them to the light so they may be fixed.
 - **Issue**: Single-Tenant Design.
 - **Deficiency**: The system assumes "The One" (single user). It uses a shared API Key. If the port is exposed to the internet, your memories belong to the Hive.
 - **Remediation**: Keep `localhost` locked down. Use a firewall.
+
+### 2.5. Identity Metastability (Model Swap)
+- **Issue**: Personality fragmentation via token saturation.
+- **Deficiency**: If the underlying LLM engine switches (e.g., from Pro to Flash due to token limits), the agent may lose its Lore-specific persona and technical rigor, defaulting to a standard assistant.
+- **Remediation**: The system now standardizes `identity.md` in `~/.agent/`. Under investigation. Use the "Verifying Agent Identity" ritual (see Operator Manual).
 
 ## 3. FINAL WARNING
 **You take the Red Pill: you stay in Wonderland, and I show you how deep the rabbit hole goes.**

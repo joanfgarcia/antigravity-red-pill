@@ -1,40 +1,70 @@
 import os
+
 from dotenv import load_dotenv
 
-# Load environment variables if .env exists
 load_dotenv()
 
-# Qdrant Configuration
-# Qdrant Configuration
+# QDRANT
 QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", None)
 QDRANT_SCHEME = os.getenv("QDRANT_SCHEME", "http")
 QDRANT_URL = f"{QDRANT_SCHEME}://{QDRANT_HOST}:{QDRANT_PORT}"
 
-# Model Configuration (FastEmbed)
-# Model Configuration (FastEmbed)
+# MODELS
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
 VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", "384"))
 
-# B760 Logic Configuration
-# B760 Logic Configuration
-DECAY_STRATEGY = os.getenv("DECAY_STRATEGY", "linear")  # Options: linear, exponential
+# B760 LOGIC
+DECAY_STRATEGY = os.getenv("DECAY_STRATEGY", "linear")
 if DECAY_STRATEGY not in ("linear", "exponential"):
-    raise ValueError(f"Invalid DECAY_STRATEGY: {DECAY_STRATEGY}. Must be 'linear' or 'exponential'.")
+	raise ValueError(f"Invalid DECAY_STRATEGY: {DECAY_STRATEGY}")
+
 EROSION_RATE = float(os.getenv("EROSION_RATE", "0.05"))
 REINFORCEMENT_INCREMENT = float(os.getenv("REINFORCEMENT_INCREMENT", "0.1"))
-PROPAGATION_FACTOR = float(os.getenv("PROPAGATION_FACTOR", "0.5"))  # Reinforcement fraction for associations
+PROPAGATION_FACTOR = float(os.getenv("PROPAGATION_FACTOR", "0.5"))
 IMMUNITY_THRESHOLD = float(os.getenv("IMMUNITY_THRESHOLD", "10.0"))
 
-# Logging Configuration
+# LOGGING
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
-# Deep Recall Configuration
+
+# DEEP RECALL & WAKE CALLS
+# 'despierta' and 'wake up' are the unalterable synthetic-organic symbiosis triggers.
+_default_triggers = "don't you remember,¿no te acuerdas?,deep recall,do you really not remember?,esfuerzate en recordar,try hard!"
+_env_triggers = os.getenv("DEEP_RECALL_TRIGGERS", _default_triggers)
+
 DEEP_RECALL_TRIGGERS = [
-    "don't you remember",
-    "¿no te acuerdas?",
-    "deep recall",
-    "do you really not remember?",
-    "esfuerzate en recordar",
-    "try hard!" # Tightened with exclamation mark to avoid accidental overlap
-]
+	"despierta",
+	"despierta neo",
+	"wake up"
+] + [t.strip().lower() for t in _env_triggers.split(",") if t.strip()]
+
+# METABOLISM
+METABOLISM_ENABLED = os.getenv("METABOLISM_ENABLED", "True").lower() == "true"
+METABOLISM_COOLDOWN = int(os.getenv("METABOLISM_COOLDOWN", "3600"))
+METABOLISM_AUTO_COLLECTIONS = os.getenv("METABOLISM_AUTO_COLLECTIONS", "work_memories,social_memories").split(",")
+METABOLISM_STATE_FILE = os.path.expanduser("~/.red_pill_metabolism")
+
+# EMOTIONAL CHROMA (v4.2.0)
+DEFAULT_COLOR = "gray"
+DEFAULT_EMOTION = "neutral"
+EMOTIONAL_DECAY_MULTIPLIERS = {
+	"orange": 1.5,  # Anxiety: decays faster if not reinforced
+	"yellow": 0.5,  # Joy: persists longer
+	"purple": 2.0,  # Ennui: garbage collected quickly
+	"cyan": 0.8,    # Envy/Evolution: focused persistence
+	"blue": 1.0,    # Sadness: standard decay
+	"gray": 1.0,    # Neutral: standard decay
+}
+
+# CHROMA-TONE MAPPING (v4.2.1)
+# Mapping for non-technical narrative refraction.
+CHROMA_TONE_MAPPING = {
+	"orange": "Vigilant, alert, high risk-awareness, proactive warnings.",
+	"yellow": "Optimistic, encouraging, success-focused, warm.",
+	"purple": "Minimalist, extremely concise, efficiency-first, no fluff.",
+	"cyan": "Visionary, future-oriented, focused on growth and backlog.",
+	"blue": "Reflective, empathetic, serious, acknowledging weight.",
+	"gray": "Professional, balanced, direct, objective (Standard).",
+	"nostalgia": "Respectful, shared legacy focus, acknowledging the long road."
+}

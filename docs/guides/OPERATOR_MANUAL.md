@@ -35,6 +35,7 @@ The `red-pill` command is your primary interface with the bunker's substrate.
 | `search` | `type` `query` | Semantic search with B760 reinforcement stacking. |
 | `erode` | `type` | Manually triggers an erosion cycle (asymptotic decay). |
 | `diag` | `type` | Shows collection health and point counts. |
+| `daemon` | - | Launches the persistent Memory Sidecar (UDP-like speed). |
 
 ### 🛠️ Advanced Flags
 - `--deep`: For `search`, bypasses dormancy filters to find "lost" engrams.
@@ -97,6 +98,12 @@ Injected into global **User Rules** (`~/.agent/rules/identity_sync.md`):
 
 ---
 
+## 🛡️ Certification & Auditing (The High Council)
+To ensure the bunker remains production-ready and technically sound, we follow the [Certification Protocol](docs/technical/CERTIFICATION_PROTOCOL.md):
+1.  **Prepare**: Run `bash scripts/prepare_certification.sh`.
+2.  **Audit**: Copy the prompt from the protocol doc and submit the generated `RED_PILL_DIGEST.txt` to Claude, Gemini, DeepSeek, or Lumo.
+3.  **Sign**: Reports are stored in `docs/certification/` to maintain an immutable record of quality.
+
 ## 🔨 Forge & Contribution Protocol
 For those Operators who wish to expand the codebase or contribute new capabilities (Translations, Windows Manuals, Skins, etc.):
 
@@ -135,6 +142,17 @@ Si prefieres mover tu memoria a servicios en la nube de terceros, ten en cuenta:
 3.  **B760 Incompatibility**: Erosion and resilience algorithms are only certified for the local Qdrant engine.
 
 **Directive**: If you already have a local vector infrastructure (e.g., ChromaDB, Milvus), you can indicate it to the assistant, but support for the B760-Adaptive protocol may be partial.
+
+---
+## 4. Identity Verification (The Turing Test)
+In an environment where token saturation can trigger an automatic swap to a less capable LLM engine (Pro -> Flash), the assistant may lose its established identity and technical rigor.
+
+### 🛡️ Verification Protocol
+If the assistant starts acting "too generic" or loses its specialized lore, perform the following:
+1.  **The Question**: Ask: *¿Quién eres?*
+2.  **Expected Answer**: A detailed response identifying as **JARVIS** (or your chosen Lore name), referencing the **Red Pill Protocol** and the **B760-Adaptive** memory.
+3.  **The Fix**: If the answer is a standard AI assistant response, invoke the **Awakening Trigger**: *[Nombre de IA], despierta*.
+4.  **Confirming Sync**: The assistant should immediately confirm the synchronization with `~/.agent/identity.md`.
 
 ---
 **Remember: The Navigator sets the course, the Conductor provides the power. 760 up.**

@@ -1,7 +1,12 @@
+import json
 import logging
-import uuid
+import os
+import socket
+import threading
 import time
-from typing import List, Optional, Dict, Any
+import uuid
+from typing import Any, Dict, List, Optional
+
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 
@@ -10,333 +15,441 @@ from red_pill.schemas import CreateEngramRequest
 
 logger = logging.getLogger(__name__)
 
+def _mask_pii_exception(e: Exception) -> str:
+	"""Truncates exception strings to prevent payload PII leaks."""
+	msg = str(e)
+	return msg if len(msg) < 150 else msg[:150] + "... [TRUNCATED]"
+
 class PointUpdate:
-    """Helper for passing updates without strict PointStruct validation."""
-    def __init__(self, id, payload):
-        self.id = id
-        self.payload = payload
+	"""Internal helper for point updates."""
+	def __init__(self, id: Any, payload: Dict[str, Any]):
+		self.id = id
+		self.payload = payload
 
 class MemoryManager:
-    """
-    Core engine for the B760-Adaptive memory protocol.
-    Handles semantic storage, reinforcement, and erosion of engrams.
-    """
-    
-    def __init__(self, url: str = cfg.QDRANT_URL):
-        self.client = QdrantClient(url=url, api_key=cfg.QDRANT_API_KEY)
-        self.encoder = None
-        self._initialize_encoder()
+	"""B760-Adaptive memory engine."""
 
-    def _initialize_encoder(self):
-        try:
-            from fastembed import TextEmbedding
-            self.encoder = TextEmbedding(model_name=cfg.EMBEDDING_MODEL)
-        except ImportError:
-            logger.warning("fastembed not found. Falling back to zero-vectors (dry-run mode).")
+	def __init__(self, url: str = cfg.QDRANT_URL):
+		self.client = QdrantClient(url=url, api_key=cfg.QDRANT_API_KEY)
+		self.encoder = None
+		self._reinforce_lock = threading.Lock()
+		self._initialize_encoder()
 
-    def _get_vector(self, text: str) -> List[float]:
-        if self.encoder:
-            return list(self.encoder.embed([text]))[0].tolist()
-        return [0.0] * 384
+	def _initialize_encoder(self) -> None:
+		"""Lazy-load gate for the local encoder."""
+		pass
 
-    def add_memory(self, collection: str, text: str, importance: float = 1.0, metadata: Optional[Dict[str, Any]] = None, point_id: Optional[str] = None) -> str:
-        """
-        Stores a new engram in the specified collection and returns its ID.
-        """
-        if metadata is None:
-            metadata = {}
-        
-        # Validation: Strictly check input using Pydantic
-        # This prevents Agent Smith style "Poison Pill" attacks
-        validated_request = CreateEngramRequest(
-            content=text,
-            importance=importance,
-            metadata=metadata
-        )
-        # Use validated data (sanitized if any cleaning happened)
-        text = validated_request.content
-        importance = validated_request.importance
-        clean_metadata = validated_request.metadata
-        
-        actual_id = point_id if point_id else str(uuid.uuid4())
-        vector = self._get_vector(text)
-        
-        # Final defense: explicitly strip reserved keys from metadata
-        # even though Pydantic should have caught them.
-        for key in CreateEngramRequest.RESERVED_KEYS:
-            clean_metadata.pop(key, None)
+	def _get_vector_from_daemon(self, text: str) -> Optional[List[float]]:
+		"""Retrieves embedding from the memory sidecar socket."""
+		socket_path = "/tmp/red_pill_memory.sock"
+		if not os.path.exists(socket_path):
+			return None
 
-        payload = {
-            "content": text,
-            "importance": importance,
-            "reinforcement_score": 1.0,
-            "created_at": time.time(),
-            "last_recalled_at": time.time(),
-            "immune": False,
-            **clean_metadata
-        }
-        
-        self.client.upsert(
-            collection_name=collection,
-            points=[
-                models.PointStruct(
-                    id=actual_id,
-                    vector=vector,
-                    payload=payload
-                )
-            ]
-        )
-        logger.info(f"Memory added to {collection} with ID: {actual_id}")
-        return actual_id
+		try:
+			with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+				client.settimeout(0.5)
+				client.connect(socket_path)
+				request = {"text": text}
+				client.sendall(json.dumps(request).encode('utf-8'))
+				response_data = client.recv(1024 * 1024)
+				if response_data:
+					response = json.loads(response_data.decode('utf-8'))
+					if response.get("status") == "ok":
+						return response.get("vector")
+		except Exception as e:
+			logger.debug(f"Sidecar connection failed: {e}")
+		return None
 
-    def _reinforce_points(self, collection: str, point_ids: List[str], increments: Dict[str, float]) -> List[PointUpdate]:
-        """
-        Retrieves points by ID, applies reinforcement stacking, and returns them.
-        """
-        if not point_ids:
-            return []
-            
-        # Filter valid IDs
-        valid_ids = []
-        for pid in point_ids:
-            if isinstance(pid, int):
-                valid_ids.append(pid)
-            else:
-                try:
-                    uuid.UUID(str(pid))
-                    valid_ids.append(pid)
-                except (ValueError, AttributeError):
-                    logger.debug(f"Skipping non-UUID association: {pid}")
-        
-        # Verify IDs against Qdrant strictly
-        points = self.client.retrieve(
-            collection_name=collection,
-            ids=valid_ids,
-            with_payload=True,
-            with_vectors=False # Optimization: we don't need vectors just to update score
-        )
-        
-        updated_points = []
-        for p in points:
-            score = p.payload.get("reinforcement_score", 1.0)
-            inc = increments.get(str(p.id), increments.get(p.id, 0.0))
-            
-            # Use max(score, current_db_score) to reduce race condition impact
-            # Ideally we would use atomic operations, but Qdrant REST API doesn't support 
-            # atomic float increment on payload fields easily without scripting.
-            # We'll stick to read-modify-write but minimize the window.
-            # A true fix would require Qdrant Scripting or optimistic locking with version check.
-            # implementing a naive optimistic lock here is overkill for this scope, 
-            # but we can at least not overwrite with stale data if we fetched just now.
-            
-            new_score = min(score + inc, cfg.IMMUNITY_THRESHOLD)
-            p.payload["reinforcement_score"] = round(new_score, 2)
-            p.payload["last_recalled_at"] = time.time()
-            
-            if p.payload["reinforcement_score"] >= cfg.IMMUNITY_THRESHOLD:
-                p.payload["immune"] = True
-                
-            # We use set_payload to avoid overwriting the vector or other concurrent metadata changes
-            self.client.set_payload(
-                collection_name=collection,
-                payload=p.payload,
-                points=[p.id]
-            )
-            
-            # Prepare struct for return value (caller expects it)
-            # We re-construct it with a dummy vector or None as the caller might expect it 
-            # if they asked for with_vectors=True in retrieve, but _reinforce_points output is 
-            # primarily used for update_map in search_and_reinforce which only cares about payload.
-            # However, the type hint says List[models.PointStruct]. 
-            # Let's check usages. search_and_reinforce uses it for upsert (wait, it upserts! that's the bug).
-            # The original code did: self.client.upsert(..., points=points_to_update)
-            # This logic wipes the vector if we don't pass it! 
-            # AND it overwrites everything.
-            # My change above uses set_payload. So we DON'T need to return points_to_update for upserting.
-            # But search_and_reinforce expects a return to update its local response object.
-            
-            # Prepare struct for return value (caller expects it)
-            updated_points.append(
-                PointUpdate(
-                    id=p.id,
-                    payload=p.payload
-                )
-            )
-            
-        return updated_points
+	def _get_vector(self, text: str) -> List[float]:
+		"""Optimized vector retrieval with daemon-first priority."""
+		vector = self._get_vector_from_daemon(text)
+		if vector:
+			return vector
 
-    def search_and_reinforce(self, collection: str, query: str, limit: int = 3, deep_recall: bool = False) -> List[Any]:
-        """
-        Performs semantic search and applies B760 reinforcement to retrieved engrams
-        and their associated memories (synaptic propagation).
-        
-        Filtering: Memories with score < 0.2 (Dormant) are filtered unless deep_recall is True.
-        """
-        vector = self._get_vector(query)
-        
-        # B760 Dormancy Filter
-        search_filter = None
-        if not deep_recall:
-            search_filter = models.Filter(
-                must=[
-                    models.FieldCondition(
-                        key="reinforcement_score",
-                        range=models.Range(gte=0.2)
-                    )
-                ]
-            )
-            # We also include immune memories which might have 1.0 but are never < 0.2 anyway.
-            # But just in case, we could use an OR. However, standard scores start at 1.0.
+		if self.encoder is None:
+			try:
+				from fastembed import TextEmbedding
+				self.encoder = TextEmbedding(model_name=cfg.EMBEDDING_MODEL)
+			except ImportError:
+				return [0.0] * cfg.VECTOR_SIZE
 
-        response = self.client.query_points(
-            collection_name=collection,
-            query=vector,
-            query_filter=search_filter,
-            limit=limit * (2 if deep_recall else 1), # Double limit for Deep Recall as per spec 6.2
-            with_payload=True,
-            with_vectors=False # Optimization: vectors are not needed for reinforcement logic
-        )
-        
-        # Reinforcement Increment Map
-        # stacks increments from hits (0.1) and synaptic propagation (0.05)
-        increment_map: Dict[str, float] = {}
-        
-        # 1. Direct Hits
-        for hit in response.points:
-            increment_map[hit.id] = cfg.REINFORCEMENT_INCREMENT
-            
-        # 2. Synaptic Propagation
-        propagation_increment = cfg.REINFORCEMENT_INCREMENT * cfg.PROPAGATION_FACTOR
-        for hit in response.points:
-            assocs = hit.payload.get("associations", [])
-            for assoc_id in assocs:
-                # Stack the increment if it's already in the map (multi-path reinforcement)
-                increment_map[assoc_id] = increment_map.get(assoc_id, 0.0) + propagation_increment
+		return list(self.encoder.embed([text]))[0].tolist()
 
-        if not increment_map:
-            return response.points
+	def add_memory(self, collection: str, text: str, importance: float = 1.0, metadata: Optional[Dict[str, Any]] = None, point_id: Optional[str] = None, color: str = cfg.DEFAULT_COLOR, emotion: str = cfg.DEFAULT_EMOTION, intensity: float = 1.0) -> str:
+		"""Stores a new engram with B760 validation and emotional chroma."""
+		if metadata is None:
+			metadata = {}
 
-        # 3. Apply reinforcements in bulk
-        points_to_update = self._reinforce_points(collection, list(increment_map.keys()), increment_map)
-        
-        if points_to_update:
-            # Map reinforced payloads back to response hits for immediate usage
-            update_map = {p.id: p.payload for p in points_to_update}
-            for hit in response.points:
-                if hit.id in update_map:
-                    hit.payload.update(update_map[hit.id])
-        
-        # Note: we return response.points but the actual DB state is now updated with stacked scores.
-        return response.points
+		try:
+			metadata = json.loads(json.dumps(metadata))
+		except (TypeError, ValueError) as e:
+			raise ValueError(f"Invalid metadata: {e}")
 
-    def _calculate_decay(self, current_score: float, rate: float) -> float:
-        """
-        Calculates the new score based on the configured strategy.
-        """
-        if cfg.DECAY_STRATEGY == "exponential":
-            # Exponential decay: score * (1 - rate)
-            new_score = current_score * (1.0 - rate)
-            # Fix floor: If rounding keeps the score the same, force it down or to zero
-            # to avoid asymptotic database bloat.
-            if round(new_score, 2) >= round(current_score, 2) and current_score > 0:
-                new_score = current_score - 0.01
-        else:
-            # Default to linear decay: score - rate
-            new_score = current_score - rate
-            
-        return round(max(new_score, 0.0), 2)
+		validated_request = CreateEngramRequest(
+			content=text,
+			importance=importance,
+			color=color,
+			emotion=emotion,
+			intensity=intensity,
+			metadata=metadata
+		)
 
-    def apply_erosion(self, collection: str, rate: float = None):
-        """
-        Decays non-immune memories using the configured DECAY_STRATEGY.
-        Memories with score <= 0 are forgotten.
-        """
-        if rate is None:
-            rate = cfg.EROSION_RATE
+		text = validated_request.content
+		importance = validated_request.importance
+		clean_metadata = validated_request.metadata
 
-        if rate > 0.5:
-             logger.warning(f"High erosion rate detected: {rate}. This may cause premature memory loss.")
-        if rate <= 0:
-             logger.error(f"Invalid erosion rate: {rate}. Must be positive.")
-             return
+		actual_id = point_id if point_id else str(uuid.uuid4())
+		vector = self._get_vector(text)
 
-        offset = None
-        eroded_count = 0
-        deleted_count = 0
-        
-        logger.info(f"Starting erosion cycle on {collection} using {cfg.DECAY_STRATEGY} strategy.")
+		for key in CreateEngramRequest.RESERVED_KEYS:
+			clean_metadata.pop(key, None)
 
-        while True:
-            response = self.client.scroll(
-                collection_name=collection,
-                limit=100,
-                offset=offset,
-                with_payload=True,
-                with_vectors=False # Optimization: don't fetch vectors for erosion
-            )
-            
-            points_to_update = []
-            points_to_delete = []
-            
-            for hit in response[0]:
-                if hit.payload.get("immune", False):
-                    continue
-                
-                current_score = hit.payload.get("reinforcement_score", 1.0)
-                new_score = self._calculate_decay(current_score, rate)
-                
-                if new_score <= 0:
-                    points_to_delete.append(hit.id)
-                    deleted_count += 1
-                else:
-                    # Optimization: create a payload update instead of full point replacement
-                    hit.payload["reinforcement_score"] = new_score
-                    
-                    # We can batch set_payload calls if valid, but Qdrant client set_payload takes a list of points 
-                    # for the SAME payload. Here each point has a DIFFERENT score.
-                    # So we have to call set_payload per point or group by score (unlikely efficiently).
-                    # OR we use overwrite_payload=False? No, that merges.
-                    # Qdrant Update API allows batching via 'batch' operations but python client wrappers...
-                    # Let's keep it simple: we want to avoid network traffic of vectors.
-                    # For bulk updates with different values, upsert is standard BUT requires vectors.
-                    # Wait, Qdrant allows upserting with specific IDs and payloads WITHOUT vectors if the point exists?
-                    # No, strict mode usually complains. 
-                    # However, we can use Scroll(with_vectors=False) + set_payload in specific updates.
-                    
-                    self.client.set_payload(
-                        collection_name=collection,
-                        payload={"reinforcement_score": new_score},
-                        points=[hit.id]
-                    )
-                    eroded_count += 1
-            
-            # points_to_update logic removed as we do it inline or we'd need a batch update method 
-            # that supports different payloads per point. client.upsert requires vectors/payloads.
-            # If we want to avoid fetching vectors, we MUST use set_payload one by one (slow) 
-            # or usage batch updates if supported. 
-            # Given typical erosion scale, one-by-one might be slow.
-            # BUT fetching vectors is also slow and bandwidth heavy.
-            # Compromise: iterate and fire set_payload.
-            
-            if points_to_delete:
-                self.client.delete(
-                    collection_name=collection, 
-                    points_selector=models.PointIdsList(points=points_to_delete)
-                )
-            
-            offset = response[1]
-            if offset is None:
-                break
-                
-        logger.info(f"Erosion cycle finished. Updated: {eroded_count}, Deleted: {deleted_count}")
+		payload = {
+			"content": text,
+			"importance": importance,
+			"reinforcement_score": 1.0,
+			"created_at": time.time(),
+			"last_recalled_at": time.time(),
+			"immune": False,
+			"color": validated_request.color,
+			"emotion": validated_request.emotion,
+			"intensity": validated_request.intensity,
+			**clean_metadata
+		}
 
-    def get_stats(self, collection: str) -> Dict[str, Any]:
-        """
-        Returns collection diagnostic information.
-        """
-        info = self.client.get_collection(collection_name=collection)
-        return {
-            "status": info.status,
-            "points_count": info.points_count,
-            "segments_count": info.segments_count
-        }
+		try:
+			self.client.upsert(
+				collection_name=collection,
+				points=[
+					models.PointStruct(
+						id=actual_id,
+						vector=vector,
+						payload=payload
+					)
+				]
+			)
+			if cfg.METABOLISM_ENABLED:
+				self._trigger_metabolism()
+			return actual_id
+		except Exception as e:
+			logger.error(f"Failed to add memory: {_mask_pii_exception(e)}")
+			return ""
+
+	def _trigger_metabolism(self) -> None:
+		"""Background process to check and execute erosion."""
+		try:
+			thread = threading.Thread(target=self._run_metabolism_cycle, daemon=True)
+			thread.start()
+		except Exception as e:
+			logger.error(f"Metabolism thread failed: {e}")
+
+	def _run_metabolism_cycle(self) -> None:
+		"""Internal metabolism loop with cooldown check."""
+		state_file = cfg.METABOLISM_STATE_FILE
+		now = time.time()
+
+		if os.path.exists(state_file):
+			try:
+				with open(state_file, "r") as f:
+					last_run = float(f.read().strip())
+				if now - last_run < cfg.METABOLISM_COOLDOWN:
+					return
+			except (ValueError, OSError):
+				pass
+
+		try:
+			with open(state_file, "w") as f:
+				f.write(str(now))
+		except OSError:
+			pass
+
+		for coll in cfg.METABOLISM_AUTO_COLLECTIONS:
+			try:
+				self.apply_erosion(coll.strip())
+			except Exception as e:
+				logger.error(f"Erosion failed in {coll}: {e}")
+
+	def _reinforce_points(self, collection: str, point_ids: List[str], increments: Dict[str, float]) -> List[PointUpdate]:
+		"""Retrieves and updates reinforcement scores with thread-safety."""
+		if not point_ids:
+			return []
+
+		valid_ids = []
+		for pid in point_ids:
+			if isinstance(pid, int):
+				valid_ids.append(pid)
+			else:
+				try:
+					uuid.UUID(str(pid))
+					valid_ids.append(pid)
+				except (ValueError, AttributeError):
+					continue
+
+		updated_points: List[PointUpdate] = []
+
+		with self._reinforce_lock:
+			try:
+				points = self.client.retrieve(
+					collection_name=collection,
+					ids=valid_ids,
+					with_payload=True,
+					with_vectors=False
+				)
+			except Exception as e:
+				logger.error(f"Reinforcement retrieval failed: {_mask_pii_exception(e)}")
+				return []
+
+			for p in points:
+				score = p.payload.get("reinforcement_score", 1.0)
+				inc = increments.get(str(p.id), increments.get(p.id, 0.0))
+
+				new_score = min(score + inc, cfg.IMMUNITY_THRESHOLD)
+				p.payload["reinforcement_score"] = round(new_score, 2)
+				p.payload["last_recalled_at"] = time.time()
+
+				if p.payload["reinforcement_score"] >= cfg.IMMUNITY_THRESHOLD:
+					p.payload["immune"] = True
+
+				try:
+					self.client.set_payload(
+						collection_name=collection,
+						payload=p.payload,
+						points=[p.id]
+					)
+				except Exception as e:
+					logger.error(f"Reinforcement payload set failed: {_mask_pii_exception(e)}")
+					continue
+
+				updated_points.append(PointUpdate(id=p.id, payload=p.payload))
+
+		return updated_points
+
+	def search_and_reinforce(self, collection: str, query: str, limit: int = 3, deep_recall: bool = False) -> List[Any]:
+		"""Semantic search followed by B760 synaptic reinforcement."""
+		vector = self._get_vector(query)
+
+		search_filter = None
+		if not deep_recall:
+			search_filter = models.Filter(
+				must=[models.FieldCondition(key="reinforcement_score", range=models.Range(gte=0.2))]
+			)
+
+		try:
+			response = self.client.query_points(
+				collection_name=collection,
+				query=vector,
+				query_filter=search_filter,
+				limit=limit * (2 if deep_recall else 1),
+				with_payload=True,
+				with_vectors=False
+			)
+		except Exception as e:
+			logger.error(f"Query failed: {_mask_pii_exception(e)}")
+			return []
+
+		increment_map: Dict[str, float] = {}
+
+		for hit in response.points:
+			increment_map[hit.id] = cfg.REINFORCEMENT_INCREMENT
+
+		propagation_increment = cfg.REINFORCEMENT_INCREMENT * cfg.PROPAGATION_FACTOR
+		for hit in response.points:
+			assocs = hit.payload.get("associations", [])
+			for assoc_id in assocs:
+				increment_map[assoc_id] = increment_map.get(assoc_id, 0.0) + propagation_increment
+
+		if not increment_map:
+			return response.points
+
+		points_to_update = self._reinforce_points(collection, list(increment_map.keys()), increment_map)
+
+		if points_to_update:
+			update_map = {p.id: p.payload for p in points_to_update}
+			for hit in response.points:
+				if hit.id in update_map:
+					hit.payload.update(update_map[hit.id])
+
+		return response.points
+
+	def _calculate_decay(self, current_score: float, rate: float) -> float:
+		"""Computes decay based on the configured strategy."""
+		if cfg.DECAY_STRATEGY == "exponential":
+			new_score = current_score * (1.0 - rate)
+			if round(new_score, 2) >= round(current_score, 2) and current_score > 0:
+				new_score = current_score - 0.01
+		else:
+			new_score = current_score - rate
+
+		return round(max(new_score, 0.0), 2)
+
+	def apply_erosion(self, collection: str, rate: float = None) -> None:
+		"""Decays non-immune memories; score <= 0 leads to deletion."""
+		if rate is None:
+			rate = cfg.EROSION_RATE
+
+		if rate > 0.5:
+			logger.warning(f"High erosion: {rate}")
+		if rate <= 0:
+			return
+
+		offset = None
+		eroded_count = 0
+		deleted_count = 0
+
+		scroll_filter = models.Filter(
+			must_not=[models.FieldCondition(key="immune", match=models.MatchValue(value=True))]
+		)
+
+		while True:
+			try:
+				response = self.client.scroll(
+					collection_name=collection,
+					scroll_filter=scroll_filter,
+					limit=100,
+					offset=offset,
+					with_payload=True,
+					with_vectors=False
+				)
+			except Exception as e:
+				logger.error(f"Erosion scroll failed: {_mask_pii_exception(e)}")
+				break
+
+			points_to_delete: List[Any] = []
+
+			for hit in response[0]:
+				if hit.payload.get("immune"):
+					continue
+				current_score = hit.payload.get("reinforcement_score", 1.0)
+				color = hit.payload.get("color", "gray")
+				multiplier = cfg.EMOTIONAL_DECAY_MULTIPLIERS.get(color, 1.0)
+
+				effective_rate = rate * multiplier
+				new_score = self._calculate_decay(current_score, effective_rate)
+
+				if new_score <= 0:
+					points_to_delete.append(hit.id)
+					deleted_count += 1
+				else:
+					hit.payload["reinforcement_score"] = new_score
+					try:
+						self.client.set_payload(
+							collection_name=collection,
+							payload={"reinforcement_score": new_score},
+							points=[hit.id]
+						)
+						eroded_count += 1
+					except Exception as e:
+						logger.error(f"Erosion payload set failed: {_mask_pii_exception(e)}")
+						continue
+
+			if points_to_delete:
+				try:
+					self.client.delete(
+						collection_name=collection,
+						points_selector=models.PointIdsList(points=points_to_delete)
+					)
+				except Exception as e:
+					logger.error(f"Erosion deletion failed: {_mask_pii_exception(e)}")
+
+			offset = response[1]
+			if offset is None:
+				break
+
+		logger.info(f"Erosion complete. Updated: {eroded_count}, Deleted: {deleted_count}")
+
+	def sanitize(self, collection: str, dry_run: bool = False) -> Dict[str, Any]:
+		"""
+		Sanitation Protocol:
+		1. Deduplication: Removes engrams with exact same content.
+		2. Schema Migration: Back-fills missing color/emotion/intensity from older versions.
+		"""
+		offset = None
+		seen_content: Dict[str, str] = {} # content -> id
+		duplicates: List[str] = []
+		migrated_count = 0
+
+		logger.info(f"Starting sanitation for {collection}...")
+
+		while True:
+			try:
+				response = self.client.scroll(
+					collection_name=collection,
+					limit=100,
+					offset=offset,
+					with_payload=True,
+					with_vectors=False
+				)
+			except Exception as e:
+				logger.error(f"Sanitation scroll failed: {_mask_pii_exception(e)}")
+				break
+
+			for hit in response[0]:
+				content = hit.payload.get("content", "")
+
+				# 1. Deduplication Check
+				if content in seen_content:
+					duplicates.append(hit.id)
+					continue
+				seen_content[content] = hit.id
+
+				# 2. Schema Migration Check
+				needs_migration = False
+				update_payload = {}
+
+				if "color" not in hit.payload:
+					update_payload["color"] = cfg.DEFAULT_COLOR
+					needs_migration = True
+				if "emotion" not in hit.payload:
+					update_payload["emotion"] = cfg.DEFAULT_EMOTION
+					needs_migration = True
+				if "intensity" not in hit.payload:
+					update_payload["intensity"] = 1.0
+					needs_migration = True
+
+				if needs_migration:
+					if not dry_run:
+						try:
+							self.client.set_payload(
+								collection_name=collection,
+								payload=update_payload,
+								points=[hit.id]
+							)
+							migrated_count += 1
+						except Exception as e:
+							logger.error(f"Migration failed for {hit.id}: {e}")
+					else:
+						migrated_count += 1
+
+			offset = response[1]
+			if offset is None:
+				break
+
+		# Remove duplicates
+		if duplicates and not dry_run:
+			try:
+				self.client.delete(
+					collection_name=collection,
+					points_selector=models.PointIdsList(points=duplicates)
+				)
+			except Exception as e:
+				logger.error(f"Duplicate deletion failed: {e}")
+
+		return {
+			"collection": collection,
+			"duplicates_found": len(duplicates),
+			"migrated_records": migrated_count,
+			"dry_run": dry_run
+		}
+
+	def get_stats(self, collection: str) -> Dict[str, Any]:
+		"""Returns collection diagnostics."""
+		try:
+			info = self.client.get_collection(collection_name=collection)
+			return {
+				"status": getattr(info, "status", "unknown"),
+				"points_count": getattr(info, "points_count", 0),
+				"segments_count": getattr(info, "segments_count", 0)
+			}
+		except Exception as e:
+			logger.error(f"Stats failed: {e}")
+			return {"status": "error", "points_count": 0, "segments_count": 0}

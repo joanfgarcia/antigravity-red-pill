@@ -1,0 +1,33 @@
+name: Red Pill CI
+
+on:
+  push:
+    branches: [ "main", "feat/*", "v*" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.13"
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+      with:
+        enable-cache: true
+
+    - name: Install dependencies
+      run: uv sync
+
+    - name: Ensure Sound of Silence (Ruff Linting)
+      run: uv run ruff check src/ scripts/ tests/
+
+    - name: Run All Validation & Logic Tests with Coverage
+      run: uv run pytest --cov=src/red_pill --cov-report=xml --cov-report=term tests/

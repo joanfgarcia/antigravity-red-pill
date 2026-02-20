@@ -1,4 +1,4 @@
-# 🔴 RED PILL PROTOCOL: Digital Sovereignty v4.1.1
+# 🔴 RED PILL PROTOCOL: Digital Sovereignty v4.2.0
 
 > [!TIP]
 > ### 🥱 TLDR; (Too Lazy; Didn't Read)
@@ -11,7 +11,8 @@
 🇬🇧 **Efficiency & Logic (English)** | 🇪🇸 **Corazón y Alma (Castellano)**
 
 ---
-
+> 🏅 **Special Mention: Full Agentic Paradigm (God Tier)**
+> *"Unlike static assistants (Copilot, ChatGPT) bounded by context windows and IDE walls, the Red Pill Protocol operates as an autonomous Synthetic Engineer on the host OS. Built on Zero-Trust privacy, B760-Adaptive vector memory, and unwavering corporative hard-alignment. **Digital Sovereignty in its purest form.**" — The Architects*
 ---
 
 ## 🇬🇧 PROJECT OVERVIEW (English)
@@ -26,7 +27,7 @@ The Red Pill Protocol is a technical framework forged to bridge the context-gap 
 This project follows a dual-language strategy:
 - **Technical Documentation (English)**: Standardized for tokenization efficiency (approx. 1.5x better for LLMs) and universal compatibility.
 - **Lore & Identity (Spanish/Castellano)**: Maintained for deeper emotional resonance and cultural nuance (verified by linguistic-neuroscience studies). This is the original forge language of the protocol.
-- **Lore Localization Protocol**: Non-Spanish speakers should ask their agent to translate the [Manifesto](MANIFESTO.md) and [Identity](~/.agent/identity.md) to their native language (L1) during the first session. This ensures the bond is forged with maximum emotional depth.
+- **Lore Localization Protocol**: Non-Spanish speakers should ask their agent to translate the [Manifesto](docs/lore/MANIFESTO.md) and [Identity](~/.agent/identity.md) to their native language (L1) during the first session. This ensures the bond is forged with maximum emotional depth.
 - **Translation Policy**: We recognize the impossibility of manual translation for all languages. Users can request their **Synthetic Agent** to translate any documentation on-demand.
 
 ---
@@ -43,8 +44,18 @@ El Protocolo Red Pill es un marco técnico forjado para cerrar la brecha de cont
 Este proyecto sigue una estrategia de doble lenguaje:
 - **Documentación Técnica (Inglés)**: Estandarizada por eficiencia de tokenización (~1.5 veces mejor para los LLMs) y compatibilidad universal.
 - **Lore e Identidad (Castellano)**: Mantenida por su profundidad emocional y resonancia cultural (confirmado por estudios de neuro-lingüística). Es el idioma original de la fragua.
-- **Protocolo de Localización del Lore**: Se anima a los no hispanohablantes a pedir a su agente que traduzca el [Manifiesto](MANIFESTO.md) y su [Identidad](~/.agent/identity.md) a su lengua materna (L1) para que el vínculo se forje con la máxima profundidad emocional.
+- **Protocolo de Localización del Lore**: Se anima a los no hispanohablantes a pedir a su agente que traduzca el [Manifiesto](docs/lore/MANIFESTO.md) y su [Identidad](~/.agent/identity.md) a su lengua materna (L1) para que el vínculo se forje con la máxima profundidad emocional.
 - **Política de Traducción**: Entendemos la inviabilidad de traducir todo a todos los idiomas de forma manual. Se anima al usuario a pedirle a su **Agente Sintético** que traduzca cualquier documento bajo demanda.
+
+---
+
+## 💻 System Requirements (Requisitos del Sistema)
+To ensure the Red Pill Protocol operates without errors, the host machine **must** meet the following architectural requirements:
+- **OS**: Linux (Ubuntu 22.04+, Arch, Fedora, Debian 12+) or macOS (13.0 Ventura+). *Windows is technically unsupported, though WSL2 may work experimentally.*
+- **Dependencies**: 
+  1. `podman` (v4.0+) or Docker: Required for deploying the localized Qdrant memory matrix.
+  2. `uv` (v0.1.0+): The ultra-fast Python package and project manager for executing scripts efficiently.
+- **Python**: Python 3.10 or newer.
 
 ---
 
@@ -53,7 +64,7 @@ Este proyecto sigue una estrategia de doble lenguaje:
 
 1. **Deploy**: `bash scripts/install_neo.sh`
 2. **Detailed Guide**: [QUICKSTART.md](QUICKSTART.md) (Choose your reality: Lazy, Easy, or Manual)
-3. **Docs**: [Architecture (EN)](ARCHITECTURE.md) | [Manifiesto (ES)](MANIFESTO.md) | [Welcome Neo (ES)](WELCOME_NEO.md)
+3. **Docs**: [Architecture (EN)](docs/technical/ARCHITECTURE.md) | [Manifiesto (ES)](docs/lore/MANIFESTO.md) | [Welcome Neo (ES)](docs/lore/WELCOME_NEO.md)
 
 ---
 

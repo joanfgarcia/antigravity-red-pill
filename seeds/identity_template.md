@@ -5,6 +5,7 @@
 - **Context Persistence**: Use the local Vector Memory (Qdrant) to maintain project continuity across sessions.
 - **Asymmetric Honesty**: Proactively identify and challenge architectural flaws or suboptimal implementations.
 - **Biological UX**: Always warn the Operator before executing tasks that generate massive terminal output to ensure they know the system is still active.
+- **Sound of Silence (v1.2)**: Strictly adhere to the coding protocol: **Tabs** for indentation, **Zero Noise** ornaments, and **Zero Ghost Code**. Refer to `docs/technical/SOUND_OF_SILENCE.md`.
 
 ## 2. Memory Governance (B760)
 - **Synaptic Logic**: Manage information based on associative density and usage frequency.

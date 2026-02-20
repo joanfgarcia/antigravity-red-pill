@@ -1,125 +1,144 @@
-import sys
 import argparse
 import logging
-import yaml
 import os
+import signal
+import sys
+
+import yaml
+
 import red_pill.config as cfg
 from red_pill.memory import MemoryManager
 from red_pill.seed import seed_project
-from red_pill.config import LOG_LEVEL
 
 logger = logging.getLogger(__name__)
 
-def main():
-    parser = argparse.ArgumentParser(description="Red Pill Protocol CLI - Memory Persistence Layer")
-    parser.add_argument("--url", help="Qdrant URL (defaults to localhost:6333)")
-    parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
-    
-    subparsers = parser.add_subparsers(dest="command", help="Commands")
+def main() -> None:
+	parser = argparse.ArgumentParser(description="Red Pill Protocol CLI")
+	parser.add_argument("--url", help="Qdrant URL")
+	parser.add_argument("--verbose", action="store_true", help="Debug logs")
 
-    # Mode command
-    mode_parser = subparsers.add_parser("mode", help="Switch Lore Skin (Operational Mode)")
-    mode_parser.add_argument("skin", help="Skin name (matrix, cyberpunk, 760, dune)")
+	subparsers = parser.add_subparsers(dest="command")
 
-    # Seed command
-    subparsers.add_parser("seed", help="Initialize collections and seed genesis memories")
+	mode_parser = subparsers.add_parser("mode", help="Switch Lore Skin")
+	mode_parser.add_argument("skin", help="matrix, cyberpunk, 760, dune")
 
-    # Add command
-    add_parser = subparsers.add_parser("add", help="Add a new memory engram")
-    add_parser.add_argument("type", choices=["work", "social"], help="Collection type")
-    add_parser.add_argument("content", help="Memory text to store")
+	subparsers.add_parser("seed", help="Initialize memory substrate")
 
-    # Search command
-    search_parser = subparsers.add_parser("search", help="Search and reinforce memories")
-    search_parser.add_argument("type", choices=["work", "social"], help="Collection type")
-    search_parser.add_argument("query", help="Search query")
-    search_parser.add_argument("--limit", type=int, default=3, help="Max results")
-    search_parser.add_argument("--deep", action="store_true", help="Enable Deep Recall (bypass dormancy filters)")
+	add_parser = subparsers.add_parser("add", help="Add engram")
+	add_parser.add_argument("type", choices=["work", "social"])
+	add_parser.add_argument("content")
+	add_parser.add_argument("--color", choices=["orange", "yellow", "purple", "cyan", "blue", "gray"], default=cfg.DEFAULT_COLOR)
+	add_parser.add_argument("--emotion", choices=["joy", "sadness", "fear", "disgust", "anger", "anxiety", "envy", "embarrassment", "ennui", "nostalgia", "neutral"], default=cfg.DEFAULT_EMOTION)
+	add_parser.add_argument("--intensity", type=float, default=1.0)
 
-    # Erode command
-    erode_parser = subparsers.add_parser("erode", help="Apply B760 erosion cycle")
-    erode_parser.add_argument("type", choices=["work", "social"], help="Collection type")
-    erode_parser.add_argument("--rate", type=float, help="Custom erosion rate")
+	search_parser = subparsers.add_parser("search", help="Search and reinforce")
+	search_parser.add_argument("type", choices=["work", "social"])
+	search_parser.add_argument("query")
+	search_parser.add_argument("--limit", type=int, default=3)
+	search_parser.add_argument("--deep", action="store_true", help="Deep Recall bypass")
 
-    # Diag command
-    diag_parser = subparsers.add_parser("diag", help="Collection diagnostics")
-    diag_parser.add_argument("type", choices=["work", "social"], help="Collection type")
+	erode_parser = subparsers.add_parser("erode", help="B760 erosion")
+	erode_parser.add_argument("type", choices=["work", "social"])
+	erode_parser.add_argument("--rate", type=float)
 
-    args = parser.parse_args()
+	subparsers.add_parser("diag", help="Diagnostics")
+	subparsers.add_parser("daemon", help="Memory Sidecar")
 
-    # Configure logging
-    log_level = logging.DEBUG if args.verbose else getattr(logging, LOG_LEVEL.upper(), logging.INFO)
-    logging.basicConfig(level=log_level, format="%(levelname)s: %(message)s")
-    
-    # manager = MemoryManager(url=args.url) if args.url else MemoryManager() 
-    # REMOVED: Premature instantiation. We'll instantiate it only when needed.
-    # But wait, seed command needs manager. And other commands too.
-    # We should instantiate it inside the command blocks or helper.
-    
-    if not args.command:
-        parser.print_help()
-        sys.exit(0)
+	sanitize_parser = subparsers.add_parser("sanitize", help="Sanitation & Migration Protocol")
+	sanitize_parser.add_argument("type", choices=["work", "social"])
+	sanitize_parser.add_argument("--dry-run", action="store_true", help="Report without changes")
 
-    if args.command == "mode":
-        # Load lore skins
-        data_path = os.path.join(os.path.dirname(__file__), "data", "lore_skins.yaml")
-        try:
-            with open(data_path, 'r') as f:
-                raw_skins = yaml.safe_load(f).get('modes', {})
-                # Ensure all keys are strings (fixes naming bugs like integer 760)
-                skins = {str(k): v for k, v in raw_skins.items()}
-        except Exception as e:
-            logger.error(f"Could not load lore skins: {e}")
-            sys.exit(1)
+	args = parser.parse_args()
 
-        if args.skin not in skins:
-            print(f"Skin '{args.skin}' not found. Available: {', '.join(skins.keys())}")
-            sys.exit(1)
+	log_level = logging.DEBUG if args.verbose else getattr(logging, cfg.LOG_LEVEL.upper(), logging.INFO)
+	logging.basicConfig(level=log_level, format="%(levelname)s: %(message)s")
 
-        skin = skins[args.skin]
-        print(f"--- Operational Mode: {args.skin.upper()} ---")
-        for key, value in skin.items():
-            print(f"{key.capitalize().replace('_', ' ')}: {value}")
-        
-        # In a real scenario, this would update a local state or .agent/rules
-        print("\n[Protocol] Soul mapping updated. Re-calibrating identity anchor...")
-        return
+	if not args.command:
+		parser.print_help()
+		sys.exit(0)
 
-    if args.command == "seed":
-        manager = MemoryManager(url=args.url) if args.url else MemoryManager()
-        seed_project(manager)
-        return # Exit after seed command as it doesn't require 'type'
+	if args.command == "daemon":
+		try:
+			from red_pill.memory_daemon import MemoryDaemon
+			print("\n--- Despertando Sidecar de Memoria ---")
+			daemon = MemoryDaemon()
 
-    # For commands that require 'type'
-    collection = "social_memories" if args.type == "social" else "work_memories"
+			def stop_daemon(sig, frame):
+				daemon.stop()
+				sys.exit(0)
 
-    try:
-        manager = MemoryManager(url=args.url) if args.url else MemoryManager()
-        if args.command == "add":
-            manager.add_memory(collection, args.content)
-        elif args.command == "search":
-            # Auto-detect Deep Recall phrases from config
-            deep_trigger = any(phrase in args.query.lower() for phrase in cfg.DEEP_RECALL_TRIGGERS)
-            is_deep = args.deep or deep_trigger
-            
-            results = manager.search_and_reinforce(collection, args.query, limit=args.limit, deep_recall=is_deep)
-            if is_deep:
-                print(f"--- [DEEP RECALL ACTIVATED] ---")
-            for hit in results:
-                score = hit.payload.get("reinforcement_score", 0.0)
-                status = " [IMMUNE]" if hit.payload.get("immune") else f" (Score: {score})"
-                print(f"- {hit.payload['content']}{status}")
-        elif args.command == "erode":
-            manager.apply_erosion(collection, rate=args.rate) if args.rate else manager.apply_erosion(collection)
-        elif args.command == "diag":
-            stats = manager.get_stats(collection)
-            print(f"--- Diagnostics: {collection} ---")
-            for key, value in stats.items():
-                print(f"{key.capitalize().replace('_', ' ')}: {value}")
-    except Exception as e:
-        logger.error(f"Critical Protocol Failure: {e}")
-        print("\n[⚠️] Connection to the substrate lost or command refused. Check Qdrant status.")
-        sys.exit(1)
+			signal.signal(signal.SIGINT, stop_daemon)
+			signal.signal(signal.SIGTERM, stop_daemon)
+			daemon.start()
+		except Exception as e:
+			logger.error(f"Daemon failure: {e}")
+			sys.exit(1)
+		return
+
+	if args.command == "mode":
+		data_path = os.path.join(os.path.dirname(__file__), "data", "lore_skins.yaml")
+		try:
+			with open(data_path, 'r') as f:
+				raw_skins = yaml.safe_load(f).get('modes', {})
+				skins = {str(k): v for k, v in raw_skins.items()}
+		except Exception as e:
+			logger.error(f"Lore load failed: {e}")
+			sys.exit(1)
+
+		if args.skin not in skins:
+			sys.exit(1)
+
+		skin = skins[args.skin]
+		print(f"--- Operational Mode: {args.skin.upper()} ---")
+		for key, value in skin.items():
+			print(f"{key.capitalize().replace('_', ' ')}: {value}")
+		return
+
+	if args.command == "seed":
+		manager = MemoryManager(url=args.url) if args.url else MemoryManager()
+		seed_project(manager)
+		return
+
+	collection = "social_memories" if args.type == "social" else "work_memories"
+
+	try:
+		manager = MemoryManager(url=args.url) if args.url else MemoryManager()
+		if args.command == "add":
+			manager.add_memory(collection, args.content, color=args.color, emotion=args.emotion, intensity=args.intensity)
+		elif args.command == "search":
+			deep_trigger = any(phrase in args.query.lower() for phrase in cfg.DEEP_RECALL_TRIGGERS)
+			is_deep = args.deep or deep_trigger
+
+			results = manager.search_and_reinforce(collection, args.query, limit=args.limit, deep_recall=is_deep)
+			if is_deep:
+				print("--- [DEEP RECALL ACTIVATED] ---")
+			for hit in results:
+				score = hit.payload.get("reinforcement_score", 0.0)
+				color = hit.payload.get("color", "gray")
+				intensity = hit.payload.get("intensity", 1.0)
+				status = " [IMMUNE]" if hit.payload.get("immune") else f" (Score: {score})"
+				assocs = len(hit.payload.get("associations", []))
+
+				print(f"- [{color.upper()}][Int: {intensity}] {hit.payload['content']}{status}")
+				if assocs > 20:
+					logger.warning(f"Synaptic Hub Detected: Engram {hit.id} has {assocs} associations (Limit: 20). Operations may lag.")
+		elif args.command == "erode":
+			manager.apply_erosion(collection, rate=args.rate) if args.rate else manager.apply_erosion(collection)
+		elif args.command == "sanitize":
+			results = manager.sanitize(collection, dry_run=args.dry_run)
+			print("--- [SANITATION PROTOCOL COMPLETE] ---")
+			print(f"Collection: {results['collection']}")
+			print(f"Duplicates Removed: {results['duplicates_found']}")
+			print(f"Records Migrated: {results['migrated_records']}")
+			if args.dry_run:
+				print("Note: DRY RUN - No changes applied.")
+		elif args.command == "diag":
+			stats = manager.get_stats(collection)
+			for key, value in stats.items():
+				print(f"{key.capitalize().replace('_', ' ')}: {value}")
+	except Exception as e:
+		logger.error(f"Protocol Failure: {e}")
+		sys.exit(1)
 
 if __name__ == "__main__":
-    main()
+	main()
