@@ -374,11 +374,22 @@ class MemoryManager:
         deleted_count = 0
         
         logger.info(f"Starting erosion cycle on {collection} using {cfg.DECAY_STRATEGY} strategy.")
+        
+        # DS-001: Scalability Optimization - Filter out immune items at Qdrant level
+        scroll_filter = models.Filter(
+            must_not=[
+                models.FieldCondition(
+                    key="immune",
+                    match=models.MatchValue(value=True)
+                )
+            ]
+        )
 
         while True:
             try:
                 response = self.client.scroll(
                     collection_name=collection,
+                    scroll_filter=scroll_filter,
                     limit=100,
                     offset=offset,
                     with_payload=True,
@@ -392,9 +403,6 @@ class MemoryManager:
             points_to_delete = []
             
             for hit in response[0]:
-                if hit.payload.get("immune", False):
-                    continue
-                
                 current_score = hit.payload.get("reinforcement_score", 1.0)
                 new_score = self._calculate_decay(current_score, rate)
                 

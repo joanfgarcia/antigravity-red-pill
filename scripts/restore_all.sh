@@ -31,7 +31,11 @@ LATEST_SOUL=$(ls -td $IA_DIR/backups/soul/*/ | head -1)
 
 # Encontrar dinámicamente dónde empieza el contenido del "home" en el backup
 # (El backup se hizo con cp --parents, así que suele ser .../home/[usuario]/)
-BACKUP_HOME_SRC=$(find "$LATEST_SOUL" -path "*/home/*" -type d -maxdepth 2 | head -1)
+if [ -d "${LATEST_SOUL}home" ]; then
+    BACKUP_HOME_SRC=$(find "${LATEST_SOUL}home" -mindepth 1 -maxdepth 1 -type d | head -1)
+else
+    BACKUP_HOME_SRC=""
+fi
 
 restore_qdrant_infra() {
     echo "--- Fase: Infraestructura Qdrant ---"
@@ -91,9 +95,18 @@ restore_soul_files() {
     else
         echo "⚠️  EJECUTANDO RESTAURACIÓN REAL ⚠️"
     fi
-    # rsync -av desde el interior de la carpeta del usuario del backup al home actual
-    rsync -av $DRY_RUN "$BACKUP_HOME_SRC/" "$HOME/"
-    echo "Archivos restaurados."
+    
+    # GM-002: Safely target explicit component folders instead of raw host root
+    echo "Sincronizando identidad (.agent/)..."
+    rsync -av $DRY_RUN "$BACKUP_HOME_SRC/.agent/" "$HOME/.agent/"
+    
+    echo "Sincronizando esencia (.gemini/antigravity/)..."
+    rsync -av $DRY_RUN "$BACKUP_HOME_SRC/.gemini/" "$HOME/.gemini/"
+    
+    echo "Sincronizando configs (.config/containers/)..."
+    rsync -av $DRY_RUN "$BACKUP_HOME_SRC/.config/containers/" "$HOME/.config/containers/"
+    
+    echo "Archivos restaurados y desplegados con seguridad."
 }
 
 if [ -z "$1" ] || [ -z "$LATEST_SOUL" ]; then
