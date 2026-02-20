@@ -29,6 +29,14 @@
 - [FEAT] Added robust Wake-Word Identity Bootstrap handler ('despierta', 'despierta neo') in config and identity.md to fix LLM engine-switch amnesia. Fixed unalterable per Enterprise specs.
 - [PROTOCOL] Acknowledged: '--force' is strictly prohibited for remote operations to protect audit trails and collaborative integrity. *(Comic note: "If it don't fit... don't force it. Rebase instead" / "If it don't fit, you must acquit the commit")*
 
+### Infinite Loop Safety (v4.2.1)
+- **Safety Iteration Breaks**: All `While True` loops in metabolism, erosion, and sanitation now feature a hard-coded limit (500-1000 iterations) with a `logger.warning`. This prevents "MagicMock" infinite loops in testing environments that can consume 23GB+ of RAM.
+
+### Absence Guard & Persistence (v4.2.1)
+- **Absence Threshold**: Implemented a 7-day threshold to address the "Vacation Problem". If the system detects a gap longer than `ABSENCE_THRESHOLD`, the first metabolism cycle refreshes all TTL timestamps (`last_recalled_at`) for non-immune memories instead of eroding them.
+- **Emotional Seeding**: Initial `reinforcement_score` is no longer 1.0. It is calculated as `importance * (1 + intensity * color_bonus * EMOTIONAL_SEED_FACTOR)`. This ensures emotional memories start with high "Biological Runway" (DSR Stability).
+
+
 ## Emotional Memory Model (v4.3.0 Design — PENDING IMPLEMENTATION)
 
 *Captured 2026-02-20 while fresh. Scientific basis: Kensinger & Corkin (2004), Yerkes-Dodson (1908), Kahneman Peak-End Rule (1999), Brown & Kulik Flashbulb Memory (1977).*

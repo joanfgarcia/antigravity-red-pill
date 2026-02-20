@@ -1,8 +1,9 @@
 # System Architecture & Scalability Report
-**Subject**: Red Pill Protocol v4.2.0 (STEALTH EDITION)
+**Subject**: Red Pill Protocol v4.2.1 (BIOS EDITION)
 **Analyst**: The Architect
-**Date**: 2026-02-18
-**System Version**: v4.2.0 (The Sound of Silence)
+**Date**: 2026-02-21
+**System Version**: v4.2.1 (The BIOS Wakeup)
+
 
 ## 1. Executive Summary
 The Red Pill Protocol v4.2.0 has achieved stability and functional alignment with the B760 specification. It successfully implements a local, privacy-first memory substrate with organic decay and reinforcement. However, the current architecture contains inherent **Singularity Points**—mathematical and structural limits that will precipitate system failure as the graph scales beyond $10^5$ engrams.
@@ -10,6 +11,7 @@ The Red Pill Protocol v4.2.0 has achieved stability and functional alignment wit
 ## 2. B760 Spec Alignment
 - **Conformity**: 95%
 - **Gaps**:
+    - **[ENHANCED v4.2.1] Biological Seed Score**: Initial `reinforcement_score` is no longer a flat 1.0. It is now derived from `importance` and weighted by `emotional intensity` (Arousal). High-intensity memories (fear, joy) born with a score of ~5.0 give them 25+ days of biological runway.
     - "Dormancy" is implemented as a search filter (`score < 0.2`) on the fly, not as a distinct state flag in the payload as implied by "Lethargic State". This is computationally expensive at scale (filtering $N$ points).
     - "Synaptic Propagation" is strictly depth-1. A true "Neural" system would propagate $N$-hops with diminishing returns ($\delta^k$).
 

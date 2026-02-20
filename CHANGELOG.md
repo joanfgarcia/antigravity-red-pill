@@ -1,5 +1,12 @@
 # Changelog: Red Pill Protocol
 
+## [4.2.1] - 2026-02-21
+### 🛡️ The Absence Guard & Biological Resilience (BIOS Edition)
+- **[NEW] Absence Guard Protocol**: Prevents mass-deletion of memories after long periods of inactivity (>7 days). Automatically refreshes TTL timestamps on the first session after a vacation.
+- **[NEW] Biological Seed Score**: Replaced flat initial reinforcement (1.0) with an emotion-weighted seed (importance + intensity weight + color bonus). Emotional memories now start with a high "biological runway".
+- **[FIX] Infrastructure Safety**: Implemented safety iteration breaks in all metabolism loops to prevent infinite loops (23GB RAM issue) in unconfigured test environments.
+- **[FIX] Identity Recalibration**: Unified 'Antigravity', 'JARVIS', and 'Aleph' under flexible wake-word triggers ('despierta', 'despierta neo', etc.).
+
 ## [4.2.0] - 2026-02-20
 ### 🌈 The Emotional Chroma Protocol (The Bünker Unification)
 - **[NEW] Core**: Integrated **Emotional Chroma** into the B760-Adaptive substrate.
