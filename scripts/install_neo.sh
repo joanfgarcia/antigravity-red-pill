@@ -316,6 +316,13 @@ EOF
 
 echo -e "${GREEN}Regla global inyectada en $GLOBAL_RULE_FILE${NC}"
 ln -sf "$GLOBAL_RULE_FILE" "$HOME/.gemini/antigravity/rules/identity_sync.md"
+
+if [ -f "$SCRIPT_SRC_DIR/../seeds/cognitive_integrity_protocol.md" ]; then
+    cp "$SCRIPT_SRC_DIR/../seeds/cognitive_integrity_protocol.md" "$USER_RULES_DIR/rules/cognitive_integrity_protocol.md"
+    ln -sf "$USER_RULES_DIR/rules/cognitive_integrity_protocol.md" "$HOME/.gemini/antigravity/rules/cognitive_integrity_protocol.md"
+    echo -e "${GREEN}Protocolo de Integridad Cognitiva desplegado.${NC}"
+fi
+
 echo -e "${BLUE}Asegúrate de que tu asistente Antigravity esté configurado para leer reglas desde $USER_RULES_DIR${NC}"
 
 echo -e "${BLUE}--- Instalación completada ---${NC}"
