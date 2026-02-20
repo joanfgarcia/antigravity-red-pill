@@ -167,9 +167,22 @@ class MemoryManager:
 				if content:
 					try:
 						last_run = float(content)
-						if now - last_run < cfg.METABOLISM_COOLDOWN:
-							if has_fcntl: fcntl.flock(f, fcntl.LOCK_UN)
+						gap = now - last_run
+						if gap < cfg.METABOLISM_COOLDOWN:
+							if has_fcntl:
+								fcntl.flock(f, fcntl.LOCK_UN)
 							return
+						# Absence guard: if idle > 7 days, refresh timestamps before eroding
+						if gap > cfg.ABSENCE_THRESHOLD:
+							logger.warning(
+								f"Absence detected ({gap/86400:.1f} days). "
+								"Running TTL refresh before erosion to protect the Bunker."
+							)
+							for coll in cfg.METABOLISM_AUTO_COLLECTIONS:
+								try:
+									self._refresh_ttl_timestamps(coll.strip())
+								except Exception as e:
+									logger.error(f"TTL refresh failed for {coll}: {e}")
 					except ValueError:
 						pass
 
@@ -177,7 +190,8 @@ class MemoryManager:
 				f.truncate()
 				f.write(str(now))
 				f.flush()
-				if has_fcntl: fcntl.flock(f, fcntl.LOCK_UN)
+				if has_fcntl:
+					fcntl.flock(f, fcntl.LOCK_UN)
 		except OSError:
 			pass
 
@@ -186,6 +200,55 @@ class MemoryManager:
 				self.apply_erosion(coll.strip())
 			except Exception as e:
 				logger.error(f"Erosion failed in {coll}: {e}")
+
+	def _refresh_ttl_timestamps(self, collection: str) -> None:
+		"""Absence Guard: forward all non-immune last_recalled_at to now.
+
+		Called automatically when idle gap > ABSENCE_THRESHOLD.
+		Prevents mass-deletion of the Bunker after long periods of inactivity
+		(e.g. the system was powered off or the user was on vacation).
+		"""
+		now = time.time()
+		offset = None
+		refreshed = 0
+
+		scroll_filter = models.Filter(
+			must_not=[models.FieldCondition(key="immune", match=models.MatchValue(value=True))]
+		)
+
+		while True:
+			try:
+				response = self.client.scroll(
+					collection_name=collection,
+					scroll_filter=scroll_filter,
+					limit=200,
+					offset=offset,
+					with_payload=False,
+					with_vectors=False
+				)
+			except Exception as e:
+				logger.error(f"TTL refresh scroll failed: {_mask_pii_exception(e)}")
+				break
+
+			point_ids = [hit.id for hit in response[0]]
+			if point_ids:
+				try:
+					self.client.set_payload(
+						collection_name=collection,
+						payload={"last_recalled_at": now},
+						points=point_ids
+					)
+					refreshed += len(point_ids)
+				except Exception as e:
+					logger.error(f"TTL refresh payload set failed: {_mask_pii_exception(e)}")
+
+			offset = response[1]
+			if offset is None:
+				break
+
+		logger.info(f"Absence Guard: refreshed TTL for {refreshed} engrams in '{collection}'.")
+
+
 
 	def _reinforce_points(self, collection: str, point_ids: List[str], increments: Dict[str, float]) -> List[PointUpdate]:
 		"""Retrieves and updates reinforcement scores with thread-safety."""

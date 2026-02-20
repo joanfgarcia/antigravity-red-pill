@@ -47,6 +47,10 @@ METABOLISM_ENABLED = os.getenv("METABOLISM_ENABLED", "True").lower() == "true"
 METABOLISM_COOLDOWN = int(os.getenv("METABOLISM_COOLDOWN", "3600"))
 METABOLISM_AUTO_COLLECTIONS = os.getenv("METABOLISM_AUTO_COLLECTIONS", "work_memories,social_memories").split(",")
 METABOLISM_STATE_FILE = os.path.expanduser("~/.red_pill_metabolism")
+# If the bunker has been idle for more than this many seconds, a TTL refresh
+# is triggered before erosion to prevent mass-deletion after long absences.
+# Default: 7 days (7 * 24 * 3600).
+ABSENCE_THRESHOLD = int(os.getenv("ABSENCE_THRESHOLD", str(7 * 24 * 3600)))
 
 # EMOTIONAL CHROMA (v4.2.0)
 DEFAULT_COLOR = "gray"
