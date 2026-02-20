@@ -1,13 +1,17 @@
 import uuid
-from typing import Any, ClassVar, Dict, List, Union
+from typing import Any, ClassVar, Dict, List, Union, Literal
 from pydantic import BaseModel, Field, field_validator
+
+# Emotional Spectrum Definition (Inside Out 2 / v4.2.0)
+ValidColor = Literal["orange", "yellow", "purple", "cyan", "blue", "gray"]
+ValidEmotion = Literal["joy", "sadness", "fear", "disgust", "anger", "anxiety", "envy", "embarrassment", "ennui", "nostalgia", "neutral"]
 
 class CreateEngramRequest(BaseModel):
 	"""Input schema for memory ingestion."""
 	content: str = Field(..., min_length=1, max_length=4096)
 	importance: float = Field(default=1.0, ge=0.0, le=10.0)
-	color: str = Field(default="gray")
-	emotion: str = Field(default="neutral")
+	color: ValidColor = Field(default="gray")
+	emotion: ValidEmotion = Field(default="neutral")
 	intensity: float = Field(default=1.0, ge=0.0, le=10.0)
 	metadata: Dict[str, Union[str, int, float, bool, List[str]]] = Field(default_factory=dict)
 	

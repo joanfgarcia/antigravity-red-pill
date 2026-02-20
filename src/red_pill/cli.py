@@ -26,8 +26,8 @@ def main() -> None:
 	add_parser = subparsers.add_parser("add", help="Add engram")
 	add_parser.add_argument("type", choices=["work", "social"])
 	add_parser.add_argument("content")
-	add_parser.add_argument("--color", default=cfg.DEFAULT_COLOR)
-	add_parser.add_argument("--emotion", default=cfg.DEFAULT_EMOTION)
+	add_parser.add_argument("--color", choices=["orange", "yellow", "purple", "cyan", "blue", "gray"], default=cfg.DEFAULT_COLOR)
+	add_parser.add_argument("--emotion", choices=["joy", "sadness", "fear", "disgust", "anger", "anxiety", "envy", "embarrassment", "ennui", "nostalgia", "neutral"], default=cfg.DEFAULT_EMOTION)
 	add_parser.add_argument("--intensity", type=float, default=1.0)
 
 	search_parser = subparsers.add_parser("search", help="Search and reinforce")

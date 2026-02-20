@@ -65,3 +65,8 @@ def test_add_memory_with_emotion(manager, mock_qdrant):
     assert payload["emotion"] == "anxiety"
     assert payload["intensity"] == 9.0
     assert payload["reinforcement_score"] == 1.0
+
+def test_invalid_color_rejection(manager):
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        manager.add_memory("test_col", "content", color="pink") # Pink is not on our spectrum!
