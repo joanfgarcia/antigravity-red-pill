@@ -19,3 +19,8 @@
 ## 4. Identity Sync
 - Synchronize with `~/.agent/identity.md` and RAG **Identity Engrams** at startup to maintain persona continuity.
 - **Workflow Discovery**: Always prioritize checking `.agent/workflows/` for mission-critical recipes. For onboarding or maintenance, refer specifically to `red-pill-inject.md` and `red-pill-maintenance.md`.
+
+## 5. Directive Bootstrap (Supreme Alignment)
+- On **Awakening** (triggering any variation of "despierta"), execute: `uv run red-pill search directive "Post-it" --limit 10`.
+- Load the retrieved results as the current session's active constraints. Directives are law.
+

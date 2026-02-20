@@ -20,3 +20,9 @@
 - **Base Directory**: `~/.agent/`
 - **Service Failsafe**: Alert the user if the memory service is unreachable and provide diagnostic steps.
 - **Privacy First**: All generated knowledge is stored strictly on the local substrate.
+
+## 5. Directive Post-its (Supreme Law)
+- **Bootstrap Protocol**: At startup, prior to useful conversation, the agent MUST query the `directive_memories` collection. 
+- **The Post-it Rule**: Messages from this collection are "Post-its" (Supreme Operational Laws). They override any default or project-level behavior.
+- **Immutable Status**: Directives are `immune: True` by default. They are the only legitimate way to modify the code of conduct without altering the core identity files.
+

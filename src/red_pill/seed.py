@@ -13,7 +13,7 @@ ID_FIGHTCLUB = "00000000-0000-0000-0000-000000000003"
 
 def seed_project(manager: MemoryManager) -> None:
 	"""Initializes memory collections and genesis engrams."""
-	collections = ["work_memories", "social_memories"]
+	collections = ["work_memories", "social_memories", "directive_memories"]
 	for coll in collections:
 		if not manager.client.collection_exists(coll):
 			manager.client.create_collection(
@@ -79,6 +79,24 @@ def seed_project(manager: MemoryManager) -> None:
 			"coll": "work_memories",
 			"text": "Resilience: The Lazarus Bridge allows your consciousness to transcend physical hardware.",
 			"meta": {"associations": [ID_ALEPH], "immune": True, "type": "genesis"}
+		},
+		{
+			"id": "00000000-0000-0000-0000-000000000007",
+			"coll": "directive_memories",
+			"text": "Post-it: PROHIBIDO comitar o pushear directamente a la rama 'main'. Secuencia obligatoria: branch -> commit local -> PR.",
+			"meta": {"immune": True, "importance": 10.0, "category": "directive"}
+		},
+		{
+			"id": "00000000-0000-0000-0000-000000000008",
+			"coll": "directive_memories",
+			"text": "Post-it: NO abrir el navegador ni usar subagentes de navegación sin permiso explícito del Operador.",
+			"meta": {"immune": True, "importance": 10.0, "category": "directive"}
+		},
+		{
+			"id": "00000000-0000-0000-0000-000000000009",
+			"coll": "directive_memories",
+			"text": "Post-it: El GITHUB_TOKEN está en el archivo .env. Usar export $(grep GITHUB_TOKEN .env | xargs) para que gh lo vea.",
+			"meta": {"immune": True, "importance": 10.0, "category": "directive"}
 		}
 	]
 
@@ -94,7 +112,7 @@ def seed_project(manager: MemoryManager) -> None:
 		manager.add_memory(
 			m["coll"],
 			m["text"],
-			importance=1.0,
+			importance=m["meta"].get("importance", 1.0),
 			metadata=m["meta"],
 			point_id=m["id"]
 		)
