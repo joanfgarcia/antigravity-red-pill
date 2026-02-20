@@ -39,7 +39,7 @@ Si quieres tener el control del gatillo pero no quieres leerte el manual de 40 p
 
 Para los que quieren auditar cada byte y configurar cada variable manualmente.
 
-1.  **Infraestructura**: Revisa el [Quadlet de Qdrant](file:///.config/containers/systemd/qdrant.container) y levanta el servicio (`systemctl --user start qdrant`).
+1.  **Infraestructura**: Revisa el [Quadlet de Qdrant](~/.config/containers/systemd/qdrant.container) y levanta el servicio (`systemctl --user start qdrant`).
 2.  **Variables**: Edita el archivo `.env` en la raíz para ajustar el `EROSION_RATE`, `DECAY_STRATEGY` y el `IMMUNITY_THRESHOLD`.
 3.  **Identidad**: Configura tu alma manualmente en `~/.agent/identity.md`.
 4.  **Reglas**: Inyecta el `identity_sync.md` en tu directorio de reglas globales para forzar el inicio de sesión determinista.
