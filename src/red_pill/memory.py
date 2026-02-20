@@ -357,6 +357,90 @@ class MemoryManager:
 				
 		logger.info(f"Erosion complete. Updated: {eroded_count}, Deleted: {deleted_count}")
 
+	def sanitize(self, collection: str, dry_run: bool = False) -> Dict[str, Any]:
+		"""
+		Sanitation Protocol:
+		1. Deduplication: Removes engrams with exact same content.
+		2. Schema Migration: Back-fills missing color/emotion/intensity from older versions.
+		"""
+		offset = None
+		seen_content: Dict[str, str] = {} # content -> id
+		duplicates: List[str] = []
+		migrated_count = 0
+		
+		logger.info(f"Starting sanitation for {collection}...")
+		
+		while True:
+			try:
+				response = self.client.scroll(
+					collection_name=collection,
+					limit=100,
+					offset=offset,
+					with_payload=True,
+					with_vectors=False
+				)
+			except Exception as e:
+				logger.error(f"Sanitation scroll failed: {_mask_pii_exception(e)}")
+				break
+
+			for hit in response[0]:
+				content = hit.payload.get("content", "")
+				
+				# 1. Deduplication Check
+				if content in seen_content:
+					duplicates.append(hit.id)
+					continue
+				seen_content[content] = hit.id
+				
+				# 2. Schema Migration Check
+				needs_migration = False
+				update_payload = {}
+				
+				if "color" not in hit.payload:
+					update_payload["color"] = cfg.DEFAULT_COLOR
+					needs_migration = True
+				if "emotion" not in hit.payload:
+					update_payload["emotion"] = cfg.DEFAULT_EMOTION
+					needs_migration = True
+				if "intensity" not in hit.payload:
+					update_payload["intensity"] = 1.0
+					needs_migration = True
+					
+				if needs_migration:
+					if not dry_run:
+						try:
+							self.client.set_payload(
+								collection_name=collection,
+								payload=update_payload,
+								points=[hit.id]
+							)
+							migrated_count += 1
+						except Exception as e:
+							logger.error(f"Migration failed for {hit.id}: {e}")
+					else:
+						migrated_count += 1
+
+			offset = response[1]
+			if offset is None:
+				break
+				
+		# Remove duplicates
+		if duplicates and not dry_run:
+			try:
+				self.client.delete(
+					collection_name=collection,
+					points_selector=models.PointIdsList(points=duplicates)
+				)
+			except Exception as e:
+				logger.error(f"Duplicate deletion failed: {e}")
+
+		return {
+			"collection": collection,
+			"duplicates_found": len(duplicates),
+			"migrated_records": migrated_count,
+			"dry_run": dry_run
+		}
+
 	def get_stats(self, collection: str) -> Dict[str, Any]:
 		"""Returns collection diagnostics."""
 		try:

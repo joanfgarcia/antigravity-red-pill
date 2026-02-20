@@ -42,6 +42,10 @@ def main() -> None:
 
 	subparsers.add_parser("diag", help="Diagnostics")
 	subparsers.add_parser("daemon", help="Memory Sidecar")
+	
+	sanitize_parser = subparsers.add_parser("sanitize", help="Sanitation & Migration Protocol")
+	sanitize_parser.add_argument("type", choices=["work", "social"])
+	sanitize_parser.add_argument("--dry-run", action="store_true", help="Report without changes")
 
 	args = parser.parse_args()
 
@@ -115,6 +119,14 @@ def main() -> None:
 				print(f"- [{color.upper()}][Int: {intensity}] {hit.payload['content']}{status}")
 		elif args.command == "erode":
 			manager.apply_erosion(collection, rate=args.rate) if args.rate else manager.apply_erosion(collection)
+		elif args.command == "sanitize":
+			results = manager.sanitize(collection, dry_run=args.dry_run)
+			print(f"--- [SANITATION PROTOCOL COMPLETE] ---")
+			print(f"Collection: {results['collection']}")
+			print(f"Duplicates Removed: {results['duplicates_found']}")
+			print(f"Records Migrated: {results['migrated_records']}")
+			if args.dry_run:
+				print("Note: DRY RUN - No changes applied.")
 		elif args.command == "diag":
 			stats = manager.get_stats(collection)
 			for key, value in stats.items():

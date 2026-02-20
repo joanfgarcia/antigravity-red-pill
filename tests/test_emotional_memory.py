@@ -70,3 +70,33 @@ def test_invalid_color_rejection(manager):
     from pydantic import ValidationError
     with pytest.raises(ValidationError):
         manager.add_memory("test_col", "content", color="pink") # Pink is not on our spectrum!
+
+def test_sanitation(manager, mock_qdrant):
+    # Mocking points: one duplicate, one old schema (missing color)
+    p1 = MagicMock(id="1", payload={"content": "duplicate", "color": "gray"})
+    p2 = MagicMock(id="2", payload={"content": "duplicate", "color": "gray"})
+    p3 = MagicMock(id="3", payload={"content": "unique", "intensity": 5.0}) # Missing color/emotion
+    
+    manager.client.scroll.side_effect = [
+        ([p1, p2, p3], None)
+    ]
+    
+    results = manager.sanitize("test_col")
+    
+    # Verify duplicates were deleted
+    # manager.client.delete should be called with point 2
+    assert manager.client.delete.called
+    args, kwargs = manager.client.delete.call_args
+    assert "2" in kwargs['points_selector'].points
+    
+    # Verify migration (point 3 missing color/emotion)
+    # manager.client.set_payload should be called for p3
+    assert manager.client.set_payload.called
+    # Check if point 3 was updated with defaults
+    calls = manager.client.set_payload.call_args_list
+    p3_update = next(c for c in calls if c[1]['points'] == ["3"])
+    assert p3_update[1]['payload']['color'] == "gray"
+    assert p3_update[1]['payload']['emotion'] == "neutral"
+    
+    assert results["duplicates_found"] == 1
+    assert results["migrated_records"] == 2
