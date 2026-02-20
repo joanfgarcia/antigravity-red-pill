@@ -207,7 +207,7 @@ def test_apply_erosion_exceptions_and_deletions():
 	p3 = MockPoint("3", 2.0, False) # Will hit set_payload exception because new_score=1.0 > 0
 	manager.client.scroll.return_value = ([p1, p2, p3], None)
 
-	manager.client.set_payload.side_effect = Exception("Set Payload Failed")
+	manager.client.batch_update_points.side_effect = Exception("Set Payload Failed")
 	manager.client.delete.side_effect = Exception("Delete Failed") # Covers deletion exception
 
 	cfg.METABOLISM_COOLDOWN = 3600 # so metabolism skips
@@ -232,11 +232,11 @@ def test_sanitize_exceptions():
 
 	manager.client.scroll.side_effect = None
 	manager.client.scroll.return_value = ([MockPoint()], None)
-	manager.client.set_payload.side_effect = Exception("Set Payload Failed")
+	manager.client.batch_update_points.side_effect = Exception("Set Payload Failed")
 	manager.sanitize("col")
 
 	# Test dry_run migration counting
-	manager.client.set_payload.side_effect = None
+	manager.client.batch_update_points.side_effect = None
 	res = manager.sanitize("col", dry_run=True)
 	assert res["migrated_records"] == 1
 
@@ -246,7 +246,7 @@ def test_sanitize_exceptions():
 	seen_mock2.id = "2"
 	seen_mock2.payload = {"content": "text"} # duplicate
 	manager.client.scroll.return_value = ([seen_mock1, seen_mock2], None)
-	manager.client.set_payload.side_effect = None
+	manager.client.batch_update_points.side_effect = None
 	manager.client.delete.side_effect = Exception("Delete Failed")
 	res = manager.sanitize("col")
 	assert res["duplicates_found"] == 1

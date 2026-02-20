@@ -316,6 +316,8 @@ class MemoryManager:
 
 			points_to_delete: List[Any] = []
 
+			update_operations = []
+
 			for hit in response[0]:
 				if hit.payload.get("immune"):
 					continue
@@ -331,16 +333,24 @@ class MemoryManager:
 					deleted_count += 1
 				else:
 					hit.payload["reinforcement_score"] = new_score
-					try:
-						self.client.set_payload(
-							collection_name=collection,
-							payload={"reinforcement_score": new_score},
-							points=[hit.id]
+					update_operations.append(
+						models.SetPayloadOperation(
+							set_payload=models.SetPayload(
+								payload={"reinforcement_score": new_score},
+								points=[hit.id]
+							)
 						)
-						eroded_count += 1
-					except Exception as e:
-						logger.error(f"Erosion payload set failed: {_mask_pii_exception(e)}")
-						continue
+					)
+
+			if update_operations:
+				try:
+					self.client.batch_update_points(
+						collection_name=collection,
+						update_operations=update_operations
+					)
+					eroded_count += len(update_operations)
+				except Exception as e:
+					logger.error(f"Erosion batch update failed: {_mask_pii_exception(e)}")
 
 			if points_to_delete:
 				try:
@@ -383,6 +393,8 @@ class MemoryManager:
 				logger.error(f"Sanitation scroll failed: {_mask_pii_exception(e)}")
 				break
 
+			update_operations = []
+
 			for hit in response[0]:
 				content = hit.payload.get("content", "")
 
@@ -408,17 +420,26 @@ class MemoryManager:
 
 				if needs_migration:
 					if not dry_run:
-						try:
-							self.client.set_payload(
-								collection_name=collection,
-								payload=update_payload,
-								points=[hit.id]
+						update_operations.append(
+							models.SetPayloadOperation(
+								set_payload=models.SetPayload(
+									payload=update_payload,
+									points=[hit.id]
+								)
 							)
-							migrated_count += 1
-						except Exception as e:
-							logger.error(f"Migration failed for {hit.id}: {e}")
+						)
 					else:
 						migrated_count += 1
+
+			if update_operations and not dry_run:
+				try:
+					self.client.batch_update_points(
+						collection_name=collection,
+						update_operations=update_operations
+					)
+					migrated_count += len(update_operations)
+				except Exception as e:
+					logger.error(f"Migration batch update failed: {_mask_pii_exception(e)}")
 
 			offset = response[1]
 			if offset is None:
