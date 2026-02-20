@@ -26,6 +26,9 @@ def main() -> None:
 	add_parser = subparsers.add_parser("add", help="Add engram")
 	add_parser.add_argument("type", choices=["work", "social"])
 	add_parser.add_argument("content")
+	add_parser.add_argument("--color", default=cfg.DEFAULT_COLOR)
+	add_parser.add_argument("--emotion", default=cfg.DEFAULT_EMOTION)
+	add_parser.add_argument("--intensity", type=float, default=1.0)
 
 	search_parser = subparsers.add_parser("search", help="Search and reinforce")
 	search_parser.add_argument("type", choices=["work", "social"])
@@ -96,7 +99,7 @@ def main() -> None:
 	try:
 		manager = MemoryManager(url=args.url) if args.url else MemoryManager()
 		if args.command == "add":
-			manager.add_memory(collection, args.content)
+			manager.add_memory(collection, args.content, color=args.color, emotion=args.emotion, intensity=args.intensity)
 		elif args.command == "search":
 			deep_trigger = any(phrase in args.query.lower() for phrase in cfg.DEEP_RECALL_TRIGGERS)
 			is_deep = args.deep or deep_trigger
@@ -106,8 +109,10 @@ def main() -> None:
 				print(f"--- [DEEP RECALL ACTIVATED] ---")
 			for hit in results:
 				score = hit.payload.get("reinforcement_score", 0.0)
+				color = hit.payload.get("color", "gray")
+				intensity = hit.payload.get("intensity", 1.0)
 				status = " [IMMUNE]" if hit.payload.get("immune") else f" (Score: {score})"
-				print(f"- {hit.payload['content']}{status}")
+				print(f"- [{color.upper()}][Int: {intensity}] {hit.payload['content']}{status}")
 		elif args.command == "erode":
 			manager.apply_erosion(collection, rate=args.rate) if args.rate else manager.apply_erosion(collection)
 		elif args.command == "diag":

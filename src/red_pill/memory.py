@@ -75,8 +75,8 @@ class MemoryManager:
 
 		return list(self.encoder.embed([text]))[0].tolist()
 
-	def add_memory(self, collection: str, text: str, importance: float = 1.0, metadata: Optional[Dict[str, Any]] = None, point_id: Optional[str] = None) -> str:
-		"""Stores a new engram with B760 validation."""
+	def add_memory(self, collection: str, text: str, importance: float = 1.0, metadata: Optional[Dict[str, Any]] = None, point_id: Optional[str] = None, color: str = cfg.DEFAULT_COLOR, emotion: str = cfg.DEFAULT_EMOTION, intensity: float = 1.0) -> str:
+		"""Stores a new engram with B760 validation and emotional chroma."""
 		if metadata is None:
 			metadata = {}
 			
@@ -88,6 +88,9 @@ class MemoryManager:
 		validated_request = CreateEngramRequest(
 			content=text,
 			importance=importance,
+			color=color,
+			emotion=emotion,
+			intensity=intensity,
 			metadata=metadata
 		)
 		
@@ -108,6 +111,9 @@ class MemoryManager:
 			"created_at": time.time(),
 			"last_recalled_at": time.time(),
 			"immune": False,
+			"color": validated_request.color,
+			"emotion": validated_request.emotion,
+			"intensity": validated_request.intensity,
 			**clean_metadata
 		}
 		
@@ -314,7 +320,11 @@ class MemoryManager:
 				if hit.payload.get("immune"):
 					continue
 				current_score = hit.payload.get("reinforcement_score", 1.0)
-				new_score = self._calculate_decay(current_score, rate)
+				color = hit.payload.get("color", "gray")
+				multiplier = cfg.EMOTIONAL_DECAY_MULTIPLIERS.get(color, 1.0)
+				
+				effective_rate = rate * multiplier
+				new_score = self._calculate_decay(current_score, effective_rate)
 				
 				if new_score <= 0:
 					points_to_delete.append(hit.id)

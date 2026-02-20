@@ -6,6 +6,9 @@ class CreateEngramRequest(BaseModel):
 	"""Input schema for memory ingestion."""
 	content: str = Field(..., min_length=1, max_length=4096)
 	importance: float = Field(default=1.0, ge=0.0, le=10.0)
+	color: str = Field(default="gray")
+	emotion: str = Field(default="neutral")
+	intensity: float = Field(default=1.0, ge=0.0, le=10.0)
 	metadata: Dict[str, Union[str, int, float, bool, List[str]]] = Field(default_factory=dict)
 	
 	@field_validator('content')
@@ -17,7 +20,8 @@ class CreateEngramRequest(BaseModel):
 		
 	RESERVED_KEYS: ClassVar[set] = {
 		"content", "importance", "reinforcement_score", 
-		"created_at", "last_recalled_at", "immune"
+		"created_at", "last_recalled_at", "immune",
+		"color", "emotion", "intensity"
 	}
 
 	@field_validator('metadata')
