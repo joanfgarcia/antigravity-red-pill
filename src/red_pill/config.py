@@ -28,14 +28,17 @@ IMMUNITY_THRESHOLD = float(os.getenv("IMMUNITY_THRESHOLD", "10.0"))
 # LOGGING
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
-# DEEP RECALL
+# DEEP RECALL & WAKE CALLS
 DEEP_RECALL_TRIGGERS = [
 	"don't you remember",
 	"¿no te acuerdas?",
 	"deep recall",
 	"do you really not remember?",
 	"esfuerzate en recordar",
-	"try hard!"
+	"try hard!",
+	"despierta",
+	"despierta neo",
+	"wake up"
 ]
 
 # METABOLISM
