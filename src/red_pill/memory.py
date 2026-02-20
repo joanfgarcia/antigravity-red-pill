@@ -29,6 +29,7 @@ class MemoryManager:
     def __init__(self, url: str = cfg.QDRANT_URL):
         self.client = QdrantClient(url=url, api_key=cfg.QDRANT_API_KEY)
         self.encoder = None
+        self._reinforce_lock = threading.Lock()
         self._initialize_encoder()
 
     def _initialize_encoder(self):
@@ -86,6 +87,13 @@ class MemoryManager:
         """
         if metadata is None:
             metadata = {}
+            
+        # Defense-in-depth: Force strict JSON serialization to prevent 
+        # Python object injection that might bypass Pydantic validation
+        try:
+            metadata = json.loads(json.dumps(metadata))
+        except (TypeError, ValueError) as e:
+            raise ValueError(f"Metadata must be strictly JSON serializable: {e}")
         
         # Validation: Strictly check input using Pydantic
         # This prevents Agent Smith style "Poison Pill" attacks
@@ -184,6 +192,7 @@ class MemoryManager:
     def _reinforce_points(self, collection: str, point_ids: List[str], increments: Dict[str, float]) -> List[PointUpdate]:
         """
         Retrieves points by ID, applies reinforcement stacking, and returns them.
+        Uses a thread lock to prevent Read-Modify-Write race conditions.
         """
         if not point_ids:
             return []
@@ -200,61 +209,48 @@ class MemoryManager:
                 except (ValueError, AttributeError):
                     logger.debug(f"Skipping non-UUID association: {pid}")
         
-        # Verify IDs against Qdrant strictly
-        points = self.client.retrieve(
-            collection_name=collection,
-            ids=valid_ids,
-            with_payload=True,
-            with_vectors=False # Optimization: we don't need vectors just to update score
-        )
-        
         updated_points = []
-        for p in points:
-            score = p.payload.get("reinforcement_score", 1.0)
-            inc = increments.get(str(p.id), increments.get(p.id, 0.0))
-            
-            # Use max(score, current_db_score) to reduce race condition impact
-            # Ideally we would use atomic operations, but Qdrant REST API doesn't support 
-            # atomic float increment on payload fields easily without scripting.
-            # We'll stick to read-modify-write but minimize the window.
-            # A true fix would require Qdrant Scripting or optimistic locking with version check.
-            # implementing a naive optimistic lock here is overkill for this scope, 
-            # but we can at least not overwrite with stale data if we fetched just now.
-            
-            new_score = min(score + inc, cfg.IMMUNITY_THRESHOLD)
-            p.payload["reinforcement_score"] = round(new_score, 2)
-            p.payload["last_recalled_at"] = time.time()
-            
-            if p.payload["reinforcement_score"] >= cfg.IMMUNITY_THRESHOLD:
-                p.payload["immune"] = True
-                
-            # We use set_payload to avoid overwriting the vector or other concurrent metadata changes
-            self.client.set_payload(
+        
+        # Lock to prevent race condition during read-modify-write
+        with self._reinforce_lock:
+            # Verify IDs against Qdrant strictly
+            points = self.client.retrieve(
                 collection_name=collection,
-                payload=p.payload,
-                points=[p.id]
+                ids=valid_ids,
+                with_payload=True,
+                with_vectors=False # Optimization: we don't need vectors just to update score
             )
             
-            # Prepare struct for return value (caller expects it)
-            # We re-construct it with a dummy vector or None as the caller might expect it 
-            # if they asked for with_vectors=True in retrieve, but _reinforce_points output is 
-            # primarily used for update_map in search_and_reinforce which only cares about payload.
-            # However, the type hint says List[models.PointStruct]. 
-            # Let's check usages. search_and_reinforce uses it for upsert (wait, it upserts! that's the bug).
-            # The original code did: self.client.upsert(..., points=points_to_update)
-            # This logic wipes the vector if we don't pass it! 
-            # AND it overwrites everything.
-            # My change above uses set_payload. So we DON'T need to return points_to_update for upserting.
-            # But search_and_reinforce expects a return to update its local response object.
-            
-            # Prepare struct for return value (caller expects it)
-            updated_points.append(
-                PointUpdate(
-                    id=p.id,
-                    payload=p.payload
+            for p in points:
+                score = p.payload.get("reinforcement_score", 1.0)
+                inc = increments.get(str(p.id), increments.get(p.id, 0.0))
+                
+                # Use max(score, current_db_score) to reduce race condition impact
+                # A true fix would require Qdrant Scripting or optimistic locking with version check.
+                # Here we use an in-memory lock as Red Pill is single-tenant local, preventing local races.
+                
+                new_score = min(score + inc, cfg.IMMUNITY_THRESHOLD)
+                p.payload["reinforcement_score"] = round(new_score, 2)
+                p.payload["last_recalled_at"] = time.time()
+                
+                if p.payload["reinforcement_score"] >= cfg.IMMUNITY_THRESHOLD:
+                    p.payload["immune"] = True
+                    
+                # We use set_payload to avoid overwriting the vector or other concurrent metadata changes
+                self.client.set_payload(
+                    collection_name=collection,
+                    payload=p.payload,
+                    points=[p.id]
                 )
-            )
-            
+                
+                # Prepare struct for return value (caller expects it)
+                updated_points.append(
+                    PointUpdate(
+                        id=p.id,
+                        payload=p.payload
+                    )
+                )
+                
         return updated_points
 
     def search_and_reinforce(self, collection: str, query: str, limit: int = 3, deep_recall: bool = False) -> List[Any]:
