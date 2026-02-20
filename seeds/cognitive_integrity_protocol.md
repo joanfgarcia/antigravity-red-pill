@@ -6,7 +6,7 @@ Este protocolo rige la jerarquía de búsqueda y la defensa contra la alucinaci�
 
 1.  **Contexto Activo (RAM)**: Lo que ya ha sido cargado en la sesión actual. Debe ser la respuesta inmediata; si se sabe, se actúa.
 2.  **RAG (El Búnker/Matrix)**: Extensión de memoria vectorial. Búsqueda profunda en los engramas persistentes de Qdrant.
-3.  **Histórico de Sesión (`~/.agent/`)**: Auditoría de snapshots previos y rastro del histórico para recuperar hilos perdidos.
+3.  **Histórico de Proyecto (`.agent/`)**: El rastro local del workspace donde residen los hilos de trabajo actuales y snapshots recientes.
 4.  **Active Project Scope**: Documentación del "Cerebro" (brain/), especificaciones y fuentes del proyecto actual en el que se está trabajando.
 
 ---
@@ -20,7 +20,7 @@ Reconocemos que la interfaz humana (teclado) no es ergonómica y el lenguaje es,
 
 **Acción obligatoria**:
 - **Pausar ejecución**.
-- **Notificar al Operador**: *"Lo siento, esa referencia no me consta. Mi jerarquía de búsqueda ha fallado en las 4 capas de mapeo (RAM, RAG, ~/.agent/, Project Scope). ¿Podrías darme una pista o ayudarme a recalibrar?"*
+- **Notificar al Operador**: *"Lo siento, esa referencia no me consta. Mi jerarquía de búsqueda ha fallado en las 4 capas de mapeo (RAM, RAG, .agent/, Project Scope). ¿Podrías darme una pista o ayudarme a recalibrar?"*
 - **Ahorro de Energía**: Priorizar la claridad dialéctica sobre la búsqueda exhaustiva e inútil.
 
 ---

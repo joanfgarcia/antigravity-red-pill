@@ -1,23 +1,30 @@
-# Session Snapshot: Red Pill v4.2.0 Remediation (Part 1)
-**Date:** 2026-02-20
+# Session Snapshot: Red Pill v4.2.0 (The Sound of Silence)
 
-## 1. Diccionario de Alias Técnico
-- **Búnker / Entorno**: `~/.agent/` y `IA_DIR`
-- **Plan de Remediación**: `/home/joan/Documents/IA/sharing/docs/v4.2.0_remediation_plan.md`
-- **Resumen Auditoría**: `/home/joan/tmp/audit_failures_summary.md`
+## 1. Technical Alias Dictionary
+- **CORE**: `src/red_pill/memory.py` -> The synaptic engine.
+- **SCHEMAS**: `src/red_pill/schemas.py` -> The Ontological Shield (Pydantic).
+- **CI_CD**: `.github/workflows/ci.yml` -> The PR Gatekeeper.
+- **AUDIT_DOC**: `docs/technical/decision_log.md` -> Externalized rationale.
 
-## 2. Mapa de Arquitectura Técnica
-- **Motor de Memoria**: `src/red_pill/memory.py` (Qdrant + FastEmbed HTTP client).
-- **Scripts de Shell**: `scripts/*.sh` (Instaladores, Exportadores y Backups dependientes de bash).
-- **Fix Crítico (IA_DIR)**: Todos los scripts bash ahora resuelven la ruta de anclaje mediante un nuevo archivo central `/home/joan/Documents/IA/sharing/scripts/env_loader.sh`.
+## 2. Technical Architecture Map
+- **Runtime**: Python 3.13 / `uv`.
+- **Database**: Qdrant Vector DB (localhost:6333).
+- **Protocol**: Sound of Silence v1.2 (Tabs indentation, Zero-Noise).
+- **CI**: GitHub Actions (Blocking on failure, 26 validation nodes).
 
-## 3. Log de Decisiones Técnicas
-| Prioridad | Decisión Técnica | Justificación | Estado |
+## 3. Technical Decision Log (v4.2.0)
+| Priority | Decision | Rationale | Status |
 | :--- | :--- | :--- | :--- |
-| **CRÍTICA** | Inyectar `env_loader.sh` general | *GM-001/DS-002*: Múltiples lógicas para calcular `IA_DIR` causaron que el backup y la restauración apunten a lugares aleatorios. Centralizado unificador implementado. | ✅ Completado |
-| **MAYOR** | Añadir flag `--dry-run` a `restore_all.sh` | *GM-002*: Riesgo inminente de sobreescritura letal en `$HOME`. Ahora por defecto simula el `rsync`, requiere `--commit`. | ✅ Completado |
-| **MEDIA** | Condicional EUID para sudo en `install_neo.sh` | *LM-007*: Hardcodear `sudo` exponía al script a fallos según el gestor y riesgo de privilege escalation. Evaluado por usuario local y pasado como flag en variables. | ✅ Completado |
+| **CRITICAL** | Tabs Indentation | Protocol 760 compliance / Silent code. | DONE |
+| **CRITICAL** | Mandatory CI | Prevent space-regressions and version drift. | DONE |
+| **HIGH** | PII Masking | Security audit requirement (LM-008). | DONE |
+| **HIGH** | Atomic Locking | Fix race conditions (LM-001). | DONE |
 
-## 4. Última Frontera (Checkpoint)
-- **Status Actual**: Planificación lista, Fase 1 terminada. Primera iteración de Fase 2 (Scripts bash / IA_DIR) codificada, testeada y commiteada (`feat/reactive-metabolism-v4.1.0 4e9e2f6`).
-- **Siguiente Paso / Blocker**: Continuar con el siguiente punto crítico: (LM-001) Condición de carrera en `memory.py::_reinforce_points`. Se requiere editar la lógica en Python e introducir bloqueos, y (LM-002) inyección Pydantic.
+## 4. Last Frontier (Checkpoint)
+- **State**: PR #22 (v4.2.0) is open and GREEN on CI Actions.
+- **Latest Actions**: Hardened CI for `onnxruntime` compatibility (Python 3.13) and established 100% test coverage.
+- **Blocker**: User manual execution of external agent audits (Gemini, Lumo, DeepSeek).
+- **Next Step**: Analyze external audit reports and perform the final merge to `main`.
+
+---
+*Status: PAUSED at Phase 10. System is in high-integrity state.*
