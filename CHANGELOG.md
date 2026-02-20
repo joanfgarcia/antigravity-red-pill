@@ -1,5 +1,23 @@
 # Changelog: Red Pill Protocol
 
+## [4.2.0] - 2026-02-20
+### 🤫 The Sound of Silence & Remediation
+- **[NEW] Protocol**: Implemented "The Sound of Silence" (v1.2).
+    - Hard-enforcement of Tab indentation across the stack.
+    - Zero-noise code policy; rationale migrated to `decision_log.md`.
+    - Automated protocol validation suite (`tests/test_sound_of_silence.py`).
+- **[SEC] Audit Remediations**: Completed Class-4 security remediation cycle (IDs LM-001 to LM-009).
+    - Fixed race conditions in reinforcement via atomic locking.
+    - Enforced strict Pydantic schemas for all metadata ingestion.
+    - Implemented PII-masking in error logs and network exceptions.
+- **[SEC] Backup**: AES-256 GPG encryption for exported souls (`export_soul.sh`).
+- **[SEC] CI/CD**: Established automated GitHub Actions pipeline (`.github/workflows/ci.yml`).
+    - Failure in any test suite (Silence, Version, Logic, Schemas) blocks PR merging.
+    - Achieved 100% test pass across 26 distinct validation nodes.
+- **[NEW] Test Suite**: Created `tests/test_schemas.py` to validate Pydantic security models.
+- **[NEW] Validation**: Implemented `tests/test_version_sync.py` to prevent version drift.
+- **[IMPR] Performance**: Optimized synaptic propagation and erosion scanning.
+
 ## [4.1.1] - 2026-02-19
 ### 🚨 Security & Stability Hotfix
 - **[CRITICAL] Security**: Hard-excluded `.env` from distribution to prevent token leakage.
