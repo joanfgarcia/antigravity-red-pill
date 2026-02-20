@@ -47,10 +47,10 @@ METABOLISM_STATE_FILE = os.path.expanduser("~/.red_pill_metabolism")
 DEFAULT_COLOR = "gray"
 DEFAULT_EMOTION = "neutral"
 EMOTIONAL_DECAY_MULTIPLIERS = {
-    "orange": 1.5,  # Anxiety: decays faster if not reinforced
-    "yellow": 0.5,  # Joy: persists longer
-    "purple": 2.0,  # Ennui: garbage collected quickly
-    "cyan": 0.8,    # Envy/Evolution: focused persistence
-    "blue": 1.0,    # Sadness: standard decay
-    "gray": 1.0,    # Neutral: standard decay
+	"orange": 1.5,  # Anxiety: decays faster if not reinforced
+	"yellow": 0.5,  # Joy: persists longer
+	"purple": 2.0,  # Ennui: garbage collected quickly
+	"cyan": 0.8,    # Envy/Evolution: focused persistence
+	"blue": 1.0,    # Sadness: standard decay
+	"gray": 1.0,    # Neutral: standard decay
 }
