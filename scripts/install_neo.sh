@@ -29,15 +29,19 @@ ensure_podman() {
 
         read -p "¿Deseas que intente instalar Podman automáticamente? (s/n): " INSTALL_PODMAN
         if [[ "$INSTALL_PODMAN" =~ ^[Ss]$ ]]; then
+            SUDO_CMD=""
+            if [[ $EUID -ne 0 ]]; then
+                SUDO_CMD="sudo"
+            fi
             case "$DISTRO" in
                 ubuntu|debian|raspbian)
-                    sudo apt-get update && sudo apt-get install -y podman
+                    $SUDO_CMD apt-get update && $SUDO_CMD apt-get install -y podman
                     ;;
                 arch|manjaro)
-                    sudo pacman -Sy --noconfirm podman
+                    $SUDO_CMD pacman -Sy --noconfirm podman
                     ;;
                 fedora|rhel|centos|amzn)
-                    sudo dnf install -y podman
+                    $SUDO_CMD dnf install -y podman
                     ;;
                 *)
                     echo "Distro no soportada para instalación automática. Por favor, instala Podman manualmente."
@@ -67,9 +71,14 @@ if [[ "$OS_TYPE" == "Darwin" ]]; then
 fi
 
 # 1. Definir Carpeta del Búnker
-DEFAULT_IA_DIR="$HOME/Documents/IA"
-read -p "Elige la ruta para tu búnker IA (Default: $DEFAULT_IA_DIR): " IA_DIR
-IA_DIR=${IA_DIR:-$DEFAULT_IA_DIR}
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/env_loader.sh" ]; then
+    source "$SCRIPT_DIR/env_loader.sh"
+else
+    # Fallback si no está el env_loader (ej. curl directo)
+    export IA_DIR="${ANTIGRAVITY_IA_DIR:-$HOME/Documents/IA}"
+fi
+echo "Utilizando IA_DIR: $IA_DIR"
 
 # 1.1 Personalización de Lore (Red Pill Multi-Verse)
 echo -e "${BLUE}--- Fase: Personalización de Lore ---${NC}"

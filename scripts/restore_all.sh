@@ -1,16 +1,29 @@
 #!/bin/bash
 # restore_all.sh - Script de recuperación de Antigravity (User-Agnostic)
 
-# Determinar la ruta base (IA_DIR)
+# Administrar dry-run
+DRY_RUN="--dry-run"
+if [[ " $* " =~ " --commit " ]]; then
+    DRY_RUN=""
+fi
+
+# Determinar la ruta base (IA_DIR) de forma segura
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-IA_DIR="${ANTIGRAVITY_IA_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+if [ -f "$SCRIPT_DIR/env_loader.sh" ]; then
+    source "$SCRIPT_DIR/env_loader.sh"
+else
+    echo "ERROR Crítico: env_loader.sh no encontrado en $SCRIPT_DIR"
+    exit 1
+fi
+
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
 show_help() {
-    echo "Uso: bash restore_all.sh [completa|brain|qdrant]"
+    echo "Uso: bash restore_all.sh [completa|brain|qdrant] [--commit]"
     echo "  completa: Reinstala Qdrant, restaura base de datos y archivos de alma."
     echo "  brain:    Solo restaura los archivos .md y scripts en el sistema."
     echo "  qdrant:   Solo restaura los snapshots en la base de datos vectorial."
+    echo "  --commit: Ejecuta los cambios destructivos reales (por defecto es DRY-RUN prudencial)."
 }
 
 # Encontrar la carpeta de backup más reciente
@@ -72,8 +85,14 @@ restore_soul_files() {
     fi
     
     echo "Sincronizando desde $BACKUP_HOME_SRC hacia $HOME ..."
+    if [ -n "$DRY_RUN" ]; then
+        echo "🚨 MODO PRUDENCIAL ACTIVADO (DRY-RUN) 🚨"
+        echo "Usa '--commit' si realmente deseas sobreescribir tus archivos."
+    else
+        echo "⚠️  EJECUTANDO RESTAURACIÓN REAL ⚠️"
+    fi
     # rsync -av desde el interior de la carpeta del usuario del backup al home actual
-    rsync -av "$BACKUP_HOME_SRC/" "$HOME/"
+    rsync -av $DRY_RUN "$BACKUP_HOME_SRC/" "$HOME/"
     echo "Archivos restaurados."
 }
 

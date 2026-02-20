@@ -1,16 +1,14 @@
 #!/bin/bash
 # backup_soul.sh - Copia archivos de identidad y llama al backup de Qdrant
 
-# Determinar la ruta base (IA_DIR)
+# Determinar la ruta base (IA_DIR) de forma segura
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Si estamos en ~/Documents/IA/sharing/scripts, subimos dos niveles para llegar a ~/Documents/IA
-POTENTIAL_IA_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-if [[ "$POTENTIAL_IA_DIR" == *"IA" ]]; then
-    IA_DIR="$POTENTIAL_IA_DIR"
+if [ -f "$SCRIPT_DIR/env_loader.sh" ]; then
+    source "$SCRIPT_DIR/env_loader.sh"
 else
-    IA_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+    echo "ERROR Crítico: env_loader.sh no encontrado en $SCRIPT_DIR"
+    exit 1
 fi
-IA_DIR="${ANTIGRAVITY_IA_DIR:-$IA_DIR}"
 
 BACKUP_SOUL_DIR="$IA_DIR/backups/soul"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
