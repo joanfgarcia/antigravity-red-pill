@@ -22,6 +22,10 @@
     - Fixed race conditions in reinforcement via atomic locking.
     - Enforced strict Pydantic schemas for all metadata ingestion.
     - Implemented PII-masking in error logs and network exceptions.
+- **[NEW] Protocol**: Established the **Engineering Certification Protocol** (v1.0).
+    - Standardized prompt for external agentic auditing.
+    - Automation script for source code aggregation (`scripts/prepare_certification.sh`).
+    - Formalized documentation in `docs/technical/CERTIFICATION_PROTOCOL.md`.
 - **[NEW] Validation**: Created `tests/test_emotional_memory.py` to verify cromatic decay multipliers.
 - **[IMPR] Performance**: Optimized synaptic propagation and erosion scanning.
 
