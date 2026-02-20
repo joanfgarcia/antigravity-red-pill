@@ -48,6 +48,16 @@ Este proyecto sigue una estrategia de doble lenguaje:
 
 ---
 
+## 💻 System Requirements (Requisitos del Sistema)
+To ensure the Red Pill Protocol operates without errors, the host machine **must** meet the following architectural requirements:
+- **OS**: Linux (Ubuntu 22.04+, Arch, Fedora, Debian 12+) or macOS (13.0 Ventura+). *Windows is technically unsupported, though WSL2 may work experimentally.*
+- **Dependencies**: 
+  1. `podman` (v4.0+) or Docker: Required for deploying the localized Qdrant memory matrix.
+  2. `uv` (v0.1.0+): The ultra-fast Python package and project manager for executing scripts efficiently.
+- **Python**: Python 3.10 or newer.
+
+---
+
 ## 💉 Quick Start / Inicio Rápido
 **Ask your assistant / Pídele a tu asistente**: *"Please, initiate the awakening."*
 
