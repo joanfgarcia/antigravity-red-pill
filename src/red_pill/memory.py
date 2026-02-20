@@ -314,7 +314,17 @@ class MemoryManager:
 		eroded_count = 0
 		deleted_count = 0
 
+		# Calculate the TTL threshold: Only erode memories that haven't been recalled
+		# recently. Wait at least METABOLISM_COOLDOWN before eroding again.
+		ttl_threshold = time.time() - cfg.METABOLISM_COOLDOWN
+
 		scroll_filter = models.Filter(
+			must=[
+				models.FieldCondition(
+					key="last_recalled_at",
+					range=models.Range(lt=ttl_threshold)
+				)
+			],
 			must_not=[models.FieldCondition(key="immune", match=models.MatchValue(value=True))]
 		)
 
@@ -351,10 +361,11 @@ class MemoryManager:
 					deleted_count += 1
 				else:
 					hit.payload["reinforcement_score"] = new_score
+					hit.payload["last_recalled_at"] = time.time()  # Reset TTL after erosion
 					update_operations.append(
 						models.SetPayloadOperation(
 							set_payload=models.SetPayload(
-								payload={"reinforcement_score": new_score},
+								payload={"reinforcement_score": new_score, "last_recalled_at": time.time()},
 								points=[hit.id]
 							)
 						)
