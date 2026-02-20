@@ -30,7 +30,12 @@
     - Automation script for source code aggregation (`scripts/prepare_certification.sh`).
     - Formalized documentation in `docs/technical/CERTIFICATION_PROTOCOL.md`.
 - **[NEW] Validation**: Created `tests/test_emotional_memory.py` to verify cromatic decay multipliers.
-- **[IMPR] Performance**: Optimized synaptic propagation and erosion scanning.
+- **[SEC] Hardening**: Tier 1 architecture lockdown (F-001/F-002 remediation):
+    - Moved sidecar Unix socket to secure `$XDG_RUNTIME_DIR`.
+    - Enforced mandatory `QDRANT_API_KEY` generation on install to protect against local SSRF.
+    - Wrapped metabolism state file writing with `fcntl.flock` to prevent concurrency corruption.
+    - Improved idempotent recovery algorithms during initial `seed` generation.
+- **[PERF] Optimization**: Re-engineered Metabolism system to use Qdrant `batch_update_points`, achieving true O(1) erosion cycles instead of latency-bound O(N).
 
 ## [4.1.1] - 2026-02-19
 ### 🚨 Security & Stability Hotfix
