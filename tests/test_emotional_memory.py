@@ -68,7 +68,7 @@ def test_add_memory_with_emotion(manager, mock_qdrant):
 	assert payload["color"] == "orange"
 	assert payload["emotion"] == "anxiety"
 	assert payload["intensity"] == 9.0
-	assert payload["reinforcement_score"] == 1.0
+	assert payload["reinforcement_score"] == 5.05 # importance(1.0) * (1 + 0.9 * 1.5 * 3) = 5.05
 
 def test_invalid_color_rejection(manager):
 	from pydantic import ValidationError

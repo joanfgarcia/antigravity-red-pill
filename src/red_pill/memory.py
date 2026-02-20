@@ -104,10 +104,26 @@ class MemoryManager:
 		for key in CreateEngramRequest.RESERVED_KEYS:
 			clean_metadata.pop(key, None)
 
+		# Emotional Seed Score (interim FSRS bridge, v4.2.1)
+		# High-intensity emotional memories deserve a higher initial score so the
+		# emotional decay multiplier does not kill them too fast.
+		# Formula: score = importance * (1 + intensity_factor * color_multiplier * SEED_FACTOR)
+		# Capped at IMMUNITY_THRESHOLD * 0.9 so single reinforcement can push to immunity.
+		_emotion = validated_request.emotion
+		_intensity = validated_request.intensity
+		_color = validated_request.color
+		if _emotion != "neutral" and _intensity > 1.0:
+			_color_mult = cfg.EMOTIONAL_DECAY_MULTIPLIERS.get(_color, 1.0)
+			_bonus = (_intensity / 10.0) * _color_mult * cfg.EMOTIONAL_SEED_FACTOR
+			_initial_score = importance * (1.0 + _bonus)
+		else:
+			_initial_score = importance
+		_initial_score = round(min(_initial_score, cfg.IMMUNITY_THRESHOLD * 0.9), 2)
+
 		payload = {
 			"content": text,
 			"importance": importance,
-			"reinforcement_score": 1.0,
+			"reinforcement_score": _initial_score,
 			"created_at": time.time(),
 			"last_recalled_at": time.time(),
 			"immune": False,

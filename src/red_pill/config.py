@@ -23,10 +23,22 @@ DECAY_STRATEGY = os.getenv("DECAY_STRATEGY", "linear")
 if DECAY_STRATEGY not in ("linear", "exponential"):
 	raise ValueError(f"Invalid DECAY_STRATEGY: {DECAY_STRATEGY}")
 
-EROSION_RATE = float(os.getenv("EROSION_RATE", "0.05"))
+# EROSION_RATE: fraction of reinforcement_score removed per erosion cycle.
+# Default 0.01 targets ~100 cycles before a neutral memory (score=1.0) dies.
+# At 1 cycle/hour = ~4 days minimum. Tune upward for aggressive forgetting.
+# NOTE: was 0.05 in development/testing. 0.01 is the production target.
+EROSION_RATE = float(os.getenv("EROSION_RATE", "0.01"))
 REINFORCEMENT_INCREMENT = float(os.getenv("REINFORCEMENT_INCREMENT", "0.1"))
 PROPAGATION_FACTOR = float(os.getenv("PROPAGATION_FACTOR", "0.5"))
 IMMUNITY_THRESHOLD = float(os.getenv("IMMUNITY_THRESHOLD", "10.0"))
+
+# EMOTIONAL_SEED_FACTOR: multiplier applied to initial reinforcement_score for
+# non-neutral memories with intensity > 1.0. Higher values give emotional
+# memories more runway before erosion. At SEED_FACTOR=3.0 and intensity=10,
+# orange memories start at score ~5.5 (vs 1.0 for neutral).
+# At production EROSION_RATE=0.01: score=9.0 → 600 hours ≈ 25 days survival.
+EMOTIONAL_SEED_FACTOR = float(os.getenv("EMOTIONAL_SEED_FACTOR", "3.0"))
+
 
 # LOGGING
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
