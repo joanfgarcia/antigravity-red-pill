@@ -44,8 +44,12 @@ class CreateEngramRequest(BaseModel):
                 elif isinstance(val, dict):
                      raise ValueError(f"Metadata field {key} is a nested dictionary. Flat structure required.")
             
-            # #4: Validate that associations are valid UUIDs
+            # #4: Validate that associations are valid UUIDs and cap them at 20 (DS-006)
             if key == 'associations' and isinstance(val, list):
+                if len(val) > 20:
+                    val = val[:20]  # Hard cap to prevent Hub-node explosion
+                    v[key] = val
+                    
                 for item in val:
                     try:
                         uuid.UUID(str(item))

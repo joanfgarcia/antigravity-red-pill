@@ -12,6 +12,11 @@ from qdrant_client.http import models
 import red_pill.config as cfg
 from red_pill.schemas import CreateEngramRequest
 
+def _mask_pii_exception(e: Exception) -> str:
+    """Helper to heavily truncate exception strings preventing full payload PII leaks in logs."""
+    msg = str(e)
+    return msg if len(msg) < 150 else msg[:150] + "... [TRUNCATED FOR PII MASKING]"
+
 logger = logging.getLogger(__name__)
 
 class PointUpdate:
@@ -144,7 +149,7 @@ class MemoryManager:
                 
             return actual_id
         except Exception as e:
-            logger.error(f"Failed to add memory to Qdrant (LM-003 constraint): {e}")
+            logger.error(f"Failed to add memory to Qdrant (LM-003 constraint): {_mask_pii_exception(e)}")
             return ""
 
     def _trigger_metabolism(self):
@@ -226,7 +231,7 @@ class MemoryManager:
                     with_vectors=False # Optimization: we don't need vectors just to update score
                 )
             except Exception as e:
-                logger.error(f"Failed to retrieve points for reinforcement (LM-003 constraint): {e}")
+                logger.error(f"Failed to retrieve points for reinforcement (LM-003 constraint): {_mask_pii_exception(e)}")
                 return []
             
             for p in points:
@@ -252,7 +257,7 @@ class MemoryManager:
                         points=[p.id]
                     )
                 except Exception as e:
-                    logger.error(f"Failed to set_payload during reinforcement (LM-003 constraint): {e}")
+                    logger.error(f"Failed to set_payload during reinforcement (LM-003 constraint): {_mask_pii_exception(e)}")
                     continue
                 
                 # Prepare struct for return value (caller expects it)
@@ -298,7 +303,7 @@ class MemoryManager:
                 with_vectors=False # Optimization: vectors are not needed for reinforcement logic
             )
         except Exception as e:
-            logger.error(f"Failed to query points for search_and_reinforce (LM-003 constraint): {e}")
+            logger.error(f"Failed to query points for search_and_reinforce (LM-003 constraint): {_mask_pii_exception(e)}")
             return []
         
         # Reinforcement Increment Map
@@ -380,7 +385,7 @@ class MemoryManager:
                     with_vectors=False # Optimization: don't fetch vectors for erosion
                 )
             except Exception as e:
-                logger.error(f"Erosion cycle aborted: failed to scroll Qdrant (LM-003 constraint): {e}")
+                logger.error(f"Erosion cycle aborted: failed to scroll Qdrant (LM-003 constraint): {_mask_pii_exception(e)}")
                 break
             
             points_to_update = []
@@ -408,7 +413,7 @@ class MemoryManager:
                         )
                         eroded_count += 1
                     except Exception as e:
-                        logger.error(f"Failed to apply erosion payload for {hit.id}: {e}")
+                        logger.error(f"Failed to apply erosion payload for {hit.id}: {_mask_pii_exception(e)}")
                         continue
             
             if points_to_delete:
@@ -418,7 +423,7 @@ class MemoryManager:
                         points_selector=models.PointIdsList(points=points_to_delete)
                     )
                 except Exception as e:
-                    logger.error(f"Failed to delete eroded points {points_to_delete}: {e}")
+                    logger.error(f"Failed to delete eroded points {points_to_delete}: {_mask_pii_exception(e)}")
             
             offset = response[1]
             if offset is None:
