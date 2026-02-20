@@ -37,7 +37,7 @@ def test_changelog_is_latest():
 	"""Ensures the version in pyproject is the most recent entry in CHANGELOG.md."""
 	version = get_version_from_pyproject()
 	changelog = (ROOT_DIR / "CHANGELOG.md").read_text()
-	
+
 	# Find the first entry header like ## [X.Y.Z]
 	match = re.search(r'## \[([^\]]+)\]', changelog)
 	assert match is not None, "No version entries found in CHANGELOG.md"

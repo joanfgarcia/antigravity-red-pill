@@ -1,10 +1,11 @@
 import os
 import time
-import threading
 import unittest
 from unittest.mock import MagicMock, patch
+
 import red_pill.config as cfg
 from red_pill.memory import MemoryManager
+
 
 class TestMetabolism(unittest.TestCase):
     def setUp(self):
@@ -26,22 +27,22 @@ class TestMetabolism(unittest.TestCase):
     def test_reactive_trigger(self, mock_erosion, mock_vector, mock_qdrant):
         mock_vector.return_value = [0.1] * cfg.VECTOR_SIZE
         manager = MemoryManager(url="http://mock:6333")
-        
+
         # 1. First addition should trigger metabolism
         manager.add_memory("test_coll", "engram 1")
-        
+
         # Give it a tiny bit of time to start the thread
         time.sleep(0.5)
-        
+
         self.assertTrue(os.path.exists(self.test_state_file))
         mock_erosion.assert_called()
         erosion_count = mock_erosion.call_count
-        
+
         # 2. Second addition within cooldown should NOT trigger again
         manager.add_memory("test_coll", "engram 2")
         time.sleep(0.5)
         self.assertEqual(mock_erosion.call_count, erosion_count)
-        
+
         # 3. Wait for cooldown and trigger again
         time.sleep(2)
         manager.add_memory("test_coll", "engram 3")
@@ -55,7 +56,7 @@ class TestMetabolism(unittest.TestCase):
         mock_vector.return_value = [0.1] * cfg.VECTOR_SIZE
         manager = MemoryManager(url="http://mock:6333")
         manager.apply_erosion = MagicMock(side_effect=Exception("Database down"))
-        
+
         # This should not raise
         id = manager.add_memory("test_coll", "safe engram")
         self.assertIsNotNone(id)

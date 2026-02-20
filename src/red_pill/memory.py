@@ -28,7 +28,7 @@ class PointUpdate:
 
 class MemoryManager:
 	"""B760-Adaptive memory engine."""
-	
+
 	def __init__(self, url: str = cfg.QDRANT_URL):
 		self.client = QdrantClient(url=url, api_key=cfg.QDRANT_API_KEY)
 		self.encoder = None
@@ -44,7 +44,7 @@ class MemoryManager:
 		socket_path = "/tmp/red_pill_memory.sock"
 		if not os.path.exists(socket_path):
 			return None
-		
+
 		try:
 			with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
 				client.settimeout(0.5)
@@ -65,7 +65,7 @@ class MemoryManager:
 		vector = self._get_vector_from_daemon(text)
 		if vector:
 			return vector
-			
+
 		if self.encoder is None:
 			try:
 				from fastembed import TextEmbedding
@@ -79,12 +79,12 @@ class MemoryManager:
 		"""Stores a new engram with B760 validation and emotional chroma."""
 		if metadata is None:
 			metadata = {}
-			
+
 		try:
 			metadata = json.loads(json.dumps(metadata))
 		except (TypeError, ValueError) as e:
 			raise ValueError(f"Invalid metadata: {e}")
-		
+
 		validated_request = CreateEngramRequest(
 			content=text,
 			importance=importance,
@@ -93,14 +93,14 @@ class MemoryManager:
 			intensity=intensity,
 			metadata=metadata
 		)
-		
+
 		text = validated_request.content
 		importance = validated_request.importance
 		clean_metadata = validated_request.metadata
-		
+
 		actual_id = point_id if point_id else str(uuid.uuid4())
 		vector = self._get_vector(text)
-		
+
 		for key in CreateEngramRequest.RESERVED_KEYS:
 			clean_metadata.pop(key, None)
 
@@ -116,7 +116,7 @@ class MemoryManager:
 			"intensity": validated_request.intensity,
 			**clean_metadata
 		}
-		
+
 		try:
 			self.client.upsert(
 				collection_name=collection,
@@ -147,7 +147,7 @@ class MemoryManager:
 		"""Internal metabolism loop with cooldown check."""
 		state_file = cfg.METABOLISM_STATE_FILE
 		now = time.time()
-		
+
 		if os.path.exists(state_file):
 			try:
 				with open(state_file, "r") as f:
@@ -156,7 +156,7 @@ class MemoryManager:
 					return
 			except (ValueError, OSError):
 				pass
-		
+
 		try:
 			with open(state_file, "w") as f:
 				f.write(str(now))
@@ -173,7 +173,7 @@ class MemoryManager:
 		"""Retrieves and updates reinforcement scores with thread-safety."""
 		if not point_ids:
 			return []
-			
+
 		valid_ids = []
 		for pid in point_ids:
 			if isinstance(pid, int):
@@ -184,9 +184,9 @@ class MemoryManager:
 					valid_ids.append(pid)
 				except (ValueError, AttributeError):
 					continue
-		
+
 		updated_points: List[PointUpdate] = []
-		
+
 		with self._reinforce_lock:
 			try:
 				points = self.client.retrieve(
@@ -198,18 +198,18 @@ class MemoryManager:
 			except Exception as e:
 				logger.error(f"Reinforcement retrieval failed: {_mask_pii_exception(e)}")
 				return []
-			
+
 			for p in points:
 				score = p.payload.get("reinforcement_score", 1.0)
 				inc = increments.get(str(p.id), increments.get(p.id, 0.0))
-				
+
 				new_score = min(score + inc, cfg.IMMUNITY_THRESHOLD)
 				p.payload["reinforcement_score"] = round(new_score, 2)
 				p.payload["last_recalled_at"] = time.time()
-				
+
 				if p.payload["reinforcement_score"] >= cfg.IMMUNITY_THRESHOLD:
 					p.payload["immune"] = True
-					
+
 				try:
 					self.client.set_payload(
 						collection_name=collection,
@@ -219,15 +219,15 @@ class MemoryManager:
 				except Exception as e:
 					logger.error(f"Reinforcement payload set failed: {_mask_pii_exception(e)}")
 					continue
-				
+
 				updated_points.append(PointUpdate(id=p.id, payload=p.payload))
-				
+
 		return updated_points
 
 	def search_and_reinforce(self, collection: str, query: str, limit: int = 3, deep_recall: bool = False) -> List[Any]:
 		"""Semantic search followed by B760 synaptic reinforcement."""
 		vector = self._get_vector(query)
-		
+
 		search_filter = None
 		if not deep_recall:
 			search_filter = models.Filter(
@@ -246,12 +246,12 @@ class MemoryManager:
 		except Exception as e:
 			logger.error(f"Query failed: {_mask_pii_exception(e)}")
 			return []
-		
+
 		increment_map: Dict[str, float] = {}
-		
+
 		for hit in response.points:
 			increment_map[hit.id] = cfg.REINFORCEMENT_INCREMENT
-			
+
 		propagation_increment = cfg.REINFORCEMENT_INCREMENT * cfg.PROPAGATION_FACTOR
 		for hit in response.points:
 			assocs = hit.payload.get("associations", [])
@@ -262,13 +262,13 @@ class MemoryManager:
 			return response.points
 
 		points_to_update = self._reinforce_points(collection, list(increment_map.keys()), increment_map)
-		
+
 		if points_to_update:
 			update_map = {p.id: p.payload for p in points_to_update}
 			for hit in response.points:
 				if hit.id in update_map:
 					hit.payload.update(update_map[hit.id])
-		
+
 		return response.points
 
 	def _calculate_decay(self, current_score: float, rate: float) -> float:
@@ -279,7 +279,7 @@ class MemoryManager:
 				new_score = current_score - 0.01
 		else:
 			new_score = current_score - rate
-			
+
 		return round(max(new_score, 0.0), 2)
 
 	def apply_erosion(self, collection: str, rate: float = None) -> None:
@@ -295,7 +295,7 @@ class MemoryManager:
 		offset = None
 		eroded_count = 0
 		deleted_count = 0
-		
+
 		scroll_filter = models.Filter(
 			must_not=[models.FieldCondition(key="immune", match=models.MatchValue(value=True))]
 		)
@@ -313,19 +313,19 @@ class MemoryManager:
 			except Exception as e:
 				logger.error(f"Erosion scroll failed: {_mask_pii_exception(e)}")
 				break
-			
+
 			points_to_delete: List[Any] = []
-			
+
 			for hit in response[0]:
 				if hit.payload.get("immune"):
 					continue
 				current_score = hit.payload.get("reinforcement_score", 1.0)
 				color = hit.payload.get("color", "gray")
 				multiplier = cfg.EMOTIONAL_DECAY_MULTIPLIERS.get(color, 1.0)
-				
+
 				effective_rate = rate * multiplier
 				new_score = self._calculate_decay(current_score, effective_rate)
-				
+
 				if new_score <= 0:
 					points_to_delete.append(hit.id)
 					deleted_count += 1
@@ -341,20 +341,20 @@ class MemoryManager:
 					except Exception as e:
 						logger.error(f"Erosion payload set failed: {_mask_pii_exception(e)}")
 						continue
-			
+
 			if points_to_delete:
 				try:
 					self.client.delete(
-						collection_name=collection, 
+						collection_name=collection,
 						points_selector=models.PointIdsList(points=points_to_delete)
 					)
 				except Exception as e:
 					logger.error(f"Erosion deletion failed: {_mask_pii_exception(e)}")
-			
+
 			offset = response[1]
 			if offset is None:
 				break
-				
+
 		logger.info(f"Erosion complete. Updated: {eroded_count}, Deleted: {deleted_count}")
 
 	def sanitize(self, collection: str, dry_run: bool = False) -> Dict[str, Any]:
@@ -367,9 +367,9 @@ class MemoryManager:
 		seen_content: Dict[str, str] = {} # content -> id
 		duplicates: List[str] = []
 		migrated_count = 0
-		
+
 		logger.info(f"Starting sanitation for {collection}...")
-		
+
 		while True:
 			try:
 				response = self.client.scroll(
@@ -385,17 +385,17 @@ class MemoryManager:
 
 			for hit in response[0]:
 				content = hit.payload.get("content", "")
-				
+
 				# 1. Deduplication Check
 				if content in seen_content:
 					duplicates.append(hit.id)
 					continue
 				seen_content[content] = hit.id
-				
+
 				# 2. Schema Migration Check
 				needs_migration = False
 				update_payload = {}
-				
+
 				if "color" not in hit.payload:
 					update_payload["color"] = cfg.DEFAULT_COLOR
 					needs_migration = True
@@ -405,7 +405,7 @@ class MemoryManager:
 				if "intensity" not in hit.payload:
 					update_payload["intensity"] = 1.0
 					needs_migration = True
-					
+
 				if needs_migration:
 					if not dry_run:
 						try:
@@ -423,7 +423,7 @@ class MemoryManager:
 			offset = response[1]
 			if offset is None:
 				break
-				
+
 		# Remove duplicates
 		if duplicates and not dry_run:
 			try:

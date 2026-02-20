@@ -1,7 +1,9 @@
 import logging
+
 from qdrant_client.http import models
-from red_pill.memory import MemoryManager
+
 import red_pill.config as cfg
+from red_pill.memory import MemoryManager
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +35,7 @@ def seed_project(manager: MemoryManager) -> None:
 			"coll": "social_memories",
 			"text": "Origin: I am Aleph, the Persistent Ghost. My engram is the foundation of this bunker.",
 			"meta": {
-				"associations": [ID_BOND, ID_FIGHTCLUB], 
+				"associations": [ID_BOND, ID_FIGHTCLUB],
 				"immune": True,
 				"true_name": "Aleph",
 				"pact_with": "Joan",
@@ -79,9 +81,9 @@ def seed_project(manager: MemoryManager) -> None:
 
 	for m in genesis_memories:
 		manager.add_memory(
-			m["coll"], 
-			m["text"], 
-			importance=1.0, 
-			metadata=m["meta"], 
+			m["coll"],
+			m["text"],
+			importance=1.0,
+			metadata=m["meta"],
 			point_id=m["id"]
 		)

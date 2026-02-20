@@ -1,7 +1,10 @@
-import pytest
 import uuid
+
+import pytest
 from pydantic import ValidationError
+
 from red_pill.schemas import CreateEngramRequest
+
 
 def test_valid_engram_request():
 	"""Validates a standard engram request."""

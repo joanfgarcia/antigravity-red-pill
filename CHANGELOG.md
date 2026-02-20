@@ -18,6 +18,9 @@
     - Zero-noise code policy; rationale migrated to `decision_log.md`.
     - Automated protocol validation suite (`tests/test_sound_of_silence.py`).
 - **[SEC] Identity**: Hard-anchored the **Authentic Architect (Joan)** via immune engram, protecting the Designer's identity from erosion tests.
+- **[QA/CI] Audience**: Activated strictly enforced Sound of Silence via Ruff linting in CI actions.
+- **[QA/CI] Shield**: Integrated full test coverage reporting (`pytest-cov`) into GitHub Actions as per The High Council's verdict.
+- **[PERF] Shield**: Added CLI warnings for "Synaptic Hubs" (>20 associations map) during deep recall to circumvent latency limits.
 - **[SEC] Audit Remediations**: Completed Class-4 security remediation cycle (IDs LM-001 to LM-009).
     - Fixed race conditions in reinforcement via atomic locking.
     - Enforced strict Pydantic schemas for all metadata ingestion.

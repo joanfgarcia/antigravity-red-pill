@@ -31,7 +31,7 @@ class MemoryDaemon:
 		self.server.bind(SOCKET_PATH)
 		os.chmod(SOCKET_PATH, 0o600)
 		self.server.listen(5)
-		
+
 		try:
 			self._load_model()
 		except Exception as e:
@@ -50,7 +50,7 @@ class MemoryDaemon:
 					data = conn.recv(4096)
 					if not data:
 						continue
-					
+
 					try:
 						request = json.loads(data.decode('utf-8'))
 						text = request.get("text")
@@ -76,12 +76,12 @@ class MemoryDaemon:
 		if self.server:
 			try:
 				self.server.close()
-			except:
+			except Exception:
 				pass
 		if os.path.exists(SOCKET_PATH):
 			try:
 				os.remove(SOCKET_PATH)
-			except:
+			except Exception:
 				pass
 
 if __name__ == "__main__":

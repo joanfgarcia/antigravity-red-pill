@@ -1,14 +1,13 @@
 
+import logging
 import threading
 import time
-import uuid
-import random
-import logging
-import sys
 from concurrent.futures import ThreadPoolExecutor
-from red_pill.memory import MemoryManager
-import red_pill.config as cfg
+
 from qdrant_client.http import models
+
+import red_pill.config as cfg
+from red_pill.memory import MemoryManager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -17,11 +16,11 @@ logger = logging.getLogger("AgentSmith")
 def attack_clone_army(manager, target_id, iterations=100):
     """
     Simulates high-concurrency reinforcement attacks on a single engram.
-    Goal: Expose race conditions where reinforcing simultaneous threads 
+    Goal: Expose race conditions where reinforcing simultaneous threads
     overwrite each other's score increments.
     """
     logger.info(f"[ATTACK] The Clone Army: Launching {iterations} concurrent reinforcements on {target_id}...")
-    
+
     def reinforce_task():
         # Each thread tries to reinforce the same memory
         # We manually call _reinforce_points to simulate the internal logic under stress
@@ -37,14 +36,14 @@ def attack_clone_army(manager, target_id, iterations=100):
         futures = [executor.submit(reinforce_task) for _ in range(iterations)]
         for f in futures:
             f.result()
-            
+
     # Check final score
     # Expected: Initial (1.0) + (0.1 * iterations)
     # If race condition exists, score will be < Expected
     points = manager.client.retrieve("stress_test", ids=[target_id], with_payload=True)
     final_score = points[0].payload["reinforcement_score"]
     expected_score = 1.0 + (0.1 * iterations)
-    
+
     logger.info(f"[RESULT] Clone Army: Final Score {final_score:.2f} / Expected {expected_score:.2f}")
     if final_score < expected_score * 0.9: # Allow small float error but not massive loss
         logger.warning(f"[FAIL] Race condition detected! Lost {(expected_score - final_score):.2f} points.")
@@ -57,7 +56,7 @@ def attack_poison_pill(manager):
     Goal: Corrupt the memory schema or cause crashes during retrieval.
     """
     logger.info("[ATTACK] Poison Pill: Injecting toxic data types...")
-    
+
     poison_data = [
         {"complex": {"nested": [1, 2, {"deep": "value"}]}}, # Deep nesting
         {"huge_string": "A" * 10000}, # Buffer overflow attempt
@@ -65,7 +64,7 @@ def attack_poison_pill(manager):
         {"sql_injection": "'; DROP TABLE memories; --"}, # Classic SQL (useless on Qdrant but checks handling)
         {"unicode_chaos": "﷽ ⚠️ 🤡 ΰ α"} # Unicode stress
     ]
-    
+
     ids = []
     rejected_count = 0
     for i, meta in enumerate(poison_data):
@@ -100,9 +99,9 @@ def attack_erosion_flood(manager, target_id):
     Goal: Test locking and data consistency during mass updates.
     """
     logger.info("[ATTACK] Erosion Flood: Initiating rapid decay cycles...")
-    
+
     stop_event = threading.Event()
-    
+
     def erosion_loop():
         while not stop_event.is_set():
             manager.apply_erosion("stress_test", rate=0.01)
@@ -115,23 +114,23 @@ def attack_erosion_flood(manager, target_id):
             reads += 1
             if reads % 50 == 0:
                 time.sleep(0.1)
-                
+
     erosion_thread = threading.Thread(target=erosion_loop)
     read_thread = threading.Thread(target=read_loop)
-    
+
     erosion_thread.start()
     read_thread.start()
-    
+
     time.sleep(3) # Let it burn for 3 seconds
     stop_event.set()
-    
+
     erosion_thread.join()
     read_thread.join()
     logger.info("[SUCCESS] Erosion Flood sustained without deadlock.")
 
 def main():
     logger.info("--- AGENT SMITH INITIALIZED ---")
-    
+
     # Setup
     manager = MemoryManager()
     # manager.client.recreate_collection is deprecated in modern clients
@@ -142,17 +141,17 @@ def main():
         collection_name=collection_name,
         vectors_config=models.VectorParams(size=cfg.VECTOR_SIZE or 384, distance=models.Distance.COSINE)
     )
-    
+
     # 1. Concurrency
     target = manager.add_memory("stress_test", "Neo is the One")
     attack_clone_army(manager, target)
-    
+
     # 2. Injection
     attack_poison_pill(manager)
-    
+
     # 3. Erosion Load
     attack_erosion_flood(manager, target)
-    
+
     logger.info("--- STRESS TEST COMPLETE ---")
 
 if __name__ == "__main__":

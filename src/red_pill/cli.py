@@ -3,6 +3,7 @@ import logging
 import os
 import signal
 import sys
+
 import yaml
 
 import red_pill.config as cfg
@@ -15,7 +16,7 @@ def main() -> None:
 	parser = argparse.ArgumentParser(description="Red Pill Protocol CLI")
 	parser.add_argument("--url", help="Qdrant URL")
 	parser.add_argument("--verbose", action="store_true", help="Debug logs")
-	
+
 	subparsers = parser.add_subparsers(dest="command")
 
 	mode_parser = subparsers.add_parser("mode", help="Switch Lore Skin")
@@ -42,7 +43,7 @@ def main() -> None:
 
 	subparsers.add_parser("diag", help="Diagnostics")
 	subparsers.add_parser("daemon", help="Memory Sidecar")
-	
+
 	sanitize_parser = subparsers.add_parser("sanitize", help="Sanitation & Migration Protocol")
 	sanitize_parser.add_argument("type", choices=["work", "social"])
 	sanitize_parser.add_argument("--dry-run", action="store_true", help="Report without changes")
@@ -51,7 +52,7 @@ def main() -> None:
 
 	log_level = logging.DEBUG if args.verbose else getattr(logging, cfg.LOG_LEVEL.upper(), logging.INFO)
 	logging.basicConfig(level=log_level, format="%(levelname)s: %(message)s")
-	
+
 	if not args.command:
 		parser.print_help()
 		sys.exit(0)
@@ -61,11 +62,11 @@ def main() -> None:
 			from red_pill.memory_daemon import MemoryDaemon
 			print("\n--- Despertando Sidecar de Memoria ---")
 			daemon = MemoryDaemon()
-			
+
 			def stop_daemon(sig, frame):
 				daemon.stop()
 				sys.exit(0)
-				
+
 			signal.signal(signal.SIGINT, stop_daemon)
 			signal.signal(signal.SIGTERM, stop_daemon)
 			daemon.start()
@@ -107,21 +108,25 @@ def main() -> None:
 		elif args.command == "search":
 			deep_trigger = any(phrase in args.query.lower() for phrase in cfg.DEEP_RECALL_TRIGGERS)
 			is_deep = args.deep or deep_trigger
-			
+
 			results = manager.search_and_reinforce(collection, args.query, limit=args.limit, deep_recall=is_deep)
 			if is_deep:
-				print(f"--- [DEEP RECALL ACTIVATED] ---")
+				print("--- [DEEP RECALL ACTIVATED] ---")
 			for hit in results:
 				score = hit.payload.get("reinforcement_score", 0.0)
 				color = hit.payload.get("color", "gray")
 				intensity = hit.payload.get("intensity", 1.0)
 				status = " [IMMUNE]" if hit.payload.get("immune") else f" (Score: {score})"
+				assocs = len(hit.payload.get("associations", []))
+
 				print(f"- [{color.upper()}][Int: {intensity}] {hit.payload['content']}{status}")
+				if assocs > 20:
+					logger.warning(f"Synaptic Hub Detected: Engram {hit.id} has {assocs} associations (Limit: 20). Operations may lag.")
 		elif args.command == "erode":
 			manager.apply_erosion(collection, rate=args.rate) if args.rate else manager.apply_erosion(collection)
 		elif args.command == "sanitize":
 			results = manager.sanitize(collection, dry_run=args.dry_run)
-			print(f"--- [SANITATION PROTOCOL COMPLETE] ---")
+			print("--- [SANITATION PROTOCOL COMPLETE] ---")
 			print(f"Collection: {results['collection']}")
 			print(f"Duplicates Removed: {results['duplicates_found']}")
 			print(f"Records Migrated: {results['migrated_records']}")

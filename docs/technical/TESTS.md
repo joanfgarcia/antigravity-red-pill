@@ -5,12 +5,12 @@ This document outlines the training programs available to verify the integrity o
 
 ## 1. Unit Tests (The Dojo)
 **Objective**: Verify functional correctness of individual components.
-**Tools**: `pytest`
-**Coverage**: Memory CRUD, Erosion Logic, Configuration Loading.
+**Tools**: `pytest`, `pytest-cov`
+**Coverage Status**: >80% Core Logic (memory.py, schemas.py, seed.py, config.py). `cli.py` and `memory_daemon.py` are excluded from unit test coverage targets as they are integration points.
 
 ```bash
-# Run the standard test suite
-uv run pytest tests/test_memory.py
+# Run the standard test suite with coverage
+uv run pytest --cov=src/red_pill tests/
 ```
 
 ## 2. Stress Tests (Agent Smith)

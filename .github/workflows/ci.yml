@@ -26,5 +26,8 @@ jobs:
     - name: Install dependencies
       run: uv sync
 
-    - name: Run All Validation & Logic Tests
-      run: uv run pytest tests/ --ignore=tests/integration/
+    - name: Ensure Sound of Silence (Ruff Linting)
+      run: uv run ruff check src/ scripts/ tests/
+
+    - name: Run All Validation & Logic Tests with Coverage
+      run: uv run pytest --cov=src/red_pill --cov-report=xml --cov-report=term tests/

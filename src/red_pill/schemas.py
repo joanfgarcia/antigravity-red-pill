@@ -1,5 +1,6 @@
 import uuid
-from typing import Any, ClassVar, Dict, List, Union, Literal
+from typing import Any, ClassVar, Dict, List, Literal, Union
+
 from pydantic import BaseModel, Field, field_validator
 
 # Emotional Spectrum Definition (Inside Out 2 / v4.2.0)
@@ -14,16 +15,16 @@ class CreateEngramRequest(BaseModel):
 	emotion: ValidEmotion = Field(default="neutral")
 	intensity: float = Field(default=1.0, ge=0.0, le=10.0)
 	metadata: Dict[str, Union[str, int, float, bool, List[str]]] = Field(default_factory=dict)
-	
+
 	@field_validator('content')
 	@classmethod
 	def no_null_bytes(cls, v: str) -> str:
 		if '\x00' in v:
 			raise ValueError("Content contains null bytes")
 		return v
-		
+
 	RESERVED_KEYS: ClassVar[set] = {
-		"content", "importance", "reinforcement_score", 
+		"content", "importance", "reinforcement_score",
 		"created_at", "last_recalled_at", "immune",
 		"color", "emotion", "intensity"
 	}
@@ -34,7 +35,7 @@ class CreateEngramRequest(BaseModel):
 		for key, val in v.items():
 			if key in cls.RESERVED_KEYS:
 				raise ValueError(f"Reserved key '{key}' found")
-			
+
 			if isinstance(val, (dict, list)) and key != 'associations':
 				if isinstance(val, list):
 					for item in val:
@@ -42,7 +43,7 @@ class CreateEngramRequest(BaseModel):
 							raise ValueError(f"Complex type in metadata list {key}")
 				elif isinstance(val, dict):
 					raise ValueError(f"Nested dict in metadata field {key}")
-			
+
 			if key == 'associations' and isinstance(val, list):
 				if len(val) > 20:
 					val = val[:20]
