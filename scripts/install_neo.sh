@@ -22,36 +22,16 @@ ensure_podman() {
     if ! command -v podman &> /dev/null; then
         echo -e "${BLUE}Podman no detectado.${NC}"
         if [[ "$OS_TYPE" == "Darwin" ]]; then
+            echo -e "${RED}[LM-007] Dependencia Faltante: Podman${NC}"
             echo "En macOS, por favor instala Podman con: brew install podman"
             echo "O descarga Podman Desktop: https://podman-desktop.io/"
-            return 1
-        fi
-
-        read -p "¿Deseas que intente instalar Podman automáticamente? (s/n): " INSTALL_PODMAN
-        if [[ "$INSTALL_PODMAN" =~ ^[Ss]$ ]]; then
-            SUDO_CMD=""
-            if [[ $EUID -ne 0 ]]; then
-                SUDO_CMD="sudo"
-            fi
-            case "$DISTRO" in
-                ubuntu|debian|raspbian)
-                    $SUDO_CMD apt-get update && $SUDO_CMD apt-get install -y podman
-                    ;;
-                arch|manjaro)
-                    $SUDO_CMD pacman -Sy --noconfirm podman
-                    ;;
-                fedora|rhel|centos|amzn)
-                    $SUDO_CMD dnf install -y podman
-                    ;;
-                *)
-                    echo "Distro no soportada para instalación automática. Por favor, instala Podman manualmente."
-                    return 1
-                    ;;
-            esac
         else
-            echo "Instalación de Podman abortada. El protocolo Red Pill requiere un motor de contenedores."
-            exit 1
+            echo -e "${RED}[LM-007] Dependencia Faltante: Podman${NC}"
+            echo "El protocolo Red Pill (Zero-Trust) requiere un motor de contenedores."
+            echo "Por seguridad, este script no escala privilegios (sudo) para instalar dependencias."
+            echo "Por favor, instala Podman manualmente (ej: sudo apt-get install podman / sudo dnf install podman)"
         fi
+        exit 1
     fi
     echo -e "${GREEN}Motor de contenedores (Podman) listo.${NC}"
     return 0
@@ -64,9 +44,7 @@ echo -e "Entorno detectado: $OS_TYPE ($DISTRO)"
 ensure_podman || exit 1
 
 if [[ "$OS_TYPE" == "Darwin" ]]; then
-    echo -e "${RED}ADVERTENCIA: macOS detectado.${NC}"
-    echo "La creación automática de servicios systemd no está soportada en Darwin."
-    echo "Deberás iniciar Qdrant manualmente o configurar un Launch Agent."
+    echo -e "${BLUE}macOS detectado. Utilizando LaunchAgents (launchd) en lugar de systemd.${NC}"
     echo ""
 fi
 
@@ -179,9 +157,47 @@ if [[ "$OS_TYPE" == "Linux" ]]; then
     systemctl --user daemon-reload
     systemctl --user enable --now qdrant.service
     echo -e "${GREEN}Servidor Qdrant activo via systemd.${NC}"
+elif [[ "$OS_TYPE" == "Darwin" ]]; then
+    echo -e "${GREEN}macOS detectado. Configurando Qdrant via launchd...${NC}"
+    LAUNCH_DIR="$HOME/Library/LaunchAgents"
+    mkdir -p "$LAUNCH_DIR"
+    PLIST_FILE="$LAUNCH_DIR/com.redpill.qdrant.plist"
+    cat <<EOF > "$PLIST_FILE"
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.redpill.qdrant</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>$(command -v podman || echo "/usr/local/bin/podman")</string>
+        <string>run</string>
+        <string>--rm</string>
+        <string>--name</string>
+        <string>qdrant_mac</string>
+        <string>-p</string>
+        <string>6333:6333</string>
+        <string>-p</string>
+        <string>6334:6334</string>
+        <string>-v</string>
+        <string>$IA_DIR/storage:/qdrant/storage</string>
+        <string>qdrant/qdrant:v1.9.0</string>
+    </array>
+    <key>KeepAlive</key>
+    <true/>
+    <key>RunAtLoad</key>
+    <true/>
+</dict>
+</plist>
+EOF
+    
+    # Reload the LaunchAgent
+    launchctl unload "$PLIST_FILE" 2>/dev/null || true
+    launchctl load "$PLIST_FILE"
+    echo -e "${GREEN}Servidor Qdrant activo via launchd.${NC}"
 else
-    echo -e "${BLUE}macOS detectado. Inicia Qdrant manualmente con:${NC}"
-    echo "podman run -d --name qdrant -p 6333:6333 -p 6334:6334 -v $IA_DIR/storage:/qdrant/storage:Z qdrant/qdrant"
+    echo -e "${RED}OS_TYPE no reconocido. Inicia Qdrant manualmente.${NC}"
 fi
 
 # 3. Preparar el Entorno Python (uv)
