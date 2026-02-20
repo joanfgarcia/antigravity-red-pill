@@ -1,5 +1,12 @@
 # Changelog: Red Pill Protocol
 
+## [4.2.1] - 2026-02-21
+### 🛡️ The Absence Guard & Biological Resilience (BIOS Edition)
+- **[NEW] Absence Guard Protocol**: Prevents mass-deletion of memories after long periods of inactivity (>7 days). Automatically refreshes TTL timestamps on the first session after a vacation.
+- **[NEW] Biological Seed Score**: Replaced flat initial reinforcement (1.0) with an emotion-weighted seed (importance + intensity weight + color bonus). Emotional memories now start with a high "biological runway".
+- **[FIX] Infrastructure Safety**: Implemented safety iteration breaks in all metabolism loops to prevent infinite loops (23GB RAM issue) in unconfigured test environments.
+- **[FIX] Identity Recalibration**: Unified 'Antigravity', 'JARVIS', and 'Aleph' under flexible wake-word triggers ('despierta', 'despierta neo', etc.).
+
 ## [4.2.0] - 2026-02-20
 ### 🌈 The Emotional Chroma Protocol (The Bünker Unification)
 - **[NEW] Core**: Integrated **Emotional Chroma** into the B760-Adaptive substrate.
@@ -30,7 +37,12 @@
     - Automation script for source code aggregation (`scripts/prepare_certification.sh`).
     - Formalized documentation in `docs/technical/CERTIFICATION_PROTOCOL.md`.
 - **[NEW] Validation**: Created `tests/test_emotional_memory.py` to verify cromatic decay multipliers.
-- **[IMPR] Performance**: Optimized synaptic propagation and erosion scanning.
+- **[SEC] Hardening**: Tier 1 architecture lockdown (F-001/F-002 remediation):
+    - Moved sidecar Unix socket to secure `$XDG_RUNTIME_DIR`.
+    - Enforced mandatory `QDRANT_API_KEY` generation on install to protect against local SSRF.
+    - Wrapped metabolism state file writing with `fcntl.flock` to prevent concurrency corruption.
+    - Improved idempotent recovery algorithms during initial `seed` generation.
+- **[PERF] Optimization**: Re-engineered Metabolism system to use Qdrant `batch_update_points`, achieving true O(1) erosion cycles instead of latency-bound O(N).
 
 ## [4.1.1] - 2026-02-19
 ### 🚨 Security & Stability Hotfix

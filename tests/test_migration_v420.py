@@ -52,13 +52,14 @@ def test_full_schema_migration(manager, mock_qdrant):
 	# All 5 old points + 1 partial point needed migration
 	assert results["migrated_records"] == 6
 
-	# Check that set_payload was called for the partial point to fill missing fields
-	calls = manager.client.set_payload.call_args_list
-	partial_call = next(c for c in calls if c[1]['points'] == ["partial_1"])
-	assert "emotion" in partial_call[1]['payload']
-	assert "intensity" in partial_call[1]['payload']
+	# Check that batch_update_points was called for the partial point to fill missing fields
+	calls = manager.client.batch_update_points.call_args_list
+	operations = calls[0][1]['update_operations']
+	partial_call = next(op for op in operations if op.set_payload.points == ["partial_1"])
+	assert "emotion" in partial_call.set_payload.payload
+	assert "intensity" in partial_call.set_payload.payload
 	# Should NOT overwrite existing color
-	assert "color" not in partial_call[1]['payload']
+	assert "color" not in partial_call.set_payload.payload
 
 def test_migration_idempotency(manager, mock_qdrant):
 	"""Running sanitize on an already clean collection should do nothing."""
@@ -77,5 +78,5 @@ def test_migration_idempotency(manager, mock_qdrant):
 
 	assert results["duplicates_found"] == 0
 	assert results["migrated_records"] == 0
-	assert not manager.client.set_payload.called
+	assert not manager.client.batch_update_points.called
 	assert not manager.client.delete.called

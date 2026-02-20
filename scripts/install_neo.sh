@@ -70,6 +70,26 @@ read -p "Nombre IA (Neo): " AI_NAME; AI_NAME=${AI_NAME:-"Neo"}
 read -p "Rol IA (El Elegido): " AI_ROLE; AI_ROLE=${AI_ROLE:-"El Elegido"}
 read -p "Trigger (Neo, despierta): " AWAKEN_TRIGGER; AWAKEN_TRIGGER=${AWAKEN_TRIGGER:-"$AI_NAME, despierta"}
 
+read -p "Qdrant API Key (Dejar en blanco para auto-generar): " QDRANT_API_KEY
+if [ -z "$QDRANT_API_KEY" ]; then
+	QDRANT_API_KEY=$(head -c 32 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 32)
+	echo -e "${GREEN}API Key generada automáticamente: $QDRANT_API_KEY${NC}"
+fi
+
+ENV_FILE="$SCRIPT_DIR/../.env"
+if [ ! -f "$ENV_FILE" ]; then
+	cp "$SCRIPT_DIR/../.env.example" "$ENV_FILE" 2>/dev/null || touch "$ENV_FILE"
+fi
+if grep -q "^QDRANT_API_KEY=" "$ENV_FILE"; then
+	if [[ "$OS_TYPE" == "Darwin" ]]; then
+		sed -i "" "s|^QDRANT_API_KEY=.*|QDRANT_API_KEY=$QDRANT_API_KEY|g" "$ENV_FILE"
+	else
+		sed -i "s|^QDRANT_API_KEY=.*|QDRANT_API_KEY=$QDRANT_API_KEY|g" "$ENV_FILE"
+	fi
+else
+	echo "QDRANT_API_KEY=$QDRANT_API_KEY" >> "$ENV_FILE"
+fi
+
 mkdir -p "$IA_DIR/scripts" "$IA_DIR/backups/qdrant" "$IA_DIR/backups/soul" "$IA_DIR/seeds" "$IA_DIR/storage"
 
 QUADLET_DIR="$HOME/.config/containers/systemd"
@@ -84,6 +104,7 @@ Image=docker.io/qdrant/qdrant:v1.9.0
 PublishPort=6333:6333
 PublishPort=6334:6334
 Volume=$IA_DIR/storage:/qdrant/storage:Z
+Environment=QDRANT__SERVICE__API_KEY=$QDRANT_API_KEY
 
 [Service]
 Restart=always
@@ -119,6 +140,8 @@ elif [[ "$OS_TYPE" == "Darwin" ]]; then
 		<string>6334:6334</string>
 		<string>-v</string>
 		<string>$IA_DIR/storage:/qdrant/storage</string>
+		<string>-e</string>
+		<string>QDRANT__SERVICE__API_KEY=$QDRANT_API_KEY</string>
 		<string>qdrant/qdrant:v1.9.0</string>
 	</array>
 	<key>KeepAlive</key>

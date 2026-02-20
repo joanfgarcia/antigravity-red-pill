@@ -40,14 +40,14 @@ def test_emotional_erosion(manager, mock_qdrant):
 
 	manager.apply_erosion("test_col")
 
-	# Verify set_payload calls
-	calls = manager.client.set_payload.call_args_list
-	assert len(calls) == 2
+	# Verify batch_update_points calls
+	calls = manager.client.batch_update_points.call_args_list
+	assert len(calls) == 1
+	operations = calls[0][1]['update_operations']
 
 	results = {}
-	for call in calls:
-		kwargs = call[1]
-		results[kwargs['points'][0]] = kwargs['payload']['reinforcement_score']
+	for op in operations:
+		results[op.set_payload.points[0]] = op.set_payload.payload['reinforcement_score']
 
 	assert results["orange_1"] == 0.85
 	assert results["yellow_1"] == 0.95
@@ -68,7 +68,7 @@ def test_add_memory_with_emotion(manager, mock_qdrant):
 	assert payload["color"] == "orange"
 	assert payload["emotion"] == "anxiety"
 	assert payload["intensity"] == 9.0
-	assert payload["reinforcement_score"] == 1.0
+	assert payload["reinforcement_score"] == 5.05 # importance(1.0) * (1 + 0.9 * 1.5 * 3) = 5.05
 
 def test_invalid_color_rejection(manager):
 	from pydantic import ValidationError
@@ -94,13 +94,14 @@ def test_sanitation(manager, mock_qdrant):
 	assert "2" in kwargs['points_selector'].points
 
 	# Verify migration (point 3 missing color/emotion)
-	# manager.client.set_payload should be called for p3
-	assert manager.client.set_payload.called
+	# manager.client.batch_update_points should be called for p3
+	assert manager.client.batch_update_points.called
 	# Check if point 3 was updated with defaults
-	calls = manager.client.set_payload.call_args_list
-	p3_update = next(c for c in calls if c[1]['points'] == ["3"])
-	assert p3_update[1]['payload']['color'] == "gray"
-	assert p3_update[1]['payload']['emotion'] == "neutral"
+	calls = manager.client.batch_update_points.call_args_list
+	operations = calls[0][1]['update_operations']
+	p3_update = next(op for op in operations if op.set_payload.points == ["3"])
+	assert p3_update.set_payload.payload['color'] == "gray"
+	assert p3_update.set_payload.payload['emotion'] == "neutral"
 
 	assert results["duplicates_found"] == 1
 	assert results["migrated_records"] == 2

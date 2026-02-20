@@ -117,7 +117,8 @@ def main() -> None:
 				color = hit.payload.get("color", "gray")
 				intensity = hit.payload.get("intensity", 1.0)
 				status = " [IMMUNE]" if hit.payload.get("immune") else f" (Score: {score})"
-				assocs = len(hit.payload.get("associations", []))
+				assocs_val = hit.payload.get("associations")
+				assocs = len(assocs_val) if assocs_val is not None else 0
 
 				print(f"- [{color.upper()}][Int: {intensity}] {hit.payload['content']}{status}")
 				if assocs > 20:
@@ -130,7 +131,7 @@ def main() -> None:
 			print(f"Collection: {results['collection']}")
 			print(f"Duplicates Removed: {results['duplicates_found']}")
 			print(f"Records Migrated: {results['migrated_records']}")
-			if args.dry_run:
+			if args.dry_run and (results['duplicates_found'] > 0 or results['migrated_records'] > 0):
 				print("Note: DRY RUN - No changes applied.")
 		elif args.command == "diag":
 			stats = manager.get_stats(collection)

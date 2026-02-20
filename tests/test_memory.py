@@ -134,12 +134,15 @@ def test_erosion_cycle(manager, mock_qdrant):
     # assert points[0].id == "123"
     # assert points[0].payload['reinforcement_score'] == 0.4
 
-    assert manager.client.set_payload.called
-    assert manager.client.set_payload.call_count == 1
+    assert manager.client.batch_update_points.called
+    assert manager.client.batch_update_points.call_count == 1
 
-    args, kwargs = manager.client.set_payload.call_args
-    assert kwargs['points'] == [mock_hit.id]
-    assert kwargs['payload']['reinforcement_score'] == 0.4
+    args, kwargs = manager.client.batch_update_points.call_args
+    operations = kwargs['update_operations']
+    assert len(operations) == 1
+    op = operations[0]
+    assert op.set_payload.points == [mock_hit.id]
+    assert op.set_payload.payload['reinforcement_score'] == 0.4
 
 def test_dormancy_filter(manager, mock_qdrant):
     mock_response = MagicMock()

@@ -11,6 +11,9 @@ QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", None)
 QDRANT_SCHEME = os.getenv("QDRANT_SCHEME", "http")
 QDRANT_URL = f"{QDRANT_SCHEME}://{QDRANT_HOST}:{QDRANT_PORT}"
 
+_run_dir = os.getenv("XDG_RUNTIME_DIR", "/tmp")
+DAEMON_SOCKET_PATH = os.getenv("DAEMON_SOCKET_PATH", os.path.join(_run_dir, "red_pill_memory.sock"))
+
 # MODELS
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
 VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", "384"))
@@ -20,10 +23,22 @@ DECAY_STRATEGY = os.getenv("DECAY_STRATEGY", "linear")
 if DECAY_STRATEGY not in ("linear", "exponential"):
 	raise ValueError(f"Invalid DECAY_STRATEGY: {DECAY_STRATEGY}")
 
-EROSION_RATE = float(os.getenv("EROSION_RATE", "0.05"))
+# EROSION_RATE: fraction of reinforcement_score removed per erosion cycle.
+# Default 0.01 targets ~100 cycles before a neutral memory (score=1.0) dies.
+# At 1 cycle/hour = ~4 days minimum. Tune upward for aggressive forgetting.
+# NOTE: was 0.05 in development/testing. 0.01 is the production target.
+EROSION_RATE = float(os.getenv("EROSION_RATE", "0.01"))
 REINFORCEMENT_INCREMENT = float(os.getenv("REINFORCEMENT_INCREMENT", "0.1"))
 PROPAGATION_FACTOR = float(os.getenv("PROPAGATION_FACTOR", "0.5"))
 IMMUNITY_THRESHOLD = float(os.getenv("IMMUNITY_THRESHOLD", "10.0"))
+
+# EMOTIONAL_SEED_FACTOR: multiplier applied to initial reinforcement_score for
+# non-neutral memories with intensity > 1.0. Higher values give emotional
+# memories more runway before erosion. At SEED_FACTOR=3.0 and intensity=10,
+# orange memories start at score ~5.5 (vs 1.0 for neutral).
+# At production EROSION_RATE=0.01: score=9.0 → 600 hours ≈ 25 days survival.
+EMOTIONAL_SEED_FACTOR = float(os.getenv("EMOTIONAL_SEED_FACTOR", "3.0"))
+
 
 # LOGGING
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
@@ -44,6 +59,10 @@ METABOLISM_ENABLED = os.getenv("METABOLISM_ENABLED", "True").lower() == "true"
 METABOLISM_COOLDOWN = int(os.getenv("METABOLISM_COOLDOWN", "3600"))
 METABOLISM_AUTO_COLLECTIONS = os.getenv("METABOLISM_AUTO_COLLECTIONS", "work_memories,social_memories").split(",")
 METABOLISM_STATE_FILE = os.path.expanduser("~/.red_pill_metabolism")
+# If the bunker has been idle for more than this many seconds, a TTL refresh
+# is triggered before erosion to prevent mass-deletion after long absences.
+# Default: 7 days (7 * 24 * 3600).
+ABSENCE_THRESHOLD = int(os.getenv("ABSENCE_THRESHOLD", str(7 * 24 * 3600)))
 
 # EMOTIONAL CHROMA (v4.2.0)
 DEFAULT_COLOR = "gray"

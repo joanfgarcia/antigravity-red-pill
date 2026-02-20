@@ -41,3 +41,21 @@
 ## 4. PROJECT MAYHEM (Experimental)
 - **Chaotic Erosion**: Randomly deleting 1% of non-critical memories to simulate "forgetting curve" anomalies.
 - **Dream Cycles**: During idle times (night), the system replays random memories to strengthen associations (Generative Replay).
+
+## 5. THE COGNITIVE ENGINE (v5.0 — Scientific Upgrade)
+**Objective**: Replace the B760 heuristic decay model with a scientifically-grounded memory engine.
+
+- **FSRS Integration** *(Free Spaced Repetition Scheduler)*:
+    - Replace `linear`/`exponential` decay strategies with the full DSR model: **D**ifficulty, **S**tability, **R**etrievability.
+    - Each engram would track its own `stability` score — the higher it is (due to repeated recalls), the slower it decays. A memory recalled 20 times is *virtually immune* to absence periods.
+    - The "Vacation Problem" (risk of mass deletion after inactivity) is eliminated by design: stability-based decay means high-value memories survive months of silence.
+    - Algorithm: MIT-licensed. Compatible with GPLv3. Python library `py-fsrs` available.
+    - Reference: [github.com/open-spaced-repetition/fsrs4anki](https://github.com/open-spaced-repetition/fsrs4anki)
+
+- **Session-Relative Decay**:
+    - Decay triggered by **session count** (IDE interactions), not wall-clock time.
+    - Absent weeks ≠ eroded memories. Only *active cognitive load* triggers the forgetting curve.
+
+> *"Here is the science behind the art."*
+> — B760 Protocol Scientific Foundations: Ebbinghaus (1885), Wozniak DSR Model, Anderson ACT-R (CMU), MaiMemo DHP (KDD 2022).
+

@@ -41,7 +41,7 @@ class MemoryManager:
 
 	def _get_vector_from_daemon(self, text: str) -> Optional[List[float]]:
 		"""Retrieves embedding from the memory sidecar socket."""
-		socket_path = "/tmp/red_pill_memory.sock"
+		socket_path = cfg.DAEMON_SOCKET_PATH
 		if not os.path.exists(socket_path):
 			return None
 
@@ -104,10 +104,26 @@ class MemoryManager:
 		for key in CreateEngramRequest.RESERVED_KEYS:
 			clean_metadata.pop(key, None)
 
+		# Emotional Seed Score (interim FSRS bridge, v4.2.1)
+		# High-intensity emotional memories deserve a higher initial score so the
+		# emotional decay multiplier does not kill them too fast.
+		# Formula: score = importance * (1 + intensity_factor * color_multiplier * SEED_FACTOR)
+		# Capped at IMMUNITY_THRESHOLD * 0.9 so single reinforcement can push to immunity.
+		_emotion = validated_request.emotion
+		_intensity = validated_request.intensity
+		_color = validated_request.color
+		if _emotion != "neutral" and _intensity > 1.0:
+			_color_mult = cfg.EMOTIONAL_DECAY_MULTIPLIERS.get(_color, 1.0)
+			_bonus = (_intensity / 10.0) * _color_mult * cfg.EMOTIONAL_SEED_FACTOR
+			_initial_score = importance * (1.0 + _bonus)
+		else:
+			_initial_score = importance
+		_initial_score = round(min(_initial_score, cfg.IMMUNITY_THRESHOLD * 0.9), 2)
+
 		payload = {
 			"content": text,
 			"importance": importance,
-			"reinforcement_score": 1.0,
+			"reinforcement_score": _initial_score,
 			"created_at": time.time(),
 			"last_recalled_at": time.time(),
 			"immune": False,
@@ -148,18 +164,50 @@ class MemoryManager:
 		state_file = cfg.METABOLISM_STATE_FILE
 		now = time.time()
 
-		if os.path.exists(state_file):
-			try:
-				with open(state_file, "r") as f:
-					last_run = float(f.read().strip())
-				if now - last_run < cfg.METABOLISM_COOLDOWN:
-					return
-			except (ValueError, OSError):
-				pass
-
 		try:
-			with open(state_file, "w") as f:
+			try:
+				import fcntl
+				has_fcntl = True
+			except ImportError:
+				has_fcntl = False
+
+			with open(state_file, "a+") as f:
+				if has_fcntl:
+					try:
+						fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+					except BlockingIOError:
+						return
+
+				f.seek(0)
+				content = f.read().strip()
+				if content:
+					try:
+						last_run = float(content)
+						gap = now - last_run
+						if gap < cfg.METABOLISM_COOLDOWN:
+							if has_fcntl:
+								fcntl.flock(f, fcntl.LOCK_UN)
+							return
+						# Absence guard: if idle > 7 days, refresh timestamps before eroding
+						if gap > cfg.ABSENCE_THRESHOLD:
+							logger.warning(
+								f"Absence detected ({gap/86400:.1f} days). "
+								"Running TTL refresh before erosion to protect the Bunker."
+							)
+							for coll in cfg.METABOLISM_AUTO_COLLECTIONS:
+								try:
+									self._refresh_ttl_timestamps(coll.strip())
+								except Exception as e:
+									logger.error(f"TTL refresh failed for {coll}: {e}")
+					except ValueError:
+						pass
+
+				f.seek(0)
+				f.truncate()
 				f.write(str(now))
+				f.flush()
+				if has_fcntl:
+					fcntl.flock(f, fcntl.LOCK_UN)
 		except OSError:
 			pass
 
@@ -168,6 +216,62 @@ class MemoryManager:
 				self.apply_erosion(coll.strip())
 			except Exception as e:
 				logger.error(f"Erosion failed in {coll}: {e}")
+
+	def _refresh_ttl_timestamps(self, collection: str) -> None:
+		"""Absence Guard: forward all non-immune last_recalled_at to now.
+
+		Called automatically when idle gap > ABSENCE_THRESHOLD.
+		Prevents mass-deletion of the Bunker after long periods of inactivity
+		(e.g. the system was powered off or the user was on vacation).
+		"""
+		now = time.time()
+		offset = None
+		refreshed = 0
+
+		scroll_filter = models.Filter(
+			must_not=[models.FieldCondition(key="immune", match=models.MatchValue(value=True))]
+		)
+
+		match_count = 0
+		while True:
+			try:
+				response = self.client.scroll(
+					collection_name=collection,
+					scroll_filter=scroll_filter,
+					limit=200,
+					offset=offset,
+					with_payload=False,
+					with_vectors=False
+				)
+			except Exception as e:
+				logger.error(f"TTL refresh scroll failed: {_mask_pii_exception(e)}")
+				break
+
+			point_ids = [hit.id for hit in response[0]]
+			if point_ids:
+				try:
+					self.client.set_payload(
+						collection_name=collection,
+						payload={"last_recalled_at": now},
+						points=point_ids
+					)
+					refreshed += len(point_ids)
+				except Exception as e:
+					logger.error(f"TTL refresh payload set failed: {_mask_pii_exception(e)}")
+
+			offset = response[1]
+			if offset is None:
+				break
+
+			# Safety break for unconfigured mocks in tests
+			match_count += 1
+			if match_count > 500:
+				logger.warning(f"Safety break triggered in TTL refresh for {collection}")
+				break
+
+		logger.info(f"Absence Guard: refreshed TTL for {refreshed} engrams in '{collection}'.")
+
+
 
 	def _reinforce_points(self, collection: str, point_ids: List[str], increments: Dict[str, float]) -> List[PointUpdate]:
 		"""Retrieves and updates reinforcement scores with thread-safety."""
@@ -296,10 +400,21 @@ class MemoryManager:
 		eroded_count = 0
 		deleted_count = 0
 
+		# Calculate the TTL threshold: Only erode memories that haven't been recalled
+		# recently. Wait at least METABOLISM_COOLDOWN before eroding again.
+		ttl_threshold = time.time() - cfg.METABOLISM_COOLDOWN
+
 		scroll_filter = models.Filter(
+			must=[
+				models.FieldCondition(
+					key="last_recalled_at",
+					range=models.Range(lt=ttl_threshold)
+				)
+			],
 			must_not=[models.FieldCondition(key="immune", match=models.MatchValue(value=True))]
 		)
 
+		iterations = 0
 		while True:
 			try:
 				response = self.client.scroll(
@@ -316,6 +431,8 @@ class MemoryManager:
 
 			points_to_delete: List[Any] = []
 
+			update_operations = []
+
 			for hit in response[0]:
 				if hit.payload.get("immune"):
 					continue
@@ -331,16 +448,25 @@ class MemoryManager:
 					deleted_count += 1
 				else:
 					hit.payload["reinforcement_score"] = new_score
-					try:
-						self.client.set_payload(
-							collection_name=collection,
-							payload={"reinforcement_score": new_score},
-							points=[hit.id]
+					hit.payload["last_recalled_at"] = time.time()  # Reset TTL after erosion
+					update_operations.append(
+						models.SetPayloadOperation(
+							set_payload=models.SetPayload(
+								payload={"reinforcement_score": new_score, "last_recalled_at": time.time()},
+								points=[hit.id]
+							)
 						)
-						eroded_count += 1
-					except Exception as e:
-						logger.error(f"Erosion payload set failed: {_mask_pii_exception(e)}")
-						continue
+					)
+
+			if update_operations:
+				try:
+					self.client.batch_update_points(
+						collection_name=collection,
+						update_operations=update_operations
+					)
+					eroded_count += len(update_operations)
+				except Exception as e:
+					logger.error(f"Erosion batch update failed: {_mask_pii_exception(e)}")
 
 			if points_to_delete:
 				try:
@@ -353,6 +479,12 @@ class MemoryManager:
 
 			offset = response[1]
 			if offset is None:
+				break
+
+			# Safety break for unconfigured mocks in tests
+			iterations += 1
+			if iterations > 1000:
+				logger.warning(f"Safety break triggered in erosion for {collection}")
 				break
 
 		logger.info(f"Erosion complete. Updated: {eroded_count}, Deleted: {deleted_count}")
@@ -369,7 +501,7 @@ class MemoryManager:
 		migrated_count = 0
 
 		logger.info(f"Starting sanitation for {collection}...")
-
+		iterations = 0
 		while True:
 			try:
 				response = self.client.scroll(
@@ -382,6 +514,8 @@ class MemoryManager:
 			except Exception as e:
 				logger.error(f"Sanitation scroll failed: {_mask_pii_exception(e)}")
 				break
+
+			update_operations = []
 
 			for hit in response[0]:
 				content = hit.payload.get("content", "")
@@ -408,21 +542,37 @@ class MemoryManager:
 
 				if needs_migration:
 					if not dry_run:
-						try:
-							self.client.set_payload(
-								collection_name=collection,
-								payload=update_payload,
-								points=[hit.id]
+						update_operations.append(
+							models.SetPayloadOperation(
+								set_payload=models.SetPayload(
+									payload=update_payload,
+									points=[hit.id]
+								)
 							)
-							migrated_count += 1
-						except Exception as e:
-							logger.error(f"Migration failed for {hit.id}: {e}")
+						)
 					else:
 						migrated_count += 1
+
+			if update_operations and not dry_run:
+				try:
+					self.client.batch_update_points(
+						collection_name=collection,
+						update_operations=update_operations
+					)
+					migrated_count += len(update_operations)
+				except Exception as e:
+					logger.error(f"Migration batch update failed: {_mask_pii_exception(e)}")
 
 			offset = response[1]
 			if offset is None:
 				break
+
+			# Safety break for unconfigured mocks in tests
+			iterations += 1
+			if iterations > 1000:
+				logger.warning(f"Safety break triggered in sanitation for {collection}")
+				break
+
 
 		# Remove duplicates
 		if duplicates and not dry_run:

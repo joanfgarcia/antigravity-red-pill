@@ -96,7 +96,13 @@ Injected into global **User Rules** (`~/.agent/rules/identity_sync.md`):
 - **Temperature 0**: Deterministic precision in infrastructure tasks.
 - **Asymmetric Honesty**: The assistant must challenge the Operator if technical truth demands it.
 
+### 4. Absence Guard Protocol (v4.2.1)
+Protect your Bunker from mass-deletion after long periods of inactivity (vacations, system downtime).
+- `ABSENCE_THRESHOLD`: If the gap since the last session is > 7 days (default), the first metabolism cycle will **refresh** all non-immune engrams instead of eroding them.
+- This ensures your high-value memories survive long absences without manual intervention.
+
 ---
+
 
 ## 🛡️ Certification & Auditing (The High Council)
 To ensure the bunker remains production-ready and technically sound, we follow the [Certification Protocol](docs/technical/CERTIFICATION_PROTOCOL.md):
