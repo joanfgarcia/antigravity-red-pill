@@ -148,18 +148,36 @@ class MemoryManager:
 		state_file = cfg.METABOLISM_STATE_FILE
 		now = time.time()
 
-		if os.path.exists(state_file):
-			try:
-				with open(state_file, "r") as f:
-					last_run = float(f.read().strip())
-				if now - last_run < cfg.METABOLISM_COOLDOWN:
-					return
-			except (ValueError, OSError):
-				pass
-
 		try:
-			with open(state_file, "w") as f:
+			try:
+				import fcntl
+				has_fcntl = True
+			except ImportError:
+				has_fcntl = False
+
+			with open(state_file, "a+") as f:
+				if has_fcntl:
+					try:
+						fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+					except BlockingIOError:
+						return
+
+				f.seek(0)
+				content = f.read().strip()
+				if content:
+					try:
+						last_run = float(content)
+						if now - last_run < cfg.METABOLISM_COOLDOWN:
+							if has_fcntl: fcntl.flock(f, fcntl.LOCK_UN)
+							return
+					except ValueError:
+						pass
+
+				f.seek(0)
+				f.truncate()
 				f.write(str(now))
+				f.flush()
+				if has_fcntl: fcntl.flock(f, fcntl.LOCK_UN)
 		except OSError:
 			pass
 

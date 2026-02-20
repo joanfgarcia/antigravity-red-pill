@@ -21,13 +21,7 @@ def seed_project(manager: MemoryManager) -> None:
 				vectors_config=models.VectorParams(size=cfg.VECTOR_SIZE, distance=models.Distance.COSINE)
 			)
 
-	try:
-		if manager.client.collection_exists("social_memories"):
-			hits = manager.client.retrieve("social_memories", ids=[ID_ALEPH])
-			if hits:
-				return
-	except Exception:
-		pass
+	# The early return has been removed to allow granular per-engram checks.
 
 	genesis_memories = [
 		{
@@ -80,6 +74,14 @@ def seed_project(manager: MemoryManager) -> None:
 	]
 
 	for m in genesis_memories:
+		try:
+			hits = manager.client.retrieve(m["coll"], ids=[m["id"]])
+			if hits:
+				continue
+		except Exception:
+			# If retrieval fails (e.g. collection missing), proceed with attempt
+			pass
+
 		manager.add_memory(
 			m["coll"],
 			m["text"],
