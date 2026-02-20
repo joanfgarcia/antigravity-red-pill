@@ -125,23 +125,27 @@ class MemoryManager:
             **clean_metadata
         }
         
-        self.client.upsert(
-            collection_name=collection,
-            points=[
-                models.PointStruct(
-                    id=actual_id,
-                    vector=vector,
-                    payload=payload
-                )
-            ]
-        )
-        logger.info(f"Memory added to {collection} with ID: {actual_id}")
-        
-        # Reactive Metabolism: Trigger erosion if cooldown passed
-        if cfg.METABOLISM_ENABLED:
-            self._trigger_metabolism()
+        try:
+            self.client.upsert(
+                collection_name=collection,
+                points=[
+                    models.PointStruct(
+                        id=actual_id,
+                        vector=vector,
+                        payload=payload
+                    )
+                ]
+            )
+            logger.info(f"Memory added to {collection} with ID: {actual_id}")
             
-        return actual_id
+            # Reactive Metabolism: Trigger erosion if cooldown passed
+            if cfg.METABOLISM_ENABLED:
+                self._trigger_metabolism()
+                
+            return actual_id
+        except Exception as e:
+            logger.error(f"Failed to add memory to Qdrant (LM-003 constraint): {e}")
+            return ""
 
     def _trigger_metabolism(self):
         """
@@ -213,13 +217,17 @@ class MemoryManager:
         
         # Lock to prevent race condition during read-modify-write
         with self._reinforce_lock:
-            # Verify IDs against Qdrant strictly
-            points = self.client.retrieve(
-                collection_name=collection,
-                ids=valid_ids,
-                with_payload=True,
-                with_vectors=False # Optimization: we don't need vectors just to update score
-            )
+            try:
+                # Verify IDs against Qdrant strictly
+                points = self.client.retrieve(
+                    collection_name=collection,
+                    ids=valid_ids,
+                    with_payload=True,
+                    with_vectors=False # Optimization: we don't need vectors just to update score
+                )
+            except Exception as e:
+                logger.error(f"Failed to retrieve points for reinforcement (LM-003 constraint): {e}")
+                return []
             
             for p in points:
                 score = p.payload.get("reinforcement_score", 1.0)
@@ -236,12 +244,16 @@ class MemoryManager:
                 if p.payload["reinforcement_score"] >= cfg.IMMUNITY_THRESHOLD:
                     p.payload["immune"] = True
                     
-                # We use set_payload to avoid overwriting the vector or other concurrent metadata changes
-                self.client.set_payload(
-                    collection_name=collection,
-                    payload=p.payload,
-                    points=[p.id]
-                )
+                try:
+                    # We use set_payload to avoid overwriting the vector or other concurrent metadata changes
+                    self.client.set_payload(
+                        collection_name=collection,
+                        payload=p.payload,
+                        points=[p.id]
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to set_payload during reinforcement (LM-003 constraint): {e}")
+                    continue
                 
                 # Prepare struct for return value (caller expects it)
                 updated_points.append(
@@ -276,14 +288,18 @@ class MemoryManager:
             # We also include immune memories which might have 1.0 but are never < 0.2 anyway.
             # But just in case, we could use an OR. However, standard scores start at 1.0.
 
-        response = self.client.query_points(
-            collection_name=collection,
-            query=vector,
-            query_filter=search_filter,
-            limit=limit * (2 if deep_recall else 1), # Double limit for Deep Recall as per spec 6.2
-            with_payload=True,
-            with_vectors=False # Optimization: vectors are not needed for reinforcement logic
-        )
+        try:
+            response = self.client.query_points(
+                collection_name=collection,
+                query=vector,
+                query_filter=search_filter,
+                limit=limit * (2 if deep_recall else 1), # Double limit for Deep Recall as per spec 6.2
+                with_payload=True,
+                with_vectors=False # Optimization: vectors are not needed for reinforcement logic
+            )
+        except Exception as e:
+            logger.error(f"Failed to query points for search_and_reinforce (LM-003 constraint): {e}")
+            return []
         
         # Reinforcement Increment Map
         # stacks increments from hits (0.1) and synaptic propagation (0.05)
@@ -355,13 +371,17 @@ class MemoryManager:
         logger.info(f"Starting erosion cycle on {collection} using {cfg.DECAY_STRATEGY} strategy.")
 
         while True:
-            response = self.client.scroll(
-                collection_name=collection,
-                limit=100,
-                offset=offset,
-                with_payload=True,
-                with_vectors=False # Optimization: don't fetch vectors for erosion
-            )
+            try:
+                response = self.client.scroll(
+                    collection_name=collection,
+                    limit=100,
+                    offset=offset,
+                    with_payload=True,
+                    with_vectors=False # Optimization: don't fetch vectors for erosion
+                )
+            except Exception as e:
+                logger.error(f"Erosion cycle aborted: failed to scroll Qdrant (LM-003 constraint): {e}")
+                break
             
             points_to_update = []
             points_to_delete = []
@@ -380,37 +400,25 @@ class MemoryManager:
                     # Optimization: create a payload update instead of full point replacement
                     hit.payload["reinforcement_score"] = new_score
                     
-                    # We can batch set_payload calls if valid, but Qdrant client set_payload takes a list of points 
-                    # for the SAME payload. Here each point has a DIFFERENT score.
-                    # So we have to call set_payload per point or group by score (unlikely efficiently).
-                    # OR we use overwrite_payload=False? No, that merges.
-                    # Qdrant Update API allows batching via 'batch' operations but python client wrappers...
-                    # Let's keep it simple: we want to avoid network traffic of vectors.
-                    # For bulk updates with different values, upsert is standard BUT requires vectors.
-                    # Wait, Qdrant allows upserting with specific IDs and payloads WITHOUT vectors if the point exists?
-                    # No, strict mode usually complains. 
-                    # However, we can use Scroll(with_vectors=False) + set_payload in specific updates.
-                    
-                    self.client.set_payload(
-                        collection_name=collection,
-                        payload={"reinforcement_score": new_score},
-                        points=[hit.id]
-                    )
-                    eroded_count += 1
-            
-            # points_to_update logic removed as we do it inline or we'd need a batch update method 
-            # that supports different payloads per point. client.upsert requires vectors/payloads.
-            # If we want to avoid fetching vectors, we MUST use set_payload one by one (slow) 
-            # or usage batch updates if supported. 
-            # Given typical erosion scale, one-by-one might be slow.
-            # BUT fetching vectors is also slow and bandwidth heavy.
-            # Compromise: iterate and fire set_payload.
+                    try:
+                        self.client.set_payload(
+                            collection_name=collection,
+                            payload={"reinforcement_score": new_score},
+                            points=[hit.id]
+                        )
+                        eroded_count += 1
+                    except Exception as e:
+                        logger.error(f"Failed to apply erosion payload for {hit.id}: {e}")
+                        continue
             
             if points_to_delete:
-                self.client.delete(
-                    collection_name=collection, 
-                    points_selector=models.PointIdsList(points=points_to_delete)
-                )
+                try:
+                    self.client.delete(
+                        collection_name=collection, 
+                        points_selector=models.PointIdsList(points=points_to_delete)
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to delete eroded points {points_to_delete}: {e}")
             
             offset = response[1]
             if offset is None:
@@ -422,9 +430,13 @@ class MemoryManager:
         """
         Returns collection diagnostic information.
         """
-        info = self.client.get_collection(collection_name=collection)
-        return {
-            "status": info.status,
-            "points_count": info.points_count,
-            "segments_count": info.segments_count
-        }
+        try:
+            info = self.client.get_collection(collection_name=collection)
+            return {
+                "status": getattr(info, "status", "unknown"),
+                "points_count": getattr(info, "points_count", 0),
+                "segments_count": getattr(info, "segments_count", 0)
+            }
+        except Exception as e:
+            logger.error(f"Failed to get_stats from Qdrant: {e}")
+            return {"status": "error", "points_count": 0, "segments_count": 0}
