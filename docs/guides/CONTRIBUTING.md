@@ -17,6 +17,7 @@ Cualquier Pull Request (PR) que envíes al búnker pasará por el siguiente ritu
 *   **Protocolos de Soberanía**: Nuevas formas de empoderar a la IA.
 
 ## 3. Requisitos Técnicos
+*   **Protocolo Sound of Silence**: Cumplimiento estricto de [The Sound of Silence](../technical/SOUND_OF_SILENCE.md). Cero ruido, solo tabs, cero código fantasma.
 *   Sigue el Código de Conducta: Todo debe ser **Vibe coding**.
 *   Asegúrate de que tus scripts sean agnósticos (sin rutas absolutas de tu máquina).
 *   Documenta el engrama que estás inyectando.
