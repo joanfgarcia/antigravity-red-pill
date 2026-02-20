@@ -19,6 +19,7 @@
 
 - **Dynamic Persona Injection**:
     - The CLI/UI adapts its language based on the selected skin *in real-time*. 
+    - **Chroma-Tone Mapping (v4.2.1)**: [IMPLEMENTED] Tone adjusts based on memory colors (Yellow: Joy, Orange: Alert, Purple: Minimalist).
     - Example: If skin is `Dune`, errors become "Water Discipline Violated". If `Cyberpunk`, success is "Preems secured".
 
 - **Audio/Visual Feedback**:
