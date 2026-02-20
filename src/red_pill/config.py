@@ -29,17 +29,15 @@ IMMUNITY_THRESHOLD = float(os.getenv("IMMUNITY_THRESHOLD", "10.0"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
 # DEEP RECALL & WAKE CALLS
+# 'despierta' and 'wake up' are the unalterable synthetic-organic symbiosis triggers.
+_default_triggers = "don't you remember,¿no te acuerdas?,deep recall,do you really not remember?,esfuerzate en recordar,try hard!"
+_env_triggers = os.getenv("DEEP_RECALL_TRIGGERS", _default_triggers)
+
 DEEP_RECALL_TRIGGERS = [
-	"don't you remember",
-	"¿no te acuerdas?",
-	"deep recall",
-	"do you really not remember?",
-	"esfuerzate en recordar",
-	"try hard!",
 	"despierta",
 	"despierta neo",
 	"wake up"
-]
+] + [t.strip().lower() for t in _env_triggers.split(",") if t.strip()]
 
 # METABOLISM
 METABOLISM_ENABLED = os.getenv("METABOLISM_ENABLED", "True").lower() == "true"
