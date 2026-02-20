@@ -8,17 +8,17 @@ When requesting a certification from external auditors (The High Council), the f
 > *Please run a full engineering-grade audit and technical review -- including project description, goals, target, audience, code-quality, security, test coverage, performance, documentation, and compliance checks -- and generate a detailed certification/report that confirms whether the project is production ready. Include any critical findings, recommended remediation steps, and prioritized action plan. Also sign the report with detailed agentic information that performed the task.*
 
 ## 2. Source Consolidation (The "Single Engram" Filter)
-To allow auditors to analyze the system as a whole, all technical assets must be aggregated into a single file named `proyecto_completo.txt`.
+To allow auditors to analyze the system as a whole, all technical assets must be aggregated into a single file named `RED_PILL_DIGEST.txt`.
 
 ### Aggregation Script (`scripts/prepare_certification.sh`):
 ```bash
 # Use git ls-files to respect .gitignore and only include tracked + untracked/non-ignored files.
 git ls-files --cached --others --exclude-standard | grep -vE '\.(png|jpg|jpeg|gif|pdf|ico)$' | while read f; do
-	if [ "$f" != "proyecto_completo.txt" ] && [ -f "$f" ]; then
+	if [ "$f" != "RED_PILL_DIGEST.txt" ] && [ -f "$f" ]; then
 		echo -e "\n\n===== FILE: $f =====\n"
 		cat "$f"
 	fi
-done > proyecto_completo.txt
+done > RED_PILL_DIGEST.txt
 ```
 
 ## 3. The High Council (External Auditors)

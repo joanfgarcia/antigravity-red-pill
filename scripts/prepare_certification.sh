@@ -2,7 +2,7 @@
 # Red Pill Protocol: Preparation for Technical Audit
 # Aggregates all source code into a single file for external LLM evaluation.
 
-OUTPUT_FILE="proyecto_completo.txt"
+OUTPUT_FILE="RED_PILL_DIGEST.txt"
 
 echo "Aggregating project core into $OUTPUT_FILE using git-aware discovery..."
 
