@@ -72,3 +72,19 @@ def test_association_cap():
 	}
 	request = CreateEngramRequest(**data)
 	assert len(request.metadata["associations"]) == 20
+
+def test_validate_metadata_structure_directly():
+	"""Ensures custom validator directly catches nested dicts, complex lists, and long strings."""
+	validator = CreateEngramRequest.validate_metadata_structure
+
+	# Test complex type in list
+	with pytest.raises(ValueError, match="Complex type in metadata list mixed"):
+		validator({"mixed": ["string", {"nested": "dict"}]})
+
+	# Test nested dict
+	with pytest.raises(ValueError, match="Nested dict in metadata field my_dict"):
+		validator({"my_dict": {"nested": "dict"}})
+
+	# Test over-length string
+	with pytest.raises(ValueError, match="Metadata field toolong exceeds limit"):
+		validator({"toolong": "A" * 1025})
