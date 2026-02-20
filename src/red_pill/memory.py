@@ -311,6 +311,8 @@ class MemoryManager:
 			points_to_delete: List[Any] = []
 			
 			for hit in response[0]:
+				if hit.payload.get("immune"):
+					continue
 				current_score = hit.payload.get("reinforcement_score", 1.0)
 				new_score = self._calculate_decay(current_score, rate)
 				

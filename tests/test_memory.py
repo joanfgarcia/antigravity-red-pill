@@ -216,7 +216,7 @@ def test_immunity_bypass_blocked(manager, mock_qdrant):
     with pytest.raises(ValidationError) as excinfo:
         manager.add_memory("test_col", "content", metadata={"immune": True})
     
-    assert "Reserved key 'immune' found in metadata" in str(excinfo.value)
+    assert "Reserved key 'immune' found" in str(excinfo.value)
 
 def test_system_keys_bypass_blocked(manager, mock_qdrant):
     # Test other reserved keys as well
