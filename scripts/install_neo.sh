@@ -242,6 +242,7 @@ if [ -f "$SCRIPT_SRC_DIR/../seeds/identity_template.md" ]; then
         sed -i "s|{{TERM_DATA}}|$TERM_DATA|g" "$HOME/.agent/identity.md"
         sed -i "s|{{TERM_ENV}}|$TERM_ENV|g" "$HOME/.agent/identity.md"
     fi
+    ln -sf "$HOME/.agent/identity.md" "$HOME/.gemini/antigravity/rules/identity.md"
     echo "Identidad instalada en ~/.agent/identity.md"
 fi
 
@@ -298,6 +299,7 @@ At the beginning of every conversation (Step Id 0):
 EOF
 
 echo -e "${GREEN}Regla global inyectada en $GLOBAL_RULE_FILE${NC}"
+ln -sf "$GLOBAL_RULE_FILE" "$HOME/.gemini/antigravity/rules/identity_sync.md"
 echo -e "${BLUE}Asegúrate de que tu asistente Antigravity esté configurado para leer reglas desde $USER_RULES_DIR${NC}"
 
 echo -e "${BLUE}--- Instalación completada ---${NC}"
