@@ -17,9 +17,8 @@ The Red Pill Protocol v4.2.0 has achieved stability and functional alignment wit
 
 ### 3.1. Entropy & Erosion Scalability (The 'Great Filter' Problem)
 The `apply_erosion` mechanism is currently an $O(N)$ operation. It scrolls through *every single memory* to calculate decay.
-- **Current State**: Acceptable for $< 10k$ memories.
-- **Singularity Point**: At $\approx 100k$ memories, the erosion cycle will take longer than the reinforcement interval, causing a "Time Dilation" effect where memories do not decay fast enough to match new input.
-- **Consequence**: Database bloat will eventually exceed local storage I/O limits during full scans.
+- **Current State**: Acceptable for $< 100k$ memories.
+- **Singularity Point**: [RESOLVED in v4.2.1] The Time Dilation effect (where O(N) decay outpaces reinforcement limits) has been neutralized by applying Time-To-Live (TTL) indexing logic to erosion loops. Only memories older than `METABOLISM_COOLDOWN` are now evaluated via Qdrant's payload indexes. Database scale is bound strictly by deep-recall limits rather than background decay cycles.
 
 ### 3.2. Synaptic Singularity
 The `associations` field is a flat list of UUIDs.
