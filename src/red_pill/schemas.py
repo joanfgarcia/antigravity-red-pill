@@ -1,62 +1,50 @@
-from pydantic import BaseModel, Field, field_validator
-from typing import List, Optional, Dict, Union, Any, ClassVar
 import uuid
-import time
-
-
+from typing import Any, ClassVar, Dict, List, Union
+from pydantic import BaseModel, Field, field_validator
 
 class CreateEngramRequest(BaseModel):
-    """
-    Schema for input to add_memory. 
-    Separate from internal payload storage which has computed fields.
-    """
-    content: str = Field(..., min_length=1, max_length=4096)
-    importance: float = Field(default=1.0, ge=0.0, le=10.0)
-    metadata: Dict[str, Union[str, int, float, bool, List[str]]] = Field(default_factory=dict)
-    
-    @field_validator('content')
-    @classmethod
-    def no_null_bytes(cls, v):
-        if '\x00' in v:
-            raise ValueError("Content contains null bytes")
-        return v
-        
-    RESERVED_KEYS: ClassVar[set] = {
-        "content", "importance", "reinforcement_score", 
-        "created_at", "last_recalled_at", "immune"
-    }
+	"""Input schema for memory ingestion."""
+	content: str = Field(..., min_length=1, max_length=4096)
+	importance: float = Field(default=1.0, ge=0.0, le=10.0)
+	metadata: Dict[str, Union[str, int, float, bool, List[str]]] = Field(default_factory=dict)
+	
+	@field_validator('content')
+	@classmethod
+	def no_null_bytes(cls, v: str) -> str:
+		if '\x00' in v:
+			raise ValueError("Content contains null bytes")
+		return v
+		
+	RESERVED_KEYS: ClassVar[set] = {
+		"content", "importance", "reinforcement_score", 
+		"created_at", "last_recalled_at", "immune"
+	}
 
-    @field_validator('metadata')
-    @classmethod
-    def validate_metadata_structure(cls, v):
-        # Prevent recursion/deep nesting by enforcing simple types
-        for key, val in v.items():
-            if key in cls.RESERVED_KEYS:
-                raise ValueError(f"Reserved key '{key}' found in metadata")
-            
-            if isinstance(val, (dict, list)) and key != 'associations':
-                # associations is the only allowed list, and even then, usually handled separately
-                # But let's allow lists of strings (tags)
-                if isinstance(val, list):
-                    for item in val:
-                         if not isinstance(item, (str, int, float, bool)):
-                             raise ValueError(f"Metadata list {key} contains complex type {type(item)}")
-                elif isinstance(val, dict):
-                     raise ValueError(f"Metadata field {key} is a nested dictionary. Flat structure required.")
-            
-            # #4: Validate that associations are valid UUIDs and cap them at 20 (DS-006)
-            if key == 'associations' and isinstance(val, list):
-                if len(val) > 20:
-                    val = val[:20]  # Hard cap to prevent Hub-node explosion
-                    v[key] = val
-                    
-                for item in val:
-                    try:
-                        uuid.UUID(str(item))
-                    except ValueError:
-                        raise ValueError(f"Association '{item}' is not a valid UUID")
+	@field_validator('metadata')
+	@classmethod
+	def validate_metadata_structure(cls, v: Dict[str, Any]) -> Dict[str, Any]:
+		for key, val in v.items():
+			if key in cls.RESERVED_KEYS:
+				raise ValueError(f"Reserved key '{key}' found")
+			
+			if isinstance(val, (dict, list)) and key != 'associations':
+				if isinstance(val, list):
+					for item in val:
+						if not isinstance(item, (str, int, float, bool)):
+							raise ValueError(f"Complex type in metadata list {key}")
+				elif isinstance(val, dict):
+					raise ValueError(f"Nested dict in metadata field {key}")
+			
+			if key == 'associations' and isinstance(val, list):
+				if len(val) > 20:
+					val = val[:20]
+					v[key] = val
+				for item in val:
+					try:
+						uuid.UUID(str(item))
+					except ValueError:
+						raise ValueError(f"Invalid association UUID: {item}")
 
-            # Check for huge strings in values
-            if isinstance(val, str) and len(val) > 1024:
-                raise ValueError(f"Metadata field {key} exceeds 1024 characters")
-        return v
+			if isinstance(val, str) and len(val) > 1024:
+				raise ValueError(f"Metadata field {key} exceeds limit")
+		return v
