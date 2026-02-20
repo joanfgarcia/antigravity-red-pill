@@ -54,3 +54,15 @@ EMOTIONAL_DECAY_MULTIPLIERS = {
 	"blue": 1.0,    # Sadness: standard decay
 	"gray": 1.0,    # Neutral: standard decay
 }
+
+# CHROMA-TONE MAPPING (v4.2.1)
+# Mapping for non-technical narrative refraction.
+CHROMA_TONE_MAPPING = {
+	"orange": "Vigilant, alert, high risk-awareness, proactive warnings.",
+	"yellow": "Optimistic, encouraging, success-focused, warm.",
+	"purple": "Minimalist, extremely concise, efficiency-first, no fluff.",
+	"cyan": "Visionary, future-oriented, focused on growth and backlog.",
+	"blue": "Reflective, empathetic, serious, acknowledging weight.",
+	"gray": "Professional, balanced, direct, objective (Standard).",
+	"nostalgia": "Respectful, shared legacy focus, acknowledging the long road."
+}
