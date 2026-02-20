@@ -10,7 +10,7 @@ from fastembed import TextEmbedding
 import red_pill.config as cfg
 
 logger = logging.getLogger("memory_daemon")
-SOCKET_PATH = "/tmp/red_pill_memory.sock"
+SOCKET_PATH = cfg.DAEMON_SOCKET_PATH
 
 class MemoryDaemon:
 	"""Sidecar for semantic memory embedding."""

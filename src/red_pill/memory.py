@@ -41,7 +41,7 @@ class MemoryManager:
 
 	def _get_vector_from_daemon(self, text: str) -> Optional[List[float]]:
 		"""Retrieves embedding from the memory sidecar socket."""
-		socket_path = "/tmp/red_pill_memory.sock"
+		socket_path = cfg.DAEMON_SOCKET_PATH
 		if not os.path.exists(socket_path):
 			return None
 

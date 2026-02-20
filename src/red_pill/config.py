@@ -11,6 +11,9 @@ QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", None)
 QDRANT_SCHEME = os.getenv("QDRANT_SCHEME", "http")
 QDRANT_URL = f"{QDRANT_SCHEME}://{QDRANT_HOST}:{QDRANT_PORT}"
 
+_run_dir = os.getenv("XDG_RUNTIME_DIR", "/tmp")
+DAEMON_SOCKET_PATH = os.getenv("DAEMON_SOCKET_PATH", os.path.join(_run_dir, "red_pill_memory.sock"))
+
 # MODELS
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
 VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", "384"))
