@@ -232,6 +232,7 @@ class MemoryManager:
 			must_not=[models.FieldCondition(key="immune", match=models.MatchValue(value=True))]
 		)
 
+		match_count = 0
 		while True:
 			try:
 				response = self.client.scroll(
@@ -260,6 +261,12 @@ class MemoryManager:
 
 			offset = response[1]
 			if offset is None:
+				break
+
+			# Safety break for unconfigured mocks in tests
+			match_count += 1
+			if match_count > 500:
+				logger.warning(f"Safety break triggered in TTL refresh for {collection}")
 				break
 
 		logger.info(f"Absence Guard: refreshed TTL for {refreshed} engrams in '{collection}'.")
@@ -407,6 +414,7 @@ class MemoryManager:
 			must_not=[models.FieldCondition(key="immune", match=models.MatchValue(value=True))]
 		)
 
+		iterations = 0
 		while True:
 			try:
 				response = self.client.scroll(
@@ -473,6 +481,12 @@ class MemoryManager:
 			if offset is None:
 				break
 
+			# Safety break for unconfigured mocks in tests
+			iterations += 1
+			if iterations > 1000:
+				logger.warning(f"Safety break triggered in erosion for {collection}")
+				break
+
 		logger.info(f"Erosion complete. Updated: {eroded_count}, Deleted: {deleted_count}")
 
 	def sanitize(self, collection: str, dry_run: bool = False) -> Dict[str, Any]:
@@ -487,7 +501,7 @@ class MemoryManager:
 		migrated_count = 0
 
 		logger.info(f"Starting sanitation for {collection}...")
-
+		iterations = 0
 		while True:
 			try:
 				response = self.client.scroll(
@@ -552,6 +566,13 @@ class MemoryManager:
 			offset = response[1]
 			if offset is None:
 				break
+
+			# Safety break for unconfigured mocks in tests
+			iterations += 1
+			if iterations > 1000:
+				logger.warning(f"Safety break triggered in sanitation for {collection}")
+				break
+
 
 		# Remove duplicates
 		if duplicates and not dry_run:
