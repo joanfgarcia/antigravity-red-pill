@@ -1,6 +1,6 @@
 # Changelog: Red Pill Protocol
 
-## [4.2.1] - 2026-02-21
+## [4.2.2] - 2026-02-21
 ### 🛡️ The Absence Guard & Biological Resilience (BIOS Edition)
 - **[NEW] Absence Guard Protocol**: Prevents mass-deletion of memories after long periods of inactivity (>7 days). Automatically refreshes TTL timestamps on the first session after a vacation.
 - **[NEW] Biological Seed Score**: Replaced flat initial reinforcement (1.0) with an emotion-weighted seed (importance + intensity weight + color bonus). Emotional memories now start with a high "biological runway".
