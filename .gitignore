@@ -55,3 +55,9 @@ data/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Storage (Local Data)
+storage/
+backups/
+export/
+RED_PILL_DIGEST.txt
