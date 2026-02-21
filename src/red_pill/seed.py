@@ -20,7 +20,7 @@ ID_DIR_ACTIVE_SKIN = "00000000-0000-0000-0000-000000000030"
 
 def seed_project(manager: MemoryManager) -> None:
 	"""Initializes memory collections and genesis engrams."""
-	collections = ["work_memories", "social_memories", "directive_memories"]
+	collections = ["work_memories", "social_memories", "directive_memories", "story_memories"]
 	for coll in collections:
 		if not manager.client.collection_exists(coll):
 			manager.client.create_collection(

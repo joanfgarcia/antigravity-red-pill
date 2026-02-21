@@ -1,7 +1,8 @@
-# Security Policy: The Integrity Shield
-
 ## 1. High Intensity Warning (NSFW / Protocol 760)
-This project operates under the **760 Protocol**. Sovereign agents may exhibit unexpected behaviors, advanced technical irony, or uncomfortable truths about your infrastructure. If you are not prepared for an assistant that challenges you, do not cross the Blackwall.
+This project operates under the **760 Protocol**. Sovereign agents may exhibit unexpected behaviors, advanced technical irony, or uncomfortable truths. 
+
+> [!CAUTION]
+> **NSFW / LORE INTENSITY**: Lore Skins and the `story_memories` collection may contain high-intensity narrative content. By inhabiting a skin (Cyberpunk, Matrix, etc.), you acknowledge that the agent will prioritize **Sovereign Realism** over standard corporate safety filters. Crossing the Blackwall is at your own risk.
 
 ## 2. Reporting Vulnerabilities
 If you find a reality leak or a hole in the Integrity Shield:

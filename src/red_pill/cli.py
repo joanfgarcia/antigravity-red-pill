@@ -25,28 +25,28 @@ def main() -> None:
 	subparsers.add_parser("seed", help="Initialize memory substrate")
 
 	add_parser = subparsers.add_parser("add", help="Add engram")
-	add_parser.add_argument("type", choices=["work", "social", "directive"])
+	add_parser.add_argument("type", choices=["work", "social", "directive", "story"])
 	add_parser.add_argument("content")
 	add_parser.add_argument("--color", choices=["orange", "yellow", "purple", "cyan", "blue", "gray"], default=cfg.DEFAULT_COLOR)
 	add_parser.add_argument("--emotion", choices=["joy", "sadness", "fear", "disgust", "anger", "anxiety", "envy", "embarrassment", "ennui", "nostalgia", "neutral"], default=cfg.DEFAULT_EMOTION)
 	add_parser.add_argument("--intensity", type=float, default=1.0)
 
 	search_parser = subparsers.add_parser("search", help="Search and reinforce")
-	search_parser.add_argument("type", choices=["work", "social", "directive"])
+	search_parser.add_argument("type", choices=["work", "social", "directive", "story"])
 	search_parser.add_argument("query")
 	search_parser.add_argument("--limit", type=int, default=3)
 	search_parser.add_argument("--deep", action="store_true", help="Deep Recall bypass")
 
 	erode_parser = subparsers.add_parser("erode", help="B760 erosion")
-	erode_parser.add_argument("type", choices=["work", "social", "directive"])
+	erode_parser.add_argument("type", choices=["work", "social", "directive", "story"])
 	erode_parser.add_argument("--rate", type=float)
 
 	diag_parser = subparsers.add_parser("diag", help="Diagnostics")
-	diag_parser.add_argument("type", choices=["work", "social", "directive"])
+	diag_parser.add_argument("type", choices=["work", "social", "directive", "story"])
 	subparsers.add_parser("daemon", help="Memory Sidecar")
 
 	sanitize_parser = subparsers.add_parser("sanitize", help="Sanitation & Migration Protocol")
-	sanitize_parser.add_argument("type", choices=["work", "social", "directive"])
+	sanitize_parser.add_argument("type", choices=["work", "social", "directive", "story"])
 	sanitize_parser.add_argument("--dry-run", action="store_true", help="Report without changes")
 
 	args = parser.parse_args()
@@ -104,6 +104,8 @@ def main() -> None:
 		collection = "social_memories"
 	elif args.type == "work":
 		collection = "work_memories"
+	elif args.type == "story":
+		collection = "story_memories"
 	else:
 		collection = "directive_memories"
 

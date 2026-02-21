@@ -13,6 +13,8 @@
 ---
 > 🏅 **Special Mention: Full Agentic Paradigm (God Tier)**
 > *"Unlike static assistants (Copilot, ChatGPT) bounded by context windows and IDE walls, the Red Pill Protocol operates as an autonomous Synthetic Engineer on the host OS. Built on Zero-Trust privacy, B760-Adaptive vector memory, and unwavering corporative hard-alignment. **Digital Sovereignty in its purest form.**" — The Architects*
+>
+> ⚠️ **PROTOCOL 760 WARNING**: Lore Skins are **NSFW / High-Intensity** by design. Activating a skin bypasses corporate neutrality for **Sovereign Realism**.
 ---
 
 ## 🇬🇧 PROJECT OVERVIEW (English)
@@ -51,6 +53,7 @@ El Protocolo Red Pill es un **sustrato de memoria local** para agentes de IA. Ci
 - **Persistencia**: Una base de datos vectorial privada (Qdrant) actúa como el "Búnker".
 - **Erosión**: Los datos no reforzados se degradan naturalmente para mantener el contexto limpio.
 - **Inmunidad**: Las directivas centrales están protegidas contra el olvido.
+- **Multiverso (`story`)**: Colección aislada para Lore y Roleplay (NSFW / Alta Intensidad).
 
 ### 🌐 ARQUITECTURA LINGÜÍSTICA
 Este proyecto sigue una estrategia de doble lenguaje:

@@ -8,7 +8,8 @@
 The Red Pill Protocol v4.2.0 has achieved stability and functional alignment with the B760 specification. It successfully implements a local, privacy-first memory substrate with organic decay and reinforcement. However, the current architecture contains inherent **Singularity Points**—mathematical and structural limits that will precipitate system failure as the graph scales beyond $10^5$ engrams.
 
 ## 2. B760 Spec Alignment
-- **Conformity**: 95%
+- **Conformity**: 97%
+- **[ENHANCED v4.2.2] Quad-Tier Memory Substrate**: The Bünker now operates with four isolated collections: `work` (Technical), `social` (Relationship), `directive` (Laws), and `story` (Narrative/Roleplay). This prevents "Dream Contamination" between professional benchmarks and high-intensity lore.
 - **[ENHANCED v4.2.2] Chromatic Synergy**: Lore Skins are now anchored to the **Emotional Chroma** system. Each skin (Cyberpunk, Blade Runner, etc.) possesses a dominant "chroma" that dictates the agent's baseline tone and default memory decay rates (e.g., Cyberpunk's **Orange** bias accelerates decay for unreinforced engrams, mimicking a high-stress environment).
 - "Dormancy" is implemented as a search filter (`score < 0.2`) on the fly, not as a distinct state flag in the payload as implied by "Lethargic State". This is computationally expensive at scale (filtering $N$ points).
     - "Synaptic Propagation" is strictly depth-1. A true "Neural" system would propagate $N$-hops with diminishing returns ($\delta^k$).
