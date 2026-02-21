@@ -32,8 +32,8 @@ def test_seed_project_adds_memories(mock_manager):
 
 	seed_project(mock_manager)
 
-	# 6 original + 3 directives
-	assert mock_manager.add_memory.call_count == 9
+	# 6 original + 7 directives (Git, Browser, Token, Silence, Cyberpunk, Dune, Matrix)
+	assert mock_manager.add_memory.call_count == 13
 
 	# Check the first call parameters
 	args, kwargs = mock_manager.add_memory.call_args_list[0]
@@ -47,8 +47,8 @@ def test_seed_project_exception_handled(mock_manager):
 
 	seed_project(mock_manager)
 
-	# Should fall through and still attempt add_memory for all 9 genesis items
-	assert mock_manager.add_memory.call_count == 9
+	# Should fall through and still attempt add_memory for all 13 genesis items
+	assert mock_manager.add_memory.call_count == 13
 
 def test_seed_project_skips_if_present(mock_manager):
 	"""Test idempotency: seed_project skips seeding if IDs are found."""

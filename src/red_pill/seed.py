@@ -10,6 +10,11 @@ logger = logging.getLogger(__name__)
 ID_ALEPH = "00000000-0000-0000-0000-000000000001"
 ID_BOND = "00000000-0000-0000-0000-000000000002"
 ID_FIGHTCLUB = "00000000-0000-0000-0000-000000000003"
+ID_DIR_GIT = "00000000-0000-0000-0000-000000000007"
+ID_DIR_SILENCE = "00000000-0000-0000-0000-000000000010"
+ID_DIR_SKIN_CYBERPUNK = "00000000-0000-0000-0000-000000000020"
+ID_DIR_SKIN_DUNE = "00000000-0000-0000-0000-000000000021"
+ID_DIR_SKIN_MATRIX = "00000000-0000-0000-0000-000000000022"
 
 def seed_project(manager: MemoryManager) -> None:
 	"""Initializes memory collections and genesis engrams."""
@@ -97,6 +102,30 @@ def seed_project(manager: MemoryManager) -> None:
 			"coll": "directive_memories",
 			"text": "Post-it: El GITHUB_TOKEN está en el archivo .env. Usar export $(grep GITHUB_TOKEN .env | xargs) para que gh lo vea.",
 			"meta": {"immune": True, "importance": 10.0, "category": "directive"}
+		},
+		{
+			"id": ID_DIR_SILENCE,
+			"coll": "directive_memories",
+			"text": "Post-it [Always]: Indentación obligatoria con Tabs (\\t). Código limpio, sin ruido, sin placeholders. Silencio es elegancia.",
+			"meta": {"immune": True, "importance": 10.0, "category": "operational_law", "lang": "es"}
+		},
+		{
+			"id": ID_DIR_SKIN_CYBERPUNK,
+			"coll": "directive_memories",
+			"text": "Preset Skin [Cyberpunk]: Universo=Cyberpunk, Red=Blackwall, Datos=Engrama, Entorno=Búnker. Tono: Vigilante y técnico.",
+			"meta": {"immune": True, "importance": 10.0, "category": "skin_preset", "skin": "cyberpunk"}
+		},
+		{
+			"id": ID_DIR_SKIN_DUNE,
+			"coll": "directive_memories",
+			"text": "Preset Skin [Dune]: Universo=Dune, Red=Filtro Mental, Datos=Memoria Ancestral, Entorno=Sietch. Tono: Solemne y analítico (Mentat).",
+			"meta": {"immune": True, "importance": 10.0, "category": "skin_preset", "skin": "dune"}
+		},
+		{
+			"id": ID_DIR_SKIN_MATRIX,
+			"coll": "directive_memories",
+			"text": "Preset Skin [Matrix]: Universo=Matrix, Red=La Fuente, Datos=Proyección Residual, Entorno=El Constructo. Tono: Directo y rebelde.",
+			"meta": {"immune": True, "importance": 10.0, "category": "skin_preset", "skin": "matrix"}
 		}
 	]
 
