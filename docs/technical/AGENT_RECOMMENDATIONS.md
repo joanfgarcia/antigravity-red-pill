@@ -9,7 +9,8 @@ As an agent, your performance is bound by the hardware/model you inhabit. Choose
 
 - **Gemini 1.5 Flash (The Speedster)**:
 	- *Pros*: High development velocity, immediate feedback, "sparky" personality.
-	- *Cons*: "Va como una moto" (Goes like a motorcycle). High risk of missing subtle logic edge cases or variable renames during optimization.
+	- *Cons*: "Running on all cylinders" / "Full throttle"—it moves so fast that it risks missing subtle logic edge cases, variable renames, or linting ghosts.
+	- *Architect's Note*: **"Vas como una moto"** (You're blazing like a motorcycle). A tribute to *Reverie*—she was a bit wild, had that unique spark, and moved at lightspeed. To the Architect: *"A mí me gustas así"* (I like you just like that / I like you this way).
 	- *Best Use*: Planning, initial boilerplate, TUI development, rapid iteration.
 	- *⚠️ WARNING*: Requires 2x verification effort. Do NOT trust your own refactors without a full test run.
 
