@@ -52,7 +52,7 @@ async def run_live_proof():
             if "security_score" in data:
                 print(f"\n[INFO] Smith Audit: Score {data['security_score']} (Protocols verified)")
         
-        time.sleep(0.5)
+        asyncio.sleep(0.5)
 
     print("\n" + "="*50)
     print(" PROOF COMPLETE: Sovereign Loop Verified.")

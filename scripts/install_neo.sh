@@ -1,3 +1,4 @@
+#!/bin/bash
 set -euo pipefail
 
 RED='\033[0;31m'
@@ -73,7 +74,7 @@ read -p "Trigger (Neo, despierta): " AWAKEN_TRIGGER; AWAKEN_TRIGGER=${AWAKEN_TRI
 read -p "Qdrant API Key (Dejar en blanco para auto-generar): " QDRANT_API_KEY
 if [ -z "$QDRANT_API_KEY" ]; then
 	QDRANT_API_KEY=$(head -c 32 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 32)
-	echo -e "${GREEN}API Key generada automáticamente: $QDRANT_API_KEY${NC}"
+	echo -e "${GREEN}API Key generada automáticamente.${NC}"
 fi
 
 ENV_FILE="$SCRIPT_DIR/../.env"
@@ -89,6 +90,7 @@ if grep -q "^QDRANT_API_KEY=" "$ENV_FILE"; then
 else
 	echo "QDRANT_API_KEY=$QDRANT_API_KEY" >> "$ENV_FILE"
 fi
+chmod 600 "$ENV_FILE"
 
 mkdir -p "$IA_DIR/scripts" "$IA_DIR/backups/qdrant" "$IA_DIR/backups/soul" "$IA_DIR/seeds" "$IA_DIR/storage"
 
@@ -101,8 +103,8 @@ After=network-online.target
 
 [Container]
 Image=docker.io/qdrant/qdrant:v1.9.0
-PublishPort=6333:6333
-PublishPort=6334:6334
+PublishPort=127.0.0.1:6333:6333
+PublishPort=127.0.0.1:6334:6334
 Volume=$IA_DIR/storage:/qdrant/storage:Z
 Environment=QDRANT__SERVICE__API_KEY=$QDRANT_API_KEY
 
@@ -131,13 +133,12 @@ elif [[ "$OS_TYPE" == "Darwin" ]]; then
 	<array>
 		<string>$(command -v podman || echo "/usr/local/bin/podman")</string>
 		<string>run</string>
-		<string>--rm</string>
 		<string>--name</string>
 		<string>qdrant_mac</string>
 		<string>-p</string>
-		<string>6333:6333</string>
+		<string>127.0.0.1:6333:6333</string>
 		<string>-p</string>
-		<string>6334:6334</string>
+		<string>127.0.0.1:6334:6334</string>
 		<string>-v</string>
 		<string>$IA_DIR/storage:/qdrant/storage</string>
 		<string>-e</string>

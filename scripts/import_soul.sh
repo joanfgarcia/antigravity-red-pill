@@ -9,6 +9,17 @@ NC='\033[0m'
 ARCHIVE="$1"
 DEST_DIR=$(pwd)
 
+# Validate archive integrity and paths
+if ! tar -tf "$ARCHIVE" &>/dev/null; then
+	echo -e "${RED}Error: Archive is corrupted or not a valid tar.gz kit.${NC}"
+	exit 1
+fi
+
+if tar -tf "$ARCHIVE" | grep -E '^/|\.\./' &>/dev/null; then
+	echo -e "${RED}Security Alert: Malicious paths detected in soul kit. Aborting.${NC}"
+	exit 1
+fi
+
 tar -xzf "$ARCHIVE" -C "$DEST_DIR"
 
 if [ -d "$DEST_DIR/soul" ]; then
