@@ -1,5 +1,7 @@
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
+
 from red_pill.seed import seed_project
 
 @pytest.fixture

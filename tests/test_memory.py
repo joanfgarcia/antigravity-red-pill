@@ -2,7 +2,7 @@ import uuid
 from unittest.mock import MagicMock, patch
 
 import pytest
-from pydantic import ValidationError
+
 
 import red_pill.config as config
 from red_pill.memory import MemoryManager
@@ -220,7 +220,7 @@ def test_strict_id_validation(manager, mock_qdrant):
     assert "not-a-uuid" not in kwargs['ids']
 
 def test_system_keys_handled_instead_of_failing(manager, mock_qdrant):
-    # Test that reserved keys like 'immune', 'importance', etc. are popped 
+    # Test that reserved keys like 'immune', 'importance', etc. are popped
     # and handled without causing a ValidationError
     manager.add_memory("test_col", "content", metadata={"immune": True, "importance": 5.0})
     # Verification happens in the mock collection calls, but here we just ensure NO CRASH
