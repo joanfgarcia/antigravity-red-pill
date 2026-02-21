@@ -15,6 +15,7 @@ logger = logging.getLogger("AgentSmith")
 
 import pytest
 
+
 @pytest.mark.integration
 def attack_clone_army(manager, target_id, iterations=100):
     """
