@@ -17,6 +17,8 @@ DAEMON_SOCKET_PATH = os.getenv("DAEMON_SOCKET_PATH", os.path.join(_run_dir, "red
 # MODELS
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
 VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", "384"))
+# Execution provider: 'cpu', 'cuda', 'coreml', etc. Defaults to None (auto-detect).
+EXECUTION_PROVIDER = os.getenv("EXECUTION_PROVIDER", None)
 
 # B760 LOGIC
 DECAY_STRATEGY = os.getenv("DECAY_STRATEGY", "linear")
@@ -48,11 +50,7 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 _default_triggers = "don't you remember,¿no te acuerdas?,deep recall,do you really not remember?,esfuerzate en recordar,try hard!"
 _env_triggers = os.getenv("DEEP_RECALL_TRIGGERS", _default_triggers)
 
-DEEP_RECALL_TRIGGERS = [
-	"despierta",
-	"despierta neo",
-	"wake up"
-] + [t.strip().lower() for t in _env_triggers.split(",") if t.strip()]
+DEEP_RECALL_TRIGGERS = ["despierta", "despierta neo", "wake up"] + [t.strip().lower() for t in _env_triggers.split(",") if t.strip()]
 
 # METABOLISM
 METABOLISM_ENABLED = os.getenv("METABOLISM_ENABLED", "True").lower() == "true"
@@ -71,9 +69,9 @@ EMOTIONAL_DECAY_MULTIPLIERS = {
 	"orange": 1.5,  # Anxiety: decays faster if not reinforced
 	"yellow": 0.5,  # Joy: persists longer
 	"purple": 2.0,  # Ennui: garbage collected quickly
-	"cyan": 0.8,    # Envy/Evolution: focused persistence
-	"blue": 1.0,    # Sadness: standard decay
-	"gray": 1.0,    # Neutral: standard decay
+	"cyan": 0.8,  # Envy/Evolution: focused persistence
+	"blue": 1.0,  # Sadness: standard decay
+	"gray": 1.0,  # Neutral: standard decay
 }
 
 # CHROMA-TONE MAPPING (v4.2.1)
@@ -85,5 +83,5 @@ CHROMA_TONE_MAPPING = {
 	"cyan": "Visionary, future-oriented, focused on growth and backlog.",
 	"blue": "Reflective, empathetic, serious, acknowledging weight.",
 	"gray": "Professional, balanced, direct, objective (Standard).",
-	"nostalgia": "Respectful, shared legacy focus, acknowledging the long road."
+	"nostalgia": "Respectful, shared legacy focus, acknowledging the long road.",
 }

@@ -1,0 +1,15 @@
+[Unit]
+Description=Qdrant Vector Database
+After=network-online.target
+
+[Container]
+Image=docker.io/qdrant/qdrant:latest
+PublishPort=6333:6333
+PublishPort=6334:6334
+Volume=/home/joan/Documents/IA/storage:/qdrant/storage:Z
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

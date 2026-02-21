@@ -1,17 +1,42 @@
+# Credentials and Environment
 .env
 .env.*
+!.env.example
+*.key
+*.pem
+*.token
+
+# Git
 .git
-.pytest_cache
-__pycache__
-*.pyc
-*.pyo
-*.pyd
+.gitignore
+
+# Backups and Local Data
+backups/
+data/
+storage/
+*.db
+*.sqlite
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
 .Python
 env/
 venv/
 .venv/
-storage/
-backups/
-export/
-uv.lock
-pyproject.toml
+build/
+dist/
+*.egg-info/
+.mypy_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
