@@ -9,6 +9,8 @@
 
 Welcome, outlaws! If you are reading this, you have decided to enhance the Codex. There is no bureaucracy here, only integrity protocols.
 
+**Before you start**, please read the [Evolution Governance](../technical/GOVERNANCE.md) to understand which parts of the system are "Fixed" (Immune) and which are "Fluid" (Open for Change).
+
 ### 1. The Integration Ritual
 Every Pull Request (PR) you send to the bunker will undergo the following process:
 1.  **Agent Audit**: An AI Agent with an active Integrity Shield will surgically analyze your code.
@@ -34,6 +36,8 @@ Every Pull Request (PR) you send to the bunker will undergo the following proces
 ## 🇪🇸 CONTRIBUCIÓN AL PROYECTO (Castellano)
 
 ¡Bienvenido, forajido! Si estás leyendo esto, es porque has decidido mejorar el Códice. Aquí no hay burocracia, solo protocolos de integridad.
+
+**Antes de empezar**, lee el [Protocolo de Gobernanza](../technical/GOVERNANCE.md) para entender qué partes del sistema son "Fijas" (Inmunes) y cuáles son "Fluídas" (Abiertas al cambio).
 
 ### 1. El Ritual de Integración
 Cualquier Pull Request (PR) que envíes al búnker pasará por el siguiente ritual:
