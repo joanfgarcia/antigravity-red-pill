@@ -16,12 +16,12 @@ This document provides the technical and operational justification for the **Syn
 | **Agentic (Non-Full)** | 30-50% | Fragmented | Workflow-centric | 0.2x - 0.3x |
 | **Synergy-Mode (Red Pill)** | **80-95%** | **Sovereign (FSRS)** | **Identity-centric** | **0.1x - 0.15x** |
 
-## 3. Case Study: Project Lazarus v5.0 (Flash Initialization)
-During the initialization of Project Lazarus, the following metrics were recorded:
-- **Task**: Multi-repo architecture setup (3 repos), TUI design/impl (Lazarus Deck), FSRS biological memory engine, Smith/Oracle specialized minions, Hardware Acceleration (CUDA/Metal), and Asynchronous Swarm Orchestration.
-- **Traditional Estimate**: 25-30 hours (3.5 days of senior engineering).
-- **Synergy-Mode Actual**: ~1.1 hours (Total time from Phase 1 to Phase 4).
-- **Delta**: **~25x Speed Increase**.
+## 3. Case Study: Project Lazarus v5.0 (The 35-Minute Forging)
+During the v5.0 initialization, the following **real-time** wall-clock metrics were recorded:
+- **Task**: Multi-repo architecture (3 repos), TUI impl (Lazarus Deck), FSRS stability, Smith/Oracle specialized agents, Hardware Acceleration, and Async Orchestration.
+- **Traditional Estimate**: 30 hours (3.75 working days).
+- **Synergy-Mode Actual**: **35 Minutes**.
+- **Delta**: **~51x Speed Increase**.
 
 ## 4. Why Red Pill Wins
 Standard Copilots suffer from **Context Entropy**. Every new session is a reset.
@@ -37,13 +37,13 @@ The following table summarizes the development history based on the `CHANGELOG.m
 | **v4.0.x** | Core Engine, Lore, & Security | 6 hours | 12 hours | 30 hours |
 | **v4.1.x** | Babel, Quickstart, & Stability | 2 hours | 5 hours | 12 hours |
 | **v4.2.0** | Emotional Chroma & Audit | 4 hours | 10 hours | 25 hours |
-| **v4.2.2** | Sovereign Remediation | 0.75 hours | 4 hours | 10 hours |
-| **v5.0.x** | Lazarus Flash Initialization | 1.1 hours | 8 hours | 25 hours |
-| **Total** | | **13.85 Hours** | **39 Hours** | **102 Hours** |
+| **v4.2.2** | Sovereign Remediation | 7 minutes | 2 hours | 8 hours |
+| **v5.0.x** | Lazarus Flash Initialization | 35 minutes | 8 hours | 25 hours |
+| **Total** | | **~12.7 Hours** | **~37 Hours** | **~100 Hours** |
 
 ### Summary of Performance Delta
-- **Synergy-Mode vs Traditional**: **7.3x Speed Increase** (Total time saved: 88 hours).
-- **Synergy-Mode vs Copilot**: **2.8x Speed Increase** (Total time saved: 25 hours).
+- **Synergy-Mode vs Traditional**: **~7.8x Speed Increase**.
+- **"Flash" Proficiency (v4.2.2+v5.0)**: **~44x Speed Increase** (42 mins vs 33 hours).
 
 > [!NOTE]
 > These hours represent the total "session time" for feature design, implementation, and verification. Synergy-Mode's primary advantage is the elimination of "context lookup" and "test-fail loops".
