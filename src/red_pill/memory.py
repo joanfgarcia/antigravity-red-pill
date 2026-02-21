@@ -69,7 +69,8 @@ class MemoryManager:
 		if self.encoder is None:
 			try:
 				from fastembed import TextEmbedding
-				self.encoder = TextEmbedding(model_name=cfg.EMBEDDING_MODEL)
+				providers = [cfg.EXECUTION_PROVIDER] if cfg.EXECUTION_PROVIDER else None
+				self.encoder = TextEmbedding(model_name=cfg.EMBEDDING_MODEL, providers=providers)
 			except ImportError:
 				return [0.0] * cfg.VECTOR_SIZE
 
@@ -347,14 +348,14 @@ class MemoryManager:
 			)
 
 		try:
-			response = self.client.query_points(
+			results = self.client.query_points(
 				collection_name=collection,
 				query=vector,
 				query_filter=search_filter,
-				limit=limit * (2 if deep_recall else 1),
+				limit=limit,
 				with_payload=True,
 				with_vectors=False
-			)
+			).points
 		except Exception as e:
 			logger.error(f"Query failed: {_mask_pii_exception(e)}")
 			return []

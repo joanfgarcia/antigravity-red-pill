@@ -3,9 +3,7 @@ import logging
 import os
 import signal
 import sys
-
 import yaml
-
 import red_pill.config as cfg
 from red_pill.memory import MemoryManager
 from red_pill.seed import seed_project

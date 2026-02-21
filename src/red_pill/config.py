@@ -17,6 +17,8 @@ DAEMON_SOCKET_PATH = os.getenv("DAEMON_SOCKET_PATH", os.path.join(_run_dir, "red
 # MODELS
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
 VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", "384"))
+# Execution provider: 'cpu', 'cuda', 'coreml', etc. Defaults to None (auto-detect).
+EXECUTION_PROVIDER = os.getenv("EXECUTION_PROVIDER", None)
 
 # B760 LOGIC
 DECAY_STRATEGY = os.getenv("DECAY_STRATEGY", "linear")

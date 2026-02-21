@@ -61,7 +61,7 @@ def test_synaptic_propagation(manager, mock_qdrant):
     mock_hit = MagicMock()
     mock_hit.payload = {"reinforcement_score": 1.0, "content": "primary", "associations": [str(uuid.uuid4())]}
     mock_hit.id = str(uuid.uuid4())
-    mock_hit.vector = [0.1] * 384
+    mock_hit.vector = [0.1] * config.VECTOR_SIZE
 
     mock_response = MagicMock()
     mock_response.points = [mock_hit]
@@ -72,7 +72,7 @@ def test_synaptic_propagation(manager, mock_qdrant):
     mock_assoc.payload = {"reinforcement_score": 1.0, "content": "associated"}
     mock_assoc.id = str(uuid.uuid4()) # assoc_1
     mock_hit.payload["associations"] = [mock_assoc.id] # Link them dynamically
-    mock_assoc.vector = [0.2] * 384
+    mock_assoc.vector = [0.2] * config.VECTOR_SIZE
     manager.client.retrieve.return_value = [mock_hit, mock_assoc]
 
     manager.search_and_reinforce("test_col", "query")
@@ -111,7 +111,7 @@ def test_erosion_cycle(manager, mock_qdrant):
     mock_hit = MagicMock()
     mock_hit.payload = {"reinforcement_score": 0.5, "immune": False}
     mock_hit.id = str(uuid.uuid4())
-    mock_hit.vector = [0.1] * 384
+    mock_hit.vector = [0.1] * config.VECTOR_SIZE
 
     mock_immune = MagicMock()
     mock_immune.payload = {"reinforcement_score": 10.0, "immune": True}
@@ -169,8 +169,8 @@ def test_reinforcement_stacking(manager, mock_qdrant):
 
     id_a = str(uuid.uuid4())
     id_b = str(uuid.uuid4())
-    hit_a = MagicMock(id=id_a, payload={"reinforcement_score": 1.0, "associations": [id_b]}, vector=[0.1]*384)
-    hit_b = MagicMock(id=id_b, payload={"reinforcement_score": 1.0, "associations": []}, vector=[0.1]*384)
+    hit_a = MagicMock(id=id_a, payload={"reinforcement_score": 1.0, "associations": [id_b]}, vector=[0.1]*config.VECTOR_SIZE)
+    hit_b = MagicMock(id=id_b, payload={"reinforcement_score": 1.0, "associations": []}, vector=[0.1]*config.VECTOR_SIZE)
 
     mock_response = MagicMock()
     mock_response.points = [hit_a, hit_b]

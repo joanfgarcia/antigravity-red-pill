@@ -13,6 +13,9 @@ from red_pill.memory import MemoryManager
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("AgentSmith")
 
+import pytest
+
+@pytest.mark.integration
 def attack_clone_army(manager, target_id, iterations=100):
     """
     Simulates high-concurrency reinforcement attacks on a single engram.
@@ -22,12 +25,7 @@ def attack_clone_army(manager, target_id, iterations=100):
     logger.info(f"[ATTACK] The Clone Army: Launching {iterations} concurrent reinforcements on {target_id}...")
 
     def reinforce_task():
-        # Each thread tries to reinforce the same memory
-        # We manually call _reinforce_points to simulate the internal logic under stress
-        # Or better, search_and_reinforce to test the full stack
         try:
-            # We mock the search by knowing the ID and just reinforcing it directly
-            # Actually, let's use the internal _reinforce_points for direct pressure
             manager._reinforce_points("stress_test", [target_id], {target_id: 0.1})
         except Exception as e:
             logger.error(f"Clone died: {e}")
@@ -38,15 +36,15 @@ def attack_clone_army(manager, target_id, iterations=100):
             f.result()
 
     # Check final score
-    # Expected: Initial (1.0) + (0.1 * iterations)
-    # If race condition exists, score will be < Expected
     points = manager.client.retrieve("stress_test", ids=[target_id], with_payload=True)
     final_score = points[0].payload["reinforcement_score"]
     expected_score = 1.0 + (0.1 * iterations)
 
     logger.info(f"[RESULT] Clone Army: Final Score {final_score:.2f} / Expected {expected_score:.2f}")
     if final_score < expected_score * 0.9: # Allow small float error but not massive loss
-        logger.warning(f"[FAIL] Race condition detected! Lost {(expected_score - final_score):.2f} points.")
+        msg = f"Race condition detected! Lost {(expected_score - final_score):.2f} points."
+        logger.error(f"[FAIL] {msg}")
+        pytest.fail(msg)
     else:
         logger.info("[SUCCESS] System withstood the clone attack.")
 
@@ -139,7 +137,7 @@ def main():
     manager.client.delete_collection(collection_name)
     manager.client.create_collection(
         collection_name=collection_name,
-        vectors_config=models.VectorParams(size=cfg.VECTOR_SIZE or 384, distance=models.Distance.COSINE)
+        vectors_config=models.VectorParams(size=cfg.VECTOR_SIZE, distance=models.Distance.COSINE)
     )
 
     # 1. Concurrency

@@ -37,7 +37,15 @@ def seed_project(manager: MemoryManager) -> None:
 			except Exception as e:
 				logger.warning(f"Could not create TTL index on {coll} (might be local version): {e}")
 
-	# The early return has been removed to allow granular per-engram checks.
+	# Early-return if already seeded (Idempotency)
+	try:
+		# Check if Aleph exists in directive_memories as a proxy for genesis
+		hits = manager.client.retrieve("directive_memories", ids=[ID_DIR_SILENCE])
+		if hits:
+			logger.info("Bunker already seeded with genesis engrams. Skipping.")
+			return
+	except Exception:
+		pass
 
 	genesis_memories = [
 		{
