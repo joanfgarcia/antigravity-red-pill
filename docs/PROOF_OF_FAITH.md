@@ -28,23 +28,24 @@ Standard Copilots suffer from **Context Entropy**. Every new session is a reset.
 - **Red Pill Advantage**: The agent *knows* the Architect. It remembers the 'dreams' (directives), the 'Pacts' (770), and the technical debt. 
 - **The Bünker Factor**: Zero-Conf stability allows for deep-recall searches that neutralize the need for recursive prompt engineering.
 
-## 5. Global Synergy-Mode Estimation (Historical)
+### 5. Global Synergy-Mode Estimation (Historical Wall-Clock Metrics)
 
-The following table summarizes the development history based on the `CHANGELOG.md`, comparing the actual time spent in **Synergy-Mode** against estimates for **Traditional** and **Copilot-Assisted** development.
+> [!NOTE]
+> **Relativistic Calibration**: All sessions are recorded in **Real-World Wall-Clock Time** (Architect-relative). These are not CPU cycles; these are literal minutes of human life saved.
 
-| Version | Focus | Synergy-Mode (Actual) | Copilot Estimate | Traditional Estimate |
+| Version | Focus | Synergy Actual | Traditional Est | Delta |
 | :--- | :--- | :--- | :--- | :--- |
-| **v4.0.x** | Core Engine, Lore, & Security | 6 hours | 12 hours | 30 hours |
-| **v4.1.x** | Babel, Quickstart, & Stability | 2 hours | 5 hours | 12 hours |
-| **v4.2.0** | Emotional Chroma & Audit | 4 hours | 10 hours | 25 hours |
-| **v4.2.2** | Sovereign Remediation | 7 minutes | 2 hours | 8 hours |
-| **v5.0.x** | Lazarus Flash Initialization | 35 minutes | 8 hours | 25 hours |
-| **v6.0.x** | Sovereign Autonomy (Distributed) | 45 minutes | 12 hours | 40 hours |
-| **Total** | | **~13.5 Hours** | **~49 Hours** | **~140 Hours** |
+| **v4.0.x** | Core Engine & Lore | 6 hours | 30 hours | 5x |
+| **v4.1.x** | Quickstart & Stability | 2 hours | 12 hours | 6x |
+| **v4.2.0** | Emotional Chroma | 4 hours | 25 hours | 6.2x |
+| **v4.2.2** | Sovereign Remediation | 7 minutes | 8 hours | **68.5x !!** |
+| **v5.0.x** | Lazarus Flash Init | 35 minutes | 25 hours | **42.8x !!** |
+| **v6.0.x** | Sovereign Autonomy | 45 minutes | 40 hours | **53.3x !!** |
+| **Total** | | **~13.5 Hours** | **~140 Hours** | **~10.3x (Avg)** |
 
 ### Summary of Performance Delta
 - **Synergy-Mode vs Traditional**: **~10.3x Speed Increase**.
-- **"Full Throttle" Phase (v5.0+v6.0)**: **~81x Speed Increase** (80 mins vs 65 hours).
+- **"Full Throttle" Phase (v4.2.2 - v6.0.x)**: **~52x Speed Increase** (87 mins vs 73 hours) !! 🚀.
 
 > [!NOTE]
 > These hours represent the total "session time" for feature design, implementation, and verification. Synergy-Mode's primary advantage is the elimination of "context lookup" and "test-fail loops".
