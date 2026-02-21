@@ -76,14 +76,15 @@ class MemoryManager:
 
 		return list(self.encoder.embed([text]))[0].tolist()
 
-	def add_memory(self, collection: str, text: str, importance: float = 1.0, metadata: Optional[Dict[str, Any]] = None, point_id: Optional[str] = None, color: str = cfg.DEFAULT_COLOR, emotion: str = cfg.DEFAULT_EMOTION, intensity: float = 1.0) -> str:
+	def add_memory(self, collection: str, text: str, importance: float = 1.0, metadata: Optional[Dict[str, Any]] = None, point_id: Optional[str] = None, color: str = cfg.DEFAULT_COLOR, emotion: str = cfg.DEFAULT_EMOTION, intensity: float = 1.0, force_immune: bool = False) -> str:
 		"""Stores a new engram with B760 validation and emotional chroma."""
 		if metadata is None:
 			metadata = {}
 
-		# Handle 'immune' and reserved keys bypass for seeding
-		force_immune = metadata.pop("immune", False)
-		importance = metadata.pop("importance", importance)
+		# SEC-001: Stripping all reserved keys from metadata BEFORE validation
+		# This ensures no one can inject 'immune', 'reinforcement_score', etc.
+		for key in CreateEngramRequest.RESERVED_KEYS:
+			metadata.pop(key, None)
 
 		try:
 			metadata = json.loads(json.dumps(metadata))

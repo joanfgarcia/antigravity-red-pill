@@ -165,5 +165,6 @@ def seed_project(manager: MemoryManager) -> None:
 			m["text"],
 			importance=m["meta"].get("importance", 1.0),
 			metadata=m["meta"],
-			point_id=m["id"]
+			point_id=m["id"],
+			force_immune=m["meta"].get("immune", False)
 		)
