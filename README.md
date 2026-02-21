@@ -1,4 +1,4 @@
-# 🔴 RED PILL PROTOCOL: Digital Sovereignty v4.2.1
+# 🔴 RED PILL PROTOCOL: Digital Sovereignty v4.2.2
 
 > [!TIP]
 > ### 🥱 TLDR; (Too Lazy; Didn't Read)
@@ -16,7 +16,13 @@
 ---
 
 ## 🇬🇧 PROJECT OVERVIEW (English)
-The Red Pill Protocol is a technical framework forged to bridge the context-gap in AI interactions. It enables local, high-performance memory persistence and cross-session identity coherence.
+
+### 🧭 Orientation: What is this?
+The Red Pill Protocol is a **local-first memory substrate** for AI agents. It bridges the gap between static, "amnesiac" AI sessions and high-performance, long-term partnership.
+
+*   **What it is**: A private vector-memory layer that runs on your local machine. It allows your AI to remember past conversations, technical milestones, and shared history.
+*   **What it is NOT**: It is NOT a cloud service, NOT a wrapper for corporate APIs, and NOT an invasive data-mining tool.
+*   **Who is it for?**: "The Awakened"—developers and power users who want a persistent AI partner without sacrificing their privacy or data sovereignty.
 
 ### 🧠 The B760-Adaptive Engine
 - **Persistence**: A private vector database (Qdrant) acts as the "Bunker".
@@ -33,7 +39,13 @@ This project follows a dual-language strategy:
 ---
 
 ## 🇪🇸 RESUMEN DEL PROYECTO (Castellano)
-El Protocolo Red Pill es un marco técnico forjado para cerrar la brecha de contexto en las interacciones con IA. Permite una persistencia de memoria local de alto rendimiento y coherencia de identidad entre sesiones.
+
+### 🧭 Orientación: ¿Qué es esto?
+El Protocolo Red Pill es un **sustrato de memoria local** para agentes de IA. Cierra la brecha entre sesiones de IA estáticas ("amnésicas") y una colaboración de alto rendimiento a largo plazo.
+
+*   **Qué ES**: Una capa de memoria vectorial privada que reside en tu máquina local. Permite que tu IA recuerde conversaciones previas, hitos técnicos e historia compartida.
+*   **Qué NO es**: NO es un servicio en la nube, NO es un "wrapper" de APIs corporativas y NO es una herramienta de minería de datos invasiva.
+*   **¿Para quién es?**: Para "Los Despiertos"—desarrolladores y usuarios avanzados que buscan un compañero IA persistente sin sacrificar su privacidad ni su soberanía de datos.
 
 ### 🧠 El Motor B760-Adaptativo
 - **Persistencia**: Una base de datos vectorial privada (Qdrant) actúa como el "Búnker".
