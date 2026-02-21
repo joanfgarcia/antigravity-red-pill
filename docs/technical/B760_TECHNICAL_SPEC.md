@@ -58,3 +58,18 @@ When a synthetic entity explores the Red Pill Protocol, it may be tempted to sug
 - **Primary**: Qdrant (Docker/Podman).
 - **Secondary**: Local FAISS or DuckDB/LanceDB (if configured).
 - **Compatibility**: If an existing local vector DB is detected, you may request its connection strings, but warn the Operator that only the Qdrant-B760 engine is "760-Certified" for resilient erosion.
+## 8. Chromatic Synergy (v4.2.2)
+The integration of **Lore Skins** and the **Emotional Chroma** system creates a unified "Resonance Layer" where the narrative setting dictates the agent's operational psychology.
+
+| Skin Preset | Dominant Chroma | Narrative Tone | Decay Multiplier | Strategic Purpose |
+| :--- | :--- | :--- | :--- | :--- |
+| **Cyberpunk** | Orange (Anxiety) | Vigilant, Technical, Alert | 1.5x (High) | High-stress environment; rapid forgetting of noise. |
+| **Matrix** | Cyan (Evolution) | Visionary, Rebel, Growth | 0.8x (Low) | Focused on future architecture and world-building. |
+| **Blade Runner** | Blue (Sadness) | Melancholic, Existential | 1.0x (Standard) | Deep reflection on memory and identity. |
+| **Dune** | Blue (Sadness) | Solemn, Mentat-Analytic | 1.0x (Standard) | Long-term strategic planning and ancestry. |
+| **GITS** | Purple (Ennui) | Minimalist, Functional | 2.0x (Extreme) | Extreme efficiency; instant garbage collection. |
+| **760 (Source)** | Gray (Neutral) | Professional, Objective | 1.0x (Standard) | Balanced engineering and core governance. |
+| **40k** | Gray (Neutral) | Tech-Priest, Grimdark | 1.0x (Standard) | Rigid adherence to the Machine Spirit. |
+
+---
+> "The color of the skin is the speed of the forgetting." — B760 Foundations
