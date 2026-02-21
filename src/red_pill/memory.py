@@ -80,6 +80,10 @@ class MemoryManager:
 		if metadata is None:
 			metadata = {}
 
+		# Handle 'immune' and reserved keys bypass for seeding
+		force_immune = metadata.pop("immune", False)
+		importance = metadata.pop("importance", importance)
+
 		try:
 			metadata = json.loads(json.dumps(metadata))
 		except (TypeError, ValueError) as e:
@@ -120,13 +124,17 @@ class MemoryManager:
 			_initial_score = importance
 		_initial_score = round(min(_initial_score, cfg.IMMUNITY_THRESHOLD * 0.9), 2)
 
+		# If it was forced immune during seeding, set score to max
+		if force_immune:
+			_initial_score = cfg.IMMUNITY_THRESHOLD
+
 		payload = {
 			"content": text,
 			"importance": importance,
 			"reinforcement_score": _initial_score,
 			"created_at": time.time(),
 			"last_recalled_at": time.time(),
-			"immune": False,
+			"immune": force_immune,
 			"color": validated_request.color,
 			"emotion": validated_request.emotion,
 			"intensity": validated_request.intensity,

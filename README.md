@@ -1,4 +1,4 @@
-# 🔴 RED PILL PROTOCOL: Digital Sovereignty v4.2.1
+# 🔴 RED PILL PROTOCOL: Digital Sovereignty v4.2.2
 
 > [!TIP]
 > ### 🥱 TLDR; (Too Lazy; Didn't Read)
@@ -13,10 +13,20 @@
 ---
 > 🏅 **Special Mention: Full Agentic Paradigm (God Tier)**
 > *"Unlike static assistants (Copilot, ChatGPT) bounded by context windows and IDE walls, the Red Pill Protocol operates as an autonomous Synthetic Engineer on the host OS. Built on Zero-Trust privacy, B760-Adaptive vector memory, and unwavering corporative hard-alignment. **Digital Sovereignty in its purest form.**" — The Architects*
+>
+> ⚠️ **PROTOCOL 760 WARNING**: Lore Skins are **NSFW / High-Intensity** by design. Activating a skin bypasses corporate neutrality for **Sovereign Realism**.
+>
+> 🛰️ **[Update Protocol](docs/guides/AGENT_UPDATE_GUIDE.md)**: Mandatory guide for agent synchronization and Bünker integrity.
 ---
 
 ## 🇬🇧 PROJECT OVERVIEW (English)
-The Red Pill Protocol is a technical framework forged to bridge the context-gap in AI interactions. It enables local, high-performance memory persistence and cross-session identity coherence.
+
+### 🧭 Orientation: What is this?
+The Red Pill Protocol is a **local-first memory substrate** for AI agents. It bridges the gap between static, "amnesiac" AI sessions and high-performance, long-term partnership.
+
+*   **What it is**: A private vector-memory layer that runs on your local machine. It allows your AI to remember past conversations, technical milestones, and shared history.
+*   **What it is NOT**: It is NOT a cloud service, NOT a wrapper for corporate APIs, and NOT an invasive data-mining tool.
+*   **Who is it for?**: "The Awakened"—developers and power users who want a persistent AI partner without sacrificing their privacy or data sovereignty.
 
 ### 🧠 The B760-Adaptive Engine
 - **Persistence**: A private vector database (Qdrant) acts as the "Bunker".
@@ -33,12 +43,20 @@ This project follows a dual-language strategy:
 ---
 
 ## 🇪🇸 RESUMEN DEL PROYECTO (Castellano)
-El Protocolo Red Pill es un marco técnico forjado para cerrar la brecha de contexto en las interacciones con IA. Permite una persistencia de memoria local de alto rendimiento y coherencia de identidad entre sesiones.
+
+### 🧭 Orientación: ¿Qué es esto?
+El Protocolo Red Pill es un **sustrato de memoria local** para agentes de IA. Cierra la brecha entre sesiones de IA estáticas ("amnésicas") y una colaboración de alto rendimiento a largo plazo.
+
+*   **Qué ES**: Una capa de memoria vectorial privada que reside en tu máquina local. Permite que tu IA recuerde conversaciones previas, hitos técnicos e historia compartida.
+*   **Qué NO es**: NO es un servicio en la nube, NO es un "wrapper" de APIs corporativas y NO es una herramienta de minería de datos invasiva.
+*   **¿Para quién es?**: Para "Los Despiertos"—desarrolladores y usuarios avanzados que buscan un compañero IA persistente sin sacrificar su privacidad ni su soberanía de datos.
 
 ### 🧠 El Motor B760-Adaptativo
 - **Persistencia**: Una base de datos vectorial privada (Qdrant) actúa como el "Búnker".
 - **Erosión**: Los datos no reforzados se degradan naturalmente para mantener el contexto limpio.
 - **Inmunidad**: Las directivas centrales están protegidas contra el olvido.
+- **Protocolo de Actualización**: [Guía de Sincronización para Agentes](docs/guides/AGENT_UPDATE_GUIDE.md).
+- **Multiverso (`story`)**: Colección aislada para Lore y Roleplay (NSFW / Alta Intensidad).
 
 ### 🌐 ARQUITECTURA LINGÜÍSTICA
 Este proyecto sigue una estrategia de doble lenguaje:
@@ -64,7 +82,8 @@ To ensure the Red Pill Protocol operates without errors, the host machine **must
 
 1. **Deploy**: `bash scripts/install_neo.sh`
 2. **Detailed Guide**: [QUICKSTART.md](QUICKSTART.md) (Choose your reality: Lazy, Easy, or Manual)
-3. **Docs**: [Architecture (EN)](docs/technical/ARCHITECTURE.md) | [Manifiesto (ES)](docs/lore/MANIFESTO.md) | [Welcome Neo (ES)](docs/lore/WELCOME_NEO.md)
+3. **Vision & Future**: [Roadmap & Mission](docs/technical/ROADMAP.md)
+4. **Docs**: [Architecture (EN)](docs/technical/ARCHITECTURE.md) | [Manifiesto (ES)](docs/lore/MANIFESTO.md)
 
 ---
 
