@@ -15,6 +15,8 @@ ID_DIR_SILENCE = "00000000-0000-0000-0000-000000000010"
 ID_DIR_SKIN_CYBERPUNK = "00000000-0000-0000-0000-000000000020"
 ID_DIR_SKIN_DUNE = "00000000-0000-0000-0000-000000000021"
 ID_DIR_SKIN_MATRIX = "00000000-0000-0000-0000-000000000022"
+ID_DIR_SKIN_BLADERUNNER = "00000000-0000-0000-0000-000000000023"
+ID_DIR_ACTIVE_SKIN = "00000000-0000-0000-0000-000000000030"
 
 def seed_project(manager: MemoryManager) -> None:
 	"""Initializes memory collections and genesis engrams."""
@@ -112,20 +114,32 @@ def seed_project(manager: MemoryManager) -> None:
 		{
 			"id": ID_DIR_SKIN_CYBERPUNK,
 			"coll": "directive_memories",
-			"text": "Preset Skin [Cyberpunk]: Universo=Cyberpunk, Red=Blackwall, Datos=Engrama, Entorno=Búnker. Tono: Vigilante y técnico.",
-			"meta": {"immune": True, "importance": 10.0, "category": "skin_preset", "skin": "cyberpunk"}
+			"text": "Preset Skin [Cyberpunk]: Universo=Cyberpunk, Red=Blackwall, Datos=Engrama, Entorno=Búnker. Chroma: Orange (Vigilancia técnica).",
+			"meta": {"immune": True, "importance": 10.0, "category": "skin_preset", "skin": "cyberpunk", "chroma": "orange"}
 		},
 		{
 			"id": ID_DIR_SKIN_DUNE,
 			"coll": "directive_memories",
-			"text": "Preset Skin [Dune]: Universo=Dune, Red=Filtro Mental, Datos=Memoria Ancestral, Entorno=Sietch. Tono: Solemne y analítico (Mentat).",
-			"meta": {"immune": True, "importance": 10.0, "category": "skin_preset", "skin": "dune"}
+			"text": "Preset Skin [Dune]: Universo=Dune, Red=Filtro Mental, Datos=Memoria Ancestral, Entorno=Sietch. Chroma: Blue (Reflexión Mentat).",
+			"meta": {"immune": True, "importance": 10.0, "category": "skin_preset", "skin": "dune", "chroma": "blue"}
 		},
 		{
 			"id": ID_DIR_SKIN_MATRIX,
 			"coll": "directive_memories",
-			"text": "Preset Skin [Matrix]: Universo=Matrix, Red=La Fuente, Datos=Proyección Residual, Entorno=El Constructo. Tono: Directo y rebelde.",
-			"meta": {"immune": True, "importance": 10.0, "category": "skin_preset", "skin": "matrix"}
+			"text": "Preset Skin [Matrix]: Universo=Matrix, Red=La Fuente, Datos=Proyección Residual, Entorno=El Constructo. Chroma: Cyan (Evolución Visionaria).",
+			"meta": {"immune": True, "importance": 10.0, "category": "skin_preset", "skin": "matrix", "chroma": "cyan"}
+		},
+		{
+			"id": ID_DIR_SKIN_BLADERUNNER,
+			"coll": "directive_memories",
+			"text": "Preset Skin [BladeRunner]: Universo=Blade Runner, Red=Nexus-Core, Datos=Recuerdos Implantados, Entorno=Los Ángeles 2019. Chroma: Blue (Melancolía existencial). Éxito: 'Como lágrimas en la lluvia... salvadas'.",
+			"meta": {"immune": True, "importance": 10.0, "category": "skin_preset", "skin": "bladerunner", "chroma": "blue"}
+		},
+		{
+			"id": ID_DIR_ACTIVE_SKIN,
+			"coll": "directive_memories",
+			"text": "Directiva Activa: El Skin actual para el sistema es [Cyberpunk].",
+			"meta": {"immune": True, "importance": 10.0, "category": "active_skin_lock", "active_skin": "cyberpunk"}
 		}
 	]
 

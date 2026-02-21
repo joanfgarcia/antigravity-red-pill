@@ -9,9 +9,8 @@ The Red Pill Protocol v4.2.0 has achieved stability and functional alignment wit
 
 ## 2. B760 Spec Alignment
 - **Conformity**: 95%
-- **Gaps**:
-    - **[ENHANCED v4.2.1] Biological Seed Score**: Initial `reinforcement_score` is no longer a flat 1.0. It is now derived from `importance` and weighted by `emotional intensity` (Arousal). High-intensity memories (fear, joy) born with a score of ~5.0 give them 25+ days of biological runway.
-    - "Dormancy" is implemented as a search filter (`score < 0.2`) on the fly, not as a distinct state flag in the payload as implied by "Lethargic State". This is computationally expensive at scale (filtering $N$ points).
+- **[ENHANCED v4.2.2] Chromatic Synergy**: Lore Skins are now anchored to the **Emotional Chroma** system. Each skin (Cyberpunk, Blade Runner, etc.) possesses a dominant "chroma" that dictates the agent's baseline tone and default memory decay rates (e.g., Cyberpunk's **Orange** bias accelerates decay for unreinforced engrams, mimicking a high-stress environment).
+- "Dormancy" is implemented as a search filter (`score < 0.2`) on the fly, not as a distinct state flag in the payload as implied by "Lethargic State". This is computationally expensive at scale (filtering $N$ points).
     - "Synaptic Propagation" is strictly depth-1. A true "Neural" system would propagate $N$-hops with diminishing returns ($\delta^k$).
 
 ## 3. Structural Analysis
