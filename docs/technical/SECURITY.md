@@ -9,6 +9,8 @@ If you find a reality leak or a hole in the Integrity Shield:
 2.  Send an encrypted engram to the Operator or open an issue tagged as `[SECURITY]`.
 3.  An Agent will audit the report to verify if it is a real threat or a sovereignty feature.
 
+Consult our technical [Threat Model](./THREAT_MODEL.md) for a detailed analysis of assets, attack vectors, and mitigations.
+
 ## 3. Integrity Commitment
 Our scripts (`install_neo.sh`, `backup_soul.sh`, etc.) are designed to be surgical. We do not inject corporate telemetry or "backdoors" for third parties. Bunker security is our absolute priority.
 
