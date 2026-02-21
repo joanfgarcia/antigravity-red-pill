@@ -10,11 +10,19 @@ mkdir -p "$BACKUP_DIR"
 
 take_snapshot() {
 	local collection=$1
-	local response=$(curl -s -X POST "http://localhost:6333/collections/$collection/snapshots")
+	local response=$(curl -s -X POST "http://localhost:6333/collections/$collection/snapshots" -H "api-key: ${QDRANT_API_KEY:-}")
+	
+	if echo "$response" | grep -q "error"; then
+		echo "Error taking snapshot for $collection: $response"
+		return 1
+	fi
+
 	local snap_name=$(echo "$response" | python3 -c "import sys, json; print(json.load(sys.stdin)['result']['name'])")
 	
 	if [ -n "$snap_name" ]; then
-		curl -s "http://localhost:6333/collections/$collection/snapshots/$snap_name" -o "$BACKUP_DIR/${collection}_${TIMESTAMP}.snapshot"
+		curl -s "http://localhost:6333/collections/$collection/snapshots/$snap_name" \
+		     -H "api-key: ${QDRANT_API_KEY:-}" \
+		     -o "$BACKUP_DIR/${collection}_${TIMESTAMP}.snapshot"
 	fi
 }
 

@@ -1,5 +1,5 @@
 import os
-import time
+import asyncio
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -32,7 +32,7 @@ class TestMetabolism(unittest.TestCase):
 		manager.add_memory("test_coll", "engram 1")
 
 		# Give it a tiny bit of time to start the thread
-		time.sleep(0.5)
+		asyncio.sleep(0.5)
 
 		self.assertTrue(os.path.exists(self.test_state_file))
 		mock_erosion.assert_called()
@@ -40,13 +40,13 @@ class TestMetabolism(unittest.TestCase):
 
 		# 2. Second addition within cooldown should NOT trigger again
 		manager.add_memory("test_coll", "engram 2")
-		time.sleep(0.5)
+		asyncio.sleep(0.5)
 		self.assertEqual(mock_erosion.call_count, erosion_count)
 
 		# 3. Wait for cooldown and trigger again
-		time.sleep(2)
+		asyncio.sleep(2)
 		manager.add_memory("test_coll", "engram 3")
-		time.sleep(0.5)
+		asyncio.sleep(0.5)
 		self.assertGreater(mock_erosion.call_count, erosion_count)
 
 	@patch("red_pill.memory.QdrantClient")
@@ -60,7 +60,7 @@ class TestMetabolism(unittest.TestCase):
 		# This should not raise
 		id = manager.add_memory("test_coll", "safe engram")
 		self.assertIsNotNone(id)
-		time.sleep(0.5)  # Background thread might log error but not crash main
+		asyncio.sleep(0.5)  # Background thread might log error but not crash main
 
 
 if __name__ == "__main__":
