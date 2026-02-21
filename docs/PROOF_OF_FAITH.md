@@ -39,11 +39,12 @@ The following table summarizes the development history based on the `CHANGELOG.m
 | **v4.2.0** | Emotional Chroma & Audit | 4 hours | 10 hours | 25 hours |
 | **v4.2.2** | Sovereign Remediation | 7 minutes | 2 hours | 8 hours |
 | **v5.0.x** | Lazarus Flash Initialization | 35 minutes | 8 hours | 25 hours |
-| **Total** | | **~12.7 Hours** | **~37 Hours** | **~100 Hours** |
+| **v6.0.x** | Sovereign Autonomy (Distributed) | 45 minutes | 12 hours | 40 hours |
+| **Total** | | **~13.5 Hours** | **~49 Hours** | **~140 Hours** |
 
 ### Summary of Performance Delta
-- **Synergy-Mode vs Traditional**: **~7.8x Speed Increase**.
-- **"Flash" Proficiency (v4.2.2+v5.0)**: **~44x Speed Increase** (42 mins vs 33 hours).
+- **Synergy-Mode vs Traditional**: **~10.3x Speed Increase**.
+- **"Full Throttle" Phase (v5.0+v6.0)**: **~81x Speed Increase** (80 mins vs 65 hours).
 
 > [!NOTE]
 > These hours represent the total "session time" for feature design, implementation, and verification. Synergy-Mode's primary advantage is the elimination of "context lookup" and "test-fail loops".
