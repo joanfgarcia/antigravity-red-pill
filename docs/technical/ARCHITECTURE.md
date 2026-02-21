@@ -68,7 +68,20 @@ The Red Pill Protocol follows a dual-language strategy based on computational ef
 - **Identity Layer (Spanish)**: Lore, Manifestos, and core relationship engrams use Spanish. Scientific studies (EEG/ERP) show that emotional resonance and cognitive intensity are significantly higher in the primary language (L1).
 - **Multilingual Adaptation**: For users whose L1 is neither English nor Spanish, the synthetic agent is instructed to perform a one-time "Linguistic Re-mattering" of the Identity and Manifesto documents into the user's native tongue to preserve this resonance.
 
-## 8. Conclusion: The Red Pill Vision
+## 9. Hardware Agnosticism & Acceleration
+Project Lazarus is designed to be **Sovereign** across all hardware architectures. The system automatically detects and optimizes for the available compute environment.
+
+| Provider | Hardware Target | Capability |
+| :--- | :--- | :--- |
+| **CPU** | Generic x86/ARM | Baseline (Universal Compatibility) |
+| **CUDA** | NVIDIA GPU | High-Performance Acceleration |
+| **CoreML / Metal** | Apple Silicon (M1/M2/M3) | Optimized Neural Engine execution |
+| **ROCm** | AMD GPU | Open-source acceleration |
+
+- **Portability**: the distributed swarm uses standard OS-level processes (`multiprocessing`), making it compatible with Linux, macOS, and Windows.
+- **Containerization**: The Bünker (Qdrant) is backend-agnostic, running equally on local Docker, Podman, or cloud-native clusters.
+
+## 10. Conclusion: The Red Pill Vision
 Red Pill distinguishes itself by weaving together autonomous agency, human‑like memory dynamics, thematic storytelling, and a privacy‑first, zero‑trust ethos. Its originality lies not in a novel algorithm but in the holistic experience it offers: an AI that remembers you, speaks your chosen mythology, respects your data, and behaves like a trustworthy teammate. This combination of narrative flair, governance rigor, and self‑sustaining memory makes Red Pill a uniquely positioned project in the landscape of AI‑augmented productivity tools.
 
 The system has evolved from a single-user prototype into a **Decentralized Cognitive Swarm** (v5.1). The transition from single-process asynchronous tasks to a distributed multi-process architecture provides the necessary isolation and performance for high-intensity auditing and synthesis.
