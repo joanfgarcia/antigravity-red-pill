@@ -363,27 +363,27 @@ class MemoryManager:
 
 		increment_map: Dict[str, float] = {}
 
-		for hit in response.points:
+		for hit in results:
 			increment_map[hit.id] = cfg.REINFORCEMENT_INCREMENT
 
 		propagation_increment = cfg.REINFORCEMENT_INCREMENT * cfg.PROPAGATION_FACTOR
-		for hit in response.points:
+		for hit in results:
 			assocs = hit.payload.get("associations", [])
 			for assoc_id in assocs:
 				increment_map[assoc_id] = increment_map.get(assoc_id, 0.0) + propagation_increment
 
 		if not increment_map:
-			return response.points
+			return results
 
 		points_to_update = self._reinforce_points(collection, list(increment_map.keys()), increment_map)
 
 		if points_to_update:
 			update_map = {p.id: p.payload for p in points_to_update}
-			for hit in response.points:
+			for hit in results:
 				if hit.id in update_map:
 					hit.payload.update(update_map[hit.id])
 
-		return response.points
+		return results
 
 	def _calculate_decay(self, current_score: float, rate: float) -> float:
 		"""Computes decay based on the configured strategy."""
