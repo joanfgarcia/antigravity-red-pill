@@ -12,8 +12,10 @@ import red_pill.config as cfg
 logger = logging.getLogger("memory_daemon")
 SOCKET_PATH = cfg.DAEMON_SOCKET_PATH
 
+
 class MemoryDaemon:
 	"""Sidecar for semantic memory embedding."""
+
 	def __init__(self) -> None:
 		self.encoder: Optional[TextEmbedding] = None
 		self.running = True
@@ -52,7 +54,7 @@ class MemoryDaemon:
 						continue
 
 					try:
-						request = json.loads(data.decode('utf-8'))
+						request = json.loads(data.decode("utf-8"))
 						text = request.get("text")
 						if text:
 							vector = list(self.encoder.embed([text]))[0].tolist()
@@ -64,7 +66,7 @@ class MemoryDaemon:
 					except Exception as e:
 						response = {"status": "error", "message": str(e)}
 
-					conn.sendall(json.dumps(response).encode('utf-8'))
+					conn.sendall(json.dumps(response).encode("utf-8"))
 			except Exception as e:
 				if self.running:
 					logger.error(f"Loop failure: {e}")
@@ -83,6 +85,7 @@ class MemoryDaemon:
 				os.remove(SOCKET_PATH)
 			except Exception:
 				pass
+
 
 if __name__ == "__main__":
 	daemon = MemoryDaemon()

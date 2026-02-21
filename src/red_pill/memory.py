@@ -15,16 +15,20 @@ from red_pill.schemas import CreateEngramRequest
 
 logger = logging.getLogger(__name__)
 
+
 def _mask_pii_exception(e: Exception) -> str:
 	"""Truncates exception strings to prevent payload PII leaks."""
 	msg = str(e)
 	return msg if len(msg) < 150 else msg[:150] + "... [TRUNCATED]"
 
+
 class PointUpdate:
 	"""Internal helper for point updates."""
+
 	def __init__(self, id: Any, payload: Dict[str, Any]):
 		self.id = id
 		self.payload = payload
+
 
 class MemoryManager:
 	"""B760-Adaptive memory engine."""
@@ -50,10 +54,10 @@ class MemoryManager:
 				client.settimeout(0.5)
 				client.connect(socket_path)
 				request = {"text": text}
-				client.sendall(json.dumps(request).encode('utf-8'))
+				client.sendall(json.dumps(request).encode("utf-8"))
 				response_data = client.recv(1024 * 1024)
 				if response_data:
-					response = json.loads(response_data.decode('utf-8'))
+					response = json.loads(response_data.decode("utf-8"))
 					if response.get("status") == "ok":
 						return response.get("vector")
 		except Exception as e:
@@ -69,6 +73,7 @@ class MemoryManager:
 		if self.encoder is None:
 			try:
 				from fastembed import TextEmbedding
+
 				providers = [cfg.EXECUTION_PROVIDER] if cfg.EXECUTION_PROVIDER else None
 				self.encoder = TextEmbedding(model_name=cfg.EMBEDDING_MODEL, providers=providers)
 			except ImportError:
@@ -76,7 +81,18 @@ class MemoryManager:
 
 		return list(self.encoder.embed([text]))[0].tolist()
 
-	def add_memory(self, collection: str, text: str, importance: float = 1.0, metadata: Optional[Dict[str, Any]] = None, point_id: Optional[str] = None, color: str = cfg.DEFAULT_COLOR, emotion: str = cfg.DEFAULT_EMOTION, intensity: float = 1.0, force_immune: bool = False) -> str:
+	def add_memory(
+		self,
+		collection: str,
+		text: str,
+		importance: float = 1.0,
+		metadata: Optional[Dict[str, Any]] = None,
+		point_id: Optional[str] = None,
+		color: str = cfg.DEFAULT_COLOR,
+		emotion: str = cfg.DEFAULT_EMOTION,
+		intensity: float = 1.0,
+		force_immune: bool = False,
+	) -> str:
 		"""Stores a new engram with B760 validation and emotional chroma."""
 		if metadata is None:
 			metadata = {}
@@ -92,12 +108,7 @@ class MemoryManager:
 			raise ValueError(f"Invalid metadata: {e}")
 
 		validated_request = CreateEngramRequest(
-			content=text,
-			importance=importance,
-			color=color,
-			emotion=emotion,
-			intensity=intensity,
-			metadata=metadata
+			content=text, importance=importance, color=color, emotion=emotion, intensity=intensity, metadata=metadata
 		)
 
 		text = validated_request.content
@@ -140,20 +151,11 @@ class MemoryManager:
 			"color": validated_request.color,
 			"emotion": validated_request.emotion,
 			"intensity": validated_request.intensity,
-			**clean_metadata
+			**clean_metadata,
 		}
 
 		try:
-			self.client.upsert(
-				collection_name=collection,
-				points=[
-					models.PointStruct(
-						id=actual_id,
-						vector=vector,
-						payload=payload
-					)
-				]
-			)
+			self.client.upsert(collection_name=collection, points=[models.PointStruct(id=actual_id, vector=vector, payload=payload)])
 			if cfg.METABOLISM_ENABLED:
 				self._trigger_metabolism()
 			return actual_id
@@ -177,6 +179,7 @@ class MemoryManager:
 		try:
 			try:
 				import fcntl
+
 				has_fcntl = True
 			except ImportError:
 				has_fcntl = False
@@ -200,10 +203,7 @@ class MemoryManager:
 							return
 						# Absence guard: if idle > 7 days, refresh timestamps before eroding
 						if gap > cfg.ABSENCE_THRESHOLD:
-							logger.warning(
-								f"Absence detected ({gap/86400:.1f} days). "
-								"Running TTL refresh before erosion to protect the Bunker."
-							)
+							logger.warning(f"Absence detected ({gap / 86400:.1f} days). Running TTL refresh before erosion to protect the Bunker.")
 							for coll in cfg.METABOLISM_AUTO_COLLECTIONS:
 								try:
 									self._refresh_ttl_timestamps(coll.strip())
@@ -238,20 +238,13 @@ class MemoryManager:
 		offset = None
 		refreshed = 0
 
-		scroll_filter = models.Filter(
-			must_not=[models.FieldCondition(key="immune", match=models.MatchValue(value=True))]
-		)
+		scroll_filter = models.Filter(must_not=[models.FieldCondition(key="immune", match=models.MatchValue(value=True))])
 
 		match_count = 0
 		while True:
 			try:
 				response = self.client.scroll(
-					collection_name=collection,
-					scroll_filter=scroll_filter,
-					limit=200,
-					offset=offset,
-					with_payload=False,
-					with_vectors=False
+					collection_name=collection, scroll_filter=scroll_filter, limit=200, offset=offset, with_payload=False, with_vectors=False
 				)
 			except Exception as e:
 				logger.error(f"TTL refresh scroll failed: {_mask_pii_exception(e)}")
@@ -260,11 +253,7 @@ class MemoryManager:
 			point_ids = [hit.id for hit in response[0]]
 			if point_ids:
 				try:
-					self.client.set_payload(
-						collection_name=collection,
-						payload={"last_recalled_at": now},
-						points=point_ids
-					)
+					self.client.set_payload(collection_name=collection, payload={"last_recalled_at": now}, points=point_ids)
 					refreshed += len(point_ids)
 				except Exception as e:
 					logger.error(f"TTL refresh payload set failed: {_mask_pii_exception(e)}")
@@ -280,8 +269,6 @@ class MemoryManager:
 				break
 
 		logger.info(f"Absence Guard: refreshed TTL for {refreshed} engrams in '{collection}'.")
-
-
 
 	def _reinforce_points(self, collection: str, point_ids: List[str], increments: Dict[str, float]) -> List[PointUpdate]:
 		"""Retrieves and updates reinforcement scores with thread-safety."""
@@ -303,12 +290,7 @@ class MemoryManager:
 
 		with self._reinforce_lock:
 			try:
-				points = self.client.retrieve(
-					collection_name=collection,
-					ids=valid_ids,
-					with_payload=True,
-					with_vectors=False
-				)
+				points = self.client.retrieve(collection_name=collection, ids=valid_ids, with_payload=True, with_vectors=False)
 			except Exception as e:
 				logger.error(f"Reinforcement retrieval failed: {_mask_pii_exception(e)}")
 				return []
@@ -325,11 +307,7 @@ class MemoryManager:
 					p.payload["immune"] = True
 
 				try:
-					self.client.set_payload(
-						collection_name=collection,
-						payload=p.payload,
-						points=[p.id]
-					)
+					self.client.set_payload(collection_name=collection, payload=p.payload, points=[p.id])
 				except Exception as e:
 					logger.error(f"Reinforcement payload set failed: {_mask_pii_exception(e)}")
 					continue
@@ -344,18 +322,11 @@ class MemoryManager:
 
 		search_filter = None
 		if not deep_recall:
-			search_filter = models.Filter(
-				must=[models.FieldCondition(key="reinforcement_score", range=models.Range(gte=0.2))]
-			)
+			search_filter = models.Filter(must=[models.FieldCondition(key="reinforcement_score", range=models.Range(gte=0.2))])
 
 		try:
 			results = self.client.query_points(
-				collection_name=collection,
-				query=vector,
-				query_filter=search_filter,
-				limit=limit,
-				with_payload=True,
-				with_vectors=False
+				collection_name=collection, query=vector, query_filter=search_filter, limit=limit, with_payload=True, with_vectors=False
 			).points
 		except Exception as e:
 			logger.error(f"Query failed: {_mask_pii_exception(e)}")
@@ -415,25 +386,15 @@ class MemoryManager:
 		ttl_threshold = time.time() - cfg.METABOLISM_COOLDOWN
 
 		scroll_filter = models.Filter(
-			must=[
-				models.FieldCondition(
-					key="last_recalled_at",
-					range=models.Range(lt=ttl_threshold)
-				)
-			],
-			must_not=[models.FieldCondition(key="immune", match=models.MatchValue(value=True))]
+			must=[models.FieldCondition(key="last_recalled_at", range=models.Range(lt=ttl_threshold))],
+			must_not=[models.FieldCondition(key="immune", match=models.MatchValue(value=True))],
 		)
 
 		iterations = 0
 		while True:
 			try:
 				response = self.client.scroll(
-					collection_name=collection,
-					scroll_filter=scroll_filter,
-					limit=100,
-					offset=offset,
-					with_payload=True,
-					with_vectors=False
+					collection_name=collection, scroll_filter=scroll_filter, limit=100, offset=offset, with_payload=True, with_vectors=False
 				)
 			except Exception as e:
 				logger.error(f"Erosion scroll failed: {_mask_pii_exception(e)}")
@@ -462,28 +423,21 @@ class MemoryManager:
 					update_operations.append(
 						models.SetPayloadOperation(
 							set_payload=models.SetPayload(
-								payload={"reinforcement_score": new_score, "last_recalled_at": time.time()},
-								points=[hit.id]
+								payload={"reinforcement_score": new_score, "last_recalled_at": time.time()}, points=[hit.id]
 							)
 						)
 					)
 
 			if update_operations:
 				try:
-					self.client.batch_update_points(
-						collection_name=collection,
-						update_operations=update_operations
-					)
+					self.client.batch_update_points(collection_name=collection, update_operations=update_operations)
 					eroded_count += len(update_operations)
 				except Exception as e:
 					logger.error(f"Erosion batch update failed: {_mask_pii_exception(e)}")
 
 			if points_to_delete:
 				try:
-					self.client.delete(
-						collection_name=collection,
-						points_selector=models.PointIdsList(points=points_to_delete)
-					)
+					self.client.delete(collection_name=collection, points_selector=models.PointIdsList(points=points_to_delete))
 				except Exception as e:
 					logger.error(f"Erosion deletion failed: {_mask_pii_exception(e)}")
 
@@ -506,7 +460,7 @@ class MemoryManager:
 		2. Schema Migration: Back-fills missing color/emotion/intensity from older versions.
 		"""
 		offset = None
-		seen_content: Dict[str, str] = {} # content -> id
+		seen_content: Dict[str, str] = {}  # content -> id
 		duplicates: List[str] = []
 		migrated_count = 0
 
@@ -514,13 +468,7 @@ class MemoryManager:
 		iterations = 0
 		while True:
 			try:
-				response = self.client.scroll(
-					collection_name=collection,
-					limit=100,
-					offset=offset,
-					with_payload=True,
-					with_vectors=False
-				)
+				response = self.client.scroll(collection_name=collection, limit=100, offset=offset, with_payload=True, with_vectors=False)
 			except Exception as e:
 				logger.error(f"Sanitation scroll failed: {_mask_pii_exception(e)}")
 				break
@@ -552,23 +500,13 @@ class MemoryManager:
 
 				if needs_migration:
 					if not dry_run:
-						update_operations.append(
-							models.SetPayloadOperation(
-								set_payload=models.SetPayload(
-									payload=update_payload,
-									points=[hit.id]
-								)
-							)
-						)
+						update_operations.append(models.SetPayloadOperation(set_payload=models.SetPayload(payload=update_payload, points=[hit.id])))
 					else:
 						migrated_count += 1
 
 			if update_operations and not dry_run:
 				try:
-					self.client.batch_update_points(
-						collection_name=collection,
-						update_operations=update_operations
-					)
+					self.client.batch_update_points(collection_name=collection, update_operations=update_operations)
 					migrated_count += len(update_operations)
 				except Exception as e:
 					logger.error(f"Migration batch update failed: {_mask_pii_exception(e)}")
@@ -583,23 +521,14 @@ class MemoryManager:
 				logger.warning(f"Safety break triggered in sanitation for {collection}")
 				break
 
-
 		# Remove duplicates
 		if duplicates and not dry_run:
 			try:
-				self.client.delete(
-					collection_name=collection,
-					points_selector=models.PointIdsList(points=duplicates)
-				)
+				self.client.delete(collection_name=collection, points_selector=models.PointIdsList(points=duplicates))
 			except Exception as e:
 				logger.error(f"Duplicate deletion failed: {e}")
 
-		return {
-			"collection": collection,
-			"duplicates_found": len(duplicates),
-			"migrated_records": migrated_count,
-			"dry_run": dry_run
-		}
+		return {"collection": collection, "duplicates_found": len(duplicates), "migrated_records": migrated_count, "dry_run": dry_run}
 
 	def get_stats(self, collection: str) -> Dict[str, Any]:
 		"""Returns collection diagnostics."""
@@ -608,7 +537,7 @@ class MemoryManager:
 			return {
 				"status": getattr(info, "status", "unknown"),
 				"points_count": getattr(info, "points_count", 0),
-				"segments_count": getattr(info, "segments_count", 0)
+				"segments_count": getattr(info, "segments_count", 0),
 			}
 		except Exception as e:
 			logger.error(f"Stats failed: {e}")

@@ -15,8 +15,9 @@ def test_mask_pii_exception():
 	assert "TRUNCATED" in masked
 	assert len(masked) <= 170
 
-@patch('os.path.exists', return_value=True)
-@patch('socket.socket')
+
+@patch("os.path.exists", return_value=True)
+@patch("socket.socket")
 def test_get_vector_from_daemon(mock_socket_cls, mock_exists):
 	"""Test successful daemon embedding."""
 	manager = MemoryManager()
@@ -24,15 +25,16 @@ def test_get_vector_from_daemon(mock_socket_cls, mock_exists):
 	mock_socket_cls.return_value.__enter__.return_value = mock_client
 
 	vector_data = [0.1, 0.2, 0.3]
-	response_json = json.dumps({"status": "ok", "vector": vector_data}).encode('utf-8')
+	response_json = json.dumps({"status": "ok", "vector": vector_data}).encode("utf-8")
 	mock_client.recv.return_value = response_json
 
 	vector = manager._get_vector("test")
 	assert vector == vector_data
 	mock_client.sendall.assert_called_once()
 
-@patch('os.path.exists', return_value=True)
-@patch('socket.socket')
+
+@patch("os.path.exists", return_value=True)
+@patch("socket.socket")
 def test_get_vector_from_daemon_exception(mock_socket_cls, mock_exists):
 	mock_client = MagicMock()
 	mock_socket_cls.return_value.__enter__.return_value = mock_client
@@ -42,12 +44,14 @@ def test_get_vector_from_daemon_exception(mock_socket_cls, mock_exists):
 	vector = manager._get_vector_from_daemon("test")
 	assert vector is None
 
-@patch('os.path.exists', return_value=False)
+
+@patch("os.path.exists", return_value=False)
 def test_get_vector_from_daemon_no_socket(mock_exists):
 	manager = MemoryManager()
 	assert manager._get_vector_from_daemon("test") is None
 
-@patch('red_pill.memory.MemoryManager._get_vector_from_daemon', return_value=None)
+
+@patch("red_pill.memory.MemoryManager._get_vector_from_daemon", return_value=None)
 def test_get_vector_local(mock_daemon):
 	"""Test fallback to local encoder."""
 	manager = MemoryManager()
@@ -65,12 +69,15 @@ def test_get_vector_local(mock_daemon):
 	class MockEncoderInst:
 		def embed(self, text_list):
 			class MockVector:
-				def tolist(self): return [0.3]
+				def tolist(self):
+					return [0.3]
+
 			yield MockVector()
 
 	manager.encoder = MockEncoderInst()
 	vector2 = manager._get_vector("again")
 	assert vector2 == [0.3]
+
 
 def test_add_memory_metadata_exception():
 	manager = MemoryManager()
@@ -79,6 +86,7 @@ def test_add_memory_metadata_exception():
 	with pytest.raises(ValueError, match="Invalid metadata"):
 		# Set an invalid object that cannot be JSON serialized
 		manager.add_memory("col", "text", metadata={"bad": object()})
+
 
 def test_add_memory_exception():
 	manager = MemoryManager()
@@ -96,6 +104,7 @@ def test_get_stats_exception_and_success():
 		status = "green"
 		points_count = 10
 		segments_count = 2
+
 	manager.client.get_collection.return_value = MockInfo()
 	stats = manager.get_stats("col")
 	assert stats["status"] == "green"
@@ -106,14 +115,16 @@ def test_get_stats_exception_and_success():
 	stats = manager.get_stats("col")
 	assert stats["status"] == "error"
 
+
 def test_trigger_metabolism_exception():
 	manager = MemoryManager()
 	manager.client = MagicMock()
-	with patch('threading.Thread') as mock_thread:
+	with patch("threading.Thread") as mock_thread:
 		mock_thread.side_effect = Exception("Thread limit reached")
 		manager._trigger_metabolism()
 		# Should just log and not crash
 		assert True
+
 
 def test_apply_erosion_io_errors(monkeypatch):
 	manager = MemoryManager()
@@ -130,6 +141,7 @@ def test_apply_erosion_io_errors(monkeypatch):
 	with patch("os.path.exists", return_value=False):
 		with patch("builtins.open", side_effect=OSError("Read-only FS")):
 			manager._run_metabolism_cycle()
+
 
 def test_reinforce_points_empty_and_payload_exception():
 	manager = MemoryManager()
@@ -149,7 +161,8 @@ def test_reinforce_points_empty_and_payload_exception():
 	manager.client.set_payload.side_effect = Exception("Payload Set Fail")
 
 	points = manager._reinforce_points("col", [1], {1: 0.1})
-	assert len(points) == 0 # Because of continue on exception
+	assert len(points) == 0  # Because of continue on exception
+
 
 def test_reinforce_points_retrieve_exception():
 	manager = MemoryManager()
@@ -158,7 +171,7 @@ def test_reinforce_points_retrieve_exception():
 	assert manager._reinforce_points("col", [1], {1: 0.1}) == []
 
 
-@patch('red_pill.memory.MemoryManager._get_vector', return_value=[0.1])
+@patch("red_pill.memory.MemoryManager._get_vector", return_value=[0.1])
 def test_search_and_reinforce_query_exception(mock_vec):
 	manager = MemoryManager()
 	manager.client = MagicMock()
@@ -166,6 +179,7 @@ def test_search_and_reinforce_query_exception(mock_vec):
 
 	results = manager.search_and_reinforce("col", "query")
 	assert results == []
+
 
 def test_calculate_decay_edge_cases():
 	manager = MemoryManager()
@@ -178,7 +192,8 @@ def test_calculate_decay_edge_cases():
 
 	monkeypatch.setattr(cfg, "DECAY_STRATEGY", "unknown")
 	val = manager._calculate_decay(5.0, 0.1)
-	assert val == 4.9 # Default to linear subtraction if unknown strategy
+	assert val == 4.9  # Default to linear subtraction if unknown strategy
+
 
 def test_apply_erosion_exceptions_and_deletions():
 	manager = MemoryManager()
@@ -195,24 +210,24 @@ def test_apply_erosion_exceptions_and_deletions():
 	# Empty run with no rate (tests None fallback)
 	manager.client.scroll.side_effect = None
 	manager.client.scroll.return_value = ([], None)
-	manager.apply_erosion("col") # No rate (tests None fallback)
+	manager.apply_erosion("col")  # No rate (tests None fallback)
 
 	# Test point update exception and hard deletion due to zero score
 	class MockPoint:
 		def __init__(self, _id, score, immune):
 			self.id = _id
 			self.payload = {"content": "text", "reinforcement_score": score, "immune": immune}
+
 	p1 = MockPoint("1", 1.0, True)
-	p2 = MockPoint("2", 1.0, False) # Will fall <= 0 because rate=1.0 and current=1.0. wait!
-	p3 = MockPoint("3", 2.0, False) # Will hit set_payload exception because new_score=1.0 > 0
+	p2 = MockPoint("2", 1.0, False)  # Will fall <= 0 because rate=1.0 and current=1.0. wait!
+	p3 = MockPoint("3", 2.0, False)  # Will hit set_payload exception because new_score=1.0 > 0
 	manager.client.scroll.return_value = ([p1, p2, p3], None)
 
 	manager.client.batch_update_points.side_effect = Exception("Set Payload Failed")
-	manager.client.delete.side_effect = Exception("Delete Failed") # Covers deletion exception
+	manager.client.delete.side_effect = Exception("Delete Failed")  # Covers deletion exception
 
-	cfg.METABOLISM_COOLDOWN = 3600 # so metabolism skips
+	cfg.METABOLISM_COOLDOWN = 3600  # so metabolism skips
 	manager.apply_erosion("col", 1.0)
-
 
 
 def test_sanitize_exceptions():
@@ -244,7 +259,7 @@ def test_sanitize_exceptions():
 	seen_mock1 = MockPoint()
 	seen_mock2 = MockPoint()
 	seen_mock2.id = "2"
-	seen_mock2.payload = {"content": "text"} # duplicate
+	seen_mock2.payload = {"content": "text"}  # duplicate
 	manager.client.scroll.return_value = ([seen_mock1, seen_mock2], None)
 	manager.client.batch_update_points.side_effect = None
 	manager.client.delete.side_effect = Exception("Delete Failed")

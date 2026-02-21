@@ -3,12 +3,15 @@ import logging
 import os
 import signal
 import sys
+
 import yaml
+
 import red_pill.config as cfg
 from red_pill.memory import MemoryManager
 from red_pill.seed import seed_project
 
 logger = logging.getLogger(__name__)
+
 
 def main() -> None:
 	parser = argparse.ArgumentParser(description="Red Pill Protocol CLI")
@@ -26,7 +29,11 @@ def main() -> None:
 	add_parser.add_argument("type", choices=["work", "social", "directive", "story"])
 	add_parser.add_argument("content")
 	add_parser.add_argument("--color", choices=["orange", "yellow", "purple", "cyan", "blue", "gray"], default=cfg.DEFAULT_COLOR)
-	add_parser.add_argument("--emotion", choices=["joy", "sadness", "fear", "disgust", "anger", "anxiety", "envy", "embarrassment", "ennui", "nostalgia", "neutral"], default=cfg.DEFAULT_EMOTION)
+	add_parser.add_argument(
+		"--emotion",
+		choices=["joy", "sadness", "fear", "disgust", "anger", "anxiety", "envy", "embarrassment", "ennui", "nostalgia", "neutral"],
+		default=cfg.DEFAULT_EMOTION,
+	)
 	add_parser.add_argument("--intensity", type=float, default=1.0)
 
 	search_parser = subparsers.add_parser("search", help="Search and reinforce")
@@ -59,6 +66,7 @@ def main() -> None:
 	if args.command == "daemon":
 		try:
 			from red_pill.memory_daemon import MemoryDaemon
+
 			print("\n--- Despertando Sidecar de Memoria ---")
 			daemon = MemoryDaemon()
 
@@ -77,8 +85,8 @@ def main() -> None:
 	if args.command == "mode":
 		data_path = os.path.join(os.path.dirname(__file__), "data", "lore_skins.yaml")
 		try:
-			with open(data_path, 'r') as f:
-				raw_skins = yaml.safe_load(f).get('modes', {})
+			with open(data_path, "r") as f:
+				raw_skins = yaml.safe_load(f).get("modes", {})
 				skins = {str(k): v for k, v in raw_skins.items()}
 		except Exception as e:
 			logger.error(f"Lore load failed: {e}")
@@ -137,7 +145,7 @@ def main() -> None:
 			print(f"Collection: {results['collection']}")
 			print(f"Duplicates Removed: {results['duplicates_found']}")
 			print(f"Records Migrated: {results['migrated_records']}")
-			if args.dry_run and (results['duplicates_found'] > 0 or results['migrated_records'] > 0):
+			if args.dry_run and (results["duplicates_found"] > 0 or results["migrated_records"] > 0):
 				print("Note: DRY RUN - No changes applied.")
 		elif args.command == "diag":
 			stats = manager.get_stats(collection)
@@ -146,6 +154,7 @@ def main() -> None:
 	except Exception as e:
 		logger.error(f"Protocol Failure: {e}")
 		sys.exit(1)
+
 
 if __name__ == "__main__":
 	main()

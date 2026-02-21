@@ -13,6 +13,7 @@ EXTENSIONS = [".py", ".sh", ".md"]
 # Specifically check root README and QUICKSTART
 ROOT_FILES = ["README.md", "QUICKSTART.md"]
 
+
 def test_sound_of_silence_compliance():
 	"""Ensures the codebase adheres to the Sound of Silence protocol."""
 	violations = []
