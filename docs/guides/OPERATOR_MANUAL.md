@@ -105,7 +105,7 @@ Protect your Bunker from mass-deletion after long periods of inactivity (vacatio
 
 
 ## 🛡️ Certification & Auditing (The High Council)
-To ensure the bunker remains production-ready and technically sound, we follow the [Certification Protocol](file:///home/joan/Documents/IA/sharing/docs/technical/CERTIFICATION_PROTOCOL.md):
+To ensure the bunker remains production-ready and technically sound, we follow the [Certification Protocol](docs/technical/CERTIFICATION_PROTOCOL.md):
 1.  **Prepare**: Run `bash scripts/prepare_certification.sh`.
 2.  **Audit**: Copy the prompt from the protocol doc and submit the generated `RED_PILL_DIGEST.txt` to Claude, Gemini, DeepSeek, or Lumo.
 3.  **Sign**: Reports are stored in `docs/certification/` to maintain an immutable record of quality.

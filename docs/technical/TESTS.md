@@ -26,7 +26,7 @@ uv run pytest --cov=src/red_pill tests/
 # Execute the stress test (Warning: High Load)
 uv run python3 tests/stress_test_smith.py
 ```
-*Audit Report available in [SMITH_AUDIT.md](file:///home/joan/Documents/IA/sharing/docs/technical/SMITH_AUDIT.md)*
+*Audit Report available in [SMITH_AUDIT.md](docs/technical/SMITH_AUDIT.md)*
 
 ## 3. Installation Verification (The Keymaker)
 **Objective**: Verify that a clean installation works for a new user.

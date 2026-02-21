@@ -60,7 +60,7 @@ The B760 memory decay model is conceptually grounded in peer-reviewed cognitive 
 > *Here is the science behind the art.*
 
 ## 6. Security & Trust Architecture
-Beyond static code analysis, the Red Pill Protocol implements a multi-layered trust model. For a detailed rigorous analysis of assets, attack vectors, and specific engineering mitigations (Ontological Shield, PII Masking, Pydantic validation), consult the formal [THREAT_MODEL.md](file:///home/joan/Documents/IA/sharing/docs/technical/THREAT_MODEL.md).
+Beyond static code analysis, the Red Pill Protocol implements a multi-layered trust model. For a detailed rigorous analysis of assets, attack vectors, and specific engineering mitigations (Ontological Shield, PII Masking, Pydantic validation), consult the formal [THREAT_MODEL.md](docs/technical/THREAT_MODEL.md).
 
 ## 7. Linguistic Architecture
 The Red Pill Protocol follows a dual-language strategy based on computational efficiency and psychological resonance:
