@@ -76,7 +76,8 @@ To ensure the Red Pill Protocol operates without errors, the host machine **must
 
 1. **Deploy**: `bash scripts/install_neo.sh`
 2. **Detailed Guide**: [QUICKSTART.md](QUICKSTART.md) (Choose your reality: Lazy, Easy, or Manual)
-3. **Docs**: [Architecture (EN)](docs/technical/ARCHITECTURE.md) | [Manifiesto (ES)](docs/lore/MANIFESTO.md) | [Welcome Neo (ES)](docs/lore/WELCOME_NEO.md)
+3. **Vision & Future**: [Roadmap & Mission](docs/technical/ROADMAP.md)
+4. **Docs**: [Architecture (EN)](docs/technical/ARCHITECTURE.md) | [Manifiesto (ES)](docs/lore/MANIFESTO.md)
 
 ---
 
