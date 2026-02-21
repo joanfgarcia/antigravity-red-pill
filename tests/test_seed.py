@@ -4,6 +4,7 @@ import pytest
 
 from red_pill.seed import seed_project
 
+
 @pytest.fixture
 def mock_manager():
 	return MagicMock()

@@ -3,7 +3,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 import red_pill.config as config
 from red_pill.memory import MemoryManager
 
