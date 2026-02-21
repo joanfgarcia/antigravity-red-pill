@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lazarus Deck v6.0 | Sovereign Swarm Simulation</title>
+    <style>
+        :root {
+            --bg-color: #050505;
+            --matrix-green: #00ff41;
+            --synapse-magenta: #ff00ff;
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-color);
+            color: #fff;
+            font-family: var(--font-mono);
+            overflow: hidden;
+        }
+
+        #deck-container {
+            display: grid;
+            grid-template-columns: 250px 1fr 300px;
+            grid-template-rows: 60px 1fr 200px;
+            gap: 10px;
+            padding: 10px;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+
+        .panel {
+            background: var(--glass-bg);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Header */
+        header {
+            grid-column: 1 / -1;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            background: linear-gradient(90deg, rgba(0, 255, 65, 0.1), rgba(255, 0, 255, 0.1));
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            letter-spacing: 2px;
+        }
+
+        .logo span { color: var(--matrix-green); }
+        .logo i { font-style: normal; color: var(--synapse-magenta); }
+
+        /* Matrix Sidebar */
+        #matrix-sidebar {
+            grid-row: 2 / -1;
+            background: rgba(0, 0, 0, 0.8);
+        }
+
+        #matrix-canvas {
+            display: block;
+        }
+
+        /* Synaptic Map (Center) */
+        #synaptic-map {
+            grid-row: 2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .node {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: 2px solid var(--synapse-magenta);
+            position: absolute;
+            background: rgba(255, 0, 255, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 20px rgba(255, 0, 255, 0.4);
+            transition: transform 0.3s;
+        }
+
+        .node:hover { transform: scale(1.1); }
+
+        .pulse {
+            position: absolute;
+            border: 1px solid var(--synapse-magenta);
+            border-radius: 50%;
+            animation: pulse-anim 2s infinite;
+        }
+
+        @keyframes pulse-anim {
+            0% { width: 0; height: 0; opacity: 1; }
+            100% { width: 300px; height: 300px; opacity: 0; }
+        }
+
+        /* Logs (Bottom) */
+        #minion-logs {
+            grid-column: 2;
+            padding: 10px;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        .log-entry { margin-bottom: 4px; border-left: 2px solid var(--matrix-green); padding-left: 8px; }
+        .log-entry.collab { border-color: var(--synapse-magenta); }
+
+        /* Metrics (Right) */
+        #metrics-panel {
+            grid-row: 2 / -1;
+            padding: 20px;
+        }
+
+        .metric-item {
+            margin-bottom: 20px;
+        }
+
+        .metric-bar {
+            height: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            margin-top: 5px;
+            position: relative;
+        }
+
+        .metric-fill {
+            height: 100%;
+            background: var(--matrix-green);
+            transition: width 0.5s;
+        }
+
+        .metric-fill.high { background: #ff4136; }
+
+    </style>
+</head>
+<body>
+
+<div id="deck-container">
+    <header class="panel">
+        <div class="logo"><span>LAZARUS</span> <i>DECK</i> v6.0</div>
+        <div id="status-badge">[ SOVEREIGN AUTONOMY ACTIVE ]</div>
+    </header>
+
+    <div id="matrix-sidebar" class="panel">
+        <canvas id="matrix-canvas"></canvas>
+    </div>
+
+    <div id="synaptic-map" class="panel">
+        <div class="node" style="top: 20%;">ORACLE</div>
+        <div class="node" style="bottom: 20%; left: 30%;">SMITH</div>
+        <div class="node" style="bottom: 20%; right: 30%;">KEYMAKER</div>
+        <div class="pulse"></div>
+    </div>
+
+    <div id="metrics-panel" class="panel">
+        <div class="metric-item">
+            <div>CPU LOAD <span id="cpu-val">89.4%</span></div>
+            <div class="metric-bar"><div id="cpu-fill" class="metric-fill high" style="width: 89%;"></div></div>
+        </div>
+        <div class="metric-item">
+            <div>SWARM NODES <span id="nodes-val">12</span></div>
+            <div class="metric-bar"><div class="metric-fill" style="width: 60%;"></div></div>
+        </div>
+        <div class="metric-item">
+            <div>SYNERGY DELTA <span id="delta-val">52.3x</span></div>
+            <div class="metric-bar"><div class="metric-fill" style="width: 95%; background: var(--synapse-magenta);"></div></div>
+        </div>
+    </div>
+
+    <div id="minion-logs" class="panel">
+        <div id="log-container"></div>
+    </div>
+</div>
+
+<script>
+    // Matrix Rain
+    const canvas = document.getElementById('matrix-canvas');
+    const ctx = canvas.getContext('2d');
+    const sidebar = document.getElementById('matrix-sidebar');
+
+    canvas.width = 250;
+    canvas.height = window.innerHeight;
+
+    const characters = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ$+-*/=%\"'#&_(),.;:?!\\|{}<>[]^~";
+    const fontSize = 16;
+    const columns = canvas.width / fontSize;
+    const drops = [];
+
+    for (let x = 0; x < columns; x++) drops[x] = 1;
+
+    function drawMatrix() {
+        ctx.fillStyle = "rgba(0, 0, 0, 0.05)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = "#00ff41";
+        ctx.font = fontSize + "px monospace";
+
+        for (let i = 0; i < drops.length; i++) {
+            const text = characters.charAt(Math.floor(Math.random() * characters.length));
+            ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+            if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) drops[i] = 0;
+            drops[i]++;
+        }
+    }
+
+    setInterval(drawMatrix, 50);
+
+    // Logs Simulation
+    const logContainer = document.getElementById('log-container');
+    const logs = [
+        "[SYSTEM] Swarm initialization verified.",
+        "[ORACLE] Deep recall triggered for 'B760_CORE'.",
+        "[COLLAB] Oracle -> Smith: Audit request sent via Bus.",
+        "[SMITH] Security verification complete: 0 vulnerabilities.",
+        "[KEYMAKER] Qdrant connectivity: 12ms [OPTIMAL]",
+        "[SYSTEM] Matrix Rain synaptic sync established.",
+        "[MINION] Task delegated: Discovery Mode active."
+    ];
+
+    function addLog() {
+        const entry = document.createElement('div');
+        entry.className = 'log-entry';
+        const msg = logs[Math.floor(Math.random() * logs.length)];
+        if (msg.includes('COLLAB')) entry.classList.add('collab');
+        entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        logContainer.prepend(entry);
+        if (logContainer.children.length > 10) logContainer.lastChild.remove();
+    }
+
+    setInterval(addLog, 2000);
+
+    // Dynamic Metrics
+    setInterval(() => {
+        const cpu = (85 + Math.random() * 10).toFixed(1);
+        document.getElementById('cpu-val').textContent = cpu + '%';
+        document.getElementById('cpu-fill').style.width = cpu + '%';
+    }, 1000);
+
+</script>
+</body>
+</html>
