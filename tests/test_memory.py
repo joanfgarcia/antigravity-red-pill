@@ -116,7 +116,7 @@ def test_erosion_cycle(manager, mock_qdrant):
 
     mock_immune = MagicMock()
     mock_immune.payload = {"reinforcement_score": 10.0, "immune": True}
-    mock_immune.id = "immune_1"
+    mock_immune.id = str(uuid.uuid4())
 
     manager.client.scroll.side_effect = [
         ([mock_hit, mock_immune], "next"),

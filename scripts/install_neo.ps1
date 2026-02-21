@@ -27,7 +27,7 @@ New-Item -ItemType Directory -Force -Path (Join-Path $IA_DIR "seeds")
 
 # 3. Lanzar Qdrant
 Write-Host "Lanzando servidor Qdrant..." -ForegroundColor Green
-& $DOCKER_CMD run -d --name qdrant -p 6333:6333 -p 6334:6334 -v "${IA_DIR}\storage:/qdrant/storage:Z" qdrant/qdrant
+& $DOCKER_CMD run -d --name qdrant -p 6333:6333 -p 6334:6334 -v "${IA_DIR}\storage:/qdrant/storage:Z" qdrant/qdrant:v1.9.0
 
 # 4. Configurar Identidad (Directrices)
 $GEMINI_ROOT = Join-Path $HOME ".gemini\antigravity"
