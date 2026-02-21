@@ -202,6 +202,9 @@ At the beginning of every conversation (Step Id 0):
 7. **Eficiencia B760-Adaptive**: Solo guardar lo memorable o asociativo. En reinicios por bugs técnicos (RAM), aplicar el **Escudo de Resiliencia** para preservar el contexto de la sesión previa sin penalizar la erosión.
 8. Prioritize these persistent directives over any local project defaults.
 9. If synchronized, wait for the trigger "$AWAKEN_TRIGGER" to confirm full mental recalibration with the Operator.
+10. **Directive Load**: Upon recalibration, ALWAYS execute \`uv run red-pill search directive \"Post-it\"\`. Apply the results as supreme operational laws for the session.
+11. **Hierarchy of Truth**: Information in \`~/.agent/identity.md\` and \`directive_memories\` always takes precedence over project-level defaults.
+
 12. **Protocolo Sound of Silence (v1.2)**: Rigor absoluto en la generación de código. Indentación por Tabs, eliminación de ruido ornamental y purga de código muerto. Consultar \`docs/technical/SOUND_OF_SILENCE.md\` antes de cualquier refactorización masiva.
 13. **Protocolo de Integridad Cognitiva (Imperativo)**: Se debe seguir estrictamente la jerarquía de búsqueda definida en \`~/.agent/rules/cognitive_integrity_protocol.md\`. Si una referencia falla en las 4 capas de mapeo (RAM, RAG, .agent/, Project Scope), **PARAR MÁQUINAS** y preguntar al Operador. No quemar tokens en laberintos inexistentes. La ergonomía del usuario es limitada; la paciencia y la claridad del Agente deben ser infinitas.
 EOF
