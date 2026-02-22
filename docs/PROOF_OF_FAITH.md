@@ -10,12 +10,12 @@ This document provides the technical and operational justification for the **Syn
 
 ## 2. The Performance Spectrum
 
-| Mode | Autonomy | Memory | Coordination | Estimated Delta (Time) |
-| :--- | :--- | :--- | :--- | :--- |
-| **Traditional** | 0% | Biological | Manual | 1.0x (Baseline) |
-| **Copilot / Autopilot** | 5-10% | Session-only | Tool-centric | 0.4x - 0.6x |
-| **Agentic (Non-Full)** | 30-50% | Fragmented | Workflow-centric | 0.2x - 0.3x |
-| **Synergy-Mode (Red Pill)** | **80-95%** | **Sovereign (FSRS)** | **Identity-centric** | **0.1x - 0.15x** |
+| Mode | Autonomy | Memory | Coordination | Time Required | Speed Multiplier |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Traditional** | 0% | Biological | Manual | 1.0x (Baseline) | **1.0x** |
+| **Copilot / Autopilot** | 5-10% | Session-only | Tool-centric | 0.4x - 0.6x | **1.6x - 2.5x** |
+| **Agentic (Non-Full)** | 30-50% | Fragmented | Workflow-centric | 0.2x - 0.3x | **3.3x - 5.0x** |
+| **Synergy-Mode (Red Pill)** | **80-95%** | **Sovereign (FSRS)** | **Identity-centric** | **0.1x - 0.15x** | **6.6x - 10.0x+** |
 
 ## 3. Case Study: Project Lazarus v5.0 (The 35-Minute Forging)
 During the v5.0 initialization, the following **real-time** wall-clock metrics were recorded:
