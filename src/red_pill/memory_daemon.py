@@ -73,7 +73,7 @@ class MemoryDaemon:
 						# SEC-002: Shared Secret Auth (Hardened)
 						api_key = str(cfg.QDRANT_API_KEY or "").strip()
 						provided_key = str(request.get("api_key") or "").strip()
-						
+
 						if not api_key or not provided_key or not hmac.compare_digest(provided_key, api_key):
 							response = {"status": "error", "message": "Unauthorized (B760 Handshake failed)"}
 						else:

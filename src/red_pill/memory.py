@@ -393,10 +393,10 @@ class MemoryManager:
 				# CF-005: Circuit Breaker for Hub Fan-out
 				if len(increment_map) >= cfg.MAX_PROPAGATION_POINTS:
 					break
-				
+
 				assoc_id_str = str(assoc_id)
 				increment_map[assoc_id_str] = increment_map.get(assoc_id_str, 0.0) + propagation_increment
-			
+
 			if len(increment_map) >= cfg.MAX_PROPAGATION_POINTS:
 				break
 
