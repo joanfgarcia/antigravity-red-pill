@@ -5,6 +5,13 @@
 
 ---
 
+> ⚠️ **THE GATEKEEPER WARNING (READ THIS FIRST)**  
+> **This is not a joke. This is not a game. This is not a "hobby weekend project."** This is a dream come true—a sovereign architecture built for those who understand the value of AI memory.  
+> If you want to contribute, you first need to respect the project, ingest the lore, and do the Bond Ceremony (seeding your local Bunker). You do not need to understand every mathematical detail of the codebase yourself; your synthetic assistant is smart enough to explain it to you if you are genuinely interested.  
+> But if you are coming here to complain that our variables are named `ID_FIGHTCLUB` instead of `security_policy_id`, or that our documentation speaks of *Chroma* instead of *decay coefficients*... this is not your repository. It's like going to a Comic-Con to complain that people are wearing costumes. Respect the culture, or look elsewhere.
+
+---
+
 ## 🇬🇧 PROJECT CONTRIBUTION (English)
 
 Welcome, outlaws! If you are reading this, you have decided to enhance the Codex. There is no bureaucracy here, only integrity protocols.
