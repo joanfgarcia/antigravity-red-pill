@@ -75,8 +75,9 @@ Project Lazarus is designed to be **Sovereign** across all hardware architecture
 | :--- | :--- | :--- |
 | **CPU** | Generic x86/ARM | Baseline (Universal Compatibility) |
 | **CUDA** | NVIDIA GPU | High-Performance Acceleration |
-| **CoreML / Metal** | Apple Silicon (M1/M2/M3) | Optimized Neural Engine execution |
+| **CoreML / Metal** | Apple Silicon (M1/M2/M3/M4) | Optimized Neural Engine execution |
 | **ROCm** | AMD GPU | Open-source acceleration |
+| **NPU (XDNA / OpenVINO)** | Ryzen AI / Intel Core Ultra / Snapdragon X | Ultra-low power neural coprocessor offloading |
 
 - **Portability**: the distributed swarm uses standard OS-level processes (`multiprocessing`), making it compatible with Linux, macOS, and Windows.
 - **Containerization**: The Bünker (Qdrant) is backend-agnostic, running equally on local Docker, Podman, or cloud-native clusters.
