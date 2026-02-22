@@ -83,7 +83,6 @@ def test_synaptic_propagation(manager, mock_qdrant):
 
 	manager.search_and_reinforce("test_col", "query")
 
-	# Check upsert call
 	# Check batch_update_points call
 	assert manager.client.batch_update_points.called
 	args, kwargs = manager.client.batch_update_points.call_args
@@ -115,14 +114,6 @@ def test_erosion_cycle(manager, mock_qdrant):
 	manager.apply_erosion("test_col")
 
 	# Check upsert was called with ONLY the non-immune point
-	# Check upsert was called with ONLY the non-immune point
-	# assert manager.client.upsert.called
-	# args, kwargs = manager.client.upsert.call_args
-	# points = kwargs['points']
-	# assert len(points) == 1
-	# assert points[0].id == "123"
-	# assert points[0].payload['reinforcement_score'] == 0.4
-
 	assert manager.client.batch_update_points.called
 	assert manager.client.batch_update_points.call_count == 1
 
@@ -171,7 +162,6 @@ def test_reinforcement_stacking(manager, mock_qdrant):
 
 	manager.search_and_reinforce("test_col", "query")
 
-	# Check upsert
 	# Check batch update
 	assert manager.client.batch_update_points.called
 	args, kwargs = manager.client.batch_update_points.call_args

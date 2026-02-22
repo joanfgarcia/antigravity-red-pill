@@ -42,6 +42,7 @@ class MemoryManager:
 		self.client = QdrantClient(url=url, api_key=cfg.QDRANT_API_KEY)
 		self.encoder: Optional[TextEmbedding] = None
 		self._reinforce_lock = threading.Lock()
+		self._metabolism_thread: Optional[threading.Thread] = None
 		self._initialize_encoder()
 
 	def _initialize_encoder(self) -> None:
@@ -197,12 +198,15 @@ class MemoryManager:
 			return ""
 
 	def _trigger_metabolism(self) -> None:
-		"""Background process to check and execute erosion."""
+		"""Persistent background process to check and execute erosion."""
+		if self._metabolism_thread is not None and self._metabolism_thread.is_alive():
+			return
+
 		try:
-			thread = threading.Thread(target=self._run_metabolism_cycle, daemon=True)
-			thread.start()
+			self._metabolism_thread = threading.Thread(target=self._run_metabolism_cycle, daemon=True)
+			self._metabolism_thread.start()
 		except Exception as e:
-			logger.error(f"Metabolism thread failed: {e}")
+			logger.error(f"Metabolism thread launch failed: {e}")
 
 	def _run_metabolism_cycle(self) -> None:
 		"""Internal metabolism loop with cooldown check."""
@@ -241,9 +245,9 @@ class MemoryManager:
 								try:
 									self._refresh_ttl_timestamps(coll.strip())
 								except Exception as e:
-									logger.error(f"TTL refresh failed for {coll}: {e}")
-					except ValueError:
-						pass
+									logger.error(f"TTL refresh failed during absence recovery for {coll}: {e}")
+					except (ValueError, TypeError) as e:
+						logger.debug(f"Invalid metabolism state: {e}")
 
 				f.seek(0)
 				f.truncate()

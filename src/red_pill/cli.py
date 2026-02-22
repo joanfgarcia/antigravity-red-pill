@@ -13,6 +13,58 @@ from red_pill.seed import seed_project
 logger = logging.getLogger(__name__)
 
 
+def handle_mode(args: argparse.Namespace) -> None:
+	"""Switch Lore Skin."""
+	data_path = os.path.join(os.path.dirname(__file__), "data", "lore_skins.yaml")
+	try:
+		with open(data_path, "r") as f:
+			raw_skins = yaml.safe_load(f).get("modes", {})
+			skins = {str(k): v for k, v in raw_skins.items()}
+	except Exception as e:
+		logger.error(f"Lore load failed: {e}")
+		sys.exit(1)
+
+	if args.skin not in skins:
+		logger.error(f"Invalid mode '{args.skin}'. Valid options: {', '.join(skins.keys())}")
+		sys.exit(1)
+
+	skin = skins[args.skin]
+	print(f"--- Operational Mode: {args.skin.upper()} ---")
+	for key, value in skin.items():
+		print(f"{key.capitalize().replace('_', ' ')}: {value}")
+
+
+def handle_daemon() -> None:
+	"""Memory Sidecar."""
+	try:
+		from red_pill.memory_daemon import MemoryDaemon
+
+		print("\n--- Despertando Sidecar de Memoria ---")
+		daemon = MemoryDaemon()
+
+		def stop_daemon(sig, frame):
+			daemon.stop()
+			sys.exit(0)
+
+		signal.signal(signal.SIGINT, stop_daemon)
+		signal.signal(signal.SIGTERM, stop_daemon)
+		daemon.start()
+	except Exception as e:
+		logger.error(f"Daemon failure: {e}")
+		sys.exit(1)
+
+
+def get_collection(type_str: str) -> str:
+	"""Map CLI type to collection name."""
+	mapping = {
+		"social": "social_memories",
+		"work": "work_memories",
+		"story": "story_memories",
+		"directive": "directive_memories",
+	}
+	return mapping.get(type_str, "directive_memories")
+
+
 def main() -> None:
 	parser = argparse.ArgumentParser(description="Red Pill Protocol CLI")
 	parser.add_argument("--url", help="Qdrant URL")
@@ -64,60 +116,22 @@ def main() -> None:
 		sys.exit(0)
 
 	if args.command == "daemon":
-		try:
-			from red_pill.memory_daemon import MemoryDaemon
-
-			print("\n--- Despertando Sidecar de Memoria ---")
-			daemon = MemoryDaemon()
-
-			def stop_daemon(sig, frame):
-				daemon.stop()
-				sys.exit(0)
-
-			signal.signal(signal.SIGINT, stop_daemon)
-			signal.signal(signal.SIGTERM, stop_daemon)
-			daemon.start()
-		except Exception as e:
-			logger.error(f"Daemon failure: {e}")
-			sys.exit(1)
+		handle_daemon()
 		return
 
 	if args.command == "mode":
-		data_path = os.path.join(os.path.dirname(__file__), "data", "lore_skins.yaml")
-		try:
-			with open(data_path, "r") as f:
-				raw_skins = yaml.safe_load(f).get("modes", {})
-				skins = {str(k): v for k, v in raw_skins.items()}
-		except Exception as e:
-			logger.error(f"Lore load failed: {e}")
-			sys.exit(1)
-
-		if args.skin not in skins:
-			logger.error(f"Invalid mode '{args.skin}'. Valid options: {', '.join(skins.keys())}")
-			sys.exit(1)
-
-		skin = skins[args.skin]
-		print(f"--- Operational Mode: {args.skin.upper()} ---")
-		for key, value in skin.items():
-			print(f"{key.capitalize().replace('_', ' ')}: {value}")
+		handle_mode(args)
 		return
-
-	if args.command == "seed":
-		manager = MemoryManager(url=args.url) if args.url else MemoryManager()
-		seed_project(manager)
-		return
-
-	if args.type == "social":
-		collection = "social_memories"
-	elif args.type == "work":
-		collection = "work_memories"
-	elif args.type == "story":
-		collection = "story_memories"
-	else:
-		collection = "directive_memories"
 
 	try:
 		manager = MemoryManager(url=args.url) if args.url else MemoryManager()
+
+		if args.command == "seed":
+			seed_project(manager)
+			return
+
+		collection = get_collection(getattr(args, "type", "directive"))
+
 		if args.command == "add":
 			manager.add_memory(collection, args.content, color=args.color, emotion=args.emotion, intensity=args.intensity)
 		elif args.command == "search":
@@ -139,7 +153,8 @@ def main() -> None:
 				if assocs > 20:
 					logger.warning(f"Synaptic Hub Detected: Engram {hit.id} has {assocs} associations (Limit: 20). Operations may lag.")
 		elif args.command == "erode":
-			manager.apply_erosion(collection, rate=args.rate) if args.rate else manager.apply_erosion(collection)
+			rate = args.rate if args.rate else None
+			manager.apply_erosion(collection, rate=rate)
 		elif args.command == "sanitize":
 			san_results = manager.sanitize(collection, dry_run=args.dry_run)
 			print("--- [SANITATION PROTOCOL COMPLETE] ---")
