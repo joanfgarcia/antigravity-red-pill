@@ -78,8 +78,8 @@ def test_markdown_links_compliance():
 		# Simple regex to catch [text](link). We skip:
 		# http, mailto, file, absolute paths starting with /, and home dir paths starting with ~
 		# Group 1 captures the link path, ignoring any #anchor at the end
-		links = re.findall(r'\[.+?\]\((?!http|mailto|file|/|~)([^)#\s]+)(?:#[^\)]*)?\)', content)
-		
+		links = re.findall(r"\[.+?\]\((?!http|mailto|file|/|~)([^)#\s]+)(?:#[^\)]*)?\)", content)
+
 		for link in links:
 			target_path = (file_path.parent / link).resolve()
 			if not target_path.exists():
