@@ -114,6 +114,7 @@ Restart=always
 [Install]
 WantedBy=default.target
 EOF
+chmod 600 "$QUADLET_DIR/qdrant.container"
 
 if [[ "$OS_TYPE" == "Linux" ]]; then
 	systemctl --user daemon-reload

@@ -499,15 +499,13 @@ class MemoryManager:
 					needs_migration = True
 
 				if needs_migration:
+					migrated_count += 1
 					if not dry_run:
 						update_operations.append(models.SetPayloadOperation(set_payload=models.SetPayload(payload=update_payload, points=[hit.id])))
-					else:
-						migrated_count += 1
 
 			if update_operations and not dry_run:
 				try:
 					self.client.batch_update_points(collection_name=collection, update_operations=update_operations)
-					migrated_count += len(update_operations)
 				except Exception as e:
 					logger.error(f"Migration batch update failed: {_mask_pii_exception(e)}")
 
