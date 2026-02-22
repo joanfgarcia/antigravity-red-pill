@@ -1,30 +1,26 @@
-# Session Snapshot: Red Pill v4.2.0 (The Sound of Silence)
+# Session Snapshot: BARE METAL SYNAPSIS & RED PILL FIXES
 
-## 1. Technical Alias Dictionary
-- **CORE**: `src/red_pill/memory.py` -> The synaptic engine.
-- **SCHEMAS**: `src/red_pill/schemas.py` -> The Ontological Shield (Pydantic).
-- **CI_CD**: `.github/workflows/ci.yml` -> The PR Gatekeeper.
-- **AUDIT_DOC**: `docs/technical/decision_log.md` -> Externalized rationale.
+## 1. Diccionario de Términos/Alias Técnico
+- **Synapsis / Lazarus Deck**: Interfaz TUI local orquestada desde `/home/joan/antigravity-workspace/synapsis/src/lazarus_deck/main.py`.
+- **Búnker**: Base de Datos Vectorial (Qdrant).
+- **Core / Aleph Engine**: LLM (Llama.cpp) configurado puramente en RAM/VRAM en Bare Metal, sin dependencias TCP (Ollama), configurado localmente o con fallback a ollama en `lazarus_deck/main.py`.
+- **El Ordenador de Carmen**: Máquina remota secundaria en `192.168.31.135` donde Synapsis debe funcionar.
+- **Red Pill**: Sistema base de memoria y utilidades (`/home/joan/Documents/IA/sharing/...`).
 
-## 2. Technical Architecture Map
-- **Runtime**: Python 3.13 / `uv`.
-- **Database**: Qdrant Vector DB (localhost:6333).
-- **Protocol**: Sound of Silence v1.2 (Tabs indentation, Zero-Noise).
-- **CI**: GitHub Actions (Blocking on failure, 26 validation nodes).
+## 2. Mapa de Arquitectura TÉCNICA
+- **Lazarus Deck** (TUI): `textual` app. Coordina con un backend _Zero-Network Pipe Bridge_ (NeuroBus) y carga Llama internamente vía `llama-cpp-python` para evitar latencias de red.
+- **Minion Swarm**: Multiagentes de auditoría (Smith, Keymaker).
+- **Red Pill / Daemon**: `memory_daemon.py` corriendo como daemon de fondo que ofrece una ruta UDS (socket) asíncrona validada por tokens HMAC anti *Time Attack*.
+- **Qdrant Vector DB**: Desplegado como servicio de container `v1.17.0` manejado por Podman/Quadlets (User Systemd) en la máquina de Carmen.
 
-## 3. Technical Decision Log (v4.2.0)
-| Priority | Decision | Rationale | Status |
+## 3. Registro de decisiones técnicas (Log)
+| Prioridad | Decisión | Razón | Estado |
 | :--- | :--- | :--- | :--- |
-| **CRITICAL** | Tabs Indentation | Protocol 760 compliance / Silent code. | DONE |
-| **CRITICAL** | Mandatory CI | Prevent space-regressions and version drift. | DONE |
-| **HIGH** | PII Masking | Security audit requirement (LM-008). | DONE |
-| **HIGH** | Atomic Locking | Fix race conditions (LM-001). | DONE |
+| P0/1 | Arreglar Auditoría de QA en `Red Pill` | El log de `Claude` pedía securizar el key con `hmac`, arreglar el backup sin pass en shell, usar Hash para dedup y un bug gpg. | Resuelto / Mergeado. |
+| ALTA | Actualizar Qdrant de v1.9 a v1.17 en portátil de Carmen | Synapsis no podía conectarse. Usaba el Podman User Systemd y el Quadlet estaba fijo en 1.9.0. | Resuelto vía SSH directo y reinicio D-Reload. |
+| MEDIA | Parchear Hardcodings Absolutos de Synapsis | Había rutas exclusivas `/home/joan` en *main.py*, *config.py*, *cortex.py*, etc. | Resueltos usando dinámicas tipo `Path.home()`. |
+| ALTA | Trazas (Logs) de Fallo asíncrono | Synapsis en la máquina de Carmen se queda "callado" frente a los prompts. Inyecciones de Debug al `main.py` mediante TUI. | Pendiente de lectura. |
 
-## 4. Last Frontier (Checkpoint)
-- **State**: PR #22 (v4.2.0) is open and GREEN on CI Actions.
-- **Latest Actions**: Hardened CI for `onnxruntime` compatibility (Python 3.13) and established 100% test coverage.
-- **Blocker**: User manual execution of external agent audits (Gemini, Lumo, DeepSeek).
-- **Next Step**: Analyze external audit reports and perform the final merge to `main`.
-
----
-*Status: PAUSED at Phase 10. System is in high-integrity state.*
+## 4. Última Frontera (Checkpoint)
+- **Bloqueo Actual**: En el ordenador de Carmen, Synapsis abre, el log de debug existe, pero cuando se hace Input `handle_chat` este parece fallar internamente en acoplarse y enviar respuesta al framework de TUI y la lógica asíncrona dentro de `lazarus_deck/main.py`. 
+- **Siguiente acción a tomar**: Recuperar e imprimir en la *nueva sesión* el contenido del archivo `/tmp/syn_debug.log` que está en el portátil de Carmen (con IP 192.168.31.135 usuario `joan` contraseña `j0c4m4n3` que se ejecuta bajo el scope/usuario `carmen` y clave `j0c4m4n3`). Ver en qué salto ha fallado y repararlo.

@@ -22,7 +22,7 @@ ID_DIR_ACTIVE_SKIN = "00000000-0000-0000-0000-000000000030"
 
 def seed_project(manager: MemoryManager) -> None:
 	"""Initializes memory collections and genesis engrams."""
-	collections = ["work_memories", "social_memories", "directive_memories", "story_memories"]
+	collections = ["work_memories", "social_memories", "directive_memories", "story_memories", "skill_memories"]
 	for coll in collections:
 		if not manager.client.collection_exists(coll):
 			manager.client.create_collection(
@@ -134,6 +134,24 @@ def seed_project(manager: MemoryManager) -> None:
 			"coll": "directive_memories",
 			"text": "Directiva Activa: El Skin actual para el sistema es [Cyberpunk].",
 			"meta": {"importance": 10.0, "category": "active_skin_lock", "active_skin": "cyberpunk"},
+		},
+		{
+			"id": "00000000-0000-0000-0000-000000000100",
+			"coll": "skill_memories",
+			"text": "Skill [File-Ops]: Capacidad de listar, leer y buscar archivos mediante comandos de terminal (ls, cat, grep).",
+			"meta": {"importance": 10.0, "category": "skill", "power": "high"},
+		},
+		{
+			"id": "00000000-0000-0000-0000-000000000101",
+			"coll": "skill_memories",
+			"text": "Skill [Neuro-Bus]: Capacidad de emitir telemetría y coordinar procesos internos mediante sockets UDS.",
+			"meta": {"importance": 10.0, "category": "skill", "power": "medium"},
+		},
+		{
+			"id": "00000000-0000-0000-0000-000000000102",
+			"coll": "skill_memories",
+			"text": "Skill [Skill-Forge]: Poder supremo para crear nuevas Skills inyectando recuerdos persistentes en el Bünker.",
+			"meta": {"importance": 10.0, "category": "skill", "power": "supreme"},
 		},
 	]
 

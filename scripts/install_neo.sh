@@ -227,6 +227,8 @@ fi
 
 USER_RULES_DIR="${1:-$HOME/.agent}"
 mkdir -p "$USER_RULES_DIR/rules"
+# CF-003: Protect rules from local manipulation
+chmod 700 "$USER_RULES_DIR" "$USER_RULES_DIR/rules"
 
 GLOBAL_RULE_FILE="$USER_RULES_DIR/rules/identity_sync.md"
 cat <<EOF > "$GLOBAL_RULE_FILE"

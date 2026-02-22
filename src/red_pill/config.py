@@ -47,6 +47,9 @@ if not (0 <= PROPAGATION_FACTOR <= 1.0):
 # At production EROSION_RATE=0.01: score=9.0 → 600 hours ≈ 25 days survival.
 EMOTIONAL_SEED_FACTOR = float(os.getenv("EMOTIONAL_SEED_FACTOR", "3.0"))
 
+# CF-005: Maximum number of points that can be reinforced via propagation in a single query.
+MAX_PROPAGATION_POINTS = int(os.getenv("MAX_PROPAGATION_POINTS", "50"))
+
 
 # LOGGING
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")

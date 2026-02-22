@@ -17,8 +17,8 @@ def test_seed_project_creates_collections(mock_manager):
 
 	seed_project(mock_manager)
 
-	# Assert collection creation was called 4 times (work, social, directive, story)
-	assert mock_manager.client.create_collection.call_count == 4
+	# Assert collection creation was called 5 times (work, social, directive, story, skill)
+	assert mock_manager.client.create_collection.call_count == 5
 
 	args, kwargs = mock_manager.client.create_collection.call_args_list[0]
 	assert kwargs["collection_name"] == "work_memories"
@@ -32,6 +32,9 @@ def test_seed_project_creates_collections(mock_manager):
 	args, kwargs = mock_manager.client.create_collection.call_args_list[3]
 	assert kwargs["collection_name"] == "story_memories"
 
+	args, kwargs = mock_manager.client.create_collection.call_args_list[4]
+	assert kwargs["collection_name"] == "skill_memories"
+
 
 def test_seed_project_adds_memories(mock_manager):
 	"""Test that genesis memories are added if not present."""
@@ -40,8 +43,8 @@ def test_seed_project_adds_memories(mock_manager):
 
 	seed_project(mock_manager)
 
-	# 6 original + 9 directives (Git, Browser, Token, Silence, 4 Skins, Active Skin Lock)
-	assert mock_manager.add_memory.call_count == 15
+	# 6 original + 9 directives + 3 skills
+	assert mock_manager.add_memory.call_count == 18
 
 	# Check the first call parameters
 	args, kwargs = mock_manager.add_memory.call_args_list[0]
@@ -56,8 +59,8 @@ def test_seed_project_exception_handled(mock_manager):
 
 	seed_project(mock_manager)
 
-	# Should fall through and still attempt add_memory for all 15 genesis items
-	assert mock_manager.add_memory.call_count == 15
+	# Should fall through and still attempt add_memory for all 18 genesis items
+	assert mock_manager.add_memory.call_count == 18
 
 
 def test_seed_project_skips_if_present(mock_manager):

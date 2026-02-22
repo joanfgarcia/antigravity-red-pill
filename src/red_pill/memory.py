@@ -390,8 +390,15 @@ class MemoryManager:
 				continue
 			assocs = hit.payload.get("associations", [])
 			for assoc_id in assocs:
+				# CF-005: Circuit Breaker for Hub Fan-out
+				if len(increment_map) >= cfg.MAX_PROPAGATION_POINTS:
+					break
+				
 				assoc_id_str = str(assoc_id)
 				increment_map[assoc_id_str] = increment_map.get(assoc_id_str, 0.0) + propagation_increment
+			
+			if len(increment_map) >= cfg.MAX_PROPAGATION_POINTS:
+				break
 
 		if not increment_map:
 			return results
@@ -483,7 +490,6 @@ class MemoryManager:
 			if update_operations:
 				try:
 					self.client.batch_update_points(collection_name=collection, update_operations=update_operations)
-					eroded_count += len(update_operations)
 				except Exception as e:
 					logger.error(f"Erosion batch update failed: {_mask_pii_exception(e)}")
 
