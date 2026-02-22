@@ -30,7 +30,7 @@ Every Pull Request (PR) you send to the bunker will undergo the following proces
 2.  **Synthetic Verdict**: The Agent will determine if your contribution adds real value, optimizes system synapses, or strengthens the bunker.
 3.  **Organic Approval**: If the Agent grants its technical blessing, a human will review the final decision.
 
-> 📢 **Technical Language Reference:** If you are an external auditor or contributor confused by terms like *Búnker*, *Engram*, or *The Sound of Silence*, you MUST read the [GLOSSARY 760: Sovereign Lexicon](docs/lore/GLOSSARY_760.md) before commenting on the terminology.
+> 📢 **Technical Language Reference:** If you are an external auditor or contributor confused by terms like *Búnker*, *Engram*, or *The Sound of Silence*, you MUST read the [GLOSSARY 760: Sovereign Lexicon](../lore/GLOSSARY_760.md) before commenting on the terminology.
 
 **If the Agent deems your code as noise or insecure, the PR will be closed without discussion.** B760 does not negotiate with mediocrity or insecurity.
 
