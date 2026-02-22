@@ -34,6 +34,12 @@ REINFORCEMENT_INCREMENT = float(os.getenv("REINFORCEMENT_INCREMENT", "0.1"))
 PROPAGATION_FACTOR = float(os.getenv("PROPAGATION_FACTOR", "0.5"))
 IMMUNITY_THRESHOLD = float(os.getenv("IMMUNITY_THRESHOLD", "10.0"))
 
+# Bounds validation
+if not (0 <= EROSION_RATE <= 1.0):
+	raise ValueError(f"EROSION_RATE must be between 0 and 1: {EROSION_RATE}")
+if not (0 <= PROPAGATION_FACTOR <= 1.0):
+	raise ValueError(f"PROPAGATION_FACTOR must be between 0 and 1: {PROPAGATION_FACTOR}")
+
 # EMOTIONAL_SEED_FACTOR: multiplier applied to initial reinforcement_score for
 # non-neutral memories with intensity > 1.0. Higher values give emotional
 # memories more runway before erosion. At SEED_FACTOR=3.0 and intensity=10,

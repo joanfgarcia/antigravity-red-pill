@@ -48,6 +48,7 @@ def attack_clone_army(manager, target_id, iterations=100):
 		logger.info("[SUCCESS] System withstood the clone attack.")
 
 
+@pytest.mark.integration
 def attack_poison_pill(manager):
 	"""
 	Injects malformed payloads and diverse data types into metadata.
@@ -92,6 +93,7 @@ def attack_poison_pill(manager):
 			logger.error(f"[CRITICAL] System crashed on poison pill retrieval: {e}")
 
 
+@pytest.mark.integration
 def attack_erosion_flood(manager, target_id):
 	"""
 	Floods the system with erosion cycles while reading.
@@ -128,6 +130,7 @@ def attack_erosion_flood(manager, target_id):
 	logger.info("[SUCCESS] Erosion Flood sustained without deadlock.")
 
 
+@pytest.mark.integration
 def main():
 	logger.info("--- AGENT SMITH INITIALIZED ---")
 
