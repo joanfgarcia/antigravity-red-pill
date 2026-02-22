@@ -46,7 +46,7 @@ def test_seed_project_adds_memories(mock_manager):
 	# Check the first call parameters
 	args, kwargs = mock_manager.add_memory.call_args_list[0]
 	assert kwargs["point_id"] == "00000000-0000-0000-0000-000000000001"
-	assert kwargs["metadata"]["immune"] is True
+	assert kwargs["force_immune"] is True
 
 
 def test_seed_project_exception_handled(mock_manager):

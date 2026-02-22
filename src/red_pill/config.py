@@ -67,6 +67,7 @@ METABOLISM_STATE_FILE = os.path.expanduser("~/.red_pill_metabolism")
 # is triggered before erosion to prevent mass-deletion after long absences.
 # Default: 7 days (7 * 24 * 3600).
 ABSENCE_THRESHOLD = int(os.getenv("ABSENCE_THRESHOLD", str(7 * 24 * 3600)))
+ABSENCE_GUARD_SCROLL_LIMIT = int(os.getenv("ABSENCE_GUARD_SCROLL_LIMIT", "500"))
 
 # EMOTIONAL CHROMA (v4.2.0)
 DEFAULT_COLOR = "gray"

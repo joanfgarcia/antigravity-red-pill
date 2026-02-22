@@ -43,11 +43,8 @@ class MemoryManager:
 		self.encoder: Optional[TextEmbedding] = None
 		self._reinforce_lock = threading.Lock()
 		self._metabolism_thread: Optional[threading.Thread] = None
-		self._initialize_encoder()
-
-	def _initialize_encoder(self) -> None:
-		"""Lazy-load gate for the local encoder."""
-		pass
+		self._reinforce_lock = threading.Lock()
+		self._metabolism_thread: Optional[threading.Thread] = None
 
 	def _get_vector_from_daemon(self, text: str) -> Optional[List[float]]:
 		"""Retrieves embedding from the memory sidecar socket."""
@@ -155,7 +152,7 @@ class MemoryManager:
 		for key in CreateEngramRequest.RESERVED_KEYS:
 			clean_metadata.pop(key, None)
 
-		# Emotional Seed Score (interim FSRS bridge, v4.2.1)
+		# Emotional Seed Score (B760-Native Emotional Seed Scoring, v4.2.1)
 		# High-intensity emotional memories deserve a higher initial score so the
 		# emotional decay multiplier does not kill them too fast.
 		# Formula: score = importance * (1 + intensity_factor * color_multiplier * SEED_FACTOR)
@@ -302,7 +299,7 @@ class MemoryManager:
 
 			# Safety break for unconfigured mocks in tests
 			match_count += 1
-			if match_count > 500:
+			if match_count > cfg.ABSENCE_GUARD_SCROLL_LIMIT:
 				logger.warning(f"Safety break triggered in TTL refresh for {collection}")
 				break
 
@@ -363,6 +360,7 @@ class MemoryManager:
 				self.client.batch_update_points(collection_name=collection, update_operations=update_operations)
 			except Exception as e:
 				logger.error(f"Reinforcement batch update failed: {_mask_pii_exception(e)}")
+				return []
 
 		return updated_points
 
