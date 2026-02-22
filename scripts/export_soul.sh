@@ -12,5 +12,5 @@ ARCHIVE="$EXPORT_DIR/${AI_NAME}_SOUL_KIT_$TIMESTAMP.tar.gz.gpg"
 mkdir -p "$EXPORT_DIR"
 bash "$SCRIPT_DIR/backup_soul.sh"
 
-tar -cz -C "$IA_DIR" . -C "$HOME/.gemini" antigravity | gpg --symmetric --cipher-algo AES256 -o "$ARCHIVE"
+tar -cz -C "$IA_DIR" . -C "$HOME/.gemini" antigravity | gpg --symmetric --batch --yes --cipher-algo AES256 -o "$ARCHIVE"
 echo -e "\nKit: $ARCHIVE"

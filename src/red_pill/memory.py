@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 import os
@@ -531,12 +532,13 @@ class MemoryManager:
 					continue
 
 				content = str(hit.payload.get("content", ""))
+				content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()[:32]
 
 				# 1. Deduplication Check
-				if content in seen_content:
+				if content_hash in seen_content:
 					duplicates.append(str(hit.id))
 					continue
-				seen_content[content] = str(hit.id)
+				seen_content[content_hash] = str(hit.id)
 
 				# 2. Schema Migration Check
 				needs_migration = False

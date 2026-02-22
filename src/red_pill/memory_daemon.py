@@ -1,3 +1,4 @@
+import hmac
 import json
 import logging
 import os
@@ -70,7 +71,7 @@ class MemoryDaemon:
 						request = json.loads(data.decode("utf-8"))
 
 						# SEC-002: Shared Secret Auth
-						if request.get("api_key") != cfg.QDRANT_API_KEY:
+						if not hmac.compare_digest(str(request.get("api_key") or ""), str(cfg.QDRANT_API_KEY or "")):
 							response = {"status": "error", "message": "Unauthorized (B760 Handshake failed)"}
 						else:
 							text = request.get("text")
