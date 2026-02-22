@@ -21,7 +21,7 @@ def main() -> None:
 	subparsers = parser.add_subparsers(dest="command")
 
 	mode_parser = subparsers.add_parser("mode", help="Switch Lore Skin")
-	mode_parser.add_argument("skin", help="matrix, cyberpunk, 760, dune")
+	mode_parser.add_argument("skin", help="matrix, cyberpunk, 760, dune, 40k, gits, bladerunner, her, exmachina, terminator, 2001, creator")
 
 	subparsers.add_parser("seed", help="Initialize memory substrate")
 

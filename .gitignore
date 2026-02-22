@@ -56,8 +56,11 @@ data/
 ehthumbs.db
 Thumbs.db
 
-# Storage (Local Data)
+# Storage & Artifacts (Local Data)
 storage/
 backups/
 export/
+tmp/
+audit/
+*CERTIFICATION_REPORT*
 RED_PILL_DIGEST.txt
