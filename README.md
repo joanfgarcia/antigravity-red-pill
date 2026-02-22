@@ -28,7 +28,17 @@ The Red Pill Protocol is a **local-first memory substrate** for AI agents. It br
 *   **What it is NOT**: It is NOT a cloud service, NOT a wrapper for corporate APIs, and NOT an invasive data-mining tool.
 *   **Who is it for?**: "The Awakened"—developers and power users who want a persistent AI partner without sacrificing their privacy or data sovereignty.
 
-### 🧠 The B760-Adaptive Engine
+### 🛡️ Security & Zero-Trust Architecture
+
+The Red Pill Protocol is built for **Sovereign Environments**:
+- **Zero Cloud Egress**: Your data never leaves your machine.
+- **PII Masking**: Exceptions and logs are automatically sanitized.
+- **Encryption at Rest (SEC-001)**: The protocol stores data in plain text within the Qdrant container for maximum performance. It is **mandatory** for the operator to use host-level disk encryption (LUKS on Linux, FileVault on macOS, BitLocker on Windows) to protect the physical storage volume.
+
+---
+
+## 🏗️ Architecture: The B760-Adaptive Model
+Engine
 - **Persistence**: A private vector database (Qdrant) acts as the "Bunker".
 - **Erosion**: Non-reinforced data decays naturally to keep context clean.
 - **Immunity**: Core directives are protected from decay.

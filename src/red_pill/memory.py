@@ -51,15 +51,36 @@ class MemoryManager:
 
 		try:
 			with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-				client.settimeout(0.5)
+				client.settimeout(2.0)
 				client.connect(socket_path)
-				request = {"text": text}
-				client.sendall(json.dumps(request).encode("utf-8"))
-				response_data = client.recv(1024 * 1024)
-				if response_data:
-					response = json.loads(response_data.decode("utf-8"))
+				
+				# Auth & Payload
+				request = {"text": text, "api_key": cfg.QDRANT_API_KEY}
+				payload = json.dumps(request).encode("utf-8")
+				
+				# CQ-003: Length-prefixed framing
+				header = len(payload).to_bytes(4, byteorder="big")
+				client.sendall(header + payload)
+				
+				# Read response header
+				resp_header = client.recv(4)
+				if not resp_header:
+					return None
+				resp_len = int.from_bytes(resp_header, byteorder="big")
+				
+				resp_data = b""
+				while len(resp_data) < resp_len:
+					chunk = client.recv(min(resp_len - len(resp_data), 8192))
+					if not chunk:
+						break
+					resp_data += chunk
+
+				if resp_data:
+					response = json.loads(resp_data.decode("utf-8"))
 					if response.get("status") == "ok":
 						return response.get("vector")
+					else:
+						logger.error(f"Daemon error: {response.get('message')}")
 		except Exception as e:
 			logger.debug(f"Sidecar connection failed: {e}")
 		return None
@@ -77,7 +98,8 @@ class MemoryManager:
 				providers = [cfg.EXECUTION_PROVIDER] if cfg.EXECUTION_PROVIDER else None
 				self.encoder = TextEmbedding(model_name=cfg.EMBEDDING_MODEL, providers=providers)
 			except ImportError:
-				return [0.0] * cfg.VECTOR_SIZE
+				logger.critical("FastEmbed is not installed. Memory ingestion is compromised.")
+				raise RuntimeError("FastEmbed not found. Cannot generate vectors for engrams.")
 
 		return list(self.encoder.embed([text]))[0].tolist()
 
@@ -271,7 +293,7 @@ class MemoryManager:
 		logger.info(f"Absence Guard: refreshed TTL for {refreshed} engrams in '{collection}'.")
 
 	def _reinforce_points(self, collection: str, point_ids: List[str], increments: Dict[str, float]) -> List[PointUpdate]:
-		"""Retrieves and updates reinforcement scores with thread-safety."""
+		"""Retrieves and updates reinforcement scores with thread-safety (Optimized Lock Scope)."""
 		if not point_ids:
 			return []
 
@@ -286,15 +308,18 @@ class MemoryManager:
 				except (ValueError, AttributeError):
 					continue
 
+		# 1. Retrieve points OUTSIDE the lock to avoid I/O serialization
+		try:
+			points = self.client.retrieve(collection_name=collection, ids=valid_ids, with_payload=True, with_vectors=False)
+		except Exception as e:
+			logger.error(f"Reinforcement retrieval failed: {_mask_pii_exception(e)}")
+			return []
+
 		updated_points: List[PointUpdate] = []
+		update_operations = []
 
+		# 2. Scope the lock only to the mathematical transition and payload preparation
 		with self._reinforce_lock:
-			try:
-				points = self.client.retrieve(collection_name=collection, ids=valid_ids, with_payload=True, with_vectors=False)
-			except Exception as e:
-				logger.error(f"Reinforcement retrieval failed: {_mask_pii_exception(e)}")
-				return []
-
 			for p in points:
 				score = p.payload.get("reinforcement_score", 1.0)
 				inc = increments.get(str(p.id), increments.get(p.id, 0.0))
@@ -306,13 +331,18 @@ class MemoryManager:
 				if p.payload["reinforcement_score"] >= cfg.IMMUNITY_THRESHOLD:
 					p.payload["immune"] = True
 
-				try:
-					self.client.set_payload(collection_name=collection, payload=p.payload, points=[p.id])
-				except Exception as e:
-					logger.error(f"Reinforcement payload set failed: {_mask_pii_exception(e)}")
-					continue
-
 				updated_points.append(PointUpdate(id=p.id, payload=p.payload))
+				# Prepare atomic batch operations
+				update_operations.append(
+					models.SetPayloadOperation(set_payload=models.SetPayload(payload=p.payload, points=[p.id]))
+				)
+
+		# 3. Execute batch update OUTSIDE the lock (Qdrant handles its own internal locking/concurrency)
+		if update_operations:
+			try:
+				self.client.batch_update_points(collection_name=collection, update_operations=update_operations)
+			except Exception as e:
+				logger.error(f"Reinforcement batch update failed: {_mask_pii_exception(e)}")
 
 		return updated_points
 

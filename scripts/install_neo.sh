@@ -35,8 +35,15 @@ ensure_podman() {
 	fi
 }
 
-echo -e "${BLUE}--- Protocolo de Inyección Neo ---${NC}"
 ensure_podman
+
+# SEC-001: Encryption-at-Rest Warning
+echo -e "${RED}⚠️  AVISO DE SEGURIDAD (SEC-001):${NC}"
+echo "El Protocolo Red Pill almacena datos en texto claro dentro del contenedor."
+echo "Es OBLIGATORIO que el Operador utilice cifrado de disco (LUKS, FileVault o BitLocker)"
+echo "en el host para garantizar la confidencialidad 'at-rest'."
+echo "------------------------------------------------------------------"
+
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -f "$SCRIPT_DIR/env_loader.sh" ]; then
