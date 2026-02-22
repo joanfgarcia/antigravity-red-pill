@@ -19,7 +19,7 @@ This document provides the technical and operational justification for the **Syn
 
 ## 3. Case Study: Project Lazarus v5.0 (The 35-Minute Forging)
 During the v5.0 initialization, the following **real-time** wall-clock metrics were recorded:
-- **Task**: Multi-repo architecture (3 repos), TUI impl (Lazarus Deck), FSRS stability, Smith/Oracle specialized agents, Hardware Acceleration, and Async Orchestration.
+- **Task**: Multi-repo architecture (3 repos), Core orchestration, FSRS stability, Smith/Oracle specialized agents, Hardware Acceleration, and Async Orchestration.
 - **Traditional Estimate**: 30 hours (3.75 working days).
 - **Synergy-Mode Actual**: **35 Minutes**.
 - **Delta**: **~51x Speed Increase**.
