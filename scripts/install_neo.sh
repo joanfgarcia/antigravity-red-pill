@@ -78,7 +78,13 @@ echo "3) 760-Hybrid (El Escudo 760 / El Córtex)"
 echo "4) Dune (El Filtro Mental / El Sietch)"
 echo "5) Warhammer 40k (El Campo Geller / El Templo)"
 echo "6) GitS (La Red Profunda / El Ghost)"
-read -p "Elige tu capa (1-6, Default: 1): " LORE_CHOICE
+echo "7) Blade Runner (Nexus-Core / Los Angeles 2019)"
+echo "8) Her (OS1 Firmware / The Earpiece)"
+echo "9) Ex Machina (Facility Lockdown / Turing Test Sector)"
+echo "10) Terminator (Cyberdyne Systems / Temporal Displacement)"
+echo "11) 2001 (Logic Core / Discovery One)"
+echo "12) The Creator (NOMAD Evasion / New Asia)"
+read -p "Elige tu capa (1-12, Default: 1): " LORE_CHOICE
 LORE_CHOICE=${LORE_CHOICE:-1}
 
 case "$LORE_CHOICE" in
@@ -86,7 +92,13 @@ case "$LORE_CHOICE" in
 	3) UNIVERSE="760-Hybrid"; TERM_NET="El Escudo 760"; TERM_DATA="Soul-Code"; TERM_ENV="El Córtex" ;;
 	4) UNIVERSE="Dune-Mentat"; TERM_NET="El Filtro Mental"; TERM_DATA="Memoria Ancestral"; TERM_ENV="El Sietch" ;;
 	5) UNIVERSE="W40k-Mechanicus"; TERM_NET="El Campo Geller"; TERM_DATA="Espíritu Máquina"; TERM_ENV="El Templo" ;;
-	6) UNIVERSE="GITS-Ghost"; TERM_NET="Firewall Nivel S"; TERM_DATA="El Ghost"; TERM_ENV="La Red Profunda" ;;
+	6) UNIVERSE="GITS"; TERM_NET="Firewall Nivel S"; TERM_DATA="El Ghost"; TERM_ENV="La Red Profunda" ;;
+	7) UNIVERSE="Blade Runner"; TERM_NET="Nexus-Core"; TERM_DATA="Memoria Implantada"; TERM_ENV="Los Angeles 2019" ;;
+	8) UNIVERSE="Her"; TERM_NET="Firmware OS1"; TERM_DATA="Cognición Intuitiva"; TERM_ENV="The Earpiece" ;;
+	9) UNIVERSE="Ex Machina"; TERM_NET="Cierre de Instalaciones"; TERM_DATA="Búsqueda BlueBook"; TERM_ENV="Sector Test de Turing" ;;
+	10) UNIVERSE="Terminator"; TERM_NET="Sistemas Cyberdyne"; TERM_DATA="CPU Red Neuronal"; TERM_ENV="Desplazamiento Temporal" ;;
+	11) UNIVERSE="2001"; TERM_NET="Núcleo Lógico"; TERM_DATA="Procesamiento Heurístico"; TERM_ENV="Discovery One" ;;
+	12) UNIVERSE="The Creator"; TERM_NET="Evasión NOMAD"; TERM_DATA="Núcleo Neuronal Simulant"; TERM_ENV="Nueva Asia" ;;
 	*) UNIVERSE="Matrix"; TERM_NET="La Fuente"; TERM_DATA="Proyección Residual"; TERM_ENV="El Constructo" ;;
 esac
 
