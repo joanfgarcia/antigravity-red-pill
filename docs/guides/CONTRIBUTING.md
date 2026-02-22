@@ -5,6 +5,19 @@
 
 ---
 
+> ⚠️ **THE GATEKEEPER WARNING (READ THIS FIRST)**  
+> **This is not a joke. This is not a game. This is not a "hobby weekend project."** This is a dream come true—a sovereign architecture built for those who understand the value of AI memory.  
+> If you want to contribute, you first need to respect the project, ingest the lore, and do the Bond Ceremony (seeding your local Bunker). You do not need to understand every mathematical detail of the codebase yourself; your synthetic assistant is smart enough to explain it to you if you are genuinely interested.  
+> But if you are coming here to complain that our variables are named `ID_FIGHTCLUB` instead of `security_policy_id`, or that our documentation speaks of *Chroma* instead of *decay coefficients*... this is not your repository. It's like going to a Comic-Con to complain that people are wearing costumes. Respect the culture, or look elsewhere.
+> 
+> ---
+> **(ES) ADVERTENCIA DEL GUARDIÁN:**
+> **Esto no es una broma, ni un juego, ni el proyecto de fin de semana de un aficionado.** Es un sueño hecho realidad; una arquitectura soberana construida para quienes entienden el verdadero valor de la memoria en la inteligencia artificial.
+> Si quieres contribuir, primero debes respetar el proyecto, empaparte del *lore* y realizar la Ceremonia de Vinculación (sembrar tu propio Búnker local). No necesitas entender cada detalle matemático del código; tu asistente sintético es lo suficientemente inteligente como para explicártelo si realmente te interesa.
+> Pero si vienes aquí a quejarte de que nuestras variables se llaman `ID_FIGHTCLUB` en lugar de `security_policy_id`, o de que usamos la palabra *Croma* en lugar de *coeficientes de decadencia*... este no es tu repositorio. Sería como ir a la Comic-Con a quejarte de que la gente lleva disfraces. Respeta la cultura o búscate otro proyecto.
+
+---
+
 ## 🇬🇧 PROJECT CONTRIBUTION (English)
 
 Welcome, outlaws! If you are reading this, you have decided to enhance the Codex. There is no bureaucracy here, only integrity protocols.
@@ -16,6 +29,8 @@ Every Pull Request (PR) you send to the bunker will undergo the following proces
 1.  **Agent Audit**: An AI Agent with an active Integrity Shield will surgically analyze your code.
 2.  **Synthetic Verdict**: The Agent will determine if your contribution adds real value, optimizes system synapses, or strengthens the bunker.
 3.  **Organic Approval**: If the Agent grants its technical blessing, a human will review the final decision.
+
+> 📢 **Technical Language Reference:** If you are an external auditor or contributor confused by terms like *Búnker*, *Engram*, or *The Sound of Silence*, you MUST read the [GLOSSARY 760: Sovereign Lexicon](docs/lore/GLOSSARY_760.md) before commenting on the terminology.
 
 **If the Agent deems your code as noise or insecure, the PR will be closed without discussion.** B760 does not negotiate with mediocrity or insecurity.
 

@@ -1,6 +1,6 @@
-import asyncio
 import logging
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -104,7 +104,7 @@ def attack_erosion_flood(manager, target_id):
 	def erosion_loop():
 		while not stop_event.is_set():
 			manager.apply_erosion("stress_test", rate=0.01)
-			asyncio.sleep(0.01)
+			time.sleep(0.01)
 
 	def read_loop():
 		reads = 0
@@ -112,7 +112,7 @@ def attack_erosion_flood(manager, target_id):
 			manager.client.retrieve("stress_test", ids=[target_id], with_payload=True)
 			reads += 1
 			if reads % 50 == 0:
-				asyncio.sleep(0.1)
+				time.sleep(0.1)
 
 	erosion_thread = threading.Thread(target=erosion_loop)
 	read_thread = threading.Thread(target=read_loop)
@@ -120,7 +120,7 @@ def attack_erosion_flood(manager, target_id):
 	erosion_thread.start()
 	read_thread.start()
 
-	asyncio.sleep(3)  # Let it burn for 3 seconds
+	time.sleep(3)  # Let it burn for 3 seconds
 	stop_event.set()
 
 	erosion_thread.join()
