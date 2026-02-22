@@ -4,7 +4,7 @@ import os
 import signal
 import sys
 
-import yaml
+import yaml  # type: ignore
 
 import red_pill.config as cfg
 from red_pill.memory import MemoryManager
@@ -141,12 +141,12 @@ def main() -> None:
 		elif args.command == "erode":
 			manager.apply_erosion(collection, rate=args.rate) if args.rate else manager.apply_erosion(collection)
 		elif args.command == "sanitize":
-			results = manager.sanitize(collection, dry_run=args.dry_run)
+			san_results = manager.sanitize(collection, dry_run=args.dry_run)
 			print("--- [SANITATION PROTOCOL COMPLETE] ---")
-			print(f"Collection: {results['collection']}")
-			print(f"Duplicates Removed: {results['duplicates_found']}")
-			print(f"Records Migrated: {results['migrated_records']}")
-			if args.dry_run and (results["duplicates_found"] > 0 or results["migrated_records"] > 0):
+			print(f"Collection: {san_results['collection']}")
+			print(f"Duplicates Removed: {san_results['duplicates_found']}")
+			print(f"Records Migrated: {san_results['migrated_records']}")
+			if args.dry_run and (san_results["duplicates_found"] > 0 or san_results["migrated_records"] > 0):
 				print("Note: DRY RUN - No changes applied.")
 		elif args.command == "diag":
 			stats = manager.get_stats(collection)

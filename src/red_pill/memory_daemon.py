@@ -68,13 +68,13 @@ class MemoryDaemon:
 
 					try:
 						request = json.loads(data.decode("utf-8"))
-						
+
 						# SEC-002: Shared Secret Auth
 						if request.get("api_key") != cfg.QDRANT_API_KEY:
 							response = {"status": "error", "message": "Unauthorized (B760 Handshake failed)"}
 						else:
 							text = request.get("text")
-							if text:
+							if text and self.encoder:
 								vector = list(self.encoder.embed([text]))[0].tolist()
 								response = {"status": "ok", "vector": vector}
 							elif request.get("command") == "ping":

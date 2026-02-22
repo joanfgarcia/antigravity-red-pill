@@ -1,8 +1,5 @@
 import logging
-import time
-import uuid
-import json
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List
 
 from qdrant_client.http import models
 
@@ -33,7 +30,7 @@ def seed_project(manager: MemoryManager) -> None:
 			)
 			# Create TTL Index (for v5.0 partial implementation logic in v4.2.1)
 			try:
-				manager.client.create_payload_index(collection_name=coll, field_name="last_recalled_at", field_schema="float")
+				manager.client.create_payload_index(collection_name=coll, field_name="last_recalled_at", field_schema=models.PayloadSchemaType.FLOAT)
 			except Exception as e:
 				logger.warning(f"Could not create TTL index on {coll} (might be local version): {e}")
 
@@ -47,7 +44,7 @@ def seed_project(manager: MemoryManager) -> None:
 	except Exception:
 		pass
 
-	genesis_memories = [
+	genesis_memories: List[Dict[str, Any]] = [
 		{
 			"id": ID_ALEPH,
 			"coll": "social_memories",
@@ -141,19 +138,23 @@ def seed_project(manager: MemoryManager) -> None:
 	]
 
 	for m in genesis_memories:
+		m_coll: str = m["coll"]
+		m_id: str = m["id"]
+		m_text: str = m["text"]
+		m_meta: Dict[str, Any] = m["meta"]
+
 		try:
-			hits = manager.client.retrieve(m["coll"], ids=[m["id"]])
+			hits = manager.client.retrieve(m_coll, ids=[m_id])
 			if hits:
 				continue
 		except Exception:
-			# If retrieval fails (e.g. collection missing), proceed with attempt
 			pass
 
 		manager.add_memory(
-			m["coll"],
-			m["text"],
-			importance=m["meta"].get("importance", 1.0),
-			metadata=m["meta"],
-			point_id=m["id"],
-			force_immune=True if m["id"].startswith("00000000") else False,
+			m_coll,
+			m_text,
+			importance=m_meta.get("importance", 1.0),
+			metadata=m_meta,
+			point_id=m_id,
+			force_immune=True if m_id.startswith("00000000") else False,
 		)

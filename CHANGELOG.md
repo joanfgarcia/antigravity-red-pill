@@ -2,10 +2,14 @@
 
 ## [4.2.4] - 2026-02-22
 ### 🧹 Cinematic Skins & Ecosystem Polish (Post-Audit Cleanup)
+- **[FIX] Protocol Hardening**: Implemented length-prefixed framing and shared-secret authentication for the embedding sidecar (SEC-002, CQ-003).
+- **[FIX] Performance**: Optimized `_reinforce_points` lock scope to prevent I/O serialization during memory reinforcement (CQ-001).
+- **[FIX] Reliability**: Replaced silent fails with explicit `RuntimeError` on embedding library absence (CQ-002).
+- **[FIX] Security**: Added mandatory encryption-at-rest warnings and hardened quadlet permissions (SEC-001, HIGH-02).
 - **[FEAT] Lore Skins**: Added 5 new cinematic skins (Her, Ex Machina, Terminator, 2001, Creator) to the ecosystem.
+- **[FEAT] QA**: Implemented `test_version_sync.py` to automatically verify version consistency and Python runtime alignment across CI and Docker.
 - **[DOCS] Architectures**: Restructured `ARCHITECTURE.md` to officially list NPU (Ryzen AI / Core Ultra / Snapdragon X) as high-efficiency hardware targets.
-- **[DOCS] Validation Metrics**: Clarified speed multipliers and baseline timings in `PROOF_OF_FAITH.md`.
-- **[CLEANUP] Safety**: Removed incomplete demo files to ensure full integrity of the working repository.
+- **[CLEANUP]**: Purged dormant experimental scripts (`live_swarm_proof.py`) and resolved `sanitize()` counter inconsistencies.
 
 ## [4.2.3] - 2026-02-22
 ### 🛡️ P0 Audit Remediation (Certification Push)
