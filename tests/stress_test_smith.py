@@ -1,7 +1,6 @@
+import asyncio
 import logging
 import threading
-import time
-import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest

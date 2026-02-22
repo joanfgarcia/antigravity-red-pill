@@ -34,6 +34,12 @@ restore_qdrant_data() {
 	for SNAPSHOT in "$IA_DIR/backups/qdrant"/*.snapshot; do
 		if [ -f "$SNAPSHOT" ]; then
 			COLL=$(basename "$SNAPSHOT" | cut -d'_' -f1,2)
+			
+			if [[ ! "$COLL" =~ ^(social_memories|work_memories|directive_memories)$ ]]; then
+				echo "Warning: Skipped unrecognized snapshot collection name: $COLL"
+				continue
+			fi
+
 			curl -X POST "http://localhost:6333/collections/$COLL/snapshots/upload" \
 				 -H "Content-Type: multipart/form-data" \
 				 -H "api-key: ${QDRANT_API_KEY:-}" \

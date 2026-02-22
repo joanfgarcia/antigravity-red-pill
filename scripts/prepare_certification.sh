@@ -12,8 +12,7 @@ git ls-files --cached --others --exclude-standard | grep -vE '\.(png|jpg|jpeg|gi
 	if [ "$f" != "$OUTPUT_FILE" ] && [ "$f" != ".env" ] && [ -f "$f" ]; then
 		echo -e "\n\n===== FILE: $f =====\n"
 		# Mask GitHub tokens just in case they are hardcoded somewhere
-		cat "$f" | sed 's/github_pat_[a-zA-Z0-9]*/[REDACTED_GH_TOKEN]/g'
-	fi
+		sed -E 's/(ghp_[A-Za-z0-9]+|gho_[A-Za-z0-9]+|github_pat_[A-Za-z0-9_]+)/[REDACTED_GH_TOKEN]/g' "$f"
 done > "$OUTPUT_FILE"
 
 echo "Done. Standard audit prompt available in docs/technical/CERTIFICATION_PROTOCOL.md"
