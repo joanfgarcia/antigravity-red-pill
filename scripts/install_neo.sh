@@ -59,10 +59,10 @@ check_encryption() {
 			target_dev=$(findmnt -nvo SOURCE -T "$IA_DIR/storage" 2>/dev/null || findmnt -nvo SOURCE -T "/" 2>/dev/null)
 			if [ -n "$target_dev" ]; then
 				if lsblk -no TYPE "$target_dev" | grep -q "crypt"; then
-					echo -e "${GREEN}✓ Cifrado de disco detectado en $target_dev.${NC}"
+					echo -e "${GREEN}✓ Capa de cifrado detectada en $target_dev.${NC}"
 				else
-					echo -e "${RED}[SEC-001] ADVERTENCIA: Almacenamiento NO cifrado detectado en $target_dev.${NC}"
-					echo "Se recomienda encarecidamente habilitar cifrado de disco (LUKS)."
+					echo -e "${BLUE}[INFO] Nota de Seguridad (SEC-001): El volumen $target_dev no utiliza LUKS.${NC}"
+					echo "Para máxima soberanía, considera cifrar esta partición en el futuro."
 				fi
 			fi
 		fi
