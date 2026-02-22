@@ -62,5 +62,6 @@ backups/
 export/
 tmp/
 audit/
+docs/certification/
 *CERTIFICATION_REPORT*
 RED_PILL_DIGEST.txt
