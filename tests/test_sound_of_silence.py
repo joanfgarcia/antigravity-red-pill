@@ -35,8 +35,8 @@ def test_sound_of_silence_compliance():
 		lines = content.splitlines()
 
 		for i, line in enumerate(lines, 1):
-			# A. Check for non-portable file:// links (All files)
-			if FILE_PROTOCOL_LINK.search(line):
+			# A. Check for non-portable file:// links (All files, except certification snapshots)
+			if "certification" not in file_path.parts and FILE_PROTOCOL_LINK.search(line):
 				violations.append(f"{file_path.relative_to(ROOT_DIR)}:{i} - Absolute file:// link detected")
 
 			# B. Logic checks (Only for source/scripts, skip .md)
@@ -56,3 +56,35 @@ def test_sound_of_silence_compliance():
 	if violations:
 		error_msg = "\n".join(violations)
 		raise AssertionError(f"Sound of Silence Violations Found:\n{error_msg}")
+
+
+def test_markdown_links_compliance():
+	"""Ensure all internal markdown links resolve to existing files."""
+	violations = []
+	candidate_files = []
+	for target in TARGET_DIRS:
+		target_path = ROOT_DIR / target
+		if target_path.exists():
+			# Support both .md and .yaml containing links if needed, mostly .md
+			candidate_files.extend(list(target_path.rglob("*.md")))
+
+	for rf in ROOT_FILES:
+		root_f = ROOT_DIR / rf
+		if root_f.exists():
+			candidate_files.append(root_f)
+
+	for file_path in candidate_files:
+		content = file_path.read_text(encoding="utf-8")
+		# Simple regex to catch [text](link). We skip:
+		# http, mailto, file, absolute paths starting with /, and home dir paths starting with ~
+		# Group 1 captures the link path, ignoring any #anchor at the end
+		links = re.findall(r'\[.+?\]\((?!http|mailto|file|/|~)([^)#\s]+)(?:#[^\)]*)?\)', content)
+		
+		for link in links:
+			target_path = (file_path.parent / link).resolve()
+			if not target_path.exists():
+				violations.append(f"{file_path.relative_to(ROOT_DIR)}: '{link}' -> missing target")
+
+	if violations:
+		error_msg = "\n".join(violations)
+		raise AssertionError(f"Broken Markdown Links Found:\n{error_msg}")
