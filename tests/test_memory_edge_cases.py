@@ -64,8 +64,8 @@ def test_get_vector_local(mock_daemon):
 		pass
 	manager.encoder = None
 	with patch.dict("sys.modules", {"fastembed": None}):
-		vector = manager._get_vector("hello")
-		assert vector == [0.0] * cfg.VECTOR_SIZE
+		with pytest.raises(RuntimeError, match="FastEmbed library is missing"):
+			manager._get_vector("hello")
 
 	# Now test when encoder is already set
 	class MockEncoderInst:

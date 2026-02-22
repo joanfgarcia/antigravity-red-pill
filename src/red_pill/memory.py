@@ -100,8 +100,7 @@ class MemoryManager:
 				providers = [cfg.EXECUTION_PROVIDER] if cfg.EXECUTION_PROVIDER else None
 				self.encoder = TextEmbedding(model_name=cfg.EMBEDDING_MODEL, providers=providers)
 			except ImportError:
-				logger.warning("FastEmbed unavailable; storing zero-vector. Memory is semantically unreachable.")
-				return [0.0] * cfg.VECTOR_SIZE
+				raise RuntimeError("FastEmbed library is missing. All semantic memory operations are blocked.")
 
 		assert self.encoder is not None
 		return list(self.encoder.embed([text]))[0].tolist()
