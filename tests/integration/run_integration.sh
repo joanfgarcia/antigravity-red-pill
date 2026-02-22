@@ -11,10 +11,11 @@ mkdir -p "$QDRANT_VOL"
 
 cd "$SCRIPT_DIR"
 
-# Update docker-compose.test.yml to use the unique volume path
-# We use a temporary file to avoid modifying the original during the test if needed, 
-# but here we just use sed locally.
+# Use a trap to ensure the compose file is restored even if the test fails or is interrupted
+trap 'sed -i "s|$QDRANT_VOL|/tmp/qdrant_test_vol|g" docker-compose.test.yml; rm -rf "$QDRANT_VOL"' EXIT
+
 sed -i "s|/tmp/qdrant_test_vol|$QDRANT_VOL|g" docker-compose.test.yml
+
 
 echo "[1/4] Starting ephemeral Qdrant container..."
 docker compose -f docker-compose.test.yml up -d

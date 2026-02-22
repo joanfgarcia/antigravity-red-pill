@@ -45,3 +45,19 @@ def test_changelog_is_latest():
 	match = re.search(r"## \[([^\]]+)\]", changelog)
 	assert match is not None, "No version entries found in CHANGELOG.md"
 	assert match.group(1) == version, f"CHANGELOG.md latest version ({match.group(1)}) does not match pyproject.toml ({version})"
+
+
+def test_python_runtime_sync():
+	"""Ensures the Python version in CI matches the Dockerfile target."""
+	ci_content = (ROOT_DIR / ".github" / "workflows" / "ci.yml").read_text()
+	docker_content = (ROOT_DIR / "tests" / "Dockerfile.keymaker").read_text()
+
+	ci_match = re.search(r'python-version:\s*"([^"]+)"', ci_content)
+	assert ci_match is not None, "python-version not found in ci.yml"
+	ci_python_version = ci_match.group(1)
+
+	docker_match = re.search(r"^FROM\s+python:([^\s-]+)", docker_content, re.M)
+	assert docker_match is not None, "python base image not found in Dockerfile"
+	docker_python_version = docker_match.group(1)
+
+	assert ci_python_version == docker_python_version, f"Python runtime mismatch! CI: {ci_python_version} vs Dockerfile: {docker_python_version}"

@@ -93,6 +93,7 @@ def main() -> None:
 			sys.exit(1)
 
 		if args.skin not in skins:
+			logger.error(f"Invalid mode '{args.skin}'. Valid options: {', '.join(skins.keys())}")
 			sys.exit(1)
 
 		skin = skins[args.skin]
