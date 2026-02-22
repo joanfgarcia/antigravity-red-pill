@@ -34,4 +34,6 @@ jobs:
       run: uv run ruff check src/ scripts/ tests/
 
     - name: Run All Validation & Logic Tests with Coverage
+      env:
+        QDRANT_API_KEY: "ci-test-key-770"
       run: uv run pytest --cov=src/red_pill --cov-report=xml --cov-report=term tests/
