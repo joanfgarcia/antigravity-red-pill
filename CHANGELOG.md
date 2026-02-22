@@ -1,5 +1,16 @@
 # Changelog: Red Pill Protocol
 
+## [4.2.3] - 2026-02-22
+### 🛡️ P0 Audit Remediation (Certification Push)
+- **[CRITICAL] Bash Security**: Fixed `env_loader.sh` to use explicit allow-lists for `IA_DIR` paths, protecting against path traversal (F-002).
+- **[CRITICAL] Cryptography**: Removed insecure GPG `/dev/tty` passphrase fallback in `export_soul.sh`. Passphrases are now reliably requested natively (F-003, F-017).
+- **[CRITICAL] Injection**: Sanitized `restore_all.sh` snapshot parsing against strictly defined collections, protecting against injection vectors (F-004).
+- **[CRITICAL] CI Correctness**: Fixed critical bug in `live_swarm_proof.py` and `test_metabolism.py` related to `asyncio.sleep` causing blocking (F-001).
+- **[HIGH] Secrets Safety**: Corrected GitHub token redaction regex in `prepare_certification.sh` to properly catch `ghp_`, `gho_`, etc (F-006).
+- **[QA] Pydantic Assurance**: Verified 100% test coverage against Schema definitions (`src/red_pill/schemas.py`).
+- **[QA] Certification Prep**: Included `docs/` and `tests/` directories into the `RED_PILL_DIGEST.txt` payload to accurately prove architectural compliance (`SOUND_OF_SILENCE`).
+- **[MAINTENANCE] Ignored Backups**: Added `audit/`, `tmp/`, and specific certification artifacts to `.gitignore` and safely expelled `backups/` from source tracking.
+
 ## [4.2.2] - 2026-02-21
 ### 🛡️ The Absence Guard & Biological Resilience (BIOS Edition)
 - **[NEW] Absence Guard Protocol**: Prevents mass-deletion of memories after long periods of inactivity (>7 days). Automatically refreshes TTL timestamps on the first session after a vacation.
