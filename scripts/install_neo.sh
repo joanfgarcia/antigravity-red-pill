@@ -52,6 +52,25 @@ else
 	export IA_DIR="${ANTIGRAVITY_IA_DIR:-$HOME/Documents/IA}"
 fi
 
+check_encryption() {
+	if [[ "$OS_TYPE" == "Linux" ]]; then
+		if command -v lsblk &> /dev/null && command -v findmnt &> /dev/null; then
+			local target_dev
+			target_dev=$(findmnt -nvo SOURCE -T "$IA_DIR/storage" 2>/dev/null || findmnt -nvo SOURCE -T "/" 2>/dev/null)
+			if [ -n "$target_dev" ]; then
+				if lsblk -no TYPE "$target_dev" | grep -q "crypt"; then
+					echo -e "${GREEN}✓ Cifrado de disco detectado en $target_dev.${NC}"
+				else
+					echo -e "${RED}[SEC-001] ADVERTENCIA: Almacenamiento NO cifrado detectado en $target_dev.${NC}"
+					echo "Se recomienda encarecidamente habilitar cifrado de disco (LUKS)."
+				fi
+			fi
+		fi
+	fi
+}
+
+check_encryption
+
 echo -e "${BLUE}--- Fase: Personalización de Lore ---${NC}"
 echo "1) Matrix (La Fuente / El Constructo)"
 echo "2) Cyberpunk (El Blackwall / El Búnker)"

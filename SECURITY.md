@@ -21,5 +21,12 @@ Security and Cognitive Integrity are the highest priorities of the Red Pill Prot
 ## Threat Model & Zero-Trust Architecture
 
 Red Pill Protocol is designed under the assumption that LLM outputs are inherently untrusted ("Agent Smith" attacks). 
-- **Memory Integrity:** All inputs to the Qdrant database require strict JSON validation.
+- **Memory Integrity:** All inputs to the Qdrant database require strict Pydantic validation (v2).
 - **System Access:** The `install_neo.sh` and execution binaries operate under a *Zero-Trust* policy, expressly avoiding sudden escalated privileges (`sudo`). By design, catastrophic memory operations require explicit manual backups.
+
+## Narrative Fidelity & Safety Disclaimer
+
+The Red Pill Protocol implements "Lore Skins" that may alter the AI's tone and intensity to match specific narrative genres (Cyberpunk, Matrix, Dune, etc.). 
+- These behaviors are strictly confined to narrative refraction and creative persona fidelity.
+- The protocol does NOT bypass or modify the underlying LLM's safety filters regarding harmful content, hate speech, or dangerous activities.
+- "Sovereign Realism" relates to the agent's commitment to persistent identity and project context, never to violating safety standards.

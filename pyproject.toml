@@ -34,7 +34,6 @@ dev = [
 
 [tool.ruff]
 line-length = 150
-indent-width = 4
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]

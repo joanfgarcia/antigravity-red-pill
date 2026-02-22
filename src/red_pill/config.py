@@ -82,6 +82,9 @@ CHROMA_TONE_MAPPING = {
 	"purple": "Minimalist, extremely concise, efficiency-first, no fluff.",
 	"cyan": "Visionary, future-oriented, focused on growth and backlog.",
 	"blue": "Reflective, empathetic, serious, acknowledging weight.",
-	"gray": "Professional, balanced, direct, objective (Standard).",
 	"nostalgia": "Respectful, shared legacy focus, acknowledging the long road.",
+	"gray": "Professional, balanced, direct, objective (Standard).",
 }
+
+# ONTOLOGICAL INTEGRITY (v4.2.4)
+CURRENT_SCHEMA_VERSION = 1

@@ -185,6 +185,7 @@ class MemoryManager:
 			"color": validated_request.color,
 			"emotion": validated_request.emotion,
 			"intensity": validated_request.intensity,
+			"schema_version": cfg.CURRENT_SCHEMA_VERSION,
 			**clean_metadata,
 		}
 
@@ -553,6 +554,9 @@ class MemoryManager:
 					needs_migration = True
 				if "intensity" not in hit.payload:
 					update_payload["intensity"] = 1.0
+					needs_migration = True
+				if hit.payload.get("schema_version") != cfg.CURRENT_SCHEMA_VERSION:
+					update_payload["schema_version"] = cfg.CURRENT_SCHEMA_VERSION
 					needs_migration = True
 
 				if needs_migration:
