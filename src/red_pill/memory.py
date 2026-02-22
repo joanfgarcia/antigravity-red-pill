@@ -43,8 +43,6 @@ class MemoryManager:
 		self.encoder: Optional[TextEmbedding] = None
 		self._reinforce_lock = threading.Lock()
 		self._metabolism_thread: Optional[threading.Thread] = None
-		self._reinforce_lock = threading.Lock()
-		self._metabolism_thread: Optional[threading.Thread] = None
 
 	def _get_vector_from_daemon(self, text: str) -> Optional[List[float]]:
 		"""Retrieves embedding from the memory sidecar socket."""
