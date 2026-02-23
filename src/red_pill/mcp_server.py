@@ -9,6 +9,7 @@ from red_pill.swarm.orchestrator import GruOrchestrator
 from red_pill.swarm.agents.smith import SmithMinion
 from red_pill.swarm.agents.oracle import OracleMinion
 from red_pill.swarm.agents.keymaker import KeymakerMinion
+from red_pill.swarm.agents.compressor import CompressorMinion
 
 # Initialize the Sovereign MCP Server
 server = Server("RedPill-Kernel")
@@ -59,6 +60,17 @@ async def handle_list_tools() -> list[types.Tool]:
 			inputSchema={
 				"type": "object",
 				"properties": {},
+			},
+		),
+		types.Tool(
+			name="compress_prompt",
+			description="Deploy Edge-Tokenization Compressor to reduce prompt bloat.",
+			inputSchema={
+				"type": "object",
+				"properties": {
+					"text": {"type": "string", "description": "The verbose text to compress"},
+				},
+				"required": ["text"],
 			},
 		),
 	]
@@ -141,6 +153,18 @@ async def handle_call_tool(
 			return [types.TextContent(type="text", text=response)]
 		except Exception as e:
 			return [types.TextContent(type="text", text=f"Failed to read directives: {e}")]
+
+	elif name == "compress_prompt":
+		text_to_compress = (arguments or {}).get("text")
+		gru = GruOrchestrator()
+		compressor = CompressorMinion()
+		results = await gru.deploy_swarm("compress", [compressor], text=text_to_compress)
+		res = results[0]
+		if res.status == "success":
+			stats = f"[Original: {res.result['original_length']} chars -> Compressed: {res.result['compressed_length']} chars]"
+			return [types.TextContent(type="text", text=f"{stats}\n\n{res.result['compressed_prompt']}")]
+		else:
+			return [types.TextContent(type="text", text=f"Compression Failed: {res.error}")]
 
 	raise ValueError(f"Unknown tool: {name}")
 
