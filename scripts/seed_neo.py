@@ -2,6 +2,7 @@
 # Execution: uv run --with qdrant-client --with fastembed python3 seed_neo.py
 import sys
 import time
+
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 
@@ -10,7 +11,7 @@ QDRANT_URL = "http://localhost:6333"
 
 def seed():
 	client = QdrantClient(url=QDRANT_URL)
-	
+
 	try:
 		from fastembed import TextEmbedding
 		encoder = TextEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2")
@@ -41,7 +42,7 @@ def seed():
 	for coll_type, text, mem_type in genesis_memories:
 		coll_name = "social_memories" if coll_type == "social" else "work_memories"
 		vector = list(encoder.embed([text]))[0].tolist()
-		
+
 		client.upsert(
 			collection_name=coll_name,
 			points=[

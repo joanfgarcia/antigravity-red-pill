@@ -1,8 +1,10 @@
-import psutil
-import subprocess
-import shutil
 import os
-from typing import Dict, Any
+import shutil
+import subprocess
+from typing import Any, Dict
+
+import psutil
+
 
 class HardwareSentinel:
 	"""
@@ -67,12 +69,12 @@ class HardwareSentinel:
 def get_telemetry_report() -> str:
 	"""Generates a Markdown report for the IDE Control Panel."""
 	stats = HardwareSentinel.get_stats()
-	
+
 	report = "### 🖥️ RED PILL HARDWARE CONTROL PANEL\n\n"
-	
+
 	# CPU/RAM
 	report += f"[CPU] {stats['cpu']['usage_percent']}% | RAM: {stats['memory']['percent']}% ({stats['memory']['available_gb']}GB free)\n"
-	
+
 	# GPU
 	if stats["gpu"]:
 		for g in stats["gpu"]:
@@ -83,8 +85,8 @@ def get_telemetry_report() -> str:
 				report += f"[{lbl}] {g['name']}: {g['status']}\n"
 	else:
 		report += "[CUDA/ROCm] Not detected.\n"
-		
+
 	# NPU
 	report += f"[NPU] {stats['npu'].get('name', 'NPU')}: {stats['npu']['status']}\n"
-	
+
 	return report

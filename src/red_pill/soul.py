@@ -1,11 +1,12 @@
+import logging
 import os
 import shutil
 import tarfile
 import time
-import logging
-import json
-import requests
 from typing import List, Optional
+
+import requests
+
 import red_pill.config as cfg
 
 logger = logging.getLogger(__name__)
@@ -56,7 +57,7 @@ class SoulManager:
 					r.raise_for_status()
 					with open(snap_path, 'wb') as f:
 						shutil.copyfileobj(r.raw, f)
-				
+
 				saved_files.append(snap_path)
 				logger.info(f"Saved: {snap_path}")
 			except Exception as e:
@@ -84,7 +85,7 @@ class SoulManager:
 		copied_count = 0
 		for file_path in files_to_backup:
 			if os.path.exists(file_path):
-				# Reconstruct path relative to HOME or root? 
+				# Reconstruct path relative to HOME or root?
 				# Let's simple-copy with a prefix for now, or use a flat structure with path info.
 				# To match the restore logic, we'll mimic the home structure.
 				rel_path = os.path.relpath(file_path, os.path.expanduser("~"))
@@ -117,11 +118,11 @@ class SoulManager:
 		timestamp = time.strftime("%Y%m%d")
 		# 1. Perform a fresh backup first
 		self.full_backup()
-		
+
 		# 2. Package everything in IA_DIR/backups and ~/.gemini/antigravity
 		export_dir = os.path.join(self.ia_dir, "backups", "export")
 		os.makedirs(export_dir, exist_ok=True)
-		
+
 		if not output_path:
 			output_path = os.path.join(export_dir, f"SOUL_KIT_{timestamp}.tar.gz")
 
@@ -150,7 +151,7 @@ class SoulManager:
 					src_file = os.path.join(root, file)
 					rel_path = os.path.relpath(src_file, home_src)
 					dest_file = os.path.join(os.path.expanduser("~"), rel_path)
-					
+
 					if commit:
 						os.makedirs(os.path.dirname(dest_file), exist_ok=True)
 						shutil.copy2(src_file, dest_file)

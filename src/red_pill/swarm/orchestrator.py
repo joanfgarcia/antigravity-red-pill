@@ -1,7 +1,9 @@
 import asyncio
 import time
-from typing import List, Dict, Any
+from typing import List
+
 from red_pill.swarm.base import Minion, SwarmResult
+
 
 class GruOrchestrator:
 	"""
@@ -14,7 +16,6 @@ class GruOrchestrator:
 
 	async def deploy_swarm(self, task: str, minions: List[Minion], **kwargs) -> List[SwarmResult]:
 		"""Deploy a set of minions in parallel and collect results."""
-		start_time = time.time()
 		tasks = [self._run_minion(m, task, **kwargs) for m in minions]
 		results = await asyncio.gather(*tasks)
 		return results

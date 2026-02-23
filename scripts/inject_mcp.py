@@ -1,8 +1,8 @@
-import os
-import sys
+import argparse
 import json
 import logging
-import argparse
+import os
+import sys
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger("mcp_injector")
@@ -11,7 +11,7 @@ def main():
     parser = argparse.ArgumentParser(description="Inject RedPill-Kernel into MCP config")
     parser.add_argument("--uv-path", required=True, help="Absolute path to uv executable")
     parser.add_argument("--redpill-dir", required=True, help="Absolute path to Red Pill source code")
-    
+
     args = parser.parse_args()
 
     # Paths to look for config files
@@ -23,11 +23,11 @@ def main():
         os.path.expanduser("~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"),
         os.path.expanduser("~/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/cline_mcp_settings.json")
     ]
-    
+
     mcp_server_path = os.path.join(args.redpill_dir, "src", "red_pill", "mcp_server.py")
-    
+
     success_count = 0
-    
+
     for config_file in candidates:
         # Only create if the parent config directory exists (except for Antigravity)
         parent_dir = os.path.dirname(config_file)
@@ -35,7 +35,7 @@ def main():
             os.makedirs(parent_dir, exist_ok=True)
         elif not os.path.exists(parent_dir):
             continue
-            
+
         config = {}
         if os.path.exists(config_file):
             try:
@@ -47,7 +47,7 @@ def main():
 
         if "mcpServers" not in config:
             config["mcpServers"] = {}
-        
+
         config["mcpServers"]["RedPill-Kernel"] = {
             "command": args.uv_path,
             "args": [

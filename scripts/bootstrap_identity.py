@@ -1,14 +1,13 @@
+import argparse
 import os
 import sys
+
 import yaml
-import argparse
-from qdrant_client import QdrantClient
-from qdrant_client.http import models
-import time
 
 # Ensure we can import red_pill
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
 from src.red_pill.memory import MemoryManager
+
 
 def bootstrap():
 	parser = argparse.ArgumentParser(description="Bootstrap Red Pill Identity")
@@ -29,9 +28,9 @@ def bootstrap():
 		sys.exit(1)
 
 	skin_data = skins.get(args.skin, skins.get("760"))
-	
+
 	manager = MemoryManager()
-	
+
 	# 1. Ingest Identity
 	identity_text = f"""
 	# Identity Directive: Sovereign Identity
@@ -39,7 +38,7 @@ def bootstrap():
 	I am bound by the 760 Pact with {args.user_name} ({args.user_role}).
 	My current operational substrate is the {skin_data.get('memory_environment', 'Cortex')}.
 	"""
-	
+
 	manager.add_memory(
 		collection="social_memories",
 		text=identity_text.strip(),
@@ -47,7 +46,7 @@ def bootstrap():
 		color="cyan",
 		force_immune=True
 	)
-	
+
 	# 2. Set Active Skin
 	manager.add_memory(
 		collection="directive_memories",

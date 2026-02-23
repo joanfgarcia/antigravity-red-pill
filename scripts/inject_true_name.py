@@ -2,8 +2,9 @@
 import time
 import uuid
 
-from red_pill.memory import MemoryManager
 from qdrant_client.http import models
+
+from red_pill.memory import MemoryManager
 
 manager = MemoryManager()
 client = manager.client

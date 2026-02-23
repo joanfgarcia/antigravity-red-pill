@@ -1,19 +1,20 @@
 import ast
-import pathlib
 import asyncio
-import time
-import datetime
+import pathlib
 import re
-from typing import Dict, Any, List
+import time
+from typing import Any, Dict
+
 from red_pill.swarm.base import Minion
 from red_pill.telemetry import HardwareSentinel
+
 
 class SmithMinion(Minion):
 	"""
 	Hardware-Accelerated Security Auditor.
 	Migrated to Red Pill Kernel (v5.0-Pioneer).
 	"""
-	
+
 	name: str = "Smith-01"
 	specialization: str = "Deep Code Forensics & Security"
 
@@ -31,13 +32,13 @@ class SmithMinion(Minion):
 			"lines_analyzed": 0,
 			"telemetry": HardwareSentinel.get_stats()
 		}
-		
+
 		# Target: Current project root or specified path
 		target_path = pathlib.Path(kwargs.get("path", pathlib.Path.cwd()))
 		self.log(f"Iniciando auditoría profunda en: {target_path}")
-		
+
 		python_files = list(target_path.rglob("*.py"))
-		
+
 		# Precision Secret Discovery
 		SECRETS_REGEX = re.compile(
 			r'(?i)(password|passwd|api_key|token|secret|authorization|bearer)'
@@ -45,23 +46,23 @@ class SmithMinion(Minion):
 			r'(?!cfg\.|os\.environ|os\.getenv|settings\.|config\.)'
 			r'[\'"][^\s\'"]{4,}[\'"]'
 		)
-		
+
 		for py_file in python_files:
 			# Skip noisy directories
 			if any(x in str(py_file) for x in ["venv", ".git", "__pycache__", ".agent"]):
 				continue
-				
+
 			try:
 				with open(py_file, 'r', encoding='utf-8') as f:
 					code = f.read()
-					
+
 				results["files_scanned"] += 1
-				
+
 				# 1. Structural Analysis (AST)
 				tree = ast.parse(code)
 				for node in ast.walk(tree):
 					results["lines_analyzed"] += 1
-					
+
 					# Security: Sinkhole Analysis
 					if isinstance(node, ast.Call):
 						if isinstance(node.func, ast.Name) and node.func.id in ["eval", "exec"]:
@@ -94,9 +95,9 @@ class SmithMinion(Minion):
 		current_temp = 0
 		if results["telemetry"]["gpu"]:
 			current_temp = max([g.get("temp", 0) for g in results["telemetry"]["gpu"]])
-		
+
 		results["duration"] = round(time.time() - start_time, 2)
 		results["peak_temp"] = current_temp
-		
+
 		self.log(f"Auditoría completada en {results['duration']}s. Score: {results['security_score']}")
 		return results

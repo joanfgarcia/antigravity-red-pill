@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # Execution: uv run --with qdrant-client --with fastembed python3 memory_manager.py [add|search] [work|social] [text]
 import sys
-import json
 import time
+
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 
@@ -20,7 +20,7 @@ except Exception as e:
 	print(f"Details: {e}")
 	sys.exit(1)
 
-# For 1.15+, we can use query_points which handles inference if configured, 
+# For 1.15+, we can use query_points which handles inference if configured,
 # or we just pass the text and let it handle it if we have a provider.
 # Since we want to be local and fast, we'll stick to manual embedding with fastembed if needed,
 # or better yet, since we have the Qdrant MCP server running, we could use that.
@@ -35,13 +35,13 @@ except ImportError:
 def add_memory(collection, text, importance=1.0, metadata=None):
 	if metadata is None:
 		metadata = {}
-	
+
 	if encoder:
 		vector = list(encoder.embed([text]))[0].tolist()
 	else:
 		# Fallback if fastembed is not available (should be in uv run)
 		vector = [0.0] * 384 # Placeholder
-	
+
 	payload = {
 		"content": text,
 		"importance": importance,
@@ -50,7 +50,7 @@ def add_memory(collection, text, importance=1.0, metadata=None):
 		"last_recalled_at": time.time(),
 		**metadata
 	}
-	
+
 	client.upsert(
 		collection_name=collection,
 		points=[
@@ -76,16 +76,16 @@ def search_and_reinforce(collection, query_text, limit=3):
 		limit=limit,
 		with_payload=True
 	)
-	
+
 	results = response.points
 	points_to_update = []
-	
+
 	for hit in results:
 		# Reinforcement logic
 		score = hit.payload.get("reinforcement_score", 1.0)
 		hit.payload["reinforcement_score"] = score + 0.1
 		hit.payload["last_recalled_at"] = time.time()
-		
+
 		points_to_update.append(
 			models.PointStruct(
 				id=hit.id,
@@ -93,17 +93,17 @@ def search_and_reinforce(collection, query_text, limit=3):
 				payload=hit.payload
 			)
 		)
-	
+
 	if points_to_update:
 		client.upsert(collection_name=collection, points=points_to_update)
-	
+
 	return results
 
 if __name__ == "__main__":
 	if len(sys.argv) < 3:
 		print("Usage: ./memory_manager.py [add|search|delete] [collection_name|id] [text|query]")
 		sys.exit(1)
-	
+
 	cmd = sys.argv[1]
 	collection_type = sys.argv[2]
 	if collection_type == "social":
@@ -113,7 +113,7 @@ if __name__ == "__main__":
 	else:
 		collection = "work_memories"
 	content = " ".join(sys.argv[3:])
-	
+
 	if cmd == "add":
 		add_memory(collection, content)
 	elif cmd == "search":

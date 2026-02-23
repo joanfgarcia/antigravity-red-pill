@@ -1,15 +1,16 @@
 import asyncio
-from mcp.server.models import InitializationOptions
+
 import mcp.types as types
 from mcp.server import NotificationOptions, Server
+from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
 
-from red_pill.telemetry import HardwareSentinel
-from red_pill.swarm.orchestrator import GruOrchestrator
-from red_pill.swarm.agents.smith import SmithMinion
-from red_pill.swarm.agents.oracle import OracleMinion
-from red_pill.swarm.agents.keymaker import KeymakerMinion
 from red_pill.swarm.agents.compressor import CompressorMinion
+from red_pill.swarm.agents.keymaker import KeymakerMinion
+from red_pill.swarm.agents.oracle import OracleMinion
+from red_pill.swarm.agents.smith import SmithMinion
+from red_pill.swarm.orchestrator import GruOrchestrator
+from red_pill.telemetry import HardwareSentinel
 
 # Initialize the Sovereign MCP Server
 server = Server("RedPill-Kernel")
@@ -85,14 +86,14 @@ async def handle_call_tool(
 		# Critical Thermal Guard check
 		gpu_temp = max([g.get("temp", 0) for g in stats["gpu"]]) if stats["gpu"] else 0
 		thermal_msg = " [🔥 OVERHEAT RISK]" if gpu_temp > 80 else " [🟢 OPTIMAL]"
-		
+
 		report = f"RED PILL TELEMETRY{thermal_msg}\n"
 		report += f"[CPU] {stats['cpu']['usage_percent']}% | RAM: {stats['memory']['percent']}%\n"
 		for g in stats["gpu"]:
 			lbl = g.get("type", "GPU")
 			report += f"[{lbl}] {g['name']}: {g.get('usage', 'N/A')}% @ {g.get('temp', 'N/A')}°C\n"
 		report += f"[NPU] {stats['npu'].get('name', 'NPU')}: {stats['npu']['status']}"
-		
+
 		return [types.TextContent(type="text", text=report)]
 
 	elif name == "run_security_audit":

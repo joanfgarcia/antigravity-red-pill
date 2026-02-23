@@ -1,4 +1,3 @@
-import sys
 import gc
 
 # 1. Fallback to basic extraction if llama_cpp is not available
@@ -7,7 +6,6 @@ try:
 	LLAMA_AVAILABLE = True
 except ImportError:
 	LLAMA_AVAILABLE = False
-	import re
 
 class EdgeCompressor:
 	"""
@@ -17,7 +15,7 @@ class EdgeCompressor:
 	def __init__(self, model_path: str):
 		self.model_path = model_path
 		self.llm = None
-		
+
 		# Only load if python binding exists
 		if LLAMA_AVAILABLE:
 			try:
@@ -42,7 +40,7 @@ class EdgeCompressor:
 				"Reply in the same language as the user."
 			)
 			prompt = f"<|system|>\n{system_prompt}</s>\n<|user|>\n{text}</s>\n<|assistant|>\n"
-			
+
 			output = self.llm(
 				prompt,
 				max_tokens=512,
@@ -65,7 +63,7 @@ class EdgeCompressor:
 		compressed_lines = []
 		for s in sentences:
 			fluff = [
-				"necesito que", "me gustaría saber si", "podrías", "te importaría", 
+				"necesito que", "me gustaría saber si", "podrías", "te importaría",
 				"estoy intentando", "creo que", "básicamente lo que pasa es que"
 			]
 			for f in fluff:

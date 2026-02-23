@@ -7,13 +7,12 @@ import sys
 import yaml  # type: ignore
 
 import red_pill.config as cfg
-import red_pill.config as cfg
 from red_pill.memory import MemoryManager
 from red_pill.seed import seed_project
-from red_pill.telemetry import get_telemetry_report
-from red_pill.swarm.orchestrator import GruOrchestrator
-from red_pill.swarm.agents.smith import SmithMinion
 from red_pill.soul import SoulManager
+from red_pill.swarm.agents.smith import SmithMinion
+from red_pill.swarm.orchestrator import GruOrchestrator
+from red_pill.telemetry import get_telemetry_report
 
 logger = logging.getLogger(__name__)
 
@@ -203,7 +202,7 @@ def main() -> None:
 					print(f"--- [DEEP RECALL ACTIVATED: {collection.upper()}] ---")
 				else:
 					print(f"--- [RESULTS: {collection.upper()}] ---")
-				
+
 				for hit in results:
 					score = hit.payload.get("reinforcement_score", 0.0)
 					color = hit.payload.get("color", "gray")

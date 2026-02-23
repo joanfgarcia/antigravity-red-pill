@@ -157,8 +157,8 @@ def inject_genesis(manager: MemoryManager) -> None:
 
 def load_markdown_seeds(manager: MemoryManager) -> None:
 	"""Read all Markdown files from the seeds directory and inject into core_directives."""
-	import pathlib
 	import hashlib
+	import pathlib
 
 	seed_dir = pathlib.Path(__file__).parent.parent.parent / "seeds"
 	if seed_dir.exists() and seed_dir.is_dir():

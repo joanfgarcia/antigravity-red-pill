@@ -1,8 +1,8 @@
-import asyncio
-import uuid
 import logging
+import uuid
+from typing import Any, Dict, Optional
+
 from pydantic import BaseModel, Field
-from typing import Dict, Any, Optional, List
 
 logger = logging.getLogger("red_pill.swarm")
 
@@ -11,12 +11,12 @@ class Minion(BaseModel):
 	Base class for all transient, specialized agents in the Red Pill Swarm.
 	Redesigned for Kernel integration (v5.0 Pioneer).
 	"""
-	
+
 	id: str = Field(default_factory=lambda: str(uuid.uuid4()))
 	name: str
 	specialization: str
 	metadata: Dict[str, Any] = Field(default_factory=dict)
-	
+
 	class Config:
 		arbitrary_types_allowed = True
 
