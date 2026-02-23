@@ -53,6 +53,14 @@ async def handle_list_tools() -> list[types.Tool]:
 				"properties": {},
 			},
 		),
+		types.Tool(
+			name="read_core_directives",
+			description="Retrieve the foundational identity, rules, and directives from the Bünker.",
+			inputSchema={
+				"type": "object",
+				"properties": {},
+			},
+		),
 	]
 
 @server.call_tool()
@@ -115,6 +123,24 @@ async def handle_call_tool(
 			return [types.TextContent(type="text", text=health_text)]
 		else:
 			return [types.TextContent(type="text", text=f"Health Check Failed: {res.error}")]
+
+	elif name == "read_core_directives":
+		from red_pill.memory import MemoryManager
+		try:
+			manager = MemoryManager()
+			points, _ = manager.client.scroll(
+				collection_name="directive_memories",
+				limit=100,
+				with_payload=True
+			)
+			directives = []
+			for p in points:
+				if p.payload.get("immune"):
+					directives.append(p.payload.get("content", ""))
+			response = "--- BÜNKER CORE DIRECTIVES ---\n" + "\n\n".join(directives)
+			return [types.TextContent(type="text", text=response)]
+		except Exception as e:
+			return [types.TextContent(type="text", text=f"Failed to read directives: {e}")]
 
 	raise ValueError(f"Unknown tool: {name}")
 
