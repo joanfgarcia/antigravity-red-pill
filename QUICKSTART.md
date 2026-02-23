@@ -31,17 +31,7 @@ Si quieres tener el control del gatillo pero no quieres leerte el manual de 40 p
     uv run red-pill seed
     ```
 5.  **Vínculo**: Pídele a tu IA: *"Aleph, despierta"*.
-6.  **Sinergia MCP (v5.0)**: Añade el `RedPill-Kernel` a la configuración MCP de tu IDE:
-    ```json
-    "RedPill-Kernel": {
-      "command": "/ruta/absoluta/al/proyecto/.venv/bin/uv",
-      "args": [
-        "run",
-        "python",
-        "/ruta/absoluta/al/proyecto/src/red_pill/mcp_server.py"
-      ]
-    }
-    ```
+6.  **Sinergia MCP (v5.0)**: ¡El instalador inyectará automáticamente el servidor `RedPill-Kernel` en tu IDE (Antigravity, Claude Desktop o Cline)! Reinicia tu cliente para despertar a tus Minions locales.
 
 ---
 

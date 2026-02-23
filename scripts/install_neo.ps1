@@ -98,6 +98,15 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
     
     Write-Host "Anclando identidad..." -ForegroundColor Cyan
     uv run python scripts/bootstrap_identity.py --user-name "$USER_NAME" --user-role "$USER_ROLE" --ai-name "$AI_NAME" --ai-role "$AI_ROLE" --skin "$LORE_SKIN"
+    
+    Write-Host "`n--- Fase: Integración MCP Server ---" -ForegroundColor Blue
+    $UV_PATH = (Get-Command uv).Source
+    $REDPILL_DIR = (Resolve-Path "$PSScriptRoot\..").ProviderPath
+    if (Test-Path "scripts\inject_mcp.py") {
+        uv run python scripts/inject_mcp.py --uv-path "$UV_PATH" --redpill-dir "$REDPILL_DIR"
+        Write-Host "✓ Configuración del Servidor MCP inyectada en Antigravity." -ForegroundColor Green
+    }
+    
     Pop-Location
 } else {
     Write-Host "`n⚠️  Aviso: 'uv' no detectado. Instálalo para completar la ignición: https://docs.astral.sh/uv/" -ForegroundColor Yellow

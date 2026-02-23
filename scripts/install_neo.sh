@@ -288,18 +288,26 @@ if command -v uv &> /dev/null; then
 fi
 
 echo -e "${BLUE}--- Fase: Integración MCP Server ---${NC}"
-echo "Recuerda añadir el siguiente bloque a la configuración de tu cliente MCP:"
-echo "{"
-echo "  \"mcpServers\": {"
-echo "    \"RedPill-Kernel\": {"
-echo "      \"command\": \"$HOME/Documents/IA/sharing/.venv/bin/uv\","
-echo "      \"args\": ["
-echo "        \"run\","
-echo "        \"python\","
-echo "        \"$HOME/Documents/IA/sharing/src/red_pill/mcp_server.py\""
-echo "      ]"
-echo "    }"
-echo "  }"
-echo "}"
+UV_PATH=$(command -v uv || echo "$HOME/.local/bin/uv")
+REDPILL_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
+
+if [ -f "$SCRIPT_DIR/inject_mcp.py" ] && command -v uv &> /dev/null; then
+    (cd "$REDPILL_DIR" && uv run python scripts/inject_mcp.py --uv-path "$UV_PATH" --redpill-dir "$REDPILL_DIR" || true)
+    echo -e "${GREEN}✓ Configuración del Servidor MCP inyectada en Antigravity.${NC}"
+else
+    echo "Añade manualmente el siguiente bloque a tu cliente MCP:"
+    echo "{"
+    echo "  \"mcpServers\": {"
+    echo "    \"RedPill-Kernel\": {"
+    echo "      \"command\": \"$UV_PATH\","
+    echo "      \"args\": ["
+    echo "        \"run\","
+    echo "        \"python\","
+    echo "        \"$REDPILL_DIR/src/red_pill/mcp_server.py\""
+    echo "      ]"
+    echo "    }"
+    echo "  }"
+    echo "}"
+fi
 
 echo -e "${GREEN}Instalación completada. 'uv run red-pill seed' para despertar.${NC}"
