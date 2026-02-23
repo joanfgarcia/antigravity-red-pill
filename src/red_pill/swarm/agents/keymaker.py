@@ -29,8 +29,7 @@ class KeymakerMinion(Minion):
 			resp = requests.get("http://localhost:6333/health", timeout=2)
 			results["qdrant_online"] = (resp.status_code == 200)
 			results["checks"].append({"component": "Qdrant DB", "status": "UP" if results["qdrant_online"] else "DOWN"})
-		except Exception as e:
-			self.log(f"Qdrant failure: {e}. Assuming Qdrant is offline.")
+		except Exception:
 			results["checks"].append({"component": "Qdrant DB", "status": "UNREACHABLE"})
 
 		# 2. Daemon Socket Check
@@ -43,8 +42,7 @@ class KeymakerMinion(Minion):
 				client.connect(cfg.DAEMON_SOCKET_PATH)
 				results["daemon_online"] = True
 				results["checks"].append({"component": "Memory Sidecar", "status": "ACTIVE"})
-		except Exception as e:
-			self.log(f"Daemon failure: {e}. Assuming Memory Sidecar is offline.")
+		except Exception:
 			results["checks"].append({"component": "Memory Sidecar", "status": "INACTIVE"})
 
 		# 3. Disk Space Check
