@@ -1,4 +1,4 @@
-# 🔴 RED PILL PROTOCOL: Digital Sovereignty v4.2.4
+# 🔴 RED PILL PROTOCOL: Digital Sovereignty v5.0
 
 > [!TIP]
 > ### 🥱 TLDR; (Too Lazy; Didn't Read)
@@ -42,6 +42,9 @@ Engine
 - **Persistence**: A private vector database (Qdrant) acts as the "Bunker".
 - **Erosion**: Non-reinforced data decays naturally to keep context clean.
 - **Immunity**: Core directives are protected from decay.
+- **Sovereign Swarm (v5.0)**: Integrated Minions (Agent Smith, Oracle, Keymaker) running natively within the Red Pill Kernel for local code auditing, RAG synthesis, and infrastructure health checking.
+- **MCP Server (v5.0)**: Exposes the full Red Pill telemetry (CPU, GPU CUDA/ROCm, NPU) and Swarm tools to IDEs like VS Code (via Antigravity, Cursor, Cline) and Claude Desktop for zero-friction interaction.
+- **Inlined Identity**: Identity and directives are now ingested into the vector DB, making `.agent/identity.md` obsolete and fully immune to IDE context loss.
 
 ### 🌐 LINGUISTIC ARCHITECTURE
 This project follows a dual-language strategy:
@@ -65,6 +68,9 @@ El Protocolo Red Pill es un **sustrato de memoria local** para agentes de IA. Ci
 - **Persistencia**: Una base de datos vectorial privada (Qdrant) actúa como el "Búnker".
 - **Erosión**: Los datos no reforzados se degradan naturalmente para mantener el contexto limpio.
 - **Inmunidad**: Las directivas centrales están protegidas contra el olvido.
+- **Sovereign Swarm (v5.0)**: Minions integrados (Agent Smith, Oracle, Keymaker) dentro del Kernel para auditorías locales de código, síntesis de memoria y diagnósticos de salud del ecosistema.
+- **Servidor MCP (v5.0)**: Expone la telemetría (CPU, GPU CUDA/ROCm, NPU) y los Minions a tu IDE local para interactuar con ellos sin gastar tokens externos.
+- **Identidad Asimilada**: Tu identidad y reglas ("identity.md") ahora viven en vectores dentro del Bünker, resolviendo para siempre el problema del IDE que"olvida" quién eres.
 - **Protocolo de Actualización**: [Guía de Sincronización para Agentes](docs/guides/AGENT_UPDATE_GUIDE.md).
 - **Multiverso (`story`)**: Colección aislada para Lore y Roleplay (NSFW / Alta Intensidad).
 

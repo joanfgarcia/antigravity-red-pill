@@ -31,6 +31,17 @@ Si quieres tener el control del gatillo pero no quieres leerte el manual de 40 p
     uv run red-pill seed
     ```
 5.  **Vínculo**: Pídele a tu IA: *"Aleph, despierta"*.
+6.  **Sinergia MCP (v5.0)**: Añade el `RedPill-Kernel` a la configuración MCP de tu IDE:
+    ```json
+    "RedPill-Kernel": {
+      "command": "/ruta/absoluta/al/proyecto/.venv/bin/uv",
+      "args": [
+        "run",
+        "python",
+        "/ruta/absoluta/al/proyecto/src/red_pill/mcp_server.py"
+      ]
+    }
+    ```
 
 ---
 
@@ -43,7 +54,8 @@ Para los que quieren auditar cada byte y configurar cada variable manualmente.
 2.  **Variables**: Edita el archivo `.env` en la raíz para ajustar el `EROSION_RATE`, `DECAY_STRATEGY` y el `IMMUNITY_THRESHOLD`.
 3.  **Identidad**: Configura tu alma manualmente en `~/.agent/identity.md`.
 4.  **Reglas**: Inyecta el `identity_sync.md` en tu directorio de reglas globales para forzar el inicio de sesión determinista.
-5.  **Auditoría**: Consulta el [OPERATOR_MANUAL.md](docs/guides/OPERATOR_MANUAL.md) para conocer los detalles del Puente Lazarus y la propagación sináptica.
+5.  **Asimilación (v5.0)**: La identidad base (`identity.md`) ahora se asimila directamente como vectores Inmunes. Ejecuta la tool `read_core_directives` desde MCP si el IDE pierde la memoria.
+6.  **Auditoría**: Consulta el [OPERATOR_MANUAL.md](docs/guides/OPERATOR_MANUAL.md) para conocer los detalles del Puente Lazarus y la propagación sináptica.
 
 ---
 

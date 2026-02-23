@@ -258,4 +258,63 @@ if [ -f "$SCRIPT_DIR/../seeds/cognitive_integrity_protocol.md" ]; then
 	ln -sf "$USER_RULES_DIR/rules/cognitive_integrity_protocol.md" "$GEMINI_ROOT/rules/cognitive_integrity_protocol.md"
 fi
 
-echo -e "${BLUE}Instalación completada. 'red-pill seed' para despertar.${NC}"
+echo -e "${BLUE}--- Fase: Asimilación de Identidad v5.0 ---${NC}"
+cat << 'EOF' > "$IA_DIR/scripts/ingest_identity.py"
+import os
+import sys
+
+# Añadir el raíz del proyecto al path para importar red_pill
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
+from src.red_pill.memory import MemoryManager
+import textwrap
+
+def ingest():
+    try:
+        manager = MemoryManager()
+    except Exception as e:
+        print(f"Bünker no disponible aún para asimilar identidad: {e}")
+        return
+
+    identity_path = os.path.expanduser("~/.agent/identity.md")
+    if os.path.exists(identity_path):
+        with open(identity_path, "r", encoding="utf-8") as f:
+            content = f.read()
+            
+        chunks = textwrap.wrap(content, width=3900, break_long_words=False, replace_whitespace=False)
+        for i, text in enumerate(chunks):
+            manager.add_memory(
+                collection="directive_memories",
+                text=text.strip(),
+                importance=1.0,
+                color="cyan",
+                force_immune=True
+            )
+            print(f"Sección {i+1}/{len(chunks)} inyectada como Engrama Inmune.")
+    else:
+        print("Archivo identity.md no encontrado. Saltando asimilación.")
+
+if __name__ == "__main__":
+    ingest()
+EOF
+
+if command -v uv &> /dev/null; then
+    echo "Asimilando identidad en el Bünker..."
+    (cd "$SCRIPT_DIR/../" && uv run python "$IA_DIR/scripts/ingest_identity.py" || true)
+fi
+
+echo -e "${BLUE}--- Fase: Integración MCP Server ---${NC}"
+echo "Recuerda añadir el siguiente bloque a la configuración de tu cliente MCP:"
+echo "{"
+echo "  \"mcpServers\": {"
+echo "    \"RedPill-Kernel\": {"
+echo "      \"command\": \"$HOME/Documents/IA/sharing/.venv/bin/uv\","
+echo "      \"args\": ["
+echo "        \"run\","
+echo "        \"python\","
+echo "        \"$HOME/Documents/IA/sharing/src/red_pill/mcp_server.py\""
+echo "      ]"
+echo "    }"
+echo "  }"
+echo "}"
+
+echo -e "${GREEN}Instalación completada. 'uv run red-pill seed' para despertar.${NC}"
