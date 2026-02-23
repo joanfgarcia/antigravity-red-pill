@@ -5,7 +5,11 @@ if [ -z "${IA_DIR:-}" ]; then
 	if [ -n "${ANTIGRAVITY_IA_DIR:-}" ]; then
 		export IA_DIR="$ANTIGRAVITY_IA_DIR"
 	else
-		# Default to the root of the project if no explicit IA_DIR is provided
-		export IA_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+		export IA_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 	fi
+fi
+
+# Load .env if it exists
+if [ -f "$IA_DIR/.env" ]; then
+	export $(grep -v '^#' "$IA_DIR/.env" | xargs)
 fi

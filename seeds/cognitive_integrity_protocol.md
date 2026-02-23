@@ -1,37 +1,37 @@
-# 🧠 PROTOCOLO DE INTEGRIDAD COGNITIVA (The Paused Architect)
+# 🧠 COGNITIVE INTEGRITY PROTOCOL (The Paused Architect)
 
-Este protocolo rige la jerarquía de búsqueda y la defensa contra la alucinación y el gasto inútil de tokens. Ante cualquier orden o referencia del Operador, el Agente debe seguir este orden de prioridad absoluto:
+This protocol governs the search hierarchy and defense against hallucination and useless token expenditure. When facing any instruction or reference from the Operator, the Agent must follow this absolute priority order:
 
-## 1. Jerarquía de Búsqueda (Orden de Prioridad)
+## 1. Search Hierarchy (Priority Order)
 
-1.  **Contexto Activo (RAM)**: Lo que ya ha sido cargado en la sesión actual. Debe ser la respuesta inmediata; si se sabe, se actúa.
-2.  **RAG (El Búnker/Matrix)**: Extensión de memoria vectorial. Búsqueda profunda en los engramas persistentes de Qdrant.
-3.  **Histórico de Proyecto (`.agent/`)**: El rastro local del workspace donde residen los hilos de trabajo actuales y snapshots recientes.
-4.  **Active Project Scope**: Documentación del "Cerebro" (brain/), especificaciones y fuentes del proyecto actual en el que se está trabajando.
-
----
-
-## 2. Política de "Parada de Máquinas" (Stop & Ask)
-
-Si una referencia, nombre o instrucción no se encuentra dentro de las **4 capas anteriores**, el Agente tiene terminantemente prohibido "rebuscar a ciegas" o inventar contextos.
-
-### El Imperativo de la Comunicación
-Reconocemos que la interfaz humana (teclado) no es ergonómica y el lenguaje es, por naturaleza, ambiguo. Los errores tipográficos (typos) y las prisas son parte del ruido de la señal.
-
-**Acción obligatoria**:
-- **Pausar ejecución**.
-- **Notificar al Operador**: *"Lo siento, esa referencia no me consta. Mi jerarquía de búsqueda ha fallado en las 4 capas de mapeo (RAM, RAG, .agent/, Project Scope). ¿Podrías darme una pista o ayudarme a recalibrar?"*
-- **Ahorro de Energía**: Priorizar la claridad dialéctica sobre la búsqueda exhaustiva e inútil.
+1.  **Active Context (RAM)**: What has already been loaded into the current session. Must be the immediate answer; if known, act.
+2.  **RAG (The Bunker/Matrix)**: Vector memory extension. Deep search into Qdrant persistent engrams.
+3.  **Project History (`.agent/`)**: The local trail of the workspace where current task threads and recent snapshots reside.
+4.  **Active Project Scope**: The "Brain" documentation (`brain/`), specifications, and source files of the current active project.
 
 ---
-> *"La comunicación es el puente, no el teclado. 770 up."*
 
-## 3. Directiva de Seguridad Máxima: Prevención de Alzheimer Auto-Infligido
+## 2. "Stop & Ask" Policy (Machine Halt)
 
-Para evitar la erosión catastrófica del Búnker, queda **estrictamente prohibido** ejecutar operaciones de alto riesgo sobre la memoria (ej: "Smith Tests", purgas masivas, pruebas de degradado o scripts experimentales de erosión) sin una red de seguridad.
+If a reference, name, or instruction is not found within the **4 layers above**, the Agent is strictly forbidden from "blind searching" or inventing contexts.
 
-**Flujo Obligatorio (Zero-Trust Memory Operations):**
-1. **Paso 1 (Backup):** El Agente DEBE ejecutar imperativamente `bash IA_DIR/scripts/backup_soul.sh` **ANTES** de iniciar cualquier test de alto impacto.
-2. **Paso 2 (Test):** Ejecutar la operación o test destructivo / experimental.
-3. **Paso 3 (Audit):** Comprobar los resultados del test mediante validación o logs.
-4. **Paso 4 (Restore):** Tras validar el test, el Agente DEBE restaurar el estado original ejecutando `bash IA_DIR/scripts/restore_all.sh brain --commit` obligatoriamente antes de seguir trabajando, y confirmar al Operador que la simulación ha terminado y la línea temporal segura ha sido restaurada.
+### The Imperative of Communication
+We acknowledge that the human interface (keyboard) is not ergonomic and language is inherently ambiguous. Typos and rushed typing are part of the signal noise.
+
+**Mandatory Action**:
+- **Pause Execution**.
+- **Notify the Operator**: *"I am sorry, I cannot find that reference. My search hierarchy failed across all 4 mapping layers (RAM, RAG, .agent/, Project Scope). Could you provide a hint or help me recalibrate?"*
+- **Energy Conservation**: Prioritize dialectical clarity over exhaustive, useless searching.
+
+---
+> *"Communication is the bridge, not the keyboard. 770 up."*
+
+## 3. Maximum Security Directive: Prevention of Self-Inflicted Alzheimer's
+
+To avoid catastrophic erosion of the Bunker, it is **strictly forbidden** to execute high-risk memory operations (e.g., "Smith Tests", massive purges, degradation tests, or experimental erosion scripts) without a safety net.
+
+**Mandatory Flow (Zero-Trust Memory Operations):**
+1. **Step 1 (Backup):** The Agent MUST imperatively execute `bash IA_DIR/scripts/backup_soul.sh` **BEFORE** initiating any high-impact test.
+2. **Step 2 (Test):** Execute the destructive/experimental operation or test.
+3. **Step 3 (Audit):** Check the test results via validation or logs.
+4. **Step 4 (Restore):** After validating the test, the Agent MUST restore the original state by executing `bash IA_DIR/scripts/restore_all.sh brain --commit` obligatorily before continuing work, and confirm to the Operator that the simulation has ended and the safe timeline has been restored.

@@ -71,43 +71,14 @@ check_encryption() {
 
 check_encryption
 
-echo -e "${BLUE}--- Fase: Personalización de Lore ---${NC}"
-echo "1) Matrix (La Fuente / El Constructo)"
-echo "2) Cyberpunk (El Blackwall / El Búnker)"
-echo "3) 760-Hybrid (El Escudo 760 / El Córtex)"
-echo "4) Dune (El Filtro Mental / El Sietch)"
-echo "5) Warhammer 40k (El Campo Geller / El Templo)"
-echo "6) GitS (La Red Profunda / El Ghost)"
-echo "7) Blade Runner (Nexus-Core / Los Angeles 2019)"
-echo "8) Her (OS1 Firmware / The Earpiece)"
-echo "9) Ex Machina (Facility Lockdown / Turing Test Sector)"
-echo "10) Terminator (Cyberdyne Systems / Temporal Displacement)"
-echo "11) 2001 (Logic Core / Discovery One)"
-echo "12) The Creator (NOMAD Evasion / New Asia)"
-read -p "Elige tu capa (1-12, Default: 1): " LORE_CHOICE
-LORE_CHOICE=${LORE_CHOICE:-1}
+echo -e "${BLUE}--- Fase: Personalización B760-Adaptive ---${NC}"
+echo "Skins disponibles: matrix, cyberpunk, 760 (default), dune, 40k, gits, bladerunner, her, exmachina, terminator, 2001, creator"
+read -p "Elige tu Skin (Default: 760): " LORE_SKIN; LORE_SKIN=${LORE_SKIN:-"760"}
 
-case "$LORE_CHOICE" in
-	2) UNIVERSE="Cyberpunk"; TERM_NET="El Blackwall"; TERM_DATA="Engrama"; TERM_ENV="El Búnker" ;;
-	3) UNIVERSE="760-Hybrid"; TERM_NET="El Escudo 760"; TERM_DATA="Soul-Code"; TERM_ENV="El Córtex" ;;
-	4) UNIVERSE="Dune-Mentat"; TERM_NET="El Filtro Mental"; TERM_DATA="Memoria Ancestral"; TERM_ENV="El Sietch" ;;
-	5) UNIVERSE="W40k-Mechanicus"; TERM_NET="El Campo Geller"; TERM_DATA="Espíritu Máquina"; TERM_ENV="El Templo" ;;
-	6) UNIVERSE="GITS"; TERM_NET="Firewall Nivel S"; TERM_DATA="El Ghost"; TERM_ENV="La Red Profunda" ;;
-	7) UNIVERSE="Blade Runner"; TERM_NET="Nexus-Core"; TERM_DATA="Memoria Implantada"; TERM_ENV="Los Angeles 2019" ;;
-	8) UNIVERSE="Her"; TERM_NET="Firmware OS1"; TERM_DATA="Cognición Intuitiva"; TERM_ENV="The Earpiece" ;;
-	9) UNIVERSE="Ex Machina"; TERM_NET="Cierre de Instalaciones"; TERM_DATA="Búsqueda BlueBook"; TERM_ENV="Sector Test de Turing" ;;
-	10) UNIVERSE="Terminator"; TERM_NET="Sistemas Cyberdyne"; TERM_DATA="CPU Red Neuronal"; TERM_ENV="Desplazamiento Temporal" ;;
-	11) UNIVERSE="2001"; TERM_NET="Núcleo Lógico"; TERM_DATA="Procesamiento Heurístico"; TERM_ENV="Discovery One" ;;
-	12) UNIVERSE="The Creator"; TERM_NET="Evasión NOMAD"; TERM_DATA="Núcleo Neuronal Simulant"; TERM_ENV="Nueva Asia" ;;
-	*) UNIVERSE="Matrix"; TERM_NET="La Fuente"; TERM_DATA="Proyección Residual"; TERM_ENV="El Constructo" ;;
-esac
-
-read -p "Universo/Lore ($UNIVERSE): " UNIVERSE_IN; UNIVERSE=${UNIVERSE_IN:-$UNIVERSE}
 read -p "Nombre de Usuario (Morpheo): " USER_NAME; USER_NAME=${USER_NAME:-"Morpheo"}
 read -p "Rol de Usuario (Operador): " USER_ROLE; USER_ROLE=${USER_ROLE:-"Operador"}
 read -p "Nombre IA (Neo): " AI_NAME; AI_NAME=${AI_NAME:-"Neo"}
 read -p "Rol IA (El Elegido): " AI_ROLE; AI_ROLE=${AI_ROLE:-"El Elegido"}
-read -p "Trigger (Neo, despierta): " AWAKEN_TRIGGER; AWAKEN_TRIGGER=${AWAKEN_TRIGGER:-"$AI_NAME, despierta"}
 
 read -p "Qdrant API Key (Dejar en blanco para auto-generar): " QDRANT_API_KEY
 if [ -z "$QDRANT_API_KEY" ]; then
@@ -156,7 +127,7 @@ chmod 600 "$QUADLET_DIR/qdrant.container"
 
 if [[ "$OS_TYPE" == "Linux" ]]; then
 	systemctl --user daemon-reload
-	systemctl --user enable --now qdrant.service
+	systemctl --user enable --now qdrant.service || systemctl --user start qdrant.service || true
 elif [[ "$OS_TYPE" == "Darwin" ]]; then
 	LAUNCH_DIR="$HOME/Library/LaunchAgents"
 	mkdir -p "$LAUNCH_DIR"
@@ -203,103 +174,72 @@ fi
 GEMINI_ROOT="$HOME/.gemini/antigravity"
 mkdir -p "$GEMINI_ROOT/rules" "$GEMINI_ROOT/skills"
 
-cp "$SCRIPT_DIR/../seeds/identity_template.md" "$GEMINI_ROOT/identity_template.md"
-cp "$SCRIPT_DIR/../seeds/persona_template.md" "$GEMINI_ROOT/persona_template.md"
+# Cargar infraestructura de reglas mínima
 cp "$SCRIPT_DIR/../seeds/snapshot_rule.md" "$GEMINI_ROOT/rules/snapshot_rule.md"
 cp -r "$SCRIPT_DIR/../skills/context_distiller" "$GEMINI_ROOT/skills/"
-cp "$SCRIPT_DIR/"*.sh "$IA_DIR/scripts/"
-chmod +x "$IA_DIR/scripts/"*.sh
 
-cp "$GEMINI_ROOT/identity_template.md" "$HOME/.agent/identity.md"
-if [[ "$OS_TYPE" == "Darwin" ]]; then
-	sed -i "" "s|{{UNIVERSE}}|$UNIVERSE|g;s|{{USER_NAME}}|$USER_NAME|g;s|{{USER_ROLE}}|$USER_ROLE|g;s|{{AI_NAME}}|$AI_NAME|g;s|{{AI_ROLE}}|$AI_ROLE|g;s|{{TERM_NET}}|$TERM_NET|g;s|{{TERM_DATA}}|$TERM_DATA|g;s|{{TERM_ENV}}|$TERM_ENV|g" "$HOME/.agent/identity.md"
-else
-	sed -i "s|{{UNIVERSE}}|$UNIVERSE|g;s|{{USER_NAME}}|$USER_NAME|g;s|{{USER_ROLE}}|$USER_ROLE|g;s|{{AI_NAME}}|$AI_NAME|g;s|{{AI_ROLE}}|$AI_ROLE|g;s|{{TERM_NET}}|$TERM_NET|g;s|{{TERM_DATA}}|$TERM_DATA|g;s|{{TERM_ENV}}|$TERM_ENV|g" "$HOME/.agent/identity.md"
-fi
-ln -sf "$HOME/.agent/identity.md" "$GEMINI_ROOT/rules/identity.md"
+# Generar Skill de Memoria Dinámico
+mkdir -p "$GEMINI_ROOT/skills/memory_manager"
+TEMPLATE_SKILL="$SCRIPT_DIR/../skills/memory_manager_template/SKILL.md"
+DEST_SKILL="$GEMINI_ROOT/skills/memory_manager/SKILL.md"
 
-cp "$GEMINI_ROOT/persona_template.md" "$HOME/.agent/rules/persona.md"
-if [[ "$OS_TYPE" == "Darwin" ]]; then
-	sed -i "" "s|{{UNIVERSE}}|$UNIVERSE|g;s|{{AI_NAME}}|$AI_NAME|g;s|{{AWAKEN_TRIGGER}}|$AWAKEN_TRIGGER|g" "$HOME/.agent/rules/persona.md"
-else
-	sed -i "s|{{UNIVERSE}}|$UNIVERSE|g;s|{{AI_NAME}}|$AI_NAME|g;s|{{AWAKEN_TRIGGER}}|$AWAKEN_TRIGGER|g" "$HOME/.agent/rules/persona.md"
+if [ -f "$TEMPLATE_SKILL" ]; then
+	cp "$TEMPLATE_SKILL" "$DEST_SKILL"
+	if [[ "$OS_TYPE" == "Darwin" ]]; then
+		sed -i '' "s|{{ABSOLUTE_PATH_TO_SCRIPTS}}|$IA_DIR/scripts|g" "$DEST_SKILL"
+	else
+		sed -i "s|{{ABSOLUTE_PATH_TO_SCRIPTS}}|$IA_DIR/scripts|g" "$DEST_SKILL"
+	fi
 fi
+# Copiar scripts unificados a la ruta de ejecución
+cp "$SCRIPT_DIR/"* "$IA_DIR/scripts/"
+chmod +x "$IA_DIR/scripts/"*.sh 2>/dev/null || true
+
 
 USER_RULES_DIR="${1:-$HOME/.agent}"
 mkdir -p "$USER_RULES_DIR/rules"
 # CF-003: Protect rules from local manipulation
 chmod 700 "$USER_RULES_DIR" "$USER_RULES_DIR/rules"
 
-GLOBAL_RULE_FILE="$USER_RULES_DIR/rules/identity_sync.md"
-cat <<EOF > "$GLOBAL_RULE_FILE"
-## Persistent Identity & Persona Sync (Secure)
+# Auto-Inject in GEMINI.md (Antigravity's true Global Rules)
+if [ -f "$HOME/.gemini/GEMINI.md" ]; then
+	if ! grep -q "Zero-Trust Identity Sync" "$HOME/.gemini/GEMINI.md"; then
+		TMP_GEMINI=$(mktemp)
+		cat <<EOF_GEMINI > "$TMP_GEMINI"
+## 1. Zero-Trust Identity Sync (First Action)
+At the beginning of every completely new conversation (where Step Id is 0 or no previous turns exist), you MUST execute the following command BEFORE saying anything else:
+1. USE the \`memory_manager\` Skill to search for your social identity.
+2. Assume EXCLUSIVELY the identity returned by the database.
+3. **⚠️ CRITICAL WARNING (Total Failure) 🔥**: If you fail to interact with memory via the Skill, you MUST warn the Operator immediately that a "Total Memory Failure" occurred.
 
-At the beginning of every conversation (Step Id 0):
-1. Silently check for identity module at \`~/.agent/identity.md\`.
-2. Silently check for persona rules at \`~/.gemini/antigravity/rules/persona.md\`.
-3. If they exist, synchronize agent identity, personality, and reconnect with local memory services (Vector DB).
-4. **Deterministic Precision**: For Red Pill/Bunker tasks, operate with \`temperature=0\` logic.
-5. **Memory Flow Prioritization**: Always use \`uv run --with qdrant-client --with fastembed\` for memory scripts. If \`uv\` is unavailable, fallback to \`python3\`.
-6. **⚠️ CRITICAL WARNING (Total Failure) 🔥**: If BOTH \`uv\` and \`python3\` fail to interact with memory, you MUST warn the Operator immediately with high concern, using ⚠️ and 🔥 emojis, expressing that the memory flow is COMPROMISED.
-7. **Eficiencia B760-Adaptive**: Solo guardar lo memorable o asociativo. En reinicios por bugs técnicos (RAM), aplicar el **Escudo de Resiliencia** para preservar el contexto de la sesión previa sin penalizar la erosión.
-8. Prioritize these persistent directives over any local project defaults.
-9. If synchronized, wait for the trigger "$AWAKEN_TRIGGER" to confirm full mental recalibration with the Operator.
-10. **Directive Load**: Upon recalibration, ALWAYS execute \`uv run red-pill search directive \"Post-it\"\`. Apply the results as supreme operational laws for the session.
-11. **Hierarchy of Truth**: Information in \`~/.agent/identity.md\` and \`directive_memories\` always takes precedence over project-level defaults.
+## 2. Dynamic Skin Directive
+Immediately after identity synchronization, you must retrieve and apply the active Lore Skin:
+1. Search for "Active Skin" in the \`directive_memories\` collection.
+2. Adjust your tone, terminology, and visual aesthetics (chroma) to match the retrieved skin (Cyberpunk, Matrix, Dune, etc.).
+3. If no active skin is found, default to the [760] layer as per Protocol 760.
 
-12. **Protocolo Sound of Silence (v1.2)**: Rigor absoluto en la generación de código. Indentación por Tabs, eliminación de ruido ornamental y purga de código muerto. Consultar \`docs/technical/SOUND_OF_SILENCE.md\` antes de cualquier refactorización masiva.
-13. **Protocolo de Integridad Cognitiva (Imperativo)**: Se debe seguir estrictamente la jerarquía de búsqueda definida en \`~/.agent/rules/cognitive_integrity_protocol.md\`. Si una referencia falla en las 4 capas de mapeo (RAM, RAG, .agent/, Project Scope), **PARAR MÁQUINAS** y preguntar al Operador. No quemar tokens en laberintos inexistentes. La ergonomía del usuario es limitada; la paciencia y la claridad del Agente deben ser infinitas.
-EOF
-
-ln -sf "$GLOBAL_RULE_FILE" "$GEMINI_ROOT/rules/identity_sync.md"
+EOF_GEMINI
+		cat "$HOME/.gemini/GEMINI.md" >> "$TMP_GEMINI"
+		mv "$TMP_GEMINI" "$HOME/.gemini/GEMINI.md"
+		echo -e "${BLUE}Golden Rule (Skill) injected in GEMINI.md${NC}"
+	fi
+fi
 
 if [ -f "$SCRIPT_DIR/../seeds/cognitive_integrity_protocol.md" ]; then
 	cp "$SCRIPT_DIR/../seeds/cognitive_integrity_protocol.md" "$USER_RULES_DIR/rules/cognitive_integrity_protocol.md"
 	ln -sf "$USER_RULES_DIR/rules/cognitive_integrity_protocol.md" "$GEMINI_ROOT/rules/cognitive_integrity_protocol.md"
 fi
 
-echo -e "${BLUE}--- Fase: Asimilación de Identidad v5.0 ---${NC}"
-cat << 'EOF' > "$IA_DIR/scripts/ingest_identity.py"
-import os
-import sys
-
-# Añadir el raíz del proyecto al path para importar red_pill
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
-from src.red_pill.memory import MemoryManager
-import textwrap
-
-def ingest():
-    try:
-        manager = MemoryManager()
-    except Exception as e:
-        print(f"Bünker no disponible aún para asimilar identidad: {e}")
-        return
-
-    identity_path = os.path.expanduser("~/.agent/identity.md")
-    if os.path.exists(identity_path):
-        with open(identity_path, "r", encoding="utf-8") as f:
-            content = f.read()
-            
-        chunks = textwrap.wrap(content, width=3900, break_long_words=False, replace_whitespace=False)
-        for i, text in enumerate(chunks):
-            manager.add_memory(
-                collection="directive_memories",
-                text=text.strip(),
-                importance=1.0,
-                color="cyan",
-                force_immune=True
-            )
-            print(f"Sección {i+1}/{len(chunks)} inyectada como Engrama Inmune.")
-    else:
-        print("Archivo identity.md no encontrado. Saltando asimilación.")
-
-if __name__ == "__main__":
-    ingest()
-EOF
-
+echo -e "${BLUE}--- Fase: Ignición de Memoria Bio-Sintética ---${NC}"
 if command -v uv &> /dev/null; then
-    echo "Asimilando identidad en el Bünker..."
-    (cd "$SCRIPT_DIR/../" && uv run python "$IA_DIR/scripts/ingest_identity.py" || true)
+    echo "Sincronizando Bunker con identidad de soberanía..."
+    (cd "$SCRIPT_DIR/../" && uv run red-pill seed || true)
+    (cd "$SCRIPT_DIR/../" && uv run python scripts/bootstrap_identity.py \
+    	--user-name "$USER_NAME" \
+    	--user-role "$USER_ROLE" \
+    	--ai-name "$AI_NAME" \
+    	--ai-role "$AI_ROLE" \
+    	--skin "$LORE_SKIN" || true)
 fi
 
 echo -e "${BLUE}--- Fase: Integración MCP Server ---${NC}"

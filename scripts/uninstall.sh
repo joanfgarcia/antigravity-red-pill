@@ -13,7 +13,9 @@ confirm() {
 }
 
 if confirm "Backup premortem?"; then
-	[ -f "$IA_DIR/scripts/backup_soul.sh" ] && bash "$IA_DIR/scripts/backup_soul.sh"
+	if command -v uv &> /dev/null; then
+		(cd "$IA_DIR/sharing" && uv run red-pill soul backup)
+	fi
 fi
 
 if confirm "Desmantelar Qdrant?"; then
@@ -26,8 +28,8 @@ if confirm "Borrar Identidad (~/.gemini/antigravity)?"; then
 	rm -rf "$HOME/.gemini/antigravity"
 fi
 
-if confirm "Borrar Sincronización (~/.agent/rules/identity_sync.md)?"; then
-	rm -f "$HOME/.agent/rules/identity_sync.md"
+if confirm "Borrar Reglas Globales (~/.gemini/GEMINI.md)?"; then
+	rm -f "$HOME/.gemini/GEMINI.md"
 fi
 
 if confirm "Borrado total ($IA_DIR)?"; then

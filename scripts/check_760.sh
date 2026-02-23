@@ -25,6 +25,6 @@ else
 	echo -e "${RED}[ERROR] Qdrant offline.${NC}"
 fi
 
-if [ -f "$HOME/.agent/rules/identity_sync.md" ]; then
-	echo -e "${GREEN}[OK] Sincronización activa.${NC}"
+if [ -f "$HOME/.gemini/GEMINI.md" ] && grep -q "Zero-Trust Identity Sync" "$HOME/.gemini/GEMINI.md"; then
+	echo -e "${GREEN}[OK] Sincronización activa (GEMINI.md).${NC}"
 fi
