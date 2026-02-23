@@ -46,11 +46,16 @@ echo "------------------------------------------------------------------"
 
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ -f "$SCRIPT_DIR/env_loader.sh" ]; then
-	source "$SCRIPT_DIR/env_loader.sh"
-else
-	export IA_DIR="${ANTIGRAVITY_IA_DIR:-$HOME/Documents/IA}"
+ENV_FILE="$SCRIPT_DIR/../.env"
+
+# Load existing environment if available
+if [ -f "$ENV_FILE" ]; then
+    # Simple .env loader
+    export $(grep -v '^#' "$ENV_FILE" | xargs)
+    echo -e "${BLUE}Configuración previa detectada.${NC}"
 fi
+
+export IA_DIR="${ANTIGRAVITY_IA_DIR:-$HOME/Documents/IA}"
 
 check_encryption() {
 	if [[ "$OS_TYPE" == "Linux" ]]; then
@@ -62,7 +67,6 @@ check_encryption() {
 					echo -e "${GREEN}✓ Capa de cifrado detectada en $target_dev.${NC}"
 				else
 					echo -e "${BLUE}[INFO] Nota de Seguridad (SEC-001): El volumen $target_dev no utiliza LUKS.${NC}"
-					echo "Para máxima soberanía, considera cifrar esta partición en el futuro."
 				fi
 			fi
 		fi
@@ -71,41 +75,75 @@ check_encryption() {
 
 check_encryption
 
+# Check if Qdrant is already running
+QDRANT_ALIVE=false
+if curl -s -f http://localhost:6333/health >/dev/null; then
+    QDRANT_ALIVE=true
+    echo -e "${GREEN}✓ Qdrant Kernel está activo.${NC}"
+fi
+
 echo -e "${BLUE}--- Fase: Personalización B760-Adaptive ---${NC}"
-echo "Skins disponibles: matrix, cyberpunk, 760 (default), dune, 40k, gits, bladerunner, her, exmachina, terminator, 2001, creator"
-read -p "Elige tu Skin (Default: 760): " LORE_SKIN; LORE_SKIN=${LORE_SKIN:-"760"}
+SKIP_BOOTSTRAP=false
+if [ -n "${LORE_SKIN:-}" ]; then
+    echo -e "Skin actual: ${LORE_SKIN}"
+    read -p "Re-inicializar Identidad y Skin? (s/N): " CHANGE_SKIN
+    if [[ ! "$CHANGE_SKIN" =~ ^[Ss]$ ]]; then
+        SKIP_BOOTSTRAP=true
+        echo -e "${BLUE}Preservando identidad actual.${NC}"
+    fi
+fi
 
-read -p "Nombre de Usuario (Morpheo): " USER_NAME; USER_NAME=${USER_NAME:-"Morpheo"}
-read -p "Rol de Usuario (Operador): " USER_ROLE; USER_ROLE=${USER_ROLE:-"Operador"}
-read -p "Nombre IA (Neo): " AI_NAME; AI_NAME=${AI_NAME:-"Neo"}
-read -p "Rol IA (El Elegido): " AI_ROLE; AI_ROLE=${AI_ROLE:-"El Elegido"}
+if [ "$SKIP_BOOTSTRAP" = "false" ]; then
+	echo "Skins disponibles: matrix, cyberpunk, 760 (default), dune, 40k, gits, bladerunner, her, exmachina, terminator, 2001, creator"
+	read -p "Elige tu Skin (Default: ${LORE_SKIN:-760}): " NEW_SKIN; LORE_SKIN=${NEW_SKIN:-${LORE_SKIN:-"760"}}
+	
+	read -p "Nombre de Usuario (${USER_NAME:-Morpheo}): " NEW_USER; USER_NAME=${NEW_USER:-${USER_NAME:-"Morpheo"}}
+	read -p "Rol de Usuario (${USER_ROLE:-Operador}): " NEW_ROLE; USER_ROLE=${NEW_ROLE:-${USER_ROLE:-"Operador"}}
+	read -p "Nombre IA (${AI_NAME:-Neo}): " NEW_AI; AI_NAME=${NEW_AI:-${AI_NAME:-"Neo"}}
+	read -p "Rol IA (${AI_ROLE:-The Chosen One}): " NEW_AI_ROLE; AI_ROLE=${NEW_AI_ROLE:-${AI_ROLE:-"The Chosen One"}}
+fi
 
-read -p "Qdrant API Key (Dejar en blanco para auto-generar): " QDRANT_API_KEY
-if [ -z "$QDRANT_API_KEY" ]; then
-	QDRANT_API_KEY=$(head -c 32 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 32)
-	echo -e "${GREEN}API Key generada automáticamente.${NC}"
+if [ -z "${QDRANT_API_KEY:-}" ]; then
+	read -p "Qdrant API Key (Dejar en blanco para auto-generar): " QDRANT_API_KEY
+	if [ -z "$QDRANT_API_KEY" ]; then
+		QDRANT_API_KEY=$(head -c 32 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 32)
+		echo -e "${GREEN}API Key generada automáticamente.${NC}"
+	fi
 fi
 
 ENV_FILE="$SCRIPT_DIR/../.env"
 if [ ! -f "$ENV_FILE" ]; then
 	cp "$SCRIPT_DIR/../.env.example" "$ENV_FILE" 2>/dev/null || touch "$ENV_FILE"
 fi
-if grep -q "^QDRANT_API_KEY=" "$ENV_FILE"; then
-	if [[ "$OS_TYPE" == "Darwin" ]]; then
-		sed -i "" "s|^QDRANT_API_KEY=.*|QDRANT_API_KEY=$QDRANT_API_KEY|g" "$ENV_FILE"
-	else
-		sed -i "s|^QDRANT_API_KEY=.*|QDRANT_API_KEY=$QDRANT_API_KEY|g" "$ENV_FILE"
-	fi
-else
-	echo "QDRANT_API_KEY=$QDRANT_API_KEY" >> "$ENV_FILE"
-fi
+
+update_env() {
+    local key=$1
+    local value=$2
+    if grep -q "^${key}=" "$ENV_FILE"; then
+        if [[ "$OS_TYPE" == "Darwin" ]]; then
+            sed -i "" "s|^${key}=.*|${key}=${value}|g" "$ENV_FILE"
+        else
+            sed -i "s|^${key}=.*|${key}=${value}|g" "$ENV_FILE"
+        fi
+    else
+        echo "${key}=${value}" >> "$ENV_FILE"
+    fi
+}
+
+update_env "QDRANT_API_KEY" "$QDRANT_API_KEY"
+update_env "LORE_SKIN" "$LORE_SKIN"
+update_env "USER_NAME" "$USER_NAME"
+update_env "USER_ROLE" "$USER_ROLE"
+update_env "AI_NAME" "$AI_NAME"
+update_env "AI_ROLE" "$AI_ROLE"
 chmod 600 "$ENV_FILE"
 
 mkdir -p "$IA_DIR/scripts" "$IA_DIR/backups/qdrant" "$IA_DIR/backups/soul" "$IA_DIR/seeds" "$IA_DIR/storage"
 
-QUADLET_DIR="$HOME/.config/containers/systemd"
-mkdir -p "$QUADLET_DIR"
-cat <<EOF > "$QUADLET_DIR/qdrant.container"
+if [ "$QDRANT_ALIVE" = "false" ]; then
+	QUADLET_DIR="$HOME/.config/containers/systemd"
+	mkdir -p "$QUADLET_DIR"
+	cat <<EOF > "$QUADLET_DIR/qdrant.container"
 [Unit]
 Description=Qdrant Vector Database
 After=network-online.target
@@ -123,16 +161,16 @@ Restart=always
 [Install]
 WantedBy=default.target
 EOF
-chmod 600 "$QUADLET_DIR/qdrant.container"
+	chmod 600 "$QUADLET_DIR/qdrant.container"
 
-if [[ "$OS_TYPE" == "Linux" ]]; then
-	systemctl --user daemon-reload
-	systemctl --user enable --now qdrant.service || systemctl --user start qdrant.service || true
-elif [[ "$OS_TYPE" == "Darwin" ]]; then
-	LAUNCH_DIR="$HOME/Library/LaunchAgents"
-	mkdir -p "$LAUNCH_DIR"
-	PLIST_FILE="$LAUNCH_DIR/com.redpill.qdrant.plist"
-	cat <<EOF > "$PLIST_FILE"
+	if [[ "$OS_TYPE" == "Linux" ]]; then
+		systemctl --user daemon-reload
+		systemctl --user enable --now qdrant.service || systemctl --user start qdrant.service || true
+	elif [[ "$OS_TYPE" == "Darwin" ]]; then
+		LAUNCH_DIR="$HOME/Library/LaunchAgents"
+		mkdir -p "$LAUNCH_DIR"
+		PLIST_FILE="$LAUNCH_DIR/com.redpill.qdrant.plist"
+		cat <<EOF > "$PLIST_FILE"
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -162,8 +200,9 @@ elif [[ "$OS_TYPE" == "Darwin" ]]; then
 </dict>
 </plist>
 EOF
-	launchctl unload "$PLIST_FILE" 2>/dev/null || true
-	launchctl load "$PLIST_FILE"
+		launchctl unload "$PLIST_FILE" 2>/dev/null || true
+		launchctl load "$PLIST_FILE"
+	fi
 fi
 
 if ! command -v uv &> /dev/null; then
@@ -232,14 +271,20 @@ fi
 
 echo -e "${BLUE}--- Fase: Ignición de Memoria Bio-Sintética ---${NC}"
 if command -v uv &> /dev/null; then
-    echo "Sincronizando Bunker con identidad de soberanía..."
+    echo "Sincronizando Bunker con estructura semántica..."
     (cd "$SCRIPT_DIR/../" && uv run red-pill seed || true)
-    (cd "$SCRIPT_DIR/../" && uv run python scripts/bootstrap_identity.py \
-    	--user-name "$USER_NAME" \
-    	--user-role "$USER_ROLE" \
-    	--ai-name "$AI_NAME" \
-    	--ai-role "$AI_ROLE" \
-    	--skin "$LORE_SKIN" || true)
+    
+    if [ "$SKIP_BOOTSTRAP" = "false" ]; then
+        echo "Anclando nueva identidad en el Bünker..."
+        (cd "$SCRIPT_DIR/../" && uv run python scripts/bootstrap_identity.py \
+            --user-name "$USER_NAME" \
+            --user-role "$USER_ROLE" \
+            --ai-name "$AI_NAME" \
+            --ai-role "$AI_ROLE" \
+            --skin "$LORE_SKIN" || true)
+    else
+        echo -e "${GREEN}✓ Identidad previa preservada. Ignición omitida para no causar fragmentación de personalidad.${NC}"
+    fi
 fi
 
 echo -e "${BLUE}--- Fase: Integración MCP Server ---${NC}"
