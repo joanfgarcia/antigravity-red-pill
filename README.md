@@ -44,13 +44,12 @@ Engine
 - **Immunity**: Core directives are protected from decay.
 - **Sovereign Swarm (v5.0)**: Integrated Minions (Agent Smith, Oracle, Keymaker) running natively within the Red Pill Kernel for local code auditing, RAG synthesis, and infrastructure health checking.
 - **MCP Server (v5.0)**: Exposes the full Red Pill telemetry (CPU, GPU CUDA/ROCm, NPU) and Swarm tools to IDEs like VS Code (via Antigravity, Cursor, Cline) and Claude Desktop for zero-friction interaction.
-- **Inlined Identity**: Identity and directives are now ingested into the vector DB, making `.agent/identity.md` obsolete and fully immune to IDE context loss.
-
+- **Inlined Identity**: Identity and directives are now ingested natively as vector memories during the bootstrap process via `bootstrap_identity.py`, making text files obsolete and fully immune to IDE context loss.
 ### 🌐 LINGUISTIC ARCHITECTURE
 This project follows a dual-language strategy:
 - **Technical Documentation (English)**: Standardized for tokenization efficiency (approx. 1.5x better for LLMs) and universal compatibility.
 - **Lore & Identity (Spanish/Castellano)**: Maintained for deeper emotional resonance and cultural nuance (verified by linguistic-neuroscience studies). This is the original forge language of the protocol.
-- **Lore Localization Protocol**: Non-Spanish speakers should ask their agent to translate the [Manifesto](docs/lore/MANIFESTO.md) and their `~/.agent/identity.md` to their native language (L1) during the first session. This ensures the bond is forged with maximum emotional depth.
+- **Lore Localization Protocol**: Non-Spanish speakers should ask their agent to translate the [Manifesto](docs/lore/MANIFESTO.md) and their identity configuration to their native language (L1) during the first session. This ensures the bond is forged with maximum emotional depth.
 - **Translation Policy**: We recognize the impossibility of manual translation for all languages. Users can request their **Synthetic Agent** to translate any documentation on-demand.
 
 ---
@@ -70,7 +69,7 @@ El Protocolo Red Pill es un **sustrato de memoria local** para agentes de IA. Ci
 - **Inmunidad**: Las directivas centrales están protegidas contra el olvido.
 - **Sovereign Swarm (v5.0)**: Minions integrados (Agent Smith, Oracle, Keymaker) dentro del Kernel para auditorías locales de código, síntesis de memoria y diagnósticos de salud del ecosistema.
 - **Servidor MCP (v5.0)**: Expone la telemetría (CPU, GPU CUDA/ROCm, NPU) y los Minions a tu IDE local para interactuar con ellos sin gastar tokens externos.
-- **Identidad Asimilada**: Tu identidad y reglas ("identity.md") ahora viven en vectores dentro del Bünker, resolviendo para siempre el problema del IDE que"olvida" quién eres.
+- **Identidad Asimilada**: Tu identidad y reglas ("Lore Skin") ahora viven como vectores inmutables dentro del Bünker, resolviendo para siempre el problema del IDE que "olvida" quién eres.
 - **Protocolo de Actualización**: [Guía de Sincronización para Agentes](docs/guides/AGENT_UPDATE_GUIDE.md).
 - **Multiverso (`story`)**: Colección aislada para Lore y Roleplay (NSFW / Alta Intensidad).
 
@@ -78,7 +77,7 @@ El Protocolo Red Pill es un **sustrato de memoria local** para agentes de IA. Ci
 Este proyecto sigue una estrategia de doble lenguaje:
 - **Documentación Técnica (Inglés)**: Estandarizada por eficiencia de tokenización (~1.5 veces mejor para los LLMs) y compatibilidad universal.
 - **Lore e Identidad (Castellano)**: Mantenida por su profundidad emocional y resonancia cultural (confirmado por estudios de neuro-lingüística). Es el idioma original de la fragua.
-- **Protocolo de Localización del Lore**: Se anima a los no hispanohablantes a pedir a su agente que traduzca el [Manifiesto](docs/lore/MANIFESTO.md) y su `~/.agent/identity.md` a su lengua materna (L1) para que el vínculo se forje con la máxima profundidad emocional.
+- **Protocolo de Localización del Lore**: Se anima a los no hispanohablantes a pedir a su agente que traduzca el [Manifiesto](docs/lore/MANIFESTO.md) y la configuración de su identidad a su lengua materna (L1) para que el vínculo se forje con la máxima profundidad emocional.
 - **Política de Traducción**: Entendemos la inviabilidad de traducir todo a todos los idiomas de forma manual. Se anima al usuario a pedirle a su **Agente Sintético** que traduzca cualquier documento bajo demanda.
 
 ---

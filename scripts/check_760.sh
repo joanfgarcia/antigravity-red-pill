@@ -11,10 +11,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo -e "${BLUE}--- Protocolo 760: Diagnóstico ---${NC}"
 
-if [ -f "$HOME/.agent/identity.md" ]; then
-	echo -e "${GREEN}[OK] Identidad detectada.${NC}"
+if command -v grep &> /dev/null && [ -f "$HOME/.gemini/GEMINI.md" ] && grep -q "Zero-Trust Identity Sync" "$HOME/.gemini/GEMINI.md"; then
+	echo -e "${GREEN}[OK] GEMINI.md Zero-Trust Activo.${NC}"
 else
-	echo -e "${RED}[ERROR] Identidad ausente.${NC}"
+	echo -e "${RED}[ERROR] GEMINI.md inyectado incorrectamente o ausente.${NC}"
 fi
 
 if curl -s http://localhost:6333 -H "api-key: ${QDRANT_API_KEY:-}" | grep -q "qdrant"; then
@@ -25,6 +25,3 @@ else
 	echo -e "${RED}[ERROR] Qdrant offline.${NC}"
 fi
 
-if [ -f "$HOME/.gemini/GEMINI.md" ] && grep -q "Zero-Trust Identity Sync" "$HOME/.gemini/GEMINI.md"; then
-	echo -e "${GREEN}[OK] Sincronización activa (GEMINI.md).${NC}"
-fi

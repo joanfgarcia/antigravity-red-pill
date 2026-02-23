@@ -70,16 +70,15 @@ class SoulManager:
 		os.makedirs(soul_backup_dir, exist_ok=True)
 
 		files_to_backup = [
-			os.path.expanduser("~/.agent/identity.md"),
 			os.path.expanduser("~/.gemini/GEMINI.md"),
 			os.path.expanduser("~/.gemini/antigravity/rules/snapshot_rule.md"),
-			# We use parents=True logic roughly by reconstructing path under soul_backup_dir
 		]
 
 		# Add skills and rules recursively
 		dirs_to_backup = [
 			os.path.expanduser("~/.gemini/antigravity/skills"),
 			os.path.expanduser("~/.gemini/antigravity/rules"),
+			os.path.expanduser("~/.agent/rules"), # Preserve any Minion specific rules.
 		]
 
 		copied_count = 0

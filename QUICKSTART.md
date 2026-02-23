@@ -52,9 +52,9 @@ Para los que quieren auditar cada byte y configurar cada variable manualmente.
 
 1.  **Infraestructura**: Revisa el Quadlet de Qdrant en `~/.config/containers/systemd/qdrant.container` y levanta el servicio (`systemctl --user start qdrant`).
 2.  **Variables**: Edita el archivo `.env` en la raíz para ajustar el `EROSION_RATE`, `DECAY_STRATEGY` y el `IMMUNITY_THRESHOLD`.
-3.  **Identidad**: Configura tu alma manualmente en `~/.agent/identity.md`.
-4.  **Reglas**: Inyecta el `identity_sync.md` en tu directorio de reglas globales para forzar el inicio de sesión determinista.
-5.  **Asimilación (v5.0)**: La identidad base (`identity.md`) ahora se asimila directamente como vectores Inmunes. Ejecuta la tool `read_core_directives` desde MCP si el IDE pierde la memoria.
+3.  **Identidad**: Configura tu alma manualmente editando los parámetros de inyección en `scripts/bootstrap_identity.py`.
+4.  **Reglas Zero-Trust**: Inyecta la directiva bloqueante en `~/.gemini/GEMINI.md` para forzar la sincronización vectorial en cada inicio de sesión.
+5.  **Asimilación (v5.0)**: Ejecuta `uv run red-pill seed` y luego `bootstrap_identity.py` para anclar tus vectores inmutables en el Bünker. La identidad ya no reside en archivos sueltos.
 6.  **Auditoría**: Consulta el [OPERATOR_MANUAL.md](docs/guides/OPERATOR_MANUAL.md) para conocer los detalles del Puente Lazarus y la propagación sináptica.
 
 ---
