@@ -1,3 +1,4 @@
+import hmac
 import json
 import logging
 import os
@@ -49,24 +50,48 @@ class MemoryDaemon:
 					continue
 
 				with conn:
-					data = conn.recv(4096)
+					# 1. Read Header (4 bytes)
+					header = conn.recv(4)
+					if not header:
+						continue
+					payload_len = int.from_bytes(header, byteorder="big")
+
+					# 2. Read Full Payload
+					data = b""
+					while len(data) < payload_len:
+						chunk = conn.recv(min(payload_len - len(data), 8192))
+						if not chunk:
+							break
+						data += chunk
+
 					if not data:
 						continue
 
 					try:
 						request = json.loads(data.decode("utf-8"))
-						text = request.get("text")
-						if text:
-							vector = list(self.encoder.embed([text]))[0].tolist()
-							response = {"status": "ok", "vector": vector}
-						elif request.get("command") == "ping":
-							response = {"status": "ok", "message": "pong"}
+
+						# SEC-002: Shared Secret Auth (Hardened)
+						api_key = str(cfg.QDRANT_API_KEY or "").strip()
+						provided_key = str(request.get("api_key") or "").strip()
+
+						if not api_key or not provided_key or not hmac.compare_digest(provided_key, api_key):
+							response = {"status": "error", "message": "Unauthorized (B760 Handshake failed)"}
 						else:
-							response = {"status": "error", "message": "Missing input"}
+							text = request.get("text")
+							if text and self.encoder:
+								vector = list(self.encoder.embed([text]))[0].tolist()
+								response = {"status": "ok", "vector": vector}
+							elif request.get("command") == "ping":
+								response = {"status": "ok", "message": "pong"}
+							else:
+								response = {"status": "error", "message": "Missing input"}
 					except Exception as e:
 						response = {"status": "error", "message": str(e)}
 
-					conn.sendall(json.dumps(response).encode("utf-8"))
+					# 3. Send Response with Header
+					resp_payload = json.dumps(response).encode("utf-8")
+					resp_header = len(resp_payload).to_bytes(4, byteorder="big")
+					conn.sendall(resp_header + resp_payload)
 			except Exception as e:
 				if self.running:
 					logger.error(f"Loop failure: {e}")

@@ -65,7 +65,12 @@ def test_full_schema_migration(manager, mock_qdrant):
 
 def test_migration_idempotency(manager, mock_qdrant):
 	"""Running sanitize on an already clean collection should do nothing."""
-	clean_points = [MagicMock(id="clean_1", payload={"content": "Clean", "color": "gray", "emotion": "neutral", "intensity": 1.0})]
+	clean_points = [
+		MagicMock(
+			id="clean_1",
+			payload={"content": "Clean", "color": "gray", "emotion": "neutral", "intensity": 1.0, "schema_version": cfg.CURRENT_SCHEMA_VERSION},
+		)
+	]
 
 	manager.client.scroll.return_value = (clean_points, None)
 

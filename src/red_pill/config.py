@@ -34,12 +34,21 @@ REINFORCEMENT_INCREMENT = float(os.getenv("REINFORCEMENT_INCREMENT", "0.1"))
 PROPAGATION_FACTOR = float(os.getenv("PROPAGATION_FACTOR", "0.5"))
 IMMUNITY_THRESHOLD = float(os.getenv("IMMUNITY_THRESHOLD", "10.0"))
 
+# Bounds validation
+if not (0 <= EROSION_RATE <= 1.0):
+	raise ValueError(f"EROSION_RATE must be between 0 and 1: {EROSION_RATE}")
+if not (0 <= PROPAGATION_FACTOR <= 1.0):
+	raise ValueError(f"PROPAGATION_FACTOR must be between 0 and 1: {PROPAGATION_FACTOR}")
+
 # EMOTIONAL_SEED_FACTOR: multiplier applied to initial reinforcement_score for
 # non-neutral memories with intensity > 1.0. Higher values give emotional
 # memories more runway before erosion. At SEED_FACTOR=3.0 and intensity=10,
 # orange memories start at score ~5.5 (vs 1.0 for neutral).
 # At production EROSION_RATE=0.01: score=9.0 → 600 hours ≈ 25 days survival.
 EMOTIONAL_SEED_FACTOR = float(os.getenv("EMOTIONAL_SEED_FACTOR", "3.0"))
+
+# CF-005: Maximum number of points that can be reinforced via propagation in a single query.
+MAX_PROPAGATION_POINTS = int(os.getenv("MAX_PROPAGATION_POINTS", "50"))
 
 
 # LOGGING
@@ -61,6 +70,7 @@ METABOLISM_STATE_FILE = os.path.expanduser("~/.red_pill_metabolism")
 # is triggered before erosion to prevent mass-deletion after long absences.
 # Default: 7 days (7 * 24 * 3600).
 ABSENCE_THRESHOLD = int(os.getenv("ABSENCE_THRESHOLD", str(7 * 24 * 3600)))
+ABSENCE_GUARD_SCROLL_LIMIT = int(os.getenv("ABSENCE_GUARD_SCROLL_LIMIT", "500"))
 
 # EMOTIONAL CHROMA (v4.2.0)
 DEFAULT_COLOR = "gray"
@@ -82,6 +92,9 @@ CHROMA_TONE_MAPPING = {
 	"purple": "Minimalist, extremely concise, efficiency-first, no fluff.",
 	"cyan": "Visionary, future-oriented, focused on growth and backlog.",
 	"blue": "Reflective, empathetic, serious, acknowledging weight.",
-	"gray": "Professional, balanced, direct, objective (Standard).",
 	"nostalgia": "Respectful, shared legacy focus, acknowledging the long road.",
+	"gray": "Professional, balanced, direct, objective (Standard).",
 }
+
+# ONTOLOGICAL INTEGRITY (v4.2.4)
+CURRENT_SCHEMA_VERSION = 1

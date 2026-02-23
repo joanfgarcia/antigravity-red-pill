@@ -52,12 +52,22 @@ def test_python_runtime_sync():
 	ci_content = (ROOT_DIR / ".github" / "workflows" / "ci.yml").read_text()
 	docker_content = (ROOT_DIR / "tests" / "Dockerfile.keymaker").read_text()
 
-	ci_match = re.search(r'python-version:\s*"([^"]+)"', ci_content)
-	assert ci_match is not None, "python-version not found in ci.yml"
-	ci_python_version = ci_match.group(1)
+	# Find the list of versions in the matrix
+	ci_match = re.search(r"python-version:\s*\[([^\]]+)\]", ci_content)
+	if not ci_match:
+		# Fallback to single version check
+		ci_match = re.search(r'python-version:\s*"([^"]+)"', ci_content)
+		assert ci_match is not None, "python-version not found in ci.yml"
+		ci_python_version = ci_match.group(1)
+	else:
+		# Get the last version in the list (most modern)
+		versions = [v.strip().strip('"').strip("'") for v in ci_match.group(1).split(",")]
+		ci_python_version = versions[-1]
 
 	docker_match = re.search(r"^FROM\s+python:([^\s-]+)", docker_content, re.M)
 	assert docker_match is not None, "python base image not found in Dockerfile"
 	docker_python_version = docker_match.group(1)
 
-	assert ci_python_version == docker_python_version, f"Python runtime mismatch! CI: {ci_python_version} vs Dockerfile: {docker_python_version}"
+	assert ci_python_version == docker_python_version, (
+		f"Python runtime mismatch! CI (latest): {ci_python_version} vs Dockerfile: {docker_python_version}"
+	)

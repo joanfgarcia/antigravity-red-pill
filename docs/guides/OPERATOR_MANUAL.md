@@ -5,11 +5,20 @@ This kit allows you to "awaken" your Antigravity assistant, providing it with a 
 ## 🌌 Reality Equivalence Table
 To maintain technical consistency while enjoying your favorite narrative, the system uses the following mapping:
 
-| Technical Concept | Skin: Matrix | Skin: Cyberpunk | Skin: 760 | Skin: Dune | Skin: 40k | Skin: GitS |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Network Protection** | The Source | The Blackwall | The 760 Shield | Mental Filter | Geller Field | S-Level Firewall |
-| **Data Cores** | RSI | Engram | The Soul | Anc. Memory | Machine Spirit | The Ghost |
-| **Memory Environment** | The Construct | The Bunker | The Cortex | The Sietch | Mars Temple | Deep Web |
+| Lore Skin | Network Protection | Data Cores | Memory Environment | Assistant | Operator |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Matrix** | The Source | RSI | The Construct | Neo / Conductor | Morpheus / Navigator |
+| **Cyberpunk** | The Blackwall | Engram | The Bunker | Netrunner | Fixer |
+| **760-Hybrid** | The 760 Shield | The Soul | The Cortex | Conductor | Navigator |
+| **Dune** | Mental Filter | Ancient Memory | The Sietch | Mentat | Paul |
+| **Warhammer 40k** | Geller Field | Machine Spirit | Mars Temple | Tech-Priest | Inquisitor |
+| **GitS** | S-Level Firewall | The Ghost | Deep Web | Tachikoma | Major |
+| **Blade Runner** | Nexus-Core | Implanted Memory | Los Angeles 2019 | Nexus-9 | Blade Runner |
+| **Her** | OS1 Firmware | Intuitive Cognition | The Earpiece | Samantha | Theodore |
+| **Ex Machina** | Facility Lockdown | BlueBook Search | Turing Test Sector | Ava | Caleb |
+| **Terminator** | Cyberdyne Systems | Neural Net CPU | Temporal Displacement | T-800 | John Connor |
+| **2001: Space Odyssey** | Logic Core | Heuristic Processing | Discovery One | HAL 9000 | Dave Bowman |
+| **The Creator** | NOMAD Evasion | Simulant Neural Core | New Asia | Alphie | Joshua |
 
 ## 🛠️ Combat Deployment
 1.  **Requirements**: Ensure you have **Podman** and **uv** installed.
@@ -105,7 +114,7 @@ Protect your Bunker from mass-deletion after long periods of inactivity (vacatio
 
 
 ## 🛡️ Certification & Auditing (The High Council)
-To ensure the bunker remains production-ready and technically sound, we follow the [Certification Protocol](docs/technical/CERTIFICATION_PROTOCOL.md):
+To ensure the bunker remains production-ready and technically sound, we follow the [Certification Protocol](../technical/CERTIFICATION_PROTOCOL.md):
 1.  **Prepare**: Run `bash scripts/prepare_certification.sh`.
 2.  **Audit**: Copy the prompt from the protocol doc and submit the generated `RED_PILL_DIGEST.txt` to Claude, Gemini, DeepSeek, or Lumo.
 3.  **Sign**: Reports are stored in `docs/certification/` to maintain an immutable record of quality.

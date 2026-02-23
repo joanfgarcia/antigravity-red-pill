@@ -83,31 +83,16 @@ def test_synaptic_propagation(manager, mock_qdrant):
 
 	manager.search_and_reinforce("test_col", "query")
 
-	# Check upsert call
-	# Check upsert call - we now use set_payload per point inside the loop
-	# assert manager.client.upsert.called
-	# args, kwargs = manager.client.upsert.call_args
-	# points = kwargs['points']
+	# Check batch_update_points call
+	assert manager.client.batch_update_points.called
+	args, kwargs = manager.client.batch_update_points.call_args
+	ops = kwargs["update_operations"]
+	assert len(ops) == 2
 
-	assert manager.client.set_payload.called
-	assert manager.client.set_payload.call_count == 2
-
-	# Verify the calls
-	calls = manager.client.set_payload.call_args_list
-
-	# We don't know the order, so we collect payloads
-	payloads = {}
-	for call in calls:
-		kwargs = call[1]
-		pid = kwargs["points"][0]
-		payload = kwargs["payload"]
-		payloads[pid] = payload
-
-	assert mock_hit.id in payloads
-	assert mock_assoc.id in payloads
-
-	assert payloads[mock_hit.id]["reinforcement_score"] == 1.1
-	assert payloads[mock_assoc.id]["reinforcement_score"] == 1.05
+	# Extract scores for verification
+	scores = {op.set_payload.points[0]: op.set_payload.payload["reinforcement_score"] for op in ops}
+	assert scores[mock_hit.id] == 1.1
+	assert scores[mock_assoc.id] == 1.05
 
 
 def test_erosion_cycle(manager, mock_qdrant):
@@ -129,14 +114,6 @@ def test_erosion_cycle(manager, mock_qdrant):
 	manager.apply_erosion("test_col")
 
 	# Check upsert was called with ONLY the non-immune point
-	# Check upsert was called with ONLY the non-immune point
-	# assert manager.client.upsert.called
-	# args, kwargs = manager.client.upsert.call_args
-	# points = kwargs['points']
-	# assert len(points) == 1
-	# assert points[0].id == "123"
-	# assert points[0].payload['reinforcement_score'] == 0.4
-
 	assert manager.client.batch_update_points.called
 	assert manager.client.batch_update_points.call_count == 1
 
@@ -185,25 +162,15 @@ def test_reinforcement_stacking(manager, mock_qdrant):
 
 	manager.search_and_reinforce("test_col", "query")
 
-	# Check upsert
-	# Check upsert
-	# args, kwargs = manager.client.upsert.call_args
-	# points = {p.id: p for p in kwargs['points']}
-	# assert points["A"].payload["reinforcement_score"] == 1.1
-	# assert points["B"].payload["reinforcement_score"] == 1.15
+	# Check batch update
+	assert manager.client.batch_update_points.called
+	args, kwargs = manager.client.batch_update_points.call_args
+	ops = kwargs["update_operations"]
+	assert len(ops) == 2
 
-	assert manager.client.set_payload.called
-	assert manager.client.set_payload.call_count == 2
-
-	payloads = {}
-	for call in manager.client.set_payload.call_args_list:
-		kwargs = call[1]
-		pid = kwargs["points"][0]
-		payload = kwargs["payload"]
-		payloads[pid] = payload
-
-	assert payloads[id_a]["reinforcement_score"] == 1.1
-	assert payloads[id_b]["reinforcement_score"] == 1.15
+	scores = {op.set_payload.points[0]: op.set_payload.payload["reinforcement_score"] for op in ops}
+	assert scores[id_a] == 1.1
+	assert scores[id_b] == 1.15
 
 
 def test_manual_id_injection(manager, mock_qdrant):

@@ -26,7 +26,9 @@ def test_get_vector_from_daemon(mock_socket_cls, mock_exists):
 
 	vector_data = [0.1, 0.2, 0.3]
 	response_json = json.dumps({"status": "ok", "vector": vector_data}).encode("utf-8")
-	mock_client.recv.return_value = response_json
+
+	header = len(response_json).to_bytes(4, byteorder="big")
+	mock_client.recv.side_effect = [header, response_json, b""]
 
 	vector = manager._get_vector("test")
 	assert vector == vector_data
@@ -62,8 +64,8 @@ def test_get_vector_local(mock_daemon):
 		pass
 	manager.encoder = None
 	with patch.dict("sys.modules", {"fastembed": None}):
-		vector = manager._get_vector("hello")
-		assert vector == [0.0] * cfg.VECTOR_SIZE
+		with pytest.raises(RuntimeError, match="FastEmbed library is missing"):
+			manager._get_vector("hello")
 
 	# Now test when encoder is already set
 	class MockEncoderInst:
@@ -158,7 +160,7 @@ def test_reinforce_points_empty_and_payload_exception():
 			self.payload = {"reinforcement_score": 1.0}
 
 	manager.client.retrieve.return_value = [MockPoint()]
-	manager.client.set_payload.side_effect = Exception("Payload Set Fail")
+	manager.client.batch_update_points.side_effect = Exception("Payload Set Fail")
 
 	points = manager._reinforce_points("col", [1], {1: 0.1})
 	assert len(points) == 0  # Because of continue on exception

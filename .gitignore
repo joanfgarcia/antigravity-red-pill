@@ -57,6 +57,7 @@ ehthumbs.db
 Thumbs.db
 
 # Storage & Artifacts (Local Data)
+.agent/
 storage/
 backups/
 export/

@@ -11,6 +11,7 @@ The Red Pill Protocol v4.2.2 has achieved stability and functional alignment wit
 - **Conformity**: 97%
 - **[ENHANCED v4.2.2] Quad-Tier Memory Substrate**: The Bünker now operates with four isolated collections: `work` (Technical), `social` (Relationship), `directive` (Laws), and `story` (Narrative/Roleplay). This prevents "Dream Contamination" between professional benchmarks and high-intensity lore.
 - **[ENHANCED v4.2.2] Chromatic Synergy**: Lore Skins are now anchored to the **Emotional Chroma** system. Each skin (Cyberpunk, Blade Runner, etc.) possesses a dominant "chroma" that dictates the agent's baseline tone and default memory decay rates (e.g., Cyberpunk's **Orange** bias accelerates decay for unreinforced engrams, mimicking a high-stress environment).
+  - **Runtime Wiring**: When an operator invokes `red-pill mode <skin>`, the CLI updates the active skin configuration. At the `MemoryManager` level, this skin selection determines the default `color` assigned to new memories and modifies the baseline erosion rate by applying the corresponding `EMOTIONAL_DECAY_MULTIPLIERS` defined in `config.py`. This ensures that the narrative flavor directly impacts the mathematical decay behavior of the system.
 - "Dormancy" is implemented as a search filter (`score < 0.2`) on the fly, not as a distinct state flag in the payload as implied by "Lethargic State". This is computationally expensive at scale (filtering $N$ points).
     - "Synaptic Propagation" is strictly depth-1. A true "Neural" system would propagate $N$-hops with diminishing returns ($\delta^k$).
 
@@ -60,7 +61,7 @@ The B760 memory decay model is conceptually grounded in peer-reviewed cognitive 
 > *Here is the science behind the art.*
 
 ## 6. Security & Trust Architecture
-Beyond static code analysis, the Red Pill Protocol implements a multi-layered trust model. For a detailed rigorous analysis of assets, attack vectors, and specific engineering mitigations (Ontological Shield, PII Masking, Pydantic validation), consult the formal [THREAT_MODEL.md](docs/technical/THREAT_MODEL.md).
+Beyond static code analysis, the Red Pill Protocol implements a multi-layered trust model. For a detailed rigorous analysis of assets, attack vectors, and specific engineering mitigations (Ontological Shield, PII Masking, Pydantic validation), consult the formal [THREAT_MODEL.md](THREAT_MODEL.md).
 
 ## 7. Linguistic Architecture
 The Red Pill Protocol follows a dual-language strategy based on computational efficiency and psychological resonance:
@@ -90,3 +91,8 @@ The system has evolved from a single-user prototype into a **Decentralized Cogni
 **Status**: GREEN (Full Pass). The Bünker is secured, the Swarm is distributed, and the vision of Project Lazarus is now operational reality.
 
 **Recommendation**: Proceed to Sovereign Autonomy Phase (v6.0 - Agent Swarm Discovery).
+
+## 11. Known Limitations & Platform Quirks
+
+### 11.1 Windows Metabolism File Locking
+The metabolism state file does not use advisory file locking on Windows (`fcntl.flock` is unavailable). Running multiple simultaneous `red-pill` memory sidecars or CLI processes on Windows may corrupt the metabolism state tracking. Operate with caution in highly concurrent Windows deployments.

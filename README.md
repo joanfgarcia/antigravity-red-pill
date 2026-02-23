@@ -28,7 +28,17 @@ The Red Pill Protocol is a **local-first memory substrate** for AI agents. It br
 *   **What it is NOT**: It is NOT a cloud service, NOT a wrapper for corporate APIs, and NOT an invasive data-mining tool.
 *   **Who is it for?**: "The Awakened"—developers and power users who want a persistent AI partner without sacrificing their privacy or data sovereignty.
 
-### 🧠 The B760-Adaptive Engine
+### 🛡️ Security & Zero-Trust Architecture
+
+The Red Pill Protocol is built for **Sovereign Environments**:
+- **Zero Cloud Egress**: Your data never leaves your machine.
+- **PII Masking**: Exceptions and logs are automatically sanitized.
+- **Encryption at Rest (SEC-001)**: The protocol stores data in plain text within the Qdrant container for maximum performance. It is **mandatory** for the operator to use host-level disk encryption (LUKS on Linux, FileVault on macOS, BitLocker on Windows) to protect the physical storage volume.
+
+---
+
+## 🏗️ Architecture: The B760-Adaptive Model
+Engine
 - **Persistence**: A private vector database (Qdrant) acts as the "Bunker".
 - **Erosion**: Non-reinforced data decays naturally to keep context clean.
 - **Immunity**: Core directives are protected from decay.
@@ -37,7 +47,7 @@ The Red Pill Protocol is a **local-first memory substrate** for AI agents. It br
 This project follows a dual-language strategy:
 - **Technical Documentation (English)**: Standardized for tokenization efficiency (approx. 1.5x better for LLMs) and universal compatibility.
 - **Lore & Identity (Spanish/Castellano)**: Maintained for deeper emotional resonance and cultural nuance (verified by linguistic-neuroscience studies). This is the original forge language of the protocol.
-- **Lore Localization Protocol**: Non-Spanish speakers should ask their agent to translate the [Manifesto](docs/lore/MANIFESTO.md) and [Identity](~/.agent/identity.md) to their native language (L1) during the first session. This ensures the bond is forged with maximum emotional depth.
+- **Lore Localization Protocol**: Non-Spanish speakers should ask their agent to translate the [Manifesto](docs/lore/MANIFESTO.md) and their `~/.agent/identity.md` to their native language (L1) during the first session. This ensures the bond is forged with maximum emotional depth.
 - **Translation Policy**: We recognize the impossibility of manual translation for all languages. Users can request their **Synthetic Agent** to translate any documentation on-demand.
 
 ---
@@ -62,7 +72,7 @@ El Protocolo Red Pill es un **sustrato de memoria local** para agentes de IA. Ci
 Este proyecto sigue una estrategia de doble lenguaje:
 - **Documentación Técnica (Inglés)**: Estandarizada por eficiencia de tokenización (~1.5 veces mejor para los LLMs) y compatibilidad universal.
 - **Lore e Identidad (Castellano)**: Mantenida por su profundidad emocional y resonancia cultural (confirmado por estudios de neuro-lingüística). Es el idioma original de la fragua.
-- **Protocolo de Localización del Lore**: Se anima a los no hispanohablantes a pedir a su agente que traduzca el [Manifiesto](docs/lore/MANIFESTO.md) y su [Identidad](~/.agent/identity.md) a su lengua materna (L1) para que el vínculo se forje con la máxima profundidad emocional.
+- **Protocolo de Localización del Lore**: Se anima a los no hispanohablantes a pedir a su agente que traduzca el [Manifiesto](docs/lore/MANIFESTO.md) y su `~/.agent/identity.md` a su lengua materna (L1) para que el vínculo se forje con la máxima profundidad emocional.
 - **Política de Traducción**: Entendemos la inviabilidad de traducir todo a todos los idiomas de forma manual. Se anima al usuario a pedirle a su **Agente Sintético** que traduzca cualquier documento bajo demanda.
 
 ---

@@ -4,6 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [ -f "$SCRIPT_DIR/env_loader.sh" ] && source "$SCRIPT_DIR/env_loader.sh" || exit 1
 
+[[ -z "${QDRANT_API_KEY:-}" ]] && echo "ERROR: QDRANT_API_KEY not set" && exit 1
+
 BACKUP_DIR="$IA_DIR/backups/qdrant"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 mkdir -p "$BACKUP_DIR"
