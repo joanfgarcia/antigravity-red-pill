@@ -301,6 +301,8 @@ else
     echo "    \"RedPill-Kernel\": {"
     echo "      \"command\": \"$UV_PATH\","
     echo "      \"args\": ["
+    echo "        \"--directory\","
+    echo "        \"$REDPILL_DIR\","
     echo "        \"run\","
     echo "        \"python\","
     echo "        \"$REDPILL_DIR/src/red_pill/mcp_server.py\""

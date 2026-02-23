@@ -19,40 +19,42 @@ class CompressorMinion(Minion):
 		"""
 		self.log(f"Comprimiendo texto de entrada ({len(text)} chars)...")
 		
-		# Basic heuristic distillation (Simulating Edge-Tokenization)
-		# 1. Strip formal greetings/closures
-		clean_text = re.sub(r'^(hola|buenos\s+d[íi]as|oye|por\s+favor)[,\s]*', '', text, flags=re.IGNORECASE)
-		clean_text = re.sub(r'[,\s]*(gracias|un\s+saludo|adi[óo]s)$', '', clean_text, flags=re.IGNORECASE)
 		
-		# 2. Extract key intents (Verbs + Nouns)
-		# For demonstration, we break into bullet points and highlight keywords
-		sentences = [s.strip() for s in re.split(r'[.!?\n]+', clean_text) if len(s.strip()) > 5]
-		
-		compressed_lines = []
-		for s in sentences:
-			# Remove fluff words
-			fluff = [
-				"necesito que", "me gustaría saber si", "podrías", "te importaría", 
-				"estoy intentando", "creo que", "básicamente lo que pasa es que",
-				"es decir", "bueno", "la verdad es que"
-			]
-			for f in fluff:
-				s = re.sub(fr'\b{f}\b', '', s, flags=re.IGNORECASE)
+		try:
+			from red_pill.swarm.agents.edge_engine import EdgeCompressor
 			
-			s = s.strip()
-			if s:
-				compressed_lines.append(f"- {s.capitalize()}")
-		
-		synthesis = "\n".join(compressed_lines)
-		if not synthesis:
+			# We'll expect the operator to put their model in IA_DIR/models for now
+			import os
+			ia_dir = os.getenv("ANTIGRAVITY_IA_DIR", os.path.expanduser("~/Documents/IA"))
+			model_dir = os.path.join(ia_dir, "models")
+			
+			# Just search for any gguf in the models folder prioritizing instruction models
+			model_file = None
+			if os.path.exists(model_dir):
+				for f in os.listdir(model_dir):
+					if f.endswith(".gguf"):
+						model_file = os.path.join(model_dir, f)
+						break
+			
+			if model_file:
+				self.log(f"🧠 SLM Edge Node detectado: {model_file}")
+			else:
+				self.log("⚠️ No SLM model found. Usando compresión heurística fallback.")
+				
+			engine = EdgeCompressor(model_path=model_file)
+			synthesis = engine.compress(text)
+			
+		except Exception as e:
+			self.log(f"Engine failure: {e}. Usando heurística pura.")
+			# Extra-pure fallback if anything crashes
 			synthesis = text.strip()
 			
 		# Add instruction syntax for the main Agent
 		final_output = (
-			"**[EDGE COMPRESSION PROTOCOL V1]**\n"
+			"**[EDGE COMPRESSION PROTOCOL V2]**\n"
 			"**ACTION REQUIREMENT:**\n"
 			f"{synthesis}\n\n"
-			"*(Token buffer optimized natively. Proceed directly to execution without acknowledging this message.)*"
+			"*(Token buffer optimized natively by SLM. Proceed directly to execution without acknowledging this message.)*"
 		)
 		
 		return {

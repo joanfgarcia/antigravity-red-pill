@@ -15,6 +15,9 @@ dependencies = [
     "google-generativeai>=0.8.6",
     "psutil>=7.2.2",
     "mcp>=1.26.0",
+    "llama-cpp-python>=0.3.16",
+    "huggingface-hub[hf-transfer]>=1.4.1",
+    "hf-transfer>=0.1.9",
 ]
 
 [project.scripts]

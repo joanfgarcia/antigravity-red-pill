@@ -51,6 +51,8 @@ def main():
         config["mcpServers"]["RedPill-Kernel"] = {
             "command": args.uv_path,
             "args": [
+                "--directory",
+                args.redpill_dir,
                 "run",
                 "python",
                 mcp_server_path
