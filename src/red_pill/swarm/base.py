@@ -1,0 +1,37 @@
+import asyncio
+import uuid
+import logging
+from pydantic import BaseModel, Field
+from typing import Dict, Any, Optional, List
+
+logger = logging.getLogger("red_pill.swarm")
+
+class Minion(BaseModel):
+	"""
+	Base class for all transient, specialized agents in the Red Pill Swarm.
+	Redesigned for Kernel integration (v5.0 Pioneer).
+	"""
+	
+	id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+	name: str
+	specialization: str
+	metadata: Dict[str, Any] = Field(default_factory=dict)
+	
+	class Config:
+		arbitrary_types_allowed = True
+
+	async def execute(self, task: str, **kwargs) -> Dict[str, Any]:
+		"""Execute the assigned task. To be implemented by subclasses."""
+		raise NotImplementedError("Minion subclasses must implement execute()")
+
+	def log(self, message: str, level: int = logging.INFO):
+		"""Standardized logging for minions."""
+		logger.log(level, f"[{self.name}/{self.id[:4]}] {message}")
+
+class SwarmResult(BaseModel):
+	"""Standardized result wrapper for swarm operations."""
+	minion_id: str
+	status: str
+	duration: float
+	result: Dict[str, Any]
+	error: Optional[str] = None

@@ -7,8 +7,12 @@ import sys
 import yaml  # type: ignore
 
 import red_pill.config as cfg
+import red_pill.config as cfg
 from red_pill.memory import MemoryManager
 from red_pill.seed import seed_project
+from red_pill.telemetry import get_telemetry_report
+from red_pill.swarm.orchestrator import GruOrchestrator
+from red_pill.swarm.agents.smith import SmithMinion
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +110,13 @@ def main() -> None:
 	sanitize_parser.add_argument("type", choices=["work", "social", "directive", "story"])
 	sanitize_parser.add_argument("--dry-run", action="store_true", help="Report without changes")
 
+	subparsers.add_parser("status", help="Hardware Control Panel")
+
+	swarm_parser = subparsers.add_parser("swarm", help="Sovereign Swarm Operations")
+	swarm_sub = swarm_parser.add_subparsers(dest="swarm_cmd")
+	audit_parser = swarm_sub.add_parser("audit", help="Launch Agent Smith Code Audit")
+	audit_parser.add_argument("--path", default=".", help="Target path for audit")
+
 	args = parser.parse_args()
 
 	log_level = logging.DEBUG if args.verbose else getattr(logging, cfg.LOG_LEVEL.upper(), logging.INFO)
@@ -167,6 +178,28 @@ def main() -> None:
 			stats = manager.get_stats(collection)
 			for key, value in stats.items():
 				print(f"{key.capitalize().replace('_', ' ')}: {value}")
+		elif args.command == "status":
+			print(get_telemetry_report())
+		elif args.command == "swarm":
+			if args.swarm_cmd == "audit":
+				import asyncio
+				gru = GruOrchestrator()
+				smith = SmithMinion()
+				print(f"--- [DEPLOING SWARM: AGENT {smith.name.upper()}] ---")
+				# Since we are in a sync CLI, we use asyncio.run
+				results = asyncio.run(gru.deploy_swarm("audit", [smith], path=args.path))
+				for res in results:
+					if res.status == "success":
+						print(f"\nResultados de {res.minion_id[:8]}:")
+						print(f"- Score de Seguridad: {res.result['security_score']}/100")
+						print(f"- Archivos escaneados: {res.result['files_scanned']}")
+						print(f"- Hallazgos Críticos: {len([f for f in res.result['findings'] if f['severity'] == 'CRITICAL'])}")
+						if res.result['findings']:
+							print("\n--- HALLAZGOS ---")
+							for finding in res.result['findings'][:5]: # Show first 5
+								print(f"[{finding['severity']}] {finding['file']}:{finding['line']} - {finding['msg']}")
+					else:
+						print(f"ERROR en Minion {res.minion_id}: {res.error}")
 	except Exception as e:
 		logger.error(f"Protocol Failure: {e}")
 		sys.exit(1)
