@@ -93,21 +93,66 @@ class SmithMinion(Minion):
 			except Exception as e:
 				self.log(f"Error analizando {py_file}: {e}", level=30)
 
-		# 3. Deep SLM Forensics (if findings exist and model available)
-		if results["findings"]:
-			from red_pill.swarm.agents.edge_engine import EdgeEngine
-			ia_dir = os.getenv("ANTIGRAVITY_IA_DIR", os.path.expanduser("~/Documents/IA"))
-			model_dir = os.path.join(ia_dir, "models")
-			model_file = next((os.path.join(model_dir, f) for f in os.listdir(model_dir) if f.endswith(".gguf")), None) if os.path.exists(model_dir) else None
+		# 3. Industrial Deep Forensics (Zero-Trust Architectural Audit)
+		is_deep = kwargs.get("deep_forensics", False) or task == "industrial_audit"
+		
+		from red_pill.swarm.agents.edge_engine import EdgeEngine
+		engine = EdgeEngine()
 
-			if model_file:
-				self.log("🔍 Desplegando forense SLM para validar hallazgos...")
-				engine = EdgeEngine(model_path=model_file)
-				for finding in results["findings"][:5]: # Limit to top 5 for speed
-					snippet = finding.get("context", finding["msg"])
-					prompt = f"Security Analysis Request: Code snippet '{snippet}' was flagged as '{finding['msg']}'. Is this a genuine security risk (True Positive) or a safe usage (False Positive)? Explain briefly."
-					analysis = engine.synthesize(snippet, prompt)
-					finding["slm_validation"] = analysis
+		if is_deep and engine.llm:
+			self.log(f"☢️ MODO INDUSTRIAL ACTIVADO: Forense con {os.path.basename(engine.model_path)}")
+			
+			for py_file in python_files:
+				if any(x in str(py_file) for x in ["venv", ".git", "__pycache__", ".agent"]):
+					continue
+				
+				try:
+					with open(py_file, 'r', encoding='utf-8') as f:
+						lines = f.readlines()
+					
+					# Heuristic block extraction for SLM (focusing on complex logic or sensitive keywords)
+					critical_blocks = []
+					current_block = []
+					sensitive_keywords = ["token", "auth", "encrypt", "subprocess", "socket", "request", "persist"]
+					
+					for line in lines:
+						current_block.append(line)
+						if len(current_block) > 40: # Chunk size
+							block_text = "".join(current_block)
+							if any(kw in block_text.lower() for kw in sensitive_keywords):
+								critical_blocks.append(block_text)
+							current_block = []
+					
+					if current_block:
+						critical_blocks.append("".join(current_block))
+
+					for block in critical_blocks[:3]: # Limit per file for intensity balance
+						prompt = (
+							"INDUSTRIAL SECURITY AUDIT: Analyze the following Python code for architectural flaws, "
+							"unsecured patterns, or logic vulnerabilities. Be extremely critical. Same language as code."
+						)
+						analysis = engine.synthesize(block, prompt)
+						if "vulner" in analysis.lower() or "risk" in analysis.lower() or "riesgo" in analysis.lower():
+							results["findings"].append({
+								"severity": "WARNING",
+								"file": str(py_file.relative_to(target_path)),
+								"line": "AI-Forensics",
+								"msg": f"SLM ARCHITECTURAL ALERT: {analysis[:200]}..."
+							})
+							results["security_score"] -= 2.0
+							
+				except Exception as e:
+					self.log(f"Deep scan error on {py_file}: {e}")
+
+		elif results["findings"] and engine.llm:
+			self.log(f"🔍 Validando hallazgos previos con {os.path.basename(engine.model_path)}...")
+			for finding in results["findings"][:5]: # Limit to top 5 for speed
+				snippet = finding.get("context", finding["msg"])
+				prompt = f"Security Analysis Request: Code snippet '{snippet}' was flagged as '{finding['msg']}'. Is this a genuine security risk (True Positive) or a safe usage (False Positive)? Explain briefly."
+				analysis = engine.synthesize(snippet, prompt)
+				finding["slm_validation"] = analysis
+
+
 
 
 		# Thermal check from real hardware

@@ -1,5 +1,6 @@
 import gc
 import os
+from typing import Optional
 
 # 1. Fallback to basic extraction if llama_cpp is not available
 try:
@@ -8,21 +9,44 @@ try:
 except ImportError:
 	LLAMA_AVAILABLE = False
 
-class EdgeCompressor:
+class EdgeEngine:
 	"""
-	Local SLM logic for prompt compression.
-	Only instantiated via the Minion if the user has a model downloaded.
+	Local SLM logic for edge-node processing.
+	Used for compression, synthesis, and technical extraction.
 	"""
-	def __init__(self, model_path: str, n_gpu_layers: int = -1):
-		self.model_path = model_path
-		self.llm = None
 
-		# Only load if python binding exists
-		if LLAMA_AVAILABLE and model_path and os.path.exists(model_path):
+	def __init__(self, model_path: Optional[str] = None, n_gpu_layers: int = -1):
+		self.llm = None
+		
+		import os
+		ia_dir = os.getenv("ANTIGRAVITY_IA_DIR", os.path.expanduser("~/Documents/IA"))
+		model_dir = os.path.join(ia_dir, "models")
+		
+		# If no path provided, search for the best one (7B > 1.5B)
+		if not model_path and os.path.exists(model_dir):
+			models = os.listdir(model_dir)
+			priority_models = ["qwen2.5-coder-7b", "qwen2.5-coder-1.5b"]
+			for target in priority_models:
+				found = next((m for m in models if target in m.lower() and m.endswith(".gguf")), None)
+				if found:
+					model_path = os.path.join(model_dir, found)
+					break
+			# Fallback to any GGUF
+			if not model_path:
+				found = next((m for m in models if m.endswith(".gguf")), None)
+				if found:
+					model_path = os.path.join(model_dir, found)
+
+		self.model_path = model_path
+
+		# Only load if python binding exists and we have a model
+		if LLAMA_AVAILABLE and self.model_path and os.path.exists(self.model_path):
 			try:
+				# VRAM Guard: The RTX 5070 has 8GB. 7B Q4_K_M uses ~5GB.
+				# We offload everything (-1) but let llama-cpp handle the limits.
 				self.llm = Llama(
-					model_path=model_path,
-					n_ctx=4096,  
+					model_path=self.model_path,
+					n_ctx=8192, # Expanded context for the Heavy weight
 					n_gpu_layers=n_gpu_layers,
 					verbose=False
 				)
@@ -76,3 +100,32 @@ class EdgeCompressor:
 				compressed_lines.append(f"- {s.capitalize()}")
 		synthesis = "\n".join(compressed_lines)
 		return synthesis if synthesis else text.strip()
+
+	def synthesize(self, background: str, query: str) -> str:
+		"""Synthesize retrieved context into a coherent summary."""
+		if not self.llm:
+			return background[:1000] + "..."
+
+		try:
+			system_prompt = (
+				"You are the Oracle of the 760 Protocol. "
+				"Synthesize the following context based on the user's query. "
+				"Be precise, technical, and prioritize security truths. "
+				"If no relevant info is found, state it clearly."
+			)
+			prompt = (
+				f"<|im_start|>system\n{system_prompt}<|im_end|>\n"
+				f"<|im_start|>user\nContext:\n{background}\n\nQuery: {query}<|im_end|>\n"
+				f"<|im_start|>assistant\n"
+			)
+
+			output = self.llm(
+				prompt,
+				max_tokens=512,
+				stop=["<|im_end|>", "</s>"],
+				temperature=0.2
+			)
+			return output["choices"][0]["text"].strip()
+		except Exception as e:
+			print(f"Edge synthesis failed: {e}")
+			return background[:1000]

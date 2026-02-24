@@ -32,17 +32,18 @@ class OracleMinion(Minion):
 
 		background = "\n---\n".join(results) if results else ""
 		
+		background = "\n---\n".join(results) if results else ""
+		
 		# Edge Synthesis Logic
-		ia_dir = os.getenv("ANTIGRAVITY_IA_DIR", os.path.expanduser("~/Documents/IA"))
-		model_dir = os.path.join(ia_dir, "models")
-		model_file = next((os.path.join(model_dir, f) for f in os.listdir(model_dir) if f.endswith(".gguf")), None) if os.path.exists(model_dir) else None
+		engine = EdgeEngine()
 
-		if model_file:
-			self.log(f"🔮 Sintetizando con SLM local: {os.path.basename(model_file)}")
-			engine = EdgeEngine(model_path=model_file)
+		if engine.llm:
+			self.log(f"🔮 Sintetizando con {os.path.basename(engine.model_path)}")
 			synthesis = engine.synthesize(background, task)
 		else:
-			self.log("⚠️ No SLM found. Usando concatenación de fragmentos.")
+			self.log("⚠️ No local LLM found. Usando concatenación de fragmentos.")
+			synthesis = background if background else "No se encontró contexto previo relevante."
+
 			synthesis = background if background else "No se encontró contexto previo relevante."
 
 		return {

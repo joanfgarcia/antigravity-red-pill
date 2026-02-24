@@ -24,25 +24,16 @@ class CompressorMinion(Minion):
 			# We'll expect the operator to put their model in IA_DIR/models for now
 			import os
 
-			from red_pill.swarm.agents.edge_engine import EdgeCompressor
-			ia_dir = os.getenv("ANTIGRAVITY_IA_DIR", os.path.expanduser("~/Documents/IA"))
-			model_dir = os.path.join(ia_dir, "models")
-
-			# Just search for any gguf in the models folder prioritizing instruction models
-			model_file = None
-			if os.path.exists(model_dir):
-				for f in os.listdir(model_dir):
-					if f.endswith(".gguf"):
-						model_file = os.path.join(model_dir, f)
-						break
-
-			if model_file:
-				self.log(f"🧠 SLM Edge Node detectado: {model_file}")
+			from red_pill.swarm.agents.edge_engine import EdgeEngine
+			engine = EdgeEngine()
+			
+			if engine.model_path:
+				self.log(f"🧠 Edge Engine activo: {os.path.basename(engine.model_path)}")
+				synthesis = engine.compress(text)
 			else:
-				self.log("⚠️ No SLM model found. Usando compresión heurística fallback.")
+				self.log("⚠️ No model found. Use fallback.")
+				synthesis = engine.compress(text) # Fallback handled by engine
 
-			engine = EdgeCompressor(model_path=model_file)
-			synthesis = engine.compress(text)
 
 		except Exception as e:
 			self.log(f"Engine failure: {e}. Usando heurística pura.")
