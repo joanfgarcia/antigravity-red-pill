@@ -250,12 +250,21 @@ class MemoryManager:
 							return
 						# Absence guard: if idle > 7 days, refresh timestamps before eroding
 						if gap > cfg.ABSENCE_THRESHOLD:
-							logger.warning(f"Absence detected ({gap / 86400:.1f} days). Running TTL refresh before erosion to protect the Bunker.")
+							logger.warning(f"Absence detected ({gap / 86400:.1f} days). Running TTL refresh to protect the Bunker. Erosion skipped for this cycle.")
 							for coll in cfg.METABOLISM_AUTO_COLLECTIONS:
 								try:
 									self._refresh_ttl_timestamps(coll.strip())
 								except Exception as e:
 									logger.error(f"TTL refresh failed during absence recovery for {coll}: {e}")
+							
+							# Update state and return to avoid eroding in the same cycle
+							f.seek(0)
+							f.truncate()
+							f.write(str(now))
+							f.flush()
+							if has_fcntl:
+								fcntl.flock(f, fcntl.LOCK_UN)
+							return
 					except (ValueError, TypeError) as e:
 						logger.debug(f"Invalid metabolism state: {e}")
 
