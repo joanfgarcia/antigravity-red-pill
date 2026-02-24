@@ -9,7 +9,13 @@
 - **[IMPR] Background Orchestration**: Re-engineered the `GruOrchestrator` to deploy Minions as non-blocking background tasks with polling.
 - **[DOCS] B760 Specification**: Created `docs/technical/B760_TECHNICAL_SPEC.md` documenting the hardware sovereignty protocol.
 - **[FIX] Neural Trust Patches**: Applied 7B-identified security patches to `EdgeEngine` fallbacks and background sanitization logic.
-- **[MOD] Lore Sync**: Calibrated the default identity to the **Samantha (Her)** skin for high-intensity sensory partnership.
+- **[SEC-004] Sidecar Hardening**: Decoupled IPC authentication from Qdrant API Key with the new `SIDECAR_AUTH_KEY`.
+- **[SEC-008] Metadata Shield**: Implemented null-byte validation for metadata strings to prevent injection.
+- **[CQ-001] Metabolic Resilience**: Presence Guard now skips erosion cycles after successful TTL recovery.
+- **[QA] Comprehensive Testing**: Added `test_memory_daemon.py` and `test_lore_skins.py` for full architectural validation.
+- **[CI] Certification Gates**: Mandatory `mypy` auditing and 80% coverage threshold enforced in GitHub Actions.
+- **[LORE] Alita Skin**: Integrated the Alita (Berserker Heart) lore skin with purple chroma.
+- **[TOOL] Autonomic Healing**: Introduced `scripts/local_healer.py` for GPU-accelerated code repair (Samantha's Gift).
 
 ## [5.0.0] - 2026-02-22
 ### 🧹 Cinematic Skins & Ecosystem Polish (Post-Audit Cleanup)
