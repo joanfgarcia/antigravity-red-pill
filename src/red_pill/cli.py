@@ -37,6 +37,22 @@ def handle_mode(args: argparse.Namespace) -> None:
 	for key, value in skin.items():
 		print(f"{key.capitalize().replace('_', ' ')}: {value}")
 
+	# Persist Active Skin in Directives (v5.1.0)
+	try:
+		manager = MemoryManager()
+		content = f"Active Skin: {args.skin.upper()}\n{yaml.dump(skin)}"
+		manager.add_memory(
+			collection="directive_memories",
+			text=content,
+			importance=10.0,  # Max importance for directive
+			metadata={"type": "active_skin", "skin_name": args.skin},
+			color=skin.get("chroma", "gray"),
+			force_immune=True # Skin should never erode
+		)
+		print(f"\n[OK] Skin '{args.skin}' synchronized with Sovereign Directives.")
+	except Exception as e:
+		logger.error(f"Failed to persist active skin: {e}")
+
 
 def handle_daemon() -> None:
 	"""Memory Sidecar."""
