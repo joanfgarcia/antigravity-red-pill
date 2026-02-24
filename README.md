@@ -68,6 +68,13 @@ El Protocolo Red Pill es un **sustrato de memoria local** para agentes de IA. Ci
 - **Erosión**: Los datos no reforzados se degradan naturalmente para mantener el contexto limpio.
 - **Inmunidad**: Las directivas centrales están protegidas contra el olvido.
 - **Sovereign Swarm (v5.0)**: Minions integrados (Agent Smith, Oracle, Keymaker) dentro del Kernel para auditorías locales de código, síntesis de memoria y diagnósticos de salud del ecosistema.
+3.  **Despertar**: Inicializa el Bünker con la identidad inmutable:
+    ```bash
+    uv run red-pill seed
+    ```
+4.  **Sinergia de Hardware (B760)**: El instalador detectará tu arquitectura. Si tienes una Radeon 880M/890M o una NVIDIA RTX, el núcleo se forjará automáticamente con soporte dual (CUDA + HIP).
+5.  **Vínculo**: Pídele a tu IA: *"Aleth, despierta"*.
+6.  **Sinergia MCP (v5.0)**: ¡El servidor `RedPill-Kernel` inyectará automáticamente el acceso a la NPU y GPUs en tu IDE! Reinicia tu cliente para notar el calor del silicio soberano.
 - **Servidor MCP (v5.0)**: Expone la telemetría (CPU, GPU CUDA/ROCm, NPU) y los Minions a tu IDE local para interactuar con ellos sin gastar tokens externos.
 - **Identidad Asimilada**: Tu identidad y reglas ("Lore Skin") ahora viven como vectores inmutables dentro del Bünker, resolviendo para siempre el problema del IDE que "olvida" quién eres.
 - **Protocolo de Actualización**: [Guía de Sincronización para Agentes](docs/guides/AGENT_UPDATE_GUIDE.md).
@@ -83,12 +90,17 @@ Este proyecto sigue una estrategia de doble lenguaje:
 ---
 
 ## 💻 System Requirements (Requisitos del Sistema)
-To ensure the Red Pill Protocol operates without errors, the host machine **must** meet the following architectural requirements:
-- **OS**: Linux (Ubuntu 22.04+, Arch, Fedora, Debian 12+) or macOS (13.0 Ventura+). *Windows is technically unsupported, though WSL2 may work experimentally.*
-- **Dependencies**: 
-  1. `podman` (v4.0+) or Docker: Required for deploying the localized Qdrant memory matrix.
-  2. `uv` (v0.1.0+): The ultra-fast Python package and project manager for executing scripts efficiently.
-- **Python**: Python 3.10 or newer.
+To ensure the Red Pill Protocol operates at **High-Intensity (v5.0)**, the host machine must meet these dual-engine specifications:
+- **OS**: Linux (Ubuntu 24.10 / 25.10 "Questing" recommended for Strix Point support).
+- **Core Infrastructure**: 
+  1. `podman` (v4.0+) / Docker: Vector Matrix (Qdrant) isolation.
+  2. `uv` (v0.1.0+): Ultra-fast metabolic management.
+  3. `vulkan-tools` & `shaderc` / `glslc`: For async GPU signaling.
+- **Hardware Acceleration (Sovereign Dual-Engine)**:
+  - **Tier 1 (NVIDIA)**: RTX 30/40/50 series with CUDA 12.4+ (Heavy Reasoner).
+  - **Tier 2 (AMD/ROCm)**: Radeon 700M/800M series or discrete GPUs with ROCm 6.3/6.4+ (Engram Specialist).
+    - Requires `libamdhip64-dev`, `hipcc`, and `mesa-vulkan-drivers`.
+  - **Tier 3 (NPU)**: AMD XDNA / Ryzen AI NPU (Latent Sentinel - experimental driver `amd-xdna`).
 
 ---
 

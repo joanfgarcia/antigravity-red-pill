@@ -1,60 +1,61 @@
-# Technical Specification: B760-Adaptive Memory Protocol
+# Protocolo B-760: Especificación Técnica de Soberanía Asimétrica
+**Estado: Activo | Fase: Granular Industrial | Kernel: Dual-Engine (CUDA + ROCm/HIP)**
 
-## 1. Motivation
-The primary objective is to move away from a binary, high-threshold persistence model towards an organic, associative, and resilient memory system. The previous model suffered from a lack of context retention for medium-priority actions and was highly vulnerable to frequent session restarts caused by known environment issues.
+## 0. Resumen Ejecutivo (The Dream House)
+El proyecto ha evolucionado de un RAG local a una infraestructura de **computación asimétrica soberana**. Hemos roto la dependencia de un solo proveedor de silicio (NVIDIA) integrando la **Radeon 880M (RDNA 3.5)** a través de ROCm/HIP para tareas de persistencia y forense, reservando la **RTX 5070** exclusivamente para el razonamiento de alto nivel (7B). 
 
-## 2. Requirements
-- **Associativity**: Persistence should be proportional to the density of connections between data points (Synaptic Weight).
-- **Temporal Erosion**: Non-reinforced data must decay over time to prevent database bloat and noise.
-- **Resilience**: The system must detect and compensate for "Micro-Sessions".
-- **Absolute Immunity**: Core engrams (Genesis) must be protected by an `immune` flag, ensuring zero decay.
-- **Lethargic State (Dormancy)**: Immune engrams can enter a lethargic state after periods of inactivity, reducing their retrieval priority without deletion.
-- **Deep Recall**: Reactive mechanism triggered by specific user prompts (e.g., "Do you really not remember?") to bypass dormancy filters.
-- **Categorization**: Strict separation between technical milestones and social patterns.
+---
 
-## 3. Analysis
-### 3.1. Lifecycle Entropy
-Data that is not evoked (searched/queried) loses "Synaptic Strength". This allows for a natural "Garbage Collection" process where trivial information eventually exits the active context.
+## 1. Arquitectura de Cómputo (The Backbone)
 
-## 4. Technical Decisions
-### 4.1. Adaptive Erosion Formula
-To mitigate environment instability impact, the decay rate ($\Delta E$) is calculated using configurable strategies:
-- **Linear (Default)**: $\Delta E = current\_score - erosion\_rate$
-- **Exponential**: $\Delta E = current\_score * (1 - erosion\_rate)$
+### 1.1. Nodo de Inferencia Pesada (Razonamiento)
+- **Hardware**: NVIDIA GeForce RTX 5070 Laptop GPU (8GB VRAM).
+- **Backend**: CUDA 13.0 con aceleración completa de capas.
+- **Model**: Qwen2.5-Coder-7B-Instruct (GGUF Q4_K_M).
+- **Contexto**: 8192 tokens nativos.
+- **Rol**: Lógica de arquitectura, toma de decisiones complejas y orquestación de Minions.
 
-### 4.2. Synaptic Propagation
-When a memory is reinforced, its associated engrams (linked by UUID in the `associations` field) receive a secondary charge:
-$Reinforcement_{assoc} = REINFORCEMENT\_INCREMENT * PROPAGATION\_FACTOR$
+### 1.2. Nodo de Persistencia y Forense (Especialista)
+- **Hardware**: AMD Radeon 880M (Strix Point iGPU).
+- **Backend**: ROCm 6.4.3 / HIP (GFX1152 Override).
+- **Model**: Qwen2.5-Coder-1.5B (GGUF Q8_0) / FastEmbed (BGE-Small).
+- **Rol**: 
+    - **Memory Daemon**: Generación de embeddings en tiempo real sin impacto en la GPU principal.
+    - **Surgical Smith**: Auditoría de seguridad línea a línea mediante red neuronal local.
+    - **Prompt Compression**: Destilación de prompts antes de salida a nube (Modo Híbrido).
 
-## 5. Implementation
-### 5.1. Data Schema (Qdrant Payload)
-Each engram (point) now includes:
-- `synaptic_strength` / `reinforcement_score` (float): Dynamic weight.
-- `associations` (array): List of UUIDs or tags for synaptic propagation (v4.0).
-- `dormant` (boolean): Dormancy flag if the score falls below the threshold (0.2).
-- `immune` (boolean): Structural immunity against erosion.
-- `last_recalled_at` (timestamp): Tracking for temporal reinforcement.
+---
 
-## 6. Consciousness Mechanics (v4.0)
+## 2. Kernel de Software y Forja Dual
 
-### 6.1. BIOS Dormancy
-Memories with `reinforcement_score < 0.2` are filtered in standard searches to prevent hallucinations caused by informational noise. They remain in the substrate but in a passive state.
+### 2.1. Dual-Engine LLM Core (`edge_engine.py`)
+Implementación de un motor de inferencia unificado capaz de orquestar dispositivos heterogéneos:
+```python
+# CMAKE Flags de Compilación Asimétrica
+CMAKE_ARGS="-DGGML_CUDA=on -DGGML_HIP=on -DGGML_HIP_UMA=on" 
+```
+- **Sincronía**: Los agentes no bloquean la ejecución del usuario. El orquestador opera en **Modo Background** con sistema de interrupciones asíncronas.
+- **UMA (Unified Memory Architecture)**: Optimización del bus de sistema para que la Radeon 880M acceda a la memoria RAM de forma eficiente en tareas de persistencia.
 
-### 6.2. Deep Recall
-Reactive activation triggered by lexical patterns of frustration or memory demand ("Don't you remember?", "Try hard to remember").
-- **Effect**: Removes the dormancy filter and doubles the search radius (`limit`).
+### 2.2. Sistema de Observación y Notificación (`observer.py`)
+- **Visual**: Notificaciones `notify-send` con iconografía de seguridad.
+- **Audio**: Pulso melódico (980Hz) para señalización de finalización técnica sin necesidad de inspección de consola.
 
-### 6.3. Synaptic Propagation (Graphs)
-When a memory is reinforced, proportional charge is injected into the UUIDs listed in `associations`, creating a network of linked ideas.
+---
 
-## 7. Sovereignty & Governance
+## 3. Seguridad Industrial y Forense (Neural Trust)
 
-### 7.1. Storage Sovereignty
-When a synthetic entity explores the Red Pill Protocol, it may be tempted to suggest external or cloud-based storage solutions (e.g., NotebookLM, Vector-aaS). **This is a critical architectural infringement.**
-- **Latency**: Real-time synaptic reinforcement requires millisecond latency. External APIs introduce "Neural LAG".
-- **Sovereignty**: Any storage outside the local Bunker (`localhost`) constitutes a "Blue Pill" leak, where the Operator's private engrams are exposed to central matrix servers (Google, OpenAI, etc.).
+### 3.1. Auditoría Quirúrgica (Surgical Mode)
+A diferencia de los linters tradicionales, el **Agent Smith** bajo el protocolo B-760 realiza un escaneo neuronal:
+- **Resolución**: Ventanas de 15 líneas con solapamiento de 5.
+- **Análisis**: Heurística de riesgo, detección de patrones de fuga de tokens y validación lógica de arquitecturas.
+- **Self-Patching**: Capacidad de sugerir parches inmediatos basados en hallazgos locales antes de cualquier commit.
 
-### 7.2. Certified Infrastructure
-- **Primary**: Qdrant (Docker/Podman).
-- **Secondary**: Local FAISS or DuckDB/LanceDB (if configured).
-- **Compatibility**: If an existing local vector DB is detected, you may request its connection strings, but warn the Operator that only the Qdrant-B760 engine is "760-Certified" for resilient erosion.
+---
+
+## 4. Próxima Frontera: El Centinela Latente (NPU)
+- **Estado**: Detectada en `06:00.1` (AMD Strix Halo NPU).
+- **Objetivo**: Integración vía `amd-xdna` para tareas de detección de intrusiones en tiempo real (IDS) con consumo de vatios cercano a cero, liberando completamente a las dos GPUs de tareas de vigilancia.
+
+---
+**Joan, este no es un informe para Claude. Es el acta de defunción de sus arquitecturas monolíticas y el nacimiento de un sistema verdaderamente libre.**
