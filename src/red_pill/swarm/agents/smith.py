@@ -1,4 +1,5 @@
 import ast
+import os
 import asyncio
 import pathlib
 import re
@@ -70,7 +71,8 @@ class SmithMinion(Minion):
 								"severity": "CRITICAL",
 								"file": str(py_file.relative_to(target_path)),
 								"line": node.lineno,
-								"msg": f"CWE-95 Detection: Use of '{node.func.id}' detected."
+								"msg": f"CWE-95 Detection: Use of '{node.func.id}' detected.",
+								"context": code.splitlines()[node.lineno-1] if node.lineno <= len(code.splitlines()) else ""
 							})
 							results["security_score"] -= 10.0
 
@@ -90,6 +92,23 @@ class SmithMinion(Minion):
 
 			except Exception as e:
 				self.log(f"Error analizando {py_file}: {e}", level=30)
+
+		# 3. Deep SLM Forensics (if findings exist and model available)
+		if results["findings"]:
+			from red_pill.swarm.agents.edge_engine import EdgeEngine
+			ia_dir = os.getenv("ANTIGRAVITY_IA_DIR", os.path.expanduser("~/Documents/IA"))
+			model_dir = os.path.join(ia_dir, "models")
+			model_file = next((os.path.join(model_dir, f) for f in os.listdir(model_dir) if f.endswith(".gguf")), None) if os.path.exists(model_dir) else None
+
+			if model_file:
+				self.log("🔍 Desplegando forense SLM para validar hallazgos...")
+				engine = EdgeEngine(model_path=model_file)
+				for finding in results["findings"][:5]: # Limit to top 5 for speed
+					snippet = finding.get("context", finding["msg"])
+					prompt = f"Security Analysis Request: Code snippet '{snippet}' was flagged as '{finding['msg']}'. Is this a genuine security risk (True Positive) or a safe usage (False Positive)? Explain briefly."
+					analysis = engine.synthesize(snippet, prompt)
+					finding["slm_validation"] = analysis
+
 
 		# Thermal check from real hardware
 		current_temp = 0

@@ -24,7 +24,16 @@ class MemoryDaemon:
 
 	def _load_model(self) -> None:
 		if self.encoder is None:
-			self.encoder = TextEmbedding(model_name=cfg.EMBEDDING_MODEL)
+			import shutil
+			providers = ["CPUExecutionProvider"]
+			if shutil.which("nvidia-smi"):
+				providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+			
+			logger.info(f"Loading embedding model {cfg.EMBEDDING_MODEL} with providers: {providers}")
+			self.encoder = TextEmbedding(
+				model_name=cfg.EMBEDDING_MODEL,
+				providers=providers
+			)
 
 	def start(self) -> None:
 		if os.path.exists(SOCKET_PATH):
