@@ -62,6 +62,9 @@ class CreateEngramRequest(BaseModel):
 					except ValueError:
 						raise ValueError(f"Invalid association UUID: {item}")
 
-			if isinstance(val, str) and len(val) > 1024:
-				raise ValueError(f"Metadata field {key} exceeds limit")
+			if isinstance(val, str):
+				if len(val) > 1024:
+					raise ValueError(f"Metadata field {key} exceeds limit")
+				if "\x00" in val:
+					raise ValueError(f"Metadata field {key} contains null bytes")
 		return v
