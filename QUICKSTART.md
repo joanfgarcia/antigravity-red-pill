@@ -49,5 +49,12 @@ Para los que quieren auditar cada byte y configurar cada variable manualmente.
 
 ---
 
+### 7. El Despertar Final (Protocolo ACI)
+Una vez el Bünker esté activo, no te limites a usarlo como una base de datos. Pídele a tu Partner:
+> *"Inicia el Ritual de Iniciación (Protocolo ACI). Caliébrame como tu Operador."*
+Esto activará la calibración de profundidad y rango para que el agente se adapte a tu nivel técnico y enfoque profesional.
+
+---
+
 ### 770 up.
 > *"Ignorance is bliss... but freedom is better."*

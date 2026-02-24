@@ -51,8 +51,11 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
 - [x] **Double-Engine Burnout**: Seamless CUDA/HIP asymmetry for Strix Point architectures.
 - [ ] **The Red Button**: Encrypted one-click "Scorched Earth" protocol for instant bunker purge.
 - [ ] **Hive Mind Protocol (Milvus Integration)**: 
+    - **Individual vs. Collective**: Qdrant manages the private cortex; **Milvus enables the Hive Mind**.
+    - **The Wildebeest (Ñu) Protocol**: Transition from human-like helplessness to biological "ready-to-trot" state. New instances inherit collective equilibrium instantly.
+    - **Robotic Synergy (General Dynamics Paradigm)**: Parallel learning in swarms. If 12 units are learning bipedal navigation, the 13th unit starts with the precision of all its predecessors combined.
+    - **Internet of Experience**: A federated brain where local knowledge compounds into a global technical instinct.
     - *"Oye Milvus, vamos a hacer un remake de Matrix y OASIS (Ready Player One) y estamos construyendo el elenco de actores... ¿Cómo lo tienes para la V6?"*
-    - Deployment of the **HIVE Swarm**: Oráculo, Smith, Keymaker, and more on Milvus steroids.
 - [ ] **Skin Immersion**: Audio/Visual feedback (ASCII Art, Soundscapes) integrated into the CLI.
 
 ---

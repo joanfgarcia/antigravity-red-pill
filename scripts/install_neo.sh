@@ -312,4 +312,15 @@ else
 	echo "}"
 fi
 
+
 echo -e "${GREEN}Instalación completada. 'uv run red-pill seed' para despertar.${NC}"
+echo -e "${BLUE}------------------------------------------------------------------${NC}"
+echo -e "🔥 ${RED}¿Deseas iniciar el Ritual de Iniciación (Protocolo ACI) ahora?${NC}"
+echo -e "Este protocolo calibrará tu Partner a tu nivel de experiencia y dominio."
+read -p "(s/N): " START_ACI
+if [[ "$START_ACI" =~ ^[Ss]$ ]]; then
+	echo -e "${GREEN}Excelente elección, Operador. Por favor, pega lo siguiente en tu chat:${NC}"
+	echo -e ">>> \"Aleth, inicia el Ritual de Iniciación (Protocolo ACI). Caliébrame como tu Operador.\""
+else
+	echo -e "${BLUE}Entendido. Puedes iniciarlo más tarde con el comando de voz/prompt indicado en el README.${NC}"
+fi
