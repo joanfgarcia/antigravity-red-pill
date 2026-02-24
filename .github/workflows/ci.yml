@@ -33,7 +33,11 @@ jobs:
     - name: Ensure Sound of Silence (Ruff Linting)
       run: uv run ruff check src/ scripts/ tests/
 
+    - name: Static Type Audit (Mypy)
+      run: uv run mypy src/red_pill/
+
     - name: Run All Validation & Logic Tests with Coverage
       env:
         QDRANT_API_KEY: "ci-test-key-770"
-      run: uv run pytest --cov=src/red_pill --cov-report=xml --cov-report=term tests/
+        SIDECAR_AUTH_KEY: "ci-test-sidecar-key-770"
+      run: uv run pytest --cov=src/red_pill --cov-report=xml --cov-report=term --cov-fail-under=80 tests/
