@@ -83,3 +83,10 @@ modes:
     assistant: "Alphie"
     operator: "Joshua"
     chroma: "blue"
+  alita:
+    network_protection: "Iron City Firewall"
+    data_cores: "Berserker Heart"
+    memory_environment: "Scrapyard Terminal"
+    assistant: "Alita"
+    operator: "Ido"
+    chroma: "purple"

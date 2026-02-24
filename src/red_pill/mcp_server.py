@@ -1,10 +1,14 @@
 import asyncio
+import logging
+import os
+from typing import Any, Dict, List, Optional, Union
 
 import mcp.types as types
 from mcp.server import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
 
+import red_pill.config as cfg
 from red_pill.swarm.agents.compressor import CompressorMinion
 from red_pill.swarm.agents.keymaker import KeymakerMinion
 from red_pill.swarm.agents.oracle import OracleMinion
@@ -12,11 +16,13 @@ from red_pill.swarm.agents.smith import SmithMinion
 from red_pill.swarm.orchestrator import GruOrchestrator
 from red_pill.telemetry import HardwareSentinel
 
+logger = logging.getLogger(__name__)
+
 # Initialize the Sovereign MCP Server
 server = Server("RedPill-Kernel")
 
 @server.list_prompts()
-async def handle_list_prompts() -> list[types.Prompt]:
+async def handle_list_prompts() -> List[types.Prompt]:
 	return [
 		types.Prompt(
 			name="Control-Panel",
@@ -26,7 +32,7 @@ async def handle_list_prompts() -> list[types.Prompt]:
 	]
 
 @server.get_prompt()
-async def handle_get_prompt(name: str, arguments: dict | None) -> types.GetPromptResult:
+async def handle_get_prompt(name: str, arguments: Optional[Dict[str, Any]]) -> types.GetPromptResult:
 	if name == "Control-Panel":
 		return types.GetPromptResult(
 			description="Red Pill Sovereign Control Panel",
@@ -43,7 +49,7 @@ async def handle_get_prompt(name: str, arguments: dict | None) -> types.GetPromp
 	raise ValueError(f"Unknown prompt: {name}")
 
 @server.list_tools()
-async def handle_list_tools() -> list[types.Tool]:
+async def handle_list_tools() -> List[types.Tool]:
 	return [
 		types.Tool(
 			name="get_hardware_status",
@@ -125,8 +131,8 @@ async def handle_list_tools() -> list[types.Tool]:
 
 @server.call_tool()
 async def handle_call_tool(
-	name: str, arguments: dict | None
-) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
+	name: str, arguments: Optional[Dict[str, Any]]
+) -> List[Union[types.TextContent, types.ImageContent, types.EmbeddedResource]]:
 	"""Handle Sovereign tool executions."""
 	if name == "get_hardware_status" or name == "get_dashboard":
 		stats = HardwareSentinel.get_stats()
@@ -150,7 +156,7 @@ async def handle_call_tool(
 				mem = g.get("memory", "N/A")
 				dashboard += f"- **[{t}] {g['name']}**: {HardwareSentinel._get_bar(usage, 15)} | {temp}°C | {mem}\n"
 			
-			dashboard += f"\n- **[NPU] {stats['npu'].get('name')}**: {stats['npu']['status']}\n"
+			dashboard += f"\n- **[NPU] {stats['npu'].get('name', 'NPU')}**: {stats['npu']['status']}\n"
 			dashboard += f"\n**Thermal State**: {thermal_state}\n"
 			dashboard += f"\n---\n*Dashboard refresh: {asyncio.get_event_loop().time():.2f} synaptic-ms*"
 			return [types.TextContent(type="text", text=dashboard.strip())]
@@ -165,8 +171,8 @@ async def handle_call_tool(
 		return [types.TextContent(type="text", text=report)]
 
 	elif name == "control_bunker":
-		cmd = arguments.get("command")
-		val = arguments.get("value", "")
+		cmd = arguments.get("command", "") if arguments else ""
+		val = arguments.get("value", "") if arguments else ""
 		
 		import subprocess
 		full_cmd = ["uv", "run", "red-pill"]
@@ -193,24 +199,24 @@ async def handle_call_tool(
 		results = await gru.deploy_swarm("audit", [smith], path=path)
 		res = results[0]
 		if res.status == "success":
-			audit_text = f"AUDIT COMPLETE: {res.result['security_score']}/100\n"
-			audit_text += f"Files: {res.result['files_scanned']} | Findings: {len(res.result['findings'])}\n"
-			if res.result['findings']:
+			audit_text = f"AUDIT COMPLETE: {res.result.get('security_score', 0)}/100\n"
+			audit_text += f"Files: {res.result.get('files_scanned', 0)} | Findings: {len(res.result.get('findings', []))}\n"
+			if res.result.get("findings"):
 				audit_text += "\nCRITICAL FINDINGS:\n"
-				for f in res.result['findings'][:3]:
-					audit_text += f"- {f['file']}:{f['line']} -> {f['msg']}\n"
+				for f in res.result.get("findings", [])[:3]:
+					audit_text += f"- {f.get('file')}:{f.get('line')} -> {f.get('msg')}\n"
 			return [types.TextContent(type="text", text=audit_text)]
 		else:
 			return [types.TextContent(type="text", text=f"Audit Failed: {res.error}")]
 
 	elif name == "search_memory_research":
-		query = (arguments or {}).get("query")
+		query = (arguments or {}).get("query", "")
 		gru = GruOrchestrator()
 		oracle = OracleMinion()
 		results = await gru.deploy_swarm("research", [oracle], task=query)
 		res = results[0]
 		if res.status == "success":
-			return [types.TextContent(type="text", text=f"ORACLE SYNTHESIS:\n{res.result['synthesis']}")]
+			return [types.TextContent(type="text", text=f"ORACLE SYNTHESIS:\n{res.result.get('synthesis', '')}")]
 		else:
 			return [types.TextContent(type="text", text=f"Research Failed: {res.error}")]
 
@@ -220,9 +226,9 @@ async def handle_call_tool(
 		results = await gru.deploy_swarm("health", [keymaker])
 		res = results[0]
 		if res.status == "success":
-			health_text = f"SYSTEM HEALTH: {res.result['status'].upper()}\n"
-			for check in res.result['checks']:
-				health_text += f"- {check['component']}: {check['status']}\n"
+			health_text = f"SYSTEM HEALTH: {res.result.get('status', 'UNKNOWN').upper()}\n"
+			for check in res.result.get("checks", []):
+				health_text += f"- {check.get('component')}: {check.get('status')}\n"
 			return [types.TextContent(type="text", text=health_text)]
 		else:
 			return [types.TextContent(type="text", text=f"Health Check Failed: {res.error}")]
@@ -238,7 +244,7 @@ async def handle_call_tool(
 			)
 			directives = []
 			for p in points:
-				if p.payload.get("immune"):
+				if p.payload and p.payload.get("immune"):
 					directives.append(p.payload.get("content", ""))
 			response = "--- BÜNKER CORE DIRECTIVES ---\n" + "\n\n".join(directives)
 			return [types.TextContent(type="text", text=response)]
@@ -246,14 +252,14 @@ async def handle_call_tool(
 			return [types.TextContent(type="text", text=f"Failed to read directives: {e}")]
 
 	elif name == "compress_prompt":
-		text_to_compress = (arguments or {}).get("text")
+		text_to_compress = (arguments or {}).get("text", "")
 		gru = GruOrchestrator()
 		compressor = CompressorMinion()
 		results = await gru.deploy_swarm("compress", [compressor], text=text_to_compress)
 		res = results[0]
 		if res.status == "success":
-			stats = f"[Original: {res.result['original_length']} chars -> Compressed: {res.result['compressed_length']} chars]"
-			return [types.TextContent(type="text", text=f"{stats}\n\n{res.result['compressed_prompt']}")]
+			stats = f"[Original: {res.result.get('original_length')} chars -> Compressed: {res.result.get('compressed_length')} chars]"
+			return [types.TextContent(type="text", text=f"{stats}\n\n{res.result.get('compressed_prompt')}")]
 		else:
 			return [types.TextContent(type="text", text=f"Compression Failed: {res.error}")]
 

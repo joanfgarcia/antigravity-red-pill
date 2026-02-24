@@ -5,7 +5,7 @@ import tarfile
 import time
 from typing import List, Optional
 
-import requests
+from requests import Session
 
 import red_pill.config as cfg
 

@@ -224,14 +224,14 @@ def main() -> None:
 					print(f"--- [RESULTS: {collection.upper()}] ---")
 
 				for hit in results:
-					score = hit.payload.get("reinforcement_score", 0.0)
-					color = hit.payload.get("color", "gray")
-					intensity = hit.payload.get("intensity", 1.0)
-					status = " [IMMUNE]" if hit.payload.get("immune") else f" (Score: {score:.2f})"
-					assocs_val = hit.payload.get("associations")
+					score = getattr(hit, "payload", {}).get("reinforcement_score", 0.0)
+					color = getattr(hit, "payload", {}).get("color", "gray")
+					intensity = getattr(hit, "payload", {}).get("intensity", 1.0)
+					status = " [IMMUNE]" if getattr(hit, "payload", {}).get("immune") else f" (Score: {score:.2f})"
+					assocs_val = getattr(hit, "payload", {}).get("associations", [])
 					assocs = len(assocs_val) if assocs_val is not None else 0
 
-					print(f"- [{color.upper()}][Int: {intensity}] {hit.payload['content']}{status}")
+					print(f"- [{color.upper()}][Int: {intensity}] {hit.payload.get('content', '')}{status}")
 					if assocs > 20:
 						logger.warning(f"Synaptic Hub Detected: Engram {hit.id} has {assocs} associations (Limit: 20). Operations may lag.")
 			elif args.command == "erode":

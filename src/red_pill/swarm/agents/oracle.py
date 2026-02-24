@@ -32,18 +32,14 @@ class OracleMinion(Minion):
 
 		background = "\n---\n".join(results) if results else ""
 		
-		background = "\n---\n".join(results) if results else ""
-		
 		# Edge Synthesis Logic
 		engine = EdgeEngine()
 
 		if engine.llm:
-			self.log(f"🔮 Sintetizando con {os.path.basename(engine.model_path)}")
+			self.log(f"🔮 Sintetizando con {os.path.basename(engine.model_path) if engine.model_path else 'No model path'}")
 			synthesis = engine.synthesize(background, task)
 		else:
 			self.log("⚠️ No local LLM found. Usando concatenación de fragmentos.")
-			synthesis = background if background else "No se encontró contexto previo relevante."
-
 			synthesis = background if background else "No se encontró contexto previo relevante."
 
 		return {
@@ -51,4 +47,3 @@ class OracleMinion(Minion):
 			"synthesis": synthesis,
 			"source_count": len(results)
 		}
-

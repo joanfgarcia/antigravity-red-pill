@@ -83,7 +83,7 @@ class MemoryManager:
 				if resp_data:
 					response = json.loads(resp_data.decode("utf-8"))
 					if response.get("status") == "ok":
-						return response.get("vector")
+						return response.get("vector") if response.get("vector") is not None else None
 					else:
 						logger.error(f"Daemon error: {response.get('message')}")
 		except Exception as e:
@@ -106,7 +106,7 @@ class MemoryManager:
 				raise RuntimeError("FastEmbed library is missing. All semantic memory operations are blocked.")
 
 		assert self.encoder is not None
-		return list(self.encoder.embed([text]))[0].tolist()
+		return list(self.encoder.embed([text]))[0].tolist()  # type: ignore
 
 	def add_memory(
 		self,

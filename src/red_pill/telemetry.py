@@ -65,13 +65,13 @@ class HardwareSentinel:
 			
 			if amdgpu_card:
 				usage = 0
-				temp = 0
+				temp = 0.0
 				
 				# Usage
 				usage_path = os.path.join(amdgpu_card, "device/gpu_busy_percent")
 				if os.path.exists(usage_path):
 					with open(usage_path, "r") as f:
-						usage = float(f.read().strip())
+						usage = int(float(f.read().strip()))
 				
 				# Temperature (Search hwmon)
 				for h in range(15):
@@ -84,8 +84,8 @@ class HardwareSentinel:
 								break
 				
 				# VRAM
-				mem_used = 0
-				mem_total = 0
+				mem_used: int = 0
+				mem_total: int = 0
 				try:
 					with open(os.path.join(amdgpu_card, "device/mem_info_vram_used"), "r") as f:
 						mem_used = int(f.read().strip()) // (1024*1024)

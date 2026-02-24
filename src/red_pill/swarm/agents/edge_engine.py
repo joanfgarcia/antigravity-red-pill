@@ -136,7 +136,7 @@ class EdgeEngine:
 				stop=["<|im_end|>", "</s>"],
 				temperature=0.2
 			)
-			return output["choices"][0]["text"].strip()
+			return output["choices"][0]["text"].strip() if isinstance(output, dict) else next(output)["choices"][0]["text"].strip()
 		except Exception as e:
 			return f"Err: Synthesis Failure. Raw snippet: {background[:200]}..."
 

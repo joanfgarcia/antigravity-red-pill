@@ -19,7 +19,7 @@ class SmithMinion(Minion):
 	name: str = "Smith-01"
 	specialization: str = "Deep Code Forensics & Security"
 
-	async def execute(self, task: str, **kwargs) -> Dict[str, Any]:
+	async def execute(self, task: str, **kwargs: Any) -> Dict[str, Any]:
 		"""
 		Perform a high-intensity audit on the current workspace.
 		Integrates real-time hardware telemetry.
@@ -102,7 +102,7 @@ class SmithMinion(Minion):
 
 		if is_deep and engine.llm:
 			mode_label = "SOLO GRANULAR (QUIRÚRGICO)" if is_super_deep else "INDUSTRIAL (BLOQUES)"
-			self.log(f"☢️ MODO {mode_label} ACTIVADO: Auditoría con {os.path.basename(engine.model_path)}")
+			self.log(f"☢️ MODO {mode_label} ACTIVADO: Auditoría con {os.path.basename(engine.model_path) if engine.model_path else 'No model path'}")
 			
 			for py_file in python_files:
 				if any(x in str(py_file) for x in ["venv", ".git", "__pycache__", ".agent"]):
@@ -151,20 +151,18 @@ class SmithMinion(Minion):
 
 
 		elif results["findings"] and engine.llm:
-			self.log(f"🔍 Validando hallazgos previos con {os.path.basename(engine.model_path)}...")
+			self.log(f"🔍 Validando hallazgos previos con {os.path.basename(engine.model_path) if engine.model_path else 'No model path'}...")
 			for finding in results["findings"][:5]: # Limit to top 5 for speed
 				snippet = finding.get("context", finding["msg"])
 				prompt = f"Security Analysis Request: Code snippet '{snippet}' was flagged as '{finding['msg']}'. Is this a genuine security risk (True Positive) or a safe usage (False Positive)? Explain briefly."
 				analysis = engine.synthesize(snippet, prompt)
 				finding["slm_validation"] = analysis
 
-
-
-
 		# Thermal check from real hardware
-		current_temp = 0
-		if results["telemetry"]["gpu"]:
-			current_temp = max([g.get("temp", 0) for g in results["telemetry"]["gpu"]])
+		current_temp = 0.0
+		telemetry = results["telemetry"]
+		if isinstance(telemetry, dict) and telemetry.get("gpu"):
+			current_temp = float(max([g.get("temp", 0) for g in telemetry["gpu"]]))
 
 		results["duration"] = round(time.time() - start_time, 2)
 		results["peak_temp"] = current_temp
