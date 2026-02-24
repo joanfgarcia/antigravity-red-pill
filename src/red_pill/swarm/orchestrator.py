@@ -27,6 +27,14 @@ class GruOrchestrator:
 		"""Deploy a set of minions in parallel and collect results."""
 		tasks = [self._run_minion(m, task, **kwargs) for m in minions]
 		results = await asyncio.gather(*tasks)
+		
+		# Observer notification
+		from red_pill.utils.observer import notify_user
+		notify_user(
+			title=f"Swarm Task Complete: {task}",
+			message=f"Deployed {len(minions)} minions. Status: Success"
+		)
+		
 		return results
 
 	async def _run_minion(self, minion: Minion, task: str, **kwargs) -> SwarmResult:

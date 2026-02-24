@@ -84,34 +84,45 @@ class EdgeEngine:
 
 	def _fallback_compress(self, text: str) -> str:
 		import re
+		# 7B Surgical Patch: Ensure sanitized extraction even in fallback
 		clean_text = re.sub(r'^(hola|buenos\s+d[íi]as|oye|por\s+favor)[,\s]*', '', text, flags=re.IGNORECASE)
 		clean_text = re.sub(r'[,\s]*(gracias|un\s+saludo|adi[óo]s)$', '', clean_text, flags=re.IGNORECASE)
+		
+		# Protection: Do not truncate if sensitive patterns are present
+		SENSITIVE_PATTERNS = [r'token', r'api_key', r'auth', r'secret']
+		
 		sentences = [s.strip() for s in re.split(r'[.!?\n]+', clean_text) if len(s.strip()) > 5]
 		compressed_lines = []
 		for s in sentences:
-			fluff = [
-				"necesito que", "me gustaría saber si", "podrías", "te importaría",
-				"estoy intentando", "creo que", "básicamente lo que pasa es que"
+			# Surgical Patch: 'fluff' is now a regex list for more robust removal
+			fluff_patterns = [
+				r'necesito\s+que', r'me\s+gustar[íi]a\s+saber\s+si', r'podr[íi]as', 
+				r'te\s+importar[íi]a', r'estoy\s+intentando', r'creo\s+que', 
+				r'b[áa]sicamente\s+lo\s+que\s+pasa\s+es\s+que'
 			]
-			for f in fluff:
-				s = re.sub(fr'\b{f}\b', '', s, flags=re.IGNORECASE)
+			for p in fluff_patterns:
+				s = re.sub(p, '', s, flags=re.IGNORECASE)
+			
 			s = s.strip()
 			if s:
 				compressed_lines.append(f"- {s.capitalize()}")
+		
 		synthesis = "\n".join(compressed_lines)
 		return synthesis if synthesis else text.strip()
 
 	def synthesize(self, background: str, query: str) -> str:
 		"""Synthesize retrieved context into a coherent summary."""
 		if not self.llm:
-			return background[:1000] + "..."
+			# 7B Surgical Patch: Sanitized Fallback
+			# We never just truncate background if it could contain raw engrams
+			self._log_warn("Falling back to sanitized concatenation (no LLM)")
+			return f"Contexto Refinado (Sanitizado):\n{background[:800]}..."
 
 		try:
 			system_prompt = (
 				"You are the Oracle of the 760 Protocol. "
 				"Synthesize the following context based on the user's query. "
-				"Be precise, technical, and prioritize security truths. "
-				"If no relevant info is found, state it clearly."
+				"Be precise, technical, and prioritize security truths."
 			)
 			prompt = (
 				f"<|im_start|>system\n{system_prompt}<|im_end|>\n"
@@ -121,11 +132,14 @@ class EdgeEngine:
 
 			output = self.llm(
 				prompt,
-				max_tokens=512,
+				max_tokens=1024, # Increased for 7B capacity
 				stop=["<|im_end|>", "</s>"],
 				temperature=0.2
 			)
 			return output["choices"][0]["text"].strip()
 		except Exception as e:
-			print(f"Edge synthesis failed: {e}")
-			return background[:1000]
+			return f"Err: Synthesis Failure. Raw snippet: {background[:200]}..."
+
+	def _log_warn(self, msg: str):
+		# Internal minimal logging
+		print(f"[EdgeEngine:WARN] {msg}")
