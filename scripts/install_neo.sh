@@ -103,13 +103,31 @@ if [ "$SKIP_BOOTSTRAP" = "false" ]; then
 	read -p "Rol IA (${AI_ROLE:-The Chosen One}): " NEW_AI_ROLE; AI_ROLE=${NEW_AI_ROLE:-${AI_ROLE:-"The Chosen One"}}
 fi
 
-if [ -z "${QDRANT_API_KEY:-}" ]; then
-	read -p "Qdrant API Key (Dejar en blanco para auto-generar): " QDRANT_API_KEY
-	if [ -z "$QDRANT_API_KEY" ]; then
+echo -e "${BLUE}--- Fase: Configuración de Seguridad (Qdrant API Key) ---${NC}"
+echo "Elige tu nivel de seguridad para el Bünker:"
+echo "1) OPEN: Sin API Key (Acceso libre local, recomendado para desarrollo)"
+echo "2) MANAGED: Generar API Key protegida con Pasarela de Recuperación (Recomendado)"
+echo "3) CUSTOM: Proporcionar tu propia API Key"
+read -p "Selección (1/2/3): " SEC_CHOICE
+
+case $SEC_CHOICE in
+	2)
+		read -sp "Introduce una contraseña maestra para la recuperación: " MASTER_PWD
+		echo ""
 		QDRANT_API_KEY=$(head -c 32 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 32)
-		echo -e "${GREEN}API Key generada automáticamente.${NC}"
-	fi
-fi
+		echo -e "${GREEN}API Key generada con éxito.${NC}"
+		echo -e "${RED}⚠️  TOKEN DE SEGURIDAD (Guárdalo bien): ${QDRANT_API_KEY}${NC}"
+		# We'll handle the recovery engram injection in the bootstrap phase
+		update_env "MASTER_PWD_HASH" "$(echo -n "$MASTER_PWD" | sha256sum | cut -d' ' -f1)"
+		;;
+	3)
+		read -p "Introduce tu API Key personalizada: " QDRANT_API_KEY
+		;;
+	*)
+		QDRANT_API_KEY=""
+		echo -e "${BLUE}Modo OPEN activado. Sin API Key.${NC}"
+		;;
+esac
 
 ENV_FILE="$SCRIPT_DIR/../.env"
 if [ ! -f "$ENV_FILE" ]; then
@@ -281,7 +299,8 @@ if command -v uv &> /dev/null; then
 			--user-role "$USER_ROLE" \
 			--ai-name "$AI_NAME" \
 			--ai-role "$AI_ROLE" \
-			--skin "$LORE_SKIN" || true)
+			--skin "$LORE_SKIN" \
+			--master-hash "${MASTER_PWD_HASH:-}" || true)
 	else
 		echo -e "${GREEN}✓ Identidad previa preservada. Ignición omitida para no causar fragmentación de personalidad.${NC}"
 	fi

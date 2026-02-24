@@ -11,6 +11,13 @@ QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", None)
 QDRANT_SCHEME = os.getenv("QDRANT_SCHEME", "http")
 QDRANT_URL = f"{QDRANT_SCHEME}://{QDRANT_HOST}:{QDRANT_PORT}"
 
+# MILVUS (Hive Mind)
+MILVUS_HOST = os.getenv("MILVUS_HOST", "localhost")
+MILVUS_PORT = int(os.getenv("MILVUS_PORT", "19530"))
+MILVUS_USER = os.getenv("MILVUS_USER", "")
+MILVUS_PASSWORD = os.getenv("MILVUS_PASSWORD", "")
+MILVUS_ENABLED = os.getenv("MILVUS_ENABLED", "False").lower() == "true"
+
 _run_dir = os.getenv("XDG_RUNTIME_DIR", "/tmp")
 DAEMON_SOCKET_PATH = os.getenv("DAEMON_SOCKET_PATH", os.path.join(_run_dir, "red_pill_memory.sock"))
 

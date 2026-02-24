@@ -16,6 +16,7 @@ def bootstrap():
 	parser.add_argument("--ai-name", default="Neo")
 	parser.add_argument("--ai-role", default="The Chosen One")
 	parser.add_argument("--skin", default="760")
+	parser.add_argument("--master-hash", default=None)
 	args = parser.parse_args()
 
 	# Load Lore skins
@@ -55,6 +56,17 @@ def bootstrap():
 		color="orange",
 		force_immune=True
 	)
+
+	# 3. Security Tier 2 (IRP)
+	if args.master_hash:
+		manager.add_memory(
+			collection="directive_memories",
+			text="Identity Recovery Protocol: Managed Security Hash",
+			metadata={"master_hash": args.master_hash, "security_tier": 2},
+			importance=1.0,
+			color="gray",
+			force_immune=True # This ensures it doesn't erode
+		)
 
 	print(f"Identity anchored for {args.ai_name}. Skin set to {args.skin}.")
 

@@ -121,6 +121,7 @@ def main() -> None:
 	soul_sub = soul_parser.add_subparsers(dest="soul_cmd")
 	soul_sub.add_parser("backup", help="Execute total soul backup (Qdrant + Files)")
 	soul_sub.add_parser("export", help="Package soul into a portable kit")
+	soul_sub.add_parser("rotate", help="Rotate Qdrant API Key and restart service")
 	restore_parser = soul_sub.add_parser("restore", help="Restore soul from a backup directory")
 	restore_parser.add_argument("source", help="Path to backup timestamp directory")
 	restore_parser.add_argument("--commit", action="store_true", help="Execute the restoration (dry-run by default)")
@@ -185,6 +186,9 @@ def main() -> None:
 				soul.full_backup()
 			elif args.soul_cmd == "export":
 				soul.export_soul()
+			elif args.soul_cmd == "rotate":
+				from scripts.rotate_keys import rotate
+				rotate()
 			elif args.soul_cmd == "restore":
 				soul.restore_soul(args.source, commit=args.commit)
 			return

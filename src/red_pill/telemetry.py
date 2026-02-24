@@ -13,6 +13,12 @@ class HardwareSentinel:
 	"""
 
 	@staticmethod
+	def _get_bar(percent: float, length: int = 10) -> str:
+		filled = int(length * percent / 100)
+		bar = "█" * filled + "░" * (length - filled)
+		return f"[{bar}] {percent}%"
+
+	@staticmethod
 	def get_stats() -> Dict[str, Any]:
 		stats = {
 			"cpu": {
@@ -46,14 +52,60 @@ class HardwareSentinel:
 			except Exception:
 				pass
 
-		# AMD GPU Logic (ROCm)
-		if os.path.exists("/sys/class/drm/renderD128"):
-			# Stub for ROCm detection
-			stats["gpu"].append({
-				"name": "AMD Radeon",
-				"type": "ROCm",
-				"status": "Ready"
-			})
+		# AMD GPU Logic (Native sysfs for ROCm/HIP)
+		try:
+			# Find amdgpu card and hwmon
+			amdgpu_card = None
+			for i in range(5):
+				card_path = f"/sys/class/drm/card{i}"
+				usage_path = os.path.join(card_path, "device/gpu_busy_percent")
+				if os.path.exists(usage_path):
+					amdgpu_card = card_path
+					break
+			
+			if amdgpu_card:
+				usage = 0
+				temp = 0
+				
+				# Usage
+				usage_path = os.path.join(amdgpu_card, "device/gpu_busy_percent")
+				if os.path.exists(usage_path):
+					with open(usage_path, "r") as f:
+						usage = float(f.read().strip())
+				
+				# Temperature (Search hwmon)
+				for h in range(15):
+					h_path = f"/sys/class/hwmon/hwmon{h}"
+					if os.path.exists(h_path):
+						with open(os.path.join(h_path, "name"), "r") as f:
+							if "amdgpu" in f.read():
+								with open(os.path.join(h_path, "temp1_input"), "r") as tf:
+									temp = float(tf.read().strip()) / 1000.0
+								break
+				
+				# VRAM
+				mem_used = 0
+				mem_total = 0
+				try:
+					with open(os.path.join(amdgpu_card, "device/mem_info_vram_used"), "r") as f:
+						mem_used = int(f.read().strip()) // (1024*1024)
+					with open(os.path.join(amdgpu_card, "device/mem_info_vram_total"), "r") as f:
+						mem_total = int(f.read().strip()) // (1024*1024)
+				except:
+					pass
+				
+				stats["gpu"].append({
+					"name": "AMD Radeon (iGPU)",
+					"type": "ROCm",
+					"usage": usage,
+					"temp": temp,
+					"memory": f"{mem_used}/{mem_total} MB",
+					"status": "Active"
+				})
+		except Exception:
+			# Fallback if sysfs restricted
+			if os.path.exists("/sys/class/drm/renderD128"):
+				stats["gpu"].append({"name": "AMD Radeon", "type": "ROCm", "status": "Ready", "memory": "N/A"})
 
 		# Ryzen AI NPU
 		if os.path.exists("/sys/class/accel/accel0"):
@@ -79,10 +131,11 @@ def get_telemetry_report() -> str:
 	if stats["gpu"]:
 		for g in stats["gpu"]:
 			lbl = g.get("type", "GPU")
+			mem_info = f" ({g['memory']})" if "memory" in g else ""
 			if "temp" in g:
-				report += f"[{lbl}] {g['name']}: {g['usage']}% @ {g['temp']}°C ({g['memory']})\n"
+				report += f"[{lbl}] {g['name']}: {g['usage']}% @ {g['temp']}°C{mem_info}\n"
 			else:
-				report += f"[{lbl}] {g['name']}: {g['status']}\n"
+				report += f"[{lbl}] {g['name']}: {g['status']}{mem_info}\n"
 	else:
 		report += "[CUDA/ROCm] Not detected.\n"
 

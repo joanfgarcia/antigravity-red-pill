@@ -15,6 +15,33 @@ from red_pill.telemetry import HardwareSentinel
 # Initialize the Sovereign MCP Server
 server = Server("RedPill-Kernel")
 
+@server.list_prompts()
+async def handle_list_prompts() -> list[types.Prompt]:
+	return [
+		types.Prompt(
+			name="Control-Panel",
+			description="Display the Sovereign Control Panel with hardware and admin options.",
+			arguments=[]
+		)
+	]
+
+@server.get_prompt()
+async def handle_get_prompt(name: str, arguments: dict | None) -> types.GetPromptResult:
+	if name == "Control-Panel":
+		return types.GetPromptResult(
+			description="Red Pill Sovereign Control Panel",
+			messages=[
+				types.PromptMessage(
+					role="user",
+					content=types.TextContent(
+						type="text",
+						text="Show me the Bünker Dashboard and the administrative controls for the Red Pill Protocol."
+					)
+				)
+			]
+		)
+	raise ValueError(f"Unknown prompt: {name}")
+
 @server.list_tools()
 async def handle_list_tools() -> list[types.Tool]:
 	return [
@@ -24,6 +51,26 @@ async def handle_list_tools() -> list[types.Tool]:
 			inputSchema={
 				"type": "object",
 				"properties": {},
+			},
+		),
+		types.Tool(
+			name="get_dashboard",
+			description="Get a high-fidelity visual dashboard of the Red Pill ecosystem.",
+			inputSchema={
+				"type": "object",
+				"properties": {},
+			},
+		),
+		types.Tool(
+			name="control_bunker",
+			description="Execute administrative CLI commands (rotate, mode, backup).",
+			inputSchema={
+				"type": "object",
+				"properties": {
+					"command": {"type": "string", "enum": ["rotate", "backup", "mode", "status"], "description": "The CLI command to execute"},
+					"value": {"type": "string", "description": "Optional argument (e.g., skin name for 'mode')"},
+				},
+				"required": ["command"],
 			},
 		),
 		types.Tool(
@@ -81,20 +128,63 @@ async def handle_call_tool(
 	name: str, arguments: dict | None
 ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
 	"""Handle Sovereign tool executions."""
-	if name == "get_hardware_status":
+	if name == "get_hardware_status" or name == "get_dashboard":
 		stats = HardwareSentinel.get_stats()
-		# Critical Thermal Guard check
 		gpu_temp = max([g.get("temp", 0) for g in stats["gpu"]]) if stats["gpu"] else 0
-		thermal_msg = " [🔥 OVERHEAT RISK]" if gpu_temp > 80 else " [🟢 OPTIMAL]"
+		thermal_state = "🔥 CRITICAL" if gpu_temp > 80 else "🟢 OPTIMAL"
 
-		report = f"RED PILL TELEMETRY{thermal_msg}\n"
+		if name == "get_dashboard":
+			dashboard = f"""
+## 🔴 BÜNKER SOVEREIGN DASHBOARD v5.2
+---
+### 🛠️ Hardware Asymmetry (Dual-Engine)
+- **CPU Load**: {HardwareSentinel._get_bar(stats['cpu']['usage_percent'], 20)}
+- **RAM Usage**: {HardwareSentinel._get_bar(stats['memory']['percent'], 20)} ({stats['memory']['available_gb']}GB Free)
+
+### ⚡ Accelerated Nodes
+"""
+			for g in stats["gpu"]:
+				t = g.get("type", "GPU")
+				usage = g.get("usage", 0)
+				temp = g.get("temp", "N/A")
+				mem = g.get("memory", "N/A")
+				dashboard += f"- **[{t}] {g['name']}**: {HardwareSentinel._get_bar(usage, 15)} | {temp}°C | {mem}\n"
+			
+			dashboard += f"\n- **[NPU] {stats['npu'].get('name')}**: {stats['npu']['status']}\n"
+			dashboard += f"\n**Thermal State**: {thermal_state}\n"
+			dashboard += f"\n---\n*Dashboard refresh: {asyncio.get_event_loop().time():.2f} synaptic-ms*"
+			return [types.TextContent(type="text", text=dashboard.strip())]
+
+		# Legacy report for simpler clients
+		report = f"RED PILL TELEMETRY [{thermal_state}]\n"
 		report += f"[CPU] {stats['cpu']['usage_percent']}% | RAM: {stats['memory']['percent']}%\n"
 		for g in stats["gpu"]:
 			lbl = g.get("type", "GPU")
 			report += f"[{lbl}] {g['name']}: {g.get('usage', 'N/A')}% @ {g.get('temp', 'N/A')}°C\n"
 		report += f"[NPU] {stats['npu'].get('name', 'NPU')}: {stats['npu']['status']}"
-
 		return [types.TextContent(type="text", text=report)]
+
+	elif name == "control_bunker":
+		cmd = arguments.get("command")
+		val = arguments.get("value", "")
+		
+		import subprocess
+		full_cmd = ["uv", "run", "red-pill"]
+		if cmd == "mode":
+			full_cmd += ["mode", val]
+		elif cmd == "rotate":
+			full_cmd += ["soul", "rotate"]
+		elif cmd == "backup":
+			full_cmd += ["soul", "backup"]
+		else:
+			full_cmd += ["status"]
+
+		try:
+			res = subprocess.run(full_cmd, capture_output=True, text=True, check=False)
+			output = res.stdout if res.stdout else res.stderr
+			return [types.TextContent(type="text", text=f"Command Executed: {cmd}\n\n{output}")]
+		except Exception as e:
+			return [types.TextContent(type="text", text=f"Execution Failed: {e}")]
 
 	elif name == "run_security_audit":
 		path = (arguments or {}).get("path", ".")

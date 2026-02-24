@@ -18,8 +18,10 @@ except ImportError:
 
 import red_pill.config as cfg
 from red_pill.schemas import CreateEngramRequest
+from red_pill.hive import HiveMind
 
 logger = logging.getLogger(__name__)
+
 
 
 def _mask_pii_exception(e: Exception) -> str:
@@ -44,6 +46,7 @@ class MemoryManager:
 		self.encoder: Optional[TextEmbedding] = None
 		self._reinforce_lock = threading.Lock()
 		self._metabolism_thread: Optional[threading.Thread] = None
+		self.hive = HiveMind()
 
 	def _get_vector_from_daemon(self, text: str) -> Optional[List[float]]:
 		"""Retrieves embedding from the memory sidecar socket."""
@@ -186,6 +189,17 @@ class MemoryManager:
 
 		try:
 			self.client.upsert(collection_name=collection, points=[models.PointStruct(id=actual_id, vector=vector, payload=payload)])
+			
+			# Hive Mind Transmission (v5.0.0)
+			# Only transmit non-immune technical or social findings to the collective.
+			if not force_immune and collection in ["work_memories", "social_memories"]:
+				self.hive.transmit_experience(
+					collection_name=f"hive_{collection}",
+					content=text,
+					vector=vector,
+					metadata={"importance": importance, "agent_id": os.getenv("AGENT_ID", "standalone")}
+				)
+
 			if cfg.METABOLISM_ENABLED:
 				self._trigger_metabolism()
 			return actual_id

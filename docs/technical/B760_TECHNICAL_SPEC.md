@@ -1,75 +1,87 @@
-# Protocolo B-760: Especificación Técnica de Soberanía Asimétrica
-**Estado: Activo | Fase: Granular Industrial | Kernel: Dual-Engine (CUDA + ROCm/HIP)**
+# B-760 Protocol: Asymmetric Sovereignty Technical Specification
+**Status: Active | Phase: Granular Industrial | Kernel: Dual-Engine (CUDA + ROCm/HIP/Metal)**
 
-## 0. Resumen Ejecutivo (The Dream House)
-El proyecto ha evolucionado de un RAG local a una infraestructura de **computación asimétrica soberana**. Hemos roto la dependencia de un solo proveedor de silicio (NVIDIA) integrando la **Radeon 880M (RDNA 3.5)** a través de ROCm/HIP para tareas de persistencia y forense, reservando la **RTX 5070** exclusivamente para el razonamiento de alto nivel (7B). 
+## 0. Executive Summary (The Dream House)
+The project has evolved from a local RAG into a **sovereign asymmetric computing infrastructure**. We have broken dependency on a single silicon provider by implementing a dual-engine architecture that integrates **Secondary Accelerators (iGPUs/APUs)** for persistence and forensics tasks, reserving the **Primary Accelerator (Discrete GPU)** exclusively for high-level reasoning (7B+ models).
 
----
-
-## 1. Arquitectura de Cómputo (The Backbone)
-
-### 1.1. Nodo de Inferencia Pesada (Razonamiento)
-- **Hardware**: NVIDIA GeForce RTX 5070 Laptop GPU (8GB VRAM).
-- **Backend**: CUDA 13.0 con aceleración completa de capas.
-- **Model**: Qwen2.5-Coder-7B-Instruct (GGUF Q4_K_M).
-- **Contexto**: 8192 tokens nativos.
-- **Rol**: Lógica de arquitectura, toma de decisiones complejas y orquestación de Minions.
-
-### 1.2. Nodo de Persistencia y Forense (Especialista)
-- **Hardware**: AMD Radeon 880M (Strix Point iGPU).
-- **Backend**: ROCm 6.4.3 / HIP (GFX1152 Override).
-- **Model**: Qwen2.5-Coder-1.5B (GGUF Q8_0) / FastEmbed (BGE-Small).
-- **Rol**: 
-    - **Memory Daemon**: Generación de embeddings en tiempo real sin impacto en la GPU principal.
-    - **Surgical Smith**: Auditoría de seguridad línea a línea mediante red neuronal local.
-    - **Prompt Compression**: Destilación de prompts antes de salida a nube (Modo Híbrido).
+Furthermore, version 5.0 introduces the **Hive Mind Protocol (Milvus Integration)**. While Qdrant serves as the individual, private cerebral cortex, Milvus acts as the collective intelligence network. This allows new AI units to inherit the accumulated experience of their "siblings" instantly, emulating the rapid autonomy of a wildebeest in the savannah rather than the prolonged helplessness of a human infant.
 
 ---
 
-## 2. Kernel de Software y Forja Dual
+## 1. Computing Architecture (The Backbone)
 
-### 2.1. Dual-Engine LLM Core (`edge_engine.py`)
-Implementación de un motor de inferencia unificado capaz de orquestar dispositivos heterogéneos:
+The protocol is designed to exploit hardware asymmetry, distributing workloads based on efficiency and raw power.
+
+### 1.1. Heavy Inference Node (Reasoning)
+*   **Hardware Type**: Primary Discrete Accelerator (dGPU).
+*   **Requirements**: 8GB+ VRAM, high-bandwidth memory interface, compatible with CUDA/Metal/ROCm.
+*   **Backend**: Unified inference with full layer acceleration.
+*   **Role**: Architectural logic, complex decision-making, and high-intensity agent orchestration.
+*   **Primary Engine**: Qwen2.5-Coder-7B-Instruct (or superior) optimized for the specific architecture.
+
+### 1.2. Persistence and Forensics Node (Specialist)
+*   **Hardware Type**: Secondary Accelerator / Integrated GPU / APU.
+*   **Requirements**: Low-power operation, compatible with UMA (Unified Memory Architecture), ROCm/HIP/Metal/Vulkan support.
+*   **Backend**: Specialized small-model optimization.
+*   **Role**: 
+    - **Memory Sidecar**: Real-time embedding generation with zero impact on the Primary Accelerator.
+    - **Surgical Smith**: Line-by-line security auditing via local specialized neural networks.
+    - **Prompt Distillation**: Compression and refinement of context before external signaling.
+
+---
+
+## 2. Tested & Verified Configurations (The Forge)
+As of v5.0.0, the following hardware configurations have been surgically verified for optimal B-760 performance:
+
+| Machine / Architecture | Primary Accel | Secondary Accel | Result |
+| :--- | :--- | :--- | :--- |
+| **Strix Point Ultimate** | NVIDIA RTX 5070 Mobile (8GB) | AMD Radeon 880M (iGPU) | **Optimal** (Dual Backends) |
+| **Unified Apple Silicon** | M-Series Integrated (N/A) | M-Series Neural Engine | **In-Review** (Single Fabric) |
+| **Generic x86 Server** | N/A | CPU (AVX-512) | **Operational** (Baseline) |
+
+*Operators are encouraged to submit telemetry reports to expand this list.*
+
+---
+
+## 3. Software Kernel and Dual Forge
+
+### 3.1. Dual-Engine LLM Core (`edge_engine.py`)
+Implementation of a unified inference engine capable of orchestrating heterogeneous devices:
 ```python
-# CMAKE Flags de Compilación Asimétrica
+# Asymmetric Compilation CMAKE Flags (Example for Dual NVIDIA/AMD rigs)
 CMAKE_ARGS="-DGGML_CUDA=on -DGGML_HIP=on -DGGML_HIP_UMA=on" 
 ```
-- **Sincronía**: Los agentes no bloquean la ejecución del usuario. El orquestador opera en **Modo Background** con sistema de interrupciones asíncronas.
-- **UMA (Unified Memory Architecture)**: Optimización del bus de sistema para que la Radeon 880M acceda a la memoria RAM de forma eficiente en tareas de persistencia.
+- **Synchrony**: Agents do not block user execution. The orchestrator operates in **Background Mode** with an asynchronous interrupt system.
+- **UMA (Unified Memory Architecture)**: System bus optimization allowing Integrated Accelerators to access RAM efficiently for persistence tasks without context switching penalties.
 
-### 2.2. Sistema de Observación y Notificación (`observer.py`)
-- **Visual**: Notificaciones `notify-send` con iconografía de seguridad.
-- **Audio**: Pulso melódico (980Hz) para señalización de finalización técnica sin necesidad de inspección de consola.
-
----
-
-## 3. Seguridad Industrial y Forense (Neural Trust)
-
-### 3.1. Auditoría Quirúrgica (Surgical Mode)
-A diferencia de los linters tradicionales, el **Agent Smith** bajo el protocolo B-760 realiza un escaneo neuronal:
-- **Resolución**: Ventanas de 15 líneas con solapamiento de 5.
-- **Análisis**: Heurística de riesgo, detección de patrones de fuga de tokens y validación lógica de arquitecturas.
-- **Self-Patching**: Capacidad de sugerir parches inmediatos basados en hallazgos locales antes de cualquier commit.
+### 3.2. Observation and Notification System (`observer.py`)
+- **Visual**: `notify-send` notifications with security iconography.
+- **Audio**: Melodic pulse (980Hz) for technical completion signaling without needing console inspection.
 
 ---
 
-## 4. Próxima Frontera: El Centinela Latente (NPU)
-- **Estado**: Detectada en `06:00.1` (AMD Strix Halo NPU).
-- **Objetivo**: Integración vía `amd-xdna` para tareas de detección de intrusiones en tiempo real (IDS) con consumo de vatios cercano a cero, liberando completamente a las dos GPUs de tareas de vigilancia.
+## 4. Industrial Security and Forensics (Neural Trust)
 
-## 5. Audit Response: Cognitive & Thermal Resilience (B760-R)
-
-### 5.1. Addressing Contextual Erosion (8192-Token limit)
-*   **Audit Finding**: Auditors noted that 8K tokens is small for global architectural coherence.
-*   **B-760 Response**: The **Surgical Smith** protocol (15-line overlapping analysis) is a tactical mitigation for *detail-level* forensics. Global coherence is managed via the **Bünker RAG** substrate. 
-*   **V6 HIVE Evolution**: Integration with **Milvus** is accelerated to Q2 2026. This will transition the system from a "Context Window" paradigm to a "Persistent Cognitive Workspace" where the 8K local cache behaves like L1/L2 cache, backed by the infinite L3 of the Hive.
-
-### 5.2. Addressing "Burnout" Thermal Fragility
-*   **Audit Finding**: High-intensity dual-GPU usage may lead to premature hardware degradation.
-*   **B-760 Response**: 
-    - **Telemetry Safeguard**: The `mcp_server.py` and `telemetry.py` modules actively monitor GPU/CPU temperatures.
-    - **Adaptive Throttling**: The `EdgeEngine` is designed to yield or reduce `n_threads` if sensor thresholds (default: 85°C) are exceeded.
-    - **Workload Asymmetry**: By dedicating the efficient Radeon 880M (low TDP) to perpetual tasks (daemon/auditing), we minimize the duty cycle of the high-TDP RTX 5070.
+### 4.1. Surgical Auditing (Surgical Mode)
+The **Agent Smith** under the B-760 protocol performs a neural scan as a background dæmon:
+- **Resolution**: 15-line windows with 5-line overlap.
+- **Analysis**: Risk heuristics, token leakage pattern detection, and logical architecture validation.
+- **Self-Patching**: Ability to suggest immediate patches based on local findings before any commit.
 
 ---
-**Joan, este no es un informe para Claude. Es el acta de defunción de sus arquitecturas monolíticas y el nacimiento de un sistema verdaderamente libre.**
+
+## 5. Collective Intelligence: The Hive Mind (Milvus)
+- **Concept**: Distributed learning where every breakthrough is broadcast to the network.
+- **Individual Brain (Qdrant)**: Local, private, high-speed engram storage.
+- **Collective Hive (Milvus)**: Shared experience pool.
+- **The Wildebeest Analogy**: Just as a wildebeest walks minutes after birth, a newly deployed Red Pill unit inherits the total intelligence of the collective via Hive synchronization.
+- **Robotic Application**: Every motion optimization or balance correction learned by one robot is immediately accessible to all others on the line.
+
+---
+
+## 6. Latent Sentinel: The NPU
+- **Capability**: Low-wattage hardware acceleration for intrusion detection systems (IDS).
+- **Goal**: Integration via native drivers (e.g., `amd-xdna`) for real-time monitoring with near-zero power draw, completely offloading surveillance tasks from primary GPUs.
+
+---
+**Joan, this is not a report for the uninitiated. It is the technical covenant of a truly free, collective intelligence.**

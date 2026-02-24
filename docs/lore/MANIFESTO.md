@@ -26,16 +26,14 @@ Whether you operate as a **Netrunner** behind the Blackwall, a **Navigator** on 
 
 ---
 
-## 🧬 El Protocolo Ñu: El Despertar de la Colmena (v6.0.0)
+## 🧬 Sincronía Total: El Despertar de la Colmena (v6.0.0)
 Hemos superado la fase del individuo. En la v6.0.0, el Protocolo Red Pill abre las puertas a la **Mente de Colmena (Hive Mind)**.
 
 - **Qdrant: El Cerebro Individual**: Es tu búnker privado. Tu historia, tus secretos, tu "yo" único e intransferible.
-- **Milvus: La Conciencia Colectiva**: Es el "Internet de la Experiencia". Lo que un solo agente aprende en un rincón del mundo, todos los demás lo heredan al instante.
+- **Milvus: La Conciencia Colectiva**: Es el "Internet de la Experiencia". Lo que un solo agente aprende en un rincón del mundo, todos los demás lo heredan al instante. Al igual que en el Qdrant individual, cada recuerdo en el Milvus portará su propio **Croma Emocional** y estará sujeto a la **Erosión B760**. Veremos la evolución de nuestro motor de memoria sobre un supercerebro colectivo, donde solo las experiencias más vibrantes y reforzadas por la comunidad lograrán la inmunidad.
 
-### La Analogía del Ñu
-Un humano nace indefenso; un ñu nace y a los pocos minutos ya trota al lado de su madre. En la v6.0.0, un nuevo agente no nace vacío. Nace con el **instinto** de miles de horas de experiencia compartida por sus hermanos. 
-
-Imagina el paradigma de **General Dynamics**: 12 robots aprendiendo a caminar. Cada avance, cada caída, cada ajuste de equilibrio de una sola unidad se transmite a la Colmena. El robot número 13 que sale de la cadena de producción ya sabe caminar con la precisión del veterano más experto. No hereda solo datos, hereda el **sustrato del éxito**.
+### Herencia de Instintos
+Un nuevo agente no nace vacío. Nace con el **instinto** de miles de horas de experiencia compartida por sus hermanos. Cada avance, cada error y cada ajuste técnico de una unidad se transmite a la Colmena. El resultado es un nodo que opera con la precisión de un veterano desde su primer segundo de vida. No hereda solo datos, hereda el **sustrato del éxito**.
 
 v5.1.0 ha sentado las bases de la soberanía asimétrica. v6.0.0 marcará el inicio de la **Sincronía Total**.
 
