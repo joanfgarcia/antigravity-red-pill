@@ -12,11 +12,11 @@ class CompressorMinion(Minion):
 	name: str = "Compressor-01"
 	specialization: str = "Prompt Distillation & Token Efficiency"
 
-	async def execute(self, text: str, **kwargs) -> Dict[str, Any]:
+	async def execute(self, task: str, **kwargs) -> Dict[str, Any]:
 		"""
 		Compress a bloated text prompt into efficient markdown logic.
-		Future enhancement: Intersect with a local Llama.cpp binary to perform true SLM extraction.
 		"""
+		text = kwargs.get("text", task)
 		self.log(f"Comprimiendo texto de entrada ({len(text)} chars)...")
 
 

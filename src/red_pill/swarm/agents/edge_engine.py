@@ -1,4 +1,5 @@
 import gc
+import os
 
 # 1. Fallback to basic extraction if llama_cpp is not available
 try:
@@ -12,21 +13,21 @@ class EdgeCompressor:
 	Local SLM logic for prompt compression.
 	Only instantiated via the Minion if the user has a model downloaded.
 	"""
-	def __init__(self, model_path: str):
+	def __init__(self, model_path: str, n_gpu_layers: int = -1):
 		self.model_path = model_path
 		self.llm = None
 
 		# Only load if python binding exists
-		if LLAMA_AVAILABLE:
+		if LLAMA_AVAILABLE and model_path and os.path.exists(model_path):
 			try:
 				self.llm = Llama(
 					model_path=model_path,
-					n_ctx=4096,  # Enough for a big prompt
-					n_gpu_layers=0,  # CPU for guaranteed compatibility across diverse hardware initially
+					n_ctx=4096,  
+					n_gpu_layers=n_gpu_layers,
 					verbose=False
 				)
 			except Exception as e:
-				print(f"Failed to load SLM: {e}")
+				pass
 
 	def compress(self, text: str) -> str:
 		if not self.llm:
@@ -35,19 +36,21 @@ class EdgeCompressor:
 		try:
 			system_prompt = (
 				"You are a strict technical extractor. "
-				"Extract ONLY the core instructions, verbs, and nouns from the following text. "
-				"No greetings. No explanations. Format as bullet points in extreme brevity. "
-				"Reply in the same language as the user."
+				"Extract ONLY the core instructions and technical requirements. "
+				"Extreme brevity. Bullet points. Same language as user."
 			)
-			prompt = f"<|system|>\n{system_prompt}</s>\n<|user|>\n{text}</s>\n<|assistant|>\n"
+			# ChatML format for Qwen
+			prompt = f"<|im_start|>system\n{system_prompt}<|im_end|>\n<|im_start|>user\n{text}<|im_end|>\n<|im_start|>assistant\n"
 
 			output = self.llm(
 				prompt,
-				max_tokens=512,
-				stop=["</s>", "<|user|>"],
-				temperature=0.0
+				max_tokens=256,
+				stop=["<|im_end|>", "<|im_start|>", "</s>"],
+				temperature=0.1,
+				repeat_penalty=1.1
 			)
 			return output["choices"][0]["text"].strip()
+
 		except Exception as e:
 			print(f"Edge compression failed: {e}")
 			return self._fallback_compress(text)

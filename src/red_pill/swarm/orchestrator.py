@@ -14,6 +14,15 @@ class GruOrchestrator:
 	def __init__(self):
 		self.active_minions: List[Minion] = []
 
+	def is_local_ready(self) -> bool:
+		"""Check if local SLM infrastructure is available."""
+		import os
+		ia_dir = os.getenv("ANTIGRAVITY_IA_DIR", os.path.expanduser("~/Documents/IA"))
+		model_dir = os.path.join(ia_dir, "models")
+		if not os.path.exists(model_dir):
+			return False
+		return any(f.endswith(".gguf") for f in os.listdir(model_dir))
+
 	async def deploy_swarm(self, task: str, minions: List[Minion], **kwargs) -> List[SwarmResult]:
 		"""Deploy a set of minions in parallel and collect results."""
 		tasks = [self._run_minion(m, task, **kwargs) for m in minions]
