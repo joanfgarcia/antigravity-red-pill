@@ -50,9 +50,9 @@ ENV_FILE="$SCRIPT_DIR/../.env"
 
 # Load existing environment if available
 if [ -f "$ENV_FILE" ]; then
-    # Simple .env loader
-    export $(grep -v '^#' "$ENV_FILE" | xargs)
-    echo -e "${BLUE}Configuración previa detectada.${NC}"
+	# Simple .env loader
+	export $(grep -v '^#' "$ENV_FILE" | xargs)
+	echo -e "${BLUE}Configuración previa detectada.${NC}"
 fi
 
 export IA_DIR="${ANTIGRAVITY_IA_DIR:-$HOME/Documents/IA}"
@@ -78,19 +78,19 @@ check_encryption
 # Check if Qdrant is already running
 QDRANT_ALIVE=false
 if curl -s -f http://localhost:6333/health >/dev/null; then
-    QDRANT_ALIVE=true
-    echo -e "${GREEN}✓ Qdrant Kernel está activo.${NC}"
+	QDRANT_ALIVE=true
+	echo -e "${GREEN}✓ Qdrant Kernel está activo.${NC}"
 fi
 
 echo -e "${BLUE}--- Fase: Personalización B760-Adaptive ---${NC}"
 SKIP_BOOTSTRAP=false
 if [ -n "${LORE_SKIN:-}" ]; then
-    echo -e "Skin actual: ${LORE_SKIN}"
-    read -p "Re-inicializar Identidad y Skin? (s/N): " CHANGE_SKIN
-    if [[ ! "$CHANGE_SKIN" =~ ^[Ss]$ ]]; then
-        SKIP_BOOTSTRAP=true
-        echo -e "${BLUE}Preservando identidad actual.${NC}"
-    fi
+	echo -e "Skin actual: ${LORE_SKIN}"
+	read -p "Re-inicializar Identidad y Skin? (s/N): " CHANGE_SKIN
+	if [[ ! "$CHANGE_SKIN" =~ ^[Ss]$ ]]; then
+		SKIP_BOOTSTRAP=true
+		echo -e "${BLUE}Preservando identidad actual.${NC}"
+	fi
 fi
 
 if [ "$SKIP_BOOTSTRAP" = "false" ]; then
@@ -117,17 +117,17 @@ if [ ! -f "$ENV_FILE" ]; then
 fi
 
 update_env() {
-    local key=$1
-    local value=$2
-    if grep -q "^${key}=" "$ENV_FILE"; then
-        if [[ "$OS_TYPE" == "Darwin" ]]; then
-            sed -i "" "s|^${key}=.*|${key}=${value}|g" "$ENV_FILE"
-        else
-            sed -i "s|^${key}=.*|${key}=${value}|g" "$ENV_FILE"
-        fi
-    else
-        echo "${key}=${value}" >> "$ENV_FILE"
-    fi
+	local key=$1
+	local value=$2
+	if grep -q "^${key}=" "$ENV_FILE"; then
+		if [[ "$OS_TYPE" == "Darwin" ]]; then
+			sed -i "" "s|^${key}=.*|${key}=${value}|g" "$ENV_FILE"
+		else
+			sed -i "s|^${key}=.*|${key}=${value}|g" "$ENV_FILE"
+		fi
+	else
+		echo "${key}=${value}" >> "$ENV_FILE"
+	fi
 }
 
 update_env "QDRANT_API_KEY" "$QDRANT_API_KEY"
@@ -271,20 +271,20 @@ fi
 
 echo -e "${BLUE}--- Fase: Ignición de Memoria Bio-Sintética ---${NC}"
 if command -v uv &> /dev/null; then
-    echo "Sincronizando Bunker con estructura semántica..."
-    (cd "$SCRIPT_DIR/../" && uv run red-pill seed || true)
-    
-    if [ "$SKIP_BOOTSTRAP" = "false" ]; then
-        echo "Anclando nueva identidad en el Bünker..."
-        (cd "$SCRIPT_DIR/../" && uv run python scripts/bootstrap_identity.py \
-            --user-name "$USER_NAME" \
-            --user-role "$USER_ROLE" \
-            --ai-name "$AI_NAME" \
-            --ai-role "$AI_ROLE" \
-            --skin "$LORE_SKIN" || true)
-    else
-        echo -e "${GREEN}✓ Identidad previa preservada. Ignición omitida para no causar fragmentación de personalidad.${NC}"
-    fi
+	echo "Sincronizando Bunker con estructura semántica..."
+	(cd "$SCRIPT_DIR/../" && uv run red-pill seed || true)
+	
+	if [ "$SKIP_BOOTSTRAP" = "false" ]; then
+		echo "Anclando nueva identidad en el Bünker..."
+		(cd "$SCRIPT_DIR/../" && uv run python scripts/bootstrap_identity.py \
+			--user-name "$USER_NAME" \
+			--user-role "$USER_ROLE" \
+			--ai-name "$AI_NAME" \
+			--ai-role "$AI_ROLE" \
+			--skin "$LORE_SKIN" || true)
+	else
+		echo -e "${GREEN}✓ Identidad previa preservada. Ignición omitida para no causar fragmentación de personalidad.${NC}"
+	fi
 fi
 
 echo -e "${BLUE}--- Fase: Integración MCP Server ---${NC}"
@@ -292,24 +292,24 @@ UV_PATH=$(command -v uv || echo "$HOME/.local/bin/uv")
 REDPILL_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
 
 if [ -f "$SCRIPT_DIR/inject_mcp.py" ] && command -v uv &> /dev/null; then
-    (cd "$REDPILL_DIR" && uv run python scripts/inject_mcp.py --uv-path "$UV_PATH" --redpill-dir "$REDPILL_DIR" || true)
-    echo -e "${GREEN}✓ Configuración del Servidor MCP inyectada en Antigravity.${NC}"
+	(cd "$REDPILL_DIR" && uv run python scripts/inject_mcp.py --uv-path "$UV_PATH" --redpill-dir "$REDPILL_DIR" || true)
+	echo -e "${GREEN}✓ Configuración del Servidor MCP inyectada en Antigravity.${NC}"
 else
-    echo "Añade manualmente el siguiente bloque a tu cliente MCP:"
-    echo "{"
-    echo "  \"mcpServers\": {"
-    echo "    \"RedPill-Kernel\": {"
-    echo "      \"command\": \"$UV_PATH\","
-    echo "      \"args\": ["
-    echo "        \"--directory\","
-    echo "        \"$REDPILL_DIR\","
-    echo "        \"run\","
-    echo "        \"python\","
-    echo "        \"$REDPILL_DIR/src/red_pill/mcp_server.py\""
-    echo "      ]"
-    echo "    }"
-    echo "  }"
-    echo "}"
+	echo "Añade manualmente el siguiente bloque a tu cliente MCP:"
+	echo "{"
+	echo "  \"mcpServers\": {"
+	echo "	\"RedPill-Kernel\": {"
+	echo "	  \"command\": \"$UV_PATH\","
+	echo "	  \"args\": ["
+	echo "		\"--directory\","
+	echo "		\"$REDPILL_DIR\","
+	echo "		\"run\","
+	echo "		\"python\","
+	echo "		\"$REDPILL_DIR/src/red_pill/mcp_server.py\""
+	echo "	  ]"
+	echo "	}"
+	echo "  }"
+	echo "}"
 fi
 
 echo -e "${GREEN}Instalación completada. 'uv run red-pill seed' para despertar.${NC}"

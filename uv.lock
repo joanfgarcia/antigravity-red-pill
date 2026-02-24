@@ -28,7 +28,7 @@ wheels = [
 
 [[package]]
 name = "antigravity-red-pill"
-version = "4.2.4"
+version = "5.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastembed" },

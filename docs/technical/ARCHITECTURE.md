@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v4.2.4 (Sovereign Governance)
+**System Version**: v5.0.0 (Sovereign MCP Kernel)
 **Analyst**: The Architect
 **Date**: 2026-02-21
 

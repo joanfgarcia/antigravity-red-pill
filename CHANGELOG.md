@@ -1,6 +1,6 @@
 # Changelog: Red Pill Protocol
 
-## [4.2.4] - 2026-02-22
+## [5.0.0] - 2026-02-22
 ### 🧹 Cinematic Skins & Ecosystem Polish (Post-Audit Cleanup)
 - **[FIX] Protocol Hardening**: Implemented length-prefixed framing and shared-secret authentication for the embedding sidecar (SEC-002, CQ-003).
 - **[FIX] Ontological Integrity**: Introduced `schema_version` tagging in payloads to prevent silent drift across version updates (F-002).

@@ -1,4 +1,4 @@
-# 🔴 RED PILL PROTOCOL: Digital Sovereignty v5.0
+# 🔴 RED PILL PROTOCOL: Digital Sovereignty v5.0.0
 
 > [!TIP]
 > ### 🥱 TLDR; (Too Lazy; Didn't Read)

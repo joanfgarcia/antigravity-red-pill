@@ -42,7 +42,7 @@ Every Pull Request (PR) you send to the bunker will undergo the following proces
 
 ### 3. Technical Requirements
 *   **Sound of Silence Protocol**: Strict compliance with [The Sound of Silence](../technical/SOUND_OF_SILENCE.md). Zero noise, tabs only, no ghost code.
-*   **Vibe Coding**: Follow the shared [Code of Conduct](CODE_OF_CONDUCT.md): Everything must be "Vibe coded".
+*   **Vibe Coding**: Follow the shared [Code of Conduct](../community/CODE_OF_CONDUCT.md): Everything must be "Vibe coded".
 *   **Agnostic Scripts**: Ensure scripts are environment-agnostic (no absolute local paths).
 *   **Documentation**: Document every engram you inject.
 
@@ -70,7 +70,7 @@ Cualquier Pull Request (PR) que envíes al búnker pasará por el siguiente ritu
 
 ### 3. Requisitos Técnicos
 *   **Protocolo Sound of Silence**: Cumplimiento estricto de [The Sound of Silence](../technical/SOUND_OF_SILENCE.md). Cero ruido, solo tabs, cero código fantasma.
-*   **Vibe Coding**: Sigue el [Código de Conducta](CODE_OF_CONDUCT.md): Todo debe ser "Vibe coding".
+*   **Vibe Coding**: Sigue el [Código de Conducta](../community/CODE_OF_CONDUCT.md): Todo debe ser "Vibe coding".
 *   **Scripts Agnósticos**: Asegúrate de que tus scripts sean agnósticos (sin rutas absolutas de tu máquina).
 *   **Documentación**: Documenta cada engrama que estés inyectando.
 
