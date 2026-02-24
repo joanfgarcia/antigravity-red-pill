@@ -31,5 +31,36 @@ async def test_local_compression():
         else:
             print(f"Error: {res.error}")
 
+    print("\n--- TEST: ORACLE SYNTHESIS ---")
+    from red_pill.swarm.agents.oracle import OracleMinion
+    oracle = OracleMinion()
+    # Search for something that might be in memory, or just a general query
+    query = "Sovereign Identity Protocol"
+    oracle_results = await orchestrator.deploy_swarm(query, [oracle])
+    
+    for res in oracle_results:
+        if res.status == "success":
+            print(f"Oracle Synthesis:\n{res.result['synthesis']}")
+        else:
+            print(f"Oracle Error: {res.error}")
+
+    print("\n--- TEST: SMITH AUDIT + SLM FORENSICS ---")
+    from red_pill.swarm.agents.smith import SmithMinion
+    smith = SmithMinion()
+    # Audit the local directory including the vulnerable sample
+    path = os.path.join(os.getcwd(), "tests")
+    smith_results = await orchestrator.deploy_swarm("audit", [smith], path=path)
+    
+    for res in smith_results:
+        if res.status == "success":
+            print(f"Security Score: {res.result['security_score']}")
+            print(f"Findings: {len(res.result['findings'])}")
+            for f in res.result['findings']:
+                print(f"- {f['file']}:{f['line']} -> {f['msg']}")
+                if "slm_validation" in f:
+                    print(f"  [SLM Validation]: {f['slm_validation']}")
+        else:
+            print(f"Smith Error: {res.error}")
+
 if __name__ == "__main__":
     asyncio.run(test_local_compression())

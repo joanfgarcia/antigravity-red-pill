@@ -93,14 +93,16 @@ class SmithMinion(Minion):
 			except Exception as e:
 				self.log(f"Error analizando {py_file}: {e}", level=30)
 
-		# 3. Industrial Deep Forensics (Zero-Trust Architectural Audit)
-		is_deep = kwargs.get("deep_forensics", False) or task == "industrial_audit"
+		# 3. Super-Deep Granular Forensics (Line-by-Line Resolution)
+		is_super_deep = kwargs.get("super_deep", False) or task == "super_deep_audit"
+		is_deep = kwargs.get("deep_forensics", False) or task == "industrial_audit" or is_super_deep
 		
 		from red_pill.swarm.agents.edge_engine import EdgeEngine
 		engine = EdgeEngine()
 
 		if is_deep and engine.llm:
-			self.log(f"☢️ MODO INDUSTRIAL ACTIVADO: Forense con {os.path.basename(engine.model_path)}")
+			mode_label = "SOLO GRANULAR (QUIRÚRGICO)" if is_super_deep else "INDUSTRIAL (BLOQUES)"
+			self.log(f"☢️ MODO {mode_label} ACTIVADO: Auditoría con {os.path.basename(engine.model_path)}")
 			
 			for py_file in python_files:
 				if any(x in str(py_file) for x in ["venv", ".git", "__pycache__", ".agent"]):
@@ -108,41 +110,45 @@ class SmithMinion(Minion):
 				
 				try:
 					with open(py_file, 'r', encoding='utf-8') as f:
-						lines = f.readlines()
+						file_content = f.read()
+						lines = file_content.splitlines()
 					
-					# Heuristic block extraction for SLM (focusing on complex logic or sensitive keywords)
-					critical_blocks = []
-					current_block = []
-					sensitive_keywords = ["token", "auth", "encrypt", "subprocess", "socket", "request", "persist"]
+					# Granular Scan: Small overlapping windows for 'line-by-line' sensation
+					chunk_size = 15 if is_super_deep else 40
+					step_size = 5 if is_super_deep else 40
 					
-					for line in lines:
-						current_block.append(line)
-						if len(current_block) > 40: # Chunk size
-							block_text = "".join(current_block)
-							if any(kw in block_text.lower() for kw in sensitive_keywords):
-								critical_blocks.append(block_text)
-							current_block = []
-					
-					if current_block:
-						critical_blocks.append("".join(current_block))
+					for i in range(0, len(lines), step_size):
+						window = lines[i : i + chunk_size]
+						block_text = "\n".join([f"{i+j+1}: {line}" for j, line in enumerate(window)])
+						
+						# Quick heuristic check to avoid flooding the GPU with empty lines
+						if not any(kw in block_text.lower() for kw in ["def ", "class ", "token", "auth", "secret", "path", "os.", "sys.", "eval", "exec", "subprocess"]):
+							if is_super_deep: # In super deep we scan more but still skip obvious noise
+								if len(block_text.strip()) < 50: continue
+							else:
+								continue
 
-					for block in critical_blocks[:3]: # Limit per file for intensity balance
 						prompt = (
-							"INDUSTRIAL SECURITY AUDIT: Analyze the following Python code for architectural flaws, "
-							"unsecured patterns, or logic vulnerabilities. Be extremely critical. Same language as code."
+							f"SURGICAL SECURITY AUDIT (RESOLUTION: {'LINE' if is_super_deep else 'BLOCK'}):\n"
+							"Inspect these lines for vulnerabilities, leaks, or architectural anti-patterns. "
+							"If you find something, specify the line number. Be extremely direct. "
+							"If clean, reply with 'CLEAN'."
 						)
-						analysis = engine.synthesize(block, prompt)
-						if "vulner" in analysis.lower() or "risk" in analysis.lower() or "riesgo" in analysis.lower():
+						
+						analysis = engine.synthesize(block_text, prompt)
+						
+						if "CLEAN" not in analysis.upper():
 							results["findings"].append({
-								"severity": "WARNING",
+								"severity": "CRITICAL" if is_super_deep else "WARNING",
 								"file": str(py_file.relative_to(target_path)),
-								"line": "AI-Forensics",
-								"msg": f"SLM ARCHITECTURAL ALERT: {analysis[:200]}..."
+								"line": f"{i+1}-{i+chunk_size}",
+								"msg": f"FORENSIC ALERT: {analysis[:300]}..."
 							})
-							results["security_score"] -= 2.0
+							results["security_score"] -= 5.0 if is_super_deep else 2.0
 							
 				except Exception as e:
 					self.log(f"Deep scan error on {py_file}: {e}")
+
 
 		elif results["findings"] and engine.llm:
 			self.log(f"🔍 Validando hallazgos previos con {os.path.basename(engine.model_path)}...")

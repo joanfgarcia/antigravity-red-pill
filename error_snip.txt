@@ -1,0 +1,12 @@
+      /tmp/.tmpwPFav8/sdists-v9/pypi/llama-cpp-python/0.3.16/zI6CcV9k5xA4faA4UGSeF/src/vendor/llama.cpp/ggml/src/ggml-threading.cpp
+      [3/183] /usr/bin/nvcc -forward-unknown-to-host-compiler -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHARED -DGGML_CUDA_PEER_MAX_BATCH_SIZE=128
+      -DGGML_CUDA_USE_GRAPHS -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_cuda_EXPORTS
+      -O3 -DNDEBUG -std=c++17 -arch=native -Xcompiler=-fPIC -use_fast_math -extended-lambda -Xcompiler "-Wmissing-declarations
+      -Wmissing-noreturn -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wno-array-bounds -Wextra-semi -Wno-pedantic" -MD -MT
+      vendor/llama.cpp/ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/acc.cu.o -MF vendor/llama.cpp/ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/acc.cu.o.d
+      -x cu -c /tmp/.tmpwPFav8/sdists-v9/pypi/llama-cpp-python/0.3.16/zI6CcV9k5xA4faA4UGSeF/src/vendor/llama.cpp/ggml/src/ggml-cuda/acc.cu -o
+      vendor/llama.cpp/ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/acc.cu.o
+      FAILED: [code=1] vendor/llama.cpp/ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/acc.cu.o
+      /usr/bin/nvcc -forward-unknown-to-host-compiler -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHARED -DGGML_CUDA_PEER_MAX_BATCH_SIZE=128
+      -DGGML_CUDA_USE_GRAPHS -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_cuda_EXPORTS
+      -O3 -DNDEBUG -std=c++17 -arch=native -Xcompiler=-fPIC -use_fast_math -extended-lambda -Xcompiler "-Wmissing-declarations
