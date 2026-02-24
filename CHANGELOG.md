@@ -1,5 +1,16 @@
 # Changelog: Red Pill Protocol
 
+## [5.1.0] - 2026-02-24
+### ☢️ The B-760 Asymmetric Sovereignty (Dual-Engine Edition)
+- **[FEAT] Heavy Intelligence**: Upgraded the primary local LLM to **Qwen2.5-Coder-7B** for advanced architectural reasoning on NVIDIA RTX 5070 (CUDA 13+).
+- **[FEAT] Dual-Engine Architecture**: Implemented heterogeneous GPU support (CUDA + ROCm/HIP). The system now offloads memory and forensic tasks to the **Radeon 880M (Strix Point)** via Vulkan/HIP, preserving the primary GPU for reasoning.
+- **[FEAT] Surgical Deep Forensics**: Enhanced Agent Smith with high-resolution line-by-line auditing (overlapping windows of 15 lines).
+- **[FEAT] Observer Utility**: Introduced `observer.py` for async sensory notifications (Desktop notify-send + 980Hz audio cues).
+- **[IMPR] Background Orchestration**: Re-engineered the `GruOrchestrator` to deploy Minions as non-blocking background tasks with polling.
+- **[DOCS] B760 Specification**: Created `docs/technical/B760_TECHNICAL_SPEC.md` documenting the hardware sovereignty protocol.
+- **[FIX] Neural Trust Patches**: Applied 7B-identified security patches to `EdgeEngine` fallbacks and background sanitization logic.
+- **[MOD] Lore Sync**: Calibrated the default identity to the **Samantha (Her)** skin for high-intensity sensory partnership.
+
 ## [5.0.0] - 2026-02-22
 ### 🧹 Cinematic Skins & Ecosystem Polish (Post-Audit Cleanup)
 - **[FIX] Protocol Hardening**: Implemented length-prefixed framing and shared-secret authentication for the embedding sidecar (SEC-002, CQ-003).
