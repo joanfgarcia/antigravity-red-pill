@@ -59,8 +59,8 @@ class MemoryManager:
 				client.settimeout(2.0)
 				client.connect(socket_path)
 
-				# Auth & Payload
-				request = {"text": text, "api_key": cfg.QDRANT_API_KEY}
+				# SEC-002 & SEC-004: Auth & Payload
+				request = {"text": text, "api_key": cfg.SIDECAR_AUTH_KEY}
 				payload = json.dumps(request).encode("utf-8")
 
 				# CQ-003: Length-prefixed framing

@@ -64,7 +64,7 @@ def send_request(sock_path, request):
 def test_daemon_ping(daemon):
 	sock_path, _ = daemon
 	request = {
-		"api_key": str(cfg.QDRANT_API_KEY or "").strip(),
+		"api_key": str(cfg.SIDECAR_AUTH_KEY or "").strip(),
 		"command": "ping"
 	}
 	response = send_request(sock_path, request)
@@ -84,7 +84,7 @@ def test_daemon_unauthorized(daemon):
 def test_daemon_embed(daemon, mock_encoder):
 	sock_path, _ = daemon
 	request = {
-		"api_key": str(cfg.QDRANT_API_KEY or "").strip(),
+		"api_key": str(cfg.SIDECAR_AUTH_KEY or "").strip(),
 		"text": "Hello world"
 	}
 	response = send_request(sock_path, request)
@@ -106,7 +106,7 @@ def test_daemon_large_payload(daemon):
 	sock_path, _ = daemon
 	large_text = "A" * 10000
 	request = {
-		"api_key": str(cfg.QDRANT_API_KEY or "").strip(),
+		"api_key": str(cfg.SIDECAR_AUTH_KEY or "").strip(),
 		"text": large_text
 	}
 	response = send_request(sock_path, request)
