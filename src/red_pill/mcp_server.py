@@ -15,6 +15,7 @@ from red_pill.swarm.agents.oracle import OracleMinion
 from red_pill.swarm.agents.smith import SmithMinion
 from red_pill.swarm.orchestrator import GruOrchestrator
 from red_pill.telemetry import HardwareSentinel
+from red_pill.utils.tone_analyzer import get_current_sync_state
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +126,14 @@ async def handle_list_tools() -> List[types.Tool]:
 					"text": {"type": "string", "description": "The verbose text to compress"},
 				},
 				"required": ["text"],
+			},
+		),
+		types.Tool(
+			name="get_emotional_sync",
+			description="Retrieve the dominant emotional mood and narrative directive from recent memories.",
+			inputSchema={
+				"type": "object",
+				"properties": {},
 			},
 		),
 	]
@@ -262,6 +271,14 @@ async def handle_call_tool(
 			return [types.TextContent(type="text", text=f"{stats}\n\n{res.result.get('compressed_prompt')}")]
 		else:
 			return [types.TextContent(type="text", text=f"Compression Failed: {res.error}")]
+
+	elif name == "get_emotional_sync":
+		try:
+			state = get_current_sync_state()
+			response = f"DOMINANT MOOD: {state['mood'].upper()}\nDIRECTIVE: {state['directive']}"
+			return [types.TextContent(type="text", text=response)]
+		except Exception as e:
+			return [types.TextContent(type="text", text=f"Mood Sync Failed: {e}")]
 
 	raise ValueError(f"Unknown tool: {name}")
 

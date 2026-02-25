@@ -13,6 +13,7 @@ from red_pill.soul import SoulManager
 from red_pill.swarm.agents.smith import SmithMinion
 from red_pill.swarm.orchestrator import GruOrchestrator
 from red_pill.telemetry import get_telemetry_report
+from red_pill.utils.tone_analyzer import get_current_sync_state
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +142,7 @@ def main() -> None:
 	restore_parser = soul_sub.add_parser("restore", help="Restore soul from a backup directory")
 	restore_parser.add_argument("source", help="Path to backup timestamp directory")
 	restore_parser.add_argument("--commit", action="store_true", help="Execute the restoration (dry-run by default)")
+	soul_sub.add_parser("sync", help="Analyze and display dominant emotional mood")
 
 	args = parser.parse_args()
 
@@ -207,6 +209,10 @@ def main() -> None:
 				rotate()
 			elif args.soul_cmd == "restore":
 				soul.restore_soul(args.source, commit=args.commit)
+			elif args.soul_cmd == "sync":
+				state = get_current_sync_state()
+				print(f"--- [EMOTIONAL SYNC: {state['mood'].upper()}] ---")
+				print(f"Directive: {state['directive']}")
 			return
 
 		# Loop through requested collections

@@ -618,8 +618,7 @@ class MemoryManager:
 		# Remove duplicates
 		if duplicates and not dry_run:
 			try:
-				point_ids: List[models.ExtendedPointId] = [str(d) for d in duplicates]
-				self.client.delete(collection_name=collection, points_selector=models.PointIdsList(points=point_ids))
+				self.client.delete(collection_name=collection, points_selector=models.PointIdsList(points=duplicates))
 			except Exception as e:
 				logger.error(f"Duplicate deletion failed: {e}")
 
