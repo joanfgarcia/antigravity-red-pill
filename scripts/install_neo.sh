@@ -94,7 +94,7 @@ if [ -n "${LORE_SKIN:-}" ]; then
 fi
 
 if [ "$SKIP_BOOTSTRAP" = "false" ]; then
-	echo "Skins disponibles: matrix, cyberpunk, 760 (default), dune, 40k, gits, bladerunner, her, exmachina, terminator, 2001, creator"
+	echo "Skins disponibles: matrix, cyberpunk, 760 (default), dune, 40k, gits, bladerunner, her, exmachina, terminator, 2001, creator, enterprise_core"
 	read -p "Elige tu Skin (Default: ${LORE_SKIN:-760}): " NEW_SKIN; LORE_SKIN=${NEW_SKIN:-${LORE_SKIN:-"760"}}
 	
 	read -p "Nombre de Usuario (${USER_NAME:-Morpheo}): " NEW_USER; USER_NAME=${NEW_USER:-${USER_NAME:-"Morpheo"}}
@@ -147,6 +147,17 @@ case $SEC_CHOICE in
 		;;
 esac
 
+echo -e "${BLUE}--- Fase: Configuración de Cloud Vault (Safe Haven) ---${NC}"
+read -p "¿Deseas habilitar copias de seguridad en Google Drive? (y/N): " VAULT_CHOICE
+if [[ "$VAULT_CHOICE" =~ ^[Yy]$ ]]; then
+	CLOUD_VAULT_ENABLED="True"
+	read -p "ID de Carpeta de Google Drive (opcional): " CLOUD_VAULT_FOLDER_ID
+else
+	CLOUD_VAULT_ENABLED="False"
+	CLOUD_VAULT_FOLDER_ID=""
+fi
+
+
 # SEC-004: Always generate a separate, random Sidecar Auth Key
 SIDECAR_AUTH_KEY=$(head -c 32 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 32)
 
@@ -178,6 +189,8 @@ update_env "AI_NAME" "$AI_NAME"
 update_env "AI_ROLE" "$AI_ROLE"
 update_env "DYNAMIC_EMOTION_SYNC" "$DYNAMIC_EMOTION_SYNC"
 update_env "MULTI_EMOTION_INFERENCE" "$MULTI_EMOTION_INFERENCE"
+update_env "CLOUD_VAULT_ENABLED" "$CLOUD_VAULT_ENABLED"
+update_env "CLOUD_VAULT_FOLDER_ID" "$CLOUD_VAULT_FOLDER_ID"
 chmod 600 "$ENV_FILE"
 
 mkdir -p "$IA_DIR/scripts" "$IA_DIR/backups/qdrant" "$IA_DIR/backups/soul" "$IA_DIR/seeds" "$IA_DIR/storage"

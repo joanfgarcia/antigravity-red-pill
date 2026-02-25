@@ -91,3 +91,11 @@ modes:
     assistant: "Alita"
     operator: "Ido"
     chroma: "purple"
+  enterprise_core:
+    network_protection: "Corporate Gateway"
+    data_cores: "Synaptic Asset"
+    memory_environment: "Workspace Boundary"
+    assistant: "Agent"
+    operator: "Operator"
+    chroma: "blue"
+    personality: "Precise, professional, and efficient. Optimized for workspace-confined operations while maintaining high-fidelity cognitive performance and Hive-Mind synchronization."
