@@ -19,6 +19,7 @@ except ImportError:
 import red_pill.config as cfg
 from red_pill.schemas import CreateEngramRequest
 from red_pill.hive import HiveMind
+from red_pill.utils.emotion import get_emotion, get_chroma_for_emotion
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +135,14 @@ class MemoryManager:
 		except (TypeError, ValueError) as e:
 			raise ValueError(f"Invalid metadata: {e}")
 
+		# v5.2.0: Hybrid Emotion Inference
+		if emotion == cfg.DEFAULT_EMOTION and os.getenv("EMOTION_AUTO_DETECT", "True").lower() == "true":
+			detected = get_emotion(text)
+			if detected:
+				emotion = detected
+				if color == cfg.DEFAULT_COLOR:
+					color = get_chroma_for_emotion(detected)
+		
 		validated_request = CreateEngramRequest(
 			content=text,
 			importance=importance,

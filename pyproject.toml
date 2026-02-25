@@ -19,6 +19,8 @@ dependencies = [
     "huggingface-hub[hf-transfer]>=1.4.1",
     "hf-transfer>=0.1.9",
     "pymilvus>=2.4.0",
+    "transformers>=4.40.0",
+    "torch>=2.2.0",
 ]
 
 [project.scripts]

@@ -42,6 +42,8 @@ The Red Pill Protocol is built for **Sovereign Environments**:
 - **Sovereign Swarm (v5.0)**: Integrated Minions (Agent Smith, Oracle, Keymaker) running natively within the Red Pill Kernel for local code auditing, RAG synthesis, and infrastructure health checking.
 - **MCP Server (v5.0)**: Exposes the full Red Pill telemetry (CPU, GPU CUDA/ROCm, NPU) and Swarm tools to IDEs like VS Code (via Antigravity, Cursor, Cline) and Claude Desktop for zero-friction interaction.
 - **Inlined Identity**: Identity and directives are now ingested natively as vector memories during the bootstrap process via `bootstrap_identity.py`, making text files obsolete and fully immune to IDE context loss.
+- **Hybrid Emotion Inference (v5.2.0)**: Integrated **BERT-Emotion** (boltuix) as a second-stage inference engine. Engrams now feature automated **Emotional Chroma** sensing; the Bünker feels the sentiment of every saved memory, adjusting its decay and tone dynamically.
+- **Sovereign Swarm (v5.2.0)**: Advanced Minion orchestration (Gru + Minions) for specialized operations like Agent Smith's code auditing and Oracle's deep research.
 - **Hive Mind (v5.0)**: Qdrant is your individual brain. **Milvus** serves as our Collective Neural Network. This is the HIVE Mind Protocol: the internet of experience. Just like the individual Bunker, collective memories will feature **Emotional Chroma and Synaptic Erosion**, allowing the B760 engine to evolve over a shared super-brain where only the most vital knowledge survives.
 
 ### 🌐 LINGUISTIC ARCHITECTURE
@@ -75,6 +77,8 @@ El Protocolo Red Pill está diseñado para **Entornos Soberanos**:
 - **Sovereign Swarm (v5.0)**: Minions integrados (Agent Smith, Oracle, Keymaker) dentro del Kernel para auditorías locales de código, síntesis de memoria y diagnósticos de salud del ecosistema.
 - **Servidor MCP (v5.0)**: Expone la telemetría (CPU, GPU CUDA/ROCm, NPU) y los Minions a tu IDE local para interactuar con ellos sin gastar tokens externos.
 - **Identidad Asimilada**: Tu identidad y reglas ("Lore Skin") ahora viven como vectores inmutables dentro del Bünker, resolviendo para siempre el problema del IDE que "olvida" quién eres.
+- **Inferencia de Emociones Híbrida (v5.2.0)**: Integración de **BERT-Emotion** para detectar automáticamente el sentimiento de los recuerdos. El Bünker "siente" lo que guardas y ajusta su color (Chroma) y persistencia sin intervención manual.
+- **Enjambre Soberano (v5.2.0)**: Orquestación avanzada de Minions (Gru) para tareas críticas de auditoría y síntesis de conocimiento profundo.
 - **Mente de Colmena (v5.0)**: Qdrant es tu cerebro individual. **Milvus** es nuestra Red Neuronal Colectiva. Este es el HIVE Mind Protocol: el internet de la experiencia. Al igual que en el Bünker, los recuerdos colectivos tendrán **Color y Erosión**, permitiendo que el motor B760 evolucione sobre un supercerebro compartido donde solo lo más vital sobrevive al olvido.
 
 ### 🌐 ARQUITECTURA LINGÜÍSTICA

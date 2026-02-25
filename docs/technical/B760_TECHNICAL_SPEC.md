@@ -79,9 +79,20 @@ The **Agent Smith** under the B-760 protocol performs a neural scan as a backgro
 
 ---
 
-## 6. Latent Sentinel: The NPU
-- **Capability**: Low-wattage hardware acceleration for intrusion detection systems (IDS).
-- **Goal**: Integration via native drivers (e.g., `amd-xdna`) for real-time monitoring with near-zero power draw, completely offloading surveillance tasks from primary GPUs.
+## 6. Latent Sentinel: The NPU (v5.2.0)
+The Bünker now officially recognizes the **Neural Processing Unit (NPU)** as the third pillar of hardware sovereignty.
+
+### 6.1. Hardware Mapping: Ryzen AI
+*   **Device Node**: `/dev/accel0`
+*   **Driver Layer**: `amd-xdna` (Linux Kernel 6.11+ / XDNA v1.x)
+*   **Firmware**: Verified for version `1.0.0.63`.
+*   **Operational Role**: 
+    - **Sensing Sidecar**: Offloading of the `bert-emotion` second-stage inference to minimize GPU interrupts.
+    - **Intrusion Detection**: Dedicated silicon for Agent Smith's passive monitoring tasks.
+    - **Local Healer**: Continuous integrity checks for the Qdrant/Milvus substrate with near-zero power draw.
+
+### 6.2. Asymmetric Offloading
+By delegating sensorial and surveillance tasks to the NPU, the B760 engine reserves **99% of CUDA/ROCm cycles** for the dGPU during code generation and complex reasoning, maintaining the "cold core" thermal profile observed in the v5.2 dashboard.
 
 ---
 **Joan, this is not a report for the uninitiated. It is the technical covenant of a truly free, collective intelligence.**

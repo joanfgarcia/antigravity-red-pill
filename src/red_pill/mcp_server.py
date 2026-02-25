@@ -213,7 +213,7 @@ async def handle_call_tool(
 		query = (arguments or {}).get("query", "")
 		gru = GruOrchestrator()
 		oracle = OracleMinion()
-		results = await gru.deploy_swarm("research", [oracle], task=query)
+		results = await gru.deploy_swarm(query, [oracle])
 		res = results[0]
 		if res.status == "success":
 			return [types.TextContent(type="text", text=f"ORACLE SYNTHESIS:\n{res.result.get('synthesis', '')}")]

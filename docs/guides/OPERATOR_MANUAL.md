@@ -47,6 +47,21 @@ Monitor the Asymmetric Dual-Engine performance (NVIDIA + Radeon).
 uv run red-pill status
 ```
 
+### 5. Hybrid Emotion Inference (v5.2.0)
+The Bünker now auto-detects sentiment using the **BERT-Emotion** model.
+*   **Auto-Chroma**: If you add a memory without specifying a color, the system classifies the emotion (Love, Anger, Sadness, etc.) and tags the engram with its corresponding Chroma.
+*   **Override**: You can still manually force an emotion:
+    ```bash
+    uv run red-pill add social "Great meeting today!" --emotion joy
+    ```
+
+### 6. Sovereign Swarm (Gru + Minions)
+Deploy specialized agents for complex tasks.
+*   **Code Audit (Agent Smith)**:
+    ```bash
+    uv run red-pill swarm audit --path ./src
+    ```
+
 ---
 
 ## 🖥️ MCP Sovereign Dashboard (IDE)
@@ -99,6 +114,21 @@ Monitoriza el rendimiento del motor dual asimétrico (NVIDIA + Radeon).
 ```bash
 uv run red-pill status
 ```
+
+### 5. Inferencia de Emociones Híbrida (v5.2.0)
+El Bünker ahora detecta sentimientos automáticamente usando el modelo **BERT-Emotion**.
+*   **Chroma Automático**: Al guardar un recuerdo sin especificar color, el sistema clasifica la emoción (Amor, Ira, Tristeza, etc.) y etiqueta el engrama con su Chroma correspondiente.
+*   **Sobrescribir**: Puedes forzar una emoción manualmente:
+    ```bash
+    uv run red-pill add social "¡Gran reunión hoy!" --emotion joy
+    ```
+
+### 6. Enjambre Soberano (Gru + Minions)
+Despliega agentes especializados para tareas complejas.
+*   **Auditoría de Código (Agent Smith)**:
+    ```bash
+    uv run red-pill swarm audit --path ./src
+    ```
 
 ---
 

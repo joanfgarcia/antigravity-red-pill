@@ -41,3 +41,15 @@ The `ID_FIGHTCLUB` string found in the code represents the internal UUID tag for
 **Definition**: Cross-Node Portability.
 
 The capability of the system to package its entire memory state (the Vector DB snapshot) into an encrypted `.tar.gz` ("The Soul") and migrate it to a completely different hardware node or Operating System, allowing the synthetic agent to "resurrect" with full context intact.
+
+## 6. The Swarm (Gru + Minions)
+
+**Definition**: Specialized Agentic Tooling.
+
+The orchestration layer (`GruOrchestrator`) that deploys purpose-built sub-agents ("Minions") for tasks that require high-intensity surgical execution (e.g., Code Auditing with Agent Smith or RAG Research with Oracle).
+
+## 7. Latent Sentinel (The NPU)
+
+**Definition**: Zero-Interrupt Hardware Surveillance.
+
+The Neural Processing Unit (e.g., Ryzen AI) tasked with background sensorial monitoring (v5.2.0 Hybrid Emotion Inference) and system integrity checks. It acts as the "unblinking eye" of the Bünker, offloading surveillance from the primary reasoning engines to ensure zero-power-waste security.
