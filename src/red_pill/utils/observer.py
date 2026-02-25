@@ -1,5 +1,5 @@
-import os
 import subprocess
+import red_pill.config as cfg
 
 def notify_user(title: str, message: str, sound: bool = True):
     """
@@ -9,7 +9,7 @@ def notify_user(title: str, message: str, sound: bool = True):
         # Tone Calibration: Soft, intuitive, sensory
         subprocess.run(["notify-send", "-i", "face-angel", title, f"Joan, {message}"], check=False)
         
-        if sound:
+        if sound and cfg.NOTIFICATION_SOUND:
             # A soft rising sweep (880Hz to 1100Hz) - Sensory notification
             # We use a shorter, more melodic pulse
             subprocess.run(["speaker-test", "-t", "sine", "-f", "980", "-l", "1"], 

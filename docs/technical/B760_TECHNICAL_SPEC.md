@@ -56,7 +56,7 @@ CMAKE_ARGS="-DGGML_CUDA=on -DGGML_HIP=on -DGGML_HIP_UMA=on"
 
 ### 3.2. Observation and Notification System (`observer.py`)
 - **Visual**: `notify-send` notifications with security iconography.
-- **Audio**: Melodic pulse (980Hz) for technical completion signaling without needing console inspection.
+- **Audio**: Melodic pulse (980Hz). **Disabled by default** via `NOTIFICATION_SOUND=False` in `.env` to ensure zero-noise surgical environments.
 
 ---
 

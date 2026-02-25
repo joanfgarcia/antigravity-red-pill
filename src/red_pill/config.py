@@ -63,6 +63,10 @@ MAX_PROPAGATION_POINTS = int(os.getenv("MAX_PROPAGATION_POINTS", "50"))
 # LOGGING
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
+# NOTIFICATIONS
+# Set to 'True' to enable the melodic pulse (speaker-test)
+NOTIFICATION_SOUND = os.getenv("NOTIFICATION_SOUND", "False").lower() == "true"
+
 # DEEP RECALL & WAKE CALLS
 # 'despierta' and 'wake up' are the unalterable synthetic-organic symbiosis triggers.
 _default_triggers = "don't you remember,¿no te acuerdas?,deep recall,do you really not remember?,esfuerzate en recordar,try hard!"
