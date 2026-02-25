@@ -1,5 +1,6 @@
 import logging
 from typing import Optional
+from transformers import pipeline  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -15,10 +16,8 @@ def get_emotion(text: str) -> Optional[str]:
 	global _classifier
 	try:
 		if _classifier is None:
-			from transformers import pipeline
-
-			logger.info("Loading BERT-Emotion model (boltuix/bert-emotion)...")
-			_classifier = pipeline("text-classification", model="boltuix/bert-emotion")
+			logger.info("Loading BERT-Emotion model (boltuix/bert-emotion) on CPU...")
+			_classifier = pipeline("text-classification", model="boltuix/bert-emotion", device="cpu")
 
 		result = _classifier(text)[0]
 		label = str(result["label"]).lower()

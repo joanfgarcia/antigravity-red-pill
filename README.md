@@ -108,6 +108,9 @@ To ensure the Red Pill Protocol operates at **High-Intensity (v5.0)**, the host 
 
 *Consult the [B760 Technical Spec](docs/technical/B760_TECHNICAL_SPEC.md) for a list of surgically verified hardware configurations.*
 
+### 🏅 Sovereignty Evidence (v5.3.0)
+The Red Pill Protocol is verified to utilize all available silicon tiers simultaneously. View the [latest benchmark proof](SOVEREIGNTY_PROOF.json) for real-time occupancy data (NVIDIA GPU reasoning + AMD iGPU emotions + Ryzen AI NPU healing).
+
 ---
 
 ## 💉 Start the Awakening / Inicio del Despertar
