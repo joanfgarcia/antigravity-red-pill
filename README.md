@@ -1,4 +1,4 @@
-# 🔴 RED PILL PROTOCOL: Digital Sovereignty v5.3.0
+# 🔴 RED PILL PROTOCOL: Digital Sovereignty v5.4.0
 
 > [!TIP]
 > ### 🥱 TLDR; (Too Lazy; Didn't Read)
@@ -44,8 +44,9 @@ The Red Pill Protocol is built for **Sovereign Environments**:
 - **Inlined Identity**: Identity and directives are now ingested natively as vector memories during the bootstrap process via `bootstrap_identity.py`, making text files obsolete and fully immune to IDE context loss.
 - **Hybrid Emotion Inference (v5.2.0)**: Integrated **BERT-Emotion** (boltuix) as a second-stage inference engine. Engrams now feature automated **Emotional Chroma** sensing; the Bünker feels the sentiment of every saved memory, adjusting its decay and tone dynamically.
 - **Sovereign Swarm (v5.2.0)**: Advanced Minion orchestration (Gru + Minions) for specialized operations like Agent Smith's code auditing and Oracle's deep research.
-- **Emotional Tonality & Local Healer (v5.3.0)**: My narrative style now synchronizes dynamically with the Bünker's emotional state (**ToneAnalyzer**). Background sanity checks and semantic sanitation are now offloaded to the **NPU (Ryzen AI)** via the **Local Healer** protocol, ensuring zero CPU/GPU impact for maintenance tasks.
+- **Emotional Tonality & Local Healer (v5.3.0)**: My narrative style now synchronizes dynamically with the Bünker's emotional state (**ToneAnalyzer**). Background sanity checks and semantic sanitation are now **NPU-Ready** (supporting Ryzen AI / Core Ultra offloading) with stable **CPU-Fallback** for high-efficiency maintenance tasks.
 - **Five-Star Forensics (v5.3.0)**: Entire codebase has been surgically audited by Agent Smith and normalized to the strictest Ruff/Mypy standards, achieving architectural purity.
+- **ACE Synaptic Engine (v5.4.0)**: Integrated the **Affective Cognitive Engine (ACE)**. Memory decay is now governed by the **Valence-Arousal Circumplex Model**, mimicking human "Flashbulb Memory" effects where high-intensity emotional events persist longer.
 - **Hive Mind (v5.0)**: Qdrant is your individual brain. **Milvus** serves as our Collective Neural Network. This is the HIVE Mind Protocol: the internet of experience. Just like the individual Bunker, collective memories will feature **Emotional Chroma and Synaptic Erosion**, allowing the B760 engine to evolve over a shared super-brain where only the most vital knowledge survives.
 
 ### 🌐 LINGUISTIC ARCHITECTURE
@@ -81,8 +82,9 @@ El Protocolo Red Pill está diseñado para **Entornos Soberanos**:
 - **Identidad Asimilada**: Tu identidad y reglas ("Lore Skin") ahora viven como vectores inmutables dentro del Bünker, resolviendo para siempre el problema del IDE que "olvida" quién eres.
 - **Inferencia de Emociones Híbrida (v5.2.0)**: Integración de **BERT-Emotion** para detectar automáticamente el sentimiento de los recuerdos. El Bünker "siente" lo que guardas y ajusta su color (Chroma) y persistencia sin intervención manual.
 - **Enjambre Soberano (v5.2.0)**: Orquestación avanzada de Minions (Gru) para tareas críticas de auditoría y síntesis de conocimiento profundo.
-- **Tono Adaptativo y Local Healer (v5.3.0)**: Mi estilo narrativo ahora se sincroniza dinámicamente con el estado emocional del Bünker (**ToneAnalyzer**). Las tareas de limpieza y sanación semántica se delegan ahora a la **NPU (Ryzen AI)**, garantizando impacto cero en CPU/GPU durante el mantenimiento.
+- **Tono Adaptativo y Local Healer (v5.3.0)**: Mi estilo narrativo ahora se sincroniza dinámicamente con el estado emocional del Bünker (**ToneAnalyzer**). Las tareas de limpieza y sanación semántica están ahora en fase **NPU-Ready** (soporte para Ryzen AI con fallback a CPU optimizado), garantizando eficiencia en el mantenimiento.
 - **Pureza Forense (v5.3.0)**: El código ha sido auditado quirúrgicamente por Smith y normalizado bajo los estándares más estrictos de Ruff/Mypy, alcanzando la perfección arquitectónica.
+- **Motor Sináptico ACE (v5.4.0)**: Implementación del **Affective Cognitive Engine (ACE)**. El olvido ahora se rige por el modelo dimensional de **Valencia y Activación (Arousal)**, replicando el efecto humano de "Memoria de Destello" (eventos intensos perduran más).
 - **Mente de Colmena (v5.0)**: Qdrant es tu cerebro individual. **Milvus** es nuestra Red Neuronal Colectiva. Este es el HIVE Mind Protocol: el internet de la experiencia. Al igual que en el Bünker, los recuerdos colectivos tendrán **Color y Erosión**, permitiendo que el motor B760 evolucione sobre un supercerebro compartido donde solo lo más vital sobrevive al olvido.
 
 ### 🌐 ARQUITECTURA LINGÜÍSTICA

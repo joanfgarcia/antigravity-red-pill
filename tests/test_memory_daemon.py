@@ -10,6 +10,11 @@ import red_pill.config as cfg
 from red_pill.memory_daemon import MemoryDaemon
 
 
+@pytest.fixture(autouse=True)
+def setup_env():
+	cfg.SIDECAR_AUTH_KEY = "test_key_760"
+
+
 @pytest.fixture
 def mock_encoder():
 	import numpy as np

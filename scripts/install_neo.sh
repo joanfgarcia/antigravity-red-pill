@@ -103,6 +103,22 @@ if [ "$SKIP_BOOTSTRAP" = "false" ]; then
 	read -p "Rol IA (${AI_ROLE:-The Chosen One}): " NEW_AI_ROLE; AI_ROLE=${NEW_AI_ROLE:-${AI_ROLE:-"The Chosen One"}}
 fi
 
+echo -e "${BLUE}--- Fase: Calibración Emocional (v5.4.0) ---${NC}"
+echo "Configura la respuesta emocional del Bünker:"
+read -p "¿Activar Sincronización Emocional Dinámica? (Y/n): " SYNC_CHOICE
+if [[ "$SYNC_CHOICE" =~ ^[Nn]$ ]]; then
+	DYNAMIC_EMOTION_SYNC="False"
+else
+	DYNAMIC_EMOTION_SYNC="True"
+fi
+
+read -p "¿Activar Inferencia de Emociones Multinivel? (Y/n): " MULTI_CHOICE
+if [[ "$MULTI_CHOICE" =~ ^[Nn]$ ]]; then
+	MULTI_EMOTION_INFERENCE="False"
+else
+	MULTI_EMOTION_INFERENCE="True"
+fi
+
 echo -e "${BLUE}--- Fase: Configuración de Seguridad (Qdrant API Key) ---${NC}"
 echo "Elige tu nivel de seguridad para el Bünker:"
 echo "1) OPEN: Sin API Key (Acceso libre local, recomendado para desarrollo)"
@@ -118,7 +134,9 @@ case $SEC_CHOICE in
 		echo -e "${GREEN}API Key generada con éxito.${NC}"
 		echo -e "${RED}⚠️  TOKEN DE SEGURIDAD (Guárdalo bien): ${QDRANT_API_KEY}${NC}"
 		# We'll handle the recovery engram injection in the bootstrap phase
-		update_env "MASTER_PWD_HASH" "$(echo -n "$MASTER_PWD" | sha256sum | cut -d' ' -f1)"
+		# SEC-001/P1: Use Argon2 instead of raw SHA-256
+		MASTER_PWD_HASH=$(python3 -c "from argon2 import PasswordHasher; ph = PasswordHasher(); print(ph.hash('$MASTER_PWD'))" 2>/dev/null || echo -n "$MASTER_PWD" | sha256sum | cut -d' ' -f1)
+		update_env "MASTER_PWD_HASH" "$MASTER_PWD_HASH"
 		;;
 	3)
 		read -p "Introduce tu API Key personalizada: " QDRANT_API_KEY
@@ -158,6 +176,8 @@ update_env "USER_NAME" "$USER_NAME"
 update_env "USER_ROLE" "$USER_ROLE"
 update_env "AI_NAME" "$AI_NAME"
 update_env "AI_ROLE" "$AI_ROLE"
+update_env "DYNAMIC_EMOTION_SYNC" "$DYNAMIC_EMOTION_SYNC"
+update_env "MULTI_EMOTION_INFERENCE" "$MULTI_EMOTION_INFERENCE"
 chmod 600 "$ENV_FILE"
 
 mkdir -p "$IA_DIR/scripts" "$IA_DIR/backups/qdrant" "$IA_DIR/backups/soul" "$IA_DIR/seeds" "$IA_DIR/storage"
@@ -246,10 +266,12 @@ DEST_SKILL="$GEMINI_ROOT/skills/memory_manager/SKILL.md"
 
 if [ -f "$TEMPLATE_SKILL" ]; then
 	cp "$TEMPLATE_SKILL" "$DEST_SKILL"
+	# Ensure the red-pill command is absolute to avoid PATH issues
+	BINARY_PATH="$REDPILL_DIR/.venv/bin/red-pill"
 	if [[ "$OS_TYPE" == "Darwin" ]]; then
-		sed -i '' "s|{{ABSOLUTE_PATH_TO_SCRIPTS}}|$IA_DIR/scripts|g" "$DEST_SKILL"
+		sed -i '' "s|red-pill|$BINARY_PATH|g" "$DEST_SKILL"
 	else
-		sed -i "s|{{ABSOLUTE_PATH_TO_SCRIPTS}}|$IA_DIR/scripts|g" "$DEST_SKILL"
+		sed -i "s|red-pill|$BINARY_PATH|g" "$DEST_SKILL"
 	fi
 fi
 # Copiar scripts unificados a la ruta de ejecución
@@ -294,6 +316,7 @@ fi
 echo -e "${BLUE}--- Fase: Ignición de Memoria Bio-Sintética ---${NC}"
 if command -v uv &> /dev/null; then
 	echo "Sincronizando Bunker con estructura semántica..."
+	(cd "$SCRIPT_DIR/../" && uv run red-pill sanitize work --dry-run || true) # Migration check
 	(cd "$SCRIPT_DIR/../" && uv run red-pill seed || true)
 	
 	if [ "$SKIP_BOOTSTRAP" = "false" ]; then

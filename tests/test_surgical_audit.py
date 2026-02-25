@@ -9,8 +9,10 @@ async def run_surgical_audit():
 	orchestrator = GruOrchestrator()
 	smith = SmithMinion()
 
-	# Audit a few key files for the demonstration of depth
-	project_root = "/home/joan/Documents/IA/sharing"
+	import os
+
+	# Dynamically determine project root
+	project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 	# We pass 'super_deep_audit' to trigger the surgical mode
 	results = await orchestrator.deploy_swarm("super_deep_audit", [smith], path=project_root)
@@ -23,7 +25,8 @@ async def run_surgical_audit():
 			if res.result["findings"]:
 				print("\n☢️ SURGICAL FORENSIC FINDINGS:")
 				# Group findings by file
-				findings_by_file = {}
+				from typing import Any, Dict, List
+				findings_by_file: Dict[str, List[Dict[str, Any]]] = {}
 				for f in res.result["findings"]:
 					findings_by_file.setdefault(f["file"], []).append(f)
 

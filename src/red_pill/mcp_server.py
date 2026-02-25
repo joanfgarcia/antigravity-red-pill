@@ -7,12 +7,15 @@ from mcp.server import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
 
+from red_pill.cli import switch_skin
+from red_pill.memory import MemoryManager
+from red_pill.soul import SoulManager
 from red_pill.swarm.agents.compressor import CompressorMinion
 from red_pill.swarm.agents.keymaker import KeymakerMinion
 from red_pill.swarm.agents.oracle import OracleMinion
 from red_pill.swarm.agents.smith import SmithMinion
 from red_pill.swarm.orchestrator import GruOrchestrator
-from red_pill.telemetry import HardwareSentinel
+from red_pill.telemetry import HardwareSentinel, get_telemetry_report
 from red_pill.utils.tone_analyzer import get_current_sync_state
 
 logger = logging.getLogger(__name__)
@@ -130,6 +133,21 @@ async def handle_list_tools() -> List[types.Tool]:
 				"properties": {},
 			},
 		),
+		types.Tool(
+			name="edit_memory",
+			description="Surgically update an engram's emotion, color, or intensity.",
+			inputSchema={
+				"type": "object",
+				"properties": {
+					"collection": {"type": "string", "enum": ["work_memories", "social_memories", "story_memories", "directive_memories"]},
+					"id": {"type": "string", "description": "Engram UUID"},
+					"emotion": {"type": "string", "description": "New emotion label"},
+					"color": {"type": "string", "description": "New chroma color"},
+					"intensity": {"type": "number", "description": "New intensity (0-10)"},
+				},
+				"required": ["collection", "id"],
+			},
+		),
 	]
 
 
@@ -178,24 +196,43 @@ async def handle_call_tool(
 		cmd = arguments.get("command", "") if arguments else ""
 		val = arguments.get("value", "") if arguments else ""
 
-		import subprocess
+		try:
+			if cmd == "mode":
+				output = switch_skin(val)
+			elif cmd == "rotate":
+				from scripts.rotate_keys import rotate
 
-		full_cmd = ["uv", "run", "red-pill"]
-		if cmd == "mode":
-			full_cmd += ["mode", val]
-		elif cmd == "rotate":
-			full_cmd += ["soul", "rotate"]
-		elif cmd == "backup":
-			full_cmd += ["soul", "backup"]
-		else:
-			full_cmd += ["status"]
+				rotate()
+				output = "Qdrant API Key rotated and service restarted."
+			elif cmd == "backup":
+				soul = SoulManager()
+				soul.full_backup()
+				output = "Total Soul Backup executed successfully."
+			elif cmd == "status":
+				output = get_telemetry_report()
+			else:
+				output = f"Unknown command: {cmd}"
+			return [types.TextContent(type="text", text=f"Action Result: {cmd}\n\n{output}")]
+		except Exception as e:
+			logger.error(f"Control Panel Error: {e}")
+			return [types.TextContent(type="text", text=f"Bunker Control Failure: {e}")]
+
+	elif name == "edit_memory":
+		coll = arguments.get("collection", "social_memories")
+		mid = arguments.get("id", "")
+		color = arguments.get("color")
+		emotion = arguments.get("emotion")
+		intensity = arguments.get("intensity")
 
 		try:
-			res = subprocess.run(full_cmd, capture_output=True, text=True, check=False)
-			output = res.stdout if res.stdout else res.stderr
-			return [types.TextContent(type="text", text=f"Command Executed: {cmd}\n\n{output}")]
+			manager = MemoryManager()
+			success = manager.update_memory(coll, mid, color=color, emotion=emotion, intensity=intensity)
+			if success:
+				return [types.TextContent(type="text", text=f"Engram {mid} updated successfully in {coll}.")]
+			else:
+				return [types.TextContent(type="text", text=f"Failed to update engram {mid}. Check logs.")]
 		except Exception as e:
-			return [types.TextContent(type="text", text=f"Execution Failed: {e}")]
+			return [types.TextContent(type="text", text=f"Memory Edit Failed: {e}")]
 
 	elif name == "run_security_audit":
 		path = (arguments or {}).get("path", ".")
@@ -239,8 +276,6 @@ async def handle_call_tool(
 			return [types.TextContent(type="text", text=f"Health Check Failed: {res.error}")]
 
 	elif name == "read_core_directives":
-		from red_pill.memory import MemoryManager
-
 		try:
 			manager = MemoryManager()
 			points, _ = manager.client.scroll(collection_name="directive_memories", limit=100, with_payload=True)
@@ -284,7 +319,7 @@ async def main():
 			write_stream,
 			InitializationOptions(
 				server_name="RedPill-Kernel",
-				server_version="5.1.0",
+				server_version="5.4.0",
 				capabilities=server.get_capabilities(
 					notification_options=NotificationOptions(),
 					experimental_capabilities={},

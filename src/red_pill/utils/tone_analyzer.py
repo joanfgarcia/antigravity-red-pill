@@ -74,6 +74,9 @@ def get_current_sync_state() -> Dict[str, str]:
 	"""
 	Returns a dictionary with the dominant mood and its narrative directive.
 	"""
+	if not cfg.DYNAMIC_EMOTION_SYNC:
+		return {"mood": cfg.DEFAULT_COLOR, "directive": cfg.CHROMA_TONE_MAPPING[cfg.DEFAULT_COLOR]}
+	
 	mood = ToneAnalyzer.get_dominant_mood()
 	directive = ToneAnalyzer.get_tone_directive(mood)
 	return {"mood": mood, "directive": directive}

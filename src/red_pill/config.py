@@ -58,6 +58,8 @@ EMOTIONAL_SEED_FACTOR = float(os.getenv("EMOTIONAL_SEED_FACTOR", "3.0"))
 
 # CF-005: Maximum number of points that can be reinforced via propagation in a single query.
 MAX_PROPAGATION_POINTS = int(os.getenv("MAX_PROPAGATION_POINTS", "50"))
+# CF-005: Maximum associations (axons) per engram to prevent synaptic hub fan-out.
+MAX_AXONS = int(os.getenv("MAX_AXONS", "500"))
 
 
 # LOGGING
@@ -111,3 +113,19 @@ CHROMA_TONE_MAPPING = {
 
 # ONTOLOGICAL INTEGRITY (v4.2.4)
 CURRENT_SCHEMA_VERSION = 1
+
+# DYNAMIC AGENTICS (v5.4.0)
+DYNAMIC_EMOTION_SYNC = os.getenv("DYNAMIC_EMOTION_SYNC", "True").lower() == "true"
+MULTI_EMOTION_INFERENCE = os.getenv("MULTI_EMOTION_INFERENCE", "True").lower() == "true"
+
+IA_DIR = os.getenv("IA_DIR", os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+# INTERACTION CADENCE (v5.4.0)
+CADENCE_BURST_THRESHOLD = 30.0  # Seconds between prompts for 'Burst' mode (High Intensity)
+CADENCE_ABSENCE_THRESHOLD = 86400 * 2  # 2 Days for 'Dormancy' greeting trigger
+MAX_AXONS = 500  # Synaptic Cap
+MAX_PROPAGATION_POINTS = 20  # Limit fan-out to prevent OOM
+METABOLISM_STATE_FILE = os.path.join(IA_DIR, "storage", "metabolism_state.json")
+# Overwrite legacy if needed
+if os.getenv("METABOLISM_STATE_FILE"):
+	METABOLISM_STATE_FILE = os.getenv("METABOLISM_STATE_FILE")

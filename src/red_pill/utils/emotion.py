@@ -1,5 +1,6 @@
 import logging
-from typing import Optional
+from typing import Any, Dict, List, Optional
+
 from transformers import pipeline  # type: ignore
 
 logger = logging.getLogger(__name__)
@@ -8,28 +9,38 @@ logger = logging.getLogger(__name__)
 _classifier = None
 
 
-def get_emotion(text: str) -> Optional[str]:
+def get_emotions(text: str, top_k: int = 3, threshold: float = 0.2) -> List[Dict[str, Any]]:
 	"""
-	Detect emotion in text using boltuix/bert-emotion model.
-	Optimized for edge performance.
+	Detect multiple emotions in text.
+	Returns a list of {label, score}.
 	"""
 	global _classifier
 	try:
 		if _classifier is None:
 			logger.info("Loading BERT-Emotion model (boltuix/bert-emotion) on CPU...")
-			_classifier = pipeline("text-classification", model="boltuix/bert-emotion", device="cpu")
+			_classifier = pipeline("text-classification", model="boltuix/bert-emotion", device="cpu", top_k=top_k)
 
-		result = _classifier(text)[0]
-		label = str(result["label"]).lower()
-		score = float(result["score"])
+		results = _classifier(text)
+		if isinstance(results, dict):
+			results = [results]
 
-		# Only return if confidence is decent
-		if score > 0.4:
-			return label
-		return None
+		# Flatten if nested
+		if results and isinstance(results[0], list):
+			results = results[0]
+
+		filtered = [{"label": str(r["label"]).lower(), "score": float(r["score"])} for r in results if float(r["score"]) >= threshold]
+		return filtered
 	except Exception as e:
-		logger.warning(f"Emotion detection failed: {e}")
-		return None
+		logger.warning(f"Multi-emotion detection failed: {e}")
+		return []
+
+
+def get_emotion(text: str) -> Optional[str]:
+	"""Legacy single-emotion detector."""
+	emotions = get_emotions(text, top_k=1)
+	if emotions:
+		return emotions[0]["label"]
+	return None
 
 
 EMOTION_CHROMA_MAP = {

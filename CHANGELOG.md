@@ -1,5 +1,19 @@
 # Changelog: Red Pill Protocol
 
+## [5.4.0] - 2026-02-25
+### 🧠 The ACE Synaptic Engine (High-Fidelity Update)
+- **[FEAT] ACE Affective Engine**: Implemented the **Affective Cognitive Engine (ACE)** based on the Russell Circumplex model. Memory stability is now dynamically calculated using **Valence and Arousal** coordinates, providing a scientific basis for emotional persistence.
+- **[FEAT] Multi-Label Emotion Profiling**: Upgraded the engram ingestion pipeline to capture high-resolution **Emotional Profiles** (multi-label) using `get_emotions`, moving beyond single-label classification.
+- **[FEAT] Surgical Overrides**: Added `red-pill edit` command and corresponding MCP tool to manually correct emotional labels, chroma, and intensity of any engram.
+- **[SEC-001] KDF Hardening**: Replaced legacy SHA-256 for `MASTER_PWD_HASH` with **Argon2-id** (RFC 9106) for industry-standard credential protection.
+- **[ARCH] MCP De-Subprocessing**: Eliminated `subprocess` calls in the MCP server, replacing them with direct Python API calls for `SoulManager`, `switch_skin`, and `HardwareSentinel`, significantly reducing the attack surface.
+- **[ARCH] Synaptic Hub Capping**: Enforced `MAX_AXONS` (hard limit on engram associations) and `MAX_PROPAGATION_POINTS` to prevent performance degradation and OOM risks from hub fan-out.
+- **[FEAT] Temporal Pulse Detection**: Implemented `record_interaction` (`pulse.py`) to capture and store conversational cadence (**Burst**, **Dormant**, **Normal**) as metadata, enabling narrative awareness of long absences or high-intensity exchanges.
+- **[FIX] Path-Agnostic Skills**: Resolved "Command not found" and legacy path errors in the `memory_manager` Skill. Updated `install_neo.sh` to inject **absolute paths** to the `.venv` binary into all generated skills.
+- **[FIX] Schema Elasticity**: Sanitized `CreateEngramRequest` to support nested list/dict structures for emotional profiles and expanded the `ValidEmotion` spectrum to prevent validation crashes.
+- **[IMPR] Command Unification**: Restored `scripts/memory_manager.py` as a compatibility wrapper for the `red-pill` CLI, maintaining backward compatibility while centralizing core logic.
+- **[TEST] Suite Stabilization**: Achieved 100% green status across 76+ unit and integration tests (Async fixes, Auth mocks, and Schema edge cases).
+
 ## [5.3.0] - 2026-02-25
 ### 🎭 Emotional Tonality & NPU Sovereignty
 - **[FEAT] Adaptive Tonality**: Integrated `ToneAnalyzer` for dynamic narrative synchronization based on memory chroma. The agent's tone now reacts to the dominant emotional color of the Bünker (Yellow, Blue, Cyan, etc.).

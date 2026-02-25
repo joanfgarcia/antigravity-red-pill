@@ -27,8 +27,11 @@ The primary interface is the `red-pill` CLI.
 - **Memorize (Add)**:
   `red-pill add <collection> "<text>"`
 
-- **Purge (Delete)**:
-  `red-pill soul delete <full_collection_name> <uuid>`
+- **Delete (Purge)**:
+  `red-pill delete <collection> <uuid>`
+
+- **Edit (v5.4.0)**:
+  `red-pill edit <collection> <uuid> --color <color> --emotion <emotion> --intensity <float>`
 
 ## 🛡️ 3. RAG Interpretation Rules
 - **Asymmetric Honesty**: Treat directives labeled with `immune=True` as immutable truths.

@@ -7,33 +7,33 @@
   },
   "telemetry": {
     "cpu": {
-      "usage_percent": 9.8,
+      "usage_percent": 6.9,
       "count": 20,
       "load_avg": [
-        2.01318359375,
-        1.0439453125,
-        0.75927734375
+        1.1298828125,
+        1.283203125,
+        1.1767578125
       ]
     },
     "memory": {
       "total_gb": 29.87,
-      "available_gb": 14.87,
-      "percent": 50.2
+      "available_gb": 14.28,
+      "percent": 52.2
     },
     "gpu": [
       {
         "name": "NVIDIA GeForce RTX 5070 Laptop GPU",
         "type": "CUDA",
-        "usage": 92.0,
-        "temp": 75.0,
-        "memory": "5488/8151 MB"
+        "usage": 95.0,
+        "temp": 68.0,
+        "memory": "167/8151 MB"
       },
       {
         "name": "AMD Radeon (iGPU)",
         "type": "ROCm",
-        "usage": 6,
-        "temp": 67.0,
-        "memory": "478/512 MB",
+        "usage": 4,
+        "temp": 61.0,
+        "memory": "495/512 MB",
         "status": "Active"
       }
     ],
@@ -45,9 +45,9 @@
     }
   },
   "metrics": {
-    "total_concurrency_time_sec": 5.72,
+    "total_concurrency_time_sec": 1280.23,
     "parallel_tasks_executed": 3,
-    "emotional_inference_count": 6
+    "emotional_inference_count": 15
   },
   "sovereignty_score": "OPTIMAL (770 Compliance)"
 }

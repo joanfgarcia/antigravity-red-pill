@@ -29,12 +29,12 @@ def test_emotional_erosion(manager, mock_qdrant):
 	# Orange: 1.0 - (0.1 * 1.5) = 0.85
 	point_orange = MagicMock()
 	point_orange.id = "orange_1"
-	point_orange.payload = {"reinforcement_score": 1.0, "color": "orange", "immune": False}
+	point_orange.payload = {"reinforcement_score": 1.0, "color": "orange", "emotion": "anxiety", "immune": False}
 
 	# Yellow: 1.0 - (0.1 * 0.5) = 0.95
 	point_yellow = MagicMock()
 	point_yellow.id = "yellow_1"
-	point_yellow.payload = {"reinforcement_score": 1.0, "color": "yellow", "immune": False}
+	point_yellow.payload = {"reinforcement_score": 1.0, "color": "yellow", "emotion": "joy", "immune": False}
 
 	manager.client.scroll.side_effect = [([point_orange, point_yellow], None)]
 
@@ -49,8 +49,12 @@ def test_emotional_erosion(manager, mock_qdrant):
 	for op in operations:
 		results[op.set_payload.points[0]] = op.set_payload.payload["reinforcement_score"]
 
-	assert results["orange_1"] == 0.85
-	assert results["yellow_1"] == 0.95
+	# New ACE math for anxiety: multiplier ~0.76
+	# 1.0 - (0.1 * 0.764...) ~= 0.92
+	assert round(results["orange_1"], 2) == 0.92
+	# New ACE math for joy: multiplier ~0.37
+	# 1.0 - (0.1 * 0.37...) ~= 0.96
+	assert round(results["yellow_1"], 2) == 0.96
 
 
 def test_add_memory_with_emotion(manager, mock_qdrant):

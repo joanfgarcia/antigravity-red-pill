@@ -18,41 +18,44 @@ from red_pill.utils.tone_analyzer import get_current_sync_state
 logger = logging.getLogger(__name__)
 
 
-def handle_mode(args: argparse.Namespace) -> None:
-	"""Switch Lore Skin."""
+def switch_skin(skin_name: str) -> str:
+	"""Switch Lore Skin and persist in Bünker."""
 	data_path = os.path.join(os.path.dirname(__file__), "data", "lore_skins.yaml")
 	try:
 		with open(data_path, "r") as f:
 			raw_skins = yaml.safe_load(f).get("modes", {})
 			skins = {str(k): v for k, v in raw_skins.items()}
 	except Exception as e:
-		logger.error(f"Lore load failed: {e}")
-		sys.exit(1)
+		return f"Lore load failed: {e}"
 
-	if args.skin not in skins:
-		logger.error(f"Invalid mode '{args.skin}'. Valid options: {', '.join(skins.keys())}")
-		sys.exit(1)
+	if skin_name not in skins:
+		return f"Invalid mode '{skin_name}'. Valid options: {', '.join(skins.keys())}"
 
-	skin = skins[args.skin]
-	print(f"--- Operational Mode: {args.skin.upper()} ---")
+	skin = skins[skin_name]
+	report = f"--- Operational Mode: {skin_name.upper()} ---\n"
 	for key, value in skin.items():
-		print(f"{key.capitalize().replace('_', ' ')}: {value}")
+		report += f"{key.capitalize().replace('_', ' ')}: {value}\n"
 
 	# Persist Active Skin in Directives (v5.1.0)
 	try:
 		manager = MemoryManager()
-		content = f"Active Skin: {args.skin.upper()}\n{yaml.dump(skin)}"
+		content = f"Active Skin: {skin_name.upper()}\n{yaml.dump(skin)}"
 		manager.add_memory(
 			collection="directive_memories",
 			text=content,
-			importance=10.0,  # Max importance for directive
-			metadata={"type": "active_skin", "skin_name": args.skin},
+			importance=10.0,
+			metadata={"type": "active_skin", "skin_name": skin_name},
 			color=skin.get("chroma", "gray"),
-			force_immune=True,  # Skin should never erode
+			force_immune=True,
 		)
-		print(f"\n[OK] Skin '{args.skin}' synchronized with Sovereign Directives.")
+		return report + f"\n[OK] Skin '{skin_name}' synchronized with Sovereign Directives."
 	except Exception as e:
-		logger.error(f"Failed to persist active skin: {e}")
+		return report + f"\n[ERROR] Failed to persist active skin: {e}"
+
+
+def handle_mode(args: argparse.Namespace) -> None:
+	"""CLI wrapper for skin switching."""
+	print(switch_skin(args.skin))
 
 
 def handle_daemon() -> None:
@@ -143,6 +146,16 @@ def main() -> None:
 	restore_parser.add_argument("source", help="Path to backup timestamp directory")
 	restore_parser.add_argument("--commit", action="store_true", help="Execute the restoration (dry-run by default)")
 	soul_sub.add_parser("sync", help="Analyze and display dominant emotional mood")
+
+	edit_parser = subparsers.add_parser("edit", help="Edit engram attributes")
+	edit_parser.add_argument("type", choices=["work", "social", "directive", "story"])
+	edit_parser.add_argument("id", help="The UUID of the engram to edit")
+	edit_parser.add_argument("--color", choices=["orange", "yellow", "purple", "cyan", "blue", "gray"])
+	edit_parser.add_argument(
+		"--emotion",
+		choices=["joy", "sadness", "fear", "disgust", "anger", "anxiety", "envy", "embarrassment", "ennui", "nostalgia", "neutral"],
+	)
+	edit_parser.add_argument("--intensity", type=float)
 
 	args = parser.parse_args()
 
@@ -253,6 +266,12 @@ def main() -> None:
 				print(f"Records Migrated: {san_results['migrated_records']}")
 				if args.dry_run and (san_results["duplicates_found"] > 0 or san_results["migrated_records"] > 0):
 					print("Note: DRY RUN - No changes applied.")
+			elif args.command == "edit":
+				success = manager.update_memory(collection, args.id, color=args.color, emotion=args.emotion, intensity=args.intensity)
+				if success:
+					print(f"[OK] Engram {args.id} updated in {collection}.")
+				else:
+					print(f"[FAIL] Could not update engram {args.id}.")
 			elif args.command == "diag":
 				print(f"--- [DIAGNOSTICS: {collection.upper()}] ---")
 				stats = manager.get_stats(collection)

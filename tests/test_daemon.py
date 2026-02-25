@@ -2,6 +2,7 @@ import json
 import os
 
 os.environ["QDRANT_API_KEY"] = "test_dummy_key_760"
+os.environ["SIDECAR_AUTH_KEY"] = "test_sidecar_key_760"
 
 import socket
 import subprocess
@@ -20,7 +21,8 @@ def run_daemon():
 		os.remove(socket_path)
 
 	# Start as subprocess
-	proc = subprocess.Popen(["python3", "-m", "red_pill.memory_daemon"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+	env = os.environ.copy()
+	proc = subprocess.Popen(["python3", "-m", "red_pill.memory_daemon"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env)
 
 	# Wait for socket to appear
 	retries = 10
@@ -48,7 +50,7 @@ def test_daemon_ping_with_auth(run_daemon):
 		client.connect(socket_path)
 
 		# Valid Request
-		request = {"command": "ping", "api_key": cfg.QDRANT_API_KEY}
+		request = {"command": "ping", "api_key": cfg.SIDECAR_AUTH_KEY}
 		payload = json.dumps(request).encode("utf-8")
 		header = len(payload).to_bytes(4, byteorder="big")
 		client.sendall(header + payload)

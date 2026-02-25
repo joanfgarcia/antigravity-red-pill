@@ -9,8 +9,10 @@ async def run_industrial_audit():
 	orchestrator = GruOrchestrator()
 	smith = SmithMinion()
 
-	# Audit the whole sharing project with Deep Forensics enabled
-	project_root = "/home/joan/Documents/IA/sharing"
+	import os
+
+	# Dynamically determine project root
+	project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 	results = await orchestrator.deploy_swarm("industrial_audit", [smith], path=project_root)
 
 	for res in results:

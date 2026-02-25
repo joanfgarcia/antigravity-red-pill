@@ -1,10 +1,12 @@
 import asyncio
 import os
+import pytest
 
 from red_pill.swarm.agents.compressor import CompressorMinion
 from red_pill.swarm.orchestrator import GruOrchestrator
 
 
+@pytest.mark.anyio
 async def test_local_compression():
 	print("--- RED PILL: LOCAL COMPRESSION TEST ---")
 	orchestrator = GruOrchestrator()

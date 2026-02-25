@@ -17,9 +17,11 @@ except ImportError:
 	TextEmbedding = Any  # type: ignore
 
 import red_pill.config as cfg
+from red_pill.utils.pulse import record_interaction
 from red_pill.hive import HiveMind
 from red_pill.schemas import CreateEngramRequest
-from red_pill.utils.emotion import get_chroma_for_emotion, get_emotion
+from red_pill.utils.affect import get_emotional_stability_multiplier
+from red_pill.utils.emotion import get_chroma_for_emotion, get_emotions
 
 logger = logging.getLogger(__name__)
 
@@ -134,13 +136,31 @@ class MemoryManager:
 		except (TypeError, ValueError) as e:
 			raise ValueError(f"Invalid metadata: {e}")
 
-		# v5.2.0: Hybrid Emotion Inference
-		if emotion == cfg.DEFAULT_EMOTION and os.getenv("EMOTION_AUTO_DETECT", "True").lower() == "true":
-			detected = get_emotion(text)
-			if detected:
-				emotion = detected
+		# v5.4.0: Temporal Pulse Detection
+		pulse = record_interaction()
+		metadata["pulse_status"] = pulse["status"]
+		metadata["pulse_delta"] = pulse["delta_seconds"]
+
+		# v5.4.0: Advanced Multi-Emotion Profile
+		emotional_profile = []
+		if os_detect := os.getenv("EMOTION_AUTO_DETECT", "True").lower() == "true":
+			if cfg.MULTI_EMOTION_INFERENCE:
+				emotional_profile = get_emotions(text)
+			
+			if emotional_profile and emotion == cfg.DEFAULT_EMOTION:
+				emotion = emotional_profile[0]["label"]
 				if color == cfg.DEFAULT_COLOR:
-					color = get_chroma_for_emotion(detected)
+					color = get_chroma_for_emotion(emotion)
+			elif os_detect and emotion == cfg.DEFAULT_EMOTION:
+				# Fallback to single if multi is disabled but detect is on
+				detected = get_emotion(text)
+				if detected:
+					emotion = detected
+					if color == cfg.DEFAULT_COLOR:
+						color = get_chroma_for_emotion(emotion)
+
+		if emotional_profile:
+			metadata["emotional_profile"] = emotional_profile
 
 		validated_request = CreateEngramRequest(
 			content=text,
@@ -214,6 +234,38 @@ class MemoryManager:
 		except Exception as e:
 			logger.error(f"Failed to add memory: {_mask_pii_exception(e)}")
 			return ""
+
+	def update_memory(
+		self,
+		collection: str,
+		point_id: str,
+		color: Optional[str] = None,
+		emotion: Optional[str] = None,
+		intensity: Optional[float] = None,
+	) -> bool:
+		"""Updates engram attributes without re-embedding."""
+		try:
+			points = self.client.retrieve(collection_name=collection, ids=[point_id], with_payload=True, with_vectors=False)
+			if not points:
+				logger.warning(f"Memory {point_id} not found in {collection}")
+				return False
+
+			p = points[0]
+			if p.payload is None:
+				return False
+
+			if color:
+				p.payload["color"] = color
+			if emotion:
+				p.payload["emotion"] = emotion
+			if intensity is not None:
+				p.payload["intensity"] = intensity
+
+			self.client.set_payload(collection_name=collection, payload=p.payload, points=[point_id])
+			return True
+		except Exception as e:
+			logger.error(f"Failed to update memory {point_id}: {e}")
+			return False
 
 	def _trigger_metabolism(self) -> None:
 		"""Persistent background process to check and execute erosion."""
@@ -502,8 +554,14 @@ class MemoryManager:
 				if hit.payload.get("immune"):
 					continue
 
-				color = str(hit.payload.get("color", "gray"))
-				multiplier = float(cfg.EMOTIONAL_DECAY_MULTIPLIERS.get(color, 1.0))
+				# Emotional Stability (v5.4.0 ACE Engine)
+				intensity = float(hit.payload.get("intensity", 1.0))
+
+				# Use full profile if available, else primary emotion
+				ep = hit.payload.get("emotional_profile", [])
+				emotions = [e["label"] for e in ep] if ep else [str(hit.payload.get("emotion", cfg.DEFAULT_EMOTION))]
+
+				multiplier = get_emotional_stability_multiplier(emotions, intensity)
 
 				effective_rate = (rate if rate is not None else cfg.EROSION_RATE) * multiplier
 				new_score = self._calculate_decay(score, effective_rate)
@@ -619,9 +677,7 @@ class MemoryManager:
 		# Remove duplicates
 		if duplicates and not dry_run:
 			try:
-				self.client.delete(
-					collection_name=collection, points_selector=models.Filter(must=[models.HasIdCondition(has_id=duplicates)])
-				)
+				self.client.delete(collection_name=collection, points_selector=models.PointIdsList(points=duplicates))
 			except Exception as e:
 				logger.error(f"Duplicate deletion failed: {e}")
 

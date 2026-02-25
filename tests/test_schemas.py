@@ -3,6 +3,7 @@ import uuid
 import pytest
 from pydantic import ValidationError
 
+import red_pill.config as cfg
 from red_pill.schemas import CreateEngramRequest
 
 
@@ -54,10 +55,10 @@ def test_association_uuid_validation():
 
 def test_association_cap():
 	"""Ensures associations are capped at 20 (DS-006 remediation)."""
-	many_ids = [str(uuid.uuid4()) for _ in range(30)]
+	many_ids = [str(uuid.uuid4()) for _ in range(600)]
 	data = {"content": "Test", "metadata": {"associations": many_ids}}
 	request = CreateEngramRequest(**data)
-	assert len(request.metadata["associations"]) == 20
+	assert len(request.metadata["associations"]) == cfg.MAX_AXONS
 
 
 def test_validate_metadata_structure_directly():

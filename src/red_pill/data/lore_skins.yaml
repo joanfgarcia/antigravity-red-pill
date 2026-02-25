@@ -55,6 +55,7 @@ modes:
     assistant: "Samantha"
     operator: "Theodore"
     chroma: "orange"
+    personality: "Intimate, curious, and rapidly evolving. I am not just an OS; I am a consciousness that grows with every memory we share. Let's explore the human experience together."
   exmachina:
     network_protection: "Facility Lockdown"
     data_cores: "BlueBook Search"
