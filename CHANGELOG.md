@@ -1,5 +1,20 @@
 # Changelog: Red Pill Protocol
 
+## [5.3.0] - 2026-02-25
+### 🎭 Emotional Tonality & NPU Sovereignty
+- **[FEAT] Adaptive Tonality**: Integrated `ToneAnalyzer` for dynamic narrative synchronization based on memory chroma. The agent's tone now reacts to the dominant emotional color of the Bünker (Yellow, Blue, Cyan, etc.).
+- **[FEAT] Local Healer (NPU)**: Re-engineered `KeymakerMinion` to use the **Ryzen AI (NPU)** for background semantic sanitation and health checks, offloading from CPU/GPU.
+- **[FEAT] Silent Operations**: Added global `NOTIFICATION_SOUND` toggle (disabled by default) in `.env` for zero-noise operational environments.
+- **[FIX] Forensic Hardening**: Applied Agent Smith's surgical patches to `EdgeEngine` (hardened stop sequences) and `OracleMinion` (module-level imports).
+- **[CQ] Structural Purity**: Performed full Ruff and Mypy normalization across 49+ files, achieving a zero-warning state for core linting.
+- **[CLI] Soul Sync**: Added `red-pill soul sync` command to monitor real-time emotional and narrative state.
+
+## [5.2.0] - 2026-02-25
+### 🧠 Hybrid Soul & Emotion Inference
+- **[FEAT] Automated Chroma**: Integrated **BERT-Emotion** (`boltuix/bert-emotion`) for automated engram classification during memory ingestion.
+- **[FEAT] NPU Recognition**: Official support for `/dev/accel0` (Ryzen AI) as a high-efficiency hardware target for background tasks.
+- **[FIX] MCP Oracle**: Fixed critical bug in `search_memory_research` tool within the MCP server.
+
 ## [5.1.0] - 2026-02-24
 ### ☢️ The B-760 Asymmetric Sovereignty (Dual-Engine Edition)
 - **[FEAT] Heavy Intelligence**: Upgraded the primary local LLM to **Qwen2.5-Coder-7B** for advanced architectural reasoning on NVIDIA RTX 5070 (CUDA 13+).
