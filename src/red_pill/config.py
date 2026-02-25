@@ -20,8 +20,8 @@ MILVUS_ENABLED = os.getenv("MILVUS_ENABLED", "False").lower() == "true"
 
 _run_dir = os.getenv("XDG_RUNTIME_DIR", "/tmp")
 DAEMON_SOCKET_PATH = os.getenv("DAEMON_SOCKET_PATH", os.path.join(_run_dir, "red_pill_memory.sock"))
-# SEC-004: Dedicated sidecar auth key (different from QDRANT_API_KEY)
-SIDECAR_AUTH_KEY = os.getenv("SIDECAR_AUTH_KEY", QDRANT_API_KEY)
+# SEC-004: Dedicated sidecar auth key (Must be random and separate from QDRANT_API_KEY)
+SIDECAR_AUTH_KEY = os.getenv("SIDECAR_AUTH_KEY", "")
 
 # MODELS
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")

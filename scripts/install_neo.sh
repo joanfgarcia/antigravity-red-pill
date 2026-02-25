@@ -129,6 +129,9 @@ case $SEC_CHOICE in
 		;;
 esac
 
+# SEC-004: Always generate a separate, random Sidecar Auth Key
+SIDECAR_AUTH_KEY=$(head -c 32 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 32)
+
 ENV_FILE="$SCRIPT_DIR/../.env"
 if [ ! -f "$ENV_FILE" ]; then
 	cp "$SCRIPT_DIR/../.env.example" "$ENV_FILE" 2>/dev/null || touch "$ENV_FILE"
@@ -149,6 +152,7 @@ update_env() {
 }
 
 update_env "QDRANT_API_KEY" "$QDRANT_API_KEY"
+update_env "SIDECAR_AUTH_KEY" "$SIDECAR_AUTH_KEY"
 update_env "LORE_SKIN" "$LORE_SKIN"
 update_env "USER_NAME" "$USER_NAME"
 update_env "USER_ROLE" "$USER_ROLE"

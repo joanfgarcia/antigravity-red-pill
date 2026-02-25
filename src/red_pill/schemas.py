@@ -49,6 +49,8 @@ class CreateEngramRequest(BaseModel):
 					for item in val:
 						if not isinstance(item, (str, int, float, bool)):
 							raise ValueError(f"Complex type in metadata list {key}")
+						if isinstance(item, str) and "\x00" in item:
+							raise ValueError(f"Metadata list {key} contains null bytes")
 				elif isinstance(val, dict):
 					raise ValueError(f"Nested dict in metadata field {key}")
 

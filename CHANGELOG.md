@@ -7,6 +7,8 @@
 - **[FEAT] Silent Operations**: Added global `NOTIFICATION_SOUND` toggle (disabled by default) in `.env` for zero-noise operational environments.
 - **[FEAT] Sovereignty Benchmark**: Added `scripts/sovereignty_benchmark.py` to provide empirical proof of triple-hardware concurrency (GPU+iGPU+NPU).
 - **[FIX] Forensic Hardening**: Applied Agent Smith's surgical patches to `EdgeEngine` (hardened stop sequences) and `OracleMinion` (module-level imports).
+- **[SEC-004] Sidecar Hardening**: Decoupled `SIDECAR_AUTH_KEY` from `QDRANT_API_KEY` and implemented automatic random key generation during install.
+- **[SEC-008] Metadata Shield**: Extended null-byte validation to all string fields and lists within engram metadata.
 - **[CQ] Structural Purity**: Performed full Ruff and Mypy normalization across 49+ files, achieving a zero-warning state for core linting.
 - **[CLI] Soul Sync**: Added `red-pill soul sync` command to monitor real-time emotional and narrative state.
 
