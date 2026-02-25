@@ -17,12 +17,11 @@ except ImportError:
 	TextEmbedding = Any  # type: ignore
 
 import red_pill.config as cfg
-from red_pill.schemas import CreateEngramRequest
 from red_pill.hive import HiveMind
-from red_pill.utils.emotion import get_emotion, get_chroma_for_emotion
+from red_pill.schemas import CreateEngramRequest
+from red_pill.utils.emotion import get_chroma_for_emotion, get_emotion
 
 logger = logging.getLogger(__name__)
-
 
 
 def _mask_pii_exception(e: Exception) -> str:
@@ -142,7 +141,7 @@ class MemoryManager:
 				emotion = detected
 				if color == cfg.DEFAULT_COLOR:
 					color = get_chroma_for_emotion(detected)
-		
+
 		validated_request = CreateEngramRequest(
 			content=text,
 			importance=importance,
@@ -198,7 +197,7 @@ class MemoryManager:
 
 		try:
 			self.client.upsert(collection_name=collection, points=[models.PointStruct(id=actual_id, vector=vector, payload=payload)])
-			
+
 			# Hive Mind Transmission (v5.0.0)
 			# Only transmit non-immune technical or social findings to the collective.
 			if not force_immune and collection in ["work_memories", "social_memories"]:
@@ -206,7 +205,7 @@ class MemoryManager:
 					collection_name=f"hive_{collection}",
 					content=text,
 					vector=vector,
-					metadata={"importance": importance, "agent_id": os.getenv("AGENT_ID", "standalone")}
+					metadata={"importance": importance, "agent_id": os.getenv("AGENT_ID", "standalone")},
 				)
 
 			if cfg.METABOLISM_ENABLED:
@@ -259,13 +258,15 @@ class MemoryManager:
 							return
 						# Absence guard: if idle > 7 days, refresh timestamps before eroding
 						if gap > cfg.ABSENCE_THRESHOLD:
-							logger.warning(f"Absence detected ({gap / 86400:.1f} days). Running TTL refresh to protect the Bunker. Erosion skipped for this cycle.")
+							logger.warning(
+								f"Absence detected ({gap / 86400:.1f} days). Running TTL refresh to protect the Bunker. Erosion skipped for this cycle."
+							)
 							for coll in cfg.METABOLISM_AUTO_COLLECTIONS:
 								try:
 									self._refresh_ttl_timestamps(coll.strip())
 								except Exception as e:
 									logger.error(f"TTL refresh failed during absence recovery for {coll}: {e}")
-							
+
 							# Update state and return to avoid eroding in the same cycle
 							f.seek(0)
 							f.truncate()

@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import os
 from typing import Any, Dict, List, Optional, Union
 
 import mcp.types as types
@@ -8,7 +7,6 @@ from mcp.server import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
 
-import red_pill.config as cfg
 from red_pill.swarm.agents.compressor import CompressorMinion
 from red_pill.swarm.agents.keymaker import KeymakerMinion
 from red_pill.swarm.agents.oracle import OracleMinion
@@ -22,15 +20,11 @@ logger = logging.getLogger(__name__)
 # Initialize the Sovereign MCP Server
 server = Server("RedPill-Kernel")
 
+
 @server.list_prompts()
 async def handle_list_prompts() -> List[types.Prompt]:
-	return [
-		types.Prompt(
-			name="Control-Panel",
-			description="Display the Sovereign Control Panel with hardware and admin options.",
-			arguments=[]
-		)
-	]
+	return [types.Prompt(name="Control-Panel", description="Display the Sovereign Control Panel with hardware and admin options.", arguments=[])]
+
 
 @server.get_prompt()
 async def handle_get_prompt(name: str, arguments: Optional[Dict[str, Any]]) -> types.GetPromptResult:
@@ -41,13 +35,13 @@ async def handle_get_prompt(name: str, arguments: Optional[Dict[str, Any]]) -> t
 				types.PromptMessage(
 					role="user",
 					content=types.TextContent(
-						type="text",
-						text="Show me the Bünker Dashboard and the administrative controls for the Red Pill Protocol."
-					)
+						type="text", text="Show me the Bünker Dashboard and the administrative controls for the Red Pill Protocol."
+					),
 				)
-			]
+			],
 		)
 	raise ValueError(f"Unknown prompt: {name}")
+
 
 @server.list_tools()
 async def handle_list_tools() -> List[types.Tool]:
@@ -138,6 +132,7 @@ async def handle_list_tools() -> List[types.Tool]:
 		),
 	]
 
+
 @server.call_tool()
 async def handle_call_tool(
 	name: str, arguments: Optional[Dict[str, Any]]
@@ -153,8 +148,8 @@ async def handle_call_tool(
 ## 🔴 BÜNKER SOVEREIGN DASHBOARD v5.2
 ---
 ### 🛠️ Hardware Asymmetry (Dual-Engine)
-- **CPU Load**: {HardwareSentinel._get_bar(stats['cpu']['usage_percent'], 20)}
-- **RAM Usage**: {HardwareSentinel._get_bar(stats['memory']['percent'], 20)} ({stats['memory']['available_gb']}GB Free)
+- **CPU Load**: {HardwareSentinel._get_bar(stats["cpu"]["usage_percent"], 20)}
+- **RAM Usage**: {HardwareSentinel._get_bar(stats["memory"]["percent"], 20)} ({stats["memory"]["available_gb"]}GB Free)
 
 ### ⚡ Accelerated Nodes
 """
@@ -164,7 +159,7 @@ async def handle_call_tool(
 				temp = g.get("temp", "N/A")
 				mem = g.get("memory", "N/A")
 				dashboard += f"- **[{t}] {g['name']}**: {HardwareSentinel._get_bar(usage, 15)} | {temp}°C | {mem}\n"
-			
+
 			dashboard += f"\n- **[NPU] {stats['npu'].get('name', 'NPU')}**: {stats['npu']['status']}\n"
 			dashboard += f"\n**Thermal State**: {thermal_state}\n"
 			dashboard += f"\n---\n*Dashboard refresh: {asyncio.get_event_loop().time():.2f} synaptic-ms*"
@@ -182,8 +177,9 @@ async def handle_call_tool(
 	elif name == "control_bunker":
 		cmd = arguments.get("command", "") if arguments else ""
 		val = arguments.get("value", "") if arguments else ""
-		
+
 		import subprocess
+
 		full_cmd = ["uv", "run", "red-pill"]
 		if cmd == "mode":
 			full_cmd += ["mode", val]
@@ -244,13 +240,10 @@ async def handle_call_tool(
 
 	elif name == "read_core_directives":
 		from red_pill.memory import MemoryManager
+
 		try:
 			manager = MemoryManager()
-			points, _ = manager.client.scroll(
-				collection_name="directive_memories",
-				limit=100,
-				with_payload=True
-			)
+			points, _ = manager.client.scroll(collection_name="directive_memories", limit=100, with_payload=True)
 			directives = []
 			for p in points:
 				if p.payload and p.payload.get("immune"):
@@ -282,6 +275,7 @@ async def handle_call_tool(
 
 	raise ValueError(f"Unknown tool: {name}")
 
+
 async def main():
 	# Run the server using stdin/stdout streams
 	async with stdio_server() as (read_stream, write_stream):
@@ -297,6 +291,7 @@ async def main():
 				),
 			),
 		)
+
 
 if __name__ == "__main__":
 	asyncio.run(main())

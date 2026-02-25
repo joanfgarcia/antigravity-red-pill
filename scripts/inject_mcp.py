@@ -7,6 +7,7 @@ import sys
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger("mcp_injector")
 
+
 def main():
 	parser = argparse.ArgumentParser(description="Inject RedPill-Kernel into MCP config")
 	parser.add_argument("--uv-path", required=True, help="Absolute path to uv executable")
@@ -21,7 +22,7 @@ def main():
 		os.path.expanduser("~/Library/Application Support/Claude/claude_desktop_config.json"),
 		os.path.expanduser("~/AppData/Roaming/Claude/claude_desktop_config.json"),
 		os.path.expanduser("~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"),
-		os.path.expanduser("~/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/cline_mcp_settings.json")
+		os.path.expanduser("~/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/cline_mcp_settings.json"),
 	]
 
 	mcp_server_path = os.path.join(args.redpill_dir, "src", "red_pill", "mcp_server.py")
@@ -50,13 +51,7 @@ def main():
 
 		config["mcpServers"]["RedPill-Kernel"] = {
 			"command": args.uv_path,
-			"args": [
-				"--directory",
-				args.redpill_dir,
-				"run",
-				"python",
-				mcp_server_path
-			]
+			"args": ["--directory", args.redpill_dir, "run", "python", mcp_server_path],
 		}
 
 		try:
@@ -70,6 +65,7 @@ def main():
 	if success_count == 0:
 		logger.error("Failed to inject MCP config in any known client directories.")
 		sys.exit(1)
+
 
 if __name__ == "__main__":
 	main()

@@ -3,13 +3,14 @@ import os
 import shutil
 import tarfile
 import time
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
-from requests import Session
+import requests  # type: ignore
 
 import red_pill.config as cfg
 
 logger = logging.getLogger(__name__)
+
 
 class SoulManager:
 	"""
@@ -29,7 +30,8 @@ class SoulManager:
 			headers = {"api-key": self.api_key} if self.api_key else {}
 			resp = requests.get(f"{self.qdrant_url}/collections", headers=headers, timeout=5)
 			resp.raise_for_status()
-			return [c["name"] for c in resp.json()["result"]["collections"]]
+			collections_info: List[Dict[str, Any]] = resp.json()["result"]["collections"]
+			return [c["name"] for c in collections_info]
 		except Exception as e:
 			logger.error(f"Failed to fetch collections: {e}")
 			return []
@@ -55,7 +57,7 @@ class SoulManager:
 				snap_path = os.path.join(backup_dir, f"{coll}_{timestamp}.snapshot")
 				with requests.get(f"{self.qdrant_url}/collections/{coll}/snapshots/{snap_name}", headers=headers, stream=True) as r:
 					r.raise_for_status()
-					with open(snap_path, 'wb') as f:
+					with open(snap_path, "wb") as f:
 						shutil.copyfileobj(r.raw, f)
 
 				saved_files.append(snap_path)
@@ -79,7 +81,7 @@ class SoulManager:
 		dirs_to_backup = [
 			os.path.expanduser("~/.gemini/antigravity/skills"),
 			os.path.expanduser("~/.gemini/antigravity/rules"),
-			os.path.expanduser("~/.agent/rules"), # Preserve any Minion specific rules.
+			os.path.expanduser("~/.agent/rules"),  # Preserve any Minion specific rules.
 		]
 
 		copied_count = 0
@@ -167,17 +169,17 @@ class SoulManager:
 				headers = {"api-key": self.api_key} if self.api_key else {}
 				for f in os.listdir(qdrant_backup_dir):
 					if f.endswith(".snapshot"):
-						coll = f.split("_")[0] # Assumes convention coll_timestamp.snapshot
+						coll = f.split("_")[0]  # Assumes convention coll_timestamp.snapshot
 						snap_path = os.path.join(qdrant_backup_dir, f)
 						try:
 							logger.info(f"Restoring snapshot for {coll}...")
-							with open(snap_path, 'rb') as snap_file:
-								files = {'snapshot': snap_file}
+							with open(snap_path, "rb") as snap_file:
+								upload_payload = {"snapshot": snap_file}
 								resp = requests.post(
 									f"{self.qdrant_url}/collections/{coll}/snapshots/upload",
 									headers=headers,
-									files=files,
-									timeout=60
+									files=upload_payload,
+									timeout=60,
 								)
 								resp.raise_for_status()
 								logger.info(f"Successfully restored {coll}")

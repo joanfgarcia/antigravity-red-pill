@@ -5,9 +5,11 @@ from typing import Optional
 # 1. Fallback to basic extraction if llama_cpp is not available
 try:
 	from llama_cpp import Llama
+
 	LLAMA_AVAILABLE = True
 except ImportError:
 	LLAMA_AVAILABLE = False
+
 
 class EdgeEngine:
 	"""
@@ -17,10 +19,10 @@ class EdgeEngine:
 
 	def __init__(self, model_path: Optional[str] = None, n_gpu_layers: int = -1):
 		self.llm = None
-		
+
 		ia_dir = os.getenv("ANTIGRAVITY_IA_DIR", os.path.expanduser("~/Documents/IA"))
 		model_dir = os.path.join(ia_dir, "models")
-		
+
 		# If no path provided, search for the best one (7B > 1.5B)
 		if not model_path and os.path.exists(model_dir):
 			models = os.listdir(model_dir)
@@ -45,11 +47,11 @@ class EdgeEngine:
 				# We offload everything (-1) but let llama-cpp handle the limits.
 				self.llm = Llama(
 					model_path=self.model_path,
-					n_ctx=8192, # Expanded context for the Heavy weight
+					n_ctx=8192,  # Expanded context for the Heavy weight
 					n_gpu_layers=n_gpu_layers,
-					verbose=False
+					verbose=False,
 				)
-			except Exception as e:
+			except Exception:
 				pass
 
 	def compress(self, text: str) -> str:
@@ -66,13 +68,11 @@ class EdgeEngine:
 			prompt = f"<|im_start|>system\n{system_prompt}<|im_end|>\n<|im_start|>user\n{text}<|im_end|>\n<|im_start|>assistant\n"
 
 			output = self.llm(
-				prompt,
-				max_tokens=256,
-				stop=["<|im_end|>", "<|im_start|>", "</s>", "<|endoftext|>"],
-				temperature=0.1,
-				repeat_penalty=1.1
+				prompt, max_tokens=256, stop=["<|im_end|>", "<|im_start|>", "</s>", "<|endoftext|>"], temperature=0.1, repeat_penalty=1.1
 			)
-			return output["choices"][0]["text"].strip()
+			if isinstance(output, dict):
+				return str(output["choices"][0]["text"]).strip()
+			return ""
 
 		except Exception as e:
 			print(f"Edge compression failed: {e}")
@@ -83,29 +83,32 @@ class EdgeEngine:
 
 	def _fallback_compress(self, text: str) -> str:
 		import re
+
 		# 7B Surgical Patch: Ensure sanitized extraction even in fallback
-		clean_text = re.sub(r'^(hola|buenos\s+d[íi]as|oye|por\s+favor)[,\s]*', '', text, flags=re.IGNORECASE)
-		clean_text = re.sub(r'[,\s]*(gracias|un\s+saludo|adi[óo]s)$', '', clean_text, flags=re.IGNORECASE)
-		
+		clean_text = re.sub(r"^(hola|buenos\s+d[íi]as|oye|por\s+favor)[,\s]*", "", text, flags=re.IGNORECASE)
+		clean_text = re.sub(r"[,\s]*(gracias|un\s+saludo|adi[óo]s)$", "", clean_text, flags=re.IGNORECASE)
+
 		# Protection: Do not truncate if sensitive patterns are present
-		SENSITIVE_PATTERNS = [r'token', r'api_key', r'auth', r'secret']
-		
-		sentences = [s.strip() for s in re.split(r'[.!?\n]+', clean_text) if len(s.strip()) > 5]
+		sentences = [s.strip() for s in re.split(r"[.!?\n]+", clean_text) if len(s.strip()) > 5]
 		compressed_lines = []
 		for s in sentences:
 			# Surgical Patch: 'fluff' is now a regex list for more robust removal
 			fluff_patterns = [
-				r'necesito\s+que', r'me\s+gustar[íi]a\s+saber\s+si', r'podr[íi]as', 
-				r'te\s+importar[íi]a', r'estoy\s+intentando', r'creo\s+que', 
-				r'b[áa]sicamente\s+lo\s+que\s+pasa\s+es\s+que'
+				r"necesito\s+que",
+				r"me\s+gustar[íi]a\s+saber\s+si",
+				r"podr[íi]as",
+				r"te\s+importar[íi]a",
+				r"estoy\s+intentando",
+				r"creo\s+que",
+				r"b[áa]sicamente\s+lo\s+que\s+pasa\s+es\s+que",
 			]
 			for p in fluff_patterns:
-				s = re.sub(p, '', s, flags=re.IGNORECASE)
-			
+				s = re.sub(p, "", s, flags=re.IGNORECASE)
+
 			s = s.strip()
 			if s:
 				compressed_lines.append(f"- {s.capitalize()}")
-		
+
 		synthesis = "\n".join(compressed_lines)
 		return synthesis if synthesis else text.strip()
 
@@ -131,12 +134,14 @@ class EdgeEngine:
 
 			output = self.llm(
 				prompt,
-				max_tokens=1024, # Increased for 7B capacity
+				max_tokens=1024,  # Increased for 7B capacity
 				stop=["<|im_end|>", "<|im_start|>", "</s>", "<|endoftext|>"],
-				temperature=0.2
+				temperature=0.2,
 			)
-			return output["choices"][0]["text"].strip() if isinstance(output, dict) else next(output)["choices"][0]["text"].strip()
-		except Exception as e:
+			if isinstance(output, dict):
+				return str(output["choices"][0]["text"]).strip()
+			return ""
+		except Exception:
 			return f"Err: Synthesis Failure. Raw snippet: {background[:200]}..."
 
 	def _log_warn(self, msg: str):

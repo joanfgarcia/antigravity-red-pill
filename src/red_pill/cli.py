@@ -48,7 +48,7 @@ def handle_mode(args: argparse.Namespace) -> None:
 			importance=10.0,  # Max importance for directive
 			metadata={"type": "active_skin", "skin_name": args.skin},
 			color=skin.get("chroma", "gray"),
-			force_immune=True # Skin should never erode
+			force_immune=True,  # Skin should never erode
 		)
 		print(f"\n[OK] Skin '{args.skin}' synchronized with Sovereign Directives.")
 	except Exception as e:
@@ -164,7 +164,7 @@ def main() -> None:
 	if getattr(args, "type", None):
 		collections = [get_collection(args.type)]
 	elif args.command in ["seed", "status", "swarm", "soul"]:
-		collections = [] # Not needed for these
+		collections = []  # Not needed for these
 	else:
 		# Default sweep for search/diag if no type specified
 		collections = ["work_memories", "social_memories"]
@@ -181,6 +181,7 @@ def main() -> None:
 		elif args.command == "swarm":
 			if args.swarm_cmd == "audit":
 				import asyncio
+
 				gru = GruOrchestrator()
 				smith = SmithMinion()
 				print(f"--- [DEPLOING SWARM: AGENT {smith.name.upper()}] ---")
@@ -191,9 +192,9 @@ def main() -> None:
 						print(f"- Score de Seguridad: {res.result['security_score']}/100")
 						print(f"- Archivos escaneados: {res.result['files_scanned']}")
 						print(f"- Hallazgos Críticos: {len([f for f in res.result['findings'] if f['severity'] == 'CRITICAL'])}")
-						if res.result['findings']:
+						if res.result["findings"]:
 							print("\n--- HALLAZGOS ---")
-							for finding in res.result['findings'][:5]:
+							for finding in res.result["findings"][:5]:
 								print(f"[{finding['severity']}] {finding['file']}:{finding['line']} - {finding['msg']}")
 					else:
 						print(f"ERROR en Minion {res.minion_id}: {res.error}")
@@ -206,6 +207,7 @@ def main() -> None:
 				soul.export_soul()
 			elif args.soul_cmd == "rotate":
 				from scripts.rotate_keys import rotate
+
 				rotate()
 			elif args.soul_cmd == "restore":
 				soul.restore_soul(args.source, commit=args.commit)

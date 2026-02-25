@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 logger = logging.getLogger("red_pill.swarm")
 
+
 class Minion(BaseModel):
 	"""
 	Base class for all transient, specialized agents in the Red Pill Swarm.
@@ -28,8 +29,10 @@ class Minion(BaseModel):
 		"""Standardized logging for minions."""
 		logger.log(level, f"[{self.name}/{self.id[:4]}] {message}")
 
+
 class SwarmResult(BaseModel):
 	"""Standardized result wrapper for swarm operations."""
+
 	minion_id: str
 	status: str
 	duration: float

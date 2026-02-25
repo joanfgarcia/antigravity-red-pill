@@ -1,10 +1,11 @@
 import logging
-from typing import Optional, Dict
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 # Singleton for the emotion classifier to avoid reloading
 _classifier = None
+
 
 def get_emotion(text: str) -> Optional[str]:
 	"""
@@ -15,13 +16,14 @@ def get_emotion(text: str) -> Optional[str]:
 	try:
 		if _classifier is None:
 			from transformers import pipeline
+
 			logger.info("Loading BERT-Emotion model (boltuix/bert-emotion)...")
 			_classifier = pipeline("text-classification", model="boltuix/bert-emotion")
-		
+
 		result = _classifier(text)[0]
-		label = result["label"].lower()
-		score = result["score"]
-		
+		label = str(result["label"]).lower()
+		score = float(result["score"])
+
 		# Only return if confidence is decent
 		if score > 0.4:
 			return label
@@ -29,6 +31,7 @@ def get_emotion(text: str) -> Optional[str]:
 	except Exception as e:
 		logger.warning(f"Emotion detection failed: {e}")
 		return None
+
 
 EMOTION_CHROMA_MAP = {
 	"happiness": "yellow",
@@ -43,8 +46,9 @@ EMOTION_CHROMA_MAP = {
 	"guilt": "blue",
 	"confusion": "cyan",
 	"desire": "orange",
-	"sarcasm": "yellow"
+	"sarcasm": "yellow",
 }
+
 
 def get_chroma_for_emotion(emotion: str) -> str:
 	return EMOTION_CHROMA_MAP.get(emotion.lower(), "gray")

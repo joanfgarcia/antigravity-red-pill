@@ -25,10 +25,11 @@ class MemoryDaemon:
 	def _load_model(self) -> None:
 		if self.encoder is None:
 			import shutil
+
 			# B760 Asymmetric Priority: ROCm (iGPU) > CUDA (dGPU) > OpenVINO (NPU) > CPU
 			# We prefer the iGPU for background embeddings to keep the dGPU free for reasoning.
 			providers = ["CPUExecutionProvider"]
-			
+
 			has_amdgpu = False
 			for i in range(5):
 				if os.path.exists(f"/sys/class/drm/card{i}/device/driver/module/name"):
@@ -36,21 +37,18 @@ class MemoryDaemon:
 						if "amdgpu" in f.read():
 							has_amdgpu = True
 							break
-			
+
 			if has_amdgpu:
 				providers = ["ROCmExecutionProvider", "CPUExecutionProvider"]
 			elif shutil.which("nvidia-smi"):
 				providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-			
+
 			# Add OpenVINO if NPU is present
 			if os.path.exists("/sys/class/accel/accel0"):
 				providers.insert(0, "OpenVINOExecutionProvider")
-			
+
 			logger.info(f"Loading embedding model {cfg.EMBEDDING_MODEL} with providers: {providers}")
-			self.encoder = TextEmbedding(
-				model_name=cfg.EMBEDDING_MODEL,
-				providers=providers
-			)
+			self.encoder = TextEmbedding(model_name=cfg.EMBEDDING_MODEL, providers=providers)
 
 	def start(self) -> None:
 		if os.path.exists(SOCKET_PATH):

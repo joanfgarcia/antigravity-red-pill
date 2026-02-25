@@ -1,14 +1,15 @@
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 try:
-	from pymilvus import connections, Collection, utility, FieldSchema, CollectionSchema, DataType
+	from pymilvus import Collection, CollectionSchema, DataType, FieldSchema, connections, utility
 except ImportError:
 	connections = None  # type: ignore
 
 import red_pill.config as cfg
 
 logger = logging.getLogger(__name__)
+
 
 class HiveMind:
 	"""
@@ -22,13 +23,7 @@ class HiveMind:
 		self.connected = False
 		if self.enabled and connections:
 			try:
-				connections.connect(
-					alias="default",
-					host=cfg.MILVUS_HOST,
-					port=cfg.MILVUS_PORT,
-					user=cfg.MILVUS_USER,
-					password=cfg.MILVUS_PASSWORD
-				)
+				connections.connect(alias="default", host=cfg.MILVUS_HOST, port=cfg.MILVUS_PORT, user=cfg.MILVUS_USER, password=cfg.MILVUS_PASSWORD)
 				self.connected = True
 				logger.info("Hive Mind (Milvus) connected successfully.")
 			except Exception as e:
@@ -46,16 +41,11 @@ class HiveMind:
 		try:
 			if not utility.has_collection(collection_name):
 				self._create_hive_collection(collection_name)
-			
+
 			col = Collection(collection_name)
-			
+
 			# Milvus expects data in columns
-			data = [
-				[content],
-				[vector],
-				[metadata.get("agent_id", "unknown")],
-				[float(metadata.get("importance", 1.0))]
-			]
+			data = [[content], [vector], [metadata.get("agent_id", "unknown")], [float(metadata.get("importance", 1.0))]]
 			col.insert(data)
 			col.flush()
 			logger.info(f"Experience transmitted to Hive: {content[:50]}...")
@@ -69,17 +59,13 @@ class HiveMind:
 			FieldSchema(name="content", dtype=DataType.VARCHAR, max_length=65535),
 			FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=cfg.VECTOR_SIZE),
 			FieldSchema(name="source_agent", dtype=DataType.VARCHAR, max_length=255),
-			FieldSchema(name="importance", dtype=DataType.FLOAT)
+			FieldSchema(name="importance", dtype=DataType.FLOAT),
 		]
 		schema = CollectionSchema(fields, "Hive Mind Collective Sector")
 		col = Collection(name, schema)
-		
+
 		# Create index for search
-		index_params = {
-			"metric_type": "L2",
-			"index_type": "IVF_FLAT",
-			"params": {"nlist": 128}
-		}
+		index_params = {"metric_type": "L2", "index_type": "IVF_FLAT", "params": {"nlist": 128}}
 		col.create_index(field_name="vector", index_params=index_params)
 		col.load()
 
@@ -95,22 +81,20 @@ class HiveMind:
 			col = Collection(collection_name)
 			search_params = {"metric_type": "L2", "params": {"nprobe": 10}}
 			results = col.search(
-				data=[query_vector],
-				anns_field="vector",
-				param=search_params,
-				limit=limit,
-				output_fields=["content", "source_agent", "importance"]
+				data=[query_vector], anns_field="vector", param=search_params, limit=limit, output_fields=["content", "source_agent", "importance"]
 			)
-			
+
 			experiences = []
 			for hits in results:
 				for hit in hits:
-					experiences.append({
-						"content": hit.entity.get("content"),
-						"source_agent": hit.entity.get("source_agent"),
-						"importance": hit.entity.get("importance"),
-						"distance": hit.distance
-					})
+					experiences.append(
+						{
+							"content": hit.entity.get("content"),
+							"source_agent": hit.entity.get("source_agent"),
+							"importance": hit.entity.get("importance"),
+							"distance": hit.distance,
+						}
+					)
 			return experiences
 		except Exception as e:
 			logger.error(f"Sync from Hive failed: {e}")

@@ -20,19 +20,15 @@ class HardwareSentinel:
 
 	@staticmethod
 	def get_stats() -> Dict[str, Any]:
-		stats = {
-			"cpu": {
-				"usage_percent": psutil.cpu_percent(interval=None),
-				"count": psutil.cpu_count(logical=True),
-				"load_avg": os.getloadavg()
-			},
+		stats: Dict[str, Any] = {
+			"cpu": {"usage_percent": psutil.cpu_percent(interval=None), "count": psutil.cpu_count(logical=True), "load_avg": os.getloadavg()},
 			"memory": {
 				"total_gb": round(psutil.virtual_memory().total / (1024**3), 2),
 				"available_gb": round(psutil.virtual_memory().available / (1024**3), 2),
-				"percent": psutil.virtual_memory().percent
+				"percent": psutil.virtual_memory().percent,
 			},
 			"gpu": [],
-			"npu": {"status": "Undetected"}
+			"npu": {"status": "Undetected"},
 		}
 
 		# NVIDIA GPU Logic (CUDA)
@@ -40,15 +36,17 @@ class HardwareSentinel:
 			try:
 				cmd = ["nvidia-smi", "--query-gpu=name,utilization.gpu,temperature.gpu,memory.used,memory.total", "--format=csv,noheader,nounits"]
 				output = subprocess.check_output(cmd).decode("utf-8").strip().split("\n")
-				for line in output:
-					name, util, temp, mem_used, mem_total = line.split(", ")
-					stats["gpu"].append({
-						"name": name,
-						"type": "CUDA",
-						"usage": float(util),
-						"temp": float(temp),
-						"memory": f"{mem_used}/{mem_total} MB"
-					})
+				for gpu_line in output:
+					nv_name, nv_util, nv_temp, nv_mem_used, nv_mem_total = gpu_line.split(", ")
+					stats["gpu"].append(
+						{
+							"name": nv_name,
+							"type": "CUDA",
+							"usage": float(nv_util),
+							"temp": float(nv_temp),
+							"memory": f"{nv_mem_used}/{nv_mem_total} MB",
+						}
+					)
 			except Exception:
 				pass
 
@@ -62,17 +60,17 @@ class HardwareSentinel:
 				if os.path.exists(usage_path):
 					amdgpu_card = card_path
 					break
-			
+
 			if amdgpu_card:
 				usage = 0
 				temp = 0.0
-				
+
 				# Usage
 				usage_path = os.path.join(amdgpu_card, "device/gpu_busy_percent")
 				if os.path.exists(usage_path):
 					with open(usage_path, "r") as f:
 						usage = int(float(f.read().strip()))
-				
+
 				# Temperature (Search hwmon)
 				for h in range(15):
 					h_path = f"/sys/class/hwmon/hwmon{h}"
@@ -82,26 +80,27 @@ class HardwareSentinel:
 								with open(os.path.join(h_path, "temp1_input"), "r") as tf:
 									temp = float(tf.read().strip()) / 1000.0
 								break
-				
+
 				# VRAM
-				mem_used: int = 0
-				mem_total: int = 0
 				try:
 					with open(os.path.join(amdgpu_card, "device/mem_info_vram_used"), "r") as f:
-						mem_used = int(f.read().strip()) // (1024*1024)
+						gpu_mem_used = int(f.read().strip()) // (1024 * 1024)
 					with open(os.path.join(amdgpu_card, "device/mem_info_vram_total"), "r") as f:
-						mem_total = int(f.read().strip()) // (1024*1024)
-				except:
-					pass
-				
-				stats["gpu"].append({
-					"name": "AMD Radeon (iGPU)",
-					"type": "ROCm",
-					"usage": usage,
-					"temp": temp,
-					"memory": f"{mem_used}/{mem_total} MB",
-					"status": "Active"
-				})
+						gpu_mem_total = int(f.read().strip()) // (1024 * 1024)
+				except Exception:
+					gpu_mem_used = 0
+					gpu_mem_total = 0
+
+				stats["gpu"].append(
+					{
+						"name": "AMD Radeon (iGPU)",
+						"type": "ROCm",
+						"usage": usage,
+						"temp": temp,
+						"memory": f"{gpu_mem_used}/{gpu_mem_total} MB",
+						"status": "Active",
+					}
+				)
 		except Exception:
 			# Fallback if sysfs restricted
 			if os.path.exists("/sys/class/drm/renderD128"):
@@ -109,14 +108,10 @@ class HardwareSentinel:
 
 		# Ryzen AI NPU
 		if os.path.exists("/sys/class/accel/accel0"):
-			stats["npu"] = {
-				"name": "Ryzen AI",
-				"type": "NPU",
-				"status": "Ready",
-				"path": "/dev/accel0"
-			}
+			stats["npu"] = {"name": "Ryzen AI", "type": "NPU", "status": "Ready", "path": "/dev/accel0"}
 
 		return stats
+
 
 def get_telemetry_report() -> str:
 	"""Generates a Markdown report for the IDE Control Panel."""
