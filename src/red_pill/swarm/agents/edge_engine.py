@@ -18,7 +18,6 @@ class EdgeEngine:
 	def __init__(self, model_path: Optional[str] = None, n_gpu_layers: int = -1):
 		self.llm = None
 		
-		import os
 		ia_dir = os.getenv("ANTIGRAVITY_IA_DIR", os.path.expanduser("~/Documents/IA"))
 		model_dir = os.path.join(ia_dir, "models")
 		
@@ -69,7 +68,7 @@ class EdgeEngine:
 			output = self.llm(
 				prompt,
 				max_tokens=256,
-				stop=["<|im_end|>", "<|im_start|>", "</s>"],
+				stop=["<|im_end|>", "<|im_start|>", "</s>", "<|endoftext|>"],
 				temperature=0.1,
 				repeat_penalty=1.1
 			)
@@ -133,7 +132,7 @@ class EdgeEngine:
 			output = self.llm(
 				prompt,
 				max_tokens=1024, # Increased for 7B capacity
-				stop=["<|im_end|>", "</s>"],
+				stop=["<|im_end|>", "<|im_start|>", "</s>", "<|endoftext|>"],
 				temperature=0.2
 			)
 			return output["choices"][0]["text"].strip() if isinstance(output, dict) else next(output)["choices"][0]["text"].strip()

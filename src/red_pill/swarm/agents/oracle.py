@@ -1,6 +1,9 @@
 from typing import Any, Dict
 
 from red_pill.swarm.base import Minion
+import os
+from red_pill.memory import MemoryManager
+from red_pill.swarm.agents.edge_engine import EdgeEngine
 
 
 class OracleMinion(Minion):
@@ -16,9 +19,6 @@ class OracleMinion(Minion):
 		"""
 		Search the memory substrate and synthesize context.
 		"""
-		import os
-		from red_pill.memory import MemoryManager
-		from red_pill.swarm.agents.edge_engine import EdgeEngine
 		
 		manager = MemoryManager()
 
