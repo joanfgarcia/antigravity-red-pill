@@ -41,21 +41,42 @@ def test_metadata_nesting_rejection():
 
 
 def test_association_uuid_validation():
-	"""Ensures associations are valid UUID strings."""
+	"""ARCH-002: Ensures associations are valid UUIDs or {id, weight} dicts."""
 	valid_uuid = str(uuid.uuid4())
 	data = {"content": "Test", "metadata": {"associations": [valid_uuid]}}
 	request = CreateEngramRequest(**data)
 	assert request.metadata["associations"][0] == valid_uuid
 
+	# Invalid UUID string
 	data_invalid = {"content": "Test", "metadata": {"associations": ["not-a-uuid"]}}
 	with pytest.raises(ValidationError) as exc:
 		CreateEngramRequest(**data_invalid)
-	assert "Invalid association UUID" in str(exc.value)
+	assert "Invalid association ID in:" in str(exc.value)
+
+
+def test_weighted_associations():
+	"""ARCH-002: Test mixed flat and weighted associations."""
+	id1 = str(uuid.uuid4())
+	id2 = str(uuid.uuid4())
+	assoc = [
+		id1,
+		{"id": id2, "weight": 1.5}
+	]
+	data = {"content": "Test", "metadata": {"associations": assoc}}
+	request = CreateEngramRequest(**data)
+	assert request.metadata["associations"][0] == id1
+	assert request.metadata["associations"][1]["weight"] == 1.5
+
+	# Invalid weight
+	data_bad_weight = {"content": "Test", "metadata": {"associations": [{"id": id1, "weight": 5.0}]}}
+	with pytest.raises(ValidationError) as exc:
+		CreateEngramRequest(**data_bad_weight)
+	assert "Invalid weight" in str(exc.value)
 
 
 def test_association_cap():
-	"""Ensures associations are capped at 20 (DS-006 remediation)."""
-	many_ids = [str(uuid.uuid4()) for _ in range(600)]
+	"""Ensures associations are capped (DS-006 remediation)."""
+	many_ids = [str(uuid.uuid4()) for _ in range(cfg.MAX_AXONS + 100)]
 	data = {"content": "Test", "metadata": {"associations": many_ids}}
 	request = CreateEngramRequest(**data)
 	assert len(request.metadata["associations"]) == cfg.MAX_AXONS
