@@ -34,8 +34,9 @@ The Red Pill Protocol is built for **Sovereign Environments**, but it adapts to 
 - **Zero Cloud Egress**: Your data never leaves your machine. Full stop.
 - **PII Masking**: Exceptions and logs are automatically sanitized.
 - **Encryption at Rest (SEC-001)**: 
-  - **The Recommended Path (Hielo)**: For maximum safety, use host-level disk encryption (LUKS, FileVault, BitLocker).
-  - **The Flexible Path (Agua)**: If you are experimenting or in a safe personal environment, the protocol runs without mandatory encryption. You are free to choose your own risk level.
+  - **MAXIMUM (Ice)**: For maximum safety, strictly enforces Argon2-id and host-level disk encryption (LUKS, FileVault, BitLocker).
+  - **ADAPTATIVE (Water)**: The Recommended Path. Resource-aware security that scales to your system without blocking.
+  - **NONE (Steam)**: Total openness for experimentation or laboratory environments.
 - **Identity Protection**: We offer Argon2-id for master passwords, but we don't block you if you prefer a simpler, keyless experience.
 
 ### 🧠 The B760-Adaptive Engine
@@ -107,13 +108,13 @@ Este proyecto sigue una estrategia de doble lenguaje:
 ## 💻 System Spectrum (Espectro de Requisitos)
 The Red Pill Protocol is designed to be **Water**. It scales based on your silicon:
 
-| Component | **Agua (Minimum)** | **Hielo (Recommended)** |
+| Profile | **Agua (Steam/Water)** | **Hielo (Ice)** |
 | :--- | :--- | :--- |
 | **OS** | Any Modern Linux / WSL2 | Ubuntu 24.10+ (Native) |
 | **Container** | Docker Engine | Podman (Quadlet integration) |
 | **CPU** | Any x86_64 / ARM64 | Core Ultra / Ryzen AI (with NPU) |
 | **GPU** | CPU Fallback (Slow) | RTX 40/50 series / Radeon RX 7000 |
-| **Security** | Open mode (No Password) | Argon2-id + LUKS Disk Encryption |
+| **Security** | NONE / ADAPTATIVE | MAXIMUM (Argon2-id + LUKS) |
 | **Metabolism** | Basic (CPU-only) | Asymmetric (NPU + iGPU Offloading) |
 
 *The B760 Engine automatically detects your tier and adjusts the synaptic workload accordingly.*

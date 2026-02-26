@@ -65,9 +65,9 @@ Beyond static code analysis, the Red Pill Protocol implements a multi-layered tr
 
 ### 6.1 The "Be Water" Security Model (v5.5.0)
 The protocol abandons rigid silos in favor of a fluid security spectrum:
-- **NINGUNA (Water)**: Open access for laboratory experimentation. No API Key or recovery hash.
-- **ADAPTATIVA (Standard)**: Resource-aware security. Uses the best available hashing (Argon2-id or SHA-256) and reports encryption status without blocking deployment.
-- **MÁXIMA (Ice)**: Hardened conformity. Requires both Argon2-id and host-level LUKS encryption. The system will **fail to install** if these requirements are missing, enforcing a high-trust baseline.
+- **NONE (Steam)**: Open access for laboratory experimentation. No API Key or recovery hash.
+- **ADAPTATIVE (Water)**: Resource-aware security. Uses the best available hashing (Argon2-id or SHA-256) and reports encryption status without blocking deployment (Standard Sovereignty).
+- **MAXIMUM (Ice)**: Hardened conformity. Requires both Argon2-id and host-level LUKS encryption. The system will **fail to install** if these requirements are missing, enforcing a high-trust baseline (Hardened Sovereignty).
 
 ## 7. Linguistic Architecture
 The Red Pill Protocol follows a dual-language strategy based on computational efficiency and psychological resonance:
@@ -78,11 +78,11 @@ The Red Pill Protocol follows a dual-language strategy based on computational ef
 ## 9. Hardware Agnosticism & Acceleration: The Spectrum
 Project Lazarus is designed to be **Water**—fluid across all hardware tiers. The system automatically classifies the environment into two performance/security profiles:
 
-| Profile | **Agua (Minimum)** | **Hielo (Recommended)** |
+| Profile | **Agua (Steam/Water)** | **Hielo (Ice)** |
 | :--- | :--- | :--- |
 | **Compute** | CPU Fallback (Universal) | CUDA / ROCm / Metal Acceleration |
 | **Logic** | Baseline Reasoning | NPU Offloading (Ryzen AI / Core Ultra) |
-| **Security** | SHA-256 / Open Mode | Argon2-id + LUKS Encryption |
+| **Security** | NONE / ADAPTATIVE | MAXIMUM (Argon2-id + LUKS) |
 
 - **Portability**: the distributed swarm uses standard OS-level processes (`multiprocessing`), making it compatible with Linux, macOS, and Windows.
 - **Containerization**: The Bünker (Qdrant) is backend-agnostic, running equally on local Docker, Podman, or cloud-native clusters.

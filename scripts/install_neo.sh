@@ -124,9 +124,9 @@ fi
 
 echo -e "${BLUE}--- Fase: Configuración de Seguridad (Be Water) ---${NC}"
 echo "Elige tu nivel de seguridad para el Bünker:"
-echo "1) NINGUNA: Sin API Key ni contraseña (Solo para entornos de laboratorio/pruebas)"
-echo "2) ADAPTATIVA (Water): Máxima seguridad disponible según tus recursos (Recomendado)"
-echo "3) MÁXIMA (Ice): Seguridad total blindada. Requiere Argon2-id y LUKS (Falla si no se cumple)"
+echo "1) NONE (Steam): Sin API Key ni contraseña (Solo para entornos de laboratorio/pruebas)"
+echo "2) ADAPTATIVE (Water): Máxima seguridad disponible según tus recursos (Recomendado)"
+echo "3) MAXIMUM (Ice): Seguridad total blindada. Requiere Argon2-id y LUKS (Falla si no se cumple)"
 read -p "Selección (1/2/3): " SEC_CHOICE
 
 case $SEC_CHOICE in
@@ -138,7 +138,7 @@ case $SEC_CHOICE in
 		fi
 
 		if [[ "$SEC_CHOICE" == "3" ]]; then
-			echo -e "${BLUE}[MODO MÁXIMA] Verificando requisitos de blindaje...${NC}"
+			echo -e "${BLUE}[MODO MAXIMUM] Verificando requisitos de blindaje...${NC}"
 			if [ "$HAS_ARGON2" == "false" ]; then
 				echo -e "${RED}[ERROR] Blindaje fallido: 'argon2-cffi' no está instalado en python3.${NC}"
 				echo -e "${RED}Remedio: pip install argon2-cffi${NC}"
@@ -146,10 +146,10 @@ case $SEC_CHOICE in
 			fi
 			if [ "$HAS_ENCRYPTION" != "0" ]; then
 				echo -e "${RED}[ERROR] Blindaje fallido: No se detectó cifrado de disco (LUKS) en el host.${NC}"
-				echo -e "${RED}Remedio: Elige Modo Adaptativo o habilita el cifrado en tu sistema.${NC}"
+				echo -e "${RED}Remedio: Elige Modo ADAPTATIVE o habilita el cifrado en tu sistema.${NC}"
 				exit 1
 			fi
-			echo -e "${GREEN}✓ Requisitos de blindaje MÁXIMO cumplidos.${NC}"
+			echo -e "${GREEN}✓ Requisitos de blindaje MAXIMUM cumplidos.${NC}"
 		fi
 
 		read -sp "Introduce una contraseña maestra para la recuperación: " MASTER_PWD
@@ -161,17 +161,17 @@ case $SEC_CHOICE in
 		if [ "$HAS_ARGON2" == "true" ]; then
 			MASTER_PWD_HASH=$(python3 -c "from argon2 import PasswordHasher; ph = PasswordHasher(); print(ph.hash('$MASTER_PWD'))")
 		else
-			echo -e "${BLUE}[INFO] 'argon2-cffi' no detectado. Usando firma SHA-256 (Modo Agua).${NC}"
+			echo -e "${BLUE}[INFO] 'argon2-cffi' no detectado. Usando firma SHA-256 (Modo Water).${NC}"
 			MASTER_PWD_HASH=$(echo -n "$MASTER_PWD" | sha256sum | cut -d' ' -f1)
 		fi
 		update_env "MASTER_PWD_HASH" "$MASTER_PWD_HASH"
 		;;
 	1)
 		QDRANT_API_KEY=""
-		echo -e "${BLUE}Modo NINGUNA/OPEN activado. Sin API Key.${NC}"
+		echo -e "${BLUE}Modo NONE (Steam) activado. Sin API Key.${NC}"
 		;;
 	*)
-		echo -e "${RED}Selección inválida. Por defecto se usará Modo NINGUNA.${NC}"
+		echo -e "${RED}Selección inválida. Por defecto se usará Modo NONE.${NC}"
 		QDRANT_API_KEY=""
 		;;
 esac

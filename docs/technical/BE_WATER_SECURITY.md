@@ -10,7 +10,7 @@ The Red Pill Protocol v5.5.0 introduces the **Be Water Philosophy**. We no longe
 
 During the installation (`bash scripts/install_neo.sh`), you must choose your path:
 
-### 1. NINGUNA (Agua - Laboratory Mode)
+### 1. NONE (Steam - Laboratory Mode)
 - **What it is**: Total openness. No API Key, no master password, no encryption checks.
 - **Best for**: 
   - Local development and rapid prototyping.
@@ -18,7 +18,7 @@ During the installation (`bash scripts/install_neo.sh`), you must choose your pa
   - Users who want to explore the Bünker without any authentication overhead.
 - **Risk**: Anyone with local access to your machine can read your engrams.
 
-### 2. ADAPTATIVA (Water - Standard Sovereignty)
+### 2. ADAPTATIVE (Water - Standard Sovereignty)
 - **What it is**: The system offers the **maximum security available** based on your current resources, but it **never blocks you**.
 - **How it works**:
   - **Hashing**: If `argon2-cffi` is present, it uses it. If not, it fluidly falls back to `SHA-256`.
@@ -27,7 +27,7 @@ During the installation (`bash scripts/install_neo.sh`), you must choose your pa
   - Daily personal use.
   - Users who want protection but don't want to deal with complex dependency fixes.
 
-### 3. MÁXIMA (Ice - Hardened Sovereignty)
+### 3. MAXIMUM (Ice - Hardened Sovereignty)
 - **What it is**: Total containment. The system becomes "Ice"—solid and uncompromising.
 - **Requirements**:
   - **Argon2-id**: Mandatory for master password hashing.
@@ -50,6 +50,6 @@ During the installation (`bash scripts/install_neo.sh`), you must choose your pa
 
 ## ⚖️ Sovereignty Choice
 
-You are the Architect. You decide the shape of your Bünker. Whether you choose the path of water or the path of ice, the Red Pill Protocol will adapt to your command.
+You are the Architect. You decide the shape of your Bünker. Whether you choose the path of vapor, water or ice, the Red Pill Protocol will adapt to your command.
 
 **770 up. Be water, my friend.**

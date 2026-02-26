@@ -4,9 +4,9 @@
 ### 🛡️ ACE-CAL (Synaptic Sovereign) & "Be Water" Security
 - **[PHILOSOPHY] Be Water Architecture**: Transitioned the protocol to an adaptable, fluid security model. The system now flows to fit the Operator's environment, offering choice between simplicity and total hardening.
 - **[SEC] Three Security Tiers**:
-    - **NINGUNA (Water)**: Open access for laboratory/dev environments (No API Key).
-    - **ADAPTATIVA (Standard)**: Resource-aware security. Uses best available hashing (Argon2-id or SHA-256) and reports encryption status without blocking.
-    - **MÁXIMA (Ice)**: Military-grade enforcement. Requires Argon2-id and host-level LUKS encryption. Aborts installation if requirements are not met.
+    - **NONE (Steam)**: Open access for laboratory/dev environments (No API Key).
+    - **ADAPTATIVE (Water)**: Resource-aware security. Uses best available hashing (Argon2-id or SHA-256) and reports encryption status without blocking.
+    - **MAXIMUM (Ice)**: Military-grade enforcement. Requires Argon2-id and host-level LUKS encryption. Aborts installation if requirements are not met.
 - **[SEC-001] OS-Level Keystore**: Migrated the Argon2-id recovery hash from Qdrant to a secure OS file (`~/.config/red_pill/recovery.key`) with mode-600 permissions. Qdrant now only stores a boolean marker of identity recovery presence.
 - **[FEAT] ACE-CAL (Dynamic Calibration)**: Introduced dynamic Affective Cognitive Engine models. Toggle between `PIONEER` (classic) and `ACADEMIC` (Warriner et al. 2013) models in `.env`. Supports `AFFECT_CUSTOM_OVERRIDES` for surgical control by the Architect.
 - **[PERF-001] Synaptic Inversion**: Refactored `ToneAnalyzer` to support dependency injection of the `MemoryManager`. This eliminates redundant Qdrant connections in high-frequency environments like the MCP server.

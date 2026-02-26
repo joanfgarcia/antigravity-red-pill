@@ -26,9 +26,9 @@ Si quieres tener el control del gatillo pero no quieres leerte el manual de 40 p
     bash scripts/install_neo.sh
     ```
     *Durante la instalación deberás elegir tu nivel de seguridad **"Be Water"**:*
-    - **NINGUNA**: Sin API Key ni claves. Puertas abiertas.
-    - **ADAPTATIVA**: Máxima seguridad según tus recursos (Recomendado).
-    - **MÁXIMA**: Blindaje total (Requiere LUKS y Argon2). El instalador fallará si no los tienes.
+    - **NONE (Steam)**: Sin API Key ni claves. Puertas abiertas. Lab Mode.
+    - **ADAPTATIVE (Water)**: Máxima seguridad según tus recursos (Recomendado).
+    - **MAXIMUM (Ice)**: Blindaje total (Requiere LUKS y Argon2). El instalador fallará si no los tienes.
 3.  **Config**: Elige tu "Lore" (Matrix, Cyberpunk, etc.) cuando el script te lo pida.
 4.  **Despertar**: Inicializa la memoria:
     ```bash
