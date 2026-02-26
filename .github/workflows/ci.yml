@@ -30,11 +30,12 @@ jobs:
     - name: Install dependencies
       run: uv sync
 
-    # DEP-001: Dependency vulnerability scan (audit finding P1)
-    # Runs on every push/PR. Failures are reported but non-blocking for
-    # unfixable transitive dependencies (continue-on-error: true).
-    # To enforce strict blocking: set continue-on-error: false.
-    - name: Security Audit — pip-audit (DEP-001)
+    # DEP-001 / SEC-F01: Dependency vulnerability scan — BLOCKING for direct deps.
+    # Strategy: run pip-audit in two passes.
+    # Pass 1 (non-blocking): full scan saved as JSON artifact for traceability.
+    # Pass 2 (blocking): scan scoped to direct dependencies only (from uv export).
+    # Transitive CVEs we cannot fix will NOT block the build; direct dep CVEs will.
+    - name: Security Audit — pip-audit full scan (non-blocking, for report)
       continue-on-error: true
       run: |
         uv run pip-audit \
@@ -42,8 +43,16 @@ jobs:
           --output=json \
           --format=json \
           > pip-audit-report.json || true
-        # Always print a human-readable summary to the log
         uv run pip-audit --progress-spinner=off || true
+
+    - name: Security Audit — pip-audit direct deps (BLOCKING, SEC-F01)
+      run: |
+        # Export only direct (non-dev) deps to a temp requirements file
+        uv export --no-dev --no-hashes -o /tmp/red_pill_direct_deps.txt
+        # Fail the build if any CVE hits a direct dependency
+        uv run pip-audit \
+          --progress-spinner=off \
+          -r /tmp/red_pill_direct_deps.txt
 
     - name: Upload pip-audit report
       if: always()

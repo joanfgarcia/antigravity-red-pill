@@ -181,6 +181,14 @@ read -p "¿Deseas habilitar copias de seguridad en Google Drive? (y/N): " VAULT_
 if [[ "$VAULT_CHOICE" =~ ^[Yy]$ ]]; then
 	CLOUD_VAULT_ENABLED="True"
 	read -p "ID de Carpeta de Google Drive (opcional): " CLOUD_VAULT_FOLDER_ID
+	echo ""
+	echo -e "${YELLOW}[SEC-F02] Los Soul Kits se cifran con AES-256 (GPG) antes de subir a Google Drive.${NC}"
+	read -s -p "Introduce una passphrase de cifrado GPG (mínimo 16 chars, se guarda en .env): " CLOUD_VAULT_GPG_PASSPHRASE
+	echo ""
+	if [[ ${#CLOUD_VAULT_GPG_PASSPHRASE} -lt 16 ]]; then
+		echo -e "${RED}[WARN] Passphrase demasiado corta. Cloud Vault quedará configurado pero las subidas fallarán hasta que definas CLOUD_VAULT_GPG_PASSPHRASE en .env.${NC}"
+		CLOUD_VAULT_GPG_PASSPHRASE=""
+	fi
 else
 	CLOUD_VAULT_ENABLED="False"
 	CLOUD_VAULT_FOLDER_ID=""
@@ -220,6 +228,7 @@ update_env "DYNAMIC_EMOTION_SYNC" "$DYNAMIC_EMOTION_SYNC"
 update_env "MULTI_EMOTION_INFERENCE" "$MULTI_EMOTION_INFERENCE"
 update_env "CLOUD_VAULT_ENABLED" "$CLOUD_VAULT_ENABLED"
 update_env "CLOUD_VAULT_FOLDER_ID" "$CLOUD_VAULT_FOLDER_ID"
+update_env "CLOUD_VAULT_GPG_PASSPHRASE" "$CLOUD_VAULT_GPG_PASSPHRASE"
 chmod 600 "$ENV_FILE"
 
 mkdir -p "$IA_DIR/scripts" "$IA_DIR/backups/qdrant" "$IA_DIR/backups/soul" "$IA_DIR/seeds" "$IA_DIR/storage"

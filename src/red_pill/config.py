@@ -11,6 +11,19 @@ QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", None)
 QDRANT_SCHEME = os.getenv("QDRANT_SCHEME", "http")
 QDRANT_URL = f"{QDRANT_SCHEME}://{QDRANT_HOST}:{QDRANT_PORT}"
 
+# SEC-F04: Warn when Qdrant is reachable over an unencrypted non-local connection.
+# Remote http:// exposes API key and engram content to any network observer.
+_local_hosts = {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
+if QDRANT_SCHEME == "http" and QDRANT_HOST not in _local_hosts:
+	import warnings
+	warnings.warn(
+		f"[SEC-F04] Qdrant is configured with scheme='http' on a non-local host "
+		f"('{QDRANT_HOST}'). Engram data and API keys will be transmitted in "
+		f"cleartext. Set QDRANT_SCHEME=https or restrict to localhost.",
+		stacklevel=1,
+	)
+
+
 # MILVUS (Hive Mind)
 MILVUS_HOST = os.getenv("MILVUS_HOST", "localhost")
 MILVUS_PORT = int(os.getenv("MILVUS_PORT", "19530"))
@@ -136,11 +149,14 @@ METABOLISM_STATE_FILE = os.path.join(IA_DIR, "storage", "metabolism_state.json")
 if os.getenv("METABOLISM_STATE_FILE"):
 	METABOLISM_STATE_FILE = str(os.getenv("METABOLISM_STATE_FILE"))
 
-# CLOUD VAULT (v5.4.1)
+# CLOUD VAULT (v5.4.1 / SEC-F02)
 CLOUD_VAULT_ENABLED = os.getenv("CLOUD_VAULT_ENABLED", "False").lower() == "true"
 CLOUD_VAULT_PROVIDER = os.getenv("CLOUD_VAULT_PROVIDER", "google_drive")
 CLOUD_VAULT_FOLDER_ID = os.getenv("CLOUD_VAULT_FOLDER_ID", "")  # The GDrive Folder ID
 CLOUD_SERVICE_ACCOUNT_FILE = os.getenv("CLOUD_SERVICE_ACCOUNT_FILE", os.path.join(IA_DIR, "storage", "keys", "service_account.json"))
+# SEC-F02: GPG passphrase for AES-256 Soul Kit encryption. Read directly in vault.py.
+# NOT cached here to avoid it appearing in repr(cfg) or debug logs.
+# Set via CLOUD_VAULT_GPG_PASSPHRASE in .env (configured during install_neo.sh).
 # EMOTIONAL CHROMA & ACE (v5.5.0 — ACE-CAL)
 # AFFECT_MODEL: Select the calibration model for Valence/Arousal values.
 #   - 'PIONEER': The original hand-curated values for the Red Pill Protocol.
