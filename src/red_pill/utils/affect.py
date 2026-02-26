@@ -6,7 +6,7 @@ import red_pill.config as cfg
 
 logger = logging.getLogger(__name__)
 
-# --- CALIBRATION MODELS ---
+
 
 # AFFECT_MODEL: PIONEER (Original Red Pill 5.0)
 _PIONEER_MODEL: Dict[str, Tuple[float, float]] = {
@@ -53,7 +53,7 @@ _ACADEMIC_MODEL: Dict[str, Tuple[float, float]] = {
 	"desire": (0.68, 0.62),
 }
 
-# --- DYNAMIC INITIALIZATION ---
+
 
 
 def _build_affect_map() -> Dict[str, Tuple[float, float]]:

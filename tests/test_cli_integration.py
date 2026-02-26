@@ -5,8 +5,12 @@ import pytest
 
 def run_cli(args):
 	"""Helper to run the red-pill CLI."""
-	cmd = ["python3", "-m", "red_pill.cli"] + args
-	result = subprocess.run(cmd, capture_output=True, text=True)
+	import os
+	import sys
+	env = os.environ.copy()
+	env["PYTHONPATH"] = os.path.join(os.getcwd(), "src")
+	cmd = [sys.executable, "-m", "red_pill.cli"] + args
+	result = subprocess.run(cmd, capture_output=True, text=True, env=env)
 	return result
 
 
