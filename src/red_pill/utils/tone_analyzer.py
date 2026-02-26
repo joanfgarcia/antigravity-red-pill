@@ -1,8 +1,7 @@
 import logging
-from typing import Dict
+from typing import Dict, Optional
 
 import red_pill.config as cfg
-from red_pill.memory import MemoryManager
 
 logger = logging.getLogger(__name__)
 
@@ -14,18 +13,34 @@ class ToneAnalyzer:
 	"""
 
 	@staticmethod
-	def get_dominant_mood(collection: str = "social_memories", limit: int = 3) -> str:
+	def get_dominant_mood(
+		collection: str = "social_memories",
+		limit: int = 3,
+		manager: Optional["MemoryManager"] = None,  # PERF-001: accept existing instance
+	) -> str:
 		"""
 		Scrolls the latest memories to find the most frequent chroma.
 		Increased limit for better sampling of the current context.
+
+		Args:
+			collection: Qdrant collection to query.
+			limit: Number of recent memories to sample.
+			manager: Optional MemoryManager instance to reuse. If not provided,
+			         a new instance is created for this call (backward-compatible).
+			         Callers that already hold a MemoryManager (e.g. MCP server,
+			         CLI sync command) should pass it to avoid redundant connections.
 		"""
+		# PERF-001: lazy import here to avoid circular imports at module level
+		from red_pill.memory import MemoryManager as _MemoryManager
+
 		try:
 			from qdrant_client.http import models
 
-			manager = MemoryManager()
+			# Reuse caller's manager or create a local one
+			_manager = manager if manager is not None else _MemoryManager()
 
 			try:
-				points, _ = manager.client.scroll(
+				points, _ = _manager.client.scroll(
 					collection_name=collection,
 					limit=limit,
 					scroll_filter=models.Filter(must_not=[models.FieldCondition(key="immune", match=models.MatchValue(value=True))]),
@@ -35,7 +50,7 @@ class ToneAnalyzer:
 				)
 			except Exception as e:
 				logger.debug(f"Scroll order_by failed, falling back to basic scroll: {e}")
-				points, _ = manager.client.scroll(
+				points, _ = _manager.client.scroll(
 					collection_name=collection,
 					limit=limit,
 					scroll_filter=models.Filter(must_not=[models.FieldCondition(key="immune", match=models.MatchValue(value=True))]),
@@ -70,13 +85,25 @@ class ToneAnalyzer:
 		return cfg.CHROMA_TONE_MAPPING.get(mood_color, cfg.CHROMA_TONE_MAPPING[cfg.DEFAULT_COLOR])
 
 
-def get_current_sync_state() -> Dict[str, str]:
+def get_current_sync_state(manager: Optional["MemoryManager"] = None) -> Dict[str, str]:
 	"""
 	Returns a dictionary with the dominant mood and its narrative directive.
+
+	Args:
+		manager: Optional MemoryManager instance to reuse (PERF-001).
+		         Pass an existing instance to avoid creating a redundant connection.
 	"""
 	if not cfg.DYNAMIC_EMOTION_SYNC:
 		return {"mood": cfg.DEFAULT_COLOR, "directive": cfg.CHROMA_TONE_MAPPING[cfg.DEFAULT_COLOR]}
-	
-	mood = ToneAnalyzer.get_dominant_mood()
+
+	mood = ToneAnalyzer.get_dominant_mood(manager=manager)
 	directive = ToneAnalyzer.get_tone_directive(mood)
 	return {"mood": mood, "directive": directive}
+
+
+# TYPE_CHECKING guard: avoid circular import at runtime
+# (MemoryManager imports from tone_analyzer indirectly via telemetry)
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+	from red_pill.memory import MemoryManager
+

@@ -22,6 +22,9 @@ dependencies = [
     "transformers>=4.40.0",
     "torch>=2.2.0",
     "argon2-cffi>=23.1.0",
+    "google-api-python-client>=2.115.0",
+    "google-auth-httplib2>=0.2.0",
+    "google-auth-oauthlib>=1.2.0",
 ]
 
 [project.scripts]
@@ -40,7 +43,18 @@ dev = [
     "mypy>=1.0.0",
     "ruff>=0.3.0",
     "pytest-cov>=4.1.0",
+    # DEP-001: Dependency vulnerability scanner (audit finding P1)
+    "pip-audit>=2.7.0",
 ]
+
+[tool.pip-audit]
+# Scan using the OSV vulnerability database (open-source, no API key required).
+# PyPI Advisory DB is used as primary source; OSV as fallback.
+vulnerability-service = "osv"
+# Do not fail on unfixable vulnerabilities (transitive deps we don't control).
+# We still REPORT them — just don't block CI on deps we can't upgrade.
+# To enforce strict mode in the future: remove this flag.
+fix = false
 
 [tool.ruff]
 line-length = 150

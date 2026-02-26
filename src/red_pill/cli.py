@@ -143,9 +143,10 @@ def main() -> None:
 	soul_sub.add_parser("export", help="Package soul into a portable kit")
 	soul_sub.add_parser("rotate", help="Rotate Qdrant API Key and restart service")
 	restore_parser = soul_sub.add_parser("restore", help="Restore soul from a backup directory")
-	restore_parser.add_argument("source", help="Path to backup timestamp directory")
-	restore_parser.add_argument("--commit", action="store_true", help="Execute the restoration (dry-run by default)")
-	soul_sub.add_parser("sync", help="Analyze and display dominant emotional mood")
+	restore_parser.add_argument("source", help="Path to backup source")
+	restore_parser.add_argument("--commit", action="store_true", help="Execute the restoration")
+	soul_sub.add_parser("sync", help="Check emotional sync state")
+	soul_sub.add_parser("vault", help="Inspect Cloud Vault status and backups")
 
 	edit_parser = subparsers.add_parser("edit", help="Edit engram attributes")
 	edit_parser.add_argument("type", choices=["work", "social", "directive", "story"])
@@ -228,6 +229,18 @@ def main() -> None:
 				state = get_current_sync_state()
 				print(f"--- [EMOTIONAL SYNC: {state['mood'].upper()}] ---")
 				print(f"Directive: {state['directive']}")
+			elif args.soul_cmd == "vault":
+				if soul.vault.enabled:
+					print(f"--- [CLOUD VAULT: ACTIVE (Google Drive)] ---")
+					files = soul.vault.list_backups()
+					if not files:
+						print("Vault is empty. Run 'red-pill soul export' to transmit your first kit.")
+					else:
+						for f in files:
+							print(f"- {f['name']} ({f['createdTime']}) [ID: {f['id']}]")
+				else:
+					print("--- [CLOUD VAULT: INACTIVE] ---")
+					print(f"To enable, set CLOUD_VAULT_ENABLED=True in .env and provide {cfg.CLOUD_SERVICE_ACCOUNT_FILE}")
 			return
 
 		# Loop through requested collections

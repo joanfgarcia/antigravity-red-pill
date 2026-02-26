@@ -1,0 +1,116 @@
+# TST-002: Integration Test Workflow (LM-005)
+# =============================================
+# Runs the E2E Docker-based persistence test (run_integration.sh).
+#
+# Trigger conditions (on-demand only — Docker is NOT available in standard CI):
+#   1. Manual dispatch via GitHub Actions UI (workflow_dispatch)
+#   2. Pull Request labeled with [integration]
+#   3. Direct push to the 'integration-test' branch (for dedicated CI runs)
+#
+# The test validates that Qdrant data persists across container destruction
+# (simulated crash/upgrade), proving the volume-mount durability contract.
+#
+# Corresponds to audit finding TST-002 (P1 — High Priority).
+
+name: Integration Tests (LM-005)
+
+on:
+  # 1. On-demand manual trigger from GitHub Actions UI
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Reason for manual integration run"
+        required: false
+        default: "Manual verification"
+
+  # 2. Automatically when a PR receives the [integration] label
+  pull_request:
+    types: [labeled]
+
+  # 3. Dedicated integration branch push
+  push:
+    branches:
+      - integration-test
+
+jobs:
+  # Gate: only proceed if the trigger is valid (label check for PRs)
+  check-trigger:
+    runs-on: ubuntu-latest
+    outputs:
+      should-run: ${{ steps.gate.outputs.run }}
+    steps:
+      - name: Evaluate trigger
+        id: gate
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.event_name }}" == "push" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.event.label.name }}" == "integration" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping: PR label is '${{ github.event.label.name }}', not 'integration'."
+          fi
+
+  integration:
+    needs: check-trigger
+    if: needs.check-trigger.outputs.should-run == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync
+
+      # Docker Compose v2 is pre-installed on ubuntu-latest GitHub runners.
+      # Verify it's available so we fail fast with a clear message if not.
+      - name: Verify Docker & Compose availability
+        run: |
+          docker --version
+          docker compose version
+
+      - name: Make integration script executable
+        run: chmod +x tests/integration/run_integration.sh
+
+      - name: Run LM-005 — E2E Persistence Test
+        id: lm005
+        env:
+          QDRANT_API_KEY: "ci-integration-key-770"
+          SIDECAR_AUTH_KEY: "ci-integration-sidecar-key-770"
+        # Run from repo root so uv run resolves the project correctly
+        run: bash tests/integration/run_integration.sh
+
+      - name: Upload integration test logs on failure
+        if: failure() && steps.lm005.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-logs
+          path: |
+            tests/integration/qdrant_test_data_*/
+          retention-days: 3
+
+      - name: Post summary
+        if: always()
+        run: |
+          echo "## LM-005 Integration Test Result" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [[ "${{ steps.lm005.outcome }}" == "success" ]]; then
+            echo "✅ **PASSED** — Memory survived container destruction." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "❌ **FAILED** — Check logs above." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Trigger: \`${{ github.event_name }}\` | Reason: \`${{ inputs.reason || 'automatic' }}\`" >> "$GITHUB_STEP_SUMMARY"

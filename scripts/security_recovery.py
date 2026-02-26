@@ -1,40 +1,57 @@
 import argparse
-import hashlib
 import os
 import random
 import sys
+
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError, VerificationError, InvalidHashError
 
 # Ensure we can import red_pill
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../")))
 import red_pill.config as cfg
 from src.red_pill.memory import MemoryManager
-
-
-def get_hash(text: str) -> str:
-	return hashlib.sha256(text.encode()).hexdigest()
+from src.red_pill.utils.keystore import load_recovery_hash, has_recovery_hash
 
 
 def run_recovery_handshake():
 	manager = MemoryManager()
 
-	# Check if a master hash exists
+	# SEC-001: Check for IRP presence marker in Qdrant (no hash material stored there)
 	points, _ = manager.client.scroll(
-		collection_name="directive_memories", scroll_filter={"must": [{"key": "security_tier", "match": {"value": 2}}]}, limit=1
+		collection_name="directive_memories",
+		scroll_filter={"must": [{"key": "security_tier", "match": {"value": 2}}]},
+		limit=1,
 	)
 
 	if not points:
-		print("ERROR: No recovery engram found. This Bünker is in OPEN mode or CUSTOM mode.")
+		print("ERROR: No IRP marker found. This Bünker is in OPEN mode or CUSTOM mode.")
 		return
 
-	master_hash = points[0].payload.get("master_hash")
+	# SEC-001: Load hash from OS keystore, NOT from Qdrant
+	if not has_recovery_hash():
+		print(
+			"CRITICAL: IRP marker exists in Qdrant but no recovery hash found in the OS keystore.\n"
+			"The keystore file may have been deleted or moved. Check: ~/.config/red_pill/recovery.key"
+		)
+		return
 
 	print("\n--- [IDENTITY RECOVERY PROTOCOL (IRP) ACTIVATED] ---")
 	print("Initiating Synaptic Handshake. You must prove your identity.")
 
-	# Step 1: Password Check
+	# Step 1: Password Check via Argon2-id verify (constant-time, no raw comparison)
 	pwd = input("Enter Master Password: ")
-	if get_hash(pwd) != master_hash:
+	try:
+		argon2_hash = load_recovery_hash()
+		ph = PasswordHasher()
+		ph.verify(argon2_hash, pwd)
+	except VerifyMismatchError:
 		print("CRITICAL: Invalid password. Handshake terminated.")
+		return
+	except (VerificationError, InvalidHashError) as e:
+		print(f"CRITICAL: Hash verification error: {e}")
+		return
+	except PermissionError as e:
+		print(f"CRITICAL: Keystore access error: {e}")
 		return
 
 	# Step 2: Memory Questions (Synaptic Handshake)

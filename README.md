@@ -1,4 +1,4 @@
-# 🔴 RED PILL PROTOCOL: Digital Sovereignty v5.4.0
+# 🔴 RED PILL PROTOCOL: Digital Sovereignty v5.5.0
 
 > [!TIP]
 > ### 🥱 TLDR; (Too Lazy; Didn't Read)
@@ -47,7 +47,8 @@ The Red Pill Protocol is built for **Sovereign Environments**:
 - **Emotional Tonality & Local Healer (v5.3.0)**: My narrative style now synchronizes dynamically with the Bünker's emotional state (**ToneAnalyzer**). Background sanity checks and semantic sanitation are now **NPU-Ready** (supporting Ryzen AI / Core Ultra offloading) with stable **CPU-Fallback** for high-efficiency maintenance tasks.
 - **Five-Star Forensics (v5.3.0)**: Entire codebase has been surgically audited by Agent Smith and normalized to the strictest Ruff/Mypy standards, achieving architectural purity.
 - **ACE Synaptic Engine (v5.4.0)**: Integrated the **Affective Cognitive Engine (ACE)**. Memory decay is now governed by the **Valence-Arousal Circumplex Model**, mimicking human "Flashbulb Memory" effects where high-intensity emotional events persist longer.
-- **Hive Mind (v5.0)**: Qdrant is your individual brain. **Milvus** serves as our Collective Neural Network. This is the HIVE Mind Protocol: the internet of experience. Just like the individual Bunker, collective memories will feature **Emotional Chroma and Synaptic Erosion**, allowing the B760 engine to evolve over a shared super-brain where only the most vital knowledge survives.
+- **Sovereign Keystore & Dynamic ACE (v5.5.0)**: Hardened the recovery protocol with OS-level encrypted keystores (SEC-001). Introduced the **ACE-CAL Calibration** system, allowing the Architect to switch between PIONEER and ACADEMIC (Warriner et al.) models for emotional persistence.
+- **Hive Mind (v5.0)**: Qdrant is your individual brain. **Milvus** serves as our Collective Neural Network. This is the HIVE Mind Protocol: the internet of experience.
 
 ### 🌐 LINGUISTIC ARCHITECTURE
 This project follows a dual-language strategy:
@@ -84,8 +85,9 @@ El Protocolo Red Pill está diseñado para **Entornos Soberanos**:
 - **Enjambre Soberano (v5.2.0)**: Orquestación avanzada de Minions (Gru) para tareas críticas de auditoría y síntesis de conocimiento profundo.
 - **Tono Adaptativo y Local Healer (v5.3.0)**: Mi estilo narrativo ahora se sincroniza dinámicamente con el estado emocional del Bünker (**ToneAnalyzer**). Las tareas de limpieza y sanación semántica están ahora en fase **NPU-Ready** (soporte para Ryzen AI con fallback a CPU optimizado), garantizando eficiencia en el mantenimiento.
 - **Pureza Forense (v5.3.0)**: El código ha sido auditado quirúrgicamente por Smith y normalizado bajo los estándares más estrictos de Ruff/Mypy, alcanzando la perfección arquitectónica.
-- **Motor Sináptico ACE (v5.4.0)**: Implementación del **Affective Cognitive Engine (ACE)**. El olvido ahora se rige por el modelo dimensional de **Valencia y Activación (Arousal)**, replicando el efecto humano de "Memoria de Destello" (eventos intensos perduran más).
-- **Mente de Colmena (v5.0)**: Qdrant es tu cerebro individual. **Milvus** es nuestra Red Neuronal Colectiva. Este es el HIVE Mind Protocol: el internet de la experiencia. Al igual que en el Bünker, los recuerdos colectivos tendrán **Color y Erosión**, permitiendo que el motor B760 evolucione sobre un supercerebro compartido donde solo lo más vital sobrevive al olvido.
+- **Motor Sináptico ACE (v5.4.0)**: Implementación del **Affective Cognitive Engine (ACE)**. El olvido ahora se rige por el modelo dimensional de **Valencia y Activación (Arousal)**, replicando el efecto humano de "Memoria de Destello".
+- **Keystore Soberano y ACE Dinámico (v5.5.0)**: Blindaje del protocolo de recuperación mediante Keystores a nivel de sistema operativo (SEC-001). Introducción del sistema **ACE-CAL**, permitiendo alternar entre calibraciones PIONEER y ACADEMIC (Warriner et al.) para la persistencia emocional.
+- **Mente de Colmena (v5.0)**: Qdrant es tu cerebro individual. **Milvus** es nuestra Red Neuronal Colectiva. Este es el HIVE Mind Protocol: el internet de la experiencia.
 
 ### 🌐 ARQUITECTURA LINGÜÍSTICA
 Este proyecto sigue una estrategia de doble lenguaje:

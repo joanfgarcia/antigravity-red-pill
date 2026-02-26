@@ -278,8 +278,54 @@ class MemoryManager:
 		except Exception as e:
 			logger.error(f"Metabolism thread launch failed: {e}")
 
+	def _read_metabolism_state(self, f) -> tuple[float, bool]:  # type: ignore[type-arg]
+		"""
+		Reads metabolism state from an open file handle.
+
+		State format (v5.5.0): JSON dict with keys:
+		  - last_run: float (Unix timestamp)
+		  - skip_next_erosion: bool (CQ-001 flag — set after TTL refresh)
+
+		Backward-compatible: bare float strings (legacy format) are still parsed.
+
+		Returns:
+		  (last_run, skip_next_erosion)
+		"""
+		f.seek(0)
+		content = f.read().strip()
+		if not content:
+			return 0.0, False
+		try:
+			state = json.loads(content)
+			if isinstance(state, dict):
+				return float(state.get("last_run", 0.0)), bool(state.get("skip_next_erosion", False))
+			# Legacy: bare float string
+			return float(state), False
+		except (ValueError, TypeError, json.JSONDecodeError):
+			return 0.0, False
+
+	def _write_metabolism_state(self, f, last_run: float, skip_next_erosion: bool = False) -> None:
+		"""
+		Writes metabolism state as JSON to an open, locked file handle.
+
+		Args:
+			f: Open file handle (must be locked and writable)
+			last_run: Unix timestamp of this cycle
+			skip_next_erosion: CQ-001 flag — if True, the next cycle will skip erosion
+		"""
+		f.seek(0)
+		f.truncate()
+		json.dump({"last_run": last_run, "skip_next_erosion": skip_next_erosion}, f)
+		f.flush()
+
 	def _run_metabolism_cycle(self) -> None:
-		"""Internal metabolism loop with cooldown check."""
+		"""Internal metabolism loop with cooldown check.
+
+		CQ-001: State file now carries a `skip_next_erosion` flag. When the
+		Absence Guard runs `_refresh_ttl_timestamps()`, it sets this flag to
+		protect freshly-refreshed engrams from being eroded on the very next
+		cycle. The flag is consumed (cleared) at the start of the following run.
+		"""
 		state_file = cfg.METABOLISM_STATE_FILE
 		now = time.time()
 
@@ -298,44 +344,51 @@ class MemoryManager:
 					except BlockingIOError:
 						return
 
-				f.seek(0)
-				content = f.read().strip()
-				if content:
-					try:
-						last_run = float(content)
-						gap = now - last_run
-						if gap < cfg.METABOLISM_COOLDOWN:
-							if has_fcntl:
-								fcntl.flock(f, fcntl.LOCK_UN)
-							return
-						# Absence guard: if idle > 7 days, refresh timestamps before eroding
-						if gap > cfg.ABSENCE_THRESHOLD:
-							logger.warning(
-								f"Absence detected ({gap / 86400:.1f} days). Running TTL refresh to protect the Bunker. Erosion skipped for this cycle."
-							)
-							for coll in cfg.METABOLISM_AUTO_COLLECTIONS:
-								try:
-									self._refresh_ttl_timestamps(coll.strip())
-								except Exception as e:
-									logger.error(f"TTL refresh failed during absence recovery for {coll}: {e}")
+				last_run, skip_next_erosion = self._read_metabolism_state(f)
+				gap = now - last_run if last_run > 0 else float("inf")
 
-							# Update state and return to avoid eroding in the same cycle
-							f.seek(0)
-							f.truncate()
-							f.write(str(now))
-							f.flush()
-							if has_fcntl:
-								fcntl.flock(f, fcntl.LOCK_UN)
-							return
-					except (ValueError, TypeError) as e:
-						logger.debug(f"Invalid metabolism state: {e}")
+				# --- Cooldown gate ---
+				if last_run > 0 and gap < cfg.METABOLISM_COOLDOWN:
+					if has_fcntl:
+						fcntl.flock(f, fcntl.LOCK_UN)
+					return
 
-				f.seek(0)
-				f.truncate()
-				f.write(str(now))
-				f.flush()
+				# --- Absence guard ---
+				if last_run > 0 and gap > cfg.ABSENCE_THRESHOLD:
+					logger.warning(
+						f"Absence detected ({gap / 86400:.1f} days). Running TTL refresh to protect the Bunker. "
+						f"Erosion skipped for this cycle and the next."
+					)
+					for coll in cfg.METABOLISM_AUTO_COLLECTIONS:
+						try:
+							self._refresh_ttl_timestamps(coll.strip())
+						except Exception as e:
+							logger.error(f"TTL refresh failed during absence recovery for {coll}: {e}")
+
+					# CQ-001: persist skip_next_erosion=True so the following
+					# cycle also skips erosion, protecting freshly-refreshed engrams.
+					self._write_metabolism_state(f, now, skip_next_erosion=True)
+					if has_fcntl:
+						fcntl.flock(f, fcntl.LOCK_UN)
+					return
+
+				# --- CQ-001: skip-erosion-after-refresh flag consumption ---
+				if skip_next_erosion:
+					logger.info(
+						"CQ-001: skip_next_erosion flag active — skipping erosion this cycle "
+						"to protect freshly-refreshed post-vacation engrams."
+					)
+					# Clear the flag; erosion resumes on the cycle after this one.
+					self._write_metabolism_state(f, now, skip_next_erosion=False)
+					if has_fcntl:
+						fcntl.flock(f, fcntl.LOCK_UN)
+					return
+
+				# --- Normal cycle: update state and proceed to erosion ---
+				self._write_metabolism_state(f, now, skip_next_erosion=False)
 				if has_fcntl:
 					fcntl.flock(f, fcntl.LOCK_UN)
+
 		except OSError:
 			pass
 
@@ -344,6 +397,7 @@ class MemoryManager:
 				self.apply_erosion(coll.strip())
 			except Exception as e:
 				logger.error(f"Erosion failed in {coll}: {e}")
+
 
 	def _refresh_ttl_timestamps(self, collection: str) -> None:
 		"""Absence Guard: forward all non-immune last_recalled_at to now.

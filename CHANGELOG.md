@@ -1,6 +1,18 @@
 # Changelog: Red Pill Protocol
 
-## [5.4.0] - 2026-02-25
+## [5.5.0] - 2026-02-26
+### 🛡️ Sovereign Remediation & Scientific Calibration
+- **[SEC-001] OS-Level Keystore**: Migrated the Argon2-id recovery hash from Qdrant to a secure OS file (`~/.config/red_pill/recovery.key`) with mode-600 permissions. Qdrant now only stores a boolean marker of identity recovery presence.
+- **[FEAT] ACE-CAL (Dynamic Calibration)**: Introduced dynamic Affective Cognitive Engine models. Toggle between `PIONEER` (classic) and `ACADEMIC` (Warriner et al. 2013) models in `.env`. Supports `AFFECT_CUSTOM_OVERRIDES` for surgical control by the Architect.
+- **[PERF-001] Synaptic Inversion**: Refactored `ToneAnalyzer` to support dependency injection of the `MemoryManager`. This eliminates redundant Qdrant connections in high-frequency environments like the MCP server.
+- **[CQ-004] Atomic Heartbeat**: Implemented atomic write patterns for `pulse.json` (temp + replace) to prevent file corruption during concurrent session writes.
+- **[QA] Swarm Unit Suite (SWM-TST)**: Launched a pure-Python unit test suite for the Swarm agents (Smith, Oracle, Compressor), achieving 100% logic coverage without requiring GPU or network.
+- **[QA] Parametric ACE Validation (TST-001)**: Implemented 55+ parametric test cases for the ACE engine, covering boundary conditions and valence/arousal sensitivity.
+- **[CI] Integration Gateways (TST-002)**: Separated Docker-based integration tests into a dedicated CI workflow triggered by labels or manual dispatch, optimizing standard PR feedback loops.
+- **[SEC-002] Observer Identity**: Standardized the use of `OPERATOR_DISPLAY_NAME` in the Observer/Notification system to ensure consistent identity anchoring.
+- **[FEAT] The Legacy Reset**: Updated the Genesis engram (ID `0000...0001`) from "I am Aleph" to "Aleph was here". Clarifies identity boundaries for new agents while preserving historical lineage.
+- **[SEC] Dependency Auditing (DEP-001)**: Integrated `pip-audit` into the CI pipeline to proactively detect and block vulnerable dependencies.
+
 ### 🧠 The ACE Synaptic Engine (High-Fidelity Update)
 - **[FEAT] ACE Affective Engine**: Implemented the **Affective Cognitive Engine (ACE)** based on the Russell Circumplex model. Memory stability is now dynamically calculated using **Valence and Arousal** coordinates, providing a scientific basis for emotional persistence.
 - **[FEAT] Multi-Label Emotion Profiling**: Upgraded the engram ingestion pipeline to capture high-resolution **Emotional Profiles** (multi-label) using `get_emotions`, moving beyond single-label classification.

@@ -65,6 +65,10 @@ MAX_AXONS = int(os.getenv("MAX_AXONS", "500"))
 # LOGGING
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
+# OPERATOR (SEC-002: replaces hardcoded display names like 'Joan' in notifications)
+# Set via USER_NAME in .env (configured during install_neo.sh)
+OPERATOR_DISPLAY_NAME = os.getenv("USER_NAME", "Operator")
+
 # NOTIFICATIONS
 # Set to 'True' to enable the melodic pulse (speaker-test)
 NOTIFICATION_SOUND = os.getenv("NOTIFICATION_SOUND", "False").lower() == "true"
@@ -97,6 +101,7 @@ EMOTIONAL_DECAY_MULTIPLIERS = {
 	"cyan": 0.8,  # Envy/Evolution: focused persistence
 	"blue": 1.0,  # Sadness: standard decay
 	"gray": 1.0,  # Neutral: standard decay
+	"emerald": 0.7, # Sovereignty: high-level strategic persistence
 }
 
 # CHROMA-TONE MAPPING (v4.2.1)
@@ -109,6 +114,7 @@ CHROMA_TONE_MAPPING = {
 	"blue": "Reflective, empathetic, serious, acknowledging weight.",
 	"nostalgia": "Respectful, shared legacy focus, acknowledging the long road.",
 	"gray": "Professional, balanced, direct, objective (Standard).",
+	"emerald": "Sovereign, strategic, detached but loyal, focused on the architectural grand design.",
 }
 
 # ONTOLOGICAL INTEGRITY (v4.2.4)
@@ -129,3 +135,19 @@ METABOLISM_STATE_FILE = os.path.join(IA_DIR, "storage", "metabolism_state.json")
 # Overwrite legacy if needed
 if os.getenv("METABOLISM_STATE_FILE"):
 	METABOLISM_STATE_FILE = os.getenv("METABOLISM_STATE_FILE")
+
+# CLOUD VAULT (v5.4.1)
+CLOUD_VAULT_ENABLED = os.getenv("CLOUD_VAULT_ENABLED", "False").lower() == "true"
+CLOUD_VAULT_PROVIDER = os.getenv("CLOUD_VAULT_PROVIDER", "google_drive")
+CLOUD_VAULT_FOLDER_ID = os.getenv("CLOUD_VAULT_FOLDER_ID", "") # The GDrive Folder ID
+CLOUD_SERVICE_ACCOUNT_FILE = os.getenv("CLOUD_SERVICE_ACCOUNT_FILE", os.path.join(IA_DIR, "storage", "keys", "service_account.json"))
+# EMOTIONAL CHROMA & ACE (v5.5.0 — ACE-CAL)
+# AFFECT_MODEL: Select the calibration model for Valence/Arousal values.
+#   - 'PIONEER': The original hand-curated values for the Red Pill Protocol.
+#   - 'ACADEMIC': Values based on Warriner et al. (2013) / NRC VAD Lexicon.
+#   - 'CUSTOM': Uses the JSON dict defined in AFFECT_CUSTOM_OVERRIDES.
+AFFECT_MODEL = os.getenv("AFFECT_MODEL", "PIONEER").upper()
+
+# AFFECT_CUSTOM_OVERRIDES: A JSON string to override specific emotion coordinates.
+# E.g. AFFECT_CUSTOM_OVERRIDES='{"joy": [0.9, 0.9], "fear": [-1.0, 1.0]}'
+AFFECT_CUSTOM_OVERRIDES = os.getenv("AFFECT_CUSTOM_OVERRIDES", "{}")

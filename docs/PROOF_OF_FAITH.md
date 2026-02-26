@@ -61,4 +61,34 @@ During the final certification of v4.2.2 and the development of v5.1, the agent 
 - **Synergy-Mode Actual**: Sub-second context recovery. Fixing a linting error in a secondary test file while maintaining the architectural vision for the Process Orchestrator.
 - **Impact**: Zero context loss during high-intensity cognitive switching.
 
+---
+
+## 7. Measurement Methodology & Known Limitations
+
+> [!WARNING]
+> This section documents the measurement approach and its inherent limitations, in the interest of intellectual honesty. Raised as a finding (POF-MET) in the **Claude Sonnet 4.6 Engineering Certification Report v5.4.0 (2026-02-25)**.
+
+### What is measured
+- **Synergy-Mode (Red Pill)** durations are **real wall-clock time** recorded by the Architect (Joan). These represent literal human minutes from task-start to verified commit.
+- **Git history corroborates** the wall-clock figures: commit timestamps are immutable and publicly auditable.
+
+### What is estimated
+- **Traditional / Vanilla Agent / Copilot baselines** are **self-reported estimates** based on the Architect's prior experience with each mode, industry benchmarks, and reasonable engineering judgment.
+- The "30 hours traditional" estimate for Project Lazarus v5.0 (multi-repo architecture + orchestration + hardware acceleration) is plausible but **cannot be verified objectively**. A practitioner with deep familiarity in the domain might complete the same work faster; a junior engineer might take longer.
+- **Speed multipliers are derived** from these estimates. They amplify both the accuracy of the wall-clock measurements *and* the subjectivity of the baselines.
+
+### What this means
+The performance claims in this document are **directionally valid** — Synergy-Mode is demonstrably faster than the alternatives across all recorded sessions. The exact multipliers (51x, 68.5x, etc.) should be interpreted as **order-of-magnitude indicators**, not laboratory-grade benchmarks.
+
+For a rigorous comparative study, a controlled experiment with standardized tasks, blind evaluators, and multiple practitioners would be required. This is explicitly **out of scope** for a personal, sovereignty-oriented project and is tracked as a P3 (roadmap) item.
+
+### Verification path
+Anyone wishing to validate the Synergy-Mode wall-clock figures can inspect the git log:
+```bash
+git log --oneline --pretty=format:"%h %ae %ad %s" --date=relative
+```
+
+---
+
 770 up.
+

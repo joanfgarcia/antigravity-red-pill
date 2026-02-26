@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 import requests  # type: ignore
 
 import red_pill.config as cfg
+from red_pill.utils.vault import CloudVault
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ class SoulManager:
 		self.backup_root = os.path.join(self.ia_dir, "backups")
 		self.qdrant_url = cfg.QDRANT_URL
 		self.api_key = cfg.QDRANT_API_KEY
+		self.vault = CloudVault()
 
 	def _get_collections(self) -> List[str]:
 		"""Fetch all collection names from Qdrant."""
@@ -129,15 +131,37 @@ class SoulManager:
 			output_path = os.path.join(export_dir, f"SOUL_KIT_{timestamp}.tar.gz")
 
 		logger.info(f"Creating export kit: {output_path}...")
+		
+		def soul_filter(tarinfo):
+			# Exclude heavy or redundant directories
+			# 'storage' is excluded because we already have concentrated Snapshots in 'backups/qdrant'
+			exclude_list = [
+				"models", ".venv", "backups/export", "backups/soul", 
+				"__pycache__", ".git", "storage", "qdrant_storage", 
+				"node_modules", ".mypy_cache"
+			]
+			if any(f"/{ex}/" in f"/{tarinfo.name}/" or tarinfo.name.endswith(f"/{ex}") for ex in exclude_list):
+				return None
+			return tarinfo
+
 		with tarfile.open(output_path, "w:gz") as tar:
-			# Add IA_DIR content
-			tar.add(self.ia_dir, arcname="IA_DATA")
+			# Add IA_DIR content with filtering
+			tar.add(self.ia_dir, arcname="IA_DATA", filter=soul_filter)
 			# Add .gemini antigravity config
 			gemini_dir = os.path.expanduser("~/.gemini")
 			if os.path.exists(gemini_dir):
 				tar.add(gemini_dir, arcname="GEMINI_CONFIG")
 
 		print(f"Export completed: {output_path}")
+		
+		# 3. Transmit to Cloud Vault if enabled
+		if self.vault.enabled:
+			file_id = self.vault.upload_kit(output_path)
+			if file_id:
+				print(f"Cloud Transmission Successful: {file_id}")
+			else:
+				print("Cloud Transmission Failed. Local kit preserved.")
+		
 		print("Note: Encryption (GPG) should be handled by the operator for high-security environments.")
 
 	def restore_soul(self, source_dir: str, commit: bool = False):

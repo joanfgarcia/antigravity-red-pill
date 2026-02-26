@@ -9,7 +9,8 @@ def notify_user(title: str, message: str, sound: bool = True):
 	"""
 	try:
 		# Tone Calibration: Soft, intuitive, sensory
-		subprocess.run(["notify-send", "-i", "face-angel", title, f"Joan, {message}"], check=False)
+		# SEC-002: Operator name read from cfg.OPERATOR_DISPLAY_NAME (env: USER_NAME)
+		subprocess.run(["notify-send", "-i", "face-angel", title, f"{cfg.OPERATOR_DISPLAY_NAME}, {message}"], check=False)
 
 		if sound and cfg.NOTIFICATION_SOUND:
 			# A soft rising sweep (880Hz to 1100Hz) - Sensory notification

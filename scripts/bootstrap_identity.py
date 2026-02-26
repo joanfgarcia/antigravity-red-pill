@@ -7,6 +7,7 @@ import yaml
 # Ensure we can import red_pill
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../")))
 from src.red_pill.memory import MemoryManager
+from src.red_pill.utils.keystore import store_recovery_hash
 
 
 def bootstrap():
@@ -46,15 +47,29 @@ def bootstrap():
 	manager.add_memory(collection="directive_memories", text=f"Active Skin: {args.skin}", importance=1.0, color="orange", force_immune=True)
 
 	# 3. Security Tier 2 (IRP)
+	# SEC-001: The Argon2 hash is stored in the OS keystore (mode 600 file),
+	# NOT in Qdrant. Qdrant only receives a boolean presence marker.
 	if args.master_hash:
+		# a) Persist hash to OS-level keystore (outside Qdrant)
+		try:
+			store_recovery_hash(args.master_hash)
+		except ValueError as e:
+			print(f"[SEC-001] Invalid hash format: {e}")
+			sys.exit(1)
+		except OSError as e:
+			print(f"[SEC-001] Failed to write keystore: {e}")
+			sys.exit(1)
+
+		# b) Store only an IRP presence marker in Qdrant — no hash material
 		manager.add_memory(
 			collection="directive_memories",
-			text="Identity Recovery Protocol: Managed Security Hash",
-			metadata={"master_hash": args.master_hash, "security_tier": 2},
+			text="Identity Recovery Protocol: Active (Tier 2 - Managed Sovereignty)",
+			metadata={"irp_active": True, "security_tier": 2},
 			importance=1.0,
 			color="gray",
-			force_immune=True,  # This ensures it doesn't erode
+			force_immune=True,  # This ensures the marker doesn't erode
 		)
+		print("[SEC-001] Recovery hash stored in OS keystore. Qdrant contains no password material.")
 
 	print(f"Identity anchored for {args.ai_name}. Skin set to {args.skin}.")
 

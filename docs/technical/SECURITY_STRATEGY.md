@@ -46,10 +46,22 @@ The agent will challenge the operator with **10 randomized questions** based on 
 For Tier 2, a "Safe Key Token" is generated. It is a one-time-viewable file provided during installation. 
 **Operator Instructions**: Store this token in a password manager or a physically separate encrypted volume.
 
-## 4. Technical Implementation
+## 4. Technical Implementation (v5.5.0 — SEC-001)
 
-- **Immune-Safe Storage**: The recovery hash is stored with `immune=True` but with a specific metadata tag `security_tier: 2`.
-- **Erosion Bypass**: The B760 metabolism daemon ignores points with the `security_tier` tag, ensuring they never decay regardless of reinforcement levels.
+- **OS-Level Keystore**: As of v5.5.0, the recovery hash is stored in
+  `~/.config/red_pill/recovery.key` (mode 600, owner-only access), managed by
+  `src/red_pill/utils/keystore.py`. The hash **never touches Qdrant**.
+- **Qdrant IRP Marker**: Qdrant stores only a boolean presence marker
+  (`{"irp_active": True, "security_tier": 2}`) in `directive_memories`. This
+  confirms the Tier 2 configuration is active, but contains **no password material**.
+- **Immune-Safe Marker**: The Qdrant marker is stored with `immune=True` so the
+  B760 metabolism daemon ignores it and it never decays.
+- **Argon2-id Verification**: Password verification uses `argon2-cffi`'s
+  `PasswordHasher.verify()`, which is constant-time and resistant to timing attacks.
+- **Known Limitation (documented)**: The keystore file is protected by OS permissions
+  (mode 600), not encrypted. For multi-user deployments or shared machines, wrap the
+  keystore directory in an age-encrypted volume or OS keyring (libsecret/Keychain).
+  This is tracked as a P3 roadmap item.
 
 ## 5. API Key Rotation Protocol
 
