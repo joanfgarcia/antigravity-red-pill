@@ -21,6 +21,7 @@ from red_pill.hive import HiveMind
 from red_pill.schemas import CreateEngramRequest
 from red_pill.utils.affect import get_emotional_stability_multiplier
 from red_pill.utils.emotion import get_chroma_for_emotion, get_emotion, get_emotions
+from red_pill.utils.fragmentation import synaptic_split
 from red_pill.utils.pulse import record_interaction
 
 logger = logging.getLogger(__name__)
@@ -138,6 +139,39 @@ class MemoryManager:
 
 		# v5.4.0: Temporal Pulse Detection
 		pulse = record_interaction()
+
+		# v5.5.0: Synaptic Fragmentation (Anti-Amnesia Logic)
+		# If the text is a massive block, we split it into sinaptic fragments
+		# to ensure vectors are granular and searchable.
+		if len(text) > cfg.CHUNK_THRESHOLD and not metadata.get("_is_fragment"):
+			fragments = synaptic_split(text)
+			parent_id = point_id if point_id else str(uuid.uuid4())
+			
+			# 1. Store the first fragment as the 'Anchor' (Original ID)
+			for i, frag in enumerate(fragments):
+				frag_metadata = metadata.copy()
+				frag_metadata["_is_fragment"] = True
+				frag_metadata["parent_id"] = parent_id
+				frag_metadata["chunk_index"] = i
+				frag_metadata["total_chunks"] = len(fragments)
+				
+				# The first fragment keeps the requested point_id (if any)
+				current_frag_id = parent_id if i == 0 else str(uuid.uuid4())
+				
+				self.add_memory(
+					collection=collection,
+					text=frag,
+					importance=importance,
+					metadata=frag_metadata,
+					point_id=current_frag_id,
+					color=color,
+					emotion=emotion,
+					intensity=intensity,
+					force_immune=force_immune
+				)
+			
+			# Return the ID of the anchor point
+			return parent_id
 		metadata["pulse_status"] = pulse["status"]
 		metadata["pulse_delta"] = pulse["delta_seconds"]
 

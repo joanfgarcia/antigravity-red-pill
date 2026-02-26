@@ -203,3 +203,11 @@ AFFECT_MODEL = os.getenv("AFFECT_MODEL", "PIONEER").upper()
 # AFFECT_CUSTOM_OVERRIDES: A JSON string to override specific emotion coordinates.
 # E.g. AFFECT_CUSTOM_OVERRIDES='{"joy": [0.9, 0.9], "fear": [-1.0, 1.0]}'
 AFFECT_CUSTOM_OVERRIDES = os.getenv("AFFECT_CUSTOM_OVERRIDES", "{}")
+
+# SYNAPTIC FRAGMENTATION (v5.5.0 Patch — 'Anti-Amnesia' Chunking)
+# Threshold: If memory > this length, it is split into multiple engrams.
+CHUNK_THRESHOLD = int(os.getenv("CHUNK_THRESHOLD", "800"))
+# Chunk Size: The target length for each engram fragment.
+CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "500"))
+# Chunk Overlap: The number of characters repeated between consecutive fragments.
+CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "100"))
