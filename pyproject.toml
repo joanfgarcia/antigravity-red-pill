@@ -71,3 +71,29 @@ ignore = [
 [tool.ruff.format]
 indent-style = "tab"
 quote-style = "double"
+
+[tool.coverage.run]
+source = ["src/red_pill"]
+# Omit modules that require real external I/O that is unavailable in CI:
+#   vault.py     — Google Drive SDK (needs service account credentials)
+#   telemetry.py — psutil GPU/NPU queries (needs real hardware)
+#   hive.py      — Milvus connection (needs running Milvus instance)
+#   cli.py       — Click entrypoint (tested via integration tests)
+#   observer.py  — Signal handler registration (untestable in unit context)
+#   memory_daemon.py — Unix socket server (tested via integration tests)
+omit = [
+    "*/utils/vault.py",
+    "*/telemetry.py",
+    "*/hive.py",
+    "*/cli.py",
+    "*/utils/observer.py",
+    "*/memory_daemon.py",
+]
+
+[tool.coverage.report]
+# Fail CI if core logic coverage drops below 80%.
+# External-I/O modules are excluded (see omit above); this threshold
+# applies only to the measurable core: memory engine, schemas, swarm,
+# MCP server, config, utils, and seed logic.
+fail_under = 80
+show_missing = true

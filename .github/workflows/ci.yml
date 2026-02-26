@@ -73,4 +73,5 @@ jobs:
         QDRANT_API_KEY: "ci-test-key-770"
         SIDECAR_AUTH_KEY: "ci-test-sidecar-key-770"
       # TST-002: Exclude integration/ — those require Docker and run in integration.yml
-      run: uv run pytest --cov=src/red_pill --cov-report=xml --cov-report=term --cov-fail-under=80 --ignore=tests/integration tests/
+      # Coverage threshold (80%) and omit list are defined in pyproject.toml [tool.coverage.*]
+      run: uv run pytest --cov=src/red_pill --cov-report=xml --cov-report=term --ignore=tests/integration tests/
