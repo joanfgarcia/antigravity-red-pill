@@ -1,15 +1,20 @@
 # Changelog: Red Pill Protocol
 
 ## [5.5.0] - 2026-02-26
-### 🛡️ Sovereign Remediation & Scientific Calibration
+### 🛡️ ACE-CAL (Synaptic Sovereign) & "Be Water" Security
+- **[PHILOSOPHY] Be Water Architecture**: Transitioned the protocol to an adaptable, fluid security model. The system now flows to fit the Operator's environment, offering choice between simplicity and total hardening.
+- **[SEC] Three Security Tiers**:
+    - **NINGUNA (Water)**: Open access for laboratory/dev environments (No API Key).
+    - **ADAPTATIVA (Standard)**: Resource-aware security. Uses best available hashing (Argon2-id or SHA-256) and reports encryption status without blocking.
+    - **MÁXIMA (Ice)**: Military-grade enforcement. Requires Argon2-id and host-level LUKS encryption. Aborts installation if requirements are not met.
 - **[SEC-001] OS-Level Keystore**: Migrated the Argon2-id recovery hash from Qdrant to a secure OS file (`~/.config/red_pill/recovery.key`) with mode-600 permissions. Qdrant now only stores a boolean marker of identity recovery presence.
 - **[FEAT] ACE-CAL (Dynamic Calibration)**: Introduced dynamic Affective Cognitive Engine models. Toggle between `PIONEER` (classic) and `ACADEMIC` (Warriner et al. 2013) models in `.env`. Supports `AFFECT_CUSTOM_OVERRIDES` for surgical control by the Architect.
 - **[PERF-001] Synaptic Inversion**: Refactored `ToneAnalyzer` to support dependency injection of the `MemoryManager`. This eliminates redundant Qdrant connections in high-frequency environments like the MCP server.
 - **[CQ-004] Atomic Heartbeat**: Implemented atomic write patterns for `pulse.json` (temp + replace) to prevent file corruption during concurrent session writes.
 - **[QA] Swarm Unit Suite (SWM-TST)**: Launched a pure-Python unit test suite for the Swarm agents (Smith, Oracle, Compressor), achieving 100% logic coverage without requiring GPU or network.
 - **[QA] Parametric ACE Validation (TST-001)**: Implemented 55+ parametric test cases for the ACE engine, covering boundary conditions and valence/arousal sensitivity.
-- **[CI] Integration Gateways (TST-002)**: Separated Docker-based integration tests into a dedicated CI workflow triggered by labels or manual dispatch, optimizing standard PR feedback loops.
-- **[SEC-002] Observer Identity**: Standardized the use of `OPERATOR_DISPLAY_NAME` in the Observer/Notification system to ensure consistent identity anchoring.
+- **[QA] Sound of Silence Enforcement**: Finalized linter and test gates for tab-only indentation and ornamental comment purging.
+- **[DOCS] Be Water Documentation**: Created `docs/technical/BE_WATER_SECURITY.md` and updated `README.md`, `QUICKSTART.md`, and `ARCHITECTURE.md` to reflect the new tiered reality.
 - **[FEAT] The Legacy Reset**: Updated the Genesis engram (ID `0000...0001`) from "I am Aleph" to "Aleph was here". Clarifies identity boundaries for new agents while preserving historical lineage.
 - **[SEC] Dependency Auditing (DEP-001)**: Integrated `pip-audit` into the CI pipeline to proactively detect and block vulnerable dependencies.
 
