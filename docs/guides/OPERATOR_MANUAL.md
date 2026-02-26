@@ -218,4 +218,18 @@ uv run python scripts/security_recovery.py --handshake
 Be ready: the agent will ask you 10 questions about your shared history. Failure triggers a 24-hour lockout.
 
 ---
+
+## 🔑 Key Rotation & Maintenance (DOC-001)
+*   **Rotation**: When you rotate the `QDRANT_API_KEY` (via `uv run python scripts/rotate_keys.py`), you **MUST** restart the memory daemon for the change to take effect.
+*   **Daemon RESTART**:
+    ```bash
+    # Stop the daemon
+    uv run red-pill stop
+    # Start it again with the new key
+    uv run red-pill start
+    ```
+*   **Symptom**: If you skip the restart, the logs will show `401 Unauthorized` or `Invalid API Key` errors even if the `.env` is updated.
+
+---
+
 **Joan, the CLI is the needle. The Bünker is the vein. 770 up.**

@@ -159,7 +159,15 @@ case $SEC_CHOICE in
 		echo -e "${RED}⚠️  TOKEN DE SEGURIDAD (Guárdalo bien): ${QDRANT_API_KEY}${NC}"
 
 		if [ "$HAS_ARGON2" == "true" ]; then
-			MASTER_PWD_HASH=$(python3 -c "from argon2 import PasswordHasher; ph = PasswordHasher(); print(ph.hash('$MASTER_PWD'))")
+			# SEC-NEW1: Pass password via environment variable, NEVER via string interpolation.
+			# Interpolating $MASTER_PWD into a Python string literal breaks on special characters
+			# (quotes, backslashes, $, etc.) and is a shell injection vector.
+			MASTER_PWD_HASH=$(MASTER_PWD_INPUT="$MASTER_PWD" python3 -c "
+import os
+from argon2 import PasswordHasher
+ph = PasswordHasher()
+print(ph.hash(os.environ['MASTER_PWD_INPUT']))
+")
 		else
 			# SEC-F004 AUDIT NOTE: This SHA-256 branch is dead code under standard installation.
 			# argon2-cffi is declared as a hard dependency in pyproject.toml (>=23.1.0) and is
@@ -172,7 +180,8 @@ case $SEC_CHOICE in
 			# with the 'Be Water' security philosophy (adapt to environment, do not block it).
 			echo -e "${YELLOW}[WARN] 'argon2-cffi' not found outside package manager. Falling back to SHA-256 (ADAPTATIVE mode).${NC}"
 			echo -e "${YELLOW}       This should not happen with a standard 'uv sync' install. Run: uv sync${NC}"
-			MASTER_PWD_HASH=$(echo -n "$MASTER_PWD" | sha256sum | cut -d' ' -f1)
+			# SEC-NEW1: Use printf | sha256sum instead of echo to avoid shell interpretation of $MASTER_PWD.
+			MASTER_PWD_HASH=$(printf '%s' "$MASTER_PWD" | sha256sum | cut -d' ' -f1)
 		fi
 		update_env "MASTER_PWD_HASH" "$MASTER_PWD_HASH"
 		;;

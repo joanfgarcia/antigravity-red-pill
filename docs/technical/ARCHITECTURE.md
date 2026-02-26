@@ -32,7 +32,8 @@ The `associations` field is a flat list of UUIDs.
 The schema is " Schemaless" (JSON payload).
 - **Flexibility**: High.
 - **Fragility**: High. The `PointUpdate` class relies on implicit knowledge of payload structure. If v5.0 introduces nested weights or time-series data for reinforcement history, the flat payload update logic will inevitably corrupt data.
-- **VectorRigidity**: `VECTOR_SIZE` is now configurable but immutable post-seed. The system lacks a "Transcoding" mechanism to migrate memories to new embedding models without re-generating everything from raw text (which is not stored, only the vector and content snippet are).
+- **VectorRigidity**: `VECTOR_SIZE` is configurable but immutable post-seed. Migrating to a new embedding model requires re-generating all vectors.
+  **ARCH-001 NOTE**: The full source text is stored in every engram's Qdrant payload (`payload["content"]`, `memory.py:205`). Re-embedding on model upgrade is therefore safe — no data is lost. What is missing is an automated **Transcoding** migration script (`red-pill re-embed --model new-model`). This is a tooling gap, not a data loss risk. Tracked as v6.0 roadmap item.
 
 ## 4. Recommendations for v5.0 (Global Scale Strategy)
 1.  **[RESOLVED v4.2.1] Time-To-Live (TTL) Indexing**: Move erosion from strict scan to a timestamp-based index query. Only fetch/update memories where `last_recalled_at < now - METABOLISM_COOLDOWN`.

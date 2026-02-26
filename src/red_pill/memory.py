@@ -484,9 +484,17 @@ class MemoryManager:
 					p.payload["immune"] = True
 
 				updated_points.append(PointUpdate(id=p.id, payload=p.payload))
-				# Prepare atomic batch operations
+				# PERF-001: Prepare focused batch operations — only send the keys that changed.
+				# Avoids re-transmitting large 'content' strings over the wire.
+				focused_payload = {
+					"reinforcement_score": p.payload["reinforcement_score"],
+					"last_recalled_at": p.payload["last_recalled_at"],
+				}
+				if "immune" in p.payload:
+					focused_payload["immune"] = p.payload["immune"]
+
 				update_operations.append(
-					models.SetPayloadOperation(set_payload=models.SetPayload(payload=p.payload, points=[p.id]))  # type: ignore
+					models.SetPayloadOperation(set_payload=models.SetPayload(payload=focused_payload, points=[p.id]))  # type: ignore
 				)
 
 		# 3. Execute batch update OUTSIDE the lock (Qdrant handles its own internal locking/concurrency)
@@ -625,8 +633,15 @@ class MemoryManager:
 					eroded_count += 1
 					hit.payload["reinforcement_score"] = new_score
 					hit.payload["last_recalled_at"] = time.time()
+					
+					# PERF-001: Only send modified keys.
+					focused_payload = {
+						"reinforcement_score": hit.payload["reinforcement_score"],
+						"last_recalled_at": hit.payload["last_recalled_at"],
+					}
+					
 					update_operations.append(
-						models.SetPayloadOperation(set_payload=models.SetPayload(payload=hit.payload, points=[hit.id]))  # type: ignore
+						models.SetPayloadOperation(set_payload=models.SetPayload(payload=focused_payload, points=[hit.id]))  # type: ignore
 					)
 
 			if update_operations:
