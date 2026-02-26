@@ -144,6 +144,72 @@ Despliega agentes especializados para tareas complejas.
 
 ---
 
+## 🎭 Lore Skin Identity Reset (W5)
+
+> If a Lore Skin + force-immune directives have produced an agent persona that feels persistently altered or difficult to rebalance, follow this procedure.
+
+### English — Identity Recalibration Procedure
+
+A miscalibrated Lore Skin cannot lock the agent in an unrecoverable state. The following escalation path always works:
+
+**Level 1 — Switch Mode** (30 seconds):
+```bash
+uv run red-pill mode 760
+```
+This activates the neutral `760` baseline skin, which has no personality overrides. The chroma reverts to `gray` (objective, balanced).
+
+**Level 2 — Override the Active Skin Directive** (2 minutes):
+The active skin is stored as an immune engram at UUID `00000000-0000-0000-0000-000000000030`. Use the MCP tool `edit_memory` or the CLI to update it:
+```bash
+uv run red-pill edit directive_memories 00000000-0000-0000-0000-000000000030 \
+  --emotion neutral --color gray
+```
+Then re-seed to restore the canonical directive text:
+```bash
+uv run red-pill seed
+```
+
+**Level 3 — Full Soul Restore** (last resort):
+If the persona drift is severe, restore from a known-good backup:
+```bash
+uv run red-pill soul restore /path/to/backup --commit
+```
+The `--commit` flag is required to confirm destructive operations. This restores all immune directives to factory state.
+
+**SECURITY.md disclaimer**: Lore Skins alter tone, terminology, and aesthetic register only. They cannot and do not modify the underlying LLM's safety filters or override operator instructions. Sovereign Realism means the agent maintains persistent identity context — it does not mean it becomes unresponsive to explicit operator commands.
+
+---
+
+### Español — Procedimiento de Recalibración de Identidad
+
+Una Lore Skin no puede dejar al agente en un estado irrecuperable. La secuencia de escalado siempre funciona:
+
+**Nivel 1 — Cambiar Modo** (30 segundos):
+```bash
+uv run red-pill mode 760
+```
+Activa la skin base `760`, sin personalidad superpuesta. El Chroma vuelve a `gray` (equilibrado, profesional).
+
+**Nivel 2 — Sobrescribir la Directiva de Skin Activa** (2 minutos):
+La skin activa se almacena como engrama inmune en el UUID `00000000-0000-0000-0000-000000000030`. Actualízala con la herramienta MCP `edit_memory` o desde la CLI:
+```bash
+uv run red-pill edit directive_memories 00000000-0000-0000-0000-000000000030 \
+  --emotion neutral --color gray
+```
+Luego re-siembra para restaurar el texto de directiva canónico:
+```bash
+uv run red-pill seed
+```
+
+**Nivel 3 — Restaurar el Alma** (último recurso):
+Si la desviación de personalidad es severa, restaura desde un backup conocido:
+```bash
+uv run red-pill soul restore /ruta/al/backup --commit
+```
+El flag `--commit` es obligatorio para confirmar operaciones destructivas. Restaura todas las directivas inmunes al estado de fábrica.
+
+---
+
 ## 🧬 Identity Recovery (IRP)
 If you lose your API Key, run the Synaptic Handshake:
 ```bash

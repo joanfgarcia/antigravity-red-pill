@@ -84,20 +84,17 @@ Project Lazarus is designed to be **Water**—fluid across all hardware tiers. T
 | **Logic** | Baseline Reasoning | NPU Offloading (Ryzen AI / Core Ultra) |
 | **Security** | NONE / ADAPTATIVE | MAXIMUM (Argon2-id + LUKS) |
 
-- **Portability**: the distributed swarm uses standard OS-level processes (`multiprocessing`), making it compatible with Linux, macOS, and Windows.
-- **Containerization**: The Bünker (Qdrant) is backend-agnostic, running equally on local Docker, Podman, or cloud-native clusters.
-
-- **Portability**: the distributed swarm uses standard OS-level processes (`multiprocessing`), making it compatible with Linux, macOS, and Windows.
+- **Portability**: The swarm agents run as concurrent `asyncio` coroutines within a single process. OS-level `multiprocessing` isolation is a planned milestone for v6.0 (Sovereign Swarm Discovery).
 - **Containerization**: The Bünker (Qdrant) is backend-agnostic, running equally on local Docker, Podman, or cloud-native clusters.
 
 ## 10. Conclusion: The Red Pill Vision
 Red Pill distinguishes itself by weaving together autonomous agency, human‑like memory dynamics, thematic storytelling, and a privacy‑first, zero‑trust ethos. Its originality lies not in a novel algorithm but in the holistic experience it offers: an AI that remembers you, speaks your chosen mythology, respects your data, and behaves like a trustworthy teammate. This combination of narrative flair, governance rigor, and self‑sustaining memory makes Red Pill a uniquely positioned project in the landscape of AI‑augmented productivity tools.
 
-The system has evolved from a single-user prototype into a **Decentralized Cognitive Swarm** (v5.1). The transition from single-process asynchronous tasks to a distributed multi-process architecture provides the necessary isolation and performance for high-intensity auditing and synthesis.
+The system has evolved from a single-user prototype into a **Cognitive Swarm architecture** (v5.1). The current implementation deploys agents as concurrent `asyncio` coroutines via `GruOrchestrator.deploy_swarm()` — providing parallelism and isolation within a single process. The transition to a true **distributed multi-process architecture** (separate OS processes, cross-machine deployment) is scoped for v6.0 and formally tracked in the roadmap.
 
-**Status**: GREEN (Full Pass). The Bünker is secured, the Swarm is distributed, and the vision of Project Lazarus is now operational reality.
+**Status**: GREEN (Full Pass). The Bünker is secured, the Swarm is concurrent, and the foundation for Project Lazarus is operational.
 
-**Recommendation**: Proceed to Sovereign Autonomy Phase (v6.0 - Agent Swarm Discovery).
+**Recommendation**: Proceed to Sovereign Autonomy Phase (v6.0 — True Distributed Swarm).
 
 ## 11. Known Limitations & Platform Quirks
 

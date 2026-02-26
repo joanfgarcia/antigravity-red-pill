@@ -1,7 +1,6 @@
-import gc
 import logging
 import os
-from typing import Optional
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -18,15 +17,22 @@ class EdgeEngine:
 	"""
 	Local SLM logic for edge-node processing.
 	Used for compression, synthesis, and technical extraction.
+
+	PERF-F01: Lazy-loading model — the GGUF is only loaded on the
+	first call to compress() or synthesize(), not at instantiation.
+	This avoids a multi-GB VRAM allocation for agents that are
+	spawned but may never be invoked.
 	"""
 
 	def __init__(self, model_path: Optional[str] = None, n_gpu_layers: int = -1):
-		self.llm = None
+		self.llm: Optional[Any] = None
+		self._llm_loaded = False
+		self._n_gpu_layers = n_gpu_layers
 
 		ia_dir = os.getenv("ANTIGRAVITY_IA_DIR", os.path.expanduser("~/Documents/IA"))
 		model_dir = os.path.join(ia_dir, "models")
 
-		# If no path provided, search for the best one (7B > 1.5B)
+		# Discover model path eagerly (cheap filesystem ops) but defer loading
 		if not model_path and os.path.exists(model_dir):
 			models = os.listdir(model_dir)
 			priority_models = ["qwen2.5-coder-7b", "qwen2.5-coder-1.5b"]
@@ -43,22 +49,28 @@ class EdgeEngine:
 
 		self.model_path = model_path
 
-		# Only load if python binding exists and we have a model
-		if LLAMA_AVAILABLE and self.model_path and os.path.exists(self.model_path):
-			try:
-				# VRAM Guard: The RTX 5070 has 8GB. 7B Q4_K_M uses ~5GB.
-				# We offload everything (-1) but let llama-cpp handle the limits.
-				self.llm = Llama(
-					model_path=self.model_path,
-					n_ctx=8192,  # Expanded context for the Heavy weight
-					n_gpu_layers=n_gpu_layers,
-					verbose=False,
-				)
-			except Exception as e:
-				logger.warning(f"CQ-001: Model load failed for {self.model_path}: {e}. Falling back to technical extraction.")
-				self.llm = None
+	def _ensure_loaded(self) -> None:
+		"""PERF-F01: Lazy-load the LLM on first use."""
+		if self._llm_loaded:
+			return
+		self._llm_loaded = True  # Mark before attempt to avoid retry storms
+
+		if not LLAMA_AVAILABLE or not self.model_path or not os.path.exists(self.model_path):
+			return
+
+		try:
+			self.llm = Llama(
+				model_path=self.model_path,
+				n_ctx=8192,
+				n_gpu_layers=self._n_gpu_layers,
+				verbose=False,
+			)
+		except Exception as e:
+			logger.warning(f"CQ-001: Model load failed for {self.model_path}: {e}. Falling back to technical extraction.")
+			self.llm = None
 
 	def compress(self, text: str) -> str:
+		self._ensure_loaded()
 		if not self.llm:
 			return self._fallback_compress(text)
 
@@ -81,9 +93,8 @@ class EdgeEngine:
 		except Exception as e:
 			print(f"Edge compression failed: {e}")
 			return self._fallback_compress(text)
-		finally:
-			# Aggressive cleanup since this is a side-agent
-			gc.collect()
+		# PERF-F03: gc.collect() removed — GGUF model stays resident in VRAM;
+		# forcing a GC cycle here is ineffective and adds 50-200ms of latency.
 
 	def _fallback_compress(self, text: str) -> str:
 		import re
@@ -118,6 +129,7 @@ class EdgeEngine:
 
 	def synthesize(self, background: str, query: str) -> str:
 		"""Synthesize retrieved context into a coherent summary."""
+		self._ensure_loaded()
 		if not self.llm:
 			# 7B Surgical Patch: Sanitized Fallback
 			# We never just truncate background if it could contain raw engrams

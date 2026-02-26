@@ -109,14 +109,47 @@ ABSENCE_GUARD_SCROLL_LIMIT = int(os.getenv("ABSENCE_GUARD_SCROLL_LIMIT", "500"))
 # EMOTIONAL CHROMA (v4.2.0)
 DEFAULT_COLOR = "gray"
 DEFAULT_EMOTION = "neutral"
+# EMOTIONAL_DECAY_MULTIPLIERS (W2 — Calibration Rationale)
+# Each multiplier adjusts the base EROSION_RATE for emotionally-tagged engrams.
+# Values > 1.0 accelerate decay; values < 1.0 slow it (higher memory persistence).
+#
+# Theoretical basis (PIONEER mode — see ACE-CAL in utils/affect.py):
+#   - orange (anxiety, 1.5x): High-arousal negative affect. Ebbinghaus (1885) and
+#     clinical anxiety research (DSM-5) show that anxiety states are highly
+#     context-sensitive — memories encoded under acute anxiety fade faster when the
+#     anxious context is resolved. Öhman & Mineka (2001) note salience is high but
+#     consolidation is fragile without repeated reinforcement.
+#   - yellow (joy, 0.5x): Positive valence memories exhibit slower forgetting curves
+#     (Levenson, 1994 — positive affect promotes broader encoding). Joy-tagged
+#     engrams are reinforced by narrative recurrence and associated optimism bias.
+#   - purple (ennui, 2.0x): Low arousal + negative valence = minimal consolidation
+#     signal. Izard's Differential Emotion Theory predicts ennui-tagged content has
+#     the lowest survival salience. Rapid erosion models cognitive 'clearing' of
+#     low-engagement states.
+#   - cyan (envy/evolution, 0.8x): Moderate persistence. Forward-looking (growth)
+#     states encode with mild salience; erosion is slightly reduced to keep
+#     strategic evolution signals available for recall.
+#   - blue (sadness, 1.0x): Standard decay. Sadness has moderate arousal and
+#     moderate consolidation per Warriner et al. (2013) / NRC VAD. No adjustment.
+#   - gray (neutral, 1.0x): Baseline. Neutral content follows the raw EROSION_RATE
+#     without modification — the mathematical zero-point of the ACE.
+#   - emerald (sovereignty, 0.7x): Strategic sovereignty-tagged engrams are
+#     intentionally persistent. They encode high-level architectural intent and
+#     identity directives, warranting a slower erosion rate to prevent drift.
+#
+# EMPIRICAL NOTE: These values are PIONEER mode defaults. ACADEMIC mode uses
+# Warriner et al. (2013) / NRC VAD coordinates for Valence-Arousal, and CUSTOM
+# mode allows per-emotion overrides via AFFECT_CUSTOM_OVERRIDES. A Monte Carlo
+# simulation of decay trajectories across affect models is a tracked roadmap item
+# (W2 → v6.0 ACE-CAL Research Build).
 EMOTIONAL_DECAY_MULTIPLIERS = {
-	"orange": 1.5,  # Anxiety: decays faster if not reinforced
-	"yellow": 0.5,  # Joy: persists longer
-	"purple": 2.0,  # Ennui: garbage collected quickly
-	"cyan": 0.8,  # Envy/Evolution: focused persistence
-	"blue": 1.0,  # Sadness: standard decay
-	"gray": 1.0,  # Neutral: standard decay
-	"emerald": 0.7,  # Sovereignty: high-level strategic persistence
+	"orange": 1.5,  # Anxiety: high arousal but fragile consolidation
+	"yellow": 0.5,  # Joy: positive persistence (Levenson positive affect)
+	"purple": 2.0,  # Ennui: lowest survival salience (Izard DET)
+	"cyan": 0.8,    # Evolution: mild strategic persistence
+	"blue": 1.0,    # Sadness: standard decay (Warriner VAD baseline)
+	"gray": 1.0,    # Neutral: mathematical zero-point
+	"emerald": 0.7, # Sovereignty: intentional strategic persistence
 }
 
 # CHROMA-TONE MAPPING (v4.2.1)
