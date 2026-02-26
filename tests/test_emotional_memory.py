@@ -29,12 +29,12 @@ def test_emotional_erosion(manager, mock_qdrant):
 	# Orange: 1.0 - (0.1 * 1.5) = 0.85
 	point_orange = MagicMock()
 	point_orange.id = "orange_1"
-	point_orange.payload = {"reinforcement_score": 1.0, "color": "orange", "emotion": "anxiety", "immune": False}
+	point_orange.payload = {"reinforcement_score": 1.0, "color": "orange", "emotion": "anxiety", "intensity": 1.0, "immune": False}
 
 	# Yellow: 1.0 - (0.1 * 0.5) = 0.95
 	point_yellow = MagicMock()
 	point_yellow.id = "yellow_1"
-	point_yellow.payload = {"reinforcement_score": 1.0, "color": "yellow", "emotion": "joy", "immune": False}
+	point_yellow.payload = {"reinforcement_score": 1.0, "color": "yellow", "emotion": "joy", "intensity": 5.6, "immune": False}
 
 	manager.client.scroll.side_effect = [([point_orange, point_yellow], None)]
 

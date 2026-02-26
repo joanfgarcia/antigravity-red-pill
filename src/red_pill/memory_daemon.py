@@ -80,7 +80,11 @@ class MemoryDaemon:
 				providers.insert(0, "OpenVINOExecutionProvider")
 
 			logger.info(f"Loading embedding model {cfg.EMBEDDING_MODEL} with providers: {providers}")
-			self.encoder = TextEmbedding(model_name=cfg.EMBEDDING_MODEL, providers=providers)
+			try:
+				self.encoder = TextEmbedding(model_name=cfg.EMBEDDING_MODEL, providers=providers)
+			except Exception as e:
+				logger.warning(f"Hardware-accelerated embedding failed ({e}). Falling back to CPU only.")
+				self.encoder = TextEmbedding(model_name=cfg.EMBEDDING_MODEL, providers=["CPUExecutionProvider"])
 
 	def start(self) -> None:
 		self._check_encryption()

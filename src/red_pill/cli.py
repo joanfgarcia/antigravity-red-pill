@@ -251,13 +251,13 @@ def main() -> None:
 				deep_trigger = any(phrase in args.query.lower() for phrase in cfg.DEEP_RECALL_TRIGGERS)
 				is_deep = args.deep or deep_trigger
 
-				results = manager.search_and_reinforce(collection, args.query, limit=args.limit, deep_recall=is_deep)
+				search_results = manager.search_and_reinforce(collection, args.query, limit=args.limit, deep_recall=is_deep)
 				if is_deep:
 					print(f"--- [DEEP RECALL ACTIVATED: {collection.upper()}] ---")
 				else:
 					print(f"--- [RESULTS: {collection.upper()}] ---")
 
-				for hit in results:
+				for hit in search_results:
 					score = getattr(hit, "payload", {}).get("reinforcement_score", 0.0)
 					color = getattr(hit, "payload", {}).get("color", "gray")
 					intensity = getattr(hit, "payload", {}).get("intensity", 1.0)
@@ -265,7 +265,9 @@ def main() -> None:
 					assocs_val = getattr(hit, "payload", {}).get("associations", [])
 					assocs = len(assocs_val) if assocs_val is not None else 0
 
-					print(f"- [{color.upper()}][Int: {intensity}] {hit.payload.get('content', '')}{status}")
+					payload = getattr(hit, "payload", {})
+					content = payload.get("content", "")
+					print(f"- [{color.upper()}][Int: {intensity}] {content}{status}")
 					if assocs > 20:
 						logger.warning(f"Synaptic Hub Detected: Engram {hit.id} has {assocs} associations (Limit: 20). Operations may lag.")
 			elif args.command == "erode":

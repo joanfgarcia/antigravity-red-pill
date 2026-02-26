@@ -71,14 +71,14 @@ class ToneAnalyzer:
 				if p.payload and not p.payload.get("immune", False):
 					color = p.payload.get("color", cfg.DEFAULT_COLOR)
 					if color != cfg.DEFAULT_COLOR:
-						return color
+						return str(color)
 					if latest_color == cfg.DEFAULT_COLOR:
 						latest_color = color
 
-			return latest_color
+			return str(latest_color)
 		except Exception as e:
 			logger.warning(f"Mood analysis failed: {e}")
-			return cfg.DEFAULT_COLOR
+			return str(cfg.DEFAULT_COLOR)
 
 	@staticmethod
 	def get_tone_directive(mood_color: str) -> str:

@@ -39,7 +39,7 @@ def get_emotion(text: str) -> Optional[str]:
 	"""Legacy single-emotion detector."""
 	emotions = get_emotions(text, top_k=1)
 	if emotions:
-		return emotions[0]["label"]
+		return str(emotions[0]["label"])
 	return None
 
 

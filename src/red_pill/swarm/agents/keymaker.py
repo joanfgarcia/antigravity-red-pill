@@ -16,7 +16,7 @@ class KeymakerMinion(Minion):
 		"""
 		Perform a full infrastructure health check.
 		"""
-		results = {"status": "optimal", "checks": [], "qdrant_online": False, "daemon_online": False, "npu_status": "Undetected"}
+		results: Dict[str, Any] = {"status": "optimal", "checks": [], "qdrant_online": False, "daemon_online": False, "npu_status": "Undetected"}
 
 		# 1. Qdrant HTTP Check
 		import requests

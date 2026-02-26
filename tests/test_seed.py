@@ -43,8 +43,8 @@ def test_seed_project_adds_memories(mock_manager):
 
 	seed_project(mock_manager)
 
-	# 6 original + 8 directives + 0 skills (or whatever sums to 14)
-	assert mock_manager.add_memory.call_count == 14
+	# 19 hardcoded genesis memories + 2 markdown seeds = 21
+	assert mock_manager.add_memory.call_count == 21
 
 	# Check the first call parameters
 	args, kwargs = mock_manager.add_memory.call_args_list[0]
@@ -60,7 +60,7 @@ def test_seed_project_exception_handled(mock_manager):
 	seed_project(mock_manager)
 
 	# Should fall through and still attempt add_memory for all items
-	assert mock_manager.add_memory.call_count == 14
+	assert mock_manager.add_memory.call_count == 21
 
 
 def test_seed_project_skips_if_present(mock_manager):

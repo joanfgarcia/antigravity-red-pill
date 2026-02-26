@@ -661,7 +661,7 @@ class MemoryManager:
 		"""
 		offset = None
 		seen_content: Dict[str, str] = {}  # content -> id
-		duplicates: List[str] = []
+		duplicates: List[Any] = []
 		migrated_count = 0
 
 		logger.info(f"Starting sanitation for {collection}...")

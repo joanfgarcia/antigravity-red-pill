@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 import red_pill.config as cfg
 
 # Emotional Spectrum Definition (Inside Out 2 / v4.2.0)
-ValidColor = Literal["orange", "yellow", "purple", "cyan", "blue", "gray", "red", "green", "pink"]
+ValidColor = Literal["orange", "yellow", "purple", "cyan", "blue", "gray", "red", "green", "emerald"]
 ValidEmotion = Literal[
 	"joy",
 	"sadness",
@@ -69,7 +69,9 @@ class CreateEngramRequest(BaseModel):
 			if isinstance(val, (dict, list)) and key != "associations":
 				if isinstance(val, list):
 					for item in val:
-						if not isinstance(item, (str, int, float, bool, dict)):
+						if key == "emotional_profile" and isinstance(item, dict):
+							continue
+						if not isinstance(item, (str, int, float, bool)):
 							raise ValueError(f"Complex type in metadata list {key}")
 						if isinstance(item, str) and "\x00" in item:
 							raise ValueError(f"Metadata list {key} contains null bytes")

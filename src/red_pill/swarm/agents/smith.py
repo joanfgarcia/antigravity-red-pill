@@ -25,7 +25,7 @@ class SmithMinion(Minion):
 		Integrates real-time hardware telemetry.
 		"""
 		start_time = time.time()
-		results = {
+		results: Dict[str, Any] = {
 			"status": "pass",
 			"findings": [],
 			"security_score": 100.0,

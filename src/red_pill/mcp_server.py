@@ -156,6 +156,8 @@ async def handle_call_tool(
 	name: str, arguments: Optional[Dict[str, Any]]
 ) -> List[Union[types.TextContent, types.ImageContent, types.EmbeddedResource]]:
 	"""Handle Sovereign tool executions."""
+	if arguments is None:
+		arguments = {}
 	if name == "get_hardware_status" or name == "get_dashboard":
 		stats = HardwareSentinel.get_stats()
 		gpu_temp = max([g.get("temp", 0) for g in stats["gpu"]]) if stats["gpu"] else 0
@@ -289,14 +291,14 @@ async def handle_call_tool(
 			return [types.TextContent(type="text", text=f"Failed to read directives: {e}")]
 
 	elif name == "compress_prompt":
-		text_to_compress = (arguments or {}).get("text", "")
+		text_to_compress = arguments.get("text", "")
 		gru = GruOrchestrator()
 		compressor = CompressorMinion()
 		results = await gru.deploy_swarm("compress", [compressor], text=text_to_compress)
 		res = results[0]
 		if res.status == "success":
-			stats = f"[Original: {res.result.get('original_length')} chars -> Compressed: {res.result.get('compressed_length')} chars]"
-			return [types.TextContent(type="text", text=f"{stats}\n\n{res.result.get('compressed_prompt')}")]
+			stats_text = f"[Original: {res.result.get('original_length')} chars -> Compressed: {res.result.get('compressed_length')} chars]"
+			return [types.TextContent(type="text", text=f"{stats_text}\n\n{res.result.get('compressed_prompt')}")]
 		else:
 			return [types.TextContent(type="text", text=f"Compression Failed: {res.error}")]
 

@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -54,7 +54,7 @@ class CloudVault:
 		logger.info(f"Transmitting Soul Kit to Cloud Haven: {file_name}")
 
 		try:
-			file_metadata = {"name": file_name}
+			file_metadata: Dict[str, Any] = {"name": file_name}
 			if self.folder_id:
 				file_metadata["parents"] = [self.folder_id]
 
@@ -62,7 +62,7 @@ class CloudVault:
 
 			file = self.service.files().create(body=file_metadata, media_body=media, fields="id").execute()
 
-			file_id = file.get("id")
+			file_id = str(file.get("id"))
 			logger.info(f"Soul Kit secured in Cloud Vault. File ID: {file_id}")
 			return file_id
 		except Exception as e:

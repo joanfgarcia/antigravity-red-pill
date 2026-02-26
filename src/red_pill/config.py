@@ -134,7 +134,7 @@ CADENCE_ABSENCE_THRESHOLD = 86400 * 2  # 2 Days for 'Dormancy' greeting trigger
 METABOLISM_STATE_FILE = os.path.join(IA_DIR, "storage", "metabolism_state.json")
 # Overwrite legacy if needed
 if os.getenv("METABOLISM_STATE_FILE"):
-	METABOLISM_STATE_FILE = os.getenv("METABOLISM_STATE_FILE")
+	METABOLISM_STATE_FILE = str(os.getenv("METABOLISM_STATE_FILE"))
 
 # CLOUD VAULT (v5.4.1)
 CLOUD_VAULT_ENABLED = os.getenv("CLOUD_VAULT_ENABLED", "False").lower() == "true"
