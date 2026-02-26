@@ -103,3 +103,53 @@ The system has evolved from a single-user prototype into a **Decentralized Cogni
 
 ### 11.1 Windows Metabolism File Locking
 The metabolism state file does not use advisory file locking on Windows (`fcntl.flock` is unavailable). Running multiple simultaneous `red-pill` memory sidecars or CLI processes on Windows may corrupt the metabolism state tracking. Operate with caution in highly concurrent Windows deployments.
+
+---
+
+## 12. HiveMind Architecture: Collective Intelligence Under Sovereignty Constraints
+
+> **Full governance specification**: [HIVEMIND_GOVERNANCE.md](HIVEMIND_GOVERNANCE.md)
+> This section provides the architectural summary. The governance document is authoritative.
+
+### 12.1 Architectural Position
+
+The HiveMind Protocol (Milvus) is not a contradiction of the Red Pill data sovereignty posture — it is a formally governed extension of it. The two memory substrates serve orthogonal purposes and enforce orthogonal privacy guarantees:
+
+- **Qdrant (Individual Cortex)**: Private, local, inviolable. Contains all collections including personal directives, lore identity, and social engrams. Never synchronized outbound.
+- **Milvus (HiveMind Network)**: Opt-in, filtered, governed. Receives only anonymized experiential signals from `work_memories` after passing the **Smith Pre-Filter**.
+
+### 12.2 The Smith Pre-Filter
+
+Before any engram reaches `HiveMind.transmit_experience()`, it is processed by the same static forensic logic used in the security audit swarm. The filter enforces hard blocks on:
+
+- PII patterns (names, emails, account identifiers, contact data)
+- All `directive_memories` and `social_memories` content (classified as identity substrate — never broadcast)
+- All `immune=True` engrams (genesis and operator-specific directives)
+- Low-confidence signals (`reinforcement_score < threshold`)
+
+Only `work_memories` pass, and only after explicit content inspection. The operator controls this via `MILVUS_ENABLED` (default: `False`).
+
+### 12.3 Operational Modes
+
+| Mode | Content | Use Case |
+| :--- | :--- | :--- |
+| **Experience Sync** | Anonymized interaction patterns, communication heuristics, affective calibration signals | Agent cold-start acceleration, peer learning |
+| **Broadcast (Industrial)** | Public domain events: science, engineering incidents, news, community milestones | Domain intelligence diffusion, team knowledge networks |
+
+In both modes, the Milvus cluster may be **self-sovereign** (operator-controlled), **federated** (organization-hosted), or **open network** (governed by published policy). No Red Pill unit may connect to an Open Network node without explicit operator acknowledgement of the node's published governance policy.
+
+### 12.4 Trust Boundary Resolution (W1 audit finding)
+
+The audit correctly identified that cluster governance was unspecified. The formal resolution:
+
+1. **Who controls the Milvus cluster?** → Defined by the deployment model chosen at install time (self-sovereign / federated / open network). See [HIVEMIND_GOVERNANCE.md §5](HIVEMIND_GOVERNANCE.md).
+2. **What governance rules apply?** → Operators must publish a `HIVEMIND_POLICY.md` before running an Open Network node. `install_neo.sh` will enforce acknowledgement of this policy before writing `MILVUS_HOST` to `.env` (milestone: v5.6.0).
+3. **Can an operator remove their data?** → Contributed signals are anonymized at transmission and cannot be reverse-attributed. Explicit deletion mechanisms are a contractual requirement for Open Network deployments.
+
+### 12.5 Engineering Roadmap
+
+| Milestone | Deliverable |
+| :--- | :--- |
+| **v5.6.0** | TLS enforcement on remote Milvus connections, Smith Pre-Filter test coverage, audit log integration |
+| **v5.7.0** | Per-tenant namespace isolation in shared clusters |
+| **v6.0.0** | Cryptographically signed experience packets, ACE-CAL Community Mode (opt-in collective calibration) |
