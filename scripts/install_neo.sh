@@ -161,7 +161,17 @@ case $SEC_CHOICE in
 		if [ "$HAS_ARGON2" == "true" ]; then
 			MASTER_PWD_HASH=$(python3 -c "from argon2 import PasswordHasher; ph = PasswordHasher(); print(ph.hash('$MASTER_PWD'))")
 		else
-			echo -e "${BLUE}[INFO] 'argon2-cffi' no detectado. Usando firma SHA-256 (Modo Water).${NC}"
+			# SEC-F004 AUDIT NOTE: This SHA-256 branch is dead code under standard installation.
+			# argon2-cffi is declared as a hard dependency in pyproject.toml (>=23.1.0) and is
+			# always present after 'uv sync'. This fallback exists ONLY as a defensive guard
+			# against non-standard manual installs that bypass the package manager.
+			#
+			# This behavior is INTENTIONAL for ADAPTATIVE (Water) tier: it is designed to use
+			# the best hashing available on the host. MAXIMUM (Ice) enforces Argon2 via exit 1
+			# above. SHA-256 fallback in ADAPTATIVE is a known, accepted trade-off consistent
+			# with the 'Be Water' security philosophy (adapt to environment, do not block it).
+			echo -e "${YELLOW}[WARN] 'argon2-cffi' not found outside package manager. Falling back to SHA-256 (ADAPTATIVE mode).${NC}"
+			echo -e "${YELLOW}       This should not happen with a standard 'uv sync' install. Run: uv sync${NC}"
 			MASTER_PWD_HASH=$(echo -n "$MASTER_PWD" | sha256sum | cut -d' ' -f1)
 		fi
 		update_env "MASTER_PWD_HASH" "$MASTER_PWD_HASH"

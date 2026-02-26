@@ -56,6 +56,12 @@ class EdgeEngine:
 		self._llm_loaded = True  # Mark before attempt to avoid retry storms
 
 		if not LLAMA_AVAILABLE or not self.model_path or not os.path.exists(self.model_path):
+			if not LLAMA_AVAILABLE:
+				logger.debug("CQ-001: llama_cpp not installed — EdgeEngine running in fallback-only mode.")
+			elif not self.model_path:
+				logger.debug("CQ-001: No GGUF model found in model directory — EdgeEngine running in fallback-only mode.")
+			else:
+				logger.warning(f"CQ-001: Model path does not exist: {self.model_path} — EdgeEngine running in fallback-only mode.")
 			return
 
 		try:
@@ -66,7 +72,10 @@ class EdgeEngine:
 				verbose=False,
 			)
 		except Exception as e:
-			logger.warning(f"CQ-001: Model load failed for {self.model_path}: {e}. Falling back to technical extraction.")
+			logger.warning(
+				f"CQ-001: Model load failed for '{self.model_path}': {e}. "
+				"EdgeEngine will use fallback extraction for this session."
+			)
 			self.llm = None
 
 	def compress(self, text: str) -> str:

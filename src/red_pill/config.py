@@ -69,11 +69,14 @@ if not (0 <= PROPAGATION_FACTOR <= 1.0):
 # At production EROSION_RATE=0.01: score=9.0 → 600 hours ≈ 25 days survival.
 EMOTIONAL_SEED_FACTOR = float(os.getenv("EMOTIONAL_SEED_FACTOR", "3.0"))
 
-# CF-005: Maximum number of points that can be reinforced via propagation in a single query.
-# Limit fan-out to prevent OOM
+# CF-005 / CQ-005: Graph fan-out controls — two related but distinct limits.
+# MAX_PROPAGATION_POINTS: max engrams that receive a score increment in a single
+#   search_and_reinforce() call (query-time circuit breaker, prevents OOM on recall).
 MAX_PROPAGATION_POINTS = int(os.getenv("MAX_PROPAGATION_POINTS", "20"))
-# CF-005: Maximum associations (axons) per engram to prevent synaptic hub fan-out.
-# Synaptic Cap
+# MAX_AXONS: max associations (edges) a single engram can accumulate over its lifetime
+#   (write-time synaptic cap, prevents hub nodes from dominating graph topology).
+# These are complementary, not duplicated: PROPAGATION_POINTS limits read fan-out,
+# MAX_AXONS limits write fan-in. Both are required for a bounded graph traversal cost.
 MAX_AXONS = int(os.getenv("MAX_AXONS", "500"))
 
 
