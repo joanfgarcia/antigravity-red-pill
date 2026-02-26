@@ -163,7 +163,7 @@ async def handle_call_tool(
 
 		if name == "get_dashboard":
 			dashboard = f"""
-## 🔴 BÜNKER SOVEREIGN DASHBOARD v5.2
+## 🔴 BÜNKER SOVEREIGN DASHBOARD v5.5 (ACE-CAL)
 ---
 ### 🛠️ Hardware Asymmetry (Dual-Engine)
 - **CPU Load**: {HardwareSentinel._get_bar(stats["cpu"]["usage_percent"], 20)}
@@ -319,7 +319,7 @@ async def main():
 			write_stream,
 			InitializationOptions(
 				server_name="RedPill-Kernel",
-				server_version="5.4.0",
+				server_version="5.5.0",
 				capabilities=server.get_capabilities(
 					notification_options=NotificationOptions(),
 					experimental_capabilities={},

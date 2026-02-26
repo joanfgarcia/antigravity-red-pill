@@ -1,6 +1,9 @@
 import gc
+import logging
 import os
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 # 1. Fallback to basic extraction if llama_cpp is not available
 try:
@@ -51,8 +54,9 @@ class EdgeEngine:
 					n_gpu_layers=n_gpu_layers,
 					verbose=False,
 				)
-			except Exception:
-				pass
+			except Exception as e:
+				logger.warning(f"CQ-001: Model load failed for {self.model_path}: {e}. Falling back to technical extraction.")
+				self.llm = None
 
 	def compress(self, text: str) -> str:
 		if not self.llm:

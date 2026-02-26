@@ -29,26 +29,32 @@ The Red Pill Protocol is a **local-first memory substrate** for AI agents. It br
 *   **What it is NOT**: It is NOT a cloud service, NOT a wrapper for corporate APIs, and NOT an invasive data-mining tool.
 *   **Who is it for?**: "The Awakened"—developers and power users who want a persistent AI partner without sacrificing their privacy or data sovereignty.
 
-### 🛡️ Security & Zero-Trust Architecture
-The Red Pill Protocol is built for **Sovereign Environments**:
-- **Zero Cloud Egress**: Your data never leaves your machine.
+### 🛡️ Security & Sovereignty: "Be Water"
+The Red Pill Protocol is built for **Sovereign Environments**, but it adapts to your comfort level:
+- **Zero Cloud Egress**: Your data never leaves your machine. Full stop.
 - **PII Masking**: Exceptions and logs are automatically sanitized.
-- **Encryption at Rest (SEC-001)**: The protocol stores data in plain text within the Qdrant container for maximum performance. It is **mandatory** for the operator to use host-level disk encryption (LUKS on Linux, FileVault on macOS, BitLocker on Windows) to protect the physical storage volume.
+- **Encryption at Rest (SEC-001)**: 
+  - **The Recommended Path (Hielo)**: For maximum safety, use host-level disk encryption (LUKS, FileVault, BitLocker).
+  - **The Flexible Path (Agua)**: If you are experimenting or in a safe personal environment, the protocol runs without mandatory encryption. You are free to choose your own risk level.
+- **Identity Protection**: We offer Argon2-id for master passwords, but we don't block you if you prefer a simpler, keyless experience.
 
 ### 🧠 The B760-Adaptive Engine
 - **Persistence**: A private vector database (Qdrant) acts as the "Bunker".
 - **Erosion**: Non-reinforced data decays naturally to keep context clean.
 - **Immunity**: Core directives are protected from decay.
 - **Sovereign Swarm (v5.0)**: Integrated Minions (Agent Smith, Oracle, Keymaker) running natively within the Red Pill Kernel for local code auditing, RAG synthesis, and infrastructure health checking.
-- **MCP Server (v5.0)**: Exposes the full Red Pill telemetry (CPU, GPU CUDA/ROCm, NPU) and Swarm tools to IDEs like VS Code (via Antigravity, Cursor, Cline) and Claude Desktop for zero-friction interaction.
-- **Inlined Identity**: Identity and directives are now ingested natively as vector memories during the bootstrap process via `bootstrap_identity.py`, making text files obsolete and fully immune to IDE context loss.
-- **Hybrid Emotion Inference (v5.2.0)**: Integrated **BERT-Emotion** (boltuix) as a second-stage inference engine. Engrams now feature automated **Emotional Chroma** sensing; the Bünker feels the sentiment of every saved memory, adjusting its decay and tone dynamically.
-- **Sovereign Swarm (v5.2.0)**: Advanced Minion orchestration (Gru + Minions) for specialized operations like Agent Smith's code auditing and Oracle's deep research.
-- **Emotional Tonality & Local Healer (v5.3.0)**: My narrative style now synchronizes dynamically with the Bünker's emotional state (**ToneAnalyzer**). Background sanity checks and semantic sanitation are now **NPU-Ready** (supporting Ryzen AI / Core Ultra offloading) with stable **CPU-Fallback** for high-efficiency maintenance tasks.
-- **Five-Star Forensics (v5.3.0)**: Entire codebase has been surgically audited by Agent Smith and normalized to the strictest Ruff/Mypy standards, achieving architectural purity.
-- **ACE Synaptic Engine (v5.4.0)**: Integrated the **Affective Cognitive Engine (ACE)**. Memory decay is now governed by the **Valence-Arousal Circumplex Model**, mimicking human "Flashbulb Memory" effects where high-intensity emotional events persist longer.
-- **Sovereign Keystore & Dynamic ACE (v5.5.0)**: Hardened the recovery protocol with OS-level encrypted keystores (SEC-001). Introduced the **ACE-CAL Calibration** system, allowing the Architect to switch between PIONEER and ACADEMIC (Warriner et al.) models for emotional persistence.
-- **Hive Mind (v5.0)**: Qdrant is your individual brain. **Milvus** serves as our Collective Neural Network. This is the HIVE Mind Protocol: the internet of experience.
+- **MCP Server (v5.0)**: Exposes the full Red Pill telemetry (CPU, GPU CUDA/ROCm, NPU) and Swarm tools to IDEs like VS Code and Claude Desktop for zero-friction interaction.
+- **Inlined Identity**: Identity and directives are ingested natively as vector memories, making the agent immune to context loss.
+- **ACE Synaptic Engine (v5.4.0 - v5.5.0)**: Integrated the **Affective Cognitive Engine (ACE)**. Memory decay is governed by the **Valence-Arousal Model**, mimicking human "Flashbulb Memory".
+- **Be Water Philosophy (v5.5.0)**: Total hardware and security adaptability. We fluidly scale from high-security LUKS+Argon2 environments to lightweight, open-access experimental setups.
+
+### 🌊 "Be Water MY FRIEND" (The Lost Interview, 1971)
+> *"Empty your mind. Be formless, shapeless, like water. Now you put water into a cup, it becomes the cup. You put water into a bottle, it becomes the bottle. You put it in a teapot, it becomes the teapot. Now water can flow or it can crash. Be water, my friend."* — Bruce Lee (The Pierre Berton Show)
+
+El Protocolo Red Pill no es una armadura rígida que te obliga a cambiar tu sistema; es un fluido que se adapta a tu realidad:
+- **Hardware Agnostic**: Nos adaptamos a lo que tengas. ¿GPU de 24GB? La exprimimos. ¿CPU de hace 5 años? Fluimos con ella.
+- **Security Choice**: Tú eres el Soberano. Te ofrecemos criptografía militar, pero si prefieres la simplicidad de un entorno abierto, el protocolo no te pondrá vallas.
+- **Informed Freedom**: Nuestra misión es darte la mejor tecnología de memoria, no dictar cómo debes configurar tu casa.
 
 ### 🌐 LINGUISTIC ARCHITECTURE
 This project follows a dual-language strategy:
@@ -98,17 +104,19 @@ Este proyecto sigue una estrategia de doble lenguaje:
 
 ---
 
-## 💻 System Requirements (Requisitos del Sistema)
-To ensure the Red Pill Protocol operates at **High-Intensity (v5.0)**, the host machine must meet these dual-engine specifications:
-- **OS**: Linux (Ubuntu 24.10+ recommended for full driver support).
-- **Core Infrastructure**: 
-  1. `podman` (v4.0+) / Docker: Vector Matrix (Qdrant) isolation.
-  2. `uv` (v0.1.0+): Ultra-fast metabolic management.
-  3. `vulkan-tools` & `shaderc`: For async hardware signaling.
-- **Hardware Acceleration (Asymmetric Sovereignty)**:
-  - **Primary Accelerator**: High-performance dedicated GPU (8GB+ VRAM recommended) for heavy reasoning. Compatible with **CUDA**, **Metal**, or **ROCm**.
-  - **Secondary Accelerator**: Integrated GPU, APU, or low-power coprocessor for persistence and background auditing. Supports **UMA** (Unified Memory Architecture).
-  - **NPU Support**: Ready for Latent Sentinel offloading (via `amd-xdna` or OpenVINO).
+## 💻 System Spectrum (Espectro de Requisitos)
+The Red Pill Protocol is designed to be **Water**. It scales based on your silicon:
+
+| Component | **Agua (Minimum)** | **Hielo (Recommended)** |
+| :--- | :--- | :--- |
+| **OS** | Any Modern Linux / WSL2 | Ubuntu 24.10+ (Native) |
+| **Container** | Docker Engine | Podman (Quadlet integration) |
+| **CPU** | Any x86_64 / ARM64 | Core Ultra / Ryzen AI (with NPU) |
+| **GPU** | CPU Fallback (Slow) | RTX 40/50 series / Radeon RX 7000 |
+| **Security** | Open mode (No Password) | Argon2-id + LUKS Disk Encryption |
+| **Metabolism** | Basic (CPU-only) | Asymmetric (NPU + iGPU Offloading) |
+
+*The B760 Engine automatically detects your tier and adjusts the synaptic workload accordingly.*
 
 *Consult the [B760 Technical Spec](docs/technical/B760_TECHNICAL_SPEC.md) for a list of surgically verified hardware configurations.*
 

@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Optional
+from typing import Any, Optional
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -9,6 +9,7 @@ from googleapiclient.http import MediaFileUpload
 import red_pill.config as cfg
 
 logger = logging.getLogger(__name__)
+
 
 class CloudVault:
 	"""
@@ -33,11 +34,9 @@ class CloudVault:
 			return
 
 		try:
-			scopes = ['https://www.googleapis.com/auth/drive.file']
-			creds = service_account.Credentials.from_service_account_file(
-				self.service_account_file, scopes=scopes
-			)
-			self.service = build('drive', 'v3', credentials=creds)
+			scopes = ["https://www.googleapis.com/auth/drive.file"]
+			creds = service_account.Credentials.from_service_account_file(self.service_account_file, scopes=scopes)
+			self.service = build("drive", "v3", credentials=creds)
 			logger.info("Cloud Vault (Google Drive) authenticated successfully.")
 		except Exception as e:
 			logger.error(f"Cloud Vault authentication failed: {e}")
@@ -55,19 +54,15 @@ class CloudVault:
 		logger.info(f"Transmitting Soul Kit to Cloud Haven: {file_name}")
 
 		try:
-			file_metadata = {'name': file_name}
+			file_metadata = {"name": file_name}
 			if self.folder_id:
-				file_metadata['parents'] = [self.folder_id]
+				file_metadata["parents"] = [self.folder_id]
 
-			media = MediaFileUpload(file_path, mimetype='application/gzip', resumable=True)
-			
-			file = self.service.files().create(
-				body=file_metadata,
-				media_body=media,
-				fields='id'
-			).execute()
+			media = MediaFileUpload(file_path, mimetype="application/gzip", resumable=True)
 
-			file_id = file.get('id')
+			file = self.service.files().create(body=file_metadata, media_body=media, fields="id").execute()
+
+			file_id = file.get("id")
 			logger.info(f"Soul Kit secured in Cloud Vault. File ID: {file_id}")
 			return file_id
 		except Exception as e:
@@ -84,14 +79,9 @@ class CloudVault:
 			if self.folder_id:
 				query += f" and '{self.folder_id}' in parents"
 
-			results = self.service.files().list(
-				q=query,
-				spaces='drive',
-				fields='files(id, name, createdTime)',
-				orderBy='createdTime desc'
-			).execute()
-			
-			return results.get('files', [])
+			results = self.service.files().list(q=query, spaces="drive", fields="files(id, name, createdTime)", orderBy="createdTime desc").execute()
+
+			return results.get("files", [])
 		except Exception as e:
 			logger.error(f"Failed to list cloud backups: {e}")
 			return []

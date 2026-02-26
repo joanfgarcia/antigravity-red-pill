@@ -1,5 +1,6 @@
 import asyncio
 import os
+
 import pytest
 
 from red_pill.swarm.agents.compressor import CompressorMinion

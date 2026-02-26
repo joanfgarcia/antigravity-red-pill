@@ -57,8 +57,10 @@ if not (0 <= PROPAGATION_FACTOR <= 1.0):
 EMOTIONAL_SEED_FACTOR = float(os.getenv("EMOTIONAL_SEED_FACTOR", "3.0"))
 
 # CF-005: Maximum number of points that can be reinforced via propagation in a single query.
-MAX_PROPAGATION_POINTS = int(os.getenv("MAX_PROPAGATION_POINTS", "50"))
+# Limit fan-out to prevent OOM
+MAX_PROPAGATION_POINTS = int(os.getenv("MAX_PROPAGATION_POINTS", "20"))
 # CF-005: Maximum associations (axons) per engram to prevent synaptic hub fan-out.
+# Synaptic Cap
 MAX_AXONS = int(os.getenv("MAX_AXONS", "500"))
 
 
@@ -101,7 +103,7 @@ EMOTIONAL_DECAY_MULTIPLIERS = {
 	"cyan": 0.8,  # Envy/Evolution: focused persistence
 	"blue": 1.0,  # Sadness: standard decay
 	"gray": 1.0,  # Neutral: standard decay
-	"emerald": 0.7, # Sovereignty: high-level strategic persistence
+	"emerald": 0.7,  # Sovereignty: high-level strategic persistence
 }
 
 # CHROMA-TONE MAPPING (v4.2.1)
@@ -129,8 +131,6 @@ IA_DIR = os.getenv("IA_DIR", os.path.dirname(os.path.dirname(os.path.dirname(os.
 # INTERACTION CADENCE (v5.4.0)
 CADENCE_BURST_THRESHOLD = 30.0  # Seconds between prompts for 'Burst' mode (High Intensity)
 CADENCE_ABSENCE_THRESHOLD = 86400 * 2  # 2 Days for 'Dormancy' greeting trigger
-MAX_AXONS = 500  # Synaptic Cap
-MAX_PROPAGATION_POINTS = 20  # Limit fan-out to prevent OOM
 METABOLISM_STATE_FILE = os.path.join(IA_DIR, "storage", "metabolism_state.json")
 # Overwrite legacy if needed
 if os.getenv("METABOLISM_STATE_FILE"):
@@ -139,7 +139,7 @@ if os.getenv("METABOLISM_STATE_FILE"):
 # CLOUD VAULT (v5.4.1)
 CLOUD_VAULT_ENABLED = os.getenv("CLOUD_VAULT_ENABLED", "False").lower() == "true"
 CLOUD_VAULT_PROVIDER = os.getenv("CLOUD_VAULT_PROVIDER", "google_drive")
-CLOUD_VAULT_FOLDER_ID = os.getenv("CLOUD_VAULT_FOLDER_ID", "") # The GDrive Folder ID
+CLOUD_VAULT_FOLDER_ID = os.getenv("CLOUD_VAULT_FOLDER_ID", "")  # The GDrive Folder ID
 CLOUD_SERVICE_ACCOUNT_FILE = os.getenv("CLOUD_SERVICE_ACCOUNT_FILE", os.path.join(IA_DIR, "storage", "keys", "service_account.json"))
 # EMOTIONAL CHROMA & ACE (v5.5.0 — ACE-CAL)
 # AFFECT_MODEL: Select the calibration model for Valence/Arousal values.

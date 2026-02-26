@@ -107,6 +107,7 @@ class TestMetabolism(unittest.TestCase):
 		# Write state with cooldown already expired AND skip_next_erosion=True
 		past_time = time.time() - cfg.METABOLISM_COOLDOWN - 10
 		import json
+
 		with open(self.test_state_file, "w") as f:
 			json.dump({"last_run": past_time, "skip_next_erosion": True}, f)
 
@@ -130,6 +131,7 @@ class TestMetabolism(unittest.TestCase):
 		# First, write state with skip_next_erosion=True (flag active)
 		past_time = time.time() - cfg.METABOLISM_COOLDOWN - 10
 		import json
+
 		with open(self.test_state_file, "w") as f:
 			json.dump({"last_run": past_time, "skip_next_erosion": True}, f)
 
@@ -149,4 +151,3 @@ class TestMetabolism(unittest.TestCase):
 
 if __name__ == "__main__":
 	unittest.main()
-

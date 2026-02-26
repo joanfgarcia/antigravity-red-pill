@@ -4,6 +4,8 @@ import logging
 import os
 import signal
 import socket
+import subprocess
+import sys
 from typing import Any, Optional
 
 from fastembed import TextEmbedding
@@ -21,6 +23,36 @@ class MemoryDaemon:
 		self.encoder: Optional[TextEmbedding] = None
 		self.running = True
 		self.server: Optional[socket.socket] = None
+
+	def _check_encryption(self) -> None:
+		"""
+		SEC-001 / CERT-COND-001: Surface disk encryption check at startup.
+		Warns the user if the storage directory is not on an encrypted volume (LUKS/dm-crypt).
+		"""
+		if sys.platform != "linux":
+			return
+
+		try:
+			# Identify the block device for IA_DIR/storage
+			storage_path = os.path.join(cfg.IA_DIR, "storage")
+			if not os.path.exists(storage_path):
+				os.makedirs(storage_path, exist_ok=True)
+
+			# Use findmnt to get the source device and lsblk to check for 'crypt' type
+			find_dev = subprocess.run(["findmnt", "-nvo", "SOURCE", "-T", storage_path], capture_output=True, text=True, check=False)
+			device = find_dev.stdout.strip()
+
+			if device:
+				check_crypt = subprocess.run(["lsblk", "-no", "TYPE", device], capture_output=True, text=True, check=False)
+				if "crypt" in check_crypt.stdout:
+					logger.info(f"SEC-001: Disk encryption (LUKS/dm-crypt) detected on {device}.")
+				else:
+					logger.warning(
+						f"!!! SECURITY WARNING (SEC-001) !!!: The volume {device} storing Red Pill engrams "
+						"does NOT appear to be encrypted. Your data is at risk if the host is compromised."
+					)
+		except Exception as e:
+			logger.debug(f"Failed to perform encryption check: {e}")
 
 	def _load_model(self) -> None:
 		if self.encoder is None:
@@ -51,6 +83,7 @@ class MemoryDaemon:
 			self.encoder = TextEmbedding(model_name=cfg.EMBEDDING_MODEL, providers=providers)
 
 	def start(self) -> None:
+		self._check_encryption()
 		if os.path.exists(SOCKET_PATH):
 			os.remove(SOCKET_PATH)
 

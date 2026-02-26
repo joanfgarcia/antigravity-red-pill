@@ -28,7 +28,7 @@ class OracleMinion(Minion):
 		results = []
 		for collection in ["work_memories", "social_memories"]:
 			hits = manager.search_and_reinforce(collection, task, limit=3)
-			results.extend([h.payload["content"] for h in hits])
+			results.extend([str(h.payload.get("content", "")) for h in hits if h.payload.get("content")])
 
 		background = "\n---\n".join(results) if results else ""
 

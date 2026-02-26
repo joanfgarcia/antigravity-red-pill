@@ -8,9 +8,25 @@ import red_pill.config as cfg
 # Emotional Spectrum Definition (Inside Out 2 / v4.2.0)
 ValidColor = Literal["orange", "yellow", "purple", "cyan", "blue", "gray", "red", "green", "pink"]
 ValidEmotion = Literal[
-	"joy", "sadness", "fear", "disgust", "anger", "surprise", "neutral", 
-	"love", "shame", "guilt", "desire", "confusion", 
-	"anxiety", "envy", "embarrassment", "ennui", "nostalgia", "sarcasm"
+	"joy",
+	"sadness",
+	"fear",
+	"disgust",
+	"anger",
+	"surprise",
+	"neutral",
+	"love",
+	"shame",
+	"guilt",
+	"desire",
+	"confusion",
+	"anxiety",
+	"envy",
+	"embarrassment",
+	"ennui",
+	"nostalgia",
+	"sarcasm",
+	"happiness",
 ]
 
 

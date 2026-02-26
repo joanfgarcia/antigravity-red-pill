@@ -65,15 +65,18 @@ check_encryption() {
 			if [ -n "$target_dev" ]; then
 				if lsblk -no TYPE "$target_dev" | grep -q "crypt"; then
 					echo -e "${GREEN}✓ Capa de cifrado detectada en $target_dev.${NC}"
+					return 0
 				else
-					echo -e "${BLUE}[INFO] Nota de Seguridad (SEC-001): El volumen $target_dev no utiliza LUKS.${NC}"
+					echo -e "${BLUE}[INFO] El volumen $target_dev no utiliza LUKS.${NC}"
+					return 1
 				fi
 			fi
 		fi
 	fi
+	return 1
 }
 
-check_encryption
+HAS_ENCRYPTION=$(check_encryption > /dev/null; echo $?)
 
 # Check if Qdrant is already running
 QDRANT_ALIVE=false
@@ -119,31 +122,57 @@ else
 	MULTI_EMOTION_INFERENCE="True"
 fi
 
-echo -e "${BLUE}--- Fase: Configuración de Seguridad (Qdrant API Key) ---${NC}"
+echo -e "${BLUE}--- Fase: Configuración de Seguridad (Be Water) ---${NC}"
 echo "Elige tu nivel de seguridad para el Bünker:"
-echo "1) OPEN: Sin API Key (Acceso libre local, recomendado para desarrollo)"
-echo "2) MANAGED: Generar API Key protegida con Pasarela de Recuperación (Recomendado)"
-echo "3) CUSTOM: Proporcionar tu propia API Key"
+echo "1) NINGUNA: Sin API Key ni contraseña (Solo para entornos de laboratorio/pruebas)"
+echo "2) ADAPTATIVA (Water): Máxima seguridad disponible según tus recursos (Recomendado)"
+echo "3) MÁXIMA (Ice): Seguridad total blindada. Requiere Argon2-id y LUKS (Falla si no se cumple)"
 read -p "Selección (1/2/3): " SEC_CHOICE
 
 case $SEC_CHOICE in
-	2)
+	2|3)
+		# Check for Argon2 availability
+		HAS_ARGON2=false
+		if python3 -c "from argon2 import PasswordHasher" &>/dev/null; then
+			HAS_ARGON2=true
+		fi
+
+		if [[ "$SEC_CHOICE" == "3" ]]; then
+			echo -e "${BLUE}[MODO MÁXIMA] Verificando requisitos de blindaje...${NC}"
+			if [ "$HAS_ARGON2" == "false" ]; then
+				echo -e "${RED}[ERROR] Blindaje fallido: 'argon2-cffi' no está instalado en python3.${NC}"
+				echo -e "${RED}Remedio: pip install argon2-cffi${NC}"
+				exit 1
+			fi
+			if [ "$HAS_ENCRYPTION" != "0" ]; then
+				echo -e "${RED}[ERROR] Blindaje fallido: No se detectó cifrado de disco (LUKS) en el host.${NC}"
+				echo -e "${RED}Remedio: Elige Modo Adaptativo o habilita el cifrado en tu sistema.${NC}"
+				exit 1
+			fi
+			echo -e "${GREEN}✓ Requisitos de blindaje MÁXIMO cumplidos.${NC}"
+		fi
+
 		read -sp "Introduce una contraseña maestra para la recuperación: " MASTER_PWD
 		echo ""
 		QDRANT_API_KEY=$(head -c 32 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 32)
 		echo -e "${GREEN}API Key generada con éxito.${NC}"
 		echo -e "${RED}⚠️  TOKEN DE SEGURIDAD (Guárdalo bien): ${QDRANT_API_KEY}${NC}"
-		# We'll handle the recovery engram injection in the bootstrap phase
-		# SEC-001/P1: Use Argon2 instead of raw SHA-256
-		MASTER_PWD_HASH=$(python3 -c "from argon2 import PasswordHasher; ph = PasswordHasher(); print(ph.hash('$MASTER_PWD'))" 2>/dev/null || echo -n "$MASTER_PWD" | sha256sum | cut -d' ' -f1)
+
+		if [ "$HAS_ARGON2" == "true" ]; then
+			MASTER_PWD_HASH=$(python3 -c "from argon2 import PasswordHasher; ph = PasswordHasher(); print(ph.hash('$MASTER_PWD'))")
+		else
+			echo -e "${BLUE}[INFO] 'argon2-cffi' no detectado. Usando firma SHA-256 (Modo Agua).${NC}"
+			MASTER_PWD_HASH=$(echo -n "$MASTER_PWD" | sha256sum | cut -d' ' -f1)
+		fi
 		update_env "MASTER_PWD_HASH" "$MASTER_PWD_HASH"
 		;;
-	3)
-		read -p "Introduce tu API Key personalizada: " QDRANT_API_KEY
+	1)
+		QDRANT_API_KEY=""
+		echo -e "${BLUE}Modo NINGUNA/OPEN activado. Sin API Key.${NC}"
 		;;
 	*)
+		echo -e "${RED}Selección inválida. Por defecto se usará Modo NINGUNA.${NC}"
 		QDRANT_API_KEY=""
-		echo -e "${BLUE}Modo OPEN activado. Sin API Key.${NC}"
 		;;
 esac
 

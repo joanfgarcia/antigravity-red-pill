@@ -26,6 +26,7 @@ async def run_surgical_audit():
 				print("\n☢️ SURGICAL FORENSIC FINDINGS:")
 				# Group findings by file
 				from typing import Any, Dict, List
+
 				findings_by_file: Dict[str, List[Dict[str, Any]]] = {}
 				for f in res.result["findings"]:
 					findings_by_file.setdefault(f["file"], []).append(f)

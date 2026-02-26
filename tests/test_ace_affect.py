@@ -25,15 +25,15 @@ Boundary cases (as requested by the independent audit, Confidence ←→ 91/100)
 import pytest
 
 from red_pill.utils.affect import (
-    AFFECT_MAP,
-    get_affect_coordinates,
-    get_emotional_stability_multiplier,
+	AFFECT_MAP,
+	get_affect_coordinates,
+	get_emotional_stability_multiplier,
 )
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def _within(value: float, lo: float, hi: float) -> bool:
 	"""Returns True if lo <= value <= hi."""
@@ -43,6 +43,7 @@ def _within(value: float, lo: float, hi: float) -> bool:
 # ─────────────────────────────────────────────────────────────────────────────
 # get_affect_coordinates — parametrized
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestGetAffectCoordinates:
 	"""Tests for the Russell Circumplex coordinate mapper."""
@@ -70,7 +71,7 @@ class TestGetAffectCoordinates:
 		exp_v, exp_a = AFFECT_MAP["fear"]
 		assert v == pytest.approx(exp_v)
 		assert a == pytest.approx(exp_a)
-		assert v < 0   # negative valence
+		assert v < 0  # negative valence
 		assert a > 0.5  # high arousal
 
 	def test_average_of_two_known_emotions(self):
@@ -106,56 +107,56 @@ class TestGetAffectCoordinates:
 		"""Every emotion in the AFFECT_MAP must return valid Circumplex coords."""
 		v, a = get_affect_coordinates([emotion])
 		assert -1.0 <= v <= 1.0, f"{emotion}: valence out of range"
-		assert  0.0 <= a <= 1.0, f"{emotion}: arousal out of range"
+		assert 0.0 <= a <= 1.0, f"{emotion}: arousal out of range"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # get_emotional_stability_multiplier — parametrized boundary cases
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestGetEmotionalStabilityMultiplier:
 	"""
 	Tests for the ACE stability multiplier.
 
 	Contract:
-	  - Output ∈ [0.1, 1.0]  (hard clamp, always)
-	  - 0.1 = 10x slower decay (maximum stability)
-	  - 1.0 = normal decay (minimum stability)
-	  - High arousal + high intensity → lower multiplier (more stable)
-	  - Neutral / low-arousal → multiplier approaches 1.0 (faster decay)
-	  - Negative valence increases stability (survival mechanism)
+		- Output ∈ [0.1, 1.0]  (hard clamp, always)
+		- 0.1 = 10x slower decay (maximum stability)
+		- 1.0 = normal decay (minimum stability)
+		- High arousal + high intensity → lower multiplier (more stable)
+		- Neutral / low-arousal → multiplier approaches 1.0 (faster decay)
+		- Negative valence increases stability (survival mechanism)
 	"""
 
 	# ── Contract: output always in [0.1, 1.0] ──────────────────────────────
 
-	@pytest.mark.parametrize("emotions,intensity", [
-		([], 1.0),
-		(["neutral"], 1.0),
-		(["joy"], 10.0),
-		(["fear"], 10.0),
-		(["anger"], 10.0),
-		(["ennui"], 1.0),
-		(["fear", "anger"], 10.0),
-		(["joy", "sadness", "neutral"], 5.0),
-		(["completely_unknown"], 10.0),
-		([], 10.0),
-		(["joy"], 0.0),
-	])
+	@pytest.mark.parametrize(
+		"emotions,intensity",
+		[
+			([], 1.0),
+			(["neutral"], 1.0),
+			(["joy"], 10.0),
+			(["fear"], 10.0),
+			(["anger"], 10.0),
+			(["ennui"], 1.0),
+			(["fear", "anger"], 10.0),
+			(["joy", "sadness", "neutral"], 5.0),
+			(["completely_unknown"], 10.0),
+			([], 10.0),
+			(["joy"], 0.0),
+		],
+	)
 	def test_output_always_in_valid_range(self, emotions, intensity):
 		"""Clamp contract: result must always be in [0.1, 1.0]."""
 		result = get_emotional_stability_multiplier(emotions, intensity)
-		assert _within(result, 0.1, 1.0), (
-			f"Out of range for emotions={emotions}, intensity={intensity}: got {result}"
-		)
+		assert _within(result, 0.1, 1.0), f"Out of range for emotions={emotions}, intensity={intensity}: got {result}"
 
 	# ── Boundary: empty / neutral ───────────────────────────────────────────
 
 	def test_empty_emotions_default_intensity_returns_near_one(self):
 		"""No emotional signal → maximum decay (multiplier ≈ 1.0)."""
 		result = get_emotional_stability_multiplier([], intensity=1.0)
-		assert result == pytest.approx(1.0), (
-			f"Expected ~1.0 for empty emotions, got {result}"
-		)
+		assert result == pytest.approx(1.0), f"Expected ~1.0 for empty emotions, got {result}"
 
 	def test_all_neutral_emotions_returns_one(self):
 		"""Pure neutral affects → no stability boost, multiplier = 1.0."""
@@ -206,19 +207,19 @@ class TestGetEmotionalStabilityMultiplier:
 		assert result > 0.8, f"Zero intensity joy should be weakly stable, got {result}"
 		assert _within(result, 0.1, 1.0)
 
-	@pytest.mark.parametrize("intensity_low,intensity_high,emotion", [
-		(1.0, 5.0, "fear"),
-		(1.0, 10.0, "anger"),
-		(1.0, 8.0, "joy"),
-	])
+	@pytest.mark.parametrize(
+		"intensity_low,intensity_high,emotion",
+		[
+			(1.0, 5.0, "fear"),
+			(1.0, 10.0, "anger"),
+			(1.0, 8.0, "joy"),
+		],
+	)
 	def test_higher_intensity_yields_lower_or_equal_multiplier(self, intensity_low, intensity_high, emotion):
 		"""Monotonicity: more intense memories should be at least as stable (lower multiplier)."""
 		result_low = get_emotional_stability_multiplier([emotion], intensity=intensity_low)
 		result_high = get_emotional_stability_multiplier([emotion], intensity=intensity_high)
-		assert result_high <= result_low + 1e-9, (
-			f"{emotion}: higher intensity should be more stable. "
-			f"low={result_low:.4f}, high={result_high:.4f}"
-		)
+		assert result_high <= result_low + 1e-9, f"{emotion}: higher intensity should be more stable. low={result_low:.4f}, high={result_high:.4f}"
 
 	# ── Boundary: valence direction ─────────────────────────────────────────
 
@@ -236,8 +237,7 @@ class TestGetEmotionalStabilityMultiplier:
 		# fear has negative valence → valence_stability = 0.6; joy → 0.4
 		# fear should be ≤ joy multiplier (same or more stable)
 		assert result_neg <= result_pos + 1e-9, (
-			f"Negative valence (fear={result_neg:.4f}) should be at least as stable "
-			f"as positive (joy={result_pos:.4f})"
+			f"Negative valence (fear={result_neg:.4f}) should be at least as stable as positive (joy={result_pos:.4f})"
 		)
 
 	def test_ennui_decays_fast(self):
@@ -278,11 +278,11 @@ class TestGetEmotionalStabilityMultiplier:
 	def test_explicit_calculation_anxiety_intensity_5(self):
 		"""
 		Explicit formula check for anxiety at intensity=5 (mid-range):
-		  anxiety: valence=-0.5, arousal=0.8
-		  effective_arousal = min(0.8 * (5/5), 1.0) = 0.8
-		  valence_stability = abs(-0.5) = 0.5   (negative valence path)
-		  stability = 0.7*0.8 + 0.3*0.5 = 0.56 + 0.15 = 0.71
-		  multiplier = max(0.1, 1.0 - 0.71*0.9) = max(0.1, 0.361) = 0.361
+			anxiety: valence=-0.5, arousal=0.8
+			effective_arousal = min(0.8 * (5/5), 1.0) = 0.8
+			valence_stability = abs(-0.5) = 0.5   (negative valence path)
+			stability = 0.7*0.8 + 0.3*0.5 = 0.56 + 0.15 = 0.71
+			multiplier = max(0.1, 1.0 - 0.71*0.9) = max(0.1, 0.361) = 0.361
 		"""
 		result = get_emotional_stability_multiplier(["anxiety"], intensity=5.0)
 		assert result == pytest.approx(0.361, abs=0.001)
@@ -290,10 +290,10 @@ class TestGetEmotionalStabilityMultiplier:
 	def test_explicit_calculation_joy_intensity_5(self):
 		"""
 		joy: valence=0.8, arousal=0.7
-		  effective_arousal = min(0.7 * 1.0, 1.0) = 0.7
-		  valence_stability = 0.5 * 0.8 = 0.4  (positive valence path)
-		  stability = 0.7*0.7 + 0.3*0.4 = 0.49 + 0.12 = 0.61
-		  multiplier = max(0.1, 1.0 - 0.61*0.9) = max(0.1, 0.451) = 0.451
+			effective_arousal = min(0.7 * 1.0, 1.0) = 0.7
+			valence_stability = 0.5 * 0.8 = 0.4  (positive valence path)
+			stability = 0.7*0.7 + 0.3*0.4 = 0.49 + 0.12 = 0.61
+			multiplier = max(0.1, 1.0 - 0.61*0.9) = max(0.1, 0.451) = 0.451
 		"""
 		result = get_emotional_stability_multiplier(["joy"], intensity=5.0)
 		assert result == pytest.approx(0.451, abs=0.001)
@@ -301,10 +301,10 @@ class TestGetEmotionalStabilityMultiplier:
 	def test_explicit_calculation_neutral_any_intensity(self):
 		"""
 		neutral: valence=0.0, arousal=0.0
-		  effective_arousal = 0.0
-		  valence_stability = 0.0
-		  stability = 0.0
-		  multiplier = max(0.1, 1.0 - 0.0) = 1.0
+			effective_arousal = 0.0
+			valence_stability = 0.0
+			stability = 0.0
+			multiplier = max(0.1, 1.0 - 0.0) = 1.0
 		"""
 		for intensity in [0.0, 1.0, 5.0, 10.0]:
 			result = get_emotional_stability_multiplier(["neutral"], intensity=intensity)

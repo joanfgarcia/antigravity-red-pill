@@ -11,16 +11,16 @@ Sonnet 4.6 Engineering Certification Report v5.4.0 (2026-02-25).
 """
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from red_pill.swarm.base import Minion, SwarmResult
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def run(coro):
 	"""Synchronous runner for async tests."""
@@ -30,6 +30,7 @@ def run(coro):
 # ─────────────────────────────────────────────────────────────────────────────
 # Base: Minion
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestMinionBase:
 	"""Tests for the Minion base class contract."""
@@ -58,6 +59,7 @@ class TestMinionBase:
 # SmithMinion
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestSmithMinion:
 	"""
 	Isolated tests for SmithMinion:
@@ -70,6 +72,7 @@ class TestSmithMinion:
 	@pytest.fixture
 	def smith(self):
 		from red_pill.swarm.agents.smith import SmithMinion
+
 		with patch("red_pill.swarm.agents.smith.HardwareSentinel") as mock_hw:
 			mock_hw.get_stats.return_value = {"cpu": 0, "gpu": []}
 			yield SmithMinion()
@@ -140,11 +143,7 @@ class TestSmithMinion:
 	def test_score_penalized_for_each_critical(self, smith, tmp_path):
 		"""Multiple eval() calls penalize the score cumulatively."""
 		multi = tmp_path / "multi.py"
-		multi.write_text(
-			"eval('a')\n"
-			"eval('b')\n"
-			"eval('c')\n"
-		)
+		multi.write_text("eval('a')\neval('b')\neval('c')\n")
 		result = self._run_smith(smith, tmp_path)
 		# 3 eval calls × -10 = score <= 70
 		assert result["security_score"] <= 70.0
@@ -174,6 +173,7 @@ class TestSmithMinion:
 # OracleMinion
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestOracleMinion:
 	"""
 	Isolated tests for OracleMinion:
@@ -185,6 +185,7 @@ class TestOracleMinion:
 	@pytest.fixture
 	def oracle(self):
 		from red_pill.swarm.agents.oracle import OracleMinion
+
 		return OracleMinion()
 
 	def _mock_memory_hit(self, content):
@@ -272,6 +273,7 @@ class TestOracleMinion:
 # CompressorMinion
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestCompressorMinion:
 	"""
 	Isolated tests for CompressorMinion core logic:
@@ -284,6 +286,7 @@ class TestCompressorMinion:
 	@pytest.fixture
 	def compressor(self):
 		from red_pill.swarm.agents.compressor import CompressorMinion
+
 		return CompressorMinion()
 
 	@patch("red_pill.swarm.agents.edge_engine.EdgeEngine")

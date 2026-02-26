@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import sys
+
 from red_pill.cli import main
 
 if __name__ == "__main__":

@@ -4,13 +4,13 @@ import random
 import sys
 
 from argon2 import PasswordHasher
-from argon2.exceptions import VerifyMismatchError, VerificationError, InvalidHashError
+from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 
 # Ensure we can import red_pill
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../")))
 import red_pill.config as cfg
 from src.red_pill.memory import MemoryManager
-from src.red_pill.utils.keystore import load_recovery_hash, has_recovery_hash
+from src.red_pill.utils.keystore import has_recovery_hash, load_recovery_hash
 
 
 def run_recovery_handshake():
@@ -38,12 +38,20 @@ def run_recovery_handshake():
 	print("\n--- [IDENTITY RECOVERY PROTOCOL (IRP) ACTIVATED] ---")
 	print("Initiating Synaptic Handshake. You must prove your identity.")
 
-	# Step 1: Password Check via Argon2-id verify (constant-time, no raw comparison)
+	# Step 1: Password Prove (Be Water: Support Argon2-id and SHA-256)
 	pwd = input("Enter Master Password: ")
 	try:
 		argon2_hash = load_recovery_hash()
-		ph = PasswordHasher()
-		ph.verify(argon2_hash, pwd)
+		if argon2_hash.startswith("$argon2"):
+			ph = PasswordHasher()
+			ph.verify(argon2_hash, pwd)
+		else:
+			import hashlib
+
+			# Legacy/Agua check
+			user_hash = hashlib.sha256(pwd.encode()).hexdigest()
+			if user_hash != argon2_hash:
+				raise VerifyMismatchError()
 	except VerifyMismatchError:
 		print("CRITICAL: Invalid password. Handshake terminated.")
 		return

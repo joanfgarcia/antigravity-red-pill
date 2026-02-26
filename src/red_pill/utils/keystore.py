@@ -15,6 +15,7 @@ Architecture:
 
 Qdrant stores ONLY a boolean marker: {"irp_active": True} -- no hash, no password material.
 """
+
 import logging
 import os
 import stat
@@ -53,11 +54,12 @@ def store_recovery_hash(argon2_hash: str) -> None:
 		ValueError: If argon2_hash is empty or does not look like an Argon2 hash.
 		OSError: If the file cannot be written (permissions, disk full, etc.).
 	"""
-	if not argon2_hash or not argon2_hash.startswith("$argon2"):
-		raise ValueError(
-			"Invalid Argon2 hash: must be a non-empty string starting with '$argon2'. "
-			"Do NOT pass a raw SHA-256 hex digest or plaintext password."
-		)
+	# SEC-001 / Be Water: We prefer Argon2, but we accept SHA-256 for simplicity (Agua)
+	is_argon2 = argon2_hash.startswith("$argon2")
+	is_legacy = len(argon2_hash) in [32, 64]  # Basic hash check
+
+	if not argon2_hash or not (is_argon2 or is_legacy):
+		raise ValueError("Invalid hash format: must be an Argon2 string or a SHA-256 digest. Do NOT pass plaintext passwords.")
 
 	_ensure_dir()
 

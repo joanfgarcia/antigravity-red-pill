@@ -17,11 +17,11 @@ except ImportError:
 	TextEmbedding = Any  # type: ignore
 
 import red_pill.config as cfg
-from red_pill.utils.pulse import record_interaction
 from red_pill.hive import HiveMind
 from red_pill.schemas import CreateEngramRequest
 from red_pill.utils.affect import get_emotional_stability_multiplier
-from red_pill.utils.emotion import get_chroma_for_emotion, get_emotions
+from red_pill.utils.emotion import get_chroma_for_emotion, get_emotion, get_emotions
+from red_pill.utils.pulse import record_interaction
 
 logger = logging.getLogger(__name__)
 
@@ -146,7 +146,7 @@ class MemoryManager:
 		if os_detect := os.getenv("EMOTION_AUTO_DETECT", "True").lower() == "true":
 			if cfg.MULTI_EMOTION_INFERENCE:
 				emotional_profile = get_emotions(text)
-			
+
 			if emotional_profile and emotion == cfg.DEFAULT_EMOTION:
 				emotion = emotional_profile[0]["label"]
 				if color == cfg.DEFAULT_COLOR:
@@ -283,13 +283,13 @@ class MemoryManager:
 		Reads metabolism state from an open file handle.
 
 		State format (v5.5.0): JSON dict with keys:
-		  - last_run: float (Unix timestamp)
-		  - skip_next_erosion: bool (CQ-001 flag — set after TTL refresh)
+			- last_run: float (Unix timestamp)
+			- skip_next_erosion: bool (CQ-001 flag — set after TTL refresh)
 
 		Backward-compatible: bare float strings (legacy format) are still parsed.
 
 		Returns:
-		  (last_run, skip_next_erosion)
+			(last_run, skip_next_erosion)
 		"""
 		f.seek(0)
 		content = f.read().strip()
@@ -375,8 +375,7 @@ class MemoryManager:
 				# --- CQ-001: skip-erosion-after-refresh flag consumption ---
 				if skip_next_erosion:
 					logger.info(
-						"CQ-001: skip_next_erosion flag active — skipping erosion this cycle "
-						"to protect freshly-refreshed post-vacation engrams."
+						"CQ-001: skip_next_erosion flag active — skipping erosion this cycle to protect freshly-refreshed post-vacation engrams."
 					)
 					# Clear the flag; erosion resumes on the cycle after this one.
 					self._write_metabolism_state(f, now, skip_next_erosion=False)
@@ -397,7 +396,6 @@ class MemoryManager:
 				self.apply_erosion(coll.strip())
 			except Exception as e:
 				logger.error(f"Erosion failed in {coll}: {e}")
-
 
 	def _refresh_ttl_timestamps(self, collection: str) -> None:
 		"""Absence Guard: forward all non-immune last_recalled_at to now.

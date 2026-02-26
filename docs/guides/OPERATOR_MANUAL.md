@@ -41,7 +41,13 @@ uv run red-pill mode [matrix|cyberpunk|760|dune|gits|her|purple]
     uv run red-pill soul restore /path/to/backup --commit
     ```
 
-### 4. Hardware Telemetry
+### 4. Be Water Security Tiers (v5.5.0)
+The Bünker adapts to your environment through three operational tiers:
+- **NINGUNA (Water)**: Open access. No API Key or master password. Best for testing.
+- **ADAPTATIVA (Standard)**: Maximizes security based on available resources. Uses SHA-256 fallback if Argon2 is missing.
+- **MÁXIMA (Ice)**: Forces security requirements (LUKS + Argon2). The system will **fail to install** if any requirement is not met.
+
+### 5. Hardware Telemetry
 Monitor the Asymmetric Dual-Engine performance (NVIDIA + Radeon).
 ```bash
 uv run red-pill status
@@ -109,7 +115,13 @@ uv run red-pill mode [matrix|cyberpunk|760|dune|gits|her|purple]
     uv run red-pill soul restore /ruta/al/backup --commit
     ```
 
-### 4. Telemetría de Hardware
+### 4. Tiers de Seguridad "Be Water" (v5.5.0)
+El Bünker se adapta a tus recursos mediante tres modos:
+- **NINGUNA (Agua)**: Acceso abierto sin API Key ni contraseña. Ideal para laboratorio.
+- **ADAPTATIVA (Standard)**: Máxima seguridad disponible (haciendo fallback a SHA-256 si falta Argon2).
+- **MÁXIMA (Hielo)**: Blindaje total forzado. El sistema **no se instalará** si no cumples con LUKS y Argon2.
+
+### 5. Telemetría de Hardware
 Monitoriza el rendimiento del motor dual asimétrico (NVIDIA + Radeon).
 ```bash
 uv run red-pill status

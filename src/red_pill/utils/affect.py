@@ -55,6 +55,7 @@ _ACADEMIC_MODEL: Dict[str, Tuple[float, float]] = {
 
 # --- DYNAMIC INITIALIZATION ---
 
+
 def _build_affect_map() -> Dict[str, Tuple[float, float]]:
 	"""Builds the active AFFECT_MAP based on configuration."""
 	# 1. Select base model
@@ -77,6 +78,7 @@ def _build_affect_map() -> Dict[str, Tuple[float, float]]:
 			logger.error(f"ACE-CAL: Failed to parse AFFECT_CUSTOM_OVERRIDES: {e}")
 
 	return base
+
 
 AFFECT_MAP = _build_affect_map()
 
@@ -125,4 +127,3 @@ def get_emotional_stability_multiplier(emotions: List[str], intensity: float = 1
 	# 0.1 means 10x slower decay (high stability)
 	# 1.0 means normal decay
 	return max(0.1, 1.0 - (stability * 0.9))
-

@@ -1,11 +1,12 @@
 import json
 import os
 import time
-from typing import Dict, Any
+from typing import Any, Dict
 
 import red_pill.config as cfg
 
 HEARTBEAT_FILE = os.path.join(cfg.IA_DIR, "storage", "pulse.json")
+
 
 def record_interaction() -> Dict[str, Any]:
 	"""Records current interaction time and returns cadence stats."""
@@ -35,11 +36,7 @@ def record_interaction() -> Dict[str, Any]:
 	elif delta > cfg.CADENCE_ABSENCE_THRESHOLD:
 		status = "dormant"
 
-	return {
-		"status": status,
-		"delta_seconds": delta,
-		"delta_human": _human_time(delta)
-	}
+	return {"status": status, "delta_seconds": delta, "delta_human": _human_time(delta)}
 
 
 def _atomic_write_heartbeat(data: Dict[str, Any]) -> None:
@@ -57,7 +54,7 @@ def _atomic_write_heartbeat(data: Dict[str, Any]) -> None:
 		with open(tmp_path, "w") as f:
 			json.dump(data, f)
 			f.flush()
-			os.fsync(f.fileno())   # Flush kernel buffers to disk before rename
+			os.fsync(f.fileno())  # Flush kernel buffers to disk before rename
 		os.replace(tmp_path, HEARTBEAT_FILE)
 	except Exception:
 		# Best-effort cleanup of temp file on failure
@@ -76,4 +73,3 @@ def _human_time(seconds: float) -> str:
 	if seconds < 86400:
 		return f"{int(seconds // 3600)}h"
 	return f"{int(seconds // 86400)}d"
-

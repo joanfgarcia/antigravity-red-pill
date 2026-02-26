@@ -231,7 +231,7 @@ def main() -> None:
 				print(f"Directive: {state['directive']}")
 			elif args.soul_cmd == "vault":
 				if soul.vault.enabled:
-					print(f"--- [CLOUD VAULT: ACTIVE (Google Drive)] ---")
+					print("--- [CLOUD VAULT: ACTIVE (Google Drive)] ---")
 					files = soul.vault.list_backups()
 					if not files:
 						print("Vault is empty. Run 'red-pill soul export' to transmit your first kit.")

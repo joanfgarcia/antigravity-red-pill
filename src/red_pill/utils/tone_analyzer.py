@@ -1,5 +1,8 @@
 import logging
-from typing import Dict, Optional
+from typing import TYPE_CHECKING, Dict, Optional
+
+if TYPE_CHECKING:
+	from red_pill.memory import MemoryManager
 
 import red_pill.config as cfg
 
@@ -26,9 +29,9 @@ class ToneAnalyzer:
 			collection: Qdrant collection to query.
 			limit: Number of recent memories to sample.
 			manager: Optional MemoryManager instance to reuse. If not provided,
-			         a new instance is created for this call (backward-compatible).
-			         Callers that already hold a MemoryManager (e.g. MCP server,
-			         CLI sync command) should pass it to avoid redundant connections.
+				a new instance is created for this call (backward-compatible).
+				Callers that already hold a MemoryManager (e.g. MCP server,
+				CLI sync command) should pass it to avoid redundant connections.
 		"""
 		# PERF-001: lazy import here to avoid circular imports at module level
 		from red_pill.memory import MemoryManager as _MemoryManager
@@ -91,7 +94,7 @@ def get_current_sync_state(manager: Optional["MemoryManager"] = None) -> Dict[st
 
 	Args:
 		manager: Optional MemoryManager instance to reuse (PERF-001).
-		         Pass an existing instance to avoid creating a redundant connection.
+			Pass an existing instance to avoid creating a redundant connection.
 	"""
 	if not cfg.DYNAMIC_EMOTION_SYNC:
 		return {"mood": cfg.DEFAULT_COLOR, "directive": cfg.CHROMA_TONE_MAPPING[cfg.DEFAULT_COLOR]}
@@ -99,11 +102,3 @@ def get_current_sync_state(manager: Optional["MemoryManager"] = None) -> Dict[st
 	mood = ToneAnalyzer.get_dominant_mood(manager=manager)
 	directive = ToneAnalyzer.get_tone_directive(mood)
 	return {"mood": mood, "directive": directive}
-
-
-# TYPE_CHECKING guard: avoid circular import at runtime
-# (MemoryManager imports from tone_analyzer indirectly via telemetry)
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-	from red_pill.memory import MemoryManager
-

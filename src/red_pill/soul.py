@@ -131,14 +131,21 @@ class SoulManager:
 			output_path = os.path.join(export_dir, f"SOUL_KIT_{timestamp}.tar.gz")
 
 		logger.info(f"Creating export kit: {output_path}...")
-		
+
 		def soul_filter(tarinfo):
 			# Exclude heavy or redundant directories
 			# 'storage' is excluded because we already have concentrated Snapshots in 'backups/qdrant'
 			exclude_list = [
-				"models", ".venv", "backups/export", "backups/soul", 
-				"__pycache__", ".git", "storage", "qdrant_storage", 
-				"node_modules", ".mypy_cache"
+				"models",
+				".venv",
+				"backups/export",
+				"backups/soul",
+				"__pycache__",
+				".git",
+				"storage",
+				"qdrant_storage",
+				"node_modules",
+				".mypy_cache",
 			]
 			if any(f"/{ex}/" in f"/{tarinfo.name}/" or tarinfo.name.endswith(f"/{ex}") for ex in exclude_list):
 				return None
@@ -153,7 +160,7 @@ class SoulManager:
 				tar.add(gemini_dir, arcname="GEMINI_CONFIG")
 
 		print(f"Export completed: {output_path}")
-		
+
 		# 3. Transmit to Cloud Vault if enabled
 		if self.vault.enabled:
 			file_id = self.vault.upload_kit(output_path)
@@ -161,7 +168,7 @@ class SoulManager:
 				print(f"Cloud Transmission Successful: {file_id}")
 			else:
 				print("Cloud Transmission Failed. Local kit preserved.")
-		
+
 		print("Note: Encryption (GPG) should be handled by the operator for high-security environments.")
 
 	def restore_soul(self, source_dir: str, commit: bool = False):

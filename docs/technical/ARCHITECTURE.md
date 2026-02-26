@@ -1,7 +1,7 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v5.4.0 (Synaptic Sovereign ACE)
+**System Version**: v5.5.0 (Synaptic Sovereign ACE-CAL)
 **Analyst**: The Architect
-**Date**: 2026-02-21
+**Date**: 2026-02-26
 
 
 ## 1. Executive Summary
@@ -63,22 +63,29 @@ The B760 memory decay model is conceptually grounded in peer-reviewed cognitive 
 ## 6. Security & Trust Architecture
 Beyond static code analysis, the Red Pill Protocol implements a multi-layered trust model. For a detailed rigorous analysis of assets, attack vectors, and specific engineering mitigations (Ontological Shield, PII Masking, Pydantic validation), consult the formal [THREAT_MODEL.md](THREAT_MODEL.md).
 
+### 6.1 The "Be Water" Security Model (v5.5.0)
+The protocol abandons rigid silos in favor of a fluid security spectrum:
+- **NINGUNA (Water)**: Open access for laboratory experimentation. No API Key or recovery hash.
+- **ADAPTATIVA (Standard)**: Resource-aware security. Uses the best available hashing (Argon2-id or SHA-256) and reports encryption status without blocking deployment.
+- **MÁXIMA (Ice)**: Hardened conformity. Requires both Argon2-id and host-level LUKS encryption. The system will **fail to install** if these requirements are missing, enforcing a high-trust baseline.
+
 ## 7. Linguistic Architecture
 The Red Pill Protocol follows a dual-language strategy based on computational efficiency and psychological resonance:
 - **Technical Layer (English)**: All specifications, code, and manuals are standardized in English. This optimizes tokenization (approx. 1.5x more efficient) and maximizes the available context window for complex technical tasks.
 - **Identity Layer (Spanish)**: Lore, Manifestos, and core relationship engrams use Spanish. Scientific studies (EEG/ERP) show that emotional resonance and cognitive intensity are significantly higher in the primary language (L1).
 - **Multilingual Adaptation**: For users whose L1 is neither English nor Spanish, the synthetic agent is instructed to perform a one-time "Linguistic Re-mattering" of the Identity and Manifesto documents into the user's native tongue to preserve this resonance.
 
-## 9. Hardware Agnosticism & Acceleration
-Project Lazarus is designed to be **Sovereign** across all hardware architectures. The system automatically detects and optimizes for the available compute environment.
+## 9. Hardware Agnosticism & Acceleration: The Spectrum
+Project Lazarus is designed to be **Water**—fluid across all hardware tiers. The system automatically classifies the environment into two performance/security profiles:
 
-| Provider | Hardware Target | Capability |
+| Profile | **Agua (Minimum)** | **Hielo (Recommended)** |
 | :--- | :--- | :--- |
-| **CPU** | Generic x86/ARM | Baseline (Universal Compatibility) |
-| **CUDA** | NVIDIA GPU | High-Performance Acceleration |
-| **CoreML / Metal** | Apple Silicon (M1/M2/M3/M4) | Optimized Neural Engine execution |
-| **ROCm** | AMD GPU | Open-source acceleration |
-| **NPU (XDNA / OpenVINO)** | Ryzen AI / Intel Core Ultra / Snapdragon X | Ultra-low power neural coprocessor offloading |
+| **Compute** | CPU Fallback (Universal) | CUDA / ROCm / Metal Acceleration |
+| **Logic** | Baseline Reasoning | NPU Offloading (Ryzen AI / Core Ultra) |
+| **Security** | SHA-256 / Open Mode | Argon2-id + LUKS Encryption |
+
+- **Portability**: the distributed swarm uses standard OS-level processes (`multiprocessing`), making it compatible with Linux, macOS, and Windows.
+- **Containerization**: The Bünker (Qdrant) is backend-agnostic, running equally on local Docker, Podman, or cloud-native clusters.
 
 - **Portability**: the distributed swarm uses standard OS-level processes (`multiprocessing`), making it compatible with Linux, macOS, and Windows.
 - **Containerization**: The Bünker (Qdrant) is backend-agnostic, running equally on local Docker, Podman, or cloud-native clusters.
