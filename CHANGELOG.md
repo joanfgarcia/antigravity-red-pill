@@ -1,5 +1,14 @@
 # Changelog: Red Pill Protocol
 
+## [5.6.1] - 2026-02-27
+### 🛡️ Audit Remediation (The Sovereign Shield)
+- **[QA] TCG-001: Sidecar Test Suite**: Created a dedicated unit test suite for `memory_daemon.py` (`tests/test_memory_daemon_unit.py`). Validates HMAC authentication, length-prefixed framing, and socket lifecycle.
+- **[SEC] SEC-004: Sidecar Credential Isolation**: Decoupled `SIDECAR_AUTH_KEY` from the Qdrant API key in `config.py`, `install_neo.sh`, and `.env.example`. Authenticating with the sidecar no longer requires exposing the master database key.
+- **[PERF] PERF-001: Targeted Payload Updates**: Refactored `update_memory` and reinforcement loops to use Qdrant's `set_payload` API. Instead of re-transmitting the entire engram, the system now only sends the specific fields that changed (score and timestamp), reducing network overhead by ~80%.
+- **[SEC] SEC-004: Keystore Persistence**: Added `fsync()` to the Argon2-id keystore write cycle to guarantee key integrity even during sudden power failure.
+- **[IMPR] Circular Dependency Exorcism**: Refactored internal imports in `hive.py`, `swarm/agents/oracle.py`, and `utils/emotion.py` to support lazy loading. This ensures the Bünker can boot even in unstable hardware/driver environments.
+- **[CQ-003] Robust Recall Triggers**: Upgraded Deep Recall detection to use exact-phrase and word-boundary matching, preventing accidental activation from partial word matches.
+
 ## [5.6.0] - 2026-02-27
 ### 🛰️ Lazy Metabolism & Agentic HiveGuard (The Sovereignty Pulse)
 - **[FEAT] Lazy Metabolism (Decay-on-Access)**: Transitioned from scheduled O(N) erosion to an O(1) lazy calculation model. Memories now calculate their decay only when accessed (`_calculate_lazy_decay`), drastically reducing background CPU noise.

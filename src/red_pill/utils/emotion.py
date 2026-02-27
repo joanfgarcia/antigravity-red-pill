@@ -1,7 +1,7 @@
 import logging
 from typing import Any, Dict, List, Optional
 
-from transformers import pipeline  # type: ignore
+# from transformers import pipeline  # Deferred to get_emotions to avoid circular imports / environment crashes at boot
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +17,8 @@ def get_emotions(text: str, top_k: int = 3, threshold: float = 0.2) -> List[Dict
 	global _classifier
 	try:
 		if _classifier is None:
+			from transformers import pipeline
+
 			logger.info("Loading BERT-Emotion model (boltuix/bert-emotion) on CPU...")
 			_classifier = pipeline("text-classification", model="boltuix/bert-emotion", device="cpu", top_k=top_k)
 

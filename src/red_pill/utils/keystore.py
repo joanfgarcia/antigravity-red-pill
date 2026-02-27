@@ -70,7 +70,8 @@ def store_recovery_hash(argon2_hash: str) -> None:
 		fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
 		with os.fdopen(fd, "w") as f:
 			f.write(argon2_hash.strip())
-		os.chmod(tmp_path, 0o600)
+			f.flush()
+			os.fsync(f.fileno())
 		os.replace(tmp_path, KEYSTORE_PATH)
 		logger.info("SEC-001: Recovery hash stored in OS keystore (mode 600).")
 	except Exception:

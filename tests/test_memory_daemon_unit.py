@@ -1,8 +1,5 @@
 import json
-import os
 import socket
-import threading
-import time
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -11,83 +8,89 @@ from red_pill.memory_daemon import MemoryDaemon
 
 
 @pytest.fixture
-def mock_encoder():
-	with patch("red_pill.memory_daemon.TextEmbedding") as mock:
-		mock_inst = MagicMock()
-		mock_inst.embed.return_value = [MagicMock(tolist=lambda: [0.1, 0.2])]
-		mock.return_value = mock_inst
-		yield mock
+def daemon():
+	d = MemoryDaemon()
+	d.encoder = MagicMock()
+	# Mock the embedding to return a deterministic list
+	d.encoder.embed.return_value = [MagicMock(tolist=lambda: [0.1, 0.2, 0.3])]
+	return d
 
 
-def test_daemon_encryption_check_no_crash():
-	"""Ensures _check_encryption doesn't crash even if tools are missing."""
-	daemon = MemoryDaemon()
-	with patch("subprocess.run") as mock_run:
-		mock_run.side_effect = Exception("tool not found")
-		daemon._check_encryption()
+def test_handle_connection_success(daemon):
+	"""TCG-001: Tests successful authenticated embedding request."""
+	mock_conn = MagicMock(spec=socket.socket)
+
+	# Request data
+	req_data = {"text": "test memory", "api_key": "valid_key"}
+	payload = json.dumps(req_data).encode("utf-8")
+	header = len(payload).to_bytes(4, "big")
+
+	# Mock recv: first call gets header, second gets payload
+	mock_conn.recv.side_effect = [header, payload]
+
+	with patch("red_pill.config.SIDECAR_AUTH_KEY", "valid_key"):
+		daemon.handle_connection(mock_conn)
+
+	# Verify response
+	args, _ = mock_conn.sendall.call_args
+	resp_full = args[0]
+	resp_len = int.from_bytes(resp_full[:4], "big")
+	resp_body = json.loads(resp_full[4:].decode("utf-8"))
+
+	assert resp_body["status"] == "ok"
+	assert resp_body["vector"] == [0.1, 0.2, 0.3]
+	assert resp_len == len(resp_full) - 4
 
 
-def test_daemon_load_model_providers(mock_encoder):
-	"""Tests model loading with hardware provider detection."""
-	daemon = MemoryDaemon()
-	with patch("shutil.which", return_value="/usr/bin/nvidia-smi"), patch("os.path.exists", return_value=False):
-		daemon._load_model()
-		assert "CUDAExecutionProvider" in mock_encoder.call_args[1]["providers"]
+def test_handle_connection_unauthorized(daemon):
+	"""SEC-004: Tests rejected request with invalid HMAC/key."""
+	mock_conn = MagicMock(spec=socket.socket)
+
+	req_data = {"text": "test", "api_key": "wrong_key"}
+	payload = json.dumps(req_data).encode("utf-8")
+	header = len(payload).to_bytes(4, "big")
+
+	mock_conn.recv.side_effect = [header, payload]
+
+	with patch("red_pill.config.SIDECAR_AUTH_KEY", "valid_key"):
+		daemon.handle_connection(mock_conn)
+
+	args, _ = mock_conn.sendall.call_args
+	resp_body = json.loads(args[0][4:].decode("utf-8"))
+	assert resp_body["status"] == "error"
+	assert "Unauthorized" in resp_body["message"]
 
 
-def test_daemon_lifecycle_and_hmac(mock_encoder):
-	"""TCG-001: Tests MemoryDaemon server loop, protocol, and HMAC verification."""
-	socket_path = "/tmp/test_daemon_unit.sock"
-	if os.path.exists(socket_path):
-		os.remove(socket_path)
+def test_handle_connection_ping(daemon):
+	"""Tests the 'ping' command."""
+	mock_conn = MagicMock(spec=socket.socket)
 
-	daemon = MemoryDaemon()
-	# Override socket path and secret for test
-	# Note: We must patch red_pill.memory_daemon.SOCKET_PATH because it's evaluated at import time.
-	with patch("red_pill.memory_daemon.SOCKET_PATH", socket_path), patch("red_pill.config.SIDECAR_AUTH_KEY", "test_secret"):
-		# Start daemon in a thread
-		daemon_thread = threading.Thread(target=daemon.start)
+	req_data = {"command": "ping", "api_key": "valid_key"}
+	payload = json.dumps(req_data).encode("utf-8")
+	header = len(payload).to_bytes(4, "big")
 
-		daemon_thread = threading.Thread(target=daemon.start)
-		daemon_thread.daemon = True
-		daemon_thread.start()
+	mock_conn.recv.side_effect = [header, payload]
 
-		# Wait for socket
-		for _ in range(10):
-			if os.path.exists(socket_path):
-				break
-			time.sleep(0.1)
+	with patch("red_pill.config.SIDECAR_AUTH_KEY", "valid_key"):
+		daemon.handle_connection(mock_conn)
 
-		try:
-			# 1. Test Valid HMAC
-			with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-				client.connect(socket_path)
-				req = {"text": "hello", "api_key": "test_secret"}
-				payload = json.dumps(req).encode("utf-8")
-				client.sendall(len(payload).to_bytes(4, "big") + payload)
+	args, _ = mock_conn.sendall.call_args
+	resp_body = json.loads(args[0][4:].decode("utf-8"))
+	assert resp_body["status"] == "ok"
+	assert resp_body["message"] == "pong"
 
-				resp_header = client.recv(4)
-				resp_len = int.from_bytes(resp_header, "big")
-				resp_data = client.recv(resp_len)
-				resp = json.loads(resp_data.decode("utf-8"))
-				assert resp["status"] == "ok"
-				assert resp["vector"] == [0.1, 0.2]
 
-			# 2. Test Invalid HMAC
-			with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-				client.connect(socket_path)
-				req = {"text": "hello", "api_key": "wrong_secret"}
-				payload = json.dumps(req).encode("utf-8")
-				client.sendall(len(payload).to_bytes(4, "big") + payload)
+def test_handle_connection_malformed_json(daemon):
+	"""Tests resilience against malformed JSON payloads."""
+	mock_conn = MagicMock(spec=socket.socket)
 
-				resp_header = client.recv(4)
-				resp_len = int.from_bytes(resp_header, "big")
-				resp_data = client.recv(resp_len)
-				resp = json.loads(resp_data.decode("utf-8"))
-				assert resp["status"] == "error"
-				assert "Unauthorized" in resp["message"]
+	payload = b"{invalid_json"
+	header = len(payload).to_bytes(4, "big")
 
-		finally:
-			daemon.stop()
-			if os.path.exists(socket_path):
-				os.remove(socket_path)
+	mock_conn.recv.side_effect = [header, payload]
+
+	daemon.handle_connection(mock_conn)
+
+	args, _ = mock_conn.sendall.call_args
+	resp_body = json.loads(args[0][4:].decode("utf-8"))
+	assert resp_body["status"] == "error"

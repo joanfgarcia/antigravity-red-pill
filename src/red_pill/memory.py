@@ -301,14 +301,16 @@ class MemoryManager:
 			if p.payload is None:
 				return False
 
+			update_payload = {}
 			if color:
-				p.payload["color"] = color
+				update_payload["color"] = color
 			if emotion:
-				p.payload["emotion"] = emotion
+				update_payload["emotion"] = emotion
 			if intensity is not None:
-				p.payload["intensity"] = intensity
+				update_payload["intensity"] = intensity
 
-			self.client.set_payload(collection_name=collection, payload=p.payload, points=[point_id])
+			if update_payload:
+				self.client.set_payload(collection_name=collection, payload=update_payload, points=[point_id])
 			return True
 		except Exception as e:
 			logger.error(f"Failed to update memory {point_id}: {e}")
