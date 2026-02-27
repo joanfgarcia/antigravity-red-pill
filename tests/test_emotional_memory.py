@@ -71,9 +71,8 @@ def test_add_memory_with_emotion(manager, mock_qdrant):
 
 
 def test_invalid_color_rejection(manager):
-	from pydantic import ValidationError
 
-	with pytest.raises(ValidationError):
+	with pytest.raises(ValueError, match="Invalid engram data"):
 		manager.add_memory("test_col", "content", color="pink")  # Pink is not on our spectrum!
 
 

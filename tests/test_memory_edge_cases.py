@@ -85,7 +85,7 @@ def test_add_memory_metadata_exception():
 	manager = MemoryManager()
 	manager.client = MagicMock()
 
-	with pytest.raises(ValueError, match="Invalid metadata"):
+	with pytest.raises(ValueError, match="Invalid engram data"):
 		# Set an invalid object that cannot be JSON serialized
 		manager.add_memory("col", "text", metadata={"bad": object()})
 

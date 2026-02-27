@@ -79,3 +79,27 @@ def test_smith_pre_filter(mock_milvus):
 		assert hive._passes_smith_filter("work_memories", "Optimal vector scaling achievement.", {"immune": False}) is True, (
 			"Valid work memory blocked"
 		)
+
+
+def test_tls_enforcement_remote(mock_milvus):
+	"""SEC-F03: Enforces TLS for non-local Milvus hosts."""
+	with (
+		patch("red_pill.config.MILVUS_ENABLED", True),
+		patch("red_pill.config.MILVUS_HOST", "milvus.remote.com"),
+		patch("red_pill.config.MILVUS_SECURE", False),
+	):
+		hive = HiveMind()
+		assert hive.connected is False, "Remote insecure connection should be blocked"
+		assert mock_milvus["conn"].connect.called is False
+
+
+def test_tls_allowed_local(mock_milvus):
+	"""SEC-F03: Allows insecure connections for localhost."""
+	with (
+		patch("red_pill.config.MILVUS_ENABLED", True),
+		patch("red_pill.config.MILVUS_HOST", "localhost"),
+		patch("red_pill.config.MILVUS_SECURE", False),
+	):
+		hive = HiveMind()
+		assert hive.connected is True
+		assert mock_milvus["conn"].connect.called is True

@@ -124,18 +124,31 @@ class MemoryManager:
 		force_immune: bool = False,
 	) -> str:
 		"""Stores a new engram with B760 validation and emotional chroma."""
-		if metadata is None:
-			metadata = {}
+		# SEC-001 & SEC-008: Validation via Pydantic schema
 
-		# SEC-001: Stripping all reserved keys from metadata BEFORE validation
-		# This ensures no one can inject 'immune', 'reinforcement_score', etc.
+		# SEC-001: Strip reserved keys before validation to ensure robustness
+		metadata = (metadata or {}).copy()
 		for key in CreateEngramRequest.RESERVED_KEYS:
 			metadata.pop(key, None)
 
 		try:
-			metadata = json.loads(json.dumps(metadata))
-		except (TypeError, ValueError) as e:
-			raise ValueError(f"Invalid metadata: {e}")
+			req = CreateEngramRequest(
+				content=text,
+				importance=importance,
+				color=color,  # type: ignore
+				emotion=emotion,  # type: ignore
+				intensity=intensity,
+				metadata=metadata or {},
+			)
+			# Update values from validated request
+			text = req.content
+			importance = req.importance
+			metadata = req.metadata
+			color = req.color
+			emotion = req.emotion
+			intensity = req.intensity
+		except Exception as e:
+			raise ValueError(f"Invalid engram data: {e}")
 
 		# v5.4.0: Temporal Pulse Detection
 		pulse = record_interaction()

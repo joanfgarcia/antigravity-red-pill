@@ -32,6 +32,8 @@ MILVUS_USER = os.getenv("MILVUS_USER", "")
 MILVUS_PASSWORD = os.getenv("MILVUS_PASSWORD", "")
 MILVUS_SECURE = os.getenv("MILVUS_SECURE", "False").lower() == "true"
 MILVUS_ENABLED = os.getenv("MILVUS_ENABLED", "False").lower() == "true"
+MILVUS_DB = os.getenv("MILVUS_DB", "default")
+
 
 # SEC-002: Warn when HiveMind is reachable over an unencrypted non-local connection.
 if MILVUS_ENABLED and not MILVUS_SECURE and MILVUS_HOST not in _local_hosts:

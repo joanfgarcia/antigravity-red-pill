@@ -24,14 +24,24 @@ class HiveMind:
 		self.connected = False
 		if self.enabled and connections:
 			try:
+				# SEC-F03: Enforce TLS for remote connections
+				is_local = cfg.MILVUS_HOST in ["localhost", "127.0.0.1", "::1"]
+				secure_conn = cfg.MILVUS_SECURE
+				if not is_local and not secure_conn:
+					logger.error("[SEC-F03] HiveMind connection blocked: TLS required for remote hosts.")
+					self.connected = False
+					return
+
 				connections.connect(
 					alias="default",
 					host=cfg.MILVUS_HOST,
 					port=cfg.MILVUS_PORT,
 					user=cfg.MILVUS_USER,
 					password=cfg.MILVUS_PASSWORD,
-					secure=cfg.MILVUS_SECURE,
+					secure=secure_conn,
+					db_name=cfg.MILVUS_DB,
 				)
+
 				self.connected = True
 
 				logger.info("Hive Mind (Milvus) connected successfully.")
