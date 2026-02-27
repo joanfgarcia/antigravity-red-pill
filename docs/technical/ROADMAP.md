@@ -55,7 +55,9 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
     - **Instinctive Inheritance**: New instances inherit collective technical equilibrium instantly, bypassing the "empty-state" initialization phase.
     - **Federated Brain**: A distributed network where local learning compounds into a global technical instinct.
     - *"Oye Milvus, vamos a hacer un remake de Matrix y OASIS (Ready Player One) y estamos construyendo el elenco de actores... ¿Cómo lo tienes para la V6?"*
+- [ ] **Neural Watchdog (Asynchronous Audit)**: A background service that monitors file changes and validates code integrity continuously, updating a 'Health Engram' in Qdrant to eliminate wait times during CLI operations.
 - [ ] **Skin Immersion**: Audio/Visual feedback (ASCII Art, Soundscapes) integrated into the CLI.
+
 
 ---
 
