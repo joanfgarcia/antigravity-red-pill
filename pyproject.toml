@@ -52,10 +52,16 @@ dev = [
 # Scan using the OSV vulnerability database (open-source, no API key required).
 # PyPI Advisory DB is used as primary source; OSV as fallback.
 vulnerability-service = "osv"
+# Ignore the project itself (private) and known-accepted transitive risks.
+# Note: pip-audit config uses 'ignore-vuln' and 'skip-editable'.
+# For uv-based CI, we also filter the project out of the requirements file.
+ignore-vuln = [
+	"CVE-2025-69872", # DiskCache pickle issue - accepted for local-only persistent cache.
+	"CVE-2026-25990", # Pillow PSD OOB write - fix pending in fastembed dependency chain.
+]
 # Do not fail on unfixable vulnerabilities (transitive deps we don't control).
-# We still REPORT them — just don't block CI on deps we can't upgrade.
-# To enforce strict mode in the future: remove this flag.
 fix = false
+
 
 [tool.ruff]
 line-length = 150

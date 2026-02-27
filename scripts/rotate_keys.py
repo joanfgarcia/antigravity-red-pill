@@ -80,7 +80,10 @@ def rotate():
 	if update_env_file(new_key):
 		if update_systemd_quadlet(new_key):
 			print("\nSUCCESS: API Key rotated.")
-			print(f"New Key: {new_key}")
+			# SEC-005: Mask new API key to prevent terminal logging leaks
+			masked_key = new_key[:4] + "*" * (len(new_key) - 8) + new_key[-4:]
+			print(f"New Key: {masked_key}")
+
 			print("Note: If using MCP, you may need to restart your IDE for the .env changes to propagate.")
 		else:
 			print("\nWARNING: .env updated but service restart failed. Manual intervention required.")

@@ -58,10 +58,7 @@ def test_weighted_associations():
 	"""ARCH-002: Test mixed flat and weighted associations."""
 	id1 = str(uuid.uuid4())
 	id2 = str(uuid.uuid4())
-	assoc = [
-		id1,
-		{"id": id2, "weight": 1.5}
-	]
+	assoc = [id1, {"id": id2, "weight": 1.5}]
 	data = {"content": "Test", "metadata": {"associations": assoc}}
 	request = CreateEngramRequest(**data)
 	assert request.metadata["associations"][0] == id1

@@ -71,7 +71,7 @@ def _recursive_split(text: str, separators: List[str], chunk_size: int, overlap:
 		else:
 			if current_chunk:
 				final_chunks.append(current_chunk)
-			
+
 			# If a single item is larger than chunk_size, recurse on it
 			if len(item) > chunk_size:
 				if new_separators:
@@ -80,7 +80,7 @@ def _recursive_split(text: str, separators: List[str], chunk_size: int, overlap:
 				else:
 					# Force split if no more separators
 					final_chunks.append(item[:chunk_size])
-				current_chunk = "" # Recurse handled the overflow
+				current_chunk = ""  # Recurse handled the overflow
 			else:
 				# Start new chunk with overlap from previous
 				overlap_text = current_chunk[-overlap:] if len(current_chunk) > overlap else current_chunk

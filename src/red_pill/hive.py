@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import Any, Dict, List
 
 try:
@@ -23,12 +24,49 @@ class HiveMind:
 		self.connected = False
 		if self.enabled and connections:
 			try:
-				connections.connect(alias="default", host=cfg.MILVUS_HOST, port=cfg.MILVUS_PORT, user=cfg.MILVUS_USER, password=cfg.MILVUS_PASSWORD)
+				connections.connect(
+					alias="default",
+					host=cfg.MILVUS_HOST,
+					port=cfg.MILVUS_PORT,
+					user=cfg.MILVUS_USER,
+					password=cfg.MILVUS_PASSWORD,
+					secure=cfg.MILVUS_SECURE,
+				)
 				self.connected = True
+
 				logger.info("Hive Mind (Milvus) connected successfully.")
 			except Exception as e:
 				logger.error(f"Failed to connect to Hive Mind: {e}")
 				self.connected = False
+
+	def _passes_smith_filter(self, collection_name: str, content: str, metadata: Dict[str, Any]) -> bool:
+		"""
+		Forensic PII and Identity filter (SEC-F03).
+		Prevents sensitive engrams from crossing the Hive boundary.
+		"""
+		# 1. Identity Substrate Protection
+		# Only 'work_memories' are allowed to cross the boundary.
+		if "work" not in collection_name.lower():
+			return False
+
+		# 2. Immunity Check
+		# Genesis directives and operator-specific immune engrams are NEVER broadcast.
+		if metadata.get("immune", False):
+			return False
+
+		# 3. PII Pre-Filter (Regex)
+		# Patterns: Email, potential Keys, and Phone Numbers.
+		pii_patterns = [
+			r"[\w\.-]+@[\w\.-]+\.\w+",  # Email
+			r"(?i)(api[_-]?key|secret|token)[\s]*[:=][\s]*[^\s]{8,}",  # Potential keys
+			r"\+?[\d\s-]{10,}",  # Phone/Long numbers
+		]
+		for pattern in pii_patterns:
+			if re.search(pattern, content):
+				logger.warning("Smith Pre-Filter: Blocked PII pattern in experience transmission.")
+				return False
+
+		return True
 
 	def transmit_experience(self, collection_name: str, content: str, vector: List[float], metadata: Dict[str, Any]):
 		"""
@@ -36,6 +74,10 @@ class HiveMind:
 		Every architectural breakthrough or finding is shared here.
 		"""
 		if not self.connected:
+			return
+
+		# TST-001: Integrated Smith Pre-Filter (Forensic Shield)
+		if not self._passes_smith_filter(collection_name, content, metadata):
 			return
 
 		try:

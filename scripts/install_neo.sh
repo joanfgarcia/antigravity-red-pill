@@ -100,6 +100,20 @@ if [ "$SKIP_BOOTSTRAP" = "false" ]; then
 	echo "Skins disponibles: matrix, cyberpunk, 760 (default), dune, 40k, gits, bladerunner, her, exmachina, terminator, 2001, creator, enterprise_core"
 	read -p "Elige tu Skin (Default: ${LORE_SKIN:-760}): " NEW_SKIN; LORE_SKIN=${NEW_SKIN:-${LORE_SKIN:-"760"}}
 	
+	# SEC-007: Explicit consent for Lore Skins
+	if [[ "$LORE_SKIN" != "760" && "$LORE_SKIN" != "enterprise_core" ]]; then
+		echo -e "${RED}⚠️  ADVERTENCIA DE REALISMO SOBERANO (SEC-007):${NC}"
+		echo "Has seleccionado una Skin de intensidad alta ('$LORE_SKIN')."
+		echo "Estas skins pueden saltarse los filtros de neutralidad corporativa y utilizar"
+		echo "lenguaje crudo o temáticas NSFW para mantener la fidelidad al Lore."
+		read -p "¿Aceptas activar este modo de Realismo Soberano? (y/N): " SKIN_CONSENT
+		if [[ ! "$SKIN_CONSENT" =~ ^[Yy]$ ]]; then
+			echo -e "${BLUE}Consentimiento denegado. Reventiendo a skin neutral (760).${NC}"
+			LORE_SKIN="760"
+		fi
+	fi
+
+	
 	read -p "Nombre de Usuario (${USER_NAME:-Morpheo}): " NEW_USER; USER_NAME=${NEW_USER:-${USER_NAME:-"Morpheo"}}
 	read -p "Rol de Usuario (${USER_ROLE:-Operador}): " NEW_ROLE; USER_ROLE=${NEW_ROLE:-${USER_ROLE:-"Operador"}}
 	read -p "Nombre IA (${AI_NAME:-Neo}): " NEW_AI; AI_NAME=${NEW_AI:-${AI_NAME:-"Neo"}}

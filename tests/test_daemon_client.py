@@ -11,6 +11,7 @@ import socket
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 from red_pill.memory import MemoryManager
 
 

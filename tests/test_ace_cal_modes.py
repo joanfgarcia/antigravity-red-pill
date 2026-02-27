@@ -112,9 +112,7 @@ class TestAcademicMode:
 		pioneer_v, _ = _build("PIONEER")["sadness"]
 		academic_v, _ = _build("ACADEMIC")["sadness"]
 		# Both negative; academic should be less negative (closer to 0)
-		assert abs(academic_v) < abs(pioneer_v), (
-			f"Expected ACADEMIC sadness ({academic_v}) less extreme than PIONEER ({pioneer_v})"
-		)
+		assert abs(academic_v) < abs(pioneer_v), f"Expected ACADEMIC sadness ({academic_v}) less extreme than PIONEER ({pioneer_v})"
 
 	def test_academic_all_emotions_present(self):
 		"""All 17 base emotions are present in ACADEMIC map."""

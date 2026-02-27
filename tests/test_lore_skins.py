@@ -1,7 +1,7 @@
 """
 TCG-003: Lore Skin Configuration Integrity
 ==========================================
-Validates that src/red_pill/data/lore_skins.yaml contains all required fields 
+Validates that src/red_pill/data/lore_skins.yaml contains all required fields
 for every defined skin (mode) and that chroma values map to the ValidColor spectrum.
 """
 
@@ -9,6 +9,7 @@ import os
 from unittest.mock import MagicMock, patch
 
 import yaml
+
 from red_pill.schemas import ValidColor
 
 
@@ -37,6 +38,7 @@ def test_lore_skins_yaml_integrity():
 
 	# Get set of valid colors from the pydantic schema for validation
 	from typing import get_args
+
 	valid_colors = set(get_args(ValidColor))
 
 	for name, skin in modes.items():
@@ -46,10 +48,7 @@ def test_lore_skins_yaml_integrity():
 			assert skin[key], f"Skin '{name}' has empty value for: {key}"
 
 		# 2. Check chroma is a valid recognized color for the UI/Bünker
-		assert skin["chroma"] in valid_colors, (
-			f"Skin '{name}' uses invalid chroma '{skin['chroma']}'. "
-			f"Must be one of: {valid_colors}"
-		)
+		assert skin["chroma"] in valid_colors, f"Skin '{name}' uses invalid chroma '{skin['chroma']}'. Must be one of: {valid_colors}"
 
 		# 3. Optional: Check personality length if present
 		if "personality" in skin:

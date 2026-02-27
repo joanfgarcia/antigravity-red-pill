@@ -28,13 +28,8 @@ def run_daemon():
 	env["SIDECAR_AUTH_KEY"] = "test_sidecar_key_760"
 
 	import sys
-	proc = subprocess.Popen(
-		[sys.executable, "-m", "red_pill.memory_daemon"],
-		stdout=subprocess.PIPE,
-		stderr=subprocess.PIPE,
-		env=env,
-		text=True
-	)
+
+	proc = subprocess.Popen([sys.executable, "-m", "red_pill.memory_daemon"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, text=True)
 
 	# Wait for socket to appear
 	retries = 20

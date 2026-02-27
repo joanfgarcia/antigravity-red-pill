@@ -146,7 +146,7 @@ class MemoryManager:
 		if len(text) > cfg.CHUNK_THRESHOLD and not metadata.get("_is_fragment"):
 			fragments = synaptic_split(text)
 			parent_id = point_id if point_id else str(uuid.uuid4())
-			
+
 			# 1. Store the first fragment as the 'Anchor' (Original ID)
 			for i, frag in enumerate(fragments):
 				frag_metadata = metadata.copy()
@@ -154,10 +154,10 @@ class MemoryManager:
 				frag_metadata["parent_id"] = parent_id
 				frag_metadata["chunk_index"] = i
 				frag_metadata["total_chunks"] = len(fragments)
-				
+
 				# The first fragment keeps the requested point_id (if any)
 				current_frag_id = parent_id if i == 0 else str(uuid.uuid4())
-				
+
 				self.add_memory(
 					collection=collection,
 					text=frag,
@@ -167,9 +167,9 @@ class MemoryManager:
 					color=color,
 					emotion=emotion,
 					intensity=intensity,
-					force_immune=force_immune
+					force_immune=force_immune,
 				)
-			
+
 			# Return the ID of the anchor point
 			return parent_id
 		metadata["pulse_status"] = pulse["status"]
@@ -667,13 +667,13 @@ class MemoryManager:
 					eroded_count += 1
 					hit.payload["reinforcement_score"] = new_score
 					hit.payload["last_recalled_at"] = time.time()
-					
+
 					# PERF-001: Only send modified keys.
 					focused_payload = {
 						"reinforcement_score": hit.payload["reinforcement_score"],
 						"last_recalled_at": hit.payload["last_recalled_at"],
 					}
-					
+
 					update_operations.append(
 						models.SetPayloadOperation(set_payload=models.SetPayload(payload=focused_payload, points=[hit.id]))  # type: ignore
 					)

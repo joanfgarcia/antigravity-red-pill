@@ -7,6 +7,7 @@ def run_cli(args):
 	"""Helper to run the red-pill CLI."""
 	import os
 	import sys
+
 	env = os.environ.copy()
 	env["PYTHONPATH"] = os.path.join(os.getcwd(), "src")
 	cmd = [sys.executable, "-m", "red_pill.cli"] + args

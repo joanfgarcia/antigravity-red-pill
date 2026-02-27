@@ -72,10 +72,7 @@ class EdgeEngine:
 				verbose=False,
 			)
 		except Exception as e:
-			logger.warning(
-				f"CQ-001: Model load failed for '{self.model_path}': {e}. "
-				"EdgeEngine will use fallback extraction for this session."
-			)
+			logger.warning(f"CQ-001: Model load failed for '{self.model_path}': {e}. EdgeEngine will use fallback extraction for this session.")
 			self.llm = None
 
 	def compress(self, text: str) -> str:

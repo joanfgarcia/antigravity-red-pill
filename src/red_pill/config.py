@@ -16,6 +16,7 @@ QDRANT_URL = f"{QDRANT_SCHEME}://{QDRANT_HOST}:{QDRANT_PORT}"
 _local_hosts = {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
 if QDRANT_SCHEME == "http" and QDRANT_HOST not in _local_hosts:
 	import warnings
+
 	warnings.warn(
 		f"[SEC-F04] Qdrant is configured with scheme='http' on a non-local host "
 		f"('{QDRANT_HOST}'). Engram data and API keys will be transmitted in "
@@ -29,7 +30,20 @@ MILVUS_HOST = os.getenv("MILVUS_HOST", "localhost")
 MILVUS_PORT = int(os.getenv("MILVUS_PORT", "19530"))
 MILVUS_USER = os.getenv("MILVUS_USER", "")
 MILVUS_PASSWORD = os.getenv("MILVUS_PASSWORD", "")
+MILVUS_SECURE = os.getenv("MILVUS_SECURE", "False").lower() == "true"
 MILVUS_ENABLED = os.getenv("MILVUS_ENABLED", "False").lower() == "true"
+
+# SEC-002: Warn when HiveMind is reachable over an unencrypted non-local connection.
+if MILVUS_ENABLED and not MILVUS_SECURE and MILVUS_HOST not in _local_hosts:
+	import warnings
+
+	warnings.warn(
+		f"[SEC-002] HiveMind (Milvus) is configured with secure=False on a non-local host "
+		f"('{MILVUS_HOST}'). Experience vectors will be transmitted in cleartext. "
+		f"Set MILVUS_SECURE=True or restrict to localhost.",
+		stacklevel=1,
+	)
+
 
 _run_dir = os.getenv("XDG_RUNTIME_DIR", "/tmp")
 DAEMON_SOCKET_PATH = os.getenv("DAEMON_SOCKET_PATH", os.path.join(_run_dir, "red_pill_memory.sock"))
@@ -149,10 +163,10 @@ EMOTIONAL_DECAY_MULTIPLIERS = {
 	"orange": 1.5,  # Anxiety: high arousal but fragile consolidation
 	"yellow": 0.5,  # Joy: positive persistence (Levenson positive affect)
 	"purple": 2.0,  # Ennui: lowest survival salience (Izard DET)
-	"cyan": 0.8,    # Evolution: mild strategic persistence
-	"blue": 1.0,    # Sadness: standard decay (Warriner VAD baseline)
-	"gray": 1.0,    # Neutral: mathematical zero-point
-	"emerald": 0.7, # Sovereignty: intentional strategic persistence
+	"cyan": 0.8,  # Evolution: mild strategic persistence
+	"blue": 1.0,  # Sadness: standard decay (Warriner VAD baseline)
+	"gray": 1.0,  # Neutral: mathematical zero-point
+	"emerald": 0.7,  # Sovereignty: intentional strategic persistence
 }
 
 # CHROMA-TONE MAPPING (v4.2.1)

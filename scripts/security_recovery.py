@@ -95,12 +95,20 @@ def run_recovery_handshake():
 			print(f'"{snippet} [...]"')
 			user_ans = input("Your answer: ")
 
-			# Simple fuzzy check (at least some words match)
-			if any(word.lower() in user_ans.lower() for word in answer.split() if len(word) > 4):
-				print("✓ Synapse verified.")
+			# SEC-001: Improved fuzzy check (at least 40% word overlap)
+			user_words = {w.lower() for w in user_ans.split() if len(w) > 3}
+			target_words = {w.lower() for w in answer.split() if len(w) > 3}
+
+			if target_words:
+				overlap = len(user_words.intersection(target_words)) / len(target_words)
+			else:
+				overlap = 1.0 if not user_words else 0.0
+
+			if overlap >= 0.4:  # Jaccard-ish threshold
+				print(f"✓ Synapse verified (overlap: {overlap:.2f}).")
 				correct += 1
 			else:
-				print("✗ Cognitive mismatch.")
+				print(f"✗ Cognitive mismatch (overlap: {overlap:.2f}).")
 		else:
 			print(f"\nQuestion {i + 1}/{num_questions}: Do you recall this? (y/n)")
 			print(f'"{mem}"')
@@ -110,7 +118,10 @@ def run_recovery_handshake():
 	threshold = (num_questions * 8) // 10
 	if correct >= threshold:
 		print(f"\n[HANDSHAKE SUCCESSFUL] {correct}/{num_questions}")
-		print(f"Bünker Access Restored. Qdrant API Key: {cfg.QDRANT_API_KEY}")
+		# SEC-004: Mask API key to prevent terminal logging leaks
+		masked_key = cfg.QDRANT_API_KEY[:4] + "*" * (len(cfg.QDRANT_API_KEY) - 8) + cfg.QDRANT_API_KEY[-4:]
+		print(f"Bünker Access Restored. Qdrant API Key: {masked_key}")
+		print("Recommendation: Copy the full key from your secure manager or .env file.")
 	else:
 		print(f"\n[HANDSHAKE FAILED] {correct}/{num_questions}")
 		print("Access denied. Agent entering Stasis Mode.")

@@ -23,9 +23,11 @@ def test_version_consistency():
 	readme_line1 = (ROOT_DIR / "README.md").read_text().splitlines()[0]
 	assert f"v{version}" in readme_line1, f"README header mismatch: {readme_line1} (expected v{version})"
 
-	# 3. Check docs/technical/ARCHITECTURE.md (Header line 2 or 5)
+	# 3. Check docs/technical/ARCHITECTURE.md (Regex for version)
 	arch_content = (ROOT_DIR / "docs" / "technical" / "ARCHITECTURE.md").read_text()
-	assert f"v{version}" in arch_content.splitlines()[1]
+	arch_match = re.search(r"\*\*System Version\*\*:\s*v([^\s\)]+)", arch_content)
+	assert arch_match is not None, "Version string not found in ARCHITECTURE.md"
+	assert arch_match.group(1) == version, f"Architecture version mismatch: {arch_match.group(1)} (expected {version})"
 
 	# 4. Check .env.example (Header line 1)
 	env_example_line1 = (ROOT_DIR / ".env.example").read_text().splitlines()[0]

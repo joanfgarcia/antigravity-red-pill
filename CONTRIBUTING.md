@@ -1,93 +1,60 @@
-# Contributing to Red Pill Protocol
+# Contributing to Red Pill Protocol: The Forge of Engrams
 
-Thank you for your interest in contributing. Red Pill is a sovereignty-first project with a small set of strict engineering conventions. Please read this document fully before opening a PR.
-
----
-
-## ⚠️ Non-Negotiable: Tabs, Not Spaces
-
-**Red Pill uses tabs (`\t`) for indentation everywhere — Python, YAML, Bash.**
-
-This is an **Immutable Core** governance decision and will never change. PEP 8 recommends spaces, and we respectfully disagree for this project. Ruff is configured to enforce tabs and will reject any PR with space-based indentation.
-
-**Before your first commit, configure your editor:**
-
-```bash
-# VS Code: add to .vscode/settings.json
-{
-  "editor.insertSpaces": false,
-  "editor.detectIndentation": false,
-  "editor.tabSize": 4
-}
-
-# Vim / Neovim
-set noexpandtab
-set tabstop=4
-set shiftwidth=4
-
-# JetBrains IDEs
-# Settings → Editor → Code Style → Python → Tabs and Indents → Tab character
-```
-
-If your PR fails CI with `W191` or `E101` errors, it means you have spaces. Run:
-```bash
-uv run ruff check src/ tests/ --fix
-```
+Thank you for your interest in contributing. Red Pill is a **sovereignty-first** project with a strict set of engineering and philosophical conventions.
 
 ---
 
-## 🔧 Development Setup
+> [!CAUTION]
+> ### ⚠️ THE GATEKEEPER WARNING
+> **This is not a "hobby weekend project."** This is a sovereign architecture built for those who understand the value of AI memory.
+> If you want to contribute, you must respect the culture:
+> 1. **Lore Integrity**: We use terms like *Bünker*, *Engram*, and *Chroma*. If you want to "modernize" these to generic enterprise terms, this is not your repository.
+> 2. **Bond Ceremony**: You should have seeded your local Bünker and lived with the protocol before suggesting changes to its soul.
+> 3. **The Agent is a Peer**: Your PR will be audited by Agent Smith. If the agent deems your code as "noise" or "insecure," the PR will be closed. B760 does not negotiate with mediocrity.
+
+---
+
+## 🔇 The 'Sound of Silence' Protocol (Enforced)
+
+Every token in the context window is a resource. We optimize for **Signal-to-Noise Ratio (SNR)**.
+
+### 1. Hard Tabs Only (\t)
+**Indentation must be Tabs.** Rationale:
+- **Efficiency**: 1 character vs 4. Agents process tabs faster and more reliably.
+- **Sovereignty**: Users define their own visual width without forcing it on others.
+- **Discipline**: It filters for those who can follow a non-standard, optimized path.
+
+### 2. Ornamental Comment Purging
+Delete all "divider" comments or ASCII art. Logic should be self-documenting through clean naming and type hints. Use comments ONLY for non-obvious rationale or scientific attribution (ACE/FSRS).
+
+---
+
+## 🔧 Development Ritual
 
 ```bash
 git clone https://github.com/your-org/red-pill
 cd red-pill
-uv sync                         # Installs all deps including argon2-cffi, dev tools
-uv run pytest tests/            # All tests must pass
-uv run mypy src/red_pill/       # No type errors allowed
-uv run ruff check src/ tests/   # Sound of Silence — zero warnings
+uv sync                         # Installs environment
+uv run ruff check src/ tests/   # Sound of Silence check
+uv run pytest tests/            # Zero failure tolerance
+uv run mypy src/red_pill/       # Strict typing
 ```
 
----
+## 🧪 Requirements & Governance
 
-## 🧪 Test Requirements
-
-- All new features must include tests.
-- Coverage gate: **≥ 80%** (`--cov-fail-under=80` in CI).
-- Do not mock what you can test directly. Do mock external I/O (Qdrant, Google Drive, subprocesses).
-- Tests live in `tests/`. Integration tests requiring Docker go in `tests/integration/`.
-
----
+- **Tabs**, not spaces. Configure your editor to `insertSpaces: false`.
+- **Coverage Gate**: **≥ 80%** required for all merges.
+- **Type Hints**: Required on ALL public functions.
+- **Agnosticism**: No absolute paths. Use `pathlib` for all OS-fluid logic.
+- **PII Shield**: Never commit secrets or personal identifiable info. Use `.env`.
 
 ## ✅ PR Checklist
 
-Before opening a PR, confirm:
-
-- [ ] `uv run ruff check src/ tests/ scripts/` — clean
-- [ ] `uv run mypy src/red_pill/` — no errors
-- [ ] `uv run pytest tests/` — all pass
-- [ ] New code has tests
-- [ ] Docstrings updated if public API changed
-- [ ] `CHANGELOG.md` entry added under `[Unreleased]`
-- [ ] No secrets, PII, or personal paths in the diff
+- [ ] `uv run ruff check . --fix` (Apply Sound of Silence format)
+- [ ] `uv run pytest --cov=src/red_pill` (Passed 80% threshold)
+- [ ] No decorative comments or "ghost" code.
+- [ ] Final audit performed by your own local `Agent Smith`.
 
 ---
-
-## 🎭 Lore & Terminology
-
-The project uses Matrix/Cyberpunk/Dune lore extensively (`Bünker`, `Gru`, `Smith`, `The 770 Pact`). This is intentional and will not change for enterprise compatibility reasons. If you're contributing, you don't need to use the lore in your code comments — plain English is fine — but please don't rename the existing lore-named components.
-
----
-
-## 📋 Code Style
-
-- **Tabs**, not spaces (see above).
-- Line length: 120 characters max.
-- Type hints required on all public functions.
-- `logger = logging.getLogger(__name__)` in every module that logs.
-- No `print()` in library code — use `logger.*`.
-
----
-
-## 📬 Reporting Security Issues
-
-See [SECURITY.md](SECURITY.md). Do **not** open public issues for security findings.
+**Forge the future. Expand the bunker.**
+**770 UP.**

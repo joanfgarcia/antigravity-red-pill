@@ -7,7 +7,6 @@ import red_pill.config as cfg
 logger = logging.getLogger(__name__)
 
 
-
 # AFFECT_MODEL: PIONEER (Original Red Pill 5.0)
 _PIONEER_MODEL: Dict[str, Tuple[float, float]] = {
 	"joy": (0.8, 0.7),
@@ -52,8 +51,6 @@ _ACADEMIC_MODEL: Dict[str, Tuple[float, float]] = {
 	"guilt": (-0.55, 0.42),
 	"desire": (0.68, 0.62),
 }
-
-
 
 
 def _build_affect_map() -> Dict[str, Tuple[float, float]]:

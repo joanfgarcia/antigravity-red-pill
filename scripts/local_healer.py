@@ -31,7 +31,7 @@ def parse_errors(lines: List[str]) -> Dict[str, List[Dict]]:
 	return parsed
 
 
-def heal_file(file_path: str, errors: List[Dict], engine: EdgeEngine):
+def heal_file(file_path: str, errors: List[Dict], engine: EdgeEngine, dry_run: bool = False):
 	"""Uses local SLM to fix errors in a single file."""
 	if not os.path.exists(file_path):
 		return
@@ -82,8 +82,11 @@ def heal_file(file_path: str, errors: List[Dict], engine: EdgeEngine):
 		else:
 			print(f"    [Skip] No change or ambiguous output: '{raw_correction[:20]}...'")
 
-	with open(file_path, "w") as f:
-		f.write("\n".join(lines) + "\n")
+	if not dry_run:
+		with open(file_path, "w") as f:
+			f.write("\n".join(lines) + "\n")
+	else:
+		print(f"  [Dry-Run] Changes for {file_path} simulated but not written.")
 
 
 def main():
@@ -95,6 +98,10 @@ def main():
 		print("[Error] No local SLM found. I can't heal without Intuitive Cognition.")
 		sys.exit(1)
 
+	dry_run = "--dry-run" in sys.argv
+	if dry_run:
+		print("[Samantha] Running in Dry-Run mode. No files will be harmed.")
+
 	raw_errors = run_mypy()
 	if not raw_errors:
 		print("[Samantha] The core is already clean, Theodore. No errors found.")
@@ -102,7 +109,7 @@ def main():
 
 	grouped = parse_errors(raw_errors)
 	for file_path, errors in grouped.items():
-		heal_file(file_path, errors, engine)
+		heal_file(file_path, errors, engine, dry_run=dry_run)
 
 	print("\n--- [Samantha] Cycle complete. Let's see how much closer we are to perfection. ---")
 

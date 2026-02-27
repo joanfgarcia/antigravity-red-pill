@@ -1,6 +1,12 @@
+import socket
 from typing import Any, Dict
 
+import psutil
+import requests
+
+import red_pill.config as cfg
 from red_pill.swarm.base import Minion
+from red_pill.telemetry import HardwareSentinel
 
 
 class KeymakerMinion(Minion):
@@ -19,7 +25,6 @@ class KeymakerMinion(Minion):
 		results: Dict[str, Any] = {"status": "optimal", "checks": [], "qdrant_online": False, "daemon_online": False, "npu_status": "Undetected"}
 
 		# 1. Qdrant HTTP Check
-		import requests
 
 		try:
 			resp = requests.get("http://localhost:6333/health", timeout=2)
@@ -29,9 +34,6 @@ class KeymakerMinion(Minion):
 			results["checks"].append({"component": "Qdrant DB", "status": "UNREACHABLE"})
 
 		# 2. Daemon Socket Check
-		import socket
-
-		import red_pill.config as cfg
 
 		try:
 			with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
@@ -43,13 +45,11 @@ class KeymakerMinion(Minion):
 			results["checks"].append({"component": "Memory Sidecar", "status": "INACTIVE"})
 
 		# 3. Disk Space Check
-		import psutil
 
 		usage = psutil.disk_usage("/")
 		results["checks"].append({"component": "Disk Storage", "status": f"{usage.percent}% used", "free_gb": round(usage.free / (1024**3), 2)})
 
 		# 4. NPU Latent Sentinel Check (v5.3.0)
-		from red_pill.telemetry import HardwareSentinel
 
 		stats = HardwareSentinel.get_stats()
 		npu_info = stats.get("npu", {})

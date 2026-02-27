@@ -101,6 +101,11 @@ class SmithMinion(Minion):
 		is_super_deep = kwargs.get("super_deep", False) or task == "super_deep_audit"
 		is_deep = kwargs.get("deep_forensics", False) or task == "industrial_audit" or is_super_deep
 
+		# PERF-002: Budget Guard for Deep Forensics
+		# Limit the number of files scanned in Deep mode to avoid GPU saturation.
+		max_deep_files = int(kwargs.get("max_files", 15))
+		deep_files_count = 0
+
 		from red_pill.swarm.agents.edge_engine import EdgeEngine
 
 		engine = EdgeEngine()
@@ -110,8 +115,14 @@ class SmithMinion(Minion):
 			self.log(f"☢️ MODO {mode_label} ACTIVADO: Auditoría con {os.path.basename(engine.model_path) if engine.model_path else 'No model path'}")
 
 			for py_file in python_files:
+				if deep_files_count >= max_deep_files:
+					self.log(f"PERF-002: Deep audit budget reached ({max_deep_files} files). Skipping remaining files.")
+					break
+
 				if any(x in str(py_file) for x in ["venv", ".git", "__pycache__", ".agent"]):
 					continue
+
+				deep_files_count += 1
 
 				try:
 					with open(py_file, "r", encoding="utf-8") as f:

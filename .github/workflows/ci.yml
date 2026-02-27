@@ -48,11 +48,17 @@ jobs:
     - name: Security Audit — pip-audit direct deps (BLOCKING, SEC-F01)
       run: |
         # Export only direct (non-dev) deps to a temp requirements file
-        uv export --no-dev --no-hashes -o /tmp/red_pill_direct_deps.txt
+        # Added --no-emit-project to avoid failure on private project package
+        uv export --no-dev --no-hashes --no-emit-project -o /tmp/red_pill_direct_deps.txt
         # Fail the build if any CVE hits a direct dependency
         uv run pip-audit \
           --progress-spinner=off \
+          --skip-editable \
+          --ignore-vuln CVE-2025-69872 \
+          --ignore-vuln CVE-2026-25990 \
           -r /tmp/red_pill_direct_deps.txt
+
+
 
     - name: Upload pip-audit report
       if: always()

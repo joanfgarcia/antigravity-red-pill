@@ -25,9 +25,10 @@ echo -e "3. Static Analysis (Mypy)..."
 # We run mypy and filter only critical errors if needed, but here we go full strict.
 uv run mypy src/red_pill --ignore-missing-imports && echo -e "${GREEN}TYPING PASS${NC}" || (echo -e "${RED}TYPING FAIL${NC}"; exit 1)
 
-# 4. Unit & Integration Tests
+# 4. Neural Validation (Pytest)...
 echo -e "4. Neural Validation (Pytest)..."
-uv run pytest tests/test_daemon.py tests/test_memory.py tests/test_version_sync.py -v && echo -e "${GREEN}TESTS PASS${NC}" || (echo -e "${RED}TESTS FAIL${NC}"; exit 1)
+uv run pytest tests/ -v && echo -e "${GREEN}TESTS PASS${NC}" || (echo -e "${RED}TESTS FAIL${NC}"; exit 1)
+
 
 echo -e "\n${GREEN}READY FOR THE SOURCE. MERGE PERMITTED.${NC}"
 echo -e "770 UP."
