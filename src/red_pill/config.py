@@ -72,6 +72,12 @@ REINFORCEMENT_INCREMENT = float(os.getenv("REINFORCEMENT_INCREMENT", "0.1"))
 PROPAGATION_FACTOR = float(os.getenv("PROPAGATION_FACTOR", "0.5"))
 IMMUNITY_THRESHOLD = float(os.getenv("IMMUNITY_THRESHOLD", "10.0"))
 
+# v5.6.0: N-hop Synaptic Propagation
+# PROPAGATION_DEPTH: Max number of jumps in the engram graph (Hebb's Law expansion).
+PROPAGATION_DEPTH = int(os.getenv("PROPAGATION_DEPTH", "2"))
+# PROPAGATION_DECAY: Reduction factor for each hop (δ).
+PROPAGATION_DECAY = float(os.getenv("PROPAGATION_DECAY", "0.5"))
+
 # Bounds validation
 if not (0 <= EROSION_RATE <= 1.0):
 	raise ValueError(f"EROSION_RATE must be between 0 and 1: {EROSION_RATE}")
@@ -124,6 +130,13 @@ METABOLISM_STATE_FILE = os.path.expanduser("~/.red_pill_metabolism")
 # Default: 7 days (7 * 24 * 3600).
 ABSENCE_THRESHOLD = int(os.getenv("ABSENCE_THRESHOLD", str(7 * 24 * 3600)))
 ABSENCE_GUARD_SCROLL_LIMIT = int(os.getenv("ABSENCE_GUARD_SCROLL_LIMIT", "500"))
+
+# v5.6.0 METABOLISM STRATEGY
+# 'CLASSIC': Background O(N) loop (legacy).
+# 'LAZY': Query-time decay + sidecar purge (optimized).
+METABOLISM_STRATEGY = os.getenv("METABOLISM_STRATEGY", "LAZY")
+# MAX_SINK_TIME: The absolute maximum age of an engram before the Gran Purge (30 days default).
+MAX_SINK_TIME = int(os.getenv("MAX_SINK_TIME", str(30 * 24 * 3600)))
 
 # EMOTIONAL CHROMA (v4.2.0)
 DEFAULT_COLOR = "gray"

@@ -62,6 +62,7 @@ def test_immunity_promotion(manager, mock_qdrant):
 def test_synaptic_propagation(manager, mock_qdrant):
 	config.REINFORCEMENT_INCREMENT = 0.1
 	config.PROPAGATION_FACTOR = 0.5
+	config.PROPAGATION_DEPTH = 1
 
 	# Mock search result with association
 	mock_hit = MagicMock()

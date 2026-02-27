@@ -440,9 +440,36 @@ class MemoryManager:
 
 		for coll in cfg.METABOLISM_AUTO_COLLECTIONS:
 			try:
-				self.apply_erosion(coll.strip())
+				if cfg.METABOLISM_STRATEGY == "LAZY":
+					self.purge_dead_memories(coll.strip())
+				else:
+					self.apply_erosion(coll.strip())
 			except Exception as e:
-				logger.error(f"Erosion failed in {coll}: {e}")
+				logger.error(f"Metabolism failed in {coll}: {e}")
+
+	def purge_dead_memories(self, collection: str) -> None:
+		"""
+		The 'Gran Purge' (v5.6.0).
+		Atomic deletion of extremely old engrams using Qdrant's filter-based delete.
+		No scroll loop, O(1) database operation.
+		"""
+		timestamp_limite = time.time() - cfg.MAX_SINK_TIME
+
+		try:
+			self.client.delete(
+				collection_name=collection,
+				points_selector=models.FilterSelector(
+					filter=models.Filter(
+						must=[
+							models.FieldCondition(key="last_recalled_at", range=models.Range(lt=timestamp_limite)),
+							models.FieldCondition(key="immune", match=models.MatchValue(value=False)),
+						]
+					)
+				),
+			)
+			logger.info(f"Gran Purge executed for '{collection}'. Engrams older than {cfg.MAX_SINK_TIME / 86400:.1f} days removed.")
+		except Exception as e:
+			logger.error(f"Gran Purge failed in {collection}: {e}")
 
 	def _refresh_ttl_timestamps(self, collection: str) -> None:
 		"""Absence Guard: forward all non-immune last_recalled_at to now.
@@ -582,38 +609,104 @@ class MemoryManager:
 
 		increment_map: Dict[str, float] = {}
 
-		for hit in results:
-			increment_map[str(hit.id)] = cfg.REINFORCEMENT_INCREMENT
+		# v5.6.0: Lazy Metabolism Implementation
+		# Recalculate decay for all results BEFORE reinforcement.
+		# This ensures that we are reinforcing the 'true' decayed score.
+		decayed_results = []
+		update_operations = []
 
-		propagation_increment = cfg.REINFORCEMENT_INCREMENT * cfg.PROPAGATION_FACTOR
 		for hit in results:
 			if hit.payload is None:
 				continue
-			assocs = hit.payload.get("associations", [])
-			for assoc_id in assocs:
-				# CF-005: Circuit Breaker for Hub Fan-out
-				if len(increment_map) >= cfg.MAX_PROPAGATION_POINTS:
+
+			if cfg.METABOLISM_STRATEGY == "LAZY":
+				original_score = float(hit.payload.get("reinforcement_score", 1.0))
+				new_score = self._calculate_lazy_decay(hit.payload)
+
+				if new_score <= 0:
+					# This engram has conceptually 'died' in the gap.
+					# We exclude it from results and mark it for deletion in Qdrant.
+					try:
+						self.client.delete(collection_name=collection, points_selector=models.PointIdsList(points=[hit.id]))
+					except Exception as e:
+						logger.error(f"Lazy deletion failed: {e}")
+					continue
+
+				if new_score < original_score:
+					hit.payload["reinforcement_score"] = new_score
+					# We don't update 'last_recalled_at' yet, that happens in _reinforce_points
+					# but we do want to sync the new score to Qdrant.
+					update_operations.append(
+						models.SetPayloadOperation(set_payload=models.SetPayload(payload={"reinforcement_score": new_score}, points=[hit.id]))
+					)
+
+			decayed_results.append(hit)
+			increment_map[str(hit.id)] = cfg.REINFORCEMENT_INCREMENT
+
+		if update_operations:
+			try:
+				self.client.batch_update_points(collection_name=collection, update_operations=update_operations)
+			except Exception as e:
+				logger.error(f"Lazy decay sync failed: {e}")
+
+		# v5.6.0: N-hop Synaptic Propagation (Hebb's Law Expansion)
+		# We use a breadth-first approach to propagate reinforcement through the graph.
+		current_hop_ids = [str(hit.id) for hit in decayed_results]
+		visited_ids = set(current_hop_ids)
+		current_increment = cfg.REINFORCEMENT_INCREMENT * cfg.PROPAGATION_FACTOR
+
+		for depth in range(1, cfg.PROPAGATION_DEPTH + 1):
+			next_hop_ids = set()
+
+			# For the first hop, we already have payloads in decayed_results
+			if depth == 1:
+				for hit in decayed_results:
+					if hit.payload:
+						assocs = hit.payload.get("associations", [])
+						for a_id in assocs:
+							a_id_str = str(a_id)
+							increment_map[a_id_str] = increment_map.get(a_id_str, 0.0) + current_increment
+							if a_id_str not in visited_ids:
+								next_hop_ids.add(a_id_str)
+			else:
+				# Fetch payloads for the current ring to find the next one
+				try:
+					if current_hop_ids:
+						points = self.client.retrieve(collection_name=collection, ids=current_hop_ids, with_payload=True, with_vectors=False)
+						for p in points:
+							if p.payload:
+								assocs = p.payload.get("associations", [])
+								for a_id in assocs:
+									a_id_str = str(a_id)
+									increment_map[a_id_str] = increment_map.get(a_id_str, 0.0) + current_increment
+									if a_id_str not in visited_ids:
+										next_hop_ids.add(a_id_str)
+				except Exception as e:
+					logger.error(f"N-hop retrieval failed at depth {depth}: {e}")
 					break
 
-				assoc_id_str = str(assoc_id)
-				increment_map[assoc_id_str] = increment_map.get(assoc_id_str, 0.0) + propagation_increment
+			# 2. Cleanup and advance
+			visited_ids.update(next_hop_ids)
+			current_hop_ids = list(next_hop_ids)
+			current_increment *= cfg.PROPAGATION_DECAY  # Diminishing returns (δ)
 
-			if len(increment_map) >= cfg.MAX_PROPAGATION_POINTS:
+			# CF-005: Circuit Breaker for Hub Fan-out
+			if len(increment_map) >= cfg.MAX_PROPAGATION_POINTS or not current_hop_ids:
 				break
 
 		if not increment_map:
-			return results
+			return decayed_results
 
 		points_to_update = self._reinforce_points(collection, list(increment_map.keys()), increment_map)
 
 		if points_to_update:
 			update_map = {str(p.id): p.payload for p in points_to_update}
-			for hit in results:
+			for hit in decayed_results:
 				hit_id_str = str(hit.id)
 				if hit_id_str in update_map and hit.payload is not None:
 					hit.payload.update(update_map[hit_id_str])
 
-		return results
+		return decayed_results
 
 	def _calculate_decay(self, current_score: float, rate: float) -> float:
 		"""Computes decay based on the configured strategy."""
@@ -623,6 +716,35 @@ class MemoryManager:
 				new_score = current_score - 0.01
 		else:
 			new_score = current_score - rate
+
+		return round(max(new_score, 0.0), 2)
+
+	def _calculate_lazy_decay(self, payload: Dict[str, Any]) -> float:
+		"""Calculates the current score of an engram based on time elapsed since last recall."""
+		if payload.get("immune"):
+			return float(payload.get("reinforcement_score", cfg.IMMUNITY_THRESHOLD))
+
+		last_recalled = payload.get("last_recalled_at", time.time())
+		score = float(payload.get("reinforcement_score", 1.0))
+		gap = time.time() - last_recalled
+
+		if gap < cfg.METABOLISM_COOLDOWN:
+			return score
+
+		cycles = gap / cfg.METABOLISM_COOLDOWN
+
+		intensity = float(payload.get("intensity", 1.0))
+		ep = payload.get("emotional_profile", [])
+		emotions = [e["label"] for e in ep] if ep else [str(payload.get("emotion", cfg.DEFAULT_EMOTION))]
+
+		multiplier = get_emotional_stability_multiplier(emotions, intensity)
+		effective_rate = cfg.EROSION_RATE * multiplier
+
+		# Apply decay for all missed cycles
+		if cfg.DECAY_STRATEGY == "exponential":
+			new_score = score * ((1.0 - effective_rate) ** cycles)
+		else:
+			new_score = score - (effective_rate * cycles)
 
 		return round(max(new_score, 0.0), 2)
 

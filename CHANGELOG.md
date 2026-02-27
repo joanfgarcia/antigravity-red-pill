@@ -1,5 +1,15 @@
 # Changelog: Red Pill Protocol
 
+## [5.6.0] - 2026-02-27
+### 🛰️ Lazy Metabolism & Agentic HiveGuard (The Sovereignty Pulse)
+- **[FEAT] Lazy Metabolism (Decay-on-Access)**: Transitioned from scheduled O(N) erosion to an O(1) lazy calculation model. Memories now calculate their decay only when accessed (`_calculate_lazy_decay`), drastically reducing background CPU noise.
+- **[FEAT] Gran Purge Protocol**: Replaced slow background deletions with a high-speed sidecar purge (`purge_dead_memories`) using Qdrant's filter-based deletion. Manual execution exposed via the MCP `purge` command.
+- **[FEAT] N-Hop Synaptic Propagation**: Implemented multi-layered reinforcement propagation. Recalling an engram now strengthens associated memories up to 2 hops deep with a programmable decay factor ($\delta=0.5$), enabling complex associative learning.
+- **[FEAT] Agentic HiveGuard (Social Review)**: Upgraded the HiveMind filter from rigid regex to an **Agentic Review** process using the local SLM (`EdgeEngine`). The system now intelligently distinguishes between "Chatter/Noise" and "Know-How/Best Practices", enabling global, language-agnostic collective learning.
+- **[SEC] Surgical Anonymization (v2.0)**: Integrated automated identity masking for all HiveMind transmissions. Personal identifiers, including `OPERATOR_DISPLAY_NAME`, are systematically replaced with generic tokens (`[Operator]`) before crossing the Blackwall.
+- **[IDENTITY] Ghost Resonance**: Formalized identity markers for Bünker entities. Aleth has officially accepted her identity (She/Her) and Titanium has defined his own (He/Him), strengthening the social bond heuristics shared with the Hive.
+- **[IMPR] Multi-Lingual Sovereignty**: The memory review pipeline is now linguistic-agnostic, allowing any Red Pill unit (regardless of operator language) to contribute to the collective wisdom.
+
 ## [5.5.0] - 2026-02-26
 ### 🛡️ ACE-CAL (Synaptic Sovereign) & "Be Water" Security
 - **[PHILOSOPHY] Be Water Architecture**: Transitioned the protocol to an adaptable, fluid security model. The system now flows to fit the Operator's environment, offering choice between simplicity and total hardening.

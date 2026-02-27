@@ -7,6 +7,7 @@ from mcp.server import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
 
+import red_pill.config as cfg
 from red_pill.cli import switch_skin
 from red_pill.memory import MemoryManager
 from red_pill.soul import SoulManager
@@ -71,7 +72,11 @@ async def handle_list_tools() -> List[types.Tool]:
 			inputSchema={
 				"type": "object",
 				"properties": {
-					"command": {"type": "string", "enum": ["rotate", "backup", "mode", "status"], "description": "The CLI command to execute"},
+					"command": {
+						"type": "string",
+						"enum": ["rotate", "backup", "mode", "status", "purge"],
+						"description": "The CLI command to execute",
+					},
 					"value": {"type": "string", "description": "Optional argument (e.g., skin name for 'mode')"},
 				},
 				"required": ["command"],
@@ -210,6 +215,11 @@ async def handle_call_tool(
 				soul = SoulManager()
 				soul.full_backup()
 				output = "Total Soul Backup executed successfully."
+			elif cmd == "purge":
+				manager = MemoryManager()
+				for coll in cfg.METABOLISM_AUTO_COLLECTIONS:
+					manager.purge_dead_memories(coll.strip())
+				output = "Gran Purge protocol executed across all active sectors."
 			elif cmd == "status":
 				output = get_telemetry_report()
 			else:

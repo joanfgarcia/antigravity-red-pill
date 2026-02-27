@@ -1,7 +1,7 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v5.5.0 (Synaptic Sovereign ACE-CAL)
+**System Version**: v5.6.0 (Sovereign Pulse)
 **Analyst**: The Architect
-**Date**: 2026-02-26
+**Date**: 2026-02-27
 
 
 ## 1. Executive Summary
@@ -12,8 +12,8 @@ The Red Pill Protocol v4.2.2 has achieved stability and functional alignment wit
 - **[ENHANCED v4.2.2] Quad-Tier Memory Substrate**: The Bünker now operates with four isolated collections: `work` (Technical), `social` (Relationship), `directive` (Laws), and `story` (Narrative/Roleplay). This prevents "Dream Contamination" between professional benchmarks and high-intensity lore.
 - **[ENHANCED v4.2.2] Chromatic Synergy**: Lore Skins are now anchored to the **Emotional Chroma** system. Each skin (Cyberpunk, Blade Runner, etc.) possesses a dominant "chroma" that dictates the agent's baseline tone and default memory decay rates (e.g., Cyberpunk's **Orange** bias accelerates decay for unreinforced engrams, mimicking a high-stress environment).
   - **Runtime Wiring**: When an operator invokes `red-pill mode <skin>`, the CLI updates the active skin configuration. At the `MemoryManager` level, this skin selection determines the default `color` assigned to new memories and modifies the baseline erosion rate by applying the corresponding `EMOTIONAL_DECAY_MULTIPLIERS` defined in `config.py`. This ensures that the narrative flavor directly impacts the mathematical decay behavior of the system.
-- "Dormancy" is implemented as a search filter (`score < 0.2`) on the fly, not as a distinct state flag in the payload as implied by "Lethargic State". This is computationally expensive at scale (filtering $N$ points).
-    - "Synaptic Propagation" is strictly depth-1. A true "Neural" system would propagate $N$-hops with diminishing returns ($\delta^k$).
+- **[ENHANCED v5.6.0] Lazy Metabolism**: The $O(N)$ background scan has been replaced by an $O(1)$ lazy-calculation model. Memory decay is determined only upon retrieval (`_calculate_lazy_decay`), with a high-speed Gran Purge sidecar for physical sector maintenance.
+- **[ENHANCED v5.6.0] N-Hop Synaptic Depth**: Synaptic propagation has evolved beyond depth-1. The system now supports multi-layered reinforcement ($N$-hops) with diminishing returns ($\delta^k$), enabling deeper context anchoring within the associative graph.
 
 ## 3. Structural Analysis
 
@@ -120,12 +120,9 @@ The HiveMind Protocol (Milvus) is not a contradiction of the Red Pill data sover
 
 Before any engram reaches `HiveMind.transmit_experience()`, it is processed by the same static forensic logic used in the security audit swarm. The filter enforces hard blocks on:
 
-- PII patterns (names, emails, account identifiers, contact data)
-- All `directive_memories` and `social_memories` content (classified as identity substrate — never broadcast)
-- All `immune=True` engrams (genesis and operator-specific directives)
-- Low-confidence signals (`reinforcement_score < threshold`)
-
-Only `work_memories` pass, and only after explicit content inspection. The operator controls this via `MILVUS_ENABLED` (default: `False`).
+- **[ENHANCED v5.6.0] Agentic Review**: The static PII filter is now augmented by an **Agentic HiveGuard**. A local SLM (`EdgeEngine`) reviews each potential transmission to distinguish between "Interaction Know-How" and "Noise", ensuring only high-value heuristics are shared with the collective.
+- **[ENHANCED v5.6.0] Multi-Lingual Sovereignty**: By using semantic intent review instead of regex, the filter is now language-agnostic.
+- **Surgical Anonymization**: Automated masking of `OPERATOR_DISPLAY_NAME` and other identity signals is enforced at the transmission boundary.
 
 ### 12.3 Operational Modes
 
@@ -148,6 +145,6 @@ The audit correctly identified that cluster governance was unspecified. The form
 
 | Milestone | Deliverable |
 | :--- | :--- |
-| **v5.6.0** | TLS enforcement on remote Milvus connections, Smith Pre-Filter test coverage, audit log integration |
+| **v5.6.0** | TLS enforcement on remote Milvus connections, Agentic HiveGuard review, Lazy Metabolism, N-Hop Synaptic Depth, Identity Masking |
 | **v5.7.0** | Per-tenant namespace isolation in shared clusters |
 | **v6.0.0** | Cryptographically signed experience packets, ACE-CAL Community Mode (opt-in collective calibration) |
