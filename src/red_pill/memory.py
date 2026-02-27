@@ -556,6 +556,16 @@ class MemoryManager:
 
 	def search_and_reinforce(self, collection: str, query: str, limit: int = 3, deep_recall: bool = False) -> List[Any]:
 		"""Semantic search followed by B760 synaptic reinforcement."""
+		# CQ-003: Robust trigger detection for Deep Recall using word boundaries
+		if not deep_recall:
+			import re as regex_lib
+
+			for phrase in cfg.DEEP_RECALL_TRIGGERS:
+				pattern = rf"\b{regex_lib.escape(phrase)}\b"
+				if regex_lib.search(pattern, query, regex_lib.IGNORECASE):
+					deep_recall = True
+					break
+
 		vector = self._get_vector(query)
 
 		search_filter = None

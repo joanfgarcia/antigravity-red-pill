@@ -90,10 +90,7 @@ source = ["src/red_pill"]
 omit = [
     "*/utils/vault.py",
     "*/telemetry.py",
-    "*/hive.py",
-    "*/cli.py",
     "*/utils/observer.py",
-    "*/memory_daemon.py",
 ]
 
 [tool.coverage.report]

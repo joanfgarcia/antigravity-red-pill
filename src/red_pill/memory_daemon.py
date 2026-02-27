@@ -33,8 +33,16 @@ class MemoryDaemon:
 			return
 
 		try:
+			# SEC-001: Check for system tools before proceeding
+			import shutil
+
+			if not shutil.which("findmnt") or not shutil.which("lsblk"):
+				logger.debug("SEC-001: findmnt or lsblk not found. Skipping disk encryption check.")
+				return
+
 			# Identify the block device for IA_DIR/storage
 			storage_path = os.path.join(cfg.IA_DIR, "storage")
+
 			if not os.path.exists(storage_path):
 				os.makedirs(storage_path, exist_ok=True)
 
@@ -51,6 +59,7 @@ class MemoryDaemon:
 						f"!!! SECURITY WARNING (SEC-001) !!!: The volume {device} storing Red Pill engrams "
 						"does NOT appear to be encrypted. Your data is at risk if the host is compromised."
 					)
+
 		except Exception as e:
 			logger.debug(f"Failed to perform encryption check: {e}")
 
