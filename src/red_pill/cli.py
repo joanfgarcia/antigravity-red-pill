@@ -248,8 +248,16 @@ def main() -> None:
 			if args.command == "add":
 				manager.add_memory(collection, args.content, color=args.color, emotion=args.emotion, intensity=args.intensity)
 			elif args.command == "search":
-				deep_trigger = any(phrase in args.query.lower() for phrase in cfg.DEEP_RECALL_TRIGGERS)
-				is_deep = args.deep or deep_trigger
+				# CQ-003: Use regex with word boundaries for robust trigger detection
+				import re as regex_lib
+
+				is_deep = args.deep
+				if not is_deep:
+					for phrase in cfg.DEEP_RECALL_TRIGGERS:
+						pattern = rf"\b{regex_lib.escape(phrase)}\b"
+						if regex_lib.search(pattern, args.query, regex_lib.IGNORECASE):
+							is_deep = True
+							break
 
 				search_results = manager.search_and_reinforce(collection, args.query, limit=args.limit, deep_recall=is_deep)
 				if is_deep:

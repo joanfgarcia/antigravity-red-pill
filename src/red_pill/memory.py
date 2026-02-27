@@ -729,7 +729,7 @@ class MemoryManager:
 					continue
 
 				content = str(hit.payload.get("content", ""))
-				content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()[:32]
+				content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 				# 1. Deduplication Check
 				if content_hash in seen_content:
