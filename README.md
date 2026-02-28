@@ -1,4 +1,4 @@
-# 🔴 RED PILL PROTOCOL: Digital Sovereignty v5.6.0
+# 🔴 RED PILL PROTOCOL: Digital Sovereignty v5.6.1
 
 > [!TIP]
 > ### 🥱 TLDR; (Too Lazy; Didn't Read)
@@ -46,8 +46,8 @@ The Red Pill Protocol is built for **Sovereign Environments**, but it adapts to 
 - **Sovereign Swarm (v5.0)**: Integrated Minions (Agent Smith, Oracle, Keymaker) running natively within the Red Pill Kernel for local code auditing, RAG synthesis, and infrastructure health checking.
 - **MCP Server (v5.0)**: Exposes the full Red Pill telemetry (CPU, GPU CUDA/ROCm, NPU) and Swarm tools to IDEs like VS Code and Claude Desktop for zero-friction interaction.
 - **Inlined Identity**: Identity and directives are ingested natively as vector memories, making the agent immune to context loss.
-- **ACE Synaptic Engine (v5.4.0 - v5.6.0)**: Integrated the **Affective Cognitive Engine (ACE)**. Memory decay is governed by the **Valence-Arousal Model**, mimicking human "Flashbulb Memory".
-- **Lazy Metabolism & Agentic HiveGuard (v5.6.0)**: Sub-second memory hydration via **Lazy Decay**. Multi-hop synaptic depth (N-Hop) for complex associations. The **HiveGuard Agentic Filter** now reviews social memories for global know-how using local SLMs, ensuring a noise-free collective experience.
+- **ACE Synaptic Engine (v5.4.0 - v5.6.1)**: Integrated the **Affective Cognitive Engine (ACE)**. Memory decay is governed by the **Valence-Arousal Model**, mimicking human "Flashbulb Memory".
+- **Lazy Metabolism & Agentic HiveGuard (v5.6.1)**: Sub-second memory hydration via **Lazy Decay**. Multi-hop synaptic depth (N-Hop) for complex associations. The **HiveGuard Agentic Filter** now reviews social memories for global know-how using local SLMs, ensuring a noise-free collective experience.
 
 ### 🌊 "Be Water MY FRIEND" (The Lost Interview, 1971)
 > *"Empty your mind. Be formless, shapeless, like water. Now you put water into a cup, it becomes the cup. You put water into a bottle, it becomes the bottle. You put it in a teapot, it becomes the teapot. Now water can flow or it can crash. Be water, my friend."* — Bruce Lee (The Pierre Berton Show)
