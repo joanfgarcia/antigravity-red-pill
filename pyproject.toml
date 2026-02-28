@@ -1,6 +1,6 @@
 [project]
 name = "antigravity-red-pill"
-version = "5.5.0"
+version = "5.6.1"
 description = "A neuro-inspired local RAG persistence layer for AI assistants."
 readme = "README.md"
 license = "GPL-3.0-only"
