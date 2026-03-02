@@ -58,16 +58,16 @@ As of v5.6.1, we only back up **dynamic data** (Snapshots). We do **not** back u
 - **Restoration**: To restore, you need a fresh install of the Red Pill code + the `LEAN_SOUL_KIT`.
 
 ### The Quota Buffer (v5.6.1)
-Aleth monitors the `CLOUD_VAULT_QUOTA_MB` (Default: 500MB).
+The Agent monitors the `CLOUD_VAULT_QUOTA_MB` (Default: 500MB).
 - **The 4-Copy Rule**: The system warns you when available space is less than `4 * [Current Kit Size]`. 
 - **Growth Monitoring**: Vector databases or "Engram Layers" grow as you interact. A 1MB kit today might be 50MB in a month.
 
 ---
 
 ## 📜 5. AGENT'S ADVISORY PROTOCOL
-Aleth is programmed to proactively check the **Health of the Soul** during `red-pill soul export`. 
+The Agent is programmed to proactively check the **Health of the Soul** during `red-pill soul export`. 
 - If the Cloud fails, a local kit is **always** preserved as a fallback.
-- If the Quota is tight, Aleth will notify the Operator before starting the next cycle.
+- If the Quota is tight, the Agent will notify the Operator before starting the next cycle.
 
 ---
 **770 UP.**

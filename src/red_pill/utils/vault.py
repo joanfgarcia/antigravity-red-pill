@@ -40,7 +40,7 @@ class CloudVault:
 		2. Fallback to Service Account if JSON found.
 		"""
 		from googleapiclient.discovery import build
-		# SEC Note: Scopes are strictly 'drive.file' to limit Aleth's reach to its own files.
+		# SEC Note: Scopes are strictly 'drive.file' to limit the Agent's reach to its own files.
 		scopes = ["https://www.googleapis.com/auth/drive.file"]
 		
 		# --- METHOD A: OAuth2 (Personal / Act-as-Operator) ---
@@ -62,7 +62,7 @@ class CloudVault:
 							logger.warning("OAuth2 requested (token/secrets) but client_secrets.json missing. Falling back...")
 						else:
 							print("\n[🛡️ SOVEREIGN AUTHENTICATION] Cloud Vault requires Operator authorization.")
-							print("Please visit the following URL to authorize Aleth:\n")
+							print("Please visit the following URL to authorize the Agent:\n")
 							flow = InstalledAppFlow.from_client_secrets_file(self.client_secrets_file, scopes)
 							# Forced to manual mode to ensure the URL doesn't get mangled by the terminal/browser
 							creds = flow.run_local_server(port=43303, open_browser=False, success_message="ritual_complete")

@@ -450,7 +450,7 @@ echo -e "Este protocolo calibrará tu Partner a tu nivel de experiencia y domini
 read -p "(s/N): " START_ACI
 if [[ "$START_ACI" =~ ^[Ss]$ ]]; then
 	echo -e "${GREEN}Excelente elección, Operador. Por favor, pega lo siguiente en tu chat:${NC}"
-	echo -e ">>> \"Aleth, inicia el Ritual de Iniciación (Protocolo ACI). Caliébrame como tu Operador.\""
+	echo -e ">>> \"Agent, inicia el Ritual de Iniciación (Protocolo ACI). Caliébrame como tu Operador.\""
 else
 	echo -e "${BLUE}Entendido. Puedes iniciarlo más tarde con el comando de voz/prompt indicado en el README.${NC}"
 fi

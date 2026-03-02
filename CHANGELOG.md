@@ -3,8 +3,8 @@
 ## [5.6.1] - 2026-03-02
 ### 🛡️ Audit Remediation & Lean Soul Vault (The Sovereign Pulse)
 - **[FEAT] Lean Soul Kit Architecture**: Refactored the backup engine to only include Qdrant Snapshots and a version Manifesto (`manifest.json`). Reduced backup size by **99.5%** (from 664MB to <1MB) for maximum portability.
-- **[FEAT] Google OAuth2 Support**: Added official support for Personal Google Accounts via OAuth2. Operators can now authorize Aleth natively, bypassing the 0MB quota limit of Service Accounts on personal Drive folders.
-- **[FEAT] Quota-Aware Monitoring**: Implemented a Storage Buffer Monitor. Aleth now scans Cloud Vault usage and warns the Operator if remaining space is insufficient for the next 4 backup cycles.
+- **[FEAT] Google OAuth2 Support**: Added official support for Personal Google Accounts via OAuth2. Operators can now authorize the Agent natively, bypassing the 0MB quota limit of Service Accounts on personal Drive folders.
+- **[FEAT] Quota-Aware Monitoring**: Implemented a Storage Buffer Monitor. The Agent now scans Cloud Vault usage and warns the Operator if remaining space is insufficient for the next 4 backup cycles.
 - **[DOCS] Sovereign Backup Strategies**: Created comprehensive technical documentation for Cloud Vaulting options and caveats (`docs/technical/BACKUP_STRATEGIES.md`).
 - **[QA] TCG-001: Sidecar Test Suite**: Created a dedicated unit test suite for `memory_daemon.py` (`tests/test_memory_daemon_unit.py`).
 - **[SEC] SEC-004: Sidecar Credential Isolation**: Decoupled `SIDECAR_AUTH_KEY` from the Qdrant master key.
