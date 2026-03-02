@@ -70,96 +70,75 @@ class SoulManager:
 		return saved_files
 
 	def backup_files(self, timestamp: str) -> str:
-		"""Backup identity and configuration files."""
-		soul_backup_dir = os.path.join(self.backup_root, "soul", timestamp)
-		os.makedirs(soul_backup_dir, exist_ok=True)
+		"""
+		v5.6.1: Deprecated file-level backups (bloat risk).
+		Replaced by Lean Manifesto (Manifest.json).
+		"""
+		logger.info("File-level recursive backup is deprecated. Using Lean Manifesto instead.")
+		return ""
 
-		files_to_backup = [
-			os.path.expanduser("~/.gemini/GEMINI.md"),
-			os.path.expanduser("~/.gemini/antigravity/rules/snapshot_rule.md"),
-		]
+	def create_manifest(self, timestamp: str) -> str:
+		"""Generate the 'Soul Manifesto' (Version metadata)."""
+		import json
+		from red_pill import __version__
 
-		# Add skills and rules recursively
-		dirs_to_backup = [
-			os.path.expanduser("~/.gemini/antigravity/skills"),
-			os.path.expanduser("~/.gemini/antigravity/rules"),
-			os.path.expanduser("~/.agent/rules"),  # Preserve any Minion specific rules.
-		]
-
-		copied_count = 0
-		for file_path in files_to_backup:
-			if os.path.exists(file_path):
-				# Reconstruct path relative to HOME or root?
-				# Let's simple-copy with a prefix for now, or use a flat structure with path info.
-				# To match the restore logic, we'll mimic the home structure.
-				rel_path = os.path.relpath(file_path, os.path.expanduser("~"))
-				dest = os.path.join(soul_backup_dir, "home", rel_path)
-				os.makedirs(os.path.dirname(dest), exist_ok=True)
-				shutil.copy2(file_path, dest)
-				copied_count += 1
-
-		for dir_path in dirs_to_backup:
-			if os.path.exists(dir_path):
-				rel_path = os.path.relpath(dir_path, os.path.expanduser("~"))
-				dest = os.path.join(soul_backup_dir, "home", rel_path)
-				if os.path.exists(dest):
-					shutil.rmtree(dest)
-				shutil.copytree(dir_path, dest)
-				copied_count += 1
-
-		logger.info(f"Backup files completed: {copied_count} items backed up to {soul_backup_dir}")
-		return soul_backup_dir
+		manifest = {
+			"protocol_version": __version__,
+			"schema_version": cfg.CURRENT_SCHEMA_VERSION,
+			"embedding_model": cfg.EMBEDDING_MODEL,
+			"vector_size": cfg.VECTOR_SIZE,
+			"timestamp": timestamp,
+			"hardware_context": "CUDA/ROCm/NPU-Ready",
+		}
+		manifest_path = os.path.join(self.backup_root, "qdrant", f"manifest_{timestamp}.json")
+		with open(manifest_path, "w") as f:
+			json.dump(manifest, f, indent="\t")
+		return manifest_path
 
 	def full_backup(self):
-		"""Execute total soul backup (Qdrant + Files)."""
+		"""Execute Lean Soul Backup (Snapshots + Manifesto)."""
 		timestamp = time.strftime("%Y%m%d_%H%M%S")
 		self.backup_qdrant(timestamp)
-		self.backup_files(timestamp)
-		print(f"Total backup completed at {timestamp}")
+		self.create_manifest(timestamp)
+		print(f"Lean Soul Backup completed at {timestamp}")
 
 	def export_soul(self, output_path: Optional[str] = None):
-		"""Export the soul into a single encrypted/compressed kit."""
-		timestamp = time.strftime("%Y%m%d")
-		# 1. Perform a fresh backup first
-		self.full_backup()
+		"""
+		Export the 'Soul' (dynamic data) into a compact, encrypted kit.
+		Following the Architect's 'Lean' directive (v5.6.1): 
+		Only Qdrant snapshots + Soul Manifesto.
+		"""
+		timestamp_full = time.strftime("%Y%m%d_%H%M%S")
+		timestamp_short = time.strftime("%Y%m%d")
+		
+		# 1. Take snapshots and manifest using the same timestamp
+		self.backup_qdrant(timestamp_full)
+		self.create_manifest(timestamp_full)
 
-		# 2. Package everything in IA_DIR/backups and ~/.gemini/antigravity
+		# 2. Package snapshots and manifest
 		export_dir = os.path.join(self.ia_dir, "backups", "export")
 		os.makedirs(export_dir, exist_ok=True)
 
 		if not output_path:
-			output_path = os.path.join(export_dir, f"SOUL_KIT_{timestamp}.tar.gz")
+			output_path = os.path.join(export_dir, f"LEAN_SOUL_KIT_{timestamp_short}.tar.gz")
 
-		logger.info(f"Creating export kit: {output_path}...")
+		logger.info(f"Creating Lean Export Kit: {output_path}...")
 
-		def soul_filter(tarinfo):
-			# Exclude heavy or redundant directories
-			# 'storage' is excluded because we already have concentrated Snapshots in 'backups/qdrant'
-			exclude_list = [
-				"models",
-				".venv",
-				"backups/export",
-				"backups/soul",
-				"__pycache__",
-				".git",
-				"storage",
-				"qdrant_storage",
-				"node_modules",
-				".mypy_cache",
-			]
-			if any(f"/{ex}/" in f"/{tarinfo.name}/" or tarinfo.name.endswith(f"/{ex}") for ex in exclude_list):
-				return None
-			return tarinfo
-
+		snapshot_dir = os.path.join(self.backup_root, "qdrant")
+		
+		# We only include the LATEST snapshots and the Manifesto from the current run
 		with tarfile.open(output_path, "w:gz") as tar:
-			# Add IA_DIR content with filtering
-			tar.add(self.ia_dir, arcname="IA_DATA", filter=soul_filter)
-			# Add .gemini antigravity config
-			gemini_dir = os.path.expanduser("~/.gemini")
-			if os.path.exists(gemini_dir):
-				tar.add(gemini_dir, arcname="GEMINI_CONFIG")
+			manifest_file = f"manifest_{timestamp_full}.json"
+			manifest_path = os.path.join(snapshot_dir, manifest_file)
+			if os.path.exists(manifest_path):
+				tar.add(manifest_path, arcname="manifest.json")
+			
+			for f in os.listdir(snapshot_dir):
+				if f.endswith(".snapshot") and timestamp_full in f:
+					f_path = os.path.join(snapshot_dir, f)
+					tar.add(f_path, arcname=f"snapshots/{f}")
 
-		print(f"Export completed: {output_path}")
+		print(f"Lean Export completed: {output_path} ({os.path.getsize(output_path) // 1024} KB)")
 
 		# 3. Transmit to Cloud Vault if enabled
 		if self.vault.enabled:
@@ -169,7 +148,7 @@ class SoulManager:
 			else:
 				print("Cloud Transmission Failed. Local kit preserved.")
 
-		print("Note: Encryption (GPG) should be handled by the operator for high-security environments.")
+		print("Note: Encryption (GPG) is enforced for Cloud Vault as per SEC-F02.")
 
 	def restore_soul(self, source_dir: str, commit: bool = False):
 		"""Restore soul files and Qdrant snapshots."""

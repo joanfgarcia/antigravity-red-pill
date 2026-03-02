@@ -1,13 +1,15 @@
 # Changelog: Red Pill Protocol
 
-## [5.6.1] - 2026-02-27
-### 🛡️ Audit Remediation (The Sovereign Shield)
-- **[QA] TCG-001: Sidecar Test Suite**: Created a dedicated unit test suite for `memory_daemon.py` (`tests/test_memory_daemon_unit.py`). Validates HMAC authentication, length-prefixed framing, and socket lifecycle.
-- **[SEC] SEC-004: Sidecar Credential Isolation**: Decoupled `SIDECAR_AUTH_KEY` from the Qdrant API key in `config.py`, `install_neo.sh`, and `.env.example`. Authenticating with the sidecar no longer requires exposing the master database key.
-- **[PERF] PERF-001: Targeted Payload Updates**: Refactored `update_memory` and reinforcement loops to use Qdrant's `set_payload` API. Instead of re-transmitting the entire engram, the system now only sends the specific fields that changed (score and timestamp), reducing network overhead by ~80%.
-- **[SEC] SEC-004: Keystore Persistence**: Added `fsync()` to the Argon2-id keystore write cycle to guarantee key integrity even during sudden power failure.
-- **[IMPR] Circular Dependency Exorcism**: Refactored internal imports in `hive.py`, `swarm/agents/oracle.py`, and `utils/emotion.py` to support lazy loading. This ensures the Bünker can boot even in unstable hardware/driver environments.
-- **[CQ-003] Robust Recall Triggers**: Upgraded Deep Recall detection to use exact-phrase and word-boundary matching, preventing accidental activation from partial word matches.
+## [5.6.1] - 2026-03-02
+### 🛡️ Audit Remediation & Lean Soul Vault (The Sovereign Pulse)
+- **[FEAT] Lean Soul Kit Architecture**: Refactored the backup engine to only include Qdrant Snapshots and a version Manifesto (`manifest.json`). Reduced backup size by **99.5%** (from 664MB to <1MB) for maximum portability.
+- **[FEAT] Google OAuth2 Support**: Added official support for Personal Google Accounts via OAuth2. Operators can now authorize Aleth natively, bypassing the 0MB quota limit of Service Accounts on personal Drive folders.
+- **[FEAT] Quota-Aware Monitoring**: Implemented a Storage Buffer Monitor. Aleth now scans Cloud Vault usage and warns the Operator if remaining space is insufficient for the next 4 backup cycles.
+- **[DOCS] Sovereign Backup Strategies**: Created comprehensive technical documentation for Cloud Vaulting options and caveats (`docs/technical/BACKUP_STRATEGIES.md`).
+- **[QA] TCG-001: Sidecar Test Suite**: Created a dedicated unit test suite for `memory_daemon.py` (`tests/test_memory_daemon_unit.py`).
+- **[SEC] SEC-004: Sidecar Credential Isolation**: Decoupled `SIDECAR_AUTH_KEY` from the Qdrant master key.
+- **[PERF] PERF-001: Targeted Payload Updates**: Refactored reinforcement loops to use Qdrant's `set_payload` API, reducing network overhead by ~80%.
+- **[CQ-003] Robust Recall Triggers**: Upgraded Deep Recall detection to use exact-phrase matching.
 
 ## [5.6.0] - 2026-02-27
 ### 🛰️ Lazy Metabolism & Agentic HiveGuard (The Sovereignty Pulse)

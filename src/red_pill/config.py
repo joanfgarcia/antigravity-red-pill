@@ -219,6 +219,8 @@ CLOUD_VAULT_ENABLED = os.getenv("CLOUD_VAULT_ENABLED", "False").lower() == "true
 CLOUD_VAULT_PROVIDER = os.getenv("CLOUD_VAULT_PROVIDER", "google_drive")
 CLOUD_VAULT_FOLDER_ID = os.getenv("CLOUD_VAULT_FOLDER_ID", "")  # The GDrive Folder ID
 CLOUD_SERVICE_ACCOUNT_FILE = os.getenv("CLOUD_SERVICE_ACCOUNT_FILE", os.path.join(IA_DIR, "storage", "keys", "service_account.json"))
+CLOUD_VAULT_QUOTA_MB = int(os.getenv("CLOUD_VAULT_QUOTA_MB", "500"))
+CLOUD_VAULT_RESERVE_COUNT = int(os.getenv("CLOUD_VAULT_RESERVE_COUNT", "4"))
 # SEC-F02: GPG passphrase for AES-256 Soul Kit encryption. Read directly in vault.py.
 # NOT cached here to avoid it appearing in repr(cfg) or debug logs.
 # Set via CLOUD_VAULT_GPG_PASSPHRASE in .env (configured during install_neo.sh).

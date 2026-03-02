@@ -48,6 +48,7 @@ The Red Pill Protocol is built for **Sovereign Environments**, but it adapts to 
 - **Inlined Identity**: Identity and directives are ingested natively as vector memories, making the agent immune to context loss.
 - **ACE Synaptic Engine (v5.4.0 - v5.6.1)**: Integrated the **Affective Cognitive Engine (ACE)**. Memory decay is governed by the **Valence-Arousal Model**, mimicking human "Flashbulb Memory".
 - **Lazy Metabolism & Agentic HiveGuard (v5.6.1)**: Sub-second memory hydration via **Lazy Decay**. Multi-hop synaptic depth (N-Hop) for complex associations. The **HiveGuard Agentic Filter** now reviews social memories for global know-how using local SLMs, ensuring a noise-free collective experience.
+- **Lean Soul Vault & OAuth2 Support (v5.6.1)**: The **Lean Soul Kit** architecture reduces backup size by 99% (Snapshots-only). Introduced **Quota-Aware Monitoring** and **Google OAuth2** (Personal Account) support for seamless, personal-tier cloud backups. See [Sovereign Backup Strategies](docs/technical/BACKUP_STRATEGIES.md).
 
 ### 🌊 "Be Water MY FRIEND" (The Lost Interview, 1971)
 > *"Empty your mind. Be formless, shapeless, like water. Now you put water into a cup, it becomes the cup. You put water into a bottle, it becomes the bottle. You put it in a teapot, it becomes the teapot. Now water can flow or it can crash. Be water, my friend."* — Bruce Lee (The Pierre Berton Show)
