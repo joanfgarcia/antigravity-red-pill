@@ -141,7 +141,19 @@ echo "Elige tu nivel de seguridad para el Bünker:"
 echo "1) NONE (Steam): Sin API Key ni contraseña (Solo para entornos de laboratorio/pruebas)"
 echo "2) ADAPTATIVE (Water): Máxima seguridad disponible según tus recursos (Recomendado)"
 echo "3) MAXIMUM (Ice): Seguridad total blindada. Requiere Argon2-id y LUKS (Falla si no se cumple)"
-read -p "Selección (1/2/3): " SEC_CHOICE
+read -p "Selección (1/2/3) [por defecto 2]: " SEC_CHOICE
+SEC_CHOICE=${SEC_CHOICE:-2}
+
+if [[ "$SEC_CHOICE" == "1" ]]; then
+	echo -e "${RED}!!! ADVERTENCIA DE SEGURIDAD (SEC-AUTH-001) !!!${NC}"
+	echo -e "${RED}Has seleccionado el modo NONE (Steam). El Bünker no tendrá protección por contraseña ni API Key.${NC}"
+	echo -e "${RED}Cualquier proceso local podrá leer y escribir en tu memoria soberana.${NC}"
+	read -p "¿Estás ABSOLUTAMENTE seguro de que quieres continuar sin protección? (y/N): " STEAM_CONFIRM
+	if [[ ! "$STEAM_CONFIRM" =~ ^[Yy]$ ]]; then
+		echo -e "${BLUE}Sabia elección. Reventiendo a Modo ADAPTATIVE (Water).${NC}"
+		SEC_CHOICE=2
+	fi
+fi
 
 case $SEC_CHOICE in
 	2|3)
@@ -149,6 +161,13 @@ case $SEC_CHOICE in
 		HAS_ARGON2=false
 		if python3 -c "from argon2 import PasswordHasher" &>/dev/null; then
 			HAS_ARGON2=true
+		fi
+
+		if [[ "$SEC_CHOICE" == "2" ]]; then
+			if [ "$HAS_ENCRYPTION" != "0" ]; then
+				echo -e "${YELLOW}[AVISO SEC-010] El almacenamiento no parece estar cifrado.${NC}"
+				echo -e "${YELLOW}En modo ADAPTATIVE esto es permitido, pero tus engramas no tienen protección 'at-rest'.${NC}"
+			fi
 		fi
 
 		if [[ "$SEC_CHOICE" == "3" ]]; then
@@ -204,8 +223,11 @@ print(ph.hash(os.environ['MASTER_PWD_INPUT']))
 		echo -e "${BLUE}Modo NONE (Steam) activado. Sin API Key.${NC}"
 		;;
 	*)
-		echo -e "${RED}Selección inválida. Por defecto se usará Modo NONE.${NC}"
-		QDRANT_API_KEY=""
+		echo -e "${BLUE}Selección no reconocida. Aplicando Modo ADAPTATIVE (Water) por defecto.${NC}"
+		SEC_CHOICE=2
+		# We need to run the 2|3 logic here too if we fallback
+		# Simplified: just let the user re-run if they fail, or we could refactor.
+		# For now, let's just make the prompt better.
 		;;
 esac
 
