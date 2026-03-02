@@ -3,7 +3,6 @@ import os
 import subprocess
 from typing import Any, Dict, Optional
 
-from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
@@ -39,10 +38,10 @@ class CloudVault:
 		1. Try OAuth2 (Personal/token mode) if client_secrets.json exists.
 		2. Fallback to Service Account if JSON found.
 		"""
-		from googleapiclient.discovery import build
+
 		# SEC Note: Scopes are strictly 'drive.file' to limit the Agent's reach to its own files.
 		scopes = ["https://www.googleapis.com/auth/drive.file"]
-		
+
 		# --- METHOD A: OAuth2 (Personal / Act-as-Operator) ---
 		if os.path.exists(self.client_secrets_file) or os.path.exists(self.token_file):
 			try:
@@ -79,6 +78,7 @@ class CloudVault:
 		if os.path.exists(self.service_account_file):
 			try:
 				from google.oauth2 import service_account
+
 				creds = service_account.Credentials.from_service_account_file(self.service_account_file, scopes=scopes)
 				self.service = build("drive", "v3", credentials=creds)
 				logger.info("Cloud Vault (Service Account) active.")
@@ -145,13 +145,11 @@ class CloudVault:
 			if self.folder_id:
 				query += f" and '{self.folder_id}' in parents"
 
-			results = self.service.files().list(
-				q=query, 
-				spaces="drive", 
-				fields="files(id, name, size)",
-				supportsAllDrives=True,
-				includeItemsFromAllDrives=True
-			).execute()
+			results = (
+				self.service.files()
+				.list(q=query, spaces="drive", fields="files(id, name, size)", supportsAllDrives=True, includeItemsFromAllDrives=True)
+				.execute()
+			)
 
 			total_bytes = sum(int(f.get("size", 0)) for f in results.get("files", []))
 			return total_bytes / (1024 * 1024)
@@ -174,7 +172,7 @@ class CloudVault:
 
 		file_name = os.path.basename(encrypted_path)
 		file_size_mb = os.path.getsize(encrypted_path) / (1024 * 1024)
-		
+
 		# Quota Check (Lean Buffer Manager)
 		current_usage = self.get_vault_usage()
 		quota_mb = cfg.CLOUD_VAULT_QUOTA_MB
@@ -185,8 +183,10 @@ class CloudVault:
 		logger.info(f"Vault Status: {current_usage:.1f}/{quota_mb}MB used. Remaining: {remaining_mb:.1f}MB.")
 
 		if remaining_mb < buffer_needed_mb:
-			print(f"\n[⚠️  VAULT WARNING] Low space in Safe Haven! "
-				  f"Remaining: {remaining_mb:.1f}MB. Buffer for {reserve_count} copies: {buffer_needed_mb:.1f}MB.")
+			print(
+				f"\n[⚠️  VAULT WARNING] Low space in Safe Haven! "
+				f"Remaining: {remaining_mb:.1f}MB. Buffer for {reserve_count} copies: {buffer_needed_mb:.1f}MB."
+			)
 			print("Recommendation: Move older kits or increase CLOUD_VAULT_QUOTA_MB in .env.\n")
 
 		logger.info(f"Transmitting encrypted Soul Kit to Cloud Haven: {file_name}")
@@ -226,14 +226,18 @@ class CloudVault:
 			if self.folder_id:
 				query += f" and '{self.folder_id}' in parents"
 
-			results = self.service.files().list(
-				q=query, 
-				spaces="drive", 
-				fields="files(id, name, createdTime, size)", 
-				orderBy="createdTime desc", 
-				supportsAllDrives=True, 
-				includeItemsFromAllDrives=True
-			).execute()
+			results = (
+				self.service.files()
+				.list(
+					q=query,
+					spaces="drive",
+					fields="files(id, name, createdTime, size)",
+					orderBy="createdTime desc",
+					supportsAllDrives=True,
+					includeItemsFromAllDrives=True,
+				)
+				.execute()
+			)
 
 			return results.get("files", [])
 		except Exception as e:

@@ -1,0 +1,60 @@
+[0;34m--- [B760 PRE-PR AUDIT PROTOCOL] ---[0m
+1. Formatting (Ruff)... 71 files already formatted
+[0;32mPASS[0m
+2. Linting (Ruff)... I001 [*] Import block is un-sorted or un-formatted
+  --> src/red_pill/soul.py:82:3
+   |
+80 |       def create_manifest(self, timestamp: str) -> str:
+81 |           """Generate the 'Soul Manifesto' (Version metadata)."""
+82 | /         import json
+83 | |         from red_pill import __version__
+   | |________________________________________^
+84 |
+85 |           manifest = {
+   |
+help: Organize imports
+
+F401 [*] `google.oauth2.service_account` imported but unused
+ --> src/red_pill/utils/vault.py:6:27
+  |
+4 | from typing import Any, Dict, Optional
+5 |
+6 | from google.oauth2 import service_account
+  |                           ^^^^^^^^^^^^^^^
+7 | from googleapiclient.discovery import build
+8 | from googleapiclient.http import MediaFileUpload
+  |
+help: Remove unused import: `google.oauth2.service_account`
+
+F401 [*] `googleapiclient.discovery.build` imported but unused
+ --> src/red_pill/utils/vault.py:7:39
+  |
+6 | from google.oauth2 import service_account
+7 | from googleapiclient.discovery import build
+  |                                       ^^^^^
+8 | from googleapiclient.http import MediaFileUpload
+  |
+help: Remove unused import: `googleapiclient.discovery.build`
+
+F811 [*] Redefinition of unused `build` from line 7
+  --> src/red_pill/utils/vault.py:42:41
+   |
+40 |         2. Fallback to Service Account if JSON found.
+41 |         """
+42 |         from googleapiclient.discovery import build
+   |                                               ^^^^^ `build` redefined here
+43 |
+44 |         # SEC Note: Scopes are strictly 'drive.file' to limit the Agent's reach to its own files.
+   |
+  ::: src/red_pill/utils/vault.py:7:39
+   |
+ 6 | from google.oauth2 import service_account
+ 7 | from googleapiclient.discovery import build
+   |                                       ----- previous definition of `build` here
+ 8 | from googleapiclient.http import MediaFileUpload
+   |
+help: Remove definition: `build`
+
+Found 4 errors.
+[*] 4 fixable with the `--fix` option.
+[0;31mFAIL (Run: uv run ruff check --fix .)[0m

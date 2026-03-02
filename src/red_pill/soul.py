@@ -80,6 +80,7 @@ class SoulManager:
 	def create_manifest(self, timestamp: str) -> str:
 		"""Generate the 'Soul Manifesto' (Version metadata)."""
 		import json
+
 		from red_pill import __version__
 
 		manifest = {
@@ -105,12 +106,12 @@ class SoulManager:
 	def export_soul(self, output_path: Optional[str] = None):
 		"""
 		Export the 'Soul' (dynamic data) into a compact, encrypted kit.
-		Following the Architect's 'Lean' directive (v5.6.1): 
+		Following the Architect's 'Lean' directive (v5.6.1):
 		Only Qdrant snapshots + Soul Manifesto.
 		"""
 		timestamp_full = time.strftime("%Y%m%d_%H%M%S")
 		timestamp_short = time.strftime("%Y%m%d")
-		
+
 		# 1. Take snapshots and manifest using the same timestamp
 		self.backup_qdrant(timestamp_full)
 		self.create_manifest(timestamp_full)
@@ -125,14 +126,14 @@ class SoulManager:
 		logger.info(f"Creating Lean Export Kit: {output_path}...")
 
 		snapshot_dir = os.path.join(self.backup_root, "qdrant")
-		
+
 		# We only include the LATEST snapshots and the Manifesto from the current run
 		with tarfile.open(output_path, "w:gz") as tar:
 			manifest_file = f"manifest_{timestamp_full}.json"
 			manifest_path = os.path.join(snapshot_dir, manifest_file)
 			if os.path.exists(manifest_path):
 				tar.add(manifest_path, arcname="manifest.json")
-			
+
 			for f in os.listdir(snapshot_dir):
 				if f.endswith(".snapshot") and timestamp_full in f:
 					f_path = os.path.join(snapshot_dir, f)
