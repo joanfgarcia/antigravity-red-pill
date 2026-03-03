@@ -1,0 +1,401 @@
+[0;34m--- [B760 PRE-PR AUDIT PROTOCOL] ---[0m
+1. Formatting (Ruff)... 71 files already formatted
+[0;32mPASS[0m
+2. Linting (Ruff)... All checks passed!
+[0;32mPASS[0m
+3. Static Analysis (Mypy)...
+Success: no issues found in 27 source files
+[0;32mTYPING PASS[0m
+4. Neural Validation (Pytest)...
+============================= test session starts ==============================
+platform linux -- Python 3.12.12, pytest-9.0.2, pluggy-1.6.0 -- /home/joan/Documents/IA/sharing/.venv/bin/python3
+cachedir: .pytest_cache
+rootdir: /home/joan/Documents/IA/sharing
+configfile: pyproject.toml
+plugins: anyio-4.12.1, cov-7.0.0
+collecting ... collected 196 items / 15 errors
+
+==================================== ERRORS ====================================
+___________________ ERROR collecting tests/test_cli_unit.py ____________________
+ImportError while importing test module '/home/joan/Documents/IA/sharing/tests/test_cli_unit.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+../../../.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_cli_unit.py:6: in <module>
+    from red_pill.cli import get_collection, handle_mode, main
+src/red_pill/cli.py:10: in <module>
+    from red_pill.memory import MemoryManager
+src/red_pill/memory.py:20: in <module>
+    from red_pill.hive import HiveMind
+src/red_pill/hive.py:12: in <module>
+    from red_pill.swarm.agents.edge_engine import EdgeEngine
+src/red_pill/swarm/__init__.py:2: in <module>
+    from .agents.oracle import OracleMinion
+src/red_pill/swarm/agents/oracle.py:4: in <module>
+    from red_pill.memory import MemoryManager
+E   ImportError: cannot import name 'MemoryManager' from partially initialized module 'red_pill.memory' (most likely due to a circular import) (/home/joan/Documents/IA/sharing/src/red_pill/memory.py)
+_________________ ERROR collecting tests/test_daemon_client.py _________________
+tests/test_daemon_client.py:15: in <module>
+    from red_pill.memory import MemoryManager
+src/red_pill/memory.py:20: in <module>
+    from red_pill.hive import HiveMind
+src/red_pill/hive.py:12: in <module>
+    from red_pill.swarm.agents.edge_engine import EdgeEngine
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1322: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:1262: in _find_spec
+    ???
+<frozen importlib._bootstrap_external>:1532: in find_spec
+    ???
+<frozen importlib._bootstrap_external>:1501: in _get_spec
+    ???
+<frozen importlib._bootstrap_external>:1372: in __iter__
+    ???
+<frozen importlib._bootstrap_external>:1359: in _recalculate
+    ???
+<frozen importlib._bootstrap_external>:1355: in _get_parent_path
+    ???
+E   KeyError: 'red_pill.swarm'
+_______________ ERROR collecting tests/test_emotional_memory.py ________________
+tests/test_emotional_memory.py:6: in <module>
+    from red_pill.memory import MemoryManager
+src/red_pill/memory.py:20: in <module>
+    from red_pill.hive import HiveMind
+src/red_pill/hive.py:12: in <module>
+    from red_pill.swarm.agents.edge_engine import EdgeEngine
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1322: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:1262: in _find_spec
+    ???
+<frozen importlib._bootstrap_external>:1532: in find_spec
+    ???
+<frozen importlib._bootstrap_external>:1501: in _get_spec
+    ???
+<frozen importlib._bootstrap_external>:1372: in __iter__
+    ???
+<frozen importlib._bootstrap_external>:1359: in _recalculate
+    ???
+<frozen importlib._bootstrap_external>:1355: in _get_parent_path
+    ???
+E   KeyError: 'red_pill.swarm'
+_____________________ ERROR collecting tests/test_hive.py ______________________
+tests/test_hive.py:5: in <module>
+    from red_pill.hive import HiveMind
+src/red_pill/hive.py:12: in <module>
+    from red_pill.swarm.agents.edge_engine import EdgeEngine
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1322: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:1262: in _find_spec
+    ???
+<frozen importlib._bootstrap_external>:1532: in find_spec
+    ???
+<frozen importlib._bootstrap_external>:1501: in _get_spec
+    ???
+<frozen importlib._bootstrap_external>:1372: in __iter__
+    ???
+<frozen importlib._bootstrap_external>:1359: in _recalculate
+    ???
+<frozen importlib._bootstrap_external>:1355: in _get_parent_path
+    ???
+E   KeyError: 'red_pill.swarm'
+___________________ ERROR collecting tests/test_hive_unit.py ___________________
+tests/test_hive_unit.py:5: in <module>
+    from red_pill.hive import HiveMind
+src/red_pill/hive.py:12: in <module>
+    from red_pill.swarm.agents.edge_engine import EdgeEngine
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1322: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:1262: in _find_spec
+    ???
+<frozen importlib._bootstrap_external>:1532: in find_spec
+    ???
+<frozen importlib._bootstrap_external>:1501: in _get_spec
+    ???
+<frozen importlib._bootstrap_external>:1372: in __iter__
+    ???
+<frozen importlib._bootstrap_external>:1359: in _recalculate
+    ???
+<frozen importlib._bootstrap_external>:1355: in _get_parent_path
+    ???
+E   KeyError: 'red_pill.swarm'
+_______________ ERROR collecting tests/test_industrial_audit.py ________________
+tests/test_industrial_audit.py:3: in <module>
+    from red_pill.swarm.agents.smith import SmithMinion
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1322: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:1262: in _find_spec
+    ???
+<frozen importlib._bootstrap_external>:1532: in find_spec
+    ???
+<frozen importlib._bootstrap_external>:1501: in _get_spec
+    ???
+<frozen importlib._bootstrap_external>:1372: in __iter__
+    ???
+<frozen importlib._bootstrap_external>:1359: in _recalculate
+    ???
+<frozen importlib._bootstrap_external>:1355: in _get_parent_path
+    ???
+E   KeyError: 'red_pill.swarm'
+__________________ ERROR collecting tests/test_local_edge.py ___________________
+tests/test_local_edge.py:6: in <module>
+    from red_pill.swarm.agents.compressor import CompressorMinion
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1322: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:1262: in _find_spec
+    ???
+<frozen importlib._bootstrap_external>:1532: in find_spec
+    ???
+<frozen importlib._bootstrap_external>:1501: in _get_spec
+    ???
+<frozen importlib._bootstrap_external>:1372: in __iter__
+    ???
+<frozen importlib._bootstrap_external>:1359: in _recalculate
+    ???
+<frozen importlib._bootstrap_external>:1355: in _get_parent_path
+    ???
+E   KeyError: 'red_pill.swarm'
+____________________ ERROR collecting tests/test_memory.py _____________________
+tests/test_memory.py:7: in <module>
+    from red_pill.memory import MemoryManager
+src/red_pill/memory.py:20: in <module>
+    from red_pill.hive import HiveMind
+src/red_pill/hive.py:12: in <module>
+    from red_pill.swarm.agents.edge_engine import EdgeEngine
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1322: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:1262: in _find_spec
+    ???
+<frozen importlib._bootstrap_external>:1532: in find_spec
+    ???
+<frozen importlib._bootstrap_external>:1501: in _get_spec
+    ???
+<frozen importlib._bootstrap_external>:1372: in __iter__
+    ???
+<frozen importlib._bootstrap_external>:1359: in _recalculate
+    ???
+<frozen importlib._bootstrap_external>:1355: in _get_parent_path
+    ???
+E   KeyError: 'red_pill.swarm'
+____________ ERROR collecting tests/test_memory_client_isolation.py ____________
+tests/test_memory_client_isolation.py:10: in <module>
+    from red_pill.memory import MemoryManager
+src/red_pill/memory.py:20: in <module>
+    from red_pill.hive import HiveMind
+src/red_pill/hive.py:12: in <module>
+    from red_pill.swarm.agents.edge_engine import EdgeEngine
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1322: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:1262: in _find_spec
+    ???
+<frozen importlib._bootstrap_external>:1532: in find_spec
+    ???
+<frozen importlib._bootstrap_external>:1501: in _get_spec
+    ???
+<frozen importlib._bootstrap_external>:1372: in __iter__
+    ???
+<frozen importlib._bootstrap_external>:1359: in _recalculate
+    ???
+<frozen importlib._bootstrap_external>:1355: in _get_parent_path
+    ???
+E   KeyError: 'red_pill.swarm'
+_______________ ERROR collecting tests/test_memory_edge_cases.py _______________
+tests/test_memory_edge_cases.py:7: in <module>
+    from red_pill.memory import MemoryManager, _mask_pii_exception
+src/red_pill/memory.py:20: in <module>
+    from red_pill.hive import HiveMind
+src/red_pill/hive.py:12: in <module>
+    from red_pill.swarm.agents.edge_engine import EdgeEngine
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1322: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:1262: in _find_spec
+    ???
+<frozen importlib._bootstrap_external>:1532: in find_spec
+    ???
+<frozen importlib._bootstrap_external>:1501: in _get_spec
+    ???
+<frozen importlib._bootstrap_external>:1372: in __iter__
+    ???
+<frozen importlib._bootstrap_external>:1359: in _recalculate
+    ???
+<frozen importlib._bootstrap_external>:1355: in _get_parent_path
+    ???
+E   KeyError: 'red_pill.swarm'
+__________________ ERROR collecting tests/test_metabolism.py ___________________
+tests/test_metabolism.py:7: in <module>
+    from red_pill.memory import MemoryManager
+src/red_pill/memory.py:20: in <module>
+    from red_pill.hive import HiveMind
+src/red_pill/hive.py:12: in <module>
+    from red_pill.swarm.agents.edge_engine import EdgeEngine
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1322: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:1262: in _find_spec
+    ???
+<frozen importlib._bootstrap_external>:1532: in find_spec
+    ???
+<frozen importlib._bootstrap_external>:1501: in _get_spec
+    ???
+<frozen importlib._bootstrap_external>:1372: in __iter__
+    ???
+<frozen importlib._bootstrap_external>:1359: in _recalculate
+    ???
+<frozen importlib._bootstrap_external>:1355: in _get_parent_path
+    ???
+E   KeyError: 'red_pill.swarm'
+________________ ERROR collecting tests/test_migration_v420.py _________________
+tests/test_migration_v420.py:7: in <module>
+    from red_pill.memory import MemoryManager
+src/red_pill/memory.py:20: in <module>
+    from red_pill.hive import HiveMind
+src/red_pill/hive.py:12: in <module>
+    from red_pill.swarm.agents.edge_engine import EdgeEngine
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1322: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:1262: in _find_spec
+    ???
+<frozen importlib._bootstrap_external>:1532: in find_spec
+    ???
+<frozen importlib._bootstrap_external>:1501: in _get_spec
+    ???
+<frozen importlib._bootstrap_external>:1372: in __iter__
+    ???
+<frozen importlib._bootstrap_external>:1359: in _recalculate
+    ???
+<frozen importlib._bootstrap_external>:1355: in _get_parent_path
+    ???
+E   KeyError: 'red_pill.swarm'
+____________________ ERROR collecting tests/test_sec_008.py ____________________
+tests/test_sec_008.py:6: in <module>
+    from red_pill.memory import MemoryManager
+src/red_pill/memory.py:20: in <module>
+    from red_pill.hive import HiveMind
+src/red_pill/hive.py:12: in <module>
+    from red_pill.swarm.agents.edge_engine import EdgeEngine
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1322: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:1262: in _find_spec
+    ???
+<frozen importlib._bootstrap_external>:1532: in find_spec
+    ???
+<frozen importlib._bootstrap_external>:1501: in _get_spec
+    ???
+<frozen importlib._bootstrap_external>:1372: in __iter__
+    ???
+<frozen importlib._bootstrap_external>:1359: in _recalculate
+    ???
+<frozen importlib._bootstrap_external>:1355: in _get_parent_path
+    ???
+E   KeyError: 'red_pill.swarm'
+_____________________ ERROR collecting tests/test_seed.py ______________________
+tests/test_seed.py:5: in <module>
+    from red_pill.seed import seed_project
+src/red_pill/seed.py:7: in <module>
+    from red_pill.memory import MemoryManager
+src/red_pill/memory.py:20: in <module>
+    from red_pill.hive import HiveMind
+src/red_pill/hive.py:12: in <module>
+    from red_pill.swarm.agents.edge_engine import EdgeEngine
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1322: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:1262: in _find_spec
+    ???
+<frozen importlib._bootstrap_external>:1532: in find_spec
+    ???
+<frozen importlib._bootstrap_external>:1501: in _get_spec
+    ???
+<frozen importlib._bootstrap_external>:1372: in __iter__
+    ???
+<frozen importlib._bootstrap_external>:1359: in _recalculate
+    ???
+<frozen importlib._bootstrap_external>:1355: in _get_parent_path
+    ???
+E   KeyError: 'red_pill.swarm'
+________________ ERROR collecting tests/test_surgical_audit.py _________________
+tests/test_surgical_audit.py:3: in <module>
+    from red_pill.swarm.agents.smith import SmithMinion
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1322: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:1262: in _find_spec
+    ???
+<frozen importlib._bootstrap_external>:1532: in find_spec
+    ???
+<frozen importlib._bootstrap_external>:1501: in _get_spec
+    ???
+<frozen importlib._bootstrap_external>:1372: in __iter__
+    ???
+<frozen importlib._bootstrap_external>:1359: in _recalculate
+    ???
+<frozen importlib._bootstrap_external>:1355: in _get_parent_path
+    ???
+E   KeyError: 'red_pill.swarm'
+=============================== warnings summary ===============================
+tests/test_cli_integration.py:18
+  /home/joan/Documents/IA/sharing/tests/test_cli_integration.py:18: PytestUnknownMarkWarning: Unknown pytest.mark.integration - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.integration
+
+tests/test_cli_integration.py:31
+  /home/joan/Documents/IA/sharing/tests/test_cli_integration.py:31: PytestUnknownMarkWarning: Unknown pytest.mark.integration - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.integration
+
+tests/test_cli_integration.py:39
+  /home/joan/Documents/IA/sharing/tests/test_cli_integration.py:39: PytestUnknownMarkWarning: Unknown pytest.mark.integration - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.integration
+
+tests/test_cli_integration.py:47
+  /home/joan/Documents/IA/sharing/tests/test_cli_integration.py:47: PytestUnknownMarkWarning: Unknown pytest.mark.integration - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.integration
+
+src/red_pill/swarm/base.py:10
+  /home/joan/Documents/IA/sharing/src/red_pill/swarm/base.py:10: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    class Minion(BaseModel):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+ERROR tests/test_cli_unit.py
+ERROR tests/test_daemon_client.py - KeyError: 'red_pill.swarm'
+ERROR tests/test_emotional_memory.py - KeyError: 'red_pill.swarm'
+ERROR tests/test_hive.py - KeyError: 'red_pill.swarm'
+ERROR tests/test_hive_unit.py - KeyError: 'red_pill.swarm'
+ERROR tests/test_industrial_audit.py - KeyError: 'red_pill.swarm'
+ERROR tests/test_local_edge.py - KeyError: 'red_pill.swarm'
+ERROR tests/test_memory.py - KeyError: 'red_pill.swarm'
+ERROR tests/test_memory_client_isolation.py - KeyError: 'red_pill.swarm'
+ERROR tests/test_memory_edge_cases.py - KeyError: 'red_pill.swarm'
+ERROR tests/test_metabolism.py - KeyError: 'red_pill.swarm'
+ERROR tests/test_migration_v420.py - KeyError: 'red_pill.swarm'
+ERROR tests/test_sec_008.py - KeyError: 'red_pill.swarm'
+ERROR tests/test_seed.py - KeyError: 'red_pill.swarm'
+ERROR tests/test_surgical_audit.py - KeyError: 'red_pill.swarm'
+!!!!!!!!!!!!!!!!!!! Interrupted: 15 errors during collection !!!!!!!!!!!!!!!!!!!
+======================== 5 warnings, 15 errors in 1.01s ========================
+[0;31mTESTS FAIL[0m

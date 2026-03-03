@@ -92,6 +92,7 @@ class SoulManager:
 			"hardware_context": "CUDA/ROCm/NPU-Ready",
 		}
 		manifest_path = os.path.join(self.backup_root, "qdrant", f"manifest_{timestamp}.json")
+		os.makedirs(os.path.dirname(manifest_path), exist_ok=True)
 		with open(manifest_path, "w") as f:
 			json.dump(manifest, f, indent="\t")
 		return manifest_path

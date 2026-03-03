@@ -144,7 +144,7 @@ class HiveMind:
 		# "Joan prefiere" -> "[Operator] prefiere"
 		# Use a list of common names or patterns if necessary, but starting with the known OP name.
 		# Also mask "yo ", "mi ", "me " in starting positions if it's social.
-		masked = re.sub(r"^(?i)(yo\s+|me\s+)", "[Operator] ", masked)
+		masked = re.sub(r"(?i)^(yo\s+|me\s+)", "[Operator] ", masked)
 
 		return masked
 

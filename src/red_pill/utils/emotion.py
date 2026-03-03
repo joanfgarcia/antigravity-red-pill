@@ -1,8 +1,6 @@
 import logging
 from typing import Any, Dict, List, Optional
 
-# from transformers import pipeline  # Deferred to get_emotions to avoid circular imports / environment crashes at boot
-
 logger = logging.getLogger(__name__)
 
 # Singleton for the emotion classifier to avoid reloading

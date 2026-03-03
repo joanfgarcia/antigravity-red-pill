@@ -301,7 +301,7 @@ class MemoryManager:
 			if p.payload is None:
 				return False
 
-			update_payload = {}
+			update_payload: dict[str, Any] = {}
 			if color:
 				update_payload["color"] = color
 			if emotion:
@@ -719,7 +719,7 @@ class MemoryManager:
 		else:
 			new_score = current_score - rate
 
-		return round(max(new_score, 0.0), 2)
+		return float(round(max(new_score, 0.0), 2))
 
 	def _calculate_lazy_decay(self, payload: Dict[str, Any]) -> float:
 		"""Calculates the current score of an engram based on time elapsed since last recall."""
@@ -748,7 +748,7 @@ class MemoryManager:
 		else:
 			new_score = score - (effective_rate * cycles)
 
-		return round(max(new_score, 0.0), 2)
+		return float(round(max(new_score, 0.0), 2))
 
 	def apply_erosion(self, collection: str, rate: Optional[float] = None) -> None:
 		"""Decays non-immune memories; score <= 0 leads to deletion."""

@@ -194,7 +194,7 @@ class TestOracleMinion:
 		return hit
 
 	@patch("red_pill.swarm.agents.oracle.EdgeEngine")
-	@patch("red_pill.swarm.agents.oracle.MemoryManager")
+	@patch("red_pill.memory.MemoryManager")
 	def test_synthesis_without_llm(self, mock_mm_cls, mock_engine_cls, oracle):
 		"""Without LLM, Oracle returns raw concatenated memory fragments."""
 		mock_mm = MagicMock()
@@ -215,7 +215,7 @@ class TestOracleMinion:
 		assert result["source_count"] > 0
 
 	@patch("red_pill.swarm.agents.oracle.EdgeEngine")
-	@patch("red_pill.swarm.agents.oracle.MemoryManager")
+	@patch("red_pill.memory.MemoryManager")
 	def test_synthesis_with_llm(self, mock_mm_cls, mock_engine_cls, oracle):
 		"""When LLM is available, Oracle calls engine.synthesize()."""
 		mock_mm = MagicMock()
@@ -236,7 +236,7 @@ class TestOracleMinion:
 		mock_engine.synthesize.assert_called_once()
 
 	@patch("red_pill.swarm.agents.oracle.EdgeEngine")
-	@patch("red_pill.swarm.agents.oracle.MemoryManager")
+	@patch("red_pill.memory.MemoryManager")
 	def test_empty_memory_fallback(self, mock_mm_cls, mock_engine_cls, oracle):
 		"""With no memory hits and no LLM, Oracle returns the no-context message."""
 		mock_mm = MagicMock()
@@ -254,7 +254,7 @@ class TestOracleMinion:
 		assert "No se encontró" in result["synthesis"]
 
 	@patch("red_pill.swarm.agents.oracle.EdgeEngine")
-	@patch("red_pill.swarm.agents.oracle.MemoryManager")
+	@patch("red_pill.memory.MemoryManager")
 	def test_result_schema(self, mock_mm_cls, mock_engine_cls, oracle):
 		"""Oracle result always has status, synthesis, source_count."""
 		mock_mm = MagicMock()
