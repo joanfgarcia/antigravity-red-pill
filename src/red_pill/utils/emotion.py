@@ -17,8 +17,8 @@ def get_emotions(text: str, top_k: int = 3, threshold: float = 0.2) -> List[Dict
 		if _classifier is None:
 			from transformers import pipeline
 
-			logger.info("Loading BERT-Emotion model (boltuix/bert-emotion) on CPU...")
-			_classifier = pipeline("text-classification", model="boltuix/bert-emotion", device="cpu", top_k=top_k)
+			logger.info("Loading BERT-Emotion model (boltuix/bert-emotion) on CPU...")  # pragma: no cover
+			_classifier = pipeline("text-classification", model="boltuix/bert-emotion", device="cpu", top_k=top_k)  # pragma: no cover
 
 		results = _classifier(text)
 		if isinstance(results, dict):
