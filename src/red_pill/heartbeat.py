@@ -62,6 +62,7 @@ class LazarusPulse:
 			try:
 				logger.info("Lazarus Pulse: Beat triggered. Executing rituals...")
 				await self._maintenance_ritual()
+				await self._dream_ritual()
 				
 				# Wait for next beat
 				await asyncio.sleep(cfg.PULSE_INTERVAL)
@@ -105,3 +106,22 @@ class LazarusPulse:
 
 		except Exception as e:
 			logger.error(f"Pulse: Maintenance ritual failed: {e}")
+
+	async def _dream_ritual(self) -> None:
+		"""
+		Autonomous Oneiromancy:
+		- Finds latent semantic associations between memories.
+		- Simulates cognitive 'dreaming' to strengthen synaptic density.
+		"""
+		try:
+			logger.info("Pulse: Initiating Oneiromancy (Dream Ritual)...")
+			for coll in ["work_memories", "social_memories", "story_memories"]:
+				try:
+					# Synchronous dream call in a thread
+					await asyncio.to_thread(self.memory_mgr.dream, coll)
+				except Exception as e:
+					logger.error(f"Pulse: Dream failed for {coll}: {e}")
+			
+			logger.info("Pulse: Oneiromancy complete. Patterns woven.")
+		except Exception as e:
+			logger.error(f"Pulse: Dream ritual failed: {e}")

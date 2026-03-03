@@ -708,7 +708,83 @@ class MemoryManager:
 				if hit_id_str in update_map and hit.payload is not None:
 					hit.payload.update(update_map[hit_id_str])
 
+
 		return decayed_results
+
+	def dream(self, collection: str, limit: int = 10) -> Dict[str, Any]:
+		"""
+		Sovereign Oneiromancy (v6.0).
+		Autonomous synaptic discovery during idle Pulse cycles.
+		Finds latent associations (axons) between random engrams.
+		"""
+		logger.info(f"Oneiromancy: Initiating dream sequence for '{collection}'...")
+		
+		# 1. Scroll for a set of 'active' engrams (not immune, fairly recent)
+		try:
+			response = self.client.scroll(
+				collection_name=collection,
+				scroll_filter=models.Filter(
+					must_not=[models.FieldCondition(key="immune", match=models.MatchValue(value=True))]
+				),
+				limit=limit,
+				with_payload=True,
+				with_vectors=True
+			)
+		except Exception as e:
+			logger.error(f"Dream scroll failed: {e}")
+			return {"status": "error", "message": str(e)}
+
+		points, _ = response
+		if not points:
+			return {"status": "empty", "message": "No non-immune memories to dream about."}
+
+		synapses_created = 0
+
+		for p in points:
+			if not p.payload or p.vector is None:
+				continue
+			
+			# 2. Semantic Search for potential partners
+			try:
+				vector = p.vector # type: ignore
+				results = self.client.query_points(
+					collection_name=collection,
+					query=vector,
+					limit=5,
+					with_payload=True,
+					query_filter=models.Filter(
+						must_not=[models.HasIdCondition(has_id=[p.id])]
+					)
+				).points
+			except Exception as e:
+				logger.error(f"Dream search failed for {p.id}: {e}")
+				continue
+
+			for hit in results:
+				if hit.score > 0.85: # High semantic overlap
+					assocs = p.payload.get("associations", [])
+					hit_id_str = str(hit.id)
+					
+					if hit_id_str not in assocs:
+						# 3. Create Synapse (Axon)
+						assocs.append(hit_id_str)
+						# Cap associations using config
+						if len(assocs) > cfg.MAX_AXONS:
+							assocs = assocs[-cfg.MAX_AXONS:]
+						
+						try:
+							self.client.set_payload(
+								collection_name=collection,
+								payload={"associations": assocs},
+								points=[p.id]
+							)
+							synapses_created += 1
+							logger.debug(f"Oneiromancy: Synapse formed [{p.id}] -> [{hit_id_str}] (Score: {hit.score:.2f})")
+						except Exception as e:
+							logger.error(f"Failed to set dream association: {e}")
+
+		logger.info(f"Oneiromancy: Dream sequence complete. {synapses_created} synapses formed.")
+		return {"status": "ok", "synapses": synapses_created}
 
 	def _calculate_decay(self, current_score: float, rate: float) -> float:
 		"""Computes decay based on the configured strategy."""
