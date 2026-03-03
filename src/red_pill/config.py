@@ -206,6 +206,12 @@ MULTI_EMOTION_INFERENCE = os.getenv("MULTI_EMOTION_INFERENCE", "True").lower() =
 
 IA_DIR = os.getenv("IA_DIR", os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
+# SOVEREIGN PULSE (v6.0)
+# Enables background rituals (Maintenance, Audit, Proactive Synthesis).
+PULSE_ENABLED = os.getenv("PULSE_ENABLED", "True").lower() == "true"
+# Pulse interval in seconds. Default: 3600 (1 hour).
+PULSE_INTERVAL = int(os.getenv("PULSE_INTERVAL", "3600"))
+
 # INTERACTION CADENCE (v5.4.0)
 CADENCE_BURST_THRESHOLD = 30.0  # Seconds between prompts for 'Burst' mode (High Intensity)
 CADENCE_ABSENCE_THRESHOLD = 86400 * 2  # 2 Days for 'Dormancy' greeting trigger

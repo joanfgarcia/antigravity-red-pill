@@ -107,8 +107,17 @@ class MemoryDaemon:
 
 		try:
 			self._load_model()
+			# Sovereign Pulse Integration (v6.0)
+			from red_pill.memory import MemoryManager
+			from red_pill.soul import SoulManager
+			from red_pill.heartbeat import LazarusPulse
+
+			self.memory_mgr = MemoryManager()
+			self.soul_mgr = SoulManager()
+			self.pulse = LazarusPulse(self.memory_mgr, self.soul_mgr)
+			self.pulse.start()
 		except Exception as e:
-			logger.error(f"Model load failed: {e}")
+			logger.error(f"Daemon startup failed (Model/Pulse): {e}")
 			self.stop()
 
 		while self.running:
@@ -177,6 +186,10 @@ class MemoryDaemon:
 		if not self.running:
 			return
 		self.running = False
+		# Stop Autonomous Pulse
+		if hasattr(self, "pulse"):
+			self.pulse.stop()
+		
 		if self.server:
 			try:
 				self.server.close()
