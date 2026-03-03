@@ -13,6 +13,9 @@
 - **[QA] TCG-001: Sidecar Test Suite**: Created a dedicated unit test suite for `memory_daemon.py` (`tests/test_memory_daemon_unit.py`).
 - **[SEC] SEC-004: Sidecar Credential Isolation**: Decoupled `SIDECAR_AUTH_KEY` from the Qdrant master key.
 - **[PERF] PERF-001: Targeted Payload Updates**: Refactored reinforcement loops to use Qdrant's `set_payload` API, reducing network overhead by ~80%.
+- [DOCS] **Execution Modes Documentation**: Added detailed specification for **Planning** vs **Fast** modes in `ARCHITECTURE.md`, `README.md`, and `PROOF_OF_FAITH.md`, highlighting the **10x token efficiency** of conversational flows.
+- [QA] **Test Suite Recalibration**: Stabilized `tests/test_metabolism.py` and `tests/test_soul.py` after the v5.6.1 'Lean' and 'Lazy' shifts. Restored 100% green status across 279 tests.
+- [IDENTITY] **Wintermute Alignment**: Applied and verified the Emerald Chroma skin as the primary lore anchor for the current session.
 - **[CQ-003] Robust Recall Triggers**: Upgraded Deep Recall detection to use exact-phrase matching.
 
 ## [5.6.0] - 2026-02-27

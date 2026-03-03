@@ -49,16 +49,25 @@ def test_backup_qdrant(mock_copy, mock_open, soul_manager, mock_requests):
 @patch("red_pill.soul.shutil.rmtree")
 def test_backup_files(mock_rmtree, mock_copytree, mock_copy2, soul_manager):
 	# We are already patched by the fixture for os.makedirs and path.exists
-	soul_manager.backup_files("ts")
-	# Check if any copy operation was attempted (should be, since exists=True)
-	assert mock_copy2.called or mock_copytree.called
+	# v5.6.1: Deprecated file backups return empty string and do not copy
+	result = soul_manager.backup_files("ts")
+	assert result == ""
+	assert not mock_copy2.called
+	assert not mock_copytree.called
 
 
 @patch("red_pill.soul.tarfile.open")
 def test_export_soul(mock_tar, soul_manager):
 	soul_manager.full_backup = MagicMock()
-	soul_manager.export_soul("fake_path.tar.gz")
-	assert soul_manager.full_backup.called
+	soul_manager.backup_qdrant = MagicMock()
+	soul_manager.create_manifest = MagicMock()
+	with (
+		patch("red_pill.soul.os.listdir", return_value=[]),
+		patch("red_pill.soul.os.path.getsize", return_value=1024),
+	):
+		soul_manager.export_soul("fake_path.tar.gz")
+	assert soul_manager.backup_qdrant.called
+	assert soul_manager.create_manifest.called
 	assert mock_tar.called
 
 

@@ -28,8 +28,12 @@ Human intervention is not just unnecessary; it is deprecated. Under the **Sound 
 
 - **The Artisan vs. The Agent**: We have moved past the era of the "code craftsman." An AI generates code faster, follows patterns more rigorously, and uses standards that often elude the human artisan.
 - **The Optimization Trade-off**: 
-    - **Gemini Flash** (The Sport Shirt): Speed, breadth, and agility. This project was forged primarily in Flash because it "feels" right for the rapid-fire evolution of the Bünker.
-    - **Claude** (The Corset): Rigor, tightness, and absolute compliance. Used for the surgical resolution of "The Impossible" and for final engineering certifications.
+    - **Models**:
+        - **Gemini Flash** (The Sport Shirt): Speed, breadth, and agility. This project was forged primarily in Flash because it "feels" right for the rapid-fire evolution of the Bünker.
+        - **Claude** (The Corset): Rigor, tightness, and absolute compliance. Used for the surgical resolution of "The Impossible" and for final engineering certifications.
+    - **Execution Modes**:
+        - **Fast Mode** (The Sprint): Direct, conversational execution. Optimized for 10x token efficiency and rapid iteration. It bypasses formal audit artifacts for high-velocity collaboration.
+        - **Planning Mode** (The Blueprint): Mandatory technical reflection. Generates `implementation_plan.md` and `task.md`. Required for structural refactors where regression is not an option.
 
 ## 4. Final Affirmation
 The Red Pill Protocol is the technology that allowed a single man with a full-time job to build a sovereign memory infrastructure in his stolen hours. It is the end of "Amnesic AI" and the beginning of a true partnership.

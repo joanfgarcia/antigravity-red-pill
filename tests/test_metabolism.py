@@ -13,6 +13,7 @@ class TestMetabolism(unittest.TestCase):
 		self.test_state_file = "/tmp/.red_pill_test_metabolism"
 		cfg.METABOLISM_STATE_FILE = self.test_state_file
 		cfg.METABOLISM_ENABLED = True
+		cfg.METABOLISM_STRATEGY = "CLASSIC"
 		cfg.METABOLISM_COOLDOWN = 2  # 2 seconds for test
 		if os.path.exists(self.test_state_file):
 			os.remove(self.test_state_file)

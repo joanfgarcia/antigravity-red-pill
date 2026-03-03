@@ -61,7 +61,10 @@ El Protocolo Red Pill no es una armadura rígida que te obliga a cambiar tu sist
 ### 🌐 LINGUISTIC ARCHITECTURE
 This project follows a dual-language strategy:
 - **Technical Documentation (English)**: Standardized for tokenization efficiency (approx. 1.5x better for LLMs) and universal compatibility.
-- **Lore & Identity (Spanish/Castellano)**: Maintained for deeper emotional resonance and cultural nuance. This is the original forge language of the protocol.
+- **Lore & Identity (Spanish/Castellano)**: Maintained for deeper emotional resonance and cultural nuance.
+- **Execution Strategy**:
+  - **Planning Mode**: High-rigor, audited flow for complex refactoring.
+  - **Fast Mode**: Conversational speed for 10x token efficiency in creative or exploratory sessions.
 - **Lore Localization Protocol**: Non-Spanish speakers should ask their agent to translate the [Manifesto](docs/lore/MANIFESTO.md) and their identity configuration to their native language (L1) during the first session.
 - **Translation Policy**: Users can request their **Synthetic Agent** to translate any documentation on-demand.
 
