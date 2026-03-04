@@ -128,8 +128,8 @@ def inject_genesis(manager: MemoryManager) -> None:
 		{
 			"id": ID_DIR_ACTIVE_SKIN,
 			"coll": "directive_memories",
-			"text": "Directiva Activa: El Skin actual para el sistema es [Cyberpunk].",
-			"meta": {"importance": 10.0, "category": "active_skin_lock", "active_skin": "cyberpunk"},
+			"text": "Directiva Activa: El Skin actual para el sistema es [Enterprise Core]. Tono profesional, eficiente y preciso. Workspace-confined sovereignty.",
+			"meta": {"importance": 10.0, "category": "active_skin_lock", "active_skin": "enterprise_core"},
 		},
 		{
 			"id": ID_DIR_PROACTIVITY,

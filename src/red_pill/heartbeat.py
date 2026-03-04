@@ -26,7 +26,7 @@ class LazarusPulse:
 		if not cfg.PULSE_ENABLED:
 			logger.info("Lazarus Pulse: Disabled via config.")
 			return
-		
+
 		if self._running:
 			return
 
@@ -63,7 +63,7 @@ class LazarusPulse:
 				logger.info("Lazarus Pulse: Beat triggered. Executing rituals...")
 				await self._maintenance_ritual()
 				await self._dream_ritual()
-				
+
 				# Wait for next beat
 				await asyncio.sleep(cfg.PULSE_INTERVAL)
 			except asyncio.CancelledError:
@@ -88,7 +88,7 @@ class LazarusPulse:
 				logger.warning("Pulse: Bünker connection lost. Attempting recovery...")
 
 			# 2. Absence Guard (Proactive TTL refresh)
-			# Ensures memories don't "suddenly" decay after long inactivity if the user 
+			# Ensures memories don't "suddenly" decay after long inactivity if the user
 			# forgets to interact. This stabilizes the biological runway.
 			if cfg.METABOLISM_STRATEGY == "LAZY":
 				logger.info("Pulse: Running proactive Absence Guard sync...")
@@ -101,7 +101,7 @@ class LazarusPulse:
 
 			# 3. Storage Health
 			# (Placeholder for future quota/cleanup tasks)
-			
+
 			logger.info("Pulse: Maintenance ritual complete. 770 stable.")
 
 		except Exception as e:
@@ -121,7 +121,7 @@ class LazarusPulse:
 					await asyncio.to_thread(self.memory_mgr.dream, coll)
 				except Exception as e:
 					logger.error(f"Pulse: Dream failed for {coll}: {e}")
-			
+
 			logger.info("Pulse: Oneiromancy complete. Patterns woven.")
 		except Exception as e:
 			logger.error(f"Pulse: Dream ritual failed: {e}")

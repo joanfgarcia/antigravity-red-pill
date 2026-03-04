@@ -1,5 +1,16 @@
 # Changelog: Red Pill Protocol
 
+## [5.6.2] - 2026-03-04
+### 🎭 Lore Skin Unification & Default Skin Alignment
+
+- **[FEAT] Skin Personality Field**: Added `personality` to all 15 Lore Skins in `lore_skins.yaml`. Each personality is written in first-person, in the exact voice and tone of the respective universe (Matrix, Dune, Terminator, etc.).
+- **[FEAT] Sovereign Alert System (SAS)**: Implemented a reactive, non-blocking notification pipeline for background processes. 
+  - **Sensory Layer**: Added `red-pill signal` CLI command for desktop alerts (`notify-send`). Silent by default per Operator directive.
+  - **Memory Layer**: Signals are persisted as `sas_signal` engrams in `directive_memories` for Agent turn-start awareness.
+  - **Orchestrator Integration**: `GruOrchestrator` now triggers SAS automatically upon swarm completion.
+- **[CHANGE] Default Skin**: Changed the default active skin seeded on fresh installations from `cyberpunk` to `enterprise_core`.
+- **[QA] Coverage Sprint Phase 2**: Achieved **98.25% global coverage** across all modules (543 tests). Raised `fail_under` from 93 → 96. Fixed several blocking test issues and added watchdog guards.
+
 ## [5.6.1] - 2026-03-02
 ### 🛡️ Audit Remediation & Lean Soul Vault (The Sovereign Pulse)
 - **[FEAT] Lean Soul Kit Architecture**: Refactored the backup engine to only include Qdrant Snapshots and a version Manifesto (`manifest.json`). Reduced backup size by **99.5%** (from 664MB to <1MB) for maximum portability.

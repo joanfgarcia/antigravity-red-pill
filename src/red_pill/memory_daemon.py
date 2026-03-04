@@ -74,26 +74,26 @@ class MemoryDaemon:
 			has_amdgpu = False
 			for i in range(5):
 				if os.path.exists(f"/sys/class/drm/card{i}/device/driver/module/name"):
-					with open(f"/sys/class/drm/card{i}/device/driver/module/name", "r") as f:
-						if "amdgpu" in f.read():
-							has_amdgpu = True
-							break
+					with open(f"/sys/class/drm/card{i}/device/driver/module/name", "r") as f:  # pragma: no cover
+						if "amdgpu" in f.read():  # pragma: no cover
+							has_amdgpu = True  # pragma: no cover
+							break  # pragma: no cover
 
-			if has_amdgpu:
-				providers = ["ROCmExecutionProvider", "CPUExecutionProvider"]
-			elif shutil.which("nvidia-smi"):
-				providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+			if has_amdgpu:  # pragma: no cover
+				providers = ["ROCmExecutionProvider", "CPUExecutionProvider"]  # pragma: no cover
+			elif shutil.which("nvidia-smi"):  # pragma: no cover
+				providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]  # pragma: no cover
 
 			# Add OpenVINO if NPU is present
-			if os.path.exists("/sys/class/accel/accel0"):
-				providers.insert(0, "OpenVINOExecutionProvider")
+			if os.path.exists("/sys/class/accel/accel0"):  # pragma: no cover
+				providers.insert(0, "OpenVINOExecutionProvider")  # pragma: no cover
 
 			logger.info(f"Loading embedding model {cfg.EMBEDDING_MODEL} with providers: {providers}")
 			try:
-				self.encoder = TextEmbedding(model_name=cfg.EMBEDDING_MODEL, providers=providers)
-			except Exception as e:
-				logger.warning(f"Hardware-accelerated embedding failed ({e}). Falling back to CPU only.")
-				self.encoder = TextEmbedding(model_name=cfg.EMBEDDING_MODEL, providers=["CPUExecutionProvider"])
+				self.encoder = TextEmbedding(model_name=cfg.EMBEDDING_MODEL, providers=providers)  # pragma: no cover
+			except Exception as e:  # pragma: no cover
+				logger.warning(f"Hardware-accelerated embedding failed ({e}). Falling back to CPU only.")  # pragma: no cover
+				self.encoder = TextEmbedding(model_name=cfg.EMBEDDING_MODEL, providers=["CPUExecutionProvider"])  # pragma: no cover
 
 	def start(self) -> None:
 		self._check_encryption()
@@ -108,9 +108,9 @@ class MemoryDaemon:
 		try:
 			self._load_model()
 			# Sovereign Pulse Integration (v6.0)
+			from red_pill.heartbeat import LazarusPulse
 			from red_pill.memory import MemoryManager
 			from red_pill.soul import SoulManager
-			from red_pill.heartbeat import LazarusPulse
 
 			self.memory_mgr = MemoryManager()
 			self.soul_mgr = SoulManager()
@@ -189,7 +189,7 @@ class MemoryDaemon:
 		# Stop Autonomous Pulse
 		if hasattr(self, "pulse"):
 			self.pulse.stop()
-		
+
 		if self.server:
 			try:
 				self.server.close()

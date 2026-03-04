@@ -1,6 +1,6 @@
 [project]
 name = "antigravity-red-pill"
-version = "5.6.1"
+version = "5.6.2"
 description = "A neuro-inspired local RAG persistence layer for AI assistants."
 readme = "README.md"
 license = "GPL-3.0-only"
@@ -98,7 +98,7 @@ omit = [
 # External-I/O modules are excluded (see omit above); this threshold
 # applies only to the measurable core: memory engine, schemas, swarm,
 # MCP server, config, utils, and seed logic.
-fail_under = 93
+fail_under = 96
 show_missing = true
 
 [tool.pytest.ini_options]

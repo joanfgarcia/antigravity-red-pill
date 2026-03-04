@@ -3,6 +3,7 @@ import logging
 import os
 import signal
 import sys
+import time
 
 import yaml  # type: ignore
 
@@ -158,6 +159,12 @@ def main() -> None:
 	)
 	edit_parser.add_argument("--intensity", type=float)
 
+	signal_parser = subparsers.add_parser("signal", help="Sovereign Alert System (SAS) trigger")
+	signal_parser.add_argument("message", help="Notification message")
+	signal_parser.add_argument("--title", default="Red Pill: Task Complete", help="Notification title")
+	signal_parser.add_argument("--sound", action="store_true", help="Enable sensory pulse (sound)")
+	signal_parser.add_argument("--silent", action="store_true", help="Do not send desktop notification (Memory only)")
+
 	args = parser.parse_args()
 
 	log_level = logging.DEBUG if args.verbose else getattr(logging, cfg.LOG_LEVEL.upper(), logging.INFO)
@@ -300,6 +307,19 @@ def main() -> None:
 				stats = manager.get_stats(collection)
 				for key, value in stats.items():
 					print(f"{key.capitalize().replace('_', ' ')}: {value}")
+			elif args.command == "signal":
+				from red_pill.utils.observer import notify_user
+				if not args.silent:
+					notify_user(args.title, args.message, sound=args.sound)
+
+				# Record memory of the signal
+				manager.add_memory(
+					collection="directive_memories",
+					text=f"SAS Signal: {args.title} - {args.message}",
+					importance=1.0,
+					metadata={"type": "sas_signal", "timestamp": time.time(), "message": args.message}
+				)
+				print(f"[SAS] Signal recorded: {args.message}")
 
 	except Exception as e:
 		logger.error(f"Protocol Failure: {e}")

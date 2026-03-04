@@ -44,8 +44,9 @@ class PointUpdate:
 class MemoryManager:
 	"""B760-Adaptive memory engine."""
 
-	def __init__(self, url: str = cfg.QDRANT_URL):
-		self.client = QdrantClient(url=url, api_key=cfg.QDRANT_API_KEY)
+	def __init__(self, url: str = cfg.QDRANT_URL, config=None):
+		self.cfg = config or cfg
+		self.client = QdrantClient(url=url, api_key=self.cfg.QDRANT_API_KEY)
 		self.encoder: Optional[TextEmbedding] = None
 		self._reinforce_lock = threading.Lock()
 		self._metabolism_thread: Optional[threading.Thread] = None
@@ -53,7 +54,7 @@ class MemoryManager:
 
 	def _get_vector_from_daemon(self, text: str) -> Optional[List[float]]:
 		"""Retrieves embedding from the memory sidecar socket."""
-		socket_path = cfg.DAEMON_SOCKET_PATH
+		socket_path = self.cfg.DAEMON_SOCKET_PATH
 		if not os.path.exists(socket_path):
 			return None
 
@@ -63,7 +64,7 @@ class MemoryManager:
 				client.connect(socket_path)
 
 				# SEC-002 & SEC-004: Auth & Payload
-				request = {"text": text, "api_key": cfg.SIDECAR_AUTH_KEY}
+				request = {"text": text, "api_key": self.cfg.SIDECAR_AUTH_KEY}
 				payload = json.dumps(request).encode("utf-8")
 
 				# CQ-003: Length-prefixed framing
@@ -103,13 +104,14 @@ class MemoryManager:
 			try:
 				from fastembed import TextEmbedding
 
-				providers = [cfg.EXECUTION_PROVIDER] if cfg.EXECUTION_PROVIDER else None
-				self.encoder = TextEmbedding(model_name=cfg.EMBEDDING_MODEL, providers=providers)
+				providers = [self.cfg.EXECUTION_PROVIDER] if self.cfg.EXECUTION_PROVIDER else None
+				self.encoder = TextEmbedding(model_name=self.cfg.EMBEDDING_MODEL, providers=providers)
 			except ImportError:
 				raise RuntimeError("FastEmbed library is missing. All semantic memory operations are blocked.")
 
 		assert self.encoder is not None
-		return list(self.encoder.embed([text]))[0].tolist()  # type: ignore
+		vector = list(self.encoder.embed([text]))[0]
+		return vector.tolist() if hasattr(vector, "tolist") else vector
 
 	def add_memory(
 		self,
@@ -156,7 +158,7 @@ class MemoryManager:
 		# v5.5.0: Synaptic Fragmentation (Anti-Amnesia Logic)
 		# If the text is a massive block, we split it into sinaptic fragments
 		# to ensure vectors are granular and searchable.
-		if len(text) > cfg.CHUNK_THRESHOLD and not metadata.get("_is_fragment"):
+		if len(text) > self.cfg.CHUNK_THRESHOLD and not metadata.get("_is_fragment"):
 			fragments = synaptic_split(text)
 			parent_id = point_id if point_id else str(uuid.uuid4())
 
@@ -191,19 +193,19 @@ class MemoryManager:
 		# v5.4.0: Advanced Multi-Emotion Profile
 		emotional_profile = []
 		if os_detect := os.getenv("EMOTION_AUTO_DETECT", "True").lower() == "true":
-			if cfg.MULTI_EMOTION_INFERENCE:
+			if self.cfg.MULTI_EMOTION_INFERENCE:
 				emotional_profile = get_emotions(text)
 
-			if emotional_profile and emotion == cfg.DEFAULT_EMOTION:
+			if emotional_profile and emotion == self.cfg.DEFAULT_EMOTION:
 				emotion = emotional_profile[0]["label"]
-				if color == cfg.DEFAULT_COLOR:
+				if color == self.cfg.DEFAULT_COLOR:
 					color = get_chroma_for_emotion(emotion)
-			elif os_detect and emotion == cfg.DEFAULT_EMOTION:
+			elif os_detect and emotion == self.cfg.DEFAULT_EMOTION:
 				# Fallback to single if multi is disabled but detect is on
 				detected = get_emotion(text)
 				if detected:
 					emotion = detected
-					if color == cfg.DEFAULT_COLOR:
+					if color == self.cfg.DEFAULT_COLOR:
 						color = get_chroma_for_emotion(emotion)
 
 		if emotional_profile:
@@ -237,16 +239,16 @@ class MemoryManager:
 		_intensity = validated_request.intensity
 		_color = validated_request.color
 		if _emotion != "neutral" and _intensity > 1.0:
-			_color_mult = cfg.EMOTIONAL_DECAY_MULTIPLIERS.get(_color, 1.0)
-			_bonus = (_intensity / 10.0) * _color_mult * cfg.EMOTIONAL_SEED_FACTOR
+			_color_mult = self.cfg.EMOTIONAL_DECAY_MULTIPLIERS.get(_color, 1.0)
+			_bonus = (_intensity / 10.0) * _color_mult * self.cfg.EMOTIONAL_SEED_FACTOR
 			_initial_score = importance * (1.0 + _bonus)
 		else:
 			_initial_score = importance
-		_initial_score = round(min(_initial_score, cfg.IMMUNITY_THRESHOLD * 0.9), 2)
+		_initial_score = round(min(_initial_score, self.cfg.IMMUNITY_THRESHOLD * 0.9), 2)
 
 		# If it was forced immune during seeding, set score to max
 		if force_immune:
-			_initial_score = cfg.IMMUNITY_THRESHOLD
+			_initial_score = self.cfg.IMMUNITY_THRESHOLD
 
 		payload = {
 			"content": text,
@@ -258,7 +260,7 @@ class MemoryManager:
 			"color": validated_request.color,
 			"emotion": validated_request.emotion,
 			"intensity": validated_request.intensity,
-			"schema_version": cfg.CURRENT_SCHEMA_VERSION,
+			"schema_version": self.cfg.CURRENT_SCHEMA_VERSION,
 			**clean_metadata,
 		}
 
@@ -275,7 +277,7 @@ class MemoryManager:
 					metadata={"importance": importance, "agent_id": os.getenv("AGENT_ID", "standalone")},
 				)
 
-			if cfg.METABOLISM_ENABLED:
+			if self.cfg.METABOLISM_ENABLED:
 				self._trigger_metabolism()
 			return actual_id
 		except Exception as e:
@@ -375,7 +377,7 @@ class MemoryManager:
 		protect freshly-refreshed engrams from being eroded on the very next
 		cycle. The flag is consumed (cleared) at the start of the following run.
 		"""
-		state_file = cfg.METABOLISM_STATE_FILE
+		state_file = self.cfg.METABOLISM_STATE_FILE
 		now = time.time()
 
 		try:
@@ -397,18 +399,18 @@ class MemoryManager:
 				gap = now - last_run if last_run > 0 else float("inf")
 
 				# --- Cooldown gate ---
-				if last_run > 0 and gap < cfg.METABOLISM_COOLDOWN:
+				if last_run > 0 and gap < self.cfg.METABOLISM_COOLDOWN:
 					if has_fcntl:
 						fcntl.flock(f, fcntl.LOCK_UN)
 					return
 
 				# --- Absence guard ---
-				if last_run > 0 and gap > cfg.ABSENCE_THRESHOLD:
+				if last_run > 0 and gap > self.cfg.ABSENCE_THRESHOLD:
 					logger.warning(
 						f"Absence detected ({gap / 86400:.1f} days). Running TTL refresh to protect the Bunker. "
 						f"Erosion skipped for this cycle and the next."
 					)
-					for coll in cfg.METABOLISM_AUTO_COLLECTIONS:
+					for coll in self.cfg.METABOLISM_AUTO_COLLECTIONS:
 						try:
 							self._refresh_ttl_timestamps(coll.strip())
 						except Exception as e:
@@ -440,9 +442,9 @@ class MemoryManager:
 		except OSError:
 			pass
 
-		for coll in cfg.METABOLISM_AUTO_COLLECTIONS:
+		for coll in self.cfg.METABOLISM_AUTO_COLLECTIONS:
 			try:
-				if cfg.METABOLISM_STRATEGY == "LAZY":
+				if self.cfg.METABOLISM_STRATEGY == "LAZY":
 					self.purge_dead_memories(coll.strip())
 				else:
 					self.apply_erosion(coll.strip())
@@ -455,7 +457,7 @@ class MemoryManager:
 		Atomic deletion of extremely old engrams using Qdrant's filter-based delete.
 		No scroll loop, O(1) database operation.
 		"""
-		timestamp_limite = time.time() - cfg.MAX_SINK_TIME
+		timestamp_limite = time.time() - self.cfg.MAX_SINK_TIME
 
 		try:
 			self.client.delete(
@@ -469,7 +471,7 @@ class MemoryManager:
 					)
 				),
 			)
-			logger.info(f"Gran Purge executed for '{collection}'. Engrams older than {cfg.MAX_SINK_TIME / 86400:.1f} days removed.")
+			logger.info(f"Gran Purge executed for '{collection}'. Engrams older than {self.cfg.MAX_SINK_TIME / 86400:.1f} days removed.")
 		except Exception as e:
 			logger.error(f"Gran Purge failed in {collection}: {e}")
 
@@ -510,7 +512,7 @@ class MemoryManager:
 
 			# Safety break for unconfigured mocks in tests
 			match_count += 1
-			if match_count > cfg.ABSENCE_GUARD_SCROLL_LIMIT:
+			if match_count > self.cfg.ABSENCE_GUARD_SCROLL_LIMIT:
 				logger.warning(f"Safety break triggered in TTL refresh for {collection}")
 				break
 
@@ -552,11 +554,11 @@ class MemoryManager:
 				p_id_str = str(p.id)
 				inc = increments.get(p_id_str, 0.0)
 
-				new_score = min(score + inc, cfg.IMMUNITY_THRESHOLD)
+				new_score = min(score + inc, self.cfg.IMMUNITY_THRESHOLD)
 				p.payload["reinforcement_score"] = round(new_score, 2)
 				p.payload["last_recalled_at"] = time.time()
 
-				if p.payload["reinforcement_score"] >= cfg.IMMUNITY_THRESHOLD:
+				if p.payload["reinforcement_score"] >= self.cfg.IMMUNITY_THRESHOLD:
 					p.payload["immune"] = True
 
 				updated_points.append(PointUpdate(id=p.id, payload=p.payload))
@@ -589,7 +591,7 @@ class MemoryManager:
 		if not deep_recall:
 			import re as regex_lib
 
-			for phrase in cfg.DEEP_RECALL_TRIGGERS:
+			for phrase in self.cfg.DEEP_RECALL_TRIGGERS:
 				pattern = rf"\b{regex_lib.escape(phrase)}\b"
 				if regex_lib.search(pattern, query, regex_lib.IGNORECASE):
 					deep_recall = True
@@ -621,7 +623,7 @@ class MemoryManager:
 			if hit.payload is None:
 				continue
 
-			if cfg.METABOLISM_STRATEGY == "LAZY":
+			if self.cfg.METABOLISM_STRATEGY == "LAZY":
 				original_score = float(hit.payload.get("reinforcement_score", 1.0))
 				new_score = self._calculate_lazy_decay(hit.payload)
 
@@ -643,7 +645,7 @@ class MemoryManager:
 					)
 
 			decayed_results.append(hit)
-			increment_map[str(hit.id)] = cfg.REINFORCEMENT_INCREMENT
+			increment_map[str(hit.id)] = self.cfg.REINFORCEMENT_INCREMENT
 
 		if update_operations:
 			try:
@@ -655,9 +657,9 @@ class MemoryManager:
 		# We use a breadth-first approach to propagate reinforcement through the graph.
 		current_hop_ids = [str(hit.id) for hit in decayed_results]
 		visited_ids = set(current_hop_ids)
-		current_increment = cfg.REINFORCEMENT_INCREMENT * cfg.PROPAGATION_FACTOR
+		current_increment = self.cfg.REINFORCEMENT_INCREMENT * self.cfg.PROPAGATION_FACTOR
 
-		for depth in range(1, cfg.PROPAGATION_DEPTH + 1):
+		for depth in range(1, self.cfg.PROPAGATION_DEPTH + 1):
 			next_hop_ids = set()
 
 			# For the first hop, we already have payloads in decayed_results
@@ -690,10 +692,10 @@ class MemoryManager:
 			# 2. Cleanup and advance
 			visited_ids.update(next_hop_ids)
 			current_hop_ids = list(next_hop_ids)
-			current_increment *= cfg.PROPAGATION_DECAY  # Diminishing returns (δ)
+			current_increment *= self.cfg.PROPAGATION_DECAY  # Diminishing returns (δ)
 
 			# CF-005: Circuit Breaker for Hub Fan-out
-			if len(increment_map) >= cfg.MAX_PROPAGATION_POINTS or not current_hop_ids:
+			if len(increment_map) >= self.cfg.MAX_PROPAGATION_POINTS or not current_hop_ids:
 				break
 
 		if not increment_map:
@@ -708,7 +710,6 @@ class MemoryManager:
 				if hit_id_str in update_map and hit.payload is not None:
 					hit.payload.update(update_map[hit_id_str])
 
-
 		return decayed_results
 
 	def dream(self, collection: str, limit: int = 10) -> Dict[str, Any]:
@@ -718,7 +719,7 @@ class MemoryManager:
 		Finds latent associations (axons) between random engrams.
 		"""
 		logger.info(f"Oneiromancy: Initiating dream sequence for '{collection}'...")
-		
+
 		# 1. Scroll for a set of 'active' engrams (not immune, fairly recent)
 		try:
 			response = self.client.scroll(
@@ -743,7 +744,7 @@ class MemoryManager:
 		for p in points:
 			if not p.payload or p.vector is None:
 				continue
-			
+
 			# 2. Semantic Search for potential partners
 			try:
 				vector = p.vector # type: ignore
@@ -764,14 +765,14 @@ class MemoryManager:
 				if hit.score > 0.85: # High semantic overlap
 					assocs = p.payload.get("associations", [])
 					hit_id_str = str(hit.id)
-					
+
 					if hit_id_str not in assocs:
 						# 3. Create Synapse (Axon)
 						assocs.append(hit_id_str)
 						# Cap associations using config
-						if len(assocs) > cfg.MAX_AXONS:
-							assocs = assocs[-cfg.MAX_AXONS:]
-						
+						if len(assocs) > self.cfg.MAX_AXONS:
+							assocs = assocs[-self.cfg.MAX_AXONS:]
+
 						try:
 							self.client.set_payload(
 								collection_name=collection,
@@ -788,7 +789,7 @@ class MemoryManager:
 
 	def _calculate_decay(self, current_score: float, rate: float) -> float:
 		"""Computes decay based on the configured strategy."""
-		if cfg.DECAY_STRATEGY == "exponential":
+		if self.cfg.DECAY_STRATEGY.lower() == "exponential":
 			new_score = current_score * (1.0 - rate)
 			if round(new_score, 2) >= round(current_score, 2) and current_score > 0:
 				new_score = current_score - 0.01
@@ -800,26 +801,26 @@ class MemoryManager:
 	def _calculate_lazy_decay(self, payload: Dict[str, Any]) -> float:
 		"""Calculates the current score of an engram based on time elapsed since last recall."""
 		if payload.get("immune"):
-			return float(payload.get("reinforcement_score", cfg.IMMUNITY_THRESHOLD))
+			return float(payload.get("reinforcement_score", self.cfg.IMMUNITY_THRESHOLD))
 
 		last_recalled = payload.get("last_recalled_at", time.time())
 		score = float(payload.get("reinforcement_score", 1.0))
 		gap = time.time() - last_recalled
 
-		if gap < cfg.METABOLISM_COOLDOWN:
+		if gap < self.cfg.METABOLISM_COOLDOWN:
 			return score
 
-		cycles = gap / cfg.METABOLISM_COOLDOWN
+		cycles = gap / self.cfg.METABOLISM_COOLDOWN
 
 		intensity = float(payload.get("intensity", 1.0))
 		ep = payload.get("emotional_profile", [])
-		emotions = [e["label"] for e in ep] if ep else [str(payload.get("emotion", cfg.DEFAULT_EMOTION))]
+		emotions = [e["label"] for e in ep] if ep else [str(payload.get("emotion", self.cfg.DEFAULT_EMOTION))]
 
 		multiplier = get_emotional_stability_multiplier(emotions, intensity)
-		effective_rate = cfg.EROSION_RATE * multiplier
+		effective_rate = self.cfg.EROSION_RATE * multiplier
 
 		# Apply decay for all missed cycles
-		if cfg.DECAY_STRATEGY == "exponential":
+		if self.cfg.DECAY_STRATEGY.lower() == "exponential":
 			new_score = score * ((1.0 - effective_rate) ** cycles)
 		else:
 			new_score = score - (effective_rate * cycles)
@@ -829,7 +830,7 @@ class MemoryManager:
 	def apply_erosion(self, collection: str, rate: Optional[float] = None) -> None:
 		"""Decays non-immune memories; score <= 0 leads to deletion."""
 		if rate is None:
-			rate = cfg.EROSION_RATE
+			rate = self.cfg.EROSION_RATE
 
 		if rate > 0.5:
 			logger.warning(f"High erosion: {rate}")
@@ -842,7 +843,7 @@ class MemoryManager:
 
 		# Calculate the TTL threshold: Only erode memories that haven't been recalled
 		# recently. Wait at least METABOLISM_COOLDOWN before eroding again.
-		ttl_threshold = time.time() - cfg.METABOLISM_COOLDOWN
+		ttl_threshold = time.time() - self.cfg.METABOLISM_COOLDOWN
 
 		scroll_filter = models.Filter(
 			must=[models.FieldCondition(key="last_recalled_at", range=models.Range(lt=ttl_threshold))],
@@ -876,11 +877,11 @@ class MemoryManager:
 
 				# Use full profile if available, else primary emotion
 				ep = hit.payload.get("emotional_profile", [])
-				emotions = [e["label"] for e in ep] if ep else [str(hit.payload.get("emotion", cfg.DEFAULT_EMOTION))]
+				emotions = [e["label"] for e in ep] if ep else [str(hit.payload.get("emotion", self.cfg.DEFAULT_EMOTION))]
 
 				multiplier = get_emotional_stability_multiplier(emotions, intensity)
 
-				effective_rate = (rate if rate is not None else cfg.EROSION_RATE) * multiplier
+				effective_rate = (rate if rate is not None else self.cfg.EROSION_RATE) * multiplier
 				new_score = self._calculate_decay(score, effective_rate)
 
 				if new_score <= 0:
@@ -965,16 +966,16 @@ class MemoryManager:
 				update_payload: Dict[str, Any] = {}
 
 				if "color" not in hit.payload:
-					update_payload["color"] = cfg.DEFAULT_COLOR
+					update_payload["color"] = self.cfg.DEFAULT_COLOR
 					needs_migration = True
 				if "emotion" not in hit.payload:
-					update_payload["emotion"] = cfg.DEFAULT_EMOTION
+					update_payload["emotion"] = self.cfg.DEFAULT_EMOTION
 					needs_migration = True
 				if "intensity" not in hit.payload:
 					update_payload["intensity"] = 1.0
 					needs_migration = True
-				if hit.payload.get("schema_version") != cfg.CURRENT_SCHEMA_VERSION:
-					update_payload["schema_version"] = cfg.CURRENT_SCHEMA_VERSION
+				if hit.payload.get("schema_version") != self.cfg.CURRENT_SCHEMA_VERSION:
+					update_payload["schema_version"] = self.cfg.CURRENT_SCHEMA_VERSION
 					needs_migration = True
 
 				if needs_migration:

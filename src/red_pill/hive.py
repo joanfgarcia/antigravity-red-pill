@@ -26,16 +26,18 @@ class HiveMind:
 		self.connected = False
 		if self.enabled and connections:
 			try:
+				# SEC-F03: Enforce TLS for remote connections
+				is_local = cfg.MILVUS_HOST in ["localhost", "127.0.0.1", "::1"]
+				secure_conn = cfg.MILVUS_SECURE
+
 				# v6.0: Milvus Lite (Sovereign Local)
-				if cfg.MILVUS_LITE_ENABLED:
+				# We only use Lite if we are explicitly on a local host and Lite is enabled.
+				if cfg.MILVUS_LITE_ENABLED and is_local:
 					logger.info(f"HiveMind: Connecting to local sanctuary (Milvus Lite) at {cfg.MILVUS_LITE_PATH}")
 					connections.connect(alias="default", uri=cfg.MILVUS_LITE_PATH)
 					self.connected = True
 					return
 
-				# SEC-F03: Enforce TLS for remote connections
-				is_local = cfg.MILVUS_HOST in ["localhost", "127.0.0.1", "::1"]
-				secure_conn = cfg.MILVUS_SECURE
 				if not is_local and not secure_conn:
 					logger.error("[SEC-F03] HiveMind connection blocked: TLS required for remote hosts.")
 					self.connected = False

@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v5.6.1 (Sovereign Pulse)
+**System Version**: v5.6.2 (Sovereign Pulse)
 **Analyst**: The Architect
 **Date**: 2026-02-27
 
@@ -14,6 +14,8 @@ The Red Pill Protocol v4.2.2 has achieved stability and functional alignment wit
   - **Runtime Wiring**: When an operator invokes `red-pill mode <skin>`, the CLI updates the active skin configuration. At the `MemoryManager` level, this skin selection determines the default `color` assigned to new memories and modifies the baseline erosion rate by applying the corresponding `EMOTIONAL_DECAY_MULTIPLIERS` defined in `config.py`. This ensures that the narrative flavor directly impacts the mathematical decay behavior of the system.
 - **[ENHANCED v5.6.0] Lazy Metabolism**: The $O(N)$ background scan has been replaced by an $O(1)$ lazy-calculation model. Memory decay is determined only upon retrieval (`_calculate_lazy_decay`), with a high-speed Gran Purge sidecar for physical sector maintenance.
 - **[ENHANCED v5.6.0] N-Hop Synaptic Depth**: Synaptic propagation has evolved beyond depth-1. The system now supports multi-layered reinforcement ($N$-hops) with diminishing returns ($\delta^k$), enabling deeper context anchoring within the associative graph.
+- **[ENHANCED v6.0.0] Sovereign Heartbeat (Lazarus Pulse)**: The system now features an autonomous, multi-threaded background service (`LazarusPulse`). This service performs "Maintenance Rituals" (Absence Guard sync, DB connectivity verification) and "Dream Rituals" independently of operator prompts.
+- **[ENHANCED v6.0.0] Milvus Lite (Local Sanctuary)**: Collective memory prototyping no longer requires distributed infrastructure. Milvus Lite provides a high-speed, local-file-based vector substrate for HiveMind logic without network exposure, maintaining absolute sovereignty.
 
 ## 3. Structural Analysis
 
@@ -57,6 +59,9 @@ The B760 memory decay model is conceptually grounded in peer-reviewed cognitive 
 - **Wozniak, P. (SuperMemo.guru)** — Three-Component Model of Memory: DSR model underpinning FSRS and modern spaced repetition.
 - **Anderson, J. R. — ACT-R Model (Carnegie Mellon)** — Memory activation theory: `A_i = ln(Σ t_j^{-d})`. Decay as a function of recency and frequency of recalls.
 - **MaiMemo DHP Model (2022, KDD)** — Direct ancestor of FSRS, introducing the data-driven optimization of memory parameters.
+- **Hebb, D. O. (1949). The Organization of Behavior** — "Neurons that fire together, wire together." The foundational principle for the **Lazarus Axon (Synaptic Dreaming)** ritual.
+- **Walker, M. P., & Stickgold, R. (2004). Sleep-dependent learning and memory consolidation** — Scientific basis for the autonomous `dream()` cycle as a mechanism for semantic pattern discovery.
+- **Tononi, G. (2004). An information integration theory of consciousness** — Theoretical framework for the **$\Phi$ (Phi)** coefficient as a metric of irreducible complexity and autonomous integration.
 
 > **The B760 Protocol does not invent its memory mechanics. It applies established cognitive science to the problem of AI session continuity.**
 > *Here is the science behind the art.*
