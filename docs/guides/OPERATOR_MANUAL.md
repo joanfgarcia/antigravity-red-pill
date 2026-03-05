@@ -1,4 +1,4 @@
-# Operator Manual: Protocol Red Pill v5.0+
+# Operator Manual: Protocol Red Pill v5.6.3
 
 This manual provides the essential instructions for operating the **Red Pill CLI** (`uv run red-pill`). It covers both technical commands and the lore-based interaction model.
 
@@ -41,7 +41,7 @@ uv run red-pill mode [matrix|cyberpunk|760|dune|gits|her|purple]
     uv run red-pill soul restore /path/to/backup --commit
     ```
 
-### 4. Be Water Security Tiers (v5.5.0)
+### 4. Be Water Security Tiers (v5.6.3)
 The Bünker adapts to your environment through three operational tiers:
 - **NONE (Steam)**: Open access. No API Key or master password. Best for testing.
 - **ADAPTATIVE (Water)**: Maximizes security based on available resources. Uses SHA-256 fallback if Argon2 is missing (Standard Sovereignty).
@@ -53,7 +53,7 @@ Monitor the Asymmetric Dual-Engine performance (NVIDIA + Radeon).
 uv run red-pill status
 ```
 
-### 5. Hybrid Emotion Inference (v5.2.0)
+### 5. Hybrid Emotion Inference (v5.6.3)
 The Bünker now auto-detects sentiment using the **BERT-Emotion** model.
 *   **Auto-Chroma**: If you add a memory without specifying a color, the system classifies the emotion (Love, Anger, Sadness, etc.) and tags the engram with its corresponding Chroma.
 *   **Override**: You can still manually force an emotion:
@@ -115,7 +115,7 @@ uv run red-pill mode [matrix|cyberpunk|760|dune|gits|her|purple]
     uv run red-pill soul restore /ruta/al/backup --commit
     ```
 
-### 4. Tiers de Seguridad "Be Water" (v5.5.0)
+### 4. Tiers de Seguridad "Be Water" (v5.6.3)
 El Bünker se adapta a tus recursos mediante tres modos:
 - **NONE (Steam)**: Acceso abierto sin API Key ni contraseña. Ideal para laboratorio.
 - **ADAPTATIVE (Water)**: Máxima seguridad disponible (haciendo fallback a SHA-256 si falta Argon2).
@@ -127,7 +127,7 @@ Monitoriza el rendimiento del motor dual asimétrico (NVIDIA + Radeon).
 uv run red-pill status
 ```
 
-### 5. Inferencia de Emociones Híbrida (v5.2.0)
+### 5. Inferencia de Emociones Híbrida (v5.6.3)
 El Bünker ahora detecta sentimientos automáticamente usando el modelo **BERT-Emotion**.
 *   **Chroma Automático**: Al guardar un recuerdo sin especificar color, el sistema clasifica la emoción (Amor, Ira, Tristeza, etc.) y etiqueta el engrama con su Chroma correspondiente.
 *   **Sobrescribir**: Puedes forzar una emoción manualmente:

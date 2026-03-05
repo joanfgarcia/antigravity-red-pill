@@ -2,7 +2,7 @@
 
 *"Empty your mind. Be formless, shapeless, like water."* — Bruce Lee (1971)
 
-The Red Pill Protocol v5.5.0 introduces the **Be Water Philosophy**. We no longer impose rigid security barriers. Instead, we adapt to the Operator's environment, offering a choice between total simplicity and military-grade hardening.
+The Red Pill Protocol v5.6.3 introduces the **Be Water Philosophy**. We no longer impose rigid security barriers. Instead, we adapt to the Operator's environment, offering a choice between total simplicity and military-grade hardening.
 
 ---
 

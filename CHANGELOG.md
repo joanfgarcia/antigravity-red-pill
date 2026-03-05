@@ -10,8 +10,11 @@
 - **[AUDIT] SEC-008: Recursive Metadata Validation**: Extended Pydantic validation to recursively check all metadata fields for null-byte injections at any depth.
 - **[AUDIT] HIVEMIND: Governance Enforcement**: Added [HIVEMIND_POLICY.md](docs/technical/HIVEMIND_POLICY.md) and required explicit operator acknowledgement in `install_neo.sh` before enabling the Open Network layer.
 - **[AUDIT] PERF-001: Optimized Updates**: Verified use of the targeted `set_payload` API for all reinforcement and metabolic updates, reducing network overhead.
-- **[FEAT] Lore Skin Unification**: Optimized `personality` fields for all 15 cinematic skins, anchoring them to the Emotional Chroma system for dynamic tone adjustment.
-- **[QA] Pure Green Status**: Achieved 100% pass rate (548/548 tests) across the entire stack, including logic, schema, and orchestration gates.
+- [FEAT] Lore Skin Unification: Optimized `personality` fields for all 15 cinematic skins, anchoring them to the Emotional Chroma system for dynamic tone adjustment.
+- [AUDIT] TCG-002: Sidecar Client Tests: Added isolated unit tests for `_get_vector_from_daemon` framing and HMAC logic.
+- [AUDIT] TCG-003: Skin Integrity Tests: Validated structural and semantic consistency across all 15 cinematic lore skins.
+- [AUDIT] SEC-009: Remote Security Gate: Hardened the installer with a mandatory confirmation phase for insecure (HTTP) remote deployments.
+- [QA] **Absolute Purity Status**: Achieved perfect pass rate (**553/553 tests**) across the entire stack, including logic, schema, and orchestration gates.
 
 ## [5.6.1] - 2026-03-02
 ### 🛡️ Audit Remediation & Lean Soul Vault (The Sovereign Pulse)
