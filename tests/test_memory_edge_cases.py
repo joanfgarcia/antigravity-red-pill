@@ -244,8 +244,15 @@ def test_sanitize_exceptions():
 	class MockPoint:
 		def __init__(self):
 			self.id = "1"
-			# Missing color so it triggers migration
-			self.payload = {"content": "text", "reinforcement_score": 1.0}
+			# Missing color so it triggers migration, but needs base fields to pass EngramPayload
+			self.payload = {
+				"content": "text", 
+				"reinforcement_score": 1.0, 
+				"importance": 1.0, 
+				"created_at": 1000.0, 
+				"last_recalled_at": 1000.0, 
+				"schema_version": "v1.0"
+			}
 
 	manager.client.scroll.side_effect = None
 	manager.client.scroll.return_value = ([MockPoint()], None)

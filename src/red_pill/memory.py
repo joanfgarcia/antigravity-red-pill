@@ -18,7 +18,7 @@ except ImportError:
 
 import red_pill.config as cfg
 from red_pill.hive import HiveMind
-from red_pill.schemas import CreateEngramRequest
+from red_pill.schemas import CreateEngramRequest, EngramPayload
 from red_pill.utils.affect import get_emotional_stability_multiplier
 from red_pill.utils.emotion import get_chroma_for_emotion, get_emotion, get_emotions
 from red_pill.utils.fragmentation import synaptic_split
@@ -48,14 +48,33 @@ class MemoryManager:
 	"""B760-Adaptive memory engine."""
 
 	def __init__(self, url: str = cfg.QDRANT_URL, config=None):
-		self.cfg = config or cfg
+		self.cfg = config if config else cfg
 		self.client = QdrantClient(url=url, api_key=self.cfg.QDRANT_API_KEY)
 		self.encoder: Optional[TextEmbedding] = None
 		self._reinforce_lock = threading.Lock()
 		self._metabolism_thread: Optional[threading.Thread] = None
 		self.hive = HiveMind()
 
-	def ensure_collection(self, collection_name: str):
+	def _parse_payload(self, payload: Dict[str, Any], strict: bool = True) -> Dict[str, Any]:
+		"""
+		Phase O.2 & O.3: Pydantic Schema Migration.
+		If strict=True, pipes payload through EngramPayload to enforce presence of fields
+		and hydrate missing FSRS dimensions (difficulty/stability).
+		If strict=False (Raw Read Mode), bypasses validation to allow emergency maintenance.
+		"""
+		if not payload:
+			return payload
+		if not strict:
+			return payload
+		try:
+			validated = EngramPayload.model_validate(payload)
+			# Convert back to dict for Qdrant client compatibility downstream
+			return validated.model_dump()
+		except Exception as e:
+			logger.warning(f"Payload strict validation failed (Original Sin detected). Returning raw payload. Error: {_mask_pii_exception(e)}")
+			return payload
+
+	def _ensure_collection(self, collection_name: str) -> None:
 		"""Create a collection if it does not exist with the standard B760 vector schema."""
 		if not self.client.collection_exists(collection_name):
 			self.client.create_collection(
@@ -555,7 +574,7 @@ class MemoryManager:
 
 		return updated_points
 
-	def search_and_reinforce(self, collection: str, query: str, limit: int = 3, deep_recall: bool = False) -> List[Any]:
+	def search_and_reinforce(self, collection: str, query: str, limit: int = 3, deep_recall: bool = False, strict: bool = True) -> List[Any]:
 		if not deep_recall:
 			import re as regex_lib
 
@@ -586,6 +605,8 @@ class MemoryManager:
 		for hit in results:
 			if hit.payload is None:
 				continue
+
+			hit.payload = self._parse_payload(hit.payload, strict=strict)
 
 			if self.cfg.METABOLISM_STRATEGY == "LAZY":
 				original_score = float(hit.payload.get("reinforcement_score", 1.0))
@@ -809,7 +830,7 @@ class MemoryManager:
 				break
 		logger.info(f"Erosion complete in {collection}. Updated: {eroded_count}, Deleted: {deleted_count}")
 
-	def sanitize(self, collection: str, dry_run: bool = False) -> Dict[str, Any]:
+	def sanitize(self, collection: str, dry_run: bool = False, strict: bool = True) -> Dict[str, Any]:
 		"""Sanitizes a collection: removes duplicates, heals schemas, and refracts oversized legacy engrams."""
 		offset = None
 		seen_content: Dict[str, str] = {}
@@ -869,20 +890,9 @@ class MemoryManager:
 							logger.error(f"Fragmentation Guard failed for {hit.id}: {e}")
 					continue
 
-				needs_migration = False
-				update_payload: Dict[str, Any] = {}
-				if "color" not in hit.payload:
-					update_payload["color"] = self.cfg.DEFAULT_COLOR
-					needs_migration = True
-				if "emotion" not in hit.payload:
-					update_payload["emotion"] = self.cfg.DEFAULT_EMOTION
-					needs_migration = True
-				if "intensity" not in hit.payload:
-					update_payload["intensity"] = 1.0
-					needs_migration = True
-				if hit.payload.get("schema_version") != self.cfg.CURRENT_SCHEMA_VERSION:
-					update_payload["schema_version"] = self.cfg.CURRENT_SCHEMA_VERSION
-					needs_migration = True
+				update_payload = self._parse_payload(hit.payload, strict=strict)
+				needs_migration = update_payload != hit.payload
+
 				if needs_migration:
 					migrated_count += 1
 					if not dry_run:

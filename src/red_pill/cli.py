@@ -130,6 +130,7 @@ def main() -> None:
 	sanitize_parser = subparsers.add_parser("sanitize", help="Sanitation & Migration Protocol")
 	sanitize_parser.add_argument("type", choices=["work", "social", "directive", "story"])
 	sanitize_parser.add_argument("--dry-run", action="store_true", help="Report without changes")
+	sanitize_parser.add_argument("--raw", action="store_true", help="Bypass Pydantic validation (Raw Read maintenance fallback)")
 
 	subparsers.add_parser("status", help="Hardware Control Panel")
 
@@ -323,7 +324,7 @@ def main() -> None:
 				manager.apply_erosion(collection, rate=rate)
 				print(f"Erosion applied to {collection}.")
 			elif args.command == "sanitize":
-				san_results = manager.sanitize(collection, dry_run=args.dry_run)
+				san_results = manager.sanitize(collection, dry_run=args.dry_run, strict=not args.raw)
 				print(f"--- [SANITATION: {collection.upper()}] ---")
 				print(f"Duplicates Removed: {san_results['duplicates_found']}")
 				print(f"Records Migrated: {san_results['migrated_records']}")

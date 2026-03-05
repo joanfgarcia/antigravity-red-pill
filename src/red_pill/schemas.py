@@ -110,3 +110,26 @@ class CreateEngramRequest(BaseModel):
 			if isinstance(val, str) and len(val) > 1024:
 				raise ValueError(f"Metadata field {key} exceeds limit")
 		return v
+
+class EngramPayload(BaseModel):
+	"""
+	Strict read-schema for data loaded from Qdrant.
+	Enforces the presence of core fields, mitigating 'Original Sin' schemaless debt.
+	Automatically injects FSRS baseline values (difficulty/stability) for graceful migration.
+	"""
+	content: str
+	importance: float
+	reinforcement_score: float = 1.0
+	color: ValidColor = "gray"
+	emotion: ValidEmotion = "neutral"
+	intensity: float = 1.0
+	immune: bool = False
+	created_at: float
+	last_recalled_at: float
+	schema_version: str
+
+	# FSRS Cognitive Model Dimensions (v6.0 PREP)
+	difficulty: float = 0.0
+	stability: float = 0.0
+
+	model_config = {"extra": "allow"}

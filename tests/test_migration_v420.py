@@ -26,15 +26,16 @@ def test_full_schema_migration(manager, mock_qdrant):
 	Simulates a collection with many engrams using the old pre-v4.2.0 schema.
 	Verifies that 'sanitize' correctly brings them into compliance.
 	"""
+	base_payload = {"importance": 1.0, "created_at": 1000.0, "last_recalled_at": 1000.0, "schema_version": "v1.0"}
 	# Old engrams: no color, no emotion, no intensity
 	old_points = [
-		MagicMock(id=str(uuid.uuid4()), payload={"content": f"Old memory {i}", "importance": 1.0, "reinforcement_score": 1.0}) for i in range(5)
+		MagicMock(id=str(uuid.uuid4()), payload={**base_payload, "content": f"Old memory {i}", "reinforcement_score": 1.0}) for i in range(5)
 	]
 
 	# Mixed engrams: some have partial data
 	mixed_points = [
-		MagicMock(id="partial_1", payload={"content": "Partial", "color": "yellow"}),  # missing emotion/intensity
-		MagicMock(id="duplicate_1", payload={"content": "Old memory 0", "importance": 1.0}),  # exact duplicate of the first old_point content
+		MagicMock(id="partial_1", payload={**base_payload, "content": "Partial", "color": "yellow"}),  # missing emotion/intensity
+		MagicMock(id="duplicate_1", payload={**base_payload, "content": "Old memory 0"}),  # exact duplicate of the first old_point content
 	]
 
 	all_points = old_points + mixed_points
@@ -59,8 +60,8 @@ def test_full_schema_migration(manager, mock_qdrant):
 	partial_call = next(op for op in operations if op.set_payload.points == ["partial_1"])
 	assert "emotion" in partial_call.set_payload.payload
 	assert "intensity" in partial_call.set_payload.payload
-	# Should NOT overwrite existing color
-	assert "color" not in partial_call.set_payload.payload
+	# Should NOT overwrite existing color with default, but contain 'yellow'
+	assert partial_call.set_payload.payload.get("color") == "yellow"
 
 
 def test_migration_idempotency(manager, mock_qdrant):

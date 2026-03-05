@@ -78,9 +78,10 @@ def test_invalid_color_rejection(manager):
 
 def test_sanitation(manager, mock_qdrant):
 	# Mocking points: one duplicate, one old schema (missing color)
-	p1 = MagicMock(id="1", payload={"content": "duplicate", "color": "gray"})
-	p2 = MagicMock(id="2", payload={"content": "duplicate", "color": "gray"})
-	p3 = MagicMock(id="3", payload={"content": "unique", "intensity": 5.0})  # Missing color/emotion
+	base_payload = {"importance": 1.0, "created_at": 1000.0, "last_recalled_at": 1000.0, "schema_version": "v1.0"}
+	p1 = MagicMock(id="1", payload={**base_payload, "content": "duplicate", "color": "gray"})
+	p2 = MagicMock(id="2", payload={**base_payload, "content": "duplicate", "color": "gray"})
+	p3 = MagicMock(id="3", payload={**base_payload, "content": "unique", "intensity": 5.0})  # Missing color/emotion
 
 	manager.client.scroll.side_effect = [([p1, p2, p3], None)]
 

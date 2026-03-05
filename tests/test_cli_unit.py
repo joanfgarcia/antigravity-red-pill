@@ -57,7 +57,7 @@ def test_cli_main_sanitize(mock_mgr):
 	mock_mgr.return_value.sanitize.return_value = {"duplicates_found": 0, "migrated_records": 0, "refracted_records": 0}
 	with patch("sys.argv", ["red-pill", "sanitize", "work"]):
 		main()
-		mock_mgr.return_value.sanitize.assert_called_once_with("work_memories", dry_run=False)
+		mock_mgr.return_value.sanitize.assert_called_once_with("work_memories", dry_run=False, strict=True)
 
 
 @patch("red_pill.cli.MemoryManager")
@@ -340,7 +340,7 @@ def test_cli_main_sanitize_dry_run(mock_mgr):
 	mock_mgr.return_value.sanitize.return_value = {"duplicates_found": 3, "migrated_records": 1, "refracted_records": 2}
 	with patch("sys.argv", ["red-pill", "sanitize", "work", "--dry-run"]):
 		main()
-	mock_mgr.return_value.sanitize.assert_called_once_with("work_memories", dry_run=True)
+	mock_mgr.return_value.sanitize.assert_called_once_with("work_memories", dry_run=True, strict=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
