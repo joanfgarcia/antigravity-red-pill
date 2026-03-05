@@ -64,7 +64,7 @@ backups/
 export/
 tmp/
 audit/
-docs/certification/
-*CERTIFICATION_REPORT*
+# docs/certification/ <-- Allow tracking of formal reports
+# *CERTIFICATION_REPORT* <-- Allow tracking
 RED_PILL_DIGEST.txt
 models/
