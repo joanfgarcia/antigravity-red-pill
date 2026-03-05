@@ -8,7 +8,7 @@ import subprocess
 import sys
 from typing import Any, Optional
 
-from fastembed import TextEmbedding
+from fastembed import TextEmbedding  # type: ignore
 
 import red_pill.config as cfg
 

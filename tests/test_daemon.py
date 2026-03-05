@@ -10,8 +10,6 @@ import time
 
 import pytest
 
-import red_pill.config as cfg
-
 
 @pytest.fixture
 def run_daemon():
@@ -61,7 +59,7 @@ def test_daemon_ping_with_auth(run_daemon):
 		client.connect(socket_path)
 
 		# Valid Request
-		request = {"command": "ping", "api_key": cfg.SIDECAR_AUTH_KEY}
+		request = {"command": "ping", "api_key": "test_sidecar_key_760"}
 		payload = json.dumps(request).encode("utf-8")
 		header = len(payload).to_bytes(4, byteorder="big")
 		client.sendall(header + payload)

@@ -8,12 +8,11 @@ Missing lines:
   166, 170, 177: transmit_experience() — not connected, smith filter blocked, collection creation
   192-205: _create_hive_collection() — schema definition + index
 """
+
 import sys
-import types
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Fixtures
@@ -58,6 +57,7 @@ def test_hive_connection_error(mock_milvus):
 	"""Test handling of connection failures."""
 	mock_milvus["conn"].connect.side_effect = Exception("No Milvus here")
 	from red_pill.hive import HiveMind
+
 	hive = HiveMind()
 	assert hive.connected is False
 
@@ -66,6 +66,7 @@ def test_transmit_experience_failure(mock_milvus):
 	"""Test transmission failures."""
 	mock_milvus["util"].has_collection.side_effect = Exception("DB dead")
 	from red_pill.hive import HiveMind
+
 	hive = HiveMind.__new__(HiveMind)
 	hive.enabled = True
 	hive.connected = True
@@ -76,6 +77,7 @@ def test_sync_from_hive_empty(mock_milvus):
 	"""Test sync when collection doesn't exist."""
 	mock_milvus["util"].has_collection.return_value = False
 	from red_pill.hive import HiveMind
+
 	hive = HiveMind.__new__(HiveMind)
 	hive.enabled = True
 	hive.connected = True
@@ -87,6 +89,7 @@ def test_sync_from_hive_error(mock_milvus):
 	mock_milvus["util"].has_collection.return_value = True
 	mock_milvus["coll"].return_value.search.side_effect = Exception("Search error")
 	from red_pill.hive import HiveMind
+
 	hive = HiveMind.__new__(HiveMind)
 	hive.enabled = True
 	hive.connected = True
@@ -111,6 +114,7 @@ class TestPymilvusImportFallback:
 			# Replace pymilvus with a module that raises ImportError
 			sys.modules["pymilvus"] = None  # type: ignore
 			import importlib
+
 			import red_pill.hive as hive_mod
 
 			importlib.reload(hive_mod)
@@ -142,6 +146,7 @@ class TestHiveMindInit:
 			patch("red_pill.config.MILVUS_LITE_ENABLED", False),
 		):
 			from red_pill.hive import HiveMind
+
 			hive = HiveMind()
 		assert hive.connected is True
 		mock_milvus["conn"].connect.assert_called_once()
@@ -155,6 +160,7 @@ class TestHiveMindInit:
 			patch("red_pill.config.MILVUS_LITE_ENABLED", False),
 		):
 			from red_pill.hive import HiveMind
+
 			hive = HiveMind()
 		assert hive.connected is False
 		mock_milvus["conn"].connect.assert_not_called()
@@ -168,6 +174,7 @@ class TestHiveMindInit:
 			patch("red_pill.config.MILVUS_LITE_PATH", "/tmp/test_hive.db"),
 		):
 			from red_pill.hive import HiveMind
+
 			hive = HiveMind()
 		assert hive.connected is True
 		mock_milvus["conn"].connect.assert_called_once_with(alias="default", uri="/tmp/test_hive.db")
@@ -176,6 +183,7 @@ class TestHiveMindInit:
 		"""Lines 25-27: MILVUS_ENABLED=False → connected=False."""
 		with patch("red_pill.config.MILVUS_ENABLED", False):
 			from red_pill.hive import HiveMind
+
 			hive = HiveMind()
 		assert hive.connected is False
 
@@ -200,9 +208,7 @@ class TestAgenticKnowHowReview:
 
 		with patch("red_pill.hive.EdgeEngine", return_value=mock_engine):
 			with patch("os.path.exists", return_value=True):
-				result = hive._agentic_know_how_review(
-					"Always prefer explicit imports over wildcard imports in Python."
-				)
+				result = hive._agentic_know_how_review("Always prefer explicit imports over wildcard imports in Python.")
 		assert result is True
 
 	def test_llm_noise_response(self):
@@ -214,9 +220,7 @@ class TestAgenticKnowHowReview:
 
 		with patch("red_pill.hive.EdgeEngine", return_value=mock_engine):
 			with patch("os.path.exists", return_value=True):
-				result = hive._agentic_know_how_review(
-					"Joan said he liked his coffee this morning."
-				)
+				result = hive._agentic_know_how_review("Joan said he liked his coffee this morning.")
 		assert result is False
 
 	def test_llm_exception_falls_back_to_heuristic(self):
@@ -229,9 +233,7 @@ class TestAgenticKnowHowReview:
 		with patch("red_pill.hive.EdgeEngine", return_value=mock_engine):
 			with patch("os.path.exists", return_value=True):
 				# Contains "always" → heuristic passes
-				result = hive._agentic_know_how_review(
-					"Always use type hints in Python code for clarity."
-				)
+				result = hive._agentic_know_how_review("Always use type hints in Python code for clarity.")
 		assert result is True
 
 	def test_no_model_path_uses_heuristic(self):
@@ -242,9 +244,7 @@ class TestAgenticKnowHowReview:
 
 		with patch("red_pill.hive.EdgeEngine", return_value=mock_engine):
 			# Contains "prefer" → heuristic passes
-			result = hive._agentic_know_how_review(
-				"prefer explicit configuration over implicit defaults always."
-			)
+			result = hive._agentic_know_how_review("prefer explicit configuration over implicit defaults always.")
 		assert result is True
 
 	def test_heuristic_fails_on_generic_content(self):
@@ -254,9 +254,7 @@ class TestAgenticKnowHowReview:
 		mock_engine.model_path = None
 
 		with patch("red_pill.hive.EdgeEngine", return_value=mock_engine):
-			result = hive._agentic_know_how_review(
-				"The user went to the store to buy some milk and eggs."
-			)
+			result = hive._agentic_know_how_review("The user went to the store to buy some milk and eggs.")
 		assert result is False
 
 

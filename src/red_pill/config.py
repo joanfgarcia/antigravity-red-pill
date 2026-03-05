@@ -34,7 +34,9 @@ MILVUS_SECURE = os.getenv("MILVUS_SECURE", "False").lower() == "true"
 MILVUS_ENABLED = os.getenv("MILVUS_ENABLED", "False").lower() == "true"
 MILVUS_DB = os.getenv("MILVUS_DB", "default")
 MILVUS_LITE_ENABLED = os.getenv("MILVUS_LITE_ENABLED", "True").lower() == "true"
-MILVUS_LITE_PATH = os.getenv("MILVUS_LITE_PATH", os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "storage", "hive_lite.db"))
+MILVUS_LITE_PATH = os.getenv(
+	"MILVUS_LITE_PATH", os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "storage", "hive_lite.db")
+)
 
 
 # SEC-002: Warn when HiveMind is reachable over an unencrypted non-local connection.

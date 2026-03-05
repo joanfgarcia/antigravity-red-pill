@@ -381,4 +381,3 @@ def test_cli_main_block_is_callable():
 	from red_pill.cli import main as cli_main
 
 	assert callable(cli_main)
-

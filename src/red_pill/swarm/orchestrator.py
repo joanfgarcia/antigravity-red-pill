@@ -1,18 +1,30 @@
 import asyncio
+import logging
 import time
 from typing import List
 
+from red_pill.memory import MemoryManager
 from red_pill.swarm.base import Minion, SwarmResult
+from red_pill.utils.observer import notify_user
+from red_pill.utils.specs_adapter import SpecsAdapter
+
+logger = logging.getLogger(__name__)
 
 
 class GruOrchestrator:
 	"""
 	The Sovereign Orchestrator (Gru).
 	Manages the deployment and collection of specialized Minions.
+	Integrated with specs.md (v5.6.2) and the Sovereign Alert System (SAS).
 	"""
 
 	def __init__(self):
+		import os
+
 		self.active_minions: List[Minion] = []
+		self.workspace_root = os.getcwd()
+		self.specs = SpecsAdapter(self.workspace_root)
+		self.memory = MemoryManager()
 
 	def is_local_ready(self) -> bool:
 		"""Check if local SLM infrastructure is available."""
@@ -25,37 +37,62 @@ class GruOrchestrator:
 		return any(f.endswith(".gguf") for f in os.listdir(model_dir))
 
 	async def deploy_swarm(self, task: str, minions: List[Minion], **kwargs) -> List[SwarmResult]:
-		"""Deploy a set of minions in parallel and collect results."""
-		tasks = [self._run_minion(m, task, **kwargs) for m in minions]
-		results = await asyncio.gather(*tasks)
+		"""Deploys a swarm of specialized agents with Sync-Shield protection."""
 
-		# SAS: Sovereign Alert System integration (v5.6.2)
+		# 1. Sync-Shield: Automatic Ghost Collection Refresh (Sound of Silence philosophy)
+		if self.specs.is_specs_aware():
+			current_hash = self.specs.get_specs_hash()
+			bunker_hash = self.memory.get_sync_hash("specs_memories")
+
+			if current_hash != bunker_hash:
+				logger.info("[SYNC-SHIELD] Disk/Bünker drift detected. Auto-syncing Ghost Collection...")
+				self.memory.sync_specs(self.workspace_root)
+				self.memory.set_sync_hash("specs_memories", current_hash)
+				logger.info("[SYNC-SHIELD] Synchronization complete.")
+
+		# 2. Spec-Aware Context Injection
+		specs_prefix = ""
+		flow = self.specs.detect_flow()
+		if flow == "fire":
+			intents = self.specs.get_fire_intents()
+			if intents:
+				specs_prefix = f"[SPECS: FIRE INTENTS]\n{intents}\n---\n"
+		elif flow == "simple":
+			tasks = self.specs.get_simple_tasks()
+			if tasks:
+				specs_prefix = f"[SPECS: SIMPLE TASKS]\n{tasks}\n---\n"
+
+		# 3. Enrich the task with specs context
+		enriched_task = f"{specs_prefix}{task}" if specs_prefix else task
+
+		# 4. Deploy Minions
+		logger.info(f"Deploying swarm to execute: {task[:100]}...")
+		tasks_parallel = [self._run_minion(m, enriched_task, **kwargs) for m in minions]
+		results = await asyncio.gather(*tasks_parallel)
+
+		# 5. SAS: Sovereign Alert System integration
 		self._trigger_sas(task, results)
 
 		return results
 
 	def _trigger_sas(self, task: str, results: List[SwarmResult]) -> None:
 		"""Record memory and notify user of swarm completion."""
-		from red_pill.memory import MemoryManager
-		from red_pill.utils.observer import notify_user
-
 		success_count = len([r for r in results if r.status == "success"])
 		message = f"Swarm Task Complete: {task}. {success_count}/{len(results)} minions succeeded."
 
-		# 1. Sensory Signal (User) - Silent by default per Operator directive
+		# Sensory Signal (User) - Silent by default per Operator directive
 		notify_user(title="Sovereign Swarm", message=message, sound=False)
 
-		# 2. Memory Signal (Agent) - For Turn-Zero recovery
+		# Memory Signal (Agent) - For Turn-Zero recovery
 		try:
-			manager = MemoryManager()
-			manager.add_memory(
+			self.memory.add_memory(
 				collection="directive_memories",
 				text=f"SWARM EVENT: {message}\nResults: {results}",
 				importance=1.0,
-				metadata={"type": "swarm_event", "task": task, "timestamp": time.time(), "results": [r.model_dump() for r in results]}
+				metadata={"type": "swarm_event", "task": task, "timestamp": time.time(), "results": [r.model_dump() for r in results]},
 			)
 		except Exception as e:
-			print(f"SAS Memory Hook failed: {e}")
+			logger.error(f"SAS Memory Hook failed: {e}")
 
 	async def _run_minion(self, minion: Minion, task: str, **kwargs) -> SwarmResult:
 		start = time.time()

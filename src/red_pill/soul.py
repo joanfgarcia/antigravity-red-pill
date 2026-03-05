@@ -48,6 +48,10 @@ class SoulManager:
 		headers = {"api-key": self.api_key} if self.api_key else {}
 
 		for coll in collections:
+			if coll == "specs_memories":
+				logger.info(f"Skipping ghost collection: {coll} (Sovereign Rule: Zero-Bloat)")
+				continue
+
 			try:
 				logger.info(f"Taking snapshot for {coll}...")
 				# 1. Create snapshot

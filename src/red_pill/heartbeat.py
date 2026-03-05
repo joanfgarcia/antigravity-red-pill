@@ -9,11 +9,13 @@ from red_pill.soul import SoulManager
 
 logger = logging.getLogger("red_pill.heartbeat")
 
+
 class LazarusPulse:
 	"""
 	The Heartbeat of the Sovereign Agent.
 	Runs autonomous rituals to maintain Bünker health and ontological integrity.
 	"""
+
 	def __init__(self, memory_mgr: MemoryManager, soul_mgr: SoulManager) -> None:
 		self.memory_mgr = memory_mgr
 		self.soul_mgr = soul_mgr
@@ -70,7 +72,7 @@ class LazarusPulse:
 				break
 			except Exception as e:
 				logger.error(f"Lazarus Pulse: Arrhythmia in cycle: {e}")
-				await asyncio.sleep(60) # Recuperation period
+				await asyncio.sleep(60)  # Recuperation period
 
 	async def _maintenance_ritual(self) -> None:
 		"""

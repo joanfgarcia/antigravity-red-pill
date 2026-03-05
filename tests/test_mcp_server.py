@@ -425,13 +425,15 @@ class TestListTools:
 
 class TestControlBunkerAdditional:
 	def test_rotate_command(self):
+		import types
+
 		from red_pill.mcp_server import handle_call_tool
 
-		import types
 		fake_scripts = types.ModuleType("scripts")
 		fake_rotate = types.ModuleType("scripts.rotate_keys")
 		fake_rotate.rotate = MagicMock()
 		import sys
+
 		sys.modules["scripts"] = fake_scripts
 		sys.modules["scripts.rotate_keys"] = fake_rotate
 		try:
@@ -485,4 +487,3 @@ class TestMainBlock:
 		from red_pill.mcp_server import main
 
 		assert callable(main)
-

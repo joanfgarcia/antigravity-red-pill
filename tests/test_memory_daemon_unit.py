@@ -16,8 +16,6 @@ sys.modules.setdefault("fastembed", _fake_fastembed)
 from red_pill.memory_daemon import MemoryDaemon  # noqa: E402
 
 
-
-
 @pytest.fixture
 def daemon():
 	d = MemoryDaemon()
@@ -129,7 +127,7 @@ class TestCheckEncryption:
 	def test_storage_path_created_if_missing(self, tmp_path):
 		"""Line 47: storage path doesn't exist → makedirs."""
 		d = MemoryDaemon()
-		fake_storage = str(tmp_path / "nonexistent_storage")
+		str(tmp_path / "nonexistent_storage")
 		with patch("sys.platform", "linux"):
 			with patch("shutil.which", return_value="/usr/bin/findmnt"):
 				with patch("red_pill.config.IA_DIR", str(tmp_path)):
@@ -138,6 +136,7 @@ class TestCheckEncryption:
 						d._check_encryption()
 		# makedirs was called, directory exists now
 		import os
+
 		assert os.path.exists(str(tmp_path / "storage"))
 
 	def test_crypt_device_logged(self, tmp_path):
@@ -150,7 +149,7 @@ class TestCheckEncryption:
 					with patch("subprocess.run") as mock_run:
 						mock_run.side_effect = [
 							MagicMock(stdout="/dev/dm-0"),  # findmnt
-							MagicMock(stdout="crypt\n"),     # lsblk
+							MagicMock(stdout="crypt\n"),  # lsblk
 						]
 						d._check_encryption()  # Should log INFO, not raise
 
@@ -167,7 +166,6 @@ class TestCheckEncryption:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # start() — lines 101, 119-121, 135
 # ─────────────────────────────────────────────────────────────────────────────
@@ -177,6 +175,7 @@ class TestDaemonStart:
 	def test_removes_existing_socket_path(self, tmp_path):
 		"""Line 101: socket file exists → os.remove before bind."""
 		import os
+
 		sock_path = str(tmp_path / "test.sock")
 		open(sock_path, "w").close()
 
@@ -312,6 +311,7 @@ class TestDaemonStop:
 			d.stop()
 
 		import os
+
 		assert not os.path.exists(sock_path)
 
 	def test_stop_remove_exception_handled(self, tmp_path):
@@ -344,7 +344,7 @@ class TestMainBlock:
 		with patch("red_pill.memory_daemon.MemoryDaemon", return_value=mock_daemon) as mock_cls:
 			with patch("red_pill.memory_daemon.signal") as mock_signal:
 				# Simulate the __main__ block directly
-				import red_pill.memory_daemon as mod
+
 				daemon = mock_cls()
 				mock_signal.signal(signal_mod.SIGINT, daemon.stop)
 				mock_signal.signal(signal_mod.SIGTERM, daemon.stop)

@@ -9,6 +9,11 @@
   - **Memory Layer**: Signals are persisted as `sas_signal` engrams in `directive_memories` for Agent turn-start awareness.
   - **Orchestrator Integration**: `GruOrchestrator` now triggers SAS automatically upon swarm completion.
 - **[CHANGE] Default Skin**: Changed the default active skin seeded on fresh installations from `cyberpunk` to `enterprise_core`.
+- **[FEAT] specs.md Framework Integration**: Implemented a high-performance orchestration bridge for the `specs.md` universe.
+  - **Ghost Collection**: Dedicated semantic search acceleration (`specs_memories`) explicitly excluded from `soul` backups to preserve AI identity purity.
+  - **Sync-Shield (Automated Sync)**: Transparent pre-flight hash validation in `GruOrchestrator`. Automatically synchronizes local disk artifacts to the Bünker before swarm deployments.
+  - **Spec-Aware Swarm**: Minions now self-configure using project-specific intents (FIRE) and tasks (Simple) injected as global context.
+- **[CLI] Project Bootstrapping**: Added `red-pill init --flow` for spec-compliant project setup and `red-pill sync` for manual Bünker refreshes.
 - **[QA] Coverage Sprint Phase 2**: Achieved **98.25% global coverage** across all modules (543 tests). Raised `fail_under` from 93 → 96. Fixed several blocking test issues and added watchdog guards.
 
 ## [5.6.1] - 2026-03-02
