@@ -56,8 +56,8 @@ class MemoryDaemon:
 					logger.info(f"SEC-001: Disk encryption (LUKS/dm-crypt) detected on {device}.")
 				else:
 					logger.warning(
-						f"!!! SECURITY WARNING (SEC-001) !!!: The volume {device} storing Red Pill engrams "
-						"does NOT appear to be encrypted. Your data is at risk if the host is compromised."
+						f"\033[91m!!! SECURITY WARNING (SEC-008) !!!: The volume {device} storing Red Pill engrams "
+						"does NOT appear to be encrypted. Your data is at risk. (Steam/Water Mode)\033[0m"
 					)
 
 		except Exception as e:
@@ -96,6 +96,10 @@ class MemoryDaemon:
 				self.encoder = TextEmbedding(model_name=cfg.EMBEDDING_MODEL, providers=["CPUExecutionProvider"])  # pragma: no cover
 
 	def start(self) -> None:
+		if not cfg.SIDECAR_AUTH_KEY:
+			logger.error("SEC-004: SIDECAR_AUTH_KEY is missing. Refusing to start daemon to prevent unauthenticated sidecar access.")
+			raise RuntimeError("SIDECAR_AUTH_KEY must be set in your environment or .env file.")
+
 		self._check_encryption()
 		if os.path.exists(SOCKET_PATH):
 			os.remove(SOCKET_PATH)
