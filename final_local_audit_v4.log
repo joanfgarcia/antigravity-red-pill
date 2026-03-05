@@ -1,4 +1,0 @@
-[0;34m--- [B760 PRE-PR AUDIT PROTOCOL] ---[0m
-1. Formatting (Ruff)... Would reformat: src/red_pill/utils/emotion.py
-1 file would be reformatted, 70 files already formatted
-[0;31mFAIL (Run: uv run ruff format .)[0m

@@ -41,6 +41,7 @@ dmypy.json
 .pytest_cache/
 .coverage
 htmlcov/
+*.log
 
 # Local data
 data/
