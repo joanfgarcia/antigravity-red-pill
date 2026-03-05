@@ -2,7 +2,7 @@ import logging
 import uuid
 from typing import Any, Dict, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 logger = logging.getLogger("red_pill.swarm")
 
@@ -18,8 +18,7 @@ class Minion(BaseModel):
 	specialization: str
 	metadata: Dict[str, Any] = Field(default_factory=dict)
 
-	class Config:
-		arbitrary_types_allowed = True
+	model_config = ConfigDict(arbitrary_types_allowed=True)
 
 	async def execute(self, task: str, **kwargs) -> Dict[str, Any]:
 		"""Execute the assigned task. To be implemented by subclasses."""

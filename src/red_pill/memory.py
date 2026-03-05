@@ -44,16 +44,60 @@ class PointUpdate:
 class MemoryManager:
 	"""B760-Adaptive memory engine."""
 
-	def __init__(self, url: str = cfg.QDRANT_URL):
-		self.client = QdrantClient(url=url, api_key=cfg.QDRANT_API_KEY)
+	def __init__(self, url: str = cfg.QDRANT_URL, config=None):
+		self.cfg = config or cfg
+		self.client = QdrantClient(url=url, api_key=self.cfg.QDRANT_API_KEY)
 		self.encoder: Optional[TextEmbedding] = None
 		self._reinforce_lock = threading.Lock()
 		self._metabolism_thread: Optional[threading.Thread] = None
 		self.hive = HiveMind()
 
+	def ensure_collection(self, collection_name: str):
+		"""Create a collection if it does not exist with the standard B760 vector schema."""
+		if not self.client.collection_exists(collection_name):
+			self.client.create_collection(
+				collection_name=collection_name,
+				vectors_config=models.VectorParams(size=self.cfg.VECTOR_SIZE, distance=models.Distance.COSINE),
+			)
+			logger.info(f"Ghost Collection created: {collection_name}")
+
+	def sync_specs(self, workspace_root: str):
+		"""Index specs.md artifacts into the Ghost Collection."""
+		from pathlib import Path
+
+		from red_pill.utils.specs_adapter import SpecsAdapter
+
+		self.ensure_collection("specs_memories")
+		adapter = SpecsAdapter(workspace_root)
+		flow = adapter.detect_flow()
+
+		if not flow:
+			logger.info("No specs.md flow detected for sync.")
+			return
+
+		files_to_index = []
+		if flow == "simple":
+			files_to_index = list(Path(workspace_root).glob("specs/*.md"))
+		elif flow == "fire":
+			files_to_index = [Path(workspace_root) / ".specs-fire/state.yaml"]
+		elif flow == "aidlc":
+			files_to_index = list(Path(workspace_root).glob("aidlc-docs/*.md"))
+
+		for p in files_to_index:
+			if p.exists():
+				content = p.read_text()
+				self.add_memory(
+					collection="specs_memories",
+					text=content,
+					importance=0.8,
+					metadata={"flow": flow, "file": p.name, "type": "spec_artifact"},
+					force_immune=True,
+				)
+				logger.info(f"Indexed spec artifact: {p.name}")
+
 	def _get_vector_from_daemon(self, text: str) -> Optional[List[float]]:
 		"""Retrieves embedding from the memory sidecar socket."""
-		socket_path = cfg.DAEMON_SOCKET_PATH
+		socket_path = self.cfg.DAEMON_SOCKET_PATH
 		if not os.path.exists(socket_path):
 			return None
 
@@ -63,7 +107,7 @@ class MemoryManager:
 				client.connect(socket_path)
 
 				# SEC-002 & SEC-004: Auth & Payload
-				request = {"text": text, "api_key": cfg.SIDECAR_AUTH_KEY}
+				request = {"text": text, "api_key": self.cfg.SIDECAR_AUTH_KEY}
 				payload = json.dumps(request).encode("utf-8")
 
 				# CQ-003: Length-prefixed framing
@@ -103,13 +147,20 @@ class MemoryManager:
 			try:
 				from fastembed import TextEmbedding
 
-				providers = [cfg.EXECUTION_PROVIDER] if cfg.EXECUTION_PROVIDER else None
-				self.encoder = TextEmbedding(model_name=cfg.EMBEDDING_MODEL, providers=providers)
+				providers = [self.cfg.EXECUTION_PROVIDER] if self.cfg.EXECUTION_PROVIDER else None
+				self.encoder = TextEmbedding(model_name=self.cfg.EMBEDDING_MODEL, providers=providers)
 			except ImportError:
 				raise RuntimeError("FastEmbed library is missing. All semantic memory operations are blocked.")
 
 		assert self.encoder is not None
-		return list(self.encoder.embed([text]))[0].tolist()  # type: ignore
+		vectors = list(self.encoder.embed([text]))
+		if not vectors:
+			raise IndexError(f"Embedding model returned no vectors for text: {text[:50]}...")
+		# v5.6.2: Explicit typing for Mypy compliance
+		v_item: Any = vectors[0]
+		if hasattr(v_item, "tolist"):
+			return list(v_item.tolist())
+		return list(v_item)
 
 	def add_memory(
 		self,
@@ -156,7 +207,7 @@ class MemoryManager:
 		# v5.5.0: Synaptic Fragmentation (Anti-Amnesia Logic)
 		# If the text is a massive block, we split it into sinaptic fragments
 		# to ensure vectors are granular and searchable.
-		if len(text) > cfg.CHUNK_THRESHOLD and not metadata.get("_is_fragment"):
+		if len(text) > self.cfg.CHUNK_THRESHOLD and not metadata.get("_is_fragment"):
 			fragments = synaptic_split(text)
 			parent_id = point_id if point_id else str(uuid.uuid4())
 
@@ -191,19 +242,19 @@ class MemoryManager:
 		# v5.4.0: Advanced Multi-Emotion Profile
 		emotional_profile = []
 		if os_detect := os.getenv("EMOTION_AUTO_DETECT", "True").lower() == "true":
-			if cfg.MULTI_EMOTION_INFERENCE:
+			if self.cfg.MULTI_EMOTION_INFERENCE:
 				emotional_profile = get_emotions(text)
 
-			if emotional_profile and emotion == cfg.DEFAULT_EMOTION:
+			if emotional_profile and emotion == self.cfg.DEFAULT_EMOTION:
 				emotion = emotional_profile[0]["label"]
-				if color == cfg.DEFAULT_COLOR:
+				if color == self.cfg.DEFAULT_COLOR:
 					color = get_chroma_for_emotion(emotion)
-			elif os_detect and emotion == cfg.DEFAULT_EMOTION:
+			elif os_detect and emotion == self.cfg.DEFAULT_EMOTION:
 				# Fallback to single if multi is disabled but detect is on
 				detected = get_emotion(text)
 				if detected:
 					emotion = detected
-					if color == cfg.DEFAULT_COLOR:
+					if color == self.cfg.DEFAULT_COLOR:
 						color = get_chroma_for_emotion(emotion)
 
 		if emotional_profile:
@@ -223,50 +274,44 @@ class MemoryManager:
 		clean_metadata = validated_request.metadata
 
 		actual_id = point_id if point_id else str(uuid.uuid4())
-		vector = self._get_vector(text)
-
-		for key in CreateEngramRequest.RESERVED_KEYS:
-			clean_metadata.pop(key, None)
-
-		# Emotional Seed Score (B760-Native Emotional Seed Scoring, v4.2.1)
-		# High-intensity emotional memories deserve a higher initial score so the
-		# emotional decay multiplier does not kill them too fast.
-		# Formula: score = importance * (1 + intensity_factor * color_multiplier * SEED_FACTOR)
-		# Capped at IMMUNITY_THRESHOLD * 0.9 so single reinforcement can push to immunity.
-		_emotion = validated_request.emotion
-		_intensity = validated_request.intensity
-		_color = validated_request.color
-		if _emotion != "neutral" and _intensity > 1.0:
-			_color_mult = cfg.EMOTIONAL_DECAY_MULTIPLIERS.get(_color, 1.0)
-			_bonus = (_intensity / 10.0) * _color_mult * cfg.EMOTIONAL_SEED_FACTOR
-			_initial_score = importance * (1.0 + _bonus)
-		else:
-			_initial_score = importance
-		_initial_score = round(min(_initial_score, cfg.IMMUNITY_THRESHOLD * 0.9), 2)
-
-		# If it was forced immune during seeding, set score to max
-		if force_immune:
-			_initial_score = cfg.IMMUNITY_THRESHOLD
-
-		payload = {
-			"content": text,
-			"importance": importance,
-			"reinforcement_score": _initial_score,
-			"created_at": time.time(),
-			"last_recalled_at": time.time(),
-			"immune": force_immune,
-			"color": validated_request.color,
-			"emotion": validated_request.emotion,
-			"intensity": validated_request.intensity,
-			"schema_version": cfg.CURRENT_SCHEMA_VERSION,
-			**clean_metadata,
-		}
-
 		try:
+			vector = self._get_vector(text)
+
+			for key in CreateEngramRequest.RESERVED_KEYS:
+				clean_metadata.pop(key, None)
+
+			# Emotional Seed Score (B760-Native Emotional Seed Scoring, v4.2.1)
+			_emotion = validated_request.emotion
+			_intensity = validated_request.intensity
+			_color = validated_request.color
+			if _emotion != "neutral" and _intensity > 1.0:
+				_color_mult = self.cfg.EMOTIONAL_DECAY_MULTIPLIERS.get(_color, 1.0)
+				_bonus = (_intensity / 10.0) * _color_mult * self.cfg.EMOTIONAL_SEED_FACTOR
+				_initial_score = importance * (1.0 + _bonus)
+			else:
+				_initial_score = importance
+			_initial_score = round(min(_initial_score, self.cfg.IMMUNITY_THRESHOLD * 0.9), 2)
+
+			if force_immune:
+				_initial_score = self.cfg.IMMUNITY_THRESHOLD
+
+			payload = {
+				"content": text,
+				"importance": importance,
+				"reinforcement_score": _initial_score,
+				"created_at": time.time(),
+				"last_recalled_at": time.time(),
+				"immune": force_immune,
+				"color": validated_request.color,
+				"emotion": validated_request.emotion,
+				"intensity": validated_request.intensity,
+				"schema_version": self.cfg.CURRENT_SCHEMA_VERSION,
+				**clean_metadata,
+			}
+
 			self.client.upsert(collection_name=collection, points=[models.PointStruct(id=actual_id, vector=vector, payload=payload)])
 
 			# Hive Mind Transmission (v5.0.0)
-			# Only transmit non-immune technical or social findings to the collective.
 			if not force_immune and collection in ["work_memories", "social_memories"]:
 				self.hive.transmit_experience(
 					collection_name=f"hive_{collection}",
@@ -275,7 +320,7 @@ class MemoryManager:
 					metadata={"importance": importance, "agent_id": os.getenv("AGENT_ID", "standalone")},
 				)
 
-			if cfg.METABOLISM_ENABLED:
+			if self.cfg.METABOLISM_ENABLED:
 				self._trigger_metabolism()
 			return actual_id
 		except Exception as e:
@@ -301,7 +346,7 @@ class MemoryManager:
 			if p.payload is None:
 				return False
 
-			update_payload = {}
+			update_payload: dict[str, Any] = {}
 			if color:
 				update_payload["color"] = color
 			if emotion:
@@ -368,14 +413,8 @@ class MemoryManager:
 		f.flush()
 
 	def _run_metabolism_cycle(self) -> None:
-		"""Internal metabolism loop with cooldown check.
-
-		CQ-001: State file now carries a `skip_next_erosion` flag. When the
-		Absence Guard runs `_refresh_ttl_timestamps()`, it sets this flag to
-		protect freshly-refreshed engrams from being eroded on the very next
-		cycle. The flag is consumed (cleared) at the start of the following run.
-		"""
-		state_file = cfg.METABOLISM_STATE_FILE
+		"""Internal metabolism loop with cooldown check."""
+		state_file = self.cfg.METABOLISM_STATE_FILE
 		now = time.time()
 
 		try:
@@ -397,25 +436,23 @@ class MemoryManager:
 				gap = now - last_run if last_run > 0 else float("inf")
 
 				# --- Cooldown gate ---
-				if last_run > 0 and gap < cfg.METABOLISM_COOLDOWN:
+				if last_run > 0 and gap < self.cfg.METABOLISM_COOLDOWN:
 					if has_fcntl:
 						fcntl.flock(f, fcntl.LOCK_UN)
 					return
 
 				# --- Absence guard ---
-				if last_run > 0 and gap > cfg.ABSENCE_THRESHOLD:
+				if last_run > 0 and gap > self.cfg.ABSENCE_THRESHOLD:
 					logger.warning(
 						f"Absence detected ({gap / 86400:.1f} days). Running TTL refresh to protect the Bunker. "
 						f"Erosion skipped for this cycle and the next."
 					)
-					for coll in cfg.METABOLISM_AUTO_COLLECTIONS:
+					for coll in self.cfg.METABOLISM_AUTO_COLLECTIONS:
 						try:
 							self._refresh_ttl_timestamps(coll.strip())
 						except Exception as e:
 							logger.error(f"TTL refresh failed during absence recovery for {coll}: {e}")
 
-					# CQ-001: persist skip_next_erosion=True so the following
-					# cycle also skips erosion, protecting freshly-refreshed engrams.
 					self._write_metabolism_state(f, now, skip_next_erosion=True)
 					if has_fcntl:
 						fcntl.flock(f, fcntl.LOCK_UN)
@@ -426,7 +463,6 @@ class MemoryManager:
 					logger.info(
 						"CQ-001: skip_next_erosion flag active — skipping erosion this cycle to protect freshly-refreshed post-vacation engrams."
 					)
-					# Clear the flag; erosion resumes on the cycle after this one.
 					self._write_metabolism_state(f, now, skip_next_erosion=False)
 					if has_fcntl:
 						fcntl.flock(f, fcntl.LOCK_UN)
@@ -440,9 +476,9 @@ class MemoryManager:
 		except OSError:
 			pass
 
-		for coll in cfg.METABOLISM_AUTO_COLLECTIONS:
+		for coll in self.cfg.METABOLISM_AUTO_COLLECTIONS:
 			try:
-				if cfg.METABOLISM_STRATEGY == "LAZY":
+				if self.cfg.METABOLISM_STRATEGY == "LAZY":
 					self.purge_dead_memories(coll.strip())
 				else:
 					self.apply_erosion(coll.strip())
@@ -450,12 +486,8 @@ class MemoryManager:
 				logger.error(f"Metabolism failed in {coll}: {e}")
 
 	def purge_dead_memories(self, collection: str) -> None:
-		"""
-		The 'Gran Purge' (v5.6.0).
-		Atomic deletion of extremely old engrams using Qdrant's filter-based delete.
-		No scroll loop, O(1) database operation.
-		"""
-		timestamp_limite = time.time() - cfg.MAX_SINK_TIME
+		"""Atomic deletion of extremely old engrams."""
+		timestamp_limite = time.time() - self.cfg.MAX_SINK_TIME
 
 		try:
 			self.client.delete(
@@ -469,17 +501,11 @@ class MemoryManager:
 					)
 				),
 			)
-			logger.info(f"Gran Purge executed for '{collection}'. Engrams older than {cfg.MAX_SINK_TIME / 86400:.1f} days removed.")
+			logger.info(f"Gran Purge executed for '{collection}'.")
 		except Exception as e:
 			logger.error(f"Gran Purge failed in {collection}: {e}")
 
 	def _refresh_ttl_timestamps(self, collection: str) -> None:
-		"""Absence Guard: forward all non-immune last_recalled_at to now.
-
-		Called automatically when idle gap > ABSENCE_THRESHOLD.
-		Prevents mass-deletion of the Bunker after long periods of inactivity
-		(e.g. the system was powered off or the user was on vacation).
-		"""
 		now = time.time()
 		offset = None
 		refreshed = 0
@@ -508,16 +534,13 @@ class MemoryManager:
 			if offset is None:
 				break
 
-			# Safety break for unconfigured mocks in tests
 			match_count += 1
-			if match_count > cfg.ABSENCE_GUARD_SCROLL_LIMIT:
-				logger.warning(f"Safety break triggered in TTL refresh for {collection}")
+			if match_count > self.cfg.ABSENCE_GUARD_SCROLL_LIMIT:
 				break
 
 		logger.info(f"Absence Guard: refreshed TTL for {refreshed} engrams in '{collection}'.")
 
 	def _reinforce_points(self, collection: str, point_ids: List[str], increments: Dict[str, float]) -> List[PointUpdate]:
-		"""Retrieves and updates reinforcement scores with thread-safety (Optimized Lock Scope)."""
 		if not point_ids:
 			return []
 
@@ -532,7 +555,6 @@ class MemoryManager:
 				except (ValueError, AttributeError):
 					continue
 
-		# 1. Retrieve points OUTSIDE the lock to avoid I/O serialization
 		try:
 			points = self.client.retrieve(collection_name=collection, ids=valid_ids, with_payload=True, with_vectors=False)
 		except Exception as e:
@@ -542,7 +564,6 @@ class MemoryManager:
 		updated_points: List[PointUpdate] = []
 		update_operations = []
 
-		# 2. Scope the lock only to the mathematical transition and payload preparation
 		with self._reinforce_lock:
 			for p in points:
 				if p.payload is None:
@@ -552,16 +573,14 @@ class MemoryManager:
 				p_id_str = str(p.id)
 				inc = increments.get(p_id_str, 0.0)
 
-				new_score = min(score + inc, cfg.IMMUNITY_THRESHOLD)
+				new_score = min(score + inc, self.cfg.IMMUNITY_THRESHOLD)
 				p.payload["reinforcement_score"] = round(new_score, 2)
 				p.payload["last_recalled_at"] = time.time()
 
-				if p.payload["reinforcement_score"] >= cfg.IMMUNITY_THRESHOLD:
+				if p.payload["reinforcement_score"] >= self.cfg.IMMUNITY_THRESHOLD:
 					p.payload["immune"] = True
 
 				updated_points.append(PointUpdate(id=p.id, payload=p.payload))
-				# PERF-001: Prepare focused batch operations — only send the keys that changed.
-				# Avoids re-transmitting large 'content' strings over the wire.
 				focused_payload = {
 					"reinforcement_score": p.payload["reinforcement_score"],
 					"last_recalled_at": p.payload["last_recalled_at"],
@@ -573,7 +592,6 @@ class MemoryManager:
 					models.SetPayloadOperation(set_payload=models.SetPayload(payload=focused_payload, points=[p.id]))  # type: ignore
 				)
 
-		# 3. Execute batch update OUTSIDE the lock (Qdrant handles its own internal locking/concurrency)
 		if update_operations:
 			try:
 				self.client.batch_update_points(collection_name=collection, update_operations=update_operations)
@@ -584,12 +602,10 @@ class MemoryManager:
 		return updated_points
 
 	def search_and_reinforce(self, collection: str, query: str, limit: int = 3, deep_recall: bool = False) -> List[Any]:
-		"""Semantic search followed by B760 synaptic reinforcement."""
-		# CQ-003: Robust trigger detection for Deep Recall using word boundaries
 		if not deep_recall:
 			import re as regex_lib
 
-			for phrase in cfg.DEEP_RECALL_TRIGGERS:
+			for phrase in self.cfg.DEEP_RECALL_TRIGGERS:
 				pattern = rf"\b{regex_lib.escape(phrase)}\b"
 				if regex_lib.search(pattern, query, regex_lib.IGNORECASE):
 					deep_recall = True
@@ -610,10 +626,6 @@ class MemoryManager:
 			return []
 
 		increment_map: Dict[str, float] = {}
-
-		# v5.6.0: Lazy Metabolism Implementation
-		# Recalculate decay for all results BEFORE reinforcement.
-		# This ensures that we are reinforcing the 'true' decayed score.
 		decayed_results = []
 		update_operations = []
 
@@ -621,46 +633,38 @@ class MemoryManager:
 			if hit.payload is None:
 				continue
 
-			if cfg.METABOLISM_STRATEGY == "LAZY":
+			if self.cfg.METABOLISM_STRATEGY == "LAZY":
 				original_score = float(hit.payload.get("reinforcement_score", 1.0))
 				new_score = self._calculate_lazy_decay(hit.payload)
 
 				if new_score <= 0:
-					# This engram has conceptually 'died' in the gap.
-					# We exclude it from results and mark it for deletion in Qdrant.
 					try:
 						self.client.delete(collection_name=collection, points_selector=models.PointIdsList(points=[hit.id]))
-					except Exception as e:
-						logger.error(f"Lazy deletion failed: {e}")
+					except Exception:
+						pass
 					continue
 
 				if new_score < original_score:
 					hit.payload["reinforcement_score"] = new_score
-					# We don't update 'last_recalled_at' yet, that happens in _reinforce_points
-					# but we do want to sync the new score to Qdrant.
 					update_operations.append(
 						models.SetPayloadOperation(set_payload=models.SetPayload(payload={"reinforcement_score": new_score}, points=[hit.id]))
 					)
 
 			decayed_results.append(hit)
-			increment_map[str(hit.id)] = cfg.REINFORCEMENT_INCREMENT
+			increment_map[str(hit.id)] = self.cfg.REINFORCEMENT_INCREMENT
 
 		if update_operations:
 			try:
 				self.client.batch_update_points(collection_name=collection, update_operations=update_operations)
-			except Exception as e:
-				logger.error(f"Lazy decay sync failed: {e}")
+			except Exception:
+				pass
 
-		# v5.6.0: N-hop Synaptic Propagation (Hebb's Law Expansion)
-		# We use a breadth-first approach to propagate reinforcement through the graph.
 		current_hop_ids = [str(hit.id) for hit in decayed_results]
 		visited_ids = set(current_hop_ids)
-		current_increment = cfg.REINFORCEMENT_INCREMENT * cfg.PROPAGATION_FACTOR
+		current_increment = self.cfg.REINFORCEMENT_INCREMENT * self.cfg.PROPAGATION_FACTOR
 
-		for depth in range(1, cfg.PROPAGATION_DEPTH + 1):
+		for depth in range(1, self.cfg.PROPAGATION_DEPTH + 1):
 			next_hop_ids = set()
-
-			# For the first hop, we already have payloads in decayed_results
 			if depth == 1:
 				for hit in decayed_results:
 					if hit.payload:
@@ -671,7 +675,6 @@ class MemoryManager:
 							if a_id_str not in visited_ids:
 								next_hop_ids.add(a_id_str)
 			else:
-				# Fetch payloads for the current ring to find the next one
 				try:
 					if current_hop_ids:
 						points = self.client.retrieve(collection_name=collection, ids=current_hop_ids, with_payload=True, with_vectors=False)
@@ -683,24 +686,19 @@ class MemoryManager:
 									increment_map[a_id_str] = increment_map.get(a_id_str, 0.0) + current_increment
 									if a_id_str not in visited_ids:
 										next_hop_ids.add(a_id_str)
-				except Exception as e:
-					logger.error(f"N-hop retrieval failed at depth {depth}: {e}")
+				except Exception:
 					break
 
-			# 2. Cleanup and advance
 			visited_ids.update(next_hop_ids)
 			current_hop_ids = list(next_hop_ids)
-			current_increment *= cfg.PROPAGATION_DECAY  # Diminishing returns (δ)
-
-			# CF-005: Circuit Breaker for Hub Fan-out
-			if len(increment_map) >= cfg.MAX_PROPAGATION_POINTS or not current_hop_ids:
+			current_increment *= self.cfg.PROPAGATION_DECAY
+			if len(increment_map) >= self.cfg.MAX_PROPAGATION_POINTS or not current_hop_ids:
 				break
 
 		if not increment_map:
 			return decayed_results
 
 		points_to_update = self._reinforce_points(collection, list(increment_map.keys()), increment_map)
-
 		if points_to_update:
 			update_map = {str(p.id): p.payload for p in points_to_update}
 			for hit in decayed_results:
@@ -710,71 +708,105 @@ class MemoryManager:
 
 		return decayed_results
 
+	def dream(self, collection: str, limit: int = 10) -> Dict[str, Any]:
+		logger.info(f"Oneiromancy: Dream sequence for '{collection}'...")
+		try:
+			response = self.client.scroll(
+				collection_name=collection,
+				scroll_filter=models.Filter(must_not=[models.FieldCondition(key="immune", match=models.MatchValue(value=True))]),
+				limit=limit,
+				with_payload=True,
+				with_vectors=True,
+			)
+		except Exception as e:
+			return {"status": "error", "message": str(e)}
+
+		points, _ = response
+		if not points:
+			return {"status": "empty", "message": "No non-immune memories."}
+
+		synapses_created = 0
+		for p in points:
+			if not p.payload or p.vector is None:
+				continue
+			try:
+				from typing import cast
+
+				results = self.client.query_points(
+					collection_name=collection,
+					query=cast(list[float], list(p.vector)) if p.vector is not None else [0.0],
+					limit=5,
+					with_payload=True,
+					query_filter=models.Filter(must_not=[models.HasIdCondition(has_id=[p.id])]),
+				).points
+			except Exception:
+				continue
+
+			for hit in results:
+				if hit.score > 0.85:
+					assocs = p.payload.get("associations", [])
+					hit_id_str = str(hit.id)
+					if hit_id_str not in assocs:
+						assocs.append(hit_id_str)
+						if len(assocs) > self.cfg.MAX_AXONS:
+							assocs = assocs[-self.cfg.MAX_AXONS :]
+						try:
+							self.client.set_payload(collection_name=collection, payload={"associations": assocs}, points=[p.id])
+							synapses_created += 1
+						except Exception as e:
+							logger.debug(f"Dream association update failed: {e}")
+
+		return {"status": "ok", "synapses": synapses_created}
+
 	def _calculate_decay(self, current_score: float, rate: float) -> float:
-		"""Computes decay based on the configured strategy."""
-		if cfg.DECAY_STRATEGY == "exponential":
+		if self.cfg.DECAY_STRATEGY.lower() == "exponential":
 			new_score = current_score * (1.0 - rate)
 			if round(new_score, 2) >= round(current_score, 2) and current_score > 0:
 				new_score = current_score - 0.01
 		else:
 			new_score = current_score - rate
-
-		return round(max(new_score, 0.0), 2)
+		return float(round(max(new_score, 0.0), 2))
 
 	def _calculate_lazy_decay(self, payload: Dict[str, Any]) -> float:
-		"""Calculates the current score of an engram based on time elapsed since last recall."""
 		if payload.get("immune"):
-			return float(payload.get("reinforcement_score", cfg.IMMUNITY_THRESHOLD))
-
+			return float(payload.get("reinforcement_score", self.cfg.IMMUNITY_THRESHOLD))
 		last_recalled = payload.get("last_recalled_at", time.time())
 		score = float(payload.get("reinforcement_score", 1.0))
 		gap = time.time() - last_recalled
-
-		if gap < cfg.METABOLISM_COOLDOWN:
+		if gap < self.cfg.METABOLISM_COOLDOWN:
 			return score
-
-		cycles = gap / cfg.METABOLISM_COOLDOWN
-
+		cycles = gap / self.cfg.METABOLISM_COOLDOWN
 		intensity = float(payload.get("intensity", 1.0))
 		ep = payload.get("emotional_profile", [])
-		emotions = [e["label"] for e in ep] if ep else [str(payload.get("emotion", cfg.DEFAULT_EMOTION))]
-
+		emotions = [e["label"] for e in ep] if ep else [str(payload.get("emotion", self.cfg.DEFAULT_EMOTION))]
 		multiplier = get_emotional_stability_multiplier(emotions, intensity)
-		effective_rate = cfg.EROSION_RATE * multiplier
-
-		# Apply decay for all missed cycles
-		if cfg.DECAY_STRATEGY == "exponential":
+		effective_rate = self.cfg.EROSION_RATE * multiplier
+		if self.cfg.DECAY_STRATEGY.lower() == "exponential":
 			new_score = score * ((1.0 - effective_rate) ** cycles)
 		else:
 			new_score = score - (effective_rate * cycles)
-
-		return round(max(new_score, 0.0), 2)
+		return float(round(max(new_score, 0.0), 2))
 
 	def apply_erosion(self, collection: str, rate: Optional[float] = None) -> None:
-		"""Decays non-immune memories; score <= 0 leads to deletion."""
 		if rate is None:
-			rate = cfg.EROSION_RATE
-
-		if rate > 0.5:
-			logger.warning(f"High erosion: {rate}")
+			rate = self.cfg.EROSION_RATE
 		if rate <= 0:
 			return
-
+		if rate > 0.5:
+			logger.warning(f"High erosion rate detected ({rate}). Significant memory loss imminent.")
 		offset = None
 		eroded_count = 0
 		deleted_count = 0
-
-		# Calculate the TTL threshold: Only erode memories that haven't been recalled
-		# recently. Wait at least METABOLISM_COOLDOWN before eroding again.
-		ttl_threshold = time.time() - cfg.METABOLISM_COOLDOWN
-
+		ttl_threshold = time.time() - self.cfg.METABOLISM_COOLDOWN
 		scroll_filter = models.Filter(
 			must=[models.FieldCondition(key="last_recalled_at", range=models.Range(lt=ttl_threshold))],
 			must_not=[models.FieldCondition(key="immune", match=models.MatchValue(value=True))],
 		)
-
-		iterations = 0
+		match_count = 0
 		while True:
+			match_count += 1
+			if match_count > 1000:  # Safety break
+				break
 			try:
 				response = self.client.scroll(
 					collection_name=collection, scroll_filter=scroll_filter, limit=100, offset=offset, with_payload=True, with_vectors=False
@@ -782,31 +814,18 @@ class MemoryManager:
 			except Exception as e:
 				logger.error(f"Erosion scroll failed: {_mask_pii_exception(e)}")
 				break
-
 			points_to_delete: List[Any] = []
-
 			update_operations = []
-
 			for hit in response[0]:
-				if hit.payload is None:
+				if hit.payload is None or hit.payload.get("immune"):
 					continue
-
 				score = float(hit.payload.get("reinforcement_score", 1.0))
-				if hit.payload.get("immune"):
-					continue
-
-				# Emotional Stability (v5.4.0 ACE Engine)
 				intensity = float(hit.payload.get("intensity", 1.0))
-
-				# Use full profile if available, else primary emotion
 				ep = hit.payload.get("emotional_profile", [])
-				emotions = [e["label"] for e in ep] if ep else [str(hit.payload.get("emotion", cfg.DEFAULT_EMOTION))]
-
+				emotions = [e["label"] for e in ep] if ep else [str(hit.payload.get("emotion", self.cfg.DEFAULT_EMOTION))]
 				multiplier = get_emotional_stability_multiplier(emotions, intensity)
-
-				effective_rate = (rate if rate is not None else cfg.EROSION_RATE) * multiplier
+				effective_rate = (rate if rate is not None else self.cfg.EROSION_RATE) * multiplier
 				new_score = self._calculate_decay(score, effective_rate)
-
 				if new_score <= 0:
 					points_to_delete.append(str(hit.id))
 					deleted_count += 1
@@ -814,125 +833,87 @@ class MemoryManager:
 					eroded_count += 1
 					hit.payload["reinforcement_score"] = new_score
 					hit.payload["last_recalled_at"] = time.time()
-
-					# PERF-001: Only send modified keys.
-					focused_payload = {
-						"reinforcement_score": hit.payload["reinforcement_score"],
-						"last_recalled_at": hit.payload["last_recalled_at"],
-					}
-
 					update_operations.append(
-						models.SetPayloadOperation(set_payload=models.SetPayload(payload=focused_payload, points=[hit.id]))  # type: ignore
+						models.SetPayloadOperation(
+							set_payload=models.SetPayload(
+								payload={"reinforcement_score": new_score, "last_recalled_at": time.time()}, points=[hit.id]
+							)
+						)
 					)
-
 			if update_operations:
 				try:
 					self.client.batch_update_points(collection_name=collection, update_operations=update_operations)
 				except Exception as e:
 					logger.error(f"Erosion batch update failed: {_mask_pii_exception(e)}")
-
 			if points_to_delete:
 				try:
 					self.client.delete(collection_name=collection, points_selector=models.PointIdsList(points=points_to_delete))
 				except Exception as e:
-					logger.error(f"Erosion deletion failed: {_mask_pii_exception(e)}")
-
+					logger.error(f"Erosion delete failed: {_mask_pii_exception(e)}")
 			offset = response[1]
 			if offset is None:
 				break
-
-			# Safety break for unconfigured mocks in tests
-			iterations += 1
-			if iterations > 1000:
-				logger.warning(f"Safety break triggered in erosion for {collection}")
-				break
-
-		logger.info(f"Erosion complete. Updated: {eroded_count}, Deleted: {deleted_count}")
+		logger.info(f"Erosion complete in {collection}. Updated: {eroded_count}, Deleted: {deleted_count}")
 
 	def sanitize(self, collection: str, dry_run: bool = False) -> Dict[str, Any]:
-		"""
-		Sanitation Protocol:
-		1. Deduplication: Removes engrams with exact same content.
-		2. Schema Migration: Back-fills missing color/emotion/intensity from older versions.
-		"""
 		offset = None
-		seen_content: Dict[str, str] = {}  # content -> id
+		seen_content: Dict[str, str] = {}
 		duplicates: List[Any] = []
 		migrated_count = 0
-
-		logger.info(f"Starting sanitation for {collection}...")
-		iterations = 0
+		match_count = 0
 		while True:
+			match_count += 1
+			if match_count > 1000:  # Safety break
+				break
 			try:
 				response = self.client.scroll(collection_name=collection, limit=100, offset=offset, with_payload=True, with_vectors=False)
 			except Exception as e:
-				logger.error(f"Sanitation scroll failed: {_mask_pii_exception(e)}")
+				logger.error(f"Sanitize scroll failed: {_mask_pii_exception(e)}")
 				break
-
 			update_operations = []
-
 			for hit in response[0]:
 				if hit.payload is None:
 					continue
-
 				content = str(hit.payload.get("content", ""))
 				content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
-
-				# 1. Deduplication Check
 				if content_hash in seen_content:
 					duplicates.append(str(hit.id))
 					continue
 				seen_content[content_hash] = str(hit.id)
-
-				# 2. Schema Migration Check
 				needs_migration = False
 				update_payload: Dict[str, Any] = {}
-
 				if "color" not in hit.payload:
-					update_payload["color"] = cfg.DEFAULT_COLOR
+					update_payload["color"] = self.cfg.DEFAULT_COLOR
 					needs_migration = True
 				if "emotion" not in hit.payload:
-					update_payload["emotion"] = cfg.DEFAULT_EMOTION
+					update_payload["emotion"] = self.cfg.DEFAULT_EMOTION
 					needs_migration = True
 				if "intensity" not in hit.payload:
 					update_payload["intensity"] = 1.0
 					needs_migration = True
-				if hit.payload.get("schema_version") != cfg.CURRENT_SCHEMA_VERSION:
-					update_payload["schema_version"] = cfg.CURRENT_SCHEMA_VERSION
+				if hit.payload.get("schema_version") != self.cfg.CURRENT_SCHEMA_VERSION:
+					update_payload["schema_version"] = self.cfg.CURRENT_SCHEMA_VERSION
 					needs_migration = True
-
 				if needs_migration:
 					migrated_count += 1
 					if not dry_run:
-						update_operations.append(models.SetPayloadOperation(set_payload=models.SetPayload(payload=update_payload, points=[hit.id])))  # type: ignore
-
+						update_operations.append(models.SetPayloadOperation(set_payload=models.SetPayload(payload=update_payload, points=[hit.id])))
 			if update_operations and not dry_run:
 				try:
 					self.client.batch_update_points(collection_name=collection, update_operations=update_operations)
 				except Exception as e:
-					logger.error(f"Migration batch update failed: {_mask_pii_exception(e)}")
-
+					logger.error(f"Sanitize migration failed: {_mask_pii_exception(e)}")
 			offset = response[1]
 			if offset is None:
 				break
-
-			# Safety break for unconfigured mocks in tests
-			iterations += 1
-			if iterations > 1000:
-				logger.warning(f"Safety break triggered in sanitation for {collection}")
-				break
-
-		# Remove duplicates
 		if duplicates and not dry_run:
 			try:
 				self.client.delete(collection_name=collection, points_selector=models.PointIdsList(points=duplicates))
 			except Exception as e:
-				logger.error(f"Duplicate deletion failed: {e}")
-
+				logger.error(f"Sanitize duplicate deletion failed: {_mask_pii_exception(e)}")
 		return {"collection": collection, "duplicates_found": len(duplicates), "migrated_records": migrated_count, "dry_run": dry_run}
 
 	def get_stats(self, collection: str) -> Dict[str, Any]:
-		"""Returns collection diagnostics."""
 		try:
 			info = self.client.get_collection(collection_name=collection)
 			return {
@@ -941,5 +922,29 @@ class MemoryManager:
 				"segments_count": getattr(info, "segments_count", 0),
 			}
 		except Exception as e:
-			logger.error(f"Stats failed: {e}")
-			return {"status": "error", "points_count": 0, "segments_count": 0}
+			logger.error(f"Failed to get collection stats: {_mask_pii_exception(e)}")
+			return {"status": "error", "error": str(e), "points_count": 0, "segments_count": 0}
+
+	def get_sync_hash(self, collection: str) -> str:
+		"""Retrieve the last known sync hash from the collection's metadata point."""
+		try:
+			# Use a deterministic UUID for the metadata point
+			meta_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{collection}.metadata"))
+			points = self.client.retrieve(collection_name=collection, ids=[meta_id], with_payload=True, with_vectors=False)
+			if points and points[0].payload:
+				val = points[0].payload.get("sync_hash", "")
+				return str(val)
+		except Exception:
+			pass
+		return ""
+
+	def set_sync_hash(self, collection: str, sync_hash: str):
+		"""Store the current sync hash in the collection's metadata point."""
+		meta_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{collection}.metadata"))
+		payload = {"sync_hash": sync_hash, "type": "collection_metadata", "updated_at": time.time(), "immune": True}
+		# Note: We use a zero vector for metadata points if needed, or just upsert payload if collection allows
+		vector = [0.0] * self.cfg.VECTOR_SIZE
+		try:
+			self.client.upsert(collection_name=collection, points=[models.PointStruct(id=meta_id, vector=vector, payload=payload)])
+		except Exception as e:
+			logger.error(f"Failed to store sync hash: {e}")

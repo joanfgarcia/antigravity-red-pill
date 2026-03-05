@@ -3,6 +3,7 @@ import logging
 import os
 import signal
 import sys
+import time
 
 import yaml  # type: ignore
 
@@ -158,6 +159,17 @@ def main() -> None:
 	)
 	edit_parser.add_argument("--intensity", type=float)
 
+	signal_parser = subparsers.add_parser("signal", help="Sovereign Alert System (SAS) trigger")
+	signal_parser.add_argument("message", help="Notification message")
+	signal_parser.add_argument("--title", default="Red Pill: Task Complete", help="Notification title")
+	signal_parser.add_argument("--sound", action="store_true", help="Enable sensory pulse (sound)")
+	signal_parser.add_argument("--silent", action="store_true", help="Do not send desktop notification (Memory only)")
+
+	init_parser = subparsers.add_parser("init", help="Bootstrap a Spec-Compliant project")
+	init_parser.add_argument("--flow", choices=["fire", "simple", "aidlc"], default="fire", help="Initial specs.md flow")
+
+	subparsers.add_parser("sync", help="Synchronize project specs with Bünker")
+
 	args = parser.parse_args()
 
 	log_level = logging.DEBUG if args.verbose else getattr(logging, cfg.LOG_LEVEL.upper(), logging.INFO)
@@ -177,7 +189,7 @@ def main() -> None:
 	# Map CLI type to collection(s)
 	if getattr(args, "type", None):
 		collections = [get_collection(args.type)]
-	elif args.command in ["seed", "status", "swarm", "soul"]:
+	elif args.command in ["seed", "status", "swarm", "soul", "init"]:
 		collections = []  # Not needed for these
 	else:
 		# Default sweep for search/diag if no type specified
@@ -242,6 +254,41 @@ def main() -> None:
 					print("--- [CLOUD VAULT: INACTIVE] ---")
 					print(f"To enable, set CLOUD_VAULT_ENABLED=True in .env and provide {cfg.CLOUD_SERVICE_ACCOUNT_FILE}")
 			return
+		elif args.command == "init":
+			import subprocess
+
+			from red_pill.utils.observer import notify_user
+
+			print(f"--- [INITIALIZING SPECS.MD FLOW: {args.flow.upper()}] ---")
+			try:
+				# 1. Initialize specs.md infrastructure
+				subprocess.run(["npx", "-y", "specsmd@latest", "install"], check=True)
+
+				# 2. Ensure Ghost Collection exists
+				manager.ensure_collection("specs_memories")
+
+				# 3. Notify Success
+				from red_pill import __version__
+
+				print(f"\n[OK] Flow '{args.flow}' initialized. Bünker mapping active (Ghost: specs_memories).")
+				notify_user("Project Initialized", f"Red Pill v{__version__} + specs.md {args.flow} flow is now live.")
+			except Exception as e:
+				print(f"[FAIL] Initialization failed: {e}")
+			return
+		elif args.command == "sync":
+			print("--- [SYNCHRONIZING SPECS WITH BÜNKER (SYNC-SHIELD)] ---")
+			manager.sync_specs(os.getcwd())
+
+			# Store the new hash to prevent redundant auto-sync in next swarm
+			from red_pill.utils.specs_adapter import SpecsAdapter
+
+			adapter = SpecsAdapter(os.getcwd())
+			new_hash = adapter.get_specs_hash()
+			if new_hash:
+				manager.set_sync_hash("specs_memories", new_hash)
+
+			print("[OK] Ghost Collection 'specs_memories' synchronized and signed.")
+			return
 
 		# Loop through requested collections
 		for collection in collections:
@@ -300,6 +347,20 @@ def main() -> None:
 				stats = manager.get_stats(collection)
 				for key, value in stats.items():
 					print(f"{key.capitalize().replace('_', ' ')}: {value}")
+			elif args.command == "signal":
+				from red_pill.utils.observer import notify_user
+
+				if not args.silent:
+					notify_user(args.title, args.message, sound=args.sound)
+
+				# Record memory of the signal
+				manager.add_memory(
+					collection="directive_memories",
+					text=f"SAS Signal: {args.title} - {args.message}",
+					importance=1.0,
+					metadata={"type": "sas_signal", "timestamp": time.time(), "message": args.message},
+				)
+				print(f"[SAS] Signal recorded: {args.message}")
 
 	except Exception as e:
 		logger.error(f"Protocol Failure: {e}")

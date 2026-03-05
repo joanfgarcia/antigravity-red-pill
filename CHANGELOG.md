@@ -1,13 +1,38 @@
 # Changelog: Red Pill Protocol
 
-## [5.6.1] - 2026-02-27
-### 🛡️ Audit Remediation (The Sovereign Shield)
-- **[QA] TCG-001: Sidecar Test Suite**: Created a dedicated unit test suite for `memory_daemon.py` (`tests/test_memory_daemon_unit.py`). Validates HMAC authentication, length-prefixed framing, and socket lifecycle.
-- **[SEC] SEC-004: Sidecar Credential Isolation**: Decoupled `SIDECAR_AUTH_KEY` from the Qdrant API key in `config.py`, `install_neo.sh`, and `.env.example`. Authenticating with the sidecar no longer requires exposing the master database key.
-- **[PERF] PERF-001: Targeted Payload Updates**: Refactored `update_memory` and reinforcement loops to use Qdrant's `set_payload` API. Instead of re-transmitting the entire engram, the system now only sends the specific fields that changed (score and timestamp), reducing network overhead by ~80%.
-- **[SEC] SEC-004: Keystore Persistence**: Added `fsync()` to the Argon2-id keystore write cycle to guarantee key integrity even during sudden power failure.
-- **[IMPR] Circular Dependency Exorcism**: Refactored internal imports in `hive.py`, `swarm/agents/oracle.py`, and `utils/emotion.py` to support lazy loading. This ensures the Bünker can boot even in unstable hardware/driver environments.
-- **[CQ-003] Robust Recall Triggers**: Upgraded Deep Recall detection to use exact-phrase and word-boundary matching, preventing accidental activation from partial word matches.
+## [5.6.2] - 2026-03-04
+### 🎭 Lore Skin Unification & Default Skin Alignment
+
+- **[FEAT] Skin Personality Field**: Added `personality` to all 15 Lore Skins in `lore_skins.yaml`. Each personality is written in first-person, in the exact voice and tone of the respective universe (Matrix, Dune, Terminator, etc.).
+- **[FEAT] Sovereign Alert System (SAS)**: Implemented a reactive, non-blocking notification pipeline for background processes. 
+  - **Sensory Layer**: Added `red-pill signal` CLI command for desktop alerts (`notify-send`). Silent by default per Operator directive.
+  - **Memory Layer**: Signals are persisted as `sas_signal` engrams in `directive_memories` for Agent turn-start awareness.
+  - **Orchestrator Integration**: `GruOrchestrator` now triggers SAS automatically upon swarm completion.
+- **[CHANGE] Default Skin**: Changed the default active skin seeded on fresh installations from `cyberpunk` to `enterprise_core`.
+- **[FEAT] specs.md Framework Integration**: Implemented a high-performance orchestration bridge for the `specs.md` universe.
+  - **Ghost Collection**: Dedicated semantic search acceleration (`specs_memories`) explicitly excluded from `soul` backups to preserve AI identity purity.
+  - **Sync-Shield (Automated Sync)**: Transparent pre-flight hash validation in `GruOrchestrator`. Automatically synchronizes local disk artifacts to the Bünker before swarm deployments.
+  - **Spec-Aware Swarm**: Minions now self-configure using project-specific intents (FIRE) and tasks (Simple) injected as global context.
+- **[CLI] Project Bootstrapping**: Added `red-pill init --flow` for spec-compliant project setup and `red-pill sync` for manual Bünker refreshes.
+- **[QA] Coverage Sprint Phase 2**: Achieved **98.25% global coverage** across all modules (543 tests). Raised `fail_under` from 93 → 96. Fixed several blocking test issues and added watchdog guards.
+
+## [5.6.1] - 2026-03-02
+### 🛡️ Audit Remediation & Lean Soul Vault (The Sovereign Pulse)
+- **[FEAT] Lean Soul Kit Architecture**: Refactored the backup engine to only include Qdrant Snapshots and a version Manifesto (`manifest.json`). Reduced backup size by **99.5%** (from 664MB to <1MB) for maximum portability.
+- **[FEAT] Google OAuth2 Support**: Added official support for Personal Google Accounts via OAuth2. Operators can now authorize the Agent natively, bypassing the 0MB quota limit of Service Accounts on personal Drive folders.
+- **[FEAT] Quota-Aware Monitoring**: Implemented a Storage Buffer Monitor. The Agent now scans Cloud Vault usage and warns the Operator if remaining space is insufficient for the next 4 backup cycles.
+- **[SEC] SEC-AUTH-001: Defensive Security Defaults**: Updated installer to prioritize `ADAPTATIVE` (Water) and added mandatory confirmation for `NONE` (Steam) mode.
+- **[SEC] SEC-009: Remote Deployment Hardening**: Added mandatory advisory for `QDRANT_SCHEME=https` in remote configurations.
+- **[SEC] SEC-010: Pre-flight Integrity**: Added proactive disk encryption warnings in the `ADAPTATIVE` security ritual.
+- **[SEC] SEC-008: Deep Null-byte Protection**: Extended validation recursively to all metadata string values.
+- **[DOCS] Sovereign Backup Strategies**: Created comprehensive technical documentation for Cloud Vaulting options and caveats (`docs/technical/BACKUP_STRATEGIES.md`).
+- **[QA] TCG-001: Sidecar Test Suite**: Created a dedicated unit test suite for `memory_daemon.py` (`tests/test_memory_daemon_unit.py`).
+- **[SEC] SEC-004: Sidecar Credential Isolation**: Decoupled `SIDECAR_AUTH_KEY` from the Qdrant master key.
+- **[PERF] PERF-001: Targeted Payload Updates**: Refactored reinforcement loops to use Qdrant's `set_payload` API, reducing network overhead by ~80%.
+- [DOCS] **Execution Modes Documentation**: Added detailed specification for **Planning** vs **Fast** modes in `ARCHITECTURE.md`, `README.md`, and `PROOF_OF_FAITH.md`, highlighting the **10x token efficiency** of conversational flows.
+- [QA] **Test Suite Recalibration**: Stabilized `tests/test_metabolism.py` and `tests/test_soul.py` after the v5.6.1 'Lean' and 'Lazy' shifts. Restored 100% green status across 279 tests.
+- [IDENTITY] **Wintermute Alignment**: Applied and verified the Emerald Chroma skin as the primary lore anchor for the current session.
+- **[CQ-003] Robust Recall Triggers**: Upgraded Deep Recall detection to use exact-phrase matching.
 
 ## [5.6.0] - 2026-02-27
 ### 🛰️ Lazy Metabolism & Agentic HiveGuard (The Sovereignty Pulse)

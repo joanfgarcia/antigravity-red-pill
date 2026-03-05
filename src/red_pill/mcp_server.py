@@ -331,7 +331,7 @@ async def main():
 			write_stream,
 			InitializationOptions(
 				server_name="RedPill-Kernel",
-				server_version="5.6.1",
+				server_version="5.6.2",
 				capabilities=server.get_capabilities(
 					notification_options=NotificationOptions(),
 					experimental_capabilities={},

@@ -6,7 +6,7 @@ The current actively maintained and supported version of the Red Pill Protocol i
 
 | Version  | Supported          | Notes                                   |
 | -------- | ------------------ | --------------------------------------- |
-| v5.5.x   | :white_check_mark: | Current stable — **Be Water** security  |
+| v5.6.2   | :white_check_mark: | Current stable — **Be Water** security  |
 | v5.x     | :white_check_mark: | Active (upgrade to v5.5 recommended)    |
 | v4.2.x   | :x:                | EOL — no security patches               |
 | < v4.2   | :x:                | EOL — critical known vulnerabilities    |

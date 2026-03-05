@@ -1,0 +1,5 @@
+[0;34m--- [B760 PRE-PR AUDIT PROTOCOL] ---[0m
+1. Formatting (Ruff)... Would reformat: src/red_pill/soul.py
+Would reformat: src/red_pill/utils/vault.py
+2 files would be reformatted, 69 files already formatted
+[0;31mFAIL (Run: uv run ruff format .)[0m

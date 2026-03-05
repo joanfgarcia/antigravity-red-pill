@@ -29,6 +29,15 @@ class HiveMind:
 				# SEC-F03: Enforce TLS for remote connections
 				is_local = cfg.MILVUS_HOST in ["localhost", "127.0.0.1", "::1"]
 				secure_conn = cfg.MILVUS_SECURE
+
+				# v6.0: Milvus Lite (Sovereign Local)
+				# We only use Lite if we are explicitly on a local host and Lite is enabled.
+				if cfg.MILVUS_LITE_ENABLED and is_local:
+					logger.info(f"HiveMind: Connecting to local sanctuary (Milvus Lite) at {cfg.MILVUS_LITE_PATH}")
+					connections.connect(alias="default", uri=cfg.MILVUS_LITE_PATH)
+					self.connected = True
+					return
+
 				if not is_local and not secure_conn:
 					logger.error("[SEC-F03] HiveMind connection blocked: TLS required for remote hosts.")
 					self.connected = False
@@ -144,7 +153,7 @@ class HiveMind:
 		# "Joan prefiere" -> "[Operator] prefiere"
 		# Use a list of common names or patterns if necessary, but starting with the known OP name.
 		# Also mask "yo ", "mi ", "me " in starting positions if it's social.
-		masked = re.sub(r"^(?i)(yo\s+|me\s+)", "[Operator] ", masked)
+		masked = re.sub(r"(?i)^(yo\s+|me\s+)", "[Operator] ", masked)
 
 		return masked
 

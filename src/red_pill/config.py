@@ -33,6 +33,10 @@ MILVUS_PASSWORD = os.getenv("MILVUS_PASSWORD", "")
 MILVUS_SECURE = os.getenv("MILVUS_SECURE", "False").lower() == "true"
 MILVUS_ENABLED = os.getenv("MILVUS_ENABLED", "False").lower() == "true"
 MILVUS_DB = os.getenv("MILVUS_DB", "default")
+MILVUS_LITE_ENABLED = os.getenv("MILVUS_LITE_ENABLED", "True").lower() == "true"
+MILVUS_LITE_PATH = os.getenv(
+	"MILVUS_LITE_PATH", os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "storage", "hive_lite.db")
+)
 
 
 # SEC-002: Warn when HiveMind is reachable over an unencrypted non-local connection.
@@ -206,6 +210,12 @@ MULTI_EMOTION_INFERENCE = os.getenv("MULTI_EMOTION_INFERENCE", "True").lower() =
 
 IA_DIR = os.getenv("IA_DIR", os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
+# SOVEREIGN PULSE (v6.0)
+# Enables background rituals (Maintenance, Audit, Proactive Synthesis).
+PULSE_ENABLED = os.getenv("PULSE_ENABLED", "True").lower() == "true"
+# Pulse interval in seconds. Default: 3600 (1 hour).
+PULSE_INTERVAL = int(os.getenv("PULSE_INTERVAL", "3600"))
+
 # INTERACTION CADENCE (v5.4.0)
 CADENCE_BURST_THRESHOLD = 30.0  # Seconds between prompts for 'Burst' mode (High Intensity)
 CADENCE_ABSENCE_THRESHOLD = 86400 * 2  # 2 Days for 'Dormancy' greeting trigger
@@ -219,6 +229,8 @@ CLOUD_VAULT_ENABLED = os.getenv("CLOUD_VAULT_ENABLED", "False").lower() == "true
 CLOUD_VAULT_PROVIDER = os.getenv("CLOUD_VAULT_PROVIDER", "google_drive")
 CLOUD_VAULT_FOLDER_ID = os.getenv("CLOUD_VAULT_FOLDER_ID", "")  # The GDrive Folder ID
 CLOUD_SERVICE_ACCOUNT_FILE = os.getenv("CLOUD_SERVICE_ACCOUNT_FILE", os.path.join(IA_DIR, "storage", "keys", "service_account.json"))
+CLOUD_VAULT_QUOTA_MB = int(os.getenv("CLOUD_VAULT_QUOTA_MB", "500"))
+CLOUD_VAULT_RESERVE_COUNT = int(os.getenv("CLOUD_VAULT_RESERVE_COUNT", "4"))
 # SEC-F02: GPG passphrase for AES-256 Soul Kit encryption. Read directly in vault.py.
 # NOT cached here to avoid it appearing in repr(cfg) or debug logs.
 # Set via CLOUD_VAULT_GPG_PASSPHRASE in .env (configured during install_neo.sh).

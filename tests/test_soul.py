@@ -1,3 +1,9 @@
+"""Tests for soul.py — targeting lines 37-39, 67-68, 82-98, 102-105, 125, 139-141, 149, 198-199."""
+
+import json
+import os
+import tarfile
+import time
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -6,79 +12,264 @@ from red_pill.soul import SoulManager
 
 
 @pytest.fixture
-def mock_requests():
-	with patch("red_pill.soul.requests") as mock:
-		yield mock
+def soul(tmp_path):
+	with patch("red_pill.soul.CloudVault") as MockVault:
+		MockVault.return_value.enabled = False
+		sm = SoulManager()
+		sm.ia_dir = str(tmp_path)
+		sm.backup_root = str(tmp_path / "backups")
+		yield sm
 
 
-@pytest.fixture
-def soul_manager(mock_requests):
-	# Mocking all filesystem interactions globally for the fixture
-	with (
-		patch("red_pill.soul.os.makedirs"),
-		patch("red_pill.soul.os.path.exists", return_value=True),
-		patch("red_pill.soul.os.path.expanduser", side_effect=lambda x: x.replace("~", "/fake/home")),
-	):
-		manager = SoulManager()
-		manager.ia_dir = "/fake/ia_dir"
-		manager.backup_root = "/fake/ia_dir/backups"
-		yield manager
+# ---------------------------------------------------------------------------
+# Lines 37-39: _get_collections exception
+# ---------------------------------------------------------------------------
 
 
-def test_get_collections(soul_manager, mock_requests):
-	mock_requests.get.return_value.json.return_value = {"result": {"collections": [{"name": "col1"}, {"name": "col2"}]}}
-	collections = soul_manager._get_collections()
-	assert collections == ["col1", "col2"]
+class TestGetCollections:
+	def test_request_exception_returns_empty(self, soul):
+		"""Lines 37-39: requests.get fails → returns []."""
+		with patch("requests.get", side_effect=Exception("timeout")):
+			result = soul._get_collections()
+		assert result == []
+
+	def test_successful_fetch(self, soul):
+		"""Lines 33-36: successful GET → list of collection names."""
+		mock_resp = MagicMock()
+		mock_resp.json.return_value = {"result": {"collections": [{"name": "work"}, {"name": "social"}]}}
+		with patch("requests.get", return_value=mock_resp):
+			result = soul._get_collections()
+		assert result == ["work", "social"]
 
 
-@patch("red_pill.soul.open", create=True)
-@patch("red_pill.soul.shutil.copyfileobj")
-def test_backup_qdrant(mock_copy, mock_open, soul_manager, mock_requests):
-	soul_manager._get_collections = MagicMock(return_value=["col1"])
-	mock_requests.post.return_value.json.return_value = {"result": {"name": "snap1"}}
-	# Mock the stream response
-	mock_requests.get.return_value.__enter__.return_value.raw = MagicMock()
-
-	saved = soul_manager.backup_qdrant("ts")
-	assert len(saved) == 1
-	assert "col1_ts.snapshot" in saved[0]
+# ---------------------------------------------------------------------------
+# Lines 67-68: backup_qdrant per-collection exception
+# ---------------------------------------------------------------------------
 
 
-@patch("red_pill.soul.shutil.copy2")
-@patch("red_pill.soul.shutil.copytree")
-@patch("red_pill.soul.shutil.rmtree")
-def test_backup_files(mock_rmtree, mock_copytree, mock_copy2, soul_manager):
-	# We are already patched by the fixture for os.makedirs and path.exists
-	soul_manager.backup_files("ts")
-	# Check if any copy operation was attempted (should be, since exists=True)
-	assert mock_copy2.called or mock_copytree.called
+class TestBackupQdrant:
+	def test_collection_backup_exception_logged(self, soul, tmp_path):
+		"""Lines 67-68: POST for snapshot fails → exception caught per-collection."""
+		with patch.object(soul, "_get_collections", return_value=["work"]):
+			with patch("requests.post", side_effect=Exception("Qdrant down")):
+				result = soul.backup_qdrant("20260101_120000")
+		# Should return empty (no successful saves)
+		assert result == []
+
+	def test_successful_snapshot_saved(self, soul, tmp_path):
+		"""Lines 50-66: snapshot created and downloaded successfully."""
+		mock_post = MagicMock()
+		mock_post.json.return_value = {"result": {"name": "snap1.snapshot"}}
+
+		mock_get_resp = MagicMock()
+		mock_get_resp.__enter__ = lambda s: s
+		mock_get_resp.__exit__ = MagicMock(return_value=False)
+		mock_get_resp.raw = MagicMock()
+
+		with patch.object(soul, "_get_collections", return_value=["work"]):
+			with patch("requests.post", return_value=mock_post):
+				with patch("requests.get", return_value=mock_get_resp):
+					with patch("shutil.copyfileobj"):
+						result = soul.backup_qdrant("20260101_120000")
+		assert len(result) == 1
+		assert "work_20260101_120000.snapshot" in result[0]
 
 
-@patch("red_pill.soul.tarfile.open")
-def test_export_soul(mock_tar, soul_manager):
-	soul_manager.full_backup = MagicMock()
-	soul_manager.export_soul("fake_path.tar.gz")
-	assert soul_manager.full_backup.called
-	assert mock_tar.called
+# ---------------------------------------------------------------------------
+# Lines 82-98: create_manifest writes JSON file
+# ---------------------------------------------------------------------------
 
 
-@patch("red_pill.soul.os.walk")
-@patch("red_pill.soul.shutil.copy2")
-def test_restore_soul_dry_run(mock_copy2, mock_walk, soul_manager):
-	mock_walk.return_value = [("/fake/home", [], ["fake.md"])]
-	soul_manager.restore_soul("/fake/backup", commit=False)
-	assert not mock_copy2.called
+class TestCreateManifest:
+	def test_manifest_written_to_disk(self, soul, tmp_path):
+		"""Lines 82-98: manifest JSON created with correct keys."""
+		result = soul.create_manifest("20260101_120000")
+		assert os.path.exists(result)
+		with open(result) as f:
+			data = json.load(f)
+		assert "protocol_version" in data
+		assert "schema_version" in data
+		assert data["timestamp"] == "20260101_120000"
 
 
-@patch("red_pill.soul.os.walk")
-@patch("red_pill.soul.shutil.copy2")
-@patch("red_pill.soul.os.listdir")
-def test_restore_soul_commit(mock_listdir, mock_copy2, mock_walk, soul_manager, mock_requests):
-	mock_walk.return_value = [("/fake/home/rel", [], ["fake.md"])]
-	mock_listdir.return_value = ["col1_ts.snapshot"]
+# ---------------------------------------------------------------------------
+# Lines 102-105: full_backup calls backup_qdrant and create_manifest
+# ---------------------------------------------------------------------------
 
-	with patch("red_pill.soul.open", create=True):
-		soul_manager.restore_soul("/fake/backup", commit=True)
 
-	assert mock_copy2.called
-	assert mock_requests.post.called  # Snapshot upload upload
+class TestFullBackup:
+	def test_full_backup_calls_both(self, soul, capsys):
+		"""Lines 102-105: full_backup runs qdrant + manifest."""
+		with patch.object(soul, "backup_qdrant") as mock_bq:
+			with patch.object(soul, "create_manifest") as mock_cm:
+				soul.full_backup()
+				assert mock_bq.called
+				assert mock_cm.called
+		captured = capsys.readouterr()
+		assert "Lean Soul Backup completed" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# Line 125: export_soul auto-generates output_path when None
+# ---------------------------------------------------------------------------
+
+
+class TestExportSoul:
+	def test_auto_output_path_generated(self, soul, tmp_path, capsys):
+		"""Line 124-125: no output_path → auto-generated from timestamp."""
+		with patch.object(soul, "backup_qdrant"):
+			with patch.object(soul, "create_manifest"):
+				with patch("os.listdir", return_value=[]):
+					soul.export_soul(output_path=None)
+		captured = capsys.readouterr()
+		assert "LEAN_SOUL_KIT" in captured.out
+
+	def test_snapshot_added_to_tar(self, soul, tmp_path, capsys):
+		"""Lines 138-141: snapshot files matching timestamp are added to tar."""
+		ts = time.strftime("%Y%m%d_%H%M%S")
+		snap_dir = tmp_path / "backups" / "qdrant"
+		snap_dir.mkdir(parents=True)
+		snap_file = snap_dir / f"work_{ts}.snapshot"
+		snap_file.write_bytes(b"snapshot_data")
+
+		with patch.object(soul, "backup_qdrant"):
+			with patch.object(soul, "create_manifest"):
+				output = str(tmp_path / "export.tar.gz")
+				soul.export_soul(output_path=output)
+
+		assert os.path.exists(output)
+		with tarfile.open(output, "r:gz") as tar:
+			names = tar.getnames()
+		assert any("work_" in n for n in names)
+
+	def test_cloud_upload_success_printed(self, soul, tmp_path, capsys):
+		"""Line 148-149: vault upload succeeds → prints file_id."""
+		soul.vault.enabled = True
+		soul.vault.upload_kit.return_value = "gdrive_file_123"
+
+		with patch.object(soul, "backup_qdrant"):
+			with patch.object(soul, "create_manifest"):
+				with patch("os.listdir", return_value=[]):
+					output = str(tmp_path / "export.tar.gz")
+					soul.export_soul(output_path=output)
+
+		captured = capsys.readouterr()
+		assert "gdrive_file_123" in captured.out
+
+	def test_cloud_upload_failure_printed(self, soul, tmp_path, capsys):
+		"""Line 151: vault upload returns falsy → prints failure message."""
+		soul.vault.enabled = True
+		soul.vault.upload_kit.return_value = None  # falsy
+
+		with patch.object(soul, "backup_qdrant"):
+			with patch.object(soul, "create_manifest"):
+				with patch("os.listdir", return_value=[]):
+					output = str(tmp_path / "export.tar.gz")
+					soul.export_soul(output_path=output)
+
+		captured = capsys.readouterr()
+		assert "Cloud Transmission Failed" in captured.out
+
+	def test_manifest_not_added_when_missing(self, soul, tmp_path, capsys):
+		"""tar created but manifest absent → archive still created."""
+		with patch.object(soul, "backup_qdrant"):
+			with patch.object(soul, "create_manifest"):
+				with patch("os.listdir", return_value=[]):
+					output = str(tmp_path / "export.tar.gz")
+					soul.export_soul(output_path=output)
+		assert os.path.exists(output)
+
+	def test_manifest_added_to_tar_when_exists(self, soul, tmp_path, capsys):
+		"""Line 136: manifest file exists → added to tar as 'manifest.json'."""
+		ts = time.strftime("%Y%m%d_%H%M%S")
+		snap_dir = tmp_path / "backups" / "qdrant"
+		snap_dir.mkdir(parents=True)
+		manifest_file = snap_dir / f"manifest_{ts}.json"
+		manifest_file.write_text('{"test": true}')
+
+		with patch.object(soul, "backup_qdrant"):
+			with patch.object(soul, "create_manifest"):
+				with patch("time.strftime", return_value=ts):
+					output = str(tmp_path / "export.tar.gz")
+					soul.export_soul(output_path=output)
+
+		with tarfile.open(output, "r:gz") as tar:
+			assert "manifest.json" in tar.getnames()
+
+
+# ---------------------------------------------------------------------------
+# Lines 77-78: backup_files deprecated
+# ---------------------------------------------------------------------------
+
+
+class TestBackupFilesDeprecated:
+	def test_returns_empty_string(self, soul):
+		"""Lines 77-78: deprecated method → logs warning, returns ''."""
+		result = soul.backup_files("20260101")
+		assert result == ""
+
+
+# ---------------------------------------------------------------------------
+# Lines 170-172: restore_soul commit actually copies files
+# ---------------------------------------------------------------------------
+
+
+class TestRestoreSoulCommit:
+	def test_commit_true_copies_files(self, soul, tmp_path):
+		"""Lines 169-172: commit=True → makedirs and copy2 called."""
+		home_src = tmp_path / "home"
+		home_src.mkdir()
+		subdir = home_src / "subdir"
+		subdir.mkdir()
+		(subdir / "config.txt").write_text("setting=1")
+
+		with patch("shutil.copy2") as mock_copy:
+			with patch("os.makedirs") as mock_makedirs:
+				soul.restore_soul(str(tmp_path), commit=True)
+				assert mock_copy.called
+				assert mock_makedirs.called
+
+	def test_commit_no_qdrant_dir_skips_gracefully(self, soul, tmp_path):
+		"""Lines 178-180: commit=True but qdrant backup dir absent → no error."""
+		soul.backup_root = str(tmp_path / "nonexistent_backups")
+		soul.restore_soul(str(tmp_path), commit=True)  # Must not raise
+
+
+class TestRestoreSoul:
+	def test_snapshot_restore_exception_caught(self, soul, tmp_path):
+		"""Lines 198-199: snapshot upload fails → exception logged, not raised."""
+		qdrant_dir = tmp_path / "backups" / "qdrant"
+		qdrant_dir.mkdir(parents=True)
+		snap = qdrant_dir / "work_20260101.snapshot"
+		snap.write_bytes(b"data")
+
+		soul.backup_root = str(tmp_path / "backups")
+
+		with patch("requests.post", side_effect=Exception("upload failed")):
+			soul.restore_soul(str(tmp_path), commit=True)  # Must not raise
+
+	def test_dry_run_prints_would_restore(self, soul, tmp_path, capsys):
+		"""Line 157-158, 174: dry run → prints would-restore messages."""
+		home_src = tmp_path / "home"
+		home_src.mkdir()
+		(home_src / "testfile.txt").write_text("content")
+
+		soul.restore_soul(str(tmp_path), commit=False)
+		captured = capsys.readouterr()
+		assert "DRY RUN" in captured.out
+		assert "Would restore" in captured.out
+
+	def test_snapshot_restore_success(self, soul, tmp_path):
+		"""Lines 196-197: POST succeeds → raise_for_status passes, success logged."""
+		qdrant_dir = tmp_path / "backups" / "qdrant"
+		qdrant_dir.mkdir(parents=True)
+		snap = qdrant_dir / "work_20260101.snapshot"
+		snap.write_bytes(b"data")
+
+		soul.backup_root = str(tmp_path / "backups")
+
+		mock_resp = MagicMock()
+		mock_resp.raise_for_status.return_value = None  # success
+		with patch("requests.post", return_value=mock_resp):
+			soul.restore_soul(str(tmp_path), commit=True)  # Must not raise
+		assert mock_resp.raise_for_status.called

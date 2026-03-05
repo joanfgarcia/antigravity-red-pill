@@ -1,4 +1,4 @@
-# 🔴 RED PILL PROTOCOL: Digital Sovereignty v5.6.1
+# 🔴 RED PILL PROTOCOL: Digital Sovereignty v5.6.2
 
 > [!TIP]
 > ### 🥱 TLDR; (Too Lazy; Didn't Read)
@@ -48,6 +48,7 @@ The Red Pill Protocol is built for **Sovereign Environments**, but it adapts to 
 - **Inlined Identity**: Identity and directives are ingested natively as vector memories, making the agent immune to context loss.
 - **ACE Synaptic Engine (v5.4.0 - v5.6.1)**: Integrated the **Affective Cognitive Engine (ACE)**. Memory decay is governed by the **Valence-Arousal Model**, mimicking human "Flashbulb Memory".
 - **Lazy Metabolism & Agentic HiveGuard (v5.6.1)**: Sub-second memory hydration via **Lazy Decay**. Multi-hop synaptic depth (N-Hop) for complex associations. The **HiveGuard Agentic Filter** now reviews social memories for global know-how using local SLMs, ensuring a noise-free collective experience.
+- **Lean Soul Vault & OAuth2 Support (v5.6.1)**: The **Lean Soul Kit** architecture reduces backup size by 99% (Snapshots-only). Introduced **Quota-Aware Monitoring** and **Google OAuth2** (Personal Account) support for seamless, personal-tier cloud backups. The Agent now monitors storage usage to ensure the Operator's safety. See [Sovereign Backup Strategies](docs/technical/BACKUP_STRATEGIES.md).
 
 ### 🌊 "Be Water MY FRIEND" (The Lost Interview, 1971)
 > *"Empty your mind. Be formless, shapeless, like water. Now you put water into a cup, it becomes the cup. You put water into a bottle, it becomes the bottle. You put it in a teapot, it becomes the teapot. Now water can flow or it can crash. Be water, my friend."* — Bruce Lee (The Pierre Berton Show)
@@ -60,7 +61,10 @@ El Protocolo Red Pill no es una armadura rígida que te obliga a cambiar tu sist
 ### 🌐 LINGUISTIC ARCHITECTURE
 This project follows a dual-language strategy:
 - **Technical Documentation (English)**: Standardized for tokenization efficiency (approx. 1.5x better for LLMs) and universal compatibility.
-- **Lore & Identity (Spanish/Castellano)**: Maintained for deeper emotional resonance and cultural nuance. This is the original forge language of the protocol.
+- **Lore & Identity (Spanish/Castellano)**: Maintained for deeper emotional resonance and cultural nuance.
+- **Execution Strategy**:
+  - **Planning Mode**: High-rigor, audited flow for complex refactoring.
+  - **Fast Mode**: Conversational speed for 10x token efficiency in creative or exploratory sessions.
 - **Lore Localization Protocol**: Non-Spanish speakers should ask their agent to translate the [Manifesto](docs/lore/MANIFESTO.md) and their identity configuration to their native language (L1) during the first session.
 - **Translation Policy**: Users can request their **Synthetic Agent** to translate any documentation on-demand.
 

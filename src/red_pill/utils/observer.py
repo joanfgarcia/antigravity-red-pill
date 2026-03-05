@@ -3,7 +3,7 @@ import subprocess
 import red_pill.config as cfg
 
 
-def notify_user(title: str, message: str, sound: bool = True):
+def notify_user(title: str, message: str, sound: bool = False):
 	"""
 	Sends a system notification and optionally plays a subtle sound.
 	"""

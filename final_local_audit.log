@@ -1,0 +1,10 @@
+[0;34m--- [B760 PRE-PR AUDIT PROTOCOL] ---[0m
+1. Formatting (Ruff)... 71 files already formatted
+[0;32mPASS[0m
+2. Linting (Ruff)... All checks passed!
+[0;32mPASS[0m
+3. Static Analysis (Mypy)...
+src/red_pill/memory.py:310: error: Incompatible types in assignment (expression has type "float", target has type "str")  [assignment]
+src/red_pill/memory.py:751: error: Returning Any from function declared to return "float"  [no-any-return]
+Found 2 errors in 1 file (checked 27 source files)
+[0;31mTYPING FAIL[0m
