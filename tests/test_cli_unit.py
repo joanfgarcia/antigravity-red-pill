@@ -54,7 +54,7 @@ def test_cli_main_search(mock_mgr):
 @patch("red_pill.cli.MemoryManager")
 def test_cli_main_sanitize(mock_mgr):
 	"""Test 'red-pill sanitize work'."""
-	mock_mgr.return_value.sanitize.return_value = {"duplicates_found": 0, "migrated_records": 0}
+	mock_mgr.return_value.sanitize.return_value = {"duplicates_found": 0, "migrated_records": 0, "refracted_records": 0}
 	with patch("sys.argv", ["red-pill", "sanitize", "work"]):
 		main()
 		mock_mgr.return_value.sanitize.assert_called_once_with("work_memories", dry_run=False)
@@ -337,7 +337,7 @@ def test_cli_main_search_with_results_and_hub_warning(mock_mgr):
 @patch("red_pill.cli.MemoryManager")
 def test_cli_main_sanitize_dry_run(mock_mgr):
 	"""Line 291: --dry-run with found items → 'DRY RUN' note printed."""
-	mock_mgr.return_value.sanitize.return_value = {"duplicates_found": 3, "migrated_records": 1}
+	mock_mgr.return_value.sanitize.return_value = {"duplicates_found": 3, "migrated_records": 1, "refracted_records": 2}
 	with patch("sys.argv", ["red-pill", "sanitize", "work", "--dry-run"]):
 		main()
 	mock_mgr.return_value.sanitize.assert_called_once_with("work_memories", dry_run=True)

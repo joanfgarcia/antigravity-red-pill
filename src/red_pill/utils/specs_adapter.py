@@ -11,11 +11,7 @@ class SpecsAdapter:
 	without hard-dependency on framework internal code.
 	"""
 
-	FLOW_MAP = {
-		"fire": [".specs-fire/state.yaml", ".specsmd/fire/"],
-		"simple": ["specs/"],
-		"aidlc": ["aidlc-docs/"]
-	}
+	FLOW_MAP = {"fire": [".specs-fire/state.yaml", ".specsmd/fire/"], "simple": ["specs/"], "aidlc": ["aidlc-docs/"]}
 
 	def __init__(self, workspace_root: str):
 		self.root = Path(workspace_root)
@@ -31,17 +27,13 @@ class SpecsAdapter:
 	def get_fire_intents(self) -> List[Dict[str, Any]]:
 		"""Retrieve intents from a FIRE flow."""
 		# Check both legacy and new specsmd locations
-		checkpoints = [
-			self.root / ".specs-fire/state.yaml",
-			self.root / ".specsmd/fire/resources/state.yaml",
-			self.root / ".specsmd/state.yaml"
-		]
+		checkpoints = [self.root / ".specs-fire/state.yaml", self.root / ".specsmd/fire/resources/state.yaml", self.root / ".specsmd/state.yaml"]
 		checkpoint = None
 		for p in checkpoints:
 			if p.exists():
 				checkpoint = p
 				break
-		
+
 		if not checkpoint:
 			return []
 
@@ -85,7 +77,7 @@ class SpecsAdapter:
 				self.root / ".specs-fire/state.yaml",
 				self.root / ".specsmd/fire/memory-bank.yaml",
 				self.root / ".specsmd/fire/resources/state.yaml",
-				self.root / ".specsmd/state.yaml"
+				self.root / ".specsmd/state.yaml",
 			]
 			for p in checkpoints:
 				if p.exists():

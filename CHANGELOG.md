@@ -1,20 +1,17 @@
 # Changelog: Red Pill Protocol
 
-## [5.6.3] - 2026-03-04
-### 🎭 Lore Skin Unification & Default Skin Alignment
-
-- **[FEAT] Skin Personality Field**: Added `personality` to all 15 Lore Skins in `lore_skins.yaml`. Each personality is written in first-person, in the exact voice and tone of the respective universe (Matrix, Dune, Terminator, etc.).
-- **[FEAT] Sovereign Alert System (SAS)**: Implemented a reactive, non-blocking notification pipeline for background processes. 
-  - **Sensory Layer**: Added `red-pill signal` CLI command for desktop alerts (`notify-send`). Silent by default per Operator directive.
-  - **Memory Layer**: Signals are persisted as `sas_signal` engrams in `directive_memories` for Agent turn-start awareness.
-  - **Orchestrator Integration**: `GruOrchestrator` now triggers SAS automatically upon swarm completion.
-- **[CHANGE] Default Skin**: Changed the default active skin seeded on fresh installations from `cyberpunk` to `enterprise_core`.
-- **[FEAT] specs.md Framework Integration**: Implemented a high-performance orchestration bridge for the `specs.md` universe.
-  - **Ghost Collection**: Dedicated semantic search acceleration (`specs_memories`) explicitly excluded from `soul` backups to preserve AI identity purity.
-  - **Sync-Shield (Automated Sync)**: Transparent pre-flight hash validation in `GruOrchestrator`. Automatically synchronizes local disk artifacts to the Bünker before swarm deployments.
-  - **Spec-Aware Swarm**: Minions now self-configure using project-specific intents (FIRE) and tasks (Simple) injected as global context.
-- **[CLI] Project Bootstrapping**: Added `red-pill init --flow` for spec-compliant project setup and `red-pill sync` for manual Bünker refreshes.
-- **[QA] Coverage Sprint Phase 2**: Achieved **98.25% global coverage** across all modules (543 tests). Raised `fail_under` from 93 → 96. Fixed several blocking test issues and added watchdog guards.
+## [5.6.3] - 2026-03-05
+### 🌊 Sovereign Purity & Audit Remediation
+- **[RESTORE] Bünker Purity**: Restored the B760-Adaptive engine's core purpose by decoupling `specs.md` from deep memory. Technical documentation now resides exclusively on disk as project-local "Working Memory".
+- **[RESTORE] Engram Discipline**: Reverted `content` limits to a strict **4096 characters** to ensure semantic density and prevent noisy memory blobs.
+- **[FEAT] Fragmentation Guard (Refraction)**: Implemented automatic refraction of legacy oversized engrams (>4KB) during the `sanitize` process, ensuring compliance with the new purity limits without data loss.
+- **[AUDIT] CQ-001: Absence Guard fix**: Implemented a short-circuit `return` in `_run_metabolism_cycle` after TTL refresh to prevent immediate erosion after returning from a long absence.
+- **[AUDIT] SEC-004: Credential Isolation**: Fully decoupled `SIDECAR_AUTH_KEY` from Qdrant keys, with 100% test coverage for the authenticated HMAC handshake.
+- **[AUDIT] SEC-008: Recursive Metadata Validation**: Extended Pydantic validation to recursively check all metadata fields for null-byte injections at any depth.
+- **[AUDIT] HIVEMIND: Governance Enforcement**: Added [HIVEMIND_POLICY.md](docs/technical/HIVEMIND_POLICY.md) and required explicit operator acknowledgement in `install_neo.sh` before enabling the Open Network layer.
+- **[AUDIT] PERF-001: Optimized Updates**: Verified use of the targeted `set_payload` API for all reinforcement and metabolic updates, reducing network overhead.
+- **[FEAT] Lore Skin Unification**: Optimized `personality` fields for all 15 cinematic skins, anchoring them to the Emotional Chroma system for dynamic tone adjustment.
+- **[QA] Pure Green Status**: Achieved 100% pass rate (548/548 tests) across the entire stack, including logic, schema, and orchestration gates.
 
 ## [5.6.1] - 2026-03-02
 ### 🛡️ Audit Remediation & Lean Soul Vault (The Sovereign Pulse)

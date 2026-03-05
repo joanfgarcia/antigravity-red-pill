@@ -168,7 +168,6 @@ def main() -> None:
 	init_parser = subparsers.add_parser("init", help="Bootstrap a Spec-Compliant project")
 	init_parser.add_argument("--flow", choices=["fire", "simple", "aidlc"], default="fire", help="Initial specs.md flow")
 
-
 	args = parser.parse_args()
 
 	log_level = logging.DEBUG if args.verbose else getattr(logging, cfg.LOG_LEVEL.upper(), logging.INFO)
@@ -317,7 +316,9 @@ def main() -> None:
 				print(f"Duplicates Removed: {san_results['duplicates_found']}")
 				print(f"Records Migrated: {san_results['migrated_records']}")
 				print(f"Records Refracted: {san_results['refracted_records']}")
-				if args.dry_run and (san_results["duplicates_found"] > 0 or san_results["migrated_records"] > 0 or san_results["refracted_records"] > 0):
+				if args.dry_run and (
+					san_results["duplicates_found"] > 0 or san_results["migrated_records"] > 0 or san_results["refracted_records"] > 0
+				):
 					print("Note: DRY RUN - No changes applied.")
 			elif args.command == "edit":
 				success = manager.update_memory(collection, args.id, color=args.color, emotion=args.emotion, intensity=args.intensity)

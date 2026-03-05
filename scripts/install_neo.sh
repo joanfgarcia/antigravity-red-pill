@@ -251,6 +251,27 @@ else
 	CLOUD_VAULT_FOLDER_ID=""
 fi
 
+echo -e "${BLUE}--- Fase: Configuración de HiveMind (Open Network) ---${NC}"
+echo "El HiveMind permite compartir experiencias (vectores anónimos) con otros Nodos."
+read -p "¿Deseas habilitar la conexión al HiveMind (Milvus)? (y/N): " HIVE_CHOICE
+if [[ "$HIVE_CHOICE" =~ ^[Yy]$ ]]; then
+	echo -e "${YELLOW}⚠️  POLÍTICA DE GOBERNANZA (HIVEMIND_POLICY.md):${NC}"
+	echo "Debes aceptar los términos de soberanía y reciprocidad de la red."
+	read -p "¿Has leído y aceptas la HIVEMIND_POLICY.md? (s/N): " HIVE_CONSENT
+	if [[ "$HIVE_CONSENT" =~ ^[Ss]$ ]]; then
+		MILVUS_ENABLED="True"
+		read -p "Milvus Host (Default: localhost): " MILVUS_HOST; MILVUS_HOST=${MILVUS_HOST:-"localhost"}
+		echo -e "${GREEN}✓ HiveMind habilitado.${NC}"
+	else
+		echo -e "${BLUE}Consentimiento denegado. HiveMind permanecerá desactivado.${NC}"
+		MILVUS_ENABLED="False"
+		MILVUS_HOST="localhost"
+	fi
+else
+	MILVUS_ENABLED="False"
+	MILVUS_HOST="localhost"
+fi
+
 
 # SEC-004: Always generate a separate, random Sidecar Auth Key
 SIDECAR_AUTH_KEY=$(head -c 32 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 32)
@@ -276,6 +297,8 @@ update_env() {
 
 update_env "QDRANT_API_KEY" "$QDRANT_API_KEY"
 update_env "SIDECAR_AUTH_KEY" "$SIDECAR_AUTH_KEY"
+update_env "MILVUS_ENABLED" "$MILVUS_ENABLED"
+update_env "MILVUS_HOST" "$MILVUS_HOST"
 update_env "LORE_SKIN" "$LORE_SKIN"
 update_env "USER_NAME" "$USER_NAME"
 update_env "USER_ROLE" "$USER_ROLE"

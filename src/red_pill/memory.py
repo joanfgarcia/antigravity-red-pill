@@ -24,6 +24,9 @@ from red_pill.utils.emotion import get_chroma_for_emotion, get_emotion, get_emot
 from red_pill.utils.fragmentation import synaptic_split
 from red_pill.utils.pulse import record_interaction
 
+# Backward compatibility alias for tests
+synaptic_split = synaptic_split
+
 logger = logging.getLogger(__name__)
 
 
@@ -60,7 +63,6 @@ class MemoryManager:
 				vectors_config=models.VectorParams(size=self.cfg.VECTOR_SIZE, distance=models.Distance.COSINE),
 			)
 			logger.info(f"Ghost Collection created: {collection_name}")
-
 
 	def _get_vector_from_daemon(self, text: str) -> Optional[List[float]]:
 		"""Retrieves embedding from the memory sidecar socket."""
@@ -147,8 +149,6 @@ class MemoryManager:
 		# before validation to support graceful degradation of oversized inputs.
 		metadata = (metadata or {}).copy()
 		if len(text) > self.cfg.CHUNK_THRESHOLD and not metadata.get("_is_fragment"):
-			from red_pill.utils.fragmentation import synaptic_split
-
 			fragments = synaptic_split(text)
 			parent_id = point_id if point_id else str(uuid.uuid4())
 
@@ -423,6 +423,7 @@ class MemoryManager:
 					self._write_metabolism_state(f, now, skip_next_erosion=True)
 					if has_fcntl:
 						fcntl.flock(f, fcntl.LOCK_UN)
+					logger.info("Absence Guard triggered: Bunker refreshed and erosion short-circuited for this cycle.")
 					return
 
 				# --- CQ-001: skip-erosion-after-refresh flag consumption ---
@@ -877,7 +878,7 @@ class MemoryManager:
 								intensity=intensity,
 								force_immune=immune,
 							)
-							logger.info(f"Refracted oversized legacy engram: {hit.id[:8]}...")
+							logger.info(f"Refracted oversized legacy engram: {str(hit.id)[:8]}...")
 						except Exception as e:
 							logger.error(f"Fragmentation Guard failed for {hit.id}: {e}")
 					continue
@@ -932,4 +933,3 @@ class MemoryManager:
 		except Exception as e:
 			logger.error(f"Failed to get collection stats: {_mask_pii_exception(e)}")
 			return {"status": "error", "error": str(e), "points_count": 0, "segments_count": 0}
-

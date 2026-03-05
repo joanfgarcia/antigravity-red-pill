@@ -1,4 +1,4 @@
-# Threat Model: Red Pill Protocol (v4.2.2)
+# Threat Model: Red Pill Protocol (v5.6.3)
 
 ## 1. Scope & Assumptions
 The Red Pill Protocol is designed for **single-user, local-first environments**. The security architecture assumes the underlying Host OS is not compromised. 
