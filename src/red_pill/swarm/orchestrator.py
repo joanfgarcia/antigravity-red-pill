@@ -37,18 +37,7 @@ class GruOrchestrator:
 		return any(f.endswith(".gguf") for f in os.listdir(model_dir))
 
 	async def deploy_swarm(self, task: str, minions: List[Minion], **kwargs) -> List[SwarmResult]:
-		"""Deploys a swarm of specialized agents with Sync-Shield protection."""
-
-		# 1. Sync-Shield: Automatic Ghost Collection Refresh (Sound of Silence philosophy)
-		if self.specs.is_specs_aware():
-			current_hash = self.specs.get_specs_hash()
-			bunker_hash = self.memory.get_sync_hash("specs_memories")
-
-			if current_hash != bunker_hash:
-				logger.info("[SYNC-SHIELD] Disk/Bünker drift detected. Auto-syncing Ghost Collection...")
-				self.memory.sync_specs(self.workspace_root)
-				self.memory.set_sync_hash("specs_memories", current_hash)
-				logger.info("[SYNC-SHIELD] Synchronization complete.")
+		"""Deploys a swarm of specialized agents with automatic context injection."""
 
 		# 2. Spec-Aware Context Injection
 		specs_prefix = ""

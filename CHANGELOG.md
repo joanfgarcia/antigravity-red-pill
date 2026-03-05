@@ -1,6 +1,6 @@
 # Changelog: Red Pill Protocol
 
-## [5.6.2] - 2026-03-04
+## [5.6.3] - 2026-03-04
 ### 🎭 Lore Skin Unification & Default Skin Alignment
 
 - **[FEAT] Skin Personality Field**: Added `personality` to all 15 Lore Skins in `lore_skins.yaml`. Each personality is written in first-person, in the exact voice and tone of the respective universe (Matrix, Dune, Terminator, etc.).

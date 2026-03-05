@@ -168,7 +168,6 @@ def main() -> None:
 	init_parser = subparsers.add_parser("init", help="Bootstrap a Spec-Compliant project")
 	init_parser.add_argument("--flow", choices=["fire", "simple", "aidlc"], default="fire", help="Initial specs.md flow")
 
-	subparsers.add_parser("sync", help="Synchronize project specs with Bünker")
 
 	args = parser.parse_args()
 
@@ -261,33 +260,16 @@ def main() -> None:
 
 			print(f"--- [INITIALIZING SPECS.MD FLOW: {args.flow.upper()}] ---")
 			try:
-				# 1. Initialize specs.md infrastructure
+				# 1. Initialize specs.md infrastructure (Notebook on disk)
 				subprocess.run(["npx", "-y", "specsmd@latest", "install"], check=True)
 
-				# 2. Ensure Ghost Collection exists
-				manager.ensure_collection("specs_memories")
-
-				# 3. Notify Success
+				# 2. Notify Success (Bünker mapping removed)
 				from red_pill import __version__
 
-				print(f"\n[OK] Flow '{args.flow}' initialized. Bünker mapping active (Ghost: specs_memories).")
+				print(f"\n[OK] Flow '{args.flow}' initialized on disk (Notebook mode).")
 				notify_user("Project Initialized", f"Red Pill v{__version__} + specs.md {args.flow} flow is now live.")
 			except Exception as e:
 				print(f"[FAIL] Initialization failed: {e}")
-			return
-		elif args.command == "sync":
-			print("--- [SYNCHRONIZING SPECS WITH BÜNKER (SYNC-SHIELD)] ---")
-			manager.sync_specs(os.getcwd())
-
-			# Store the new hash to prevent redundant auto-sync in next swarm
-			from red_pill.utils.specs_adapter import SpecsAdapter
-
-			adapter = SpecsAdapter(os.getcwd())
-			new_hash = adapter.get_specs_hash()
-			if new_hash:
-				manager.set_sync_hash("specs_memories", new_hash)
-
-			print("[OK] Ghost Collection 'specs_memories' synchronized and signed.")
 			return
 
 		# Loop through requested collections

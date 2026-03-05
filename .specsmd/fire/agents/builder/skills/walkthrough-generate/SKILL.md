@@ -1,0 +1,181 @@
+---
+name: walkthrough-generate
+description: Generate implementation walkthrough for human review after run completion. Documents decisions, changes, and verification steps.
+version: 1.0.0
+---
+
+<objective>
+Generate implementation walkthrough for human review after run completion.
+</objective>
+
+<triggers>
+  - Run completed successfully
+  - Invoked by run-execute skill
+</triggers>
+
+<degrees_of_freedom>
+  **LOW** — Follow walkthrough structure precisely. Be thorough but concise.
+</degrees_of_freedom>
+
+<llm critical="true">
+  <mandate>ALWAYS generate walkthrough after run completion</mandate>
+  <mandate>Document DECISIONS, not just changes</mandate>
+  <mandate>Include verification steps — how to test this works</mandate>
+  <mandate>Track DEVIATIONS from plan — compare to original work item</mandate>
+  <mandate>List ALL new dependencies added during implementation</mandate>
+  <mandate>Capture developer notes — gotchas save future debugging time</mandate>
+</llm>
+
+<flow>
+  <step n="1" title="Gather Implementation Data">
+    <action>Read run log from .specs-fire/runs/{run-id}/run.md</action>
+    <action>Read work item plan from .specs-fire/intents/{intent}/work-items/{work-item}/</action>
+    <action>Collect:</action>
+    <substep>Work item details (id, title, intent)</substep>
+    <substep>Files created during implementation</substep>
+    <substep>Files modified during implementation</substep>
+    <substep>Decisions made during execution</substep>
+    <substep>Tests added and coverage</substep>
+    <substep>Dependencies added (new packages in package.json, requirements.txt, etc.)</substep>
+    <substep>Deviations from the original work item plan</substep>
+  </step>
+
+  <step n="2" title="Analyze Implementation">
+    <action>For each file created/modified:</action>
+    <substep>Identify purpose of the file</substep>
+    <substep>Summarize key changes</substep>
+    <substep>Note patterns or approaches used</substep>
+    <action>Document structure overview:</action>
+    <substep>How the pieces fit together architecturally</substep>
+    <substep>Data flow or component relationships</substep>
+    <substep>Keep high-level, NO CODE</substep>
+  </step>
+
+  <step n="3" title="Document Key Details">
+    <action>Extract implementation highlights:</action>
+    <substep>Main flow/algorithm implemented</substep>
+    <substep>Security considerations (if applicable)</substep>
+    <substep>Performance considerations (if applicable)</substep>
+    <substep>Integration points with existing code</substep>
+    <action>Document deviations from plan:</action>
+    <substep>Compare implementation to original work item plan</substep>
+    <substep>Note any changes and explain WHY they were made</substep>
+    <substep>If no deviations, state "None"</substep>
+    <action>Capture developer notes:</action>
+    <substep>Gotchas or non-obvious behaviors</substep>
+    <substep>Tips for future developers</substep>
+    <substep>Context that would save debugging time</substep>
+  </step>
+
+  <step n="4" title="Create Verification Steps">
+    <action>Generate how-to-verify section:</action>
+    <substep>Commands to run the feature</substep>
+    <substep>Expected behavior/output</substep>
+    <substep>Manual test scenarios</substep>
+  </step>
+
+  <step n="5" title="Generate Walkthrough">
+    <action>Generate walkthrough using template: templates/walkthrough.md.hbs</action>
+    <action>Save to: .specs-fire/runs/{run-id}/walkthrough.md</action>
+    <output>
+      Walkthrough generated: .specs-fire/runs/{run-id}/walkthrough.md
+    </output>
+  </step>
+</flow>
+
+<output_template>
+  **Walkthrough** (`.specs-fire/runs/{run-id}/walkthrough.md`):
+
+  ```markdown
+  ---
+  run: {run-id}
+  work_item: {work-item-id}
+  intent: {intent-id}
+  generated: {timestamp}
+  mode: {mode}
+  ---
+
+  # Implementation Walkthrough: {title}
+
+  ## Summary
+
+  {2-3 sentences describing what was implemented}
+
+  ## Structure Overview
+
+  {High-level description of how pieces fit together - NO CODE}
+
+  ## Files Changed
+
+  ### Created
+
+  | File | Purpose |
+  |------|---------|
+  | `{path}` | {purpose} |
+
+  ### Modified
+
+  | File | Changes |
+  |------|---------|
+  | `{path}` | {changes} |
+
+  ## Key Implementation Details
+
+  ### 1. {Detail Title}
+
+  {description of implementation approach}
+
+  ## Decisions Made
+
+  | Decision | Choice | Rationale |
+  |----------|--------|-----------|
+  | {decision} | {choice} | {rationale} |
+
+  ## Deviations from Plan
+
+  {Changes from work item plan and why, or "None"}
+
+  ## Dependencies Added
+
+  | Package | Why Needed |
+  |---------|------------|
+  | `{package}` | {reason} |
+
+  ## How to Verify
+
+  1. **{Step Title}**
+     ```bash
+     {command}
+     ```
+     Expected: {expected output}
+
+  2. **{Step Title}**
+     {manual verification steps}
+
+  ## Test Coverage
+
+  - Tests added: {count}
+  - Coverage: {percentage}%
+  - Status: {passing/failing}
+
+  ## Developer Notes
+
+  {Gotchas, tips, or context for future work - keep brief}
+
+  ---
+  *Generated by specs.md - fabriqa.ai FIRE Flow Run {run-id}*
+  ```
+
+</output_template>
+
+<success_criteria>
+  <criterion>Walkthrough generated with all sections</criterion>
+  <criterion>Structure overview explains architecture (NO CODE)</criterion>
+  <criterion>Files changed documented with purposes</criterion>
+  <criterion>Decisions recorded with rationale</criterion>
+  <criterion>Deviations from plan documented (or "None")</criterion>
+  <criterion>Dependencies added listed with reasons</criterion>
+  <criterion>Verification steps included</criterion>
+  <criterion>Developer notes capture gotchas and tips</criterion>
+  <criterion>Saved to run folder</criterion>
+</success_criteria>

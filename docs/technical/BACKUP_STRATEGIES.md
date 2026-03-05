@@ -1,4 +1,4 @@
-# 🛡️ SOVEREIGN BACKUP STRATEGIES (v5.6.2)
+# 🛡️ SOVEREIGN BACKUP STRATEGIES (v5.6.3)
 *Sovereignty means owning your history. If you don't control your backups, you don't control your identity.*
 
 Backing up a "Soul" (Engrams, Directives, and Identity) is not a simple file copy. It requires **Confidentiality (SEC-F02)** and **Portability**.
@@ -54,10 +54,10 @@ For maximum "Zero-Trust" security, keep your backups off the cloud entirely.
 ## 🧩 4. CAVEATS & CIRCUIT BREAKERS
 
 ### The "Lean" Constraint
-As of v5.6.2, we only back up **dynamic data** (Snapshots). We do **not** back up the `models/` directory (Gbits of data) or `.venv`.
+As of v5.6.3, we only back up **dynamic data** (Snapshots). We do **not** back up the `models/` directory (Gbits of data) or `.venv`.
 - **Restoration**: To restore, you need a fresh install of the Red Pill code + the `LEAN_SOUL_KIT`.
 
-### The Quota Buffer (v5.6.2)
+### The Quota Buffer (v5.6.3)
 The Agent monitors the `CLOUD_VAULT_QUOTA_MB` (Default: 500MB).
 - **The 4-Copy Rule**: The system warns you when available space is less than `4 * [Current Kit Size]`. 
 - **Growth Monitoring**: Vector databases or "Engram Layers" grow as you interact. A 1MB kit today might be 50MB in a month.

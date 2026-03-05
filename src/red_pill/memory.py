@@ -61,39 +61,6 @@ class MemoryManager:
 			)
 			logger.info(f"Ghost Collection created: {collection_name}")
 
-	def sync_specs(self, workspace_root: str):
-		"""Index specs.md artifacts into the Ghost Collection."""
-		from pathlib import Path
-
-		from red_pill.utils.specs_adapter import SpecsAdapter
-
-		self.ensure_collection("specs_memories")
-		adapter = SpecsAdapter(workspace_root)
-		flow = adapter.detect_flow()
-
-		if not flow:
-			logger.info("No specs.md flow detected for sync.")
-			return
-
-		files_to_index = []
-		if flow == "simple":
-			files_to_index = list(Path(workspace_root).glob("specs/*.md"))
-		elif flow == "fire":
-			files_to_index = [Path(workspace_root) / ".specs-fire/state.yaml"]
-		elif flow == "aidlc":
-			files_to_index = list(Path(workspace_root).glob("aidlc-docs/*.md"))
-
-		for p in files_to_index:
-			if p.exists():
-				content = p.read_text()
-				self.add_memory(
-					collection="specs_memories",
-					text=content,
-					importance=0.8,
-					metadata={"flow": flow, "file": p.name, "type": "spec_artifact"},
-					force_immune=True,
-				)
-				logger.info(f"Indexed spec artifact: {p.name}")
 
 	def _get_vector_from_daemon(self, text: str) -> Optional[List[float]]:
 		"""Retrieves embedding from the memory sidecar socket."""
@@ -925,26 +892,3 @@ class MemoryManager:
 			logger.error(f"Failed to get collection stats: {_mask_pii_exception(e)}")
 			return {"status": "error", "error": str(e), "points_count": 0, "segments_count": 0}
 
-	def get_sync_hash(self, collection: str) -> str:
-		"""Retrieve the last known sync hash from the collection's metadata point."""
-		try:
-			# Use a deterministic UUID for the metadata point
-			meta_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{collection}.metadata"))
-			points = self.client.retrieve(collection_name=collection, ids=[meta_id], with_payload=True, with_vectors=False)
-			if points and points[0].payload:
-				val = points[0].payload.get("sync_hash", "")
-				return str(val)
-		except Exception:
-			pass
-		return ""
-
-	def set_sync_hash(self, collection: str, sync_hash: str):
-		"""Store the current sync hash in the collection's metadata point."""
-		meta_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{collection}.metadata"))
-		payload = {"sync_hash": sync_hash, "type": "collection_metadata", "updated_at": time.time(), "immune": True}
-		# Note: We use a zero vector for metadata points if needed, or just upsert payload if collection allows
-		vector = [0.0] * self.cfg.VECTOR_SIZE
-		try:
-			self.client.upsert(collection_name=collection, points=[models.PointStruct(id=meta_id, vector=vector, payload=payload)])
-		except Exception as e:
-			logger.error(f"Failed to store sync hash: {e}")

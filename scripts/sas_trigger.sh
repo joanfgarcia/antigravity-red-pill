@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sovereign Alert System (SAS) - Trigger Helper (v5.6.2)
+# Sovereign Alert System (SAS) - Trigger Helper (v5.6.3)
 
 # Usage: ./sas_trigger.sh "Task Name" "Status Message" [--sound]
 

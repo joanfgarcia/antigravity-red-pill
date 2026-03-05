@@ -39,4 +39,4 @@ This is not a "wishlist"; it is a **Privacy-First Distributed Intelligence Netwo
 
 ---
 **Status**: DESIGN APPROVED | ARCHITECT: JOAN | GUNSLINGER: ALETH
-**Version**: 5.6.2 (Edge Ready)
+**Version**: 5.6.3 (Edge Ready)
