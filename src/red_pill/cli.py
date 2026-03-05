@@ -316,7 +316,8 @@ def main() -> None:
 				print(f"--- [SANITATION: {collection.upper()}] ---")
 				print(f"Duplicates Removed: {san_results['duplicates_found']}")
 				print(f"Records Migrated: {san_results['migrated_records']}")
-				if args.dry_run and (san_results["duplicates_found"] > 0 or san_results["migrated_records"] > 0):
+				print(f"Records Refracted: {san_results['refracted_records']}")
+				if args.dry_run and (san_results["duplicates_found"] > 0 or san_results["migrated_records"] > 0 or san_results["refracted_records"] > 0):
 					print("Note: DRY RUN - No changes applied.")
 			elif args.command == "edit":
 				success = manager.update_memory(collection, args.id, color=args.color, emotion=args.emotion, intensity=args.intensity)

@@ -142,43 +142,16 @@ class MemoryManager:
 		force_immune: bool = False,
 	) -> str:
 		"""Stores a new engram with B760 validation and emotional chroma."""
-		# SEC-001 & SEC-008: Validation via Pydantic schema
-
-		# SEC-001: Strip reserved keys before validation to ensure robustness
-		metadata = (metadata or {}).copy()
-		for key in CreateEngramRequest.RESERVED_KEYS:
-			metadata.pop(key, None)
-
-		try:
-			req = CreateEngramRequest(
-				content=text,
-				importance=importance,
-				color=color,  # type: ignore
-				emotion=emotion,  # type: ignore
-				intensity=intensity,
-				metadata=metadata or {},
-			)
-			# Update values from validated request
-			text = req.content
-			importance = req.importance
-			metadata = req.metadata
-			color = req.color
-			emotion = req.emotion
-			intensity = req.intensity
-		except Exception as e:
-			raise ValueError(f"Invalid engram data: {e}")
-
-		# v5.4.0: Temporal Pulse Detection
-		pulse = record_interaction()
-
-		# v5.5.0: Synaptic Fragmentation (Anti-Amnesia Logic)
+		# v5.6.3: Synaptic Fragmentation (Anti-Amnesia Logic - Pre-validation)
 		# If the text is a massive block, we split it into sinaptic fragments
-		# to ensure vectors are granular and searchable.
+		# before validation to support graceful degradation of oversized inputs.
+		metadata = (metadata or {}).copy()
 		if len(text) > self.cfg.CHUNK_THRESHOLD and not metadata.get("_is_fragment"):
+			from red_pill.utils.fragmentation import synaptic_split
+
 			fragments = synaptic_split(text)
 			parent_id = point_id if point_id else str(uuid.uuid4())
 
-			# 1. Store the first fragment as the 'Anchor' (Original ID)
 			for i, frag in enumerate(fragments):
 				frag_metadata = metadata.copy()
 				frag_metadata["_is_fragment"] = True
@@ -203,6 +176,33 @@ class MemoryManager:
 
 			# Return the ID of the anchor point
 			return parent_id
+
+		# SEC-001 & SEC-008: Validation via Pydantic schema
+		# SEC-001: Strip reserved keys before validation to ensure robustness
+		for key in CreateEngramRequest.RESERVED_KEYS:
+			metadata.pop(key, None)
+
+		try:
+			req = CreateEngramRequest(
+				content=text,
+				importance=importance,
+				color=color,  # type: ignore
+				emotion=emotion,  # type: ignore
+				intensity=intensity,
+				metadata=metadata,
+			)
+			# Update values from validated request
+			text = req.content
+			importance = req.importance
+			metadata = req.metadata
+			color = req.color
+			emotion = req.emotion
+			intensity = req.intensity
+		except Exception as e:
+			raise ValueError(f"Invalid engram data: {e}")
+
+		# v5.4.0: Temporal Pulse Detection
+		pulse = record_interaction()
 		metadata["pulse_status"] = pulse["status"]
 		metadata["pulse_delta"] = pulse["delta_seconds"]
 
@@ -823,10 +823,12 @@ class MemoryManager:
 		logger.info(f"Erosion complete in {collection}. Updated: {eroded_count}, Deleted: {deleted_count}")
 
 	def sanitize(self, collection: str, dry_run: bool = False) -> Dict[str, Any]:
+		"""Sanitizes a collection: removes duplicates, heals schemas, and refracts oversized legacy engrams."""
 		offset = None
 		seen_content: Dict[str, str] = {}
 		duplicates: List[Any] = []
 		migrated_count = 0
+		refracted_count = 0
 		match_count = 0
 		while True:
 			match_count += 1
@@ -847,6 +849,39 @@ class MemoryManager:
 					duplicates.append(str(hit.id))
 					continue
 				seen_content[content_hash] = str(hit.id)
+
+				# v5.6.3: Fragmentation Guard (Refract oversized legacy engrams)
+				# If an engram exceeds the current high-purity limits (e.g. leftovers from v5.6.2),
+				# we delete and re-add it to trigger the synaptic_split logic.
+				if len(content) > self.cfg.CHUNK_THRESHOLD:
+					refracted_count += 1
+					if not dry_run:
+						try:
+							# Extract core metadata for re-entry
+							importance = float(hit.payload.get("reinforcement_score", 1.0))
+							color = hit.payload.get("color", self.cfg.DEFAULT_COLOR)
+							emotion = hit.payload.get("emotion", self.cfg.DEFAULT_EMOTION)
+							intensity = float(hit.payload.get("intensity", 1.0))
+							immune = bool(hit.payload.get("immune", False))
+
+							# Delete original
+							self.client.delete(collection_name=collection, points_selector=models.PointIdsList(points=[hit.id]))
+
+							# Re-add (will trigger chunking automatically)
+							self.add_memory(
+								collection=collection,
+								text=content,
+								importance=importance,
+								color=color,
+								emotion=emotion,
+								intensity=intensity,
+								force_immune=immune,
+							)
+							logger.info(f"Refracted oversized legacy engram: {hit.id[:8]}...")
+						except Exception as e:
+							logger.error(f"Fragmentation Guard failed for {hit.id}: {e}")
+					continue
+
 				needs_migration = False
 				update_payload: Dict[str, Any] = {}
 				if "color" not in hit.payload:
@@ -878,7 +913,13 @@ class MemoryManager:
 				self.client.delete(collection_name=collection, points_selector=models.PointIdsList(points=duplicates))
 			except Exception as e:
 				logger.error(f"Sanitize duplicate deletion failed: {_mask_pii_exception(e)}")
-		return {"collection": collection, "duplicates_found": len(duplicates), "migrated_records": migrated_count, "dry_run": dry_run}
+		return {
+			"collection": collection,
+			"duplicates_found": len(duplicates),
+			"migrated_records": migrated_count,
+			"refracted_records": refracted_count,
+			"dry_run": dry_run,
+		}
 
 	def get_stats(self, collection: str) -> Dict[str, Any]:
 		try:

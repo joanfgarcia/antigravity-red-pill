@@ -145,12 +145,14 @@ read -p "Selección (1/2/3) [por defecto 2]: " SEC_CHOICE
 SEC_CHOICE=${SEC_CHOICE:-2}
 
 if [[ "$SEC_CHOICE" == "1" ]]; then
-	echo -e "${RED}!!! ADVERTENCIA DE SEGURIDAD (SEC-AUTH-001) !!!${NC}"
+	echo -e "${RED}!!! ADVERTENCIA DE SEGURIDAD CRÍTICA (SEC-AUTH-001) !!!${NC}"
 	echo -e "${RED}Has seleccionado el modo NONE (Steam). El Bünker no tendrá protección por contraseña ni API Key.${NC}"
 	echo -e "${RED}Cualquier proceso local podrá leer y escribir en tu memoria soberana.${NC}"
-	read -p "¿Estás ABSOLUTAMENTE seguro de que quieres continuar sin protección? (y/N): " STEAM_CONFIRM
-	if [[ ! "$STEAM_CONFIRM" =~ ^[Yy]$ ]]; then
-		echo -e "${BLUE}Sabia elección. Reventiendo a Modo ADAPTATIVE (Water).${NC}"
+	echo -e "Para continuar, debes escribir exactamente el siguiente flag de seguridad:"
+	echo -e "${YELLOW}--i-understand-this-is-insecure${NC}"
+	read -p "Confirma selección: " STEAM_CONFIRM
+	if [[ "$STEAM_CONFIRM" != "--i-understand-this-is-insecure" ]]; then
+		echo -e "${BLUE}Flag incorrecto o denegado. Reventiendo a Modo ADAPTATIVE (Water) por seguridad.${NC}"
 		SEC_CHOICE=2
 	fi
 fi
