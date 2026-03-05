@@ -107,8 +107,8 @@ The system has evolved from a single-user prototype into a **Cognitive Swarm arc
 
 ## 11. Known Limitations & Platform Quirks
 
-### 11.1 Windows Metabolism File Locking
-The metabolism state file does not use advisory file locking on Windows (`fcntl.flock` is unavailable). Running multiple simultaneous `red-pill` memory sidecars or CLI processes on Windows may corrupt the metabolism state tracking. Operate with caution in highly concurrent Windows deployments.
+### 11.1 Windows Support (ARCH-005 Fully Addressed)
+As of v5.6.4, the protocol relies on the cross-platform `filelock` library for metabolism state locking. The previous Unix-only conditional approach (`fcntl.flock`) has been removed. Running multiple concurrent `red-pill` sidecars or processes on Windows is now formally supported with full concurrency safety.
 
 ### 11.2 FSRS Cognitive Model Integration (Aspirational)
 While Section 5 describes the FSRS algorithm (retrievability = e^(ln(0.9) × t/S)) with mathematical rigor, this represents the **aspirational v6.0 target model**. The current implementation (v5.6.x) utilizes a simplified, single-variable scalar approximation (`reinforcement_score`) combined with a linear or exponential decay rate. The distinct parameters for memory 'difficulty' and 'stability' are not yet fully operationalized in the vector payload.

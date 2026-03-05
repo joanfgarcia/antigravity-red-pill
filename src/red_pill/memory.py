@@ -385,62 +385,48 @@ class MemoryManager:
 		now = time.time()
 
 		try:
-			try:
-				import fcntl
+			from filelock import FileLock, Timeout
 
-				has_fcntl = True
-			except ImportError:
-				has_fcntl = False
+			lock = FileLock(state_file + ".lock", timeout=0)
+			with lock:
+				with open(state_file, "a+") as f:
+					last_run, skip_next_erosion = self._read_metabolism_state(f)
+					gap = now - last_run if last_run > 0 else float("inf")
 
-			with open(state_file, "a+") as f:
-				if has_fcntl:
-					try:
-						fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-					except BlockingIOError:
+					# --- Cooldown gate ---
+					if last_run > 0 and gap < self.cfg.METABOLISM_COOLDOWN:
 						return
 
-				last_run, skip_next_erosion = self._read_metabolism_state(f)
-				gap = now - last_run if last_run > 0 else float("inf")
+					# --- Absence guard ---
+					if last_run > 0 and gap > self.cfg.ABSENCE_THRESHOLD:
+						logger.warning(
+							f"Absence detected ({gap / 86400:.1f} days). Running TTL refresh to protect the Bunker. "
+							f"Erosion skipped for this cycle and the next."
+						)
+						for coll in self.cfg.METABOLISM_AUTO_COLLECTIONS:
+							try:
+								self._refresh_ttl_timestamps(coll.strip())
+							except Exception as e:
+								logger.error(f"TTL refresh failed during absence recovery for {coll}: {e}")
 
-				# --- Cooldown gate ---
-				if last_run > 0 and gap < self.cfg.METABOLISM_COOLDOWN:
-					if has_fcntl:
-						fcntl.flock(f, fcntl.LOCK_UN)
-					return
+						self._write_metabolism_state(f, now, skip_next_erosion=True)
+						logger.info("Absence Guard triggered: Bunker refreshed and erosion short-circuited for this cycle.")
+						return
 
-				# --- Absence guard ---
-				if last_run > 0 and gap > self.cfg.ABSENCE_THRESHOLD:
-					logger.warning(
-						f"Absence detected ({gap / 86400:.1f} days). Running TTL refresh to protect the Bunker. "
-						f"Erosion skipped for this cycle and the next."
-					)
-					for coll in self.cfg.METABOLISM_AUTO_COLLECTIONS:
-						try:
-							self._refresh_ttl_timestamps(coll.strip())
-						except Exception as e:
-							logger.error(f"TTL refresh failed during absence recovery for {coll}: {e}")
+					# --- CQ-001: skip-erosion-after-refresh flag consumption ---
+					if skip_next_erosion:
+						logger.info(
+							"CQ-001: skip_next_erosion flag active — skipping erosion this cycle to protect freshly-refreshed post-vacation engrams."
+						)
+						self._write_metabolism_state(f, now, skip_next_erosion=False)
+						return
 
-					self._write_metabolism_state(f, now, skip_next_erosion=True)
-					if has_fcntl:
-						fcntl.flock(f, fcntl.LOCK_UN)
-					logger.info("Absence Guard triggered: Bunker refreshed and erosion short-circuited for this cycle.")
-					return
-
-				# --- CQ-001: skip-erosion-after-refresh flag consumption ---
-				if skip_next_erosion:
-					logger.info(
-						"CQ-001: skip_next_erosion flag active — skipping erosion this cycle to protect freshly-refreshed post-vacation engrams."
-					)
+					# --- Normal cycle: update state and proceed to erosion ---
 					self._write_metabolism_state(f, now, skip_next_erosion=False)
-					if has_fcntl:
-						fcntl.flock(f, fcntl.LOCK_UN)
-					return
 
-				# --- Normal cycle: update state and proceed to erosion ---
-				self._write_metabolism_state(f, now, skip_next_erosion=False)
-				if has_fcntl:
-					fcntl.flock(f, fcntl.LOCK_UN)
-
+		except Timeout:
+			# Lock could not be acquired because another instance is running
+			return
 		except OSError:
 			pass
 
