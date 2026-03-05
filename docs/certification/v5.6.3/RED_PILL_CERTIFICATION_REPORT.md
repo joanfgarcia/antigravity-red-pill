@@ -16,7 +16,7 @@ This report certifies the **Red Pill Protocol v5.6.3** as production-ready. This
 | **CQ-002** | **LOW** | SHA-256 Truncation | ✅ FIXED | Fingerprint now uses full 64-char digest for absolute deduplication unique IDs. |
 | **SEC-004** | **MEDIUM** | Credential Isolation | ✅ FIXED | `SIDECAR_AUTH_KEY` decoupled from Qdrant keys. 100% HMAC handshake coverage. |
 | **SEC-008** | **LOW** | Null-Byte Injection | ✅ FIXED | Recursive validation in `schemas.py` blocks nested binary payloads. |
-| **HIVEMIND** | **MEDIUM** | Governance Policy | ✅ FIXED | [HIVEMIND_POLICY.md](../../docs/technical/HIVEMIND_POLICY.md) enforced at install time. |
+| **HIVEMIND** | **MEDIUM** | Governance Policy | ✅ FIXED | [HIVEMIND_POLICY.md](../../technical/HIVEMIND_POLICY.md) enforced at install time. |
 | **PERF-001** | **LOW** | Payload Replacement | ✅ FIXED | Verified atomic `set_payload` usage for reinforcement and metabolic updates. |
 
 ## 3. Verification & Metrics

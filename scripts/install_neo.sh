@@ -251,6 +251,23 @@ else
 	CLOUD_VAULT_FOLDER_ID=""
 fi
 
+echo -e "${BLUE}--- Fase: Localización del Bünker (Qdrant) ---${NC}"
+read -p "Qdrant Host (Default: localhost): " Q_HOST; Q_HOST=${Q_HOST:-"localhost"}
+read -p "Qdrant Port (Default: 6333): " Q_PORT; Q_PORT=${Q_PORT:-"6333"}
+read -p "Qdrant Scheme (http/https) [Default: http]: " Q_SCHEME; Q_SCHEME=${Q_SCHEME:-"http"}
+
+# SEC-009: Mandatory confirmation for insecure remote deployments
+if [[ "$Q_HOST" != "localhost" && "$Q_HOST" != "127.0.0.1" && "$Q_SCHEME" == "http" ]]; then
+	echo -e "${RED}⚠️  ALERTA DE SEGURIDAD CRÍTICA (SEC-009):${NC}"
+	echo "Has configurado un host remoto ('$Q_HOST') utilizando el esquema 'http'."
+	echo "Esto enviará tus engramas (recuerdos) en TEXTO PLANO a través de la red."
+	read -p "¿Entiendes los riesgos y deseas continuar con una conexión NO SEGURA? (y/N): " REMOTE_CONFIRM
+	if [[ ! "$REMOTE_CONFIRM" =~ ^[Yy]$ ]]; then
+		echo -e "${BLUE}Cambiando esquema a 'https' por seguridad.${NC}"
+		Q_SCHEME="https"
+	fi
+fi
+
 echo -e "${BLUE}--- Fase: Configuración de HiveMind (Open Network) ---${NC}"
 echo "El HiveMind permite compartir experiencias (vectores anónimos) con otros Nodos."
 read -p "¿Deseas habilitar la conexión al HiveMind (Milvus)? (y/N): " HIVE_CHOICE
@@ -295,6 +312,9 @@ update_env() {
 	fi
 }
 
+update_env "QDRANT_HOST" "$Q_HOST"
+update_env "QDRANT_PORT" "$Q_PORT"
+update_env "QDRANT_SCHEME" "$Q_SCHEME"
 update_env "QDRANT_API_KEY" "$QDRANT_API_KEY"
 update_env "SIDECAR_AUTH_KEY" "$SIDECAR_AUTH_KEY"
 update_env "MILVUS_ENABLED" "$MILVUS_ENABLED"
