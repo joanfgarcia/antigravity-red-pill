@@ -138,6 +138,9 @@ def main() -> None:
 	audit_parser = swarm_sub.add_parser("audit", help="Launch Agent Smith Code Audit")
 	audit_parser.add_argument("--path", default=".", help="Target path for audit")
 
+	backup_parser = subparsers.add_parser("backup", help="Create fast Qdrant snapshots (Pre-Migration Safety)")
+	backup_parser.add_argument("--collections", nargs="+", help="Specific collections to backup")
+
 	soul_parser = subparsers.add_parser("soul", help="B760 Soul Management")
 	soul_sub = soul_parser.add_subparsers(dest="soul_cmd")
 	soul_sub.add_parser("backup", help="Execute total soul backup (Qdrant + Files)")
@@ -198,6 +201,15 @@ def main() -> None:
 
 		if args.command == "seed":
 			seed_project(manager)
+			return
+		elif args.command == "backup":
+			print("\n--- [BÜNKER BACKUP: CREATING LOCAL SNAPSHOTS] ---")
+			results = manager.create_bunker_snapshot(collections=args.collections)
+			for coll, snap in results.items():
+				if snap.startswith("ERROR"):
+					print(f"[FAIL] {coll}: {snap}")
+				else:
+					print(f"[OK] {coll}: {snap}")
 			return
 		elif args.command == "status":
 			print(get_telemetry_report())

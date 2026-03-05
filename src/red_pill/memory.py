@@ -919,3 +919,30 @@ class MemoryManager:
 		except Exception as e:
 			logger.error(f"Failed to get collection stats: {_mask_pii_exception(e)}")
 			return {"status": "error", "error": str(e), "points_count": 0, "segments_count": 0}
+
+	def create_bunker_snapshot(self, collections: Optional[List[str]] = None) -> Dict[str, str]:
+		"""
+		Creates a full backup snapshot of the specified collections.
+		If collections is None, uses all METABOLISM_AUTO_COLLECTIONS.
+		Returns a dict mapping collection names to snapshot names.
+		"""
+		if collections is None:
+			collections = self.cfg.METABOLISM_AUTO_COLLECTIONS
+
+		snapshots_created = {}
+		for coll in collections:
+			coll = coll.strip()
+			if not self.client.collection_exists(coll):
+				logger.warning(f"Cannot create snapshot for non-existent collection: {coll}")
+				continue
+			try:
+				logger.info(f"Creating snapshot for collection: {coll}...")
+				snapshot_desc = self.client.create_snapshot(collection_name=coll)
+				# snapshot_desc is a SnapshotDescription object with 'name', 'creation_time', 'size'
+				snapshots_created[coll] = snapshot_desc.name
+				logger.info(f"Snapshot created successfully: {snapshot_desc.name}")
+			except Exception as e:
+				logger.error(f"Failed to create snapshot for {coll}: {_mask_pii_exception(e)}")
+				snapshots_created[coll] = f"ERROR: {str(e)}"
+
+		return snapshots_created
