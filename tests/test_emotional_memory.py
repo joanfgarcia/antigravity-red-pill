@@ -26,15 +26,35 @@ def test_emotional_erosion(manager, mock_qdrant):
 	cfg.EMOTIONAL_DECAY_MULTIPLIERS["yellow"] = 0.5
 
 	# Mock points with different colors
-	# Orange: 1.0 - (0.1 * 1.5) = 0.85
+	import time
+	now = time.time()
+	one_day = 86400.0
+
+	# Orange (Anxiety): highly salient therefore high initial stability
 	point_orange = MagicMock()
 	point_orange.id = "orange_1"
-	point_orange.payload = {"reinforcement_score": 1.0, "color": "orange", "emotion": "anxiety", "intensity": 1.0, "immune": False}
+	point_orange.payload = {
+		"reinforcement_score": 1.0,
+		"color": "orange",
+		"emotion": "anxiety",
+		"intensity": 1.0,
+		"immune": False,
+		"last_recalled_at": now - one_day, # 1 day ago
+		"stability": 10.0 # High stability
+	}
 
-	# Yellow: 1.0 - (0.1 * 0.5) = 0.95
+	# Yellow (Joy): less salient, lower initial stability
 	point_yellow = MagicMock()
 	point_yellow.id = "yellow_1"
-	point_yellow.payload = {"reinforcement_score": 1.0, "color": "yellow", "emotion": "joy", "intensity": 5.6, "immune": False}
+	point_yellow.payload = {
+		"reinforcement_score": 1.0,
+		"color": "yellow",
+		"emotion": "joy",
+		"intensity": 5.6,
+		"immune": False,
+		"last_recalled_at": now - one_day, # 1 day ago
+		"stability": 2.0 # Low stability
+	}
 
 	manager.client.scroll.side_effect = [([point_orange, point_yellow], None)]
 
@@ -49,12 +69,11 @@ def test_emotional_erosion(manager, mock_qdrant):
 	for op in operations:
 		results[op.set_payload.points[0]] = op.set_payload.payload["reinforcement_score"]
 
-	# New ACE math for anxiety: multiplier ~0.76
-	# 1.0 - (0.1 * 0.764...) ~= 0.92
-	assert round(results["orange_1"], 2) == 0.92
-	# New ACE math for joy: multiplier ~0.37
-	# 1.0 - (0.1 * 0.37...) ~= 0.96
-	assert round(results["yellow_1"], 2) == 0.96
+	# FSRS Math: R = e^(ln(0.9) * t / S)
+	# Orange: t=1, S=10.0 -> e^(ln(0.9) * 0.1) = ~0.99
+	# Yellow: t=1, S=2.0 -> e^(ln(0.9) * 0.5) = ~0.95
+	assert round(results["orange_1"], 2) == 0.99
+	assert round(results["yellow_1"], 2) == 0.95
 
 
 def test_add_memory_with_emotion(manager, mock_qdrant):

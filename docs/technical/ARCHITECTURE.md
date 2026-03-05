@@ -41,7 +41,7 @@ The schema is " Schemaless" (JSON payload).
 1.  **[RESOLVED v4.2.1] Time-To-Live (TTL) Indexing**: Move erosion from strict scan to a timestamp-based index query. Only fetch/update memories where `last_recalled_at < now - METABOLISM_COOLDOWN`.
 2.  **Graph Pruning**: Implement "Synaptic Pruning" where weak associations are severed, not just the nodes themselves.
 3.  **Hebb's Law Implementation**: "Neurons that fire together, wire together." Currently, associations are static. They should be dynamic—created automatically when two memories are retrieved in the same session context for a prolonged period.
-4.  **[PLANNED v5.0] FSRS Algorithm Integration**: Replace the current linear/exponential decay with the **Free Spaced Repetition Scheduler** model. This introduces three key memory variables per engram: `difficulty`, `stability`, and `retrievability`. The formula `retrievability = e^(ln(0.9) × interval/stability)` produces biologically-accurate decay curves. High-stability memories (frequently recalled, high importance) would survive months of inactivity — directly solving the "Vacation Problem" (session-relative decay).
+4.  **[IMPLEMENTED v6.0-PREP] FSRS Algorithm Integration**: Replaced heuristic linear/exponential decay with the **Free Spaced Repetition Scheduler** (FSRS) model. Each engram now manages its own `difficulty` and `stability` parameters. The formula $R = e^{\ln(0.9) \cdot t/S}$ produces biologically-accurate decay curves, ensuring high-stability memories (frequently recalled, high importance) survive months of inactivity — solving the "Vacation Problem" (session-relative decay).
 
 ## 5. Scientific Foundations & Attribution
 
@@ -110,8 +110,8 @@ The system has evolved from a single-user prototype into a **Cognitive Swarm arc
 ### 11.1 Windows Support (ARCH-005 Fully Addressed)
 As of v5.6.4, the protocol relies on the cross-platform `filelock` library for metabolism state locking. The previous Unix-only conditional approach (`fcntl.flock`) has been removed. Running multiple concurrent `red-pill` sidecars or processes on Windows is now formally supported with full concurrency safety.
 
-### 11.2 FSRS Cognitive Model Integration (Aspirational)
-While Section 5 describes the FSRS algorithm (retrievability = e^(ln(0.9) × t/S)) with mathematical rigor, this represents the **aspirational v6.0 target model**. The current implementation (v5.6.x) utilizes a simplified, single-variable scalar approximation (`reinforcement_score`) combined with a linear or exponential decay rate. The distinct parameters for memory 'difficulty' and 'stability' are not yet fully operationalized in the vector payload.
+### 11.2 FSRS Cognitive Model Integration
+As of **v6.0-PREP**, the FSRS algorithm ($R = e^{\ln(0.9) \cdot t/S}$) is fully operationalized within the memory payload. Each engram maintains its own `stability` and `difficulty` scalars, which are seeded from emotional intensity and updated through successful recall events. The `reinforcement_score` is now a derived value representing the current Retrievability ($R$), enabling a zero-loss transition for legacy UI components while providing high-fidelity cognitive modeling.
 
 ---
 
@@ -157,5 +157,5 @@ The audit correctly identified that cluster governance was unspecified. The form
 | Milestone | Deliverable |
 | :--- | :--- |
 | **v5.6.0** | TLS enforcement on remote Milvus connections, Agentic HiveGuard review, Lazy Metabolism, N-Hop Synaptic Depth, Identity Masking |
-| **v5.7.0** | Per-tenant namespace isolation in shared clusters |
+| **v6.0.0-PREP** | **[CORE] FSRS Integration**, Strict Pydantic Payload Schema, Bünker Snapshots (`red-pill backup`), Raw Mode maintenance |
 | **v6.0.0** | Cryptographically signed experience packets, ACE-CAL Community Mode (opt-in collective calibration) |

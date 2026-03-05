@@ -100,9 +100,18 @@ def test_erosion_cycle(manager, mock_qdrant):
 	config.DECAY_STRATEGY = "linear"
 	config.EROSION_RATE = 0.1
 
+	import time
+	now = time.time()
+	one_day = 86400.0
+
 	# Mock scroll result: one normal, one immune
 	mock_hit = MagicMock()
-	mock_hit.payload = {"reinforcement_score": 0.5, "immune": False}
+	mock_hit.payload = {
+		"reinforcement_score": 0.5,
+		"immune": False,
+		"last_recalled_at": now - one_day, # 1 day ago
+		"stability": 2.0 # Low stability
+	}
 	mock_hit.id = str(uuid.uuid4())
 	mock_hit.vector = [0.1] * config.VECTOR_SIZE
 
@@ -123,7 +132,10 @@ def test_erosion_cycle(manager, mock_qdrant):
 	assert len(operations) == 1
 	op = operations[0]
 	assert op.set_payload.points == [mock_hit.id]
-	assert op.set_payload.payload["reinforcement_score"] == 0.4
+
+	# FSRS Math: R = e^(ln(0.9) * 1.0 / 2.0) = ~0.95
+	# new_score = round(0.5 * 0.95, 2) = 0.47
+	assert op.set_payload.payload["reinforcement_score"] == 0.47
 
 
 def test_dormancy_filter(manager, mock_qdrant):

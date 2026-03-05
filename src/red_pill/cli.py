@@ -1,9 +1,11 @@
 import argparse
+import asyncio
 import logging
 import os
 import signal
 import sys
 import time
+from typing import List
 
 import yaml  # type: ignore
 
@@ -12,6 +14,7 @@ from red_pill.memory import MemoryManager
 from red_pill.seed import seed_project
 from red_pill.soul import SoulManager
 from red_pill.swarm.agents.smith import SmithMinion
+from red_pill.swarm.base import SwarmResult
 from red_pill.swarm.orchestrator import GruOrchestrator
 from red_pill.telemetry import get_telemetry_report
 from red_pill.utils.tone_analyzer import get_current_sync_state
@@ -217,13 +220,12 @@ def main() -> None:
 			return
 		elif args.command == "swarm":
 			if args.swarm_cmd == "audit":
-				import asyncio
-
 				gru = GruOrchestrator()
 				smith = SmithMinion()
 				print(f"--- [DEPLOING SWARM: AGENT {smith.name.upper()}] ---")
-				results = asyncio.run(gru.deploy_swarm("audit", [smith], path=args.path))
-				for res in results:
+				# Explicitly type results for Mypy
+				swarm_results: List[SwarmResult] = asyncio.run(gru.deploy_swarm("audit", [smith], path=args.path))
+				for res in swarm_results:
 					if res.status == "success":
 						print(f"\nResultados de {res.minion_id[:8]}:")
 						print(f"- Score de Seguridad: {res.result['security_score']}/100")

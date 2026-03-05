@@ -1,5 +1,6 @@
 import json
 import logging
+import math
 from typing import Dict, List, Tuple
 
 import red_pill.config as cfg
@@ -124,3 +125,58 @@ def get_emotional_stability_multiplier(emotions: List[str], intensity: float = 1
 	# 0.1 means 10x slower decay (high stability)
 	# 1.0 means normal decay
 	return max(0.1, 1.0 - (stability * 0.9))
+
+
+def calculate_fsrs_retrievability(stability: float, time_since_last_recall: float) -> float:
+	"""
+	Calculates the probability of recall R.
+	Formula: R = e^(ln(0.9) * t / S)
+	Where t is time in days, S is stability in days.
+	"""
+	if stability <= 0.0:
+		return 0.0
+
+	# Convert time (seconds) to days
+	days_passed = time_since_last_recall / 86400.0
+	if days_passed <= 0.0:
+		return 1.0
+
+	return math.exp(math.log(0.9) * (days_passed / stability))
+
+def calculate_fsrs_new_stability(current_stability: float, difficulty: float, retrievability: float, is_success: bool = True) -> float:
+	"""
+	Calculates new stability S' after a recall event.
+	Based on the Free Spaced Repetition Scheduler algorithm structure.
+	"""
+	if not is_success:
+		# Lapses dramatically cut stability
+		return max(0.1, current_stability * 0.3)
+
+	if current_stability <= 0.0:
+		return 1.0 # Initial cold start
+
+	# As R decreases (memory was hard to recall but successful), the stability gain increases.
+	# As difficulty increases, the stability gain decreases.
+	gain = current_stability * math.exp(0.5 * (1 - retrievability)) * (11.0 - difficulty) / 10.0
+
+	return current_stability + gain
+
+def calculate_fsrs_initial_parameters(emotions: List[str], intensity: float) -> Tuple[float, float]:
+	"""
+	Converts emotional valence/arousal into FSRS initial parameters.
+	Returns (Difficulty [1-10], Stability [days])
+	"""
+	valence, arousal = get_affect_coordinates(emotions)
+
+	# High arousal / extreme valence = highly salient = low difficulty, high initial stability
+	effective_arousal = min(arousal * (intensity / 5.0), 1.0)
+	valence_stability = abs(valence) if valence < 0 else 0.5 * valence
+	salience = (0.7 * effective_arousal) + (0.3 * valence_stability)
+
+	# Difficulty: [1, 10], highly salient = 2.0, neutral = 8.0
+	initial_difficulty = max(1.0, 10.0 - (salience * 8.0))
+
+	# Stability: [0.1, 30.0] days. Highly salient = 14 days, neutral = 1 day
+	initial_stability = max(0.5, 1.0 + (salience * 13.0))
+
+	return initial_difficulty, initial_stability

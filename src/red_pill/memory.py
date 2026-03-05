@@ -19,7 +19,12 @@ except ImportError:
 import red_pill.config as cfg
 from red_pill.hive import HiveMind
 from red_pill.schemas import CreateEngramRequest, EngramPayload
-from red_pill.utils.affect import get_emotional_stability_multiplier
+from red_pill.utils.affect import (
+	calculate_fsrs_initial_parameters,
+	calculate_fsrs_new_stability,
+	calculate_fsrs_retrievability,
+	get_emotional_stability_multiplier,
+)
 from red_pill.utils.emotion import get_chroma_for_emotion, get_emotion, get_emotions
 from red_pill.utils.fragmentation import synaptic_split
 from red_pill.utils.pulse import record_interaction
@@ -281,6 +286,10 @@ class MemoryManager:
 			if force_immune:
 				_initial_score = self.cfg.IMMUNITY_THRESHOLD
 
+			# Phase O.5: FSRS Initialization
+			emotions = [e["label"] for e in emotional_profile] if emotional_profile else [validated_request.emotion]
+			fsrs_diff, fsrs_stab = calculate_fsrs_initial_parameters(emotions, validated_request.intensity)
+
 			payload = {
 				"content": text,
 				"importance": importance,
@@ -292,6 +301,8 @@ class MemoryManager:
 				"emotion": validated_request.emotion,
 				"intensity": validated_request.intensity,
 				"schema_version": self.cfg.CURRENT_SCHEMA_VERSION,
+				"difficulty": fsrs_diff,
+				"stability": fsrs_stab,
 				**clean_metadata,
 			}
 
@@ -542,12 +553,33 @@ class MemoryManager:
 				if p.payload is None:
 					continue
 
-				score = float(p.payload.get("reinforcement_score", 1.0))
-				p_id_str = str(p.id)
-				inc = increments.get(p_id_str, 0.0)
+				# Ensure we have FSRS fields ready
+				p.payload = self._parse_payload(p.payload, strict=True)
 
-				new_score = min(score + inc, self.cfg.IMMUNITY_THRESHOLD)
+				score = float(p.payload.get("reinforcement_score", 1.0))
+				stability = float(p.payload.get("stability", 1.0))
+				difficulty = float(p.payload.get("difficulty", 5.0))
+				last_recalled = float(p.payload.get("last_recalled_at", time.time()))
+
+				p_id_str = str(p.id)
+
+				# We use the propagation increment as a proxy for the 'success' weight of the recall event.
+				inc = increments.get(p_id_str, 0.0)
+				time_passed = time.time() - last_recalled
+
+				# 1. Calculate retrievability prior to this reinforcement
+				retrievability = calculate_fsrs_retrievability(stability, time_passed)
+
+				# 2. Calculate newly boosted FSRS stability (a direct hit is a success)
+				is_success = inc >= (self.cfg.REINFORCEMENT_INCREMENT * 0.5)
+				new_stability = calculate_fsrs_new_stability(stability, difficulty, retrievability, is_success=is_success)
+
+				# 3. Translate stability back into the legacy reinforcement_score scaler for backwards compatibility with UI/immunity
+				# A stability of ~30 days translates to 10.0 (immunity)
+				new_score = min(max(new_stability / 3.0, score + inc), self.cfg.IMMUNITY_THRESHOLD)
+
 				p.payload["reinforcement_score"] = round(new_score, 2)
+				p.payload["stability"] = round(new_stability, 3)
 				p.payload["last_recalled_at"] = time.time()
 
 				if p.payload["reinforcement_score"] >= self.cfg.IMMUNITY_THRESHOLD:
@@ -556,6 +588,7 @@ class MemoryManager:
 				updated_points.append(PointUpdate(id=p.id, payload=p.payload))
 				focused_payload = {
 					"reinforcement_score": p.payload["reinforcement_score"],
+					"stability": p.payload["stability"],
 					"last_recalled_at": p.payload["last_recalled_at"],
 				}
 				if "immune" in p.payload:
@@ -609,17 +642,23 @@ class MemoryManager:
 			hit.payload = self._parse_payload(hit.payload, strict=strict)
 
 			if self.cfg.METABOLISM_STRATEGY == "LAZY":
-				original_score = float(hit.payload.get("reinforcement_score", 1.0))
-				new_score = self._calculate_lazy_decay(hit.payload)
+				score = float(hit.payload.get("reinforcement_score", 1.0))
+				stability = float(hit.payload.get("stability", 1.0))
+				last_recalled = float(hit.payload.get("last_recalled_at", time.time()))
 
-				if new_score <= 0:
+				# Phase O.6: FSRS Lazy Erosion
+				time_passed = time.time() - last_recalled
+				retrievability = calculate_fsrs_retrievability(stability, time_passed)
+				new_score = round(score * retrievability, 2)
+
+				if new_score <= 0.05:
 					try:
 						self.client.delete(collection_name=collection, points_selector=models.PointIdsList(points=[hit.id]))
 					except Exception:
 						pass
 					continue
 
-				if new_score < original_score:
+				if new_score < score:
 					hit.payload["reinforcement_score"] = new_score
 					update_operations.append(
 						models.SetPayloadOperation(set_payload=models.SetPayload(payload={"reinforcement_score": new_score}, points=[hit.id]))
@@ -794,20 +833,28 @@ class MemoryManager:
 			for hit in response[0]:
 				if hit.payload is None or hit.payload.get("immune"):
 					continue
+
+				# Sanitize check - ensure we have FSRS fields (Fallback if migration wasn't run)
+				hit.payload = self._parse_payload(hit.payload, strict=True)
+
 				score = float(hit.payload.get("reinforcement_score", 1.0))
-				intensity = float(hit.payload.get("intensity", 1.0))
-				ep = hit.payload.get("emotional_profile", [])
-				emotions = [e["label"] for e in ep] if ep else [str(hit.payload.get("emotion", self.cfg.DEFAULT_EMOTION))]
-				multiplier = get_emotional_stability_multiplier(emotions, intensity)
-				effective_rate = (rate if rate is not None else self.cfg.EROSION_RATE) * multiplier
-				new_score = self._calculate_decay(score, effective_rate)
-				if new_score <= 0:
+				stability = float(hit.payload.get("stability", 1.0)) # Fallback
+				last_recalled = float(hit.payload.get("last_recalled_at", time.time()))
+
+				time_passed = time.time() - last_recalled
+
+				# Phase O.6: FSRS Active Erosion
+				# Calculate raw objective retrievability R on [0, 1] curve
+				retrievability = calculate_fsrs_retrievability(stability, time_passed)
+
+				# The reinforcement_score becomes a proxy for R scaled to [0, 10]
+				new_score = round(score * retrievability, 2)
+
+				if new_score <= 0.05: # Cleaned up death threshold
 					points_to_delete.append(str(hit.id))
 					deleted_count += 1
 				else:
 					eroded_count += 1
-					hit.payload["reinforcement_score"] = new_score
-					hit.payload["last_recalled_at"] = time.time()
 					update_operations.append(
 						models.SetPayloadOperation(
 							set_payload=models.SetPayload(
@@ -949,8 +996,12 @@ class MemoryManager:
 				logger.info(f"Creating snapshot for collection: {coll}...")
 				snapshot_desc = self.client.create_snapshot(collection_name=coll)
 				# snapshot_desc is a SnapshotDescription object with 'name', 'creation_time', 'size'
-				snapshots_created[coll] = snapshot_desc.name
-				logger.info(f"Snapshot created successfully: {snapshot_desc.name}")
+				if snapshot_desc: # Add truthiness check
+					snapshots_created[coll] = snapshot_desc.name
+					logger.info(f"Snapshot created successfully: {snapshot_desc.name}")
+				else:
+					logger.error(f"Snapshot creation returned an empty descriptor for {coll}")
+					snapshots_created[coll] = "ERROR: Empty snapshot descriptor"
 			except Exception as e:
 				logger.error(f"Failed to create snapshot for {coll}: {_mask_pii_exception(e)}")
 				snapshots_created[coll] = f"ERROR: {str(e)}"
