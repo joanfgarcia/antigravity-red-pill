@@ -174,10 +174,10 @@ class TestCheckEncryption:
 
 
 class TestDaemonStart:
-	def test_removes_existing_socket_path(self, tmp_path):
+	def test_removes_existing_socket_path(self, short_socket_dir):
 		"""Line 101: socket file exists → os.remove before bind."""
 		import os
-		sock_path = str(tmp_path / "test.sock")
+		sock_path = str(short_socket_dir / "test.sock")
 		open(sock_path, "w").close()
 
 		d = MemoryDaemon()
@@ -197,9 +197,9 @@ class TestDaemonStart:
 								d.start()
 		assert not os.path.exists(sock_path)
 
-	def test_startup_failure_calls_stop(self, tmp_path):
+	def test_startup_failure_calls_stop(self, short_socket_dir):
 		"""Lines 119-121: _load_model raises → stop() called."""
-		sock_path = str(tmp_path / "test2.sock")
+		sock_path = str(short_socket_dir / "test2.sock")
 		d = MemoryDaemon()
 
 		def fake_stop(*args):
@@ -299,9 +299,9 @@ class TestDaemonStop:
 		d.server.close.side_effect = OSError("already closed")
 		d.stop()  # Must not raise
 
-	def test_stop_removes_socket_file(self, tmp_path):
+	def test_stop_removes_socket_file(self, short_socket_dir):
 		"""Lines 198-202: socket path exists → remove."""
-		sock_path = str(tmp_path / "test.sock")
+		sock_path = str(short_socket_dir / "test.sock")
 		open(sock_path, "w").close()
 
 		d = MemoryDaemon()
@@ -314,9 +314,9 @@ class TestDaemonStop:
 		import os
 		assert not os.path.exists(sock_path)
 
-	def test_stop_remove_exception_handled(self, tmp_path):
+	def test_stop_remove_exception_handled(self, short_socket_dir):
 		"""Lines 201-202: os.remove raises → swallowed."""
-		sock_path = str(tmp_path / "test.sock")
+		sock_path = str(short_socket_dir / "test.sock")
 		open(sock_path, "w").close()
 
 		d = MemoryDaemon()
