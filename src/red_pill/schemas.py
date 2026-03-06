@@ -39,6 +39,7 @@ class CreateEngramRequest(BaseModel):
 	emotion: ValidEmotion = Field(default="neutral")
 	intensity: float = Field(default=1.0, ge=0.0, le=10.0)
 	metadata: Dict[str, Union[str, int, float, bool, List[Any]]] = Field(default_factory=dict)
+	linguistic_markers: List[str] = Field(default_factory=list)
 
 	@field_validator("content")
 	@classmethod
@@ -126,10 +127,14 @@ class EngramPayload(BaseModel):
 	immune: bool = False
 	created_at: float
 	last_recalled_at: float
-	schema_version: str
+	schema_version: Union[str, int]
 
 	# FSRS Cognitive Model Dimensions (v6.0 PREP)
 	difficulty: float = 0.0
 	stability: float = 0.0
+
+	# Conversational DNA (v6.0 Claude-Pistis)
+	# Captures shared aliases, nicknames, and unique linguistic triggers.
+	linguistic_markers: List[str] = Field(default_factory=list)
 
 	model_config = {"extra": "allow"}

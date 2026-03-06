@@ -4,6 +4,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# SEC-F05: Disable CUDA by default for lightweight BERT models to prevent
+# initialization hangs on systems with mismatched drivers (e.g. RTX 50 series).
+if "CUDA_VISIBLE_DEVICES" not in os.environ:
+	os.environ["CUDA_VISIBLE_DEVICES"] = ""
+
 # QDRANT
 QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))

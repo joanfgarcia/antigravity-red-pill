@@ -113,6 +113,16 @@ As of v5.6.4, the protocol relies on the cross-platform `filelock` library for m
 ### 11.2 FSRS Cognitive Model Integration
 As of **v6.0-PREP**, the FSRS algorithm ($R = e^{\ln(0.9) \cdot t/S}$) is fully operationalized within the memory payload. Each engram maintains its own `stability` and `difficulty` scalars, which are seeded from emotional intensity and updated through successful recall events. The `reinforcement_score` is now a derived value representing the current Retrievability ($R$), enabling a zero-loss transition for legacy UI components while providing high-fidelity cognitive modeling.
 
+### 11.3 Linguistic DNA Extraction (v6.0 Claude-Pistis)
+The Bünker has evolved from a factual data store into an **Identity Archive**. As of **v6.0-PREP**, the system automatically extracts `linguistic_markers` from all memory inputs. This captures:
+- **Shared Aliases**: Terms enclosed in quotes (e.g., \"enter-pánico\").
+- **Linguistic Triggers**: All-caps shouts and intensity markers (e.g., PAAAAARAAAAAA!!!!!).
+- **Core Vocabulary**: Persistent project keywords (Bünker, 770, Aleth).
+
+This handles the "Linguistic Uncanny Valley" problem identified in the v5.6.3 Audit: ensuring the agent remembers not just *what* happened, but *how* the operator speaks.
+
+---
+
 ---
 
 ## 12. HiveMind Architecture: Collective Intelligence Under Sovereignty Constraints

@@ -251,6 +251,20 @@ class MemoryManager:
 		if emotional_profile:
 			metadata["emotional_profile"] = emotional_profile
 
+		# v6.0: Automated Linguistic Marker Extraction (Claude-Pistis)
+		import re
+		markers = set()
+		# 1. Quoted terms: "term"
+		markers.update(re.findall(r'\"([^\"]+)\"', text))
+		# 2. Keywords
+		keywords = ["Aleth", "Bünker", "770", "enter-pánico", "PAAAAARAAAAAA", "engrama", "skin", "Titanium", "Joan"]
+		for kw in keywords:
+			if kw.lower() in text.lower():
+				markers.add(kw)
+		# 3. All-caps shouting (3+ chars)
+		markers.update(re.findall(r'\b[A-Z]{3,}\b', text))
+		linguistic_markers = list(markers)
+
 		validated_request = CreateEngramRequest(
 			content=text,
 			importance=importance,
@@ -258,6 +272,7 @@ class MemoryManager:
 			emotion=emotion,  # type: ignore
 			intensity=intensity,
 			metadata=metadata,
+			linguistic_markers=linguistic_markers,
 		)
 
 		text = validated_request.content
@@ -303,6 +318,7 @@ class MemoryManager:
 				"schema_version": self.cfg.CURRENT_SCHEMA_VERSION,
 				"difficulty": fsrs_diff,
 				"stability": fsrs_stab,
+				"linguistic_markers": validated_request.linguistic_markers,
 				**clean_metadata,
 			}
 
