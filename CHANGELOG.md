@@ -1,13 +1,5 @@
 # Changelog: Red Pill Protocol
 
-## [6.0.0-PREP] - 2026-03-05
-### 🧠 FSRS Logic & Strict Schema (Phase O Complete)
-- **[FEAT] FSRS Memory Decay**: Migrated heuristic decay to the biologically-grounded **Free Spaced Repetition Scheduler (FSRS)** formulation ($R = e^{\ln(0.9) \cdot t/S}$), enabling human-like memory metabolism.
-- **[FEAT] Dynamic Stability Hub**: Implemented non-linear stability ($S$) growth and difficulty ($D$) seeding based on emotional Chroma (Valence/Arousal), moving the system from a "score" to a "memory model".
-- **[FEAT] Strict Gateway Enforcement**: Introduced the `EngramPayload` Pydantic schema at the Bünker level, transforming schemaless JSON blobs into strict, versioned contracts.
-- **[FEAT] Maintenance Escape Hatch**: Added `strict=False` mode and the `--raw` CLI flag to bypass validation for surgical repairs, ensuring the system can never be locked out by its own schema.
-- **[FEAT] Instant Bünker Snapshots**: Implemented the `red-pill backup` command for creating fast, in-memory Qdrant snapshots before critical migrations.
-- **[QA] 100% Math Verification**: Calibrated the entire test suite (553/553 green) to ensure FSRS curves and Pydantic gates are functioning with absolute precision.
 
 ## [5.6.3] - 2026-03-05
 ### 🌊 Sovereign Purity & Audit Remediation
