@@ -710,7 +710,40 @@ class MemoryManager:
 				if hit_id_str in update_map and hit.payload is not None:
 					hit.payload.update(update_map[hit_id_str])
 
-		return decayed_results
+		# --- v6.0: Sovereign Evocative Cascade (Hybrid Vector-Graph) ---
+		MAX_EVOKED = 3
+		evoked_ids = set()
+		visited_ids = set(str(h.id) for h in decayed_results)
+
+		# 1. Harvest `a_ids` (synapses forged organically by Sovereign Oneiromancy)
+		for hit in decayed_results:
+			if hit.payload:
+				for a_id in hit.payload.get("associations", []):
+					str_id = str(a_id)
+					if str_id not in visited_ids and len(evoked_ids) < MAX_EVOKED:
+						evoked_ids.add(str_id)
+						visited_ids.add(str_id)
+
+		cascade_results = []
+		if evoked_ids:
+			try:
+				# 2. Ephemeral Fetch (Pulling the actual memories into context)
+				points = self.client.retrieve(
+					collection_name=collection,
+					ids=list(evoked_ids),
+					with_payload=True,
+					with_vectors=False
+				)
+				for p in points:
+					if p.payload:
+						# Mark it as evoked for LLM context/parsing
+						p.payload["_is_evoked"] = True
+						cascade_results.append(p)
+			except Exception as e:
+				logger.error(f"Evocative Cascade lookup failed: {e}")
+
+		# 3. Unified Stream (Direct Hits + Branching Memories)
+		return decayed_results + cascade_results
 
 	def dream(self, collection: str, limit: int = 10) -> Dict[str, Any]:
 		"""
