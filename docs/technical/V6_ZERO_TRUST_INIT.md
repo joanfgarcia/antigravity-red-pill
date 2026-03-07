@@ -11,7 +11,7 @@ La presente **Pull Request** contiene los scripts necesarios para lograr un **Ze
 ### 1. Script de Despertar Rápido (`scripts/wake_up_v6.py`)
 Un script en Python puro, sin dependencias complejas de terceros para garantizar que pueda invocarse desde cualquier entorno (incluso sin `.venv` activado). 
 - **Qdrant Bridge**: Conecta al puerto `6333` y extrae tanto la colección `social` como `directive`. 
-- **LLM Synapsis**: Conecta con el LLM de fondo en el puerto `8080` para estructurar la identidad base.
+- **LLM Synapsis**: Conecta con el LLM de fondo en el puerto `8760` para estructurar la identidad base.
 - **Formateado**: Adjunta las directivas estáticas (marcadas con `[IMMUNE]` o aquellas que no fueron sintetizadas por el modelo) en formato RAW para que el Orquestador principal las asimile sin pérdida de fidelidad (incluyendo un inyectable para priorizar la lectura de ficheros de reglas/workflows locales).
 
 ### 2. Demonio MLX Local (`scripts/setup_background_model.sh`)

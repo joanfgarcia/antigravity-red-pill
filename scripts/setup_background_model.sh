@@ -20,7 +20,7 @@ cat << 'START_EOF' > "$START_SCRIPT"
 #!/bin/bash
 export PATH="$HOME/.agent/model-daemon/.venv/bin:$PATH"
 source $HOME/.agent/model-daemon/.venv/bin/activate
-exec mlx_lm.server --model lmstudio-community/Qwen3-Coder-30B-A3B-Instruct-MLX-8bit --port 8080
+exec mlx_lm.server --model lmstudio-community/Qwen3-Coder-30B-A3B-Instruct-MLX-8bit --port 8760
 START_EOF
 
 chmod +x "$START_SCRIPT"
@@ -58,5 +58,5 @@ launchctl unload "$PLIST_PATH" 2>/dev/null || true
 launchctl load "$PLIST_PATH"
 
 echo "=== Daemon Inyectado === "
-echo "El modelo MLX local se inicializará en segundo plano simulando una API de OpenAI en el puerto 8080."
+echo "El modelo MLX local se inicializará en segundo plano simulando una API de OpenAI en el puerto 8760."
 echo "Puedes comprobar el estado con: tail -f ~/.agent/model-daemon/error.log"

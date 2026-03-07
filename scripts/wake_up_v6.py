@@ -5,7 +5,7 @@ import urllib.request
 import urllib.error
 
 QDRANT_URL = "http://localhost:6333"
-MLX_LM_URL = "http://localhost:8080/v1/chat/completions"
+MLX_LM_URL = "http://localhost:8760/v1/chat/completions"
 
 def check_service(url, name):
     try:
@@ -88,7 +88,7 @@ def main():
         print("CRITICAL: Qdrant is down. Execute launchctl or podman to start it.")
         sys.exit(1)
         
-    if not check_service("http://localhost:8080/v1/models", "Local MLX LLM Daemon"):
+    if not check_service("http://localhost:8760/v1/models", "Local MLX LLM Daemon"):
         print("WARN: Background LLM is down. Attempting raw initialization.")
     
     social = query_qdrant("social_memories", "Active Skin")
