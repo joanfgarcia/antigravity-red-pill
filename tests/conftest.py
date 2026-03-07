@@ -12,6 +12,11 @@ from unittest.mock import MagicMock
 import pytest
 from pathlib import Path
 import tempfile
+@pytest.fixture
+def short_socket_dir():
+	"""Provides a short temporary directory path suitable for macOS AF_UNIX sockets (<104 chars)."""
+	with tempfile.TemporaryDirectory(prefix="rpm_") as d:
+		yield Path(d)
 
 @pytest.fixture
 def short_socket_dir():
