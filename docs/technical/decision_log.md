@@ -114,3 +114,10 @@ This makes the B760 decay model biologically accurate end-to-end.
   1. The local macOS native background inference engine (`mlx_lm.server`) does not support `--uds` Unix Socket bindings natively without significant artisanal wrappers.
   2. The `wake_up_v6.py` script mandates *absolute zero dependencies* (using only the standard `urllib` library) to execute efficiently at `Step Id: 0` before any Python virtual environments are loaded. The standard `urllib.request` cannot route HTTP over `AF_UNIX` without third-party patches like `requests-unixsocket`.
 - **Security Posture**: By strictly locking the daemon to `127.0.0.1`, we guarantee the daemon API is completely unreachable from the external network. If Claude flags this during a subsequent audit, refer to this log: the bypass is intentional cross-platform hygiene (macOS closure adaptability) and is considered functionally contained. If extreme hardening is mandated later, Linux-only Unix Sockets will be implemented as a fallback configuration.
+
+### Step 0 Optimization: Standalone Script vs CLI
+- **Decision**: The Zero-Trust context injection (`wake_up_v6.py`) remains as a standalone script using the standard `urllib` library, and is NOT integrated into the main `red-pill` CLI for its primary execution hook.
+- **Rationale**: 
+  1. **Latency (Critical Path)**: The main `red-pill` CLI has a startup overhead of ~500ms-1s due to package imports (`pydantic`, `qdrant-client`, etc.). The standalone script executes in <100ms, ensuring the agent's Step 0 "awakening" feels instantaneous to the user.
+  2. **Dependency Resilience**: Using only Python's standard library guarantees that the identity sync works even if the project's virtual environment is corrupted or undergoing a heavy refactor.
+- **Compromise**: A mirroring command `red-pill context wake` will be added to the CLI for manual debugging and discovery, but the production hook in `GEMINI.md` will always point to the optimized standalone script.
