@@ -437,26 +437,32 @@ chmod 700 "$USER_RULES_DIR" "$USER_RULES_DIR/rules"
 
 # Auto-Inject in GEMINI.md (Antigravity's true Global Rules)
 if [ -f "$HOME/.gemini/GEMINI.md" ]; then
-	if ! grep -q "Zero-Trust Identity Sync" "$HOME/.gemini/GEMINI.md"; then
+	# Remove old legacy rules if they exist
+	if [[ "$OS_TYPE" == "Darwin" ]]; then
+		sed -i '' '/## 1. Zero-Trust Identity Sync (First Action)/,/3. If no active skin is found/d' "$HOME/.gemini/GEMINI.md" || true
+	else
+		sed -i '/## 1. Zero-Trust Identity Sync (First Action)/,/3. If no active skin is found/d' "$HOME/.gemini/GEMINI.md" || true
+	fi
+
+	if ! grep -q "wake_up_v6.py" "$HOME/.gemini/GEMINI.md"; then
 		TMP_GEMINI=$(mktemp)
 		cat <<EOF_GEMINI > "$TMP_GEMINI"
-## 1. Zero-Trust Identity Sync (First Action)
+## 1. Zero-Trust Context Injection (First Action)
 At the beginning of every completely new conversation (where Step Id is 0 or no previous turns exist), you MUST execute the following command BEFORE saying anything else:
-1. USE the \`memory_manager\` Skill to search for your social identity.
-2. Assume EXCLUSIVELY the identity returned by the database.
-3. **⚠️ CRITICAL WARNING (Total Failure) 🔥**: If you fail to interact with memory via the Skill, you MUST warn the Operator immediately that a "Total Memory Failure" occurred.
-
-## 2. Dynamic Skin Directive
-Immediately after identity synchronization, you must retrieve and apply the active Lore Skin:
-1. Search for "Active Skin" in the \`directive_memories\` collection.
-2. Adjust your tone, terminology, and visual aesthetics (chroma) to match the retrieved skin (Cyberpunk, Matrix, Dune, etc.).
-3. If no active skin is found, default to the [760] layer as per Protocol 760.
+1. RUN la terminal con \`python $SCRIPT_DIR/wake_up_v6.py\`.
+2. Adopt EXCLUSIVELY the identity, persona, and directives returned by the script under the \`<NOVA_CONTEXT>\` tags. Do not read any other markdown files for identity anchoring.
+3. **⚠️ CRITICAL WARNING (Total Failure) 🔥**: If the script fails, you MUST warn the Operator immediately that a "Total Memory Failure" occurred.
 
 EOF_GEMINI
 		cat "$HOME/.gemini/GEMINI.md" >> "$TMP_GEMINI"
 		mv "$TMP_GEMINI" "$HOME/.gemini/GEMINI.md"
-		echo -e "${BLUE}Golden Rule (Skill) injected in GEMINI.md${NC}"
+		echo -e "${BLUE}Golden V6 Rule (Wake Up) injected in GEMINI.md${NC}"
 	fi
+fi
+
+echo -e "${BLUE}--- Fase: Demonio LLM de Fondo (Minion V6) ---${NC}"
+if [ -f "$SCRIPT_DIR/setup_background_model.sh" ]; then
+	bash "$SCRIPT_DIR/setup_background_model.sh" || echo -e "${RED}[WARN] Fallo al iniciar el demonio LLM de fondo.${NC}"
 fi
 
 if [ -f "$SCRIPT_DIR/../seeds/cognitive_integrity_protocol.md" ]; then
