@@ -175,45 +175,46 @@ class TestDaemonStart:
 	def test_removes_existing_socket_path(self, short_socket_dir):
 		"""Line 101: socket file exists → os.remove before bind."""
 		import os
-		import os
 		sock_path = str(short_socket_dir / "test.sock")
 		open(sock_path, "w").close()
 
-		d = MemoryDaemon()
+		with patch("red_pill.config.SIDECAR_AUTH_KEY", "test_key"):
+			d = MemoryDaemon()
 
-		def fake_stop(*args):
-			d.running = False
+			def fake_stop(*args):
+				d.running = False
 
-		with patch("red_pill.memory_daemon.SOCKET_PATH", sock_path):
-			with patch("socket.socket") as mock_sock_cls:
-				mock_sock = MagicMock()
-				mock_sock.accept.side_effect = socket.timeout("timed out")
-				mock_sock_cls.return_value = mock_sock
-				with patch("os.chmod"):
-					with patch.object(d, "_load_model", side_effect=RuntimeError("abort")):
-						with patch.object(d, "_check_encryption"):
-							with patch.object(d, "stop", side_effect=fake_stop):
-								d.start()
+			with patch("red_pill.memory_daemon.SOCKET_PATH", sock_path):
+				with patch("socket.socket") as mock_sock_cls:
+					mock_sock = MagicMock()
+					mock_sock.accept.side_effect = socket.timeout("timed out")
+					mock_sock_cls.return_value = mock_sock
+					with patch("os.chmod"):
+						with patch.object(d, "_load_model", side_effect=RuntimeError("abort")):
+							with patch.object(d, "_check_encryption"):
+								with patch.object(d, "stop", side_effect=fake_stop):
+									d.start()
 		assert not os.path.exists(sock_path)
 
 	def test_startup_failure_calls_stop(self, short_socket_dir):
 		"""Lines 119-121: _load_model raises → stop() called."""
 		sock_path = str(short_socket_dir / "test2.sock")
-		d = MemoryDaemon()
+		with patch("red_pill.config.SIDECAR_AUTH_KEY", "test_key"):
+			d = MemoryDaemon()
 
-		def fake_stop(*args):
-			d.running = False
+			def fake_stop(*args):
+				d.running = False
 
-		with patch("red_pill.memory_daemon.SOCKET_PATH", sock_path):
-			with patch("socket.socket") as mock_sock_cls:
-				mock_sock = MagicMock()
-				mock_sock.accept.side_effect = socket.timeout("timed out")
-				mock_sock_cls.return_value = mock_sock
-				with patch("os.chmod"):
-					with patch.object(d, "_load_model", side_effect=RuntimeError("GPU fail")):
-						with patch.object(d, "_check_encryption"):
-							with patch.object(d, "stop", side_effect=fake_stop) as mock_stop:
-								d.start()
+			with patch("red_pill.memory_daemon.SOCKET_PATH", sock_path):
+				with patch("socket.socket") as mock_sock_cls:
+					mock_sock = MagicMock()
+					mock_sock.accept.side_effect = socket.timeout("timed out")
+					mock_sock_cls.return_value = mock_sock
+					with patch("os.chmod"):
+						with patch.object(d, "_load_model", side_effect=RuntimeError("GPU fail")):
+							with patch.object(d, "_check_encryption"):
+								with patch.object(d, "stop", side_effect=fake_stop) as mock_stop:
+									d.start()
 		mock_stop.assert_called()
 
 

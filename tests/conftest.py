@@ -18,12 +18,6 @@ def short_socket_dir():
 	with tempfile.TemporaryDirectory(prefix="rpm_") as d:
 		yield Path(d)
 
-@pytest.fixture
-def short_socket_dir():
-	"""Provides a short temporary directory path suitable for macOS AF_UNIX sockets (<104 chars)."""
-	with tempfile.TemporaryDirectory(prefix="rpm_") as d:
-		yield Path(d)
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Block fastembed (TextEmbedding) from downloading real models
 # ─────────────────────────────────────────────────────────────────────────────

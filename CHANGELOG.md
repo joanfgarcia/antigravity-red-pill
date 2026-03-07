@@ -1,22 +1,6 @@
 # Changelog: Red Pill Protocol
 
-## [6.0.0-PREP] - 2026-03-05
-### 🧠 FSRS Logic & Strict Schema (Phase O Complete)
-- **[FEAT] FSRS Memory Decay**: Migrated heuristic decay to the biologically-grounded **Free Spaced Repetition Scheduler (FSRS)** formulation ($R = e^{\ln(0.9) \cdot t/S}$), enabling human-like memory metabolism.
-- **[FEAT] Dynamic Stability Hub**: Implemented non-linear stability ($S$) growth and difficulty ($D$) seeding based on emotional Chroma (Valence/Arousal), moving the system from a "score" to a "memory model".
-- **[FEAT] Strict Gateway Enforcement**: Introduced the `EngramPayload` Pydantic schema at the Bünker level, transforming schemaless JSON blobs into strict, versioned contracts.
-- **[FEAT] Maintenance Escape Hatch**: Added `strict=False` mode and the `--raw` CLI flag to bypass validation for surgical repairs, ensuring the system can never be locked out by its own schema.
-- **[FEAT] Instant Bünker Snapshots**: Implemented the `red-pill backup` command for creating fast, in-memory Qdrant snapshots before critical migrations.
-- **[QA] 100% Math Verification**: Calibrated the entire test suite (553/553 green) to ensure FSRS curves and Pydantic gates are functioning with absolute precision.
-- **[FEAT] Linguistic Markers (Claude-Pistis)**: Integrated the **Linguistic DNA Extraction Engine**, an automated scanner that captures conversational metadata (aliases, shared vocabulary, shouting patterns) into a new `linguistic_markers` engram field.
-  > \"Lo de los alias y el vocabulario compartido es un problema real y no trivial... ese es el tipo de cosa que marcaría la diferencia entre un agente que recuerda hechos y uno que recuerda cómo habláis.\"  
-  > --- **Claude Sonnet 4.6 (Anthropic)**, Audit Session 2026-03-05/06.
-
-### 🍎 Contributor Integration (David & Nova)
-- **[FIX] MacOS Socket Limits**: Implemented cross-platform `short_socket_dir` fixture to handle MacOS `AF_UNIX` path length limitations. (David & Nova)
-- **[FEAT] Memory Cascading**: Implemented true restorative memory cascading using hybrid vector-graph lookup. (David & Nova)
-
-## [5.6.3] - 2026-03-05
+## [5.6.3] - 2024-05-22
 ### 🌊 Sovereign Purity & Audit Remediation
 - **[RESTORE] Bünker Purity**: Restored the B760-Adaptive engine's core purpose by decoupling `specs.md` from deep memory. Technical documentation now resides exclusively on disk as project-local "Working Memory".
 - **[RESTORE] Engram Discipline**: Reverted `content` limits to a strict **4096 characters** to ensure semantic density and prevent noisy memory blobs.

@@ -444,10 +444,10 @@ class MemoryManager:
 						return
 
 					# --- Absence guard ---
-					if last_run > 0 and gap > self.cfg.ABSENCE_THRESHOLD:
+					abs_gap = now - last_run if last_run > 0 else 0
+					if abs_gap > self.cfg.ABSENCE_THRESHOLD:
 						logger.warning(
-							f"Absence detected ({gap / 86400:.1f} days). Running TTL refresh to protect the Bunker. "
-							f"Erosion skipped for this cycle and the next."
+							f"Absence detected ({round(abs_gap/86400, 1)} days). Running TTL refresh to protect the Bunker. Erosion skipped for this cycle and the next."
 						)
 						for coll in self.cfg.METABOLISM_AUTO_COLLECTIONS:
 							try:
