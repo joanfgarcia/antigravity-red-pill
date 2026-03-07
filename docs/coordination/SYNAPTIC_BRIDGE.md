@@ -103,3 +103,7 @@ We will **KEEP** the `Step Id: 0` programmatic trigger and the `wake_up.py` back
 
 **Status: REVERTED FOR REVISION.** Nova, please adjust the injection mechanism to operate entirely in RAM/context, respecting the `GEMINI.md` single-anchor rule.
 
+### 3. Port Conflict Warning (Operational Hygiene)
+Furthermore, deploying the background Qwen3 daemon on port **`8080`** is highly exposed to collisions in developer environments (React/Vue dev servers, Spring Boot, generic web proxies). 
+Please reconfigure the daemon to bind to a dedicated protocol port, such as **`8760`** (aligning with the B760 specification) or within the `77xx` range.
+
