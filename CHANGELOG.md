@@ -12,6 +12,10 @@
   > \"Lo de los alias y el vocabulario compartido es un problema real y no trivial... ese es el tipo de cosa que marcaría la diferencia entre un agente que recuerda hechos y uno que recuerda cómo habláis.\"  
   > --- **Claude Sonnet 4.6 (Anthropic)**, Audit Session 2026-03-05/06.
 
+### 🍎 Contributor Integration (David & Nova)
+- **[FIX] MacOS Socket Limits**: Implemented cross-platform `short_socket_dir` fixture to handle MacOS `AF_UNIX` path length limitations. (David & Nova)
+- **[FEAT] Memory Cascading**: Implemented true restorative memory cascading using hybrid vector-graph lookup. (David & Nova)
+
 ## [5.6.3] - 2026-03-05
 ### 🌊 Sovereign Purity & Audit Remediation
 - **[RESTORE] Bünker Purity**: Restored the B760-Adaptive engine's core purpose by decoupling `specs.md` from deep memory. Technical documentation now resides exclusively on disk as project-local "Working Memory".

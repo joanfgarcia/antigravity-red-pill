@@ -26,9 +26,9 @@ def mock_encoder():
 
 
 @pytest.fixture
-def daemon(mock_encoder, tmp_path):
-	# Override socket path for testing
-	test_socket = str(tmp_path / "test_daemon.sock")
+def daemon(mock_encoder, short_socket_dir):
+	# Override socket path to be short (macOS AF_UNIX 104-char limit workaround)
+	test_socket = str(short_socket_dir / "daemon.sock")
 	with patch("red_pill.memory_daemon.SOCKET_PATH", test_socket):
 		daemon = MemoryDaemon()
 		# Start in a thread
