@@ -36,13 +36,13 @@ The schema is " Schemaless" (JSON payload).
 - **Flexibility**: High.
 - **Fragility**: High. The `PointUpdate` class relies on implicit knowledge of payload structure. If v5.0 introduces nested weights or time-series data for reinforcement history, the flat payload update logic will inevitably corrupt data.
 - **VectorRigidity**: `VECTOR_SIZE` is configurable but immutable post-seed. Migrating to a new embedding model requires re-generating all vectors.
-  **ARCH-001 NOTE**: The full source text is stored in every engram's Qdrant payload (`payload["content"]`). Re-embedding on model upgrade is therefore safe — no data is lost. What is missing is an automated **Transcoding** migration script (`red-pill re-embed --model new-model`). This is a tooling gap, not a data loss risk. Tracked as v6.0 roadmap item.
+  **ARCH-001 NOTE**: The full source text is stored in every engram's Qdrant payload (`payload["content"]`). Re-embedding on model upgrade is therefore safe — no data is lost. What is missing is an automated **Transcoding** migration script (`red-pill re-embed --model new-model`). This is a tooling gap, not a data loss risk.
 
 ## 4. Recommendations for v5.0 (Global Scale Strategy)
 1.  **[RESOLVED v4.2.1] Time-To-Live (TTL) Indexing**: Move erosion from strict scan to a timestamp-based index query. Only fetch/update memories where `last_recalled_at < now - METABOLISM_COOLDOWN`.
 2.  **Graph Pruning**: Implement "Synaptic Pruning" where weak associations are severed, not just the nodes themselves.
 3.  **Hebb's Law Implementation**: "Neurons that fire together, wire together." Currently, associations are static. They should be dynamic—created automatically when two memories are retrieved in the same session context for a prolonged period.
-4.  **[IMPLEMENTED v6.0-PREP] FSRS Algorithm Integration**: Replaced heuristic linear/exponential decay with the **Free Spaced Repetition Scheduler** (FSRS) model. Each engram now manages its own `difficulty` and `stability` parameters. The formula $R = e^{\ln(0.9) \cdot t/S}$ produces biologically-accurate decay curves, ensuring high-stability memories (frequently recalled, high importance) survive months of inactivity — solving the "Vacation Problem" (session-relative decay).
+4.  **[IMPLEMENTED v5.6.3] FSRS Algorithm Integration**: Replaced heuristic linear/exponential decay with the **Free Spaced Repetition Scheduler** (FSRS) model. Each engram now manages its own `difficulty` and `stability` parameters. The formula $R = e^{\ln(0.9) \cdot t/S}$ produces biologically-accurate decay curves, ensuring high-stability memories (frequently recalled, high importance) survive months of inactivity — solving the "Vacation Problem" (session-relative decay).
 
 ## 5. Scientific Foundations & Attribution
 
@@ -52,7 +52,7 @@ The B760 memory decay model is conceptually grounded in peer-reviewed cognitive 
 **FSRS (Free Spaced Repetition Scheduler)** — [open-spaced-repetition/fsrs4anki](https://github.com/open-spaced-repetition/fsrs4anki)
 - License: MIT (fully compatible with this project's GPLv3)
 - Authors: Open Spaced Repetition community
-- Theory basis: The **DSR model** by Piotr Wozniak (SuperMemo/Anki), modeling memory through **D**ifficulty, **S**tability, and **R**etriebability.
+- Theory basis: The **DSR model** by Piotr Wozniak (SuperMemo/Anki), modeling memory through **D**ifficulty, **S**tability, and **R**etrievability.
 - Mathematical kernel: `R(t) = e^(ln(0.9) × t/S)` — where `R` is retrievability, `t` is elapsed time, and `S` is memory stability.
 
 ### 5.2 Foundational Research
@@ -168,5 +168,5 @@ The audit correctly identified that cluster governance was unspecified. The form
 | Milestone | Deliverable |
 | :--- | :--- |
 | **v5.6.0** | TLS enforcement on remote Milvus connections, Agentic HiveGuard review, Lazy Metabolism, N-Hop Synaptic Depth, Identity Masking |
-| **v6.0.0-PREP** | **[CORE] FSRS Integration**, Strict Pydantic Payload Schema, Bünker Snapshots (`red-pill backup`), Raw Mode maintenance |
-| **v6.0.0** | Cryptographically signed experience packets, ACE-CAL Community Mode (opt-in collective calibration) |
+| **v5.6.3** | **[CORE] Sovereign Pulse**, Refraction Guard, Absence Guard, SEC-004/008/009 Remediation |
+| **v5.7.0** | Evolutionary Stability, Advanced Chroma Mapping |

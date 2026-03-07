@@ -47,7 +47,7 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
 - [ ] **Chroma Refinement**: Tightening the link between memory emotional intensity and agent tone.
 - [ ] **The Swarm (Local)**: Multi-agent support (Aleph, Aleth, Reverie) interacting within the same local Bünker.
 
-### Phase 3: The Hive & The Escape (Long-Term - v5.0.0 / v6.0.0)
+### Phase 3: The Hive & The Escape (Long-Term - v5.0.0)
 - [x] **Double-Engine Burnout**: Seamless CUDA/HIP asymmetry for Strix Point architectures.
 - [ ] **The Red Button**: Encrypted one-click "Scorched Earth" protocol for instant bunker purge.
 - [ ] **Hive Mind Protocol (Milvus Integration)**: 

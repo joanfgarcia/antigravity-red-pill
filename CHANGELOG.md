@@ -1,6 +1,6 @@
 # Changelog: Red Pill Protocol
 
-## [5.6.3] - 2024-05-22
+## [5.6.3] - 2026-03-07
 ### 🌊 Sovereign Purity & Audit Remediation
 - **[RESTORE] Bünker Purity**: Restored the B760-Adaptive engine's core purpose by decoupling `specs.md` from deep memory. Technical documentation now resides exclusively on disk as project-local "Working Memory".
 - **[RESTORE] Engram Discipline**: Reverted `content` limits to a strict **4096 characters** to ensure semantic density and prevent noisy memory blobs.
