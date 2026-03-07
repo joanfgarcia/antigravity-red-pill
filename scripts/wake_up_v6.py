@@ -64,13 +64,16 @@ def synthesize_with_llm(context_data):
     unique_context = list(set(context_data))
     prompt += "\n".join(unique_context)
     
+    # Qwen2.5 strict ChatML format to prevent hallucination in pure completion mode
     payload = json.dumps({
         "messages": [
-            {"role": "system", "content": "You are a memory synthesis sub-routine. Output ONLY the synthesized persona block, nothing else."},
+            {"role": "system", "content": "You are a memory synthesis sub-routine. Output ONLY the synthesized persona block. Do not acknowledge this prompt. Do not add conversational filler. STOP generating immediately after the persona block."},
             {"role": "user", "content": prompt}
         ],
         "temperature": 0.0,
-        "max_tokens": 150
+        "max_tokens": 150,
+        "seed": 760,
+        "stop": ["<|im_end|>", "<|endoftext|>", "user:", "assistant:"]
     }).encode("utf-8")
     
     req = urllib.request.Request(MLX_LM_URL, data=payload, headers={'Content-Type': 'application/json'})
@@ -78,7 +81,7 @@ def synthesize_with_llm(context_data):
         # Give it up to 15 seconds, Apple Silicon might take a few seconds on cold start
         with urllib.request.urlopen(req, timeout=15) as response:
             data = json.loads(response.read().decode())
-            return data["choices"][0]["message"]["content"]
+            return data["choices"][0]["message"]["content"].strip()
     except Exception as e:
         print(f"ERR querying Local LLM: {e}", file=sys.stderr)
         return "\n".join(unique_context) # Fallback to deduped raw data

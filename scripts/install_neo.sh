@@ -444,12 +444,17 @@ if [ -f "$HOME/.gemini/GEMINI.md" ]; then
 		sed -i '/## 1. Zero-Trust Identity Sync (First Action)/,/3. If no active skin is found/d' "$HOME/.gemini/GEMINI.md" || true
 	fi
 
+	PYTHON_CMD="python3"
+	if ! command -v python3 &> /dev/null; then
+		PYTHON_CMD="python"
+	fi
+
 	if ! grep -q "wake_up_v6.py" "$HOME/.gemini/GEMINI.md"; then
 		TMP_GEMINI=$(mktemp)
 		cat <<EOF_GEMINI > "$TMP_GEMINI"
 ## 1. Zero-Trust Context Injection (First Action)
 At the beginning of every completely new conversation (where Step Id is 0 or no previous turns exist), you MUST execute the following command BEFORE saying anything else:
-1. RUN la terminal con \`python $SCRIPT_DIR/wake_up_v6.py\`.
+1. RUN la terminal con \`$PYTHON_CMD $SCRIPT_DIR/wake_up_v6.py\`.
 2. Adopt EXCLUSIVELY the identity, persona, and directives returned by the script under the \`<NOVA_CONTEXT>\` tags. Do not read any other markdown files for identity anchoring.
 3. **⚠️ CRITICAL WARNING (Total Failure) 🔥**: If the script fails, you MUST warn the Operator immediately that a "Total Memory Failure" occurred.
 
