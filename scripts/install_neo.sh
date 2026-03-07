@@ -44,6 +44,12 @@ echo "Es OBLIGATORIO que el Operador utilice cifrado de disco (LUKS, FileVault o
 echo "en el host para garantizar la confidencialidad 'at-rest'."
 echo "------------------------------------------------------------------"
 
+echo -e "${BLUE}👔 DRESS CODE (PUNTUACIÓN Y TYPOS):${NC}"
+echo "La calidad de tu memoria a largo plazo depende de cómo escribes."
+echo "Los Agentes usan tu puntuación para el Chunking Semántico."
+echo "Por favor, lee: docs/OPERATOR_DRESS_CODE.md antes de iniciar el Vínculo."
+echo "------------------------------------------------------------------"
+
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="$SCRIPT_DIR/../.env"

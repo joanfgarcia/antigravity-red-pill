@@ -139,6 +139,9 @@ def main() -> None:
 
 	swarm_parser = subparsers.add_parser("swarm", help="Sovereign Swarm Operations")
 	swarm_sub = swarm_parser.add_subparsers(dest="swarm_cmd")
+
+	sleep_parser = subparsers.add_parser("sleep", help="Lazarus Maintenance Ritual")
+	sleep_parser.add_argument("--mode", choices=["lazy", "deep"], default="lazy", help="Deep mode forces full pruning")
 	audit_parser = swarm_sub.add_parser("audit", help="Launch Agent Smith Code Audit")
 	audit_parser.add_argument("--path", default=".", help="Target path for audit")
 
@@ -203,9 +206,22 @@ def main() -> None:
 	try:
 		manager = MemoryManager(url=args.url) if args.url else MemoryManager()
 
+		# Telemetry initialization
+		points_affected = 0
+
 		if args.command == "seed":
 			seed_project(manager)
 			return
+		elif args.command == "sleep":
+			from red_pill.metabolism.sleep import perform_sleep_cycle
+
+			print("\n[LAZARUS PULSE] Initiating Maintenance Ritual (Sleep Cycle)...")
+			try:
+				points_affected = perform_sleep_cycle(manager, mode=args.mode)  # Pass mode from args
+				print(f"[OK] Ritual Complete. {points_affected} engrams consolidated via FSRS Fixation.")
+			except Exception as e:
+				print(f"[ERROR] Sleep cycle interrupted: {e}")
+			return  # Added return here
 		elif args.command == "backup":
 			print("\n--- [BÜNKER BACKUP: CREATING LOCAL SNAPSHOTS] ---")
 			results = manager.create_bunker_snapshot(collections=args.collections)

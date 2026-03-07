@@ -27,6 +27,7 @@ def test_emotional_erosion(manager, mock_qdrant):
 
 	# Mock points with different colors
 	import time
+
 	now = time.time()
 	one_day = 86400.0
 
@@ -39,8 +40,8 @@ def test_emotional_erosion(manager, mock_qdrant):
 		"emotion": "anxiety",
 		"intensity": 1.0,
 		"immune": False,
-		"last_recalled_at": now - one_day, # 1 day ago
-		"stability": 10.0 # High stability
+		"last_recalled_at": now - one_day,  # 1 day ago
+		"stability": 10.0,  # High stability
 	}
 
 	# Yellow (Joy): less salient, lower initial stability
@@ -52,8 +53,8 @@ def test_emotional_erosion(manager, mock_qdrant):
 		"emotion": "joy",
 		"intensity": 5.6,
 		"immune": False,
-		"last_recalled_at": now - one_day, # 1 day ago
-		"stability": 2.0 # Low stability
+		"last_recalled_at": now - one_day,  # 1 day ago
+		"stability": 2.0,  # Low stability
 	}
 
 	manager.client.scroll.side_effect = [([point_orange, point_yellow], None)]

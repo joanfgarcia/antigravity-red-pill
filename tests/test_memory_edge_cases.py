@@ -251,7 +251,7 @@ def test_sanitize_exceptions():
 				"importance": 1.0,
 				"created_at": 1000.0,
 				"last_recalled_at": 1000.0,
-				"schema_version": "v1.0"
+				"schema_version": "v1.0",
 			}
 
 	manager.client.scroll.side_effect = None

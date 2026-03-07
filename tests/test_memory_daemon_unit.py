@@ -175,6 +175,7 @@ class TestDaemonStart:
 	def test_removes_existing_socket_path(self, short_socket_dir):
 		"""Line 101: socket file exists → os.remove before bind."""
 		import os
+
 		sock_path = str(short_socket_dir / "test.sock")
 		open(sock_path, "w").close()
 

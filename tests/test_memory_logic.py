@@ -129,7 +129,7 @@ def test_metabolism_full_logic_final(mem_mgr, fake_cfg):
 		# 1. Switch to ACTIVE strategy to ensure apply_erosion is called
 		mem_mgr.cfg.METABOLISM_STRATEGY = "ACTIVE"
 		mem_mgr.cfg.METABOLISM_AUTO_COLLECTIONS = ["work_memories"]
-		
+
 		# 2. Setup a point with a COMPLETE payload to pass EngramPayload validation
 		p1_payload = {
 			"content": "test content",
@@ -144,18 +144,19 @@ def test_metabolism_full_logic_final(mem_mgr, fake_cfg):
 			"schema_version": "6.0",
 			"stability": 1.0,
 			"difficulty": 5.0,
-			"linguistic_markers": []
+			"linguistic_markers": [],
 		}
 		p1 = MagicMock(id="1", payload=p1_payload)
 		# Mock scroll to return the point
 		mem_mgr.client.scroll.side_effect = [([p1], None), ([], None)]
 
-		# 3. Patch internal state methods to bypass FileLock and open() complexity
+		# 3. Patch internal state methods to bypass FileLock and open() complexity, and the new Sleep Engine
 		with patch.object(mem_mgr, "_read_metabolism_state", return_value=(time.time() - 3601, False)):
 			with patch.object(mem_mgr, "_write_metabolism_state"):
 				with patch("os.path.exists", return_value=True):
-					mem_mgr._run_metabolism_cycle()
-		
+					with patch("red_pill.metabolism.sleep.perform_sleep_cycle", return_value=0):
+						mem_mgr._run_metabolism_cycle()
+
 		# Check if either old set_payload or new batch_update_points was called
 		assert mem_mgr.client.batch_update_points.called or mem_mgr.client.set_payload.called
 

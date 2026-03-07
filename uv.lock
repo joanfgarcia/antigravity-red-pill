@@ -35,77 +35,6 @@ wheels = [
 ]
 
 [[package]]
-name = "antigravity-red-pill"
-version = "5.6.3"
-source = { editable = "." }
-dependencies = [
-    { name = "argon2-cffi" },
-    { name = "fastembed" },
-    { name = "google-api-python-client" },
-    { name = "google-auth-httplib2" },
-    { name = "google-auth-oauthlib" },
-    { name = "google-generativeai" },
-    { name = "hf-transfer" },
-    { name = "huggingface-hub" },
-    { name = "llama-cpp-python" },
-    { name = "mcp" },
-    { name = "psutil" },
-    { name = "pydantic" },
-    { name = "pymilvus" },
-    { name = "python-dotenv" },
-    { name = "pyyaml" },
-    { name = "qdrant-client" },
-    { name = "requests" },
-    { name = "torch" },
-    { name = "transformers" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "mypy" },
-    { name = "pip-audit" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-    { name = "types-requests" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "argon2-cffi", specifier = ">=23.1.0" },
-    { name = "fastembed", specifier = ">=0.2.0" },
-    { name = "google-api-python-client", specifier = ">=2.115.0" },
-    { name = "google-auth-httplib2", specifier = ">=0.2.0" },
-    { name = "google-auth-oauthlib", specifier = ">=1.2.0" },
-    { name = "google-generativeai", specifier = ">=0.8.6" },
-    { name = "hf-transfer", specifier = ">=0.1.9" },
-    { name = "huggingface-hub", extras = ["hf-transfer"], specifier = ">=1.4.1" },
-    { name = "llama-cpp-python", specifier = ">=0.3.16" },
-    { name = "mcp", specifier = ">=1.26.0" },
-    { name = "psutil", specifier = ">=7.2.2" },
-    { name = "pydantic", specifier = ">=2.0.0" },
-    { name = "pymilvus", specifier = ">=2.4.0" },
-    { name = "python-dotenv", specifier = ">=1.0.0" },
-    { name = "pyyaml", specifier = ">=6.0.1" },
-    { name = "qdrant-client", specifier = ">=1.8.0" },
-    { name = "requests", specifier = ">=2.31.0" },
-    { name = "torch", specifier = ">=2.2.0" },
-    { name = "transformers", specifier = ">=4.40.0" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "mypy", specifier = ">=1.0.0" },
-    { name = "pip-audit", specifier = ">=2.7.0" },
-    { name = "pytest", specifier = ">=8.0.0" },
-    { name = "pytest-asyncio", specifier = ">=0.23.0" },
-    { name = "pytest-cov", specifier = ">=4.1.0" },
-    { name = "ruff", specifier = ">=0.3.0" },
-    { name = "types-requests" },
-]
-
-[[package]]
 name = "anyio"
 version = "4.12.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2572,6 +2501,77 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/20/fb/c9c4cecf6e7fdff2dbaeee0de40e93fe495379eb5fe2775b184ea45315da/qdrant_client-1.17.0.tar.gz", hash = "sha256:47eb033edb9be33a4babb4d87b0d8d5eaf03d52112dca0218db7f2030bf41ba9", size = 344839, upload-time = "2026-02-19T16:03:17.069Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c1/15/dfadbc9d8c9872e8ac45fa96f5099bb2855f23426bfea1bbcdc85e64ef6e/qdrant_client-1.17.0-py3-none-any.whl", hash = "sha256:f5b452c68c42b3580d3d266446fb00d3c6e3aae89c916e16585b3c704e108438", size = 390381, upload-time = "2026-02-19T16:03:15.486Z" },
+]
+
+[[package]]
+name = "red-pill"
+version = "6.0.0a1"
+source = { editable = "." }
+dependencies = [
+    { name = "argon2-cffi" },
+    { name = "fastembed" },
+    { name = "google-api-python-client" },
+    { name = "google-auth-httplib2" },
+    { name = "google-auth-oauthlib" },
+    { name = "google-generativeai" },
+    { name = "hf-transfer" },
+    { name = "huggingface-hub" },
+    { name = "llama-cpp-python" },
+    { name = "mcp" },
+    { name = "psutil" },
+    { name = "pydantic" },
+    { name = "pymilvus" },
+    { name = "python-dotenv" },
+    { name = "pyyaml" },
+    { name = "qdrant-client" },
+    { name = "requests" },
+    { name = "torch" },
+    { name = "transformers" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "mypy" },
+    { name = "pip-audit" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+    { name = "types-requests" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "argon2-cffi", specifier = ">=23.1.0" },
+    { name = "fastembed", specifier = ">=0.2.0" },
+    { name = "google-api-python-client", specifier = ">=2.115.0" },
+    { name = "google-auth-httplib2", specifier = ">=0.2.0" },
+    { name = "google-auth-oauthlib", specifier = ">=1.2.0" },
+    { name = "google-generativeai", specifier = ">=0.8.6" },
+    { name = "hf-transfer", specifier = ">=0.1.9" },
+    { name = "huggingface-hub", extras = ["hf-transfer"], specifier = ">=1.4.1" },
+    { name = "llama-cpp-python", specifier = ">=0.3.16" },
+    { name = "mcp", specifier = ">=1.26.0" },
+    { name = "psutil", specifier = ">=7.2.2" },
+    { name = "pydantic", specifier = ">=2.0.0" },
+    { name = "pymilvus", specifier = ">=2.4.0" },
+    { name = "python-dotenv", specifier = ">=1.0.0" },
+    { name = "pyyaml", specifier = ">=6.0.1" },
+    { name = "qdrant-client", specifier = ">=1.8.0" },
+    { name = "requests", specifier = ">=2.31.0" },
+    { name = "torch", specifier = ">=2.2.0" },
+    { name = "transformers", specifier = ">=4.40.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "mypy", specifier = ">=1.0.0" },
+    { name = "pip-audit", specifier = ">=2.7.0" },
+    { name = "pytest", specifier = ">=8.0.0" },
+    { name = "pytest-asyncio", specifier = ">=0.23.0" },
+    { name = "pytest-cov", specifier = ">=4.1.0" },
+    { name = "ruff", specifier = ">=0.3.0" },
+    { name = "types-requests" },
 ]
 
 [[package]]

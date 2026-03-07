@@ -112,12 +112,14 @@ class CreateEngramRequest(BaseModel):
 				raise ValueError(f"Metadata field {key} exceeds limit")
 		return v
 
+
 class EngramPayload(BaseModel):
 	"""
 	Strict read-schema for data loaded from Qdrant.
 	Enforces the presence of core fields, mitigating 'Original Sin' schemaless debt.
 	Automatically injects FSRS baseline values (difficulty/stability) for graceful migration.
 	"""
+
 	content: str
 	importance: float
 	reinforcement_score: float = 1.0

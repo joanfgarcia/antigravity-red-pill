@@ -143,6 +143,7 @@ def calculate_fsrs_retrievability(stability: float, time_since_last_recall: floa
 
 	return math.exp(math.log(0.9) * (days_passed / stability))
 
+
 def calculate_fsrs_new_stability(current_stability: float, difficulty: float, retrievability: float, is_success: bool = True) -> float:
 	"""
 	Calculates new stability S' after a recall event.
@@ -153,13 +154,14 @@ def calculate_fsrs_new_stability(current_stability: float, difficulty: float, re
 		return max(0.1, current_stability * 0.3)
 
 	if current_stability <= 0.0:
-		return 1.0 # Initial cold start
+		return 1.0  # Initial cold start
 
 	# As R decreases (memory was hard to recall but successful), the stability gain increases.
 	# As difficulty increases, the stability gain decreases.
 	gain = current_stability * math.exp(0.5 * (1 - retrievability)) * (11.0 - difficulty) / 10.0
 
 	return current_stability + gain
+
 
 def calculate_fsrs_initial_parameters(emotions: List[str], intensity: float) -> Tuple[float, float]:
 	"""

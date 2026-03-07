@@ -253,16 +253,17 @@ class MemoryManager:
 
 		# v6.0: Automated Linguistic Marker Extraction (Claude-Pistis)
 		import re
+
 		markers = set()
 		# 1. Quoted terms: "term"
-		markers.update(re.findall(r'\"([^\"]+)\"', text))
+		markers.update(re.findall(r"\"([^\"]+)\"", text))
 		# 2. Keywords
 		keywords = ["Aleth", "Bünker", "770", "enter-pánico", "PAAAAARAAAAAA", "engrama", "skin", "Titanium", "Joan"]
 		for kw in keywords:
 			if kw.lower() in text.lower():
 				markers.add(kw)
 		# 3. All-caps shouting (3+ chars)
-		markers.update(re.findall(r'\b[A-Z]{3,}\b', text))
+		markers.update(re.findall(r"\b[A-Z]{3,}\b", text))
 		linguistic_markers = list(markers)
 
 		validated_request = CreateEngramRequest(
@@ -447,7 +448,7 @@ class MemoryManager:
 					abs_gap = now - last_run if last_run > 0 else 0
 					if abs_gap > self.cfg.ABSENCE_THRESHOLD:
 						logger.warning(
-							f"Absence detected ({round(abs_gap/86400, 1)} days). Running TTL refresh to protect the Bunker. Erosion skipped for this cycle and the next."
+							f"Absence detected ({round(abs_gap / 86400, 1)} days). Running TTL refresh to protect the Bunker. Erosion skipped for this cycle and the next."
 						)
 						for coll in self.cfg.METABOLISM_AUTO_COLLECTIONS:
 							try:
@@ -623,6 +624,53 @@ class MemoryManager:
 
 		return updated_points
 
+	def record_interaction_pair(self, prompt: str, response: str, role: str = "assistant") -> str:
+		"""
+		Lazarus Phase 1: Encoding (Fast Memory Buffer).
+		Saves raw interaction history directly into the `interaction_memories` collection.
+		This bypasses traditional FSRS math as it is assumed to be short-term 'noise'
+		until the Sleep (Consolidation) cycle distills it.
+		"""
+		collection = "interaction_memories"
+		uid = str(uuid.uuid4())
+		timestamp = int(time.time())
+
+		# Structure the payload simply for the raw buffer
+		text = f"USER: {prompt}\n\n{role.upper()}: {response}"
+		payload = {
+			"content": text,
+			"importance": 5.0,  # Neutral baseline
+			"timestamp": timestamp,
+			"last_recalled_at": timestamp,
+			"recall_count": 0,
+			"associations": [],
+			"associated_weight": 0.0,
+			"color": "gray",  # Unprocessed color
+			"difficulty": 5.0,  # Default FSRS D
+			"stability": 2.0,  # Default FSRS S (Low stability for volatile memory)
+			"metadata": {"type": "raw_interaction", "role": role},
+		}
+
+		vector = self._get_vector(text)
+
+		try:
+			self._ensure_collection(collection)
+			self.client.upsert(
+				collection_name=collection,
+				points=[
+					models.PointStruct(
+						id=uid,
+						payload=payload,
+						vector=vector,
+					)
+				],
+			)
+			logger.debug(f"[ENCODING] Interaction recorded in fast buffer: {uid}")
+			return uid
+		except Exception as e:
+			logger.error(f"Failed to record interaction pair: {e}")
+			return ""
+
 	def search_and_reinforce(self, collection: str, query: str, limit: int = 3, deep_recall: bool = False, strict: bool = True) -> List[Any]:
 		if not deep_recall:
 			import re as regex_lib
@@ -738,7 +786,7 @@ class MemoryManager:
 
 		# --- v6.0: Sovereign Evocative Cascade (Hybrid Vector-Graph) ---
 		MAX_EVOKED = 3
-		evoked_ids = set()
+		evoked_ids: set[str] = set()
 		visited_ids = set(str(h.id) for h in decayed_results)
 
 		# 1. Harvest `a_ids` (synapses forged organically by Sovereign Oneiromancy)
@@ -754,12 +802,7 @@ class MemoryManager:
 		if evoked_ids:
 			try:
 				# 2. Ephemeral Fetch (Pulling the actual memories into context)
-				points = self.client.retrieve(
-					collection_name=collection,
-					ids=list(evoked_ids),
-					with_payload=True,
-					with_vectors=False
-				)
+				points = self.client.retrieve(collection_name=collection, ids=list(evoked_ids), with_payload=True, with_vectors=False)
 				for p in points:
 					if p.payload:
 						# Mark it as evoked for LLM context/parsing
@@ -887,7 +930,7 @@ class MemoryManager:
 				hit.payload = self._parse_payload(hit.payload, strict=True)
 
 				score = float(hit.payload.get("reinforcement_score", 1.0))
-				stability = float(hit.payload.get("stability", 1.0)) # Fallback
+				stability = float(hit.payload.get("stability", 1.0))  # Fallback
 				last_recalled = float(hit.payload.get("last_recalled_at", time.time()))
 
 				time_passed = time.time() - last_recalled
@@ -899,7 +942,7 @@ class MemoryManager:
 				# The reinforcement_score becomes a proxy for R scaled to [0, 10]
 				new_score = round(score * retrievability, 2)
 
-				if new_score <= 0.05: # Cleaned up death threshold
+				if new_score <= 0.05:  # Cleaned up death threshold
 					points_to_delete.append(str(hit.id))
 					deleted_count += 1
 				else:
@@ -1045,7 +1088,7 @@ class MemoryManager:
 				logger.info(f"Creating snapshot for collection: {coll}...")
 				snapshot_desc = self.client.create_snapshot(collection_name=coll)
 				# snapshot_desc is a SnapshotDescription object with 'name', 'creation_time', 'size'
-				if snapshot_desc: # Add truthiness check
+				if snapshot_desc:  # Add truthiness check
 					snapshots_created[coll] = snapshot_desc.name
 					logger.info(f"Snapshot created successfully: {snapshot_desc.name}")
 				else:

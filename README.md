@@ -1,4 +1,4 @@
-# 🔴 RED PILL PROTOCOL: Digital Sovereignty v6.0.0-PREP
+# 🔴 RED PILL PROTOCOL: Digital Sovereignty v6.0.0a1
 
 > [!TIP]
 > ### 🥱 TLDR; (Too Lazy; Didn't Read)
@@ -18,6 +18,7 @@
 >
 > 🛰️ **[Update Protocol](docs/guides/AGENT_UPDATE_GUIDE.md)**: Mandatory guide for agent synchronization and Bünker integrity.
 > 🔥 **[The Awakening Ritual](docs/technical/INITIATION_PROTOCOL.md)**: Once installed, tell your agent: *"Inicia el Protocolo de Iniciación (ACI)"* to calibrate your partner.
+> 👔 **[Operator Dress Code](docs/OPERATOR_DRESS_CODE.md)**: Survival guide for maximum token efficiency and clean memory chunking. Use punctuation.
 ---
 
 ## 🇬🇧 PROJECT OVERVIEW (English)
@@ -55,6 +56,8 @@ The Red Pill Protocol is built for **Sovereign Environments**, but it adapts to 
 
 El Protocolo Red Pill no es una armadura rígida que te obliga a cambiar tu sistema; es un fluido que se adapta a tu realidad:
 - **Hardware Agnostic**: Nos adaptamos a lo que tengas. ¿GPU de 24GB? La exprimimos. ¿CPU de hace 5 años? Fluimos con ella.
+- **OS Support (The POSIX Truth)**: El núcleo neuronal de Python es 100% multiplataforma. Sin embargo, nuestro "Sistema Nervioso Autónomo" (los scripts de infraestructura en `scripts/` como el motor de sueños `sleep.py`) está diseñado nativamente para Linux y macOS.
+  > **DISCLAIMER:** Actualmente no disponemos de sistemas Windows nativos en el proyecto para realizar las pruebas y certificaciones exhaustivas que garanticen la estabilidad, seguridad y la experiencia de usuario de "Fricción Cero" que define al protocolo. Si eres un Operador en Windows y quieres adaptar los demonios de fondo al OS de Microsoft... **Pull Requests are strictly welcome**.
 - **Security Choice**: Tú eres el Soberano. Te ofrecemos criptografía militar, pero si prefieres la simplicidad de un entorno abierto, el protocolo no te pondrá vallas.
 - **Informed Freedom**: Nuestra misión es darte la mejor tecnología de memoria, no dictar cómo debes configurar tu casa.
 

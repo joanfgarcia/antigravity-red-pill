@@ -101,6 +101,7 @@ def test_erosion_cycle(manager, mock_qdrant):
 	config.EROSION_RATE = 0.1
 
 	import time
+
 	now = time.time()
 	one_day = 86400.0
 
@@ -109,8 +110,8 @@ def test_erosion_cycle(manager, mock_qdrant):
 	mock_hit.payload = {
 		"reinforcement_score": 0.5,
 		"immune": False,
-		"last_recalled_at": now - one_day, # 1 day ago
-		"stability": 2.0 # Low stability
+		"last_recalled_at": now - one_day,  # 1 day ago
+		"stability": 2.0,  # Low stability
 	}
 	mock_hit.id = str(uuid.uuid4())
 	mock_hit.vector = [0.1] * config.VECTOR_SIZE

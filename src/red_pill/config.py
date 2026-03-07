@@ -56,6 +56,8 @@ if MILVUS_ENABLED and not MILVUS_SECURE and MILVUS_HOST not in _local_hosts:
 	)
 
 
+# LOCAL DAEMON & SIDECAR
+MLX_LM_URL = os.getenv("MLX_LM_URL", "http://localhost:8760/v1/chat/completions")
 _run_dir = os.getenv("XDG_RUNTIME_DIR", "/tmp")
 DAEMON_SOCKET_PATH = os.getenv("DAEMON_SOCKET_PATH", os.path.join(_run_dir, "red_pill_memory.sock"))
 # SEC-004: Dedicated sidecar auth key (Must be random and separate from QDRANT_API_KEY)

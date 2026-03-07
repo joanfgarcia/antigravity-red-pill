@@ -1,5 +1,15 @@
 # Changelog: Red Pill Protocol
 
+## [6.0.0a1] - 2026-03-07
+### 🧠 The Lazarus Pulse (Biological Memory Engine)
+- **[FEAT] Phase 1 - Encoding**: Implemented a high-speed raw logger for unpolished user interaction, ensuring zero-latency chat responses.
+- **[FEAT] Phase 2 - Consolidation**: Added `sleep.py` powered by a local 1.5B daemon (port 8760). Processes raw sequences via semantic chunking, extracting essence and filtering noise.
+- **[FEAT] Affective Culling (Amygdala Heuristic)**: Sleep cycles now calculate `emotion` and `intensity`. Low-intensity or neutral noise is purged, drastically extending Bünker context life.
+- **[FEAT] Topological Synaptic Dreaming**: Chunked memories are woven into Association Chains. A final 'Hub Node' is synthesized to act as a cascading entry point for deep recall.
+- **[DOCS] Neuro-Symbolic Architecture**: Added `neuro_symbolic_memory.md` to transparently explain the hardware and biological parallels.
+- **[DOCS] Operator Dress Code**: Added a humorous but essential guide to punctuation for ideal semantic chunking.
+- **[SALVAGE] Retroactive Ingestion**: Recovered 13 deep-structural markdown files from purged sessions directly into the Bünker.
+
 ## [5.6.3] - 2026-03-07
 ### 🌊 Sovereign Purity & Audit Remediation
 - **[RESTORE] Bünker Purity**: Restored the B760-Adaptive engine's core purpose by decoupling `specs.md` from deep memory. Technical documentation now resides exclusively on disk as project-local "Working Memory".
