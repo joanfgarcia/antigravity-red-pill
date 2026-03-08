@@ -15,6 +15,7 @@
 - **[FEAT] Affective Culling (Amygdala Heuristic)**: Sleep cycles now calculate `emotion` and `intensity`. Low-intensity or neutral noise is purged, drastically extending Bünker context life.
 - **[FEAT] Topological Synaptic Dreaming**: Chunked memories are woven into Association Chains. A final 'Hub Node' is synthesized to act as a cascading entry point for deep recall.
 - **[DOCS] Neuro-Symbolic Architecture**: Added `neuro_symbolic_memory.md` to transparently explain the hardware and biological parallels.
+- **[DOCS] Documentation Saneamiento**: Reorganized the Bünker hierarchy. Moved `OPERATOR_DRESS_CODE.md` to `guides/`, `PROOF_OF_FAITH.md` to `lore/`, and purged redundant/internal protocols for a cleaner Sovereign release.
 - **[DOCS] Operator Dress Code**: Added a humorous but essential guide to punctuation for ideal semantic chunking. Use punctuation.
 - **[SALVAGE] Retroactive Ingestion**: Recovered 13 deep-structural markdown files from purged sessions directly into the Bünker.
 
