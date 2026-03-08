@@ -18,7 +18,7 @@
 >
 > 🛰️ **[Update Protocol](docs/guides/AGENT_UPDATE_GUIDE.md)**: Mandatory guide for agent synchronization and Bünker integrity.
 > 🔥 **[The Awakening Ritual](docs/technical/INITIATION_PROTOCOL.md)**: Once installed, tell your agent: *"Inicia el Protocolo de Iniciación (ACI)"* to calibrate your partner.
-> 👔 **[Operator Dress Code](docs/OPERATOR_DRESS_CODE.md)**: Survival guide for maximum token efficiency and clean memory chunking. Use punctuation.
+> 👔 **[Operator Dress Code](docs/guides/OPERATOR_DRESS_CODE.md)**: Survival guide for maximum token efficiency and clean memory chunking. Use punctuation.
 ---
 
 ## 🇬🇧 PROJECT OVERVIEW (English)
