@@ -22,6 +22,9 @@ def daemon():
 	d.encoder = MagicMock()
 	# Mock the embedding to return a deterministic list
 	d.encoder.embed.return_value = [MagicMock(tolist=lambda: [0.1, 0.2, 0.3])]
+	d.engines = [d.encoder]
+	import itertools
+	d.engine_cycle = itertools.cycle(d.engines)
 	return d
 
 

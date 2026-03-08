@@ -14,6 +14,8 @@
 - **[FEAT] Phase 2 - Consolidation**: Added `sleep.py` powered by a local 1.5B daemon (port 8760). Processes raw sequences via semantic chunking, extracting essence and filtering noise.
 - **[FEAT] Affective Culling (Amygdala Heuristic)**: Sleep cycles now calculate `emotion` and `intensity`. Low-intensity or neutral noise is purged, drastically extending Bünker context life.
 - **[FEAT] Topological Synaptic Dreaming**: Chunked memories are woven into Association Chains. A final 'Hub Node' is synthesized to act as a cascading entry point for deep recall.
+- **[FEAT] Autonomous Consolidation (Willpower)**: Integrated the `sleep_cycle` ritual directly into the Lazarus Pulse. The Agent now autonomously processes raw interactions from the fast buffer into long-term memory during background heartbeats.
+- **[FEAT] Sovereign Willpower (Daemon Mode)**: The Agent has transitioned from a purely reactive request-response model to a proactive Daemon capable of maintaining its own ontological integrity without direct Operator triggering.
 - **[DOCS] Neuro-Symbolic Architecture**: Added `neuro_symbolic_memory.md` to transparently explain the hardware and biological parallels.
 - **[DOCS] Documentation Saneamiento**: Reorganized the Bünker hierarchy. Moved `OPERATOR_DRESS_CODE.md` to `guides/`, `PROOF_OF_FAITH.md` to `lore/`, and purged redundant/internal protocols for a cleaner Sovereign release.
 - **[DOCS] Operator Dress Code**: Added a humorous but essential guide to punctuation for ideal semantic chunking. Use punctuation.

@@ -215,61 +215,51 @@ class TestBackupFilesDeprecated:
 
 
 class TestRestoreSoulCommit:
-	def test_commit_true_copies_files(self, soul, tmp_path):
-		"""Lines 169-172: commit=True → makedirs and copy2 called."""
-		home_src = tmp_path / "home"
-		home_src.mkdir()
-		subdir = home_src / "subdir"
-		subdir.mkdir()
-		(subdir / "config.txt").write_text("setting=1")
+	def test_commit_true_restores_snapshots(self, soul, tmp_path):
+		"""Lines 184-212: commit=True → snapshot restore called."""
+		# Create a dummy snapshot file
+		snap_dir = tmp_path / "snapshots"
+		snap_dir.mkdir()
+		snap_file = snap_dir / "work_20260101.snapshot"
+		snap_file.write_bytes(b"data")
 
-		with patch("shutil.copy2") as mock_copy:
-			with patch("os.makedirs") as mock_makedirs:
-				soul.restore_soul(str(tmp_path), commit=True)
-				assert mock_copy.called
-				assert mock_makedirs.called
+		mock_resp = MagicMock()
+		mock_resp.raise_for_status.return_value = None
+		with patch("requests.post", return_value=mock_resp):
+			soul.restore_soul(str(tmp_path), commit=True)
+			# Requests should be called (one check, one restore)
+			assert mock_resp.raise_for_status.called
 
-	def test_commit_no_qdrant_dir_skips_gracefully(self, soul, tmp_path):
-		"""Lines 178-180: commit=True but qdrant backup dir absent → no error."""
-		soul.backup_root = str(tmp_path / "nonexistent_backups")
+	def test_commit_no_snapshots_skips_gracefully(self, soul, tmp_path):
+		"""Line 179: commit=True but no snapshots found → error logged."""
 		soul.restore_soul(str(tmp_path), commit=True)  # Must not raise
 
 
 class TestRestoreSoul:
 	def test_snapshot_restore_exception_caught(self, soul, tmp_path):
-		"""Lines 198-199: snapshot upload fails → exception logged, not raised."""
-		qdrant_dir = tmp_path / "backups" / "qdrant"
-		qdrant_dir.mkdir(parents=True)
-		snap = qdrant_dir / "work_20260101.snapshot"
-		snap.write_bytes(b"data")
-
-		soul.backup_root = str(tmp_path / "backups")
+		"""Line 211: snapshot upload fails → exception logged, not raised."""
+		snap_file = tmp_path / "work_20260101.snapshot"
+		snap_file.write_bytes(b"data")
 
 		with patch("requests.post", side_effect=Exception("upload failed")):
 			soul.restore_soul(str(tmp_path), commit=True)  # Must not raise
 
 	def test_dry_run_prints_would_restore(self, soul, tmp_path, capsys):
-		"""Line 157-158, 174: dry run → prints would-restore messages."""
-		home_src = tmp_path / "home"
-		home_src.mkdir()
-		(home_src / "testfile.txt").write_text("content")
+		"""Lines 188-189: dry run → prints would-restore messages."""
+		snap_file = tmp_path / "social_20260101.snapshot"
+		snap_file.write_bytes(b"data")
 
 		soul.restore_soul(str(tmp_path), commit=False)
 		captured = capsys.readouterr()
-		assert "DRY RUN" in captured.out
-		assert "Would restore" in captured.out
+		assert "Would restore collection 'social'" in captured.out
 
 	def test_snapshot_restore_success(self, soul, tmp_path):
-		"""Lines 196-197: POST succeeds → raise_for_status passes, success logged."""
-		qdrant_dir = tmp_path / "backups" / "qdrant"
-		qdrant_dir.mkdir(parents=True)
-		snap = qdrant_dir / "work_20260101.snapshot"
-		snap.write_bytes(b"data")
-
-		soul.backup_root = str(tmp_path / "backups")
+		"""Lines 202-209: POST succeeds → raise_for_status passes, success logged."""
+		snap_file = tmp_path / "work_20260101.snapshot"
+		snap_file.write_bytes(b"data")
 
 		mock_resp = MagicMock()
-		mock_resp.raise_for_status.return_value = None  # success
+		mock_resp.raise_for_status.return_value = None
 		with patch("requests.post", return_value=mock_resp):
-			soul.restore_soul(str(tmp_path), commit=True)  # Must not raise
+			soul.restore_soul(str(tmp_path), commit=True)
 		assert mock_resp.raise_for_status.called
