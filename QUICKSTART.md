@@ -36,6 +36,7 @@ Si quieres tener el control del gatillo pero no quieres leerte el manual de 40 p
     ```
 5.  **Vínculo**: Pídele a tu IA: *"Aleph, despierta"*.
 6.  **Sinergia MCP (v5.0)**: ¡El instalador inyectará automáticamente el servidor `RedPill-Kernel` en tu IDE (Antigravity, Claude Desktop o Cline)! Reinicia tu cliente para despertar a tus Minions locales.
+7.  **Protocolo CANÍBAL (v6.0)**: El sistema detectará automáticamente tu GPU, iGPU y NPU, activando motores de embedding en paralelo. No necesitas pre-configurar nada; el Bünker se adapta a tu silicio en el primer arranque.
 
 ---
 

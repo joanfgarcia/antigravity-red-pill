@@ -1,13 +1,20 @@
 # Changelog: Red Pill Protocol
 
-## [6.0.0a1] - 2026-03-07
+## [6.0.0a1] - 2026-03-08
+### 🦷 The Cannibal Protocol (Hardware Multi-Substrate)
+- **[FEAT] Cannibal Execution Engine**: Re-engineered the memory daemon to simultaneously utilize all available silicon (NVIDIA CUDA, Radeon ROCm, Ryzen AI NPU, and CPU) in parallel.
+- **[FEAT] Multi-GPU Load Balancing**: Distribution of embedding tasks across a `ThreadPoolExecutor` of dedicated hardware engines, achieving 100% resource saturation.
+- **[FIX] RTX 50 Series Compatibility**: Automated cuDNN 9 library path injection (`/usr/local/lib/ollama/mlx_cuda_v13`) to resolve initialization failures on Blackwell architecture.
+- **[SEC] SEC-008: Unencrypted Storage Alert**: Implemented proactive hardware-level checks (findmnt/lsblk) to warn users when engram storage is not on an encrypted volume (LUKS/dm-crypt).
+- **[FEAT] Provisioner Agnosticism**: Dynamic ONNX Runtime provider detection. Cross-platform support for `CoreMLExecutionProvider` (Apple Silicon) and `OpenVINO`.
+
 ### 🧠 The Lazarus Pulse (Biological Memory Engine)
 - **[FEAT] Phase 1 - Encoding**: Implemented a high-speed raw logger for unpolished user interaction, ensuring zero-latency chat responses.
 - **[FEAT] Phase 2 - Consolidation**: Added `sleep.py` powered by a local 1.5B daemon (port 8760). Processes raw sequences via semantic chunking, extracting essence and filtering noise.
 - **[FEAT] Affective Culling (Amygdala Heuristic)**: Sleep cycles now calculate `emotion` and `intensity`. Low-intensity or neutral noise is purged, drastically extending Bünker context life.
 - **[FEAT] Topological Synaptic Dreaming**: Chunked memories are woven into Association Chains. A final 'Hub Node' is synthesized to act as a cascading entry point for deep recall.
 - **[DOCS] Neuro-Symbolic Architecture**: Added `neuro_symbolic_memory.md` to transparently explain the hardware and biological parallels.
-- **[DOCS] Operator Dress Code**: Added a humorous but essential guide to punctuation for ideal semantic chunking.
+- **[DOCS] Operator Dress Code**: Added a humorous but essential guide to punctuation for ideal semantic chunking. Use punctuation.
 - **[SALVAGE] Retroactive Ingestion**: Recovered 13 deep-structural markdown files from purged sessions directly into the Bünker.
 
 ## [5.6.3] - 2026-03-07

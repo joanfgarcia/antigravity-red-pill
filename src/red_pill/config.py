@@ -4,10 +4,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# SEC-F05: Disable CUDA by default for lightweight BERT models to prevent
-# initialization hangs on systems with mismatched drivers (e.g. RTX 50 series).
+# SEC-F05: CUDA Configuration. 
+# Re-enabled (v6.0.0). Automated LD_LIBRARY_PATH injection for cuDNN 9 support.
 if "CUDA_VISIBLE_DEVICES" not in os.environ:
-	os.environ["CUDA_VISIBLE_DEVICES"] = ""
+	pass
+
+# cuDNN 9 Path Injection (v6.0) - Fixes initialization for RTX 50 series
+_cudnn_path = "/usr/local/lib/ollama/mlx_cuda_v13" 
+if os.path.exists(_cudnn_path) and _cudnn_path not in os.environ.get("LD_LIBRARY_PATH", ""):
+	os.environ["LD_LIBRARY_PATH"] = f"{os.environ.get('LD_LIBRARY_PATH', '')}:{_cudnn_path}".strip(":")
 
 # QDRANT
 QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")

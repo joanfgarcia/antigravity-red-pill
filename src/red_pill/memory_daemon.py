@@ -6,7 +6,7 @@ import signal
 import socket
 import subprocess
 import sys
-from typing import Any, Optional
+from typing import Any, Optional, List
 
 from fastembed import TextEmbedding  # type: ignore
 
@@ -23,6 +23,7 @@ class MemoryDaemon:
 		self.encoder: Optional[TextEmbedding] = None
 		self.running = True
 		self.server: Optional[socket.socket] = None
+		self.engines = []
 
 	def _check_encryption(self) -> None:
 		"""
@@ -33,20 +34,17 @@ class MemoryDaemon:
 			return
 
 		try:
-			# SEC-001: Check for system tools before proceeding
 			import shutil
 
 			if not shutil.which("findmnt") or not shutil.which("lsblk"):
 				logger.debug("SEC-001: findmnt or lsblk not found. Skipping disk encryption check.")
 				return
 
-			# Identify the block device for IA_DIR/storage
 			storage_path = os.path.join(cfg.IA_DIR, "storage")
 
 			if not os.path.exists(storage_path):
 				os.makedirs(storage_path, exist_ok=True)
 
-			# Use findmnt to get the source device and lsblk to check for 'crypt' type
 			find_dev = subprocess.run(["findmnt", "-nvo", "SOURCE", "-T", storage_path], capture_output=True, text=True, check=False)
 			device = find_dev.stdout.strip()
 
@@ -59,46 +57,56 @@ class MemoryDaemon:
 						f"\033[91m!!! SECURITY WARNING (SEC-008) !!!: The volume {device} storing Red Pill engrams "
 						"does NOT appear to be encrypted. Your data is at risk. (Steam/Water Mode)\033[0m"
 					)
-
 		except Exception as e:
 			logger.debug(f"Failed to perform encryption check: {e}")
 
 	def _load_model(self) -> None:
-		if self.encoder is None:
+		if not self.engines:
 			import shutil
+			# CANNIBAL PROTOCOL (v6.0): Extreme Parallelization.
+			# We don't choose; we devour all available silicons simultaneously.
+			import onnxruntime as ort
+			from concurrent.futures import ThreadPoolExecutor
+			import itertools
+			
+			available_ort = ort.get_available_providers()
+			active_providers = []
 
-			# B760 Asymmetric Priority: ROCm (iGPU) > CUDA (dGPU) > OpenVINO (NPU) > CPU
-			# We prefer the iGPU for background embeddings to keep the dGPU free for reasoning.
-			providers = ["CPUExecutionProvider"]
+			# Collect every capable provider
+			potential = ["CoreMLExecutionProvider", "CUDAExecutionProvider", "ROCmExecutionProvider", "OpenVINOExecutionProvider"]
+			for p in potential:
+				if p in available_ort:
+					active_providers.append(p)
+			
+			# Always include CPU for maximum saturation
+			active_providers.append("CPUExecutionProvider")
+			
+			logger.info(f"CANNIBAL PROTOCOL: Spawning {len(active_providers)} dedicated engines on: {active_providers}")
+			
+			for p in active_providers:
+				try:
+					engine = TextEmbedding(model_name=cfg.EMBEDDING_MODEL, providers=[p])
+					self.engines.append(engine)
+				except Exception as e:
+					logger.warning(f"Failed to prime {p} engine: {e}. Skipping.")
+			
+			if not self.engines:
+				raise RuntimeError("Cannibal Protocol Failure: No engines primed.")
+			
+			self.engine_cycle = itertools.cycle(self.engines)
+			self.executor = ThreadPoolExecutor(max_workers=len(self.engines))
+			# Sentinel for legacy references
+			self.encoder = self.engines[0]
 
-			has_amdgpu = False
-			for i in range(5):
-				if os.path.exists(f"/sys/class/drm/card{i}/device/driver/module/name"):
-					with open(f"/sys/class/drm/card{i}/device/driver/module/name", "r") as f:  # pragma: no cover
-						if "amdgpu" in f.read():  # pragma: no cover
-							has_amdgpu = True  # pragma: no cover
-							break  # pragma: no cover
-
-			if has_amdgpu:  # pragma: no cover
-				providers = ["ROCmExecutionProvider", "CPUExecutionProvider"]  # pragma: no cover
-			elif shutil.which("nvidia-smi"):  # pragma: no cover
-				providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]  # pragma: no cover
-
-			# Add OpenVINO if NPU is present
-			if os.path.exists("/sys/class/accel/accel0"):  # pragma: no cover
-				providers.insert(0, "OpenVINOExecutionProvider")  # pragma: no cover
-
-			logger.info(f"Loading embedding model {cfg.EMBEDDING_MODEL} with providers: {providers}")
-			try:
-				self.encoder = TextEmbedding(model_name=cfg.EMBEDDING_MODEL, providers=providers)  # pragma: no cover
-			except Exception as e:  # pragma: no cover
-				logger.warning(f"Hardware-accelerated embedding failed ({e}). Falling back to CPU only.")  # pragma: no cover
-				self.encoder = TextEmbedding(model_name=cfg.EMBEDDING_MODEL, providers=["CPUExecutionProvider"])  # pragma: no cover
+	def embed_cannibal(self, texts: List[str]) -> List[float]:
+		"""Distributes the load across all primed hardware engines."""
+		engine = next(self.engine_cycle)
+		return list(engine.embed(texts))[0].tolist()
 
 	def start(self) -> None:
 		if not cfg.SIDECAR_AUTH_KEY:
-			logger.error("SEC-004: SIDECAR_AUTH_KEY is missing. Refusing to start daemon to prevent unauthenticated sidecar access.")
-			raise RuntimeError("SIDECAR_AUTH_KEY must be set in your environment or .env file.")
+			logger.error("SEC-004: SIDECAR_AUTH_KEY is missing.")
+			raise RuntimeError("SIDECAR_AUTH_KEY must be set.")
 
 		self._check_encryption()
 		if os.path.exists(SOCKET_PATH):
@@ -139,15 +147,13 @@ class MemoryDaemon:
 					logger.error(f"Loop failure: {e}")
 
 	def handle_connection(self, conn: socket.socket) -> None:
-		"""Handles a single client connection (Framing + Auth + Execution)."""
+		"""Handles a single client connection."""
 		try:
-			# 1. Read Header (4 bytes)
 			header = conn.recv(4)
 			if not header:
 				return
 			payload_len = int.from_bytes(header, byteorder="big")
 
-			# 2. Read Full Payload
 			data = b""
 			while len(data) < payload_len:
 				chunk = conn.recv(min(payload_len - len(data), 8192))
@@ -160,17 +166,16 @@ class MemoryDaemon:
 
 			try:
 				request = json.loads(data.decode("utf-8"))
-
-				# SEC-002 & SEC-004: Shared Secret Auth (Hardened)
 				auth_key = str(cfg.SIDECAR_AUTH_KEY or "").strip()
 				provided_key = str(request.get("api_key") or "").strip()
 
 				if not auth_key or not provided_key or not hmac.compare_digest(provided_key, auth_key):
-					response = {"status": "error", "message": "Unauthorized (B760 Handshake failed)"}
+					response = {"status": "error", "message": "Unauthorized"}
 				else:
 					text = request.get("text")
-					if text and self.encoder:
-						vector = list(self.encoder.embed([text]))[0].tolist()
+					if text and self.engines:
+						# Phase O.11: Cannibal Execution
+						vector = self.embed_cannibal([text])
 						response = {"status": "ok", "vector": vector}
 					elif request.get("command") == "ping":
 						response = {"status": "ok", "message": "pong"}
@@ -179,7 +184,6 @@ class MemoryDaemon:
 			except Exception as e:
 				response = {"status": "error", "message": str(e)}
 
-			# 3. Send Response with Header
 			resp_payload = json.dumps(response).encode("utf-8")
 			resp_header = len(resp_payload).to_bytes(4, byteorder="big")
 			conn.sendall(resp_header + resp_payload)
@@ -190,10 +194,8 @@ class MemoryDaemon:
 		if not self.running:
 			return
 		self.running = False
-		# Stop Autonomous Pulse
 		if hasattr(self, "pulse"):
 			self.pulse.stop()
-
 		if self.server:
 			try:
 				self.server.close()
