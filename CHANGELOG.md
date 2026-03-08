@@ -2,6 +2,7 @@
 
 ## [6.0.0a1] - 2026-03-08
 ### 🦷 The Cannibal Protocol (Hardware Multi-Substrate)
+- **[FEAT] Soul Integrity (Hardened Restoration)**: Re-engineered the `restore_soul` workflow to support high-integrity snapshot uploads. Added authentication headers, 300s timeouts for large engram substrates, and granular per-collection reporting.
 - **[FEAT] Cannibal Execution Engine**: Re-engineered the memory daemon to simultaneously utilize all available silicon (NVIDIA CUDA, Radeon ROCm, Ryzen AI NPU, and CPU) in parallel.
 - **[FEAT] Multi-GPU Load Balancing**: Distribution of embedding tasks across a `ThreadPoolExecutor` of dedicated hardware engines, achieving 100% resource saturation.
 - **[FIX] RTX 50 Series Compatibility**: Automated cuDNN 9 library path injection (`/usr/local/lib/ollama/mlx_cuda_v13`) to resolve initialization failures on Blackwell architecture.

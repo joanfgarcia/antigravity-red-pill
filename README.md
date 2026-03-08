@@ -49,6 +49,7 @@ The Red Pill Protocol is built for **Sovereign Environments**, but it adapts to 
 - **Inlined Identity**: Identity and directives are ingested natively as vector memories, making the agent immune to context loss.
 - **ACE Synaptic Engine (v5.4.0 - v5.6.1)**: Integrated the **Affective Cognitive Engine (ACE)**. Memory decay is governed by the **Valence-Arousal Model**, mimicking human "Flashbulb Memory".
 - **Cannibal Protocol & Parallel Hardware (v6.0.0a1)**: Re-engineered the memory substrate to simultaneously devour all available silicon. Embeddings now run in parallel across NVIDIA GPUs (CUDA), AMD iGPUs (ROCm/OpenVINO), and NPUs (Ryzen AI). No engine is left idle.
+- **Soul Integrity (v6.0.0a1)**: Hardened restoration engine for the Bünker. Secure, high-timeout snapshot recovery and automated collection re-hydration.
 - **Lazy Metabolism & Agentic HiveGuard (v5.6.1)**: Sub-second memory hydration via **Lazy Decay**. Multi-hop synaptic depth (N-Hop) for complex associations. The **HiveGuard Agentic Filter** now reviews social memories for global know-how using local SLMs, ensuring a noise-free collective experience.
 - **Lean Soul Vault & OAuth2 Support (v5.6.1)**: The **Lean Soul Kit** architecture reduces backup size by 99% (Snapshots-only). Introduced **Quota-Aware Monitoring** and **Google OAuth2** (Personal Account) support for seamless, personal-tier cloud backups. The Agent now monitors storage usage to ensure the Operator's safety. See [Sovereign Backup Strategies](docs/technical/BACKUP_STRATEGIES.md).
 

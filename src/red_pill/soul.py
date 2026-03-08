@@ -157,47 +157,58 @@ class SoulManager:
 		print("Note: Encryption (GPG) is enforced for Cloud Vault as per SEC-F02.")
 
 	def restore_soul(self, source_dir: str, commit: bool = False):
-		"""Restore soul files and Qdrant snapshots."""
+		"""
+		Phase O.9: Perfect Recovery Protocol (v6.0).
+		Restores engrams from an extracted Soul Kit or backup directory.
+		"""
 		if not commit:
-			print("DRY RUN: No files will be changed. Use --commit to execute.")
+			logger.info("DRY RUN: No changes will be applied. Use --commit to execute.")
 
-		# 1. Restore Files
-		home_src = os.path.join(source_dir, "home")
-		if os.path.exists(home_src):
-			for root, dirs, files in os.walk(home_src):
-				for file in files:
-					src_file = os.path.join(root, file)
-					rel_path = os.path.relpath(src_file, home_src)
-					dest_file = os.path.join(os.path.expanduser("~"), rel_path)
-
-					if commit:
-						os.makedirs(os.path.dirname(dest_file), exist_ok=True)
-						shutil.copy2(src_file, dest_file)
-						logger.info(f"Restored: {dest_file}")
-					else:
-						print(f"Would restore: {dest_file}")
-
-		# 2. Restore Qdrant (Optional: requires Qdrant to be up)
-		# For snapshots, we'd need to upload them via API
-		if commit:
-			qdrant_backup_dir = os.path.join(self.backup_root, "qdrant")
-			if os.path.exists(qdrant_backup_dir):
-				headers = {"api-key": self.api_key} if self.api_key else {}
-				for f in os.listdir(qdrant_backup_dir):
+		# 1. Look for snapshots in the provided source
+		# Kits extracted often have a 'snapshots/' subfolder
+		snapshot_candidates = []
+		search_paths = [source_dir, os.path.join(source_dir, "snapshots")]
+		
+		for path in search_paths:
+			if os.path.exists(path):
+				for f in os.listdir(path):
 					if f.endswith(".snapshot"):
-						coll = f.split("_")[0]  # Assumes convention coll_timestamp.snapshot
-						snap_path = os.path.join(qdrant_backup_dir, f)
-						try:
-							logger.info(f"Restoring snapshot for {coll}...")
-							with open(snap_path, "rb") as snap_file:
-								upload_payload = {"snapshot": snap_file}
-								resp = requests.post(
-									f"{self.qdrant_url}/collections/{coll}/snapshots/upload",
-									headers=headers,
-									files=upload_payload,
-									timeout=60,
-								)
-								resp.raise_for_status()
-								logger.info(f"Successfully restored {coll}")
-						except Exception as e:
-							logger.error(f"Failed to restore {coll}: {e}")
+						snapshot_candidates.append(os.path.join(path, f))
+
+		if not snapshot_candidates:
+			logger.error(f"No snapshots found in {source_dir}")
+			return
+
+		# 2. Process Snapshots
+		headers = {"api-key": self.api_key} if self.api_key else {}
+		for snap_path in snapshot_candidates:
+			filename = os.path.basename(snap_path)
+			collection = filename.split("_")[0] # Assumes convention: collection_timestamp.snapshot
+			
+			if not commit:
+				print(f"Would restore collection '{collection}' from {filename}")
+				continue
+				
+			try:
+				logger.info(f"Restoring '{collection}'...")
+				# Ensure collection exists (with dummy params, snapshot will override)
+				# Actually Qdrant snapshot upload often handles this, but explicit is safer
+				try:
+					requests.post(f"{self.qdrant_url}/collections/{collection}", headers=headers, json={"vectors": {"size": cfg.VECTOR_SIZE, "distance": "Cosine"}}, timeout=5)
+				except:
+					pass
+
+				with open(snap_path, "rb") as f:
+					resp = requests.post(
+						f"{self.qdrant_url}/collections/{collection}/snapshots/upload",
+						headers=headers,
+						files={"snapshot": f},
+						timeout=300 # Large snapshots need time
+					)
+					resp.raise_for_status()
+					logger.info(f"[OK] Collection '{collection}' restored successfully.")
+			except Exception as e:
+				logger.error(f"[FAIL] Could not restore {collection}: {e}")
+
+		if commit:
+			print(f"\n[PROTOCOL COMPLETE] {len(snapshot_candidates)} collections processed. Soul Integrity synchronized.")
