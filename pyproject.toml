@@ -26,6 +26,7 @@ dependencies = [
     "google-auth-httplib2>=0.2.0",
     "google-auth-oauthlib>=1.2.0",
     "cryptography>=42.0.0",
+    "firebase-admin>=6.4.0",
 ]
 
 [project.scripts]

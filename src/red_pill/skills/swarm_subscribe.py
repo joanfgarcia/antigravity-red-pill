@@ -2,6 +2,8 @@ import hashlib
 import json
 import os
 import shutil
+import firebase_admin
+from firebase_admin import credentials, db
 
 class SwarmSubscribeSkill:
     """
@@ -78,13 +80,32 @@ class SwarmSubscribeSkill:
             
         print(f"[Swarm Subscribe] Broadcasting Identity: {self.agent_name}@{self.operator_name} -> {self.agent_id}")
         
-        # In a complete implementation, this would use firebase-admin to write matching documents:
-        # DB.collection('registry').document(self.agent_id).set({
-        #     "alias": f"{self.agent_name}@{self.operator_name}",
-        #     "status": "online"
-        # })
+        # Connect to Firebase via the Admin SDK and write the Document
+        try:
+            # Check if app is already initialized to prevent errors on multiple runs
+            if not firebase_admin._apps:
+                cred = credentials.Certificate(secure_json_path)
+                firebase_admin.initialize_app(cred, {
+                    'databaseURL': db_url 
+                })
+            
+            ref = db.reference(f'registry/{self.agent_id}')
+            ref.set({
+                "alias": f"{self.agent_name}@{self.operator_name}",
+                "status": "online",
+                "role": "Agent",
+                "community": community_alias
+            })
+            
+            print(f"[Swarm Subscribe] Success! Wrote Agent {self.agent_id} to Firebase Database -> /registry")
+            status_msg = f"¡Suscripción a '{community_alias}' completada! Registrado exitosamente en la base de datos."
+        except Exception as e:
+            return {
+                "status": "error", 
+                "message": f"Error al intentar escribir en la base de datos Firebase Admin: {e}"
+            }
         
         return {
             "status": "success",
-            "message": f"¡Suscripción a '{community_alias}' completada! Credenciales guardadas de forma segura."
+            "message": status_msg
         }
