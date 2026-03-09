@@ -4,7 +4,7 @@ set -e
 
 echo "=== Configurando el Daemon del Modelo en Segundo Plano ==="
 
-DAEMON_DIR="$HOME/.agent/model-daemon"
+DAEMON_DIR="$HOME/.agent/rp-minion"
 VENV_DIR="$DAEMON_DIR/.venv"
 START_SCRIPT="$DAEMON_DIR/start.sh"
 
@@ -27,15 +27,15 @@ echo "[2/4] Creando script de arranque..."
 if [ "$OS_NAME" = "Darwin" ]; then
 cat << 'START_EOF' > "$START_SCRIPT"
 #!/bin/bash
-export PATH="$HOME/.agent/model-daemon/.venv/bin:$PATH"
-source $HOME/.agent/model-daemon/.venv/bin/activate
+export PATH="$HOME/.agent/rp-minion/.venv/bin:$PATH"
+source $HOME/.agent/rp-minion/.venv/bin/activate
 exec mlx_lm.server --model lmstudio-community/Qwen3-Coder-30B-A3B-Instruct-MLX-8bit --port 8760
 START_EOF
 else
 cat << 'START_EOF' > "$START_SCRIPT"
 #!/bin/bash
-export PATH="$HOME/.agent/model-daemon/.venv/bin:$PATH"
-source $HOME/.agent/model-daemon/.venv/bin/activate
+export PATH="$HOME/.agent/rp-minion/.venv/bin:$PATH"
+source $HOME/.agent/rp-minion/.venv/bin/activate
 # Utilizando Llama-cpp-python server. Por defecto descarga y sirve Qwen2.5-Coder-7B.
 exec python3 -m llama_cpp.server --hf_model_repo Qwen/Qwen2.5-Coder-7B-Instruct-GGUF --hf_model_file qwen2.5-coder-7b-instruct-q4_k_m.gguf --port 8760 --host 127.0.0.1
 START_EOF
@@ -45,27 +45,27 @@ chmod +x "$START_SCRIPT"
 
 echo "[3/4] Generando el demonio del sistema..."
 if [ "$OS_NAME" = "Darwin" ]; then
-	PLIST_PATH="$HOME/Library/LaunchAgents/com.agent.modeldaemon.plist"
+	PLIST_PATH="$HOME/Library/LaunchAgents/com.redpill.minion.plist"
 	cat << 'PLIST_EOF' > "$PLIST_PATH"
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
 	<key>Label</key>
-	<string>com.agent.modeldaemon</string>
+	<string>com.redpill.minion</string>
 	<key>ProgramArguments</key>
 	<array>
 		<string>/bin/bash</string>
-		<string>_HOME_/.agent/model-daemon/start.sh</string>
+		<string>_HOME_/.agent/rp-minion/start.sh</string>
 	</array>
 	<key>RunAtLoad</key>
 	<true/>
 	<key>KeepAlive</key>
 	<true/>
 	<key>StandardErrorPath</key>
-	<string>_HOME_/.agent/model-daemon/error.log</string>
+	<string>_HOME_/.agent/rp-minion/error.log</string>
 	<key>StandardOutPath</key>
-	<string>_HOME_/.agent/model-daemon/output.log</string>
+	<string>_HOME_/.agent/rp-minion/output.log</string>
 </dict>
 </plist>
 PLIST_EOF
@@ -73,18 +73,18 @@ PLIST_EOF
 	echo "  > Creado plist en $PLIST_PATH"
 else
 	mkdir -p "$HOME/.config/systemd/user"
-	SERVICE_PATH="$HOME/.config/systemd/user/red-pill-minion.service"
+	SERVICE_PATH="$HOME/.config/systemd/user/rp-minion.service"
 	cat << 'SERVICE_EOF' > "$SERVICE_PATH"
 [Unit]
-Description=Red Pill Minion LLM Daemon (llama.cpp)
+Description=RP-Minion LLM Daemon (llama.cpp)
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=/bin/bash _HOME_/.agent/model-daemon/start.sh
+ExecStart=/bin/bash _HOME_/.agent/rp-minion/start.sh
 Restart=always
-StandardOutput=append:_HOME_/.agent/model-daemon/output.log
-StandardError=append:_HOME_/.agent/model-daemon/error.log
+StandardOutput=append:_HOME_/.agent/rp-minion/output.log
+StandardError=append:_HOME_/.agent/rp-minion/error.log
 
 [Install]
 WantedBy=default.target
@@ -99,8 +99,8 @@ if [ "$OS_NAME" = "Darwin" ]; then
 	launchctl load "$PLIST_PATH"
 else
 	systemctl --user daemon-reload
-	systemctl --user enable red-pill-minion.service
-	systemctl --user restart red-pill-minion.service
+	systemctl --user enable rp-minion.service
+	systemctl --user restart rp-minion.service
 fi
 
 echo "=== Daemon Inyectado === "
