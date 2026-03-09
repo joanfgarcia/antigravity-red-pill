@@ -153,6 +153,17 @@ async def handle_list_tools() -> List[types.Tool]:
 				"required": ["collection", "id"],
 			},
 		),
+		types.Tool(
+			name="adjust_sleep_knobs",
+			description="Adjust the 'Sovereign Knobs' for memory consolidation (chunk size and culling threshold).",
+			inputSchema={
+				"type": "object",
+				"properties": {
+					"chunk_size": {"type": "integer", "description": "Max characters per memory unit (e.g. 500)"},
+					"cull_threshold": {"type": "number", "description": "Sensitivity (0-1). Higher = more aggressive filtration (e.g. 0.3)."},
+				},
+			},
+		),
 	]
 
 
@@ -319,6 +330,28 @@ async def handle_call_tool(
 			return [types.TextContent(type="text", text=response)]
 		except Exception as e:
 			return [types.TextContent(type="text", text=f"Mood Sync Failed: {e}")]
+
+	elif name == "adjust_sleep_knobs":
+		size = arguments.get("chunk_size")
+		threshold = arguments.get("cull_threshold")
+		
+		try:
+			from scripts.update_env import update_env
+			updates = {}
+			if size is not None:
+				cfg.SLEEP_CHUNK_SIZE = size
+				updates["SLEEP_CHUNK_SIZE"] = str(size)
+			if threshold is not None:
+				cfg.SLEEP_CULL_THRESHOLD = threshold
+				updates["SLEEP_CULL_THRESHOLD"] = str(threshold)
+				
+			if updates:
+				update_env(updates)
+				return [types.TextContent(type="text", text=f"Sovereign Knobs adjusted: {updates}")]
+			return [types.TextContent(type="text", text="No adjustments made.")]
+		except Exception as e:
+			# Fallback if scripts.update_env is missing or fails
+			return [types.TextContent(type="text", text=f"Failed to persist knobs: {e}. Values updated in memory only.")]
 
 	raise ValueError(f"Unknown tool: {name}")
 

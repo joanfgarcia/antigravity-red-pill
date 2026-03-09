@@ -1,5 +1,12 @@
 # Changelog: Red Pill Protocol
 
+## [6.0.0a2] - 2026-03-09
+### 🛠️ Persistent Sovereignty & Metabolic Optimization
+- **[FEAT] Persistent Sovereign Knobs**: Integrated `scripts/update_env.py` to allow metabolic parameters (`SLEEP_CHUNK_SIZE`, `SLEEP_CULL_THRESHOLD`) to survive system reboots.
+- **[IMPR] MCP Configuration Persistence**: Enhanced the `adjust_sleep_knobs` MCP tool to atomically verify and write adjustments to the `.env` file via the new update script.
+- **[REFACTOR] Configuration Decoupling**: Extracted hardcoded constants from `sleep.py` (including `MLX_LM_URL` and cull heuristics) into the centralized `config.py` for easier auditing and adjustment.
+- **[QA] Regression Guard**: Verified CLI and Version integrity after metabolic refactoring with 100% test pass rate.
+
 ## [6.0.0a1] - 2026-03-08
 ### 🦷 The Cannibal Protocol (Hardware Multi-Substrate)
 - **[FEAT] Soul Integrity (Hardened Restoration)**: Re-engineered the `restore_soul` workflow to support high-integrity snapshot uploads. Added authentication headers, 300s timeouts for large engram substrates, and granular per-collection reporting.

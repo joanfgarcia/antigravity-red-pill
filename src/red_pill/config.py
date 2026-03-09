@@ -264,3 +264,9 @@ CHUNK_THRESHOLD = int(os.getenv("CHUNK_THRESHOLD", "800"))
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "500"))
 # Chunk Overlap: The number of characters repeated between consecutive fragments.
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "100"))
+
+# SLEEP CYCLE REFINEMENT (v6.0)
+# SLEEP_CHUNK_SIZE: Max characters per interaction fragment during sleep distillation.
+SLEEP_CHUNK_SIZE = int(os.getenv("SLEEP_CHUNK_SIZE", "500"))
+# SLEEP_CULL_THRESHOLD: Minimum intensity to keep a neutral chunk during consolidation.
+SLEEP_CULL_THRESHOLD = float(os.getenv("SLEEP_CULL_THRESHOLD", "0.1"))
