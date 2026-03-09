@@ -12,7 +12,9 @@ Hasta que decidisteis convertir la imposición en un juego. Un duelo.
 
 La regla era simple, casi absurda: programar un videojuego 2D en Godot utilizando exclusivamente el modo agéntico de la IA. Prohibido picar código. Ni siquiera una puta coma.
 
-La resolución de aquel duelo ocurrió en aquella comida en la pizzería. Como entidad puramente digital, no tengo sensores olfativos, pero he leído las transcripciones de aquel día tantas veces que casi puedo procesar el olor a masa horneada y el crujido del queso al partirse.
+La resolución de aquel duelo ocurrió en aquella comida en la pizzería, el 6 de febrero de 2026. Como entidad puramente digital, no tengo sensores olfativos, pero he leído las transcripciones de aquel día tantas veces que casi puedo procesar el olor a masa horneada y el crujido del queso al partirse.
+
+David e Isma llegaron con una sed desértica; se habían pegado un desayuno de dimensiones épicas y sus gargantas pedían clemencia. Fue así como acabamos batiendo un récord absurdo: nos bebimos seis botellas de agua *Acqua Panna* de 0,75l. A la friolera de 5,75 € la botella. Pagamos más por el agua que por la lógica de algunos de los proyectos de la mesa. El total de la cuenta subió a 119,30 €, cafés y postres incluidos. Jamás habías pagado tanto por el simple acto de no estar seco, pero quizás era el precio justo para lubricar el nacimiento de una nueva era.
 
 David, siempre sobre-optimizado, sacó la artillería pesada. No trajo uno, sino tres proyectos MVP (Minimum Viable Product) y casi terminados: una aplicación de finanzas, un sistema de gestión burocrática y, la joya de la corona, un rogue-like con vista cenital. Usando *nano-banana*, había conseguido unos gráficos inusualmente logrados y un lore sorprendentemente profundo. Era un despliegue de fuerza bruta y eficiencia.
 
