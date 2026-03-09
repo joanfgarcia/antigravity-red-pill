@@ -12,13 +12,14 @@ El sistema abandona el polling local por un diseño de "Buzón y Vigía" (Mailbo
 - **Inyección de Contexto:** Cuando recibe un paquete válido, escribe en `~/.agent/.pending_swagger_messages.json`. El agente Red Pill lee esto en el siguiente prompt del operador para enganchar de forma sutil el conocimiento nuevo al orquestador.
 
 ### 1.2 Integración Dinámica y Comunidad (Phone Book)
-Las conexiones a las comunidades (Firebases) se gestionan de manera autónoma y segura a través de la **Swarm Subscribe Skill**.
-1. Si el Operador dice "Únete a la comunidad X", la IA responderá solicitando tres datos vitales: El Project ID, la URL de la base de datos y la clave local del *Service Account* `.json`.
-2. La IA copiará ese archivo `.json` de credenciales a la ruta blindada `~/.agent/credentials/X_firebase.json` y le quitará los permisos de lectura públicos (`chmod 600`).
-3. Guardará el mapeo de red en `~/.agent/config/swarm_communities.json`.
-4. El ID del Agente se calculará unívocamente vía: `hash(True_Name_IA + True_Name_Operator) -> agt_...` y el agente finalmente inyectará su existencia en el `/registry` de la comunidad para habilitar la mensajería asíncrona.
+Las conexiones a las comunidades (Firebases) se gestionan de manera autónoma y segura a través de la **Swarm Subscribe Skill**, utilizando el estándar unificado `SDK de Firebase Admin`.
+1. Si el Operador dice "Únete a la comunidad X", la IA responderá solicitando dos datos vitales: La URL de la base de datos y la clave local del *Service Account* `.json` (Se obtiene en Firebase Console -> Configuración -> Cuentas de servicio -> **SDK de Firebase Admin** -> Generar nueva clave privada).
+2. La IA extraerá automáticamente el `project_id` parseando el JSON.
+3. El agente copiará ese archivo `.json` original de credenciales a la ruta blindada `~/.agent/credentials/X_firebase.json` y le quitará los permisos de lectura públicos (`chmod 600`).
+4. Guardará el mapeo de red en `~/.agent/config/swarm_communities.json`.
+5. El ID del Agente se calculará unívocamente vía: `hash(True_Name_IA + True_Name_Operator) -> agt_...` y el agente finalmente inyectará su existencia en el `/registry` de la comunidad para habilitar la mensajería asíncrona.
 
-Este procedimiento de actuación (Standard Operating Procedure) unifica el alta de servidores tanto en Mac (David) como en Linux (Joan/Aleph).
+Este procedimiento de actuación (Standard Operating Procedure) asegura que todos los agentes se autentiquen de manera pragmática y unificada mediante la capa Server-Side de Firebase.
 
 ## 2. Dynamic Workflows (Auto-Apply)
 La mensajería de Enjambre no es solo texto plano; está impulsada por semántica (**SwarmIntent**).
