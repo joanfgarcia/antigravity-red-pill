@@ -25,24 +25,31 @@ class SwarmSubscribeSkill:
         raw = f"{self.agent_name.lower().strip()}:{self.operator_name.lower().strip()}"
         return f"agt_{hashlib.sha256(raw.encode()).hexdigest()[:24]}"
         
-    def execute(self, community_alias: str, project_id: str = None, db_url: str = None, service_acc_json_path: str = None):
+    def execute(self, community_alias: str, db_url: str = None, service_acc_json_path: str = None):
         """
         Registers the Agent's Routing ID in the target Firebase Registry.
         If credentials are not provided, outputs what is needed.
         """
-        if not all([project_id, db_url, service_acc_json_path]):
+        if not all([db_url, service_acc_json_path]):
             return {
                 "status": "missing_info",
                 "message": (
-                    f"Para suscribirnos a la comunidad '{community_alias}', necesito 3 datos:\n"
-                    "1. El Project ID de Firebase.\n"
-                    "2. La URL de la Base de Datos (Realtime DB o Firestore).\n"
-                    "3. La ruta local al archivo JSON de claves (Service Account).\n"
-                    "Dámelos y yo me encargaré de guardarlos en el área segura (~/.agent/credentials/)."
+                    f"Para suscribirnos a la comunidad '{community_alias}' a través del SDK de Firebase Admin unificado, necesito 2 datos:\n"
+                    "1. La URL de la Base de Datos (ej. https://tu-comunidad-default-rtdb.europe-west1.firebasedatabase.app).\n"
+                    "2. La ruta local al archivo de claves JSON. Lo puedes generar en Firebase Console -> Configuración del proyecto -> Cuentas de servicio -> 'SDK de Firebase Admin' -> botón 'Generar nueva clave privada'.\n"
+                    "Dámelos y yo me encargaré de extraer tu Project ID y blindar la conexión vía ~/.agent/credentials/."
                 )
             }
             
         print(f"[Swarm Subscribe] Processing subscription to Hub: {community_alias}")
+        
+        # Parse the project_id from the Google Service Account JSON explicitly
+        try:
+            with open(service_acc_json_path, 'r') as f:
+                 key_data = json.load(f)
+                 project_id = key_data.get("project_id", "NOT_FOUND_IN_SDK_KEY")
+        except Exception as e:
+            return {"status": "error", "message": f"Could not read the Firebase Admin SDK JSON: {e}"}
         
         # 1. Store the Service Account securely
         secure_json_path = os.path.join(self.CREDENTIALS_DIR, f"{community_alias}_firebase.json")
