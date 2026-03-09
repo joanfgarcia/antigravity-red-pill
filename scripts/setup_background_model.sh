@@ -36,8 +36,8 @@ cat << 'START_EOF' > "$START_SCRIPT"
 #!/bin/bash
 export PATH="$HOME/.agent/model-daemon/.venv/bin:$PATH"
 source $HOME/.agent/model-daemon/.venv/bin/activate
-# Utilizando Llama-cpp-python server. Por defecto descarga y sirve Qwen2.5-Coder-7B.
-exec python3 -m llama_cpp.server --hf_model_repo Qwen/Qwen2.5-Coder-7B-Instruct-GGUF --hf_model_file qwen2.5-coder-7b-instruct-q4_k_m.gguf --port 8760 --host 127.0.0.1
+# Utilizando Llama-cpp-python server. Por defecto descarga y sirve Samantha (Mistral 7B).
+exec python3 -m llama_cpp.server --hf_model_repo_id TheBloke/samantha-1.2-mistral-7B-GGUF --model "*Q4_K_M.gguf" --port 8760 --host 127.0.0.1
 START_EOF
 fi
 

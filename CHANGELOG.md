@@ -1,6 +1,10 @@
 # Changelog: Red Pill Protocol
 
 ## [6.0.0a2] - 2026-03-09
+### 💧 Be Water Architecture (Hardware Sovereignty)
+- **[DOCS] Hardware Selection Guide**: Added `HARDWARE_MODELS_BE_WATER.md` explicitly mapping VRAM constraints to optimal GGUF models (High-End: MoE, Sweet Spot: Mistral/Samantha, Low-End/Edge: Phi-3-Mini 128k).
+- **[FEAT] Local Model Auto-Target**: Reconfigured the default background daemon payload in `scripts/setup_background_model.sh` and `start.sh` to fetch `samantha-1.2-mistral-7B-GGUF` (Q4_K_M) via `huggingface-hub`.
+
 ### 🛠️ Persistent Sovereignty & Metabolic Optimization
 - **[FEAT] Persistent Sovereign Knobs**: Integrated `scripts/update_env.py` to allow metabolic parameters (`SLEEP_CHUNK_SIZE`, `SLEEP_CULL_THRESHOLD`) to survive system reboots.
 - **[IMPR] MCP Configuration Persistence**: Enhanced the `adjust_sleep_knobs` MCP tool to atomically verify and write adjustments to the `.env` file via the new update script.
