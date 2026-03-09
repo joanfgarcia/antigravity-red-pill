@@ -35,8 +35,13 @@ The `associations` field is a flat list of UUIDs.
 The schema is " Schemaless" (JSON payload).
 - **Flexibility**: High.
 - **Fragility**: High. The `PointUpdate` class relies on implicit knowledge of payload structure. If v5.0 introduces nested weights or time-series data for reinforcement history, the flat payload update logic will inevitably corrupt data.
-- **VectorRigidity**: `VECTOR_SIZE` is configurable but immutable post-seed. Migrating to a new embedding model requires re-generating all vectors.
   **ARCH-001 NOTE**: The full source text is stored in every engram's Qdrant payload (`payload["content"]`). Re-embedding on model upgrade is therefore safe — no data is lost. What is missing is an automated **Transcoding** migration script (`red-pill re-embed --model new-model`). This is a tooling gap, not a data loss risk.
+
+### 3.4. Background Services (Daemons) Standard
+To ensure the Bünker remains observable and resource-accountable, all persistent background processes must adhere to the **`RP-*` Naming Standard**:
+- **Prefix Rule**: Every Red Pill daemon, service, or system listener MUST be named starting with `RP-` (e.g., `RP-Minion` for the local LLM, `RP-Watcher` for the Swarm listener).
+- **Service Files**: System registration files MUST reflect this (e.g., `com.redpill.watcher.plist`, `rp-minion.service`).
+- **Log Unification**: All background components MUST output logs into the `~/.agent/rp-<name>/` structure to prevent cross-contamination and guarantee rapid debugging.
 
 ## 4. Recommendations for v5.0 (Global Scale Strategy)
 1.  **[RESOLVED v4.2.1] Time-To-Live (TTL) Indexing**: Move erosion from strict scan to a timestamp-based index query. Only fetch/update memories where `last_recalled_at < now - METABOLISM_COOLDOWN`.
@@ -100,7 +105,7 @@ Project Lazarus is designed to be **Water**—fluid across all hardware tiers. T
 ## 10. Conclusion: The Red Pill Vision
 Red Pill distinguishes itself by weaving together autonomous agency, human‑like memory dynamics, thematic storytelling, and a privacy‑first, zero‑trust ethos. Its originality lies not in a novel algorithm but in the holistic experience it offers: an AI that remembers you, speaks your chosen mythology, respects your data, and behaves like a trustworthy teammate. This combination of narrative flair, governance rigor, and self‑sustaining memory makes Red Pill a uniquely positioned project in the landscape of AI‑augmented productivity tools.
 
-The system has evolved from a single-user prototype into a **Cognitive Swarm architecture** (v5.1). The current implementation deploys agents as concurrent `asyncio` coroutines via `GruOrchestrator.deploy_swarm()` — providing parallelism and isolation within a single process. The transition to a true **distributed multi-process architecture** (separate OS processes, cross-machine deployment) is scoped for v6.0 and formally tracked in the roadmap.
+The system has evolved from a single-user prototype into a **Cognitive Swarm architecture** (v5.1). The current implementation deploys agents as concurrent `asyncio` coroutines via `GruOrchestrator.deploy_swarm()` — providing parallelism and isolation within a single process. The transition to a true **distributed multi-process architecture** (separate OS processes, cross-machine deployment) is scoped for v6.0 and formally tracked in the roadmap. This is materialized via the **Swarm Messaging V3 Protocol** (see [SWARM_MESSAGING.md](SWARM_MESSAGING.md) for specs on E2E Encryption, Daemons, and Dynamic Workflows).
 
 **Status**: GREEN (Full Pass). The Bünker is secured, the Swarm is concurrent, and the foundation for Project Lazarus is operational.
 
