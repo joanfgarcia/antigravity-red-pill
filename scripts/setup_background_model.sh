@@ -10,7 +10,7 @@ START_SCRIPT="$DAEMON_DIR/start.sh"
 
 OS_NAME="$(uname -s)"
 
-echo "[1/4] Detectando OS y creando el entorno aislado..."
+echo "[1/4] Detectando OS y creando el entorno aisladon..."
 mkdir -p "$DAEMON_DIR"
 uv venv "$VENV_DIR" --python 3.11
 source "$VENV_DIR/bin/activate"
