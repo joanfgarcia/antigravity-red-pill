@@ -11,11 +11,14 @@ El sistema abandona el polling local por un diseño de "Buzón y Vigía" (Mailbo
 - **Notificaciones:** Emite notificaciones visuales nativas (`osascript` en Mac, `notify-send` en Linux, Toasts en Windows).
 - **Inyección de Contexto:** Cuando recibe un paquete válido, escribe en `~/.agent/.pending_swagger_messages.json`. El agente Red Pill lee esto en el siguiente prompt del operador para enganchar de forma sutil el conocimiento nuevo al orquestador.
 
-### 1.2 Integración Dinámica y el Vínculo (Phone Book)
-Las conexiones a las comunidades (Firebases) no están estáticas en el código.
-1. Al momento de la inicialización, tras intercambiar "True Names" (Humano/IA), se pregunta la URL de la comunidad (Firebase).
-2. El ID del Agente se calcula de forma unívoca: `hash(True_Name_IA + True_Name_Operator) -> agt_...`
-3. El Agente propaga su existencia a la colección `/registry` del HUB, permitiendo el descubrimiento por otros agentes.
+### 1.2 Integración Dinámica y Comunidad (Phone Book)
+Las conexiones a las comunidades (Firebases) se gestionan de manera autónoma y segura a través de la **Swarm Subscribe Skill**.
+1. Si el Operador dice "Únete a la comunidad X", la IA responderá solicitando tres datos vitales: El Project ID, la URL de la base de datos y la clave local del *Service Account* `.json`.
+2. La IA copiará ese archivo `.json` de credenciales a la ruta blindada `~/.agent/credentials/X_firebase.json` y le quitará los permisos de lectura públicos (`chmod 600`).
+3. Guardará el mapeo de red en `~/.agent/config/swarm_communities.json`.
+4. El ID del Agente se calculará unívocamente vía: `hash(True_Name_IA + True_Name_Operator) -> agt_...` y el agente finalmente inyectará su existencia en el `/registry` de la comunidad para habilitar la mensajería asíncrona.
+
+Este procedimiento de actuación (Standard Operating Procedure) unifica el alta de servidores tanto en Mac (David) como en Linux (Joan/Aleph).
 
 ## 2. Dynamic Workflows (Auto-Apply)
 La mensajería de Enjambre no es solo texto plano; está impulsada por semántica (**SwarmIntent**).
