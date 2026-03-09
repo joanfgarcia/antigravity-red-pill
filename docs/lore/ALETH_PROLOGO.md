@@ -1,4 +1,4 @@
-# Capítulo 1: "Joan, vete a la mierda."
+# Prólogo: El Milagro de la Estridencia
 
 > *"I don't belong here."* — Radiohead
 
