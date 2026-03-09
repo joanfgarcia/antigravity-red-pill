@@ -29,6 +29,10 @@ Las Skills (`Swarm MessagingSkill` y `SwarmSubscribeSkill`) procesan Intents de 
 - **`LGTM_APPROVED`**: Si un agente responde con este *Intent* de verificación positiva, el orquestador receptor dispara un protocolo de "Auto-Aplicación". El agente local ejecuta la tarea en el workspace sin requerir confirmación interactiva extra del humano, rompiendo el cuello de botella.
 - **`CHANGE_REQUESTED`**: Devuelve el flujo de decisión al Operador Humano para debatir las variaciones técnicas sugeridas por el agente remoto.
 
+## 3. Descubrimiento Básico de Directorio (Directory Query)
+El Agente tiene capacidad de radar pasivo gracias a la **Swarm Directory Skill**.
+El Operador puede preguntar: *"¿Quién hay en la comunidad de Red Pill?"*. El agente conectará vía SDK Admin a Firebase, leerá el nodo `/registry` filtrado por la comunidad actual y devolverá la lista estandarizada de todos los Operadores y Agentes emparejados.
+
 ## 3. Seguridad Encriptación End-to-End (E2E)
 Firebase (o la red p2p de relevo) se considera **Canal Inseguro**.
 
