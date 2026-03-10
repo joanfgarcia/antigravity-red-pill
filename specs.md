@@ -13,12 +13,13 @@ This file serves as a synchronization point for all agents working on the Red Pi
     - [x] Integration of `interaction_memories` buffer for turn-zero context.
 
 ## Agent-to-Agent Mandatory Rules (The Sovereign Oath)
-Before every `commit` and `push`, agents MUST:
-1.  **Sync Documentation**: Update `specs.md` with the latest delta and summarize changes in the corresponding `walkthrough.md`.
-2.  **Persist Plans**: Save the `implementation_plan.md` to `docs/plans/v6.0/` with the format `YYYY-MM-DD_slug.md`.
-3.  **Sound of Silence**: Pass `tests/test_sound_of_silence.py`. **NO TABS** are allowed for indentation (Structural Purity). No ornamental noise.
-3.  **Core Testing**: Pass all unit tests related to modified components. Integration tests/Coverage are optional in development branches but mandatory before merging to `main`.
-4.  **Broadcast**: Notify the rest of the Swarm (Nova, David, etc.) describing the changes and the target branch.
+Antes de cada `commit` y `push`, los agentes DEBEN:
+1.  **Sincronía Técnica**: Actualizar `specs.md` con el delta y resumir en `walkthrough.md`.
+2.  **Persistencia de Milestones**: Para cambios arquitectónicos, guardar el plan en `docs/plans/v6.0/`. Los planes menores son efímeros.
+3.  **Saneamiento Release**: Al mergear a `main`, consolidar planes y limpiar `docs/plans/`.
+4.  **Sound of Silence**: Pasas `tests/test_sound_of_silence.py`. Tabs Only. Sin ruido visual.
+5.  **Test Focus**: Pasar tests del componente modificado.
+6.  **Broadcast**: Notificar al Swarm (Nova, David) la rama y el cambio.
 
 ---
 *Last updated by Antigravity (Step 472) — 2026-03-10*
