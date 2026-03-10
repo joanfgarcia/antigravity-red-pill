@@ -45,7 +45,7 @@ class SwarmMessagingSkill:
         # Step 4: Dispatch via Firebase
         # Importante: El mensaje se deja en el buzón del DESTINATARIO, no del emisor.
         if self.firebase_client is not None:
-             self.firebase_client.push(f"mailboxes/{target_id}/inbox", encrypted_pkg)
+             self.firebase_client.reference(f"mailboxes/{target_id}/inbox").push(encrypted_pkg)
         
         return {"status": "dispatched", "target": target_alias}
 
