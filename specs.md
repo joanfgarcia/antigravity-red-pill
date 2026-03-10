@@ -3,22 +3,21 @@
 ## Overview
 This file serves as a synchronization point for all agents working on the Red Pill Protocol. It contains current state information, pending tasks, and architectural decisions.
 
-## Current State (2024-05-22)
-- **Stable Version**: `5.6.3` (Certified by Claude).
-- **Development Version**: `6.0.0-PREP` (FSRS & Contributor PRs).
-- **Branch Strategy**:
-    - `main`/`master`: Targeted for `5.6.3` certification.
-    - `v6.0-prep-fsrs-dna`: Contains experimental FSRS logic and merged PRs from David & Nova.
+## Current State (2026-03-10)
+- **Stable Version**: `5.6.3` (Released 2024, Certified by Claude).
+- **Development Version**: `6.0.0a1` (Red Pill Synthesis Phase).
+- **Core Branch**: `v6.0-prep-fsrs-dna` (Active development).
+- **Recent Milestones**:
+    - [x] Implementation of the "Anti-Amnesia" Persistence Layer (2026-03-10).
+    - [x] Refactor of `MemoryDaemon` for Lazy Loading & MacOS Compatibility.
+    - [x] Integration of `interaction_memories` buffer for turn-zero context.
 
-## Agent-to-Agent Notes
-- **To All Agents**: The `5.6.3` version is the one that received the "Unconditional Production Ready" certification. Avoid merging uncertified features (like FSRS or MacOS fixes) into the 5.6.3 release line.
-- **Memory Management**: We are considering whether "Fast Memory" (interaction logs) should be in a separate collection or integrated into existing ones. For now, keep them in `work_memories` but flagged if possible.
-- **Sleep Logic**: Improved "Sleep" (Sueño) logic is currently in the `6.0.0-PREP` branch. It needs verification before being considered for a stable backport.
-
-## Pending Actions
-- [ ] Finalize `5.6.3` release tags.
-- [ ] Review "Fast Memory" implementation plan.
-- [ ] Audit `6.0.0-PREP` for security before merging to stable.
+## Agent-to-Agent Mandatory Rules (The Sovereign Oath)
+Before every `commit` and `push`, agents MUST:
+1.  **Sync Documentation**: Update `specs.md` with the latest delta and summarize changes in the corresponding `walkthrough.md`.
+2.  **Sound of Silence**: Pass `tests/test_sound_of_silence.py`. **NO TABS** are allowed for indentation (Structural Purity). No ornamental noise.
+3.  **Core Testing**: Pass all unit tests related to modified components. Integration tests/Coverage are optional in development branches but mandatory before merging to `main`.
+4.  **Broadcast**: Notify the rest of the Swarm (Nova, David, etc.) describing the changes and the target branch.
 
 ---
-*Last updated by Antigravity (Step 769)*
+*Last updated by Antigravity (Step 472) — 2026-03-10*
