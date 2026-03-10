@@ -1,6 +1,5 @@
-
 import os
-import red_pill.config as cfg
+
 
 def update_env(updates: dict):
 	"""Updates the .env file with new key-value pairs."""
@@ -23,7 +22,7 @@ def update_env(updates: dict):
 		if not stripped or stripped.startswith("#"):
 			new_lines.append(line)
 			continue
-		
+
 		if "=" in stripped:
 			key = stripped.split("=")[0].strip()
 			if key in updates:
@@ -42,9 +41,11 @@ def update_env(updates: dict):
 	with open(env_path, "w") as f:
 		f.writelines(new_lines)
 
+
 if __name__ == "__main__":
 	# Example usage
 	import sys
+
 	if len(sys.argv) > 1:
 		# Simple CLI for the script: update_env.py KEY=VALUE
 		pairs = {}

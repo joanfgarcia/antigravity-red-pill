@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import os
+import subprocess
 from typing import Any, Dict, List, Optional, Union
 
 import mcp.types as types
@@ -20,6 +22,9 @@ from red_pill.telemetry import HardwareSentinel, get_telemetry_report
 from red_pill.utils.tone_analyzer import get_current_sync_state
 
 logger = logging.getLogger(__name__)
+
+# v6.0.1: Robust Script Resolution
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Initialize the Sovereign MCP Server
 server = Server("RedPill-Kernel")
@@ -177,6 +182,31 @@ async def handle_list_tools() -> List[types.Tool]:
 				},
 			},
 		),
+		types.Tool(
+			name="run_local_healer",
+			description="Deploy Samantha Local Healer to automatically fix Mypy type errors.",
+			inputSchema={
+				"type": "object",
+				"properties": {
+					"dry_run": {"type": "boolean", "description": "Report fixes without applying them", "default": False},
+				},
+			},
+		),
+		types.Tool(
+			name="run_pre_pr_audit",
+			description="Run the Pre-PR Audit protocol (Formatting, Linting, Typing, Tests).",
+			inputSchema={"type": "object", "properties": {}},
+		),
+		types.Tool(
+			name="run_sovereignty_benchmark",
+			description="Execute the Sovereignty Benchmark to verify hardware concurrency.",
+			inputSchema={"type": "object", "properties": {}},
+		),
+		types.Tool(
+			name="refresh_session_context",
+			description="Execute wake_up_v6 script to re-synthesize identity and session context.",
+			inputSchema={"type": "object", "properties": {}},
+		),
 	]
 
 
@@ -248,6 +278,7 @@ async def handle_call_tool(
 				output = get_telemetry_report()
 			elif cmd == "sleep":
 				from red_pill.metabolism.sleep import perform_sleep_cycle
+
 				manager = MemoryManager()
 				mode = val if val in ["lazy", "deep"] else "lazy"
 				count = perform_sleep_cycle(manager, mode=mode)
@@ -353,9 +384,10 @@ async def handle_call_tool(
 	elif name == "adjust_sleep_knobs":
 		size = arguments.get("chunk_size")
 		threshold = arguments.get("cull_threshold")
-		
+
 		try:
 			from scripts.update_env import update_env
+
 			updates = {}
 			if size is not None:
 				cfg.SLEEP_CHUNK_SIZE = size
@@ -363,7 +395,7 @@ async def handle_call_tool(
 			if threshold is not None:
 				cfg.SLEEP_CULL_THRESHOLD = threshold
 				updates["SLEEP_CULL_THRESHOLD"] = str(threshold)
-				
+
 			if updates:
 				update_env(updates)
 				return [types.TextContent(type="text", text=f"Sovereign Knobs adjusted: {updates}")]
@@ -376,28 +408,23 @@ async def handle_call_tool(
 		prompt = arguments.get("prompt", "")
 		response_text = arguments.get("response", "")
 		role = arguments.get("role", "assistant")
-		
+
 		try:
-			import socket
 			import json
+			import socket
+
 			socket_path = cfg.DAEMON_SOCKET_PATH
 			if not os.path.exists(socket_path):
 				return [types.TextContent(type="text", text="Error: Memory Sidecar is not running.")]
-				
+
 			with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
 				client.settimeout(2.0)
 				client.connect(socket_path)
-				req = {
-					"command": "encode",
-					"prompt": prompt,
-					"response": response_text,
-					"role": role,
-					"api_key": cfg.SIDECAR_AUTH_KEY
-				}
+				req = {"command": "encode", "prompt": prompt, "response": response_text, "role": role, "api_key": cfg.SIDECAR_AUTH_KEY}
 				payload = json.dumps(req).encode("utf-8")
 				header = len(payload).to_bytes(4, byteorder="big")
 				client.sendall(header + payload)
-				
+
 				# Wait for ACK
 				resp_header = client.recv(4)
 				if resp_header:
@@ -406,10 +433,35 @@ async def handle_call_tool(
 					result = json.loads(resp_data.decode("utf-8"))
 					if result.get("status") == "ok":
 						return [types.TextContent(type="text", text=f"Interaction memorized. ID: {result.get('id')}")]
-				
+
 			return [types.TextContent(type="text", text="Interaction sent to buffer.")]
 		except Exception as e:
 			return [types.TextContent(type="text", text=f"Failed to memorize: {e}")]
+
+	elif name == "run_local_healer":
+		dry_run = arguments.get("dry_run", False)
+		script_path = os.path.join(PROJECT_ROOT, "scripts", "local_healer.py")
+		cmd = ["python3", script_path]
+		if dry_run:
+			cmd.append("--dry-run")
+		result = subprocess.run(cmd, capture_output=True, text=True)
+		return [types.TextContent(type="text", text=f"Healer Output:\n{result.stdout}\n{result.stderr}")]
+
+	elif name == "run_pre_pr_audit":
+		script_path = os.path.join(PROJECT_ROOT, "scripts", "pre_pr_audit.sh")
+		result = subprocess.run(["bash", script_path], capture_output=True, text=True)
+		status = "PASSED" if result.returncode == 0 else "FAILED"
+		return [types.TextContent(type="text", text=f"Audit {status}:\n{result.stdout}\n{result.stderr}")]
+
+	elif name == "run_sovereignty_benchmark":
+		script_path = os.path.join(PROJECT_ROOT, "scripts", "sovereignty_benchmark.py")
+		result = subprocess.run(["python3", script_path], capture_output=True, text=True)
+		return [types.TextContent(type="text", text=f"Benchmark Output:\n{result.stdout}")]
+
+	elif name == "refresh_session_context":
+		script_path = os.path.join(PROJECT_ROOT, "scripts", "wake_up_v6.py")
+		result = subprocess.run(["python3", script_path], capture_output=True, text=True)
+		return [types.TextContent(type="text", text=f"Session Context:\n{result.stdout}")]
 
 	raise ValueError(f"Unknown tool: {name}")
 

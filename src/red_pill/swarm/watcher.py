@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
-import time
-import os
 import json
+import os
 import subprocess
-from datetime import datetime
 import sys
+import time
+from datetime import datetime
 
 # Watcher specific lock files to prevent multiple instances
 WATCHER_LOCK_PATH = "/tmp/.red_pill_watcher.lock"
 PENDING_MESSAGES_FILE = os.path.expanduser("~/.agent/.pending_swagger_messages.json")
 
+
 def notify_macos(title: str, text: str):
 	"""Triggers a native macOS notification using osascript."""
 	script = f'display notification "{text}" with title "{title}" sound name "Glass"'
 	subprocess.run(["osascript", "-e", script])
+
 
 def inject_context_pill(sender, message_preview):
 	"""
@@ -23,20 +25,16 @@ def inject_context_pill(sender, message_preview):
 	messages = []
 	if os.path.exists(PENDING_MESSAGES_FILE):
 		try:
-			with open(PENDING_MESSAGES_FILE, 'r') as f:
+			with open(PENDING_MESSAGES_FILE, "r") as f:
 				messages = json.load(f)
-		except:
+		except Exception:
 			pass
-			
-	messages.append({
-		"timestamp": datetime.now().isoformat(),
-		"sender": sender,
-		"preview": message_preview,
-		"status": "unread"
-	})
-	
-	with open(PENDING_MESSAGES_FILE, 'w') as f:
+
+	messages.append({"timestamp": datetime.now().isoformat(), "sender": sender, "preview": message_preview, "status": "unread"})
+
+	with open(PENDING_MESSAGES_FILE, "w") as f:
 		json.dump(messages, f, indent=2)
+
 
 def simulate_firebase_listener(my_identity):
 	"""
@@ -49,28 +47,29 @@ def simulate_firebase_listener(my_identity):
 		# Here we would have the Firestore asynchronous on_snapshot listener
 		time.sleep(10)
 		# Randomly simulating an incoming ping for the demo
-		if int(time.time()) % 300 == 0: 
+		if int(time.time()) % 300 == 0:
 			print("[Watcher] Signal received!")
 			sender = "Aleph@Joan"
 			notify_macos("Hivemind Protocol", f"{sender} has replied to your request.")
 			inject_context_pill(sender, "I have reviewed the architecture. Looks solid.")
-			time.sleep(5) # Cooldown
+			time.sleep(5)  # Cooldown
+
 
 if __name__ == "__main__":
 	if os.path.exists(WATCHER_LOCK_PATH):
 		print("Watcher is already running.")
 		sys.exit(0)
-	
+
 	try:
-		with open(WATCHER_LOCK_PATH, 'w') as f:
+		with open(WATCHER_LOCK_PATH, "w") as f:
 			f.write(str(os.getpid()))
-		
+
 		# We assume the ID generation logic runs here to resolve local agent
 		# For daemonization, it will read an ENV var or a config file
 		local_target = os.getenv("RED_PILL_ROUTING_ID", "agt_local_debug")
-		
+
 		simulate_firebase_listener(local_target)
-		
+
 	finally:
 		if os.path.exists(WATCHER_LOCK_PATH):
 			os.remove(WATCHER_LOCK_PATH)

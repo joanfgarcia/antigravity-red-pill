@@ -6,7 +6,7 @@ import signal
 import socket
 import subprocess
 import sys
-from typing import Any, Optional, List
+from typing import Any, Dict, List, Optional
 
 from fastembed import TextEmbedding  # type: ignore
 
@@ -23,7 +23,7 @@ class MemoryDaemon:
 		self.encoder: Optional[TextEmbedding] = None
 		self.running = True
 		self.server: Optional[socket.socket] = None
-		self.engines = []
+		self.engines: List[Any] = []
 
 	def _check_encryption(self) -> None:
 		"""
@@ -62,13 +62,13 @@ class MemoryDaemon:
 
 	def _load_model(self) -> None:
 		if not self.engines:
-			import shutil
 			# CANNIBAL PROTOCOL (v6.0): Extreme Parallelization.
 			# We don't choose; we devour all available silicons simultaneously.
-			import onnxruntime as ort
-			from concurrent.futures import ThreadPoolExecutor
 			import itertools
-			
+			from concurrent.futures import ThreadPoolExecutor
+
+			import onnxruntime as ort
+
 			available_ort = ort.get_available_providers()
 			active_providers = []
 
@@ -77,22 +77,22 @@ class MemoryDaemon:
 			for p in potential:
 				if p in available_ort:
 					active_providers.append(p)
-			
+
 			# Always include CPU for maximum saturation
 			active_providers.append("CPUExecutionProvider")
-			
+
 			logger.info(f"CANNIBAL PROTOCOL: Spawning {len(active_providers)} dedicated engines on: {active_providers}")
-			
+
 			for p in active_providers:
 				try:
 					engine = TextEmbedding(model_name=cfg.EMBEDDING_MODEL, providers=[p])
 					self.engines.append(engine)
 				except Exception as e:
 					logger.warning(f"Failed to prime {p} engine: {e}. Skipping.")
-			
+
 			if not self.engines:
 				raise RuntimeError("Cannibal Protocol Failure: No engines primed.")
-			
+
 			self.engine_cycle = itertools.cycle(self.engines)
 			self.executor = ThreadPoolExecutor(max_workers=len(self.engines))
 			# Sentinel for legacy references
@@ -103,7 +103,8 @@ class MemoryDaemon:
 		if not self.engines:
 			self._load_model()
 		engine = next(self.engine_cycle)
-		return list(engine.embed(texts))[0].tolist()
+		vectors: List[List[float]] = [v.tolist() for v in engine.embed(texts)]
+		return vectors[0]
 
 	def start(self) -> None:
 		if not cfg.SIDECAR_AUTH_KEY:
@@ -151,7 +152,8 @@ class MemoryDaemon:
 					logger.error(f"Loop failure: {e}")
 
 	def handle_connection(self, conn: socket.socket) -> None:
-		"""Handles a single client connection."""
+		"""Processes a single Sidecar request."""
+		response: Dict[str, Any] = {}
 		try:
 			header = conn.recv(4)
 			if not header:
@@ -187,8 +189,8 @@ class MemoryDaemon:
 							response = {"status": "ok", "id": uid}
 						else:
 							response = {"status": "error", "message": "Missing prompt or response"}
-					elif text and self.engines:
-						# Phase O.11: Cannibal Execution
+					elif text:
+						# Phase O.11: Cannibal Execution (lazy loads engines internally)
 						vector = self.embed_cannibal([text])
 						response = {"status": "ok", "vector": vector}
 					elif request.get("command") == "ping":

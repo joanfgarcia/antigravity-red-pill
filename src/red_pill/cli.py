@@ -3,6 +3,7 @@ import asyncio
 import logging
 import os
 import signal
+import subprocess
 import sys
 import time
 from typing import List
@@ -20,6 +21,9 @@ from red_pill.telemetry import get_telemetry_report
 from red_pill.utils.tone_analyzer import get_current_sync_state
 
 logger = logging.getLogger(__name__)
+
+# v6.0.1: Robust Script Resolution
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def switch_skin(skin_name: str) -> str:
@@ -80,6 +84,55 @@ def handle_daemon() -> None:
 	except Exception as e:
 		logger.error(f"Daemon failure: {e}")
 		sys.exit(1)
+
+
+def handle_audit() -> None:
+	"""Pre-PR Audit Protocol."""
+	script_path = os.path.join(PROJECT_ROOT, "scripts", "pre_pr_audit.sh")
+	print(f"--- [DEPLOING AUDIT PROTOCOL: {script_path}] ---")
+	try:
+		subprocess.run(["bash", script_path], check=True)
+	except subprocess.CalledProcessError:
+		sys.exit(1)
+
+
+def handle_heal(dry_run: bool = False) -> None:
+	"""Samantha's Local Healing Cycle."""
+	script_path = os.path.join(PROJECT_ROOT, "scripts", "local_healer.py")
+	cmd = ["python3", script_path]
+	if dry_run:
+		cmd.append("--dry-run")
+	print(f"--- [DEPLOING HEALER: {script_path}] ---")
+	subprocess.run(cmd)
+
+
+def handle_benchmark() -> None:
+	"""Sovereignty Benchmark (Tri-Tier Hardware)."""
+	script_path = os.path.join(PROJECT_ROOT, "scripts", "sovereignty_benchmark.py")
+	print(f"--- [DEPLOING BENCHMARK: {script_path}] ---")
+	subprocess.run(["python3", script_path])
+
+
+def handle_identity(args: argparse.Namespace) -> None:
+	"""Identity Management (Bootstrap/Refresh)."""
+	if args.id_cmd == "bootstrap":
+		script_path = os.path.join(PROJECT_ROOT, "scripts", "bootstrap_identity.py")
+		cmd = ["python3", script_path]
+		if args.ai_name:
+			cmd.extend(["--ai-name", args.ai_name])
+		if args.ai_role:
+			cmd.extend(["--ai-role", args.ai_role])
+		if args.user_name:
+			cmd.extend(["--user-name", args.user_name])
+		if args.user_role:
+			cmd.extend(["--user-role", args.user_role])
+		if args.skin:
+			cmd.extend(["--skin", args.skin])
+		subprocess.run(cmd)
+	elif args.id_cmd == "refresh":
+		script_path = os.path.join(PROJECT_ROOT, "scripts", "wake_up_v6.py")
+		print(f"--- [REFRESHING SESSION CONTEXT: {script_path}] ---")
+		subprocess.run(["python3", script_path])
 
 
 def get_collection(type_str: str) -> str:
@@ -177,6 +230,25 @@ def main() -> None:
 
 	init_parser = subparsers.add_parser("init", help="Bootstrap a Spec-Compliant project")
 	init_parser.add_argument("--flow", choices=["fire", "simple", "aidlc"], default="fire", help="Initial specs.md flow")
+
+	subparsers.add_parser("audit", help="Run Pre-PR Audit (Ruff, Mypy, Pytest)")
+
+	heal_parser = subparsers.add_parser("heal", help="Run Samantha Local Healer (Auto-fix Mypy)")
+	heal_parser.add_argument("--dry-run", action="store_true")
+
+	subparsers.add_parser("benchmark", help="Run Sovereignty Benchmark (Hardware Concurrency)")
+
+	id_parser = subparsers.add_parser("identity", help="Identity & Persona Management")
+	id_sub = id_parser.add_subparsers(dest="id_cmd")
+
+	boot_parser = id_sub.add_parser("bootstrap", help="Initialize Sovereign Identity")
+	boot_parser.add_argument("--ai-name")
+	boot_parser.add_argument("--ai-role")
+	boot_parser.add_argument("--user-name")
+	boot_parser.add_argument("--user-role")
+	boot_parser.add_argument("--skin")
+
+	id_sub.add_parser("refresh", help="Synthesize and refresh session context (wake_up)")
 
 	args = parser.parse_args()
 
@@ -300,6 +372,18 @@ def main() -> None:
 				notify_user("Project Initialized", f"Red Pill v{__version__} + specs.md {args.flow} flow is now live.")
 			except Exception as e:
 				print(f"[FAIL] Initialization failed: {e}")
+			return
+		elif args.command == "audit":
+			handle_audit()
+			return
+		elif args.command == "heal":
+			handle_heal(args.dry_run)
+			return
+		elif args.command == "benchmark":
+			handle_benchmark()
+			return
+		elif args.command == "identity":
+			handle_identity(args)
 			return
 
 		# Loop through requested collections

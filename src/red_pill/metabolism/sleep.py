@@ -1,7 +1,7 @@
 import json
 import logging
 import urllib.request
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from qdrant_client.models import Filter
 
@@ -10,7 +10,7 @@ import red_pill.config as cfg
 logger = logging.getLogger(__name__)
 
 
-def chunk_text(text: str, size: int = None) -> List[str]:
+def chunk_text(text: str, size: Optional[int] = None) -> List[str]:
 	"""Break large interactions into biologially manageable sequences."""
 	if size is None:
 		size = cfg.SLEEP_CHUNK_SIZE

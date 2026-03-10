@@ -130,7 +130,7 @@ class LazarusPulse:
 		"""
 		try:
 			from red_pill.metabolism.sleep import perform_sleep_cycle
-			
+
 			logger.info("Pulse: Initiating Consolidation (Consolidating interactions)...")
 			# Use lazy mode by default for background pulse to avoid excessive pruning
 			await asyncio.to_thread(perform_sleep_cycle, self.memory_mgr, mode="lazy")
