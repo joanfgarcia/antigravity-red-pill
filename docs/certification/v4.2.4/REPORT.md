@@ -5,17 +5,17 @@
 Version 4.2.4 --- Sovereign Governance Edition
 
   ----------------------------------- -----------------------------------
-  **Report Date**                     February 23, 2026
+  **Report Date**					 February 23, 2026
 
-  **Audited Version**                 v4.2.4 (post-audit cleanup)
+  **Audited Version**				 v4.2.4 (post-audit cleanup)
 
-  **Audit Standard**                  Engineering Certification Protocol
-                                      v1.0
+  **Audit Standard**				  Engineering Certification Protocol
+									  v1.0
 
-  **Overall Verdict**                 **✅ CONDITIONALLY
-                                      PRODUCTION-READY**
+  **Overall Verdict**				 **✅ CONDITIONALLY
+									  PRODUCTION-READY**
 
-  **Confidence Score**                87 / 100
+  **Confidence Score**				87 / 100
   ----------------------------------- -----------------------------------
 
 **1. Project Overview**
@@ -48,21 +48,21 @@ Podman, Ruff, mypy.
 The system is organized into five logical layers:
 
 1.  Memory Collections: Five isolated Qdrant namespaces (work, social,
-    directive, story, skill).
+	directive, story, skill).
 
 2.  B760-Adaptive Engine: Linear/exponential decay with emotion-weighted
-    multipliers (Emotional Chroma), immunity thresholds, and synaptic
-    propagation.
+	multipliers (Emotional Chroma), immunity thresholds, and synaptic
+	propagation.
 
 3.  Memory Sidecar (Daemon): A Unix Domain Socket server pre-loading the
-    embedding model to avoid cold-start latency on each query.
+	embedding model to avoid cold-start latency on each query.
 
 4.  CLI (red-pill): Typer-based command dispatcher for seed, search,
-    erode, sanitize, diag, mode, daemon.
+	erode, sanitize, diag, mode, daemon.
 
 5.  Lore Skins: YAML-driven persona configuration mapping narrative
-    universes (Matrix, Cyberpunk, Dune, etc.) to chroma tones and
-    terminology.
+	universes (Matrix, Cyberpunk, Dune, etc.) to chroma tones and
+	terminology.
 
 **2. Code Quality Assessment**
 
@@ -77,77 +77,77 @@ documentation files present in the digest.
 **2.2 Structural & Formatting Quality**
 
   --------------------- ----------- ----------------------------------------
-  **Dimension**         **Score**   **Finding**
+  **Dimension**		 **Score**   **Finding**
 
-  Indentation Protocol  10/10       Sound of Silence (tabs-only) rigorously
-                                    enforced via ruff + automated test suite
-                                    (test_sound_of_silence.py). Zero
-                                    violations detected.
+  Indentation Protocol  10/10	   Sound of Silence (tabs-only) rigorously
+									enforced via ruff + automated test suite
+									(test_sound_of_silence.py). Zero
+									violations detected.
 
-  Code Noise            9/10        Dead code, ornamental comments, and
-                                    commented-out blocks are systematically
-                                    purged. Minor: one lingering \# type:
-                                    ignore in memory.py (2 instances)
-                                    acceptable.
+  Code Noise			9/10		Dead code, ornamental comments, and
+									commented-out blocks are systematically
+									purged. Minor: one lingering \# type:
+									ignore in memory.py (2 instances)
+									acceptable.
 
-  Function/Module Size  8/10        memory.py is appropriately scoped.
-                                    apply_erosion() and
-                                    search_and_reinforce() are complex but
-                                    logically contained. No god-objects.
+  Function/Module Size  8/10		memory.py is appropriately scoped.
+									apply_erosion() and
+									search_and_reinforce() are complex but
+									logically contained. No god-objects.
 
-  Type Annotations      8/10        mypy coverage present; Optional, Dict,
-                                    List usage is consistent. The
-                                    TextEmbedding = Any fallback in the
-                                    except ImportError block is pragmatic
-                                    but typed weakly.
+  Type Annotations	  8/10		mypy coverage present; Optional, Dict,
+									List usage is consistent. The
+									TextEmbedding = Any fallback in the
+									except ImportError block is pragmatic
+									but typed weakly.
 
-  Naming Conventions    9/10        Consistent snake_case throughout. Domain
-                                    terminology (engram, erosion, immune) is
-                                    consistently applied. No ambiguous
-                                    abbreviations.
+  Naming Conventions	9/10		Consistent snake_case throughout. Domain
+									terminology (engram, erosion, immune) is
+									consistently applied. No ambiguous
+									abbreviations.
   --------------------- ----------- ----------------------------------------
 
 **2.3 Notable Code Quality Strengths**
 
 -   \_mask_pii_exception(): A thoughtful, production-grade utility that
-    prevents payload data from bleeding into log streams. Rare to see
-    this in personal projects.
+	prevents payload data from bleeding into log streams. Rare to see
+	this in personal projects.
 
 -   Lock Scope Optimization in \_reinforce_points(): I/O (Qdrant
-    retrieval) is deliberately placed OUTSIDE the threading.Lock(), with
-    the lock applied only to the score arithmetic. This is textbook
-    concurrent programming discipline.
+	retrieval) is deliberately placed OUTSIDE the threading.Lock(), with
+	the lock applied only to the score arithmetic. This is textbook
+	concurrent programming discipline.
 
 -   Absence Guard Protocol: The TTL-refresh logic on long idle gaps (\>7
-    days) is genuinely novel and solves a real-world edge case (vacation
-    data loss) elegantly.
+	days) is genuinely novel and solves a real-world edge case (vacation
+	data loss) elegantly.
 
 -   MAX_PROPAGATION_POINTS circuit-breaker: Correctly prevents a single
-    hub-node query from triggering a catastrophic fan-out update storm.
+	hub-node query from triggering a catastrophic fan-out update storm.
 
 -   fcntl.flock() on the metabolism state file: Cross-process locking
-    for the state file is properly OS-gated (Windows fallback included).
-    Solid.
+	for the state file is properly OS-gated (Windows fallback included).
+	Solid.
 
 **2.4 Minor Code Quality Issues**
 
 -   CQ-001 (Low): In \_run_metabolism_cycle, the absence-guard branch
-    runs TTL refresh before erosion but does not short-circuit the
-    erosion itself after a refresh. This means the first post-vacation
-    cycle still erodes freshly-refreshed engrams. Consider adding a
-    return after the refresh loop.
+	runs TTL refresh before erosion but does not short-circuit the
+	erosion itself after a refresh. This means the first post-vacation
+	cycle still erodes freshly-refreshed engrams. Consider adding a
+	return after the refresh loop.
 
 -   CQ-002 (Low): sanitize() uses a truncated SHA-256 hash for
-    deduplication (\[:32\] = 128-bit prefix). While collision risk is
-    astronomically low for this use case, using the full digest (64
-    chars) or a different fingerprint strategy would be more canonical.
+	deduplication (\[:32\] = 128-bit prefix). While collision risk is
+	astronomically low for this use case, using the full digest (64
+	chars) or a different fingerprint strategy would be more canonical.
 
 -   CQ-003 (Low): In cli.py, the Deep Recall trigger detection (any(t in
-    query.lower() for t in cfg.DEEP_RECALL_TRIGGERS)) does substring
-    matching. A query containing \'try hard!\' will match the trigger
-    token correctly, but this approach is fragile for multi-token
-    triggers that are substrings of longer phrases. Exact-phrase
-    matching would be more robust.
+	query.lower() for t in cfg.DEEP_RECALL_TRIGGERS)) does substring
+	matching. A query containing \'try hard!\' will match the trigger
+	token correctly, but this approach is fragile for multi-token
+	triggers that are substrings of longer phrases. Exact-phrase
+	matching would be more robust.
 
 **3. Security Audit**
 
@@ -161,67 +161,67 @@ performative.
 **3.2 Security Findings Matrix**
 
   ------------- -------------- ------------------------------------------ ---------------
-  **ID**        **Severity**   **Finding**                                **Status**
+  **ID**		**Severity**   **Finding**								**Status**
 
-  **SEC-001**   **✅           Metadata injection: All reserved keys      CLOSED
-                RESOLVED**     (immune, reinforcement_score, etc.) are    
-                               stripped from caller-supplied metadata     
-                               BEFORE Pydantic validation.                
-                               Defense-in-depth: stripped twice           
-                               (pre-validation and post-validation).      
+  **SEC-001**   **✅		   Metadata injection: All reserved keys	  CLOSED
+				RESOLVED**	 (immune, reinforcement_score, etc.) are	
+							   stripped from caller-supplied metadata	 
+							   BEFORE Pydantic validation.				
+							   Defense-in-depth: stripped twice		   
+							   (pre-validation and post-validation).	  
 
-  **SEC-002**   **✅           Sidecar authentication: HMAC-based         CLOSED
-                RESOLVED**     shared-secret comparison using             
-                               hmac.compare_digest() (constant-time)      
-                               prevents timing attacks on the auth token. 
-                               Length-prefixed framing (4-byte header)    
-                               prevents message-boundary attacks.         
+  **SEC-002**   **✅		   Sidecar authentication: HMAC-based		 CLOSED
+				RESOLVED**	 shared-secret comparison using			 
+							   hmac.compare_digest() (constant-time)	  
+							   prevents timing attacks on the auth token. 
+							   Length-prefixed framing (4-byte header)	
+							   prevents message-boundary attacks.		 
 
-  **SEC-003**   **✅           Unix socket permissions: 0o600 applied     CLOSED
-                RESOLVED**     immediately after bind(). Socket is placed 
-                               in XDG_RUNTIME_DIR (per-user tmpfs) with   
-                               0700 directory permissions.                
+  **SEC-003**   **✅		   Unix socket permissions: 0o600 applied	 CLOSED
+				RESOLVED**	 immediately after bind(). Socket is placed 
+							   in XDG_RUNTIME_DIR (per-user tmpfs) with   
+							   0700 directory permissions.				
 
-  **SEC-004**   **⚠️ MEDIUM**  QDRANT_API_KEY reuse as sidecar auth       OPEN
-                               token: The Qdrant API key doubles as the   
-                               sidecar shared secret. If the sidecar is   
-                               ever exposed beyond localhost, this        
-                               creates a credential leak. Recommendation: 
-                               generate a separate SIDECAR_AUTH_KEY.      
+  **SEC-004**   **⚠️ MEDIUM**  QDRANT_API_KEY reuse as sidecar auth	   OPEN
+							   token: The Qdrant API key doubles as the   
+							   sidecar shared secret. If the sidecar is   
+							   ever exposed beyond localhost, this		
+							   creates a credential leak. Recommendation: 
+							   generate a separate SIDECAR_AUTH_KEY.	  
 
-  **SEC-005**   **✅           PII in logs: \_mask_pii_exception()        CLOSED
-                RESOLVED**     truncates exception messages at 150 chars. 
-                               Applied consistently across all Qdrant I/O 
-                               error handlers.                            
+  **SEC-005**   **✅		   PII in logs: \_mask_pii_exception()		CLOSED
+				RESOLVED**	 truncates exception messages at 150 chars. 
+							   Applied consistently across all Qdrant I/O 
+							   error handlers.							
 
-  **SEC-006**   **✅           GPG passphrase fallback: /dev/tty insecure CLOSED
-                RESOLVED**     fallback removed from export_soul.sh.      
+  **SEC-006**   **✅		   GPG passphrase fallback: /dev/tty insecure CLOSED
+				RESOLVED**	 fallback removed from export_soul.sh.	  
 
-  **SEC-007**   **✅           Path traversal in bash scripts:            CLOSED
-                RESOLVED**     env_loader.sh and restore_all.sh use       
-                               explicit allowlists for IA_DIR paths.      
+  **SEC-007**   **✅		   Path traversal in bash scripts:			CLOSED
+				RESOLVED**	 env_loader.sh and restore_all.sh use	   
+							   explicit allowlists for IA_DIR paths.	  
 
-  **SEC-008**   **⚠️ LOW**     Null-byte injection: content validator     OPEN
-                               rejects \\x00 in content strings. However, 
-                               metadata string values are not null-byte   
-                               checked beyond the length limit. Extend    
-                               the no_null_bytes validator to metadata    
-                               string values.                             
+  **SEC-008**   **⚠️ LOW**	 Null-byte injection: content validator	 OPEN
+							   rejects \\x00 in content strings. However, 
+							   metadata string values are not null-byte   
+							   checked beyond the length limit. Extend	
+							   the no_null_bytes validator to metadata	
+							   string values.							 
 
-  **SEC-009**   **ℹ️ INFO**    Transport encryption: Qdrant runs on HTTP  INFORMATIONAL
-                               (localhost). The .env.example notes this   
-                               is acceptable for localhost. For remote    
-                               deployments, QDRANT_SCHEME=https is        
-                               required and must be documented as         
-                               mandatory in QUICKSTART.                   
+  **SEC-009**   **ℹ️ INFO**	Transport encryption: Qdrant runs on HTTP  INFORMATIONAL
+							   (localhost). The .env.example notes this   
+							   is acceptable for localhost. For remote	
+							   deployments, QDRANT_SCHEME=https is		
+							   required and must be documented as		 
+							   mandatory in QUICKSTART.				   
 
-  **SEC-010**   **ℹ️ INFO**    Encryption at rest: No native encryption   INFORMATIONAL
-                               for the Qdrant storage volume. Changelog   
-                               correctly documents this as a user         
-                               responsibility. Consider adding a          
-                               pre-flight check script that warns if the  
-                               storage directory is not on an encrypted   
-                               volume.                                    
+  **SEC-010**   **ℹ️ INFO**	Encryption at rest: No native encryption   INFORMATIONAL
+							   for the Qdrant storage volume. Changelog   
+							   correctly documents this as a user		 
+							   responsibility. Consider adding a		  
+							   pre-flight check script that warns if the  
+							   storage directory is not on an encrypted   
+							   volume.									
   ------------- -------------- ------------------------------------------ ---------------
 
 **4. Test Coverage & Quality**
@@ -229,62 +229,62 @@ performative.
 **4.1 Coverage Score: 8.5 / 10**
 
   -------------------------- ----------------------------- ------------------------------
-  **Test Module**            **Scope**                     **Assessment**
+  **Test Module**			**Scope**					 **Assessment**
 
-  test_memory.py             add_memory,                   Comprehensive. Mocked Qdrant
-                             search_and_reinforce,         client. Validates
-                             \_reinforce_points,           reinforcement stacking, UUID
-                             apply_erosion, sanitize,      guard, PII masking,
-                             get_stats                     hub-circuit-breaker.
+  test_memory.py			 add_memory,				   Comprehensive. Mocked Qdrant
+							 search_and_reinforce,		 client. Validates
+							 \_reinforce_points,		   reinforcement stacking, UUID
+							 apply_erosion, sanitize,	  guard, PII masking,
+							 get_stats					 hub-circuit-breaker.
 
-  test_metabolism.py         B760 decay math, metabolic    Solid coverage of the
-                             cooldown, async correctness   metabolism state machine
-                                                           including absence guard and
-                                                           fcntl locking.
+  test_metabolism.py		 B760 decay math, metabolic	Solid coverage of the
+							 cooldown, async correctness   metabolism state machine
+														   including absence guard and
+														   fcntl locking.
 
-  test_emotional_memory.py   Emotional chroma decay        Direct numerical validation of
-                             multipliers                   the decay formulas. Verifies
-                             (orange/yellow/purple/cyan)   Inside Out 2 chroma semantics.
+  test_emotional_memory.py   Emotional chroma decay		Direct numerical validation of
+							 multipliers				   the decay formulas. Verifies
+							 (orange/yellow/purple/cyan)   Inside Out 2 chroma semantics.
 
-  test_schemas.py            Pydantic validation: reserved 100% schema boundary coverage
-                             keys, null bytes, over-length per CHANGELOG. Excellent
-                             strings, nested dicts,        edge-case discipline.
-                             invalid UUIDs                 
+  test_schemas.py			Pydantic validation: reserved 100% schema boundary coverage
+							 keys, null bytes, over-length per CHANGELOG. Excellent
+							 strings, nested dicts,		edge-case discipline.
+							 invalid UUIDs				 
 
-  test_seed.py               seed_project: collection      All four seed scenarios
-                             creation, genesis engrams,    covered including the
-                             idempotency, exception bypass exception-bypass (DB Down)
-                                                           path.
+  test_seed.py			   seed_project: collection	  All four seed scenarios
+							 creation, genesis engrams,	covered including the
+							 idempotency, exception bypass exception-bypass (DB Down)
+														   path.
 
-  test_sound_of_silence.py   Codebase formatting: tabs,    Unique and highly valuable.
-                             ornamental comments, file://  Automated protocol compliance
-                             links, broken markdown links  as a test suite.
+  test_sound_of_silence.py   Codebase formatting: tabs,	Unique and highly valuable.
+							 ornamental comments, file://  Automated protocol compliance
+							 links, broken markdown links  as a test suite.
 
-  test_version_sync.py       Version consistency across    Prevents the #1 cause of
-                             pyproject.toml,               release confusion. Excellent
-                             \_\_init\_\_.py, README,      hygiene.
-                             ARCHITECTURE, CHANGELOG,      
-                             Dockerfile                    
+  test_version_sync.py	   Version consistency across	Prevents the #1 cause of
+							 pyproject.toml,			   release confusion. Excellent
+							 \_\_init\_\_.py, README,	  hygiene.
+							 ARCHITECTURE, CHANGELOG,	  
+							 Dockerfile					
   -------------------------- ----------------------------- ------------------------------
 
 **4.2 Test Coverage Gaps**
 
 -   TCG-001: The memory sidecar (memory_daemon.py) has no dedicated test
-    file. The MemoryDaemon class, HMAC validation flow, length-prefixed
-    framing, and socket lifecycle (start/stop/SIGTERM) lack unit tests.
-    This is the most significant testing gap.
+	file. The MemoryDaemon class, HMAC validation flow, length-prefixed
+	framing, and socket lifecycle (start/stop/SIGTERM) lack unit tests.
+	This is the most significant testing gap.
 
 -   TCG-002: The \_get_vector_from_daemon() client-side path in
-    memory.py is not unit tested in isolation. The daemon client/server
-    contract is implicitly trusted.
+	memory.py is not unit tested in isolation. The daemon client/server
+	contract is implicitly trusted.
 
 -   TCG-003: The lore_skins.yaml loading logic in cli.py has no test
-    asserting that all 12 skins load correctly and map to valid chroma
-    values.
+	asserting that all 12 skins load correctly and map to valid chroma
+	values.
 
 -   TCG-004: Integration tests (live Qdrant instance) are absent from
-    the CI pipeline. All tests use mocked clients. This is acceptable
-    for a local tool but worth noting.
+	the CI pipeline. All tests use mocked clients. This is acceptable
+	for a local tool but worth noting.
 
 **5. Performance Analysis**
 
@@ -337,40 +337,40 @@ its own against many commercial products. The bilingual (EN/ES) approach
 is deliberate and consistent with the target audience.
 
   -------------------------- ------------------ ------------------------------------------
-  **Document**               **Quality**        **Notes**
+  **Document**			   **Quality**		**Notes**
 
-  README.md                  Excellent          Clear TLDR, project overview in both
-                                                languages, security warnings, onboarding
-                                                tiers. Version-locked in header (verified
-                                                by test_version_sync).
+  README.md				  Excellent		  Clear TLDR, project overview in both
+												languages, security warnings, onboarding
+												tiers. Version-locked in header (verified
+												by test_version_sync).
 
-  QUICKSTART.md              Excellent          Three-tier onboarding (Lazy/Easy/Manual)
-                                                is genuinely user-centric. The AI-assisted
-                                                installation path is novel and
-                                                well-documented.
+  QUICKSTART.md			  Excellent		  Three-tier onboarding (Lazy/Easy/Manual)
+												is genuinely user-centric. The AI-assisted
+												installation path is novel and
+												well-documented.
 
-  ARCHITECTURE.md            Excellent          Honest about Singularity Points, O(N)
-                                                limits, and planned v5.0 improvements. The
-                                                FSRS algorithm reference is
-                                                architecturally sound. Rare self-awareness
-                                                in project documentation.
+  ARCHITECTURE.md			Excellent		  Honest about Singularity Points, O(N)
+												limits, and planned v5.0 improvements. The
+												FSRS algorithm reference is
+												architecturally sound. Rare self-awareness
+												in project documentation.
 
-  OPERATOR_MANUAL.md         Very Good          Lore Reality Equivalence Table is a clever
-                                                UX device. CLI reference is complete.
+  OPERATOR_MANUAL.md		 Very Good		  Lore Reality Equivalence Table is a clever
+												UX device. CLI reference is complete.
 
-  SOUND_OF_SILENCE.md        Referenced but not Decision rationale documented in
-                             in digest          decision_log.md per CHANGELOG. Protocol
-                                                itself is clear from test implementation.
+  SOUND_OF_SILENCE.md		Referenced but not Decision rationale documented in
+							 in digest		  decision_log.md per CHANGELOG. Protocol
+												itself is clear from test implementation.
 
-  CHANGELOG.md               Excellent          Granular, semantically versioned, tied to
-                                                specific bug IDs. Demonstrates genuine
-                                                engineering discipline across 15 versions
-                                                in 5 days.
+  CHANGELOG.md			   Excellent		  Granular, semantically versioned, tied to
+												specific bug IDs. Demonstrates genuine
+												engineering discipline across 15 versions
+												in 5 days.
 
   AGENT_RECOMMENDATIONS.md   Unique/Excellent   The AI-agent-as-reader framing is
-                                                innovative. Practical, honest about
-                                                model-specific quirks (Gemini Flash vs
-                                                Sonnet).
+												innovative. Practical, honest about
+												model-specific quirks (Gemini Flash vs
+												Sonnet).
   -------------------------- ------------------ ------------------------------------------
 
 One documentation gap: the sidecar HMAC shared-secret mechanism is not
@@ -507,33 +507,33 @@ deliberate design choice for a sovereign personal stack.
 **8. Compliance & Regulatory Assessment**
 
   ---------------- ---------------- ---------------------------------------
-  **Domain**       **Status**       **Notes**
+  **Domain**	   **Status**	   **Notes**
 
-  GPLv3 License    ✅ COMPLIANT     Full license text included. No
-                                    dependency license conflicts detected
-                                    in the lock file (all MIT/Apache-2/BSD
-                                    compatible with GPLv3).
+  GPLv3 License	✅ COMPLIANT	 Full license text included. No
+									dependency license conflicts detected
+									in the lock file (all MIT/Apache-2/BSD
+									compatible with GPLv3).
 
-  Data Residency   ✅ COMPLIANT     Fully local-first. No data transmitted
-                                    to external services by design.
-                                    Zero-Trust posture documented.
+  Data Residency   ✅ COMPLIANT	 Fully local-first. No data transmitted
+									to external services by design.
+									Zero-Trust posture documented.
 
   GDPR / Privacy   ✅ COMPLIANT (by No personal data leaves the local
-                   design)          system. PII masking in logs.
-                                    Right-to-erasure is trivially exercised
-                                    via uninstall.sh.
+				   design)		  system. PII masking in logs.
+									Right-to-erasure is trivially exercised
+									via uninstall.sh.
 
-  Dependency       ✅ COMPLIANT     uv.lock with full SHA-256 hash
-  Pinning                           verification for all 40+ dependencies.
-                                    Supply chain attack surface is
-                                    minimized.
+  Dependency	   ✅ COMPLIANT	 uv.lock with full SHA-256 hash
+  Pinning						   verification for all 40+ dependencies.
+									Supply chain attack surface is
+									minimized.
 
-  Secrets          ✅ COMPLIANT     .env excluded from git; .env.example
-  Management                        provided with placeholder values. No
-                                    hardcoded secrets found in source.
+  Secrets		  ✅ COMPLIANT	 .env excluded from git; .env.example
+  Management						provided with placeholder values. No
+									hardcoded secrets found in source.
 
-  Encryption at    ⚠️ USER          Documented as operator responsibility.
-  Rest             RESPONSIBILITY   Pre-flight warning recommended.
+  Encryption at	⚠️ USER		  Documented as operator responsibility.
+  Rest			 RESPONSIBILITY   Pre-flight warning recommended.
   ---------------- ---------------- ---------------------------------------
 
 **9. CI/CD Pipeline Assessment**
@@ -546,167 +546,167 @@ uv → uv sync → ruff check → pytest \--cov. The pipeline is clean, fast,
 and correctly scoped.
 
 -   Strength: Sound of Silence (ruff check) and test coverage are gated
-    in CI, not advisory.
+	in CI, not advisory.
 
 -   Strength: uv cache is enabled (enable-cache: true), keeping CI fast.
 
 -   Gap: mypy is not run in CI. It is mentioned in the pre-PR audit
-    workflow (.agent/workflows/pre-pr-audit.md) but is not a CI gate.
-    Type regressions can merge undetected.
+	workflow (.agent/workflows/pre-pr-audit.md) but is not a CI gate.
+	Type regressions can merge undetected.
 
 -   Gap: No coverage threshold is configured. pytest \--cov generates a
-    report but does not fail on \< N% coverage. Setting
-    \--cov-fail-under=80 would enforce the coverage standard.
+	report but does not fail on \< N% coverage. Setting
+	\--cov-fail-under=80 would enforce the coverage standard.
 
 -   Gap: No SAST (static application security testing) tool (e.g.,
-    bandit) is integrated. Given the shell script attack surface
-    (install_neo.sh, export_soul.sh), a bandit scan of bash scripts
-    would catch additional injection vectors.
+	bandit) is integrated. Given the shell script attack surface
+	(install_neo.sh, export_soul.sh), a bandit scan of bash scripts
+	would catch additional injection vectors.
 
 **10. Production Readiness Verdict**
 
   --------------------- ----------- -------------------------------------
-  **Domain**            **Score**   **Verdict**
+  **Domain**			**Score**   **Verdict**
 
-  Code Quality          8.4 / 10    ✅ Production-ready. Sound of Silence
-                                    protocol is exemplary.
+  Code Quality		  8.4 / 10	✅ Production-ready. Sound of Silence
+									protocol is exemplary.
 
-  Security              8.2 / 10    ✅ Production-ready for local
-                                    deployment. SEC-004 should be
-                                    addressed before shared deployments.
+  Security			  8.2 / 10	✅ Production-ready for local
+									deployment. SEC-004 should be
+									addressed before shared deployments.
 
-  Test Coverage         8.5 / 10    ✅ Conditionally. TCG-001 (sidecar
-                                    tests) must be addressed before v5.0.
+  Test Coverage		 8.5 / 10	✅ Conditionally. TCG-001 (sidecar
+									tests) must be addressed before v5.0.
 
-  Performance           7.8 / 10    ✅ Adequate for target scale (\<100k
-                                    engrams). Payload-targeting
-                                    optimization recommended.
+  Performance		   7.8 / 10	✅ Adequate for target scale (\<100k
+									engrams). Payload-targeting
+									optimization recommended.
 
-  Documentation         9.1 / 10    ✅ Exceptional. Best-in-class for
-                                    personal tooling.
+  Documentation		 9.1 / 10	✅ Exceptional. Best-in-class for
+									personal tooling.
 
-  Architecture          8.0 / 10    ✅ Solid foundation. VectorRigidity
-                                    and raw-text storage are known
-                                    technical debt.
+  Architecture		  8.0 / 10	✅ Solid foundation. VectorRigidity
+									and raw-text storage are known
+									technical debt.
 
-  CI/CD                 8.8 / 10    ✅ Near-production. Add mypy gate and
-                                    coverage threshold.
+  CI/CD				 8.8 / 10	✅ Near-production. Add mypy gate and
+									coverage threshold.
 
-  Compliance            9.0 / 10    ✅ Fully compliant for
-                                    personal/open-source use.
+  Compliance			9.0 / 10	✅ Fully compliant for
+									personal/open-source use.
 
-  **Overall**           **87 /      **✅ CONDITIONALLY PRODUCTION-READY**
-                        100**       
+  **Overall**		   **87 /	  **✅ CONDITIONALLY PRODUCTION-READY**
+						100**	   
   --------------------- ----------- -------------------------------------
 
 **11. Prioritized Remediation Action Plan**
 
   -------------- ---------- ------------------------------- ------------ -------------
-  **Priority**   **ID**     **Action**                      **Effort**   **Impact**
+  **Priority**   **ID**	 **Action**					  **Effort**   **Impact**
 
-  P0 ---         TCG-001    Write test_memory_daemon.py:    Medium       High
-  Critical                  unit tests for MemoryDaemon                  
-                            HMAC auth, length-framing,                   
-                            socket lifecycle, and SIGTERM                
-                            handling.                                    
+  P0 ---		 TCG-001	Write test_memory_daemon.py:	Medium	   High
+  Critical				  unit tests for MemoryDaemon				  
+							HMAC auth, length-framing,				   
+							socket lifecycle, and SIGTERM				
+							handling.									
 
-  P0 ---         CI-001     Add mypy check to               Low          High
-  Critical                  .github/workflows/ci.yml as a                
-                            required CI gate. Add                        
-                            \--cov-fail-under=80 to pytest.              
+  P0 ---		 CI-001	 Add mypy check to			   Low		  High
+  Critical				  .github/workflows/ci.yml as a				
+							required CI gate. Add						
+							\--cov-fail-under=80 to pytest.			  
 
-  P1 --- High    SEC-004    Generate a separate             Low          Medium
-                            SIDECAR_AUTH_KEY distinct from               
-                            QDRANT_API_KEY. Update                       
-                            MemoryDaemon and memory.py to                
-                            use it.                                      
+  P1 --- High	SEC-004	Generate a separate			 Low		  Medium
+							SIDECAR_AUTH_KEY distinct from			   
+							QDRANT_API_KEY. Update					   
+							MemoryDaemon and memory.py to				
+							use it.									  
 
-  P1 --- High    CQ-001     Add return after TTL refresh in Low          Medium
-                            \_run_metabolism_cycle absence               
-                            branch to skip erosion on the                
-                            same cycle.                                  
+  P1 --- High	CQ-001	 Add return after TTL refresh in Low		  Medium
+							\_run_metabolism_cycle absence			   
+							branch to skip erosion on the				
+							same cycle.								  
 
-  P2 --- Medium  ARCH-001   Store raw text content          High         Critical
-                            alongside the embedding vector.              (Long-term)
-                            This is the prerequisite for                 
-                            model migration and FSRS                     
-                            adoption.                                    
+  P2 --- Medium  ARCH-001   Store raw text content		  High		 Critical
+							alongside the embedding vector.			  (Long-term)
+							This is the prerequisite for				 
+							model migration and FSRS					 
+							adoption.									
 
-  P2 --- Medium  TCG-003    Add test_lore_skins.py: verify  Low          Medium
-                            all 12 skins load from YAML and              
-                            map to valid chroma values.                  
+  P2 --- Medium  TCG-003	Add test_lore_skins.py: verify  Low		  Medium
+							all 12 skins load from YAML and			  
+							map to valid chroma values.				  
 
-  P2 --- Medium  SEC-008    Extend no_null_bytes validator  Low          Low
-                            to cover metadata string values              
-                            in CreateEngramRequest.                      
+  P2 --- Medium  SEC-008	Extend no_null_bytes validator  Low		  Low
+							to cover metadata string values			  
+							in CreateEngramRequest.					  
 
-  P3 --- Low     PERF-001   Replace full-payload            Medium       Medium
-                            SetPayloadOperation in                       
-                            apply_erosion() with targeted                
-                            field updates for                            
-                            reinforcement_score and                      
-                            last_recalled_at only.                       
+  P3 --- Low	 PERF-001   Replace full-payload			Medium	   Medium
+							SetPayloadOperation in					   
+							apply_erosion() with targeted				
+							field updates for							
+							reinforcement_score and					  
+							last_recalled_at only.					   
 
-  P3 --- Low     CI-002     Integrate bandit SAST scan for  Low          Low
-                            bash scripts in CI workflow.                 
+  P3 --- Low	 CI-002	 Integrate bandit SAST scan for  Low		  Low
+							bash scripts in CI workflow.				 
 
-  P3 --- Low     DOCS-001   Document SIDECAR_AUTH_KEY       Low          Low
-                            rotation procedure in                        
-                            OPERATOR_MANUAL. Add diagnostic              
-                            message for auth failure in                  
-                            daemon logs.                                 
+  P3 --- Low	 DOCS-001   Document SIDECAR_AUTH_KEY	   Low		  Low
+							rotation procedure in						
+							OPERATOR_MANUAL. Add diagnostic			  
+							message for auth failure in				  
+							daemon logs.								 
   -------------- ---------- ------------------------------- ------------ -------------
 
 **12. Auditor Certification & Digital Signature**
 
   ------------------- ---------------------------------------------------
-  **Auditor           Claude Sonnet 4.6 (claude-sonnet-4-6)
-  Identity**          
+  **Auditor		   Claude Sonnet 4.6 (claude-sonnet-4-6)
+  Identity**		  
 
-  **Model Family**    Claude 4.6 (Smart, efficient model for everyday
-                      use)
+  **Model Family**	Claude 4.6 (Smart, efficient model for everyday
+					  use)
 
-  **Creator /         Anthropic, PBC --- San Francisco, CA
-  Operator**          
+  **Creator /		 Anthropic, PBC --- San Francisco, CA
+  Operator**		  
 
-  **Audit Method**    Full static analysis of RED_PILL_DIGEST.txt (7,733
-                      lines). Line-by-line review of all Python source,
-                      shell scripts, YAML configs, test suites, CI/CD
-                      pipeline, and documentation. No live execution
-                      environment.
+  **Audit Method**	Full static analysis of RED_PILL_DIGEST.txt (7,733
+					  lines). Line-by-line review of all Python source,
+					  shell scripts, YAML configs, test suites, CI/CD
+					  pipeline, and documentation. No live execution
+					  environment.
 
-  **Audit Date &      February 23, 2026 --- claude.ai (Web Interface)
-  Time**              
+  **Audit Date &	  February 23, 2026 --- claude.ai (Web Interface)
+  Time**			  
 
-  **Knowledge         August 2025. Code reviewed against publicly known
-  Cutoff**            security patterns, Python ecosystem best practices,
-                      and Qdrant API as of that date.
+  **Knowledge		 August 2025. Code reviewed against publicly known
+  Cutoff**			security patterns, Python ecosystem best practices,
+					  and Qdrant API as of that date.
 
-  **Agentic           Context window: \~200k tokens. No persistent memory
-  Capabilities**      between sessions. No external tool calls were used
-                      to perform this audit --- all findings derive from
-                      static analysis within this conversation context.
-                      This report was generated programmatically using
-                      the docx npm library on a sandboxed Linux
-                      container.
+  **Agentic		   Context window: \~200k tokens. No persistent memory
+  Capabilities**	  between sessions. No external tool calls were used
+					  to perform this audit --- all findings derive from
+					  static analysis within this conversation context.
+					  This report was generated programmatically using
+					  the docx npm library on a sandboxed Linux
+					  container.
 
-  **Limitations**     This audit is static-only. No dynamic analysis,
-                      fuzzing, or live integration testing was performed.
-                      Shell scripts (install_neo.sh, export_soul.sh,
-                      check_760.sh) were reviewed for patterns but not
-                      executed. Findings are based on code as presented
-                      in the digest --- any post-digest changes are not
-                      reflected.
+  **Limitations**	 This audit is static-only. No dynamic analysis,
+					  fuzzing, or live integration testing was performed.
+					  Shell scripts (install_neo.sh, export_soul.sh,
+					  check_760.sh) were reviewed for patterns but not
+					  executed. Findings are based on code as presented
+					  in the digest --- any post-digest changes are not
+					  reflected.
 
-  **Final             **✅ CONDITIONALLY PRODUCTION-READY. The Red Pill
-  Certification**     Protocol v4.2.4 demonstrates engineering
-                      discipline, security awareness, and architectural
-                      clarity that significantly exceeds typical personal
-                      tooling. The 10 open items in Section 11 should be
-                      addressed before v5.0. The project is cleared for
-                      production use in its stated target context
-                      (local-first, single-operator, personal AI memory
-                      substrate).**
+  **Final			 **✅ CONDITIONALLY PRODUCTION-READY. The Red Pill
+  Certification**	 Protocol v4.2.4 demonstrates engineering
+					  discipline, security awareness, and architectural
+					  clarity that significantly exceeds typical personal
+					  tooling. The 10 open items in Section 11 should be
+					  addressed before v5.0. The project is cleared for
+					  production use in its stated target context
+					  (local-first, single-operator, personal AI memory
+					  substrate).**
   ------------------- ---------------------------------------------------
 
 --- Claude Sonnet 4.6 \| Anthropic \| 770 up.

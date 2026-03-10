@@ -127,6 +127,7 @@ def test_metabolism_full_logic_final(mem_mgr, fake_cfg):
 				mem_mgr._run_metabolism_cycle()
 
 		# 1. Switch to ACTIVE strategy to ensure apply_erosion is called
+		mem_mgr.cfg = fake_cfg
 		mem_mgr.cfg.METABOLISM_STRATEGY = "ACTIVE"
 		mem_mgr.cfg.METABOLISM_AUTO_COLLECTIONS = ["work_memories"]
 

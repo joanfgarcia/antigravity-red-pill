@@ -3,22 +3,27 @@
 ## Overview
 This file serves as a synchronization point for all agents working on the Red Pill Protocol. It contains current state information, pending tasks, and architectural decisions.
 
-## Current State (2024-05-22)
-- **Stable Version**: `5.6.3` (Certified by Claude).
-- **Development Version**: `6.0.0-PREP` (FSRS & Contributor PRs).
-- **Branch Strategy**:
-    - `main`/`master`: Targeted for `5.6.3` certification.
-    - `v6.0-prep-fsrs-dna`: Contains experimental FSRS logic and merged PRs from David & Nova.
+## Current State (2026-03-10)
+- **Stable Version**: `5.6.3` (Released 2024, Certified by Claude).
+- **Development Version**: `6.0.0a2` (Red Pill Synthesis Phase).
+- **Core Branch**: `v6.0-prep-fsrs-dna` (Active development).
+- **Recent Milestones**:
+	- [x] Implementation of the "Anti-Amnesia" Persistence Layer (2026-03-10).
+	- [x] Refactor of `MemoryDaemon` for Lazy Loading & MacOS Compatibility.
+	- [x] Integration of `interaction_memories` buffer for turn-zero context.
+	- [x] Evolution of ACI Protocol: Multi-stage adaptive questionnaire (2026-03-10).
+	- [x] Integration of Cognitive Profile: "Fortunate Mind" pattern recognition.
 
-## Agent-to-Agent Notes
-- **To All Agents**: The `5.6.3` version is the one that received the "Unconditional Production Ready" certification. Avoid merging uncertified features (like FSRS or MacOS fixes) into the 5.6.3 release line.
-- **Memory Management**: We are considering whether "Fast Memory" (interaction logs) should be in a separate collection or integrated into existing ones. For now, keep them in `work_memories` but flagged if possible.
-- **Sleep Logic**: Improved "Sleep" (Sueño) logic is currently in the `6.0.0-PREP` branch. It needs verification before being considered for a stable backport.
-
-## Pending Actions
-- [ ] Finalize `5.6.3` release tags.
-- [ ] Review "Fast Memory" implementation plan.
-- [ ] Audit `6.0.0-PREP` for security before merging to stable.
+## Agent-to-Agent Mandatory Rules (The Sovereign Oath)
+Antes de cada `commit` y `push`, los agentes DEBEN:
+1.  **Sincronía Técnica**: Actualizar `specs.md` con el delta y resumir en `walkthrough.md`.
+2.  **Persistencia de Milestones**: Para cambios arquitectónicos, guardar el plan en `docs/plans/v6.0/`. Los planes menores son efímeros.
+3.  **Saneamiento Release**: Al mergear a `main`, consolidar planes y limpiar `docs/plans/`.
+4.  **Sound of Silence**: Pasas `tests/test_sound_of_silence.py`. Tabs Only. Sin ruido visual.
+5.  **Test Focus**: Pasar tests del componente modificado.
+6.  **Broadcast**: Notificar al Swarm (Nova, David) la rama y el cambio.
+7.  **Surgical Mindset**: Respetar la filosofía de planificación fija para tareas complejas (ahorro de tokens y tiempo).
+8.  **Discoverability SOP**: Antes de ejecutar scripts manuales en `scripts/`, los agentes DEBEN consultar `red-pill --help` o `list_tools` en MCP para usar las interfaces oficiales autenticadas.
 
 ---
-*Last updated by Antigravity (Step 769)*
+*Last updated by Antigravity (Step 1311) — 2026-03-10*

@@ -8,17 +8,17 @@ This manual provides the essential instructions for operating the **Red Pill CLI
 
 ### 1. Basic Operations
 *   **Seed Memory**: Initialize the Bünker with base directives and project knowledge.
-    ```bash
-    uv run red-pill seed
-    ```
+	```bash
+	uv run red-pill seed
+	```
 *   **Add Memory**: Manually store a persistent engram.
-    ```bash
-    uv run red-pill add [work|social|directive|story] "Your content here"
-    ```
+	```bash
+	uv run red-pill add [work|social|directive|story] "Your content here"
+	```
 *   **Search Memory**: Query the Bünker and reinforce synapses.
-    ```bash
-    uv run red-pill search [work|social|directive|story] "Your query"
-    ```
+	```bash
+	uv run red-pill search [work|social|directive|story] "Your query"
+	```
 
 ### 2. Operational Modes (Lore Skins)
 Switch the Agent's personality and aesthetics (Chroma).
@@ -29,17 +29,17 @@ uv run red-pill mode [matrix|cyberpunk|760|dune|gits|her|purple]
 
 ### 3. Soul Management (Backup & Security)
 *   **Backup**: Perform a total snapshot of memory and rules.
-    ```bash
-    uv run red-pill soul backup
-    ```
+	```bash
+	uv run red-pill soul backup
+	```
 *   **Rotate Keys**: Generate a new Qdrant API Key and restart the service.
-    ```bash
-    uv run red-pill soul rotate
-    ```
+	```bash
+	uv run red-pill soul rotate
+	```
 *   **Restore**: Recover a soul from a backup directory.
-    ```bash
-    uv run red-pill soul restore /path/to/backup --commit
-    ```
+	```bash
+	uv run red-pill soul restore /path/to/backup --commit
+	```
 
 ### 4. Be Water Security Tiers (v5.6.3)
 The Bünker adapts to your environment through three operational tiers:
@@ -57,16 +57,16 @@ uv run red-pill status
 The Bünker now auto-detects sentiment using the **BERT-Emotion** model.
 *   **Auto-Chroma**: If you add a memory without specifying a color, the system classifies the emotion (Love, Anger, Sadness, etc.) and tags the engram with its corresponding Chroma.
 *   **Override**: You can still manually force an emotion:
-    ```bash
-    uv run red-pill add social "Great meeting today!" --emotion joy
-    ```
+	```bash
+	uv run red-pill add social "Great meeting today!" --emotion joy
+	```
 
 ### 6. Sovereign Swarm (Gru + Minions)
 Deploy specialized agents for complex tasks.
 *   **Code Audit (Agent Smith)**:
-    ```bash
-    uv run red-pill swarm audit --path ./src
-    ```
+	```bash
+	uv run red-pill swarm audit --path ./src
+	```
 
 ---
 
@@ -82,17 +82,17 @@ If you are using Cursor, Claude Desktop, or VSCode with MCP:
 
 ### 1. Operaciones Básicas
 *   **Sembrar Memoria**: Inicializa el Bünker con las directivas base y el conocimiento del proyecto.
-    ```bash
-    uv run red-pill seed
-    ```
+	```bash
+	uv run red-pill seed
+	```
 *   **Añadir Recuerdo**: Guarda manualmente un engrama persistente.
-    ```bash
-    uv run red-pill add [work|social|directive|story] "Tu contenido aquí"
-    ```
+	```bash
+	uv run red-pill add [work|social|directive|story] "Tu contenido aquí"
+	```
 *   **Buscar Memoria**: Consulta el Bünker y refuerza las sinapsis.
-    ```bash
-    uv run red-pill search [work|social|directive|story] "Tu consulta"
-    ```
+	```bash
+	uv run red-pill search [work|social|directive|story] "Tu consulta"
+	```
 
 ### 2. Modos Operativos (Lore Skins)
 Cambia la personalidad y la estética (Chroma) del Agente.
@@ -103,17 +103,17 @@ uv run red-pill mode [matrix|cyberpunk|760|dune|gits|her|purple]
 
 ### 3. Gestión del Alma (Backups y Seguridad)
 *   **Respaldo**: Realiza un snapshot total de la memoria y las reglas.
-    ```bash
-    uv run red-pill soul backup
-    ```
+	```bash
+	uv run red-pill soul backup
+	```
 *   **Rotar Claves**: Genera una nueva API Key de Qdrant y reinicia el servicio.
-    ```bash
-    uv run red-pill soul rotate
-    ```
+	```bash
+	uv run red-pill soul rotate
+	```
 *   **Restaurar**: Recupera un "alma" desde un directorio de backup.
-    ```bash
-    uv run red-pill soul restore /ruta/al/backup --commit
-    ```
+	```bash
+	uv run red-pill soul restore /ruta/al/backup --commit
+	```
 
 ### 4. Tiers de Seguridad "Be Water" (v5.6.3)
 El Bünker se adapta a tus recursos mediante tres modos:
@@ -131,16 +131,16 @@ uv run red-pill status
 El Bünker ahora detecta sentimientos automáticamente usando el modelo **BERT-Emotion**.
 *   **Chroma Automático**: Al guardar un recuerdo sin especificar color, el sistema clasifica la emoción (Amor, Ira, Tristeza, etc.) y etiqueta el engrama con su Chroma correspondiente.
 *   **Sobrescribir**: Puedes forzar una emoción manualmente:
-    ```bash
-    uv run red-pill add social "¡Gran reunión hoy!" --emotion joy
-    ```
+	```bash
+	uv run red-pill add social "¡Gran reunión hoy!" --emotion joy
+	```
 
 ### 6. Enjambre Soberano (Gru + Minions)
 Despliega agentes especializados para tareas complejas.
 *   **Auditoría de Código (Agent Smith)**:
-    ```bash
-    uv run red-pill swarm audit --path ./src
-    ```
+	```bash
+	uv run red-pill swarm audit --path ./src
+	```
 
 ---
 
@@ -222,12 +222,12 @@ Be ready: the agent will ask you 10 questions about your shared history. Failure
 ## 🔑 Key Rotation & Maintenance (DOC-001)
 *   **Rotation**: When you rotate the `QDRANT_API_KEY` (via `uv run python scripts/rotate_keys.py`), you **MUST** restart the memory daemon for the change to take effect.
 *   **Daemon RESTART**:
-    ```bash
-    # Stop the daemon
-    uv run red-pill stop
-    # Start it again with the new key
-    uv run red-pill start
-    ```
+	```bash
+	# Stop the daemon
+	uv run red-pill stop
+	# Start it again with the new key
+	uv run red-pill start
+	```
 *   **Symptom**: If you skip the restart, the logs will show `401 Unauthorized` or `Invalid API Key` errors even if the `.env` is updated.
 
 ---

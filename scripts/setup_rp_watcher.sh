@@ -14,7 +14,7 @@ echo "[1/4] Detectando OS y creando el entorno aislado para RP-Watcher..."
 mkdir -p "$DAEMON_DIR"
 
 if [ ! -d "$VENV_DIR" ]; then
-    uv venv "$VENV_DIR" --python 3.11
+	uv venv "$VENV_DIR" --python 3.11
 fi
 
 echo "[2/4] Instalando dependencias del watcher..."
@@ -67,7 +67,7 @@ if [ "$OS_NAME" = "Darwin" ]; then
 </plist>
 PLIST_EOF
 	sed -i.bak "s|_HOME_|$HOME|g" "$PLIST_PATH"
-    rm -f "${PLIST_PATH}.bak"
+	rm -f "${PLIST_PATH}.bak"
 	echo "  > Creado plist en $PLIST_PATH"
 	
 	launchctl unload "$PLIST_PATH" 2>/dev/null || true

@@ -77,10 +77,10 @@ def heal_file(file_path: str, errors: List[Dict], engine: EdgeEngine, dry_run: b
 		correction = correction.splitlines()[0] if correction.splitlines() else ""
 
 		if correction and correction != original_line:
-			print(f"    [Fix] {original_line.strip()} -> {correction.strip()}")
+			print(f"	[Fix] {original_line.strip()} -> {correction.strip()}")
 			lines[line_idx] = correction
 		else:
-			print(f"    [Skip] No change or ambiguous output: '{raw_correction[:20]}...'")
+			print(f"	[Skip] No change or ambiguous output: '{raw_correction[:20]}...'")
 
 	if not dry_run:
 		with open(file_path, "w") as f:

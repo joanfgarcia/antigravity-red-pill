@@ -80,6 +80,8 @@ class GruOrchestrator:
 				importance=1.0,
 				metadata={"type": "swarm_event", "task": task, "timestamp": time.time(), "results": [r.model_dump() for r in results]},
 			)
+			# Phase 1: Encoding (Fast Buffer) for deep context
+			self.memory.record_interaction_pair(prompt=f"SWARM TASK: {task}", response=message, role="orchestrator")
 		except Exception as e:
 			logger.error(f"SAS Memory Hook failed: {e}")
 

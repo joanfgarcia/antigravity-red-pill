@@ -75,8 +75,8 @@ effective_rate = rate * effective_multiplier
 # For emotional (non-neutral) engrams only:
 HABITUATION_RATE = cfg.EMOTIONAL_HABITUATION_RATE  # default: 0.02 (2% per recall)
 if emotion not in ("neutral", None) and not immune:
-    new_intensity = max(1.0, intensity * (1.0 - HABITUATION_RATE))
-    payload["intensity"] = round(new_intensity, 2)
+	new_intensity = max(1.0, intensity * (1.0 - HABITUATION_RATE))
+	payload["intensity"] = round(new_intensity, 2)
 # Immunity: immune engrams skip habituation (genesis engrams remain at full intensity).
 # Floor: intensity never drops below 1.0 (minimum emotional trace preserved).
 ```

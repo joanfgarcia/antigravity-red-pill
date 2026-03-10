@@ -65,6 +65,7 @@ class LazarusPulse:
 				logger.info("Lazarus Pulse: Beat triggered. Executing rituals...")
 				await self._maintenance_ritual()
 				await self._dream_ritual()
+				await self._consolidation_ritual()
 
 				# Wait for next beat
 				await asyncio.sleep(cfg.PULSE_INTERVAL)
@@ -90,19 +91,13 @@ class LazarusPulse:
 				logger.warning("Pulse: Bünker connection lost. Attempting recovery...")
 
 			# 2. Absence Guard (Proactive TTL refresh)
-			# Ensures memories don't "suddenly" decay after long inactivity if the user
-			# forgets to interact. This stabilizes the biological runway.
 			if cfg.METABOLISM_STRATEGY == "LAZY":
 				logger.info("Pulse: Running proactive Absence Guard sync...")
 				for coll in ["work_memories", "social_memories", "story_memories", "directive_memories"]:
 					try:
-						# We run the synchronous refresh in a thread to avoid blocking the pulse loop
 						await asyncio.to_thread(self.memory_mgr._refresh_ttl_timestamps, coll)
 					except Exception as e:
 						logger.error(f"Pulse: Absence Guard failed for {coll}: {e}")
-
-			# 3. Storage Health
-			# (Placeholder for future quota/cleanup tasks)
 
 			logger.info("Pulse: Maintenance ritual complete. 770 stable.")
 
@@ -119,7 +114,6 @@ class LazarusPulse:
 			logger.info("Pulse: Initiating Oneiromancy (Dream Ritual)...")
 			for coll in ["work_memories", "social_memories", "story_memories"]:
 				try:
-					# Synchronous dream call in a thread
 					await asyncio.to_thread(self.memory_mgr.dream, coll)
 				except Exception as e:
 					logger.error(f"Pulse: Dream failed for {coll}: {e}")
@@ -127,3 +121,19 @@ class LazarusPulse:
 			logger.info("Pulse: Oneiromancy complete. Patterns woven.")
 		except Exception as e:
 			logger.error(f"Pulse: Dream ritual failed: {e}")
+
+	async def _consolidation_ritual(self) -> None:
+		"""
+		Autonomous Consolidation:
+		- Processes raw interactions into long-term memories.
+		- Discards noise and fixates essence.
+		"""
+		try:
+			from red_pill.metabolism.sleep import perform_sleep_cycle
+
+			logger.info("Pulse: Initiating Consolidation (Consolidating interactions)...")
+			# Use lazy mode by default for background pulse to avoid excessive pruning
+			await asyncio.to_thread(perform_sleep_cycle, self.memory_mgr, mode="lazy")
+			logger.info("Pulse: Consolidation complete. Memories fixed.")
+		except Exception as e:
+			logger.error(f"Pulse: Consolidation ritual failed: {e}")

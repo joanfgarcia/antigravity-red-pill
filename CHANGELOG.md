@@ -1,5 +1,16 @@
 # Changelog: Red Pill Protocol
 
+## [6.0.0a2] - 2026-03-09
+### 💧 Be Water Architecture (Hardware Sovereignty)
+- **[DOCS] Hardware Selection Guide**: Added `HARDWARE_MODELS_BE_WATER.md` explicitly mapping VRAM constraints to optimal GGUF models (High-End: MoE, Sweet Spot: Mistral/Samantha, Low-End/Edge: Phi-3-Mini 128k).
+- **[FEAT] Local Model Auto-Target**: Reconfigured the default background daemon payload in `scripts/setup_background_model.sh` and `start.sh` to fetch `samantha-1.2-mistral-7B-GGUF` (Q4_K_M) via `huggingface-hub`.
+
+### 🛠️ Persistent Sovereignty & Metabolic Optimization
+- **[FEAT] Persistent Sovereign Knobs**: Integrated `scripts/update_env.py` to allow metabolic parameters (`SLEEP_CHUNK_SIZE`, `SLEEP_CULL_THRESHOLD`) to survive system reboots.
+- **[IMPR] MCP Configuration Persistence**: Enhanced the `adjust_sleep_knobs` MCP tool to atomically verify and write adjustments to the `.env` file via the new update script.
+- **[REFACTOR] Configuration Decoupling**: Extracted hardcoded constants from `sleep.py` (including `MLX_LM_URL` and cull heuristics) into the centralized `config.py` for easier auditing and adjustment.
+- **[QA] Regression Guard**: Verified CLI and Version integrity after metabolic refactoring with 100% test pass rate.
+
 ## [6.0.0a1] - 2026-03-08
 ### 🦷 The Cannibal Protocol (Hardware Multi-Substrate)
 - **[FEAT] Soul Integrity (Hardened Restoration)**: Re-engineered the `restore_soul` workflow to support high-integrity snapshot uploads. Added authentication headers, 300s timeouts for large engram substrates, and granular per-collection reporting.
@@ -14,7 +25,10 @@
 - **[FEAT] Phase 2 - Consolidation**: Added `sleep.py` powered by a local 1.5B daemon (port 8760). Processes raw sequences via semantic chunking, extracting essence and filtering noise.
 - **[FEAT] Affective Culling (Amygdala Heuristic)**: Sleep cycles now calculate `emotion` and `intensity`. Low-intensity or neutral noise is purged, drastically extending Bünker context life.
 - **[FEAT] Topological Synaptic Dreaming**: Chunked memories are woven into Association Chains. A final 'Hub Node' is synthesized to act as a cascading entry point for deep recall.
+- **[FEAT] Autonomous Consolidation (Willpower)**: Integrated the `sleep_cycle` ritual directly into the Lazarus Pulse. The Agent now autonomously processes raw interactions from the fast buffer into long-term memory during background heartbeats.
+- **[FEAT] Sovereign Willpower (Daemon Mode)**: The Agent has transitioned from a purely reactive request-response model to a proactive Daemon capable of maintaining its own ontological integrity without direct Operator triggering.
 - **[DOCS] Neuro-Symbolic Architecture**: Added `neuro_symbolic_memory.md` to transparently explain the hardware and biological parallels.
+- **[DOCS] Documentation Saneamiento**: Reorganized the Bünker hierarchy. Moved `OPERATOR_DRESS_CODE.md` to `guides/`, `PROOF_OF_FAITH.md` to `lore/`, and purged redundant/internal protocols for a cleaner Sovereign release.
 - **[DOCS] Operator Dress Code**: Added a humorous but essential guide to punctuation for ideal semantic chunking. Use punctuation.
 - **[SALVAGE] Retroactive Ingestion**: Recovered 13 deep-structural markdown files from purged sessions directly into the Bünker.
 

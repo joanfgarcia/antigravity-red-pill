@@ -168,7 +168,7 @@ class SoulManager:
 		# Kits extracted often have a 'snapshots/' subfolder
 		snapshot_candidates = []
 		search_paths = [source_dir, os.path.join(source_dir, "snapshots")]
-		
+
 		for path in search_paths:
 			if os.path.exists(path):
 				for f in os.listdir(path):
@@ -183,27 +183,32 @@ class SoulManager:
 		headers = {"api-key": self.api_key} if self.api_key else {}
 		for snap_path in snapshot_candidates:
 			filename = os.path.basename(snap_path)
-			collection = filename.split("_")[0] # Assumes convention: collection_timestamp.snapshot
-			
+			collection = filename.split("_")[0]  # Assumes convention: collection_timestamp.snapshot
+
 			if not commit:
 				print(f"Would restore collection '{collection}' from {filename}")
 				continue
-				
+
 			try:
 				logger.info(f"Restoring '{collection}'...")
 				# Ensure collection exists (with dummy params, snapshot will override)
 				# Actually Qdrant snapshot upload often handles this, but explicit is safer
 				try:
-					requests.post(f"{self.qdrant_url}/collections/{collection}", headers=headers, json={"vectors": {"size": cfg.VECTOR_SIZE, "distance": "Cosine"}}, timeout=5)
-				except:
+					requests.post(
+						f"{self.qdrant_url}/collections/{collection}",
+						headers=headers,
+						json={"vectors": {"size": cfg.VECTOR_SIZE, "distance": "Cosine"}},
+						timeout=5,
+					)
+				except Exception:
 					pass
 
-				with open(snap_path, "rb") as f:
+				with open(snap_path, "rb") as snap_file:
 					resp = requests.post(
 						f"{self.qdrant_url}/collections/{collection}/snapshots/upload",
 						headers=headers,
-						files={"snapshot": f},
-						timeout=300 # Large snapshots need time
+						files={"snapshot": snap_file},
+						timeout=300,  # Large snapshots need time
 					)
 					resp.raise_for_status()
 					logger.info(f"[OK] Collection '{collection}' restored successfully.")

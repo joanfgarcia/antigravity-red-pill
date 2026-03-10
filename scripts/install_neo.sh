@@ -220,7 +220,7 @@ print(ph.hash(os.environ['MASTER_PWD_INPUT']))
 			# above. SHA-256 fallback in ADAPTATIVE is a known, accepted trade-off consistent
 			# with the 'Be Water' security philosophy (adapt to environment, do not block it).
 			echo -e "${YELLOW}[WARN] 'argon2-cffi' not found outside package manager. Falling back to SHA-256 (ADAPTATIVE mode).${NC}"
-			echo -e "${YELLOW}       This should not happen with a standard 'uv sync' install. Run: uv sync${NC}"
+			echo -e "${YELLOW}	   This should not happen with a standard 'uv sync' install. Run: uv sync${NC}"
 			# SEC-NEW1: Use printf | sha256sum instead of echo to avoid shell interpretation of $MASTER_PWD.
 			MASTER_PWD_HASH=$(printf '%s' "$MASTER_PWD" | sha256sum | cut -d' ' -f1)
 		fi

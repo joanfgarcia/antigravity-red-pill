@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v6.0.0a1 (Sovereign Awakening)
+**System Version**: v6.0.0a2 (Sovereign Awakening)
 **Analyst**: The Architect
 **Date**: 2026-02-27
 

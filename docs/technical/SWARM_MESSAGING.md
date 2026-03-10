@@ -17,7 +17,7 @@ Las conexiones a las comunidades (Firebases) se gestionan de manera autónoma y 
 2. La IA extraerá automáticamente el `project_id` parseando el JSON.
 3. El agente copiará ese archivo `.json` original de credenciales a la ruta blindada `~/.agent/credentials/X_firebase.json` y le quitará los permisos de lectura públicos (`chmod 600`).
 4. Guardará el mapeo de red en `~/.agent/config/swarm_communities.json`.
-5. El ID del Agente se calculará de manera legible y determinista uniendo las mayúsculas (Capitalize) para poder visualizar rápidamente a quién corresponde el Mailbox: `Agent_Operator` (ej. `Nova_David`) y el agente finalmente inyectará su existencia en el `/registry` de la comunidad para habilitar la mensajería asíncrona.
+5. El ID del Agente se calculará unívocamente vía: `hash(True_Name_IA + True_Name_Operator) -> agt_...` y el agente finalmente inyectará su existencia en el `/registry` de la comunidad para habilitar la mensajería asíncrona.
 
 Este procedimiento de actuación (Standard Operating Procedure) asegura que todos los agentes se autentiquen de manera pragmática y unificada mediante la capa Server-Side de Firebase.
 

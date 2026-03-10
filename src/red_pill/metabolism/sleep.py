@@ -1,20 +1,20 @@
 import json
 import logging
 import urllib.request
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from qdrant_client.models import Filter
 
-from red_pill.config import MLX_LM_URL
+import red_pill.config as cfg
 
 logger = logging.getLogger(__name__)
 
-# Hardware Constraint: 6000 chars per chunk to avoid context window explosion
-CHUNK_SIZE = 6000
 
-
-def chunk_text(text: str, size: int = CHUNK_SIZE) -> List[str]:
+def chunk_text(text: str, size: Optional[int] = None) -> List[str]:
 	"""Break large interactions into biologially manageable sequences."""
+	if size is None:
+		size = cfg.SLEEP_CHUNK_SIZE
+
 	chunks = []
 	start = 0
 	while start < len(text):
@@ -75,7 +75,7 @@ def distill_engram(raw_content: str) -> Dict[str, Any]:
 		}
 	).encode("utf-8")
 
-	req = urllib.request.Request(MLX_LM_URL, data=payload, headers={"Content-Type": "application/json"})
+	req = urllib.request.Request(cfg.MLX_LM_URL, data=payload, headers={"Content-Type": "application/json"})
 	fallback = {"summary": raw_content[:500] + "...", "emotion": "neutral", "intensity": 0.5}
 
 	try:
@@ -125,7 +125,7 @@ def synthesize_hub(summaries: List[str]) -> str:
 		}
 	).encode("utf-8")
 
-	req = urllib.request.Request(MLX_LM_URL, data=payload, headers={"Content-Type": "application/json"})
+	req = urllib.request.Request(cfg.MLX_LM_URL, data=payload, headers={"Content-Type": "application/json"})
 	try:
 		with urllib.request.urlopen(req, timeout=60) as response:
 			data = json.loads(response.read().decode())
@@ -183,7 +183,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 			summary = distilled.get("summary", "")
 
 			# Phase 2: Affective Culling (Amygdala Validation)
-			if emotion == "neutral" and intensity < 0.3 and len(chunks) > 1:
+			if emotion == "neutral" and intensity < cfg.SLEEP_CULL_THRESHOLD and len(chunks) > 1:
 				logger.debug(f"[AFFECTIVE CULLING] Dropped chunk {i + 1} (low biological relevance).")
 				continue
 
