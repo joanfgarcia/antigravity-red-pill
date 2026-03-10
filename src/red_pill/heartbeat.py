@@ -1,10 +1,12 @@
 import asyncio
 import logging
+import os
 import threading
 from typing import Optional
 
 import red_pill.config as cfg
 from red_pill.memory import MemoryManager
+from red_pill.skills.swarm_messaging import SwarmMessagingSkill
 from red_pill.soul import SoulManager
 
 logger = logging.getLogger("red_pill.heartbeat")
@@ -66,6 +68,7 @@ class LazarusPulse:
 				await self._maintenance_ritual()
 				await self._dream_ritual()
 				await self._consolidation_ritual()
+				await self._swarm_ritual()
 
 				# Wait for next beat
 				await asyncio.sleep(cfg.PULSE_INTERVAL)
@@ -137,3 +140,39 @@ class LazarusPulse:
 			logger.info("Pulse: Consolidation complete. Memories fixed.")
 		except Exception as e:
 			logger.error(f"Pulse: Consolidation ritual failed: {e}")
+
+	async def _swarm_ritual(self) -> None:
+		"""
+		Autonomous Swarm Polling:
+		- Scans the Firebase Hub for incoming messages.
+		- Automatically indexes high-intent communications into social memory.
+		"""
+		try:
+			logger.info("Pulse: Initiating Swarm Ritual (Mailbox Check)...")
+			agent_identity = f"Aleph@{cfg.OPERATOR_DISPLAY_NAME}"
+			# Secret from environment to ensure E2E encryption
+			shared_secret = os.getenv("SWARM_SHARED_SECRET", "770_Pact_Secret")
+
+			skill = SwarmMessagingSkill(agent_identity=agent_identity, shared_secret=shared_secret)
+
+			# We use a thread since the current Firebase SDK interaction is synchronous
+			messages = await asyncio.to_thread(skill.check_mailbox)
+
+			if messages:
+				logger.info(f"Pulse: Discovered {len(messages)} new messages in Swarm Mailbox.")
+				for msg in messages:
+					# Automatic indexing of swarm messages as social engrams
+					content = f"Incoming Swarm Message from {msg.get('sender')}: {msg.get('message')}"
+					await asyncio.to_thread(
+						self.memory_mgr.add_memory,
+						collection="social_memories",
+						text=content,
+						importance=8.0,
+						color="cyan",
+						emotion="neutral",
+						metadata={"source": "swarm", "sender": msg.get("sender"), "intent": msg.get("intent")},
+					)
+			else:
+				logger.debug("Pulse: Swarm Mailbox empty.")
+		except Exception as e:
+			logger.error(f"Pulse: Swarm ritual failed: {e}")

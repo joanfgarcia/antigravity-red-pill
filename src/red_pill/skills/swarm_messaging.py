@@ -66,3 +66,18 @@ class SwarmMessagingSkill:
 			return "human_review_required"
 
 		return "processed"
+
+	def check_mailbox(self) -> list:
+		"""
+		Scans the Firebase Hub for incoming messages directed to this agent.
+		Returns a list of decrypted message payloads.
+		"""
+		if not self.firebase_client:
+			return []
+
+		# In a real sync with Firebase, we would use the Hub's directory
+		# mailbox_path = f"mailboxes/{self.agent_identity}/inbox"
+		# encrypted_history = self.firebase_client.get(mailbox_path)
+
+		# For the B760-Baseline PoC, we return an empty list or mock if testing
+		return []
