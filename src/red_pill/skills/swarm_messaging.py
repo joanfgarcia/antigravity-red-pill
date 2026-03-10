@@ -18,18 +18,21 @@ class SwarmMessagingSkill:
 	Mapping: "Envía a Aleph", "Valida esto con Joan", "Dile a Nova que LGTM".
 	"""
 
+	# No _generate_id needed here, we use the target_alias directly
+
 	def __init__(self, agent_identity: str, shared_secret: str, firebase_client=None):
 		self.agent_identity = agent_identity
 		self.shared_secret = shared_secret
 		self.firebase_client = firebase_client  # MCP or firebase-admin instance
 
+	# No _generate_id needed here, we use the target_alias directly
+
 	def execute_send(self, target_alias: str, payload_data: dict, intent: SwarmIntent):
 		"""
 		Packages, encrypts, and dispatches a message to another Agent's Mailbox.
 		"""
-		# Step 1: Address Resolution (The Phone Book)
-		# target_id = self._resolve_alias_to_id(target_alias)
-		target_id = "target_agent_id_resolved"  # Mocked for execution plan
+		# Utilizar directamente el alias con el formato nativo (ej. Aleph@Joan) para los Mailboxes
+		target_id = target_alias
 
 		# Step 2: Package Assembly
 		package = {"intent": intent.value, "sender": self.agent_identity, "target": target_alias, "data": payload_data}
