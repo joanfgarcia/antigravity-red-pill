@@ -14,7 +14,7 @@ class AgentIdentity:
         Generates a clear and legible Agent ID based on the bond.
         This ID acts as the 'phone number' in the Swarm Messaging registry.
         """
-        return f"{agent_true_name.capitalize()}_{operator_true_name.capitalize()}"
+        return f"{agent_true_name.capitalize()}@{operator_true_name.capitalize()}"
     
     @staticmethod
     def resolve_local_identity() -> dict:

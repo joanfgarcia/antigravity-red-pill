@@ -26,9 +26,8 @@ class SwarmMessagingSkill:
         """
         Packages, encrypts, and dispatches a message to another Agent's Mailbox.
         """
-        # Step 1: Address Resolution (The Phone Book)
-        # Convert Target Alias (e.g. Aleph@Joan) to readable Routing ID (Aleph_Joan)
-        target_id = target_alias.replace("@", "_")
+        # Utilizar directamente el alias con el formato nativo (ej. Aleph@Joan) para los Mailboxes
+        target_id = target_alias
         
         # Step 2: Package Assembly
         package = {
