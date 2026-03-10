@@ -100,6 +100,8 @@ class MemoryDaemon:
 
 	def embed_cannibal(self, texts: List[str]) -> List[float]:
 		"""Distributes the load across all primed hardware engines."""
+		if not self.engines:
+			self._load_model()
 		engine = next(self.engine_cycle)
 		return list(engine.embed(texts))[0].tolist()
 
@@ -118,19 +120,21 @@ class MemoryDaemon:
 		self.server.listen(5)
 
 		try:
-			self._load_model()
 			# Sovereign Pulse Integration (v6.0)
 			from red_pill.heartbeat import LazarusPulse
 			from red_pill.memory import MemoryManager
 			from red_pill.soul import SoulManager
 
 			self.memory_mgr = MemoryManager()
+			# v6.0.1: Prevent self-referential deadlock by bypassing the socket when called within the daemon
+			self.memory_mgr._get_vector = self.embed_cannibal  # type: ignore
 			self.soul_mgr = SoulManager()
 			self.pulse = LazarusPulse(self.memory_mgr, self.soul_mgr)
 			self.pulse.start()
 		except Exception as e:
 			logger.error(f"Daemon startup failed (Model/Pulse): {e}")
-			self.stop()
+			# We don't stop here, we allow the loop to start even if Pulse fails
+			pass
 
 		while self.running:
 			try:
@@ -173,7 +177,17 @@ class MemoryDaemon:
 					response = {"status": "error", "message": "Unauthorized"}
 				else:
 					text = request.get("text")
-					if text and self.engines:
+					command = request.get("command")
+					if command == "encode":
+						prompt = request.get("prompt", "")
+						response_text = request.get("response", "")
+						role = request.get("role", "assistant")
+						if prompt and response_text:
+							uid = self.memory_mgr.record_interaction_pair(prompt, response_text, role=role)
+							response = {"status": "ok", "id": uid}
+						else:
+							response = {"status": "error", "message": "Missing prompt or response"}
+					elif text and self.engines:
 						# Phase O.11: Cannibal Execution
 						vector = self.embed_cannibal([text])
 						response = {"status": "ok", "vector": vector}

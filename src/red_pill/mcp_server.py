@@ -74,12 +74,25 @@ async def handle_list_tools() -> List[types.Tool]:
 				"properties": {
 					"command": {
 						"type": "string",
-						"enum": ["rotate", "backup", "mode", "status", "purge"],
+						"enum": ["rotate", "backup", "mode", "status", "purge", "sleep"],
 						"description": "The CLI command to execute",
 					},
-					"value": {"type": "string", "description": "Optional argument (e.g., skin name for 'mode')"},
+					"value": {"type": "string", "description": "Optional argument (e.g., skin name for 'mode', 'lazy' or 'deep' for 'sleep')"},
 				},
 				"required": ["command"],
+			},
+		),
+		types.Tool(
+			name="memorize_interaction",
+			description="Record a dialogue pair into the fast interaction buffer (anti-amnesia).",
+			inputSchema={
+				"type": "object",
+				"properties": {
+					"prompt": {"type": "string", "description": "The user's input/request"},
+					"response": {"type": "string", "description": "The assistant's response"},
+					"role": {"type": "string", "description": "Role of the responder (default: assistant)", "default": "assistant"},
+				},
+				"required": ["prompt", "response"],
 			},
 		),
 		types.Tool(
@@ -233,6 +246,12 @@ async def handle_call_tool(
 				output = "Gran Purge protocol executed across all active sectors."
 			elif cmd == "status":
 				output = get_telemetry_report()
+			elif cmd == "sleep":
+				from red_pill.metabolism.sleep import perform_sleep_cycle
+				manager = MemoryManager()
+				mode = val if val in ["lazy", "deep"] else "lazy"
+				count = perform_sleep_cycle(manager, mode=mode)
+				output = f"Sleep cycle ({mode}) complete. {count} engrams consolidated."
 			else:
 				output = f"Unknown command: {cmd}"
 			return [types.TextContent(type="text", text=f"Action Result: {cmd}\n\n{output}")]
@@ -352,6 +371,45 @@ async def handle_call_tool(
 		except Exception as e:
 			# Fallback if scripts.update_env is missing or fails
 			return [types.TextContent(type="text", text=f"Failed to persist knobs: {e}. Values updated in memory only.")]
+
+	elif name == "memorize_interaction":
+		prompt = arguments.get("prompt", "")
+		response_text = arguments.get("response", "")
+		role = arguments.get("role", "assistant")
+		
+		try:
+			import socket
+			import json
+			socket_path = cfg.DAEMON_SOCKET_PATH
+			if not os.path.exists(socket_path):
+				return [types.TextContent(type="text", text="Error: Memory Sidecar is not running.")]
+				
+			with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+				client.settimeout(2.0)
+				client.connect(socket_path)
+				req = {
+					"command": "encode",
+					"prompt": prompt,
+					"response": response_text,
+					"role": role,
+					"api_key": cfg.SIDECAR_AUTH_KEY
+				}
+				payload = json.dumps(req).encode("utf-8")
+				header = len(payload).to_bytes(4, byteorder="big")
+				client.sendall(header + payload)
+				
+				# Wait for ACK
+				resp_header = client.recv(4)
+				if resp_header:
+					resp_len = int.from_bytes(resp_header, byteorder="big")
+					resp_data = client.recv(resp_len)
+					result = json.loads(resp_data.decode("utf-8"))
+					if result.get("status") == "ok":
+						return [types.TextContent(type="text", text=f"Interaction memorized. ID: {result.get('id')}")]
+				
+			return [types.TextContent(type="text", text="Interaction sent to buffer.")]
+		except Exception as e:
+			return [types.TextContent(type="text", text=f"Failed to memorize: {e}")]
 
 	raise ValueError(f"Unknown tool: {name}")
 
