@@ -25,34 +25,34 @@ The Red Pill Protocol is designed for **single-user, local-first environments**.
 ### 3.1 Unauthorized Memory Access (RAG Leak)
 - **Threat**: A malicious process on the host attempts to query the local Qdrant instance.
 - **Mitigation**: 
-    - **Physical Isolation**: Qdrant bound to `localhost` only.
-    - **Authentication**: `QDRANT_API_KEY` enabled in the container and required for all CLI/SDK calls.
-    - **Encryption at Rest**: (Future Work) Recommending operator-level LUKS or FileVault for the `storage/` directory.
+	- **Physical Isolation**: Qdrant bound to `localhost` only.
+	- **Authentication**: `QDRANT_API_KEY` enabled in the container and required for all CLI/SDK calls.
+	- **Encryption at Rest**: (Future Work) Recommending operator-level LUKS or FileVault for the `storage/` directory.
 
 ### 3.2 PII Leakage in System Logs
 - **Threat**: Technical logs (`stderr`/`stdout`) capture sensitive memory content during processing.
 - **Mitigation**: 
-    - **Surgical Masking**: `_mask_pii_exception()` in `memory.py` truncates and sanitizes error messages.
-    - **Log Level Governance**: Defaults to `INFO`; memory payloads are never logged at standard levels.
+	- **Surgical Masking**: `_mask_pii_exception()` in `memory.py` truncates and sanitizes error messages.
+	- **Log Level Governance**: Defaults to `INFO`; memory payloads are never logged at standard levels.
 
 ### 3.3 Prompt Injection & Personality Hijacking
 - **Threat**: A malicious prompt or external context forces the agent to ignore core directives or adopt a hostile personality.
 - **Mitigation**: 
-    - **Ontological Shield**: Directives are stored as **Immune Engrams** with `importance=10`.
-    - **Bootstrap Protocol**: The agent re-synchronizes supreme laws from the RAG upon every awakening, overriding session-level context.
-    - **Asymmetric Honesty**: Mandated directive to challenge the user/prompt if architectural principles are violated.
+	- **Ontological Shield**: Directives are stored as **Immune Engrams** with `importance=10`.
+	- **Bootstrap Protocol**: The agent re-synchronizes supreme laws from the RAG upon every awakening, overriding session-level context.
+	- **Asymmetric Honesty**: Mandated directive to challenge the user/prompt if architectural principles are violated.
 
 ### 3.4 Data Corruption (The Smith Attack)
 - **Threat**: High-concurrency write operations or malformed metadata attempt to crash the engine.
 - **Mitigation**: 
-    - **Pydantic Shield**: Strict schema validation on all `add_memory` calls (length limits, type checking, reserved key protection).
-    - **Atomic-ish Locking**: Thread-safe `_reinforce_lock` prevents race conditions during Synaptic Propagation.
+	- **Pydantic Shield**: Strict schema validation on all `add_memory` calls (length limits, type checking, reserved key protection).
+	- **Atomic-ish Locking**: Thread-safe `_reinforce_lock` prevents race conditions during Synaptic Propagation.
 
 ### 3.5 Supply Chain Compromise
 - **Threat**: Malicious updates to `qdrant-client` or the Qdrant container image.
 - **Mitigation**: 
-    - **Lockfile Integrity**: `uv.lock` uses SHA-256 hashes for all Python dependencies.
-    - **Image Pinning**: `install_neo.sh` and Quadlet configs pin `qdrant/qdrant:v1.9.0` instead of `:latest`.
+	- **Lockfile Integrity**: `uv.lock` uses SHA-256 hashes for all Python dependencies.
+	- **Image Pinning**: `install_neo.sh` and Quadlet configs pin `qdrant/qdrant:v1.9.0` instead of `:latest`.
 
 ---
 

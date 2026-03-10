@@ -133,8 +133,8 @@ class MemoryDaemon:
 			self.pulse.start()
 		except Exception as e:
 			logger.error(f"Daemon startup failed (Model/Pulse): {e}")
-			# We don't stop here, we allow the loop to start even if Pulse fails
-			pass
+			self.stop()
+			raise
 
 		while self.running:
 			try:

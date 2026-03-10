@@ -46,7 +46,7 @@ Once the update and the search for directives are complete, the agent **MUST** p
 
 1.  **Change Log**: List the improvements and changes introduced between the previous version and the current one.
 2.  **Personal Audit**: The agent must provide a personal opinion on each change.
-    *   **Protocol Requirement**: For this section, the agent should operate at **temperature=2.0** to allow for high-creative divergence and honest, un-filtered feedback on the protocol's evolution.
+	*   **Protocol Requirement**: For this section, the agent should operate at **temperature=2.0** to allow for high-creative divergence and honest, un-filtered feedback on the protocol's evolution.
 3.  **Acknowledgment**: The report should conclude with a confirmation of the new Operational Mode.
 
 ---

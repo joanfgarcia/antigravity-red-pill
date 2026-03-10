@@ -14,7 +14,7 @@ Documento el plan táctico para asegurar que Aleth y Nova no olviden sus interac
 ### [Componente: Memory Sidecar]
 Actualización del daemon para recibir pares de interacción.
 
-#### [MODIFY] [memory_daemon.py](file:///home/joan/Documents/IA/sharing/src/red_pill/memory_daemon.py)
+#### [MODIFY] [memory_daemon.py](../../../src/red_pill/memory_daemon.py)
 - Añadir comando `encode` al `handle_connection`.
 - Recibir `prompt`, `response` y `role`.
 - Invocar `self.memory_mgr.record_interaction_pair`.
@@ -22,14 +22,14 @@ Actualización del daemon para recibir pares de interacción.
 ### [Componente: MCP Server]
 Facilitar que el agente capture su propia salida.
 
-#### [MODIFY] [mcp_server.py](file:///home/joan/Documents/IA/sharing/src/red_pill/mcp_server.py)
+#### [MODIFY] [mcp_server.py](../../../src/red_pill/mcp_server.py)
 - Añadir herramienta `memorize_interaction(prompt, response, role)`.
 - Esta herramienta llamará al socket del daemon para persistir la data.
 
 ### [Componente: Swarm Orchestrator]
 Persistencia de eventos técnicos.
 
-#### [MODIFY] [orchestrator.py](file:///home/joan/Documents/IA/sharing/src/red_pill/swarm/orchestrator.py)
+#### [MODIFY] [orchestrator.py](../../../src/red_pill/swarm/orchestrator.py)
 - Actualizar `_trigger_sas` para que, además de los `directive_memories`, guarde el flujo en `interaction_memories`.
 
 ---

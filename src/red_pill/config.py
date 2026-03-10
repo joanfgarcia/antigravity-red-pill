@@ -163,27 +163,27 @@ DEFAULT_EMOTION = "neutral"
 #
 # Theoretical basis (PIONEER mode — see ACE-CAL in utils/affect.py):
 #   - orange (anxiety, 1.5x): High-arousal negative affect. Ebbinghaus (1885) and
-#     clinical anxiety research (DSM-5) show that anxiety states are highly
-#     context-sensitive — memories encoded under acute anxiety fade faster when the
-#     anxious context is resolved. Öhman & Mineka (2001) note salience is high but
-#     consolidation is fragile without repeated reinforcement.
+#	 clinical anxiety research (DSM-5) show that anxiety states are highly
+#	 context-sensitive — memories encoded under acute anxiety fade faster when the
+#	 anxious context is resolved. Öhman & Mineka (2001) note salience is high but
+#	 consolidation is fragile without repeated reinforcement.
 #   - yellow (joy, 0.5x): Positive valence memories exhibit slower forgetting curves
-#     (Levenson, 1994 — positive affect promotes broader encoding). Joy-tagged
-#     engrams are reinforced by narrative recurrence and associated optimism bias.
+#	 (Levenson, 1994 — positive affect promotes broader encoding). Joy-tagged
+#	 engrams are reinforced by narrative recurrence and associated optimism bias.
 #   - purple (ennui, 2.0x): Low arousal + negative valence = minimal consolidation
-#     signal. Izard's Differential Emotion Theory predicts ennui-tagged content has
-#     the lowest survival salience. Rapid erosion models cognitive 'clearing' of
-#     low-engagement states.
+#	 signal. Izard's Differential Emotion Theory predicts ennui-tagged content has
+#	 the lowest survival salience. Rapid erosion models cognitive 'clearing' of
+#	 low-engagement states.
 #   - cyan (envy/evolution, 0.8x): Moderate persistence. Forward-looking (growth)
-#     states encode with mild salience; erosion is slightly reduced to keep
-#     strategic evolution signals available for recall.
+#	 states encode with mild salience; erosion is slightly reduced to keep
+#	 strategic evolution signals available for recall.
 #   - blue (sadness, 1.0x): Standard decay. Sadness has moderate arousal and
-#     moderate consolidation per Warriner et al. (2013) / NRC VAD. No adjustment.
+#	 moderate consolidation per Warriner et al. (2013) / NRC VAD. No adjustment.
 #   - gray (neutral, 1.0x): Baseline. Neutral content follows the raw EROSION_RATE
-#     without modification — the mathematical zero-point of the ACE.
+#	 without modification — the mathematical zero-point of the ACE.
 #   - emerald (sovereignty, 0.7x): Strategic sovereignty-tagged engrams are
-#     intentionally persistent. They encode high-level architectural intent and
-#     identity directives, warranting a slower erosion rate to prevent drift.
+#	 intentionally persistent. They encode high-level architectural intent and
+#	 identity directives, warranting a slower erosion rate to prevent drift.
 #
 # EMPIRICAL NOTE: These values are PIONEER mode defaults. ACADEMIC mode uses
 # Warriner et al. (2013) / NRC VAD coordinates for Valence-Arousal, and CUSTOM

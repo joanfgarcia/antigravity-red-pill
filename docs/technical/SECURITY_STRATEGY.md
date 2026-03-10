@@ -14,9 +14,9 @@ The operator must choose one of the following configurations during the installa
 ### Tier 2: Managed Sovereignty (Balanced)
 - **Mechanism**: The operator provides a **Master Password**.
 - **Execution**: 
-    1. A complex API Key is automatically generated.
-    2. The key is stored in the local `.env` file for system operation.
-    3. A **Recovery Engram** is stored in the `directive_memories` collection. This engram contains an encrypted/hashed version of the Master Password. It is marked as **Erosion-Immune** (it will never decay) but is technically non-immune to manual deletion by the operator.
+	1. A complex API Key is automatically generated.
+	2. The key is stored in the local `.env` file for system operation.
+	3. A **Recovery Engram** is stored in the `directive_memories` collection. This engram contains an encrypted/hashed version of the Master Password. It is marked as **Erosion-Immune** (it will never decay) but is technically non-immune to manual deletion by the operator.
 - **Identity Recovery Protocol (IRP)**: If the `.env` file is lost, the agent can restore the access key after a successful **Synaptic Handshake**.
 
 ### Tier 3: Custom Hardening (Advanced)

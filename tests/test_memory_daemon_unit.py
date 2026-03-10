@@ -194,10 +194,16 @@ class TestDaemonStart:
 					mock_sock.accept.side_effect = socket.timeout("timed out")
 					mock_sock_cls.return_value = mock_sock
 					with patch("os.chmod"):
-						with patch.object(d, "_load_model", side_effect=RuntimeError("abort")):
-							with patch.object(d, "_check_encryption"):
-								with patch.object(d, "stop", side_effect=fake_stop):
-									d.start()
+						with patch("red_pill.memory.MemoryManager"):
+							with patch("red_pill.heartbeat.LazarusPulse") as mock_pulse_cls:
+								with patch("red_pill.soul.SoulManager"):
+									mock_pulse = MagicMock()
+									mock_pulse.start.side_effect = RuntimeError("abort")
+									mock_pulse_cls.return_value = mock_pulse
+									with patch.object(d, "_check_encryption"):
+										with patch.object(d, "stop", side_effect=fake_stop):
+											with pytest.raises(RuntimeError):
+												d.start()
 		assert not os.path.exists(sock_path)
 
 	def test_startup_failure_calls_stop(self, short_socket_dir):
@@ -215,10 +221,16 @@ class TestDaemonStart:
 					mock_sock.accept.side_effect = socket.timeout("timed out")
 					mock_sock_cls.return_value = mock_sock
 					with patch("os.chmod"):
-						with patch.object(d, "_load_model", side_effect=RuntimeError("GPU fail")):
-							with patch.object(d, "_check_encryption"):
-								with patch.object(d, "stop", side_effect=fake_stop) as mock_stop:
-									d.start()
+						with patch("red_pill.memory.MemoryManager"):
+							with patch("red_pill.heartbeat.LazarusPulse") as mock_pulse_cls:
+								with patch("red_pill.soul.SoulManager"):
+									mock_pulse = MagicMock()
+									mock_pulse.start.side_effect = RuntimeError("GPU fail")
+									mock_pulse_cls.return_value = mock_pulse
+									with patch.object(d, "_check_encryption"):
+										with patch.object(d, "stop", side_effect=fake_stop) as mock_stop:
+											with pytest.raises(RuntimeError):
+												d.start()
 		mock_stop.assert_called()
 
 

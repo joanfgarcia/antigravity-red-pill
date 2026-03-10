@@ -8,9 +8,9 @@ This file serves as a synchronization point for all agents working on the Red Pi
 - **Development Version**: `6.0.0a1` (Red Pill Synthesis Phase).
 - **Core Branch**: `v6.0-prep-fsrs-dna` (Active development).
 - **Recent Milestones**:
-    - [x] Implementation of the "Anti-Amnesia" Persistence Layer (2026-03-10).
-    - [x] Refactor of `MemoryDaemon` for Lazy Loading & MacOS Compatibility.
-    - [x] Integration of `interaction_memories` buffer for turn-zero context.
+	- [x] Implementation of the "Anti-Amnesia" Persistence Layer (2026-03-10).
+	- [x] Refactor of `MemoryDaemon` for Lazy Loading & MacOS Compatibility.
+	- [x] Integration of `interaction_memories` buffer for turn-zero context.
 
 ## Agent-to-Agent Mandatory Rules (The Sovereign Oath)
 Antes de cada `commit` y `push`, los agentes DEBEN:

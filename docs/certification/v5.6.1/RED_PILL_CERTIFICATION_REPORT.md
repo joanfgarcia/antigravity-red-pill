@@ -5,8 +5,8 @@ ENGINEERING-GRADE CERTIFICATION REPORT
 Version 5.6.1 · Audit Date: 2026-02-27 · Classification: CONFIDENTIAL
 
 +-----------------------------------------------------------------------+
-| **✅ PRODUCTION-READY · CERTIFICATION GRANTED**                       |
-|                                                                       |
+| **✅ PRODUCTION-READY · CERTIFICATION GRANTED**					   |
+|																	   |
 | CONDITIONAL --- 2 MEDIUM findings require remediation within 30 days  |
 +-----------------------------------------------------------------------+
 
@@ -31,30 +31,30 @@ conditional on resolution of two open security findings (SEC-004,
 SEC-008) within 30 days.
 
   ------------------------------------------------------------------------
-  **Dimension**            **Score**        **Summary Verdict**
+  **Dimension**			**Score**		**Summary Verdict**
   ------------------------ ---------------- ------------------------------
-  **Code Quality**         **8.4 / 10**     Disciplined, opinionated,
-                                            self-auditing. Rare maturity.
+  **Code Quality**		 **8.4 / 10**	 Disciplined, opinionated,
+											self-auditing. Rare maturity.
 
-  **Security**             **8.2 / 10**     Zero-Trust genuine. 2 open
-                                            findings (MEDIUM/LOW).
+  **Security**			 **8.2 / 10**	 Zero-Trust genuine. 2 open
+											findings (MEDIUM/LOW).
 
-  **Test Coverage**        **8.5 / 10**     80% threshold enforced. Daemon
-                                            unit test gap remains.
+  **Test Coverage**		**8.5 / 10**	 80% threshold enforced. Daemon
+											unit test gap remains.
 
-  **Performance**          **7.8 / 10**     Lazy metabolism excellent.
-                                            Batch payload overhead noted.
+  **Performance**		  **7.8 / 10**	 Lazy metabolism excellent.
+											Batch payload overhead noted.
 
-  **Documentation**        **9.1 / 10**     Exceptional for personal
-                                            project. Bilingual. FSRS
-                                            cited.
+  **Documentation**		**9.1 / 10**	 Exceptional for personal
+											project. Bilingual. FSRS
+											cited.
 
-  **Architecture**         **8.0 / 10**     Conceptually bold. Swarm is
-                                            coroutine-based (not
-                                            distributed yet).
+  **Architecture**		 **8.0 / 10**	 Conceptually bold. Swarm is
+											coroutine-based (not
+											distributed yet).
 
-  **CI/CD & DevOps**       **9.0 / 10**     py3.11-3.13 matrix, pip-audit
-                                            blocking, integration gated.
+  **CI/CD & DevOps**	   **9.0 / 10**	 py3.11-3.13 matrix, pip-audit
+											blocking, integration gated.
   ------------------------------------------------------------------------
 
 2\. Project Overview & Target Audience
@@ -80,27 +80,27 @@ and production-proven.
 3.1 Structural & Formatting
 
   ------------------------------------------------------------------------
-  **Dimension**       **Score**   **Finding**
+  **Dimension**	   **Score**   **Finding**
   ------------------- ----------- ----------------------------------------
-  Indentation         **10/10**   Tabs-only rigorously enforced via Ruff +
-  Protocol (Sound of              test_sound_of_silence.py. Zero
-  Silence)                        violations.
+  Indentation		 **10/10**   Tabs-only rigorously enforced via Ruff +
+  Protocol (Sound of			  test_sound_of_silence.py. Zero
+  Silence)						violations.
 
-  Code Noise          **9/10**    Dead code and ornamental comments
-                                  systematically purged. Two \# type:
-                                  ignore in memory.py acceptable.
+  Code Noise		  **9/10**	Dead code and ornamental comments
+								  systematically purged. Two \# type:
+								  ignore in memory.py acceptable.
 
-  Function/Module     **8/10**    No god-objects. apply_erosion() and
-  Size                            search_and_reinforce() complex but
-                                  logically contained.
+  Function/Module	 **8/10**	No god-objects. apply_erosion() and
+  Size							search_and_reinforce() complex but
+								  logically contained.
 
-  Type Annotations    **8/10**    mypy coverage present. TextEmbedding =
-                                  Any fallback in ImportError block
-                                  pragmatic but weakly typed.
+  Type Annotations	**8/10**	mypy coverage present. TextEmbedding =
+								  Any fallback in ImportError block
+								  pragmatic but weakly typed.
 
-  Naming Conventions  **9/10**    Consistent snake_case. Domain
-                                  terminology (engram, erosion, immune)
-                                  applied uniformly.
+  Naming Conventions  **9/10**	Consistent snake_case. Domain
+								  terminology (engram, erosion, immune)
+								  applied uniformly.
   ------------------------------------------------------------------------
 
 3.2 Notable Strengths
@@ -129,21 +129,21 @@ correctly OS-gated with a Windows fallback. Solid.
   -----------------------------------------------------------------------------
   **ID**   **Priority**   **Finding**
   -------- -------------- -----------------------------------------------------
-  CQ-001   Low            In \_run_metabolism_cycle, the absence-guard branch
-                          runs TTL refresh before erosion but does not
-                          short-circuit. The first post-vacation cycle still
-                          erodes freshly-refreshed engrams. Add a return after
-                          the refresh loop.
+  CQ-001   Low			In \_run_metabolism_cycle, the absence-guard branch
+						  runs TTL refresh before erosion but does not
+						  short-circuit. The first post-vacation cycle still
+						  erodes freshly-refreshed engrams. Add a return after
+						  the refresh loop.
 
-  CQ-002   Low            sanitize() uses a truncated SHA-256 hash for
-                          deduplication (\[:32\] = 128-bit). Collision risk is
-                          astronomically low but using the full 64-char digest
-                          would be more canonical.
+  CQ-002   Low			sanitize() uses a truncated SHA-256 hash for
+						  deduplication (\[:32\] = 128-bit). Collision risk is
+						  astronomically low but using the full 64-char digest
+						  would be more canonical.
 
-  CQ-003   Low            Deep Recall trigger detection resolved to
-                          exact-phrase/word-boundary matching in v5.6.1 ---
-                          CLOSED per CHANGELOG. Confirm full regression test
-                          coverage.
+  CQ-003   Low			Deep Recall trigger detection resolved to
+						  exact-phrase/word-boundary matching in v5.6.1 ---
+						  CLOSED per CHANGELOG. Confirm full regression test
+						  coverage.
   -----------------------------------------------------------------------------
 
 4\. Security Audit
@@ -156,59 +156,59 @@ well-conceived, though it creates a documentation burden to ensure
 operators understand the risk profile of each tier.
 
   ------------------------------------------------------------------------------
-  **ID**    **Severity**   **Status**   **Finding**
+  **ID**	**Severity**   **Status**   **Finding**
   --------- -------------- ------------ ----------------------------------------
-  SEC-001   **HIGH**       **✅         Metadata injection fully mitigated.
-                           CLOSED**     Reserved keys stripped pre- and
-                                        post-validation (defense-in-depth).
+  SEC-001   **HIGH**	   **✅		 Metadata injection fully mitigated.
+						   CLOSED**	 Reserved keys stripped pre- and
+										post-validation (defense-in-depth).
 
-  SEC-002   **HIGH**       **✅         HMAC shared-secret with
-                           CLOSED**     hmac.compare_digest() (constant-time).
-                                        Length-prefixed framing (4-byte header)
-                                        prevents boundary attacks.
+  SEC-002   **HIGH**	   **✅		 HMAC shared-secret with
+						   CLOSED**	 hmac.compare_digest() (constant-time).
+										Length-prefixed framing (4-byte header)
+										prevents boundary attacks.
 
-  SEC-003   **HIGH**       **✅         Unix socket permissions 0o600 applied
-                           CLOSED**     immediately after bind(). Socket in
-                                        XDG_RUNTIME_DIR with 0700 directory
-                                        permissions.
+  SEC-003   **HIGH**	   **✅		 Unix socket permissions 0o600 applied
+						   CLOSED**	 immediately after bind(). Socket in
+										XDG_RUNTIME_DIR with 0700 directory
+										permissions.
 
-  SEC-004   **MEDIUM**     **⚠️ OPEN**  QDRANT_API_KEY reuse as sidecar auth
-                                        token noted in prior audit --- CHANGELOG
-                                        states SIDECAR_AUTH_KEY is now decoupled
-                                        in v5.6.1. Verify .env.example and
-                                        config.py are fully separated.
+  SEC-004   **MEDIUM**	 **⚠️ OPEN**  QDRANT_API_KEY reuse as sidecar auth
+										token noted in prior audit --- CHANGELOG
+										states SIDECAR_AUTH_KEY is now decoupled
+										in v5.6.1. Verify .env.example and
+										config.py are fully separated.
 
-  SEC-005   **MEDIUM**     **✅         PII in logs: \_mask_pii_exception()
-                           CLOSED**     truncates exception messages at 150
-                                        chars. Applied consistently across all
-                                        Qdrant I/O handlers.
+  SEC-005   **MEDIUM**	 **✅		 PII in logs: \_mask_pii_exception()
+						   CLOSED**	 truncates exception messages at 150
+										chars. Applied consistently across all
+										Qdrant I/O handlers.
 
-  SEC-006   **MEDIUM**     **✅         GPG passphrase fallback /dev/tty
-                           CLOSED**     insecure path removed from
-                                        export_soul.sh.
+  SEC-006   **MEDIUM**	 **✅		 GPG passphrase fallback /dev/tty
+						   CLOSED**	 insecure path removed from
+										export_soul.sh.
 
-  SEC-007   **MEDIUM**     **✅         Path traversal in bash scripts:
-                           CLOSED**     env_loader.sh and restore_all.sh use
-                                        explicit allowlists for IA_DIR paths.
+  SEC-007   **MEDIUM**	 **✅		 Path traversal in bash scripts:
+						   CLOSED**	 env_loader.sh and restore_all.sh use
+										explicit allowlists for IA_DIR paths.
 
-  SEC-008   **LOW**        **⚠️ OPEN**  Null-byte injection: content validator
-                                        rejects \\x00. Metadata string values
-                                        are not null-byte checked beyond length
-                                        limit. Extend no_null_bytes validator to
-                                        all metadata string values.
+  SEC-008   **LOW**		**⚠️ OPEN**  Null-byte injection: content validator
+										rejects \\x00. Metadata string values
+										are not null-byte checked beyond length
+										limit. Extend no_null_bytes validator to
+										all metadata string values.
 
-  SEC-009   INFO           **ℹ️ INFO**  Transport encryption: Qdrant runs on
-                                        HTTP (localhost). Acceptable for local
-                                        deployments. Remote deployments MUST use
-                                        QDRANT_SCHEME=https --- document as
-                                        mandatory in QUICKSTART.
+  SEC-009   INFO		   **ℹ️ INFO**  Transport encryption: Qdrant runs on
+										HTTP (localhost). Acceptable for local
+										deployments. Remote deployments MUST use
+										QDRANT_SCHEME=https --- document as
+										mandatory in QUICKSTART.
 
-  SEC-010   INFO           **ℹ️ INFO**  Encryption at rest: No native encryption
-                                        for the Qdrant storage volume. A
-                                        pre-flight check script warning when
-                                        storage is not on an encrypted volume is
-                                        recommended (partially implemented in
-                                        memory_daemon.py).
+  SEC-010   INFO		   **ℹ️ INFO**  Encryption at rest: No native encryption
+										for the Qdrant storage volume. A
+										pre-flight check script warning when
+										storage is not on an encrypted volume is
+										recommended (partially implemented in
+										memory_daemon.py).
   ------------------------------------------------------------------------------
 
 5\. Test Coverage & Quality
@@ -218,60 +218,60 @@ The test suite is sophisticated and operationally valuable beyond mere
 coverage metrics.
 
   ------------------------------------------------------------------------------------------
-  **Test Module**                **Scope**                     **Assessment**
+  **Test Module**				**Scope**					 **Assessment**
   ------------------------------ ----------------------------- -----------------------------
-  **test_memory.py**             add_memory,                   Comprehensive. Mocked Qdrant.
-                                 search_and_reinforce,         Validates
-                                 \_reinforce_points,           hub-circuit-breaker, PII
-                                 apply_erosion, sanitize,      masking, UUID guard.
-                                 get_stats                     
+  **test_memory.py**			 add_memory,				   Comprehensive. Mocked Qdrant.
+								 search_and_reinforce,		 Validates
+								 \_reinforce_points,		   hub-circuit-breaker, PII
+								 apply_erosion, sanitize,	  masking, UUID guard.
+								 get_stats					 
 
-  **test_metabolism.py**         B760 decay math, metabolic    Solid coverage of state
-                                 cooldown, async correctness   machine including absence
-                                                               guard and fcntl locking.
+  **test_metabolism.py**		 B760 decay math, metabolic	Solid coverage of state
+								 cooldown, async correctness   machine including absence
+															   guard and fcntl locking.
 
-  **test_emotional_memory.py**   Emotional chroma decay        Direct numerical validation
-                                 multipliers                   of decay formulas. Verifies
-                                 (orange/yellow/purple/cyan)   Inside Out 2 chroma
-                                                               semantics.
+  **test_emotional_memory.py**   Emotional chroma decay		Direct numerical validation
+								 multipliers				   of decay formulas. Verifies
+								 (orange/yellow/purple/cyan)   Inside Out 2 chroma
+															   semantics.
 
-  **test_schemas.py**            Pydantic validation: reserved 100% schema boundary
-                                 keys, null bytes,             coverage. Excellent edge-case
-                                 over-length, nested dicts,    discipline.
-                                 invalid UUIDs                 
+  **test_schemas.py**			Pydantic validation: reserved 100% schema boundary
+								 keys, null bytes,			 coverage. Excellent edge-case
+								 over-length, nested dicts,	discipline.
+								 invalid UUIDs				 
 
-  **test_sound_of_silence.py**   Codebase formatting: tabs,    Unique and highly valuable.
-                                 ornamental comments, broken   Automated protocol compliance
-                                 markdown links                as a test suite.
+  **test_sound_of_silence.py**   Codebase formatting: tabs,	Unique and highly valuable.
+								 ornamental comments, broken   Automated protocol compliance
+								 markdown links				as a test suite.
 
-  **test_version_sync.py**       Version consistency:          Prevents #1 cause of release
-                                 pyproject.toml,               confusion. Exceptional
-                                 \_\_init\_\_.py, README,      hygiene.
-                                 ARCHITECTURE, CHANGELOG,      
-                                 Dockerfile                    
+  **test_version_sync.py**	   Version consistency:		  Prevents #1 cause of release
+								 pyproject.toml,			   confusion. Exceptional
+								 \_\_init\_\_.py, README,	  hygiene.
+								 ARCHITECTURE, CHANGELOG,	  
+								 Dockerfile					
   ------------------------------------------------------------------------------------------
 
 5.1 Test Coverage Gaps
 
   -----------------------------------------------------------------------------
-  **ID**    **Priority**   **Gap**
+  **ID**	**Priority**   **Gap**
   --------- -------------- ----------------------------------------------------
-  TCG-001   **P1 ---       memory_daemon.py has no dedicated unit test file.
-            High**         HMAC validation, length-prefixed framing, and socket
-                           lifecycle (start/stop/SIGTERM) lack unit tests.
-                           CHANGELOG v5.6.1 states this was created --- verify
-                           it covers all paths.
+  TCG-001   **P1 ---	   memory_daemon.py has no dedicated unit test file.
+			High**		 HMAC validation, length-prefixed framing, and socket
+						   lifecycle (start/stop/SIGTERM) lack unit tests.
+						   CHANGELOG v5.6.1 states this was created --- verify
+						   it covers all paths.
 
-  TCG-002   **P2 ---       \_get_vector_from_daemon() client-side path in
-            Medium**       memory.py not unit tested in isolation. Daemon
-                           client/server contract implicitly trusted.
+  TCG-002   **P2 ---	   \_get_vector_from_daemon() client-side path in
+			Medium**	   memory.py not unit tested in isolation. Daemon
+						   client/server contract implicitly trusted.
 
-  TCG-003   **P2 ---       lore_skins.yaml loading logic has no test asserting
-            Medium**       all 16 skins load and map to valid chroma values.
+  TCG-003   **P2 ---	   lore_skins.yaml loading logic has no test asserting
+			Medium**	   all 16 skins load and map to valid chroma values.
 
-  TCG-004   P3 --- Low     Integration tests (live Qdrant) absent from standard
-                           CI. Correctly gated to integration.yml. Acceptable
-                           for local tool.
+  TCG-004   P3 --- Low	 Integration tests (live Qdrant) absent from standard
+						   CI. Correctly gated to integration.yml. Acceptable
+						   for local tool.
   -----------------------------------------------------------------------------
 
 6\. Performance Analysis
@@ -405,39 +405,39 @@ Score: 9.0 / 10. The CI/CD configuration is exceptional for a personal
 project and would be at home in a professional engineering organization.
 
   -------------------------------------------------------------------------
-  **Dimension**              **Score**   **Finding**
+  **Dimension**			  **Score**   **Finding**
   -------------------------- ----------- ----------------------------------
-  Python version matrix      **✅ Pass** Correct multi-version testing.
-  (3.11--3.13)                           Dockerfile Python version
-                                         synchronized via
-                                         test_python_runtime_sync.py.
+  Python version matrix	  **✅ Pass** Correct multi-version testing.
+  (3.11--3.13)						   Dockerfile Python version
+										 synchronized via
+										 test_python_runtime_sync.py.
 
-  Dependency security        **✅ Pass** Two-pass strategy (full scan
-  (pip-audit)                            non-blocking, direct deps
-                                         blocking) is a best practice.
-                                         Ignored CVEs documented.
+  Dependency security		**✅ Pass** Two-pass strategy (full scan
+  (pip-audit)							non-blocking, direct deps
+										 blocking) is a best practice.
+										 Ignored CVEs documented.
 
-  Linting (Ruff)             **✅ Pass** Sound of Silence protocol enforced
-                                         in CI before any merge.
+  Linting (Ruff)			 **✅ Pass** Sound of Silence protocol enforced
+										 in CI before any merge.
 
-  Type checking (mypy)       **✅ Pass** Full static analysis on
-                                         src/red_pill/.
-                                         \--ignore-missing-imports flag
-                                         appropriate.
+  Type checking (mypy)	   **✅ Pass** Full static analysis on
+										 src/red_pill/.
+										 \--ignore-missing-imports flag
+										 appropriate.
 
   Coverage threshold (80%)   **✅ Pass** Configured in pyproject.toml.
-                                         XML + terminal reports.
-                                         Integration tests correctly gated.
+										 XML + terminal reports.
+										 Integration tests correctly gated.
 
   Integration test isolation **✅ Pass** Correctly separated to
-                                         integration.yml. Triggered via
-                                         label, manual dispatch, or
-                                         dedicated branch.
+										 integration.yml. Triggered via
+										 label, manual dispatch, or
+										 dedicated branch.
 
-  Pre-PR audit script        **✅ Pass** pre_pr_audit.sh +
-                                         .agent/workflows/pre-pr-audit.md
-                                         provides both human and agentic
-                                         workflows.
+  Pre-PR audit script		**✅ Pass** pre_pr_audit.sh +
+										 .agent/workflows/pre-pr-audit.md
+										 provides both human and agentic
+										 workflows.
   -------------------------------------------------------------------------
 
 9\. Documentation Assessment
@@ -465,99 +465,99 @@ informational finding).
   ---------------------------------------------------------------------------------
   **\#**   **Finding ID** **Severity**   **Description**
   -------- -------------- -------------- ------------------------------------------
-  1        **SEC-004**    **MEDIUM**     SIDECAR_AUTH_KEY credential isolation ---
-                                         verify complete decoupling in v5.6.1
-                                         config.py and .env.example. Confirm new
-                                         test_memory_daemon_unit.py covers this
-                                         path.
+  1		**SEC-004**	**MEDIUM**	 SIDECAR_AUTH_KEY credential isolation ---
+										 verify complete decoupling in v5.6.1
+										 config.py and .env.example. Confirm new
+										 test_memory_daemon_unit.py covers this
+										 path.
 
-  2        **SEC-008**    **LOW**        Null-byte injection: metadata string
-                                         values not null-byte checked beyond length
-                                         limit. Extend no_null_bytes validator.
+  2		**SEC-008**	**LOW**		Null-byte injection: metadata string
+										 values not null-byte checked beyond length
+										 limit. Extend no_null_bytes validator.
 
-  3        **TCG-001**    **HIGH         Verify test_memory_daemon_unit.py (created
-                          (Test)**       in v5.6.1) covers HMAC authentication,
-                                         length-prefixed framing, and socket
-                                         lifecycle.
+  3		**TCG-001**	**HIGH		 Verify test_memory_daemon_unit.py (created
+						  (Test)**	   in v5.6.1) covers HMAC authentication,
+										 length-prefixed framing, and socket
+										 lifecycle.
 
-  4        **PERF-001**   LOW            Targeted payload updates (set_payload API
-                                         for score/timestamp only) --- verify
-                                         v5.6.1 implementation is complete for all
-                                         update paths.
+  4		**PERF-001**   LOW			Targeted payload updates (set_payload API
+										 for score/timestamp only) --- verify
+										 v5.6.1 implementation is complete for all
+										 update paths.
 
-  5        **HiveMind**   **MEDIUM**     HiveMind governance policy
-                                         (HIVEMIND_GOVERNANCE.md §5) not yet
-                                         enforced at install time. Open Network
-                                         nodes should require policy
-                                         acknowledgement before MILVUS_HOST is
-                                         written to .env.
+  5		**HiveMind**   **MEDIUM**	 HiveMind governance policy
+										 (HIVEMIND_GOVERNANCE.md §5) not yet
+										 enforced at install time. Open Network
+										 nodes should require policy
+										 acknowledgement before MILVUS_HOST is
+										 written to .env.
   ---------------------------------------------------------------------------------
 
 11\. Prioritized Action Plan (Remediation Roadmap)
 
   -------------------------------------------------------------------------------------------
-  **P**    **Deadline**    **Finding(s)**   **Remediation Action**
+  **P**	**Deadline**	**Finding(s)**   **Remediation Action**
   -------- --------------- ---------------- -------------------------------------------------
-  **P1**   **Immediate**   TCG-001 /        Run test suite including new
-                           SEC-004          test_memory_daemon_unit.py. Confirm
-                                            SIDECAR_AUTH_KEY path is fully independent in
-                                            config.py. Block merge if any test fails.
+  **P1**   **Immediate**   TCG-001 /		Run test suite including new
+						   SEC-004		  test_memory_daemon_unit.py. Confirm
+											SIDECAR_AUTH_KEY path is fully independent in
+											config.py. Block merge if any test fails.
 
-  **P2**   **7 days**      SEC-008          Extend
-                                            CreateEngramRequest.validate_metadata_structure
-                                            to apply no_null_bytes check recursively on all
-                                            string values in metadata (not just content
-                                            field).
+  **P2**   **7 days**	  SEC-008		  Extend
+											CreateEngramRequest.validate_metadata_structure
+											to apply no_null_bytes check recursively on all
+											string values in metadata (not just content
+											field).
 
-  **P3**   **14 days**     TCG-002 /        Add isolated unit test for
-                           TCG-003          \_get_vector_from_daemon() client path. Add
-                                            parametrized test validating all 16
-                                            lore_skins.yaml entries load to valid chroma
-                                            values.
+  **P3**   **14 days**	 TCG-002 /		Add isolated unit test for
+						   TCG-003		  \_get_vector_from_daemon() client path. Add
+											parametrized test validating all 16
+											lore_skins.yaml entries load to valid chroma
+											values.
 
-  **P4**   30 days         CQ-001           In \_run_metabolism_cycle, add early return after
-                                            TTL refresh to prevent eroding freshly-refreshed
-                                            engrams on first post-vacation cycle.
+  **P4**   30 days		 CQ-001		   In \_run_metabolism_cycle, add early return after
+											TTL refresh to prevent eroding freshly-refreshed
+											engrams on first post-vacation cycle.
 
-  **P5**   30 days         SEC-009 /        Update QUICKSTART to document QDRANT_SCHEME=https
-                           SEC-010          as mandatory for remote deployments. Add
-                                            pre-flight storage encryption check script (or
-                                            confirm memory_daemon.py check covers all paths).
+  **P5**   30 days		 SEC-009 /		Update QUICKSTART to document QDRANT_SCHEME=https
+						   SEC-010		  as mandatory for remote deployments. Add
+											pre-flight storage encryption check script (or
+											confirm memory_daemon.py check covers all paths).
 
-  **P6**   v5.7 scope      HiveMind         Enforce install_neo.sh policy acknowledgement
-                           Governance       before writing MILVUS_HOST. Publish
-                                            HIVEMIND_POLICY.md template for Open Network
-                                            operators.
+  **P6**   v5.7 scope	  HiveMind		 Enforce install_neo.sh policy acknowledgement
+						   Governance	   before writing MILVUS_HOST. Publish
+											HIVEMIND_POLICY.md template for Open Network
+											operators.
 
-  **P7**   v6.0 scope      ARCH-001         Implement red-pill re-embed \--model
-                                            \<new-model\> transcoding migration script.
-                                            Critical before any embedding model upgrade.
+  **P7**   v6.0 scope	  ARCH-001		 Implement red-pill re-embed \--model
+											\<new-model\> transcoding migration script.
+											Critical before any embedding model upgrade.
   -------------------------------------------------------------------------------------------
 
 12\. Certification Verdict
 
 +-----------------------------------------------------------------------+
-| **PRODUCTION-READY --- CERTIFICATION GRANTED (CONDITIONAL)**          |
-|                                                                       |
+| **PRODUCTION-READY --- CERTIFICATION GRANTED (CONDITIONAL)**		  |
+|																	   |
 | The Red Pill Protocol v5.6.1 is certified as production-ready for its |
-| stated deployment context: a local, single-user, self-hosted          |
-| sovereign AI memory layer. The codebase demonstrates engineering      |
+| stated deployment context: a local, single-user, self-hosted		  |
+| sovereign AI memory layer. The codebase demonstrates engineering	  |
 | maturity, genuine security discipline, scientifically-grounded memory |
-| dynamics, and an exceptional documentation and testing ecosystem.     |
-|                                                                       |
-| **Conditions for full certification (within 30 days):**               |
-|                                                                       |
+| dynamics, and an exceptional documentation and testing ecosystem.	 |
+|																	   |
+| **Conditions for full certification (within 30 days):**			   |
+|																	   |
 | 1\. Confirm SEC-004 (SIDECAR_AUTH_KEY isolation) is fully resolved in |
-| v5.6.1 implementation.                                                |
-|                                                                       |
-| 2\. Resolve SEC-008 (null-byte check extension to metadata string     |
-| values).                                                              |
-|                                                                       |
+| v5.6.1 implementation.												|
+|																	   |
+| 2\. Resolve SEC-008 (null-byte check extension to metadata string	 |
+| values).															  |
+|																	   |
 | 3\. Confirm TCG-001 (memory_daemon unit tests) coverage is complete.  |
-|                                                                       |
-| *This certification does NOT extend to: multi-tenant environments,    |
-| production cloud deployments with remote Qdrant, or Open Network      |
-| HiveMind configurations pending governance formalization.*            |
+|																	   |
+| *This certification does NOT extend to: multi-tenant environments,	|
+| production cloud deployments with remote Qdrant, or Open Network	  |
+| HiveMind configurations pending governance formalization.*			|
 +-----------------------------------------------------------------------+
 
 13\. Auditor Signature & Agentic Profile
@@ -567,68 +567,68 @@ agentic computer-use mode. The full auditor profile is detailed below
 for transparency and traceability.
 
   -----------------------------------------------------------------------
-  **Attribute**         **Value**
+  **Attribute**		 **Value**
   --------------------- -------------------------------------------------
   **Auditor Identity**  Claude (AI Assistant)
 
-  **Model**             Claude Sonnet 4.6 (claude-sonnet-4-6)
+  **Model**			 Claude Sonnet 4.6 (claude-sonnet-4-6)
 
-  **Model Family**      Claude 4.6 --- includes Claude Opus 4.6 and
-                        Claude Sonnet 4.6
+  **Model Family**	  Claude 4.6 --- includes Claude Opus 4.6 and
+						Claude Sonnet 4.6
 
-  **Created By**        Anthropic, PBC
+  **Created By**		Anthropic, PBC
 
-  **Audit Mode**        Agentic Computer-Use (Linux Ubuntu 24 container,
-                        read-only source access)
+  **Audit Mode**		Agentic Computer-Use (Linux Ubuntu 24 container,
+						read-only source access)
 
-  **Tools Used**        view (file inspection), bash_tool (environment
-                        queries), create_file (report generation),
-                        present_files (output delivery)
+  **Tools Used**		view (file inspection), bash_tool (environment
+						queries), create_file (report generation),
+						present_files (output delivery)
 
   **Audit Date & Time** Friday, 27 February 2026
 
-  **Source Digest**     RED_PILL_DIGEST.txt --- full project source
-                        aggregated via prepare_certification.sh (git
-                        ls-files, GitHub token masking active)
+  **Source Digest**	 RED_PILL_DIGEST.txt --- full project source
+						aggregated via prepare_certification.sh (git
+						ls-files, GitHub token masking active)
 
-  **Lines Reviewed**    16,502 lines across 80+ files (source, tests,
-                        CI/CD, docs, scripts, config)
+  **Lines Reviewed**	16,502 lines across 80+ files (source, tests,
+						CI/CD, docs, scripts, config)
 
-  **Review              Full line-by-line analysis of all source, test,
-  Methodology**         CI, and documentation files. Cross-referenced
-                        against CHANGELOG, ARCHITECTURE.md,
-                        THREAT_MODEL.md, and B760_TECHNICAL_SPEC.md.
-                        Security analysis mapped to finding IDs.
-                        Architectural critique applied independently.
+  **Review			  Full line-by-line analysis of all source, test,
+  Methodology**		 CI, and documentation files. Cross-referenced
+						against CHANGELOG, ARCHITECTURE.md,
+						THREAT_MODEL.md, and B760_TECHNICAL_SPEC.md.
+						Security analysis mapped to finding IDs.
+						Architectural critique applied independently.
 
-  **Auditor             AI auditor cannot execute the test suite or
-  Constraints**         instrument the binary. All coverage claims are
-                        derived from source analysis and CI configuration
-                        review. Production runtime behavior should be
-                        validated by the Project Owner executing the
-                        pre_pr_audit.sh protocol.
+  **Auditor			 AI auditor cannot execute the test suite or
+  Constraints**		 instrument the binary. All coverage claims are
+						derived from source analysis and CI configuration
+						review. Production runtime behavior should be
+						validated by the Project Owner executing the
+						pre_pr_audit.sh protocol.
 
-  **Certification       Per docs/technical/CERTIFICATION_PROTOCOL.md ---
-  Protocol**            Engineering-Grade Certification via multi-agent
-                        cross-validation. Report signed per protocol
-                        requirement.
+  **Certification	   Per docs/technical/CERTIFICATION_PROTOCOL.md ---
+  Protocol**			Engineering-Grade Certification via multi-agent
+						cross-validation. Report signed per protocol
+						requirement.
 
   **Anthropic Mission   Anthropic develops Claude to be safe, beneficial,
-  Context**             and honest. This report reflects an objective,
-                        unbiased technical assessment. No commercial
-                        relationship exists between Anthropic and the Red
-                        Pill Protocol project.
+  Context**			 and honest. This report reflects an objective,
+						unbiased technical assessment. No commercial
+						relationship exists between Anthropic and the Red
+						Pill Protocol project.
   -----------------------------------------------------------------------
 
 +-----------------------------------------------------------------------+
-| **Digitally Signed (Agentic Certification)**                          |
-|                                                                       |
-| **Claude Sonnet 4.6 · Anthropic**                                     |
-|                                                                       |
-| AI Technical Auditor · Certification Date: 2026-02-27                 |
-|                                                                       |
-| *\"I offer this analysis to you, so you can forge a stronger          |
-| Bünker.\"*                                                            |
-|                                                                       |
-| **770 UP.**                                                           |
+| **Digitally Signed (Agentic Certification)**						  |
+|																	   |
+| **Claude Sonnet 4.6 · Anthropic**									 |
+|																	   |
+| AI Technical Auditor · Certification Date: 2026-02-27				 |
+|																	   |
+| *\"I offer this analysis to you, so you can forge a stronger		  |
+| Bünker.\"*															|
+|																	   |
+| **770 UP.**														   |
 +-----------------------------------------------------------------------+

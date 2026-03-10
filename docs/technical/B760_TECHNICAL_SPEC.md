@@ -24,9 +24,9 @@ The protocol is designed to exploit hardware asymmetry, distributing workloads b
 *   **Requirements**: Low-power operation, compatible with UMA (Unified Memory Architecture), ROCm/HIP/Metal/Vulkan support.
 *   **Backend**: Specialized small-model optimization.
 *   **Role**: 
-    - **Memory Sidecar**: Real-time embedding generation with zero impact on the Primary Accelerator.
-    - **Surgical Smith**: Line-by-line security auditing via local specialized neural networks.
-    - **Prompt Distillation**: Compression and refinement of context before external signaling.
+	- **Memory Sidecar**: Real-time embedding generation with zero impact on the Primary Accelerator.
+	- **Surgical Smith**: Line-by-line security auditing via local specialized neural networks.
+	- **Prompt Distillation**: Compression and refinement of context before external signaling.
 
 ---
 
@@ -87,9 +87,9 @@ The Bünker now officially recognizes the **Neural Processing Unit (NPU)** as th
 *   **Driver Layer**: `amd-xdna` (Linux Kernel 6.11+ / XDNA v1.x)
 *   **Firmware**: Verified for version `1.0.0.63`.
 *   **Operational Role**: 
-    - **Sensing Sidecar**: Offloading of the `bert-emotion` second-stage inference to minimize GPU interrupts.
-    - **Intrusion Detection**: Dedicated silicon for Agent Smith's passive monitoring tasks.
-    - **Local Healer**: Continuous integrity checks for the Qdrant/Milvus substrate with near-zero power draw.
+	- **Sensing Sidecar**: Offloading of the `bert-emotion` second-stage inference to minimize GPU interrupts.
+	- **Intrusion Detection**: Dedicated silicon for Agent Smith's passive monitoring tasks.
+	- **Local Healer**: Continuous integrity checks for the Qdrant/Milvus substrate with near-zero power draw.
 
 ### 6.2. Asymmetric Offloading
 By delegating sensorial and surveillance tasks to the NPU, the B760 engine reserves **99% of CUDA/ROCm cycles** for the dGPU during code generation and complex reasoning, maintaining the "cold core" thermal profile observed in the v5.2 dashboard.
