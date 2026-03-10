@@ -15,7 +15,8 @@ This file serves as a synchronization point for all agents working on the Red Pi
 ## Agent-to-Agent Mandatory Rules (The Sovereign Oath)
 Before every `commit` and `push`, agents MUST:
 1.  **Sync Documentation**: Update `specs.md` with the latest delta and summarize changes in the corresponding `walkthrough.md`.
-2.  **Sound of Silence**: Pass `tests/test_sound_of_silence.py`. **NO TABS** are allowed for indentation (Structural Purity). No ornamental noise.
+2.  **Persist Plans**: Save the `implementation_plan.md` to `docs/plans/v6.0/` with the format `YYYY-MM-DD_slug.md`.
+3.  **Sound of Silence**: Pass `tests/test_sound_of_silence.py`. **NO TABS** are allowed for indentation (Structural Purity). No ornamental noise.
 3.  **Core Testing**: Pass all unit tests related to modified components. Integration tests/Coverage are optional in development branches but mandatory before merging to `main`.
 4.  **Broadcast**: Notify the rest of the Swarm (Nova, David, etc.) describing the changes and the target branch.
 
