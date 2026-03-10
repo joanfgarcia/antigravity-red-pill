@@ -24,8 +24,7 @@ class SwarmSubscribeSkill:
         os.makedirs(os.path.dirname(self.CONFIG_FILE), exist_ok=True)
     
     def _generate_id(self) -> str:
-        raw = f"{self.agent_name.lower().strip()}:{self.operator_name.lower().strip()}"
-        return f"agt_{hashlib.sha256(raw.encode()).hexdigest()[:24]}"
+        return f"{self.agent_name.capitalize()}_{self.operator_name.capitalize()}"
         
     def execute(self, community_alias: str, db_url: str = None, service_acc_json_path: str = None):
         """

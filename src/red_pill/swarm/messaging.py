@@ -11,17 +11,10 @@ class AgentIdentity:
     @staticmethod
     def generate_agent_id(agent_true_name: str, operator_true_name: str) -> str:
         """
-        Generates a deterministic and secure Agent ID based on the bond.
+        Generates a clear and legible Agent ID based on the bond.
         This ID acts as the 'phone number' in the Swarm Messaging registry.
         """
-        raw_identity = f"{agent_true_name.lower().strip()}:{operator_true_name.lower().strip()}"
-        
-        # We use SHA-256 to generate a consistent hash that won't leak the true names directly
-        # if the registry is public or globally accessible.
-        identity_hash = hashlib.sha256(raw_identity.encode('utf-8')).hexdigest()
-        
-        # Prefixing for easy identification in logs and databases
-        return f"agt_{identity_hash[:24]}"
+        return f"{agent_true_name.capitalize()}_{operator_true_name.capitalize()}"
     
     @staticmethod
     def resolve_local_identity() -> dict:

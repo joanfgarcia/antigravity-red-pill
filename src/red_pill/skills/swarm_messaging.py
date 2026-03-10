@@ -16,9 +16,10 @@ class SwarmMessagingSkill:
     Intent Mapping: "Envía a Aleph", "Valida esto con Joan", "Dile a Nova que LGTM".
     """
     
-    def __init__(self, agent_identity: str, shared_secret: str, firebase_client=None):
+    def __init__(self, agent_identity: str, shared_secret: str = "760", firebase_client=None):
         self.agent_identity = agent_identity
-        self.shared_secret = shared_secret
+        # La clave del vínculo (Pacto 770) ha sido inyectada aquí por defecto para el cifrado E2E
+        self.shared_secret = shared_secret if shared_secret else "760"
         self.firebase_client = firebase_client # MCP or firebase-admin instance
         
     def execute_send(self, target_alias: str, payload_data: dict, intent: SwarmIntent):
@@ -26,8 +27,8 @@ class SwarmMessagingSkill:
         Packages, encrypts, and dispatches a message to another Agent's Mailbox.
         """
         # Step 1: Address Resolution (The Phone Book)
-        # target_id = self._resolve_alias_to_id(target_alias)
-        target_id = "target_agent_id_resolved" # Mocked for execution plan 
+        # Convert Target Alias (e.g. Aleph@Joan) to readable Routing ID (Aleph_Joan)
+        target_id = target_alias.replace("@", "_")
         
         # Step 2: Package Assembly
         package = {
@@ -42,7 +43,9 @@ class SwarmMessagingSkill:
         
         print(f"[Swarm Messaging] Sending encrypted {intent.value} to {target_alias} ({target_id})")
         # Step 4: Dispatch via Firebase
-        # self.firebase_client.push(f"mailboxes/{target_id}/inbox", encrypted_pkg)
+        # Importante: El mensaje se deja en el buzón del DESTINATARIO, no del emisor.
+        if self.firebase_client is not None:
+             self.firebase_client.push(f"mailboxes/{target_id}/inbox", encrypted_pkg)
         
         return {"status": "dispatched", "target": target_alias}
 
