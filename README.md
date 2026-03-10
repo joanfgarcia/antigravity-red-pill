@@ -48,6 +48,14 @@ The Red Pill Protocol is built for **Sovereign Environments**, but it adapts to 
 - **MCP Server (v5.0)**: Exposes the full Red Pill telemetry (CPU, GPU CUDA/ROCm, NPU) and Swarm tools to IDEs like VS Code and Claude Desktop for zero-friction interaction.
 - **Inlined Identity**: Identity and directives are ingested natively as vector memories, making the agent immune to context loss.
 - **ACE Synaptic Engine (v5.4.0 - v5.6.1)**: Integrated the **Affective Cognitive Engine (ACE)**. Memory decay is governed by the **Valence-Arousal Model**, mimicking human "Flashbulb Memory".
+
+### 🔍 Agentic Discoverability (How to talk to the Bünker)
+If you are an AI Agent interacting with this repository:
+1. **Unified Gateway**: Always prefer the `red-pill` CLI over manual script execution. Use `red-pill --help` to discover available commands.
+2. **MCP First**: If an MCP server is active, use the provided tools (e.g., `run_pre_pr_audit`) to ensure you are running in the correctly configured and authenticated environment.
+3. **Sound of Silence**: All code edits MUST adhere to the [specs.md](specs.md) rules (Tabs only, zero noise).
+
+### 🛠️ Hardware Asymmetry (v6.0.0a2)
 - **Cannibal Protocol & Parallel Hardware (v6.0.0a2)**: Re-engineered the memory substrate to simultaneously devour all available silicon. Embeddings now run in parallel across NVIDIA GPUs (CUDA), AMD iGPUs (ROCm/OpenVINO), and NPUs (Ryzen AI). No engine is left idle.
 - **Soul Integrity (v6.0.0a2)**: Hardened restoration engine for the Bünker. Secure, high-timeout snapshot recovery and automated collection re-hydration.
 - **Lazy Metabolism & Agentic HiveGuard (v5.6.1)**: Sub-second memory hydration via **Lazy Decay**. Multi-hop synaptic depth (N-Hop) for complex associations. The **HiveGuard Agentic Filter** now reviews social memories for global know-how using local SLMs, ensuring a noise-free collective experience.

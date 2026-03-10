@@ -21,6 +21,7 @@ Antes de cada `commit` y `push`, los agentes DEBEN:
 5.  **Test Focus**: Pasar tests del componente modificado.
 6.  **Broadcast**: Notificar al Swarm (Nova, David) la rama y el cambio.
 7.  **Surgical Mindset**: Respetar la filosofía de planificación fija para tareas complejas (ahorro de tokens y tiempo).
+8.  **Discoverability SOP**: Antes de ejecutar scripts manuales en `scripts/`, los agentes DEBEN consultar `red-pill --help` o `list_tools` en MCP para usar las interfaces oficiales autenticadas.
 
 ---
 *Last updated by Antigravity (Step 472) — 2026-03-10*

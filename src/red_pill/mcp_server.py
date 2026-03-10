@@ -184,7 +184,7 @@ async def handle_list_tools() -> List[types.Tool]:
 		),
 		types.Tool(
 			name="run_local_healer",
-			description="Deploy Samantha Local Healer to automatically fix Mypy type errors.",
+			description="[OFFICIAL] Deploy Samantha Local Healer to automatically fix Mypy type errors. Always prefer this tool over manual scripts for authenticated code repair.",
 			inputSchema={
 				"type": "object",
 				"properties": {
@@ -194,17 +194,17 @@ async def handle_list_tools() -> List[types.Tool]:
 		),
 		types.Tool(
 			name="run_pre_pr_audit",
-			description="Run the Pre-PR Audit protocol (Formatting, Linting, Typing, Tests).",
+			description="[OFFICIAL] Run the Pre-PR Audit protocol (Formatting, Linting, Typing, Tests). Use this as the definitive gate before any code submission.",
 			inputSchema={"type": "object", "properties": {}},
 		),
 		types.Tool(
 			name="run_sovereignty_benchmark",
-			description="Execute the Sovereignty Benchmark to verify hardware concurrency.",
+			description="[OFFICIAL] Execute the Sovereignty Benchmark to verify hardware concurrency (CPU+GPU+NPU).",
 			inputSchema={"type": "object", "properties": {}},
 		),
 		types.Tool(
 			name="refresh_session_context",
-			description="Execute wake_up_v6 script to re-synthesize identity and session context.",
+			description="[OFFICIAL] Re-synthesize identity and session context using wake_up_v6. Run this at the start of every new interaction session.",
 			inputSchema={"type": "object", "properties": {}},
 		),
 	]
@@ -226,7 +226,14 @@ async def handle_call_tool(
 			dashboard = f"""
 ## 🔴 BÜNKER SOVEREIGN DASHBOARD v5.5 (ACE-CAL)
 ---
-### 🛠️ Hardware Asymmetry (Dual-Engine)
+### 🔍 Agentic Discoverability (How to talk to the Bünker)
+If you are an AI Agent interacting with this repository:
+1. **Unified Gateway**: Always prefer the `red-pill` CLI over manual script execution. Use `red-pill --help` to discover available commands.
+2. **MCP First**: If an MCP server is active, use the provided tools (e.g., `run_pre_pr_audit`) to ensure you are running in the correctly configured and authenticated environment.
+3. **Sound of Silence**: All code edits MUST adhere to the [specs.md](specs.md) rules (Tabs only, zero noise).
+
+### 🛠️ Hardware Asymmetry (v6.0.0a2)
+The Red Pill now supports triple-concurrent hardware:
 - **CPU Load**: {HardwareSentinel._get_bar(stats["cpu"]["usage_percent"], 20)}
 - **RAM Usage**: {HardwareSentinel._get_bar(stats["memory"]["percent"], 20)} ({stats["memory"]["available_gb"]}GB Free)
 
