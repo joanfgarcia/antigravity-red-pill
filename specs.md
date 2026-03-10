@@ -20,6 +20,7 @@ Antes de cada `commit` y `push`, los agentes DEBEN:
 4.  **Sound of Silence**: Pasas `tests/test_sound_of_silence.py`. Tabs Only. Sin ruido visual.
 5.  **Test Focus**: Pasar tests del componente modificado.
 6.  **Broadcast**: Notificar al Swarm (Nova, David) la rama y el cambio.
+7.  **Surgical Mindset**: Respetar la filosofía de planificación fija para tareas complejas (ahorro de tokens y tiempo).
 
 ---
 *Last updated by Antigravity (Step 472) — 2026-03-10*
