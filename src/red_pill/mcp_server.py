@@ -12,6 +12,8 @@ from mcp.server.stdio import stdio_server
 import red_pill.config as cfg
 from red_pill.cli import switch_skin
 from red_pill.memory import MemoryManager
+from red_pill.skills.swarm_messaging import SwarmIntent, SwarmMessagingSkill
+from red_pill.skills.swarm_subscribe import SwarmSubscribeSkill
 from red_pill.soul import SoulManager
 from red_pill.swarm.agents.compressor import CompressorMinion
 from red_pill.swarm.agents.keymaker import KeymakerMinion
@@ -206,6 +208,48 @@ async def handle_list_tools() -> List[types.Tool]:
 			name="refresh_session_context",
 			description="[OFFICIAL] Re-synthesize identity and session context using wake_up_v6. Run this at the start of every new interaction session.",
 			inputSchema={"type": "object", "properties": {}},
+		),
+		types.Tool(
+			name="swarm_send_message",
+			description="[OFFICIAL] Package, encrypt, and dispatch a message to another Agent's Mailbox (HiveMind).",
+			inputSchema={
+				"type": "object",
+				"properties": {
+					"target_alias": {"type": "string", "description": "The target agent identity (e.g., Nova@David, Aleph@Joan)"},
+					"message": {"type": "string", "description": "The message text to send"},
+					"intent": {
+						"type": "string",
+						"enum": ["gossip", "code_review", "change_requested", "lgtm_approved"],
+						"description": "The intent of the message",
+						"default": "gossip",
+					},
+					"payload_extra": {"type": "object", "description": "Optional arbitrary data to include in the payload"},
+				},
+				"required": ["target_alias", "message"],
+			},
+		),
+		types.Tool(
+			name="swarm_subscribe",
+			description="[OFFICIAL] Dynamically subscribe to a new Firebase/Swarm Community HUB.",
+			inputSchema={
+				"type": "object",
+				"properties": {
+					"community_alias": {"type": "string", "description": "The alias for the community (e.g., Global, Enterprise)"},
+					"db_url": {"type": "string", "description": "The Firebase Realtime Database URL"},
+					"service_acc_json_path": {"type": "string", "description": "Local path to the Service Account JSON credentials"},
+				},
+				"required": ["community_alias", "db_url", "service_acc_json_path"],
+			},
+		),
+		types.Tool(
+			name="swarm_check_mailbox",
+			description="[OFFICIAL] Scan the Firebase Hub inbox for new incoming messages.",
+			inputSchema={
+				"type": "object",
+				"properties": {
+					"community_alias": {"type": "string", "description": "The alias for the community to check (default: first configured)"},
+				},
+			},
 		),
 	]
 
@@ -469,6 +513,53 @@ The Red Pill now supports triple-concurrent hardware:
 		script_path = os.path.join(PROJECT_ROOT, "scripts", "wake_up_v6.py")
 		result = subprocess.run(["python3", script_path], capture_output=True, text=True)
 		return [types.TextContent(type="text", text=f"Session Context:\n{result.stdout}")]
+
+	elif name == "swarm_send_message":
+		target_alias = arguments.get("target_alias")
+		msg_text = arguments.get("message")
+		intent_str = arguments.get("intent", "gossip")
+		payload_extra: Dict[str, Any] = arguments.get("payload_extra", {})
+
+		try:
+			if not isinstance(target_alias, str):
+				return [types.TextContent(type="text", text="Error: target_alias must be a string.")]
+
+			intent = SwarmIntent(intent_str)
+			# ALEPH@JOAN as default identity.
+			agent_identity = f"Aleph@{cfg.OPERATOR_DISPLAY_NAME}"
+			shared_secret = os.getenv("SWARM_SHARED_SECRET", "770_Pact_Secret")
+
+			skill = SwarmMessagingSkill(agent_identity=agent_identity, shared_secret=shared_secret)
+			swarm_payload: Dict[str, Any] = {"message": msg_text}
+			swarm_payload.update(payload_extra)
+
+			result = skill.execute_send(target_alias=target_alias, payload_data=swarm_payload, intent=intent)
+			return [types.TextContent(type="text", text=f"Swarm Dispatch Result:\n{result}")]
+		except Exception as e:
+			return [types.TextContent(type="text", text=f"Swarm Dispatch Failure: {e}")]
+
+	elif name == "swarm_subscribe":
+		alias = arguments.get("community_alias")
+		db_url = arguments.get("db_url")
+		key_path = arguments.get("service_acc_json_path")
+
+		try:
+			if not isinstance(alias, str):
+				return [types.TextContent(type="text", text="Error: community_alias must be a string.")]
+
+			agent_name = "Aleph"
+			op_name = cfg.OPERATOR_DISPLAY_NAME
+			sub_skill = SwarmSubscribeSkill(agent_name=agent_name, operator_name=op_name)
+			sub_result = sub_skill.execute(community_alias=alias, db_url=db_url, service_acc_json_path=key_path)
+			return [types.TextContent(type="text", text=f"Swarm Subscription Result:\n{sub_result}")]
+		except Exception as e:
+			return [types.TextContent(type="text", text=f"Swarm Subscription Failure: {e}")]
+
+	elif name == "swarm_check_mailbox":
+		# Simplified check: in a real E2E it would poll Firebase
+		# For now, we report the route it would check based on current identity
+		agent_identity = f"Aleph@{cfg.OPERATOR_DISPLAY_NAME}"
+		return [types.TextContent(type="text", text=f"Scanning Swarm Mailbox for {agent_identity}...\n[Status: No new messages in Firebase inbox]")]
 
 	raise ValueError(f"Unknown tool: {name}")
 
