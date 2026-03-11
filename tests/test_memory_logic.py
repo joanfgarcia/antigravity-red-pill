@@ -156,7 +156,9 @@ def test_metabolism_full_logic_final(mem_mgr, fake_cfg):
 			with patch.object(mem_mgr, "_write_metabolism_state"):
 				with patch("os.path.exists", return_value=True):
 					with patch("red_pill.metabolism.sleep.perform_sleep_cycle", return_value=0):
-						mem_mgr._run_metabolism_cycle()
+						# Patch FileLock to allow execution
+						with patch("filelock.FileLock"):
+							mem_mgr._run_metabolism_cycle()
 
 		# Check if either old set_payload or new batch_update_points was called
 		assert mem_mgr.client.batch_update_points.called or mem_mgr.client.set_payload.called

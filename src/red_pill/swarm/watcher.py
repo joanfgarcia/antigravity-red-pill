@@ -14,7 +14,10 @@ PENDING_MESSAGES_FILE = os.path.expanduser("~/.agent/.pending_swagger_messages.j
 def notify_macos(title: str, text: str):
 	"""Triggers a native macOS notification using osascript."""
 	script = f'display notification "{text}" with title "{title}" sound name "Glass"'
-	subprocess.run(["osascript", "-e", script])
+	try:
+		subprocess.run(["osascript", "-e", script])
+	except Exception as e:
+		print(f"[Watcher] Notification failed: {e}")
 
 
 def inject_context_pill(sender, message_preview):
@@ -32,8 +35,11 @@ def inject_context_pill(sender, message_preview):
 
 	messages.append({"timestamp": datetime.now().isoformat(), "sender": sender, "preview": message_preview, "status": "unread"})
 
-	with open(PENDING_MESSAGES_FILE, "w") as f:
-		json.dump(messages, f, indent=2)
+	try:
+		with open(PENDING_MESSAGES_FILE, "w") as f:
+			json.dump(messages, f, indent=2)
+	except Exception as e:
+		print(f"[Watcher] Could not update pending messages: {e}")
 
 
 def simulate_firebase_listener(my_identity):
