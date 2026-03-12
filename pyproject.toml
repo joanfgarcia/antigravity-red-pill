@@ -48,6 +48,7 @@ dev = [
     "pytest-asyncio>=0.23.0",
     "pip-audit>=2.7.0",
     "types-requests",
+    "types-pyyaml>=6.0.12.20250915",
 ]
 
 [tool.pip-audit]
@@ -115,7 +116,24 @@ python_version = "3.12"
 check_untyped_defs = true
 explicit_package_bases = true
 mypy_path = "src"
+namespace_packages = true
+show_error_codes = true
+warn_redundant_casts = true
+warn_unused_ignores = true
 exclude = [
-    "tasks/",
-    "tests/",
+    "^tests/.*",
+    "^scripts/.*",
 ]
+
+[[tool.mypy.overrides]]
+module = [
+    "qdrant_client.*",
+    "fastembed.*",
+    "plyer.*",
+    "google.generativeai.*",
+    "psutil.*",
+    "yaml.*",
+    "mcp.*",
+    "llama_cpp.*",
+]
+ignore_missing_imports = true
