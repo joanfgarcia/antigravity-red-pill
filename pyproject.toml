@@ -109,3 +109,13 @@ asyncio_default_fixture_loop_scope = "function"
 markers = [
     "integration: tests that require a real environment (Qdrant, Milvus, models)"
 ]
+
+[tool.mypy]
+python_version = "3.12"
+check_untyped_defs = true
+explicit_package_bases = true
+mypy_path = "src"
+exclude = [
+    "tasks/",
+    "tests/",
+]
