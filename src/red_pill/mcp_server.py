@@ -353,7 +353,10 @@ async def handle_run_local_healer(arguments: Dict[str, Any]):
 
 @registry.register(name="run_pre_pr_audit", description="[OFFICIAL] Run the Pre-PR Audit protocol.", schema={"type": "object", "properties": {}})
 async def handle_run_pre_pr_audit(arguments: Dict[str, Any]):
-	result = subprocess.run(["bash", os.path.join(PROJECT_ROOT, "scripts", "pre_pr_audit.sh")], capture_output=True, text=True)
+	import sys
+
+	cmd = [sys.executable, os.path.join(PROJECT_ROOT, "scripts", "pre_pr_audit.py")]
+	result = subprocess.run(cmd, capture_output=True, text=True)
 	return [types.TextContent(type="text", text=f"Audit {'PASSED' if result.returncode == 0 else 'FAILED'}:\n{result.stdout}")]
 
 
