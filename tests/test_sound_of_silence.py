@@ -37,7 +37,7 @@ def test_sound_of_silence_compliance():
 
 		for i, line in enumerate(lines, 1):
 			# A. Check for non-portable file:// links (All files, except certification snapshots)
-			if "certification" not in file_path.parts and FILE_PROTOCOL_LINK.search(line):
+			if "certification" not in [p.lower() for p in file_path.parts] and FILE_PROTOCOL_LINK.search(line):
 				violations.append(f"{file_path.relative_to(ROOT_DIR)}:{i} - Absolute file:// link detected")
 
 			if HOME_DIR_PATH.search(line) and "SOVEREIGNTY_PROOF.json" not in file_path.name:

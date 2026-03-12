@@ -146,7 +146,15 @@ class SoulManager:
 
 		print(f"Lean Export completed: {output_path} ({os.path.getsize(output_path) // 1024} KB)")
 
-		# 3. Transmit to Cloud Vault if enabled
+		# 3. Handle Encryption & Transmission (SEC-F02)
+		if self.vault.enabled or os.getenv("CLOUD_VAULT_GPG_PASSPHRASE"):
+			encrypted_path = self.vault._encrypt_kit(output_path)
+			if encrypted_path:
+				# Replace original with encrypted version for local persistence
+				os.remove(output_path)
+				output_path = encrypted_path
+				print(f"Lean Export Secured (AES-256): {output_path}")
+
 		if self.vault.enabled:
 			file_id = self.vault.upload_kit(output_path)
 			if file_id:

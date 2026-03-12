@@ -30,5 +30,9 @@ echo -e "4. Neural Validation (Pytest)..."
 uv run pytest tests/ -v && echo -e "${GREEN}TESTS PASS${NC}" || (echo -e "${RED}TESTS FAIL${NC}"; exit 1)
 
 
+# 5. MCP Protocol Sync
+echo -e "5. Bünker Protocol Sync..."
+python3 scripts/mcp_sync_check.py && echo -e "${GREEN}SYNC PASS${NC}" || (echo -e "${RED}SYNC FAIL${NC}"; exit 1)
+
 echo -e "\n${GREEN}READY FOR THE SOURCE. MERGE PERMITTED.${NC}"
 echo -e "770 UP."

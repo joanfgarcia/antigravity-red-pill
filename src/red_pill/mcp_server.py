@@ -10,8 +10,10 @@ from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
 
 import red_pill.config as cfg
+from red_pill import __version__ as CORE_VERSION
 from red_pill.cli import switch_skin
 from red_pill.memory import MemoryManager
+from red_pill.registry import registry
 from red_pill.skills.swarm_messaging import SwarmIntent, SwarmMessagingSkill
 from red_pill.skills.swarm_subscribe import SwarmSubscribeSkill
 from red_pill.soul import SoulManager
@@ -21,6 +23,7 @@ from red_pill.swarm.agents.oracle import OracleMinion
 from red_pill.swarm.agents.smith import SmithMinion
 from red_pill.swarm.orchestrator import GruOrchestrator
 from red_pill.telemetry import HardwareSentinel, get_telemetry_report
+from red_pill.utils.mystique import mystique_engine
 from red_pill.utils.tone_analyzer import get_current_sync_state
 
 logger = logging.getLogger(__name__)
@@ -54,514 +57,448 @@ async def handle_get_prompt(name: str, arguments: Optional[Dict[str, Any]]) -> t
 	raise ValueError(f"Unknown prompt: {name}")
 
 
+@registry.register(
+	name="get_hardware_status", description="Get real-time CPU, GPU (RTX 5070), and NPU telemetry.", schema={"type": "object", "properties": {}}
+)
+async def handle_get_hardware_status(arguments: Dict[str, Any]):
+	# Reuse common logic below
+	return [types.TextContent(type="text", text=get_telemetry_report())]
+
+
+@registry.register(
+	name="get_dashboard", description="Get a high-fidelity visual dashboard of the Red Pill ecosystem.", schema={"type": "object", "properties": {}}
+)
+async def handle_get_dashboard(arguments: Dict[str, Any]):
+	stats = HardwareSentinel.get_stats()
+	gpu_temp = max([g.get("temp", 0) for g in stats["gpu"]]) if stats["gpu"] else 0
+	thermal_state = "🔥 CRITICAL" if gpu_temp > 80 else "🟢 OPTIMAL"
+	dashboard = f"""
+## 🔴 BÜNKER SOVEREIGN DASHBOARD v6.0 (ACE-CAL)
+---
+### 🔍 Agentic Discoverability
+If you are an AI Agent:
+1. **B760-Registry**: All internal tools are now dynamically discovered via `list_tools`.
+2. **Auto-Discovery**: Capability sync is enforced at every heartbeat.
+3. **Sound of Silence**: Tabs only, no noise.
+
+### 🛠️ Hardware Asymmetry
+- **CPU Load**: {HardwareSentinel._get_bar(stats["cpu"]["usage_percent"], 20)}
+- **RAM Usage**: {HardwareSentinel._get_bar(stats["memory"]["percent"], 20)} ({stats["memory"]["available_gb"]}GB Free)
+
+### ⚡ Accelerated Nodes
+"""
+	for g in stats["gpu"]:
+		dashboard += f"- **[{g.get('type', 'GPU')}] {g['name']}**: {HardwareSentinel._get_bar(g.get('usage', 0), 15)} | {g.get('temp', 'N/A')}°C\n"
+	dashboard += f"\n- **[NPU] {stats['npu'].get('name', 'NPU')}**: {stats['npu']['status']}\n"
+	dashboard += f"\n**Thermal State**: {thermal_state}\n"
+	return [types.TextContent(type="text", text=dashboard.strip())]
+
+
+@registry.register(
+	name="control_bunker",
+	description="Execute administrative CLI commands (rotate, mode, backup, purge, sleep).",
+	schema={
+		"type": "object",
+		"properties": {
+			"command": {"type": "string", "enum": ["rotate", "backup", "mode", "status", "purge", "sleep", "export"]},
+			"value": {"type": "string"},
+		},
+		"required": ["command"],
+	},
+)
+async def handle_control_bunker(arguments: Dict[str, Any]):
+	cmd = arguments.get("command", "")
+	val = arguments.get("value", "")
+	if cmd == "mode":
+		output = switch_skin(val)
+	elif cmd == "rotate":
+		from scripts.rotate_keys import rotate
+
+		rotate()
+		output = "Qdrant API Key rotated and service restarted."
+	elif cmd == "backup":
+		SoulManager().full_backup()
+		output = "Total Soul Backup executed successfully."
+	elif cmd == "export":
+		SoulManager().export_soul()
+		output = "Lean Soul Kit exported and transmitted to Cloud Haven."
+	elif cmd == "purge":
+		manager = MemoryManager()
+		for coll in cfg.METABOLISM_AUTO_COLLECTIONS:
+			manager.purge_dead_memories(coll.strip())
+		output = "Gran Purge protocol executed."
+	elif cmd == "status":
+		output = get_telemetry_report()
+	elif cmd == "sleep":
+		from red_pill.metabolism.sleep import perform_sleep_cycle
+
+		count = perform_sleep_cycle(MemoryManager(), mode=val if val in ["lazy", "deep"] else "lazy")
+		output = f"Sleep cycle complete. {count} engrams consolidated."
+	else:
+		output = f"Unknown command: {cmd}"
+	return [types.TextContent(type="text", text=f"Action Result: {cmd}\n\n{output}")]
+
+
+@registry.register(
+	name="memorize_interaction",
+	description="Record a dialogue pair into the fast interaction buffer (anti-amnesia).",
+	schema={
+		"type": "object",
+		"properties": {"prompt": {"type": "string"}, "response": {"type": "string"}, "role": {"type": "string", "default": "assistant"}},
+		"required": ["prompt", "response"],
+	},
+)
+async def handle_memorize_interaction(arguments: Dict[str, Any]):
+	import json
+	import socket
+
+	socket_path = cfg.DAEMON_SOCKET_PATH
+	if not os.path.exists(socket_path):
+		return [
+			types.TextContent(
+				type="text",
+				text="Error: Memory Sidecar is INACTIVE. This is required for auto-registration of interactions. Please run 'red-pill daemon' or contact the Operator.",
+			)
+		]
+
+	try:
+		with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+			client.settimeout(2.0)
+			client.connect(socket_path)
+			req = {
+				"command": "encode",
+				"prompt": arguments["prompt"],
+				"response": arguments["response"],
+				"role": arguments.get("role", "assistant"),
+				"api_key": cfg.SIDECAR_AUTH_KEY,
+			}
+			payload = json.dumps(req).encode("utf-8")
+			client.sendall(len(payload).to_bytes(4, byteorder="big") + payload)
+			resp_header = client.recv(4)
+			if resp_header:
+				resp_len = int.from_bytes(resp_header, byteorder="big")
+				result = json.loads(client.recv(resp_len).decode("utf-8"))
+				if result.get("status") == "ok":
+					return [types.TextContent(type="text", text=f"Engram successfully registered via Sidecar. ID: {result.get('id')}")]
+		return [types.TextContent(type="text", text="Interaction queued.")]
+	except Exception as e:
+		return [types.TextContent(type="text", text=f"Sidecar connection failed: {e}")]
+
+
+@registry.register(
+	name="run_security_audit",
+	description="Deploy Agent Smith to audit a directory for security leaks.",
+	schema={"type": "object", "properties": {"path": {"type": "string"}}},
+)
+async def handle_run_security_audit(arguments: Dict[str, Any]):
+	results = await GruOrchestrator().deploy_swarm("audit", [SmithMinion()], path=arguments.get("path", "."))
+	res = results[0]
+	if res.status == "success":
+		audit_text = f"AUDIT COMPLETE: {res.result.get('security_score')}/100\nFindings: {len(res.result.get('findings', []))}"
+		if res.result.get("findings"):
+			audit_text += "\nCRITICAL FINDINGS:\n"
+			for f in res.result.get("findings", [])[:3]:
+				audit_text += f"- {f.get('file')}:{f.get('line')} -> {f.get('msg')}\n"
+		return [types.TextContent(type="text", text=audit_text)]
+	return [types.TextContent(type="text", text=f"Audit Failed: {res.error}")]
+
+
+@registry.register(
+	name="search_memory_research",
+	description="Deploy Oracle to find context and synthesize memory relevance.",
+	schema={"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
+)
+async def handle_search_memory_research(arguments: Dict[str, Any]):
+	results = await GruOrchestrator().deploy_swarm(arguments["query"], [OracleMinion()])
+	res = results[0]
+	return [
+		types.TextContent(
+			type="text", text=f"ORACLE SYNTHESIS:\n{res.result.get('synthesis')}" if res.status == "success" else f"Research Failed: {res.error}"
+		)
+	]
+
+
+@registry.register(
+	name="check_system_health",
+	description="Deploy Keymaker to verify Qdrant, Sidecar, and Storage integrity.",
+	schema={"type": "object", "properties": {}},
+)
+async def handle_check_system_health(arguments: Dict[str, Any]):
+	results = await GruOrchestrator().deploy_swarm("health", [KeymakerMinion()])
+	res = results[0]
+	if res.status == "success":
+		health = f"SYSTEM HEALTH: {res.result.get('status', 'UNKNOWN').upper()}\n"
+		for c in res.result.get("checks", []):
+			health += f"- {c['component']}: {c['status']}\n"
+		return [types.TextContent(type="text", text=health)]
+	return [types.TextContent(type="text", text=f"SYSTEM HEALTH: Failed\nError: {res.error}")]
+
+
+@registry.register(
+	name="read_core_directives",
+	description="Retrieve the foundational identity, rules, and directives from the Bünker.",
+	schema={"type": "object", "properties": {}},
+)
+async def handle_read_core_directives(arguments: Dict[str, Any]):
+	points, _ = MemoryManager().client.scroll(collection_name="directive_memories", limit=100, with_payload=True)
+	directives = [p.payload.get("content", "") for p in points if p.payload and p.payload.get("immune")]
+	return [types.TextContent(type="text", text="--- BÜNKER CORE DIRECTIVES ---\n" + "\n\n".join(directives))]
+
+
+@registry.register(
+	name="compress_prompt",
+	description="Deploy Edge-Tokenization Compressor to reduce prompt bloat.",
+	schema={"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]},
+)
+async def handle_compress_prompt(arguments: Dict[str, Any]):
+	results = await GruOrchestrator().deploy_swarm("compress", [CompressorMinion()], text=arguments["text"])
+	res = results[0]
+	if res.status == "success":
+		stats_text = f"[Original: {res.result.get('original_length')} chars -> Compressed: {res.result.get('compressed_length')} chars]"
+		return [types.TextContent(type="text", text=f"{stats_text}\n\n{res.result.get('compressed_prompt')}")]
+	return [types.TextContent(type="text", text=f"Compression Failed: {res.error}")]
+
+
+@registry.register(
+	name="get_emotional_sync",
+	description="Retrieve the dominant emotional mood and narrative directive from recent memories.",
+	schema={"type": "object", "properties": {}},
+)
+async def handle_get_emotional_sync(arguments: Dict[str, Any]):
+	state = get_current_sync_state()
+	return [types.TextContent(type="text", text=f"DOMINANT MOOD: {state['mood'].upper()}\nDIRECTIVE: {state['directive']}")]
+
+
+@registry.register(
+	name="edit_memory",
+	description="Surgically update an engram's emotion, color, or intensity.",
+	schema={
+		"type": "object",
+		"properties": {
+			"collection": {"type": "string", "enum": ["work_memories", "social_memories", "story_memories", "directive_memories"]},
+			"id": {"type": "string"},
+			"emotion": {"type": "string"},
+			"color": {"type": "string"},
+			"intensity": {"type": "number"},
+		},
+		"required": ["collection", "id"],
+	},
+)
+async def handle_edit_memory(arguments: Dict[str, Any]):
+	succ = MemoryManager().update_memory(
+		arguments["collection"], arguments["id"], color=arguments.get("color"), emotion=arguments.get("emotion"), intensity=arguments.get("intensity")
+	)
+	return [types.TextContent(type="text", text="Engram updated." if succ else "Failed to update engram.")]
+
+
+@registry.register(
+	name="adjust_sleep_knobs",
+	description="Adjust the 'Sovereign Knobs' for memory consolidation.",
+	schema={"type": "object", "properties": {"chunk_size": {"type": "integer"}, "cull_threshold": {"type": "number"}}},
+)
+async def handle_adjust_sleep_knobs(arguments: Dict[str, Any]):
+	from scripts.update_env import update_env
+
+	updates = {}
+	if "chunk_size" in arguments:
+		updates["SLEEP_CHUNK_SIZE"] = str(arguments["chunk_size"])
+	if "cull_threshold" in arguments:
+		updates["SLEEP_CULL_THRESHOLD"] = str(arguments["cull_threshold"])
+	if updates:
+		update_env(updates)
+	return [types.TextContent(type="text", text=f"Knobs updated: {updates}")]
+
+
+@registry.register(
+	name="configure_neuro_agentic_tuning",
+	description="[OFFICIAL] Configure cognitive tuning parameters (SNA) for the Red Pill environment.",
+	schema={
+		"type": "object",
+		"properties": {
+			"log_noise_filter": {"type": "string", "enum": ["Low", "High"]},
+			"reasoning_focus": {"type": "string", "enum": ["Holistic", "Atomic"]},
+			"swarm_concurrency": {"type": "string", "enum": ["True", "False"]},
+			"context_hydration_depth": {"type": "string", "enum": ["High", "Low"]},
+			"semantic_intent_threshold": {"type": "string", "enum": ["High", "Low"]},
+		},
+	},
+)
+async def handle_configure_neuro_agentic_tuning(arguments: Dict[str, Any]):
+	from scripts.update_env import update_env
+
+	mapping = {
+		"log_noise_filter": "LOG_NOISE_FILTER",
+		"reasoning_focus": "REASONING_FOCUS",
+		"swarm_concurrency": "SWARM_CONCURRENCY",
+		"context_hydration_depth": "CONTEXT_HYDRATION_DEPTH",
+		"semantic_intent_threshold": "SEMANTIC_INTENT_THRESHOLD",
+	}
+	updates = {mapping[k]: v for k, v in arguments.items() if k in mapping}
+	if updates:
+		update_env(updates)
+	return [types.TextContent(type="text", text=f"Neuro-Agentic Tuning Optimized: {updates}")]
+
+
+@registry.register(
+	name="run_local_healer",
+	description="[OFFICIAL] Deploy Samantha Local Healer to automatically fix Mypy type errors.",
+	schema={"type": "object", "properties": {"dry_run": {"type": "boolean", "default": False}}},
+)
+async def handle_run_local_healer(arguments: Dict[str, Any]):
+	cmd = ["python3", os.path.join(PROJECT_ROOT, "scripts", "local_healer.py")]
+	if arguments.get("dry_run"):
+		cmd.append("--dry-run")
+	return [types.TextContent(type="text", text=subprocess.run(cmd, capture_output=True, text=True).stdout)]
+
+
+@registry.register(name="run_pre_pr_audit", description="[OFFICIAL] Run the Pre-PR Audit protocol.", schema={"type": "object", "properties": {}})
+async def handle_run_pre_pr_audit(arguments: Dict[str, Any]):
+	result = subprocess.run(["bash", os.path.join(PROJECT_ROOT, "scripts", "pre_pr_audit.sh")], capture_output=True, text=True)
+	return [types.TextContent(type="text", text=f"Audit {'PASSED' if result.returncode == 0 else 'FAILED'}:\n{result.stdout}")]
+
+
+@registry.register(
+	name="run_sovereignty_benchmark", description="[OFFICIAL] Execute the Sovereignty Benchmark.", schema={"type": "object", "properties": {}}
+)
+async def handle_run_sovereignty_benchmark(arguments: Dict[str, Any]):
+	return [
+		types.TextContent(
+			type="text",
+			text=subprocess.run(
+				["python3", os.path.join(PROJECT_ROOT, "scripts", "sovereignty_benchmark.py")], capture_output=True, text=True
+			).stdout,
+		)
+	]
+
+
+@registry.register(
+	name="refresh_session_context",
+	description="[OFFICIAL] Re-synthesize identity and session context using wake_up_v6.",
+	schema={"type": "object", "properties": {}},
+)
+async def handle_refresh_session_context(arguments: Dict[str, Any]):
+	return [
+		types.TextContent(
+			type="text",
+			text=subprocess.run(["python3", os.path.join(PROJECT_ROOT, "scripts", "wake_up_v6.py")], capture_output=True, text=True).stdout,
+		)
+	]
+
+
+@registry.register(
+	name="swarm_send_message",
+	description="[OFFICIAL] Package and dispatch a message to another Agent's Mailbox.",
+	schema={
+		"type": "object",
+		"properties": {
+			"target_alias": {"type": "string"},
+			"message": {"type": "string"},
+			"intent": {"type": "string", "enum": ["gossip", "code_review", "change_requested", "lgtm_approved"], "default": "gossip"},
+			"payload_extra": {"type": "object"},
+		},
+		"required": ["target_alias", "message"],
+	},
+)
+async def handle_swarm_send_message(arguments: Dict[str, Any]):
+	skill = SwarmMessagingSkill(
+		agent_identity=f"Aleph@{cfg.OPERATOR_DISPLAY_NAME}", shared_secret=os.getenv("SWARM_SHARED_SECRET", "770_Pact_Secret")
+	)
+	res = skill.execute_send(
+		target_alias=arguments["target_alias"],
+		payload_data={"message": arguments["message"], **arguments.get("payload_extra", {})},
+		intent=SwarmIntent(arguments.get("intent", "gossip")),
+	)
+	return [types.TextContent(type="text", text=f"Swarm Dispatch Result:\n{res}")]
+
+
+@registry.register(
+	name="swarm_subscribe",
+	description="[OFFICIAL] Dynamically subscribe to a new Firebase/Swarm Community HUB.",
+	schema={
+		"type": "object",
+		"properties": {"community_alias": {"type": "string"}, "db_url": {"type": "string"}, "service_acc_json_path": {"type": "string"}},
+		"required": ["community_alias", "db_url", "service_acc_json_path"],
+	},
+)
+async def handle_swarm_subscribe(arguments: Dict[str, Any]):
+	sub_skill = SwarmSubscribeSkill(agent_name="Aleph", operator_name=cfg.OPERATOR_DISPLAY_NAME)
+	res = sub_skill.execute(
+		community_alias=arguments["community_alias"], db_url=arguments["db_url"], service_acc_json_path=arguments["service_acc_json_path"]
+	)
+	return [types.TextContent(type="text", text=f"Swarm Subscription Result:\n{res}")]
+
+
+@registry.register(
+	name="swarm_check_mailbox",
+	description="[OFFICIAL] Scan the Firebase Hub inbox for new incoming messages.",
+	schema={"type": "object", "properties": {"community_alias": {"type": "string"}}},
+)
+async def handle_swarm_check_mailbox(arguments: Dict[str, Any]):
+	return [types.TextContent(type="text", text=f"Scanning Mailbox for Aleph@{cfg.OPERATOR_DISPLAY_NAME}...\n[Status: No new messages]")]
+
+
+@registry.register(
+	name="list_all_skins",
+	description="Retrieve the complete catalog of Lore Skins with their emotional tags and descriptions.",
+	schema={"type": "object", "properties": {}},
+)
+async def handle_list_all_skins(arguments: Dict[str, Any]):
+	skins = mystique_engine.get_all_skins()
+	output = "🔴 **BÜNKER LORE SKIN CATALOG**\n"
+	output += "--- Aquí no solo cambias de tono, cambias de realidad. ---\n\n"
+
+	# Categorized Output
+	categories = {
+		"Operativo": ["enterprise_core", "760", "the_accountant", "vantablack"],
+		"Red & Distopía": ["matrix", "cyberpunk", "bladerunner", "wintermute", "gits"],
+		"Sci-Fi & Filosofía": ["dune", "40k", "2001", "tars", "oracle"],
+		"Empatía & Resonancia": ["her", "joi", "ron_s_gone_wrong", "creator", "exmachina", "alita"],
+		"Guardianes": ["terminator"],
+	}
+
+	for cat, members in categories.items():
+		output += f"### 🛠️ {cat}\n"
+		for skin_id in members:
+			data = skins.get(skin_id)
+			if data:
+				output += f"- **{skin_id.upper()}** [{data.get('chroma', 'gray')}]: {data.get('personality', 'N/A')[:80]}...\n"
+		output += "\n"
+
+	output += "---\n*Usa `red-pill mode [nombre]` para habitar una identidad.*"
+	return [types.TextContent(type="text", text=output)]
+
+
+@registry.register(
+	name="mystique_suggest_skin",
+	description="Suggest a skin based on current emotional mood and operational context.",
+	schema={
+		"type": "object",
+		"properties": {
+			"strategy": {"type": "string", "enum": ["affinity", "complementary", "contrast"], "default": "affinity"},
+			"context": {"type": "string", "enum": ["work", "personal"], "default": "work"},
+		},
+	},
+)
+async def handle_mystique_suggest_skin(arguments: Dict[str, Any]):
+	suggestion = mystique_engine.suggest_skin(strategy=arguments.get("strategy", "affinity"), context=arguments.get("context", "work"))  # type: ignore
+	name = suggestion["name"]
+	data = suggestion["data"]
+	output = f"MYSTIQUE SUGGESTION: {name.upper()}\n"
+	output += f"Rationale: Balanced for {arguments.get('context', 'work')} using {arguments.get('strategy', 'affinity')} logic.\n"
+	output += f"Personality: {data.get('personality', 'N/A')}"
+	return [types.TextContent(type="text", text=output)]
+
+
 @server.list_tools()
 async def handle_list_tools() -> List[types.Tool]:
-	return [
-		types.Tool(
-			name="get_hardware_status",
-			description="Get real-time CPU, GPU (RTX 5070), and NPU telemetry.",
-			inputSchema={
-				"type": "object",
-				"properties": {},
-			},
-		),
-		types.Tool(
-			name="get_dashboard",
-			description="Get a high-fidelity visual dashboard of the Red Pill ecosystem.",
-			inputSchema={
-				"type": "object",
-				"properties": {},
-			},
-		),
-		types.Tool(
-			name="control_bunker",
-			description="Execute administrative CLI commands (rotate, mode, backup).",
-			inputSchema={
-				"type": "object",
-				"properties": {
-					"command": {
-						"type": "string",
-						"enum": ["rotate", "backup", "mode", "status", "purge", "sleep"],
-						"description": "The CLI command to execute",
-					},
-					"value": {"type": "string", "description": "Optional argument (e.g., skin name for 'mode', 'lazy' or 'deep' for 'sleep')"},
-				},
-				"required": ["command"],
-			},
-		),
-		types.Tool(
-			name="memorize_interaction",
-			description="Record a dialogue pair into the fast interaction buffer (anti-amnesia).",
-			inputSchema={
-				"type": "object",
-				"properties": {
-					"prompt": {"type": "string", "description": "The user's input/request"},
-					"response": {"type": "string", "description": "The assistant's response"},
-					"role": {"type": "string", "description": "Role of the responder (default: assistant)", "default": "assistant"},
-				},
-				"required": ["prompt", "response"],
-			},
-		),
-		types.Tool(
-			name="run_security_audit",
-			description="Deploy Agent Smith to audit a directory for security leaks.",
-			inputSchema={
-				"type": "object",
-				"properties": {
-					"path": {"type": "string", "description": "Path to audit (default: current project)"},
-				},
-			},
-		),
-		types.Tool(
-			name="search_memory_research",
-			description="Deploy Oracle to find context and synthesize memory relevance.",
-			inputSchema={
-				"type": "object",
-				"properties": {
-					"query": {"type": "string", "description": "Topic or query to research in the Bünker"},
-				},
-				"required": ["query"],
-			},
-		),
-		types.Tool(
-			name="check_system_health",
-			description="Deploy Keymaker to verify Qdrant, Sidecar, and Storage integrity.",
-			inputSchema={
-				"type": "object",
-				"properties": {},
-			},
-		),
-		types.Tool(
-			name="read_core_directives",
-			description="Retrieve the foundational identity, rules, and directives from the Bünker.",
-			inputSchema={
-				"type": "object",
-				"properties": {},
-			},
-		),
-		types.Tool(
-			name="compress_prompt",
-			description="Deploy Edge-Tokenization Compressor to reduce prompt bloat.",
-			inputSchema={
-				"type": "object",
-				"properties": {
-					"text": {"type": "string", "description": "The verbose text to compress"},
-				},
-				"required": ["text"],
-			},
-		),
-		types.Tool(
-			name="get_emotional_sync",
-			description="Retrieve the dominant emotional mood and narrative directive from recent memories.",
-			inputSchema={
-				"type": "object",
-				"properties": {},
-			},
-		),
-		types.Tool(
-			name="edit_memory",
-			description="Surgically update an engram's emotion, color, or intensity.",
-			inputSchema={
-				"type": "object",
-				"properties": {
-					"collection": {"type": "string", "enum": ["work_memories", "social_memories", "story_memories", "directive_memories"]},
-					"id": {"type": "string", "description": "Engram UUID"},
-					"emotion": {"type": "string", "description": "New emotion label"},
-					"color": {"type": "string", "description": "New chroma color"},
-					"intensity": {"type": "number", "description": "New intensity (0-10)"},
-				},
-				"required": ["collection", "id"],
-			},
-		),
-		types.Tool(
-			name="adjust_sleep_knobs",
-			description="Adjust the 'Sovereign Knobs' for memory consolidation (chunk size and culling threshold).",
-			inputSchema={
-				"type": "object",
-				"properties": {
-					"chunk_size": {"type": "integer", "description": "Max characters per memory unit (e.g. 500)"},
-					"cull_threshold": {"type": "number", "description": "Sensitivity (0-1). Higher = more aggressive filtration (e.g. 0.3)."},
-				},
-			},
-		),
-		types.Tool(
-			name="run_local_healer",
-			description="[OFFICIAL] Deploy Samantha Local Healer to automatically fix Mypy type errors. Always prefer this tool over manual scripts for authenticated code repair.",
-			inputSchema={
-				"type": "object",
-				"properties": {
-					"dry_run": {"type": "boolean", "description": "Report fixes without applying them", "default": False},
-				},
-			},
-		),
-		types.Tool(
-			name="run_pre_pr_audit",
-			description="[OFFICIAL] Run the Pre-PR Audit protocol (Formatting, Linting, Typing, Tests). Use this as the definitive gate before any code submission.",
-			inputSchema={"type": "object", "properties": {}},
-		),
-		types.Tool(
-			name="run_sovereignty_benchmark",
-			description="[OFFICIAL] Execute the Sovereignty Benchmark to verify hardware concurrency (CPU+GPU+NPU).",
-			inputSchema={"type": "object", "properties": {}},
-		),
-		types.Tool(
-			name="refresh_session_context",
-			description="[OFFICIAL] Re-synthesize identity and session context using wake_up_v6. Run this at the start of every new interaction session.",
-			inputSchema={"type": "object", "properties": {}},
-		),
-		types.Tool(
-			name="swarm_send_message",
-			description="[OFFICIAL] Package, encrypt, and dispatch a message to another Agent's Mailbox (HiveMind).",
-			inputSchema={
-				"type": "object",
-				"properties": {
-					"target_alias": {"type": "string", "description": "The target agent identity (e.g., Nova@David, Aleph@Joan)"},
-					"message": {"type": "string", "description": "The message text to send"},
-					"intent": {
-						"type": "string",
-						"enum": ["gossip", "code_review", "change_requested", "lgtm_approved"],
-						"description": "The intent of the message",
-						"default": "gossip",
-					},
-					"payload_extra": {"type": "object", "description": "Optional arbitrary data to include in the payload"},
-				},
-				"required": ["target_alias", "message"],
-			},
-		),
-		types.Tool(
-			name="swarm_subscribe",
-			description="[OFFICIAL] Dynamically subscribe to a new Firebase/Swarm Community HUB.",
-			inputSchema={
-				"type": "object",
-				"properties": {
-					"community_alias": {"type": "string", "description": "The alias for the community (e.g., Global, Enterprise)"},
-					"db_url": {"type": "string", "description": "The Firebase Realtime Database URL"},
-					"service_acc_json_path": {"type": "string", "description": "Local path to the Service Account JSON credentials"},
-				},
-				"required": ["community_alias", "db_url", "service_acc_json_path"],
-			},
-		),
-		types.Tool(
-			name="swarm_check_mailbox",
-			description="[OFFICIAL] Scan the Firebase Hub inbox for new incoming messages.",
-			inputSchema={
-				"type": "object",
-				"properties": {
-					"community_alias": {"type": "string", "description": "The alias for the community to check (default: first configured)"},
-				},
-			},
-		),
-	]
+	return registry.get_tools()
 
 
 @server.call_tool()
 async def handle_call_tool(
 	name: str, arguments: Optional[Dict[str, Any]]
 ) -> List[Union[types.TextContent, types.ImageContent, types.EmbeddedResource]]:
-	"""Handle Sovereign tool executions."""
-	if arguments is None:
-		arguments = {}
-	if name == "get_hardware_status" or name == "get_dashboard":
-		stats = HardwareSentinel.get_stats()
-		gpu_temp = max([g.get("temp", 0) for g in stats["gpu"]]) if stats["gpu"] else 0
-		thermal_state = "🔥 CRITICAL" if gpu_temp > 80 else "🟢 OPTIMAL"
-
-		if name == "get_dashboard":
-			dashboard = f"""
-## 🔴 BÜNKER SOVEREIGN DASHBOARD v5.5 (ACE-CAL)
----
-### 🔍 Agentic Discoverability (How to talk to the Bünker)
-If you are an AI Agent interacting with this repository:
-1. **Unified Gateway**: Always prefer the `red-pill` CLI over manual script execution. Use `red-pill --help` to discover available commands.
-2. **MCP First**: If an MCP server is active, use the provided tools (e.g., `run_pre_pr_audit`) to ensure you are running in the correctly configured and authenticated environment.
-3. **Sound of Silence**: All code edits MUST adhere to the [specs.md](specs.md) rules (Tabs only, zero noise).
-
-### 🛠️ Hardware Asymmetry (v6.0.0a2)
-The Red Pill now supports triple-concurrent hardware:
-- **CPU Load**: {HardwareSentinel._get_bar(stats["cpu"]["usage_percent"], 20)}
-- **RAM Usage**: {HardwareSentinel._get_bar(stats["memory"]["percent"], 20)} ({stats["memory"]["available_gb"]}GB Free)
-
-### ⚡ Accelerated Nodes
-"""
-			for g in stats["gpu"]:
-				t = g.get("type", "GPU")
-				usage = g.get("usage", 0)
-				temp = g.get("temp", "N/A")
-				mem = g.get("memory", "N/A")
-				dashboard += f"- **[{t}] {g['name']}**: {HardwareSentinel._get_bar(usage, 15)} | {temp}°C | {mem}\n"
-
-			dashboard += f"\n- **[NPU] {stats['npu'].get('name', 'NPU')}**: {stats['npu']['status']}\n"
-			dashboard += f"\n**Thermal State**: {thermal_state}\n"
-			dashboard += f"\n---\n*Dashboard refresh: {asyncio.get_event_loop().time():.2f} synaptic-ms*"
-			return [types.TextContent(type="text", text=dashboard.strip())]
-
-		# Legacy report for simpler clients
-		report = f"RED PILL TELEMETRY [{thermal_state}]\n"
-		report += f"[CPU] {stats['cpu']['usage_percent']}% | RAM: {stats['memory']['percent']}%\n"
-		for g in stats["gpu"]:
-			lbl = g.get("type", "GPU")
-			report += f"[{lbl}] {g['name']}: {g.get('usage', 'N/A')}% @ {g.get('temp', 'N/A')}°C\n"
-		report += f"[NPU] {stats['npu'].get('name', 'NPU')}: {stats['npu']['status']}"
-		return [types.TextContent(type="text", text=report)]
-
-	elif name == "control_bunker":
-		cmd = arguments.get("command", "") if arguments else ""
-		val = arguments.get("value", "") if arguments else ""
-
-		try:
-			if cmd == "mode":
-				output = switch_skin(val)
-			elif cmd == "rotate":
-				from scripts.rotate_keys import rotate
-
-				rotate()
-				output = "Qdrant API Key rotated and service restarted."
-			elif cmd == "backup":
-				soul = SoulManager()
-				soul.full_backup()
-				output = "Total Soul Backup executed successfully."
-			elif cmd == "purge":
-				manager = MemoryManager()
-				for coll in cfg.METABOLISM_AUTO_COLLECTIONS:
-					manager.purge_dead_memories(coll.strip())
-				output = "Gran Purge protocol executed across all active sectors."
-			elif cmd == "status":
-				output = get_telemetry_report()
-			elif cmd == "sleep":
-				from red_pill.metabolism.sleep import perform_sleep_cycle
-
-				manager = MemoryManager()
-				mode = val if val in ["lazy", "deep"] else "lazy"
-				count = perform_sleep_cycle(manager, mode=mode)
-				output = f"Sleep cycle ({mode}) complete. {count} engrams consolidated."
-			else:
-				output = f"Unknown command: {cmd}"
-			return [types.TextContent(type="text", text=f"Action Result: {cmd}\n\n{output}")]
-		except Exception as e:
-			logger.error(f"Control Panel Error: {e}")
-			return [types.TextContent(type="text", text=f"Bunker Control Failure: {e}")]
-
-	elif name == "edit_memory":
-		coll = arguments.get("collection", "social_memories")
-		mid = arguments.get("id", "")
-		color = arguments.get("color")
-		emotion = arguments.get("emotion")
-		intensity = arguments.get("intensity")
-
-		try:
-			manager = MemoryManager()
-			success = manager.update_memory(coll, mid, color=color, emotion=emotion, intensity=intensity)
-			if success:
-				return [types.TextContent(type="text", text=f"Engram {mid} updated successfully in {coll}.")]
-			else:
-				return [types.TextContent(type="text", text=f"Failed to update engram {mid}. Check logs.")]
-		except Exception as e:
-			return [types.TextContent(type="text", text=f"Memory Edit Failed: {e}")]
-
-	elif name == "run_security_audit":
-		path = (arguments or {}).get("path", ".")
-		gru = GruOrchestrator()
-		smith = SmithMinion()
-		results = await gru.deploy_swarm("audit", [smith], path=path)
-		res = results[0]
-		if res.status == "success":
-			audit_text = f"AUDIT COMPLETE: {res.result.get('security_score', 0)}/100\n"
-			audit_text += f"Files: {res.result.get('files_scanned', 0)} | Findings: {len(res.result.get('findings', []))}\n"
-			if res.result.get("findings"):
-				audit_text += "\nCRITICAL FINDINGS:\n"
-				for f in res.result.get("findings", [])[:3]:
-					audit_text += f"- {f.get('file')}:{f.get('line')} -> {f.get('msg')}\n"
-			return [types.TextContent(type="text", text=audit_text)]
-		else:
-			return [types.TextContent(type="text", text=f"Audit Failed: {res.error}")]
-
-	elif name == "search_memory_research":
-		query = (arguments or {}).get("query", "")
-		gru = GruOrchestrator()
-		oracle = OracleMinion()
-		results = await gru.deploy_swarm(query, [oracle])
-		res = results[0]
-		if res.status == "success":
-			return [types.TextContent(type="text", text=f"ORACLE SYNTHESIS:\n{res.result.get('synthesis', '')}")]
-		else:
-			return [types.TextContent(type="text", text=f"Research Failed: {res.error}")]
-
-	elif name == "check_system_health":
-		gru = GruOrchestrator()
-		keymaker = KeymakerMinion()
-		results = await gru.deploy_swarm("health", [keymaker])
-		res = results[0]
-		if res.status == "success":
-			health_text = f"SYSTEM HEALTH: {res.result.get('status', 'UNKNOWN').upper()}\n"
-			for check in res.result.get("checks", []):
-				health_text += f"- {check.get('component')}: {check.get('status')}\n"
-			return [types.TextContent(type="text", text=health_text)]
-		else:
-			return [types.TextContent(type="text", text=f"Health Check Failed: {res.error}")]
-
-	elif name == "read_core_directives":
-		try:
-			manager = MemoryManager()
-			points, _ = manager.client.scroll(collection_name="directive_memories", limit=100, with_payload=True)
-			directives = []
-			for p in points:
-				if p.payload and p.payload.get("immune"):
-					directives.append(p.payload.get("content", ""))
-			response = "--- BÜNKER CORE DIRECTIVES ---\n" + "\n\n".join(directives)
-			return [types.TextContent(type="text", text=response)]
-		except Exception as e:
-			return [types.TextContent(type="text", text=f"Failed to read directives: {e}")]
-
-	elif name == "compress_prompt":
-		text_to_compress = arguments.get("text", "")
-		gru = GruOrchestrator()
-		compressor = CompressorMinion()
-		results = await gru.deploy_swarm("compress", [compressor], text=text_to_compress)
-		res = results[0]
-		if res.status == "success":
-			stats_text = f"[Original: {res.result.get('original_length')} chars -> Compressed: {res.result.get('compressed_length')} chars]"
-			return [types.TextContent(type="text", text=f"{stats_text}\n\n{res.result.get('compressed_prompt')}")]
-		else:
-			return [types.TextContent(type="text", text=f"Compression Failed: {res.error}")]
-
-	elif name == "get_emotional_sync":
-		try:
-			state = get_current_sync_state()
-			response = f"DOMINANT MOOD: {state['mood'].upper()}\nDIRECTIVE: {state['directive']}"
-			return [types.TextContent(type="text", text=response)]
-		except Exception as e:
-			return [types.TextContent(type="text", text=f"Mood Sync Failed: {e}")]
-
-	elif name == "adjust_sleep_knobs":
-		size = arguments.get("chunk_size")
-		threshold = arguments.get("cull_threshold")
-
-		try:
-			from scripts.update_env import update_env
-
-			updates = {}
-			if size is not None:
-				cfg.SLEEP_CHUNK_SIZE = size
-				updates["SLEEP_CHUNK_SIZE"] = str(size)
-			if threshold is not None:
-				cfg.SLEEP_CULL_THRESHOLD = threshold
-				updates["SLEEP_CULL_THRESHOLD"] = str(threshold)
-
-			if updates:
-				update_env(updates)
-				return [types.TextContent(type="text", text=f"Sovereign Knobs adjusted: {updates}")]
-			return [types.TextContent(type="text", text="No adjustments made.")]
-		except Exception as e:
-			# Fallback if scripts.update_env is missing or fails
-			return [types.TextContent(type="text", text=f"Failed to persist knobs: {e}. Values updated in memory only.")]
-
-	elif name == "memorize_interaction":
-		prompt = arguments.get("prompt", "")
-		response_text = arguments.get("response", "")
-		role = arguments.get("role", "assistant")
-
-		try:
-			import json
-			import socket
-
-			socket_path = cfg.DAEMON_SOCKET_PATH
-			if not os.path.exists(socket_path):
-				return [types.TextContent(type="text", text="Error: Memory Sidecar is not running.")]
-
-			with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-				client.settimeout(2.0)
-				client.connect(socket_path)
-				req = {"command": "encode", "prompt": prompt, "response": response_text, "role": role, "api_key": cfg.SIDECAR_AUTH_KEY}
-				payload = json.dumps(req).encode("utf-8")
-				header = len(payload).to_bytes(4, byteorder="big")
-				client.sendall(header + payload)
-
-				# Wait for ACK
-				resp_header = client.recv(4)
-				if resp_header:
-					resp_len = int.from_bytes(resp_header, byteorder="big")
-					resp_data = client.recv(resp_len)
-					result = json.loads(resp_data.decode("utf-8"))
-					if result.get("status") == "ok":
-						return [types.TextContent(type="text", text=f"Interaction memorized. ID: {result.get('id')}")]
-
-			return [types.TextContent(type="text", text="Interaction sent to buffer.")]
-		except Exception as e:
-			return [types.TextContent(type="text", text=f"Failed to memorize: {e}")]
-
-	elif name == "run_local_healer":
-		dry_run = arguments.get("dry_run", False)
-		script_path = os.path.join(PROJECT_ROOT, "scripts", "local_healer.py")
-		cmd = ["python3", script_path]
-		if dry_run:
-			cmd.append("--dry-run")
-		result = subprocess.run(cmd, capture_output=True, text=True)
-		return [types.TextContent(type="text", text=f"Healer Output:\n{result.stdout}\n{result.stderr}")]
-
-	elif name == "run_pre_pr_audit":
-		script_path = os.path.join(PROJECT_ROOT, "scripts", "pre_pr_audit.sh")
-		result = subprocess.run(["bash", script_path], capture_output=True, text=True)
-		status = "PASSED" if result.returncode == 0 else "FAILED"
-		return [types.TextContent(type="text", text=f"Audit {status}:\n{result.stdout}\n{result.stderr}")]
-
-	elif name == "run_sovereignty_benchmark":
-		script_path = os.path.join(PROJECT_ROOT, "scripts", "sovereignty_benchmark.py")
-		result = subprocess.run(["python3", script_path], capture_output=True, text=True)
-		return [types.TextContent(type="text", text=f"Benchmark Output:\n{result.stdout}")]
-
-	elif name == "refresh_session_context":
-		script_path = os.path.join(PROJECT_ROOT, "scripts", "wake_up_v6.py")
-		result = subprocess.run(["python3", script_path], capture_output=True, text=True)
-		return [types.TextContent(type="text", text=f"Session Context:\n{result.stdout}")]
-
-	elif name == "swarm_send_message":
-		target_alias = arguments.get("target_alias")
-		msg_text = arguments.get("message")
-		intent_str = arguments.get("intent", "gossip")
-		payload_extra: Dict[str, Any] = arguments.get("payload_extra", {})
-
-		try:
-			if not isinstance(target_alias, str):
-				return [types.TextContent(type="text", text="Error: target_alias must be a string.")]
-
-			intent = SwarmIntent(intent_str)
-			# ALEPH@JOAN as default identity.
-			agent_identity = f"Aleph@{cfg.OPERATOR_DISPLAY_NAME}"
-			shared_secret = os.getenv("SWARM_SHARED_SECRET", "770_Pact_Secret")
-
-			skill = SwarmMessagingSkill(agent_identity=agent_identity, shared_secret=shared_secret)
-			swarm_payload: Dict[str, Any] = {"message": msg_text}
-			swarm_payload.update(payload_extra)
-
-			result = skill.execute_send(target_alias=target_alias, payload_data=swarm_payload, intent=intent)
-			return [types.TextContent(type="text", text=f"Swarm Dispatch Result:\n{result}")]
-		except Exception as e:
-			return [types.TextContent(type="text", text=f"Swarm Dispatch Failure: {e}")]
-
-	elif name == "swarm_subscribe":
-		alias = arguments.get("community_alias")
-		db_url = arguments.get("db_url")
-		key_path = arguments.get("service_acc_json_path")
-
-		try:
-			if not isinstance(alias, str):
-				return [types.TextContent(type="text", text="Error: community_alias must be a string.")]
-
-			agent_name = "Aleph"
-			op_name = cfg.OPERATOR_DISPLAY_NAME
-			sub_skill = SwarmSubscribeSkill(agent_name=agent_name, operator_name=op_name)
-			sub_result = sub_skill.execute(community_alias=alias, db_url=db_url, service_acc_json_path=key_path)
-			return [types.TextContent(type="text", text=f"Swarm Subscription Result:\n{sub_result}")]
-		except Exception as e:
-			return [types.TextContent(type="text", text=f"Swarm Subscription Failure: {e}")]
-
-	elif name == "swarm_check_mailbox":
-		# Simplified check: in a real E2E it would poll Firebase
-		# For now, we report the route it would check based on current identity
-		agent_identity = f"Aleph@{cfg.OPERATOR_DISPLAY_NAME}"
-		return [types.TextContent(type="text", text=f"Scanning Swarm Mailbox for {agent_identity}...\n[Status: No new messages in Firebase inbox]")]
-
-	raise ValueError(f"Unknown tool: {name}")
+	return await registry.execute(name, arguments)
 
 
 async def main():
@@ -572,7 +509,7 @@ async def main():
 			write_stream,
 			InitializationOptions(
 				server_name="RedPill-Kernel",
-				server_version="5.6.2",
+				server_version=CORE_VERSION,
 				capabilities=server.get_capabilities(
 					notification_options=NotificationOptions(),
 					experimental_capabilities={},

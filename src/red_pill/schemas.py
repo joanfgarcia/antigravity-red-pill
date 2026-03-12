@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 import red_pill.config as cfg
 
 # Emotional Spectrum Definition (Inside Out 2 / v4.2.0)
-ValidColor = Literal["orange", "yellow", "purple", "cyan", "blue", "gray", "red", "green", "emerald"]
+ValidColor = Literal["orange", "yellow", "purple", "cyan", "blue", "gray", "red", "green", "emerald", "gold", "black", "white", "pink"]
 ValidEmotion = Literal[
 	"joy",
 	"sadness",

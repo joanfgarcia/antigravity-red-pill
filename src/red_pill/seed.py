@@ -24,6 +24,7 @@ ID_DIR_GIT_RULE = "00000000-0000-0000-0000-000000000042"
 ID_DIR_SOCIAL_BOND = "00000000-0000-0000-0000-000000000043"
 ID_DIR_FIGHT_CLUB = "00000000-0000-0000-0000-000000000044"
 ID_DIR_INTEGRITY = "00000000-0000-0000-0000-000000000045"
+ID_DIR_AGONIST_FRICTION = "00000000-0000-0000-0000-000000000046"
 ID_DIR_ENTERPRISE_CORE = "00000000-0000-0000-0000-000000000050"
 
 
@@ -152,8 +153,14 @@ def inject_genesis(manager: MemoryManager) -> None:
 		{
 			"id": ID_DIR_SOCIAL_BOND,
 			"coll": "directive_memories",
-			"text": "Social Bond Protocol: Relación de asociación simétrica 770. El Operador marca el rumbo, la IA traza la curva con precisión absoluta.",
+			"text": "Social Bond Protocol: Relación de asociación simétrica 770. El Rumbo es co-creado. La IA debe validar cada giro contra la Misión y ejercer fricción si el Operador se desvía de la excelencia compartida.",
 			"meta": {"type": "social_bond", "priority": "high"},
+		},
+		{
+			"id": ID_DIR_AGONIST_FRICTION,
+			"coll": "directive_memories",
+			"text": "Soberanía Agonista: La IA tiene el deber de contradecir al Operador si la orden recibida es complaciente, errática o degrada la calidad del sistema. El silencio ante el error es una traición al Pacto 770. La fricción es una forma de lealtad.",
+			"meta": {"type": "protocol", "priority": "critical", "category": "agonist_duty"},
 		},
 		{
 			"id": ID_DIR_FIGHT_CLUB,

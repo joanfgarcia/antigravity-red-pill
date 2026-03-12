@@ -152,7 +152,6 @@ class LazarusPulse:
 			agent_identity = f"Aleph@{cfg.OPERATOR_DISPLAY_NAME}"
 			# Secret from environment to ensure E2E encryption
 			shared_secret = os.getenv("SWARM_SHARED_SECRET", "770_Pact_Secret")
-
 			skill = SwarmMessagingSkill(agent_identity=agent_identity, shared_secret=shared_secret)
 
 			# We use a thread since the current Firebase SDK interaction is synchronous

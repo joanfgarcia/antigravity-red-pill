@@ -68,3 +68,6 @@ audit/
 # *CERTIFICATION_REPORT* <-- Allow tracking
 RED_PILL_DIGEST.txt
 models/
+
+# Sensitive Data
+cookies/
