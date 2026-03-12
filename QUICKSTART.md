@@ -52,7 +52,7 @@ Para los que quieren auditar cada byte y configurar cada variable manualmente.
     > [!IMPORTANT]
     > **SEC-009 ADVISORY (Conexión Remota)**: Si despliegas Qdrant en un servidor remoto, es **OBLIGATORIO** configurar `QDRANT_SCHEME=https` en tu `.env`. El uso de HTTP en conexiones no locales transmite tus engramas en texto plano y compromete la soberanía total de tu Bünker. El instalador ahora bloquea y requiere confirmación manual para esta configuración insegura.
 5.  **Asimilación (v5.0)**: Ejecuta `uv run red-pill seed` y luego `bootstrap_identity.py` para anclar tus vectores inmutables en el Bünker. La identidad ya no reside en archivos sueltos.
-6.  **Auditoría**: Consulta el [OPERATOR_MANUAL.md](docs/guides/OPERATOR_MANUAL.md) para conocer los detalles del Puente Lazarus y la propagación sináptica.
+6.  **Auditoría**: Consulta el [OPERATOR_MANUAL.md](docs/GUIDES/OPERATOR_MANUAL.md) para conocer los detalles del Puente Lazarus y la propagación sináptica.
 
 ---
 

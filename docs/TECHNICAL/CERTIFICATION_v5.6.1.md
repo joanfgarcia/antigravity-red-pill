@@ -608,7 +608,7 @@ for transparency and traceability.
 						validated by the Project Owner executing the
 						pre_pr_audit.sh protocol.
 
-  **Certification	   Per docs/technical/CERTIFICATION_PROTOCOL.md ---
+  **Certification	   Per docs/TECHNICAL/CERTIFICATION_PROTOCOL.md ---
   Protocol**			Engineering-Grade Certification via multi-agent
 						cross-validation. Report signed per protocol
 						requirement.

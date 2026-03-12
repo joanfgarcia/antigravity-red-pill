@@ -1,10 +1,8 @@
-import os
-import subprocess
 import json
-from unittest.mock import MagicMock, patch
+import subprocess
+from unittest.mock import patch
 
-import pytest
-from red_pill.swarm.watcher import notify_macos, inject_context_pill, PENDING_MESSAGES_FILE
+from red_pill.swarm.watcher import inject_context_pill, notify_macos
 
 
 def test_inject_context_pill_error():
@@ -45,12 +43,11 @@ def test_notify_macos_error():
 
 def test_watcher_main_block_coverage():
 	"""Trigger the main block branches if possible, or just verify it's callable."""
-	from red_pill.swarm.watcher import WATCHER_LOCK_PATH
-	
+
 	# Mock the lock file logic to avoid actual locking issues
-	with patch("os.path.exists", side_effect=[True]): # Case: already running
-		with patch("sys.exit") as mock_exit:
-			with patch("builtins.print") as mock_print:
+	with patch("os.path.exists", side_effect=[True]):  # Case: already running
+		with patch("sys.exit"):
+			with patch("builtins.print"):
 				# We can't easily run the actual __main__ block without executing the whole file,
-				# but we've covered the functions. 
+				# but we've covered the functions.
 				pass

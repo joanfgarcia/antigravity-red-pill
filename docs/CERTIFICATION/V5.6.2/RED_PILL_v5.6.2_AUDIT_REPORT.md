@@ -816,7 +816,7 @@ traceability artifact.
 					  state. The failed run is preserved in §5.1 as a
 					  traceability artifact.
 
-  **Certification	 Per docs/technical/CERTIFICATION_PROTOCOL.md ---
+  **Certification	 Per docs/TECHNICAL/CERTIFICATION_PROTOCOL.md ---
   Protocol**		  Engineering-Grade Certification via multi-agent
 					  cross-validation. Report signed per protocol
 					  requirement.

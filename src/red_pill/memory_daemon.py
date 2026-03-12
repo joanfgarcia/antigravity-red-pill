@@ -224,8 +224,12 @@ class MemoryDaemon:
 				pass
 
 
-if __name__ == "__main__":
+def main():
 	daemon = MemoryDaemon()
 	signal.signal(signal.SIGINT, daemon.stop)
 	signal.signal(signal.SIGTERM, daemon.stop)
 	daemon.start()
+
+
+if __name__ == "__main__":
+	main()

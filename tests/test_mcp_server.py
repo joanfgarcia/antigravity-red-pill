@@ -9,13 +9,10 @@ dependencies. Each test verifies:
   - Error paths return a user-facing error string (not an unhandled exception)
 """
 
-import asyncio
 import json
-from typing import List, Union
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from mcp.server import Server
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Import handler under test
@@ -414,14 +411,15 @@ class TestListTools:
 
 class TestControlBunkerAdditional:
 	async def test_rotate_command(self):
-		import types
 		import sys
+		import types
+
 		from red_pill.mcp_server import handle_call_tool
 
 		fake_scripts = types.ModuleType("scripts")
 		fake_rotate = types.ModuleType("scripts.rotate_keys")
 		fake_rotate.rotate = MagicMock()
-		
+
 		sys.modules["scripts"] = fake_scripts
 		sys.modules["scripts.rotate_keys"] = fake_rotate
 		try:
@@ -468,26 +466,30 @@ class TestAuditWithFindings:
 # Additional tools and edge cases (COV recovery)
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestMCPAdditionalTools:
 	async def test_control_bunker_sleep(self):
 		from red_pill.mcp_server import handle_call_tool
+
 		with patch("red_pill.metabolism.sleep.perform_sleep_cycle", return_value=5):
 			result = await handle_call_tool("control_bunker", {"command": "sleep", "value": "deep"})
 			assert "5 engrams" in result[0].text
 
 	async def test_memorize_interaction_no_daemon(self):
 		from red_pill.mcp_server import handle_call_tool
+
 		with patch("os.path.exists", return_value=False):
 			result = await handle_call_tool("memorize_interaction", {"prompt": "p", "response": "r"})
 			assert "INACTIVE" in result[0].text
 
 	async def test_memorize_interaction_success(self):
+
 		from red_pill.mcp_server import handle_call_tool
-		import socket
+
 		with patch("os.path.exists", return_value=True):
 			with patch("socket.socket") as mock_sock:
 				client = MagicMock()
-				client.fileno.return_value = 999 
+				client.fileno.return_value = 999
 				mock_sock.return_value.__enter__.return_value = client
 				resp = json.dumps({"status": "ok", "id": "eng-123"}).encode()
 				client.recv.side_effect = [len(resp).to_bytes(4, "big"), resp]
@@ -496,6 +498,7 @@ class TestMCPAdditionalTools:
 
 	async def test_adjust_sleep_knobs(self):
 		from red_pill.mcp_server import handle_call_tool
+
 		with patch("scripts.update_env.update_env") as mock_env:
 			result = await handle_call_tool("adjust_sleep_knobs", {"chunk_size": 1000, "cull_threshold": 0.5})
 			assert "Knobs updated" in result[0].text
@@ -503,6 +506,7 @@ class TestMCPAdditionalTools:
 
 	async def test_run_local_healer(self):
 		from red_pill.mcp_server import handle_call_tool
+
 		with patch("subprocess.run") as mock_run:
 			mock_run.return_value = MagicMock(stdout="healer output")
 			result = await handle_call_tool("run_local_healer", {"dry_run": True})
@@ -510,6 +514,7 @@ class TestMCPAdditionalTools:
 
 	async def test_run_pre_pr_audit(self):
 		from red_pill.mcp_server import handle_call_tool
+
 		with patch("subprocess.run") as mock_run:
 			mock_run.return_value = MagicMock(stdout="audit pass", returncode=0)
 			result = await handle_call_tool("run_pre_pr_audit", {})
@@ -517,6 +522,7 @@ class TestMCPAdditionalTools:
 
 	async def test_run_sovereignty_benchmark(self):
 		from red_pill.mcp_server import handle_call_tool
+
 		with patch("subprocess.run") as mock_run:
 			mock_run.return_value = MagicMock(stdout="benchmark result")
 			result = await handle_call_tool("run_sovereignty_benchmark", {})
@@ -524,6 +530,7 @@ class TestMCPAdditionalTools:
 
 	async def test_refresh_session_context(self):
 		from red_pill.mcp_server import handle_call_tool
+
 		with patch("subprocess.run") as mock_run:
 			mock_run.return_value = MagicMock(stdout="session refreshed")
 			result = await handle_call_tool("refresh_session_context", {})
@@ -531,6 +538,7 @@ class TestMCPAdditionalTools:
 
 	async def test_swarm_send_message(self):
 		from red_pill.mcp_server import handle_call_tool
+
 		with patch("red_pill.mcp_server.SwarmMessagingSkill") as mock_skill:
 			mock_skill.return_value.execute_send.return_value = "sent"
 			result = await handle_call_tool("swarm_send_message", {"target_alias": "t", "message": "m"})
@@ -538,6 +546,7 @@ class TestMCPAdditionalTools:
 
 	async def test_swarm_subscribe(self):
 		from red_pill.mcp_server import handle_call_tool
+
 		with patch("red_pill.mcp_server.SwarmSubscribeSkill") as mock_skill:
 			mock_skill.return_value.execute.return_value = "subscribed"
 			result = await handle_call_tool("swarm_subscribe", {"community_alias": "c", "db_url": "u", "service_acc_json_path": "p"})
@@ -545,16 +554,20 @@ class TestMCPAdditionalTools:
 
 	async def test_swarm_check_mailbox(self):
 		from red_pill.mcp_server import handle_call_tool
+
 		result = await handle_call_tool("swarm_check_mailbox", {"community_alias": "c"})
 		assert "Scanning Mailbox" in result[0].text
+
 
 class TestMainBlock:
 	async def test_main_function_is_callable(self):
 		from red_pill.mcp_server import main
+
 		assert callable(main)
 
 	async def test_main_execution_mocked(self):
 		from red_pill.mcp_server import main
+
 		with patch("red_pill.mcp_server.stdio_server") as mock_stdio:
 			mock_stdio.return_value.__aenter__.return_value = (MagicMock(), MagicMock())
 			with patch("red_pill.mcp_server.server.run") as mock_run:

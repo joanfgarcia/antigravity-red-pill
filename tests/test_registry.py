@@ -1,10 +1,13 @@
-import pytest
 import mcp.types as types
+import pytest
+
 from red_pill.registry import ToolRegistry
+
 
 @pytest.fixture
 def registry():
 	return ToolRegistry()
+
 
 def test_register_tool(registry):
 	@registry.register(name="test_tool", description="Test description", schema={"type": "object"})
@@ -16,6 +19,7 @@ def test_register_tool(registry):
 	assert tools[0].name == "test_tool"
 	assert tools[0].description == "Test description"
 
+
 @pytest.mark.asyncio
 async def test_execute_tool(registry):
 	@registry.register(name="add", description="Add numbers", schema={"type": "object"})
@@ -25,10 +29,12 @@ async def test_execute_tool(registry):
 	result = await registry.execute("add", {"a": 1, "b": 2})
 	assert result[0].text == "3"
 
+
 @pytest.mark.asyncio
 async def test_execute_unknown_tool(registry):
 	with pytest.raises(ValueError, match="Unknown tool"):
 		await registry.execute("non_existent", {})
+
 
 @pytest.mark.asyncio
 async def test_execute_tool_exception(registry):
@@ -38,6 +44,7 @@ async def test_execute_tool_exception(registry):
 
 	result = await registry.execute("fail", {})
 	assert "Error: Boom" in result[0].text
+
 
 @pytest.mark.asyncio
 async def test_execute_tool_non_list_return(registry):

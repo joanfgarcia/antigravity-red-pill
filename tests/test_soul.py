@@ -117,25 +117,28 @@ class TestFullBackup:
 class TestExportSoul:
 	def test_auto_output_path_generated(self, soul, tmp_path, capsys):
 		"""Line 124-125: no output_path → auto-generated from timestamp."""
-		with patch.object(soul, "backup_qdrant"):
-			with patch.object(soul, "create_manifest"):
-				with patch("os.listdir", return_value=[]):
-					soul.export_soul(output_path=None)
+		with patch("os.getenv", return_value=None):
+			with patch.object(soul, "backup_qdrant"):
+				with patch.object(soul, "create_manifest"):
+					with patch("os.listdir", return_value=[]):
+						soul.export_soul(output_path=None)
 		captured = capsys.readouterr()
 		assert "LEAN_SOUL_KIT" in captured.out
 
 	def test_snapshot_added_to_tar(self, soul, tmp_path, capsys):
 		"""Lines 138-141: snapshot files matching timestamp are added to tar."""
-		ts = time.strftime("%Y%m%d_%H%M%S")
+		ts = "20260101_120000"
 		snap_dir = tmp_path / "backups" / "qdrant"
 		snap_dir.mkdir(parents=True)
 		snap_file = snap_dir / f"work_{ts}.snapshot"
 		snap_file.write_bytes(b"snapshot_data")
 
-		with patch.object(soul, "backup_qdrant"):
-			with patch.object(soul, "create_manifest"):
-				output = str(tmp_path / "export.tar.gz")
-				soul.export_soul(output_path=output)
+		with patch("time.strftime", return_value=ts):
+			with patch("os.getenv", return_value=None):
+				with patch.object(soul, "backup_qdrant"):
+					with patch.object(soul, "create_manifest"):
+						output = str(tmp_path / "export.tar.gz")
+						soul.export_soul(output_path=output)
 
 		assert os.path.exists(output)
 		with tarfile.open(output, "r:gz") as tar:
@@ -172,11 +175,12 @@ class TestExportSoul:
 
 	def test_manifest_not_added_when_missing(self, soul, tmp_path, capsys):
 		"""tar created but manifest absent → archive still created."""
-		with patch.object(soul, "backup_qdrant"):
-			with patch.object(soul, "create_manifest"):
-				with patch("os.listdir", return_value=[]):
-					output = str(tmp_path / "export.tar.gz")
-					soul.export_soul(output_path=output)
+		with patch("os.getenv", return_value=None):
+			with patch.object(soul, "backup_qdrant"):
+				with patch.object(soul, "create_manifest"):
+					with patch("os.listdir", return_value=[]):
+						output = str(tmp_path / "export.tar.gz")
+						soul.export_soul(output_path=output)
 		assert os.path.exists(output)
 
 	def test_manifest_added_to_tar_when_exists(self, soul, tmp_path, capsys):
@@ -187,11 +191,12 @@ class TestExportSoul:
 		manifest_file = snap_dir / f"manifest_{ts}.json"
 		manifest_file.write_text('{"test": true}')
 
-		with patch.object(soul, "backup_qdrant"):
-			with patch.object(soul, "create_manifest"):
-				with patch("time.strftime", return_value=ts):
-					output = str(tmp_path / "export.tar.gz")
-					soul.export_soul(output_path=output)
+		with patch("time.strftime", return_value=ts):
+			with patch("os.getenv", return_value=None):
+				with patch.object(soul, "backup_qdrant"):
+					with patch.object(soul, "create_manifest"):
+						output = str(tmp_path / "export.tar.gz")
+						soul.export_soul(output_path=output)
 
 		with tarfile.open(output, "r:gz") as tar:
 			assert "manifest.json" in tar.getnames()

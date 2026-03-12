@@ -29,7 +29,7 @@
 - **Alternative**: Use Git history for audit trails or "Memory" (RAG) for long-term storage of deprecated ideas.
 
 ## 4. Rationale Migration
-- **Rule**: Complex design explanations should live in `docs/technical/decision_log.md`, not as long-winded comments above functions.
+- **Rule**: Complex design explanations should live in `docs/TECHNICAL/decision_log.md`, not as long-winded comments above functions.
 - **Rationale**: Keeps the working code "Silent" and purely functional, while preserving the "Aleth" (revealed truth) of the design in the proper documentation layer.
 
 ---

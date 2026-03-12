@@ -61,7 +61,7 @@ def simulate_firebase_listener(my_identity):
 			time.sleep(5)  # Cooldown
 
 
-if __name__ == "__main__":
+def main():
 	if os.path.exists(WATCHER_LOCK_PATH):
 		print("Watcher is already running.")
 		sys.exit(0)
@@ -79,3 +79,7 @@ if __name__ == "__main__":
 	finally:
 		if os.path.exists(WATCHER_LOCK_PATH):
 			os.remove(WATCHER_LOCK_PATH)
+
+
+if __name__ == "__main__":
+	main()

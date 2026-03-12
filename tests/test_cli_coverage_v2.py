@@ -1,18 +1,10 @@
 import argparse
-import os
 import subprocess
-import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
-from red_pill.cli import (
-	handle_audit,
-	handle_benchmark,
-	handle_heal,
-	handle_identity,
-	main,
-	switch_skin
-)
+
+from red_pill.cli import handle_audit, handle_benchmark, handle_heal, handle_identity, main, switch_skin
 
 
 def test_switch_skin_invalid():
@@ -49,14 +41,7 @@ def test_handle_benchmark():
 
 
 def test_handle_identity_bootstrap():
-	args = argparse.Namespace(
-		id_cmd="bootstrap",
-		ai_name="Aleth",
-		ai_role="Architect",
-		user_name="Joan",
-		user_role="Operator",
-		skin="matrix"
-	)
+	args = argparse.Namespace(id_cmd="bootstrap", ai_name="Aleth", ai_role="Architect", user_name="Joan", user_role="Operator", skin="matrix")
 	with patch("subprocess.run") as mock_run:
 		handle_identity(args)
 		cmd = mock_run.call_args[0][0]
@@ -100,7 +85,7 @@ def test_main_signal_logic():
 	test_args = ["red-pill", "signal", "Test message", "--title", "Test Title", "--sound"]
 	with patch("sys.argv", test_args):
 		with patch("red_pill.utils.observer.notify_user") as mock_notify:
-			with patch("red_pill.cli.MemoryManager") as mock_mgr:
+			with patch("red_pill.cli.MemoryManager"):
 				main()
 				mock_notify.assert_any_call("Test Title", "Test message", sound=True)
 				# mock_mgr.return_value.add_memory.assert_called_once()
@@ -116,15 +101,15 @@ def test_main_swarm_audit_details():
 		mock_res.result = {
 			"security_score": 95,
 			"files_scanned": 10,
-			"findings": [{"severity": "CRITICAL", "file": "key.py", "line": 1, "msg": "leak"}]
+			"findings": [{"severity": "CRITICAL", "file": "key.py", "line": 1, "msg": "leak"}],
 		}
-		
+
 		# Define an async mock for deploy_swarm
 		async def mock_deploy(*args, **kwargs):
 			return [mock_res]
-		
+
 		mock_gru.deploy_swarm = mock_deploy
-		
+
 		with patch("red_pill.cli.GruOrchestrator", return_value=mock_gru):
 			with patch("red_pill.cli.SmithMinion"):
 				with patch("builtins.print") as mock_print:

@@ -48,6 +48,6 @@ uv run red-pill audit --path ./src
 - **PII Masking**: Automatic truncation of sensitive patterns in logs.
 - **Audit Logs**: All memory operations are logged at `INFO` level without payload disclosure.
 
-For full technical specifications, refer to [ARCHITECTURE.md](../technical/ARCHITECTURE.md).
+For full technical specifications, refer to [ARCHITECTURE.md](../TECHNICAL/ARCHITECTURE.md).
 
 770 UP.

@@ -320,7 +320,7 @@ Input	   : RED_PILL_DIGEST.txt (13,360 lines)
 			  (schema only), .dockerignore, .env.example, .github/workflows/ci.yml,
 			  .gitignore, CHANGELOG.md, GPL-3.0 license text, uv.lock,
 			  docs/certification/red_pill_v4.0.9_certification_report (prior audit),
-			  docs/technical/ARCHITECTURE.md, docs/technical/B760_TECHNICAL_SPEC.md,
+			  docs/TECHNICAL/ARCHITECTURE.md, docs/TECHNICAL/B760_TECHNICAL_SPEC.md,
 			  scripts/install_neo.sh, src/red_pill/cli.py, src/red_pill/config.py,
 			  src/red_pill/data/lore_skins.yaml, src/red_pill/memory.py,
 			  src/red_pill/memory_daemon.py, src/red_pill/seed.py,

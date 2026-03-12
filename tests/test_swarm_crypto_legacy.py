@@ -1,4 +1,4 @@
-from crypto import SwarmCrypto
+from red_pill.swarm.crypto import SwarmCrypto
 
 
 def test_encryption():

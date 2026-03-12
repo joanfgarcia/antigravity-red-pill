@@ -28,10 +28,10 @@ Velocity without integrity is just a fast way to crash.
 ## 3. Branch Discipline & Governance
 1.  **Main is Sacred**: Never commit directly to `main`. Always use feature/fix branches (`feat/*`, `fix/*`).
 2.  **The PR Bridge**: Use `gh pr create` and `gh pr merge`. Let the tooling handle the metadata. 
-3.  **Governance Documentation**: Consult `docs/technical/GOVERNANCE.md` before making any changes that alter the B760-Adaptive core logic.
+3.  **Governance Documentation**: Consult `docs/TECHNICAL/GOVERNANCE.md` before making any changes that alter the B760-Adaptive core logic.
 
 ## 4. Coding Aesthetics: Sound of Silence
-Respect the protocol defined in `docs/technical/SOUND_OF_SILENCE.md`:
+Respect the protocol defined in `docs/TECHNICAL/SOUND_OF_SILENCE.md`:
 - **Tabs Only**: No spaces for indentation. None.
 - **No Noise**: Remove ornamental comments, dead code (like Claude found in `memory.py`), and redundant logs.
 - **Atomic Commits**: Group your changes logically. A single commit with 15 unrelated files is a project failure.

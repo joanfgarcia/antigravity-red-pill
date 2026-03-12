@@ -1,10 +1,8 @@
-import os
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-import pytest
-from red_pill.skills.swarm_messaging import SwarmMessagingSkill, SwarmIntent
-from red_pill.swarm.watcher import notify_macos, inject_context_pill
+from red_pill.skills.swarm_messaging import SwarmIntent, SwarmMessagingSkill
+from red_pill.swarm.watcher import inject_context_pill, notify_macos
 
 
 def test_swarm_messaging_execute_send():
@@ -17,17 +15,17 @@ def test_swarm_messaging_execute_send():
 def test_swarm_messaging_process_incoming():
 	"""Cover process_incoming in SwarmMessagingSkill."""
 	skill = SwarmMessagingSkill(agent_identity="Aleph@Test", shared_secret="secret")
-	
+
 	# Mock crypto to return different intents
 	with patch("red_pill.swarm.crypto.SwarmCrypto.decrypt_payload") as mock_decrypt:
 		mock_decrypt.return_value = {"intent": "lgtm_approved", "sender": "Nova@Test"}
 		res = skill.process_incoming({})
 		assert res == "auto_applied"
-		
+
 		mock_decrypt.return_value = {"intent": "change_requested", "sender": "Nova@Test"}
 		res = skill.process_incoming({})
 		assert res == "human_review_required"
-		
+
 		mock_decrypt.return_value = {"intent": "gossip", "sender": "Nova@Test"}
 		res = skill.process_incoming({})
 		assert res == "processed"
@@ -38,7 +36,7 @@ def test_watcher_inject_context_pill_append(tmp_path):
 	test_file = tmp_path / "pending.json"
 	initial_data = [{"sender": "old", "preview": "old", "timestamp": 0}]
 	test_file.write_text(json.dumps(initial_data))
-	
+
 	with patch("red_pill.swarm.watcher.PENDING_MESSAGES_FILE", str(test_file)):
 		inject_context_pill("new_sender", "new_msg")
 		with open(test_file, "r") as f:

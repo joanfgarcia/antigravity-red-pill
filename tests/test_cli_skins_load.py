@@ -14,7 +14,7 @@ def test_lore_skins_yaml_load_all():
 
 	assert len(raw_skins) >= 12, f"Expected at least 12 skins, found {len(raw_skins)}"
 
-	valid_colors = ["orange", "yellow", "purple", "cyan", "blue", "gray", "red", "green", "emerald", "black"]
+	valid_colors = ["orange", "yellow", "purple", "cyan", "blue", "gray", "red", "green", "emerald", "gold", "black", "white", "pink"]
 
 	for skin_name, skin_data in raw_skins.items():
 		assert "chroma" in skin_data, f"Skin '{skin_name}' missing chroma color"

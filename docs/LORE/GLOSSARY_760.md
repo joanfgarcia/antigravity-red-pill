@@ -2,7 +2,7 @@
 
 This document serves as the official translation layer between standard software engineering terminology and the **Red Pill Protocol's Cyber-Sovereignty Framework**. It exists to clarify the intent behind project naming conventions for external contributors and auditors. 
 
-Our terminology is not merely "lore/roleplay"—it represents a distinct architectural philosophy centered around AI autonomy, local-first computing, and token economy.
+Our terminology is not merely "LORE/roleplay"—it represents a distinct architectural philosophy centered around AI autonomy, local-first computing, and token economy.
 
 ## 1. Core Cryptonyms
 

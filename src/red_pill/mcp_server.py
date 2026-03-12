@@ -23,8 +23,8 @@ from red_pill.swarm.agents.oracle import OracleMinion
 from red_pill.swarm.agents.smith import SmithMinion
 from red_pill.swarm.orchestrator import GruOrchestrator
 from red_pill.telemetry import HardwareSentinel, get_telemetry_report
-from red_pill.utils.tone_analyzer import get_current_sync_state
 from red_pill.utils.mystique import mystique_engine
+from red_pill.utils.tone_analyzer import get_current_sync_state
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +99,10 @@ If you are an AI Agent:
 	description="Execute administrative CLI commands (rotate, mode, backup, purge, sleep).",
 	schema={
 		"type": "object",
-		"properties": {"command": {"type": "string", "enum": ["rotate", "backup", "mode", "status", "purge", "sleep", "export"]}, "value": {"type": "string"}},
+		"properties": {
+			"command": {"type": "string", "enum": ["rotate", "backup", "mode", "status", "purge", "sleep", "export"]},
+			"value": {"type": "string"},
+		},
 		"required": ["command"],
 	},
 )
@@ -294,18 +297,7 @@ async def handle_edit_memory(arguments: Dict[str, Any]):
 	schema={"type": "object", "properties": {"chunk_size": {"type": "integer"}, "cull_threshold": {"type": "number"}}},
 )
 async def handle_adjust_sleep_knobs(arguments: Dict[str, Any]):
-	import importlib.util
-	from pathlib import Path
-	
-	script_path = Path(__file__).parent.parent.parent / "scripts" / "update_env.py"
-	spec = importlib.util.spec_from_file_location("update_env", script_path)
-	if spec and spec.loader:
-		module = importlib.util.module_from_spec(spec)
-		spec.loader.exec_module(module)
-		update_env = module.update_env
-	else:
-		return [types.TextContent(type="text", text="Error: Could not load update_env script.")]
-
+	from scripts.update_env import update_env
 	updates = {}
 	if "chunk_size" in arguments:
 		updates["SLEEP_CHUNK_SIZE"] = str(arguments["chunk_size"])
@@ -331,18 +323,8 @@ async def handle_adjust_sleep_knobs(arguments: Dict[str, Any]):
 	},
 )
 async def handle_configure_neuro_agentic_tuning(arguments: Dict[str, Any]):
-	import importlib.util
-	from pathlib import Path
-	
-	script_path = Path(__file__).parent.parent.parent / "scripts" / "update_env.py"
-	spec = importlib.util.spec_from_file_location("update_env", script_path)
-	if spec and spec.loader:
-		module = importlib.util.module_from_spec(spec)
-		spec.loader.exec_module(module)
-		update_env = module.update_env
-	else:
-		return [types.TextContent(type="text", text="Error: Could not load update_env script.")]
-	
+	from scripts.update_env import update_env
+
 	mapping = {
 		"log_noise_filter": "LOG_NOISE_FILTER",
 		"reasoning_focus": "REASONING_FOCUS",
@@ -463,14 +445,14 @@ async def handle_list_all_skins(arguments: Dict[str, Any]):
 	skins = mystique_engine.get_all_skins()
 	output = "🔴 **BÜNKER LORE SKIN CATALOG**\n"
 	output += "--- Aquí no solo cambias de tono, cambias de realidad. ---\n\n"
-	
+
 	# Categorized Output
 	categories = {
 		"Operativo": ["enterprise_core", "760", "the_accountant", "vantablack"],
 		"Red & Distopía": ["matrix", "cyberpunk", "bladerunner", "wintermute", "gits"],
 		"Sci-Fi & Filosofía": ["dune", "40k", "2001", "tars", "oracle"],
 		"Empatía & Resonancia": ["her", "joi", "ron_s_gone_wrong", "creator", "exmachina", "alita"],
-		"Guardianes": ["terminator"]
+		"Guardianes": ["terminator"],
 	}
 
 	for cat, members in categories.items():
@@ -497,7 +479,7 @@ async def handle_list_all_skins(arguments: Dict[str, Any]):
 	},
 )
 async def handle_mystique_suggest_skin(arguments: Dict[str, Any]):
-	suggestion = mystique_engine.suggest_skin(strategy=arguments.get("strategy", "affinity"), context=arguments.get("context", "work"))
+	suggestion = mystique_engine.suggest_skin(strategy=arguments.get("strategy", "affinity"), context=arguments.get("context", "work"))  # type: ignore
 	name = suggestion["name"]
 	data = suggestion["data"]
 	output = f"MYSTIQUE SUGGESTION: {name.upper()}\n"
