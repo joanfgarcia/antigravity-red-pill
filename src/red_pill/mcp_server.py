@@ -298,6 +298,7 @@ async def handle_edit_memory(arguments: Dict[str, Any]):
 )
 async def handle_adjust_sleep_knobs(arguments: Dict[str, Any]):
 	from scripts.update_env import update_env
+
 	updates = {}
 	if "chunk_size" in arguments:
 		updates["SLEEP_CHUNK_SIZE"] = str(arguments["chunk_size"])

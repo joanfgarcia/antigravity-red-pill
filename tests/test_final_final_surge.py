@@ -1,5 +1,4 @@
-import runpy
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 
 @patch("red_pill.swarm.watcher.simulate_firebase_listener")
@@ -7,7 +6,7 @@ def test_watcher_main_block_coverage(mock_sim, tmp_path):
 	"""Cover the __main__ block of watcher.py."""
 	lock_file = tmp_path / "watcher.lock"
 	from red_pill.swarm import watcher
-	
+
 	with patch("red_pill.swarm.watcher.WATCHER_LOCK_PATH", str(lock_file)):
 		# Case 1: Already running
 		lock_file.write_text("123")
@@ -25,8 +24,8 @@ def test_watcher_main_block_coverage(mock_sim, tmp_path):
 			assert mock_sim.called
 			assert not lock_file.exists()
 
-
 	from red_pill.memory_daemon import main as daemon_main
+
 	with patch("red_pill.memory_daemon.MemoryDaemon.start") as mock_start:
 		with patch("signal.signal"):
 			daemon_main()
