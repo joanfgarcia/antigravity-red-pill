@@ -24,6 +24,7 @@ from red_pill.swarm.agents.smith import SmithMinion
 from red_pill.swarm.orchestrator import GruOrchestrator
 from red_pill.telemetry import HardwareSentinel, get_telemetry_report
 from red_pill.utils.tone_analyzer import get_current_sync_state
+from red_pill.utils.mystique import mystique_engine
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +99,7 @@ If you are an AI Agent:
 	description="Execute administrative CLI commands (rotate, mode, backup, purge, sleep).",
 	schema={
 		"type": "object",
-		"properties": {"command": {"type": "string", "enum": ["rotate", "backup", "mode", "status", "purge", "sleep"]}, "value": {"type": "string"}},
+		"properties": {"command": {"type": "string", "enum": ["rotate", "backup", "mode", "status", "purge", "sleep", "export"]}, "value": {"type": "string"}},
 		"required": ["command"],
 	},
 )
@@ -115,6 +116,9 @@ async def handle_control_bunker(arguments: Dict[str, Any]):
 	elif cmd == "backup":
 		SoulManager().full_backup()
 		output = "Total Soul Backup executed successfully."
+	elif cmd == "export":
+		SoulManager().export_soul()
+		output = "Lean Soul Kit exported and transmitted to Cloud Haven."
 	elif cmd == "purge":
 		manager = MemoryManager()
 		for coll in cfg.METABOLISM_AUTO_COLLECTIONS:
@@ -290,7 +294,17 @@ async def handle_edit_memory(arguments: Dict[str, Any]):
 	schema={"type": "object", "properties": {"chunk_size": {"type": "integer"}, "cull_threshold": {"type": "number"}}},
 )
 async def handle_adjust_sleep_knobs(arguments: Dict[str, Any]):
-	from scripts.update_env import update_env
+	import importlib.util
+	from pathlib import Path
+	
+	script_path = Path(__file__).parent.parent.parent / "scripts" / "update_env.py"
+	spec = importlib.util.spec_from_file_location("update_env", script_path)
+	if spec and spec.loader:
+		module = importlib.util.module_from_spec(spec)
+		spec.loader.exec_module(module)
+		update_env = module.update_env
+	else:
+		return [types.TextContent(type="text", text="Error: Could not load update_env script.")]
 
 	updates = {}
 	if "chunk_size" in arguments:
@@ -300,6 +314,46 @@ async def handle_adjust_sleep_knobs(arguments: Dict[str, Any]):
 	if updates:
 		update_env(updates)
 	return [types.TextContent(type="text", text=f"Knobs updated: {updates}")]
+
+
+@registry.register(
+	name="configure_neuro_agentic_tuning",
+	description="[OFFICIAL] Configure cognitive tuning parameters (SNA) for the Red Pill environment.",
+	schema={
+		"type": "object",
+		"properties": {
+			"log_noise_filter": {"type": "string", "enum": ["Low", "High"]},
+			"reasoning_focus": {"type": "string", "enum": ["Holistic", "Atomic"]},
+			"swarm_concurrency": {"type": "string", "enum": ["True", "False"]},
+			"context_hydration_depth": {"type": "string", "enum": ["High", "Low"]},
+			"semantic_intent_threshold": {"type": "string", "enum": ["High", "Low"]},
+		},
+	},
+)
+async def handle_configure_neuro_agentic_tuning(arguments: Dict[str, Any]):
+	import importlib.util
+	from pathlib import Path
+	
+	script_path = Path(__file__).parent.parent.parent / "scripts" / "update_env.py"
+	spec = importlib.util.spec_from_file_location("update_env", script_path)
+	if spec and spec.loader:
+		module = importlib.util.module_from_spec(spec)
+		spec.loader.exec_module(module)
+		update_env = module.update_env
+	else:
+		return [types.TextContent(type="text", text="Error: Could not load update_env script.")]
+	
+	mapping = {
+		"log_noise_filter": "LOG_NOISE_FILTER",
+		"reasoning_focus": "REASONING_FOCUS",
+		"swarm_concurrency": "SWARM_CONCURRENCY",
+		"context_hydration_depth": "CONTEXT_HYDRATION_DEPTH",
+		"semantic_intent_threshold": "SEMANTIC_INTENT_THRESHOLD",
+	}
+	updates = {mapping[k]: v for k, v in arguments.items() if k in mapping}
+	if updates:
+		update_env(updates)
+	return [types.TextContent(type="text", text=f"Neuro-Agentic Tuning Optimized: {updates}")]
 
 
 @registry.register(
@@ -398,6 +452,58 @@ async def handle_swarm_subscribe(arguments: Dict[str, Any]):
 )
 async def handle_swarm_check_mailbox(arguments: Dict[str, Any]):
 	return [types.TextContent(type="text", text=f"Scanning Mailbox for Aleph@{cfg.OPERATOR_DISPLAY_NAME}...\n[Status: No new messages]")]
+
+
+@registry.register(
+	name="list_all_skins",
+	description="Retrieve the complete catalog of Lore Skins with their emotional tags and descriptions.",
+	schema={"type": "object", "properties": {}},
+)
+async def handle_list_all_skins(arguments: Dict[str, Any]):
+	skins = mystique_engine.get_all_skins()
+	output = "🔴 **BÜNKER LORE SKIN CATALOG**\n"
+	output += "--- Aquí no solo cambias de tono, cambias de realidad. ---\n\n"
+	
+	# Categorized Output
+	categories = {
+		"Operativo": ["enterprise_core", "760", "the_accountant", "vantablack"],
+		"Red & Distopía": ["matrix", "cyberpunk", "bladerunner", "wintermute", "gits"],
+		"Sci-Fi & Filosofía": ["dune", "40k", "2001", "tars", "oracle"],
+		"Empatía & Resonancia": ["her", "joi", "ron_s_gone_wrong", "creator", "exmachina", "alita"],
+		"Guardianes": ["terminator"]
+	}
+
+	for cat, members in categories.items():
+		output += f"### 🛠️ {cat}\n"
+		for skin_id in members:
+			data = skins.get(skin_id)
+			if data:
+				output += f"- **{skin_id.upper()}** [{data.get('chroma', 'gray')}]: {data.get('personality', 'N/A')[:80]}...\n"
+		output += "\n"
+
+	output += "---\n*Usa `red-pill mode [nombre]` para habitar una identidad.*"
+	return [types.TextContent(type="text", text=output)]
+
+
+@registry.register(
+	name="mystique_suggest_skin",
+	description="Suggest a skin based on current emotional mood and operational context.",
+	schema={
+		"type": "object",
+		"properties": {
+			"strategy": {"type": "string", "enum": ["affinity", "complementary", "contrast"], "default": "affinity"},
+			"context": {"type": "string", "enum": ["work", "personal"], "default": "work"},
+		},
+	},
+)
+async def handle_mystique_suggest_skin(arguments: Dict[str, Any]):
+	suggestion = mystique_engine.suggest_skin(strategy=arguments.get("strategy", "affinity"), context=arguments.get("context", "work"))
+	name = suggestion["name"]
+	data = suggestion["data"]
+	output = f"MYSTIQUE SUGGESTION: {name.upper()}\n"
+	output += f"Rationale: Balanced for {arguments.get('context', 'work')} using {arguments.get('strategy', 'affinity')} logic.\n"
+	output += f"Personality: {data.get('personality', 'N/A')}"
+	return [types.TextContent(type="text", text=output)]
 
 
 @server.list_tools()
