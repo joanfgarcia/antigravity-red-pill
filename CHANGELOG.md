@@ -1,5 +1,18 @@
 # Changelog: Red Pill Protocol
 
+## [6.0.0a3] - 2026-03-13
+### 🛡️ Sovereign CNS & The Shadow Scribe (Anti-Amnesia)
+- **[FEAT] Persistent Sovereign Daemon**: Fully implemented `redpill.service` (systemd) for background memory orchestration. The system now lives beyond the lifecycle of any single agent.
+- **[FEAT] Shadow Scribe Protocol**: Introduced a name-agnostic, structural dialogue extraction engine. Captures conversations automatically from `walkthrough.md` with zero token cost.
+- **[FEAT] Anti-Amnesia Hub**: Centralized fast-memory buffer (`interaction_memories`) with automatic consolidation into long-term `social_memories` via the Lazarus Pulse.
+- **[FEAT] Bünker Live Monitor**: Added `scripts/bunker_monitor.py` for real-time visual validation of engram ingestion.
+- **[IMPR] Name-Agnostic Extraction**: Refactored dialogue logic to be 100% persona-agnostic, successfully verified with "Titanium" and "Aleth" identities.
+
+### 🧪 770 Engineering Certification
+- **[QA] Grand Audit Pass**: Achieved 100% compliance with the 770 standards. 640/640 tests PASSED with zero linting or formatting violations.
+- **[SEC] Sound of Silence Enforcement**: Eliminated all hardcoded paths and ornamental code noise across the entire stack.
+- **[FIX] Mypy Typed Implementation**: Resolved critical type errors in the SIP proxy for production-grade stability.
+
 ## [6.0.0a2] - 2026-03-09
 ### 💧 Be Water Architecture (Hardware Sovereignty)
 - **[DOCS] Hardware Selection Guide**: Added `HARDWARE_MODELS_BE_WATER.md` explicitly mapping VRAM constraints to optimal GGUF models (High-End: MoE, Sweet Spot: Mistral/Samantha, Low-End/Edge: Phi-3-Mini 128k).

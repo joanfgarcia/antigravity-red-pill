@@ -5,7 +5,7 @@ This file serves as a synchronization point for all agents working on the Red Pi
 
 ## Current State (2026-03-10)
 - **Stable Version**: `5.6.3` (Released 2024, Certified by Claude).
-- **Development Version**: `6.0.0a2` (Red Pill Synthesis Phase).
+- **Development Version**: `6.0.0a3` (Sovereign Synthesis Phase).
 - **Core Branch**: `v6.0-prep-fsrs-dna` (Active development).
 - **Recent Milestones**:
 	- [x] Implementation of the "Anti-Amnesia" Persistence Layer (2026-03-10).

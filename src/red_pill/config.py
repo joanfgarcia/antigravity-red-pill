@@ -68,6 +68,12 @@ DAEMON_SOCKET_PATH = os.getenv("DAEMON_SOCKET_PATH", os.path.join(_run_dir, "red
 # SEC-004: Dedicated sidecar auth key (Must be random and separate from QDRANT_API_KEY)
 SIDECAR_AUTH_KEY = os.getenv("SIDECAR_AUTH_KEY", "")
 
+# SENSOR & BRAIN CONFIG
+BRAIN_PATH = os.path.join(os.path.expanduser("~"), ".gemini/antigravity/brain/a147efbd-4ab8-4e4d-90ce-b6295177b697")
+# SOVEREIGN INFERENCE PROXY (SIP)
+SIP_ENABLED = os.getenv("SIP_ENABLED", "True").lower() == "true"
+SIP_SOCKET_PATH = os.getenv("SIP_SOCKET_PATH", os.path.join(_run_dir, "red_pill_sip.sock"))
+
 # MODELS
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
 VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", "384"))

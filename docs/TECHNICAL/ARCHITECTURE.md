@@ -1,7 +1,7 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v6.0.0a2 (Sovereign Awakening)
+**System Version**: v6.0.0a3 (Sovereign CNS)
 **Analyst**: The Architect
-**Date**: 2026-02-27
+**Date**: 2026-03-13
 
 
 ## 1. Executive Summary
@@ -17,6 +17,8 @@ The Red Pill Protocol v5.6.3 has achieved stability and functional alignment wit
 - **[ENHANCED v6.0.0] Evocative Memory Cascading (Hybrid Vector-Graph)**: Replaced strictly radial memory recall with a biologically-aligned cascading mechanism. N-Hop associations forged during Oneiromancy are now physically fetched at recall time (`search_and_reinforce`). Associated payloads are labeled transitorily (`_is_evoked=True`) to maintain Pydantic `EngramPayload` integrity while granting the agent genuine "train of thought" chaining.
 - **[ENHANCED v6.0.0] Sovereign Heartbeat (Lazarus Pulse)**: The system now features an autonomous, multi-threaded background service (`LazarusPulse`). This service performs "Maintenance Rituals" (Absence Guard sync, DB connectivity verification) and "Dream Rituals" independently of operator prompts.
 - **[ENHANCED v6.0.0] Milvus Lite (Local Sanctuary)**: Collective memory prototyping no longer requires distributed infrastructure. Milvus Lite provides a high-speed, local-file-based vector substrate for HiveMind logic without network exposure, maintaining absolute sovereignty.
+- **[NEW v6.0.0a3] Persistent Sovereign CNS (systemd)**: The core sidecar and heartbeat rituals are now encapsulated in a system-level service (`redpill.service`). This ensures that the Bünker is always listening and the metabolic rituals (consolidation, culling) run proactively, independent of the user's IDE state.
+- **[NEW v6.0.0a3] Structural Shadow Scribe (Anti-Amnesia)**: Implemented a name-agnostic, zero-token dialogue extraction ritual. By structural analysis of artifacts (`walkthrough.md`), the system captures interactions based on structural cues ('> ' prefixes) rather than hardcoded labels, allowing total persona agnosticism (e.g., Titanium, Aleth, or Operator).
 
 ## 3. Structural Analysis
 
