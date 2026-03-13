@@ -159,14 +159,21 @@ class CloudVault:
 
 	def upload_kit(self, file_path: str) -> Optional[str]:
 		"""
-		Encrypts and transmits a Soul Kit to the vault.
-		Implements Quota-Aware Monitoring (v5.6.1):
-		Warns the Operator if space for the next N copies is running low.
+		Encrypts (if needed) and transmits a Soul Kit to the vault.
+		Implements Quota-Aware Monitoring (v5.6.1).
 		"""
 		if not self.enabled or not self.service:
 			return None
 
-		encrypted_path = self._encrypt_kit(file_path)
+		was_already_encrypted = file_path.endswith(".gpg")
+		encrypted_path: Optional[str] = None
+
+		if was_already_encrypted:
+			encrypted_path = file_path
+			logger.info("Soul Kit already encrypted. Skipping redundant AES-256 layer.")
+		else:
+			encrypted_path = self._encrypt_kit(file_path)
+
 		if not encrypted_path:
 			return None
 
@@ -210,7 +217,9 @@ class CloudVault:
 			logger.error(f"Failed to transmit encrypted Soul Kit to Cloud: {e}")
 			return None
 		finally:
-			if os.path.exists(encrypted_path):
+			# Only cleanup if WE created the encrypted file.
+			# If it was already encrypted (local persistence), keep it.
+			if encrypted_path and not was_already_encrypted and os.path.exists(encrypted_path):
 				try:
 					os.remove(encrypted_path)
 				except OSError:
