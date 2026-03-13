@@ -132,6 +132,8 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 OPERATOR_DISPLAY_NAME = os.getenv("USER_NAME", "Operator")
 
 # NOTIFICATIONS
+# Set to 'False' to silence the system entirely
+NOTIFICATIONS_ENABLED = os.getenv("NOTIFICATIONS_ENABLED", "True").lower() == "true"
 # Set to 'True' to enable the melodic pulse (speaker-test)
 NOTIFICATION_SOUND = os.getenv("NOTIFICATION_SOUND", "False").lower() == "true"
 

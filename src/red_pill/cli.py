@@ -369,7 +369,7 @@ def main() -> None:
 				from red_pill import __version__
 
 				print(f"\n[OK] Flow '{args.flow}' initialized on disk (Notebook mode).")
-				notify_user("Project Initialized", f"Red Pill v{__version__} + specs.md {args.flow} flow is now live.")
+				notify_user("Project Initialized", f"Red Pill v{__version__} + specs.md {args.flow} flow is now live.", category="init")
 			except Exception as e:
 				print(f"[FAIL] Initialization failed: {e}")
 			return
@@ -450,7 +450,7 @@ def main() -> None:
 				from red_pill.utils.observer import notify_user
 
 				if not args.silent:
-					notify_user(args.title, args.message, sound=args.sound)
+					notify_user(args.title, args.message, sound=args.sound, category="manual")
 
 				# Record memory of the signal
 				manager.add_memory(

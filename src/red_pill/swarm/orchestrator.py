@@ -70,7 +70,7 @@ class GruOrchestrator:
 		message = f"Swarm Task Complete: {task}. {success_count}/{len(results)} minions succeeded."
 
 		# Sensory Signal (User) - Silent by default per Operator directive
-		notify_user(title="Sovereign Swarm", message=message, sound=False)
+		notify_user(title="Sovereign Swarm", message=message, sound=False, category="swarm")
 
 		# Memory Signal (Agent) - For Turn-Zero recovery
 		try:
