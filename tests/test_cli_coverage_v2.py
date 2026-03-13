@@ -1,6 +1,6 @@
 import argparse
 import subprocess
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 
@@ -87,7 +87,7 @@ def test_main_signal_logic():
 		with patch("red_pill.utils.observer.notify_user") as mock_notify:
 			with patch("red_pill.cli.MemoryManager"):
 				main()
-				mock_notify.assert_any_call("Test Title", "Test message", sound=True)
+				mock_notify.assert_any_call("Test Title", "Test message", sound=True, category="manual")
 				# mock_mgr.return_value.add_memory.assert_called_once()
 
 
@@ -125,4 +125,4 @@ def test_main_init_command():
 				main()
 				mock_run.assert_called_once()
 				assert "specsmd@latest" in mock_run.call_args[0][0]
-				mock_notify.assert_called_once()
+				mock_notify.assert_called_once_with("Project Initialized", ANY, category="init")

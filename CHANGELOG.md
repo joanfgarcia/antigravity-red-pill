@@ -13,6 +13,10 @@
 - **[SEC] Sound of Silence Enforcement**: Eliminated all hardcoded paths and ornamental code noise across the entire stack.
 - **[FIX] Mypy Typed Implementation**: Resolved critical type errors in the SIP proxy for production-grade stability.
 
+### 🔔 Sensory & Operational Comfort
+- **[FEAT] Synchronous Notification Grouping**: Refactored the notification engine to use "In-Place" updates. Multiple swarm or system alerts now update a single bubble instead of flooding the desktop.
+- **[FEAT] Global Silence Toggle**: Added `NOTIFICATIONS_ENABLED` to the configuration. Operators can now deactivate all system-level desktop notifications via the `.env` file for high-concentration sessions.
+
 ## [6.0.0a2] - 2026-03-09
 ### 💧 Be Water Architecture (Hardware Sovereignty)
 - **[DOCS] Hardware Selection Guide**: Added `HARDWARE_MODELS_BE_WATER.md` explicitly mapping VRAM constraints to optimal GGUF models (High-End: MoE, Sweet Spot: Mistral/Samantha, Low-End/Edge: Phi-3-Mini 128k).
