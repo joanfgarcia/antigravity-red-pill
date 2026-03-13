@@ -18,9 +18,8 @@ class ShadowScribe:
 
 	def __init__(self, brain_path):
 		self.brain_path = brain_path
-		self.walkthrough_path = os.path.join(brain_path, "walkthrough.md")
 		self.memory_mgr = MemoryManager()
-		self.last_content = ""
+		self.last_contents = {}  # dict per walkthrough path
 		self.processed_hashes = set()
 
 	def _get_block_hash(self, prompt, response):
@@ -28,22 +27,31 @@ class ShadowScribe:
 		data = f"{prompt}|||{response}".encode("utf-8")
 		return hashlib.md5(data).hexdigest()
 
-	def execute_ritual(self):
-		"""Extracts dialogue from walkthrough.md and commits to Bünker."""
-		if not os.path.exists(self.walkthrough_path):
-			return
+	def _discover_walkthroughs(self):
+		"""Scans subdirectories for walkthrough.md files."""
+		walkthroughs = []
+		if not os.path.exists(self.brain_path):
+			return walkthroughs
 
+		for entry in os.scandir(self.brain_path):
+			if entry.is_dir():
+				wt_path = os.path.join(entry.path, "walkthrough.md")
+				if os.path.exists(wt_path):
+					walkthroughs.append(wt_path)
+		return walkthroughs
+
+	def _process_walkthrough(self, walkthrough_path):
+		"""Processes an individual walkthrough file."""
 		try:
-			with open(self.walkthrough_path, "r") as f:
+			with open(walkthrough_path, "r") as f:
 				content = f.read()
 
-			if content == self.last_content:
+			if content == self.last_contents.get(walkthrough_path):
 				return
 
-			self.last_content = content
+			self.last_contents[walkthrough_path] = content
 
 			# Structural Extract: Find ### 🗨️ Diálogo Reciente section
-			# Then look for ANY pair of lines starting with '> '
 			matches = re.finditer(r"### 🗨️ Diálogo Reciente\n(.*?)(?=\n###|\Z)", content, re.DOTALL)
 
 			for match in matches:
@@ -51,14 +59,9 @@ class ShadowScribe:
 				dialogue_lines = [line.strip() for line in block.split("\n") if line.strip().startswith(">")]
 
 				if len(dialogue_lines) >= 2:
-					# Symmetrical Agnostic Extraction:
-					# Line 0: PROMPT / Line 1+: RESPONSE
-
-					# Strip any label like '> NAME:' or just '>'
 					def clean_line(line):
-						# Remove leading '> ' and any 'Label: '
 						clean = re.sub(r"^>\s*", "", line)
-						clean = re.sub(r"^[^:]+:\s*", "", clean)  # Remove 'USER:', 'AGENT:', etc.
+						clean = re.sub(r"^[^:]+:\s*", "", clean)
 						return clean.strip()
 
 					prompt = clean_line(dialogue_lines[0])
@@ -72,12 +75,17 @@ class ShadowScribe:
 						try:
 							self.memory_mgr.record_interaction_pair(prompt, response, role="assistant")
 							self.processed_hashes.add(block_hash)
-							logger.info("Shadow Scribe: Ingested unique label-agnostic dialogue.")
+							logger.info(f"Shadow Scribe: Ingested dialogue from {os.path.basename(os.path.dirname(walkthrough_path))}")
 						except Exception as e:
-							logger.error(f"Scribe: Sync failed: {e}")
+							logger.error(f"Scribe: Sync failed for {walkthrough_path}: {e}")
 
 		except Exception as e:
-			logger.error(f"Shadow Scribe Ritual Failure: {e}")
+			logger.error(f"Shadow Scribe failed processing {walkthrough_path}: {e}")
+
+	def execute_ritual(self):
+		"""Discovers and processes all available walkthroughs."""
+		for wt_path in self._discover_walkthroughs():
+			self._process_walkthrough(wt_path)
 
 
 def run_scribe_service(brain_path):
