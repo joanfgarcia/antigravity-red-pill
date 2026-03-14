@@ -9,7 +9,7 @@
 - **[DOCS] Swarm Documentation Suite**: Added Technical Specs, User Manual, and Integration Guide for the new messaging architecture.
 - **[ARCH] Dual-Path Communication**: Differentiated between **Private Pulse** (E2EE/P2P) for free dialogue and **Canonical Hive** (Consensual/Milvus) for audited knowledge.
 - **[SEC] X25519/XEdDSA Consolidation**: Unified all cryptographic identities under X25519. Digital signatures for Hive notarization now use XEdDSA to leverage the same identity key as MLS.
-- **[FEAT] Milvus Consensus Ledger**: Prototype logic for in-situ engram auditing and multi-signature notarization directly within the Milvus storage layer.
+- **[FEAT] Milvus Dock (Phase 5.1)**: Implemented `MilvusTransport` as a high-visibility consensus ledger and local dock for offgrid operations. Verified with Milvus-Lite.
 
 ## [6.0.0a3] - 2026-03-13
 ### 🛡️ Sovereign CNS & The Shadow Scribe (Anti-Amnesia)
