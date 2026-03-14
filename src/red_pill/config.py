@@ -248,8 +248,8 @@ LAZARUS_STATE_FILE = os.path.join(IA_DIR, "storage", "lazarus_state.json")
 
 # SEMANTIC RESONANCE (v6.0 - Phase 7)
 RESONANCE_ENABLED = os.getenv("RESONANCE_ENABLED", "True").lower() == "true"
-RESONANCE_THRESHOLD = float(os.getenv("RESONANCE_THRESHOLD", "0.4")) # Similarity distance threshold
-RESONANCE_INTERVAL = int(os.getenv("RESONANCE_INTERVAL", "600")) # Polling interval
+RESONANCE_THRESHOLD = float(os.getenv("RESONANCE_THRESHOLD", "0.4"))  # Similarity distance threshold
+RESONANCE_INTERVAL = int(os.getenv("RESONANCE_INTERVAL", "600"))  # Polling interval
 # Overwrite legacy if needed
 if os.getenv("METABOLISM_STATE_FILE"):
 	METABOLISM_STATE_FILE = str(os.getenv("METABOLISM_STATE_FILE"))

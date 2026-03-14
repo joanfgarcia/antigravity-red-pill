@@ -3,6 +3,7 @@ import logging
 import os
 import re
 import time
+from typing import List
 
 from red_pill.memory import MemoryManager
 
@@ -29,7 +30,7 @@ class ShadowScribe:
 
 	def _discover_walkthroughs(self):
 		"""Scans subdirectories for walkthrough.md files."""
-		walkthroughs = []
+		walkthroughs: List[str] = []
 		if not os.path.exists(self.brain_path):
 			return walkthroughs
 
@@ -59,6 +60,7 @@ class ShadowScribe:
 				dialogue_lines = [line.strip() for line in block.split("\n") if line.strip().startswith(">")]
 
 				if len(dialogue_lines) >= 2:
+
 					def clean_line(line):
 						clean = re.sub(r"^>\s*", "", line)
 						clean = re.sub(r"^[^:]+:\s*", "", clean)

@@ -25,14 +25,9 @@ class SwarmCrypto:
 		# For unified identity, we expose the underlying 32-byte seed if needed,
 		# but here we follow standard raw output.
 		priv_bytes = private_key.private_bytes(
-			encoding=serialization.Encoding.Raw,
-			format=serialization.PrivateFormat.Raw,
-			encryption_algorithm=serialization.NoEncryption()
+			encoding=serialization.Encoding.Raw, format=serialization.PrivateFormat.Raw, encryption_algorithm=serialization.NoEncryption()
 		)
-		pub_bytes = public_key.public_bytes(
-			encoding=serialization.Encoding.Raw,
-			format=serialization.PublicFormat.Raw
-		)
+		pub_bytes = public_key.public_bytes(encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw)
 		return priv_bytes, pub_bytes
 
 	@staticmethod
@@ -45,23 +40,13 @@ class SwarmCrypto:
 
 		# Deriving X25519 (Encryption)
 		x_priv = x25519.X25519PrivateKey.from_private_bytes(actual_seed)
-		x_pub = x_priv.public_key().public_bytes(
-			encoding=serialization.Encoding.Raw,
-			format=serialization.PublicFormat.Raw
-		)
+		x_pub = x_priv.public_key().public_bytes(encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw)
 
 		# Deriving Ed25519 (Signatures)
 		ed_priv = ed25519.Ed25519PrivateKey.from_private_bytes(actual_seed)
-		ed_pub = ed_priv.public_key().public_bytes(
-			encoding=serialization.Encoding.Raw,
-			format=serialization.PublicFormat.Raw
-		)
+		ed_pub = ed_priv.public_key().public_bytes(encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw)
 
-		return {
-			"seed": actual_seed,
-			"x25519_pub": x_pub,
-			"ed25519_pub": ed_pub
-		}
+		return {"seed": actual_seed, "x25519_pub": x_pub, "ed25519_pub": ed_pub}
 
 	@staticmethod
 	def sign_notary(private_seed: bytes, data: bytes) -> bytes:

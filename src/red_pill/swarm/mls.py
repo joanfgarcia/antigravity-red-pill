@@ -11,8 +11,8 @@ class SovereignGroup:
 
 	def __init__(self, group_id: str):
 		self.group_id = group_id
-		self.members: Dict[str, bytes] = {} # agent_identity -> public_key
-		self.tree_nodes: List[Optional[bytes]] = [] # Binary tree representation
+		self.members: Dict[str, bytes] = {}  # agent_identity -> public_key
+		self.tree_nodes: List[Optional[bytes]] = []  # Binary tree representation
 
 	def add_member(self, agent_identity: str, public_key: bytes):
 		self.members[agent_identity] = public_key
@@ -33,10 +33,10 @@ class SovereignGroup:
 			next_level = []
 			for i in range(0, len(nodes), 2):
 				if i + 1 < len(nodes):
-					parent = SwarmCrypto.combine_nodes(nodes[i], nodes[i+1])
+					parent = SwarmCrypto.combine_nodes(nodes[i], nodes[i + 1])
 					next_level.append(parent)
 				else:
-					next_level.append(nodes[i]) # Odd node propagates up
+					next_level.append(nodes[i])  # Odd node propagates up
 			nodes = next_level
 
 		self.root_secret = nodes[0]

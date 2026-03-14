@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v6.0.0a3 (Sovereign CNS)
+**System Version**: v6.1.0a1 (Sovereign CNS)
 **Analyst**: The Architect
 **Date**: 2026-03-13
 

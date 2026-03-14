@@ -235,7 +235,7 @@ class LazarusPulse:
 
 			# PoC Focus Vector: Sovereignty / Swarm Architecture
 			# In a full impl, this vector would be dynamically updated via LLM focus.
-			poc_vector = [0.1] * cfg.VECTOR_SIZE # Dummy focus
+			poc_vector = [0.1] * cfg.VECTOR_SIZE  # Dummy focus
 
 			matches = await asyncio.to_thread(observer.check_resonance, hub_vector=poc_vector)
 

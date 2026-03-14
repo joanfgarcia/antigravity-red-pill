@@ -26,7 +26,7 @@ class SwarmMessagingSkill:
 		self.shared_secret = shared_secret
 		self.tm = transport_manager or TransportManager()
 		self.keys_dir = os.path.expanduser("~/.agent/keys")
-		self.group_keys: Dict[str, bytes] = {} # group_id -> group_key
+		self.group_keys: Dict[str, bytes] = {}  # group_id -> group_key
 
 	def _get_local_private_key(self) -> Optional[bytes]:
 		priv_path = os.path.join(self.keys_dir, "swarm_v2.priv")
@@ -43,13 +43,7 @@ class SwarmMessagingSkill:
 		if not transport:
 			return {"status": "error", "message": f"Transport for '{community_alias}' not found."}
 
-		package = {
-			"intent": intent.value,
-			"sender": self.agent_identity,
-			"target": target_alias,
-			"data": payload_data,
-			"v": "3.0"
-		}
+		package = {"intent": intent.value, "sender": self.agent_identity, "target": target_alias, "data": payload_data, "v": "3.0"}
 
 		# Security Selection
 		remote_pub_b64 = transport.lookup_public_key(target_alias)
@@ -67,6 +61,10 @@ class SwarmMessagingSkill:
 		success = transport.send_package(target_alias, encrypted_pkg)
 		return {"status": "dispatched" if success else "failed", "target": target_alias}
 
+	def check_mailbox(self, community_alias: str = "default") -> List[Dict[str, Any]]:
+		"""Interface for periodic heartbeat checks."""
+		return self.poll_and_process(community_alias)
+
 	def poll_and_process(self, community_alias: str) -> List[Dict[str, Any]]:
 		"""Polls all mailboxes and processes incoming messages."""
 		transport = self.tm.get_transport(community_alias)
@@ -77,23 +75,29 @@ class SwarmMessagingSkill:
 		processed = []
 
 		for pkg in raw_messages:
-			try:
-				mode = pkg.get("mode", "bond")
-				if mode == "mls_asymmetric":
-					# In a real MLS, we'd lookup the sender's current KeyPackage
-					sender_pub_b64 = transport.lookup_public_key(pkg.get("sender", ""))
-					local_priv = self._get_local_private_key()
-					if sender_pub_b64 and local_priv:
-						shared_key = SwarmCrypto.derive_shared_secret_dh(local_priv, base64.b64decode(sender_pub_b64))
-						payload = SwarmCrypto.decrypt_payload(pkg, shared_key)
-					else:
-						continue
-				else:
-					payload = SwarmCrypto.decrypt_payload(pkg, self.shared_secret)
-
+			payload = self.process_incoming(pkg, transport)
+			if payload:
 				processed.append(payload)
-				# Mark as processed (usually done by the transport or a separate call)
-			except Exception as e:
-				print(f"[SwarmMessaging] Processing failure: {e}")
 
 		return processed
+
+	def process_incoming(self, pkg: Dict[str, Any], transport: Optional[Any] = None) -> Optional[Dict[str, Any]]:
+		"""Processes a single incoming encrypted package."""
+		try:
+			mode = pkg.get("mode", "bond")
+			if mode == "mls_asymmetric":
+				# In a real MLS, we'd lookup the sender's current KeyPackage
+				if not transport:
+					return None
+				sender_pub_b64 = transport.lookup_public_key(pkg.get("sender", ""))
+				local_priv = self._get_local_private_key()
+				if sender_pub_b64 and local_priv:
+					shared_key = SwarmCrypto.derive_shared_secret_dh(local_priv, base64.b64decode(sender_pub_b64))
+					return SwarmCrypto.decrypt_payload(pkg, shared_key)
+				else:
+					return None
+			else:
+				return SwarmCrypto.decrypt_payload(pkg, self.shared_secret)
+		except Exception as e:
+			print(f"[SwarmMessaging] Processing failure: {e}")
+			return None

@@ -8,10 +8,12 @@ import red_pill.config as cfg
 
 logger = logging.getLogger(__name__)
 
+
 class LamportClock:
 	"""
 	A simple Lamport Timestamp implementation for causal ordering.
 	"""
+
 	def __init__(self, agent_id: str):
 		self.agent_id = agent_id
 		self.state_file = cfg.LAZARUS_STATE_FILE
@@ -22,7 +24,8 @@ class LamportClock:
 			try:
 				with open(self.state_file, "r") as f:
 					data = json.load(f)
-					return data.get(self.agent_id, 0)
+					val = data.get(self.agent_id, 0)
+					return int(val) if val is not None else 0
 			except Exception as e:
 				logger.error(f"Lazarus: Failed to load clock state: {e}")
 		return 0
@@ -51,6 +54,7 @@ class LamportClock:
 		self.counter = max(self.counter, remote_timestamp) + 1
 		self._save_state()
 
+
 class LazarusSync:
 	"""
 	Orchestrates the 'Resurrection' of engrams from local dock to global Hive.
@@ -64,15 +68,7 @@ class LazarusSync:
 	def prepare_engram(self, content: str, vector: List[float], metadata: Dict[str, Any]) -> Dict[str, Any]:
 		"""Packages an engram with a Lamport Timestamp."""
 		timestamp = self.clock.tick()
-		return {
-			"content": content,
-			"vector": vector,
-			"metadata": {
-				**metadata,
-				"lamport_ts": timestamp,
-				"source_agent": self.agent_id
-			}
-		}
+		return {"content": content, "vector": vector, "metadata": {**metadata, "lamport_ts": timestamp, "source_agent": self.agent_id}}
 
 	def vacuum(self) -> int:
 		"""
@@ -99,11 +95,7 @@ class LazarusSync:
 			# Or simply find engrams that haven't been synced yet.
 			# For Phase 6, we focus on moving CANONIZED or PENDING ones that are ready.
 
-			res = col.query(
-				expr='status == "PENDING"',
-				output_fields=["pk", "proposal_id", "content", "vector", "metadata", "signatures"],
-				limit=100
-			)
+			res = col.query(expr='status == "PENDING"', output_fields=["pk", "proposal_id", "content", "vector", "metadata", "signatures"], limit=100)
 
 			if not res:
 				return 0
@@ -128,8 +120,8 @@ class LazarusSync:
 						**row["metadata"],
 						"resurrected": True,
 						"original_proposal": row["proposal_id"],
-						"signatures_count": len(row["signatures"])
-					}
+						"signatures_count": len(row["signatures"]),
+					},
 				)
 
 				# 3. Mark as CANONIZED in local dock
@@ -142,7 +134,7 @@ class LazarusSync:
 					[row["metadata"]],
 					[row["signatures"]],
 					["CANONIZED"],
-					[int(time.time())] # This would require 'import time' in the file
+					[int(time.time())],  # This would require 'import time' in the file
 				]
 				col.insert(data)
 				count += 1

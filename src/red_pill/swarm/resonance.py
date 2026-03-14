@@ -6,6 +6,7 @@ from red_pill.hive import HiveMind
 
 logger = logging.getLogger(__name__)
 
+
 class ResonanceObserver:
 	"""
 	The Semantic Radar.
@@ -26,11 +27,7 @@ class ResonanceObserver:
 		try:
 			# Search with a strict threshold
 			# Milvus distance (L2): lower is closer
-			experiences = self.hive.sync_from_hive(
-				query_vector=hub_vector,
-				collection_name=collection_name,
-				limit=5
-			)
+			experiences = self.hive.sync_from_hive(query_vector=hub_vector, collection_name=collection_name, limit=5)
 
 			resonating = []
 			for exp in experiences:

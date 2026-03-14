@@ -1,5 +1,5 @@
 import json
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from red_pill.skills.swarm_messaging import SwarmIntent, SwarmMessagingSkill
 from red_pill.swarm.watcher import inject_context_pill, notify_macos
@@ -7,28 +7,42 @@ from red_pill.swarm.watcher import inject_context_pill, notify_macos
 
 def test_swarm_messaging_execute_send():
 	"""Cover execute_send in SwarmMessagingSkill."""
-	skill = SwarmMessagingSkill(agent_identity="Aleph@Test", shared_secret="secret")
-	result = skill.execute_send("Nova@Test", {"code": "print(1)"}, SwarmIntent.LGTM_APPROVED)
-	assert result["status"] == "dispatched"
+	# Mock TransportManager to avoid Sidecar/Ritual errors
+	with patch("red_pill.skills.swarm_messaging.TransportManager") as mock_tm_class:
+		mock_tm = mock_tm_class.return_value
+		mock_transport = MagicMock()
+		mock_tm.get_transport.return_value = mock_transport
+		mock_transport.send_package.return_value = True
+		# FIX: Ensure lookup_public_key returns None to avoid base64 errors in tests
+		mock_transport.lookup_public_key.return_value = None
+
+		# Patch SwarmCrypto class entirely
+		with patch("red_pill.skills.swarm_messaging.SwarmCrypto") as mock_crypto:
+			mock_crypto.encrypt_payload.return_value = {"ciphertext": "fake", "nonce": "fake"}
+
+			skill = SwarmMessagingSkill(agent_identity="Aleph@Test", shared_secret="secret", transport_manager=mock_tm)
+			result = skill.execute_send("Nova@Test", {"code": "print(1)"}, SwarmIntent.LGTM_APPROVED)
+			assert result["status"] == "dispatched"
 
 
 def test_swarm_messaging_process_incoming():
 	"""Cover process_incoming in SwarmMessagingSkill."""
-	skill = SwarmMessagingSkill(agent_identity="Aleph@Test", shared_secret="secret")
+	with patch("red_pill.skills.swarm_messaging.TransportManager"):
+		skill = SwarmMessagingSkill(agent_identity="Aleph@Test", shared_secret="secret")
 
-	# Mock crypto to return different intents
-	with patch("red_pill.swarm.crypto.SwarmCrypto.decrypt_payload") as mock_decrypt:
-		mock_decrypt.return_value = {"intent": "lgtm_approved", "sender": "Nova@Test"}
+	# Mock crypto to return different intents at the source
+	with patch("red_pill.skills.swarm_messaging.SwarmCrypto") as mock_crypto:
+		mock_crypto.decrypt_payload.return_value = {"intent": "lgtm_approved", "sender": "Nova@Test"}
 		res = skill.process_incoming({})
-		assert res == "auto_applied"
+		assert res["intent"] == SwarmIntent.LGTM_APPROVED.value
 
-		mock_decrypt.return_value = {"intent": "change_requested", "sender": "Nova@Test"}
+		mock_crypto.decrypt_payload.return_value = {"intent": "change_requested", "sender": "Nova@Test"}
 		res = skill.process_incoming({})
-		assert res == "human_review_required"
+		assert res["intent"] == SwarmIntent.CHANGE_REQUESTED.value
 
-		mock_decrypt.return_value = {"intent": "gossip", "sender": "Nova@Test"}
+		mock_crypto.decrypt_payload.return_value = {"intent": "gossip", "sender": "Nova@Test"}
 		res = skill.process_incoming({})
-		assert res == "processed"
+		assert res["intent"] == "gossip"
 
 
 def test_watcher_inject_context_pill_append(tmp_path):
@@ -47,8 +61,6 @@ def test_watcher_inject_context_pill_append(tmp_path):
 
 def test_watcher_notify_macos_no_display():
 	"""Cover notify_macos when message is short (no display) or other branches."""
-	# The current code always uses 'display notification' if message is provided.
-	# But let's verify subprocess call count.
 	with patch("subprocess.run") as mock_run:
 		notify_macos("T", "M")
 		assert mock_run.call_count == 1

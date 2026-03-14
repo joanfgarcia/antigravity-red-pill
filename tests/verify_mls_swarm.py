@@ -31,13 +31,7 @@ def test_mls_swarm_e2ee():
 	config_path = os.path.join(config_dir, "swarm_communities.json")
 
 	# Mocking a community configuration
-	mock_config = {
-		"test_hub": {
-			"db_url": "https://mock-swarm.firebaseio.com",
-			"credential_path": "/tmp/mock_creds.json",
-			"type": "firebase"
-		}
-	}
+	mock_config = {"test_hub": {"db_url": "https://mock-swarm.firebaseio.com", "credential_path": "/tmp/mock_creds.json", "type": "firebase"}}
 	with open(config_path, "w") as f:
 		json.dump(mock_config, f)
 
@@ -75,6 +69,7 @@ def test_mls_swarm_e2ee():
 
 	# Verification of TreeKEM logic
 	from red_pill.swarm.mls import SovereignGroup
+
 	group = SovereignGroup("test_group")
 	group.add_member("Aleph", pub_aleph)
 	group.add_member("Nova", pub_nova)
@@ -83,6 +78,7 @@ def test_mls_swarm_e2ee():
 	print(f"✅ MLS Group Key Derived: {base64.b64encode(key).decode()[:16]}...")
 
 	print("--- Verification Complete ---")
+
 
 if __name__ == "__main__":
 	test_mls_swarm_e2ee()

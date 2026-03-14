@@ -74,7 +74,8 @@ class FirebaseTransport(SwarmTransport):
 
 			for node_id, data in nodes.items():
 				if data.get("alias") == alias:
-					return data.get("public_key")
+					key = data.get("public_key")
+					return str(key) if key else None
 			return None
 		except Exception as e:
 			print(f"[FirebaseTransport] Lookup failed: {e}")

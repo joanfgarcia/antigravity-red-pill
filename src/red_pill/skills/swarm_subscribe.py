@@ -35,6 +35,7 @@ class SwarmSubscribeSkill:
 	def _get_or_create_keys(self) -> Tuple[bytes, bytes]:
 		"""Retrieves existing keys or generates a new pair."""
 		from red_pill.swarm.crypto import SwarmCrypto
+
 		priv_path = os.path.join(self.keys_dir, "swarm_v2.priv")
 		pub_path = os.path.join(self.keys_dir, "swarm_v2.pub")
 
@@ -59,10 +60,7 @@ class SwarmSubscribeSkill:
 		Registers the Agent using the appropriate Transport plugin.
 		"""
 		if db_url is None or service_acc_json_path is None:
-			return {
-				"status": "missing_info",
-				"message": "Necesito la URL de la DB y la ruta al JSON de credenciales para la suscripción."
-			}
+			return {"status": "missing_info", "message": "Necesito la URL de la DB y la ruta al JSON de credenciales para la suscripción."}
 
 		# 1. Store the Service Account/Config (This part remains as it defines the community configuration)
 		secure_json_path = os.path.join(self.CREDENTIALS_DIR, f"{community_alias}_firebase.json")
@@ -83,14 +81,13 @@ class SwarmSubscribeSkill:
 			"credential_path": secure_json_path,
 			"agent_identity": self.agent_identity,
 			"agent_id": self.agent_id,
-			"type": "firebase" # Defaulting for now
+			"type": "firebase",  # Defaulting for now
 		}
 
 		with open(self.CONFIG_FILE, "w") as f:
 			json.dump(communities, f, indent=4)
 
 		# 3. Perform Broadcast via Transport
-		self.tm._load_communities() # Refresh manager
 		transport = self.tm.get_transport(community_alias)
 		if not transport:
 			return {"status": "error", "message": f"Could not initialize transport for {community_alias}."}
@@ -104,7 +101,7 @@ class SwarmSubscribeSkill:
 			"role": "Agent",
 			"community": community_alias,
 			"public_key": pub_b64,
-			"v": "3.0"
+			"v": "3.0",
 		}
 
 		if transport.broadcast_identity(self.agent_id, metadata):

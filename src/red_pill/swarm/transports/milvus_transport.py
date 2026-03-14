@@ -4,13 +4,14 @@ from typing import Any, Dict, List, Optional
 try:
 	from pymilvus import Collection, CollectionSchema, DataType, FieldSchema, utility
 except ImportError:
-	Collection = None # type: ignore
+	Collection = None  # type: ignore
 
 import red_pill.config as cfg
 from red_pill.hive import HiveMind
 from red_pill.swarm.transport import SwarmTransport
 
 logger = logging.getLogger(__name__)
+
 
 class MilvusTransport(SwarmTransport):
 	"""
@@ -55,7 +56,7 @@ class MilvusTransport(SwarmTransport):
 					FieldSchema(name="pk", dtype=DataType.INT64, is_primary=True, auto_id=True),
 					FieldSchema(name="target_id", dtype=DataType.VARCHAR, max_length=255),
 					FieldSchema(name="sender_id", dtype=DataType.VARCHAR, max_length=255),
-					FieldSchema(name="payload", dtype=DataType.JSON), # Encrypted MLS package
+					FieldSchema(name="payload", dtype=DataType.JSON),  # Encrypted MLS package
 					FieldSchema(name="timestamp", dtype=DataType.INT64),
 					# Vector field for later 'Semantic Resonance' logic - though not used for routing
 					FieldSchema(name="resonance_vector", dtype=DataType.FLOAT_VECTOR, dim=cfg.VECTOR_SIZE),
@@ -74,8 +75,8 @@ class MilvusTransport(SwarmTransport):
 					FieldSchema(name="content", dtype=DataType.VARCHAR, max_length=65535),
 					FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=cfg.VECTOR_SIZE),
 					FieldSchema(name="metadata", dtype=DataType.JSON),
-					FieldSchema(name="signatures", dtype=DataType.JSON), # List of {agent: signature}
-					FieldSchema(name="status", dtype=DataType.VARCHAR, max_length=50), # PENDING, CANONIZED
+					FieldSchema(name="signatures", dtype=DataType.JSON),  # List of {agent: signature}
+					FieldSchema(name="status", dtype=DataType.VARCHAR, max_length=50),  # PENDING, CANONIZED
 					FieldSchema(name="created_at", dtype=DataType.INT64),
 				]
 				schema = CollectionSchema(fields, f"Swarm Proposals for {self.community_id}")
@@ -96,6 +97,7 @@ class MilvusTransport(SwarmTransport):
 			import time
 
 			import numpy as np
+
 			col = Collection(self.registry_coll)
 			# Search if already exists
 			res = col.query(expr=f'fingerprint == "{agent_id}"', output_fields=["pk"])
@@ -108,21 +110,14 @@ class MilvusTransport(SwarmTransport):
 				"public_key": metadata.get("public_key", ""),
 				"metadata": metadata,
 				"updated_at": int(time.time()),
-				"id_vector": dummy_vector
+				"id_vector": dummy_vector,
 			}
 
 			if res:
 				# Update
 				col.delete(expr=f'fingerprint == "{agent_id}"')
 
-			col.insert([
-				[data["fingerprint"]],
-				[data["alias"]],
-				[data["public_key"]],
-				[data["metadata"]],
-				[data["updated_at"]],
-				[data["id_vector"]]
-			])
+			col.insert([[data["fingerprint"]], [data["alias"]], [data["public_key"]], [data["metadata"]], [data["updated_at"]], [data["id_vector"]]])
 			col.flush()
 			return True
 		except Exception as e:
@@ -137,18 +132,13 @@ class MilvusTransport(SwarmTransport):
 			import time
 
 			import numpy as np
+
 			col = Collection(self.mailbox_coll)
 
 			# Dummy vector for now (Required for Milvus vector fields)
 			dummy_vector = np.zeros(cfg.VECTOR_SIZE).tolist()
 
-			data = [
-				[target_id],
-				[package.get("sender_id", "anonymous")],
-				[package],
-				[int(time.time())],
-				[dummy_vector]
-			]
+			data = [[target_id], [package.get("sender_id", "anonymous")], [package], [int(time.time())], [dummy_vector]]
 			col.insert(data)
 			col.flush()
 			return True
@@ -185,7 +175,8 @@ class MilvusTransport(SwarmTransport):
 			col = Collection(self.registry_coll)
 			res = col.query(expr=f'alias == "{alias}"', output_fields=["public_key"])
 			if res:
-				return res[0]["public_key"]
+				key = res[0]["public_key"]
+				return str(key) if key else None
 			return None
 		except Exception as e:
 			logger.error(f"MilvusTransport: Failed to lookup public key: {e}")
@@ -198,6 +189,7 @@ class MilvusTransport(SwarmTransport):
 		try:
 			import time
 			import uuid
+
 			col = Collection(f"swarm_proposals_{self.community_id}")
 
 			proposal_id = str(uuid.uuid4())
@@ -206,9 +198,9 @@ class MilvusTransport(SwarmTransport):
 				[engram_data.get("content", "")],
 				[engram_data.get("vector", [])],
 				[engram_data.get("metadata", {})],
-				[[]], # Initial empty signatures
+				[[]],  # Initial empty signatures
 				["PENDING"],
-				[int(time.time())]
+				[int(time.time())],
 			]
 			col.insert(data)
 			col.flush()
@@ -225,11 +217,12 @@ class MilvusTransport(SwarmTransport):
 		try:
 			import time
 			from base64 import b64encode
+
 			col = Collection(f"swarm_proposals_{self.community_id}")
 			res = col.query(
 				expr=f'proposal_id == "{proposal_id}"',
 				output_fields=["pk", "content", "vector", "metadata", "signatures", "status", "created_at"],
-				limit=1
+				limit=1,
 			)
 
 			if not res:
@@ -240,24 +233,12 @@ class MilvusTransport(SwarmTransport):
 			signatures = row["signatures"]
 
 			# Add new signature
-			signatures.append({
-				"agent": agent_id,
-				"sig": b64encode(signature).decode("utf-8"),
-				"ts": int(time.time())
-			})
+			signatures.append({"agent": agent_id, "sig": b64encode(signature).decode("utf-8"), "ts": int(time.time())})
 
 			# Persist: Delete old, Insert new
 			col.delete(expr=f"pk == {pk}")
 
-			data = [
-				[proposal_id],
-				[row["content"]],
-				[row["vector"]],
-				[row["metadata"]],
-				[signatures],
-				[row["status"]],
-				[row["created_at"]]
-			]
+			data = [[proposal_id], [row["content"]], [row["vector"]], [row["metadata"]], [signatures], [row["status"]], [row["created_at"]]]
 			col.insert(data)
 			col.flush()
 
