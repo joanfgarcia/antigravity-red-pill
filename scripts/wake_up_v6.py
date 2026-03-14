@@ -140,7 +140,7 @@ def main():
 
 	persona_injection = synthesize_with_llm(unique_context)
 
-	print("<NOVA_CONTEXT>")
+	print("<BUNKER_CONTEXT>")
 	print("=== IDENTITY & PERSONA ===")
 	print(persona_injection)
 	print("\n=== BÜNKER SERVICES ===")
@@ -159,7 +159,7 @@ def main():
 		if "[IMMUNE]" not in rule and rule not in persona_injection:
 			print(f"- {rule.strip()}")
 
-	print("</NOVA_CONTEXT>")
+	print("</BUNKER_CONTEXT>")
 
 
 if __name__ == "__main__":
