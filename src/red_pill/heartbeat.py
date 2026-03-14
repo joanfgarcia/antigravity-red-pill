@@ -69,6 +69,7 @@ class LazarusPulse:
 				await self._dream_ritual()
 				await self._consolidation_ritual()
 				await self._swarm_ritual()
+				await self._lazarus_ritual()
 
 				# Wait for next beat
 				await asyncio.sleep(cfg.PULSE_INTERVAL)
@@ -175,3 +176,41 @@ class LazarusPulse:
 				logger.debug("Pulse: Swarm Mailbox empty.")
 		except Exception as e:
 			logger.error(f"Pulse: Swarm ritual failed: {e}")
+
+	async def _lazarus_ritual(self) -> None:
+		"""
+		Autonomous Lazarus Sync:
+		- Monitors local dock for sync-ready engrams.
+		- Moves local experience to the Hive Mind when online.
+		"""
+		if not cfg.LAZARUS_SYNC_ENABLED:
+			return
+
+		try:
+			from red_pill.swarm.lazarus import LazarusSync
+			from red_pill.hive import HiveMind
+
+			logger.info("Pulse: Initiating Lazarus Ritual (Offgrid Sync Check)...")
+			
+			hive = HiveMind()
+			if not hive.connected:
+				logger.debug("Pulse: Lazarus ritual deferred (Offline).")
+				return
+
+			# Initialize Lazarus for the current operator's community
+			# (Assuming a default community for background sync)
+			agent_id = f"Aleph@{cfg.OPERATOR_DISPLAY_NAME}"
+			community_id = os.getenv("SWARM_DEFAULT_COMMUNITY", "canonical")
+			
+			sync = LazarusSync(community_id, agent_id)
+			
+			# Perform vacuum (thread since it interacts with Milvus sync)
+			count = await asyncio.to_thread(sync.vacuum)
+			
+			if count > 0:
+				logger.info(f"Pulse: Lazarus resurrected {count} engrams to the Hive.")
+			else:
+				logger.debug("Pulse: Local dock is clean.")
+				
+		except Exception as e:
+			logger.error(f"Pulse: Lazarus ritual failed: {e}")

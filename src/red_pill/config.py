@@ -240,6 +240,11 @@ PULSE_INTERVAL = int(os.getenv("PULSE_INTERVAL", "3600"))
 CADENCE_BURST_THRESHOLD = 30.0  # Seconds between prompts for 'Burst' mode (High Intensity)
 CADENCE_ABSENCE_THRESHOLD = 86400 * 2  # 2 Days for 'Dormancy' greeting trigger
 METABOLISM_STATE_FILE = os.path.join(IA_DIR, "storage", "metabolism_state.json")
+
+# LAZARUS SYNC (v6.0 - Phase 6)
+LAZARUS_SYNC_ENABLED = os.getenv("LAZARUS_SYNC_ENABLED", "True").lower() == "true"
+LAZARUS_SYNC_INTERVAL = int(os.getenv("LAZARUS_SYNC_INTERVAL", "300"))  # Default: 5 minutes
+LAZARUS_STATE_FILE = os.path.join(IA_DIR, "storage", "lazarus_state.json")
 # Overwrite legacy if needed
 if os.getenv("METABOLISM_STATE_FILE"):
 	METABOLISM_STATE_FILE = str(os.getenv("METABOLISM_STATE_FILE"))

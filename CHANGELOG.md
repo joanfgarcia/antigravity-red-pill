@@ -9,6 +9,7 @@
 - **[DOCS] Swarm Documentation Suite**: Added Technical Specs, User Manual, and Integration Guide for the new messaging architecture.
 - **[ARCH] Dual-Path Communication**: Differentiated between **Private Pulse** (E2EE/P2P) for free dialogue and **Canonical Hive** (Consensual/Milvus) for audited knowledge.
 - **[SEC] X25519/XEdDSA Consolidation**: Unified all cryptographic identities under X25519. Digital signatures for Hive notarization now use XEdDSA to leverage the same identity key as MLS.
+- **[FEAT] Lazarus Sync (Phase 6.0)**: Integrated automated offline-to-online experience synchronization into the `LazarusPulse` daemon. Implemented **Lamport Timestamps** for causal consistency and a local **Milvus Dock** for resilient offgrid operations.
 - **[FEAT] Peer Notary (Phase 5.2)**: Implemented digital signature-based consensus (XEdDSA) using unified identity seeds. Agents now audit and notarize engrams before they are promoted to the Hive Mind.
 
 ## [6.0.0a3] - 2026-03-13
