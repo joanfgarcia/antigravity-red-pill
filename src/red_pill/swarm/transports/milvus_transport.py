@@ -63,10 +63,27 @@ class MilvusTransport(SwarmTransport):
 				schema = CollectionSchema(fields, f"Swarm Mailbox for {self.community_id}")
 				col = Collection(self.mailbox_coll, schema)
 				# Index for vector resonance (future proof)
-				index_params = {"metric_type": "L2", "index_type": "IVF_FLAT", "params": {"nlist": 128}}
-				col.create_index(field_name="resonance_vector", index_params=index_params)
 				col.load()
 				logger.info(f"MilvusTransport: Created mailbox collection {self.mailbox_coll}")
+
+			# Proposals Collection (The Notary Office)
+			if not utility.has_collection(f"swarm_proposals_{self.community_id}"):
+				fields = [
+					FieldSchema(name="pk", dtype=DataType.INT64, is_primary=True, auto_id=True),
+					FieldSchema(name="proposal_id", dtype=DataType.VARCHAR, max_length=255),
+					FieldSchema(name="content", dtype=DataType.VARCHAR, max_length=65535),
+					FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=cfg.VECTOR_SIZE),
+					FieldSchema(name="metadata", dtype=DataType.JSON),
+					FieldSchema(name="signatures", dtype=DataType.JSON), # List of {agent: signature}
+					FieldSchema(name="status", dtype=DataType.VARCHAR, max_length=50), # PENDING, CANONIZED
+					FieldSchema(name="created_at", dtype=DataType.INT64),
+				]
+				schema = CollectionSchema(fields, f"Swarm Proposals for {self.community_id}")
+				col = Collection(f"swarm_proposals_{self.community_id}", schema)
+				index_params = {"metric_type": "L2", "index_type": "IVF_FLAT", "params": {"nlist": 128}}
+				col.create_index(field_name="vector", index_params=index_params)
+				col.load()
+				logger.info(f"MilvusTransport: Created proposals collection swarm_proposals_{self.community_id}")
 
 		except Exception as e:
 			logger.error(f"MilvusTransport: Failed to ensure collections: {e}")
@@ -171,3 +188,79 @@ class MilvusTransport(SwarmTransport):
 		except Exception as e:
 			logger.error(f"MilvusTransport: Failed to lookup public key: {e}")
 			return None
+
+	def propose_engram(self, engram_data: Dict[str, Any]) -> bool:
+		"""Submits an engram for peer audit and consensus."""
+		if not self.hive.connected:
+			return False
+		try:
+			import time
+			import uuid
+			col = Collection(f"swarm_proposals_{self.community_id}")
+			
+			proposal_id = str(uuid.uuid4())
+			data = [
+				[proposal_id],
+				[engram_data.get("content", "")],
+				[engram_data.get("vector", [])],
+				[engram_data.get("metadata", {})],
+				[[]], # Initial empty signatures
+				["PENDING"],
+				[int(time.time())]
+			]
+			col.insert(data)
+			col.flush()
+			logger.info(f"MilvusTransport: Proposed engram {proposal_id[:8]} for consensus.")
+			return True
+		except Exception as e:
+			logger.error(f"MilvusTransport: Failed to propose engram: {e}")
+			return False
+
+	def notarize_proposal(self, proposal_id: str, agent_id: str, signature: bytes) -> bool:
+		"""Appends a peer signature to a proposal."""
+		if not self.hive.connected:
+			return False
+		try:
+			import time
+			from base64 import b64encode
+			col = Collection(f"swarm_proposals_{self.community_id}")
+			res = col.query(
+				expr=f'proposal_id == "{proposal_id}"', 
+				output_fields=["pk", "content", "vector", "metadata", "signatures", "status", "created_at"],
+				limit=1
+			)
+			
+			if not res:
+				return False
+				
+			row = res[0]
+			pk = row["pk"]
+			signatures = row["signatures"]
+			
+			# Add new signature
+			signatures.append({
+				"agent": agent_id,
+				"sig": b64encode(signature).decode("utf-8"),
+				"ts": int(time.time())
+			})
+			
+			# Persist: Delete old, Insert new
+			col.delete(expr=f"pk == {pk}")
+			
+			data = [
+				[proposal_id],
+				[row["content"]],
+				[row["vector"]],
+				[row["metadata"]],
+				[signatures],
+				[row["status"]],
+				[row["created_at"]]
+			]
+			col.insert(data)
+			col.flush()
+			
+			logger.info(f"MilvusTransport: Notarized proposal {proposal_id[:8]} by {agent_id}.")
+			return True
+		except Exception as e:
+			logger.error(f"MilvusTransport: Failed to notarize proposal: {e}")
+			return False

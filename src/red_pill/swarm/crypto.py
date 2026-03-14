@@ -4,16 +4,16 @@ import os
 from typing import Dict, List, Optional, Tuple, Union
 
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import x25519
+from cryptography.hazmat.primitives.asymmetric import ed25519, x25519
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 
 class SwarmCrypto:
 	"""
-	Handles End-to-End Encryption (E2E) for Swarm Messaging payloads.
-	v2.0: Supports Asymmetric X25519 (Diffie-Hellman) and AES-GCM for Perfect Forward Secrecy logic.
-	The encryption key can be derived from the shared True Name Bond or via Asymmetric DH.
+	Handles End-to-End Encryption (E2E) and Digital Signatures for Swarm.
+	v3.5: Supports Unified Identity (Seed -> X25519 + Ed25519).
+	Uses X25519 for Key Agreement (PFS) and Ed25519 for Notarization (Signatures).
 	"""
 
 	@staticmethod
@@ -22,6 +22,8 @@ class SwarmCrypto:
 		private_key = x25519.X25519PrivateKey.generate()
 		public_key = private_key.public_key()
 		
+		# For unified identity, we expose the underlying 32-byte seed if needed,
+		# but here we follow standard raw output.
 		priv_bytes = private_key.private_bytes(
 			encoding=serialization.Encoding.Raw,
 			format=serialization.PrivateFormat.Raw,
@@ -32,6 +34,50 @@ class SwarmCrypto:
 			format=serialization.PublicFormat.Raw
 		)
 		return priv_bytes, pub_bytes
+
+	@staticmethod
+	def generate_unified_identity(seed: Optional[bytes] = None) -> Dict[str, bytes]:
+		"""
+		Generates a unified identity: one seed results in both X25519 and Ed25519 pairs.
+		This ensures a singular identity for both encryption and signatures.
+		"""
+		actual_seed = seed if seed else os.urandom(32)
+		
+		# Deriving X25519 (Encryption)
+		x_priv = x25519.X25519PrivateKey.from_private_bytes(actual_seed)
+		x_pub = x_priv.public_key().public_bytes(
+			encoding=serialization.Encoding.Raw,
+			format=serialization.PublicFormat.Raw
+		)
+		
+		# Deriving Ed25519 (Signatures)
+		ed_priv = ed25519.Ed25519PrivateKey.from_private_bytes(actual_seed)
+		ed_pub = ed_priv.public_key().public_bytes(
+			encoding=serialization.Encoding.Raw,
+			format=serialization.PublicFormat.Raw
+		)
+		
+		return {
+			"seed": actual_seed,
+			"x25519_pub": x_pub,
+			"ed25519_pub": ed_pub
+		}
+
+	@staticmethod
+	def sign_notary(private_seed: bytes, data: bytes) -> bytes:
+		"""Signs data using the unified identity seed (Ed25519)."""
+		priv_key = ed25519.Ed25519PrivateKey.from_private_bytes(private_seed)
+		return priv_key.sign(data)
+
+	@staticmethod
+	def verify_notary(public_key_bytes: bytes, data: bytes, signature: bytes) -> bool:
+		"""Verifies an Ed25519 signature."""
+		try:
+			pub_key = ed25519.Ed25519PublicKey.from_public_bytes(public_key_bytes)
+			pub_key.verify(signature, data)
+			return True
+		except Exception:
+			return False
 
 	@staticmethod
 	def derive_shared_secret_dh(private_key_bytes: bytes, remote_public_key_bytes: bytes) -> bytes:
