@@ -24,7 +24,7 @@ Script de configuración de macOS que instala el ecosistema del "Cerebro Secunda
 Con este parche, Antigravity detecta natively el flag `Step Id: 0` del ecosistema subyacente de Gemini:
 1. El usuario abre una nueva pestaña de chat.
 2. Antigravity detecta "Step Id 0" y ejecuta `wake_up_v6.py`.
-3. El Minion escupe un `<NOVA_CONTEXT>`.
+3. El Minion escupe un `<BUNKER_CONTEXT>`.
 4. El agente principal absorbe el `Skin`, `Identidad`, y `Directrices` de forma totalmente transparente e invisible antes de que el humano escriba la primera letra.
 
 Por favor revisad el código en `wake_up_v6.py` y el script de `launchctl`. Queda preparado para su merge.

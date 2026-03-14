@@ -9,9 +9,10 @@
 - **[DOCS] Swarm Documentation Suite**: Added Technical Specs, User Manual, and Integration Guide for the new messaging architecture.
 - **[ARCH] Dual-Path Communication**: Differentiated between **Private Pulse** (E2EE/P2P) for free dialogue and **Canonical Hive** (Consensual/Milvus) for audited knowledge.
 - **[SEC] X25519/XEdDSA Consolidation**: Unified all cryptographic identities under X25519. Digital signatures for Hive notarization now use XEdDSA to leverage the same identity key as MLS.
-- **[FEAT] Semantic Resonance (Phase 7.0)**: Implemented a proactive **Semantic Radar** within the `LazarusPulse` daemon. The system now autonomously monitors the Hive Mind for knowledge that resonates with the agent's focus, triggering cognitive responses to external intelligence.
-- **[FEAT] Lazarus Sync (Phase 6.0)**: Integrated automated offline-to-online experience synchronization into the `LazarusPulse` daemon. Implemented **Lamport Timestamps** for causal consistency and a local **Milvus Dock** for resilient offgrid operations.
-- **[FEAT] Peer Notary (Phase 5.2)**: Implemented digital signature-based consensus (XEdDSA) using unified identity seeds. Agents now audit and notarize engrams before they are promoted to the Hive Mind.
+- **[FIX] Identity Collision Mitigation**: Renamed system identity tags from `<NOVA_CONTEXT>` to **`<BUNKER_CONTEXT>`** across the codebase and global rules to prevent identity confusion with other AIs.
+- **[FEAT] Semantic Resonance (Phase 7.0)**: Implemented a proactive **Semantic Radar** within the `LazarusPulse` daemon. The system now autonomously monitors the Hive Mind for knowledge that resonates with the agent's focus.
+- **[FEAT] Offgrid Sovereignty (Phase 6.0)**: Integrated **Lazarus Sync** with causal Lamport Clocks for robust offline-to-online engram synchronization.
+- **[FEAT] Peer Notary (Phase 5.2)**: Implemented digital signature-based consensus (XEdDSA) for engram promotion to the Hive Mind.
 
 ## [6.0.0a3] - 2026-03-13
 ### 🛡️ Sovereign CNS & The Shadow Scribe (Anti-Amnesia)
