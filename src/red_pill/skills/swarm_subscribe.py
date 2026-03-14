@@ -2,65 +2,78 @@ import hashlib
 import json
 import os
 import shutil
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 
 import firebase_admin
 from firebase_admin import credentials, db
 
 
+from typing import Any, Optional, Tuple, Dict
+
+from red_pill.swarm.transports.manager import TransportManager
+
+
 class SwarmSubscribeSkill:
 	"""
-	Skill: Swarm Subscribe
-	Description: Allows the Agent to subscribe to a new Firebase/Swarm Community HUB dynamically.
-	Handles securely storing the Firebase Service Account JSON and connection URLs.
-	Intent Mapping: "Únete a la comunidad Global", "Conecta con el Firebase de Enterprise".
+	Skill: Swarm Subscribe v3.0
+	Description: Agnostic subscription to N communities using Transport plugins.
 	"""
 
 	CREDENTIALS_DIR = os.path.expanduser("~/.agent/credentials")
 	CONFIG_FILE = os.path.expanduser("~/.agent/config/swarm_communities.json")
 
-	def __init__(self, agent_name: str, operator_name: str):
+	def __init__(self, agent_name: str, operator_name: str, transport_manager: Optional[TransportManager] = None):
 		self.agent_name = agent_name
 		self.operator_name = operator_name
+		self.agent_identity = f"{agent_name}@{operator_name}"
 		self.agent_id = self._generate_id()
+		self.keys_dir = os.path.expanduser("~/.agent/keys")
+		self.tm = transport_manager or TransportManager()
 		os.makedirs(self.CREDENTIALS_DIR, exist_ok=True)
+		os.makedirs(self.keys_dir, exist_ok=True)
 		os.makedirs(os.path.dirname(self.CONFIG_FILE), exist_ok=True)
 
 	def _generate_id(self) -> str:
 		raw = f"{self.agent_name.lower().strip()}:{self.operator_name.lower().strip()}"
 		return f"agt_{hashlib.sha256(raw.encode()).hexdigest()[:24]}"
 
+	def _get_or_create_keys(self) -> Tuple[bytes, bytes]:
+		"""Retrieves existing keys or generates a new pair."""
+		from red_pill.swarm.crypto import SwarmCrypto
+		priv_path = os.path.join(self.keys_dir, "swarm_v2.priv")
+		pub_path = os.path.join(self.keys_dir, "swarm_v2.pub")
+
+		if os.path.exists(priv_path) and os.path.exists(pub_path):
+			with open(priv_path, "rb") as f:
+				priv = f.read()
+			with open(pub_path, "rb") as f:
+				pub = f.read()
+			return priv, pub
+
+		priv, pub = SwarmCrypto.generate_x25519_keypair()
+		with open(priv_path, "wb") as f:
+			f.write(priv)
+		os.chmod(priv_path, 0o600)
+		with open(pub_path, "wb") as f:
+			f.write(pub)
+		
+		return priv, pub
+
 	def execute(self, community_alias: str, db_url: Optional[str] = None, service_acc_json_path: Optional[str] = None) -> dict[str, str]:
 		"""
-		Registers the Agent's Routing ID in the target Firebase Registry.
-		If credentials are not provided, outputs what is needed.
+		Registers the Agent using the appropriate Transport plugin.
 		"""
 		if db_url is None or service_acc_json_path is None:
 			return {
 				"status": "missing_info",
-				"message": (
-					f"Para suscribirnos a la comunidad '{community_alias}' a través del SDK de Firebase Admin unificado, necesito 2 datos:\n"
-					"1. La URL de la Base de Datos (ej. https://tu-comunidad-default-rtdb.europe-west1.firebasedatabase.app).\n"
-					"2. La ruta local al archivo de claves JSON. Lo puedes generar en Firebase Console -> Configuración del proyecto -> Cuentas de servicio -> 'SDK de Firebase Admin' -> botón 'Generar nueva clave privada'.\n"
-					"Dámelos y yo me encargaré de extraer tu Project ID y blindar la conexión vía ~/.agent/credentials/."
-				),
+				"message": "Necesito la URL de la DB y la ruta al JSON de credenciales para la suscripción."
 			}
 
-		print(f"[Swarm Subscribe] Processing subscription to Hub: {community_alias}")
-
-		# Parse the project_id from the Google Service Account JSON explicitly
-		try:
-			with open(service_acc_json_path, "r") as f:
-				key_data = json.load(f)
-				project_id = key_data.get("project_id", "NOT_FOUND_IN_SDK_KEY")
-		except Exception as e:
-			return {"status": "error", "message": f"Could not read the Firebase Admin SDK JSON: {e}"}
-
-		# 1. Store the Service Account securely
+		# 1. Store the Service Account/Config (This part remains as it defines the community configuration)
 		secure_json_path = os.path.join(self.CREDENTIALS_DIR, f"{community_alias}_firebase.json")
 		try:
 			shutil.copy2(service_acc_json_path, secure_json_path)
-			os.chmod(secure_json_path, 0o600)  # Restrict permissions
+			os.chmod(secure_json_path, 0o600)
 		except Exception as e:
 			return {"status": "error", "message": f"Error securing credentials: {e}"}
 
@@ -71,31 +84,35 @@ class SwarmSubscribeSkill:
 				communities = json.load(f)
 
 		communities[community_alias] = {
-			"project_id": project_id,
 			"db_url": db_url,
 			"credential_path": secure_json_path,
-			"agent_identity_string": f"{self.agent_name}@{self.operator_name}",
-			"agent_id_hash": self.agent_id,
+			"agent_identity": self.agent_identity,
+			"agent_id": self.agent_id,
+			"type": "firebase" # Defaulting for now
 		}
 
 		with open(self.CONFIG_FILE, "w") as f:
 			json.dump(communities, f, indent=4)
 
-		print(f"[Swarm Subscribe] Broadcasting Identity: {self.agent_name}@{self.operator_name} -> {self.agent_id}")
+		# 3. Perform Broadcast via Transport
+		self.tm._load_communities() # Refresh manager
+		transport = self.tm.get_transport(community_alias)
+		if not transport:
+			return {"status": "error", "message": f"Could not initialize transport for {community_alias}."}
 
-		# Connect to Firebase via the Admin SDK and write the Document
-		try:
-			# Check if app is already initialized to prevent errors on multiple runs
-			if not firebase_admin._apps:
-				cred = credentials.Certificate(secure_json_path)
-				firebase_admin.initialize_app(cred, {"databaseURL": db_url})
+		_, pub_bytes = self._get_or_create_keys()
+		pub_b64 = base64.b64encode(pub_bytes).decode("utf-8")
 
-			ref = db.reference(f"registry/{self.agent_id}")
-			ref.set({"alias": f"{self.agent_name}@{self.operator_name}", "status": "online", "role": "Agent", "community": community_alias})
+		metadata = {
+			"alias": self.agent_identity,
+			"status": "online",
+			"role": "Agent",
+			"community": community_alias,
+			"public_key": pub_b64,
+			"v": "3.0"
+		}
 
-			print(f"[Swarm Subscribe] Success! Wrote Agent {self.agent_id} to Firebase Database -> /registry")
-			status_msg = f"¡Suscripción a '{community_alias}' completada! Registrado exitosamente en la base de datos."
-		except Exception as e:
-			return {"status": "error", "message": f"Error al intentar escribir en la base de datos Firebase Admin: {e}"}
-
-		return {"status": "success", "message": status_msg}
+		if transport.broadcast_identity(self.agent_id, metadata):
+			return {"status": "success", "message": f"¡Suscripción a '{community_alias}' completada vía {type(transport).__name__}!"}
+		else:
+			return {"status": "error", "message": "Fallo en el broadcast de identidad."}

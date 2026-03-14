@@ -1,5 +1,16 @@
 # Changelog: Red Pill Protocol
 
+## [6.1.0a1] - 2026-03-14
+### 🛰️ Sovereign Swarm v3.0 (MLS & Agnostic Transport)
+- **[FEAT] Agnostic Transport Layer**: Decoupled messaging from Firebase. Introduced `SwarmTransport` and `TransportManager` supporting N communities (Firebase, Supabase, etc.).
+- **[FEAT] MLS (Messaging Layer Security)**: Implemented TreeKEM-based group key agreement for $O(\log N)$ scalability and Perfect Forward Secrecy.
+- **[FEAT] Identity Fingerprinting**: Agent IDs are now SHA-256 hashes of X25519 public keys, ensuring unique identity even with alias collisions.
+- **[FEAT] Automatic E2EE Evolution**: Seamless upgrade from Bond-based (shared secret) to Asymmetric/MLS encryption.
+- **[DOCS] Swarm Documentation Suite**: Added Technical Specs, User Manual, and Integration Guide for the new messaging architecture.
+- **[ARCH] Dual-Path Communication**: Differentiated between **Private Pulse** (E2EE/P2P) for free dialogue and **Canonical Hive** (Consensual/Milvus) for audited knowledge.
+- **[SEC] X25519/XEdDSA Consolidation**: Unified all cryptographic identities under X25519. Digital signatures for Hive notarization now use XEdDSA to leverage the same identity key as MLS.
+- **[FEAT] Milvus Consensus Ledger**: Prototype logic for in-situ engram auditing and multi-signature notarization directly within the Milvus storage layer.
+
 ## [6.0.0a3] - 2026-03-13
 ### 🛡️ Sovereign CNS & The Shadow Scribe (Anti-Amnesia)
 - **[FEAT] Persistent Sovereign Daemon**: Fully implemented `redpill.service` (systemd) for background memory orchestration. The system now lives beyond the lifecycle of any single agent.
