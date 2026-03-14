@@ -24,7 +24,7 @@ class MilvusTransport(SwarmTransport):
 		self.hive = HiveMind()
 		self.registry_coll = f"swarm_registry_{community_id}"
 		self.mailbox_coll = f"swarm_mailbox_{community_id}"
-		
+
 		if self.hive.connected:
 			self._ensure_collections()
 
@@ -94,13 +94,14 @@ class MilvusTransport(SwarmTransport):
 			return False
 		try:
 			import time
+
 			import numpy as np
 			col = Collection(self.registry_coll)
 			# Search if already exists
 			res = col.query(expr=f'fingerprint == "{agent_id}"', output_fields=["pk"])
-			
+
 			dummy_vector = np.zeros(cfg.VECTOR_SIZE).tolist()
-			
+
 			data = {
 				"fingerprint": agent_id,
 				"alias": metadata.get("alias", "unknown"),
@@ -109,11 +110,11 @@ class MilvusTransport(SwarmTransport):
 				"updated_at": int(time.time()),
 				"id_vector": dummy_vector
 			}
-			
+
 			if res:
 				# Update
 				col.delete(expr=f'fingerprint == "{agent_id}"')
-			
+
 			col.insert([
 				[data["fingerprint"]],
 				[data["alias"]],
@@ -134,12 +135,13 @@ class MilvusTransport(SwarmTransport):
 			return False
 		try:
 			import time
+
 			import numpy as np
 			col = Collection(self.mailbox_coll)
-			
+
 			# Dummy vector for now (Required for Milvus vector fields)
 			dummy_vector = np.zeros(cfg.VECTOR_SIZE).tolist()
-			
+
 			data = [
 				[target_id],
 				[package.get("sender_id", "anonymous")],
@@ -161,15 +163,15 @@ class MilvusTransport(SwarmTransport):
 		try:
 			col = Collection(self.mailbox_coll)
 			res = col.query(expr=f'target_id == "{agent_id}"', output_fields=["payload", "pk"])
-			
+
 			packages = [r["payload"] for r in res]
-			
+
 			# Destructive read: clear mailbox after polling (like a real mailbox)
 			if res:
 				pks = [r["pk"] for r in res]
 				col.delete(expr=f"pk in {pks}")
 				col.flush()
-				
+
 			return packages
 		except Exception as e:
 			logger.error(f"MilvusTransport: Failed to poll mailbox: {e}")
@@ -197,7 +199,7 @@ class MilvusTransport(SwarmTransport):
 			import time
 			import uuid
 			col = Collection(f"swarm_proposals_{self.community_id}")
-			
+
 			proposal_id = str(uuid.uuid4())
 			data = [
 				[proposal_id],
@@ -225,28 +227,28 @@ class MilvusTransport(SwarmTransport):
 			from base64 import b64encode
 			col = Collection(f"swarm_proposals_{self.community_id}")
 			res = col.query(
-				expr=f'proposal_id == "{proposal_id}"', 
+				expr=f'proposal_id == "{proposal_id}"',
 				output_fields=["pk", "content", "vector", "metadata", "signatures", "status", "created_at"],
 				limit=1
 			)
-			
+
 			if not res:
 				return False
-				
+
 			row = res[0]
 			pk = row["pk"]
 			signatures = row["signatures"]
-			
+
 			# Add new signature
 			signatures.append({
 				"agent": agent_id,
 				"sig": b64encode(signature).decode("utf-8"),
 				"ts": int(time.time())
 			})
-			
+
 			# Persist: Delete old, Insert new
 			col.delete(expr=f"pk == {pk}")
-			
+
 			data = [
 				[proposal_id],
 				[row["content"]],
@@ -258,7 +260,7 @@ class MilvusTransport(SwarmTransport):
 			]
 			col.insert(data)
 			col.flush()
-			
+
 			logger.info(f"MilvusTransport: Notarized proposal {proposal_id[:8]} by {agent_id}.")
 			return True
 		except Exception as e:

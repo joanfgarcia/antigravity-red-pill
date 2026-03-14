@@ -1,14 +1,9 @@
+import base64
 import hashlib
 import json
 import os
 import shutil
 from typing import Any, Optional, Tuple
-
-import firebase_admin
-from firebase_admin import credentials, db
-
-
-from typing import Any, Optional, Tuple, Dict
 
 from red_pill.swarm.transports.manager import TransportManager
 
@@ -56,7 +51,7 @@ class SwarmSubscribeSkill:
 		os.chmod(priv_path, 0o600)
 		with open(pub_path, "wb") as f:
 			f.write(pub)
-		
+
 		return priv, pub
 
 	def execute(self, community_alias: str, db_url: Optional[str] = None, service_acc_json_path: Optional[str] = None) -> dict[str, str]:

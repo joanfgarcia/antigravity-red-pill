@@ -1,21 +1,9 @@
 import base64
-import hashlib
 import os
 from enum import Enum
-from typing import Optional, Any, Dict, List
-
-from firebase_admin import db
+from typing import Any, Dict, List, Optional
 
 from red_pill.swarm.crypto import SwarmCrypto
-
-
-class SwarmIntent(Enum):
-	CODE_REVIEW = "code_review"
-	CHANGE_REQUESTED = "change_requested"
-	LGTM_APPROVED = "lgtm_approved"
-	GOSSIP = "gossip"
-
-
 from red_pill.swarm.transports.manager import TransportManager
 
 
@@ -24,7 +12,7 @@ class SwarmIntent(Enum):
 	CHANGE_REQUESTED = "change_requested"
 	LGTM_APPROVED = "lgtm_approved"
 	GOSSIP = "gossip"
-	MLS_WELCOME = "mls_welcome" # New intent for MLS handshakes
+	MLS_WELCOME = "mls_welcome"  # New intent for MLS handshakes
 
 
 class SwarmMessagingSkill:
@@ -87,7 +75,7 @@ class SwarmMessagingSkill:
 
 		raw_messages = transport.poll_mailbox(self.agent_identity)
 		processed = []
-		
+
 		for pkg in raw_messages:
 			try:
 				mode = pkg.get("mode", "bond")
@@ -107,5 +95,5 @@ class SwarmMessagingSkill:
 				# Mark as processed (usually done by the transport or a separate call)
 			except Exception as e:
 				print(f"[SwarmMessaging] Processing failure: {e}")
-		
+
 		return processed

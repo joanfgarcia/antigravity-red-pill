@@ -1,10 +1,9 @@
 import logging
-import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
+from red_pill.hive import HiveMind
 from red_pill.swarm.crypto import SwarmCrypto
 from red_pill.swarm.transports.milvus_transport import MilvusTransport
-from red_pill.hive import HiveMind
 
 logger = logging.getLogger(__name__)
 
@@ -37,17 +36,17 @@ class NotaryOffice:
 		"""
 		proposal_id = proposal.get("proposal_id")
 		content = proposal.get("content")
-		
+
 		logger.info(f"Agent {self.agent_id} auditing proposal {proposal_id[:8]}...")
-		
+
 		# Simplistic audit: ensure content is not empty
 		if not content:
 			logger.warning("Audit failed: empty content.")
 			return False
-			
+
 		# Sign content using Ed25519 (Unified Identity)
 		signature = SwarmCrypto.sign_notary(self.private_seed, content.encode("utf-8"))
-		
+
 		# Send signature to the ledger
 		return self.transport.notarize_proposal(proposal_id, self.agent_id, signature)
 
@@ -68,7 +67,7 @@ class NotaryOffice:
 		"""
 		if not self.hive.connected:
 			return False
-			
+
 		try:
 			# Promotion logic: insert into main hive
 			self.hive.transmit_experience(

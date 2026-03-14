@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import red_pill.config as cfg
 
@@ -33,7 +33,7 @@ class LamportClock:
 			if os.path.exists(self.state_file):
 				with open(self.state_file, "r") as f:
 					data = json.load(f)
-			
+
 			data[self.agent_id] = self.counter
 			with open(self.state_file, "w") as f:
 				json.dump(data, f)
@@ -79,10 +79,11 @@ class LazarusSync:
 		Scans local dock for pending engrams and moves them to the Hive.
 		"""
 		from pymilvus import Collection, utility
+
 		from red_pill.hive import HiveMind
-		
+
 		logger.info(f"Lazarus: Initiating vacuum for {self.agent_id} in {self.community_id}")
-		
+
 		hive = HiveMind()
 		if not hive.connected:
 			logger.debug("Lazarus: Hive Mind not reachable. Sync deferred.")
@@ -97,28 +98,28 @@ class LazarusSync:
 			# Find engrams that are PENDING and have reached quorum (for Ph5.2 logic)
 			# Or simply find engrams that haven't been synced yet.
 			# For Phase 6, we focus on moving CANONIZED or PENDING ones that are ready.
-			
+
 			res = col.query(
-				expr='status == "PENDING"', 
+				expr='status == "PENDING"',
 				output_fields=["pk", "proposal_id", "content", "vector", "metadata", "signatures"],
 				limit=100
 			)
-			
+
 			if not res:
 				return 0
-				
+
 			count = 0
 			for row in res:
 				# 1. Check if it's a social/work engram prepared for the hive
 				# In a full implementation, we'd check if enough signatures exist (Phase 5.2)
 				# For this sync, we'll assume any PENDING engram is a candidate for "lifting"
-				
+
 				# 2. Transmit to Hive
 				target_coll = row["metadata"].get("target_collection", "work_memories")
-				
+
 				# Preserve Lamport order: if remote hive has a higher TS, we should update local.
 				# (In a real distributed system, we'd query the Hive's latest TS first).
-				
+
 				hive.transmit_experience(
 					target_coll,
 					row["content"],
@@ -130,7 +131,7 @@ class LazarusSync:
 						"signatures_count": len(row["signatures"])
 					}
 				)
-				
+
 				# 3. Mark as CANONIZED in local dock
 				col.delete(expr=f"pk == {row['pk']}")
 				# Re-insert with CANONIZED status
@@ -145,7 +146,7 @@ class LazarusSync:
 				]
 				col.insert(data)
 				count += 1
-				
+
 			col.flush()
 			logger.info(f"Lazarus: Successfully resurrected {count} engrams.")
 			return count

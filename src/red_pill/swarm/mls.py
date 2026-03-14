@@ -1,5 +1,7 @@
 from typing import Dict, List, Optional
+
 from red_pill.swarm.crypto import SwarmCrypto
+
 
 class SovereignGroup:
 	"""
@@ -36,9 +38,9 @@ class SovereignGroup:
 				else:
 					next_level.append(nodes[i]) # Odd node propagates up
 			nodes = next_level
-		
+
 		self.root_secret = nodes[0]
-	
+
 	def get_group_key(self) -> bytes:
 		"""Derives the current encryption key for the group."""
 		return SwarmCrypto.derive_group_key([self.root_secret])

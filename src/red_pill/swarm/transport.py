@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
+
 class SwarmTransport(ABC):
 	"""
 	Abstract Base Class for Swarm Transport Plugins.

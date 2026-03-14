@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import red_pill.config as cfg
 from red_pill.hive import HiveMind
@@ -39,7 +39,7 @@ class ResonanceObserver:
 					# Skip own messages if necessary
 					if exp.get("source_agent") == self.agent_id:
 						continue
-						
+
 					logger.info(f"✨ Resonance detected (d={distance:.4f}): {exp['content'][:50]}...")
 					resonating.append(exp)
 
@@ -52,9 +52,7 @@ class ResonanceObserver:
 		"""
 		Executes a proactive response to a resonating engram.
 		"""
-		content = match.get("content", "")
 		source = match.get("source_agent", "unknown")
-		
 		# Proactive Notification logic
 		# In a full UI impl, this would push to a dashboard.
 		logger.info(f"Cognitive Trigger: Reacting to intelligence from {source}.")

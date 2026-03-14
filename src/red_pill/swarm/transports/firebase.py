@@ -6,6 +6,7 @@ from firebase_admin import credentials, db
 
 from red_pill.swarm.transport import SwarmTransport
 
+
 class FirebaseTransport(SwarmTransport):
 	"""
 	Firebase implementation of SwarmTransport.
@@ -54,7 +55,7 @@ class FirebaseTransport(SwarmTransport):
 			messages = ref.get()
 			if not messages:
 				return []
-			
+
 			results = []
 			for msg_id, pkg in messages.items():
 				pkg["_msg_id"] = msg_id
@@ -70,7 +71,7 @@ class FirebaseTransport(SwarmTransport):
 			nodes = ref.get()
 			if not nodes:
 				return None
-			
+
 			for node_id, data in nodes.items():
 				if data.get("alias") == alias:
 					return data.get("public_key")

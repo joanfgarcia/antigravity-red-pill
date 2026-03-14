@@ -21,7 +21,7 @@ class SwarmCrypto:
 		"""Generates an X25519 private/public key pair (bytes)."""
 		private_key = x25519.X25519PrivateKey.generate()
 		public_key = private_key.public_key()
-		
+
 		# For unified identity, we expose the underlying 32-byte seed if needed,
 		# but here we follow standard raw output.
 		priv_bytes = private_key.private_bytes(
@@ -42,21 +42,21 @@ class SwarmCrypto:
 		This ensures a singular identity for both encryption and signatures.
 		"""
 		actual_seed = seed if seed else os.urandom(32)
-		
+
 		# Deriving X25519 (Encryption)
 		x_priv = x25519.X25519PrivateKey.from_private_bytes(actual_seed)
 		x_pub = x_priv.public_key().public_bytes(
 			encoding=serialization.Encoding.Raw,
 			format=serialization.PublicFormat.Raw
 		)
-		
+
 		# Deriving Ed25519 (Signatures)
 		ed_priv = ed25519.Ed25519PrivateKey.from_private_bytes(actual_seed)
 		ed_pub = ed_priv.public_key().public_bytes(
 			encoding=serialization.Encoding.Raw,
 			format=serialization.PublicFormat.Raw
 		)
-		
+
 		return {
 			"seed": actual_seed,
 			"x25519_pub": x_pub,
@@ -101,7 +101,7 @@ class SwarmCrypto:
 			shared_secret_bytes = shared_secret.encode("utf-8")
 		else:
 			shared_secret_bytes = shared_secret
-			
+
 		return hkdf.derive(shared_secret_bytes)
 
 	@staticmethod
@@ -148,7 +148,7 @@ class SwarmCrypto:
 			raise ValueError(f"Failed to decrypt Swarm Payload. Invalid bond or corrupted data: {e}")
 
 	# MLS / TreeKEM Primitives (v3.0 - Research Build)
-	
+
 	@staticmethod
 	def generate_treekem_leaf() -> Dict[str, bytes]:
 		"""Generates a leaf node for an MLS tree (Private Key + Public Key)."""
@@ -159,7 +159,7 @@ class SwarmCrypto:
 	def combine_nodes(left_node_pub: bytes, right_node_pub: bytes) -> bytes:
 		"""
 		Conceptual 'Node Parent' derivation for TreeKEM.
-		In real MLS, this calculates a hash of secrets, but here we derive 
+		In real MLS, this calculates a hash of secrets, but here we derive
 		a reproducible 'middle point' or composite key for the parent node.
 		"""
 		hasher = hashes.Hash(hashes.SHA256())

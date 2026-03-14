@@ -1,7 +1,6 @@
+import logging
 import os
 import sys
-import logging
-from typing import List
 
 # Project root setup
 sys.path.append(os.getcwd() + "/src")
@@ -11,18 +10,19 @@ os.environ["MILVUS_ENABLED"] = "True"
 os.environ["MILVUS_LITE_ENABLED"] = "True"
 os.environ["MILVUS_LITE_PATH"] = "/tmp/milvus_notary_test.db"
 
+from pymilvus import Collection
+
 import red_pill.config as cfg
 from red_pill.swarm.crypto import SwarmCrypto
 from red_pill.swarm.notary import NotaryOffice
-from pymilvus import Collection, utility
 
 logging.basicConfig(level=logging.INFO)
 
 def test_peer_notary():
     print("--- Testing Peer Notary (Phase 5.2) ---")
-    
+
     community = "consensus_test"
-    
+
     # 1. Setup 3 Agent Identities
     agents = []
     names = ["Aleph", "Nova", "Sam"]
@@ -40,7 +40,7 @@ def test_peer_notary():
     # 2. Aleph proposes an engram
     proposal_content = "The swarm protocol v3.5 is the foundation of digital sovereignty."
     dummy_vector = [0.1] * cfg.VECTOR_SIZE
-    
+
     print(f"{agents[0]['name']} is proposing a new engram...")
     if agents[0]["office"].propose_knowledge(proposal_content, dummy_vector, {"source": "manual_input"}):
         print("SUCCESS: Engram proposed.")
@@ -52,11 +52,11 @@ def test_peer_notary():
     col_name = f"swarm_proposals_{community}"
     col = Collection(col_name)
     res = col.query(expr="proposal_id != ''", output_fields=["proposal_id", "content", "signatures", "vector", "metadata"], limit=10)
-    
+
     if not res:
         print("FAIL: Proposal not found in ledger.")
         return False
-        
+
     proposal = res[0]
     proposal_id = proposal["proposal_id"]
     print(f"Found proposal: {proposal_id[:8]} -> '{proposal['content'][:20]}...'")
@@ -81,18 +81,18 @@ def test_peer_notary():
         for r in all_res:
             print(f" - {r['proposal_id']}")
         return False
-        
+
     signatures = res[0]["signatures"]
     print(f"Ledger contains {len(signatures)} signatures.")
-    
+
     from base64 import b64decode
     for sig_entry in signatures:
         agent_name = sig_entry["agent"]
         sig_bytes = b64decode(sig_entry["sig"])
-        
+
         # Find agent's public key
         target_agent = next(a for a in agents if a["name"] == agent_name)
-        
+
         if SwarmCrypto.verify_notary(target_agent["ed_pub"], proposal_content.encode("utf-8"), sig_bytes):
             print(f"VERIFIED: Signature from {agent_name} is valid.")
         else:
@@ -118,7 +118,7 @@ if __name__ == "__main__":
     # Cleanup previous DB
     if os.path.exists("/tmp/milvus_notary_test.db"):
         os.remove("/tmp/milvus_notary_test.db")
-        
+
     if test_peer_notary():
         print("\n--- ALL PEER NOTARY TESTS PASSED ---")
         sys.exit(0)
