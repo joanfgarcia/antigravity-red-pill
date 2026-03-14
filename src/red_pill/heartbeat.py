@@ -70,6 +70,7 @@ class LazarusPulse:
 				await self._consolidation_ritual()
 				await self._swarm_ritual()
 				await self._lazarus_ritual()
+				await self._resonance_ritual()
 
 				# Wait for next beat
 				await asyncio.sleep(cfg.PULSE_INTERVAL)
@@ -214,3 +215,32 @@ class LazarusPulse:
 				
 		except Exception as e:
 			logger.error(f"Pulse: Lazarus ritual failed: {e}")
+
+	async def _resonance_ritual(self) -> None:
+		"""
+		Autonomous Semantic Resonance:
+		- Searches the Hive Mind for content matching the agent's current focus.
+		- Triggers proactive reactions to relevant external intelligence.
+		"""
+		if not cfg.RESONANCE_ENABLED:
+			return
+
+		try:
+			from red_pill.swarm.resonance import ResonanceObserver
+			
+			logger.info("Pulse: Initiating Resonance Ritual (Semantic Radar)...")
+			
+			agent_id = f"Aleph@{cfg.OPERATOR_DISPLAY_NAME}"
+			observer = ResonanceObserver(agent_id)
+			
+			# PoC Focus Vector: Sovereignty / Swarm Architecture
+			# In a full impl, this vector would be dynamically updated via LLM focus.
+			poc_vector = [0.1] * cfg.VECTOR_SIZE # Dummy focus
+			
+			matches = await asyncio.to_thread(observer.check_resonance, hub_vector=poc_vector)
+			
+			for match in matches:
+				await asyncio.to_thread(observer.trigger_reaction, match)
+				
+		except Exception as e:
+			logger.error(f"Pulse: Resonance ritual failed: {e}")
