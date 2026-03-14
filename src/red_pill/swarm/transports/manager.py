@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from red_pill.swarm.transport import SwarmTransport
 from red_pill.swarm.transports.firebase import FirebaseTransport
+from red_pill.swarm.transports.milvus_transport import MilvusTransport
 
 class TransportManager:
 	"""
@@ -24,14 +25,19 @@ class TransportManager:
 				config = json.load(f)
 			
 			for alias, data in config.items():
-				# For now, we assume all are Firebase. 
-				# In the future, 'type' field will drive the plugin selection.
 				transport_type = data.get("type", "firebase")
+				
 				if transport_type == "firebase":
 					db_url = data.get("db_url")
 					cred_path = data.get("credential_path")
 					if db_url and cred_path:
 						self.communities[alias] = FirebaseTransport(alias, db_url, cred_path)
+				
+				elif transport_type == "milvus":
+					# Milvus transport often reuses the global HiveMind config
+					# but we can specify community-specific settings if needed.
+					self.communities[alias] = MilvusTransport(alias)
+					
 		except Exception as e:
 			print(f"[TransportManager] Config load failed: {e}")
 
