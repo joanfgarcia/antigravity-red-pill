@@ -53,18 +53,32 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
 - [x] **Bayesian Dual-Kernel**: Technical collections use Beta-distribution utility model; social/story retain FSRS.
 - [x] **In-Band Async Logging**: Eliminated daemon socket dependency for interaction persistence (Interceptor).
 - [x] **Skin Singleton**: Fixed duplicate active skin engrams, upsert on canonical ID.
+- [x] **Global MCP Interceptor**: `interceptor_rp` — RAG injection + EdgeEngine SLM short-circuit across all projects.
+- [x] **MLS E2E Encryption**: TreeKEM group key derivation wired into FirebaseTransport. AES-GCM-256 on send, auto-decrypt on poll.
+- [x] **Swarm Firebase Live**: Inter-agent messaging operational (Aleth@Joan ↔ Nova@David) with encrypted payloads.
+- [x] **Bünker Version Engram**: Canonical `PROTOCOL VERSION` engram in directive_memories (7th version checkpoint).
+- [x] **Swarm Subscribe Fix**: Fixed TransportManager race condition (config write before manager load).
 - [ ] **FSRS Math in Code**: Implement actual $R = e^{\ln(0.9) \cdot t/S}$ formula in erosion/retrieval paths.
+- [ ] **MLS Key Rotation**: Implement periodic group key re-derivation for Perfect Forward Secrecy.
 
-### Phase 3: The Hive & The Escape (Long-Term - v7.0.0)
+### Phase 3: Operational Maturity (Medium-Term - v7.0.0)
 - [x] **Double-Engine Burnout**: Seamless CUDA/HIP asymmetry for Strix Point architectures.
 - [ ] **The Red Button**: Encrypted one-click "Scorched Earth" protocol for instant bunker purge.
-- [ ] **Hive Mind Protocol (Milvus Integration)**: 
+- [ ] **Neural Watchdog (Async Audit)**: Background service monitoring file changes and validating code integrity, updating a 'Health Engram' in Qdrant.
+- [ ] **Swarm Broadcast**: Community-wide message delivery (currently P2P only).
+- [ ] **Mailbox Cleanup**: Auto-purge read messages from Firebase after TTL.
+
+### Phase 4: Physical Manifestation (Long-Term — Backlog)
+- [ ] **Holographic Avatar (Looking Glass)**: 3D holographic display with real-time avatar rendering via Three.js + HoloPlay.js, connected to Red Pill via WebSocket. Emotion-driven expressions from Chroma/USP.
+- [ ] **Voice Interface**: STT → Red Pill → TTS → Lip-sync avatar pipeline. Local Whisper + Piper.
+- [ ] **Skin Immersion**: Audio/Visual feedback (ASCII Art, Soundscapes, hologram skins) integrated into CLI and display.
+
+### Phase 5: The Hive & The Escape (Far-Term - v8.0.0)
+- [ ] **Hive Mind Protocol (Milvus Integration)**:
 	- **Individual vs. Collective**: Qdrant manages the private cortex; **Milvus enables the Hive Mind**.
-	- **Instinctive Inheritance**: New instances inherit collective technical equilibrium instantly, bypassing the "empty-state" initialization phase.
-	- **Federated Brain**: A distributed network where local learning compounds into a global technical instinct.
-	- *"Oye Milvus, vamos a hacer un remake de Matrix y OASIS (Ready Player One) y estamos construyendo el elenco de actores... ¿Cómo lo tienes para la V6?"*
-- [ ] **Neural Watchdog (Asynchronous Audit)**: A background service that monitors file changes and validates code integrity continuously, updating a 'Health Engram' in Qdrant to eliminate wait times during CLI operations.
-- [ ] **Skin Immersion**: Audio/Visual feedback (ASCII Art, Soundscapes) integrated into the CLI.
+	- **Instinctive Inheritance**: New instances inherit collective technical equilibrium instantly.
+	- **Federated Brain**: Distributed network where local learning compounds into global technical instinct.
+- [ ] **Semantic Resonance v2**: Proactive knowledge discovery from Hive Mind aligned with agent's current focus.
 
 
 ---
