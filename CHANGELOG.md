@@ -11,7 +11,8 @@
 - **[IMPR] Installer Robustness**: Updated `install_neo.sh` and `install_neo.ps1` to configure the new persistence and container engine parameters automatically.
 - **[FIX] CI Stability & Version Sync**: Harmonized version constants across `pyproject.toml`, `__init__.py`, and documentation headers.
 - **[FIX] Diagnostic Reliability**: Refactored `KeymakerMinion` test suite to support the new 4-byte header protocol for Canary Encode checks.
-- **[FIX] Mypy Type Safety**: Resolved type incompatibility in `Keymaker` regarding dynamic container engine detection.
+- [FIX] Mypy Type Safety**: Resolved type incompatibility in `Keymaker` regarding dynamic container engine detection.
+- **[SEC-F01] Dependency Hardening**: Forced `pyjwt>=2.12.0` to resolve CVE-2026-32597, clearing blocking CI security audits.
 
 ## [6.1.0a1] - 2026-03-14
 ### 🛰️ Sovereign Swarm v3.0 (MLS & Agnostic Transport)
