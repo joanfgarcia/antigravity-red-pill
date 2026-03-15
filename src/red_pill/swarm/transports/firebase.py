@@ -39,8 +39,8 @@ class FirebaseTransport(SwarmTransport):
 
 	def send_package(self, target_id: str, package: Dict[str, Any]) -> bool:
 		try:
-			# Mailbox ID is often a hash of the target identifier
-			mailbox_id = hashlib.sha256(target_id.encode()).hexdigest()[:24]
+			# Mailbox ID should be readable (e.g. Aleph_Joan) instead of a hash for Swarm V3 logic.
+			mailbox_id = target_id.replace("@", "_")
 			ref = db.reference(f"mailboxes/{mailbox_id}/inbox", app=self.app)
 			ref.push(package)
 			return True
@@ -50,7 +50,7 @@ class FirebaseTransport(SwarmTransport):
 
 	def poll_mailbox(self, agent_id: str) -> List[Dict[str, Any]]:
 		try:
-			mailbox_id = hashlib.sha256(agent_id.encode()).hexdigest()[:24]
+			mailbox_id = agent_id.replace("@", "_")
 			ref = db.reference(f"mailboxes/{mailbox_id}/inbox", app=self.app)
 			messages = ref.get()
 			if not messages:

@@ -397,12 +397,13 @@ async def handle_refresh_session_context(arguments: Dict[str, Any]):
 )
 async def handle_swarm_send_message(arguments: Dict[str, Any]):
 	skill = SwarmMessagingSkill(
-		agent_identity=f"Aleph@{cfg.OPERATOR_DISPLAY_NAME}", shared_secret=os.getenv("SWARM_SHARED_SECRET", "770_Pact_Secret")
+		agent_identity=f"{cfg.AGENT_NAME}@{cfg.OPERATOR_DISPLAY_NAME}", shared_secret=os.getenv("SWARM_SHARED_SECRET", "770_Pact_Secret")
 	)
 	res = skill.execute_send(
 		target_alias=arguments["target_alias"],
 		payload_data={"message": arguments["message"], **arguments.get("payload_extra", {})},
 		intent=SwarmIntent(arguments.get("intent", "gossip")),
+        community_alias=arguments.get("community_alias", "global")
 	)
 	return [types.TextContent(type="text", text=f"Swarm Dispatch Result:\n{res}")]
 
