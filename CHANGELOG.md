@@ -1,5 +1,15 @@
 # Changelog: Red Pill Protocol
 
+## [6.1.0a2] - 2026-03-15
+### 🛡️ Infrastructure Sovereignty & Deep Diagnostics
+- **[FEAT] Persistent Model Cache**: Migrated `fastembed` model cache from `/tmp` to `{IA_DIR}/storage/models`. Prevents Sidecar "amnesia" and startup failures after OS temporary file purges.
+- **[FEAT] Dynamic Container Abstraction**: Introduced `CONTAINER_ENGINE` variable in `.env`. Diagnostics (`Keymaker`) now dynamically use the configured engine (Podman/Docker), eliminating hardcoded assumptions.
+- **[FEAT] Deep Sidecar Diagnostics (Canary Encode)**: Upgraded `KeymakerMinion` health checks. Now performs a real semantic encoding test (ping + encode) instead of a simple socket ping, detecting "Active but Dead" states.
+- **[ENFORCE] Unified Execution Environment**: Standardized all internal Python executions (Systemd, MCP, scripts) to use `uv run`. Guarantees consistent dependency availability and eliminates `ModuleNotFoundError`.
+- **[FIX] Persistence Integrity Reporting**: Refactored `mcp_server.py` to abort and report fatal errors if memory registration fails, eliminating silent data loss during Sidecar downtime.
+- **[SEC] Secure Diagnostics**: Updated `Keymaker` to use authenticated health checks for Qdrant, supporting secured remote and local clusters.
+- **[IMPR] Installer Robustness**: Updated `install_neo.sh` and `install_neo.ps1` to configure the new persistence and container engine parameters automatically.
+
 ## [6.1.0a1] - 2026-03-14
 ### 🛰️ Sovereign Swarm v3.0 (MLS & Agnostic Transport)
 - **[FEAT] Agnostic Transport Layer**: Decoupled messaging from Firebase. Introduced `SwarmTransport` and `TransportManager` supporting N communities (Firebase, Supabase, etc.).

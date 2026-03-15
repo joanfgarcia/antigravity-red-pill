@@ -128,9 +128,9 @@ def main():
 
 	# SEC-001: Sidecar health is mandatory for zero-amnesia
 	if check_sidecar():
-		sidecar_status = "OPERATIONAL (Socket Alive)"
+		sidecar_status = f"OPERATIONAL (Socket: {SOCKET_PATH})"
 	else:
-		sidecar_status = "RESTORING (Systemd Triggered)"
+		sidecar_status = "RESTORING (Systemd restart triggered via uv run)"
 
 	social = query_qdrant("social_memories", "Active Skin")
 	directives = query_qdrant("directive_memories", "Active Skin")

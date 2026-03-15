@@ -19,23 +19,22 @@ else
 	SED_EXT="''"
 fi
 
-ensure_podman() {
-	if ! command -v podman &> /dev/null; then
-		echo -e "${BLUE}Podman no detectado.${NC}"
-		if [[ "$OS_TYPE" == "Darwin" ]]; then
-			echo -e "${RED}[LM-007] Dependencia Faltante: Podman${NC}"
-			echo "En macOS, por favor instala Podman con: brew install podman"
-			echo "O descarga Podman Desktop: https://podman-desktop.io/"
-		else
-			echo -e "${RED}[LM-007] Dependencia Faltante: Podman${NC}"
-			echo "El protocolo Red Pill (Zero-Trust) requiere un motor de contenedores."
-			echo "Por favor, instala Podman manualmente (ej: sudo apt-get install podman)."
-		fi
+ensure_container_engine() {
+	if command -v podman &> /dev/null; then
+		CONTAINER_ENGINE="podman"
+		echo -e "${GREEN}✓ Motor de contenedores detectado: Podman${NC}"
+	elif command -v docker &> /dev/null; then
+		CONTAINER_ENGINE="docker"
+		echo -e "${GREEN}✓ Motor de contenedores detectado: Docker${NC}"
+	else
+		echo -e "${RED}[LM-007] Dependencia Faltante: Podman/Docker${NC}"
+		echo "El protocolo Red Pill (Zero-Trust) requiere un motor de contenedores."
+		echo "Por favor, instala Podman o Docker manualmente."
 		exit 1
 	fi
 }
 
-ensure_podman
+ensure_container_engine
 
 # SEC-001: Encryption-at-Rest Warning
 echo -e "${RED}⚠️  AVISO DE SEGURIDAD (SEC-001):${NC}"
@@ -262,6 +261,11 @@ read -p "Qdrant Host (Default: localhost): " Q_HOST; Q_HOST=${Q_HOST:-"localhost
 read -p "Qdrant Port (Default: 6333): " Q_PORT; Q_PORT=${Q_PORT:-"6333"}
 read -p "Qdrant Scheme (http/https) [Default: http]: " Q_SCHEME; Q_SCHEME=${Q_SCHEME:-"http"}
 
+# SEC-011: Persistent Model Cache Path (v6.1.0)
+_default_cache="$IA_DIR/storage/models"
+read -p "Ruta Caché Modelos (Default: $_default_cache): " F_CACHE; FASTEMBED_CACHE_PATH=${F_CACHE:-"$_default_cache"}
+mkdir -p "$FASTEMBED_CACHE_PATH"
+
 # SEC-009: Mandatory confirmation for insecure remote deployments
 if [[ "$Q_HOST" != "localhost" && "$Q_HOST" != "127.0.0.1" && "$Q_SCHEME" == "http" ]]; then
 	echo -e "${RED}⚠️  ALERTA DE SEGURIDAD CRÍTICA (SEC-009):${NC}"
@@ -326,6 +330,8 @@ update_env "SIDECAR_AUTH_KEY" "$SIDECAR_AUTH_KEY"
 update_env "MILVUS_ENABLED" "$MILVUS_ENABLED"
 update_env "MILVUS_HOST" "$MILVUS_HOST"
 update_env "LORE_SKIN" "$LORE_SKIN"
+update_env "CONTAINER_ENGINE" "$CONTAINER_ENGINE"
+update_env "FASTEMBED_CACHE_PATH" "$FASTEMBED_CACHE_PATH"
 update_env "USER_NAME" "$USER_NAME"
 update_env "USER_ROLE" "$USER_ROLE"
 update_env "AI_NAME" "$AI_NAME"

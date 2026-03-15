@@ -180,9 +180,11 @@ async def handle_memorize_interaction(arguments: Dict[str, Any]):
 				result = json.loads(client.recv(resp_len).decode("utf-8"))
 				if result.get("status") == "ok":
 					return [types.TextContent(type="text", text=f"Engram successfully registered via Sidecar. ID: {result.get('id')}")]
-		return [types.TextContent(type="text", text="Interaction queued.")]
+				else:
+					return [types.TextContent(type="text", text=f"Sidecar Error: {result.get('message', 'Unknown failure')}")]
+		return [types.TextContent(type="text", text="Error: Interaction NOT persisted. Sidecar did not return a success signal.")]
 	except Exception as e:
-		return [types.TextContent(type="text", text=f"Sidecar connection failed: {e}")]
+		return [types.TextContent(type="text", text=f"Sidecar connection failed (Fatal): {e}")]
 
 
 @registry.register(
@@ -383,7 +385,7 @@ async def handle_refresh_session_context(arguments: Dict[str, Any]):
 	return [
 		types.TextContent(
 			type="text",
-			text=subprocess.run(["python3", os.path.join(PROJECT_ROOT, "scripts", "wake_up_v6.py")], capture_output=True, text=True).stdout,
+			text=subprocess.run(["uv", "run", "--project", PROJECT_ROOT, os.path.join(PROJECT_ROOT, "scripts", "wake_up_v6.py")], capture_output=True, text=True).stdout,
 		)
 	]
 
