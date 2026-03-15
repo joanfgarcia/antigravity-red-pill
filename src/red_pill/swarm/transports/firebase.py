@@ -80,3 +80,21 @@ class FirebaseTransport(SwarmTransport):
 		except Exception as e:
 			print(f"[FirebaseTransport] Lookup failed: {e}")
 			return None
+
+	def resolve_alias(self, partial_alias: str) -> Optional[tuple[str, str]]:
+		try:
+			ref = db.reference("registry", app=self.app)
+			nodes = ref.get()
+			if not nodes:
+				return None
+
+			partial_lower = partial_alias.lower()
+			for node_id, data in nodes.items():
+				full_alias = data.get("alias", "")
+				if full_alias and (full_alias.lower() == partial_lower or full_alias.lower().startswith(f"{partial_lower}@")):
+					key = data.get("public_key", "")
+					return (full_alias, str(key) if key else "")
+			return None
+		except Exception as e:
+			print(f"[FirebaseTransport] Resolve alias failed: {e}")
+			return None

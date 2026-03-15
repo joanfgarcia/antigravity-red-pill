@@ -27,3 +27,8 @@ class SwarmTransport(ABC):
 	def lookup_public_key(self, alias: str) -> Optional[str]:
 		"""Finds the public key (Base64) for a given alias in the registry."""
 		pass
+
+	@abstractmethod
+	def resolve_alias(self, partial_alias: str) -> Optional[tuple[str, str]]:
+		"""Resolves a partial alias (e.g. 'Aleph') to a full identifier ('Aleph@Joan') and its public key."""
+		pass

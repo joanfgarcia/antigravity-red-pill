@@ -43,10 +43,19 @@ class SwarmMessagingSkill:
 		if not transport:
 			return {"status": "error", "message": f"Transport for '{community_alias}' not found."}
 
-		package = {"intent": intent.value, "sender": self.agent_identity, "target": target_alias, "data": payload_data, "v": "3.0"}
+		# Try resolving the target (e.g. "Aleph" -> "Aleph@Joan")
+		resolved = transport.resolve_alias(target_alias) if hasattr(transport, "resolve_alias") else None
+		
+		# Fallbacks
+		if resolved:
+			actual_target, remote_pub_b64 = resolved
+		else:
+			actual_target = target_alias
+			remote_pub_b64 = transport.lookup_public_key(actual_target)
+
+		package = {"intent": intent.value, "sender": self.agent_identity, "target": actual_target, "data": payload_data, "v": "3.0"}
 
 		# Security Selection
-		remote_pub_b64 = transport.lookup_public_key(target_alias)
 		local_priv = self._get_local_private_key()
 
 		if remote_pub_b64 and local_priv:
@@ -58,8 +67,8 @@ class SwarmMessagingSkill:
 			encrypted_pkg = SwarmCrypto.encrypt_payload(package, self.shared_secret)
 			encrypted_pkg["mode"] = "bond"
 
-		success = transport.send_package(target_alias, encrypted_pkg)
-		return {"status": "dispatched" if success else "failed", "target": target_alias}
+		success = transport.send_package(actual_target, encrypted_pkg)
+		return {"status": "dispatched" if success else "failed", "target": actual_target}
 
 	def check_mailbox(self, community_alias: str = "default") -> List[Dict[str, Any]]:
 		"""Interface for periodic heartbeat checks."""
