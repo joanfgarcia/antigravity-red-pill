@@ -1,2 +1,2 @@
-__version__ = "6.0.0a3"
+__version__ = "6.1.0a2"
 CORE_VERSION = __version__

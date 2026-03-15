@@ -141,6 +141,7 @@ This makes the B760 decay model biologically accurate end-to-end.
 ### Daemon Socket Exposure ("La Paradoja de la Contención")
 - **Decision**: The local background LLM Minion (`Qwen`) used for Step 0 Zero-Trust Identity initialization is bound strictly to `127.0.0.1:8760`, intentionally omitting Unix Sockets (`AF_UNIX`).
 - **Context**: Claude audits strictly flag exposed local ports (SEC-F01). Standard Unix daemon architectures heavily favor `.sock` files (as implemented in `red_pill.daemon` minions) to prevent port collisions and ensure OS-level permission boundaries (`chmod 600`).
+- **Identity Update (2026-03-14)**: Renamed `<NOVA_CONTEXT>` to `<BUNKER_CONTEXT>` to prevent identity collisions with other AIs (e.g., Nova) and maintain Aleth's core authority.
 - **Rationale (The Be Water Protocol)**: 
   1. The local macOS native background inference engine (`mlx_lm.server`) does not support `--uds` Unix Socket bindings natively without significant artisanal wrappers.
   2. The `wake_up_v6.py` script mandates *absolute zero dependencies* (using only the standard `urllib` library) to execute efficiently at `Step Id: 0` before any Python virtual environments are loaded. The standard `urllib.request` cannot route HTTP over `AF_UNIX` without third-party patches like `requests-unixsocket`.

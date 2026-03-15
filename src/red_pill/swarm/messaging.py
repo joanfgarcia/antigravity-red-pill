@@ -19,7 +19,7 @@ class AgentIdentity:
 	def resolve_local_identity() -> dict:
 		"""
 		Attempts to resolve the local identity from the current environment context.
-		In a real scenario, this would read from the Qdrant <NOVA_CONTEXT> or a secure keystore.
+		In a real scenario, this would read from the Qdrant <BUNKER_CONTEXT> or a secure keystore.
 		"""
 		# For now, this is a placeholder that should read the bonded names from the system
 		# This will be refined once the database connection strategy is defined.

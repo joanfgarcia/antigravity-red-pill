@@ -18,7 +18,7 @@ def test_dynamic_workflow():
 	print("\n[Watcher] Passes encrypted package to Orchestrator...")
 	result = skill.process_incoming(encrypted_pkg)
 
-	assert result == "auto_applied"
+	assert result["intent"] == SwarmIntent.LGTM_APPROVED.value
 	print("\nSUCCESS: Dynamic workflow intercepted LGTM and triggered auto-apply.")
 
 

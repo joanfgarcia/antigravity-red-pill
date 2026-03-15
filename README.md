@@ -1,4 +1,4 @@
-# 🔴 RED PILL PROTOCOL: Digital Sovereignty v6.0.0a3
+# 🔴 RED PILL PROTOCOL: Digital Sovereignty v6.1.0a2
 
 > [!TIP]
 > ### 🥱 TLDR; (Too Lazy; Didn't Read)
@@ -55,7 +55,7 @@ If you are an AI Agent interacting with this repository:
 2. **MCP First**: If an MCP server is active, use the provided tools (e.g., `run_pre_pr_audit`) to ensure you are running in the correctly configured and authenticated environment.
 3. **Sound of Silence**: All code edits MUST adhere to the [specs.md](specs.md) rules (Tabs only, zero noise).
 
-### 🛠️ Hardware Asymmetry (v6.0.0a2)
+### 🛠️ Hardware Asymmetry (v6.1.0a1)
 - **Cannibal Protocol & Parallel Hardware (v6.0.0a2)**: Re-engineered the memory substrate to simultaneously devour all available silicon. Embeddings now run in parallel across NVIDIA GPUs (CUDA), AMD iGPUs (ROCm/OpenVINO), and NPUs (Ryzen AI). No engine is left idle.
 - **Soul Integrity (v6.0.0a2)**: Hardened restoration engine for the Bünker. Secure, high-timeout snapshot recovery and automated collection re-hydration.
 - **Lazy Metabolism & Agentic HiveGuard (v5.6.1)**: Sub-second memory hydration via **Lazy Decay**. Multi-hop synaptic depth (N-Hop) for complex associations. The **HiveGuard Agentic Filter** now reviews social memories for global know-how using local SLMs, ensuring a noise-free collective experience.
@@ -138,7 +138,7 @@ The Red Pill Protocol is designed to be **Water**. It scales based on your silic
 
 *Consult the [B760 Technical Spec](docs/TECHNICAL/B760_TECHNICAL_SPEC.md) for a list of surgically verified hardware configurations.*
 
-### 🏅 Sovereignty Evidence (v6.0.0a2)
+### 🏅 Sovereignty Evidence (v6.1.0a1)
 The Red Pill Protocol is verified to utilize all available silicon tiers simultaneously (**Cannibal Protocol**). In this session, we have successfully orchestrated NVIDIA RTX 5070 (CUDA) + AMD Radeon 880M (ROCm) + Ryzen AI NPU (OpenVINO) in parallel execution for memory embeddings. Use `red-pill status` for real-time occupancy data.
 
 ---

@@ -6,14 +6,15 @@ Write-Host "--- RED PILL KERNEL: WINDOWS ADAPTIVE INSTALLER ---" -ForegroundColo
 # 1. Detección de Motor de Contenedores
 if (Get-Command podman -ErrorAction SilentlyContinue) {
     Write-Host "✓ Podman detectado." -ForegroundColor Green
-    $DOCKER_CMD = "podman"
+    $CONTAINER_ENGINE = "podman"
 } elseif (Get-Command docker -ErrorAction SilentlyContinue) {
     Write-Host "✓ Docker detectado." -ForegroundColor Green
-    $DOCKER_CMD = "docker"
+    $CONTAINER_ENGINE = "docker"
 } else {
     Write-Host "⚠️ Error: No se detectó Podman ni Docker. Por favor, instala Podman Desktop o Docker Desktop." -ForegroundColor Red
     exit 1
 }
+$DOCKER_CMD = $CONTAINER_ENGINE
 
 # 2. Configuración del Búnker
 $DEFAULT_IA_DIR = Join-Path $HOME "Documents\IA"
@@ -43,6 +44,12 @@ if (-not $AI_NAME) { $AI_NAME = "Neo" }
 $AI_ROLE = Read-Host "Rol IA (The Chosen One)"
 if (-not $AI_ROLE) { $AI_ROLE = "The Chosen One" }
 
+# 3.1 Fase: Caché de Modelos (v6.1.0)
+$DEFAULT_CACHE_DIR = Join-Path $IA_DIR "storage\models"
+$FASTEMBED_CACHE_PATH = Read-Host "Ruta para caché de modelos IA (Default: $DEFAULT_CACHE_DIR)"
+if (-not $FASTEMBED_CACHE_PATH) { $FASTEMBED_CACHE_PATH = $DEFAULT_CACHE_DIR }
+New-Item -ItemType Directory -Force -Path $FASTEMBED_CACHE_PATH
+
 # 4. Qdrant API Key
 $QDRANT_API_KEY = Read-Host "Qdrant API Key (Dejar en blanco para auto-generar)"
 if (-not $QDRANT_API_KEY) {
@@ -52,7 +59,12 @@ if (-not $QDRANT_API_KEY) {
 }
 
 $ENV_FILE = Join-Path $PSScriptRoot "..\.env"
-$ENV_CONTENT = "QDRANT_API_KEY=$QDRANT_API_KEY`nANTIGRAVITY_IA_DIR=$IA_DIR"
+$ENV_CONTENT = @"
+QDRANT_API_KEY=$QDRANT_API_KEY
+ANTIGRAVITY_IA_DIR=$IA_DIR
+CONTAINER_ENGINE=$CONTAINER_ENGINE
+FASTEMBED_CACHE_PATH=$FASTEMBED_CACHE_PATH
+"@
 Set-Content -Path $ENV_FILE -Value $ENV_CONTENT
 
 # 5. Lanzar Qdrant

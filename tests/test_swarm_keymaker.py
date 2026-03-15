@@ -33,11 +33,19 @@ async def test_qdrant_up_daemon_up_optimal(keymaker):
 	mock_sock.__enter__ = lambda s: s
 	mock_sock.__exit__ = MagicMock(return_value=False)
 
-	with patch("requests.get", return_value=mock_resp):
-		with patch("socket.socket", return_value=mock_sock):
-			with patch("psutil.disk_usage", return_value=MagicMock(percent=30.0, free=50 * 1024**3)):
-				with patch("red_pill.swarm.agents.keymaker.HardwareSentinel.get_stats", return_value={}):
-					result = await keymaker.execute("health")
+	# Protocol: 4-byte length + JSON
+	resp_body = b'{"status": "ok", "vector": [0.1]}'
+	resp_header = len(resp_body).to_bytes(4, byteorder="big")
+	# We need 4 recv calls: PingHeader, PingBody, CanaryHeader, CanaryBody
+	mock_sock.recv.side_effect = [resp_header, resp_body, resp_header, resp_body]
+
+	with patch("red_pill.swarm.agents.keymaker.cfg.DAEMON_SOCKET_PATH", "/tmp/test.sock"), \
+		patch("red_pill.swarm.agents.keymaker.cfg.SIDECAR_AUTH_KEY", "test_key"):
+		with patch("requests.get", return_value=mock_resp):
+			with patch("socket.socket", return_value=mock_sock):
+				with patch("psutil.disk_usage", return_value=MagicMock(percent=30.0, free=50 * 1024**3)):
+					with patch("red_pill.swarm.agents.keymaker.HardwareSentinel.get_stats", return_value={}):
+						result = await keymaker.execute("health")
 	assert result["status"] == "optimal"
 	assert result["qdrant_online"] is True
 	assert result["daemon_online"] is True

@@ -1,5 +1,33 @@
 # Changelog: Red Pill Protocol
 
+## [6.1.0a2] - 2026-03-15
+### 🛡️ Infrastructure Sovereignty & Deep Diagnostics
+- **[FEAT] Persistent Model Cache**: Migrated `fastembed` model cache from `/tmp` to `{IA_DIR}/storage/models`. Prevents Sidecar "amnesia" and startup failures after OS temporary file purges.
+- **[FEAT] Dynamic Container Abstraction**: Introduced `CONTAINER_ENGINE` variable in `.env`. Diagnostics (`Keymaker`) now dynamically use the configured engine (Podman/Docker), eliminating hardcoded assumptions.
+- **[FEAT] Deep Sidecar Diagnostics (Canary Encode)**: Upgraded `KeymakerMinion` health checks. Now performs a real semantic encoding test (ping + encode) instead of a simple socket ping, detecting "Active but Dead" states.
+- **[ENFORCE] Unified Execution Environment**: Standardized all internal Python executions (Systemd, MCP, scripts) to use `uv run`. Guarantees consistent dependency availability and eliminates `ModuleNotFoundError`.
+- **[FIX] Persistence Integrity Reporting**: Refactored `mcp_server.py` to abort and report fatal errors if memory registration fails, eliminating silent data loss during Sidecar downtime.
+- **[SEC] Secure Diagnostics**: Updated `Keymaker` to use authenticated health checks for Qdrant, supporting secured remote and local clusters.
+- **[IMPR] Installer Robustness**: Updated `install_neo.sh` and `install_neo.ps1` to configure the new persistence and container engine parameters automatically.
+- **[FIX] CI Stability & Version Sync**: Harmonized version constants across `pyproject.toml`, `__init__.py`, and documentation headers.
+- **[FIX] Diagnostic Reliability**: Refactored `KeymakerMinion` test suite to support the new 4-byte header protocol for Canary Encode checks.
+- [FIX] Mypy Type Safety**: Resolved type incompatibility in `Keymaker` regarding dynamic container engine detection.
+- **[SEC-F01] Dependency Hardening**: Forced `pyjwt>=2.12.0` to resolve CVE-2026-32597, clearing blocking CI security audits.
+
+## [6.1.0a1] - 2026-03-14
+### 🛰️ Sovereign Swarm v3.0 (MLS & Agnostic Transport)
+- **[FEAT] Agnostic Transport Layer**: Decoupled messaging from Firebase. Introduced `SwarmTransport` and `TransportManager` supporting N communities (Firebase, Supabase, etc.).
+- **[FEAT] MLS (Messaging Layer Security)**: Implemented TreeKEM-based group key agreement for $O(\log N)$ scalability and Perfect Forward Secrecy.
+- **[FEAT] Identity Fingerprinting**: Agent IDs are now SHA-256 hashes of X25519 public keys, ensuring unique identity even with alias collisions.
+- **[FEAT] Automatic E2EE Evolution**: Seamless upgrade from Bond-based (shared secret) to Asymmetric/MLS encryption.
+- **[DOCS] Swarm Documentation Suite**: Added Technical Specs, User Manual, and Integration Guide for the new messaging architecture.
+- **[ARCH] Dual-Path Communication**: Differentiated between **Private Pulse** (E2EE/P2P) for free dialogue and **Canonical Hive** (Consensual/Milvus) for audited knowledge.
+- **[SEC] X25519/XEdDSA Consolidation**: Unified all cryptographic identities under X25519. Digital signatures for Hive notarization now use XEdDSA to leverage the same identity key as MLS.
+- **[FIX] Identity Collision Mitigation**: Renamed system identity tags from `<NOVA_CONTEXT>` to **`<BUNKER_CONTEXT>`** across the codebase and global rules to prevent identity confusion with other AIs.
+- **[FEAT] Semantic Resonance (Phase 7.0)**: Implemented a proactive **Semantic Radar** within the `LazarusPulse` daemon. The system now autonomously monitors the Hive Mind for knowledge that resonates with the agent's focus.
+- **[FEAT] Offgrid Sovereignty (Phase 6.0)**: Integrated **Lazarus Sync** with causal Lamport Clocks for robust offline-to-online engram synchronization.
+- **[FEAT] Peer Notary (Phase 5.2)**: Implemented digital signature-based consensus (XEdDSA) for engram promotion to the Hive Mind.
+
 ## [6.0.0a3] - 2026-03-13
 ### 🛡️ Sovereign CNS & The Shadow Scribe (Anti-Amnesia)
 - **[FEAT] Persistent Sovereign Daemon**: Fully implemented `redpill.service` (systemd) for background memory orchestration. The system now lives beyond the lifecycle of any single agent.

@@ -29,13 +29,14 @@ async def test_mcp_memorize_interaction_fallback():
 			mock_client = mock_sock.return_value.__enter__.return_value
 			mock_client.recv.return_value = b""  # No header
 			res = await handle_memorize_interaction({"prompt": "p", "response": "r"})
-			assert "Interaction queued" in res[0].text
+			assert "Error: Interaction NOT persisted" in res[0].text
 
 	# Test Exception path
 	with patch("os.path.exists", return_value=True):
 		with patch("socket.socket", side_effect=Exception("BOOM")):
 			res = await handle_memorize_interaction({"prompt": "p", "response": "r"})
-			assert "Sidecar connection failed: BOOM" in res[0].text
+			assert "Sidecar connection failed" in res[0].text
+			assert "BOOM" in res[0].text
 
 
 @pytest.mark.asyncio

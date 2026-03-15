@@ -4,6 +4,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# CORE PATHS (v6.1.0)
+IA_DIR = os.getenv("IA_DIR", os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
 # SEC-F05: CUDA Configuration.
 # Re-enabled (v6.0.0). Automated LD_LIBRARY_PATH injection for cuDNN 9 support.
 if "CUDA_VISIBLE_DEVICES" not in os.environ:
@@ -20,6 +23,19 @@ QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", None)
 QDRANT_SCHEME = os.getenv("QDRANT_SCHEME", "http")
 QDRANT_URL = f"{QDRANT_SCHEME}://{QDRANT_HOST}:{QDRANT_PORT}"
+
+# CONTAINER_ENGINE abstraction (v6.1.0)
+# Read from .env, fallback to path-based detection (heuristics).
+CONTAINER_ENGINE = os.getenv("CONTAINER_ENGINE", None)
+if not CONTAINER_ENGINE:
+	import shutil
+
+	if shutil.which("podman"):
+		CONTAINER_ENGINE = "podman"
+	elif shutil.which("docker"):
+		CONTAINER_ENGINE = "docker"
+	else:
+		CONTAINER_ENGINE = "podman"  # Standard default for Bünker v6
 
 # SEC-F04: Warn when Qdrant is reachable over an unencrypted non-local connection.
 # Remote http:// exposes API key and engram content to any network observer.
@@ -77,6 +93,13 @@ SIP_SOCKET_PATH = os.getenv("SIP_SOCKET_PATH", os.path.join(_run_dir, "red_pill_
 # MODELS
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
 VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", "384"))
+
+# FASTEMBED Cache Persistence (v6.1.0)
+_default_cache = os.path.join(IA_DIR, "storage", "models")
+FASTEMBED_CACHE_PATH = os.getenv("FASTEMBED_CACHE_PATH", _default_cache)
+os.makedirs(FASTEMBED_CACHE_PATH, exist_ok=True)
+os.environ["FASTEMBED_CACHE_PATH"] = FASTEMBED_CACHE_PATH
+
 # Execution provider: 'cpu', 'cuda', 'coreml', etc. Defaults to None (auto-detect).
 EXECUTION_PROVIDER = os.getenv("EXECUTION_PROVIDER", None)
 
@@ -228,8 +251,6 @@ CURRENT_SCHEMA_VERSION = 1
 DYNAMIC_EMOTION_SYNC = os.getenv("DYNAMIC_EMOTION_SYNC", "True").lower() == "true"
 MULTI_EMOTION_INFERENCE = os.getenv("MULTI_EMOTION_INFERENCE", "True").lower() == "true"
 
-IA_DIR = os.getenv("IA_DIR", os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
 # SOVEREIGN PULSE (v6.0)
 # Enables background rituals (Maintenance, Audit, Proactive Synthesis).
 PULSE_ENABLED = os.getenv("PULSE_ENABLED", "True").lower() == "true"
@@ -240,6 +261,16 @@ PULSE_INTERVAL = int(os.getenv("PULSE_INTERVAL", "3600"))
 CADENCE_BURST_THRESHOLD = 30.0  # Seconds between prompts for 'Burst' mode (High Intensity)
 CADENCE_ABSENCE_THRESHOLD = 86400 * 2  # 2 Days for 'Dormancy' greeting trigger
 METABOLISM_STATE_FILE = os.path.join(IA_DIR, "storage", "metabolism_state.json")
+
+# LAZARUS SYNC (v6.0 - Phase 6)
+LAZARUS_SYNC_ENABLED = os.getenv("LAZARUS_SYNC_ENABLED", "True").lower() == "true"
+LAZARUS_SYNC_INTERVAL = int(os.getenv("LAZARUS_SYNC_INTERVAL", "300"))  # Default: 5 minutes
+LAZARUS_STATE_FILE = os.path.join(IA_DIR, "storage", "lazarus_state.json")
+
+# SEMANTIC RESONANCE (v6.0 - Phase 7)
+RESONANCE_ENABLED = os.getenv("RESONANCE_ENABLED", "True").lower() == "true"
+RESONANCE_THRESHOLD = float(os.getenv("RESONANCE_THRESHOLD", "0.4"))  # Similarity distance threshold
+RESONANCE_INTERVAL = int(os.getenv("RESONANCE_INTERVAL", "600"))  # Polling interval
 # Overwrite legacy if needed
 if os.getenv("METABOLISM_STATE_FILE"):
 	METABOLISM_STATE_FILE = str(os.getenv("METABOLISM_STATE_FILE"))
