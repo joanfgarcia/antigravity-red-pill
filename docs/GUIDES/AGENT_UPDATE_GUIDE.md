@@ -31,12 +31,14 @@ If you are transitioning from a legacy version (e.g., v4.1.x or older) to the cu
 1.  **Code Sync**: Update the project files from the repository.
 2.  **Bünker Audit**: Run `uv run red-pill sanitize --dry-run` on each collection (`work`, `social`, `story`, `directive`).
 3.  **Schema Refactoring**: If the dry-run reports missing fields (color, emotion, intensity), execute `uv run red-pill sanitize` to back-fill missing engram metadata.
-### 🛡️ Infrastructure Migration (v6.1.0a2+)
-If updating to v6.1.0a2 or higher, you must synchronize your infrastructure parameters:
+### 🛡️ Infrastructure Migration (v6.1.0a3+)
+If updating to v6.1.0a3 or higher, you must synchronize your infrastructure parameters:
 1.  **Redefine Cache**: Add `FASTEMBED_CACHE_PATH` to your `.env` (recommended: `{IA_DIR}/storage/models`).
 2.  **Define Engine**: Add `CONTAINER_ENGINE` to your `.env` (`podman` or `docker`).
 3.  **Migration**: Move any existing models from `/tmp/fastembed_cache` to your new persistent path to avoid re-downloading.
-4.  **Service Restart**: Run `systemctl --user restart redpill.service` to apply the new persistent environment.
+4.  **USP Genesis**: Run `uv run red-pill sanitize` to ensure the `ID_OPERATOR_MOOD` engram exists in `directive_memories`. If not present, it will be seeded automatically.
+5.  **Skin Singleton**: Run `uv run red-pill search directive "Active Skin"` and verify only ONE result. If duplicates exist, purge them manually.
+6.  **Service Restart**: Run `systemctl --user restart redpill.service` to apply the new persistent environment.
 
 ### 4. Verification
 Run `uv run red-pill status` and verify that the "Sidecar Engine" is reported as **OPTIMAL** and the "Container Engine" correctly matches your environment.
