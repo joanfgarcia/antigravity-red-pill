@@ -153,7 +153,7 @@ async def handle_control_bunker(arguments: Dict[str, Any]):
 )
 async def handle_memorize_interaction(arguments: Dict[str, Any]):
 	import asyncio
-	
+
 	prompt = arguments["prompt"]
 	response = arguments["response"]
 	role = arguments.get("role", "assistant")
@@ -161,6 +161,7 @@ async def handle_memorize_interaction(arguments: Dict[str, Any]):
 	def _save_memory_task(p_prompt, p_response, p_role):
 		try:
 			from red_pill.memory import MemoryManager
+
 			mgr = MemoryManager()
 			uid = mgr.record_interaction_pair(p_prompt, p_response, role=p_role)
 			logger.info(f"Async Memory Log Success: {uid}")
@@ -491,11 +492,11 @@ async def handle_mystique_suggest_skin(arguments: Dict[str, Any]):
 )
 async def handle_interceptor_rp(arguments: Dict[str, Any]):
 	user_prompt = arguments.get("user_prompt", "")
-	
+
 	try:
 		from red_pill.memory import MemoryManager
 		from red_pill.swarm.agents.edge_engine import EdgeEngine
-		
+
 		# 1. RAG Retrieve
 		manager = MemoryManager()
 		results = []
@@ -522,26 +523,19 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 			prompt = f"<|im_start|>system\n{eval_sys}<|im_end|>\n<|im_start|>user\nContexto Cifrado del Bünker:\n{background}\n\nPetición del Operador: {user_prompt}<|im_end|>\n<|im_start|>assistant\n"
 
 			# Execute local LLM (Fire and wait, but it's local)
-			output = engine.llm(
-				prompt, max_tokens=1024, stop=["<|im_end|>", "<|im_start|>", "</s>", "<|endoftext|>"], temperature=0.1
-			)
+			output = engine.llm(prompt, max_tokens=1024, stop=["<|im_end|>", "<|im_start|>", "</s>", "<|endoftext|>"], temperature=0.1)
 			if isinstance(output, dict):
 				local_answer = str(output["choices"][0]["text"]).strip()
 				logger.info(f"SLM Eval Result: {local_answer[:50]}...")
-				
+
 				if local_answer and "INSUFFICIENT_CONTEXT" not in local_answer:
-					return [
-						types.TextContent(
-							type="text",
-							text=f"<LOCAL_RESPONSE_READY>\n{local_answer}\n</LOCAL_RESPONSE_READY>"
-						)
-					]
+					return [types.TextContent(type="text", text=f"<LOCAL_RESPONSE_READY>\n{local_answer}\n</LOCAL_RESPONSE_READY>")]
 
 		# 3. Fallback: Wrap with Context for Cloud LLM
 		wrapper = user_prompt
 		if background:
 			wrapper = f"<bunker_context>\n{background}\n</bunker_context>\n\n<user_request>\n{user_prompt}\n</user_request>"
-			
+
 		return [types.TextContent(type="text", text=wrapper)]
 
 	except Exception as e:

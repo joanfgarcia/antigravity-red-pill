@@ -9,7 +9,6 @@ dependencies. Each test verifies:
   - Error paths return a user-facing error string (not an unhandled exception)
 """
 
-import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -476,25 +475,18 @@ class TestMCPAdditionalTools:
 			assert "5 engrams" in result[0].text
 
 	async def test_memorize_interaction_no_daemon(self):
+		"""Phase 2 Interceptor: daemon is no longer used, always in-band async."""
 		from red_pill.mcp_server import handle_call_tool
 
-		with patch("os.path.exists", return_value=False):
-			result = await handle_call_tool("memorize_interaction", {"prompt": "p", "response": "r"})
-			assert "INACTIVE" in result[0].text
+		result = await handle_call_tool("memorize_interaction", {"prompt": "p", "response": "r"})
+		assert "Engram async registration initiated" in result[0].text
 
 	async def test_memorize_interaction_success(self):
-
+		"""Phase 2 Interceptor: function always returns async success."""
 		from red_pill.mcp_server import handle_call_tool
 
-		with patch("os.path.exists", return_value=True):
-			with patch("socket.socket") as mock_sock:
-				client = MagicMock()
-				client.fileno.return_value = 999
-				mock_sock.return_value.__enter__.return_value = client
-				resp = json.dumps({"status": "ok", "id": "eng-123"}).encode()
-				client.recv.side_effect = [len(resp).to_bytes(4, "big"), resp]
-				result = await handle_call_tool("memorize_interaction", {"prompt": "p", "response": "r"})
-				assert "eng-123" in result[0].text
+		result = await handle_call_tool("memorize_interaction", {"prompt": "hello", "response": "world"})
+		assert "Engram async registration initiated" in result[0].text
 
 	async def test_adjust_sleep_knobs(self):
 		from red_pill.mcp_server import handle_call_tool

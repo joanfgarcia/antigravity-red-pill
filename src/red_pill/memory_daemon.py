@@ -136,11 +136,9 @@ class MemoryDaemon:
 
 			# SOVEREIGN INTERACTION MIDDLEWARE (Phase 3)
 			if cfg.SIP_ENABLED:
-				from red_pill.utils.scribe import run_scribe_service
 				from red_pill.utils.sip import run_sip
 
 				threading.Thread(target=run_sip, daemon=True).start()
-
 
 		except Exception as e:
 			logger.error(f"Daemon startup failed (Model/Pulse): {e}")
