@@ -35,6 +35,7 @@ def test_pulse_sync_lifecycle(pulse):
 @pytest.mark.asyncio
 async def test_pulse_cycle_logic(pulse):
 	pulse._maintenance_ritual = AsyncMock()
+	pulse._usp_ritual = AsyncMock()
 	pulse._dream_ritual = AsyncMock()
 
 	pulse._running = True
@@ -99,3 +100,79 @@ def test_event_loop_coverage(pulse):
 	with patch("asyncio.new_event_loop", return_value=mock_loop), patch("asyncio.set_event_loop"):
 		pulse._run_event_loop()
 		assert mock_loop.run_forever.called
+
+
+@pytest.mark.asyncio
+async def test_usp_ritual_success(pulse):
+	"""Covers heartbeat.py lines 119-130 — successful USP refresh."""
+	mock_usp = {"last_3d": {"orange": 0.7, "blue": 0.3}, "interaction_count": 42}
+	with patch("asyncio.to_thread", AsyncMock(return_value=mock_usp)):
+		await pulse._usp_ritual()
+
+
+@pytest.mark.asyncio
+async def test_usp_ritual_failure(pulse):
+	"""Covers heartbeat.py lines 132-133 — USP ritual exception."""
+	with patch("asyncio.to_thread", AsyncMock(side_effect=Exception("USP Fail"))):
+		await pulse._usp_ritual()  # Should not raise
+
+
+@pytest.mark.asyncio
+async def test_consolidation_ritual_failure(pulse):
+	"""Covers heartbeat.py lines 166-167."""
+	with patch("asyncio.to_thread", AsyncMock(side_effect=Exception("Consol Fail"))):
+		await pulse._consolidation_ritual()
+
+
+@pytest.mark.asyncio
+async def test_swarm_ritual_with_messages(pulse):
+	"""Covers heartbeat.py lines 186-190 — swarm with incoming messages."""
+	mock_messages = [{"sender": "Nova", "message": "Hello", "intent": "gossip"}]
+	with patch("red_pill.heartbeat.SwarmMessagingSkill"):
+		with patch("asyncio.to_thread", AsyncMock(side_effect=[mock_messages, None])):
+			await pulse._swarm_ritual()
+
+
+@pytest.mark.asyncio
+async def test_swarm_ritual_failure(pulse):
+	"""Covers swarm exception path."""
+	with patch("red_pill.heartbeat.SwarmMessagingSkill", side_effect=Exception("Swarm init fail")):
+		await pulse._swarm_ritual()
+
+
+@pytest.mark.asyncio
+async def test_lazarus_ritual_disabled(pulse):
+	"""Covers heartbeat.py line 211 — LAZARUS_SYNC_ENABLED=False."""
+	with patch("red_pill.heartbeat.cfg") as mock_cfg:
+		mock_cfg.LAZARUS_SYNC_ENABLED = False
+		await pulse._lazarus_ritual()
+
+
+@pytest.mark.asyncio
+async def test_lazarus_ritual_failure(pulse):
+	"""Covers heartbeat.py lines 226-240."""
+	with patch("red_pill.heartbeat.cfg") as mock_cfg:
+		mock_cfg.LAZARUS_SYNC_ENABLED = True
+		mock_cfg.OPERATOR_DISPLAY_NAME = "test"
+		# HiveMind is imported lazily inside the method
+		with patch.dict("sys.modules", {"red_pill.hive": MagicMock(HiveMind=MagicMock(side_effect=Exception("Hive fail")))}):
+			await pulse._lazarus_ritual()
+
+
+@pytest.mark.asyncio
+async def test_resonance_ritual_disabled(pulse):
+	"""Covers heartbeat.py line 249 — RESONANCE_ENABLED=False."""
+	with patch("red_pill.heartbeat.cfg") as mock_cfg:
+		mock_cfg.RESONANCE_ENABLED = False
+		await pulse._resonance_ritual()
+
+
+@pytest.mark.asyncio
+async def test_resonance_ritual_failure(pulse):
+	"""Covers heartbeat.py lines 266-269."""
+	with patch("red_pill.heartbeat.cfg") as mock_cfg:
+		mock_cfg.RESONANCE_ENABLED = True
+		mock_cfg.OPERATOR_DISPLAY_NAME = "test"
+		mock_cfg.VECTOR_SIZE = 384
+		with patch.dict("sys.modules", {"red_pill.swarm.resonance": MagicMock(ResonanceObserver=MagicMock(side_effect=Exception("Resonance fail")))}):
+			await pulse._resonance_ritual()

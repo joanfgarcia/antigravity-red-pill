@@ -131,9 +131,11 @@ class EngramPayload(BaseModel):
 	last_recalled_at: float
 	schema_version: Union[str, int]
 
-	# FSRS Cognitive Model Dimensions (v6.0 PREP)
-	difficulty: float = 0.0
-	stability: float = 0.0
+	# Bayesian Utility Model (v6.1 Phase B.1)
+	# Alpha: Cumulative success weight (Prior/Reinforcement)
+	# Beta: Cumulative uncertainty/decay weight (Purity/Erosion)
+	utility_alpha: float = 1.0
+	utility_beta: float = 1.0
 
 	# Conversational DNA (v6.0 Claude-Pistis)
 	# Captures shared aliases, nicknames, and unique linguistic triggers.

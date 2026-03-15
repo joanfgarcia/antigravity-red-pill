@@ -71,7 +71,10 @@ async def handle_get_hardware_status(arguments: Dict[str, Any]):
 async def handle_get_dashboard(arguments: Dict[str, Any]):
 	stats = HardwareSentinel.get_stats()
 	gpu_temp = max([g.get("temp", 0) for g in stats["gpu"]]) if stats["gpu"] else 0
-	thermal_state = "🔥 CRITICAL" if gpu_temp > 80 else "🟢 OPTIMAL"
+	cpu_temp = stats["cpu"].get("temp") or 0
+	max_temp = max(gpu_temp, cpu_temp)
+	thermal_state = "🔥 CRITICAL" if max_temp > 80 else "🟢 OPTIMAL"
+	cpu_temp_display = f" @ {stats['cpu'].get('temp')}°C" if stats["cpu"].get("temp") is not None else ""
 	dashboard = f"""
 ## 🔴 BÜNKER SOVEREIGN DASHBOARD v6.0 (ACE-CAL)
 ---
@@ -82,7 +85,7 @@ If you are an AI Agent:
 3. **Sound of Silence**: Tabs only, no noise.
 
 ### 🛠️ Hardware Asymmetry
-- **CPU Load**: {HardwareSentinel._get_bar(stats["cpu"]["usage_percent"], 20)}
+- **CPU Load**: {HardwareSentinel._get_bar(stats["cpu"]["usage_percent"], 20)}{cpu_temp_display}
 - **RAM Usage**: {HardwareSentinel._get_bar(stats["memory"]["percent"], 20)} ({stats["memory"]["available_gb"]}GB Free)
 
 ### ⚡ Accelerated Nodes
@@ -370,7 +373,9 @@ async def handle_refresh_session_context(arguments: Dict[str, Any]):
 	return [
 		types.TextContent(
 			type="text",
-			text=subprocess.run(["uv", "run", "--project", PROJECT_ROOT, os.path.join(PROJECT_ROOT, "scripts", "wake_up_v6.py")], capture_output=True, text=True).stdout,
+			text=subprocess.run(
+				["uv", "run", "--project", PROJECT_ROOT, os.path.join(PROJECT_ROOT, "scripts", "wake_up_v6.py")], capture_output=True, text=True
+			).stdout,
 		)
 	]
 

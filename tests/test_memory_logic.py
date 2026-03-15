@@ -46,6 +46,9 @@ def fake_cfg():
 	cfg.EXECUTION_PROVIDER = "cpu"
 	cfg.METABOLISM_STATE_FILE = "/tmp/metabolism.json"
 	cfg.EMOTIONAL_DECAY_MULTIPLIERS = {"blue": 1.0, "red": 2.0, "orange": 1.0, "joy": 0.8, "surprise": 1.0, "anger": 1.5, "neutral": 1.0}
+	cfg.BAYESIAN_COLLECTIONS = ["skill_memories", "work_memories", "directive_memories"]
+	cfg.BAYESIAN_STABILITY_KAPPA = 0.05
+	cfg.BAYESIAN_REINFORCEMENT_GAIN = 1.0
 	return cfg
 
 

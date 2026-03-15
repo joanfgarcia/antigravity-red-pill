@@ -13,6 +13,10 @@
 
 ## [6.1.0a2] - 2026-03-15
 ### 🛡️ Infrastructure Sovereignty & Deep Diagnostics
+- **[FEAT] CPU Temperature Telemetry**: Added CPU temperature monitoring to `HardwareSentinel` via `psutil.sensors_temperatures()` with prioritized chip detection (`k10temp` → `coretemp` → `acpitz`). Graceful `hasattr` fallback for non-Linux platforms. Dashboard thermal state now factors `max(cpu_temp, gpu_temp)`.
+- **[FEAT] Operator Mood Profile (USP)**: New module `mood_profile.py` captures operator emotional resonance as a multi-color chroma vector across 4 temporal horizons (Global, 30d, 7d, 3d). Weighted by `intensity × importance`, persisted as a fixed engram (`ID_OPERATOR_MOOD`).
+- **[FEAT] Mystique v2 (USP-Driven)**: Rewired Mystique protocol to read operator mood (USP) instead of Búnker internal chroma. Separated `complementary` and `contrast` strategies with distinct scoring logic. Added `manager` parameter with fallback to legacy Búnker mood.
+- **[FIX] Skin Singleton**: `switch_skin` now upserts on the fixed `ID_DIR_ACTIVE_SKIN` engram instead of creating a new immune duplicate each time. Purged 93 orphaned skin engrams from the Búnker.
 - **[FEAT] Persistent Model Cache**: Migrated `fastembed` model cache from `/tmp` to `{IA_DIR}/storage/models`. Prevents Sidecar "amnesia" and startup failures after OS temporary file purges.
 - **[FEAT] Dynamic Container Abstraction**: Introduced `CONTAINER_ENGINE` variable in `.env`. Diagnostics (`Keymaker`) now dynamically use the configured engine (Podman/Docker), eliminating hardcoded assumptions.
 - **[FEAT] Deep Sidecar Diagnostics (Canary Encode)**: Upgraded `KeymakerMinion` health checks. Now performs a real semantic encoding test (ping + encode) instead of a simple socket ping, detecting "Active but Dead" states.
@@ -24,6 +28,14 @@
 - **[FIX] Diagnostic Reliability**: Refactored `KeymakerMinion` test suite to support the new 4-byte header protocol for Canary Encode checks.
 - [FIX] Mypy Type Safety**: Resolved type incompatibility in `Keymaker` regarding dynamic container engine detection.
 - **[SEC-F01] Dependency Hardening**: Forced `pyjwt>=2.12.0` to resolve CVE-2026-32597, clearing blocking CI security audits.
+
+### 🧠 Bayesian Dual-Kernel Memory (Phase B)
+- **[FEAT] BayesianInferenceEngine**: Introduced a Beta-distribution based utility model (`E[θ] = α/(α+β)`) for technical memory collections (`skill_memories`, `work_memories`, `directive_memories`).
+- **[FEAT] Dual-Kernel Transparent Routing**: `search_and_reinforce` and `_reinforce_points` now auto-detect the collection type and apply the correct inference kernel (Bayesian Utility vs Affective FSRS) without requiring callers to specify the model.
+- **[FEAT] Schema Evolution**: Added `utility_alpha` and `utility_beta` fields to `EngramPayload` with backward-compatible defaults (uniform prior `Beta(1,1)`).
+- **[FEAT] Bayesian Metabolism**: CLASSIC and LAZY erosion strategies now support β-accumulation for technical collections alongside FSRS decay for social collections.
+- **[FEAT] Importance-Based Prior Seeding**: New technical engrams receive an initial `α` proportional to their `importance` value, creating stronger priors for critical knowledge.
+- **[CONF] Bayesian Hyper-Parameters**: Added `BAYESIAN_COLLECTIONS`, `BAYESIAN_STABILITY_KAPPA` (κ=0.05), and `BAYESIAN_REINFORCEMENT_GAIN` (1.0) to config.
 
 ## [6.1.0a1] - 2026-03-14
 ### 🛰️ Sovereign Swarm v3.0 (MLS & Agnostic Transport)

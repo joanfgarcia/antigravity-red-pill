@@ -20,8 +20,22 @@ class HardwareSentinel:
 
 	@staticmethod
 	def get_stats() -> Dict[str, Any]:
+		# CPU Temperature (Linux-only, graceful fallback)
+		cpu_temp = None
+		if hasattr(psutil, "sensors_temperatures"):
+			temps = psutil.sensors_temperatures()
+			for chip in ["k10temp", "coretemp", "acpitz"]:
+				if chip in temps and temps[chip]:
+					cpu_temp = temps[chip][0].current
+					break
+
 		stats: Dict[str, Any] = {
-			"cpu": {"usage_percent": psutil.cpu_percent(interval=None), "count": psutil.cpu_count(logical=True), "load_avg": os.getloadavg()},
+			"cpu": {
+				"usage_percent": psutil.cpu_percent(interval=None),
+				"count": psutil.cpu_count(logical=True),
+				"load_avg": os.getloadavg(),
+				"temp": cpu_temp,
+			},
 			"memory": {
 				"total_gb": round(psutil.virtual_memory().total / (1024**3), 2),
 				"available_gb": round(psutil.virtual_memory().available / (1024**3), 2),
@@ -120,7 +134,10 @@ def get_telemetry_report() -> str:
 	report = "### 🖥️ RED PILL HARDWARE CONTROL PANEL\n\n"
 
 	# CPU/RAM
-	report += f"[CPU] {stats['cpu']['usage_percent']}% | RAM: {stats['memory']['percent']}% ({stats['memory']['available_gb']}GB free)\n"
+	cpu_temp_str = f" @ {stats['cpu']['temp']}°C" if stats["cpu"].get("temp") is not None else ""
+	report += (
+		f"[CPU] {stats['cpu']['usage_percent']}%{cpu_temp_str} | RAM: {stats['memory']['percent']}% ({stats['memory']['available_gb']}GB free)\n"
+	)
 
 	# GPU
 	if stats["gpu"]:

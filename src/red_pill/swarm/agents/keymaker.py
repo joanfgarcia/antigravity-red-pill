@@ -40,8 +40,7 @@ class KeymakerMinion(Minion):
 			engine = cfg.CONTAINER_ENGINE or "podman"
 			try:
 				container_proc = subprocess.run(
-					[engine, "ps", "--filter", "name=qdrant", "--format", "{{.Status}}"],
-					capture_output=True, text=True, timeout=2
+					[engine, "ps", "--filter", "name=qdrant", "--format", "{{.Status}}"], capture_output=True, text=True, timeout=2
 				)
 				c_status = container_proc.stdout.strip() or "NOT FOUND"
 				results["checks"].append({"component": f"Qdrant ({cfg.CONTAINER_ENGINE})", "status": c_status})
@@ -61,8 +60,8 @@ class KeymakerMinion(Minion):
 
 				# Canary Encode Test (v6.1.0)
 				payload = {
-					"command": "ping", # Ping first
-					"api_key": cfg.SIDECAR_AUTH_KEY
+					"command": "ping",  # Ping first
+					"api_key": cfg.SIDECAR_AUTH_KEY,
 				}
 
 				def send_req(p):
@@ -107,7 +106,9 @@ class KeymakerMinion(Minion):
 						if canary_resp.get("status") == "ok" and "vector" in canary_resp:
 							results["checks"].append({"component": "Sidecar Engine", "status": "OPTIMAL", "details": "Canary Encode Success"})
 						else:
-							results["checks"].append({"component": "Sidecar Engine", "status": "FAILED", "details": canary_resp.get("message", "Unknown Error")})
+							results["checks"].append(
+								{"component": "Sidecar Engine", "status": "FAILED", "details": canary_resp.get("message", "Unknown Error")}
+							)
 							results["daemon_online"] = False
 			except Exception as e:
 				results["checks"].append({"component": "Sidecar Engine", "status": "UNREACHABLE", "details": str(e)})

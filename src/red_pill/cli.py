@@ -12,7 +12,7 @@ import yaml  # type: ignore
 
 import red_pill.config as cfg
 from red_pill.memory import MemoryManager
-from red_pill.seed import seed_project
+from red_pill.seed import ID_DIR_ACTIVE_SKIN, seed_project
 from red_pill.soul import SoulManager
 from red_pill.swarm.agents.smith import SmithMinion
 from red_pill.swarm.base import SwarmResult
@@ -44,7 +44,7 @@ def switch_skin(skin_name: str) -> str:
 	for key, value in skin.items():
 		report += f"{key.capitalize().replace('_', ' ')}: {value}\n"
 
-	# Persist Active Skin in Directives (v5.1.0)
+	# Persist Active Skin in Directives (v6.1.0: Singleton Upsert)
 	try:
 		manager = MemoryManager()
 		content = f"Active Skin: {skin_name.upper()}\n{yaml.dump(skin)}"
@@ -55,6 +55,7 @@ def switch_skin(skin_name: str) -> str:
 			metadata={"type": "active_skin", "skin_name": skin_name},
 			color=skin.get("chroma", "gray"),
 			force_immune=True,
+			point_id=ID_DIR_ACTIVE_SKIN,
 		)
 		return report + f"\n[OK] Skin '{skin_name}' synchronized with Sovereign Directives."
 	except Exception as e:
