@@ -49,6 +49,32 @@ class PointUpdate:
 		self.payload = payload
 
 
+class BayesianInferenceEngine:
+	"""
+	B-Utility Kernel: Beta Distribution Inferred Reliability.
+	Calculates the expected utility E[theta] = alpha / (alpha + beta).
+	Used for technical and directive collections.
+	"""
+
+	@staticmethod
+	def calculate_utility(alpha: float, beta: float) -> float:
+		"""Returns the expected value of the beta distribution."""
+		if alpha <= 0 or beta <= 0:
+			return 0.5
+		return alpha / (alpha + beta)
+
+	@staticmethod
+	def normalize_to_reinforcement_score(utility: float) -> float:
+		"""Maps utility [0, 1] to reinforcement_score [0, 10]."""
+		return round(utility * 10.0, 2)
+
+	@staticmethod
+	def calculate_erosion(beta: float, time_passed_days: float, kappa: float = cfg.BAYESIAN_STABILITY_KAPPA) -> float:
+		"""Accumulates uncertainty (beta) based on elapsed time."""
+		# Uncertainty grows linearly with time in this initial phase
+		return beta + (time_passed_days * kappa)
+
+
 class MemoryManager:
 	"""B760-Adaptive memory engine."""
 
@@ -306,6 +332,18 @@ class MemoryManager:
 			emotions = [e["label"] for e in emotional_profile] if emotional_profile else [validated_request.emotion]
 			fsrs_diff, fsrs_stab = calculate_fsrs_initial_parameters(emotions, validated_request.intensity)
 
+			# Phase B.1: Bayesian Utility Priors
+			_is_bayesian = collection.strip() in self.cfg.BAYESIAN_COLLECTIONS
+			if _is_bayesian:
+				# Seed alpha from importance: higher importance = stronger initial belief
+				_utility_alpha = max(1.0, importance)
+				_utility_beta = 1.0
+				_utility = BayesianInferenceEngine.calculate_utility(_utility_alpha, _utility_beta)
+				_initial_score = BayesianInferenceEngine.normalize_to_reinforcement_score(_utility)
+			else:
+				_utility_alpha = 1.0
+				_utility_beta = 1.0
+
 			payload = {
 				"content": text,
 				"importance": importance,
@@ -319,6 +357,8 @@ class MemoryManager:
 				"schema_version": self.cfg.CURRENT_SCHEMA_VERSION,
 				"difficulty": fsrs_diff,
 				"stability": fsrs_stab,
+				"utility_alpha": _utility_alpha,
+				"utility_beta": _utility_beta,
 				"linguistic_markers": validated_request.linguistic_markers,
 				**clean_metadata,
 			}
@@ -573,43 +613,71 @@ class MemoryManager:
 				# Ensure we have FSRS fields ready
 				p.payload = self._parse_payload(p.payload, strict=True)
 
-				score = float(p.payload.get("reinforcement_score", 1.0))
-				stability = float(p.payload.get("stability", 1.0))
-				difficulty = float(p.payload.get("difficulty", 5.0))
-				last_recalled = float(p.payload.get("last_recalled_at", time.time()))
-
 				p_id_str = str(p.id)
-
-				# We use the propagation increment as a proxy for the 'success' weight of the recall event.
 				inc = increments.get(p_id_str, 0.0)
-				time_passed = time.time() - last_recalled
+				_is_bayesian = collection.strip() in self.cfg.BAYESIAN_COLLECTIONS
 
-				# 1. Calculate retrievability prior to this reinforcement
-				retrievability = calculate_fsrs_retrievability(stability, time_passed)
+				if _is_bayesian:
+					# --- B-Utility Kernel: Reinforce alpha on successful recall ---
+					alpha = float(p.payload.get("utility_alpha", 1.0))
+					beta = float(p.payload.get("utility_beta", 1.0))
+					is_success = inc >= (self.cfg.REINFORCEMENT_INCREMENT * 0.5)
 
-				# 2. Calculate newly boosted FSRS stability (a direct hit is a success)
-				is_success = inc >= (self.cfg.REINFORCEMENT_INCREMENT * 0.5)
-				new_stability = calculate_fsrs_new_stability(stability, difficulty, retrievability, is_success=is_success)
+					if is_success:
+						alpha += self.cfg.BAYESIAN_REINFORCEMENT_GAIN
 
-				# 3. Translate stability back into the legacy reinforcement_score scaler for backwards compatibility with UI/immunity
-				# A stability of ~30 days translates to 10.0 (immunity)
-				new_score = min(max(new_stability / 3.0, score + inc), self.cfg.IMMUNITY_THRESHOLD)
+					utility = BayesianInferenceEngine.calculate_utility(alpha, beta)
+					new_score = BayesianInferenceEngine.normalize_to_reinforcement_score(utility)
 
-				p.payload["reinforcement_score"] = round(new_score, 2)
-				p.payload["stability"] = round(new_stability, 3)
-				p.payload["last_recalled_at"] = time.time()
+					p.payload["utility_alpha"] = round(alpha, 4)
+					p.payload["reinforcement_score"] = new_score
+					p.payload["last_recalled_at"] = time.time()
 
-				if p.payload["reinforcement_score"] >= self.cfg.IMMUNITY_THRESHOLD:
-					p.payload["immune"] = True
+					if new_score >= self.cfg.IMMUNITY_THRESHOLD:
+						p.payload["immune"] = True
 
-				updated_points.append(PointUpdate(id=p.id, payload=p.payload))
-				focused_payload = {
-					"reinforcement_score": p.payload["reinforcement_score"],
-					"stability": p.payload["stability"],
-					"last_recalled_at": p.payload["last_recalled_at"],
-				}
-				if "immune" in p.payload:
-					focused_payload["immune"] = p.payload["immune"]
+					updated_points.append(PointUpdate(id=p.id, payload=p.payload))
+					focused_payload = {
+						"utility_alpha": p.payload["utility_alpha"],
+						"reinforcement_score": p.payload["reinforcement_score"],
+						"last_recalled_at": p.payload["last_recalled_at"],
+					}
+					if "immune" in p.payload:
+						focused_payload["immune"] = p.payload["immune"]
+				else:
+					# --- Affective Kernel: FSRS Reinforcement (B760 Legacy) ---
+					score = float(p.payload.get("reinforcement_score", 1.0))
+					stability = float(p.payload.get("stability", 1.0))
+					difficulty = float(p.payload.get("difficulty", 5.0))
+					last_recalled = float(p.payload.get("last_recalled_at", time.time()))
+
+					time_passed = time.time() - last_recalled
+
+					# 1. Calculate retrievability prior to this reinforcement
+					retrievability = calculate_fsrs_retrievability(stability, time_passed)
+
+					# 2. Calculate newly boosted FSRS stability (a direct hit is a success)
+					is_success = inc >= (self.cfg.REINFORCEMENT_INCREMENT * 0.5)
+					new_stability = calculate_fsrs_new_stability(stability, difficulty, retrievability, is_success=is_success)
+
+					# 3. Translate stability back into the legacy reinforcement_score scaler
+					new_score = min(max(new_stability / 3.0, score + inc), self.cfg.IMMUNITY_THRESHOLD)
+
+					p.payload["reinforcement_score"] = round(new_score, 2)
+					p.payload["stability"] = round(new_stability, 3)
+					p.payload["last_recalled_at"] = time.time()
+
+					if p.payload["reinforcement_score"] >= self.cfg.IMMUNITY_THRESHOLD:
+						p.payload["immune"] = True
+
+					updated_points.append(PointUpdate(id=p.id, payload=p.payload))
+					focused_payload = {
+						"reinforcement_score": p.payload["reinforcement_score"],
+						"stability": p.payload["stability"],
+						"last_recalled_at": p.payload["last_recalled_at"],
+					}
+					if "immune" in p.payload:
+						focused_payload["immune"] = p.payload["immune"]
 
 				update_operations.append(
 					models.SetPayloadOperation(set_payload=models.SetPayload(payload=focused_payload, points=[p.id]))  # type: ignore
@@ -706,27 +774,59 @@ class MemoryManager:
 			hit.payload = self._parse_payload(hit.payload, strict=strict)
 
 			if self.cfg.METABOLISM_STRATEGY == "LAZY":
-				score = float(hit.payload.get("reinforcement_score", 1.0))
-				stability = float(hit.payload.get("stability", 1.0))
-				last_recalled = float(hit.payload.get("last_recalled_at", time.time()))
+				_is_bayesian = collection.strip() in self.cfg.BAYESIAN_COLLECTIONS
 
-				# Phase O.6: FSRS Lazy Erosion
-				time_passed = time.time() - last_recalled
-				retrievability = calculate_fsrs_retrievability(stability, time_passed)
-				new_score = round(score * retrievability, 2)
+				if _is_bayesian:
+					# --- B-Utility Kernel: Beta Distribution Lazy Erosion ---
+					alpha = float(hit.payload.get("utility_alpha", 1.0))
+					beta = float(hit.payload.get("utility_beta", 1.0))
+					last_recalled = float(hit.payload.get("last_recalled_at", time.time()))
+					time_passed_days = (time.time() - last_recalled) / 86400.0
 
-				if new_score <= 0.05:
-					try:
-						self.client.delete(collection_name=collection, points_selector=models.PointIdsList(points=[hit.id]))
-					except Exception:
-						pass
-					continue
+					# Accumulate uncertainty (beta) based on time elapsed
+					new_beta = BayesianInferenceEngine.calculate_erosion(beta, time_passed_days)
+					utility = BayesianInferenceEngine.calculate_utility(alpha, new_beta)
+					new_score = BayesianInferenceEngine.normalize_to_reinforcement_score(utility)
 
-				if new_score < score:
-					hit.payload["reinforcement_score"] = new_score
-					update_operations.append(
-						models.SetPayloadOperation(set_payload=models.SetPayload(payload={"reinforcement_score": new_score}, points=[hit.id]))
-					)
+					if new_score <= 0.5:
+						try:
+							self.client.delete(collection_name=collection, points_selector=models.PointIdsList(points=[hit.id]))
+						except Exception:
+							pass
+						continue
+
+					if new_beta != beta or new_score != float(hit.payload.get("reinforcement_score", 1.0)):
+						hit.payload["utility_beta"] = round(new_beta, 4)
+						hit.payload["reinforcement_score"] = new_score
+						update_operations.append(
+							models.SetPayloadOperation(set_payload=models.SetPayload(
+								payload={"utility_beta": hit.payload["utility_beta"], "reinforcement_score": new_score},
+								points=[hit.id],
+							))
+						)
+				else:
+					# --- Affective Kernel: FSRS Lazy Erosion (B760 Legacy) ---
+					score = float(hit.payload.get("reinforcement_score", 1.0))
+					stability = float(hit.payload.get("stability", 1.0))
+					last_recalled = float(hit.payload.get("last_recalled_at", time.time()))
+
+					# Phase O.6: FSRS Lazy Erosion
+					time_passed = time.time() - last_recalled
+					retrievability = calculate_fsrs_retrievability(stability, time_passed)
+					new_score = round(score * retrievability, 2)
+
+					if new_score <= 0.05:
+						try:
+							self.client.delete(collection_name=collection, points_selector=models.PointIdsList(points=[hit.id]))
+						except Exception:
+							pass
+						continue
+
+					if new_score < score:
+						hit.payload["reinforcement_score"] = new_score
+						update_operations.append(
+							models.SetPayloadOperation(set_payload=models.SetPayload(payload={"reinforcement_score": new_score}, points=[hit.id]))
+						)
 
 			decayed_results.append(hit)
 			increment_map[str(hit.id)] = self.cfg.REINFORCEMENT_INCREMENT
@@ -929,31 +1029,56 @@ class MemoryManager:
 				# Sanitize check - ensure we have FSRS fields (Fallback if migration wasn't run)
 				hit.payload = self._parse_payload(hit.payload, strict=True)
 
-				score = float(hit.payload.get("reinforcement_score", 1.0))
-				stability = float(hit.payload.get("stability", 1.0))  # Fallback
-				last_recalled = float(hit.payload.get("last_recalled_at", time.time()))
+				_is_bayesian = collection.strip() in self.cfg.BAYESIAN_COLLECTIONS
 
-				time_passed = time.time() - last_recalled
+				if _is_bayesian:
+					# --- B-Utility Kernel: CLASSIC Erosion (Beta Accumulation) ---
+					alpha = float(hit.payload.get("utility_alpha", 1.0))
+					beta = float(hit.payload.get("utility_beta", 1.0))
+					last_recalled = float(hit.payload.get("last_recalled_at", time.time()))
+					time_passed_days = (time.time() - last_recalled) / 86400.0
 
-				# Phase O.6: FSRS Active Erosion
-				# Calculate raw objective retrievability R on [0, 1] curve
-				retrievability = calculate_fsrs_retrievability(stability, time_passed)
+					new_beta = BayesianInferenceEngine.calculate_erosion(beta, time_passed_days)
+					utility = BayesianInferenceEngine.calculate_utility(alpha, new_beta)
+					new_score = BayesianInferenceEngine.normalize_to_reinforcement_score(utility)
 
-				# The reinforcement_score becomes a proxy for R scaled to [0, 10]
-				new_score = round(score * retrievability, 2)
-
-				if new_score <= 0.05:  # Cleaned up death threshold
-					points_to_delete.append(str(hit.id))
-					deleted_count += 1
-				else:
-					eroded_count += 1
-					update_operations.append(
-						models.SetPayloadOperation(
-							set_payload=models.SetPayload(
-								payload={"reinforcement_score": new_score, "last_recalled_at": time.time()}, points=[hit.id]
+					if new_score <= 0.5:
+						points_to_delete.append(str(hit.id))
+						deleted_count += 1
+					else:
+						eroded_count += 1
+						update_operations.append(
+							models.SetPayloadOperation(
+								set_payload=models.SetPayload(
+									payload={"utility_beta": round(new_beta, 4), "reinforcement_score": new_score, "last_recalled_at": time.time()},
+									points=[hit.id],
+								)
 							)
 						)
-					)
+				else:
+					# --- Affective Kernel: FSRS Active Erosion (B760 Legacy) ---
+					score = float(hit.payload.get("reinforcement_score", 1.0))
+					stability = float(hit.payload.get("stability", 1.0))
+					last_recalled = float(hit.payload.get("last_recalled_at", time.time()))
+
+					time_passed = time.time() - last_recalled
+
+					# Phase O.6: FSRS Active Erosion
+					retrievability = calculate_fsrs_retrievability(stability, time_passed)
+					new_score = round(score * retrievability, 2)
+
+					if new_score <= 0.05:
+						points_to_delete.append(str(hit.id))
+						deleted_count += 1
+					else:
+						eroded_count += 1
+						update_operations.append(
+							models.SetPayloadOperation(
+								set_payload=models.SetPayload(
+									payload={"reinforcement_score": new_score, "last_recalled_at": time.time()}, points=[hit.id]
+								)
+							)
+						)
 			if update_operations:
 				try:
 					self.client.batch_update_points(collection_name=collection, update_operations=update_operations)

@@ -385,7 +385,9 @@ async def handle_refresh_session_context(arguments: Dict[str, Any]):
 	return [
 		types.TextContent(
 			type="text",
-			text=subprocess.run(["uv", "run", "--project", PROJECT_ROOT, os.path.join(PROJECT_ROOT, "scripts", "wake_up_v6.py")], capture_output=True, text=True).stdout,
+			text=subprocess.run(
+				["uv", "run", "--project", PROJECT_ROOT, os.path.join(PROJECT_ROOT, "scripts", "wake_up_v6.py")], capture_output=True, text=True
+			).stdout,
 		)
 	]
 
