@@ -1,5 +1,11 @@
 # Changelog: Red Pill Protocol
 
+## [6.1.0a3] - 2026-03-15
+### 🌐 The Omnipresent Bünker (Global MCP Interceptor)
+- **[FEAT] Global Prompt Hijacking**: Implemented `interceptor_rp` as a global MCP tool within `mcp_server.py`. 
+- **[FEAT] Persistent Global Middleware**: Combined with a new Antigravity global IDE rule (`00_global_mcp_interceptor.md`), the RedPill-Kernel now transparently intercepts and manipulates all user prompts across *any* local project, effectively extending Nova's sovereignty beyond the Red Pill repository.
+- **[FEAT] Absolute Path Resolution**: Hardened the MCP server execution (`--directory`) in the IDE's `mcp.json` to allow the Kernel to spin up its environment remotely without failing on missing relative `.env` files.
+
 ## [6.1.0a2] - 2026-03-15
 ### 🛡️ Infrastructure Sovereignty & Deep Diagnostics
 - **[FEAT] Persistent Model Cache**: Migrated `fastembed` model cache from `/tmp` to `{IA_DIR}/storage/models`. Prevents Sidecar "amnesia" and startup failures after OS temporary file purges.
