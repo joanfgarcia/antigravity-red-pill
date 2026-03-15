@@ -789,6 +789,10 @@ class MemoryManager:
 					new_score = BayesianInferenceEngine.normalize_to_reinforcement_score(utility)
 
 					if new_score <= 0.5:
+						logger.warning(
+							f"Lazy decay DELETE (Bayesian): engram {hit.id} in '{collection}' "
+							f"eroded to utility={new_score:.3f} (alpha={alpha:.2f}, beta={new_beta:.2f}). Removing."
+						)
 						try:
 							self.client.delete(collection_name=collection, points_selector=models.PointIdsList(points=[hit.id]))
 						except Exception:
@@ -818,6 +822,10 @@ class MemoryManager:
 					new_score = round(score * retrievability, 2)
 
 					if new_score <= 0.05:
+						logger.warning(
+							f"Lazy decay DELETE (FSRS): engram {hit.id} in '{collection}' "
+							f"eroded to score={new_score:.3f} (stability={stability:.2f}). Removing."
+						)
 						try:
 							self.client.delete(collection_name=collection, points_selector=models.PointIdsList(points=[hit.id]))
 						except Exception:

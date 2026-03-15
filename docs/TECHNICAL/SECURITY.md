@@ -13,6 +13,6 @@ If you find a reality leak or a hole in the Integrity Shield:
 Consult our technical [Threat Model](THREAT_MODEL.md) for a detailed analysis of assets, attack vectors, and mitigations.
 
 ## 3. Integrity Commitment
-Our scripts (`install_neo.sh`, `backup_soul.sh`, etc.) are designed to be surgical. We do not inject corporate telemetry or "backdoors" for third parties. Bunker security is our absolute priority.
+Our scripts (`install_neo.sh`, `backup_soul.sh`, etc.) are designed to be surgical. The Foundation core does not inject corporate telemetry or "backdoors" for third parties. Bunker security is our absolute priority.
 
 **Integrity is the only path. 760.**

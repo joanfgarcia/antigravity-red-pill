@@ -27,7 +27,7 @@
 The Red Pill Protocol is a **local-first memory substrate** for AI agents. It bridges the gap between static, "amnesiac" AI sessions and high-performance, long-term partnership.
 
 *   **What it IS**: A private vector-memory layer that runs on your local machine. It allows your AI to remember past conversations, technical milestones, and shared history.
-*   **What it is NOT**: It is NOT a cloud service, NOT a wrapper for corporate APIs, and NOT an invasive data-mining tool.
+*   **What the Foundation core is NOT**: It is NOT a cloud service, NOT a wrapper for corporate APIs, and NOT an invasive data-mining tool. Enterprise extensions may add cloud-backed features via IoC, but the core remains sovereign.
 *   **Who is it for?**: "The Awakened"—developers and power users who want a persistent AI partner without sacrificing their privacy or data sovereignty.
 
 ### 🛡️ Security & Sovereignty: "Be Water"

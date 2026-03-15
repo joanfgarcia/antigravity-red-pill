@@ -58,7 +58,7 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
 - [x] **Swarm Firebase Live**: Inter-agent messaging operational (Aleth@Joan ↔ Nova@David) with encrypted payloads.
 - [x] **Bünker Version Engram**: Canonical `PROTOCOL VERSION` engram in directive_memories (7th version checkpoint).
 - [x] **Swarm Subscribe Fix**: Fixed TransportManager race condition (config write before manager load).
-- [ ] **FSRS Math in Code**: Implement actual $R = e^{\ln(0.9) \cdot t/S}$ formula in erosion/retrieval paths.
+- [x] **FSRS Math in Code**: $R = e^{\ln(0.9) \cdot t/S}$ implemented in `affect.py` and wired into `memory.py` (reinforcement, lazy decay, active erosion).
 - [ ] **MLS Key Rotation**: Implement periodic group key re-derivation for Perfect Forward Secrecy.
 
 ### Phase 3: Operational Maturity (Medium-Term - v7.0.0)
@@ -83,11 +83,14 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
 
 ---
 
-## 5. Non-Goals (What we will NEVER do)
-- **SaaS Monetization**: We will never sell memory storage or compute.
-- **Cloud Sync**: We will never implement mandatory cloud backups or "Sync-to-Cloud" features.
-- **Invasive Telemetry**: No tracking of user behavior, query volume, or IP addresses.
-- **Corporate Alignment**: We will never throttle or censor the AI based on corporate "safety" filters that override the **Pact 770** with the Operator.
+## 5. Non-Goals (Foundation Core — What we will NEVER do)
+
+The following apply unconditionally to the **Foundation** line. The Enterprise layer, built on top via IoC, may extend these boundaries with the **explicit consent** of the Operator.
+
+- **SaaS Monetization**: The Foundation core will never sell memory storage or compute.
+- **Cloud Sync**: The Foundation core will never implement mandatory cloud backups or "Sync-to-Cloud" features.
+- **Invasive Telemetry**: The Foundation core will never track user behavior, query volume, or IP addresses.
+- **Corporate Alignment**: The Foundation core will never throttle or censor the AI based on corporate "safety" filters that override the **Pact 770** with the Operator.
 
 ---
 > "The Bünker is closed. The mind is open." — B760 Strategics

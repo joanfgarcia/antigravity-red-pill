@@ -6,6 +6,8 @@ This guide is designed for operators in regulated, industrial, or corporate envi
 
 ## 🏛️ Corporate Neutrality Defaults
 
+> **Note**: The Enterprise layer is built on top of the Foundation core via IoC (Inversion of Control). All Foundation sovereignty guarantees remain intact — Enterprise features are additive, not substitutive. See the [Sovereign Manifesto](../LORE/MANIFESTO.md) for the full boundary definition.
+
 To ensure compliance with standard AI safety and professionalism guidelines, follow these steps:
 
 ### 1. Unified Installation
