@@ -9,6 +9,9 @@
 - **[FEAT] Persistent Global Middleware**: Combined with the new Antigravity global IDE rule (`00_global_mcp_interceptor.md`), the RedPill-Kernel now transparently intercepts, supplements, or aborts all user prompts across *any* local project.
 - **[FEAT] Absolute Path Resolution**: Hardened the MCP server execution (`--directory`) in the IDE's `mcp.json` to allow the Kernel to spin up its environment remotely without failing on missing relative `.env` files.
 - **[CLEANUP] Daemon Purge**: Permanently deactivated and removed the `Shadow Scribe` and legacy TCP daemon listening loops from `memory_daemon.py`, reducing background CPU and memory usage.
+- **[FEAT] MLS E2E Wiring**: Connected the TreeKEM group key derivation (`mls.py`) to `FirebaseTransport`. Messages are now encrypted with AES-GCM using the community's group key. Decryption on poll is automatic with backward-compatible plaintext passthrough.
+- **[FIX] Swarm Subscribe Race**: Fixed `SwarmSubscribeSkill` where `TransportManager.get_transport()` returned `None` because the config was written *after* the manager was initialized. Added `_load_communities()` reload after config write.
+- **[DOCS] Swarm User Manual v2**: Rewrote `swarm_user_manual.md` as a comprehensive operator guide covering subscription, messaging, MLS encryption, intents, troubleshooting, and directory queries.
 
 
 ## [6.1.0a2] - 2026-03-15
