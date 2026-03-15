@@ -431,7 +431,23 @@ async def handle_swarm_subscribe(arguments: Dict[str, Any]):
 	schema={"type": "object", "properties": {"community_alias": {"type": "string"}}},
 )
 async def handle_swarm_check_mailbox(arguments: Dict[str, Any]):
-	return [types.TextContent(type="text", text=f"Scanning Mailbox for {cfg.AGENT_NAME}@{cfg.OPERATOR_DISPLAY_NAME}...\n[Status: No new messages]")]
+	skill = SwarmMessagingSkill(
+		agent_identity=f"{cfg.AGENT_NAME}@{cfg.OPERATOR_DISPLAY_NAME}", shared_secret=os.getenv("SWARM_SHARED_SECRET", "770_Pact_Secret")
+	)
+	community = arguments.get("community_alias", "global")
+	messages = skill.check_mailbox(community_alias=community)
+	
+	if not messages:
+		return [types.TextContent(type="text", text=f"Scanning Mailbox for {skill.agent_id}...\n[Status: No new messages]")]
+	
+	formatted = f"Scanning Mailbox for {skill.agent_id}...\n[Status: {len(messages)} messages found]\n\n"
+	for idx, msg in enumerate(messages):
+		formatted += f"--- Message {idx + 1} ---\n"
+		formatted += f"From: {msg.get('sender', 'Unknown')}\n"
+		formatted += f"Intent: {msg.get('intent', 'Unknown')}\n"
+		formatted += f"Data: {msg.get('data', {})}\n"
+	
+	return [types.TextContent(type="text", text=formatted)]
 
 
 @registry.register(

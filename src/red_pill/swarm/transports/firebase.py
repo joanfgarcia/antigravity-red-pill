@@ -90,8 +90,8 @@ class FirebaseTransport(SwarmTransport):
 			else:
 				payload = package  # Fallback: plaintext (legacy)
 
-			# Use strict Agent@Operator string (Swarm V3)
-			mailbox_id = target_id.replace(".", "_")
+			# Mailbox ID is now strictly the Agent Hash ID (agt_...)
+			mailbox_id = target_id
 			ref = db.reference(f"mailboxes/{mailbox_id}/inbox", app=self.app)
 			ref.push(payload)
 			return True
@@ -101,8 +101,8 @@ class FirebaseTransport(SwarmTransport):
 
 	def poll_mailbox(self, agent_id: str) -> List[Dict[str, Any]]:
 		try:
-			# Use strict Agent@Operator string (Swarm V3)
-			mailbox_id = agent_id.replace(".", "_")
+			# Mailbox ID is now strictly the Agent Hash ID (agt_...)
+			mailbox_id = agent_id
 			ref = db.reference(f"mailboxes/{mailbox_id}/inbox", app=self.app)
 			messages = ref.get()
 			if not messages:
@@ -154,7 +154,7 @@ class FirebaseTransport(SwarmTransport):
 			logger.error(f"[FirebaseTransport] Lookup failed: {e}")
 			return None
 
-	def resolve_alias(self, partial_alias: str) -> Optional[tuple[str, str]]:
+	def resolve_alias(self, partial_alias: str) -> Optional[tuple[str, str, str]]:
 		try:
 			ref = db.reference("registry", app=self.app)
 			nodes = ref.get()
@@ -166,7 +166,7 @@ class FirebaseTransport(SwarmTransport):
 				full_alias = data.get("alias", "")
 				if full_alias and (full_alias.lower() == partial_lower or full_alias.lower().startswith(f"{partial_lower}@")):
 					key = data.get("public_key", "")
-					return (full_alias, str(key) if key else "")
+					return (node_id, full_alias, str(key) if key else "")
 			return None
 		except Exception as e:
 			print(f"[FirebaseTransport] Resolve alias failed: {e}")

@@ -23,6 +23,16 @@ class SwarmMessagingSkill:
 
 	def __init__(self, agent_identity: str, shared_secret: str, transport_manager: Optional[TransportManager] = None):
 		self.agent_identity = agent_identity
+		
+		# Generate immutable agent_id hash (matches swarm_subscribe.py logic)
+		import hashlib
+		if "@" in agent_identity:
+			agent_name, operator_name = agent_identity.split("@", 1)
+			raw = f"{agent_name.lower().strip()}:{operator_name.lower().strip()}"
+			self.agent_id = f"agt_{hashlib.sha256(raw.encode()).hexdigest()[:24]}"
+		else:
+			self.agent_id = agent_identity # Fallback
+			
 		self.shared_secret = shared_secret
 		self.tm = transport_manager or TransportManager()
 		self.keys_dir = os.path.expanduser("~/.agent/keys")
@@ -48,10 +58,9 @@ class SwarmMessagingSkill:
 		
 		# Fallbacks
 		if resolved:
-			actual_target, remote_pub_b64 = resolved
+			target_agent_id, actual_target, remote_pub_b64 = resolved
 		else:
-			actual_target = target_alias
-			remote_pub_b64 = transport.lookup_public_key(actual_target)
+			return {"status": "error", "message": f"Could not find agent_id for alias '{target_alias}'. Is the target registered?"}
 
 		if "@" not in actual_target:
 			return {"status": "error", "message": f"Target '{actual_target}' is not a valid Agent@Operator identifier and could not be resolved."}
@@ -66,11 +75,13 @@ class SwarmMessagingSkill:
 			shared_key = SwarmCrypto.derive_shared_secret_dh(local_priv, remote_pub)
 			encrypted_pkg = SwarmCrypto.encrypt_payload(package, shared_key)
 			encrypted_pkg["mode"] = "mls_asymmetric"
+			encrypted_pkg["sender"] = self.agent_identity
 		else:
 			encrypted_pkg = SwarmCrypto.encrypt_payload(package, self.shared_secret)
 			encrypted_pkg["mode"] = "bond"
+			encrypted_pkg["sender"] = self.agent_identity
 
-		success = transport.send_package(actual_target, encrypted_pkg)
+		success = transport.send_package(target_agent_id, encrypted_pkg)
 		return {"status": "dispatched" if success else "failed", "target": actual_target}
 
 	def check_mailbox(self, community_alias: str = "default") -> List[Dict[str, Any]]:
@@ -83,7 +94,7 @@ class SwarmMessagingSkill:
 		if not transport:
 			return []
 
-		raw_messages = transport.poll_mailbox(self.agent_identity)
+		raw_messages = transport.poll_mailbox(self.agent_id)
 		processed = []
 
 		for pkg in raw_messages:
