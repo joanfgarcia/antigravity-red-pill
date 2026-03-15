@@ -87,7 +87,8 @@ class SwarmSubscribeSkill:
 		with open(self.CONFIG_FILE, "w") as f:
 			json.dump(communities, f, indent=4)
 
-		# 3. Perform Broadcast via Transport
+		# 3. Reload transports (config was written after manager init)
+		self.tm._load_communities()
 		transport = self.tm.get_transport(community_alias)
 		if not transport:
 			return {"status": "error", "message": f"Could not initialize transport for {community_alias}."}
