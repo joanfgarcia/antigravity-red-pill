@@ -107,6 +107,10 @@ class SwarmMessagingSkill:
 	def process_incoming(self, pkg: Dict[str, Any], transport: Optional[Any] = None) -> Optional[Dict[str, Any]]:
 		"""Processes a single incoming encrypted package."""
 		try:
+			# If the transport plugin already decrypted it successfully, it lacks 'ciphertext'
+			if pkg.get("_encrypted") is True and "ciphertext" not in pkg:
+				return pkg
+				
 			mode = pkg.get("mode", "bond")
 			if mode == "mls_asymmetric":
 				# In a real MLS, we'd lookup the sender's current KeyPackage

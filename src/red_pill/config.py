@@ -2,10 +2,12 @@ import os
 
 from dotenv import load_dotenv
 
-load_dotenv()
-
 # CORE PATHS (v6.1.0)
 IA_DIR = os.getenv("IA_DIR", os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+# Ensure explicit .env loading for absolute paths (fixes MCP external execution context)
+env_path = os.path.join(IA_DIR, ".env")
+load_dotenv(env_path)
 
 # SEC-F05: CUDA Configuration.
 # Re-enabled (v6.0.0). Automated LD_LIBRARY_PATH injection for cuDNN 9 support.
