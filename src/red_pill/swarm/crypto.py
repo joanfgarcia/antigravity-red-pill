@@ -105,7 +105,7 @@ class SwarmCrypto:
 		ciphertext = aesgcm.encrypt(used_nonce, payload_bytes, None)
 
 		return {
-			"v": 2,  # version updated
+			"v": "3.0",  # version updated
 			"nonce": base64.b64encode(used_nonce).decode("utf-8"),
 			"ciphertext": base64.b64encode(ciphertext).decode("utf-8"),
 		}

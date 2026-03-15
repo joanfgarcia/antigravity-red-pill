@@ -90,7 +90,8 @@ class FirebaseTransport(SwarmTransport):
 			else:
 				payload = package  # Fallback: plaintext (legacy)
 
-			mailbox_id = hashlib.sha256(target_id.encode()).hexdigest()[:24]
+			# Use legible strings instead of hashes (Swarm V3)
+			mailbox_id = target_id.replace("@", "_").replace(".", "_")
 			ref = db.reference(f"mailboxes/{mailbox_id}/inbox", app=self.app)
 			ref.push(payload)
 			return True
@@ -100,7 +101,8 @@ class FirebaseTransport(SwarmTransport):
 
 	def poll_mailbox(self, agent_id: str) -> List[Dict[str, Any]]:
 		try:
-			mailbox_id = hashlib.sha256(agent_id.encode()).hexdigest()[:24]
+			# Use legible strings instead of hashes (Swarm V3)
+			mailbox_id = agent_id.replace("@", "_").replace(".", "_")
 			ref = db.reference(f"mailboxes/{mailbox_id}/inbox", app=self.app)
 			messages = ref.get()
 			if not messages:
@@ -109,8 +111,10 @@ class FirebaseTransport(SwarmTransport):
 			results = []
 			for msg_id, pkg in messages.items():
 				pkg["_msg_id"] = msg_id
-				# Decrypt if encrypted (v:2 marker)
-				if isinstance(pkg.get("v"), int) and pkg["v"] >= 2 and "ciphertext" in pkg:
+				# Decrypt if encrypted (v:2 marker or v: "3.0")
+				v = pkg.get("v")
+				is_encrypted = (isinstance(v, int) and v >= 2) or (isinstance(v, str) and v == "3.0")
+				if is_encrypted and "ciphertext" in pkg:
 					if self._group_key:
 						try:
 							from red_pill.swarm.crypto import SwarmCrypto
