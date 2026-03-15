@@ -151,11 +151,11 @@ MAX_AXONS = int(os.getenv("MAX_AXONS", "500"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
 # AGENT (Dynamic Identity)
-AGENT_NAME = os.getenv("AGENT_NAME", "Nova")
+AGENT_NAME = os.getenv("AGENT_NAME", "Agente")
 
 # OPERATOR (SEC-002: replaces hardcoded display names like 'Joan' in notifications)
-# Set via USER_NAME in .env (configured during install_neo.sh)
-OPERATOR_DISPLAY_NAME = os.getenv("USER_NAME", "Operator")
+# Set via USER_NAME in .env, fallback to OS username, fallback to 'Operador'
+OPERATOR_DISPLAY_NAME = os.getenv("USER_NAME", os.getenv("USER", "Operador"))
 
 # NOTIFICATIONS
 # Set to 'False' to silence the system entirely
