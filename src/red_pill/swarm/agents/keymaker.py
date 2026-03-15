@@ -1,7 +1,6 @@
-import hmac
 import json
-import subprocess
 import socket
+import subprocess
 from typing import Any, Dict
 
 import psutil
@@ -36,7 +35,7 @@ class KeymakerMinion(Minion):
 			# Qdrant v1.x uses root / for health/version check
 			resp = requests.get(cfg.QDRANT_URL, headers=headers, timeout=2)
 			results["qdrant_online"] = resp.status_code == 200
-			
+
 			# Container status sub-check
 			engine = cfg.CONTAINER_ENGINE or "podman"
 			try:
@@ -59,18 +58,19 @@ class KeymakerMinion(Minion):
 			with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
 				client.settimeout(2)
 				client.connect(cfg.DAEMON_SOCKET_PATH)
-				
+
 				# Canary Encode Test (v6.1.0)
 				payload = {
 					"command": "ping", # Ping first
 					"api_key": cfg.SIDECAR_AUTH_KEY
 				}
-				
+
 				def send_req(p):
 					data = json.dumps(p).encode("utf-8")
 					client.sendall(len(data).to_bytes(4, byteorder="big") + data)
 					resp_header = client.recv(4)
-					if not resp_header: return None
+					if not resp_header:
+						return None
 					resp_len = int.from_bytes(resp_header, byteorder="big")
 					return json.loads(client.recv(resp_len).decode("utf-8"))
 
@@ -79,12 +79,12 @@ class KeymakerMinion(Minion):
 					# Deep check: actual encoding
 					canary_payload = {"text": "healthcheck", "api_key": cfg.SIDECAR_AUTH_KEY}
 					# Re-establish or reuse? Socket might be closed by daemon after one sync depending on implementation.
-					# But handle_connection loop handles one request per 'with conn:'. 
-					# So we need a new connection for the canary if we want to be safe, 
-					# but let's try a second send if the daemon keeps it open. 
+					# But handle_connection loop handles one request per 'with conn:'.
+					# So we need a new connection for the canary if we want to be safe,
+					# but let's try a second send if the daemon keeps it open.
 					# Looking at memory_daemon.py: it uses 'with conn:' which closes after handle_connection returns.
 					# So we need a NEW connection for the canary.
-				
+
 				results["daemon_online"] = True
 				results["checks"].append({"component": "Sidecar Socket", "status": "CONNECTED", "path": cfg.DAEMON_SOCKET_PATH})
 		except Exception as e:
@@ -99,7 +99,7 @@ class KeymakerMinion(Minion):
 					canary_payload = {"text": "canary", "api_key": cfg.SIDECAR_AUTH_KEY}
 					data = json.dumps(canary_payload).encode("utf-8")
 					client.sendall(len(data).to_bytes(4, byteorder="big") + data)
-					
+
 					resp_header = client.recv(4)
 					if resp_header:
 						resp_len = int.from_bytes(resp_header, byteorder="big")

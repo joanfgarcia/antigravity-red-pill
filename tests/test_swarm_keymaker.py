@@ -40,7 +40,7 @@ async def test_qdrant_up_daemon_up_optimal(keymaker):
 	mock_sock.recv.side_effect = [resp_header, resp_body, resp_header, resp_body]
 
 	with patch("red_pill.swarm.agents.keymaker.cfg.DAEMON_SOCKET_PATH", "/tmp/test.sock"), \
-		 patch("red_pill.swarm.agents.keymaker.cfg.SIDECAR_AUTH_KEY", "test_key"):
+		patch("red_pill.swarm.agents.keymaker.cfg.SIDECAR_AUTH_KEY", "test_key"):
 		with patch("requests.get", return_value=mock_resp):
 			with patch("socket.socket", return_value=mock_sock):
 				with patch("psutil.disk_usage", return_value=MagicMock(percent=30.0, free=50 * 1024**3)):
