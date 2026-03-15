@@ -54,6 +54,9 @@ def cfg():
 		EXECUTION_PROVIDER="cpu",
 		METABOLISM_STATE_FILE="/tmp/meta_test.json",
 		EMOTIONAL_DECAY_MULTIPLIERS={"blue": 1.0, "red": 2.0, "orange": 1.0, "neutral": 1.0, "joy": 0.8},
+		BAYESIAN_COLLECTIONS=["skill_memories", "work_memories", "directive_memories"],
+		BAYESIAN_STABILITY_KAPPA=0.05,
+		BAYESIAN_REINFORCEMENT_GAIN=1.0,
 	)
 	return c
 

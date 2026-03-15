@@ -66,6 +66,7 @@ class LazarusPulse:
 			try:
 				logger.info("Lazarus Pulse: Beat triggered. Executing rituals...")
 				await self._maintenance_ritual()
+				await self._usp_ritual()
 				await self._dream_ritual()
 				await self._consolidation_ritual()
 				await self._swarm_ritual()
@@ -108,6 +109,28 @@ class LazarusPulse:
 
 		except Exception as e:
 			logger.error(f"Pulse: Maintenance ritual failed: {e}")
+
+	async def _usp_ritual(self) -> None:
+		"""
+		Autonomous Operator Mood Profile (USP) Refresh:
+		Recalculates the operator's emotional resonance vectors
+		across all temporal horizons (global, 30d, 7d, 3d).
+		"""
+		try:
+			from red_pill.utils.mood_profile import update_usp
+
+			logger.info("Pulse: Initiating USP Ritual (Operator Mood Profile refresh)...")
+			usp = await asyncio.to_thread(update_usp, self.memory_mgr)
+
+			# Log dominant mood for observability
+			from red_pill.utils.mood_profile import _get_dominant_color
+
+			dominant = _get_dominant_color(usp.get("last_3d", {}))
+			count = usp.get("interaction_count", 0)
+			logger.info(f"Pulse: USP updated. Dominant 3d: {dominant}, interactions: {count}")
+
+		except Exception as e:
+			logger.error(f"Pulse: USP ritual failed: {e}")
 
 	async def _dream_ritual(self) -> None:
 		"""

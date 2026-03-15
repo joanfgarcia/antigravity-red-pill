@@ -48,6 +48,7 @@ The Red Pill Protocol is built for **Sovereign Environments**, but it adapts to 
 - **MCP Server (v5.0)**: Exposes the full Red Pill telemetry (CPU, GPU CUDA/ROCm, NPU) and Swarm tools to IDEs like VS Code and Claude Desktop for zero-friction interaction.
 - **Inlined Identity**: Identity and directives are ingested natively as vector memories, making the agent immune to context loss.
 - **ACE Synaptic Engine (v5.4.0 - v5.6.1)**: Integrated the **Affective Cognitive Engine (ACE)**. Memory decay is governed by the **Valence-Arousal Model**, mimicking human "Flashbulb Memory".
+- **Bayesian Dual-Kernel (v6.1.0a2)**: Technical collections (`skill_memories`, `work_memories`, `directive_memories`) now use a **Beta-distribution Utility Model** (`E[θ] = α/(α+β)`) for reliability-based retrieval, while social/story collections retain the Affective FSRS engine. The routing is fully transparent — neither agents nor tools need to know which kernel is active.
 
 ### 🔍 Agentic Discoverability (How to talk to the Bünker)
 If you are an AI Agent interacting with this repository:

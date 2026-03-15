@@ -309,3 +309,12 @@ CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "100"))
 SLEEP_CHUNK_SIZE = int(os.getenv("SLEEP_CHUNK_SIZE", "500"))
 # SLEEP_CULL_THRESHOLD: Minimum intensity to keep a neutral chunk during consolidation.
 SLEEP_CULL_THRESHOLD = float(os.getenv("SLEEP_CULL_THRESHOLD", "0.1"))
+
+# BAYESIAN MEMORY (v6.1 Phase B.1)
+# Collections that use the Bayesian Utility Kernel instead of Affective FSRS.
+BAYESIAN_COLLECTIONS = os.getenv("BAYESIAN_COLLECTIONS", "skill_memories,work_memories,directive_memories").split(",")
+# BAYESIAN_STABILITY_KAPPA: Rate of uncertainty accumulation (beta) per day.
+# Higher = faster "forgetting" of technical utility.
+BAYESIAN_STABILITY_KAPPA = float(os.getenv("BAYESIAN_STABILITY_KAPPA", "0.05"))
+# BAYESIAN_REINFORCEMENT_GAIN: Amount of alpha added per successful recall.
+BAYESIAN_REINFORCEMENT_GAIN = float(os.getenv("BAYESIAN_REINFORCEMENT_GAIN", "1.0"))
