@@ -99,6 +99,7 @@ Project Lazarus is designed to be **Water**—fluid across all hardware tiers. T
 | :--- | :--- | :--- |
 | **Compute** | CPU Fallback (Universal) | CUDA / ROCm / Metal Acceleration |
 | **Logic** | Baseline Reasoning | NPU Offloading (Ryzen AI / Core Ultra) |
+| **Thermal** | `psutil.sensors_temperatures()` (`k10temp`/`coretemp`/`acpitz`) | GPU temp via `nvidia-smi` / sysfs `hwmon` |
 | **Security** | NONE / ADAPTATIVE | MAXIMUM (Argon2-id + LUKS) |
 
 - **Portability**: The swarm agents run as concurrent `asyncio` coroutines within a single process. OS-level `multiprocessing` isolation is a planned milestone for v6.0 (Sovereign Swarm Discovery).

@@ -799,10 +799,12 @@ class MemoryManager:
 						hit.payload["utility_beta"] = round(new_beta, 4)
 						hit.payload["reinforcement_score"] = new_score
 						update_operations.append(
-							models.SetPayloadOperation(set_payload=models.SetPayload(
-								payload={"utility_beta": hit.payload["utility_beta"], "reinforcement_score": new_score},
-								points=[hit.id],
-							))
+							models.SetPayloadOperation(
+								set_payload=models.SetPayload(
+									payload={"utility_beta": hit.payload["utility_beta"], "reinforcement_score": new_score},
+									points=[hit.id],
+								)
+							)
 						)
 				else:
 					# --- Affective Kernel: FSRS Lazy Erosion (B760 Legacy) ---

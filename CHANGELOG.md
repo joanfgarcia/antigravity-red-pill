@@ -2,6 +2,7 @@
 
 ## [6.1.0a2] - 2026-03-15
 ### 🛡️ Infrastructure Sovereignty & Deep Diagnostics
+- **[FEAT] CPU Temperature Telemetry**: Added CPU temperature monitoring to `HardwareSentinel` via `psutil.sensors_temperatures()` with prioritized chip detection (`k10temp` → `coretemp` → `acpitz`). Graceful `hasattr` fallback for non-Linux platforms. Dashboard thermal state now factors `max(cpu_temp, gpu_temp)`.
 - **[FEAT] Persistent Model Cache**: Migrated `fastembed` model cache from `/tmp` to `{IA_DIR}/storage/models`. Prevents Sidecar "amnesia" and startup failures after OS temporary file purges.
 - **[FEAT] Dynamic Container Abstraction**: Introduced `CONTAINER_ENGINE` variable in `.env`. Diagnostics (`Keymaker`) now dynamically use the configured engine (Podman/Docker), eliminating hardcoded assumptions.
 - **[FEAT] Deep Sidecar Diagnostics (Canary Encode)**: Upgraded `KeymakerMinion` health checks. Now performs a real semantic encoding test (ping + encode) instead of a simple socket ping, detecting "Active but Dead" states.
