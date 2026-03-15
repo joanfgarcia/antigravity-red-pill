@@ -136,16 +136,10 @@ class MemoryDaemon:
 
 			# SOVEREIGN INTERACTION MIDDLEWARE (Phase 3)
 			if cfg.SIP_ENABLED:
-				from red_pill.utils.scribe import run_scribe_service
 				from red_pill.utils.sip import run_sip
 
 				threading.Thread(target=run_sip, daemon=True).start()
 
-			# SHADOW SCRIBE (Zero-Token Artifact Monitoring)
-			if cfg.BRAIN_PATH:
-				from red_pill.utils.scribe import run_scribe_service
-
-				threading.Thread(target=run_scribe_service, args=(cfg.BRAIN_PATH,), daemon=True, name="ShadowScribe").start()
 		except Exception as e:
 			logger.error(f"Daemon startup failed (Model/Pulse): {e}")
 			self.stop()

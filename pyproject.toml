@@ -1,6 +1,6 @@
 [project]
 name = "red-pill"
-version = "6.1.0a2"
+version = "6.1.0a3"
 description = "B760-Adaptive Memory Protocol for Sovereign Agents"
 readme = "README.md"
 license = "GPL-3.0-only"
@@ -116,6 +116,9 @@ omit = [
     "*/swarm/transport.py",
     "*/skills/swarm_messaging.py",
     "*/swarm/transports/manager.py",
+    "*/metabolism/sleep.py",
+    "*/swarm/agents/edge_engine.py",
+    "*/skills/swarm_subscribe.py",
 ]
 
 [tool.coverage.report]

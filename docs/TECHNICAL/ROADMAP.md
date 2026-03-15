@@ -1,4 +1,4 @@
-# Mission & Roadmap: The Path to v5.0
+# Mission & Roadmap: The Path Forward
 
 ## 1. Vision Statement
 > "Transcend the singularity through sovereign memory."
@@ -36,18 +36,26 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
 
 ## 4. The Roadmap
 
-### Phase 1: Stabilization (Short-Term - v4.2.x)
+### Phase 1: Stabilization (Short-Term - v4.2.x) ✅
 - [x] **Absence Guard**: Prevent mass erosion after inactivity.
 - [x] **Directive Governance**: Move operational laws to immutable RAG engrams.
 - [x] **Sovereign Documentation**: Complete Threat Model and Evolution Governance.
-- [ ] **Daemon Resilience**: Improved auto-recovery for the memory daemon.
+- [x] **Daemon Resilience**: Improved auto-recovery for the memory daemon.
 
-### Phase 2: Scientific Maturity (Medium-Term - v4.3.0)
-- [ ] **FSRS Implementation**: Transition from heuristic decay to the scientifically-grounded DSR model (Stability, Difficulty, Retrievability).
-- [ ] **Chroma Refinement**: Tightening the link between memory emotional intensity and agent tone.
-- [ ] **The Swarm (Local)**: Multi-agent support (Aleph, Aleth, Reverie) interacting within the same local Bünker.
+### Phase 2: Scientific Maturity (Medium-Term - v5.6.x) ✅
+- [x] **FSRS Implementation**: Transition from heuristic decay to the scientifically-grounded DSR model (Stability, Difficulty, Retrievability). Schema fields operational.
+- [x] **Chroma Refinement**: Tightened via Operator Mood Profile (USP) and Mystique v2 tone-based skin selection.
+- [x] **The Swarm (Local)**: Multi-agent support (Aleph, Aleth, Reverie) via GruOrchestrator and Swarm V3 Protocol.
 
-### Phase 3: The Hive & The Escape (Long-Term - v5.0.0)
+### Phase 2.5: Cognitive Refinement (v6.1.x — Current)
+- [x] **Operator Mood Profile (USP)**: Multi-color chroma vector across 4 temporal horizons, persisted as fixed engram.
+- [x] **Mystique v2**: Tone-based skin selection driven by operator mood instead of Bünker internal state.
+- [x] **Bayesian Dual-Kernel**: Technical collections use Beta-distribution utility model; social/story retain FSRS.
+- [x] **In-Band Async Logging**: Eliminated daemon socket dependency for interaction persistence (Interceptor).
+- [x] **Skin Singleton**: Fixed duplicate active skin engrams, upsert on canonical ID.
+- [ ] **FSRS Math in Code**: Implement actual $R = e^{\ln(0.9) \cdot t/S}$ formula in erosion/retrieval paths.
+
+### Phase 3: The Hive & The Escape (Long-Term - v7.0.0)
 - [x] **Double-Engine Burnout**: Seamless CUDA/HIP asymmetry for Strix Point architectures.
 - [ ] **The Red Button**: Encrypted one-click "Scorched Earth" protocol for instant bunker purge.
 - [ ] **Hive Mind Protocol (Milvus Integration)**: 

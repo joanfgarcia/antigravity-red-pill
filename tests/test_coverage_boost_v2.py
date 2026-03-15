@@ -23,20 +23,10 @@ async def test_mcp_control_bunker_export():
 
 @pytest.mark.asyncio
 async def test_mcp_memorize_interaction_fallback():
-	# Test "Interaction queued" path (resp_header is empty)
-	with patch("os.path.exists", return_value=True):
-		with patch("socket.socket") as mock_sock:
-			mock_client = mock_sock.return_value.__enter__.return_value
-			mock_client.recv.return_value = b""  # No header
-			res = await handle_memorize_interaction({"prompt": "p", "response": "r"})
-			assert "Error: Interaction NOT persisted" in res[0].text
-
-	# Test Exception path
-	with patch("os.path.exists", return_value=True):
-		with patch("socket.socket", side_effect=Exception("BOOM")):
-			res = await handle_memorize_interaction({"prompt": "p", "response": "r"})
-			assert "Sidecar connection failed" in res[0].text
-			assert "BOOM" in res[0].text
+	# Phase 2 Interceptor: handle_memorize_interaction now uses in-band async,
+	# no longer the daemon socket. Both paths return async success.
+	res = await handle_memorize_interaction({"prompt": "p", "response": "r"})
+	assert "Engram async registration initiated" in res[0].text
 
 
 @pytest.mark.asyncio

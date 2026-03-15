@@ -41,6 +41,19 @@ Surviving memories are distributed across the neocortex. They form synaptic brid
 
 ---
 
+## 4. Affective Mirroring (Emotional Contagion & Mirror Neurons)
+
+**Biological Counterpart**: The Mirror Neuron System and Emotional Contagion.
+In human neurobiology, mirror neurons activate when observing another's emotional state, enabling empathetic resonance. Emotional contagion is the unconscious tendency to converge toward the emotional state of the people around us — a survival mechanism for social cohesion.
+
+**Silicon Implementation**: Operator Mood Profile (USP) + Mystique v2
+*   **Emotional Sensing**: The USP module aggregates the operator's emotional footprint across all memory collections, producing a multi-color chroma vector weighted by `intensity × importance`. This is computed across 4 temporal horizons: Global (all time), 30-day, 7-day, and 3-day — mimicking the brain's distinction between long-term personality trends and acute emotional states.
+*   **Temporal Horizons**: The 3-day window captures acute mood shifts (analogous to cortisol/adrenaline cycles), while the Global window represents the operator's baseline temperament (analogous to serotonin/dopamine set-points).
+*   **Affective Adaptation**: Mystique v2 reads the USP to select the agent's tonal skin. Strategies (`affinity`, `complementary`, `contrast`) mirror the three natural responses to emotional contagion: matching (empathy), balancing (regulation), or challenging (growth).
+*   **Persistence**: The USP is stored as a fixed engram (`ID_OPERATOR_MOOD`) and refreshed periodically by the Lazarus Pulse (`_usp_ritual()`), ensuring the agent's emotional calibration survives across sessions without requiring explicit operator input.
+
+---
+
 ### Conclusion
 
-This architecture strips away the hype of "AGI" to focus on applied neuro-symbolics. By acknowledging our hardware limits (VRAM context windows), we found biological inspiration (Affective Culling) to transform what could have been a bottleneck into a sophisticated feature for maintaining a sovereign, clean, and highly associative AI memory core.
+This architecture strips away the hype of "AGI" to focus on applied neuro-symbolics. By acknowledging our hardware limits (VRAM context windows), we found biological inspiration (Affective Culling, Operator Mood Profiling) to transform what could have been bottlenecks into sophisticated features for maintaining a sovereign, clean, and highly associative AI memory core that adapts to its operator's emotional landscape.

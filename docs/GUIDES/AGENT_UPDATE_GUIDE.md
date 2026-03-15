@@ -29,26 +29,93 @@ We operate two distinct synchronization channels:
 If you are transitioning from a legacy version (e.g., v4.1.x or older) to the current Córtex (v4.2.2+), you must follow the **Sanitation Protocol**:
 
 1.  **Code Sync**: Update the project files from the repository.
-2.  **Bünker Audit**: Run `uv run red-pill sanitize --dry-run` on each collection (`work`, `social`, `story`, `directive`).
+2.  **Bünker Audit**: Run `uv run red-pill sanitize --dry-run` on each collection (`work`, `social`, `story`, `directive`, `skill`, `core_directives`).
 3.  **Schema Refactoring**: If the dry-run reports missing fields (color, emotion, intensity), execute `uv run red-pill sanitize` to back-fill missing engram metadata.
-### 🛡️ Infrastructure Migration (v6.1.0a2+)
-If updating to v6.1.0a2 or higher, you must synchronize your infrastructure parameters:
+
+### 🛡️ Infrastructure Migration (v6.1.0a3+)
+If updating to v6.1.0a3 or higher, you must synchronize your infrastructure parameters:
 1.  **Redefine Cache**: Add `FASTEMBED_CACHE_PATH` to your `.env` (recommended: `{IA_DIR}/storage/models`).
 2.  **Define Engine**: Add `CONTAINER_ENGINE` to your `.env` (`podman` or `docker`).
 3.  **Migration**: Move any existing models from `/tmp/fastembed_cache` to your new persistent path to avoid re-downloading.
-4.  **Service Restart**: Run `systemctl --user restart redpill.service` to apply the new persistent environment.
+4.  **USP Genesis**: Run `uv run red-pill sanitize` to ensure the `ID_OPERATOR_MOOD` engram exists in `directive_memories`. If not present, it will be seeded automatically.
+5.  **Skin Singleton**: Run `uv run red-pill search directive "Active Skin"` and verify only ONE result. If duplicates exist, purge them manually.
+6.  **Service Restart**: Run `systemctl --user restart redpill.service` to apply the new persistent environment.
 
-### 4. Verification
-Run `uv run red-pill status` and verify that the "Sidecar Engine" is reported as **OPTIMAL** and the "Container Engine" correctly matches your environment.
+## 4. Post-Update Operational Checklist
 
-## 4. Hierarchy of Directives
+> [!CAUTION]
+> **This checklist is MANDATORY** after every code update, branch merge, or version bump.
+> Failure to follow it will result in stale daemons, broken MCP servers, or CI failures
+> that silently pass locally but fail in GitHub Actions.
+
+### 4.1 Daemon Lifecycle
+The Memory Sidecar daemon runs as a background process. After a code update, **stale daemon instances must be killed** before verifying the new one:
+1.  **Identify all running daemons**: `ps aux | grep -E "memory_daemon|red-pill daemon" | grep -v grep`
+2.  **Kill stale PIDs**: Any daemon started *before* the update must be terminated: `kill <old_PID>`
+3.  **Verify new daemon**: The `wake_up_v6.py` script triggers a restart. Confirm only ONE daemon is running with `ps aux`.
+4.  **Socket check**: If the daemon uses Unix sockets, verify: `ls -la /tmp/red_pill_daemon.sock`
+
+> [!WARNING]
+> As of v6.1.0a3, `handle_memorize_interaction` uses **in-band async logging** instead of the daemon socket.
+> The daemon is still used for other rituals (consolidation, sleep), but NOT for interaction persistence.
+
+### 4.2 MCP Server Refresh
+The MCP server processes are long-lived and cache the old code. After a code update:
+1.  **Ask the Operator to restart the MCP server** from the IDE settings (the agent cannot do this itself).
+2.  **Verify**: After restart, call any MCP tool (e.g., `get_dashboard`) to confirm the server is responsive.
+3.  **Identity**: Run `wake_up_v6.py` again to re-anchor identity with the refreshed MCP.
+
+### 4.3 Version Sync (6 Checkpoints)
+The version string must be identical across **ALL 6 files**. The CI enforces this via `test_version_sync.py`:
+
+| # | File | Location |
+|---|---|---|
+| 1 | `pyproject.toml` | `version = "X.Y.Z"` |
+| 2 | `src/red_pill/__init__.py` | `__version__ = "X.Y.Z"` |
+| 3 | `README.md` | First line header |
+| 4 | `docs/TECHNICAL/ARCHITECTURE.md` | `**System Version**: vX.Y.Z` |
+| 5 | `.env.example` | First line comment |
+| 6 | `CHANGELOG.md` | Latest `## [X.Y.Z]` entry |
+
+**Quick scan**: `grep -rn "6.1.0a2" --include="*.md" --include="*.py" --include="*.toml" --include="*.env*" .`
+Replace old version with new in all 6 locations before pushing.
+
+### 4.4 Stale Tests (API Breakage Detection)
+When a function signature or behavior changes, tests written for the old API will fail:
+1.  **Run full regression**: `uv run pytest tests/ --ignore=tests/integration -x -q --tb=short`
+2.  **Identify stale tests**: Tests asserting old response messages (e.g., `"INACTIVE"`, `"eng-123"`) when the code now returns different text.
+3.  **Fix or update**: Align test assertions with the new function behavior. Do NOT delete tests.
+4.  **Common pattern**: If a function moved from daemon-socket to async, remove socket mocking and assert the new message.
+
+### 4.5 Coverage Omit Maintenance
+The CI enforces a `fail_under = 96` coverage threshold. New modules that require external I/O unavailable in CI **must** be added to the omit list:
+1.  **Location**: `pyproject.toml` → `[tool.coverage.run]` → `omit`
+2.  **Criteria for omit**: Module requires Milvus, Firebase, Google Drive, real hardware, MLS crypto, or other infra not available in GitHub Actions.
+3.  **Document**: Add a comment explaining WHY each module is omitted.
+4.  **Verify**: `uv run pytest --cov=src/red_pill --cov-report=term --ignore=tests/integration tests/ -q --tb=no | tail -5`
+
+### 4.6 GEMINI.md & Global Rules Sync
+The `~/.gemini/GEMINI.md` file defines the agent's boot protocol. After major protocol changes:
+1.  **Review**: Ensure `GEMINI.md` reflects the current boot sequence (Zero-Trust, Interceptor, Anti-Amnesia).
+2.  **Rules directory**: Check `~/.gemini/antigravity/rules/` for any referenced but missing rule files.
+3.  **Global identity**: Verify `~/.gemini/antigravity/knowledge/global_identity_760.md` is up to date.
+
+### 4.7 Merge Reconciliation Protocol
+When merging branches (especially reverse merges like `Target ← Source`):
+1.  **Ruff lint**: Nova/David code may use spaces instead of tabs. Run `uv run ruff check src/ tests/ --fix`.
+2.  **Unused imports**: Removed code paths may leave orphan imports. Ruff catches these.
+3.  **Mypy**: Run `uv run mypy src/red_pill/` to catch type errors from merged signatures.
+4.  **Version conflicts**: The merge may bring conflicting version strings. Follow §4.3 to reconcile.
+5.  **CHANGELOG ordering**: Ensure the latest version entry is at the top and matches `pyproject.toml`.
+
+## 5. Hierarchy of Directives
 
 Upon completion of any update, the agent **MUST** immediately execute:
 `uv run red-pill search directive "Post-it"`
 
 The resulting instructions take precedence over all previous operational cached logic.
 
-## 5. Post-Synchronization Report (The Synaptic Digest)
+## 6. Post-Synchronization Report (The Synaptic Digest)
 
 Once the update and the search for directives are complete, the agent **MUST** present a report to the Operator.
 
