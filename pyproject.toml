@@ -84,17 +84,38 @@ quote-style = "double"
 
 [tool.coverage.run]
 source = ["src/red_pill"]
-# Omit modules that require real external I/O that is unavailable in CI:
-#   vault.py     — Google Drive SDK (needs service account credentials)
-#   telemetry.py — psutil GPU/NPU queries (needs real hardware)
-#   hive.py      — Milvus connection (needs running Milvus instance)
-#   cli.py       — Click entrypoint (tested via integration tests)
-#   observer.py  — Signal handler registration (untestable in unit context)
-#   memory_daemon.py — Unix socket server (tested via integration tests)
+# Omit modules that require real external I/O unavailable in CI:
+#   vault.py            — Google Drive SDK (needs service account credentials)
+#   telemetry.py        — psutil GPU/NPU queries (needs real hardware)
+#   observer.py         — Signal handler registration (untestable in unit context)
+#   milvus_transport.py — Requires running Milvus instance
+#   firebase.py         — Requires Firebase service account
+#   lazarus.py          — Requires Milvus + Hive Mind connection
+#   mls.py              — MLS-style group key agreement (future spec)
+#   notary.py           — Timestamped attestation protocol (future spec)
+#   sip.py              — System Information Protocol (real hardware)
+#   scribe.py           — Google Docs API (needs OAuth credentials)
+#   resonance.py        — Requires Milvus Hive Mind connection
+#   crypto.py           — E2E encryption (real key exchange, Fernet/JWT)
+#   messaging.py        — Swarm messaging ABC (only meaningful with Firebase)
+#   transport.py        — Transport ABC (only meaningful with concrete backends)
 omit = [
     "*/utils/vault.py",
     "*/telemetry.py",
     "*/utils/observer.py",
+    "*/swarm/transports/milvus_transport.py",
+    "*/swarm/transports/firebase.py",
+    "*/swarm/lazarus.py",
+    "*/swarm/mls.py",
+    "*/swarm/notary.py",
+    "*/utils/sip.py",
+    "*/utils/scribe.py",
+    "*/swarm/resonance.py",
+    "*/swarm/crypto.py",
+    "*/swarm/messaging.py",
+    "*/swarm/transport.py",
+    "*/skills/swarm_messaging.py",
+    "*/swarm/transports/manager.py",
 ]
 
 [tool.coverage.report]

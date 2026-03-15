@@ -4,6 +4,7 @@ from typing import Any, Dict, Optional
 
 import yaml  # type: ignore
 
+from red_pill.utils.mood_profile import get_dominant_operator_mood
 from red_pill.utils.tone_analyzer import get_current_sync_state
 
 
@@ -11,6 +12,7 @@ class MystiqueEngine:
 	"""
 	The Mystique Protocol Logic Layer.
 	Calculates the best skin for the current emotional resonance or balance.
+	Uses the Operator Mood Profile (USP) to adapt tone without injecting lore.
 	"""
 
 	def __init__(self, skins_path: Optional[str] = None):
@@ -27,27 +29,28 @@ class MystiqueEngine:
 	def get_all_skins(self) -> Dict[str, Any]:
 		return self.skins
 
-	def suggest_skin(self, strategy: str = "affinity", context: str = "work") -> Dict[str, Any]:
+	def suggest_skin(self, strategy: str = "affinity", context: str = "work", manager: Any = None) -> Dict[str, Any]:
 		"""
-		Suggests a skin based on current mood and desired strategy.
-		- affinity: match the mood
-		- complementary: balance the mood (e.g., if angry, suggest calm/logical)
-		- contrast: provide the opposite (e.g., if too emotional at work, suggest clinical)
+		Suggests a skin based on the **operator's** mood and desired strategy.
+
+		- affinity: match the operator's mood
+		- complementary: balance the mood (calm if agitated)
+		- contrast: provide the opposite (clinical if emotional)
+
+		Args:
+			strategy: One of 'affinity', 'complementary', 'contrast'.
+			context: 'work' or 'personal' — filters skins by tag.
+			manager: Optional MemoryManager for USP lookup. Falls back to Búnker mood.
 		"""
-		sync_state = get_current_sync_state()
-		mood_color = sync_state["mood"]
+		# v6.1.0: Read Operator Mood (USP) instead of Búnker mood
+		if manager is not None:
+			mood_color = get_dominant_operator_mood(manager)
+		else:
+			# Fallback: legacy Búnker mood when no manager is available
+			sync_state = get_current_sync_state()
+			mood_color = sync_state["mood"]
 
 		# Mapping mood colors to tag categories
-		# orange -> empathic, technical
-		# blue -> analytical, clinical
-		# gray -> clinical, logical
-		# red -> goofy, rebellious
-		# purple -> protective, curious
-		# cyan -> analytical, visionary
-		# yellow -> watchful, clinical
-		# emerald -> strategic, analytical
-		# gold -> clinical, technical
-
 		mood_to_tags = {
 			"orange": ["empathic", "technical"],
 			"blue": ["analytical", "clinical"],
@@ -76,17 +79,22 @@ class MystiqueEngine:
 				score = len(set(tags) & set(target_tags))
 				if data.get("chroma") == mood_color:
 					score += 2
-			elif strategy == "complementary" or strategy == "contrast":
-				# Prioritize 'clinical' or 'logical' if mood is high-arousal (red/orange)
+			elif strategy == "complementary":
+				# Balance: favor clinical/logical if high-arousal mood
 				if mood_color in ["red", "orange"] and "clinical" in tags:
 					score += 5
-				# Avoid the current mood color
 				if data.get("chroma") != mood_color:
 					score += 2
-				# If "sobón" (empathic/intimate) in office, favor professional/clinical
 				if context == "work" and any(t in ["empathic", "intimate"] for t in target_tags):
 					if "clinical" in tags or "professional" in tags:
 						score += 5
+			elif strategy == "contrast":
+				# Opposite: maximize distance from current mood
+				if data.get("chroma") != mood_color:
+					score += 3
+				# Prefer tags that don't overlap at all
+				overlap = len(set(tags) & set(target_tags))
+				score += max(0, 3 - overlap)
 
 			candidates.append({"name": name, "score": score, "data": data})
 

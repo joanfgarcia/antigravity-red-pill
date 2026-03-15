@@ -3,6 +3,9 @@
 ## [6.1.0a2] - 2026-03-15
 ### 🛡️ Infrastructure Sovereignty & Deep Diagnostics
 - **[FEAT] CPU Temperature Telemetry**: Added CPU temperature monitoring to `HardwareSentinel` via `psutil.sensors_temperatures()` with prioritized chip detection (`k10temp` → `coretemp` → `acpitz`). Graceful `hasattr` fallback for non-Linux platforms. Dashboard thermal state now factors `max(cpu_temp, gpu_temp)`.
+- **[FEAT] Operator Mood Profile (USP)**: New module `mood_profile.py` captures operator emotional resonance as a multi-color chroma vector across 4 temporal horizons (Global, 30d, 7d, 3d). Weighted by `intensity × importance`, persisted as a fixed engram (`ID_OPERATOR_MOOD`).
+- **[FEAT] Mystique v2 (USP-Driven)**: Rewired Mystique protocol to read operator mood (USP) instead of Búnker internal chroma. Separated `complementary` and `contrast` strategies with distinct scoring logic. Added `manager` parameter with fallback to legacy Búnker mood.
+- **[FIX] Skin Singleton**: `switch_skin` now upserts on the fixed `ID_DIR_ACTIVE_SKIN` engram instead of creating a new immune duplicate each time. Purged 93 orphaned skin engrams from the Búnker.
 - **[FEAT] Persistent Model Cache**: Migrated `fastembed` model cache from `/tmp` to `{IA_DIR}/storage/models`. Prevents Sidecar "amnesia" and startup failures after OS temporary file purges.
 - **[FEAT] Dynamic Container Abstraction**: Introduced `CONTAINER_ENGINE` variable in `.env`. Diagnostics (`Keymaker`) now dynamically use the configured engine (Podman/Docker), eliminating hardcoded assumptions.
 - **[FEAT] Deep Sidecar Diagnostics (Canary Encode)**: Upgraded `KeymakerMinion` health checks. Now performs a real semantic encoding test (ping + encode) instead of a simple socket ping, detecting "Active but Dead" states.
