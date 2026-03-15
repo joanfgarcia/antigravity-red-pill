@@ -65,8 +65,8 @@ The MCP server processes are long-lived and cache the old code. After a code upd
 2.  **Verify**: After restart, call any MCP tool (e.g., `get_dashboard`) to confirm the server is responsive.
 3.  **Identity**: Run `wake_up_v6.py` again to re-anchor identity with the refreshed MCP.
 
-### 4.3 Version Sync (6 Checkpoints)
-The version string must be identical across **ALL 6 files**. The CI enforces this via `test_version_sync.py`:
+### 4.3 Version Sync (7 Checkpoints)
+The version string must be identical across **ALL 7 locations**. The CI enforces the first 6 via `test_version_sync.py`:
 
 | # | File | Location |
 |---|---|---|
@@ -76,9 +76,19 @@ The version string must be identical across **ALL 6 files**. The CI enforces thi
 | 4 | `docs/TECHNICAL/ARCHITECTURE.md` | `**System Version**: vX.Y.Z` |
 | 5 | `.env.example` | First line comment |
 | 6 | `CHANGELOG.md` | Latest `## [X.Y.Z]` entry |
+| 7 | **Bünker** (`directive_memories`) | `PROTOCOL VERSION:` engram |
 
 **Quick scan**: `grep -rn "6.1.0a2" --include="*.md" --include="*.py" --include="*.toml" --include="*.env*" .`
-Replace old version with new in all 6 locations before pushing.
+Replace old version with new in all 6 file locations before pushing.
+
+> [!IMPORTANT]
+> **Checkpoint 7 (Bünker Version Engram)** is critical for the MCP Interceptor.
+> Without it, the local SLM will return stale version information via `<LOCAL_RESPONSE_READY>`.
+> After bumping the version in files, update the Bünker engram:
+> ```bash
+> uv run red-pill search directive "PROTOCOL VERSION"  # Find the old engram ID
+> uv run red-pill add directive "PROTOCOL VERSION: Red Pill Protocol vX.Y.Z. Released YYYY-MM-DD. Codename: <name>. Key features: <list>. Previous stable: <prev>. This engram MUST be updated on every version bump." --emotion neutral --color gray --intensity 10
+> ```
 
 ### 4.4 Stale Tests (API Breakage Detection)
 When a function signature or behavior changes, tests written for the old API will fail:
