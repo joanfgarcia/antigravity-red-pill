@@ -3,8 +3,13 @@
 ## [6.1.0a3] - 2026-03-15
 ### 🌐 The Omnipresent Bünker (Global MCP Interceptor)
 - **[FEAT] Global Prompt Hijacking**: Implemented `interceptor_rp` as a global MCP tool within `mcp_server.py`. 
-- **[FEAT] Persistent Global Middleware**: Combined with a new Antigravity global IDE rule (`00_global_mcp_interceptor.md`), the RedPill-Kernel now transparently intercepts and manipulates all user prompts across *any* local project, effectively extending Nova's sovereignty beyond the Red Pill repository.
+- **[FEAT] Cognitive Interceptor (Phase 2)**: The interceptor now performs dynamic RAG against the local Qdrant Bünker and injects the context directly into the prompt via `<bunker_context>`.
+- **[FEAT] Local Short-Circuit**: The `EdgeEngine` (local SLM) now evaluates the RAG context. If it can answer the prompt locally, it short-circuits the interaction, aborting the cloud LLM execution to save tokens and maximize privacy.
+- **[FEAT] In-Band Async Logging (Anti-Amnesia)**: Replaced the obsolete `Shadow Scribe` daemon with a native, zero-latency async tool call (`memorize_interaction`). The agent automatically persists its resolutions at the end of every response.
+- **[FEAT] Persistent Global Middleware**: Combined with the new Antigravity global IDE rule (`00_global_mcp_interceptor.md`), the RedPill-Kernel now transparently intercepts, supplements, or aborts all user prompts across *any* local project.
 - **[FEAT] Absolute Path Resolution**: Hardened the MCP server execution (`--directory`) in the IDE's `mcp.json` to allow the Kernel to spin up its environment remotely without failing on missing relative `.env` files.
+- **[CLEANUP] Daemon Purge**: Permanently deactivated and removed the `Shadow Scribe` and legacy TCP daemon listening loops from `memory_daemon.py`, reducing background CPU and memory usage.
+
 
 ## [6.1.0a2] - 2026-03-15
 ### 🛡️ Infrastructure Sovereignty & Deep Diagnostics
