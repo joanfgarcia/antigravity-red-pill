@@ -149,42 +149,27 @@ async def handle_control_bunker(arguments: Dict[str, Any]):
 	},
 )
 async def handle_memorize_interaction(arguments: Dict[str, Any]):
-	import json
-	import socket
+	import asyncio
+	
+	prompt = arguments["prompt"]
+	response = arguments["response"]
+	role = arguments.get("role", "assistant")
 
-	socket_path = cfg.DAEMON_SOCKET_PATH
-	if not os.path.exists(socket_path):
-		return [
-			types.TextContent(
-				type="text",
-				text="Error: Memory Sidecar is INACTIVE. This is required for auto-registration of interactions. Please run 'red-pill daemon' or contact the Operator.",
-			)
-		]
+	def _save_memory_task(p_prompt, p_response, p_role):
+		try:
+			from red_pill.memory import MemoryManager
+			mgr = MemoryManager()
+			uid = mgr.record_interaction_pair(p_prompt, p_response, role=p_role)
+			logger.info(f"Async Memory Log Success: {uid}")
+		except Exception as e:
+			logger.error(f"Async Memory Log Failed: {e}")
 
 	try:
-		with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-			client.settimeout(2.0)
-			client.connect(socket_path)
-			req = {
-				"command": "encode",
-				"prompt": arguments["prompt"],
-				"response": arguments["response"],
-				"role": arguments.get("role", "assistant"),
-				"api_key": cfg.SIDECAR_AUTH_KEY,
-			}
-			payload = json.dumps(req).encode("utf-8")
-			client.sendall(len(payload).to_bytes(4, byteorder="big") + payload)
-			resp_header = client.recv(4)
-			if resp_header:
-				resp_len = int.from_bytes(resp_header, byteorder="big")
-				result = json.loads(client.recv(resp_len).decode("utf-8"))
-				if result.get("status") == "ok":
-					return [types.TextContent(type="text", text=f"Engram successfully registered via Sidecar. ID: {result.get('id')}")]
-				else:
-					return [types.TextContent(type="text", text=f"Sidecar Error: {result.get('message', 'Unknown failure')}")]
-		return [types.TextContent(type="text", text="Error: Interaction NOT persisted. Sidecar did not return a success signal.")]
+		# Fire and forget asynchronous task to avoid blocking MCP response
+		asyncio.create_task(asyncio.to_thread(_save_memory_task, prompt, response, role))
+		return [types.TextContent(type="text", text="Engram async registration initiated automatically.")]
 	except Exception as e:
-		return [types.TextContent(type="text", text=f"Sidecar connection failed (Fatal): {e}")]
+		return [types.TextContent(type="text", text=f"Local Async Logging Error: {str(e)}")]
 
 
 @registry.register(
