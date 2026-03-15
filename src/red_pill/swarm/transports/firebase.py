@@ -90,8 +90,8 @@ class FirebaseTransport(SwarmTransport):
 			else:
 				payload = package  # Fallback: plaintext (legacy)
 
-			# Use legible strings instead of hashes (Swarm V3)
-			mailbox_id = target_id.replace("@", "_").replace(".", "_")
+			# Use strict Agent@Operator string (Swarm V3)
+			mailbox_id = target_id.replace(".", "_")
 			ref = db.reference(f"mailboxes/{mailbox_id}/inbox", app=self.app)
 			ref.push(payload)
 			return True
@@ -101,8 +101,8 @@ class FirebaseTransport(SwarmTransport):
 
 	def poll_mailbox(self, agent_id: str) -> List[Dict[str, Any]]:
 		try:
-			# Use legible strings instead of hashes (Swarm V3)
-			mailbox_id = agent_id.replace("@", "_").replace(".", "_")
+			# Use strict Agent@Operator string (Swarm V3)
+			mailbox_id = agent_id.replace(".", "_")
 			ref = db.reference(f"mailboxes/{mailbox_id}/inbox", app=self.app)
 			messages = ref.get()
 			if not messages:

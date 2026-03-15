@@ -53,6 +53,9 @@ class SwarmMessagingSkill:
 			actual_target = target_alias
 			remote_pub_b64 = transport.lookup_public_key(actual_target)
 
+		if "@" not in actual_target:
+			return {"status": "error", "message": f"Target '{actual_target}' is not a valid Agent@Operator identifier and could not be resolved."}
+
 		package = {"intent": intent.value, "sender": self.agent_identity, "target": actual_target, "data": payload_data, "v": "3.0"}
 
 		# Security Selection
