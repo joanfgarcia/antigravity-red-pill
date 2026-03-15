@@ -38,9 +38,10 @@ class KeymakerMinion(Minion):
 			results["qdrant_online"] = resp.status_code == 200
 			
 			# Container status sub-check
+			engine = cfg.CONTAINER_ENGINE or "podman"
 			try:
 				container_proc = subprocess.run(
-					[cfg.CONTAINER_ENGINE, "ps", "--filter", "name=qdrant", "--format", "{{.Status}}"],
+					[engine, "ps", "--filter", "name=qdrant", "--format", "{{.Status}}"],
 					capture_output=True, text=True, timeout=2
 				)
 				c_status = container_proc.stdout.strip() or "NOT FOUND"
