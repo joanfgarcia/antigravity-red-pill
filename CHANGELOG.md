@@ -14,6 +14,14 @@
 - [FIX] Mypy Type Safety**: Resolved type incompatibility in `Keymaker` regarding dynamic container engine detection.
 - **[SEC-F01] Dependency Hardening**: Forced `pyjwt>=2.12.0` to resolve CVE-2026-32597, clearing blocking CI security audits.
 
+### 🧠 Bayesian Dual-Kernel Memory (Phase B)
+- **[FEAT] BayesianInferenceEngine**: Introduced a Beta-distribution based utility model (`E[θ] = α/(α+β)`) for technical memory collections (`skill_memories`, `work_memories`, `directive_memories`).
+- **[FEAT] Dual-Kernel Transparent Routing**: `search_and_reinforce` and `_reinforce_points` now auto-detect the collection type and apply the correct inference kernel (Bayesian Utility vs Affective FSRS) without requiring callers to specify the model.
+- **[FEAT] Schema Evolution**: Added `utility_alpha` and `utility_beta` fields to `EngramPayload` with backward-compatible defaults (uniform prior `Beta(1,1)`).
+- **[FEAT] Bayesian Metabolism**: CLASSIC and LAZY erosion strategies now support β-accumulation for technical collections alongside FSRS decay for social collections.
+- **[FEAT] Importance-Based Prior Seeding**: New technical engrams receive an initial `α` proportional to their `importance` value, creating stronger priors for critical knowledge.
+- **[CONF] Bayesian Hyper-Parameters**: Added `BAYESIAN_COLLECTIONS`, `BAYESIAN_STABILITY_KAPPA` (κ=0.05), and `BAYESIAN_REINFORCEMENT_GAIN` (1.0) to config.
+
 ## [6.1.0a1] - 2026-03-14
 ### 🛰️ Sovereign Swarm v3.0 (MLS & Agnostic Transport)
 - **[FEAT] Agnostic Transport Layer**: Decoupled messaging from Firebase. Introduced `SwarmTransport` and `TransportManager` supporting N communities (Firebase, Supabase, etc.).
