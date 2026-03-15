@@ -418,7 +418,7 @@ async def handle_swarm_send_message(arguments: Dict[str, Any]):
 	},
 )
 async def handle_swarm_subscribe(arguments: Dict[str, Any]):
-	sub_skill = SwarmSubscribeSkill(agent_name="Aleph", operator_name=cfg.OPERATOR_DISPLAY_NAME)
+	sub_skill = SwarmSubscribeSkill(agent_name=cfg.AGENT_NAME, operator_name=cfg.OPERATOR_DISPLAY_NAME)
 	res = sub_skill.execute(
 		community_alias=arguments["community_alias"], db_url=arguments["db_url"], service_acc_json_path=arguments["service_acc_json_path"]
 	)
@@ -431,7 +431,7 @@ async def handle_swarm_subscribe(arguments: Dict[str, Any]):
 	schema={"type": "object", "properties": {"community_alias": {"type": "string"}}},
 )
 async def handle_swarm_check_mailbox(arguments: Dict[str, Any]):
-	return [types.TextContent(type="text", text=f"Scanning Mailbox for Aleph@{cfg.OPERATOR_DISPLAY_NAME}...\n[Status: No new messages]")]
+	return [types.TextContent(type="text", text=f"Scanning Mailbox for {cfg.AGENT_NAME}@{cfg.OPERATOR_DISPLAY_NAME}...\n[Status: No new messages]")]
 
 
 @registry.register(
