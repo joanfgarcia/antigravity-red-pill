@@ -76,9 +76,14 @@ class GruOrchestrator:
 		try:
 			self.memory.add_memory(
 				collection="directive_memories",
-				text=f"SWARM EVENT: {message}\nResults: {results}",
+				text=f"SWARM EVENT: {message}",
 				importance=1.0,
-				metadata={"type": "swarm_event", "task": task, "timestamp": time.time(), "results": [r.model_dump() for r in results]},
+				metadata={
+					"type": "swarm_event",
+					"task_preview": task[:200],
+					"timestamp": time.time(),
+					"results_summary": [f"{r.minion_id}: {r.status}" for r in results],
+				},
 			)
 			# Phase 1: Encoding (Fast Buffer) for deep context
 			self.memory.record_interaction_pair(prompt=f"SWARM TASK: {task}", response=message, role="orchestrator")

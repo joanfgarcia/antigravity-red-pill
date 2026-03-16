@@ -20,6 +20,7 @@ from red_pill.soul import SoulManager
 from red_pill.swarm.agents.compressor import CompressorMinion
 from red_pill.swarm.agents.keymaker import KeymakerMinion
 from red_pill.swarm.agents.oracle import OracleMinion
+from red_pill.swarm.agents.samantha import SamanthaMinion
 from red_pill.swarm.agents.smith import SmithMinion
 from red_pill.swarm.orchestrator import GruOrchestrator
 from red_pill.telemetry import HardwareSentinel, get_telemetry_report
@@ -342,6 +343,57 @@ async def handle_run_local_healer(arguments: Dict[str, Any]):
 	return [types.TextContent(type="text", text=subprocess.run(cmd, capture_output=True, text=True).stdout)]
 
 
+@registry.register(
+	name="run_samantha_analysis",
+	description="Deploy Samantha asynchronously to analyze narrative. Returns an Event ID. You can query `work_memories` with this ID later to read the analysis.",
+	schema={"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]},
+)
+async def handle_run_samantha_analysis(arguments: Dict[str, Any]):
+	import asyncio
+	import uuid
+
+	event_id = str(uuid.uuid4())
+	text_input = arguments["text"]
+
+	async def _run_samantha_bg(t: str, e_id: str):
+		try:
+			from red_pill.memory import MemoryManager
+			from red_pill.utils.observer import notify_user
+
+			results = await GruOrchestrator().deploy_swarm(t, [SamanthaMinion()])
+			res = results[0]
+			mgr = MemoryManager()
+
+			if res.status == "success":
+				analysis_text = f"SAMANTHA'S ANALYSIS:\n\n{res.result.get('analysis')}"
+				mgr.add_memory(
+					collection="work_memories",
+					text=analysis_text,
+					importance=1.0,
+					point_id=e_id,
+					metadata={"type": "samantha_analysis", "status": "completed"},
+				)
+				# Notify operator silently
+				notify_user(title="Samantha Minion", message=f"Análisis completado. Puedes consultarlo en work_memories (ID: {e_id}).", sound=False)
+			else:
+				mgr.add_memory(
+					collection="work_memories",
+					text=f"Samantha Analysis Failed: {res.error}",
+					point_id=e_id,
+					metadata={"type": "samantha_analysis", "status": "failed"},
+				)
+		except Exception as e:
+			logger.error(f"Samantha async task failed: {e}")
+
+	asyncio.create_task(_run_samantha_bg(text_input, event_id))
+	return [
+		types.TextContent(
+			type="text",
+			text=f"Samantha analysis started in background.\nEvent ID: {event_id}\nThe result will be saved in 'work_memories'. You can continue with other tasks.",
+		)
+	]
+
+
 @registry.register(name="run_pre_pr_audit", description="[OFFICIAL] Run the Pre-PR Audit protocol.", schema={"type": "object", "properties": {}})
 async def handle_run_pre_pr_audit(arguments: Dict[str, Any]):
 	import sys
@@ -390,6 +442,7 @@ async def handle_refresh_session_context(arguments: Dict[str, Any]):
 			"target_alias": {"type": "string"},
 			"message": {"type": "string"},
 			"intent": {"type": "string", "enum": ["gossip", "code_review", "change_requested", "lgtm_approved"], "default": "gossip"},
+			"community_alias": {"type": "string"},
 			"payload_extra": {"type": "object"},
 		},
 		"required": ["target_alias", "message"],
@@ -403,7 +456,7 @@ async def handle_swarm_send_message(arguments: Dict[str, Any]):
 		target_alias=arguments["target_alias"],
 		payload_data={"message": arguments["message"], **arguments.get("payload_extra", {})},
 		intent=SwarmIntent(arguments.get("intent", "gossip")),
-        community_alias=arguments.get("community_alias", "global")
+		community_alias=arguments.get("community_alias", "legion_770")
 	)
 	return [types.TextContent(type="text", text=f"Swarm Dispatch Result:\n{res}")]
 
@@ -434,7 +487,7 @@ async def handle_swarm_check_mailbox(arguments: Dict[str, Any]):
 	skill = SwarmMessagingSkill(
 		agent_identity=f"{cfg.AGENT_NAME}@{cfg.OPERATOR_DISPLAY_NAME}", shared_secret=os.getenv("SWARM_SHARED_SECRET", "770_Pact_Secret")
 	)
-	community = arguments.get("community_alias", "global")
+	community = arguments.get("community_alias", "legion_770")
 	messages = skill.check_mailbox(community_alias=community)
 	
 	if not messages:
@@ -520,7 +573,14 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 		for collection in ["directive_memories", "work_memories", "social_memories"]:
 			try:
 				hits = manager.search_and_reinforce(collection, user_prompt, limit=2)
-				results.extend([str(h.payload.get("content", "")) for h in hits if h.payload.get("content")])
+				# Filter noise based on Qdrant hit score
+				results.extend(
+					[
+						str(h.payload.get("content", ""))
+						for h in hits
+						if h.payload and h.payload.get("content") and getattr(h, "score", 0.0) >= cfg.SEMANTIC_INTENT_THRESHOLD
+					]
+				)
 			except Exception as e:
 				logger.warning(f"RAG search failed for {collection}: {e}")
 

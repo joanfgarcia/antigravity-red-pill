@@ -11,6 +11,9 @@
 - **[CLEANUP] Daemon Purge**: Permanently deactivated and removed the `Shadow Scribe` and legacy TCP daemon listening loops from `memory_daemon.py`, reducing background CPU and memory usage.
 - **[FEAT] MLS E2E Wiring**: Connected the TreeKEM group key derivation (`mls.py`) to `FirebaseTransport`. Messages are now encrypted with AES-GCM using the community's group key. Decryption on poll is automatic with backward-compatible plaintext passthrough.
 - **[FIX] Swarm Subscribe Race**: Fixed `SwarmSubscribeSkill` where `TransportManager.get_transport()` returned `None` because the config was written *after* the manager was initialized. Added `_load_communities()` reload after config write.
+- **[FIX] Orchestrator SAS Poisoning**: Corrected `GruOrchestrator` to strictly log execution metadata to `directive_memories` instead of the full Minion analysis string, preventing lore poisoning of core directives.
+- **[FIX] CUDA Version Hell**: Purged a legacy `LD_LIBRARY_PATH` injection from `config.py` that forced older Ollama CUDA libraries onto PyTorch, resolving `cudaGetDriverEntryPointByVersion` crashes when evaluating emotions.
+- **[FEAT] Async Swarm Offloading**: Refactored `run_samantha_analysis` MCP tool into a non-blocking `asyncio.create_task` background process. The UI now returns instantly with a UUID, while Samantha injects her analysis directly into `work_memories` upon completion.
 - **[DOCS] Swarm User Manual v2**: Rewrote `swarm_user_manual.md` as a comprehensive operator guide covering subscription, messaging, MLS encryption, intents, troubleshooting, and directory queries.
 
 

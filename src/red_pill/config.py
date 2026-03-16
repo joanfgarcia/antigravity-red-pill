@@ -14,10 +14,10 @@ load_dotenv(env_path)
 if "CUDA_VISIBLE_DEVICES" not in os.environ:
 	pass
 
-# cuDNN 9 Path Injection (v6.0) - Fixes initialization for RTX 50 series
-_cudnn_path = "/usr/local/lib/ollama/mlx_cuda_v13"
-if os.path.exists(_cudnn_path) and _cudnn_path not in os.environ.get("LD_LIBRARY_PATH", ""):
-	os.environ["LD_LIBRARY_PATH"] = f"{os.environ.get('LD_LIBRARY_PATH', '')}:{_cudnn_path}".strip(":")
+# CUDA Configuration (v6.0.0) - Removed runtime LD_LIBRARY_PATH injection
+# as it breaks PyTorch 2.10 `libc10_cuda.so` initialization by forcing older Ollama libs.
+if "CUDA_VISIBLE_DEVICES" not in os.environ:
+	pass
 
 # QDRANT
 QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
@@ -255,6 +255,10 @@ CURRENT_SCHEMA_VERSION = 1
 # DYNAMIC AGENTICS (v5.4.0)
 DYNAMIC_EMOTION_SYNC = os.getenv("DYNAMIC_EMOTION_SYNC", "True").lower() == "true"
 MULTI_EMOTION_INFERENCE = os.getenv("MULTI_EMOTION_INFERENCE", "True").lower() == "true"
+
+# NEURO-AGENTIC TUNING (v6.1.0)
+_semantic_str = os.getenv("SEMANTIC_INTENT_THRESHOLD", "Low").upper()
+SEMANTIC_INTENT_THRESHOLD = 0.6 if _semantic_str == "HIGH" else 0.3
 
 # SOVEREIGN PULSE (v6.0)
 # Enables background rituals (Maintenance, Audit, Proactive Synthesis).
