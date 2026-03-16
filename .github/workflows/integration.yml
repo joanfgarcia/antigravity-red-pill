@@ -31,11 +31,6 @@ on:
   pull_request:
     types: [labeled]
 
-  # 3. Dedicated integration branch push
-  push:
-    branches:
-      - integration-test
-
 jobs:
   # Gate: only proceed if the trigger is valid (label check for PRs)
   check-trigger:
