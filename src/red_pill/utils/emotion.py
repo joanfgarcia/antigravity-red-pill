@@ -6,6 +6,10 @@ logger = logging.getLogger(__name__)
 # Singleton for the emotion classifier to avoid reloading
 _classifier = None
 
+# Force CPU to avoid CUDA library mismatch in BERT
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+
 
 def get_emotions(text: str, top_k: int = 3, threshold: float = 0.2) -> List[Dict[str, Any]]:
 	"""

@@ -489,12 +489,25 @@ class TestMCPAdditionalTools:
 		assert "Engram async registration initiated" in result[0].text
 
 	async def test_adjust_sleep_knobs(self):
+		import sys
+		import types
 		from red_pill.mcp_server import handle_call_tool
 
-		with patch("scripts.update_env.update_env") as mock_env:
-			result = await handle_call_tool("adjust_sleep_knobs", {"chunk_size": 1000, "cull_threshold": 0.5})
-			assert "Knobs updated" in result[0].text
-			mock_env.assert_called_once()
+		fake_scripts = types.ModuleType("scripts")
+		fake_update = types.ModuleType("scripts.update_env")
+		fake_update.update_env = MagicMock()
+		
+		sys.modules["scripts"] = fake_scripts
+		sys.modules["scripts.update_env"] = fake_update
+		
+		try:
+			with patch("scripts.update_env.update_env") as mock_env:
+				result = await handle_call_tool("adjust_sleep_knobs", {"chunk_size": 1000, "cull_threshold": 0.5})
+				assert "Knobs updated" in result[0].text
+				mock_env.assert_called_once()
+		finally:
+			sys.modules.pop("scripts", None)
+			sys.modules.pop("scripts.update_env", None)
 
 	async def test_run_local_healer(self):
 		from red_pill.mcp_server import handle_call_tool
@@ -571,6 +584,7 @@ class TestMainBlock:
 		from red_pill.mcp_server import handle_call_tool
 
 		mock_hit = MagicMock()
+		mock_hit.score = 0.9
 		mock_hit.payload = {"content": "directive content here"}
 		with patch("red_pill.memory.MemoryManager") as MockMgr:
 			mgr = MockMgr.return_value
@@ -601,6 +615,7 @@ class TestMainBlock:
 		from red_pill.mcp_server import handle_call_tool
 
 		mock_hit = MagicMock()
+		mock_hit.score = 0.9
 		mock_hit.payload = {"content": "some knowledge"}
 		with patch("red_pill.memory.MemoryManager") as MockMgr:
 			mgr = MockMgr.return_value

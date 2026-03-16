@@ -1,0 +1,105 @@
+/home/joan/Documents/IA/sharing/src/red_pill/memory.py:83: UserWarning: Api key is used with an insecure connection.
+  self.client = QdrantClient(url=url, api_key=self.cfg.QDRANT_API_KEY)
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Multi-emotion detection failed: /home/joan/Documents/IA/sharing/.venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so: undefined symbol: cudaGetDriverEntryPointByVersion, version libcudart.so.12
+Traceback (most recent call last):
+  File "/home/joan/Documents/IA/sharing/scripts/run_samantha_swarm.py", line 42, in <module>
+    asyncio.run(run_analysis())
+  File "/home/joan/.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py", line 195, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/home/joan/.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/joan/.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/home/joan/Documents/IA/sharing/scripts/run_samantha_swarm.py", line 37, in run_analysis
+    rf.write(analysis)
+TypeError: write() argument must be str, not None
