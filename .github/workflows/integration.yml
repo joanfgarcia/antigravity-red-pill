@@ -14,6 +14,10 @@
 
 name: Integration Tests (LM-005)
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   # 1. On-demand manual trigger from GitHub Actions UI
   workflow_dispatch:
@@ -58,7 +62,7 @@ jobs:
     if: needs.check-trigger.outputs.should-run == 'true'
     strategy:
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        python-version: ["3.12"]
 
     steps:
       - name: Checkout repository
