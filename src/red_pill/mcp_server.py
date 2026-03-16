@@ -345,53 +345,54 @@ async def handle_run_local_healer(arguments: Dict[str, Any]):
 
 @registry.register(
 	name="run_samantha_analysis",
-	description="Deploy Samantha asynchronously to analyze narrative. Returns an Event ID. You can query `work_memories` with this ID later to read the analysis.",
+	description="Deploy Samantha asynchronously to analyze narrative. Returns an Event ID. You can query `work_memories` with this ID later.",
 	schema={"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]},
 )
 async def handle_run_samantha_analysis(arguments: Dict[str, Any]):
-	import asyncio
+	import subprocess
+	import tempfile
 	import uuid
+	import os
+	import sys
 
 	event_id = str(uuid.uuid4())
 	text_input = arguments["text"]
 
-	async def _run_samantha_bg(t: str, e_id: str):
-		try:
-			from red_pill.memory import MemoryManager
-			from red_pill.utils.observer import notify_user
+	# Save the large text to a temporary file to avoid CLI argument limits
+	tmp_fd, tmp_path = tempfile.mkstemp(prefix="samantha_input_", suffix=".txt")
+	with os.fdopen(tmp_fd, 'w', encoding='utf-8') as f:
+		f.write(text_input)
 
-			results = await GruOrchestrator().deploy_swarm(t, [SamanthaMinion()])
-			res = results[0]
-			mgr = MemoryManager()
+	# We construct a completely detached background script call
+	script_path = os.path.join(cfg.IA_DIR, "scripts", "samantha_critic.py")
+	
+	python_exe = sys.executable
 
-			if res.status == "success":
-				analysis_text = f"SAMANTHA'S ANALYSIS:\n\n{res.result.get('analysis')}"
-				mgr.add_memory(
-					collection="work_memories",
-					text=analysis_text,
-					importance=1.0,
-					point_id=e_id,
-					metadata={"type": "samantha_analysis", "status": "completed"},
-				)
-				# Notify operator silently
-				notify_user(title="Samantha Minion", message=f"Análisis completado. Puedes consultarlo en work_memories (ID: {e_id}).", sound=False)
-			else:
-				mgr.add_memory(
-					collection="work_memories",
-					text=f"Samantha Analysis Failed: {res.error}",
-					point_id=e_id,
-					metadata={"type": "samantha_analysis", "status": "failed"},
-				)
-		except Exception as e:
-			logger.error(f"Samantha async task failed: {e}")
-
-	asyncio.create_task(_run_samantha_bg(text_input, event_id))
-	return [
-		types.TextContent(
-			type="text",
-			text=f"Samantha analysis started in background.\nEvent ID: {event_id}\nThe result will be saved in 'work_memories'. You can continue with other tasks.",
-		)
+	# The CLI will read the file, run the swarm, save to qdrant, and delete the temp file.
+	cmd = [
+		python_exe, script_path,
+		"--event-id", event_id,
+		"--input-file", tmp_path
 	]
+
+	try:
+		# Run fully detached
+		subprocess.Popen(
+			cmd,
+			stdout=subprocess.DEVNULL,
+			stderr=subprocess.DEVNULL,
+			start_new_session=True # Detach from MCP server process group
+		)
+		
+		return [
+			types.TextContent(
+				type="text",
+				text=f"Samantha analysis started completely in the background.\nEvent ID: {event_id}\nThe result will be saved in 'work_memories' upon completion."
+			)
+		]
+	except Exception as e:
+		logger.error(f"Failed to launch detached Samantha process: {e}")
+		return [types.TextContent(type="text", text=f"Failed to launch analysis: {e}")]
 
 
 @registry.register(name="run_pre_pr_audit", description="[OFFICIAL] Run the Pre-PR Audit protocol.", schema={"type": "object", "properties": {}})
