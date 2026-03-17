@@ -112,54 +112,10 @@ class MemoryManager:
 			)
 			logger.info(f"Ghost Collection created: {collection_name}")
 
-	def _get_vector_from_daemon(self, text: str) -> Optional[List[float]]:
-		"""Retrieves embedding from the memory sidecar socket."""
-		socket_path = self.cfg.DAEMON_SOCKET_PATH
-		if not os.path.exists(socket_path):
-			return None
 
-		try:
-			with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-				client.settimeout(2.0)
-				client.connect(socket_path)
-
-				# SEC-002 & SEC-004: Auth & Payload
-				request = {"text": text, "api_key": self.cfg.SIDECAR_AUTH_KEY}
-				payload = json.dumps(request).encode("utf-8")
-
-				# CQ-003: Length-prefixed framing
-				header = len(payload).to_bytes(4, byteorder="big")
-				client.sendall(header + payload)
-
-				# Read response header
-				resp_header = client.recv(4)
-				if not resp_header:
-					return None
-				resp_len = int.from_bytes(resp_header, byteorder="big")
-
-				resp_data = b""
-				while len(resp_data) < resp_len:
-					chunk = client.recv(min(resp_len - len(resp_data), 8192))
-					if not chunk:
-						break
-					resp_data += chunk
-
-				if resp_data:
-					response = json.loads(resp_data.decode("utf-8"))
-					if response.get("status") == "ok":
-						return response.get("vector") if response.get("vector") is not None else None
-					else:
-						logger.error(f"Daemon error: {response.get('message')}")
-		except Exception as e:
-			logger.debug(f"Sidecar connection failed: {e}")
-		return None
 
 	def _get_vector(self, text: str) -> List[float]:
-		"""Optimized vector retrieval with daemon-first priority."""
-		vector = self._get_vector_from_daemon(text)
-		if vector:
-			return vector
-
+		"""Optimized vector retrieval strictly in-band."""
 		if self.encoder is None:
 			try:
 				from fastembed import TextEmbedding
