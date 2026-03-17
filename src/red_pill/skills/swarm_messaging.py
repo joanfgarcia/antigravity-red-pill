@@ -23,16 +23,17 @@ class SwarmMessagingSkill:
 
 	def __init__(self, agent_identity: str, shared_secret: str, transport_manager: Optional[TransportManager] = None):
 		self.agent_identity = agent_identity
-		
+
 		# Generate immutable agent_id hash (matches swarm_subscribe.py logic)
 		import hashlib
+
 		if "@" in agent_identity:
 			agent_name, operator_name = agent_identity.split("@", 1)
 			raw = f"{agent_name.lower().strip()}:{operator_name.lower().strip()}"
 			self.agent_id = f"agt_{hashlib.sha256(raw.encode()).hexdigest()[:24]}"
 		else:
-			self.agent_id = agent_identity # Fallback
-			
+			self.agent_id = agent_identity  # Fallback
+
 		self.shared_secret = shared_secret
 		self.tm = transport_manager or TransportManager()
 		self.keys_dir = os.path.expanduser("~/.agent/keys")
@@ -55,9 +56,9 @@ class SwarmMessagingSkill:
 
 		# Try resolving the target (e.g. "Aleph" -> "Aleph@Joan")
 		resolved = transport.resolve_alias(target_alias) if hasattr(transport, "resolve_alias") else None
-		
+
 		# Fallbacks
-		if resolved:
+		if resolved and len(resolved) >= 3:
 			target_agent_id, actual_target, remote_pub_b64 = resolved
 		else:
 			return {"status": "error", "message": f"Could not find agent_id for alias '{target_alias}'. Is the target registered?"}
@@ -110,7 +111,7 @@ class SwarmMessagingSkill:
 			# If the transport plugin already decrypted it successfully, it lacks 'ciphertext'
 			if pkg.get("_encrypted") is True and "ciphertext" not in pkg:
 				return pkg
-				
+
 			mode = pkg.get("mode", "bond")
 			if mode == "mls_asymmetric":
 				# In a real MLS, we'd lookup the sender's current KeyPackage

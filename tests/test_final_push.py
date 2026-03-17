@@ -13,6 +13,8 @@ def test_swarm_messaging_execute_send():
 		mock_transport = MagicMock()
 		mock_tm.get_transport.return_value = mock_transport
 		mock_transport.send_package.return_value = True
+		# FIX: Mock resolve_alias to return a valid 3-tuple to avoid unpack crash
+		mock_transport.resolve_alias.return_value = ("agt_test123", "Nova@Test", None)
 		# FIX: Ensure lookup_public_key returns None to avoid base64 errors in tests
 		mock_transport.lookup_public_key.return_value = None
 

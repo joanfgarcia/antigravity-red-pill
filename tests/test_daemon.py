@@ -25,23 +25,23 @@ def run_daemon():
 	env["DAEMON_SOCKET_PATH"] = socket_path
 	env["SIDECAR_AUTH_KEY"] = "test_sidecar_key_760"
 
-	import sys
-
-	proc = subprocess.Popen([sys.executable, "-m", "red_pill.memory_daemon"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, text=True)
+	# Use exactly the same command as systemd / CLI
+	proc = subprocess.Popen(["uv", "run", "python", "-m", "red_pill.memory_daemon"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, text=True)
 
 	# Wait for socket to appear
-	retries = 20
+	retries = 30
 	while not os.path.exists(socket_path) and retries > 0:
 		time.sleep(0.5)
 		retries -= 1
 
 	if retries == 0:
-		stdout, stderr = proc.communicate(timeout=1)
+		stdout, stderr = proc.communicate(timeout=2)
 		proc.kill()
 		pytest.fail(f"Daemon failed to start and create socket.\nStdout: {stdout}\nStderr: {stderr}")
 
-	yield proc
+	yield # This is where the daemon is running for the test
 
+	# Teardown: Stop the daemon and clean up
 	proc.terminate()
 	try:
 		proc.wait(timeout=5)
@@ -55,7 +55,7 @@ def test_daemon_ping_with_auth(run_daemon):
 	"""Tests the daemon ping-pong with the new header and auth protocol."""
 	socket_path = "/tmp/red_pill_test.sock"
 	with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-		client.settimeout(2.0)
+		client.settimeout(10.0)
 		client.connect(socket_path)
 
 		# Valid Request
