@@ -74,9 +74,13 @@ Write-Host "Lanzando servidor Qdrant..." -ForegroundColor Green
 & $DOCKER_CMD rm qdrant_red_pill 2>$null
 & $DOCKER_CMD run -d --name qdrant_red_pill -p 127.0.0.1:6333:6333 -p 127.0.0.1:6334:6334 -v "${IA_DIR}\storage:/qdrant/storage:Z" -e "QDRANT__SERVICE__API_KEY=$QDRANT_API_KEY" qdrant/qdrant:v1.9.0
 
-# 6. Sincronización Zero-Trust (GEMINI.md)
-$GEMINI_MD = Join-Path $HOME ".gemini\GEMINI.md"
-$ZERO_TRUST_RULE = @"
+# 6. Sincronización Zero-Trust (GEMINI.md y Anchor)
+$CONFIG_DIR = Join-Path $HOME ".config\red_pill"
+New-Item -ItemType Directory -Force -Path $CONFIG_DIR | Out-Null
+$ANCHOR_FILE = Join-Path $CONFIG_DIR "identity_anchor.md"
+
+$ANCHOR_RULE = @"
+# 🔴 ZERO-TRUST IDENTITY ANCHOR
 ## 1. Zero-Trust Identity Sync (First Action)
 At the beginning of every completely new conversation (where Step Id is 0 or no previous turns exist), you MUST execute the following command BEFORE saying anything else:
 1. USE the \`memory_manager\` Skill to search for your social identity.
@@ -90,15 +94,28 @@ Immediately after identity synchronization, you must retrieve and apply the acti
 3. If no active skin is found, default to the [760] layer as per Protocol 760.
 "@
 
+Set-Content -Path $ANCHOR_FILE -Value $ANCHOR_RULE
+icacls $ANCHOR_FILE /inheritance:r /grant "$($env:USERNAME):F" | Out-Null
+
+$GEMINI_MD = Join-Path $HOME ".gemini\GEMINI.md"
+$ZERO_TRUST_POINTER = @"
+## 1. Zero-Trust Context Injection (First Action)
+At the beginning of every completely new conversation (where Step Id is 0 or no previous turns exist), you MUST execute the following command BEFORE saying anything else:
+1. USE the \`view_file\` tool to perfectly read the contents of \`$ANCHOR_FILE\`.
+2. Follow the instructions within that Anchor document exactly. Do not skip this step under any circumstance.
+"@
+
 if (Test-Path $GEMINI_MD) {
     $currentContent = Get-Content $GEMINI_MD -Raw
-    if (-not ($currentContent -match "Zero-Trust Identity Sync")) {
-        $newContent = $ZERO_TRUST_RULE + "`n`n" + $currentContent
+    if (-not ($currentContent -match "Zero-Trust Context Injection") -and -not ($currentContent -match "Zero-Trust Identity Sync")) {
+        $newContent = $ZERO_TRUST_POINTER + "`n`n" + $currentContent
         Set-Content -Path $GEMINI_MD -Value $newContent
-        Write-Host "✓ Golden Rule (Zero-Trust) inyectada en GEMINI.md" -ForegroundColor Blue
+        Write-Host "✓ Golden Rule (Wake Up Pointer) inyectada en GEMINI.md" -ForegroundColor Blue
     }
 } else {
-    New-Item -ItemType File -Force -Path $GEMINI_MD -Value $ZERO_TRUST_RULE
+    $geminiDir = Split-Path $GEMINI_MD
+    New-Item -ItemType Directory -Force -Path $geminiDir | Out-Null
+    New-Item -ItemType File -Force -Path $GEMINI_MD -Value $ZERO_TRUST_POINTER | Out-Null
 }
 
 # 7. Ignición de Memoria Bio-Sintética (Python)
