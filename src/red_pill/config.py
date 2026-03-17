@@ -191,51 +191,29 @@ METABOLISM_STRATEGY = os.getenv("METABOLISM_STRATEGY", "LAZY")
 # MAX_SINK_TIME: The absolute maximum age of an engram before the Gran Purge (30 days default).
 MAX_SINK_TIME = int(os.getenv("MAX_SINK_TIME", str(30 * 24 * 3600)))
 
-# EMOTIONAL CHROMA (v4.2.0)
+# AFFECT DECAY MODELS (v6.1.0)
 DEFAULT_COLOR = "gray"
 DEFAULT_EMOTION = "neutral"
-# EMOTIONAL_DECAY_MULTIPLIERS (W2 — Calibration Rationale)
-# Each multiplier adjusts the base EROSION_RATE for emotionally-tagged engrams.
-# Values > 1.0 accelerate decay; values < 1.0 slow it (higher memory persistence).
-#
-# Theoretical basis (PIONEER mode — see ACE-CAL in utils/affect.py):
-#   - orange (anxiety, 1.5x): High-arousal negative affect. Ebbinghaus (1885) and
-# clinical anxiety research (DSM-5) show that anxiety states are highly
-# context-sensitive — memories encoded under acute anxiety fade faster when the
-# anxious context is resolved. Öhman & Mineka (2001) note salience is high but
-# consolidation is fragile without repeated reinforcement.
-#   - yellow (joy, 0.5x): Positive valence memories exhibit slower forgetting curves
-# (Levenson, 1994 — positive affect promotes broader encoding). Joy-tagged
-# engrams are reinforced by narrative recurrence and associated optimism bias.
-#   - purple (ennui, 2.0x): Low arousal + negative valence = minimal consolidation
-# signal. Izard's Differential Emotion Theory predicts ennui-tagged content has
-# the lowest survival salience. Rapid erosion models cognitive 'clearing' of
-# low-engagement states.
-#   - cyan (envy/evolution, 0.8x): Moderate persistence. Forward-looking (growth)
-# states encode with mild salience; erosion is slightly reduced to keep
-# strategic evolution signals available for recall.
-#   - blue (sadness, 1.0x): Standard decay. Sadness has moderate arousal and
-# moderate consolidation per Warriner et al. (2013) / NRC VAD. No adjustment.
-#   - gray (neutral, 1.0x): Baseline. Neutral content follows the raw EROSION_RATE
-# without modification — the mathematical zero-point of the ACE.
-#   - emerald (sovereignty, 0.7x): Strategic sovereignty-tagged engrams are
-# intentionally persistent. They encode high-level architectural intent and
-# identity directives, warranting a slower erosion rate to prevent drift.
-#
-# EMPIRICAL NOTE: These values are PIONEER mode defaults. ACADEMIC mode uses
-# Warriner et al. (2013) / NRC VAD coordinates for Valence-Arousal, and CUSTOM
-# mode allows per-emotion overrides via AFFECT_CUSTOM_OVERRIDES. A Monte Carlo
-# simulation of decay trajectories across affect models is a tracked roadmap item
-# (W2 → v6.0 ACE-CAL Research Build).
-EMOTIONAL_DECAY_MULTIPLIERS = {
-	"orange": 1.5,  # Anxiety: high arousal but fragile consolidation
-	"yellow": 0.5,  # Joy: positive persistence (Levenson positive affect)
-	"purple": 2.0,  # Ennui: lowest survival salience (Izard DET)
-	"cyan": 0.8,  # Evolution: mild strategic persistence
-	"blue": 1.0,  # Sadness: standard decay (Warriner VAD baseline)
-	"gray": 1.0,  # Neutral: mathematical zero-point
-	"emerald": 0.7,  # Sovereignty: intentional strategic persistence
-}
+AFFECT_DECAY_MODEL = os.getenv("AFFECT_DECAY_MODEL", "PIONEER")
+
+def _load_affect_multipliers(model_name: str) -> dict:
+	try:
+		import yaml
+		# Calculate path relative to this source file, not IA_DIR (which tests monkeypatch)
+		current_dir = os.path.dirname(os.path.abspath(__file__))
+		yml_path = os.path.join(current_dir, "data", "affect_models.yaml")
+		with open(yml_path, "r", encoding="utf-8") as f:
+			data = yaml.safe_load(f)
+		return data.get(model_name, data.get("PIONEER")).get("multipliers", {})
+	except Exception as e:
+		import warnings
+		warnings.warn(f"Failed to load affect_models.yaml: {e}. Falling back to default PIONEER profile.")
+		return {
+			"orange": 1.5, "yellow": 0.5, "purple": 2.0,
+			"cyan": 0.8, "blue": 1.0, "gray": 1.0, "emerald": 0.7,
+		}
+
+EMOTIONAL_DECAY_MULTIPLIERS = _load_affect_multipliers(AFFECT_DECAY_MODEL)
 
 # CHROMA-TONE MAPPING (v4.2.1)
 # Mapping for non-technical narrative refraction.

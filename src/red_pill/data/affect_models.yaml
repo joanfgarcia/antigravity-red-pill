@@ -1,0 +1,27 @@
+# EMOTIONAL CHROMA MULTIPLIERS (AFFECT MODELS)
+# 
+# These multipliers adjust the base EROSION_RATE for emotionally-tagged engrams.
+# Values > 1.0 accelerate decay; values < 1.0 slow it (higher memory persistence).
+# See docs/TECHNICAL/AFFECT_MULTIPLIERS_RESEARCH.md for empirical validation.
+
+PIONEER:
+  description: "The default B760 synthetic profile based on the Fading Affect Bias (FAB)."
+  multipliers:
+    orange: 1.5   # Anxiety: high arousal but fragile consolidation once context resolves.
+    yellow: 0.5   # Joy: positive persistence (FAB resilience / Levenson positive affect).
+    purple: 2.0   # Ennui: lowest survival salience (Izard DET). Clears low-engagement states.
+    cyan: 0.8     # Evolution: mild strategic persistence for forward-looking states.
+    blue: 1.0     # Sadness: standard decay. Moderate consolidation.
+    gray: 1.0     # Neutral: mathematical zero-point. Base EROSION_RATE.
+    emerald: 0.7  # Sovereignty: intentional strategic persistence (architectural intent).
+
+FLAT:
+  description: "A baseline profile where all emotional tagging is ignored for decay purposes."
+  multipliers:
+    orange: 1.0
+    yellow: 1.0
+    purple: 1.0
+    cyan: 1.0
+    blue: 1.0
+    gray: 1.0
+    emerald: 1.0
