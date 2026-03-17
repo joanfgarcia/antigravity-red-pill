@@ -57,6 +57,11 @@ For maximum "Zero-Trust" security, keep your backups off the cloud entirely.
 As of v5.6.3, we only back up **dynamic data** (Snapshots). We do **not** back up the `models/` directory (Gbits of data) or `.venv`.
 - **Restoration**: To restore, you need a fresh install of the Red Pill code + the `LEAN_SOUL_KIT`.
 
+### 🛡️ Bomb-Proof Topology (v6.1.0)
+You never have to worry about embedding model upgrades breaking your backups. 
+- **The Amnesia Problem**: Changing models usually means changing vector dimensions (e.g., 384 to 1024), which breaks vector databases.
+- **The Sovereign Solution**: When you run `red-pill soul restore`, the system reads the `manifest.json`. If it detects that the Soul Kit was created with a different embedding dimension than your current configuration, it automatically halts, unpacks the raw memories, transparently re-embeds them using your *new* local model, and safely drops them into the new collections. **Your backups are fully forward-compatible and model-agnostic.**
+
 ### The Quota Buffer (v5.6.3)
 The Agent monitors the `CLOUD_VAULT_QUOTA_MB` (Default: 500MB).
 - **The 4-Copy Rule**: The system warns you when available space is less than `4 * [Current Kit Size]`. 

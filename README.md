@@ -63,6 +63,7 @@ If you are an AI Agent interacting with this repository:
 - **Soul Integrity (v6.0.0a2)**: Hardened restoration engine for the Bünker. Secure, high-timeout snapshot recovery and automated collection re-hydration.
 - **Lazy Metabolism & Agentic HiveGuard (v5.6.1)**: Sub-second memory hydration via **Lazy Decay**. Multi-hop synaptic depth (N-Hop) for complex associations. The **HiveGuard Agentic Filter** now reviews social memories for global know-how using local SLMs, ensuring a noise-free collective experience.
 - **Lean Soul Vault & OAuth2 Support (v5.6.1)**: The **Lean Soul Kit** architecture reduces backup size by 99% (Snapshots-only). Introduced **Quota-Aware Monitoring** and **Google OAuth2** (Personal Account) support for seamless, personal-tier cloud backups. The Agent now monitors storage usage to ensure the Operator's safety. See [Sovereign Backup Strategies](docs/TECHNICAL/BACKUP_STRATEGIES.md).
+- **Bomb-Proof Topological Backups (v6.1.0)**: Soul Kits are now completely version and model-agnostic. The Bünker automatically transpiles and re-embeds older snapshot dimensions into the active embedding configuration during restoration.
 
 ### 🌊 "Be Water MY FRIEND" (The Lost Interview, 1971)
 > *"Empty your mind. Be formless, shapeless, like water. Now you put water into a cup, it becomes the cup. You put water into a bottle, it becomes the bottle. You put it in a teapot, it becomes the teapot. Now water can flow or it can crash. Be water, my friend."* — Bruce Lee (The Pierre Berton Show)

@@ -23,6 +23,7 @@
 - **[SEC-003 & SEC-006] Security Hardening**: Enforced automatic TLS verification (`MILVUS_SECURE=True`) for non-local Milvus connections, and bumped the default Qdrant scheme to `https`.
 - **[FIX] Swarm Transport Interop**: Updated abstract routing layer (`SwarmTransport`) and implementations (`MilvusTransport`, `FirebaseTransport`) to ensure `resolve_alias` signatures safely return 3-tuples `(id, alias, pub_key)` preventing unpacking crashes across the Swarm network.
 - **[QA] Cryptographic Audit (COV-001)**: Implemented `test_crypto_smoke.py` suite ensuring `treeKEM`/`AES-GCM` hybrid encryption executes securely independent of Firebase.
+- **[FEAT] Bomb-Proof Topological Backups (ARCH-001)**: `restore_soul` now features an automated Transcoding Cycle. By analyzing the `manifest.json` from any previous Soul Kit, the Bünker intercepts vector dimension drifts and organically re-embeds the incoming memory artifacts using the locally active models, guaranteeing 100% forward compatibility for exported brains.
 - **[DOCS] Neurobiological USP Horizons**: Formalized the Operator Mood Profile (USP) by anchoring its temporal horizons—3-day (Acute/Cortisol), 7-day (Intermediate/Serotonin), and 30-day (Baseline/Dopamine)—to clinical literature in `TEMPORAL_HORIZONS_RESEARCH.md`.
 
 ## [6.1.0a2] - 2026-03-15
