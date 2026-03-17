@@ -10,10 +10,11 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
 
     strategy:
       matrix:
+        os: [ubuntu-latest, windows-latest]
         python-version: ["3.12"]
 
     steps:
@@ -39,6 +40,7 @@ jobs:
     # Transitive CVEs we cannot fix will NOT block the build; direct dep CVEs will.
     - name: Security Audit — pip-audit full scan (non-blocking, for report)
       continue-on-error: true
+      shell: bash
       run: |
         uv run pip-audit \
           --progress-spinner=off \
@@ -48,17 +50,18 @@ jobs:
         uv run pip-audit --progress-spinner=off || true
 
     - name: Security Audit — pip-audit direct deps (BLOCKING, SEC-F01)
+      shell: bash
       run: |
         # Export only direct (non-dev) deps to a temp requirements file
         # Added --no-emit-project to avoid failure on private project package
-        uv export --no-dev --no-hashes --no-emit-project -o /tmp/red_pill_direct_deps.txt
+        uv export --no-dev --no-hashes --no-emit-project -o direct_deps.txt
         # Fail the build if any CVE hits a direct dependency
         uv run pip-audit \
           --progress-spinner=off \
           --skip-editable \
           --ignore-vuln CVE-2025-69872 \
           --ignore-vuln CVE-2026-25990 \
-          -r /tmp/red_pill_direct_deps.txt
+          -r direct_deps.txt
 
 
 
