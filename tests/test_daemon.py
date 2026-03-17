@@ -26,7 +26,9 @@ def run_daemon():
 	env["SIDECAR_AUTH_KEY"] = "test_sidecar_key_760"
 
 	# Use exactly the same command as systemd / CLI
-	proc = subprocess.Popen(["uv", "run", "python", "-m", "red_pill.memory_daemon"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, text=True)
+	proc = subprocess.Popen(
+		["uv", "run", "python", "-m", "red_pill.memory_daemon"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, text=True
+	)
 
 	# Wait for socket to appear
 	retries = 30
@@ -39,7 +41,7 @@ def run_daemon():
 		proc.kill()
 		pytest.fail(f"Daemon failed to start and create socket.\nStdout: {stdout}\nStderr: {stderr}")
 
-	yield # This is where the daemon is running for the test
+	yield  # This is where the daemon is running for the test
 
 	# Teardown: Stop the daemon and clean up
 	proc.terminate()

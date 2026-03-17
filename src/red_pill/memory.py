@@ -605,7 +605,7 @@ class MemoryManager:
 
 		updated_points = []
 		update_operations = []
-		
+
 		engine_type = self.cfg.MEMORY_ENGINES.get(collection.strip(), "fsrs_real")
 		engine = get_memory_engine(engine_type)
 
@@ -619,23 +619,23 @@ class MemoryManager:
 
 				p_id_str = str(p.id)
 				inc = increments.get(p_id_str, self.cfg.REINFORCEMENT_INCREMENT)
-				
+
 				# Calculate reinforcement using the engine
 				reinforced_updates = engine.calculate_reinforcement(p.payload, increment=inc)
-				
+
 				if reinforced_updates:
 					p.payload.update(reinforced_updates)
 					# Also explicitly bump the frequency timestamp
 					p.payload["last_recalled_at"] = time.time()
 					p.payload["recall_count"] = p.payload.get("recall_count", 0) + 1
-					
+
 					# Ensure updates are included for the batch operation
 					reinforced_updates["last_recalled_at"] = p.payload["last_recalled_at"]
 					reinforced_updates["recall_count"] = p.payload["recall_count"]
-					
+
 					updated_points.append(p)
 					update_operations.append(
-						models.SetPayloadOperation(set_payload=models.SetPayload(payload=reinforced_updates, points=[p.id])) # type: ignore
+						models.SetPayloadOperation(set_payload=models.SetPayload(payload=reinforced_updates, points=[p.id]))  # type: ignore
 					)
 
 		if update_operations:
@@ -732,14 +732,12 @@ class MemoryManager:
 				# Phase 2: Pluggable Memory Engine
 				engine_type = self.cfg.MEMORY_ENGINES.get(collection.strip(), "fsrs_real")
 				engine = get_memory_engine(engine_type)
-				
+
 				# Execute engine
 				decay_updates = engine.calculate_lazy_decay(hit.payload, current_time=time.time())
 
 				if decay_updates.get("_delete"):
-					logger.warning(
-						f"Lazy decay DELETE ({engine_type}): engram {hit.id} in '{collection}' eroded below threshold. Removing."
-					)
+					logger.warning(f"Lazy decay DELETE ({engine_type}): engram {hit.id} in '{collection}' eroded below threshold. Removing.")
 					try:
 						self.client.delete(collection_name=collection, points_selector=models.PointIdsList(points=[hit.id]))
 					except Exception:
@@ -906,20 +904,20 @@ class MemoryManager:
 	def _calculate_lazy_decay(self, payload: Dict[str, Any], collection: str) -> float:
 		if payload.get("immune"):
 			return float(payload.get("reinforcement_score", self.cfg.IMMUNITY_THRESHOLD))
-		
+
 		# Pluggable Engine Logic
 		engine_type = self.cfg.MEMORY_ENGINES.get(collection.strip(), "fsrs_real")
 		engine = get_memory_engine(engine_type)
-		
+
 		# We use the engine to calculate what the decay *would be* right now
 		decay_updates = engine.calculate_lazy_decay(payload, current_time=time.time())
-		
+
 		if decay_updates.get("_delete"):
 			return 0.0
-			
+
 		if "reinforcement_score" in decay_updates:
 			return float(decay_updates["reinforcement_score"])
-			
+
 		return float(payload.get("reinforcement_score", 1.0))
 
 	def apply_erosion(self, collection: str, rate: Optional[float] = None) -> None:
@@ -960,7 +958,7 @@ class MemoryManager:
 
 				engine_type = self.cfg.MEMORY_ENGINES.get(collection.strip(), "fsrs_real")
 				engine = get_memory_engine(engine_type)
-				
+
 				# We calculate decay logic
 				decay_updates = engine.calculate_lazy_decay(hit.payload, current_time=time.time())
 

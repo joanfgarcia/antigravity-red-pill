@@ -8,6 +8,7 @@ _classifier = None
 
 # Force CPU to avoid CUDA library mismatch in BERT
 import os
+
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 

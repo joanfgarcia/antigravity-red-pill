@@ -44,8 +44,6 @@ def test_exponential_decay_floor(manager):
 	assert manager._calculate_decay(0.01, 0.05) == 0.0
 
 
-
-
 def test_dormancy_filter(manager, mock_qdrant):
 	mock_response = MagicMock()
 	mock_response.points = []
@@ -63,8 +61,6 @@ def test_dormancy_filter(manager, mock_qdrant):
 	manager.search_and_reinforce("test_col", "query", deep_recall=True)
 	args, kwargs = manager.client.query_points.call_args
 	assert kwargs["query_filter"] is None
-
-
 
 
 def test_manual_id_injection(manager, mock_qdrant):

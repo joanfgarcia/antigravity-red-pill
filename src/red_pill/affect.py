@@ -62,7 +62,7 @@ class FSRSEngine(MemoryEngine):
 
 		if new_score < score:
 			return {"reinforcement_score": new_score}
-		
+
 		return {}
 
 	def calculate_reinforcement(self, payload: Dict[str, Any], increment: float) -> Dict[str, Any]:
@@ -70,15 +70,12 @@ class FSRSEngine(MemoryEngine):
 		# For now, we apply a simplistic stability increase based on the increment
 		score = float(payload.get("reinforcement_score", 1.0))
 		stability = float(payload.get("stability", 1.0))
-		
+
 		new_score = min(score + increment, 1.0)
 		# Increase stability (S) slightly upon retrieval (this delays future decay)
 		new_stability = stability * (1.0 + (increment * 2))
 
-		return {
-			"reinforcement_score": round(new_score, 3),
-			"stability": round(new_stability, 3)
-		}
+		return {"reinforcement_score": round(new_score, 3), "stability": round(new_stability, 3)}
 
 
 class BayesianEngine(MemoryEngine):
@@ -94,7 +91,7 @@ class BayesianEngine(MemoryEngine):
 		alpha = float(payload.get("utility_alpha", 1.0))
 		beta = float(payload.get("utility_beta", 1.0))
 		last_recalled = float(payload.get("last_recalled_at", current_time))
-		
+
 		time_passed_seconds = max(0.0, current_time - last_recalled)
 		time_passed_days = time_passed_seconds / 86400.0
 
@@ -104,7 +101,7 @@ class BayesianEngine(MemoryEngine):
 
 		# Utility (Expected value): α / (α + β)
 		utility = alpha / (alpha + new_beta)
-		
+
 		# Normalize utility (which converges to 0.0 as β -> ∞) to the reinforcement_score scale
 		new_score = utility
 
@@ -112,30 +109,23 @@ class BayesianEngine(MemoryEngine):
 			return {"_delete": True, "score": new_score, "alpha": alpha, "beta": new_beta}
 
 		if new_beta != beta:
-			return {
-				"utility_beta": round(new_beta, 4),
-				"reinforcement_score": round(new_score, 3)
-			}
-			
+			return {"utility_beta": round(new_beta, 4), "reinforcement_score": round(new_score, 3)}
+
 		return {}
 
 	def calculate_reinforcement(self, payload: Dict[str, Any], increment: float) -> Dict[str, Any]:
 		alpha = float(payload.get("utility_alpha", 1.0))
 		beta = float(payload.get("utility_beta", 1.0))
-		
+
 		# Retrieval strengthens confidence (reduces uncertainty and increases alpha)
 		new_alpha = alpha + (increment * 5)
 		# Pull beta back slightly towards 1.0 to clear uncertainty
 		new_beta = max(1.0, beta - (increment * 2))
-		
+
 		utility = new_alpha / (new_alpha + new_beta)
 		new_score = utility
 
-		return {
-			"utility_alpha": round(new_alpha, 4),
-			"utility_beta": round(new_beta, 4),
-			"reinforcement_score": round(new_score, 3)
-		}
+		return {"utility_alpha": round(new_alpha, 4), "utility_beta": round(new_beta, 4), "reinforcement_score": round(new_score, 3)}
 
 
 def get_memory_engine(engine_type: str) -> MemoryEngine:

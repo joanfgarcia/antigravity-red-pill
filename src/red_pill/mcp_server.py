@@ -359,7 +359,7 @@ async def handle_run_samantha_analysis(arguments: Dict[str, Any]):
 
 	# Save the large text to a temporary file to avoid CLI argument limits
 	tmp_fd, tmp_path = tempfile.mkstemp(prefix="samantha_input_", suffix=".txt")
-	with os.fdopen(tmp_fd, 'w', encoding='utf-8') as f:
+	with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
 		f.write(text_input)
 
 	# We construct a completely detached background script call
@@ -368,11 +368,7 @@ async def handle_run_samantha_analysis(arguments: Dict[str, Any]):
 	python_exe = sys.executable
 
 	# The CLI will read the file, run the swarm, save to qdrant, and delete the temp file.
-	cmd = [
-		python_exe, script_path,
-		"--event-id", event_id,
-		"--input-file", tmp_path
-	]
+	cmd = [python_exe, script_path, "--event-id", event_id, "--input-file", tmp_path]
 
 	try:
 		# Run fully detached
@@ -380,13 +376,13 @@ async def handle_run_samantha_analysis(arguments: Dict[str, Any]):
 			cmd,
 			stdout=subprocess.DEVNULL,
 			stderr=subprocess.DEVNULL,
-			start_new_session=True # Detach from MCP server process group
+			start_new_session=True,  # Detach from MCP server process group
 		)
 
 		return [
 			types.TextContent(
 				type="text",
-				text=f"Samantha analysis started completely in the background.\nEvent ID: {event_id}\nThe result will be saved in 'work_memories' upon completion."
+				text=f"Samantha analysis started completely in the background.\nEvent ID: {event_id}\nThe result will be saved in 'work_memories' upon completion.",
 			)
 		]
 	except Exception as e:
@@ -456,7 +452,7 @@ async def handle_swarm_send_message(arguments: Dict[str, Any]):
 		target_alias=arguments["target_alias"],
 		payload_data={"message": arguments["message"], **arguments.get("payload_extra", {})},
 		intent=SwarmIntent(arguments.get("intent", "gossip")),
-		community_alias=arguments.get("community_alias", "legion_770")
+		community_alias=arguments.get("community_alias", "legion_770"),
 	)
 	return [types.TextContent(type="text", text=f"Swarm Dispatch Result:\n{res}")]
 
@@ -623,9 +619,7 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 					try:
 						mgr = MemoryManager()
 						mgr.record_interaction_pair(
-							user_prompt,
-							f"[INTERCEPTOR] Injected {len(results)} context chunks: {background[:100]}...",
-							role="assistant"
+							user_prompt, f"[INTERCEPTOR] Injected {len(results)} context chunks: {background[:100]}...", role="assistant"
 						)
 					except Exception as inner_e:
 						logger.warning(f"Interceptor auto-logging failed: {inner_e}")

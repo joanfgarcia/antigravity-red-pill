@@ -496,10 +496,10 @@ class TestMCPAdditionalTools:
 		fake_scripts = types.ModuleType("scripts")
 		fake_update = types.ModuleType("scripts.update_env")
 		fake_update.update_env = MagicMock()
-		
+
 		sys.modules["scripts"] = fake_scripts
 		sys.modules["scripts.update_env"] = fake_update
-		
+
 		try:
 			with patch("scripts.update_env.update_env") as mock_env:
 				result = await handle_call_tool("adjust_sleep_knobs", {"chunk_size": 1000, "cull_threshold": 0.5})
