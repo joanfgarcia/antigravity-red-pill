@@ -6,7 +6,7 @@ import socket
 import threading
 import time
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Generator, List, Optional
 
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
@@ -230,25 +230,6 @@ class MemoryManager:
 		for key in CreateEngramRequest.RESERVED_KEYS:
 			metadata.pop(key, None)
 
-		try:
-			req = CreateEngramRequest(
-				content=text,
-				importance=importance,
-				color=color,  # type: ignore
-				emotion=emotion,  # type: ignore
-				intensity=intensity,
-				metadata=metadata,
-			)
-			# Update values from validated request
-			text = req.content
-			importance = req.importance
-			metadata = req.metadata
-			color = req.color
-			emotion = req.emotion
-			intensity = req.intensity
-		except Exception as e:
-			raise ValueError(f"Invalid engram data: {e}")
-
 		# v5.4.0: Temporal Pulse Detection
 		pulse = record_interaction()
 		metadata["pulse_status"] = pulse["status"]
@@ -290,15 +271,18 @@ class MemoryManager:
 		markers.update(re.findall(r"\b[A-Z]{3,}\b", text))
 		linguistic_markers = list(markers)
 
-		validated_request = CreateEngramRequest(
-			content=text,
-			importance=importance,
-			color=color,  # type: ignore
-			emotion=emotion,  # type: ignore
-			intensity=intensity,
-			metadata=metadata,
-			linguistic_markers=linguistic_markers,
-		)
+		try:
+			validated_request = CreateEngramRequest(
+				content=text,
+				importance=importance,
+				color=color,  # type: ignore
+				emotion=emotion,  # type: ignore
+				intensity=intensity,
+				metadata=metadata,
+				linguistic_markers=linguistic_markers,
+			)
+		except Exception as e:
+			raise ValueError(f"Invalid engram data: {e}")
 
 		text = validated_request.content
 		importance = validated_request.importance
@@ -543,6 +527,41 @@ class MemoryManager:
 			logger.info(f"Gran Purge executed for '{collection}'.")
 		except Exception as e:
 			logger.error(f"Gran Purge failed in {collection}: {e}")
+
+	def _scroll_collection(
+		self,
+		collection: str,
+		scroll_filter: Optional[models.Filter] = None,
+		limit: int = 100,
+		with_payload: bool = True,
+		with_vectors: bool = False,
+		max_iterations: int = 1000
+	) -> Generator[List[Any], None, None]:
+		"""Yields batches of points from a collection using scroll pagination (CQ-005)."""
+		offset = None
+		iterations = 0
+		while True:
+			iterations += 1
+			if iterations > max_iterations:
+				break
+			try:
+				response = self.client.scroll(
+					collection_name=collection,
+					scroll_filter=scroll_filter,
+					limit=limit,
+					offset=offset,
+					with_payload=with_payload,
+					with_vectors=with_vectors
+				)
+			except Exception as e:
+				logger.error(f"Scroll operation failed in {collection}: {_mask_pii_exception(e)}")
+				break
+
+			yield response[0]
+
+			offset = response[1]
+			if offset is None:
+				break
 
 	def _refresh_ttl_timestamps(self, collection: str) -> None:
 		now = time.time()
@@ -924,7 +943,6 @@ class MemoryManager:
 			return
 		if rate > 0.5:
 			logger.warning(f"High erosion rate detected ({rate}). Significant memory loss imminent.")
-		offset = None
 		eroded_count = 0
 		deleted_count = 0
 		ttl_threshold = time.time() - self.cfg.METABOLISM_COOLDOWN
@@ -932,21 +950,11 @@ class MemoryManager:
 			must=[models.FieldCondition(key="last_recalled_at", range=models.Range(lt=ttl_threshold))],
 			must_not=[models.FieldCondition(key="immune", match=models.MatchValue(value=True))],
 		)
-		match_count = 0
-		while True:
-			match_count += 1
-			if match_count > 1000:  # Safety break
-				break
-			try:
-				response = self.client.scroll(
-					collection_name=collection, scroll_filter=scroll_filter, limit=100, offset=offset, with_payload=True, with_vectors=False
-				)
-			except Exception as e:
-				logger.error(f"Erosion scroll failed: {_mask_pii_exception(e)}")
-				break
+		
+		for batch in self._scroll_collection(collection, scroll_filter=scroll_filter, limit=100, max_iterations=1000):
 			points_to_delete: List[Any] = []
 			update_operations = []
-			for hit in response[0]:
+			for hit in batch:
 				if hit.payload is None or hit.payload.get("immune"):
 					continue
 
@@ -984,9 +992,7 @@ class MemoryManager:
 					self.client.delete(collection_name=collection, points_selector=models.PointIdsList(points=points_to_delete))
 				except Exception as e:
 					logger.error(f"Erosion delete failed: {_mask_pii_exception(e)}")
-			offset = response[1]
-			if offset is None:
-				break
+
 		logger.info(f"Erosion complete in {collection}. Updated: {eroded_count}, Deleted: {deleted_count}")
 
 	def sanitize(self, collection: str, dry_run: bool = False, strict: bool = True) -> Dict[str, Any]:
