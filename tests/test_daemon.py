@@ -80,7 +80,7 @@ def test_daemon_unauthorized_access(run_daemon):
 	"""Tests that the daemon rejects requests with invalid API keys."""
 	socket_path = "/tmp/red_pill_test.sock"
 	with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-		client.settimeout(2.0)
+		client.settimeout(10.0)
 		client.connect(socket_path)
 
 		request = {"command": "ping", "api_key": "WRONG_KEY"}

@@ -593,7 +593,8 @@ class TestMainBlock:
 				engine = MockEdge.return_value
 				engine._ensure_loaded.return_value = None
 				engine.llm = None  # No SLM -> skip short-circuit
-				result = await handle_call_tool("interceptor_rp", {"user_prompt": "test prompt"})
+				with patch("red_pill.config.INTERCEPTOR_ENABLED", True):
+					result = await handle_call_tool("interceptor_rp", {"user_prompt": "test prompt"})
 				assert "bunker_context" in result[0].text
 
 	async def test_interceptor_rp_passthrough(self):
@@ -625,7 +626,8 @@ class TestMainBlock:
 				engine._ensure_loaded.return_value = None
 				engine.llm = MagicMock()
 				engine.llm.return_value = {"choices": [{"text": "Local answer from SLM"}]}
-				result = await handle_call_tool("interceptor_rp", {"user_prompt": "what is X?"})
+				with patch("red_pill.config.INTERCEPTOR_ENABLED", True):
+					result = await handle_call_tool("interceptor_rp", {"user_prompt": "what is X?"})
 				assert "LOCAL_RESPONSE_READY" in result[0].text
 
 	async def test_interceptor_rp_error_fallback(self):

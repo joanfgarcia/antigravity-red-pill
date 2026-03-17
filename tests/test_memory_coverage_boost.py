@@ -57,6 +57,7 @@ def cfg():
 		BAYESIAN_COLLECTIONS=["skill_memories", "work_memories", "directive_memories"],
 		BAYESIAN_STABILITY_KAPPA=0.05,
 		BAYESIAN_REINFORCEMENT_GAIN=1.0,
+		MEMORY_ENGINES={"work_memories": "bayesian", "social_memories": "fsrs_real"},
 	)
 	return c
 

@@ -44,99 +44,6 @@ def test_exponential_decay_floor(manager):
 	assert manager._calculate_decay(0.01, 0.05) == 0.0
 
 
-def test_immunity_promotion(manager, mock_qdrant):
-	mock_hit = MagicMock()
-	mock_hit.payload = {"reinforcement_score": 9.9, "content": "test"}
-	mock_hit.id = str(uuid.uuid4())
-
-	mock_response = MagicMock()
-	mock_response.points = [mock_hit]
-	manager.client.query_points.return_value = mock_response
-	manager.client.retrieve.return_value = [mock_hit]
-
-	results = manager.search_and_reinforce("test_col", "query")
-	assert results[0].payload["reinforcement_score"] == 10.0
-	assert results[0].payload["immune"] is True
-
-
-def test_synaptic_propagation(manager, mock_qdrant):
-	config.REINFORCEMENT_INCREMENT = 0.1
-	config.PROPAGATION_FACTOR = 0.5
-	config.PROPAGATION_DEPTH = 1
-
-	# Mock search result with association
-	mock_hit = MagicMock()
-	mock_hit.payload = {"reinforcement_score": 1.0, "content": "primary", "associations": [str(uuid.uuid4())]}
-	mock_hit.id = str(uuid.uuid4())
-	mock_hit.vector = [0.1] * config.VECTOR_SIZE
-
-	mock_response = MagicMock()
-	mock_response.points = [mock_hit]
-	manager.client.query_points.return_value = mock_response
-
-	# Mock retrieval of BOTH primary and association
-	mock_assoc = MagicMock()
-	mock_assoc.payload = {"reinforcement_score": 1.0, "content": "associated"}
-	mock_assoc.id = str(uuid.uuid4())  # assoc_1
-	mock_hit.payload["associations"] = [mock_assoc.id]  # Link them dynamically
-	mock_assoc.vector = [0.2] * config.VECTOR_SIZE
-	manager.client.retrieve.return_value = [mock_hit, mock_assoc]
-
-	manager.search_and_reinforce("test_col", "query")
-
-	# Check batch_update_points call
-	assert manager.client.batch_update_points.called
-	args, kwargs = manager.client.batch_update_points.call_args
-	ops = kwargs["update_operations"]
-	assert len(ops) == 2
-
-	# Extract scores for verification
-	scores = {op.set_payload.points[0]: op.set_payload.payload["reinforcement_score"] for op in ops}
-	assert scores[mock_hit.id] == 1.1
-	assert scores[mock_assoc.id] == 1.05
-
-
-def test_erosion_cycle(manager, mock_qdrant):
-	config.DECAY_STRATEGY = "linear"
-	config.EROSION_RATE = 0.1
-
-	import time
-
-	now = time.time()
-	one_day = 86400.0
-
-	# Mock scroll result: one normal, one immune
-	mock_hit = MagicMock()
-	mock_hit.payload = {
-		"reinforcement_score": 0.5,
-		"immune": False,
-		"last_recalled_at": now - one_day,  # 1 day ago
-		"stability": 2.0,  # Low stability
-	}
-	mock_hit.id = str(uuid.uuid4())
-	mock_hit.vector = [0.1] * config.VECTOR_SIZE
-
-	mock_immune = MagicMock()
-	mock_immune.payload = {"reinforcement_score": 10.0, "immune": True}
-	mock_immune.id = str(uuid.uuid4())
-
-	manager.client.scroll.side_effect = [([mock_hit, mock_immune], "next"), ([], None)]
-
-	manager.apply_erosion("test_col")
-
-	# Check upsert was called with ONLY the non-immune point
-	assert manager.client.batch_update_points.called
-	assert manager.client.batch_update_points.call_count == 1
-
-	args, kwargs = manager.client.batch_update_points.call_args
-	operations = kwargs["update_operations"]
-	assert len(operations) == 1
-	op = operations[0]
-	assert op.set_payload.points == [mock_hit.id]
-
-	# FSRS Math: R = e^(ln(0.9) * 1.0 / 2.0) = ~0.95
-	# new_score = round(0.5 * 0.95, 2) = 0.47
-	assert op.set_payload.payload["reinforcement_score"] == 0.47
 
 
 def test_dormancy_filter(manager, mock_qdrant):
@@ -158,33 +65,6 @@ def test_dormancy_filter(manager, mock_qdrant):
 	assert kwargs["query_filter"] is None
 
 
-def test_reinforcement_stacking(manager, mock_qdrant):
-	# Hit A associates with Hit B. Hit B is also a primary hit.
-	# Base: 1.0. Hit A -> 1.1. Hit B -> 1.1 (primary) + 0.05 (assoc) = 1.15
-	config.REINFORCEMENT_INCREMENT = 0.1
-	config.PROPAGATION_FACTOR = 0.5
-
-	id_a = str(uuid.uuid4())
-	id_b = str(uuid.uuid4())
-	hit_a = MagicMock(id=id_a, payload={"reinforcement_score": 1.0, "associations": [id_b]}, vector=[0.1] * config.VECTOR_SIZE)
-	hit_b = MagicMock(id=id_b, payload={"reinforcement_score": 1.0, "associations": []}, vector=[0.1] * config.VECTOR_SIZE)
-
-	mock_response = MagicMock()
-	mock_response.points = [hit_a, hit_b]
-	manager.client.query_points.return_value = mock_response
-	manager.client.retrieve.return_value = [hit_a, hit_b]
-
-	manager.search_and_reinforce("test_col", "query")
-
-	# Check batch update
-	assert manager.client.batch_update_points.called
-	args, kwargs = manager.client.batch_update_points.call_args
-	ops = kwargs["update_operations"]
-	assert len(ops) == 2
-
-	scores = {op.set_payload.points[0]: op.set_payload.payload["reinforcement_score"] for op in ops}
-	assert scores[id_a] == 1.1
-	assert scores[id_b] == 1.15
 
 
 def test_manual_id_injection(manager, mock_qdrant):

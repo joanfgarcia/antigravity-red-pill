@@ -324,7 +324,6 @@ SLEEP_CHUNK_SIZE = int(os.getenv("SLEEP_CHUNK_SIZE", "500"))
 SLEEP_CULL_THRESHOLD = float(os.getenv("SLEEP_CULL_THRESHOLD", "0.1"))
 
 # BAYESIAN MEMORY (v6.1 Phase B.1)
-# --- V6.1.0a2: Dual-Kernel (Beta-Utility for Technical, FSRS for Social) ---
 BAYESIAN_COLLECTIONS = ["skill_memories", "work_memories", "directive_memories"]
 
 # Provide a mapping of collections to their primary memory engine plugin

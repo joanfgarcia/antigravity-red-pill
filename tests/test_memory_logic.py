@@ -49,6 +49,7 @@ def fake_cfg():
 	cfg.BAYESIAN_COLLECTIONS = ["skill_memories", "work_memories", "directive_memories"]
 	cfg.BAYESIAN_STABILITY_KAPPA = 0.05
 	cfg.BAYESIAN_REINFORCEMENT_GAIN = 1.0
+	cfg.MEMORY_ENGINES = {"work_memories": "bayesian", "social_memories": "fsrs_real"}
 	return cfg
 
 
@@ -163,8 +164,8 @@ def test_metabolism_full_logic_final(mem_mgr, fake_cfg):
 						with patch("filelock.FileLock"):
 							mem_mgr._run_metabolism_cycle()
 
-		# Check if either old set_payload or new batch_update_points was called
-		assert mem_mgr.client.batch_update_points.called or mem_mgr.client.set_payload.called
+		# Check if batch_update_points or delete was called
+		assert mem_mgr.client.batch_update_points.called or mem_mgr.client.delete.called
 
 
 # --- Reinforcement & Search ---
@@ -212,7 +213,7 @@ def test_calculate_lazy_decay_logic_final(mem_mgr, fake_cfg):
 	payload = {"last_recalled_at": time.time() - 7200, "reinforcement_score": 0.5, "emotion": "joy", "intensity": 1.0}
 	fake_cfg.METABOLISM_COOLDOWN = 3600
 	fake_cfg.DECAY_STRATEGY = "exponential"
-	score = mem_mgr._calculate_lazy_decay(payload)
+	score = mem_mgr._calculate_lazy_decay(payload, "work_memories")
 	assert score < 0.5
 
 

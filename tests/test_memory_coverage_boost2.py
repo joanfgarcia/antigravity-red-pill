@@ -55,6 +55,7 @@ def cfg():
 		BAYESIAN_COLLECTIONS=["skill_memories", "work_memories", "directive_memories"],
 		BAYESIAN_STABILITY_KAPPA=0.05,
 		BAYESIAN_REINFORCEMENT_GAIN=1.0,
+		MEMORY_ENGINES={"work_memories": "bayesian", "social_memories": "fsrs_real"},
 	)
 
 
@@ -228,39 +229,10 @@ def test_refresh_ttl_safety_break(mm, cfg):
 
 
 # ---------------------------------------------------------------------------
-# Line 524: _reinforce_points immunity promotion
+# (Legacy) Line 572: focused_payload includes immune when present
+# These old immunity tests are disabled since Dual-Kernel v6.1 handles stability
+# per-engine (Bayesian vs FSRS) instead of hardcoded threshold promotion.
 # ---------------------------------------------------------------------------
-
-
-def test_reinforce_points_promotes_to_immune(mm, cfg):
-	"""Line 562: score >= IMMUNITY_THRESHOLD → immune flag set."""
-	cfg.IMMUNITY_THRESHOLD = 1.0
-	p1 = MagicMock(id="1", payload={"reinforcement_score": 0.95, "last_recalled_at": time.time()})
-	mm.client.retrieve.return_value = [p1]
-	results = mm._reinforce_points("work", ["1"], {"1": 0.1})
-	assert len(results) == 1
-	# Should have set immune=True since 0.95 + 0.1 = 1.05 >= 1.0
-	assert results[0].payload.get("immune") is True
-
-
-# ---------------------------------------------------------------------------
-# Line 572: focused_payload includes immune when present
-# ---------------------------------------------------------------------------
-
-
-def test_reinforce_points_immune_included_in_batch(mm, cfg):
-	"""Line 572: when immune is set, it's included in the focused batch payload."""
-	cfg.IMMUNITY_THRESHOLD = 1.0
-	p1 = MagicMock(id="1", payload={"reinforcement_score": 0.99, "last_recalled_at": time.time()})
-	mm.client.retrieve.return_value = [p1]
-	mm._reinforce_points("work", ["1"], {"1": 0.1})
-
-	call_args = mm.client.batch_update_points.call_args
-	ops = call_args[1]["update_operations"]
-	assert len(ops) == 1
-	batch_payload = ops[0].set_payload.payload
-	# immune should be in payload
-	assert "immune" in batch_payload
 
 
 # ---------------------------------------------------------------------------
@@ -370,7 +342,7 @@ def test_calculate_decay_linear_strategy(mm, cfg):
 def test_calculate_lazy_decay_immune_returns_score(mm, cfg):
 	"""Line 804: immune payload → returns reinforcement_score unchanged."""
 	payload = {"immune": True, "reinforcement_score": 3.7}
-	result = mm._calculate_lazy_decay(payload)
+	result = mm._calculate_lazy_decay(payload, "work_memories")
 	assert result == pytest.approx(3.7)
 
 
@@ -388,7 +360,7 @@ def test_calculate_lazy_decay_linear(mm, cfg):
 		"emotion": "neutral",
 		"intensity": 1.0,
 	}
-	result = mm._calculate_lazy_decay(payload)
+	result = mm._calculate_lazy_decay(payload, "work_memories")
 	assert result < 1.0  # should have decayed
 	assert result >= 0.0
 
