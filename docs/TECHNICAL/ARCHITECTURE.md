@@ -41,7 +41,7 @@ The `associations` field is a flat list of UUIDs.
 The schema is " Schemaless" (JSON payload).
 - **Flexibility**: High.
 - **Fragility**: High. The `PointUpdate` class relies on implicit knowledge of payload structure. If v5.0 introduces nested weights or time-series data for reinforcement history, the flat payload update logic will inevitably corrupt data.
-  **ARCH-001 NOTE**: The full source text is stored in every engram's Qdrant payload (`payload["content"]`). Re-embedding on model upgrade is therefore safe — no data is lost. What is missing is an automated **Transcoding** migration script (`red-pill re-embed --model new-model`). This is a tooling gap, not a data loss risk.
+- **[RESOLVED v6.1.0] Topological Amnesia (ARCH-001)**: Since the full source text is stored in every engram's Qdrant payload (`payload["content"]`), re-embedding on model upgrade is entirely loss-less. The `SoulManager.restore_soul` protocol now features an **Automated Transcoding Cycle**. By comparing the incoming Soul Kit's `manifest.json` against the active `cfg.VECTOR_SIZE`, the Bünker automatically recalculates and migrates the embeddings of the entire database to the new dimensionality at import time.
 
 ### 3.4. Background Services (Daemons) Standard
 To ensure the Bünker remains observable and resource-accountable, all persistent background processes must adhere to the **`RP-*` Naming Standard**:

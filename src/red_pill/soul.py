@@ -223,5 +223,90 @@ class SoulManager:
 			except Exception as e:
 				logger.error(f"[FAIL] Could not restore {collection}: {e}")
 
+		# 3. Read Manifest for Topological Consistency (ARCH-001)
+		requires_reembed = False
+		manifest_path = os.path.join(source_dir, "manifest.json")
+		if not os.path.exists(manifest_path):
+			# Try finding any manifest in the folder
+			for f in os.listdir(source_dir):
+				if f.startswith("manifest_") and f.endswith(".json"):
+					manifest_path = os.path.join(source_dir, f)
+					break
+
+		if os.path.exists(manifest_path):
+			try:
+				import json
+				with open(manifest_path, "r") as f:
+					manifest_data = json.load(f)
+				backup_vsize = manifest_data.get("vector_size")
+				if backup_vsize and backup_vsize != cfg.VECTOR_SIZE:
+					logger.warning(f"Dimensionality Mismatch! Backup vector size ({backup_vsize}) != System config ({cfg.VECTOR_SIZE}). Re-embedding required.")
+					requires_reembed = True
+			except Exception as e:
+				logger.error(f"Failed to read manifest for dimensionality check: {e}")
+		else:
+			logger.warning("No manifest.json found. Skipping dimensionality check.")
+
+		# 4. Phase 2: Execute Re-Embedding if Dimension Drift Detected
+		if commit and requires_reembed:
+			logger.info("\n[ARCH-001] Initiating Runtime Re-Embedding Protocol...")
+			from qdrant_client import models
+			from red_pill.memory import MemoryManager
+			memory_manager = MemoryManager()
+			
+			for snap_path in snapshot_candidates:
+				collection = os.path.basename(snap_path).split("_")[0]
+				logger.info(f"Re-Embedding collection: {collection}")
+				try:
+					# 4.1 Scroll and Extract all points from the restored (old-dimension) collection
+					all_points = []
+					offset = None
+					while True:
+						records, next_offset = memory_manager.client.scroll(
+							collection_name=collection,
+							limit=100,
+							offset=offset,
+							with_payload=True,
+							with_vectors=False
+						)
+						all_points.extend(records)
+						if next_offset is None:
+							break
+						offset = next_offset
+
+					if not all_points:
+						continue
+
+					# 4.2 Recompute vectors using new configured text encoder
+					logger.info(f"Computing new vectors for {len(all_points)} engrams in {collection}...")
+					new_points = []
+					for record in all_points:
+						content = record.payload.get("content", "") if record.payload else ""
+						if not content:
+							content = "Empty Engram" # Fallback if payload corrupt
+						new_vector = memory_manager._get_vector(content)
+						new_points.append(
+							models.PointStruct(
+								id=record.id,
+								vector=new_vector,
+								payload=record.payload
+							)
+						)
+
+					# 4.3 Drop and Recreate Collection with NEW dimensionality
+					memory_manager.client.delete_collection(collection_name=collection)
+					memory_manager._ensure_collection(collection)
+
+					# 4.4 Batch Upload
+					memory_manager.client.upload_points(
+						collection_name=collection,
+						points=new_points,
+						wait=True
+					)
+					logger.info(f"[OK] Collection '{collection}' successfully re-embedded to dimensions={cfg.VECTOR_SIZE}")
+				except Exception as e:
+					logger.error(f"[FAIL] Re-embedding aborted for {collection}: {e}")
+
 		if commit:
-			print(f"\n[PROTOCOL COMPLETE] {len(snapshot_candidates)} collections processed. Soul Integrity synchronized.")
+			msg = "Soul Integrity synchronized and re-embedded." if requires_reembed else "Soul Integrity synchronized."
+			print(f"\n[PROTOCOL COMPLETE] {len(snapshot_candidates)} collections processed. {msg}")
