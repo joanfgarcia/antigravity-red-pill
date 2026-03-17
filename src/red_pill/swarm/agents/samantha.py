@@ -60,18 +60,24 @@ class SamanthaMinion(Minion):
 		}
 
 		try:
-			conn = UnixHTTPConnection(socket_path, timeout=300)
-			headers = {"Content-Type": "application/json"}
+			import asyncio
+			
+			def _sync_inference() -> Dict[str, Any]:
+				conn = UnixHTTPConnection(socket_path, timeout=300)
+				headers = {"Content-Type": "application/json"}
+				conn.request("POST", "/v1/chat/completions", body=json.dumps(payload), headers=headers)
 
-			# Since this is an async minion but UnixHTTPConnection is synchronous,
-			# we wrap it or use it directly (Minions are usually awaited in a Swarm context)
-			conn.request("POST", "/v1/chat/completions", body=json.dumps(payload), headers=headers)
+				response = conn.getresponse()
+				if response.status != 200:
+					return {"status": "error", "error": f"Inference failed (HTTP {response.status})"}
 
-			response = conn.getresponse()
-			if response.status != 200:
-				return {"status": "error", "error": f"Inference failed (HTTP {response.status})"}
+				return json.loads(response.read().decode())
 
-			data = json.loads(response.read().decode())
+			data = await asyncio.to_thread(_sync_inference)
+			
+			if data.get("status") == "error":
+				return data
+
 			self.log(f"Raw Response from SIP: {json.dumps(data)[:200]}...")
 
 			choices = data.get("choices", [])
