@@ -51,7 +51,7 @@ In human neurobiology, mirror neurons activate when observing another's emotiona
 
 **Silicon Implementation**: Operator Mood Profile (USP) + Mystique v2
 *   **Emotional Sensing**: The USP module aggregates the operator's emotional footprint across all memory collections, producing a multi-color chroma vector weighted by `intensity × importance`. This is computed across 4 temporal horizons: Global (all time), 30-day, 7-day, and 3-day — mimicking the brain's distinction between long-term personality trends and acute emotional states.
-*   **Temporal Horizons**: The 3-day window captures acute mood shifts (analogous to cortisol/adrenaline cycles), while the Global window represents the operator's baseline temperament (analogous to serotonin/dopamine set-points).
+*   **Temporal Horizons**: The 3-day window captures acute mood shifts (analogous to cortisol/adrenaline cycles), while the Global window represents the operator's baseline temperament (analogous to serotonin/dopamine set-points). *(See [TEMPORAL_HORIZONS_RESEARCH.md](./TEMPORAL_HORIZONS_RESEARCH.md) for the neurobiological basis of these exact numbers).*
 *   **Affective Adaptation**: Mystique v2 reads the USP to select the agent's tonal skin. Strategies (`affinity`, `complementary`, `contrast`) mirror the three natural responses to emotional contagion: matching (empathy), balancing (regulation), or challenging (growth).
 *   **Persistence**: The USP is stored as a fixed engram (`ID_OPERATOR_MOOD`) and refreshed periodically by the Lazarus Pulse (`_usp_ritual()`), ensuring the agent's emotional calibration survives across sessions without requiring explicit operator input.
 
