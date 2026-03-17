@@ -1,6 +1,6 @@
 # Changelog: Red Pill Protocol
 
-## [6.1.0a3] - 2026-03-15
+## [6.1.0a3] - 2026-03-17
 ### 🌐 The Omnipresent Bünker (Global MCP Interceptor)
 - **[FEAT] Global Prompt Hijacking**: Implemented `interceptor_rp` as a global MCP tool within `mcp_server.py`. 
 - **[FEAT] Cognitive Interceptor (Phase 2)**: The interceptor now performs dynamic RAG against the local Qdrant Bünker and injects the context directly into the prompt via `<bunker_context>`.
@@ -16,6 +16,14 @@
 - **[FEAT] Async Swarm Offloading**: Refactored `run_samantha_analysis` MCP tool into a non-blocking `asyncio.create_task` background process. The UI now returns instantly with a UUID, while Samantha injects her analysis directly into `work_memories` upon completion.
 - **[DOCS] Swarm User Manual v2**: Rewrote `swarm_user_manual.md` as a comprehensive operator guide covering subscription, messaging, MLS encryption, intents, troubleshooting, and directory queries.
 
+### 🧠 Pluggable Memory Engines (Foundation Prep)
+- **[FEAT] Abstract Memory Architecture**: Re-engineered `memory.py` and `affect.py` to support pluggable `MemoryEngine` components, completely decoupling hardcoded decay math from the core ingestion loops.
+- **[FEAT] Dual-Kernel Configuration**: Configurable per-collection engines via `MEMORY_ENGINES` setting. Supports exact FSRS math (`FSRSEngine`) for social memories and `BayesianEngine` for technical persistence.
+- **[PERF] Lazy Decay Batching (PERF-003)**: Optimized Qdrant writes in `search_and_reinforce`. Instead of writing decay updates one by one, all eroded points from a search result are now grouped into a single atomic `batch_update_points` network payload.
+- **[SEC-003 & SEC-006] Security Hardening**: Enforced automatic TLS verification (`MILVUS_SECURE=True`) for non-local Milvus connections, and bumped the default Qdrant scheme to `https`.
+- **[FIX] Swarm Transport Interop**: Updated abstract routing layer (`SwarmTransport`) and implementations (`MilvusTransport`, `FirebaseTransport`) to ensure `resolve_alias` signatures safely return 3-tuples `(id, alias, pub_key)` preventing unpacking crashes across the Swarm network.
+- **[QA] Cryptographic Audit (COV-001)**: Implemented `test_crypto_smoke.py` suite ensuring `treeKEM`/`AES-GCM` hybrid encryption executes securely independent of Firebase.
+- **[DOCS] Neurobiological USP Horizons**: Formalized the Operator Mood Profile (USP) by anchoring its temporal horizons—3-day (Acute/Cortisol), 7-day (Intermediate/Serotonin), and 30-day (Baseline/Dopamine)—to clinical literature in `TEMPORAL_HORIZONS_RESEARCH.md`.
 
 ## [6.1.0a2] - 2026-03-15
 ### 🛡️ Infrastructure Sovereignty & Deep Diagnostics
