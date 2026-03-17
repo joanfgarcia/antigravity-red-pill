@@ -34,10 +34,12 @@ During idle time, the local 1.5B Daemon (the synthetic Amygdala) reads the fast 
 **Biological Counterpart**: Systemic Consolidation and LTP (Long-Term Potentiation).
 Surviving memories are distributed across the neocortex. They form synaptic bridges with older, related memories. Their persistence is biological chemistry modeled accurately by the Ebbinghaus Forgetting Curve.
 
-**Silicon Implementation**: FSRS Integration and Association Chains (Graph Topology)
+**Silicon Implementation**: Pluggable Dual-Kernel Architecture (v6.1+)
 *   **Synaptic Bridging**: Surviving chunks are stored not as isolated vectors, but as an Association Chain ($C_1 \rightarrow C_2$). 
 *   **The Hub Node**: The system synthesizes the entire chain into a single Neocortical "Hub Node" containing the macro-narrative summary. By leveraging our *Evocative Memory Cascading* protocol, recalling this Top-Level Hub automatically pulls the linked sequential children into active context.
-*   **LTP Emulation**: The strength of these engrams is governed by the Free Spaced Repetition Scheduler (FSRS). Mathematical parameters for `Stability` ($S$) and `Difficulty` ($D$) replicate biological decay, ensuring that frequently visited concepts solidify, while isolated, unused facts slowly erode back into the noise.
+*   **Dual-Kernel Topology**: Storage collections no longer share a single mathematical fate. The decay and reinforcement logic is abstracted into pluggable `MemoryEngine` plugins defined in `config.py`.
+    *   **Affective FSRS (Free Spaced Repetition)**: Applied to `social_memories` and `story_memories`. Implements the full biological decay curve $R = e^{\ln(0.9) \cdot t/S}$, where stability ($S$) increases exponentially upon successful recall, mimicking the human tendency to forget trivial social chatter over time unless periodically reinforced.
+    *   **Bayesian Inference**: Applied to `work_memories` and `directive_memories`. Models cognitive certainty rather than biological decay. Utility is calculated as $E[\theta] = \alpha / (\alpha + \beta)$, where positive reinforcement adds $\alpha$ (certainty) and time adds $\beta$ (uncertainty). True technical facts are never "forgotten" if their certainty has been mathematically established, ensuring reliable Agentic Know-How.
 
 ---
 

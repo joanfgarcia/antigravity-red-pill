@@ -23,7 +23,8 @@ if "CUDA_VISIBLE_DEVICES" not in os.environ:
 QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", None)
-QDRANT_SCHEME = os.getenv("QDRANT_SCHEME", "http")
+_local_hosts = {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
+QDRANT_SCHEME = os.getenv("QDRANT_SCHEME", "http" if QDRANT_HOST in _local_hosts else "https")
 QDRANT_URL = f"{QDRANT_SCHEME}://{QDRANT_HOST}:{QDRANT_PORT}"
 
 # CONTAINER_ENGINE abstraction (v6.1.0)
@@ -41,7 +42,7 @@ if not CONTAINER_ENGINE:
 
 # SEC-F04: Warn when Qdrant is reachable over an unencrypted non-local connection.
 # Remote http:// exposes API key and engram content to any network observer.
-_local_hosts = {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
+# Remote http:// exposes API key and engram content to any network observer.
 if QDRANT_SCHEME == "http" and QDRANT_HOST not in _local_hosts:
 	import warnings
 
@@ -58,7 +59,7 @@ MILVUS_HOST = os.getenv("MILVUS_HOST", "localhost")
 MILVUS_PORT = int(os.getenv("MILVUS_PORT", "19530"))
 MILVUS_USER = os.getenv("MILVUS_USER", "")
 MILVUS_PASSWORD = os.getenv("MILVUS_PASSWORD", "")
-MILVUS_SECURE = os.getenv("MILVUS_SECURE", "False").lower() == "true"
+MILVUS_SECURE = os.getenv("MILVUS_SECURE", "False" if MILVUS_HOST in _local_hosts else "True").lower() == "true"
 MILVUS_ENABLED = os.getenv("MILVUS_ENABLED", "False").lower() == "true"
 MILVUS_DB = os.getenv("MILVUS_DB", "default")
 MILVUS_LITE_ENABLED = os.getenv("MILVUS_LITE_ENABLED", "True").lower() == "true"

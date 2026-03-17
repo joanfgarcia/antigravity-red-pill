@@ -762,6 +762,7 @@ class MemoryManager:
 
 		if update_operations:
 			try:
+				# Apply grouped lazy decay batch update
 				self.client.batch_update_points(collection_name=collection, update_operations=update_operations)
 			except Exception:
 				pass
