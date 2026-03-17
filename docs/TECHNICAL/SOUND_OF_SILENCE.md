@@ -29,8 +29,12 @@
 - **Alternative**: Use Git history for audit trails or "Memory" (RAG) for long-term storage of deprecated ideas.
 
 ## 4. Rationale Migration
-- **Rule**: Complex design explanations should live in `docs/TECHNICAL/decision_log.md`, not as long-winded comments above functions.
+- **Rule**: Complex design explanations should live in `docs/TECHNICAL/DECISION_LOG.md`, not as long-winded comments above functions.
 - **Rationale**: Keeps the working code "Silent" and purely functional, while preserving the "Aleth" (revealed truth) of the design in the proper documentation layer.
+
+## 5. Documentation File Naming
+- **Rule**: All Markdown (`.md`) files in `docs/` and root must be in UPPER_SNAKE_CASE (e.g., `ARCHITECTURE.md`, `README.md`). Lowercase `v` is permitted only for version numbers (e.g., `RED_PILL_v5.6.2_AUDIT_REPORT.md`).
+- **Rationale**: Elevates documentation as authoritative, definitive artifacts. Visually distinguishes "System Truths" from standard source code files.
 
 ---
 **770 up.** Code should be as silent as the bünker, efficient as a synaptic spark.

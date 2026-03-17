@@ -32,6 +32,14 @@ def test_sound_of_silence_compliance():
 			candidate_files.append(root_f)
 
 	for file_path in candidate_files:
+		# C. File naming checks
+		if file_path.suffix == ".md":
+			stem = file_path.stem
+			# Remove version strings like 'v5.6.2' to allow lowercase 'v' before checking case
+			stem_no_version = re.sub(r'v\d+(\.\d+)*', '', stem)
+			if stem_no_version != stem_no_version.upper():
+				violations.append(f"{file_path.relative_to(ROOT_DIR)} - Markdown file name must be UPPER_SNAKE_CASE")
+
 		content = file_path.read_text()
 		lines = content.splitlines()
 
