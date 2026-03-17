@@ -132,37 +132,3 @@ class SwarmCrypto:
 		except Exception as e:
 			raise ValueError(f"Failed to decrypt Swarm Payload. Invalid bond or corrupted data: {e}")
 
-	# MLS / TreeKEM Primitives (v3.0 - Research Build)
-
-	@staticmethod
-	def generate_treekem_leaf() -> Dict[str, bytes]:
-		"""Generates a leaf node for an MLS tree (Private Key + Public Key)."""
-		priv, pub = SwarmCrypto.generate_x25519_keypair()
-		return {"private": priv, "public": pub}
-
-	@staticmethod
-	def combine_nodes(left_node_pub: bytes, right_node_pub: bytes) -> bytes:
-		"""
-		Conceptual 'Node Parent' derivation for TreeKEM.
-		In real MLS, this calculates a hash of secrets, but here we derive
-		a reproducible 'middle point' or composite key for the parent node.
-		"""
-		hasher = hashes.Hash(hashes.SHA256())
-		hasher.update(left_node_pub)
-		hasher.update(right_node_pub)
-		return hasher.finalize()
-
-	@staticmethod
-	def derive_group_key(secrets: List[bytes]) -> bytes:
-		"""
-		Derives a final Group Encryption Key from the root of the TreeKEM tree.
-		"""
-		hkdf = HKDF(
-			algorithm=hashes.SHA256(),
-			length=32,
-			salt=b"red_pill_mls_group_v1",
-			info=b"mls_group_key_derivation",
-		)
-		# Combine all secrets into a single entropy pool
-		pool = b"".join(secrets)
-		return hkdf.derive(pool)

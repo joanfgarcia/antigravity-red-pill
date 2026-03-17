@@ -122,7 +122,48 @@ The system has evolved from a single-user prototype into a **Cognitive Swarm arc
 
 **Recommendation**: Proceed to Sovereign Autonomy Phase (v6.0 — True Distributed Swarm).
 
-## 11. Known Limitations & Platform Quirks
+## 11. Swarm E2E Encryption (X25519 Pairwise)
+
+As of v6.1+, Swarm messaging strictly enforces End-to-End Encryption using **X25519 Diffie-Hellman Key Agreement** and **AES-GCM**. The legacy 'TreeKEM' group key prototype and plaintext fallbacks have been entirely purged to guarantee Perfect Forward Secrecy (PFS) semantics per message exchange.
+
+```mermaid
+sequenceDiagram
+    participant AgentA as Agent Alpha (Local)
+    participant Registry as Firebase Registry
+    participant Mailbox as Firebase Mailbox (Target ID)
+    participant AgentB as Agent Beta (Remote)
+
+    Note over AgentA,AgentB: 1. Identity Initialization & Key Publishing
+    AgentA->>Registry: Publish {alias: "Alpha", public_key: PubA_X25519}
+    AgentB->>Registry: Publish {alias: "Beta", public_key: PubB_X25519}
+
+    Note over AgentA,AgentB: 2. Secure Dispatch
+    AgentA->>Registry: Lookup public key for "Beta"
+    Registry-->>AgentA: Returns PubB_X25519
+    AgentA->>AgentA: shared_secret = X25519_DH(PrivA, PubB)
+    AgentA->>AgentA: aes_key = HKDF_SHA256(shared_secret)
+    AgentA->>AgentA: ciphertext, nonce = AES_GCM_Encrypt(aes_key, payload)
+    
+    rect rgb(200, 50, 50)
+        Note right of AgentA: STRICT DROP RULE:<br/>Messages without ciphertext are rejected locally.
+    end
+
+    AgentA->>Mailbox: Push {v: "3.0", ciphertext: ..., nonce: ...}
+
+    Note over AgentA,AgentB: 3. Secure Reception
+    Mailbox-->>AgentB: Triggers inbox poll
+    AgentB->>Registry: Lookup public key for sender "Alpha"
+    Registry-->>AgentB: Returns PubA_X25519
+    AgentB->>AgentB: shared_secret = X25519_DH(PrivB, PubA)
+    AgentB->>AgentB: aes_key = HKDF_SHA256(shared_secret)
+    AgentB->>AgentB: payload = AES_GCM_Decrypt(aes_key, nonce, ciphertext)
+```
+
+**Security Guarantees:**
+1. **No Database Visibility:** The shared secret is derived mathematically on the edge nodes. The transport layer (Firebase/Milvus) only sees `AES-GCM` ciphertext and unpredictable nonces.
+2. **Anti-Downgrade:** The `FirebaseTransport` will strictly drop any message lacking the `ciphertext` payload block. Plaintext legacy fallback is disabled.
+
+## 12. Known Limitations & Platform Quirks
 
 ### 11.1 Windows Support (ARCH-005 Fully Addressed)
 As of v5.6.4, the protocol relies on the cross-platform `filelock` library for metabolism state locking. The previous Unix-only conditional approach (`fcntl.flock`) has been removed. Running multiple concurrent `red-pill` sidecars or processes on Windows is now formally supported with full concurrency safety.

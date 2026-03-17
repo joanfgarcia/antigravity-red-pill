@@ -20,9 +20,7 @@ class FirebaseTransport(SwarmTransport):
 		self.community_alias = community_alias
 		self.db_url = db_url
 		self.credential_path = credential_path
-		self._group_key: Optional[bytes] = None
 		self._initialize_sdk()
-		self._bootstrap_group_key()
 
 	def _initialize_sdk(self):
 		# Initialize individual app per community to avoid conflicts
@@ -33,39 +31,6 @@ class FirebaseTransport(SwarmTransport):
 			cred = credentials.Certificate(self.credential_path)
 			self.app = firebase_admin.initialize_app(cred, {"databaseURL": self.db_url}, name=app_name)
 
-	def _bootstrap_group_key(self):
-		"""Derive group encryption key from all members' public keys in registry."""
-		try:
-			from red_pill.swarm.crypto import SwarmCrypto
-			from red_pill.swarm.mls import SovereignGroup
-
-			ref = db.reference("registry", app=self.app)
-			nodes = ref.get()
-			if not nodes:
-				logger.warning("[MLS] No registry nodes found — group key unavailable")
-				return
-
-			group = SovereignGroup(self.community_alias)
-			import base64
-
-			for node_id, data in nodes.items():
-				alias = data.get("alias", node_id)
-				pub_key_b64 = data.get("public_key")
-				if pub_key_b64:
-					try:
-						pub_bytes = base64.b64decode(pub_key_b64)
-						group.add_member(alias, pub_bytes)
-					except Exception:
-						logger.warning(f"[MLS] Skipping member {alias}: invalid public key")
-
-			if group.members and hasattr(group, "root_secret"):
-				self._group_key = SwarmCrypto.derive_group_key([group.root_secret])
-				logger.info(f"[MLS] Group key derived for '{self.community_alias}' ({len(group.members)} members)")
-			else:
-				logger.warning("[MLS] Not enough members for group key derivation")
-
-		except Exception as e:
-			logger.warning(f"[MLS] Group key bootstrap failed: {e}")
 
 	def broadcast_identity(self, agent_id: str, metadata: Dict[str, Any]) -> bool:
 		try:
@@ -80,19 +45,15 @@ class FirebaseTransport(SwarmTransport):
 
 	def send_package(self, target_id: str, package: Dict[str, Any]) -> bool:
 		try:
-			# Encrypt if group key is available
-			if self._group_key:
-				from red_pill.swarm.crypto import SwarmCrypto
-
-				encrypted = SwarmCrypto.encrypt_payload(package, self._group_key)
-				payload = encrypted  # Contains: v, nonce, ciphertext
-			else:
-				payload = package  # Fallback: plaintext (legacy)
+			# Enforce Strict E2E Drop Rule
+			if "ciphertext" not in package or "nonce" not in package:
+				logger.error("[FirebaseTransport] REJECTED: Plaintext fallback is disabled. Package must be strictly E2E encrypted.")
+				return False
 
 			# Mailbox ID is now strictly the Agent Hash ID (agt_...)
 			mailbox_id = target_id
 			ref = db.reference(f"mailboxes/{mailbox_id}/inbox", app=self.app)
-			ref.push(payload)
+			ref.push(package)
 			return True
 		except Exception as e:
 			logger.error(f"[FirebaseTransport] Send failed: {e}")
@@ -110,28 +71,14 @@ class FirebaseTransport(SwarmTransport):
 			results = []
 			for msg_id, pkg in messages.items():
 				pkg["_msg_id"] = msg_id
-				# Decrypt if encrypted (v:2 marker or v: "3.0")
-				v = pkg.get("v")
-				is_encrypted = (isinstance(v, int) and v >= 2) or (isinstance(v, str) and v == "3.0")
-				if is_encrypted and "ciphertext" in pkg:
-					if self._group_key:
-						try:
-							from red_pill.swarm.crypto import SwarmCrypto
-
-							decrypted = SwarmCrypto.decrypt_payload(pkg, self._group_key)
-							decrypted["_msg_id"] = msg_id
-							decrypted["_encrypted"] = True
-							results.append(decrypted)
-						except Exception as e:
-							logger.warning(f"[MLS] Decrypt failed for {msg_id}: {e}")
-							pkg["_decrypt_error"] = str(e)
-							results.append(pkg)
-					else:
-						pkg["_decrypt_error"] = "No group key available"
-						results.append(pkg)
-				else:
-					# Legacy plaintext message
-					results.append(pkg)
+				
+				# Enforce Strict E2E Drop Rule
+				if "ciphertext" not in pkg:
+					logger.warning(f"[FirebaseTransport] Dropping legacy plaintext message {msg_id}")
+					continue
+					
+				# Pass the encrypted payload up to the SwarmMessaging skill where decryption happens
+				results.append(pkg)
 			return results
 		except Exception as e:
 			logger.error(f"[FirebaseTransport] Poll failed: {e}")
