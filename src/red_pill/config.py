@@ -323,8 +323,17 @@ SLEEP_CHUNK_SIZE = int(os.getenv("SLEEP_CHUNK_SIZE", "500"))
 SLEEP_CULL_THRESHOLD = float(os.getenv("SLEEP_CULL_THRESHOLD", "0.1"))
 
 # BAYESIAN MEMORY (v6.1 Phase B.1)
-# Collections that use the Bayesian Utility Kernel instead of Affective FSRS.
-BAYESIAN_COLLECTIONS = os.getenv("BAYESIAN_COLLECTIONS", "skill_memories,work_memories,directive_memories").split(",")
+# --- V6.1.0a2: Dual-Kernel (Beta-Utility for Technical, FSRS for Social) ---
+BAYESIAN_COLLECTIONS = ["skill_memories", "work_memories", "directive_memories"]
+
+# Provide a mapping of collections to their primary memory engine plugin
+MEMORY_ENGINES = {
+	"work_memories": "bayesian",
+	"skill_memories": "bayesian",
+	"directive_memories": "bayesian",
+	"social_memories": "fsrs_real",
+	"story_memories": "fsrs_real",
+}
 # BAYESIAN_STABILITY_KAPPA: Rate of uncertainty accumulation (beta) per day.
 # Higher = faster "forgetting" of technical utility.
 BAYESIAN_STABILITY_KAPPA = float(os.getenv("BAYESIAN_STABILITY_KAPPA", "0.05"))
