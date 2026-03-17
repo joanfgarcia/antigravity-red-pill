@@ -1,16 +1,17 @@
 import argparse
-import sys
 import os
+import sys
 
 # Add src to pythonpath so imports work
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
 
 import asyncio
-from red_pill.memory import MemoryManager
-from red_pill.swarm.orchestrator import GruOrchestrator
-from red_pill.swarm.agents.samantha import SamanthaMinion
-from red_pill.utils.observer import notify_user
 import logging
+
+from red_pill.memory import MemoryManager
+from red_pill.swarm.agents.samantha import SamanthaMinion
+from red_pill.swarm.orchestrator import GruOrchestrator
+from red_pill.utils.observer import notify_user
 
 logger = logging.getLogger("samantha_critic")
 
@@ -52,7 +53,7 @@ async def run_analysis(event_id: str, input_file: str):
 		if os.path.exists(input_file):
 			try:
 				os.remove(input_file)
-			except:
+			except Exception:
 				pass
 
 

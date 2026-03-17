@@ -33,8 +33,8 @@ async def run_analysis():
 		os.makedirs("docs/CERTIFICATION", exist_ok=True)
 		with open("docs/CERTIFICATION/SAMANTHA_REPORT_CH1.md", "w", encoding="utf-8") as rf:
 			rf.write("# Reporte de Análisis Narrativo: Capítulo 1\n")
-			rf.write(f"**Analista:** Samantha (Mistral-7B / Local Engine via Swarm/SIP)\n")
-			rf.write(f"**Fecha:** 2026-03-16\n\n")
+			rf.write("**Analista:** Samantha (Mistral-7B / Local Engine via Swarm/SIP)\n")
+			rf.write("**Fecha:** 2026-03-16\n\n")
 			rf.write(analysis)
 	else:
 		print(f"[Error] Fallo en el Swarm: {res.error}")
