@@ -54,9 +54,16 @@ class MemoryDaemon:
 				if "crypt" in check_crypt.stdout:
 					logger.info(f"SEC-001: Disk encryption (LUKS/dm-crypt) detected on {device}.")
 				else:
-					logger.warning(
-						f"\033[91m!!! SECURITY WARNING (SEC-008) !!!: The volume {device} storing Red Pill engrams "
-						"does NOT appear to be encrypted. Your data is at risk. (Steam/Water Mode)\033[0m"
+					print(
+						"\n\033[91m"
+						"========================================================================\n"
+						"!!! SECURITY WARNING (SEC-008) !!!\n"
+						f"The volume {device} storing Red Pill engrams does NOT appear to be\n"
+						"encrypted (LUKS/dm-crypt). Your data is stored in PLAINTEXT AT REST.\n"
+						"(Steam/Water Mode)\n"
+						"========================================================================\n"
+						"\033[0m",
+						file=sys.stderr
 					)
 		except Exception as e:
 			logger.debug(f"Failed to perform encryption check: {e}")
@@ -108,10 +115,6 @@ class MemoryDaemon:
 		return vectors[0]
 
 	def start(self) -> None:
-		if not cfg.SIDECAR_AUTH_KEY:
-			logger.error("SEC-004: SIDECAR_AUTH_KEY is missing.")
-			raise RuntimeError("SIDECAR_AUTH_KEY must be set.")
-
 		self._check_encryption()
 		if os.path.exists(SOCKET_PATH):
 			os.remove(SOCKET_PATH)
