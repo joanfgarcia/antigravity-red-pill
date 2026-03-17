@@ -92,6 +92,7 @@ if not SIDECAR_AUTH_KEY:
 	try:
 		if not os.path.exists(_auth_cache_file):
 			import secrets
+
 			with open(_auth_cache_file, "w") as f:
 				f.write(secrets.token_hex(32))
 			os.chmod(_auth_cache_file, 0o600)
@@ -206,26 +207,39 @@ METABOLISM_STRATEGY = os.getenv("METABOLISM_STRATEGY", "LAZY")
 MAX_SINK_TIME = int(os.getenv("MAX_SINK_TIME", str(30 * 24 * 3600)))
 
 # AFFECT DECAY MODELS (v6.1.0)
+# NOTE: The resulting decay curves from these models are neuro-symbolic design choices
+# regarding AI psychological safety and longitudinal alignment. They are NOT empirical models
+# of human biological memory (where trauma/anxiety often persist instead of decaying).
+# See docs/PHILOSOPHY.md for documentation of these Sovereign Trade-offs.
 DEFAULT_COLOR = "gray"
 DEFAULT_EMOTION = "neutral"
 AFFECT_DECAY_MODEL = os.getenv("AFFECT_DECAY_MODEL", "PIONEER")
 
+
 def _load_affect_multipliers(model_name: str) -> dict:
 	try:
 		import yaml
+
 		# Calculate path relative to this source file, not IA_DIR (which tests monkeypatch)
 		current_dir = os.path.dirname(os.path.abspath(__file__))
 		yml_path = os.path.join(current_dir, "data", "affect_models.yaml")
 		with open(yml_path, "r", encoding="utf-8") as f:
 			data = yaml.safe_load(f)
-		return data.get(model_name, data.get("PIONEER")).get("multipliers", {})
+		return dict(data.get(model_name, data.get("PIONEER")).get("multipliers", {}))
 	except Exception as e:
 		import warnings
+
 		warnings.warn(f"Failed to load affect_models.yaml: {e}. Falling back to default PIONEER profile.")
 		return {
-			"orange": 1.5, "yellow": 0.5, "purple": 2.0,
-			"cyan": 0.8, "blue": 1.0, "gray": 1.0, "emerald": 0.7,
+			"orange": 1.5,
+			"yellow": 0.5,
+			"purple": 2.0,
+			"cyan": 0.8,
+			"blue": 1.0,
+			"gray": 1.0,
+			"emerald": 0.7,
 		}
+
 
 EMOTIONAL_DECAY_MULTIPLIERS = _load_affect_multipliers(AFFECT_DECAY_MODEL)
 

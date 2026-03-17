@@ -43,11 +43,7 @@ def test_notify_macos_error():
 
 def test_watcher_main_block_coverage():
 	"""Trigger the main block branches if possible, or just verify it's callable."""
-
-	# Mock the lock file logic to avoid actual locking issues
-	with patch("os.path.exists", side_effect=[True]):  # Case: already running
+	with patch("os.path.exists", side_effect=[True]):
 		with patch("sys.exit"):
 			with patch("builtins.print"):
-				# We can't easily run the actual __main__ block without executing the whole file,
-				# but we've covered the functions.
 				pass

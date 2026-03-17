@@ -19,17 +19,15 @@ def test_pulse_sync_lifecycle(pulse):
 		mock_cfg.PULSE_ENABLED = False
 		pulse.start()
 		assert not pulse._running
-
 		mock_cfg.PULSE_ENABLED = True
 		with patch("threading.Thread"):
 			pulse.start()
 			assert pulse._running
-			pulse.start()  # Hits 31
-
+			pulse.start()
 			pulse._loop = MagicMock()
-			pulse.stop()  # Hits 44
+			pulse.stop()
 			assert not pulse._running
-			pulse.stop()  # Hits 41
+			pulse.stop()
 
 
 @pytest.mark.asyncio
@@ -37,7 +35,6 @@ async def test_pulse_cycle_logic(pulse):
 	pulse._maintenance_ritual = AsyncMock()
 	pulse._usp_ritual = AsyncMock()
 	pulse._dream_ritual = AsyncMock()
-
 	pulse._running = True
 	with patch("asyncio.sleep", AsyncMock()) as mock_sleep:
 
@@ -48,12 +45,10 @@ async def test_pulse_cycle_logic(pulse):
 		mock_sleep.side_effect = stop_loop
 		await pulse._pulse_cycle()
 		assert pulse._maintenance_ritual.called
-
 	pulse._running = True
 	with patch("asyncio.sleep", AsyncMock(side_effect=asyncio.CancelledError)):
-		await pulse._pulse_cycle()  # Hits 70
+		await pulse._pulse_cycle()
 		assert pulse._running
-
 	pulse._running = True
 	pulse._maintenance_ritual = AsyncMock(side_effect=Exception("Arrythmia"))
 	with patch("asyncio.sleep", AsyncMock()) as mock_sleep:
@@ -64,33 +59,23 @@ async def test_pulse_cycle_logic(pulse):
 			return None
 
 		mock_sleep.side_effect = stop_after_error
-		await pulse._pulse_cycle()  # Hits 72-73
+		await pulse._pulse_cycle()
 
 
 @pytest.mark.asyncio
 async def test_ritual_failures_final(pulse):
-	# db error (88)
 	pulse.memory_mgr.client.get_collections.side_effect = Exception("DB Down")
 	await pulse._maintenance_ritual()
-
-	# absence guard error (100)
 	pulse.memory_mgr.client.get_collections.side_effect = None
 	with patch("red_pill.heartbeat.cfg") as mock_cfg:
 		mock_cfg.METABOLISM_STRATEGY = "LAZY"
 		with patch("asyncio.to_thread", AsyncMock(side_effect=Exception("TTL Err"))):
 			await pulse._maintenance_ritual()
-
-	# global maint error (108)
-	# Using a side effect on attribute access to force exception outside inner try
 	with patch("red_pill.heartbeat.cfg") as mock_cfg:
 		type(mock_cfg).METABOLISM_STRATEGY = PropertyMock(side_effect=Exception("Hard Fail"))
 		await pulse._maintenance_ritual()
-
-	# dream individual error (123)
 	with patch("asyncio.to_thread", AsyncMock(side_effect=Exception("Dream Individual Fail"))):
 		await pulse._dream_ritual()
-
-	# dream global error (127)
 	with patch("red_pill.heartbeat.logger.info", side_effect=Exception("Dream Hard Fail")):
 		await pulse._dream_ritual()
 
@@ -114,7 +99,7 @@ async def test_usp_ritual_success(pulse):
 async def test_usp_ritual_failure(pulse):
 	"""Covers heartbeat.py lines 132-133 — USP ritual exception."""
 	with patch("asyncio.to_thread", AsyncMock(side_effect=Exception("USP Fail"))):
-		await pulse._usp_ritual()  # Should not raise
+		await pulse._usp_ritual()
 
 
 @pytest.mark.asyncio
@@ -154,7 +139,6 @@ async def test_lazarus_ritual_failure(pulse):
 	with patch("red_pill.heartbeat.cfg") as mock_cfg:
 		mock_cfg.LAZARUS_SYNC_ENABLED = True
 		mock_cfg.OPERATOR_DISPLAY_NAME = "test"
-		# HiveMind is imported lazily inside the method
 		with patch.dict("sys.modules", {"red_pill.hive": MagicMock(HiveMind=MagicMock(side_effect=Exception("Hive fail")))}):
 			await pulse._lazarus_ritual()
 

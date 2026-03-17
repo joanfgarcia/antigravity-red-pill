@@ -1,4 +1,3 @@
-import json
 import time
 from types import SimpleNamespace
 from unittest.mock import MagicMock, mock_open, patch
@@ -6,8 +5,6 @@ from unittest.mock import MagicMock, mock_open, patch
 import pytest
 
 from red_pill.memory import MemoryManager, PointUpdate, _mask_pii_exception
-
-# --- Fixtures ---
 
 
 @pytest.fixture
@@ -63,11 +60,8 @@ def mem_mgr(fake_cfg):
 				MockTE.return_value = mock_encoder
 				mm = MemoryManager(config=fake_cfg)
 				mm.encoder = mock_encoder
-				mm.client.get_collection.return_value = MagicMock(config=MagicMock(params=MagicMock(vectors=MagicMock(size=384))))
+				mm.client.get_collection.return_value = MagicMock(config=MagicMock(params=MagicMock(vectors=MagicMock(size=384))))  # type: ignore
 				yield mm
-
-
-# --- Unit Tests ---
 
 
 def test_point_update_logic():
@@ -79,40 +73,24 @@ def test_mask_pii_logic():
 	assert "[TRUNCATED]" in _mask_pii_exception(Exception("x" * 500))
 
 
-# --- Vector Helpers ---
 def test_get_vector_error_handling(mem_mgr):
 	mem_mgr.encoder.embed.return_value = []
 	with pytest.raises(IndexError):
 		mem_mgr._get_vector("test")
 
 
-def test_get_vector_from_daemon_full_logic(mem_mgr):
-	with patch("os.path.exists", return_value=True):
-		with patch("socket.socket") as mock_sock:
-			client = MagicMock()
-			mock_sock.return_value.__enter__.return_value = client
-			resp = json.dumps({"status": "ok", "vector": [0.4] * 384}).encode()
-			client.recv.side_effect = [len(resp).to_bytes(4, "big"), resp]
-			assert mem_mgr._get_vector_from_daemon("test") == [0.4] * 384
-			client.recv.side_effect = [b""]
-			assert mem_mgr._get_vector_from_daemon("test") is None
-
-
-# --- add_memory branches ---
 def test_add_memory_all_paths_final(mem_mgr, fake_cfg):
 	with patch("red_pill.memory.record_interaction"):
 		mem_mgr.add_memory("work", "text", color="orange", emotion="joy")
 		fake_cfg.CHUNK_THRESHOLD = 2
 		with patch("red_pill.memory.synaptic_split", return_value=["s1", "s2"]):
 			mem_mgr.add_memory("work", "long")
-		# Multi-emotion detection
 		with patch("red_pill.memory.get_emotions", return_value=[{"label": "anger", "score": 1.0}]):
 			with patch("red_pill.memory.get_chroma_for_emotion", return_value="red"):
 				mem_mgr.add_memory("work", "anger detected")
 		mem_mgr.add_memory("work", "immune", force_immune=True)
 
 
-# --- update_memory branches ---
 def test_update_memory_full_path(mem_mgr):
 	mem_mgr.client.retrieve.return_value = [MagicMock(id="1")]
 	assert mem_mgr.update_memory("work", "1", color="red", emotion="anger", intensity=5.0) is True
@@ -121,7 +99,6 @@ def test_update_memory_full_path(mem_mgr):
 	assert mem_mgr.update_memory("work", None) is False
 
 
-# --- Metabolism Branches ---
 def test_metabolism_full_logic_final(mem_mgr, fake_cfg):
 	mock_fcntl = MagicMock()
 	with patch.dict("sys.modules", {"fcntl": mock_fcntl}):
@@ -129,13 +106,9 @@ def test_metabolism_full_logic_final(mem_mgr, fake_cfg):
 		with patch("builtins.open", mock_open()):
 			with patch("os.path.exists", return_value=True):
 				mem_mgr._run_metabolism_cycle()
-
-		# 1. Switch to ACTIVE strategy to ensure apply_erosion is called
 		mem_mgr.cfg = fake_cfg
 		mem_mgr.cfg.METABOLISM_STRATEGY = "ACTIVE"
 		mem_mgr.cfg.METABOLISM_AUTO_COLLECTIONS = ["work_memories"]
-
-		# 2. Setup a point with a COMPLETE payload to pass EngramPayload validation
 		p1_payload = {
 			"content": "test content",
 			"importance": 1.0,
@@ -152,54 +125,40 @@ def test_metabolism_full_logic_final(mem_mgr, fake_cfg):
 			"linguistic_markers": [],
 		}
 		p1 = MagicMock(id="1", payload=p1_payload)
-		# Mock scroll to return the point
 		mem_mgr.client.scroll.side_effect = [([p1], None), ([], None)]
-
-		# 3. Patch internal state methods to bypass FileLock and open() complexity, and the new Sleep Engine
 		with patch.object(mem_mgr, "_read_metabolism_state", return_value=(time.time() - 3601, False)):
 			with patch.object(mem_mgr, "_write_metabolism_state"):
 				with patch("os.path.exists", return_value=True):
 					with patch("red_pill.metabolism.sleep.perform_sleep_cycle", return_value=0):
-						# Patch FileLock to allow execution
 						with patch("filelock.FileLock"):
 							mem_mgr._run_metabolism_cycle()
-
-		# Check if batch_update_points or delete was called
 		assert mem_mgr.client.batch_update_points.called or mem_mgr.client.delete.called
 
 
-# --- Reinforcement & Search ---
 def test_reinforce_and_propagation_final(mem_mgr, fake_cfg):
 	p1 = MagicMock(id=1, payload={"reinforcement_score": 0.5})
 	mem_mgr.client.retrieve.return_value = [p1]
 	res = mem_mgr._reinforce_points("work", [1], {"1": 0.1})
 	assert len(res) == 1
-
 	h1 = MagicMock(id="1", payload={"reinforcement_score": 0.5, "associations": ["2"]})
 	mem_mgr.client.query_points.return_value = MagicMock(points=[h1])
-	# depth 2 hop retrieval
 	h2 = MagicMock(id="2", payload={"associations": [], "reinforcement_score": 0.5})
 	mem_mgr.client.retrieve.return_value = [h2]
-
 	mem_mgr.search_and_reinforce("work", "oracle query", deep_recall=True)
 	assert mem_mgr.client.batch_update_points.called
 
 
-# --- Maintenance ---
 def test_erosion_purge_sanitize_final(mem_mgr):
 	p1 = MagicMock(id="1", payload={"reinforcement_score": 0.01, "emotion": "neutral"})
 	p2 = MagicMock(id="2", payload={"reinforcement_score": 1.0, "emotion": "joy", "intensity": 5.0})
 	mem_mgr.client.scroll.side_effect = [([p1, p2], None)]
 	mem_mgr.apply_erosion("work", rate=0.1)
 	assert mem_mgr.client.delete.called
-
 	p3 = MagicMock(id="3", payload={"content": "dupe", "schema_version": "1.0"})
 	p4 = MagicMock(id="4", payload={"content": "dupe"})
-	# p5 = MagicMock(id="5", payload={"content":"immune", "immune": True})
 	mem_mgr.client.scroll.side_effect = [([p3, p4], None)]
 	res = mem_mgr.sanitize("work")
 	assert res["duplicates_found"] == 1
-
 	mem_mgr.purge_dead_memories("work")
 	assert mem_mgr.client.delete.called
 
@@ -215,9 +174,6 @@ def test_calculate_lazy_decay_logic_final(mem_mgr, fake_cfg):
 	fake_cfg.DECAY_STRATEGY = "exponential"
 	score = mem_mgr._calculate_lazy_decay(payload, "work_memories")
 	assert score < 0.5
-
-
-# --- New tests to break 80% ---
 
 
 def test_metabolism_no_fcntl(mem_mgr, fake_cfg):

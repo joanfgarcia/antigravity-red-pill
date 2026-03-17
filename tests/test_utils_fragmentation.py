@@ -26,43 +26,34 @@ class TestRecursiveSplit:
 
 	def test_empty_separator_char_split(self):
 		"""Lines 43-45, 64: no visible separators found → character-level fallback."""
-		# Use only the empty string as separator → hits lines 43-45 directly
-		# Then separator=="" → character split (line 64)
-		no_sep_text = "abcdefghij" * 3  # 30 chars, no separators
+		no_sep_text = "abcdefghij" * 3
 		result = _recursive_split(no_sep_text, [""], chunk_size=10, overlap=0)
-		# Characters are split into lists, then grouped into chunks of 10
 		assert len(result) >= 2
-		assert "".join(result).replace("", "") != ""  # content preserved
+		assert "".join(result).replace("", "") != ""
 
 	def test_paragraph_separator_used(self):
-		"""Lines 46-49: \n\n separator found → used to split."""
+		"""Lines 46-49:
+
+		separator found → used to split."""
 		text = ("paragraph one.\n\n" * 10).strip()
 		result = _recursive_split(text, ["\n\n", "\n", ". ", " ", ""], chunk_size=30, overlap=0)
 		assert len(result) > 1
 
 	def test_force_split_when_no_more_separators(self):
 		"""Line 82: separator found, item > chunk_size, new_separators=[] → force truncate."""
-		# '. ' is the ONLY separator → new_separators=[] after match.
-		# Text splits into ['AAA...A. ', 'BBB...B'] where first part > chunk_size.
-		# Since new_separators is empty, hits the else branch: append item[:chunk_size].
 		text = "A" * 60 + ". " + "B" * 30
 		result = _recursive_split(text, [". "], chunk_size=50, overlap=0)
-		# First item ("A"*60 + ". ") is 62 chars > 50 → force-truncated to 50
-		assert all(len(r) <= 50 for r in result)
+		assert all((len(r) <= 50 for r in result))
 
 	def test_overlap_applied_on_new_chunk(self):
 		"""Lines 85-87: overlap text from previous chunk prepended to new chunk."""
-		# Create text that will split across chunk boundaries
-		text = "hello " * 20  # 120 chars
+		text = "hello " * 20
 		result = _recursive_split(text, [" ", ""], chunk_size=20, overlap=5)
-		# With overlap=5, each new chunk starts with last 5 chars of previous
 		assert len(result) > 1
 
 	def test_recursive_split_on_oversized_item(self):
 		"""Lines 77-79: item > chunk_size and new_separators available → recurse."""
-		# "\n\n" is first separator, splits into two big chunks each >chunk_size
-		# Then recurse with ["\n", ". ", " ", ""]
-		part = "word " * 30  # 150 chars
+		part = "word " * 30
 		text = part + "\n\n" + part
 		result = _recursive_split(text, ["\n\n", "\n", ". ", " ", ""], chunk_size=50, overlap=5)
-		assert len(result) >= 4  # Should produce many sub-chunks
+		assert len(result) >= 4

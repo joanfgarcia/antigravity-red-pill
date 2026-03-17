@@ -14,7 +14,7 @@ Plan táctico elaborado en colaboración entre el **Operador (Joan)** y el **Age
 ### [Componente: Memory Sidecar]
 Actualización del daemon para recibir pares de interacción.
 
-#### [MODIFY] [memory_daemon.py](../../../src/red_pill/memory_daemon.py)
+#### [MODIFY] `memory_daemon.py`
 - Añadir comando `encode` al `handle_connection`.
 - Recibir `prompt`, `response` y `role`.
 - Invocar `self.memory_mgr.record_interaction_pair`.

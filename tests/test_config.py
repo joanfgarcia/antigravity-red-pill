@@ -13,29 +13,23 @@ import pytest
 
 def _reimport_config(env_overrides: dict):
 	"""Re-import red_pill.config with custom environment variables."""
-	# Save original env and module
 	original_env = {}
 	for key in env_overrides:
 		original_env[key] = os.environ.get(key)
 		os.environ[key] = env_overrides[key]
-
-	# Remove cached module to force re-import
 	mod_name = "red_pill.config"
 	cached = sys.modules.get(mod_name)
 	if mod_name in sys.modules:
 		del sys.modules[mod_name]
-
 	try:
 		mod = importlib.import_module(mod_name)
 		return mod
 	finally:
-		# Restore env
 		for key, val in original_env.items():
 			if val is None:
 				os.environ.pop(key, None)
 			else:
 				os.environ[key] = val
-		# Restore original module
 		if cached is not None:
 			sys.modules[mod_name] = cached
 		elif mod_name in sys.modules:
@@ -47,13 +41,7 @@ class TestConfigWarnings:
 		"""Lines 18-20: QDRANT_SCHEME=http + non-local host → UserWarning emitted."""
 		with warnings.catch_warnings(record=True) as w:
 			warnings.simplefilter("always")
-			_reimport_config(
-				{
-					"QDRANT_SCHEME": "http",
-					"QDRANT_HOST": "remote.example.com",
-					"MILVUS_ENABLED": "False",
-				}
-			)
+			_reimport_config({"QDRANT_SCHEME": "http", "QDRANT_HOST": "remote.example.com", "MILVUS_ENABLED": "False"})
 		sec_warnings = [x for x in w if "SEC-F04" in str(x.message) or "cleartext" in str(x.message).lower()]
 		assert len(sec_warnings) > 0
 
@@ -61,13 +49,7 @@ class TestConfigWarnings:
 		"""Lines 17: QDRANT_SCHEME=https → no SEC-F04 warning."""
 		with warnings.catch_warnings(record=True) as w:
 			warnings.simplefilter("always")
-			_reimport_config(
-				{
-					"QDRANT_SCHEME": "https",
-					"QDRANT_HOST": "remote.example.com",
-					"MILVUS_ENABLED": "False",
-				}
-			)
+			_reimport_config({"QDRANT_SCHEME": "https", "QDRANT_HOST": "remote.example.com", "MILVUS_ENABLED": "False"})
 		sec_warnings = [x for x in w if "SEC-F04" in str(x.message)]
 		assert len(sec_warnings) == 0
 
@@ -106,10 +88,5 @@ class TestConfigValidation:
 
 	def test_metabolism_state_file_env_override(self):
 		"""Line 223: METABOLISM_STATE_FILE env set → overrides default path."""
-		mod = _reimport_config(
-			{
-				"METABOLISM_STATE_FILE": "/custom/path/state.json",
-				"MILVUS_ENABLED": "False",
-			}
-		)
+		mod = _reimport_config({"METABOLISM_STATE_FILE": "/custom/path/state.json", "MILVUS_ENABLED": "False"})
 		assert mod.METABOLISM_STATE_FILE == "/custom/path/state.json"

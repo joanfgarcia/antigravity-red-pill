@@ -1,6 +1,19 @@
 # Changelog: Red Pill Protocol
 
 ## [6.1.0a3] - 2026-03-17
+### 🛡️ Operation A+ (Absolute Purity Audit Remediation)
+- **[ARCH] Sovereign Trade-offs Manifesto**: Authored `PHILOSOPHY.md` to explicitly document architectural tensions (HiveMind privacy, Lore Skin consent, Swarm complexity, FSRS decay models, and Node.js rejection) as intentional features, solving the "Philosophical Incoherence" audit finding.
+- **[SEC-001] Adaptative Encryption**: Solidified `ADAPTATIVE` mode as the default for local installations, gracefully warning operators without LUKS instead of blocking execution.
+- **[SEC-007] Mystique Protocol & Lore Skin Consent**: Introduced an explicit `Y/n` CLI consent prompt when switching to non-neutral skins to prevent silent behavioral drift. Explicitly exempted the dynamic `Mystique` protocol.
+- **[SEC-MLS] Plaintext Passthrough Purge**: Removed plaintext fallback mechanisms from the Swarm `FirebaseTransport`, enforcing strict TreeKEM/AES-GCM encryption for all network messages.
+- **[SEC] HiveMind Differential Privacy**: Implemented Laplace noise injection for vectors shared to the HiveMind, ensuring technical know-how and social empathy patterns are anonymized before broadcast.
+- **[PERF] Async Samantha Offloading**: Wrapped the `UnixHTTPConnection` in `asyncio.to_thread()` to prevent the sync HTTP requests from blocking the main event loop during deep analysis.
+- **[OPS] Recovery & Verification**: Added the `red-pill soul verify` command to strictly validate the checksums of backup snapshots before initiating a destructive restore.
+- **[PRIV-GDPR] Right to be Forgotten**: Added `purge_identity()` to the core `MemoryManager` and exposed `red-pill identity purge` in the CLI for rapid GDPR Art. 17 compliance.
+- **[CLEANUP] FIRE YAML Eradication**: Purged all legacy Node.js/`.specs-fire` polling mechanics, proving the system is 100% pure Python and immune to TOCTOU JS race conditions. Dethroned `RED_PILL_DIGEST.txt`.
+- **[QA] Integration Harness**: Created `tests/integration/test_core_pipeline.py` to continuously validate the end-to-end round-trip lifecycle of memories across the Swarm.
+- **[QA] Deterministic Metabolism Tests**: Refactored `test_metabolism.py` with mock clocks instead of `time.sleep()`, reducing test suite execution time significantly.
+
 ### 🌐 The Omnipresent Bünker (Global MCP Interceptor)
 - **[FEAT] Global Prompt Hijacking**: Implemented `interceptor_rp` as a global MCP tool within `mcp_server.py`. 
 - **[FEAT] Cognitive Interceptor (Phase 2)**: The interceptor now performs dynamic RAG against the local Qdrant Bünker and injects the context directly into the prompt via `<bunker_context>`.

@@ -2,7 +2,6 @@ import hashlib
 import json
 import logging
 import os
-import socket
 import threading
 import time
 import uuid
@@ -111,8 +110,6 @@ class MemoryManager:
 				vectors_config=models.VectorParams(size=self.cfg.VECTOR_SIZE, distance=models.Distance.COSINE),
 			)
 			logger.info(f"Ghost Collection created: {collection_name}")
-
-
 
 	def _get_vector(self, text: str) -> List[float]:
 		"""Optimized vector retrieval strictly in-band."""
@@ -491,7 +488,7 @@ class MemoryManager:
 		limit: int = 100,
 		with_payload: bool = True,
 		with_vectors: bool = False,
-		max_iterations: int = 1000
+		max_iterations: int = 1000,
 	) -> Generator[List[Any], None, None]:
 		"""Yields batches of points from a collection using scroll pagination (CQ-005)."""
 		offset = None
@@ -507,7 +504,7 @@ class MemoryManager:
 					limit=limit,
 					offset=offset,
 					with_payload=with_payload,
-					with_vectors=with_vectors
+					with_vectors=with_vectors,
 				)
 			except Exception as e:
 				logger.error(f"Scroll operation failed in {collection}: {_mask_pii_exception(e)}")
@@ -878,11 +875,7 @@ class MemoryManager:
 
 		try:
 			assoc_ids = [a["id"] if isinstance(a, dict) else str(a) for a in assocs]
-			records = self.client.retrieve(
-				collection_name=collection,
-				ids=assoc_ids,
-				with_payload=["importance", "reinforcement_score"]
-			)
+			records = self.client.retrieve(collection_name=collection, ids=assoc_ids, with_payload=["importance", "reinforcement_score"])
 
 			hub_scores = {}
 			for r in records:
@@ -896,7 +889,7 @@ class MemoryManager:
 				a_id = assoc["id"] if isinstance(assoc, dict) else str(assoc)
 				h_score = hub_scores.get(a_id, 0.1)  # 0.1 for missing nodes (dead links)
 				# Age penalty: older items (lower index) get a tiny log penalty
-				e_score = h_score / math.log(i + 2)
+				e_score = h_score * math.log(i + 2)
 				eviction_scores[a_id] = e_score
 
 			num_to_evict = len(assocs) - self.cfg.MAX_AXONS
@@ -951,7 +944,7 @@ class MemoryManager:
 			must=[models.FieldCondition(key="last_recalled_at", range=models.Range(lt=ttl_threshold))],
 			must_not=[models.FieldCondition(key="immune", match=models.MatchValue(value=True))],
 		)
-		
+
 		for batch in self._scroll_collection(collection, scroll_filter=scroll_filter, limit=100, max_iterations=1000):
 			points_to_delete: List[Any] = []
 			update_operations = []
@@ -1095,6 +1088,45 @@ class MemoryManager:
 		except Exception as e:
 			logger.error(f"Failed to get collection stats: {_mask_pii_exception(e)}")
 			return {"status": "error", "error": str(e), "points_count": 0, "segments_count": 0}
+
+	def purge_identity(self) -> None:
+		"""
+		PRIV-GDPR: Art. 17 Right to be Forgotten.
+		Drops all local collections from Qdrant and wipes the local ~/.agent/ context.
+		"""
+		logger.warning("Initiating GDPR Article 17 Purge (Right to be Forgotten).")
+
+		# 1. Drop Qdrant Collections
+		from red_pill.config import METABOLISM_AUTO_COLLECTIONS
+
+		for coll in METABOLISM_AUTO_COLLECTIONS:
+			try:
+				if self.client.collection_exists(coll):
+					self.client.delete_collection(collection_name=coll)
+					logger.info(f"Dropped collection: {coll}")
+			except Exception as e:
+				logger.error(f"Failed to drop collection {coll}: {e}")
+
+		# 2. Wipe ~/.agent/
+		agent_dir = os.path.expanduser("~/.agent")
+		if os.path.exists(agent_dir):
+			try:
+				import shutil
+
+				shutil.rmtree(agent_dir)
+				logger.info(f"Wiped local agent directory: {agent_dir}")
+			except Exception as e:
+				logger.error(f"Failed to wipe {agent_dir}: {e}")
+
+		# 3. Wipe generic metabolism state file
+		metabolism_file = os.path.expanduser("~/.red_pill_metabolism")
+		if os.path.exists(metabolism_file):
+			try:
+				os.remove(metabolism_file)
+			except Exception as e:
+				logger.error(f"Failed to wipe {metabolism_file}: {e}")
+
+		logger.warning("Identity purge complete.")
 
 	def create_bunker_snapshot(self, collections: Optional[List[str]] = None) -> Dict[str, str]:
 		"""

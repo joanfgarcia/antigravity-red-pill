@@ -23,8 +23,6 @@ async def test_mcp_control_bunker_export():
 
 @pytest.mark.asyncio
 async def test_mcp_memorize_interaction_fallback():
-	# Phase 2 Interceptor: handle_memorize_interaction now uses in-band async,
-	# no longer the daemon socket. Both paths return async success.
 	res = await handle_memorize_interaction({"prompt": "p", "response": "r"})
 	assert "Engram async registration initiated" in res[0].text
 
@@ -52,10 +50,8 @@ async def test_mcp_suggest_skin_logic():
 
 @pytest.mark.asyncio
 async def test_mcp_main_coverage():
-	# Simply test that main() can be called (mocking stdio_server)
 	with patch("red_pill.mcp_server.stdio_server") as mock_stdio:
 		mock_stdio.return_value.__aenter__.return_value = (MagicMock(), MagicMock())
-		# We don't want to run the whole server loop, so we mock server.run
 		with patch("red_pill.mcp_server.server.run") as mock_run:
 			await mcp_main()
 			assert mock_run.called

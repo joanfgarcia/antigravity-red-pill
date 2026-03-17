@@ -59,12 +59,10 @@ def test_handle_identity_refresh():
 
 
 def test_main_sleep_error():
-	# Test the error handling in sleep command
 	test_args = ["red-pill", "sleep", "--mode", "deep"]
 	with patch("sys.argv", test_args):
 		with patch("red_pill.metabolism.sleep.perform_sleep_cycle", side_effect=Exception("Consolidation error")):
 			with patch("red_pill.memory.MemoryManager"):
-				# main() doesn't return, so we check if it prints error
 				with patch("builtins.print") as mock_print:
 					main()
 					mock_print.assert_any_call("[ERROR] Sleep cycle interrupted: Consolidation error")
@@ -88,7 +86,6 @@ def test_main_signal_logic():
 			with patch("red_pill.cli.MemoryManager"):
 				main()
 				mock_notify.assert_any_call("Test Title", "Test message", sound=True, category="manual")
-				# mock_mgr.return_value.add_memory.assert_called_once()
 
 
 def test_main_swarm_audit_details():
@@ -104,12 +101,10 @@ def test_main_swarm_audit_details():
 			"findings": [{"severity": "CRITICAL", "file": "key.py", "line": 1, "msg": "leak"}],
 		}
 
-		# Define an async mock for deploy_swarm
 		async def mock_deploy(*args, **kwargs):
 			return [mock_res]
 
 		mock_gru.deploy_swarm = mock_deploy
-
 		with patch("red_pill.cli.GruOrchestrator", return_value=mock_gru):
 			with patch("red_pill.cli.SmithMinion"):
 				with patch("builtins.print") as mock_print:

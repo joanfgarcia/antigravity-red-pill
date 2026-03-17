@@ -16,8 +16,7 @@ def mock_qdrant():
 @pytest.fixture
 def manager(mock_qdrant):
 	mgr = MemoryManager()
-	# Mock embeddings to avoid network
-	mgr._get_vector = MagicMock(return_value=[0.1] * cfg.VECTOR_SIZE)
+	mgr._get_vector = MagicMock(return_value=[0.1] * cfg.VECTOR_SIZE)  # type: ignore
 	return mgr
 
 
@@ -27,40 +26,24 @@ def test_full_schema_migration(manager, mock_qdrant):
 	Verifies that 'sanitize' correctly brings them into compliance.
 	"""
 	base_payload = {"importance": 1.0, "created_at": 1000.0, "last_recalled_at": 1000.0, "schema_version": "v1.0"}
-	# Old engrams: no color, no emotion, no intensity
 	old_points = [
 		MagicMock(id=str(uuid.uuid4()), payload={**base_payload, "content": f"Old memory {i}", "reinforcement_score": 1.0}) for i in range(5)
 	]
-
-	# Mixed engrams: some have partial data
 	mixed_points = [
-		MagicMock(id="partial_1", payload={**base_payload, "content": "Partial", "color": "yellow"}),  # missing emotion/intensity
-		MagicMock(id="duplicate_1", payload={**base_payload, "content": "Old memory 0"}),  # exact duplicate of the first old_point content
+		MagicMock(id="partial_1", payload={**base_payload, "content": "Partial", "color": "yellow"}),
+		MagicMock(id="duplicate_1", payload={**base_payload, "content": "Old memory 0"}),
 	]
-
 	all_points = old_points + mixed_points
-
-	# Mock scroll response
-	manager.client.scroll.side_effect = [
-		(all_points, None)  # One single page for brevity
-	]
-
+	manager.client.scroll.side_effect = [(all_points, None)]
 	results = manager.sanitize("work_memories")
-
-	# Assertions
 	assert results["collection"] == "work_memories"
-	assert results["duplicates_found"] == 1  # "Old memory 0" duplicated
-
-	# All 5 old points + 1 partial point needed migration
+	assert results["duplicates_found"] == 1
 	assert results["migrated_records"] == 6
-
-	# Check that batch_update_points was called for the partial point to fill missing fields
 	calls = manager.client.batch_update_points.call_args_list
 	operations = calls[0][1]["update_operations"]
-	partial_call = next(op for op in operations if op.set_payload.points == ["partial_1"])
+	partial_call = next((op for op in operations if op.set_payload.points == ["partial_1"]))
 	assert "emotion" in partial_call.set_payload.payload
 	assert "intensity" in partial_call.set_payload.payload
-	# Should NOT overwrite existing color with default, but contain 'yellow'
 	assert partial_call.set_payload.payload.get("color") == "yellow"
 
 
@@ -72,11 +55,8 @@ def test_migration_idempotency(manager, mock_qdrant):
 			payload={"content": "Clean", "color": "gray", "emotion": "neutral", "intensity": 1.0, "schema_version": cfg.CURRENT_SCHEMA_VERSION},
 		)
 	]
-
 	manager.client.scroll.return_value = (clean_points, None)
-
 	results = manager.sanitize("work_memories")
-
 	assert results["duplicates_found"] == 0
 	assert results["migrated_records"] == 0
 	assert not manager.client.batch_update_points.called

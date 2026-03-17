@@ -1,7 +1,7 @@
 import base64
 import json
 import os
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519, x25519
@@ -131,4 +131,3 @@ class SwarmCrypto:
 
 		except Exception as e:
 			raise ValueError(f"Failed to decrypt Swarm Payload. Invalid bond or corrupted data: {e}")
-

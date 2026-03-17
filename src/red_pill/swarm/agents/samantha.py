@@ -61,7 +61,7 @@ class SamanthaMinion(Minion):
 
 		try:
 			import asyncio
-			
+
 			def _sync_inference() -> Dict[str, Any]:
 				conn = UnixHTTPConnection(socket_path, timeout=300)
 				headers = {"Content-Type": "application/json"}
@@ -71,10 +71,10 @@ class SamanthaMinion(Minion):
 				if response.status != 200:
 					return {"status": "error", "error": f"Inference failed (HTTP {response.status})"}
 
-				return json.loads(response.read().decode())
+				return json.loads(response.read().decode())  # type: ignore
 
 			data = await asyncio.to_thread(_sync_inference)
-			
+
 			if data.get("status") == "error":
 				return data
 

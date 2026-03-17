@@ -27,11 +27,9 @@ def test_notify_macos(mock_run):
 
 
 def test_inject_context_pill():
-	# Use a temp file for testing
 	test_file = "/tmp/.test_pending_messages.json"
 	if os.path.exists(test_file):
 		os.remove(test_file)
-
 	with patch("red_pill.swarm.watcher.PENDING_MESSAGES_FILE", test_file):
 		inject_context_pill("Sender", "Message")
 		assert os.path.exists(test_file)
@@ -40,14 +38,11 @@ def test_inject_context_pill():
 			assert len(data) == 1
 			assert data[0]["sender"] == "Sender"
 			assert data[0]["preview"] == "Message"
-
-		# Test appending
 		inject_context_pill("Sender2", "Message2")
 		with open(test_file, "r") as f:
 			data = json.load(f)
 			assert len(data) == 2
 			assert data[1]["sender"] == "Sender2"
-
 	if os.path.exists(test_file):
 		os.remove(test_file)
 
@@ -58,7 +53,7 @@ def test_inject_context_pill():
 def test_simulate_firebase_listener_interrupted(mock_inject, mock_notify, mock_sleep):
 	from red_pill.swarm.watcher import simulate_firebase_listener
 
-	with patch("time.time", return_value=300):  # Force the modulo 300 condition
+	with patch("time.time", return_value=300):
 		try:
 			simulate_firebase_listener("test_id")
 		except InterruptedError:

@@ -130,7 +130,7 @@ class TestLoadMarkdownSeeds:
 		try:
 			seed_dir.mkdir(exist_ok=True)
 			test_file.write_text("# Failing directive")
-			load_markdown_seeds(mgr)  # Must not raise
+			load_markdown_seeds(mgr)
 		finally:
 			if test_file.exists():
 				test_file.unlink()

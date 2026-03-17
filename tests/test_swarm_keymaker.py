@@ -27,7 +27,6 @@ async def test_qdrant_down_degraded(keymaker):
 async def test_qdrant_up_optimal(keymaker):
 	"""Lines 31-43: qdrant online → status='optimal'."""
 	mock_resp = MagicMock(status_code=200)
-
 	with patch("requests.get", return_value=mock_resp):
 		with patch("psutil.disk_usage", return_value=MagicMock(percent=30.0, free=50 * 1024**3)):
 			with patch("red_pill.swarm.agents.keymaker.HardwareSentinel.get_stats", return_value={}):
@@ -41,12 +40,10 @@ async def test_npu_active_status_reported(keymaker):
 	"""Lines 56-58: NPU status=Ready → npu_status='Active'."""
 	with patch("requests.get", side_effect=Exception("no qdrant")):
 		with patch("psutil.disk_usage", return_value=MagicMock(percent=20.0, free=100 * 1024**3)):
-			with patch(
-				"red_pill.swarm.agents.keymaker.HardwareSentinel.get_stats", return_value={"npu": {"status": "Ready", "name": "Mali-G710"}}
-			):
+			with patch("red_pill.swarm.agents.keymaker.HardwareSentinel.get_stats", return_value={"npu": {"status": "Ready", "name": "Mali-G710"}}):
 				result = await keymaker.execute("health")
 	assert result["npu_status"] == "Active"
-	assert any("NPU" in c["component"] for c in result["checks"])
+	assert any(("NPU" in c["component"] for c in result["checks"]))
 
 
 @pytest.mark.asyncio
@@ -55,18 +52,14 @@ async def test_heal_task_with_active_npu_runs_sanitize(keymaker):
 	import sys
 
 	mock_resp = MagicMock(status_code=200)
-
 	mock_mm = MagicMock()
 	mock_mm_class = MagicMock(return_value=mock_mm)
-
-	# Create a fake red_pill.memory module with MemoryManager
 	import types
 
 	fake_memory = types.ModuleType("red_pill.memory")
-	fake_memory.MemoryManager = mock_mm_class
+	fake_memory.MemoryManager = mock_mm_class  # type: ignore
 	original = sys.modules.get("red_pill.memory")
 	sys.modules["red_pill.memory"] = fake_memory
-
 	try:
 		with patch("requests.get", return_value=mock_resp):
 			with patch("psutil.disk_usage", return_value=MagicMock(percent=20.0, free=100 * 1024**3)):
@@ -77,9 +70,8 @@ async def test_heal_task_with_active_npu_runs_sanitize(keymaker):
 			sys.modules["red_pill.memory"] = original
 		elif "red_pill.memory" in sys.modules:
 			del sys.modules["red_pill.memory"]
-
 	assert mock_mm.sanitize.called
-	assert any("Healing" in c["component"] for c in result["checks"])
+	assert any(("Healing" in c["component"] for c in result["checks"]))
 
 
 @pytest.mark.asyncio
@@ -90,4 +82,4 @@ async def test_npu_not_ready_offline_reported(keymaker):
 			with patch("red_pill.swarm.agents.keymaker.HardwareSentinel.get_stats", return_value={"npu": {"status": "Unavailable"}}):
 				result = await keymaker.execute("health")
 	assert result["npu_status"] == "Undetected"
-	assert any("OFFLINE" in c.get("status", "") for c in result["checks"])
+	assert any(("OFFLINE" in c.get("status", "") for c in result["checks"]))

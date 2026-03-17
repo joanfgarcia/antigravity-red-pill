@@ -31,10 +31,7 @@ class TestGetEmotions:
 		import red_pill.utils.emotion as em
 
 		mock_clf = MagicMock()
-		mock_clf.return_value = [
-			{"label": "JOY", "score": 0.95},
-			{"label": "FEAR", "score": 0.05},  # below threshold=0.2
-		]
+		mock_clf.return_value = [{"label": "JOY", "score": 0.95}, {"label": "FEAR", "score": 0.05}]
 		em._classifier = mock_clf
 		result = em.get_emotions("test", threshold=0.2)
 		assert len(result) == 1
@@ -94,7 +91,7 @@ class TestGetChromaForEmotion:
 
 		assert get_chroma_for_emotion("anger") == "red"
 		assert get_chroma_for_emotion("sadness") == "blue"
-		assert get_chroma_for_emotion("HAPPINESS") == "yellow"  # case-insensitive
+		assert get_chroma_for_emotion("HAPPINESS") == "yellow"
 
 	def test_unknown_emotion_returns_gray(self):
 		"""Line 64: unknown emotion → default 'gray'."""

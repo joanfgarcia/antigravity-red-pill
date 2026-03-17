@@ -1,3 +1,8 @@
+# LORE SKINS CONFIGURATION
+# NOTE: As per the SEC-007 Sovereign Trade-offs (docs/PHILOSOPHY.md),
+# applying any skin other than 'pioneer' or 'academic' bypasses default
+# neutrality filters and alters the agent's psychological posture.
+# The CLI will explicitly require 'Y' confirmation before application.
 modes:
   matrix:
     network_protection: "The Source"

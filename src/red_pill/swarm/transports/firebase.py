@@ -31,13 +31,12 @@ class FirebaseTransport(SwarmTransport):
 			cred = credentials.Certificate(self.credential_path)
 			self.app = firebase_admin.initialize_app(cred, {"databaseURL": self.db_url}, name=app_name)
 
-
 	def broadcast_identity(self, agent_id: str, metadata: Dict[str, Any]) -> bool:
 		try:
 			ref = db.reference(f"registry/{agent_id}", app=self.app)
 			ref.set(metadata)
 			# Rebuild group key after identity broadcast (new member may have joined)
-			self._bootstrap_group_key()
+			self._bootstrap_group_key()  # type: ignore
 			return True
 		except Exception as e:
 			logger.error(f"[FirebaseTransport] Broadcast failed: {e}")
@@ -71,12 +70,12 @@ class FirebaseTransport(SwarmTransport):
 			results = []
 			for msg_id, pkg in messages.items():
 				pkg["_msg_id"] = msg_id
-				
+
 				# Enforce Strict E2E Drop Rule
 				if "ciphertext" not in pkg:
 					logger.warning(f"[FirebaseTransport] Dropping legacy plaintext message {msg_id}")
 					continue
-					
+
 				# Pass the encrypted payload up to the SwarmMessaging skill where decryption happens
 				results.append(pkg)
 			return results

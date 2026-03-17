@@ -63,7 +63,17 @@ def switch_skin(skin_name: str) -> str:
 
 
 def handle_mode(args: argparse.Namespace) -> None:
-	"""CLI wrapper for skin switching."""
+	"""CLI wrapper for skin switching (with SEC-007 explicit consent)."""
+	neutral_skins = ["pioneer", "academic"]
+	if args.skin not in neutral_skins:
+		print("\n--- [SEC-007 CONSENT REQUIRED] ---")
+		print(f"Warning: Skin '{args.skin.upper()}' modifies base AI neutrality and behavioral filters.")
+		print("For exact behavioral modifiers, see 'src/red_pill/data/lore_skins.yaml'")
+		print("By proceeding, you assume sovereignty over the agent's altered psychological posture.")
+		confirm = input("Type 'Y' to confirm and bypass safety protocols: ")
+		if confirm.strip().upper() != "Y":
+			print("Skin application aborted. Safety protocols maintained.")
+			return
 	print(switch_skin(args.skin))
 
 
@@ -134,6 +144,18 @@ def handle_identity(args: argparse.Namespace) -> None:
 		script_path = os.path.join(PROJECT_ROOT, "scripts", "wake_up_v6.py")
 		print(f"--- [REFRESHING SESSION CONTEXT: {script_path}] ---")
 		subprocess.run(["python3", script_path])
+	elif args.id_cmd == "purge":
+		print("--- [WARNING: INITIATING GDPR PURGE] ---")
+		print("This will destroy all memories, directives, and identity context forever.")
+		confirm = input("Type 'PURGE' to confirm: ")
+		if confirm == "PURGE":
+			from red_pill.memory import MemoryManager
+
+			mgr = MemoryManager()
+			mgr.purge_identity()
+			print("[OK] Identity and collections purged. System is a blank slate.")
+		else:
+			print("Purge aborted.")
 
 
 def get_collection(type_str: str) -> str:
@@ -210,6 +232,8 @@ def main() -> None:
 	restore_parser = soul_sub.add_parser("restore", help="Restore soul from a backup directory")
 	restore_parser.add_argument("source", help="Path to backup source")
 	restore_parser.add_argument("--commit", action="store_true", help="Execute the restoration")
+	verify_parser = soul_sub.add_parser("verify", help="Verify backup integrity without restoring")
+	verify_parser.add_argument("source", help="Path to backup kit (.tar.gz or .enc)")
 	soul_sub.add_parser("sync", help="Check emotional sync state")
 	soul_sub.add_parser("vault", help="Inspect Cloud Vault status and backups")
 
@@ -250,6 +274,7 @@ def main() -> None:
 	boot_parser.add_argument("--skin")
 
 	id_sub.add_parser("refresh", help="Synthesize and refresh session context (wake_up)")
+	id_sub.add_parser("purge", help="GDPR Art 17: Right to be Forgotten. Destroys all memory collections and local identity.")
 
 	args = parser.parse_args()
 
@@ -339,6 +364,12 @@ def main() -> None:
 				rotate()
 			elif args.soul_cmd == "restore":
 				soul.restore_soul(args.source, commit=args.commit)
+			elif args.soul_cmd == "verify":
+				if soul.verify_soul(args.source):
+					print(f"\n[OK] VERIFIED: {args.source} is healthy.")
+				else:
+					print(f"\n[FAIL] CORRUPT OR INVALID: {args.source}")
+					sys.exit(1)
 			elif args.soul_cmd == "sync":
 				state = get_current_sync_state()
 				print(f"--- [EMOTIONAL SYNC: {state['mood'].upper()}] ---")

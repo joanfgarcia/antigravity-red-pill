@@ -15,25 +15,17 @@ def mock_qdrant():
 @pytest.fixture
 def manager(mock_qdrant):
 	mgr = MemoryManager()
-	mgr._get_vector = MagicMock(return_value=[0.1] * config.VECTOR_SIZE)
+	mgr._get_vector = MagicMock(return_value=[0.1] * config.VECTOR_SIZE)  # type: ignore
 	return mgr
 
 
 def test_null_byte_rejection_metadata(manager):
-	# Test null byte in metadata key
 	with pytest.raises(ValueError, match="contains null bytes"):
 		manager.add_memory("test", "content", metadata={"bad\x00key": "val"})
-
-	# Test null byte in metadata value (string)
 	with pytest.raises(ValueError, match="contains null bytes"):
 		manager.add_memory("test", "content", metadata={"key": "bad\x00val"})
-
-	# Test null byte in nested list
 	with pytest.raises(ValueError, match="contains null bytes"):
 		manager.add_memory("test", "content", metadata={"key": ["val1", "bad\x00val2"]})
-
-	# Test null byte in metadata key (nested associations)
-	# associations value is actually validated differently but general null byte check should catch it if it's a string
 	with pytest.raises(ValueError, match="contains null bytes"):
 		manager.add_memory("test", "content", metadata={"associations": ["bad\x00uuid"]})
 

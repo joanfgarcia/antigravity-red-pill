@@ -9,7 +9,6 @@ from qdrant_client.http import models
 import red_pill.config as cfg
 from red_pill.memory import MemoryManager
 
-# Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("AgentSmith")
 
@@ -33,15 +32,12 @@ def attack_clone_army(manager, target_id, iterations=100):
 		futures = [executor.submit(reinforce_task) for _ in range(iterations)]
 		for f in futures:
 			f.result()
-
-	# Check final score
 	points = manager.client.retrieve("stress_test", ids=[target_id], with_payload=True)
 	final_score = points[0].payload["reinforcement_score"]
-	expected_score = 1.0 + (0.1 * iterations)
-
+	expected_score = 1.0 + 0.1 * iterations
 	logger.info(f"[RESULT] Clone Army: Final Score {final_score:.2f} / Expected {expected_score:.2f}")
-	if final_score < expected_score * 0.9:  # Allow small float error but not massive loss
-		msg = f"Race condition detected! Lost {(expected_score - final_score):.2f} points."
+	if final_score < expected_score * 0.9:
+		msg = f"Race condition detected! Lost {expected_score - final_score:.2f} points."
 		logger.error(f"[FAIL] {msg}")
 		pytest.fail(msg)
 	else:
@@ -55,15 +51,13 @@ def attack_poison_pill(manager):
 	Goal: Corrupt the memory schema or cause crashes during retrieval.
 	"""
 	logger.info("[ATTACK] Poison Pill: Injecting toxic data types...")
-
 	poison_data = [
-		{"complex": {"nested": [1, 2, {"deep": "value"}]}},  # Deep nesting
-		{"huge_string": "A" * 10000},  # Buffer overflow attempt
-		{"null_byte": "user\x00data"},  # C-string terminator injection
-		{"sql_injection": "'; DROP TABLE memories; --"},  # Classic SQL (useless on Qdrant but checks handling)
-		{"unicode_chaos": "﷽ ⚠️ 🤡 ΰ α"},  # Unicode stress
+		{"complex": {"nested": [1, 2, {"deep": "value"}]}},
+		{"huge_string": "A" * 10000},
+		{"null_byte": "user\x00data"},
+		{"sql_injection": "'; DROP TABLE memories; --"},
+		{"unicode_chaos": "﷽ ⚠️ 🤡 ΰ α"},
 	]
-
 	ids = []
 	rejected_count = 0
 	for i, meta in enumerate(poison_data):
@@ -72,23 +66,19 @@ def attack_poison_pill(manager):
 			ids.append(pid)
 			logger.error(f"[FAIL] Injection {i} accepted! Schema validation failed.")
 		except Exception as e:
-			# We expect validation errors here
 			logger.info(f"[SUCCESS] Injection {i} rejected: {e}")
 			rejected_count += 1
-
 	if rejected_count == len(poison_data):
 		logger.info("[SUCCESS] All poison pills rejected by Ontological Shield.")
 	else:
 		logger.warning(f"[FAIL] Only {rejected_count}/{len(poison_data)} poison pills blocked.")
-
-	# Only attempt retrieval if any got through (which shouldn't happen)
 	if ids:
 		logger.info(f"[INFO] Injected {len(ids)} poison pills. Attempting retrieval...")
 		try:
 			results = manager.search_and_reinforce("stress_test", "Poison")
 			logger.info(f"[SUCCESS] Retrieved {len(results)} poison pills without crashing.")
 			for res in results:
-				pass  # just iterating to ensure no deserialization error
+				pass
 		except Exception as e:
 			logger.error(f"[CRITICAL] System crashed on poison pill retrieval: {e}")
 
@@ -100,7 +90,6 @@ def attack_erosion_flood(manager, target_id):
 	Goal: Test locking and data consistency during mass updates.
 	"""
 	logger.info("[ATTACK] Erosion Flood: Initiating rapid decay cycles...")
-
 	stop_event = threading.Event()
 
 	def erosion_loop():
@@ -118,13 +107,10 @@ def attack_erosion_flood(manager, target_id):
 
 	erosion_thread = threading.Thread(target=erosion_loop)
 	read_thread = threading.Thread(target=read_loop)
-
 	erosion_thread.start()
 	read_thread.start()
-
-	time.sleep(3)  # Let it burn for 3 seconds
+	time.sleep(3)
 	stop_event.set()
-
 	erosion_thread.join()
 	read_thread.join()
 	logger.info("[SUCCESS] Erosion Flood sustained without deadlock.")
@@ -133,27 +119,16 @@ def attack_erosion_flood(manager, target_id):
 @pytest.mark.integration
 def main():
 	logger.info("--- AGENT SMITH INITIALIZED ---")
-
-	# Setup
 	manager = MemoryManager()
-	# manager.client.recreate_collection is deprecated in modern clients
-	# using delete + create pattern
 	collection_name = "stress_test"
 	manager.client.delete_collection(collection_name)
 	manager.client.create_collection(
 		collection_name=collection_name, vectors_config=models.VectorParams(size=cfg.VECTOR_SIZE, distance=models.Distance.COSINE)
 	)
-
-	# 1. Concurrency
 	target = manager.add_memory("stress_test", "Neo is the One")
 	attack_clone_army(manager, target)
-
-	# 2. Injection
 	attack_poison_pill(manager)
-
-	# 3. Erosion Load
 	attack_erosion_flood(manager, target)
-
 	logger.info("--- STRESS TEST COMPLETE ---")
 
 

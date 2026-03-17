@@ -17,10 +17,6 @@ import pytest
 
 import red_pill.config as cfg
 
-# ─────────────────────────────────────────────────────────────────────────────
-# TST-F02: ToneAnalyzer fallback scroll
-# ─────────────────────────────────────────────────────────────────────────────
-
 
 class TestToneAnalyzerFallback:
 	"""TST-F02: get_dominant_mood() must degrade gracefully on scroll failure."""
@@ -40,13 +36,7 @@ class TestToneAnalyzerFallback:
 
 		mock_manager = MagicMock()
 		orange_point = self._make_point("orange")
-
-		# First call (ordered) raises, second call (plain) succeeds
-		mock_manager.client.scroll.side_effect = [
-			Exception("order_by not supported"),
-			([orange_point], None),
-		]
-
+		mock_manager.client.scroll.side_effect = [Exception("order_by not supported"), ([orange_point], None)]
 		result = ToneAnalyzer.get_dominant_mood(manager=mock_manager)
 		assert result == "orange"
 		assert mock_manager.client.scroll.call_count == 2
@@ -57,7 +47,6 @@ class TestToneAnalyzerFallback:
 
 		mock_manager = MagicMock()
 		mock_manager.client.scroll.side_effect = Exception("DB offline")
-
 		result = ToneAnalyzer.get_dominant_mood(manager=mock_manager)
 		assert result == cfg.DEFAULT_COLOR
 
@@ -68,7 +57,6 @@ class TestToneAnalyzerFallback:
 		mock_manager = MagicMock()
 		immune_point = self._make_point("cyan", immune=True)
 		mock_manager.client.scroll.return_value = ([immune_point], None)
-
 		result = ToneAnalyzer.get_dominant_mood(manager=mock_manager)
 		assert result == cfg.DEFAULT_COLOR
 
@@ -78,7 +66,6 @@ class TestToneAnalyzerFallback:
 
 		mock_manager = MagicMock()
 		mock_manager.client.scroll.return_value = ([], None)
-
 		result = ToneAnalyzer.get_dominant_mood(manager=mock_manager)
 		assert result == cfg.DEFAULT_COLOR
 
@@ -90,7 +77,6 @@ class TestToneAnalyzerFallback:
 		gray_point = self._make_point(cfg.DEFAULT_COLOR)
 		yellow_point = self._make_point("yellow")
 		mock_manager.client.scroll.return_value = ([gray_point, yellow_point], None)
-
 		result = ToneAnalyzer.get_dominant_mood(manager=mock_manager)
 		assert result == "yellow"
 
@@ -100,17 +86,9 @@ class TestToneAnalyzerFallback:
 
 		mock_manager = MagicMock()
 		mock_manager.client.scroll.return_value = ([], None)
-
-		# If manager is passed, MemoryManager() constructor must NOT be called.
-		# Patch at the source module since the import is done lazily inside the method.
 		with patch("red_pill.memory.MemoryManager") as mock_cls:
 			ToneAnalyzer.get_dominant_mood(manager=mock_manager)
 			mock_cls.assert_not_called()
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# TST-F03: Windows fcntl fallback
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 class TestWindowsFcntlFallback:
@@ -126,28 +104,22 @@ class TestWindowsFcntlFallback:
 		complete without raising. It should read/write the state file normally
 		but skip the flock calls.
 		"""
-		# Remove fcntl from sys.modules to simulate Windows
 		fcntl_backup = sys.modules.get("fcntl")
 		sys.modules["fcntl"] = None  # type: ignore
-
 		try:
 			state_file = tmp_path / "metabolism_state.json"
 			cfg.METABOLISM_STATE_FILE = str(state_file)
 			cfg.METABOLISM_ENABLED = True
-			cfg.METABOLISM_COOLDOWN = 0  # Force cycle
-
+			cfg.METABOLISM_COOLDOWN = 0
 			with patch("red_pill.memory.QdrantClient"), patch("red_pill.memory.MemoryManager.apply_erosion"):
 				from red_pill.memory import MemoryManager
 
 				manager = MemoryManager(url="http://mock:6333")
-				# Should not raise even without fcntl
 				try:
 					manager._run_metabolism_cycle()
 				except ImportError as e:
 					pytest.fail(f"ImportError from missing fcntl — platform isolation failed: {e}")
-
 		finally:
-			# Restore fcntl
 			if fcntl_backup is not None:
 				sys.modules["fcntl"] = fcntl_backup
 			elif "fcntl" in sys.modules:
@@ -159,34 +131,27 @@ class TestWindowsFcntlFallback:
 		even if fcntl.flock() is unavailable — they should degrade to a
 		plain file write/read without raising.
 		"""
-
 		fcntl_backup = sys.modules.get("fcntl")
 		sys.modules["fcntl"] = None  # type: ignore
-
 		try:
 			state_file = tmp_path / "metabolism_test.json"
 			cfg.METABOLISM_STATE_FILE = str(state_file)
-
 			with patch("red_pill.memory.QdrantClient"):
 				from red_pill.memory import MemoryManager
 
 				manager = MemoryManager(url="http://mock:6333")
-
 				with open(state_file, "w+") as f:
 					try:
 						manager._write_metabolism_state(f, 1234567890.0, skip_next_erosion=False)
 					except ImportError as e:
 						pytest.fail(f"write_metabolism_state raised ImportError without fcntl: {e}")
-
 				with open(state_file, "r+") as f:
 					try:
 						last_run, skip = manager._read_metabolism_state(f)
 					except ImportError as e:
 						pytest.fail(f"read_metabolism_state raised ImportError without fcntl: {e}")
-
 				assert last_run == pytest.approx(1234567890.0, abs=0.001)
 				assert skip is False
-
 		finally:
 			if fcntl_backup is not None:
 				sys.modules["fcntl"] = fcntl_backup

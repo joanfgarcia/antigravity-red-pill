@@ -13,10 +13,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Import handler under test
-# ─────────────────────────────────────────────────────────────────────────────
-
 pytestmark = pytest.mark.asyncio
 
 
@@ -43,11 +39,6 @@ def patch_hardware():
 			yield
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# get_hardware_status
-# ─────────────────────────────────────────────────────────────────────────────
-
-
 class TestGetHardwareStatus:
 	async def test_returns_text_content(self):
 		from red_pill.mcp_server import handle_call_tool
@@ -64,11 +55,6 @@ class TestGetHardwareStatus:
 		assert result[0].type == "text"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# get_dashboard
-# ─────────────────────────────────────────────────────────────────────────────
-
-
 class TestGetDashboard:
 	async def test_dashboard_contains_header(self):
 		from red_pill.mcp_server import handle_call_tool
@@ -81,11 +67,6 @@ class TestGetDashboard:
 
 		result = await handle_call_tool("get_dashboard", {})
 		assert "TestGPU" in result[0].text
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# control_bunker
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 class TestControlBunker:
@@ -127,11 +108,6 @@ class TestControlBunker:
 			assert "Failure" in result[0].text or "DB down" in result[0].text
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# edit_memory
-# ─────────────────────────────────────────────────────────────────────────────
-
-
 class TestEditMemory:
 	async def test_successful_edit(self):
 		from red_pill.mcp_server import handle_call_tool
@@ -139,10 +115,7 @@ class TestEditMemory:
 		mock_mgr = MagicMock()
 		mock_mgr.update_memory.return_value = True
 		with patch("red_pill.mcp_server.MemoryManager", return_value=mock_mgr):
-			result = await handle_call_tool(
-				"edit_memory",
-				{"collection": "work_memories", "id": "abc-123", "color": "yellow"},
-			)
+			result = await handle_call_tool("edit_memory", {"collection": "work_memories", "id": "abc-123", "color": "yellow"})
 			assert "updated" in result[0].text.lower() or "abc-123" in result[0].text
 
 	async def test_failed_edit(self):
@@ -160,11 +133,6 @@ class TestEditMemory:
 		with patch("red_pill.mcp_server.MemoryManager", side_effect=RuntimeError("DB offline")):
 			result = await handle_call_tool("edit_memory", {"collection": "work_memories", "id": "xyz"})
 			assert "Failed" in result[0].text or "DB offline" in result[0].text
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# run_security_audit
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 class TestRunSecurityAudit:
@@ -191,11 +159,6 @@ class TestRunSecurityAudit:
 				assert "Failed" in result[0].text or "out of memory" in result[0].text
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# search_memory_research
-# ─────────────────────────────────────────────────────────────────────────────
-
-
 class TestSearchMemoryResearch:
 	async def test_successful_research(self):
 		from red_pill.mcp_server import handle_call_tool
@@ -220,20 +183,11 @@ class TestSearchMemoryResearch:
 				assert "Failed" in result[0].text
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# check_system_health
-# ─────────────────────────────────────────────────────────────────────────────
-
-
 class TestCheckSystemHealth:
 	async def test_healthy_system(self):
 		from red_pill.mcp_server import handle_call_tool
 
-		swarm_result = _make_swarm_result(
-			status="success",
-			status_val="healthy",
-			checks=[{"component": "qdrant", "status": "OK"}],
-		)
+		swarm_result = _make_swarm_result(status="success", status_val="healthy", checks=[{"component": "qdrant", "status": "OK"}])
 		swarm_result.result["status"] = "healthy"
 		swarm_result.result["checks"] = [{"component": "qdrant", "status": "OK"}]
 		mock_gru = MagicMock()
@@ -253,11 +207,6 @@ class TestCheckSystemHealth:
 			with patch("red_pill.mcp_server.KeymakerMinion"):
 				result = await handle_call_tool("check_system_health", {})
 				assert "Failed" in result[0].text
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# read_core_directives
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 class TestReadCoreDirectives:
@@ -280,20 +229,12 @@ class TestReadCoreDirectives:
 			assert "Failed" in result[0].text or "DB error" in result[0].text
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# compress_prompt
-# ─────────────────────────────────────────────────────────────────────────────
-
-
 class TestCompressPrompt:
 	async def test_successful_compression(self):
 		from red_pill.mcp_server import handle_call_tool
 
 		swarm_result = _make_swarm_result(
-			status="success",
-			original_length=500,
-			compressed_length=120,
-			compressed_prompt="- task: fix bug\n- context: auth module",
+			status="success", original_length=500, compressed_length=120, compressed_prompt="- task: fix bug\n- context: auth module"
 		)
 		mock_gru = MagicMock()
 		mock_gru.deploy_swarm = AsyncMock(return_value=[swarm_result])
@@ -314,19 +255,11 @@ class TestCompressPrompt:
 				assert "Failed" in result[0].text
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# get_emotional_sync
-# ─────────────────────────────────────────────────────────────────────────────
-
-
 class TestGetEmotionalSync:
 	async def test_returns_mood_and_directive(self):
 		from red_pill.mcp_server import handle_call_tool
 
-		with patch(
-			"red_pill.mcp_server.get_current_sync_state",
-			return_value={"mood": "yellow", "directive": "Optimistic framing."},
-		):
+		with patch("red_pill.mcp_server.get_current_sync_state", return_value={"mood": "yellow", "directive": "Optimistic framing."}):
 			result = await handle_call_tool("get_emotional_sync", {})
 			assert "YELLOW" in result[0].text or "yellow" in result[0].text
 			assert "Optimistic" in result[0].text
@@ -339,22 +272,12 @@ class TestGetEmotionalSync:
 			assert "Failed" in result[0].text or "Qdrant down" in result[0].text
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Unknown tool
-# ─────────────────────────────────────────────────────────────────────────────
-
-
 class TestUnknownTool:
 	async def test_unknown_tool_raises_value_error(self):
 		from red_pill.mcp_server import handle_call_tool
 
 		with pytest.raises(ValueError, match="Unknown tool"):
 			await handle_call_tool("definitely_not_a_real_tool", {})
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# handle_list_prompts
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 class TestListPrompts:
@@ -364,11 +287,6 @@ class TestListPrompts:
 		result = await handle_list_prompts()
 		assert len(result) == 1
 		assert result[0].name == "Control-Panel"
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# handle_get_prompt
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 class TestGetPrompt:
@@ -386,11 +304,6 @@ class TestGetPrompt:
 			await handle_get_prompt("NonExistentPrompt", {})
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# handle_list_tools
-# ─────────────────────────────────────────────────────────────────────────────
-
-
 class TestListTools:
 	async def test_returns_all_tools(self):
 		from red_pill.mcp_server import handle_list_tools
@@ -403,11 +316,6 @@ class TestListTools:
 		assert len(result) >= 9
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# control_bunker: rotate and purge
-# ─────────────────────────────────────────────────────────────────────────────
-
-
 class TestControlBunkerAdditional:
 	async def test_rotate_command(self):
 		import sys
@@ -417,8 +325,7 @@ class TestControlBunkerAdditional:
 
 		fake_scripts = types.ModuleType("scripts")
 		fake_rotate = types.ModuleType("scripts.rotate_keys")
-		fake_rotate.rotate = MagicMock()
-
+		fake_rotate.rotate = MagicMock()  # type: ignore
 		sys.modules["scripts"] = fake_scripts
 		sys.modules["scripts.rotate_keys"] = fake_rotate
 		try:
@@ -438,11 +345,6 @@ class TestControlBunkerAdditional:
 		assert "purge" in result[0].text.lower() or "Purge" in result[0].text
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# run_security_audit: with findings
-# ─────────────────────────────────────────────────────────────────────────────
-
-
 class TestAuditWithFindings:
 	async def test_audit_with_critical_findings(self):
 		from red_pill.mcp_server import handle_call_tool
@@ -459,11 +361,6 @@ class TestAuditWithFindings:
 			with patch("red_pill.mcp_server.SmithMinion"):
 				result = await handle_call_tool("run_security_audit", {"path": "./src"})
 		assert "CRITICAL" in result[0].text or "auth.py" in result[0].text
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Additional tools and edge cases (COV recovery)
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 class TestMCPAdditionalTools:
@@ -496,11 +393,9 @@ class TestMCPAdditionalTools:
 
 		fake_scripts = types.ModuleType("scripts")
 		fake_update = types.ModuleType("scripts.update_env")
-		fake_update.update_env = MagicMock()
-
+		fake_update.update_env = MagicMock()  # type: ignore
 		sys.modules["scripts"] = fake_scripts
 		sys.modules["scripts.update_env"] = fake_update
-
 		try:
 			with patch("scripts.update_env.update_env") as mock_env:
 				result = await handle_call_tool("adjust_sleep_knobs", {"chunk_size": 1000, "cull_threshold": 0.5})
@@ -593,7 +488,7 @@ class TestMainBlock:
 			with patch("red_pill.swarm.agents.edge_engine.EdgeEngine") as MockEdge:
 				engine = MockEdge.return_value
 				engine._ensure_loaded.return_value = None
-				engine.llm = None  # No SLM -> skip short-circuit
+				engine.llm = None
 				with patch("red_pill.config.INTERCEPTOR_ENABLED", True):
 					result = await handle_call_tool("interceptor_rp", {"user_prompt": "test prompt"})
 				assert "bunker_context" in result[0].text

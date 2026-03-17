@@ -10,7 +10,6 @@ class TestGetDominantMood:
 	def _make_manager(self, points, fallback_exception=None):
 		mgr = MagicMock()
 		if fallback_exception:
-			# First scroll raises, second scroll returns points
 			mgr.client.scroll.side_effect = [fallback_exception, (points, None)]
 		else:
 			mgr.client.scroll.return_value = (points, None)
@@ -67,11 +66,10 @@ class TestGetDominantMood:
 class TestGetToneDirective:
 	def test_known_color_returns_directive(self):
 		"""Line 88: known color → correct directive from CHROMA_TONE_MAPPING."""
-		# Use any key that exists in the mapping
 		for color, directive in cfg.CHROMA_TONE_MAPPING.items():
 			result = ToneAnalyzer.get_tone_directive(color)
 			assert result == directive
-			break  # just test one
+			break
 
 	def test_unknown_color_returns_default_directive(self):
 		"""Line 88: unknown color → falls back to DEFAULT_COLOR directive."""

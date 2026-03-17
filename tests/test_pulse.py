@@ -15,10 +15,6 @@ import pytest
 
 import red_pill.config as cfg
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Fixtures
-# ─────────────────────────────────────────────────────────────────────────────
-
 
 @pytest.fixture(autouse=True)
 def isolate_heartbeat(tmp_path):
@@ -26,11 +22,6 @@ def isolate_heartbeat(tmp_path):
 	heartbeat_path = str(tmp_path / "pulse.json")
 	with patch("red_pill.utils.pulse.HEARTBEAT_FILE", heartbeat_path):
 		yield heartbeat_path
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# record_interaction()
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 class TestRecordInteraction:
@@ -46,25 +37,21 @@ class TestRecordInteraction:
 		"""Second call after a gap returns a positive delta_seconds."""
 		from red_pill.utils.pulse import record_interaction
 
-		# Write a fake previous heartbeat 10 seconds ago
 		heartbeat_path = str(tmp_path / "pulse.json")
 		with open(heartbeat_path, "w") as f:
 			json.dump({"last_interaction": time.time() - 10.0}, f)
-
 		with patch("red_pill.utils.pulse.HEARTBEAT_FILE", heartbeat_path):
 			result = record_interaction()
-			assert result["delta_seconds"] >= 9  # At least 9s gap (tolerance)
-			assert result["delta_seconds"] <= 15  # Not absurdly large
+			assert result["delta_seconds"] >= 9
+			assert result["delta_seconds"] <= 15
 
 	def test_burst_detection(self, tmp_path):
 		"""Interactions within CADENCE_BURST_THRESHOLD are classified as 'burst'."""
 		from red_pill.utils.pulse import record_interaction
 
 		heartbeat_path = str(tmp_path / "pulse.json")
-		# Write a heartbeat 0.5s ago (below burst threshold)
 		with open(heartbeat_path, "w") as f:
 			json.dump({"last_interaction": time.time() - 0.5}, f)
-
 		with patch("red_pill.utils.pulse.HEARTBEAT_FILE", heartbeat_path):
 			result = record_interaction()
 			assert result["status"] == "burst"
@@ -74,11 +61,9 @@ class TestRecordInteraction:
 		from red_pill.utils.pulse import record_interaction
 
 		heartbeat_path = str(tmp_path / "pulse.json")
-		# Write a heartbeat far in the past (beyond absence threshold)
 		far_past = time.time() - (cfg.CADENCE_ABSENCE_THRESHOLD + 100)
 		with open(heartbeat_path, "w") as f:
 			json.dump({"last_interaction": far_past}, f)
-
 		with patch("red_pill.utils.pulse.HEARTBEAT_FILE", heartbeat_path):
 			result = record_interaction()
 			assert result["status"] == "dormant"
@@ -88,11 +73,9 @@ class TestRecordInteraction:
 		from red_pill.utils.pulse import record_interaction
 
 		heartbeat_path = str(tmp_path / "pulse.json")
-		# Gap between burst and absence thresholds
-		mid_gap = time.time() - ((cfg.CADENCE_BURST_THRESHOLD + cfg.CADENCE_ABSENCE_THRESHOLD) / 2)
+		mid_gap = time.time() - (cfg.CADENCE_BURST_THRESHOLD + cfg.CADENCE_ABSENCE_THRESHOLD) / 2
 		with open(heartbeat_path, "w") as f:
 			json.dump({"last_interaction": mid_gap}, f)
-
 		with patch("red_pill.utils.pulse.HEARTBEAT_FILE", heartbeat_path):
 			result = record_interaction()
 			assert result["status"] == "normal"
@@ -117,15 +100,9 @@ class TestRecordInteraction:
 		heartbeat_path = str(tmp_path / "pulse.json")
 		with open(heartbeat_path, "w") as f:
 			f.write("{not valid json")
-
 		with patch("red_pill.utils.pulse.HEARTBEAT_FILE", heartbeat_path):
 			result = record_interaction()
 			assert result["status"] == "initial"
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# _atomic_write_heartbeat()
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 class TestAtomicWrite:
@@ -158,11 +135,6 @@ class TestAtomicWrite:
 				data = json.load(f)
 			assert data["last_interaction"] == pytest.approx(9999.5)
 			assert data["prev_interaction"] == pytest.approx(1234.0)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# _human_time()
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 class TestHumanTime:

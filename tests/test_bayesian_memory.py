@@ -88,8 +88,7 @@ class TestDualKernelRouting:
 
 	def test_utility_score_is_normalized(self):
 		"""Bayesian utility maps to the same [0-10] score range as FSRS."""
-		# Strong engram: alpha=5, beta=1 -> utility=0.833 -> score=8.33
 		utility = BayesianInferenceEngine.calculate_utility(5.0, 1.0)
 		score = BayesianInferenceEngine.normalize_to_reinforcement_score(utility)
 		assert 0.0 <= score <= 10.0
-		assert score > 5.0  # A strong engram should be above midpoint
+		assert score > 5.0

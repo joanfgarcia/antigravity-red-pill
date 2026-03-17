@@ -1,70 +1,49 @@
 import re
 from pathlib import Path
 
-# Protocol Criteria
-TAB_INDENT_ONLY = re.compile(r"^ +")
-ORNAMENTAL_COMMENT = re.compile(r"^#\s*[-=*#]{3,}")
-CODE_COMMENT = re.compile(r"^#\s*(def|class|if|import|for|while|try|with|return|from)\b")
-FILE_PROTOCOL_LINK = re.compile(r"file://")
-HOME_DIR_PATH = re.compile(r"/(home|Users)/[a-zA-Z0-9_-]+/")
-
+TAB_INDENT_ONLY = re.compile("^ +")
+ORNAMENTAL_COMMENT = re.compile("^#\\s*[-=*#]{3,}")
+CODE_COMMENT = re.compile("^#\\s*(def|class|if|import|for|while|try|with|return|from)\\b")
+FILE_PROTOCOL_LINK = re.compile("file://")
+HOME_DIR_PATH = re.compile("/(home|Users)/[a-zA-Z0-9_-]+/")
 ROOT_DIR = Path(__file__).parent.parent
 TARGET_DIRS = ["src", "scripts", "docs"]
 EXTENSIONS = [".py", ".sh", ".md"]
-# Specifically check root README and QUICKSTART
 ROOT_FILES = ["README.md", "QUICKSTART.md"]
 
 
 def test_sound_of_silence_compliance():
 	"""Ensures the codebase adheres to the Sound of Silence protocol."""
 	violations = []
-
-	# 1. Collect all candidate files
 	candidate_files = []
 	for target in TARGET_DIRS:
 		target_path = ROOT_DIR / target
 		if target_path.exists():
 			candidate_files.extend([f for f in target_path.rglob("*") if f.suffix in EXTENSIONS])
-
 	for rf in ROOT_FILES:
 		root_f = ROOT_DIR / rf
 		if root_f.exists():
 			candidate_files.append(root_f)
-
 	for file_path in candidate_files:
-		# C. File naming checks
 		if file_path.suffix == ".md":
 			stem = file_path.stem
-			# Remove version strings like 'v5.6.2' to allow lowercase 'v' before checking case
-			stem_no_version = re.sub(r'v\d+(\.\d+)*', '', stem)
+			stem_no_version = re.sub("v\\d+(\\.\\d+)*", "", stem)
 			if stem_no_version != stem_no_version.upper():
 				violations.append(f"{file_path.relative_to(ROOT_DIR)} - Markdown file name must be UPPER_SNAKE_CASE")
-
 		content = file_path.read_text()
 		lines = content.splitlines()
-
 		for i, line in enumerate(lines, 1):
-			# A. Check for non-portable file:// links (All files, except certification snapshots)
 			if "certification" not in [p.lower() for p in file_path.parts] and FILE_PROTOCOL_LINK.search(line):
 				violations.append(f"{file_path.relative_to(ROOT_DIR)}:{i} - Absolute file:// link detected")
-
 			if HOME_DIR_PATH.search(line) and "SOVEREIGNTY_PROOF.json" not in file_path.name:
 				violations.append(f"{file_path.relative_to(ROOT_DIR)}:{i} - Hardcoded home directory path detected")
-
-			# B. Logic checks (Only for source/scripts, skip .md)
 			if file_path.suffix in [".py", ".sh"]:
-				# 1. Indentation Check (Tabs only)
 				if TAB_INDENT_ONLY.match(line):
 					violations.append(f"{file_path.relative_to(ROOT_DIR)}:{i} - Space indentation detected")
-
-				# 2. Ornamental Comment Check
 				if ORNAMENTAL_COMMENT.match(line):
 					violations.append(f"{file_path.relative_to(ROOT_DIR)}:{i} - Ornamental comment noise detected")
-
-				# 3. Commented-out Code Check
 				if CODE_COMMENT.match(line):
 					violations.append(f"{file_path.relative_to(ROOT_DIR)}:{i} - Commented-out code detected")
-
 	if violations:
 		error_msg = "\n".join(violations)
 		raise AssertionError(f"Sound of Silence Violations Found:\n{error_msg}")
@@ -77,26 +56,18 @@ def test_markdown_links_compliance():
 	for target in TARGET_DIRS:
 		target_path = ROOT_DIR / target
 		if target_path.exists():
-			# Support both .md and .yaml containing links if needed, mostly .md
 			candidate_files.extend(list(target_path.rglob("*.md")))
-
 	for rf in ROOT_FILES:
 		root_f = ROOT_DIR / rf
 		if root_f.exists():
 			candidate_files.append(root_f)
-
 	for file_path in candidate_files:
 		content = file_path.read_text(encoding="utf-8")
-		# Simple regex to catch [text](link). We skip:
-		# http, mailto, file, absolute paths starting with /, and home dir paths starting with ~
-		# Group 1 captures the link path, ignoring any #anchor at the end
-		links = re.findall(r"\[.+?\]\((?!http|mailto|file|/|~)([^)#\s]+)(?:#[^\)]*)?\)", content)
-
+		links = re.findall("\\[.+?\\]\\((?!http|mailto|file|/|~)([^)#\\s]+)(?:#[^\\)]*)?\\)", content)
 		for link in links:
 			target_path = (file_path.parent / link).resolve()
 			if not target_path.exists():
 				violations.append(f"{file_path.relative_to(ROOT_DIR)}: '{link}' -> missing target")
-
 	if violations:
 		error_msg = "\n".join(violations)
 		raise AssertionError(f"Broken Markdown Links Found:\n{error_msg}")

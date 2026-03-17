@@ -1,8 +1,8 @@
 import logging
-import os
-import re
 import math
+import os
 import random
+import re
 from typing import Any, Dict, List
 
 try:
@@ -14,6 +14,7 @@ import red_pill.config as cfg
 from red_pill.swarm.agents.edge_engine import EdgeEngine
 
 logger = logging.getLogger(__name__)
+
 
 def _laplace_noise(scale: float) -> float:
 	u = random.uniform(-0.5, 0.5)

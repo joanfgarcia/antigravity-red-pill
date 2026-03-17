@@ -1,5 +1,3 @@
-import json
-import socket
 import subprocess
 from typing import Any, Dict
 
@@ -50,8 +48,6 @@ class KeymakerMinion(Minion):
 			results["checks"].append({"component": "Qdrant API", "status": "UP" if results["qdrant_online"] else "DOWN"})
 		except Exception:
 			results["checks"].append({"component": "Qdrant API", "status": "UNREACHABLE"})
-
-
 
 		usage = psutil.disk_usage("/")
 		results["checks"].append({"component": "Disk Storage", "status": f"{usage.percent}% used", "free_gb": round(usage.free / (1024**3), 2)})
