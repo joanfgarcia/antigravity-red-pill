@@ -1,6 +1,8 @@
 import logging
 import os
 import re
+import math
+import random
 from typing import Any, Dict, List
 
 try:
@@ -12,6 +14,10 @@ import red_pill.config as cfg
 from red_pill.swarm.agents.edge_engine import EdgeEngine
 
 logger = logging.getLogger(__name__)
+
+def _laplace_noise(scale: float) -> float:
+	u = random.uniform(-0.5, 0.5)
+	return -scale * math.copysign(1.0, u) * math.log(1.0 - 2.0 * abs(u))
 
 
 class HiveMind:
@@ -171,6 +177,14 @@ class HiveMind:
 
 		# v5.6.0: Forced Anonymization before crossing the boundary
 		masked_content = self._mask_identity_signals(content)
+
+		# SEC-HIVEMIND (v6.1.0): Differential Privacy via Laplace Noise
+		# Protects against vector inversion attacks.
+		if getattr(cfg, "HIVEMIND_DP_NOISE", True):
+			epsilon = getattr(cfg, "HIVEMIND_DP_EPSILON", 1.0)
+			# Assuming normalized sentence embeddings are bounded within [-1, 1], sensitivity = 1.0
+			scale = 1.0 / max(epsilon, 0.01)
+			vector = [v + _laplace_noise(scale) for v in vector]
 
 		try:
 			if not utility.has_collection(collection_name):
