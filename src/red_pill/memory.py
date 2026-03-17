@@ -22,9 +22,6 @@ from red_pill.hive import HiveMind
 from red_pill.schemas import CreateEngramRequest, EngramPayload
 from red_pill.utils.affect import (
 	calculate_fsrs_initial_parameters,
-	calculate_fsrs_new_stability,
-	calculate_fsrs_retrievability,
-	get_emotional_stability_multiplier,
 )
 from red_pill.utils.emotion import get_chroma_for_emotion, get_emotion, get_emotions
 from red_pill.utils.fragmentation import synaptic_split

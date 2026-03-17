@@ -1,5 +1,6 @@
 import base64
 import os
+
 import pytest
 
 from red_pill.swarm.crypto import SwarmCrypto

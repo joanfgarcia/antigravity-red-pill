@@ -491,6 +491,7 @@ class TestMCPAdditionalTools:
 	async def test_adjust_sleep_knobs(self):
 		import sys
 		import types
+
 		from red_pill.mcp_server import handle_call_tool
 
 		fake_scripts = types.ModuleType("scripts")

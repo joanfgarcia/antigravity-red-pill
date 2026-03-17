@@ -1,12 +1,12 @@
-import json
 import http.client
-import socket
-import os
+import json
 import logging
+import os
+import socket
 from typing import Any, Dict
 
-from red_pill.swarm.base import Minion
 import red_pill.config as cfg
+from red_pill.swarm.base import Minion
 
 logger = logging.getLogger("red_pill.swarm.samantha")
 
