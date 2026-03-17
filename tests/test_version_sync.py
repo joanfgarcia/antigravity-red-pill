@@ -52,7 +52,7 @@ def test_changelog_is_latest():
 def test_python_runtime_sync():
 	"""Ensures the Python version in CI matches the Dockerfile target."""
 	ci_content = (ROOT_DIR / ".github" / "workflows" / "ci.yml").read_text()
-	docker_content = (ROOT_DIR / "tests" / "Dockerfile.keymaker").read_text()
+	docker_content = (ROOT_DIR / "docker" / "Dockerfile.keymaker").read_text()
 
 	# Find the list of versions in the matrix
 	ci_match = re.search(r"python-version:\s*\[([^\]]+)\]", ci_content)
