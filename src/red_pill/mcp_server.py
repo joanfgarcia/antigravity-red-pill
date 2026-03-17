@@ -20,7 +20,6 @@ from red_pill.soul import SoulManager
 from red_pill.swarm.agents.compressor import CompressorMinion
 from red_pill.swarm.agents.keymaker import KeymakerMinion
 from red_pill.swarm.agents.oracle import OracleMinion
-from red_pill.swarm.agents.samantha import SamanthaMinion
 from red_pill.swarm.agents.smith import SmithMinion
 from red_pill.swarm.orchestrator import GruOrchestrator
 from red_pill.telemetry import HardwareSentinel, get_telemetry_report
@@ -349,11 +348,11 @@ async def handle_run_local_healer(arguments: Dict[str, Any]):
 	schema={"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]},
 )
 async def handle_run_samantha_analysis(arguments: Dict[str, Any]):
+	import os
 	import subprocess
+	import sys
 	import tempfile
 	import uuid
-	import os
-	import sys
 
 	event_id = str(uuid.uuid4())
 	text_input = arguments["text"]
@@ -365,7 +364,7 @@ async def handle_run_samantha_analysis(arguments: Dict[str, Any]):
 
 	# We construct a completely detached background script call
 	script_path = os.path.join(cfg.IA_DIR, "scripts", "samantha_critic.py")
-	
+
 	python_exe = sys.executable
 
 	# The CLI will read the file, run the swarm, save to qdrant, and delete the temp file.
@@ -383,7 +382,7 @@ async def handle_run_samantha_analysis(arguments: Dict[str, Any]):
 			stderr=subprocess.DEVNULL,
 			start_new_session=True # Detach from MCP server process group
 		)
-		
+
 		return [
 			types.TextContent(
 				type="text",
@@ -490,17 +489,17 @@ async def handle_swarm_check_mailbox(arguments: Dict[str, Any]):
 	)
 	community = arguments.get("community_alias", "legion_770")
 	messages = skill.check_mailbox(community_alias=community)
-	
+
 	if not messages:
 		return [types.TextContent(type="text", text=f"Scanning Mailbox for {skill.agent_id}...\n[Status: No new messages]")]
-	
+
 	formatted = f"Scanning Mailbox for {skill.agent_id}...\n[Status: {len(messages)} messages found]\n\n"
 	for idx, msg in enumerate(messages):
 		formatted += f"--- Message {idx + 1} ---\n"
 		formatted += f"From: {msg.get('sender', 'Unknown')}\n"
 		formatted += f"Intent: {msg.get('intent', 'Unknown')}\n"
 		formatted += f"Data: {msg.get('data', {})}\n"
-	
+
 	return [types.TextContent(type="text", text=formatted)]
 
 
@@ -564,6 +563,9 @@ async def handle_mystique_suggest_skin(arguments: Dict[str, Any]):
 async def handle_interceptor_rp(arguments: Dict[str, Any]):
 	user_prompt = arguments.get("user_prompt", "")
 
+	if not getattr(cfg, "INTERCEPTOR_ENABLED", False):
+		return [types.TextContent(type="text", text=user_prompt)]
+
 	try:
 		from red_pill.memory import MemoryManager
 		from red_pill.swarm.agents.edge_engine import EdgeEngine
@@ -613,6 +615,24 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 		wrapper = user_prompt
 		if background:
 			wrapper = f"<bunker_context>\n{background}\n</bunker_context>\n\n<user_request>\n{user_prompt}\n</user_request>"
+
+			# Auto-logging Interceptor: Record that this context was injected
+			try:
+				# Use a detached thread to prevent blocking
+				def _log_interceptor():
+					try:
+						mgr = MemoryManager()
+						mgr.record_interaction_pair(
+							user_prompt,
+							f"[INTERCEPTOR] Injected {len(results)} context chunks: {background[:100]}...",
+							role="assistant"
+						)
+					except Exception as inner_e:
+						logger.warning(f"Interceptor auto-logging failed: {inner_e}")
+
+				asyncio.create_task(asyncio.to_thread(_log_interceptor))
+			except Exception as log_e:
+				logger.warning(f"Failed to spawn interceptor auto-log task: {log_e}")
 
 		return [types.TextContent(type="text", text=wrapper)]
 

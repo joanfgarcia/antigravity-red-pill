@@ -260,6 +260,9 @@ MULTI_EMOTION_INFERENCE = os.getenv("MULTI_EMOTION_INFERENCE", "True").lower() =
 _semantic_str = os.getenv("SEMANTIC_INTENT_THRESHOLD", "Low").upper()
 SEMANTIC_INTENT_THRESHOLD = 0.6 if _semantic_str == "HIGH" else 0.3
 
+# MCP Interceptor
+INTERCEPTOR_ENABLED = str(os.getenv("INTERCEPTOR_ENABLED", "False")).lower() in ("true", "1", "yes")
+
 # SOVEREIGN PULSE (v6.0)
 # Enables background rituals (Maintenance, Audit, Proactive Synthesis).
 PULSE_ENABLED = os.getenv("PULSE_ENABLED", "True").lower() == "true"
