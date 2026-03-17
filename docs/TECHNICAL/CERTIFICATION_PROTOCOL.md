@@ -13,7 +13,7 @@ To allow auditors to analyze the system as a whole, all technical assets must be
 ### Aggregation Script (`scripts/prepare_certification.sh`):
 ```bash
 # Use git ls-files to respect .gitignore and only include tracked + untracked/non-ignored files.
-git ls-files --cached --others --exclude-standard | grep -vE '\.(png|jpg|jpeg|gif|pdf|ico)$' | while read f; do
+git ls-files --cached --others --exclude-standard | grep -vE '^docs/CERTIFICATION/' | grep -vE '\.(png|jpg|jpeg|gif|pdf|ico)$' | while read f; do
 	if [ "$f" != "RED_PILL_DIGEST.txt" ] && [ -f "$f" ]; then
 		echo -e "\n\n===== FILE: $f =====\n"
 		cat "$f"

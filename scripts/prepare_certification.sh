@@ -11,7 +11,7 @@ OUTPUT_FILE="RED_PILL_DIGEST.txt"
 echo "Aggregating project core into $OUTPUT_FILE from $ROOT_DIR..."
 
 # Use git ls-files to respect .gitignore and only include relevant source files.
-git ls-files --cached --others --exclude-standard | grep -vE '\.(png|jpg|jpeg|gif|pdf|ico|coverage|DS_Store|lock|pyc)$' | while read f; do
+git ls-files --cached --others --exclude-standard | grep -vE '^docs/CERTIFICATION/' | grep -vE '\.(png|jpg|jpeg|gif|pdf|ico|coverage|DS_Store|lock|pyc)$' | while read f; do
 	# Explicitly skip .env and the output file itself
 	if [ "$f" != "$OUTPUT_FILE" ] && [ "$f" != ".env" ] && [ -f "$f" ]; then
 		echo -e "\n\n===== FILE: $f =====\n"
