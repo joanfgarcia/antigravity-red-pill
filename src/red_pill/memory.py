@@ -899,7 +899,7 @@ class MemoryManager:
 					if hit_id_str not in assocs:
 						assocs.append(hit_id_str)
 						if len(assocs) > self.cfg.MAX_AXONS:
-							assocs = assocs[-self.cfg.MAX_AXONS :]
+							assocs = self._symmetric_axons_eviction(collection, assocs)
 						try:
 							self.client.set_payload(collection_name=collection, payload={"associations": assocs}, points=[p.id])
 							synapses_created += 1
@@ -907,6 +907,51 @@ class MemoryManager:
 							logger.debug(f"Dream association update failed: {e}")
 
 		return {"status": "ok", "synapses": synapses_created}
+
+	def _symmetric_axons_eviction(self, collection: str, assocs: List[Any]) -> List[Any]:
+		"""
+		ARCH-002: Hub-Aware Synaptic Pruning (Symmetric Eviction).
+		Prevents the "Hub Problem" encountered in dense graph datasets by evaluating
+		the absolute significance (reinforcement * importance) of the target node,
+		instead of relying solely on edge age.
+		"""
+		import math
+
+		if len(assocs) <= self.cfg.MAX_AXONS:
+			return assocs
+
+		try:
+			assoc_ids = [a["id"] if isinstance(a, dict) else str(a) for a in assocs]
+			records = self.client.retrieve(
+				collection_name=collection,
+				ids=assoc_ids,
+				with_payload=["importance", "reinforcement_score"]
+			)
+
+			hub_scores = {}
+			for r in records:
+				payload = r.payload or {}
+				imp = max(0.1, float(payload.get("importance", 1.0)))
+				reinf = max(0.1, float(payload.get("reinforcement_score", 1.0)))
+				hub_scores[str(r.id)] = imp * reinf
+
+			eviction_scores = {}
+			for i, assoc in enumerate(assocs):
+				a_id = assoc["id"] if isinstance(assoc, dict) else str(assoc)
+				h_score = hub_scores.get(a_id, 0.1)  # 0.1 for missing nodes (dead links)
+				# Age penalty: older items (lower index) get a tiny log penalty
+				e_score = h_score / math.log(i + 2)
+				eviction_scores[a_id] = e_score
+
+			num_to_evict = len(assocs) - self.cfg.MAX_AXONS
+			sorted_by_weakness = sorted(assocs, key=lambda x: eviction_scores[x["id"] if isinstance(x, dict) else str(x)])
+			victim_ids = {v["id"] if isinstance(v, dict) else str(v) for v in sorted_by_weakness[:num_to_evict]}
+
+			return [a for a in assocs if (a["id"] if isinstance(a, dict) else str(a)) not in victim_ids]
+
+		except Exception as e:
+			logger.warning(f"Symmetric eviction failed, falling back to chronological FIFO: {e}")
+			return assocs[-self.cfg.MAX_AXONS :]
 
 	def _calculate_decay(self, current_score: float, rate: float) -> float:
 		if self.cfg.DECAY_STRATEGY.lower() == "exponential":
