@@ -21,7 +21,7 @@ class MinionInbox:
 			self.db_path = os.path.join(cfg.BRAIN_PATH, "minion_inbox.db")
 		else:
 			self.db_path = db_path
-		
+
 		# Ensure the directory exists
 		os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
 		self._init_db()
@@ -66,7 +66,8 @@ class MinionInbox:
 				conn.row_factory = sqlite3.Row
 				cursor = conn.cursor()
 				cursor.execute(
-					"SELECT id, event_id, source, status, content, is_read, timestamp FROM inbox WHERE is_read = 0 ORDER BY timestamp DESC LIMIT ?", (limit,)
+					"SELECT id, event_id, source, status, content, is_read, timestamp FROM inbox WHERE is_read = 0 ORDER BY timestamp DESC LIMIT ?",
+					(limit,),
 				)
 				for row in cursor.fetchall():
 					reports.append(dict(row))

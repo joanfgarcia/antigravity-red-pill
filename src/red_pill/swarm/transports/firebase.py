@@ -21,7 +21,7 @@ class FirebaseTransport(SwarmTransport):
 		self.community_alias = community_alias
 		self.db_url = db_url
 		self.credential_path = credential_path
-		self._group_key: Optional[bytes] = None
+		self.mls_group: Optional[Any] = None
 		self._initialize_sdk()
 
 	def _initialize_sdk(self):
@@ -137,7 +137,7 @@ class FirebaseTransport(SwarmTransport):
 				if pk_b64:
 					group.add_member(node_id, base64.b64decode(pk_b64))
 
-			self._group_key = group.get_group_key()
+			self.mls_group = group
 			logger.info(f"[FirebaseTransport] Group key bootstrapped for {self.community_alias}")
 		except Exception as e:
 			logger.error(f"[FirebaseTransport] Group key bootstrap failed: {e}")

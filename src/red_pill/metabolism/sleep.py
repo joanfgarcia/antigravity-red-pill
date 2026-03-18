@@ -75,7 +75,7 @@ def distill_engram(raw_content: str) -> Dict[str, Any]:
 		}
 	).encode("utf-8")
 
-	req = urllib.request.Request(cfg.MLX_LM_URL, data=payload, headers={"Content-Type": "application/json"})
+	req = urllib.request.Request(getattr(cfg, "MLX_LM_URL", ""), data=payload, headers={"Content-Type": "application/json"})
 	import time
 
 	max_retries = 3
@@ -135,7 +135,7 @@ def synthesize_hub(summaries: List[str]) -> str:
 		}
 	).encode("utf-8")
 
-	req = urllib.request.Request(cfg.MLX_LM_URL, data=payload, headers={"Content-Type": "application/json"})
+	req = urllib.request.Request(getattr(cfg, "MLX_LM_URL", ""), data=payload, headers={"Content-Type": "application/json"})
 	try:
 		with urllib.request.urlopen(req, timeout=60) as response:
 			data = json.loads(response.read().decode())

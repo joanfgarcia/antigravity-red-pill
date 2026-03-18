@@ -12,6 +12,7 @@
 ### Added
 - Created `docs/ENV_REFERENCE.md` explaining all `.env` system configuration properties.
 - Implemented `MinionInbox` (SQLite) to intercept and store background Swarm Minion reports decoupling them from Qdrant.
+- **Phase 2.5 Complete**: Added automatic `key_epoch` TreeKEM ratcheting (Perfect Forward Secrecy) to Swarm Firebase messaging to ensure past messages cannot be compromised.
 
 ### Changed
 - All Minion MCP Tools (`run_security_audit`, `check_system_health`, etc.) have been converted to 100% asynchronous (fire-and-forget) with native OSD (`notify-send`) notifications upon completion.

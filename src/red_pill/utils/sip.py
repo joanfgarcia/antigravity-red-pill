@@ -88,7 +88,7 @@ async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
 				await writer.drain()
 				return
 
-			target_url = cfg.MLX_LM_URL
+			target_url = getattr(cfg, "MLX_LM_URL", "")
 
 			def fetch():
 				return requests.post(target_url, json=req_json, headers=out_headers, timeout=120)
@@ -114,7 +114,7 @@ async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
 				await writer.drain()
 
 		else:
-			base_url = cfg.MLX_LM_URL.replace("/v1/chat/completions", "")
+			base_url = getattr(cfg, "MLX_LM_URL", "").replace("/v1/chat/completions", "")
 			target_url = f"{base_url}{path}"
 
 			def fetch_fwd():

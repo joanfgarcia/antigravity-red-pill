@@ -73,8 +73,8 @@ class GruOrchestrator:
 		# Sensory Signal (User) - Silent by default per Operator directive
 		notify_user(title="Sovereign Swarm", message=message, sound=False, category="swarm")
 
-		import uuid
 		import json
+		import uuid
 
 		# Memory Signal (Agent) - For Turn-Zero recovery
 		try:
@@ -85,9 +85,11 @@ class GruOrchestrator:
 				"timestamp": time.time(),
 				"results_summary": [f"{r.minion_id}: {r.status}" for r in results],
 			}
-			
+
 			full_content = f"{message}\n\nMetadata: {json.dumps(metadata)}"
-			self.inbox.drop_report(event_id=event_id, source="GruOrchestrator", status="success" if success_count > 0 else "failed", content=full_content)
+			self.inbox.drop_report(
+				event_id=event_id, source="GruOrchestrator", status="success" if success_count > 0 else "failed", content=full_content
+			)
 		except Exception as e:
 			logger.error(f"SAS Inbox Hook failed: {e}")
 

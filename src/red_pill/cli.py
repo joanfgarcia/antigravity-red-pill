@@ -284,7 +284,7 @@ def main() -> None:
 		def filter(self, record):
 			try:
 				msg = str(record.msg)
-				secrets = [cfg.QDRANT_API_KEY, cfg.SIDECAR_AUTH_KEY, cfg.MILVUS_PASSWORD]
+				secrets = [cfg.QDRANT_API_KEY, getattr(cfg, "SIDECAR_AUTH_KEY", ""), getattr(cfg, "MILVUS_PASSWORD", "")]
 				for secret in secrets:
 					if secret and isinstance(secret, str) and len(secret) > 4:
 						msg = msg.replace(secret, f"***{secret[-4:]}")

@@ -7,6 +7,7 @@ from unittest.mock import patch
 import yaml
 
 import red_pill.config as cfg
+from red_pill.core.metabolism import MetabolismKernel
 from red_pill.memory import MemoryManager
 
 
@@ -55,9 +56,9 @@ class TestAuditLow(unittest.TestCase):
 		expected_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
 		self.assertEqual(len(expected_hash), 64)
 
-	@patch.object(MemoryManager, "_refresh_ttl_timestamps")
-	@patch.object(MemoryManager, "_read_metabolism_state")
-	@patch.object(MemoryManager, "_write_metabolism_state")
+	@patch.object(MetabolismKernel, "refresh_ttl_timestamps")
+	@patch.object(MetabolismKernel, "_read_state")
+	@patch.object(MetabolismKernel, "_write_state")
 	def test_cq_001_absence_guard_short_circuit(self, mock_write, mock_read, mock_refresh):
 		"""Verify CQ-001: Absence guard short-circuits to avoid immediate erosion."""
 		now = time.time()
@@ -67,7 +68,7 @@ class TestAuditLow(unittest.TestCase):
 			with patch("red_pill.memory.logger"):
 				with patch("builtins.open", unittest.mock.mock_open()):
 					with patch("fcntl.flock", return_value=None, create=True):
-						self.manager._run_metabolism_cycle()
+						self.manager.metabolism._run_cycle()
 		mock_refresh.assert_called_with("test_coll")
 		mock_write.assert_called()
 		call_args = mock_write.call_args

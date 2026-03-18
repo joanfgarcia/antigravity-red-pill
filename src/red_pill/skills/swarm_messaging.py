@@ -77,7 +77,21 @@ class SwarmMessagingSkill:
 			encrypted_pkg = SwarmCrypto.encrypt_payload(package, shared_key)
 			encrypted_pkg["mode"] = "mls_asymmetric"
 			encrypted_pkg["sender"] = self.agent_identity
+		elif transport and getattr(transport, "mls_group", None):
+			mls_group = transport.mls_group  # type: ignore
+			# Use TreeKEM Group Key with Ratcheting (Perfect Forward Secrecy)
+			if mls_group.should_rotate():
+				mls_group.rotate_key()
+
+			mls_group.increment_message()
+			group_key = mls_group.get_group_key()
+
+			encrypted_pkg = SwarmCrypto.encrypt_payload(package, group_key)
+			encrypted_pkg["mode"] = "mls_group"
+			encrypted_pkg["key_epoch"] = mls_group.key_epoch
+			encrypted_pkg["sender"] = self.agent_identity
 		else:
+			# Legacy static fallback
 			encrypted_pkg = SwarmCrypto.encrypt_payload(package, self.shared_secret)
 			encrypted_pkg["mode"] = "bond"
 			encrypted_pkg["sender"] = self.agent_identity
@@ -124,6 +138,18 @@ class SwarmMessagingSkill:
 					return SwarmCrypto.decrypt_payload(pkg, shared_key)
 				else:
 					return None
+			elif mode == "mls_group":
+				if not transport or not getattr(transport, "mls_group", None):
+					return None
+
+				mls_group = transport.mls_group  # type: ignore
+				# Synchronize the Ratchet (PFS)
+				sender_epoch = pkg.get("key_epoch", 1)
+				mls_group.sync_epoch(sender_epoch)
+
+				group_key = mls_group.get_group_key()
+				mls_group.increment_message()
+				return SwarmCrypto.decrypt_payload(pkg, group_key)
 			else:
 				return SwarmCrypto.decrypt_payload(pkg, self.shared_secret)
 		except Exception as e:

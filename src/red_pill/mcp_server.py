@@ -192,7 +192,7 @@ async def handle_run_security_audit(arguments: Dict[str, Any]):
 		try:
 			from red_pill.core.inbox import MinionInbox
 			from red_pill.utils.observer import notify_user
-			
+
 			results = await GruOrchestrator().deploy_swarm("audit", [SmithMinion()], path=path)
 			res = results[0]
 			if res.status == "success":
@@ -203,13 +203,14 @@ async def handle_run_security_audit(arguments: Dict[str, Any]):
 						audit_text += f"- {f.get('file')}:{f.get('line')} -> {f.get('msg')}\n"
 			else:
 				audit_text = f"Audit Failed: {res.error}"
-			
+
 			MinionInbox().drop_report(event_id=event_id, source="SmithMinion", status=res.status, content=audit_text)
 			notify_user("Security Audit", f"Audit [{event_id}] {res.status}", category="system")
 		except Exception as e:
 			logger.error(f"Async Audit [{event_id}] crashed: {e}")
 			from red_pill.core.inbox import MinionInbox
 			from red_pill.utils.observer import notify_user
+
 			MinionInbox().drop_report(event_id=event_id, source="SmithMinion", status="crashed", content=f"Exception: {e}")
 			notify_user("Audit Crash", f"[{event_id}] Failed", category="system")
 
@@ -237,13 +238,14 @@ async def handle_search_memory_research(arguments: Dict[str, Any]):
 			results = await GruOrchestrator().deploy_swarm(query, [OracleMinion()])
 			res = results[0]
 			content = f"ORACLE SYNTHESIS:\n{res.result.get('synthesis')}" if res.status == "success" else f"Research Failed: {res.error}"
-			
+
 			MinionInbox().drop_report(event_id=event_id, source="OracleMinion", status=res.status, content=content)
 			notify_user("Oracle Research", f"Synthesis [{event_id}] Ready", category="system")
 		except Exception as e:
 			logger.error(f"Oracle Research [{event_id}] crashed: {e}")
 			from red_pill.core.inbox import MinionInbox
 			from red_pill.utils.observer import notify_user
+
 			MinionInbox().drop_report(event_id=event_id, source="OracleMinion", status="crashed", content=f"Exception: {e}")
 			notify_user("Oracle Crash", f"[{event_id}] Failed", category="system")
 
@@ -282,6 +284,7 @@ async def handle_check_system_health(arguments: Dict[str, Any]):
 			logger.error(f"Health Check [{event_id}] crashed: {e}")
 			from red_pill.core.inbox import MinionInbox
 			from red_pill.utils.observer import notify_user
+
 			MinionInbox().drop_report(event_id=event_id, source="KeymakerMinion", status="crashed", content=f"Exception: {e}")
 			notify_user("Health Check Crash", f"[{event_id}] Failed", category="system")
 
@@ -331,6 +334,7 @@ async def handle_compress_prompt(arguments: Dict[str, Any]):
 			logger.error(f"Compressor [{event_id}] crashed: {e}")
 			from red_pill.core.inbox import MinionInbox
 			from red_pill.utils.observer import notify_user
+
 			MinionInbox().drop_report(event_id=event_id, source="CompressorMinion", status="crashed", content=f"Exception: {e}")
 			notify_user("Compressor Crash", f"[{event_id}] Failed", category="system")
 
@@ -491,7 +495,7 @@ async def handle_run_pre_pr_audit(arguments: Dict[str, Any]):
 			cmd = [sys.executable, os.path.join(PROJECT_ROOT, "scripts", "pre_pr_audit.py")]
 			result = subprocess.run(cmd, capture_output=True, text=True)
 			status = "PASSED" if result.returncode == 0 else "FAILED"
-			
+
 			from red_pill.memory import MemoryManager
 			from red_pill.utils.observer import notify_user
 
@@ -507,11 +511,11 @@ async def handle_run_pre_pr_audit(arguments: Dict[str, Any]):
 			logger.error(f"Async Audit [{event_id}] crashed: {e}")
 
 	asyncio.create_task(asyncio.to_thread(_run_audit_bg))
-	
+
 	return [
 		types.TextContent(
-			type="text", 
-			text=f"Background Audit started [Event ID: {event_id}]. You can check 'work_memories' for the result later. Do NOT wait for it now."
+			type="text",
+			text=f"Background Audit started [Event ID: {event_id}]. You can check 'work_memories' for the result later. Do NOT wait for it now.",
 		)
 	]
 
