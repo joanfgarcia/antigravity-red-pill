@@ -66,8 +66,10 @@ class BayesianInferenceEngine:
 	@staticmethod
 	def calculate_erosion(beta: float, time_passed_days: float, kappa: float = cfg.BAYESIAN_STABILITY_KAPPA) -> float:
 		"""Accumulates uncertainty (beta) based on elapsed time."""
-		# Uncertainty grows linearly with time in this initial phase
-		return beta + (time_passed_days * kappa)
+		# MEM-001: Uncertainty grows linearly with time but is capped to prevent infinite compounding
+		raw_beta = beta + (time_passed_days * kappa)
+		max_beta = getattr(cfg, "BAYESIAN_MAX_BETA", 20.0)
+		return min(raw_beta, max_beta)
 
 
 class MemoryManager:
@@ -125,6 +127,7 @@ class MemoryManager:
 		emotion: str = cfg.DEFAULT_EMOTION,
 		intensity: float = 1.0,
 		force_immune: bool = False,
+		recursion_depth: int = 0,
 	) -> str:
 		"""Stores a new engram with B760 validation and emotional chroma."""
 		# v5.6.3: Synaptic Fragmentation (Anti-Amnesia Logic - Pre-validation)
@@ -132,30 +135,35 @@ class MemoryManager:
 		# before validation to support graceful degradation of oversized inputs.
 		metadata = (metadata or {}).copy()
 		if len(text) > self.cfg.CHUNK_THRESHOLD and not metadata.get("_is_fragment"):
-			fragments = synaptic_split(text)
-			parent_id = point_id if point_id else str(uuid.uuid4())
+			if recursion_depth >= 3:
+				logger.warning("MEM-002: Max recursion depth (3) reached for engram fragmentation. Truncating.")
+				text = text[: self.cfg.CHUNK_THRESHOLD]
+			else:
+				fragments = synaptic_split(text)
+				parent_id = point_id if point_id else str(uuid.uuid4())
 
-			for i, frag in enumerate(fragments):
-				frag_metadata = metadata.copy()
-				frag_metadata["_is_fragment"] = True
-				frag_metadata["parent_id"] = parent_id
-				frag_metadata["chunk_index"] = i
-				frag_metadata["total_chunks"] = len(fragments)
+				for i, frag in enumerate(fragments):
+					frag_metadata = metadata.copy()
+					frag_metadata["_is_fragment"] = True
+					frag_metadata["parent_id"] = parent_id
+					frag_metadata["chunk_index"] = i
+					frag_metadata["total_chunks"] = len(fragments)
 
-				# The first fragment keeps the requested point_id (if any)
-				current_frag_id = parent_id if i == 0 else str(uuid.uuid4())
+					# The first fragment keeps the requested point_id (if any)
+					current_frag_id = parent_id if i == 0 else str(uuid.uuid4())
 
-				self.add_memory(
-					collection=collection,
-					text=frag,
-					importance=importance,
-					metadata=frag_metadata,
-					point_id=current_frag_id,
-					color=color,
-					emotion=emotion,
-					intensity=intensity,
-					force_immune=force_immune,
-				)
+					self.add_memory(
+						collection=collection,
+						text=frag,
+						importance=importance,
+						metadata=frag_metadata,
+						point_id=current_frag_id,
+						color=color,
+						emotion=emotion,
+						recursion_depth=recursion_depth + 1,
+						intensity=intensity,
+						force_immune=force_immune,
+					)
 
 			# Return the ID of the anchor point
 			return parent_id
@@ -172,7 +180,8 @@ class MemoryManager:
 
 		# v5.4.0: Advanced Multi-Emotion Profile
 		emotional_profile = []
-		if os_detect := os.getenv("EMOTION_AUTO_DETECT", "True").lower() == "true":
+		os_detect = os.getenv("EMOTION_AUTO_DETECT", "True").lower() == "true"
+		if os_detect:
 			if self.cfg.MULTI_EMOTION_INFERENCE:
 				emotional_profile = get_emotions(text)
 

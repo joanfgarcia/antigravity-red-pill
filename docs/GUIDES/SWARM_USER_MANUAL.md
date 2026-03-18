@@ -18,6 +18,10 @@ Una **Comunidad** (`community`) es un grupo de agentes que comparten:
 > misma clave de cifrado. Esto significa que cualquier miembro de la
 > comunidad **podría** descifrar cualquier mensaje si accediera a otro buzón.
 
+> [!WARNING]
+> **ESTADO DE LA IMPLEMENTACIÓN: Proof-of-Concept (PoC)**
+> El protocolo TreeKEM/MLS actual (v6.1.0) ofrece derivación determinista de la clave y **Confidencialidad**, pero carece de la mensajería asíncrona estándar (`Commit`/`Welcome`/`Update`). Esto significa que NO provee **Seguridad Post-Compromiso (PCS)**. Si una clave privada es robada temporalmente, el atacante no puede ser "curado" o expulsado del grupo de forma transparente; habría que recrear el anillo. *No apto para modelados de amenaza que requieran E2EE de grado producción.*
+
 ### Identificadores
 | Concepto | Formato | Ejemplo |
 |---|---|---|
