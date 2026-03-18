@@ -1,5 +1,6 @@
 import logging
 import os
+import shutil
 import subprocess
 from typing import Any, Dict, Optional
 
@@ -30,6 +31,16 @@ class CloudVault:
 		creds_dir = os.path.join(os.getenv("HOME", "/tmp"), ".agent", "credentials")
 		os.makedirs(creds_dir, exist_ok=True)
 		self.token_file = os.path.join(creds_dir, "drive_token.json")
+
+		# Zero-touch migration: Move old token if existing to avoid requiring operators to re-authenticate
+		legacy_token = os.path.join(os.path.dirname(self.service_account_file), "token.json")
+		if os.path.exists(legacy_token) and not os.path.exists(self.token_file):
+			try:
+				shutil.move(legacy_token, self.token_file)
+				logger.info(f"SEC-F02b: Migrated legacy token.json to {self.token_file}")
+			except Exception as e:
+				logger.warning(f"Failed to migrate legacy token.json: {e}")
+
 		self.client_secrets_file = os.path.join(os.path.dirname(self.service_account_file), "client_secrets.json")
 		self.service: Optional[Any] = None
 

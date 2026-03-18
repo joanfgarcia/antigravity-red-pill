@@ -1,12 +1,15 @@
 # Changelog: Red Pill Protocol
 
-## [6.1.0 Stable] - 2026-03-18
+## [6.1.0a3] - 2026-03-18
 ### 🟢 Claude 4.6 Audit Remediation (All Green)
 - **[ARCH-01] Sovereignty Boundary**: Added explicit global Zero-Egress warning in `hive.py` and `.env.example` when the Hive Mind is enabled.
 - **[SEC-01] Health Verification**: Enhanced `rotate_keys.py` to physically query Qdrant collections testing the new API key before declaring success, closing a critical race condition.
 - **[PERF-01] Oneiromancy Optimization**: Protected `MemoryManager.dream()` against O(1) sequential vector query blowups via `MAX_DREAM_QUERIES`.
+- **[PERF-001] USP Pagination Ceiling**: Added `cfg.MOOD_PROFILE_MAX_SCROLL` in `calculate_resonance_vector` to prevent OOM/looping on dense Bünkers.
+- **[SEC-F02b] Vault Credential Separation**: Relocated `drive_token.json` to the secluded `~/.agent/credentials/` path and added self-healing auto-migration (`shutil.move`) on boot to prevent operators from losing OAuth authorization upon upgrade.
 - **[TEST-01] Pre-Flight Tests**: Authored comprehensive unit test `test_wake_up_v6.py`, covering session context initialization and Qdrant outages.
-- **[DOC-02] Toolchain Generation**: Auto-generated the final `CLI_REFERENCE.md` using the Python script.
+- **[DOC-02] Toolchain Generation**: Auto-generated the final `CLI_REFERENCE.md` using the Python script. Pre-pended essential real-world commands as a skeleton.
+- **[COM-001] Code of Conduct**: Softened the strict Antigravity IDE mandates into 'strong recommendations' to foster a more inclusive Vibe.
 - **[CODE] Quality & Resiliency**: Resolved typographic anomalies in CLI (`DEPLOING`), enforced `check=True` subprocess checks in `handle_heal()`, and sanitized `resolve_alias()` from plain prints to secure `logger.error` streams.
 
 ### 🛡️ Operation Bünker Restoration (Post-Restart Sync)
