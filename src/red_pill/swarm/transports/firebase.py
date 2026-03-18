@@ -116,7 +116,7 @@ class FirebaseTransport(SwarmTransport):
 					return (node_id, full_alias, str(key) if key else "")
 			return None
 		except Exception as e:
-			print(f"[FirebaseTransport] Resolve alias failed: {e}")
+			logger.error(f"[FirebaseTransport] Resolve alias failed: {e}")
 			return None
 
 	def _bootstrap_group_key(self):

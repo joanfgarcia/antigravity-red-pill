@@ -33,6 +33,13 @@ class HiveMind:
 		self.connected = False
 		if self.enabled and connections:
 			try:
+				# ARCH-01: Explicit Sovereignty Boundary Warning
+				logger.warning("--- [SOVEREIGNTY BOUNDARY WARNING] ---")
+				logger.warning("Hive Mind (Milvus) is ENABLED. You are establishing a connection to a collective neural network.")
+				logger.warning("By proceeding, you explicitly authorize the Red Pill Protocol to transmit anonymized engrams")
+				logger.warning("outside your local machine to the collective database. Your Zero-Egress guarantee is currently SUSPENDED.")
+				logger.warning("--------------------------------------")
+
 				# SEC-F03: Enforce TLS for remote connections
 				is_local = cfg.MILVUS_HOST in ["localhost", "127.0.0.1", "::1"]
 				secure_conn = cfg.MILVUS_SECURE

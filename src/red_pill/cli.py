@@ -79,7 +79,7 @@ def handle_mode(args: argparse.Namespace) -> None:
 def handle_audit() -> None:
 	"""Pre-PR Audit Protocol."""
 	script_path = os.path.join(PROJECT_ROOT, "scripts", "pre_pr_audit.sh")
-	print(f"--- [DEPLOING AUDIT PROTOCOL: {script_path}] ---")
+	print(f"--- [DEPLOYING AUDIT PROTOCOL: {script_path}] ---")
 	try:
 		subprocess.run(["bash", script_path], check=True)
 	except subprocess.CalledProcessError:
@@ -92,14 +92,17 @@ def handle_heal(dry_run: bool = False) -> None:
 	cmd = ["python3", script_path]
 	if dry_run:
 		cmd.append("--dry-run")
-	print(f"--- [DEPLOING HEALER: {script_path}] ---")
-	subprocess.run(cmd)
+	print(f"--- [DEPLOYING HEALER: {script_path}] ---")
+	try:
+		subprocess.run(cmd, check=True)
+	except subprocess.CalledProcessError:
+		sys.exit(1)
 
 
 def handle_benchmark() -> None:
 	"""Sovereignty Benchmark (Tri-Tier Hardware)."""
 	script_path = os.path.join(PROJECT_ROOT, "scripts", "sovereignty_benchmark.py")
-	print(f"--- [DEPLOING BENCHMARK: {script_path}] ---")
+	print(f"--- [DEPLOYING BENCHMARK: {script_path}] ---")
 	subprocess.run(["python3", script_path])
 
 
@@ -348,7 +351,7 @@ def main() -> None:
 			if args.swarm_cmd == "audit":
 				gru = GruOrchestrator()
 				smith = SmithMinion()
-				print(f"--- [DEPLOING SWARM: AGENT {smith.name.upper()}] ---")
+				print(f"--- [DEPLOYING SWARM: AGENT {smith.name.upper()}] ---")
 				# Explicitly type results for Mypy
 				swarm_results: List[SwarmResult] = asyncio.run(gru.deploy_swarm("audit", [smith], path=args.path))
 				for res in swarm_results:

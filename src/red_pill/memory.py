@@ -602,6 +602,12 @@ class MemoryManager:
 		return decayed_results + cascade_results
 
 	def dream(self, collection: str, limit: int = 10) -> Dict[str, Any]:
+		# PERF-01: Prevent O(N) sequential vector search blowup (Sound of Silence formatting)
+		max_dreams = getattr(self.cfg, "MAX_DREAM_QUERIES", 10)
+		if limit > max_dreams:
+			logger.warning(f"Capping dream limit {limit} to MAX_DREAM_QUERIES ({max_dreams})")
+			limit = max_dreams
+
 		logger.info(f"Oneiromancy: Dream sequence for '{collection}'...")
 		try:
 			response = self.client.scroll(
