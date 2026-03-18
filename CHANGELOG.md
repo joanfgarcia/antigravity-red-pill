@@ -9,6 +9,14 @@
 - **[QA] Absolute Purity Certification**: Resolved residual lint errors (unused imports, typing mismatches) in `cli.py` and `wake_up_v6.py`. Verified a clean pass for 50 source files.
 ### 🛡️ Operation A+ (Absolute Purity Audit Remediation)
 - **[ARCH] Sovereign Trade-offs Manifesto**: Authored `PHILOSOPHY.md` to explicitly document architectural tensions (HiveMind privacy, Lore Skin consent, Swarm complexity, FSRS decay models, and Node.js rejection) as intentional features, solving the "Philosophical Incoherence" audit finding.
+### Added
+- Created `docs/ENV_REFERENCE.md` explaining all `.env` system configuration properties.
+- Implemented `MinionInbox` (SQLite) to intercept and store background Swarm Minion reports decoupling them from Qdrant.
+
+### Changed
+- All Minion MCP Tools (`run_security_audit`, `check_system_health`, etc.) have been converted to 100% asynchronous (fire-and-forget) with native OSD (`notify-send`) notifications upon completion.
+- Refactored `MemoryManager` God Class: extracted functionalities into dedicated `StorageEngine`, `EmbeddingEngine`, and `MetabolismKernel`. `MemoryManager` now acts as a stable `Facade`, resolving the primary architectural debt finding from the March 18 Audit.
+- **[DOCS] Environment Parameter Compendium**: Created `docs/ENV_REFERENCE.md`, an exhaustive taxonomy of all available `.env` parameters, their bounds, and the Bünker features they toggle.
 - **[SEC-001] Adaptative Encryption**: Solidified `ADAPTATIVE` mode as the default for local installations, gracefully warning operators without LUKS instead of blocking execution.
 - **[SEC-007] Mystique Protocol & Lore Skin Consent**: Introduced an explicit `Y/n` CLI consent prompt when switching to non-neutral skins to prevent silent behavioral drift. Explicitly exempted the dynamic `Mystique` protocol.
 - **[SEC-MLS] Plaintext Passthrough Purge**: Removed plaintext fallback mechanisms from the Swarm `FirebaseTransport`, enforcing strict TreeKEM/AES-GCM encryption for all network messages.

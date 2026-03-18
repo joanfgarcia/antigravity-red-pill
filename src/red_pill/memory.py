@@ -1,13 +1,11 @@
 import hashlib
-import json
 import logging
 import os
 import threading
 import time
 import uuid
-from typing import Any, Dict, Generator, List, Optional
+from typing import Any, Dict, List, Optional
 
-from qdrant_client import QdrantClient
 from qdrant_client.http import models
 
 try:
@@ -77,10 +75,18 @@ class MemoryManager:
 
 	def __init__(self, url: str = cfg.QDRANT_URL, config=None):
 		self.cfg = config if config else cfg
-		self.client = QdrantClient(url=url, api_key=self.cfg.QDRANT_API_KEY)
-		self.encoder: Optional[TextEmbedding] = None
+
+		# Facade Pattern: Delegate to core engines
+		from red_pill.core.embeddings import EmbeddingEngine
+		from red_pill.core.metabolism import MetabolismKernel
+		from red_pill.core.storage import StorageEngine
+
+		self.storage = StorageEngine(url=url, config=self.cfg)
+		self.client = self.storage.client  # Retained for direct access/backward compat
+		self.embeddings = EmbeddingEngine(config=self.cfg)
+		self.metabolism = MetabolismKernel(storage_engine=self.storage, config=self.cfg)
+
 		self._reinforce_lock = threading.Lock()
-		self._metabolism_thread: Optional[threading.Thread] = None
 		self.hive = HiveMind()
 
 	def _parse_payload(self, payload: Dict[str, Any], strict: bool = True) -> Dict[str, Any]:
@@ -103,34 +109,10 @@ class MemoryManager:
 			return payload
 
 	def _ensure_collection(self, collection_name: str) -> None:
-		"""Create a collection if it does not exist with the standard B760 vector schema."""
-		if not self.client.collection_exists(collection_name):
-			self.client.create_collection(
-				collection_name=collection_name,
-				vectors_config=models.VectorParams(size=self.cfg.VECTOR_SIZE, distance=models.Distance.COSINE),
-			)
-			logger.info(f"Ghost Collection created: {collection_name}")
+		self.storage.ensure_collection(collection_name)
 
 	def _get_vector(self, text: str) -> List[float]:
-		"""Optimized vector retrieval strictly in-band."""
-		if self.encoder is None:
-			try:
-				from fastembed import TextEmbedding
-
-				providers = [self.cfg.EXECUTION_PROVIDER] if self.cfg.EXECUTION_PROVIDER else None
-				self.encoder = TextEmbedding(model_name=self.cfg.EMBEDDING_MODEL, providers=providers)
-			except ImportError:
-				raise RuntimeError("FastEmbed library is missing. All semantic memory operations are blocked.")
-
-		assert self.encoder is not None
-		vectors = list(self.encoder.embed([text]))
-		if not vectors:
-			raise IndexError(f"Embedding model returned no vectors for text: {text[:50]}...")
-		# v5.6.2: Explicit typing for Mypy compliance
-		v_item: Any = vectors[0]
-		if hasattr(v_item, "tolist"):
-			return list(v_item.tolist())
-		return list(v_item)
+		return self.embeddings.get_vector(text)
 
 	def add_memory(
 		self,
@@ -351,205 +333,10 @@ class MemoryManager:
 			return False
 
 	def _trigger_metabolism(self) -> None:
-		"""Persistent background process to check and execute erosion."""
-		if self._metabolism_thread is not None and self._metabolism_thread.is_alive():
-			return
-
-		try:
-			self._metabolism_thread = threading.Thread(target=self._run_metabolism_cycle, daemon=True)
-			self._metabolism_thread.start()
-		except Exception as e:
-			logger.error(f"Metabolism thread launch failed: {e}")
-
-	def _read_metabolism_state(self, f) -> tuple[float, bool]:  # type: ignore[type-arg]
-		"""
-		Reads metabolism state from an open file handle.
-
-		State format (v5.5.0): JSON dict with keys:
-			- last_run: float (Unix timestamp)
-			- skip_next_erosion: bool (CQ-001 flag — set after TTL refresh)
-
-		Backward-compatible: bare float strings (legacy format) are still parsed.
-
-		Returns:
-			(last_run, skip_next_erosion)
-		"""
-		f.seek(0)
-		content = f.read().strip()
-		if not content:
-			return 0.0, False
-		try:
-			state = json.loads(content)
-			if isinstance(state, dict):
-				return float(state.get("last_run", 0.0)), bool(state.get("skip_next_erosion", False))
-			# Legacy: bare float string
-			return float(state), False
-		except (ValueError, TypeError, json.JSONDecodeError):
-			return 0.0, False
-
-	def _write_metabolism_state(self, f, last_run: float, skip_next_erosion: bool = False) -> None:
-		"""
-		Writes metabolism state as JSON to an open, locked file handle.
-
-		Args:
-			f: Open file handle (must be locked and writable)
-			last_run: Unix timestamp of this cycle
-			skip_next_erosion: CQ-001 flag — if True, the next cycle will skip erosion
-		"""
-		f.seek(0)
-		f.truncate()
-		json.dump({"last_run": last_run, "skip_next_erosion": skip_next_erosion}, f)
-		f.flush()
-
-	def _run_metabolism_cycle(self) -> None:
-		"""Internal metabolism loop with cooldown check."""
-		state_file = self.cfg.METABOLISM_STATE_FILE
-		now = time.time()
-
-		try:
-			from filelock import FileLock, Timeout
-
-			lock = FileLock(state_file + ".lock", timeout=0)
-			with lock:
-				with open(state_file, "a+") as f:
-					last_run, skip_next_erosion = self._read_metabolism_state(f)
-					gap = now - last_run if last_run > 0 else float("inf")
-
-					# --- Cooldown gate ---
-					if last_run > 0 and gap < self.cfg.METABOLISM_COOLDOWN:
-						return
-
-					# --- Absence guard ---
-					abs_gap = now - last_run if last_run > 0 else 0
-					if abs_gap > self.cfg.ABSENCE_THRESHOLD:
-						logger.warning(
-							f"Absence detected ({round(abs_gap / 86400, 1)} days). Running TTL refresh to protect the Bunker. Erosion skipped for this cycle and the next."
-						)
-						for coll in self.cfg.METABOLISM_AUTO_COLLECTIONS:
-							try:
-								self._refresh_ttl_timestamps(coll.strip())
-							except Exception as e:
-								logger.error(f"TTL refresh failed during absence recovery for {coll}: {e}")
-
-						self._write_metabolism_state(f, now, skip_next_erosion=True)
-						logger.info("Absence Guard triggered: Bunker refreshed and erosion short-circuited for this cycle.")
-						return
-
-					# --- CQ-001: skip-erosion-after-refresh flag consumption ---
-					if skip_next_erosion:
-						logger.info(
-							"CQ-001: skip_next_erosion flag active — skipping erosion this cycle to protect freshly-refreshed post-vacation engrams."
-						)
-						self._write_metabolism_state(f, now, skip_next_erosion=False)
-						return
-
-					# --- Normal cycle: update state and proceed to erosion ---
-					self._write_metabolism_state(f, now, skip_next_erosion=False)
-
-		except Timeout:
-			# Lock could not be acquired because another instance is running
-			return
-		except OSError:
-			pass
-
-		for coll in self.cfg.METABOLISM_AUTO_COLLECTIONS:
-			try:
-				if self.cfg.METABOLISM_STRATEGY == "LAZY":
-					self.purge_dead_memories(coll.strip())
-				else:
-					self.apply_erosion(coll.strip())
-			except Exception as e:
-				logger.error(f"Metabolism failed in {coll}: {e}")
+		self.metabolism.trigger()
 
 	def purge_dead_memories(self, collection: str) -> None:
-		"""Atomic deletion of extremely old engrams."""
-		timestamp_limite = time.time() - self.cfg.MAX_SINK_TIME
-
-		try:
-			self.client.delete(
-				collection_name=collection,
-				points_selector=models.FilterSelector(
-					filter=models.Filter(
-						must=[
-							models.FieldCondition(key="last_recalled_at", range=models.Range(lt=timestamp_limite)),
-							models.FieldCondition(key="immune", match=models.MatchValue(value=False)),
-						]
-					)
-				),
-			)
-			logger.info(f"Gran Purge executed for '{collection}'.")
-		except Exception as e:
-			logger.error(f"Gran Purge failed in {collection}: {e}")
-
-	def _scroll_collection(
-		self,
-		collection: str,
-		scroll_filter: Optional[models.Filter] = None,
-		limit: int = 100,
-		with_payload: bool = True,
-		with_vectors: bool = False,
-		max_iterations: int = 1000,
-	) -> Generator[List[Any], None, None]:
-		"""Yields batches of points from a collection using scroll pagination (CQ-005)."""
-		offset = None
-		iterations = 0
-		while True:
-			iterations += 1
-			if iterations > max_iterations:
-				break
-			try:
-				response = self.client.scroll(
-					collection_name=collection,
-					scroll_filter=scroll_filter,
-					limit=limit,
-					offset=offset,
-					with_payload=with_payload,
-					with_vectors=with_vectors,
-				)
-			except Exception as e:
-				logger.error(f"Scroll operation failed in {collection}: {_mask_pii_exception(e)}")
-				break
-
-			yield response[0]
-
-			offset = response[1]
-			if offset is None:
-				break
-
-	def _refresh_ttl_timestamps(self, collection: str) -> None:
-		now = time.time()
-		offset = None
-		refreshed = 0
-
-		scroll_filter = models.Filter(must_not=[models.FieldCondition(key="immune", match=models.MatchValue(value=True))])
-
-		match_count = 0
-		while True:
-			try:
-				response = self.client.scroll(
-					collection_name=collection, scroll_filter=scroll_filter, limit=200, offset=offset, with_payload=False, with_vectors=False
-				)
-			except Exception as e:
-				logger.error(f"TTL refresh scroll failed: {_mask_pii_exception(e)}")
-				break
-
-			point_ids = [hit.id for hit in response[0]]
-			if point_ids:
-				try:
-					self.client.set_payload(collection_name=collection, payload={"last_recalled_at": now}, points=point_ids)
-					refreshed += len(point_ids)
-				except Exception as e:
-					logger.error(f"TTL refresh payload set failed: {_mask_pii_exception(e)}")
-
-			offset = response[1]
-			if offset is None:
-				break
-
-			match_count += 1
-			if match_count > self.cfg.ABSENCE_GUARD_SCROLL_LIMIT:
-				break
-
-		logger.info(f"Absence Guard: refreshed TTL for {refreshed} engrams in '{collection}'.")
+		self.metabolism.purge_dead_memories(collection)
 
 	def _reinforce_points(self, collection: str, point_ids: List[str], increments: Dict[str, float]) -> List[Any]:
 		if not point_ids:
@@ -931,63 +718,7 @@ class MemoryManager:
 		return float(payload.get("reinforcement_score", 1.0))
 
 	def apply_erosion(self, collection: str, rate: Optional[float] = None) -> None:
-		if rate is None:
-			rate = self.cfg.EROSION_RATE
-		if rate <= 0:
-			return
-		if rate > 0.5:
-			logger.warning(f"High erosion rate detected ({rate}). Significant memory loss imminent.")
-		eroded_count = 0
-		deleted_count = 0
-		ttl_threshold = time.time() - self.cfg.METABOLISM_COOLDOWN
-		scroll_filter = models.Filter(
-			must=[models.FieldCondition(key="last_recalled_at", range=models.Range(lt=ttl_threshold))],
-			must_not=[models.FieldCondition(key="immune", match=models.MatchValue(value=True))],
-		)
-
-		for batch in self._scroll_collection(collection, scroll_filter=scroll_filter, limit=100, max_iterations=1000):
-			points_to_delete: List[Any] = []
-			update_operations = []
-			for hit in batch:
-				if hit.payload is None or hit.payload.get("immune"):
-					continue
-
-				# Sanitize check - ensure we have FSRS fields (Fallback if migration wasn't run)
-				hit.payload = self._parse_payload(hit.payload, strict=True)
-
-				engine_type = self.cfg.MEMORY_ENGINES.get(collection.strip(), "fsrs_real")
-				engine = get_memory_engine(engine_type)
-
-				# We calculate decay logic
-				decay_updates = engine.calculate_lazy_decay(hit.payload, current_time=time.time())
-
-				if decay_updates.get("_delete"):
-					points_to_delete.append(str(hit.id))
-					deleted_count += 1
-				elif decay_updates:
-					eroded_count += 1
-					# Important for apply_erosion active pass: always update last_recalled so it steps forward
-					decay_updates["last_recalled_at"] = time.time()
-					update_operations.append(
-						models.SetPayloadOperation(
-							set_payload=models.SetPayload(
-								payload=decay_updates,
-								points=[hit.id],
-							)
-						)
-					)
-			if update_operations:
-				try:
-					self.client.batch_update_points(collection_name=collection, update_operations=update_operations)
-				except Exception as e:
-					logger.error(f"Erosion batch update failed: {_mask_pii_exception(e)}")
-			if points_to_delete:
-				try:
-					self.client.delete(collection_name=collection, points_selector=models.PointIdsList(points=points_to_delete))
-				except Exception as e:
-					logger.error(f"Erosion delete failed: {_mask_pii_exception(e)}")
-
-		logger.info(f"Erosion complete in {collection}. Updated: {eroded_count}, Deleted: {deleted_count}")
+		self.metabolism.apply_erosion(collection, rate)
 
 	def sanitize(self, collection: str, dry_run: bool = False, strict: bool = True) -> Dict[str, Any]:
 		"""Sanitizes a collection: removes duplicates, heals schemas, and refracts oversized legacy engrams."""

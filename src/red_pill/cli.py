@@ -76,8 +76,6 @@ def handle_mode(args: argparse.Namespace) -> None:
 	print(switch_skin(args.skin))
 
 
-
-
 def handle_audit() -> None:
 	"""Pre-PR Audit Protocol."""
 	script_path = os.path.join(PROJECT_ROOT, "scripts", "pre_pr_audit.sh")

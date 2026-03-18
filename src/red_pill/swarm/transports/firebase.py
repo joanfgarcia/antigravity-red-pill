@@ -125,6 +125,7 @@ class FirebaseTransport(SwarmTransport):
 		"""
 		try:
 			from red_pill.swarm.mls import SovereignGroup
+
 			ref = db.reference("registry", app=self.app)
 			nodes = ref.get()
 			if not nodes:

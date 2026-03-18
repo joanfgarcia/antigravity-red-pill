@@ -3,7 +3,6 @@ import logging
 import time
 from typing import List
 
-from red_pill.memory import MemoryManager
 from red_pill.swarm.base import Minion, SwarmResult
 from red_pill.utils.observer import notify_user
 from red_pill.utils.specs_adapter import SpecsAdapter
@@ -21,10 +20,12 @@ class GruOrchestrator:
 	def __init__(self):
 		import os
 
+		from red_pill.core.inbox import MinionInbox
+
 		self.active_minions: List[Minion] = []
 		self.workspace_root = os.getcwd()
 		self.specs = SpecsAdapter(self.workspace_root)
-		self.memory = MemoryManager()
+		self.inbox = MinionInbox()
 
 	def is_local_ready(self) -> bool:
 		"""Check if local SLM infrastructure is available."""
@@ -72,23 +73,23 @@ class GruOrchestrator:
 		# Sensory Signal (User) - Silent by default per Operator directive
 		notify_user(title="Sovereign Swarm", message=message, sound=False, category="swarm")
 
+		import uuid
+		import json
+
 		# Memory Signal (Agent) - For Turn-Zero recovery
 		try:
-			self.memory.add_memory(
-				collection="directive_memories",
-				text=f"SWARM EVENT: {message}",
-				importance=1.0,
-				metadata={
-					"type": "swarm_event",
-					"task_preview": task[:200],
-					"timestamp": time.time(),
-					"results_summary": [f"{r.minion_id}: {r.status}" for r in results],
-				},
-			)
-			# Phase 1: Encoding (Fast Buffer) for deep context
-			self.memory.record_interaction_pair(prompt=f"SWARM TASK: {task}", response=message, role="orchestrator")
+			event_id = str(uuid.uuid4())[:8]
+			metadata = {
+				"type": "swarm_event",
+				"task_preview": task[:200],
+				"timestamp": time.time(),
+				"results_summary": [f"{r.minion_id}: {r.status}" for r in results],
+			}
+			
+			full_content = f"{message}\n\nMetadata: {json.dumps(metadata)}"
+			self.inbox.drop_report(event_id=event_id, source="GruOrchestrator", status="success" if success_count > 0 else "failed", content=full_content)
 		except Exception as e:
-			logger.error(f"SAS Memory Hook failed: {e}")
+			logger.error(f"SAS Inbox Hook failed: {e}")
 
 	async def _run_minion(self, minion: Minion, task: str, **kwargs) -> SwarmResult:
 		start = time.time()

@@ -8,7 +8,7 @@ from red_pill.memory import MemoryManager
 
 @pytest.fixture
 def mock_qdrant():
-	with patch("red_pill.memory.QdrantClient") as mock:
+	with patch("red_pill.core.storage.QdrantClient") as mock:
 		yield mock
 
 

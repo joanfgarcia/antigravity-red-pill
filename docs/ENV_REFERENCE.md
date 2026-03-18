@@ -1,0 +1,133 @@
+# Red Pill Protocol: Environment Configuration Reference (v6.1)
+
+This document provides a comprehensive list of all parameters available in the `.env` file, their purposes, default values, and what specific behaviors they activate or deactivate within the Bünker ecosystem.
+
+---
+
+## 🏗️ Core Infrastructure Interfaces
+
+### Database / Storage (Qdrant & Milvus)
+| Parameter | Default | Description |
+| :--- | :--- | :--- |
+| `QDRANT_HOST` | `localhost` | The hostname or IP address of the Qdrant vector database. |
+| `QDRANT_PORT` | `6333` | The port the Qdrant service is listening on. |
+| `QDRANT_SCHEME` | `http` or `https`| The protocol used to communicate with Qdrant. Defaults to `https` for remote, `http` for local. |
+| `QDRANT_API_KEY` | `None` | Authentication token for Qdrant. Required for secure shared environments or cloud clusters. |
+| `MILVUS_ENABLED` | `False` | Activates connection to the HiveMind (Milvus). |
+| `MILVUS_HOST` | `localhost` | Hostname for the Milvus server. |
+| `MILVUS_PORT` | `19530` | Port for the Milvus server. |
+| `MILVUS_SECURE`| `False` / `True` | Forces TLS encryption for Milvus connections (automatically True if remote). |
+| `MILVUS_DB` | `default` | Goal database inside Milvus. |
+| `MILVUS_NLIST` | `128` | Tuning parameter for the `IVF_FLAT` high-performance clustering index mapping. |
+| `MILVUS_LITE_ENABLED` | `True` | Uses Milvus Lite (SQLite-based fallback) if a full Milvus cluster is unavailable. |
+
+### Memory Processing (FastEmbed & Inference)
+| Parameter | Default | Description |
+| :--- | :--- | :--- |
+| `EMBEDDING_MODEL` | `sentence-transformers/all-MiniLM-L6-v2` | The FastEmbed model to use. Modifying this requires completely wiping the vector database. |
+| `VECTOR_SIZE` | `384` | Expected dimensional output from the embedding model. Must match the model exactly. |
+| `EXECUTION_PROVIDER`| `None` | Hardware acceleration strategy (e.g., `cpu`, `cuda`, `coreml`). |
+| `FASTEMBED_CACHE_PATH` | `<project>/storage/models` | Absolute path to the locally cached embedding model weights. |
+
+---
+
+## 🧬 Biological & Architectural Memory (FSRS & Decay)
+
+### General Decay & Metabolism
+| Parameter | Default | Description |
+| :--- | :--- | :--- |
+| `METABOLISM_ENABLED` | `True` | Activates the core engine that forgets over time (entropic background decay). |
+| `METABOLISM_STRATEGY`| `LAZY` | Calculation mode: `CLASSIC` run as a loop, `LAZY` calculated at query time. |
+| `METABOLISM_COOLDOWN`| `3600` | Minimum seconds between global erosion cycles. |
+| `ABSENCE_THRESHOLD`| `604800` (7 days)| Maximum idle time. If the operator doesn't connect for this duration, the Bünker triggers a global TTL refresh to prevent catastrophic mass-amnesia. |
+| `MAX_SINK_TIME` | `2592000` (30 days)| Total max time an engram survives before a `Gran Purge` irrevocably destroys it. |
+| `DECAY_STRATEGY` | `linear` | Mathematical model to apply score reduction (`linear` or `exponential`). |
+| `EROSION_RATE` | `0.01` | How much reinforcement score is removed per cycle. At 0.01, standard memories last ~4 days without reinforcement. |
+| `IMMUNITY_THRESHOLD`| `10.0` | Any memory achieving this reinforcement score becomes un-erasable ("immune"). |
+| `REINFORCEMENT_INCREMENT`| `0.1` | Amount added to a memory's score every time it is actively recalled. |
+
+### Emotional Seeding & Symbiosis
+| Parameter | Default | Description |
+| :--- | :--- | :--- |
+| `EMOTIONAL_SEED_FACTOR`| `3.0` | Score multiplier for emotional (non-neutral) memories. Gives intense memories higher starting scores (anxiety, joy) ensuring longer baseline survival. |
+| `DEEP_RECALL_TRIGGERS`| `don't you remember,...` | Comma-separated list of queries that invoke high-intensity semantic search bypassing surface-level decay logic. |
+
+### Graph Topology & Associations
+| Parameter | Default | Description |
+| :--- | :--- | :--- |
+| `PROPAGATION_FACTOR` | `0.5` | How much score transmits across the graph to associated nodes when a parent is recalled (e.g., 50% of the parent's `REINFORCEMENT_INCREMENT`). |
+| `PROPAGATION_DEPTH`| `2` | Maximum recursive steps (hops) to traverse associations during recall (Hebb's Law). |
+| `PROPAGATION_DECAY`| `0.5` | Exponential decay penalty per hop. Ensures ripple effects dampen into the graph. |
+| `MAX_PROPAGATION_POINTS`| `20` | Maximum number of nodes that can receive reinforcement in a single query (Read Fan-Out). |
+| `MAX_AXONS` | `500` | Maximum number of connections (edges) one node can form over its lifetime (Write Fan-In limit). |
+
+### Memory Engrams (Fragmenter)
+| Parameter | Default | Description |
+| :--- | :--- | :--- |
+| `CHUNK_THRESHOLD` | `800` | If a text memory exceeds this character limit, it splits into fragments. |
+| `CHUNK_SIZE` | `500` | Target size for engram chunks after splitting. |
+| `CHUNK_OVERLAP` | `100` | Number of overlapping characters to preserve semantic transition between chunks. |
+
+### Bayesian Core (Logic & Work Memories)
+| Parameter | Default | Description |
+| :--- | :--- | :--- |
+| `BAYESIAN_COLLECTIONS` | `skill,work,directive` | Comma-separated list of collections that use technical Bayesian inference instead of affect-based FSRS logic. |
+| `BAYESIAN_STABILITY_KAPPA`| `0.05` | Rate of uncertainty accumulation (`beta`) per day. Higher means faster forgetting of technical utility. |
+| `BAYESIAN_REINFORCEMENT_GAIN`| `1.0` | Amount of certainty (`alpha`) added when an operator actively uses this technical knowledge. |
+
+---
+
+## 🤖 Dynamic Protocol (MCP & Interceptor)
+
+### Agent & Operator Definition
+| Parameter | Default | Description |
+| :--- | :--- | :--- |
+| `AGENT_NAME` | `Agente` | Fallback name used by the agent during interactions. |
+| `USER_NAME` | `Operador` | Overrides the Operator name in the Bünker to ensure privacy beyond system logic. |
+
+### MCP Kernel & Interceptor
+| Parameter | Default | Description |
+| :--- | :--- | :--- |
+| `INTERCEPTOR_ENABLED`| `False` | Toggles the Bünker's active middleware injection via MCP. If `True`, intercepts IDE prompts to dynamically load context from Qdrant. |
+| `SEMANTIC_INTENT_THRESHOLD`| `Low` (0.3) | `High` (0.6) or `Low` (0.3). Sets how literal the matching needs to be for context injection. |
+| `PULSE_ENABLED` | `True` | Activates autonomous background synthesis and maintenance operations. |
+| `PULSE_INTERVAL` | `3600` | Interval in seconds between Sovereign Pulses. |
+| `LAZARUS_SYNC_ENABLED` | `True` | Activates constant state-sync to prevent process interruptions from losing RAM context. |
+| `LAZARUS_SYNC_INTERVAL` | `300` | Interval in seconds (5 min) for the Lazarus checkpoint generator. |
+| `RESONANCE_ENABLED`| `True` | Enables automated "Aha!" moments by checking similarities across previously idle engrams. |
+| `RESONANCE_THRESHOLD`| `0.4` | How close two disparate memories need to be in vector space to trigger forced integration. |
+
+---
+
+## ☁️ Persistence & Encryption (Cloud Vault)
+
+| Parameter | Default | Description |
+| :--- | :--- | :--- |
+| `CLOUD_VAULT_ENABLED` | `False` | Toggles AES-256 encrypted auto-exports to cloud services. |
+| `CLOUD_VAULT_PROVIDER`| `google_drive` | Only `google_drive` supported. |
+| `CLOUD_VAULT_FOLDER_ID`| `""` | The absolute folder ID in the Drive account to stage exports. |
+| `CLOUD_SERVICE_ACCOUNT_FILE`| `*/service_account.json`| Auto-generated path to G-Cloud credentials. |
+| `CLOUD_VAULT_QUOTA_MB` | `500` | Maximum size in MB stored on the cloud. |
+| `CLOUD_VAULT_RESERVE_COUNT`| `4` | How many recent full Soul Kits to keep before pruning older ones. |
+| `CLOUD_VAULT_GPG_PASSPHRASE`| `N/A` | Critical: Sets the symmetric AES-256 payload password. Used dynamically but not printed in `.env.example`. |
+
+---
+
+## 🎭 Affective Calibration (ACE & Chroma)
+
+| Parameter | Default | Description |
+| :--- | :--- | :--- |
+| `AFFECT_MODEL` | `PIONEER` | Affective dictionary behavior. Options: `PIONEER` (Native RP rules), `ACADEMIC` (Warriner 2013 lexicons), `CUSTOM` (Your parameters). |
+| `AFFECT_CUSTOM_OVERRIDES`| `{}` | A JSON Dictionary mapping emotions to custom Valence/Arousal weights. Only triggers if `AFFECT_MODEL=CUSTOM`. |
+| `DYNAMIC_EMOTION_SYNC`| `True` | Let the agent auto-derive its Skin based on the dominant emotional context of recent interactions. |
+| `MULTI_EMOTION_INFERENCE`| `True` | Enables deriving a primary and secondary emotion for high-complexity engrams. |
+
+---
+
+## 🛠️ Diagnostics
+| Parameter | Default | Description |
+| :--- | :--- | :--- |
+| `LOG_LEVEL` | `INFO` | Standard application logging (`DEBUG`, `INFO`, `WARNING`, `ERROR`). |
+| `LOG_JSON` | `False` | Experimental. Replaces string logs with parseable JSON structures for ELK/Datadog ingrowth. |
+| `NOTIFICATIONS_ENABLED`| `True` | Send `osd-notify` DBUS messages to the desktop when background tasks complete. |
+| `NOTIFICATION_SOUND` | `False` | Experimental: Play a 770Hz pulse on key Bünker actions. |

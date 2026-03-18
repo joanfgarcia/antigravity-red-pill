@@ -83,34 +83,10 @@ if MILVUS_ENABLED and not MILVUS_SECURE and MILVUS_HOST not in _local_hosts:
 	)
 
 
-# LOCAL DAEMON & SIDECAR
-MLX_LM_URL = os.getenv("MLX_LM_URL", "http://localhost:8760/v1/chat/completions")
-_run_dir = os.getenv("XDG_RUNTIME_DIR", "/tmp")
-DAEMON_SOCKET_PATH = os.getenv("DAEMON_SOCKET_PATH", os.path.join(_run_dir, "red_pill_memory.sock"))
-# SEC-004: Dedicated sidecar auth key (Must be random and separate from QDRANT_API_KEY)
-_auth_cache_file = os.path.join(_run_dir, ".red_pill_sidecar.key")
-SIDECAR_AUTH_KEY = os.getenv("SIDECAR_AUTH_KEY", "")
-
-if not SIDECAR_AUTH_KEY:
-	try:
-		import secrets
-
-		try:
-			fd = os.open(_auth_cache_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-			with os.fdopen(fd, "w") as f:
-				f.write(secrets.token_hex(32))
-		except FileExistsError:
-			pass
-
-		with open(_auth_cache_file, "r") as f:
-			SIDECAR_AUTH_KEY = f.read().strip()
-	except Exception:
-		# Ultimate fallback if filesystem is read-only
-		SIDECAR_AUTH_KEY = "insecure-fallback-key"
-
 # SENSOR & BRAIN CONFIG
 BRAIN_PATH = os.getenv("BRAIN_PATH", os.path.join(os.path.expanduser("~"), ".gemini/antigravity/brain"))
 # SOVEREIGN INFERENCE PROXY (SIP)
+_run_dir = os.getenv("XDG_RUNTIME_DIR", "/tmp")
 SIP_ENABLED = os.getenv("SIP_ENABLED", "True").lower() == "true"
 SIP_SOCKET_PATH = os.getenv("SIP_SOCKET_PATH", os.path.join(_run_dir, "red_pill_sip.sock"))
 

@@ -101,7 +101,7 @@ class LazarusPulse:
 				logger.info("Pulse: Running proactive Absence Guard sync...")
 				for coll in ["work_memories", "social_memories", "story_memories", "directive_memories"]:
 					try:
-						await asyncio.to_thread(self.memory_mgr._refresh_ttl_timestamps, coll)
+						await asyncio.to_thread(self.memory_mgr.metabolism.refresh_ttl_timestamps, coll)
 					except Exception as e:
 						logger.error(f"Pulse: Absence Guard failed for {coll}: {e}")
 

@@ -35,8 +35,6 @@ def check_service(url, name):
 	return False
 
 
-
-
 def query_qdrant(collection, text):
 
 	# We use a dummy vector query just for keyword or semantic match fallback if needed.

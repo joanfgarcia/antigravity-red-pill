@@ -1,6 +1,5 @@
 import argparse
 import os
-import random
 import secrets
 import sys
 

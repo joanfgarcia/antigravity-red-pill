@@ -106,7 +106,7 @@ def distill_engram(raw_content: str) -> Dict[str, Any]:
 			if attempt < max_retries - 1:
 				time.sleep(backoff ** (attempt + 1))
 			else:
-				logger.error(f"[SLEEP ENGINE] All distillation retries failed. Falling back.")
+				logger.error("[SLEEP ENGINE] All distillation retries failed. Falling back.")
 
 	return fallback
 

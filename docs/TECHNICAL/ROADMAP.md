@@ -67,6 +67,7 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
 - [ ] **Neural Watchdog (Async Audit)**: Background service monitoring file changes and validating code integrity, updating a 'Health Engram' in Qdrant.
 - [ ] **Swarm Broadcast**: Community-wide message delivery (currently P2P only).
 - [ ] **Mailbox Cleanup**: Auto-purge read messages from Firebase after TTL.
+- [ ] **SQLite Workflow DAG (`specs.md`)**: Use SQLite triggers and polling hooks on `minion_inbox.db` to chain Minion executions asynchronously (e.g. Oracle -> Compressor) without Python blocking.
 
 ### Phase 4: Physical Manifestation (Long-Term — Backlog)
 - [ ] **Holographic Avatar (Looking Glass)**: 3D holographic display with real-time avatar rendering via Three.js + HoloPlay.js, connected to Red Pill via WebSocket. Emotion-driven expressions from Chroma/USP.
