@@ -10,11 +10,19 @@
 ### 🛡️ Operation A+ (Absolute Purity Audit Remediation)
 - **[ARCH] Sovereign Trade-offs Manifesto**: Authored `PHILOSOPHY.md` to explicitly document architectural tensions (HiveMind privacy, Lore Skin consent, Swarm complexity, FSRS decay models, and Node.js rejection) as intentional features, solving the "Philosophical Incoherence" audit finding.
 ### Added
+- **[AUDIT] Digest Split**: Upgraded `prepare_certification.sh` to generate `RED_PILL_DIGEST_CORE.txt` and `RED_PILL_DIGEST_TESTS.txt` with dedicated indices to prevent LLM context truncation.
+- **[DOCS] Interceptor Architecture**: Added `6.2 Global MCP Interceptor & Enterprise Telemetry` to `ARCHITECTURE.md`.
+- **[DOCS] Audit Exceptions**: Added `Known Audit Exceptions (WONTFIX)` to `SECURITY.md` explicitly accepting the localhost MLX daemon unauthenticated risk (SEC-03).
+- `test_inbox_concurrency.py`: Stress test asserting massive concurrent background tool writes won't trigger `database is locked`.
 - Created `docs/ENV_REFERENCE.md` explaining all `.env` system configuration properties.
 - Implemented `MinionInbox` (SQLite) to intercept and store background Swarm Minion reports decoupling them from Qdrant.
 - **Phase 2.5 Complete**: Added automatic `key_epoch` TreeKEM ratcheting (Perfect Forward Secrecy) to Swarm Firebase messaging to ensure past messages cannot be compromised.
 
 ### Changed
+- **[FIX] CF-01 Hive Mind Guarding**: Wrapped `transmit_experience` in `add_memory` inside a `try...except` to prevent local Qdrant memory failures in case of Milvus remote transmission failure.
+- **[FIX] CF-02 Wake-Up O(n) Scalability**: Refactored `wake_up_v6.py` to use a native Qdrant `payload index` query on the `immune` field instead of an unbound python-filtered scroll loop. Storage engine now explicitly creates indexes for `immune` and `importance`.
+- **[FIX] MCP Deadlock Resolution**: Refactored `MinionInbox().drop_report` and `notify_user` to run non-blockingly using `asyncio.to_thread` directly inside MCP handlers, eradicating UI freezes.
+- **[FIX] SQLite Concurrency**: Enforced `WAL` (Write-Ahead Logging) and `NORMAL` synchronous mode in `minion_inbox.db` schema initialization.
 - **[FIX] MCP Deadlock Resolution**: Fixed severe UI freezes caused by MinionInbox SQLite writes blocking the main `asyncio` event loop. Background drops and notifications are now securely offloaded via `asyncio.to_thread`, and SQLite connections enforce `WAL` mode for high-concurrency swarms.
 - **[DOCS] Interceptor Architecture**: Added `6.2 Global MCP Interceptor & Enterprise Telemetry` to `ARCHITECTURE.md` to formally document RAG injection limits, Enterprise IoC boundaries, and IDE limitations preventing native conversation hooks.
 - All Minion MCP Tools (`run_security_audit`, `check_system_health`, etc.) have been converted to 100% asynchronous (fire-and-forget) with native OSD (`notify-send`) notifications upon completion.

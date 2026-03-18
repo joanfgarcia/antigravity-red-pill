@@ -43,7 +43,7 @@ def query_qdrant(collection, text):
 	# For robust zero-dependency, we do a scroll to get all and filter locally for simplicity in this script.
 
 	scroll_url = f"{QDRANT_URL}/collections/{collection}/points/scroll"
-	
+
 	payload_dict = {"limit": 500, "with_payload": True}
 	if collection != "directive_memories":
 		payload_dict["filter"] = {"must": [{"key": "immune", "match": {"value": True}}]}

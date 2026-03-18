@@ -44,6 +44,7 @@ def test_notify_macos_error():
 def test_watcher_main_lock_exists():
 	"""MF-004: Test real de la salida segura cuando el watcher ya corre."""
 	import pytest
+
 	from red_pill.swarm.watcher import main
 
 	with patch("os.path.exists", return_value=True):
