@@ -16,3 +16,10 @@ Consult our technical [Threat Model](THREAT_MODEL.md) for a detailed analysis of
 Our scripts (`install_neo.sh`, `backup_soul.sh`, etc.) are designed to be surgical. The Foundation core does not inject corporate telemetry or "backdoors" for third parties. Bunker security is our absolute priority.
 
 **Integrity is the only path. 760.**
+
+## 4. Known Audit Exceptions (WONTFIX)
+Certain security findings from external engineering audits (e.g. Claude 4.6) are explicitly discarded when they conflict with the **Nomad Persona** (local-first, extreme lowest-friction). 
+
+- **SEC-03: Localhost Daemon Authentication (Bearer Token)**
+  - **Status**: **WONTFIX (Accepted Risk by Design)**
+  - **Rationale**: In a sovereign, single-operator Bünker, the OS network layer intrinsically isolates `127.0.0.1`. If a threat actor is capable of sending unauthorized HTTP requests to `localhost:8760`, they have already achieved arbitrary code execution within the host OS boundary. Adding internal HTTP authentication (like a Bearer token) introduces friction without meaningfully expanding the perimeter. The Zero-Trust boundary is drawn at the OS level.
