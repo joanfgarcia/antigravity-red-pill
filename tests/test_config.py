@@ -55,7 +55,7 @@ class TestConfigWarnings:
 
 	def test_milvus_unencrypted_non_local_warns(self):
 		"""Lines 42-44: MILVUS_ENABLED=True + MILVUS_SECURE=False + non-local → SEC-F03 forces True."""
-		with warnings.catch_warnings(record=True) as w:
+		with warnings.catch_warnings(record=True):
 			warnings.simplefilter("always")
 			mod = _reimport_config(
 				{

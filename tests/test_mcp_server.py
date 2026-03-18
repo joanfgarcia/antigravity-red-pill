@@ -418,7 +418,8 @@ class TestMCPAdditionalTools:
 
 		with patch("subprocess.run") as mock_run:
 			mock_run.return_value = MagicMock(stdout="audit pass", returncode=0)
-			result = await handle_call_tool("run_pre_pr_audit", {})
+			with patch("asyncio.create_task"):
+				result = await handle_call_tool("run_pre_pr_audit", {})
 			assert "started" in result[0].text or "PASSED" in result[0].text
 
 	async def test_run_sovereignty_benchmark(self):
@@ -438,12 +439,23 @@ class TestMCPAdditionalTools:
 			assert "session refreshed" in result[0].text
 
 	async def test_swarm_send_message(self):
+		import os
+
 		from red_pill.mcp_server import handle_call_tool
 
-		with patch("red_pill.mcp_server.SwarmMessagingSkill") as mock_skill:
-			mock_skill.return_value.execute_send.return_value = "sent"
-			result = await handle_call_tool("swarm_send_message", {"target_alias": "t", "message": "m"})
-			assert "sent" in result[0].text
+		old_secret = os.getenv("SWARM_SHARED_SECRET")
+		os.environ["SWARM_SHARED_SECRET"] = "supersecret"
+		try:
+			with patch("red_pill.mcp_server.SwarmMessagingSkill") as mock_skill:
+				mock_skill.return_value.execute_send.return_value = "sent"
+				result = await handle_call_tool("swarm_send_message", {"target_alias": "t", "message": "m"})
+				assert "sent" in result[0].text
+		finally:
+			if old_secret is not None:
+				os.environ["SWARM_SHARED_SECRET"] = old_secret
+			else:
+				if "SWARM_SHARED_SECRET" in os.environ:
+					del os.environ["SWARM_SHARED_SECRET"]
 
 	async def test_swarm_subscribe(self):
 		from red_pill.mcp_server import handle_call_tool
@@ -454,8 +466,9 @@ class TestMCPAdditionalTools:
 			assert "subscribed" in result[0].text
 
 	async def test_swarm_check_mailbox(self):
-		from red_pill.mcp_server import handle_call_tool
 		import os
+
+		from red_pill.mcp_server import handle_call_tool
 
 		old_secret = os.getenv("SWARM_SHARED_SECRET")
 		os.environ["SWARM_SHARED_SECRET"] = "supersecret"

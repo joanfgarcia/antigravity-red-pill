@@ -29,6 +29,9 @@ class MinionInbox:
 	def _init_db(self) -> None:
 		with sqlite3.connect(self.db_path) as conn:
 			cursor = conn.cursor()
+			# Enable Write-Ahead Logging for graceful concurrency across minions
+			cursor.execute("PRAGMA journal_mode=WAL;")
+			cursor.execute("PRAGMA synchronous=NORMAL;")
 			cursor.execute(
 				"""
 				CREATE TABLE IF NOT EXISTS inbox (

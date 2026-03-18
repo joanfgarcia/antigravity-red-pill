@@ -43,12 +43,14 @@ def test_notify_macos_error():
 
 def test_watcher_main_lock_exists():
 	"""MF-004: Test real de la salida segura cuando el watcher ya corre."""
+	import pytest
 	from red_pill.swarm.watcher import main
 
 	with patch("os.path.exists", return_value=True):
 		with patch("builtins.print") as mock_print:
-			with patch("sys.exit") as mock_exit:
-				main()
+			with patch("sys.exit", side_effect=SystemExit) as mock_exit:
+				with pytest.raises(SystemExit):
+					main()
 				mock_print.assert_called_with("Watcher is already running.")
 				mock_exit.assert_called_with(0)
 

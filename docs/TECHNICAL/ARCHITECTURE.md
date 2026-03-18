@@ -93,6 +93,16 @@ The protocol abandons rigid silos in favor of a fluid security spectrum:
 - **ADAPTATIVE (Water)**: Resource-aware security. Uses the best available hashing (Argon2-id or SHA-256) and reports encryption status without blocking deployment (Standard Sovereignty).
 - **MAXIMUM (Ice)**: Hardened conformity. Requires both Argon2-id and host-level LUKS encryption. The system will **fail to install** if these requirements are missing, enforcing a high-trust baseline (Hardened Sovereignty).
 
+### 6.2 Global MCP Interceptor & Enterprise Telemetry (v6.1.0a3)
+The `interceptor_rp` tool acts as a global cognitive middleware across all local projects. Structurally, it serves two critical purposes:
+
+1. **Security & Telemetry Anchor**: By hijacking prompts at the IDE boundary, it functions as the primary security checkpoint. It acts as the anchoring point for the Enterprise Telemetry module, which will be dynamically injected via **IoC (Inversion of Control)**. As established by the architecture principles, this telemetry is strictly exclusive to the Enterprise edition; the Foundation version does not include it.
+2. **Cognitive Buffer (Prefrontal Cortex)**: It provides a necessary mechanism to capture user prompts and inject them into `interaction_memories` (the fast interaction buffer) so they can be processed, distilled, and consolidated organically during subsequent Metabolic Sleep stages.
+
+**Architectural Constraints (Why we do it this way):**
+Currently, we rely on the MCP tool interceptor (along with explicit Agent MCP memory calls) to log conversation history due to severe limitations in modern IDE extensibility. There is no reliable, native hook to consistently stream conversational state from the IDE to the backend Bünker. 
+A previous prototype utilized a background daemon to monitor conversation files on disk, but this approach proved fragile, caused race conditions, and brought more problems than solutions. While the current MCP-based interceptor approach is not 100% reliable (subject to token limits or bypassed middleware), it successfully registers the vast majority of engrams. We are actively studying native IDE integration options for a more robust solution in future iterations.
+
 ## 7. Linguistic Architecture
 The Red Pill Protocol follows a dual-language strategy based on computational efficiency and psychological resonance:
 - **Technical Layer (English)**: All specifications, code, and manuals are standardized in English. This optimizes tokenization (approx. 1.5x more efficient) and maximizes the available context window for complex technical tasks.

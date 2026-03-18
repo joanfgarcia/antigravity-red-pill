@@ -15,8 +15,12 @@
 - **Phase 2.5 Complete**: Added automatic `key_epoch` TreeKEM ratcheting (Perfect Forward Secrecy) to Swarm Firebase messaging to ensure past messages cannot be compromised.
 
 ### Changed
+- **[FIX] MCP Deadlock Resolution**: Fixed severe UI freezes caused by MinionInbox SQLite writes blocking the main `asyncio` event loop. Background drops and notifications are now securely offloaded via `asyncio.to_thread`, and SQLite connections enforce `WAL` mode for high-concurrency swarms.
+- **[DOCS] Interceptor Architecture**: Added `6.2 Global MCP Interceptor & Enterprise Telemetry` to `ARCHITECTURE.md` to formally document RAG injection limits, Enterprise IoC boundaries, and IDE limitations preventing native conversation hooks.
 - All Minion MCP Tools (`run_security_audit`, `check_system_health`, etc.) have been converted to 100% asynchronous (fire-and-forget) with native OSD (`notify-send`) notifications upon completion.
 - Refactored `MemoryManager` God Class: extracted functionalities into dedicated `StorageEngine`, `EmbeddingEngine`, and `MetabolismKernel`. `MemoryManager` now acts as a stable `Facade`, resolving the primary architectural debt finding from the March 18 Audit.
+- **[QA] Swarm Mock Isolation**: Fixed test environment leakage pulling `SWARM_SHARED_SECRET` incorrectly by enforcing strict `os.environ` patching during Minion MCP unit tests (resolving `CF-001` test failures).
+- **[FIX] Security Warning Collisions**: Rectified `config.py` logic where the `SEC-F03` auto-encryption rule was silencing the intended `SEC-002` plaintext transmission warnings for Milvus remote hosts.
 - **[DOCS] Environment Parameter Compendium**: Created `docs/ENV_REFERENCE.md`, an exhaustive taxonomy of all available `.env` parameters, their bounds, and the Bünker features they toggle.
 - **[SEC-001] Adaptative Encryption**: Solidified `ADAPTATIVE` mode as the default for local installations, gracefully warning operators without LUKS instead of blocking execution.
 - **[SEC-007] Mystique Protocol & Lore Skin Consent**: Introduced an explicit `Y/n` CLI consent prompt when switching to non-neutral skins to prevent silent behavioral drift. Explicitly exempted the dynamic `Mystique` protocol.

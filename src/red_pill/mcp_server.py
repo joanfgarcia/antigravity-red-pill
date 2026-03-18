@@ -204,15 +204,22 @@ async def handle_run_security_audit(arguments: Dict[str, Any]):
 			else:
 				audit_text = f"Audit Failed: {res.error}"
 
-			MinionInbox().drop_report(event_id=event_id, source="SmithMinion", status=res.status, content=audit_text)
-			notify_user("Security Audit", f"Audit [{event_id}] {res.status}", category="system")
+			def _deliver_report():
+				MinionInbox().drop_report(event_id=event_id, source="SmithMinion", status=res.status, content=audit_text)
+				notify_user("Security Audit", f"Audit [{event_id}] {res.status}", category="system")
+
+			await asyncio.to_thread(_deliver_report)
 		except Exception as e:
 			logger.error(f"Async Audit [{event_id}] crashed: {e}")
+			err_msg = str(e)
 			from red_pill.core.inbox import MinionInbox
 			from red_pill.utils.observer import notify_user
 
-			MinionInbox().drop_report(event_id=event_id, source="SmithMinion", status="crashed", content=f"Exception: {e}")
-			notify_user("Audit Crash", f"[{event_id}] Failed", category="system")
+			def _deliver_err():
+				MinionInbox().drop_report(event_id=event_id, source="SmithMinion", status="crashed", content=f"Exception: {err_msg}")
+				notify_user("Audit Crash", f"[{event_id}] Failed", category="system")
+
+			await asyncio.to_thread(_deliver_err)
 
 	asyncio.create_task(_run_bg())
 	return [types.TextContent(type="text", text=f"Background Audit started [Event ID: {event_id}]. Results will be in the Minion Inbox.")]
@@ -239,15 +246,22 @@ async def handle_search_memory_research(arguments: Dict[str, Any]):
 			res = results[0]
 			content = f"ORACLE SYNTHESIS:\n{res.result.get('synthesis')}" if res.status == "success" else f"Research Failed: {res.error}"
 
-			MinionInbox().drop_report(event_id=event_id, source="OracleMinion", status=res.status, content=content)
-			notify_user("Oracle Research", f"Synthesis [{event_id}] Ready", category="system")
+			def _deliver_report():
+				MinionInbox().drop_report(event_id=event_id, source="OracleMinion", status=res.status, content=content)
+				notify_user("Oracle Research", f"Synthesis [{event_id}] Ready", category="system")
+
+			await asyncio.to_thread(_deliver_report)
 		except Exception as e:
 			logger.error(f"Oracle Research [{event_id}] crashed: {e}")
+			err_msg = str(e)
 			from red_pill.core.inbox import MinionInbox
 			from red_pill.utils.observer import notify_user
 
-			MinionInbox().drop_report(event_id=event_id, source="OracleMinion", status="crashed", content=f"Exception: {e}")
-			notify_user("Oracle Crash", f"[{event_id}] Failed", category="system")
+			def _deliver_err():
+				MinionInbox().drop_report(event_id=event_id, source="OracleMinion", status="crashed", content=f"Exception: {err_msg}")
+				notify_user("Oracle Crash", f"[{event_id}] Failed", category="system")
+
+			await asyncio.to_thread(_deliver_err)
 
 	asyncio.create_task(_run_bg())
 	return [types.TextContent(type="text", text=f"Oracle Research started [Event ID: {event_id}]. Results will be in the Minion Inbox.")]
@@ -278,15 +292,22 @@ async def handle_check_system_health(arguments: Dict[str, Any]):
 			else:
 				health = f"SYSTEM HEALTH: Failed\nError: {res.error}"
 
-			MinionInbox().drop_report(event_id=event_id, source="KeymakerMinion", status=res.status, content=health)
-			notify_user("Health Check", f"Status [{event_id}] Ready", category="system")
+			def _deliver_report():
+				MinionInbox().drop_report(event_id=event_id, source="KeymakerMinion", status=res.status, content=health)
+				notify_user("Health Check", f"Status [{event_id}] Ready", category="system")
+
+			await asyncio.to_thread(_deliver_report)
 		except Exception as e:
 			logger.error(f"Health Check [{event_id}] crashed: {e}")
+			err_msg = str(e)
 			from red_pill.core.inbox import MinionInbox
 			from red_pill.utils.observer import notify_user
 
-			MinionInbox().drop_report(event_id=event_id, source="KeymakerMinion", status="crashed", content=f"Exception: {e}")
-			notify_user("Health Check Crash", f"[{event_id}] Failed", category="system")
+			def _deliver_err():
+				MinionInbox().drop_report(event_id=event_id, source="KeymakerMinion", status="crashed", content=f"Exception: {err_msg}")
+				notify_user("Health Check Crash", f"[{event_id}] Failed", category="system")
+
+			await asyncio.to_thread(_deliver_err)
 
 	asyncio.create_task(_run_bg())
 	return [types.TextContent(type="text", text=f"Keymaker Health Check started [Event ID: {event_id}]. Results will be in the Minion Inbox.")]
@@ -328,15 +349,22 @@ async def handle_compress_prompt(arguments: Dict[str, Any]):
 			else:
 				content = f"Compression Failed: {res.error}"
 
-			MinionInbox().drop_report(event_id=event_id, source="CompressorMinion", status=res.status, content=content)
-			notify_user("Prompt Compressor", f"Compression [{event_id}] Ready", category="system")
+			def _deliver_report():
+				MinionInbox().drop_report(event_id=event_id, source="CompressorMinion", status=res.status, content=content)
+				notify_user("Prompt Compressor", f"Compression [{event_id}] Ready", category="system")
+
+			await asyncio.to_thread(_deliver_report)
 		except Exception as e:
 			logger.error(f"Compressor [{event_id}] crashed: {e}")
+			err_msg = str(e)
 			from red_pill.core.inbox import MinionInbox
 			from red_pill.utils.observer import notify_user
 
-			MinionInbox().drop_report(event_id=event_id, source="CompressorMinion", status="crashed", content=f"Exception: {e}")
-			notify_user("Compressor Crash", f"[{event_id}] Failed", category="system")
+			def _deliver_err():
+				MinionInbox().drop_report(event_id=event_id, source="CompressorMinion", status="crashed", content=f"Exception: {err_msg}")
+				notify_user("Compressor Crash", f"[{event_id}] Failed", category="system")
+
+			await asyncio.to_thread(_deliver_err)
 
 	asyncio.create_task(_run_bg())
 	return [types.TextContent(type="text", text=f"Compressor started [Event ID: {event_id}]. Results will be in the Minion Inbox.")]
