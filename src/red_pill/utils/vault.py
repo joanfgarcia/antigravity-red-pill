@@ -25,7 +25,11 @@ class CloudVault:
 		self.enabled = cfg.CLOUD_VAULT_ENABLED
 		self.folder_id = cfg.CLOUD_VAULT_FOLDER_ID
 		self.service_account_file = cfg.CLOUD_SERVICE_ACCOUNT_FILE
-		self.token_file = os.path.join(os.path.dirname(self.service_account_file), "token.json")
+
+		# SEC-F02b: separate token from service account directory
+		creds_dir = os.path.join(os.getenv("HOME", "/tmp"), ".agent", "credentials")
+		os.makedirs(creds_dir, exist_ok=True)
+		self.token_file = os.path.join(creds_dir, "drive_token.json")
 		self.client_secrets_file = os.path.join(os.path.dirname(self.service_account_file), "client_secrets.json")
 		self.service: Optional[Any] = None
 

@@ -68,8 +68,9 @@ def calculate_resonance_vector(
 		scroll_filter = models.Filter(must=must_conditions)
 		offset = None
 		safety = 0
+		max_scroll = getattr(cfg, "MOOD_PROFILE_MAX_SCROLL", 50)
 
-		while safety < 50:
+		while safety < max_scroll:
 			safety += 1
 			try:
 				points, offset = manager.client.scroll(
@@ -98,6 +99,12 @@ def calculate_resonance_vector(
 
 			if offset is None:
 				break
+
+		if safety >= max_scroll and offset is not None:
+			logger.warning(
+				f"PERF-001: calculate_resonance_vector hit the maximum scroll pagination ceiling ({max_scroll}) "
+				f"for '{collection}'. The computed emotional mood vector may be truncated."
+			)
 
 	# Normalize to [0, 1]
 	if total_weight > 0:
