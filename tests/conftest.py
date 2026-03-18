@@ -51,3 +51,16 @@ def pytest_collection_modifyitems(items):
 				item.add_marker(pytest.mark.timeout(30))
 	except ImportError:
 		pass
+
+
+def check_qdrant_running():
+	import socket
+
+	with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+		s.settimeout(0.5)
+		return s.connect_ex(("localhost", 6333)) == 0
+
+
+def pytest_runtest_setup(item):
+	if "integration" in item.keywords and not check_qdrant_running():
+		pytest.skip("TEST-002: Integration tests require Qdrant (Docker) running on port 6333.")

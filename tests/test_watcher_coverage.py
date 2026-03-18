@@ -41,9 +41,35 @@ def test_notify_macos_error():
 			mock_print.assert_any_call("[Watcher] Notification failed: Command 'cmd' returned non-zero exit status 1.")
 
 
-def test_watcher_main_block_coverage():
-	"""Trigger the main block branches if possible, or just verify it's callable."""
-	with patch("os.path.exists", side_effect=[True]):
-		with patch("sys.exit"):
-			with patch("builtins.print"):
-				pass
+def test_watcher_main_lock_exists():
+	"""MF-004: Test real de la salida segura cuando el watcher ya corre."""
+	from red_pill.swarm.watcher import main
+
+	with patch("os.path.exists", return_value=True):
+		with patch("builtins.print") as mock_print:
+			with patch("sys.exit") as mock_exit:
+				main()
+				mock_print.assert_called_with("Watcher is already running.")
+				mock_exit.assert_called_with(0)
+
+
+def test_watcher_main_execution():
+	"""MF-004: Test real de la ejecución exitosa de main()."""
+	from red_pill.swarm.watcher import main
+
+	with patch("os.path.exists", side_effect=[False, True]):  # 1 para check, 2 para finally
+		with patch("builtins.open") as mock_open:
+			with patch("os.getpid", return_value=1234):
+				with patch("red_pill.swarm.watcher.simulate_firebase_listener") as mock_sim:
+					with patch("os.remove") as mock_remove:
+						main()
+
+						# Verify lock was written
+						mock_open.assert_called_once()
+						mock_open.return_value.__enter__.return_value.write.assert_called_with("1234")
+
+						# Verify listener called
+						mock_sim.assert_called_once()
+
+						# Verify cleanup
+						mock_remove.assert_called_once()

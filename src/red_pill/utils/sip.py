@@ -1,9 +1,8 @@
+import asyncio
 import json
 import logging
 import os
-import socketserver
 import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import requests
 
@@ -13,124 +12,157 @@ from red_pill.memory import MemoryManager
 logger = logging.getLogger("red_pill.sip")
 
 
-class SovereignInferenceProxy(BaseHTTPRequestHandler):
-	"""
-	Sovereign Inference Proxy (SIP)
-	Intercepts LLM traffic via UNIX Socket to record interactions automatically.
-	"""
-
-	def log_message(self, format, *args):
-		# Silence standard HTTP logging
-		return
-
-	def do_POST(self):
-		if self.path == "/v1/chat/completions":
-			self.handle_inference()
-		else:
-			self.forward_request()
-
-	def handle_inference(self):
-		content_length = int(self.headers["Content-Length"])
-		post_data = self.rfile.read(content_length)
-
-		try:
-			req_json = json.loads(post_data.decode("utf-8"))
-		except Exception as e:
-			self.send_error(400, f"Invalid JSON: {e}")
+def _capture_interaction(request, response):
+	try:
+		messages = request.get("messages", [])
+		if not messages:
 			return
 
-		target_url = cfg.MLX_LM_URL
+		prompt = ""
+		for m in reversed(messages):
+			if m.get("role") == "user":
+				prompt = m.get("content", "")
+				break
 
-		try:
-			resp = requests.post(target_url, json=req_json, headers=dict(self.headers), timeout=120)
+		choices = response.get("choices", [])
+		if not choices:
+			return
 
-			# Extract and capture
-			self.capture_interaction(req_json, resp.json())
+		resp_text = choices[0].get("message", {}).get("content", "")
 
-			self.send_response(resp.status_code)
-			for key, value in resp.headers.items():
-				if key.lower() not in ["content-encoding", "transfer-encoding", "content-length"]:
-					self.send_header(key, value)
+		if prompt and resp_text:
+			threading.Thread(target=_save_to_bunker, args=(prompt, resp_text), daemon=True).start()
 
-			resp_content = resp.content
-			self.send_header("Content-Length", str(len(resp_content)))
-			self.end_headers()
-			self.wfile.write(resp_content)
+	except Exception as e:
+		logger.error(f"SIP Capture Error: {e}")
 
-		except Exception as e:
-			logger.error(f"SIP Forwarding Error: {e}")
-			self.send_error(502, f"Bad Gateway: {e}")
 
-	def capture_interaction(self, request, response):
-		try:
-			messages = request.get("messages", [])
-			if not messages:
+def _save_to_bunker(prompt, response):
+	try:
+		mgr = MemoryManager()
+		mgr.record_interaction_pair(prompt, response, role="assistant")
+		logger.debug("SIP: Interaction recorded successfully.")
+	except Exception as e:
+		logger.error(f"SIP Persistence Failure: {e}")
+
+
+async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+	try:
+		request_line = await reader.readline()
+		if not request_line:
+			return
+
+		parts = request_line.decode("utf-8").strip().split()
+		if len(parts) < 3:
+			return
+		method, path, version = parts[0], parts[1], parts[2]
+
+		headers = {}
+		content_length = 0
+		while True:
+			line = await reader.readline()
+			line_str = line.decode("utf-8").strip()
+			if not line_str:
+				break
+			key, val = line_str.split(":", 1)
+			key, val = key.strip(), val.strip()
+			headers[key] = val
+			if key.lower() == "content-length":
+				content_length = int(val)
+
+		body = await reader.readexactly(content_length) if content_length > 0 else b""
+
+		loop = asyncio.get_running_loop()
+
+		# Forwarding headers safely
+		out_headers = dict(headers)
+		# Strip host to avoid host mismatch at the target API
+		out_headers.pop("Host", None)
+		out_headers.pop("host", None)
+
+		if path == "/v1/chat/completions" and method == "POST":
+			try:
+				req_json = json.loads(body.decode("utf-8"))
+			except Exception as e:
+				writer.write(f"{version} 400 Bad Request\r\n\r\nInvalid JSON: {e}".encode("utf-8"))
+				await writer.drain()
 				return
 
-			prompt = ""
-			for m in reversed(messages):
-				if m.get("role") == "user":
-					prompt = m.get("content", "")
-					break
+			target_url = cfg.MLX_LM_URL
 
-			choices = response.get("choices", [])
-			if not choices:
-				return
+			def fetch():
+				return requests.post(target_url, json=req_json, headers=out_headers, timeout=120)
 
-			resp_text = choices[0].get("message", {}).get("content", "")
+			try:
+				resp = await loop.run_in_executor(None, fetch)
+				try:
+					resp_json = resp.json()
+					_capture_interaction(req_json, resp_json)
+				except Exception:
+					pass
 
-			if prompt and resp_text:
-				threading.Thread(target=self._save_to_bunker, args=(prompt, resp_text), daemon=True).start()
+				writer.write(f"{version} {resp.status_code} OK\r\n".encode("utf-8"))
+				for k, v in resp.headers.items():
+					if k.lower() not in ["content-encoding", "transfer-encoding", "content-length"]:
+						writer.write(f"{k}: {v}\r\n".encode("utf-8"))
+				writer.write(f"Content-Length: {len(resp.content)}\r\n\r\n".encode("utf-8"))
+				writer.write(resp.content)
+				await writer.drain()
+			except Exception as e:
+				logger.error(f"SIP Forwarding Error: {e}")
+				writer.write(f"{version} 502 Bad Gateway\r\n\r\n{str(e)}".encode("utf-8"))
+				await writer.drain()
 
-		except Exception as e:
-			logger.error(f"SIP Capture Error: {e}")
+		else:
+			base_url = cfg.MLX_LM_URL.replace("/v1/chat/completions", "")
+			target_url = f"{base_url}{path}"
 
-	def _save_to_bunker(self, prompt, response):
-		try:
-			mgr = MemoryManager()
-			mgr.record_interaction_pair(prompt, response, role="assistant")
-			logger.debug("SIP: Interaction recorded successfully.")
-		except Exception as e:
-			logger.error(f"SIP Persistence Failure: {e}")
+			def fetch_fwd():
+				return requests.request(method=method, url=target_url, data=body, headers=out_headers, timeout=30)
 
-	def forward_request(self):
-		content_length = int(self.headers.get("Content-Length", 0))
-		post_data = self.rfile.read(content_length) if content_length > 0 else None
+			try:
+				resp = await loop.run_in_executor(None, fetch_fwd)
+				writer.write(f"{version} {resp.status_code} OK\r\n".encode("utf-8"))
+				for k, v in resp.headers.items():
+					if k.lower() not in ["content-encoding", "transfer-encoding", "content-length"]:
+						writer.write(f"{k}: {v}\r\n".encode("utf-8"))
+				writer.write(f"Content-Length: {len(resp.content)}\r\n\r\n".encode("utf-8"))
+				writer.write(resp.content)
+				await writer.drain()
+			except Exception as e:
+				writer.write(f"{version} 502 Bad Gateway\r\n\r\n{str(e)}".encode("utf-8"))
+				await writer.drain()
 
-		base_url = cfg.MLX_LM_URL.replace("/v1/chat/completions", "")
-		target_url = f"{base_url}{self.path}"
-
-		try:
-			resp = requests.request(method=self.command, url=target_url, data=post_data, headers=dict(self.headers), timeout=30)
-			self.send_response(resp.status_code)
-			for key, value in resp.headers.items():
-				if key.lower() not in ["content-encoding", "transfer-encoding", "content-length"]:
-					self.send_header(key, value)
-			self.send_header("Content-Length", str(len(resp.content)))
-			self.end_headers()
-			self.wfile.write(resp.content)
-		except Exception as e:
-			self.send_error(502, f"Gateway Error: {e}")
-
-
-class UnixHTTPServer(socketserver.UnixStreamServer, HTTPServer):
-	def server_bind(self):
-		socketserver.UnixStreamServer.server_bind(self)
-		self.server_name = "localhost"
-		self.server_port = 0
+	except asyncio.CancelledError:
+		pass
+	except Exception as e:
+		logger.error(f"SIP Async Error: {e}")
+	finally:
+		if not writer.is_closing():
+			writer.close()
+			try:
+				await writer.wait_closed()
+			except Exception:
+				pass
 
 
-def run_sip(socket_path=None):
-	if socket_path is None:
-		socket_path = cfg.SIP_SOCKET_PATH
-
+async def serve_sip(socket_path):
 	if os.path.exists(socket_path):
 		os.remove(socket_path)
 
-	logger.info(f"Sovereign Inference Proxy (SIP) active at UNIX Socket: {socket_path}")
-	httpd = UnixHTTPServer(socket_path, SovereignInferenceProxy)
-
-	# Ensure local only access
+	server = await asyncio.start_unix_server(handle_client, path=socket_path)
 	os.chmod(socket_path, 0o600)
+	logger.info(f"Sovereign Inference Proxy (SIP) active at Async UNIX Socket: {socket_path}")
 
-	httpd.serve_forever()
+	async with server:
+		await server.serve_forever()
+
+
+def run_sip(socket_path=None):
+	"""Sync entrypoint for backwards compatibility"""
+	if socket_path is None:
+		socket_path = cfg.SIP_SOCKET_PATH
+	try:
+		asyncio.run(serve_sip(socket_path))
+	except KeyboardInterrupt:
+		logger.info("SIP Terminated.")

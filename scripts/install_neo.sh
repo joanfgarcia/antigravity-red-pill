@@ -54,12 +54,18 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="$SCRIPT_DIR/../.env"
 
 # Load existing environment if available
-if [ -f "$ENV_FILE" ]; then
-	# Simple .env loader
-	export $(grep -v '^#' "$ENV_FILE" | xargs)
-	echo -e "${BLUE}Configuración previa detectada.${NC}"
+if [ -f .env ]; then
+	echo -e "${YELLOW}Cargando .env...${NC}"
+	set -a
+	source .env
+	set +a
+else
+	echo -e "${YELLOW}No .env found. Using .env.example...${NC}"
+	cp .env.example .env
+	set -a
+	source .env
+	set +a
 fi
-
 export IA_DIR="${ANTIGRAVITY_IA_DIR:-$HOME/Documents/IA}"
 
 check_encryption() {

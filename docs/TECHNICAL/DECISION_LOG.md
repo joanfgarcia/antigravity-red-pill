@@ -153,3 +153,20 @@ This makes the B760 decay model biologically accurate end-to-end.
   1. **Latency (Critical Path)**: The main `red-pill` CLI has a startup overhead of ~500ms-1s due to package imports (`pydantic`, `qdrant-client`, etc.). The standalone script executes in <100ms, ensuring the agent's Step 0 "awakening" feels instantaneous to the user.
   2. **Dependency Resilience**: Using only Python's standard library guarantees that the identity sync works even if the project's virtual environment is corrupted or undergoing a heavy refactor.
 - **Compromise**: A mirroring command `red-pill context wake` will be added to the CLI for manual debugging and discovery, but the production hook in `GEMINI.md` will always point to the optimized standalone script.
+
+---
+
+## [AD-002] Rejection of the "Agent Factory" Paradigm (The `specs.md` Purge)
+**Date**: 2026-03-18  
+**Context**: Phase O.7 (v6.1 Alpha) - Post-Audit Cleanup  
+**Status**: ACCEPTED & IMPLEMENTED  
+
+### 1. The Problem
+The inclusion of `specs.md` and `.specsmd/` workflows introduced an industrial, "assembly-line" approach to AI interaction, where the human acts as a passive client handing off specifications to a chain of automated workers (similar to patterns seen in Deerflow's `DECISION.log`).
+
+### 2. The Decision
+Completely purge the `specs.md` framework from the Foundation core. The Red Pill Protocol is fundamentally about **Human-AI Symbiosis**, not industrial automation. AI should be a collaborative partner in the creative process, not a replacement for human joy and connection in software engineering.
+Agent Factory paradigms might be explored in the Enterprise layer for corporate velocity, but they are antithetical to the Sovereign Foundation.
+
+### 3. Nuance: Batch vs. Creative Processing
+We recognize that agent chains (often resting on "one-shot" prompting, recently rebranded as `specs.md` or similar to feign novelty) are highly effective for repetitive, variation-free batch processing (e.g., QA, mass refactoring, log analysis) where AI sensors excel at catching details humans miss. However, applying this "assembly line" to entirely creative or evolving processes fundamentally breaks the iterative magic of software creation.

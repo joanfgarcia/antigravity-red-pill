@@ -1,16 +1,22 @@
-FROM python:3.12-slim
+FROM python:3.12-slim AS builder
 
 WORKDIR /app
-
-# Install git just in case dependencies need it
 RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
-# Copy project root
-COPY . .
+COPY pyproject.toml README.md ./
+COPY src/ ./src/
 
-# Install the package in editable mode or standard mode
-# We use standard install to simulate a real user
 RUN pip install .
 
-# Default command
+FROM python:3.12-slim
+
+RUN useradd -ms /bin/bash appuser
+USER appuser
+WORKDIR /home/appuser
+
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
 CMD ["red-pill", "diag", "work"]

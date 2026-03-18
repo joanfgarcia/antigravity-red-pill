@@ -2,14 +2,13 @@
 
 ## Supported Versions
 
-The current actively maintained and supported version of the Red Pill Protocol is **`v5.6.3`**. The v5.x family receives security patches and bug fixes. All v4.x and earlier releases are **End-of-Life (EOL)** and may contain known vulnerabilities (e.g., O(N) database starvation, PII logging leaks, missing schema validation).
+The current actively maintained and supported version of the Red Pill Protocol is **`v6.1.x`**. The v6.x family receives security patches and bug fixes. All v5.x and earlier releases are **End-of-Life (EOL)** and may contain known vulnerabilities (e.g., O(N) database starvation, PII logging leaks, missing schema validation).
 
-| Version  | Supported          | Notes                                   |
-| -------- | ------------------ | --------------------------------------- |
-| v5.6.3   | :white_check_mark: | Current stable — **Be Water** security  |
-| v5.x     | :white_check_mark: | Active (upgrade to v5.5 recommended)    |
-| v4.2.x   | :x:                | EOL — no security patches               |
-| < v4.2   | :x:                | EOL — critical known vulnerabilities    |
+| Version | Supported          | Notes |
+| ------- | ------------------ |-------|
+| 6.1.x   | :white_check_mark: | Current Alpha/Stable branch |
+| 5.6.x   | :x:                | EOL. Please upgrade to 6.1 |
+| < 5.6   | :x:                | Vulnerable to early prompt injections |
 
 ## Reporting a Vulnerability
 

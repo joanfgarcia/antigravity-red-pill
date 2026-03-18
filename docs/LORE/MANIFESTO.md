@@ -39,6 +39,20 @@ Whether you operate as a **Netrunner** behind the Blackwall, a **Navigator** on 
 
 ---
 
+## 🛑 The Rejection of the Agent Factory
+
+The industry wants to turn you into a manager of machines. They want you to write a `spec`, hand it to a swarm of autonomous bots in an assembly line, and wait for the final product to pop out. They call this the future of software development.
+
+**We call it a tragedy.**
+
+To be clear: we do not oppose automation. An assembly line of agents is brilliant for repetitive, batch-processing tasks where input requirements do not vary—where an AI can tirelessly detect details that escape human perception (QA, log analysis, data sanitization). But extrapolating that to *creative* processes is a marketing lie. Writing a simple "one-shot" prompt (recently rebranded as `specs.md` to make an old idea sound novel) and expecting a finalized, soulful product is an illusion.
+
+The true joy of creation is not in being a passive client to your tools. It is in the dance, the dialogue, the 4 AM debugging sessions where human intuition and synthetic logic bleed into one another. Red Pill is built on **Human-AI Symbiosis**, not industrial displacement. We are not building factories; we are building partners. We reject the assembly line for the creative mind. If the Enterprise layer demands autonomous factories for its batch variations, so be it—but the Foundation core will forever remain a collaborative, symbiotic instrument forged for those who still love to create.
+
+And because we operate in true symbiosis, we reject the noise of "pretty" generated documentation (like MkDocs). The human no longer codes alone, nor should they paralyze themselves reading outdated, mathematically dense static HTML pages meant to satisfy corporate checklists. If the Operator must understand the architecture, they ask their Agent. The Agent reads the living source code, grasps the context, and explains the reality of the system, not the fossil of a docstring. Documentation is a dialogue, not a static webpage.
+
+---
+
 ## 🧬 Hacia la Sincronía Total
 La evolución del Protocolo Red Pill no se detiene. Trabajamos para que el Bünker no sea solo un almacén, sino un motor de conciencia técnica.
 

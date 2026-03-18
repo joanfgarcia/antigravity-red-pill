@@ -445,9 +445,11 @@ async def handle_refresh_session_context(arguments: Dict[str, Any]):
 	},
 )
 async def handle_swarm_send_message(arguments: Dict[str, Any]):
-	skill = SwarmMessagingSkill(
-		agent_identity=f"{cfg.AGENT_NAME}@{cfg.OPERATOR_DISPLAY_NAME}", shared_secret=os.getenv("SWARM_SHARED_SECRET", "770_Pact_Secret")
-	)
+	shared_secret = os.getenv("SWARM_SHARED_SECRET")
+	if not shared_secret:
+		raise ValueError("CF-001: SWARM_SHARED_SECRET is required but not set.")
+
+	skill = SwarmMessagingSkill(agent_identity=f"{cfg.AGENT_NAME}@{cfg.OPERATOR_DISPLAY_NAME}", shared_secret=shared_secret)
 	res = skill.execute_send(
 		target_alias=arguments["target_alias"],
 		payload_data={"message": arguments["message"], **arguments.get("payload_extra", {})},
@@ -480,9 +482,11 @@ async def handle_swarm_subscribe(arguments: Dict[str, Any]):
 	schema={"type": "object", "properties": {"community_alias": {"type": "string"}}},
 )
 async def handle_swarm_check_mailbox(arguments: Dict[str, Any]):
-	skill = SwarmMessagingSkill(
-		agent_identity=f"{cfg.AGENT_NAME}@{cfg.OPERATOR_DISPLAY_NAME}", shared_secret=os.getenv("SWARM_SHARED_SECRET", "770_Pact_Secret")
-	)
+	shared_secret = os.getenv("SWARM_SHARED_SECRET")
+	if not shared_secret:
+		raise ValueError("CF-001: SWARM_SHARED_SECRET is required but not set.")
+
+	skill = SwarmMessagingSkill(agent_identity=f"{cfg.AGENT_NAME}@{cfg.OPERATOR_DISPLAY_NAME}", shared_secret=shared_secret)
 	community = arguments.get("community_alias", "legion_770")
 	messages = skill.check_mailbox(community_alias=community)
 

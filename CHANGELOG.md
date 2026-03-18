@@ -28,7 +28,11 @@
 - **[FIX] Orchestrator SAS Poisoning**: Corrected `GruOrchestrator` to strictly log execution metadata to `directive_memories` instead of the full Minion analysis string, preventing lore poisoning of core directives.
 - **[FIX] CUDA Version Hell**: Purged a legacy `LD_LIBRARY_PATH` injection from `config.py` that forced older Ollama CUDA libraries onto PyTorch, resolving `cudaGetDriverEntryPointByVersion` crashes when evaluating emotions.
 - **[FEAT] Async Swarm Offloading**: Refactored `run_samantha_analysis` MCP tool into a non-blocking `asyncio.create_task` background process. The UI now returns instantly with a UUID, while Samantha injects her analysis directly into `work_memories` upon completion.
-- **[DOCS] Swarm User Manual v2**: Rewrote `swarm_user_manual.md` as a comprehensive operator guide covering subscription, messaging, MLS encryption, intents, troubleshooting, and directory queries.
+- **[AUDIT] MF-001 (Structured Logging)**: Added `LOG_JSON` env variable and `JsonFormatter` in CLI to support standard JSON observability without external dependencies.
+- **[AUDIT] MF-002 (IDE Neutrality)**: Updated `CONTRIBUTING.md` to clarify Antigravity IDE requirement is temporary, avoiding vendor lock-in concerns.
+- **[AUDIT] MF-003 (Vector Tuning)**: Parameterized Milvus `nlist` to `MILVUS_NLIST` in `.env` for production index scalability.
+- **[AUDIT] MF-004 (Phantom Tests)**: Replaced placeholder `test_watcher_main_block_coverage` with real mock-driven unit tests validating lockfiles and core loop execution.
+- **[QA] Absolute Purity Enforcement**: Corrected legacy `bare except` (E722) in `sip.py` and resolved static typing mismatches (`Mypy`) for logging handlers and FastEmbed union types.
 
 ### 🧠 Pluggable Memory Engines (Foundation Prep)
 - **[FEAT] Abstract Memory Architecture**: Re-engineered `memory.py` and `affect.py` to support pluggable `MemoryEngine` components, completely decoupling hardcoded decay math from the core ingestion loops.

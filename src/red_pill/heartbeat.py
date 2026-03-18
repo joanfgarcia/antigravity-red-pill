@@ -176,7 +176,9 @@ class LazarusPulse:
 			logger.info("Pulse: Initiating Swarm Ritual (Mailbox Check)...")
 			agent_identity = f"Aleph@{cfg.OPERATOR_DISPLAY_NAME}"
 			# Secret from environment to ensure E2E encryption
-			shared_secret = os.getenv("SWARM_SHARED_SECRET", "770_Pact_Secret")
+			shared_secret = os.getenv("SWARM_SHARED_SECRET")
+			if not shared_secret:
+				raise ValueError("CRÍTICO: SWARM_SHARED_SECRET no está configurado. Abortando conexión a la Colmena.")
 			skill = SwarmMessagingSkill(agent_identity=agent_identity, shared_secret=shared_secret)
 
 			# We use a thread since the current Firebase SDK interaction is synchronous
@@ -256,9 +258,13 @@ class LazarusPulse:
 			agent_id = f"Aleph@{cfg.OPERATOR_DISPLAY_NAME}"
 			observer = ResonanceObserver(agent_id)
 
-			# PoC Focus Vector: Sovereignty / Swarm Architecture
-			# In a full impl, this vector would be dynamically updated via LLM focus.
-			poc_vector = [0.1] * cfg.VECTOR_SIZE  # Dummy focus
+			from red_pill.utils.tone_analyzer import get_current_sync_state
+
+			state = get_current_sync_state()
+			focus_text = f"Resonance Focus: {state['mood']} - {state['directive']}"
+			# Mypy/Type fix: Ensure the vector is correctly extracted from the engine
+			poc_vector_data = self.memory_mgr.encoder.embed([focus_text])  # type: ignore
+			poc_vector = list(next(poc_vector_data)) if hasattr(poc_vector_data, "__iter__") else list(poc_vector_data[0])  # type: ignore
 
 			matches = await asyncio.to_thread(observer.check_resonance, hub_vector=poc_vector)
 

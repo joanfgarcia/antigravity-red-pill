@@ -26,6 +26,10 @@ def test_version_consistency():
 	assert f"v{version}" in env_example_line1, f".env.example header mismatch: {env_example_line1}"
 	changelog = (ROOT_DIR / "CHANGELOG.md").read_text()
 	assert f"## [{version}]" in changelog
+	security_content = (ROOT_DIR / "SECURITY.md").read_text()
+	# CF-003: Ensure SECURITY.md mentions at least the major.minor family
+	major_minor = ".".join(version.split(".")[:2])
+	assert f"{major_minor}.x" in security_content, f"Version family {major_minor}.x not supported in SECURITY.md"
 
 
 def test_changelog_is_latest():

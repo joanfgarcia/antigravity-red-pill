@@ -135,6 +135,8 @@ class HiveMind:
 					return False
 			except Exception as e:
 				logger.warning(f"HiveGuard Agentic Review failed: {e}. Falling back to conservative heuristics.")
+		else:
+			logger.warning("HF-004: EdgeEngine no disponible. Los engramas sociales usarán heurística estricta (degradación silenciosa mitigada).")
 
 		# Fallback: If no LLM, use a very strict heuristic to avoid 'Moltbook' noise.
 		# Only allow if it has key 'structural' words (trying to stay as agnostic as possible).
@@ -215,7 +217,7 @@ class HiveMind:
 		col = Collection(name, schema)
 
 		# Create index for search
-		index_params = {"metric_type": "L2", "index_type": "IVF_FLAT", "params": {"nlist": 128}}
+		index_params = {"metric_type": "L2", "index_type": "IVF_FLAT", "params": {"nlist": cfg.MILVUS_NLIST}}
 		col.create_index(field_name="vector", index_params=index_params)
 		col.load()
 

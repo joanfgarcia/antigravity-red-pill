@@ -60,8 +60,11 @@ MILVUS_PORT = int(os.getenv("MILVUS_PORT", "19530"))
 MILVUS_USER = os.getenv("MILVUS_USER", "")
 MILVUS_PASSWORD = os.getenv("MILVUS_PASSWORD", "")
 MILVUS_SECURE = os.getenv("MILVUS_SECURE", "False" if MILVUS_HOST in _local_hosts else "True").lower() == "true"
+if not MILVUS_SECURE and MILVUS_HOST not in _local_hosts:
+	MILVUS_SECURE = True  # SEC-F03: Force secure connection for remote hosts
 MILVUS_ENABLED = os.getenv("MILVUS_ENABLED", "False").lower() == "true"
 MILVUS_DB = os.getenv("MILVUS_DB", "default")
+MILVUS_NLIST = int(os.getenv("MILVUS_NLIST", "128"))
 MILVUS_LITE_ENABLED = os.getenv("MILVUS_LITE_ENABLED", "True").lower() == "true"
 MILVUS_LITE_PATH = os.getenv(
 	"MILVUS_LITE_PATH", os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "storage", "hive_lite.db")
@@ -90,12 +93,15 @@ SIDECAR_AUTH_KEY = os.getenv("SIDECAR_AUTH_KEY", "")
 
 if not SIDECAR_AUTH_KEY:
 	try:
-		if not os.path.exists(_auth_cache_file):
-			import secrets
+		import secrets
 
-			with open(_auth_cache_file, "w") as f:
+		try:
+			fd = os.open(_auth_cache_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+			with os.fdopen(fd, "w") as f:
 				f.write(secrets.token_hex(32))
-			os.chmod(_auth_cache_file, 0o600)
+		except FileExistsError:
+			pass
+
 		with open(_auth_cache_file, "r") as f:
 			SIDECAR_AUTH_KEY = f.read().strip()
 	except Exception:

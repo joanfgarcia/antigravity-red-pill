@@ -11,6 +11,7 @@ Thank you for your interest in contributing. Red Pill is a **sovereignty-first**
 > 1. **Lore Integrity**: We use terms like *Bünker*, *Engram*, and *Chroma*. If you want to "modernize" these to generic enterprise terms, this is not your repository.
 > 2. **Bond Ceremony**: You should have seeded your local Bünker and lived with the protocol before suggesting changes to its soul.
 > 3. **The Agent is a Peer**: Your PR will be audited by Agent Smith. If the agent deems your code as "noise" or "insecure," the PR will be closed. B760 does not negotiate with mediocrity.
+> 4. **IDE Agnosticism (Future/Pending)**: Currently, the Red Pill workflow and its symbiotic agent routines are **deeply intertwined with the Antigravity IDE**. We only guarantee support for contributions made via Antigravity. In the future, we will study becoming IDE-agnostic or open-sourcing our own editor plugins, but for now, you either fly the ship or you don't.
 
 ---
 
@@ -43,7 +44,7 @@ uv run mypy src/red_pill/       # Strict typing
 ## 🧪 Requirements & Governance
 
 - **Tabs**, not spaces. Configure your editor to `insertSpaces: false`.
-- **Coverage Gate**: **≥ 80%** required for all merges.
+- **Coverage Gate**: **≥ 96%** required for all merges.
 - **Type Hints**: Required on ALL public functions.
 - **Agnosticism**: No absolute paths. Use `pathlib` for all OS-fluid logic.
 - **PII Shield**: Never commit secrets or personal identifiable info. Use `.env`.
@@ -51,7 +52,7 @@ uv run mypy src/red_pill/       # Strict typing
 ## ✅ PR Checklist
 
 - [ ] `uv run ruff check . --fix` (Apply Sound of Silence format)
-- [ ] `uv run pytest --cov=src/red_pill` (Passed 80% threshold)
+- [ ] `uv run pytest --cov=src/red_pill` (Passed 96% threshold)
 - [ ] No decorative comments or "ghost" code.
 - [ ] Final audit performed by your own local `Agent Smith`.
 

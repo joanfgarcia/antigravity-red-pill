@@ -279,7 +279,41 @@ def main() -> None:
 	args = parser.parse_args()
 
 	log_level = logging.DEBUG if args.verbose else getattr(logging, cfg.LOG_LEVEL.upper(), logging.INFO)
-	logging.basicConfig(level=log_level, format="%(levelname)s: %(message)s")
+
+	if os.getenv("LOG_JSON", "False").lower() == "true":
+		import json
+
+		class JsonFormatter(logging.Formatter):
+			def format(self, record):
+				log_record = {
+					"timestamp": self.formatTime(record, self.datefmt),
+					"level": record.levelname,
+					"name": record.name,
+					"message": record.getMessage(),
+				}
+				if record.exc_info:
+					log_record["exception"] = self.formatException(record.exc_info)
+				return json.dumps(log_record)
+
+		handler = logging.StreamHandler()
+		handler.setFormatter(JsonFormatter())
+		logging.basicConfig(level=log_level, handlers=[handler])  # type: ignore
+	else:
+		logging.basicConfig(level=log_level, format="%(levelname)s: %(message)s")
+
+	# SEC-F04: Prevención de fuga de credenciales en logs
+	class SecretMasker(logging.Filter):
+		def filter(self, record):
+			msg = str(record.msg)
+			secrets = [cfg.QDRANT_API_KEY, cfg.SIDECAR_AUTH_KEY, cfg.MILVUS_PASSWORD]
+			for secret in secrets:
+				if secret and isinstance(secret, str) and len(secret) > 4:
+					msg = msg.replace(secret, f"***{secret[-4:]}")
+			record.msg = msg
+			return True
+
+	for h in logging.root.handlers:
+		h.addFilter(SecretMasker())
 
 	if not args.command:
 		parser.print_help()
