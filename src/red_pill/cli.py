@@ -64,7 +64,7 @@ def switch_skin(skin_name: str) -> str:
 def handle_mode(args: argparse.Namespace) -> None:
 	"""CLI wrapper for skin switching (with SEC-007 explicit consent)."""
 	neutral_skins = ["pioneer", "academic"]
-	if args.skin not in neutral_skins:
+	if args.skin not in neutral_skins and not getattr(args, "yes", False):
 		print("\n--- [SEC-007 CONSENT REQUIRED] ---")
 		print(f"Warning: Skin '{args.skin.upper()}' modifies base AI neutrality and behavioral filters.")
 		print("For exact behavioral modifiers, see 'src/red_pill/data/lore_skins.yaml'")
@@ -89,7 +89,7 @@ def handle_audit() -> None:
 def handle_heal(dry_run: bool = False) -> None:
 	"""Samantha's Local Healing Cycle."""
 	script_path = os.path.join(PROJECT_ROOT, "scripts", "local_healer.py")
-	cmd = ["python3", script_path]
+	cmd = [sys.executable, script_path]
 	if dry_run:
 		cmd.append("--dry-run")
 	print(f"--- [DEPLOYING HEALER: {script_path}] ---")
@@ -103,14 +103,14 @@ def handle_benchmark() -> None:
 	"""Sovereignty Benchmark (Tri-Tier Hardware)."""
 	script_path = os.path.join(PROJECT_ROOT, "scripts", "sovereignty_benchmark.py")
 	print(f"--- [DEPLOYING BENCHMARK: {script_path}] ---")
-	subprocess.run(["python3", script_path])
+	subprocess.run([sys.executable, script_path])
 
 
 def handle_identity(args: argparse.Namespace) -> None:
 	"""Identity Management (Bootstrap/Refresh)."""
 	if args.id_cmd == "bootstrap":
 		script_path = os.path.join(PROJECT_ROOT, "scripts", "bootstrap_identity.py")
-		cmd = ["python3", script_path]
+		cmd = [sys.executable, script_path]
 		if args.ai_name:
 			cmd.extend(["--ai-name", args.ai_name])
 		if args.ai_role:
@@ -125,7 +125,7 @@ def handle_identity(args: argparse.Namespace) -> None:
 	elif args.id_cmd == "refresh":
 		script_path = os.path.join(PROJECT_ROOT, "scripts", "wake_up_v6.py")
 		print(f"--- [REFRESHING SESSION CONTEXT: {script_path}] ---")
-		subprocess.run(["python3", script_path])
+		subprocess.run([sys.executable, script_path])
 	elif args.id_cmd == "purge":
 		print("--- [WARNING: INITIATING GDPR PURGE] ---")
 		print("This will destroy all memories, directives, and identity context forever.")
@@ -160,6 +160,7 @@ def main() -> None:
 
 	mode_parser = subparsers.add_parser("mode", help="Switch Lore Skin")
 	mode_parser.add_argument("skin", help="matrix, cyberpunk, 760, dune, 40k, gits, bladerunner, her, exmachina, terminator, 2001, creator")
+	mode_parser.add_argument("--yes", "--force", action="store_true", help="Bypass SEC-007 consent prompt")
 
 	subparsers.add_parser("seed", help="Initialize memory substrate")
 

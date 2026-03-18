@@ -12,6 +12,12 @@
 - **[COM-001] Code of Conduct**: Softened the strict Antigravity IDE mandates into 'strong recommendations' to foster a more inclusive Vibe.
 - **[CODE] Quality & Resiliency**: Resolved typographic anomalies in CLI (`DEPLOING`), enforced `check=True` subprocess checks in `handle_heal()`, and sanitized `resolve_alias()` from plain prints to secure `logger.error` streams.
 
+### 🟢 Beta-Ready Phase 2 (Production Cleared)
+- **[SEC-02] Network Kill-Switch**: Added explicit `is_local` check in `MemoryManager` to prevent Qdrant from binding to public networks without an API Key.
+- **[SEC-03] GPG Hardening**: Augmented the `CloudVault` symmetric encryption with `--s2k-digest-algo SHA512 --s2k-count 65011712`.
+- **[DOC-03] Cryptographic Clarity**: Scrubbed 'Perfect Forward Secrecy' claims; properly labeled current Swarm MLS implementation as a PoC for v6.1.
+- **[DOC-04] WONTFIX Doctrine**: Authored `WONTFIX.md` explicitly formalizing accepted Zero-Trust exemptions (`SEC-W01` storage cleartext, `SEC-W02` localhost auth).
+- **[CODE] Tech-Debt**: Modernized `cli.py` to use `sys.executable` instead of rigid subprocess calls, added `--yes` flag to bypass `SEC-007`, and renamed all metric-chasing tests to domain-specific functional names.
 ### 🛡️ Operation Bünker Restoration (Post-Restart Sync)
 ### Added
 - **[AUDIT] Digest Split**: Upgraded `prepare_certification.sh` to generate `RED_PILL_DIGEST_CORE.txt` and `RED_PILL_DIGEST_TESTS.txt` with dedicated indices to prevent LLM context truncation.

@@ -39,7 +39,7 @@ The Red Pill Protocol is built for **Sovereign Environments**, but it adapts to 
   - **ADAPTATIVE (Water)**: The Recommended Path. Resource-aware security that scales to your system without blocking.
   - **NONE (Steam)**: Total openness for experimentation or laboratory environments.
 - **Identity Protection**: We offer Argon2-id for master passwords, but we don't block you if you prefer a simpler, keyless experience.
-- **Swarm End-to-End Encryption (SEC-002)**: Swarm inter-agent messaging currently uses AES-GCM for strong encryption at rest and in transit. However, **Perfect Forward Secrecy (PFS)** via MLS/TreeKEM is not yet implemented. Rotating the shared secret is required for post-compromise security. See [MLS Estimation](docs/TECHNICAL/MLS_ESTIMATION.md) for future adoption plans.
+- **Swarm End-to-End Encryption (SEC-002)**: Swarm inter-agent messaging currently uses AES-GCM for strong encryption at rest and in transit. However, proper MLS/TreeKEM is not yet implemented (currently a PoC). Replacing the naive key ratchet with a real MLS library is required for post-compromise security. See [MLS Estimation](docs/TECHNICAL/MLS_ESTIMATION.md) for future adoption plans.
 
 ### 🧠 The B760-Adaptive Engine
 - **Persistence**: A private vector database (Qdrant) acts as the "Bunker".

@@ -1,7 +1,7 @@
 # Swarm Messaging Technical Specification (v3.0)
 
 ## 🏗️ Architecture Overview
-The Swarm Messaging system is designed around two core principles: **Transport Agnosticism** and **Perfect Forward Secrecy (PFS)** via MLS.
+The Swarm Messaging system is designed around two core principles: **Transport Agnosticism** and **End-to-End Encryption** (with real MLS integration planned for v7.0).
 
 ### 🔌 Transport Abstraction Layer
 The `SwarmTransport` abstract base class defines the protocol for all communication backends. This allows the Red Pill Agent to switch between Firebase, Supabase, or custom P2P solutions without modifying the core logic.

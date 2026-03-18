@@ -136,7 +136,7 @@ The system has evolved from a single-user prototype into a **Cognitive Swarm arc
 
 ## 11. Swarm E2E Encryption (X25519 Pairwise)
 
-As of v6.1+, Swarm messaging strictly enforces End-to-End Encryption using **X25519 Diffie-Hellman Key Agreement** and **AES-GCM**. The legacy 'TreeKEM' group key prototype and plaintext fallbacks have been entirely purged to guarantee Perfect Forward Secrecy (PFS) semantics per message exchange.
+As of v6.1+, Swarm messaging strictly enforces End-to-End Encryption using **X25519 Diffie-Hellman Key Agreement** and **AES-GCM**. The legacy 'TreeKEM' group key prototype and plaintext fallbacks have been entirely purged to guarantee encryption semantics per message exchange. Note: Current group ratcheting is a PoC; true Perfect Forward Secrecy (PFS) via OpenMLS is pending v7.0.
 
 ```mermaid
 sequenceDiagram

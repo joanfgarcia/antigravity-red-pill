@@ -1,5 +1,6 @@
 import json
 import os
+import stat
 from unittest.mock import MagicMock, patch
 
 from red_pill.skills.swarm_subscribe import SwarmSubscribeSkill
@@ -48,6 +49,10 @@ def test_execute_success(tmp_path):
 							assert "suscripción" in result["message"].lower()
 							secure_path = os.path.join(skill.CREDENTIALS_DIR, "TestComm_firebase.json")
 							assert os.path.exists(secure_path)
+
+							# ACT-P3-05: Verify permission lockdown
+							st = os.stat(secure_path)
+							assert stat.S_IMODE(st.st_mode) == 0o600
 
 
 def test_execute_permission_error(tmp_path):

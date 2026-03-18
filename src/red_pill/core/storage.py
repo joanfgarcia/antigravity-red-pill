@@ -20,6 +20,13 @@ class StorageEngine:
 
 	def __init__(self, url: str = cfg.QDRANT_URL, config: Any = None):
 		self.cfg = config if config else cfg
+
+		# ACT-P1-02: Network Security Kill-Switch
+		is_local = any(local in url for local in ["localhost", "127.0.0.1", "0.0.0.0"])
+		if not is_local and not self.cfg.QDRANT_API_KEY:
+			logger.critical(f"SEC-CR-02: Qdrant at '{url}' is exposed to the network without an API key.")
+			raise RuntimeError("Aborting execution to protect Bünker sovereignty. Set QDRANT_API_KEY.")
+
 		self.client = QdrantClient(url=url, api_key=self.cfg.QDRANT_API_KEY)
 
 	def ensure_collection(self, collection_name: str) -> None:

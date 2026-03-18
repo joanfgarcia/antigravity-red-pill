@@ -68,7 +68,7 @@ class SovereignGroup:
 
 	def rotate_key(self) -> int:
 		"""
-		Forces a forward ratchet of the group key (Perfect Forward Secrecy).
+		Forces a naive forward ratchet of the group key (PoC).
 		Increments the epoch, resets the message counter.
 		Returns the new epoch.
 		"""
