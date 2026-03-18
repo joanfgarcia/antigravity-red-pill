@@ -1,6 +1,7 @@
 import argparse
 import os
 import random
+import secrets
 import sys
 
 from argon2 import PasswordHasher
@@ -49,6 +50,8 @@ def run_recovery_handshake():
 			import hashlib
 
 			# Legacy/Agua check
+			print("WARNING: [SEC-A02] This Bünker is using a SHA-256 legacy hash. Protection is degraded.")
+			print("Recommendation: Run `red-pill soul migrate` to upgrade to Argon2id.")
 			user_hash = hashlib.sha256(pwd.encode()).hexdigest()
 			if user_hash != argon2_hash:
 				raise VerifyMismatchError()
@@ -81,7 +84,7 @@ def run_recovery_handshake():
 	else:
 		num_questions = 10
 
-	random.shuffle(all_memories)
+	secrets.SystemRandom().shuffle(all_memories)
 	questions = all_memories[:num_questions]
 
 	correct = 0
@@ -104,7 +107,7 @@ def run_recovery_handshake():
 			else:
 				overlap = 1.0 if not user_words else 0.0
 
-			if overlap >= 0.4:  # Jaccard-ish threshold
+			if overlap >= 0.6:  # Jaccard-ish threshold (SEC-A03)
 				print(f"✓ Synapse verified (overlap: {overlap:.2f}).")
 				correct += 1
 			else:

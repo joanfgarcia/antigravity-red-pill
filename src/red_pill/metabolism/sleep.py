@@ -76,29 +76,39 @@ def distill_engram(raw_content: str) -> Dict[str, Any]:
 	).encode("utf-8")
 
 	req = urllib.request.Request(cfg.MLX_LM_URL, data=payload, headers={"Content-Type": "application/json"})
+	import time
+
+	max_retries = 3
+	backoff = 2
 	fallback = {"summary": raw_content[:500] + "...", "emotion": "neutral", "intensity": 0.5}
 
-	try:
-		with urllib.request.urlopen(req, timeout=45) as response:
-			data = json.loads(response.read().decode())
-			content = data["choices"][0]["message"]["content"].strip()
-			# Clean possible LLM markdown
-			if content.startswith("```json"):
-				content = content[7:]
-			if content.startswith("```"):
-				content = content[3:]
-			if content.endswith("```"):
-				content = content[:-3]
-			parsed = json.loads(content)
+	for attempt in range(max_retries):
+		try:
+			with urllib.request.urlopen(req, timeout=45) as response:
+				data = json.loads(response.read().decode())
+				content = data["choices"][0]["message"]["content"].strip()
+				# Clean possible LLM markdown
+				if content.startswith("```json"):
+					content = content[7:]
+				if content.startswith("```"):
+					content = content[3:]
+				if content.endswith("```"):
+					content = content[:-3]
+				parsed = json.loads(content)
 
-			return {
-				"summary": parsed.get("summary", fallback["summary"]),
-				"emotion": parsed.get("emotion", "neutral").lower()[:20],
-				"intensity": float(parsed.get("intensity", 0.5)),
-			}
-	except Exception as e:
-		logger.error(f"[SLEEP ENGINE] Failed to distill engram (JSON parse/timeout): {e}")
-		return fallback
+				return {
+					"summary": parsed.get("summary", fallback["summary"]),
+					"emotion": parsed.get("emotion", "neutral").lower()[:20],
+					"intensity": float(parsed.get("intensity", 0.5)),
+				}
+		except Exception as e:
+			logger.warning(f"[SLEEP ENGINE] Distillation attempt {attempt + 1} failed: {e}")
+			if attempt < max_retries - 1:
+				time.sleep(backoff ** (attempt + 1))
+			else:
+				logger.error(f"[SLEEP ENGINE] All distillation retries failed. Falling back.")
+
+	return fallback
 
 
 def synthesize_hub(summaries: List[str]) -> str:
