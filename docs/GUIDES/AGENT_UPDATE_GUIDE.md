@@ -43,6 +43,8 @@ If updating to v6.1.0a3 or higher, you must synchronize your infrastructure para
     *   **Check**: `cat ~/.config/containers/systemd/qdrant.container`
     *   **Action**: Restart service: `systemctl --user daemon-reload && systemctl --user restart qdrant.service`
 7.  **Service Restart**: Run `systemctl --user restart redpill.service` to apply the new persistent environment.
+8.  **Qdrant Kill-Switch (SEC-02)**: If your Qdrant instance is exposed to the local network (`0.0.0.0`) or hosted remotely, the protocol will now refuse to boot unless you define a `QDRANT_API_KEY` in your `.env`. This is a hard-coded security protection.
+9.  **Google Drive Token Migration**: Your existing `token.json` for Cloud Vault backups will be automatically migrated to `~/.agent/credentials/drive_token.json` internally on boot. No re-authentication is required.
 
 ## 4. Post-Update Operational Checklist
 
