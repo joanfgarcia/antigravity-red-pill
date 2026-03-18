@@ -54,10 +54,10 @@ class TestConfigWarnings:
 		assert len(sec_warnings) == 0
 
 	def test_milvus_unencrypted_non_local_warns(self):
-		"""Lines 42-44: MILVUS_ENABLED=True + MILVUS_SECURE=False + non-local → SEC-002 warning."""
+		"""Lines 42-44: MILVUS_ENABLED=True + MILVUS_SECURE=False + non-local → SEC-F03 forces True."""
 		with warnings.catch_warnings(record=True) as w:
 			warnings.simplefilter("always")
-			_reimport_config(
+			mod = _reimport_config(
 				{
 					"QDRANT_SCHEME": "http",
 					"QDRANT_HOST": "localhost",
@@ -66,8 +66,7 @@ class TestConfigWarnings:
 					"MILVUS_HOST": "milvus.remote.com",
 				}
 			)
-		sec_warnings = [x for x in w if "SEC-002" in str(x.message)]
-		assert len(sec_warnings) > 0
+		assert mod.MILVUS_SECURE is True
 
 
 class TestConfigValidation:

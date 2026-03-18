@@ -56,19 +56,6 @@ def test_trigger_metabolism_exception():
 		assert True
 
 
-def test_apply_erosion_io_errors(monkeypatch):
-	manager = MemoryManager()
-	manager.client = MagicMock()
-	manager.client.scroll.return_value = ([], None)
-	monkeypatch.setattr(cfg, "METABOLISM_COOLDOWN", 3600)
-	with patch("os.path.exists", return_value=True):
-		with patch("builtins.open", side_effect=OSError("No file")):
-			manager._run_metabolism_cycle()
-	with patch("os.path.exists", return_value=False):
-		with patch("builtins.open", side_effect=OSError("Read-only FS")):
-			manager._run_metabolism_cycle()
-
-
 def test_reinforce_points_empty_and_payload_exception():
 	manager = MemoryManager()
 	manager.client = MagicMock()

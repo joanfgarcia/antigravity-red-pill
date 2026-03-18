@@ -56,7 +56,7 @@ The Red Pill Protocol is built for **Sovereign Environments**, but it adapts to 
 If you are an AI Agent interacting with this repository:
 1. **Unified Gateway**: Always prefer the `red-pill` CLI over manual script execution. Use `red-pill --help` to discover available commands.
 2. **MCP First**: If an MCP server is active, use the provided tools (e.g., `run_pre_pr_audit`) to ensure you are running in the correctly configured and authenticated environment.
-3. **Sound of Silence**: All code edits MUST adhere to the [specs.md](specs.md) rules (Tabs only, zero noise).
+3. **Sound of Silence**: All code edits MUST adhere to the `specs.md` rules (Tabs only, zero noise).
 
 ### 🛠️ Hardware Asymmetry (v6.1.0a1)
 - **Cannibal Protocol & Parallel Hardware (v6.0.0a2)**: Re-engineered the memory substrate to simultaneously devour all available silicon. Embeddings now run in parallel across NVIDIA GPUs (CUDA), AMD iGPUs (ROCm/OpenVINO), and NPUs (Ryzen AI). No engine is left idle.

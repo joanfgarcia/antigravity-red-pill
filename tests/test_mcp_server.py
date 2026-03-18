@@ -455,9 +455,18 @@ class TestMCPAdditionalTools:
 
 	async def test_swarm_check_mailbox(self):
 		from red_pill.mcp_server import handle_call_tool
+		import os
 
-		result = await handle_call_tool("swarm_check_mailbox", {"community_alias": "c"})
-		assert "Scanning Mailbox" in result[0].text
+		old_secret = os.getenv("SWARM_SHARED_SECRET")
+		os.environ["SWARM_SHARED_SECRET"] = "supersecret"
+		try:
+			result = await handle_call_tool("swarm_check_mailbox", {"community_alias": "c"})
+			assert "Scanning Mailbox" in result[0].text
+		finally:
+			if old_secret is not None:
+				os.environ["SWARM_SHARED_SECRET"] = old_secret
+			else:
+				del os.environ["SWARM_SHARED_SECRET"]
 
 
 class TestMainBlock:
