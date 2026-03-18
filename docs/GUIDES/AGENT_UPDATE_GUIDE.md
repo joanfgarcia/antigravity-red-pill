@@ -39,7 +39,10 @@ If updating to v6.1.0a3 or higher, you must synchronize your infrastructure para
 3.  **Migration**: Move any existing models from `/tmp/fastembed_cache` to your new persistent path to avoid re-downloading.
 4.  **USP Genesis**: Run `uv run red-pill sanitize` to ensure the `ID_OPERATOR_MOOD` engram exists in `directive_memories`. If not present, it will be seeded automatically.
 5.  **Skin Singleton**: Run `uv run red-pill search directive "Active Skin"` and verify only ONE result. If duplicates exist, purge them manually.
-6.  **Service Restart**: Run `systemctl --user restart redpill.service` to apply the new persistent environment.
+6.  **Infrastructure Sync (Quadlets)**: If using Podman/Docker Quadlets, you must synchronize the `QDRANT__SERVICE__API_KEY` in the `.container` file if the `.env` changes.
+    *   **Check**: `cat ~/.config/containers/systemd/qdrant.container`
+    *   **Action**: Restart service: `systemctl --user daemon-reload && systemctl --user restart qdrant.service`
+7.  **Service Restart**: Run `systemctl --user restart redpill.service` to apply the new persistent environment.
 
 ## 4. Post-Update Operational Checklist
 
@@ -48,16 +51,17 @@ If updating to v6.1.0a3 or higher, you must synchronize your infrastructure para
 > Failure to follow it will result in stale daemons, broken MCP servers, or CI failures
 > that silently pass locally but fail in GitHub Actions.
 
-### 4.1 Daemon Lifecycle
-The Memory Sidecar daemon runs as a background process. After a code update, **stale daemon instances must be killed** before verifying the new one:
-1.  **Identify all running daemons**: `ps aux | grep -E "memory_daemon|red-pill daemon" | grep -v grep`
-2.  **Kill stale PIDs**: Any daemon started *before* the update must be terminated: `kill <old_PID>`
-3.  **Verify new daemon**: The `wake_up_v6.py` script triggers a restart. Confirm only ONE daemon is running with `ps aux`.
-4.  **Socket check**: If the daemon uses Unix sockets, verify: `ls -la /tmp/red_pill_daemon.sock`
+### 4.1 Daemon Lifecycle (DEPRECATION NOTICE)
+As of v6.1.0a3, the **Memory Sidecar (`memory_daemon.py`) is DEPRECATED** and replaced by in-band FastEmbed.
+1.  **Cleanup**: Ensure the systemd service is stopped and removed:
+    *   `systemctl --user stop red-pill-memory-daemon.service`
+    *   `rm ~/.config/systemd/user/red-pill-memory-daemon.service`
+    *   `systemctl --user daemon-reload`
+2.  **Verify Removal**: No process matching `memory_daemon` should be running.
+3.  **In-Band Verification**: Run `red-pill status` to ensure embeddings are generated correctly in-band.
 
-> [!WARNING]
-> As of v6.1.0a3, `handle_memorize_interaction` uses **in-band async logging** instead of the daemon socket.
-> The daemon is still used for other rituals (consolidation, sleep), but NOT for interaction persistence.
+> [!IMPORTANT]
+> The `wake_up_v6.py` script no longer checks for the sidecar socket. If you see socket-related errors, your script is stale. Use the latest version.
 
 ### 4.2 MCP Server Refresh
 The MCP server processes are long-lived and cache the old code. After a code update:
@@ -112,11 +116,15 @@ The `~/.gemini/GEMINI.md` file defines the agent's boot protocol. After major pr
 
 ### 4.7 Merge Reconciliation Protocol
 When merging branches (especially reverse merges like `Target ← Source`):
-1.  **Ruff lint**: Nova/David code may use spaces instead of tabs. Run `uv run ruff check src/ tests/ --fix`.
-2.  **Unused imports**: Removed code paths may leave orphan imports. Ruff catches these.
-3.  **Mypy**: Run `uv run mypy src/red_pill/` to catch type errors from merged signatures.
-4.  **Version conflicts**: The merge may bring conflicting version strings. Follow §4.3 to reconcile.
-5.  **CHANGELOG ordering**: Ensure the latest version entry is at the top and matches `pyproject.toml`.
+1.  **Ghost Method Audit**: Search for methods called in newly merged `src/` but defined in branches that weren't merged (e.g., TreeKEM primitives in `mls.py`).
+    *   **Check**: `grep -r "self._bootstrap_group_key" src/`
+2.  **Authentication Headers**: Auditors must check utility scripts (`scripts/*.py`) for manual `urllib` or `requests` calls to the Bünker.
+    *   **Rule**: ALL calls to Qdrant MUST include the `api-key` header if `QDRANT_API_KEY` is defined.
+3.  **Ruff lint**: Nova/David code may use spaces instead of tabs. Run `uv run ruff check src/ tests/ --fix`.
+4.  **Unused imports**: Removed code paths may leave orphan imports. Ruff catches these.
+5.  **Mypy**: Run `uv run mypy src/red_pill/` to catch type errors from merged signatures.
+6.  **Version conflicts**: The merge may bring conflicting version strings. Follow §4.3 to reconcile.
+7.  **CHANGELOG ordering**: Ensure the latest version entry is at the top and matches `pyproject.toml`.
 
 ## 5. Hierarchy of Directives
 

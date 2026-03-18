@@ -1,21 +1,32 @@
 import json
 import os
-import socket
-import subprocess
 import sys
 import urllib.error
 import urllib.request
+from typing import List
 
 QDRANT_URL = "http://localhost:6333"
 MLX_LM_URL = "http://localhost:8760/v1/chat/completions"
-# Socket path consistent with src/red_pill/config.py
+# QDRANT Configuration
 _run_dir = os.getenv("XDG_RUNTIME_DIR", "/tmp")
-SOCKET_PATH = os.path.join(_run_dir, "red_pill_memory.sock")
+
+# Load QDRANT_API_KEY from .env
+QDRANT_API_KEY = ""
+env_path = os.path.join(os.path.dirname(__file__), "../.env")
+if os.path.exists(env_path):
+	with open(env_path, "r") as f:
+		for line in f:
+			if line.startswith("QDRANT_API_KEY="):
+				QDRANT_API_KEY = line.strip().split("=", 1)[1]
+				break
 
 
 def check_service(url, name):
 	try:
-		req = urllib.request.Request(url, method="GET")
+		headers = {}
+		if QDRANT_API_KEY:
+			headers["api-key"] = QDRANT_API_KEY
+		req = urllib.request.Request(url, headers=headers, method="GET")
 		with urllib.request.urlopen(req, timeout=2) as response:
 			if response.status == 200:
 				return True
@@ -24,23 +35,6 @@ def check_service(url, name):
 	return False
 
 
-def check_sidecar():
-	"""Checks if the Memory Sidecar is alive via its UNIX socket."""
-	if not os.path.exists(SOCKET_PATH):
-		print("WARN: Memory Sidecar socket missing. Attempting restoration...", file=sys.stderr)
-		subprocess.run(["systemctl", "--user", "restart", "red-pill-memory-daemon.service"], check=False)
-		return False
-
-	try:
-		with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
-			s.settimeout(1.0)
-			s.connect(SOCKET_PATH)
-			# Send a simple ping if supported, or just verify connection
-			return True
-	except Exception as e:
-		print(f"WARN: Sidecar connection failed: {e}. Restarting...", file=sys.stderr)
-		subprocess.run(["systemctl", "--user", "restart", "red-pill-memory-daemon.service"], check=False)
-		return False
 
 
 def query_qdrant(collection, text):
@@ -53,14 +47,18 @@ def query_qdrant(collection, text):
 	scroll_url = f"{QDRANT_URL}/collections/{collection}/points/scroll"
 	payload = json.dumps({"limit": 50, "with_payload": True}).encode("utf-8")
 
-	req = urllib.request.Request(scroll_url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+	headers = {"Content-Type": "application/json"}
+	if QDRANT_API_KEY:
+		headers["api-key"] = QDRANT_API_KEY
+
+	req = urllib.request.Request(scroll_url, data=payload, headers=headers, method="POST")
 	try:
 		with urllib.request.urlopen(req, timeout=5) as response:
 			data = json.loads(response.read().decode())
 			points = data.get("result", {}).get("points", [])
 
 			# Extract all content, prioritizing immune tag formatting
-			results = []
+			results: List[str] = []
 			for p in points:
 				content = p.get("payload", {}).get("content", "")
 				is_immune = p.get("payload", {}).get("immune", False) or "[immune]" in content.lower()
@@ -126,11 +124,7 @@ def main():
 	if not check_service("http://localhost:8760/v1/models", "Local MLX LLM Daemon"):
 		print("WARN: Background LLM is down. Attempting raw initialization.")
 
-	# SEC-001: Sidecar health is mandatory for zero-amnesia
-	if check_sidecar():
-		sidecar_status = f"OPERATIONAL (Socket: {SOCKET_PATH})"
-	else:
-		sidecar_status = "RESTORING (Systemd restart triggered via uv run)"
+	sidecar_status = "DEPRECATED (FastEmbed In-Band)"
 
 	social = query_qdrant("social_memories", "Active Skin")
 	directives = query_qdrant("directive_memories", "Active Skin")

@@ -1,3 +1,4 @@
+import base64
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -20,6 +21,7 @@ class FirebaseTransport(SwarmTransport):
 		self.community_alias = community_alias
 		self.db_url = db_url
 		self.credential_path = credential_path
+		self._group_key: Optional[bytes] = None
 		self._initialize_sdk()
 
 	def _initialize_sdk(self):
@@ -116,3 +118,25 @@ class FirebaseTransport(SwarmTransport):
 		except Exception as e:
 			print(f"[FirebaseTransport] Resolve alias failed: {e}")
 			return None
+
+	def _bootstrap_group_key(self):
+		"""
+		MLS V3.0 Bootstrap: Rebuilds the TreeKEM group key by harvesting the registry.
+		"""
+		try:
+			from red_pill.swarm.mls import SovereignGroup
+			ref = db.reference("registry", app=self.app)
+			nodes = ref.get()
+			if not nodes:
+				return
+
+			group = SovereignGroup(self.community_alias)
+			for node_id, data in nodes.items():
+				pk_b64 = data.get("public_key")
+				if pk_b64:
+					group.add_member(node_id, base64.b64decode(pk_b64))
+
+			self._group_key = group.get_group_key()
+			logger.info(f"[FirebaseTransport] Group key bootstrapped for {self.community_alias}")
+		except Exception as e:
+			logger.error(f"[FirebaseTransport] Group key bootstrap failed: {e}")

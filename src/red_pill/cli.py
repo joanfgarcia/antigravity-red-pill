@@ -2,7 +2,6 @@ import argparse
 import asyncio
 import logging
 import os
-import signal
 import subprocess
 import sys
 import time
@@ -77,24 +76,6 @@ def handle_mode(args: argparse.Namespace) -> None:
 	print(switch_skin(args.skin))
 
 
-def handle_daemon() -> None:
-	"""Memory Sidecar."""
-	try:
-		from red_pill.memory_daemon import MemoryDaemon
-
-		print("\n--- Despertando Sidecar de Memoria ---")
-		daemon = MemoryDaemon()
-
-		def stop_daemon(sig, frame):
-			daemon.stop()
-			sys.exit(0)
-
-		signal.signal(signal.SIGINT, stop_daemon)
-		signal.signal(signal.SIGTERM, stop_daemon)
-		daemon.start()
-	except Exception as e:
-		logger.error(f"Daemon failure: {e}")
-		sys.exit(1)
 
 
 def handle_audit() -> None:
@@ -204,7 +185,6 @@ def main() -> None:
 
 	diag_parser = subparsers.add_parser("diag", help="Diagnostics")
 	diag_parser.add_argument("type", choices=["work", "social", "directive", "story"])
-	subparsers.add_parser("daemon", help="Memory Sidecar")
 
 	sanitize_parser = subparsers.add_parser("sanitize", help="Sanitation & Migration Protocol")
 	sanitize_parser.add_argument("type", choices=["work", "social", "directive", "story"])
@@ -304,12 +284,15 @@ def main() -> None:
 	# SEC-F04: Prevención de fuga de credenciales en logs
 	class SecretMasker(logging.Filter):
 		def filter(self, record):
-			msg = str(record.msg)
-			secrets = [cfg.QDRANT_API_KEY, cfg.SIDECAR_AUTH_KEY, cfg.MILVUS_PASSWORD]
-			for secret in secrets:
-				if secret and isinstance(secret, str) and len(secret) > 4:
-					msg = msg.replace(secret, f"***{secret[-4:]}")
-			record.msg = msg
+			try:
+				msg = str(record.msg)
+				secrets = [cfg.QDRANT_API_KEY, cfg.SIDECAR_AUTH_KEY, cfg.MILVUS_PASSWORD]
+				for secret in secrets:
+					if secret and isinstance(secret, str) and len(secret) > 4:
+						msg = msg.replace(secret, f"***{secret[-4:]}")
+				record.msg = msg
+			except Exception:
+				pass
 			return True
 
 	for h in logging.root.handlers:
@@ -319,9 +302,6 @@ def main() -> None:
 		parser.print_help()
 		sys.exit(0)
 
-	if args.command == "daemon":
-		handle_daemon()
-		return
 	elif args.command == "mode":
 		handle_mode(args)
 		return

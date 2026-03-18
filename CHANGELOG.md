@@ -1,6 +1,12 @@
 # Changelog: Red Pill Protocol
 
-## [6.1.0a3] - 2026-03-17
+## [6.1.0a3] - 2026-03-18
+### 🛡️ Operation Bünker Restoration (Post-Restart Sync)
+- **[INFRA] Qdrant API Sync**: Aligned the Qdrant Quadlet configuration (`systemd-qdrant`) with `.env` by injecting `QDRANT__SERVICE__API_KEY`. Updated `wake_up_v6.py` to include authenticated headers, resolving `401 Unauthorized` errors.
+- **[SEC-MLS] Swarm Encryption Rehabilitation**: Restored the missing `mls.py` module and TreeKEM primitives in `crypto.py`. Implemented `_bootstrap_group_key` in `FirebaseTransport`, re-enabling E2E encryption for Swarm v3.0.
+- **[CLEANUP] Memory Sidecar Purge**: Permanently decommissioned the `red-pill daemon` command and removed legacy `MemoryDaemon` references from `cli.py` and `wake_up_v6.py`. The system now operates 100% in-band with FastEmbed.
+- **[DOCS] Zero-Trust Update Protocols**: Authored the **Infrastructure Sync (Quadlets)** and **Ghost Method Audit** sections in `AGENT_UPDATE_GUIDE.md` to prevent future infrastructure and encryption desyncs.
+- **[QA] Absolute Purity Certification**: Resolved residual lint errors (unused imports, typing mismatches) in `cli.py` and `wake_up_v6.py`. Verified a clean pass for 50 source files.
 ### 🛡️ Operation A+ (Absolute Purity Audit Remediation)
 - **[ARCH] Sovereign Trade-offs Manifesto**: Authored `PHILOSOPHY.md` to explicitly document architectural tensions (HiveMind privacy, Lore Skin consent, Swarm complexity, FSRS decay models, and Node.js rejection) as intentional features, solving the "Philosophical Incoherence" audit finding.
 - **[SEC-001] Adaptative Encryption**: Solidified `ADAPTATIVE` mode as the default for local installations, gracefully warning operators without LUKS instead of blocking execution.
