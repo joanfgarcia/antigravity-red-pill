@@ -43,7 +43,12 @@ def query_qdrant(collection, text):
 	# For robust zero-dependency, we do a scroll to get all and filter locally for simplicity in this script.
 
 	scroll_url = f"{QDRANT_URL}/collections/{collection}/points/scroll"
-	payload = json.dumps({"limit": 50, "with_payload": True}).encode("utf-8")
+	
+	payload_dict = {"limit": 500, "with_payload": True}
+	if collection != "directive_memories":
+		payload_dict["filter"] = {"must": [{"key": "immune", "match": {"value": True}}]}
+
+	payload = json.dumps(payload_dict).encode("utf-8")
 
 	headers = {"Content-Type": "application/json"}
 	if QDRANT_API_KEY:
@@ -55,7 +60,6 @@ def query_qdrant(collection, text):
 			data = json.loads(response.read().decode())
 			points = data.get("result", {}).get("points", [])
 
-			# Extract all content, prioritizing immune tag formatting
 			results: List[str] = []
 			for p in points:
 				content = p.get("payload", {}).get("content", "")
@@ -64,12 +68,7 @@ def query_qdrant(collection, text):
 				if is_immune and "[IMMUNE]" not in content:
 					content += " [IMMUNE]"
 
-				# If we are querying directive_memories, we want ALL of them
-				if collection == "directive_memories":
-					results.append(content)
-				# If it's another collection (like social_memories), we filter by text or immunity
-				elif text.lower() in content.lower() or is_immune:
-					results.append(content)
+				results.append(content)
 
 			return results
 	except Exception as e:

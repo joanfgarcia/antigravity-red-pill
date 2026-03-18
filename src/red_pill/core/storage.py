@@ -29,6 +29,8 @@ class StorageEngine:
 				collection_name=collection_name,
 				vectors_config=models.VectorParams(size=self.cfg.VECTOR_SIZE, distance=models.Distance.COSINE),
 			)
+			self.client.create_payload_index(collection_name=collection_name, field_name="immune", field_schema=models.PayloadSchemaType.BOOL)
+			self.client.create_payload_index(collection_name=collection_name, field_name="importance", field_schema=models.PayloadSchemaType.FLOAT)
 			logger.info(f"Ghost Collection created: {collection_name}")
 
 	def upsert(self, collection_name: str, points: List[models.PointStruct]) -> None:

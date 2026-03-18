@@ -284,12 +284,15 @@ class MemoryManager:
 
 			# Hive Mind Transmission (v5.0.0)
 			if not force_immune and collection in ["work_memories", "social_memories"]:
-				self.hive.transmit_experience(
-					collection_name=f"hive_{collection}",
-					content=text,
-					vector=vector,
-					metadata={"importance": importance, "agent_id": os.getenv("AGENT_ID", "standalone")},
-				)
+				try:
+					self.hive.transmit_experience(
+						collection_name=f"hive_{collection}",
+						content=text,
+						vector=vector,
+						metadata={"importance": importance, "agent_id": os.getenv("AGENT_ID", "standalone")},
+					)
+				except Exception as he:
+					logger.warning(f"Hive transmission failed, but local memory retained: {he}")
 
 			if self.cfg.METABOLISM_ENABLED:
 				self._trigger_metabolism()
