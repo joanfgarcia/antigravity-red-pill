@@ -66,7 +66,7 @@ tmp/
 audit/
 # docs/certification/ <-- Allow tracking of formal reports
 # *CERTIFICATION_REPORT* <-- Allow tracking
-RED_PILL_DIGEST.txt
+RED_PILL_DIGEST*.txt
 models/
 
 # Sensitive Data
