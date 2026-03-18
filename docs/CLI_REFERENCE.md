@@ -1,5 +1,11 @@
 # 🔴 BÜNKER COMMAND LINE INTERFACE
 
+## Minimal Usage Examples
+- **Start background daemon:** `red-pill run`
+- **Run security audit on a codebase:** `red-pill audit /path/to/project`
+- **Export encrypted soul-kit:** `red-pill soul export`
+
+## Command Reference
 ```text
 ```
 

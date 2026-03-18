@@ -14,6 +14,11 @@ def main():
 
 	with open(out_file, "w") as f:
 		f.write("# 🔴 BÜNKER COMMAND LINE INTERFACE\n\n")
+		f.write("## Minimal Usage Examples\n")
+		f.write("- **Start background daemon:** `red-pill run`\n")
+		f.write("- **Run security audit on a codebase:** `red-pill audit /path/to/project`\n")
+		f.write("- **Export encrypted soul-kit:** `red-pill soul export`\n\n")
+		f.write("## Command Reference\n")
 		f.write("```text\n")
 		f.write(res.stdout)
 		f.write("```\n\n")
