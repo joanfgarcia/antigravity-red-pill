@@ -327,3 +327,16 @@ MEMORY_ENGINES = {
 BAYESIAN_STABILITY_KAPPA = float(os.getenv("BAYESIAN_STABILITY_KAPPA", "0.05"))
 # BAYESIAN_REINFORCEMENT_GAIN: Amount of alpha added per successful recall.
 BAYESIAN_REINFORCEMENT_GAIN = float(os.getenv("BAYESIAN_REINFORCEMENT_GAIN", "1.0"))
+
+# NEURO-IMMUNE SENSITIVITY (BIOLOGICAL DASHBOARD v6.1)
+# Threshold for a signal to be visible in the prompt context
+SIGNAL_VISIBILITY_THRESHOLD = float(os.getenv("SIGNAL_VISIBILITY_THRESHOLD", "5.0"))
+# Base intensity for normal notifications (decays automatically on read)
+SIGNAL_BASE_NOTIFICATION = float(os.getenv("SIGNAL_BASE_NOTIFICATION", "5.0"))
+# Base intensity for a CUDA failure pain signal
+SIGNAL_BASE_PAIN_CUDA = float(os.getenv("SIGNAL_BASE_PAIN_CUDA", "7.0"))
+# Escalation rate per pulse for untreated pain signals
+SIGNAL_PAIN_ESCALATION_RATE = float(os.getenv("SIGNAL_PAIN_ESCALATION_RATE", "0.5"))
+# Thresholds for Amygdala/Autonomic alerts
+SIGNAL_AMNESIA_HOURS = int(os.getenv("SIGNAL_AMNESIA_HOURS", "4"))
+SIGNAL_MIGRAINE_VECTORS = int(os.getenv("SIGNAL_MIGRAINE_VECTORS", "10000"))

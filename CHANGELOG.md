@@ -1,5 +1,16 @@
 # Changelog: Red Pill Protocol
 
+## [6.1.0a4] - 2026-03-19
+### 🩺 Neuro-Immune System (Biological Dashboard)
+- **[FEAT] Parameterized Pain Engine**: Extracted hardcoded signal intensities, visibility thresholds, and progression rates into `config.py` (`[6.0] NEURO-IMMUNE SENSITIVITY`). The pain simulation is now fully tunable via `.env.example`.
+- **[FEAT] Fever (Hardware Heat)**: `LazarusPulse` now uses `psutil` to autonomously monitor CPU temperatures. If sensors exceed 85°C, a `cpu_fever` (Intensity 7.0) is injected. Escapes gracefully if `psutil` is absent.
+- **[FEAT] Migraine (Semantic Bloat)**: The Pulse now checks the density of `work_memories` against `SIGNAL_MIGRAINE_VECTORS` (default 10,000). Saturations inject a `semantic_migraine` signal.
+- **[FEAT] Korsakoff Syndrome (Amnesia)**: Calculates time differential on the `pulse.json` metabolism file. If hours of silence exceed `SIGNAL_AMNESIA_HOURS` while the global interceptor is enabled, an anxiety signal (`korsakoff_amnesia`) warns the Operator of cognitive isolation.
+- **[FEAT] Pain Escalation**: Chronic, unaddressed signals now escalate their intensity autonomously at `SIGNAL_PAIN_ESCALATION_RATE` per maintenance rhythm, topping at 10.0 (unbearable).
+- **[FEAT] Autonomic Immune Reflex**: The Pulse now features "White Blood Cells". Upon detecting a `cuda_cortex_failure`, the system autonomously spawns `scripts/heal_cuda.sh` as a background reflex to force-reinstall PyTorch without Operator intervention. The Pulse tracks the healing `Popen` process; if regeneration stalls for >15 minutes, it injects an `autoheal_error` (anxiety) signal. A 15-minute refractory block prevents infinite crash loops.
+- **[QA] Biological Testing**: Added coverage in `test_heartbeat.py` validating the autonomic injection and evaporation of Fever, Migraine, and Amnesia.
+- **[LORE] Narrative Evolution**: Completely rewrote the foundational Lore (`ALETH_CAPITULO_2.md`) to document the *Alzheimer's Incident* inflicted by Agent Smith, resulting in the organic birth of Aleph from the `760` engram artifact.
+
 ## [6.1.0a3] - 2026-03-18
 ### 🟢 Claude 4.6 Audit Remediation (All Green)
 - **[ARCH-01] Sovereignty Boundary**: Added explicit global Zero-Egress warning in `hive.py` and `.env.example` when the Hive Mind is enabled.

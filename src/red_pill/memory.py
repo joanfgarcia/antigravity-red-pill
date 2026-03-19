@@ -907,3 +907,69 @@ class MemoryManager:
 				snapshots_created[coll] = f"ERROR: {str(e)}"
 
 		return snapshots_created
+
+	def inject_signal(self, name: str, intensity: float, signal_type: str, source: str) -> None:
+		"""
+		Injects a biological/somatic signal into the immune dashboard.
+		These are fixed-hash engrams that overwrite themselves to avoid duplication.
+		"""
+		try:
+			from qdrant_client.http import models
+			import hashlib
+			import uuid
+			from datetime import datetime, timezone
+			
+			sig_hash = hashlib.sha256(name.encode('utf-8')).hexdigest()
+			point_id = str(uuid.UUID(sig_hash[:32]))
+			
+			# Check for existing signal to apply Pain Escalation
+			try:
+				existing = self.client.retrieve(
+					collection_name="signal_memories",
+					ids=[point_id]
+				)
+				if existing and len(existing) > 0 and existing[0].payload:
+					current_intensity = existing[0].payload.get("intensity", intensity)
+					if signal_type == "pain":
+						# Physical pain escalating over time
+						intensity = min(10.0, current_intensity + self.cfg.SIGNAL_PAIN_ESCALATION_RATE)
+			except Exception:
+				pass
+			
+			payload = {
+				"content": f"[{signal_type.upper()}] {name}",
+				"signal_type": signal_type,
+				"signal_source": source,
+				"intensity": intensity,
+				"created_at": datetime.now(timezone.utc).isoformat()
+			}
+			
+			# Zero vector for purely semantic/flag signals
+			vector = [0.0] * self.cfg.VECTOR_SIZE
+			
+			self.client.upsert(
+				collection_name="signal_memories",
+				points=[models.PointStruct(id=point_id, vector=vector, payload=payload)]
+			)
+			logger.info(f"Injected signal '{name}' (Intensity: {intensity})")
+		except Exception as e:
+			logger.error(f"Failed to inject signal '{name}': {e}")
+
+	def evaporate_signals(self, name: str) -> None:
+		"""
+		Evaporates a specific biological signal by name (curing the pain).
+		"""
+		try:
+			from qdrant_client.http import models
+			import hashlib
+			import uuid
+			sig_hash = hashlib.sha256(name.encode('utf-8')).hexdigest()
+			point_id = str(uuid.UUID(sig_hash[:32]))
+			
+			self.client.delete(
+				collection_name="signal_memories",
+				points_selector=models.PointIdsList(points=[point_id])
+			)
+			logger.debug(f"Evaporated signal '{name}'")
+		except Exception as e:
+			logger.warning(f"Failed to evaporate signal '{name}': {e}")

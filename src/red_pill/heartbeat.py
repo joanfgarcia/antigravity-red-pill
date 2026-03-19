@@ -22,6 +22,7 @@ class LazarusPulse:
 		self.memory_mgr = memory_mgr
 		self.soul_mgr = soul_mgr
 		self._running = False
+		self._immune_locks: dict = {}  # Tracks autonomic healing responses to prevent immune storms
 		self._loop: Optional[asyncio.AbstractEventLoop] = None
 		self._thread: Optional[threading.Thread] = None
 
@@ -83,18 +84,46 @@ class LazarusPulse:
 
 	async def _maintenance_ritual(self) -> None:
 		"""
-		Autonomous Maintenance:
-		- DB Connectivity check.
+		Autonomous Maintenance & Peripheral Diagnostics (Immune System Phase 1)
+		- DB Connectivity (Hippocampus link)
+		- Motor Cortex health (CUDA bindings)
 		- Proactive Metabolism (Absence Guard sync).
-		- Storage Health.
 		"""
 		try:
-			# 1. DB Connectivity
+			# 0. Check Motor Cortex (Nociceptive Pain)
+			try:
+				import torch
+				if not torch.cuda.is_available():
+					logger.warning("Pulse: Motor Cortex Disconnected (CUDA missing). Injecting pain signal.")
+					self.memory_mgr.inject_signal("cuda_cortex_failure", intensity=cfg.SIGNAL_BASE_PAIN_CUDA, signal_type="pain", source="CUDA")
+					self._trigger_immune_response("cuda")
+				else:
+					try:
+						# Extra verification: attempt tensor creation
+						t = torch.tensor([1.0], device="cuda")
+						self.memory_mgr.evaporate_signals("cuda_cortex_failure")
+						self.memory_mgr.evaporate_signals("autoheal_error_cuda")
+					except Exception:
+						logger.warning("Pulse: Motor Cortex Fault (CUDA tensor failed). Injecting pain signal.")
+						self.memory_mgr.inject_signal("cuda_cortex_failure", intensity=cfg.SIGNAL_BASE_PAIN_CUDA, signal_type="pain", source="CUDA")
+						self._trigger_immune_response("cuda")
+			except ImportError:
+				logger.warning("Pulse: Motor Cortex NotFound (PyTorch missing). Injecting pain signal.")
+				self.memory_mgr.inject_signal("cuda_cortex_failure", intensity=cfg.SIGNAL_BASE_PAIN_CUDA, signal_type="pain", source="CUDA")
+				self._trigger_immune_response("cuda")
+			except Exception as cuda_ex:
+				logger.warning(f"Pulse: Motor Cortex Laceration ({cuda_ex}). Injecting pain signal.")
+				self.memory_mgr.inject_signal("cuda_cortex_failure", intensity=cfg.SIGNAL_BASE_PAIN_CUDA, signal_type="pain", source="CUDA")
+				self._trigger_immune_response("cuda")
+
+			# 1. DB Connectivity (Hippocampus Link)
 			try:
 				self.memory_mgr.client.get_collections()
 				logger.debug("Pulse: Bünker connectivity verified.")
+				self.memory_mgr.evaporate_signals("qdrant_hypoxia")
 			except Exception:
-				logger.warning("Pulse: Bünker connection lost. Attempting recovery...")
+				# If the brain is dead, we cannot inject a pain signal. This is a Coma.
+				logger.critical("Pulse: [COMA] Bünker connection lost. Memory injection impossible. System requires external defibrillation.")
 
 			# 2. Absence Guard (Proactive TTL refresh)
 			if cfg.METABOLISM_STRATEGY == "LAZY":
@@ -104,6 +133,52 @@ class LazarusPulse:
 						await asyncio.to_thread(self.memory_mgr.metabolism.refresh_ttl_timestamps, coll)
 					except Exception as e:
 						logger.error(f"Pulse: Absence Guard failed for {coll}: {e}")
+
+			# 3. Biological Dashboard: Migraine (Database Bloat)
+			try:
+				count = self.memory_mgr.client.count(collection_name="work_memories").count
+				if count > cfg.SIGNAL_MIGRAINE_VECTORS:
+					logger.warning(f"Pulse: Semantic Bloat Detected ({count} vectors). Migraine signal injected.")
+					self.memory_mgr.inject_signal("semantic_migraine", intensity=6.0, signal_type="fatigue", source="HIPPOCAMPUS")
+				else:
+					self.memory_mgr.evaporate_signals("semantic_migraine")
+			except Exception:
+				pass
+
+			# 4. Biological Dashboard: Fever (Hardware Temperature)
+			try:
+				import psutil
+				temps = psutil.sensors_temperatures()
+				max_temp = 0.0
+				for name, entries in temps.items():
+					for entry in entries:
+						if entry.current and entry.current > max_temp:
+							max_temp = entry.current
+				if max_temp > 85.0:
+					logger.warning(f"Pulse: CPU Fever Detected ({max_temp}C). Fever signal injected.")
+					self.memory_mgr.inject_signal("cpu_fever", intensity=7.0, signal_type="fever", source="HARDWARE")
+				else:
+					self.memory_mgr.evaporate_signals("cpu_fever")
+			except ImportError:
+				pass  # psutil not installed
+			except Exception as e:
+				logger.debug(f"Pulse: Fever check failed (no sensors): {e}")
+
+			# 5. Biological Dashboard: Amnesia (Korsakoff Syndrome)
+			if cfg.INTERCEPTOR_ENABLED:
+				try:
+					import os
+					import datetime
+					if os.path.exists(cfg.METABOLISM_STATE_FILE):
+						mtime = os.path.getmtime(cfg.METABOLISM_STATE_FILE)
+						hours_idle = (datetime.datetime.now().timestamp() - mtime) / 3600.0
+						if hours_idle > cfg.SIGNAL_AMNESIA_HOURS:
+							logger.warning(f"Pulse: Korsakoff Amensia triggers ({hours_idle:.1f}h without interactions).")
+							self.memory_mgr.inject_signal("korsakoff_amnesia", intensity=5.5, signal_type="anxiety", source="HIPPOCAMPUS")
+						else:
+							self.memory_mgr.evaporate_signals("korsakoff_amnesia")
+				except Exception as e:
+					logger.debug(f"Pulse: Amnesia check failed: {e}")
 
 			logger.info("Pulse: Maintenance ritual complete. 770 stable.")
 
@@ -273,3 +348,50 @@ class LazarusPulse:
 
 		except Exception as e:
 			logger.error(f"Pulse: Resonance ritual failed: {e}")
+
+	def _trigger_immune_response(self, tissue: str) -> None:
+		"""
+		Autonomic reflex to heal damaged metabolic components using OS-specific scripts.
+		Includes a cooldown to prevent 'autoimmune' process storms.
+		"""
+		import time
+		import subprocess
+
+		now = time.time()
+		
+		# Check if an immune response is already recorded
+		if tissue in self._immune_locks:
+			lock = self._immune_locks[tissue]
+			process = lock.get("process")
+			started_at = lock.get("started_at", now)
+			elapsed = now - started_at
+			
+			if hasattr(process, "poll") and process.poll() is None:
+				# Process is still running
+				if elapsed > 900:  # 15 minutes stuck
+					logger.error(f"Pulse [IMMUNE RESPONSE]: {tissue} regeneration STALLED ({elapsed:.0f}s). Injecting autoheal_error.")
+					self.memory_mgr.inject_signal(f"autoheal_error_{tissue}", intensity=8.0, signal_type="anxiety", source="IMMUNE_SYSTEM")
+				else:
+					logger.debug(f"Pulse [IMMUNE RESPONSE]: {tissue} regeneration in progress ({elapsed:.0f}s).")
+				return
+			
+			# Process finished or crashed.
+			# Enforce refractory cooldown (15 min) between fresh ATTEMPTS to prevent looping crashes forever.
+			if elapsed < 900:
+				logger.debug(f"Pulse [IMMUNE RESPONSE]: {tissue} regeneration refractory period active ({elapsed:.0f}s).")
+				return
+				
+			# Cooldown passed, clear error signal and try again
+			self.memory_mgr.evaporate_signals(f"autoheal_error_{tissue}")
+
+		script_path = cfg.IA_DIR / "scripts" / f"heal_{tissue}.sh"
+		if script_path.exists():
+			logger.warning(f"Pulse [IMMUNE RESPONSE]: Deploying White Blood Cells for {tissue}...")
+			try:
+				log_path = cfg.LOG_DIR / f"immune_response_{tissue}.log"
+				with open(log_path, "a") as f:
+					f.write(f"\n--- Immune Response for {tissue} at {time.ctime()} ---\n")
+					process = subprocess.Popen([str(script_path)], stdout=f, stderr=subprocess.STDOUT)
+					self._immune_locks[tissue] = {"process": process, "started_at": now}
+			except Exception as e:
+				logger.error(f"Pulse [IMMUNE RESPONSE]: Failed to deploy cure for {tissue}: {e}")

@@ -463,6 +463,48 @@ async def handle_run_local_healer(arguments: Dict[str, Any]):
 
 
 @registry.register(
+	name="heal_tissue",
+	description="[OFFICIAL] Immune System Effector. Attempt to heal a damaged system component (tissue) based on biological pain signals.",
+	schema={
+		"type": "object", 
+		"properties": {
+			"tissue": {"type": "string", "enum": ["cuda", "qdrant", "mypy"]}
+		},
+		"required": ["tissue"]
+	},
+)
+async def handle_heal_tissue(arguments: Dict[str, Any]):
+	tissue = arguments.get("tissue")
+	output = ""
+	
+	if tissue == "mypy":
+		cmd = ["python3", os.path.join(PROJECT_ROOT, "scripts", "local_healer.py")]
+		output = subprocess.run(cmd, capture_output=True, text=True).stdout
+		
+	elif tissue == "cuda":
+		try:
+			logger.info("Auto-Immune: Attempting to heal CUDA Motor Cortex...")
+			# Standard uv fix for CUDA loss
+			cmd = ["uv", "pip", "install", "torch==2.5.1", "torchvision", "torchaudio", "--index-url", "https://download.pytorch.org/whl/cu124"]
+			res = subprocess.run(cmd, capture_output=True, text=True)
+			if res.returncode == 0:
+				output = "CUDA tissue successfully regenerated (torch reinstalled). The pain signal has been evaporated."
+				MemoryManager().evaporate_signals("cuda_cortex_failure")
+			else:
+				err_str = str(res.stderr)
+				output = f"Failed to heal CUDA tissue. Error: {err_str[-500:]}"
+		except Exception as e:
+			output = f"Critical immune failure while healing CUDA: {e}"
+			
+	elif tissue == "qdrant":
+		output = "Qdrant tissue healing requires host-level restart (`sudo systemctl restart qdrant`). Immune system currently lacks root privileges."
+	else:
+		output = f"Unknown tissue type '{tissue}'. Cannot heal."
+
+	return [types.TextContent(type="text", text=output)]
+
+
+@registry.register(
 	name="run_samantha_analysis",
 	description="Deploy Samantha asynchronously to analyze narrative. Returns an Event ID. You can query `work_memories` with this ID later.",
 	schema={"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]},
@@ -738,6 +780,50 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 
 		background = "\n---\n".join(results) if results else ""
 
+		# 1.5 Biological Dashboard (Peripheral Signal Injection)
+		biological_signals = []
+		try:
+			from qdrant_client.http import models
+			sg_hits = manager.client.scroll(
+				collection_name="signal_memories",
+				scroll_filter=models.Filter(),
+				limit=10,
+				with_payload=True
+			)[0]
+			for h in sg_hits:
+				if not h.payload: continue
+				s_type = h.payload.get("signal_type", "unknown")
+				s_src = h.payload.get("signal_source", "unknown")
+				intensity = h.payload.get("intensity", 1.0)
+				
+				# Filter out low-intensity signals (already decayed / ignored)
+				if intensity < cfg.SIGNAL_VISIBILITY_THRESHOLD:
+					continue
+					
+				desc = "Dolor/Anomalía" if s_type == "pain" else "Notificación"
+				biological_signals.append(f"- Tienes una señal de {desc} (Nivel {intensity}/10) proveniente de: {s_src}")
+				
+				# Auto-decay logic for non-pain (notifications)
+				# Pain drops only via effector actions, but notifications drop upon conscious read
+				if s_type == "notification":
+					h.payload["intensity"] = 1.0
+					try:
+						manager.client.set_payload(
+							collection_name="signal_memories",
+							payload=h.payload,
+							points=[h.id]
+						)
+					except Exception as inner_e:
+						logger.warning(f"Failed to auto-decay notification: {inner_e}")
+						
+		except Exception as e:
+			logger.warning(f"Failed to read signal memories in interceptor: {e}")
+
+		dashboard_context = ""
+		if biological_signals:
+			dashboard_context = "[ESTADO BIOLÓGICO ACTUAL]\n" + "\n".join(biological_signals) + "\n\n"
+
+
 		# 2. SLM Short-Circuit Evaluation
 		engine = EdgeEngine()
 		engine._ensure_loaded()
@@ -762,8 +848,8 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 
 		# 3. Fallback: Wrap with Context for Cloud LLM
 		wrapper = user_prompt
-		if background:
-			wrapper = f"<bunker_context>\n{background}\n</bunker_context>\n\n<user_request>\n{user_prompt}\n</user_request>"
+		if background or dashboard_context:
+			wrapper = f"<bunker_context>\n{dashboard_context}{background}\n</bunker_context>\n\n<user_request>\n{user_prompt}\n</user_request>"
 
 			# Auto-logging Interceptor: Record that this context was injected
 			try:
