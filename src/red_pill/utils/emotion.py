@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 
 # Singleton for the emotion classifier to avoid reloading
 _classifier = None
+_model_failed = False
 
 
 def get_emotions(text: str, top_k: int = 3, threshold: float = 0.2) -> List[Dict[str, Any]]:
@@ -16,7 +17,11 @@ def get_emotions(text: str, top_k: int = 3, threshold: float = 0.2) -> List[Dict
 	Detect multiple emotions in text.
 	Returns a list of {label, score}.
 	"""
-	global _classifier
+	global _classifier, _model_failed
+	
+	if _model_failed:
+		return []
+		
 	try:
 		if _classifier is None:
 			from transformers import pipeline
@@ -35,7 +40,8 @@ def get_emotions(text: str, top_k: int = 3, threshold: float = 0.2) -> List[Dict
 		filtered = [{"label": str(r["label"]).lower(), "score": float(r["score"])} for r in results if float(r["score"]) >= threshold]
 		return filtered
 	except Exception as e:
-		logger.warning(f"Multi-emotion detection failed: {e}")
+		_model_failed = True
+		logger.warning(f"Multi-emotion model missing/failed (disabling module): {e}")
 		return []
 
 
