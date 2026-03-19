@@ -160,3 +160,40 @@ async def test_resonance_ritual_failure(pulse):
 		mock_cfg.VECTOR_SIZE = 384
 		with patch.dict("sys.modules", {"red_pill.swarm.resonance": MagicMock(ResonanceObserver=MagicMock(side_effect=Exception("Resonance fail")))}):
 			await pulse._resonance_ritual()
+
+
+@pytest.mark.asyncio
+@patch("red_pill.heartbeat.cfg")
+async def test_maintenance_ritual_migraine(mock_cfg, pulse):
+	mock_cfg.SIGNAL_MIGRAINE_VECTORS = 100
+	mock_cfg.METABOLISM_STRATEGY = "CLASSIC"
+	pulse.memory_mgr.client.count.return_value = MagicMock(count=150)
+	await pulse._maintenance_ritual()
+	pulse.memory_mgr.inject_signal.assert_any_call("semantic_migraine", intensity=6.0, signal_type="fatigue", source="HIPPOCAMPUS")
+
+	pulse.memory_mgr.client.count.return_value = MagicMock(count=50)
+	await pulse._maintenance_ritual()
+	pulse.memory_mgr.evaporate_signals.assert_any_call("semantic_migraine")
+
+
+@pytest.mark.asyncio
+@patch("red_pill.heartbeat.cfg")
+@patch.dict("sys.modules", {"psutil": MagicMock(sensors_temperatures=MagicMock(return_value={"coretemp": [MagicMock(current=90.0)]}))})
+async def test_maintenance_ritual_fever(mock_cfg, pulse):
+	mock_cfg.METABOLISM_STRATEGY = "CLASSIC"
+	await pulse._maintenance_ritual()
+	pulse.memory_mgr.inject_signal.assert_any_call("cpu_fever", intensity=7.0, signal_type="fever", source="HARDWARE")
+
+
+@pytest.mark.asyncio
+@patch("red_pill.heartbeat.cfg")
+@patch("os.path.exists", return_value=True)
+@patch("os.path.getmtime", return_value=0)
+@patch("datetime.datetime")
+async def test_maintenance_ritual_amnesia(mock_datetime, mock_mtime, mock_exists, mock_cfg, pulse):
+	mock_cfg.INTERCEPTOR_ENABLED = True
+	mock_cfg.SIGNAL_AMNESIA_HOURS = 24
+	mock_cfg.METABOLISM_STRATEGY = "CLASSIC"
+	mock_datetime.now.return_value = MagicMock(timestamp=MagicMock(return_value=3600 * 48))
+	await pulse._maintenance_ritual()
+	pulse.memory_mgr.inject_signal.assert_any_call("korsakoff_amnesia", intensity=5.5, signal_type="anxiety", source="HIPPOCAMPUS")

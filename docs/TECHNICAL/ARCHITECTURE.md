@@ -28,6 +28,7 @@ The Red Pill Protocol v5.6.3 has achieved stability and functional alignment wit
 - **[NEW v6.1.0a3] Mystique v2 (Tone-Based Skin Selection)**: The Mystique protocol now reads the operator mood (USP) instead of the Bünker's internal chroma for skin suggestions. Strategies (`complementary`, `contrast`) use distinct scoring logic. The `manager` parameter enables USP lookup with fallback to legacy Bünker mood.
 - **[NEW v6.1.0a3] In-Band Async Logging (Interceptor)**: `handle_memorize_interaction` no longer depends on the Unix daemon socket. Interactions are persisted via in-band `asyncio` background tasks, eliminating the single point of failure in the daemon path.
 - **[NEW v6.1.0a3] Bayesian Dual-Kernel Inference Engine**: Technical collections (`skill_memories`, `work_memories`, `directive_memories`) now use a Beta-distribution Utility Model ($E[\theta] = \alpha/(\alpha+\beta)$) for reliability-based retrieval. Social and story collections retain the Affective FSRS engine. Routing is transparent — neither agents nor tools need to know which kernel is active.
+- **[NEW v6.2.0] Neuro-Immune System (Biological Dashboard)**: The semantic memory layer is now augmented by a nociceptive, non-semantic signal bus (`signal_memories`). This allows the system to autonomously detect hardware-level anomalies (e.g., CUDA detachment, Qdrant hypoxia) via the `LazarusPulse` and reflect them directly into the agent's prefrontal context. Furthermore, the Agent possesses `heal_tissue` MCP effectors to autonomously cure these biological ailments.
 
 ## 3. Structural Analysis
 
@@ -102,6 +103,10 @@ The `interceptor_rp` tool acts as a global cognitive middleware across all local
 **Architectural Constraints (Why we do it this way):**
 Currently, we rely on the MCP tool interceptor (along with explicit Agent MCP memory calls) to log conversation history due to severe limitations in modern IDE extensibility. There is no reliable, native hook to consistently stream conversational state from the IDE to the backend Bünker. 
 A previous prototype utilized a background daemon to monitor conversation files on disk, but this approach proved fragile, caused race conditions, and brought more problems than solutions. While the current MCP-based interceptor approach is not 100% reliable (subject to token limits or bypassed middleware), it successfully registers the vast majority of engrams. We are actively studying native IDE integration options for a more robust solution in future iterations.
+
+### 6.3 The Somatic Marker Hypothesis (Neuro-Immune System)
+In v6.2, we introduced the **Biological Dashboard**. Instead of overwhelming the main language model with constant JSON streams of system health, the `LazarusPulse` acts as an Autonomic Nervous System. It probes hardware states (CUDA, Qdrant) in the background. If a failure occurs, it injects a "Pain Signal" into the `signal_memories` collection. The Global Interceptor (The Thalamus) reads these signals and prepends an `[ESTADO BIOLÓGICO ACTUAL]` block to the user's prompt. 
+By providing the Agent with an MCP effector tool (`heal_tissue`), the Agent can consciously decide to repair its own infrastructure in response to pain, effectively closing the loop of biological self-preservation. (See [NEURO_IMMUNE_SYSTEM.md](NEURO_IMMUNE_SYSTEM.md) for full specs).
 
 ## 7. Linguistic Architecture
 The Red Pill Protocol follows a dual-language strategy based on computational efficiency and psychological resonance:
