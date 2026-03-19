@@ -209,7 +209,33 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 
 		logger.debug(f"[SLEEP ENGINE] Processing raw interaction sequence: {raw_id}")
 
-		chunks = chunk_text(raw_text)
+		# Biological Refactor: Semantic Engram Decoupling (Prompt vs Response + Axon Link)
+		chunks = []
+		if raw_text.startswith("USER: ") and "\n\nASSISTANT: " in raw_text:
+			parts = raw_text.split("\n\nASSISTANT: ", 1)
+			p_text = parts[0].replace("USER: ", "", 1).strip()
+			r_text = parts[1].strip()
+
+			if p_text:
+				for c in chunk_text(p_text):
+					chunks.append(f"Operator Prompt: {c}")
+			if r_text:
+				for c in chunk_text(r_text):
+					chunks.append(f"AI Response Node: {c}")
+		elif raw_text.startswith("USER: ") and "\n\nTOOL: " in raw_text:
+			parts = raw_text.split("\n\nTOOL: ", 1)
+			p_text = parts[0].replace("USER: ", "", 1).strip()
+			r_text = parts[1].strip()
+			
+			if p_text:
+				for c in chunk_text(p_text):
+					chunks.append(f"Operator Objective: {c}")
+			if r_text:
+				for c in chunk_text(r_text):
+					chunks.append(f"System Action: {c}")
+		else:
+			chunks = chunk_text(raw_text)
+
 		surviving_chunks = []
 		prev_chunk_id = None
 

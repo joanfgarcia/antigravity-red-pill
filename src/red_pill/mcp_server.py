@@ -840,21 +840,17 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 				"If the user's prompt is a statement, a conversational remark, or requires complex creativity/coding, "
 				"you MUST reply ONLY with: 'INSUFFICIENT_CONTEXT'. "
 				"ONLY if the user asks a direct factual question that is FULLY answered by the 'Contexto Cifrado', "
-				"you should provide the answer."
+				"You are an internal routing Gatekeeper. Evaluate the user's prompt strictly based on the provided <BUNKER_CONTEXT>.\n"
+				"If you have enough hard factual data to answer the prompt conclusively, you MUST prefix your answer with the EXACT string `[VALID]`.\n"
+				"If you don't have enough data, or the prompt is narrative, conversational, or philosophical, do NOT use the prefix. Output ONLY: `INSUFFICIENT_CONTEXT`."
 			)
-			prompt = f"<|im_start|>system\n{eval_sys}<|im_end|>\n<|im_start|>user\nContexto Cifrado del Bünker:\n{background}\n\nPetición del Operador: {user_prompt}<|im_end|>\n<|im_start|>assistant\n"
+			local_answer = EdgeEngine.evaluate(eval_sys, user_prompt, temperature=0.0)
 
-			# Execute local LLM (Fire and wait, but it's local)
-			output = engine.llm(prompt, max_tokens=1024, stop=["<|im_end|>", "<|im_start|>", "</s>", "<|endoftext|>"], temperature=0.1)
-			if isinstance(output, dict):
-				local_answer = str(output["choices"][0]["text"]).strip()
-				logger.info(f"SLM Eval Result: {local_answer[:50]}...")
-				
-				refusals = ["lo siento", "no puedo", "i'm sorry", "i cannot", "as an ai", "modelo de lenguaje", "as a language model"]
-				is_refusal = any(r in local_answer.lower() for r in refusals)
-
-				if local_answer and "INSUFFICIENT_CONTEXT" not in local_answer and not is_refusal:
-					return [types.TextContent(type="text", text=f"<LOCAL_RESPONSE_READY>\n{local_answer}\n</LOCAL_RESPONSE_READY>")]
+			if "[VALID]" in local_answer:
+				# Strip the positive-catch token before displaying to user
+				clean_answer = local_answer.replace("[VALID]", "").strip()
+				if clean_answer:
+					return [types.TextContent(type="text", text=f"<LOCAL_RESPONSE_READY>\n{clean_answer}\n</LOCAL_RESPONSE_READY>")]
 
 		# 3. Fallback: Wrap with Context for Cloud LLM
 		wrapper = user_prompt
