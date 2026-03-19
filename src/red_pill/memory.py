@@ -766,6 +766,36 @@ class MemoryManager:
 					continue
 				seen_content[content_hash] = str(hit.id)
 
+				# v6.1: Biological Refraction (Refract legacy monolithic Prompts/Responses)
+				if content.startswith("USER: ") and "\n\nASSISTANT: " in content:
+					refracted_count += 1
+					if not dry_run:
+						try:
+							importance = float(hit.payload.get("reinforcement_score", 1.0))
+							color = hit.payload.get("color", self.cfg.DEFAULT_COLOR)
+							emotion = hit.payload.get("emotion", self.cfg.DEFAULT_EMOTION)
+							intensity = float(hit.payload.get("intensity", 1.0))
+							immune = bool(hit.payload.get("immune", False))
+
+							self.client.delete(collection_name=collection, points_selector=models.PointIdsList(points=[hit.id]))
+							
+							parts = content.split("\n\nASSISTANT: ", 1)
+							p_text = parts[0].replace("USER: ", "", 1).strip()
+							r_text = parts[1].strip()
+
+							prev_id = None
+							if p_text:
+								prev_id = self.add_memory(collection, f"Operator Prompt: {p_text}", importance, color=color, emotion=emotion, intensity=intensity, force_immune=immune)
+							if r_text:
+								r_id = self.add_memory(collection, f"AI Response Node: {r_text}", importance, color=color, emotion=emotion, intensity=intensity, force_immune=immune)
+								if prev_id and r_id:
+									self.client.set_payload(collection_name=collection, payload={"associations": [prev_id]}, points=[r_id])
+									
+							logger.info(f"Refracted monolithic legacy engram: {str(hit.id)[:8]}...")
+						except Exception as e:
+							logger.error(f"Biological Refraction failed for {hit.id}: {e}")
+					continue
+
 				# v5.6.3: Fragmentation Guard (Refract oversized legacy engrams)
 				# If an engram exceeds the current high-purity limits (e.g. leftovers from v5.6.2),
 				# we delete and re-add it to trigger the synaptic_split logic.
