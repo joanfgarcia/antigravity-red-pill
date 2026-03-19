@@ -2,6 +2,9 @@
 
 ## [6.1.0a4] - 2026-03-19
 ### 🩺 Neuro-Immune System (Biological Dashboard)
+- **[FEAT] Biological Refraction (Memory Sanitize)**: Upgraded the `sanitize` operation with polymorphic Regex. It now actively hunts and breaks down legacy monolithic engrams (`USER: ... ASSISTANT/ORCHESTRATOR/TOOL: ...`) into separate, purely semantic Twin Nodes (Prompt + Response).
+- **[ARCH] Axon Linkage**: Refracted Twin Nodes are geometrically tied via the `associations` array, forming an Axon bridge that preserves conversational flow while bypassing the fragmentation limits.
+- **[FIX] CUDA Healer Latch**: Injected a `_model_failed` silent latch into `emotion.py` to gracefully downgrade to an empty set if the secondary PyTorch environment crashes, killing the cyclic infinite console spam during global reads.
 - **[FEAT] Parameterized Pain Engine**: Extracted hardcoded signal intensities, visibility thresholds, and progression rates into `config.py` (`[6.0] NEURO-IMMUNE SENSITIVITY`). The pain simulation is now fully tunable via `.env.example`.
 - **[FEAT] Fever (Hardware Heat)**: `LazarusPulse` now uses `psutil` to autonomously monitor CPU temperatures. If sensors exceed 85°C, a `cpu_fever` (Intensity 7.0) is injected. Escapes gracefully if `psutil` is absent.
 - **[FEAT] Migraine (Semantic Bloat)**: The Pulse now checks the density of `work_memories` against `SIGNAL_MIGRAINE_VECTORS` (default 10,000). Saturations inject a `semantic_migraine` signal.
