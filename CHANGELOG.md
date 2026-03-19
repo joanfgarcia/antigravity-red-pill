@@ -1,7 +1,13 @@
 # Changelog: Red Pill Protocol
 
+## [6.1.0a5] - 2026-03-20
+### 🗡️ Operation Scythe & MCP Stabilization
+- **[ARCH] Interceptor Extirpation**: Permanently removed `interceptor_rp` from `mcp_server.py` and installation scripts. The global interceptor was erroneously injecting its own search contexts into `interaction_memories` (creating a toxic hallucination loop).
+- **[FIX] MCP JSON-RPC Integrity**: Hardened the Server communication by internally redirecting `sys.stdout` to `sys.stderr` during the `stdio_server` lifecycle. This prevents indiscriminate print noise from corrupting the JSON-RPC pipe.
+- **[FEAT] Polymorphic Swarm Refraction**: Upgraded the `sanitize` Regex inside `MemoryManager`. It now correctly splits and refracts legacy monolithic engrams matching any Swarm role (`ASSISTANT`, `TOOL`, `ORCHESTRATOR`, `MINION`, `SMITH`, `KEYMAKER`, `COMPRESSOR`), cleaning up Swarm background noise.
+- **[OPS] Buffer Sterilization**: Purged `interaction_memories` (deleted 227 polluted engrams), restoring the clarity and quality of the short-term associative vector space.
+
 ## [6.1.0a4] - 2026-03-19
-### 🩺 Neuro-Immune System (Biological Dashboard)
 - **[FEAT] Biological Refraction (Memory Sanitize)**: Upgraded the `sanitize` operation with polymorphic Regex. It now actively hunts and breaks down legacy monolithic engrams (`USER: ... ASSISTANT/ORCHESTRATOR/TOOL: ...`) into separate, purely semantic Twin Nodes (Prompt + Response).
 - **[ARCH] Axon Linkage**: Refracted Twin Nodes are geometrically tied via the `associations` array, forming an Axon bridge that preserves conversational flow while bypassing the fragmentation limits.
 - **[FIX] CUDA Healer Latch**: Injected a `_model_failed` silent latch into `emotion.py` to gracefully downgrade to an empty set if the secondary PyTorch environment crashes, killing the cyclic infinite console spam during global reads.

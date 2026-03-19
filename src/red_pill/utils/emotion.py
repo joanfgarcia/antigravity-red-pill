@@ -18,10 +18,10 @@ def get_emotions(text: str, top_k: int = 3, threshold: float = 0.2) -> List[Dict
 	Returns a list of {label, score}.
 	"""
 	global _classifier, _model_failed
-	
+
 	if _model_failed:
 		return []
-		
+
 	try:
 		if _classifier is None:
 			from transformers import pipeline

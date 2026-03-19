@@ -769,6 +769,7 @@ class MemoryManager:
 				# v6.1: Biological Refraction (Refract legacy monolithic Prompts/Responses)
 				if content.startswith("USER: "):
 					import re
+
 					# Catch polymorphic responses from Swarm Agents even if newlines were stripped
 					match = re.search(r"\b(ASSISTANT|TOOL|ORCHESTRATOR|MINION|SMITH|KEYMAKER|COMPRESSOR):\s(.*)", content, flags=re.DOTALL)
 					if match:
@@ -783,19 +784,35 @@ class MemoryManager:
 								immune = bool(hit.payload.get("immune", False))
 
 								self.client.delete(collection_name=collection, points_selector=models.PointIdsList(points=[hit.id]))
-								
-								p_text = content[:match.start()].replace("USER: ", "", 1).strip()
+
+								p_text = content[: match.start()].replace("USER: ", "", 1).strip()
 								r_text = match.group(2).strip()
 
 								prev_id = None
 								if p_text:
-									prev_id = self.add_memory(collection, f"Operator Prompt: {p_text}", importance, color=color, emotion=emotion, intensity=intensity, force_immune=immune)
+									prev_id = self.add_memory(
+										collection,
+										f"Operator Prompt: {p_text}",
+										importance,
+										color=color,
+										emotion=emotion,
+										intensity=intensity,
+										force_immune=immune,
+									)
 								if r_text:
 									node_prefix = "AI" if role == "ASSISTANT" else role.capitalize()
-									r_id = self.add_memory(collection, f"{node_prefix} Response Node: {r_text}", importance, color=color, emotion=emotion, intensity=intensity, force_immune=immune)
+									r_id = self.add_memory(
+										collection,
+										f"{node_prefix} Response Node: {r_text}",
+										importance,
+										color=color,
+										emotion=emotion,
+										intensity=intensity,
+										force_immune=immune,
+									)
 									if prev_id and r_id:
 										self.client.set_payload(collection_name=collection, payload={"associations": [prev_id]}, points=[r_id])
-										
+
 								logger.info(f"Refracted polymorphic legacy engram ({role}): {str(hit.id)[:8]}...")
 							except Exception as e:
 								logger.error(f"Biological Refraction failed for {hit.id}: {e}")
@@ -953,16 +970,13 @@ class MemoryManager:
 			import hashlib
 			import uuid
 			from datetime import datetime, timezone
-			
-			sig_hash = hashlib.sha256(name.encode('utf-8')).hexdigest()
+
+			sig_hash = hashlib.sha256(name.encode("utf-8")).hexdigest()
 			point_id = str(uuid.UUID(sig_hash[:32]))
-			
+
 			# Check for existing signal to apply Pain Escalation
 			try:
-				existing = self.client.retrieve(
-					collection_name="signal_memories",
-					ids=[point_id]
-				)
+				existing = self.client.retrieve(collection_name="signal_memories", ids=[point_id])
 				if existing and len(existing) > 0 and existing[0].payload:
 					current_intensity = existing[0].payload.get("intensity", intensity)
 					if signal_type == "pain":
@@ -970,22 +984,19 @@ class MemoryManager:
 						intensity = min(10.0, current_intensity + self.cfg.SIGNAL_PAIN_ESCALATION_RATE)
 			except Exception:
 				pass
-			
+
 			payload = {
 				"content": f"[{signal_type.upper()}] {name}",
 				"signal_type": signal_type,
 				"signal_source": source,
 				"intensity": intensity,
-				"created_at": datetime.now(timezone.utc).isoformat()
+				"created_at": datetime.now(timezone.utc).isoformat(),
 			}
-			
+
 			# Zero vector for purely semantic/flag signals
 			vector = [0.0] * self.cfg.VECTOR_SIZE
-			
-			self.client.upsert(
-				collection_name="signal_memories",
-				points=[models.PointStruct(id=point_id, vector=vector, payload=payload)]
-			)
+
+			self.client.upsert(collection_name="signal_memories", points=[models.PointStruct(id=point_id, vector=vector, payload=payload)])
 			logger.info(f"Injected signal '{name}' (Intensity: {intensity})")
 		except Exception as e:
 			logger.error(f"Failed to inject signal '{name}': {e}")
@@ -998,13 +1009,11 @@ class MemoryManager:
 			from qdrant_client.http import models
 			import hashlib
 			import uuid
-			sig_hash = hashlib.sha256(name.encode('utf-8')).hexdigest()
+
+			sig_hash = hashlib.sha256(name.encode("utf-8")).hexdigest()
 			point_id = str(uuid.UUID(sig_hash[:32]))
-			
-			self.client.delete(
-				collection_name="signal_memories",
-				points_selector=models.PointIdsList(points=[point_id])
-			)
+
+			self.client.delete(collection_name="signal_memories", points_selector=models.PointIdsList(points=[point_id]))
 			logger.debug(f"Evaporated signal '{name}'")
 		except Exception as e:
 			logger.warning(f"Failed to evaporate signal '{name}': {e}")

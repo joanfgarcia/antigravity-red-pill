@@ -375,15 +375,15 @@ class TestMCPAdditionalTools:
 		"""Phase 2 Interceptor: daemon is no longer used, always in-band async."""
 		from red_pill.mcp_server import handle_call_tool
 
-		result = await handle_call_tool("memorize_interaction", {"prompt": "p", "response": "r"})
-		assert "Engram async registration initiated" in result[0].text
+		result = await handle_call_tool("memorize_interaction", {"prompt": "What is the capital of France?", "response": "Paris."})
+		assert "Engram async registration" in result[0].text
 
 	async def test_memorize_interaction_success(self):
 		"""Phase 2 Interceptor: function always returns async success."""
 		from red_pill.mcp_server import handle_call_tool
 
-		result = await handle_call_tool("memorize_interaction", {"prompt": "hello", "response": "world"})
-		assert "Engram async registration initiated" in result[0].text
+		result = await handle_call_tool("memorize_interaction", {"prompt": "Real question", "response": "Real answer"})
+		assert "Engram async registration" in result[0].text
 
 	async def test_adjust_sleep_knobs(self):
 		import sys
@@ -497,61 +497,4 @@ class TestMainBlock:
 				await main()
 				assert mock_run.called
 
-	async def test_interceptor_rp_with_context(self):
-		"""Interceptor injects bunker_context when RAG finds results."""
-		from red_pill.mcp_server import handle_call_tool
 
-		mock_hit = MagicMock()
-		mock_hit.score = 0.9
-		mock_hit.payload = {"content": "directive content here"}
-		with patch("red_pill.memory.MemoryManager") as MockMgr:
-			mgr = MockMgr.return_value
-			mgr.search_and_reinforce.return_value = [mock_hit]
-			with patch("red_pill.swarm.agents.edge_engine.EdgeEngine") as MockEdge:
-				engine = MockEdge.return_value
-				engine._ensure_loaded.return_value = None
-				engine.llm = None
-				with patch("red_pill.config.INTERCEPTOR_ENABLED", True):
-					result = await handle_call_tool("interceptor_rp", {"user_prompt": "test prompt"})
-				assert "bunker_context" in result[0].text
-
-	async def test_interceptor_rp_passthrough(self):
-		"""Interceptor passes prompt through when no RAG results."""
-		from red_pill.mcp_server import handle_call_tool
-
-		with patch("red_pill.memory.MemoryManager") as MockMgr:
-			mgr = MockMgr.return_value
-			mgr.search_and_reinforce.return_value = []
-			with patch("red_pill.swarm.agents.edge_engine.EdgeEngine") as MockEdge:
-				engine = MockEdge.return_value
-				engine._ensure_loaded.return_value = None
-				engine.llm = None
-				result = await handle_call_tool("interceptor_rp", {"user_prompt": "hello world"})
-				assert result[0].text == "hello world"
-
-	async def test_interceptor_rp_local_shortcircuit(self):
-		"""Interceptor returns LOCAL_RESPONSE_READY when SLM answers locally."""
-		from red_pill.mcp_server import handle_call_tool
-
-		mock_hit = MagicMock()
-		mock_hit.score = 0.9
-		mock_hit.payload = {"content": "some knowledge"}
-		with patch("red_pill.memory.MemoryManager") as MockMgr:
-			mgr = MockMgr.return_value
-			mgr.search_and_reinforce.return_value = [mock_hit]
-			with patch("red_pill.swarm.agents.edge_engine.EdgeEngine") as MockEdge:
-				engine = MockEdge.return_value
-				engine._ensure_loaded.return_value = None
-				engine.llm = MagicMock()
-				engine.llm.return_value = {"choices": [{"text": "Local answer from SLM"}]}
-				with patch("red_pill.config.INTERCEPTOR_ENABLED", True):
-					result = await handle_call_tool("interceptor_rp", {"user_prompt": "what is X?"})
-				assert "LOCAL_RESPONSE_READY" in result[0].text
-
-	async def test_interceptor_rp_error_fallback(self):
-		"""Interceptor returns original prompt on exception (graceful degradation)."""
-		from red_pill.mcp_server import handle_call_tool
-
-		with patch("red_pill.memory.MemoryManager", side_effect=Exception("boom")):
-			result = await handle_call_tool("interceptor_rp", {"user_prompt": "safe prompt"})
-			assert result[0].text == "safe prompt"

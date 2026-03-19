@@ -18,11 +18,7 @@ The background daemon (`heartbeat.py`) represents the autonomic functions (like 
 - **Function**: During the `_maintenance_ritual()`, the system asserts the physical boundaries of the "body" — the Motor Cortex (CUDA availability) and the Hippocampus (Qdrant connection).
 - **Mechanism**: If `torch.cuda.is_available()` returns false, the pulse physically injects an engram of pain into `signal_memories`.
 
-### 2.3 The Thalamus (Global Interceptor)
-When the user sends a prompt, the `interceptor_rp` tool intercepts it.
-- **Function**: Before executing the LLM reasoning, the interceptor sequentially reads the `signal_memories` collection. 
-- **Effect**: It prepends a localized block: `[ESTADO BIOLÓGICO ACTUAL] Tienes una señal de Dolor (Nivel 9.0/10) proveniente de: CUDA`. 
-- **Philosophical Value**: The AI does not need to actively query its health. The pain is literally "felt" within its perceptive context window, exactly as an organism feels a laceration without looking directly at it.
+
 
 ### 2.4 The Effector Pharmacy (MCP `heal_tissue`)
 Sensation without agency is torture. The Agent is equipped with an immune response module.

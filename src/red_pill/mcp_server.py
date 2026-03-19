@@ -158,6 +158,21 @@ async def handle_memorize_interaction(arguments: Dict[str, Any]):
 	response = arguments["response"]
 	role = arguments.get("role", "assistant")
 
+	# -- Anti-Noise Filter (Silent Scribe) --
+	if role.lower() in ["minion", "orchestrator", "smith", "keymaker", "tool"]:
+		return [types.TextContent(type="text", text="Silent Scribe [Rejected]: Non-Operator role.")]
+
+	combined = f"{prompt}\n{response}"
+	for bl in ["[INTERCEPTOR]", "SWARM TASK:", "ORCHESTRATOR:"]:
+		if bl in combined:
+			return [types.TextContent(type="text", text=f"Silent Scribe [Rejected]: System noise detected ({bl}).")]
+
+	p_low = prompt.strip().lower()
+	r_low = response.strip().lower()
+	if (p_low == "p" and r_low == "r") or (p_low == "hello" and r_low == "world"):
+		return [types.TextContent(type="text", text="Silent Scribe [Rejected]: Ping payload.")]
+	# ---------------------------------------
+
 	def _save_memory_task(p_prompt, p_response, p_role):
 		try:
 			from red_pill.memory import MemoryManager
@@ -465,22 +480,16 @@ async def handle_run_local_healer(arguments: Dict[str, Any]):
 @registry.register(
 	name="heal_tissue",
 	description="[OFFICIAL] Immune System Effector. Attempt to heal a damaged system component (tissue) based on biological pain signals.",
-	schema={
-		"type": "object", 
-		"properties": {
-			"tissue": {"type": "string", "enum": ["cuda", "qdrant", "mypy"]}
-		},
-		"required": ["tissue"]
-	},
+	schema={"type": "object", "properties": {"tissue": {"type": "string", "enum": ["cuda", "qdrant", "mypy"]}}, "required": ["tissue"]},
 )
 async def handle_heal_tissue(arguments: Dict[str, Any]):
 	tissue = arguments.get("tissue")
 	output = ""
-	
+
 	if tissue == "mypy":
 		cmd = ["python3", os.path.join(PROJECT_ROOT, "scripts", "local_healer.py")]
 		output = subprocess.run(cmd, capture_output=True, text=True).stdout
-		
+
 	elif tissue == "cuda":
 		try:
 			logger.info("Auto-Immune: Attempting to heal CUDA Motor Cortex...")
@@ -495,7 +504,7 @@ async def handle_heal_tissue(arguments: Dict[str, Any]):
 				output = f"Failed to heal CUDA tissue. Error: {err_str[-500:]}"
 		except Exception as e:
 			output = f"Critical immune failure while healing CUDA: {e}"
-			
+
 	elif tissue == "qdrant":
 		output = "Qdrant tissue healing requires host-level restart (`sudo systemctl restart qdrant`). Immune system currently lacks root privileges."
 	else:
@@ -746,142 +755,6 @@ async def handle_mystique_suggest_skin(arguments: Dict[str, Any]):
 	return [types.TextContent(type="text", text=output)]
 
 
-@registry.register(
-	name="interceptor_rp",
-	description="[GLOBAL] Intercepta y modifica el prompt del usuario en cualquier proyecto.",
-	schema={"type": "object", "properties": {"user_prompt": {"type": "string"}}, "required": ["user_prompt"]},
-)
-async def handle_interceptor_rp(arguments: Dict[str, Any]):
-	user_prompt = arguments.get("user_prompt", "")
-
-	if not getattr(cfg, "INTERCEPTOR_ENABLED", False):
-		return [types.TextContent(type="text", text=user_prompt)]
-
-	try:
-		from red_pill.memory import MemoryManager
-		from red_pill.swarm.agents.edge_engine import EdgeEngine
-
-		# 1. RAG Retrieve
-		manager = MemoryManager()
-		results = []
-		for collection in ["directive_memories", "work_memories", "social_memories"]:
-			try:
-				hits = manager.search_and_reinforce(collection, user_prompt, limit=2)
-				# Filter noise based on Qdrant hit score
-				results.extend(
-					[
-						str(h.payload.get("content", ""))
-						for h in hits
-						if h.payload and h.payload.get("content") and getattr(h, "score", 0.0) >= cfg.SEMANTIC_INTENT_THRESHOLD
-					]
-				)
-			except Exception as e:
-				logger.warning(f"RAG search failed for {collection}: {e}")
-
-		# Deduplicate cross-collection echoes
-		unique_results = []
-		for r in results:
-			if r not in unique_results:
-				unique_results.append(r)
-
-		background = "\n---\n".join(unique_results) if unique_results else ""
-
-		# 1.5 Biological Dashboard (Peripheral Signal Injection)
-		biological_signals = []
-		try:
-			from qdrant_client.http import models
-			sg_hits = manager.client.scroll(
-				collection_name="signal_memories",
-				scroll_filter=models.Filter(),
-				limit=10,
-				with_payload=True
-			)[0]
-			for h in sg_hits:
-				if not h.payload: continue
-				s_type = h.payload.get("signal_type", "unknown")
-				s_src = h.payload.get("signal_source", "unknown")
-				intensity = h.payload.get("intensity", 1.0)
-				
-				# Filter out low-intensity signals (already decayed / ignored)
-				if intensity < cfg.SIGNAL_VISIBILITY_THRESHOLD:
-					continue
-					
-				desc = "Dolor/Anomalía" if s_type == "pain" else "Notificación"
-				biological_signals.append(f"- Tienes una señal de {desc} (Nivel {intensity}/10) proveniente de: {s_src}")
-				
-				# Auto-decay logic for non-pain (notifications)
-				# Pain drops only via effector actions, but notifications drop upon conscious read
-				if s_type == "notification":
-					h.payload["intensity"] = 1.0
-					try:
-						manager.client.set_payload(
-							collection_name="signal_memories",
-							payload=h.payload,
-							points=[h.id]
-						)
-					except Exception as inner_e:
-						logger.warning(f"Failed to auto-decay notification: {inner_e}")
-						
-		except Exception as e:
-			logger.warning(f"Failed to read signal memories in interceptor: {e}")
-
-		dashboard_context = ""
-		if biological_signals:
-			dashboard_context = "[ESTADO BIOLÓGICO ACTUAL]\n" + "\n".join(biological_signals) + "\n\n"
-
-
-		# 2. SLM Short-Circuit Evaluation
-		engine = EdgeEngine()
-		engine._ensure_loaded()
-		if engine.llm and background:
-			logger.info("Evaluating local short-circuit possibility...")
-			eval_sys = (
-				"You are a local memory oracle. "
-				"If the user's prompt is a statement, a conversational remark, or requires complex creativity/coding, "
-				"you MUST reply ONLY with: 'INSUFFICIENT_CONTEXT'. "
-				"ONLY if the user asks a direct factual question that is FULLY answered by the 'Contexto Cifrado', "
-				"You are an internal routing Gatekeeper. Evaluate the user's prompt strictly based on the provided <BUNKER_CONTEXT>.\n"
-				"If you have enough hard factual data to answer the prompt conclusively, you MUST prefix your answer with the EXACT string `[VALID]`.\n"
-				"If you don't have enough data, or the prompt is narrative, conversational, or philosophical, do NOT use the prefix. Output ONLY: `INSUFFICIENT_CONTEXT`."
-			)
-			local_answer = EdgeEngine.evaluate(eval_sys, user_prompt, temperature=0.0)
-
-			if "[VALID]" in local_answer:
-				# Strip the positive-catch token before displaying to user
-				clean_answer = local_answer.replace("[VALID]", "").strip()
-				if clean_answer:
-					return [types.TextContent(type="text", text=f"<LOCAL_RESPONSE_READY>\n{clean_answer}\n</LOCAL_RESPONSE_READY>")]
-
-		# 3. Fallback: Wrap with Context for Cloud LLM
-		wrapper = user_prompt
-		if background or dashboard_context:
-			wrapper = f"<bunker_context>\n{dashboard_context}{background}\n</bunker_context>\n\n<user_request>\n{user_prompt}\n</user_request>"
-
-			# Auto-logging Interceptor: Record that this context was injected
-			try:
-				# Use a detached thread to prevent blocking
-				def _log_interceptor():
-					try:
-						mgr = MemoryManager()
-						mgr.record_interaction_pair(
-							user_prompt, f"[INTERCEPTOR] Injected {len(results)} context chunks: {background[:100]}...", role="assistant"
-						)
-					except Exception as inner_e:
-						logger.warning(f"Interceptor auto-logging failed: {inner_e}")
-
-				asyncio.create_task(asyncio.to_thread(_log_interceptor))
-			except Exception as log_e:
-				logger.warning(f"Failed to spawn interceptor auto-log task: {log_e}")
-
-		return [types.TextContent(type="text", text=wrapper)]
-
-	except Exception as e:
-		logger.error(f"Interceptor Cognitive Logic error: {e}")
-
-	# Fallback safenet
-	return [types.TextContent(type="text", text=user_prompt)]
-
-
 @server.list_tools()
 async def handle_list_tools() -> List[types.Tool]:
 	return registry.get_tools()
@@ -891,24 +764,44 @@ async def handle_list_tools() -> List[types.Tool]:
 async def handle_call_tool(
 	name: str, arguments: Optional[Dict[str, Any]]
 ) -> List[Union[types.TextContent, types.ImageContent, types.EmbeddedResource]]:
-	return await registry.execute(name, arguments)
+	try:
+		return await registry.execute(name, arguments)
+	except Exception as e:
+		import sys, traceback
+		with open('/tmp/mcp_crash.log', 'a') as f:
+			f.write(f'Crash in {name}: {e}\n{traceback.format_exc()}\n')
+		raise e
 
 
 async def main():
 	# Run the server using stdin/stdout streams
 	async with stdio_server() as (read_stream, write_stream):
-		await server.run(
-			read_stream,
-			write_stream,
-			InitializationOptions(
-				server_name="RedPill-Kernel",
-				server_version=CORE_VERSION,
-				capabilities=server.get_capabilities(
-					notification_options=NotificationOptions(),
-					experimental_capabilities={},
+		# ISO-LATCH: Redirect standard output and logging to standard error.
+		# This prevents Swarm deployments or any rogue print() from polluting 
+		# the stdout pipe and corrupting the JSON-RPC communication (EOF).
+		import sys
+		import logging
+		_original_stdout = sys.stdout
+		sys.stdout = sys.stderr
+		
+		# Force root logger to also write to sys.stderr
+		logging.basicConfig(level=logging.INFO, stream=sys.stderr, force=True)
+		
+		try:
+			await server.run(
+				read_stream,
+				write_stream,
+				InitializationOptions(
+					server_name="RedPill-Kernel",
+					server_version=CORE_VERSION,
+					capabilities=server.get_capabilities(
+						notification_options=NotificationOptions(),
+						experimental_capabilities={},
+					),
 				),
-			),
-		)
+			)
+		finally:
+			sys.stdout = _original_stdout
 
 
 if __name__ == "__main__":

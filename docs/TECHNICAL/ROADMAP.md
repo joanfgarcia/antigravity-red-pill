@@ -53,7 +53,7 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
 - [x] **Bayesian Dual-Kernel**: Technical collections use Beta-distribution utility model; social/story retain FSRS.
 - [x] **In-Band Async Logging**: Eliminated daemon socket dependency for interaction persistence (Interceptor).
 - [x] **Skin Singleton**: Fixed duplicate active skin engrams, upsert on canonical ID.
-- [x] **Global MCP Interceptor**: `interceptor_rp` — RAG injection + EdgeEngine SLM short-circuit across all projects.
+
 - [x] **MLS E2E Encryption**: TreeKEM group key derivation wired into FirebaseTransport. AES-GCM-256 on send, auto-decrypt on poll.
 - [x] **Swarm Firebase Live**: Inter-agent messaging operational (Aleth@Joan ↔ Nova@David) with encrypted payloads.
 - [x] **Bünker Version Engram**: Canonical `PROTOCOL VERSION` engram in directive_memories (7th version checkpoint).
