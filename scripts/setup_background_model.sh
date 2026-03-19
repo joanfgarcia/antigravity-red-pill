@@ -32,12 +32,53 @@ source $HOME/.agent/model-daemon/.venv/bin/activate
 exec mlx_lm.server --model lmstudio-community/Qwen3-Coder-30B-A3B-Instruct-MLX-8bit --port 8760
 START_EOF
 else
+cat << 'DUAL_BIND_EOF' > "$DAEMON_DIR/run_dual_bind.py"
+import os
+import socket
+import uvicorn
+from llama_cpp.server.app import create_app, Settings
+
+def main():
+    settings = Settings(
+        hf_model_repo_id="TheBloke/samantha-1.2-mistral-7B-GGUF",
+        model="*Q4_K_M.gguf",
+        chat_format="chatml",
+        n_ctx=8192,
+        n_gpu_layers=-1
+    )
+    app = create_app(settings)
+    
+    tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    tcp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    tcp_sock.bind(("127.0.0.1", 8760))
+    tcp_sock.listen()
+    
+    uds_path = os.path.expanduser("~/.agent/red_pill.sock")
+    if os.path.exists(uds_path):
+        os.remove(uds_path)
+    uds_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    uds_sock.bind(uds_path)
+    uds_sock.listen()
+    os.chmod(uds_path, 0o600)
+    
+    config = uvicorn.Config(app=app, log_level="info")
+    server = uvicorn.Server(config=config)
+    
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(server.serve(sockets=[tcp_sock, uds_sock]))
+
+if __name__ == "__main__":
+    main()
+DUAL_BIND_EOF
+
 cat << 'START_EOF' > "$START_SCRIPT"
 #!/bin/bash
 export PATH="$HOME/.agent/model-daemon/.venv/bin:$PATH"
 source $HOME/.agent/model-daemon/.venv/bin/activate
-# Utilizando Llama-cpp-python server. Por defecto descarga y sirve Samantha (Mistral 7B).
-exec python3 -m llama_cpp.server --hf_model_repo_id TheBloke/samantha-1.2-mistral-7B-GGUF --model "*Q4_K_M.gguf" --port 8760 --host 127.0.0.1
+# Utilizando Llama-cpp-python server con Dual-Bind (UDS Local + TCP Público).
+exec python3 "$HOME/.agent/model-daemon/run_dual_bind.py"
 START_EOF
 fi
 

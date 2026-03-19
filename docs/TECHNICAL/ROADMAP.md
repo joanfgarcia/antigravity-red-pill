@@ -60,6 +60,7 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
 - [x] **Swarm Subscribe Fix**: Fixed TransportManager race condition (config write before manager load).
 - [x] **FSRS Math in Code**: $R = e^{\ln(0.9) \cdot t/S}$ implemented in `affect.py` and wired into `memory.py` (reinforcement, lazy decay, active erosion).
 - [x] **MLS Key Rotation**: Implemented perfect forward secrecy ratcheting via `key_epoch` in `SovereignGroup` to proactively rotate the AES-GCM Swarm key.
+- [x] **Dual-Bind IPC Fast-Lane**: The Edge Engine now natively serves Unix Domain Sockets alongside TCP, allowing internal daemons to bypass the loopback network stack entirely with zero dependencies.
 
 ### Phase 3: Operational Maturity (Medium-Term - v7.0.0)
 - [x] **Double-Engine Burnout**: Seamless CUDA/HIP asymmetry for Strix Point architectures.

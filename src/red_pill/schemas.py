@@ -38,7 +38,7 @@ class CreateEngramRequest(BaseModel):
 	color: ValidColor = Field(default="gray")
 	emotion: ValidEmotion = Field(default="neutral")
 	intensity: float = Field(default=1.0, ge=0.0, le=10.0)
-	metadata: Dict[str, Union[str, int, float, bool, List[Any]]] = Field(default_factory=dict)
+	metadata: Dict[str, Any] = Field(default_factory=dict)
 	linguistic_markers: List[str] = Field(default_factory=list)
 
 	@field_validator("content")
@@ -86,9 +86,9 @@ class CreateEngramRequest(BaseModel):
 					for item in val:
 						if key == "emotional_profile" and isinstance(item, dict):
 							continue
-						if not isinstance(item, (str, int, float, bool)):
+						if not isinstance(item, (str, int, float, bool, dict)):
 							raise ValueError(f"Complex type in metadata list {key}")
-				elif isinstance(val, dict):
+				elif isinstance(val, dict) and key not in ["last_3d", "last_7d", "last_30d", "global"]:
 					raise ValueError(f"Nested dict in metadata field {key}")
 
 			if key == "associations" and isinstance(val, list):

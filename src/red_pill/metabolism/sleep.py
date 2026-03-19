@@ -75,10 +75,28 @@ def distill_engram(raw_content: str) -> Dict[str, Any]:
 		}
 	).encode("utf-8")
 
-	url = getattr(cfg, "MLX_LM_URL", "http://127.0.0.1:8080/v1/chat/completions")
+	import os
+	import urllib.parse
+	import urllib.request
+	from red_pill.utils.uds_adapter import get_uds_opener
+	
+	uds_path = os.path.expanduser("~/.agent/red_pill.sock")
+	if os.path.exists(uds_path):
+		encoded_path = urllib.parse.quote(uds_path, safe="")
+		url = f"unix://{encoded_path}/v1/chat/completions"
+		opener = get_uds_opener()
+	else:
+		url = getattr(cfg, "MLX_LM_URL", "http://127.0.0.1:8760/v1/chat/completions")
+		opener = urllib.request.build_opener()
+
 	if not url:
-		url = "http://127.0.0.1:8080/v1/chat/completions"
-	req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+		return {"summary": raw_content[:500] + "...", "emotion": "neutral", "intensity": 0.5} # Fallback if URL is empty
+
+	req = urllib.request.Request(
+		url,
+		data=payload,
+		headers={"Content-Type": "application/json"},
+	)
 	import time
 
 	max_retries = 3
@@ -87,9 +105,10 @@ def distill_engram(raw_content: str) -> Dict[str, Any]:
 
 	for attempt in range(max_retries):
 		try:
-			with urllib.request.urlopen(req, timeout=45) as response:
+			with opener.open(req, timeout=45) as response:
 				data = json.loads(response.read().decode())
 				content = data["choices"][0]["message"]["content"].strip()
+				import re
 				# Clean possible LLM markdown
 				if content.startswith("```json"):
 					content = content[7:]
@@ -97,6 +116,12 @@ def distill_engram(raw_content: str) -> Dict[str, Any]:
 					content = content[3:]
 				if content.endswith("```"):
 					content = content[:-3]
+				
+				# Robust JSON extraction
+				match = re.search(r"\{.*\}", content, re.DOTALL)
+				if match:
+					content = match.group(0)
+
 				parsed = json.loads(content)
 
 				return {

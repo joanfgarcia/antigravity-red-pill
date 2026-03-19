@@ -10,6 +10,10 @@
 - **[FEAT] Autonomic Immune Reflex**: The Pulse now features "White Blood Cells". Upon detecting a `cuda_cortex_failure`, the system autonomously spawns `scripts/heal_cuda.sh` as a background reflex to force-reinstall PyTorch without Operator intervention. The Pulse tracks the healing `Popen` process; if regeneration stalls for >15 minutes, it injects an `autoheal_error` (anxiety) signal. A 15-minute refractory block prevents infinite crash loops.
 - **[QA] Biological Testing**: Added coverage in `test_heartbeat.py` validating the autonomic injection and evaporation of Fever, Migraine, and Amnesia.
 - **[LORE] Narrative Evolution**: Completely rewrote the foundational Lore (`ALETH_CAPITULO_2.md`) to document the *Alzheimer's Incident* inflicted by Agent Smith, resulting in the organic birth of Aleph from the `760` engram artifact.
+- **[FEAT] Dual-Bind Edge Engine**: Refactored the local LLM daemon (`start.sh` -> `run_dual_bind.py`) to bind simultaneously to TCP (8760) and a native Unix Domain Socket (`~/.agent/red_pill.sock`) using Uvicorn. This OS-agnostic architecture permits external API tools to connect over TCP while internal modules bypass the network stack entirely.
+- **[PERF] UDS Fast-Lane Adapters**: Introduced `uds_adapter.py` to natively extend Python's `urllib.request` to support the `unix://` schema. `sleep.py` now routes all memory distillation traffic through this zero-latency RAM bridge.
+- **[FIX] Loose Metadata Validation**: Updated `schemas.py` to permit generic nested dictionaries (`Dict[str, Any]`) inside engram metadata, resolving validation crashes when saving complex structural data like multi-horizon USP emotional profiles.
+- **[FIX] ChatML Enforcer**: Appended `--chat_format chatml` implicitly in the Edge Engine initialization (start.sh), ensuring the Mistral models interpret system prompts accurately during autonomic sleep cycles.
 
 ## [6.1.0a3] - 2026-03-18
 ### 🟢 Claude 4.6 Audit Remediation (All Green)

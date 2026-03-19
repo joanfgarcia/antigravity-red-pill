@@ -384,11 +384,14 @@ class LazarusPulse:
 			# Cooldown passed, clear error signal and try again
 			self.memory_mgr.evaporate_signals(f"autoheal_error_{tissue}")
 
-		script_path = cfg.IA_DIR / "scripts" / f"heal_{tissue}.sh"
-		if script_path.exists():
+		import os
+		script_path = os.path.join(cfg.IA_DIR, "scripts", f"heal_{tissue}.sh")
+		if os.path.exists(script_path):
 			logger.warning(f"Pulse [IMMUNE RESPONSE]: Deploying White Blood Cells for {tissue}...")
 			try:
-				log_path = cfg.LOG_DIR / f"immune_response_{tissue}.log"
+				log_dir = os.path.join(os.path.expanduser("~"), ".agent")
+				os.makedirs(log_dir, exist_ok=True)
+				log_path = os.path.join(log_dir, f"immune_response_{tissue}.log")
 				with open(log_path, "a") as f:
 					f.write(f"\n--- Immune Response for {tissue} at {time.ctime()} ---\n")
 					process = subprocess.Popen([str(script_path)], stdout=f, stderr=subprocess.STDOUT)

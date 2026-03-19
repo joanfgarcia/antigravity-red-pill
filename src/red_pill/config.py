@@ -14,6 +14,8 @@ load_dotenv(env_path)
 if "CUDA_VISIBLE_DEVICES" not in os.environ:
 	pass
 
+MLX_LM_URL = os.getenv("MLX_LM_URL", "http://127.0.0.1:8080/v1/chat/completions")
+
 # CUDA Configuration (v6.0.0) - Removed runtime LD_LIBRARY_PATH injection
 # as it breaks PyTorch 2.10 `libc10_cuda.so` initialization by forcing older Ollama libs.
 if "CUDA_VISIBLE_DEVICES" not in os.environ:
