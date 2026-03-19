@@ -89,7 +89,7 @@ This document provides a comprehensive list of all parameters available in the `
 | Parameter | Default | Description |
 | :--- | :--- | :--- |
 | `INTERCEPTOR_ENABLED`| `False` | Toggles the Bünker's active middleware injection via MCP. If `True`, intercepts IDE prompts to dynamically load context from Qdrant. |
-| `SEMANTIC_INTENT_THRESHOLD`| `Low` (0.3) | `High` (0.6) or `Low` (0.3). Sets how literal the matching needs to be for context injection. |
+| `SEMANTIC_INTENT_THRESHOLD`| `Low` (0.5) | `High` (0.75) or `Low` (0.5). Sets how literal the matching needs to be for context injection. |
 | `PULSE_ENABLED` | `True` | Activates autonomous background synthesis and maintenance operations. |
 | `PULSE_INTERVAL` | `3600` | Interval in seconds between Sovereign Pulses. |
 | `LAZARUS_SYNC_ENABLED` | `True` | Activates constant state-sync to prevent process interruptions from losing RAM context. |

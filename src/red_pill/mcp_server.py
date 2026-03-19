@@ -778,7 +778,13 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 			except Exception as e:
 				logger.warning(f"RAG search failed for {collection}: {e}")
 
-		background = "\n---\n".join(results) if results else ""
+		# Deduplicate cross-collection echoes
+		unique_results = []
+		for r in results:
+			if r not in unique_results:
+				unique_results.append(r)
+
+		background = "\n---\n".join(unique_results) if unique_results else ""
 
 		# 1.5 Biological Dashboard (Peripheral Signal Injection)
 		biological_signals = []
@@ -830,10 +836,11 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 		if engine.llm and background:
 			logger.info("Evaluating local short-circuit possibility...")
 			eval_sys = (
-				"Eres un oráculo de la memoria local. "
-				"Responde la pregunta del usuario DIRECTA Y COMPLETAMENTE usando SOLO el contexto proporcionado. "
-				"Si la información no está en el contexto, o si el usuario pide programar código nuevo, "
-				"debes responder ESTRICTAMENTE con esta frase y nada más: 'INSUFFICIENT_CONTEXT'."
+				"You are a local memory oracle. "
+				"If the user's prompt is a statement, a conversational remark, or requires complex creativity/coding, "
+				"you MUST reply ONLY with: 'INSUFFICIENT_CONTEXT'. "
+				"ONLY if the user asks a direct factual question that is FULLY answered by the 'Contexto Cifrado', "
+				"you should provide the answer."
 			)
 			prompt = f"<|im_start|>system\n{eval_sys}<|im_end|>\n<|im_start|>user\nContexto Cifrado del Bünker:\n{background}\n\nPetición del Operador: {user_prompt}<|im_end|>\n<|im_start|>assistant\n"
 
@@ -842,8 +849,11 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 			if isinstance(output, dict):
 				local_answer = str(output["choices"][0]["text"]).strip()
 				logger.info(f"SLM Eval Result: {local_answer[:50]}...")
+				
+				refusals = ["lo siento", "no puedo", "i'm sorry", "i cannot", "as an ai", "modelo de lenguaje", "as a language model"]
+				is_refusal = any(r in local_answer.lower() for r in refusals)
 
-				if local_answer and "INSUFFICIENT_CONTEXT" not in local_answer:
+				if local_answer and "INSUFFICIENT_CONTEXT" not in local_answer and not is_refusal:
 					return [types.TextContent(type="text", text=f"<LOCAL_RESPONSE_READY>\n{local_answer}\n</LOCAL_RESPONSE_READY>")]
 
 		# 3. Fallback: Wrap with Context for Cloud LLM

@@ -249,7 +249,7 @@ MULTI_EMOTION_INFERENCE = os.getenv("MULTI_EMOTION_INFERENCE", "True").lower() =
 
 # NEURO-AGENTIC TUNING (v6.1.0)
 _semantic_str = os.getenv("SEMANTIC_INTENT_THRESHOLD", "Low").upper()
-SEMANTIC_INTENT_THRESHOLD = 0.6 if _semantic_str == "HIGH" else 0.3
+SEMANTIC_INTENT_THRESHOLD = 0.75 if _semantic_str == "HIGH" else 0.5
 
 # MCP Interceptor
 INTERCEPTOR_ENABLED = str(os.getenv("INTERCEPTOR_ENABLED", "False")).lower() in ("true", "1", "yes")

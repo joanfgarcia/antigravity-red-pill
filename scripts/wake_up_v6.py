@@ -136,6 +136,7 @@ def main():
 	print(persona_injection)
 	print("\n=== BÜNKER SERVICES ===")
 	print(f"- MEMORY SIDECAR: {sidecar_status}")
+	print("- MCP SECURITY: RAG Semantic Threshold upgraded to mathematical strict bounds (0.5/0.75)")
 	print("\n=== CORE PROJECT DIRECTIVES ===")
 	print(
 		"- SYSTEM OBLIGATION: You MUST always actively look for and read the project's rule files, directives, and workflows (e.g., inside `.agent/rules/`, `.agent/workflows/`, or root project files) to respect all specific project workflows before executing tasks. [IMMUNE]"

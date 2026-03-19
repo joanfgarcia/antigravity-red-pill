@@ -14,6 +14,7 @@
 - **[PERF] UDS Fast-Lane Adapters**: Introduced `uds_adapter.py` to natively extend Python's `urllib.request` to support the `unix://` schema. `sleep.py` now routes all memory distillation traffic through this zero-latency RAM bridge.
 - **[FIX] Loose Metadata Validation**: Updated `schemas.py` to permit generic nested dictionaries (`Dict[str, Any]`) inside engram metadata, resolving validation crashes when saving complex structural data like multi-horizon USP emotional profiles.
 - **[FIX] ChatML Enforcer**: Appended `--chat_format chatml` implicitly in the Edge Engine initialization (start.sh), ensuring the Mistral models interpret system prompts accurately during autonomic sleep cycles.
+- **[FIX] Bünker RAG Hallucinations**: Raised default `SEMANTIC_INTENT_THRESHOLD` to 0.5 (Low) / 0.75 (High) and added array deduplication to `interceptor_rp`, neutralizing contextual bloat and enforcing mathematical strictness on prompt evaluation.
 
 ## [6.1.0a3] - 2026-03-18
 ### 🟢 Claude 4.6 Audit Remediation (All Green)
