@@ -128,6 +128,9 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
     Write-Host "Anclando identidad..." -ForegroundColor Cyan
     uv run python scripts/bootstrap_identity.py --user-name "$USER_NAME" --user-role "$USER_ROLE" --ai-name "$AI_NAME" --ai-role "$AI_ROLE" --skin "$LORE_SKIN"
     
+    Write-Host "`n--- Fase: Despliegue de Pulso (Sovereign Heartbeat) ---" -ForegroundColor Blue
+    uv run python scripts/deploy_pulse.py
+
     Write-Host "`n--- Fase: Integración MCP Server ---" -ForegroundColor Blue
     $UV_PATH = (Get-Command uv).Source
     $REDPILL_DIR = (Resolve-Path "$PSScriptRoot\..").ProviderPath

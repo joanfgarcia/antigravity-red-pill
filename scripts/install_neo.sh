@@ -539,6 +539,9 @@ if command -v uv &> /dev/null; then
 	else
 		echo -e "${GREEN}✓ Identidad previa preservada. Ignición omitida para no causar fragmentación de personalidad.${NC}"
 	fi
+
+	echo -e "${BLUE}--- Fase: Despliegue de Pulso (Sovereign Heartbeat) ---${NC}"
+	(cd "$SCRIPT_DIR/../" && uv run python scripts/deploy_pulse.py || echo -e "${YELLOW}Aviso: No se pudo inyectar el pulso OS-nativo.${NC}")
 fi
 
 echo -e "${BLUE}--- Fase: Integración MCP Server ---${NC}"
