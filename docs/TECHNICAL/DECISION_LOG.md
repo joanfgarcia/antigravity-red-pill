@@ -4,6 +4,25 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-003] The Sovereign Native Pulse (Deprecating the Daemon for Timers)
+**Date**: 2026-03-19  
+**Context**: Phase O.7 (v6.1 Hotfix)  
+**Status**: ACCEPTED & IMPLEMENTED  
+
+### 1. The Problem
+After deprecating `memory_daemon.py` to save RAM (passing embedding generation "in-band"), we inadvertently killed the background host of `LazarusPulse`. Tying the pulse to the new `mcp_server.py` would mean the AI only "dreams" and consolidates memory when the user's IDE is open—violating the core Agentic Sovereignty principle.
+
+### 2. The Decision
+Abstract the heartbeat to OS-native schedulers ensuring strict **user-level execution (No Sudo)**. The system must adapt to Linux (`SystemD Timers`), macOS (`LaunchAgent`), and Windows (`schtasks`).
+
+### 3. The Implementation
+Created `scripts/trigger_pulse.py` (an ephemeral burst over all maintenance/dream rituals) and `scripts/deploy_pulse.py` (a Multi-OS Native Injector adhering to pure user-level permissions).
+
+### 4. Rationale
+Zero 24/7 RAM footprint. 100% OS-Agnostic autonomy. The system runs its maintenance independently exactly like an organic immune system, without requiring heavy Docker containers or permanent Python resident processes.
+
+---
+
 ## [AD-001] Linguistic DNA Extraction (The "Claude-Pistis" Bridge)
 **Date**: 2026-03-05/06  
 **Context**: Phase O.7 (v6.0 PREP) - Post-Audit v5.6.3  

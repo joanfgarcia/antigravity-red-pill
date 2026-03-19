@@ -48,6 +48,17 @@ During the installation (`bash scripts/install_neo.sh`), you must choose your pa
 
 ---
 
+## ⏳ Multi-OS Native Scheduling (The Ephemeral Pulse)
+
+The heartbeat of the Bünker (`LazarusPulse`) also strictly follows the Be Water philosophy. We do not enforce heavy Node.js or Python daemons running 24/7 just to wait for a timer. The system takes the shape of the host OS natively to guarantee autonomy:
+- **Linux**: Fills the shape of `Systemd Timers` (`--user`).
+- **macOS**: Fills the shape of `LaunchAgents` (`~/Library/LaunchAgents`).
+- **Windows**: Fills the shape of `Task Scheduler` (`schtasks`).
+
+All execution is mapped strictly at **User-Level**, guaranteeing sovereignty without requiring root/sudo escalation.
+
+---
+
 ## ⚖️ Sovereignty Choice
 
 You are the Architect. You decide the shape of your Bünker. Whether you choose the path of vapor, water or ice, the Red Pill Protocol will adapt to your command.
