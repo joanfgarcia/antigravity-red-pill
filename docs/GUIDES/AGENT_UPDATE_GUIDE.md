@@ -46,6 +46,7 @@ If updating to v6.1.0a3 or higher, you must synchronize your infrastructure para
 8.  **Qdrant Kill-Switch (SEC-02)**: If your Qdrant instance is exposed to the local network (`0.0.0.0`) or hosted remotely, the protocol will now refuse to boot unless you define a `QDRANT_API_KEY` in your `.env`. This is a hard-coded security protection.
 9.  **Google Drive Token Migration**: Your existing `token.json` for Cloud Vault backups will be automatically migrated to `~/.agent/credentials/drive_token.json` internally on boot. No re-authentication is required.
 10. **Lazarus Pulse Deploy**: The background daemon was removed. You MUST deploy the new OS-native pulse timer to keep the Swarm and Memory Consolidation active: Run `uv run python scripts/deploy_pulse.py` manually once from the root directory.
+11. **Async Queue Worker Deploy**: To ensure the MCP Server does not freeze during memory ingestion, you MUST deploy the new SQLite queue daemon: Run `uv run python scripts/deploy_queue.py` manually once from the root directory.
 
 ## 4. Post-Update Operational Checklist
 

@@ -163,7 +163,7 @@ async def handle_memorize_interaction(arguments: Dict[str, Any]):
 		return [types.TextContent(type="text", text="Silent Scribe [Rejected]: Non-Operator role.")]
 
 	combined = f"{prompt}\n{response}"
-	for bl in ["[INTERCEPTOR]", "SWARM TASK:", "ORCHESTRATOR:"]:
+	for bl in ["[INTERCEPTOR]", "SWARM TASK:", "ORCHESTRATOR:", "[SYSTEM_SIGNAL]"]:
 		if bl in combined:
 			return [types.TextContent(type="text", text=f"Silent Scribe [Rejected]: System noise detected ({bl}).")]
 
@@ -173,20 +173,10 @@ async def handle_memorize_interaction(arguments: Dict[str, Any]):
 		return [types.TextContent(type="text", text="Silent Scribe [Rejected]: Ping payload.")]
 	# ---------------------------------------
 
-	def _save_memory_task(p_prompt, p_response, p_role):
-		try:
-			from red_pill.memory import MemoryManager
-
-			mgr = MemoryManager()
-			uid = mgr.record_interaction_pair(p_prompt, p_response, role=p_role)
-			logger.info(f"Async Memory Log Success: {uid}")
-		except Exception as e:
-			logger.error(f"Async Memory Log Failed: {e}")
-
 	try:
-		# Fire and forget asynchronous task to avoid blocking MCP response
-		asyncio.create_task(asyncio.to_thread(_save_memory_task, prompt, response, role))
-		return [types.TextContent(type="text", text="Engram async registration initiated automatically.")]
+		from red_pill.core.queue_manager import MemoryQueueManager
+		MemoryQueueManager().enqueue_memory(prompt, response, role)
+		return [types.TextContent(type="text", text="Engram queue registration initiated automatically.")]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"Local Async Logging Error: {str(e)}")]
 
@@ -280,6 +270,63 @@ async def handle_search_memory_research(arguments: Dict[str, Any]):
 
 	asyncio.create_task(_run_bg())
 	return [types.TextContent(type="text", text=f"Oracle Research started [Event ID: {event_id}]. Results will be in the Minion Inbox.")]
+
+
+@registry.register(
+	name="check_minion_inbox",
+	description="[OFFICIAL] Read the unread background reports from the MinionInbox.",
+	schema={"type": "object", "properties": {}},
+)
+async def handle_check_minion_inbox(arguments: Dict[str, Any]):
+	try:
+		from red_pill.core.inbox import MinionInbox
+		import mcp.types as types
+		inbox = MinionInbox()
+		reports = inbox.get_unread(limit=50)
+		
+		if not reports:
+			return [types.TextContent(type="text", text="[MINION INBOX] No unread reports.")]
+			
+		formatted = f"--- MINION INBOX ({len(reports)} unread reports) ---\n"
+		read_ids = []
+		for r in reports:
+			formatted += f"[{r['source']}] Event: {r['event_id']} | Status: {r['status']}\nContent: {r['content']}\n\n"
+			read_ids.append(r["id"])
+			
+		inbox.mark_as_read(read_ids)
+		return [types.TextContent(type="text", text=formatted)]
+	except Exception as e:
+		import mcp.types as types
+		return [types.TextContent(type="text", text=f"Error reading Minion Inbox: {e}")]
+
+
+@registry.register(
+	name="fetch_signal_memories",
+	description="[OFFICIAL] Read the latest system pain signals and alerts (Cortex Status).",
+	schema={"type": "object", "properties": {}},
+)
+async def handle_fetch_signal_memories(arguments: Dict[str, Any]):
+	try:
+		from red_pill.memory import MemoryManager
+		mgr = MemoryManager()
+		points, _ = mgr.client.scroll(
+			collection_name="signal_memories",
+			limit=10,
+			with_payload=True
+		)
+		if not points:
+			return [types.TextContent(type="text", text="[SYSTEM_SIGNAL] No signals detected. System optimal.")]
+		
+		out = []
+		for p in points:
+			if p.payload:
+				content = p.payload.get("content", "Unknown Signal")
+				intensity = p.payload.get("intensity", 1.0)
+				out.append(f"- [Intensity {intensity}] {content}")
+				
+		return [types.TextContent(type="text", text="[SYSTEM_SIGNAL] Bünker Alerts:\n" + "\n".join(out))]
+	except Exception as e:
+		return [types.TextContent(type="text", text=f"[SYSTEM_SIGNAL] Failed to fetch signals: {e}")]
 
 
 @registry.register(

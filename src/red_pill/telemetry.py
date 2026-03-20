@@ -154,4 +154,33 @@ def get_telemetry_report() -> str:
 	# NPU
 	report += f"[NPU] {stats['npu'].get('name', 'NPU')}: {stats['npu']['status']}\n"
 
+	# Memory Queue
+	try:
+		from red_pill.core.queue_manager import MemoryQueueManager
+		from red_pill.memory import MemoryManager
+		
+		# Process Queue Status
+		pending = MemoryQueueManager().get_pending_count()
+		if pending >= 0:
+			report += f"\n[MEMORY QUEUE] {pending} pending engrams\n"
+			
+		# Process Signal Status
+		mgr = MemoryManager()
+		count_result = mgr.client.count(collection_name="signal_memories")
+		sig_count = count_result.count
+		if sig_count >= 0:
+			report += f"[SYSTEM SIGNALS] {sig_count} unread warnings/alerts active\n"
+
+		# Process Minion Inbox Status
+		try:
+			from red_pill.core.inbox import MinionInbox
+			inbox_msgs = len(MinionInbox().get_unread(limit=1000))
+			if inbox_msgs >= 0:
+				report += f"[MINION INBOX] {inbox_msgs} unread background reports\n"
+		except Exception:
+			pass
+
+	except Exception:
+		pass
+
 	return report

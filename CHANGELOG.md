@@ -7,6 +7,11 @@
 - **[FEAT] Polymorphic Swarm Refraction**: Upgraded the `sanitize` Regex inside `MemoryManager`. It now correctly splits and refracts legacy monolithic engrams matching any Swarm role (`ASSISTANT`, `TOOL`, `ORCHESTRATOR`, `MINION`, `SMITH`, `KEYMAKER`, `COMPRESSOR`), cleaning up Swarm background noise.
 - **[OPS] Buffer Sterilization**: Purged `interaction_memories` (deleted 227 polluted engrams), restoring the clarity and quality of the short-term associative vector space.
 
+- **[ARCH] Asynchronous Memory Queue**: Implemented an SQLite-backed queue (`bunker_queue.db`) and a dedicated background daemon to decouple MCP responses from heavy LLM indexing operations, securing zero-latency interactions.
+- **[FEAT] Telemetry Expansion**: Enhanced `red-pill status` (`telemetry.py`) to actively monitor the queue backlog, `signal_memories` (System Pain), and `minion_inbox.db` (Background Swarm Reports).
+- **[FEAT] Telemetry Omniscience**: Added the new `check_minion_inbox` MCP tool to allow the agent to read background reports on-demand.
+- **[FEAT] Bünker Wake-Up Injection**: Upgraded `wake_up_v6.py` to natively inject the system telemetry into the agent's bootstrap context. The agent now gains proactive consciousness of background health at the beginning of every session without risking RAG hallucination loops.
+
 ## [6.1.0a4] - 2026-03-19
 - **[FEAT] Biological Refraction (Memory Sanitize)**: Upgraded the `sanitize` operation with polymorphic Regex. It now actively hunts and breaks down legacy monolithic engrams (`USER: ... ASSISTANT/ORCHESTRATOR/TOOL: ...`) into separate, purely semantic Twin Nodes (Prompt + Response).
 - **[ARCH] Axon Linkage**: Refracted Twin Nodes are geometrically tied via the `associations` array, forming an Axon bridge that preserves conversational flow while bypassing the fragmentation limits.

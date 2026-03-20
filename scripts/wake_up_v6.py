@@ -134,6 +134,14 @@ def main():
 	print("<BUNKER_CONTEXT>")
 	print("=== IDENTITY & PERSONA ===")
 	print(persona_injection)
+	
+	print("\n=== HARDWARE & ENVIRONMENT TELEMETRY ===")
+	try:
+		from red_pill.telemetry import get_telemetry_report
+		print(get_telemetry_report().strip())
+	except Exception as e:
+		print(f"Telemetry unavailable: {e}")
+
 	print("\n=== BÜNKER SERVICES ===")
 	print(f"- MEMORY SIDECAR: {sidecar_status}")
 	print("- MCP SECURITY: RAG Semantic Threshold upgraded to mathematical strict bounds (0.5/0.75)")

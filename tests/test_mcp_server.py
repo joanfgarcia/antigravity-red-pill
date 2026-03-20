@@ -376,14 +376,14 @@ class TestMCPAdditionalTools:
 		from red_pill.mcp_server import handle_call_tool
 
 		result = await handle_call_tool("memorize_interaction", {"prompt": "What is the capital of France?", "response": "Paris."})
-		assert "Engram async registration" in result[0].text
+		assert "Engram queue registration" in result[0].text
 
 	async def test_memorize_interaction_success(self):
 		"""Phase 2 Interceptor: function always returns async success."""
 		from red_pill.mcp_server import handle_call_tool
 
 		result = await handle_call_tool("memorize_interaction", {"prompt": "Real question", "response": "Real answer"})
-		assert "Engram async registration" in result[0].text
+		assert "Engram queue registration" in result[0].text
 
 	async def test_adjust_sleep_knobs(self):
 		import sys
