@@ -4,12 +4,18 @@
 
 > 🚨 **PASOS OBLIGATORIOS POST-ACTUALIZACIÓN (CRÍTICO)** 🚨 
 > Si vienes de `v6.0.0` o inferior, la nueva arquitectura asíncrona exige que despliegues los nuevos demonios. **Si no ejecutas estos dos scripts, el MCP Server se congelará (deadlock) silenciosamente e indefinidamente durante la ingesta de memoria** al no haber un *Queue Worker* leyendo los mensajes.
+> 
+> **Paso 1: Despliegue de los Demonios (Multi-OS: Linux, macOS, Windows)**
 > ```bash
 > uv run python scripts/deploy_queue.py
 > uv run python scripts/deploy_pulse.py
-> systemctl --user daemon-reload
-> systemctl --user restart redpill.service
 > ```
+> *(Nota: Los scripts detectan automáticamente tu SO y levantan los wrappers bajo `systemd`, `launchd` o `Task Scheduler`).*
+> 
+> **Paso 2: Reinicio de Servicios (Aplica tus propios alias si los posees)**
+> - **Linux:** `systemctl --user daemon-reload && systemctl --user restart redpill.service`
+> - **macOS:** Si posees el demonio base exportado, `launchctl unload [tu_plist] && launchctl load [tu_plist]`. Alternativamente, un re-lanzado duro del IDE matará los procesos huérfanos.
+> - **Windows:** Reinicia la Terminal/IDE por completo, o la tarea programada si la tienes bajo *Task Scheduler*.
 
 ### 🗡️ Operation Scythe & MCP Stabilization
 - **[ARCH] Interceptor Extirpation & Rebirth**: The global monolithic `interceptor_rp` was removed due to toxic hallucination loops and re-architected into a **Concurrent Plugin Pipeline**.
