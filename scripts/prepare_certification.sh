@@ -6,35 +6,28 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$ROOT_DIR" || exit 1
 
-OUTPUT_FILE="RED_PILL_DIGEST.txt" # legacy name
 CORE_OUTPUT="RED_PILL_DIGEST_CORE.txt"
 TESTS_OUTPUT="RED_PILL_DIGEST_TESTS.txt"
+LORE_OUTPUT="RED_PILL_DIGEST_LORE.txt"
 
-echo "Aggregating project core into $CORE_OUTPUT and $TESTS_OUTPUT from $ROOT_DIR..."
+echo "Aggregating project digests..."
 
-FILES=$(git ls-files --cached --others --exclude-standard | grep -vE '^docs/CERTIFICATION/' | grep -vE '\.(png|jpg|jpeg|gif|pdf|ico|coverage|DS_Store|lock|pyc)$')
+CORE_FILES=$(git ls-files src/red_pill/ scripts/ docs/TECHNICAL/ pyproject.toml README.md docker/ | grep -vE '\.(png|jpg|jpeg|gif|pdf|ico|coverage|DS_Store|lock|pyc|db|db-wal|db-shm)$')
+TESTS_FILES=$(git ls-files tests/ | grep -vE '\.(png|jpg|jpeg|gif|pdf|ico|coverage|DS_Store|lock|pyc|db|db-wal|db-shm)$')
+LORE_FILES=$(git ls-files docs/LORE/ CHANGELOG.md docs/GUIDES/ docs/CORE/ seeds/ skills/ | grep -vE '\.(png|jpg|jpeg|gif|pdf|ico|coverage|DS_Store|lock|pyc|db|db-wal|db-shm)$')
 
 generate_digest() {
 	local output_file=$1
-	local is_test=$2
+	local target_files=$2
 	
 	echo "Generating $output_file..."
 	echo -e "================================================================================\n							RED PILL SOURCE DIGEST INDEX						\n================================================================================\n" > "$output_file"
 	
 	local matched_files=()
-	for f in $FILES; do
-		if [ "$f" != "$CORE_OUTPUT" ] && [ "$f" != "$TESTS_OUTPUT" ] && [ "$f" != "$OUTPUT_FILE" ] && [ "$f" != ".env" ] && [ -f "$f" ]; then
-			local is_match=0
-			if [ "$is_test" = "1" ] && echo "$f" | grep -q '^tests/'; then
-				is_match=1
-			elif [ "$is_test" = "0" ] && ! echo "$f" | grep -q '^tests/'; then
-				is_match=1
-			fi
-			
-			if [ $is_match -eq 1 ]; then
-				matched_files+=("$f")
-				echo "- $f" >> "$output_file"
-			fi
+	for f in $target_files; do
+		if [ "$f" != "$CORE_OUTPUT" ] && [ "$f" != "$TESTS_OUTPUT" ] && [ "$f" != "$LORE_OUTPUT" ] && [ "$f" != ".env" ] && [ -f "$f" ]; then
+			matched_files+=("$f")
+			echo "- $f" >> "$output_file"
 		fi
 	done
 	
@@ -46,9 +39,11 @@ generate_digest() {
 	done
 }
 
-generate_digest "$CORE_OUTPUT" 0
-generate_digest "$TESTS_OUTPUT" 1
+generate_digest "$CORE_OUTPUT" "$CORE_FILES"
+generate_digest "$TESTS_OUTPUT" "$TESTS_FILES"
+generate_digest "$LORE_OUTPUT" "$LORE_FILES"
 
 echo "Done. Digests generated:"
 echo "- $CORE_OUTPUT"
 echo "- $TESTS_OUTPUT"
+echo "- $LORE_OUTPUT"

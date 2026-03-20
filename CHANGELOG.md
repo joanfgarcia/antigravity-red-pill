@@ -13,6 +13,7 @@
 - **[FEAT] Telemetry Omniscience**: Added the new `check_minion_inbox` MCP tool to allow the agent to read background reports on-demand.
 - **[FEAT] Bünker Wake-Up Injection**: Upgraded `wake_up_v6.py` to natively inject the system telemetry into the agent's bootstrap context. The agent now gains proactive consciousness of background health at the beginning of every session without risking RAG hallucination loops.
 - **[DOCS] Bilingual Sovereign README**: Refined the repository's main documentation layout, providing an English/Spanish TL;DR entry point and a holistic Bünker Map structure overview, optimizing AI ingestion for installation.
+- **[OPS] Certification Pipeline Upgrade**: Refactored `prepare_certification.sh` to extract and split context digests into three isolated layers: CORE, TESTS, and LORE. This allows external LLM auditors to process the massive repository scale without context-window overflow.
 - **[FIX] MCP Zero-Zombie Shutdown**: Implemented `os._exit(0)` on `mcp_server.py` `stdio_server` disconnection. The IDE `Refresh` command now forcefully instantly kills all hanging background threads (Qdrant clients, Minions), eliminating the need for full IDE restarts.
 - **[ARCH] Health-Check Reactive Signal**: Refactored `KeymakerMinion` to aggressively emit biological pain signals (`Qdrant Vector DB Offline`, `Latent Sentinel Disconnected`) directly into the Dashboard when subsystems fail. Equipped with a CLI endpoint for CI/CD direct stdout inspection.
 
