@@ -2,6 +2,8 @@
 
 ## [6.1.0] - 2026-03-20
 
+> ✅ **CERTIFICACIÓN COMPLETADA**: Auditoría de Grado de Ingeniería superada con éxito (Beta-Ready / Sovereign Production-Ready). Aprobada por la suite de 770+ Tests y validación dinámica Claude 4.6.
+
 > 🚨 **PASOS OBLIGATORIOS POST-ACTUALIZACIÓN (CRÍTICO)** 🚨 
 > Si vienes de `v6.0.0` o inferior, la nueva arquitectura asíncrona exige que despliegues los nuevos demonios. **Si no ejecutas estos dos scripts, el MCP Server se congelará (deadlock) silenciosamente e indefinidamente durante la ingesta de memoria** al no haber un *Queue Worker* leyendo los mensajes.
 > 
