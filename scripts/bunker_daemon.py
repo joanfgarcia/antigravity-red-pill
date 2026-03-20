@@ -61,8 +61,56 @@ class BunkerDaemon:
 			with open(tmp_file, "w") as f:
 				json.dump(self.state, f)
 			tmp_file.replace(BUNKER_STATE_FILE)
+			
+			# Write Markdown LED panel for IDE passive injection
+			rule_dir = Path.home() / ".gemini" / "antigravity" / "rules"
+			rule_dir.mkdir(parents=True, exist_ok=True)
+			rule_file = rule_dir / "00_bunker_telemetry.md"
+			rule_tmp = rule_file.with_suffix(".tmp")
+			
+			nv = self.state.get("nvidia", {})
+			minions = self.state.get("minions", {}).get("unread", 0)
+			signals = self.state.get("signals", {}).get("active", 0)
+			swarm_msgs = self.state.get("swarm", {}).get("messages", 0)
+			
+			md_content = f"""<bunker_led_panel>
+You are actively receiving this telemetry via IDE rule injection (`00_bunker_telemetry.md`).
+- **GPU**: {nv.get('status', 'offline')} | {nv.get('temp', 'N/A')} | VRAM: {nv.get('vram', 'N/A')}
+- **Minion Inbox**: {minions} unread background reports
+- **Active System Signals (PAIN)**: {signals} active signals
+- **Swarm Messages**: {swarm_msgs} pending messages
+</bunker_led_panel>
+"""
+			# 1. Antigravity Global
+			ag_dir = Path.home() / ".gemini" / "antigravity" / "rules"
+			ag_dir.mkdir(parents=True, exist_ok=True)
+			ag_file = ag_dir / "00_bunker_telemetry.md"
+			self._atomic_write(ag_file, md_content)
+
+			# 2. Cursor IDE Rule (.mdc)
+			cursor_dir = Path(IA_DIR) / ".cursor" / "rules"
+			try:
+				cursor_dir.mkdir(parents=True, exist_ok=True)
+				# Prefix .mdc for Cursor generic context
+				cursor_file = cursor_dir / "00_bunker_telemetry.mdc"
+				# Cursor rules need some frontmatter usually, but raw markdown is often accepted, or we just write it.
+				cursor_content = f"---\ndescription: Red Pill Kernel Live Telemetry\nglobs: *\n---\n\n{md_content}"
+				self._atomic_write(cursor_file, cursor_content)
+			except Exception:
+				pass
+
+			# 3. Generic Fallback in root
+			fb_file = Path(IA_DIR) / ".bunker_telemetry.md"
+			self._atomic_write(fb_file, md_content)
+
 		except Exception as e:
 			logger.error(f"Failed to write state: {e}")
+
+	def _atomic_write(self, target_file: Path, content: str):
+		tmp_file = target_file.with_suffix(".tmp_bunker")
+		with open(tmp_file, "w") as f:
+			f.write(content)
+		tmp_file.replace(target_file)
 
 	async def poll_telemetry(self):
 		"""Heavy polling loop: runs nvidia-smi with timeout and checks SQLite sizes."""
