@@ -11,6 +11,7 @@
 - **[FEAT] Telemetry Expansion**: Enhanced `red-pill status` (`telemetry.py`) to actively monitor the queue backlog, `signal_memories` (System Pain), and `minion_inbox.db` (Background Swarm Reports).
 - **[FEAT] Telemetry Omniscience**: Added the new `check_minion_inbox` MCP tool to allow the agent to read background reports on-demand.
 - **[FEAT] Bünker Wake-Up Injection**: Upgraded `wake_up_v6.py` to natively inject the system telemetry into the agent's bootstrap context. The agent now gains proactive consciousness of background health at the beginning of every session without risking RAG hallucination loops.
+- **[FIX] MCP Zero-Zombie Shutdown**: Implemented `os._exit(0)` on `mcp_server.py` `stdio_server` disconnection. The IDE `Refresh` command now forcefully instantly kills all hanging background threads (Qdrant clients, Minions), eliminating the need for full IDE restarts.
 
 ## [6.1.0a4] - 2026-03-19
 - **[FEAT] Biological Refraction (Memory Sanitize)**: Upgraded the `sanitize` operation with polymorphic Regex. It now actively hunts and breaks down legacy monolithic engrams (`USER: ... ASSISTANT/ORCHESTRATOR/TOOL: ...`) into separate, purely semantic Twin Nodes (Prompt + Response).

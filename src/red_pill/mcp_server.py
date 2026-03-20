@@ -852,4 +852,13 @@ async def main():
 
 
 if __name__ == "__main__":
-	asyncio.run(main())
+	try:
+		asyncio.run(main())
+	except KeyboardInterrupt:
+		pass
+	finally:
+		# Force a hard exit. This prevents background thread pools 
+		# (e.g. from Qdrant clients or Minion detached tasks) from keeping
+		# the Python interpreter alive and blocking the IDE's MCP refresh.
+		import os
+		os._exit(0)
