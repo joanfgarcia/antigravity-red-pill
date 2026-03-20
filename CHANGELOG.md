@@ -1,6 +1,16 @@
 # Changelog: Red Pill Protocol
 
 ## [6.1.0] - 2026-03-20
+
+> 🚨 **PASOS OBLIGATORIOS POST-ACTUALIZACIÓN (CRÍTICO)** 🚨 
+> Si vienes de `v6.0.0` o inferior, la nueva arquitectura asíncrona exige que despliegues los nuevos demonios. **Si no ejecutas estos dos scripts, el MCP Server se congelará (deadlock) silenciosamente e indefinidamente durante la ingesta de memoria** al no haber un *Queue Worker* leyendo los mensajes.
+> ```bash
+> uv run python scripts/deploy_queue.py
+> uv run python scripts/deploy_pulse.py
+> systemctl --user daemon-reload
+> systemctl --user restart redpill.service
+> ```
+
 ### 🗡️ Operation Scythe & MCP Stabilization
 - **[ARCH] Interceptor Extirpation & Rebirth**: The global monolithic `interceptor_rp` was removed due to toxic hallucination loops and re-architected into a **Concurrent Plugin Pipeline**.
 - **[FEAT] Asynchronous Plugin Architecture**: The Interceptor now dynamically runs plugins (`01_telemetry`, `02_rag_enrichment`, `03_circuit_breaker`) via `asyncio.gather` with strict timeouts to guarantee Zero-Latency UX. Configurable via `.env` flags (`INTERCEPTOR_RAG_ENABLED`, `INTERCEPTOR_CIRCUIT_BREAKER_ENABLED`).
