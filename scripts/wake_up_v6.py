@@ -1,8 +1,10 @@
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 from typing import List
 
 QDRANT_URL = "http://localhost:6333"
@@ -104,8 +106,8 @@ def synthesize_with_llm(context_data):
 
 	req = urllib.request.Request(MLX_LM_URL, data=payload, headers={"Content-Type": "application/json"})
 	try:
-		# Give it up to 15 seconds, Apple Silicon might take a few seconds on cold start
-		with urllib.request.urlopen(req, timeout=15) as response:
+		# Give it up to 3 seconds. If the MLX daemon is frozen loading the model, we gracefully fail fast.
+		with urllib.request.urlopen(req, timeout=3) as response:
 			data = json.loads(response.read().decode())
 			return data["choices"][0]["message"]["content"].strip()
 	except Exception as e:
@@ -134,13 +136,27 @@ def main():
 	print("<BUNKER_CONTEXT>")
 	print("=== IDENTITY & PERSONA ===")
 	print(persona_injection)
-	
+
 	print("\n=== HARDWARE & ENVIRONMENT TELEMETRY ===")
-	try:
-		from red_pill.telemetry import get_telemetry_report
-		print(get_telemetry_report().strip())
-	except Exception as e:
-		print(f"Telemetry unavailable: {e}")
+	bunker_state = Path("/tmp/bunker_state.json")
+	if bunker_state.exists():
+		try:
+			with open(bunker_state, "r") as f:
+				state = json.load(f)
+			age = time.time() - state.get("timestamp", 0)
+			if age < 300:  # Fresh enough (5 mins)
+				print(
+					f"NVIDIA: {state.get('nvidia', {}).get('status', 'offline').upper()} | Temp: {state.get('nvidia', {}).get('temp', 'N/A')} | VRAM: {state.get('nvidia', {}).get('vram', 'N/A')}"
+				)
+				print(f"MINIONS INBOX: {state.get('minions', {}).get('unread', 0)} Unread")
+				print(f"SYSTEM SIGNALS: {state.get('signals', {}).get('active', 0)} Active")
+				print(f"SWARM MAILBOX: {state.get('swarm', {}).get('messages', 0)} Messages")
+			else:
+				print("[Bünker Daemon Stale - Telemetry age > 5 mins]")
+		except Exception:
+			print("[Bünker Daemon State Corrupt - Fallback Offline]")
+	else:
+		print("[Bünker Daemon Offline - Telemetry Unavailable]")
 
 	print("\n=== BÜNKER SERVICES ===")
 	print(f"- MEMORY SIDECAR: {sidecar_status}")

@@ -1,6 +1,6 @@
 # Estimación Técnica: Message Layer Security (MLS) / TreeKEM
 
-**Ticket/Hallazgo:** SEC-002 (Auditoría V6.1.0a3)
+**Ticket/Hallazgo:** SEC-002 (Auditoría V6.1.0)
 **Componente:** `red_pill.skills.swarm_messaging` / `red_pill.crypto`
 **Objetivo:** Implementar *Perfect Forward Secrecy* (PFS) y *Post-Compromise Security* (PCS) en las comunicaciones del Swarm utilizando el estándar IETF MLS (RFC 9420) basado en TreeKEM.
 

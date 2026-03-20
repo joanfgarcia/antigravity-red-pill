@@ -19,7 +19,7 @@ def test_add_memory_metadata_exception():
 	manager = MemoryManager()
 	manager.client = MagicMock()
 	with pytest.raises(ValueError, match="Invalid engram data"):
-		manager.add_memory("col", "text", metadata={"bad": object()})
+		manager.add_memory("col", "text", metadata={"bad": "null\x00byte"})
 
 
 def test_add_memory_exception():

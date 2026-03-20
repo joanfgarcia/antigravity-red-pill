@@ -16,7 +16,12 @@ def notify_user(title: str, message: str, sound: bool = False, category: str = "
 		# SEC-002: Operator name read from cfg.OPERATOR_DISPLAY_NAME (env: USER_NAME)
 		# Hint: x-canonical-private-synchronous allows grouping notifications (in-place update)
 		hint = f"string:x-canonical-private-synchronous:red-pill-{category}"
-		subprocess.run(["notify-send", "-i", "face-angel", "-h", hint, title, f"{cfg.OPERATOR_DISPLAY_NAME}, {message}"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+		subprocess.run(
+			["notify-send", "-i", "face-angel", "-h", hint, title, f"{cfg.OPERATOR_DISPLAY_NAME}, {message}"],
+			check=False,
+			stdout=subprocess.DEVNULL,
+			stderr=subprocess.DEVNULL,
+		)
 
 		if sound and cfg.NOTIFICATION_SOUND:
 			# A soft rising sweep (880Hz to 1100Hz) - Sensory notification

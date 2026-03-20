@@ -74,7 +74,35 @@ class KeymakerMinion(Minion):
 				{"component": "Healing Engine", "status": "COMPLETED", "details": "NPU-accelerated semantic sanitation executed."}
 			)
 
+		# Passive Pain Signal Injection
+		from red_pill.memory import MemoryManager
+
+		try:
+			manager = MemoryManager()
+			if not results["qdrant_online"]:
+				manager.inject_signal("Qdrant Vector DB Offline", 9.0, "pain", "Keymaker")
+				results["status"] = "degraded"
+			else:
+				manager.evaporate_signals("Qdrant Vector DB Offline")
+
+			if results["npu_status"] == "OFFLINE":
+				manager.inject_signal("Latent Sentinel (NPU) Disconnected", 4.0, "pain", "Keymaker")
+			else:
+				manager.evaporate_signals("Latent Sentinel (NPU) Disconnected")
+		except Exception as e:
+			results["checks"].append({"component": "Signal Injection", "status": "ERROR", "details": str(e)})
+
 		if not results["qdrant_online"]:
 			results["status"] = "degraded"
 
 		return results
+
+
+if __name__ == "__main__":
+	import asyncio
+	import json
+
+	print("--- KEYMAKER INFRASTRUCTURE HEALTH CHECK ---")
+	minion = KeymakerMinion()
+	res = asyncio.run(minion.execute("check"))
+	print(json.dumps(res, indent=2))

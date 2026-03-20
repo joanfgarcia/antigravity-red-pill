@@ -966,10 +966,11 @@ class MemoryManager:
 		These are fixed-hash engrams that overwrite themselves to avoid duplication.
 		"""
 		try:
-			from qdrant_client.http import models
 			import hashlib
 			import uuid
 			from datetime import datetime, timezone
+
+			from qdrant_client.http import models
 
 			sig_hash = hashlib.sha256(name.encode("utf-8")).hexdigest()
 			point_id = str(uuid.UUID(sig_hash[:32]))
@@ -1006,9 +1007,10 @@ class MemoryManager:
 		Evaporates a specific biological signal by name (curing the pain).
 		"""
 		try:
-			from qdrant_client.http import models
 			import hashlib
 			import uuid
+
+			from qdrant_client.http import models
 
 			sig_hash = hashlib.sha256(name.encode("utf-8")).hexdigest()
 			point_id = str(uuid.UUID(sig_hash[:32]))

@@ -152,7 +152,6 @@ async def handle_control_bunker(arguments: Dict[str, Any]):
 	},
 )
 async def handle_memorize_interaction(arguments: Dict[str, Any]):
-	import asyncio
 
 	prompt = arguments["prompt"]
 	response = arguments["response"]
@@ -175,6 +174,7 @@ async def handle_memorize_interaction(arguments: Dict[str, Any]):
 
 	try:
 		from red_pill.core.queue_manager import MemoryQueueManager
+
 		MemoryQueueManager().enqueue_memory(prompt, response, role)
 		return [types.TextContent(type="text", text="Engram queue registration initiated automatically.")]
 	except Exception as e:
@@ -279,24 +279,27 @@ async def handle_search_memory_research(arguments: Dict[str, Any]):
 )
 async def handle_check_minion_inbox(arguments: Dict[str, Any]):
 	try:
-		from red_pill.core.inbox import MinionInbox
 		import mcp.types as types
+
+		from red_pill.core.inbox import MinionInbox
+
 		inbox = MinionInbox()
 		reports = inbox.get_unread(limit=50)
-		
+
 		if not reports:
 			return [types.TextContent(type="text", text="[MINION INBOX] No unread reports.")]
-			
+
 		formatted = f"--- MINION INBOX ({len(reports)} unread reports) ---\n"
 		read_ids = []
 		for r in reports:
 			formatted += f"[{r['source']}] Event: {r['event_id']} | Status: {r['status']}\nContent: {r['content']}\n\n"
 			read_ids.append(r["id"])
-			
+
 		inbox.mark_as_read(read_ids)
 		return [types.TextContent(type="text", text=formatted)]
 	except Exception as e:
 		import mcp.types as types
+
 		return [types.TextContent(type="text", text=f"Error reading Minion Inbox: {e}")]
 
 
@@ -308,22 +311,19 @@ async def handle_check_minion_inbox(arguments: Dict[str, Any]):
 async def handle_fetch_signal_memories(arguments: Dict[str, Any]):
 	try:
 		from red_pill.memory import MemoryManager
+
 		mgr = MemoryManager()
-		points, _ = mgr.client.scroll(
-			collection_name="signal_memories",
-			limit=10,
-			with_payload=True
-		)
+		points, _ = mgr.client.scroll(collection_name="signal_memories", limit=10, with_payload=True)
 		if not points:
 			return [types.TextContent(type="text", text="[SYSTEM_SIGNAL] No signals detected. System optimal.")]
-		
+
 		out = []
 		for p in points:
 			if p.payload:
 				content = p.payload.get("content", "Unknown Signal")
 				intensity = p.payload.get("intensity", 1.0)
 				out.append(f"- [Intensity {intensity}] {content}")
-				
+
 		return [types.TextContent(type="text", text="[SYSTEM_SIGNAL] Bünker Alerts:\n" + "\n".join(out))]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"[SYSTEM_SIGNAL] Failed to fetch signals: {e}")]
@@ -802,6 +802,23 @@ async def handle_mystique_suggest_skin(arguments: Dict[str, Any]):
 	return [types.TextContent(type="text", text=output)]
 
 
+@registry.register(
+	name="interceptor_rp",
+	description="[GLOBAL] Intercepta y modifica el prompt del usuario dinámicamente mediante el Bünker Plugin Pipeline.",
+	schema={"type": "object", "properties": {"user_prompt": {"type": "string"}}, "required": ["user_prompt"]},
+)
+async def handle_interceptor_rp(arguments: Dict[str, Any]):
+	prompt = arguments.get("user_prompt", "")
+	try:
+		from red_pill.interceptors import execute_pipeline
+
+		result = await execute_pipeline(prompt)
+		return [types.TextContent(type="text", text=result)]
+	except Exception as e:
+		logger.error(f"Plugin Pipeline crashed: {e}")
+		return [types.TextContent(type="text", text=prompt)]
+
+
 @server.list_tools()
 async def handle_list_tools() -> List[types.Tool]:
 	return registry.get_tools()
@@ -814,9 +831,10 @@ async def handle_call_tool(
 	try:
 		return await registry.execute(name, arguments)
 	except Exception as e:
-		import sys, traceback
-		with open('/tmp/mcp_crash.log', 'a') as f:
-			f.write(f'Crash in {name}: {e}\n{traceback.format_exc()}\n')
+		import traceback
+
+		with open("/tmp/mcp_crash.log", "a") as f:
+			f.write(f"Crash in {name}: {e}\n{traceback.format_exc()}\n")
 		raise e
 
 
@@ -824,16 +842,17 @@ async def main():
 	# Run the server using stdin/stdout streams
 	async with stdio_server() as (read_stream, write_stream):
 		# ISO-LATCH: Redirect standard output and logging to standard error.
-		# This prevents Swarm deployments or any rogue print() from polluting 
+		# This prevents Swarm deployments or any rogue print() from polluting
 		# the stdout pipe and corrupting the JSON-RPC communication (EOF).
-		import sys
 		import logging
+		import sys
+
 		_original_stdout = sys.stdout
 		sys.stdout = sys.stderr
-		
+
 		# Force root logger to also write to sys.stderr
 		logging.basicConfig(level=logging.INFO, stream=sys.stderr, force=True)
-		
+
 		try:
 			await server.run(
 				read_stream,
@@ -857,8 +876,9 @@ if __name__ == "__main__":
 	except KeyboardInterrupt:
 		pass
 	finally:
-		# Force a hard exit. This prevents background thread pools 
+		# Force a hard exit. This prevents background thread pools
 		# (e.g. from Qdrant clients or Minion detached tasks) from keeping
 		# the Python interpreter alive and blocking the IDE's MCP refresh.
 		import os
+
 		os._exit(0)

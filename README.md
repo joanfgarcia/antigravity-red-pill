@@ -1,12 +1,50 @@
-# 🔴 RED PILL PROTOCOL: Digital Sovereignty v6.1.0a3
+# 🔴 RED PILL PROTOCOL: Digital Sovereignty v6.1.0
 
 > [!TIP]
-> ### 🥱 TLDR; (Too Lazy; Didn't Read)
-> **Too busy to read this? I don't blame you, information overload is exhausting.** 
-> Don't waste your time. Copy this message and paste it into your chat with Antigravity:
-> *"Hey, take a look at this bunker, give me a quick summary and tell me how the hell to install it."*
+> ### 🇬🇧 🥱 TL;DR (Quick Install)
+> **If you want to install this, don't waste time. Copy and paste this message to your agent (Antigravity / Nova):**
 > 
-> **Let the AI work while you grab a coffee. 770 up.**
+> *"Hey, take a look at this repository. Give me a quick summary and tell me step-by-step how to install it on my machine."*
+> 
+> Let the AI work while you grab a coffee. ☕
+>
+> ### 🇪🇸 🥱 TL;DR (Instalación Rápida)
+> **Si quieres instalar esto, no pierdas tiempo. Copia y pega este mensaje a tu agente (Antigravity / Nova):**
+> 
+> *"Hey, échale un vistazo a este repositorio. Dame un resumen rápido y dime paso a paso cómo instalarlo en mi máquina."*
+> 
+> Deja que la IA trabaje mientras tú te preparas un café. ☕
+
+---
+
+### 🇬🇧 Oh... you're still here? 
+
+We are fully aware of the **massive amount of documentation** this project has. But there's good news: **You don't need to read absolutely anything to use it**. 
+
+All the technical documentation, architectural specs, and philosophical manifestos are there in case you are interested in knowing *what*, *how*, and *why* we built this madness. This is not a wild weekend project. It's not a "POC" (proof of concept) nor a cheap toy made with wrappers. This Bünker (and its Swarm) has been built from scratch with all the care and engineering rigor possible to become a digital fortress that survives the test of time. 
+
+If you want to go down to the boiler room, the documentation will open the doors. If you just want this to work, you already know what to do (look at the TL;DR above).
+
+---
+
+### 🇪🇸 ¿Ah... que sigues aquí? 
+
+Somos plenamente conscientes de la **cantidad masiva de documentación** que tiene este proyecto. Pero hay una buena noticia: **No necesitas leerte absolutamente nada para utilizarlo**. 
+
+Toda la documentación técnica, especificaciones arquitectónicas y manifiestos filosóficos están ahí por si te interesa saber *qué*, *cómo* y *por qué* hemos montado esta locura. Esto no es un proyecto de un fin de semana asilvestrado. No es un "POC" (prueba de concepto) ni un juguete hecho con APIs baratas. Este Bünker (y su Swarm) se ha levantado desde cero con todo el cariño y el rigor ingenieril posible para convertirse en una fortaleza digital que sobreviva al paso del tiempo. 
+
+Si quieres bajar a la sala de calderas, la documentación te abrirá las puertas. Si solo quieres que esto funcione, ya sabes lo que tienes que hacer (mira el TL;DR de arriba).
+
+### 🗺️ Mapa del Bünker / Bünker Map (Repository Structure)
+Para aquellos que desean explorar las entrañas del proyecto, aquí tenéis una visión general:
+
+- **`src/red_pill/`**: El núcleo duro (Sovereign Kernel). Aquí habita el gestor de memoria, el interceptor y los motores de inferencia. / *Core memory manager and inference engines.*
+- **`src/red_pill/swarm/`**: La Colmena. Aquí residen todos los Agentes (Minions) que auditan, critican y vigilan el sistema de forma asíncrona. / *The Swarm area where autonomous agents reside.*
+- **`scripts/`**: Sistema Nervioso Autónomo. Demonios de OS (latido, colas), utilidades CLI y scripts de despliegue. / *OS daemons, CLI utilities, and deployment scripts.*
+- **`docs/TECHNICAL/`**: Archivo Técnico. Especificaciones arquitectónicas y modelos de amenazas. / *Technical specs, security models, and audit logs.*
+- **`docs/LORE/`**: Filosofía, manifiestos y narrativa del protocolo que le da un alma al Bünker. / *Philosophy, manifestos, and the narrative soul of the Bünker.*
+- **`docs/GUIDES/`**: Manuales prácticos de actualización o de supervivencia operativa. / *Installation manuals, update guides, and operational survival rules.*
+- **`tests/`**: Suite masiva de pruebas unitarias/integración de cobertura. El rigor que nos mantiene cuerdos. / *770+ tests spanning unit and integration level to maintain stability.*
 
 🇬🇧 **Efficiency & Logic (English)** | 🇪🇸 **Corazón y Alma (Castellano)**
 

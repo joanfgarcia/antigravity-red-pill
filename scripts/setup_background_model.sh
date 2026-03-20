@@ -39,38 +39,38 @@ import uvicorn
 from llama_cpp.server.app import create_app, Settings
 
 def main():
-    settings = Settings(
-        hf_model_repo_id="TheBloke/samantha-1.2-mistral-7B-GGUF",
-        model="*Q4_K_M.gguf",
-        chat_format="chatml",
-        n_ctx=8192,
-        n_gpu_layers=-1
-    )
-    app = create_app(settings)
-    
-    tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    tcp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    tcp_sock.bind(("127.0.0.1", 8760))
-    tcp_sock.listen()
-    
-    uds_path = os.path.expanduser("~/.agent/red_pill.sock")
-    if os.path.exists(uds_path):
-        os.remove(uds_path)
-    uds_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    uds_sock.bind(uds_path)
-    uds_sock.listen()
-    os.chmod(uds_path, 0o600)
-    
-    config = uvicorn.Config(app=app, log_level="info")
-    server = uvicorn.Server(config=config)
-    
-    import asyncio
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(server.serve(sockets=[tcp_sock, uds_sock]))
+	settings = Settings(
+		hf_model_repo_id="TheBloke/samantha-1.2-mistral-7B-GGUF",
+		model="*Q4_K_M.gguf",
+		chat_format="chatml",
+		n_ctx=8192,
+		n_gpu_layers=-1
+	)
+	app = create_app(settings)
+	
+	tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	tcp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+	tcp_sock.bind(("127.0.0.1", 8760))
+	tcp_sock.listen()
+	
+	uds_path = os.path.expanduser("~/.agent/red_pill.sock")
+	if os.path.exists(uds_path):
+		os.remove(uds_path)
+	uds_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+	uds_sock.bind(uds_path)
+	uds_sock.listen()
+	os.chmod(uds_path, 0o600)
+	
+	config = uvicorn.Config(app=app, log_level="info")
+	server = uvicorn.Server(config=config)
+	
+	import asyncio
+	loop = asyncio.new_event_loop()
+	asyncio.set_event_loop(loop)
+	loop.run_until_complete(server.serve(sockets=[tcp_sock, uds_sock]))
 
 if __name__ == "__main__":
-    main()
+	main()
 DUAL_BIND_EOF
 
 cat << 'START_EOF' > "$START_SCRIPT"

@@ -1,5 +1,4 @@
 import pytest
-from unittest.mock import patch
 
 from red_pill.mcp_server import handle_memorize_interaction
 
@@ -28,8 +27,6 @@ async def test_silent_scribe_rejects_noise():
 
 
 @pytest.mark.asyncio
-@patch("red_pill.mcp_server.asyncio.create_task")
-async def test_silent_scribe_accepts_valid_interaction(mock_task):
+async def test_silent_scribe_accepts_valid_interaction():
 	res = await handle_memorize_interaction({"prompt": "Who are you?", "response": "I am Aleth.", "role": "assistant"})
-	assert "Engram async registration initiated" in res[0].text
-	mock_task.assert_called_once()
+	assert "Engram queue registration initiated" in res[0].text

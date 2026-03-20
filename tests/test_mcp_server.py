@@ -496,5 +496,3 @@ class TestMainBlock:
 			with patch("red_pill.mcp_server.server.run") as mock_run:
 				await main()
 				assert mock_run.called
-
-

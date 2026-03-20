@@ -93,6 +93,7 @@ class LazarusPulse:
 			# 0. Check Motor Cortex (Nociceptive Pain)
 			try:
 				import torch
+
 				if not torch.cuda.is_available():
 					logger.warning("Pulse: Motor Cortex Disconnected (CUDA missing). Injecting pain signal.")
 					self.memory_mgr.inject_signal("cuda_cortex_failure", intensity=cfg.SIGNAL_BASE_PAIN_CUDA, signal_type="pain", source="CUDA")
@@ -100,7 +101,7 @@ class LazarusPulse:
 				else:
 					try:
 						# Extra verification: attempt tensor creation
-						t = torch.tensor([1.0], device="cuda")
+						_ = torch.tensor([1.0], device="cuda")
 						self.memory_mgr.evaporate_signals("cuda_cortex_failure")
 						self.memory_mgr.evaporate_signals("autoheal_error_cuda")
 					except Exception:
@@ -148,6 +149,7 @@ class LazarusPulse:
 			# 4. Biological Dashboard: Fever (Hardware Temperature)
 			try:
 				import psutil
+
 				temps = psutil.sensors_temperatures()
 				max_temp = 0.0
 				for name, entries in temps.items():
@@ -167,8 +169,9 @@ class LazarusPulse:
 			# 5. Biological Dashboard: Amnesia (Korsakoff Syndrome)
 			if cfg.INTERCEPTOR_ENABLED:
 				try:
-					import os
 					import datetime
+					import os
+
 					if os.path.exists(cfg.METABOLISM_STATE_FILE):
 						mtime = os.path.getmtime(cfg.METABOLISM_STATE_FILE)
 						hours_idle = (datetime.datetime.now().timestamp() - mtime) / 3600.0
@@ -354,18 +357,18 @@ class LazarusPulse:
 		Autonomic reflex to heal damaged metabolic components using OS-specific scripts.
 		Includes a cooldown to prevent 'autoimmune' process storms.
 		"""
-		import time
 		import subprocess
+		import time
 
 		now = time.time()
-		
+
 		# Check if an immune response is already recorded
 		if tissue in self._immune_locks:
 			lock = self._immune_locks[tissue]
 			process = lock.get("process")
 			started_at = lock.get("started_at", now)
 			elapsed = now - started_at
-			
+
 			if hasattr(process, "poll") and process.poll() is None:
 				# Process is still running
 				if elapsed > 900:  # 15 minutes stuck
@@ -374,17 +377,18 @@ class LazarusPulse:
 				else:
 					logger.debug(f"Pulse [IMMUNE RESPONSE]: {tissue} regeneration in progress ({elapsed:.0f}s).")
 				return
-			
+
 			# Process finished or crashed.
 			# Enforce refractory cooldown (15 min) between fresh ATTEMPTS to prevent looping crashes forever.
 			if elapsed < 900:
 				logger.debug(f"Pulse [IMMUNE RESPONSE]: {tissue} regeneration refractory period active ({elapsed:.0f}s).")
 				return
-				
+
 			# Cooldown passed, clear error signal and try again
 			self.memory_mgr.evaporate_signals(f"autoheal_error_{tissue}")
 
 		import os
+
 		script_path = os.path.join(cfg.IA_DIR, "scripts", f"heal_{tissue}.sh")
 		if os.path.exists(script_path):
 			logger.warning(f"Pulse [IMMUNE RESPONSE]: Deploying White Blood Cells for {tissue}...")

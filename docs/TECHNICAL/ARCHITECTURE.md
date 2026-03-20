@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v6.1.0a3 (Sovereign CNS)
+**System Version**: v6.1.0 (Sovereign CNS)
 **Analyst**: The Architect
 **Date**: 2026-03-13
 
@@ -24,10 +24,10 @@ The Red Pill Protocol v5.6.3 has achieved stability and functional alignment wit
 - **[ENHANCED v6.0.0] Milvus Lite (Local Sanctuary)**: Collective memory prototyping no longer requires distributed infrastructure. Milvus Lite provides a high-speed, local-file-based vector substrate for HiveMind logic without network exposure, maintaining absolute sovereignty.
 - **[NEW v6.0.0a3] Persistent Sovereign CNS (systemd)**: The core sidecar and heartbeat rituals are now encapsulated in a system-level service (`redpill.service`). This ensures that the Bünker is always listening and the metabolic rituals (consolidation, culling) run proactively, independent of the user's IDE state.
 - **[NEW v6.0.0a3] Structural Shadow Scribe (Anti-Amnesia)**: Implemented a name-agnostic, zero-token dialogue extraction ritual. By structural analysis of artifacts (`walkthrough.md`), the system captures interactions based on structural cues ('> ' prefixes) rather than hardcoded labels, allowing total persona agnosticism (e.g., Titanium, Aleth, or Operator).
-- **[NEW v6.1.0a3] Operator Mood Profile (USP)**: New module `mood_profile.py` captures the operator's emotional resonance as a multi-color chroma vector across 4 temporal horizons (Global, 30d, 7d, 3d). Vectors are weighted by `intensity × importance` and persisted as a fixed engram (`ID_OPERATOR_MOOD`). Integrated into the Lazarus Pulse via `_usp_ritual()`.
-- **[NEW v6.1.0a3] Mystique v2 (Tone-Based Skin Selection)**: The Mystique protocol now reads the operator mood (USP) instead of the Bünker's internal chroma for skin suggestions. Strategies (`complementary`, `contrast`) use distinct scoring logic. The `manager` parameter enables USP lookup with fallback to legacy Bünker mood.
-- **[NEW v6.1.0a3] In-Band Async Logging (Interceptor)**: `handle_memorize_interaction` no longer depends on the Unix daemon socket. Interactions are persisted via in-band `asyncio` background tasks, eliminating the single point of failure in the daemon path.
-- **[NEW v6.1.0a3] Bayesian Dual-Kernel Inference Engine**: Technical collections (`skill_memories`, `work_memories`, `directive_memories`) now use a Beta-distribution Utility Model ($E[\theta] = \alpha/(\alpha+\beta)$) for reliability-based retrieval. Social and story collections retain the Affective FSRS engine. Routing is transparent — neither agents nor tools need to know which kernel is active.
+- **[NEW v6.1.0] Operator Mood Profile (USP)**: New module `mood_profile.py` captures the operator's emotional resonance as a multi-color chroma vector across 4 temporal horizons (Global, 30d, 7d, 3d). Vectors are weighted by `intensity × importance` and persisted as a fixed engram (`ID_OPERATOR_MOOD`). Integrated into the Lazarus Pulse via `_usp_ritual()`.
+- **[NEW v6.1.0] Mystique v2 (Tone-Based Skin Selection)**: The Mystique protocol now reads the operator mood (USP) instead of the Bünker's internal chroma for skin suggestions. Strategies (`complementary`, `contrast`) use distinct scoring logic. The `manager` parameter enables USP lookup with fallback to legacy Bünker mood.
+- **[NEW v6.1.0] In-Band Async Logging (Interceptor)**: `handle_memorize_interaction` no longer depends on the Unix daemon socket. Interactions are persisted via in-band `asyncio` background tasks, eliminating the single point of failure in the daemon path.
+- **[NEW v6.1.0] Bayesian Dual-Kernel Inference Engine**: Technical collections (`skill_memories`, `work_memories`, `directive_memories`) now use a Beta-distribution Utility Model ($E[\theta] = \alpha/(\alpha+\beta)$) for reliability-based retrieval. Social and story collections retain the Affective FSRS engine. Routing is transparent — neither agents nor tools need to know which kernel is active.
 - **[NEW v6.2.0] Neuro-Immune System (Biological Dashboard)**: The semantic memory layer is now augmented by a nociceptive, non-semantic signal bus (`signal_memories`). This allows the system to autonomously detect hardware-level anomalies (e.g., CUDA detachment, Qdrant hypoxia) via the `LazarusPulse` and reflect them directly into the agent's prefrontal context. Furthermore, the Agent possesses `heal_tissue` MCP effectors to autonomously cure these biological ailments.
 
 ## 3. Structural Analysis
@@ -94,8 +94,49 @@ The protocol abandons rigid silos in favor of a fluid security spectrum:
 - **ADAPTATIVE (Water)**: Resource-aware security. Uses the best available hashing (Argon2-id or SHA-256) and reports encryption status without blocking deployment (Standard Sovereignty).
 - **MAXIMUM (Ice)**: Hardened conformity. Requires both Argon2-id and host-level LUKS encryption. The system will **fail to install** if these requirements are missing, enforcing a high-trust baseline (Hardened Sovereignty).
 
-### 6.2 Global MCP Interceptor & Enterprise Telemetry (v6.1.0a3, REMOVED)
-*Note: The `interceptor_rp` tool was completely removed from the MCP system due to instability and connection issues.*
+### 6.2 The Bünker Interceptor Pipeline (v6.1.0)
+The legacy monolithic interceptor from v6.0 has been re-architected into a **Concurrent Plugin Pipeline**. This ensures the Antigravity IDE is never blocked by Qdrant or Local LLM timeouts, achieving a *Zero-Latency UX*.
+
+When a prompt is issued, the RedPill-Kernel executes all enabled plugins concurrently via `asyncio.gather` with strict micro-timeouts. Responses are concatenated into a passive `<BUNKER_CONTEXT>` block.
+
+```mermaid
+sequenceDiagram
+    participant User as Operator (IDE)
+    participant MCP as RedPill-Kernel (MCP)
+    participant Pipeline as Plugin Pipeline (asyncio)
+    participant P1 as 01_telemetry (0.5s timeout)
+    participant P2 as 02_rag_enrichment (1.5s timeout)
+    participant P3 as 03_circuit_breaker (2.5s timeout)
+    participant LLM as Cloud LLM (Claude)
+
+    User->>MCP: User Prompt
+    MCP->>Pipeline: Execute Interceptors
+    
+    par Concurrency
+        Pipeline->>P1: Read /tmp/bunker_state.json
+        Pipeline->>P2: Search Qdrant (Semantic RAG)
+        Pipeline->>P3: SLM Eval (Can we answer locally?)
+    end
+    
+    P1-->>Pipeline: Hardware & Queue Sync
+    P2-->>Pipeline: Vector Context (if found)
+    
+    alt Edge Engine computes [VALID] result
+        P3-->>Pipeline: <LOCAL_RESPONSE_READY>
+        Pipeline-->>MCP: Abort Cloud! Short-Circuit
+        MCP-->>User: Local Response (Instant)
+    else Edge Engine computes INSUFFICIENT_CONTEXT
+        P3-->>Pipeline: Timeout / Pass
+        Pipeline-->>MCP: Passive Context Block
+        MCP->>LLM: Injected Prompt + Context
+        LLM-->>User: Enriched Response
+    end
+```
+
+**Available Plugins:**
+- **`01_telemetry.py` (Default: ON)**: Injects Hardware Temps, Queue Backlogs, and Minion Inbox counts silently. Cost: 0ms.
+- **`02_rag_enrichment.py` (Configurable)**: Injects semantic memories from Qdrant into the prompt context via `INTERCEPTOR_RAG_ENABLED`.
+- **`03_circuit_breaker.py` (Configurable)**: Evaluates if the local SLM (`EdgeEngine`) can answer the prompt directly, aborting the Claude API call entirely. Toggled via `INTERCEPTOR_CIRCUIT_BREAKER_ENABLED`.
 
 ### 6.3 The Somatic Marker Hypothesis (Neuro-Immune System)
 In v6.2, we introduced the **Biological Dashboard**. Instead of overwhelming the main language model with constant JSON streams of system health, the `LazarusPulse` acts as an Autonomic Nervous System. It probes hardware states (CUDA, Qdrant) in the background. If a failure occurs, it injects a "Pain Signal" into the `signal_memories` collection. The Global Interceptor (The Thalamus) reads these signals and prepends an `[ESTADO BIOLÓGICO ACTUAL]` block to the user's prompt. 
@@ -238,4 +279,4 @@ The audit correctly identified that cluster governance was unspecified. The form
 | **v5.6.3** | **[CORE] Sovereign Pulse**, Refraction Guard, Absence Guard, SEC-004/008/009 Remediation |
 | **v5.7.0** | Evolutionary Stability, Advanced Chroma Mapping |
 | **v6.1.0a2** | CPU Thermal Telemetry, Persistent Model Cache, Container Abstraction, Deep Sidecar Diagnostics, Unified `uv run` Execution |
-| **v6.1.0a3** | Operator Mood Profile (USP), Mystique v2 (Tone-Based), Bayesian Dual-Kernel, In-Band Async Logging (Interceptor), Skin Singleton Fix |
+| **v6.1.0** | Operator Mood Profile (USP), Mystique v2 (Tone-Based), Bayesian Dual-Kernel, In-Band Async Logging (Interceptor), Skin Singleton Fix |

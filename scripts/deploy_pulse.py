@@ -43,22 +43,22 @@ def deploy_mac():
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>Label</key>
-    <string>com.redpill.pulse</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/usr/bin/env</string>
-        <string>uv</string>
-        <string>run</string>
-        <string>python</string>
-        <string>scripts/trigger_pulse.py</string>
-    </array>
-    <key>WorkingDirectory</key>
-    <string>{cwd}</string>
-    <key>StartInterval</key>
-    <integer>7200</integer>
-    <key>RunAtLoad</key>
-    <true/>
+	<key>Label</key>
+	<string>com.redpill.pulse</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/bin/env</string>
+		<string>uv</string>
+		<string>run</string>
+		<string>python</string>
+		<string>scripts/trigger_pulse.py</string>
+	</array>
+	<key>WorkingDirectory</key>
+	<string>{cwd}</string>
+	<key>StartInterval</key>
+	<integer>7200</integer>
+	<key>RunAtLoad</key>
+	<true/>
 </dict>
 </plist>"""
 	launch_dir = os.path.expanduser("~/Library/LaunchAgents")

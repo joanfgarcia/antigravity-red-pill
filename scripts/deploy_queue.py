@@ -12,7 +12,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory={os.getcwd()}
-Environment="PATH={os.environ.get('PATH', '/usr/bin:/bin')}"
+Environment="PATH={os.environ.get("PATH", "/usr/bin:/bin")}"
 ExecStart=/usr/bin/env uv run python src/red_pill/core/queue_worker.py
 Restart=always
 RestartSec=5
@@ -40,7 +40,7 @@ def deploy_mac():
 	log_path = os.path.expanduser("~/.agent/queue_worker.log")
 	err_path = os.path.expanduser("~/.agent/queue_worker_error.log")
 	os.makedirs(os.path.dirname(log_path), exist_ok=True)
-	
+
 	plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -83,9 +83,7 @@ def deploy_windows():
 	print("Deploying queue worker for Windows (Task Scheduler)...")
 	cwd = os.getcwd()
 	# Run on logon, indefinitely
-	command = (
-		f'schtasks /create /f /sc ONLOGON /tn "RedPillQueueWorker" /tr "cmd.exe /c cd /d {cwd} && uv run python src\\\\red_pill\\\\core\\\\queue_worker.py"'
-	)
+	command = f'schtasks /create /f /sc ONLOGON /tn "RedPillQueueWorker" /tr "cmd.exe /c cd /d {cwd} && uv run python src\\\\red_pill\\\\core\\\\queue_worker.py"'
 	subprocess.run(command, shell=True, check=True)
 	# Also try starting it immediately
 	try:

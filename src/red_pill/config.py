@@ -253,6 +253,8 @@ SEMANTIC_INTENT_THRESHOLD = 0.75 if _semantic_str == "HIGH" else 0.5
 
 # MCP Interceptor
 INTERCEPTOR_ENABLED = str(os.getenv("INTERCEPTOR_ENABLED", "False")).lower() in ("true", "1", "yes")
+INTERCEPTOR_RAG_ENABLED = str(os.getenv("INTERCEPTOR_RAG_ENABLED", "True")).lower() in ("true", "1", "yes")
+INTERCEPTOR_CIRCUIT_BREAKER_ENABLED = str(os.getenv("INTERCEPTOR_CIRCUIT_BREAKER_ENABLED", "False")).lower() in ("true", "1", "yes")
 
 # SOVEREIGN PULSE (v6.0)
 # Enables background rituals (Maintenance, Audit, Proactive Synthesis).

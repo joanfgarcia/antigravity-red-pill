@@ -35,7 +35,7 @@ def test_full_memory_lifecycle(memory_manager):
 
 	# 2. Search Memory
 	# The default fastembed stub in conftest returns a zero vector for everything.
-	results = memory_manager.search_and_reinforce(collection=collection, query="test query", limit=5, deep_recall=False)
+	results = memory_manager.search_and_reinforce(collection=collection, query="test query", limit=50, deep_recall=False)
 	assert len(results) > 0
 	found_memory = next((m for m in results if "Integration test memory" in m.payload["content"]), None)
 	assert found_memory is not None

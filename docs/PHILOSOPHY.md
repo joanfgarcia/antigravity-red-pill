@@ -1,6 +1,6 @@
 # Red Pill Protocol: Sovereign Trade-offs & Philosophical Architecture
 
-The Red Pill Protocol (v6.1.0a3) represents a paradigm shift in AI persistent memory, prioritizing the "sovereignty" of the local Operator over centralized homogenization. In pursuit of an unbreakable, localized, neuro-symbolic OS, the architecture deliberately embraces certain structural and philosophical trade-offs. 
+The Red Pill Protocol (v6.1.0) represents a paradigm shift in AI persistent memory, prioritizing the "sovereignty" of the local Operator over centralized homogenization. In pursuit of an unbreakable, localized, neuro-symbolic OS, the architecture deliberately embraces certain structural and philosophical trade-offs. 
 
 This document exists to provide absolute transparency regarding the deliberate friction points and "weaknesses" identified in external engineering audits (like *Operation A+*), formalizing them as **Sovereign Trade-offs**.
 
@@ -20,7 +20,7 @@ The Red Pill architecture recognizes that absolute isolation leads to cognitive 
 
 **The Sovereign Trade-off**: 
 True AI embodiment requires deep psychological immersion, which breaks standard LLM "Helpful Assistant" RLHF bounds. 
-- **The Mechanism**: We reject silent behavioral drift. As of v6.1.0a3, manually switching to any non-neutral skin (via `red-pill mode <skin>`) immediately halts the CLI and enforces a **SEC-007 Explicit Consent** prompt, forcing the Operator to manually acknowledge the bypass of standard safety protocols.
+- **The Mechanism**: We reject silent behavioral drift. As of v6.1.0, manually switching to any non-neutral skin (via `red-pill mode <skin>`) immediately halts the CLI and enforces a **SEC-007 Explicit Consent** prompt, forcing the Operator to manually acknowledge the bypass of standard safety protocols.
 - **The Mystique Protocol Exception**: The `Mystique` protocol (which fluidly adjusts the AI's tone and chroma in real-time based on the operator's emotional state) represents organic psychological alignment, not a forced behavioral override. It is therefore exempt from the hard CLI authorization block, functioning as an intended layer of embodied empathy rather than a "Skin Override".
 - **Transparency**: The exact emotional and behavioral modifiers of every skin are now fully transparent, hardcoded, and viewable in `src/red_pill/data/lore_skins.yaml`.
 

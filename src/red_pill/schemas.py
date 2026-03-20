@@ -86,7 +86,7 @@ class CreateEngramRequest(BaseModel):
 					for item in val:
 						if key == "emotional_profile" and isinstance(item, dict):
 							continue
-						if not isinstance(item, (str, int, float, bool, dict)):
+						if isinstance(item, dict) or not isinstance(item, (str, int, float, bool, dict)):
 							raise ValueError(f"Complex type in metadata list {key}")
 				elif isinstance(val, dict) and key not in ["last_3d", "last_7d", "last_30d", "global"]:
 					raise ValueError(f"Nested dict in metadata field {key}")

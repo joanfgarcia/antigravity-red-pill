@@ -11,8 +11,10 @@ def reset_classifier():
 	import red_pill.utils.emotion as em
 
 	em._classifier = None
+	em._model_failed = False
 	yield
 	em._classifier = None
+	em._model_failed = False
 
 
 class TestGetEmotions:

@@ -16,23 +16,23 @@ def test_chunk_text_edge_cases():
 	assert chunk_text("short", size=10) == ["short"]
 
 
-@patch("urllib.request.urlopen")
-def test_distill_engram(mock_urlopen):
+@patch("urllib.request.OpenerDirector.open")
+def test_distill_engram(mock_open):
 	mock_response = MagicMock()
 	mock_response.read.return_value = json.dumps(
 		{"choices": [{"message": {"content": '{"summary": "test", "emotion": "joy", "intensity": 0.9}'}}]}
 	).encode()
 	mock_response.__enter__.return_value = mock_response
-	mock_urlopen.return_value = mock_response
+	mock_open.return_value = mock_response
 	result = distill_engram("raw content")
 	assert result["summary"] == "test"
 	assert result["emotion"] == "joy"
 	assert result["intensity"] == 0.9
 
 
-@patch("urllib.request.urlopen")
-def test_distill_engram_fallback(mock_urlopen):
-	mock_urlopen.side_effect = Exception("Network fail")
+@patch("urllib.request.OpenerDirector.open")
+def test_distill_engram_fallback(mock_open):
+	mock_open.side_effect = Exception("Network fail")
 	result = distill_engram("raw content")
 	assert "raw content" in result["summary"]
 	assert result["emotion"] == "neutral"

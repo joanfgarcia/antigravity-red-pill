@@ -23,8 +23,8 @@ async def test_mcp_control_bunker_export():
 
 @pytest.mark.asyncio
 async def test_mcp_memorize_interaction_fallback():
-	res = await handle_memorize_interaction({"prompt": "p", "response": "r"})
-	assert "Engram async registration initiated" in res[0].text
+	res = await handle_memorize_interaction({"prompt": "Valid test prompt long enough to bypass", "response": "Valid log enough to bypass ping."})
+	assert "Engram queue registration initiated" in res[0].text
 
 
 @pytest.mark.asyncio

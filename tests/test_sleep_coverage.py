@@ -4,17 +4,18 @@ from unittest.mock import MagicMock, patch
 from red_pill.metabolism.sleep import distill_engram, perform_sleep_cycle, synthesize_hub
 
 
-def test_distill_engram_markdown_cleaning():
+@patch("urllib.request.OpenerDirector.open")
+def test_distill_engram_markdown_cleaning(mock_open):
 	"""Test cleaning of markdown fences from LLM response."""
 	mock_resp = MagicMock()
 	mock_resp.read.return_value = json.dumps(
 		{"choices": [{"message": {"content": '```json\n{"summary": "test", "emotion": "joy", "intensity": 0.9}\n```'}}]}
 	).encode()
 	mock_resp.__enter__.return_value = mock_resp
-	with patch("urllib.request.urlopen", return_value=mock_resp):
-		result = distill_engram("raw")
-		assert result["summary"] == "test"
-		assert result["emotion"] == "joy"
+	mock_open.return_value = mock_resp
+	result = distill_engram("raw")
+	assert result["summary"] == "test"
+	assert result["emotion"] == "joy"
 	mock_resp.read.return_value = json.dumps(
 		{"choices": [{"message": {"content": '```\n{"summary": "test2", "emotion": "sadness", "intensity": 0.1}\n```'}}]}
 	).encode()

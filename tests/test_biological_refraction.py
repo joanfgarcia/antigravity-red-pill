@@ -1,7 +1,5 @@
 from unittest.mock import MagicMock
 
-from qdrant_client.http import models
-
 from red_pill.memory import MemoryManager
 
 

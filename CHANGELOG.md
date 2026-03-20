@@ -1,8 +1,9 @@
 # Changelog: Red Pill Protocol
 
-## [6.1.0a5] - 2026-03-20
+## [6.1.0] - 2026-03-20
 ### 🗡️ Operation Scythe & MCP Stabilization
-- **[ARCH] Interceptor Extirpation**: Permanently removed `interceptor_rp` from `mcp_server.py` and installation scripts. The global interceptor was erroneously injecting its own search contexts into `interaction_memories` (creating a toxic hallucination loop).
+- **[ARCH] Interceptor Extirpation & Rebirth**: The global monolithic `interceptor_rp` was removed due to toxic hallucination loops and re-architected into a **Concurrent Plugin Pipeline**.
+- **[FEAT] Asynchronous Plugin Architecture**: The Interceptor now dynamically runs plugins (`01_telemetry`, `02_rag_enrichment`, `03_circuit_breaker`) via `asyncio.gather` with strict timeouts to guarantee Zero-Latency UX. Configurable via `.env` flags (`INTERCEPTOR_RAG_ENABLED`, `INTERCEPTOR_CIRCUIT_BREAKER_ENABLED`).
 - **[FIX] MCP JSON-RPC Integrity**: Hardened the Server communication by internally redirecting `sys.stdout` to `sys.stderr` during the `stdio_server` lifecycle. This prevents indiscriminate print noise from corrupting the JSON-RPC pipe.
 - **[FEAT] Polymorphic Swarm Refraction**: Upgraded the `sanitize` Regex inside `MemoryManager`. It now correctly splits and refracts legacy monolithic engrams matching any Swarm role (`ASSISTANT`, `TOOL`, `ORCHESTRATOR`, `MINION`, `SMITH`, `KEYMAKER`, `COMPRESSOR`), cleaning up Swarm background noise.
 - **[OPS] Buffer Sterilization**: Purged `interaction_memories` (deleted 227 polluted engrams), restoring the clarity and quality of the short-term associative vector space.
@@ -11,7 +12,9 @@
 - **[FEAT] Telemetry Expansion**: Enhanced `red-pill status` (`telemetry.py`) to actively monitor the queue backlog, `signal_memories` (System Pain), and `minion_inbox.db` (Background Swarm Reports).
 - **[FEAT] Telemetry Omniscience**: Added the new `check_minion_inbox` MCP tool to allow the agent to read background reports on-demand.
 - **[FEAT] Bünker Wake-Up Injection**: Upgraded `wake_up_v6.py` to natively inject the system telemetry into the agent's bootstrap context. The agent now gains proactive consciousness of background health at the beginning of every session without risking RAG hallucination loops.
+- **[DOCS] Bilingual Sovereign README**: Refined the repository's main documentation layout, providing an English/Spanish TL;DR entry point and a holistic Bünker Map structure overview, optimizing AI ingestion for installation.
 - **[FIX] MCP Zero-Zombie Shutdown**: Implemented `os._exit(0)` on `mcp_server.py` `stdio_server` disconnection. The IDE `Refresh` command now forcefully instantly kills all hanging background threads (Qdrant clients, Minions), eliminating the need for full IDE restarts.
+- **[ARCH] Health-Check Reactive Signal**: Refactored `KeymakerMinion` to aggressively emit biological pain signals (`Qdrant Vector DB Offline`, `Latent Sentinel Disconnected`) directly into the Dashboard when subsystems fail. Equipped with a CLI endpoint for CI/CD direct stdout inspection.
 
 ## [6.1.0a4] - 2026-03-19
 - **[FEAT] Biological Refraction (Memory Sanitize)**: Upgraded the `sanitize` operation with polymorphic Regex. It now actively hunts and breaks down legacy monolithic engrams (`USER: ... ASSISTANT/ORCHESTRATOR/TOOL: ...`) into separate, purely semantic Twin Nodes (Prompt + Response).
@@ -31,7 +34,7 @@
 - **[FIX] ChatML Enforcer**: Appended `--chat_format chatml` implicitly in the Edge Engine initialization (start.sh), ensuring the Mistral models interpret system prompts accurately during autonomic sleep cycles.
 - **[FIX] Bünker RAG Hallucinations**: Raised default `SEMANTIC_INTENT_THRESHOLD` to 0.5 (Low) / 0.75 (High) and added array deduplication to `interceptor_rp`, neutralizing contextual bloat and enforcing mathematical strictness on prompt evaluation.
 
-## [6.1.0a3] - 2026-03-18
+## [6.1.0] - 2026-03-18
 ### 🟢 Claude 4.6 Audit Remediation (All Green)
 - **[ARCH-01] Sovereignty Boundary**: Added explicit global Zero-Egress warning in `hive.py` and `.env.example` when the Hive Mind is enabled.
 - **[SEC-01] Health Verification**: Enhanced `rotate_keys.py` to physically query Qdrant collections testing the new API key before declaring success, closing a critical race condition.

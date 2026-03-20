@@ -78,8 +78,9 @@ def distill_engram(raw_content: str) -> Dict[str, Any]:
 	import os
 	import urllib.parse
 	import urllib.request
+
 	from red_pill.utils.uds_adapter import get_uds_opener
-	
+
 	uds_path = os.path.expanduser("~/.agent/red_pill.sock")
 	if os.path.exists(uds_path):
 		encoded_path = urllib.parse.quote(uds_path, safe="")
@@ -90,7 +91,7 @@ def distill_engram(raw_content: str) -> Dict[str, Any]:
 		opener = urllib.request.build_opener()
 
 	if not url:
-		return {"summary": raw_content[:500] + "...", "emotion": "neutral", "intensity": 0.5} # Fallback if URL is empty
+		return {"summary": raw_content[:500] + "...", "emotion": "neutral", "intensity": 0.5}  # Fallback if URL is empty
 
 	req = urllib.request.Request(
 		url,
@@ -109,6 +110,7 @@ def distill_engram(raw_content: str) -> Dict[str, Any]:
 				data = json.loads(response.read().decode())
 				content = data["choices"][0]["message"]["content"].strip()
 				import re
+
 				# Clean possible LLM markdown
 				if content.startswith("```json"):
 					content = content[7:]
@@ -116,7 +118,7 @@ def distill_engram(raw_content: str) -> Dict[str, Any]:
 					content = content[3:]
 				if content.endswith("```"):
 					content = content[:-3]
-				
+
 				# Robust JSON extraction
 				match = re.search(r"\{.*\}", content, re.DOTALL)
 				if match:
@@ -226,7 +228,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 			parts = raw_text.split("\n\nTOOL: ", 1)
 			p_text = parts[0].replace("USER: ", "", 1).strip()
 			r_text = parts[1].strip()
-			
+
 			if p_text:
 				for c in chunk_text(p_text):
 					chunks.append(f"Operator Objective: {c}")

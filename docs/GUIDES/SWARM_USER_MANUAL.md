@@ -1,7 +1,7 @@
 # Swarm Messaging — Manual de Operador
 
 > **Protocolo**: Swarm v3.0 + MLS/TreeKEM E2E  
-> **Versión**: Red Pill v6.1.0a3  
+> **Versión**: Red Pill v6.1.0  
 > **Última actualización**: 2026-03-15
 
 ## 1. Conceptos Clave
