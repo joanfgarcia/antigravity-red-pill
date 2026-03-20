@@ -34,6 +34,7 @@
 - **[OPS] Certification Pipeline Upgrade**: Refactored `prepare_certification.sh` to extract and split context digests into three isolated layers: CORE, TESTS, and LORE. This allows external LLM auditors to process the massive repository scale without context-window overflow.
 - **[FIX] MCP Zero-Zombie Shutdown**: Implemented `os._exit(0)` on `mcp_server.py` `stdio_server` disconnection. The IDE `Refresh` command now forcefully instantly kills all hanging background threads (Qdrant clients, Minions), eliminating the need for full IDE restarts.
 - **[ARCH] Health-Check Reactive Signal**: Refactored `KeymakerMinion` to aggressively emit biological pain signals (`Qdrant Vector DB Offline`, `Latent Sentinel Disconnected`) directly into the Dashboard when subsystems fail. Equipped with a CLI endpoint for CI/CD direct stdout inspection.
+- **[FIX] Lazy Collection Shield**: Fixed a crash where the `signal_memories` collection was accessed before being explicitly instantiated in Qdrant. An `ensure_collection` shield was injected natively to protect premature reads and writes.
 
 ## [6.1.0a4] - 2026-03-19
 - **[FEAT] Biological Refraction (Memory Sanitize)**: Upgraded the `sanitize` operation with polymorphic Regex. It now actively hunts and breaks down legacy monolithic engrams (`USER: ... ASSISTANT/ORCHESTRATOR/TOOL: ...`) into separate, purely semantic Twin Nodes (Prompt + Response).
