@@ -32,6 +32,10 @@ def bootstrap():
 	skin_data = skins.get(args.skin, skins.get("760"))
 
 	manager = MemoryManager()
+	
+	# INITIALIZE CORE COLLECTIONS ON FRESH INSTALL
+	from src.red_pill.seed import seed_project
+	seed_project(manager)
 
 	# 1. Ingest Identity
 	identity_text = f"""

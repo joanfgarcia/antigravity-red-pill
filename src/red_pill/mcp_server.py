@@ -313,6 +313,7 @@ async def handle_fetch_signal_memories(arguments: Dict[str, Any]):
 		from red_pill.memory import MemoryManager
 
 		mgr = MemoryManager()
+		mgr.storage.ensure_collection("signal_memories")
 		points, _ = mgr.client.scroll(collection_name="signal_memories", limit=10, with_payload=True)
 		if not points:
 			return [types.TextContent(type="text", text="[SYSTEM_SIGNAL] No signals detected. System optimal.")]
