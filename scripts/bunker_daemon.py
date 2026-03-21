@@ -66,7 +66,6 @@ class BunkerDaemon:
 			rule_dir = Path.home() / ".gemini" / "antigravity" / "rules"
 			rule_dir.mkdir(parents=True, exist_ok=True)
 			rule_file = rule_dir / "00_bunker_telemetry.md"
-			rule_tmp = rule_file.with_suffix(".tmp")
 
 			nv = self.state.get("nvidia", {})
 			minions = self.state.get("minions", {}).get("unread", 0)

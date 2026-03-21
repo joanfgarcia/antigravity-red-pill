@@ -6,7 +6,7 @@ import requests
 
 import red_pill.config as cfg
 from red_pill.swarm.base import Minion
-from red_pill.telemetry import HardwareSentinel
+from red_pill.telemetry import HardwareSentinel, sentinel
 
 
 class KeymakerMinion(Minion):
@@ -54,7 +54,7 @@ class KeymakerMinion(Minion):
 
 		# 4. NPU Latent Sentinel Check (v5.3.0)
 
-		stats = HardwareSentinel.get_stats()
+		stats = sentinel.get_stats()
 		npu_info = stats.get("npu", {})
 		if npu_info.get("status") == "Ready":
 			results["npu_status"] = "Active"

@@ -7,7 +7,7 @@ import time
 from typing import Any, Dict
 
 from red_pill.swarm.base import Minion
-from red_pill.telemetry import HardwareSentinel
+from red_pill.telemetry import HardwareSentinel, sentinel
 
 
 class SmithMinion(Minion):
@@ -31,7 +31,7 @@ class SmithMinion(Minion):
 			"security_score": 100.0,
 			"files_scanned": 0,
 			"lines_analyzed": 0,
-			"telemetry": HardwareSentinel.get_stats(),
+			"telemetry": sentinel.get_stats(),
 		}
 
 		# Target: Current project root or specified path

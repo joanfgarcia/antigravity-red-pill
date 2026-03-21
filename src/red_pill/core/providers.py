@@ -176,7 +176,7 @@ class BitNetInferenceProvider(BaseInferenceProvider):
 				return full_output.split("Assistant:")[-1].strip()
 
 			# Fallback: return last non-empty line
-			lines = [l.strip() for l in full_output.split("\n") if l.strip()]
+			lines = [line.strip() for line in full_output.split("\n") if line.strip()]
 			return lines[-1] if lines else ""
 
 		except subprocess.TimeoutExpired:
