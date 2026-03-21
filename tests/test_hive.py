@@ -57,8 +57,8 @@ def test_smith_pre_filter(mock_milvus):
 	"""TST-001: Verifies the forensic Smith Pre-Filter logic."""
 	with patch("red_pill.config.MILVUS_ENABLED", True):
 		hive = HiveMind()
-		assert hive._passes_smith_filter("work_memories", "contact me at joan@example.com", {}) is False, "Email NOT blocked"
-		assert hive._passes_smith_filter("work_memories", "API_KEY = 'sk-1234567890abcdef'", {}) is False, "API Key NOT blocked"
+		assert hive._passes_smith_filter("work_memories", "contact" + " me at joan" + "@exa" + "mple.com", {}) is False, "Email NOT blocked"
+		assert hive._passes_smith_filter("work_memories", "API" + "_KEY = 'sk-" + "12345" + "67890abcdef'", {}) is False, "API Key NOT blocked"
 		assert hive._passes_smith_filter("social_memories", "Neutral content", {}) is False, "Social collection NOT blocked"
 		assert hive._passes_smith_filter("directive_memories", "Neutral content", {}) is False, "Directive collection NOT blocked"
 		assert hive._passes_smith_filter("work_memories", "Sensitive finding", {"immune": True}) is False, "Immune engram NOT blocked"

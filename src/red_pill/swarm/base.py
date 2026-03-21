@@ -7,6 +7,9 @@ from pydantic import BaseModel, ConfigDict, Field
 logger = logging.getLogger("red_pill.swarm")
 
 
+from red_pill import config  # noqa: E402
+
+
 class Minion(BaseModel):
 	"""
 	Base class for all transient, specialized agents in the Red Pill Swarm.
@@ -16,6 +19,7 @@ class Minion(BaseModel):
 	id: str = Field(default_factory=lambda: str(uuid.uuid4()))
 	name: str
 	specialization: str
+	telemetry_level: str = Field(default_factory=lambda: config.SWARM_TELEMETRY_DEFAULT)
 	metadata: Dict[str, Any] = Field(default_factory=dict)
 
 	model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -35,5 +39,6 @@ class SwarmResult(BaseModel):
 	minion_id: str
 	status: str
 	duration: float
+	telemetry: Optional[Dict[str, Any]] = None
 	result: Dict[str, Any]
 	error: Optional[str] = None

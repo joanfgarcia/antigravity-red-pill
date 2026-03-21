@@ -1,9 +1,8 @@
-import os
 import logging
-from typing import Dict, Optional, Tuple
+import os
+from typing import Dict
 
-from pure_mls.group import MLSGroup, WelcomeInfo, GroupUpdate
-from pure_mls.keys import KemKey, SignatureKey
+from pure_mls.group import GroupUpdate, MLSGroup, WelcomeInfo
 from pure_mls.tree import KeyPackage
 
 from red_pill.utils.vault_crypto import VaultCrypto
@@ -12,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 # SEC-001: Swarm State Directory
 SWARM_STATE_DIR = os.path.join(os.path.expanduser("~/.config/red_pill"), "swarm_groups")
+
 
 class MLSManager:
 	"""
@@ -62,10 +62,7 @@ class MLSManager:
 
 	def get_key_package(self) -> KeyPackage:
 		"""Generates a KeyPackage for joining groups."""
-		return KeyPackage(
-			identity_key_pub=self.sig_key.public_bytes(),
-			init_key_pub=self.kem_key.public_bytes()
-		)
+		return KeyPackage(identity_key_pub=self.sig_key.public_bytes(), init_key_pub=self.kem_key.public_bytes())
 
 	def join_community(self, alias: str, welcome: WelcomeInfo) -> MLSGroup:
 		"""Joins a community using a Welcome message."""

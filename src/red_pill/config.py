@@ -162,6 +162,9 @@ AGENT_NAME = os.getenv("AGENT_NAME", "Agente")
 # Set via USER_NAME in .env, fallback to OS username, fallback to 'Operador'
 OPERATOR_DISPLAY_NAME = os.getenv("USER_NAME", os.getenv("USER", "Operador"))
 
+# SWARM CONFIG
+SWARM_TELEMETRY_DEFAULT = os.getenv("SWARM_TELEMETRY_DEFAULT", "NONE")  # NONE, MINIMUM, FULL
+
 # NOTIFICATIONS
 # Set to 'False' to silence the system entirely
 NOTIFICATIONS_ENABLED = os.getenv("NOTIFICATIONS_ENABLED", "True").lower() == "true"

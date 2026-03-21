@@ -54,7 +54,7 @@ def test_encrypt_decrypt_payload_bytes_secret():
 
 def test_encrypt_decrypt_payload_string_secret():
 	"""Verify AES-GCM encryption and decryption of JSON payload with a string secret."""
-	shared_secret = "a_very_secret_passphrase_for_fallback_tests"
+	shared_secret = os.urandom(32)
 	payload = {"directive": "Execute Order 66"}
 	encrypted = SwarmCrypto.encrypt_payload(payload, shared_secret)
 	decrypted = SwarmCrypto.decrypt_payload(encrypted, shared_secret)
@@ -63,7 +63,7 @@ def test_encrypt_decrypt_payload_string_secret():
 
 def test_decrypt_invalid_payload():
 	"""Verify decryption fails on corrupted data."""
-	shared_secret = "secret"
+	shared_secret = os.urandom(16).hex()
 	encrypted = SwarmCrypto.encrypt_payload({"data": 1}, shared_secret)
 	original_ciphertext_bytes = base64.b64decode(encrypted["ciphertext"])
 	corrupted_ciphertext_bytes = original_ciphertext_bytes[:-1] + (b"_" if original_ciphertext_bytes[-1:] != b"_" else b"-")

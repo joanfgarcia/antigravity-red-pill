@@ -1,4 +1,5 @@
 import json
+import os
 from unittest.mock import MagicMock, patch
 
 from red_pill.skills.swarm_messaging import SwarmIntent, SwarmMessagingSkill
@@ -16,7 +17,7 @@ def test_swarm_messaging_execute_send():
 		mock_transport.lookup_public_key.return_value = None
 		with patch("red_pill.skills.swarm_messaging.SwarmCrypto") as mock_crypto:
 			mock_crypto.encrypt_payload.return_value = {"ciphertext": "fake", "nonce": "fake"}
-			skill = SwarmMessagingSkill(agent_identity="Aleph@Test", shared_secret="secret", transport_manager=mock_tm)
+			skill = SwarmMessagingSkill(agent_identity="Aleph@Test", shared_secret=os.urandom(32), transport_manager=mock_tm)
 			result = skill.execute_send("Nova@Test", {"code": "print(1)"}, SwarmIntent.LGTM_APPROVED)
 			assert result["status"] == "dispatched"
 
@@ -24,7 +25,7 @@ def test_swarm_messaging_execute_send():
 def test_swarm_messaging_process_incoming():
 	"""Cover process_incoming in SwarmMessagingSkill."""
 	with patch("red_pill.skills.swarm_messaging.TransportManager"):
-		skill = SwarmMessagingSkill(agent_identity="Aleph@Test", shared_secret="secret")
+		skill = SwarmMessagingSkill(agent_identity="Aleph@Test", shared_secret=os.urandom(32))
 	with patch("red_pill.skills.swarm_messaging.SwarmCrypto") as mock_crypto:
 		mock_crypto.decrypt_payload.return_value = {"intent": "lgtm_approved", "sender": "Nova@Test"}
 		res = skill.process_incoming({})

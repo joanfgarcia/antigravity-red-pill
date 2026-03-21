@@ -50,3 +50,9 @@ class ToolRegistry:
 
 # Global Registry instance
 registry = ToolRegistry()
+
+# Enterprise Mode: Provider Initialization
+from red_pill.core.providers import ProviderRegistry  # noqa: E402
+from red_pill.telemetry import sentinel  # noqa: E402
+
+ProviderRegistry.register_telemetry_provider(sentinel)

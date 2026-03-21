@@ -22,7 +22,7 @@ from red_pill.swarm.agents.keymaker import KeymakerMinion
 from red_pill.swarm.agents.oracle import OracleMinion
 from red_pill.swarm.agents.smith import SmithMinion
 from red_pill.swarm.orchestrator import GruOrchestrator
-from red_pill.telemetry import HardwareSentinel, get_telemetry_report
+from red_pill.telemetry import HardwareSentinel, get_telemetry_report, sentinel
 from red_pill.utils.mystique import mystique_engine
 from red_pill.utils.tone_analyzer import get_current_sync_state
 
@@ -69,7 +69,7 @@ async def handle_get_hardware_status(arguments: Dict[str, Any]):
 	name="get_dashboard", description="Get a high-fidelity visual dashboard of the Red Pill ecosystem.", schema={"type": "object", "properties": {}}
 )
 async def handle_get_dashboard(arguments: Dict[str, Any]):
-	stats = HardwareSentinel.get_stats()
+	stats = sentinel.get_stats()
 	gpu_temp = max([g.get("temp", 0) for g in stats["gpu"]]) if stats["gpu"] else 0
 	cpu_temp = stats["cpu"].get("temp") or 0
 	max_temp = max(gpu_temp, cpu_temp)
@@ -292,7 +292,6 @@ async def handle_check_minion_inbox(arguments: Dict[str, Any]):
 			return [types.TextContent(type="text", text="[MINION INBOX] No unread reports.")]
 
 		formatted = f"--- MINION INBOX ({len(reports)} unread reports) ---\n"
-		read_ids = []
 		for r in reports:
 			formatted += f"[{r['source']}] Event: {r['event_id']} | Status: {r['status']}\nContent: {r['content']}\n\n"
 
@@ -513,6 +512,20 @@ async def handle_configure_neuro_agentic_tuning(arguments: Dict[str, Any]):
 	if updates:
 		update_env(updates)
 	return [types.TextContent(type="text", text=f"Neuro-Agentic Tuning Optimized: {updates}")]
+
+
+@registry.register(
+	name="adjust_swarm_telemetry",
+	description="[OFFICIAL] Adjust the global Swarm telemetry level (NONE, MINIMUM, FULL).",
+	schema={"type": "object", "properties": {"level": {"type": "string", "enum": ["NONE", "MINIMUM", "FULL"]}}, "required": ["level"]},
+)
+async def handle_adjust_swarm_telemetry(arguments: Dict[str, Any]):
+	from scripts.update_env import update_env
+
+	level = arguments["level"]
+	update_env({"SWARM_TELEMETRY_DEFAULT": level})
+	cfg.SWARM_TELEMETRY_DEFAULT = level
+	return [types.TextContent(type="text", text=f"Global Swarm Telemetry level updated to: {level}")]
 
 
 @registry.register(

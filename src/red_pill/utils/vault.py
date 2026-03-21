@@ -2,14 +2,11 @@ import logging
 import os
 import shutil
 import subprocess
-import time
-from typing import Any, Dict, List, Optional
-
-import pure_mls
-from pure_mls.group import MLSGroup
+from typing import Any, Dict, Optional
 
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
+from pure_mls.group import MLSGroup
 
 import red_pill.config as cfg
 from red_pill.utils.vault_crypto import VaultCrypto
@@ -117,7 +114,7 @@ class CloudVault:
 		Retrieves or initializes the MLS Group for Vault encryption.
 		"""
 		kem_key, sig_key = VaultCrypto.get_identity()
-		
+
 		if os.path.exists(VAULT_STATE_PATH):
 			with open(VAULT_STATE_PATH, "rb") as f:
 				data = f.read()
@@ -142,13 +139,13 @@ class CloudVault:
 			group = self._get_vault_group()
 			with open(file_path, "rb") as f:
 				plaintext = f.read()
-			
+
 			ciphertext = group.encrypt_application_message(plaintext)
-			
+
 			encrypted_path = file_path + ".mls"
 			with open(encrypted_path, "wb") as f:
 				f.write(ciphertext)
-			
+
 			logger.info(f"Soul Kit protected by MLS: {os.path.basename(encrypted_path)}")
 			return encrypted_path
 		except Exception as e:
@@ -195,13 +192,13 @@ class CloudVault:
 			group = self._get_vault_group()
 			with open(encrypted_path, "rb") as f:
 				ciphertext = f.read()
-			
+
 			plaintext = group.decrypt_application_message(ciphertext)
-			
+
 			output_path = encrypted_path.replace(".mls", "")
 			with open(output_path, "wb") as f:
 				f.write(plaintext)
-			
+
 			return output_path
 		except Exception as e:
 			logger.error(f"MLS Decryption failed: {e}")

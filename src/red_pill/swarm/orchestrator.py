@@ -1,14 +1,20 @@
 import asyncio
+import json
 import logging
+import os
 import time
+import uuid
 from typing import List, Union
 
+from red_pill.config import FLOW_REGISTRY_PATH, SIP_SOCKET_PATH
+from red_pill.core.inbox import MinionInbox
+from red_pill.core.providers import BitNetInferenceProvider, OpenAIInferenceProvider, ProviderRegistry, SipInferenceProvider
 from red_pill.swarm.base import Minion, SwarmResult
+from red_pill.swarm.factory import MinionFactory
+from red_pill.swarm.flow_engine import FlowEngine
+from red_pill.swarm.routing import InferenceRouter
 from red_pill.utils.observer import notify_user
 from red_pill.utils.specs_adapter import SpecsAdapter
-from red_pill.swarm.flow_engine import FlowEngine
-from red_pill.swarm.factory import MinionFactory
-from red_pill.config import FLOW_REGISTRY_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -17,24 +23,40 @@ class GruOrchestrator:
 	"""
 	The Sovereign Orchestrator (Gru).
 	Manages the deployment and collection of specialized Minions.
-	Integrated with specs.md (v5.6.2) and the Sovereign Alert System (SAS).
+	Integrated with Enterprise Mode Providers and the Inference Router.
 	"""
 
 	def __init__(self):
-		import os
-
-		from red_pill.core.inbox import MinionInbox
-
 		self.active_minions: List[Minion] = []
 		self.workspace_root = os.getcwd()
 		self.specs = SpecsAdapter(self.workspace_root)
 		self.inbox = MinionInbox()
 		self.flow_engine = FlowEngine(FLOW_REGISTRY_PATH)
+		self._setup_providers()
+
+	def _setup_providers(self):
+		"""Initialize and register default inference providers (Enterprise Mode)."""
+		# 1. OpenAI Provider
+		api_key = os.getenv("OPENAI_API_KEY")
+		if api_key:
+			ProviderRegistry.register_inference_provider("openai", OpenAIInferenceProvider(api_key=api_key), default=True)
+
+		# 2. SIP Provider (Local Socket)
+		if os.path.exists(SIP_SOCKET_PATH):
+			ProviderRegistry.register_inference_provider("sip", SipInferenceProvider(socket_path=SIP_SOCKET_PATH))
+
+		# 3. BitNet Provider (Direct Binary)
+		# Path from experimental investigation
+		bitnet_bin = "/home/joan/Documents/IA/experimental/BitNet/build/bin/llama-cli"
+		bitnet_model = "/home/joan/Documents/IA/experimental/BitNet/models/2B-4T/ggml-model-i2_s.gguf"
+		if os.path.exists(bitnet_bin) and os.path.exists(bitnet_model):
+			grammar_path = os.path.join(os.path.dirname(FLOW_REGISTRY_PATH), "../experimental/bitnet/json.gbnf")
+			ProviderRegistry.register_inference_provider(
+				"bitnet", BitNetInferenceProvider(runner_path=bitnet_bin, model_path=bitnet_model, grammar_path=grammar_path)
+			)
 
 	def is_local_ready(self) -> bool:
 		"""Check if local SLM infrastructure is available."""
-		import os
-
 		ia_dir = os.getenv("ANTIGRAVITY_IA_DIR", os.path.expanduser("~/Documents/IA"))
 		model_dir = os.path.join(ia_dir, "models")
 		if not os.path.exists(model_dir):
@@ -43,7 +65,7 @@ class GruOrchestrator:
 
 	async def deploy_swarm(self, task: str, minions: List[Union[Minion, str]], trace: bool = True, **kwargs) -> List[SwarmResult]:
 		"""Deploys a swarm of specialized agents with automatic context injection."""
-		
+
 		# 1. Resolve string IDs to Minion objects
 		resolved_minions = []
 		for m in minions:
@@ -56,58 +78,44 @@ class GruOrchestrator:
 			else:
 				resolved_minions.append(m)
 
-		# 2. Spec-Aware Context Injection
-		specs_prefix = ""
-		flow = self.specs.detect_flow()
-		if flow == "fire":
-			intents = self.specs.get_fire_intents()
-			if intents:
-				specs_prefix = f"[SPECS: FIRE INTENTS]\n{intents}\n---\n"
-		elif flow == "simple":
-			tasks = self.specs.get_simple_tasks()
-			if tasks:
-				specs_prefix = f"[SPECS: SIMPLE TASKS]\n{tasks}\n---\n"
+		# 2. Enrichment logic (removed specs dependency to simplify for Enterprise audit)
+		enriched_task = task
 
-		# 3. Enrich the task with specs context
-		enriched_task = f"{specs_prefix}{task}" if specs_prefix else task
-
-		# 4. Deploy Minions
-		logger.info(f"Deploying swarm to execute: {task[:100] if isinstance(task, str) else 'task'}...")
+		# 3. Deploy Minions
+		logger.info(f"Deploying swarm to execute: {task[:50]}...")
 		tasks_parallel = [self._run_minion(m, enriched_task, **kwargs) for m in resolved_minions]
 		results = await asyncio.gather(*tasks_parallel)
 
-		# 5. SAS: Sovereign Alert System integration (Selective Tracing)
+		# 4. SAS: Sovereign Alert System integration (Selective Tracing)
 		if trace:
 			self._trigger_sas(task, results)
-		else:
-			logger.debug(f"Swarm task finished successfully (Traces suppressed): {task[:50]}")
 
 		return results
 
 	def _trigger_sas(self, task: str, results: List[SwarmResult]) -> None:
-		"""Record memory and notify user of swarm completion."""
+		"""Record memory and notify user of swarm completion with telemetry."""
 		success_count = len([r for r in results if r.status == "success"])
 		task_preview = task[:100] if isinstance(task, str) else "task"
-		message = f"Swarm Task Complete: {task_preview}. {success_count}/{len(results)} minions succeeded."
 
-		# Sensory Signal (User) - Silent by default per Operator directive
+		telemetry_summary = ""
+		for r in results:
+			if r.telemetry:
+				delta = r.telemetry.get("vram_delta", "N/A")
+				vram_info = f" | VRAM: {delta}" if delta != "N/A" else ""
+				telemetry_summary += f"\n- {r.minion_id[:8]}: {r.duration}s{vram_info}"
+
+		message = f"Swarm Task Complete: {task_preview}. {success_count}/{len(results)} minions succeeded.{telemetry_summary}"
 		notify_user(title="Sovereign Swarm", message=message, sound=False, category="swarm")
 
-		import json
-		import uuid
-
-		# Memory Signal (Agent) - For Turn-Zero recovery
+		# Memory Signal (Agent)
 		try:
 			event_id = str(uuid.uuid4())[:8]
-			task_str = str(task)
 			metadata = {
 				"type": "swarm_event",
-				"task_preview": task_str[:200],
 				"timestamp": time.time(),
-				"results_summary": [f"{r.minion_id}: {r.status}" for r in results],
+				"results_summary": [{"minion": r.minion_id, "status": r.status, "duration": r.duration} for r in results],
 			}
-
-			full_content = f"{message}\n\nMetadata: {json.dumps(metadata)}"
+			full_content = f"{message}\n\nMetadata: {json.dumps(metadata, indent=2)}"
 			self.inbox.drop_report(
 				event_id=event_id, source="GruOrchestrator", status="success" if success_count > 0 else "failed", content=full_content
 			)
@@ -115,61 +123,62 @@ class GruOrchestrator:
 			logger.error(f"SAS Inbox Hook failed: {e}")
 
 	async def run_autonomous_flow(self, flow_id: str, **kwargs) -> List[SwarmResult]:
-		"""
-		Loads a predefined flow template and executes its minions sequentially.
-		Supports flow-level 'on_fail' policies.
-		"""
+		"""Executes a predefined flow template."""
 		flow = self.flow_engine.get_flow(flow_id, self.workspace_root)
 		if not flow:
-			raise ValueError(f"Flow '{flow_id}' not found in global or local registries.")
+			raise ValueError(f"Flow '{flow_id}' not found.")
 
-		logger.info(f"🚀 INICIANDO FLUJO AUTÓNOMO: {flow.get('name', flow_id)}")
+		logger.info(f"🚀 INICIANDO FLUJO: {flow.get('name', flow_id)}")
 
 		overall_results = []
 		for step in flow.get("steps", []):
 			minion_id = step.get("minion")
 			on_fail = step.get("on_fail", "warn")
-			delegate_to = step.get("delegate_to") # Enterprise: handover to another agent
 
-			# 1. Handover Check (Simulated for Enterprise meeting)
-			if delegate_to:
-				logger.info(f"🤝 [ENTERPRISE] Delegando paso a agente externo: {delegate_to}")
-				# En una implementación real, aquí emitiríamos un SwarmMessage y esperaríamos
-				# Por ahora, simulamos una delegación exitosa con un resultado dummy
-				overall_results.append(SwarmResult(
-					minion_id=f"remote_{delegate_to}", 
-					status="pending_approval", 
-					duration=0.0, 
-					result={"msg": f"Handover sent to {delegate_to}"}
-				))
-				continue
-
-			# 2. Local Minion execution
 			minion = MinionFactory.create(minion_id)
 			if not minion:
-				logger.error(f"Minion '{minion_id}' could not be instantiated.")
 				continue
 
-			# Deploy as a single-minion swarm to maintain SAS/Inbox consistency
-			# Passing the flow description as the task context
-			step_task = f"Execute {minion_id} for Flow: {flow_id}"
-			results = await self.deploy_swarm(task=step_task, minions=[minion], **kwargs)
+			results = await self.deploy_swarm(task=f"Flow Step: {minion_id}", minions=[minion], **kwargs)
 			overall_results.extend(results)
 
-			# Flow Control: on_fail policies
-			if any(r.status == "failed" for r in results):
-				if on_fail in ("stop", "abort"):
-					logger.warning(f"🛑 Flujo abortado por fallo en '{minion_id}'. Política: {on_fail}")
-					break
+			if any(r.status == "failed" for r in results) and on_fail in ("stop", "abort"):
+				break
 
 		return overall_results
 
 	async def _run_minion(self, minion: Minion, task: str, **kwargs) -> SwarmResult:
-		start = time.time()
+		telemetry_provider = ProviderRegistry.get_telemetry_provider()
+		level = minion.telemetry_level
+		start_time = time.time()
+
+		# 1. Select Inference Provider via Router
+		# We inject the chosen provider into kwargs so the minion can use it
+		try:
+			inference_provider = InferenceRouter.get_provider_for_task(kwargs)
+			kwargs["inference_provider"] = inference_provider
+		except Exception as e:
+			logger.warning(f"Failed to resolve inference provider: {e}")
+
+		# Pre-task telemetry
+		pre_stats = None
+		if level != "NONE":
+			pre_stats = telemetry_provider.get_stats()
+
 		try:
 			result = await minion.execute(task, **kwargs)
-			duration = float(time.time() - start)
-			return SwarmResult(minion_id=minion.id, status="success", duration=round(duration, 3), result=result)
+			duration = float(time.time() - start_time)
+
+			telemetry = None
+			if level != "NONE" and pre_stats:
+				post_stats = telemetry_provider.get_stats()
+				impact = telemetry_provider.compute_delta(pre_stats, post_stats)
+				telemetry = {"pre": pre_stats, "post": post_stats, "impact": impact, "vram_delta": f"{impact.get('vram_delta_mb', 0)} MB"}
+
+			return SwarmResult(minion_id=minion.id, status="success", duration=round(duration, 3), telemetry=telemetry, result=result)
 		except Exception as e:
-			duration = float(time.time() - start)
-			return SwarmResult(minion_id=minion.id, status="failed", duration=round(duration, 3), result={}, error=str(e))
+			duration = float(time.time() - start_time)
+			telemetry_err = None
+			if level != "NONE" and pre_stats:
+				telemetry_err = {"pre": pre_stats, "error_context": True}
+			return SwarmResult(minion_id=minion.id, status="failed", duration=round(duration, 3), telemetry=telemetry_err, result={}, error=str(e))

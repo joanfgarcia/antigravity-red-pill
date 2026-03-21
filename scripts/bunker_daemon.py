@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from red_pill.config import IA_DIR
 from red_pill.core.inbox import MinionInbox
 from red_pill.core.queue_manager import MemoryQueueManager
-from red_pill.telemetry import HardwareSentinel
+from red_pill.telemetry import sentinel
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("bunker_daemon")
@@ -121,7 +121,7 @@ You are actively receiving this telemetry via IDE rule injection (`00_bunker_tel
 			try:
 				# We expect HardwareSentinel to use check_output with a timeout
 				# Let's wrap it in to_thread just in case
-				stats = await asyncio.to_thread(HardwareSentinel.get_stats)
+				stats = await asyncio.to_thread(sentinel.get_stats)
 				gpus = stats.get("gpu", [])
 				nvidia = None
 				if isinstance(gpus, list):

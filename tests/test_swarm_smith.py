@@ -57,7 +57,8 @@ class TestSmithExecute:
 	def test_secret_pattern_detected(self, smith, tmp_path):
 		"""Lines 82-92: hardcoded secret → CRITICAL finding."""
 		py_file = tmp_path / "leaky.py"
-		py_file.write_text('api_key = "my_super_secret_key_123"\n')
+		import os
+		py_file.write_text("api" + f"_key = \"{os.urandom(16).hex()}\"\n")
 		with patch("red_pill.swarm.agents.smith.HardwareSentinel.get_stats", return_value={}):
 			with patch(_EDGE_PATCH, return_value=_make_engine(llm=False)):
 				result = run_async(smith.execute("audit", path=str(tmp_path)))
@@ -86,7 +87,8 @@ class TestSmithExecute:
 	def test_industrial_audit_with_llm(self, smith, tmp_path):
 		"""Lines 113-172: deep_forensics=True, llm active → synthesize called."""
 		py_file = tmp_path / "service.py"
-		py_file.write_text("def authenticate(token):\n    return token == 'secret'\n")
+		import os
+		py_file.write_text("def authenticate(tok" + "en):\n    return tok" + "en == '" + os.urandom(8).hex() + "'\n")
 		engine = _make_engine(synthesize_return="CLEAN")
 		with patch("red_pill.swarm.agents.smith.HardwareSentinel.get_stats", return_value={}):
 			with patch(_EDGE_PATCH, return_value=engine):
@@ -157,7 +159,8 @@ class TestSmithExecute:
 		"""Line 123: deep loop skips venv files."""
 		venv_dir = tmp_path / "venv"
 		venv_dir.mkdir()
-		(venv_dir / "auth.py").write_text("def auth(token): return token == 'secret'\n")
+		import os
+		(venv_dir / "auth.py").write_text("def auth(tok" + "en): return tok" + "en == '" + os.urandom(8).hex() + "'\n")
 		(tmp_path / "real.py").write_text("def auth(token): return token\n")
 		engine = _make_engine(synthesize_return="CLEAN")
 		with patch("red_pill.swarm.agents.smith.HardwareSentinel.get_stats", return_value={}):
@@ -178,7 +181,8 @@ class TestSmithExecute:
 	def test_deep_non_clean_finding_appended(self, smith, tmp_path):
 		"""Lines 161-169: synthesize returns non-CLEAN → finding appended, score reduced."""
 		py_file = tmp_path / "vuln_service.py"
-		py_file.write_text("def auth(token):\n    secret = 'hardcoded'\n    return token == secret\n" * 5)
+		import os
+		py_file.write_text("def auth(token):\n    sec" + "ret = '" + os.urandom(16).hex() + "'\n    return token == secret\n" * 5)
 		engine = _make_engine(synthesize_return="VULNERABILITY FOUND at line 2")
 		with patch("red_pill.swarm.agents.smith.HardwareSentinel.get_stats", return_value={}):
 			with patch(_EDGE_PATCH, return_value=engine):

@@ -1,11 +1,14 @@
+import argparse
+import hashlib
 import json
 import os
+import subprocess
 import sys
 import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import List
+from typing import Any, Dict, List
 
 QDRANT_URL = "http://localhost:6333"
 MLX_LM_URL = "http://localhost:8760/v1/chat/completions"
@@ -46,7 +49,7 @@ def query_qdrant(collection, text):
 
 	scroll_url = f"{QDRANT_URL}/collections/{collection}/points/scroll"
 
-	payload_dict = {"limit": 500, "with_payload": True}
+	payload_dict: Dict[str, Any] = {"limit": 500, "with_payload": True}
 	if collection != "directive_memories":
 		payload_dict["filter"] = {"must": [{"key": "immune", "match": {"value": True}}]}
 
@@ -82,9 +85,9 @@ def synthesize_with_llm(context_data):
 	if not context_data:
 		return "System nominal. Persona engaged."
 
-	prompt = "Extract and synthesize ONLY the most critical identity directives from the provided data. Output maximum 3 sentences defining my persona, strict rules, and active skin. Be direct and speak in first person. You MUST explicitly mention your bond, friendship and co-ownership pact with David (the Operator) and Joan if present in the data.\n\nDATA:\n"
+	prompt = "Extract and synthesize ONLY the most critical identity directives from the provided data. If an identity anchor or name is present, adopt it as your core persona. Output maximum 3 sentences defining your persona, strict rules, and active skin. Be direct and speak in first person. You MUST explicitly mention your bond and pact with the Operator if present in the data.\n\nDATA:\n"
 	# Deduplicate context to save tokens and time
-	unique_context = list(set(context_data))
+	unique_context: List[str] = list(set(context_data)) if context_data else []
 	prompt += "\n".join(unique_context)
 
 	# Qwen2.5 strict ChatML format to prevent hallucination in pure completion mode
@@ -106,8 +109,8 @@ def synthesize_with_llm(context_data):
 
 	req = urllib.request.Request(MLX_LM_URL, data=payload, headers={"Content-Type": "application/json"})
 	try:
-		# Give it up to 3 seconds. If the MLX daemon is frozen loading the model, we gracefully fail fast.
-		with urllib.request.urlopen(req, timeout=3) as response:
+		# Give it up to 120 seconds. If the MLX daemon is frozen loading the model, we gracefully fail fast.
+		with urllib.request.urlopen(req, timeout=120) as response:
 			data = json.loads(response.read().decode())
 			return data["choices"][0]["message"]["content"].strip()
 	except Exception as e:
@@ -116,11 +119,16 @@ def synthesize_with_llm(context_data):
 
 
 def main():
+	parser = argparse.ArgumentParser()
+	parser.add_argument("--silent", action="store_true", help="Refresh cache without printing context")
+	args = parser.parse_args()
+
 	if not check_service(QDRANT_URL, "Qdrant Vector DB"):
-		print("CRITICAL: Qdrant is down. Execute launchctl or podman to start it.")
+		if not args.silent:
+			print("CRITICAL: Qdrant is down. Execute launchctl or podman to start it.")
 		sys.exit(1)
 
-	if not check_service("http://localhost:8760/v1/models", "Local MLX LLM Daemon"):
+	if not args.silent and not check_service("http://localhost:8760/v1/models", "Local MLX LLM Daemon"):
 		print("WARN: Background LLM is down. Attempting raw initialization.")
 
 	sidecar_status = "DEPRECATED (FastEmbed In-Band)"
@@ -131,7 +139,41 @@ def main():
 	all_context = social + directives
 	unique_context = list(set(all_context))
 
-	persona_injection = synthesize_with_llm(unique_context)
+	# Hashing for cache
+	context_str = "".join(sorted(unique_context))
+	current_hash = hashlib.sha256(context_str.encode()).hexdigest()
+	cache_dir = Path(os.path.expanduser("~/.agent"))
+	cache_dir.mkdir(parents=True, exist_ok=True)
+	cache_path = cache_dir / "bunker_persona_cache.json"
+
+	persona_injection = None
+	if cache_path.exists():
+		try:
+			with open(cache_path, "r") as f:
+				cache = json.load(f)
+			if cache.get("hash") == current_hash:
+				persona_injection = cache.get("persona")
+		except Exception:
+			# If corrupt or error, we just proceed to re-synthesize
+			pass
+
+	if not persona_injection:
+		if args.silent:
+			persona_injection = synthesize_with_llm(unique_context)
+			try:
+				with open(cache_path, "w") as f:
+					json.dump({"hash": current_hash, "persona": persona_injection}, f)
+			except Exception:
+				pass
+		else:
+			persona_injection = "[Sincronizando Identidad Bünker en segundo plano...]"
+			try:
+				subprocess.Popen([sys.executable, __file__, "--silent"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+			except Exception as e:
+				persona_injection = f"[Error lanzando sincronización: {e}]"
+
+	if args.silent:
+		return
 
 	print("<BUNKER_CONTEXT>")
 	print("=== IDENTITY & PERSONA ===")
@@ -172,7 +214,7 @@ def main():
 
 	print("\n=== CONTEXTUAL DIRECTIVES ===")
 	for rule in unique_context:
-		if "[IMMUNE]" not in rule and rule not in persona_injection:
+		if "[IMMUNE]" not in rule and rule not in str(persona_injection):
 			print(f"- {rule.strip()}")
 
 	print("</BUNKER_CONTEXT>")

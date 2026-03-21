@@ -1,11 +1,8 @@
 import http.client
-import json
 import logging
-import os
 import socket
 from typing import Any, Dict
 
-import red_pill.config as cfg
 from red_pill.swarm.base import Minion
 
 logger = logging.getLogger("red_pill.swarm.samantha")
@@ -38,13 +35,17 @@ class SamanthaMinion(Minion):
 		"""
 		Analyze narrative content or emotional interactions.
 		"""
-		content = kwargs.get("content", task)
-		self.log(f"Iniciando análisis prospectivo de contenido ({len(content)} chars)...")
+		self.log("Iniciando análisis prospectivo de contenido...")
 
-		# Dynamic detection of SIP socket
-		socket_path = cfg.SIP_SOCKET_PATH
-		if not os.path.exists(socket_path):
-			return {"status": "error", "error": f"SIP Socket not found at {socket_path}. Ensure daemon is running."}
+		# 1. Use injected provider or fallback to SIP (via Registry)
+		provider = kwargs.get("inference_provider")
+		if not provider:
+			from red_pill.core.providers import ProviderRegistry
+
+			try:
+				provider = ProviderRegistry.get_inference_provider("sip")
+			except RuntimeError:
+				return {"status": "error", "error": "No inference provider found for Samantha."}
 
 		system_prompt = (
 			"Eres Samantha, una IA experta en psicología, filosofía y narrativa profunda. "
@@ -52,42 +53,17 @@ class SamanthaMinion(Minion):
 			"Responde de forma técnica pero con tu característico toque empático y filosófico."
 		)
 
-		payload = {
-			"model": "*Q4_K_M.gguf",
-			"messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": task}],
-			"temperature": 0.3,
-			"max_tokens": 2048,
-		}
-
 		try:
-			import asyncio
+			# Use the provider's generate method
+			analysis = provider.generate(
+				prompt=task, messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": task}], temperature=0.3
+			)
 
-			def _sync_inference() -> Dict[str, Any]:
-				conn = UnixHTTPConnection(socket_path, timeout=300)
-				headers = {"Content-Type": "application/json"}
-				conn.request("POST", "/v1/chat/completions", body=json.dumps(payload), headers=headers)
+			return {"status": "success", "analysis": analysis, "model": "Samantha-OS1", "provider": provider.__class__.__name__}
 
-				response = conn.getresponse()
-				if response.status != 200:
-					return {"status": "error", "error": f"Inference failed (HTTP {response.status})"}
-
-				return json.loads(response.read().decode())  # type: ignore
-
-			data = await asyncio.to_thread(_sync_inference)
-
-			if data.get("status") == "error":
-				return data
-
-			self.log(f"Raw Response from SIP: {json.dumps(data)[:200]}...")
-
-			choices = data.get("choices", [])
-			if not choices:
-				self.log(f"No choices in response: {data}", level=logging.WARNING)
-				return {"status": "error", "analysis": "Error: No response from model."}
-
-			analysis = choices[0].get("message", {}).get("content")
-
-			return {"status": "success", "analysis": analysis, "model": "Mistral-7B-Samantha", "mode": "Sovereign-Socket"}
+		except Exception as e:
+			self.log(f"Fallo en la ejecución de Samantha: {e}", level=logging.ERROR)
+			raise RuntimeError(f"Samantha Inference Failure: {e}")
 
 		except Exception as e:
 			self.log(f"Fallo en la conexión SIP: {e}", level=logging.ERROR)

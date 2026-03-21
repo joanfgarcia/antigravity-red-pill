@@ -38,7 +38,8 @@ async def run_sovereignty_benchmark():
 	await asyncio.sleep(5)  # Let them roar for a bit
 
 	# Final Snapshot of Telemetry while tasks are active
-	stats = HardwareSentinel.get_stats()
+	sentinel = HardwareSentinel()
+	stats = sentinel.get_stats()
 
 	# Graceful wait for results
 	try:
@@ -49,7 +50,7 @@ async def run_sovereignty_benchmark():
 	total_time = time.time() - start_time
 
 	# Final Snapshot of Telemetry
-	stats = HardwareSentinel.get_stats()
+	stats = sentinel.get_stats()
 
 	report = {
 		"benchmark_version": "5.3.0",

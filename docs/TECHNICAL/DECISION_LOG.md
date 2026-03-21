@@ -189,3 +189,38 @@ Agent Factory paradigms might be explored in the Enterprise layer for corporate 
 
 ### 3. Nuance: Batch vs. Creative Processing
 We recognize that agent chains (often resting on "one-shot" prompting, recently rebranded as `specs.md` or similar to feign novelty) are highly effective for repetitive, variation-free batch processing (e.g., QA, mass refactoring, log analysis) where AI sensors excel at catching details humans miss. However, applying this "assembly line" to entirely creative or evolving processes fundamentally breaks the iterative magic of software creation.
+
+---
+
+## [AD-004] Inference Provider Abstraction (The Enterprise Router)
+**Date**: 2026-03-21  
+**Context**: Phase 2 — Enterprise Mode (BitNet Integration)  
+**Status**: ACCEPTED & IMPLEMENTED  
+
+### 1. The Problem
+As the swarm expands into local ternary models (BitNet), hardcoding inference logic within each Minion creates massive technical debt. It forces Minions to know about local hardware paths and binary locations, violating the "Separation of Concerns" principle.
+
+### 2. The Decision
+Abstract all LLM interactions into a pluggable `BaseInferenceProvider` layer. Orchestrate these providers via a centralized `InferenceRouter` that matches task metadata (`local_only`, `tier`) to the most efficient hardware available.
+
+### 3. The Implementation
+- **Registry**: `ProviderRegistry` now manages local mapping of `openai`, `sip`, and `bitnet` keys.
+- **Providers**: `OpenAIInferenceProvider` (Remote), `SipInferenceProvider` (Unix Socket), and `BitNetInferenceProvider` (Local Binary).
+
+### 4. Rationale
+Enables "Humble Hardware" sovereignty. The system can now instantly pivot from VRAM-heavy models to CPU-optimized ternary models without breaking the conversational flow or requiring manual architectural intervention.
+
+---
+
+## [AD-005] Sovereign Self-Reflexion (The Aleth-Provider)
+**Date**: 2026-03-21  
+**Context**: Post-Phase 2 Brainstorming  
+**Status**: PROPOSED / RESEARCH  
+
+### 1. The Decision
+Research the implementation of a `SelfInferenceProvider`. This provider would allow Minions to delegate complex "Identity-Aware" reasoning back to a secondary instance of the main LLM engine (Aleth), operating as a background worker.
+
+### 2. Implementation Guardrails
+- **Synaptic Hops**: Every request must carry a `hop_trace` metadata field to prevent infinite loops.
+- **Cycle Detection**: The `InferenceRouter` will detect and block redundant entries in the trace.
+- **Bünker Context**: Ensures Aleth's identity remains consistent across recursive calls.

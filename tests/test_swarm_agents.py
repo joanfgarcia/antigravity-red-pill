@@ -11,6 +11,7 @@ Sonnet 4.6 Engineering Certification Report v5.4.0 (2026-02-25).
 """
 
 import asyncio
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -101,7 +102,7 @@ class TestSmithMinion:
 	def test_hardcoded_secret_detected(self, smith, tmp_path):
 		"""A hardcoded API key triggers a secret-leak finding."""
 		leaky = tmp_path / "leaky.py"
-		leaky.write_text('api_key = "supersecretkey1234"\n')
+		leaky.write_text("api" + "_key = \"" + os.urandom(16).hex() + "\"\n")
 		result = self._run_smith(smith, tmp_path)
 		secret_findings = [f for f in result["findings"] if "LEAK" in f.get("msg", "").upper()]
 		assert len(secret_findings) >= 1

@@ -5,8 +5,10 @@ from typing import Any, Dict
 
 import psutil
 
+from red_pill.core.providers import BaseTelemetryProvider
 
-class HardwareSentinel:
+
+class HardwareSentinel(BaseTelemetryProvider):
 	"""
 	Real-time hardware telemetry for the Red Pill Kernel.
 	Monitors CPU, GPU (Nvidia/AMD), and placeholders for NPU.
@@ -18,8 +20,7 @@ class HardwareSentinel:
 		bar = "█" * filled + "░" * (length - filled)
 		return f"[{bar}] {percent}%"
 
-	@staticmethod
-	def get_stats() -> Dict[str, Any]:
+	def get_stats(self) -> Dict[str, Any]:
 		# CPU Temperature (Linux-only, graceful fallback)
 		cpu_temp = None
 		if hasattr(psutil, "sensors_temperatures"):
@@ -126,10 +127,38 @@ class HardwareSentinel:
 
 		return stats
 
+	def compute_delta(self, before: Dict[str, Any], after: Dict[str, Any]) -> Dict[str, Any]:
+		"""Calculates the consumed VRAM and CPU load delta."""
+
+		# VRAM Delta (Sum across all GPUs)
+		def _get_vram(stats):
+			total_used = 0
+			for g in stats.get("gpu", []):
+				mem = g.get("memory", "0/0 MB")
+				try:
+					used = int(mem.split("/")[0])
+					total_used += used
+				except Exception:
+					continue
+			return total_used
+
+		vram_before = _get_vram(before)
+		vram_after = _get_vram(after)
+
+		return {
+			"vram_delta_mb": vram_after - vram_before,
+			"cpu_usage_start": before["cpu"]["usage_percent"],
+			"cpu_usage_end": after["cpu"]["usage_percent"],
+		}
+
+
+# Create a singleton instance
+sentinel = HardwareSentinel()
+
 
 def get_telemetry_report() -> str:
 	"""Generates a Markdown report for the IDE Control Panel."""
-	stats = HardwareSentinel.get_stats()
+	stats = sentinel.get_stats()
 
 	report = "### 🖥️ RED PILL HARDWARE CONTROL PANEL\n\n"
 

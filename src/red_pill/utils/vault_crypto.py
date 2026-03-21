@@ -45,7 +45,7 @@ class VaultCrypto:
 			logger.info("SEC-001: Generating new Sovereign Vault Seed...")
 			seed = os.urandom(32)
 			VaultCrypto._ensure_dir()
-			
+
 			# Atomic write
 			tmp_path = SEED_PATH + ".tmp"
 			fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
