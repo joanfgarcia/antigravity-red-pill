@@ -1,5 +1,32 @@
 # Changelog: Red Pill Protocol
 
+## [6.1.4] - 2026-03-21
+
+### 🏗️ Enterprise Foundation Split — Phases 1–3
+
+> Branch: `feat/enterprise-foundation-split`. Lays the architectural groundwork for three independent repositories: **Red Pill Foundation** (OSS core), **Red Pill Enterprise** (commercial layer), **Red Pill Community** (libre sharing layer). Foundation exposes typed extension points; Enterprise/Community inject into them without touching Foundation code.
+
+- **[ARCH] Phase 1 — Config Decoupling**: Migrated `config.py` to `RedPillConfig(BaseSettings)` (pydantic-settings ≥ 2.0). Cascade loading: Foundation defaults → user `.env` → Enterprise runtime overrides via `set_enterprise_overrides()`. Backward compat maintained via module-level `__getattr__`; all 60+ variables accessible as `cfg.VARIABLE_NAME` without changes. Added `get_config()` singleton. Security validators (`SEC-F04`, `SEC-002`, `SEC-F03`) migrated to `model_validator`. **563 tests green.**
+- **[ARCH] Phase 2 — Dependency Injection in MemoryManager**: Added `register_sleep_hook(cb)` + `fire_sleep_hooks(summary)` — Enterprise uses this to upload nightly synthesis to Cerberus; failures are isolated. `HiveMind` is now injectable via `MemoryManager(hive=...)` — Enterprise can substitute a no-op or custom backend. Fixed `BayesianInferenceEngine.calculate_erosion()` to accept `kappa=None` (evaluated at call time, not class definition). Added `tests/test_di_hooks.py` (10 tests). **574 tests green.**
+- **[ARCH] Phase 3 — CLI EntryPoints Plugin Discovery**: Added `load_plugins(subparsers)` + `_dispatch_plugins(args)` to `cli.py`. Enterprise/Community register new `red-pill` commands via standard Python EntryPoints (`[project.entry-points."red_pill.commands"]`), zero Foundation changes required. Plugin failures are isolated — broken plugins do not crash the CLI. Added `tests/test_cli_plugins.py` (8 tests). **591 tests green.**
+- **[FIX] `mcp_server.py`**: `swarm_send_message` and `swarm_check_mailbox` now pass `shared_secret.encode()` (bytes) to `SwarmMessagingSkill` as required by `MLSBridge`.
+
+## [6.1.3] - 2026-03-21
+
+### 🔐 Swarm MLS B1 — pure-mls End-to-End (Opción B)
+
+- **[ARCH] Swarm Messaging v4.0 (Clean Slate)**: Replaced all legacy encryption modes (`mls_asymmetric` DH, `mls_group` SovereignGroup, `bond` shared-secret) with a single, canonical `pure_mls` mode based on RFC 9420 TreeKEM. Zero backward compat with pre-B1 messages by design.
+- **[NEW] `swarm/mls_bridge.py`**: Thin wrapper between `SwarmMessagingSkill` and `MLSManager`. Centralizes HMAC Admission Token generation/verification, `add_member` → Welcome bootstrapping, and group encrypt/decrypt.
+- **[FEAT] HMAC Admission Guard**: Every `KeyPackage` published to Firebase now ships an `admission_token = HMAC-SHA256(SWARM_SHARED_SECRET, kp_bytes)`. `FirebaseTransport.resolve_alias()` silently drops any entry with an invalid token — unauthorized agents cannot join the group even if they can write to Firebase.
+- **[FEAT] MLS Welcome Distribution**: `FirebaseTransport` now exposes `push_welcome(target_id, bytes)` and `pop_welcome(my_id) → bytes` (destructive read) via `mls_welcomes/{id}` nodes. The Welcome is consumed once and deleted.
+- **[FEAT] `swarm_subscribe` MLS B1**: On registration, the agent publishes `key_package` (base64 `KeyPackage.to_bytes()`) and `admission_token` beside the legacy `public_key`. Registry entries are now versioned `v: "mls_b1"`.
+- **[FEAT] `SwarmMessagingSkill.execute_send()`**: Resolves target's `key_package` via Firebase, verifies admission token, bootstraps the MLS group if none exists (`add_member` → `push_welcome`), then encrypts with `MLSBridge.encrypt()` and sends a `{"mode": "pure_mls", ...}` package.
+- **[FEAT] `SwarmMessagingSkill.poll_and_process()`**: Before reading the inbox, processes any pending `mls_welcomes/` (calls `MLSBridge.process_welcome()` to join the group via RFC 9420 TreeKEM).
+- **[DELETE] `SovereignGroup` bootstrap**: Removed `FirebaseTransport._bootstrap_group_key()` which depended on the custom `SovereignGroup` (now fully replaced by `pure_mls.MLSGroup` via `MLSManager`).
+- **[QA] `test_swarm_mls_integration.py`** (10 new tests): HMAC token validity/tamper/wrong-secret/empty, intruder blocking, missing key_package error, full E2E `add_member → Welcome → join → encrypt → decrypt`, `process_incoming` pure_mls mode, legacy mode drop.
+- **[FIX] `mcp_server.py`**: Both `swarm_send_message` and `swarm_check_mailbox` now pass `shared_secret.encode()` (bytes) to `SwarmMessagingSkill` as required by `MLSBridge`.
+- **[QA] Test Suite**: Updated `test_swarm_workflow.py` and `test_local_healer_integration.py` to align with v4.0 (no `SwarmCrypto`, no `bond` mode). **27/27 Swarm tests green**.
+
 ## [6.1.2] - 2026-03-21
 
 ### 🧠 Persistent Zero-Wait Identity (Lazarus Wake-Up)
