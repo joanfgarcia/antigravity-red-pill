@@ -40,10 +40,10 @@ from llama_cpp.server.app import create_app, Settings
 
 def main():
 	settings = Settings(
-		hf_model_repo_id="TheBloke/samantha-1.2-mistral-7B-GGUF",
-		model="*Q4_K_M.gguf",
+		hf_model_repo_id="bartowski/Qwen2.5-7B-Instruct-GGUF",
+		model="Qwen2.5-7B-Instruct-Q4_K_M.gguf",
 		chat_format="chatml",
-		n_ctx=8192,
+		n_ctx=16384,
 		n_gpu_layers=-1
 	)
 	app = create_app(settings)

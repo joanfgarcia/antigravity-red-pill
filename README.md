@@ -59,6 +59,7 @@ Para aquellos que desean explorar las entrañas del proyecto, aquí tenéis una 
 > 👔 **[Operator Dress Code](docs/GUIDES/OPERATOR_DRESS_CODE.md)**: Survival guide for maximum token efficiency and clean memory chunking. Use punctuation.
 ---
 
+
 ## 🇬🇧 PROJECT OVERVIEW (English)
 
 ### 🧭 Orientation: What is this?
@@ -83,10 +84,12 @@ The Red Pill Protocol is built for **Sovereign Environments**, but it adapts to 
 - **Persistence**: A private vector database (Qdrant) acts as the "Bunker".
 - **Erosion**: Non-reinforced data decays naturally to keep context clean.
 - **Immunity**: Core directives are protected from decay.
-- **Sovereign Swarm (v5.0)**: Integrated Minions (Agent Smith, Oracle, Keymaker) running natively within the Red Pill Kernel for local code auditing, RAG synthesis, and infrastructure health checking.
+- **Sovereign Swarm (v6.1)**: Integrated Minions (Agent Smith, Oracle, Healer) running natively within the Red Pill Kernel for local code auditing, RAG synthesis, and autonomous "Active Immunity" (auto-repair).
+- **Autonomous Flow Engine (v6.1)**: Multi-step task orchestration using a 3-layer discovery mechanism (Global, Community, Local) for complex engineering workflows.
 - **MCP Server (v5.0)**: Exposes the full Red Pill telemetry (CPU, GPU CUDA/ROCm, NPU) and Swarm tools to IDEs like VS Code and Claude Desktop for zero-friction interaction.
-- **Global IDE Interceptor (v6.1)**: The MCP Server now forcibly hijacks prompts from the Antigravity IDE across *any* project folder on your machine, injecting identity and Bünker rules before the LLM processes them.
-- **Inlined Identity**: Identity and directives are ingested natively as vector memories, making the agent immune to context loss.
+- [v] **Autonomous Flow Orchestration (v6.1)**: 3-layer hierarchy (Global, Community, Local) for complex multi-agent execution.
+- [v] **Minion Healer (v6.1)**: "Active Immunity" substrate for autonomous code repair using local SLMs.
+- [v] **Mermaid Technical Diagrams**: Visual orchestration and discovery documentation.
 - **ACE Synaptic Engine (v5.4.0 - v5.6.1)**: Integrated the **Affective Cognitive Engine (ACE)**. Memory decay is governed by the **Valence-Arousal Model**, mimicking human "Flashbulb Memory".
 - **Bayesian Dual-Kernel (v6.1.0a2)**: Technical collections (`skill_memories`, `work_memories`, `directive_memories`) now use a **Beta-distribution Utility Model** (`E[θ] = α/(α+β)`) for reliability-based retrieval, while social/story collections retain the Affective FSRS engine. The routing is fully transparent — neither agents nor tools need to know which kernel is active.
 

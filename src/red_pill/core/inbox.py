@@ -61,35 +61,28 @@ class MinionInbox:
 		except Exception as e:
 			logger.error(f"Failed to drop report in MinionInbox: {e}")
 
-	def get_unread(self, limit: int = 50) -> List[Dict[str, Any]]:
-		"""Fetch unread background reports."""
+	def pop_unread(self, limit: int = 50) -> List[Dict[str, Any]]:
+		"""Retrieve unread reports and mark them as read atomically."""
 		reports = []
 		try:
 			with sqlite3.connect(self.db_path) as conn:
 				conn.row_factory = sqlite3.Row
 				cursor = conn.cursor()
+				# Fetch inside transaction
 				cursor.execute(
 					"SELECT id, event_id, source, status, content, is_read, timestamp FROM inbox WHERE is_read = 0 ORDER BY timestamp DESC LIMIT ?",
 					(limit,),
 				)
-				for row in cursor.fetchall():
-					reports.append(dict(row))
-		except Exception as e:
-			logger.error(f"Failed to fetch unread reports: {e}")
-		return reports
-
-	def mark_as_read(self, report_ids: List[int]) -> None:
-		"""Mark reports as read (they can be purged later)."""
-		if not report_ids:
-			return
-		try:
-			with sqlite3.connect(self.db_path) as conn:
-				cursor = conn.cursor()
-				placeholders = ",".join("?" * len(report_ids))
-				cursor.execute(f"UPDATE inbox SET is_read = 1 WHERE id IN ({placeholders})", report_ids)
+				rows = cursor.fetchall()
+				if rows:
+					report_ids = [row["id"] for row in rows]
+					placeholders = ",".join("?" * len(report_ids))
+					cursor.execute(f"UPDATE inbox SET is_read = 1 WHERE id IN ({placeholders})", report_ids)
+					reports = [dict(row) for row in rows]
 				conn.commit()
 		except Exception as e:
-			logger.error(f"Failed to mark reports as read: {e}")
+			logger.error(f"Failed to pop unread reports: {e}")
+		return reports
 
 	def purge_read(self) -> None:
 		"""Delete all read messages to keep the inbox completely sterile."""

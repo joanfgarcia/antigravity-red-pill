@@ -198,7 +198,7 @@ async def handle_run_security_audit(arguments: Dict[str, Any]):
 			from red_pill.core.inbox import MinionInbox
 			from red_pill.utils.observer import notify_user
 
-			results = await GruOrchestrator().deploy_swarm("audit", [SmithMinion()], path=path)
+			results = await GruOrchestrator().deploy_swarm("audit", [SmithMinion()], trace=False, path=path)
 			res = results[0]
 			if res.status == "success":
 				audit_text = f"AUDIT COMPLETE: {res.result.get('security_score')}/100\nFindings: {len(res.result.get('findings', []))}"
@@ -211,7 +211,8 @@ async def handle_run_security_audit(arguments: Dict[str, Any]):
 
 			def _deliver_report():
 				MinionInbox().drop_report(event_id=event_id, source="SmithMinion", status=res.status, content=audit_text)
-				notify_user("Security Audit", f"Audit [{event_id}] {res.status}", category="system")
+				if res.status != "success":
+					notify_user("Security Audit", f"Audit [{event_id}] {res.status}", category="system")
 
 			await asyncio.to_thread(_deliver_report)
 		except Exception as e:
@@ -247,13 +248,14 @@ async def handle_search_memory_research(arguments: Dict[str, Any]):
 			from red_pill.core.inbox import MinionInbox
 			from red_pill.utils.observer import notify_user
 
-			results = await GruOrchestrator().deploy_swarm(query, [OracleMinion()])
+			results = await GruOrchestrator().deploy_swarm(query, [OracleMinion()], trace=False)
 			res = results[0]
 			content = f"ORACLE SYNTHESIS:\n{res.result.get('synthesis')}" if res.status == "success" else f"Research Failed: {res.error}"
 
 			def _deliver_report():
 				MinionInbox().drop_report(event_id=event_id, source="OracleMinion", status=res.status, content=content)
-				notify_user("Oracle Research", f"Synthesis [{event_id}] Ready", category="system")
+				if res.status != "success":
+					notify_user("Oracle Research", f"Synthesis [{event_id}] Ready", category="system")
 
 			await asyncio.to_thread(_deliver_report)
 		except Exception as e:
@@ -284,7 +286,7 @@ async def handle_check_minion_inbox(arguments: Dict[str, Any]):
 		from red_pill.core.inbox import MinionInbox
 
 		inbox = MinionInbox()
-		reports = inbox.get_unread(limit=50)
+		reports = inbox.pop_unread(limit=50)
 
 		if not reports:
 			return [types.TextContent(type="text", text="[MINION INBOX] No unread reports.")]
@@ -293,9 +295,7 @@ async def handle_check_minion_inbox(arguments: Dict[str, Any]):
 		read_ids = []
 		for r in reports:
 			formatted += f"[{r['source']}] Event: {r['event_id']} | Status: {r['status']}\nContent: {r['content']}\n\n"
-			read_ids.append(r["id"])
 
-		inbox.mark_as_read(read_ids)
 		return [types.TextContent(type="text", text=formatted)]
 	except Exception as e:
 		import mcp.types as types
@@ -346,7 +346,7 @@ async def handle_check_system_health(arguments: Dict[str, Any]):
 			from red_pill.core.inbox import MinionInbox
 			from red_pill.utils.observer import notify_user
 
-			results = await GruOrchestrator().deploy_swarm("health", [KeymakerMinion()])
+			results = await GruOrchestrator().deploy_swarm("health", [KeymakerMinion()], trace=False)
 			res = results[0]
 			if res.status == "success":
 				health = f"SYSTEM HEALTH: {res.result.get('status', 'UNKNOWN').upper()}\n"
@@ -357,7 +357,8 @@ async def handle_check_system_health(arguments: Dict[str, Any]):
 
 			def _deliver_report():
 				MinionInbox().drop_report(event_id=event_id, source="KeymakerMinion", status=res.status, content=health)
-				notify_user("Health Check", f"Status [{event_id}] Ready", category="system")
+				if res.status != "success":
+					notify_user("Health Check", f"Status [{event_id}] Ready", category="system")
 
 			await asyncio.to_thread(_deliver_report)
 		except Exception as e:
@@ -404,7 +405,7 @@ async def handle_compress_prompt(arguments: Dict[str, Any]):
 			from red_pill.core.inbox import MinionInbox
 			from red_pill.utils.observer import notify_user
 
-			results = await GruOrchestrator().deploy_swarm("compress", [CompressorMinion()], text=text)
+			results = await GruOrchestrator().deploy_swarm("compress", [CompressorMinion()], trace=False, text=text)
 			res = results[0]
 			if res.status == "success":
 				stats_text = f"[Original: {res.result.get('original_length')} chars -> Compressed: {res.result.get('compressed_length')} chars]"
@@ -414,7 +415,8 @@ async def handle_compress_prompt(arguments: Dict[str, Any]):
 
 			def _deliver_report():
 				MinionInbox().drop_report(event_id=event_id, source="CompressorMinion", status=res.status, content=content)
-				notify_user("Prompt Compressor", f"Compression [{event_id}] Ready", category="system")
+				if res.status != "success":
+					notify_user("Prompt Compressor", f"Compression [{event_id}] Ready", category="system")
 
 			await asyncio.to_thread(_deliver_report)
 		except Exception as e:

@@ -4,7 +4,7 @@ version = "6.1.0"
 description = "B760-Adaptive Memory Protocol for Sovereign Agents"
 readme = "README.md"
 license = "GPL-3.0-only"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     "qdrant-client>=1.8.0",
     "fastembed>=0.2.0",
@@ -29,6 +29,7 @@ dependencies = [
     "firebase-admin>=6.4.0",
     "pyjwt>=2.12.0",
     "watchfiles>=1.1.1",
+    "pure-mls @ git+https://github.com/joanfgarcia/pure-mls.git@v0.2.4",
 ]
 
 [project.scripts]
@@ -40,6 +41,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/red_pill"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [dependency-groups]
 dev = [

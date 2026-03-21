@@ -153,7 +153,8 @@ class SoulManager:
 				# Replace original with encrypted version for local persistence
 				os.remove(output_path)
 				output_path = encrypted_path
-				print(f"Lean Export Secured (AES-256): {output_path}")
+				mech = "MLS" if output_path.endswith(".mls") else "GPG"
+				print(f"Lean Export Secured ({mech}): {output_path}")
 
 		if self.vault.enabled:
 			file_id = self.vault.upload_kit(output_path)
@@ -162,7 +163,7 @@ class SoulManager:
 			else:
 				print("Cloud Transmission Failed. Local kit preserved.")
 
-		print("Note: Encryption (GPG) is enforced for Cloud Vault as per SEC-F02.")
+		print("Note: Encryption (MLS/GPG) is enforced for Cloud Vault as per SEC-F02.")
 
 	def restore_soul(self, source_dir: str, commit: bool = False):
 		"""

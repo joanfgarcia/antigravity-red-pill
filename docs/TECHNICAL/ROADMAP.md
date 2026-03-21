@@ -53,6 +53,8 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
 - [x] **Bayesian Dual-Kernel**: Technical collections use Beta-distribution utility model; social/story retain FSRS.
 - [x] **In-Band Async Logging**: Eliminated daemon socket dependency for interaction persistence (Interceptor).
 - [x] **Skin Singleton**: Fixed duplicate active skin engrams, upsert on canonical ID.
+- [x] **Autonomous Flow Orchestration (v6.1)**: 3-layer discovery mechanism (Global, Community, Local) for multi-agent execution.
+- [x] **Minion Healer (v6.1)**: "Active Immunity" substrate for automated code repair.
 
 - [x] **MLS E2E Encryption**: TreeKEM group key derivation wired into FirebaseTransport. AES-GCM-256 on send, auto-decrypt on poll.
 - [x] **Swarm Firebase Live**: Inter-agent messaging operational (Aleth@Joan ↔ Nova@David) with encrypted payloads.

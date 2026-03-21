@@ -2,14 +2,22 @@ import logging
 import os
 import shutil
 import subprocess
-from typing import Any, Dict, Optional
+import time
+from typing import Any, Dict, List, Optional
+
+import pure_mls
+from pure_mls.group import MLSGroup
 
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
 import red_pill.config as cfg
+from red_pill.utils.vault_crypto import VaultCrypto
 
 logger = logging.getLogger(__name__)
+
+# SEC-001: Vault State Persistence
+VAULT_STATE_PATH = os.path.join(os.path.expanduser("~/.config/red_pill"), "vault_group.state")
 
 
 class CloudVault:
@@ -104,54 +112,106 @@ class CloudVault:
 			logger.warning("Cloud Vault enabled but no valid credentials found (client_secrets.json or service_account.json). Vault disabled.")
 			self.enabled = False
 
-	def _encrypt_kit(self, file_path: str) -> Optional[str]:
+	def _get_vault_group(self) -> MLSGroup:
 		"""
-		SEC-F02: Encrypt a Soul Kit using GPG symmetric AES-256 encryption.
-		Returns the path to the encrypted file, or None if encryption fails.
-		The caller is responsible for cleaning up the returned temp file.
+		Retrieves or initializes the MLS Group for Vault encryption.
 		"""
-		passphrase = os.getenv("CLOUD_VAULT_GPG_PASSPHRASE", "").strip()
-		if not passphrase:
-			logger.error(
-				"SEC-F02: CLOUD_VAULT_GPG_PASSPHRASE is not set. "
-				"Soul Kit upload aborted — plaintext transmission is not permitted. "
-				"Set CLOUD_VAULT_GPG_PASSPHRASE in your .env to enable Cloud Vault uploads."
-			)
+		kem_key, sig_key = VaultCrypto.get_identity()
+		
+		if os.path.exists(VAULT_STATE_PATH):
+			with open(VAULT_STATE_PATH, "rb") as f:
+				data = f.read()
+			group = MLSGroup.from_bytes(data)
+			# Ensure keys are reassigned if they were not serialized (though to_bytes does include them)
+			group.my_kem_key = kem_key
+			group.my_sig_key = sig_key
+		else:
+			# Initialize a solo group for the vault
+			logger.info("Initializing new Sovereign Vault Group...")
+			group = MLSGroup.create(b"SovereignVaultV1", sig_key, kem_key)
+			with open(VAULT_STATE_PATH, "wb") as f:
+				f.write(group.to_bytes())
+		return group
+
+	def _encrypt_kit_mls(self, file_path: str) -> Optional[str]:
+		"""
+		Encrypts a Soul Kit using pure-mls (RFC 9420).
+		Returns path to .mls file.
+		"""
+		try:
+			group = self._get_vault_group()
+			with open(file_path, "rb") as f:
+				plaintext = f.read()
+			
+			ciphertext = group.encrypt_application_message(plaintext)
+			
+			encrypted_path = file_path + ".mls"
+			with open(encrypted_path, "wb") as f:
+				f.write(ciphertext)
+			
+			logger.info(f"Soul Kit protected by MLS: {os.path.basename(encrypted_path)}")
+			return encrypted_path
+		except Exception as e:
+			logger.error(f"MLS Encryption failed: {e}")
 			return None
 
-		encrypted_path = file_path + ".gpg"
+	def _decrypt_kit(self, encrypted_path: str) -> Optional[str]:
+		"""
+		Dual-mode decryption: supports legacy .gpg and new .mls formats.
+		Returns path to decrypted file.
+		"""
+		if encrypted_path.endswith(".gpg"):
+			return self._decrypt_kit_gpg(encrypted_path)
+		elif encrypted_path.endswith(".mls"):
+			return self._decrypt_kit_mls(encrypted_path)
+		else:
+			logger.error(f"Unknown encryption format for {encrypted_path}")
+			return None
+
+	def _decrypt_kit_gpg(self, encrypted_path: str) -> Optional[str]:
+		"""Legacy GPG Decryption."""
+		passphrase = os.getenv("CLOUD_VAULT_GPG_PASSPHRASE", "").strip()
+		if not passphrase:
+			logger.error("Passphrase required for GPG decryption.")
+			return None
+
+		output_path = encrypted_path.replace(".gpg", "")
 		try:
 			subprocess.run(
-				[
-					"gpg",
-					"--batch",
-					"--yes",
-					"--symmetric",
-					"--cipher-algo",
-					"AES256",
-					"--s2k-digest-algo",
-					"SHA512",
-					"--s2k-count",
-					"65011712",
-					"--passphrase-fd",
-					"0",
-					"--output",
-					encrypted_path,
-					file_path,
-				],
+				["gpg", "--batch", "--yes", "--passphrase-fd", "0", "--output", output_path, "--decrypt", encrypted_path],
 				input=passphrase,
 				capture_output=True,
 				text=True,
 				check=True,
 			)
-			logger.info(f"Soul Kit encrypted (AES-256): {os.path.basename(encrypted_path)}")
-			return encrypted_path
-		except FileNotFoundError:
-			logger.error("SEC-F02: gpg binary not found. Install gnupg to enable Cloud Vault uploads.")
+			return output_path
+		except Exception as e:
+			logger.error(f"GPG Decryption failed: {e}")
 			return None
-		except subprocess.CalledProcessError as e:
-			logger.error(f"SEC-F02: GPG encryption failed: {e.stderr}")
+
+	def _decrypt_kit_mls(self, encrypted_path: str) -> Optional[str]:
+		"""MLS Decryption."""
+		try:
+			group = self._get_vault_group()
+			with open(encrypted_path, "rb") as f:
+				ciphertext = f.read()
+			
+			plaintext = group.decrypt_application_message(ciphertext)
+			
+			output_path = encrypted_path.replace(".mls", "")
+			with open(output_path, "wb") as f:
+				f.write(plaintext)
+			
+			return output_path
+		except Exception as e:
+			logger.error(f"MLS Decryption failed: {e}")
 			return None
+
+	def _encrypt_kit(self, file_path: str) -> Optional[str]:
+		"""
+		SEC-F02: Encrypts a Soul Kit. Defaults to MLS in v6.1.
+		"""
+		return self._encrypt_kit_mls(file_path)
 
 	def get_vault_usage(self) -> float:
 		"""
@@ -185,7 +245,7 @@ class CloudVault:
 		if not self.enabled or not self.service:
 			return None
 
-		was_already_encrypted = file_path.endswith(".gpg")
+		was_already_encrypted = file_path.endswith(".gpg") or file_path.endswith(".mls")
 		encrypted_path: Optional[str] = None
 
 		if was_already_encrypted:

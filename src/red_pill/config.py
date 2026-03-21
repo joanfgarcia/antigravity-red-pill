@@ -102,6 +102,9 @@ FASTEMBED_CACHE_PATH = os.getenv("FASTEMBED_CACHE_PATH", _default_cache)
 os.makedirs(FASTEMBED_CACHE_PATH, exist_ok=True)
 os.environ["FASTEMBED_CACHE_PATH"] = FASTEMBED_CACHE_PATH
 
+# FLOW REGISTRY (v6.1.0)
+FLOW_REGISTRY_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "flow_registry.yaml")
+
 # Execution provider: 'cpu', 'cuda', 'coreml', etc. Defaults to None (auto-detect).
 EXECUTION_PROVIDER = os.getenv("EXECUTION_PROVIDER", None)
 

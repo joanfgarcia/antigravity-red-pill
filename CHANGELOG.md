@@ -1,5 +1,15 @@
 # Changelog: Red Pill Protocol
 
+## [6.1.1] - 2026-03-21
+
+### 🚁 Swarm Orchestration & Autonomous Recovery
+- **[FEAT] Autonomous Flow Engine**: Implemented a 3-layer hierarchical flow discovery (Global, Community, Local). Flows can now be defined project-side in `.agent/flows.yaml`.
+- **[FEAT] Minion Healer**: Introduced "Active Immunity" via `HealerMinion`. Automatically diagnoses Mypy/Lint errors and applies surgical fixes using local SLMs (Qwen-Coder).
+- **[FEAT] Standard Flow Recipes**: Added `surgical-fix` (Analysis -> Heal -> Verify) and upgraded `pre-pr` to support multi-agent auditing.
+- **[ARCH] Orchestrator Fluidity**: Refactored `GruOrchestrator` to accept string IDs for minions, resolving them dynamically via `MinionFactory`.
+- **[DOCS] Mermaid Integration**: Added reactive Mermaid diagrams to `SWARM_ARCHITECTURE.md` visualizing orchestration and P2P handovers.
+- **[FIX] Pydantic Validation**: Hardened `Minion` base class and child implementations for strict field validation.
+
 ## [6.1.0] - 2026-03-20
 
 > ✅ **CERTIFICACIÓN COMPLETADA**: Auditoría de Grado de Ingeniería superada con éxito (Beta-Ready / Sovereign Production-Ready). Aprobada por la suite de 770+ Tests y validación dinámica Claude 4.6.
