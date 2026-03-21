@@ -3,11 +3,11 @@
 ## [6.1.2] - 2026-03-21
 
 ### 🧠 Persistent Zero-Wait Identity (Lazarus Wake-Up)
-- **[FEAT] Zero-Wait Identity Protocol**: Eliminated the 60-second synthesis delay during wake-up and model switches. The system now starts instantly with raw data and triggers background synthesis.
-- **[FEAT] Detached Synthesis Minion**: Implemented async background synthesis using detached subprocesses, ensuring non-blocking UX even on cache misses.
-- **[ARCH] Persistent Persona Cache**: Migrated the identity cache to `~/.agent/bunker_persona_cache.json` for reboot resilience and cross-session stability.
-- **[ARCH] Bünker Telemetry Daemon**: Deployed `redpill-bunker.service` for persistent background telemetry and queue management.
-- **[FIX] HardwareSentinel Bug**: Resolved a critical "missing self" argument in `get_stats()` that caused telemetry crashes in `mcp_server.py` and `bunker_daemon.py`.
+- **[FEAT] Zero-Wait Identity Protocol**: Eliminated the 60-second synthesis delay during wake-up and model switches.
+- **[FEAT] Bünker Telemetry Daemon**: Deployed `redpill-bunker.service` for persistent background telemetry and queue management.
+- **[FIX] HardwareSentinel Protocol**: Resolved critical "missing self" argument in `get_stats()` affecting `Keymaker`, `Smith`, `mcp_server`, and `bunker_daemon`.
+- **[DOCS] Installer Sync**: Updated `install_neo.sh` and `install_neo.ps1` to include daemon deployment and latest identity resync rules.
+- **[DOCS] Update Guide**: Synchronized `AGENT_UPDATE_GUIDE.md` with modern telemetry and lifecycle protocols.
 
 ## [6.1.1] - 2026-03-21
 

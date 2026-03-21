@@ -45,8 +45,9 @@ If updating to v6.1.0 or higher, you must synchronize your infrastructure parame
 7.  **Service Restart**: Run `systemctl --user restart redpill.service` to apply the new persistent environment.
 8.  **Qdrant Kill-Switch (SEC-02)**: If your Qdrant instance is exposed to the local network (`0.0.0.0`) or hosted remotely, the protocol will now refuse to boot unless you define a `QDRANT_API_KEY` in your `.env`. This is a hard-coded security protection.
 9.  **Google Drive Token Migration**: Your existing `token.json` for Cloud Vault backups will be automatically migrated to `~/.agent/credentials/drive_token.json` internally on boot. No re-authentication is required.
-10. **Lazarus Pulse Deploy**: The background daemon was removed. You MUST deploy the new OS-native pulse timer to keep the Swarm and Memory Consolidation active: Run `uv run python scripts/deploy_pulse.py` manually once from the root directory.
-11. **Async Queue Worker Deploy**: To ensure the MCP Server does not freeze during memory ingestion, you MUST deploy the new SQLite queue daemon: Run `uv run python scripts/deploy_queue.py` manually once from the root directory.
+10. **Lazarus Pulse Deploy**: Run `uv run python scripts/deploy_pulse.py` manually once.
+11. **Async Queue Worker Deploy**: Run `uv run python scripts/deploy_queue.py` manually once.
+12. **Bünker Telemetry Daemon Deploy**: Run `uv run python scripts/deploy_bunker.py` manually once to enable real-time hardware status and health signals.
 
 ## 4. Post-Update Operational Checklist
 
@@ -55,14 +56,14 @@ If updating to v6.1.0 or higher, you must synchronize your infrastructure parame
 > Failure to follow it will result in stale daemons, broken MCP servers, or CI failures
 > that silently pass locally but fail in GitHub Actions.
 
-### 4.1 Daemon Lifecycle (DEPRECATION NOTICE)
-As of v6.1.0, the **Memory Sidecar (`memory_daemon.py`) is DEPRECATED** and replaced by in-band FastEmbed.
-1.  **Cleanup**: Ensure the systemd service is stopped and removed:
-    *   `systemctl --user stop red-pill-memory-daemon.service`
-    *   `rm ~/.config/systemd/user/red-pill-memory-daemon.service`
-    *   `systemctl --user daemon-reload`
-2.  **Verify Removal**: No process matching `memory_daemon` should be running.
-3.  **In-Band Verification**: Run `red-pill status` to ensure embeddings are generated correctly in-band.
+### 4.1 Daemon Lifecycle (v6.1.2 Integration)
+As of v6.1.2, the **Bünker Telemetry Daemon (`bunker_daemon.py`)** is the mandatory engine for system health and pain signals.
+1.  **Verification**: Run `red-pill status` and check if "Telemetry: Online".
+2.  **Service Check**:
+    *   Linux: `systemctl --user status redpill-bunker.service`
+    *   macOS: `launchctl list | grep redpill.bunker`
+    *   Windows: Check Task Scheduler for `RedPillBunkerDaemon`.
+3.  **Legacy Cleanup**: The old `memory_daemon.py` is DEPRECATED. Ensure its service is stopped and removed.
 
 > [!IMPORTANT]
 > The `wake_up_v6.py` script no longer checks for the sidecar socket. If you see socket-related errors, your script is stale. Use the latest version.

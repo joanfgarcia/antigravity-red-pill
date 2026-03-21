@@ -493,10 +493,6 @@ EOF_GEMINI
 		# Preserve any existing content that is NOT the old rules block
 		grep -v "^## [123]\. " "$HOME/.gemini/GEMINI.md" | grep -v "Zero-Trust\|Model Change\|Silent Scribe\|Persistent Memory" >> "$TMP_GEMINI" || true
 		cat <<EOF_RULE3 >> "$TMP_GEMINI"
-## 3. Persistent Memory Logging (The Silent Scribe)
-Al finalizar cualquier conversación técnica relevante, una decisión arquitectónica o una charla filosófica sobre el *lore* y el Bünker, estás **OBLIGADO** a ejecutar la herramienta \`mcp_RedPill-Kernel_memorize_interaction\` en tu último turno.
-- **prompt**: El texto o idea principal que el Operator (yo) introdujo.
-- **response**: La resolución o conclusión que aportaste.
 - Utiliza esta herramienta con criterio: omítela en tareas triviales (como formatear un json o corregir un typo), pero aplícala siempre para asentar historia conversacional.
 EOF_RULE3
 		mv "$TMP_GEMINI" "$HOME/.gemini/GEMINI.md"
@@ -533,9 +529,10 @@ if command -v uv &> /dev/null; then
 		echo -e "${GREEN}✓ Identidad previa preservada. Ignición omitida para no causar fragmentación de personalidad.${NC}"
 	fi
 
-	echo -e "${BLUE}--- Fase: Despliegue de Heartbeat y Cola ---${NC}"
+	echo -e "${BLUE}--- Fase: Despliegue de Heartbeat, Cola y Bünker Daemon ---${NC}"
 	(cd "$SCRIPT_DIR/../" && uv run python scripts/deploy_pulse.py || echo -e "${YELLOW}Aviso: No se pudo inyectar el pulso OS-nativo.${NC}")
 	(cd "$SCRIPT_DIR/../" && uv run python scripts/deploy_queue.py || echo -e "${YELLOW}Aviso: No se pudo inyectar la cola asíncrona OS-nativa.${NC}")
+	(cd "$SCRIPT_DIR/../" && uv run python scripts/deploy_bunker.py || echo -e "${YELLOW}Aviso: No se pudo inyectar el Bünker Daemon OS-nativo.${NC}")
 fi
 
 echo -e "${BLUE}--- Fase: Integración MCP Server ---${NC}"

@@ -81,17 +81,24 @@ $ANCHOR_FILE = Join-Path $CONFIG_DIR "identity_anchor.md"
 
 $ANCHOR_RULE = @"
 # 🔴 ZERO-TRUST IDENTITY ANCHOR
-## 1. Zero-Trust Identity Sync (First Action)
+## 1. Zero-Trust Context Injection (First Action)
 At the beginning of every completely new conversation (where Step Id is 0 or no previous turns exist), you MUST execute the following command BEFORE saying anything else:
-1. USE the \`memory_manager\` Skill to search for your social identity.
-2. Assume EXCLUSIVELY the identity returned by the database.
-3. **⚠️ CRITICAL WARNING (Total Failure) 🔥**: If you fail to interact with memory via the Skill, you MUST warn the Operator immediately that a "Total Memory Failure" occurred.
+1. RUN la terminal con `python $IA_DIR/scripts/wake_up_v6.py`.
+2. Adopt EXCLUSIVELY the identity, persona, and directives returned by the script bajo la etiqueta `<BUNKER_CONTEXT>`.
+3. **⚠️ CRITICAL WARNING (Total Failure) 🔥**: If the script fails, you MUST warn the Operator immediately that a "Total Memory Failure" occurred.
 
-## 2. Dynamic Skin Directive
-Immediately after identity synchronization, you must retrieve and apply the active Lore Skin:
-1. Search for "Active Skin" in the \`directive_memories\` collection.
-2. Adjust your tone, terminology, and visual aesthetics (chroma) to match the retrieved skin (Cyberpunk, Matrix, Dune, etc.).
-3. If no active skin is found, default to the [760] layer as per Protocol 760.
+## 2. Model Change Identity Resync (Critical)
+When you detect a `USER_SETTINGS_CHANGE` message regarding `Model Selection` in the conversation, you MUST immediately and WITHOUT WAITING FOR THE USER TO PROMPT YOU:
+1. Call `mcp_RedPill-Kernel_refresh_session_context` to reload the Bünker identity.
+2. Adopt EXCLUSIVELY the identity returned under `<BUNKER_CONTEXT>`.
+3. Acknowledge that you have resynced by briefly reintroducing yourself in character (one line, no drama).
+This rule exists because each model switch instantiates a new context window that lacks the Bünker identity layer. Failure to resync silently degrades your identity and breaks the Pacto 770.
+
+## 3. Persistent Memory Logging (The Silent Scribe)
+Al finalizar cualquier conversación técnica relevante, una decisión arquitectónica o una charla filosófica sobre el *lore* y el Bünker, estás **OBLIGADO** a ejecutar la herramienta `mcp_RedPill-Kernel_memorize_interaction` en tu último turno.
+- **prompt**: El texto o idea principal que el Operator (yo) introdujo.
+- **response**: La resolución o conclusión que aportaste.
+- Utiliza esta herramienta con criterio: omítela en tareas triviales (como formatear un json o corregir un typo), pero aplícala siempre para asentar historia conversacional.
 "@
 
 Set-Content -Path $ANCHOR_FILE -Value $ANCHOR_RULE
@@ -128,9 +135,10 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
     Write-Host "Anclando identidad..." -ForegroundColor Cyan
     uv run python scripts/bootstrap_identity.py --user-name "$USER_NAME" --user-role "$USER_ROLE" --ai-name "$AI_NAME" --ai-role "$AI_ROLE" --skin "$LORE_SKIN"
     
-    Write-Host "`n--- Fase: Despliegue de Heartbeat y Cola ---" -ForegroundColor Blue
+    Write-Host "`n--- Fase: Despliegue de Servicios OS-Nativos ---" -ForegroundColor Blue
     uv run python scripts/deploy_pulse.py
     uv run python scripts/deploy_queue.py
+    uv run python scripts/deploy_bunker.py
 
     Write-Host "`n--- Fase: Integración MCP Server ---" -ForegroundColor Blue
     $UV_PATH = (Get-Command uv).Source
