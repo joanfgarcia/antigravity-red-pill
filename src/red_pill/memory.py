@@ -64,8 +64,10 @@ class BayesianInferenceEngine:
 		return round(utility * 10.0, 2)
 
 	@staticmethod
-	def calculate_erosion(beta: float, time_passed_days: float, kappa: float = cfg.BAYESIAN_STABILITY_KAPPA) -> float:
+	def calculate_erosion(beta: float, time_passed_days: float, kappa: Optional[float] = None) -> float:
 		"""Accumulates uncertainty (beta) based on elapsed time."""
+		if kappa is None:
+			kappa = cfg.BAYESIAN_STABILITY_KAPPA  # fallback for standalone use
 		# MEM-001: Uncertainty grows linearly with time but is capped to prevent infinite compounding
 		raw_beta = beta + (time_passed_days * kappa)
 		max_beta = getattr(cfg, "BAYESIAN_MAX_BETA", 20.0)
@@ -75,7 +77,12 @@ class BayesianInferenceEngine:
 class MemoryManager:
 	"""B760-Adaptive memory engine."""
 
-	def __init__(self, url: str = cfg.QDRANT_URL, config=None):
+	def __init__(
+		self,
+		url: str = cfg.QDRANT_URL,
+		config=None,
+		hive=None,
+	):
 		self.cfg = config if config else cfg
 
 		# Facade Pattern: Delegate to core engines
@@ -89,7 +96,37 @@ class MemoryManager:
 		self.metabolism = MetabolismKernel(storage_engine=self.storage, config=self.cfg)
 
 		self._reinforce_lock = threading.Lock()
-		self.hive = HiveMind()
+
+		# HiveMind: injectable for Enterprise/Community (e.g. no-op, custom backend)
+		self.hive = hive if hive is not None else HiveMind()
+
+		# ---------------------------------------------------------------
+		# Enterprise Extension Point: Protocolo Sueño hooks
+		# Enterprise/Community modules register callbacks here at boot.
+		# Callbacks signature: (summary: dict) -> None
+		# The Foundation fires them after a sleep cycle completes.
+		# ---------------------------------------------------------------
+		self._sleep_hooks: List[Any] = []
+
+	def register_sleep_hook(self, callback) -> None:
+		"""
+		Register a callback to be fired after each sleep/consolidation cycle.
+		Enterprise uses this to upload the nightly synthesis to Cerberus.
+		Community uses this to share anonymized learning summaries.
+
+		callback(summary: dict) -> None
+		  summary keys: 'processed_count', 'collection', 'timestamp'
+		"""
+		self._sleep_hooks.append(callback)
+		logger.debug(f"[DI] Registered sleep hook: {callback.__name__ if hasattr(callback, '__name__') else repr(callback)}")
+
+	def fire_sleep_hooks(self, summary: dict) -> None:
+		"""Called by perform_sleep_cycle (or Enterprise wrapper) after consolidation."""
+		for hook in self._sleep_hooks:
+			try:
+				hook(summary)
+			except Exception as e:
+				logger.warning(f"[DI] Sleep hook {hook!r} raised an exception: {e}")
 
 	def _parse_payload(self, payload: Dict[str, Any], strict: bool = True) -> Dict[str, Any]:
 		"""

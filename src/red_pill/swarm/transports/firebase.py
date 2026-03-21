@@ -1,5 +1,6 @@
 import base64
 import logging
+import os
 from typing import Any, Dict, List, Optional
 
 import firebase_admin
@@ -37,8 +38,6 @@ class FirebaseTransport(SwarmTransport):
 		try:
 			ref = db.reference(f"registry/{agent_id}", app=self.app)
 			ref.set(metadata)
-			# Rebuild group key after identity broadcast (new member may have joined)
-			self._bootstrap_group_key()  # type: ignore
 			return True
 		except Exception as e:
 			logger.error(f"[FirebaseTransport] Broadcast failed: {e}")
@@ -101,43 +100,71 @@ class FirebaseTransport(SwarmTransport):
 			logger.error(f"[FirebaseTransport] Lookup failed: {e}")
 			return None
 
-	def resolve_alias(self, partial_alias: str) -> Optional[tuple[str, str, str]]:
+	def resolve_alias(self, partial_alias: str) -> Optional[tuple[str, str, str, str]]:
+		"""
+		Resolves a partial alias to (agent_id, full_alias, public_key_b64, key_package_b64).
+		Drops entries with invalid admission_token (HMAC guard).
+		"""
 		try:
 			ref = db.reference("registry", app=self.app)
 			nodes = ref.get()
 			if not nodes:
 				return None
 
+			shared_secret = os.getenv("SWARM_SHARED_SECRET", "").encode()
 			partial_lower = partial_alias.lower()
+
 			for node_id, data in nodes.items():
 				full_alias = data.get("alias", "")
-				if full_alias and (full_alias.lower() == partial_lower or full_alias.lower().startswith(f"{partial_lower}@")):
-					key = data.get("public_key", "")
-					return (node_id, full_alias, str(key) if key else "")
+				if not full_alias:
+					continue
+				if not (full_alias.lower() == partial_lower or full_alias.lower().startswith(f"{partial_lower}@")):
+					continue
+
+				# MLS B1: Verify admission token if present
+				kp_b64 = data.get("key_package", "")
+				admission_token = data.get("admission_token", "")
+				if kp_b64 and admission_token and shared_secret:
+					import hashlib
+					import hmac as _hmac
+
+					kp_bytes = base64.b64decode(kp_b64)
+					expected = base64.b64encode(
+						_hmac.new(shared_secret, kp_bytes, hashlib.sha256).digest()
+					).decode()
+					if not _hmac.compare_digest(expected, admission_token):
+						logger.warning(f"[FirebaseTransport] Invalid admission_token for '{full_alias}'. Dropping.")
+						continue
+
+				pk = data.get("public_key", "")
+				return (node_id, full_alias, str(pk) if pk else "", kp_b64)
 			return None
 		except Exception as e:
 			logger.error(f"[FirebaseTransport] Resolve alias failed: {e}")
 			return None
 
-	def _bootstrap_group_key(self):
-		"""
-		MLS V3.0 Bootstrap: Rebuilds the TreeKEM group key by harvesting the registry.
-		"""
+	def push_welcome(self, target_id: str, welcome_bytes: bytes) -> bool:
+		"""Deposits an MLS Welcome message into the target's welcome slot."""
 		try:
-			from red_pill.swarm.mls import SovereignGroup
-
-			ref = db.reference("registry", app=self.app)
-			nodes = ref.get()
-			if not nodes:
-				return
-
-			group = SovereignGroup(self.community_alias)
-			for node_id, data in nodes.items():
-				pk_b64 = data.get("public_key")
-				if pk_b64:
-					group.add_member(node_id, base64.b64decode(pk_b64))
-
-			self.mls_group = group
-			logger.info(f"[FirebaseTransport] Group key bootstrapped for {self.community_alias}")
+			ref = db.reference(f"mls_welcomes/{target_id}", app=self.app)
+			ref.set(base64.b64encode(welcome_bytes).decode("utf-8"))
+			logger.info(f"[FirebaseTransport] Welcome pushed to '{target_id}'.")
+			return True
 		except Exception as e:
-			logger.error(f"[FirebaseTransport] Group key bootstrap failed: {e}")
+			logger.error(f"[FirebaseTransport] push_welcome failed: {e}")
+			return False
+
+	def pop_welcome(self, my_id: str) -> Optional[bytes]:
+		"""Reads and deletes the MLS Welcome for this agent (destructive read)."""
+		try:
+			ref = db.reference(f"mls_welcomes/{my_id}", app=self.app)
+			value = ref.get()
+			if not value:
+				return None
+			ref.delete()
+			return base64.b64decode(value)
+		except Exception as e:
+			logger.error(f"[FirebaseTransport] pop_welcome failed: {e}")
+			return None
+
+	# _bootstrap_group_key() removed — SovereignGroup replaced by pure-mls MLSBridge.
