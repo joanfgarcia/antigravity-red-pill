@@ -6,7 +6,7 @@ import requests
 
 import red_pill.config as cfg
 from red_pill.swarm.base import Minion
-from red_pill.telemetry import HardwareSentinel, sentinel
+from red_pill.telemetry import HardwareSentinel, sentinel  # noqa: F401
 
 
 class KeymakerMinion(Minion):

@@ -45,7 +45,7 @@ def validate():
 		try:
 			parsed = json.loads(json_response)
 			logger.info(f"✅ JSON Parse Success: {parsed}")
-		except:
+		except Exception:
 			logger.warning("⚠️  JSON Grammar check failed or output was malformed.")
 
 	logger.info("✨ Validation Complete.")

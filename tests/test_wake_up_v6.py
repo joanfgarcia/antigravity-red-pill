@@ -65,13 +65,14 @@ def test_synthesize_with_llm():
 
 
 def test_main_qdrant_down(capsys):
-	with patch("wake_up_v6.check_service") as mock_check:
-		# Fail if checking Qdrant
-		mock_check.side_effect = lambda url, name: False if "Qdrant" in name else True
+	with patch("sys.argv", ["wake_up_v6.py"]):
+		with patch("wake_up_v6.check_service") as mock_check:
+			# Fail if checking Qdrant
+			mock_check.side_effect = lambda url, name: False if "Qdrant" in name else True
 
-		with pytest.raises(SystemExit) as e:
-			wake_up_v6.main()
+			with pytest.raises(SystemExit) as e:
+				wake_up_v6.main()
 
-		assert e.value.code == 1
-		captured = capsys.readouterr()
-		assert "CRITICAL: Qdrant is down" in captured.out
+			assert e.value.code == 1
+			captured = capsys.readouterr()
+			assert "CRITICAL: Qdrant is down" in captured.out

@@ -5,8 +5,8 @@ globs: *
 
 <bunker_led_panel>
 You are actively receiving this telemetry via IDE rule injection (`00_bunker_telemetry.md`).
-- **GPU**: online | 39.0 | VRAM: 13/8151 MB
+- **GPU**: online | 35.0 | VRAM: 13/8151 MB
 - **Minion Inbox**: 0 unread background reports
-- **Active System Signals (PAIN)**: 1 active signals
+- **Active System Signals (PAIN)**: 2 active signals
 - **Swarm Messages**: 0 pending messages
 </bunker_led_panel>

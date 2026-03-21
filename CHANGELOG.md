@@ -6,8 +6,11 @@
 - **[FEAT] Zero-Wait Identity Protocol**: Eliminated the 60-second synthesis delay during wake-up and model switches.
 - **[FEAT] Bünker Telemetry Daemon**: Deployed `redpill-bunker.service` for persistent background telemetry and queue management.
 - **[FIX] HardwareSentinel Protocol**: Resolved critical "missing self" argument in `get_stats()` affecting `Keymaker`, `Smith`, `mcp_server`, and `bunker_daemon`.
+- **[FIX] MinionInbox API**: Added `get_unread()` (non-destructive peek) and `mark_as_read()` methods alongside existing `pop_unread()`.
+- **[FIX] Test Suite**: Fixed mock patch targets in `test_sleep_coverage` and `test_wake_up_v6`; restored `HardwareSentinel` import in `smith.py`/`keymaker.py` for mock compatibility.
 - **[DOCS] Installer Sync**: Updated `install_neo.sh` and `install_neo.ps1` to include daemon deployment and latest identity resync rules.
 - **[DOCS] Update Guide**: Synchronized `AGENT_UPDATE_GUIDE.md` with modern telemetry and lifecycle protocols.
+- **[ARCH] Enterprise Foundation Plan**: Documented Foundation/Enterprise/Community three-repository architecture in brain artifacts.
 
 ## [6.1.1] - 2026-03-21
 

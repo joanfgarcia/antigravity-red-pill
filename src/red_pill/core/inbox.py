@@ -61,6 +61,34 @@ class MinionInbox:
 		except Exception as e:
 			logger.error(f"Failed to drop report in MinionInbox: {e}")
 
+	def get_unread(self, limit: int = 50) -> List[Dict[str, Any]]:
+		"""Retrieve unread reports WITHOUT marking them as read (non-destructive peek)."""
+		reports = []
+		try:
+			with sqlite3.connect(self.db_path) as conn:
+				conn.row_factory = sqlite3.Row
+				cursor = conn.cursor()
+				cursor.execute(
+					"SELECT id, event_id, source, status, content, is_read, timestamp FROM inbox WHERE is_read = 0 ORDER BY timestamp DESC LIMIT ?",
+					(limit,),
+				)
+				rows = cursor.fetchall()
+				reports = [dict(row) for row in rows]
+		except Exception as e:
+			logger.error(f"Failed to get unread reports: {e}")
+		return reports
+
+	def mark_as_read(self, report_ids: List[int]) -> None:
+		"""Mark specific reports as read by ID."""
+		try:
+			with sqlite3.connect(self.db_path) as conn:
+				cursor = conn.cursor()
+				placeholders = ",".join("?" * len(report_ids))
+				cursor.execute(f"UPDATE inbox SET is_read = 1 WHERE id IN ({placeholders})", report_ids)
+				conn.commit()
+		except Exception as e:
+			logger.error(f"Failed to mark reports as read: {e}")
+
 	def pop_unread(self, limit: int = 50) -> List[Dict[str, Any]]:
 		"""Retrieve unread reports and mark them as read atomically."""
 		reports = []

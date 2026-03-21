@@ -7,7 +7,7 @@ import time
 from typing import Any, Dict
 
 from red_pill.swarm.base import Minion
-from red_pill.telemetry import HardwareSentinel, sentinel
+from red_pill.telemetry import HardwareSentinel, sentinel  # noqa: F401
 
 
 class SmithMinion(Minion):

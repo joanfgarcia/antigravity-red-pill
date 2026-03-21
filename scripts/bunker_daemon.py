@@ -65,7 +65,6 @@ class BunkerDaemon:
 			# Write Markdown LED panel for IDE passive injection
 			rule_dir = Path.home() / ".gemini" / "antigravity" / "rules"
 			rule_dir.mkdir(parents=True, exist_ok=True)
-			rule_file = rule_dir / "00_bunker_telemetry.md"
 
 			nv = self.state.get("nvidia", {})
 			minions = self.state.get("minions", {}).get("unread", 0)

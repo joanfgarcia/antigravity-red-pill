@@ -26,7 +26,7 @@ def run_benchmarks():
 		try:
 			res = json.loads(output)
 			print(f"✅ {task['name']}: {res}")
-		except:
+		except Exception:
 			print(f"❌ {task['name']}: Output was not valid JSON.")
 
 

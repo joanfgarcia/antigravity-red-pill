@@ -26,7 +26,7 @@ def test_distill_engram_markdown_cleaning(mock_open):
 
 def test_distill_engram_error_path():
 	"""Test fallback on HTTP error or timeout."""
-	with patch("urllib.request.urlopen", side_effect=Exception("Timeout")):
+	with patch("urllib.request.OpenerDirector.open", side_effect=Exception("Timeout")):
 		result = distill_engram("raw content that is quite long " * 10)
 		assert "raw content" in result["summary"]
 		assert result["emotion"] == "neutral"
