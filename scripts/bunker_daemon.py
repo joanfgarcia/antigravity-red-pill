@@ -61,21 +61,21 @@ class BunkerDaemon:
 			with open(tmp_file, "w") as f:
 				json.dump(self.state, f)
 			tmp_file.replace(BUNKER_STATE_FILE)
-			
+
 			# Write Markdown LED panel for IDE passive injection
 			rule_dir = Path.home() / ".gemini" / "antigravity" / "rules"
 			rule_dir.mkdir(parents=True, exist_ok=True)
 			rule_file = rule_dir / "00_bunker_telemetry.md"
 			rule_tmp = rule_file.with_suffix(".tmp")
-			
+
 			nv = self.state.get("nvidia", {})
 			minions = self.state.get("minions", {}).get("unread", 0)
 			signals = self.state.get("signals", {}).get("active", 0)
 			swarm_msgs = self.state.get("swarm", {}).get("messages", 0)
-			
+
 			md_content = f"""<bunker_led_panel>
 You are actively receiving this telemetry via IDE rule injection (`00_bunker_telemetry.md`).
-- **GPU**: {nv.get('status', 'offline')} | {nv.get('temp', 'N/A')} | VRAM: {nv.get('vram', 'N/A')}
+- **GPU**: {nv.get("status", "offline")} | {nv.get("temp", "N/A")} | VRAM: {nv.get("vram", "N/A")}
 - **Minion Inbox**: {minions} unread background reports
 - **Active System Signals (PAIN)**: {signals} active signals
 - **Swarm Messages**: {swarm_msgs} pending messages
