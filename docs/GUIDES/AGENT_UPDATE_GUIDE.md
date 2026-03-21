@@ -114,9 +114,12 @@ The CI enforces a `fail_under = 96` coverage threshold. New modules that require
 
 ### 4.6 GEMINI.md & Global Rules Sync
 The `~/.gemini/GEMINI.md` file defines the agent's boot protocol. After major protocol changes:
-1.  **Review**: Ensure `GEMINI.md` reflects the current boot sequence (Zero-Trust, Interceptor, Anti-Amnesia).
+1.  **Review**: Ensure `GEMINI.md` contains all 3 current rules:
+    - **Rule 1 — Zero-Trust Context Injection**: Runs `wake_up_v6.py` at Step 0.
+    - **Rule 2 — Model Change Identity Resync**: Calls `refresh_session_context` on `USER_SETTINGS_CHANGE` (Model Selection). This is **critical** — without it, identity is lost on model switches mid-session.
+    - **Rule 3 — Persistent Memory Logging**: Calls `memorize_interaction` at end of relevant conversations.
 2.  **Rules directory**: Check `~/.gemini/antigravity/rules/` for any referenced but missing rule files.
-3.  **Global identity**: Verify `~/.gemini/antigravity/knowledge/global_identity_760.md` is up to date.
+3.  **Re-inject**: If any rule is missing, re-run `scripts/install_neo.sh` or manually update `~/.gemini/GEMINI.md`.
 
 ### 4.7 Merge Reconciliation Protocol
 When merging branches (especially reverse merges like `Target ← Source`):
