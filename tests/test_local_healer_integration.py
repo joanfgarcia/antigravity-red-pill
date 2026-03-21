@@ -7,35 +7,42 @@ from red_pill.swarm.watcher import inject_context_pill, notify_macos
 
 
 def test_swarm_messaging_execute_send():
-	"""Cover execute_send in SwarmMessagingSkill."""
+	"""Cover execute_send in SwarmMessagingSkill v4.0 (pure-mls path)."""
+	import os
+	from unittest.mock import MagicMock, patch
+	from red_pill.skills.swarm_messaging import SwarmIntent, SwarmMessagingSkill
+
 	with patch("red_pill.skills.swarm_messaging.TransportManager") as mock_tm_class:
-		mock_tm = mock_tm_class.return_value
-		mock_transport = MagicMock()
-		mock_tm.get_transport.return_value = mock_transport
-		mock_transport.send_package.return_value = True
-		mock_transport.resolve_alias.return_value = ("agt_test123", "Nova@Test", None)
-		mock_transport.lookup_public_key.return_value = None
-		with patch("red_pill.skills.swarm_messaging.SwarmCrypto") as mock_crypto:
-			mock_crypto.encrypt_payload.return_value = {"ciphertext": "fake", "nonce": "fake"}
+		with patch("red_pill.skills.swarm_messaging.MLSBridge") as mock_bridge_class:
+			mock_tm = mock_tm_class.return_value
+			mock_transport = MagicMock()
+			mock_tm.get_transport.return_value = mock_transport
+			mock_transport.send_package.return_value = True
+			# Return a 4-tuple with a valid kp_b64
+			mock_transport.resolve_alias.return_value = ("agt_test123", "Nova@Test", "fake_pub", "dmFsaWRfa2V5")
+			mock_bridge = mock_bridge_class.return_value
+			mock_bridge.has_group.return_value = False
+			mock_bridge.add_member_and_get_welcome.return_value = b"fake_welcome"
+			mock_bridge.encrypt.return_value = b"fake_ciphertext"
 			skill = SwarmMessagingSkill(agent_identity="Aleph@Test", shared_secret=os.urandom(32), transport_manager=mock_tm)
 			result = skill.execute_send("Nova@Test", {"code": "print(1)"}, SwarmIntent.LGTM_APPROVED)
 			assert result["status"] == "dispatched"
 
 
 def test_swarm_messaging_process_incoming():
-	"""Cover process_incoming in SwarmMessagingSkill."""
+	"""Cover process_incoming in SwarmMessagingSkill v4.0 — unknown mode is dropped."""
+	import os
+	from unittest.mock import patch
+	from red_pill.skills.swarm_messaging import SwarmMessagingSkill
+
 	with patch("red_pill.skills.swarm_messaging.TransportManager"):
 		skill = SwarmMessagingSkill(agent_identity="Aleph@Test", shared_secret=os.urandom(32))
-	with patch("red_pill.skills.swarm_messaging.SwarmCrypto") as mock_crypto:
-		mock_crypto.decrypt_payload.return_value = {"intent": "lgtm_approved", "sender": "Nova@Test"}
-		res = skill.process_incoming({})
-		assert res["intent"] == SwarmIntent.LGTM_APPROVED.value  # type: ignore
-		mock_crypto.decrypt_payload.return_value = {"intent": "change_requested", "sender": "Nova@Test"}
-		res = skill.process_incoming({})
-		assert res["intent"] == SwarmIntent.CHANGE_REQUESTED.value  # type: ignore
-		mock_crypto.decrypt_payload.return_value = {"intent": "gossip", "sender": "Nova@Test"}
-		res = skill.process_incoming({})
-		assert res["intent"] == "gossip"  # type: ignore
+	# Legacy 'bond' mode is unknown in v4.0 → dropped
+	res = skill.process_incoming({"mode": "bond", "ciphertext": "abc"}, "legion_770")
+	assert res is None
+	# Unknown mode also dropped
+	res = skill.process_incoming({"mode": "mls_asymmetric", "ciphertext": "abc"}, "legion_770")
+	assert res is None
 
 
 def test_watcher_inject_context_pill_append(tmp_path):

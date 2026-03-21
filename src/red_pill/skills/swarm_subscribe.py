@@ -58,11 +58,12 @@ class SwarmSubscribeSkill:
 	def execute(self, community_alias: str, db_url: Optional[str] = None, service_acc_json_path: Optional[str] = None) -> dict[str, str]:
 		"""
 		Registers the Agent using the appropriate Transport plugin.
+		MLS B1: Also publishes KeyPackage + admission_token for pure-mls group membership.
 		"""
 		if db_url is None or service_acc_json_path is None:
 			return {"status": "missing_info", "message": "Necesito la URL de la DB y la ruta al JSON de credenciales para la suscripción."}
 
-		# 1. Store the Service Account/Config (This part remains as it defines the community configuration)
+		# 1. Store credentials
 		secure_json_path = os.path.join(self.CREDENTIALS_DIR, f"{community_alias}_firebase.json")
 		try:
 			shutil.copy2(service_acc_json_path, secure_json_path)
@@ -70,7 +71,7 @@ class SwarmSubscribeSkill:
 		except Exception as e:
 			return {"status": "error", "message": f"Error securing credentials: {e}"}
 
-		# 2. Save the Community Config
+		# 2. Save Community Config
 		communities: dict[str, Any] = {}
 		if os.path.exists(self.CONFIG_FILE):
 			with open(self.CONFIG_FILE, "r") as f:
@@ -81,13 +82,13 @@ class SwarmSubscribeSkill:
 			"credential_path": secure_json_path,
 			"agent_identity": self.agent_identity,
 			"agent_id": self.agent_id,
-			"type": "firebase",  # Defaulting for now
+			"type": "firebase",
 		}
 
 		with open(self.CONFIG_FILE, "w") as f:
 			json.dump(communities, f, indent=4)
 
-		# 3. Reload transports (config was written after manager init)
+		# 3. Reload transports
 		self.tm._load_communities()
 		transport = self.tm.get_transport(community_alias)
 		if not transport:
@@ -96,16 +97,36 @@ class SwarmSubscribeSkill:
 		_, pub_bytes = self._get_or_create_keys()
 		pub_b64 = base64.b64encode(pub_bytes).decode("utf-8")
 
+		# 4. MLS B1 — generate KeyPackage + admission_token
+		kp_b64 = ""
+		admission_token = ""
+		shared_secret_str = os.getenv("SWARM_SHARED_SECRET", "")
+		if shared_secret_str:
+			try:
+				import hashlib
+				import hmac as _hmac
+
+				from red_pill.swarm.mls_bridge import MLSBridge
+
+				bridge = MLSBridge(shared_secret_str.encode())
+				kp_bytes, admission_token = bridge.get_my_key_package()
+				kp_b64 = base64.b64encode(kp_bytes).decode("utf-8")
+			except Exception as e:
+				import logging
+				logging.getLogger(__name__).warning(f"[SwarmSubscribe] Could not generate KeyPackage: {e}")
+
 		metadata = {
 			"alias": self.agent_identity,
 			"status": "online",
 			"role": "Agent",
 			"community": community_alias,
 			"public_key": pub_b64,
-			"v": "3.0",
+			"key_package": kp_b64,
+			"admission_token": admission_token,
+			"v": "mls_b1",
 		}
 
 		if transport.broadcast_identity(self.agent_id, metadata):
-			return {"status": "success", "message": f"¡Suscripción a '{community_alias}' completada vía {type(transport).__name__}!"}
+			return {"status": "success", "message": f"¡Suscripción MLS B1 a '{community_alias}' completada!"}
 		else:
 			return {"status": "error", "message": "Fallo en el broadcast de identidad."}

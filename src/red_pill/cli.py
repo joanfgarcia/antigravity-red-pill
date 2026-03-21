@@ -1,11 +1,12 @@
 import argparse
 import asyncio
+import importlib.metadata
 import logging
 import os
 import subprocess
 import sys
 import time
-from typing import List
+from typing import Any, Dict, List
 
 import yaml  # type: ignore
 
@@ -151,12 +152,68 @@ def get_collection(type_str: str) -> str:
 	return mapping.get(type_str, "directive_memories")
 
 
+# ---------------------------------------------------------------------------
+# CLI Plugin Discovery (EntryPoints)
+# ---------------------------------------------------------------------------
+# Enterprise/Community packages declare their commands in pyproject.toml:
+#
+#   [project.entry-points."red_pill.commands"]
+#   cerberus = "red_pill_enterprise.cli:CerberusPlugin"
+#
+# Each plugin class must implement:
+#   - register(subparsers: argparse._SubParsersAction) -> None
+#       Add your subparser(s) to the Foundation's main subparsers object.
+#   - handle(args: argparse.Namespace) -> bool
+#       Handle the command. Return True if handled, False to pass through.
+# ---------------------------------------------------------------------------
+
+_PLUGIN_REGISTRY: Dict[str, Any] = {}
+
+
+def load_plugins(subparsers: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
+	"""
+	Discover and register CLI plugins via 'red_pill.commands' EntryPoints.
+	Called once before argparse.parse_args(), so plugins can add subcommands.
+	"""
+	try:
+		eps = importlib.metadata.entry_points(group="red_pill.commands")
+		for ep in eps:
+			try:
+				plugin_cls = ep.load()
+				plugin = plugin_cls()
+				plugin.register(subparsers)
+				_PLUGIN_REGISTRY[ep.name] = plugin
+				logger.debug(f"[CLI] Loaded plugin: {ep.name} ({ep.value})")
+			except Exception as e:
+				logger.warning(f"[CLI] Failed to load plugin '{ep.name}': {e}")
+	except Exception as e:
+		logger.debug(f"[CLI] EntryPoints discovery skipped: {e}")
+
+
+def _dispatch_plugins(args: argparse.Namespace) -> bool:
+	"""
+	Try each registered plugin's handle() method.
+	Returns True if a plugin handled the command (stops dispatch chain).
+	"""
+	for name, plugin in _PLUGIN_REGISTRY.items():
+		try:
+			if plugin.handle(args):
+				return True
+		except Exception as e:
+			logger.warning(f"[CLI] Plugin '{name}' raised an exception: {e}")
+	return False
+
+
 def main() -> None:
 	parser = argparse.ArgumentParser(description="Red Pill Protocol CLI")
 	parser.add_argument("--url", help="Qdrant URL")
 	parser.add_argument("--verbose", action="store_true", help="Debug logs")
 
 	subparsers = parser.add_subparsers(dest="command")
+
+	# Load Enterprise / Community plugins BEFORE Foundation commands so they
+	# can extend (or wrap) any subparser group.
+	load_plugins(subparsers)
 
 	mode_parser = subparsers.add_parser("mode", help="Switch Lore Skin")
 	mode_parser.add_argument("skin", help="matrix, cyberpunk, 760, dune, 40k, gits, bladerunner, her, exmachina, terminator, 2001, creator")
@@ -508,6 +565,13 @@ def main() -> None:
 					metadata={"type": "sas_signal", "timestamp": time.time(), "message": args.message},
 				)
 				print(f"[SAS] Signal recorded: {args.message}")
+
+			else:
+				# --- Enterprise/Community Plugin Dispatch ---
+				# If no built-in command matched, let plugins handle it.
+				if not _dispatch_plugins(args):
+					parser.print_help()
+					sys.exit(1)
 
 	except Exception as e:
 		logger.error(f"Protocol Failure: {e}")

@@ -712,7 +712,7 @@ async def handle_swarm_send_message(arguments: Dict[str, Any]):
 	if not shared_secret:
 		raise ValueError("CF-001: SWARM_SHARED_SECRET is required but not set.")
 
-	skill = SwarmMessagingSkill(agent_identity=f"{cfg.AGENT_NAME}@{cfg.OPERATOR_DISPLAY_NAME}", shared_secret=shared_secret)
+	skill = SwarmMessagingSkill(agent_identity=f"{cfg.AGENT_NAME}@{cfg.OPERATOR_DISPLAY_NAME}", shared_secret=shared_secret.encode())
 	res = skill.execute_send(
 		target_alias=arguments["target_alias"],
 		payload_data={"message": arguments["message"], **arguments.get("payload_extra", {})},
@@ -749,7 +749,7 @@ async def handle_swarm_check_mailbox(arguments: Dict[str, Any]):
 	if not shared_secret:
 		raise ValueError("CF-001: SWARM_SHARED_SECRET is required but not set.")
 
-	skill = SwarmMessagingSkill(agent_identity=f"{cfg.AGENT_NAME}@{cfg.OPERATOR_DISPLAY_NAME}", shared_secret=shared_secret)
+	skill = SwarmMessagingSkill(agent_identity=f"{cfg.AGENT_NAME}@{cfg.OPERATOR_DISPLAY_NAME}", shared_secret=shared_secret.encode())
 	community = arguments.get("community_alias", "legion_770")
 	messages = skill.check_mailbox(community_alias=community)
 

@@ -1,9 +1,11 @@
 import base64
+import json
+import logging
 import os
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from red_pill.swarm.crypto import SwarmCrypto
+from red_pill.swarm.mls_bridge import MLSBridge
 from red_pill.swarm.transports.manager import TransportManager
 
 
@@ -12,19 +14,20 @@ class SwarmIntent(Enum):
 	CHANGE_REQUESTED = "change_requested"
 	LGTM_APPROVED = "lgtm_approved"
 	GOSSIP = "gossip"
-	MLS_WELCOME = "mls_welcome"  # New intent for MLS handshakes
+	MLS_WELCOME = "mls_welcome"
 
 
 class SwarmMessagingSkill:
 	"""
-	Skill: Swarm Messaging v3.0
-	Description: Implements Agnostic Transport and MLS-based E2EE.
+	Skill: Swarm Messaging v4.0 (pure-mls, Option B)
+	Description: End-to-end encrypted messaging using pure-mls (RFC 9420 / TreeKEM).
+	All messages use MLSBridge. Legacy DH/bond modes removed.
 	"""
 
-	def __init__(self, agent_identity: str, shared_secret: str, transport_manager: Optional[TransportManager] = None):
+	def __init__(self, agent_identity: str, shared_secret: bytes, transport_manager: Optional[TransportManager] = None):
 		self.agent_identity = agent_identity
+		self.shared_secret = shared_secret
 
-		# Generate immutable agent_id hash (matches swarm_subscribe.py logic)
 		import hashlib
 
 		if "@" in agent_identity:
@@ -32,126 +35,115 @@ class SwarmMessagingSkill:
 			raw = f"{agent_name.lower().strip()}:{operator_name.lower().strip()}"
 			self.agent_id = f"agt_{hashlib.sha256(raw.encode()).hexdigest()[:24]}"
 		else:
-			self.agent_id = agent_identity  # Fallback
+			self.agent_id = agent_identity
 
-		self.shared_secret = shared_secret
 		self.tm = transport_manager or TransportManager()
-		self.keys_dir = os.path.expanduser("~/.agent/keys")
-		self.group_keys: Dict[str, bytes] = {}  # group_id -> group_key
+		self._bridge = MLSBridge(shared_secret)
+		self.logger = logging.getLogger(__name__)
 
-	def _get_local_private_key(self) -> Optional[bytes]:
-		priv_path = os.path.join(self.keys_dir, "swarm_v2.priv")
-		if os.path.exists(priv_path):
-			with open(priv_path, "rb") as f:
-				return f.read()
-		return None
+	# ------------------------------------------------------------------
+	# Send
+	# ------------------------------------------------------------------
 
 	def execute_send(self, target_alias: str, payload_data: dict, intent: SwarmIntent, community_alias: str = "default") -> Dict[str, Any]:
 		"""
-		Packages and dispatches a message using the specified community transport.
+		Sends an MLS-encrypted message to the target agent.
+		Flow:
+		  1. resolve_alias → get (agent_id, full_alias, pub_key, key_package_b64)
+		  2. If key_package present and no group yet → add_member → push_welcome
+		  3. Encrypt with MLSBridge → send_package
 		"""
 		transport = self.tm.get_transport(community_alias)
 		if not transport:
 			return {"status": "error", "message": f"Transport for '{community_alias}' not found."}
 
-		# Try resolving the target (e.g. "Aleph" -> "Aleph@Joan")
 		resolved = transport.resolve_alias(target_alias) if hasattr(transport, "resolve_alias") else None
+		if not resolved or len(resolved) < 4:
+			return {"status": "error", "message": f"Could not resolve alias '{target_alias}'. Is the target registered?"}
 
-		# Fallbacks
-		if resolved and len(resolved) >= 3:
-			target_agent_id, actual_target, remote_pub_b64 = resolved
-		else:
-			return {"status": "error", "message": f"Could not find agent_id for alias '{target_alias}'. Is the target registered?"}
+		target_agent_id, actual_target, _pub_key, kp_b64 = resolved
 
 		if "@" not in actual_target:
-			return {"status": "error", "message": f"Target '{actual_target}' is not a valid Agent@Operator identifier and could not be resolved."}
+			return {"status": "error", "message": f"Target '{actual_target}' is not a valid Agent@Operator identifier."}
 
-		package = {"intent": intent.value, "sender": self.agent_identity, "target": actual_target, "data": payload_data, "v": "3.0"}
-
-		# Security Selection
-		local_priv = self._get_local_private_key()
-
-		if remote_pub_b64 and local_priv:
-			remote_pub = base64.b64decode(remote_pub_b64)
-			shared_key = SwarmCrypto.derive_shared_secret_dh(local_priv, remote_pub)
-			encrypted_pkg = SwarmCrypto.encrypt_payload(package, shared_key)
-			encrypted_pkg["mode"] = "mls_asymmetric"
-			encrypted_pkg["sender"] = self.agent_identity
-		elif transport and getattr(transport, "mls_group", None):
-			mls_group = transport.mls_group  # type: ignore
-			# Use TreeKEM Group Key with Ratcheting (Perfect Forward Secrecy)
-			if mls_group.should_rotate():
-				mls_group.rotate_key()
-
-			mls_group.increment_message()
-			group_key = mls_group.get_group_key()
-
-			encrypted_pkg = SwarmCrypto.encrypt_payload(package, group_key)
-			encrypted_pkg["mode"] = "mls_group"
-			encrypted_pkg["key_epoch"] = mls_group.key_epoch
-			encrypted_pkg["sender"] = self.agent_identity
+		# MLS group bootstrap if needed
+		if kp_b64:
+			if not self._bridge.has_group(community_alias):
+				self.logger.info(f"[SwarmMessaging] Bootstrapping MLS group for '{community_alias}' with target '{actual_target}'.")
+				try:
+					kp_bytes = base64.b64decode(kp_b64)
+					welcome_bytes = self._bridge.add_member_and_get_welcome(community_alias, kp_bytes)
+					if welcome_bytes and hasattr(transport, "push_welcome"):
+						transport.push_welcome(target_agent_id, welcome_bytes)  # type: ignore[union-attr]
+						self.logger.info(f"[SwarmMessaging] Welcome pushed to '{actual_target}'.")
+				except Exception as e:
+					self.logger.error(f"[SwarmMessaging] MLS group bootstrap failed: {e}")
+					return {"status": "error", "message": f"MLS group bootstrap failed: {e}"}
 		else:
-			# Legacy static fallback
-			encrypted_pkg = SwarmCrypto.encrypt_payload(package, self.shared_secret)
-			encrypted_pkg["mode"] = "bond"
-			encrypted_pkg["sender"] = self.agent_identity
+			self.logger.warning(f"[SwarmMessaging] Target '{actual_target}' has no key_package. Cannot use pure-mls.")
+			return {"status": "error", "message": f"Target '{actual_target}' is not MLS B1 capable (no key_package in registry)."}
 
-		success = transport.send_package(target_agent_id, encrypted_pkg)
+		# Encrypt
+		plaintext = json.dumps({"intent": intent.value, "sender": self.agent_identity, "target": actual_target, "data": payload_data, "v": "4.0"}).encode("utf-8")
+		ciphertext = self._bridge.encrypt(community_alias, plaintext)
+		if not ciphertext:
+			return {"status": "error", "message": "MLS encryption failed."}
+
+		package = {
+			"mode": "pure_mls",
+			"sender": self.agent_id,
+			"community": community_alias,
+			"ciphertext": base64.b64encode(ciphertext).decode("utf-8"),
+		}
+
+		success = transport.send_package(target_agent_id, package)
 		return {"status": "dispatched" if success else "failed", "target": actual_target}
+
+	# ------------------------------------------------------------------
+	# Receive
+	# ------------------------------------------------------------------
 
 	def check_mailbox(self, community_alias: str = "default") -> List[Dict[str, Any]]:
 		"""Interface for periodic heartbeat checks."""
 		return self.poll_and_process(community_alias)
 
 	def poll_and_process(self, community_alias: str) -> List[Dict[str, Any]]:
-		"""Polls all mailboxes and processes incoming messages."""
+		"""Polls the mailbox, processes pending Welcomes, then decrypts messages."""
 		transport = self.tm.get_transport(community_alias)
 		if not transport:
 			return []
 
+		# Step 1: Process any pending Welcome (join the group if invited)
+		if hasattr(transport, "pop_welcome"):
+			welcome_bytes = transport.pop_welcome(self.agent_id)  # type: ignore[union-attr]
+			if welcome_bytes:
+				self.logger.info(f"[SwarmMessaging] Welcome received for '{community_alias}'. Joining group.")
+				self._bridge.process_welcome(community_alias, welcome_bytes)
+
+		# Step 2: Read and decrypt messages
 		raw_messages = transport.poll_mailbox(self.agent_id)
 		processed = []
-
 		for pkg in raw_messages:
-			payload = self.process_incoming(pkg, transport)
+			payload = self.process_incoming(pkg, community_alias)
 			if payload:
 				processed.append(payload)
 
 		return processed
 
-	def process_incoming(self, pkg: Dict[str, Any], transport: Optional[Any] = None) -> Optional[Dict[str, Any]]:
-		"""Processes a single incoming encrypted package."""
+	def process_incoming(self, pkg: Dict[str, Any], community_alias: str = "default") -> Optional[Dict[str, Any]]:
+		"""Decrypts a single incoming MLS package."""
 		try:
-			# If the transport plugin already decrypted it successfully, it lacks 'ciphertext'
-			if pkg.get("_encrypted") is True and "ciphertext" not in pkg:
-				return pkg
-
-			mode = pkg.get("mode", "bond")
-			if mode == "mls_asymmetric":
-				# In a real MLS, we'd lookup the sender's current KeyPackage
-				if not transport:
+			mode = pkg.get("mode", "unknown")
+			if mode == "pure_mls":
+				ciphertext = base64.b64decode(pkg["ciphertext"])
+				plaintext = self._bridge.decrypt(community_alias, ciphertext)
+				if not plaintext:
+					self.logger.error("[SwarmMessaging] MLS decryption returned None.")
 					return None
-				sender_pub_b64 = transport.lookup_public_key(pkg.get("sender", ""))
-				local_priv = self._get_local_private_key()
-				if sender_pub_b64 and local_priv:
-					shared_key = SwarmCrypto.derive_shared_secret_dh(local_priv, base64.b64decode(sender_pub_b64))
-					return SwarmCrypto.decrypt_payload(pkg, shared_key)
-				else:
-					return None
-			elif mode == "mls_group":
-				if not transport or not getattr(transport, "mls_group", None):
-					return None
-
-				mls_group = transport.mls_group  # type: ignore
-				# Synchronize the Ratchet (PFS)
-				sender_epoch = pkg.get("key_epoch", 1)
-				mls_group.sync_epoch(sender_epoch)
-
-				group_key = mls_group.get_group_key()
-				mls_group.increment_message()
-				return SwarmCrypto.decrypt_payload(pkg, group_key)
+				return json.loads(plaintext.decode("utf-8"))
 			else:
-				return SwarmCrypto.decrypt_payload(pkg, self.shared_secret)
+				self.logger.warning(f"[SwarmMessaging] Unknown mode '{mode}'. Dropping message.")
+				return None
 		except Exception as e:
-			print(f"[SwarmMessaging] Processing failure: {e}")
+			self.logger.error(f"[SwarmMessaging] process_incoming failed: {e}")
 			return None

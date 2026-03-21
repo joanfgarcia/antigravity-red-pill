@@ -197,11 +197,13 @@ def test_switch_skin_persist_exception(mock_mgr):
 
 
 def test_cli_main_no_command_exits():
-	"""Lines 166-168: no command → parser.print_help() + sys.exit(0)."""
+	"""Lines 166-168: no command → parser.print_help() + sys.exit(0).
+	Note: sys.exit is mocked so execution continues; we verify exit(0) was called.
+	"""
 	with patch("sys.argv", ["red-pill"]):
 		with patch("sys.exit") as mock_exit:
 			main()
-			mock_exit.assert_called_with(0)
+			mock_exit.assert_any_call(0)
 
 
 def test_cli_main_mode_command():
