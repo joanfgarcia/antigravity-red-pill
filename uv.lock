@@ -2376,7 +2376,7 @@ wheels = [
 
 [[package]]
 name = "red-pill"
-version = "6.1.0"
+version = "6.1.2"
 source = { editable = "." }
 dependencies = [
     { name = "argon2-cffi" },
@@ -2394,6 +2394,7 @@ dependencies = [
     { name = "psutil" },
     { name = "pure-mls" },
     { name = "pydantic" },
+    { name = "pydantic-settings" },
     { name = "pyjwt" },
     { name = "pymilvus" },
     { name = "python-dotenv" },
@@ -2434,6 +2435,7 @@ requires-dist = [
     { name = "psutil", specifier = ">=7.2.2" },
     { name = "pure-mls", git = "https://github.com/joanfgarcia/pure-mls.git?rev=v0.2.4" },
     { name = "pydantic", specifier = ">=2.0.0" },
+    { name = "pydantic-settings", specifier = ">=2.0.0" },
     { name = "pyjwt", specifier = ">=2.12.0" },
     { name = "pymilvus", specifier = ">=2.4.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
