@@ -30,12 +30,16 @@ async def run_analysis():
 		print(analysis)
 		print("\n========================================\n")
 
-		os.makedirs("docs/CERTIFICATION", exist_ok=True)
-		with open("docs/CERTIFICATION/SAMANTHA_REPORT_CH1.md", "w", encoding="utf-8") as rf:
+		from red_pill.config import cfg
+		reports_dir = os.path.join(cfg.IA_DIR, "reports")
+		os.makedirs(reports_dir, exist_ok=True)
+		report_path = os.path.join(reports_dir, "SAMANTHA_REPORT_CH1.md")
+		with open(report_path, "w", encoding="utf-8") as rf:
 			rf.write("# Reporte de Análisis Narrativo: Capítulo 1\n")
 			rf.write("**Analista:** Samantha (Mistral-7B / Local Engine via Swarm/SIP)\n")
 			rf.write("**Fecha:** 2026-03-16\n\n")
 			rf.write(analysis)
+		print(f"[Success] Report saved to {report_path}")
 	else:
 		print(f"[Error] Fallo en el Swarm: {res.error}")
 
