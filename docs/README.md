@@ -94,8 +94,6 @@ Project-level rules and standards. These govern how the project itself is built 
 | [PROTOCOL_OF_SILENCE.md](CORE/PROTOCOL_OF_SILENCE.md) | Universal coding standard for Human-AI co-authored systems (all languages) |
 | [DOCUMENTATION_MANUAL.md](CORE/DOCUMENTATION_MANUAL.md) | How documentation is structured and maintained in this project (DMN-770) |
 | [AGENT_SAFETY_PROTOCOL.md](CORE/AGENT_SAFETY_PROTOCOL.md) | Safety boundaries and fail-safes for autonomous agent operation |
-| [snapshot_rule.md](CORE/snapshot_rule.md) | Governance directive for session snapshot creation and storage |
-| [cognitive_integrity_protocol.md](CORE/cognitive_integrity_protocol.md) | Protocol for detecting and recovering from cognitive integrity failures |
 
 ---
 
