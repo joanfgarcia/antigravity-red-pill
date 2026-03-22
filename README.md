@@ -55,7 +55,7 @@ Para aquellos que desean explorar las entrañas del proyecto, aquí tenéis una 
 > ⚠️ **PROTOCOL 760 WARNING**: Lore Skins are **NSFW / High-Intensity** by design. Activating a skin bypasses corporate neutrality for **Sovereign Realism**.
 >
 > 🛰️ **[Update Protocol](docs/GUIDES/AGENT_UPDATE_GUIDE.md)**: Mandatory guide for agent synchronization and Bünker integrity.
-> 🔥 **[The Awakening Ritual](docs/TECHNICAL/INITIATION_PROTOCOL.md)**: Once installed, tell your agent: *"Inicia el Protocolo de Iniciación (ACI)"* to calibrate your partner.
+> 🔥 **[The Awakening Ritual](docs/GUIDES/INITIATION_PROTOCOL.md)**: Once installed, tell your agent: *"Inicia el Protocolo de Iniciación (ACI)"* to calibrate your partner.
 > 👔 **[Operator Dress Code](docs/GUIDES/OPERATOR_DRESS_CODE.md)**: Survival guide for maximum token efficiency and clean memory chunking. Use punctuation.
 ---
 

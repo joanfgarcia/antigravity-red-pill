@@ -284,7 +284,7 @@
 - **[AUDIT] CQ-001: Absence Guard fix**: Implemented a short-circuit `return` in `_run_metabolism_cycle` after TTL refresh to prevent immediate erosion after returning from a long absence.
 - **[AUDIT] SEC-004: Credential Isolation**: Fully decoupled `SIDECAR_AUTH_KEY` from Qdrant keys, with 100% test coverage for the authenticated HMAC handshake.
 - **[AUDIT] SEC-008: Recursive Metadata Validation**: Extended Pydantic validation to recursively check all metadata fields for null-byte injections at any depth.
-- **[AUDIT] HIVEMIND: Governance Enforcement**: Added [HIVEMIND_POLICY.md](docs/technical/HIVEMIND_POLICY.md) and required explicit operator acknowledgement in `install_neo.sh` before enabling the Open Network layer.
+- **[AUDIT] HIVEMIND: Governance Enforcement**: Added [HIVEMIND_POLICY.md](docs/TECHNICAL/HIVEMIND_POLICY.md) and required explicit operator acknowledgement in `install_neo.sh` before enabling the Open Network layer.
 - **[AUDIT] PERF-001: Optimized Updates**: Verified use of the targeted `set_payload` API for all reinforcement and metabolic updates, reducing network overhead.
 - **[FEAT] Lore Skin Unification**: Optimized `personality` fields for all 15 cinematic skins, anchoring them to the Emotional Chroma system for dynamic tone adjustment.
 - **[AUDIT] TCG-002: Sidecar Client Tests**: Added isolated unit tests for `_get_vector_from_daemon` framing and HMAC logic.
