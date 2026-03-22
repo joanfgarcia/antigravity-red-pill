@@ -1,9 +1,9 @@
-import os
 import pytest
-from pathlib import Path
+
+from red_pill.config import FLOW_REGISTRY_PATH
 from red_pill.swarm.flow_engine import FlowEngine
 from red_pill.swarm.orchestrator import GruOrchestrator
-from red_pill.config import FLOW_REGISTRY_PATH
+
 
 @pytest.fixture
 def flow_engine():
@@ -18,7 +18,7 @@ def test_local_override_and_lock(tmp_path, flow_engine):
     # Setup local .agent directory
     agent_dir = tmp_path / ".agent"
     agent_dir.mkdir()
-    
+
     # Create a local override for a non-locked flow
     flows_yaml = agent_dir / "flows.yaml"
     flows_yaml.write_text("""
@@ -27,7 +27,7 @@ flows:
     name: "Custom Research"
     locked: false
 """)
-    
+
     # Load flows pointing to tmp_path as CWD
     flows = flow_engine.load_flows(cwd=str(tmp_path))
     assert flows["deep-research"]["name"] == "Custom Research"
@@ -41,9 +41,9 @@ flows:
     name: "Enterprise Audit"
     locked: true
 """)
-    
+
     engine = FlowEngine(FLOW_REGISTRY_PATH, community_registry_path=str(comm_file))
-    
+
     # Attempt local override
     agent_dir = tmp_path / ".agent"
     agent_dir.mkdir()
@@ -53,7 +53,7 @@ flows:
   compliance-audit:
     name: "Hacked Audit"
 """)
-    
+
     flows = engine.load_flows(cwd=str(tmp_path))
     # Should resist override because it's locked in community layer
     assert flows["compliance-audit"]["name"] == "Enterprise Audit"
@@ -64,7 +64,7 @@ async def test_orchestrator_run_flow_basic():
     # Test that it detects flows
     flows = gru.flow_engine.load_flows()
     assert "pre-pr" in flows
-    
+
     # We don't run the full flow in unit tests to avoid GPU/CLI side effects
     # but we verify the method exists and handles invalid IDs
     with pytest.raises(ValueError):

@@ -1,7 +1,6 @@
 import base64
 import json
 import logging
-import os
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -49,9 +48,9 @@ class SwarmMessagingSkill:
 		"""
 		Sends an MLS-encrypted message to the target agent.
 		Flow:
-		  1. resolve_alias → get (agent_id, full_alias, pub_key, key_package_b64)
-		  2. If key_package present and no group yet → add_member → push_welcome
-		  3. Encrypt with MLSBridge → send_package
+			1. resolve_alias → get (agent_id, full_alias, pub_key, key_package_b64)
+			2. If key_package present and no group yet → add_member → push_welcome
+			3. Encrypt with MLSBridge → send_package
 		"""
 		transport = self.tm.get_transport(community_alias)
 		if not transport:

@@ -5,15 +5,13 @@ coverage report.  No external dependencies required (pure unit tests).
 """
 
 import subprocess
-import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# affect.py — FSRSEngine + BayesianEngine edge cases
-# ---------------------------------------------------------------------------
 from red_pill.affect import BayesianEngine, FSRSEngine, MemoryEngine, get_memory_engine
+from red_pill.cli import _PLUGIN_REGISTRY, _dispatch_plugins, handle_heal, handle_identity
+from red_pill.config import RedPillConfig
 
 
 class TestAffectEdgeCases:
@@ -91,7 +89,6 @@ class TestAffectEdgeCases:
 # ---------------------------------------------------------------------------
 # cli.py — Exception paths + identity purge
 # ---------------------------------------------------------------------------
-from red_pill.cli import handle_heal, handle_identity
 
 
 class TestCliExceptionPaths:
@@ -129,7 +126,6 @@ class TestCliExceptionPaths:
 # ---------------------------------------------------------------------------
 # cli.py — _dispatch_plugins warning on exception (line 190-191)
 # ---------------------------------------------------------------------------
-from red_pill.cli import _PLUGIN_REGISTRY, _dispatch_plugins
 
 
 class TestDispatchPluginsWarning:
@@ -162,7 +158,6 @@ class TestDispatchPluginsWarning:
 # ---------------------------------------------------------------------------
 # config.py — validator edge cases
 # ---------------------------------------------------------------------------
-from red_pill.config import RedPillConfig
 
 
 class TestConfigValidatorEdgeCases:

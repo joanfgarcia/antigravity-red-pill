@@ -5,14 +5,10 @@ Cubre: MLSBridge, admission tokens, flujo E2E con Firebase mockeado.
 """
 import base64
 import json
-import os
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-from red_pill.swarm.mls_bridge import MLSBridge
 from red_pill.skills.swarm_messaging import SwarmIntent, SwarmMessagingSkill
-
+from red_pill.swarm.mls_bridge import MLSBridge
 
 SHARED_SECRET = b"test_sovereign_secret_32bytes!!!"
 
@@ -110,7 +106,7 @@ class TestSwarmMessagingE2E:
 
     def test_full_mls_e2e_send_receive(self):
         """
-        Full E2E: Aleth creates MLS group, sends Welcome to Nova, Nova joins, 
+        Full E2E: Aleth creates MLS group, sends Welcome to Nova, Nova joins,
         both exchange messages successfully.
         """
         aleth_seed = b"aleth_seed_32_bytes_long_!!!!!"

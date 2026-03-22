@@ -8,9 +8,9 @@ from red_pill.swarm.watcher import inject_context_pill, notify_macos
 
 def test_swarm_messaging_execute_send():
 	"""Cover execute_send in SwarmMessagingSkill v4.0 (pure-mls path)."""
-	import os
-	from unittest.mock import MagicMock, patch
-	from red_pill.skills.swarm_messaging import SwarmIntent, SwarmMessagingSkill
+	from unittest.mock import patch
+
+	from red_pill.skills.swarm_messaging import SwarmMessagingSkill
 
 	with patch("red_pill.skills.swarm_messaging.TransportManager") as mock_tm_class:
 		with patch("red_pill.skills.swarm_messaging.MLSBridge") as mock_bridge_class:
@@ -31,9 +31,7 @@ def test_swarm_messaging_execute_send():
 
 def test_swarm_messaging_process_incoming():
 	"""Cover process_incoming in SwarmMessagingSkill v4.0 — unknown mode is dropped."""
-	import os
 	from unittest.mock import patch
-	from red_pill.skills.swarm_messaging import SwarmMessagingSkill
 
 	with patch("red_pill.skills.swarm_messaging.TransportManager"):
 		skill = SwarmMessagingSkill(agent_identity="Aleph@Test", shared_secret=os.urandom(32))

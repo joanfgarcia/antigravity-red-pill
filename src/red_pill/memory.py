@@ -116,7 +116,7 @@ class MemoryManager:
 		Community uses this to share anonymized learning summaries.
 
 		callback(summary: dict) -> None
-		  summary keys: 'processed_count', 'collection', 'timestamp'
+			summary keys: 'processed_count', 'collection', 'timestamp'
 		"""
 		self._sleep_hooks.append(callback)
 		logger.debug(f"[DI] Registered sleep hook: {callback.__name__ if hasattr(callback, '__name__') else repr(callback)}")

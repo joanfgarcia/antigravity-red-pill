@@ -15,10 +15,11 @@ def test_dynamic_workflow():
     """
     Simulates an incoming pure-mls package being processed by SwarmMessagingSkill.
     """
-    from red_pill.swarm.mls_bridge import MLSBridge
-    from red_pill.skills.swarm_messaging import SwarmIntent, SwarmMessagingSkill
     import base64
     import json
+
+    from red_pill.skills.swarm_messaging import SwarmIntent, SwarmMessagingSkill
+    from red_pill.swarm.mls_bridge import MLSBridge
 
     secret = os.urandom(32)
     seed_a = b"aleth_seed_workflow_test______"

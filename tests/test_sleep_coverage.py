@@ -1,6 +1,7 @@
 import json
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from red_pill.metabolism.sleep import distill_engram, perform_sleep_cycle, synthesize_hub
 

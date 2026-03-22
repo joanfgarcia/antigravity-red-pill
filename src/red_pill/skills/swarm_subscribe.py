@@ -103,8 +103,6 @@ class SwarmSubscribeSkill:
 		shared_secret_str = os.getenv("SWARM_SHARED_SECRET", "")
 		if shared_secret_str:
 			try:
-				import hashlib
-				import hmac as _hmac
 
 				from red_pill.swarm.mls_bridge import MLSBridge
 
