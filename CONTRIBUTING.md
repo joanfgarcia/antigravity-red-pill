@@ -19,6 +19,9 @@ Thank you for your interest in contributing. Red Pill is a **sovereignty-first**
 
 Every token in the context window is a resource. We optimize for **Signal-to-Noise Ratio (SNR)**.
 
+> For the full universal coding standard (all languages — Python, TypeScript, Java, Rust, shell, markup):
+> see [**Protocol of Silence**](docs/CORE/PROTOCOL_OF_SILENCE.md).
+
 ### 1. Hard Tabs Only (\t)
 **Indentation must be Tabs.** Rationale:
 - **Efficiency**: 1 character vs 4. Agents process tabs faster and more reliably.

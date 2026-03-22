@@ -71,10 +71,15 @@ async def run_sovereignty_benchmark():
 	print("\n--- [BENCHMARK RESULTS] ---")
 	print(json.dumps(report, indent=2))
 
-	with open("SOVEREIGNTY_PROOF.json", "w") as f:
+	import os
+	from red_pill.config import cfg
+	reports_dir = os.path.join(cfg.IA_DIR, "reports")
+	os.makedirs(reports_dir, exist_ok=True)
+	output_path = os.path.join(reports_dir, "SOVEREIGNTY_PROOF.json")
+	with open(output_path, "w") as f:
 		json.dump(report, f, indent=2)
 
-	print("\n[Success] Evidence saved to SOVEREIGNTY_PROOF.json")
+	print(f"\n[Success] Evidence saved to {output_path}")
 	print("This data confirms that the Red Pill Protocol occupies all silicon tiers simultaneously.")
 
 
