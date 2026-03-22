@@ -75,3 +75,6 @@ cookies/
 # IDE Telemetry (instance-local, not shared)
 .bunker_telemetry.md
 .cursor/rules/00_bunker_telemetry.mdc
+
+# Runtime-generated benchmark artifacts
+SOVEREIGNTY_PROOF.json
