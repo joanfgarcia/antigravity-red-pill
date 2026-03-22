@@ -1,5 +1,18 @@
 # Changelog: Red Pill Protocol
 
+## [6.1.6] - 2026-03-22
+
+### 🛡️ Memory Incident Response: SEC-PURGE-001, Daily Backups & Bilingual Docs
+
+> **INCIDENT 2026-03-22**: `social_memories` and `work_memories` Qdrant collections were accidentally deleted, suspected due to an unguarded `purge` call. Collections were manually restored from the March 19 snapshot (manual tar extraction into Podman container storage volume — `Qdrant v1.16.3` API fails to accept gzip snapshots due to checksum validation bug). Memory gap forensics recovered 16 additional engrams from brain artifacts and pasted conversation logs with correct historical timestamps.
+
+- **[SEC] SEC-PURGE-001 — Purge Guard**: `control_bunker('purge')` in `mcp_server.py` now requires the environment variable `ALLOW_PURGE=true` to execute. Without it, returns `[PURGE BLOCKED] SEC-PURGE-001` and aborts. Prevents accidental mass-deletion from tests or scripts without explicit intent.
+- **[TEST] `test_mcp_server.py`**: Replaced `test_purge_command` with two focused tests: `test_purge_command_blocked_by_default` (verifies blocking when `ALLOW_PURGE` not set) and `test_purge_command_allowed_with_env_var` (verifies successful execution with `ALLOW_PURGE=true`).
+- **[OPS] `scripts/backup_qdrant.sh`**: New bash script for automated daily Qdrant backups. Snapshots all collections via API, saves locally to `~/Documents/IA/backups/qdrant/` with timestamps, and applies a 14-day rolling retention policy. Cron job deployed: `0 3 * * *` — runs at 03:00 daily. Logs to `~/.local/share/red_pill/backup.log`.
+- **[DOCS] `QUICKSTART.md` — Full Bilingual Rewrite (EN + ES)**: Restructured as a bilingual document with full English first, then full Spanish, cross-linked via anchor navigation. Both sections include the new **SEC-MLS-001** security advisory.
+- **[DOCS] SEC-MLS-001 — MLS Vault Key Recovery**: Documented the two files required to decrypt any `.tar.gz.mls` Soul Kit: `~/.config/red_pill/vault.seed` (static, generate once, never changes — the cryptographic master key) and `~/.config/red_pill/vault_group.state` (dynamic — changes with each MLS operation due to forward secrecy; must be saved alongside each exported kit). Includes backup commands (base64 seed export) and restore procedure for new machines.
+- **[OPS] OAuth2 Drive Token Resilience**: Documented and validated the Google Drive OAuth2 token lifecycle. `drive_token.json` at `~/.agent/credentials/` must be preserved; the `refresh_token` does not expire but the file can be lost. Soul Kit upload verified functional after token re-authorization.
+
 ## [6.1.5] - 2026-03-22
 
 ### 📚 Documentation Reorganization, Linting & Housekeeping

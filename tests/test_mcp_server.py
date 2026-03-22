@@ -335,14 +335,36 @@ class TestControlBunkerAdditional:
 			sys.modules.pop("scripts", None)
 			sys.modules.pop("scripts.rotate_keys", None)
 
-	async def test_purge_command(self):
+	async def test_purge_command_blocked_by_default(self):
+		"""SEC-PURGE-001: purge is blocked unless ALLOW_PURGE=true is set."""
+		import os
+
+		from red_pill.mcp_server import handle_call_tool
+
+		mock_mgr = MagicMock()
+		# Ensure ALLOW_PURGE is NOT set (simulate safe production/test environment)
+		env = {k: v for k, v in os.environ.items() if k != "ALLOW_PURGE"}
+		with patch("red_pill.mcp_server.MemoryManager", return_value=mock_mgr):
+			with patch("red_pill.config.METABOLISM_AUTO_COLLECTIONS", ["work_memories"]):
+				with patch.dict(os.environ, env, clear=True):
+					result = await handle_call_tool("control_bunker", {"command": "purge"})
+		# Should be blocked — purge_dead_memories must NOT have been called
+		mock_mgr.purge_dead_memories.assert_not_called()
+		assert "PURGE BLOCKED" in result[0].text or "SEC-PURGE-001" in result[0].text
+
+	async def test_purge_command_allowed_with_env_var(self):
+		"""SEC-PURGE-001: purge executes when ALLOW_PURGE=true is explicitly set."""
+		import os
+
 		from red_pill.mcp_server import handle_call_tool
 
 		mock_mgr = MagicMock()
 		with patch("red_pill.mcp_server.MemoryManager", return_value=mock_mgr):
 			with patch("red_pill.config.METABOLISM_AUTO_COLLECTIONS", ["work_memories"]):
-				result = await handle_call_tool("control_bunker", {"command": "purge"})
-		assert "purge" in result[0].text.lower() or "Purge" in result[0].text
+				with patch.dict(os.environ, {"ALLOW_PURGE": "true"}):
+					result = await handle_call_tool("control_bunker", {"command": "purge"})
+		mock_mgr.purge_dead_memories.assert_called_once_with("work_memories")
+		assert "Gran Purge" in result[0].text or "purge" in result[0].text.lower()
 
 
 class TestAuditWithFindings:

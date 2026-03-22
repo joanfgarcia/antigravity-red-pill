@@ -126,10 +126,19 @@ async def handle_control_bunker(arguments: Dict[str, Any]):
 		SoulManager().export_soul()
 		output = "Lean Soul Kit exported and transmitted to Cloud Haven."
 	elif cmd == "purge":
-		manager = MemoryManager()
-		for coll in cfg.METABOLISM_AUTO_COLLECTIONS:
-			manager.purge_dead_memories(coll.strip())
-		output = "Gran Purge protocol executed."
+		# SEC-PURGE-001: Require explicit opt-in via env var to prevent accidental data loss.
+		# Set ALLOW_PURGE=true in .env only when intentionally running a purge operation.
+		if os.environ.get("ALLOW_PURGE", "").lower() != "true":
+			output = (
+				"[PURGE BLOCKED] SEC-PURGE-001: Production safeguard active. "
+				"Set ALLOW_PURGE=true in your environment to authorize this operation. "
+				"This prevents accidental data loss from tests or unintended calls."
+			)
+		else:
+			manager = MemoryManager()
+			for coll in cfg.METABOLISM_AUTO_COLLECTIONS:
+				manager.purge_dead_memories(coll.strip())
+			output = "Gran Purge protocol executed."
 	elif cmd == "status":
 		output = get_telemetry_report()
 	elif cmd == "sleep":
