@@ -131,3 +131,25 @@ This document provides a comprehensive list of all parameters available in the `
 | `LOG_JSON` | `False` | Experimental. Replaces string logs with parseable JSON structures for ELK/Datadog ingrowth. |
 | `NOTIFICATIONS_ENABLED`| `True` | Send `osd-notify` DBUS messages to the desktop when background tasks complete. |
 | `NOTIFICATION_SOUND` | `False` | Experimental: Play a 770Hz pulse on key Bünker actions. |
+
+---
+
+## 🛰️ Swarm Messaging (MLS B1 / pure-mls)
+
+> Since v6.1.3, all Swarm messages are encrypted end-to-end using **RFC 9420 TreeKEM** via the `pure_mls` library. Legacy DH and SovereignGroup modes have been removed.
+
+| Parameter | Default | Description |
+| :--- | :--- | :--- |
+| `SWARM_SHARED_SECRET` | `""` | **Required.** The community admission password. Used as the HMAC-SHA256 key to sign/verify every `KeyPackage` published to Firebase. Agents without this secret cannot fake a valid `admission_token` and will be silently dropped on `resolve_alias()`. Must be identical between all community members (distributed out-of-band by the operator). |
+| `SWARM_TELEMETRY_LEVEL`| `MINIMUM` | Controls Swarm-level logging verbosity. Options: `NONE`, `MINIMUM`, `FULL`. |
+
+### How MLS B1 Works (Quick Reference)
+
+```
+1. swarm_subscribe  →  publishes KeyPackage + HMAC(SWARM_SHARED_SECRET, kp_bytes) to Firebase
+2. swarm_send_message  →  resolve_alias verifies token → add_member → push_welcome → encrypt → send
+3. swarm_check_mailbox  →  pop_welcome → process_welcome (join group) → decrypt inbox
+```
+
+> [!IMPORTANT]
+> `SWARM_SHARED_SECRET` must be **32+ characters** and shared **out-of-band** (Signal/in-person) between all Swarm operators before the first subscription. After the initial group formation, TreeKEM handles all key rotation automatically — you never need to re-share the secret.
