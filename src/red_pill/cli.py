@@ -11,6 +11,7 @@ from typing import Any, Dict, List
 import yaml  # type: ignore
 
 import red_pill.config as cfg
+from red_pill.events import CliCommandDispatchedEvent, get_event_bus
 from red_pill.memory import MemoryManager
 from red_pill.seed import ID_DIR_ACTIVE_SKIN, seed_project
 from red_pill.soul import SoulManager
@@ -364,6 +365,12 @@ def main() -> None:
 	elif args.command == "mode":
 		handle_mode(args)
 		return
+
+	# EventBus: let Enterprise/Community know which command was dispatched
+	get_event_bus().emit(CliCommandDispatchedEvent(
+		command=args.command,
+		subcommand=getattr(args, "swarm_cmd", None) or getattr(args, "soul_cmd", None) or getattr(args, "id_cmd", None),
+	))
 
 	# Map CLI type to collection(s)
 	if getattr(args, "type", None):

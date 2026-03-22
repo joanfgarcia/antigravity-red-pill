@@ -15,6 +15,7 @@ except ImportError:
 
 import red_pill.config as cfg
 from red_pill.affect import get_memory_engine
+from red_pill.events import MemoryAddedEvent, get_event_bus
 from red_pill.hive import HiveMind
 from red_pill.schemas import CreateEngramRequest, EngramPayload
 from red_pill.utils.affect import (
@@ -342,6 +343,15 @@ class MemoryManager:
 
 			if self.cfg.METABOLISM_ENABLED:
 				self._trigger_metabolism()
+
+			# EventBus: notify Enterprise/Community layers
+			get_event_bus().emit(MemoryAddedEvent(
+				collection=collection,
+				engram_id=actual_id,
+				importance=importance,
+				emotion=validated_request.emotion,
+				color=validated_request.color,
+			))
 			return actual_id
 		except Exception as e:
 			logger.error(f"Failed to add memory: {_mask_pii_exception(e)}")

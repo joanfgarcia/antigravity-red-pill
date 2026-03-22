@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 from qdrant_client.models import Filter
 
 import red_pill.config as cfg
+from red_pill.events import SleepCompletedEvent, get_event_bus
 
 logger = logging.getLogger(__name__)
 
@@ -310,4 +311,9 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 			logger.error(f"[SLEEP ENGINE] Could not purge fast buffer node {raw_id}: {e}")
 
 	logger.info(f"=== LAZARUS PULSE: Sleep Cycle complete. {processed_count} engrams synaptically woven. ===")
+	get_event_bus().emit(SleepCompletedEvent(
+		collection=collection,
+		processed_count=processed_count,
+		mode=mode,
+	))
 	return processed_count

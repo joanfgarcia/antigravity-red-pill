@@ -5,6 +5,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models
 
 import red_pill.config as cfg
+from red_pill.events import CollectionCreatedEvent, get_event_bus
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,7 @@ class StorageEngine:
 			self.client.create_payload_index(collection_name=collection_name, field_name="immune", field_schema=models.PayloadSchemaType.BOOL)
 			self.client.create_payload_index(collection_name=collection_name, field_name="importance", field_schema=models.PayloadSchemaType.FLOAT)
 			logger.info(f"Ghost Collection created: {collection_name}")
+			get_event_bus().emit(CollectionCreatedEvent(collection_name=collection_name))
 
 	def upsert(self, collection_name: str, points: List[models.PointStruct]) -> None:
 		self.client.upsert(collection_name=collection_name, points=points)
