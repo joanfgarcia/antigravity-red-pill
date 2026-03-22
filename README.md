@@ -200,11 +200,24 @@ The Red Pill Protocol is verified to utilize all available silicon tiers simulta
 
 ---
 
-## ⚖️ LICENSE & SOVEREIGNTY (GPLv3)
-This project is licensed under **GNU General Public License v3.0**. 
-- **Freedom / Libertad**: You are free to use, study, share, and modify this software.
-- **Persistence / Persistencia**: Any derivative work must also be shared under the same GPLv3 license.
-- **No Captura**: No external entity can take this code and turn it into closed-source commodity.
+## ⚖️ DUAL LICENSE — Code & Lore
+
+This project uses a **dual licensing model**. See [NOTICE](NOTICE) for full details.
+
+| What | License |
+|------|---------|
+| **All source code, scripts, data files** (`.py`, `.yaml`, `.sh`, etc.) | [GPLv3](LICENSE) |
+| **Narrative & creative works** (`docs/LORE/`, novels, worldbuilding prose) | [CC BY-NC 4.0](LICENSE.creative) |
+
+### ⚙️ Code — GPLv3
+- **Freedom**: Use, study, share, and modify freely.
+- **Persistence**: Derivative works must remain GPLv3.
+- **No Capture**: No entity can turn this code into closed-source commodity.
+
+### 🎭 Lore & Narrative — CC BY-NC 4.0
+- **Free for**: personal use, fan works, non-commercial sharing (with attribution).
+- **Commercial use**: requires prior written consent from Joan García.
+- 📩 Commercial licensing: [github.com/joanfgarcia](https://github.com/joanfgarcia)
 
 ---
 ### ⚡ Forge Signature

@@ -1,0 +1,79 @@
+Creative Commons Attribution-NonCommercial 4.0 International
+
+Red Pill Protocol — Creative Works License
+===========================================
+
+Copyright (c) 2025-2026 Joan García (joanfgarcia)
+All narrative, lore, and creative works in this repository are authored by Joan García.
+
+This license applies EXCLUSIVELY to the following creative works:
+  - All files under docs/LORE/
+  - Any narrative, fictional, or worldbuilding documents (e.g. MANIFESTO.md, the Bünker story)
+  - All written prose, philosophy, and fictional universe descriptions not embedded in source code
+
+This license does NOT apply to:
+  - Source code (.py, .yaml, .toml, .sh and all other code/data files) → GPLv3
+  - lore_skins.yaml and any other data files used by the runtime → GPLv3
+
+─────────────────────────────────────────────────────────────────────────────
+
+                Creative Commons Corporation ("Creative Commons") is not a
+                law firm and does not provide legal services or legal advice.
+                Distribution of Creative Commons public licenses does not
+                create a lawyer-client or other relationship.
+
+CREATIVE COMMONS PUBLIC LICENSE
+Creative Commons Attribution-NonCommercial 4.0 International Public License
+
+By exercising the Licensed Rights (defined below), You accept and agree to be
+bound by the terms and conditions of this Creative Commons
+Attribution-NonCommercial 4.0 International Public License ("Public License").
+
+Section 1 – Definitions.
+  a. "Licensed Material" means the artistic or literary work, database,
+     or other material to which the Licensor applied this Public License.
+  b. "NonCommercial" means not primarily intended for or directed towards
+     commercial advantage or monetary compensation.
+  c. "You" means the individual or entity exercising the Licensed Rights.
+
+Section 2 – Scope.
+  a. License grant. Subject to the terms and conditions of this Public License,
+     the Licensor hereby grants You a worldwide, royalty-free, non-sublicensable,
+     non-exclusive, irrevocable license to:
+       1. reproduce and Share the Licensed Material, in whole or in part,
+          for NonCommercial purposes only;
+       2. produce, reproduce, and Share Adapted Material for NonCommercial
+          purposes only.
+
+  b. Commercial Use. Any use of the Licensed Material for commercial advantage
+     or monetary compensation requires PRIOR WRITTEN CONSENT from the Licensor.
+     
+     If you wish to use this creative work commercially, please contact:
+       Joan García — github.com/joanfgarcia
+     
+     "Commercial use" includes but is not limited to:
+       - Publishing or selling books, stories, or adaptations based on this lore
+       - Incorporating this narrative into a paid product or SaaS
+       - Licensing or sublicensing the lore to third parties for compensation
+       - Using the worldbuilding in advertising or brand campaigns
+
+Section 3 – License Conditions.
+  a. Attribution. You must give appropriate credit, provide a link to this
+     license, and indicate if changes were made. You may do so in any reasonable
+     manner, but not in any way that suggests the Licensor endorses you or your use.
+  b. NonCommercial. You may not use the material for commercial purposes
+     without prior written consent from Joan García.
+  c. ShareAlike. If you remix, transform, or build upon the material, you must
+     distribute your contributions under this same license or a compatible one.
+
+Section 4 – Disclaimer.
+  THE LICENSED MATERIAL IS PROVIDED "AS-IS". THE LICENSOR MAKES NO WARRANTIES
+  REGARDING THE LICENSED MATERIAL AND DISCLAIMS LIABILITY FOR DAMAGES RESULTING
+  FROM YOUR USE OF THE LICENSED MATERIAL TO THE FULLEST EXTENT POSSIBLE.
+
+─────────────────────────────────────────────────────────────────────────────
+
+Full license text: https://creativecommons.org/licenses/by-nc/4.0/legalcode
+Human-readable summary: https://creativecommons.org/licenses/by-nc/4.0/
+
+For commercial licensing inquiries: github.com/joanfgarcia

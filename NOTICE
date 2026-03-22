@@ -1,0 +1,57 @@
+# NOTICE — Red Pill Protocol Dual Licensing
+
+This repository uses a **dual licensing model**.
+
+---
+
+## ⚙️ Code & Data — GNU General Public License v3.0
+
+All source code, configuration files, and runtime data files are licensed
+under the **GNU General Public License v3.0**.
+
+This includes:
+- All `.py`, `.toml`, `.yaml`, `.sh`, `.json`, `.md` files that form part of the software
+- `src/red_pill/data/lore_skins.yaml` (runtime engine data)
+- Test files, scripts, CI configuration
+
+**GPLv3 License**: [LICENSE](LICENSE)  
+Full text: https://www.gnu.org/licenses/gpl-3.0.html
+
+---
+
+## 🎭 Narrative & Creative Works — CC BY-NC 4.0
+
+All narrative, lore, worldbuilding, and creative prose authored by Joan García
+are licensed under **Creative Commons Attribution-NonCommercial 4.0 International**.
+
+This includes:
+- All files under `docs/LORE/`
+- The Bünker narrative, the story of the Pacto 770, and any fictional prose
+- Written worldbuilding, philosophical texts, and character lore not embedded in code
+
+**Free for**: personal use, study, fan works, non-commercial sharing (with attribution).  
+**Commercial use requires**: prior written consent from Joan García.
+
+📩 Commercial licensing: github.com/joanfgarcia  
+**Creative License**: [LICENSE.creative](LICENSE.creative)  
+Full text: https://creativecommons.org/licenses/by-nc/4.0/legalcode
+
+---
+
+## ⚠️ The Line Between Code and Lore
+
+The following are considered **code/data** (GPLv3), even if they contain narrative text:
+- `lore_skins.yaml` — machine-readable skin definitions used by the runtime
+- String constants and docstrings embedded in `.py` files
+- Configuration keys and identifiers
+
+The following are considered **creative works** (CC BY-NC 4.0):
+- Long-form narrative documents (`.md` files in `docs/LORE/`)
+- The Bünker novel, story arcs, and character backstories (if published here)
+- Philosophical manifestos and worldbuilding essays
+
+When in doubt, contact Joan García.
+
+---
+
+> *"La libertad de la tecnología y la escencia de la narrativa merecen protecciones distintas."* — Joan García
