@@ -44,6 +44,10 @@ uv run pytest tests/            # Zero failure tolerance
 uv run mypy src/red_pill/       # Strict typing
 ```
 
+> [!NOTE]
+> **Developer `IA_DIR` setup (dogfooding):** When developing Red Pill, it is normal to set `IA_DIR` to the repository directory itself so the agent runs against the live source code without reinstalling. This causes some runtime artifacts (`.bunker_telemetry.md`, `reports/`) to appear inside the repo root — all are covered by `.gitignore`. This is expected and correct for a development environment. Production users should set `IA_DIR` to a dedicated directory outside the repo (e.g. `~/.agent/`).
+
+
 ## 🧪 Requirements & Governance
 
 - **Tabs**, not spaces. Configure your editor to `insertSpaces: false`.
