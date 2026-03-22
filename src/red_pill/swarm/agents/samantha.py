@@ -64,7 +64,3 @@ class SamanthaMinion(Minion):
 		except Exception as e:
 			self.log(f"Fallo en la ejecución de Samantha: {e}", level=logging.ERROR)
 			raise RuntimeError(f"Samantha Inference Failure: {e}")
-
-		except Exception as e:
-			self.log(f"Fallo en la conexión SIP: {e}", level=logging.ERROR)
-			raise RuntimeError(f"SIP Connection Failure: {e}")

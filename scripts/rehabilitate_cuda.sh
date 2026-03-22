@@ -11,5 +11,3 @@ else
 	echo "[WARN] cuDNN 9 path not found at $CUDNN_PATH. Check manual installation."
 fi
 
-# Re-run daemon or other tools
-# nohup .venv/bin/python src/red_pill/memory_daemon.py > /tmp/memory_daemon.log 2>&1 &
