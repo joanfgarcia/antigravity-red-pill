@@ -62,6 +62,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [NEURO_IMMUNE_SYSTEM.md](TECHNICAL/NEURO_IMMUNE_SYSTEM.md) | Active immunity system design and biological analogies |
 | [AFFECT_MULTIPLIERS_RESEARCH.md](TECHNICAL/AFFECT_MULTIPLIERS_RESEARCH.md) | Emotional affect weighting research (FSRS, Bayesian) |
 | [TEMPORAL_HORIZONS_RESEARCH.md](TECHNICAL/TEMPORAL_HORIZONS_RESEARCH.md) | Temporal memory horizon and decay research |
+| [BRAIN_ANIMAL_ANALOGIES.md](TECHNICAL/BRAIN_ANIMAL_ANALOGIES.md) | Biological analogies for the memory and immune system architecture |
 
 ---
 
@@ -116,14 +117,6 @@ Project-level rules and standards. These govern how the project itself is built 
 
 ---
 
-## 🧠 PHILOSOPHY
-
-| Document | What it is |
-|----------|-----------|
-| [PHILOSOPHY.md](PHILOSOPHY.md) | Sovereign trade-offs and philosophical architecture of the Protocol |
-| [BRAIN_ANIMAL_ANALOGIES.md](PHILOSOPHY/BRAIN_ANIMAL_ANALOGIES.md) | Biological analogies for the memory and immune system architecture |
-
----
 
 ## 🤝 COMMUNITY
 
