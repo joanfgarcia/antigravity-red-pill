@@ -93,8 +93,17 @@ Project-level rules and standards. These govern how the project itself is built 
 | Document | What it is |
 |----------|-----------|
 | [PROTOCOL_OF_SILENCE.md](CORE/PROTOCOL_OF_SILENCE.md) | Universal coding standard for Human-AI co-authored systems (all languages) |
+| [CONVENTIONS.md](CORE/CONVENTIONS.md) | Naming and structure conventions — UPPERCASE docs, lowercase code, decision table |
 | [DOCUMENTATION_MANUAL.md](CORE/DOCUMENTATION_MANUAL.md) | How documentation is structured and maintained in this project (DMN-770) |
 | [AGENT_SAFETY_PROTOCOL.md](CORE/AGENT_SAFETY_PROTOCOL.md) | Safety boundaries and fail-safes for autonomous agent operation |
+
+---
+
+## 🏅 CERTIFICATION — Engineering audit reports
+
+| Document | What it is |
+|----------|-----------|
+| [REPORT_CLAUDE_4.6_20260322.md](CERTIFICATION/REPORT_CLAUDE_4.6_20260322.md) | Claude Sonnet 4.6 full audit — BETA-READY verdict, 2026-03-22 |
 
 ---
 

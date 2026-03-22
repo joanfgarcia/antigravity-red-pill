@@ -13,6 +13,8 @@
 - **[FIX] Runtime artifact paths**: `scripts/sovereignty_benchmark.py` and `scripts/run_samantha_swarm.py` were writing output files to CWD (polluting the repo root). Both now write to `cfg.IA_DIR/reports/` consistent with all other runtime artifacts. `SOVEREIGNTY_PROOF.json` added to `.gitignore`.
 - **[QA] Ruff linting — 0 errors**: 53 auto-fixes applied + 8 manual fixes (3×E402 imports moved to top of `test_coverage_gaps.py`, 4×E101 docstring tab indentation in `memory.py` and `swarm_messaging.py`, 1×W291 trailing whitespace). `ruff check src/ tests/` → `All checks passed!`.
 - **[QA] `test_sleep.py::test_distill_engram`**: Marked `xfail` — pre-existing urllib local-import mock limitation, same root cause as `test_sleep_coverage.py`. Coverage gate: **96.09%** (required ≥ 96%). Test suite: **629 passed, 2 xfailed, 3 pre-existing integration failures**.
+- **[CERT] Certification Report — Claude Sonnet 4.6**: Full engineering-grade audit filed at `docs/CERTIFICATION/REPORT_CLAUDE_4.6_20260322.md`. Verdict: **BETA-READY** for Sovereign/Nomad single-operator deployments. Two P1 SoS violations fixed immediately: dead unreachable `except` block in `samantha.py`, commented-out daemon restart in `rehabilitate_cuda.sh`. P0 items (pure-mls supply chain, unencrypted MLS state) tracked for next cycle.
+- **[NEW] `docs/CORE/CONVENTIONS.md`**: Codifies naming and structure conventions — UPPERCASE for all `docs/` directories and files, lowercase for agent runtime seeds and Python source. Includes decision table, certification report naming format, and explicit AI-agent context. Prevents recurring mistakes (e.g. `docs/certification/` → `docs/CERTIFICATION/`).
 
 ## [6.1.4] - 2026-03-21
 
