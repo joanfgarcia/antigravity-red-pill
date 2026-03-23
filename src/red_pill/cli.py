@@ -276,6 +276,10 @@ def main() -> None:
 	verify_parser.add_argument("source", help="Path to backup kit (.tar.gz or .enc)")
 	soul_sub.add_parser("sync", help="Check emotional sync state")
 	soul_sub.add_parser("vault", help="Inspect Cloud Vault status and backups")
+	migrate_parser = soul_sub.add_parser("migrate", help="v3.0 pre-flight: decrypt/re-encrypt LEAN_SOUL_KITs")
+	migrate_parser.add_argument("--status", action="store_true", help="Show migration state")
+	migrate_parser.add_argument("--decrypt", action="store_true", help="Step 1: decrypt .mls kits before pure-mls upgrade")
+	migrate_parser.add_argument("--reencrypt", action="store_true", help="Step 2: re-encrypt kits after pure-mls v3.0 upgrade")
 
 	edit_parser = subparsers.add_parser("edit", help="Edit engram attributes")
 	edit_parser.add_argument("type", choices=["work", "social", "directive", "story"])
@@ -466,6 +470,11 @@ def main() -> None:
 				else:
 					print("--- [CLOUD VAULT: INACTIVE] ---")
 					print(f"To enable, set CLOUD_VAULT_ENABLED=True in .env and provide {cfg.CLOUD_SERVICE_ACCOUNT_FILE}")
+			elif args.soul_cmd == "migrate":
+				from red_pill.soul_migrate import run_migrate_cli
+
+				migrate_args = sys.argv[sys.argv.index("migrate") + 1 :]
+				run_migrate_cli(migrate_args)
 			return
 		elif args.command == "init":
 			import subprocess

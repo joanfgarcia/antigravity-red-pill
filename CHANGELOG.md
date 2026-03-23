@@ -1,5 +1,32 @@
 # Changelog: Red Pill Protocol
 
+## [Unreleased] v3.0-phase0 — LEAN_SOUL_KIT Migration Protocol
+
+### Added
+
+- **`src/red_pill/soul_migrate.py`**: Phase 0 pre-flight migration script
+  - `cmd_status()`: show current migration state (kits found, decrypted count, manifest)
+  - `cmd_decrypt()`: decrypt all `.mls` kits in export dir using current vault group (v2.x);
+    saves plaintext `.tar.gz` + `vault_group.state.bak` in `~/.config/red_pill/soul_migrate/` (mode 0700/0600)
+  - `cmd_reencrypt()`: re-encrypt decrypted kits with a fresh v3.0 vault group; cleans staging area
+  - Writes `migration_manifest.json` with timestamp, pure-mls version, and per-kit results
+
+- **`src/red_pill/cli.py`**: `red-pill soul migrate` subcommand
+  - `--status`: show migration state
+  - `--decrypt`: Step 1 — run before upgrading pure-mls to v3.0
+  - `--reencrypt`: Step 2 — run after upgrading pure-mls to v3.0
+
+### Migration Procedure
+
+```bash
+# Step 1 — before upgrading pure-mls:
+red-pill soul migrate --decrypt
+
+# (upgrade pure-mls to v3.0 here)
+
+# Step 2 — after upgrading pure-mls:
+red-pill soul migrate --reencrypt
+```
 ## [6.1.6] - 2026-03-22
 
 ### 🛡️ Memory Incident Response: SEC-PURGE-001, Daily Backups & Bilingual Docs
