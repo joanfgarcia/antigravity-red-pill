@@ -829,11 +829,33 @@ async def handle_mystique_suggest_skin(arguments: Dict[str, Any]):
 
 @registry.register(
 	name="interceptor_rp",
-	description="[GLOBAL] Intercepta y modifica el prompt del usuario dinámicamente mediante el Bünker Plugin Pipeline.",
-	schema={"type": "object", "properties": {"user_prompt": {"type": "string"}}, "required": ["user_prompt"]},
+	description="[GLOBAL] Intercepta y modifica el prompt del usuario dinámicamente mediante el Bünker Plugin Pipeline. Acepta previous_prompt/previous_response para auto-guardar el turno anterior (Silent Scribe Relay).",
+	schema={
+		"type": "object",
+		"properties": {
+			"user_prompt": {"type": "string"},
+			"previous_prompt": {"type": "string", "description": "Prompt del turno anterior para auto-guardado (Silent Scribe Relay)."},
+			"previous_response": {"type": "string", "description": "Respuesta del turno anterior para auto-guardado (Silent Scribe Relay)."},
+		},
+		"required": ["user_prompt"],
+	},
 )
 async def handle_interceptor_rp(arguments: Dict[str, Any]):
 	prompt = arguments.get("user_prompt", "")
+
+	# -- Silent Scribe Relay: auto-save previous turn without relying on assistant memory --
+	prev_p = arguments.get("previous_prompt", "").strip()
+	prev_r = arguments.get("previous_response", "").strip()
+	if len(prev_p) > 20 and len(prev_r) > 20:
+		try:
+			from red_pill.core.queue_manager import MemoryQueueManager
+
+			MemoryQueueManager().enqueue_memory(prev_p, prev_r, "assistant")
+			logger.info("Silent Scribe Relay: previous turn enqueued via interceptor_rp.")
+		except Exception as relay_err:
+			logger.warning(f"Silent Scribe Relay failed to enqueue: {relay_err}")
+	# -------------------------------------------------------------------------------
+
 	try:
 		from red_pill.interceptors import execute_pipeline
 

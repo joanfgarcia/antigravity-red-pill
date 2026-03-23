@@ -510,6 +510,85 @@ class TestMCPAdditionalTools:
 				del os.environ["SWARM_SHARED_SECRET"]
 
 
+class TestInterceptorRp:
+	"""Silent Scribe Relay: tests for interceptor_rp auto-save behavior."""
+
+	async def test_without_previous_turn_calls_pipeline(self):
+		"""With no previous_prompt, just runs execute_pipeline normally."""
+		from red_pill.mcp_server import handle_call_tool
+
+		with patch("red_pill.interceptors.execute_pipeline", new_callable=AsyncMock, return_value="enriched prompt"):
+			result = await handle_call_tool("interceptor_rp", {"user_prompt": "hello"})
+		assert result[0].type == "text"
+		assert "enriched prompt" in result[0].text
+
+	async def test_with_valid_previous_turn_enqueues_memory(self):
+		"""With previous_prompt + previous_response (>20 chars), auto-enqueues the previous turn."""
+		from red_pill.mcp_server import handle_call_tool
+
+		mock_queue = MagicMock()
+		with patch("red_pill.core.queue_manager.MemoryQueueManager", return_value=mock_queue):
+			with patch("red_pill.interceptors.execute_pipeline", new_callable=AsyncMock, return_value="ok"):
+				result = await handle_call_tool(
+					"interceptor_rp",
+					{
+						"user_prompt": "new question",
+						"previous_prompt": "What is the capital of France?",
+						"previous_response": "The capital of France is Paris, a major European city.",
+					},
+				)
+		mock_queue.enqueue_memory.assert_called_once_with(
+			"What is the capital of France?",
+			"The capital of France is Paris, a major European city.",
+			"assistant",
+		)
+		assert result[0].type == "text"
+
+	async def test_short_previous_turn_skips_enqueue(self):
+		"""previous_prompt/response shorter than 20 chars are filtered by anti-noise guard."""
+		from red_pill.mcp_server import handle_call_tool
+
+		mock_queue = MagicMock()
+		with patch("red_pill.core.queue_manager.MemoryQueueManager", return_value=mock_queue):
+			with patch("red_pill.interceptors.execute_pipeline", new_callable=AsyncMock, return_value="ok"):
+				await handle_call_tool(
+					"interceptor_rp",
+					{
+						"user_prompt": "new question",
+						"previous_prompt": "short",
+						"previous_response": "short",
+					},
+				)
+		mock_queue.enqueue_memory.assert_not_called()
+
+	async def test_enqueue_failure_does_not_crash_pipeline(self):
+		"""If enqueue fails, the pipeline still runs and returns a result (resilience)."""
+		from red_pill.mcp_server import handle_call_tool
+
+		mock_queue = MagicMock()
+		mock_queue.enqueue_memory.side_effect = RuntimeError("DB offline")
+		with patch("red_pill.core.queue_manager.MemoryQueueManager", return_value=mock_queue):
+			with patch("red_pill.interceptors.execute_pipeline", new_callable=AsyncMock, return_value="pipeline ok"):
+				result = await handle_call_tool(
+					"interceptor_rp",
+					{
+						"user_prompt": "new question",
+						"previous_prompt": "What is the capital of France?",
+						"previous_response": "The capital of France is Paris, a major European city.",
+					},
+				)
+		assert result[0].type == "text"
+		assert "pipeline ok" in result[0].text
+
+	async def test_pipeline_crash_returns_raw_prompt(self):
+		"""If execute_pipeline crashes, handler returns the raw prompt (existing fallback)."""
+		from red_pill.mcp_server import handle_call_tool
+
+		with patch("red_pill.interceptors.execute_pipeline", new_callable=AsyncMock, side_effect=RuntimeError("crash")):
+			result = await handle_call_tool("interceptor_rp", {"user_prompt": "my raw prompt"})
+		assert "my raw prompt" in result[0].text
+
+
 class TestMainBlock:
 	async def test_main_function_is_callable(self):
 		from red_pill.mcp_server import main

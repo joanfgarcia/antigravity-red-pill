@@ -217,6 +217,10 @@ def main():
 		if "[IMMUNE]" not in rule and rule not in str(persona_injection):
 			print(f"- {rule.strip()}")
 
+	print("\n=== SILENT SCRIBE RELAY (OBLIGATORIO) ===")
+	print("- Al llamar interceptor_rp al inicio de CADA turno, pasa previous_prompt y previous_response del turno anterior.")
+	print("- Esto auto-guarda el turno anterior sin depender de tu memoria. Sin relay = amnesia silenciosa.")
+	print("- Formato: interceptor_rp(user_prompt=..., previous_prompt=<turno_anterior>, previous_response=<respuesta_anterior>)")
 	print("</BUNKER_CONTEXT>")
 
 
