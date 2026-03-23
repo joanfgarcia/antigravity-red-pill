@@ -533,6 +533,9 @@ if command -v uv &> /dev/null; then
 	(cd "$SCRIPT_DIR/../" && uv run python scripts/schedule_pulse.py --interval-hours 1 || echo -e "${YELLOW}Aviso: No se pudo registrar el pulso. Ejecuta 'uv run python scripts/schedule_pulse.py' manualmente.${NC}")
 	(cd "$SCRIPT_DIR/../" && uv run python scripts/deploy_queue.py || echo -e "${YELLOW}Aviso: No se pudo inyectar la cola asíncrona OS-nativa.${NC}")
 	(cd "$SCRIPT_DIR/../" && uv run python scripts/deploy_bunker.py || echo -e "${YELLOW}Aviso: No se pudo inyectar el Bünker Daemon OS-nativo.${NC}")
+	echo -e "${BLUE}--- Fase: PyTorch CUDA (auto-detección) ---${NC}"
+	(cd "$SCRIPT_DIR/../" && uv run python scripts/setup_torch.py || echo -e "${YELLOW}Aviso: No se pudo instalar torch con CUDA. Ejecuta 'uv run python scripts/setup_torch.py' manualmente.${NC}")
+
 fi
 
 echo -e "${BLUE}--- Fase: Integración MCP Server ---${NC}"
