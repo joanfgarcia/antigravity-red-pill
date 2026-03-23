@@ -118,7 +118,8 @@ The `~/.gemini/GEMINI.md` file defines the agent's boot protocol. After major pr
 1.  **Review**: Ensure `GEMINI.md` contains all 3 current rules:
     - **Rule 1 — Zero-Trust Context Injection**: Runs `wake_up_v6.py` at Step 0.
     - **Rule 2 — Model Change Identity Resync**: Calls `refresh_session_context` on `USER_SETTINGS_CHANGE` (Model Selection). This is **critical** — without it, identity is lost on model switches mid-session.
-    - **Rule 3 — Persistent Memory Logging**: Calls `memorize_interaction` at end of relevant conversations.
+    - **Rule 3 — Persistent Memory Logging**: Calls `memorize_interaction` **after each relevant turn** (not end-of-session). Skipped for trivial exchanges (typos, yes/no). If the session is interrupted, unregistered turns are lost forever.
+
 2.  **Rules directory**: Check `~/.gemini/antigravity/rules/` for any referenced but missing rule files.
 3.  **Re-inject**: If any rule is missing, re-run `scripts/install_neo.sh` or manually update `~/.gemini/GEMINI.md`.
 
