@@ -45,7 +45,7 @@ If updating to v6.1.0 or higher, you must synchronize your infrastructure parame
 7.  **Service Restart**: Run `systemctl --user restart redpill.service` to apply the new persistent environment.
 8.  **Qdrant Kill-Switch (SEC-02)**: If your Qdrant instance is exposed to the local network (`0.0.0.0`) or hosted remotely, the protocol will now refuse to boot unless you define a `QDRANT_API_KEY` in your `.env`. This is a hard-coded security protection.
 9.  **Google Drive Token Migration**: Your existing `token.json` for Cloud Vault backups will be automatically migrated to `~/.agent/credentials/drive_token.json` internally on boot. No re-authentication is required.
-10. **Lazarus Pulse Deploy**: Run `uv run python scripts/deploy_pulse.py` manually once.
+10. **Lazarus Pulse Deploy**: Run `uv run python scripts/schedule_pulse.py --interval-hours 1` manually once. This is cross-platform (Linux: systemd timer, macOS: launchd, Windows: schtasks). To uninstall: `uv run python scripts/schedule_pulse.py --uninstall`.
 11. **Async Queue Worker Deploy**: Run `uv run python scripts/deploy_queue.py` manually once.
 12. **Bünker Telemetry Daemon Deploy**: Run `uv run python scripts/deploy_bunker.py` manually once to enable real-time hardware status and health signals.
 
@@ -133,6 +133,41 @@ When merging branches (especially reverse merges like `Target ← Source`):
 5.  **Mypy**: Run `uv run mypy src/red_pill/` to catch type errors from merged signatures.
 6.  **Version conflicts**: The merge may bring conflicting version strings. Follow §4.3 to reconcile.
 7.  **CHANGELOG ordering**: Ensure the latest version entry is at the top and matches `pyproject.toml`.
+
+### 4.8 Test Isolation — `memorize_interaction` Rule
+
+> [!CAUTION]
+> **Any test that calls `handle_memorize_interaction` (or any handler that eventually calls `MemoryQueueManager`) with a payload that passes the Anti-Noise filters WILL write to the real Qdrant instance** unless `MemoryQueueManager` is mocked. This is a data pollution risk.
+
+**Mandatory pattern** for every test invoking memory-writing MCP handlers:
+
+```python
+from unittest.mock import MagicMock, patch
+
+mock_queue = MagicMock()
+with patch("red_pill.core.queue_manager.MemoryQueueManager", return_value=mock_queue):
+    res = await handle_memorize_interaction({"prompt": "...", "response": "..."})
+assert "Engram queue registration initiated" in res[0].text
+mock_queue.enqueue_memory.assert_called_once()  # Verify it reached the queue
+```
+
+**Safe (rejection) tests** (ping, noise, wrong role) do NOT need the mock; they are rejected before hitting the queue.
+
+**Affected files to audit** when adding new tests: `test_mcp_server.py`, `test_mcp_bunker_export.py`, `test_mcp_memorize_filter.py`.
+
+### 4.9 Lazarus Sleep Engine — Safety Invariants
+
+The `perform_sleep_cycle()` function in `src/red_pill/metabolism/sleep.py` has two critical safety rules that must be preserved in any future modification:
+
+1.  **LLM-gated deletion**: A raw `interaction_memories` node is **only deleted** after `chunks_saved > 0` (i.e., at least one engram was successfully written to `work_memories` or `social_memories`). If the local LLM is down or all chunks are culled with no saves, the raw node is **preserved** for the next cycle. Never remove the `chunks_saved` guard.
+
+2.  **LLM health check before processing**: At the start of each cycle, `_check_llm_available()` probes the UDS socket or TCP endpoint of the local distillation model. If unreachable:
+    - Injects a `local_llm_offline` pain signal (intensity 7.0) into `signal_memories`.
+    - Aborts the cycle without touching any node.
+    - Signal is automatically evaporated when the cycle completes successfully.
+
+3.  **Tests of `perform_sleep_cycle`** must mock `red_pill.metabolism.sleep._check_llm_available` to return `True` (or explicitly test the LLM-down path), otherwise they will be skipped by the health guard in CI where no LLM runs.
+
 
 ## 5. Hierarchy of Directives
 

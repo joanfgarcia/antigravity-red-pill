@@ -11,6 +11,39 @@ from red_pill.events import SleepCompletedEvent, get_event_bus
 logger = logging.getLogger(__name__)
 
 
+def _check_llm_available() -> bool:
+	"""Quick reachability probe for the local distillation LLM."""
+	import os
+	import socket
+
+	uds_path = os.path.expanduser("~/.agent/red_pill.sock")
+	if os.path.exists(uds_path):
+		try:
+			s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+			s.settimeout(1.0)
+			s.connect(uds_path)
+			s.close()
+			return True
+		except OSError:
+			return False
+
+	# Fallback: probe TCP endpoint
+	mlx_url = getattr(cfg, "MLX_LM_URL", "") or ""
+	if mlx_url:
+		try:
+			import urllib.parse
+			parsed = urllib.parse.urlparse(mlx_url)
+			host = parsed.hostname or "127.0.0.1"
+			port = parsed.port or 8760
+			s = socket.create_connection((host, port), timeout=1.0)
+			s.close()
+			return True
+		except OSError:
+			return False
+
+	return False  # No endpoint configured
+
+
 def chunk_text(text: str, size: Optional[int] = None) -> List[str]:
 	"""Break large interactions into biologially manageable sequences."""
 	if size is None:
@@ -202,6 +235,21 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 		logger.info("Sleep Cycle complete. No unprocessed interactions found.")
 		return 0
 
+	# LLM Health Check: if the distillation model is unreachable, abort and signal pain.
+	# Nodes are preserved in interaction_memories for the next cycle.
+	if not _check_llm_available():
+		logger.warning("[SLEEP ENGINE] Local LLM is offline. Aborting sleep cycle. Injecting pain signal.")
+		try:
+			memory_manager.inject_signal(
+				"local_llm_offline",
+				intensity=7.0,
+				signal_type="pain",
+				source="SLEEP_ENGINE",
+			)
+		except Exception:
+			pass
+		return 0
+
 	processed_count = 0
 	for point in scroll_result:
 		raw_id = point.id
@@ -241,6 +289,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 
 		surviving_chunks = []
 		prev_chunk_id = None
+		chunks_saved = 0  # Track successful writes for this point
 
 		target_col = "social_memories"
 		if any(kw in raw_text.lower() for kw in ["code", "error", "bash", "python", "script", "commit"]):
@@ -279,6 +328,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 
 				prev_chunk_id = new_id
 				processed_count += 1
+				chunks_saved += 1
 
 			except Exception as e:
 				logger.error(f"[SLEEP ENGINE] Failed to fixate child chunk: {e}")
@@ -301,16 +351,28 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 				if hub_id:
 					client.set_payload(collection_name=target_col, payload={"associations": [prev_chunk_id]}, points=[hub_id])
 					processed_count += 1
+					chunks_saved += 1
 			except Exception as e:
 				logger.error(f"[SLEEP ENGINE] Failed to fixate synthesis hub: {e}")
 
-		# Erase the raw memory sequence
-		try:
-			client.delete(collection_name=collection, points_selector=[raw_id])
-		except Exception as e:
-			logger.error(f"[SLEEP ENGINE] Could not purge fast buffer node {raw_id}: {e}")
+		# Erase the raw memory sequence ONLY if we successfully stored at least one engram.
+		# If distillation failed (LLM down) or all chunks were culled, preserve for next cycle.
+		if chunks_saved > 0:
+			try:
+				client.delete(collection_name=collection, points_selector=[raw_id])
+			except Exception as e:
+				logger.error(f"[SLEEP ENGINE] Could not purge fast buffer node {raw_id}: {e}")
+		else:
+			logger.warning(f"[SLEEP ENGINE] Node {raw_id} preserved: no engrams saved (LLM down or all chunks culled). Will retry next cycle.")
 
 	logger.info(f"=== LAZARUS PULSE: Sleep Cycle complete. {processed_count} engrams synaptically woven. ===")
+
+	# LLM was available (we got here): evaporate any lingering pain signal.
+	try:
+		memory_manager.evaporate_signals("local_llm_offline")
+	except Exception:
+		pass
+
 	get_event_bus().emit(SleepCompletedEvent(
 		collection=collection,
 		processed_count=processed_count,

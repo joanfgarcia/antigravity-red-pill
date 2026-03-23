@@ -530,7 +530,7 @@ if command -v uv &> /dev/null; then
 	fi
 
 	echo -e "${BLUE}--- Fase: Despliegue de Heartbeat, Cola y Bünker Daemon ---${NC}"
-	(cd "$SCRIPT_DIR/../" && uv run python scripts/deploy_pulse.py || echo -e "${YELLOW}Aviso: No se pudo inyectar el pulso OS-nativo.${NC}")
+	(cd "$SCRIPT_DIR/../" && uv run python scripts/schedule_pulse.py --interval-hours 1 || echo -e "${YELLOW}Aviso: No se pudo registrar el pulso. Ejecuta 'uv run python scripts/schedule_pulse.py' manualmente.${NC}")
 	(cd "$SCRIPT_DIR/../" && uv run python scripts/deploy_queue.py || echo -e "${YELLOW}Aviso: No se pudo inyectar la cola asíncrona OS-nativa.${NC}")
 	(cd "$SCRIPT_DIR/../" && uv run python scripts/deploy_bunker.py || echo -e "${YELLOW}Aviso: No se pudo inyectar el Bünker Daemon OS-nativo.${NC}")
 fi

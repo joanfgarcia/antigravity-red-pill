@@ -1,3 +1,5 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
 
 from red_pill.mcp_server import handle_memorize_interaction
@@ -28,5 +30,9 @@ async def test_silent_scribe_rejects_noise():
 
 @pytest.mark.asyncio
 async def test_silent_scribe_accepts_valid_interaction():
-	res = await handle_memorize_interaction({"prompt": "Who are you?", "response": "I am Aleth.", "role": "assistant"})
+	mock_queue = MagicMock()
+	with patch("red_pill.core.queue_manager.MemoryQueueManager", return_value=mock_queue):
+		res = await handle_memorize_interaction({"prompt": "Who are you?", "response": "I am Aleth.", "role": "assistant"})
 	assert "Engram queue registration initiated" in res[0].text
+	mock_queue.enqueue_memory.assert_called_once()
+

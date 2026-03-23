@@ -50,8 +50,9 @@ def test_synthesize_hub(mock_urlopen):
 	assert result == "Master summary"
 
 
+@patch("red_pill.metabolism.sleep._check_llm_available", return_value=True)
 @patch("red_pill.metabolism.sleep.distill_engram")
-def test_perform_sleep_cycle(mock_distill):
+def test_perform_sleep_cycle(mock_distill, mock_llm):
 	mock_mem_mgr = MagicMock()
 	mock_client = mock_mem_mgr.client
 	mock_client.collection_exists.return_value = True

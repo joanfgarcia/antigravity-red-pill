@@ -397,15 +397,21 @@ class TestMCPAdditionalTools:
 		"""Phase 2 Interceptor: daemon is no longer used, always in-band async."""
 		from red_pill.mcp_server import handle_call_tool
 
-		result = await handle_call_tool("memorize_interaction", {"prompt": "What is the capital of France?", "response": "Paris."})
+		mock_queue = MagicMock()
+		with patch("red_pill.core.queue_manager.MemoryQueueManager", return_value=mock_queue):
+			result = await handle_call_tool("memorize_interaction", {"prompt": "What is the capital of France?", "response": "Paris."})
 		assert "Engram queue registration" in result[0].text
+		mock_queue.enqueue_memory.assert_called_once()
 
 	async def test_memorize_interaction_success(self):
 		"""Phase 2 Interceptor: function always returns async success."""
 		from red_pill.mcp_server import handle_call_tool
 
-		result = await handle_call_tool("memorize_interaction", {"prompt": "Real question", "response": "Real answer"})
+		mock_queue = MagicMock()
+		with patch("red_pill.core.queue_manager.MemoryQueueManager", return_value=mock_queue):
+			result = await handle_call_tool("memorize_interaction", {"prompt": "Real question", "response": "Real answer"})
 		assert "Engram queue registration" in result[0].text
+		mock_queue.enqueue_memory.assert_called_once()
 
 	async def test_adjust_sleep_knobs(self):
 		import sys

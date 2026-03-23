@@ -23,8 +23,11 @@ async def test_mcp_control_bunker_export():
 
 @pytest.mark.asyncio
 async def test_mcp_memorize_interaction_fallback():
-	res = await handle_memorize_interaction({"prompt": "Valid test prompt long enough to bypass", "response": "Valid log enough to bypass ping."})
+	mock_queue = MagicMock()
+	with patch("red_pill.core.queue_manager.MemoryQueueManager", return_value=mock_queue):
+		res = await handle_memorize_interaction({"prompt": "Valid test prompt long enough to bypass", "response": "Valid log enough to bypass ping."})
 	assert "Engram queue registration initiated" in res[0].text
+	mock_queue.enqueue_memory.assert_called_once()
 
 
 @pytest.mark.asyncio

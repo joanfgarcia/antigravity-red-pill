@@ -1,5 +1,33 @@
 # Changelog: Red Pill Protocol
 
+## [6.1.7] - 2026-03-23
+
+### 🧠 Sleep Engine Safety, Test Isolation & Cross-Platform Pulse Scheduler
+
+- **[FIX] `src/red_pill/metabolism/sleep.py` — LLM-Gated Deletion (Data Loss Prevention)**: Raw `interaction_memories` nodes are now only deleted after `chunks_saved > 0`. Previously, nodes were deleted even when the local LLM was unreachable or all distilled chunks were culled by the affective filter. This caused silent data loss. Nodes are now preserved for the next cycle if no engrams are saved.
+
+- **[FIX] `src/red_pill/metabolism/sleep.py` — LLM Health Check**: Added `_check_llm_available()` at the start of every `perform_sleep_cycle()` execution. If the local distillation model (UDS socket or TCP) is unreachable, the cycle injects a `local_llm_offline` pain signal (intensity 7.0) into `signal_memories` and aborts without touching any node. The signal is evaporated automatically on the next successful cycle.
+
+- **[FIX] `tests/test_mcp_server.py`, `tests/test_mcp_bunker_export.py`, `tests/test_mcp_memorize_filter.py` — Test Isolation**: Three test files were calling `handle_memorize_interaction` without mocking `MemoryQueueManager`, causing real writes to the `interaction_memories` Qdrant collection during CI runs. All three files now mock `red_pill.core.queue_manager.MemoryQueueManager`. Approx. 140 garbage nodes were purged from the production instance as a result.
+
+- **[FIX] `tests/test_sleep.py`, `tests/test_sleep_coverage.py` — LLM Mock for CI**: Added `patch("red_pill.metabolism.sleep._check_llm_available", return_value=True)` to relevant tests that run the full `perform_sleep_cycle` path. Without this mock, the new LLM health check would abort the test silently in CI environments where no local LLM is running.
+
+- **[NEW] `scripts/schedule_pulse.py` — Cross-Platform Pulse Scheduler**: Replaces `deploy_pulse.py` as the canonical way to install the hourly heartbeat job. Detects the current OS and uses the native scheduling mechanism:
+  - **Linux** → `systemd --user` timer (`redpill-pulse.timer` + `redpill-pulse.service`)
+  - **macOS** → `launchd` plist (`~/Library/LaunchAgents/com.redpill.pulse.plist`)
+  - **Windows** → Task Scheduler (`schtasks /create`)
+  - Supports `--interval-hours N` (default: 1) and `--uninstall`.
+
+- **[FIX] `~/.config/systemd/user/redpill-pulse.timer`** — Added `OnBootSec=5min` to bootstrap the timer on first boot. Updated interval from 2h → 1h.
+
+- **[FIX] `~/.config/systemd/user/redpill-pulse.service`** — Fixed `uv: No such file or directory` in systemd context using absolute path + explicit `Environment=PATH=...`.
+
+- **[FEAT] `src/red_pill/cli.py` — `red-pill daemon` subcommand**: Continuous blocking daemon mode with SIGTERM/SIGINT handling for `Restart=always` systemd services.
+
+- **[DOCS] `scripts/install_neo.sh`**: Updated to call `schedule_pulse.py --interval-hours 1`.
+
+- **[DOCS] `docs/GUIDES/AGENT_UPDATE_GUIDE.md`**: Added §4.8 (Test Isolation) and §4.9 (Sleep Engine safety invariants).
+
 ## [Unreleased] v3.0-phase0 — LEAN_SOUL_KIT Migration Protocol
 
 ### Added
@@ -27,7 +55,9 @@ red-pill soul migrate --decrypt
 # Step 2 — after upgrading pure-mls:
 red-pill soul migrate --reencrypt
 ```
+
 ## [6.1.6] - 2026-03-22
+
 
 ### 🛡️ Memory Incident Response: SEC-PURGE-001, Daily Backups & Bilingual Docs
 

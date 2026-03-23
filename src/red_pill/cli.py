@@ -142,6 +142,40 @@ def handle_identity(args: argparse.Namespace) -> None:
 			print("Purge aborted.")
 
 
+def handle_daemon() -> None:
+	"""
+	Lazarus Daemon: starts the LazarusPulse heartbeat and blocks forever.
+	This is the entry point called by the systemd service (redpill.service).
+	The pulse runs all rituals (maintenance, sleep/consolidation, swarm, etc.)
+	every PULSE_INTERVAL seconds (default: 3600).
+	"""
+	import signal
+	import threading
+
+	from red_pill.heartbeat import LazarusPulse
+
+	mem_mgr = MemoryManager()
+	soul_mgr = SoulManager()
+	pulse = LazarusPulse(mem_mgr, soul_mgr)
+
+	stop_event = threading.Event()
+
+	def _shutdown(signum, frame):
+		print("\n[DAEMON] Signal received. Initiating graceful shutdown...")
+		pulse.stop()
+		stop_event.set()
+
+	signal.signal(signal.SIGTERM, _shutdown)
+	signal.signal(signal.SIGINT, _shutdown)
+
+	print(f"[DAEMON] Lazarus Pulse started. Interval: {cfg.PULSE_INTERVAL}s. PID: {os.getpid()}")
+	pulse.start()
+
+	# Block main thread until signal
+	stop_event.wait()
+	print("[DAEMON] Flatline. Goodbye.")
+
+
 def get_collection(type_str: str) -> str:
 	"""Map CLI type to collection name."""
 	mapping = {
@@ -320,6 +354,8 @@ def main() -> None:
 	id_sub.add_parser("refresh", help="Synthesize and refresh session context (wake_up)")
 	id_sub.add_parser("purge", help="GDPR Art 17: Right to be Forgotten. Destroys all memory collections and local identity.")
 
+	subparsers.add_parser("daemon", help="Start the Lazarus Pulse heartbeat daemon (used by systemd)")
+
 	args = parser.parse_args()
 
 	log_level = logging.DEBUG if args.verbose else getattr(logging, cfg.LOG_LEVEL.upper(), logging.INFO)
@@ -365,6 +401,10 @@ def main() -> None:
 	if not args.command:
 		parser.print_help()
 		sys.exit(0)
+
+	elif args.command == "daemon":
+		handle_daemon()
+		return
 
 	elif args.command == "mode":
 		handle_mode(args)
