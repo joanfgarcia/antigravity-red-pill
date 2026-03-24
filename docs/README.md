@@ -54,6 +54,9 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [MLS_ESTIMATION.md](TECHNICAL/MLS_ESTIMATION.md) | MLS/TreeKEM group key agreement estimation and design |
 | [EDGE_HIVE_TRANSIT_DOCK.md](TECHNICAL/EDGE_HIVE_TRANSIT_DOCK.md) | Edge-to-HiveMind transit architecture |
 
+> [!WARNING]
+> **Swarm E2EE is a Proof-of-Concept.** The current MLS/TreeKEM implementation does not yet provide Perfect Forward Secrecy (PFS) or Post-Compromise Security (PCS). Swarm messaging confidentiality relies on a shared secret (`SWARM_SHARED_SECRET`). Production-grade MLS is planned for v7.0. See `MLS_ESTIMATION.md` for details.
+
 ### Research
 
 | Document | What it is |

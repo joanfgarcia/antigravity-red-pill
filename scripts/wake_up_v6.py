@@ -151,7 +151,9 @@ def main():
 		try:
 			with open(cache_path, "r") as f:
 				cache = json.load(f)
-			if cache.get("hash") == current_hash:
+			# P2-001: Invalidate cache if older than 1 hour (TTL guard)
+			cache_age = time.time() - cache.get("timestamp", 0)
+			if cache.get("hash") == current_hash and cache_age < 3600:
 				persona_injection = cache.get("persona")
 		except Exception:
 			# If corrupt or error, we just proceed to re-synthesize
@@ -162,7 +164,7 @@ def main():
 			persona_injection = synthesize_with_llm(unique_context)
 			try:
 				with open(cache_path, "w") as f:
-					json.dump({"hash": current_hash, "persona": persona_injection}, f)
+					json.dump({"hash": current_hash, "timestamp": time.time(), "persona": persona_injection}, f)
 			except Exception:
 				pass
 		else:

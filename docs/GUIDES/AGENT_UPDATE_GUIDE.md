@@ -46,8 +46,37 @@ If updating to v6.1.0 or higher, you must synchronize your infrastructure parame
 8.  **Qdrant Kill-Switch (SEC-02)**: If your Qdrant instance is exposed to the local network (`0.0.0.0`) or hosted remotely, the protocol will now refuse to boot unless you define a `QDRANT_API_KEY` in your `.env`. This is a hard-coded security protection.
 9.  **Google Drive Token Migration**: Your existing `token.json` for Cloud Vault backups will be automatically migrated to `~/.agent/credentials/drive_token.json` internally on boot. No re-authentication is required.
 10. **Sovereign Persistence (Protocol 770)**: Run `uv run python scripts/schedule_pulse.py` manually once. This cross-platform tool configures a 1-minute interval for the interaction queue, ensuring near-real-time memory persistence.
-49. **Legacy Cleanup**: The scripts `deploy_queue.py`, `deploy_pulse.py`, and `deploy_service.py` are DEPRECATED. Their functionality is now unified within `schedule_pulse.py`.
-50. **Bünker Telemetry**: Ensure `uv run python scripts/schedule_pulse.py` is executed to enable background health signals.
+
+    #### §4.8 Zero-Daemon Pulse Management (v6.2.0)
+
+    `schedule_pulse.py` replaces all persistent background daemons with OS-native oneshot timers (systemd on Linux, launchd on macOS, Task Scheduler on Windows). Each timer fires every 60 seconds, runs the pulse, and exits — consuming zero idle RAM.
+
+    **Install/reinstall timers:**
+    ```bash
+    uv run python scripts/schedule_pulse.py --interval-hours 1
+    # Default: 1 minute interval (--interval-hours 1 = 60 min cycle)
+    # Recommended: run once after every installation or update
+    ```
+
+    **Uninstall timers (maintenance window):**
+    ```bash
+    uv run python scripts/schedule_pulse.py --uninstall
+    ```
+
+    **Verify timers are active:**
+    ```bash
+    # Linux
+    systemctl --user list-timers | grep redpill
+
+    # macOS
+    launchctl list | grep redpill
+    ```
+
+    > [!NOTE]
+    > The legacy scripts `deploy_queue.py`, `deploy_pulse.py`, and `deploy_service.py` are **DEPRECATED**. Their functionality is unified in `schedule_pulse.py`. Remove them from any custom automation.
+
+11. **Legacy Cleanup**: The scripts `deploy_queue.py`, `deploy_pulse.py`, and `deploy_service.py` are DEPRECATED. Their functionality is now unified within `schedule_pulse.py`.
+12. **Bünker Telemetry**: Ensure `uv run python scripts/schedule_pulse.py` is executed to enable background health signals.
 
 ## 4. Post-Update Operational Checklist
 

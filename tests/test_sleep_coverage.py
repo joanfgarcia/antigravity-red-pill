@@ -6,10 +6,6 @@ import pytest
 from red_pill.metabolism.sleep import distill_engram, perform_sleep_cycle, synthesize_hub
 
 
-@pytest.mark.xfail(
-	reason="urllib.request is imported locally inside distill_engram; global patch cannot intercept it. Requires integration test with real LLM endpoint.",
-	strict=False,
-)
 def test_distill_engram_markdown_cleaning():
 	"""Test cleaning of markdown fences from LLM response."""
 	mock_resp = MagicMock()
@@ -21,7 +17,7 @@ def test_distill_engram_markdown_cleaning():
 	mock_opener = MagicMock()
 	mock_opener.open.return_value = mock_resp
 
-	with patch("os.path.exists", return_value=False), patch("urllib.request.build_opener", return_value=mock_opener):
+	with patch("red_pill.metabolism.sleep.os.path.exists", return_value=False), patch("red_pill.metabolism.sleep.urllib.request.build_opener", return_value=mock_opener):
 		result = distill_engram("raw")
 	assert result["summary"] == "test"
 	assert result["emotion"] == "joy"
@@ -30,14 +26,16 @@ def test_distill_engram_markdown_cleaning():
 	mock_resp.read.return_value = json.dumps(
 		{"choices": [{"message": {"content": '```\n{"summary": "test2", "emotion": "sadness", "intensity": 0.1}\n```'}}]}
 	).encode()
-	with patch("os.path.exists", return_value=False), patch("urllib.request.build_opener", return_value=mock_opener):
+	with patch("red_pill.metabolism.sleep.os.path.exists", return_value=False), patch("red_pill.metabolism.sleep.urllib.request.build_opener", return_value=mock_opener):
 		result = distill_engram("raw")
 	assert result["summary"] == "test2"
 
 
 def test_distill_engram_error_path():
 	"""Test fallback on HTTP error or timeout."""
-	with patch("urllib.request.OpenerDirector.open", side_effect=Exception("Timeout")):
+	mock_opener = MagicMock()
+	mock_opener.open.side_effect = Exception("Timeout")
+	with patch("red_pill.metabolism.sleep.os.path.exists", return_value=False), patch("red_pill.metabolism.sleep.urllib.request.build_opener", return_value=mock_opener):
 		result = distill_engram("raw content that is quite long " * 10)
 		assert "raw content" in result["summary"]
 		assert result["emotion"] == "neutral"
@@ -45,7 +43,7 @@ def test_distill_engram_error_path():
 
 def test_synthesize_hub_error_path():
 	"""Test fallback on synthesis failure."""
-	with patch("urllib.request.urlopen", side_effect=Exception("LLM Down")):
+	with patch("red_pill.metabolism.sleep.urllib.request.urlopen", side_effect=Exception("LLM Down")):
 		result = synthesize_hub(["summary 1", "summary 2"])
 		assert "Aggregated Memory Sequence" in result
 

@@ -18,32 +18,35 @@ def test_chunk_text_edge_cases():
 	assert chunk_text("short", size=10) == ["short"]
 
 
-@pytest.mark.xfail(
-	reason="sleep.py imports urllib.request locally inside distill_engram — patch at module level is not intercepted (pre-existing, same as test_sleep_coverage.py)"
-)
-@patch("urllib.request.OpenerDirector.open")
-def test_distill_engram(mock_open):
+@patch("red_pill.metabolism.sleep.os.path.exists", return_value=False)
+@patch("red_pill.metabolism.sleep.urllib.request.build_opener")
+def test_distill_engram(mock_build_opener, mock_exists):
+	mock_opener = MagicMock()
 	mock_response = MagicMock()
 	mock_response.read.return_value = json.dumps(
 		{"choices": [{"message": {"content": '{"summary": "test", "emotion": "joy", "intensity": 0.9}'}}]}
 	).encode()
 	mock_response.__enter__.return_value = mock_response
-	mock_open.return_value = mock_response
+	mock_opener.open.return_value = mock_response
+	mock_build_opener.return_value = mock_opener
 	result = distill_engram("raw content")
 	assert result["summary"] == "test"
 	assert result["emotion"] == "joy"
 	assert result["intensity"] == 0.9
 
 
-@patch("urllib.request.OpenerDirector.open")
-def test_distill_engram_fallback(mock_open):
-	mock_open.side_effect = Exception("Network fail")
+@patch("red_pill.metabolism.sleep.os.path.exists", return_value=False)
+@patch("red_pill.metabolism.sleep.urllib.request.build_opener")
+def test_distill_engram_fallback(mock_build_opener, mock_exists):
+	mock_opener = MagicMock()
+	mock_opener.open.side_effect = Exception("Network fail")
+	mock_build_opener.return_value = mock_opener
 	result = distill_engram("raw content")
 	assert "raw content" in result["summary"]
 	assert result["emotion"] == "neutral"
 
 
-@patch("urllib.request.urlopen")
+@patch("red_pill.metabolism.sleep.urllib.request.urlopen")
 def test_synthesize_hub(mock_urlopen):
 	mock_response = MagicMock()
 	mock_response.read.return_value = json.dumps({"choices": [{"message": {"content": "Master summary"}}]}).encode()

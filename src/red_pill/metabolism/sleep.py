@@ -1,5 +1,7 @@
 import json
 import logging
+import os
+import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Optional
 
@@ -7,6 +9,7 @@ from qdrant_client.models import Filter
 
 import red_pill.config as cfg
 from red_pill.events import SleepCompletedEvent, get_event_bus
+from red_pill.utils.uds_adapter import get_uds_opener
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +34,6 @@ def _check_llm_available() -> bool:
 	mlx_url = getattr(cfg, "MLX_LM_URL", "") or ""
 	if mlx_url:
 		try:
-			import urllib.parse
-
 			parsed = urllib.parse.urlparse(mlx_url)
 			host = parsed.hostname or "127.0.0.1"
 			port = parsed.port or 8760
@@ -109,12 +110,6 @@ def distill_engram(raw_content: str) -> Dict[str, Any]:
 			"stop": ["<|im_end|>", "<|endoftext|>", "user:", "assistant:"],
 		}
 	).encode("utf-8")
-
-	import os
-	import urllib.parse
-	import urllib.request
-
-	from red_pill.utils.uds_adapter import get_uds_opener
 
 	uds_path = os.path.expanduser("~/.agent/red_pill.sock")
 	if os.path.exists(uds_path):

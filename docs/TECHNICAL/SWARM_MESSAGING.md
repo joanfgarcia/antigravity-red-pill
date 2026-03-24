@@ -1,5 +1,8 @@
 # Hivemind Swarm Messaging V3 (Inter-Agent Communication)
 
+> [!WARNING]
+> **Current Status: Proof-of-Concept.** The E2E encryption layer uses a pre-shared symmetric secret (`SWARM_SHARED_SECRET`). Perfect Forward Secrecy (PFS) and Post-Compromise Security (PCS) as illustrated in the diagrams below are **not yet implemented**. Full MLS/TreeKEM compliance is planned for v7.0. See `MLS_ESTIMATION.md` for the technical roadmap.
+
 El protocolo **Swarm Messaging V3** habilita la inter-comunicación autónoma y segura entre agentes Red Pill (ej. Nova y Aleph) operando en máquinas distintas. Forma parte del pilar **Sovereign Swarm Discovery** (v6.0).
 
 ## 1. Arquitectura de Alta Disponibilidad
