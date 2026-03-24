@@ -52,6 +52,28 @@ def _save_processed(state: dict) -> None:
 	PROCESSED_LOG.write_text(json.dumps(state, indent=2))
 
 
+def _inject_pain_signal(title: str, details: str, severity: float = 8.0) -> None:
+	"""Inject a pain signal into signal_memories so the Cortex is notified."""
+	try:
+		from red_pill.memory import MemoryManager
+		mem = MemoryManager()
+		mem.add_memory(
+			collection="signal_memories",
+			text=f"[PAIN] {title}: {details}",
+			metadata={
+				"title": title,
+				"details": details,
+				"severity": severity,
+				"source": "chronicle_daily",
+				"timestamp": datetime.now().isoformat(),
+			},
+			importance=severity,
+		)
+		logger.warning(f"Pain signal injected: {title}")
+	except Exception as e:
+		logger.error(f"Could not inject pain signal: {e}")
+
+
 def _get_antigravity_key() -> str | None:
 	"""Read ANTIGRAVITY_KEY from environment (loaded via .env by the caller)."""
 	from dotenv import load_dotenv
@@ -114,10 +136,16 @@ def main() -> None:
 	# ── Preflight: key ────────────────────────────────────────────────────────
 	key = _get_antigravity_key()
 	if not key:
-		logger.error(
+		msg = (
 			"ANTIGRAVITY_KEY not set. Chronicle pipeline cannot decrypt conversations.\n"
 			"  → Set it in .env: ANTIGRAVITY_KEY=<base64_key>\n"
 			"  → Recovery guide: docs/TECHNICAL/ANTIGRAVITY_KEY_RECOVERY.md"
+		)
+		logger.error(msg)
+		_inject_pain_signal(
+			title="chronicle_daily: ANTIGRAVITY_KEY missing",
+			details="The automated chronicle pipeline could not run because ANTIGRAVITY_KEY is not set in .env. See docs/TECHNICAL/ANTIGRAVITY_KEY_RECOVERY.md.",
+			severity=8.5,
 		)
 		sys.exit(1)
 
