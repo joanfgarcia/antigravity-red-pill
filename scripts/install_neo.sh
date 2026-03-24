@@ -515,6 +515,15 @@ if [ -d "$REPO_ROOT/skills" ]; then
 	echo -e "${GREEN}✓ Habilidades (Skills) desplegadas en Antigravity.${NC}"
 fi
 
+# 6.2 Git Sovereign Guard (v6.2.0)
+if [ -d "$REPO_ROOT/scripts/git-hooks" ] && [ -d "$REPO_ROOT/.git" ]; then
+	echo -e "${BLUE}--- Fase: Blindaje de Flujo Git (Sovereign Guard) ---${NC}"
+	mkdir -p "$REPO_ROOT/.git/hooks"
+	cp "$REPO_ROOT/scripts/git-hooks/"* "$REPO_ROOT/.git/hooks/"
+	chmod +x "$REPO_ROOT/.git/hooks/"*
+	echo -e "${GREEN}✓ Hook de protección (pre-push) instalado.${NC}"
+fi
+
 # Generar Skill de Memoria Dinámico
 mkdir -p "$GEMINI_ROOT/skills/memory_manager"
 TEMPLATE_SKILL="$REPO_ROOT/skills/memory_manager_template/SKILL.md"

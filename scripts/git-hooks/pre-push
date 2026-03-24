@@ -1,0 +1,32 @@
+#!/bin/bash
+
+# Bünker Sovereign Guard: pre-push hook
+# Prevents any push to 'main' and any force push globally for this repo.
+
+remote="$1"
+url="$2"
+
+z40=0000000000000000000000000000000000000000
+
+while read local_ref local_sha remote_ref remote_sha
+do
+	# 1. Prevent Push to Main
+	if [ "$remote_ref" == "refs/heads/main" ]; then
+		echo -e "\033[0;31m[SOVEREIGN GUARD] REJECTED: Direct push to 'main' is strictly forbidden.\033[0m"
+		exit 1
+	fi
+
+	# 2. Prevent Force Push (Non-fast-forward check)
+	# Note: This is an approximation for local pre-push, as force-push detection 
+	# is more reliably done on server, but we can detect if local_sha is not an 
+	# ancestor of remote_sha if it's not a deletion.
+	if [ "$local_sha" != "$z40" ] && [ "$remote_sha" != "$z40" ]; then
+		# Check if remote_sha is an ancestor of local_sha
+		if [[ $(git merge-base "$local_sha" "$remote_sha") != "$remote_sha" ]]; then
+			echo -e "\033[0;31m[SOVEREIGN GUARD] REJECTED: Force push (non-fast-forward) is strictly forbidden.\033[0m"
+			exit 1
+		fi
+	fi
+done
+
+exit 0

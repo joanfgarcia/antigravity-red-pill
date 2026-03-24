@@ -219,6 +219,16 @@ if (Test-Path "$REPO_ROOT\skills") {
     Copy-Item "$REPO_ROOT\skills\*" (Join-Path $GEMINI_ROOT "skills") -Recurse -Force
 }
 
+# 6.2 Git Sovereign Guard (v6.2.0)
+$GIT_HOOKS_SRC = Join-Path $REPO_ROOT "scripts\git-hooks"
+$GIT_HOOKS_DEST = Join-Path $REPO_ROOT ".git\hooks"
+if (Test-Path $GIT_HOOKS_SRC) {
+    Write-Host "`n--- Fase: Blindaje de Flujo Git (Sovereign Guard) ---" -ForegroundColor Blue
+    if (-not (Test-Path $GIT_HOOKS_DEST)) { New-Item -ItemType Directory -Path $GIT_HOOKS_DEST | Out-Null }
+    Copy-Item "$GIT_HOOKS_SRC\*" $GIT_HOOKS_DEST -Force
+    Write-Host "✓ Hook de protección (pre-push) instalado." -ForegroundColor Green
+}
+
 # 7. Ignición de Memoria Bio-Sintética (Python)
 if (Get-Command uv -ErrorAction SilentlyContinue) {
     Write-Host "`n--- Fase: Ignición de Memoria Bio-Sintética ---" -ForegroundColor Blue

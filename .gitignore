@@ -59,6 +59,7 @@ Thumbs.db
 
 # Storage & Artifacts (Local Data)
 .agent/
+!.agent/rules/
 storage/
 backups/
 export/
