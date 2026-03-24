@@ -71,8 +71,8 @@ def main():
 				f_node_id = str(uuid.UUID(f_node_id[:32]))
 
 				f_payload = {
-					"raw_content": frag["content"],
-					"refined_content": frag["content"],
+					"raw_content": frag["content"][:1024],
+					"refined_content": frag["content"][:1024],
 					"parent_id": str(p.id),
 					"session_id": payload.get("session_id"),
 					"type": "idea_fragment",

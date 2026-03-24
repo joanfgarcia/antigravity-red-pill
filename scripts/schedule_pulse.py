@@ -16,7 +16,7 @@ import textwrap
 # Config
 DEFAULT_INTERVAL_HOURS = 1
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TRIGGER_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "trigger_pulse.py")
+
 
 # Systemd unit names (Linux)
 TIMER_NAME = "redpill-pulse.timer"
@@ -33,9 +33,10 @@ TASK_NAME_TELEMETRY = "RedPill-Telemetry"
 TASK_NAME_QUEUE = "RedPill-Queue"
 
 # Scripts
-TRIGGER_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "trigger_pulse.py")
-TELEMETRY_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "bunker_telemetry.py")
-QUEUE_SCRIPT = os.path.join(PROJECT_ROOT, "src", "red_pill", "core", "queue_worker.py")
+TRIGGER_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "run_pulse.py")
+TELEMETRY_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "telemetry.py")
+QUEUE_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "process_queue.py")
+CHRONICLE_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "chronicle_daily.py")
 
 
 def _find_uv() -> str:
@@ -71,15 +72,27 @@ def _install_linux(interval_hours: int, uv_path: str) -> None:
 	_write_systemd_unit("redpill-queue.service", f"{uv_path} run python {QUEUE_SCRIPT} --oneshot", "Red Pill Memory Queue Worker", type="oneshot")
 	_write_systemd_timer("redpill-queue.timer", "1m", "Timer for Red Pill Memory Queue Worker")
 
+	# 4. Chronicle Daily (04:00, Persistent — runs on next boot if missed)
+	_write_systemd_unit(
+		"redpill-chronicle.service",
+		f"{uv_path} run python {CHRONICLE_SCRIPT}",
+		"Red Pill Chronicle Daily Pipeline",
+		type="oneshot",
+		nice=10,
+	)
+	_write_calendar_timer("redpill-chronicle.timer", "*-*-* 04:00:00", "Daily Chronicle Ingestion Pipeline")
+
 	subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
 	subprocess.run(["systemctl", "--user", "enable", "--now", TIMER_NAME], check=True)
 	subprocess.run(["systemctl", "--user", "enable", "--now", "redpill-telemetry.timer"], check=True)
 	subprocess.run(["systemctl", "--user", "enable", "--now", "redpill-queue.timer"], check=True)
+	subprocess.run(["systemctl", "--user", "enable", "--now", "redpill-chronicle.timer"], check=True)
 	print("[OK] systemd timers installed. Protocol Zero-Daemon active.")
 
 
-def _write_systemd_unit(name, command, desc, type="oneshot"):
+def _write_systemd_unit(name, command, desc, type="oneshot", nice: int | None = None):
 	path = os.path.join(SYSTEMD_USER_DIR, name)
+	nice_line = f"\nNice={nice}" if nice is not None else ""
 	content = textwrap.dedent(f"""\
 		[Unit]
 		Description={desc}
@@ -88,7 +101,29 @@ def _write_systemd_unit(name, command, desc, type="oneshot"):
 		Type={type}
 		WorkingDirectory={PROJECT_ROOT}
 		Environment="PATH={os.environ.get("PATH")}"
-		ExecStart={command}
+		ExecStart={command}{nice_line}
+	""")
+	with open(path, "w") as f:
+		f.write(content)
+
+
+def _write_calendar_timer(name: str, calendar: str, desc: str) -> None:
+	"""Write a systemd timer that fires at a fixed calendar time (not interval).
+	Uses Persistent=true so it fires on next boot/wake if the system was off.
+	"""
+	path = os.path.join(SYSTEMD_USER_DIR, name)
+	content = textwrap.dedent(f"""\
+		[Unit]
+		Description={desc}
+
+		[Timer]
+		OnCalendar={calendar}
+		Persistent=true
+		WakeSystem=false
+		AccuracySec=5min
+
+		[Install]
+		WantedBy=timers.target
 	""")
 	with open(path, "w") as f:
 		f.write(content)
@@ -117,7 +152,13 @@ def _uninstall_linux() -> None:
 	subprocess.run(["systemctl", "--user", "disable", "--now", TIMER_NAME], check=False)
 	subprocess.run(["systemctl", "--user", "disable", "--now", "redpill-telemetry.timer"], check=False)
 	subprocess.run(["systemctl", "--user", "disable", "--now", "redpill-queue.timer"], check=False)
-	for name in (TIMER_NAME, SERVICE_NAME, "redpill-telemetry.timer", "redpill-telemetry.service", "redpill-queue.timer", "redpill-queue.service"):
+	subprocess.run(["systemctl", "--user", "disable", "--now", "redpill-chronicle.timer"], check=False)
+	for name in (
+		TIMER_NAME, SERVICE_NAME,
+		"redpill-telemetry.timer", "redpill-telemetry.service",
+		"redpill-queue.timer", "redpill-queue.service",
+		"redpill-chronicle.timer", "redpill-chronicle.service",
+	):
 		path = os.path.join(SYSTEMD_USER_DIR, name)
 		if os.path.exists(path):
 			os.remove(path)
