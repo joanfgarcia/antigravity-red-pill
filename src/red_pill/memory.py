@@ -545,7 +545,8 @@ class MemoryManager:
 
 			hit.payload = self._parse_payload(hit.payload, strict=strict)
 
-			if self.cfg.METABOLISM_STRATEGY == "LAZY":
+			_is_permanent = collection.strip() in self.cfg.PERMANENT_COLLECTIONS
+			if self.cfg.METABOLISM_STRATEGY == "LAZY" and not _is_permanent:
 				# Phase 2: Pluggable Memory Engine
 				engine_type = self.cfg.MEMORY_ENGINES.get(collection.strip(), "fsrs_real")
 				engine = get_memory_engine(engine_type)

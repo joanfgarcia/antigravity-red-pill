@@ -29,18 +29,37 @@ HEALTH=$(curl -sf "${QDRANT_URL}/healthz" -H "api-key: ${API_KEY}" 2>/dev/null) 
 }
 log "Qdrant healthy: ${HEALTH}"
 
-# Get list of collections
-COLLECTIONS=$(curl -sf "${QDRANT_URL}/collections" \
-	-H "api-key: ${API_KEY}" | \
-	python3 -c "import sys, json; data=json.load(sys.stdin); [print(c['name']) for c in data['result']['collections']]")
+# Collections to backup (Default: All)
+MODE="all"
+while [[ $# -gt 0 ]]; do
+	case $1 in
+		--soul-only) MODE="soul"; shift ;;
+		--chronicle-only) MODE="chronicle"; shift ;;
+		*) shift ;;
+	esac
+done
 
-log "Collections found: $(echo "$COLLECTIONS" | tr '\n' ' ')"
+SOUL_COLLECTIONS="work_memories social_memories directive_memories skill_memories"
+CHRONICLE_COLLECTIONS="archive_memories"
+
+if [[ "$MODE" == "soul" ]]; then
+	TARGET_COLLECTIONS="$SOUL_COLLECTIONS"
+elif [[ "$MODE" == "chronicle" ]]; then
+	TARGET_COLLECTIONS="$CHRONICLE_COLLECTIONS"
+else
+	# Get all collections from API
+	TARGET_COLLECTIONS=$(curl -sf "${QDRANT_URL}/collections" \
+		-H "api-key: ${API_KEY}" | \
+		python3 -c "import sys, json; data=json.load(sys.stdin); [print(c['name']) for c in data['result']['collections']]")
+fi
+
+log "Mode: ${MODE} | Targets: $(echo "$TARGET_COLLECTIONS" | tr '\n' ' ')"
 
 # Snapshot each collection
 SUCCESS=0
 FAIL=0
 
-for COLLECTION in $COLLECTIONS; do
+for COLLECTION in $TARGET_COLLECTIONS; do
 	SNAP_NAME="${COLLECTION}_${TIMESTAMP}.snapshot"
 	log "  Snapshotting: ${COLLECTION} -> ${SNAP_NAME}"
 

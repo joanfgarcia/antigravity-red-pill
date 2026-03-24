@@ -412,12 +412,15 @@ class RedPillConfig(BaseSettings):
 # Static data (not env-driven)
 # ---------------------------------------------------------------------------
 
-BAYESIAN_COLLECTIONS: List[str] = ["skill_memories", "work_memories", "directive_memories"]
+BAYESIAN_COLLECTIONS: List[str] = ["skill_memories", "work_memories", "directive_memories", "archive_memories"]
+
+PERMANENT_COLLECTIONS: List[str] = ["archive_memories", "directive_memories"]
 
 MEMORY_ENGINES: Dict[str, str] = {
 	"work_memories": "bayesian",
 	"skill_memories": "bayesian",
 	"directive_memories": "bayesian",
+	"archive_memories": "bayesian",
 	"social_memories": "fsrs_real",
 	"story_memories": "fsrs_real",
 }
@@ -502,6 +505,8 @@ def __getattr__(name: str) -> Any:
 	# Static mappings (not on the model)
 	if name == "BAYESIAN_COLLECTIONS":
 		return BAYESIAN_COLLECTIONS
+	if name == "PERMANENT_COLLECTIONS":
+		return PERMANENT_COLLECTIONS
 	if name == "MEMORY_ENGINES":
 		return MEMORY_ENGINES
 	if name == "CHROMA_TONE_MAPPING":

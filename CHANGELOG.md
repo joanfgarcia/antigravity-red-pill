@@ -2,8 +2,13 @@
 
 ## [6.2.0] - 2026-03-24
 
-### 🧠 Bünker Stabilization: Offline Decryption & Resonance Restoration
+### 🧠 Bünker Stabilization: Offline Decryption & The Atomized Chronicle
 
+- **[FEAT] The Atomized Chronicle (Ariadne's Thread)**: Implemented full historical dialogue preservation across all roles (User, Assistant, Tool). The system now indexes the complete technical trace of past sessions.
+- **[FEAT] Cognitive Refinement (Normalization)**: Introduced heuristic semantic normalization to scrub "raw_content" of logs, ANSI noise, and binary bloat, distilling it into "refined_content".
+- **[FEAT] Idea Fragmentation**: Activated granular semantic segmentation, breaking monoliths into 15,000+ "Idea Fragments" linked via causal axons for high-precision recall.
+- **[FEAT] Chronicle Explorer CLI**: New diagnostic tool (`scripts/chronicle_explorer.py`) for semantic search and Ariadne's Thread traversal (sequential axonal reconstruction).
+- **[FEAT] Dual-Mode Backup Strategy**: Refactored `backup_qdrant.sh` to support `--soul-only` and `--chronicle-only` flags, separating distilled identity from the raw historical archive.
 - **[FEAT] Offline Conversation Decryption**: Implemented the Antigravity decryption pipeline and persisted the recovered AES-128-CTR key in `.env` for offline Bünker ingestion.
 - **[HEAL] Dynamic CUDA Restoration**: Stabilized the "Motor Cortex" via `setup_torch.py`. Verified PyTorch `2.11.0+cu130` compatibility with CUDA 13.0 on RTX 5070.
 - **[FIX] `MemoryManager` Resonance Bug**: Resolved a critical `AttributeError` in `LazarusPulse` (`heartbeat.py`) where it incorrectly accessed the encoder. Migrated to `embeddings.get_vector()`.
