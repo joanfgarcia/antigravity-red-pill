@@ -29,6 +29,6 @@ class SwarmTransport(ABC):
 		pass
 
 	@abstractmethod
-	def resolve_alias(self, partial_alias: str) -> Optional[tuple[str, str, str]]:
+	def resolve_alias(self, partial_alias: str) -> Optional[tuple[str, str, str, str]]:
 		"""Resolves a partial alias (e.g. 'Aleph') to a full identifier ('Aleph@Joan') and its public key."""
 		pass

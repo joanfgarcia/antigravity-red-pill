@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
-# ============================================================
 # backup_qdrant.sh — Daily Qdrant Snapshot Backup
 # Backs up all active collections to the backup dir.
 # Retention: keeps last 14 days of snapshots.
-# ============================================================
 set -euo pipefail
 
 QDRANT_URL="http://localhost:6333"
 API_KEY="770-Sovereign-Key-001"
-BACKUP_DIR="/home/joan/Documents/IA/backups/qdrant"
+BACKUP_DIR="${HOME}/Documents/IA/backups/qdrant"
 RETENTION_DAYS=14
 LOG_FILE="${HOME}/.local/share/red_pill/backup.log"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")

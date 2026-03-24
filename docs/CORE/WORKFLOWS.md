@@ -70,7 +70,7 @@ git status --short | grep -E "^[AM].*\.(json|log|md)" | grep -v docs/
 [ ] Coverage: ≥96%
 [ ] CHANGELOG: entry present for this version
 [ ] No runtime artifacts committed (SOVEREIGNTY_PROOF.json, *.log, etc.)
-[ ] No hardcoded local paths (/home/joan/...) in src/
+[ ] No hardcoded local paths (~/...) in src/
 [ ] docs/README.md updated if docs files were added/removed
 ```
 
@@ -207,5 +207,5 @@ python3 scripts/wake_up_v6.py
 | `docs/certification/` lowercase | CONVENTIONS.md §2.1 |
 | Runtime artifact in `docs/` | CONVENTIONS.md §7 |
 | Dead code block (unreachable except) | `ruff check` + SoS test |
-| Hardcoded `/home/joan/` path | Pre-PR audit §2 |
+| Hardcoded `~/` path | Pre-PR audit §2 |
 | Mid-file module-level import (E402) | Move imports to top of file |

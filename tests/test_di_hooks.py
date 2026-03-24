@@ -9,9 +9,7 @@ from unittest.mock import MagicMock, patch
 
 from red_pill.memory import BayesianInferenceEngine, MemoryManager
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 
 def _make_mock_memory_manager(**kwargs) -> MemoryManager:
@@ -34,9 +32,7 @@ def _make_mock_memory_manager(**kwargs) -> MemoryManager:
 		return mm
 
 
-# ---------------------------------------------------------------------------
 # BayesianInferenceEngine
-# ---------------------------------------------------------------------------
 
 
 class TestBayesianInferenceEngine:
@@ -63,9 +59,7 @@ class TestBayesianInferenceEngine:
 		assert result == 5.0
 
 
-# ---------------------------------------------------------------------------
 # MemoryManager — sleep hooks
-# ---------------------------------------------------------------------------
 
 
 class TestMemoryManagerSleepHooks:
@@ -107,9 +101,7 @@ class TestMemoryManagerSleepHooks:
 		mm.fire_sleep_hooks({"processed_count": 0})  # Should not raise
 
 
-# ---------------------------------------------------------------------------
 # MemoryManager — hive injectable
-# ---------------------------------------------------------------------------
 
 
 class TestMemoryManagerHiveInjection:

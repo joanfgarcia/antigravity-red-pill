@@ -1,6 +1,5 @@
-import logging
 import asyncio
-from typing import Any, Dict
+import logging
 
 import red_pill.config as cfg
 from red_pill.interceptors.base import BaseInterceptorPlugin

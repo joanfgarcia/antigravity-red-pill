@@ -1,12 +1,8 @@
 import asyncio
-import json
 import logging
 import os
-import signal
 import subprocess
 import sys
-import threading
-import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
@@ -599,7 +595,6 @@ async def handle_heal_tissue(arguments: Dict[str, Any]):
 async def handle_run_samantha_analysis(arguments: Dict[str, Any]):
 	import os
 	import subprocess
-	import sys
 	import tempfile
 	import uuid
 
@@ -642,7 +637,6 @@ async def handle_run_samantha_analysis(arguments: Dict[str, Any]):
 @registry.register(name="run_pre_pr_audit", description="[OFFICIAL] Run the Pre-PR Audit protocol.", schema={"type": "object", "properties": {}})
 async def handle_run_pre_pr_audit(arguments: Dict[str, Any]):
 	import asyncio
-	import sys
 	import uuid
 
 	event_id = str(uuid.uuid4())[:8]
@@ -858,8 +852,8 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 			debug_f.write(f"TELEMETRY_PATH: {bunker_state}\n")
 
 		if bunker_state.exists():
-			import time
 			import json
+			import time
 
 			with open(bunker_state, "r") as f:
 				state = json.load(f)

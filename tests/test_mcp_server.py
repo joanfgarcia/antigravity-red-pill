@@ -4,9 +4,9 @@ CERT-COND-003 / COV-001: MCP Server Tool Coverage
 Unit tests for all registered MCP tools in red_pill.mcp_server.
 Uses AsyncMock and patch to avoid live Qdrant, swarm agents, or hardware
 dependencies. Each test verifies:
-  - The handler returns a list of TextContent items
-  - The text content contains expected identifiers/keywords
-  - Error paths return a user-facing error string (not an unhandled exception)
+	- The handler returns a list of TextContent items
+	- The text content contains expected identifiers/keywords
+	- Error paths return a user-facing error string (not an unhandled exception)
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch

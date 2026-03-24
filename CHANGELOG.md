@@ -15,6 +15,14 @@
 - **[FIX] Defensive Queue Management**: Added `MemoryQueueManager.process_pending()` as a defensive alias in `queue_manager.py` to neutralize legacy `AttributeError` signals across the telemetry pipeline.
 - **[ARCH] Zero-Daemon Migration (Protocol Silence)**: Fully decommissioned all persistent background services (~441MB RAM saved). The CNS now operates via OS-native oneshot Pulses.
 
+### 🛡️ Protocol 770 Hardening (Sovereign Handshake)
+- **[FEAT] The Sovereign Handshake**: Unified fragmented identity rules into a single, mandatory English-based MCP handshake for deterministic memory persistence (1.5x token efficiency).
+- **[FEAT] Windows Parity**: Hardened `install_neo.ps1` with `Get-PreflightAudit` (CPU, VRAM, BitLocker) and Diagnostic Dashboard.
+- **[FEAT] IDE-Native Preflight**: New `scripts/ide_preflight.py` for autonomous agentic hardware auditing directly from the IDE.
+- **[FEAT] Auto-ACI Workflow**: Installer-to-Agent continuity; the Ritual of Initiation now triggers automatically after unattended deployments.
+- **[HEAL] Archive Seeding**: `archive_memories` collection now automatically created in `seed.py` to support 41k+ node historical ingestion.
+- **[FIX] Pulse Loop Synchronization**: Hardened 1-minute interval across all platforms for zero-latency Scribe Relay.
+
 ## [6.1.7] - 2026-03-23
 
 ### 🧠 Sleep Engine Safety, Test Isolation & Cross-Platform Pulse Scheduler

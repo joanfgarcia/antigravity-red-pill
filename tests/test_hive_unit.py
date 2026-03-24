@@ -1,12 +1,12 @@
 """Tests for red_pill/hive.py — targeting all uncovered branches.
 
 Missing lines:
-  8-9   : pymilvus ImportError fallback
-  46-61 : connections.connect() full remote path + exception
-  110-136: _agentic_know_how_review() — short content, LLM KNOW-HOW/NOISE, exception, fallback heuristic
-  149-150: _mask_identity_signals() — op_name masking
-  166, 170, 177: transmit_experience() — not connected, smith filter blocked, collection creation
-  192-205: _create_hive_collection() — schema definition + index
+	8-9   : pymilvus ImportError fallback
+	46-61 : connections.connect() full remote path + exception
+	110-136: _agentic_know_how_review() — short content, LLM KNOW-HOW/NOISE, exception, fallback heuristic
+	149-150: _mask_identity_signals() — op_name masking
+	166, 170, 177: transmit_experience() — not connected, smith filter blocked, collection creation
+	192-205: _create_hive_collection() — schema definition + index
 """
 
 import sys

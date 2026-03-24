@@ -13,9 +13,7 @@ import subprocess
 import sys
 import textwrap
 
-# ---------------------------------------------------------------------------
 # Config
-# ---------------------------------------------------------------------------
 DEFAULT_INTERVAL_HOURS = 1
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TRIGGER_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "trigger_pulse.py")
@@ -53,9 +51,7 @@ def _find_uv() -> str:
 	sys.exit(1)
 
 
-# ---------------------------------------------------------------------------
 # Linux — systemd user timer
-# ---------------------------------------------------------------------------
 
 
 def _install_linux(interval_hours: int, uv_path: str) -> None:
@@ -71,29 +67,29 @@ def _install_linux(interval_hours: int, uv_path: str) -> None:
 	)
 	_write_systemd_timer("redpill-telemetry.timer", "30s", "Timer for Red Pill Telemetry Heartbeat")
 
-	# 3. Queue (Worker) - 15m
+	# 3. Queue (Worker) - 1m
 	_write_systemd_unit("redpill-queue.service", f"{uv_path} run python {QUEUE_SCRIPT} --oneshot", "Red Pill Memory Queue Worker", type="oneshot")
-	_write_systemd_timer("redpill-queue.timer", "15m", "Timer for Red Pill Memory Queue Worker")
+	_write_systemd_timer("redpill-queue.timer", "1m", "Timer for Red Pill Memory Queue Worker")
 
 	subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
 	subprocess.run(["systemctl", "--user", "enable", "--now", TIMER_NAME], check=True)
 	subprocess.run(["systemctl", "--user", "enable", "--now", "redpill-telemetry.timer"], check=True)
 	subprocess.run(["systemctl", "--user", "enable", "--now", "redpill-queue.timer"], check=True)
-	print(f"[OK] systemd timers installed. Protocol Zero-Daemon active.")
+	print("[OK] systemd timers installed. Protocol Zero-Daemon active.")
 
 
 def _write_systemd_unit(name, command, desc, type="oneshot"):
 	path = os.path.join(SYSTEMD_USER_DIR, name)
 	content = textwrap.dedent(f"""\
-        [Unit]
-        Description={desc}
+		[Unit]
+		Description={desc}
 
-        [Service]
-        Type={type}
-        WorkingDirectory={PROJECT_ROOT}
-        Environment="PATH={os.environ.get("PATH")}"
-        ExecStart={command}
-    """)
+		[Service]
+		Type={type}
+		WorkingDirectory={PROJECT_ROOT}
+		Environment="PATH={os.environ.get("PATH")}"
+		ExecStart={command}
+	""")
 	with open(path, "w") as f:
 		f.write(content)
 
@@ -101,18 +97,18 @@ def _write_systemd_unit(name, command, desc, type="oneshot"):
 def _write_systemd_timer(name, interval, desc):
 	path = os.path.join(SYSTEMD_USER_DIR, name)
 	content = textwrap.dedent(f"""\
-        [Unit]
-        Description={desc}
+		[Unit]
+		Description={desc}
 
-        [Timer]
-        OnBootSec=1min
-        OnUnitActiveSec={interval}
-        AccuracySec=1s
-        Persistent=true
+		[Timer]
+		OnBootSec=1min
+		OnUnitActiveSec={interval}
+		AccuracySec=1s
+		Persistent=true
 
-        [Install]
-        WantedBy=timers.target
-    """)
+		[Install]
+		WantedBy=timers.target
+	""")
 	with open(path, "w") as f:
 		f.write(content)
 
@@ -130,9 +126,7 @@ def _uninstall_linux() -> None:
 	print("[OK] systemd pulse timer uninstalled.")
 
 
-# ---------------------------------------------------------------------------
 # macOS — launchd plist
-# ---------------------------------------------------------------------------
 
 
 def _uninstall_macos() -> None:
@@ -157,8 +151,8 @@ def _install_macos(interval_hours: int, uv_path: str) -> None:
 	# 2. Telemetry
 	_write_launchd_plist("com.redpill.telemetry", f"{uv_path} run python {TELEMETRY_SCRIPT} --oneshot", 30)
 	# 3. Queue
-	_write_launchd_plist("com.redpill.queue", f"{uv_path} run python {QUEUE_SCRIPT} --oneshot", 15 * 60)
-	print(f"[OK] launchd agents installed. Protocol Zero-Daemon active.")
+	_write_launchd_plist("com.redpill.queue", f"{uv_path} run python {QUEUE_SCRIPT} --oneshot", 60)
+	print("[OK] launchd agents installed. Protocol Zero-Daemon active.")
 
 
 def _write_launchd_plist(label, command, interval_seconds):
@@ -166,25 +160,25 @@ def _write_launchd_plist(label, command, interval_seconds):
 	args = command.split(" ")
 	args_xml = "".join([f"<string>{a}</string>" for a in args])
 	content = textwrap.dedent(f"""\
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0">
-        <dict>
-            <key>Label</key>
-            <string>{label}</string>
-            <key>ProgramArguments</key>
-            <array>
-                {args_xml}
-            </array>
-            <key>WorkingDirectory</key>
-            <string>{PROJECT_ROOT}</string>
-            <key>StartInterval</key>
-            <integer>{interval_seconds}</integer>
-            <key>RunAtLoad</key>
-            <true/>
-        </dict>
-        </plist>
-    """)
+		<?xml version="1.0" encoding="UTF-8"?>
+		<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+		<plist version="1.0">
+		<dict>
+			<key>Label</key>
+			<string>{label}</string>
+			<key>ProgramArguments</key>
+			<array>
+				{args_xml}
+			</array>
+			<key>WorkingDirectory</key>
+			<string>{PROJECT_ROOT}</string>
+			<key>StartInterval</key>
+			<integer>{interval_seconds}</integer>
+			<key>RunAtLoad</key>
+			<true/>
+		</dict>
+		</plist>
+	""")
 	os.makedirs(os.path.dirname(plist_path), exist_ok=True)
 	with open(plist_path, "w") as f:
 		f.write(content)
@@ -192,9 +186,7 @@ def _write_launchd_plist(label, command, interval_seconds):
 	subprocess.run(["launchctl", "load", plist_path], check=True)
 
 
-# ---------------------------------------------------------------------------
 # Windows — Task Scheduler
-# ---------------------------------------------------------------------------
 
 
 def _install_windows(interval_hours: int, uv_path: str) -> None:
@@ -203,8 +195,8 @@ def _install_windows(interval_hours: int, uv_path: str) -> None:
 	# 2. Telemetry
 	_create_win_task(TASK_NAME_TELEMETRY, f'"{uv_path}" run python "{TELEMETRY_SCRIPT}" --oneshot', 1)  # Min interval 1m in schtasks usually
 	# 3. Queue
-	_create_win_task(TASK_NAME_QUEUE, f'"{uv_path}" run python "{QUEUE_SCRIPT}" --oneshot', 15)
-	print(f"[OK] Windows Tasks created. Protocol Zero-Daemon active.")
+	_create_win_task(TASK_NAME_QUEUE, f'"{uv_path}" run python "{QUEUE_SCRIPT}" --oneshot', 1)
+	print("[OK] Windows Tasks created. Protocol Zero-Daemon active.")
 
 
 def _create_win_task(name, command, minutes):
@@ -232,9 +224,7 @@ def _uninstall_windows() -> None:
 	print("[OK] Windows tasks uninstalled.")
 
 
-# ---------------------------------------------------------------------------
 # Main
-# ---------------------------------------------------------------------------
 
 
 def main() -> None:

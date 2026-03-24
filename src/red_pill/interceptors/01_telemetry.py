@@ -1,8 +1,8 @@
 import json
 import time
 from pathlib import Path
-import red_pill.config as cfg
 
+import red_pill.config as cfg
 from red_pill.interceptors.base import BaseInterceptorPlugin
 
 

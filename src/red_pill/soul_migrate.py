@@ -2,17 +2,17 @@
 Phase 0 — LEAN_SOUL_KIT Migration Protocol (v3.0 pre-flight).
 
 Security contract:
-  1. All .mls kits in ~/Documents/IA/backups/export/ are decrypted using
-     the CURRENT vault_group.state (pure-mls v2.x key schedule).
-  2. Plaintext .tar.gz files are written to SECURE_BACKUP_DIR (mode 0o700).
-  3. vault_group.state and VaultCrypto identity keys are exported alongside them.
-  4. After upgrading pure-mls to v3.0, 'soul migrate --reencrypt' re-encrypts
-     the plaintext kits with a NEW vault group and rebuilds vault_group.state.
+	1. All .mls kits in ~/Documents/IA/backups/export/ are decrypted using
+		the CURRENT vault_group.state (pure-mls v2.x key schedule).
+	2. Plaintext .tar.gz files are written to SECURE_BACKUP_DIR (mode 0o700).
+	3. vault_group.state and VaultCrypto identity keys are exported alongside them.
+	4. After upgrading pure-mls to v3.0, 'soul migrate --reencrypt' re-encrypts
+		the plaintext kits with a NEW vault group and rebuilds vault_group.state.
 
 Usage:
-  red-pill soul migrate --decrypt   # Step 1: before updating pure-mls
-  red-pill soul migrate --reencrypt # Step 2: after updating pure-mls
-  red-pill soul migrate --status    # Show migration state
+	red-pill soul migrate --decrypt   # Step 1: before updating pure-mls
+	red-pill soul migrate --reencrypt # Step 2: after updating pure-mls
+	red-pill soul migrate --status    # Show migration state
 """
 
 import json

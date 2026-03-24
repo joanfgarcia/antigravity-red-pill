@@ -52,7 +52,7 @@ The dual-language architecture (English for technical precision, Spanish for emo
 
 **The `rehabilitate_cuda.sh` commented-out daemon restart line** _(fixed in v6.1.5)_ — a dead code ornamental comment. Removed.
 
-**Hardcoded identity paths in orchestrator.py** (`/home/joan/Documents/IA/experimental/BitNet/...`) — _not found in current codebase at time of fix application._ May have already been cleaned in a prior session. No action required.
+**Hardcoded identity paths in orchestrator.py** (`~/Documents/IA/experimental/BitNet/...`) — _not found in current codebase at time of fix application._ May have already been cleaned in a prior session. No action required.
 
 ### 3.3 Sound of Silence Compliance
 
@@ -148,7 +148,7 @@ Documentation is exceptional in depth and dual-layer structure. ARCHITECTURE.md,
 ### P1 — High (address within one release cycle)
 3. ~~Remove dead `except Exception` block in `samantha.py`~~ ✅ **Fixed in v6.1.5**
 4. ~~Remove commented-out daemon restart line in `rehabilitate_cuda.sh`~~ ✅ **Fixed in v6.1.5**
-5. ~~Remove hardcoded `/home/joan/` paths from `orchestrator.py`~~ ✅ **Not found in current codebase**
+5. ~~Remove hardcoded `~/` paths from `orchestrator.py`~~ ✅ **Not found in current codebase**
 6. Add runtime warning log when `HIVEMIND_DP_EPSILON ≤ 1.0`.
 7. Add scroll progress indicator to USP truncation logging.
 

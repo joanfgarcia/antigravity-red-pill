@@ -110,7 +110,7 @@ class CreateEngramRequest(BaseModel):
 						if not isinstance(weight, (int, float)) or not (0 <= weight <= 2.0):
 							raise ValueError(f"Invalid weight '{weight}' for association {item['id']}")
 
-			if isinstance(val, str) and len(val) > 32768:
+			if isinstance(val, str) and len(val) > 1024:
 				raise ValueError(f"Metadata field {key} exceeds limit")
 		return v
 

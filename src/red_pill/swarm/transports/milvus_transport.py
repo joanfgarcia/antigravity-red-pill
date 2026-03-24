@@ -182,7 +182,7 @@ class MilvusTransport(SwarmTransport):
 			logger.error(f"MilvusTransport: Failed to lookup public key: {e}")
 			return None
 
-	def resolve_alias(self, partial_alias: str) -> Optional[tuple[str, str, str]]:
+	def resolve_alias(self, partial_alias: str) -> Optional[tuple[str, str, str, str]]:
 		"""Resolves a partial alias (e.g. 'Aleph') to a full identifier ('Aleph@Joan') and its public key."""
 		if not self.hive.connected:
 			return None
@@ -191,7 +191,7 @@ class MilvusTransport(SwarmTransport):
 			res = col.query(expr=f'alias like "{partial_alias}%"', output_fields=["fingerprint", "alias", "public_key"])
 			if res:
 				row = res[0]
-				return (str(row["fingerprint"]), str(row["alias"]), str(row.get("public_key", "")))
+				return (str(row["fingerprint"]), str(row["alias"]), str(row.get("public_key", "")), "")  # KeyPackage empty for Milvus for now
 			return None
 		except Exception as e:
 			logger.error(f"MilvusTransport: Failed to resolve alias: {e}")

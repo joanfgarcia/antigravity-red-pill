@@ -86,9 +86,7 @@ class TestAffectEdgeCases:
 		assert isinstance(engine, BayesianEngine)
 
 
-# ---------------------------------------------------------------------------
 # cli.py — Exception paths + identity purge
-# ---------------------------------------------------------------------------
 
 
 class TestCliExceptionPaths:
@@ -122,9 +120,7 @@ class TestCliExceptionPaths:
 				mock_mgr_cls.assert_not_called()
 
 
-# ---------------------------------------------------------------------------
 # cli.py — _dispatch_plugins warning on exception (line 190-191)
-# ---------------------------------------------------------------------------
 
 
 class TestDispatchPluginsWarning:
@@ -154,9 +150,7 @@ class TestDispatchPluginsWarning:
 		assert "plugin exploded" in caplog.text or "bad" in caplog.text
 
 
-# ---------------------------------------------------------------------------
 # config.py — validator edge cases
-# ---------------------------------------------------------------------------
 
 
 class TestConfigValidatorEdgeCases:

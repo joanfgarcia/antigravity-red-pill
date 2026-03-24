@@ -30,9 +30,7 @@ def fresh_bus():
 	reset_event_bus()
 
 
-# ---------------------------------------------------------------------------
 # Core EventBus mechanics
-# ---------------------------------------------------------------------------
 
 
 class TestEventBusCore:
@@ -143,9 +141,7 @@ class TestEventBusCore:
 		assert len(counts) == 250
 
 
-# ---------------------------------------------------------------------------
 # Async listener support
-# ---------------------------------------------------------------------------
 
 
 class TestAsyncListeners:
@@ -178,9 +174,7 @@ class TestAsyncListeners:
 		bus.emit(MemoryAddedEvent())  # No running loop — should not raise
 
 
-# ---------------------------------------------------------------------------
 # Typed event dataclasses
-# ---------------------------------------------------------------------------
 
 
 class TestEventDataclasses:
@@ -214,9 +208,7 @@ class TestEventDataclasses:
 		assert before <= e.timestamp <= after
 
 
-# ---------------------------------------------------------------------------
 # Singleton
-# ---------------------------------------------------------------------------
 
 
 class TestSingleton:

@@ -14,9 +14,7 @@ from red_pill.swarm.mls_bridge import MLSBridge
 SHARED_SECRET = b"test_sovereign_secret_32bytes!!!"
 
 
-# ---------------------------------------------------------------------------
 # MLSBridge unit tests
-# ---------------------------------------------------------------------------
 
 
 class TestMLSBridgeAdmissionToken:
@@ -44,9 +42,7 @@ class TestMLSBridgeAdmissionToken:
 		assert not self.bridge.verify_admission_token(kp_bytes, "")
 
 
-# ---------------------------------------------------------------------------
 # E2E mock test: full MLS handshake via SwarmMessagingSkill
-# ---------------------------------------------------------------------------
 
 
 def _mock_identity(seed: bytes):

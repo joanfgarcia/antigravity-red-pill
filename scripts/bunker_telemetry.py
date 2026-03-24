@@ -5,6 +5,7 @@ import signal
 import sys
 import time
 from pathlib import Path
+from typing import Optional
 
 # Add src to pythonpath so it can run independently
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -36,9 +37,11 @@ class BunkerTelemetry:
 
 		# Ensure queue manager avoids fastembed lazy loading until needed
 		try:
-			self.queue_mgr = MemoryQueueManager()
-			self.db_path = Path(self.queue_mgr.db_path)
-			self.wal_path = Path(str(self.db_path) + "-wal")
+			self.queue_mgr: Optional[MemoryQueueManager] = MemoryQueueManager()
+			if self.queue_mgr:
+				q_path = getattr(self.queue_mgr, "db_path", None)
+				self.db_path = Path(q_path) if q_path else Path(IA_DIR) / "storage" / "memory_queue.db"
+				self.wal_path = Path(str(self.db_path) + "-wal")
 		except Exception as e:
 			logger.error(f"Failed to init MemoryQueueManager: {e}")
 			self.queue_mgr = None
@@ -96,11 +99,10 @@ class BunkerTelemetry:
 			raw_swarm = self.state.get("swarm")
 			swarm_msgs = raw_swarm.get("messages", 0) if isinstance(raw_swarm, dict) else 0
 
-			last_int = self.state.get("last_interaction", 0)
-
+			last_int = self.state.get("last_interaction", 0.0)
 			time_info = ""
-			if last_int > 0:
-				ago = int(time.time() - last_int)
+			if isinstance(last_int, (int, float)) and last_int > 0:
+				ago = int(time.time() - float(last_int))
 				time_info = f"\n- **Last Interaction**: {ago}s ago"
 
 			md_content = f"""<bunker_led_panel>

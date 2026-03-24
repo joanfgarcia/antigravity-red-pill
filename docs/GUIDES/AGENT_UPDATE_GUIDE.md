@@ -45,9 +45,9 @@ If updating to v6.1.0 or higher, you must synchronize your infrastructure parame
 7.  **Service Restart**: Run `systemctl --user restart redpill.service` to apply the new persistent environment.
 8.  **Qdrant Kill-Switch (SEC-02)**: If your Qdrant instance is exposed to the local network (`0.0.0.0`) or hosted remotely, the protocol will now refuse to boot unless you define a `QDRANT_API_KEY` in your `.env`. This is a hard-coded security protection.
 9.  **Google Drive Token Migration**: Your existing `token.json` for Cloud Vault backups will be automatically migrated to `~/.agent/credentials/drive_token.json` internally on boot. No re-authentication is required.
-10. **Lazarus Pulse Deploy**: Run `uv run python scripts/schedule_pulse.py --interval-hours 1` manually once. This is cross-platform (Linux: systemd timer, macOS: launchd, Windows: schtasks). To uninstall: `uv run python scripts/schedule_pulse.py --uninstall`.
-11. **Async Queue Worker Deploy**: Run `uv run python scripts/deploy_queue.py` manually once.
-12. **Bünker Telemetry Daemon Deploy**: Run `uv run python scripts/deploy_bunker.py` manually once to enable real-time hardware status and health signals.
+10. **Sovereign Persistence (Protocol 770)**: Run `uv run python scripts/schedule_pulse.py` manually once. This cross-platform tool configures a 1-minute interval for the interaction queue, ensuring near-real-time memory persistence.
+49. **Legacy Cleanup**: The scripts `deploy_queue.py`, `deploy_pulse.py`, and `deploy_service.py` are DEPRECATED. Their functionality is now unified within `schedule_pulse.py`.
+50. **Bünker Telemetry**: Ensure `uv run python scripts/schedule_pulse.py` is executed to enable background health signals.
 
 ## 4. Post-Update Operational Checklist
 
@@ -116,9 +116,9 @@ The CI enforces a `fail_under = 96` coverage threshold. New modules that require
 ### 4.6 GEMINI.md & Global Rules Sync
 The `~/.gemini/GEMINI.md` file defines the agent's boot protocol. After major protocol changes:
 1.  **Review**: Ensure `GEMINI.md` contains all 3 current rules:
-    - **Rule 1 — Zero-Trust Context Injection**: Runs `wake_up_v6.py` at Step 0.
-    - **Rule 2 — Model Change Identity Resync**: Calls `refresh_session_context` on `USER_SETTINGS_CHANGE` (Model Selection). This is **critical** — without it, identity is lost on model switches mid-session.
-    - **Rule 3 — Persistent Memory Logging**: Calls `memorize_interaction` **after each relevant turn** (not end-of-session). Skipped for trivial exchanges (typos, yes/no). If the session is interrupted, unregistered turns are lost forever.
+    - **Rule 1 — The Sovereign Handshake**: Mandates the use of `interceptor_rp` and `refresh_session_context` at the start of EVERY turn to prevent amnesia and resync identity.
+    - **Rule 2 — Model Change Identity Resync**: Redundant but critical safety for IDE-level model switches.
+    - **Rule 3 — Persistent Memory Policy**: Deprecates end-of-turn logging in favor of the Start-of-Turn Relay (Rule 1.1).
 
 2.  **Rules directory**: Check `~/.gemini/antigravity/rules/` for any referenced but missing rule files.
 3.  **Re-inject**: If any rule is missing, re-run `scripts/install_neo.sh` or manually update `~/.gemini/GEMINI.md`.

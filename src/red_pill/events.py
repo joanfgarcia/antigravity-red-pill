@@ -9,30 +9,30 @@ DESIGN PRINCIPLES
 - Foundation emits; Enterprise/Community subscribe. Never the reverse.
 - Sync listeners run inline (same thread as the emitter).
 - Async listeners are fire-and-forget (asyncio.create_task if a loop exists,
-  else skipped silently — CLI callers don't need async).
+	else skipped silently — CLI callers don't need async).
 - Broken listeners are isolated: one bad handler cannot crash the emitter.
 - Zero hard dependencies on Enterprise: the bus lives 100% in Foundation.
 
 USAGE (Foundation — emitting)
 ------------------------------
-    from red_pill.events import get_event_bus, MemoryAddedEvent
-    get_event_bus().emit(MemoryAddedEvent(collection="work_memories", engram_id=uid))
+	from red_pill.events import get_event_bus, MemoryAddedEvent
+	get_event_bus().emit(MemoryAddedEvent(collection="work_memories", engram_id=uid))
 
 USAGE (Enterprise — subscribing, in their own __init__ or boot hook)
 ----------------------------------------------------------------------
-    from red_pill.events import get_event_bus, SleepCompletedEvent
+	from red_pill.events import get_event_bus, SleepCompletedEvent
 
-    def on_sleep(event: SleepCompletedEvent) -> None:
-        cerberus_client.upload(event.summary)
+	def on_sleep(event: SleepCompletedEvent) -> None:
+		cerberus_client.upload(event.summary)
 
-    get_event_bus().subscribe(SleepCompletedEvent, on_sleep)
+	get_event_bus().subscribe(SleepCompletedEvent, on_sleep)
 
 AVAILABLE EVENTS (Foundation-emitted)
 --------------------------------------
-    MemoryAddedEvent        — after a new engram is stored
-    SleepCompletedEvent     — after a sleep/consolidation cycle
-    CollectionCreatedEvent  — after StorageEngine creates a new Qdrant collection
-    CliCommandDispatchedEvent — after main() resolves the CLI command
+	MemoryAddedEvent        — after a new engram is stored
+	SleepCompletedEvent     — after a sleep/consolidation cycle
+	CollectionCreatedEvent  — after StorageEngine creates a new Qdrant collection
+	CliCommandDispatchedEvent — after main() resolves the CLI command
 """
 
 from __future__ import annotations
@@ -46,9 +46,7 @@ from typing import Any, Callable, Dict, List, Optional, Type, TypeVar
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
 # Event Base & Typed Events
-# ---------------------------------------------------------------------------
 
 
 @dataclasses.dataclass
@@ -93,9 +91,7 @@ class CliCommandDispatchedEvent(RedPillEvent):
 	subcommand: Optional[str] = None
 
 
-# ---------------------------------------------------------------------------
 # EventBus
-# ---------------------------------------------------------------------------
 
 E = TypeVar("E", bound=RedPillEvent)
 ListenerFn = Callable[[Any], Any]  # (event) -> None | Coroutine
@@ -175,9 +171,7 @@ class EventBus:
 			return len(self._listeners.get(event_type, []))
 
 
-# ---------------------------------------------------------------------------
 # Singleton accessor
-# ---------------------------------------------------------------------------
 
 _bus: Optional[EventBus] = None
 _bus_lock = threading.Lock()

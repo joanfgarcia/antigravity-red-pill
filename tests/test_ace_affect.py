@@ -2,24 +2,24 @@
 TST-001: ACE Engine — Affect & Stability Multiplier Unit Tests
 =================================================================
 Dedicated parametrized tests for `red_pill.utils.affect`:
-  - get_affect_coordinates()
-  - get_emotional_stability_multiplier()
+	- get_affect_coordinates()
+	- get_emotional_stability_multiplier()
 
 All tests operate on pure math — no Qdrant, no network, no mocks required.
 The functions are stateless and deterministic.
 
 Boundary cases (as requested by the independent audit, Confidence ←→ 91/100):
-  1. Empty emotion list
-  2. All-neutral emotions
-  3. Single high-arousal emotion (flashbulb memory)
-  4. Single negative-valence emotion (survival persistence)
-  5. Mixed positive/negative valence (averaging)
-  6. Maximum intensity (10.0)
-  7. Minimum intensity (0.0 / 1.0 boundary)
-  8. Unknown / unrecognised emotion labels
-  9. Output always clamped to [0.1, 1.0]
- 10. High-arousal + high-intensity → low multiplier (slower decay)
- 11. Low-arousal + neutral valence → multiplier close to 1.0 (fast decay)
+	1. Empty emotion list
+	2. All-neutral emotions
+	3. Single high-arousal emotion (flashbulb memory)
+	4. Single negative-valence emotion (survival persistence)
+	5. Mixed positive/negative valence (averaging)
+	6. Maximum intensity (10.0)
+	7. Minimum intensity (0.0 / 1.0 boundary)
+	8. Unknown / unrecognised emotion labels
+	9. Output always clamped to [0.1, 1.0]
+	10. High-arousal + high-intensity → low multiplier (slower decay)
+	11. Low-arousal + neutral valence → multiplier close to 1.0 (fast decay)
 """
 
 import pytest

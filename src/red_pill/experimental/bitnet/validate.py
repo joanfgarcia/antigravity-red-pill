@@ -5,8 +5,8 @@ from red_pill.experimental.bitnet.runner import BitNetRunner
 
 
 def run_benchmarks():
-	runner_path = "/home/joan/Documents/IA/experimental/BitNet/build/bin/llama-cli"
-	model_path = "/home/joan/Documents/IA/experimental/BitNet/models/2B-4T/ggml-model-i2_s.gguf"
+	runner_path = os.path.expanduser("~") + "/Documents/IA/experimental/BitNet/build/bin/llama-cli"
+	model_path = os.path.expanduser("~") + "/Documents/IA/experimental/BitNet/models/2B-4T/ggml-model-i2_s.gguf"
 	grammar_path = os.path.join(os.path.dirname(__file__), "json.gbnf")
 
 	if not (os.path.exists(runner_path) and os.path.exists(model_path)):

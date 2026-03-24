@@ -74,15 +74,7 @@ For humans operating, installing, or extending the system.
 |----------|-----------|
 | [OPERATOR_MANUAL.md](GUIDES/OPERATOR_MANUAL.md) | Essential CLI and lore-based interaction guide for operators |
 | [INITIATION_PROTOCOL.md](GUIDES/INITIATION_PROTOCOL.md) | Adaptive Cognitive Initiation (ACI) — how to wake up and calibrate the agent |
-| [AGENT_INITIATION_PROMPT.md](GUIDES/AGENT_INITIATION_PROMPT.md) | The exact prompt for initiating a new agent session |
 | [AGENT_UPDATE_GUIDE.md](GUIDES/AGENT_UPDATE_GUIDE.md) | Step-by-step guide for updating the agent and MCP server |
-| [ENTERPRISE_QUICKSTART.md](GUIDES/ENTERPRISE_QUICKSTART.md) | Quickstart for operators in regulated or corporate environments |
-| [SWARM_USER_MANUAL.md](GUIDES/SWARM_USER_MANUAL.md) | How to use Swarm messaging as an operator |
-| [HARDWARE_MODELS_BE_WATER.md](GUIDES/HARDWARE_MODELS_BE_WATER.md) | Hardware and model selection guide — the Be Water philosophy applied |
-| [TOKEN_SAVING_GUIDE.md](GUIDES/TOKEN_SAVING_GUIDE.md) | Practical techniques for minimizing token consumption |
-| [OPERATOR_DRESS_CODE.md](GUIDES/OPERATOR_DRESS_CODE.md) | How to interact with the agent — tone, style, and expectations |
-| [DISCLAIMER.md](GUIDES/DISCLAIMER.md) | Legal and philosophical disclaimer for operators |
-| [skin_personality_migration.md](GUIDES/skin_personality_migration.md) | Guide for migrating lore skins and personalities between versions |
 
 ---
 

@@ -2,33 +2,31 @@
 Red Pill Foundation — Configuration Layer (v6.2.0)
 
 Cascade Order (lowest → highest priority):
-  1. Foundation field defaults (baked into RedPillConfig)
-  2. User .env file  (loaded via pydantic-settings)
-  3. Enterprise read-only overrides (injected once at boot via set_enterprise_overrides)
+	1. Foundation field defaults (baked into RedPillConfig)
+	2. User .env file  (loaded via pydantic-settings)
+	3. Enterprise read-only overrides (injected once at boot via set_enterprise_overrides)
 
 Usage:
-  import red_pill.config as cfg
-  cfg.QDRANT_HOST          # module-level aliases (backward-compat)
-  cfg.get_config()         # typed RedPillConfig instance
-  cfg.set_enterprise_overrides({"CERBERUS_TOKEN": "..."})  # Enterprise boot
+	import red_pill.config as cfg
+	cfg.QDRANT_HOST          # module-level aliases (backward-compat)
+	cfg.get_config()         # typed RedPillConfig instance
+	cfg.set_enterprise_overrides({"CERBERUS_TOKEN": "..."})  # Enterprise boot
 """
 
 from __future__ import annotations
 
 import os
 import shutil
+import tempfile
 import warnings
 from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
-import tempfile
 import yaml
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# ---------------------------------------------------------------------------
 # Resolve IA_DIR early (needed as env_file base path)
-# ---------------------------------------------------------------------------
 _IA_DIR = os.getenv(
 	"IA_DIR",
 	os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
@@ -36,9 +34,7 @@ _IA_DIR = os.getenv(
 
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
 
-# ---------------------------------------------------------------------------
 # Helper: detect container engine
-# ---------------------------------------------------------------------------
 
 
 def _detect_container_engine() -> str:
@@ -49,9 +45,7 @@ def _detect_container_engine() -> str:
 	return "podman"  # Bünker v6 default
 
 
-# ---------------------------------------------------------------------------
 # Helper: load affect multipliers from YAML
-# ---------------------------------------------------------------------------
 
 
 def _load_affect_multipliers(model_name: str) -> dict:
@@ -74,9 +68,7 @@ def _load_affect_multipliers(model_name: str) -> dict:
 		}
 
 
-# ---------------------------------------------------------------------------
 # RedPillConfig — the sovereign configuration model
-# ---------------------------------------------------------------------------
 
 
 class RedPillConfig(BaseSettings):
@@ -408,9 +400,7 @@ class RedPillConfig(BaseSettings):
 		return self._enterprise_overrides.get(key, default)
 
 
-# ---------------------------------------------------------------------------
 # Static data (not env-driven)
-# ---------------------------------------------------------------------------
 
 BAYESIAN_COLLECTIONS: List[str] = ["skill_memories", "work_memories", "directive_memories", "archive_memories"]
 
@@ -438,9 +428,7 @@ CHROMA_TONE_MAPPING: Dict[str, str] = {
 
 CURRENT_SCHEMA_VERSION: int = 1
 
-# ---------------------------------------------------------------------------
 # Singleton config loader
-# ---------------------------------------------------------------------------
 
 _enterprise_overrides_store: Dict[str, Any] = {}
 
@@ -467,10 +455,8 @@ def set_enterprise_overrides(overrides: Dict[str, Any]) -> None:
 		get_config.cache_clear()
 
 
-# ---------------------------------------------------------------------------
 # Module-level aliases — backward compatibility (do NOT remove)
 # All existing code does: import red_pill.config as cfg; cfg.QDRANT_HOST
-# ---------------------------------------------------------------------------
 
 
 def _cfg() -> RedPillConfig:

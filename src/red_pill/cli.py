@@ -177,7 +177,7 @@ def handle_interceptor(args: argparse.Namespace) -> None:
 				with open(env_path, "r") as f:
 					for line in f:
 						if line.startswith("INTERCEPTOR_ENABLED="):
-							lines.append(f"INTERCEPTOR_ENABLED=true\n")
+							lines.append("INTERCEPTOR_ENABLED=true\n")
 							replaced = True
 						else:
 							lines.append(line)
@@ -195,7 +195,7 @@ def handle_interceptor(args: argparse.Namespace) -> None:
 			with open(env_path, "r") as f:
 				for line in f:
 					if line.startswith("INTERCEPTOR_ENABLED="):
-						lines.append(f"INTERCEPTOR_ENABLED=false\n")
+						lines.append("INTERCEPTOR_ENABLED=false\n")
 					else:
 						lines.append(line)
 		with open(env_path, "w") as f:
@@ -251,9 +251,7 @@ def get_collection(type_str: str) -> str:
 	return mapping.get(type_str, "directive_memories")
 
 
-# ---------------------------------------------------------------------------
 # CLI Plugin Discovery (EntryPoints)
-# ---------------------------------------------------------------------------
 # Enterprise/Community packages declare their commands in pyproject.toml:
 #
 #   [project.entry-points."red_pill.commands"]
@@ -264,7 +262,6 @@ def get_collection(type_str: str) -> str:
 #       Add your subparser(s) to the Foundation's main subparsers object.
 #   - handle(args: argparse.Namespace) -> bool
 #       Handle the command. Return True if handled, False to pass through.
-# ---------------------------------------------------------------------------
 
 _PLUGIN_REGISTRY: Dict[str, Any] = {}
 

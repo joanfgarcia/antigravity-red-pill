@@ -31,7 +31,16 @@ ID_OPERATOR_MOOD = "00000000-0000-0000-0000-000000000060"
 
 def seed_project(manager: MemoryManager) -> None:
 	"""Initializes memory collections and genesis engrams."""
-	collections = ["work_memories", "social_memories", "directive_memories", "story_memories", "skill_memories", "core_directives", "signal_memories"]
+	collections = [
+		"work_memories",
+		"social_memories",
+		"directive_memories",
+		"story_memories",
+		"skill_memories",
+		"core_directives",
+		"signal_memories",
+		"archive_memories",
+	]
 	for coll in collections:
 		if not manager.client.collection_exists(coll):
 			manager.client.create_collection(

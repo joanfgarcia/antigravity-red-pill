@@ -9,9 +9,7 @@ from unittest.mock import MagicMock, patch
 
 from red_pill.cli import _PLUGIN_REGISTRY, _dispatch_plugins, load_plugins
 
-# ---------------------------------------------------------------------------
 # Helpers: mock EntryPoint & Plugin
-# ---------------------------------------------------------------------------
 
 
 def _make_ep(name: str, plugin_cls):
@@ -53,9 +51,7 @@ class _BadPlugin:
 		raise RuntimeError("Plugin exploded")
 
 
-# ---------------------------------------------------------------------------
 # load_plugins() tests
-# ---------------------------------------------------------------------------
 
 
 class TestLoadPlugins:
@@ -116,9 +112,7 @@ class TestLoadPlugins:
 		assert _PLUGIN_REGISTRY == {}
 
 
-# ---------------------------------------------------------------------------
 # _dispatch_plugins() tests
-# ---------------------------------------------------------------------------
 
 
 class TestDispatchPlugins:

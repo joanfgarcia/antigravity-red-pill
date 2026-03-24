@@ -25,9 +25,9 @@ def test_local_override_and_lock(tmp_path, flow_engine):
 	flows_yaml = agent_dir / "flows.yaml"
 	flows_yaml.write_text("""
 flows:
-  deep-research:
-    name: "Custom Research"
-    locked: false
+	deep-research:
+	name: "Custom Research"
+	locked: false
 """)
 
 	# Load flows pointing to tmp_path as CWD
@@ -40,9 +40,9 @@ def test_lock_enforcement(tmp_path, flow_engine):
 	comm_file = tmp_path / "community_flows.yaml"
 	comm_file.write_text("""
 flows:
-  compliance-audit:
-    name: "Enterprise Audit"
-    locked: true
+	compliance-audit:
+	name: "Enterprise Audit"
+	locked: true
 """)
 
 	engine = FlowEngine(FLOW_REGISTRY_PATH, community_registry_path=str(comm_file))
@@ -53,8 +53,8 @@ flows:
 	flows_yaml = agent_dir / "flows.yaml"
 	flows_yaml.write_text("""
 flows:
-  compliance-audit:
-    name: "Hacked Audit"
+	compliance-audit:
+	name: "Hacked Audit"
 """)
 
 	flows = engine.load_flows(cwd=str(tmp_path))

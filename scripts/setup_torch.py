@@ -3,37 +3,33 @@
 setup_torch.py — Auto-detect CUDA version and install matching PyTorch wheel.
 
 Modes:
-  (default)      Detect system CUDA and install the right torch wheel.
-  --check        Only check for mismatch. Exit 1 + pain signal if mismatch found.
-  --auto-fix     If mismatch detected, reinstall the correct wheel automatically.
+	(default)      Detect system CUDA and install the right torch wheel.
+	--check        Only check for mismatch. Exit 1 + pain signal if mismatch found.
+	--auto-fix     If mismatch detected, reinstall the correct wheel automatically.
 
 CUDA → wheel tag discovery (pytorch.org/get-started/locally):
-  - Dynamically detects system CUDA via nvcc/nvidia-smi/filesystem.
-  - Projects `cuXXX` tag and verifies existence on pytorch.org.
-  - Falls back to highest supported stable version if projection fails.
-  - No CPU / old → cpu
+	- Dynamically detects system CUDA via nvcc/nvidia-smi/filesystem.
+	- Projects `cuXXX` tag and verifies existence on pytorch.org.
+	- Falls back to highest supported stable version if projection fails.
+	- No CPU / old → cpu
 
 Called by install_neo.sh after `uv sync`.
 Also callable from the Lazarus Pulse for drift detection (--check).
 """
 
 import argparse
-import os
 import re
 import shutil
 import subprocess
 import sys
-import uuid
 from pathlib import Path
-from typing import Tuple, Optional
+
 from dotenv import load_dotenv
 
 load_dotenv()
 
 
-# ---------------------------------------------------------------------------
 # CUDA detection
-# ---------------------------------------------------------------------------
 
 
 def _get_cuda_version() -> tuple[int, int] | None:
@@ -140,9 +136,7 @@ def _cuda_to_index(major: int, minor: int) -> str:
 	return "cpu"
 
 
-# ---------------------------------------------------------------------------
 # Installed torch inspection
-# ---------------------------------------------------------------------------
 
 
 def _get_installed_torch_cuda_tag() -> str | None:
@@ -172,9 +166,7 @@ def _get_installed_torch_cuda_tag() -> str | None:
 		return None
 
 
-# ---------------------------------------------------------------------------
 # Optional pain signal injection
-# ---------------------------------------------------------------------------
 
 
 def _inject_pain_signal(message: str, intensity: float = 7.0) -> None:
@@ -182,6 +174,7 @@ def _inject_pain_signal(message: str, intensity: float = 7.0) -> None:
 	try:
 		import os
 		import uuid
+
 		from qdrant_client import QdrantClient
 		from qdrant_client.models import Distance, PointStruct, VectorParams
 
@@ -216,9 +209,7 @@ def _inject_pain_signal(message: str, intensity: float = 7.0) -> None:
 		print(f"[setup_torch] Could not inject pain signal: {e}")
 
 
-# ---------------------------------------------------------------------------
 # Main
-# ---------------------------------------------------------------------------
 
 
 def main() -> None:
