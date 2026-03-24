@@ -303,6 +303,102 @@ async def handle_search_memory_research(arguments: Dict[str, Any]):
 
 
 @registry.register(
+	name="traverse_thread",
+	description="Walk the Ariadne's Thread through work_memories or social_memories. Finds the best matching synthesis_hub for the query and traverses the temporal chain via prev/next_session_hub axons.",
+	schema={
+		"type": "object",
+		"properties": {
+			"query": {"type": "string", "description": "Semantic description of the session to start from."},
+			"collection": {
+				"type": "string",
+				"enum": ["work_memories", "social_memories"],
+				"description": "Collection to traverse. Default: work_memories.",
+			},
+			"direction": {
+				"type": "string",
+				"enum": ["backward", "forward", "both"],
+				"description": "Traversal direction relative to the matched hub. Default: both.",
+			},
+			"depth": {
+				"type": "integer",
+				"description": "Max hops in each direction. Default: 5.",
+			},
+		},
+		"required": ["query"],
+	},
+)
+async def handle_traverse_thread(arguments: Dict[str, Any]):
+	from red_pill.memory import MemoryManager
+
+	query = arguments["query"]
+	collection = arguments.get("collection", "work_memories")
+	direction = arguments.get("direction", "both")
+	depth = int(arguments.get("depth", 5))
+
+	try:
+		manager = MemoryManager()
+		client = manager.client
+
+		# 1. Find the best matching synthesis_hub via semantic search
+		hits = manager.search_and_reinforce(collection, query, limit=10)
+		hub_hits = [h for h in hits if h.payload.get("lazarus_phase") == "synthesis_hub"]
+		if not hub_hits:
+			hub_hits = hits[:1]
+		if not hub_hits:
+			return [types.TextContent(type="text", text=f"No matching nodes found in {collection} for: {query}")]
+
+		start = hub_hits[0]
+
+		def _fetch(point_id: str) -> dict | None:
+			try:
+				pts = client.retrieve(collection, ids=[point_id], with_payload=True)
+				return pts[0].payload if pts else None
+			except Exception:
+				return None
+
+		# 2. Walk backward (past)
+		backward: list[dict] = []
+		if direction in ("backward", "both"):
+			cur_id = str(start.payload.get("prev_session_hub", ""))
+			for _ in range(depth):
+				if not cur_id:
+					break
+				payload = _fetch(cur_id)
+				if not payload:
+					break
+				backward.append({"id": cur_id, "content": payload.get("content", "")[:300]})
+				cur_id = str(payload.get("prev_session_hub", ""))
+			backward.reverse()
+
+		# 3. Walk forward (future)
+		forward: list[dict] = []
+		if direction in ("forward", "both"):
+			cur_id = str(start.payload.get("next_session_hub", ""))
+			for _ in range(depth):
+				if not cur_id:
+					break
+				payload = _fetch(cur_id)
+				if not payload:
+					break
+				forward.append({"id": cur_id, "content": payload.get("content", "")[:300]})
+				cur_id = str(payload.get("next_session_hub", ""))
+
+		# 4. Build output
+		lines = [f"[THREAD] collection={collection} | direction={direction} | depth={depth}", ""]
+		for node in backward:
+			lines.append(f"← [{node['id'][:8]}] {node['content']}")
+		lines.append(f"★ [{str(start.id)[:8]}] {start.payload.get('content', '')[:300]}  ← START")
+		for node in forward:
+			lines.append(f"→ [{node['id'][:8]}] {node['content']}")
+		lines.append(f"\nTotal: {len(backward)} past + 1 start + {len(forward)} future nodes")
+		return [types.TextContent(type="text", text="\n".join(lines))]
+
+	except Exception as e:
+		logger.error(f"traverse_thread failed: {e}")
+		return [types.TextContent(type="text", text=f"Thread traversal error: {e}")]
+
+
+@registry.register(
 	name="check_minion_inbox",
 	description="[OFFICIAL] Read the unread background reports from the MinionInbox.",
 	schema={"type": "object", "properties": {}},
