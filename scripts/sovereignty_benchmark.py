@@ -73,6 +73,7 @@ async def run_sovereignty_benchmark():
 
 	import os
 	from red_pill.config import cfg
+
 	reports_dir = os.path.join(cfg.IA_DIR, "reports")
 	os.makedirs(reports_dir, exist_ok=True)
 	output_path = os.path.join(reports_dir, "SOVEREIGNTY_PROOF.json")

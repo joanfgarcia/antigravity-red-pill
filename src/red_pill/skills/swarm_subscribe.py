@@ -103,7 +103,6 @@ class SwarmSubscribeSkill:
 		shared_secret_str = os.getenv("SWARM_SHARED_SECRET", "")
 		if shared_secret_str:
 			try:
-
 				from red_pill.swarm.mls_bridge import MLSBridge
 
 				bridge = MLSBridge(shared_secret_str.encode())
@@ -111,6 +110,7 @@ class SwarmSubscribeSkill:
 				kp_b64 = base64.b64encode(kp_bytes).decode("utf-8")
 			except Exception as e:
 				import logging
+
 				logging.getLogger(__name__).warning(f"[SwarmSubscribe] Could not generate KeyPackage: {e}")
 
 		metadata = {

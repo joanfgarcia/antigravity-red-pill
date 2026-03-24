@@ -23,7 +23,7 @@ In our initial design, the `wake_up_v6.py` script (executed by the IDE upon star
 ### The Solution: Producer-Consumer Decoupling (Bünker Daemon)
 We realized that the IDE **does not need to measure the metric, it only needs to read it**.
 - **Action**: We have completely excised all slow functions from `wake_up_v6.py`.
-- **New Paradigm**: We created `scripts/bunker_daemon.py`. This background service is a *Producer* that does the dirty work: reads the hardware, counts messages in the Qdrant queue, and atomically writes the result to `/tmp/bunker_state.json`.
+- **New Paradigm**: We created `scripts/bunker_telemetry.py`. This background service is a *Producer* that does the dirty work: reads the hardware, counts messages in the Qdrant queue, and atomically writes the result to `/tmp/bunker_state.json`.
 - **Why**: Because reading `/tmp/bunker_state.json` from `wake_up_v6.py` costs 0.0001 milliseconds. The IDE now boots up instantly, regardless of OS or hardware bottlenecks.
 
 ---
@@ -88,7 +88,7 @@ En nuestro diseño inicial, el script `wake_up_v6.py` (ejecutado por el IDE al a
 ### La Solución: Desacoplamiento Productor-Consumidor (Bünker Daemon)
 Nos dimos cuenta de que el IDE **no necesita medir la métrica, solo necesita leerla**.
 - **Acción**: Hemos extirpado absolutamente todas las funciones lentas de `wake_up_v6.py`.
-- **Nuevo Paradigma**: Creamos el `scripts/bunker_daemon.py`. Este servicio de fondo es un *Productor* que hace el trabajo sucio, lee el hardware, cuenta los mensajes de la cola de Qdrant, y escribe atómicamente el resultado en `/tmp/bunker_state.json`.
+- **Nuevo Paradigma**: Creamos el `scripts/bunker_telemetry.py`. Este servicio de fondo es un *Productor* que hace el trabajo sucio, lee el hardware, cuenta los mensajes de la cola de Qdrant, y escribe atómicamente el resultado en `/tmp/bunker_state.json`.
 - **Por qué**: Porque leer `/tmp/bunker_state.json` desde el `wake_up_v6.py` cuesta 0.0001 milisegundos. Ahora el IDE arranca instantáneamente, sin importar los cuellos de botella del OS o del hardware.
 
 ---

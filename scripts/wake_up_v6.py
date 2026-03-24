@@ -180,7 +180,8 @@ def main():
 	print(persona_injection)
 
 	print("\n=== HARDWARE & ENVIRONMENT TELEMETRY ===")
-	bunker_state = Path("/tmp/bunker_state.json")
+	runtime_dir = os.getenv("XDG_RUNTIME_DIR", "/tmp")
+	bunker_state = Path(runtime_dir) / "bunker_state.json"
 	if bunker_state.exists():
 		try:
 			with open(bunker_state, "r") as f:

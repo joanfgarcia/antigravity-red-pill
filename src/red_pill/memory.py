@@ -345,13 +345,15 @@ class MemoryManager:
 				self._trigger_metabolism()
 
 			# EventBus: notify Enterprise/Community layers
-			get_event_bus().emit(MemoryAddedEvent(
-				collection=collection,
-				engram_id=actual_id,
-				importance=importance,
-				emotion=validated_request.emotion,
-				color=validated_request.color,
-			))
+			get_event_bus().emit(
+				MemoryAddedEvent(
+					collection=collection,
+					engram_id=actual_id,
+					importance=importance,
+					emotion=validated_request.emotion,
+					color=validated_request.color,
+				)
+			)
 			return actual_id
 		except Exception as e:
 			logger.error(f"Failed to add memory: {_mask_pii_exception(e)}")

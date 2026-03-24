@@ -17,7 +17,9 @@ def _check_cuda_drift() -> None:
 	try:
 		result = subprocess.run(
 			[sys.executable, SETUP_TORCH_SCRIPT, "--check"],
-			capture_output=True, text=True, timeout=15,
+			capture_output=True,
+			text=True,
+			timeout=15,
 		)
 		if result.returncode != 0:
 			print(f"[pulse] ⚠️  CUDA drift detected: {result.stdout.strip()}")
@@ -49,4 +51,3 @@ async def oneshot_pulse():
 
 if __name__ == "__main__":
 	asyncio.run(oneshot_pulse())
-

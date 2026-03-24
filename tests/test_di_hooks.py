@@ -147,10 +147,13 @@ class TestMemoryManagerHiveInjection:
 			# Patch in the memory module's namespace (where the import was bound)
 			patch("red_pill.memory.HiveMind") as mock_hive_cls,
 		):
-			with patch.dict("sys.modules", {
-				"red_pill.core.storage": MagicMock(StorageEngine=MagicMock(return_value=MagicMock(client=MagicMock()))),
-				"red_pill.core.embeddings": MagicMock(EmbeddingEngine=MagicMock()),
-				"red_pill.core.metabolism": MagicMock(MetabolismKernel=MagicMock()),
-			}):
+			with patch.dict(
+				"sys.modules",
+				{
+					"red_pill.core.storage": MagicMock(StorageEngine=MagicMock(return_value=MagicMock(client=MagicMock()))),
+					"red_pill.core.embeddings": MagicMock(EmbeddingEngine=MagicMock()),
+					"red_pill.core.metabolism": MagicMock(MetabolismKernel=MagicMock()),
+				},
+			):
 				mm = MemoryManager(url="http://localhost:6333")
 				assert mm.hive is mock_hive_cls.return_value

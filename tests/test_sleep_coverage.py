@@ -21,8 +21,7 @@ def test_distill_engram_markdown_cleaning():
 	mock_opener = MagicMock()
 	mock_opener.open.return_value = mock_resp
 
-	with patch("os.path.exists", return_value=False), \
-		patch("urllib.request.build_opener", return_value=mock_opener):
+	with patch("os.path.exists", return_value=False), patch("urllib.request.build_opener", return_value=mock_opener):
 		result = distill_engram("raw")
 	assert result["summary"] == "test"
 	assert result["emotion"] == "joy"
@@ -31,11 +30,9 @@ def test_distill_engram_markdown_cleaning():
 	mock_resp.read.return_value = json.dumps(
 		{"choices": [{"message": {"content": '```\n{"summary": "test2", "emotion": "sadness", "intensity": 0.1}\n```'}}]}
 	).encode()
-	with patch("os.path.exists", return_value=False), \
-		patch("urllib.request.build_opener", return_value=mock_opener):
+	with patch("os.path.exists", return_value=False), patch("urllib.request.build_opener", return_value=mock_opener):
 		result = distill_engram("raw")
 	assert result["summary"] == "test2"
-
 
 
 def test_distill_engram_error_path():

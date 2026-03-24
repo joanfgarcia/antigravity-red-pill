@@ -129,9 +129,7 @@ class FirebaseTransport(SwarmTransport):
 					import hmac as _hmac
 
 					kp_bytes = base64.b64decode(kp_b64)
-					expected = base64.b64encode(
-						_hmac.new(shared_secret, kp_bytes, hashlib.sha256).digest()
-					).decode()
+					expected = base64.b64encode(_hmac.new(shared_secret, kp_bytes, hashlib.sha256).digest()).decode()
 					if not _hmac.compare_digest(expected, admission_token):
 						logger.warning(f"[FirebaseTransport] Invalid admission_token for '{full_alias}'. Dropping.")
 						continue

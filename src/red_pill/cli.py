@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import time
+from pathlib import Path
 from typing import Any, Dict, List
 
 import yaml  # type: ignore
@@ -140,6 +141,69 @@ def handle_identity(args: argparse.Namespace) -> None:
 			print("[OK] Identity and collections purged. System is a blank slate.")
 		else:
 			print("Purge aborted.")
+
+
+def handle_telemetry() -> None:
+	"""One-shot telemetry scan (formerly daemon)."""
+	import sys
+	from pathlib import Path
+
+	project_root = str(Path(__file__).parent.parent.parent)
+	if project_root not in sys.path:
+		sys.path.append(project_root)
+
+	from scripts.bunker_telemetry import BunkerTelemetry
+
+	telemetry = BunkerTelemetry()
+	asyncio.run(telemetry.poll_telemetry(oneshot=True))
+
+
+def handle_interceptor(args: argparse.Namespace) -> None:
+	"""Interceptor Management (Manual Activation for Security Audits)."""
+	conf = cfg.get_config()
+	env_path = Path(conf.IA_DIR) / ".env"
+
+	if args.int_cmd == "enable":
+		print("\n--- [SEC-G01: BÜNKER INTERCEPTOR ACTIVATION] ---")
+		print("Warning: Activating the Interceptor will supplement all user prompts with")
+		print("local context (hardware telemetry, memories, and Lore Skin personality).")
+		print("This is a sovereign technical decision that may affect LLM reasoning costs.")
+		confirm = input("Type 'CONFIRM' to enable the pipeline: ")
+		if confirm.strip().upper() == "CONFIRM":
+			# Update .env
+			lines = []
+			replaced = False
+			if env_path.exists():
+				with open(env_path, "r") as f:
+					for line in f:
+						if line.startswith("INTERCEPTOR_ENABLED="):
+							lines.append(f"INTERCEPTOR_ENABLED=true\n")
+							replaced = True
+						else:
+							lines.append(line)
+			if not replaced:
+				lines.append("INTERCEPTOR_ENABLED=true\n")
+			with open(env_path, "w") as f:
+				f.writelines(lines)
+			print("[OK] Interceptor ENABLED. Protocol Nova is now active.")
+		else:
+			print("Activation aborted.")
+	elif args.int_cmd == "disable":
+		# Update .env
+		lines = []
+		if env_path.exists():
+			with open(env_path, "r") as f:
+				for line in f:
+					if line.startswith("INTERCEPTOR_ENABLED="):
+						lines.append(f"INTERCEPTOR_ENABLED=false\n")
+					else:
+						lines.append(line)
+		with open(env_path, "w") as f:
+			f.writelines(lines)
+		print("[OK] Interceptor DISABLED. Baseline neutrality restored.")
+	elif args.int_cmd == "status":
+		status = "ENABLED" if conf.INTERCEPTOR_ENABLED else "DISABLED"
+		print(f"Bünker Interceptor: {status}")
 
 
 def handle_daemon() -> None:
@@ -354,7 +418,13 @@ def main() -> None:
 	id_sub.add_parser("refresh", help="Synthesize and refresh session context (wake_up)")
 	id_sub.add_parser("purge", help="GDPR Art 17: Right to be Forgotten. Destroys all memory collections and local identity.")
 
-	subparsers.add_parser("daemon", help="Start the Lazarus Pulse heartbeat daemon (used by systemd)")
+	int_parser = subparsers.add_parser("interceptor", help="Bünker Interceptor Management")
+	int_sub = int_parser.add_subparsers(dest="int_cmd")
+	int_sub.add_parser("enable", help="Manually enable personal identity injection")
+	int_sub.add_parser("disable", help="Restore baseline AI neutrality")
+	int_sub.add_parser("status", help="Show interceptor state")
+
+	subparsers.add_parser("telemetry", help="Run a single-pass hardware/Bünker telemetry heartbeat (Oneshot)")
 
 	args = parser.parse_args()
 
@@ -402,8 +472,8 @@ def main() -> None:
 		parser.print_help()
 		sys.exit(0)
 
-	elif args.command == "daemon":
-		handle_daemon()
+	elif args.command == "telemetry":
+		handle_telemetry()
 		return
 
 	elif args.command == "mode":
@@ -411,10 +481,12 @@ def main() -> None:
 		return
 
 	# EventBus: let Enterprise/Community know which command was dispatched
-	get_event_bus().emit(CliCommandDispatchedEvent(
-		command=args.command,
-		subcommand=getattr(args, "swarm_cmd", None) or getattr(args, "soul_cmd", None) or getattr(args, "id_cmd", None),
-	))
+	get_event_bus().emit(
+		CliCommandDispatchedEvent(
+			command=args.command,
+			subcommand=getattr(args, "swarm_cmd", None) or getattr(args, "soul_cmd", None) or getattr(args, "id_cmd", None),
+		)
+	)
 
 	# Map CLI type to collection(s)
 	if getattr(args, "type", None):
@@ -545,6 +617,9 @@ def main() -> None:
 			return
 		elif args.command == "identity":
 			handle_identity(args)
+			return
+		elif args.command == "interceptor":
+			handle_interceptor(args)
 			return
 
 		# Loop through requested collections

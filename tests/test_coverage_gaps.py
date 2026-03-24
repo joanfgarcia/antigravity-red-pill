@@ -108,8 +108,7 @@ class TestCliExceptionPaths:
 		args = MagicMock()
 		args.id_cmd = "purge"
 		mock_mgr = MagicMock()
-		with patch("builtins.input", return_value="PURGE"), \
-			patch("red_pill.memory.MemoryManager", return_value=mock_mgr):
+		with patch("builtins.input", return_value="PURGE"), patch("red_pill.memory.MemoryManager", return_value=mock_mgr):
 			handle_identity(args)
 			mock_mgr.purge_identity.assert_called_once()
 
@@ -189,19 +188,23 @@ class TestConfigValidatorEdgeCases:
 	def test_module_alias_bayesian_collections(self):
 		"""Module-level alias BAYESIAN_COLLECTIONS is accessible via import."""
 		from red_pill import config as cfg_module
+
 		assert hasattr(cfg_module, "BAYESIAN_COLLECTIONS")
 
 	def test_module_alias_memory_engines(self):
 		"""Module-level alias MEMORY_ENGINES is accessible via import."""
 		from red_pill import config as cfg_module
+
 		assert hasattr(cfg_module, "MEMORY_ENGINES")
 
 	def test_module_alias_chroma_tone_mapping(self):
 		"""Module-level alias CHROMA_TONE_MAPPING is accessible."""
 		from red_pill import config as cfg_module
+
 		assert hasattr(cfg_module, "CHROMA_TONE_MAPPING")
 
 	def test_module_alias_current_schema_version(self):
 		"""Module-level alias CURRENT_SCHEMA_VERSION is accessible."""
 		from red_pill import config as cfg_module
+
 		assert hasattr(cfg_module, "CURRENT_SCHEMA_VERSION")

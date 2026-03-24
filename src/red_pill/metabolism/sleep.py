@@ -32,6 +32,7 @@ def _check_llm_available() -> bool:
 	if mlx_url:
 		try:
 			import urllib.parse
+
 			parsed = urllib.parse.urlparse(mlx_url)
 			host = parsed.hostname or "127.0.0.1"
 			port = parsed.port or 8760
@@ -373,9 +374,11 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 	except Exception:
 		pass
 
-	get_event_bus().emit(SleepCompletedEvent(
-		collection=collection,
-		processed_count=processed_count,
-		mode=mode,
-	))
+	get_event_bus().emit(
+		SleepCompletedEvent(
+			collection=collection,
+			processed_count=processed_count,
+			mode=mode,
+		)
+	)
 	return processed_count

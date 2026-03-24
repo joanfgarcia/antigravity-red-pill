@@ -31,6 +31,7 @@ async def run_analysis():
 		print("\n========================================\n")
 
 		from red_pill.config import cfg
+
 		reports_dir = os.path.join(cfg.IA_DIR, "reports")
 		os.makedirs(reports_dir, exist_ok=True)
 		report_path = os.path.join(reports_dir, "SAMANTHA_REPORT_CH1.md")

@@ -27,6 +27,8 @@ ValidEmotion = Literal[
 	"nostalgia",
 	"sarcasm",
 	"happiness",
+	"relief",
+	"pain",
 ]
 
 

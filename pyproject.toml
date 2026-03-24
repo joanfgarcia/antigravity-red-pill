@@ -1,6 +1,6 @@
 [project]
 name = "red-pill"
-version = "6.1.7"
+version = "6.2.0"
 description = "B760-Adaptive Memory Protocol for Sovereign Agents"
 readme = "README.md"
 license = "GPL-3.0-only"
@@ -16,12 +16,14 @@ dependencies = [
     "google-generativeai>=0.8.6",
     "psutil>=7.2.2",
     "mcp>=1.26.0",
-    "llama-cpp-python>=0.3.16",
+    "llama-cpp-python[server]>=0.3.16",
     "huggingface-hub[hf-transfer]>=1.4.1",
     "hf-transfer>=0.1.9",
     "pymilvus>=2.4.0",
     "transformers>=4.40.0",
     "torch>=2.2.0",
+    "torchvision",
+    "torchaudio",
     "argon2-cffi>=23.1.0",
     "google-api-python-client>=2.115.0",
     "google-auth-httplib2>=0.2.0",
@@ -30,6 +32,8 @@ dependencies = [
     "firebase-admin>=6.4.0",
     "pyjwt>=2.12.0",
     "watchfiles>=1.1.1",
+    "fastapi>=0.110.0",
+    "uvicorn>=0.27.0",
     "pure-mls @ git+https://github.com/joanfgarcia/pure-mls.git@v0.2.4",
 ]
 

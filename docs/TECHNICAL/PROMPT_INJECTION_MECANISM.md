@@ -7,9 +7,9 @@ The architecture of *The Bünker* (Red Pill Protocol) manages User and System co
 ## 1. Passive Injection (Zero-Latency / Native IDE Rules)
 > **Recommended for continuous telemetry (LED Panels, system alerts, hardware status).**
 
-Instead of intercepting the text the Operator types into the IDE on the fly, the background process `bunker_daemon.py` proactively writes vital information into **strategic Markdown files** that modern IDEs automatically load as *System Prompts* or *Rules*.
+Instead of intercepting the text the Operator types into the IDE on the fly, the background process `bunker_telemetry.py` proactively writes vital information into **strategic Markdown files** that modern IDEs automatically load as *System Prompts* or *Rules*.
 
-### Natively Supported by `bunker_daemon.py`:
+### Natively Supported by `bunker_telemetry.py`:
 - **Antigravity (Gemini)**: Periodically writes to `~/.gemini/antigravity/rules/00_bunker_telemetry.md`. Antigravity includes it globally with no extra configuration.
 - **Cursor IDE**: Writes to `<PROJECT_ROOT>/.cursor/rules/00_bunker_telemetry.mdc`. Cursor includes this contextually within the local project.
 - **Generic Fallback**: Writes to `<PROJECT_ROOT>/.bunker_telemetry.md`. In IDEs like Windsurf or GitHub Copilot, the Operator must manually reference this file (e.g., typing `@.bunker_telemetry.md` or including it in `.github/copilot-instructions.md`).

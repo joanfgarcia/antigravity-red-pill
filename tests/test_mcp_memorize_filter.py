@@ -35,4 +35,3 @@ async def test_silent_scribe_accepts_valid_interaction():
 		res = await handle_memorize_interaction({"prompt": "Who are you?", "response": "I am Aleth.", "role": "assistant"})
 	assert "Engram queue registration initiated" in res[0].text
 	mock_queue.enqueue_memory.assert_called_once()
-

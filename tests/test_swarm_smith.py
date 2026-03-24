@@ -58,7 +58,8 @@ class TestSmithExecute:
 		"""Lines 82-92: hardcoded secret → CRITICAL finding."""
 		py_file = tmp_path / "leaky.py"
 		import os
-		py_file.write_text("api" + f"_key = \"{os.urandom(16).hex()}\"\n")
+
+		py_file.write_text("api" + f'_key = "{os.urandom(16).hex()}"\n')
 		with patch("red_pill.swarm.agents.smith.HardwareSentinel.get_stats", return_value={}):
 			with patch(_EDGE_PATCH, return_value=_make_engine(llm=False)):
 				result = run_async(smith.execute("audit", path=str(tmp_path)))
@@ -88,6 +89,7 @@ class TestSmithExecute:
 		"""Lines 113-172: deep_forensics=True, llm active → synthesize called."""
 		py_file = tmp_path / "service.py"
 		import os
+
 		py_file.write_text("def authenticate(tok" + "en):\n    return tok" + "en == '" + os.urandom(8).hex() + "'\n")
 		engine = _make_engine(synthesize_return="CLEAN")
 		with patch("red_pill.swarm.agents.smith.HardwareSentinel.get_stats", return_value={}):
@@ -160,6 +162,7 @@ class TestSmithExecute:
 		venv_dir = tmp_path / "venv"
 		venv_dir.mkdir()
 		import os
+
 		(venv_dir / "auth.py").write_text("def auth(tok" + "en): return tok" + "en == '" + os.urandom(8).hex() + "'\n")
 		(tmp_path / "real.py").write_text("def auth(token): return token\n")
 		engine = _make_engine(synthesize_return="CLEAN")
@@ -182,6 +185,7 @@ class TestSmithExecute:
 		"""Lines 161-169: synthesize returns non-CLEAN → finding appended, score reduced."""
 		py_file = tmp_path / "vuln_service.py"
 		import os
+
 		py_file.write_text("def auth(token):\n    sec" + "ret = '" + os.urandom(16).hex() + "'\n    return token == secret\n" * 5)
 		engine = _make_engine(synthesize_return="VULNERABILITY FOUND at line 2")
 		with patch("red_pill.swarm.agents.smith.HardwareSentinel.get_stats", return_value={}):

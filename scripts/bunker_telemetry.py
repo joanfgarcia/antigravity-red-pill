@@ -9,19 +9,21 @@ from pathlib import Path
 # Add src to pythonpath so it can run independently
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from red_pill.config import IA_DIR
+from red_pill.config import IA_DIR, get_config
 from red_pill.core.inbox import MinionInbox
 from red_pill.core.queue_manager import MemoryQueueManager
 from red_pill.telemetry import sentinel
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-logger = logging.getLogger("bunker_daemon")
+cfg = get_config()
 
-BUNKER_STATE_FILE = Path("/tmp/bunker_state.json")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger("bunker_telemetry")
+
+BUNKER_STATE_FILE = Path(cfg.RUNTIME_DIR) / "bunker_state.json"
 TELEMETRY_INTERVAL = 10.0  # seconds
 
 
-class BunkerDaemon:
+class BunkerTelemetry:
 	def __init__(self):
 		self.running = True
 		self.state = {
@@ -44,7 +46,7 @@ class BunkerDaemon:
 			self.wal_path = Path(str(self.db_path) + "-wal")
 
 	def shutdown(self, sig, frame):
-		logger.info("Shutting down Bunker Daemon...")
+		logger.info("Shutting down Bunker Telemetry Task...")
 		self.running = False
 		if BUNKER_STATE_FILE.exists():
 			try:
@@ -55,6 +57,20 @@ class BunkerDaemon:
 
 	async def write_state(self):
 		self.state["timestamp"] = time.time()
+
+		# v6.2.2: Merciful Merge (pick up updates from interceptor_rp)
+		# We preserve all keys NOT managed by the daemon's polling loop.
+		managed_keys = {"nvidia", "minions", "swarm", "signals", "timestamp"}
+		try:
+			if BUNKER_STATE_FILE.exists():
+				with open(BUNKER_STATE_FILE, "r") as f:
+					disk_state = json.load(f)
+				for k, v in disk_state.items():
+					if k not in managed_keys:
+						self.state[k] = v
+		except Exception as merge_err:
+			logger.warning(f"Failed to merge disk state: {merge_err}")
+
 		tmp_file = BUNKER_STATE_FILE.with_suffix(".tmp")
 		try:
 			# Atomic write
@@ -66,14 +82,30 @@ class BunkerDaemon:
 			rule_dir = Path.home() / ".gemini" / "antigravity" / "rules"
 			rule_dir.mkdir(parents=True, exist_ok=True)
 
-			nv = self.state.get("nvidia", {})
-			minions = self.state.get("minions", {}).get("unread", 0)
-			signals = self.state.get("signals", {}).get("active", 0)
-			swarm_msgs = self.state.get("swarm", {}).get("messages", 0)
+			# Defensive access for LED panel
+			nv = self.state.get("nvidia")
+			if not isinstance(nv, dict):
+				nv = {}
+
+			raw_minions = self.state.get("minions")
+			minions = raw_minions.get("unread", 0) if isinstance(raw_minions, dict) else 0
+
+			raw_signals = self.state.get("signals")
+			signals = raw_signals.get("active", 0) if isinstance(raw_signals, dict) else 0
+
+			raw_swarm = self.state.get("swarm")
+			swarm_msgs = raw_swarm.get("messages", 0) if isinstance(raw_swarm, dict) else 0
+
+			last_int = self.state.get("last_interaction", 0)
+
+			time_info = ""
+			if last_int > 0:
+				ago = int(time.time() - last_int)
+				time_info = f"\n- **Last Interaction**: {ago}s ago"
 
 			md_content = f"""<bunker_led_panel>
 You are actively receiving this telemetry via IDE rule injection (`00_bunker_telemetry.md`).
-- **GPU**: {nv.get("status", "offline")} | {nv.get("temp", "N/A")} | VRAM: {nv.get("vram", "N/A")}
+- **GPU**: {nv.get("status", "offline")} | {nv.get("temp", "N/A")} | VRAM: {nv.get("vram", "N/A")}{time_info}
 - **Minion Inbox**: {minions} unread background reports
 - **Active System Signals (PAIN)**: {signals} active signals
 - **Swarm Messages**: {swarm_msgs} pending messages
@@ -110,7 +142,25 @@ You are actively receiving this telemetry via IDE rule injection (`00_bunker_tel
 			f.write(content)
 		tmp_file.replace(target_file)
 
-	async def poll_telemetry(self):
+	async def report_pain(self, message: str):
+		"""Log a system pain signal to Qdrant (Cortex)."""
+		try:
+			from red_pill.memory import MemoryManager
+
+			mgr = MemoryManager()
+			mgr.add_memory(
+				collection="signal_memories",
+				text=f"[BunkerTelemetry] {message}",
+				importance=0.9,
+				emotion="pain",
+				color="red",
+				metadata={"source": "bunker_daemon", "type": "system_failure"},
+			)
+			logger.info(f"Pain signal recorded: {message}")
+		except Exception as e:
+			logger.error(f"Failed to record pain signal: {e}")
+
+	async def poll_telemetry(self, oneshot: bool = False):
 		"""Heavy polling loop: runs nvidia-smi with timeout and checks SQLite sizes."""
 		while self.running:
 			t0 = time.time()
@@ -158,65 +208,43 @@ You are actively receiving this telemetry via IDE rule injection (`00_bunker_tel
 			# Commit State
 			await self.write_state()
 
+			if oneshot:
+				break
+
 			elapsed = time.time() - t0
 			sleep_time = max(0.1, TELEMETRY_INTERVAL - elapsed)
 			await asyncio.sleep(sleep_time)
 
-	async def watch_sqlite_queues(self):
-		"""Event-driven watcher for the WAL file using watchfiles."""
-		try:
-			from watchfiles import awatch
-		except ImportError:
-			logger.warning("watchfiles not installed. Falling back to dumb polling for Queues.")
-			await self._fallback_queue_poller()
-			return
-
-		logger.info(f"Subscribed to FileSystem events on {self.db_path.parent}...")
-
-		# If queue is not empty at startup, process it
-		if self.queue_mgr and self.queue_mgr.get_pending_count() > 0:
-			await asyncio.to_thread(self.queue_mgr.process_pending)
-
-		# Watch the directory (inotify limits us watching specific files if they get rotated easily,
-		# but watchfiles abstracts it. We watch the directory and filter by WAL).
-		async for changes in awatch(self.db_path.parent):
-			if not self.running:
-				break
-
-			trigger = False
-			for change_type, path in changes:
-				if "memory_queue.db-wal" in path or "memory_queue.db" in path:
-					trigger = True
-					break
-
-			if trigger and self.queue_mgr:
-				logger.info("Inotify Event: Queue WAL modified. Awakening Memory Worker.")
-				# Small debounce to let SQLite finish the OS flush if needed
-				await asyncio.sleep(0.1)
-				try:
-					await asyncio.to_thread(self.queue_mgr.process_pending)
-					logger.info("Memory Worker finished draining queue. Back to 0% CPU sleep.")
-				except Exception as e:
-					logger.error(f"Memory Worker crashed processing queue: {e}")
-
-	async def _fallback_queue_poller(self):
-		while self.running:
-			if self.queue_mgr and self.queue_mgr.get_pending_count() > 0:
-				await asyncio.to_thread(self.queue_mgr.process_pending)
-			await asyncio.sleep(2.0)
-
 
 async def main():
-	daemon = BunkerDaemon()
+	import argparse
+
+	parser = argparse.ArgumentParser(description="Bünker Daemon (Telemetry & Queue Manager)")
+	parser.add_argument("--oneshot", action="store_true", help="Perform a single poll and exit")
+	args = parser.parse_args()
+
+	telemetry = BunkerTelemetry()
+	daemon = telemetry  # Alias for backward compat if needed in this scope
+
+	if args.oneshot:
+		logger.info("Executing Bünker Telemetry Oneshot...")
+		try:
+			await daemon.poll_telemetry(oneshot=True)
+		except Exception as e:
+			await daemon.report_pain(f"Telemetry failed: {e}")
+			sys.exit(1)
+
+		logger.info("Oneshot complete. Exiting.")
+		return
+
 	signal.signal(signal.SIGINT, daemon.shutdown)
 	signal.signal(signal.SIGTERM, daemon.shutdown)
 
-	logger.info("Bünker Daemon Started (BE WATER).")
+	logger.info("Bünker Telemetry Task Started (BE WATER).")
 	logger.info("Core 1: Async Polling (Telemetry/Nvidia/Qdrant)")
-	logger.info("Core 2: Event-Driven Queue Worker (Inotify/SQLite)")
 
 	try:
-		await asyncio.gather(daemon.poll_telemetry(), daemon.watch_sqlite_queues())
+		await daemon.poll_telemetry()
 	except asyncio.CancelledError:
 		pass
 	finally:

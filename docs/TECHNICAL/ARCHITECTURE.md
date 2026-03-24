@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v6.1.7 (Sovereign CNS)
+**System Version**: v6.2.0 (Sovereign CNS)
 **Analyst**: The Architect
 **Date**: 2026-03-13
 
@@ -20,9 +20,10 @@ The Red Pill Protocol v5.6.3 has achieved stability and functional alignment wit
 - **[ENHANCED v5.6.0] Lazy Metabolism**: The $O(N)$ background scan has been replaced by an $O(1)$ lazy-calculation model. Memory decay is determined only upon retrieval (`_calculate_lazy_decay`), with a high-speed Gran Purge sidecar for physical sector maintenance.
 - **[ENHANCED v5.6.0] N-Hop Synaptic Depth**: Synaptic propagation has evolved beyond depth-1. The system now supports multi-layered reinforcement ($N$-hops) with diminishing returns ($\delta^k$), enabling deeper context anchoring within the associative graph.
 - **[ENHANCED v6.0.0] Evocative Memory Cascading (Hybrid Vector-Graph)**: Replaced strictly radial memory recall with a biologically-aligned cascading mechanism. N-Hop associations forged during Oneiromancy are now physically fetched at recall time (`search_and_reinforce`). Associated payloads are labeled transitorily (`_is_evoked=True`) to maintain Pydantic `EngramPayload` integrity while granting the agent genuine "train of thought" chaining.
-- **[ENHANCED v6.0.0] Sovereign Heartbeat (Lazarus Pulse)**: The system now features an autonomous, multi-threaded background service (`LazarusPulse`). This service performs "Maintenance Rituals" (Absence Guard sync, DB connectivity verification) and "Dream Rituals" independently of operator prompts.
+- **[ENHANCED v6.2.0] Sovereign Heartbeat (Silent Architecture)**: The system has transitioned to a **Zero-Daemon** model. Persistent background processes have been decommissioned in favor of OS-native, timer-driven oneshot tasks (Lazarus Pulse, Telemetry, Queue). This eliminates idle RAM overhead (~441MB saved) and ensures the system remains completely silent until a pulse is triggered.
+- **[ENHANCED v6.2.0] Dynamic CUDA Healer**: `setup_torch.py` now performs real-time system discovery and wheel projection. It verified the exact PyTorch index against the detected CUDA version (e.g., `cu124` for CUDA 12.4) before installation, ensuring the Bünker auto-repairs after driver updates without manual intervention.
 - **[ENHANCED v6.0.0] Milvus Lite (Local Sanctuary)**: Collective memory prototyping no longer requires distributed infrastructure. Milvus Lite provides a high-speed, local-file-based vector substrate for HiveMind logic without network exposure, maintaining absolute sovereignty.
-- **[NEW v6.0.0a3] Persistent Sovereign CNS (systemd)**: The core sidecar and heartbeat rituals are now encapsulated in a system-level service (`redpill.service`). This ensures that the Bünker is always listening and the metabolic rituals (consolidation, culling) run proactively, independent of the user's IDE state.
+- **[ENHANCED v6.1.7] Triggered Sovereign CNS (Timers)**: Core rituals are now encapsulated in OS-native timers (`systemd` user timers, `launchd` plists, or Windows Tasks). These trigger oneshot execution of `trigger_pulse.py`, `bunker_telemetry.py`, and `queue_worker.py`, ensuring the Bünker maintains its metabolic rituals (consolidation, culling) without persistent daemon overhead.
 - **[NEW v6.0.0a3] Structural Shadow Scribe (Anti-Amnesia)**: Implemented a name-agnostic, zero-token dialogue extraction ritual. By structural analysis of artifacts (`walkthrough.md`), the system captures interactions based on structural cues ('> ' prefixes) rather than hardcoded labels, allowing total persona agnosticism (e.g., Titanium, Aleth, or Operator).
 - **[NEW v6.1.0] Operator Mood Profile (USP)**: New module `mood_profile.py` captures the operator's emotional resonance as a multi-color chroma vector across 4 temporal horizons (Global, 30d, 7d, 3d). Vectors are weighted by `intensity × importance` and persisted as a fixed engram (`ID_OPERATOR_MOOD`). Integrated into the Lazarus Pulse via `_usp_ritual()`.
 - **[NEW v6.1.0] Mystique v2 (Tone-Based Skin Selection)**: The Mystique protocol now reads the operator mood (USP) instead of the Bünker's internal chroma for skin suggestions. Strategies (`complementary`, `contrast`) use distinct scoring logic. The `manager` parameter enables USP lookup with fallback to legacy Bünker mood.
@@ -49,10 +50,10 @@ The schema is " Schemaless" (JSON payload).
 - **Fragility**: High. The `PointUpdate` class relies on implicit knowledge of payload structure. If v5.0 introduces nested weights or time-series data for reinforcement history, the flat payload update logic will inevitably corrupt data.
 - **[RESOLVED v6.1.0] Topological Amnesia (ARCH-001)**: Since the full source text is stored in every engram's Qdrant payload (`payload["content"]`), re-embedding on model upgrade is entirely loss-less. The `SoulManager.restore_soul` protocol now features an **Automated Transcoding Cycle**. By comparing the incoming Soul Kit's `manifest.json` against the active `cfg.VECTOR_SIZE`, the Bünker automatically recalculates and migrates the embeddings of the entire database to the new dimensionality at import time.
 
-### 3.4. Background Services (Daemons) Standard
-To ensure the Bünker remains observable and resource-accountable, all persistent background processes must adhere to the **`RP-*` Naming Standard**:
-- **Prefix Rule**: Every Red Pill daemon, service, or system listener MUST be named starting with `RP-` (e.g., `RP-Minion` for the local LLM, `RP-Watcher` for the Swarm listener).
-- **Service Files**: System registration files MUST reflect this (e.g., `com.redpill.watcher.plist`, `rp-minion.service`).
+### 3.4. Background Task Scheduling (Zero-Daemon)
+To ensure the Bünker remains observable and resource-accountable, all background tasks MUST be implemented as **oneshot executions** triggered by OS timers:
+- **Naming Rule**: Every Red Pill task or timer MUST be named starting with `redpill-` (e.g., `redpill-telemetry`, `redpill-queue`).
+- **Nomenclature Rule**: The term "daemon" is deprecated. All background activities are referred to as **Tasks**, **Pulses**, or **Rituals**.
 - **Log Unification**: All background components MUST output logs into the `~/.agent/rp-<name>/` structure to prevent cross-contamination and guarantee rapid debugging.
 
 ## 4. Recommendations for v5.0 (Global Scale Strategy)

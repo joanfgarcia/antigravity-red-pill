@@ -50,15 +50,18 @@ logger = logging.getLogger(__name__)
 # Event Base & Typed Events
 # ---------------------------------------------------------------------------
 
+
 @dataclasses.dataclass
 class RedPillEvent:
 	"""All Foundation events inherit from this class."""
+
 	timestamp: float = dataclasses.field(default_factory=time.time)
 
 
 @dataclasses.dataclass
 class MemoryAddedEvent(RedPillEvent):
 	"""Fired after MemoryManager.add_memory() stores a new engram."""
+
 	collection: str = ""
 	engram_id: str = ""
 	importance: float = 1.0
@@ -69,6 +72,7 @@ class MemoryAddedEvent(RedPillEvent):
 @dataclasses.dataclass
 class SleepCompletedEvent(RedPillEvent):
 	"""Fired after perform_sleep_cycle() finishes consolidation."""
+
 	collection: str = ""
 	processed_count: int = 0
 	mode: str = "lazy"  # "lazy" | "deep"
@@ -77,12 +81,14 @@ class SleepCompletedEvent(RedPillEvent):
 @dataclasses.dataclass
 class CollectionCreatedEvent(RedPillEvent):
 	"""Fired after StorageEngine creates a new Qdrant collection."""
+
 	collection_name: str = ""
 
 
 @dataclasses.dataclass
 class CliCommandDispatchedEvent(RedPillEvent):
 	"""Fired in main() after argparse resolves the command."""
+
 	command: str = ""
 	subcommand: Optional[str] = None
 
@@ -118,9 +124,7 @@ class EventBus:
 			if event_type not in self._listeners:
 				self._listeners[event_type] = []
 			self._listeners[event_type].append(listener)
-		logger.debug(
-			f"[EventBus] Subscribed {listener!r} to {event_type.__name__}"
-		)
+		logger.debug(f"[EventBus] Subscribed {listener!r} to {event_type.__name__}")
 
 	def unsubscribe(self, event_type: Type[E], listener: ListenerFn) -> bool:
 		"""Remove a specific listener. Returns True if it was found and removed."""
@@ -155,10 +159,7 @@ class EventBus:
 						# No running loop (CLI context) — close the coroutine to avoid warnings
 						result.close()
 			except Exception as e:
-				logger.warning(
-					f"[EventBus] Listener {listener!r} raised on "
-					f"{type(event).__name__}: {e}"
-				)
+				logger.warning(f"[EventBus] Listener {listener!r} raised on {type(event).__name__}: {e}")
 
 	def clear(self, event_type: Optional[Type[RedPillEvent]] = None) -> None:
 		"""Remove all listeners for a given type, or all listeners if None."""

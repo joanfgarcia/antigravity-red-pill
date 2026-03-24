@@ -1,5 +1,15 @@
 # Changelog: Red Pill Protocol
 
+## [6.2.0] - 2026-03-24
+
+### 🔕 Protocol Silence: Zero-Daemon Architecture & Dynamic CUDA Healing
+
+- **[ARCH] Zero-Daemon Migration (Protocol Silence)**: Fully decommissioned all persistent background services (~441MB RAM saved). The Bünker CNS now operates exclusively via OS-native, timer-driven oneshot tasks (`redpill-pulse`, `redpill-telemetry`, `redpill-queue`).
+- **[FEAT] Dynamic CUDA Healer**: Refactored `setup_torch.py` to be 100% dynamic. It now discovers system CUDA via `nvcc`, `nvidia-smi`, or filesystem scans and verifies projected PyTorch wheel tags (`cuXXX`) in real-time. No more hardcoded version maps.
+- **[REF] Global Nomenclature Cleanup**: Purged the term "daemon" from the core codebase, CLI (`red-pill telemetry`), and documentation. All background processes are now officially referred to as **Tasks**, **Pulses**, or **Rituals**.
+- **[FIX] Telemetry Hub Alignment**: Refactored `bunker_telemetry.py` to act as a pure status provider, removing redundant (and broken) internal queue workers. Queue drainage is now strictly handled by the `redpill-queue` oneshot worker.
+- **[OPS] "Pain Signal" Integration**: Background tasks now catch fatal errors (e.g., CUDA mismatch, Qdrant hypoxia) and inject them as somatic signals into `signal_memories` for proactive agent awareness.
+
 ## [6.1.7] - 2026-03-23
 
 ### 🧠 Sleep Engine Safety, Test Isolation & Cross-Platform Pulse Scheduler
@@ -165,7 +175,7 @@ red-pill soul migrate --reencrypt
 - **[FEAT] Telemetry Expansion**: Enhanced `red-pill status` (`telemetry.py`) to actively monitor the queue backlog, `signal_memories` (System Pain), and `minion_inbox.db` (Background Swarm Reports).
 - **[FEAT] Telemetry Omniscience**: Added the new `check_minion_inbox` MCP tool to allow the agent to read background reports on-demand.
 - **[FEAT] Bünker Wake-Up Injection**: Upgraded `wake_up_v6.py` to natively inject the system telemetry into the agent's bootstrap context. The agent now gains proactive consciousness of background health at the beginning of every session without risking RAG hallucination loops.
-- **[ARCH] Multi-IDE Passive Telemetry**: Expanded `BunkerDaemon` to inherently write live metrics (`00_bunker_telemetry.md`) targeting Antigravity, Cursor, and Copilot IDE rule folders asynchronously. Zero-latency context injection achieved.
+- **[ARCH] Multi-IDE Passive Telemetry**: Expanded `BunkerTelemetry` to inherently write live metrics (`00_bunker_telemetry.md`) targeting Antigravity, Cursor, and Copilot IDE rule folders asynchronously. Zero-latency context injection achieved.
 - **[DOCS] Prompt Injection Manifesto**: Authored `docs/TECHNICAL/PROMPT_INJECTION_MECANISM.md` dictating the exact limits and usage of Active (MCP) vs Passive (IDE Rule) injection pipelines.
 - **[DOCS] Bilingual Sovereign README**: Refined the repository's main documentation layout, providing an English/Spanish TL;DR entry point and a holistic Bünker Map structure overview, optimizing AI ingestion for installation.
 - **[OPS] Certification Pipeline Upgrade**: Refactored `prepare_certification.sh` to extract and split context digests into three isolated layers: CORE, TESTS, and LORE. This allows external LLM auditors to process the massive repository scale without context-window overflow.

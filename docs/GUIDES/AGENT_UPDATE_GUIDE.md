@@ -57,12 +57,12 @@ If updating to v6.1.0 or higher, you must synchronize your infrastructure parame
 > that silently pass locally but fail in GitHub Actions.
 
 ### 4.1 Daemon Lifecycle (v6.1.2 Integration)
-As of v6.1.2, the **Bünker Telemetry Daemon (`bunker_daemon.py`)** is the mandatory engine for system health and pain signals.
+As of v6.1.2, the **Bünker Telemetry Daemon (`bunker_telemetry.py`)** is the mandatory engine for system health and pain signals.
 1.  **Verification**: Run `red-pill status` and check if "Telemetry: Online".
 2.  **Service Check**:
     *   Linux: `systemctl --user status redpill-bunker.service`
     *   macOS: `launchctl list | grep redpill.bunker`
-    *   Windows: Check Task Scheduler for `RedPillBunkerDaemon`.
+    *   Windows: Check Task Scheduler for `RedPillBunkerTelemetry`.
 3.  **Legacy Cleanup**: The old `memory_daemon.py` is DEPRECATED. Ensure its service is stopped and removed.
 
 > [!IMPORTANT]

@@ -21,6 +21,7 @@ import warnings
 from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
+import tempfile
 import yaml
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -96,10 +97,26 @@ class RedPillConfig(BaseSettings):
 	# -----------------------------------------------------------------------
 	IA_DIR: str = _IA_DIR
 
+	@property
+	def RUNTIME_DIR(self) -> str:
+		"""OS-safe runtime directory for volatile state (LEDs, interaction timestamps)."""
+		xdg = os.getenv("XDG_RUNTIME_DIR")
+		if xdg and os.path.exists(xdg):
+			return xdg
+
+		# Fallback 1: Linux user runtime dir
+		if os.name == "posix":
+			uid_dir = f"/run/user/{os.getuid()}"
+			if os.path.exists(uid_dir):
+				return uid_dir
+
+		# Fallback 2: System temp
+		return tempfile.gettempdir()
+
 	# -----------------------------------------------------------------------
 	# LLM INFERENCE
 	# -----------------------------------------------------------------------
-	MLX_LM_URL: str = "http://127.0.0.1:8080/v1/chat/completions"
+	MLX_LM_URL: str = "http://127.0.0.1:8760/v1/chat/completions"
 
 	# -----------------------------------------------------------------------
 	# QDRANT (always local in Foundation)
@@ -452,6 +469,7 @@ def set_enterprise_overrides(overrides: Dict[str, Any]) -> None:
 # All existing code does: import red_pill.config as cfg; cfg.QDRANT_HOST
 # ---------------------------------------------------------------------------
 
+
 def _cfg() -> RedPillConfig:
 	"""Lazy accessor — deferred until first module-level alias is touched."""
 	return get_config()
@@ -461,10 +479,11 @@ def _cfg() -> RedPillConfig:
 IA_DIR = _IA_DIR
 
 # LLM
-MLX_LM_URL: str = ""  # filled below after first import
+# filled below after first import via __getattr__
 
 # We use a lazy-init pattern via __getattr__ to avoid circular imports
 # and to allow tests to monkeypatch individual settings cleanly.
+
 
 def __getattr__(name: str) -> Any:
 	"""

@@ -14,9 +14,11 @@ def temp_swarm_dir():
 		with patch("red_pill.swarm.mls_manager.SWARM_STATE_DIR", tmp_dir):
 			yield tmp_dir
 
+
 def get_mock_identity(seed_bytes: bytes):
 	"""Returns a Tuple[KemKey, SignatureKey] from a seed."""
 	return KemKey.from_private_bytes(seed_bytes), SignatureKey.from_private_bytes(seed_bytes)
+
 
 def test_swarm_messaging_flow(temp_swarm_dir):
 	"""
@@ -44,7 +46,7 @@ def test_swarm_messaging_flow(temp_swarm_dir):
 	# 2. Agent A adds Agent B
 	kp_b = manager_b.get_key_package()
 	group_a, welcome, update = group_a.add_member(kp_b)
-	manager_a.groups[community_alias] = group_a # Update state in manager_a
+	manager_a.groups[community_alias] = group_a  # Update state in manager_a
 
 	# 3. Agent B joins the community
 	group_b = manager_b.join_community(community_alias, welcome)

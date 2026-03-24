@@ -1,15 +1,8 @@
 #!/usr/bin/env python3
 """
-schedule_pulse.py — Cross-Platform Lazarus Pulse Scheduler
-===========================================================
-Detects the current OS and registers the hourly heartbeat job using
-the native scheduling mechanism:
-  - Linux  → systemd user timer  (redpill-pulse.timer / .service)
-  - macOS  → launchd plist       (~/Library/LaunchAgents/com.redpill.pulse.plist)
-  - Windows → Task Scheduler     (schtasks /create ...)
-
-Usage:
-  uv run python scripts/schedule_pulse.py [--interval-hours N] [--uninstall]
+schedule_pulse.py — Cross-Platform Red Pill Heartbeat Scheduler
+=============================================================
+Registers periodic oneshot tasks (Pulse, Telemetry, Queue).
 """
 
 import argparse
@@ -37,97 +30,151 @@ LAUNCHD_LABEL = "com.redpill.pulse"
 LAUNCHD_PLIST = os.path.expanduser(f"~/Library/LaunchAgents/{LAUNCHD_LABEL}.plist")
 
 # Task Scheduler name (Windows)
-TASK_NAME = "RedPill-Pulse"
+TASK_NAME_PULSE = "RedPill-Pulse"
+TASK_NAME_TELEMETRY = "RedPill-Telemetry"
+TASK_NAME_QUEUE = "RedPill-Queue"
+
+# Scripts
+TRIGGER_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "trigger_pulse.py")
+TELEMETRY_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "bunker_telemetry.py")
+QUEUE_SCRIPT = os.path.join(PROJECT_ROOT, "src", "red_pill", "core", "queue_worker.py")
 
 
 def _find_uv() -> str:
-    """Return the absolute path to the uv binary."""
-    uv = shutil.which("uv")
-    if uv:
-        return uv
-    # Fallback: common install location
-    candidate = os.path.expanduser("~/.local/bin/uv")
-    if os.path.exists(candidate):
-        return candidate
-    print("[ERROR] 'uv' not found. Install it first: https://docs.astral.sh/uv/")
-    sys.exit(1)
+	"""Return the absolute path to the uv binary."""
+	uv = shutil.which("uv")
+	if uv:
+		return uv
+	# Fallback: common install location
+	candidate = os.path.expanduser("~/.local/bin/uv")
+	if os.path.exists(candidate):
+		return candidate
+	print("[ERROR] 'uv' not found. Install it first: https://docs.astral.sh/uv/")
+	sys.exit(1)
 
 
 # ---------------------------------------------------------------------------
 # Linux — systemd user timer
 # ---------------------------------------------------------------------------
 
+
 def _install_linux(interval_hours: int, uv_path: str) -> None:
-    os.makedirs(SYSTEMD_USER_DIR, exist_ok=True)
+	os.makedirs(SYSTEMD_USER_DIR, exist_ok=True)
 
-    service_path = os.path.join(SYSTEMD_USER_DIR, SERVICE_NAME)
-    timer_path = os.path.join(SYSTEMD_USER_DIR, TIMER_NAME)
+	# 1. Pulse (Maintenance) - Hourly
+	_write_systemd_unit(SERVICE_NAME, f"{uv_path} run python {TRIGGER_SCRIPT}", "Red Pill Sovereign Pulse", type="oneshot")
+	_write_systemd_timer(TIMER_NAME, f"{interval_hours}h", "Timer for Red Pill Sovereign Pulse")
 
-    service_content = textwrap.dedent(f"""\
+	# 2. Telemetry (Heartbeat) - 10s-30s
+	_write_systemd_unit(
+		"redpill-telemetry.service", f"{uv_path} run python {TELEMETRY_SCRIPT} --oneshot", "Red Pill Telemetry Heartbeat", type="oneshot"
+	)
+	_write_systemd_timer("redpill-telemetry.timer", "30s", "Timer for Red Pill Telemetry Heartbeat")
+
+	# 3. Queue (Worker) - 15m
+	_write_systemd_unit("redpill-queue.service", f"{uv_path} run python {QUEUE_SCRIPT} --oneshot", "Red Pill Memory Queue Worker", type="oneshot")
+	_write_systemd_timer("redpill-queue.timer", "15m", "Timer for Red Pill Memory Queue Worker")
+
+	subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
+	subprocess.run(["systemctl", "--user", "enable", "--now", TIMER_NAME], check=True)
+	subprocess.run(["systemctl", "--user", "enable", "--now", "redpill-telemetry.timer"], check=True)
+	subprocess.run(["systemctl", "--user", "enable", "--now", "redpill-queue.timer"], check=True)
+	print(f"[OK] systemd timers installed. Protocol Zero-Daemon active.")
+
+
+def _write_systemd_unit(name, command, desc, type="oneshot"):
+	path = os.path.join(SYSTEMD_USER_DIR, name)
+	content = textwrap.dedent(f"""\
         [Unit]
-        Description=Red Pill Sovereign Pulse
+        Description={desc}
 
         [Service]
-        Type=oneshot
+        Type={type}
         WorkingDirectory={PROJECT_ROOT}
-        Environment="PATH={os.path.dirname(uv_path)}:/usr/local/bin:/usr/bin:/bin"
-        ExecStart={uv_path} run python {TRIGGER_SCRIPT}
+        Environment="PATH={os.environ.get("PATH")}"
+        ExecStart={command}
     """)
+	with open(path, "w") as f:
+		f.write(content)
 
-    timer_content = textwrap.dedent(f"""\
+
+def _write_systemd_timer(name, interval, desc):
+	path = os.path.join(SYSTEMD_USER_DIR, name)
+	content = textwrap.dedent(f"""\
         [Unit]
-        Description=Timer for Red Pill Sovereign Pulse
+        Description={desc}
 
         [Timer]
-        OnBootSec=5min
-        OnUnitActiveSec={interval_hours}h
+        OnBootSec=1min
+        OnUnitActiveSec={interval}
+        AccuracySec=1s
         Persistent=true
 
         [Install]
         WantedBy=timers.target
     """)
-
-    with open(service_path, "w") as f:
-        f.write(service_content)
-    with open(timer_path, "w") as f:
-        f.write(timer_content)
-
-    subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
-    subprocess.run(["systemctl", "--user", "enable", "--now", TIMER_NAME], check=True)
-    print(f"[OK] systemd timer installed. Next run in ~{interval_hours}h (also on next boot after 5min).")
+	with open(path, "w") as f:
+		f.write(content)
 
 
 def _uninstall_linux() -> None:
-    subprocess.run(["systemctl", "--user", "disable", "--now", TIMER_NAME], check=False)
-    for name in (TIMER_NAME, SERVICE_NAME):
-        path = os.path.join(SYSTEMD_USER_DIR, name)
-        if os.path.exists(path):
-            os.remove(path)
-            print(f"[OK] Removed {path}")
-    subprocess.run(["systemctl", "--user", "daemon-reload"], check=False)
-    print("[OK] systemd pulse timer uninstalled.")
+	subprocess.run(["systemctl", "--user", "disable", "--now", TIMER_NAME], check=False)
+	subprocess.run(["systemctl", "--user", "disable", "--now", "redpill-telemetry.timer"], check=False)
+	subprocess.run(["systemctl", "--user", "disable", "--now", "redpill-queue.timer"], check=False)
+	for name in (TIMER_NAME, SERVICE_NAME, "redpill-telemetry.timer", "redpill-telemetry.service", "redpill-queue.timer", "redpill-queue.service"):
+		path = os.path.join(SYSTEMD_USER_DIR, name)
+		if os.path.exists(path):
+			os.remove(path)
+			print(f"[OK] Removed {path}")
+	subprocess.run(["systemctl", "--user", "daemon-reload"], check=False)
+	print("[OK] systemd pulse timer uninstalled.")
 
 
 # ---------------------------------------------------------------------------
 # macOS — launchd plist
 # ---------------------------------------------------------------------------
 
+
+def _uninstall_macos() -> None:
+	if os.path.exists(LAUNCHD_PLIST):
+		subprocess.run(["launchctl", "unload", LAUNCHD_PLIST], check=False)
+		os.remove(LAUNCHD_PLIST)
+		print(f"[OK] Removed {LAUNCHD_PLIST}")
+	# Also uninstall telemetry and queue if they were separate (but here we'll keep them in one plist or multiple)
+	# For now, let's assume we use separate plists for separate intervals.
+	for suffix in ("telemetry", "queue"):
+		p = os.path.expanduser(f"~/Library/LaunchAgents/com.redpill.{suffix}.plist")
+		if os.path.exists(p):
+			subprocess.run(["launchctl", "unload", p], check=False)
+			os.remove(p)
+			print(f"[OK] Removed {p}")
+	print("[OK] launchd pulse agents uninstalled.")
+
+
 def _install_macos(interval_hours: int, uv_path: str) -> None:
-    interval_seconds = interval_hours * 3600
-    plist_content = textwrap.dedent(f"""\
+	# 1. Pulse
+	_write_launchd_plist("com.redpill.pulse", f"{uv_path} run python {TRIGGER_SCRIPT}", interval_hours * 3600)
+	# 2. Telemetry
+	_write_launchd_plist("com.redpill.telemetry", f"{uv_path} run python {TELEMETRY_SCRIPT} --oneshot", 30)
+	# 3. Queue
+	_write_launchd_plist("com.redpill.queue", f"{uv_path} run python {QUEUE_SCRIPT} --oneshot", 15 * 60)
+	print(f"[OK] launchd agents installed. Protocol Zero-Daemon active.")
+
+
+def _write_launchd_plist(label, command, interval_seconds):
+	plist_path = os.path.expanduser(f"~/Library/LaunchAgents/{label}.plist")
+	args = command.split(" ")
+	args_xml = "".join([f"<string>{a}</string>" for a in args])
+	content = textwrap.dedent(f"""\
         <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-          "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
         <plist version="1.0">
         <dict>
             <key>Label</key>
-            <string>{LAUNCHD_LABEL}</string>
+            <string>{label}</string>
             <key>ProgramArguments</key>
             <array>
-                <string>{uv_path}</string>
-                <string>run</string>
-                <string>python</string>
-                <string>{TRIGGER_SCRIPT}</string>
+                {args_xml}
             </array>
             <key>WorkingDirectory</key>
             <string>{PROJECT_ROOT}</string>
@@ -135,113 +182,99 @@ def _install_macos(interval_hours: int, uv_path: str) -> None:
             <integer>{interval_seconds}</integer>
             <key>RunAtLoad</key>
             <true/>
-            <key>StandardOutPath</key>
-            <string>{os.path.expanduser("~/.agent/redpill_pulse.log")}</string>
-            <key>StandardErrorPath</key>
-            <string>{os.path.expanduser("~/.agent/redpill_pulse_error.log")}</string>
         </dict>
         </plist>
     """)
-
-    os.makedirs(os.path.dirname(LAUNCHD_PLIST), exist_ok=True)
-    with open(LAUNCHD_PLIST, "w") as f:
-        f.write(plist_content)
-
-    # Unload previous version if it exists
-    subprocess.run(["launchctl", "unload", LAUNCHD_PLIST], check=False, stderr=subprocess.DEVNULL)
-    subprocess.run(["launchctl", "load", LAUNCHD_PLIST], check=True)
-    print(f"[OK] launchd agent installed. Runs every {interval_hours}h (also at login).")
-
-
-def _uninstall_macos() -> None:
-    if os.path.exists(LAUNCHD_PLIST):
-        subprocess.run(["launchctl", "unload", LAUNCHD_PLIST], check=False)
-        os.remove(LAUNCHD_PLIST)
-        print(f"[OK] Removed {LAUNCHD_PLIST}")
-    print("[OK] launchd pulse agent uninstalled.")
+	os.makedirs(os.path.dirname(plist_path), exist_ok=True)
+	with open(plist_path, "w") as f:
+		f.write(content)
+	subprocess.run(["launchctl", "unload", plist_path], check=False, stderr=subprocess.DEVNULL)
+	subprocess.run(["launchctl", "load", plist_path], check=True)
 
 
 # ---------------------------------------------------------------------------
 # Windows — Task Scheduler
 # ---------------------------------------------------------------------------
 
-def _install_windows(interval_hours: int, uv_path: str) -> None:
-    # Build the trigger interval string (PT1H = 1 hour in ISO 8601 duration)
-    schedule = f"PT{interval_hours}H"
 
-    cmd = [
-        "schtasks", "/create",
-        "/tn", TASK_NAME,
-        "/tr", f'"{uv_path}" run python "{TRIGGER_SCRIPT}"',
-        "/sc", "MINUTE",
-        "/mo", str(interval_hours * 60),
-        "/sd", "01/01/2000",
-        "/ri", str(interval_hours * 60),  # repetition interval
-        "/du", "9999:00",                  # duration: forever
-        "/f",                              # force overwrite
-        "/rl", "HIGHEST",
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode == 0:
-        print(f"[OK] Windows Task Scheduler job '{TASK_NAME}' created (every {interval_hours}h).")
-    else:
-        print(f"[ERROR] schtasks failed: {result.stderr.strip()}")
-        sys.exit(1)
+def _install_windows(interval_hours: int, uv_path: str) -> None:
+	# 1. Pulse
+	_create_win_task(TASK_NAME_PULSE, f'"{uv_path}" run python "{TRIGGER_SCRIPT}"', interval_hours * 60)
+	# 2. Telemetry
+	_create_win_task(TASK_NAME_TELEMETRY, f'"{uv_path}" run python "{TELEMETRY_SCRIPT}" --oneshot', 1)  # Min interval 1m in schtasks usually
+	# 3. Queue
+	_create_win_task(TASK_NAME_QUEUE, f'"{uv_path}" run python "{QUEUE_SCRIPT}" --oneshot', 15)
+	print(f"[OK] Windows Tasks created. Protocol Zero-Daemon active.")
+
+
+def _create_win_task(name, command, minutes):
+	cmd = [
+		"schtasks",
+		"/create",
+		"/tn",
+		name,
+		"/tr",
+		f'cmd.exe /c cd /d "{PROJECT_ROOT}" && {command}',
+		"/sc",
+		"MINUTE",
+		"/mo",
+		str(minutes),
+		"/f",
+		"/rl",
+		"HIGHEST",
+	]
+	subprocess.run(cmd, check=True)
 
 
 def _uninstall_windows() -> None:
-    result = subprocess.run(
-        ["schtasks", "/delete", "/tn", TASK_NAME, "/f"],
-        capture_output=True, text=True,
-    )
-    if result.returncode == 0:
-        print(f"[OK] Windows Task Scheduler job '{TASK_NAME}' removed.")
-    else:
-        print(f"[WARN] Could not remove task (may not exist): {result.stderr.strip()}")
+	for tn in (TASK_NAME_PULSE, TASK_NAME_TELEMETRY, TASK_NAME_QUEUE):
+		subprocess.run(["schtasks", "/delete", "/tn", tn, "/f"], check=False)
+	print("[OK] Windows tasks uninstalled.")
 
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Cross-platform pulse scheduler for Red Pill.")
-    parser.add_argument("--interval-hours", type=int, default=DEFAULT_INTERVAL_HOURS,
-                        help=f"How often to run the pulse in hours (default: {DEFAULT_INTERVAL_HOURS})")
-    parser.add_argument("--uninstall", action="store_true",
-                        help="Remove the scheduled job for the current platform")
-    args = parser.parse_args()
+	parser = argparse.ArgumentParser(description="Cross-platform pulse scheduler for Red Pill.")
+	parser.add_argument(
+		"--interval-hours", type=int, default=DEFAULT_INTERVAL_HOURS, help=f"How often to run the pulse in hours (default: {DEFAULT_INTERVAL_HOURS})"
+	)
+	parser.add_argument("--uninstall", action="store_true", help="Remove the scheduled job for the current platform")
+	args = parser.parse_args()
 
-    system = platform.system()
-    print(f"[INFO] Platform detected: {system}")
+	system = platform.system()
+	print(f"[INFO] Platform detected: {system}")
 
-    if args.uninstall:
-        if system == "Linux":
-            _uninstall_linux()
-        elif system == "Darwin":
-            _uninstall_macos()
-        elif system == "Windows":
-            _uninstall_windows()
-        else:
-            print(f"[ERROR] Unsupported platform: {system}")
-            sys.exit(1)
-        return
+	if args.uninstall:
+		if system == "Linux":
+			_uninstall_linux()
+		elif system == "Darwin":
+			_uninstall_macos()
+		elif system == "Windows":
+			_uninstall_windows()
+		else:
+			print(f"[ERROR] Unsupported platform: {system}")
+			sys.exit(1)
+		return
 
-    uv_path = _find_uv()
-    print(f"[INFO] uv found at: {uv_path}")
-    print(f"[INFO] trigger_pulse: {TRIGGER_SCRIPT}")
-    print(f"[INFO] Interval: {args.interval_hours}h")
+	uv_path = _find_uv()
+	print(f"[INFO] uv found at: {uv_path}")
+	print(f"[INFO] trigger_pulse: {TRIGGER_SCRIPT}")
+	print(f"[INFO] Interval: {args.interval_hours}h")
 
-    if system == "Linux":
-        _install_linux(args.interval_hours, uv_path)
-    elif system == "Darwin":
-        _install_macos(args.interval_hours, uv_path)
-    elif system == "Windows":
-        _install_windows(args.interval_hours, uv_path)
-    else:
-        print(f"[ERROR] Unsupported platform: {system}. Implement support or run trigger_pulse.py manually.")
-        sys.exit(1)
+	if system == "Linux":
+		_install_linux(args.interval_hours, uv_path)
+	elif system == "Darwin":
+		_install_macos(args.interval_hours, uv_path)
+	elif system == "Windows":
+		_install_windows(args.interval_hours, uv_path)
+	else:
+		print(f"[ERROR] Unsupported platform: {system}. Implement support or run trigger_pulse.py manually.")
+		sys.exit(1)
 
 
 if __name__ == "__main__":
-    main()
+	main()

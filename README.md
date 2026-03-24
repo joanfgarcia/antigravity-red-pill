@@ -1,4 +1,4 @@
-# 🔴 RED PILL PROTOCOL: Digital Sovereignty v6.1.7
+# 🔴 RED PILL PROTOCOL: Digital Sovereignty v6.2.0
 
 > [!TIP]
 > ### 🇬🇧 🥱 TL;DR (Quick Install)

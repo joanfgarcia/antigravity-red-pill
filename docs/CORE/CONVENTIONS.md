@@ -70,7 +70,7 @@ All scripts use **lowercase_with_underscores**:
 ```
 scripts/install_neo.sh             ✅
 scripts/sovereignty_benchmark.py   ✅
-scripts/bunker_daemon.py           ✅
+scripts/bunker_telemetry.py           ✅
 ```
 
 ### 1.6 Test Files

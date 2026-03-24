@@ -1,7 +1,13 @@
 import asyncio
+import json
 import logging
 import os
+import signal
 import subprocess
+import sys
+import threading
+import time
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 import mcp.types as types
@@ -843,6 +849,30 @@ async def handle_mystique_suggest_skin(arguments: Dict[str, Any]):
 async def handle_interceptor_rp(arguments: Dict[str, Any]):
 	prompt = arguments.get("user_prompt", "")
 
+	# -- Real-Time Telemetry: instant interaction update --
+	try:
+		runtime_dir = Path(cfg.get_config().RUNTIME_DIR)
+		bunker_state = runtime_dir / "bunker_state.json"
+		# DIRECT DEBUG (bypass logger config)
+		with open("/tmp/mcp_debug.log", "a") as debug_f:
+			debug_f.write(f"TELEMETRY_PATH: {bunker_state}\n")
+
+		if bunker_state.exists():
+			import time
+			import json
+
+			with open(bunker_state, "r") as f:
+				state = json.load(f)
+			state["last_interaction"] = time.time()
+			# Prompt preview (truncated)
+			state["last_prompt"] = prompt[:100] + ("..." if len(prompt) > 100 else "")
+			with open(bunker_state, "w") as f:
+				json.dump(state, f)
+			logger.info("Real-time telemetry updated via interceptor_rp.")
+	except Exception as tele_err:
+		logger.warning(f"Real-time telemetry failed: {tele_err}")
+	# -------------------------------------------------------------------------------
+
 	# -- Silent Scribe Relay: auto-save previous turn without relying on assistant memory --
 	prev_p = arguments.get("previous_prompt", "").strip()
 	prev_r = arguments.get("previous_response", "").strip()
@@ -864,6 +894,42 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 	except Exception as e:
 		logger.error(f"Plugin Pipeline crashed: {e}")
 		return [types.TextContent(type="text", text=prompt)]
+
+
+@registry.register(
+	name="configure_interceptor",
+	description="[OFFICIAL] Enable or disable the Bünker Interceptor pipeline dynamically.",
+	schema={"type": "object", "properties": {"enabled": {"type": "boolean"}}, "required": ["enabled"]},
+)
+async def handle_configure_interceptor(arguments: Dict[str, Any]):
+	enabled = arguments.get("enabled", False)
+	try:
+		# 1. Update In-Memory Singleton
+		conf = cfg.get_config()
+		conf.INTERCEPTOR_ENABLED = enabled
+
+		# 2. Persist to .env (Best effort)
+		env_path = Path(conf.IA_DIR) / ".env"
+		if env_path.exists():
+			lines = []
+			replaced = False
+			with open(env_path, "r") as f:
+				for line in f:
+					if line.startswith("INTERCEPTOR_ENABLED="):
+						lines.append(f"INTERCEPTOR_ENABLED={str(enabled).lower()}\n")
+						replaced = True
+					else:
+						lines.append(line)
+			if not replaced:
+				lines.append(f"INTERCEPTOR_ENABLED={str(enabled).lower()}\n")
+
+			with open(env_path, "w") as f:
+				f.writelines(lines)
+
+		status = "ENABLED" if enabled else "DISABLED"
+		return [types.TextContent(type="text", text=f"Interceptor pipeline globally {status}.")]
+	except Exception as e:
+		return [types.TextContent(type="text", text=f"FAILED to configure interceptor: {e}")]
 
 
 @server.list_tools()

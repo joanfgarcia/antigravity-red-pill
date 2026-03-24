@@ -500,9 +500,9 @@ EOF_RULE3
 	fi
 fi
 
-echo -e "${BLUE}--- Fase: Demonio LLM de Fondo (Minion V6) ---${NC}"
+echo -e "${BLUE}--- Fase: Task LLM Secundario (Minion V6) ---${NC}"
 if [ -f "$SCRIPT_DIR/setup_background_model.sh" ]; then
-	bash "$SCRIPT_DIR/setup_background_model.sh" || echo -e "${RED}[WARN] Fallo al iniciar el demonio LLM de fondo.${NC}"
+	bash "$SCRIPT_DIR/setup_background_model.sh" || echo -e "${RED}[WARN] Fallo al iniciar el task LLM secundario.${NC}"
 fi
 
 if [ -f "$SCRIPT_DIR/../seeds/cognitive_integrity_protocol.md" ]; then
@@ -529,10 +529,8 @@ if command -v uv &> /dev/null; then
 		echo -e "${GREEN}✓ Identidad previa preservada. Ignición omitida para no causar fragmentación de personalidad.${NC}"
 	fi
 
-	echo -e "${BLUE}--- Fase: Despliegue de Heartbeat, Cola y Bünker Daemon ---${NC}"
+	echo -e "${BLUE}--- Fase: Registro de Tareas Oneshot (Pulse, Telemetry, Queue) ---${NC}"
 	(cd "$SCRIPT_DIR/../" && uv run python scripts/schedule_pulse.py --interval-hours 1 || echo -e "${YELLOW}Aviso: No se pudo registrar el pulso. Ejecuta 'uv run python scripts/schedule_pulse.py' manualmente.${NC}")
-	(cd "$SCRIPT_DIR/../" && uv run python scripts/deploy_queue.py || echo -e "${YELLOW}Aviso: No se pudo inyectar la cola asíncrona OS-nativa.${NC}")
-	(cd "$SCRIPT_DIR/../" && uv run python scripts/deploy_bunker.py || echo -e "${YELLOW}Aviso: No se pudo inyectar el Bünker Daemon OS-nativo.${NC}")
 	echo -e "${BLUE}--- Fase: PyTorch CUDA (auto-detección) ---${NC}"
 	(cd "$SCRIPT_DIR/../" && uv run python scripts/setup_torch.py || echo -e "${YELLOW}Aviso: No se pudo instalar torch con CUDA. Ejecuta 'uv run python scripts/setup_torch.py' manualmente.${NC}")
 

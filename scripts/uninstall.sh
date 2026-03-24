@@ -18,9 +18,12 @@ if confirm "Backup premortem?"; then
 	fi
 fi
 
-if confirm "Desmantelar Qdrant?"; then
-	systemctl --user stop qdrant.service || true
+if confirm "Desmantelar Bünker (Qdrant y Timers)?"; then
+	systemctl --user stop qdrant.service redpill-pulse.timer redpill-telemetry.timer redpill-queue.timer || true
+	systemctl --user disable qdrant.service redpill-pulse.timer redpill-telemetry.timer redpill-queue.timer || true
 	rm -f "$HOME/.config/containers/systemd/qdrant.container"
+	rm -f "$HOME/.config/systemd/user/redpill-"*".service"
+	rm -f "$HOME/.config/systemd/user/redpill-"*".timer"
 	systemctl --user daemon-reload
 fi
 

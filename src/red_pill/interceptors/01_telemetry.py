@@ -1,6 +1,7 @@
 import json
 import time
 from pathlib import Path
+import red_pill.config as cfg
 
 from red_pill.interceptors.base import BaseInterceptorPlugin
 
@@ -15,7 +16,8 @@ class TelemetryPlugin(BaseInterceptorPlugin):
 		return 0.5  # Should take ~0.001s since it's just reading a file
 
 	async def execute(self, prompt: str) -> str:
-		bunker_state = Path("/tmp/bunker_state.json")
+		runtime_dir = Path(cfg.get_config().RUNTIME_DIR)
+		bunker_state = runtime_dir / "bunker_state.json"
 		if not bunker_state.exists():
 			return ""
 

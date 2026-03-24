@@ -83,7 +83,9 @@ class SwarmMessagingSkill:
 			return {"status": "error", "message": f"Target '{actual_target}' is not MLS B1 capable (no key_package in registry)."}
 
 		# Encrypt
-		plaintext = json.dumps({"intent": intent.value, "sender": self.agent_identity, "target": actual_target, "data": payload_data, "v": "4.0"}).encode("utf-8")
+		plaintext = json.dumps(
+			{"intent": intent.value, "sender": self.agent_identity, "target": actual_target, "data": payload_data, "v": "4.0"}
+		).encode("utf-8")
 		ciphertext = self._bridge.encrypt(community_alias, plaintext)
 		if not ciphertext:
 			return {"status": "error", "message": "MLS encryption failed."}
