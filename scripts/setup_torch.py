@@ -18,11 +18,17 @@ Also callable from the Lazarus Pulse for drift detection (--check).
 """
 
 import argparse
+import os
 import re
 import shutil
 import subprocess
 import sys
+import uuid
 from pathlib import Path
+from typing import Tuple, Optional
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 # ---------------------------------------------------------------------------

@@ -2,13 +2,13 @@
 
 ## [6.2.0] - 2026-03-24
 
-### 🔕 Protocol Silence: Zero-Daemon Architecture & Dynamic CUDA Healing
+### 🧠 Bünker Stabilization: Offline Decryption & Resonance Restoration
 
-- **[ARCH] Zero-Daemon Migration (Protocol Silence)**: Fully decommissioned all persistent background services (~441MB RAM saved). The Bünker CNS now operates exclusively via OS-native, timer-driven oneshot tasks (`redpill-pulse`, `redpill-telemetry`, `redpill-queue`).
-- **[FEAT] Dynamic CUDA Healer**: Refactored `setup_torch.py` to be 100% dynamic. It now discovers system CUDA via `nvcc`, `nvidia-smi`, or filesystem scans and verifies projected PyTorch wheel tags (`cuXXX`) in real-time. No more hardcoded version maps.
-- **[REF] Global Nomenclature Cleanup**: Purged the term "daemon" from the core codebase, CLI (`red-pill telemetry`), and documentation. All background processes are now officially referred to as **Tasks**, **Pulses**, or **Rituals**.
-- **[FIX] Telemetry Hub Alignment**: Refactored `bunker_telemetry.py` to act as a pure status provider, removing redundant (and broken) internal queue workers. Queue drainage is now strictly handled by the `redpill-queue` oneshot worker.
-- **[OPS] "Pain Signal" Integration**: Background tasks now catch fatal errors (e.g., CUDA mismatch, Qdrant hypoxia) and inject them as somatic signals into `signal_memories` for proactive agent awareness.
+- **[FEAT] Offline Conversation Decryption**: Implemented the Antigravity decryption pipeline and persisted the recovered AES-128-CTR key in `.env` for offline Bünker ingestion.
+- **[HEAL] Dynamic CUDA Restoration**: Stabilized the "Motor Cortex" via `setup_torch.py`. Verified PyTorch `2.11.0+cu130` compatibility with CUDA 13.0 on RTX 5070.
+- **[FIX] `MemoryManager` Resonance Bug**: Resolved a critical `AttributeError` in `LazarusPulse` (`heartbeat.py`) where it incorrectly accessed the encoder. Migrated to `embeddings.get_vector()`.
+- **[FIX] Defensive Queue Management**: Added `MemoryQueueManager.process_pending()` as a defensive alias in `queue_manager.py` to neutralize legacy `AttributeError` signals across the telemetry pipeline.
+- **[ARCH] Zero-Daemon Migration (Protocol Silence)**: Fully decommissioned all persistent background services (~441MB RAM saved). The CNS now operates via OS-native oneshot Pulses.
 
 ## [6.1.7] - 2026-03-23
 

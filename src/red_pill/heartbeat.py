@@ -341,8 +341,7 @@ class LazarusPulse:
 			state = get_current_sync_state()
 			focus_text = f"Resonance Focus: {state['mood']} - {state['directive']}"
 			# Mypy/Type fix: Ensure the vector is correctly extracted from the engine
-			poc_vector_data = self.memory_mgr.encoder.embed([focus_text])  # type: ignore
-			poc_vector = list(next(poc_vector_data)) if hasattr(poc_vector_data, "__iter__") else list(poc_vector_data[0])  # type: ignore
+			poc_vector = self.memory_mgr.embeddings.get_vector(focus_text)
 
 			matches = await asyncio.to_thread(observer.check_resonance, hub_vector=poc_vector)
 

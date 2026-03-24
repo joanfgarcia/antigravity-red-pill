@@ -99,3 +99,7 @@ class MemoryQueueManager:
 		except Exception as e:
 			logger.error(f"Failed to count pending queue: {e}")
 			return -1
+
+	def process_pending(self, limit: int = 10) -> List[Dict[str, Any]]:
+		"""Defensive alias for dequeue_pending to avoid legacy AttributeErrors."""
+		return self.dequeue_pending(limit=limit)
