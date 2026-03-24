@@ -13,6 +13,31 @@ from red_pill.utils.uds_adapter import get_uds_opener
 
 logger = logging.getLogger(__name__)
 
+# ── Thread Weaving state ──────────────────────────────────────────────────────
+_THREAD_STATE_PATH = os.path.expanduser("~/.agent/thread_state.json")
+
+
+def _load_thread_state() -> dict:
+	"""Load the last hub_id per collection for inter-session thread weaving."""
+	try:
+		if os.path.exists(_THREAD_STATE_PATH):
+			with open(_THREAD_STATE_PATH) as f:
+				return json.load(f)
+	except Exception:
+		pass
+	return {}
+
+
+def _save_thread_state(state: dict) -> None:
+	"""Persist the last hub_id per collection."""
+	try:
+		os.makedirs(os.path.dirname(_THREAD_STATE_PATH), exist_ok=True)
+		with open(_THREAD_STATE_PATH, "w") as f:
+			json.dump(state, f)
+	except Exception as e:
+		logger.warning(f"[THREAD WEAVER] Could not save thread state: {e}")
+
+
 
 def _check_llm_available() -> bool:
 	"""Quick reachability probe for the local distillation LLM."""
@@ -350,6 +375,31 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 					chunks_saved += 1
 			except Exception as e:
 				logger.error(f"[SLEEP ENGINE] Failed to fixate synthesis hub: {e}")
+				hub_id = None  # type: ignore[assignment]
+
+			# Phase 5: Thread Weaving — link this hub to the previous session's hub
+			if hub_id:
+				thread_state = _load_thread_state()
+				prev_hub_id = thread_state.get(target_col)
+				if prev_hub_id:
+					try:
+						# Forward axon: new hub → prev hub (temporal continuity, weight 1.0)
+						client.set_payload(
+							collection_name=target_col,
+							payload={"prev_session_hub": prev_hub_id},
+							points=[hub_id],
+						)
+						# Back-pointer: prev hub → new hub (for forward traversal)
+						client.set_payload(
+							collection_name=target_col,
+							payload={"next_session_hub": str(hub_id)},
+							points=[prev_hub_id],
+						)
+						logger.debug(f"[THREAD WEAVER] {target_col}: {hub_id} ← linked → {prev_hub_id}")
+					except Exception as e:
+						logger.warning(f"[THREAD WEAVER] Failed to weave thread: {e}")
+				thread_state[target_col] = str(hub_id)
+				_save_thread_state(thread_state)
 
 		# Erase the raw memory sequence ONLY if we successfully stored at least one engram.
 		# If distillation failed (LLM down) or all chunks were culled, preserve for next cycle.
