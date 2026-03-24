@@ -339,13 +339,17 @@ async def handle_traverse_thread(arguments: Dict[str, Any]):
 		manager = MemoryManager()
 		client = manager.client
 
-		# 1. Find the best matching synthesis_hub via semantic search
-		hits = manager.search_and_reinforce(collection, query, limit=10)
+		# 1. Find the best matching synthesis_hub via semantic search (search wider, filter to hubs)
+		hits = manager.search_and_reinforce(collection, query, limit=50)
 		hub_hits = [h for h in hits if h.payload.get("lazarus_phase") == "synthesis_hub"]
 		if not hub_hits:
-			hub_hits = hits[:1]
-		if not hub_hits:
-			return [types.TextContent(type="text", text=f"No matching nodes found in {collection} for: {query}")]
+			return [types.TextContent(
+				type="text",
+				text=(
+					f"No synthesis_hub nodes found in top-50 results for '{query}' in {collection}.\n"
+					"Try a broader query describing the session topic, not a specific quote."
+				),
+			)]
 
 		start = hub_hits[0]
 
