@@ -245,7 +245,17 @@ async def handle_run_security_audit(arguments: Dict[str, Any]):
 @registry.register(
 	name="search_memory_research",
 	description="Deploy Oracle to find context and synthesize memory relevance.",
-	schema={"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
+	schema={
+		"type": "object",
+		"properties": {
+			"query": {"type": "string"},
+			"collection": {
+				"type": "string",
+				"description": "Optional. Restrict search to a specific collection (e.g. 'archive_memories', 'work_memories', 'social_memories'). Default: searches work_memories + social_memories.",
+			}
+		},
+		"required": ["query"],
+	},
 )
 async def handle_search_memory_research(arguments: Dict[str, Any]):
 	import asyncio
@@ -253,13 +263,20 @@ async def handle_search_memory_research(arguments: Dict[str, Any]):
 
 	event_id = str(uuid.uuid4())[:8]
 	query = arguments["query"]
+	collection = arguments.get("collection")
+	collections = [collection] if collection else None  # None → OracleMinion default
 
 	async def _run_bg():
 		try:
 			from red_pill.core.inbox import MinionInbox
 			from red_pill.utils.observer import notify_user
 
-			results = await GruOrchestrator().deploy_swarm(query, [OracleMinion()], trace=False)
+			oracle = OracleMinion()
+			if collections:
+				oracle.collections = collections
+			results = await GruOrchestrator().deploy_swarm(
+				query, [oracle], trace=False
+			)
 			res = results[0]
 			content = f"ORACLE SYNTHESIS:\n{res.result.get('synthesis')}" if res.status == "success" else f"Research Failed: {res.error}"
 
