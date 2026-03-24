@@ -1,6 +1,46 @@
 # Changelog: Red Pill Protocol
 
-## [6.2.0] - 2026-03-24
+## [6.2.1] - 2026-03-24
+
+### 🔬 Engineering-Grade Audit Remediation (DeepSeek-R1 v6.2.0 Certification)
+
+#### Test Stabilization (P1-001)
+- **[FIX] `src/red_pill/metabolism/sleep.py`**: Moved `urllib.request`, `urllib.parse`, `os`, and `get_uds_opener` imports from local function scope (`distill_engram`) to module level. Enables proper pytest mocking and removes the root cause of 2 `xfail` markers.
+- **[FIX] `tests/test_sleep.py`, `tests/test_sleep_coverage.py`**: Updated all `@patch` targets to the correct module namespace (`red_pill.metabolism.sleep.urllib.request.*`). Removed `@pytest.mark.xfail` markers. All 15 sleep tests now pass.
+- **[FIX] `tests/test_flow_engine.py`**: Fixed YAML string literals that used Python tab indentation inside multiline strings — YAML parser rejects tab characters, causing silent `AssertionError`.
+
+#### Documentation (P1-002, P2-002)
+- **[DOCS] `docs/GUIDES/CHRONICLE_INGESTION_GUIDE.md`** *(new)*: Full step-by-step manual pipeline guide: decrypt → ingest → distill → refine → explore with commands and notes.
+- **[DOCS] `docs/GUIDES/AGENT_UPDATE_GUIDE.md`**: Expanded §4.8 into a full Zero-Daemon Pulse Management reference with install/uninstall/verify commands for `schedule_pulse.py`.
+
+#### Security & Config (P1-003, P1-004, P2-003)
+- **[DOCS] `docs/README.md`**: Added `[!WARNING]` block in Swarm section — MLS/TreeKEM E2EE is a Proof-of-Concept; PFS/PCS planned for v7.0.
+- **[DOCS] `docs/TECHNICAL/SWARM_MESSAGING.md`**: Added PoC disclaimer in title area clarifying that E2EE diagrams show the design target, not current state.
+- **[CONFIG] `.env.example`**: Added `ALLOW_PURGE=false` with `SEC-PURGE-001` reference. Added `ANTIGRAVITY_KEY=` with recovery guide link.
+
+#### System Hardening (P2-001)
+- **[FIX] `scripts/wake_up_v6.py`**: Persona cache (`bunker_persona_cache.json`) now stores a `timestamp` field. Cache is invalidated and re-synthesized if older than 1 hour (TTL guard), regardless of content hash match.
+
+---
+
+### 🗓️ Autonomous Chronicle Pipeline (P3-002)
+
+- **[FEAT] `scripts/chronicle_daily.py`** *(new)*: Full autonomous orchestrator for daily chronicle ingestion. Eliminates the manual "recipe" cited by the audit. Features:
+  - 4-phase pipeline: `decrypt → ingest → distill → refine`
+  - Idempotent session tracking via `~/.agent/chronicle_processed.json`
+  - Preflight check for `ANTIGRAVITY_KEY` with `severity 8.5` pain signal if missing
+  - `--yesterday` (default), `--all`, `--dry-run` flags
+  - Distill step gracefully skipped if local LLM is offline at 04:00
+  - `Nice=10` process priority to yield CPU if system is busy
+- **[FEAT] `scripts/schedule_pulse.py`**: Added `redpill-chronicle` service/timer pair:
+  - `OnCalendar=*-*-* 04:00:00` (fixed daily time, not interval)
+  - `Persistent=true` — fires on next boot/wake if laptop was off at 04:00
+  - `WakeSystem=false` — does not wake from suspend
+  - New `_write_calendar_timer()` helper for `OnCalendar`-style timers
+  - `_write_systemd_unit()` now accepts optional `Nice=` parameter
+- **[FIX] `scripts/chronicle_refine.py`**: Fixed `ValidationError` — truncated `raw_content` and `refined_content` in fragment payloads to 1024 characters (schema limit).
+- **[FIX] `.env`**: Fixed `FASTEMBED_CACHE_PATH` — replaced literal `~` with absolute path `/home/joan/Documents/IA/storage/models`. Dotenv loaders do not expand tilde, causing `ONNXRuntimeError: NO_SUCH_FILE` on fastembed model load.
+
 
 ### 🧠 Bünker Stabilization: Offline Decryption & The Atomized Chronicle
 
