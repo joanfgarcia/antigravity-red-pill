@@ -78,6 +78,25 @@ If updating to v6.1.0 or higher, you must synchronize your infrastructure parame
 11. **Legacy Cleanup**: The scripts `deploy_queue.py`, `deploy_pulse.py`, and `deploy_service.py` are DEPRECATED. Their functionality is now unified within `schedule_pulse.py`.
 12. **Bünker Telemetry**: Ensure `uv run python scripts/schedule_pulse.py` is executed to enable background health signals.
 
+    #### §4.9 Thread Weaving Migration (v6.2.1+)
+
+    When upgrading to v6.2.1 or later (sleep.py Phase 5), you MUST run the retroactive thread weaving migration once to link all existing `synthesis_hub` nodes with bidirectional temporal axons (`prev_session_hub` / `next_session_hub`). This enables Ariadne's Thread traversal through `work_memories` and `social_memories`.
+
+    **Run once after upgrading:**
+    ```bash
+    uv run python scripts/thread_weave_migrate.py
+    ```
+
+    **Dry-run to inspect without writing:**
+    ```bash
+    uv run python scripts/thread_weave_migrate.py --dry-run
+    ```
+
+    The script is **idempotent** — safe to re-run. It also bootstraps `~/.agent/thread_state.json` so the next sleep cycle continues the thread from the most recent hub.
+
+    > [!IMPORTANT]
+    > This migration does NOT need to be re-run on subsequent updates. It only needs to run once per Qdrant instance after the initial Phase 5 upgrade. Future sleep cycles maintain the thread automatically.
+
 ## 4. Post-Update Operational Checklist
 
 > [!CAUTION]
