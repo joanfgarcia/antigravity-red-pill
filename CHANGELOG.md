@@ -1,5 +1,21 @@
 # Changelog: Red Pill Protocol
 
+## [6.2.3] - 2026-03-25
+
+### 🧠 Advanced Hardware Telemetry & False Positive Mitigation
+
+- **[FIX] `scripts/setup_torch.py` — Multi-Version CUDA Discovery**: Swapped detection priority to favor `nvidia-smi` (Runtime) and `torch` (Active) over `nvcc` (Compiler). This prevents "false positive" mismatch alerts in environments where a secondary CUDA toolkit (e.g., 12.4) is present alongside a newer driver/torch (e.g., 13.0).
+- **[HEAL] Autonomous Pain Evaporation**: Verified and enforced the automatic clearing of `torch_cuda_mismatch` and `cuda_cortex_failure` signals when `torch.cuda.is_available()` is confirmed, even if version tags differ.
+- **[FEAT] Subprocess Torch Inspection**: Added a direct `torch.version.cuda` probe via a isolated subprocess to ensure the system detects the exact CUDA version the active PyTorch installation is linked against.
+
+## [6.2.3] - 2026-03-25
+
+### 🧠 Advanced Hardware Telemetry & False Positive Mitigation
+
+- **[FIX] `scripts/setup_torch.py` — Multi-Version CUDA Discovery**: Swapped detection priority to favor `nvidia-smi` (Runtime) and `torch` (Active) over `nvcc` (Compiler). This prevents "false positive" mismatch alerts in environments where a secondary CUDA toolkit (e.g., 12.4) is present alongside a newer driver/torch (e.g., 13.0).
+- **[HEAL] Autonomous Pain Evaporation**: Verified and enforced the automatic clearing of `torch_cuda_mismatch` and `cuda_cortex_failure` signals when `torch.cuda.is_available()` is confirmed, even if version tags differ.
+- **[FEAT] Subprocess Torch Inspection**: Added a direct `torch.version.cuda` probe via a isolated subprocess to ensure the system detects the exact CUDA version the active PyTorch installation is linked against.
+
 ## [6.2.2] - 2026-03-25
 
 ### 🗡️ Pragmatic Cortex Stabilization (CUDA Resilience)

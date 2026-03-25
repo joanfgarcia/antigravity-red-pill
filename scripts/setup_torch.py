@@ -35,23 +35,34 @@ load_dotenv()
 def _get_cuda_version() -> tuple[int, int] | None:
 	"""
 	Return (major, minor) of the system CUDA version.
-	Prioritizes nvcc, fails over to nvidia-smi, then filesystem scan.
+	Prioritizes nvidia-smi (Runtime) and torch (Active), then nvcc (Compiler).
 	"""
-	# 1. Try nvcc (Compiler version)
-	if shutil.which("nvcc"):
+	# 1. Try torch (already loaded or via subprocess)
+	try:
+		# Use a subprocess to check the environment torch's view of CUDA
+		cmd = [sys.executable, "-c", "import torch; print(torch.version.cuda)"]
+		out = subprocess.check_output(cmd, text=True, stderr=subprocess.STDOUT)
+		match = re.search(r"(\d+)\.(\d+)", out)
+		if match:
+			return int(match.group(1)), int(match.group(2))
+	except Exception:
+		pass
+
+	# 2. Try nvidia-smi (Driver/Runtime version)
+	if shutil.which("nvidia-smi"):
 		try:
-			out = subprocess.check_output(["nvcc", "--version"], text=True)
-			match = re.search(r"release (\d+)\.(\d+)", out)
+			out = subprocess.check_output(["nvidia-smi"], text=True)
+			match = re.search(r"CUDA Version:\s*(\d+)\.(\d+)", out)
 			if match:
 				return int(match.group(1)), int(match.group(2))
 		except Exception:
 			pass
 
-	# 2. Try nvidia-smi (Runtime version from driver)
-	if shutil.which("nvidia-smi"):
+	# 3. Try nvcc (Compiler version)
+	if shutil.which("nvcc"):
 		try:
-			out = subprocess.check_output(["nvidia-smi"], text=True)
-			match = re.search(r"CUDA Version:\s*(\d+)\.(\d+)", out)
+			out = subprocess.check_output(["nvcc", "--version"], text=True)
+			match = re.search(r"release (\d+)\.(\d+)", out)
 			if match:
 				return int(match.group(1)), int(match.group(2))
 		except Exception:
