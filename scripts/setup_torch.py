@@ -211,6 +211,30 @@ def _inject_pain_signal(message: str, intensity: float = 7.0) -> None:
 		print(f"[setup_torch] Could not inject pain signal: {e}")
 
 
+def _clear_pain_signal(signal_id_name: str) -> None:
+	"""Remove a pain signal from signal_memories if it exists."""
+	try:
+		import os
+		import uuid
+
+		from qdrant_client import QdrantClient
+
+		host = os.getenv("QDRANT_HOST", "localhost")
+		port = int(os.getenv("QDRANT_PORT", "6333"))
+		api_key = os.getenv("QDRANT_API_KEY")
+		client = QdrantClient(host=host, port=port, api_key=api_key, https=False)
+
+		cols = [c.name for c in client.get_collections().collections]
+		if "signal_memories" in cols:
+			client.delete(
+				collection_name="signal_memories",
+				points_selector=[str(uuid.uuid5(uuid.NAMESPACE_DNS, signal_id_name))],
+			)
+			print(f"[setup_torch] Pain signal cleared: {signal_id_name}")
+	except Exception:
+		pass
+
+
 # Main
 
 
@@ -252,10 +276,12 @@ def main() -> None:
 			print("[setup_torch] --auto-fix: proceeding to fresh installation...")
 		elif installed_tag == system_tag:
 			print(f"[setup_torch] ✅ torch ({installed_tag}) matches system CUDA {cuda_str}. No action needed.")
+			_clear_pain_signal("torch_cuda_mismatch")
 			return
 		elif is_cuda_avail:
 			# Available but tag is different (e.g. cu130 vs cu124/cu121)
 			print(f"[setup_torch] ✅ torch ({installed_tag}) differs from detected CUDA {cuda_str}, but CUDA is AVAILABLE. Skipping re-install.")
+			_clear_pain_signal("torch_cuda_mismatch")
 			return
 		else:
 			# Mismatch AND not available
