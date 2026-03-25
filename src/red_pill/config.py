@@ -326,6 +326,17 @@ class RedPillConfig(BaseSettings):
 	INTERCEPTOR_CIRCUIT_BREAKER_ENABLED: bool = False
 
 	# -----------------------------------------------------------------------
+	# FERRARI PROTOCOL — Emotional Intelligence Plugins
+	# -----------------------------------------------------------------------
+	COGNITIVE_ROUTER_ENABLED: bool = True   # Plugin 05: task routing by operator color
+	TONE_ADAPTER_ENABLED: bool = True       # Plugin 06: verbal tone adaptation
+	MOOD_ANALYTICS_ENABLED: bool = False    # Plugin 07: longitudinal mood history (extra I/O)
+	EMOTIVE_RECALL_ENABLED: bool = False    # Plugin 08: RAG filtered by emotional resonance
+	PROACTIVE_SIGNAL_ENABLED: bool = False  # Plugin 09: proactive N-day mood alerts
+	PROACTIVE_SIGNAL_THRESHOLD: int = 3    # Days of consecutive negative mood before alert
+	PREDICTIVE_PRELOAD_ENABLED: bool = False  # Plugin 10: predictive context preloading
+
+	# -----------------------------------------------------------------------
 	# SOVEREIGN PULSE
 	# -----------------------------------------------------------------------
 	PULSE_ENABLED: bool = True

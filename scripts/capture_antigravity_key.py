@@ -125,7 +125,7 @@ async def hook_target(ws_url: str, label: str):
 
 async def main():
 	try:
-		req = urllib.request.Request("http://127.0.0.1:9229/json")
+		req = urllib.request.Request("http://127.0.0.1:9222/json")
 		with urllib.request.urlopen(req, timeout=5) as r:
 			targets = json.loads(r.read())
 	except Exception as e:
