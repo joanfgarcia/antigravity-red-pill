@@ -10,6 +10,29 @@ This guide documents the full pipeline to preserve and query historical Antigrav
 
 ---
 
+## 🤖 Automated Mode (Recommended)
+
+The `redpill-chronicle.timer` runs **automatically every night at 04:00** via `chronicle_daily.py`. It handles Steps 1–4 autonomously (decrypt → ingest → distill → refine).
+
+**Install the timer (once after installation or update):**
+```bash
+uv run python scripts/schedule_pulse.py --interval-hours 1
+systemctl --user list-timers | grep chronicle
+# Expected output: redpill-chronicle.timer  NEXT: tomorrow 04:00
+```
+
+**Manual catch-up (if the timer missed a day):**
+```bash
+uv run python scripts/chronicle_daily.py --yesterday
+uv run python scripts/chronicle_daily.py --all   # all unprocessed sessions
+```
+
+> [!NOTE]
+> The timer uses `Persistent=true` — if the laptop was off at 04:00, it fires on next boot.
+> See [AGENT_UPDATE_GUIDE §4.11](AGENT_UPDATE_GUIDE.md) for full maintenance instructions.
+
+---
+
 ## Step 1 — Obtain the Antigravity Key
 
 The `.pb` conversation files are AES-encrypted. You need the key to decrypt them.

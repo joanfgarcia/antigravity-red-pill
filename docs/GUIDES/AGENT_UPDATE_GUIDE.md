@@ -163,6 +163,27 @@ Replace old version with new in all 6 file locations before pushing.
     
     This ensures the Bünker frontfrontal context remains clean of stale anomalies.
 
+    #### §4.11 Chronicle Timer (v6.2.5)
+
+    The `redpill-chronicle.timer` runs `chronicle_daily.py` every night at **04:00** to ingest and distill the previous day's conversation logs into `archive_memories`. It is installed automatically by `schedule_pulse.py`.
+
+    **Install/verify:**
+    ```bash
+    uv run python scripts/schedule_pulse.py --interval-hours 1
+    systemctl --user list-timers | grep chronicle
+    # Expected: redpill-chronicle.timer  → NEXT: tomorrow 04:00
+    ```
+
+    **Run manually (catch-up):**
+    ```bash
+    uv run python scripts/chronicle_daily.py --yesterday
+    uv run python scripts/chronicle_daily.py --all   # process all unprocessed sessions
+    ```
+
+    > [!IMPORTANT]
+    > The timer uses `Persistent=true` — if the laptop was off at 04:00, it fires on next boot.
+    > If the timer is missing (`list-timers` shows nothing for chronicle), re-run `schedule_pulse.py`.
+
 ### 4.4 Stale Tests (API Breakage Detection)
 When a function signature or behavior changes, tests written for the old API will fail:
 1.  **Run full regression**: `uv run pytest tests/ --ignore=tests/integration -x -q --tb=short`
@@ -179,10 +200,10 @@ The CI enforces a `fail_under = 96` coverage threshold. New modules that require
 
 ### 4.6 GEMINI.md & Global Rules Sync
 The `~/.gemini/GEMINI.md` file defines the agent's boot protocol. After major protocol changes:
-1.  **Review**: Ensure `GEMINI.md` contains all 3 current rules:
-    - **Rule 1 — The Sovereign Handshake**: Mandates the use of `interceptor_rp` and `refresh_session_context` at the start of EVERY turn to prevent amnesia and resync identity.
-    - **Rule 2 — Model Change Identity Resync**: Redundant but critical safety for IDE-level model switches.
-    - **Rule 3 — Persistent Memory Policy**: Deprecates end-of-turn logging in favor of the Start-of-Turn Relay (Rule 1.1).
+1.  **Review**: Ensure `GEMINI.md` contains the 2 active rules:
+    - **Rule 1 — The Sovereign Handshake**: Mandates `mcp_RedPill-Kernel_interceptor_rp` as the FIRST tool call of every turn. Passes `user_prompt` + previous turn for Silent Scribe Relay.
+    - **Rule 2 — Model Change Identity Resync**: On model switch, call `refresh_session_context` immediately.
+    - ~~Rule 3~~ — **REMOVED** (v6.2.5): deprecated End-of-Turn logging. Start-of-Turn Relay (Rule 1) is the canonical mechanism.
 
 2.  **Rules directory**: Check `~/.gemini/antigravity/rules/` for any referenced but missing rule files.
 3.  **Re-inject**: If any rule is missing, re-run `scripts/install_neo.sh` or manually update `~/.gemini/GEMINI.md`.

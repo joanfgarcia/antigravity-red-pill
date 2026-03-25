@@ -623,8 +623,10 @@ if command -v uv &> /dev/null; then
 		echo -e "${GREEN}✓ Identidad previa preservada. Ignición omitida para no causar fragmentación de personalidad.${NC}"
 	fi
 
-	echo -e "${BLUE}--- Fase: Registro de Tareas Oneshot (Pulse, Telemetry, Queue) ---${NC}"
-	(cd "$SCRIPT_DIR/../" && uv run python scripts/schedule_pulse.py --interval-hours 1 || echo -e "${YELLOW}Aviso: No se pudo registrar el pulso. Ejecuta 'uv run python scripts/schedule_pulse.py' manualmente.${NC}")
+	echo -e "${BLUE}--- Fase: Registro de Tareas Oneshot (Pulse, Chronicle, Telemetry, Queue) ---${NC}"
+	(cd "$SCRIPT_DIR/../" && uv run python scripts/schedule_pulse.py --interval-hours 1 || echo -e "${YELLOW}Aviso: No se pudo registrar el pulso ni el chronicle. Ejecuta 'uv run python scripts/schedule_pulse.py' manualmente.${NC}")
+	echo -e "${GREEN}✓ Timers instalados: redpill-pulse (cada 1h) + redpill-chronicle (diario a las 04:00).${NC}"
+
 	echo -e "${BLUE}--- Fase: PyTorch CUDA (auto-detección) ---${NC}"
 	(cd "$SCRIPT_DIR/../" && uv run python scripts/setup_torch.py || echo -e "${YELLOW}Aviso: No se pudo instalar torch con CUDA. Ejecuta 'uv run python scripts/setup_torch.py' manualmente.${NC}")
 
