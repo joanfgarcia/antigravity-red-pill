@@ -1,6 +1,20 @@
 # Changelog: Red Pill Protocol
 
+## [6.2.5] - 2026-03-25
+
+### 🧠 Sovereignty Protocol Reinforcement
+
+- **[FEAT] `mcp_server.py` — `interceptor_rp` Sovereignty Reminder**: Added a mandatory
+  `[SOVEREIGNTY PROTOCOL]` reminder block to every `interceptor_rp` response. The reminder
+  instructs the LLM that its **first tool call of the next turn MUST be `interceptor_rp`**.
+  This creates a self-reinforcing loop: every correctly called relay primes the agent to
+  repeat the behavior in the following turn.
+- **[CONFIG] `~/.gemini/GEMINI.md` — Removed deprecated Rule 3**: Rule 3 (`End of Turn`
+  memory logging) was already superseded by the Start-of-Turn Relay in Rule 1.1. Removed
+  to reduce system prompt noise and token overhead.
+
 ## [6.2.4] - 2026-03-25
+
 
 ### 🧊 Fedora Silverblue Stabilization & MCP Hardening
 
