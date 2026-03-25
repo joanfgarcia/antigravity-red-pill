@@ -277,11 +277,13 @@ def main() -> None:
 		elif installed_tag == system_tag:
 			print(f"[setup_torch] ✅ torch ({installed_tag}) matches system CUDA {cuda_str}. No action needed.")
 			_clear_pain_signal("torch_cuda_mismatch")
+			_clear_pain_signal("cuda_cortex_failure")
 			return
 		elif is_cuda_avail:
 			# Available but tag is different (e.g. cu130 vs cu124/cu121)
 			print(f"[setup_torch] ✅ torch ({installed_tag}) differs from detected CUDA {cuda_str}, but CUDA is AVAILABLE. Skipping re-install.")
 			_clear_pain_signal("torch_cuda_mismatch")
+			_clear_pain_signal("cuda_cortex_failure")
 			return
 		else:
 			# Mismatch AND not available
