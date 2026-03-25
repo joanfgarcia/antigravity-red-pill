@@ -86,7 +86,8 @@ The Red Pill Protocol is built for **Sovereign Environments**, but it adapts to 
 - **Immunity**: Core directives are protected from decay.
 - **Sovereign Swarm (v6.1)**: Integrated Minions (Agent Smith, Oracle, Healer) running natively within the Red Pill Kernel for local code auditing, RAG synthesis, and autonomous "Active Immunity" (auto-repair).
 - **Autonomous Flow Engine (v6.1)**: Multi-step task orchestration using a 3-layer discovery mechanism (Global, Community, Local) for complex engineering workflows.
-- **MCP Server (v5.0)**: Exposes the full Red Pill telemetry (CPU, GPU CUDA/ROCm, NPU) and Swarm tools to IDEs like VS Code and Claude Desktop for zero-friction interaction.
+- **MCP Server (v5.0)**: Exposes the full Red Pill telemetry (CPU, GPU CUDA/ROCm, NPU), Swarm tools, and the new **`evaporate_signal`** tool for Neural Reset to IDEs.
+- **Sovereign Alert System (CLI)**: Manual signal injection and evaporation via `red-pill signal [push|evaporate]`.
 - [v] **Autonomous Flow Orchestration (v6.1)**: 3-layer hierarchy (Global, Community, Local) for complex multi-agent execution.
 - [v] **Minion Healer (v6.1)**: "Active Immunity" substrate for autonomous code repair using local SLMs.
 - [v] **Mermaid Technical Diagrams**: Visual orchestration and discovery documentation.

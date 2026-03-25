@@ -5,7 +5,6 @@ import logging
 import os
 import subprocess
 import sys
-import time
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -386,11 +385,19 @@ def main() -> None:
 	)
 	edit_parser.add_argument("--intensity", type=float)
 
-	signal_parser = subparsers.add_parser("signal", help="Sovereign Alert System (SAS) trigger")
-	signal_parser.add_argument("message", help="Notification message")
-	signal_parser.add_argument("--title", default="Red Pill: Task Complete", help="Notification title")
-	signal_parser.add_argument("--sound", action="store_true", help="Enable sensory pulse (sound)")
-	signal_parser.add_argument("--silent", action="store_true", help="Do not send desktop notification (Memory only)")
+	signal_parser = subparsers.add_parser("signal", help="Sovereign Alert System (SAS) management")
+	signal_sub = signal_parser.add_subparsers(dest="sig_cmd")
+
+	sig_push = signal_sub.add_parser("push", help="Trigger a new alert/notification")
+	sig_push.add_argument("message", help="Notification message")
+	sig_push.add_argument("--title", default="Red Pill: Task Complete", help="Notification title")
+	sig_push.add_argument("--sound", action="store_true", help="Enable sensory pulse (sound)")
+	sig_push.add_argument("--silent", action="store_true", help="Do not send desktop notification (Memory only)")
+	sig_push.add_argument("--intensity", type=float, default=7.0, help="Pain intensity (0.0 - 10.0)")
+
+	sig_evap = signal_sub.add_parser("evaporate", help="Clear one or all pain signals (Neural Reset)")
+	sig_evap.add_argument("--name", help="Specific signal name to clear (e.g. 'torch_cuda_mismatch')")
+	sig_evap.add_argument("--all", action="store_true", help="Purge ALL active signals")
 
 	init_parser = subparsers.add_parser("init", help="Bootstrap a Spec-Compliant project")
 	init_parser.add_argument("--flow", choices=["fire", "simple", "aidlc"], default="fire", help="Initial specs.md flow")
@@ -680,19 +687,25 @@ def main() -> None:
 				for key, value in stats.items():
 					print(f"{key.capitalize().replace('_', ' ')}: {value}")
 			elif args.command == "signal":
-				from red_pill.utils.observer import notify_user
+				if args.sig_cmd == "push":
+					from red_pill.utils.observer import notify_user
 
-				if not args.silent:
-					notify_user(args.title, args.message, sound=args.sound, category="manual")
+					if not args.silent:
+						notify_user(args.title, args.message, sound=args.sound, category="manual")
 
-				# Record memory of the signal
-				manager.add_memory(
-					collection="directive_memories",
-					text=f"SAS Signal: {args.title} - {args.message}",
-					importance=1.0,
-					metadata={"type": "sas_signal", "timestamp": time.time(), "message": args.message},
-				)
-				print(f"[SAS] Signal recorded: {args.message}")
+					# Record memory of the signal (System Signal collections)
+					manager.inject_signal(name=args.title, content=args.message, intensity=args.intensity)
+					print(f"[SAS] Signal recorded: {args.message}")
+
+				elif args.sig_cmd == "evaporate":
+					if args.all:
+						manager.evaporate_signals()
+						print("[SAS] Neural Reset: All signals cleared.")
+					elif args.name:
+						manager.evaporate_signals(name=args.name)
+						print(f"[SAS] Signal '{args.name}' evaporated.")
+					else:
+						print("[FAIL] Specify --name or --all to evaporate.")
 
 			else:
 				# --- Enterprise/Community Plugin Dispatch ---

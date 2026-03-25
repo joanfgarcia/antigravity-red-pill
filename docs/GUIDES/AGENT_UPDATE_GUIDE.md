@@ -147,6 +147,22 @@ Replace old version with new in all 6 file locations before pushing.
 > uv run red-pill add directive "PROTOCOL VERSION: Red Pill Protocol vX.Y.Z. Released YYYY-MM-DD. Codename: <name>. Key features: <list>. Previous stable: <prev>. This engram MUST be updated on every version bump." --emotion neutral --color gray --intensity 10
 > ```
 
+    #### §4.10 Neuro-Immune Calibration (v6.2.2)
+    
+    The **Biological Dashboard** now uses a non-semantic signal bus. If you encounter persistent pain signals (e.g., `torch_cuda_mismatch`) after fixing the root cause:
+    
+    **Via MCP:**
+    Call `evaporate_signal(name="signal_name")` or `evaporate_signal()` for a total Neural Reset.
+    
+    **Via CLI:**
+    ```bash
+    uv run red-pill signal evaporate --name torch_cuda_mismatch
+    # Or total reset:
+    uv run red-pill signal evaporate --all
+    ```
+    
+    This ensures the Bünker frontfrontal context remains clean of stale anomalies.
+
 ### 4.4 Stale Tests (API Breakage Detection)
 When a function signature or behavior changes, tests written for the old API will fail:
 1.  **Run full regression**: `uv run pytest tests/ --ignore=tests/integration -x -q --tb=short`
