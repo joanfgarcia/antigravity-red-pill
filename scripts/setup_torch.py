@@ -174,6 +174,7 @@ def _get_installed_torch_cuda_tag() -> str | None:
 def _inject_pain_signal(message: str, intensity: float = 7.0) -> None:
 	"""Inject a pain signal into signal_memories if Qdrant is reachable."""
 	try:
+		import hashlib
 		import os
 		import uuid
 
@@ -192,11 +193,16 @@ def _inject_pain_signal(message: str, intensity: float = 7.0) -> None:
 				vectors_config=VectorParams(size=384, distance=Distance.COSINE),
 			)
 
+		# Consistent hashing with MemoryManager protocol
+		sig_name = "torch_cuda_mismatch"
+		sig_hash = hashlib.sha256(sig_name.encode("utf-8")).hexdigest()
+		point_id = str(uuid.UUID(sig_hash[:32]))
+
 		client.upsert(
 			collection_name="signal_memories",
 			points=[
 				PointStruct(
-					id=str(uuid.uuid5(uuid.NAMESPACE_DNS, "torch_cuda_mismatch")),
+					id=point_id,
 					vector=[0.0] * 384,
 					payload={
 						"content": f"[PAIN] {message}",
@@ -214,6 +220,7 @@ def _inject_pain_signal(message: str, intensity: float = 7.0) -> None:
 def _clear_pain_signal(signal_id_name: str) -> None:
 	"""Remove a pain signal from signal_memories if it exists."""
 	try:
+		import hashlib
 		import os
 		import uuid
 
@@ -224,11 +231,15 @@ def _clear_pain_signal(signal_id_name: str) -> None:
 		api_key = os.getenv("QDRANT_API_KEY")
 		client = QdrantClient(host=host, port=port, api_key=api_key, https=False)
 
+		# Consistent hashing with MemoryManager protocol
+		sig_hash = hashlib.sha256(signal_id_name.encode("utf-8")).hexdigest()
+		point_id = str(uuid.UUID(sig_hash[:32]))
+
 		cols = [c.name for c in client.get_collections().collections]
 		if "signal_memories" in cols:
 			client.delete(
 				collection_name="signal_memories",
-				points_selector=[str(uuid.uuid5(uuid.NAMESPACE_DNS, signal_id_name))],
+				points_selector=[point_id],
 			)
 			print(f"[setup_torch] Pain signal cleared: {signal_id_name}")
 	except Exception:

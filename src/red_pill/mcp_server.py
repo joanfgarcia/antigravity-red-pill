@@ -252,7 +252,7 @@ async def handle_run_security_audit(arguments: Dict[str, Any]):
 			"collection": {
 				"type": "string",
 				"description": "Optional. Restrict search to a specific collection (e.g. 'archive_memories', 'work_memories', 'social_memories'). Default: searches work_memories + social_memories.",
-			}
+			},
 		},
 		"required": ["query"],
 	},
@@ -274,9 +274,7 @@ async def handle_search_memory_research(arguments: Dict[str, Any]):
 			oracle = OracleMinion()
 			if collections:
 				oracle.collections = collections
-			results = await GruOrchestrator().deploy_swarm(
-				query, [oracle], trace=False
-			)
+			results = await GruOrchestrator().deploy_swarm(query, [oracle], trace=False)
 			res = results[0]
 			content = f"ORACLE SYNTHESIS:\n{res.result.get('synthesis')}" if res.status == "success" else f"Research Failed: {res.error}"
 
@@ -343,13 +341,15 @@ async def handle_traverse_thread(arguments: Dict[str, Any]):
 		hits = manager.search_and_reinforce(collection, query, limit=50)
 		hub_hits = [h for h in hits if h.payload.get("lazarus_phase") == "synthesis_hub"]
 		if not hub_hits:
-			return [types.TextContent(
-				type="text",
-				text=(
-					f"No synthesis_hub nodes found in top-50 results for '{query}' in {collection}.\n"
-					"Try a broader query describing the session topic, not a specific quote."
-				),
-			)]
+			return [
+				types.TextContent(
+					type="text",
+					text=(
+						f"No synthesis_hub nodes found in top-50 results for '{query}' in {collection}.\n"
+						"Try a broader query describing the session topic, not a specific quote."
+					),
+				)
+			]
 
 		start = hub_hits[0]
 
@@ -455,6 +455,36 @@ async def handle_fetch_signal_memories(arguments: Dict[str, Any]):
 		return [types.TextContent(type="text", text="[SYSTEM_SIGNAL] Bünker Alerts:\n" + "\n".join(out))]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"[SYSTEM_SIGNAL] Failed to fetch signals: {e}")]
+
+
+@registry.register(
+	name="evaporate_signal",
+	description="[OFFICIAL] Manually clear a specific pain signal (curing the pain).",
+	schema={
+		"type": "object",
+		"properties": {
+			"name": {
+				"type": "string",
+				"description": "The name of the signal to evaporate (e.g. 'torch_cuda_mismatch', 'korsakoff_amnesia'). IF empty, clears ALL signals.",
+			},
+		},
+	},
+)
+async def handle_evaporate_signal(arguments: Dict[str, Any]):
+	from red_pill.memory import MemoryManager
+
+	name = arguments.get("name")
+	mgr = MemoryManager()
+	if name:
+		mgr.evaporate_signals(name)
+		# Try also with common variants if not exactly matched? No, protocol is name-based.
+		return [types.TextContent(type="text", text=f"Signal '{name}' evaporation initiated.")]
+	else:
+		# Purge entire collection
+
+		mgr.client.delete_collection("signal_memories")
+		mgr.storage.ensure_collection("signal_memories")
+		return [types.TextContent(type="text", text="All system signals have been evaporated (Neural reset).")]
 
 
 @registry.register(
