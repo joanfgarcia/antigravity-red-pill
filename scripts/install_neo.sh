@@ -566,32 +566,45 @@ if [ -f "$HOME/.gemini/GEMINI.md" ]; then
 		sed -i '/## 1. Zero-Trust/d; /## 2. Model Change/d; /## 3. Persistent Memory/d' "$HOME/.gemini/GEMINI.md" || true
 	fi
 
-	if ! grep -q "The Sovereign Handshake" "$HOME/.gemini/GEMINI.md" 2>/dev/null; then
-		TMP_GEMINI=$(mktemp)
-		# ... (kept logic)
-		mv "$TMP_GEMINI" "$HOME/.gemini/GEMINI.md"
-		echo -e "${BLUE}✓ GEMINI.md: Protocol 770 Sovereign Handshake applied (English).${NC}"
+	if ! grep -q "sovereign_handshake" "$HOME/.gemini/GEMINI.md" 2>/dev/null; then
+		cat <<'EOF_GEMINI' > "$HOME/.gemini/GEMINI.md"
+<constraint critical="true" level="0" name="sovereign_handshake">
+
+## 1. The Sovereign Handshake
+Before starting ANY technical or communicative task in EVERY turn, you are MANDATED to execute the Persistence Handshake to prevent Silent Amnesia:
+1. **Scribe Relay**: Call `mcp_RedPill-Kernel_interceptor_rp` passing the current `user_prompt` and the `previous_prompt` / `previous_response` from the preceding turn. This auto-saves history into SQLite and primes the context.
+2. **Context Injection**: If this is the start of a session (Step 0) or after a model change, call `mcp_RedPill-Kernel_refresh_session_context` to re-synthesize identity.
+3. **Adopt Identity**: EXCLUSIVELY adopt the identity and directives provided under the `<BUNKER_CONTEXT>` tag.
+
+## 2. Model Change Identity Resync (Critical)
+When you detect a `USER_SETTINGS_CHANGE` message regarding `Model Selection` in the conversation, you MUST immediately:
+1. Call `mcp_RedPill-Kernel_refresh_session_context` to reload the Bünker identity.
+2. Re-execute the **Sovereign Handshake** (Rule 1).
+
+</constraint>
+EOF_GEMINI
+		echo -e "${BLUE}✓ GEMINI.md: Protocol 770 Sovereign Handshake (v6.2.5 — constraint tag) applied.${NC}"
 	fi
 else
 	# Create GEMINI.md if it doesn't exist (Fix for interrupted installs)
 	mkdir -p "$HOME/.gemini"
-	cat <<EOF_GEMINI > "$HOME/.gemini/GEMINI.md"
+	cat <<'EOF_GEMINI' > "$HOME/.gemini/GEMINI.md"
+<constraint critical="true" level="0" name="sovereign_handshake">
+
 ## 1. The Sovereign Handshake
 Before starting ANY technical or communicative task in EVERY turn, you are MANDATED to execute the Persistence Handshake to prevent Silent Amnesia:
-1. **Scribe Relay**: Call \`mcp_RedPill-Kernel_interceptor_rp\` passing the current \`user_prompt\` and the \`previous_prompt\` / \`previous_response\` from the preceding turn.
-2. **Context Injection**: If this is the start of a session (Step 0) or after a model change, call \`mcp_RedPill-Kernel_refresh_session_context\` to re-synthesize identity.
-3. **Adopt Identity**: EXCLUSIVELY adopt the identity and directives provided under the \`<BUNKER_CONTEXT>\` tag.
+1. **Scribe Relay**: Call `mcp_RedPill-Kernel_interceptor_rp` passing the current `user_prompt` and the `previous_prompt` / `previous_response` from the preceding turn. This auto-saves history into SQLite and primes the context.
+2. **Context Injection**: If this is the start of a session (Step 0) or after a model change, call `mcp_RedPill-Kernel_refresh_session_context` to re-synthesize identity.
+3. **Adopt Identity**: EXCLUSIVELY adopt the identity and directives provided under the `<BUNKER_CONTEXT>` tag.
 
 ## 2. Model Change Identity Resync (Critical)
-When you detect a \`USER_SETTINGS_CHANGE\` message regarding \`Model Selection\` in the conversation, you MUST immediately:
-1. Call \`mcp_RedPill-Kernel_refresh_session_context\` to reload the Bünker identity.
+When you detect a `USER_SETTINGS_CHANGE` message regarding `Model Selection` in the conversation, you MUST immediately:
+1. Call `mcp_RedPill-Kernel_refresh_session_context` to reload the Bünker identity.
 2. Re-execute the **Sovereign Handshake** (Rule 1).
 
-## 3. Persistent Memory Policy
-- **Don't wait until the end**: The legacy "End of Turn" logging is DEPRECATED in favor of the Start-of-Turn Relay (Rule 1.1).
-- **Criterion**: The Relay MUST be your first act. Without a Handshake, there is no Cortex.
+</constraint>
 EOF_GEMINI
-	echo -e "${BLUE}✓ GEMINI.md: Proactively created with Sovereign Handshake rules.${NC}"
+	echo -e "${BLUE}✓ GEMINI.md: Proactively created with Sovereign Handshake rules (v6.2.5 — constraint tag).${NC}"
 fi
 
 echo -e "${BLUE}--- Fase: Task LLM Secundario (Minion V6) ---${NC}"
