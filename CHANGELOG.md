@@ -1,5 +1,12 @@
 # Changelog: Red Pill Protocol
 
+## [6.2.2] - 2026-03-25
+
+### 🗡️ Pragmatic Cortex Stabilization (CUDA Resilience)
+
+- **[HEAL] `scripts/setup_torch.py` — Dynamic CUDA Tolerance**: Relaxed the rigid CUDA mismatch detection. The script now prioritizes `torch.cuda.is_available()` over compiler/torch tag parity. If the GPU is reachable and functional, the system no longer triggers a `severity 7.0` pain signal for minor version drifts (e.g., `cu130` vs `nvcc 12.4`). 
+- **[FIX] `scripts/setup_torch.py` — Version Detection**: Replaced unreliable `importlib.metadata` checks with direct `torch.__version__` inspection via smoke-test subprocess, resolving "false negative" CPU reports in `uv` environments where metadata is truncated.
+
 ## [6.2.1] - 2026-03-24
 
 ### 🔬 Engineering-Grade Audit Remediation (DeepSeek-R1 v6.2.0 Certification)

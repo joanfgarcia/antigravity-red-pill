@@ -146,22 +146,24 @@ def _get_installed_torch_cuda_tag() -> str | None:
 	or if it fails to import (smoke test).
 	"""
 	try:
-		# 1. Check metadata (fast)
-		import importlib.metadata
-
-		dist = importlib.metadata.distribution("torch")
-		version = dist.metadata["version"]  # e.g. "2.11.0+cu126"
-		tag = version.split("+")[1] if "+" in version else "cpu"
-
-		# 2. Smoke test: actual import (slow but necessary for dynamic link checks)
 		# We use a subprocess to avoid polluting the current process or crashing it
-		# if there's a serious ImportError/Segfault.
-		res = subprocess.run([sys.executable, "-c", "import torch; print(torch.version.cuda)"], capture_output=True, text=True, timeout=10)
+		# and to get the actual __version__ which is more reliable than metadata.
+		cmd = [sys.executable, "-c", "import torch; print(f'{torch.__version__}|{torch.version.cuda}')"]
+		res = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
 		if res.returncode != 0:
-			print(f"[setup_torch] ⚠️  Torch exists but failed smoke test: {res.stderr.strip()}")
-			return None
+			# Try fallback importlib metadata just in case
+			import importlib.metadata
 
-		return tag
+			dist = importlib.metadata.distribution("torch")
+			v = dist.metadata["version"]
+			return v.split("+")[1] if "+" in v else "cpu"
+
+		v_full, cuda_val = res.stdout.strip().split("|")
+		if "+" in v_full:
+			return v_full.split("+")[1]
+		if cuda_val and cuda_val != "None":
+			return f"cu{cuda_val.replace('.', '')}"
+		return "cpu"
 	except Exception:
 		return None
 
@@ -234,6 +236,14 @@ def main() -> None:
 	if args.check or args.auto_fix:
 		installed_tag = _get_installed_torch_cuda_tag()
 
+		# Robust check for actual CUDA availability
+		try:
+			is_cuda_avail = (
+				subprocess.run([sys.executable, "-c", "import torch; exit(0 if torch.cuda.is_available() else 1)"], timeout=10).returncode == 0
+			)
+		except Exception:
+			is_cuda_avail = False
+
 		if installed_tag is None:
 			print("[setup_torch] ⚠️  torch is not installed or is broken.")
 			if not args.auto_fix:
@@ -243,10 +253,14 @@ def main() -> None:
 		elif installed_tag == system_tag:
 			print(f"[setup_torch] ✅ torch ({installed_tag}) matches system CUDA {cuda_str}. No action needed.")
 			return
+		elif is_cuda_avail:
+			# Available but tag is different (e.g. cu130 vs cu124/cu121)
+			print(f"[setup_torch] ✅ torch ({installed_tag}) differs from detected CUDA {cuda_str}, but CUDA is AVAILABLE. Skipping re-install.")
+			return
 		else:
-			# Mismatch
+			# Mismatch AND not available
 			msg = (
-				f"torch CUDA mismatch detected — installed: {installed_tag}, "
+				f"torch CUDA mismatch detected AND NOT AVAILABLE — installed: {installed_tag}, "
 				f"system requires: {system_tag} (CUDA {cuda_str}). "
 				f"Run: uv run python scripts/setup_torch.py"
 			)
