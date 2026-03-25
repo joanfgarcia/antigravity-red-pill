@@ -333,10 +333,17 @@ def main() -> None:
 
 	print(f"[setup_torch] Installing torch from {index_url} ...")
 	uv_path = shutil.which("uv") or "uv"
-	result = subprocess.run(
-		[uv_path, "pip", "install", "torch", "--index-url", index_url],
-		check=False,
-	)
+	install_cmd = [uv_path, "pip", "install", "torch", "--index-url", index_url]
+
+	# Detect if we should use --system (if not in a venv)
+	if not (hasattr(sys, "real_prefix") or (sys.base_prefix != sys.prefix)):
+		# Not in a venv, if it's uv we might need --system depending on environment
+		# But on Silverblue/OSTree --system will fail unless in a toolbx.
+		# For now, let's just try to be more descriptive.
+		print("[setup_torch] ⚠️  Not in a virtual environment. uv might require --system.")
+		# install_cmd.append("--system")
+
+	result = subprocess.run(install_cmd, check=False)
 
 	if result.returncode == 0:
 		print(f"[setup_torch] ✅ torch installed successfully ({system_tag}).")

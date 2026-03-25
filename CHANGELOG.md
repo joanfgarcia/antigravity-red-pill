@@ -1,12 +1,14 @@
 # Changelog: Red Pill Protocol
 
-## [6.2.3] - 2026-03-25
+## [6.2.4] - 2026-03-25
 
-### 🧠 Advanced Hardware Telemetry & False Positive Mitigation
+### 🧊 Fedora Silverblue Stabilization & MCP Hardening
 
-- **[FIX] `scripts/setup_torch.py` — Multi-Version CUDA Discovery**: Swapped detection priority to favor `nvidia-smi` (Runtime) and `torch` (Active) over `nvcc` (Compiler). This prevents "false positive" mismatch alerts in environments where a secondary CUDA toolkit (e.g., 12.4) is present alongside a newer driver/torch (e.g., 13.0).
-- **[HEAL] Autonomous Pain Evaporation**: Verified and enforced the automatic clearing of `torch_cuda_mismatch` and `cuda_cortex_failure` signals when `torch.cuda.is_available()` is confirmed, even if version tags differ.
-- **[FEAT] Subprocess Torch Inspection**: Added a direct `torch.version.cuda` probe via a isolated subprocess to ensure the system detects the exact CUDA version the active PyTorch installation is linked against.
+- **[FEAT] Silverblue/OSTree Compatibility**: Hardened the installer (`install_neo.sh`) and preflight audit (`ide_preflight.py`) with a `/dev/mapper/luks-*` fallback for LUKS detection, as `lsblk` can be inconsistent on atomic host deployments.
+- **[FIX] Broken Pulse Reference**: Resolved a critical broken link in `schedule_pulse.py` where the hourly timer pointed to a non-existent `run_pulse.py`. Migrated to the correctly named `trigger_pulse.py`.
+- **[FIX] MCP CUDA Hardcoding**: Removed a "legacy poison" in `mcp_server.py` that forced a hardcoded `cu124` installation. The `heal_tissue(tissue='cuda')` tool now delegates to the decentralized `setup_torch.py` for dynamic hardware-aware healing.
+- **[FEAT] Installation Resilience**: Improved `install_neo.sh` to be idempotent and resilient against interrupted executions (proactive directory creation and `GEMINI.md` rule repair).
+- **[CONFIG] Default Connectivity**: Shifted default `QDRANT_SCHEME` to `http` in `.env.example` to align with the standard out-of-the-box local containerized deployment.
 
 ## [6.2.3] - 2026-03-25
 

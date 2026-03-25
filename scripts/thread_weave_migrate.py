@@ -48,7 +48,7 @@ def migrate(dry_run: bool = False) -> None:
 		hubs = [p for p in all_pts if p.payload.get("lazarus_phase") == "synthesis_hub"]
 
 		if not hubs:
-			logger.info(f"  No synthesis_hub nodes found — skipping.")
+			logger.info("  No synthesis_hub nodes found — skipping.")
 			continue
 
 		# Sort chronologically by created_at

@@ -33,7 +33,7 @@ TASK_NAME_TELEMETRY = "RedPill-Telemetry"
 TASK_NAME_QUEUE = "RedPill-Queue"
 
 # Scripts
-TRIGGER_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "run_pulse.py")
+TRIGGER_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "trigger_pulse.py")
 TELEMETRY_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "telemetry.py")
 QUEUE_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "process_queue.py")
 CHRONICLE_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "chronicle_daily.py")

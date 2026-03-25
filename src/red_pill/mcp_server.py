@@ -714,14 +714,15 @@ async def handle_heal_tissue(arguments: Dict[str, Any]):
 	elif tissue == "cuda":
 		try:
 			logger.info("Auto-Immune: Attempting to heal CUDA Motor Cortex...")
-			# Standard uv fix for CUDA loss
-			cmd = ["uv", "pip", "install", "torch==2.5.1", "torchvision", "torchaudio", "--index-url", "https://download.pytorch.org/whl/cu124"]
+			# v6.2.3: Delegate to decentralized setup_torch script
+			script_path = os.path.join(PROJECT_ROOT, "scripts", "setup_torch.py")
+			cmd = [sys.executable, script_path, "--auto-fix"]
 			res = subprocess.run(cmd, capture_output=True, text=True)
 			if res.returncode == 0:
-				output = "CUDA tissue successfully regenerated (torch reinstalled). The pain signal has been evaporated."
-				MemoryManager().evaporate_signals("cuda_cortex_failure")
+				output = f"CUDA tissue successfully regenerated.\n{res.stdout}"
+				# signals are cleared by the script itself
 			else:
-				err_str = str(res.stderr)
+				err_str = str(res.stderr or res.stdout)
 				output = f"Failed to heal CUDA tissue. Error: {err_str[-500:]}"
 		except Exception as e:
 			output = f"Critical immune failure while healing CUDA: {e}"

@@ -62,9 +62,25 @@ def get_encryption():
 			status = subprocess.check_output(cmd).decode().strip()
 			return "ACTIVE (FileVault)" if "is On" in status else "OFF"
 		else:
-			# Linux (check for crypt in lsblk)
-			output = subprocess.check_output(["lsblk", "-f"]).decode()
-			return "ACTIVE (LUKS/Crypt)" if "crypt" in output.lower() else "OFF"
+			# Linux (check for crypt in lsblk, then /dev/mapper fallback)
+			try:
+				lsblk_out = subprocess.check_output(["lsblk", "-no", "TYPE"]).decode()
+				if "crypt" in lsblk_out.lower():
+					return "ACTIVE (LUKS/Crypt)"
+			except Exception:
+				pass
+
+			# Fallback for Silverblue / OSTree (check /dev/mapper)
+			try:
+				import os
+				if os.path.exists("/dev/mapper"):
+					mapper_list = os.listdir("/dev/mapper")
+					if any(m.startswith("luks-") for m in mapper_list):
+						return "ACTIVE (LUKS Fallback)"
+			except Exception:
+				pass
+
+			return "OFF (SEC-001 Warning)"
 	except Exception:
 		return "Unknown (Requires Admin/Tools)"
 
