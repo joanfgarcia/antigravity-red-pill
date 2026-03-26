@@ -12,6 +12,11 @@ LORE_OUTPUT="RED_PILL_DIGEST_LORE.txt"
 
 echo "Aggregating project digests..."
 
+# NOTE: docs/CERTIFICATION/ is intentionally EXCLUDED from the digest.
+# Including past audit reports in the digest sent to auditors would contaminate
+# their analysis with prior findings, causing confirmation bias and hallucinations
+# (e.g., rating a fixed issue as still broken because a previous report said so).
+# Auditors must evaluate the code as-is, not through the lens of past verdicts.
 CORE_FILES=$(git ls-files src/red_pill/ scripts/ docs/TECHNICAL/ pyproject.toml README.md docker/ | grep -vE '\.(png|jpg|jpeg|gif|pdf|ico|coverage|DS_Store|lock|pyc|db|db-wal|db-shm)$')
 TESTS_FILES=$(git ls-files tests/ | grep -vE '\.(png|jpg|jpeg|gif|pdf|ico|coverage|DS_Store|lock|pyc|db|db-wal|db-shm)$')
 LORE_FILES=$(git ls-files docs/LORE/ CHANGELOG.md docs/GUIDES/ docs/CORE/ seeds/ skills/ | grep -vE '\.(png|jpg|jpeg|gif|pdf|ico|coverage|DS_Store|lock|pyc|db|db-wal|db-shm)$')

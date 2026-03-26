@@ -15,10 +15,19 @@ When requesting a certification from external auditors (The High Council), the f
 To allow auditors to analyze the system as a whole without triggering context-window truncation false-negatives, technical assets are aggregated into two split files via `scripts/prepare_certification.sh`.
 
 ### Aggregation Script Output:
-- `RED_PILL_DIGEST_CORE.txt`: Contains all source code (`src/`), documentation (`docs/`), scripts (`scripts/`), and root assets (`README.md`, `LICENSE`, `SECURITY.md`, etc.).
+- `RED_PILL_DIGEST_CORE.txt`: Contains all source code (`src/`), documentation (`docs/TECHNICAL/`), scripts (`scripts/`), and root assets (`README.md`, `LICENSE`, `SECURITY.md`, etc.).
 - `RED_PILL_DIGEST_TESTS.txt`: Contains only the `tests/` directory suite.
 
 *Note: Both files contain a Table of Contents index at the top so the auditor can map the system architecture instantly.*
+
+> [!IMPORTANT]
+> **`docs/CERTIFICATION/` is intentionally excluded from all digest files.**
+> Including past audit reports in the material sent to new auditors would contaminate their
+> analysis: they would unconsciously anchor on prior findings, rate already-fixed issues as
+> still broken, or overlook regressions that previous reports missed. Each auditor must
+> evaluate the codebase fresh, without the noise or bias of earlier verdicts.
+> The `prepare_certification.sh` script enforces this by only including `docs/TECHNICAL/`
+> — never `docs/CERTIFICATION/`.
 
 ## 3. The High Council (External Auditors)
 The certification must be validated by at least three of the following entities to reach consensus:
