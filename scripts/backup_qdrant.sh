@@ -5,7 +5,7 @@
 set -euo pipefail
 
 QDRANT_URL="http://localhost:6333"
-API_KEY="770-Sovereign-Key-001"
+API_KEY="${QDRANT_API_KEY:?ERROR: QDRANT_API_KEY not set. Run the install script to generate it.}"
 BACKUP_DIR="${HOME}/Documents/IA/backups/qdrant"
 RETENTION_DAYS=14
 LOG_FILE="${HOME}/.local/share/red_pill/backup.log"

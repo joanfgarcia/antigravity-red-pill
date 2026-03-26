@@ -38,7 +38,6 @@ def _save_thread_state(state: dict) -> None:
 		logger.warning(f"[THREAD WEAVER] Could not save thread state: {e}")
 
 
-
 def _check_llm_available() -> bool:
 	"""Quick reachability probe for the local distillation LLM."""
 	import os

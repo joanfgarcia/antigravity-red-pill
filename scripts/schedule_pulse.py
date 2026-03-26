@@ -19,8 +19,10 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 # Systemd unit names (Linux)
-TIMER_NAME = "redpill-pulse.timer"
-SERVICE_NAME = "redpill-pulse.service"
+WAKE_SERVICE = "redpill-wake.service"
+WAKE_TIMER = "redpill-wake.timer"
+SLEEP_SERVICE = "redpill-sleep.service"
+SLEEP_TIMER = "redpill-sleep.timer"
 SYSTEMD_USER_DIR = os.path.expanduser("~/.config/systemd/user")
 
 # Launchd label (macOS)
@@ -58,11 +60,15 @@ def _find_uv() -> str:
 def _install_linux(interval_hours: int, uv_path: str) -> None:
 	os.makedirs(SYSTEMD_USER_DIR, exist_ok=True)
 
-	# 1. Pulse (Maintenance) - Hourly
-	_write_systemd_unit(SERVICE_NAME, f"{uv_path} run python {TRIGGER_SCRIPT}", "Red Pill Sovereign Pulse", type="oneshot")
-	_write_systemd_timer(TIMER_NAME, f"{interval_hours}h", "Timer for Red Pill Sovereign Pulse")
+	# 1. Wake Pulse (Hourly) — Social connectivity, swarm, hive sync
+	_write_systemd_unit(WAKE_SERVICE, f"{uv_path} run python {TRIGGER_SCRIPT} --cycle wake", "Red Pill Wake Pulse", type="oneshot")
+	_write_systemd_timer(WAKE_TIMER, f"{interval_hours}h", "Timer for Red Pill Wake Pulse (Hourly)")
 
-	# 2. Telemetry (Heartbeat) - 10s-30s
+	# 2. Sleep Pulse (03:00 Daily) — Memory consolidation, Ariadne's Thread
+	_write_systemd_unit(SLEEP_SERVICE, f"{uv_path} run python {TRIGGER_SCRIPT} --cycle sleep", "Red Pill Sleep Pulse", type="oneshot", nice=10)
+	_write_calendar_timer(SLEEP_TIMER, "*-*-* 03:00:00", "Daily Sleep Consolidation Pulse")
+
+	# 3. Telemetry (Heartbeat) - 10s-30s
 	_write_systemd_unit(
 		"redpill-telemetry.service", f"{uv_path} run python {TELEMETRY_SCRIPT} --oneshot", "Red Pill Telemetry Heartbeat", type="oneshot"
 	)
@@ -83,7 +89,8 @@ def _install_linux(interval_hours: int, uv_path: str) -> None:
 	_write_calendar_timer("redpill-chronicle.timer", "*-*-* 04:00:00", "Daily Chronicle Ingestion Pipeline")
 
 	subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
-	subprocess.run(["systemctl", "--user", "enable", "--now", TIMER_NAME], check=True)
+	subprocess.run(["systemctl", "--user", "enable", "--now", WAKE_TIMER], check=True)
+	subprocess.run(["systemctl", "--user", "enable", "--now", SLEEP_TIMER], check=True)
 	subprocess.run(["systemctl", "--user", "enable", "--now", "redpill-telemetry.timer"], check=True)
 	subprocess.run(["systemctl", "--user", "enable", "--now", "redpill-queue.timer"], check=True)
 	subprocess.run(["systemctl", "--user", "enable", "--now", "redpill-chronicle.timer"], check=True)
@@ -149,12 +156,11 @@ def _write_systemd_timer(name, interval, desc):
 
 
 def _uninstall_linux() -> None:
-	subprocess.run(["systemctl", "--user", "disable", "--now", TIMER_NAME], check=False)
-	subprocess.run(["systemctl", "--user", "disable", "--now", "redpill-telemetry.timer"], check=False)
-	subprocess.run(["systemctl", "--user", "disable", "--now", "redpill-queue.timer"], check=False)
-	subprocess.run(["systemctl", "--user", "disable", "--now", "redpill-chronicle.timer"], check=False)
+	for timer in (WAKE_TIMER, SLEEP_TIMER, "redpill-telemetry.timer", "redpill-queue.timer", "redpill-chronicle.timer"):
+		subprocess.run(["systemctl", "--user", "disable", "--now", timer], check=False)
 	for name in (
-		TIMER_NAME, SERVICE_NAME,
+		WAKE_TIMER, WAKE_SERVICE,
+		SLEEP_TIMER, SLEEP_SERVICE,
 		"redpill-telemetry.timer", "redpill-telemetry.service",
 		"redpill-queue.timer", "redpill-queue.service",
 		"redpill-chronicle.timer", "redpill-chronicle.service",
@@ -164,34 +170,34 @@ def _uninstall_linux() -> None:
 			os.remove(path)
 			print(f"[OK] Removed {path}")
 	subprocess.run(["systemctl", "--user", "daemon-reload"], check=False)
-	print("[OK] systemd pulse timer uninstalled.")
+	print("[OK] systemd pulse timers uninstalled.")
 
 
 # macOS — launchd plist
 
 
 def _uninstall_macos() -> None:
-	if os.path.exists(LAUNCHD_PLIST):
-		subprocess.run(["launchctl", "unload", LAUNCHD_PLIST], check=False)
-		os.remove(LAUNCHD_PLIST)
-		print(f"[OK] Removed {LAUNCHD_PLIST}")
-	# Also uninstall telemetry and queue if they were separate (but here we'll keep them in one plist or multiple)
-	# For now, let's assume we use separate plists for separate intervals.
-	for suffix in ("telemetry", "queue"):
-		p = os.path.expanduser(f"~/Library/LaunchAgents/com.redpill.{suffix}.plist")
+	for label in ("wake", "sleep", "telemetry", "queue"):
+		p = os.path.expanduser(f"~/Library/LaunchAgents/com.redpill.{label}.plist")
 		if os.path.exists(p):
 			subprocess.run(["launchctl", "unload", p], check=False)
 			os.remove(p)
 			print(f"[OK] Removed {p}")
+	# Legacy cleanup
+	if os.path.exists(LAUNCHD_PLIST):
+		subprocess.run(["launchctl", "unload", LAUNCHD_PLIST], check=False)
+		os.remove(LAUNCHD_PLIST)
 	print("[OK] launchd pulse agents uninstalled.")
 
 
 def _install_macos(interval_hours: int, uv_path: str) -> None:
-	# 1. Pulse
-	_write_launchd_plist("com.redpill.pulse", f"{uv_path} run python {TRIGGER_SCRIPT}", interval_hours * 3600)
-	# 2. Telemetry
+	# 1. Wake Pulse (Interval-based, hourly)
+	_write_launchd_plist("com.redpill.wake", f"{uv_path} run python {TRIGGER_SCRIPT} --cycle wake", interval_hours * 3600)
+	# 2. Sleep Pulse (Calendar-based, 03:00 daily)
+	_write_launchd_calendar_plist("com.redpill.sleep", f"{uv_path} run python {TRIGGER_SCRIPT} --cycle sleep", hour=3, minute=0)
+	# 3. Telemetry
 	_write_launchd_plist("com.redpill.telemetry", f"{uv_path} run python {TELEMETRY_SCRIPT} --oneshot", 30)
-	# 3. Queue
+	# 4. Queue
 	_write_launchd_plist("com.redpill.queue", f"{uv_path} run python {QUEUE_SCRIPT} --oneshot", 60)
 	print("[OK] launchd agents installed. Protocol Zero-Daemon active.")
 
@@ -227,41 +233,80 @@ def _write_launchd_plist(label, command, interval_seconds):
 	subprocess.run(["launchctl", "load", plist_path], check=True)
 
 
+def _write_launchd_calendar_plist(label: str, command: str, hour: int, minute: int) -> None:
+	"""Write a launchd plist that fires at a fixed daily time (StartCalendarInterval)."""
+	plist_path = os.path.expanduser(f"~/Library/LaunchAgents/{label}.plist")
+	args = command.split(" ")
+	args_xml = "".join([f"<string>{a}</string>" for a in args])
+	content = textwrap.dedent(f"""\
+		<?xml version="1.0" encoding="UTF-8"?>
+		<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+		<plist version="1.0">
+		<dict>
+			<key>Label</key>
+			<string>{label}</string>
+			<key>ProgramArguments</key>
+			<array>
+				{args_xml}
+			</array>
+			<key>WorkingDirectory</key>
+			<string>{PROJECT_ROOT}</string>
+			<key>StartCalendarInterval</key>
+			<dict>
+				<key>Hour</key>
+				<integer>{hour}</integer>
+				<key>Minute</key>
+				<integer>{minute}</integer>
+			</dict>
+		</dict>
+		</plist>
+	""")
+	os.makedirs(os.path.dirname(plist_path), exist_ok=True)
+	with open(plist_path, "w") as f:
+		f.write(content)
+	subprocess.run(["launchctl", "unload", plist_path], check=False, stderr=subprocess.DEVNULL)
+	subprocess.run(["launchctl", "load", plist_path], check=True)
+
+
 # Windows — Task Scheduler
 
 
 def _install_windows(interval_hours: int, uv_path: str) -> None:
-	# 1. Pulse
-	_create_win_task(TASK_NAME_PULSE, f'"{uv_path}" run python "{TRIGGER_SCRIPT}"', interval_hours * 60)
-	# 2. Telemetry
-	_create_win_task(TASK_NAME_TELEMETRY, f'"{uv_path}" run python "{TELEMETRY_SCRIPT}" --oneshot', 1)  # Min interval 1m in schtasks usually
-	# 3. Queue
+	# 1. Wake Pulse (interval — MINUTE-based)
+	_create_win_task("RedPill-Wake", f'"{uv_path}" run python "{TRIGGER_SCRIPT}" --cycle wake', interval_hours * 60)
+	# 2. Sleep Pulse (daily at 03:00)
+	_create_win_daily_task("RedPill-Sleep", f'"{uv_path}" run python "{TRIGGER_SCRIPT}" --cycle sleep', "03:00")
+	# 3. Telemetry
+	_create_win_task(TASK_NAME_TELEMETRY, f'"{uv_path}" run python "{TELEMETRY_SCRIPT}" --oneshot', 1)
+	# 4. Queue
 	_create_win_task(TASK_NAME_QUEUE, f'"{uv_path}" run python "{QUEUE_SCRIPT}" --oneshot', 1)
 	print("[OK] Windows Tasks created. Protocol Zero-Daemon active.")
 
 
 def _create_win_task(name, command, minutes):
 	cmd = [
-		"schtasks",
-		"/create",
-		"/tn",
-		name,
-		"/tr",
+		"schtasks", "/create", "/tn", name, "/tr",
 		f'cmd.exe /c cd /d "{PROJECT_ROOT}" && {command}',
-		"/sc",
-		"MINUTE",
-		"/mo",
-		str(minutes),
-		"/f",
-		"/rl",
-		"HIGHEST",
+		"/sc", "MINUTE", "/mo", str(minutes), "/f", "/rl", "HIGHEST",
+	]
+	subprocess.run(cmd, check=True)
+
+
+def _create_win_daily_task(name: str, command: str, start_time: str) -> None:
+	"""Create a Windows Task Scheduler task that runs daily at a fixed time."""
+	cmd = [
+		"schtasks", "/create", "/tn", name, "/tr",
+		f'cmd.exe /c cd /d "{PROJECT_ROOT}" && {command}',
+		"/sc", "DAILY", "/st", start_time, "/f", "/rl", "HIGHEST",
 	]
 	subprocess.run(cmd, check=True)
 
 
 def _uninstall_windows() -> None:
-	for tn in (TASK_NAME_PULSE, TASK_NAME_TELEMETRY, TASK_NAME_QUEUE):
+	for tn in ("RedPill-Wake", "RedPill-Sleep", TASK_NAME_TELEMETRY, TASK_NAME_QUEUE):
 		subprocess.run(["schtasks", "/delete", "/tn", tn, "/f"], check=False)
+	# Legacy cleanup
+	subprocess.run(["schtasks", "/delete", "/tn", TASK_NAME_PULSE, "/f"], check=False)
 	print("[OK] Windows tasks uninstalled.")
 
 

@@ -29,7 +29,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger("thread_weave_migrate")
 
 THREAD_STATE_PATH = os.path.expanduser("~/.agent/thread_state.json")
-COLLECTIONS = ["work_memories", "social_memories"]
+COLLECTIONS = ["archive_memories", "work_memories", "social_memories", "directive_memories"]
 
 
 def migrate(dry_run: bool = False) -> None:
@@ -43,9 +43,22 @@ def migrate(dry_run: bool = False) -> None:
 	for col in COLLECTIONS:
 		logger.info(f"=== {col} ===")
 
-		# Fetch all points (increase limit if collection grows beyond 1000)
-		all_pts = client.scroll(col, limit=2000, with_payload=True)[0]
-		hubs = [p for p in all_pts if p.payload.get("lazarus_phase") == "synthesis_hub"]
+		try:
+			all_pts = client.scroll(col, limit=10000, with_payload=True)[0]
+		except Exception as e:
+			logger.warning(f"Could not load {col}: {e}")
+			continue
+
+		# Collection-specific hub selection
+		if col == "archive_memories":
+			# Chain chronicle and monolith nodes in temporal sequence
+			hubs = [p for p in all_pts if p.payload.get("type", "") in ("chronicle_node", "monolith_parent")]
+		elif col == "directive_memories":
+			# Directives are all woven indiscriminately
+			hubs = list(all_pts)
+		else:
+			# work_memories / social_memories: synthesis hubs only
+			hubs = [p for p in all_pts if p.payload.get("lazarus_phase") == "synthesis_hub"]
 
 		if not hubs:
 			logger.info("  No synthesis_hub nodes found — skipping.")

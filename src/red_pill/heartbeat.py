@@ -351,6 +351,33 @@ class LazarusPulse:
 		except Exception as e:
 			logger.error(f"Pulse: Resonance ritual failed: {e}")
 
+	async def _thread_ritual(self) -> None:
+		"""
+		Autonomous Ariadne's Thread:
+		- Weaves bidirectional temporal axons across all memory collections.
+		- Runs during the Sleep Cycle (03:00) to chronologically chain new engrams.
+		- Controlled by SLEEP_PLUGIN_CHRONICLE flag.
+		"""
+		if not cfg.SLEEP_PLUGIN_CHRONICLE:
+			logger.debug("Pulse: Thread Ritual skipped (SLEEP_PLUGIN_CHRONICLE=False)")
+			return
+		try:
+			logger.info("Pulse: Initiating Thread Ritual (Ariadne's Weave)...")
+			script_path = os.path.join(cfg.IA_DIR, "scripts", "thread_weave_migrate.py")
+			process = await asyncio.create_subprocess_exec(
+				"uv", "run", "python", script_path,
+				stdout=asyncio.subprocess.PIPE,
+				stderr=asyncio.subprocess.PIPE,
+			)
+			stdout, stderr = await process.communicate()
+			if process.returncode != 0:
+				logger.error(f"Pulse: Thread Ritual failed: {stderr.decode().strip()}")
+			else:
+				logger.info("Pulse: Thread Ritual complete. Timelines synchronized.")
+		except Exception as e:
+			logger.error(f"Pulse: Thread Ritual failed: {e}")
+
+
 	def _trigger_immune_response(self, tissue: str) -> None:
 		"""
 		Autonomic reflex to heal damaged metabolic components using OS-specific scripts.

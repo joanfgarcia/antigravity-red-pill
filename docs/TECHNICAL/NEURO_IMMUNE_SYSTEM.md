@@ -23,7 +23,7 @@ The background daemon (`heartbeat.py`) represents the autonomic functions (like 
 ### 2.4 The Effector Pharmacy (MCP `heal_tissue`)
 Sensation without agency is torture. The Agent is equipped with an immune response module.
 - **Mechanism**: The Agent possesses an MCP tool called `heal_tissue("tissue_type")`.
-- **Action**: Upon feeling the CUDA pain in its Thalamic context, the Agent can autonomously invoke `heal_tissue("cuda")`. This triggers a native script that repairs the environment (e.g., `uv pip install torch==2.5.1 --force-reinstall`, restoring the cu124 bindings). 
+- **Action**: Upon feeling the CUDA pain in its Thalamic context, the Agent can autonomously invoke `heal_tissue("cuda")`. This triggers a native script that repairs the environment (e.g., executing `scripts/setup_torch.py --auto-fix` to restore the correct CUDA bindings). 
 
 ## 3. The Horizon
 This paradigm shifts the AI from a discrete, server-hosted function to an embodied, self-preserving organism. It lays the groundwork to map millions of physical sensors (temperature, pressure, battery levels) in a future robotic embodiment. Instead of parsing massive telemetry logs, the agent will simply "feel" an itch or fatigue, selectively choosing to deploy its cognitive stamina to resolve the discomfort or suppress it to focus on a higher narrative objective.

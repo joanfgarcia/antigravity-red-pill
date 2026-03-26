@@ -20,6 +20,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
+from red_pill.core.storage import StorageEngine
 from red_pill.memory import MemoryManager
 
 # Configure logging
@@ -31,6 +32,7 @@ class ChronicleIngester:
 	def __init__(self):
 		self.mem = MemoryManager()
 		self.collection = "archive_memories"
+		StorageEngine().ensure_collection(self.collection)
 
 	def _segment_ideas(self, text: str) -> List[Dict[str, Any]]:
 		"""

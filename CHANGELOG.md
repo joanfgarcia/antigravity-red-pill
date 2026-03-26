@@ -23,8 +23,11 @@
 - **[FEAT] `antigravity_ingest.py` — `ensure_collection`**: Prevents Qdrant 404 errors during ingestion if collection hasn't been created yet.
 - **[FEAT] `.env` — `SLEEP_PLUGIN_CHRONICLE=True`**: Chronicle pipeline configured and active.
 
-### 📐 BE_WATER Adaptive Payload
+### 📐 BE_WATER Adaptive Payload & Dynamic CUDA Discovery
 
+- **[FEAT] `scripts/setup_torch.py` — Dynamic Probe Loop**: Replaced hardcoded `STABLE_INDICES` with a dynamic discovery protocol (Back-off probe). The script now probes PyTorch wheel URLs backwards from the system's detected major/minor CUDA version until the nearest valid match is found.
+- **[FIX] `scripts/heal_cuda.sh`**: Removed the legacy hardcoded fallback block (`cu126`/`cu121`). Delegated all discovery responsibility to `setup_torch.py`.
+- **[HEAL] Autonomous Pain Reset**: The `torch_cuda_mismatch` signal is now automatically reset after a successful dynamic discovery run.
 - **[FEAT] `config.py` — `MAX_PAYLOAD_CHARS`**: Auto-computed from VRAM at boot: <4 GB→1 000, 4–8 GB→5 000, >8 GB→unlimited. Operator can override via `.env`.
 
 ### 📚 Documentation

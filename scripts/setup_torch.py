@@ -118,32 +118,45 @@ def _check_url_exists(url: str) -> bool:
 def _cuda_to_index(major: int, minor: int) -> str:
 	"""
 	Map detected CUDA version to the best available cuXXX tag.
-	Now dynamically projects the tag and verifies the URL.
+	Now performs dynamic probing of the PyTorch index to find the nearest match.
 	"""
-	# Known stable indices in descending order
-	STABLE_INDICES = ["cu126", "cu124", "cu121", "cu118"]
-
-	# Project tag: 13.0 -> cu130, 12.6 -> cu126
+	# Priority 1: Exact match (e.g., cu130 for CUDA 13.0)
 	projected = f"cu{major}{minor}"
 	url = f"https://download.pytorch.org/whl/{projected}"
 
-	# 1. Try the exact match first
-	print(f"[setup_torch] Verifying projected index: {url} ...")
+	print(f"[setup_torch] Probing exact index: {url} ...")
 	if _check_url_exists(url):
+		print(f"[setup_torch] Using exact match: {projected}")
 		return projected
 
-	# 2. Find the highest stable that is <= the detected version
-	v_detected = major * 100 + minor  # 12.4 -> 1204
-	for tag in STABLE_INDICES:
-		# Parse tag: cu124 -> (12, 4) -> 1204
-		m = re.match(r"cu(\d+)(\d)", tag)
-		if m:
-			v_stable = int(m.group(1)) * 100 + int(m.group(2))
-			if v_stable <= v_detected:
-				print(f"[setup_torch] ⚠️  {projected} index not found. Falling back to {tag}.")
+	# Priority 2: Dynamic Back-off (Trial & Error)
+	# Iterates backward from the detected minor/major to find the next available wheel.
+	print("[setup_torch] Exact index unavailable. Starting dynamic back-off probe...")
+
+	# Common major versions to probe if exact fails
+	PROBE_MAJORS = sorted(list(set([major, 12, 11])), reverse=True)
+	# Common minor versions used by PyTorch
+	PROBE_MINORS = [8, 6, 4, 1, 0]
+
+	for v_major in PROBE_MAJORS:
+		for v_minor in PROBE_MINORS:
+			# Skip versions newer than system (safety)
+			if v_major == major and v_minor > minor:
+				continue
+			tag = f"cu{v_major}{v_minor}"
+			test_url = f"https://download.pytorch.org/whl/{tag}"
+			if _check_url_exists(test_url):
+				print(f"[setup_torch] Found nearest compatible index: {tag} (at {test_url})")
 				return tag
 
-	# 3. Last resort fallback
+	# Priority 3: Common stable targets as a last-resort safety net
+	SAFE_FALLBACKS = ["cu124", "cu121", "cu118"]
+	for tag in SAFE_FALLBACKS:
+		if _check_url_exists(f"https://download.pytorch.org/whl/{tag}"):
+			print(f"[setup_torch] Falling back to verified stable index: {tag}")
+			return tag
+
+	print("[setup_torch] No CUDA indices found on pytorch.org. Falling back to CPU.")
 	return "cpu"
 
 

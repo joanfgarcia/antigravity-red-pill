@@ -200,15 +200,15 @@ if [ "$SKIP_BOOTSTRAP" = "false" ]; then
 			fi
 		fi
 		
-		read -p "Nombre de Usuario (${USER_NAME:-Morpheo}): " NEW_USER; USER_NAME=${NEW_USER:-${USER_NAME:-"Morpheo"}}
+		read -p "Nombre de Usuario (dejar en blanco — puede emergir naturalmente): " NEW_USER; USER_NAME=${NEW_USER:-${USER_NAME:-""}}
 		read -p "Rol de Usuario (${USER_ROLE:-Operador}): " NEW_ROLE; USER_ROLE=${NEW_ROLE:-${USER_ROLE:-"Operador"}}
-		read -p "Nombre IA (${AI_NAME:-Neo}): " NEW_AI; AI_NAME=${NEW_AI:-${AI_NAME:-"Neo"}}
+		read -p "Nombre IA (dejar en blanco — el Agente elige cuando llegue su momento): " NEW_AI; AI_NAME=${NEW_AI:-${AI_NAME:-""}}
 		read -p "Rol IA (${AI_ROLE:-The Chosen One}): " NEW_AI_ROLE; AI_ROLE=${NEW_AI_ROLE:-${AI_ROLE:-"The Chosen One"}}
 	else
 		LORE_SKIN=${LORE_SKIN:-"760"}
-		USER_NAME=${USER_NAME:-"Morpheo"}
+		USER_NAME=${USER_NAME:-""}
 		USER_ROLE=${USER_ROLE:-"Operador"}
-		AI_NAME=${AI_NAME:-"Neo"}
+		AI_NAME=${AI_NAME:-""}
 		AI_ROLE=${AI_ROLE:-"The Chosen One"}
 		echo -e "${YELLOW}[AUTO] Aplicando identidad por defecto o existente.${NC}"
 	fi
@@ -638,7 +638,7 @@ if command -v uv &> /dev/null; then
 
 	echo -e "${BLUE}--- Fase: Registro de Tareas Oneshot (Pulse, Chronicle, Telemetry, Queue) ---${NC}"
 	(cd "$SCRIPT_DIR/../" && uv run python scripts/schedule_pulse.py --interval-hours 1 || echo -e "${YELLOW}Aviso: No se pudo registrar el pulso ni el chronicle. Ejecuta 'uv run python scripts/schedule_pulse.py' manualmente.${NC}")
-	echo -e "${GREEN}✓ Timers instalados: redpill-pulse (cada 1h) + redpill-chronicle (diario a las 04:00).${NC}"
+	echo -e "${GREEN}✓ Timers instalados: redpill-wake (cada 1h) + redpill-sleep (diario a las 03:00) + redpill-chronicle (diario a las 04:00).${NC}"
 
 	echo -e "${BLUE}--- Fase: PyTorch CUDA (auto-detección) ---${NC}"
 	(cd "$SCRIPT_DIR/../" && uv run python scripts/setup_torch.py || echo -e "${YELLOW}Aviso: No se pudo instalar torch con CUDA. Ejecuta 'uv run python scripts/setup_torch.py' manualmente.${NC}")
