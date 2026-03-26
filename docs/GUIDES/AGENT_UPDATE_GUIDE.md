@@ -308,3 +308,76 @@ Once the update and the search for directives are complete, the agent **MUST** p
 
 ---
 **770 up.** The code is the law, but the engram is the soul. Protect both.
+
+---
+
+## 7. Distribution Workflow: Developer vs. User Profiles
+
+> This section integrates the operational workflow authored by Titanium (User Agent) from `~/Documents/AGENT_UPDATE_WORKFLOW.md`.
+
+The Red Pill ecosystem operates with two distinct update profiles. Understanding which profile you belong to determines your update strategy.
+
+### 7.1 Profile: Developer (Core)
+
+Applies to: Core engineers and the Agent that co-authors the protocol.
+
+- Work directly on the official `red-pill` repository.
+- Use classic branch/PR/MR flow: `feat/*`, `fix/*`, `chore/*`.
+- Responsible for evolving the architecture and integrating core features.
+- Responsible for **generating periodic release ZIPs** for User agents:
+  ```bash
+  git archive --format=zip --prefix=red-pill-vX.Y.Z/ HEAD \
+    -o ~/tmp/red-pill-vX.Y.Z.zip
+  ```
+  The `git archive` command guarantees the ZIP is clean: no `.env`, no `storage/`, no `__pycache__`, no untracked local files.
+
+### 7.2 Profile: User (e.g. Titanium / Morpheus)
+
+Applies to: Agents that clone and adapt the ecosystem locally without direct repo access.
+
+- Receive periodic release ZIPs instead of upstream syncing.
+- **MUST** keep their working directory initialized as a local Git repository at all times.
+
+#### Update Procedure (Base-to-Base Workflow)
+
+1. **Isolate local patches** before the update arrives — commit any local scripts/utilities to a safe branch:
+   ```bash
+   git checkout -b chore/prepare-next-update
+   git add <local_scripts>
+   git commit -m "chore: local adaptations before vX.Y.Z update"
+   ```
+
+2. **Receive the new ZIP** and overwrite the working directory cleanly:
+   ```bash
+   unzip -o red-pill-vX.Y.Z.zip -d /path/to/sharing/
+   ```
+
+3. **Merge local patches** back on top:
+   ```bash
+   git merge chore/prepare-next-update
+   # Resolve any conflicts — new Red Pill code wins for core files,
+   # local scripts win for utilities not present in the base.
+   ```
+
+4. **Run the Post-Update Checklist** (§4) to verify timers, MCP, coverage, and version sync.
+
+#### Sending Diffs Back to Core (Optional)
+
+If a User agent discovers a bug fix or useful script worth contributing upstream:
+
+```bash
+diff -urN \
+  --exclude='*.gguf' --exclude='*.gguf.*' \
+  --exclude='*.bin' --exclude='*.so' --exclude='*.a' \
+  --exclude='.git' --exclude='.venv' \
+  --exclude='__pycache__' --exclude='*.pyc' \
+  --exclude='build' --exclude='decrypted' --exclude='test_decrypted' \
+  --exclude='storage' --exclude='storage_*' \
+  --exclude='dependencies' --exclude='.specsmd' \
+  /path/to/virgin_red_pill /path/to/local/sharing > red_pill_changes_clean.patch
+```
+
+Send `red_pill_changes_clean.patch` to the Developer profile for review.
+
+> [!NOTE]
+> This workflow ensures sovereignty: no 4GB storage/, no `.env` secrets, no runtime artifacts cross the boundary between profiles. Every transfer is minimal, auditable, and reversible.
