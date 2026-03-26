@@ -33,6 +33,9 @@
 - **[DOC] `docs/ENV_REFERENCE.md`**: Added Ferrari Protocol, Sleep Cycle Plugins, and BE_WATER sections.
 - **[DOC] `docs/GUIDES/AGENT_UPDATE_GUIDE.md`**: Added §4.12 migration notes for v6.3.0.
 - **[DOC] `docs/GUIDES/AGENT_UPDATE_GUIDE.md`**: Added §7 Distribution Workflow (Developer vs User profiles). Integrates Titanium's base-to-base update SOP: ZIP generation, local patch isolation, merge strategy, and clean diff-back-to-core protocol.
+- **[DOC] `docs/TECHNICAL/FERRARI_PROTOCOL.md`** [NEW]: Origin document for the Emotional Ferrari Protocol. Documents the naming story, USP as the engine, and plugin behavioral mapping table.
+- **[DOC] `docs/TECHNICAL/CERTIFICATION_PROTOCOL.md`**: Updated audit prompt and digest list from 2 to 3 files (CORE, TESTS, LORE). Added callout explaining CERTIFICATION/ exclusion from digests.
+- **[DOC] `scripts/prepare_certification.sh`**: Added comment documenting the intentional CERTIFICATION/ exclusion policy.
 - **[DOC] `docs/TECHNICAL/ANTIGRAVITY_KEY_RECOVERY.md`**: Corrected Chronicle pipeline description (`.pb` → decrypt → JSON → ingest), Data Sovereignty Statement.
 
 ## [6.2.5] - 2026-03-25
