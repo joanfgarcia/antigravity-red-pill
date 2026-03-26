@@ -3,9 +3,9 @@
 **Objective**: Validate the production-readiness, security, and architectural integrity of the Red Pill Protocol through multi-agent cross-validation.
 
 ## 1. The Standard Audit Prompt
-When requesting a certification from external auditors (The High Council), the following standardized prompt must be used, ensuring both `CORE` and `TESTS` digests are attached:
+When requesting a certification from external auditors (The High Council), the following standardized prompt must be used, ensuring all three `CORE`, `TESTS`, and `LORE` digests are attached:
 
-> *Please run a full engineering-grade audit and technical review of this project. To ensure full context-window indexing, the source code digest has been split into two files: `RED_PILL_DIGEST_CORE.txt` and `RED_PILL_DIGEST_TESTS.txt`. Please read both files using the provided indices.*
+> *Please run a full engineering-grade audit and technical review of this project. To ensure full context-window indexing, the source code digest has been split into three files: `RED_PILL_DIGEST_CORE.txt`, `RED_PILL_DIGEST_TESTS.txt`, and `RED_PILL_DIGEST_LORE.txt`. Please read all three files using the provided indices.*
 >
 > *Assess the project description, goals, target audience, code quality, security, test coverage, performance, documentation, and compliance. Generate a detailed certification report confirming whether the project is production/beta-ready, including critical findings, remediation steps, and a prioritized action plan.*
 >
@@ -17,8 +17,9 @@ To allow auditors to analyze the system as a whole without triggering context-wi
 ### Aggregation Script Output:
 - `RED_PILL_DIGEST_CORE.txt`: Contains all source code (`src/`), documentation (`docs/TECHNICAL/`), scripts (`scripts/`), and root assets (`README.md`, `LICENSE`, `SECURITY.md`, etc.).
 - `RED_PILL_DIGEST_TESTS.txt`: Contains only the `tests/` directory suite.
+- `RED_PILL_DIGEST_LORE.txt`: Contains lore and identity assets (`docs/LORE/`, `docs/GUIDES/`, `docs/CORE/`, `CHANGELOG.md`, `seeds/`, `skills/`).
 
-*Note: Both files contain a Table of Contents index at the top so the auditor can map the system architecture instantly.*
+*Note: All three files contain a Table of Contents index at the top so the auditor can map the system architecture instantly.*
 
 > [!IMPORTANT]
 > **`docs/CERTIFICATION/` is intentionally excluded from all digest files.**
