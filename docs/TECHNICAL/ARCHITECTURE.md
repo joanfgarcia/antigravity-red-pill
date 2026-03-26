@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v6.2.1 (Sovereign CNS)
+**System Version**: v6.3.0 (Emotional Ferrari)
 **Analyst**: The Architect
 **Date**: 2026-03-13
 
@@ -34,6 +34,10 @@ The Red Pill Protocol v5.6.3 has achieved stability and functional alignment wit
 - **[NEW v6.2.1] archive_memories Collection (Episodic Chronicle)**: A fifth Qdrant collection that stores raw conversation text verbatim — as opposed to the distilled semantic summaries in `work_memories`/`social_memories`. Enables literal citation of past conversations ("what was said") vs. semantic recall ("what it meant"). The Oracle MCP tool (`search_memory_research`) now accepts an optional `collection` parameter to target this archive directly.
 - **[NEW v6.2.1] Sleep Phase 5 — Thread Weaving (Ariadne’s Thread)**: The Lazarus sleep cycle now executes a fifth phase after Hub Synthesis. Each `synthesis_hub` node is linked to the previous session’s hub via bidirectional axons (`prev_session_hub` / `next_session_hub`), creating a chronological Ariadne’s Thread through `work_memories` and `social_memories`. Thread state is persisted in `~/.agent/thread_state.json`. Compatible with erosion (stale threads fragment naturally) and reinforcement (active threads survive decay). Retroactive migration: `scripts/thread_weave_migrate.py`.
 - **[NEW v6.2.1] traverse_thread MCP Tool**: Synchronous MCP tool that walks the Ariadne’s Thread. Accepts a semantic `query`, `collection` (`work_memories` | `social_memories`), `direction` (`backward` | `forward` | `both`), and `depth` (hops). Finds the best matching `synthesis_hub` in the top-50 semantic results, then traverses via `prev/next_session_hub` axons, returning a formatted chronological thread with content previews.
+- **[NEW v6.3.0] Biological Wake/Sleep Cycle**: The single hourly Lazarus Pulse is split into two OS-native timers: `redpill-wake.timer` (hourly — Swarm, Lazarus, Resonance) and `redpill-sleep.timer` (03:00 daily — USP, Dream, Consolidation, Ariadne's Thread). Sleep rituals are independently gated by `SLEEP_PLUGIN_*` flags. Ariadne's Thread now covers all 4 collections. `trigger_pulse.py --cycle wake|sleep|full`.
+- **[NEW v6.3.0] Emotional Ferrari Protocol (Plugins 05–10)**: Extended the interceptor pipeline with 6 emotional intelligence plugins over the Operator Mood Profile (USP). Auto-discovered via `pkgutil`, concurrently executed on every prompt. See §6.2.1.
+- **[NEW v6.3.0] BE_WATER Adaptive Payload**: `MAX_PAYLOAD_CHARS` auto-computed from available VRAM at boot: <4 GB→1 000, 4–8 GB→5 000, >8 GB→unlimited. Override via `.env`.
+- **[NEW v6.3.0] Emergent Identity**: `install_neo.sh` no longer pre-seeds `USER_NAME` or `AI_NAME` defaults. Identity emerges naturally through operator interaction.
 
 ## 3. Structural Analysis
 
@@ -138,10 +142,40 @@ sequenceDiagram
     end
 ```
 
-**Available Plugins:**
-- **`01_telemetry.py` (Default: ON)**: Injects Hardware Temps, Queue Backlogs, and Minion Inbox counts silently. Cost: 0ms.
-- **`02_rag_enrichment.py` (Configurable)**: Injects semantic memories from Qdrant into the prompt context via `INTERCEPTOR_RAG_ENABLED`.
-- **`03_circuit_breaker.py` (Configurable)**: Evaluates if the local SLM (`EdgeEngine`) can answer the prompt directly, aborting the Claude API call entirely. Toggled via `INTERCEPTOR_CIRCUIT_BREAKER_ENABLED`.
+**Available Plugins (v6.3.0):**
+| # | File | Default | Trigger | Config Flag |
+|---|---|---|---|---|
+| 01 | `01_telemetry.py` | ON | Every prompt | — |
+| 02 | `02_rag_enrichment.py` | ON | Every prompt | `INTERCEPTOR_RAG_ENABLED` |
+| 03 | `03_circuit_breaker.py` | OFF | Every prompt | `INTERCEPTOR_CIRCUIT_BREAKER_ENABLED` |
+| 04 | `04_mystique.py` | ON | Every prompt | `DYNAMIC_EMOTION_SYNC` |
+| 05 | `05_cognitive_router.py` | ON | Every prompt | `COGNITIVE_ROUTER_ENABLED` |
+| 06 | `06_tone_adapter.py` | ON | Every prompt | `TONE_ADAPTER_ENABLED` |
+| 07 | `07_mood_analytics.py` | ON | Every prompt | `MOOD_ANALYTICS_ENABLED` |
+| 08 | `08_emotive_recall.py` | ON | Every prompt | `EMOTIVE_RECALL_ENABLED` |
+| 09 | `09_proactive_signal.py` | ON | Every prompt | `PROACTIVE_SIGNAL_ENABLED` |
+| 10 | `10_predictive_preload.py` | ON | Every prompt | `PREDICTIVE_PRELOAD_ENABLED` |
+
+#### 6.2.1 The Emotional Ferrari Protocol (v6.3.0)
+
+Plugins 04–10 form the **Emotional Ferrari**: a layered emotional intelligence system that reads the Operator Mood Profile and adapts the agent's behavior on every prompt — without any explicit user command.
+
+```
+USP (Qdrant social_memories)
+  ↓ ToneAnalyzer.get_dominant_mood()
+  → current color (cyan / purple / red / ...)
+        ↓
+   [04 Mystique]       → Selects Lore Skin matching emotional chroma
+   [05 CognitiveRouter] → Routes task TYPE (architecture vs. maintenance vs. empathy)
+   [06 ToneAdapter]     → Adapts verbal STYLE (rigorous / warm / ultra-concise)
+   [07 MoodAnalytics]   → Injects TREND data (stable / improving / deteriorating)
+   [08 EmotiveRecall]   → Injects MEMORY of past same-color interactions
+   [09 ProactiveSignal] → Alerts on sustained RED (>5 consecutive) or high volatility
+   [10 PredictivePreload] → Preloads relevant work/social context by color
+```
+
+Each plugin is **silent when irrelevant** (returns `""`), activated automatically when the signal is meaningful. The pipeline runs fully concurrent via `asyncio.gather` — total overhead is bounded by the slowest plugin's timeout (2.0s max).
+
 
 ### 6.3 The Somatic Marker Hypothesis (Neuro-Immune System)
 In v6.2, we introduced the **Biological Dashboard**. Instead of overwhelming the main language model with constant JSON streams of system health, the `LazarusPulse` acts as an Autonomic Nervous System. It probes hardware states (CUDA, Qdrant) in the background. If a failure occurs, it injects a "Pain Signal" into the `signal_memories` collection. The Global Interceptor (The Thalamus) reads these signals and prepends an `[ESTADO BIOLÓGICO ACTUAL]` block to the user's prompt. 

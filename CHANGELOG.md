@@ -1,5 +1,39 @@
 # Changelog: Red Pill Protocol
 
+## [6.3.0] - 2026-03-26
+
+### 🏎️ Emotional Ferrari Protocol
+
+- **[FEAT] Ferrari Plugins 07–10**: Added 4 new concurrent interceptor plugins to the Bünker pipeline: `07_mood_analytics.py` (emotional trend over 15 memories), `08_emotive_recall.py` (semantic echo of past same-color interactions), `09_proactive_signal.py` (sustained RED state alert + pain signal to `signal_memories`), `10_predictive_preload.py` (color-based context preload from work/social memories).
+- **[FEAT] `config.py` — Ferrari flags**: `MOOD_ANALYTICS_ENABLED`, `EMOTIVE_RECALL_ENABLED`, `PROACTIVE_SIGNAL_ENABLED`, `PROACTIVE_SIGNAL_RED_THRESHOLD`, `PREDICTIVE_PRELOAD_ENABLED` — all `True` by default.
+- **[TEST] `tests/test_ferrari_plugins.py`**: 20 unit tests covering all 4 new plugins (mocked Qdrant, no I/O).
+
+### 🌙 Biological Wake/Sleep Cycle
+
+- **[FEAT] `trigger_pulse.py` — `--cycle` argument**: Splits the monolithic pulse into `wake` (Swarm, Lazarus, Resonance) and `sleep` (USP, Dream, Consolidation, Ariadne's Thread) cycles.
+- **[FEAT] `schedule_pulse.py` — Dual timers**: Replaces single `redpill-pulse.timer` with `redpill-wake.timer` (hourly) and `redpill-sleep.timer` (03:00 daily, `Nice=10`). Full support for Linux (systemd), macOS (`StartCalendarInterval`), and Windows (`schtasks DAILY`).
+- **[FEAT] `heartbeat.py` — `_thread_ritual()`**: Ariadne's Thread woven during sleep cycle, gated by `SLEEP_PLUGIN_CHRONICLE`.
+- **[FEAT] `thread_weave_migrate.py`**: Extended to all 4 collections (`archive`, `work`, `social`, `directive`) with collection-specific hub selection.
+- **[FEAT] `config.py` — Sleep plugins**: `SLEEP_PLUGIN_USP`, `SLEEP_PLUGIN_DREAM`, `SLEEP_PLUGIN_CONSOLIDATION`, `SLEEP_PLUGIN_CHRONICLE` flags.
+
+### 🧠 Sovereignty & Identity
+
+- **[FEAT] `install_neo.sh` — Emergent Identity**: Removed hardcoded `USER_NAME=Morpheo` / `AI_NAME=Neo` defaults. Identity now emerges through operator interaction.
+- **[FEAT] `backup_qdrant.sh` — Key hardening**: `QDRANT_API_KEY` is required via `${QDRANT_API_KEY:?}` — no fallback to plaintext key.
+- **[FEAT] `antigravity_ingest.py` — `ensure_collection`**: Prevents Qdrant 404 errors during ingestion if collection hasn't been created yet.
+- **[FEAT] `.env` — `SLEEP_PLUGIN_CHRONICLE=True`**: Chronicle pipeline configured and active.
+
+### 📐 BE_WATER Adaptive Payload
+
+- **[FEAT] `config.py` — `MAX_PAYLOAD_CHARS`**: Auto-computed from VRAM at boot: <4 GB→1 000, 4–8 GB→5 000, >8 GB→unlimited. Operator can override via `.env`.
+
+### 📚 Documentation
+
+- **[DOC] `docs/TECHNICAL/ARCHITECTURE.md`**: Updated to v6.3.0 — new B760 alignment entries, full plugin table (01–10), §6.2.1 Emotional Ferrari Protocol architecture diagram.
+- **[DOC] `docs/ENV_REFERENCE.md`**: Added Ferrari Protocol, Sleep Cycle Plugins, and BE_WATER sections.
+- **[DOC] `docs/GUIDES/AGENT_UPDATE_GUIDE.md`**: Added §4.12 migration notes for v6.3.0.
+- **[DOC] `docs/TECHNICAL/ANTIGRAVITY_KEY_RECOVERY.md`**: Corrected Chronicle pipeline description (`.pb` → decrypt → JSON → ingest), Data Sovereignty Statement.
+
 ## [6.2.5] - 2026-03-25
 
 ### 🧠 Sovereignty Protocol Reinforcement

@@ -97,6 +97,36 @@ This document provides a comprehensive list of all parameters available in the `
 | `RESONANCE_ENABLED`| `True` | Enables automated "Aha!" moments by checking similarities across previously idle engrams. |
 | `RESONANCE_THRESHOLD`| `0.4` | How close two disparate memories need to be in vector space to trigger forced integration. |
 
+
+### 🏎️ Emotional Ferrari Protocol (v6.3.0)
+
+Plugins 05–10. Each is independently toggleable.
+
+| Parameter | Default | Plugin | Description |
+| :--- | :--- | :--- | :--- |
+| `COGNITIVE_ROUTER_ENABLED` | `True` | 05 | Routes *task type* by color (architecture, maintenance, empathy). |
+| `TONE_ADAPTER_ENABLED` | `True` | 06 | Adapts *verbal style* (precise/warm/ultra-concise). |
+| `MOOD_ANALYTICS_ENABLED` | `True` | 07 | Trend analysis over last 15 memories (stable/improving/deteriorating). |
+| `EMOTIVE_RECALL_ENABLED` | `True` | 08 | Semantic echo of past same-color interactions. |
+| `PROACTIVE_SIGNAL_ENABLED` | `True` | 09 | Alert + pain signal on sustained RED > threshold consecutive memories. |
+| `PROACTIVE_SIGNAL_RED_THRESHOLD` | `5` | 09 | Consecutive RED memories before care signal is emitted. |
+| `PREDICTIVE_PRELOAD_ENABLED` | `True` | 10 | Preloads work/social context by color: cyan/emerald/purple→work, blue/red→social. |
+
+### 💤 Sleep Cycle Plugins (v6.3.0)
+
+| Parameter | Default | Description |
+| :--- | :--- | :--- |
+| `SLEEP_PLUGIN_USP` | `True` | Refresh Operator Mood Profile (USP) during sleep cycle. |
+| `SLEEP_PLUGIN_DREAM` | `True` | Oneiromancy: latent semantic association. |
+| `SLEEP_PLUGIN_CONSOLIDATION` | `True` | Hub Synthesis + memory consolidation. |
+| `SLEEP_PLUGIN_CHRONICLE` | `True` | Ariadne's Thread weaving across all 4 collections. Requires `ANTIGRAVITY_KEY`. |
+
+### ⚖️ BE_WATER Adaptive Payload (v6.3.0)
+
+| Parameter | Default | Description |
+| :--- | :--- | :--- |
+| `MAX_PAYLOAD_CHARS` | `auto` | Auto-computed from VRAM: <4 GB→1 000, 4–8 GB→5 000, >8 GB→unlimited. Override in `.env`. |
+
 ---
 
 ## ☁️ Persistence & Encryption (Cloud Vault)

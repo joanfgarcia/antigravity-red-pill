@@ -184,6 +184,41 @@ Replace old version with new in all 6 file locations before pushing.
     > The timer uses `Persistent=true` — if the laptop was off at 04:00, it fires on next boot.
     > If the timer is missing (`list-timers` shows nothing for chronicle), re-run `schedule_pulse.py`.
 
+
+    #### §4.12 Emotional Ferrari & Biological Wake/Sleep (v6.3.0)
+
+    **New interceptor plugins (07–10) are auto-loaded** — no configuration needed unless you want to disable them.
+
+    **New biological timers** replace the single pulse. Run once after updating:
+    ```bash
+    uv run python scripts/schedule_pulse.py --interval-hours 1
+    systemctl --user list-timers | grep redpill
+    # Expected: redpill-wake.timer + redpill-sleep.timer
+    ```
+
+    **Ferrari defaults** (all `True`):
+    ```env
+    MOOD_ANALYTICS_ENABLED=True
+    EMOTIVE_RECALL_ENABLED=True
+    PROACTIVE_SIGNAL_ENABLED=True
+    PREDICTIVE_PRELOAD_ENABLED=True
+    ```
+
+    **Sleep plugin defaults:**
+    ```env
+    SLEEP_PLUGIN_USP=True
+    SLEEP_PLUGIN_DREAM=True
+    SLEEP_PLUGIN_CONSOLIDATION=True
+    SLEEP_PLUGIN_CHRONICLE=True   # Requires ANTIGRAVITY_KEY in .env
+    ```
+
+    **Emergent Identity**: If upgrading, `USER_NAME` and `AI_NAME` in `.env` are preserved.
+    New installations start blank — identity emerges through interaction.
+
+    > [!IMPORTANT]
+    > After updating, **restart the MCP server** so the 4 new interceptor plugins are loaded
+    > into the pipeline (the plugin cache is cleared on restart via `load_plugins()`).
+
 ### 4.4 Stale Tests (API Breakage Detection)
 When a function signature or behavior changes, tests written for the old API will fail:
 1.  **Run full regression**: `uv run pytest tests/ --ignore=tests/integration -x -q --tb=short`

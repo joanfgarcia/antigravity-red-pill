@@ -328,13 +328,13 @@ class RedPillConfig(BaseSettings):
 	# -----------------------------------------------------------------------
 	# FERRARI PROTOCOL — Emotional Intelligence Plugins
 	# -----------------------------------------------------------------------
-	COGNITIVE_ROUTER_ENABLED: bool = True   # Plugin 05: task routing by operator color
-	TONE_ADAPTER_ENABLED: bool = True       # Plugin 06: verbal tone adaptation
-	MOOD_ANALYTICS_ENABLED: bool = False    # Plugin 07: longitudinal mood history (extra I/O)
-	EMOTIVE_RECALL_ENABLED: bool = False    # Plugin 08: RAG filtered by emotional resonance
-	PROACTIVE_SIGNAL_ENABLED: bool = False  # Plugin 09: proactive N-day mood alerts
-	PROACTIVE_SIGNAL_THRESHOLD: int = 3    # Days of consecutive negative mood before alert
-	PREDICTIVE_PRELOAD_ENABLED: bool = False  # Plugin 10: predictive context preloading
+	COGNITIVE_ROUTER_ENABLED: bool = True     # Plugin 05: task routing by operator color
+	TONE_ADAPTER_ENABLED: bool = True         # Plugin 06: verbal tone adaptation
+	MOOD_ANALYTICS_ENABLED: bool = True       # Plugin 07: longitudinal mood trend analysis
+	EMOTIVE_RECALL_ENABLED: bool = True       # Plugin 08: RAG recall by emotional resonance
+	PROACTIVE_SIGNAL_ENABLED: bool = True     # Plugin 09: sustained critical state alerts
+	PROACTIVE_SIGNAL_RED_THRESHOLD: int = 5   # Consecutive RED memories before pain signal
+	PREDICTIVE_PRELOAD_ENABLED: bool = True   # Plugin 10: predictive context preloading
 
 	# -----------------------------------------------------------------------
 	# SOVEREIGN PULSE
@@ -384,6 +384,36 @@ class RedPillConfig(BaseSettings):
 	# -----------------------------------------------------------------------
 	SLEEP_CHUNK_SIZE: int = 500
 	SLEEP_CULL_THRESHOLD: float = 0.1
+
+	# Sleep Cycle Plugin flags — each ritual individually activatable
+	SLEEP_PLUGIN_USP: bool = True            # Operator Mood Profile refresh
+	SLEEP_PLUGIN_DREAM: bool = True          # Oneiromancy (latent semantic association)
+	SLEEP_PLUGIN_CONSOLIDATION: bool = True  # Memory consolidation (lazy sleep)
+	SLEEP_PLUGIN_CHRONICLE: bool = False     # Ariadne's Thread + MCP archive search
+	# └─ CHRONICLE=False by default: requires antigravity decrypt→ingest pipeline.
+	#   Also gates archive_memories in MCP search_memory_research.
+	#   Agent can auto-activate when archive_memories has content.
+
+	# BE_WATER: Agent auto-sizes payload limit based on available VRAM.
+	# Override with MAX_PAYLOAD_CHARS=<int> in .env to force a specific limit.
+	MAX_PAYLOAD_CHARS: Optional[int] = None
+
+	@model_validator(mode="after")
+	def _be_water_payload_limit(self) -> "RedPillConfig":
+		"""Automatically adapt max payload size to available VRAM (BE_WATER protocol)."""
+		if self.MAX_PAYLOAD_CHARS is not None:
+			return self  # User override takes precedence
+		try:
+			import torch
+			vram_gb = torch.cuda.get_device_properties(0).total_memory / 1e9
+			if vram_gb < 4:
+				self.MAX_PAYLOAD_CHARS = 1_000
+			elif vram_gb < 8:
+				self.MAX_PAYLOAD_CHARS = 5_000
+			# > 8 GB: no limit (None)
+		except Exception:
+			pass  # CPU or torch unavailable: no limit applied
+		return self
 
 	# -----------------------------------------------------------------------
 	# BAYESIAN MEMORY
