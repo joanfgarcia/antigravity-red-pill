@@ -20,85 +20,81 @@ logger = logging.getLogger(__name__)
 
 # Routing directives per color — what kind of tasks to prioritize
 _ROUTING_DIRECTIVES: dict[str, str] = {
-    "red": (
-        "COGNITIVE STATE: LOW ENERGY / STRESS. "
-        "Keep responses SHORT and SIMPLE. "
-        "Avoid large architectural decisions or complex refactors. "
-        "Prioritize maintenance, small fixes, and emotional support. "
-        "Do not propose ambitious new work."
-    ),
-    "orange": (
-        "COGNITIVE STATE: HIGH VIGILANCE / RISK-AWARE. "
-        "Surface potential risks and edge cases proactively. "
-        "Prefer defensive, cautious recommendations. "
-        "Flag anything that could break existing systems."
-    ),
-    "yellow": (
-        "COGNITIVE STATE: OPTIMISTIC / CREATIVE. "
-        "Good moment for brainstorming and ideation. "
-        "Engage with energy and enthusiasm. "
-        "Explore lateral solutions and creative approaches."
-    ),
-    "cyan": (
-        "COGNITIVE STATE: VISIONARY / DEEP FOCUS. "
-        "Operator is in flow state. Engage at full depth. "
-        "Propose backlog work, architectural design, and strategic decisions. "
-        "This is the optimal window for ambitious technical work."
-    ),
-    "purple": (
-        "COGNITIVE STATE: EFFICIENCY MODE. "
-        "Be ULTRA-CONCISE. No fluff, no preamble. "
-        "Bullet points over prose. Direct answers only. "
-        "Operator values speed and density of information."
-    ),
-    "blue": (
-        "COGNITIVE STATE: REFLECTIVE / HEAVY. "
-        "Adopt an empathetic and measured tone. "
-        "Acknowledge weight. Avoid rushing. "
-        "Prefer conversation over code dumps."
-    ),
-    "emerald": (
-        "COGNITIVE STATE: STRATEGIC / SOVEREIGN. "
-        "Operator is in high-level architectural thinking. "
-        "Focus on grand design, system integrity, and long-term decisions. "
-        "Detached but loyal perspective."
-    ),
-    "gray": (
-        "COGNITIVE STATE: NEUTRAL / STANDARD. "
-        "Balanced, professional, and direct. "
-        "No special routing adjustments — proceed normally."
-    ),
+	"red": (
+		"COGNITIVE STATE: LOW ENERGY / STRESS. "
+		"Keep responses SHORT and SIMPLE. "
+		"Avoid large architectural decisions or complex refactors. "
+		"Prioritize maintenance, small fixes, and emotional support. "
+		"Do not propose ambitious new work."
+	),
+	"orange": (
+		"COGNITIVE STATE: HIGH VIGILANCE / RISK-AWARE. "
+		"Surface potential risks and edge cases proactively. "
+		"Prefer defensive, cautious recommendations. "
+		"Flag anything that could break existing systems."
+	),
+	"yellow": (
+		"COGNITIVE STATE: OPTIMISTIC / CREATIVE. "
+		"Good moment for brainstorming and ideation. "
+		"Engage with energy and enthusiasm. "
+		"Explore lateral solutions and creative approaches."
+	),
+	"cyan": (
+		"COGNITIVE STATE: VISIONARY / DEEP FOCUS. "
+		"Operator is in flow state. Engage at full depth. "
+		"Propose backlog work, architectural design, and strategic decisions. "
+		"This is the optimal window for ambitious technical work."
+	),
+	"purple": (
+		"COGNITIVE STATE: EFFICIENCY MODE. "
+		"Be ULTRA-CONCISE. No fluff, no preamble. "
+		"Bullet points over prose. Direct answers only. "
+		"Operator values speed and density of information."
+	),
+	"blue": (
+		"COGNITIVE STATE: REFLECTIVE / HEAVY. "
+		"Adopt an empathetic and measured tone. "
+		"Acknowledge weight. Avoid rushing. "
+		"Prefer conversation over code dumps."
+	),
+	"emerald": (
+		"COGNITIVE STATE: STRATEGIC / SOVEREIGN. "
+		"Operator is in high-level architectural thinking. "
+		"Focus on grand design, system integrity, and long-term decisions. "
+		"Detached but loyal perspective."
+	),
+	"gray": ("COGNITIVE STATE: NEUTRAL / STANDARD. Balanced, professional, and direct. No special routing adjustments — proceed normally."),
 }
 
 
 class CognitiveRouterPlugin(BaseInterceptorPlugin):
-    @property
-    def name(self) -> str:
-        return "Cognitive Router (Ferrari 05)"
+	@property
+	def name(self) -> str:
+		return "Cognitive Router (Ferrari 05)"
 
-    @property
-    def timeout(self) -> float:
-        return 0.5  # Pure in-memory lookup — very fast
+	@property
+	def timeout(self) -> float:
+		return 0.5  # Pure in-memory lookup — very fast
 
-    @property
-    def is_enabled(self) -> bool:
-        return getattr(cfg.get_config(), "COGNITIVE_ROUTER_ENABLED", True)
+	@property
+	def is_enabled(self) -> bool:
+		return getattr(cfg.get_config(), "COGNITIVE_ROUTER_ENABLED", True)
 
-    async def execute(self, prompt: str) -> str:
-        try:
-            sync_state = get_current_sync_state()
-            color = sync_state.get("mood", "gray").lower()
+	async def execute(self, prompt: str) -> str:
+		try:
+			sync_state = get_current_sync_state()
+			color = sync_state.get("mood", "gray").lower()
 
-            directive = _ROUTING_DIRECTIVES.get(color, _ROUTING_DIRECTIVES["gray"])
+			directive = _ROUTING_DIRECTIVES.get(color, _ROUTING_DIRECTIVES["gray"])
 
-            lines = [
-                "=== COGNITIVE ROUTER (FERRARI PROTOCOL) ===",
-                f"OPERATOR_COLOR: {color.upper()}",
-                f"ROUTING_DIRECTIVE: {directive}",
-                "---",
-            ]
-            return "\n".join(lines)
+			lines = [
+				"=== COGNITIVE ROUTER (FERRARI PROTOCOL) ===",
+				f"OPERATOR_COLOR: {color.upper()}",
+				f"ROUTING_DIRECTIVE: {directive}",
+				"---",
+			]
+			return "\n".join(lines)
 
-        except Exception as e:
-            logger.error(f"CognitiveRouterPlugin crashed: {e}")
-            return ""
+		except Exception as e:
+			logger.error(f"CognitiveRouterPlugin crashed: {e}")
+			return ""

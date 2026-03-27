@@ -84,7 +84,23 @@ class ChronicleIngester:
 		last_node_id = None
 
 		for idx, msg in enumerate(messages):
+			# --- Power Throttling Logic (Protocol 770) ---
+			import psutil
+
+			if hasattr(psutil, "sensors_battery"):
+				battery = psutil.sensors_battery()
+				if battery and not battery.power_plugged:
+					# Hard Halt if battery is critical
+					if battery.percent < 20:
+						logger.warning(f"CRITICAL BATTERY ({battery.percent}%). Emergency shutdown of ingestion.")
+						return
+
+					# Soft Throttle: Sleep to cool down and save power
+					logger.debug(f"Power Save Mode: Throttling ingestion (Battery @ {battery.percent}%)...")
+					time.sleep(1.0)  # Introduce latency to drop CPU usage
+
 			role = msg.get("role")
+
 			content = msg.get("content", "")
 			if not content or role == "system":
 				continue  # Skip empty or system noise

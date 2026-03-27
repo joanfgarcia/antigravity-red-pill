@@ -44,7 +44,15 @@ class HardwareSentinel(BaseTelemetryProvider):
 			},
 			"gpu": [],
 			"npu": {"status": "Undetected"},
+			"power": {"battery_percent": None, "ac_online": True},
 		}
+
+		# Battery & Power Logic
+		if hasattr(psutil, "sensors_battery"):
+			battery = psutil.sensors_battery()
+			if battery:
+				stats["power"]["battery_percent"] = round(battery.percent, 1)
+				stats["power"]["ac_online"] = battery.power_plugged
 
 		# NVIDIA GPU Logic (CUDA)
 		if shutil.which("nvidia-smi"):
@@ -119,7 +127,7 @@ class HardwareSentinel(BaseTelemetryProvider):
 		except Exception:
 			# Fallback if sysfs restricted
 			if os.path.exists("/sys/class/drm/renderD128"):
-				stats["gpu"].append({"name": "AMD Radeon", "type": "ROCm", "status": "Ready", "memory": "N/A"})
+				stats["gpu"].append({"name": "AMD Radeon (iGPU)", "type": "ROCm", "status": "Ready", "memory": "N/A"})
 
 		# Ryzen AI NPU
 		if os.path.exists("/sys/class/accel/accel0"):
@@ -183,7 +191,14 @@ def get_telemetry_report() -> str:
 	# NPU
 	report += f"[NPU] {stats['npu'].get('name', 'NPU')}: {stats['npu']['status']}\n"
 
+	# Power
+	pwr = stats.get("power", {})
+	if pwr.get("battery_percent") is not None:
+		ac_status = "🔌 AC" if pwr["ac_online"] else "🔋 BATTERY"
+		report += f"[POWER] {pwr['battery_percent']}% ({ac_status})\n"
+
 	# Memory Queue
+
 	try:
 		from red_pill.core.queue_manager import MemoryQueueManager
 		from red_pill.memory import MemoryManager

@@ -56,6 +56,7 @@ def _inject_pain_signal(title: str, details: str, severity: float = 8.0) -> None
 	"""Inject a pain signal into signal_memories so the Cortex is notified."""
 	try:
 		from red_pill.memory import MemoryManager
+
 		mem = MemoryManager()
 		mem.add_memory(
 			collection="signal_memories",
@@ -79,6 +80,7 @@ def _get_antigravity_key() -> str | None:
 	import os
 
 	from dotenv import load_dotenv
+
 	load_dotenv()
 	return os.environ.get("ANTIGRAVITY_KEY")
 
@@ -118,6 +120,7 @@ def _llm_available() -> bool:
 	"""Quick check if the local LLM endpoint responds."""
 	import os
 	import urllib.request
+
 	url = os.environ.get("MLX_LM_URL", "http://127.0.0.1:8760/v1/chat/completions")
 	# Just check the base URL
 	base = url.rsplit("/", 2)[0]
@@ -179,19 +182,14 @@ def main() -> None:
 
 		# ── Step 1: Decrypt ───────────────────────────────────────────────────
 		decrypt_ok = _run(
-			uv + [str(SCRIPTS_DIR / "antigravity_decrypt.py"),
-				str(CONVERSATIONS_DIR), "--output", str(WORK_DIR), "--key", key],
-			"DECRYPT"
+			uv + [str(SCRIPTS_DIR / "antigravity_decrypt.py"), str(CONVERSATIONS_DIR), "--output", str(WORK_DIR), "--key", key], "DECRYPT"
 		)
 		if not decrypt_ok:
 			logger.error("Decrypt failed. Aborting pipeline.")
 			return
 
 		# ── Step 2: Ingest ────────────────────────────────────────────────────
-		ingest_ok = _run(
-			uv + [str(SCRIPTS_DIR / "antigravity_ingest.py"), "--dir", str(WORK_DIR)],
-			"INGEST"
-		)
+		ingest_ok = _run(uv + [str(SCRIPTS_DIR / "antigravity_ingest.py"), "--dir", str(WORK_DIR)], "INGEST")
 		if not ingest_ok:
 			logger.error("Ingest failed. Aborting pipeline.")
 			return

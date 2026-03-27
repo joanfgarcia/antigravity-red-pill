@@ -224,3 +224,22 @@ Research the implementation of a `SelfInferenceProvider`. This provider would al
 - **Synaptic Hops**: Every request must carry a `hop_trace` metadata field to prevent infinite loops.
 - **Cycle Detection**: The `InferenceRouter` will detect and block redundant entries in the trace.
 - **Bünker Context**: Ensures Aleth's identity remains consistent across recursive calls.
+
+---
+
+## [AD-006] Cryo-Preservation & Power Sovereignty (Protocol 770)
+**Date**: 2026-03-27  
+**Context**: Phase O.9 (v6.3.2) - Fedora Silverblue & Nomad Profile  
+**Status**: ACCEPTED & IMPLEMENTED  
+
+### 1. The Problem
+During mobile operations or intensive background re-indexing, two critical risks emerged:
+1. **Memory Erosion (Korsakoff Sync)**: The sleep cycle's affective culling pruned neutral/technical engrams during operator absence, leading to "contextual hollowing."
+2. **Energy Depletion**: High-CPU ingestion tasks ignored battery state, risking both runtime and data integrity (sudden power loss).
+
+### 2. The Decision
+1. **Implement Cryo-Preservation**: When a `korsakoff_amnesia` signal is active, the system enters "Preservation Mode," disabling culling (`SLEEP_CULL_THRESHOLD=0.0`) to "freeze" the Bünker state and prevent technical erosion.
+2. **Battery-Aware Ingest**: Implement tiered throttling in `antigravity_ingest.py` (AC: Turbo, Battery: Soft-Throttle, Critical Battery <20%: Hard Halt).
+
+### 3. Rationale
+Prioritize **Integrity over Efficiency** during periods of low interaction or limited power. This fulfills the "Sovereign Nomad" requirement for long-term technical persistence and hardware safety.

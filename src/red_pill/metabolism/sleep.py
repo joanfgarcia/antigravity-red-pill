@@ -255,7 +255,24 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 		logger.info("Sleep Cycle complete. No unprocessed interactions found.")
 		return 0
 
+	# --- Protocol 770: Cryo-Preservation Logic ---
+	active_signals = []
+	try:
+		sig_result = memory_manager.client.scroll(collection_name="signal_memories", limit=100)
+		active_signals = [s.payload.get("name") for s in sig_result[0] if s.payload]
+	except Exception:
+		pass
+
+	hibernating = "korsakoff_amnesia" in active_signals
+	thermal_stress = "cpu_fever" in active_signals or "cuda_cortex_failure" in active_signals
+
+	if hibernating:
+		logger.info("[SLEEP ENGINE] Korsakoff active (Operator absent). Switching to PRESERVATION MODE (Culling disabled).")
+	if thermal_stress:
+		logger.warning("[SLEEP ENGINE] System stress detected. Minimizing metabolic load.")
+
 	# LLM Health Check: if the distillation model is unreachable, abort and signal pain.
+
 	# Nodes are preserved in interaction_memories for the next cycle.
 	if not _check_llm_available():
 		logger.warning("[SLEEP ENGINE] Local LLM is offline. Aborting sleep cycle. Injecting pain signal.")
@@ -322,7 +339,9 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 			summary = distilled.get("summary", "")
 
 			# Phase 2: Affective Culling (Amygdala Validation)
-			if emotion == "neutral" and intensity < cfg.SLEEP_CULL_THRESHOLD and len(chunks) > 1:
+			# Protocol 770: Disable culling if hibernation (Operator absent) is active
+			current_threshold = 0.0 if hibernating else cfg.SLEEP_CULL_THRESHOLD
+			if emotion == "neutral" and intensity < current_threshold and len(chunks) > 1:
 				logger.debug(f"[AFFECTIVE CULLING] Dropped chunk {i + 1} (low biological relevance).")
 				continue
 

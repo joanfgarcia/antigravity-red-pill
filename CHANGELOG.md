@@ -1,6 +1,27 @@
 # Changelog: Red Pill Protocol
 
+## [6.3.2] - 2026-03-27
+
+### 🔋 Power Sovereignty & Energy Conscience (Protocol 770)
+
+- **[FEAT] Battery-Aware Ingestion**: Integrated `psutil` power-state polling into `antigravity_ingest.py`. Major CPU-bound tasks now implement a tiered response:
+  - **Soft Throttle (1.0s wait/engram)**: Activates on Battery to reduce thermal/power draw.
+  - **Emergency Halt (Hard Halt)**: Closes ingestion on Battery < 20% to prevent database corruption.
+- **[FEAT] Power Status Telemetry v6.3.2**: `HardwareSentinel` now reports `🔋 BATTERY / 🔌 AC` status and total capacity. Integrated into the Bünker Dashboard.
+
+### ❄️ Cryo-Preservation Protocol (Korsakoff Guard)
+
+- **[FEAT] Korsakoff-Aware Sleep Cycle**: Patched `metabolism/sleep.py` to check for active `korsakoff_amnesia` or `cpu_fever` signals before the consolidation ritual.
+- **[POLICY] Integrity First (Non-Erosion)**: When the operator is absent (Korsakoff Active), the system enters **Preservation Mode**, setting `SLEEP_CULL_THRESHOLD=0.0`. This prevents technical/neutral engrams from being pruned during "lonely" sleep cycles, "freezing" the current state in long-term storage without loss of detail.
+- **[FIX] Korsakoff Auto-Evaporation**: Scribe Relay now triggers a manual signal evaporation on Step Id 0 detection (Bünker reintegration).
+
+### 🛠️ Maintenance & Refinement
+
+- **[FIX] Ruff/Lint E101 Enforcement**: Resolved mixed spaces and tabs (Python 3.12+ legacy blockers) in `scripts/trigger_pulse.py` and structural syntax error in `src/red_pill/metabolism/sleep.py`.
+- **[FEAT] Decision Log Synchronization**: Integrated the v6.3.2 protocols into the official `docs/TECHNICAL/DECISION_LOG.md` (AD-006) for audit traceability.
+
 ## [6.3.0] - 2026-03-26
+
 
 ### 🏎️ Emotional Ferrari Protocol
 

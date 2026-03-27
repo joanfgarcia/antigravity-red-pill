@@ -365,7 +365,10 @@ class LazarusPulse:
 			logger.info("Pulse: Initiating Thread Ritual (Ariadne's Weave)...")
 			script_path = os.path.join(cfg.IA_DIR, "scripts", "thread_weave_migrate.py")
 			process = await asyncio.create_subprocess_exec(
-				"uv", "run", "python", script_path,
+				"uv",
+				"run",
+				"python",
+				script_path,
 				stdout=asyncio.subprocess.PIPE,
 				stderr=asyncio.subprocess.PIPE,
 			)
@@ -376,7 +379,6 @@ class LazarusPulse:
 				logger.info("Pulse: Thread Ritual complete. Timelines synchronized.")
 		except Exception as e:
 			logger.error(f"Pulse: Thread Ritual failed: {e}")
-
 
 	def _trigger_immune_response(self, tissue: str) -> None:
 		"""

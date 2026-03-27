@@ -66,8 +66,7 @@ def migrate(dry_run: bool = False) -> None:
 
 		# Sort chronologically by created_at
 		hubs.sort(key=lambda p: p.payload.get("created_at", 0))
-		logger.info(f"  Found {len(hubs)} hubs spanning "
-					f"{hubs[0].payload.get('created_at', '?')} → {hubs[-1].payload.get('created_at', '?')}")
+		logger.info(f"  Found {len(hubs)} hubs spanning {hubs[0].payload.get('created_at', '?')} → {hubs[-1].payload.get('created_at', '?')}")
 
 		linked = 0
 		for i in range(1, len(hubs)):

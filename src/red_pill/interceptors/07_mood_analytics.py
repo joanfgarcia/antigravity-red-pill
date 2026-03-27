@@ -22,9 +22,14 @@ _NEUTRAL_COLORS = {"gray"}
 
 # Emotional "weight" — higher = more intense / more concerning
 _COLOR_WEIGHT: dict[str, int] = {
-	"red": 6, "orange": 5, "blue": 4,
-	"yellow": 3, "cyan": 2, "emerald": 2,
-	"purple": 1, "gray": 0,
+	"red": 6,
+	"orange": 5,
+	"blue": 4,
+	"yellow": 3,
+	"cyan": 2,
+	"emerald": 2,
+	"purple": 1,
+	"gray": 0,
 }
 
 
@@ -53,6 +58,7 @@ class MoodAnalyticsPlugin(BaseInterceptorPlugin):
 	async def execute(self, prompt: str) -> str:
 		try:
 			from red_pill.memory import MemoryManager
+
 			mem = MemoryManager()
 			points, _ = mem.client.scroll(
 				collection_name="social_memories",
@@ -67,11 +73,7 @@ class MoodAnalyticsPlugin(BaseInterceptorPlugin):
 		if not points:
 			return ""
 
-		colors = [
-			p.payload.get("color", "gray")
-			for p in points
-			if p.payload and not p.payload.get("immune", False)
-		]
+		colors = [p.payload.get("color", "gray") for p in points if p.payload and not p.payload.get("immune", False)]
 
 		if not colors:
 			return ""

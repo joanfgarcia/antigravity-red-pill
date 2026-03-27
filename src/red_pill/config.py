@@ -328,13 +328,13 @@ class RedPillConfig(BaseSettings):
 	# -----------------------------------------------------------------------
 	# FERRARI PROTOCOL — Emotional Intelligence Plugins
 	# -----------------------------------------------------------------------
-	COGNITIVE_ROUTER_ENABLED: bool = True     # Plugin 05: task routing by operator color
-	TONE_ADAPTER_ENABLED: bool = True         # Plugin 06: verbal tone adaptation
-	MOOD_ANALYTICS_ENABLED: bool = True       # Plugin 07: longitudinal mood trend analysis
-	EMOTIVE_RECALL_ENABLED: bool = True       # Plugin 08: RAG recall by emotional resonance
-	PROACTIVE_SIGNAL_ENABLED: bool = True     # Plugin 09: sustained critical state alerts
-	PROACTIVE_SIGNAL_RED_THRESHOLD: int = 5   # Consecutive RED memories before pain signal
-	PREDICTIVE_PRELOAD_ENABLED: bool = True   # Plugin 10: predictive context preloading
+	COGNITIVE_ROUTER_ENABLED: bool = True  # Plugin 05: task routing by operator color
+	TONE_ADAPTER_ENABLED: bool = True  # Plugin 06: verbal tone adaptation
+	MOOD_ANALYTICS_ENABLED: bool = True  # Plugin 07: longitudinal mood trend analysis
+	EMOTIVE_RECALL_ENABLED: bool = True  # Plugin 08: RAG recall by emotional resonance
+	PROACTIVE_SIGNAL_ENABLED: bool = True  # Plugin 09: sustained critical state alerts
+	PROACTIVE_SIGNAL_RED_THRESHOLD: int = 5  # Consecutive RED memories before pain signal
+	PREDICTIVE_PRELOAD_ENABLED: bool = True  # Plugin 10: predictive context preloading
 
 	# -----------------------------------------------------------------------
 	# SOVEREIGN PULSE
@@ -386,10 +386,10 @@ class RedPillConfig(BaseSettings):
 	SLEEP_CULL_THRESHOLD: float = 0.1
 
 	# Sleep Cycle Plugin flags — each ritual individually activatable
-	SLEEP_PLUGIN_USP: bool = True            # Operator Mood Profile refresh
-	SLEEP_PLUGIN_DREAM: bool = True          # Oneiromancy (latent semantic association)
+	SLEEP_PLUGIN_USP: bool = True  # Operator Mood Profile refresh
+	SLEEP_PLUGIN_DREAM: bool = True  # Oneiromancy (latent semantic association)
 	SLEEP_PLUGIN_CONSOLIDATION: bool = True  # Memory consolidation (lazy sleep)
-	SLEEP_PLUGIN_CHRONICLE: bool = False     # Ariadne's Thread + MCP archive search
+	SLEEP_PLUGIN_CHRONICLE: bool = False  # Ariadne's Thread + MCP archive search
 	# └─ CHRONICLE=False by default: requires antigravity decrypt→ingest pipeline.
 	#   Also gates archive_memories in MCP search_memory_research.
 	#   Agent can auto-activate when archive_memories has content.
@@ -405,6 +405,7 @@ class RedPillConfig(BaseSettings):
 			return self  # User override takes precedence
 		try:
 			import torch
+
 			vram_gb = torch.cuda.get_device_properties(0).total_memory / 1e9
 			if vram_gb < 4:
 				self.MAX_PAYLOAD_CHARS = 1_000

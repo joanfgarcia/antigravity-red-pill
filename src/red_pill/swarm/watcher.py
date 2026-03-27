@@ -6,9 +6,9 @@ import sys
 import time
 from datetime import datetime
 
-# Watcher specific lock files to prevent multiple instances
-WATCHER_LOCK_PATH = "/tmp/.red_pill_watcher.lock"
-PENDING_MESSAGES_FILE = os.path.expanduser("~/.agent/.pending_swagger_messages.json")
+# Watcher specific lock files to prevent multiple instances (Namespaced by user)
+WATCHER_LOCK_PATH = f"/tmp/.red_pill_watcher_{os.getlogin()}.lock"
+PENDING_MESSAGES_FILE = os.path.expanduser("~/.gemini/antigravity/.pending_messages.json")
 
 
 def notify_macos(title: str, text: str):
@@ -36,6 +36,7 @@ def inject_context_pill(sender, message_preview):
 	messages.append({"timestamp": datetime.now().isoformat(), "sender": sender, "preview": message_preview, "status": "unread"})
 
 	try:
+		os.makedirs(os.path.dirname(PENDING_MESSAGES_FILE), exist_ok=True)
 		with open(PENDING_MESSAGES_FILE, "w") as f:
 			json.dump(messages, f, indent=2)
 	except Exception as e:

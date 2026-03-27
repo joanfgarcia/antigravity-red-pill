@@ -159,11 +159,16 @@ def _uninstall_linux() -> None:
 	for timer in (WAKE_TIMER, SLEEP_TIMER, "redpill-telemetry.timer", "redpill-queue.timer", "redpill-chronicle.timer"):
 		subprocess.run(["systemctl", "--user", "disable", "--now", timer], check=False)
 	for name in (
-		WAKE_TIMER, WAKE_SERVICE,
-		SLEEP_TIMER, SLEEP_SERVICE,
-		"redpill-telemetry.timer", "redpill-telemetry.service",
-		"redpill-queue.timer", "redpill-queue.service",
-		"redpill-chronicle.timer", "redpill-chronicle.service",
+		WAKE_TIMER,
+		WAKE_SERVICE,
+		SLEEP_TIMER,
+		SLEEP_SERVICE,
+		"redpill-telemetry.timer",
+		"redpill-telemetry.service",
+		"redpill-queue.timer",
+		"redpill-queue.service",
+		"redpill-chronicle.timer",
+		"redpill-chronicle.service",
 	):
 		path = os.path.join(SYSTEMD_USER_DIR, name)
 		if os.path.exists(path):
@@ -285,9 +290,19 @@ def _install_windows(interval_hours: int, uv_path: str) -> None:
 
 def _create_win_task(name, command, minutes):
 	cmd = [
-		"schtasks", "/create", "/tn", name, "/tr",
+		"schtasks",
+		"/create",
+		"/tn",
+		name,
+		"/tr",
 		f'cmd.exe /c cd /d "{PROJECT_ROOT}" && {command}',
-		"/sc", "MINUTE", "/mo", str(minutes), "/f", "/rl", "HIGHEST",
+		"/sc",
+		"MINUTE",
+		"/mo",
+		str(minutes),
+		"/f",
+		"/rl",
+		"HIGHEST",
 	]
 	subprocess.run(cmd, check=True)
 
@@ -295,9 +310,19 @@ def _create_win_task(name, command, minutes):
 def _create_win_daily_task(name: str, command: str, start_time: str) -> None:
 	"""Create a Windows Task Scheduler task that runs daily at a fixed time."""
 	cmd = [
-		"schtasks", "/create", "/tn", name, "/tr",
+		"schtasks",
+		"/create",
+		"/tn",
+		name,
+		"/tr",
 		f'cmd.exe /c cd /d "{PROJECT_ROOT}" && {command}',
-		"/sc", "DAILY", "/st", start_time, "/f", "/rl", "HIGHEST",
+		"/sc",
+		"DAILY",
+		"/st",
+		start_time,
+		"/f",
+		"/rl",
+		"HIGHEST",
 	]
 	subprocess.run(cmd, check=True)
 

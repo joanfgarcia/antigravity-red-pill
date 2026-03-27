@@ -35,10 +35,11 @@ async def oneshot_pulse(cycle: str = "full") -> None:
 	Execute a biological pulse cycle.
 
 	Cycles:
-	  wake  — Social/connectivity rituals (hourly). Swarm, Lazarus, Resonance.
-	  sleep — Memory consolidation rituals (daily at 03:00). USP, Dream, Consolidation, Thread.
-	  full  — All rituals (legacy/manual use).
+		wake  — Social/connectivity rituals (hourly). Swarm, Lazarus, Resonance.
+		sleep — Memory consolidation rituals (daily at 03:00). USP, Dream, Consolidation, Thread.
+		full  — All rituals (legacy/manual use).
 	"""
+
 	print(f"Initiating Oneshot Lazarus Pulse (Cycle: {cycle})...")
 
 	# CUDA drift check — always runs, non-blocking

@@ -19,7 +19,10 @@ update_env() {
 	else
 		echo "${key}=${value}" >> "$ENV_FILE"
 	fi
+	# Protocol 770 Fix: Export immediately to current session
+	export "${key}"="${value}"
 }
+
 
 OS_TYPE=$(uname -s)
 DISTRO="unknown"
@@ -137,7 +140,26 @@ else
 	source .env
 	set +a
 fi
-export IA_DIR="${ANTIGRAVITY_IA_DIR:-$HOME/Documents/IA}"
+# Dynamic IA_DIR discovery (Protocol 770 Safe-Path)
+if [ -z "${IA_DIR:-}" ]; then
+	# 1. Check if the script is running inside a subfolder of an 'IA' directory
+	# Project is usually at $IA_DIR/sharing/scripts/install_neo.sh
+	POTENTIAL_IA_DIR="$(cd "$SCRIPT_DIR/../../" && pwd)"
+	if [[ "$POTENTIAL_IA_DIR" == */IA ]]; then
+		export IA_DIR="$POTENTIAL_IA_DIR"
+	# 2. Check standard English path
+	elif [ -d "$HOME/Documents/IA" ]; then
+		export IA_DIR="$HOME/Documents/IA"
+	# 3. Check standard Spanish path (Fix for Silverblue/Office environments)
+	elif [ -d "$HOME/Documentos/IA" ]; then
+		export IA_DIR="$HOME/Documentos/IA"
+	else
+		echo -e "${RED}[ERROR] IA_DIR no detectado. Por favor, crea ~/Documentos/IA o setea IA_DIR manualmente.${NC}"
+		exit 1
+	fi
+fi
+echo -e "${GREEN}✓ IA_DIR anclado en: $IA_DIR${NC}"
+
 
 check_encryption() {
 	if [[ "$OS_TYPE" == "Linux" ]]; then

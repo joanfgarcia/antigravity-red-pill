@@ -42,6 +42,7 @@ class EmotiveRecallPlugin(BaseInterceptorPlugin):
 				return ""  # Neutral state — no emotional echo needed
 
 			from red_pill.memory import MemoryManager
+
 			mem = MemoryManager()
 
 			# Semantic search for emotionally-similar past interactions

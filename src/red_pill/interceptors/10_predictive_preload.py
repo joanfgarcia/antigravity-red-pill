@@ -27,11 +27,11 @@ _TOP_K = 3
 # Which collection to query per color + the search query hint
 _PRELOAD_MAP: dict[str, tuple[str, str, int]] = {
 	# color → (collection, query, top_k)
-	"cyan":    ("work_memories",   "active technical work architecture code", 3),
-	"emerald": ("work_memories",   "strategic architecture long-term design decision", 2),
-	"purple":  ("work_memories",   "recent tasks completed summary progress", 2),
-	"blue":    ("social_memories", "reflection emotional processing connection", 2),
-	"red":     ("social_memories", "support care wellbeing operator feeling", 2),
+	"cyan": ("work_memories", "active technical work architecture code", 3),
+	"emerald": ("work_memories", "strategic architecture long-term design decision", 2),
+	"purple": ("work_memories", "recent tasks completed summary progress", 2),
+	"blue": ("social_memories", "reflection emotional processing connection", 2),
+	"red": ("social_memories", "support care wellbeing operator feeling", 2),
 }
 
 
@@ -59,6 +59,7 @@ class PredictivePreloadPlugin(BaseInterceptorPlugin):
 			collection, query, top_k = _PRELOAD_MAP[color]
 
 			from red_pill.memory import MemoryManager
+
 			mem = MemoryManager()
 			results = mem.search_memory(
 				collection=collection,

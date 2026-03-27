@@ -73,6 +73,7 @@ def get_encryption():
 			# Fallback for Silverblue / OSTree (check /dev/mapper)
 			try:
 				import os
+
 				if os.path.exists("/dev/mapper"):
 					mapper_list = os.listdir("/dev/mapper")
 					if any(m.startswith("luks-") for m in mapper_list):

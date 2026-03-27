@@ -46,6 +46,7 @@ class ProactiveSignalPlugin(BaseInterceptorPlugin):
 		global _pain_signal_emitted
 		try:
 			from red_pill.memory import MemoryManager
+
 			mem = MemoryManager()
 			points, _ = mem.client.scroll(
 				collection_name="social_memories",
@@ -60,11 +61,7 @@ class ProactiveSignalPlugin(BaseInterceptorPlugin):
 		if not points:
 			return ""
 
-		colors = [
-			p.payload.get("color", "gray")
-			for p in points
-			if p.payload and not p.payload.get("immune", False)
-		]
+		colors = [p.payload.get("color", "gray") for p in points if p.payload and not p.payload.get("immune", False)]
 
 		if not colors:
 			return ""
@@ -94,6 +91,7 @@ class ProactiveSignalPlugin(BaseInterceptorPlugin):
 			if not _pain_signal_emitted:
 				try:
 					from red_pill.memory import MemoryManager as _MM
+
 					_m = _MM()
 					_m.add_memory(
 						collection="signal_memories",
