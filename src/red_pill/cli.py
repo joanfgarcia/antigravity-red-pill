@@ -246,6 +246,7 @@ def get_collection(type_str: str) -> str:
 		"work": "work_memories",
 		"story": "story_memories",
 		"directive": "directive_memories",
+		"interaction": "interaction_memories",
 	}
 	return mapping.get(type_str, "directive_memories")
 
@@ -317,7 +318,7 @@ def main() -> None:
 	subparsers.add_parser("seed", help="Initialize memory substrate")
 
 	add_parser = subparsers.add_parser("add", help="Add engram")
-	add_parser.add_argument("type", choices=["work", "social", "directive", "story"])
+	add_parser.add_argument("type", choices=["work", "social", "directive", "story", "interaction"])
 	add_parser.add_argument("content")
 	add_parser.add_argument("--color", choices=["orange", "yellow", "purple", "cyan", "blue", "gray"], default=cfg.DEFAULT_COLOR)
 	add_parser.add_argument(
@@ -328,20 +329,20 @@ def main() -> None:
 	add_parser.add_argument("--intensity", type=float, default=1.0)
 
 	search_parser = subparsers.add_parser("search", help="Search and reinforce")
-	search_parser.add_argument("type", choices=["work", "social", "directive", "story"])
+	search_parser.add_argument("type", choices=["work", "social", "directive", "story", "interaction"])
 	search_parser.add_argument("query")
 	search_parser.add_argument("--limit", type=int, default=3)
 	search_parser.add_argument("--deep", action="store_true", help="Deep Recall bypass")
 
 	erode_parser = subparsers.add_parser("erode", help="B760 erosion")
-	erode_parser.add_argument("type", choices=["work", "social", "directive", "story"])
+	erode_parser.add_argument("type", choices=["work", "social", "directive", "story", "interaction"])
 	erode_parser.add_argument("--rate", type=float)
 
 	diag_parser = subparsers.add_parser("diag", help="Diagnostics")
-	diag_parser.add_argument("type", choices=["work", "social", "directive", "story"])
+	diag_parser.add_argument("type", choices=["work", "social", "directive", "story", "interaction"])
 
 	sanitize_parser = subparsers.add_parser("sanitize", help="Sanitation & Migration Protocol")
-	sanitize_parser.add_argument("type", choices=["work", "social", "directive", "story"])
+	sanitize_parser.add_argument("type", choices=["work", "social", "directive", "story", "interaction"])
 	sanitize_parser.add_argument("--dry-run", action="store_true", help="Report without changes")
 	sanitize_parser.add_argument("--raw", action="store_true", help="Bypass Pydantic validation (Raw Read maintenance fallback)")
 
@@ -376,7 +377,7 @@ def main() -> None:
 	migrate_parser.add_argument("--reencrypt", action="store_true", help="Step 2: re-encrypt kits after pure-mls v3.0 upgrade")
 
 	edit_parser = subparsers.add_parser("edit", help="Edit engram attributes")
-	edit_parser.add_argument("type", choices=["work", "social", "directive", "story"])
+	edit_parser.add_argument("type", choices=["work", "social", "directive", "story", "interaction"])
 	edit_parser.add_argument("id", help="The UUID of the engram to edit")
 	edit_parser.add_argument("--color", choices=["orange", "yellow", "purple", "cyan", "blue", "gray"])
 	edit_parser.add_argument(

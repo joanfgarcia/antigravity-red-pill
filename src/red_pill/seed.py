@@ -40,6 +40,7 @@ def seed_project(manager: MemoryManager) -> None:
 		"core_directives",
 		"signal_memories",
 		"archive_memories",
+		"interaction_memories",
 	]
 	for coll in collections:
 		if not manager.client.collection_exists(coll):

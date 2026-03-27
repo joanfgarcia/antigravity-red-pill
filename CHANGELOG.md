@@ -1,5 +1,12 @@
 # Changelog: Red Pill Protocol
 
+## [6.3.3] - 2026-03-27
+
+### 🧬 Bünker Genesis & Interaction Persistence
+- **[FIX] Genesis Seed Refinement**: Added `interaction_memories` to the default collections in `red_pill/seed.py`. This ensures that fresh installations (like on Fedora Silverblue) possess the necessary substrate for "Short-term Memory" from the first turn.
+- **[FEAT] First-Class Interaction management**: `interaction` is now an available `type` in the CLI for `add`, `search`, `diag`, `sanitize`, and `edit`.
+- **[FEAT] Decision Log AD-007**: Documented the Mandatory Interaction Grounding requirement in `docs/TECHNICAL/DECISION_LOG.md`.
+
 ## [6.3.2] - 2026-03-27
 
 ### 🔋 Power Sovereignty & Energy Conscience (Protocol 770)

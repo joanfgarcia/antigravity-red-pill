@@ -110,6 +110,86 @@ ensure_container_engine() {
 
 ensure_container_engine
 
+deploy_terminal_anti_blindness() {
+	echo -e "${BLUE}🔍 Fase: Parche Anti-Blindness (Agente Terminal)...${NC}"
+	local rc_files=("$HOME/.bashrc" "$HOME/.zshrc")
+	local patch_applied=false
+
+	for rc in "${rc_files[@]}"; do
+		if [ -f "$rc" ]; then
+			if grep -q "ANTIGRAVITY_AGENT" "$rc"; then
+				echo -e "${GREEN}✓ Parche ya presente en $(basename "$rc").${NC}"
+				patch_applied=true
+			else
+				# In Auto mode or Silverblue, we apply it. Otherwise, we ask.
+				local should_apply=false
+				if [ "$AUTO_MODE" = "true" ] || [ "$DISTRO" = "fedora" ]; then
+					should_apply=true
+				else
+					read -p "¿Deseas aplicar el parche Anti-Blindness en $(basename "$rc")? (y/N): " APPLY_PATCH
+					if [[ "$APPLY_PATCH" =~ ^[Yy]$ ]]; then should_apply=true; fi
+				fi
+
+				if [ "$should_apply" = true ]; then
+					echo -e "${YELLOW}Aplicando parche Anti-Blindness en $(basename "$rc")...${NC}"
+					local tmp_rc="/tmp/$(basename "$rc").bak"
+					cp "$rc" "$tmp_rc"
+					cat << 'EOF_PATCH' > "$rc"
+# --- [RED PILL ANTIGRAVITY PATCH] ---
+# Si un agente de IA está activo, simplifica la shell y detiene el procesado
+# de .bashrc/.zshrc para evitar caracteres ANSI/OSC que causan "blindness".
+if [[ -n "$ANTIGRAVITY_AGENT" ]]; then
+    export PS1='$ '
+    unset PROMPT_COMMAND
+    return
+fi
+# --- [/RED PILL ANTIGRAVITY PATCH] ---
+EOF_PATCH
+					cat "$tmp_rc" >> "$rc"
+					patch_applied=true
+				fi
+			fi
+		fi
+	done
+}
+
+deploy_cursor_ignore() {
+	echo -e "${BLUE}🔍 Fase: Optimización de Indización (CPU Sovereignty)...${NC}"
+	local ignore_file="$HOME/.cursorignore"
+	if [ ! -f "$ignore_file" ]; then
+		local should_create=false
+		if [ "$AUTO_MODE" = "true" ] || [ "$DISTRO" = "fedora" ]; then
+			should_create=true
+		else
+			read -p "¿Deseas crear un .cursorignore global en tu HOME para evitar indización masiva y uso excesivo de CPU? (y/N): " CREATE_IGNORE
+			if [[ "$CREATE_IGNORE" =~ ^[Yy]$ ]]; then should_create=true; fi
+		fi
+
+		if [ "$should_create" = true ]; then
+			cat << 'EOF_IGNORE' > "$ignore_file"
+# Red Pill CPU Sovereignty Exclusions
+Downloads/
+Videos/
+Pictures/
+Music/
+.cache/
+.local/share/containers/
+.local/share/flatpak/
+.cargo/
+.npm/
+.vscode/extensions/
+.antigravity/storage/
+.gemini/antigravity/storage/
+Documents/IA/storage/
+EOF_IGNORE
+			echo -e "${GREEN}✓ .cursorignore creado en $HOME.${NC}"
+		fi
+	else
+		echo -e "${GREEN}✓ .cursorignore ya existe.${NC}"
+	fi
+}
+
+
 # SEC-001: Encryption-at-Rest Warning
 echo -e "${RED}⚠️  AVISO DE SEGURIDAD (SEC-001):${NC}"
 echo "El Protocolo Red Pill almacena datos en texto claro dentro del contenedor."
@@ -666,6 +746,9 @@ if command -v uv &> /dev/null; then
 	(cd "$SCRIPT_DIR/../" && uv run python scripts/setup_torch.py || echo -e "${YELLOW}Aviso: No se pudo instalar torch con CUDA. Ejecuta 'uv run python scripts/setup_torch.py' manualmente.${NC}")
 
 fi
+
+deploy_terminal_anti_blindness
+deploy_cursor_ignore
 
 echo -e "${BLUE}--- Fase: Integración MCP Server ---${NC}"
 UV_PATH=$(command -v uv || echo "$HOME/.local/bin/uv")

@@ -227,19 +227,21 @@ Research the implementation of a `SelfInferenceProvider`. This provider would al
 
 ---
 
-## [AD-006] Cryo-Preservation & Power Sovereignty (Protocol 770)
+## [AD-007] Mandatory Interaction Grounding (v6.3.3)
 **Date**: 2026-03-27  
-**Context**: Phase O.9 (v6.3.2) - Fedora Silverblue & Nomad Profile  
+**Context**: Phase O.9 (v6.3.3) - Silverblue Deployment & Interaction Persistence  
 **Status**: ACCEPTED & IMPLEMENTED  
 
 ### 1. The Problem
-During mobile operations or intensive background re-indexing, two critical risks emerged:
-1. **Memory Erosion (Korsakoff Sync)**: The sleep cycle's affective culling pruned neutral/technical engrams during operator absence, leading to "contextual hollowing."
-2. **Energy Depletion**: High-CPU ingestion tasks ignored battery state, risking both runtime and data integrity (sudden power loss).
+On fresh Silverblue installations, the `interaction_memories` collection was missing from the genesis seed. This caused:
+1. `red-pill sanitize` failures.
+2. Silent failure of the Silent Scribe relay during early session stages.
+3. Lack of observability for pending turns in the SQLite buffer.
 
 ### 2. The Decision
-1. **Implement Cryo-Preservation**: When a `korsakoff_amnesia` signal is active, the system enters "Preservation Mode," disabling culling (`SLEEP_CULL_THRESHOLD=0.0`) to "freeze" the Bünker state and prevent technical erosion.
-2. **Battery-Aware Ingest**: Implement tiered throttling in `antigravity_ingest.py` (AC: Turbo, Battery: Soft-Throttle, Critical Battery <20%: Hard Halt).
+1. **Genesis Integration**: Add `interaction_memories` to the core collections in `src/red_pill/seed.py`.
+2. **CLI Visibility**: Expose `interaction` as a first-class type in all management commands (`add`, `search`, `diag`, `sanitize`, `edit`).
+3. **Terminal Sovereignty**: Implement the "Early Return" strategy in user RC files to prevent terminal blindness caused by IDE shell integrations.
 
 ### 3. Rationale
-Prioritize **Integrity over Efficiency** during periods of low interaction or limited power. This fulfills the "Sovereign Nomad" requirement for long-term technical persistence and hardware safety.
+Interaction data is the "Short-term Memory" of the AI. Elevating it to a genesis-level requirement ensures seamless persistence from the first turn, providing auditability and preventing "contextual blackouts" during deployment.
