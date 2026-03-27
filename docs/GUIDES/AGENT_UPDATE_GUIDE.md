@@ -219,6 +219,33 @@ Replace old version with new in all 6 file locations before pushing.
     > After updating, **restart the MCP server** so the 4 new interceptor plugins are loaded
     > into the pipeline (the plugin cache is cleared on restart via `load_plugins()`).
 
+    #### §4.13 Sovereign Terminal & Genesis Hardening (v6.3.3)
+
+    This update introduces critical infrastructure to prevent "Agent Blindness" and ensure that new Bünkers are interaction-ready from the first turn.
+
+    **1. Terminal Anti-Blindness (Early Return)**:
+    If your agent is "blind" to terminal output (common in Fedora Silverblue or with complex shell themes), you MUST apply the **Early Return** patch to your `~/.bashrc` or `~/.zshrc`. This is handled automatically by `scripts/install_neo.sh`, but manually:
+    ```bash
+    # Add to the TOP of your .bashrc / .zshrc
+    if [[ -n "$ANTIGRAVITY_AGENT" ]]; then
+        export PS1='$ '
+        unset PROMPT_COMMAND
+        return
+    fi
+    ```
+
+    **2. CPU Sovereignty (.cursorignore)**:
+    To prevent the IDE from launching massive background `rg` (ripgrep) processes on system folders, ensure a global `~/.cursorignore` exists in your HOME directory. The installer now provides a default one.
+
+    **3. Interaction Genesis**:
+    The `red-pill seed` command now includes the `interaction_memories` collection by default.
+    - **Existing installations**: Run `uv run red-pill seed` again to ensure the collection exists.
+    - **Sanitize**: You can now run `uv run red-pill sanitize interaction` to clean up session memories.
+    - **Search**: Use `uv run red-pill search interaction "query"` for debugging session persistence.
+
+    **4. Verification**:
+    Run `red-pill status` and verify that all memory collections (including `interaction`) are reported as healthy.
+
 ### 4.4 Stale Tests (API Breakage Detection)
 When a function signature or behavior changes, tests written for the old API will fail:
 1.  **Run full regression**: `uv run pytest tests/ --ignore=tests/integration -x -q --tb=short`
