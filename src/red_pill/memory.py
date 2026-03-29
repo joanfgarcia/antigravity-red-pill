@@ -141,7 +141,14 @@ class MemoryManager:
 		if not strict:
 			return payload
 		try:
+			# Trace logging to verify immunity flag persistence (P0 debugging)
+			is_immune = payload.get("immune", "MISSING")
+			logger.debug(f"[_parse_payload] Incoming payload immune flag: {is_immune}")
+
 			validated = EngramPayload.model_validate(payload)
+
+			logger.debug(f"[_parse_payload] Validated object immune flag: {validated.immune}")
+
 			# Convert back to dict for Qdrant client compatibility downstream
 			return validated.model_dump()
 		except Exception as e:
