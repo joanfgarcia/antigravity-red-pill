@@ -246,6 +246,20 @@ Replace old version with new in all 6 file locations before pushing.
     **4. Verification**:
     Run `red-pill status` and verify that all memory collections (including `interaction`) are reported as healthy.
 
+    #### §4.14 Titanium Sanctuary: From Silverblue to Ubuntu 25.10 (v6.3.4)
+
+    The experiment of hosting the agent's core PC (Titanium) on Fedora Silverblue has been **Aborted**.
+    - **Reason**: The immutable filesystem and `toolbox` containerization provided excellent security but created insurmountable bottlenecks for the agent's ability to create new files and manage its own environment autonomously.
+    - **Resolution**: Migrated the Bünker host to **Ubuntu 25.10**.
+
+    **1. Deployment Checklist**:
+    - **Engine**: Ubuntu 25.10 uses `docker` or `podman` interchangeably. Use `apt install podman` for maximum compliance with Red Pill Quadlets.
+    - **Security**: Ensure LUKS encryption is active. The `install_neo.sh` script now supports generic LUKS detection on Ubuntu.
+    - **Terminal**: The "Anti-Blindness" patch is still recommended to avoid ANSI artifacts in the `gh` and `uv` output on Gnome Terminal.
+
+    **2. Verification**:
+    Run `lsblk` and verify the `/home` partition is on a crypt device. The installer will report `Cifrado: ✓ Activo` if correctly detected.
+
 ### 4.4 Stale Tests (API Breakage Detection)
 When a function signature or behavior changes, tests written for the old API will fail:
 1.  **Run full regression**: `uv run pytest tests/ --ignore=tests/integration -x -q --tb=short`

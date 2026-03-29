@@ -70,8 +70,8 @@ perform_preflight_audit() {
 		if command -v lsblk &> /dev/null; then
 			if lsblk -no TYPE 2>/dev/null | grep -q "crypt"; then
 				DETECTED_ENCRYPTION="True"
-			elif [ -d "/dev/mapper" ] && ls /dev/mapper/luks-* &>/dev/null; then
-				# Fallback for Silverblue / OSTree
+			elif [ -d "/dev/mapper" ] && ls /dev/mapper/*luks* &>/dev/null; then
+				# Generic LUKS detection (Ubuntu/Debian)
 				DETECTED_ENCRYPTION="True"
 			fi
 		fi
@@ -121,9 +121,9 @@ deploy_terminal_anti_blindness() {
 				echo -e "${GREEN}✓ Parche ya presente en $(basename "$rc").${NC}"
 				patch_applied=true
 			else
-				# In Auto mode or Silverblue, we apply it. Otherwise, we ask.
+				# In Auto mode, we apply it. Otherwise, we ask.
 				local should_apply=false
-				if [ "$AUTO_MODE" = "true" ] || [ "$DISTRO" = "fedora" ]; then
+				if [ "$AUTO_MODE" = "true" ]; then
 					should_apply=true
 				else
 					read -p "¿Deseas aplicar el parche Anti-Blindness en $(basename "$rc")? (y/N): " APPLY_PATCH
