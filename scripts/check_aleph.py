@@ -1,5 +1,6 @@
 import os
 import sys
+
 from qdrant_client import QdrantClient
 
 # Add project root to path
@@ -12,6 +13,6 @@ ID_ALEPH = "00000000-0000-0000-0000-000000000001"
 res = client.retrieve(collection_name="social_memories", ids=[ID_ALEPH], with_payload=True)
 
 if res:
-    print(f"Payload for Aleph: {res[0].payload}")
+	print(f"Payload for Aleph: {res[0].payload}")
 else:
-    print("Aleph not found.")
+	print("Aleph not found.")

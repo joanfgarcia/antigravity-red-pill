@@ -5,10 +5,10 @@ Preloads relevant context from work/social memories based on the
 Operator's current emotional color — before it's explicitly requested.
 
 Color → Collection mapping:
-  cyan / emerald → work_memories  (deep focus, architectural work)
-  purple         → work_memories  (efficiency, last tasks summary)
-  blue / red     → social_memories (empathy, reflective context)
-  others         → no preload
+	cyan / emerald → work_memories  (deep focus, architectural work)
+	purple         → work_memories  (efficiency, last tasks summary)
+	blue / red     → social_memories (empathy, reflective context)
+	others         → no preload
 
 Enable/Disable: PREDICTIVE_PRELOAD_ENABLED=True in .env
 """

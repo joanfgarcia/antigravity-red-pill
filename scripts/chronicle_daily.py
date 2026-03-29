@@ -3,7 +3,7 @@
 chronicle_daily.py — Autonomous Chronicle Ingestion Pipeline
 
 Automates the full chronicle ritual for unprocessed conversations:
-  decrypt → ingest → distill → refine
+	decrypt → ingest → distill → refine
 
 Designed to run as a systemd --user oneshot service (daily, Persistent=true).
 If the system was suspended at scheduled time, runs on next wake/boot.

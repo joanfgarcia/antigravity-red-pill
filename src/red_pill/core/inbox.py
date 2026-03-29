@@ -17,8 +17,8 @@ class MinionInbox:
 
 	def __init__(self, db_path: Optional[str] = None):
 		if db_path is None:
-			# Default to the brain path, alongside the vector DB files
-			self.db_path = os.path.join(cfg.BRAIN_PATH, "minion_inbox.db")
+			# Sovereign Pod path inside sharing storage repository
+			self.db_path = os.path.join(cfg._IA_DIR, "storage", "queue", "minion_inbox.db")
 		else:
 			self.db_path = db_path
 

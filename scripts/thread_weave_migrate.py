@@ -13,10 +13,10 @@ Also bootstraps ~/.agent/thread_state.json so the next sleep cycle
 continues the thread from the most recent hub.
 
 Run once after upgrading to sleep.py Phase 5 (Thread Weaving):
-    uv run python scripts/thread_weave_migrate.py
+	uv run python scripts/thread_weave_migrate.py
 
 Run with --dry-run to inspect without writing:
-    uv run python scripts/thread_weave_migrate.py --dry-run
+	uv run python scripts/thread_weave_migrate.py --dry-run
 """
 
 import argparse

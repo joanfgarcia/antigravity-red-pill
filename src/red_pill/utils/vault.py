@@ -25,7 +25,7 @@ VAULT_STATE_PATH = os.path.join(os.path.expanduser("~/.config/red_pill"), "vault
 # Problem: sharing a single MLSGroup state across both use cases couples their
 # lifecycles. A swarm key rotation (add_member/process_update) advances the epoch
 # and wipes the SecretTree, which breaks decryption of old LEAN_SOUL_KIT ciphertexts
-# if the same group object is reused.
+# same group object reuse causes cross-use-case state corruption.
 #
 # Proposed implementation (after pure-mls ≥ 3.0.0.9 is deployed to red-pill):
 #   VAULT_KIT_STATE_PATH   = ~/.config/red_pill/vault_kit.state

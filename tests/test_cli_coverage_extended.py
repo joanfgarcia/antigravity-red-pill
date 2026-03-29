@@ -80,7 +80,7 @@ def test_main_backup_error():
 
 
 def test_main_signal_logic():
-	test_args = ["red-pill", "signal", "Test message", "--title", "Test Title", "--sound"]
+	test_args = ["red-pill", "signal", "push", "Test message", "--title", "Test Title", "--sound"]
 	with patch("sys.argv", test_args):
 		with patch("red_pill.utils.observer.notify_user") as mock_notify:
 			with patch("red_pill.cli.MemoryManager"):

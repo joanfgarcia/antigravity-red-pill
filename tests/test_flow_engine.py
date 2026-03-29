@@ -23,12 +23,7 @@ def test_local_override_and_lock(tmp_path, flow_engine):
 
 	# Create a local override for a non-locked flow
 	flows_yaml = agent_dir / "flows.yaml"
-	flows_yaml.write_text(
-		"flows:\n"
-		"  deep-research:\n"
-		"    name: 'Custom Research'\n"
-		"    locked: false\n"
-	)
+	flows_yaml.write_text("flows:\n  deep-research:\n    name: 'Custom Research'\n    locked: false\n")
 
 	# Load flows pointing to tmp_path as CWD
 	flows = flow_engine.load_flows(cwd=str(tmp_path))
@@ -38,12 +33,7 @@ def test_local_override_and_lock(tmp_path, flow_engine):
 def test_lock_enforcement(tmp_path, flow_engine):
 	# Setup a "Community" locked flow manually for test
 	comm_file = tmp_path / "community_flows.yaml"
-	comm_file.write_text(
-		"flows:\n"
-		"  compliance-audit:\n"
-		"    name: 'Enterprise Audit'\n"
-		"    locked: true\n"
-	)
+	comm_file.write_text("flows:\n  compliance-audit:\n    name: 'Enterprise Audit'\n    locked: true\n")
 
 	engine = FlowEngine(FLOW_REGISTRY_PATH, community_registry_path=str(comm_file))
 
@@ -51,11 +41,7 @@ def test_lock_enforcement(tmp_path, flow_engine):
 	agent_dir = tmp_path / ".agent"
 	agent_dir.mkdir()
 	flows_yaml = agent_dir / "flows.yaml"
-	flows_yaml.write_text(
-		"flows:\n"
-		"  compliance-audit:\n"
-		"    name: 'Hacked Audit'\n"
-	)
+	flows_yaml.write_text("flows:\n  compliance-audit:\n    name: 'Hacked Audit'\n")
 
 	flows = engine.load_flows(cwd=str(tmp_path))
 	# Should resist override because it's locked in community layer

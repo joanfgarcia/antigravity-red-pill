@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v6.3.0 (Emotional Ferrari)
+**System Version**: v6.3.4 (Emotional Ferrari)
 **Analyst**: The Architect
 **Date**: 2026-03-13
 
@@ -38,7 +38,7 @@ The Red Pill Protocol v5.6.3 has achieved stability and functional alignment wit
 - **[NEW v6.3.0] Emotional Ferrari Protocol (Plugins 05–10)**: Extended the interceptor pipeline with 6 emotional intelligence plugins over the Operator Mood Profile (USP). Auto-discovered via `pkgutil`, concurrently executed on every prompt. See §6.2.1 and [FERRARI_PROTOCOL.md](FERRARI_PROTOCOL.md).
 - **[NEW v6.3.0] BE_WATER Adaptive Payload**: `MAX_PAYLOAD_CHARS` auto-computed from available VRAM at boot: <4 GB→1 000, 4–8 GB→5 000, >8 GB→unlimited. Override via `.env`.
 - **[NEW v6.3.0] Emergent Identity**: `install_neo.sh` no longer pre-seeds `USER_NAME` or `AI_NAME` defaults. Identity emerges naturally through operator interaction.
-
+- **[NEW v6.3.4] Sovereign Pod Storage**: Re-architected storage boundaries. SQLite queue databases (`bunker_queue.db`, `minion_inbox.db`) have been migrated from external host paths into the self-contained `<IA_DIR>/storage/queue/` directory, unifying state persistence and ensuring true Pod portability.
 ## 3. Structural Analysis
 
 ### 3.1. Entropy & Erosion Scalability (The 'Great Filter' Problem)

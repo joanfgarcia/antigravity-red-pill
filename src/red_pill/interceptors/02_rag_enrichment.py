@@ -57,18 +57,7 @@ class RagEnrichmentPlugin(BaseInterceptorPlugin):
 
 			background = "\n---\n".join(unique_results)
 
-			# Background logging task
-			def _log_interceptor():
-				try:
-					from red_pill.memory import MemoryManager
-
-					MemoryManager().record_interaction_pair(
-						prompt, f"[INTERCEPTOR] Injected {len(unique_results)} RAG context chunks.", role="assistant"
-					)
-				except Exception:
-					pass
-
-			asyncio.create_task(asyncio.to_thread(_log_interceptor))
+			# Log removed to prevent overwriting the Assistant's real conversational response in work_memories.
 
 			return f"[CONTEXTO CORTEX ENCONTRADO PARA ESTA TAREA]\n{background}"
 

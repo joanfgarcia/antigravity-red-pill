@@ -2,6 +2,13 @@
 
 ## [6.3.4] - 2026-03-29
 
+### 🗄️ Sovereign Pod Consolidation & Memory Integrity
+- **[ARCH] Queue Isolation**: Migrated `bunker_queue.db` and `minion_inbox.db` out of the external `~/.gemini/antigravity/brain/` host directory into the isolated `<IA_DIR>/storage/queue/` Sovereign Pod boundary.
+- **[ARCH] Background Storage Restructure**: Refactored Qdrant storage volume to map internally to `<IA_DIR>/storage/db` in the podman quadlet, alongside fastembed caches in `<IA_DIR>/storage/models`.
+- **[FIX] Systemd Timer Alignment**: Patched `redpill-queue.service` and `redpill-telemetry.service` to correctly execute the v6.3.0 modular entrypoints (`red_pill.core.queue_worker` and `bunker_telemetry.py`), fixing background ingestion failures.
+- **[FIX] RAG Interceptor Pollution**: Surgically removed a rogue background logging task in `02_rag_enrichment.py` that was overwriting genuine Assistant responses in `work_memories` with `[INTERCEPTOR] Injected X RAG context chunks`, preventing data loss during context injection.
+- **[SEC-008] Ignored Environments**: Added `experimental/` layer to `.gitignore` preventing ternary weight explosion into the source index.
+
 ### 🏗️ Titanium Sanctuary: Ubuntu 25.10 Transition
 - **[OS] Silverblue Migration Aborted**: Formally documented the failure of the Fedora Silverblue immutable filesystem experiment. Permissions and file-creation blocks in the terminal environment proved incompatible with the agent's autonomous workflow.
 - **[FIX] install_neo.sh Generalization**: 

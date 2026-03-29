@@ -79,3 +79,6 @@ cookies/
 
 # Runtime-generated benchmark artifacts
 SOVEREIGNTY_PROOF.json
+
+# Experimental Ternary Models
+experimental/

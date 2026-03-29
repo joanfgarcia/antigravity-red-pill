@@ -2,9 +2,9 @@
 Ferrari Plugin 07 — Mood Analytics
 =====================================
 Analyzes the last 15 social_memories to compute emotional trend data:
-  - Dominant color across the session sample
-  - Trend direction (improving / stable / deteriorating)
-  - Persistence: consecutive count of the current color
+	- Dominant color across the session sample
+	- Trend direction (improving / stable / deteriorating)
+	- Persistence: consecutive count of the current color
 
 Enable/Disable: MOOD_ANALYTICS_ENABLED=True in .env
 """

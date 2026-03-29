@@ -10,7 +10,7 @@ Enable the co-residency and orchestration of multiple sovereign agents (Aleth + 
 - **Bünker Isolation**: 
   - Aleth (Bünker A): Qdrant Port `6333`
   - Titanium (Bünker B): Qdrant Port `6334`
-- **Workspace Anchoring**: Separate `/home/joan/Documents/IA/` subdirectories to prevent file-system collisions.
+- **Workspace Anchoring**: Separate `<IA_DIR>/` subdirectories to prevent file-system collisions.
 - **Hardware Pooling**:
   - Shared `FASTEMBED_CACHE_PATH`.
   - Shared Local LLM (Ollama/VLLM) endpoint via 5070-CUDA.

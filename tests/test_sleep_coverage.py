@@ -15,7 +15,10 @@ def test_distill_engram_markdown_cleaning():
 	mock_opener = MagicMock()
 	mock_opener.open.return_value = mock_resp
 
-	with patch("red_pill.metabolism.sleep.os.path.exists", return_value=False), patch("red_pill.metabolism.sleep.urllib.request.build_opener", return_value=mock_opener):
+	with (
+		patch("red_pill.metabolism.sleep.os.path.exists", return_value=False),
+		patch("red_pill.metabolism.sleep.urllib.request.build_opener", return_value=mock_opener),
+	):
 		result = distill_engram("raw")
 	assert result["summary"] == "test"
 	assert result["emotion"] == "joy"
@@ -24,7 +27,10 @@ def test_distill_engram_markdown_cleaning():
 	mock_resp.read.return_value = json.dumps(
 		{"choices": [{"message": {"content": '```\n{"summary": "test2", "emotion": "sadness", "intensity": 0.1}\n```'}}]}
 	).encode()
-	with patch("red_pill.metabolism.sleep.os.path.exists", return_value=False), patch("red_pill.metabolism.sleep.urllib.request.build_opener", return_value=mock_opener):
+	with (
+		patch("red_pill.metabolism.sleep.os.path.exists", return_value=False),
+		patch("red_pill.metabolism.sleep.urllib.request.build_opener", return_value=mock_opener),
+	):
 		result = distill_engram("raw")
 	assert result["summary"] == "test2"
 
@@ -33,7 +39,10 @@ def test_distill_engram_error_path():
 	"""Test fallback on HTTP error or timeout."""
 	mock_opener = MagicMock()
 	mock_opener.open.side_effect = Exception("Timeout")
-	with patch("red_pill.metabolism.sleep.os.path.exists", return_value=False), patch("red_pill.metabolism.sleep.urllib.request.build_opener", return_value=mock_opener):
+	with (
+		patch("red_pill.metabolism.sleep.os.path.exists", return_value=False),
+		patch("red_pill.metabolism.sleep.urllib.request.build_opener", return_value=mock_opener),
+	):
 		result = distill_engram("raw content that is quite long " * 10)
 		assert "raw content" in result["summary"]
 		assert result["emotion"] == "neutral"

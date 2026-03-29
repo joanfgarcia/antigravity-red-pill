@@ -4,10 +4,10 @@ Ferrari Plugin 09 — Proactive Signal
 Monitors for sustained critical emotional states and emits care signals.
 
 Triggers:
-  - RED sustained > PROACTIVE_SIGNAL_RED_THRESHOLD consecutive memories
-    → Injects care suggestion + writes pain signal to signal_memories (once per session)
-  - High emotional volatility (> 3 color changes in last 5 memories)
-    → Injects stability note
+	- RED sustained > PROACTIVE_SIGNAL_RED_THRESHOLD consecutive memories
+		→ Injects care suggestion + writes pain signal to signal_memories (once per session)
+	- High emotional volatility (> 3 color changes in last 5 memories)
+		→ Injects stability note
 
 Enable/Disable: PROACTIVE_SIGNAL_ENABLED=True in .env
 Config: PROACTIVE_SIGNAL_RED_THRESHOLD (default: 5)
