@@ -16,6 +16,34 @@ logger = logging.getLogger(__name__)
 # SEC-001: Vault State Persistence
 VAULT_STATE_PATH = os.path.join(os.path.expanduser("~/.config/red_pill"), "vault_group.state")
 
+# TODO(post-pure-mls-upgrade): Separate MLS group states by purpose — VAULT-STATE-SPLIT
+#
+# Currently vault_group.state is shared between:
+#   1. LEAN_SOUL_KIT encryption (.tar.gz.mls) — solo-member, epoch-0, never rotates
+#   2. Future swarm messaging — multi-member, epoch advances on each commit
+#
+# Problem: sharing a single MLSGroup state across both use cases couples their
+# lifecycles. A swarm key rotation (add_member/process_update) advances the epoch
+# and wipes the SecretTree, which breaks decryption of old LEAN_SOUL_KIT ciphertexts
+# if the same group object is reused.
+#
+# Proposed implementation (after pure-mls ≥ 3.0.0.9 is deployed to red-pill):
+#   VAULT_KIT_STATE_PATH   = ~/.config/red_pill/vault_kit.state
+#       Purpose: LEAN_SOUL_KIT encryption only. Solo-member. Never rotates.
+#       Lifecycle: created once, never advanced. Stable forever.
+#   VAULT_SWARM_STATE_PATH = ~/.config/red_pill/vault_swarm.state
+#       Purpose: Swarm inter-agent messaging. Multi-member. Rotates per epoch.
+#       Lifecycle: advances with each add_member/process_update in MLS swarm.
+#
+# Compatibility invariant: vault_group.state bytes serialize COMPUTED secrets,
+# not derivation formulas. If the file exists and is NOT deleted, it is fully
+# compatible across pure-mls versions. Only NEW group creation (MLSGroup.create)
+# is affected by changes to genesis derivation (P0-C fix).
+#
+# Migration path: rename existing vault_group.state → vault_kit.state on first boot
+# after the split, so existing LEAN_SOUL_KIT backups remain decryptable.
+# See: ARCHITECTURE.md §Vault State Management
+
 
 class CloudVault:
 	"""
@@ -112,6 +140,18 @@ class CloudVault:
 	def _get_vault_group(self) -> MLSGroup:
 		"""
 		Retrieves or initializes the MLS Group for Vault encryption.
+
+		IMPORTANT — pure-mls version compatibility:
+		The vault_group.state file stores serialized epoch secrets (pre-computed bytes).
+		As long as this file is NOT deleted, decryption of existing .mls kits works
+		across all pure-mls versions. Only MLSGroup.create() is affected by genesis
+		derivation changes — and that only runs when the state file is absent.
+
+		NEVER delete vault_group.state without first decrypting all .mls backups,
+		or they will become permanently inaccessible.
+
+		See module-level VAULT-STATE-SPLIT TODO for the planned separation of this
+		state into vault_kit.state (LEAN_SOUL_KIT) and vault_swarm.state (messaging).
 		"""
 		kem_key, sig_key = VaultCrypto.get_identity()
 
