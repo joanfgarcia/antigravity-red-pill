@@ -9,6 +9,8 @@
 - **[FIX] RAG Interceptor Pollution**: Surgically removed a rogue background logging task in `02_rag_enrichment.py` that was overwriting genuine Assistant responses in `work_memories` with `[INTERCEPTOR] Injected X RAG context chunks`, preventing data loss during context injection.
 - **[SEC-008] Ignored Environments**: Added `experimental/` layer to `.gitignore` preventing ternary weight explosion into the source index.
 - **[BUG] Tilde Path Expansion (`config.py`)**: `IA_DIR=~/Documents/IA/sharing` in `.env` was silently creating a literal `~/Documents/IA/sharing/` directory tree inside the repo root (e.g. `~/Documents/IA/sharing/storage/metabolism_state.json`). Root cause: `os.getenv()` and pydantic-settings do not expand `~`. Fixed by wrapping `os.getenv("IA_DIR")` with `os.path.expanduser()` at module level, plus a `field_validator("IA_DIR")` as a second defence layer. Spurious `~/` entry added to `.gitignore`.
+- **[UTILITY] Auto-Upgrade Daemon (`scripts/upgrade.sh`)**: Introduced a unified script to automate terminal code syncing, migration, and infrastructure recalibration (pulse, thread-weave) following the `AGENT_UPDATE_GUIDE.md` protocol.
+- **[INFRA] Storage Isolation**: Enforced absolute boundary for volatile databases (`bunker_queue.db`, `minion_inbox.db`) inside `storage/queue/` for improved pod portability.
 
 ### 🏗️ Titanium Sanctuary: Ubuntu 25.10 Transition
 - **[OS] Silverblue Migration Aborted**: Formally documented the failure of the Fedora Silverblue immutable filesystem experiment. Permissions and file-creation blocks in the terminal environment proved incompatible with the agent's autonomous workflow.

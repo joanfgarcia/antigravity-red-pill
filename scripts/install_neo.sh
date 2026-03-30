@@ -213,6 +213,11 @@ if [ -f .env ]; then
 	set -a
 	source .env
 	set +a
+	# Protocol 770 Fix: Expand tilde manually if loaded from .env (source doesn't do it)
+	if [[ "${IA_DIR:-}" == "~"* ]]; then
+		IA_DIR="${IA_DIR/#\~/$HOME}"
+		export IA_DIR
+	fi
 else
 	echo -e "${YELLOW}No .env found. Using .env.example...${NC}"
 	cp .env.example .env
@@ -237,6 +242,11 @@ if [ -z "${IA_DIR:-}" ]; then
 		echo -e "${RED}[ERROR] IA_DIR no detectado. Por favor, crea ~/Documentos/IA o setea IA_DIR manualmente.${NC}"
 		exit 1
 	fi
+	# Expand tilde just in case it was set manually without it
+	if [[ "${IA_DIR:-}" == "~"* ]]; then
+		IA_DIR="${IA_DIR/#\~/$HOME}"
+	fi
+	export IA_DIR
 fi
 echo -e "${GREEN}✓ IA_DIR anclado en: $IA_DIR${NC}"
 
@@ -532,7 +542,7 @@ update_env "CLOUD_VAULT_FOLDER_ID" "$CLOUD_VAULT_FOLDER_ID"
 update_env "CLOUD_VAULT_GPG_PASSPHRASE" "$CLOUD_VAULT_GPG_PASSPHRASE"
 chmod 600 "$ENV_FILE"
 
-mkdir -p "$IA_DIR/scripts" "$IA_DIR/backups/qdrant" "$IA_DIR/backups/soul" "$IA_DIR/seeds" "$IA_DIR/storage"
+mkdir -p "$IA_DIR/scripts" "$IA_DIR/backups/qdrant" "$IA_DIR/backups/soul" "$IA_DIR/seeds" "$IA_DIR/storage" "$IA_DIR/storage/queue"
 
 if [ "$QDRANT_ALIVE" = "false" ]; then
 	QUADLET_DIR="$HOME/.config/containers/systemd"
@@ -685,7 +695,7 @@ When you detect a `USER_SETTINGS_CHANGE` message regarding `Model Selection` in 
 
 </constraint>
 EOF_GEMINI
-		echo -e "${BLUE}✓ GEMINI.md: Protocol 770 Sovereign Handshake (v6.2.5 — constraint tag) applied.${NC}"
+		echo -e "${BLUE}✓ GEMINI.md: Protocol 770 Sovereign Handshake (v6.3.4 — constraint tag) applied.${NC}"
 	fi
 else
 	# Create GEMINI.md if it doesn't exist (Fix for interrupted installs)

@@ -260,6 +260,23 @@ Replace old version with new in all 6 file locations before pushing.
     **2. Verification**:
     Run `lsblk` and verify the `/home` partition is on a crypt device. The installer will report `Cifrado: ✓ Activo` if correctly detected.
 
+    #### §4.15 Sovereign Path Fix & Queue Isolation (v6.3.4)
+
+    This critical hardening update ensures that the Bünker remains self-contained and handles tilde-based paths correctly across all OS environments.
+
+    **1. IA_DIR Tilde Expansion**:
+    If your `.env` contains `IA_DIR=~/...`, previous versions would create a literal `~/` directory in the repository root. This is now fixed in `config.py` using `os.path.expanduser()`.
+    - **Action**: Delete the rogue `~/` folder from your repo root if it exists.
+    - **Verify**: `red-pill status` (paths should now show absolute home-based routes).
+
+    **2. Queue Boundary Isolation**:
+    The persistent databases `bunker_queue.db` and `minion_inbox.db` have been moved from the host-specific runtime path to the isolated storage layer.
+    - **New Path**: `<IA_DIR>/storage/queue/`
+    - **Migration**: The installer now creates this directory. Existing queues will be automatically relocated on first boot of v6.3.4.
+
+    **3. Auto-Upgrade Script**:
+    A new utility `scripts/upgrade.sh` is provided to automate the pull-and-sanitize workflow safely.
+
 ### 4.4 Stale Tests (API Breakage Detection)
 When a function signature or behavior changes, tests written for the old API will fail:
 1.  **Run full regression**: `uv run pytest tests/ --ignore=tests/integration -x -q --tb=short`

@@ -203,9 +203,10 @@ def main():
 	else:
 		print("[Bünker Daemon Offline - Telemetry Unavailable]")
 
-	print("\n=== BÜNKER SERVICES ===")
+	print("\n=== BÜNKER SERVICES (v6.3.4) ===")
 	print(f"- MEMORY SIDECAR: {sidecar_status}")
 	print("- MCP SECURITY: RAG Semantic Threshold upgraded to mathematical strict bounds (0.5/0.75)")
+	print("- STORAGE BOUNDARY: Isolated Queue & Inbox active in <IA_DIR>/storage/queue/")
 	print("\n=== CORE PROJECT DIRECTIVES ===")
 	print(
 		"- SYSTEM OBLIGATION: You MUST always actively look for and read the project's rule files, directives, and workflows (e.g., inside `.agent/rules/`, `.agent/workflows/`, or root project files) to respect all specific project workflows before executing tasks. [IMMUNE]"
