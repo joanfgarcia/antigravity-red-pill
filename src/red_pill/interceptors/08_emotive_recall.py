@@ -9,6 +9,7 @@ Enable/Disable: EMOTIVE_RECALL_ENABLED=True in .env
 """
 
 import logging
+from typing import List
 
 import red_pill.config as cfg
 from red_pill.interceptors.base import BaseInterceptorPlugin
@@ -47,7 +48,7 @@ class EmotiveRecallPlugin(BaseInterceptorPlugin):
 
 			# Semantic search for emotionally-similar past interactions
 			query = f"operator {color} emotional state feeling interaction"
-			results = mem.search_memory(
+			results = mem.search_and_reinforce(
 				collection="social_memories",
 				query=query,
 				limit=_TOP_K + 2,  # Extra to allow filtering
@@ -57,7 +58,7 @@ class EmotiveRecallPlugin(BaseInterceptorPlugin):
 				return ""
 
 			# Filter by same color if payload has it, otherwise accept all
-			echoes = []
+			echoes: List[str] = []
 			for r in results:
 				payload = getattr(r, "payload", {}) or {}
 				# Prefer memories of matching color, but don't exclude others

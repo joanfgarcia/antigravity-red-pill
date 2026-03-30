@@ -257,7 +257,7 @@ class LazarusPulse:
 			shared_secret = os.getenv("SWARM_SHARED_SECRET")
 			if not shared_secret:
 				raise ValueError("CRÍTICO: SWARM_SHARED_SECRET no está configurado. Abortando conexión a la Colmena.")
-			skill = SwarmMessagingSkill(agent_identity=agent_identity, shared_secret=shared_secret)
+			skill = SwarmMessagingSkill(agent_identity=agent_identity, shared_secret=shared_secret.encode())
 
 			# We use a thread since the current Firebase SDK interaction is synchronous
 			messages = await asyncio.to_thread(skill.check_mailbox)

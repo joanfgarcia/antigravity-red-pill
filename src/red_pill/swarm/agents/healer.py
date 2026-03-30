@@ -63,7 +63,7 @@ class HealerMinion(Minion):
 
 	def _parse_errors(self, lines: List[str]) -> Dict[str, List[Dict]]:
 		"""Groups errors by file."""
-		parsed = {}
+		parsed: Dict[str, List[Dict[str, Any]]] = {}
 		for line in lines:
 			match = re.match(r"([^:]+):(\d+): error: (.+)", line)
 			if match:

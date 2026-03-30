@@ -61,7 +61,7 @@ class PredictivePreloadPlugin(BaseInterceptorPlugin):
 			from red_pill.memory import MemoryManager
 
 			mem = MemoryManager()
-			results = mem.search_memory(
+			results = mem.search_and_reinforce(
 				collection=collection,
 				query=query,
 				limit=top_k,

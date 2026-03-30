@@ -141,7 +141,9 @@ class SwarmMessagingSkill:
 				if not plaintext:
 					self.logger.error("[SwarmMessaging] MLS decryption returned None.")
 					return None
-				return json.loads(plaintext.decode("utf-8"))
+				from typing import cast
+
+				return cast(Dict[str, Any], json.loads(plaintext.decode("utf-8")))
 			else:
 				self.logger.warning(f"[SwarmMessaging] Unknown mode '{mode}'. Dropping message.")
 				return None

@@ -204,11 +204,11 @@ def get_dominant_operator_mood(
 def _get_dominant_color(vector: Dict[str, float]) -> str:
 	"""Returns the color with the highest weight, excluding gray."""
 	if not vector:
-		return cfg.DEFAULT_COLOR
+		return str(cfg.DEFAULT_COLOR)
 
 	# Filter out gray (neutral) for dominance calculation
 	candidates = {k: v for k, v in vector.items() if k != "gray" and v > 0}
 	if not candidates:
-		return cfg.DEFAULT_COLOR
+		return str(cfg.DEFAULT_COLOR)
 
-	return max(candidates, key=candidates.get)  # type: ignore[arg-type]
+	return str(max(candidates, key=candidates.get))  # type: ignore[arg-type]

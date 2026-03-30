@@ -99,7 +99,7 @@ class OpenAIInferenceProvider(BaseInferenceProvider):
 				},
 			)
 			response.raise_for_status()
-			return response.json()["choices"][0]["message"]["content"]
+			return str(response.json()["choices"][0]["message"]["content"])
 
 	def stream(self, prompt: str, **kwargs) -> Iterator[str]:
 		# Implementation for streaming
@@ -137,7 +137,7 @@ class SipInferenceProvider(BaseInferenceProvider):
 		conn.request("POST", "/v1/chat/completions", body=json.dumps(payload))
 		response = conn.getresponse()
 		data = json.loads(response.read().decode())
-		return data["choices"][0]["message"]["content"]
+		return str(data["choices"][0]["message"]["content"])
 
 	def stream(self, prompt: str, **kwargs) -> Iterator[str]:
 		return iter([])

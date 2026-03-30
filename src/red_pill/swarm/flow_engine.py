@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, cast
 
 import yaml
 
@@ -45,7 +45,8 @@ class FlowEngine:
 		if path and path.exists():
 			try:
 				data = yaml.safe_load(path.read_text())
-				return data.get("flows", {})
+				if isinstance(data, dict):
+					return cast(Dict[str, Any], data.get("flows", {}))
 			except Exception as e:
 				print(f"Error reading flow registry at {path}: {e}")
 		return {}

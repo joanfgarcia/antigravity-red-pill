@@ -695,12 +695,12 @@ def main() -> None:
 						notify_user(args.title, args.message, sound=args.sound, category="manual")
 
 					# Record memory of the signal (System Signal collections)
-					manager.inject_signal(name=args.title, content=args.message, intensity=args.intensity)
+					manager.inject_signal(name=args.title, intensity=args.intensity, signal_type="manual", source="cli")
 					print(f"[SAS] Signal recorded: {args.message}")
 
 				elif args.sig_cmd == "evaporate":
 					if args.all:
-						manager.evaporate_signals()
+						manager.evaporate_signals(name=None)
 						print("[SAS] Neural Reset: All signals cleared.")
 					elif args.name:
 						manager.evaporate_signals(name=args.name)

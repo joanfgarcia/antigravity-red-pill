@@ -232,4 +232,11 @@ Be ready: the agent will ask you 10 questions about your shared history. Failure
 
 ---
 
+## ❄️ Immutable Systems (Silverblue/NixOS)
+If running on an immutable host like **Fedora Silverblue**, you must enable the following setting in your IDE's agent configuration:
+- **"Agent Non-Workspace File Access"**: **ACTIVE** (ON).
+This allows the agent to see beyond the containerized/workspace sandbox and interact with the host Bünker (Podman/Toolbox).
+
+---
+
 **Joan, the CLI is the needle. The Bünker is the vein. 770 up.**

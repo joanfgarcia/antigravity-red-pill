@@ -1059,15 +1059,28 @@ class MemoryManager:
 		except Exception as e:
 			logger.error(f"Failed to inject signal '{name}': {e}")
 
-	def evaporate_signals(self, name: str) -> None:
+	def evaporate_signals(self, name: Optional[str] = None) -> None:
 		"""
 		Evaporates a specific biological signal by name (curing the pain).
+		If name is None, clears ALL signals (Neural Reset).
 		"""
 		try:
+			from qdrant_client.http import models
+
+			if name is None:
+				self.client.delete(
+					collection_name="signal_memories",
+					points_selector=models.Filter(
+						must=[models.HasIdCondition(has_id=[])]  # This is usually not enough for 'all'
+					),
+				)
+				# Better way to delete all in Qdrant: Filter must_not with an impossible condition or just match_all
+				self.client.delete(collection_name="signal_memories", points_selector=models.Filter(must_not=[models.HasIdCondition(has_id=[])]))
+				logger.debug("Neural Reset: All signals evaporated.")
+				return
+
 			import hashlib
 			import uuid
-
-			from qdrant_client.http import models
 
 			sig_hash = hashlib.sha256(name.encode("utf-8")).hexdigest()
 			point_id = str(uuid.UUID(sig_hash[:32]))

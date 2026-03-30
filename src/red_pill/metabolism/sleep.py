@@ -22,7 +22,7 @@ def _load_thread_state() -> dict:
 	try:
 		if os.path.exists(_THREAD_STATE_PATH):
 			with open(_THREAD_STATE_PATH) as f:
-				return json.load(f)
+				return dict(json.load(f))
 	except Exception:
 		pass
 	return {}

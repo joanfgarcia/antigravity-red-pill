@@ -62,18 +62,18 @@ class ToneAnalyzer:
 				)
 
 			if not points:
-				return cfg.DEFAULT_COLOR
+				return str(cfg.DEFAULT_COLOR)
 
 			# High Reactivity Logic: Pick the first non-neutral emotion found in the latest memories
 			# Otherwise, return the most frequent (consensus).
-			latest_color = cfg.DEFAULT_COLOR
+			latest_color = str(cfg.DEFAULT_COLOR)
 			for p in points:
 				if p.payload and not p.payload.get("immune", False):
 					color = p.payload.get("color", cfg.DEFAULT_COLOR)
 					if color != cfg.DEFAULT_COLOR:
 						return str(color)
 					if latest_color == cfg.DEFAULT_COLOR:
-						latest_color = color
+						latest_color = str(color)
 
 			return str(latest_color)
 		except Exception as e:

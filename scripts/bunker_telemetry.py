@@ -5,7 +5,7 @@ import signal
 import sys
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 # Add src to pythonpath so it can run independently
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -27,7 +27,7 @@ TELEMETRY_INTERVAL = 10.0  # seconds
 class BunkerTelemetry:
 	def __init__(self):
 		self.running = True
-		self.state = {
+		self.state: Dict[str, Any] = {
 			"timestamp": 0.0,
 			"nvidia": {"status": "offline", "temp": None, "vram": None},
 			"minions": {"unread": 0},
