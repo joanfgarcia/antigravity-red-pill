@@ -8,6 +8,7 @@
 - **[FIX] Systemd Timer Alignment**: Patched `redpill-queue.service` and `redpill-telemetry.service` to correctly execute the v6.3.0 modular entrypoints (`red_pill.core.queue_worker` and `bunker_telemetry.py`), fixing background ingestion failures.
 - **[FIX] RAG Interceptor Pollution**: Surgically removed a rogue background logging task in `02_rag_enrichment.py` that was overwriting genuine Assistant responses in `work_memories` with `[INTERCEPTOR] Injected X RAG context chunks`, preventing data loss during context injection.
 - **[SEC-008] Ignored Environments**: Added `experimental/` layer to `.gitignore` preventing ternary weight explosion into the source index.
+- **[BUG] Tilde Path Expansion (`config.py`)**: `IA_DIR=~/Documents/IA/sharing` in `.env` was silently creating a literal `~/Documents/IA/sharing/` directory tree inside the repo root (e.g. `~/Documents/IA/sharing/storage/metabolism_state.json`). Root cause: `os.getenv()` and pydantic-settings do not expand `~`. Fixed by wrapping `os.getenv("IA_DIR")` with `os.path.expanduser()` at module level, plus a `field_validator("IA_DIR")` as a second defence layer. Spurious `~/` entry added to `.gitignore`.
 
 ### 🏗️ Titanium Sanctuary: Ubuntu 25.10 Transition
 - **[OS] Silverblue Migration Aborted**: Formally documented the failure of the Fedora Silverblue immutable filesystem experiment. Permissions and file-creation blocks in the terminal environment proved incompatible with the agent's autonomous workflow.
