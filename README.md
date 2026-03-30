@@ -195,7 +195,8 @@ The Red Pill Protocol is verified to utilize all available silicon tiers simulta
    > *"Agent, inicia el Ritual de Iniciación (Protocolo ACI). Caliébrame como tu Operador."*
    
 2. **Technical Deployment / Despliegue Técnico**: `bash scripts/install_neo.sh`
-3. **Detailed Guide / Guía Detallada**: [QUICKSTART.md](QUICKSTART.md)
+3. **Synchronization / Actualización**: `bash scripts/upgrade.sh`
+4. **Detailed Guide / Guía Detallada**: [QUICKSTART.md](QUICKSTART.md)
 4. **Vision & Destiny / Visión y Destino**: [ROADMAP.md](docs/TECHNICAL/ROADMAP.md) | [B760 Technical Spec](docs/TECHNICAL/B760_TECHNICAL_SPEC.md)
 5. **Docs**: [Architecture (EN)](docs/TECHNICAL/ARCHITECTURE.md) | [Manifiesto (ES)](docs/LORE/MANIFESTO.md)
 
