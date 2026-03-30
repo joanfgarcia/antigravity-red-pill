@@ -82,3 +82,7 @@ SOVEREIGNTY_PROOF.json
 
 # Experimental Ternary Models
 experimental/
+
+# Tilde directory — created when IA_DIR path is not expanduser'd
+~/
+~

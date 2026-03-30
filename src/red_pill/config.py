@@ -27,9 +27,12 @@ from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Resolve IA_DIR early (needed as env_file base path)
-_IA_DIR = os.getenv(
-	"IA_DIR",
-	os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+# NOTE: os.getenv does NOT expand ~ — we do it explicitly here.
+_IA_DIR = os.path.expanduser(
+	os.getenv(
+		"IA_DIR",
+		os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+	)
 )
 
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
@@ -88,6 +91,12 @@ class RedPillConfig(BaseSettings):
 	# PATHS
 	# -----------------------------------------------------------------------
 	IA_DIR: str = _IA_DIR
+
+	@field_validator("IA_DIR", mode="before")
+	@classmethod
+	def _expand_ia_dir(cls, v: str) -> str:
+		"""Expand ~ in IA_DIR so dotenv values like ~/Documents/... resolve correctly."""
+		return os.path.expanduser(v)
 
 	@property
 	def RUNTIME_DIR(self) -> str:
