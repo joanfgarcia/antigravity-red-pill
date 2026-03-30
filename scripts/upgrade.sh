@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# 🛰️ Red Pill Sovereign Upgrade Tool (v6.3.4)
+# 🛰️ Red Pill Sovereign Upgrade Tool (v6.3.5)
 # This script automates the synchronization and migration of the Bünker.
 
 RED='\033[0;31m'
@@ -78,5 +78,5 @@ else
 fi
 
 echo -e "\n${GREEN}Upgrade Finalizado con éxito.${NC}"
-echo -e "Por favor, ${YELLOW}reinicia tu Servidor MCP${NC} en el IDE para cargar los nuevos módulos v6.3.4."
+echo -e "Por favor, ${YELLOW}reinicia tu Servidor MCP${NC} en el IDE para cargar los nuevos módulos v6.3.5."
 echo -e "${BLUE}------------------------------------------------------------------${NC}"

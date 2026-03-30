@@ -4,7 +4,15 @@
 
 ### ❄️ Fedora Silverblue Breakthrough: Permission Over Sovereignty
 - **[OS] Silverblue Sovereignty Restored**: Discovered that enabling **"Agent Non-Workspace File Access"** in the IDE settings resolves the filesystem restriction issues previously attributed to Fedora Silverblue's immutability. Silverblue is now a supported host environment via Toolbox/Podman.
+- **[HARDENING] Mypy/Type Strict-Safety Pass**: Performed a comprehensive codebase audit to resolve 17+ latent type errors.
+  - **[API] Renamed `MemoryManager.search_memory` to `search_and_reinforce`** to reflect the actual underlying semantic logic and ensure consistency across all interceptors.
+  - **[API] Updated `evaporate_signals`** to support a full "Neural Reset" by passing `name=None`.
+  - Fixed `no-any-return` and `arg-type` mismatches in `providers.py`, `mood_profile.py`, `tone_analyzer.py`, and `flow_engine.py` (added missing `cast` imports).
+  - Explicitly annotated `HealerMinion` parsed output and `BunkerTelemetry` state dictionary for strict type validation.
+  - Corregido el desajuste de tipos (`shared_secret` bytes encoding) en el ritual de la Colmena (`heartbeat.py`).
 - **[DOC] Documentation Recalibration**: Updated `OPERATOR_MANUAL.md`, `ARCHITECTURE.md`, and `AGENT_UPDATE_GUIDE.md` to reflect the Silverblue breakthrough and the mandatory IDE setting for containerized environments.
+- **[FIX] CLI Audit Script**: Corrected the `red-pill audit` entrypoint in `cli.py` to point to `scripts/pre_pr_audit.py` (was erroneously `.sh`), ensuring the L1-L5 certification protocol works in all python-native environments.
+- **[SYNC] Bünker Engram**: Manually synchronized the `PROTOCOL VERSION` engram in `directive_memories` to v6.3.5.
 
 ## [6.3.4] - 2026-03-29
 

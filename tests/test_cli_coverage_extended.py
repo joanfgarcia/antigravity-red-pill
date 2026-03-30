@@ -16,7 +16,7 @@ def test_handle_audit_success():
 	with patch("subprocess.run") as mock_run:
 		handle_audit()
 		mock_run.assert_called_once()
-		assert "pre_pr_audit.sh" in mock_run.call_args[0][0][1]
+		assert "pre_pr_audit.py" in mock_run.call_args[0][0][1]
 
 
 def test_handle_audit_failure():

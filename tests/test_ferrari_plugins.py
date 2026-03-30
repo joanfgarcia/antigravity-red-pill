@@ -36,7 +36,7 @@ def _mem_mock(scroll_colors: list[str] | None = None, search_results: list | Non
 	if scroll_colors is not None:
 		m.client.scroll.return_value = _mock_scroll(scroll_colors)
 	if search_results is not None:
-		m.search_memory.return_value = search_results
+		m.search_and_reinforce.return_value = search_results
 	return m
 
 

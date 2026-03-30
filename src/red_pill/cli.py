@@ -80,10 +80,10 @@ def handle_mode(args: argparse.Namespace) -> None:
 
 def handle_audit() -> None:
 	"""Pre-PR Audit Protocol."""
-	script_path = os.path.join(PROJECT_ROOT, "scripts", "pre_pr_audit.sh")
+	script_path = os.path.join(PROJECT_ROOT, "scripts", "pre_pr_audit.py")
 	print(f"--- [DEPLOYING AUDIT PROTOCOL: {script_path}] ---")
 	try:
-		subprocess.run(["bash", script_path], check=True)
+		subprocess.run([sys.executable, script_path], check=True)
 	except subprocess.CalledProcessError:
 		sys.exit(1)
 

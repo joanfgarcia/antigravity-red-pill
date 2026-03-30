@@ -135,7 +135,7 @@ The version string must be identical across **ALL 7 locations**. The CI enforces
 | 6 | `CHANGELOG.md` | Latest `## [X.Y.Z]` entry |
 | 7 | **Bünker** (`directive_memories`) | `PROTOCOL VERSION:` engram |
 
-**Quick scan**: `grep -rn "6.1.0a2" --include="*.md" --include="*.py" --include="*.toml" --include="*.env*" .`
+**Quick scan**: `grep -rn "6.3.5" --include="*.md" --include="*.py" --include="*.toml" --include="*.env*" .`
 Replace old version with new in all 6 file locations before pushing.
 
 > [!IMPORTANT]
@@ -259,7 +259,7 @@ Replace old version with new in all 6 file locations before pushing.
     - **Terminal**: Use the "Anti-Blindness" patch (§4.13) to ensure terminal observability in containerized shells.
 
 
-    #### §4.15 Sovereign Path Fix & Queue Isolation (v6.3.4)
+    #### §4.15 Sovereign Path Fix & Queue Isolation (v6.3.5)
 
     This critical hardening update ensures that the Bünker remains self-contained and handles tilde-based paths correctly across all OS environments.
 
