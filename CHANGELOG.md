@@ -7,6 +7,11 @@
 - **[FEAT] Timer Health Pain Signal**: Upgraded `BunkerTelemetry` to actively poll `systemctl --user is-active` for core timers. If a timer dies, it injects a biological `timers_offline` pain signal (Int: 8.0) into the Córtex, auto-evaporating when the timer is restored.
 - **[SYNC] Installation Sync**: Updated `scripts/schedule_pulse.py` to auto-deploy the hardened timer patterns across all `install_neo.sh` and `upgrade.sh` workflows.
 
+### 🤖 Agentic Ecosystem & Diagnostics
+- **[FEAT] Core Skills Suite**: Integrated new native agentic skills directly into the Bünker workflow (`commit`, `git-pushing`, `python-venv-runner`, `skill_creation`, `swarm_flow_manager`) mapping complex execution directly into conversational boundaries.
+- **[FEAT] Diagnostic Tooling**: Added `scripts/audit_hallucinations.py` for automated trace validation, and `scripts/clean_conversations.py` to prune orphaned artifacts on demand.
+- **[LORE] Minion Recruitment Board**: Expanded the Swarm lore tracking by formalizing operational recruitment nodes (`MINION_RECRUITMENT_BOARD.md`).
+
 ## [6.3.5] - 2026-03-30
 
 ### ❄️ Fedora Silverblue Breakthrough: Permission Over Sovereignty
