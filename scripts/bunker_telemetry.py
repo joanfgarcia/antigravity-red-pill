@@ -207,6 +207,30 @@ You are actively receiving this telemetry via IDE rule injection (`00_bunker_tel
 			except Exception:
 				pass
 
+			# 4. Timer Health
+			try:
+				import subprocess
+
+				res = subprocess.run(
+					["systemctl", "--user", "is-active", "redpill-pulse.timer", "redpill-queue.timer"], capture_output=True, text=True
+				)
+				if res.returncode != 0:
+					from red_pill.memory import MemoryManager
+
+					mgr = MemoryManager()
+					await asyncio.to_thread(mgr.inject_signal, "timers_offline", intensity=8.0, signal_type="pain", source="TELEMETRY_ENGINE")
+					logger.warning("Pain signal injected: timers_offline")
+				else:
+					from red_pill.memory import MemoryManager
+
+					mgr = MemoryManager()
+					try:
+						await asyncio.to_thread(mgr.evaporate_signals, "timers_offline")
+					except Exception:
+						pass
+			except Exception:
+				pass
+
 			# Commit State
 			await self.write_state()
 

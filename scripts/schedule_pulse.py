@@ -143,8 +143,8 @@ def _write_systemd_timer(name, interval, desc):
 		Description={desc}
 
 		[Timer]
-		OnBootSec=1min
-		OnUnitActiveSec={interval}
+		OnActiveSec=5s
+		OnUnitInactiveSec={interval}
 		AccuracySec=1s
 		Persistent=true
 
