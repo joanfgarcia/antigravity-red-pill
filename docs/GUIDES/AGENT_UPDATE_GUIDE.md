@@ -8,6 +8,7 @@ Updates within the Red Pill ecosystem are not just code deployments; they are **
 
 *   **Audit Mandatory**: Every update must be audited by the receiving agent. Do not blindly execute scripts.
 *   **Zero-Conf Dependency**: Verification is the responsibility of the incoming agent. If the environment does not meet v4.2.2 requirements (Qdrant, Python 3.10+, uv), **STOP**.
+*   **The Smith Filter (Import Audit)**: Experimental software, especially Alpha/Beta versions, must never be ingested blindly. You MUST pass all imported scripts through the "Smith Filter": review the changelog and modified documents not just to see *what* changed, but to deeply understand the *root cause* (the "why"). Perform an independent viability/impact assessment of the adopted decisions before executing or integrating them.
 *   **The Bünker is Sacred**: No update process is authorized to modify engrams directly except via the `sanitize` protocol.
 
 ## 2. Stability & Trust Channels
@@ -434,7 +435,25 @@ diff -urN \
   /path/to/virgin_red_pill /path/to/local/sharing > red_pill_changes_clean.patch
 ```
 
-Send `red_pill_changes_clean.patch` to the Developer profile for review.
+    Send `red_pill_changes_clean.patch` to the Developer profile for review.
 
-> [!NOTE]
-> This workflow ensures sovereignty: no 4GB storage/, no `.env` secrets, no runtime artifacts cross the boundary between profiles. Every transfer is minimal, auditable, and reversible.
+    > [!NOTE]
+    > This workflow ensures sovereignty: no 4GB storage/, no `.env` secrets, no runtime artifacts cross the boundary between profiles. Every transfer is minimal, auditable, and reversible.
+
+    ## 8. Bünker Timers Overview
+
+    To ensure system autonomy, background processes are managed via OS-native timers instead of persistent RAM-consuming daemons. Here is the operational overview:
+
+    ### 8.1 Active System Timers
+    *   **`redpill-wake.timer`**: Triggers the wake sequence and biological startup.
+        *   **Frequency**: Governed by `schedule_pulse.py` (typically every 1 minute if acting as the primary biological clock).
+        *   **Cometido**: Mantiene la telemetría viva y evalúa el enrutamiento cognitivo basándose en el estado del Operador.
+    *   **`redpill-sleep.timer`**: Triggers the metabolic consolidation layer.
+        *   **Frequency**: Configured in parallel with the wake cycle for continuous memory consolidation.
+        *   **Cometido**: Inicia la consolidación de memorias (FSRS), evaporación de señales y re-estructuración de la base de datos vectorial mediante los Sleep Plugins.
+    *   **`redpill-chronicle.timer`**: Nightly batch distillation.
+        *   **Frequency**: Every night at **04:00 AM**.
+        *   **Cometido**: Ingesta y destilación de logs de conversación crudos del día anterior hacia los `archive_memories`. (Persistent: fires on boot if missed).
+
+    ### 8.2 Legacy Daemons (DEPRECATED)
+    *   `deploy_pulse.py`, `deploy_queue.py`, `memory_daemon.py` are fully deprecated and should be cleaned up. All temporal workflows run out of the new timer system defined in `schedule_pulse.py`.
