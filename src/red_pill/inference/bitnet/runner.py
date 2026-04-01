@@ -24,8 +24,8 @@ class BitNetRunner:
 
 if __name__ == "__main__":
 	# Test execution
-	RUNNER = os.path.expanduser("~") + "/Documents/IA/experimental/BitNet/build/bin/llama-cli"
-	MODEL = os.path.expanduser("~") + "/Documents/IA/experimental/BitNet/models/2B-4T/ggml-model-i2_s.gguf"
+	RUNNER = os.path.join(os.getcwd(), "3rdparty/BitNet-1.58b/build/bin/llama-cli")
+	MODEL = os.path.join(os.getcwd(), "3rdparty/BitNet-1.58b/models/2B-4T/ggml-model-i2_s.gguf")
 
 	if os.path.exists(RUNNER) and os.path.exists(MODEL):
 		agent = BitNetRunner(RUNNER, MODEL)

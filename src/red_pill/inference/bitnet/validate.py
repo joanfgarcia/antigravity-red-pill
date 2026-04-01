@@ -1,12 +1,12 @@
 import json
 import os
 
-from red_pill.experimental.bitnet.runner import BitNetRunner
+from red_pill.inference.bitnet.runner import BitNetRunner
 
 
 def run_benchmarks():
-	runner_path = os.path.expanduser("~") + "/Documents/IA/experimental/BitNet/build/bin/llama-cli"
-	model_path = os.path.expanduser("~") + "/Documents/IA/experimental/BitNet/models/2B-4T/ggml-model-i2_s.gguf"
+	runner_path = os.path.join(os.getcwd(), "3rdparty/BitNet-1.58b/build/bin/llama-cli")
+	model_path = os.path.join(os.getcwd(), "3rdparty/BitNet-1.58b/models/2B-4T/ggml-model-i2_s.gguf")
 	grammar_path = os.path.join(os.path.dirname(__file__), "json.gbnf")
 
 	if not (os.path.exists(runner_path) and os.path.exists(model_path)):
