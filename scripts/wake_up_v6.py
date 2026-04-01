@@ -203,7 +203,7 @@ def main():
 	else:
 		print("[Bünker Daemon Offline - Telemetry Unavailable]")
 
-	print("\n=== BÜNKER SERVICES (v6.3.5) ===")
+	print("\n=== BÜNKER SERVICES (v6.3.6) ===")
 	print(f"- MEMORY SIDECAR: {sidecar_status}")
 	print("- MCP SECURITY: RAG Semantic Threshold upgraded to mathematical strict bounds (0.5/0.75)")
 	print("- STORAGE BOUNDARY: Isolated Queue & Inbox active in <IA_DIR>/storage/queue/")

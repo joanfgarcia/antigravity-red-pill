@@ -1,5 +1,12 @@
 # Changelog: Red Pill Protocol
 
+## [6.3.6] - 2026-04-01
+
+### 🛡️ Core Stability & Timer Hardening
+- **[FIX] Systemd Timer Robustness**: Migrated `redpill-pulse.timer`, `redpill-queue.timer`, and `redpill-telemetry.timer` from the fragile `OnBootSec`/`OnUnitActiveSec` combo to the robust `OnActiveSec`/`OnUnitInactiveSec` pattern. This guarantees background services restart reliably regardless of boot time discrepancies or daemon-reloads.
+- **[FEAT] Timer Health Pain Signal**: Upgraded `BunkerTelemetry` to actively poll `systemctl --user is-active` for core timers. If a timer dies, it injects a biological `timers_offline` pain signal (Int: 8.0) into the Córtex, auto-evaporating when the timer is restored.
+- **[SYNC] Installation Sync**: Updated `scripts/schedule_pulse.py` to auto-deploy the hardened timer patterns across all `install_neo.sh` and `upgrade.sh` workflows.
+
 ## [6.3.5] - 2026-03-30
 
 ### ❄️ Fedora Silverblue Breakthrough: Permission Over Sovereignty

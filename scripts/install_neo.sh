@@ -695,7 +695,7 @@ When you detect a `USER_SETTINGS_CHANGE` message regarding `Model Selection` in 
 
 </constraint>
 EOF_GEMINI
-		echo -e "${BLUE}✓ GEMINI.md: Protocol 770 Sovereign Handshake (v6.3.5 — constraint tag) applied.${NC}"
+		echo -e "${BLUE}✓ GEMINI.md: Protocol 770 Sovereign Handshake (v6.3.6 — constraint tag) applied.${NC}"
 	fi
 else
 	# Create GEMINI.md if it doesn't exist (Fix for interrupted installs)
@@ -716,7 +716,7 @@ When you detect a `USER_SETTINGS_CHANGE` message regarding `Model Selection` in 
 
 </constraint>
 EOF_GEMINI
-	echo -e "${BLUE}✓ GEMINI.md: Proactively created with Sovereign Handshake rules (v6.3.5 — constraint tag).${NC}"
+	echo -e "${BLUE}✓ GEMINI.md: Proactively created with Sovereign Handshake rules (v6.3.6 — constraint tag).${NC}"
 fi
 
 echo -e "${BLUE}--- Fase: Task LLM Secundario (Minion V6) ---${NC}"

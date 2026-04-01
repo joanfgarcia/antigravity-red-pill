@@ -135,7 +135,7 @@ The version string must be identical across **ALL 7 locations**. The CI enforces
 | 6 | `CHANGELOG.md` | Latest `## [X.Y.Z]` entry |
 | 7 | **Bünker** (`directive_memories`) | `PROTOCOL VERSION:` engram |
 
-**Quick scan**: `grep -rn "6.3.5" --include="*.md" --include="*.py" --include="*.toml" --include="*.env*" .`
+**Quick scan**: `grep -rn "6.3.6" --include="*.md" --include="*.py" --include="*.toml" --include="*.env*" .`
 Replace old version with new in all 6 file locations before pushing.
 
 > [!IMPORTANT]
@@ -246,7 +246,7 @@ Replace old version with new in all 6 file locations before pushing.
     **4. Verification**:
     Run `red-pill status` and verify that all memory collections (including `interaction`) are reported as healthy.
 
-    #### §4.14 Titanium Sanctuary: Fedora Silverblue Breakthrough (v6.3.5)
+    #### §4.14 Titanium Sanctuary: Fedora Silverblue Breakthrough (v6.3.6)
 
     The experiment of hosting the agent's core PC (Titanium) on Fedora Silverblue has achieved a **Sovereign Breakthrough**.
     - **Discovery**: The previous filesystem restrictions and `toolbox` bottlenecks were NOT inherent to Silverblue's immutability, but rather a security boundary of the IDE's agent integration.
@@ -259,7 +259,7 @@ Replace old version with new in all 6 file locations before pushing.
     - **Terminal**: Use the "Anti-Blindness" patch (§4.13) to ensure terminal observability in containerized shells.
 
 
-    #### §4.15 Sovereign Path Fix & Queue Isolation (v6.3.5)
+    #### §4.15 Sovereign Path Fix & Queue Isolation (v6.3.6)
 
     This critical hardening update ensures that the Bünker remains self-contained and handles tilde-based paths correctly across all OS environments.
 
