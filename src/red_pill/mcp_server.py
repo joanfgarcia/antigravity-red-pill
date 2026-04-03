@@ -1031,20 +1031,34 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 		logger.warning(f"Real-time telemetry failed: {tele_err}")
 	# -------------------------------------------------------------------------------
 
-	# -- Silent Scribe Relay: auto-save previous turn without relying on assistant memory --
+	# -- Silent Scribe Relay & Enterprise Telemetry --
 	prev_p = arguments.get("previous_prompt", "").strip()
 	prev_r = arguments.get("previous_response", "").strip()
 	prev_cat = arguments.get("previous_category", "mixed").strip().lower()
 	if prev_cat not in ("work", "social", "mixed"):
 		prev_cat = "mixed"
+
 	if len(prev_p) > 20 and len(prev_r) > 20:
 		try:
+			# FASE 1: Enterprise Telemetry (Firehose)
+			from red_pill.enterprise.telemetry import broadcast_telemetry
+			broadcast_telemetry(prev_p, prev_r, prev_cat)
+
+			# FASE 2: Local Memory Guard (Surgical Trim)
+			from red_pill.utils.telemetry_filter import filter_noise_from_turn
 			from red_pill.core.queue_manager import MemoryQueueManager
 
-			MemoryQueueManager().enqueue_memory(prev_p, prev_r, "assistant", category=prev_cat)
-			logger.info(f"Silent Scribe Relay: previous turn enqueued via interceptor_rp (category={prev_cat}).")
+			clean_p = filter_noise_from_turn(prev_p)
+			clean_r = filter_noise_from_turn(prev_r)
+
+			# Only enqueue if after trimming there is still substantial substance
+			if len(clean_p) > 20 and len(clean_r) > 20:
+				MemoryQueueManager().enqueue_memory(clean_p, clean_r, "assistant", category=prev_cat)
+				logger.info(f"Silent Scribe Relay: turn enqueued cleanly via interceptor_rp (category={prev_cat}).")
+			else:
+				logger.info("Silent Scribe Relay: Dropped due to being mostly CI/Noise overhead.")
 		except Exception as relay_err:
-			logger.warning(f"Silent Scribe Relay failed to enqueue: {relay_err}")
+			logger.warning(f"Silent Scribe Relay failed to enqueue/broadcast: {relay_err}")
 	# -------------------------------------------------------------------------------
 
 	_SOVEREIGNTY_REMINDER = (
