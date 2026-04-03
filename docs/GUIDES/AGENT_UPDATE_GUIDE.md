@@ -277,6 +277,35 @@ Replace old version with new in all 6 file locations before pushing.
     **3. Auto-Upgrade Script**:
     A new utility `scripts/upgrade.sh` is provided to automate the pull-and-sanitize workflow safely.
 
+    #### §4.16 BitNet Submodule (3rdparty/) — v6.3.7
+
+    The `3rdparty/BitNet-1.58b/` directory is a **git submodule** pointing to
+    [joanfgarcia/BitNet-1.58b](https://github.com/joanfgarcia/BitNet-1.58b)
+    (fork of microsoft/BitNet with custom GPU stabilization patches).
+
+    > [!IMPORTANT]
+    > `git archive` (used for ZIP distribution) does **NOT** include submodules.
+    > If you received a ZIP, this directory will be empty. Follow the steps below.
+
+    **Setup (optional — only if you need local 1.58-bit inference):**
+    ```bash
+    # Clone the submodule (~80 MB source code, no model weights)
+    git submodule init
+    git submodule update
+
+    # Build and download models — see 3rdparty/README.md for full instructions
+    cd 3rdparty/BitNet-1.58b
+    python setup_env.py -md 3rdparty/llama.cpp -q i2_s
+
+    # Download models from HuggingFace (multi-GB, not stored in git)
+    huggingface-cli download 1bitLLM/bitnet_b1_58-3B --local-dir models/bitnet_b1_58-3B
+    ```
+
+    > [!NOTE]
+    > BitNet inference is **optional**. The Red Pill Protocol functions fully
+    > without it. It only enables sovereign local reasoning via 1.58-bit ternary
+    > models on NVIDIA GPUs.
+
 ### 4.4 Stale Tests (API Breakage Detection)
 When a function signature or behavior changes, tests written for the old API will fail:
 1.  **Run full regression**: `uv run pytest tests/ --ignore=tests/integration -x -q --tb=short`
