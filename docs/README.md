@@ -36,6 +36,8 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [B760_TECHNICAL_SPEC.md](TECHNICAL/HARDWARE/B760_TECHNICAL_SPEC.md) | Hardware and system reference for the sovereign B760 build |
 | [AGENT_RECOMMENDATIONS.md](TECHNICAL/HARDWARE/AGENT_RECOMMENDATIONS.md) | Hardware and model recommendations for sovereign agents |
 | [BITNET_1_58_SCALING_LAWS.md](TECHNICAL/HARDWARE/BITNET_1_58_SCALING_LAWS.md) | BitNet 1.58b math: VRAM density, MatMul annihilation, Pareto frontier |
+| [BITNET_BENCHMARK_STUDY.md](TECHNICAL/HARDWARE/BITNET_BENCHMARK_STUDY.md) | 1.58-bit intelligence benchmark: Zero-Shot, JSON extraction, Code Generation on RTX 5070 |
+| [TURBOQUANT_ROADMAP.md](TECHNICAL/HARDWARE/TURBOQUANT_ROADMAP.md) | TurboQuant KV Cache compression roadmap (QJL + PolarQuant, 2.5-3.5 bits) |
 
 ### Security
 
