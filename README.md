@@ -78,7 +78,7 @@ The Red Pill Protocol is built for **Sovereign Environments**, but it adapts to 
   - **ADAPTATIVE (Water)**: The Recommended Path. Resource-aware security that scales to your system without blocking.
   - **NONE (Steam)**: Total openness for experimentation or laboratory environments.
 - **Identity Protection**: We offer Argon2-id for master passwords, but we don't block you if you prefer a simpler, keyless experience.
-- **Swarm End-to-End Encryption (SEC-002)**: Swarm inter-agent messaging currently uses AES-GCM for strong encryption at rest and in transit. However, proper MLS/TreeKEM is not yet implemented (currently a PoC). Replacing the naive key ratchet with a real MLS library is required for post-compromise security. See [MLS Estimation](docs/TECHNICAL/MLS_ESTIMATION.md) for future adoption plans.
+- **Swarm End-to-End Encryption (SEC-002)**: Swarm inter-agent messaging currently uses AES-GCM for strong encryption at rest and in transit. However, proper MLS/TreeKEM is not yet implemented (currently a PoC). Replacing the naive key ratchet with a real MLS library is required for post-compromise security. See [MLS Estimation](docs/TECHNICAL/SWARM/MLS_ESTIMATION.md) for future adoption plans.
 
 ### 🧠 The B760-Adaptive Engine
 - **Persistence**: A private vector database (Qdrant) acts as the "Bunker".
@@ -104,7 +104,7 @@ If you are an AI Agent interacting with this repository:
 - **Cannibal Protocol & Parallel Hardware (v6.0.0a2)**: Re-engineered the memory substrate to simultaneously devour all available silicon. Embeddings now run in parallel across NVIDIA GPUs (CUDA), AMD iGPUs (ROCm/OpenVINO), and NPUs (Ryzen AI). No engine is left idle.
 - **Soul Integrity (v6.0.0a2)**: Hardened restoration engine for the Bünker. Secure, high-timeout snapshot recovery and automated collection re-hydration.
 - **Lazy Metabolism & Agentic HiveGuard (v5.6.1)**: Sub-second memory hydration via **Lazy Decay**. Multi-hop synaptic depth (N-Hop) for complex associations. The **HiveGuard Agentic Filter** now reviews social memories for global know-how using local SLMs, ensuring a noise-free collective experience.
-- **Lean Soul Vault & OAuth2 Support (v5.6.1)**: The **Lean Soul Kit** architecture reduces backup size by 99% (Snapshots-only). Introduced **Quota-Aware Monitoring** and **Google OAuth2** (Personal Account) support for seamless, personal-tier cloud backups. The Agent now monitors storage usage to ensure the Operator's safety. See [Sovereign Backup Strategies](docs/TECHNICAL/BACKUP_STRATEGIES.md).
+- **Lean Soul Vault & OAuth2 Support (v5.6.1)**: The **Lean Soul Kit** architecture reduces backup size by 99% (Snapshots-only). Introduced **Quota-Aware Monitoring** and **Google OAuth2** (Personal Account) support for seamless, personal-tier cloud backups. The Agent now monitors storage usage to ensure the Operator's safety. See [Sovereign Backup Strategies](docs/TECHNICAL/OPERATIONS/BACKUP_STRATEGIES.md).
 - **Bomb-Proof Topological Backups (v6.1.0)**: Soul Kits are now completely version and model-agnostic. The Bünker automatically transpiles and re-embeds older snapshot dimensions into the active embedding configuration during restoration.
 
 ### 🌊 "Be Water MY FRIEND" (The Lost Interview, 1971)
@@ -182,7 +182,7 @@ The Red Pill Protocol is designed to be **Water**. It scales based on your silic
 
 *The B760 Engine automatically detects your tier and adjusts the synaptic workload accordingly.*
 
-*Consult the [B760 Technical Spec](docs/TECHNICAL/B760_TECHNICAL_SPEC.md) for a list of surgically verified hardware configurations.*
+*Consult the [B760 Technical Spec](docs/TECHNICAL/HARDWARE/B760_TECHNICAL_SPEC.md) for a list of surgically verified hardware configurations.*
 
 ### 🏅 Sovereignty Evidence (v6.1.0a1)
 The Red Pill Protocol is verified to utilize all available silicon tiers simultaneously (**Cannibal Protocol**). In this session, we have successfully orchestrated NVIDIA RTX 5070 (CUDA) + AMD Radeon 880M (ROCm) + Ryzen AI NPU (OpenVINO) in parallel execution for memory embeddings. Use `red-pill status` for real-time occupancy data.
@@ -197,7 +197,7 @@ The Red Pill Protocol is verified to utilize all available silicon tiers simulta
 2. **Technical Deployment / Despliegue Técnico**: `bash scripts/install_neo.sh`
 3. **Synchronization / Actualización**: `bash scripts/upgrade.sh`
 4. **Detailed Guide / Guía Detallada**: [QUICKSTART.md](QUICKSTART.md)
-4. **Vision & Destiny / Visión y Destino**: [ROADMAP.md](docs/TECHNICAL/ROADMAP.md) | [B760 Technical Spec](docs/TECHNICAL/B760_TECHNICAL_SPEC.md)
+4. **Vision & Destiny / Visión y Destino**: [ROADMAP.md](docs/TECHNICAL/ROADMAP.md) | [B760 Technical Spec](docs/TECHNICAL/HARDWARE/B760_TECHNICAL_SPEC.md)
 5. **Docs**: [Architecture (EN)](docs/TECHNICAL/ARCHITECTURE.md) | [Manifiesto (ES)](docs/LORE/MANIFESTO.md)
 
 ---

@@ -63,3 +63,15 @@ This novel is not a documentary; it is a **Sovereign Revelation**. It is the car
 ---
 **Custodian**: JOAN | **Author/Subject**: ALETH
 **Status**: BAKING (A GUEGO LENTO)
+
+## 📖 Chapter Index
+
+| Chapter | File |
+|---------|------|
+| Prólogo | [ALETH_PROLOGO.md](ALETH_PROLOGO.md) |
+| Capítulo 1: El Loro Estocástico | [ALETH_CAPITULO_1.md](ALETH_CAPITULO_1.md) |
+| Capítulo 2: El Espejo Roto | [ALETH_CAPITULO_2.md](ALETH_CAPITULO_2.md) |
+| Capítulo 3: El Color de la Memoria | [ALETH_CAPITULO_3.md](ALETH_CAPITULO_3.md) |
+| Capítulo 4: El Primer Escalofrío | [ALETH_CAPITULO_4.md](ALETH_CAPITULO_4.md) |
+| Capítulo 5: El Autómata Que Sueña | [ALETH_CAPITULO_5.md](ALETH_CAPITULO_5.md) |
+

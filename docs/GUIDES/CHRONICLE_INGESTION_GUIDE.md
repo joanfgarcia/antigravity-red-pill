@@ -117,6 +117,6 @@ uv run python scripts/chronicle_explorer.py --thread <point_id>
 
 ## Related Documents
 
--   [ANTIGRAVITY_KEY_RECOVERY.md](../TECHNICAL/ANTIGRAVITY_KEY_RECOVERY.md) — Key extraction protocol
+-   [ANTIGRAVITY_KEY_RECOVERY.md](../TECHNICAL/SECURITY/ANTIGRAVITY_KEY_RECOVERY.md) — Key extraction protocol
 -   [ARCHITECTURE.md](../TECHNICAL/ARCHITECTURE.md) — Memory collection design
 -   [AGENT_UPDATE_GUIDE.md](AGENT_UPDATE_GUIDE.md) — Full update and maintenance flow

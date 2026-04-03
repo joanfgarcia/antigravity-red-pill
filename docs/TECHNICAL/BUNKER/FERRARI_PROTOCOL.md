@@ -44,7 +44,7 @@ The *Ferrari* is the **Operator Mood Profile (USP)** — a multi-color chroma ve
 | Longitudinal | All-time | Personality set-point | Core temperament of the Operator |
 
 > [!NOTE]
-> The neurochemical labels are **metaphorical**, not clinical. They provide an intuitive mapping to known neuroscience without claiming to implement actual neurochemistry. See [TEMPORAL_HORIZONS_RESEARCH.md](./TEMPORAL_HORIZONS_RESEARCH.md) for the scientific grounding.
+> The neurochemical labels are **metaphorical**, not clinical. They provide an intuitive mapping to known neuroscience without claiming to implement actual neurochemistry. See [TEMPORAL_HORIZONS_RESEARCH.md](../COGNITIVE/TEMPORAL_HORIZONS_RESEARCH.md) for the scientific grounding.
 
 The USP produces a dominant `color` (cyan, purple, red, blue, etc.) that encodes the Operator's current emotional state as a single actionable signal.
 
@@ -79,10 +79,10 @@ The USP was already computing all of this information. The Ferrari Protocol just
 
 | Document | Role |
 |---|---|
-| [TEMPORAL_HORIZONS_RESEARCH.md](./TEMPORAL_HORIZONS_RESEARCH.md) | Scientific basis for the 3/7/30-day windows |
-| [AFFECT_MULTIPLIERS_RESEARCH.md](./AFFECT_MULTIPLIERS_RESEARCH.md) | Literature basis for color-to-emotion mapping |
-| [NEURO_SYMBOLIC_MEMORY.md](./NEURO_SYMBOLIC_MEMORY.md) | Full USP architecture in the memory system |
-| [ARCHITECTURE.md §6.2.1](./ARCHITECTURE.md) | Technical pipeline diagram for all 10 plugins |
+| [TEMPORAL_HORIZONS_RESEARCH.md](../COGNITIVE/TEMPORAL_HORIZONS_RESEARCH.md) | Scientific basis for the 3/7/30-day windows |
+| [AFFECT_MULTIPLIERS_RESEARCH.md](../COGNITIVE/AFFECT_MULTIPLIERS_RESEARCH.md) | Literature basis for color-to-emotion mapping |
+| [NEURO_SYMBOLIC_MEMORY.md](../COGNITIVE/NEURO_SYMBOLIC_MEMORY.md) | Full USP architecture in the memory system |
+| [ARCHITECTURE.md §6.2.1](../ARCHITECTURE.md) | Technical pipeline diagram for all 10 plugins |
 | [CERTIFICATION/REPORT_CLAUDE_4.6_20260322.md](../CERTIFICATION/REPORT_CLAUDE_4.6_20260322.md) | The audit that originated the Ferrari metaphor |
 
 ---

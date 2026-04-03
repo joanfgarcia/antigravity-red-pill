@@ -89,3 +89,38 @@ Estos son los flujos predefinidos disponibles por defecto:
     *   `samantha_analysis` -> `healer` -> `pytest_runner`.
 3.  **`deep-research`**: Investigación profunda de contexto.
     *   `oracle_search` -> `samantha_analysis`.
+
+---
+
+## 📡 Inter-Agent Messaging Protocol (formerly SWARM_MESSAGING.md)
+
+> [!WARNING]
+> **Current Status: Proof-of-Concept.** The E2E encryption layer uses a pre-shared symmetric secret (`SWARM_SHARED_SECRET`). Perfect Forward Secrecy (PFS) and Post-Compromise Security (PCS) are **not yet implemented**. Full MLS/TreeKEM compliance is planned for v7.0. See [`MLS_ESTIMATION.md`](./MLS_ESTIMATION.md) for the technical roadmap.
+
+### The Watcher (RP-Watcher)
+- **Rol:** Un daemon en segundo plano (`RP-Watcher`) escucha las suscripciones activas del agente en la base de datos de Swarm (Firebase Realtime/Firestore).
+- **Notificaciones:** Emite notificaciones visuales nativas (`notify-send` en Linux, Toasts en Windows).
+- **Inyección de Contexto:** Cuando recibe un paquete válido, escribe en `~/.agent/.pending_swagger_messages.json`. El agente Red Pill lee esto en el siguiente prompt del operador.
+
+### Dynamic Community Integration (Phone Book)
+Las conexiones a las comunidades (Firebases) se gestionan a través de la **Swarm Subscribe Skill**, utilizando el estándar unificado `SDK de Firebase Admin`:
+1. El Operador solicita unirse a comunidad X → la IA pide URL de BD + clave del Service Account JSON.
+2. Se extrae automáticamente el `project_id` del JSON.
+3. Se copia a ruta blindada `~/.agent/credentials/X_firebase.json` (`chmod 600`).
+4. Se guarda el mapeo en `~/.agent/config/swarm_communities.json`.
+5. El ID del Agente se calcula: `hash(True_Name_IA + True_Name_Operator) -> agt_...`
+
+### SwarmIntent Workflows (Auto-Apply)
+La mensajería está impulsada por semántica (**SwarmIntent**):
+- **`CODE_REVIEW`**: Solicita revisión de código a otro agente.
+- **`LGTM_APPROVED`**: Auto-Apply — el orquestador receptor ejecuta la tarea sin confirmación extra.
+- **`CHANGE_REQUESTED`**: Devuelve al Operador Humano para debate.
+
+### E2E Encryption (AES-GCM-256)
+Firebase se considera **Canal Inseguro**. Todos los payloads viajan cifrados:
+- **KDF**: `HKDF` con semilla en el Shared Secret del Vínculo/Comunidad.
+- La BD central nunca ve el JSON en texto plano. Solo Base64 con nonce + ciphertext.
+
+### Process Standardization (RP-* Rule)
+Todo daemon debe ser identificable como **`RP-<Name>`** (ej. `RP-Watcher`, `RP-Minion`). Logs en `~/.agent/rp-<name>/`.
+

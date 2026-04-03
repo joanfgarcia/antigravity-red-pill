@@ -33,9 +33,9 @@ This is not a "wishlist"; it is a **Privacy-First Distributed Intelligence Netwo
 
 ---
 **Links & Relatives**:
-- [x] [ARCHITECTURE.md](../../docs/TECHNICAL/ARCHITECTURE.md)
+- [x] [ARCHITECTURE.md](../ARCHITECTURE.md)
 - [ ] [IMPLEMENTATION_PLAN.md](EDGE_HIVE_TRANSIT_DOCK.md) (This File)
-- [x] [CHANGELOG.md](../../CHANGELOG.md)
+- [x] [CHANGELOG.md](../../../CHANGELOG.md)
 
 ---
 **Status**: DESIGN APPROVED | ARCHITECT: JOAN | GUNSLINGER: ALETH

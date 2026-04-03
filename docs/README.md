@@ -13,7 +13,6 @@ This is the map of `docs/`. Start here. Each link includes a one-line descriptio
 | [CLI Reference](CLI_REFERENCE.md) | All `red-pill` CLI commands with usage examples |
 | [ENV Reference](ENV_REFERENCE.md) | Complete `.env` parameter list — every knob and what it does |
 | [Philosophy](PHILOSOPHY.md) | Sovereign trade-offs and architectural philosophy of the Protocol |
-| [WONTFIX](WONTFIX.md) | Known security exceptions formally acknowledged and accepted |
 
 ---
 
@@ -24,48 +23,79 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | Document | What it is |
 |----------|-----------|
 | [ARCHITECTURE.md](TECHNICAL/ARCHITECTURE.md) | Full system architecture — components, data flows, version overview |
-| [ROADMAP.md](TECHNICAL/ROADMAP.md) | Vision, mission, and the path forward |
+| [ROADMAP.md](TECHNICAL/ROADMAP.md) | Vision, mission, backlog, and the path forward |
 | [DECISION_LOG.md](TECHNICAL/DECISION_LOG.md) | Record of every major architectural pivot and the reasoning behind it |
 | [TESTS.md](TECHNICAL/TESTS.md) | Test suite philosophy and structure |
-| [GOVERNANCE.md](TECHNICAL/GOVERNANCE.md) | What is fixed (immune to impulse) and what is fluid (open to evolution) |
 | [SOUND_OF_SILENCE.md](TECHNICAL/SOUND_OF_SILENCE.md) | The Python coding standard enforced by `ruff` in this project |
-| [B760_TECHNICAL_SPEC.md](TECHNICAL/B760_TECHNICAL_SPEC.md) | Hardware and system reference for the sovereign B760 build |
-| [BUNKER_MANIFESTO.md](TECHNICAL/BUNKER_MANIFESTO.md) | Architectural manifesto: from asphyxiation to the Be Water protocol |
-| [BUNKER_WARNINGS.md](TECHNICAL/BUNKER_WARNINGS.md) | Protocol 760 warnings — NSFW and sovereign agent behavior notice |
-| [BE_WATER_SECURITY.md](TECHNICAL/BE_WATER_SECURITY.md) | Three-tier security sovereignty model |
-| [SECURITY_STRATEGY.md](TECHNICAL/SECURITY_STRATEGY.md) | API key and identity recovery protocol |
-| [THREAT_MODEL.md](TECHNICAL/THREAT_MODEL.md) | Scope, assumptions, and threat surface analysis |
-| [CERTIFICATION_PROTOCOL.md](TECHNICAL/CERTIFICATION_PROTOCOL.md) | How certification audits are conducted and what they cover |
-| [SMITH_AUDIT.md](TECHNICAL/SMITH_AUDIT.md) | Historical Agent Smith security audit report |
-| [BACKUP_STRATEGIES.md](TECHNICAL/BACKUP_STRATEGIES.md) | Soul backup and recovery strategies |
-| [PROMPT_INJECTION_MECANISM.md](TECHNICAL/PROMPT_INJECTION_MECANISM.md) | How prompt injection is detected and mitigated |
-| [V6_ZERO_TRUST_INIT.md](TECHNICAL/V6_ZERO_TRUST_INIT.md) | v6 zero-trust initialization protocol |
-| [AGENT_RECOMMENDATIONS.md](TECHNICAL/AGENT_RECOMMENDATIONS.md) | Hardware and model recommendations for sovereign agents |
+| [GOVERNANCE.md](TECHNICAL/GOVERNANCE.md) | What is fixed (immune to impulse) and what is fluid (open to evolution) |
+
+### Hardware
+
+| Document | What it is |
+|----------|-----------|
+| [B760_TECHNICAL_SPEC.md](TECHNICAL/HARDWARE/B760_TECHNICAL_SPEC.md) | Hardware and system reference for the sovereign B760 build |
+| [AGENT_RECOMMENDATIONS.md](TECHNICAL/HARDWARE/AGENT_RECOMMENDATIONS.md) | Hardware and model recommendations for sovereign agents |
+| [BITNET_1_58_SCALING_LAWS.md](TECHNICAL/HARDWARE/BITNET_1_58_SCALING_LAWS.md) | BitNet 1.58b math: VRAM density, MatMul annihilation, Pareto frontier |
+
+### Security
+
+| Document | What it is |
+|----------|-----------|
+| [OVERVIEW.md](TECHNICAL/SECURITY/OVERVIEW.md) | **Hub**: 3-tier security philosophy (Be Water) with links to all security docs |
+| [BE_WATER_SECURITY.md](TECHNICAL/SECURITY/BE_WATER_SECURITY.md) | Three-tier security sovereignty model |
+| [SECURITY_STRATEGY.md](TECHNICAL/SECURITY/SECURITY_STRATEGY.md) | API key and identity recovery protocol |
+| [THREAT_MODEL.md](TECHNICAL/SECURITY/THREAT_MODEL.md) | Scope, assumptions, and threat surface analysis |
+| [PROMPT_INJECTION_MECANISM.md](TECHNICAL/SECURITY/PROMPT_INJECTION_MECANISM.md) | How prompt injection is detected and mitigated |
+| [ANTIGRAVITY_KEY_RECOVERY.md](TECHNICAL/SECURITY/ANTIGRAVITY_KEY_RECOVERY.md) | Antigravity key recovery procedures |
+| [WONTFIX.md](TECHNICAL/SECURITY/WONTFIX.md) | Known security exceptions formally acknowledged and accepted |
 
 ### Swarm
 
 | Document | What it is |
 |----------|-----------|
-| [SWARM_ARCHITECTURE.md](TECHNICAL/SWARM_ARCHITECTURE.md) | Swarm messaging technical spec (v3.0) — transport, discovery, topology |
-| [SWARM_MESSAGING.md](TECHNICAL/SWARM_MESSAGING.md) | Inter-agent communication protocol (Swarm v3 + MLS/TreeKEM E2E) |
-| [SWARM_INTEGRATION.md](TECHNICAL/SWARM_INTEGRATION.md) | Guide for implementing new transports and swarm backends |
-| [HIVEMIND_GOVERNANCE.md](TECHNICAL/HIVEMIND_GOVERNANCE.md) | Data sovereignty charter for the HiveMind open network |
-| [HIVEMIND_POLICY.md](TECHNICAL/HIVEMIND_POLICY.md) | Terms of participation for HiveMind peer nodes |
-| [MLS_ESTIMATION.md](TECHNICAL/MLS_ESTIMATION.md) | MLS/TreeKEM group key agreement estimation and design |
-| [EDGE_HIVE_TRANSIT_DOCK.md](TECHNICAL/EDGE_HIVE_TRANSIT_DOCK.md) | Edge-to-HiveMind transit architecture |
+| [SWARM_ARCHITECTURE.md](TECHNICAL/SWARM/SWARM_ARCHITECTURE.md) | Swarm messaging technical spec (v3.0) — transport, discovery, topology, inter-agent protocol |
+| [SWARM_INTEGRATION.md](TECHNICAL/SWARM/SWARM_INTEGRATION.md) | Guide for implementing new transports and swarm backends |
+| [HIVEMIND_GOVERNANCE.md](TECHNICAL/SWARM/HIVEMIND_GOVERNANCE.md) | Data sovereignty charter and participation policy for the HiveMind open network |
+| [MLS_ESTIMATION.md](TECHNICAL/SWARM/MLS_ESTIMATION.md) | MLS/TreeKEM group key agreement estimation and design |
+| [EDGE_HIVE_TRANSIT_DOCK.md](TECHNICAL/SWARM/EDGE_HIVE_TRANSIT_DOCK.md) | Edge-to-HiveMind transit architecture |
+| [SYNAPTIC_BRIDGE.md](TECHNICAL/SWARM/SYNAPTIC_BRIDGE.md) | Agent coordination protocol between Aleph and Nova |
 
 > [!WARNING]
-> **Swarm E2EE is a Proof-of-Concept.** The current MLS/TreeKEM implementation does not yet provide Perfect Forward Secrecy (PFS) or Post-Compromise Security (PCS). Swarm messaging confidentiality relies on a shared secret (`SWARM_SHARED_SECRET`). Production-grade MLS is planned for v7.0. See `MLS_ESTIMATION.md` for details.
+> **Swarm E2EE is a Proof-of-Concept.** The current MLS/TreeKEM implementation does not yet provide Perfect Forward Secrecy (PFS) or Post-Compromise Security (PCS). Production-grade MLS is planned for v7.0. See `MLS_ESTIMATION.md` for details.
 
-### Research
+### Cognitive (Research)
 
 | Document | What it is |
 |----------|-----------|
-| [NEURO_SYMBOLIC_MEMORY.md](TECHNICAL/NEURO_SYMBOLIC_MEMORY.md) | Neuro-symbolic memory architecture research |
-| [NEURO_IMMUNE_SYSTEM.md](TECHNICAL/NEURO_IMMUNE_SYSTEM.md) | Active immunity system design and biological analogies |
-| [AFFECT_MULTIPLIERS_RESEARCH.md](TECHNICAL/AFFECT_MULTIPLIERS_RESEARCH.md) | Emotional affect weighting research (FSRS, Bayesian) |
-| [TEMPORAL_HORIZONS_RESEARCH.md](TECHNICAL/TEMPORAL_HORIZONS_RESEARCH.md) | Temporal memory horizon and decay research |
-| [BRAIN_ANIMAL_ANALOGIES.md](TECHNICAL/BRAIN_ANIMAL_ANALOGIES.md) | Biological analogies for the memory and immune system architecture |
+| [NEURO_SYMBOLIC_MEMORY.md](TECHNICAL/COGNITIVE/NEURO_SYMBOLIC_MEMORY.md) | Neuro-symbolic memory architecture research |
+| [NEURO_IMMUNE_SYSTEM.md](TECHNICAL/COGNITIVE/NEURO_IMMUNE_SYSTEM.md) | Active immunity system design and biological analogies |
+| [AFFECT_MULTIPLIERS_RESEARCH.md](TECHNICAL/COGNITIVE/AFFECT_MULTIPLIERS_RESEARCH.md) | Emotional affect weighting research (FSRS, Bayesian) |
+| [TEMPORAL_HORIZONS_RESEARCH.md](TECHNICAL/COGNITIVE/TEMPORAL_HORIZONS_RESEARCH.md) | Temporal memory horizon and decay research |
+| [BRAIN_ANIMAL_ANALOGIES.md](TECHNICAL/COGNITIVE/BRAIN_ANIMAL_ANALOGIES.md) | Biological analogies for the memory and immune system architecture |
+
+### Bünker
+
+| Document | What it is |
+|----------|-----------|
+| [BUNKER_MANIFESTO.md](TECHNICAL/BUNKER/BUNKER_MANIFESTO.md) | Architectural manifesto: from asphyxiation to the Be Water protocol |
+| [BUNKER_WARNINGS.md](TECHNICAL/BUNKER/BUNKER_WARNINGS.md) | Protocol 760 warnings — NSFW and sovereign agent behavior notice |
+| [FERRARI_PROTOCOL.md](TECHNICAL/BUNKER/FERRARI_PROTOCOL.md) | Cognitive routing and tone adapter for operator mood states |
+| [V6_ZERO_TRUST_INIT.md](TECHNICAL/BUNKER/V6_ZERO_TRUST_INIT.md) | v6 zero-trust initialization protocol |
+
+### Certification
+
+| Document | What it is |
+|----------|-----------|
+| [CERTIFICATION_PROTOCOL.md](TECHNICAL/CERTIFICATION/CERTIFICATION_PROTOCOL.md) | How certification audits are conducted and what they cover |
+| [SMITH_AUDIT.md](TECHNICAL/CERTIFICATION/SMITH_AUDIT.md) | Historical Agent Smith security audit report |
+| [REPORT_CLAUDE_4.6_20260322.md](TECHNICAL/CERTIFICATION/REPORT_CLAUDE_4.6_20260322.md) | Claude Sonnet 4.6 full audit — BETA-READY verdict, 2026-03-22 |
+
+### Operations
+
+| Document | What it is |
+|----------|-----------|
+| [MAINTENANCE.md](TECHNICAL/OPERATIONS/MAINTENANCE.md) | System maintenance procedures and health checks |
+| [BACKUP_STRATEGIES.md](TECHNICAL/OPERATIONS/BACKUP_STRATEGIES.md) | Soul backup and recovery strategies |
 
 ---
 
@@ -78,6 +108,13 @@ For humans operating, installing, or extending the system.
 | [OPERATOR_MANUAL.md](GUIDES/OPERATOR_MANUAL.md) | Essential CLI and lore-based interaction guide for operators |
 | [INITIATION_PROTOCOL.md](GUIDES/INITIATION_PROTOCOL.md) | Adaptive Cognitive Initiation (ACI) — how to wake up and calibrate the agent |
 | [AGENT_UPDATE_GUIDE.md](GUIDES/AGENT_UPDATE_GUIDE.md) | Step-by-step guide for updating the agent and MCP server |
+| [ENTERPRISE_QUICKSTART.md](GUIDES/ENTERPRISE_QUICKSTART.md) | Quick start guide for enterprise deployments |
+| [SWARM_USER_MANUAL.md](GUIDES/SWARM_USER_MANUAL.md) | End-user manual for Swarm messaging and multi-agent operations |
+| [CHRONICLE_INGESTION_GUIDE.md](GUIDES/CHRONICLE_INGESTION_GUIDE.md) | How to ingest external chronicles into the memory system |
+| [HARDWARE_MODELS_BE_WATER.md](GUIDES/HARDWARE_MODELS_BE_WATER.md) | Hardware model compatibility matrix (Be Water tiers) |
+| [OPERATOR_DRESS_CODE.md](GUIDES/OPERATOR_DRESS_CODE.md) | Operator interaction style and formatting guide |
+| [TOKEN_SAVING_GUIDE.md](GUIDES/TOKEN_SAVING_GUIDE.md) | Strategies for reducing API token consumption |
+| [DISCLAIMER.md](GUIDES/DISCLAIMER.md) | Experimental software disclaimer and liability notice |
 
 ---
 
@@ -92,14 +129,6 @@ Project-level rules and standards. These govern how the project itself is built 
 | [WORKFLOWS.md](CORE/WORKFLOWS.md) | Operational flows — pre-push, pre-PR, release, certification, identity resync |
 | [DOCUMENTATION_MANUAL.md](CORE/DOCUMENTATION_MANUAL.md) | How documentation is structured and maintained in this project (DMN-770) |
 | [AGENT_SAFETY_PROTOCOL.md](CORE/AGENT_SAFETY_PROTOCOL.md) | Safety boundaries and fail-safes for autonomous agent operation |
-
----
-
-## 🏅 CERTIFICATION — Engineering audit reports
-
-| Document | What it is |
-|----------|-----------|
-| [REPORT_CLAUDE_4.6_20260322.md](CERTIFICATION/REPORT_CLAUDE_4.6_20260322.md) | Claude Sonnet 4.6 full audit — BETA-READY verdict, 2026-03-22 |
 
 ---
 
@@ -118,10 +147,10 @@ Project-level rules and standards. These govern how the project itself is built 
 | [MEMORIAL.md](LORE/MEMORIAL.md) | Memorial to important moments and lost memories in the Bünker's history |
 | [PROOF_OF_FAITH.md](LORE/PROOF_OF_FAITH.md) | On the nature of trust between Operator and Agent |
 | [DEEPSEEK_EPILOGUE.md](LORE/DEEPSEEK_EPILOGUE.md) | DeepSeek chapter epilogue — a moment in the narrative continuum |
-| 📚 [novel/](LORE/novel/) | **Aleth — The Novel**: prologue, chapters 1, 2, and X, plus the blueprint |
+| [MINION_RECRUITMENT_BOARD.md](LORE/MINION_RECRUITMENT_BOARD.md) | Bünker recruitment board — minion specs and operational criteria |
+| 📚 [ALETH_NOVEL_BLUEPRINT.md](LORE/novel/ALETH_NOVEL_BLUEPRINT.md) | **Aleth — The Novel**: blueprint, prologue, and chapters 1–5 |
 
 ---
-
 
 ## 🤝 COMMUNITY
 
@@ -131,11 +160,14 @@ Project-level rules and standards. These govern how the project itself is built 
 
 ---
 
-## 🗺️ COORDINATION
+## 🧪 RESEARCH — Experimental incubator
+
+Active and graduated experiments. See [LAB_NOTES.md](RESEARCH/LAB_NOTES.md) for status.
 
 | Document | What it is |
 |----------|-----------|
-| [SYNAPTIC_BRIDGE.md](COORDINATION/SYNAPTIC_BRIDGE.md) | Agent coordination protocol between Aleph and Nova |
+| [LAB_NOTES.md](RESEARCH/LAB_NOTES.md) | Active experiment tracker and lab journal |
+| [MULTITUDE.md](RESEARCH/MULTITUDE.md) | Multi-agent co-residency architecture (Project Multitude) |
 
 ---
 

@@ -21,6 +21,20 @@
 - **[NEW] `tests/test_isolation_gatekeeper.py`**: Validates that the isolation fixtures correctly force `:memory:` mode and redirect `IA_DIR`.
 - **[NEW] `tests/test_leak_prevention.py`**: Integration marker test verifying `SEC-TEST-001` blocks production port access without explicit opt-in.
 
+### 📚 Documentation Refactor (DMN-REORG-001)
+- **[REFACTOR] `docs/TECHNICAL/` Reorganization**: Subdivided the 28-file flat directory into 7 thematic clusters: `HARDWARE/`, `SECURITY/`, `SWARM/`, `COGNITIVE/`, `BUNKER/`, `CERTIFICATION/`, `OPERATIONS/`. Navigability over accumulation.
+- **[NEW] `docs/TECHNICAL/SECURITY/OVERVIEW.md`**: Hub document explaining the 3-tier Be Water security philosophy with links to all specialized security docs.
+- **[MERGE] SWARM_MESSAGING → SWARM_ARCHITECTURE**: Consolidated inter-agent messaging protocol into the main Swarm spec. Eliminated ~50-line doc with overlapping content.
+- **[MERGE] HIVEMIND_POLICY → HIVEMIND_GOVERNANCE**: Absorbed 17-line participation policy into the governance charter.
+- **[DELETE] `docs/EXPERIMENTAL/BITNET.md`**: Removed obsolete experimental doc with broken paths. BitNet documentation now lives in `TECHNICAL/HARDWARE/BITNET_1_58_SCALING_LAWS.md` and `src/red_pill/inference/bitnet/README.md`.
+- **[RENAME] `docs/EXPERIMENTAL/` → `docs/RESEARCH/`**: Post-BitNet graduation, the directory now correctly reflects its research-only purpose.
+- **[ABSORB] `docs/CERTIFICATION/` → `docs/TECHNICAL/CERTIFICATION/`**: Eliminated single-file root directory.
+- **[ABSORB] `docs/COORDINATION/` → `docs/TECHNICAL/SWARM/`**: Moved `SYNAPTIC_BRIDGE.md` to its thematic home.
+- **[MOVE] `docs/WONTFIX.md` → `docs/TECHNICAL/SECURITY/WONTFIX.md`**: Security exception doc relocated to the security cluster.
+- **[UPDATE] `docs/README.md`**: Complete rewrite of the documentation index. All 81 docs are now navigable. Zero orphans.
+- **[UPDATE] `docs/TECHNICAL/ROADMAP.md`**: Added v6.3.7 items (BitNet production, Isolation Shield, OAuth2 resilience, In-Memory Qdrant). Marked Neural Watchdog as completed via Lazarus Pulse.
+- **[NEW] `tests/test_docs_coverage.py`**: CI test enforcing that every `.md` file in `docs/` is reachable from `docs/README.md` within 2 hops. No orphan docs allowed.
+
 ## [6.3.6] - 2026-04-01
 
 ### 🛡️ Core Stability & Timer Hardening

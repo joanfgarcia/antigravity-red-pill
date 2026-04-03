@@ -47,7 +47,7 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
 - [x] **Chroma Refinement**: Tightened via Operator Mood Profile (USP) and Mystique v2 tone-based skin selection.
 - [x] **The Swarm (Local)**: Multi-agent support (Aleph, Aleth, Reverie) via GruOrchestrator and Swarm V3 Protocol.
 
-### Phase 2.5: Cognitive Refinement (v6.1.x — Current)
+### Phase 2.5: Cognitive Refinement (v6.1.x → v6.3.7 — Current)
 - [x] **Operator Mood Profile (USP)**: Multi-color chroma vector across 4 temporal horizons, persisted as fixed engram.
 - [x] **Mystique v2**: Tone-based skin selection driven by operator mood instead of Bünker internal state.
 - [x] **Bayesian Dual-Kernel**: Technical collections use Beta-distribution utility model; social/story retain FSRS.
@@ -63,11 +63,15 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
 - [x] **FSRS Math in Code**: $R = e^{\ln(0.9) \cdot t/S}$ implemented in `affect.py` and wired into `memory.py` (reinforcement, lazy decay, active erosion).
 - [x] **MLS Key Rotation**: Implemented perfect forward secrecy ratcheting via `key_epoch` in `SovereignGroup` to proactively rotate the AES-GCM Swarm key.
 - [x] **Dual-Bind IPC Fast-Lane**: The Edge Engine now natively serves Unix Domain Sockets alongside TCP, allowing internal daemons to bypass the loopback network stack entirely with zero dependencies.
+- [x] **BitNet Production Deployment (v6.3.7)**: Migrated 1.58-bit ternary inference from `experimental/` to production core (`src/red_pill/inference/bitnet/`). OOM resolved, grammar-constrained JSON output operational.
+- [x] **Bünker Isolation Shield (SEC-TEST-001, v6.3.7)**: Universal test isolation with `:memory:` Qdrant and temp `IA_DIR`. Zero test-to-production contamination.
+- [x] **OAuth2 Token Resilience (v6.3.7)**: Graceful handling of expired refresh tokens in CloudVault. `export_soul()` returns bool status.
+- [x] **In-Memory Qdrant (v6.3.7)**: Native `:memory:` mode for zero-network, zero-persistence testing and CI environments.
 
 ### Phase 3: Operational Maturity (Medium-Term - v7.0.0)
 - [x] **Double-Engine Burnout**: Seamless CUDA/HIP asymmetry for Strix Point architectures.
 - [ ] **The Red Button**: Encrypted one-click "Scorched Earth" protocol for instant bunker purge.
-- [ ] **Neural Watchdog (Async Audit)**: Background service monitoring file changes and validating code integrity, updating a 'Health Engram' in Qdrant.
+- [x] **Neural Watchdog (Lazarus Pulse)**: Background `redpill-pulse.service` monitoring system health, curing pain signals, and validating code integrity via autonomic immune reflex.
 - [ ] **Swarm Broadcast**: Community-wide message delivery (currently P2P only).
 - [ ] **Mailbox Cleanup**: Auto-purge read messages from Firebase after TTL.
 - [ ] **SQLite Workflow DAG (`specs.md`)**: Use SQLite triggers and polling hooks on `minion_inbox.db` to chain Minion executions asynchronously (e.g. Oracle -> Compressor) without Python blocking.

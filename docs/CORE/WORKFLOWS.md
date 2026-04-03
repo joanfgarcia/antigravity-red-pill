@@ -135,7 +135,7 @@ RED_PILL_DIGEST_LORE.txt    ← docs/ + seeds/
 
 ### High Council Members
 
-Per `docs/TECHNICAL/CERTIFICATION_PROTOCOL.md`:
+Per `docs/TECHNICAL/CERTIFICATION/CERTIFICATION_PROTOCOL.md`:
 
 | Member | Role |
 |--------|------|
@@ -149,7 +149,7 @@ Per `docs/TECHNICAL/CERTIFICATION_PROTOCOL.md`:
 After receiving the certification report, save it at:
 
 ```
-docs/CERTIFICATION/REPORT_{AUDITOR}_{YYYYMMDD}.md
+docs/TECHNICAL/CERTIFICATION/REPORT_{AUDITOR}_{YYYYMMDD}.md
 ```
 
 Act on P1 items immediately. P0 items block production certification. P2/P3 are tracked for the next cycle.
