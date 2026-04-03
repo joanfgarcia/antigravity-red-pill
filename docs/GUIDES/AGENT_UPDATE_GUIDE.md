@@ -297,8 +297,10 @@ Replace old version with new in all 6 file locations before pushing.
     cd 3rdparty/BitNet-1.58b
     python setup_env.py -md 3rdparty/llama.cpp -q i2_s
 
-    # Download models from HuggingFace (multi-GB, not stored in git)
-    huggingface-cli download 1bitLLM/bitnet_b1_58-3B --local-dir models/bitnet_b1_58-3B
+    # Download the ONLY certified model (98/100 benchmark score)
+    # Do NOT use base models (Llama3-8B, BitNet-2B) — they fail zero-shot tasks
+    huggingface-cli download tiiuae/Falcon3-10B-Instruct-1.58bit \
+      --local-dir models/Falcon3-10B-Instruct-1.58bit
     ```
 
     > [!NOTE]

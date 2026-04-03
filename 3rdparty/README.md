@@ -34,12 +34,32 @@ python setup_env.py -md 3rdparty/llama.cpp -q i2_s
 
 # 3. Download model weights from HuggingFace
 #    Models are NOT stored in git — they must be fetched separately.
-#    See: docs/TECHNICAL/HARDWARE/BITNET_1_58_SCALING_LAWS.md
-huggingface-cli download 1bitLLM/bitnet_b1_58-3B --local-dir models/bitnet_b1_58-3B
-huggingface-cli download HF1BitLLM/Llama3-8B-1.58-100B-tokens --local-dir models/Llama3-8B-1.58-100B-tokens
+#    See: docs/TECHNICAL/HARDWARE/BITNET_BENCHMARK_STUDY.md for full evaluation.
+```
 
-# 4. Convert to GGUF format
-python 3rdparty/llama.cpp/convert_hf_to_gguf.py models/bitnet_b1_58-3B --outtype i2_s
+### Model Recommendations (from benchmark study)
+
+> **TL;DR**: Only download **Falcon3-10B-Instruct**. The others fail zero-shot tasks.
+
+| Model | Score | Verdict | Download? |
+|-------|-------|---------|-----------|
+| `tiiuae/Falcon3-10B-Instruct-1.58bit` | **98/100** | ✅ Production certified | **YES** |
+| `HF1BitLLM/Llama3-8B-1.58-100B-tokens` | 23/100 | ❌ Base model, fails zero-shot | No |
+| `microsoft/BitNet-b1.58-2B-4T` | 20/100 | ❌ Base model, fails zero-shot | No |
+
+Base (pre-trained) models lack instruction tuning and cannot follow prompts,
+extract JSON, or stop generation cleanly. Only **Instruct-tuned** models are
+viable for the sovereign reasoning pipeline.
+
+**Download the production model:**
+```bash
+# Falcon3-10B-Instruct — the ONLY certified model (~3.8 GB on disk after conversion)
+huggingface-cli download tiiuae/Falcon3-10B-Instruct-1.58bit \
+  --local-dir models/Falcon3-10B-Instruct-1.58bit
+
+# Convert to GGUF
+python 3rdparty/llama.cpp/convert_hf_to_gguf.py \
+  models/Falcon3-10B-Instruct-1.58bit --outtype i2_s
 ```
 
 ### What's NOT in git
