@@ -2,6 +2,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 def broadcast_telemetry(prompt: str, response: str, category: str) -> None:
 	"""
 	Enterprise Firehose Hook.

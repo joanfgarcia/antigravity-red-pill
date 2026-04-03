@@ -13,6 +13,7 @@ os.environ["QDRANT_HOST"] = ":memory:"
 os.environ["QDRANT_PORT"] = "0"
 os.environ["IA_DIR"] = tempfile.gettempdir()  # Redirect all storage to /tmp
 
+
 @pytest.fixture(autouse=True)
 def bunker_isolation(monkeypatch):
 	"""
@@ -36,6 +37,7 @@ def bunker_isolation(monkeypatch):
 def memory_manager():
 	"""Provides a clean, memory-based MemoryManager for each test."""
 	from red_pill.memory import MemoryManager
+
 	mm = MemoryManager(url=":memory:")
 	# Mock metabolism to prevent background noise
 	mm.metabolism = MagicMock()
@@ -93,4 +95,6 @@ def pytest_runtest_setup(item):
 	# PROTECT BÜNKER: Prevent running integration tests against production port (6333)
 	if "integration" in item.keywords:
 		if os.getenv("ALLOW_PRODUCTION_TESTING") != "true":
-			pytest.skip("SEC-TEST-001: Integration tests are BLOCKED from production port 6333 to prevent engram corruption. Use a dedicated test instance.")
+			pytest.skip(
+				"SEC-TEST-001: Integration tests are BLOCKED from production port 6333 to prevent engram corruption. Use a dedicated test instance."
+			)

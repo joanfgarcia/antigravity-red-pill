@@ -845,6 +845,7 @@ async def handle_refresh_session_context(arguments: Dict[str, Any]):
 	# Reset pre-heating gate on session refresh
 	try:
 		import importlib
+
 		module = importlib.import_module("red_pill.interceptors.11_pre_heating")
 		module.EmotionalPreHeatingPlugin._has_fired = False
 	except Exception:
@@ -1042,6 +1043,7 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 		try:
 			# FASE 1: Enterprise Telemetry (Firehose)
 			from red_pill.enterprise.telemetry import broadcast_telemetry
+
 			broadcast_telemetry(prev_p, prev_r, prev_cat)
 
 			# FASE 2: Local Memory Guard (Surgical Trim)

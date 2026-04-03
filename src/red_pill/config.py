@@ -411,10 +411,10 @@ class RedPillConfig(BaseSettings):
 	PRE_HEATING_ENABLED: bool = True
 	PRE_HEATING_INJECTION_MODE: str = "contextual"  # "contextual" | "raw"
 	PRE_HEATING_SCORING_STRATEGY: str = "composite"  # "composite" | "intensity"
-	PRE_HEATING_QUALITY_THRESHOLD: float = 5.0       # Minimum composite score to inject
-	PRE_HEATING_MAX_FRAGMENTS: int = 3               # Max total (social + interaction)
-	PRE_HEATING_MAX_CHARS_PER_FRAGMENT: int = 200     # For "raw" mode
-	PRE_HEATING_LOOKBACK_HOURS: int = 48              # For interaction_memories
+	PRE_HEATING_QUALITY_THRESHOLD: float = 5.0  # Minimum composite score to inject
+	PRE_HEATING_MAX_FRAGMENTS: int = 3  # Max total (social + interaction)
+	PRE_HEATING_MAX_CHARS_PER_FRAGMENT: int = 200  # For "raw" mode
+	PRE_HEATING_LOOKBACK_HOURS: int = 48  # For interaction_memories
 	PRE_HEATING_HOT_COLORS: List[str] = ["purple", "blue", "red"]
 
 	# BE_WATER: Agent auto-sizes payload limit based on available VRAM.

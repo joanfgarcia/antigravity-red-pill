@@ -337,7 +337,10 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 			target_col = f"{llm_category}_memories"
 		elif llm_category == "mixed":
 			# Mixed: use keyword heuristic as tiebreaker
-			if any(kw in raw_text.lower() for kw in ["code", "error", "bash", "python", "script", "commit", "test", "debug", "deploy", "pipeline", "ci", "config"]):
+			if any(
+				kw in raw_text.lower()
+				for kw in ["code", "error", "bash", "python", "script", "commit", "test", "debug", "deploy", "pipeline", "ci", "config"]
+			):
 				target_col = "work_memories"
 			else:
 				target_col = "social_memories"

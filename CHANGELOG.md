@@ -2,6 +2,14 @@
 
 ## [6.3.7] - 2026-04-03
 
+### 🧠 Cognitive Continuity (Phase 3.5 Bridge)
+- **[FEAT] Emotional Pre-Heating (Oracle Protocol)**: Built Interceptor Plugin 11 (`11_pre_heating.py`) to inject emotional texture into the model's initial prompt at session startup, curing the "cold boot" syndrome.
+- **[FEAT] Graceful Degradation Engine**: Implemented `pre_heating_scorer.py` using a composite equation (`intensity * recency * color_weight`) to block low-quality memories (`< 5.0` threshold) from injecting noise into the prompt. Contextual state (`operator_state`, `themes`) is extracted gracefully via regex.
+- **[FEAT] Silent Scribe Relay Decoupling (Memory Input Filter)**: Split the IDE telemetry pipeline into two distinct phases. Phase 1 (Enterprise) receives the raw firehose. Phase 2 (Local Qdrant) is strictly protected by a structural markdown segmenter.
+- **[FEAT] Surgical Trimming (`telemetry_filter.py`)**: Designed a lightning-fast regex heuristic capable of dropping `pytest` and `CI` outputs enclosed in markdown blocks while immaculately preserving the human philosophy and natural language surrounding it. Replaced toxic tags with benign `[...]` tokens to prevent semantic vector clustering in Qdrant (The Bayesian Immortality Bug).
+- **[TEST] Emotional Pre-Heating Test Suite**: Added `tests/test_pre_heating.py` with 7 robust mock cases to ensure threshold degradation, state resets, and scoring algorithms perform surgically.
+- **[TEST] Scribe Decoupling Test Suite**: Added `tests/test_telemetry_filter.py` validating that philosophical discussions are preserved while raw terminal dumps are truncated.
+
 ### 🌀 Sovereign BitNet Deployment (Cognitive Independence)
 - **[FEAT] BitNet 1.58b Inference Stabilization**: Standardized the use of ternary weights (`{-1, 0, 1}`) dynamically packaged to INT2 parameters. Established that the VRAM ceiling on the local RTX 5070 explicitly maxes at **16B-18B** BitNet models, yielding absolute perplexity parity with FP16 equivalents (3B) while freeing massive memory for context caching.
 - **[FIX] OOM Memory Evaporation**: Remedied a catastrophic Out-Of-Memory (OOM) sequence in `generate.py` by purging static `torch.cuda.graph` allocation and dynamically reusing the `decode` (INT2) model during the `prefill` phase. This reduced cognitive load baseline from ~7.5GB to ~2.3GB VRAM.

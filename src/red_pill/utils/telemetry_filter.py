@@ -1,8 +1,8 @@
 import re
 from collections import Counter
 
-ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-MD_CODE_BLOCK = re.compile(r'```(?:[a-zA-Z0-9#\-\+]+)?\n(.*?)\n```', re.DOTALL)
+ANSI_ESCAPE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+MD_CODE_BLOCK = re.compile(r"```(?:[a-zA-Z0-9#\-\+]+)?\n(.*?)\n```", re.DOTALL)
 
 
 def is_garbage(content: str) -> bool:
@@ -31,17 +31,17 @@ def is_garbage(content: str) -> bool:
 		return True
 
 	ci_markers = [
-		"--- formatting check", 
-		"--- linting check", 
+		"--- formatting check",
+		"--- linting check",
 		"--- static analysis",
-		"--- neural validation", 
-		"warnings summary", 
-		"passed in", 
-		"PASS", 
+		"--- neural validation",
+		"warnings summary",
+		"passed in",
+		"PASS",
 		"FAIL",
-		"pytest.org", 
-		"short test summary", 
-		"capture-warnings"
+		"pytest.org",
+		"short test summary",
+		"capture-warnings",
 	]
 	ci_hits = sum(1 for m in ci_markers if m.lower() in content_lower_stripped)
 	if ci_hits >= 2:

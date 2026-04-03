@@ -1,6 +1,7 @@
 import pytest
 from red_pill.utils.telemetry_filter import is_garbage, filter_noise_from_turn
 
+
 def test_is_garbage_empty_or_short():
 	assert is_garbage("") is False
 	assert is_garbage("   ") is False
@@ -19,7 +20,7 @@ def test_is_garbage_pre_pr_audit():
 
 def test_is_garbage_ansi():
 	# 90% ANSI string
-	content = "\x1B[0;34m" * 15 + "hello" + "\x1B[0m" * 15
+	content = "\x1b[0;34m" * 15 + "hello" + "\x1b[0m" * 15
 	assert is_garbage(content) is True
 
 
@@ -39,7 +40,7 @@ def test_filter_noise_clean_prompt():
 def test_filter_noise_surgical_truncate():
 	prompt = "This test failed miserably:\n```bash\n=================================== FAILURES ===================================\nERROR tests/something.py\n```\nBut don't worry, the philosophical meaning behind this failure is that human error is inevitable."
 	res = filter_noise_from_turn(prompt)
-	
+
 	# The garbage block should be truncated
 	assert "FAILURES" not in res
 	assert "[...]" in res
