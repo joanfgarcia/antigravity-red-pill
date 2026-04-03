@@ -47,8 +47,23 @@ SOCIAL_MARKERS = [
 
 
 def is_garbage(content: str) -> bool:
-	"""Detect Qwen hallucination garbage: repetitive tokens, nonsensical output."""
+	"""Detect Qwen hallucination garbage, terminal noise, and non-content."""
 	if len(content) < 10:
+		return True
+
+	# Pattern: ANSI escape codes (raw terminal output)
+	ansi_stripped = re.sub(r"\x1b\[[0-9;]*m", "", content).strip()
+	if len(ansi_stripped) < 15:
+		return True
+	# If >40% of content is ANSI escapes → terminal dump, not memory
+	if len(content) > 30 and len(ansi_stripped) < len(content) * 0.6:
+		return True
+
+	# Pattern: CI/test output (PASS/FAIL/warnings with no substance)
+	ci_markers = ["--- formatting check", "--- linting check", "--- static analysis",
+		"--- neural validation", "warnings summary", "passed in", "PASS", "FAIL"]
+	ci_hits = sum(1 for m in ci_markers if m.lower() in ansi_stripped.lower())
+	if ci_hits >= 2 and len(ansi_stripped) < 300:
 		return True
 
 	words = content.lower().split()
