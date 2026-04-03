@@ -1,0 +1,4 @@
+[submodule "3rdparty/BitNet-1.58b"]
+	path = 3rdparty/BitNet-1.58b
+	url = https://github.com/joanfgarcia/BitNet-1.58b.git
+	branch = main
