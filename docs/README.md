@@ -135,7 +135,8 @@ Project-level rules and standards. These govern how the project itself is built 
 ## 🎭 LORE — Narrative universe (CC BY-NC 4.0)
 
 > *All files in this section are creative works licensed under [CC BY-NC 4.0](../LICENSE.creative).*  
-> *Commercial use requires prior written consent from Joan García.*
+> *Reading, sharing, and enjoyment are free for everyone — individuals and organizations alike.*  
+> *Commercial exploitation (movies, books, merchandise, SaaS integration) requires prior written consent from Joan García.*
 
 | Document | What it is |
 |----------|-----------|
