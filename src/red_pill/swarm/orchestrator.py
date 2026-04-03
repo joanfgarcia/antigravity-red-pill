@@ -47,10 +47,10 @@ class GruOrchestrator:
 
 		# 3. BitNet Provider (Direct Binary)
 		# Path from experimental investigation
-		bitnet_bin = os.path.expanduser("~") + "/Documents/IA/experimental/BitNet/build/bin/llama-cli"
-		bitnet_model = os.path.expanduser("~") + "/Documents/IA/experimental/BitNet/models/2B-4T/ggml-model-i2_s.gguf"
+		bitnet_bin = os.path.join(os.getcwd(), "3rdparty/BitNet-1.58b/build/bin/llama-cli")
+		bitnet_model = os.path.join(os.getcwd(), "3rdparty/BitNet-1.58b/models/2B-4T/ggml-model-i2_s.gguf")
 		if os.path.exists(bitnet_bin) and os.path.exists(bitnet_model):
-			grammar_path = os.path.join(os.path.dirname(FLOW_REGISTRY_PATH), "../experimental/bitnet/json.gbnf")
+			grammar_path = os.path.join(os.path.dirname(FLOW_REGISTRY_PATH), "../inference/bitnet/json.gbnf")
 			ProviderRegistry.register_inference_provider(
 				"bitnet", BitNetInferenceProvider(runner_path=bitnet_bin, model_path=bitnet_model, grammar_path=grammar_path)
 			)

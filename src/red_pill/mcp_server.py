@@ -125,8 +125,11 @@ async def handle_control_bunker(arguments: Dict[str, Any]):
 		SoulManager().full_backup()
 		output = "Total Soul Backup executed successfully."
 	elif cmd == "export":
-		SoulManager().export_soul()
-		output = "Lean Soul Kit exported and transmitted to Cloud Haven."
+		success = SoulManager().export_soul()
+		if success:
+			output = "Lean Soul Kit exported and transmitted to Cloud Haven."
+		else:
+			output = "[❌ CLOUD_FAILURE] Soul Kit exported locally but transmission failed. OAuth2 token likely expired or revoked."
 	elif cmd == "purge":
 		# SEC-PURGE-001: Require explicit opt-in via env var to prevent accidental data loss.
 		# Set ALLOW_PURGE=true in .env only when intentionally running a purge operation.

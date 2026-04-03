@@ -43,7 +43,7 @@ def audit_collection(collection_name: str, md_file):
 
 
 def main():
-	out_path = Path("/home/joan/.gemini/antigravity/artifacts/audit_results.md")
+	out_path = Path.home() / ".gemini" / "antigravity" / "artifacts" / "audit_results.md"
 	out_path.parent.mkdir(parents=True, exist_ok=True)
 
 	with open(out_path, "w", encoding="utf-8") as f:

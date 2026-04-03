@@ -91,6 +91,7 @@ jobs:
         env:
           QDRANT_API_KEY: "ci-integration-key-770"
           SIDECAR_AUTH_KEY: "ci-integration-sidecar-key-770"
+          ALLOW_PRODUCTION_TESTING: "true"  # SEC-TEST-001: Safe — Qdrant is an ephemeral Docker container
         # Run from repo root so uv run resolves the project correctly
         run: bash tests/integration/run_integration.sh
 

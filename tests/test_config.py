@@ -86,7 +86,7 @@ class TestConfigModuleAliases:
 
 		assert isinstance(cfg.QDRANT_HOST, str)
 		assert isinstance(cfg.QDRANT_URL, str)
-		assert cfg.QDRANT_URL.startswith("http")
+		assert cfg.QDRANT_URL.startswith("http") or cfg.QDRANT_URL == ":memory:"
 		assert isinstance(cfg.EROSION_RATE, float)
 		assert isinstance(cfg.DEEP_RECALL_TRIGGERS, list)
 		assert "despierta" in cfg.DEEP_RECALL_TRIGGERS

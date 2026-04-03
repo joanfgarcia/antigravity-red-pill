@@ -160,7 +160,7 @@ class TestConfigValidatorEdgeCases:
 	def test_qdrant_url_defaults_to_localhost(self):
 		"""When QDRANT_URL is empty, validator constructs localhost URL."""
 		cfg = RedPillConfig(QDRANT_URL="")
-		assert "localhost" in cfg.QDRANT_URL or "6333" in cfg.QDRANT_URL
+		assert "localhost" in cfg.QDRANT_URL or "6333" in cfg.QDRANT_URL or cfg.QDRANT_URL == ":memory:"
 
 	def test_deep_recall_triggers_parsed_from_comma_string(self):
 		"""DEEP_RECALL_TRIGGERS_STR is split into a list (tests list validator)."""

@@ -108,7 +108,7 @@ class SoulManager:
 		self.create_manifest(timestamp)
 		print(f"Lean Soul Backup completed at {timestamp}")
 
-	def export_soul(self, output_path: Optional[str] = None):
+	def export_soul(self, output_path: Optional[str] = None) -> bool:
 		"""
 		Export the 'Soul' (dynamic data) into a compact, encrypted kit.
 		Following the Architect's 'Lean' directive (v5.6.1):
@@ -160,10 +160,13 @@ class SoulManager:
 			file_id = self.vault.upload_kit(output_path)
 			if file_id:
 				print(f"Cloud Transmission Successful: {file_id}")
+				return True
 			else:
 				print("Cloud Transmission Failed. Local kit preserved.")
+				return False
 
 		print("Note: Encryption (MLS/GPG) is enforced for Cloud Vault as per SEC-F02.")
+		return True  # Local success, but no cloud requested
 
 	def restore_soul(self, source_dir: str, commit: bool = False):
 		"""

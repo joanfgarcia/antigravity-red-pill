@@ -1,6 +1,6 @@
 # Changelog: Red Pill Protocol
 
-## [6.3.7] - 2026-04-01
+## [6.3.7] - 2026-04-03
 
 ### 🌀 Sovereign BitNet Deployment (Cognitive Independence)
 - **[FEAT] BitNet 1.58b Inference Stabilization**: Standardized the use of ternary weights (`{-1, 0, 1}`) dynamically packaged to INT2 parameters. Established that the VRAM ceiling on the local RTX 5070 explicitly maxes at **16B-18B** BitNet models, yielding absolute perplexity parity with FP16 equivalents (3B) while freeing massive memory for context caching.
@@ -8,6 +8,18 @@
 - **[FIX] Sleep Engine Distillation Bypass**: Engineered an exact payload envelope in `api_server.py` to transparently convert raw ternary matrix outputs directly into JSON dictionary schemas (`{"summary": "...", "tags": [...]}`) to satisfy the internal biological Bünker expectations.
 - **[HEAL] Pulse Eradication of `local_llm_offline`**: Validated successfully that the autonomic `redpill-pulse.service` cycle integrates locally, effectively curing the persistence of the missing local LLM pain signal.
 - **[DOCS] Scaling Law Manifesto**: Added `docs/bitnet_1_58_scaling_laws.md` codifying the exact technical capability derived from omitting `FP16` Matrix Multiplications and shifting into ternary-native pure addition architectures.
+
+### 🛡️ Bünker Isolation Shield (SEC-TEST-001)
+- **[FEAT] Secure Test Isolation Gatekeeper**: Overhauled `conftest.py` with a universal `bunker_isolation` auto-use fixture. All tests now force `QDRANT_URL=:memory:` and redirect `IA_DIR` to a temporary directory, making it physically impossible for unit tests to corrupt production engrams.
+- **[FEAT] In-Memory Qdrant Support**: Extended `RedPillConfig.QDRANT_URL` and `StorageEngine` to natively support `:memory:` mode. When `QDRANT_HOST=:memory:`, the system instantiates an ephemeral in-process Qdrant client — zero network, zero persistence.
+- **[FEAT] Integration Test Kill-Switch**: Integration tests against the production Qdrant port (6333) are now blocked by default via `SEC-TEST-001`. Only CI pipelines with `ALLOW_PRODUCTION_TESTING=true` (ephemeral Docker containers) can execute them.
+- **[FEAT] Memory Manager Test Fixture**: Added a reusable `memory_manager` pytest fixture providing a clean, `:memory:`-backed `MemoryManager` with mocked metabolism for isolated test scenarios.
+- **[FIX] OAuth2 Token Resilience**: Hardened `CloudVault` to gracefully handle expired/revoked OAuth2 refresh tokens. Failed refreshes now trigger re-authorization instead of crashing the export pipeline. `export_soul()` returns a `bool` status for proper error reporting in MCP.
+- **[FIX] Orchestrator Grammar Path**: Corrected a stale reference in `GruOrchestrator` pointing `json.gbnf` to `../experimental/bitnet/` (pre-migration path) → `../inference/bitnet/` (production path).
+- **[FIX] Backup Script Sovereignty**: Refactored `backup_qdrant.sh` to resolve paths from the project root and load `.env` dynamically, eliminating hardcoded `$HOME` references for pod portability.
+- **[FIX] Audit Script Path**: Replaced hardcoded absolute path in `audit_hallucinations.py` with `Path.home()` for cross-user compatibility.
+- **[NEW] `tests/test_isolation_gatekeeper.py`**: Validates that the isolation fixtures correctly force `:memory:` mode and redirect `IA_DIR`.
+- **[NEW] `tests/test_leak_prevention.py`**: Integration marker test verifying `SEC-TEST-001` blocks production port access without explicit opt-in.
 
 ## [6.3.6] - 2026-04-01
 

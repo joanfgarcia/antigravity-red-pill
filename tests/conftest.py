@@ -1,10 +1,4 @@
-"""
-conftest.py — Session-scope stubs to prevent live ML model downloads
-and hardware probes during unit tests.
-
-CERT-COND: All tests must be runnable without network access or GPU hardware.
-"""
-
+import os
 import sys
 import tempfile
 import types
@@ -12,6 +6,40 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+
+# v6.3.7: Secure Isolation Gatekeeper
+# Force :memory: location for all unit tests to prevent production leakage.
+os.environ["QDRANT_HOST"] = ":memory:"
+os.environ["QDRANT_PORT"] = "0"
+os.environ["IA_DIR"] = tempfile.gettempdir()  # Redirect all storage to /tmp
+
+@pytest.fixture(autouse=True)
+def bunker_isolation(monkeypatch):
+	"""
+	Universal isolation fixture (AUTO-USE).
+	Ensures that no test accidentallly hits the production Qdrant or filesystem.
+	"""
+	from red_pill import config as cfg
+
+	# Force isolated testing paths
+	test_dir = tempfile.mkdtemp(prefix="bunker_test_")
+	monkeypatch.setattr(cfg, "IA_DIR", test_dir)
+
+	# Force Qdrant into memory mode UNLESS explicitly requested via integration marker
+	# NOTE: This overrides the module-level lazy attributes
+	monkeypatch.setattr(cfg, "QDRANT_URL", ":memory:")
+
+	yield test_dir
+
+
+@pytest.fixture
+def memory_manager():
+	"""Provides a clean, memory-based MemoryManager for each test."""
+	from red_pill.memory import MemoryManager
+	mm = MemoryManager(url=":memory:")
+	# Mock metabolism to prevent background noise
+	mm.metabolism = MagicMock()
+	return mm
 
 
 @pytest.fixture
@@ -39,7 +67,7 @@ _stub_fastembed()
 
 
 def pytest_collection_modifyitems(items):
-	"""Apply a default timeout to all tests that don't already have one."""
+	"""Apply a default timeout and categorize integration tests."""
 	try:
 		import importlib.util
 
@@ -53,14 +81,16 @@ def pytest_collection_modifyitems(items):
 		pass
 
 
-def check_qdrant_running():
+def check_qdrant_running(port=6333):
 	import socket
 
 	with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
 		s.settimeout(0.5)
-		return s.connect_ex(("localhost", 6333)) == 0
+		return s.connect_ex(("localhost", port)) == 0
 
 
 def pytest_runtest_setup(item):
-	if "integration" in item.keywords and not check_qdrant_running():
-		pytest.skip("TEST-002: Integration tests require Qdrant (Docker) running on port 6333.")
+	# PROTECT BÜNKER: Prevent running integration tests against production port (6333)
+	if "integration" in item.keywords:
+		if os.getenv("ALLOW_PRODUCTION_TESTING") != "true":
+			pytest.skip("SEC-TEST-001: Integration tests are BLOCKED from production port 6333 to prevent engram corruption. Use a dedicated test instance.")

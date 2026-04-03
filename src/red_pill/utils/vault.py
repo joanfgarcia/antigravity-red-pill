@@ -103,22 +103,27 @@ class CloudVault:
 
 				if not creds or not creds.valid:
 					if creds and creds.expired and creds.refresh_token:
-						creds.refresh(Request())
-					else:
+						try:
+							creds.refresh(Request())
+						except Exception as refresh_err:
+							logger.warning(f"OAuth2 refresh failed ({refresh_err}). Re-triggering ritual...")
+							creds = None  # Force ritual
+
+					if not creds:
 						if not os.path.exists(self.client_secrets_file):
 							logger.warning("OAuth2 requested (token/secrets) but client_secrets.json missing. Falling back...")
 						else:
 							print("\n[🛡️ SOVEREIGN AUTHENTICATION] Cloud Vault requires Operator authorization.")
 							print("Please visit the following URL to authorize the Agent:\n")
 							flow = InstalledAppFlow.from_client_secrets_file(self.client_secrets_file, scopes)
-							# Forced to manual mode to ensure the URL doesn't get mangled by the terminal/browser
 							creds = flow.run_local_server(port=43303, open_browser=False, success_message="ritual_complete")
 							with open(self.token_file, "w") as token:
 								token.write(creds.to_json())
 
-				self.service = build("drive", "v3", credentials=creds)
-				logger.info("Cloud Vault (Google Drive OAuth2) active.")
-				return
+				if creds:
+					self.service = build("drive", "v3", credentials=creds)
+					logger.info("Cloud Vault (Google Drive OAuth2) active.")
+					return
 			except Exception as e:
 				logger.error(f"OAuth2 Flow failed: {e}")
 

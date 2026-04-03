@@ -143,6 +143,8 @@ class RedPillConfig(BaseSettings):
 
 	@property
 	def QDRANT_URL(self) -> str:
+		if self.QDRANT_HOST == ":memory:":
+			return ":memory:"
 		return f"{self.QDRANT_SCHEME}://{self.QDRANT_HOST}:{self.QDRANT_PORT}"
 
 	# -----------------------------------------------------------------------

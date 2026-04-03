@@ -2,11 +2,26 @@
 # backup_qdrant.sh — Daily Qdrant Snapshot Backup
 # Backs up all active collections to the backup dir.
 # Retention: keeps last 14 days of snapshots.
+
 set -euo pipefail
 
+# 1. Resolve project root
+_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_PROJECT_ROOT="$(dirname "$_SCRIPT_DIR")"
+
+# 2. Load .env to get IA_DIR and QDRANT_API_KEY
+if [ -f "$_PROJECT_ROOT/.env" ]; then
+	set -a
+	source "$_PROJECT_ROOT/.env"
+	set +a
+fi
+
+# 3. Use Sovereign Pod path (fallback to project root if env missing)
+IA_DIR="${IA_DIR:-$_PROJECT_ROOT}"
+
 QDRANT_URL="http://localhost:6333"
-API_KEY="${QDRANT_API_KEY:?ERROR: QDRANT_API_KEY not set. Run the install script to generate it.}"
-BACKUP_DIR="${HOME}/Documents/IA/backups/qdrant"
+API_KEY="${QDRANT_API_KEY:?ERROR: QDRANT_API_KEY not set. Check your .env file or run the install script.}"
+BACKUP_DIR="${IA_DIR}/backups/qdrant"
 RETENTION_DAYS=14
 LOG_FILE="${HOME}/.local/share/red_pill/backup.log"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
