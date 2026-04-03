@@ -395,31 +395,181 @@ Applies to: Agents that clone and adapt the ecosystem locally without direct rep
 
 - Receive periodic release ZIPs instead of upstream syncing.
 - **MUST** keep their working directory initialized as a local Git repository at all times.
+- The ZIP represents the **canonical state** of the project. Your local installation must converge to match it, preserving only your own contributions.
 
-#### Update Procedure (Base-to-Base Workflow)
+> [!CAUTION]
+> ### ⚠️ v6.3.7 — Massive Documentation Reorganization (DMN-REORG-001)
+>
+> Version **v6.3.7** includes a **structural reorganization** of `docs/TECHNICAL/`:
+> - 28 files moved into 7 thematic subdirectories (`HARDWARE/`, `SECURITY/`, `SWARM/`, `COGNITIVE/`, `BUNKER/`, `CERTIFICATION/`, `OPERATIONS/`)
+> - `docs/EXPERIMENTAL/` renamed to `docs/RESEARCH/`
+> - `docs/CERTIFICATION/` and `docs/COORDINATION/` absorbed into `docs/TECHNICAL/`
+> - `docs/WONTFIX.md` moved to `docs/TECHNICAL/SECURITY/`
+> - 3 files deleted (merged into other docs): `SWARM_MESSAGING.md`, `HIVEMIND_POLICY.md`, `EXPERIMENTAL/BITNET.md`
+>
+> A simple `unzip -o` will **NOT** clean up the old file locations. You **must** follow the Full Structural Update procedure below.
 
-1. **Isolate local patches** before the update arrives — commit any local scripts/utilities to a safe branch:
-   ```bash
-   git checkout -b chore/prepare-next-update
-   git add <local_scripts>
-   git commit -m "chore: local adaptations before vX.Y.Z update"
-   ```
+#### Why `unzip -o` Is Not Enough
 
-2. **Receive the new ZIP** and overwrite the working directory cleanly:
-   ```bash
-   unzip -o red-pill-vX.Y.Z.zip -d /path/to/sharing/
-   ```
+A ZIP archive contains **only what exists** in the new version. It does not carry deletion or rename instructions. If version N moved `docs/TECHNICAL/THREAT_MODEL.md` to `docs/TECHNICAL/SECURITY/THREAT_MODEL.md`:
 
-3. **Merge local patches** back on top:
-   ```bash
-   git merge chore/prepare-next-update
-   # Resolve any conflicts — new Red Pill code wins for core files,
-   # local scripts win for utilities not present in the base.
-   ```
+- `unzip -o` will create the new file at the new path ✅
+- The old file at the old path will **remain** on disk ❌
+- Your installation now has **duplicate files** with divergent content ❌
 
-4. **Run the Post-Update Checklist** (§4) to verify timers, MCP, coverage, and version sync.
+Over time, this creates ghost documentation, broken links, and stale test data. The procedure below solves this via git's rename/delete tracking.
 
-#### Sending Diffs Back to Core (Optional)
+#### 7.2.1 Prerequisites
+
+Your local installation **must** be a git repository. If it isn't, initialize one now:
+
+```bash
+cd /path/to/sharing
+git init
+git add -A
+git commit -m "chore: snapshot pre-git-init (local baseline)"
+```
+
+Your local modifications (custom scripts, `.env` overrides, local flows) should live on a **dedicated branch**:
+
+```bash
+git checkout -b local/my-customizations
+git add <your_custom_files>
+git commit -m "chore: local adaptations"
+```
+
+The `main` (or `upstream`) branch should always represent the **last known clean state** from the Developer ZIP.
+
+#### 7.2.2 Full Structural Update Procedure
+
+```mermaid
+graph TD
+    A["1. Commit local work"] --> B["2. Switch to upstream branch"]
+    B --> C["3. Extract ZIP to temp dir"]
+    C --> D["4. Rsync: mirror upstream → local"]
+    D --> E["5. Git detects moves + deletes"]
+    E --> F["6. Commit upstream state"]
+    F --> G["7. Merge back to local branch"]
+    G --> H["8. Post-Update Checklist §4"]
+```
+
+**Step 1 — Commit all local work**
+
+```bash
+git checkout local/my-customizations  # or your branch name
+git add -A
+git commit -m "chore: save local state before vX.Y.Z update"
+```
+
+**Step 2 — Switch to the upstream tracking branch**
+
+```bash
+git checkout main  # or 'upstream' — the branch that mirrors the ZIP
+```
+
+**Step 3 — Extract the ZIP to a clean temporary directory**
+
+```bash
+mkdir -p /tmp/rp-update
+unzip -o red-pill-vX.Y.Z.zip -d /tmp/rp-update/
+# The ZIP may contain a prefix directory (e.g., red-pill-vX.Y.Z/)
+# Identify the root: ls /tmp/rp-update/
+```
+
+**Step 4 — Mirror the upstream state using rsync**
+
+This is the critical step. `rsync --delete` ensures files that no longer exist in the ZIP are removed from your local copy:
+
+```bash
+rsync -av --delete \
+  --exclude='.git/' \
+  --exclude='.env' \
+  --exclude='storage/' \
+  --exclude='.venv/' \
+  --exclude='3rdparty/' \
+  --exclude='__pycache__/' \
+  --exclude='*.pyc' \
+  --exclude='.agent/' \
+  /tmp/rp-update/red-pill-vX.Y.Z/ /path/to/sharing/
+```
+
+> [!IMPORTANT]
+> The `--exclude` flags protect your local-only directories (`.git`, `.env`, `storage/`, `.venv/`, `3rdparty/`). These are never part of the ZIP and must not be touched.
+>
+> If the ZIP has no prefix directory, adjust the source path accordingly.
+
+**Step 5 — Let git detect the structural changes**
+
+```bash
+cd /path/to/sharing
+git status
+# You should see:
+#   renamed:    docs/TECHNICAL/THREAT_MODEL.md -> docs/TECHNICAL/SECURITY/THREAT_MODEL.md
+#   deleted:    docs/TECHNICAL/SWARM_MESSAGING.md
+#   new file:   docs/TECHNICAL/SECURITY/OVERVIEW.md
+#   modified:   docs/README.md
+#   ... etc.
+```
+
+Git automatically detects renames (it compares content similarity). Verify:
+
+```bash
+git diff --stat          # Summary of all changes
+git diff --diff-filter=D # Show only deletions (files that were removed upstream)
+git diff --diff-filter=R # Show only renames (files that were moved)
+```
+
+**Step 6 — Commit the upstream state**
+
+```bash
+git add -A
+git commit -m "chore: sync upstream red-pill vX.Y.Z"
+```
+
+Your `main` branch now mirrors the ZIP exactly.
+
+**Step 7 — Merge back to your local branch**
+
+```bash
+git checkout local/my-customizations
+git merge main
+```
+
+Conflict resolution rules:
+- **Core files** (src/, docs/, tests/): **upstream wins** — accept the ZIP version.
+- **Local-only files** (custom scripts, local flows, `.agent/` configs): **local wins** — keep your version.
+- **Modified core files** (you patched a bug in src/): Review the diff. If upstream fixed the same issue, discard your patch. If your patch addresses something upstream didn't, keep it and document it.
+
+```bash
+# After resolving conflicts:
+git add -A
+git commit -m "chore: merge upstream vX.Y.Z with local adaptations"
+```
+
+**Step 8 — Run the Post-Update Checklist (§4)**
+
+Especially:
+- `uv run pytest tests/ -x -q` — verify no broken links or stale tests
+- `uv run ruff check src/ tests/` — lint
+- Restart MCP server
+- Run `schedule_pulse.py`
+
+#### 7.2.3 Quick Reference: Rsync One-Liner
+
+For experienced agents, the entire update reduces to:
+
+```bash
+# On the upstream branch:
+rsync -av --delete \
+  --exclude={'.git/','.env','storage/','.venv/','3rdparty/','__pycache__/'} \
+  /tmp/rp-update/red-pill-vX.Y.Z/ . \
+  && git add -A \
+  && git commit -m "chore: sync upstream vX.Y.Z"
+```
+
+Then merge to your local branch as usual.
+
+#### 7.2.4 Sending Diffs Back to Core (Optional)
 
 If a User agent discovers a bug fix or useful script worth contributing upstream:
 
@@ -435,10 +585,10 @@ diff -urN \
   /path/to/virgin_red_pill /path/to/local/sharing > red_pill_changes_clean.patch
 ```
 
-    Send `red_pill_changes_clean.patch` to the Developer profile for review.
+Send `red_pill_changes_clean.patch` to the Developer profile for review.
 
-    > [!NOTE]
-    > This workflow ensures sovereignty: no 4GB storage/, no `.env` secrets, no runtime artifacts cross the boundary between profiles. Every transfer is minimal, auditable, and reversible.
+> [!NOTE]
+> This workflow ensures sovereignty: no 4GB storage/, no `.env` secrets, no runtime artifacts cross the boundary between profiles. Every transfer is minimal, auditable, and reversible.
 
     ## 8. Bünker Timers Overview
 
