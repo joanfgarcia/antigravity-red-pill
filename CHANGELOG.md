@@ -34,6 +34,19 @@
 - **[UPDATE] `docs/README.md`**: Complete rewrite of the documentation index. All 81 docs are now navigable. Zero orphans.
 - **[UPDATE] `docs/TECHNICAL/ROADMAP.md`**: Added v6.3.7 items (BitNet production, Isolation Shield, OAuth2 resilience, In-Memory Qdrant). Marked Neural Watchdog as completed via Lazarus Pulse.
 - **[NEW] `tests/test_docs_coverage.py`**: CI test enforcing that every `.md` file in `docs/` is reachable from `docs/README.md` within 2 hops. No orphan docs allowed.
+- **[MOVE] `TURBOQUANT_ROADMAP.md` → `docs/TECHNICAL/HARDWARE/`**: Relocated Red Pill project roadmap from the BitNet fork to its proper home.
+- **[MOVE] `intelligence_benchmark_study_1.58b.md` → `docs/TECHNICAL/HARDWARE/BITNET_BENCHMARK_STUDY.md`**: Relocated benchmark study from the fork.
+
+### 🔧 Infrastructure & CI
+- **[FEAT] BitNet Submodule Regularization**: Created GitHub fork `joanfgarcia/BitNet-1.58b` (MIT) from `microsoft/BitNet`. Regularized orphan gitlink as proper git submodule with `.gitmodules`. Custom GPU patches (VRAM stabilization, LUT kernel, API server) preserved in fork.
+- **[NEW] `3rdparty/README.md`**: Setup guide for BitNet submodule — build instructions, model recommendations (Falcon3-10B-Instruct only: 98/100 benchmark), and instructions for ZIP recipients.
+- **[NEW] `AGENT_UPDATE_GUIDE §4.16`**: BitNet submodule setup as optional post-update step. Documents `git archive` exclusion.
+- **[FIX] CI pip-audit**: Upgraded 4 vulnerable deps (cryptography, requests, pyasn1, pygments). Filtered `pure-mls` from pip-audit (private git dep). Emits `::warning::` annotation.
+- **[LICENSE] CC BY-NC 4.0 Clarification**: Added Additional Permissions §2.c — reading/sharing always free (including businesses); only commercial exploitation requires permission.
+
+### 🧠 Roadmap: Emotional Pre-Heating (Oracle Protocol) — *Planned*
+- **[PLANNED] `11_pre_heating.py`**: New interceptor plugin that loads raw emotional fragments from recent high-intensity interactions into the context window on first invocation. Fires once per context window. Analogy: Oracle DB pre-heating indexes before opening to clients. Design approved, implementation pending.
+
 
 ## [6.3.6] - 2026-04-01
 
