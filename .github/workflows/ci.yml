@@ -54,13 +54,17 @@ jobs:
       run: |
         # Export only direct (non-dev) deps to a temp requirements file
         # Added --no-emit-project to avoid failure on private project package
-        uv export --no-dev --no-hashes --no-emit-project -o direct_deps.txt
+        uv export --no-dev --no-hashes --no-emit-project -o direct_deps_raw.txt
+        # Filter out private/unpublished packages that pip-audit cannot resolve
+        # pure-mls: local MLS library not yet published on PyPI (git dep)
+        grep -v 'pure-mls' direct_deps_raw.txt > direct_deps.txt || true
+        if grep -q 'pure-mls' direct_deps_raw.txt; then
+          echo "::warning::pure-mls is a private git dependency and was excluded from pip-audit. It will be included once published on PyPI."
+        fi
         # Fail the build if any CVE hits a direct dependency
         uv run pip-audit \
           --progress-spinner=off \
           --skip-editable \
-          --ignore-vuln CVE-2025-69872 \
-          --ignore-vuln CVE-2026-25990 \
           -r direct_deps.txt
 
 
