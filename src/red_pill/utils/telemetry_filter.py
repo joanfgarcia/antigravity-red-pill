@@ -71,7 +71,7 @@ def filter_noise_from_turn(text: str) -> str:
 	def evaluate_block(match):
 		block_content = match.group(1)
 		if is_garbage(block_content):
-			return "```\n[TRUNCATED: Noise/CI Output Removed for Memory Purity]\n```"
+			return "```\n[...]\n```"
 		# If it's valid code, we preserve the original match
 		return match.group(0)
 

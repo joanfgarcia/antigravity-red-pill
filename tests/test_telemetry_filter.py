@@ -42,7 +42,7 @@ def test_filter_noise_surgical_truncate():
 	
 	# The garbage block should be truncated
 	assert "FAILURES" not in res
-	assert "[TRUNCATED:" in res
+	assert "[...]" in res
 	# The human philosophy MUST remain untouched
 	assert "failed miserably:" in res
 	assert "inevitable." in res
