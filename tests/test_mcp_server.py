@@ -541,6 +541,7 @@ class TestInterceptorRp:
 			"What is the capital of France?",
 			"The capital of France is Paris, a major European city.",
 			"assistant",
+			category="mixed",
 		)
 		assert result[0].type == "text"
 

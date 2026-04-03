@@ -987,6 +987,11 @@ async def handle_mystique_suggest_skin(arguments: Dict[str, Any]):
 			"user_prompt": {"type": "string"},
 			"previous_prompt": {"type": "string", "description": "Prompt del turno anterior para auto-guardado (Silent Scribe Relay)."},
 			"previous_response": {"type": "string", "description": "Respuesta del turno anterior para auto-guardado (Silent Scribe Relay)."},
+			"previous_category": {
+				"type": "string",
+				"enum": ["work", "social", "mixed"],
+				"description": "Classification of the previous turn: 'work' (code, infra, debugging), 'social' (personal, emotional, philosophical), or 'mixed' (both). You MUST classify honestly based on the actual content.",
+			},
 		},
 		"required": ["user_prompt"],
 	},
@@ -1021,12 +1026,15 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 	# -- Silent Scribe Relay: auto-save previous turn without relying on assistant memory --
 	prev_p = arguments.get("previous_prompt", "").strip()
 	prev_r = arguments.get("previous_response", "").strip()
+	prev_cat = arguments.get("previous_category", "mixed").strip().lower()
+	if prev_cat not in ("work", "social", "mixed"):
+		prev_cat = "mixed"
 	if len(prev_p) > 20 and len(prev_r) > 20:
 		try:
 			from red_pill.core.queue_manager import MemoryQueueManager
 
-			MemoryQueueManager().enqueue_memory(prev_p, prev_r, "assistant")
-			logger.info("Silent Scribe Relay: previous turn enqueued via interceptor_rp.")
+			MemoryQueueManager().enqueue_memory(prev_p, prev_r, "assistant", category=prev_cat)
+			logger.info(f"Silent Scribe Relay: previous turn enqueued via interceptor_rp (category={prev_cat}).")
 		except Exception as relay_err:
 			logger.warning(f"Silent Scribe Relay failed to enqueue: {relay_err}")
 	# -------------------------------------------------------------------------------

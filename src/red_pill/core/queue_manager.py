@@ -38,22 +38,35 @@ class MemoryQueueManager:
 					response TEXT NOT NULL,
 					role TEXT NOT NULL,
 					status TEXT DEFAULT 'pending',
-					created_at REAL
+					created_at REAL,
+					category TEXT DEFAULT 'mixed'
 				)
 				"""
 			)
+			# v6.3.8: Add category column to existing databases (migration)
+			try:
+				cursor.execute("ALTER TABLE memory_queue ADD COLUMN category TEXT DEFAULT 'mixed'")
+			except sqlite3.OperationalError:
+				pass  # Column already exists
 			# Index for fast lookup of pending items
 			cursor.execute("CREATE INDEX IF NOT EXISTS idx_status ON memory_queue (status)")
 			conn.commit()
 
-	def enqueue_memory(self, prompt: str, response: str, role: str) -> int:
-		"""Push a fast memory into the queue. Returns row ID."""
+	def enqueue_memory(self, prompt: str, response: str, role: str, category: str = "mixed") -> int:
+		"""Push a fast memory into the queue. Returns row ID.
+
+		Args:
+			category: 'work', 'social', or 'mixed'. Classified by the LLM
+				at write-time (not by the sleep cycle's keyword heuristic).
+		"""
+		if category not in ("work", "social", "mixed"):
+			category = "mixed"
 		try:
 			with sqlite3.connect(self.db_path) as conn:
 				cursor = conn.cursor()
 				cursor.execute(
-					"INSERT INTO memory_queue (prompt, response, role, status, created_at) VALUES (?, ?, ?, 'pending', ?)",
-					(prompt, response, role, time.time()),
+					"INSERT INTO memory_queue (prompt, response, role, status, created_at, category) VALUES (?, ?, ?, 'pending', ?, ?)",
+					(prompt, response, role, time.time(), category),
 				)
 				conn.commit()
 				return cursor.lastrowid or 0
@@ -69,7 +82,7 @@ class MemoryQueueManager:
 				conn.row_factory = sqlite3.Row
 				cursor = conn.cursor()
 				cursor.execute(
-					"SELECT id, prompt, response, role FROM memory_queue WHERE status = 'pending' ORDER BY created_at ASC LIMIT ?",
+					"SELECT id, prompt, response, role, category FROM memory_queue WHERE status = 'pending' ORDER BY created_at ASC LIMIT ?",
 					(limit,),
 				)
 				for row in cursor.fetchall():

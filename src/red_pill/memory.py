@@ -471,12 +471,15 @@ class MemoryManager:
 
 		return updated_points
 
-	def record_interaction_pair(self, prompt: str, response: str, role: str = "assistant") -> str:
+	def record_interaction_pair(self, prompt: str, response: str, role: str = "assistant", category: str = "mixed") -> str:
 		"""
 		Lazarus Phase 1: Encoding (Fast Memory Buffer).
 		Saves raw interaction history directly into the `interaction_memories` collection.
 		This bypasses traditional FSRS math as it is assumed to be short-term 'noise'
 		until the Sleep (Consolidation) cycle distills it.
+
+		Args:
+			category: 'work', 'social', or 'mixed'. Classified by the LLM at write-time.
 		"""
 		collection = "interaction_memories"
 		uid = str(uuid.uuid4())
@@ -495,7 +498,7 @@ class MemoryManager:
 			"color": "gray",  # Unprocessed color
 			"difficulty": 5.0,  # Default FSRS D
 			"stability": 2.0,  # Default FSRS S (Low stability for volatile memory)
-			"metadata": {"type": "raw_interaction", "role": role},
+			"metadata": {"type": "raw_interaction", "role": role, "category": category},
 		}
 
 		vector = self._get_vector(text)

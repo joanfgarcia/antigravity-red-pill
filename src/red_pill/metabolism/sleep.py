@@ -328,9 +328,24 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 		prev_chunk_id = None
 		chunks_saved = 0  # Track successful writes for this point
 
-		target_col = "social_memories"
-		if any(kw in raw_text.lower() for kw in ["code", "error", "bash", "python", "script", "commit"]):
-			target_col = "work_memories"
+		# v6.3.8: Use LLM-classified category from interaction metadata.
+		# The LLM classifies each turn at write-time via interceptor_rp.
+		# Fallback to keyword heuristic for legacy engrams without category.
+		raw_metadata = (point.payload or {}).get("metadata", {})
+		llm_category = raw_metadata.get("category", "") if isinstance(raw_metadata, dict) else ""
+		if llm_category in ("work", "social"):
+			target_col = f"{llm_category}_memories"
+		elif llm_category == "mixed":
+			# Mixed: use keyword heuristic as tiebreaker
+			if any(kw in raw_text.lower() for kw in ["code", "error", "bash", "python", "script", "commit", "test", "debug", "deploy", "pipeline", "ci", "config"]):
+				target_col = "work_memories"
+			else:
+				target_col = "social_memories"
+		else:
+			# Legacy fallback (no category metadata)
+			target_col = "social_memories"
+			if any(kw in raw_text.lower() for kw in ["code", "error", "bash", "python", "script", "commit"]):
+				target_col = "work_memories"
 
 		for i, chunk in enumerate(chunks):
 			distilled = distill_engram(chunk)
