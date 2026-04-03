@@ -842,6 +842,14 @@ async def handle_run_sovereignty_benchmark(arguments: Dict[str, Any]):
 	schema={"type": "object", "properties": {}},
 )
 async def handle_refresh_session_context(arguments: Dict[str, Any]):
+	# Reset pre-heating gate on session refresh
+	try:
+		import importlib
+		module = importlib.import_module("red_pill.interceptors.11_pre_heating")
+		module.EmotionalPreHeatingPlugin._has_fired = False
+	except Exception:
+		pass
+
 	return [
 		types.TextContent(
 			type="text",
