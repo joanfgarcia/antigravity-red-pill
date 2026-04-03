@@ -59,11 +59,28 @@ def is_garbage(content: str) -> bool:
 	if len(content) > 30 and len(ansi_stripped) < len(content) * 0.6:
 		return True
 
-	# Pattern: CI/test output (PASS/FAIL/warnings with no substance)
+	# Pattern: CI/test/audit output (raw tool output, not memory)
+	content_lower_stripped = ansi_stripped.lower()
+
+	# Definitive CI signatures — always garbage, any length
+	ci_definitive = [
+		"pre-pr audit protocol",
+		"b760 pre-pr audit",
+		"formatting check (ruff)",
+		"linting check (ruff)",
+		"static analysis (mypy)",
+		"neural validation (pytest)",
+		"pre-pr audit [",
+	]
+	if any(sig in content_lower_stripped for sig in ci_definitive):
+		return True
+
+	# Generic CI markers — garbage if multiple hits
 	ci_markers = ["--- formatting check", "--- linting check", "--- static analysis",
-		"--- neural validation", "warnings summary", "passed in", "PASS", "FAIL"]
-	ci_hits = sum(1 for m in ci_markers if m.lower() in ansi_stripped.lower())
-	if ci_hits >= 2 and len(ansi_stripped) < 300:
+		"--- neural validation", "warnings summary", "passed in", "PASS", "FAIL",
+		"pytest.org", "short test summary", "capture-warnings"]
+	ci_hits = sum(1 for m in ci_markers if m.lower() in content_lower_stripped)
+	if ci_hits >= 2:
 		return True
 
 	words = content.lower().split()
