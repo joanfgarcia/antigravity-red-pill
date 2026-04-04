@@ -15,8 +15,102 @@ from red_pill.swarm.flow_engine import FlowEngine
 from red_pill.swarm.routing import InferenceRouter
 from red_pill.utils.observer import notify_user
 from red_pill.utils.specs_adapter import SpecsAdapter
+from red_pill.core.model_registry import ModelRegistry
 
 logger = logging.getLogger(__name__)
+
+
+class SwarmScheduler:
+	"""
+	Model-Aware Batch Scheduler.
+	Implements Context Affinity, Hardware Routing (VRAM NGL check) and Anti-Starvation (Aging TTL).
+	"""
+	def __init__(self, orchestrator):
+		self.orchestrator = orchestrator
+		self.queue = []
+		self.hot_profile = None
+		self.is_processing = False
+		self.lock = asyncio.Lock()
+		self.MAX_WAIT_TTL = 30.0 # seconds before anti-starvation kicks in
+
+	async def enqueue(self, minion: Minion, task: str, **kwargs) -> SwarmResult:
+		future = asyncio.get_running_loop().create_future()
+		item = {
+			"minion": minion,
+			"task": task,
+			"kwargs": kwargs,
+			"future": future,
+			"enqueue_time": time.time()
+		}
+		async with self.lock:
+			self.queue.append(item)
+		
+		# Trigger processor asynchronously
+		asyncio.create_task(self._process_queue())
+		return await future
+
+	async def _process_queue(self):
+		if self.is_processing:
+			return
+			
+		async with self.lock:
+			if self.is_processing or not self.queue:
+				return
+			self.is_processing = True
+
+		try:
+			while True:
+				async with self.lock:
+					if not self.queue:
+						break
+					
+					now = time.time()
+					# 1. Anti-Starvation Check (Aging)
+					starving_tasks = [i for i in self.queue if now - i["enqueue_time"] > self.MAX_WAIT_TTL]
+					
+					if starving_tasks:
+						next_item = starving_tasks[0]
+						logger.info(f"Anti-Starvation context switch forced for {next_item['minion'].id}. TTL > {self.MAX_WAIT_TTL}s")
+					else:
+						# 2. Context Affinity Check
+						hot_tasks = [i for i in self.queue if getattr(i["minion"], "model_profile", None) == self.hot_profile]
+						if hot_tasks:
+							next_item = hot_tasks[0]
+						else:
+							# Pick the oldest if no affinity matches
+							next_item = self.queue[0]
+					
+					self.queue.remove(next_item)
+					self.hot_profile = getattr(next_item["minion"], "model_profile", None)
+				
+				await self._execute_item(next_item)
+		finally:
+			self.is_processing = False
+
+	async def _execute_item(self, item):
+		minion, task, base_kwargs = item["minion"], item["task"], item["kwargs"]
+		
+		# Override Profile logic
+		profile_data = ModelRegistry.get_profile(self.hot_profile) if self.hot_profile else {}
+		exec_kwargs = base_kwargs.copy()
+		exec_kwargs.update(profile_data)
+		
+		# Hardware VRAM Routing
+		telemetry_provider = ProviderRegistry.get_telemetry_provider()
+		try:
+			stats = telemetry_provider.get_stats()
+			vram_free = stats.get("vram_free_mb", 0)
+			exec_kwargs["ngl"] = 99 if vram_free > 3000 else 0
+		except Exception:
+			exec_kwargs["ngl"] = 0
+			
+		try:
+			result = await self.orchestrator._run_minion(minion, task, **exec_kwargs)
+			if not item["future"].done():
+				item["future"].set_result(result)
+		except Exception as e:
+			if not item["future"].done():
+				item["future"].set_exception(e)
 
 
 class GruOrchestrator:
@@ -32,6 +126,7 @@ class GruOrchestrator:
 		self.specs = SpecsAdapter(self.workspace_root)
 		self.inbox = MinionInbox()
 		self.flow_engine = FlowEngine(FLOW_REGISTRY_PATH)
+		self.scheduler = SwarmScheduler(self)
 		self._setup_providers()
 
 	def _setup_providers(self):
@@ -81,9 +176,9 @@ class GruOrchestrator:
 		# 2. Enrichment logic (removed specs dependency to simplify for Enterprise audit)
 		enriched_task = task
 
-		# 3. Deploy Minions
+		# 3. Deploy Minions via the Scheduler
 		logger.info(f"Deploying swarm to execute: {task[:50]}...")
-		tasks_parallel = [self._run_minion(m, enriched_task, **kwargs) for m in resolved_minions]
+		tasks_parallel = [self.scheduler.enqueue(m, enriched_task, **kwargs) for m in resolved_minions]
 		results = await asyncio.gather(*tasks_parallel)
 
 		# 4. SAS: Sovereign Alert System integration (Selective Tracing)

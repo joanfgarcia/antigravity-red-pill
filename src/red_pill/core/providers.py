@@ -158,13 +158,28 @@ class BitNetInferenceProvider(BaseInferenceProvider):
 		import os
 		import subprocess
 
+		# Overrides from kwargs (via Minion Profiles)
+		model_path = kwargs.get("model_path", self.model_path)
 		max_tokens = kwargs.get("max_tokens", 128)
 		temp = kwargs.get("temperature", 0.1)
+		grammar_path = kwargs.get("grammar_path", self.grammar_path)
+		use_mmap = kwargs.get("use_mmap", True)
+		ngl = kwargs.get("ngl", 0)  # Hardware Offload
 
-		cmd = [str(self.runner_path), "-m", str(self.model_path), "-p", str(prompt), "-n", str(max_tokens), "--temp", str(temp)]
+		cmd = [
+			str(self.runner_path), 
+			"-m", str(model_path), 
+			"-p", str(prompt), 
+			"-n", str(max_tokens), 
+			"--temp", str(temp),
+			"-ngl", str(ngl)
+		]
 
-		if self.grammar_path and os.path.exists(str(self.grammar_path)):
-			cmd.extend(["--grammar-file", str(self.grammar_path)])
+		if not use_mmap:
+			cmd.append("--no-mmap")
+
+		if grammar_path and os.path.exists(str(grammar_path)):
+			cmd.extend(["--grammar-file", str(grammar_path)])
 
 		try:
 			# Use a short timeout for humble hardware to prevent hangs

@@ -21,6 +21,7 @@ class Minion(BaseModel):
 	specialization: str
 	telemetry_level: str = Field(default_factory=lambda: config.SWARM_TELEMETRY_DEFAULT)
 	metadata: Dict[str, Any] = Field(default_factory=dict)
+	model_profile: Optional[str] = None
 
 	model_config = ConfigDict(arbitrary_types_allowed=True)
 
