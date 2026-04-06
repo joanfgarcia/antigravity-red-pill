@@ -1,24 +1,9 @@
 import os
 import yaml
 import logging
+import shutil
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_PROFILES = {
-	"samantha": {
-		"model_path": "3rdparty/BitNet-1.58b/models/Llama3-8B-Instruct.gguf",
-		"temperature": 0.7,
-		"max_tokens": 1024,
-		"use_mmap": False,
-	},
-	"smith": {
-		"model_path": "3rdparty/BitNet-1.58b/models/2B-4T/ggml-model-i2_s.gguf",
-		"temperature": 0.0,
-		"max_tokens": 512,
-		"grammar_path": "3rdparty/BitNet-1.58b/validation/json.gbnf",
-		"use_mmap": False,
-	}
-}
 
 class ModelRegistry:
 	_profiles_cache = None
@@ -30,23 +15,41 @@ class ModelRegistry:
 		return cls._profiles_cache.get(profile_name, {})
 
 	@classmethod
+	def get_profile_by_capability(cls, required_capability: str) -> tuple[str, dict]:
+		if cls._profiles_cache is None:
+			cls._load_profiles()
+		for name, profile in cls._profiles_cache.items():
+			caps = profile.get("capabilities", [])
+			if required_capability in caps:
+				return name, profile
+		# Fallback to the first available profile if none match exactly
+		if cls._profiles_cache:
+			first_name = list(cls._profiles_cache.keys())[0]
+			return first_name, cls._profiles_cache[first_name]
+		return "", {}
+
+	@classmethod
 	def _load_profiles(cls):
 		config_path = os.path.expanduser("~/.agent/model_profiles.yaml")
-		cls._profiles_cache = DEFAULT_PROFILES.copy()
+		# The fallback seed is at the project root
+		seed_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), "model_profiles.yaml.example")
+		
+		# Auto-seed if missing
+		if not os.path.exists(config_path):
+			try:
+				os.makedirs(os.path.dirname(config_path), exist_ok=True)
+				if os.path.exists(seed_path):
+					shutil.copy2(seed_path, config_path)
+					logger.info(f"Seeded model profiles to {config_path}")
+			except Exception as e:
+				logger.error(f"Failed to seed profiles: {e}")
+
+		cls._profiles_cache = {}
 		if os.path.exists(config_path):
 			try:
 				with open(config_path, "r") as f:
 					data = yaml.safe_load(f)
 					if data and "profiles" in data:
 						cls._profiles_cache.update(data["profiles"])
-				logger.info(f"Loaded override model profiles from {config_path}")
 			except Exception as e:
 				logger.error(f"Failed to load model profiles from {config_path}: {e}")
-		else:
-			# Create defaults to guide user
-			try:
-				os.makedirs(os.path.dirname(config_path), exist_ok=True)
-				with open(config_path, "w") as f:
-					yaml.dump({"profiles": DEFAULT_PROFILES}, f)
-			except Exception:
-				pass

@@ -120,6 +120,11 @@ class RedPillConfig(BaseSettings):
 	MLX_LM_URL: str = "http://127.0.0.1:8760/v1/chat/completions"
 
 	# -----------------------------------------------------------------------
+	# COGNITIVE DYNAMICS
+	# -----------------------------------------------------------------------
+	ABSOLUTE_KEYWORDS: List[str] = ["Aleth", "Bünker", "770", "enter-pánico", "PAAAAARAAAAAA", "engrama", "skin", "Titanium", "Joan"]
+
+	# -----------------------------------------------------------------------
 	# QDRANT (always local in Foundation)
 	# -----------------------------------------------------------------------
 	QDRANT_HOST: str = "localhost"

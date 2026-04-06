@@ -1,5 +1,15 @@
 # Changelog: Red Pill Protocol
 
+## [6.3.8] - Unreleased
+
+### ✨ Cognitive Hypervisor & Quadlet Swarm Queue
+- **[FEAT] Sovereign Cognitive Hypervisor**: Deployed `hypervisor_daemon.py` on TCP (8760) and UDS (`red_pill.sock`). Dynamically proxy-routes local inference requests, negotiating ephemeral ports on-the-fly (`llama-server`) to guarantee zero port collisions.
+- **[FEAT] VRAM Garbage Collector**: The hypervisor now strictly enforces a 5-minute TTL on loaded models. Idle sub-processes are gracefully terminated and, if zombie, `SIGKILL`ed.
+- **[FEAT] Sleep Engine Integrity (Bounds & Routing)**: `sleep.py` now leverages `re.search(..., re.DOTALL)` to strictly bound JSON extractions ensuring syntactic purity. All UDS payloads are now explicitly tagged with `{"model": "distillation"}` for hypervisor auto-routing.
+- **[FEAT] Quadlet Celery/Redis Enclave (Phase 3)**: Orchestrated `docker/queue/compose.yaml` (Podman) enclosing `redis:alpine` and a strictly throttled Celery Worker (`--concurrency=2`, `time_limit=300`).
+- **[FEAT] API Gateway Decoupling**: Implemented `api_gateway.py` (FastAPI) running on `127.0.0.1:8771` inside the pod. Red Pill processes now enqueue async tasks fully decoupled from Celery libraries natively via pure HTTP.
+- **[IMPR] Dockerfile Hatch Optimization**: Re-engineered `Dockerfile.worker` using `astral-sh/uv` multi-stage build, leveraging `uv sync --frozen` for lightning-fast container compilation.
+
 ## [6.3.7] - 2026-04-03
 
 ### 🧠 Cognitive Continuity (Phase 3.5 Bridge)

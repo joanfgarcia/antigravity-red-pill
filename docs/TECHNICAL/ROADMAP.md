@@ -72,6 +72,10 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
 - [x] **Double-Engine Burnout**: Seamless CUDA/HIP asymmetry for Strix Point architectures.
 - [ ] **The Red Button**: Encrypted one-click "Scorched Earth" protocol for instant bunker purge.
 - [x] **Neural Watchdog (Lazarus Pulse)**: Background `redpill-pulse.service` monitoring system health, curing pain signals, and validating code integrity via autonomic immune reflex.
+- [x] **Industrial Task Queues (Celery+Redis)**: Quadlet Podman cluster running `redis:alpine` and rigorous Celery workers (`time_limit=300`, FastAPI Gateway decoupling). Guarantee 0% CPU saturation and zombie-process eradication.
+- [ ] **Bünker Observability UI**: Unified UX for systemic control (Pain signals, Telemetry, Queue statuses). Must be a lightweight on-demand web server checking subsystem readiness (WebSocket/MQTT for real-time reactivity), or alternatively, a highly stylized terminal UI (btop aesthetic).
+- [ ] **Extensible Plugin System (Phase 3)**: Leverage Celery/Redis for scheduled integrations (Email, Agenda, Domotics). We need a base `TaskScheduler` to automate personal assistant workflows.
+- [ ] **Config Decoupling & Guided UX**: Restructure `.env` file for sanity. Create a supervised UX config modifier to prevent operators from fatally breaking the Bünker configurations.
 - [ ] **Swarm Broadcast**: Community-wide message delivery (currently P2P only).
 - [ ] **Mailbox Cleanup**: Auto-purge read messages from Firebase after TTL.
 - [ ] **SQLite Workflow DAG (`specs.md`)**: Use SQLite triggers and polling hooks on `minion_inbox.db` to chain Minion executions asynchronously (e.g. Oracle -> Compressor) without Python blocking.

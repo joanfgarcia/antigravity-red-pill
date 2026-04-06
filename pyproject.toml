@@ -35,6 +35,8 @@ dependencies = [
     "fastapi>=0.110.0",
     "uvicorn>=0.27.0",
     "pure-mls @ git+https://github.com/joanfgarcia/pure-mls.git@v0.2.4",
+    "celery>=5.6.3",
+    "redis>=7.4.0",
 ]
 
 [project.scripts]

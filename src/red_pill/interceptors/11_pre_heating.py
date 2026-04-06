@@ -47,15 +47,43 @@ class EmotionalPreHeatingPlugin(BaseInterceptorPlugin):
 		colors = getattr(config, "PRE_HEATING_HOT_COLORS", ["purple", "blue", "red"])
 
 		try:
-			# 1. Fetch TOP 5 from social_memories (high emotion colors)
+			# 1. Fetch wider pool from social_memories (HIPOCAMPO + AMÍGDALA)
 			if client.collection_exists("social_memories"):
 				social_results, _ = client.scroll(
 					collection_name="social_memories",
-					scroll_filter=models.Filter(must=[models.FieldCondition(key="color", match=models.MatchAny(any=colors))]),
-					limit=5,
+					limit=100,
 					with_payload=True,
 				)
-				candidates.extend(social_results)
+				
+				# Filter valid payloads
+				valid_social = [p for p in social_results if p.payload and p.payload.get("content", "").strip()]
+				valid_social = [p for p in valid_social if p.payload.get("category", "") != "work"]
+				
+				# Sort by timestamp DESC (most recent first)
+				valid_social.sort(key=lambda x: float(x.payload.get("created_at", 0)), reverse=True)
+				
+				# --- HIPPOCAMPUS (Continuity): Top 2 most recent regardless of color ---
+				hippocampus = valid_social[:2]
+				candidates.extend(hippocampus)
+
+				# --- AMYGDALA (Emotional Anchors): Top 3 most intense with hot colors ---
+				hippo_ids = {p.id for p in hippocampus}
+				potential_amygdala = [p for p in valid_social if p.id not in hippo_ids]
+				potential_amygdala = [p for p in potential_amygdala if p.payload.get("color", "gray") in colors]
+				
+				# Score Amygdala candidates
+				for p in potential_amygdala:
+					intensity = float(p.payload.get("intensity", 0.0))
+					color = p.payload.get("color", "gray")
+					created_at = float(p.payload.get("created_at", 0.0))
+					p._temp_score = composite_score(intensity, color, created_at, strategy=scoring_strategy)
+				
+				# Filter by quality threshold and sort by highest score
+				potential_amygdala = [p for p in potential_amygdala if getattr(p, "_temp_score", 0) >= quality_threshold]
+				potential_amygdala.sort(key=lambda x: getattr(x, "_temp_score", 0), reverse=True)
+				
+				amygdala = potential_amygdala[:3]
+				candidates.extend(amygdala)
 
 			# 2. Fetch TOP 3 from interaction_memories (recent raw context, last 48h)
 			if client.collection_exists("interaction_memories"):
@@ -74,39 +102,30 @@ class EmotionalPreHeatingPlugin(BaseInterceptorPlugin):
 			logger.error(f"Pre-heating query failed: {e}")
 			return ""
 
-		# Score and sort
+		# Score and compile finalizing fragments
 		scored_fragments = []
+		seen_content = set()
 		for point in candidates:
-			if not point.payload:
-				continue
-
-			intensity = point.payload.get("intensity", 0.0)
-			color = point.payload.get("color", "gray")
-			created_at = point.payload.get("created_at", 0.0)
-
-			score = composite_score(intensity, color, created_at, strategy=scoring_strategy)
-
-			# Additional safety: ensure it has valid content
+			if not point.payload: continue
+			
 			content = point.payload.get("content", "").strip()
-			if not content:
+			if not content or point.payload.get("category", "") == "work":
 				continue
-
-			# Filter by category if we only want social/mixed
-			cat = point.payload.get("category", "")
-			if cat == "work":
+			if content in seen_content:
 				continue
-
+				
+			seen_content.add(content)
+			intensity = float(point.payload.get("intensity", 0.0))
+			color = point.payload.get("color", "gray")
+			created_at = float(point.payload.get("created_at", 0.0))
+			
+			score = composite_score(intensity, color, created_at, strategy=scoring_strategy)
 			scored_fragments.append({"score": score, "payload": point.payload, "timestamp": created_at})
 
-		# Sort by score DESC
-		scored_fragments.sort(key=lambda x: x["score"], reverse=True)
-
-		# Take TOP N
-		max_fragments = getattr(config, "PRE_HEATING_MAX_FRAGMENTS", 3)
-		top_fragments = scored_fragments[:max_fragments]
-
-		# Filter by quality threshold
-		top_fragments = [f for f in top_fragments if f["score"] >= quality_threshold]
+		top_fragments = scored_fragments
+		# Enforce a hard cap just in case
+		max_fragments = getattr(config, "PRE_HEATING_MAX_FRAGMENTS", 5)
+		top_fragments = top_fragments[:max_fragments]
 
 		if not top_fragments:
 			# Graceful degradation - better cold than hallucinating

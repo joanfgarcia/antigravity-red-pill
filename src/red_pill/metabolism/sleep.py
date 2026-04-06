@@ -121,17 +121,21 @@ def distill_engram(raw_content: str) -> Dict[str, Any]:
 
 	payload = json.dumps(
 		{
+			"model": "distillation",
 			"messages": [
 				{
 					"role": "system",
-					"content": "You are an Amygdala-driven consolidation sub-routine. Output ONLY valid JSON without markdown fences. Be extremely concise.",
+					"content": "You are an Amygdala-driven consolidation engine. You must ONLY output a valid JSON object. Examples of keys: 'summary', 'emotion', 'intensity'. Example output: {\"summary\": \"Session overview\", \"emotion\": \"neutral\", \"intensity\": 0.5}",
 				},
-				{"role": "user", "content": prompt},
+				{
+					"role": "user",
+					"content": f"Analyze this text and return ONLY JSON:\n{prompt}",
+				}
 			],
 			"temperature": 0.1,
-			"max_tokens": 512,
+			"max_tokens": 1024,
 			"seed": 760,
-			"stop": ["<|im_end|>", "<|endoftext|>", "user:", "assistant:"],
+			"stop": ["<|im_end|>", "<|eot_id|>", "<|endoftext|>", "user:", "assistant:", "```"],
 		}
 	).encode("utf-8")
 
@@ -165,18 +169,14 @@ def distill_engram(raw_content: str) -> Dict[str, Any]:
 				content = data["choices"][0]["message"]["content"].strip()
 				import re
 
-				# Clean possible LLM markdown
-				if content.startswith("```json"):
-					content = content[7:]
-				if content.startswith("```"):
-					content = content[3:]
-				if content.endswith("```"):
-					content = content[:-3]
-
-				# Robust JSON extraction
-				match = re.search(r"\{.*\}", content, re.DOTALL)
+				# Extract strictly the first JSON looking object
+				match = re.search(r"\{[\s\S]*?\}", content)
 				if match:
 					content = match.group(0)
+				else:
+					# If no JSON found, log and fallback fast instead of throwing json.decoder errors
+					logger.warning(f"[SLEEP ENGINE] LLM output not JSON: {content[:100]}")
+					return fallback
 
 				parsed = json.loads(content)
 
@@ -205,6 +205,7 @@ def synthesize_hub(summaries: List[str]) -> str:
 
 	payload = json.dumps(
 		{
+			"model": "distillation",
 			"messages": [
 				{
 					"role": "system",
@@ -219,12 +220,18 @@ def synthesize_hub(summaries: List[str]) -> str:
 		}
 	).encode("utf-8")
 
-	url = getattr(cfg, "MLX_LM_URL", "http://127.0.0.1:8080/v1/chat/completions")
-	if not url:
-		url = "http://127.0.0.1:8080/v1/chat/completions"
+	uds_path = os.path.expanduser("~/.agent/red_pill.sock")
+	if os.path.exists(uds_path):
+		encoded_path = urllib.parse.quote(uds_path, safe="")
+		url = f"unix://{encoded_path}/v1/chat/completions"
+		opener = get_uds_opener()
+	else:
+		url = getattr(cfg, "MLX_LM_URL", "http://127.0.0.1:8760/v1/chat/completions")
+		opener = urllib.request.build_opener()
+
 	req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
 	try:
-		with urllib.request.urlopen(req, timeout=60) as response:
+		with opener.open(req, timeout=60) as response:
 			data = json.loads(response.read().decode())
 			return str(data["choices"][0]["message"]["content"].strip())
 	except Exception as e:

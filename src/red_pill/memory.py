@@ -245,19 +245,21 @@ class MemoryManager:
 		if emotional_profile:
 			metadata["emotional_profile"] = emotional_profile
 
-		# v6.0: Automated Linguistic Marker Extraction (Claude-Pistis)
+		# v6.0: Automated Linguistic Marker Extraction
 		import re
 
 		markers = set()
-		# 1. Quoted terms: "term"
-		markers.update(re.findall(r"\"([^\"]+)\"", text))
-		# 2. Keywords
-		keywords = ["Aleth", "Bünker", "770", "enter-pánico", "PAAAAARAAAAAA", "engrama", "skin", "Titanium", "Joan"]
+		# 1. Quoted terms: "term" (max 3 words to prevent sentence capture)
+		quotes = re.findall(r"\"([^\"]+)\"", text)
+		for q in quotes:
+			if len(q.split()) <= 3:
+				markers.add(q)
+		# 2. Absolute Keywords (Dynamic from settings)
+		keywords = getattr(self.cfg, "ABSOLUTE_KEYWORDS", ["Aleth", "Bünker", "770", "Joan"])
 		for kw in keywords:
 			if kw.lower() in text.lower():
 				markers.add(kw)
-		# 3. All-caps shouting (3+ chars)
-		markers.update(re.findall(r"\b[A-Z]{3,}\b", text))
+		# All-caps regex removed to avoid noise like 'JSON', 'API', 'USP'.
 		linguistic_markers = list(markers)
 
 		try:

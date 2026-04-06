@@ -7,29 +7,8 @@ import red_pill.config as cfg
 
 # Emotional Spectrum Definition (Inside Out 2 / v4.2.0)
 ValidColor = Literal["orange", "yellow", "purple", "cyan", "blue", "gray", "red", "green", "emerald", "gold", "black", "white", "pink"]
-ValidEmotion = Literal[
-	"joy",
-	"sadness",
-	"fear",
-	"disgust",
-	"anger",
-	"surprise",
-	"neutral",
-	"love",
-	"shame",
-	"guilt",
-	"desire",
-	"confusion",
-	"anxiety",
-	"envy",
-	"embarrassment",
-	"ennui",
-	"nostalgia",
-	"sarcasm",
-	"happiness",
-	"relief",
-	"pain",
-]
+# We map it directly to str to embrace Samantha's open-ended emotional taxonomy (e.g. 'frustration', 'existential dread').
+ValidEmotion = str
 
 
 class CreateEngramRequest(BaseModel):
