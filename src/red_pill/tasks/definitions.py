@@ -1,5 +1,7 @@
 import time
+
 from red_pill.tasks.celery_app import celery_app
+
 
 @celery_app.task(bind=True)
 def dummy_audit_task(self, path: str):

@@ -8,6 +8,7 @@ from typing import List, Union
 
 from red_pill.config import FLOW_REGISTRY_PATH, SIP_SOCKET_PATH
 from red_pill.core.inbox import MinionInbox
+from red_pill.core.model_registry import ModelRegistry
 from red_pill.core.providers import BitNetInferenceProvider, OpenAIInferenceProvider, ProviderRegistry, SipInferenceProvider
 from red_pill.swarm.base import Minion, SwarmResult
 from red_pill.swarm.factory import MinionFactory
@@ -15,7 +16,6 @@ from red_pill.swarm.flow_engine import FlowEngine
 from red_pill.swarm.routing import InferenceRouter
 from red_pill.utils.observer import notify_user
 from red_pill.utils.specs_adapter import SpecsAdapter
-from red_pill.core.model_registry import ModelRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ class SwarmScheduler:
 		}
 		async with self.lock:
 			self.queue.append(item)
-		
+
 		# Trigger processor asynchronously
 		asyncio.create_task(self._process_queue())
 		return await future
@@ -52,7 +52,7 @@ class SwarmScheduler:
 	async def _process_queue(self):
 		if self.is_processing:
 			return
-			
+
 		async with self.lock:
 			if self.is_processing or not self.queue:
 				return
@@ -63,11 +63,11 @@ class SwarmScheduler:
 				async with self.lock:
 					if not self.queue:
 						break
-					
+
 					now = time.time()
 					# 1. Anti-Starvation Check (Aging)
 					starving_tasks = [i for i in self.queue if now - i["enqueue_time"] > self.MAX_WAIT_TTL]
-					
+
 					if starving_tasks:
 						next_item = starving_tasks[0]
 						logger.info(f"Anti-Starvation context switch forced for {next_item['minion'].id}. TTL > {self.MAX_WAIT_TTL}s")
@@ -79,22 +79,22 @@ class SwarmScheduler:
 						else:
 							# Pick the oldest if no affinity matches
 							next_item = self.queue[0]
-					
+
 					self.queue.remove(next_item)
 					self.hot_profile = getattr(next_item["minion"], "model_profile", None)
-				
+
 				await self._execute_item(next_item)
 		finally:
 			self.is_processing = False
 
 	async def _execute_item(self, item):
 		minion, task, base_kwargs = item["minion"], item["task"], item["kwargs"]
-		
+
 		# Override Profile logic
 		profile_data = ModelRegistry.get_profile(self.hot_profile) if self.hot_profile else {}
 		exec_kwargs = base_kwargs.copy()
 		exec_kwargs.update(profile_data)
-		
+
 		# Hardware VRAM Routing
 		telemetry_provider = ProviderRegistry.get_telemetry_provider()
 		try:
@@ -103,7 +103,7 @@ class SwarmScheduler:
 			exec_kwargs["ngl"] = 99 if vram_free > 3000 else 0
 		except Exception:
 			exec_kwargs["ngl"] = 0
-			
+
 		try:
 			result = await self.orchestrator._run_minion(minion, task, **exec_kwargs)
 			if not item["future"].done():

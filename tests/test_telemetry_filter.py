@@ -1,5 +1,4 @@
-import pytest
-from red_pill.utils.telemetry_filter import is_garbage, filter_noise_from_turn
+from red_pill.utils.telemetry_filter import filter_noise_from_turn, is_garbage
 
 
 def test_is_garbage_empty_or_short():

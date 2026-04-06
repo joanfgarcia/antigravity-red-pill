@@ -1047,8 +1047,8 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 			broadcast_telemetry(prev_p, prev_r, prev_cat)
 
 			# FASE 2: Local Memory Guard (Surgical Trim)
-			from red_pill.utils.telemetry_filter import filter_noise_from_turn
 			from red_pill.core.queue_manager import MemoryQueueManager
+			from red_pill.utils.telemetry_filter import filter_noise_from_turn
 
 			clean_p = filter_noise_from_turn(prev_p)
 			clean_r = filter_noise_from_turn(prev_r)

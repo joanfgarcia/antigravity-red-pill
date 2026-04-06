@@ -1,7 +1,8 @@
-import os
-import yaml
 import logging
+import os
 import shutil
+
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ class ModelRegistry:
 		config_path = os.path.expanduser("~/.agent/model_profiles.yaml")
 		# The fallback seed is at the project root
 		seed_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), "model_profiles.yaml.example")
-		
+
 		# Auto-seed if missing
 		if not os.path.exists(config_path):
 			try:

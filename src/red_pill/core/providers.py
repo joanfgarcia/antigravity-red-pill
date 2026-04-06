@@ -167,10 +167,10 @@ class BitNetInferenceProvider(BaseInferenceProvider):
 		ngl = kwargs.get("ngl", 0)  # Hardware Offload
 
 		cmd = [
-			str(self.runner_path), 
-			"-m", str(model_path), 
-			"-p", str(prompt), 
-			"-n", str(max_tokens), 
+			str(self.runner_path),
+			"-m", str(model_path),
+			"-p", str(prompt),
+			"-n", str(max_tokens),
 			"--temp", str(temp),
 			"-ngl", str(ngl)
 		]

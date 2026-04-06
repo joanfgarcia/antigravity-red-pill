@@ -1,4 +1,6 @@
-import urllib.request, json
+import json
+import urllib.request
+
 payload = json.dumps({
     "messages": [{"role": "user", "content": "Hello, what is your name?"}],
     "max_tokens": 50,

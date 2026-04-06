@@ -1,4 +1,6 @@
-import urllib.request, json
+import json
+import urllib.request
+
 payload = json.dumps({
     "messages": [{"role": "system", "content": "You are an Amygdala-driven consolidation engine. You must ONLY output a valid JSON object. Examples of keys: 'summary', 'emotion', 'intensity'. Example output: {\"summary\": \"Session overview\", \"emotion\": \"neutral\", \"intensity\": 0.5}"}, {"role": "user", "content": "Analyze this text and return ONLY JSON:\nHello there, I feel great about the new architecture."}],
     "max_tokens": 150,

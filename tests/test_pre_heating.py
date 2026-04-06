@@ -1,9 +1,10 @@
+import importlib
 import time
-import pytest
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from red_pill import config
-import importlib
 
 plugin_module = importlib.import_module("red_pill.interceptors.11_pre_heating")
 EmotionalPreHeatingPlugin = plugin_module.EmotionalPreHeatingPlugin

@@ -1,6 +1,7 @@
+from typing import Any, Dict
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import Dict, Any
 
 from red_pill.tasks.celery_app import celery_app
 from red_pill.tasks.definitions import dummy_audit_task, extract_knowledge
@@ -19,7 +20,7 @@ def enqueue_task(request: TaskRequest):
         task = extract_knowledge.delay(**request.kwargs)
     else:
         raise HTTPException(status_code=400, detail="Unknown task_name.")
-    
+
     return {"task_id": task.id, "status": "enqueued"}
 
 @app.get("/api/tasks/{task_id}")

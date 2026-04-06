@@ -1,17 +1,17 @@
-import os
-import sys
-import time
-import socket
+import argparse
 import asyncio
 import logging
-import argparse
+import os
+import socket
 import subprocess
-from typing import Dict, Optional, Any
+import sys
+import time
+from typing import Dict
+
 import httpx
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
 
 # Adjust import paths relying on IA_DIR structure
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -19,8 +19,8 @@ src_dir = os.path.dirname(os.path.dirname(current_dir))
 if src_dir not in sys.path:
 	sys.path.insert(0, src_dir)
 
-from red_pill.core.model_registry import ModelRegistry
 from red_pill.config import get_config
+from red_pill.core.model_registry import ModelRegistry
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] [HYPERVISOR] %(message)s")
 logger = logging.getLogger(__name__)
@@ -51,7 +51,7 @@ class HypervisorManager:
 		profile_name, profile = ModelRegistry.get_profile_by_capability(requested_capability)
 		if not profile_name:
 			raise ValueError(f"No profile found for capability: {requested_capability}")
-	
+
 		async with self.lock:
 			if profile_name in self.active_models:
 				active = self.active_models[profile_name]
@@ -68,7 +68,7 @@ class HypervisorManager:
 			# Resolve binary types
 			model_path = os.path.join(cfg.IA_DIR, profile.get("model_path", ""))
 			binary_type = profile.get("binary_type", "gguf")
-			
+
 			# Build command based on OS/binary type logic
 			os_name = os.uname().sysname
 			if os_name == "Darwin" and binary_type == "gguf":
@@ -84,7 +84,7 @@ class HypervisorManager:
 
 			logger.info(f"Exec: {' '.join(cmd)}")
 			process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-			
+
 			active_model = ActiveModel(profile_name, profile, ephemeral_port, process)
 			self.active_models[profile_name] = active_model
 
@@ -94,7 +94,7 @@ class HypervisorManager:
 					if s.connect_ex(("127.0.0.1", ephemeral_port)) == 0:
 						break
 				await asyncio.sleep(0.5)
-				
+
 			logger.info(f"Model {profile_name} stabilized on port {ephemeral_port}")
 			return active_model
 
@@ -193,7 +193,7 @@ def main():
 	server = uvicorn.Server(config=config)
 
 	logger.info(f"Hypervisor Sub-Socket UDS Array active on {uds_path}")
-	
+
 	loop = asyncio.get_event_loop()
 	loop.run_until_complete(server.serve(sockets=[tcp_sock, uds_sock]))
 

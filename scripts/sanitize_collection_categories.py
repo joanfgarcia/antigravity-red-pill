@@ -324,7 +324,7 @@ def run_sanitation(dry_run: bool = True):
 		logger.info(f"  Kept: {kept}")
 
 	if dry_run:
-		logger.info(f"\nRun without --dry-run to execute changes.")
+		logger.info("\nRun without --dry-run to execute changes.")
 
 
 if __name__ == "__main__":
