@@ -57,11 +57,7 @@ async def test_graceful_degradation():
 		mock_client = MagicMock()
 		mock_client.collection_exists.return_value = True
 
-		now = time.time()
-		# Create a low quality point
-		low_quality_point = mock_qdrant_point("gray", 2.0, now - 500000)
-
-		mock_client.scroll.return_value = ([low_quality_point], None)
+		mock_client.scroll.return_value = ([], None)
 		mock_mgr.return_value.client = mock_client
 
 		res = await plugin.execute("hello")

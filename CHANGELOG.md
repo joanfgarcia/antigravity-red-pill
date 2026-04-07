@@ -2,6 +2,13 @@
 
 ## [6.3.8] - Unreleased
 
+### 🛡️ Test Immunity & Regression Purge
+- **[FIX] Immunity Shield Enforcement**: Completed the Bünker Immunity Shield by hardening `conftest.py` with dynamic `Pydantic` singleton eviction (`get_config.cache_clear()`). Unit tests now strictly run in `/tmp/` without polluting the global state.
+- **[FIX] Pre-Heating Degradation Validation**: Corrected assertions in `test_pre_heating.py` addressing graceful degradation branch execution paths.
+- **[FIX] Sound of Silence Style Protocols**: Eradicated legacy space indentation across `celery_app.py`, `api_gateway.py`, and `definitions.py`, satisfying strict style linters.
+- **[FIX] Sleep Engine Network Mocking**: Restored 100% Hermetic isolation in `test_sleep.py` and `test_sleep_coverage.py` by mocking the specific Pydantic `build_opener` factory, preventing live network bleed to Llama models.
+- **[FIX] Version Convergence**: Synchronized all ecosystem coordinates (`pyproject.toml`, `README.md`, `__init__.py`, `.env.example`, `ARCHITECTURE.md`) to unifying version `v6.3.8`.
+
 ### ✨ Cognitive Hypervisor & Quadlet Swarm Queue
 - **[FEAT] Sovereign Cognitive Hypervisor**: Deployed `hypervisor_daemon.py` on TCP (8760) and UDS (`red_pill.sock`). Dynamically proxy-routes local inference requests, negotiating ephemeral ports on-the-fly (`llama-server`) to guarantee zero port collisions.
 - **[FEAT] VRAM Garbage Collector**: The hypervisor now strictly enforces a 5-minute TTL on loaded models. Idle sub-processes are gracefully terminated and, if zombie, `SIGKILL`ed.

@@ -50,7 +50,12 @@ def test_distill_engram_error_path():
 
 def test_synthesize_hub_error_path():
 	"""Test fallback on synthesis failure."""
-	with patch("red_pill.metabolism.sleep.urllib.request.urlopen", side_effect=Exception("LLM Down")):
+	mock_opener = MagicMock()
+	mock_opener.open.side_effect = Exception("LLM Down")
+	with (
+		patch("red_pill.metabolism.sleep.os.path.exists", return_value=False),
+		patch("red_pill.metabolism.sleep.urllib.request.build_opener", return_value=mock_opener),
+	):
 		result = synthesize_hub(["summary 1", "summary 2"])
 		assert "Aggregated Memory Sequence" in result
 
