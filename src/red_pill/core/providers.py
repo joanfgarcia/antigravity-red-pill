@@ -182,16 +182,24 @@ class BitNetInferenceProvider(BaseInferenceProvider):
 			cmd.extend(["--grammar-file", str(grammar_path)])
 
 		try:
+			# LD_LIBRARY_PATH must be explicitly set for local subprocesses or they will fail to find libllama.so
+			env = os.environ.copy()
+			lib_path = os.path.join(os.getcwd(), "3rdparty/BitNet-1.58b/build/3rdparty/llama.cpp/src")
+			ggml_path = os.path.join(os.getcwd(), "3rdparty/BitNet-1.58b/build/3rdparty/llama.cpp/ggml/src")
+			env["LD_LIBRARY_PATH"] = f"{lib_path}:{ggml_path}:" + env.get("LD_LIBRARY_PATH", "")
+
 			# Use a short timeout for humble hardware to prevent hangs
-			result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-			full_output = result.stdout + result.stderr
+			result = subprocess.run(cmd, capture_output=True, text=True, timeout=60, env=env)
+			output = result.stdout
 
 			# Parsing logic from experimental runner
-			if "Assistant:" in full_output:
-				return full_output.split("Assistant:")[-1].strip()
+			if prompt in output:
+				return output.split(prompt)[-1].split("[end of text]")[0].strip()
+			elif "Assistant:" in output:
+				return output.split("Assistant:")[-1].split("[end of text]")[0].strip()
 
 			# Fallback: return last non-empty line
-			lines = [line.strip() for line in full_output.split("\n") if line.strip()]
+			lines = [line.strip() for line in output.split("\n") if line.strip()]
 			return lines[-1] if lines else ""
 
 		except subprocess.TimeoutExpired:
