@@ -84,6 +84,13 @@ class CollectionCreatedEvent(RedPillEvent):
 
 
 @dataclasses.dataclass
+class SoulCreatedEvent(RedPillEvent):
+	"""Fired after 'redpill export' creates a new local backup zip."""
+
+	zip_path: str = ""
+
+
+@dataclasses.dataclass
 class CliCommandDispatchedEvent(RedPillEvent):
 	"""Fired in main() after argparse resolves the command."""
 

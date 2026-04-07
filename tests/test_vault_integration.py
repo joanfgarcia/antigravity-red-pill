@@ -3,11 +3,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from red_pill.utils.vault import CloudVault
+from red_pill.utils.vault import SoulCryptographer
 
 
 @pytest.mark.xfail(
-	reason="vault._encrypt_kit now uses MLS (.tar.gz.mls) not GPG; GPG subprocess no longer called",
+	reason="SoulCryptographer._encrypt_kit now uses MLS (.tar.gz.mls) not GPG; GPG subprocess no longer called",
 	strict=False,
 )
 def test_encrypt_kit_hardened(tmp_path):
@@ -17,14 +17,14 @@ def test_encrypt_kit_hardened(tmp_path):
 	dummy_tar = tmp_path / "dummy_backup.tar.gz"
 	dummy_tar.write_text("dummy soul data")
 
-	vault = CloudVault()
+	vault = SoulCryptographer()
 
 	with patch("subprocess.run") as mock_run:
 		mock_result = MagicMock()
 		mock_result.returncode = 0
 		mock_run.return_value = mock_result
 
-		output = vault._encrypt_kit(str(dummy_tar))
+		output = vault.encrypt_kit(str(dummy_tar))
 
 		assert mock_run.call_count == 1
 		cmd_args = mock_run.call_args[0][0]
@@ -39,7 +39,7 @@ def test_encrypt_kit_hardened(tmp_path):
 
 
 @pytest.mark.xfail(
-	reason="vault._encrypt_kit now falls back to MLS encryption (.tar.gz.mls) when no GPG passphrase — returns path instead of None",
+	reason="SoulCryptographer._encrypt_kit now falls back to MLS encryption (.tar.gz.mls) when no GPG passphrase — returns path instead of None",
 	strict=False,
 )
 def test_encrypt_kit_no_passphrase(tmp_path):
@@ -50,6 +50,6 @@ def test_encrypt_kit_no_passphrase(tmp_path):
 	dummy_tar = tmp_path / "dummy_backup.tar.gz"
 	dummy_tar.write_text("dummy")
 
-	vault = CloudVault()
-	output = vault._encrypt_kit(str(dummy_tar))
+	vault = SoulCryptographer()
+	output = vault.encrypt_kit(str(dummy_tar))
 	assert output is None

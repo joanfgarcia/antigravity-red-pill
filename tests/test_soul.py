@@ -13,7 +13,7 @@ from red_pill.soul import SoulManager
 
 @pytest.fixture
 def soul(tmp_path):
-	with patch("red_pill.soul.CloudVault") as MockVault:
+	with patch("red_pill.soul.SoulCryptographer") as MockVault:
 		MockVault.return_value.enabled = False
 		sm = SoulManager()
 		sm.ia_dir = str(tmp_path)
@@ -104,49 +104,53 @@ class TestExportSoul:
 		snap_dir.mkdir(parents=True)
 		snap_file = snap_dir / f"work_{ts}.snapshot"
 		snap_file.write_bytes(b"snapshot_data")
-		with patch("time.strftime", return_value=ts):
-			with patch("os.getenv", return_value=None):
-				with patch.object(soul, "backup_qdrant"):
-					with patch.object(soul, "create_manifest"):
-						output = str(tmp_path / "export.tar.gz")
-						soul.export_soul(output_path=output)
+		
+		# Prevent cryptographer from deleting the file
+		with patch("red_pill.soul.SoulCryptographer") as MockCrypto:
+			MockCrypto.return_value.encrypt_kit.return_value = None
+			with patch("time.strftime", return_value=ts):
+				with patch("os.getenv", return_value=None):
+					with patch.object(soul, "backup_qdrant"):
+						with patch.object(soul, "create_manifest"):
+							output = str(tmp_path / "export.tar.gz")
+							soul.export_soul(output_path=output)
+		
 		assert os.path.exists(output)
 		with tarfile.open(output, "r:gz") as tar:
 			names = tar.getnames()
 		assert any(("work_" in n for n in names))
 
-	def test_cloud_upload_success_printed(self, soul, tmp_path, capsys):
-		"""Line 148-149: vault upload succeeds → prints file_id."""
-		soul.vault.enabled = True
-		soul.vault.upload_kit.return_value = "gdrive_file_123"
-		with patch.object(soul, "backup_qdrant"):
-			with patch.object(soul, "create_manifest"):
-				with patch("os.listdir", return_value=[]):
-					output = str(tmp_path / "export.tar.gz")
-					soul.export_soul(output_path=output)
+	def test_event_emitted_after_export(self, soul, tmp_path, capsys):
+		"""Instead of vault upload, we now emit SoulCreatedEvent."""
+		with patch("red_pill.events.get_event_bus") as mock_bus_func:
+			mock_bus = MagicMock()
+			mock_bus_func.return_value = mock_bus
+			# Prevent Cryptographer from touching the real file if testing
+			with patch("red_pill.soul.SoulCryptographer") as MockCrypto:
+				MockCrypto.return_value.encrypt_kit.return_value = None
+				with patch.object(soul, "backup_qdrant"):
+					with patch.object(soul, "create_manifest"):
+						with patch("os.listdir", return_value=[]):
+							output = str(tmp_path / "export.tar.gz")
+							soul.export_soul(output_path=output)
+						
+			assert mock_bus.emit.called
+			# Verify SoulCreatedEvent was emitted
+			args, _ = mock_bus.emit.call_args
+			assert args[0].__class__.__name__ == "SoulCreatedEvent"
 		captured = capsys.readouterr()
-		assert "gdrive_file_123" in captured.out
-
-	def test_cloud_upload_failure_printed(self, soul, tmp_path, capsys):
-		"""Line 151: vault upload returns falsy → prints failure message."""
-		soul.vault.enabled = True
-		soul.vault.upload_kit.return_value = None
-		with patch.object(soul, "backup_qdrant"):
-			with patch.object(soul, "create_manifest"):
-				with patch("os.listdir", return_value=[]):
-					output = str(tmp_path / "export.tar.gz")
-					soul.export_soul(output_path=output)
-		captured = capsys.readouterr()
-		assert "Cloud Transmission Failed" in captured.out
+		assert "EventBus" in captured.out
 
 	def test_manifest_not_added_when_missing(self, soul, tmp_path, capsys):
 		"""tar created but manifest absent → archive still created."""
-		with patch("os.getenv", return_value=None):
-			with patch.object(soul, "backup_qdrant"):
-				with patch.object(soul, "create_manifest"):
-					with patch("os.listdir", return_value=[]):
-						output = str(tmp_path / "export.tar.gz")
-						soul.export_soul(output_path=output)
+		with patch("red_pill.soul.SoulCryptographer") as MockCrypto:
+			MockCrypto.return_value.encrypt_kit.return_value = None
+			with patch("os.getenv", return_value=None):
+				with patch.object(soul, "backup_qdrant"):
+					with patch.object(soul, "create_manifest"):
+						with patch("os.listdir", return_value=[]):
+							output = str(tmp_path / "export.tar.gz")
+							soul.export_soul(output_path=output)
 		assert os.path.exists(output)
 
 	def test_manifest_added_to_tar_when_exists(self, soul, tmp_path, capsys):
@@ -156,12 +160,15 @@ class TestExportSoul:
 		snap_dir.mkdir(parents=True)
 		manifest_file = snap_dir / f"manifest_{ts}.json"
 		manifest_file.write_text('{"test": true}')
-		with patch("time.strftime", return_value=ts):
-			with patch("os.getenv", return_value=None):
-				with patch.object(soul, "backup_qdrant"):
-					with patch.object(soul, "create_manifest"):
-						output = str(tmp_path / "export.tar.gz")
-						soul.export_soul(output_path=output)
+		
+		with patch("red_pill.soul.SoulCryptographer") as MockCrypto:
+			MockCrypto.return_value.encrypt_kit.return_value = None
+			with patch("time.strftime", return_value=ts):
+				with patch("os.getenv", return_value=None):
+					with patch.object(soul, "backup_qdrant"):
+						with patch.object(soul, "create_manifest"):
+							output = str(tmp_path / "export.tar.gz")
+							soul.export_soul(output_path=output)
 		with tarfile.open(output, "r:gz") as tar:
 			assert "manifest.json" in tar.getnames()
 

@@ -1,5 +1,15 @@
 # Changelog: Red Pill Protocol
 
+## [6.4.0] - Unreleased
+
+### 🧩 Sovereign Plugin Architecture & Systemd Orchestration
+- **[FEAT] Modular Plugin Infrastructure:** Implemented `RedPillPlugin` and `PluginManager` via `pluggy` inside `src/red_pill/plugins/`, decoupling third-party integrations from the core Bünker logic.
+- **[FEAT] Centralized Decentralization:** Plugin configs are now strictly sandboxed in `<IA_DIR>/plugins/<plugin_name>/`, enforcing complete isolation from the `storage/` directory and `.env`.
+- **[FEAT] CloudSync Subjugation:** Fully extracted Google Drive sync from `SoulManager` and `CloudVault` into an event-driven plugin (`plugins/cloud_sync`) reacting to `SoulCreatedEvent`.
+- **[FEAT] Systemd --User Orchestration:** Eradicated background Python threading/polling daemons. Plugins like `GmailWatcher` now generate native OS `systemd --user` `.timer` and `.service` units (`generate_systemd_units`), relying entirely on sovereign OS scheduling.
+- **[FEAT] Muted Pain Signals & Auto-Healer:** `MemoryManager.inject_signal(..., muted=True)` now routes plugin failures to the SQLite `MinionInbox`. `LazarusPulse` implements an `_auto_heal_ritual` that polls the inbox, attempting automated healing scripts without polluting Qdrant context windows.
+- **[REFACT] Pure Cryptographer (`SoulCryptographer`):** Renamed and refactored `CloudVault` to `SoulCryptographer` to strictly handle local Pure-MLS / legacy GPG encryption and decryption layers, completely severed from network I/O responsibilities.
+
 ## [6.3.8] - Unreleased
 
 ### 🛡️ Test Immunity & Regression Purge

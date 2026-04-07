@@ -379,16 +379,6 @@ class RedPillConfig(BaseSettings):
 	RESONANCE_INTERVAL: int = 600
 
 	# -----------------------------------------------------------------------
-	# CLOUD VAULT
-	# -----------------------------------------------------------------------
-	CLOUD_VAULT_ENABLED: bool = False
-	CLOUD_VAULT_PROVIDER: str = "google_drive"
-	CLOUD_VAULT_FOLDER_ID: str = ""
-	CLOUD_SERVICE_ACCOUNT_FILE: str = os.path.join(_IA_DIR, "storage", "keys", "service_account.json")
-	CLOUD_VAULT_QUOTA_MB: int = 500
-	CLOUD_VAULT_RESERVE_COUNT: int = 4
-
-	# -----------------------------------------------------------------------
 	# SYNAPTIC FRAGMENTATION
 	# -----------------------------------------------------------------------
 	CHUNK_THRESHOLD: int = 800

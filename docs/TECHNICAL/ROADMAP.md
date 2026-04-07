@@ -74,7 +74,10 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
 - [x] **Neural Watchdog (Lazarus Pulse)**: Background `redpill-pulse.service` monitoring system health, curing pain signals, and validating code integrity via autonomic immune reflex.
 - [x] **Industrial Task Queues (Celery+Redis)**: Quadlet Podman cluster running `redis:alpine` and rigorous Celery workers (`time_limit=300`, FastAPI Gateway decoupling). Guarantee 0% CPU saturation and zombie-process eradication.
 - [ ] **Bünker Observability UI**: Unified UX for systemic control (Pain signals, Telemetry, Queue statuses). Must be a lightweight on-demand web server checking subsystem readiness (WebSocket/MQTT for real-time reactivity), or alternatively, a highly stylized terminal UI (btop aesthetic).
-- [ ] **Extensible Plugin System (Phase 3)**: Leverage Celery/Redis for scheduled integrations (Email, Agenda, Domotics). We need a base `TaskScheduler` to automate personal assistant workflows.
+- [ ] **Extensible Plugin System (Personal Assistant)**: Leverage Celery/Redis for scheduled autonomous integrations. Develop a modular `TaskScheduler` ecosystem:
+  - **Mail/Calendar**: Listeners for Gmail and Calendar events (appointments, incoming priority emails).
+  - **Work/Ticketing**: ClickUp/Jira/GitLab API integration for issue tracking.
+  - **Wellness**: Personal coach module (QiYoga, hydration/stretch reminders) integrated into the Lazarus Pulse.
 - [ ] **Config Decoupling & Guided UX**: Restructure `.env` file for sanity. Create a supervised UX config modifier to prevent operators from fatally breaking the Bünker configurations.
 - [ ] **Swarm Broadcast**: Community-wide message delivery (currently P2P only).
 - [ ] **Mailbox Cleanup**: Auto-purge read messages from Firebase after TTL.

@@ -73,6 +73,7 @@ class LazarusPulse:
 				await self._swarm_ritual()
 				await self._lazarus_ritual()
 				await self._resonance_ritual()
+				await self._auto_heal_ritual()
 
 				# Wait for next beat
 				await asyncio.sleep(cfg.PULSE_INTERVAL)
@@ -350,6 +351,50 @@ class LazarusPulse:
 
 		except Exception as e:
 			logger.error(f"Pulse: Resonance ritual failed: {e}")
+
+	async def _auto_heal_ritual(self) -> None:
+		"""
+		Auto-Healer Minion.
+		Reads the SQLite Inbox for muted plugin pain signals and attempts dry-run
+		fixes (e.g., OAuth token refresh) before alerting the Operator.
+		"""
+		try:
+			from red_pill.core.inbox import MinionInbox
+			inbox = MinionInbox()
+			unread = await asyncio.to_thread(inbox.get_unread, limit=50)
+
+			healed_ids = []
+			for report in unread:
+				event_id = report.get("event_id", "")
+
+				# Auto-Healer Heuristics
+				if event_id.startswith("signal_cloud_sync_error"):
+					logger.info(f"Auto-Healer: Attempting to heal plugin error '{event_id}'...")
+					# e.g., run oauth refresh script or similar
+					script_path = os.path.join(cfg.IA_DIR, "scripts", "heal_cloud_sync.sh")
+					if os.path.exists(script_path):
+						process = await asyncio.create_subprocess_exec(
+							str(script_path),
+							stdout=asyncio.subprocess.PIPE,
+							stderr=asyncio.subprocess.PIPE,
+						)
+						stdout, stderr = await process.communicate()
+						if process.returncode == 0:
+							logger.info(f"Auto-Healer: Successfully healed '{event_id}'")
+							healed_ids.append(report["id"])
+						else:
+							logger.warning(f"Auto-Healer: Failed to heal '{event_id}'. Escalating to Qdrant...")
+							self.memory_mgr.inject_signal(name=event_id.replace("signal_", ""), intensity=6.0, signal_type="pain", source="Auto-Healer", muted=False)
+							healed_ids.append(report["id"]) # mark as read since we escalated
+					else:
+						# No script available, escalate
+						self.memory_mgr.inject_signal(name=event_id.replace("signal_", ""), intensity=6.0, signal_type="pain", source="Auto-Healer", muted=False)
+						healed_ids.append(report["id"])
+
+			if healed_ids:
+				await asyncio.to_thread(inbox.mark_as_read, healed_ids)
+		except Exception as e:
+			logger.error(f"Pulse: Auto-Heal ritual failed: {e}")
 
 	async def _thread_ritual(self) -> None:
 		"""

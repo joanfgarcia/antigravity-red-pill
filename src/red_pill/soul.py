@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 import requests  # type: ignore
 
 import red_pill.config as cfg
-from red_pill.utils.vault import CloudVault
+from red_pill.utils.vault import SoulCryptographer
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,6 @@ class SoulManager:
 		self.backup_root = os.path.join(self.ia_dir, "backups")
 		self.qdrant_url = cfg.QDRANT_URL
 		self.api_key = cfg.QDRANT_API_KEY
-		self.vault = CloudVault()
 
 	def _get_collections(self) -> List[str]:
 		"""Fetch all collection names from Qdrant."""
@@ -146,27 +145,24 @@ class SoulManager:
 
 		print(f"Lean Export completed: {output_path} ({os.path.getsize(output_path) // 1024} KB)")
 
-		# 3. Handle Encryption & Transmission (SEC-F02)
-		if self.vault.enabled or os.getenv("CLOUD_VAULT_GPG_PASSPHRASE"):
-			encrypted_path = self.vault._encrypt_kit(output_path)
-			if encrypted_path:
-				# Replace original with encrypted version for local persistence
-				os.remove(output_path)
-				output_path = encrypted_path
-				mech = "MLS" if output_path.endswith(".mls") else "GPG"
-				print(f"Lean Export Secured ({mech}): {output_path}")
+		# 3. Handle Encryption (SEC-F02)
+		cryptographer = SoulCryptographer()
+		encrypted_path = cryptographer.encrypt_kit(output_path)
+		if encrypted_path:
+			os.remove(output_path)
+			output_path = encrypted_path
+			mech = "MLS" if output_path.endswith(".mls") else "GPG"
+			print(f"Lean Export Secured ({mech}): {output_path}")
 
-		if self.vault.enabled:
-			file_id = self.vault.upload_kit(output_path)
-			if file_id:
-				print(f"Cloud Transmission Successful: {file_id}")
-				return True
-			else:
-				print("Cloud Transmission Failed. Local kit preserved.")
-				return False
+		# 4. Notify Cloud Sync / Ecosystem via EventBus
+		from red_pill.events import SoulCreatedEvent, get_event_bus
+		logger.info(f"Emitting SoulCreatedEvent for {output_path}")
+		get_event_bus().emit(SoulCreatedEvent(zip_path=output_path))
 
-		print("Note: Encryption (MLS/GPG) is enforced for Cloud Vault as per SEC-F02.")
-		return True  # Local success, but no cloud requested
+		# In this architecture, we do not know if CloudSync succeeded synchronously.
+		# Plugins act asynchronously. The Local kit is successfully preserved and secured.
+		print("Export Pipeline finished. Plugins (Cloud Vault, etc) notified via EventBus.")
+		return True
 
 	def restore_soul(self, source_dir: str, commit: bool = False):
 		"""

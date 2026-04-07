@@ -1022,12 +1022,19 @@ class MemoryManager:
 
 		return snapshots_created
 
-	def inject_signal(self, name: str, intensity: float, signal_type: str, source: str) -> None:
+	def inject_signal(self, name: str, intensity: float, signal_type: str, source: str, muted: bool = False) -> None:
 		"""
 		Injects a biological/somatic signal into the immune dashboard.
-		These are fixed-hash engrams that overwrite themselves to avoid duplication.
+		If muted=True, the signal is written to the MinionInbox (SQLite) instead of Qdrant (Zero Context Bloat).
 		"""
 		try:
+			from red_pill.core.inbox import MinionInbox
+			if muted:
+				inbox = MinionInbox()
+				inbox.drop_report(event_id=f"signal_{name}", source=source, status=signal_type, content=f"Muted Signal: {name} (Intensity: {intensity})")
+				logger.info(f"Injected muted signal '{name}' to SQLite MinionInbox")
+				return
+
 			import hashlib
 			import uuid
 			from datetime import datetime, timezone

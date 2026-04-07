@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v6.3.8 (Bünker Isolation Shield)
+**System Version**: v6.4.0 (Bünker Isolation Shield)
 **Analyst**: The Architect
 **Date**: 2026-03-13
 

@@ -586,7 +586,7 @@ def main() -> None:
 							print(f"- {f['name']} ({f['createdTime']}) [ID: {f['id']}]")
 				else:
 					print("--- [CLOUD VAULT: INACTIVE] ---")
-					print(f"To enable, set CLOUD_VAULT_ENABLED=True in .env and provide {cfg.CLOUD_SERVICE_ACCOUNT_FILE}")
+					print("To enable Cloud Sync, configure the 'cloud_sync' plugin in <IA_DIR>/plugins/cloud_sync/cloud_sync.json")
 			elif args.soul_cmd == "migrate":
 				from red_pill.soul_migrate import run_migrate_cli
 

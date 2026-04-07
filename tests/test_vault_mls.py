@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
-from red_pill.utils.vault import CloudVault
+from red_pill.utils.vault import SoulCryptographer
 from red_pill.utils.vault_crypto import VaultCrypto
 
 
@@ -25,7 +25,7 @@ def temp_ia_dir():
 
 def test_vault_mls_encryption_cycle(temp_ia_dir):
 	"""Tests that a file can be encrypted and decrypted using MLS."""
-	vault = CloudVault()
+	vault = SoulCryptographer()
 
 	# Create a dummy soul kit
 	kit_path = os.path.join(temp_ia_dir, "test_kit.tar.gz")
@@ -33,13 +33,13 @@ def test_vault_mls_encryption_cycle(temp_ia_dir):
 		f.write(b"fake soul data 123")
 
 	# 1. Encrypt using MLS (default)
-	encrypted_path = vault._encrypt_kit(kit_path)
+	encrypted_path = vault.encrypt_kit(kit_path)
 	assert encrypted_path is not None
 	assert encrypted_path.endswith(".mls")
 	assert os.path.exists(encrypted_path)
 
 	# 2. Decrypt using the dual-mode decryptor
-	decrypted_path = vault._decrypt_kit(encrypted_path)
+	decrypted_path = vault.decrypt_kit(encrypted_path)
 	assert decrypted_path is not None
 	assert not decrypted_path.endswith(".mls")
 
@@ -49,7 +49,7 @@ def test_vault_mls_encryption_cycle(temp_ia_dir):
 
 def test_vault_gpg_legacy_restoration(temp_ia_dir):
 	"""Tests that legacy GPG files are still decryptable."""
-	vault = CloudVault()
+	vault = SoulCryptographer()
 
 	# Create a dummy soul kit
 	kit_path = os.path.join(temp_ia_dir, "legacy_kit.tar.gz")
@@ -57,9 +57,9 @@ def test_vault_gpg_legacy_restoration(temp_ia_dir):
 		f.write(b"legacy gpg data")
 
 	# Manually create a GPG file (if gpg is installed) or mock the response
-	# Here we verify that _decrypt_kit calls _decrypt_kit_gpg
+	# Here we verify that decrypt_kit calls _decrypt_kit_gpg
 	with patch.object(vault, "_decrypt_kit_gpg", return_value="decrypted_path") as mock_gpg:
-		res = vault._decrypt_kit("legacy_kit.tar.gz.gpg")
+		res = vault.decrypt_kit("legacy_kit.tar.gz.gpg")
 		assert res == "decrypted_path"
 		mock_gpg.assert_called_once_with("legacy_kit.tar.gz.gpg")
 
