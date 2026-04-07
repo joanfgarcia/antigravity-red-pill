@@ -18,19 +18,28 @@ os.environ["IA_DIR"] = tempfile.gettempdir()  # Redirect all storage to /tmp
 def bunker_isolation(monkeypatch):
 	"""
 	Universal isolation fixture (AUTO-USE).
-	Ensures that no test accidentallly hits the production Qdrant or filesystem.
+	Ensures that no test accidentally hits the production Qdrant or filesystem.
 	"""
-	from red_pill import config as cfg
+	from red_pill.config import get_config
 
-	# Force isolated testing paths
+	# 1. Clear the singleton cache so the next get_config() rebuilds with new envs
+	get_config.cache_clear()
+
+	# 2. Force isolated testing paths via environment
 	test_dir = tempfile.mkdtemp(prefix="bunker_test_")
-	monkeypatch.setattr(cfg, "IA_DIR", test_dir)
+	monkeypatch.setenv("IA_DIR", test_dir)
 
-	# Force Qdrant into memory mode UNLESS explicitly requested via integration marker
-	# NOTE: This overrides the module-level lazy attributes
-	monkeypatch.setattr(cfg, "QDRANT_URL", ":memory:")
+	# 3. Force Qdrant into memory mode via env variables for Pydantic to capture
+	monkeypatch.setenv("QDRANT_HOST", ":memory:")
+	monkeypatch.setenv("QDRANT_URL", ":memory:")
+
+	# Force rebuild for this test immediately
+	get_config()
 
 	yield test_dir
+
+	# 4. Clean cache after test finishes
+	get_config.cache_clear()
 
 
 @pytest.fixture

@@ -106,7 +106,8 @@ class EmotionalPreHeatingPlugin(BaseInterceptorPlugin):
 		scored_fragments = []
 		seen_content = set()
 		for point in candidates:
-			if not point.payload: continue
+			if not point.payload:
+				continue
 
 			content = point.payload.get("content", "").strip()
 			if not content or point.payload.get("category", "") == "work":

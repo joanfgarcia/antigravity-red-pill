@@ -74,6 +74,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [AFFECT_MULTIPLIERS_RESEARCH.md](TECHNICAL/COGNITIVE/AFFECT_MULTIPLIERS_RESEARCH.md) | Emotional affect weighting research (FSRS, Bayesian) |
 | [TEMPORAL_HORIZONS_RESEARCH.md](TECHNICAL/COGNITIVE/TEMPORAL_HORIZONS_RESEARCH.md) | Temporal memory horizon and decay research |
 | [BRAIN_ANIMAL_ANALOGIES.md](TECHNICAL/COGNITIVE/BRAIN_ANIMAL_ANALOGIES.md) | Biological analogies for the memory and immune system architecture |
+| [HYPERVISOR.md](TECHNICAL/COGNITIVE/HYPERVISOR.md) | Cognitive Hypervisor design covering unified resource orchestration |
 
 ### Bünker
 

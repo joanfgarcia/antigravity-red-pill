@@ -8,7 +8,7 @@ from red_pill import config
 
 plugin_module = importlib.import_module("red_pill.interceptors.11_pre_heating")
 EmotionalPreHeatingPlugin = plugin_module.EmotionalPreHeatingPlugin
-from red_pill.utils.pre_heating_scorer import composite_score, extract_contextual_metadata
+from red_pill.utils.pre_heating_scorer import composite_score, extract_contextual_metadata  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -42,7 +42,7 @@ async def test_fires_once():
 		mock_client.collection_exists.return_value = False
 		mock_mgr.return_value.client = mock_client
 
-		res1 = await plugin.execute("hello")
+		await plugin.execute("hello")
 		res2 = await plugin.execute("world")
 
 		assert EmotionalPreHeatingPlugin._has_fired is True

@@ -535,8 +535,7 @@ def _cfg() -> RedPillConfig:
 
 
 # Paths
-IA_DIR = _IA_DIR
-
+# Dynamically handled via __getattr__
 # LLM
 # filled below after first import via __getattr__
 

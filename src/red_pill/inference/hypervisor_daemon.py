@@ -19,8 +19,8 @@ src_dir = os.path.dirname(os.path.dirname(current_dir))
 if src_dir not in sys.path:
 	sys.path.insert(0, src_dir)
 
-from red_pill.config import get_config
-from red_pill.core.model_registry import ModelRegistry
+from red_pill.config import get_config  # noqa: E402
+from red_pill.core.model_registry import ModelRegistry  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] [HYPERVISOR] %(message)s")
 logger = logging.getLogger(__name__)
