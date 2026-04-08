@@ -23,8 +23,7 @@ class CloudSyncPlugin(RedPillPlugin):
 		self.service = None
 
 		# Token paths within the plugin folder
-		ia_dir = os.path.expanduser(os.getenv("IA_DIR", "~/.gemini/antigravity"))
-		self.token_file = os.path.join(ia_dir, "plugins", self.plugin_name, "drive_token.json")
+		self.token_file = os.path.expanduser("~/.agent/credentials/drive_token.json")
 
 		if self.enabled and (self.service_account_file or self.client_secrets_file):
 			self._authenticate()
@@ -94,8 +93,13 @@ class CloudSyncPlugin(RedPillPlugin):
 			return 0.0
 
 	@hookspecs.hookimpl
-	def on_soul_created(self, zip_path: str) -> None:
+	def on_soul_created(self, event) -> None:
 		"""Uploads the newly created encrypted kit."""
+		from red_pill.events import SoulCreatedEvent
+		if not isinstance(event, SoulCreatedEvent):
+			return
+
+		zip_path = event.zip_path
 		if not self.enabled or not self.service:
 			return
 

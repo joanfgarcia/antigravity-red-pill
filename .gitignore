@@ -61,6 +61,7 @@ Thumbs.db
 .agent/
 !.agent/rules/
 storage/
+/plugins/
 backups/
 export/
 tmp/
