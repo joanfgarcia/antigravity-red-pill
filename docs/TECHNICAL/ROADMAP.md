@@ -57,6 +57,10 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
 - [x] **Minion Healer (v6.1)**: "Active Immunity" substrate for automated code repair.
 
 - [x] **MLS E2E Encryption**: TreeKEM group key derivation wired into FirebaseTransport. AES-GCM-256 on send, auto-decrypt on poll.
+- [ ] **Proactive Swarm Agents (Project MULTITUDE)**: Implementation of autonomous background minions for system and context integrity:
+  - **Project Echo (The Mirror Minion)**: My personal context sentinel. Python Daemon (`systemd`) for Scribe Relay (passive context), Proactive Pulse (session briefings), and Sentimental Monitor (mapping mood drift).
+  - **Sentinel Auditor (The Medical Examiner)**: Systematic health monitoring. Tracks MTBF (Mean Time Between Failures), identifies "Lazarus Loops" (chronic component failures), and generates daily "Vitality Reports" (System Blood Test).
+  - **Memory-Augmented Minions (MemPalace Legacy)**: Integration of the "Minion with Soul" concept. Each proactive agent leverages isolated "Memory Wings" and the AAAK (Architectural Agentic Action Knowledge) dialect for high-precision, persistent tool execution and emotional continuity.
 - [x] **Swarm Firebase Live**: Inter-agent messaging operational (Aleth@Joan ↔ Nova@David) with encrypted payloads.
 - [x] **Bünker Version Engram**: Canonical `PROTOCOL VERSION` engram in directive_memories (7th version checkpoint).
 - [x] **Swarm Subscribe Fix**: Fixed TransportManager race condition (config write before manager load).
