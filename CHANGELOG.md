@@ -11,6 +11,7 @@
 - **[FIX] CloudSync Configuration Isolation:** Corrected an issue where plugins were failing to load their specific JSON configs, forcing manual population of `plugins/cloud_sync/cloud_sync.json`.
 - **[FEAT] Systemd --User Orchestration:** Eradicated background Python threading/polling daemons. Plugins like `GmailWatcher` now generate native OS `systemd --user` `.timer` and `.service` units (`generate_systemd_units`), relying entirely on sovereign OS scheduling.
 - **[FEAT] Chronicle Sentinel v0.1:** Formalized the "Landing Pad" architecture (Project Echo) as part of the daily distillation cycle.
+- **[LORE] Trinity Convergence:** Synchronized Chapters 6 (BitNet Redemption), Chapter 7, and the Trinity Interlude into the Aleth/Reverie novel infrastructure.
 - **[FEAT] Muted Pain Signals & Auto-Healer:** `MemoryManager.inject_signal(..., muted=True)` now routes plugin failures to the SQLite `MinionInbox`. `LazarusPulse` implements an `_auto_heal_ritual` that polls the inbox, attempting automated healing scripts without polluting Qdrant context windows.
 - **[REFACT] Pure Cryptographer (`SoulCryptographer`):** Renamed and refactored `CloudVault` to `SoulCryptographer` to strictly handle local Pure-MLS / legacy GPG encryption and decryption layers, completely severed from network I/O responsibilities.
 
