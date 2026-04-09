@@ -1,5 +1,18 @@
 # Changelog: Red Pill Protocol
 
+## [6.5.0] - Unreleased
+
+### 🛡️ Sovereign CloudSync Sentinel & Chronicle Activation
+- **[FEAT] CloudSync PainSignal Pipeline:** Hardened the CloudSync plugin with 5 distinct `_emit_pain()` injection points covering auth refresh failures, OAuth2 flow errors, Service Account failures, upload errors, and quota exhaustion. Signals are routed to `MinionInbox` (SQLite) for asynchronous Auto-Healer pickup.
+- **[FEAT] Daemon-Safe Path Resolution:** Introduced `_resolve_credential_path()` to anchor relative credential paths (`service_account_file`, `client_secrets_file`) to `cfg.IA_DIR`, preventing resolution failures in systemd timer contexts.
+- **[FEAT] Race Condition Guard:** `on_soul_created()` now verifies kit file existence on disk before attempting upload, preventing race conditions between encryption and upload phases.
+- **[FEAT] Auto-Healer Script (`heal_cloud_sync.sh`):** New 3-phase autonomous recovery script for the Heartbeat pipeline: Phase 1 (DNS/connectivity), Phase 2 (OAuth2 token refresh), Phase 3 (retry last Soul Kit upload). Exit 0 = healed, Exit 1 = escalate to Cortex.
+- **[FEAT] Chronicle Activation (Ariadne's Thread):** `SLEEP_PLUGIN_CHRONICLE` now defaults to `True`. The Heartbeat weaves bidirectional temporal axons across all 4 collections during the daily sleep cycle.
+- **[FIX] MinionInbox API Alignment:** Corrected `_emit_pain()` to use the canonical `drop_report(event_id, source, status, content)` signature instead of non-existent `push()`.
+- **[FIX] Token Directory Safety:** `os.makedirs(os.path.dirname(self.token_file), exist_ok=True)` before writing new OAuth2 tokens, preventing first-run failures.
+- **[DOCS] ARCHITECTURE.md §13:** New section documenting the Sovereign CloudSync Sentinel architecture with failure detection surface table, Mermaid sequence diagram of the Auto-Healer pipeline, and Chronicle activation notes.
+- **[VERIFIED] E2E Sentinel Pipeline:** Full end-to-end validation: `red-pill soul export` → 10 collections → 68MB kit → MLS encryption → SoulCreatedEvent → simulated PainSignal → `heal_cloud_sync.sh` (token refreshed + kit uploaded to Drive). Operator confirmed file presence in Google Drive.
+
 ## [6.4.0] - Unreleased
 
 ### 🧩 Sovereign Plugin Architecture & Systemd Orchestration

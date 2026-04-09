@@ -395,10 +395,10 @@ class RedPillConfig(BaseSettings):
 	SLEEP_PLUGIN_USP: bool = True  # Operator Mood Profile refresh
 	SLEEP_PLUGIN_DREAM: bool = True  # Oneiromancy (latent semantic association)
 	SLEEP_PLUGIN_CONSOLIDATION: bool = True  # Memory consolidation (lazy sleep)
-	SLEEP_PLUGIN_CHRONICLE: bool = False  # Ariadne's Thread + MCP archive search
-	# └─ CHRONICLE=False by default: requires antigravity decrypt→ingest pipeline.
-	#   Also gates archive_memories in MCP search_memory_research.
-	#   Agent can auto-activate when archive_memories has content.
+	SLEEP_PLUGIN_CHRONICLE: bool = True  # Ariadne's Thread + MCP archive search
+	# └─ CHRONICLE=True (v6.5.0): antigravity decrypt→ingest pipeline operational.
+	#   Gates archive_memories in MCP search_memory_research.
+	#   Agent can auto-deactivate if archive_memories is empty.
 
 	# -----------------------------------------------------------------------
 	# PRE-HEATING (Oracle Protocol)

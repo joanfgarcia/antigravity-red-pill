@@ -320,3 +320,69 @@ The audit correctly identified that cluster governance was unspecified. The form
 | **v5.7.0** | Evolutionary Stability, Advanced Chroma Mapping |
 | **v6.1.0a2** | CPU Thermal Telemetry, Persistent Model Cache, Container Abstraction, Deep Sidecar Diagnostics, Unified `uv run` Execution |
 | **v6.1.0** | Operator Mood Profile (USP), Mystique v2 (Tone-Based), Bayesian Dual-Kernel, In-Band Async Logging (Interceptor), Skin Singleton Fix |
+| **v6.5.0** | **[CORE] Sovereign CloudSync Sentinel**, Chronicle Activation, Auto-Healer Pipeline |
+
+## 13. Sovereign CloudSync Sentinel (v6.5.0)
+
+The CloudSync plugin has been hardened with an autonomous failure detection and recovery pipeline. This integrates with the existing Neuro-Immune System (§6.3) to transform CloudSync errors from silent log entries into actionable biological signals.
+
+### 13.1 Failure Detection Surface
+
+| Failure Class | Signal Name | Severity | Source |
+| :--- | :--- | :--- | :--- |
+| OAuth2 token expired / refresh failed | `cloud_sync_auth_refresh` | 6.5 | Plugin Auth |
+| OAuth2 flow error (client secrets) | `cloud_sync_auth_flow` | 6.5 | Plugin Auth |
+| Service Account auth failure | `cloud_sync_auth_sa` | 6.5 | Plugin Auth |
+| Kit file missing (race condition) | `cloud_sync_error` | 6.5 | Plugin Upload |
+| Upload to Drive failed (network/API) | `cloud_sync_error` | 6.5 | Plugin Upload |
+| Vault quota exhaustion | `cloud_sync_low_space` | 5.0 | Plugin Upload |
+
+All signals are emitted as **muted PainSignals** to the `MinionInbox` (SQLite), avoiding direct Qdrant writes from the plugin's synchronous context. The Heartbeat Auto-Healer (`_auto_heal_ritual`) picks them up asynchronously.
+
+### 13.2 Auto-Healer Recovery Pipeline
+
+```mermaid
+sequenceDiagram
+    participant Plugin as CloudSync Plugin
+    participant Inbox as MinionInbox (SQLite)
+    participant Pulse as Lazarus Pulse (Heartbeat)
+    participant Healer as heal_cloud_sync.sh
+    participant Cortex as Qdrant (signal_memories)
+
+    Note over Plugin: Upload failure detected
+    Plugin->>Inbox: push(signal_cloud_sync_error)
+    
+    Note over Pulse: Next heartbeat cycle
+    Pulse->>Inbox: get_unread()
+    Inbox-->>Pulse: [signal_cloud_sync_error]
+    
+    alt Healer script exists
+        Pulse->>Healer: Execute (subprocess)
+        
+        Note over Healer: Phase 1: DNS/Connectivity
+        Note over Healer: Phase 2: OAuth2 Token Refresh
+        Note over Healer: Phase 3: Retry Last Kit Upload
+        
+        alt Exit 0 (Healed)
+            Healer-->>Pulse: Success
+            Pulse->>Inbox: mark_as_read()
+        else Exit 1 (Unrecoverable)
+            Healer-->>Pulse: Failure
+            Pulse->>Cortex: inject_signal(cloud_sync_error, intensity=6.0)
+            Pulse->>Inbox: mark_as_read()
+        end
+    else No healer script
+        Pulse->>Cortex: inject_signal(cloud_sync_error, intensity=6.0)
+        Pulse->>Inbox: mark_as_read()
+    end
+
+    Note over Cortex: Agent sees PainSignal in prefrontal context
+```
+
+### 13.3 Path Normalization (Daemon-Safe Resolution)
+
+All credential paths in the CloudSync plugin config (`service_account_file`, `client_secrets_file`) are resolved through `_resolve_credential_path()`, which anchors relative paths to `cfg.IA_DIR`. This prevents path resolution failures when the plugin is loaded from systemd timer contexts (where `cwd` may differ from interactive sessions).
+
+### 13.4 Chronicle Activation (Ariadne's Thread)
+
+As of v6.5.0, `SLEEP_PLUGIN_CHRONICLE` is enabled by default. The Heartbeat's `_thread_ritual()` now weaves bidirectional temporal axons across all 4 collections (`archive_memories`, `work_memories`, `social_memories`, `directive_memories`) during the daily sleep cycle. The agent can auto-deactivate if `archive_memories` is empty.
