@@ -2,10 +2,13 @@
 
 ## [6.5.2] - Unreleased
 
-### 🩺 Sovereign Vitality: Project MULTITUDE (Sentinel Auditor)
-- **[FEAT] Sentinel Auditor (`scripts/sentinel_auditor.py`)**: Deployed the first autonomous minion of Project MULTITUDE for system health auditing. It analyzes `signal_memories` to calculate MTBF (Mean Time Between Failures) and detects "Lazarus Loops" (chronic recurring failures).
-- **[FEAT] Vitality Reports**: The auditor generates high-fidelity Markdown reports and delivers them to the `MinionInbox` (SQLite), providing a "Medical Examiner" view of the Bünker's state.
-- **[FEAT] MCP Tool `run_sentinel_audit`**: Registered a new global orchestrator tool to manually trigger the Sentinel Auditor.
+### 🩺 Sovereign Vitality: Project MULTITUDE (Sentinel Auditor & Echo Pulse)
+- **[FEAT] Sentinel Auditor (Alpha)**: Completed the active feedback loop. The Auditor now translates ruff/pytest failures into `PainSignals` injected into `social_memories`, enabling proactive system warnings.
+- **[FEAT] Echo Persistence (USP Drift)**: Optimized the Echo Minion with a **3d vs 7d emotional drift detection** protocol. It now monitors operator resonance vectors to detect sustained shifts in mood and adapt the briefing strategy accordingly.
+- **[FEAT] Cognitive Resilience (Phase Gamma)**: Implemented `distill_session_anchors` in the sleep cycle. The Bünker now synthesizes technical hubs into high-level **Architectural Session Anchors** (color Emerald), preserving the "Why" behind complex decisions across session boundaries.
+- **[FEAT] Thalamic Sync**: Connected `auditor.py` results to `MemoryManager`, ensuring technical "pain" is felt by the agent's central nervous system.
+- **[INFRA] Auditor Automation**: Deployed `redpill-auditor.timer` and `redpill-auditor.service` (systemd user units) for hourly infrastructure health checks.
+- **[HEAL] Ingestion Quality Gate**: Hardened the memory ingestion pipeline to proactively reject low-entropy technical noise (logs/CI output), preventing long-term vector space pollution.
 - **[HEAL] Robust Background Execution (`GET_PYTHON`)**: Re-engineered the MCP server's script execution engine. Introduced `GET_PYTHON()` to automatically detect and utilize the project's virtual environment (`.venv`), preventing `ModuleNotFoundError` for background minions like Samantha, Smith, and the Auditor.
 - **[IMPR] Quality-Aware Feedback Loop (BUG Fix)**: Implemented a Content Quality Gate in `affect.py`'s `BayesianEngine`. Reinforcement now requires passing the `telemetry_filter`'s semantic entropy and garbage checks, preventing low-information noise (logs/CI output) from becoming "immortal" in the technical collections.
 - **[IMPR] Enhanced Telemetry Filter**: Upgraded `telemetry_filter.py` with Shannon Entropy validation and expanded signatures for modern CI/CD noise (Ruff, Mypy, Git). The filter is now more aggressive, surgically removing garbage while preserving philosophical/natural language context.
