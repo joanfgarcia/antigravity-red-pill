@@ -242,6 +242,11 @@ def synthesize_hub(summaries: List[str]) -> str:
 def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 	"""
 	Lazarus Phase 2, 3 & 4: Consolidation, Fixation, and Synaptic Dreaming.
+
+	v6.5.1: Drain loop — processes ALL pending interaction_memories in
+	batches of cfg.SLEEP_SCROLL_LIMIT until the queue is empty, with a
+	thermal breaker that aborts after cfg.SLEEP_MAX_LLM_FAILURES consecutive
+	LLM failures to prevent infinite retry loops.
 	"""
 	logger.info("=== LAZARUS PULSE: Initiating Synaptic Dreaming (NREM/REM) ===")
 
@@ -250,16 +255,6 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 
 	if not client.collection_exists(collection):
 		logger.warning("Sleep cycle aborted: fast buffer does not exist.")
-		return 0
-
-	try:
-		scroll_result, _ = client.scroll(collection_name=collection, scroll_filter=Filter(), limit=50, with_payload=True)
-	except Exception as e:
-		logger.error(f"[SLEEP ENGINE] Failed to fetch raw buffer: {e}")
-		return 0
-
-	if not scroll_result:
-		logger.info("Sleep Cycle complete. No unprocessed interactions found.")
 		return 0
 
 	# --- Protocol 770: Cryo-Preservation Logic ---
@@ -279,8 +274,6 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 		logger.warning("[SLEEP ENGINE] System stress detected. Minimizing metabolic load.")
 
 	# LLM Health Check: if the distillation model is unreachable, abort and signal pain.
-
-	# Nodes are preserved in interaction_memories for the next cycle.
 	if not _check_llm_available():
 		logger.warning("[SLEEP ENGINE] Local LLM is offline. Aborting sleep cycle. Injecting pain signal.")
 		try:
@@ -294,167 +287,239 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 			pass
 		return 0
 
-	processed_count = 0
-	for point in scroll_result:
-		raw_id = point.id
-		raw_text = (point.payload or {}).get("content", "")
+	# ── Drain Loop ────────────────────────────────────────────────────────
+	# v6.5.1 fix: process ALL pending engrams, not just the first batch.
+	total_processed = 0
+	batch_number = 0
+	consecutive_llm_failures = 0
+	scroll_limit = cfg.SLEEP_SCROLL_LIMIT
+	max_llm_failures = cfg.SLEEP_MAX_LLM_FAILURES
 
-		if not raw_text:
-			continue
+	while True:
+		batch_number += 1
 
-		logger.debug(f"[SLEEP ENGINE] Processing raw interaction sequence: {raw_id}")
+		# Thermal breaker: abort if LLM keeps failing
+		if consecutive_llm_failures >= max_llm_failures:
+			logger.error(
+				f"[SLEEP ENGINE] Thermal breaker tripped: {consecutive_llm_failures} consecutive LLM failures. "
+				f"Aborting drain loop. {total_processed} engrams processed before failure."
+			)
+			try:
+				memory_manager.inject_signal(
+					"sleep_thermal_breaker",
+					intensity=6.0,
+					signal_type="pain",
+					source="SLEEP_ENGINE",
+				)
+			except Exception:
+				pass
+			break
 
-		# Biological Refactor: Semantic Engram Decoupling (Prompt vs Response + Axon Link)
-		chunks = []
-		if raw_text.startswith("USER: ") and "\n\nASSISTANT: " in raw_text:
-			parts = raw_text.split("\n\nASSISTANT: ", 1)
-			p_text = parts[0].replace("USER: ", "", 1).strip()
-			r_text = parts[1].strip()
+		# Re-check LLM health each batch (may have gone down mid-cycle)
+		if batch_number > 1 and not _check_llm_available():
+			logger.warning(f"[SLEEP ENGINE] LLM went offline mid-cycle (batch {batch_number}). Stopping drain.")
+			break
 
-			if p_text:
-				for c in chunk_text(p_text):
-					chunks.append(f"Operator Prompt: {c}")
-			if r_text:
-				for c in chunk_text(r_text):
-					chunks.append(f"AI Response Node: {c}")
-		elif raw_text.startswith("USER: ") and "\n\nTOOL: " in raw_text:
-			parts = raw_text.split("\n\nTOOL: ", 1)
-			p_text = parts[0].replace("USER: ", "", 1).strip()
-			r_text = parts[1].strip()
+		try:
+			scroll_result, _ = client.scroll(
+				collection_name=collection, scroll_filter=Filter(), limit=scroll_limit, with_payload=True
+			)
+		except Exception as e:
+			logger.error(f"[SLEEP ENGINE] Failed to fetch raw buffer (batch {batch_number}): {e}")
+			break
 
-			if p_text:
-				for c in chunk_text(p_text):
-					chunks.append(f"Operator Objective: {c}")
-			if r_text:
-				for c in chunk_text(r_text):
-					chunks.append(f"System Action: {c}")
-		else:
-			chunks = chunk_text(raw_text)
+		if not scroll_result:
+			logger.info(f"[SLEEP ENGINE] Queue drained. {batch_number - 1} batches, {total_processed} engrams total.")
+			break
 
-		surviving_chunks = []
-		prev_chunk_id = None
-		chunks_saved = 0  # Track successful writes for this point
+		logger.info(f"[SLEEP ENGINE] Batch {batch_number}: processing {len(scroll_result)} engrams ({total_processed} so far)...")
 
-		# v6.3.8: Use LLM-classified category from interaction metadata.
-		# The LLM classifies each turn at write-time via interceptor_rp.
-		# Fallback to keyword heuristic for legacy engrams without category.
-		raw_metadata = (point.payload or {}).get("metadata", {})
-		llm_category = raw_metadata.get("category", "") if isinstance(raw_metadata, dict) else ""
-		if llm_category in ("work", "social"):
-			target_col = f"{llm_category}_memories"
-		elif llm_category == "mixed":
-			# Mixed: use keyword heuristic as tiebreaker
-			if any(
-				kw in raw_text.lower()
-				for kw in ["code", "error", "bash", "python", "script", "commit", "test", "debug", "deploy", "pipeline", "ci", "config"]
-			):
-				target_col = "work_memories"
-			else:
-				target_col = "social_memories"
-		else:
-			# Legacy fallback (no category metadata)
-			target_col = "social_memories"
-			if any(kw in raw_text.lower() for kw in ["code", "error", "bash", "python", "script", "commit"]):
-				target_col = "work_memories"
+		batch_processed = 0
+		for point in scroll_result:
+			raw_id = point.id
+			raw_text = (point.payload or {}).get("content", "")
 
-		for i, chunk in enumerate(chunks):
-			distilled = distill_engram(chunk)
-			emotion = distilled.get("emotion", "neutral")
-			intensity = distilled.get("intensity", 0.5)
-			summary = distilled.get("summary", "")
-
-			# Phase 2: Affective Culling (Amygdala Validation)
-			# Protocol 770: Disable culling if hibernation (Operator absent) is active
-			current_threshold = 0.0 if hibernating else cfg.SLEEP_CULL_THRESHOLD
-			if emotion == "neutral" and intensity < current_threshold and len(chunks) > 1:
-				logger.debug(f"[AFFECTIVE CULLING] Dropped chunk {i + 1} (low biological relevance).")
+			if not raw_text:
 				continue
 
-			surviving_chunks.append(distilled)
+			logger.debug(f"[SLEEP ENGINE] Processing raw interaction sequence: {raw_id}")
 
-			# Phase 3: Immediate Fixation of Sub-node
-			meta = {"lazarus_phase": "sequence_chunk", "chunk_index": i, "source_buffer_id": raw_id, "raw_content_preview": chunk[:200]}
+			# Biological Refactor: Semantic Engram Decoupling (Prompt vs Response + Axon Link)
+			chunks = []
+			if raw_text.startswith("USER: ") and "\n\nASSISTANT: " in raw_text:
+				parts = raw_text.split("\n\nASSISTANT: ", 1)
+				p_text = parts[0].replace("USER: ", "", 1).strip()
+				r_text = parts[1].strip()
 
-			try:
-				# Insert memory
-				new_id = memory_manager.add_memory(
-					collection=target_col,
-					text=summary,
-					metadata=meta,
-					color="blue" if target_col == "work_memories" else "purple",
-					emotion=emotion,
-					intensity=intensity,
-				)
+				if p_text:
+					for c in chunk_text(p_text):
+						chunks.append(f"Operator Prompt: {c}")
+				if r_text:
+					for c in chunk_text(r_text):
+						chunks.append(f"AI Response Node: {c}")
+			elif raw_text.startswith("USER: ") and "\n\nTOOL: " in raw_text:
+				parts = raw_text.split("\n\nTOOL: ", 1)
+				p_text = parts[0].replace("USER: ", "", 1).strip()
+				r_text = parts[1].strip()
 
-				# Assign Graph Topology (Linked Thread)
-				if prev_chunk_id and new_id:
-					client.set_payload(collection_name=target_col, payload={"associations": [prev_chunk_id]}, points=[new_id])
+				if p_text:
+					for c in chunk_text(p_text):
+						chunks.append(f"Operator Objective: {c}")
+				if r_text:
+					for c in chunk_text(r_text):
+						chunks.append(f"System Action: {c}")
+			else:
+				chunks = chunk_text(raw_text)
 
-				prev_chunk_id = new_id
-				processed_count += 1
-				chunks_saved += 1
+			surviving_chunks = []
+			prev_chunk_id = None
+			chunks_saved = 0  # Track successful writes for this point
 
-			except Exception as e:
-				logger.error(f"[SLEEP ENGINE] Failed to fixate child chunk: {e}")
+			# v6.3.8: Use LLM-classified category from interaction metadata.
+			# The LLM classifies each turn at write-time via interceptor_rp.
+			# Fallback to keyword heuristic for legacy engrams without category.
+			raw_metadata = (point.payload or {}).get("metadata", {})
+			llm_category = raw_metadata.get("category", "") if isinstance(raw_metadata, dict) else ""
+			if llm_category in ("work", "social"):
+				target_col = f"{llm_category}_memories"
+			elif llm_category == "mixed":
+				# Mixed: use keyword heuristic as tiebreaker
+				if any(
+					kw in raw_text.lower()
+					for kw in ["code", "error", "bash", "python", "script", "commit", "test", "debug", "deploy", "pipeline", "ci", "config"]
+				):
+					target_col = "work_memories"
+				else:
+					target_col = "social_memories"
+			else:
+				# Legacy fallback (no category metadata)
+				target_col = "social_memories"
+				if any(kw in raw_text.lower() for kw in ["code", "error", "bash", "python", "script", "commit"]):
+					target_col = "work_memories"
 
-		# Phase 4: Hub Synthesis (Neocortex)
-		if len(surviving_chunks) > 1 and prev_chunk_id:
-			hub_summary = synthesize_hub([c["summary"] for c in surviving_chunks])
-			hub_emotion = surviving_chunks[-1]["emotion"]  # Heuristic: retain last emotion
-			hub_intensity = max([c["intensity"] for c in surviving_chunks])  # Heuristic: peak arousal
+			point_llm_failed = False
+			for i, chunk in enumerate(chunks):
+				distilled = distill_engram(chunk)
+				emotion = distilled.get("emotion", "neutral")
+				intensity = distilled.get("intensity", 0.5)
+				summary = distilled.get("summary", "")
 
-			try:
-				hub_id = memory_manager.add_memory(
-					collection=target_col,
-					text=hub_summary,
-					metadata={"lazarus_phase": "synthesis_hub", "source_buffer_id": raw_id},
-					color="cyan",  # Hub Node color
-					emotion=hub_emotion,
-					intensity=hub_intensity,
-				)
-				if hub_id:
-					client.set_payload(collection_name=target_col, payload={"associations": [prev_chunk_id]}, points=[hub_id])
-					processed_count += 1
+				# Detect LLM fallback (distill_engram returns truncated raw content on failure)
+				if summary.endswith("...") and len(summary) > 490:
+					consecutive_llm_failures += 1
+					point_llm_failed = True
+					if consecutive_llm_failures >= max_llm_failures:
+						break
+					continue
+				else:
+					consecutive_llm_failures = 0  # Reset on success
+
+				# Phase 2: Affective Culling (Amygdala Validation)
+				# Protocol 770: Disable culling if hibernation (Operator absent) is active
+				current_threshold = 0.0 if hibernating else cfg.SLEEP_CULL_THRESHOLD
+				if emotion == "neutral" and intensity < current_threshold and len(chunks) > 1:
+					logger.debug(f"[AFFECTIVE CULLING] Dropped chunk {i + 1} (low biological relevance).")
+					continue
+
+				surviving_chunks.append(distilled)
+
+				# Phase 3: Immediate Fixation of Sub-node
+				meta = {"lazarus_phase": "sequence_chunk", "chunk_index": i, "source_buffer_id": raw_id, "raw_content_preview": chunk[:200]}
+
+				try:
+					# Insert memory
+					new_id = memory_manager.add_memory(
+						collection=target_col,
+						text=summary,
+						metadata=meta,
+						color="blue" if target_col == "work_memories" else "purple",
+						emotion=emotion,
+						intensity=intensity,
+					)
+
+					# Assign Graph Topology (Linked Thread)
+					if prev_chunk_id and new_id:
+						client.set_payload(collection_name=target_col, payload={"associations": [prev_chunk_id]}, points=[new_id])
+
+					prev_chunk_id = new_id
+					batch_processed += 1
 					chunks_saved += 1
-			except Exception as e:
-				logger.error(f"[SLEEP ENGINE] Failed to fixate synthesis hub: {e}")
-				hub_id = None  # type: ignore[assignment]
 
-			# Phase 5: Thread Weaving — link this hub to the previous session's hub
-			if hub_id:
-				thread_state = _load_thread_state()
-				prev_hub_id = thread_state.get(target_col)
-				if prev_hub_id:
+				except Exception as e:
+					logger.error(f"[SLEEP ENGINE] Failed to fixate child chunk: {e}")
+
+			# If thermal breaker tripped during chunk processing, stop this batch
+			if consecutive_llm_failures >= max_llm_failures:
+				break
+
+			# Phase 4: Hub Synthesis (Neocortex)
+			if len(surviving_chunks) > 1 and prev_chunk_id:
+				hub_summary = synthesize_hub([c["summary"] for c in surviving_chunks])
+				hub_emotion = surviving_chunks[-1]["emotion"]  # Heuristic: retain last emotion
+				hub_intensity = max([c["intensity"] for c in surviving_chunks])  # Heuristic: peak arousal
+
+				try:
+					hub_id = memory_manager.add_memory(
+						collection=target_col,
+						text=hub_summary,
+						metadata={"lazarus_phase": "synthesis_hub", "source_buffer_id": raw_id},
+						color="cyan",  # Hub Node color
+						emotion=hub_emotion,
+						intensity=hub_intensity,
+					)
+					if hub_id:
+						client.set_payload(collection_name=target_col, payload={"associations": [prev_chunk_id]}, points=[hub_id])
+						batch_processed += 1
+						chunks_saved += 1
+				except Exception as e:
+					logger.error(f"[SLEEP ENGINE] Failed to fixate synthesis hub: {e}")
+					hub_id = None  # type: ignore[assignment]
+
+				# Phase 5: Thread Weaving — link this hub to the previous session's hub
+				if hub_id:
+					thread_state = _load_thread_state()
+					prev_hub_id = thread_state.get(target_col)
+					if prev_hub_id:
+						try:
+							# Forward axon: new hub → prev hub (temporal continuity, weight 1.0)
+							client.set_payload(
+								collection_name=target_col,
+								payload={"prev_session_hub": prev_hub_id},
+								points=[hub_id],
+							)
+							# Back-pointer: prev hub → new hub (for forward traversal)
+							client.set_payload(
+								collection_name=target_col,
+								payload={"next_session_hub": str(hub_id)},
+								points=[prev_hub_id],
+							)
+							logger.debug(f"[THREAD WEAVER] {target_col}: {hub_id} ← linked → {prev_hub_id}")
+						except Exception as e:
+							logger.warning(f"[THREAD WEAVER] Failed to weave thread: {e}")
+					thread_state[target_col] = str(hub_id)
+					_save_thread_state(thread_state)
+
+			# Erase the raw memory sequence ONLY if we successfully stored at least one engram.
+			# If distillation failed (LLM down) or all chunks were culled, preserve for next cycle.
+			if chunks_saved > 0:
+				try:
+					client.delete(collection_name=collection, points_selector=[raw_id])
+				except Exception as e:
+					logger.error(f"[SLEEP ENGINE] Could not purge fast buffer node {raw_id}: {e}")
+			else:
+				if not point_llm_failed:
+					# All chunks culled (not LLM failure) — still delete to prevent infinite loop
 					try:
-						# Forward axon: new hub → prev hub (temporal continuity, weight 1.0)
-						client.set_payload(
-							collection_name=target_col,
-							payload={"prev_session_hub": prev_hub_id},
-							points=[hub_id],
-						)
-						# Back-pointer: prev hub → new hub (for forward traversal)
-						client.set_payload(
-							collection_name=target_col,
-							payload={"next_session_hub": str(hub_id)},
-							points=[prev_hub_id],
-						)
-						logger.debug(f"[THREAD WEAVER] {target_col}: {hub_id} ← linked → {prev_hub_id}")
-					except Exception as e:
-						logger.warning(f"[THREAD WEAVER] Failed to weave thread: {e}")
-				thread_state[target_col] = str(hub_id)
-				_save_thread_state(thread_state)
+						client.delete(collection_name=collection, points_selector=[raw_id])
+						logger.debug(f"[SLEEP ENGINE] Node {raw_id} deleted: all chunks culled (no content worth preserving).")
+					except Exception:
+						pass
+				else:
+					logger.warning(f"[SLEEP ENGINE] Node {raw_id} preserved: LLM failure. Will retry next cycle.")
 
-		# Erase the raw memory sequence ONLY if we successfully stored at least one engram.
-		# If distillation failed (LLM down) or all chunks were culled, preserve for next cycle.
-		if chunks_saved > 0:
-			try:
-				client.delete(collection_name=collection, points_selector=[raw_id])
-			except Exception as e:
-				logger.error(f"[SLEEP ENGINE] Could not purge fast buffer node {raw_id}: {e}")
-		else:
-			logger.warning(f"[SLEEP ENGINE] Node {raw_id} preserved: no engrams saved (LLM down or all chunks culled). Will retry next cycle.")
+		total_processed += batch_processed
 
-	logger.info(f"=== LAZARUS PULSE: Sleep Cycle complete. {processed_count} engrams synaptically woven. ===")
+	logger.info(f"=== LAZARUS PULSE: Sleep Cycle complete. {total_processed} engrams synaptically woven ({batch_number} batches). ===")
 
 	# LLM was available (we got here): evaporate any lingering pain signal.
 	try:
@@ -465,8 +530,8 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 	get_event_bus().emit(
 		SleepCompletedEvent(
 			collection=collection,
-			processed_count=processed_count,
+			processed_count=total_processed,
 			mode=mode,
 		)
 	)
-	return processed_count
+	return total_processed

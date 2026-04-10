@@ -33,6 +33,15 @@ logger = logging.getLogger(__name__)
 # v6.0.1: Robust Script Resolution
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+
+def GET_PYTHON() -> str:
+	"""Returns the path to the project's virtual environment python if it exists, else system python."""
+	venv_python = os.path.join(PROJECT_ROOT, ".venv", "bin", "python")
+	if os.path.exists(venv_python):
+		return venv_python
+	return sys.executable
+
+
 # Initialize the Sovereign MCP Server
 server = Server("RedPill-Kernel")
 
@@ -695,7 +704,7 @@ async def handle_adjust_swarm_telemetry(arguments: Dict[str, Any]):
 	schema={"type": "object", "properties": {"dry_run": {"type": "boolean", "default": False}}},
 )
 async def handle_run_local_healer(arguments: Dict[str, Any]):
-	cmd = ["python3", os.path.join(PROJECT_ROOT, "scripts", "local_healer.py")]
+	cmd = [GET_PYTHON(), os.path.join(PROJECT_ROOT, "scripts", "local_healer.py")]
 	if arguments.get("dry_run"):
 		cmd.append("--dry-run")
 	return [types.TextContent(type="text", text=subprocess.run(cmd, capture_output=True, text=True).stdout)]
@@ -711,7 +720,7 @@ async def handle_heal_tissue(arguments: Dict[str, Any]):
 	output = ""
 
 	if tissue == "mypy":
-		cmd = ["python3", os.path.join(PROJECT_ROOT, "scripts", "local_healer.py")]
+		cmd = [GET_PYTHON(), os.path.join(PROJECT_ROOT, "scripts", "local_healer.py")]
 		output = subprocess.run(cmd, capture_output=True, text=True).stdout
 
 	elif tissue == "cuda":
@@ -719,7 +728,7 @@ async def handle_heal_tissue(arguments: Dict[str, Any]):
 			logger.info("Auto-Immune: Attempting to heal CUDA Motor Cortex...")
 			# v6.2.3: Delegate to decentralized setup_torch script
 			script_path = os.path.join(PROJECT_ROOT, "scripts", "setup_torch.py")
-			cmd = [sys.executable, script_path, "--auto-fix"]
+			cmd = [GET_PYTHON(), script_path, "--auto-fix"]
 			res = subprocess.run(cmd, capture_output=True, text=True)
 			if res.returncode == 0:
 				output = f"CUDA tissue successfully regenerated.\n{res.stdout}"
@@ -760,10 +769,8 @@ async def handle_run_samantha_analysis(arguments: Dict[str, Any]):
 	# We construct a completely detached background script call
 	script_path = os.path.join(cfg.IA_DIR, "scripts", "samantha_critic.py")
 
-	python_exe = sys.executable
-
 	# The CLI will read the file, run the swarm, save to qdrant, and delete the temp file.
-	cmd = [python_exe, script_path, "--event-id", event_id, "--input-file", tmp_path]
+	cmd = [GET_PYTHON(), script_path, "--event-id", event_id, "--input-file", tmp_path]
 
 	try:
 		# Run fully detached
@@ -794,7 +801,7 @@ async def handle_run_pre_pr_audit(arguments: Dict[str, Any]):
 
 	def _run_audit_bg():
 		try:
-			cmd = [sys.executable, os.path.join(PROJECT_ROOT, "scripts", "pre_pr_audit.py")]
+			cmd = [GET_PYTHON(), os.path.join(PROJECT_ROOT, "scripts", "pre_pr_audit.py")]
 			result = subprocess.run(cmd, capture_output=True, text=True)
 			status = "PASSED" if result.returncode == 0 else "FAILED"
 
@@ -830,7 +837,7 @@ async def handle_run_sovereignty_benchmark(arguments: Dict[str, Any]):
 		types.TextContent(
 			type="text",
 			text=subprocess.run(
-				["python3", os.path.join(PROJECT_ROOT, "scripts", "sovereignty_benchmark.py")], capture_output=True, text=True
+				[GET_PYTHON(), os.path.join(PROJECT_ROOT, "scripts", "sovereignty_benchmark.py")], capture_output=True, text=True
 			).stdout,
 		)
 	]
@@ -855,7 +862,7 @@ async def handle_refresh_session_context(arguments: Dict[str, Any]):
 		types.TextContent(
 			type="text",
 			text=subprocess.run(
-				["uv", "run", "--project", PROJECT_ROOT, os.path.join(PROJECT_ROOT, "scripts", "wake_up_v6.py")], capture_output=True, text=True
+				[GET_PYTHON(), os.path.join(PROJECT_ROOT, "scripts", "wake_up_v6.py")], capture_output=True, text=True
 			).stdout,
 		)
 	]
@@ -1135,6 +1142,29 @@ async def handle_call_tool(
 		with open("/tmp/mcp_crash.log", "a") as f:
 			f.write(f"Crash in {name}: {e}\n{traceback.format_exc()}\n")
 		raise e
+
+
+@registry.register(
+	name="run_sentinel_audit",
+	description="[OFFICIAL] Deploy Sentinel Auditor to generate a System Vitality Report.",
+	schema={"type": "object", "properties": {}},
+)
+async def handle_run_sentinel_audit(arguments: Dict[str, Any]):
+	import asyncio
+	import uuid
+
+	event_id = str(uuid.uuid4())[:8]
+
+	async def _run_bg():
+		try:
+			cmd = [GET_PYTHON(), os.path.join(PROJECT_ROOT, "scripts", "sentinel_auditor.py")]
+			subprocess.run(cmd, capture_output=True, text=True)
+			# The script drops its own report, so we just finish.
+		except Exception as e:
+			logger.error(f"Sentinel Auditor [{event_id}] crashed: {e}")
+
+	asyncio.create_task(_run_bg())
+	return [types.TextContent(type="text", text=f"Sentinel Auditor deployed [Event ID: {event_id}]. Check the Minion Inbox in a few seconds.")]
 
 
 async def main():

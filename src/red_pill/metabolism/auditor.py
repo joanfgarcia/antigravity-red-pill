@@ -1,0 +1,93 @@
+"""
+Red Pill Sentinel Auditor (v6.6.0-alpha)
+The tactical 'Frontal Lobe' for sovereign infrastructure monitoring.
+"""
+
+import logging
+import os
+import subprocess
+from dataclasses import dataclass, field
+from typing import Any, Dict, List
+
+
+@dataclass
+class AuditFinding:
+    type: str # 'formatting' | 'test' | 'security' | 'pain'
+    severity: float # 0.0 - 10.0
+    message: str
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+@dataclass
+class AuditReport:
+    status: str # 'green' | 'yellow' | 'red'
+    findings: List[AuditFinding] = field(default_factory=list)
+    intensity: float = 0.0
+
+class SentinelAuditor:
+    def __init__(self, target_repos: List[str] = None):
+        self.target_repos = target_repos or []
+        self.logger = logging.getLogger("redpill.auditor")
+        self.uv_path = "/home/joan/.local/bin/uv"
+
+    def audit_repo(self, repo_path: str) -> AuditReport:
+        """Run standard sovereign checks on a repository."""
+        report = AuditReport(status="green")
+
+        if not os.path.exists(repo_path):
+            report.status = "red"
+            report.findings.append(AuditFinding(type="infra", severity=10.0, message=f"Path not found: {repo_path}"))
+            return report
+
+        # 1. Formatting & Linting (Ruff)
+        self.logger.info(f"Auditing formatting for {repo_path}")
+        ruff = subprocess.run(
+            [self.uv_path, "run", "ruff", "check", "."],
+            cwd=repo_path, capture_output=True, text=True
+        )
+        if ruff.returncode != 0:
+            report.status = "yellow"
+            report.findings.append(AuditFinding(
+                type="formatting",
+                severity=5.0,
+                message="Ruff check failed",
+                metadata={"stdout": ruff.stdout}
+            ))
+
+        # 2. Testing (Pytest)
+        self.logger.info(f"Auditing tests for {repo_path}")
+        # Run subset of tests for speed in daily audit if repo is large
+        pytest = subprocess.run(
+            [self.uv_path, "run", "pytest", "-n", "auto", "--dist", "loadgroup"],
+            cwd=repo_path, capture_output=True, text=True
+        )
+        if pytest.returncode != 0:
+            report.status = "red"
+            report.findings.append(AuditFinding(
+                type="test",
+                severity=8.0,
+                message="Pytest suite failed",
+                metadata={"stdout": pytest.stdout}
+            ))
+
+        # Calculate global intensity based on findings
+        report.intensity = sum(f.severity for f in report.findings)
+        if any(f.severity >= 8.0 for f in report.findings):
+            report.status = "red"
+        elif report.findings:
+            report.status = "yellow"
+
+        return report
+
+    def sync_to_thalamus(self, report: AuditReport):
+        """Mock method for injecting finding summaries into signal_memories."""
+        self.logger.info(f"Sentinel Analysis complete. Status: {report.status}. Intensity: {report.intensity}")
+        for finding in report.findings:
+            # Here it would emit PainSignals to MinionInbox if intensity > 5.0
+            pass
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    auditor = SentinelAuditor(target_repos=["/home/joan/Documents/IA/pure-mls"])
+    for repo in auditor.target_repos:
+        res = auditor.audit_repo(repo)
+        print(f"Audit of {repo}: {res.status} (Intensity: {res.intensity})")

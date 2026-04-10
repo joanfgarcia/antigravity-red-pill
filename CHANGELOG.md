@@ -1,5 +1,23 @@
 # Changelog: Red Pill Protocol
 
+## [6.5.2] - Unreleased
+
+### 🩺 Sovereign Vitality: Project MULTITUDE (Sentinel Auditor)
+- **[FEAT] Sentinel Auditor (`scripts/sentinel_auditor.py`)**: Deployed the first autonomous minion of Project MULTITUDE for system health auditing. It analyzes `signal_memories` to calculate MTBF (Mean Time Between Failures) and detects "Lazarus Loops" (chronic recurring failures).
+- **[FEAT] Vitality Reports**: The auditor generates high-fidelity Markdown reports and delivers them to the `MinionInbox` (SQLite), providing a "Medical Examiner" view of the Bünker's state.
+- **[FEAT] MCP Tool `run_sentinel_audit`**: Registered a new global orchestrator tool to manually trigger the Sentinel Auditor.
+- **[HEAL] Robust Background Execution (`GET_PYTHON`)**: Re-engineered the MCP server's script execution engine. Introduced `GET_PYTHON()` to automatically detect and utilize the project's virtual environment (`.venv`), preventing `ModuleNotFoundError` for background minions like Samantha, Smith, and the Auditor.
+- **[IMPR] Quality-Aware Feedback Loop (BUG Fix)**: Implemented a Content Quality Gate in `affect.py`'s `BayesianEngine`. Reinforcement now requires passing the `telemetry_filter`'s semantic entropy and garbage checks, preventing low-information noise (logs/CI output) from becoming "immortal" in the technical collections.
+- **[IMPR] Enhanced Telemetry Filter**: Upgraded `telemetry_filter.py` with Shannon Entropy validation and expanded signatures for modern CI/CD noise (Ruff, Mypy, Git). The filter is now more aggressive, surgically removing garbage while preserving philosophical/natural language context.
+
+## [6.5.1] - Unreleased
+
+### 🌙 Metabolism Hardening: Memory Flow Integrity
+- **[FIX] Interaction Memory Bottleneck:** Refactored `perform_sleep_cycle()` in `sleep.py` to implement a continuous chunk-based drain loop. The system no longer halts after a single batch; it now iteratively drains the `interaction_memories` collection until empty, resolving the critical cognitive bottleneck where daily interaction volume exceeded the hardcoded sleep limit.
+- **[FEAT] Metadata-Aware Distillation:** Enhanced the distillation prompt to preserve conversational role metadata during the sleep-cycle summarization, improving the semantic quality of long-term engrams.
+- **[FEAT] Metabolism Stress Test:** Added `sharing/scratch/stress_sleep.py` for autonomous validation of high-volume memory processing (100+ engrams per cycle).
+- **[HEAL] Korsakoff Auto-Healer Sync:** The asynchronous `LazarusPulse` now correctly evaporates `korsakoff_amnesia` signals after a successful multi-batch sleep cycle.
+
 ## [6.5.0] - Unreleased
 
 ### 🛡️ Sovereign CloudSync Sentinel & Chronicle Activation

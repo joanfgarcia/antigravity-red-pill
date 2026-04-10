@@ -390,6 +390,8 @@ class RedPillConfig(BaseSettings):
 	# -----------------------------------------------------------------------
 	SLEEP_CHUNK_SIZE: int = 500
 	SLEEP_CULL_THRESHOLD: float = 0.1
+	SLEEP_SCROLL_LIMIT: int = 50  # Max engrams fetched per scroll batch (loop drains until empty)
+	SLEEP_MAX_LLM_FAILURES: int = 5  # Thermal breaker: abort sleep after N consecutive LLM failures
 
 	# Sleep Cycle Plugin flags — each ritual individually activatable
 	SLEEP_PLUGIN_USP: bool = True  # Operator Mood Profile refresh

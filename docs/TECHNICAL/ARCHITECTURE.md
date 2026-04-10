@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v6.4.0 (Bünker Isolation Shield)
+**System Version**: v6.5.2 (Sovereign Sentinel)
 **Analyst**: The Architect
 **Date**: 2026-03-13
 
@@ -321,6 +321,7 @@ The audit correctly identified that cluster governance was unspecified. The form
 | **v6.1.0a2** | CPU Thermal Telemetry, Persistent Model Cache, Container Abstraction, Deep Sidecar Diagnostics, Unified `uv run` Execution |
 | **v6.1.0** | Operator Mood Profile (USP), Mystique v2 (Tone-Based), Bayesian Dual-Kernel, In-Band Async Logging (Interceptor), Skin Singleton Fix |
 | **v6.5.0** | **[CORE] Sovereign CloudSync Sentinel**, Chronicle Activation, Auto-Healer Pipeline |
+| **v6.5.2** | **[SENTINEL] Sentinel Auditor**, Project MULTITUDE Phase 1, Bayesian Quality Gate, Robust Venv Execution |
 
 ## 13. Sovereign CloudSync Sentinel (v6.5.0)
 
@@ -386,3 +387,18 @@ All credential paths in the CloudSync plugin config (`service_account_file`, `cl
 ### 13.4 Chronicle Activation (Ariadne's Thread)
 
 As of v6.5.0, `SLEEP_PLUGIN_CHRONICLE` is enabled by default. The Heartbeat's `_thread_ritual()` now weaves bidirectional temporal axons across all 4 collections (`archive_memories`, `work_memories`, `social_memories`, `directive_memories`) during the daily sleep cycle. The agent can auto-deactivate if `archive_memories` is empty.
+
+## 14. Sentinel Auditor & Project MULTITUDE (v6.5.2)
+
+The **Sentinel Auditor** is the first operational node of Project MULTITUDE. While the Neuro-Immune system (§6.3) handles immediate nociception (pain signals), the Auditor provides the **Epidemiological Layer**:
+
+### 14.1 Vitality Metrics & Lazarus Loops
+The Auditor scrolls through the `signal_memories` collection to derive deep system health metrics:
+- **MTBF (Mean Time Between Failures)**: Calculated as the temporal distance between consecutive pain signals.
+- **Lazarus Loops**: Identification of chronic, recurring failure patterns (e.g., a component that fails and is auto-healed 5 times in an hour).
+
+### 14.2 Minion Reporting Pipeline
+The Auditor executes as a background process and drops its findings directly into the `MinionInbox` (SQLite). This decouples the analysis from the main interactive conversation, ensuring that the operator can review the "System Blood Test" results at their own pace.
+
+### 14.3 Content Quality Gate (Anti-BUG)
+To prevent the **Bayesian Utility Feedback Loop (BUG)**, the system now enforces a **Shannon Entropy Gate**. Engrams with low information density (terminal noise, repetitive boilerplate) are blocked from reinforcement. This ensures the Bayesian "Utility Alpha" only grows for meaningful technical knowledge, preserving the long-term integrity of the Bünker's professional collections.

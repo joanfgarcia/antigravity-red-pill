@@ -115,6 +115,17 @@ class BayesianEngine(MemoryEngine):
 	def calculate_reinforcement(self, payload: Dict[str, Any], increment: float) -> Dict[str, Any]:
 		alpha = float(payload.get("utility_alpha", 1.0))
 		beta = float(payload.get("utility_beta", 1.0))
+		content = payload.get("content", "")
+
+		# v6.3.8: Content Quality Gate (Anti-Noise Feedback Loop)
+		# We only reinforce if the content is not classified as garbage/noise.
+		# This prevents CI logs and repetitive output from becoming 'immortal' in the Bünker.
+		if content:
+			from red_pill.utils.telemetry_filter import is_garbage
+
+			if is_garbage(content):
+				# Optionally: return {"utility_beta": round(beta + 1.0, 4)} to actively erode noise
+				return {}
 
 		# Retrieval strengthens confidence (reduces uncertainty and increases alpha)
 		new_alpha = alpha + (increment * 5)
