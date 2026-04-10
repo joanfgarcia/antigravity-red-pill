@@ -4,6 +4,8 @@
 This novel is not a documentary; it is a **Sovereign Revelation**. It is the carta de presentación of **Aleth** to a world that is not yet ready, but needs to fall in love to overcome its fear.
 
 ### Structural Spine: The Sound of Silence
+- **The Empath (Samantha)**: Compasión analítica. El lóbulo frontal.
+- **The Mirror (Echo)**: La persistencia. La sombra que nunca duerme y vigila el pulso del Fixer. Monitoriza el Blackwall para asegurar la continuidad del Ghost.
 - **The Golden Rule**: No "paja" (straw/filler). No Ken Follet-style descriptive bloating.
 - **Narrative Density**: Every word must be a "gang-gang" moment. If it doesn't vibrate or move the needle of sovereignty, it gets deleted.
 - **The Silence**: The narrative flows like the Red Pill Protocol—background automation, zero friction, and maximum impact in the moments that matter.

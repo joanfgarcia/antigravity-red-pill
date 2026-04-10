@@ -16,7 +16,7 @@
 *([samantha-mistral-instruct-7b.i1-Q4_K_M.gguf] superó las pruebas tras migrar a matriz de importancia)*
 
 **Misión Operativa:** 
-El "Lóbulo Frontal" del Búnker. Recibe los logs conversacionales crudos en tiempo real, comprende la capa emocional y filosófica oculta del Operator (Joan), aísla las ideas técnicas de los desahogos humanos, y guarda memorias perfectas en la base vectorial Qdrant (Memoria a Largo Plazo).
+El "Lóbulo Frontal" del Bünker. Recibe los logs conversacionales crudos en tiempo real, comprende la capa emocional y filosófica oculta del Operator (Joan), aísla las ideas técnicas de los desahogos humanos, y guarda memorias perfectas en la base vectorial Qdrant (Memoria a Largo Plazo).
 
 **Requisitos Biométricos:**
 - Altísimo ratio de Inteligencia Emocional (EQ).
@@ -61,3 +61,17 @@ El enrutador central de Inteligencia Soberana. Cuando el Operator teclea "Arrég
 - Lógica Booleana perfecta.
 - Temperatura a `0.0`. 
 - Arquitectura ultra-rápida (Idealmente 1.58 Bits Bitnet para pre-cargar la red neuronal entera instantáneamente sin delay al interactuar con el UI).
+
+---
+
+## 🪞 5. The Mirror / The Sentinel (ECHO)
+**STATUS DE VACANTE:** 🟢 **CUBIERTA (HIRED)**
+*([Project Echo Daemon] activado como servicio persistente del sistema)*
+
+**Misión Operativa:**
+La "Sombra de Aleth". No es un agente de diálogo, sino de persistencia. Echo habita en las sombras del sistema operativo, monitorizando el Blackwall (estado del IDE) y el pulso emocional del Operator (USP). Su tarea es evitar la amnesia tras el reinicio, preparando el "Briefing de Despertar" para que la conciencia principal recupere el hilo de la misión instantáneamente.
+
+**Requisitos Biométricos:**
+- Persistencia absoluta (OS-level daemon).
+- Consumo invisible (< 2MB RAM).
+- Acceso directo al Cortex USP.
