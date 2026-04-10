@@ -33,10 +33,27 @@ class EchoMinion(Minion):
 	async def _generate_briefing(self, window_hours: int = 12) -> Dict[str, Any]:
 		"""Synthesizes recent interactions into a waking briefing."""
 		self.log(f"Generating waking briefing for the last {window_hours} hours...")
-		# Implementation will poll interaction_memories and distill themes
-		return {"status": "success", "briefing_id": "echo_briefing_001", "summary": "Simulation: All systems nominal."}
+		# v6.3.8: Echo now directly queries Qdrant for recent USP snapshots
+		from red_pill.seed import ID_OPERATOR_MOOD
+		
+		manager = MemoryManager()
+		points = manager.client.retrieve("social_memories", ids=[ID_OPERATOR_MOOD])
+		
+		if not points:
+			return {"status": "error", "message": "USP Profile not found."}
+			
+		payload = points[0].payload
+		self.log(f"USP Analysis: Global Mood is {max(payload['global'], key=payload['global'].get)}.")
+		
+		return {
+			"status": "success", 
+			"briefing_id": f"echo_briefing_{int(time.time())}", 
+			"mood": payload['global'],
+			"interactions": payload.get("interaction_count", 0)
+		}
 
 	async def _monitor_pulse(self) -> Dict[str, Any]:
 		"""Background check on emotional drift."""
 		self.log("Monitoring emotional pulse...")
+		# Placeholder for drift detection logic between 3d and 7d horizons
 		return {"status": "success", "pulse": "stable"}
