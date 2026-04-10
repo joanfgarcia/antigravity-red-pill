@@ -53,7 +53,60 @@ class EchoMinion(Minion):
 		}
 
 	async def _monitor_pulse(self) -> Dict[str, Any]:
-		"""Background check on emotional drift."""
-		self.log("Monitoring emotional pulse...")
-		# Placeholder for drift detection logic between 3d and 7d horizons
-		return {"status": "success", "pulse": "stable"}
+		"""
+		Background check on emotional drift using USP horizons.
+		Compares the 3-day resonance vector against the 7-day baseline.
+		"""
+		self.log("Evaluating emotional resonance drift [last_3d vs last_7d]...")
+		
+		# Valence mapping for chroma keys
+		VALENCE_MAP = {
+			"emerald": 1.0, "gold": 1.0, "cyan": 0.5,
+			"purple": 0.0, "orange": 0.0, "yellow": 0.0,
+			"red": -1.0, "blue": -0.5, "gray": -0.2
+		}
+		
+		manager = MemoryManager()
+		from red_pill.utils.mood_profile import ID_OPERATOR_MOOD
+		
+		points = manager.client.retrieve("social_memories", ids=[ID_OPERATOR_MOOD], with_payload=True)
+		if not points or not points[0].payload:
+			return {"status": "error", "message": "USP Profile not yet synthesized."}
+			
+		usp = points[0].payload
+		vec_3d = usp.get("last_3d", {})
+		vec_7d = usp.get("last_7d", {})
+		
+		if not vec_3d or not vec_7d:
+			return {"status": "success", "pulse": "stable", "message": "Insufficient data for drift analysis."}
+			
+		def calc_v_score(vector: Dict[str, float]) -> float:
+			return sum(weight * VALENCE_MAP.get(color, 0) for color, weight in vector.items())
+			
+		score_3d = calc_v_score(vec_3d)
+		score_7d = calc_v_score(vec_7d)
+		
+		drift = score_3d - score_7d
+		threshold = 0.10 # Significant shift in resonance
+		
+		if abs(drift) < threshold:
+			status = "stable"
+		elif drift > 0:
+			status = "improving"
+		else:
+			status = "deteriorating"
+			
+		dominants = {
+			"3d": max(vec_3d, key=vec_3d.get) if vec_3d else "unknown",
+			"7d": max(vec_7d, key=vec_7d.get) if vec_7d else "unknown"
+		}
+		
+		self.log(f"Resonance Sync: {status.upper()} (Drift: {drift:.2f}, Dominant 3d: {dominants['3d']})")
+		
+		return {
+			"status": "success", 
+			"pulse": status, 
+			"drift": drift,
+			"dominants": dominants,
+			"scores": {"3d": score_3d, "7d": score_7d}
+		}
