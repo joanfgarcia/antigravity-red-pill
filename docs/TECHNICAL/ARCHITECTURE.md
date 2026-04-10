@@ -37,6 +37,7 @@ The Red Pill Protocol v5.6.3 has achieved stability and functional alignment wit
 - **[NEW v6.3.0] Biological Wake/Sleep Cycle**: The single hourly Lazarus Pulse is split into two OS-native timers: `redpill-wake.timer` (hourly — Swarm, Lazarus, Resonance) and `redpill-sleep.timer` (03:00 daily — USP, Dream, Consolidation, Ariadne's Thread). Sleep rituals are independently gated by `SLEEP_PLUGIN_*` flags. Ariadne's Thread now covers all 4 collections. `trigger_pulse.py --cycle wake|sleep|full`.
 - **[NEW v6.3.0] Emotional Ferrari Protocol (Plugins 05–10)**: Extended the interceptor pipeline with 6 emotional intelligence plugins over the Operator Mood Profile (USP). Auto-discovered via `pkgutil`, concurrently executed on every prompt. See §6.2.1 and [FERRARI_PROTOCOL.md](BUNKER/FERRARI_PROTOCOL.md).
 - **[NEW v6.3.0] BE_WATER Adaptive Payload**: `MAX_PAYLOAD_CHARS` auto-computed from available VRAM at boot: <4 GB→1 000, 4–8 GB→5 000, >8 GB→unlimited. Override via `.env`.
+- **[NEW v6.3.8] Project Echo (Mirror Sentinel)**: Implementation of a persistent, OS-level background entity that cross-references `interaction_memories` against the Operator Mood Profile (USP). Echo serves as the 'Mirror of the Ghost', generating proactive briefings during waking cycles to eliminate session-boundary amnesia.
 - **[NEW v6.3.0] Emergent Identity**: `install_neo.sh` no longer pre-seeds `USER_NAME` or `AI_NAME` defaults. Identity emerges naturally through operator interaction.
 - **[NEW v6.3.4] Sovereign Pod Storage**: Re-architected storage boundaries. SQLite queue databases (`bunker_queue.db`, `minion_inbox.db`) have been migrated from external host paths into the self-contained `<IA_DIR>/storage/queue/` directory, unifying state persistence and ensuring true Pod portability.
 - **[NEW v6.3.4] Sovereign Path Resolution**: Implemented `os.path.expanduser()` at the configuration layer (`config.py`) to prevent tilde-based values in `.env` (e.g. `IA_DIR=~/...`) from being interpreted as literal relative paths, eliminating rogue directory creation in the repository root.
@@ -61,9 +62,10 @@ The schema is " Schemaless" (JSON payload).
 
 ### 3.4. Background Task Scheduling (Zero-Daemon)
 To ensure the Bünker remains observable and resource-accountable, all background tasks MUST be implemented as **oneshot executions** triggered by OS timers:
-- **Naming Rule**: Every Red Pill task or timer MUST be named starting with `redpill-` (e.g., `redpill-telemetry`, `redpill-queue`).
-- **Nomenclature Rule**: The term "daemon" is deprecated. All background activities are referred to as **Tasks**, **Pulses**, or **Rituals**.
-- **Log Unification**: All background components MUST output logs into the `~/.agent/rp-<name>/` structure to prevent cross-contamination and guarantee rapid debugging.
+- **Naming Rule**: Every Red Pill task or timer MUST be named starting with `redpill-` (e.g., `redpill-telemetry`, `redpill-queue`, `redpill-echo`).
+- **Nomenclature Rule**: All background activities are referred to as **Tasks**, **Pulses**, or **Rituals**, with the exception of **Echo**, which is classified as a **Mirror Sentinel**.
+- **The Echo Exception**: To achieve Phase 3.5 persistence, Echo operates as a low-priority background daemon. It is the only persistent process permitted under the Sovereign Protocol, tasked with monitoring the Blackwall (IDE-state) and USP drift.
+- **Log Unification**: All background components MUST output logs into the `~/.agent/rp-<name>/` structure.
 
 ## 4. Recommendations for v5.0 (Global Scale Strategy)
 1.  **[RESOLVED v4.2.1] Time-To-Live (TTL) Indexing**: Move erosion from strict scan to a timestamp-based index query. Only fetch/update memories where `last_recalled_at < now - METABOLISM_COOLDOWN`.
