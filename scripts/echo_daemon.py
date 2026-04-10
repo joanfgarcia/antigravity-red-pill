@@ -3,13 +3,10 @@ import logging
 import os
 import signal
 import sys
-import time
-from pathlib import Path
 
 # Fix path for local imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
-from red_pill import config as cfg
 from red_pill.swarm.factory import MinionFactory
 
 logger = logging.getLogger("red_pill.echo_daemon")
@@ -28,7 +25,7 @@ class EchoDaemon:
 
 	async def run(self):
 		logger.info("Initializing Project Echo Mirror Daemon...")
-		
+
 		# Register signal handlers for graceful shutdown
 		loop = asyncio.get_running_loop()
 		for sig in (signal.SIGINT, signal.SIGTERM):
@@ -38,10 +35,10 @@ class EchoDaemon:
 			try:
 				# 1. Heartbeat - notify system we are alive
 				logger.debug("Echo Heartbeat: Monitoring The Blackwall...")
-				
+
 				# 2. Monitor Pulse: Check for recent interactions
 				await self.echo.execute("monitor_pulse")
-				
+
 				# 4. Sleep interval (configurable)
 				await asyncio.sleep(60) # Default: check every minute
 			except Exception as e:

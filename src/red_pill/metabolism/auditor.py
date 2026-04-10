@@ -83,9 +83,9 @@ class SentinelAuditor:
         """Inject audit findings into social_memories as pain signals."""
         from red_pill.memory import MemoryManager
         manager = MemoryManager()
-        
+
         self.logger.info(f"Sentinel Analysis complete. Status: {report.status}. Intensity: {report.intensity}")
-        
+
         for finding in report.findings:
             if finding.severity >= 5.0:
                 self.logger.warning(f"Emitting PainSignal for: {finding.message}")

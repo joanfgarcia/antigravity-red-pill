@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import time
 import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Optional
@@ -195,6 +196,44 @@ def distill_engram(raw_content: str) -> Dict[str, Any]:
 	return fallback
 
 
+def synthesize_hub(summaries: List[str]) -> str:
+	"""Creates the final Neocortex Hub Node from a chain of chunks."""
+	combined = "\n".join([f"- {s}" for s in summaries])
+	prompt = (
+		"Synthesize these chronological memory chunks into a single, cohesive master summary. Be highly concise but preserve key facts and overall narrative trajectory.\n\nCHUNKS:\n"
+		+ combined
+	)
+
+	payload = json.dumps(
+		{
+			"model": "distillation",
+			"messages": [
+				{
+					"role": "system",
+					"content": "You are a Neocortex synthesis sub-routine. Output ONLY the short master summary string. No JSON, no conversational filler.",
+				},
+				{"role": "user", "content": prompt},
+			],
+			"temperature": 0.1,
+			"max_tokens": 512,
+			"seed": 777,
+			"stop": ["<|im_end|>", "<|endoftext|>"],
+		}
+	).encode("utf-8")
+
+	# Reuse existing transport detection
+	url = getattr(cfg, "MLX_LM_URL", "http://127.0.0.1:8760/v1/chat/completions")
+	opener = urllib.request.build_opener()
+	req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+	try:
+		with opener.open(req, timeout=60) as response:
+			data = json.loads(response.read().decode())
+			return str(data["choices"][0]["message"]["content"].strip())
+	except Exception as e:
+		logger.error(f"[SLEEP ENGINE] Failed to synthesize hub: {e}")
+		return "Aggregated Memory Sequence Synthesis."
+
+
 def distill_session_anchors(memory_manager, hub_summaries: List[str]) -> Optional[str]:
 	"""
 	Phase Gamma: Logical Distillation.
@@ -204,7 +243,7 @@ def distill_session_anchors(memory_manager, hub_summaries: List[str]) -> Optiona
 		return None
 
 	logger.info(f"[SLEEP ENGINE] Commencing Logical Distillation of {len(hub_summaries)} technical hubs...")
-	
+
 	combined_hubs = "\n".join([f"- {s}" for s in hub_summaries])
 	prompt = (
 		"Analyze these technical memory hubs from the current session. "
@@ -232,12 +271,12 @@ def distill_session_anchors(memory_manager, hub_summaries: List[str]) -> Optiona
 	url = getattr(cfg, "MLX_LM_URL", "http://127.0.0.1:8760/v1/chat/completions")
 	opener = urllib.request.build_opener()
 	req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
-	
+
 	try:
 		with opener.open(req, timeout=90) as response:
 			data = json.loads(response.read().decode())
 			anchor_text = data["choices"][0]["message"]["content"].strip()
-			
+
 			# Persist the Anchor
 			memory_manager.add_memory(
 				collection="work_memories",
@@ -303,7 +342,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 	while True:
 		batch_number += 1
 		if consecutive_llm_failures >= max_llm_failures:
-			logger.error(f"[SLEEP ENGINE] Thermal breaker tripped. Aborting drain loop.")
+			logger.error("[SLEEP ENGINE] Thermal breaker tripped. Aborting drain loop.")
 			break
 
 		if batch_number > 1 and not _check_llm_available():
@@ -322,7 +361,8 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 		for point in scroll_result:
 			raw_id = point.id
 			raw_text = (point.payload or {}).get("content", "")
-			if not raw_text: continue
+			if not raw_text:
+				continue
 
 			# Refactoring chunks
 			chunks = []
@@ -330,8 +370,10 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 				parts = raw_text.split("\n\nASSISTANT: ", 1)
 				p_text = parts[0].replace("USER: ", "", 1).strip()
 				r_text = parts[1].strip()
-				if p_text: chunks.extend([f"Operator Prompt: {c}" for c in chunk_text(p_text)])
-				if r_text: chunks.extend([f"AI Response Node: {c}" for c in chunk_text(r_text)])
+				if p_text:
+					chunks.extend([f"Operator Prompt: {c}" for c in chunk_text(p_text)])
+				if r_text:
+					chunks.extend([f"AI Response Node: {c}" for c in chunk_text(r_text)])
 			else:
 				chunks = chunk_text(raw_text)
 
@@ -392,7 +434,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 						chunks_saved += 1
 						if target_col == "work_memories":
 							new_work_hubs.append(hub_summary)
-							
+
 						# Thread Weaving
 						thread_state = _load_thread_state()
 						prev_hub_id = thread_state.get(target_col)
@@ -418,7 +460,8 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 	logger.info(f"=== LAZARUS PULSE: Sleep Cycle complete. {total_processed} engrams synaptically woven. ===")
 	try:
 		memory_manager.evaporate_signals("local_llm_offline")
-	except Exception: pass
+	except Exception:
+		pass
 
 	get_event_bus().emit(SleepCompletedEvent(collection=collection, processed_count=total_processed, mode=mode))
 	return total_processed

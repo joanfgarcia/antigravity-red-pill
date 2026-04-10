@@ -104,7 +104,7 @@ class TestExportSoul:
 		snap_dir.mkdir(parents=True)
 		snap_file = snap_dir / f"work_{ts}.snapshot"
 		snap_file.write_bytes(b"snapshot_data")
-		
+
 		# Prevent cryptographer from deleting the file
 		with patch("red_pill.soul.SoulCryptographer") as MockCrypto:
 			MockCrypto.return_value.encrypt_kit.return_value = None
@@ -114,7 +114,7 @@ class TestExportSoul:
 						with patch.object(soul, "create_manifest"):
 							output = str(tmp_path / "export.tar.gz")
 							soul.export_soul(output_path=output)
-		
+
 		assert os.path.exists(output)
 		with tarfile.open(output, "r:gz") as tar:
 			names = tar.getnames()
@@ -133,7 +133,7 @@ class TestExportSoul:
 						with patch("os.listdir", return_value=[]):
 							output = str(tmp_path / "export.tar.gz")
 							soul.export_soul(output_path=output)
-						
+
 			assert mock_bus.emit.called
 			# Verify SoulCreatedEvent was emitted
 			args, _ = mock_bus.emit.call_args
@@ -160,7 +160,7 @@ class TestExportSoul:
 		snap_dir.mkdir(parents=True)
 		manifest_file = snap_dir / f"manifest_{ts}.json"
 		manifest_file.write_text('{"test": true}')
-		
+
 		with patch("red_pill.soul.SoulCryptographer") as MockCrypto:
 			MockCrypto.return_value.encrypt_kit.return_value = None
 			with patch("time.strftime", return_value=ts):
