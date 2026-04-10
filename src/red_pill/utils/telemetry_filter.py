@@ -54,6 +54,13 @@ def is_garbage(content: str) -> bool:
 		"git status",
 		"git commit",
 		"finding files...",
+		"_________________________ test_",
+		"_ round_trip _________________________ ",
+		"assert 0 == 1",
+		"where 0 = GroupUpdate(",
+		"AssertionError: assert",
+		"E    AssertionError:",
+		"E     +  where ",
 	]
 	if any(sig in content_lower for sig in ci_definitive):
 		return True

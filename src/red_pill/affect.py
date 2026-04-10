@@ -119,13 +119,15 @@ class BayesianEngine(MemoryEngine):
 
 		# v6.3.8: Content Quality Gate (Anti-Noise Feedback Loop)
 		# We only reinforce if the content is not classified as garbage/noise.
-		# This prevents CI logs and repetitive output from becoming 'immortal' in the Bünker.
 		if content:
-			from red_pill.utils.telemetry_filter import is_garbage
+			from red_pill.utils.telemetry_filter import calculate_entropy, is_garbage
 
-			if is_garbage(content):
-				# Optionally: return {"utility_beta": round(beta + 1.0, 4)} to actively erode noise
-				return {}
+			# Informational Density Gate: Repetitive logs/boilerplate should not be immortalized.
+			entropy = calculate_entropy(content)
+			if is_garbage(content) or entropy < 3.2:
+				# Active Erosion: Technical noise increases uncertainty by 1.0 per recall
+				# until it reaches BAYESIAN_MAX_BETA and gets purged during sleep.
+				return {"utility_beta": round(beta + 1.0, 4)}
 
 		# Retrieval strengthens confidence (reduces uncertainty and increases alpha)
 		new_alpha = alpha + (increment * 5)
