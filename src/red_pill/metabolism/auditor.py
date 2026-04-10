@@ -79,15 +79,34 @@ class SentinelAuditor:
         return report
 
     def sync_to_thalamus(self, report: AuditReport):
-        """Mock method for injecting finding summaries into signal_memories."""
+        """Inject audit findings into social_memories as pain signals."""
+        from red_pill.memory import MemoryManager
+        manager = MemoryManager()
+        
         self.logger.info(f"Sentinel Analysis complete. Status: {report.status}. Intensity: {report.intensity}")
+        
         for finding in report.findings:
-            # Here it would emit PainSignals to MinionInbox if intensity > 5.0
-            pass
+            if finding.severity >= 5.0:
+                self.logger.warning(f"Emitting PainSignal for: {finding.message}")
+                manager.add_memory(
+                    collection="social_memories",
+                    text=f"[SENTINEL_PAIN] {finding.type.upper()}: {finding.message}",
+                    importance=finding.severity,
+                    metadata={
+                        "category": "pain_signal",
+                        "signal_type": finding.type,
+                        "audit_report_id": f"auditor_{int(time.time())}",
+                        "is_immune": False
+                    },
+                    color="red",
+                    emotion="alert"
+                )
 
 if __name__ == "__main__":
+    import time
     logging.basicConfig(level=logging.INFO)
-    auditor = SentinelAuditor(target_repos=["/home/joan/Documents/IA/pure-mls"])
+    auditor = SentinelAuditor(target_repos=["/home/joan/Documents/IA/pure-mls", "/home/joan/Documents/IA/sharing"])
     for repo in auditor.target_repos:
         res = auditor.audit_repo(repo)
+        auditor.sync_to_thalamus(res)
         print(f"Audit of {repo}: {res.status} (Intensity: {res.intensity})")
