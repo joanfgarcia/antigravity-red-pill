@@ -213,6 +213,15 @@ class MemoryManager:
 			# Return the ID of the anchor point
 			return parent_id
 
+		# v6.3.8: Ingestion Quality Gate (Cortex Isolation)
+		# Prevent noise and garbage from entering long-term collections.
+		if not force_immune and collection in ["work_memories", "social_memories"]:
+			from red_pill.utils.telemetry_filter import is_garbage
+
+			if is_garbage(text):
+				logger.debug(f"[QUALITY_GATE] Rejected engram for '{collection}' due to machine noise/garbage signatures.")
+				return ""
+
 		# SEC-001 & SEC-008: Validation via Pydantic schema
 		# SEC-001: Strip reserved keys before validation to ensure robustness
 		for key in CreateEngramRequest.RESERVED_KEYS:
