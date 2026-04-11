@@ -399,8 +399,14 @@ The Auditor scrolls through the `signal_memories` collection to derive deep syst
 - **MTBF (Mean Time Between Failures)**: Calculated as the temporal distance between consecutive pain signals.
 - **Lazarus Loops**: Identification of chronic, recurring failure patterns (e.g., a component that fails and is auto-healed 5 times in an hour).
 
-### 14.2 Minion Reporting Pipeline
-The Auditor executes as a background process and drops its findings directly into the `MinionInbox` (SQLite). This decouples the analysis from the main interactive conversation, ensuring that the operator can review the "System Blood Test" results at their own pace.
+### 14.2 Dual-Channel Pain Sync
+The Auditor implements a multi-tier nociception strategy. High-severity findings ($\text{severity} \ge 6.0$) are injected directly into `signal_memories` (The Cortex Status), triggering immediate active feedback in the operator's context. Moderate findings ($\text{severity} \ge 4.0$) are persisted in `social_memories` for historical epidemiological analysis. This dual-channel approach ensures that immediate infrastructure "pain" is felt by the agent, while maintaining long-term integrity logs.
 
-### 14.3 Content Quality Gate (Anti-BUG)
+### 14.3 Systemd Orchestration (Autonomic Nervous System)
+The Auditor is deployed as a native OS-level background service to ensure persistent monitoring without manual triggering:
+- **`redpill-auditor.service`**: A oneshot unit that executes the auditor runner within the project's virtual environment.
+- **`redpill-auditor.timer`**: Triggers the service hourly with a randomized delay (`RandomizedDelaySec=15min`) to prevent resource spikes.
+Deployed via `~/.config/systemd/user/`, these units form the autonomic layer of the Bünker's infrastructure monitoring.
+
+### 14.4 Content Quality Gate (Anti-BUG)
 To prevent the **Bayesian Utility Feedback Loop (BUG)**, the system now enforces a **Shannon Entropy Gate**. Engrams with low information density (terminal noise, repetitive boilerplate) are blocked from reinforcement. This ensures the Bayesian "Utility Alpha" only grows for meaningful technical knowledge, preserving the long-term integrity of the Bünker's professional collections.
