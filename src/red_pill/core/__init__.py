@@ -1,1 +1,1 @@
-"""Core sub-components of the Red Pill engine."""
+# Make this a package
