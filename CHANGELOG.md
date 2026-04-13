@@ -1,6 +1,14 @@
 # Changelog: Red Pill Protocol
 
-## [6.5.2] - Unreleased
+## [6.6.0] - Unreleased
+
+### 🦾 Sovereign Trinity & Cognitive Plugins (Phase 3 & 4)
+- **[ARCH] Sovereign Plugin Engine**: Formally encapsulated third-party services and cognitive loops into the new `SovereignPlugin` class. Complete eradication of the legacy `pluggy` framework for a 100% proprietary, asynchronous architecture.
+- **[FEAT] The Sovereign Audit Engine**: New security mechanism in the `PluginRegistry` that demands an explicit `requested_permissions` manifest. Any escalation (Qdrant access, Network I/O) is heavily audited upon registration.
+- **[FEAT] Trinity Bayesian Learning (`trinity_learning`)**: Integrated an autonomous learning module that hooks into `PluginScope.MEMORY`. Applies temporal degradation to useless associations and calculates semantic friction.
+- **[FEAT] Trinity Homeostasis (`trinity_homeostasis`)**: Introduced organic feedback mechanisms bridging `PluginScope.COGNITION`. It observes system Pain Signals (`signal_memories`) and modulates the Bünker's internal temperature and responses.
+- **[MIGR] Legacy Plugin Subjugation**: Re-architected `cloud_sync` and `gmail_watcher` from legacy `RedPillPlugin` to `SovereignPlugin`. They now run transparently via explicit `SYSTEM_EVENT` and `BACKGROUND` hooks with their own independent `.json` storage directories.
+- **[DOCS] The Sovereign Triad**: Mandatory documentation validation (`validate_sovereignty()`) enforcing the existence of `README.md`, `TECHNICAL.md`, and `USER_MANUAL.md` for every loaded plugin.
 
 ### 🩺 Sovereign Vitality: Project MULTITUDE (Sentinel Auditor & Echo Pulse)
 - **[FEAT] Sentinel Auditor (Alpha)**: Completed the active feedback loop. The Auditor now translates ruff/pytest failures into `PainSignals` injected into `signal_memories` (critical alerts) and `social_memories` (historical persistence), enabling proactive system warnings and epidemiological tracking.

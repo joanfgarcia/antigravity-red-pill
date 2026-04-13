@@ -2,26 +2,51 @@ import logging
 import os
 import time
 
+from typing import Any, Dict, List
+from pathlib import Path
+
 from red_pill.memory import MemoryManager
-from red_pill.plugins.base import RedPillPlugin
+from red_pill.core.plugin_engine import SovereignPlugin, PluginScope, Priority
 
 logger = logging.getLogger(__name__)
 
-class GmailWatcherPlugin(RedPillPlugin):
+class GmailWatcherPlugin(SovereignPlugin):
 	"""
 	Dummy Gmail Watcher Plugin.
 	Demonstrates background task capability via the Sovereign Plugin system using systemd timers.
 	"""
 
-	def __init__(self):
-		super().__init__("gmail_watcher")
+	def __init__(self, name: str = "gmail_watcher", version: str = "1.0", directory: Path = None):
+		super().__init__(name, version, directory)
 
-	def on_plugin_setup(self):
-		"""Called automatically on plugin registration."""
+	@property
+	def scopes(self) -> List[PluginScope]:
+		return [PluginScope.BACKGROUND]
+
+	@property
+	def requested_permissions(self) -> List[str]:
+		return ["api:gmail:read", "qdrant:write:signal_memories"]
+
+	async def init(self) -> None:
 		if not self.config.get("enabled", False):
 			logger.info("[GmailWatcher] Plugin is disabled in config.")
 		else:
 			logger.info("[GmailWatcher] Plugin Enabled. Ready for systemd timer invocations.")
+
+	async def activate(self) -> None:
+		pass
+
+	async def deactivate(self) -> None:
+		pass
+
+	async def uninstall(self, purge: bool = False) -> None:
+		pass
+
+	async def export_state(self) -> Dict[str, Any]:
+		return {}
+
+	async def hook(self, scope: PluginScope, payload: Dict[str, Any]) -> Dict[str, Any]:
+		return payload
 
 	def poll(self):
 		"""

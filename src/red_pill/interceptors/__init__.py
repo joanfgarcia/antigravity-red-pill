@@ -6,10 +6,43 @@ from pathlib import Path
 
 from red_pill.interceptors.base import BaseInterceptorPlugin
 
+from red_pill.core.plugin_engine import PluginRegistry, PluginScope
+from red_pill.plugins.trinity_homeostasis.plugin import HomeostasisPlugin
+from red_pill.plugins.trinity_learning.plugin import BayesianLearningPlugin
+from red_pill.plugins.cloud_sync.plugin import CloudSyncPlugin
+from red_pill.plugins.gmail_watcher.plugin import GmailWatcherPlugin
+
 logger = logging.getLogger(__name__)
 
 # Cache loaded plugins to avoid I/O on every prompt
 _PLUGINS: list[BaseInterceptorPlugin] = []
+
+sovereign_registry = PluginRegistry()
+_sovereign_loaded = False
+
+async def _init_sovereign_plugins():
+    global _sovereign_loaded
+    if _sovereign_loaded:
+        return
+        
+    p_homeo = HomeostasisPlugin(name="TrinityHomeostasis", version="1.0", directory=Path(__file__).parent.parent / "plugins" / "trinity_homeostasis")
+    p_learn = BayesianLearningPlugin(name="TrinityLearning", version="1.0", directory=Path(__file__).parent.parent / "plugins" / "trinity_learning")
+    p_cloud = CloudSyncPlugin(name="cloud_sync", version="1.0", directory=Path(__file__).parent.parent / "plugins" / "cloud_sync")
+    p_gmail = GmailWatcherPlugin(name="gmail_watcher", version="1.0", directory=Path(__file__).parent.parent / "plugins" / "gmail_watcher")
+    
+    # Injection of the in-memory Qdrant mock for MVP to avoid breaking Real DB
+    from qdrant_client import QdrantClient
+    mock_db = QdrantClient(location=":memory:")
+    p_learn.qdrant = mock_db
+    
+    sovereign_registry.register(p_homeo)
+    sovereign_registry.register(p_learn)
+    sovereign_registry.register(p_cloud)
+    sovereign_registry.register(p_gmail)
+    
+    await sovereign_registry.activate_all()
+    _sovereign_loaded = True
+
 
 
 def load_plugins():
@@ -73,10 +106,31 @@ async def execute_pipeline(user_prompt: str) -> str:
 	# Merge all contexts safely
 	valid_contexts = [r.strip() for r in results if r and r.strip()]
 
+	if not _sovereign_loaded:
+		await _init_sovereign_plugins()
+
 	if not valid_contexts:
+		merged = ""
+	else:
+		merged = "\n".join(valid_contexts)
+
+	# --- TRINITY BRIDGE ---
+	payload = {
+		"user_prompt": user_prompt,
+		"legacy_context": merged,
+		"operator_friction": False,
+	}
+	
+	try:
+		mutated = await sovereign_registry.emit_hook(PluginScope.COGNITION, payload)
+		merged = mutated.get("legacy_context", merged)
+	except Exception as core_err:
+		logger.error(f"Trinity Bünker Bridge failed: {core_err}")
+	# -----------------------
+
+	if not merged.strip():
 		return user_prompt
 
 	# Wrap passively
-	merged = "\n".join(valid_contexts)
 	wrapper = f"<bunker_context>\n{merged}\n</bunker_context>\n\n<user_request>\n{user_prompt}\n</user_request>"
 	return wrapper
