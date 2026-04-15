@@ -1,5 +1,5 @@
 import uuid
-from typing import Any, ClassVar, Dict, List, Literal, Union
+from typing import Any, ClassVar, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -39,6 +39,7 @@ class CreateEngramRequest(BaseModel):
 		"color",
 		"emotion",
 		"intensity",
+		"originator",
 	}
 
 	@field_validator("metadata")
@@ -111,6 +112,7 @@ class EngramPayload(BaseModel):
 	created_at: float
 	last_recalled_at: float
 	schema_version: Union[str, int]
+	originator: Optional[str] = None
 
 	# Bayesian Utility Model (v6.1 Phase B.1)
 	# Alpha: Cumulative success weight (Prior/Reinforcement)

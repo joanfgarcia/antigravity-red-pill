@@ -1,10 +1,13 @@
-from typing import Any, Dict, List
-from pathlib import Path
-
-from red_pill.core.plugin_engine import SovereignPlugin, PluginScope, Priority
-
 import datetime
+import logging
 import math
+from typing import Any, Dict, List
+
+from red_pill.core.plugin_engine import PluginScope, Priority, SovereignPlugin
+from red_pill.memory import MemoryManager
+
+logger = logging.getLogger(__name__)
+
 
 class BayesianAxonEngine:
     """Motor matemático (B-1.2 y B-1.4)"""
@@ -32,7 +35,7 @@ class BayesianAxonEngine:
 
 class BayesianLearningPlugin(SovereignPlugin):
     """
-    Trinity Phase 1: Motor Bayesiano. 
+    Trinity Phase 1: Motor Bayesiano.
     Interviene en la memoria para calibrar pesos de engramas basados en fricción/éxito.
     """
 
@@ -50,13 +53,16 @@ class BayesianLearningPlugin(SovereignPlugin):
 
     async def init(self) -> None:
         self.engine = BayesianAxonEngine()
-        # TODO: Cargar conexión a Qdrant (procedural_memories)
+        self.memory_mgr = MemoryManager()
+        self.collection = "procedural_memories"
+        # Garantizar infraestructura persistente
+        self.memory_mgr.storage.ensure_collection(self.collection)
 
     async def activate(self) -> None:
         pass
 
     async def hook(self, scope: PluginScope, payload: Dict[str, Any]) -> Dict[str, Any]:
-        
+
         if scope == PluginScope.MEMORY:
             # Verificamos si hay engramas procedimentales recuperados (RAG output)
             engrams = payload.get("retrieved_engrams", [])
@@ -64,20 +70,20 @@ class BayesianLearningPlugin(SovereignPlugin):
                 # 1. Enfriamiento (si el engrama es muy viejo, pierde peso)
                 last_used = engram.get("last_accessed", datetime.datetime.now())
                 engram["weight"] = self.engine.apply_temporal_decay(engram.get("weight", 0.5), last_used)
-                
+
             payload["retrieved_engrams"] = engrams
-            
+
         elif scope == PluginScope.COGNITION:
             # Durante la inyección cognitiva, parseamos si hubo scolding/fricción en el turno (B-1.3)
             # Ej: payload["operator_friction"] = True si el Operador tuvo que corregirme.
-            friction_detected = payload.get("operator_friction", False)
+            payload.get("operator_friction", False)
             active_axon = payload.get("active_engram_id") # El engrama que originó la acción
-            
+
             if active_axon:
                 # Aquí despacharíamos asíncronamente el update a Qdrant para ajustarlo
                 # new_weight = self.engine.update_weight(old_weight, not friction_detected)
                 pass
-            
+
         return payload
 
     async def deactivate(self) -> None:
@@ -85,8 +91,8 @@ class BayesianLearningPlugin(SovereignPlugin):
 
     async def uninstall(self, purge: bool = False) -> None:
         if purge:
-            # Aquí dropearíamos la colección `procedural_memories` en Qdrant
-            pass
+            self.memory_mgr.client.delete_collection(self.collection)
+            logger.warning(f"Trinity Learning: Colección {self.collection} aniquilada.")
 
     async def export_state(self) -> Dict[str, Any]:
         # Aquí exportaríamos las matrices de pesos bayesianos o el snapshot de engramas activos

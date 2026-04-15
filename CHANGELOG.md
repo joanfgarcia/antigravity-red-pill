@@ -1,4 +1,11 @@
-# Changelog: Red Pill Protocol
+## [6.6.1] - 2026-04-15
+
+### 🧠 Trinity Persistence & Provenance Hardening
+- **[FEAT] Trinity Soul Anchoring**: `HomeostasisPlugin` now persists the Emotional State into `soul_memories`. Cure for emotional amnesia between sessions.
+- **[FEAT] Trinity Bayesian Scaling**: `BayesianLearningPlugin` anchors weights and procedural heuristics into `procedural_memories` with automated collection management.
+- **[FEAT] Engram Provenance (Anti-Hallucination)**: Introduced mandatory `originator` field for all engrams and signals. Identifying source models and agents for transparency.
+- **[HEAL] Lazarus Pulse Hygiene**: Automated `MinionInbox` purging (Surgical Reset) with pain escalation if unprocessed reports exceed 500 nodes.
+- **[FIX] Schemas Type Safety**: Corrected `Optional` typing imports in `schemas.py` to prevent validation crashes.
 
 ## [6.6.0] - Unreleased
 
