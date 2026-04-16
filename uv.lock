@@ -2187,10 +2187,14 @@ wheels = [
 
 [[package]]
 name = "pure-mls"
-version = "0.2.0"
-source = { git = "https://github.com/joanfgarcia/pure-mls.git?rev=v0.2.4#c178fdabdf20018af0fb7d1f4bc82904b23881f2" }
+version = "3.0.4.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c2/d1/21087f3ac8cd356e54df92686fc09ba96578b2162e2e85817211f2d91c0b/pure_mls-3.0.4.0.tar.gz", hash = "sha256:7c6205a2af5de19617e909dbe1708a6fd3456068d2f0835581d64f518e439525", size = 42216, upload-time = "2026-04-12T11:35:30.549Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ba/cf/8e2080ae9472f86e3b6db8357b598a80067e6ed9d4b140f4873dc8fda164/pure_mls-3.0.4.0-py3-none-any.whl", hash = "sha256:848a5a920cea366793ece66fd6bc423fd648db5f8569de4ea18f993a1994d2dd", size = 48915, upload-time = "2026-04-12T11:35:29.3Z" },
 ]
 
 [[package]]
@@ -2568,7 +2572,7 @@ wheels = [
 
 [[package]]
 name = "red-pill"
-version = "6.4.0"
+version = "6.8.0"
 source = { editable = "." }
 dependencies = [
     { name = "argon2-cffi" },
@@ -2635,7 +2639,7 @@ requires-dist = [
     { name = "mcp", specifier = ">=1.26.0" },
     { name = "pluggy", specifier = ">=1.6.0" },
     { name = "psutil", specifier = ">=7.2.2" },
-    { name = "pure-mls", git = "https://github.com/joanfgarcia/pure-mls.git?rev=v0.2.4" },
+    { name = "pure-mls", specifier = "==3.0.4.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pydantic-settings", specifier = ">=2.0.0" },
     { name = "pyjwt", specifier = ">=2.12.0" },

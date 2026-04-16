@@ -1,12 +1,11 @@
 import logging
 import os
 import time
-
-from typing import Any, Dict, List
 from pathlib import Path
+from typing import Any, Dict, List
 
+from red_pill.core.plugin_engine import PluginScope, SovereignPlugin
 from red_pill.memory import MemoryManager
-from red_pill.core.plugin_engine import SovereignPlugin, PluginScope, Priority
 
 logger = logging.getLogger(__name__)
 

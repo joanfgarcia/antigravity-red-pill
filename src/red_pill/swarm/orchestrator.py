@@ -25,23 +25,18 @@ class SwarmScheduler:
 	Model-Aware Batch Scheduler.
 	Implements Context Affinity, Hardware Routing (VRAM NGL check) and Anti-Starvation (Aging TTL).
 	"""
+
 	def __init__(self, orchestrator):
 		self.orchestrator = orchestrator
 		self.queue = []
 		self.hot_profile = None
 		self.is_processing = False
 		self.lock = asyncio.Lock()
-		self.MAX_WAIT_TTL = 30.0 # seconds before anti-starvation kicks in
+		self.MAX_WAIT_TTL = 30.0  # seconds before anti-starvation kicks in
 
 	async def enqueue(self, minion: Minion, task: str, **kwargs) -> SwarmResult:
 		future = asyncio.get_running_loop().create_future()
-		item = {
-			"minion": minion,
-			"task": task,
-			"kwargs": kwargs,
-			"future": future,
-			"enqueue_time": time.time()
-		}
+		item = {"minion": minion, "task": task, "kwargs": kwargs, "future": future, "enqueue_time": time.time()}
 		async with self.lock:
 			self.queue.append(item)
 

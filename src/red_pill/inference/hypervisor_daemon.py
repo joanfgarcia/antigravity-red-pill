@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 cfg = get_config()
 
+
 class ActiveModel:
 	def __init__(self, profile_name: str, profile: dict, ephemeral_port: int, process: subprocess.Popen):
 		self.profile_name = profile_name
@@ -34,6 +35,7 @@ class ActiveModel:
 		self.ephemeral_port = ephemeral_port
 		self.process = process
 		self.last_used = time.time()
+
 
 class HypervisorManager:
 	def __init__(self, ttl_seconds: int = 300):
@@ -121,36 +123,39 @@ class HypervisorManager:
 		url = f"http://127.0.0.1:{active_model.ephemeral_port}{request.url.path}"
 		body = await request.body()
 		req = self.http_client.build_request(
-			method=request.method,
-			url=url,
-			headers={k:v for k,v in request.headers.items() if k.lower() != "host"},
-			content=body
+			method=request.method, url=url, headers={k: v for k, v in request.headers.items() if k.lower() != "host"}, content=body
 		)
 		# Proxy stream
 		response = await self.http_client.send(req, stream=True)
+
 		async def stream_generator():
 			async for chunk in response.aiter_raw():
 				yield chunk
+
 		return StreamingResponse(
 			stream_generator(),
 			status_code=response.status_code,
-			headers={k:v for k,v in response.headers.items() if k.lower() not in ('content-length', 'transfer-encoding')}
+			headers={k: v for k, v in response.headers.items() if k.lower() not in ("content-length", "transfer-encoding")},
 		)
+
 
 app = FastAPI(title="Cognitive Hypervisor")
 manager = HypervisorManager()
+
 
 @app.on_event("startup")
 async def startup_event():
 	asyncio.create_task(manager.garbage_collector())
 
+
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
 async def catch_all(request: Request, path: str):
 	# Parse capability from payload if possible
 	body = await request.body()
-	requested_capability = "logic" # fallback fast/base model
+	requested_capability = "logic"  # fallback fast/base model
 	try:
 		import json
+
 		data = json.loads(body.decode())
 		# If the request targets a specific model by name, use it. Some agents might send {"model": "deep"}
 		if "model" in data:
@@ -168,7 +173,9 @@ async def catch_all(request: Request, path: str):
 	except Exception as e:
 		logger.error(f"Hypervisor Proxy Pipeline Error: {e}")
 		from fastapi.responses import JSONResponse
+
 		return JSONResponse(status_code=500, content={"error": str(e)})
+
 
 def main():
 	parser = argparse.ArgumentParser(description="Cognitive Hypervisor Daemon")
@@ -196,6 +203,7 @@ def main():
 
 	loop = asyncio.get_event_loop()
 	loop.run_until_complete(server.serve(sockets=[tcp_sock, uds_sock]))
+
 
 if __name__ == "__main__":
 	main()

@@ -62,7 +62,13 @@ class MLSManager:
 
 	def get_key_package(self) -> KeyPackage:
 		"""Generates a KeyPackage for joining groups."""
-		return KeyPackage(identity_key_pub=self.sig_key.public_bytes(), init_key_pub=self.kem_key.public_bytes())
+		return KeyPackage.create(
+			encryption_key=self.kem_key.public_bytes(),
+			init_key_pub=self.kem_key.public_bytes(),
+			signature_key=self.sig_key.public_bytes(),
+			identity=self.sig_key.public_bytes(),
+			sign_fn=self.sig_key.sign,
+		)
 
 	def join_community(self, alias: str, welcome: WelcomeInfo) -> MLSGroup:
 		"""Joins a community using a Welcome message."""

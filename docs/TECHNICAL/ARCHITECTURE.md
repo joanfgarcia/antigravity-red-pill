@@ -1,16 +1,19 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v6.5.2 (Sovereign Sentinel)
+**System Version**: v6.8.0 (Titanium Bloom)
 **Analyst**: The Architect
-**Date**: 2026-03-13
+**Date**: 2026-04-16
 
 
 ## 1. Executive Summary
+> [!IMPORTANT]
+> **v6.8.0 - Titanium Bloom Optimization**: This version refactors the agent's boot sequence to achieve a "Zero-Disk-I/O" state. It implements high-fidelity XML context anchoring and dynamic identity pruning, reducing token overhead by up to 60% while ensuring the immune core directive remains the dominant cognitive anchor.
+
 > [!NOTE]
 > **Terminology Mapping**: The Red Pill protocol utilizes an immersive nomenclature (Lore). For a direct translation of terms like *The Bünker*, *Metabolism*, or *Lazarus Bridge* into standard engineering definitions (Vector DB, GC/Erosion, Snapshotting), please refer to the [ यूनिवर्सल Dictionary (GLOSSARY_760)](../LORE/GLOSSARY_760.md).
 >
 > **Sovereign Trade-offs**: For an explicit breakdown of the structural weaknesses and philosophical constraints accepted within this architecture (Swarm complexity, HiveMind boundaries, Skin consent), please refer to [PHILOSOPHY.md](../PHILOSOPHY.md).
 
-The Red Pill Protocol v5.6.3 has achieved stability and functional alignment with the B760 specification. It successfully implements a local, privacy-first memory substrate with organic decay and reinforcement. However, the current architecture contains inherent **Singularity Points**—mathematical and structural limits that will precipitate system failure as the graph scales beyond $10^5$ engrams.
+The Red Pill Protocol v6.7.0 has achieved stability and functional alignment with the B760 specification. It successfully implements a multi-backend inference substrate (ROCm, CUDA, NPU, Vulkan) and the Emotional Ferrari Protocol for real-time cognitive adaptation. The architecture remains privacy-first, with organic decay and reinforcement, now enhanced by the Ariadne's Thread temporal axons.
 
 ## 2. B760 Spec Alignment
 - **Conformity**: 97%
@@ -205,6 +208,28 @@ Project Lazarus is designed to be **Water**—fluid across all hardware tiers. T
 
 - **Portability**: The swarm agents run as concurrent `asyncio` coroutines within a single process. OS-level `multiprocessing` isolation is a planned milestone for v6.0 (Sovereign Swarm Discovery).
 - **Containerization**: The Bünker (Qdrant) is backend-agnostic, running equally on local Docker, Podman, or cloud-native clusters.
+
+### 9.1 Inference Plugin System (BitNet Multi-Backend)
+
+> **Full specification**: [INFERENCE_PLUGINS.md](INFERENCE_PLUGINS.md)
+
+The BitNet b1.58 inference engine operates via a **multi-flavor plugin architecture**. Each flavor is an independent CMake build (`build_<name>/`) sharing the same source tree and model files. Flavors are activated/deactivated by editing the `FLAVORS` dict in the benchmark scripts.
+
+**Active Flavors (April 2026):**
+
+| Flavor | Hardware | Generation | vs CPU | Build Flag |
+| :--- | :--- | :--- | :--- | :--- |
+| **CPU** | Ryzen AI 9 HX 370 (AVX2) | 2.57 tok/s | 1.0x | (default) |
+| **CUDA** | NVIDIA RTX 5070 (8GB) | 10.6 tok/s | 4.1x | `-DGGML_CUDA=ON` |
+| **ROCm** | AMD Radeon 880M iGPU | 5.15 tok/s | 2.0x | `-DGGML_HIPBLAS=ON` |
+| **NPU** | AMD XDNA2 (Strix Point) | 15.8 tok/s | 6.1x | Custom |
+| **Vulkan** | Universal GPU | TBD | TBD | `-DGGML_VULKAN=ON` |
+
+**Planned Flavors:** Metal (macOS), oneAPI/SYCL (Intel iGPU), OpenVINO (Intel NPU).
+
+**Benchmark Scripts:**
+- `scripts/test_all_bunker_flavors.py` — Quick smoke test (1 query × N flavors)
+- `scripts/bitnet_sovereign_bench.py` — Full benchmark (4 queries × N flavors)
 
 ## 10. Conclusion: The Red Pill Vision
 Red Pill distinguishes itself by weaving together autonomous agency, human‑like memory dynamics, thematic storytelling, and a privacy‑first, zero‑trust ethos. Its originality lies not in a novel algorithm but in the holistic experience it offers: an AI that remembers you, speaks your chosen mythology, respects your data, and behaves like a trustworthy teammate. This combination of narrative flair, governance rigor, and self‑sustaining memory makes Red Pill a uniquely positioned project in the landscape of AI‑augmented productivity tools.

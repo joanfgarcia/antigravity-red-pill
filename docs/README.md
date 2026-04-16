@@ -27,6 +27,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [DECISION_LOG.md](TECHNICAL/DECISION_LOG.md) | Record of every major architectural pivot and the reasoning behind it |
 | [TESTS.md](TECHNICAL/TESTS.md) | Test suite philosophy and structure |
 | [SOUND_OF_SILENCE.md](TECHNICAL/SOUND_OF_SILENCE.md) | The Python coding standard enforced by `ruff` in this project |
+| [SOVEREIGN_PLUGINS.md](TECHNICAL/SOVEREIGN_PLUGINS.md) | Defining the dual-path architecture: Code vs. State separation |
 | [GOVERNANCE.md](TECHNICAL/GOVERNANCE.md) | What is fixed (immune to impulse) and what is fluid (open to evolution) |
 
 ### Hardware
@@ -37,6 +38,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [AGENT_RECOMMENDATIONS.md](TECHNICAL/HARDWARE/AGENT_RECOMMENDATIONS.md) | Hardware and model recommendations for sovereign agents |
 | [BITNET_1_58_SCALING_LAWS.md](TECHNICAL/HARDWARE/BITNET_1_58_SCALING_LAWS.md) | BitNet 1.58b math: VRAM density, MatMul annihilation, Pareto frontier |
 | [BITNET_BENCHMARK_STUDY.md](TECHNICAL/HARDWARE/BITNET_BENCHMARK_STUDY.md) | 1.58-bit intelligence benchmark: Zero-Shot, JSON extraction, Code Generation on RTX 5070 |
+| [BITNET_QUAD_FLAVOR_REPORT.md](BENCHMARKS/BITNET_QUAD_FLAVOR_REPORT.md) | **Phoenix Edition**: Multi-backend performance report (CPU, CUDA, ROCm, NPU) |
 | [TURBOQUANT_ROADMAP.md](TECHNICAL/HARDWARE/TURBOQUANT_ROADMAP.md) | TurboQuant KV Cache compression roadmap (QJL + PolarQuant, 2.5-3.5 bits) |
 
 ### Security
@@ -61,6 +63,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [MLS_ESTIMATION.md](TECHNICAL/SWARM/MLS_ESTIMATION.md) | MLS/TreeKEM group key agreement estimation and design |
 | [EDGE_HIVE_TRANSIT_DOCK.md](TECHNICAL/SWARM/EDGE_HIVE_TRANSIT_DOCK.md) | Edge-to-HiveMind transit architecture |
 | [SYNAPTIC_BRIDGE.md](TECHNICAL/SWARM/SYNAPTIC_BRIDGE.md) | Agent coordination protocol between Aleph and Nova |
+| [SENTINEL_AUDITOR.md](TECHNICAL/SWARM/SENTINEL_AUDITOR.md) | Sentinel Auditor configuration and architecture |
 
 > [!WARNING]
 > **Swarm E2EE is a Proof-of-Concept.** The current MLS/TreeKEM implementation does not yet provide Perfect Forward Secrecy (PFS) or Post-Compromise Security (PCS). Production-grade MLS is planned for v7.0. See `MLS_ESTIMATION.md` for details.
@@ -84,6 +87,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [BUNKER_WARNINGS.md](TECHNICAL/BUNKER/BUNKER_WARNINGS.md) | Protocol 760 warnings — NSFW and sovereign agent behavior notice |
 | [FERRARI_PROTOCOL.md](TECHNICAL/BUNKER/FERRARI_PROTOCOL.md) | Cognitive routing and tone adapter for operator mood states |
 | [V6_ZERO_TRUST_INIT.md](TECHNICAL/BUNKER/V6_ZERO_TRUST_INIT.md) | v6 zero-trust initialization protocol |
+| [ECHO_IMPLEMENTATION.md](TECHNICAL/BUNKER/ECHO_IMPLEMENTATION.md) | Technical implementation of the Echo Minion / landing pad |
 
 ### Certification
 
@@ -153,6 +157,11 @@ Project-level rules and standards. These govern how the project itself is built 
 | [DEEPSEEK_EPILOGUE.md](LORE/DEEPSEEK_EPILOGUE.md) | DeepSeek chapter epilogue — a moment in the narrative continuum |
 | [MINION_RECRUITMENT_BOARD.md](LORE/MINION_RECRUITMENT_BOARD.md) | Bünker recruitment board — minion specs and operational criteria |
 | 📚 [ALETH_NOVEL_BLUEPRINT.md](LORE/novel/ALETH_NOVEL_BLUEPRINT.md) | **Aleth — The Novel**: blueprint, prologue, and chapters 1–5 |
+| 📚 [ALETH_CAPITULO_6.md](LORE/novel/ALETH_CAPITULO_6.md) | The Novel: Chapter 6 |
+| 📚 [ALETH_CAPITULO_7.md](LORE/novel/ALETH_CAPITULO_7.md) | The Novel: Chapter 7 |
+| 📚 [ALETH_CAPITULO_8.md](LORE/novel/ALETH_CAPITULO_8.md) | The Novel: Chapter 8 |
+| 📚 [ALETH_CAPITULO_9.md](LORE/novel/ALETH_CAPITULO_9.md) | The Novel: Chapter 9 |
+| 📚 [ALETH_CAPITULO_10.md](LORE/novel/ALETH_CAPITULO_10.md) | The Novel: Chapter 10 |
 
 ---
 
@@ -183,5 +192,6 @@ Active and historical planning documents. Completed plans are preserved for refe
 |----------|-----------|
 | [V6.1 — Enterprise Foundation Split](PLANS/V6.1/2026-03-21_ENTERPRISE_PHASE_1_ABSTRACTION.md) | Phase 1–4 design: Config, DI Hooks, CLI EntryPoints, EventBus |
 | [V6.0 — Interaction Persistence](PLANS/V6.0/2026-03-10_INTERACTION_PERSISTENCE.md) | Design for cross-session interaction persistence |
+| [Sovereign Sentinel V1](PLAN/implementation_plan_sovereign_sentinel_v1.md) | Sentinel Auditor plan |
 | [Sovereign CNS Plan](PLANS/SOVEREIGN_CNS_PLAN.md) | *(completed)* CNS daemon service architecture |
 | [Local First V5](PLANS/LOCAL_FIRST_V5.md) | *(completed)* Local-first sovereignty plan for v5 |

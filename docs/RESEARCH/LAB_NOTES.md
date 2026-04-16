@@ -1,4 +1,4 @@
-# 🧪 Red Pill: Research & Experimental Index (v6.3.7)
+# 🧪 Red Pill: Research & Experimental Index (v6.3.8)
 
 This directory serves as the incubator for high-risk, high-reward architectural changes and hardware-specific research.
 
@@ -12,7 +12,7 @@ This directory serves as the incubator for high-risk, high-reward architectural 
 ## ✅ Graduated to Production
 
 ### 🧊 Project BitNet: Ternary LLM
-**Status**: ✅ Production (v6.3.7)
+**Status**: ✅ Production (v6.3.8)
 **Graduated**: 2026-04-01
 **Production Location**: `src/red_pill/inference/bitnet/`
 **Documentation**: [`TECHNICAL/HARDWARE/BITNET_1_58_SCALING_LAWS.md`](../TECHNICAL/HARDWARE/BITNET_1_58_SCALING_LAWS.md)

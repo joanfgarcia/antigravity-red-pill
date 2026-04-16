@@ -1,7 +1,7 @@
 import argparse
 import os
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from red_pill.cli import get_collection, handle_mode, main
 
@@ -153,8 +153,10 @@ def test_cli_main_soul_rotate(mock_soul):
 def test_cli_main_soul_export(mock_soul):
 	"""Test 'red-pill soul export'."""
 	with patch("sys.argv", ["red-pill", "soul", "export"]):
-		main()
-		mock_soul.return_value.export_soul.assert_called_once()
+		with patch("red_pill.interceptors._init_sovereign_plugins", new_callable=AsyncMock):
+			mock_soul.return_value.export_soul = AsyncMock()
+			main()
+			mock_soul.return_value.export_soul.assert_called_once()
 
 
 @patch("red_pill.cli.SoulManager")

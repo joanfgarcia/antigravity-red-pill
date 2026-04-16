@@ -42,12 +42,17 @@ class EchoMinion(Minion):
 			return {"status": "error", "message": "USP Profile not found."}
 
 		payload = points[0].payload
-		self.log(f"USP Analysis: Global Mood is {max(payload['global'], key=payload['global'].get)}.")
+		if payload is None:
+			return {"status": "error", "message": "USP Profile payload is empty."}
+			
+		global_mood = payload.get('global', {})
+		dominant_mood = max(global_mood, key=global_mood.get) if global_mood else "unknown"
+		self.log(f"USP Analysis: Global Mood is {dominant_mood}.")
 
 		return {
 			"status": "success",
 			"briefing_id": f"echo_briefing_{int(time.time())}",
-			"mood": payload['global'],
+			"mood": global_mood,
 			"interactions": payload.get("interaction_count", 0)
 		}
 

@@ -15,6 +15,7 @@ FLAVORS = {
     "CPU": {"dir": "build_cpu", "flags": []},
     "CUDA": {"dir": "build_cuda", "flags": ["-ngl", "35"]},
     "VULKAN": {"dir": "build_vulkan", "flags": ["-ngl", "35"]},
+    "ROCm": {"dir": "build_rocm", "flags": ["-ngl", "35"]},
     "NPU": {"dir": "build_npu", "flags": []}
 }
 
@@ -28,6 +29,9 @@ def run_bench(flavor_name, config):
         os.path.join(build_dir, "3rdparty/llama.cpp/ggml/src"),
     ]
     env = os.environ.copy()
+    if flavor_name == "ROCm":
+        env["HSA_OVERRIDE_GFX_VERSION"] = "11.0.0"
+        libs.insert(0, "/opt/rocm-6.4.1/lib")
     env["LD_LIBRARY_PATH"] = ":".join(libs) + ":" + env.get("LD_LIBRARY_PATH", "")
 
     cmd = [

@@ -24,16 +24,22 @@ class SoulCryptographer:
 		kem_key, sig_key = VaultCrypto.get_identity()
 
 		if os.path.exists(VAULT_STATE_PATH):
-			with open(VAULT_STATE_PATH, "rb") as f:
-				data = f.read()
-			group = MLSGroup.from_bytes(data)
-			group.my_kem_key = kem_key
-			group.my_sig_key = sig_key
-		else:
-			logger.info("Initializing new Sovereign Vault Group...")
-			group = MLSGroup.create(b"SovereignVaultV1", sig_key, kem_key)
-			with open(VAULT_STATE_PATH, "wb") as f:
-				f.write(group.to_bytes())
+			try:
+				with open(VAULT_STATE_PATH, "rb") as f:
+					data = f.read()
+				group = MLSGroup.from_bytes(data)
+				group.my_kem_key = kem_key
+				group.my_sig_key = sig_key
+				# [v6.6.1] Proactive health check for KeySchedule size mismatch (v3 migration)
+				group.encrypt_application_message(b"ping")
+				return group
+			except Exception as e:
+				logger.warning(f"Sovereign Vault state incompatible or corrupt ({e}). Regenerating...")
+
+		logger.info("Initializing new Sovereign Vault Group...")
+		group = MLSGroup.create(b"SovereignVaultV1", sig_key, kem_key)
+		with open(VAULT_STATE_PATH, "wb") as f:
+			f.write(group.to_bytes())
 		return group
 
 	def encrypt_kit(self, file_path: str) -> Optional[str]:

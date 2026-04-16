@@ -126,12 +126,12 @@ def distill_engram(raw_content: str) -> Dict[str, Any]:
 			"messages": [
 				{
 					"role": "system",
-					"content": "You are an Amygdala-driven consolidation engine. You must ONLY output a valid JSON object. Examples of keys: 'summary', 'emotion', 'intensity'. Example output: {\"summary\": \"Session overview\", \"emotion\": \"neutral\", \"intensity\": 0.5}",
+					"content": 'You are an Amygdala-driven consolidation engine. You must ONLY output a valid JSON object. Examples of keys: \'summary\', \'emotion\', \'intensity\'. Example output: {"summary": "Session overview", "emotion": "neutral", "intensity": 0.5}',
 				},
 				{
 					"role": "user",
 					"content": f"Analyze this text and return ONLY JSON:\n{prompt}",
-				}
+				},
 			],
 			"temperature": 0.1,
 			"max_tokens": 1024,
@@ -452,6 +452,91 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 				client.delete(collection_name=collection, points_selector=[raw_id])
 
 		total_processed += batch_processed
+
+	# ── Staging Buffer Processing (Productor-Consumidor Fallback) ─────────
+	STAGING_DIR = os.path.expanduser("~/.agent/staging_buffer")
+	if os.path.exists(STAGING_DIR):
+		logger.info(f"[SLEEP ENGINE] Sweeping Staging Buffer: {STAGING_DIR}")
+		try:
+			for filename in os.listdir(STAGING_DIR):
+				if not filename.endswith(".json"):
+					continue
+				filepath = os.path.join(STAGING_DIR, filename)
+				try:
+					with open(filepath, "r") as f:
+						payload = json.load(f)
+				except Exception as e:
+					logger.error(f"[SLEEP ENGINE] Unreadable file {filename}: {e}")
+					continue
+
+				raw_id = payload.get("id", filename.replace(".json", ""))
+				raw_text = ""
+				for step in payload.get("steps", []):
+					txt = step.get("message", {}).get("text", "")
+					if txt:
+						intent_str = str(step.get("intent", ""))
+						intent_role = "ASSISTANT" if "ASSISTANT" in intent_str else "USER"
+						raw_text += f"{intent_role}: {txt}\n\n"
+
+				if not raw_text.strip():
+					os.remove(filepath)
+					continue
+
+				chunks = chunk_text(raw_text)
+				surviving_chunks = []
+				prev_chunk_id = None
+
+				for chunk in chunks:
+					distilled = distill_engram(chunk)
+					summary = distilled.get("summary", "")
+					if summary.endswith("...") and len(summary) > 490:
+						continue # LLM failed to distill
+
+					current_threshold = 0.0 if hibernating else cfg.SLEEP_CULL_THRESHOLD
+					if distilled.get("emotion") == "neutral" and distilled.get("intensity", 0.5) < current_threshold:
+						continue
+
+					surviving_chunks.append(distilled)
+					try:
+						new_id = memory_manager.add_memory(
+							collection="work_memories", text=summary, metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id},
+							color="blue", emotion=distilled.get("emotion", "neutral"), intensity=distilled.get("intensity", 0.5)
+						)
+						if prev_chunk_id and new_id:
+							client.set_payload(collection_name="work_memories", payload={"associations": [prev_chunk_id]}, points=[new_id])
+						prev_chunk_id = new_id
+						total_processed += 1
+					except Exception:
+						pass
+
+				# Hub Synthesis
+				if len(surviving_chunks) > 1 and prev_chunk_id:
+					hub_summary = synthesize_hub([c["summary"] for c in surviving_chunks])
+					try:
+						hub_id = memory_manager.add_memory(
+							collection="work_memories", text=hub_summary, metadata={"lazarus_phase": "synthesis_hub", "source_buffer_id": raw_id},
+							color="cyan", emotion=surviving_chunks[-1]["emotion"], intensity=max([c["intensity"] for c in surviving_chunks])
+						)
+						if hub_id:
+							client.set_payload(collection_name="work_memories", payload={"associations": [prev_chunk_id]}, points=[hub_id])
+							new_work_hubs.append(hub_summary)
+
+							# Thread Weaving
+							thread_state = _load_thread_state()
+							prev_hub_id = thread_state.get("work_memories")
+							if prev_hub_id:
+								client.set_payload(collection_name="work_memories", payload={"prev_session_hub": prev_hub_id}, points=[hub_id])
+								client.set_payload(collection_name="work_memories", payload={"next_session_hub": str(hub_id)}, points=[prev_hub_id])
+							thread_state["work_memories"] = str(hub_id)
+							_save_thread_state(thread_state)
+					except Exception:
+						pass
+
+				# Purge document
+				logger.info(f"[SLEEP ENGINE] Ingested cascade {raw_id}. Purging staging file.")
+				os.remove(filepath)
+		except Exception as e:
+			logger.error(f"[SLEEP ENGINE] Staging loop failed: {e}")
 
 	# PHASE GAMMA: Logical Distillation (The Session Anchor)
 	if new_work_hubs:

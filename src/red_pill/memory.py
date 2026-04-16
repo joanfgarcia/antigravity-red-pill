@@ -342,6 +342,7 @@ class MemoryManager:
 				"utility_alpha": _utility_alpha,
 				"utility_beta": _utility_beta,
 				"linguistic_markers": validated_request.linguistic_markers,
+				"originator": clean_metadata.pop("originator", None),
 				**clean_metadata,
 			}
 
@@ -1031,7 +1032,7 @@ class MemoryManager:
 
 		return snapshots_created
 
-	def inject_signal(self, name: str, intensity: float, signal_type: str, source: str, muted: bool = False) -> None:
+	def inject_signal(self, name: str, intensity: float, signal_type: str, source: str, muted: bool = False, originator: Optional[str] = None) -> None:
 		"""
 		Injects a biological/somatic signal into the immune dashboard.
 		If muted=True, the signal is written to the MinionInbox (SQLite) instead of Qdrant (Zero Context Bloat).
@@ -1040,7 +1041,7 @@ class MemoryManager:
 			from red_pill.core.inbox import MinionInbox
 			if muted:
 				inbox = MinionInbox()
-				inbox.drop_report(event_id=f"signal_{name}", source=source, status=signal_type, content=f"Muted Signal: {name} (Intensity: {intensity})")
+				inbox.drop_report(event_id=f"signal_{name}", source=source, status=signal_type, content=f"Muted Signal: {name} (Intensity: {intensity})", originator=originator)
 				logger.info(f"Injected muted signal '{name}' to SQLite MinionInbox")
 				return
 
@@ -1070,6 +1071,7 @@ class MemoryManager:
 				"signal_source": source,
 				"intensity": intensity,
 				"created_at": datetime.now(timezone.utc).isoformat(),
+				"originator": originator or "Legacy (Pre-Audit)",
 			}
 
 			# Zero vector for purely semantic/flag signals

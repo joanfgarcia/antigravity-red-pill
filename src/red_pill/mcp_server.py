@@ -12,6 +12,7 @@ from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
 
 import red_pill.config as cfg
+from red_pill import __model__ as MODEL_NAME
 from red_pill import __version__ as CORE_VERSION
 from red_pill.cli import switch_skin
 from red_pill.memory import MemoryManager
@@ -198,7 +199,8 @@ async def handle_memorize_interaction(arguments: Dict[str, Any]):
 	try:
 		from red_pill.core.queue_manager import MemoryQueueManager
 
-		MemoryQueueManager().enqueue_memory(prompt, response, role)
+		originator = f"Aleth ({MODEL_NAME})"
+		MemoryQueueManager().enqueue_memory(prompt, response, role, originator=originator)
 		return [types.TextContent(type="text", text="Engram queue registration initiated automatically.")]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"Local Async Logging Error: {str(e)}")]
@@ -462,7 +464,8 @@ async def handle_fetch_signal_memories(arguments: Dict[str, Any]):
 			if p.payload:
 				content = p.payload.get("content", "Unknown Signal")
 				intensity = p.payload.get("intensity", 1.0)
-				out.append(f"- [Intensity {intensity}] {content}")
+				originator = p.payload.get("originator", "Legacy (Pre-Audit)")
+				out.append(f"- [Intensity {intensity}] {content} | Origin: {originator}")
 
 		return [types.TextContent(type="text", text="[SYSTEM_SIGNAL] Bünker Alerts:\n" + "\n".join(out))]
 	except Exception as e:

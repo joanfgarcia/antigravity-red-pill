@@ -1,13 +1,13 @@
 import logging
 import os
+from pathlib import Path
+from typing import Any, Dict, List
 
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
-from typing import Any, Dict, List
-from pathlib import Path
 
 from red_pill import config as cfg
-from red_pill.core.plugin_engine import SovereignPlugin, PluginScope, Priority
+from red_pill.core.plugin_engine import PluginScope, SovereignPlugin
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,8 @@ class CloudSyncPlugin(SovereignPlugin):
 
 	async def init(self) -> None:
 		# Token path: Sovereign Credential Standard (v6.4.1)
-		self.token_file = os.path.expanduser("~/.agent/credentials/drive_token.json")
+		self.token_file = os.path.join(cfg.IA_DIR, "plugins", self.name, "token.json")
+
 		if self.enabled and (self.service_account_file or self.client_secrets_file):
 			self._authenticate()
 		else:
@@ -85,54 +86,66 @@ class CloudSyncPlugin(SovereignPlugin):
 	def _authenticate(self):
 		scopes = ["https://www.googleapis.com/auth/drive.file"]
 
-		if os.path.exists(self.client_secrets_file) or os.path.exists(self.token_file):
+		# JERARQUÍA SOBERANA: 1. Token (Sesión Activa) -> 2. Service Account (Empresa) -> 3. Interactive (Secrets)
+
+		# 1. INTENTO: OAuth2 con Token existente (Recuérdame)
+		if os.path.exists(self.token_file):
 			try:
 				from google.auth.transport.requests import Request
 				from google.oauth2.credentials import Credentials
-				from google_auth_oauthlib.flow import InstalledAppFlow
 
-				creds = None
-				if os.path.exists(self.token_file):
-					creds = Credentials.from_authorized_user_file(self.token_file, scopes)
+				creds = Credentials.from_authorized_user_file(self.token_file, scopes)
 
-				if not creds or not creds.valid:
-					if creds and creds.expired and creds.refresh_token:
-						try:
-							creds.refresh(Request())
-						except Exception as refresh_err:
-							logger.warning(f"OAuth2 refresh failed: {refresh_err}")
-							self._emit_pain("cloud_sync_auth_refresh", str(refresh_err))
-							creds = None
+				if creds and creds.expired and creds.refresh_token:
+					try:
+						creds.refresh(Request())
+						with open(self.token_file, "w") as token:
+							token.write(creds.to_json())
+					except Exception as refresh_err:
+						logger.warning(f"OAuth2 refresh failed: {refresh_err}")
+						creds = None # Saltamos al siguiente método si el refresh falla
 
-					if not creds:
-						if os.path.exists(self.client_secrets_file):
-							flow = InstalledAppFlow.from_client_secrets_file(self.client_secrets_file, scopes)
-							creds = flow.run_local_server(port=43303, open_browser=False, success_message="ritual_complete")
-							os.makedirs(os.path.dirname(self.token_file), exist_ok=True)
-							with open(self.token_file, "w") as token:
-								token.write(creds.to_json())
-
-				if creds:
+				if creds and creds.valid:
 					self.service = build("drive", "v3", credentials=creds)
-					logger.info("CloudSync (Google Drive OAuth2) active.")
+					logger.info("CloudSync: Acceso recuperado vía Token soberano.")
 					return
 			except Exception as e:
-				logger.error(f"CloudSync OAuth2 Flow failed: {e}")
-				self._emit_pain("cloud_sync_auth_flow", str(e))
+				logger.debug(f"Fallo silencioso en intento Token: {e}")
 
+		# 2. INTENTO: Cuenta de Servicio (Modo Headless/Empresa)
 		if os.path.exists(self.service_account_file):
 			try:
 				from google.oauth2 import service_account
 				creds = service_account.Credentials.from_service_account_file(self.service_account_file, scopes=scopes)
 				self.service = build("drive", "v3", credentials=creds)
-				logger.info("CloudSync (Service Account) active.")
+				logger.info("CloudSync: Acceso vía Cuenta de Servicio (Headless) activo.")
+				return
 			except Exception as e:
-				logger.error(f"CloudSync Service Account Auth failed: {e}")
-				self._emit_pain("cloud_sync_auth_sa", str(e))
-				self.enabled = False
-		else:
-			logger.warning("CloudSync enabled but credentials files missing. Disabled.")
-			self.enabled = False
+				logger.warning(f"Fallo en intento Cuenta de Servicio: {e}")
+
+		# 3. INTENTO: OAuth2 Interactivo (Último recurso, requiere intervención)
+		if os.path.exists(self.client_secrets_file):
+			try:
+				from google_auth_oauthlib.flow import InstalledAppFlow
+				logger.info("CloudSync: Iniciando flujo interactivo (Requiere intervención del Operador)...")
+				flow = InstalledAppFlow.from_client_secrets_file(self.client_secrets_file, scopes)
+				creds = flow.run_local_server(port=43303, open_browser=False, success_message="ritual_complete")
+
+				os.makedirs(os.path.dirname(self.token_file), exist_ok=True)
+				with open(self.token_file, "w") as token:
+					token.write(creds.to_json())
+
+				self.service = build("drive", "v3", credentials=creds)
+				logger.info("CloudSync: Acceso interactivo concedido y token guardado.")
+				return
+			except Exception as e:
+				logger.error(f"CloudSync: Fallo total en flujo interactivo: {e}")
+				self._emit_pain("cloud_sync_auth_total_failure", str(e))
+
+		# Si llegamos aquí sin self.service, el plugin se deshabilita silenciosamente
+		logger.warning("CloudSync: No se han encontrado credenciales válidas en la jerarquía. Plugin inactivo.")
+		self.enabled = False
+
 
 	def get_vault_usage(self) -> float:
 		if not self.enabled or not self.service:

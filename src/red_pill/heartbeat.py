@@ -5,6 +5,7 @@ import threading
 from typing import Optional
 
 import red_pill.config as cfg
+from red_pill.core.inbox import MinionInbox
 from red_pill.memory import MemoryManager
 from red_pill.skills.swarm_messaging import SwarmMessagingSkill
 from red_pill.soul import SoulManager
@@ -21,6 +22,7 @@ class LazarusPulse:
 	def __init__(self, memory_mgr: MemoryManager, soul_mgr: SoulManager) -> None:
 		self.memory_mgr = memory_mgr
 		self.soul_mgr = soul_mgr
+		self.inbox = MinionInbox()
 		self._running = False
 		self._immune_locks: dict = {}  # Tracks autonomic healing responses to prevent immune storms
 		self._loop: Optional[asyncio.AbstractEventLoop] = None
@@ -67,6 +69,7 @@ class LazarusPulse:
 			try:
 				logger.info("Lazarus Pulse: Beat triggered. Executing rituals...")
 				await self._maintenance_ritual()
+				await self._hygiene_ritual()
 				await self._usp_ritual()
 				await self._dream_ritual()
 				await self._consolidation_ritual()
@@ -475,3 +478,41 @@ class LazarusPulse:
 					self._immune_locks[tissue] = {"process": process, "started_at": now}
 			except Exception as e:
 				logger.error(f"Pulse [IMMUNE RESPONSE]: Failed to deploy cure for {tissue}: {e}")
+
+	async def _hygiene_ritual(self) -> None:
+		"""
+		Autonomous Hygiene Ritual (Cleaning Minion)
+		- Purges read messages from MinionInbox.
+		- Escalates pain signal if inbox bloat is detected (cleaning failure).
+		"""
+		try:
+			logger.info("Pulse: Initiating Hygiene Ritual (MinionInbox Purge)...")
+
+			# 1. Purge already read messages
+			await asyncio.to_thread(self.inbox.purge_read)
+
+			# 2. Monitor for 'Garbage' accumulation (Total messages > Threshold)
+			# Using a simpler query for total count
+			import sqlite3
+			with sqlite3.connect(self.inbox.db_path) as conn:
+				cursor = conn.cursor()
+				cursor.execute("SELECT COUNT(*) FROM inbox")
+				total_count = cursor.fetchone()[0]
+
+			# Threshold: 500 messages suggests purge is not effective or traffic is extreme
+			if total_count > 500:
+				logger.warning(f"Pulse: Inbox Bloat Detected ({total_count} reports). Injecting stasis signal.")
+				self.memory_mgr.inject_signal(
+					"inbox_bloat_stasis",
+					intensity=7.5,
+					signal_type="pain",
+					source="MinionInbox",
+					originator=f"{__file__}"
+				)
+			else:
+				# Heal if previously bloated
+				self.memory_mgr.evaporate_signals("inbox_bloat_stasis")
+
+			logger.info("Pulse: Hygiene ritual complete.")
+		except Exception as e:
+			logger.error(f"Pulse: Hygiene ritual failed: {e}")

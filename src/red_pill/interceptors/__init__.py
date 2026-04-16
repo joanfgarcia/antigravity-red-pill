@@ -4,13 +4,13 @@ import logging
 import pkgutil
 from pathlib import Path
 
-from red_pill.interceptors.base import BaseInterceptorPlugin
-
 from red_pill.core.plugin_engine import PluginRegistry, PluginScope
-from red_pill.plugins.trinity_homeostasis.plugin import HomeostasisPlugin
-from red_pill.plugins.trinity_learning.plugin import BayesianLearningPlugin
+from red_pill.events import SoulCreatedEvent, get_event_bus
+from red_pill.interceptors.base import BaseInterceptorPlugin
 from red_pill.plugins.cloud_sync.plugin import CloudSyncPlugin
 from red_pill.plugins.gmail_watcher.plugin import GmailWatcherPlugin
+from red_pill.plugins.trinity_homeostasis.plugin import HomeostasisPlugin
+from red_pill.plugins.trinity_learning.plugin import BayesianLearningPlugin
 
 logger = logging.getLogger(__name__)
 
@@ -20,28 +20,42 @@ _PLUGINS: list[BaseInterceptorPlugin] = []
 sovereign_registry = PluginRegistry()
 _sovereign_loaded = False
 
+async def _bridge_soul_event(event: SoulCreatedEvent):
+    """Bridge EventBus SoulCreatedEvent to PluginRegistry SYSTEM_EVENT hook."""
+    payload = {
+        "action": "soul_created",
+        "zip_path": event.zip_path,
+        "timestamp": event.timestamp
+    }
+    await sovereign_registry.emit_hook(PluginScope.SYSTEM_EVENT, payload)
+
 async def _init_sovereign_plugins():
     global _sovereign_loaded
     if _sovereign_loaded:
         return
-        
+
+
     p_homeo = HomeostasisPlugin(name="TrinityHomeostasis", version="1.0", directory=Path(__file__).parent.parent / "plugins" / "trinity_homeostasis")
     p_learn = BayesianLearningPlugin(name="TrinityLearning", version="1.0", directory=Path(__file__).parent.parent / "plugins" / "trinity_learning")
     p_cloud = CloudSyncPlugin(name="cloud_sync", version="1.0", directory=Path(__file__).parent.parent / "plugins" / "cloud_sync")
     p_gmail = GmailWatcherPlugin(name="gmail_watcher", version="1.0", directory=Path(__file__).parent.parent / "plugins" / "gmail_watcher")
-    
+
     # Injection of the in-memory Qdrant mock for MVP to avoid breaking Real DB
     from qdrant_client import QdrantClient
     mock_db = QdrantClient(location=":memory:")
     p_learn.qdrant = mock_db
-    
+
     sovereign_registry.register(p_homeo)
     sovereign_registry.register(p_learn)
     sovereign_registry.register(p_cloud)
     sovereign_registry.register(p_gmail)
-    
+
+    # Bridge: Listen for local events and forward to plugins
+    get_event_bus().subscribe(SoulCreatedEvent, lambda ev: asyncio.create_task(_bridge_soul_event(ev)))
+
     await sovereign_registry.activate_all()
     _sovereign_loaded = True
+
 
 
 
@@ -120,7 +134,7 @@ async def execute_pipeline(user_prompt: str) -> str:
 		"legacy_context": merged,
 		"operator_friction": False,
 	}
-	
+
 	try:
 		mutated = await sovereign_registry.emit_hook(PluginScope.COGNITION, payload)
 		merged = mutated.get("legacy_context", merged)

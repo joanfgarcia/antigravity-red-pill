@@ -1,8 +1,8 @@
 import abc
 import enum
 import logging
-from typing import Any, Dict, List
 from pathlib import Path
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ class CircuitBreak(Exception):
     pass
 
 class SovereignPlugin(abc.ABC):
-    
+
     def __init__(self, name: str, version: str, directory: Path):
         self.name = name
         self.version = version
@@ -34,24 +34,33 @@ class SovereignPlugin(abc.ABC):
         self.config = self._load_config()
 
     def _load_config(self) -> Dict[str, Any]:
-        """Carga iterativa e indepedendiente de la configuración del plugin."""
-        config_path = self.directory / f"{self.name}.json"
-        
+        """Carga la configuración del plugin priorizando el directorio soberano IA_DIR."""
+        import json
+
+        from red_pill import config as cfg
+
+        # 1. Intentar ruta soberana: {IA_DIR}/plugins/{name}/{name}.json
+        sovereign_path = Path(cfg.IA_DIR) / "plugins" / self.name / f"{self.name}.json"
+
+        # 2. Fallback a ruta de fuentes (Legacy/Default)
+        fallback_path = self.directory / f"{self.name}.json"
+
+        config_path = sovereign_path if sovereign_path.exists() else fallback_path
+
         if not config_path.exists():
-            import json
-            logger.info(f"[PluginBase] Creando config vacía para '{self.name}' en {config_path}")
-            self.directory.mkdir(parents=True, exist_ok=True)
-            with open(config_path, "w", encoding="utf-8") as f:
+            logger.info(f"[PluginBase] Creando config vacía para '{self.name}' en la ruta soberana {sovereign_path}")
+            sovereign_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(sovereign_path, "w", encoding="utf-8") as f:
                 json.dump({}, f, indent=4)
             return {}
 
         try:
-            import json
             with open(config_path, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
-            logger.error(f"[PluginBase] Error cargando config para plugin {self.name}: {e}")
+            logger.error(f"[PluginBase] Error cargando config para plugin {self.name} desde {config_path}: {e}")
             return {}
+
 
     @property
     @abc.abstractmethod
@@ -99,13 +108,13 @@ class SovereignPlugin(abc.ABC):
         para ser empaquetado en el archivo maestro de persistencia del Bünker.
         """
         pass
-        
+
     def validate_sovereignty(self) -> bool:
         required = ["README.md", "TECHNICAL.md", "USER_MANUAL.md"]
         return all((self.directory / doc).exists() for doc in required)
 
 class PluginRegistry:
-    
+
     def __init__(self):
         self._plugins: Dict[str, SovereignPlugin] = {}
         self._routing_table: Dict[PluginScope, List[SovereignPlugin]] = {
@@ -115,7 +124,7 @@ class PluginRegistry:
     def register(self, plugin: SovereignPlugin) -> None:
         if not plugin.validate_sovereignty():
             raise RuntimeError(f"Fallo de Soberanía documental en: {plugin.name}")
-            
+
         # --- SOVEREIGN AUDIT ENGINE ---
         permissions = getattr(plugin, "requested_permissions", [])
         if not permissions:
@@ -126,11 +135,11 @@ class PluginRegistry:
         # ------------------------------
 
         self._plugins[plugin.name] = plugin
-        
+
         for scope in plugin.scopes:
             self._routing_table[scope].append(plugin)
             self._routing_table[scope].sort(key=lambda p: p.priority.value)
-            
+
         logger.info(f"Registrado [Oculto]: {plugin.name} v{plugin.version} (Prioridad: {plugin.priority.name})")
 
     async def activate_all(self) -> None:
@@ -143,11 +152,11 @@ class PluginRegistry:
     async def emit_hook(self, scope: PluginScope, payload: Dict[str, Any]) -> Dict[str, Any]:
         interested_plugins = self._routing_table[scope]
         mutated_payload = payload.copy()
-        
+
         for plugin in interested_plugins:
             if not plugin._is_active:
                 continue
-                
+
             try:
                 mutated_payload = await plugin.hook(scope, mutated_payload)
             except CircuitBreak:
@@ -155,5 +164,5 @@ class PluginRegistry:
                 break
             except Exception as e:
                 logger.error(f"Plugin Error [{plugin.name}]: {e}")
-                    
+
         return mutated_payload

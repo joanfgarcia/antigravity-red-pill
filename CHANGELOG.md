@@ -1,4 +1,54 @@
+## [6.8.0] - 2026-04-16
+
+### 🚀 Titanium Optimization (v3.1) — "Titanium Bloom"
+- **[BOOT] XML Anchoring (Identity Guard)**: Grouped core directives and personae under `<bunker_directives mode="immune_core">` for deterministic attention.
+- **[BOOT] Dynamic Identity Pruning**: High-efficiency boot sequence that suppresses all non-active "Lore Skin" engrams, reducing token overhead by ~60%.
+- **[BOOT] Recency Bias Alignment**: Reordered context injection to place hardware telemetry at the start and identity personae at the absolute end.
+- **[BIO] Signal Vectorization (`pain_vec`)**: Replaced verbose signal lists with a high-density sensory vector `[T, D, H]` (Tests, Disk, Hardware Health).
+- **[BOOT] Differential Bootstrap foundation**: Implemented SHA-256 context hashing for future cached session logic.
+- **[CLEAN] Protocol of Silence**: Mass-removed decorative headers, horizontal rules, and redundant whitespace from the context synthesis.
+
+## [6.7.0] - 2026-04-16
+
+### Added
+- **BitNet Multi-Backend (Phoenix Edition)**: Finalized stable inference for Falcon 3 10B 1.58-bit across ROCm 6.4.1 (AMD Radeon 880M iGPU), CUDA (NVIDIA RTX 5070), and NPU (Ryzen AI).
+- **Emotional Ferrari Protocol**: Integrated 4 new interceptor plugins (07-10) for mood analytics, emotive recall, proactive signaling, and predictive context preloading.
+- **Biological Wake/Sleep Cycle**: Replaced monolithic pulse with distinct `--cycle wake` (hourly) and `--cycle sleep` (03:00 daily) in `schedule_pulse.py` and `trigger_pulse.py`.
+- **Ariadne's Thread Automation**: Autonomous sleep ritual that weaves temporal axons across all memory collections (`work`, `social`, `story`).
+- **NPU Validation**: Verified NPU inference via existing build scripts for AMD Ryzen AI hardware.
+
+### Fixed
+- **GPU Stability Breakthrough**: Fixed `block_i2_s` struct size mismatch in `ggml-common.h` (66 -> 36 bytes), resolving crashes in Vulkan, ROCm, and CUDA backends.
+- **ROCm Integration**: Established `HSA_OVERRIDE_GFX_VERSION=11.0.0` and `TensileLibrary` symlinking for native HIP support on Radeon 880M.
+- **Storage Resilience**: Ensured `StorageEngine` collection existence before interaction ingestion in `antigravity_ingest.py`.
+
+### Security
+- **API Key Compliance**: Enforced explicit `QDRANT_API_KEY` environment checks in backup scripts to prevent data leaks.
+- **Data Sovereignty**: Clarified Chronicle ingestion pipeline utilizing forensic AES decryption (`ANTIGRAVITY_KEY`).
+
+## [6.6.3] - 2026-04-15
+
+### 🧩 Sovereign Plugin Infrastructure & Authorization
+- **[ARCH] Sovereign Configuration Relocation**: Migrated plugin configurations from source directories to `{IA_DIR}/plugins/`, ensuring absolute separation of code and state.
+- **[SEC] Git Isolation**: Hardened `.gitignore` to protect the `/plugins/` sovereign directory from repository commits.
+- **[FEAT] Elegant Auth Hierarchy**: Refactored `CloudSyncPlugin` with a prioritized credential discovery protocol: **Token (OAuth2) > Service Account (Headless) > Interactive Discovery**.
+- **[HEAL] Personal Drive Quota Resolution**: Implemented OAuth2 delegation to bypass Service Account storage limits for personal Google Drive accounts.
+- **[DOCS] Sovereign Standard**: Authored `docs/TECHNICAL/SOVEREIGN_PLUGINS.md` defining the dual-path architecture.
+
+## [6.6.2] - 2026-04-15
+
+### 🔐 Pure-MLS v3.0 Final Certification & Cloud Sync
+- **[MIGR] RFC 9420 Pure-MLS Transition**: Completed the migration to `pure-mls==3.0.4.0`.
+- **[HEAL] Vault Auto-Sanitation**: Implemented pro-active state detection in `vault.py` to automatically regenerate group states upon cryptographic incompatibility.
+- **[FIX] LeafNode Identity API**: Adapted `MLSManager` to the new `KeyPackage.create()` class method, ensuring full compliance with the updated standard.
+- **[CERT] Cloud Sync Validation**: Verified that `cloud_sync` correctly handles the new `.tar.gz.mls` (v3.0) format by triggering a fresh encrypted Soul Export.
+
+### ⚠️ Breaking Changes
+- **Encrypted Vault Obsolescence**: Files with `.mls` extension generated with versions prior to v6.6.2 are now legacy/orphaned. They cannot be decrypted by the updated engine due to the fundamental shift in the KeySchedule state of RFC 9420.
+
+
 ## [6.6.1] - 2026-04-15
+
 
 ### 🧠 Trinity Persistence & Provenance Hardening
 - **[FEAT] Trinity Soul Anchoring**: `HomeostasisPlugin` now persists the Emotional State into `soul_memories`. Cure for emotional amnesia between sessions.

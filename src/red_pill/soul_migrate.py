@@ -77,7 +77,7 @@ def cmd_decrypt() -> bool:
 	Step 1: Decrypt all .mls kits and back up vault state.
 	Run BEFORE upgrading pure-mls.
 	"""
-	from red_pill.utils.vault import CloudVault
+	from red_pill.utils.vault import SoulCryptographer
 
 	_ensure_secure_dir()
 	kits = _find_encrypted_kits()
@@ -89,13 +89,13 @@ def cmd_decrypt() -> bool:
 	print(f"\n[Phase 0] Decrypting {len(kits)} Soul Kit(s) → {SECURE_BACKUP_DIR}")
 	print("⚠️  Keep this directory secure — it contains unencrypted identity data.\n")
 
-	vault = CloudVault()
+	vault = SoulCryptographer()
 	results = []
 
 	for kit_path in kits:
 		print(f"  Decrypting: {kit_path.name} ...", end=" ", flush=True)
 		try:
-			decrypted_path = vault._decrypt_kit(str(kit_path))
+			decrypted_path = vault.decrypt_kit(str(kit_path))
 			if decrypted_path:
 				# Move decrypted file to secure staging
 				dest = SECURE_BACKUP_DIR / Path(decrypted_path).name
@@ -158,7 +158,7 @@ def cmd_reencrypt() -> bool:
 	Run AFTER upgrading pure-mls.
 	"""
 	from red_pill.utils.vault import VAULT_STATE_PATH as VSP
-	from red_pill.utils.vault import CloudVault
+	from red_pill.utils.vault import SoulCryptographer
 
 	if not MIGRATION_MANIFEST.exists():
 		print("No migration manifest found. Run 'soul migrate --decrypt' first.")
@@ -178,13 +178,13 @@ def cmd_reencrypt() -> bool:
 
 	print(f"\n[Phase 0] Re-encrypting {len(decrypted_kits)} kit(s) with v3.0 vault group...")
 
-	vault = CloudVault()
+	vault = SoulCryptographer()
 	results = []
 
 	for kit_path in decrypted_kits:
 		print(f"  Encrypting: {kit_path.name} ...", end=" ", flush=True)
 		try:
-			encrypted = vault._encrypt_kit(str(kit_path))
+			encrypted = vault.encrypt_kit(str(kit_path))
 			if encrypted:
 				# Move to export dir to replace old kit
 				dest = EXPORT_DIR / Path(encrypted).name

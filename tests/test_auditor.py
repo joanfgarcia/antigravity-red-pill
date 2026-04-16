@@ -27,7 +27,7 @@ def test_audit_repo_ruff_failure(mock_run, auditor):
 
     mock_run.side_effect = [mock_ruff, mock_pytest]
 
-    report = auditor.audit_repo("/home/joan/Documents/IA/pure-mls")
+    report = auditor.audit_repo(".")
     assert report.status == "yellow"
     assert any(f.type == "formatting" for f in report.findings)
 
@@ -38,7 +38,7 @@ def test_audit_repo_all_green(mock_run, auditor):
     mock_res.returncode = 0
     mock_run.return_value = mock_res
 
-    report = auditor.audit_repo("/home/joan/Documents/IA/pure-mls")
+    report = auditor.audit_repo(".")
     assert report.status == "green"
     assert len(report.findings) == 0
     assert report.intensity == 0.0

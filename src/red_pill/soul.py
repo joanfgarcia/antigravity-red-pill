@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import shutil
@@ -107,7 +108,7 @@ class SoulManager:
 		self.create_manifest(timestamp)
 		print(f"Lean Soul Backup completed at {timestamp}")
 
-	def export_soul(self, output_path: Optional[str] = None) -> bool:
+	async def export_soul(self, output_path: Optional[str] = None) -> bool:
 		"""
 		Export the 'Soul' (dynamic data) into a compact, encrypted kit.
 		Following the Architect's 'Lean' directive (v5.6.1):
@@ -159,10 +160,14 @@ class SoulManager:
 		logger.info(f"Emitting SoulCreatedEvent for {output_path}")
 		get_event_bus().emit(SoulCreatedEvent(zip_path=output_path))
 
+		# Give a small window for async listeners in the current loop to start/finish
+		await asyncio.sleep(2)
+
 		# In this architecture, we do not know if CloudSync succeeded synchronously.
 		# Plugins act asynchronously. The Local kit is successfully preserved and secured.
 		print("Export Pipeline finished. Plugins (Cloud Vault, etc) notified via EventBus.")
 		return True
+
 
 	def restore_soul(self, source_dir: str, commit: bool = False):
 		"""
@@ -312,7 +317,8 @@ class SoulManager:
 				return False
 			with tarfile.open(target_archive_path, "r:gz") as tar:
 				members = tar.getnames()
-				if not any(m.startswith("manifest_") and m.endswith(".json") for m in members):
+				# Check for manifest.json (standard) or manifest_*.json (legacy/debug)
+				if not any(m == "manifest.json" or (m.startswith("manifest_") and m.endswith(".json")) for m in members):
 					logger.error("Archive is missing manifest.json")
 					return False
 			return True

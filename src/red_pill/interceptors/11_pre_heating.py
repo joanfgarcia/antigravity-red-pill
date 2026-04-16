@@ -151,7 +151,8 @@ class EmotionalPreHeatingPlugin(BaseInterceptorPlugin):
 				parts.append(f"  Tone: {meta['tone']}")
 				parts.append(f"  Operator state: {meta['operator_state']}")
 			else:
-				raw_text = frag["payload"].get("content", "")
+				payload = frag["payload"]
+				raw_text = payload.get("content", "") if isinstance(payload, dict) else ""
 				max_chars = getattr(config, "PRE_HEATING_MAX_CHARS_PER_FRAGMENT", 200)
 				if len(raw_text) > max_chars:
 					raw_text = raw_text[:max_chars] + "..."

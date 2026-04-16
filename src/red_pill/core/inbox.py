@@ -41,21 +41,26 @@ class MinionInbox:
 					status TEXT,
 					content TEXT,
 					is_read INTEGER DEFAULT 0,
-					timestamp REAL
+					timestamp REAL,
+					originator TEXT
 				)
 				"""
 			)
 			cursor.execute("CREATE INDEX IF NOT EXISTS idx_is_read ON inbox (is_read)")
+			try:
+				cursor.execute("ALTER TABLE inbox ADD COLUMN originator TEXT")
+			except sqlite3.OperationalError:
+				pass
 			conn.commit()
 
-	def drop_report(self, event_id: str, source: str, status: str, content: str) -> None:
+	def drop_report(self, event_id: str, source: str, status: str, content: str, originator: Optional[str] = None) -> None:
 		"""Save a fire-and-forget report from a background minion."""
 		try:
 			with sqlite3.connect(self.db_path) as conn:
 				cursor = conn.cursor()
 				cursor.execute(
-					"INSERT INTO inbox (event_id, source, status, content, timestamp) VALUES (?, ?, ?, ?, ?)",
-					(event_id, source, status, content, time.time()),
+					"INSERT INTO inbox (event_id, source, status, content, timestamp, originator) VALUES (?, ?, ?, ?, ?, ?)",
+					(event_id, source, status, content, time.time(), originator),
 				)
 				conn.commit()
 		except Exception as e:
@@ -69,7 +74,7 @@ class MinionInbox:
 				conn.row_factory = sqlite3.Row
 				cursor = conn.cursor()
 				cursor.execute(
-					"SELECT id, event_id, source, status, content, is_read, timestamp FROM inbox WHERE is_read = 0 ORDER BY timestamp DESC LIMIT ?",
+					"SELECT id, event_id, source, status, content, is_read, timestamp, originator FROM inbox WHERE is_read = 0 ORDER BY timestamp DESC LIMIT ?",
 					(limit,),
 				)
 				rows = cursor.fetchall()
@@ -98,7 +103,7 @@ class MinionInbox:
 				cursor = conn.cursor()
 				# Fetch inside transaction
 				cursor.execute(
-					"SELECT id, event_id, source, status, content, is_read, timestamp FROM inbox WHERE is_read = 0 ORDER BY timestamp DESC LIMIT ?",
+					"SELECT id, event_id, source, status, content, is_read, timestamp, originator FROM inbox WHERE is_read = 0 ORDER BY timestamp DESC LIMIT ?",
 					(limit,),
 				)
 				rows = cursor.fetchall()
