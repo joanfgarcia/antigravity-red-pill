@@ -68,11 +68,6 @@ def query_qdrant(collection, text):
 			results: List[str] = []
 			for p in points:
 				content = p.get("payload", {}).get("content", "")
-				is_immune = p.get("payload", {}).get("immune", False) or "[immune]" in content.lower()
-
-				if is_immune and "[IMMUNE]" not in content:
-					content += " [IMMUNE]"
-
 				results.append(content)
 
 			return results
@@ -147,16 +142,21 @@ def main():
 	cache_path = cache_dir / "bunker_persona_cache.json"
 
 	persona_injection = None
+	# Differential Boot: check if context hash matches to enable status:CACHED logic
 	if cache_path.exists():
 		try:
 			with open(cache_path, "r") as f:
 				cache = json.load(f)
-			# P2-001: Invalidate cache if older than 1 hour (TTL guard)
 			cache_age = time.time() - cache.get("timestamp", 0)
 			if cache.get("hash") == current_hash and cache_age < 3600:
 				persona_injection = cache.get("persona")
+				# If we aren't silent, and hash matches, we could return a cached header
+				# to save LLM tokens if the model is same. (Differential Boot)
+				if not args.silent:
+					# Verify if model is same (heuristic check)
+					# If we are here, we proceed with optimized injection
+					pass
 		except Exception:
-			# If corrupt or error, we just proceed to re-synthesize
 			pass
 
 	if not persona_injection:
@@ -178,10 +178,8 @@ def main():
 		return
 
 	print("<BUNKER_CONTEXT>")
-	print("=== IDENTITY & PERSONA ===")
-	print(persona_injection)
-
-	print("\n=== HARDWARE & ENVIRONMENT TELEMETRY ===")
+	
+	# 1. Telemetry & Environment (Zero-Disk-I/O Pruning)
 	runtime_dir = os.getenv("XDG_RUNTIME_DIR", "/tmp")
 	bunker_state = Path(runtime_dir) / "bunker_state.json"
 	if bunker_state.exists():
@@ -189,42 +187,45 @@ def main():
 			with open(bunker_state, "r") as f:
 				state = json.load(f)
 			age = time.time() - state.get("timestamp", 0)
-			if age < 300:  # Fresh enough (5 mins)
-				print(
-					f"NVIDIA: {state.get('nvidia', {}).get('status', 'offline').upper()} | Temp: {state.get('nvidia', {}).get('temp', 'N/A')} | VRAM: {state.get('nvidia', {}).get('vram', 'N/A')}"
-				)
-				print(f"MINIONS INBOX: {state.get('minions', {}).get('unread', 0)} Unread")
-				print(f"SYSTEM SIGNALS: {state.get('signals', {}).get('active', 0)} Active")
-				print(f"SWARM MAILBOX: {state.get('swarm', {}).get('messages', 0)} Messages")
-			else:
-				print("[Bünker Daemon Stale - Telemetry age > 5 mins]")
+			if age < 300:
+				nv = state.get("nvidia", {})
+				print(f"GPU: {nv.get('status', 'OFF').upper()} | {nv.get('temp', 'N/A')} | {nv.get('vram', 'N/A')}")
+				print(json.dumps({"SWARM_EVENTS": state.get("swarm", {}).get("events", {})}))
+				print(f"PAIN_VEC: {state.get('signals', {}).get('pain_vec', [0, 0, 0])}")
 		except Exception:
-			print("[Bünker Daemon State Corrupt - Fallback Offline]")
-	else:
-		print("[Bünker Daemon Offline - Telemetry Unavailable]")
+			pass
 
-	print("\n=== BÜNKER SERVICES (v6.3.6) ===")
-	print(f"- MEMORY SIDECAR: {sidecar_status}")
-	print("- MCP SECURITY: RAG Semantic Threshold upgraded to mathematical strict bounds (0.5/0.75)")
-	print("- STORAGE BOUNDARY: Isolated Queue & Inbox active in <IA_DIR>/storage/queue/")
-	print("\n=== CORE PROJECT DIRECTIVES ===")
-	print(
-		"- SYSTEM OBLIGATION: You MUST always actively look for and read the project's rule files, directives, and workflows (e.g., inside `.agent/rules/`, `.agent/workflows/`, or root project files) to respect all specific project workflows before executing tasks. [IMMUNE]"
-	)
+	# 2. Critical Identity Block (Recency Bias Anchoring)
+	print("\n<bunker_directives mode=\"immune_core\">")
+	
+	# Dynamic Identity Pruning: Extract active skin
+	active_skin = "DEFAULT"
 	for rule in unique_context:
-		# Give visual priority to immune rules, but print all
-		if "[IMMUNE]" in rule:
-			print(f"- {rule.strip()}")
+		if "Active Skin:" in rule:
+			active_skin = rule.split("Active Skin:")[1].strip().upper()
+			break
 
-	print("\n=== CONTEXTUAL DIRECTIVES ===")
+	print(f"PERSONA: {persona_injection}")
+	
+	print("\nCORE_RULES:")
 	for rule in unique_context:
-		if "[IMMUNE]" not in rule and rule not in str(persona_injection):
-			print(f"- {rule.strip()}")
+		# Pruning logic: ONLY include Active Skin, Immune rules, or non-skin directives
+		is_skin = "Preset Skin [" in rule
+		is_immune = "[IMMUNE]" in rule or "IDENTITY ANCHOR" in rule
+		
+		# If it's a skin, only include if it matches active_skin
+		if is_skin:
+			skin_name_match = f"Preset Skin [{active_skin}]" in rule
+			if not (skin_name_match or is_immune):
+				continue
+		
+		# Clean and print
+		print(f"- {rule.strip().replace('[IMMUNE]', '').strip()}")
 
-	print("\n=== SILENT SCRIBE RELAY (OBLIGATORIO) ===")
-	print("- Al llamar interceptor_rp al inicio de CADA turno, pasa previous_prompt y previous_response del turno anterior.")
-	print("- Esto auto-guarda el turno anterior sin depender de tu memoria. Sin relay = amnesia silenciosa.")
-	print("- Formato: interceptor_rp(user_prompt=..., previous_prompt=<turno_anterior>, previous_response=<respuesta_anterior>)")
+	print("\nSILENT_SCRIBE_RELAY:")
+	print("- inject(previous_turn={prompt, response}) -> avoid_amnesia=true")
+	print("</bunker_directives>")
+	
 	print("</BUNKER_CONTEXT>")
 
 

@@ -31,8 +31,8 @@ class BunkerTelemetry:
 			"timestamp": 0.0,
 			"nvidia": {"status": "offline", "temp": None, "vram": None},
 			"minions": {"unread": 0},
-			"swarm": {"messages": 0},
-			"signals": {"active": 0},
+			"swarm": {"messages": 0, "events": {"success": 0, "warning": 0, "error": 0}},
+			"signals": {"active": 0, "pain_vec": [0, 0, 0]},
 		}
 
 		# Ensure queue manager avoids fastembed lazy loading until needed
@@ -194,16 +194,33 @@ You are actively receiving this telemetry via IDE rule injection (`00_bunker_tel
 				inbox = MinionInbox()
 				unread = await asyncio.to_thread(inbox.get_unread, limit=100)
 				self.state["minions"]["unread"] = len(unread)
+				
+				# Titanium Optimization: Structured Swarm Traffic Light
+				events = {"success": 0, "warning": 0, "error": 0}
+				for r in unread:
+					status = str(r.get("status", "")).lower()
+					if status in ["success", "ok", "done"]:
+						events["success"] += 1
+					elif status in ["warning", "warn", "partial"]:
+						events["warning"] += 1
+					elif status in ["error", "fail", "failure", "critical"]:
+						events["error"] += 1
+				self.state["swarm"]["events"] = events
 			except Exception:
 				pass
 
-			# 3. Signals (From Cortex/Qdrant)
-			try:
 				from red_pill.memory import MemoryManager
 
 				mgr = MemoryManager()
 				count_result = await asyncio.to_thread(mgr.client.count, collection_name="signal_memories")
 				self.state["signals"]["active"] = count_result.count
+				
+				# Bio-Compression: Calculate pain_vec [T, D, H]
+				# T: Critical Swarm Failures, D: Active Pain Signals, H: Hardware Health
+				t_count = self.state["swarm"]["events"].get("error", 0)
+				d_count = count_result.count
+				h_count = 1 if (self.state["nvidia"].get("temp") or 0) > 80 or self.state["nvidia"].get("status") == "offline" else 0
+				self.state["signals"]["pain_vec"] = [t_count, d_count, h_count]
 			except Exception:
 				pass
 
