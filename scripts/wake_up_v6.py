@@ -68,6 +68,9 @@ def query_qdrant(collection, text):
 			results: List[str] = []
 			for p in points:
 				content = p.get("payload", {}).get("content", "")
+				is_immune = p.get("payload", {}).get("immune", False)
+				if is_immune and "[IMMUNE]" not in content:
+					content = f"{content} [IMMUNE]"
 				results.append(content)
 
 			return results

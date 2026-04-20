@@ -60,6 +60,7 @@ dev = [
     "ruff>=0.3.0",
     "pytest-cov>=4.1.0",
     "pytest-asyncio>=0.23.0",
+    "pytest-timeout>=2.4.0",
     "pip-audit>=2.7.0",
     "types-requests",
     "types-pyyaml>=6.0.12.20250915",
@@ -195,6 +196,7 @@ show_missing = true
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
+timeout = 10
 markers = [
     "integration: tests that require a real environment (Qdrant, Milvus, models)"
 ]

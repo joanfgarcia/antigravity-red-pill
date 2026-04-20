@@ -87,17 +87,19 @@ class TestFullBackup:
 
 
 class TestExportSoul:
-	def test_auto_output_path_generated(self, soul, tmp_path, capsys):
+	@pytest.mark.asyncio
+	async def test_auto_output_path_generated(self, soul, tmp_path, capsys):
 		"""Line 124-125: no output_path → auto-generated from timestamp."""
 		with patch("os.getenv", return_value=None):
 			with patch.object(soul, "backup_qdrant"):
 				with patch.object(soul, "create_manifest"):
 					with patch("os.listdir", return_value=[]):
-						soul.export_soul(output_path=None)
+						await soul.export_soul(output_path=None)
 		captured = capsys.readouterr()
 		assert "LEAN_SOUL_KIT" in captured.out
 
-	def test_snapshot_added_to_tar(self, soul, tmp_path, capsys):
+	@pytest.mark.asyncio
+	async def test_snapshot_added_to_tar(self, soul, tmp_path, capsys):
 		"""Lines 138-141: snapshot files matching timestamp are added to tar."""
 		ts = "20260101_120000"
 		snap_dir = tmp_path / "backups" / "qdrant"
@@ -113,14 +115,15 @@ class TestExportSoul:
 					with patch.object(soul, "backup_qdrant"):
 						with patch.object(soul, "create_manifest"):
 							output = str(tmp_path / "export.tar.gz")
-							soul.export_soul(output_path=output)
+							await soul.export_soul(output_path=output)
 
 		assert os.path.exists(output)
 		with tarfile.open(output, "r:gz") as tar:
 			names = tar.getnames()
 		assert any(("work_" in n for n in names))
 
-	def test_event_emitted_after_export(self, soul, tmp_path, capsys):
+	@pytest.mark.asyncio
+	async def test_event_emitted_after_export(self, soul, tmp_path, capsys):
 		"""Instead of vault upload, we now emit SoulCreatedEvent."""
 		with patch("red_pill.events.get_event_bus") as mock_bus_func:
 			mock_bus = MagicMock()
@@ -132,7 +135,7 @@ class TestExportSoul:
 					with patch.object(soul, "create_manifest"):
 						with patch("os.listdir", return_value=[]):
 							output = str(tmp_path / "export.tar.gz")
-							soul.export_soul(output_path=output)
+							await soul.export_soul(output_path=output)
 
 			assert mock_bus.emit.called
 			# Verify SoulCreatedEvent was emitted
@@ -141,7 +144,8 @@ class TestExportSoul:
 		captured = capsys.readouterr()
 		assert "EventBus" in captured.out
 
-	def test_manifest_not_added_when_missing(self, soul, tmp_path, capsys):
+	@pytest.mark.asyncio
+	async def test_manifest_not_added_when_missing(self, soul, tmp_path, capsys):
 		"""tar created but manifest absent → archive still created."""
 		with patch("red_pill.soul.SoulCryptographer") as MockCrypto:
 			MockCrypto.return_value.encrypt_kit.return_value = None
@@ -150,10 +154,11 @@ class TestExportSoul:
 					with patch.object(soul, "create_manifest"):
 						with patch("os.listdir", return_value=[]):
 							output = str(tmp_path / "export.tar.gz")
-							soul.export_soul(output_path=output)
+							await soul.export_soul(output_path=output)
 		assert os.path.exists(output)
 
-	def test_manifest_added_to_tar_when_exists(self, soul, tmp_path, capsys):
+	@pytest.mark.asyncio
+	async def test_manifest_added_to_tar_when_exists(self, soul, tmp_path, capsys):
 		"""Line 136: manifest file exists → added to tar as 'manifest.json'."""
 		ts = time.strftime("%Y%m%d_%H%M%S")
 		snap_dir = tmp_path / "backups" / "qdrant"
@@ -168,7 +173,7 @@ class TestExportSoul:
 					with patch.object(soul, "backup_qdrant"):
 						with patch.object(soul, "create_manifest"):
 							output = str(tmp_path / "export.tar.gz")
-							soul.export_soul(output_path=output)
+							await soul.export_soul(output_path=output)
 		with tarfile.open(output, "r:gz") as tar:
 			assert "manifest.json" in tar.getnames()
 

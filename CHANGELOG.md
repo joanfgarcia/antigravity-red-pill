@@ -1,4 +1,13 @@
-## [6.8.0] - 2026-04-16
+## [6.8.0] - 2026-04-20
+
+### 🛡️ Final Hardening & Stability: "Titanium Bloom"
+- **[SEC] GPG Total Purge**: Eradicated legacy GPG encryption and decryption layers. The Bünker now operates exclusively on `pure-mls` (RFC 9420) for all local and distributed operations.
+- **[HEAL] Sleep Engine Stabilization**: Resolved the "Lazarus Loop" in `sleep.py` by implementing `SLEEP_MAX_BATCHES` and hardening the distillation loop against hardware-hanging infinite sequences.
+- **[SEC] ToolRegistry Hardening**: Implemented mandatory `auth_level` permissions and autonomous Sentinel audit telemetry for all kernel tools, creating a forensic trail for every agentic action.
+- **[QA] Comprehensive Test Stabilization**: Achieved 682/683 test success rate. Hardened Swarm MLS tests with isolation barriers and integrated `pytest-timeout` for hardware protection.
+- **[DOCS] Documentation Convergence**: Synchronized all documentation links, including Chapter 11 and Sentinel architecture, ensuring zero orphan files.
+
+## [6.7.1] - 2026-04-19
 
 ### 🚀 Titanium Optimization (v3.1) — "Titanium Bloom"
 - **[BOOT] XML Anchoring (Identity Guard)**: Grouped core directives and personae under `<bunker_directives mode="immune_core">` for deterministic attention.

@@ -335,12 +335,17 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 	# ── Drain Loop ────────────────────────────────────────────────────────
 	total_processed = 0
 	batch_number = 0
+	max_batches = getattr(cfg, "SLEEP_MAX_BATCHES", 1000)
 	consecutive_llm_failures = 0
 	scroll_limit = cfg.SLEEP_SCROLL_LIMIT
 	max_llm_failures = cfg.SLEEP_MAX_LLM_FAILURES
 
 	while True:
 		batch_number += 1
+		if batch_number > max_batches:
+			logger.warning(f"[SLEEP ENGINE] Safety limit reached ({max_batches} batches). Forcing exit to protect hardware.")
+			break
+
 		if consecutive_llm_failures >= max_llm_failures:
 			logger.error("[SLEEP ENGINE] Thermal breaker tripped. Aborting drain loop.")
 			break
@@ -391,6 +396,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 				if any(kw in raw_text.lower() for kw in ["code", "error", "bash", "python", "script", "commit"]):
 					target_col = "work_memories"
 
+			point_write_failed = False
 			point_llm_failed = False
 			for i, chunk in enumerate(chunks):
 				distilled = distill_engram(chunk)
@@ -417,11 +423,12 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 					prev_chunk_id = new_id
 					batch_processed += 1
 					chunks_saved += 1
-				except Exception:
-					pass
+				except Exception as e:
+					logger.error(f"[SLEEP ENGINE] Metabolic Fixation failed for {raw_id}: {e}")
+					point_write_failed = True
 
 			# Hub Synthesis
-			if len(surviving_chunks) > 1 and prev_chunk_id:
+			if len(surviving_chunks) > 1 and prev_chunk_id and not point_write_failed:
 				hub_summary = synthesize_hub([c["summary"] for c in surviving_chunks])
 				try:
 					hub_id = memory_manager.add_memory(
@@ -446,9 +453,9 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 				except Exception:
 					pass
 
-			if chunks_saved > 0:
+			if chunks_saved > 0 and not point_write_failed:
 				client.delete(collection_name=collection, points_selector=[raw_id])
-			elif not point_llm_failed:
+			elif not point_llm_failed and not point_write_failed:
 				client.delete(collection_name=collection, points_selector=[raw_id])
 
 		total_processed += batch_processed

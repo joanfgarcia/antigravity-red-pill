@@ -47,21 +47,6 @@ def test_vault_mls_encryption_cycle(temp_ia_dir):
 		assert f.read() == b"fake soul data 123"
 
 
-def test_vault_gpg_legacy_restoration(temp_ia_dir):
-	"""Tests that legacy GPG files are still decryptable."""
-	vault = SoulCryptographer()
-
-	# Create a dummy soul kit
-	kit_path = os.path.join(temp_ia_dir, "legacy_kit.tar.gz")
-	with open(kit_path, "wb") as f:
-		f.write(b"legacy gpg data")
-
-	# Manually create a GPG file (if gpg is installed) or mock the response
-	# Here we verify that decrypt_kit calls _decrypt_kit_gpg
-	with patch.object(vault, "_decrypt_kit_gpg", return_value="decrypted_path") as mock_gpg:
-		res = vault.decrypt_kit("legacy_kit.tar.gz.gpg")
-		assert res == "decrypted_path"
-		mock_gpg.assert_called_once_with("legacy_kit.tar.gz.gpg")
 
 
 def test_vault_identity_persistence(temp_ia_dir):

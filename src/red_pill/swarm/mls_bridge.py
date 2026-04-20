@@ -3,7 +3,7 @@ import hmac
 import logging
 from typing import Optional, Tuple
 
-from pure_mls.group import WelcomeInfo
+from pure_mls.group import Welcome
 from pure_mls.tree import KeyPackage
 
 from red_pill.swarm.mls_manager import MLSManager
@@ -66,7 +66,7 @@ class MLSBridge:
 		Returns True on success.
 		"""
 		try:
-			welcome = WelcomeInfo.from_bytes(welcome_bytes)
+			welcome = Welcome.from_bytes(welcome_bytes)
 			self._manager.join_community(community_alias, welcome)
 			logger.info(f"[MLSBridge] Joined community '{community_alias}' via Welcome.")
 			return True

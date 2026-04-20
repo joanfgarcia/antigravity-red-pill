@@ -64,7 +64,8 @@ def test_perform_sleep_cycle(mock_distill, mock_llm):
 	mock_client = mock_mem_mgr.client
 	mock_client.collection_exists.return_value = True
 	p1 = MagicMock(id="1", payload={"content": "work related code"})
-	mock_client.scroll.return_value = ([p1], None)
+	# First scroll is for signals, second for interactions, third for end of loop
+	mock_client.scroll.side_effect = [([], None), ([p1], None), ([], None)]
 	mock_distill.return_value = {"summary": "sum", "emotion": "joy", "intensity": 0.8}
 	count = perform_sleep_cycle(mock_mem_mgr)
 	assert count > 0

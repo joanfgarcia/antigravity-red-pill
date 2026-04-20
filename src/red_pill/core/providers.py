@@ -15,6 +15,11 @@ class BaseTelemetryProvider(ABC):
 		"""Compute the cognitive or hardware impact (delta) between two states."""
 		return {}
 
+	@abstractmethod
+	def log_event(self, event_type: str, data: Dict[str, Any]):
+		"""Log an event for auditing or telemetry."""
+		pass
+
 
 class BaseInferenceProvider(ABC):
 	"""Abstract Base Class for LLM inference (OpenAI, Local BitNet, etc.)."""

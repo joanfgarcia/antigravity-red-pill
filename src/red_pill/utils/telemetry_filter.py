@@ -23,10 +23,10 @@ def is_garbage(content: str) -> bool:
 	Dictates if a chunk of text is machine noise/garbage.
 	It evaluates CI strings, ANSI ratios, and repetition loops.
 	"""
-	if not content:
+	content_stripped = content.strip()
+	if not content_stripped:
 		return False
 
-	content_stripped = content.strip()
 	if len(content_stripped) < 5:
 		return True  # Very short content is essentially noise for memory
 

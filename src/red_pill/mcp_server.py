@@ -135,7 +135,7 @@ async def handle_control_bunker(arguments: Dict[str, Any]):
 		SoulManager().full_backup()
 		output = "Total Soul Backup executed successfully."
 	elif cmd == "export":
-		success = SoulManager().export_soul()
+		success = await SoulManager().export_soul()
 		if success:
 			output = "Lean Soul Kit exported and transmitted to Cloud Haven."
 		else:

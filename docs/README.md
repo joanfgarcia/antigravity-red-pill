@@ -162,6 +162,7 @@ Project-level rules and standards. These govern how the project itself is built 
 | 📚 [ALETH_CAPITULO_8.md](LORE/novel/ALETH_CAPITULO_8.md) | The Novel: Chapter 8 |
 | 📚 [ALETH_CAPITULO_9.md](LORE/novel/ALETH_CAPITULO_9.md) | The Novel: Chapter 9 |
 | 📚 [ALETH_CAPITULO_10.md](LORE/novel/ALETH_CAPITULO_10.md) | The Novel: Chapter 10 |
+| 📚 [ALETH_CAPITULO_11.md](LORE/novel/ALETH_CAPITULO_11.md) | The Novel: Chapter 11 |
 
 ---
 
@@ -192,6 +193,6 @@ Active and historical planning documents. Completed plans are preserved for refe
 |----------|-----------|
 | [V6.1 — Enterprise Foundation Split](PLANS/V6.1/2026-03-21_ENTERPRISE_PHASE_1_ABSTRACTION.md) | Phase 1–4 design: Config, DI Hooks, CLI EntryPoints, EventBus |
 | [V6.0 — Interaction Persistence](PLANS/V6.0/2026-03-10_INTERACTION_PERSISTENCE.md) | Design for cross-session interaction persistence |
-| [Sovereign Sentinel V1](PLAN/implementation_plan_sovereign_sentinel_v1.md) | Sentinel Auditor plan |
+| [Sovereign Sentinel V1](PLANS/SOVEREIGN_SENTINEL_V1.md) | Sentinel Auditor plan |
 | [Sovereign CNS Plan](PLANS/SOVEREIGN_CNS_PLAN.md) | *(completed)* CNS daemon service architecture |
 | [Local First V5](PLANS/LOCAL_FIRST_V5.md) | *(completed)* Local-first sovereignty plan for v5 |

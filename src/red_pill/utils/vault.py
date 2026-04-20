@@ -1,6 +1,5 @@
 import logging
 import os
-import subprocess
 from typing import Optional
 
 from pure_mls.group import MLSGroup
@@ -14,9 +13,9 @@ VAULT_STATE_PATH = os.path.join(os.path.expanduser("~/.config/red_pill"), "vault
 
 class SoulCryptographer:
 	"""
-	Sovereign Vault Cryptography (Refactored in v6.4 -> Core Plugin System).
-	Handles ONLY local Pure-MLS / GPG Encryption of Soul Kits.
-	Cloud transmissions are now handled by the 'cloud_sync' plugin via the EventBus.
+	Sovereign Vault Cryptography (Refactored in v6.8 -> Pure-MLS).
+	Handles local Pure-MLS Encryption/Decryption of Soul Kits.
+	Legacy GPG support has been purged for Zero-Bloat sovereignty.
 	"""
 
 	def _get_vault_group(self) -> MLSGroup:
@@ -43,10 +42,6 @@ class SoulCryptographer:
 		return group
 
 	def encrypt_kit(self, file_path: str) -> Optional[str]:
-		"""Encrypts a Soul Kit. Defaults to MLS."""
-		return self._encrypt_kit_mls(file_path)
-
-	def _encrypt_kit_mls(self, file_path: str) -> Optional[str]:
 		"""Encrypts a Soul Kit using pure-mls (RFC 9420)."""
 		try:
 			group = self._get_vault_group()
@@ -66,38 +61,11 @@ class SoulCryptographer:
 			return None
 
 	def decrypt_kit(self, encrypted_path: str) -> Optional[str]:
-		"""Dual-mode decryption: supports legacy .gpg and new .mls formats."""
-		if encrypted_path.endswith(".gpg"):
-			return self._decrypt_kit_gpg(encrypted_path)
-		elif encrypted_path.endswith(".mls"):
-			return self._decrypt_kit_mls(encrypted_path)
-		else:
-			logger.error(f"Unknown encryption format for {encrypted_path}")
+		"""MLS Decryption for .mls formats."""
+		if not encrypted_path.endswith(".mls"):
+			logger.error(f"Unsupported encryption format: {encrypted_path}. GPG legacy was purged.")
 			return None
 
-	def _decrypt_kit_gpg(self, encrypted_path: str) -> Optional[str]:
-		"""Legacy GPG Decryption."""
-		passphrase = os.getenv("VAULT_GPG_PASSPHRASE", "").strip()
-		if not passphrase:
-			logger.error("Passphrase required for GPG decryption.")
-			return None
-
-		output_path = encrypted_path.replace(".gpg", "")
-		try:
-			subprocess.run(
-				["gpg", "--batch", "--yes", "--passphrase-fd", "0", "--output", output_path, "--decrypt", encrypted_path],
-				input=passphrase,
-				capture_output=True,
-				text=True,
-				check=True,
-			)
-			return output_path
-		except Exception as e:
-			logger.error(f"GPG Decryption failed: {e}")
-			return None
-
-	def _decrypt_kit_mls(self, encrypted_path: str) -> Optional[str]:
-		"""MLS Decryption."""
 		try:
 			group = self._get_vault_group()
 			with open(encrypted_path, "rb") as f:

@@ -28,7 +28,7 @@ class SentinelAuditor:
 	def __init__(self, target_repos: List[str] = None):
 		self.target_repos = target_repos or []
 		self.logger = logging.getLogger("redpill.auditor")
-		self.uv_path = "/home/joan/.local/bin/uv"
+		self.uv_path = os.path.expanduser("~/.local/bin/uv")
 
 	def audit_repo(self, repo_path: str) -> AuditReport:
 		"""Run standard sovereign checks on a repository."""
@@ -123,7 +123,7 @@ class SentinelAuditor:
 if __name__ == "__main__":
 	import time
 	logging.basicConfig(level=logging.INFO)
-	auditor = SentinelAuditor(target_repos=["/home/joan/Documents/IA/pure-mls", "/home/joan/Documents/IA/sharing"])
+	auditor = SentinelAuditor(target_repos=[os.path.expanduser("~/Documents/IA/pure-mls"), os.path.expanduser("~/Documents/IA/sharing")])
 	for repo in auditor.target_repos:
 		res = auditor.audit_repo(repo)
 		auditor.sync_to_thalamus(res)

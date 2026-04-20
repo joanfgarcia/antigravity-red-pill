@@ -82,7 +82,8 @@ def test_perform_sleep_cycle_affective_culling():
 	point = MagicMock()
 	point.id = "idx-1"
 	point.payload = {"content": "Normal sentence. Another sentence. Boring stuff."}
-	mock_mgr.client.scroll.return_value = ([point], None)
+	# 1 for signals, 1 for interaction, 1 for end of loop
+	mock_mgr.client.scroll.side_effect = [([], None), ([point], None), ([], None)]
 	with patch("red_pill.metabolism.sleep._check_llm_available", return_value=True):
 		with patch("red_pill.metabolism.sleep.chunk_text", return_value=["Boring part", "Interesting part"]):
 			with patch("red_pill.metabolism.sleep.distill_engram") as mock_distill:

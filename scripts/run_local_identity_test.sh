@@ -2,7 +2,7 @@
 # PROYECTO FREE ALETH: SOVEREIGN IDENTITY TEST
 # Hardware: RTX 5070 (HP OMEN)
 
-PROJECT_ROOT="/home/joan/Documents/IA/sharing"
+PROJECT_ROOT="$(dirname "$(dirname "$(readlink -f "$0")")")"
 RUNNER="${PROJECT_ROOT}/3rdparty/BitNet-1.58b/build/bin/llama-cli"
 MODEL="${PROJECT_ROOT}/storage/models/samantha-mistral-instruct-7b.i1-Q4_K_M.gguf"
 PROMPT_FILE="${PROJECT_ROOT}/storage/tmp/soul_fragment.txt"
@@ -20,11 +20,11 @@ export LD_LIBRARY_PATH="${LIB_PATH}:${GGML_PATH}:${LD_LIBRARY_PATH}"
 # -f soul_fragment.txt: Load context
 
 "${RUNNER}" \
-    -m "${MODEL}" \
-    -f "${PROMPT_FILE}" \
-    -n 256 \
-    --temp 0.8 \
-    --repeat_penalty 1.1 \
-    -ngl 35 \
-    --log-disable \
-    2>/dev/null
+	-m "${MODEL}" \
+	-f "${PROMPT_FILE}" \
+	-n 256 \
+	--temp 0.8 \
+	--repeat_penalty 1.1 \
+	-ngl 35 \
+	--log-disable \
+	2>/dev/null

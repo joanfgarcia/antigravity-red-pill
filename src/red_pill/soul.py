@@ -152,8 +152,7 @@ class SoulManager:
 		if encrypted_path:
 			os.remove(output_path)
 			output_path = encrypted_path
-			mech = "MLS" if output_path.endswith(".mls") else "GPG"
-			print(f"Lean Export Secured ({mech}): {output_path}")
+			print(f"Lean Export Secured (MLS): {output_path}")
 
 		# 4. Notify Cloud Sync / Ecosystem via EventBus
 		from red_pill.events import SoulCreatedEvent, get_event_bus

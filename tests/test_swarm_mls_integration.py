@@ -6,6 +6,8 @@ Cubre: MLSBridge, admission tokens, flujo E2E con Firebase mockeado.
 
 import base64
 import json
+import tempfile
+import tempfile
 from unittest.mock import MagicMock, patch
 
 from red_pill.skills.swarm_messaging import SwarmIntent, SwarmMessagingSkill
@@ -18,9 +20,16 @@ SHARED_SECRET = b"test_sovereign_secret_32bytes!!!"
 
 
 class TestMLSBridgeAdmissionToken:
-	def setup_method(self):
+	def setup_method(self, method):
+		self.tmp_dir = tempfile.TemporaryDirectory()
+		self._patcher = patch("red_pill.swarm.mls_manager.SWARM_STATE_DIR", self.tmp_dir.name)
+		self._patcher.start()
 		with patch("red_pill.utils.vault_crypto.VaultCrypto.get_identity", return_value=_mock_identity(b"aleth_seed_32_bytes_long_!!!!!")):
 			self.bridge = MLSBridge(SHARED_SECRET)
+
+	def teardown_method(self, method):
+		self._patcher.stop()
+		self.tmp_dir.cleanup()
 
 	def test_make_and_verify_token_valid(self):
 		kp_bytes, token = self.bridge.get_my_key_package()
@@ -57,6 +66,15 @@ class TestSwarmMessagingE2E:
 	"""
 	Simulates Aleth (sender) → Nova (receiver) using pure-mls with a mock transport.
 	"""
+
+	def setup_method(self, method):
+		self.tmp_dir = tempfile.TemporaryDirectory()
+		self._patcher = patch("red_pill.swarm.mls_manager.SWARM_STATE_DIR", self.tmp_dir.name)
+		self._patcher.start()
+
+	def teardown_method(self, method):
+		self._patcher.stop()
+		self.tmp_dir.cleanup()
 
 	def _make_skill(self, identity: str, seed: bytes) -> SwarmMessagingSkill:
 		mock_tm = MagicMock()

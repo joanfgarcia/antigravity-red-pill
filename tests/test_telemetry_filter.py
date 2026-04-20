@@ -4,7 +4,7 @@ from red_pill.utils.telemetry_filter import filter_noise_from_turn, is_garbage
 def test_is_garbage_empty_or_short():
 	assert is_garbage("") is False
 	assert is_garbage("   ") is False
-	assert is_garbage("hi") is False
+	assert is_garbage("hi") is True
 
 
 def test_is_garbage_pytest():

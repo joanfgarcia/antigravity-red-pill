@@ -2,7 +2,7 @@ import logging
 import os
 from typing import Dict
 
-from pure_mls.group import GroupUpdate, MLSGroup, WelcomeInfo
+from pure_mls.group import GroupUpdate, MLSGroup, Welcome
 from pure_mls.tree import KeyPackage
 
 from red_pill.utils.vault_crypto import VaultCrypto
@@ -70,7 +70,7 @@ class MLSManager:
 			sign_fn=self.sig_key.sign,
 		)
 
-	def join_community(self, alias: str, welcome: WelcomeInfo) -> MLSGroup:
+	def join_community(self, alias: str, welcome: Welcome) -> MLSGroup:
 		"""Joins a community using a Welcome message."""
 		logger.info(f"Joining Swarm Community: {alias}")
 		group = MLSGroup.join(welcome, self.sig_key, self.kem_key)
