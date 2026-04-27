@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
+import getpass
 import json
 import os
-import getpass
 import subprocess
 import sys
 import time
