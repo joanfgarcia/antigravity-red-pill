@@ -371,6 +371,7 @@ class RedPillConfig(BaseSettings):
 	LAZARUS_SYNC_ENABLED: bool = True
 	LAZARUS_SYNC_INTERVAL: int = 300
 	LAZARUS_STATE_FILE: str = os.path.join(_IA_DIR, "storage", "lazarus_state.json")
+	# Prevents autonomous git pushes from consuming machine resources or interrupting the operator's active IDE sessions during office hours (09:00 - 18:00).
 	LAZARUS_OFFICE_HOURS_PROTECTION: bool = True
 
 	# -----------------------------------------------------------------------
