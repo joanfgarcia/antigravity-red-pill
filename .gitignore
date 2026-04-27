@@ -44,7 +44,7 @@ htmlcov/
 *.log
 
 # Local data
-data/
+/data/
 *.db
 *.sqlite
 
