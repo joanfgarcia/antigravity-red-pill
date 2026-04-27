@@ -355,11 +355,49 @@ class LazarusPulse:
 		except Exception as e:
 			logger.error(f"Pulse: Resonance ritual failed: {e}")
 
+	async def _try_auto_push(self, trigger_event: str) -> None:
+		"""Guardrails for git push: avoids pushing to main/master or during office hours."""
+		import datetime
+		
+		# 1. Branch check
+		proc = await asyncio.create_subprocess_exec("git", "rev-parse", "--abbrev-ref", "HEAD", cwd=cfg.IA_DIR, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+		stdout, _ = await proc.communicate()
+		branch = stdout.decode().strip()
+		if branch in ["main", "master"]:
+			logger.warning(f"Auto-Healer: Skipping auto-push for {trigger_event}. Branch is protected ({branch}).")
+			return
+
+		# 2. Time check (M-F, 09:00 - 18:00)
+		if cfg.LAZARUS_OFFICE_HOURS_PROTECTION:
+			now = datetime.datetime.now()
+			is_weekday = now.weekday() < 5
+			is_office_hours = 9 <= now.hour < 18
+			if is_weekday and is_office_hours:
+				logger.warning(f"Auto-Healer: Skipping auto-push for {trigger_event}. Office hours restriction (M-F 09-18) is ENABLED.")
+				return
+
+		# 3. Check if there are changes
+		proc_status = await asyncio.create_subprocess_exec("git", "status", "--porcelain", cwd=cfg.IA_DIR, stdout=asyncio.subprocess.PIPE)
+		stdout_status, _ = await proc_status.communicate()
+		if not stdout_status.strip():
+			logger.info("Auto-Healer: No files changed to commit.")
+			return
+
+		# 4. Commit and push
+		logger.info(f"Auto-Healer: Executing background commit & push for {trigger_event}...")
+		proc_add = await asyncio.create_subprocess_exec("git", "add", ".", cwd=cfg.IA_DIR)
+		await proc_add.communicate()
+		proc_commit = await asyncio.create_subprocess_exec("git", "commit", "-m", f"chore(auto-heal): background recovery [{trigger_event}]", cwd=cfg.IA_DIR)
+		await proc_commit.communicate()
+		proc_push = await asyncio.create_subprocess_exec("git", "push", "origin", "HEAD", cwd=cfg.IA_DIR)
+		await proc_push.communicate()
+		logger.info(f"Auto-Healer: Successfully healed and pushed: {trigger_event}")
+
 	async def _auto_heal_ritual(self) -> None:
 		"""
 		Auto-Healer Minion.
-		Reads the SQLite Inbox for muted plugin pain signals and attempts dry-run
-		fixes (e.g., OAuth token refresh) before alerting the Operator.
+		Reads the SQLite Inbox for mutated pain signals and attempts autonomous
+		fixes (e.g., Ruff formatting, Mypy healing) before pushing.
 		"""
 		try:
 			from red_pill.core.inbox import MinionInbox
@@ -370,6 +408,27 @@ class LazarusPulse:
 			healed_ids = []
 			for report in unread:
 				event_id = report.get("event_id", "")
+
+				if event_id == "signal_ruff_failure":
+					logger.info("Auto-Healer: Attempting to heal 'signal_ruff_failure' (Ruff)...")
+					proc1 = await asyncio.create_subprocess_exec("uv", "run", "ruff", "check", "--fix", ".", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, cwd=cfg.IA_DIR)
+					await proc1.communicate()
+					proc2 = await asyncio.create_subprocess_exec("uv", "run", "ruff", "format", ".", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, cwd=cfg.IA_DIR)
+					await proc2.communicate()
+					await self._try_auto_push(event_id)
+					healed_ids.append(report["id"])
+					continue
+
+				if event_id == "signal_mypy_failure":
+					logger.info("Auto-Healer: Attempting to heal 'signal_mypy_failure' (HealerMinion)...")
+					from red_pill.swarm.agents.healer import HealerMinion
+					healer = HealerMinion()
+					# Execute healing on src directory
+					result = await healer.execute("Heal mypy", path=os.path.join(cfg.IA_DIR, "src", "red_pill"))
+					if result.get("modified_files", False):
+						await self._try_auto_push(event_id)
+					healed_ids.append(report["id"])
+					continue
 
 				# Auto-Healer Heuristics
 				if event_id.startswith("signal_cloud_sync_error"):

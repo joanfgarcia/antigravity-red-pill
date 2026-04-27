@@ -366,12 +366,12 @@ class RedPillConfig(BaseSettings):
 	CADENCE_BURST_THRESHOLD: float = 30.0
 	CADENCE_ABSENCE_THRESHOLD: int = 86400 * 2
 
-	# -----------------------------------------------------------------------
-	# LAZARUS SYNC
+	# LAZARUS SYNC & HEALER
 	# -----------------------------------------------------------------------
 	LAZARUS_SYNC_ENABLED: bool = True
 	LAZARUS_SYNC_INTERVAL: int = 300
 	LAZARUS_STATE_FILE: str = os.path.join(_IA_DIR, "storage", "lazarus_state.json")
+	LAZARUS_OFFICE_HOURS_PROTECTION: bool = True
 
 	# -----------------------------------------------------------------------
 	# SEMANTIC RESONANCE
