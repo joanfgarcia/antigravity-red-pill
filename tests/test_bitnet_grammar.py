@@ -2,6 +2,8 @@ import json
 import os
 import subprocess
 
+import pytest
+
 MODEL_PATH = os.path.join(os.getcwd(), "3rdparty/BitNet-1.58b/models/2B-4T/ggml-model-i2_s.gguf")
 RUNNER_PATH = os.path.join(os.getcwd(), "3rdparty/BitNet-1.58b/build/bin/llama-cli")
 GRAMMAR_PATH = os.path.join(os.getcwd(), "src/red_pill/inference/bitnet/json.gbnf")
@@ -18,6 +20,7 @@ def run_grammar_inference(prompt):
 	return full_output.strip()
 
 
+@pytest.mark.skipif(not os.path.exists(RUNNER_PATH), reason="BitNet-1.58b not installed")
 def test_enhanced_trust():
 	print("--- Testing BitNet + GBNF Grammar ---")
 	prompt = "User: Generate a task with id 101, title 'Verify Swarm', and done true. Output JSON only.\nAssistant:"

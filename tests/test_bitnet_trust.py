@@ -2,6 +2,8 @@ import json
 import os
 import subprocess
 
+import pytest
+
 MODEL_PATH = os.path.join(os.getcwd(), "3rdparty/BitNet-1.58b/models/2B-4T/ggml-model-i2_s.gguf")
 RUNNER_PATH = os.path.join(os.getcwd(), "3rdparty/BitNet-1.58b/build/bin/llama-cli")
 
@@ -15,6 +17,7 @@ def run_raw_inference(prompt):
 	return full_output.strip().split("\n")[-1]
 
 
+@pytest.mark.skipif(not os.path.exists(RUNNER_PATH), reason="BitNet-1.58b not installed")
 def test_consistency():
 	print("--- Test 1: Consistency (5 iterations) ---")
 	prompt = "User: List the first 5 prime numbers.\nAssistant:"
@@ -29,6 +32,7 @@ def test_consistency():
 	return unique_count == 1
 
 
+@pytest.mark.skipif(not os.path.exists(RUNNER_PATH), reason="BitNet-1.58b not installed")
 def test_schema_adherence():
 	print("\n--- Test 2: Schema Adherence ---")
 	prompt = "User: Generate a JSON object for a task with 'id' (int), 'title' (string), and 'done' (boolean). Only output the JSON.\nAssistant:"
