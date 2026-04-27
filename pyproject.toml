@@ -223,6 +223,7 @@ markers = [
 
 [tool.mypy]
 python_version = "3.12"
+platform = "linux"
 check_untyped_defs = true
 explicit_package_bases = true
 mypy_path = "src"
