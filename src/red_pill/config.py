@@ -451,7 +451,7 @@ class RedPillConfig(BaseSettings):
 	SIGNAL_BASE_NOTIFICATION: float = 5.0
 	SIGNAL_BASE_PAIN_CUDA: float = 7.0
 	SIGNAL_PAIN_ESCALATION_RATE: float = 0.5
-	SIGNAL_AMNESIA_HOURS: int = 4
+	SIGNAL_AMNESIA_HOURS: int = 8
 	SIGNAL_MIGRAINE_VECTORS: int = 10000
 
 	# -----------------------------------------------------------------------
