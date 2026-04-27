@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 # SEC-001: Vault State Persistence
 VAULT_STATE_PATH = os.path.join(os.path.expanduser("~/.config/red_pill"), "vault_group.state")
 
+
 class SoulCryptographer:
 	"""
 	Sovereign Vault Cryptography (Refactored in v6.8 -> Pure-MLS).

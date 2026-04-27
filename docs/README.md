@@ -191,6 +191,7 @@ Active and historical planning documents. Completed plans are preserved for refe
 
 | Document | What it is |
 |----------|-----------|
+| [V6.9 — Evolutionary Set Point](PLANS/V6.9_EVOLUTIONARY_SET_POINT.md) | V6.9 Evolutionary Set Point plan |
 | [V6.1 — Enterprise Foundation Split](PLANS/V6.1/2026-03-21_ENTERPRISE_PHASE_1_ABSTRACTION.md) | Phase 1–4 design: Config, DI Hooks, CLI EntryPoints, EventBus |
 | [V6.0 — Interaction Persistence](PLANS/V6.0/2026-03-10_INTERACTION_PERSISTENCE.md) | Design for cross-session interaction persistence |
 | [Sovereign Sentinel V1](PLANS/SOVEREIGN_SENTINEL_V1.md) | Sentinel Auditor plan |

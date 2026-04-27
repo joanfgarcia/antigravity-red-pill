@@ -11,10 +11,11 @@ logger = logging.getLogger(__name__)
 
 class BayesianAxonEngine:
 	"""Motor matemático (B-1.2 y B-1.4)"""
+
 	def __init__(self, decay_rate: float = 0.05, epsilon: float = 0.1, delta: float = 0.2):
-		self.decay_rate = decay_rate # λ para el enfriamiento homeostático
-		self.epsilon = epsilon	   # +Ɛ Recompensa por éxito
-		self.delta = delta		   # -Δ Castigo por fricción
+		self.decay_rate = decay_rate  # λ para el enfriamiento homeostático
+		self.epsilon = epsilon  # +Ɛ Recompensa por éxito
+		self.delta = delta  # -Δ Castigo por fricción
 
 	def apply_temporal_decay(self, weight: float, last_accessed: datetime.datetime) -> float:
 		"""B-1.4: Enfriamiento temporal para que las heurísticas no se osifiquen."""
@@ -77,7 +78,7 @@ class BayesianLearningPlugin(SovereignPlugin):
 			# Durante la inyección cognitiva, parseamos si hubo scolding/fricción en el turno (B-1.3)
 			# Ej: payload["operator_friction"] = True si el Operador tuvo que corregirme.
 			payload.get("operator_friction", False)
-			active_axon = payload.get("active_engram_id") # El engrama que originó la acción
+			active_axon = payload.get("active_engram_id")  # El engrama que originó la acción
 
 			if active_axon:
 				# Aquí despacharíamos asíncronamente el update a Qdrant para ajustarlo
@@ -96,8 +97,4 @@ class BayesianLearningPlugin(SovereignPlugin):
 
 	async def export_state(self) -> Dict[str, Any]:
 		# Aquí exportaríamos las matrices de pesos bayesianos o el snapshot de engramas activos
-		return {
-			"decay_rate": self.engine.decay_rate,
-			"epsilon": self.engine.epsilon,
-			"delta": self.engine.delta
-		}
+		return {"decay_rate": self.engine.decay_rate, "epsilon": self.engine.epsilon, "delta": self.engine.delta}

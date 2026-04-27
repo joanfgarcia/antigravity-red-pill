@@ -31,11 +31,7 @@ def generate_vitality_report():
 		return "SYSTEM OPTIMAL: No signal_memories collection found."
 
 	# Scroll to get recent signals
-	points, _ = manager.client.scroll(
-		collection_name=collection,
-		limit=100,
-		with_payload=True
-	)
+	points, _ = manager.client.scroll(collection_name=collection, limit=100, with_payload=True)
 
 	if not points:
 		return "SYSTEM OPTIMAL: Zero pain signals detected in the Cortex."
@@ -73,15 +69,15 @@ def generate_vitality_report():
 	if len(ts_float) >= 2:
 		intervals = []
 		for i in range(len(ts_float) - 1):
-			intervals.append(ts_float[i] - ts_float[i+1])
+			intervals.append(ts_float[i] - ts_float[i + 1])
 		avg_interval = sum(intervals) / len(intervals)
 
 		if avg_interval < 60:
 			mtbf_str = f"{avg_interval:.1f} seconds"
 		elif avg_interval < 3600:
-			mtbf_str = f"{avg_interval/60:.1f} minutes"
+			mtbf_str = f"{avg_interval / 60:.1f} minutes"
 		else:
-			mtbf_str = f"{avg_interval/3600:.1f} hours"
+			mtbf_str = f"{avg_interval / 3600:.1f} hours"
 
 	# 3. Lazarus Loops (Chronic failure detection)
 	lazarus_loops = [t for t, count in type_counts.items() if count >= 3]
@@ -121,22 +117,12 @@ def main():
 		report_content = generate_vitality_report()
 
 		# Drop in inbox
-		MinionInbox().drop_report(
-			event_id=event_id,
-			source="SentinelAuditor",
-			status="success",
-			content=report_content
-		)
+		MinionInbox().drop_report(event_id=event_id, source="SentinelAuditor", status="success", content=report_content)
 		print(f"[✓] Vitality Report [{event_id}] delivered to Minion Inbox.")
 
 	except Exception as e:
 		print(f"[✗] Auditor Failed: {e}")
-		MinionInbox().drop_report(
-			event_id=event_id,
-			source="SentinelAuditor",
-			status="failed",
-			content=f"Auditor Crash: {str(e)}"
-		)
+		MinionInbox().drop_report(event_id=event_id, source="SentinelAuditor", status="failed", content=f"Auditor Crash: {str(e)}")
 		sys.exit(1)
 
 

@@ -199,7 +199,7 @@ def main():
 			pass
 
 	# 2. Critical Identity Block (Recency Bias Anchoring)
-	print("\n<bunker_directives mode=\"immune_core\">")
+	print('\n<bunker_directives mode="immune_core">')
 
 	# Dynamic Identity Pruning: Extract active skin
 	active_skin = "DEFAULT"

@@ -47,8 +47,6 @@ def test_vault_mls_encryption_cycle(temp_ia_dir):
 		assert f.read() == b"fake soul data 123"
 
 
-
-
 def test_vault_identity_persistence(temp_ia_dir):
 	"""Tests that the vault identity is persistent across vault instances."""
 	kem1, sig1 = VaultCrypto.get_identity()

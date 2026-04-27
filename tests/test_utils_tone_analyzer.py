@@ -24,6 +24,7 @@ class TestGetDominantMood:
 	def test_returns_non_neutral_color_immediately(self):
 		"""Line 74: first non-default color found → returned immediately."""
 		import time
+
 		p1 = MagicMock()
 		p1.payload = {"color": "red", "immune": False, "created_at": time.time()}
 		mgr = self._make_manager([p1])
@@ -33,6 +34,7 @@ class TestGetDominantMood:
 	def test_fallback_scroll_on_order_by_exception(self):
 		"""Lines 55-62: order_by scroll fails → fallback to basic scroll."""
 		import time
+
 		p1 = MagicMock()
 		p1.payload = {"color": "orange", "immune": False, "created_at": time.time()}
 		mgr = self._make_manager([p1], fallback_exception=Exception("order_by not supported"))
@@ -42,6 +44,7 @@ class TestGetDominantMood:
 	def test_all_default_color_returns_default(self):
 		"""Lines 75-76: all points have default color → latest_color set, returned at end."""
 		import time
+
 		p1 = MagicMock()
 		p1.payload = {"color": cfg.DEFAULT_COLOR, "immune": False, "created_at": time.time()}
 		p2 = MagicMock()
@@ -60,6 +63,7 @@ class TestGetDominantMood:
 	def test_immune_points_skipped(self):
 		"""Line 71: immune=True → skipped, returns default."""
 		import time
+
 		p1 = MagicMock()
 		p1.payload = {"color": "red", "immune": True, "created_at": time.time()}
 		mgr = self._make_manager([p1])

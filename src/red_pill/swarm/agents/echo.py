@@ -7,12 +7,14 @@ from red_pill.swarm.base import Minion
 
 logger = logging.getLogger("red_pill.swarm.echo")
 
+
 class EchoMinion(Minion):
 	"""
 	PROJECT ECHO: The Mirror Minion.
 	A persistent context sentinel designed to maintain Aleth's state
 	across session boundaries.
 	"""
+
 	name: str = "Echo"
 	specialization: str = "context_persistence"
 
@@ -45,7 +47,7 @@ class EchoMinion(Minion):
 		if payload is None:
 			return {"status": "error", "message": "USP Profile payload is empty."}
 
-		global_mood = payload.get('global', {})
+		global_mood = payload.get("global", {})
 		dominant_mood = max(global_mood, key=global_mood.get) if global_mood else "unknown"
 		self.log(f"USP Analysis: Global Mood is {dominant_mood}.")
 
@@ -53,7 +55,7 @@ class EchoMinion(Minion):
 			"status": "success",
 			"briefing_id": f"echo_briefing_{int(time.time())}",
 			"mood": global_mood,
-			"interactions": payload.get("interaction_count", 0)
+			"interactions": payload.get("interaction_count", 0),
 		}
 
 	async def _monitor_pulse(self) -> Dict[str, Any]:
@@ -64,11 +66,7 @@ class EchoMinion(Minion):
 		self.log("Evaluating emotional resonance drift [last_3d vs last_7d]...")
 
 		# Valence mapping for chroma keys
-		VALENCE_MAP = {
-			"emerald": 1.0, "gold": 1.0, "cyan": 0.5,
-			"purple": 0.0, "orange": 0.0, "yellow": 0.0,
-			"red": -1.0, "blue": -0.5, "gray": -0.2
-		}
+		VALENCE_MAP = {"emerald": 1.0, "gold": 1.0, "cyan": 0.5, "purple": 0.0, "orange": 0.0, "yellow": 0.0, "red": -1.0, "blue": -0.5, "gray": -0.2}
 
 		manager = MemoryManager()
 		from red_pill.utils.mood_profile import ID_OPERATOR_MOOD
@@ -91,7 +89,7 @@ class EchoMinion(Minion):
 		score_7d = calc_v_score(vec_7d)
 
 		drift = score_3d - score_7d
-		threshold = 0.10 # Significant shift in resonance
+		threshold = 0.10  # Significant shift in resonance
 
 		if abs(drift) < threshold:
 			status = "stable"
@@ -100,17 +98,8 @@ class EchoMinion(Minion):
 		else:
 			status = "deteriorating"
 
-		dominants = {
-			"3d": max(vec_3d, key=vec_3d.get) if vec_3d else "unknown",
-			"7d": max(vec_7d, key=vec_7d.get) if vec_7d else "unknown"
-		}
+		dominants = {"3d": max(vec_3d, key=vec_3d.get) if vec_3d else "unknown", "7d": max(vec_7d, key=vec_7d.get) if vec_7d else "unknown"}
 
 		self.log(f"Resonance Sync: {status.upper()} (Drift: {drift:.2f}, Dominant 3d: {dominants['3d']})")
 
-		return {
-			"status": "success",
-			"pulse": status,
-			"drift": drift,
-			"dominants": dominants,
-			"scores": {"3d": score_3d, "7d": score_7d}
-		}
+		return {"status": "success", "pulse": status, "drift": drift, "dominants": dominants, "scores": {"3d": score_3d, "7d": score_7d}}

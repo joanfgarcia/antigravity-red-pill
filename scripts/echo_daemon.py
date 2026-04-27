@@ -12,11 +12,13 @@ from red_pill.swarm.factory import MinionFactory
 logger = logging.getLogger("red_pill.echo_daemon")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
+
 class EchoDaemon:
 	"""
 	Long-running background process for the Echo Mirror Minion.
 	Maintains context integrity and proactive briefings while the IDE is offline.
 	"""
+
 	def __init__(self):
 		self.running = True
 		self.echo = MinionFactory.create("echo_mirror")
@@ -40,7 +42,7 @@ class EchoDaemon:
 				await self.echo.execute("monitor_pulse")
 
 				# 4. Sleep interval (configurable)
-				await asyncio.sleep(60) # Default: check every minute
+				await asyncio.sleep(60)  # Default: check every minute
 			except Exception as e:
 				logger.error(f"Echo Daemon Loop Error: {e}")
 				await asyncio.sleep(10)
@@ -48,6 +50,7 @@ class EchoDaemon:
 	def stop(self):
 		logger.info("Echo Daemon: Shutdown signal received. Hibernating context...")
 		self.running = False
+
 
 if __name__ == "__main__":
 	daemon = EchoDaemon()

@@ -8,9 +8,11 @@ from red_pill.tasks.definitions import dummy_audit_task, extract_knowledge
 
 app = FastAPI(title="Red Pill Background Task Gateway")
 
+
 class TaskRequest(BaseModel):
 	task_name: str
 	kwargs: Dict[str, Any] = {}
+
 
 @app.post("/api/tasks/enqueue")
 def enqueue_task(request: TaskRequest):
@@ -22,6 +24,7 @@ def enqueue_task(request: TaskRequest):
 		raise HTTPException(status_code=400, detail="Unknown task_name.")
 
 	return {"task_id": task.id, "status": "enqueued"}
+
 
 @app.get("/api/tasks/{task_id}")
 def get_task_status(task_id: str):

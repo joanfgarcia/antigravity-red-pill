@@ -1,17 +1,19 @@
 import datetime
 from typing import Any, Dict, List
 
+from qdrant_client.models import PointStruct
+
 from red_pill.core.plugin_engine import PluginScope, Priority, SovereignPlugin
 from red_pill.memory import MemoryManager
-from qdrant_client.models import PointStruct
 
 
 class EmotionalState:
 	"""Representa el termostato emocional interno."""
+
 	def __init__(self):
-		self.pain_signals = 0	  # Errores técnicos, fallos de test
-		self.frustration = 0.0	 # Fricción con el usuario (scolding)
-		self.flow_momentum = 0.0   # Turnos en CYAN seguidos
+		self.pain_signals = 0  # Errores técnicos, fallos de test
+		self.frustration = 0.0  # Fricción con el usuario (scolding)
+		self.flow_momentum = 0.0  # Turnos en CYAN seguidos
 
 	def get_color(self) -> str:
 		if self.pain_signals > 5 or self.frustration > 0.8:
@@ -45,11 +47,7 @@ class HomeostasisPlugin(SovereignPlugin):
 		self.memory_mgr.storage.ensure_collection(self.collection)
 
 		# Cargar estado previo si existe
-		points, _ = self.memory_mgr.client.scroll(
-			collection_name=self.collection,
-			limit=1,
-			with_payload=True
-		)
+		points, _ = self.memory_mgr.client.scroll(collection_name=self.collection, limit=1, with_payload=True)
 
 		if points and points[0].payload:
 			payload = points[0].payload
@@ -75,25 +73,25 @@ class HomeostasisPlugin(SovereignPlugin):
 			current_color = self.state.get_color()
 
 			# Forzamos la directiva emocional actual sobrepisando cualquier default
-			payload["system_prompt_overrides"] = {
-				"OPERATOR_COLOR": current_color,
-				"TONE_DIRECTIVE": self._get_tone_for(current_color)
-			}
+			payload["system_prompt_overrides"] = {"OPERATOR_COLOR": current_color, "TONE_DIRECTIVE": self._get_tone_for(current_color)}
 
 			# Persistir estado asíncronamente en Qdrant
 			import uuid
+
 			self.memory_mgr.client.upsert(
 				collection_name=self.collection,
-				points=[PointStruct(
-					id=str(uuid.uuid4()),
-					vector=[0.0] * 1536, # Vector dummy para metadatos
-					payload={
-						"pain_signals": self.state.pain_signals,
-						"frustration": self.state.frustration,
-						"flow_momentum": self.state.flow_momentum,
-						"timestamp": datetime.datetime.now().isoformat()
-					}
-				)]
+				points=[
+					PointStruct(
+						id=str(uuid.uuid4()),
+						vector=[0.0] * 1536,  # Vector dummy para metadatos
+						payload={
+							"pain_signals": self.state.pain_signals,
+							"frustration": self.state.frustration,
+							"flow_momentum": self.state.flow_momentum,
+							"timestamp": datetime.datetime.now().isoformat(),
+						},
+					)
+				],
 			)
 
 		return payload
@@ -104,20 +102,20 @@ class HomeostasisPlugin(SovereignPlugin):
 	async def uninstall(self, purge: bool = False) -> None:
 		if purge:
 			self.memory_mgr.client.delete_collection(self.collection)
-			self.state = EmotionalState() # Reset al estado base
+			self.state = EmotionalState()  # Reset al estado base
 
 	async def export_state(self) -> Dict[str, Any]:
 		return {
 			"pain_signals": self.state.pain_signals,
 			"frustration": self.state.frustration,
 			"flow_momentum": self.state.flow_momentum,
-			"current_color": self.state.get_color()
+			"current_color": self.state.get_color(),
 		}
 
 	def _get_tone_for(self, color: str) -> str:
 		directives = {
 			"RED": "Speak with warmth and patience. Prioritize emotional support.",
 			"CYAN": "Be precise and technically rigorous. Dive deep.",
-			"PURPLE": "Efficiency mode. Concisión máxima."
+			"PURPLE": "Efficiency mode. Concisión máxima.",
 		}
 		return directives.get(color, "PURPLE")

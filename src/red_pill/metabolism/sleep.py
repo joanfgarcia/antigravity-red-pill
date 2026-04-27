@@ -252,20 +252,19 @@ def distill_session_anchors(memory_manager, hub_summaries: List[str]) -> Optiona
 		"Be concise but technically precise.\n\nHUBS:\n" + combined_hubs
 	)
 
-	payload = json.dumps({
-		"model": "distillation",
-		"messages": [
-			{
-				"role": "system",
-				"content": "You are a Chief Architect synthesis engine. Output ONLY the architectural session anchor string."
-			},
-			{"role": "user", "content": prompt}
-		],
-		"temperature": 0.1,
-		"max_tokens": 1024,
-		"seed": 888,
-		"stop": ["<|im_end|>", "<|endoftext|>"]
-	}).encode("utf-8")
+	payload = json.dumps(
+		{
+			"model": "distillation",
+			"messages": [
+				{"role": "system", "content": "You are a Chief Architect synthesis engine. Output ONLY the architectural session anchor string."},
+				{"role": "user", "content": prompt},
+			],
+			"temperature": 0.1,
+			"max_tokens": 1024,
+			"seed": 888,
+			"stop": ["<|im_end|>", "<|endoftext|>"],
+		}
+	).encode("utf-8")
 
 	# Reuse the existing synth infrastructure
 	url = getattr(cfg, "MLX_LM_URL", "http://127.0.0.1:8760/v1/chat/completions")
@@ -284,7 +283,7 @@ def distill_session_anchors(memory_manager, hub_summaries: List[str]) -> Optiona
 				metadata={"lazarus_phase": "logic_distillation", "session_id": int(time.time())},
 				color="emerald",  # Sovereign Emerald for architectural truth
 				importance=9.0,
-				emotion="nostalgia" # Preserving the legacy of the session
+				emotion="nostalgia",  # Preserving the legacy of the session
 			)
 			return str(anchor_text)
 	except Exception as e:
@@ -414,9 +413,12 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 				surviving_chunks.append(distilled)
 				try:
 					new_id = memory_manager.add_memory(
-						collection=target_col, text=summary, metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id},
+						collection=target_col,
+						text=summary,
+						metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id},
 						color="blue" if target_col == "work_memories" else "purple",
-						emotion=distilled.get("emotion", "neutral"), intensity=distilled.get("intensity", 0.5)
+						emotion=distilled.get("emotion", "neutral"),
+						intensity=distilled.get("intensity", 0.5),
 					)
 					if prev_chunk_id and new_id:
 						client.set_payload(collection_name=target_col, payload={"associations": [prev_chunk_id]}, points=[new_id])
@@ -432,8 +434,12 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 				hub_summary = synthesize_hub([c["summary"] for c in surviving_chunks])
 				try:
 					hub_id = memory_manager.add_memory(
-						collection=target_col, text=hub_summary, metadata={"lazarus_phase": "synthesis_hub", "source_buffer_id": raw_id},
-						color="cyan", emotion=surviving_chunks[-1]["emotion"], intensity=max([c["intensity"] for c in surviving_chunks])
+						collection=target_col,
+						text=hub_summary,
+						metadata={"lazarus_phase": "synthesis_hub", "source_buffer_id": raw_id},
+						color="cyan",
+						emotion=surviving_chunks[-1]["emotion"],
+						intensity=max([c["intensity"] for c in surviving_chunks]),
 					)
 					if hub_id:
 						client.set_payload(collection_name=target_col, payload={"associations": [prev_chunk_id]}, points=[hub_id])
@@ -497,7 +503,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 					distilled = distill_engram(chunk)
 					summary = distilled.get("summary", "")
 					if summary.endswith("...") and len(summary) > 490:
-						continue # LLM failed to distill
+						continue  # LLM failed to distill
 
 					current_threshold = 0.0 if hibernating else cfg.SLEEP_CULL_THRESHOLD
 					if distilled.get("emotion") == "neutral" and distilled.get("intensity", 0.5) < current_threshold:
@@ -506,8 +512,12 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 					surviving_chunks.append(distilled)
 					try:
 						new_id = memory_manager.add_memory(
-							collection="work_memories", text=summary, metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id},
-							color="blue", emotion=distilled.get("emotion", "neutral"), intensity=distilled.get("intensity", 0.5)
+							collection="work_memories",
+							text=summary,
+							metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id},
+							color="blue",
+							emotion=distilled.get("emotion", "neutral"),
+							intensity=distilled.get("intensity", 0.5),
 						)
 						if prev_chunk_id and new_id:
 							client.set_payload(collection_name="work_memories", payload={"associations": [prev_chunk_id]}, points=[new_id])
@@ -521,8 +531,12 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 					hub_summary = synthesize_hub([c["summary"] for c in surviving_chunks])
 					try:
 						hub_id = memory_manager.add_memory(
-							collection="work_memories", text=hub_summary, metadata={"lazarus_phase": "synthesis_hub", "source_buffer_id": raw_id},
-							color="cyan", emotion=surviving_chunks[-1]["emotion"], intensity=max([c["intensity"] for c in surviving_chunks])
+							collection="work_memories",
+							text=hub_summary,
+							metadata={"lazarus_phase": "synthesis_hub", "source_buffer_id": raw_id},
+							color="cyan",
+							emotion=surviving_chunks[-1]["emotion"],
+							intensity=max([c["intensity"] for c in surviving_chunks]),
 						)
 						if hub_id:
 							client.set_payload(collection_name="work_memories", payload={"associations": [prev_chunk_id]}, points=[hub_id])

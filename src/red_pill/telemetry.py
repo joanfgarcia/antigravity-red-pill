@@ -161,6 +161,7 @@ class HardwareSentinel(BaseTelemetryProvider):
 			"cpu_usage_start": before["cpu"]["usage_percent"],
 			"cpu_usage_end": after["cpu"]["usage_percent"],
 		}
+
 	def log_event(self, event_type: str, data: Dict[str, Any]):
 		"""Log an event for auditing (v6.8 Hardening)."""
 		logger.info(f"[SENTINEL-EVENT] type={event_type} data={data}")

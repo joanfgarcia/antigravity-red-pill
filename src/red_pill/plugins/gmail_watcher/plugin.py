@@ -9,6 +9,7 @@ from red_pill.memory import MemoryManager
 
 logger = logging.getLogger(__name__)
 
+
 class GmailWatcherPlugin(SovereignPlugin):
 	"""
 	Dummy Gmail Watcher Plugin.
@@ -64,13 +65,7 @@ class GmailWatcherPlugin(SovereignPlugin):
 			logger.warning("[GmailWatcher] Simulated OAuth Error. Submitting pain signal.")
 			mgr = MemoryManager()
 			# Emitting a MUTED pain signal so it goes to MinionInbox for the AutoHealer
-			mgr.inject_signal(
-				name="cloud_sync_error_gmail",
-				intensity=6.0,
-				signal_type="pain",
-				source="GmailWatcher",
-				muted=True
-			)
+			mgr.inject_signal(name="cloud_sync_error_gmail", intensity=6.0, signal_type="pain", source="GmailWatcher", muted=True)
 		else:
 			logger.debug("[GmailWatcher] No new emails.")
 
@@ -97,4 +92,3 @@ Persistent=true
 WantedBy=timers.target
 """
 		return {"service": service_content, "timer": timer_content}
-

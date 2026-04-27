@@ -363,6 +363,7 @@ class LazarusPulse:
 		"""
 		try:
 			from red_pill.core.inbox import MinionInbox
+
 			inbox = MinionInbox()
 			unread = await asyncio.to_thread(inbox.get_unread, limit=50)
 
@@ -387,11 +388,15 @@ class LazarusPulse:
 							healed_ids.append(report["id"])
 						else:
 							logger.warning(f"Auto-Healer: Failed to heal '{event_id}'. Escalating to Qdrant...")
-							self.memory_mgr.inject_signal(name=event_id.replace("signal_", ""), intensity=6.0, signal_type="pain", source="Auto-Healer", muted=False)
-							healed_ids.append(report["id"]) # mark as read since we escalated
+							self.memory_mgr.inject_signal(
+								name=event_id.replace("signal_", ""), intensity=6.0, signal_type="pain", source="Auto-Healer", muted=False
+							)
+							healed_ids.append(report["id"])  # mark as read since we escalated
 					else:
 						# No script available, escalate
-						self.memory_mgr.inject_signal(name=event_id.replace("signal_", ""), intensity=6.0, signal_type="pain", source="Auto-Healer", muted=False)
+						self.memory_mgr.inject_signal(
+							name=event_id.replace("signal_", ""), intensity=6.0, signal_type="pain", source="Auto-Healer", muted=False
+						)
 						healed_ids.append(report["id"])
 
 			if healed_ids:
@@ -494,6 +499,7 @@ class LazarusPulse:
 			# 2. Monitor for 'Garbage' accumulation (Total messages > Threshold)
 			# Using a simpler query for total count
 			import sqlite3
+
 			with sqlite3.connect(self.inbox.db_path) as conn:
 				cursor = conn.cursor()
 				cursor.execute("SELECT COUNT(*) FROM inbox")
@@ -502,13 +508,7 @@ class LazarusPulse:
 			# Threshold: 500 messages suggests purge is not effective or traffic is extreme
 			if total_count > 500:
 				logger.warning(f"Pulse: Inbox Bloat Detected ({total_count} reports). Injecting stasis signal.")
-				self.memory_mgr.inject_signal(
-					"inbox_bloat_stasis",
-					intensity=7.5,
-					signal_type="pain",
-					source="MinionInbox",
-					originator=f"{__file__}"
-				)
+				self.memory_mgr.inject_signal("inbox_bloat_stasis", intensity=7.5, signal_type="pain", source="MinionInbox", originator=f"{__file__}")
 			else:
 				# Heal if previously bloated
 				self.memory_mgr.evaporate_signals("inbox_bloat_stasis")

@@ -20,20 +20,17 @@ _PLUGINS: list[BaseInterceptorPlugin] = []
 sovereign_registry = PluginRegistry()
 _sovereign_loaded = False
 
+
 async def _bridge_soul_event(event: SoulCreatedEvent):
 	"""Bridge EventBus SoulCreatedEvent to PluginRegistry SYSTEM_EVENT hook."""
-	payload = {
-		"action": "soul_created",
-		"zip_path": event.zip_path,
-		"timestamp": event.timestamp
-	}
+	payload = {"action": "soul_created", "zip_path": event.zip_path, "timestamp": event.timestamp}
 	await sovereign_registry.emit_hook(PluginScope.SYSTEM_EVENT, payload)
+
 
 async def _init_sovereign_plugins():
 	global _sovereign_loaded
 	if _sovereign_loaded:
 		return
-
 
 	p_homeo = HomeostasisPlugin(name="TrinityHomeostasis", version="1.0", directory=Path(__file__).parent.parent / "plugins" / "trinity_homeostasis")
 	p_learn = BayesianLearningPlugin(name="TrinityLearning", version="1.0", directory=Path(__file__).parent.parent / "plugins" / "trinity_learning")
@@ -42,6 +39,7 @@ async def _init_sovereign_plugins():
 
 	# Injection of the in-memory Qdrant mock for MVP to avoid breaking Real DB
 	from qdrant_client import QdrantClient
+
 	mock_db = QdrantClient(location=":memory:")
 	p_learn.qdrant = mock_db  # type: ignore
 
@@ -55,8 +53,6 @@ async def _init_sovereign_plugins():
 
 	await sovereign_registry.activate_all()
 	_sovereign_loaded = True
-
-
 
 
 def load_plugins():

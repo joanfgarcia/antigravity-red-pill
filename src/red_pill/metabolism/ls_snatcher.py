@@ -9,8 +9,10 @@ logger = logging.getLogger(__name__)
 
 STAGING_DIR = os.path.expanduser("~/.agent/staging_buffer")
 
+
 def hex_to_port(hex_str: str) -> int:
 	return int(hex_str, 16)
+
 
 def find_language_servers() -> List[Dict[str, Any]]:
 	"""Scan /proc for language_server processes."""
@@ -39,6 +41,7 @@ def find_language_servers() -> List[Dict[str, Any]]:
 	except Exception as e:
 		logger.error(f"[LS SNATCHER] Failed reading /proc: {e}")
 	return servers
+
 
 def get_listening_ports(pid: int) -> List[int]:
 	"""Read listening localhost ports for a given PID via /proc/net/tcp6."""
@@ -77,7 +80,9 @@ def get_listening_ports(pid: int) -> List[int]:
 		pass
 	return list(pid_ports)
 
+
 BASE_PATH = "exa.language_server_pb.LanguageServerService"
+
 
 def call_ls_api(port: int, csrf: str, method: str, params: Optional[dict] = None, timeout: int = 5) -> Optional[dict]:
 	url = f"https://localhost:{port}/{BASE_PATH}/{method}"
@@ -100,6 +105,7 @@ def call_ls_api(port: int, csrf: str, method: str, params: Optional[dict] = None
 	except Exception:
 		pass
 	return None
+
 
 def snatch_all_trajectories() -> int:
 	"""Discover all active LanguageServers and snatch conversations securely."""
@@ -155,21 +161,18 @@ def snatch_all_trajectories() -> int:
 				active_endpoint["csrf"],
 				"GetCascadeTrajectorySteps",
 				{"cascadeId": cascade_id, "startIndex": 0, "endIndex": 5000},
-				timeout=10
+				timeout=10,
 			)
 			if steps_resp:
 				steps = steps_resp.get("steps", steps_resp.get("messages", []))
-				payload = {
-					"id": cascade_id,
-					"summary": info,
-					"steps": steps
-				}
+				payload = {"id": cascade_id, "summary": info, "steps": steps}
 				with open(stage_file, "w") as f:
 					json.dump(payload, f)
 				snatched_count += 1
 
 	logger.info(f"[LS SNATCHER] Extraction complete. Snatched {snatched_count} updated trajectories.")
 	return snatched_count
+
 
 if __name__ == "__main__":
 	logging.basicConfig(level=logging.INFO)

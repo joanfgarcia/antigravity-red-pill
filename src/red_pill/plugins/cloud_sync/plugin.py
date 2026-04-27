@@ -72,6 +72,7 @@ class CloudSyncPlugin(SovereignPlugin):
 		"""Emit a muted PainSignal to MinionInbox for the Auto-Healer pipeline."""
 		try:
 			from red_pill.core.inbox import MinionInbox
+
 			inbox = MinionInbox()
 			inbox.drop_report(
 				event_id=f"signal_{signal_name}",
@@ -103,7 +104,7 @@ class CloudSyncPlugin(SovereignPlugin):
 							token.write(creds.to_json())
 					except Exception as refresh_err:
 						logger.warning(f"OAuth2 refresh failed: {refresh_err}")
-						creds = None # Saltamos al siguiente método si el refresh falla
+						creds = None  # Saltamos al siguiente método si el refresh falla
 
 				if creds and creds.valid:
 					self.service = build("drive", "v3", credentials=creds)
@@ -116,6 +117,7 @@ class CloudSyncPlugin(SovereignPlugin):
 		if os.path.exists(self.service_account_file):
 			try:
 				from google.oauth2 import service_account
+
 				creds = service_account.Credentials.from_service_account_file(self.service_account_file, scopes=scopes)
 				self.service = build("drive", "v3", credentials=creds)
 				logger.info("CloudSync: Acceso vía Cuenta de Servicio (Headless) activo.")
@@ -127,6 +129,7 @@ class CloudSyncPlugin(SovereignPlugin):
 		if os.path.exists(self.client_secrets_file):
 			try:
 				from google_auth_oauthlib.flow import InstalledAppFlow
+
 				logger.info("CloudSync: Iniciando flujo interactivo (Requiere intervención del Operador)...")
 				flow = InstalledAppFlow.from_client_secrets_file(self.client_secrets_file, scopes)
 				creds = flow.run_local_server(port=43303, open_browser=False, success_message="ritual_complete")
@@ -146,7 +149,6 @@ class CloudSyncPlugin(SovereignPlugin):
 		logger.warning("CloudSync: No se han encontrado credenciales válidas en la jerarquía. Plugin inactivo.")
 		self.enabled = False
 
-
 	def get_vault_usage(self) -> float:
 		if not self.enabled or not self.service:
 			return 0.0
@@ -154,7 +156,11 @@ class CloudSyncPlugin(SovereignPlugin):
 			query = "trashed = false"
 			if self.folder_id:
 				query += f" and '{self.folder_id}' in parents"
-			results = self.service.files().list(q=query, spaces="drive", fields="files(id, name, size)", supportsAllDrives=True, includeItemsFromAllDrives=True).execute()
+			results = (
+				self.service.files()
+				.list(q=query, spaces="drive", fields="files(id, name, size)", supportsAllDrives=True, includeItemsFromAllDrives=True)
+				.execute()
+			)
 			total_bytes = sum(int(f.get("size", 0)) for f in results.get("files", []))
 			return total_bytes / (1024 * 1024)
 		except Exception:

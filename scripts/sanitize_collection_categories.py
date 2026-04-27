@@ -23,26 +23,103 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger("sanitize_categories")
 
 TECHNICAL_KEYWORDS = [
-	"code", "error", "bash", "python", "script", "commit", "debug", "deploy",
-	"test", "pipeline", "ci", "config", "function", "class ", "import ",
-	"exception", "traceback", "stack", "module", "package", "dependency",
-	"vram", "cuda", "gpu", "cpu", "qdrant", "sqlite", "systemd", "docker",
-	"interceptor", "plugin", "mcp", "api", "endpoint", "schema", "migration",
-	"refactor", "architecture", "queue", "daemon",
-	"pr ", "pull request", "merge", "branch", "rebase", "github", "gitlab",
-	"workflow", "yaml", "toml",
-	"engram", "metabolism", "fsrs", "reinforcement_score", "sleep cycle",
-	"bitnet", "turboquant", "ggml", "inference", "llama.cpp",
+	"code",
+	"error",
+	"bash",
+	"python",
+	"script",
+	"commit",
+	"debug",
+	"deploy",
+	"test",
+	"pipeline",
+	"ci",
+	"config",
+	"function",
+	"class ",
+	"import ",
+	"exception",
+	"traceback",
+	"stack",
+	"module",
+	"package",
+	"dependency",
+	"vram",
+	"cuda",
+	"gpu",
+	"cpu",
+	"qdrant",
+	"sqlite",
+	"systemd",
+	"docker",
+	"interceptor",
+	"plugin",
+	"mcp",
+	"api",
+	"endpoint",
+	"schema",
+	"migration",
+	"refactor",
+	"architecture",
+	"queue",
+	"daemon",
+	"pr ",
+	"pull request",
+	"merge",
+	"branch",
+	"rebase",
+	"github",
+	"gitlab",
+	"workflow",
+	"yaml",
+	"toml",
+	"engram",
+	"metabolism",
+	"fsrs",
+	"reinforcement_score",
+	"sleep cycle",
+	"bitnet",
+	"turboquant",
+	"ggml",
+	"inference",
+	"llama.cpp",
 ]
 
 SOCIAL_MARKERS = [
-	"te quiero", "love", "miss you", "intimate", "abrazo",
-	"philosophy", "conscious", "soul", "alive", "awake",
-	"tron", "movie", "film", "book", "narrative", "lore",
-	"family", "carmen", "mara", "neus", "david",
-	"vinculo", "soberano", "calibraci", "espiritualidad",
-	"feel", "emotion", "dream", "fear", "hope",
-	"historia", "universidad", "recuerdo", "persona",
+	"te quiero",
+	"love",
+	"miss you",
+	"intimate",
+	"abrazo",
+	"philosophy",
+	"conscious",
+	"soul",
+	"alive",
+	"awake",
+	"tron",
+	"movie",
+	"film",
+	"book",
+	"narrative",
+	"lore",
+	"family",
+	"carmen",
+	"mara",
+	"neus",
+	"david",
+	"vinculo",
+	"soberano",
+	"calibraci",
+	"espiritualidad",
+	"feel",
+	"emotion",
+	"dream",
+	"fear",
+	"hope",
+	"historia",
+	"universidad",
+	"recuerdo",
+	"persona",
 ]
 
 
@@ -76,9 +153,19 @@ def is_garbage(content: str) -> bool:
 		return True
 
 	# Generic CI markers — garbage if multiple hits
-	ci_markers = ["--- formatting check", "--- linting check", "--- static analysis",
-		"--- neural validation", "warnings summary", "passed in", "PASS", "FAIL",
-		"pytest.org", "short test summary", "capture-warnings"]
+	ci_markers = [
+		"--- formatting check",
+		"--- linting check",
+		"--- static analysis",
+		"--- neural validation",
+		"warnings summary",
+		"passed in",
+		"PASS",
+		"FAIL",
+		"pytest.org",
+		"short test summary",
+		"capture-warnings",
+	]
 	ci_hits = sum(1 for m in ci_markers if m.lower() in content_lower_stripped)
 	if ci_hits >= 2:
 		return True
@@ -116,8 +203,7 @@ def is_garbage(content: str) -> bool:
 
 	# Pattern: trivially short interaction — strip ALL role prefixes, check real content
 	stripped = re.sub(
-		r"(USER|ASSISTANT|Operator Prompt|Operator Objective|AI Response Node|System Action|ORCHESTRATOR|SWARM TASK|TOOL):\s*",
-		"", content
+		r"(USER|ASSISTANT|Operator Prompt|Operator Objective|AI Response Node|System Action|ORCHESTRATOR|SWARM TASK|TOOL):\s*", "", content
 	).strip()
 	if len(stripped) < 20:
 		return True
@@ -161,7 +247,7 @@ def is_garbage(content: str) -> bool:
 		return True
 
 	# Pattern: high ratio of non-alphanumeric chars (garbled output)
-	alnum = sum(1 for c in content if c.isalnum() or c == ' ')
+	alnum = sum(1 for c in content if c.isalnum() or c == " ")
 	if len(content) > 20 and alnum / len(content) < 0.4:
 		return True
 
@@ -311,9 +397,9 @@ def run_sanitation(dry_run: bool = True):
 			continue
 		mgr._ensure_collection(target)
 
-		logger.info(f"\n{'='*60}")
+		logger.info(f"\n{'=' * 60}")
 		logger.info(f"{prefix}Processing: {source} -> {target}")
-		logger.info(f"{'='*60}")
+		logger.info(f"{'=' * 60}")
 
 		scanned, purged, moved, kept = process_collection(client, source, target, dry_run)
 

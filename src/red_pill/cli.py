@@ -559,12 +559,13 @@ def main() -> None:
 				soul.full_backup()
 			elif args.soul_cmd == "export":
 				from red_pill.interceptors import _init_sovereign_plugins
+
 				async def run_export():
 					await _init_sovereign_plugins()
 					await soul.export_soul()
+
 				asyncio.run(run_export())
 			elif args.soul_cmd == "rotate":
-
 				from scripts.rotate_keys import rotate
 
 				rotate()

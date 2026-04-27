@@ -50,6 +50,7 @@ class ToolRegistry:
 		# 2. Audit Start (Sentinel)
 		try:
 			from red_pill.core.providers import ProviderRegistry
+
 			audit_provider = ProviderRegistry.get_telemetry_provider()
 			audit_provider.log_event("TOOL_START", {"tool": name, "args": arguments})
 		except Exception as e:

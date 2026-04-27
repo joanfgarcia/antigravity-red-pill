@@ -5,12 +5,7 @@ from celery import Celery
 broker_url = os.getenv("REDIS_URL", "redis://localhost:8770/0")
 backend_url = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:8770/1")
 
-celery_app = Celery(
-	"red_pill_tasks",
-	broker=broker_url,
-	backend=backend_url,
-	include=["red_pill.tasks.definitions"]
-)
+celery_app = Celery("red_pill_tasks", broker=broker_url, backend=backend_url, include=["red_pill.tasks.definitions"])
 
 celery_app.conf.update(
 	task_serializer="json",

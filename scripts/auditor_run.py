@@ -15,10 +15,7 @@ async def main():
 
 	logger.info("Sentinel Auditor: Commencing scheduled infrastructure audit...")
 
-	repos = [
-		os.path.expanduser("~/Documents/IA/pure-mls"),
-		os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-	]
+	repos = [os.path.expanduser("~/Documents/IA/pure-mls"), os.path.dirname(os.path.dirname(os.path.abspath(__file__)))]
 
 	auditor = SentinelAuditor(target_repos=repos)
 
@@ -30,6 +27,7 @@ async def main():
 			logger.error(f"Failed to audit {repo}: {e}")
 
 	logger.info("Sentinel Auditor: Audit cycle complete.")
+
 
 if __name__ == "__main__":
 	asyncio.run(main())

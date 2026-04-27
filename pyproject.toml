@@ -1,6 +1,6 @@
 [project]
 name = "red-pill"
-version = "6.8.0"
+version = "6.8.1"
 description = "B760-Adaptive Memory Protocol for Sovereign Agents"
 readme = "README.md"
 license = "GPL-3.0-only"
@@ -88,6 +88,7 @@ fix = false
 
 [tool.ruff]
 line-length = 150
+exclude = ["3rdparty", ".venv", "build"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]

@@ -19,15 +19,16 @@ FLAVORS = {
 	"CUDA": {"dir": "build_cuda", "ngl": 35},
 	"VULKAN": {"dir": "build_vulkan", "ngl": 35},
 	"ROCm": {"dir": "build_rocm", "ngl": 35},
-	"NPU": {"dir": "build_npu", "ngl": 0}
+	"NPU": {"dir": "build_npu", "ngl": 0},
 }
 
 QUERIES = [
 	{"id": "Logic", "prompt": "Si tengo 5 manzanas y te doy 2, ¿cuántas manzanas tienes tú?"},
 	{"id": "Math", "prompt": "Calcula el resultado exacto de (15 * 15 * 15) / 5. Muestra el proceso."},
 	{"id": "Creative", "prompt": "Define el concepto de 'Soberanía Digital' en un poema de exactamente 4 versos."},
-	{"id": "Code", "prompt": "Escribe una función corta en Python para encontrar el número más grande en una lista sin usar max()."}
+	{"id": "Code", "prompt": "Escribe una función corta en Python para encontrar el número más grande en una lista sin usar max()."},
 ]
+
 
 def wait_for_server(timeout=60):
 	start = time.time()
@@ -40,6 +41,7 @@ def wait_for_server(timeout=60):
 			pass
 		time.sleep(1)
 	return False
+
 
 def run_flavor_bench(flavor_name, config):
 	print(f"\n>>> INICIANDO CATA TÉCNICA: {flavor_name} <<<")
@@ -68,11 +70,15 @@ def run_flavor_bench(flavor_name, config):
 
 	cmd = [
 		server_bin,
-		"-m", MODEL_PATH,
-		"-ngl", str(config["ngl"]),
-		"-c", "2048", # Límite de contexto para estabilidad en Fase Deep-Sync
-		"--port", "8080",
-		"--log-disable"
+		"-m",
+		MODEL_PATH,
+		"-ngl",
+		str(config["ngl"]),
+		"-c",
+		"2048",  # Límite de contexto para estabilidad en Fase Deep-Sync
+		"--port",
+		"8080",
+		"--log-disable",
 	]
 
 	# Start Server (Warm-up)
@@ -87,11 +93,7 @@ def run_flavor_bench(flavor_name, config):
 	warmup_time = time.time() - start_warmup
 	print(f"Warm-up (Carga): {warmup_time:.2f}s")
 
-	flavor_results = {
-		"flavor": flavor_name,
-		"warmup": f"{warmup_time:.2f}s",
-		"responses": []
-	}
+	flavor_results = {"flavor": flavor_name, "warmup": f"{warmup_time:.2f}s", "responses": []}
 
 	# Run Queries
 	for q in QUERIES:
@@ -100,26 +102,30 @@ def run_flavor_bench(flavor_name, config):
 			"prompt": f"<|im_start|>user\n{q['prompt']}<|im_end|>\n<|im_start|>assistant\n",
 			"n_predict": 256,
 			"temperature": 0.0,
-			"stop": ["<|im_end|>"]
+			"stop": ["<|im_end|>"],
 		}
 
 		q_start = time.time()
-		res = subprocess.run(["curl", "-s", "-X", "POST", "-H", "Content-Type: application/json", "-d", json.dumps(payload), API_URL], capture_output=True, text=True)
+		res = subprocess.run(
+			["curl", "-s", "-X", "POST", "-H", "Content-Type: application/json", "-d", json.dumps(payload), API_URL], capture_output=True, text=True
+		)
 		q_duration = time.time() - q_start
 
 		if res.returncode == 0:
 			try:
 				data = json.loads(res.stdout)
 				# Estimamos tokens si no vienen en el JSON (llama.cpp server suele incluirlos en completion)
-				t_count = data.get("tokens_predicted", len(data.get("content", "").split())) # Rough estimate if missing
+				t_count = data.get("tokens_predicted", len(data.get("content", "").split()))  # Rough estimate if missing
 				tps = t_count / q_duration
-				flavor_results["responses"].append({
-					"id": q["id"],
-					"prompt": q["prompt"],
-					"text": data.get("content", "").strip(),
-					"duration": f"{q_duration:.2f}s",
-					"tps": f"{tps:.2f}"
-				})
+				flavor_results["responses"].append(
+					{
+						"id": q["id"],
+						"prompt": q["prompt"],
+						"text": data.get("content", "").strip(),
+						"duration": f"{q_duration:.2f}s",
+						"tps": f"{tps:.2f}",
+					}
+				)
 				print(f" OK ({tps:.2f} t/s)")
 			except Exception as e:
 				print(f" ERROR JSON: {e}")
@@ -132,6 +138,7 @@ def run_flavor_bench(flavor_name, config):
 
 	return flavor_results
 
+
 def generate_report(results):
 	report_path = os.path.join(PROJECT_ROOT, "docs/BENCHMARKS/BITNET_QUAD_FLAVOR_REPORT.md")
 	os.makedirs(os.path.dirname(report_path), exist_ok=True)
@@ -142,7 +149,9 @@ def generate_report(results):
 		f.write("Hardware: HP OMEN (AMD Ryzen AI 9 HX 370 / NVIDIA RTX 5070 / 32GB RAM)\n\n")
 
 		f.write("## 1. Executive Summary\n")
-		f.write("This report certifies the functional stability and performance of BitNet b1.58 (Falcon 3 10B) across four backend implementations. Key finding: NPU (XDNA) support is ready for edge inference.\n\n")
+		f.write(
+			"This report certifies the functional stability and performance of BitNet b1.58 (Falcon 3 10B) across four backend implementations. Key finding: NPU (XDNA) support is ready for edge inference.\n\n"
+		)
 
 		for res in results:
 			if not res:
@@ -163,6 +172,7 @@ def generate_report(results):
 
 	print(f"\n[REPORTE GENERADO]: {report_path}")
 
+
 def main():
 	all_results = []
 	for name, config in FLAVORS.items():
@@ -170,6 +180,7 @@ def main():
 		all_results.append(res)
 
 	generate_report(all_results)
+
 
 if __name__ == "__main__":
 	main()

@@ -6,6 +6,7 @@ from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
+
 class PluginScope(enum.Enum):
 	MEMORY = "memory"
 	TELEMETRY = "telemetry"
@@ -14,6 +15,7 @@ class PluginScope(enum.Enum):
 	SYSTEM_EVENT = "system_event"
 	BACKGROUND = "background"
 
+
 class Priority(enum.IntEnum):
 	FIRST = 0
 	HIGH = 25
@@ -21,11 +23,12 @@ class Priority(enum.IntEnum):
 	LOW = 75
 	LAST = 100
 
+
 class CircuitBreak(Exception):
 	pass
 
-class SovereignPlugin(abc.ABC):
 
+class SovereignPlugin(abc.ABC):
 	def __init__(self, name: str, version: str, directory: Path):
 		self.name = name
 		self.version = version
@@ -60,7 +63,6 @@ class SovereignPlugin(abc.ABC):
 		except Exception as e:
 			logger.error(f"[PluginBase] Error cargando config para plugin {self.name} desde {config_path}: {e}")
 			return {}
-
 
 	@property
 	@abc.abstractmethod
@@ -113,13 +115,11 @@ class SovereignPlugin(abc.ABC):
 		required = ["README.md", "TECHNICAL.md", "USER_MANUAL.md"]
 		return all((self.directory / doc).exists() for doc in required)
 
-class PluginRegistry:
 
+class PluginRegistry:
 	def __init__(self):
 		self._plugins: Dict[str, SovereignPlugin] = {}
-		self._routing_table: Dict[PluginScope, List[SovereignPlugin]] = {
-			scope: [] for scope in PluginScope
-		}
+		self._routing_table: Dict[PluginScope, List[SovereignPlugin]] = {scope: [] for scope in PluginScope}
 
 	def register(self, plugin: SovereignPlugin) -> None:
 		if not plugin.validate_sovereignty():

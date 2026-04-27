@@ -156,6 +156,7 @@ class SoulManager:
 
 		# 4. Notify Cloud Sync / Ecosystem via EventBus
 		from red_pill.events import SoulCreatedEvent, get_event_bus
+
 		logger.info(f"Emitting SoulCreatedEvent for {output_path}")
 		get_event_bus().emit(SoulCreatedEvent(zip_path=output_path))
 
@@ -166,7 +167,6 @@ class SoulManager:
 		# Plugins act asynchronously. The Local kit is successfully preserved and secured.
 		print("Export Pipeline finished. Plugins (Cloud Vault, etc) notified via EventBus.")
 		return True
-
 
 	def restore_soul(self, source_dir: str, commit: bool = False):
 		"""

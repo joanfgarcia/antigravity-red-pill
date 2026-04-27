@@ -11,6 +11,7 @@ def dummy_audit_task(self, path: str):
 	time.sleep(5)  # Simulamos 5 segundos de auditoría
 	return {"status": "success", "audited_path": path, "issues_found": 0}
 
+
 @celery_app.task(bind=True)
 def extract_knowledge(self, text: str):
 	time.sleep(2)

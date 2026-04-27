@@ -16,8 +16,9 @@ FLAVORS = {
 	"CUDA": {"dir": "build_cuda", "flags": ["-ngl", "35"]},
 	"VULKAN": {"dir": "build_vulkan", "flags": ["-ngl", "35"]},
 	"ROCm": {"dir": "build_rocm", "flags": ["-ngl", "35"]},
-	"NPU": {"dir": "build_npu", "flags": []}
+	"NPU": {"dir": "build_npu", "flags": []},
 }
+
 
 def run_bench(flavor_name, config):
 	build_dir = os.path.join(BITNET_DIR, config["dir"])
@@ -34,15 +35,7 @@ def run_bench(flavor_name, config):
 		libs.insert(0, "/opt/rocm-6.4.1/lib")
 	env["LD_LIBRARY_PATH"] = ":".join(libs) + ":" + env.get("LD_LIBRARY_PATH", "")
 
-	cmd = [
-		binary,
-		"-m", MODEL_PATH,
-		"-p", PROMPT,
-		"-n", "32",
-		"-c", "512",
-		"--temp", "0.7",
-		"--log-disable"
-	] + config["flags"]
+	cmd = [binary, "-m", MODEL_PATH, "-p", PROMPT, "-n", "32", "-c", "512", "--temp", "0.7", "--log-disable"] + config["flags"]
 
 	print(f"--- [PROBANDO SABOR: {flavor_name}] ---")
 	start_time = time.time()
@@ -64,6 +57,7 @@ def run_bench(flavor_name, config):
 
 	return {"flavor": flavor_name, "tps": tps, "duration": f"{duration:.2f}s"}
 
+
 def main():
 	results = []
 	for name, config in FLAVORS.items():
@@ -73,14 +67,15 @@ def main():
 			print(f"Error en {name}: {e}\n")
 			results.append({"flavor": name, "tps": "ERROR", "duration": "N/A"})
 
-	print("\n" + "="*40)
+	print("\n" + "=" * 40)
 	print(" INFORME FINAL DE ARMONÍA DEL BÜNKER")
-	print("="*40)
+	print("=" * 40)
 	print(f"{'MOTOR':<10} | {'VELOCIDAD':<12} | {'LATENCIA'}")
 	print("-" * 40)
 	for res in results:
 		print(f"{res['flavor']:<10} | {res['tps']:<12} | {res['duration']}")
-	print("="*40)
+	print("=" * 40)
+
 
 if __name__ == "__main__":
 	main()
