@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 import json
 import os
+import getpass
 import subprocess
 import sys
 import time
 from datetime import datetime
 
 # Watcher specific lock files to prevent multiple instances (Namespaced by user)
-WATCHER_LOCK_PATH = f"/tmp/.red_pill_watcher_{os.getlogin()}.lock"
+WATCHER_LOCK_PATH = f"/tmp/.red_pill_watcher_{getpass.getuser()}.lock"
 PENDING_MESSAGES_FILE = os.path.expanduser("~/.gemini/antigravity/.pending_messages.json")
 
 
