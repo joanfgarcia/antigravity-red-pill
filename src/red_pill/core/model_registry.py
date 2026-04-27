@@ -3,31 +3,35 @@ import os
 import shutil
 
 import yaml
+from typing import Dict, Tuple, Optional
 
 logger = logging.getLogger(__name__)
 
 
 class ModelRegistry:
-	_profiles_cache = None
+	_profiles_cache: Optional[Dict[str, dict]] = None
 
 	@classmethod
 	def get_profile(cls, profile_name: str) -> dict:
 		if cls._profiles_cache is None:
 			cls._load_profiles()
-		return cls._profiles_cache.get(profile_name, {})
+		if cls._profiles_cache is not None:
+			return cls._profiles_cache.get(profile_name, {})
+		return {}
 
 	@classmethod
 	def get_profile_by_capability(cls, required_capability: str) -> tuple[str, dict]:
 		if cls._profiles_cache is None:
 			cls._load_profiles()
-		for name, profile in cls._profiles_cache.items():
-			caps = profile.get("capabilities", [])
-			if required_capability in caps:
-				return name, profile
-		# Fallback to the first available profile if none match exactly
-		if cls._profiles_cache:
-			first_name = list(cls._profiles_cache.keys())[0]
-			return first_name, cls._profiles_cache[first_name]
+		if cls._profiles_cache is not None:
+			for name, profile in cls._profiles_cache.items():
+				caps = profile.get("capabilities", [])
+				if required_capability in caps:
+					return name, profile
+			# Fallback to the first available profile if none match exactly
+			if cls._profiles_cache:
+				first_name = list(cls._profiles_cache.keys())[0]
+				return first_name, cls._profiles_cache[first_name]
 		return "", {}
 
 	@classmethod

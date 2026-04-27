@@ -29,8 +29,9 @@ class EdgeEngine:
 		self._llm_loaded = False
 		self._n_gpu_layers = n_gpu_layers
 
-		ia_dir = os.getenv("ANTIGRAVITY_IA_DIR", os.path.expanduser("~/Documents/IA"))
-		model_dir = os.path.join(ia_dir, "models")
+		current_dir = os.path.dirname(os.path.abspath(__file__))
+		project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(current_dir))))
+		model_dir = os.path.join(project_root, "storage", "models")
 
 		# Discover model path eagerly (cheap filesystem ops) but defer loading
 		if not model_path and os.path.exists(model_dir):

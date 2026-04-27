@@ -94,7 +94,9 @@ def call_ls_api(port: int, csrf: str, method: str, params: Optional[dict] = None
 		req = urllib.request.Request(url, data=body, headers=headers, method="POST")
 		with urllib.request.urlopen(req, context=ctx, timeout=timeout) as resp:
 			if resp.status == 200:
-				return json.loads(resp.read())
+				res = json.loads(resp.read())
+				if isinstance(res, dict):
+					return res
 	except Exception:
 		pass
 	return None
@@ -118,7 +120,7 @@ def snatch_all_trajectories() -> int:
 		if active_endpoint:
 			break
 
-	if not active_endpoint:
+	if not active_endpoint or not resp:
 		logger.warning("[LS SNATCHER] LanguageServer found but API not responding.")
 		return 0
 

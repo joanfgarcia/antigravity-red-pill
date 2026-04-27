@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -16,6 +16,7 @@ from red_pill.utils.mystique import MystiqueEngine
 @pytest.mark.asyncio
 async def test_mcp_control_bunker_export():
 	with patch("red_pill.mcp_server.SoulManager") as mock_soul:
+		mock_soul.return_value.export_soul = AsyncMock(return_value=True)
 		res = await handle_control_bunker({"command": "export"})
 		assert "Soul Kit exported" in res[0].text
 		assert mock_soul.return_value.export_soul.called

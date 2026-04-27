@@ -73,7 +73,24 @@ class MoodAnalyticsPlugin(BaseInterceptorPlugin):
 		if not points:
 			return ""
 
-		colors = [p.payload.get("color", "gray") for p in points if p.payload and not p.payload.get("immune", False)]
+		import time
+
+		now = time.time()
+		threshold = getattr(cfg, "OVERNIGHT_THERAPY_THRESHOLD_HOURS", 4) * 3600
+
+		session_points = []
+		for p in points:
+			p_time = float(p.payload.get("created_at", 0)) if p.payload else 0
+			if now - p_time > threshold:
+				break
+			session_points.append(p)
+
+		if not session_points:
+			return (
+				"=== MOOD ANALYTICS (FERRARI PROTOCOL) ===\nSTATUS: OVERNIGHT THERAPY RESET (Blank Slate)\nDOMINANT_COLOR: EMERALD (Set Point)\n---"
+			)
+
+		colors = [p.payload.get("color", "gray") for p in session_points if p.payload and not p.payload.get("immune", False)]
 
 		if not colors:
 			return ""

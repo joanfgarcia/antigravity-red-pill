@@ -1090,7 +1090,7 @@ class MemoryManager:
 		try:
 			from qdrant_client.http import models
 
-			if name is None:
+			if not name:
 				self.client.delete(
 					collection_name="signal_memories",
 					points_selector=models.Filter(

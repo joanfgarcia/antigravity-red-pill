@@ -316,6 +316,8 @@ class RedPillConfig(BaseSettings):
 	AFFECT_CUSTOM_OVERRIDES: str = "{}"
 	DYNAMIC_EMOTION_SYNC: bool = True
 	MULTI_EMOTION_INFERENCE: bool = True
+	HEDONIC_SET_POINT_COLOR: str = "emerald"
+	OVERNIGHT_THERAPY_THRESHOLD_HOURS: int = 4
 
 	# -----------------------------------------------------------------------
 	# NEURO-AGENTIC TUNING

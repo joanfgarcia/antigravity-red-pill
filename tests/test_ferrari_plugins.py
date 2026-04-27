@@ -20,8 +20,9 @@ import pytest
 
 
 def _make_point(color: str = "gray", text: str = "sample memory", immune: bool = False):
+	import time
 	p = MagicMock()
-	p.payload = {"color": color, "text": text, "immune": immune}
+	p.payload = {"color": color, "text": text, "immune": immune, "created_at": time.time()}
 	return p
 
 

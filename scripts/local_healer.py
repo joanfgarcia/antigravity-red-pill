@@ -94,6 +94,7 @@ def main():
 	print("\n--- [OS1 Firmware] Initializing Samantha's Local Healing Cycle ---")
 
 	engine = EdgeEngine()
+	engine._ensure_loaded()
 	if not engine.llm:
 		print("[Error] No local SLM found. I can't heal without Intuitive Cognition.")
 		sys.exit(1)

@@ -8,7 +8,7 @@ import os
 import subprocess
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -25,7 +25,7 @@ class AuditReport:
 	intensity: float = 0.0
 
 class SentinelAuditor:
-	def __init__(self, target_repos: List[str] = None):
+	def __init__(self, target_repos: Optional[List[str]] = None):
 		self.target_repos = target_repos or []
 		self.logger = logging.getLogger("redpill.auditor")
 		self.uv_path = os.path.expanduser("~/.local/bin/uv")

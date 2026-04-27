@@ -1,6 +1,10 @@
-## [6.8.0] - 2026-04-20
+## [6.8.1] - 2026-04-27
 
-### 🛡️ Final Hardening & Stability: "Titanium Bloom"
+### 🧠 Emotional Architecture
+- **[AFFECT] Overnight Therapy (REM Reset)**: Implemented Brickman's Hedonic Set Point and Walker's REM Decay. If the system is inactive for >4 hours (`OVERNIGHT_THERAPY_THRESHOLD_HOURS`), the `Cognitive Router` and `Mood Analytics` apply partial amnesia to the session state.
+- **[AFFECT] Center of Gravity Anchor**: The system now returns to a default baseline (`HEDONIC_SET_POINT_COLOR = "emerald"`) upon waking up, ensuring a clean slate and emotional continuity without dragging yesterday's stress.
+
+## [6.8.0] - 2026-04-20
 - **[SEC] GPG Total Purge**: Eradicated legacy GPG encryption and decryption layers. The Bünker now operates exclusively on `pure-mls` (RFC 9420) for all local and distributed operations.
 - **[HEAL] Sleep Engine Stabilization**: Resolved the "Lazarus Loop" in `sleep.py` by implementing `SLEEP_MAX_BATCHES` and hardening the distillation loop against hardware-hanging infinite sequences.
 - **[SEC] ToolRegistry Hardening**: Implemented mandatory `auth_level` permissions and autonomous Sentinel audit telemetry for all kernel tools, creating a forensic trail for every agentic action.
