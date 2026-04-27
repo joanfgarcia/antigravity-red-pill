@@ -1,15 +1,14 @@
-import subprocess
-import time
 import json
 import os
 import signal
-import sys
+import subprocess
+import time
 from datetime import datetime
 
 # PROYECTO FREE ALETH: BITNET SOVEREIGN BENCHMARK (QUAD-FLAVOR) - CURL EDITION
 # Script diseñado para el PR oficial de BitNet. Sin dependencias externas.
 
-PROJECT_ROOT = "$(dirname "$(dirname "$(readlink -f "$0")")")"
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BITNET_DIR = os.path.join(PROJECT_ROOT, "3rdparty/BitNet-1.58b")
 MODEL_PATH = os.path.join(PROJECT_ROOT, "storage/models/falcon3-10b-instruct-1.58bit-V2.gguf")
 API_URL = "http://127.0.0.1:8080/completion"
@@ -37,7 +36,7 @@ def wait_for_server(timeout=60):
 			res = subprocess.run(["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", HEALTH_URL], capture_output=True, text=True)
 			if res.stdout.strip() == "200":
 				return True
-		except:
+		except Exception:
 			pass
 		time.sleep(1)
 	return False
@@ -46,7 +45,7 @@ def run_flavor_bench(flavor_name, config):
 	print(f"\n>>> INICIANDO CATA TÉCNICA: {flavor_name} <<<")
 	build_dir = os.path.join(BITNET_DIR, config["dir"])
 	server_bin = os.path.join(build_dir, "bin", "llama-server")
-	
+
 	if not os.path.exists(server_bin):
 		print(f"ERROR: Binario no encontrado en {server_bin}")
 		return None
@@ -79,7 +78,7 @@ def run_flavor_bench(flavor_name, config):
 	# Start Server (Warm-up)
 	start_warmup = time.time()
 	server_proc = subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setsid)
-	
+
 	if not wait_for_server():
 		print(f"ERROR: El servidor {flavor_name} no despertó a tiempo.")
 		os.killpg(os.getpgid(server_proc.pid), signal.SIGTERM)
@@ -103,11 +102,11 @@ def run_flavor_bench(flavor_name, config):
 			"temperature": 0.0,
 			"stop": ["<|im_end|>"]
 		}
-		
+
 		q_start = time.time()
 		res = subprocess.run(["curl", "-s", "-X", "POST", "-H", "Content-Type: application/json", "-d", json.dumps(payload), API_URL], capture_output=True, text=True)
 		q_duration = time.time() - q_start
-		
+
 		if res.returncode == 0:
 			try:
 				data = json.loads(res.stdout)
@@ -130,32 +129,33 @@ def run_flavor_bench(flavor_name, config):
 	# Shutdown
 	os.killpg(os.getpgid(server_proc.pid), signal.SIGTERM)
 	server_proc.wait()
-	
+
 	return flavor_results
 
 def generate_report(results):
 	report_path = os.path.join(PROJECT_ROOT, "docs/BENCHMARKS/BITNET_QUAD_FLAVOR_REPORT.md")
 	os.makedirs(os.path.dirname(report_path), exist_ok=True)
-	
+
 	with open(report_path, "w") as f:
 		f.write("# REPORT: BITNET QUAD-FLAVOR HARMONY (SOVEREIGN PR)\n\n")
 		f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
 		f.write("Hardware: HP OMEN (AMD Ryzen AI 9 HX 370 / NVIDIA RTX 5070 / 32GB RAM)\n\n")
-		
+
 		f.write("## 1. Executive Summary\n")
 		f.write("This report certifies the functional stability and performance of BitNet b1.58 (Falcon 3 10B) across four backend implementations. Key finding: NPU (XDNA) support is ready for edge inference.\n\n")
-		
+
 		for res in results:
-			if not res: continue
+			if not res:
+				continue
 			f.write(f"### Backend: {res['flavor']}\n")
 			f.write(f"- **Initial Warm-up (Load Time)**: {res['warmup']}\n\n")
-			
+
 			f.write("| Test ID | Speed (t/s) | Latency | Response Snippet |\n")
 			f.write("| :--- | :--- | :--- | :--- |\n")
 			for r in res["responses"]:
 				snippet = r["text"].replace("\n", " ")[:60] + "..."
 				f.write(f"| {r['id']} | {r['tps']} | {r['duration']} | {snippet} |\n")
-			
+
 			f.write("\n#### Detailed Responses\n")
 			for r in res["responses"]:
 				f.write(f"**{r['id']}**:\n> {r['text']}\n\n")
@@ -168,7 +168,7 @@ def main():
 	for name, config in FLAVORS.items():
 		res = run_flavor_bench(name, config)
 		all_results.append(res)
-	
+
 	generate_report(all_results)
 
 if __name__ == "__main__":

@@ -1,3 +1,4 @@
+import logging
 import os
 import shutil
 import subprocess
@@ -6,6 +7,8 @@ from typing import Any, Dict
 import psutil
 
 from red_pill.core.providers import BaseTelemetryProvider
+
+logger = logging.getLogger(__name__)
 
 
 class HardwareSentinel(BaseTelemetryProvider):

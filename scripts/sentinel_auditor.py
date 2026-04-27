@@ -17,8 +17,8 @@ from datetime import datetime
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.join(project_root, "src"))
 
-from red_pill.core.inbox import MinionInbox
-from red_pill.memory import MemoryManager
+from red_pill.core.inbox import MinionInbox  # noqa: E402
+from red_pill.memory import MemoryManager  # noqa: E402
 
 
 def generate_vitality_report():

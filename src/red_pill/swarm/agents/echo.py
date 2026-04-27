@@ -44,7 +44,7 @@ class EchoMinion(Minion):
 		payload = points[0].payload
 		if payload is None:
 			return {"status": "error", "message": "USP Profile payload is empty."}
-			
+
 		global_mood = payload.get('global', {})
 		dominant_mood = max(global_mood, key=global_mood.get) if global_mood else "unknown"
 		self.log(f"USP Analysis: Global Mood is {dominant_mood}.")

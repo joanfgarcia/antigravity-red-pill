@@ -129,7 +129,7 @@ def main():
 	if not args.silent and not check_service("http://localhost:8760/v1/models", "Local MLX LLM Daemon"):
 		print("WARN: Background LLM is down. Attempting raw initialization.")
 
-	sidecar_status = "DEPRECATED (FastEmbed In-Band)"
+	_sidecar_status = "DEPRECATED (FastEmbed In-Band)"
 
 	social = query_qdrant("social_memories", "Active Skin")
 	directives = query_qdrant("directive_memories", "Active Skin")
@@ -181,7 +181,7 @@ def main():
 		return
 
 	print("<BUNKER_CONTEXT>")
-	
+
 	# 1. Telemetry & Environment (Zero-Disk-I/O Pruning)
 	runtime_dir = os.getenv("XDG_RUNTIME_DIR", "/tmp")
 	bunker_state = Path(runtime_dir) / "bunker_state.json"
@@ -200,7 +200,7 @@ def main():
 
 	# 2. Critical Identity Block (Recency Bias Anchoring)
 	print("\n<bunker_directives mode=\"immune_core\">")
-	
+
 	# Dynamic Identity Pruning: Extract active skin
 	active_skin = "DEFAULT"
 	for rule in unique_context:
@@ -209,26 +209,26 @@ def main():
 			break
 
 	print(f"PERSONA: {persona_injection}")
-	
+
 	print("\nCORE_RULES:")
 	for rule in unique_context:
 		# Pruning logic: ONLY include Active Skin, Immune rules, or non-skin directives
 		is_skin = "Preset Skin [" in rule
 		is_immune = "[IMMUNE]" in rule or "IDENTITY ANCHOR" in rule
-		
+
 		# If it's a skin, only include if it matches active_skin
 		if is_skin:
 			skin_name_match = f"Preset Skin [{active_skin}]" in rule
 			if not (skin_name_match or is_immune):
 				continue
-		
+
 		# Clean and print
 		print(f"- {rule.strip().replace('[IMMUNE]', '').strip()}")
 
 	print("\nSILENT_SCRIBE_RELAY:")
 	print("- inject(previous_turn={prompt, response}) -> avoid_amnesia=true")
 	print("</bunker_directives>")
-	
+
 	print("</BUNKER_CONTEXT>")
 
 

@@ -194,7 +194,7 @@ You are actively receiving this telemetry via IDE rule injection (`00_bunker_tel
 				inbox = MinionInbox()
 				unread = await asyncio.to_thread(inbox.get_unread, limit=100)
 				self.state["minions"]["unread"] = len(unread)
-				
+
 				# Titanium Optimization: Structured Swarm Traffic Light
 				events = {"success": 0, "warning": 0, "error": 0}
 				for r in unread:
@@ -214,7 +214,7 @@ You are actively receiving this telemetry via IDE rule injection (`00_bunker_tel
 				mgr = MemoryManager()
 				count_result = await asyncio.to_thread(mgr.client.count, collection_name="signal_memories")
 				self.state["signals"]["active"] = count_result.count
-				
+
 				# Bio-Compression: Calculate pain_vec [T, D, H]
 				# T: Critical Swarm Failures, D: Active Pain Signals, H: Hardware Health
 				t_count = self.state["swarm"]["events"].get("error", 0)
