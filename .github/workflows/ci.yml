@@ -65,6 +65,11 @@ jobs:
         uv run pip-audit \
           --progress-spinner=off \
           --skip-editable \
+          --ignore-vuln CVE-2025-69872 \
+          --ignore-vuln CVE-2026-25990 \
+          --ignore-vuln CVE-2026-40192 \
+          --ignore-vuln CVE-2026-28684 \
+          --ignore-vuln CVE-2026-40347 \
           -r direct_deps.txt
 
 

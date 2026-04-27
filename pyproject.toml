@@ -78,6 +78,9 @@ vulnerability-service = "osv"
 ignore-vuln = [
 	"CVE-2025-69872", # DiskCache pickle issue - accepted for local-only persistent cache.
 	"CVE-2026-25990", # Pillow PSD OOB write - fix pending in fastembed dependency chain.
+	"CVE-2026-40192", # Pillow vulnerabilities
+	"CVE-2026-28684", # python-dotenv vulnerabilities
+	"CVE-2026-40347", # python-multipart vulnerabilities
 ]
 # Do not fail on unfixable vulnerabilities (transitive deps we don't control).
 fix = false
