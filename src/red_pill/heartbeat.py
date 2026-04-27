@@ -358,7 +358,7 @@ class LazarusPulse:
 	async def _try_auto_push(self, trigger_event: str) -> None:
 		"""Guardrails for git push: avoids pushing to main/master or during office hours."""
 		import datetime
-		
+
 		# 1. Branch check
 		proc = await asyncio.create_subprocess_exec("git", "rev-parse", "--abbrev-ref", "HEAD", cwd=cfg.IA_DIR, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
 		stdout, _ = await proc.communicate()
