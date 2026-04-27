@@ -1,7 +1,7 @@
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
@@ -23,8 +23,8 @@ def _resolve_credential_path(raw_path: str) -> str:
 
 
 class CloudSyncPlugin(SovereignPlugin):
-	def __init__(self, name: str = "cloud_sync", version: str = "1.0", directory: Path = None):
-		super().__init__(name, version, directory)
+	def __init__(self, name: str = "cloud_sync", version: str = "1.0", directory: Optional[Path] = None):
+		super().__init__(name, version, directory or Path("."))
 		self.enabled = self.config.get("enabled", True)
 		self.folder_id = self.config.get("folder_id", "")
 		self.service_account_file = _resolve_credential_path(self.config.get("service_account_file", ""))
@@ -65,7 +65,7 @@ class CloudSyncPlugin(SovereignPlugin):
 
 	async def hook(self, scope: PluginScope, payload: Dict[str, Any]) -> Dict[str, Any]:
 		if scope == PluginScope.SYSTEM_EVENT and payload.get("action") == "soul_created":
-			self._on_soul_created(payload.get("zip_path"))
+			self._on_soul_created(str(payload.get("zip_path", "")))
 		return payload
 
 	def _emit_pain(self, signal_name: str, detail: str) -> None:

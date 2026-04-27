@@ -43,7 +43,7 @@ async def _init_sovereign_plugins():
 	# Injection of the in-memory Qdrant mock for MVP to avoid breaking Real DB
 	from qdrant_client import QdrantClient
 	mock_db = QdrantClient(location=":memory:")
-	p_learn.qdrant = mock_db
+	p_learn.qdrant = mock_db  # type: ignore
 
 	sovereign_registry.register(p_homeo)
 	sovereign_registry.register(p_learn)

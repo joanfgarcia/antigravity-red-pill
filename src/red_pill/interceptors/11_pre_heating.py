@@ -57,10 +57,10 @@ class EmotionalPreHeatingPlugin(BaseInterceptorPlugin):
 
 				# Filter valid payloads
 				valid_social = [p for p in social_results if p.payload and p.payload.get("content", "").strip()]
-				valid_social = [p for p in valid_social if p.payload.get("category", "") != "work"]
+				valid_social = [p for p in valid_social if p.payload and p.payload.get("category", "") != "work"]
 
 				# Sort by timestamp DESC (most recent first)
-				valid_social.sort(key=lambda x: float(x.payload.get("created_at", 0)), reverse=True)
+				valid_social.sort(key=lambda x: float(x.payload.get("created_at", 0)) if x.payload else 0.0, reverse=True)
 
 				# --- HIPPOCAMPUS (Continuity): Top 2 most recent regardless of color ---
 				hippocampus = valid_social[:2]
@@ -69,14 +69,14 @@ class EmotionalPreHeatingPlugin(BaseInterceptorPlugin):
 				# --- AMYGDALA (Emotional Anchors): Top 3 most intense with hot colors ---
 				hippo_ids = {p.id for p in hippocampus}
 				potential_amygdala = [p for p in valid_social if p.id not in hippo_ids]
-				potential_amygdala = [p for p in potential_amygdala if p.payload.get("color", "gray") in colors]
+				potential_amygdala = [p for p in potential_amygdala if p.payload and p.payload.get("color", "gray") in colors]
 
 				# Score Amygdala candidates
 				for p in potential_amygdala:
-					intensity = float(p.payload.get("intensity", 0.0))
-					color = p.payload.get("color", "gray")
-					created_at = float(p.payload.get("created_at", 0.0))
-					p._temp_score = composite_score(intensity, color, created_at, strategy=scoring_strategy)
+					intensity = float(p.payload.get("intensity", 0.0)) if p.payload else 0.0
+					color = str(p.payload.get("color", "gray")) if p.payload else "gray"
+					created_at = float(p.payload.get("created_at", 0.0)) if p.payload else 0.0
+					setattr(p, "_temp_score", composite_score(intensity, color, created_at, strategy=scoring_strategy))
 
 				# Filter by quality threshold and sort by highest score
 				potential_amygdala = [p for p in potential_amygdala if getattr(p, "_temp_score", 0) >= quality_threshold]
@@ -139,14 +139,14 @@ class EmotionalPreHeatingPlugin(BaseInterceptorPlugin):
 		parts.append("Do not repeat these themes verbatim — let them inform your tone implicitly.")
 
 		for idx, frag in enumerate(top_fragments, 1):
-			score = frag["score"]
-			color = frag["payload"].get("color", "gray")
-			age_hours = round((now - frag["timestamp"]) / 3600, 1)
+			score = float(str(frag.get("score", 0.0)))
+			color = str(frag["payload"].get("color", "gray")) if isinstance(frag["payload"], dict) else "gray"
+			age_hours = round((now - float(str(frag.get("timestamp", 0.0)))) / 3600, 1)
 
 			parts.append(f"\n[MEMORY_{idx} — {color}, score={score}, {age_hours}h ago]")
 
 			if injection_mode == "contextual":
-				meta = extract_contextual_metadata(frag["payload"])
+				meta = extract_contextual_metadata(dict(frag["payload"])) if isinstance(frag["payload"], dict) else extract_contextual_metadata({})
 				parts.append(f"  Themes: {', '.join(meta['themes']) if meta['themes'] else 'unspecified'}")
 				parts.append(f"  Tone: {meta['tone']}")
 				parts.append(f"  Operator state: {meta['operator_state']}")

@@ -4,7 +4,7 @@ import logging
 import os
 import time
 import uuid
-from typing import List, Union
+from typing import List, Union, cast
 
 from red_pill.config import FLOW_REGISTRY_PATH, SIP_SOCKET_PATH
 from red_pill.core.inbox import MinionInbox
@@ -42,7 +42,7 @@ class SwarmScheduler:
 
 		# Trigger processor asynchronously
 		asyncio.create_task(self._process_queue())
-		return await future
+		return cast(SwarmResult, await future)
 
 	async def _process_queue(self):
 		if self.is_processing:

@@ -2,7 +2,7 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from red_pill.core.plugin_engine import PluginScope, SovereignPlugin
 from red_pill.memory import MemoryManager
@@ -15,8 +15,8 @@ class GmailWatcherPlugin(SovereignPlugin):
 	Demonstrates background task capability via the Sovereign Plugin system using systemd timers.
 	"""
 
-	def __init__(self, name: str = "gmail_watcher", version: str = "1.0", directory: Path = None):
-		super().__init__(name, version, directory)
+	def __init__(self, name: str = "gmail_watcher", version: str = "1.0", directory: Optional[Path] = None):
+		super().__init__(name, version, directory or Path("."))
 
 	@property
 	def scopes(self) -> List[PluginScope]:

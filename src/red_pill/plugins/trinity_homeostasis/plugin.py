@@ -3,6 +3,7 @@ from typing import Any, Dict, List
 
 from red_pill.core.plugin_engine import PluginScope, Priority, SovereignPlugin
 from red_pill.memory import MemoryManager
+from qdrant_client.models import PointStruct
 
 
 class EmotionalState:
@@ -50,7 +51,7 @@ class HomeostasisPlugin(SovereignPlugin):
 			with_payload=True
 		)
 
-		if points:
+		if points and points[0].payload:
 			payload = points[0].payload
 			self.state = EmotionalState()
 			self.state.pain_signals = payload.get("pain_signals", 0)
@@ -83,16 +84,16 @@ class HomeostasisPlugin(SovereignPlugin):
 			import uuid
 			self.memory_mgr.client.upsert(
 				collection_name=self.collection,
-				points=[{
-					"id": str(uuid.uuid4()),
-					"vector": [0.0] * 1536, # Vector dummy para metadatos
-					"payload": {
+				points=[PointStruct(
+					id=str(uuid.uuid4()),
+					vector=[0.0] * 1536, # Vector dummy para metadatos
+					payload={
 						"pain_signals": self.state.pain_signals,
 						"frustration": self.state.frustration,
 						"flow_momentum": self.state.flow_momentum,
 						"timestamp": datetime.datetime.now().isoformat()
 					}
-				}]
+				)]
 			)
 
 		return payload

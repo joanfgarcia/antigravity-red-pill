@@ -56,7 +56,7 @@ class SovereignPlugin(abc.ABC):
 
 		try:
 			with open(config_path, "r", encoding="utf-8") as f:
-				return json.load(f)
+				return dict(json.load(f))
 		except Exception as e:
 			logger.error(f"[PluginBase] Error cargando config para plugin {self.name} desde {config_path}: {e}")
 			return {}

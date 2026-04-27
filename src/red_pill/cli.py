@@ -581,9 +581,9 @@ def main() -> None:
 				print(f"--- [EMOTIONAL SYNC: {state['mood'].upper()}] ---")
 				print(f"Directive: {state['directive']}")
 			elif args.soul_cmd == "vault":
-				if soul.vault.enabled:
+				if soul.vault.enabled:  # type: ignore
 					print("--- [CLOUD VAULT: ACTIVE (Google Drive)] ---")
-					files = soul.vault.list_backups()
+					files = soul.vault.list_backups()  # type: ignore
 					if not files:
 						print("Vault is empty. Run 'red-pill soul export' to transmit your first kit.")
 					else:

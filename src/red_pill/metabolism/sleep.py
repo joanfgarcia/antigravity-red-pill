@@ -286,7 +286,7 @@ def distill_session_anchors(memory_manager, hub_summaries: List[str]) -> Optiona
 				importance=9.0,
 				emotion="nostalgia" # Preserving the legacy of the session
 			)
-			return anchor_text
+			return str(anchor_text)
 	except Exception as e:
 		logger.error(f"[SLEEP ENGINE] Logical Distillation failed: {e}")
 		return None

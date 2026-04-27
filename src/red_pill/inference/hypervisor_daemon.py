@@ -47,7 +47,7 @@ class HypervisorManager:
 	def get_free_port(self) -> int:
 		with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
 			s.bind(("", 0))
-			return s.getsockname()[1]
+			return int(s.getsockname()[1])
 
 	async def ensure_model(self, requested_capability: str) -> ActiveModel:
 		profile_name, profile = ModelRegistry.get_profile_by_capability(requested_capability)
