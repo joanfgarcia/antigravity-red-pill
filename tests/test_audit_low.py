@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import sys
 import yaml
 
 import red_pill.config as cfg
@@ -56,6 +57,7 @@ class TestAuditLow(unittest.TestCase):
 		expected_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
 		self.assertEqual(len(expected_hash), 64)
 
+	@unittest.skipIf(sys.platform == "win32", "fcntl is not available on Windows")
 	@patch.object(MetabolismKernel, "refresh_ttl_timestamps")
 	@patch.object(MetabolismKernel, "_read_state")
 	@patch.object(MetabolismKernel, "_write_state")

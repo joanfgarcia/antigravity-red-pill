@@ -41,7 +41,7 @@ def test_sound_of_silence_compliance():
 			if HOME_DIR_PATH.search(line) and "SOVEREIGNTY_PROOF.json" not in file_path.name:
 				violations.append(f"{file_path.relative_to(ROOT_DIR)}:{i} - Hardcoded home directory path detected")
 			if file_path.suffix in [".py", ".sh"]:
-				rel = str(file_path.relative_to(ROOT_DIR))
+				rel = file_path.relative_to(ROOT_DIR).as_posix()
 				if rel in EXCLUDED_FROM_STYLE_CHECKS:
 					continue
 				if TAB_INDENT_ONLY.match(line):
