@@ -13,6 +13,7 @@ class OracleMinion(Minion):
 
 	name: str = "Oracle-01"
 	specialization: str = "Knowledge Synthesis & RAG Research"
+	collections: list[str] = ["work_memories", "social_memories"]
 
 	async def execute(self, task: str, **kwargs) -> Dict[str, Any]:
 		"""
@@ -24,9 +25,12 @@ class OracleMinion(Minion):
 
 		self.log(f"Investigando contexto para: {task}")
 
-		# Simple RAG search across work and social for broad context
+		# Optional collection filter — default: operational memory
+		collections = kwargs.get("collections") or self.collections
+
+		# RAG search across requested collections
 		results = []
-		for collection in ["work_memories", "social_memories"]:
+		for collection in collections:
 			hits = manager.search_and_reinforce(collection, task, limit=3)
 			results.extend([str(h.payload.get("content", "")) for h in hits if h.payload.get("content")])
 

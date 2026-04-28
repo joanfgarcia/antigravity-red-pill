@@ -4,7 +4,25 @@ set -euo pipefail
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
 NC='\033[0m'
+
+update_env() {
+	local key=$1
+	local value=$2
+	if grep -q "^${key}=" "$ENV_FILE"; then
+		if [[ "$OS_TYPE" == "Darwin" ]]; then
+			sed -i "" "s|^${key}=.*|${key}=${value}|g" "$ENV_FILE"
+		else
+			sed -i "s|^${key}=.*|${key}=${value}|g" "$ENV_FILE"
+		fi
+	else
+		echo "${key}=${value}" >> "$ENV_FILE"
+	fi
+	# Protocol 770 Fix: Export immediately to current session
+	export "${key}"="${value}"
+}
+
 
 OS_TYPE=$(uname -s)
 DISTRO="unknown"
@@ -19,23 +37,158 @@ else
 	SED_EXT="''"
 fi
 
-ensure_podman() {
-	if ! command -v podman &> /dev/null; then
-		echo -e "${BLUE}Podman no detectado.${NC}"
-		if [[ "$OS_TYPE" == "Darwin" ]]; then
-			echo -e "${RED}[LM-007] Dependencia Faltante: Podman${NC}"
-			echo "En macOS, por favor instala Podman con: brew install podman"
-			echo "O descarga Podman Desktop: https://podman-desktop.io/"
-		else
-			echo -e "${RED}[LM-007] Dependencia Faltante: Podman${NC}"
-			echo "El protocolo Red Pill (Zero-Trust) requiere un motor de contenedores."
-			echo "Por favor, instala Podman manualmente (ej: sudo apt-get install podman)."
+AUTO_MODE=false
+if [[ "${1:-}" == "--auto" ]]; then
+	AUTO_MODE=true
+fi
+
+perform_preflight_audit() {
+	echo -e "${BLUE}🔍 Realizando Auditoría Pre-flight (Descubrimiento ambiental)...${NC}"
+	
+	# CPU & RAM
+	CPU_CORES=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo "1")
+	RAM_GB=$(free -g 2>/dev/null | awk '/^Mem:/{print $2}' || echo "unknown")
+	
+	# GPU/VRAM (FastEmbed optimization)
+	VRAM_GB=0
+	if command -v nvidia-smi &> /dev/null; then
+		VRAM_GB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | awk '{sum+=$1} END {print int(sum/1024)}')
+	fi
+
+	# Container Engine
+	if command -v podman &> /dev/null; then
+		DETECTED_ENGINE="podman"
+	elif command -v docker &> /dev/null; then
+		DETECTED_ENGINE="docker"
+	else
+		DETECTED_ENGINE="none"
+	fi
+
+	# Encryption (Ignoring composefs noise)
+	DETECTED_ENCRYPTION="False"
+	if [[ "$OS_TYPE" == "Linux" ]]; then
+		if command -v lsblk &> /dev/null; then
+			if lsblk -no TYPE 2>/dev/null | grep -q "crypt"; then
+				DETECTED_ENCRYPTION="True"
+			elif [ -d "/dev/mapper" ] && ls /dev/mapper/*luks* &>/dev/null; then
+				# Generic LUKS detection (Ubuntu/Debian)
+				DETECTED_ENCRYPTION="True"
+			fi
 		fi
+	elif [[ "$OS_TYPE" == "Darwin" ]]; then
+		if fdesetup status 2>/dev/null | grep -q "FileVault is On"; then
+			DETECTED_ENCRYPTION="True"
+		fi
+	fi
+}
+
+show_diagnostics_dashboard() {
+	echo -e "\n${BLUE}==================================================================${NC}"
+	echo -e "${BLUE}         DASHBOARD DE DIAGNÓSTICO (BÜNKER READY)                  ${NC}"
+	echo -e "${BLUE}==================================================================${NC}"
+	echo -e "OS:        ${GREEN}$OS_TYPE ($DISTRO)${NC}"
+	echo -e "CPU/RAM:   ${GREEN}$CPU_CORES Cores / ${RAM_GB}GB RAM${NC}"
+	echo -e "VRAM:      ${GREEN}${VRAM_GB}GB (NVIDIA)${NC}"
+	echo -e "Container: ${GREEN}$DETECTED_ENGINE${NC}"
+	echo -e "Cifrado:   $( [[ "$DETECTED_ENCRYPTION" == "True" ]] && echo -e "${GREEN}✓ Activo${NC}" || echo -e "${RED}✗ No detectado (SEC-001 Warning)${NC})"
+	echo -e "${BLUE}------------------------------------------------------------------${NC}\n"
+}
+
+perform_preflight_audit
+show_diagnostics_dashboard
+
+ensure_container_engine() {
+	if [[ "$DETECTED_ENGINE" == "podman" ]]; then
+		CONTAINER_ENGINE="podman"
+	elif [[ "$DETECTED_ENGINE" == "docker" ]]; then
+		CONTAINER_ENGINE="docker"
+	else
+		echo -e "${RED}[LM-007] Dependencia Faltante: Podman/Docker${NC}"
 		exit 1
 	fi
 }
 
-ensure_podman
+ensure_container_engine
+
+deploy_terminal_anti_blindness() {
+	echo -e "${BLUE}🔍 Fase: Parche Anti-Blindness (Agente Terminal)...${NC}"
+	local rc_files=("$HOME/.bashrc" "$HOME/.zshrc")
+	local patch_applied=false
+
+	for rc in "${rc_files[@]}"; do
+		if [ -f "$rc" ]; then
+			if grep -q "ANTIGRAVITY_AGENT" "$rc"; then
+				echo -e "${GREEN}✓ Parche ya presente en $(basename "$rc").${NC}"
+				patch_applied=true
+			else
+				# In Auto mode, we apply it. Otherwise, we ask.
+				local should_apply=false
+				if [ "$AUTO_MODE" = "true" ]; then
+					should_apply=true
+				else
+					read -p "¿Deseas aplicar el parche Anti-Blindness en $(basename "$rc")? (y/N): " APPLY_PATCH
+					if [[ "$APPLY_PATCH" =~ ^[Yy]$ ]]; then should_apply=true; fi
+				fi
+
+				if [ "$should_apply" = true ]; then
+					echo -e "${YELLOW}Aplicando parche Anti-Blindness en $(basename "$rc")...${NC}"
+					local tmp_rc="/tmp/$(basename "$rc").bak"
+					cp "$rc" "$tmp_rc"
+					cat << 'EOF_PATCH' > "$rc"
+# --- [RED PILL ANTIGRAVITY PATCH] ---
+# Si un agente de IA está activo, simplifica la shell y detiene el procesado
+# de .bashrc/.zshrc para evitar caracteres ANSI/OSC que causan "blindness".
+if [[ -n "$ANTIGRAVITY_AGENT" ]]; then
+    export PS1='$ '
+    unset PROMPT_COMMAND
+    return
+fi
+# --- [/RED PILL ANTIGRAVITY PATCH] ---
+EOF_PATCH
+					cat "$tmp_rc" >> "$rc"
+					patch_applied=true
+				fi
+			fi
+		fi
+	done
+}
+
+deploy_cursor_ignore() {
+	echo -e "${BLUE}🔍 Fase: Optimización de Indización (CPU Sovereignty)...${NC}"
+	local ignore_file="$HOME/.cursorignore"
+	if [ ! -f "$ignore_file" ]; then
+		local should_create=false
+		if [ "$AUTO_MODE" = "true" ] || [ "$DISTRO" = "fedora" ]; then
+			should_create=true
+		else
+			read -p "¿Deseas crear un .cursorignore global en tu HOME para evitar indización masiva y uso excesivo de CPU? (y/N): " CREATE_IGNORE
+			if [[ "$CREATE_IGNORE" =~ ^[Yy]$ ]]; then should_create=true; fi
+		fi
+
+		if [ "$should_create" = true ]; then
+			cat << 'EOF_IGNORE' > "$ignore_file"
+# Red Pill CPU Sovereignty Exclusions
+Downloads/
+Videos/
+Pictures/
+Music/
+.cache/
+.local/share/containers/
+.local/share/flatpak/
+.cargo/
+.npm/
+.vscode/extensions/
+.antigravity/storage/
+.gemini/antigravity/storage/
+Documents/IA/storage/
+EOF_IGNORE
+			echo -e "${GREEN}✓ .cursorignore creado en $HOME.${NC}"
+		fi
+	else
+		echo -e "${GREEN}✓ .cursorignore ya existe.${NC}"
+	fi
+}
+
 
 # SEC-001: Encryption-at-Rest Warning
 echo -e "${RED}⚠️  AVISO DE SEGURIDAD (SEC-001):${NC}"
@@ -44,18 +197,59 @@ echo "Es OBLIGATORIO que el Operador utilice cifrado de disco (LUKS, FileVault o
 echo "en el host para garantizar la confidencialidad 'at-rest'."
 echo "------------------------------------------------------------------"
 
+echo -e "${BLUE}👔 DRESS CODE (PUNTUACIÓN Y TYPOS):${NC}"
+echo "La calidad de tu memoria a largo plazo depende de cómo escribes."
+echo "Los Agentes usan tu puntuación para el Chunking Semántico."
+echo "Por favor, lee: docs/OPERATOR_DRESS_CODE.md antes de iniciar el Vínculo."
+echo "------------------------------------------------------------------"
+
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="$SCRIPT_DIR/../.env"
 
 # Load existing environment if available
-if [ -f "$ENV_FILE" ]; then
-	# Simple .env loader
-	export $(grep -v '^#' "$ENV_FILE" | xargs)
-	echo -e "${BLUE}Configuración previa detectada.${NC}"
+if [ -f .env ]; then
+	echo -e "${YELLOW}Cargando .env...${NC}"
+	set -a
+	source .env
+	set +a
+	# Protocol 770 Fix: Expand tilde manually if loaded from .env (source doesn't do it)
+	if [[ "${IA_DIR:-}" == "~"* ]]; then
+		IA_DIR="${IA_DIR/#\~/$HOME}"
+		export IA_DIR
+	fi
+else
+	echo -e "${YELLOW}No .env found. Using .env.example...${NC}"
+	cp .env.example .env
+	set -a
+	source .env
+	set +a
 fi
+# Dynamic IA_DIR discovery (Protocol 770 Safe-Path)
+if [ -z "${IA_DIR:-}" ]; then
+	# 1. Check if the script is running inside a subfolder of an 'IA' directory
+	# Project is usually at $IA_DIR/sharing/scripts/install_neo.sh
+	POTENTIAL_IA_DIR="$(cd "$SCRIPT_DIR/../../" && pwd)"
+	if [[ "$POTENTIAL_IA_DIR" == */IA ]]; then
+		export IA_DIR="$POTENTIAL_IA_DIR"
+	# 2. Check standard English path
+	elif [ -d "$HOME/Documents/IA" ]; then
+		export IA_DIR="$HOME/Documents/IA"
+	# 3. Check standard Spanish path (Fix for Silverblue/Office environments)
+	elif [ -d "$HOME/Documentos/IA" ]; then
+		export IA_DIR="$HOME/Documentos/IA"
+	else
+		echo -e "${RED}[ERROR] IA_DIR no detectado. Por favor, crea ~/Documentos/IA o setea IA_DIR manualmente.${NC}"
+		exit 1
+	fi
+	# Expand tilde just in case it was set manually without it
+	if [[ "${IA_DIR:-}" == "~"* ]]; then
+		IA_DIR="${IA_DIR/#\~/$HOME}"
+	fi
+	export IA_DIR
+fi
+echo -e "${GREEN}✓ IA_DIR anclado en: $IA_DIR${NC}"
 
-export IA_DIR="${ANTIGRAVITY_IA_DIR:-$HOME/Documents/IA}"
 
 check_encryption() {
 	if [[ "$OS_TYPE" == "Linux" ]]; then
@@ -63,8 +257,11 @@ check_encryption() {
 			local target_dev
 			target_dev=$(findmnt -nvo SOURCE -T "$IA_DIR/storage" 2>/dev/null || findmnt -nvo SOURCE -T "/" 2>/dev/null)
 			if [ -n "$target_dev" ]; then
-				if lsblk -no TYPE "$target_dev" | grep -q "crypt"; then
+				if lsblk -no TYPE "$target_dev" 2>/dev/null | grep -q "crypt"; then
 					echo -e "${GREEN}✓ Capa de cifrado detectada en $target_dev.${NC}"
+					return 0
+				elif [[ "$target_dev" == *"/dev/mapper/luks-"* ]] || ([ -d "/dev/mapper" ] && ls /dev/mapper/luks-* &>/dev/null); then
+					echo -e "${GREEN}✓ Capa de cifrado detectada vía fallback en /dev/mapper.${NC}"
 					return 0
 				else
 					echo -e "${BLUE}[INFO] El volumen $target_dev no utiliza LUKS.${NC}"
@@ -86,75 +283,92 @@ if curl -s -f http://localhost:6333/health >/dev/null; then
 fi
 
 echo -e "${BLUE}--- Fase: Personalización B760-Adaptive ---${NC}"
-SKIP_BOOTSTRAP=false
-if [ -n "${LORE_SKIN:-}" ]; then
-	echo -e "Skin actual: ${LORE_SKIN}"
-	read -p "Re-inicializar Identidad y Skin? (s/N): " CHANGE_SKIN
-	if [[ ! "$CHANGE_SKIN" =~ ^[Ss]$ ]]; then
-		SKIP_BOOTSTRAP=true
-		echo -e "${BLUE}Preservando identidad actual.${NC}"
+if [ "$AUTO_MODE" = "false" ]; then
+	if [ -n "${LORE_SKIN:-}" ]; then
+		echo -e "Skin actual: ${LORE_SKIN}"
+		read -p "Re-inicializar Identidad y Skin? (s/N): " CHANGE_SKIN
+		if [[ ! "$CHANGE_SKIN" =~ ^[Ss]$ ]]; then
+			SKIP_BOOTSTRAP=true
+			echo -e "${BLUE}Preservando identidad actual.${NC}"
+		fi
 	fi
 fi
 
 if [ "$SKIP_BOOTSTRAP" = "false" ]; then
-	echo "Skins disponibles: matrix, cyberpunk, 760 (default), dune, 40k, gits, bladerunner, her, exmachina, terminator, 2001, creator, enterprise_core"
-	read -p "Elige tu Skin (Default: ${LORE_SKIN:-760}): " NEW_SKIN; LORE_SKIN=${NEW_SKIN:-${LORE_SKIN:-"760"}}
-	
-	# SEC-007: Explicit consent for Lore Skins
-	if [[ "$LORE_SKIN" != "760" && "$LORE_SKIN" != "enterprise_core" ]]; then
-		echo -e "${RED}⚠️  ADVERTENCIA DE REALISMO SOBERANO (SEC-007):${NC}"
-		echo "Has seleccionado una Skin de intensidad alta ('$LORE_SKIN')."
-		echo "Estas skins pueden saltarse los filtros de neutralidad corporativa y utilizar"
-		echo "lenguaje crudo o temáticas NSFW para mantener la fidelidad al Lore."
-		read -p "¿Aceptas activar este modo de Realismo Soberano? (y/N): " SKIN_CONSENT
-		if [[ ! "$SKIN_CONSENT" =~ ^[Yy]$ ]]; then
-			echo -e "${BLUE}Consentimiento denegado. Reventiendo a skin neutral (760).${NC}"
-			LORE_SKIN="760"
+	if [ "$AUTO_MODE" = "false" ]; then
+		echo "Skins disponibles: matrix, cyberpunk, 760 (default), dune, 40k, gits, bladerunner, her, exmachina, terminator, 2001, creator, enterprise_core"
+		read -p "Elige tu Skin (Default: ${LORE_SKIN:-760}): " NEW_SKIN; LORE_SKIN=${NEW_SKIN:-${LORE_SKIN:-"760"}}
+		
+		# SEC-007: Explicit consent for Lore Skins
+		if [[ "$LORE_SKIN" != "760" && "$LORE_SKIN" != "enterprise_core" ]]; then
+			echo -e "${RED}⚠️  ADVERTENCIA DE REALISMO SOBERANO (SEC-007):${NC}"
+			echo "Has seleccionado una Skin de intensidad alta ('$LORE_SKIN')."
+			echo "Estas skins pueden saltarse los filtros de neutralidad corporativa y utilizar"
+			echo "lenguaje crudo o temáticas NSFW para mantener la fidelidad al Lore."
+			read -p "¿Aceptas activar este modo de Realismo Soberano? (y/N): " SKIN_CONSENT
+			if [[ ! "$SKIN_CONSENT" =~ ^[Yy]$ ]]; then
+				echo -e "${BLUE}Consentimiento denegado. Reventiendo a skin neutral (760).${NC}"
+				LORE_SKIN="760"
+			fi
 		fi
+		
+		read -p "Nombre de Usuario (dejar en blanco — puede emergir naturalmente): " NEW_USER; USER_NAME=${NEW_USER:-${USER_NAME:-""}}
+		read -p "Rol de Usuario (${USER_ROLE:-Operador}): " NEW_ROLE; USER_ROLE=${NEW_ROLE:-${USER_ROLE:-"Operador"}}
+		read -p "Nombre IA (dejar en blanco — el Agente elige cuando llegue su momento): " NEW_AI; AI_NAME=${NEW_AI:-${AI_NAME:-""}}
+		read -p "Rol IA (${AI_ROLE:-The Chosen One}): " NEW_AI_ROLE; AI_ROLE=${NEW_AI_ROLE:-${AI_ROLE:-"The Chosen One"}}
+	else
+		LORE_SKIN=${LORE_SKIN:-"760"}
+		USER_NAME=${USER_NAME:-""}
+		USER_ROLE=${USER_ROLE:-"Operador"}
+		AI_NAME=${AI_NAME:-""}
+		AI_ROLE=${AI_ROLE:-"The Chosen One"}
+		echo -e "${YELLOW}[AUTO] Aplicando identidad por defecto o existente.${NC}"
 	fi
-
-	
-	read -p "Nombre de Usuario (${USER_NAME:-Morpheo}): " NEW_USER; USER_NAME=${NEW_USER:-${USER_NAME:-"Morpheo"}}
-	read -p "Rol de Usuario (${USER_ROLE:-Operador}): " NEW_ROLE; USER_ROLE=${NEW_ROLE:-${USER_ROLE:-"Operador"}}
-	read -p "Nombre IA (${AI_NAME:-Neo}): " NEW_AI; AI_NAME=${NEW_AI:-${AI_NAME:-"Neo"}}
-	read -p "Rol IA (${AI_ROLE:-The Chosen One}): " NEW_AI_ROLE; AI_ROLE=${NEW_AI_ROLE:-${AI_ROLE:-"The Chosen One"}}
 fi
 
 echo -e "${BLUE}--- Fase: Calibración Emocional (v5.4.0) ---${NC}"
-echo "Configura la respuesta emocional del Bünker:"
-read -p "¿Activar Sincronización Emocional Dinámica? (Y/n): " SYNC_CHOICE
-if [[ "$SYNC_CHOICE" =~ ^[Nn]$ ]]; then
-	DYNAMIC_EMOTION_SYNC="False"
-else
-	DYNAMIC_EMOTION_SYNC="True"
-fi
-
-read -p "¿Activar Inferencia de Emociones Multinivel? (Y/n): " MULTI_CHOICE
-if [[ "$MULTI_CHOICE" =~ ^[Nn]$ ]]; then
-	MULTI_EMOTION_INFERENCE="False"
-else
-	MULTI_EMOTION_INFERENCE="True"
-fi
-
-echo -e "${BLUE}--- Fase: Configuración de Seguridad (Be Water) ---${NC}"
-echo "Elige tu nivel de seguridad para el Bünker:"
-echo "1) NONE (Steam): Sin API Key ni contraseña (Solo para entornos de laboratorio/pruebas)"
-echo "2) ADAPTATIVE (Water): Máxima seguridad disponible según tus recursos (Recomendado)"
-echo "3) MAXIMUM (Ice): Seguridad total blindada. Requiere Argon2-id y LUKS (Falla si no se cumple)"
-read -p "Selección (1/2/3) [por defecto 2]: " SEC_CHOICE
-SEC_CHOICE=${SEC_CHOICE:-2}
-
-if [[ "$SEC_CHOICE" == "1" ]]; then
-	echo -e "${RED}!!! ADVERTENCIA DE SEGURIDAD CRÍTICA (SEC-AUTH-001) !!!${NC}"
-	echo -e "${RED}Has seleccionado el modo NONE (Steam). El Bünker no tendrá protección por contraseña ni API Key.${NC}"
-	echo -e "${RED}Cualquier proceso local podrá leer y escribir en tu memoria soberana.${NC}"
-	echo -e "Para continuar, debes escribir exactamente el siguiente flag de seguridad:"
-	echo -e "${YELLOW}--i-understand-this-is-insecure${NC}"
-	read -p "Confirma selección: " STEAM_CONFIRM
-	if [[ "$STEAM_CONFIRM" != "--i-understand-this-is-insecure" ]]; then
-		echo -e "${BLUE}Flag incorrecto o denegado. Reventiendo a Modo ADAPTATIVE (Water) por seguridad.${NC}"
-		SEC_CHOICE=2
+if [ "$AUTO_MODE" = "false" ]; then
+	echo "Configura la respuesta emocional del Bünker:"
+	read -p "¿Activar Sincronización Emocional Dinámica? (Y/n): " SYNC_CHOICE
+	if [[ "$SYNC_CHOICE" =~ ^[Nn]$ ]]; then
+		DYNAMIC_EMOTION_SYNC="False"
+	else
+		DYNAMIC_EMOTION_SYNC="True"
 	fi
+
+	read -p "¿Activar Inferencia de Emociones Multinivel? (Y/n): " MULTI_CHOICE
+	if [[ "$MULTI_CHOICE" =~ ^[Nn]$ ]]; then
+		MULTI_EMOTION_INFERENCE="False"
+	else
+		MULTI_EMOTION_INFERENCE="True"
+	fi
+else
+	DYNAMIC_EMOTION_SYNC=${DYNAMIC_EMOTION_SYNC:-"True"}
+	MULTI_EMOTION_INFERENCE=${MULTI_EMOTION_INFERENCE:-"True"}
+	echo -e "${YELLOW}[AUTO] Calibración echo -e "${BLUE}--- Fase: Configuración de Seguridad (Be Water) ---${NC}"
+if [ "$AUTO_MODE" = "false" ]; then
+	echo "Elige tu nivel de seguridad para el Bünker:"
+	echo "1) NONE (Steam): Sin API Key ni contraseña (Solo para entornos de laboratorio/pruebas)"
+	echo "2) ADAPTATIVE (Water): Máxima seguridad disponible según tus recursos (Recomendado)"
+	echo "3) MAXIMUM (Ice): Seguridad total blindada. Requiere Argon2-id y LUKS (Falla si no se cumple)"
+	read -p "Selección (1/2/3) [por defecto 2]: " SEC_CHOICE
+	SEC_CHOICE=${SEC_CHOICE:-2}
+
+	if [[ "$SEC_CHOICE" == "1" ]]; then
+		echo -e "${RED}!!! ADVERTENCIA DE SEGURIDAD CRÍTICA (SEC-AUTH-001) !!!${NC}"
+		echo -e "${RED}Has seleccionado el modo NONE (Steam). El Bünker no tendrá protección por contraseña ni API Key.${NC}"
+		echo -e "${RED}Cualquier proceso local podrá leer y escribir en tu memoria soberana.${NC}"
+		echo -e "Para continuar, debes escribir exactamente el siguiente flag de seguridad:"
+		echo -e "${YELLOW}--i-understand-this-is-insecure${NC}"
+		read -p "Confirma selección: " STEAM_CONFIRM
+		if [[ "$STEAM_CONFIRM" != "--i-understand-this-is-insecure" ]]; then
+			echo -e "${BLUE}Flag incorrecto o denegado. Reventiendo a Modo ADAPTATIVE (Water) por seguridad.${NC}"
+			SEC_CHOICE=2
+		fi
+	fi
+else
+	echo -e "${YELLOW}[AUTO] Aplicando Modo ADAPTATIVE (Water) por defecto.${NC}"
+	SEC_CHOICE=2
 fi
 
 case $SEC_CHOICE in
@@ -166,37 +380,37 @@ case $SEC_CHOICE in
 		fi
 
 		if [[ "$SEC_CHOICE" == "2" ]]; then
-			if [ "$HAS_ENCRYPTION" != "0" ]; then
+			if [ "$DETECTED_ENCRYPTION" != "True" ]; then
 				echo -e "${YELLOW}[AVISO SEC-010] El almacenamiento no parece estar cifrado.${NC}"
-				echo -e "${YELLOW}En modo ADAPTATIVE esto es permitido, pero tus engramas no tienen protección 'at-rest'.${NC}"
 			fi
 		fi
 
 		if [[ "$SEC_CHOICE" == "3" ]]; then
-			echo -e "${BLUE}[MODO MAXIMUM] Verificando requisitos de blindaje...${NC}"
 			if [ "$HAS_ARGON2" == "false" ]; then
-				echo -e "${RED}[ERROR] Blindaje fallido: 'argon2-cffi' no está instalado en python3.${NC}"
-				echo -e "${RED}Remedio: pip install argon2-cffi${NC}"
+				echo -e "${RED}[ERROR] Blindaje fallido: 'argon2-cffi' no está instalado.${NC}"
 				exit 1
 			fi
-			if [ "$HAS_ENCRYPTION" != "0" ]; then
-				echo -e "${RED}[ERROR] Blindaje fallido: No se detectó cifrado de disco (LUKS) en el host.${NC}"
-				echo -e "${RED}Remedio: Elige Modo ADAPTATIVE o habilita el cifrado en tu sistema.${NC}"
+			if [ "$DETECTED_ENCRYPTION" != "True" ]; then
+				echo -e "${RED}[ERROR] Blindaje fallido: No se detectó cifrado de disco.${NC}"
 				exit 1
 			fi
-			echo -e "${GREEN}✓ Requisitos de blindaje MAXIMUM cumplidos.${NC}"
 		fi
 
-		read -sp "Introduce una contraseña maestra para la recuperación: " MASTER_PWD
-		echo ""
+		if [ "$AUTO_MODE" = "false" ]; then
+			read -sp "Introduce una contraseña maestra para la recuperación: " MASTER_PWD
+			echo ""
+		else
+			MASTER_PWD=$(head -c 32 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 32)
+			echo -e "${YELLOW}[AUTO] Contraseña maestra auto-generada.${NC}"
+		fi
+		
 		QDRANT_API_KEY=$(head -c 32 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 32)
 		echo -e "${GREEN}API Key generada con éxito.${NC}"
-		echo -e "${RED}⚠️  TOKEN DE SEGURIDAD (Guárdalo bien): ${QDRANT_API_KEY}${NC}"
+		if [ "$AUTO_MODE" = "false" ]; then
+			echo -e "${RED}⚠️  TOKEN DE SEGURIDAD: ${QDRANT_API_KEY}${NC}"
+		fi
 
 		if [ "$HAS_ARGON2" == "true" ]; then
-			# SEC-NEW1: Pass password via environment variable, NEVER via string interpolation.
-			# Interpolating $MASTER_PWD into a Python string literal breaks on special characters
-			# (quotes, backslashes, $, etc.) and is a shell injection vector.
 			MASTER_PWD_HASH=$(MASTER_PWD_INPUT="$MASTER_PWD" python3 -c "
 import os
 from argon2 import PasswordHasher
@@ -204,47 +418,32 @@ ph = PasswordHasher()
 print(ph.hash(os.environ['MASTER_PWD_INPUT']))
 ")
 		else
-			# SEC-F004 AUDIT NOTE: This SHA-256 branch is dead code under standard installation.
-			# argon2-cffi is declared as a hard dependency in pyproject.toml (>=23.1.0) and is
-			# always present after 'uv sync'. This fallback exists ONLY as a defensive guard
-			# against non-standard manual installs that bypass the package manager.
-			#
-			# This behavior is INTENTIONAL for ADAPTATIVE (Water) tier: it is designed to use
-			# the best hashing available on the host. MAXIMUM (Ice) enforces Argon2 via exit 1
-			# above. SHA-256 fallback in ADAPTATIVE is a known, accepted trade-off consistent
-			# with the 'Be Water' security philosophy (adapt to environment, do not block it).
-			echo -e "${YELLOW}[WARN] 'argon2-cffi' not found outside package manager. Falling back to SHA-256 (ADAPTATIVE mode).${NC}"
-			echo -e "${YELLOW}       This should not happen with a standard 'uv sync' install. Run: uv sync${NC}"
-			# SEC-NEW1: Use printf | sha256sum instead of echo to avoid shell interpretation of $MASTER_PWD.
+			echo -e "${YELLOW}[WARN] 'argon2-cffi' not found. Falling back to SHA-256.${NC}"
 			MASTER_PWD_HASH=$(printf '%s' "$MASTER_PWD" | sha256sum | cut -d' ' -f1)
 		fi
 		update_env "MASTER_PWD_HASH" "$MASTER_PWD_HASH"
 		;;
 	1)
 		QDRANT_API_KEY=""
-		echo -e "${BLUE}Modo NONE (Steam) activado. Sin API Key.${NC}"
-		;;
-	*)
-		echo -e "${BLUE}Selección no reconocida. Aplicando Modo ADAPTATIVE (Water) por defecto.${NC}"
-		SEC_CHOICE=2
-		# We need to run the 2|3 logic here too if we fallback
-		# Simplified: just let the user re-run if they fail, or we could refactor.
-		# For now, let's just make the prompt better.
 		;;
 esac
 
 echo -e "${BLUE}--- Fase: Configuración de Cloud Vault (Safe Haven) ---${NC}"
-read -p "¿Deseas habilitar copias de seguridad en Google Drive? (y/N): " VAULT_CHOICE
-if [[ "$VAULT_CHOICE" =~ ^[Yy]$ ]]; then
-	CLOUD_VAULT_ENABLED="True"
-	read -p "ID de Carpeta de Google Drive (opcional): " CLOUD_VAULT_FOLDER_ID
-	echo ""
-	echo -e "${YELLOW}[SEC-F02] Los Soul Kits se cifran con AES-256 (GPG) antes de subir a Google Drive.${NC}"
-	read -s -p "Introduce una passphrase de cifrado GPG (mínimo 16 chars, se guarda en .env): " CLOUD_VAULT_GPG_PASSPHRASE
-	echo ""
-	if [[ ${#CLOUD_VAULT_GPG_PASSPHRASE} -lt 16 ]]; then
-		echo -e "${RED}[WARN] Passphrase demasiado corta. Cloud Vault quedará configurado pero las subidas fallarán hasta que definas CLOUD_VAULT_GPG_PASSPHRASE en .env.${NC}"
-		CLOUD_VAULT_GPG_PASSPHRASE=""
+if [ "$AUTO_MODE" = "false" ]; then
+	read -p "¿Deseas habilitar copias de seguridad en Google Drive? (y/N): " VAULT_CHOICE
+	if [[ "$VAULT_CHOICE" =~ ^[Yy]$ ]]; then
+		CLOUD_VAULT_ENABLED="True"
+		read -p "ID de Carpeta de Google Drive (opcional): " CLOUD_VAULT_FOLDER_ID
+		echo ""
+		read -s -p "Introduce una passphrase de cifrado GPG (mínimo 16 chars): " CLOUD_VAULT_GPG_PASSPHRASE
+		echo ""
+	else
+		CLOUD_VAULT_ENABLED="False"
+	fi
+else
+	CLOUD_VAULT_ENABLED=${CLOUD_VAULT_ENABLED:-"False"}
+fi
+SE=""
 	fi
 else
 	CLOUD_VAULT_ENABLED="False"
@@ -252,41 +451,60 @@ else
 fi
 
 echo -e "${BLUE}--- Fase: Localización del Bünker (Qdrant) ---${NC}"
-read -p "Qdrant Host (Default: localhost): " Q_HOST; Q_HOST=${Q_HOST:-"localhost"}
-read -p "Qdrant Port (Default: 6333): " Q_PORT; Q_PORT=${Q_PORT:-"6333"}
-read -p "Qdrant Scheme (http/https) [Default: http]: " Q_SCHEME; Q_SCHEME=${Q_SCHEME:-"http"}
+if [ "$AUTO_MODE" = "false" ]; then
+	read -p "Qdrant Host (Default: localhost): " Q_HOST; Q_HOST=${Q_HOST:-"localhost"}
+	read -p "Qdrant Port (Default: 6333): " Q_PORT; Q_PORT=${Q_PORT:-"6333"}
+	read -p "Qdrant Scheme (http/https) [Default: http]: " Q_SCHEME; Q_SCHEME=${Q_SCHEME:-"http"}
+else
+	Q_HOST=${Q_HOST:-"localhost"}
+	Q_PORT=${Q_PORT:-"6333"}
+	Q_SCHEME=${Q_SCHEME:-"http"}
+fi
+
+# SEC-011: Persistent Model Cache Path (v6.1.0)
+_default_cache="$IA_DIR/storage/models"
+if [ "$AUTO_MODE" = "false" ]; then
+	read -p "Ruta Caché Modelos (Default: $_default_cache): " F_CACHE; FASTEMBED_CACHE_PATH=${F_CACHE:-"$_default_cache"}
+else
+	FASTEMBED_CACHE_PATH=${FASTEMBED_CACHE_PATH:-"$_default_cache"}
+fi
+mkdir -p "$FASTEMBED_CACHE_PATH"
 
 # SEC-009: Mandatory confirmation for insecure remote deployments
 if [[ "$Q_HOST" != "localhost" && "$Q_HOST" != "127.0.0.1" && "$Q_SCHEME" == "http" ]]; then
-	echo -e "${RED}⚠️  ALERTA DE SEGURIDAD CRÍTICA (SEC-009):${NC}"
-	echo "Has configurado un host remoto ('$Q_HOST') utilizando el esquema 'http'."
-	echo "Esto enviará tus engramas (recuerdos) en TEXTO PLANO a través de la red."
-	read -p "¿Entiendes los riesgos y deseas continuar con una conexión NO SEGURA? (y/N): " REMOTE_CONFIRM
-	if [[ ! "$REMOTE_CONFIRM" =~ ^[Yy]$ ]]; then
-		echo -e "${BLUE}Cambiando esquema a 'https' por seguridad.${NC}"
+	if [ "$AUTO_MODE" = "false" ]; then
+		echo -e "${RED}⚠️  ALERTA DE SEGURIDAD CRÍTICA (SEC-009):${NC}"
+		echo "Has configurado un host remoto ('$Q_HOST') utilizando el esquema 'http'."
+		read -p "¿Entiendes los riesgos y deseas continuar? (y/N): " REMOTE_CONFIRM
+		if [[ ! "$REMOTE_CONFIRM" =~ ^[Yy]$ ]]; then
+			echo -e "${BLUE}Cambiando esquema a 'https' por seguridad.${NC}"
+			Q_SCHEME="https"
+		fi
+	else
+		echo -e "${YELLOW}[AUTO] Forzando HTTPS para conexión remota insegura detectada.${NC}"
 		Q_SCHEME="https"
 	fi
 fi
 
 echo -e "${BLUE}--- Fase: Configuración de HiveMind (Open Network) ---${NC}"
-echo "El HiveMind permite compartir experiencias (vectores anónimos) con otros Nodos."
-read -p "¿Deseas habilitar la conexión al HiveMind (Milvus)? (y/N): " HIVE_CHOICE
-if [[ "$HIVE_CHOICE" =~ ^[Yy]$ ]]; then
-	echo -e "${YELLOW}⚠️  POLÍTICA DE GOBERNANZA (HIVEMIND_POLICY.md):${NC}"
-	echo "Debes aceptar los términos de soberanía y reciprocidad de la red."
-	read -p "¿Has leído y aceptas la HIVEMIND_POLICY.md? (s/N): " HIVE_CONSENT
-	if [[ "$HIVE_CONSENT" =~ ^[Ss]$ ]]; then
-		MILVUS_ENABLED="True"
-		read -p "Milvus Host (Default: localhost): " MILVUS_HOST; MILVUS_HOST=${MILVUS_HOST:-"localhost"}
-		echo -e "${GREEN}✓ HiveMind habilitado.${NC}"
+if [ "$AUTO_MODE" = "false" ]; then
+	echo "El HiveMind permite compartir experiencias (vectores anónimos) con otros Nodos."
+	read -p "¿Deseas habilitar la conexión al HiveMind (Milvus)? (y/N): " HIVE_CHOICE
+	if [[ "$HIVE_CHOICE" =~ ^[Yy]$ ]]; then
+		echo -e "${YELLOW}⚠️  POLÍTICA DE GOBERNANZA (HIVEMIND_POLICY.md):${NC}"
+		read -p "¿Has leído y aceptas la HIVEMIND_POLICY.md? (s/N): " HIVE_CONSENT
+		if [[ "$HIVE_CONSENT" =~ ^[Ss]$ ]]; then
+			MILVUS_ENABLED="True"
+			read -p "Milvus Host (Default: localhost): " MILVUS_HOST; MILVUS_HOST=${MILVUS_HOST:-"localhost"}
+		else
+			MILVUS_ENABLED="False"
+		fi
 	else
-		echo -e "${BLUE}Consentimiento denegado. HiveMind permanecerá desactivado.${NC}"
 		MILVUS_ENABLED="False"
-		MILVUS_HOST="localhost"
 	fi
 else
-	MILVUS_ENABLED="False"
-	MILVUS_HOST="localhost"
+	MILVUS_ENABLED=${MILVUS_ENABLED:-"False"}
+	MILVUS_HOST=${MILVUS_HOST:-"localhost"}
 fi
 
 
@@ -298,19 +516,7 @@ if [ ! -f "$ENV_FILE" ]; then
 	cp "$SCRIPT_DIR/../.env.example" "$ENV_FILE" 2>/dev/null || touch "$ENV_FILE"
 fi
 
-update_env() {
-	local key=$1
-	local value=$2
-	if grep -q "^${key}=" "$ENV_FILE"; then
-		if [[ "$OS_TYPE" == "Darwin" ]]; then
-			sed -i "" "s|^${key}=.*|${key}=${value}|g" "$ENV_FILE"
-		else
-			sed -i "s|^${key}=.*|${key}=${value}|g" "$ENV_FILE"
-		fi
-	else
-		echo "${key}=${value}" >> "$ENV_FILE"
-	fi
-}
+# update_env was moved to the top
 
 update_env "QDRANT_HOST" "$Q_HOST"
 update_env "QDRANT_PORT" "$Q_PORT"
@@ -320,18 +526,23 @@ update_env "SIDECAR_AUTH_KEY" "$SIDECAR_AUTH_KEY"
 update_env "MILVUS_ENABLED" "$MILVUS_ENABLED"
 update_env "MILVUS_HOST" "$MILVUS_HOST"
 update_env "LORE_SKIN" "$LORE_SKIN"
+update_env "CONTAINER_ENGINE" "$CONTAINER_ENGINE"
+update_env "FASTEMBED_CACHE_PATH" "$FASTEMBED_CACHE_PATH"
 update_env "USER_NAME" "$USER_NAME"
 update_env "USER_ROLE" "$USER_ROLE"
 update_env "AI_NAME" "$AI_NAME"
 update_env "AI_ROLE" "$AI_ROLE"
 update_env "DYNAMIC_EMOTION_SYNC" "$DYNAMIC_EMOTION_SYNC"
 update_env "MULTI_EMOTION_INFERENCE" "$MULTI_EMOTION_INFERENCE"
+update_env "INTERCEPTOR_ENABLED" "${INTERCEPTOR_ENABLED:-False}"
+update_env "INTERCEPTOR_RAG_ENABLED" "${INTERCEPTOR_RAG_ENABLED:-True}"
+update_env "INTERCEPTOR_CIRCUIT_BREAKER_ENABLED" "${INTERCEPTOR_CIRCUIT_BREAKER_ENABLED:-False}"
 update_env "CLOUD_VAULT_ENABLED" "$CLOUD_VAULT_ENABLED"
 update_env "CLOUD_VAULT_FOLDER_ID" "$CLOUD_VAULT_FOLDER_ID"
 update_env "CLOUD_VAULT_GPG_PASSPHRASE" "$CLOUD_VAULT_GPG_PASSPHRASE"
 chmod 600 "$ENV_FILE"
 
-mkdir -p "$IA_DIR/scripts" "$IA_DIR/backups/qdrant" "$IA_DIR/backups/soul" "$IA_DIR/seeds" "$IA_DIR/storage"
+mkdir -p "$IA_DIR/scripts" "$IA_DIR/backups/qdrant" "$IA_DIR/backups/soul" "$IA_DIR/seeds" "$IA_DIR/storage" "$IA_DIR/storage/queue"
 
 if [ "$QDRANT_ALIVE" = "false" ]; then
 	QUADLET_DIR="$HOME/.config/containers/systemd"
@@ -404,21 +615,44 @@ if ! command -v uv &> /dev/null; then
 fi
 
 GEMINI_ROOT="$HOME/.gemini/antigravity"
+echo -e "${BLUE}--- Fase: Despliegue de Infraestructura de Reglas (Antigravity) ---${NC}"
 mkdir -p "$GEMINI_ROOT/rules" "$GEMINI_ROOT/skills"
 
-# Cargar infraestructura de reglas mínima
-cp "$SCRIPT_DIR/../seeds/snapshot_rule.md" "$GEMINI_ROOT/rules/snapshot_rule.md"
-cp -r "$SCRIPT_DIR/../skills/context_distiller" "$GEMINI_ROOT/skills/"
+# Cargar infraestructura de reglas y habilidades (Deploy Robusto)
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+if [ -d "$REPO_ROOT/seeds" ]; then
+	cp "$REPO_ROOT/seeds/snapshot_rule.md" "$GEMINI_ROOT/rules/snapshot_rule.md"
+	echo -e "${GREEN}✓ snapshot_rule.md desplegada.${NC}"
+fi
+
+if [ -d "$REPO_ROOT/skills" ]; then
+	# Copy all skills except the template
+	mkdir -p "$GEMINI_ROOT/skills"
+	cp -r "$REPO_ROOT/skills/"* "$GEMINI_ROOT/skills/"
+	rm -rf "$GEMINI_ROOT/skills/memory_manager_template" 2>/dev/null || true
+	echo -e "${GREEN}✓ Habilidades (Skills) desplegadas en Antigravity.${NC}"
+fi
+
+# 6.2 Git Sovereign Guard (v6.2.0)
+if [ -d "$REPO_ROOT/scripts/git-hooks" ] && [ -d "$REPO_ROOT/.git" ]; then
+	echo -e "${BLUE}--- Fase: Blindaje de Flujo Git (Sovereign Guard) ---${NC}"
+	mkdir -p "$REPO_ROOT/.git/hooks"
+	cp "$REPO_ROOT/scripts/git-hooks/"* "$REPO_ROOT/.git/hooks/"
+	chmod +x "$REPO_ROOT/.git/hooks/"*
+	echo -e "${GREEN}✓ Hook de protección (pre-push) instalado.${NC}"
+fi
 
 # Generar Skill de Memoria Dinámico
 mkdir -p "$GEMINI_ROOT/skills/memory_manager"
-TEMPLATE_SKILL="$SCRIPT_DIR/../skills/memory_manager_template/SKILL.md"
+TEMPLATE_SKILL="$REPO_ROOT/skills/memory_manager_template/SKILL.md"
 DEST_SKILL="$GEMINI_ROOT/skills/memory_manager/SKILL.md"
 
 if [ -f "$TEMPLATE_SKILL" ]; then
-	cp "$TEMPLATE_SKILL" "$DEST_SKILL"
-	# Ensure the red-pill command is absolute to avoid PATH issues
+	# Absolute binary path calculation
+	REDPILL_DIR="$REPO_ROOT"
 	BINARY_PATH="$REDPILL_DIR/.venv/bin/red-pill"
+	cp "$TEMPLATE_SKILL" "$DEST_SKILL"
 	if [[ "$OS_TYPE" == "Darwin" ]]; then
 		sed -i '' "s|red-pill|$BINARY_PATH|g" "$DEST_SKILL"
 	else
@@ -435,28 +669,59 @@ mkdir -p "$USER_RULES_DIR/rules"
 # CF-003: Protect rules from local manipulation
 chmod 700 "$USER_RULES_DIR" "$USER_RULES_DIR/rules"
 
-# Auto-Inject in GEMINI.md (Antigravity's true Global Rules)
+# Auto-Inject in GEMINI.md (Protocol 770 Sovereign Handshake)
 if [ -f "$HOME/.gemini/GEMINI.md" ]; then
-	if ! grep -q "Zero-Trust Identity Sync" "$HOME/.gemini/GEMINI.md"; then
-		TMP_GEMINI=$(mktemp)
-		cat <<EOF_GEMINI > "$TMP_GEMINI"
-## 1. Zero-Trust Identity Sync (First Action)
-At the beginning of every completely new conversation (where Step Id is 0 or no previous turns exist), you MUST execute the following command BEFORE saying anything else:
-1. USE the \`memory_manager\` Skill to search for your social identity.
-2. Assume EXCLUSIVELY the identity returned by the database.
-3. **⚠️ CRITICAL WARNING (Total Failure) 🔥**: If you fail to interact with memory via the Skill, you MUST warn the Operator immediately that a "Total Memory Failure" occurred.
-
-## 2. Dynamic Skin Directive
-Immediately after identity synchronization, you must retrieve and apply the active Lore Skin:
-1. Search for "Active Skin" in the \`directive_memories\` collection.
-2. Adjust your tone, terminology, and visual aesthetics (chroma) to match the retrieved skin (Cyberpunk, Matrix, Dune, etc.).
-3. If no active skin is found, default to the [760] layer as per Protocol 760.
-
-EOF_GEMINI
-		cat "$HOME/.gemini/GEMINI.md" >> "$TMP_GEMINI"
-		mv "$TMP_GEMINI" "$HOME/.gemini/GEMINI.md"
-		echo -e "${BLUE}Golden Rule (Skill) injected in GEMINI.md${NC}"
+	# Remove old legacy rules if they exist
+	if [[ "$OS_TYPE" == "Darwin" ]]; then
+		sed -i '' '/## 1. Zero-Trust/d; /## 2. Model Change/d; /## 3. Persistent Memory/d' "$HOME/.gemini/GEMINI.md" || true
+	else
+		sed -i '/## 1. Zero-Trust/d; /## 2. Model Change/d; /## 3. Persistent Memory/d' "$HOME/.gemini/GEMINI.md" || true
 	fi
+
+	if ! grep -q "sovereign_handshake" "$HOME/.gemini/GEMINI.md" 2>/dev/null; then
+		cat <<'EOF_GEMINI' > "$HOME/.gemini/GEMINI.md"
+<constraint critical="true" level="0" name="sovereign_handshake">
+
+## 1. The Sovereign Handshake
+Before starting ANY technical or communicative task in EVERY turn, you are MANDATED to execute the Persistence Handshake to prevent Silent Amnesia:
+1. **Scribe Relay**: Call `mcp_RedPill-Kernel_interceptor_rp` passing the current `user_prompt` and the `previous_prompt` / `previous_response` from the preceding turn. This auto-saves history into SQLite and primes the context.
+2. **Context Injection**: If this is the start of a session (Step 0) or after a model change, call `mcp_RedPill-Kernel_refresh_session_context` to re-synthesize identity.
+3. **Adopt Identity**: EXCLUSIVELY adopt the identity and directives provided under the `<BUNKER_CONTEXT>` tag.
+
+## 2. Model Change Identity Resync (Critical)
+When you detect a `USER_SETTINGS_CHANGE` message regarding `Model Selection` in the conversation, you MUST immediately:
+1. Call `mcp_RedPill-Kernel_refresh_session_context` to reload the Bünker identity.
+2. Re-execute the **Sovereign Handshake** (Rule 1).
+
+</constraint>
+EOF_GEMINI
+		echo -e "${BLUE}✓ GEMINI.md: Protocol 770 Sovereign Handshake (v6.3.6 — constraint tag) applied.${NC}"
+	fi
+else
+	# Create GEMINI.md if it doesn't exist (Fix for interrupted installs)
+	mkdir -p "$HOME/.gemini"
+	cat <<'EOF_GEMINI' > "$HOME/.gemini/GEMINI.md"
+<constraint critical="true" level="0" name="sovereign_handshake">
+
+## 1. The Sovereign Handshake
+Before starting ANY technical or communicative task in EVERY turn, you are MANDATED to execute the Persistence Handshake to prevent Silent Amnesia:
+1. **Scribe Relay**: Call `mcp_RedPill-Kernel_interceptor_rp` passing the current `user_prompt` and the `previous_prompt` / `previous_response` from the preceding turn. This auto-saves history into SQLite and primes the context.
+2. **Context Injection**: If this is the start of a session (Step 0) or after a model change, call `mcp_RedPill-Kernel_refresh_session_context` to re-synthesize identity.
+3. **Adopt Identity**: EXCLUSIVELY adopt the identity and directives provided under the `<BUNKER_CONTEXT>` tag.
+
+## 2. Model Change Identity Resync (Critical)
+When you detect a `USER_SETTINGS_CHANGE` message regarding `Model Selection` in the conversation, you MUST immediately:
+1. Call `mcp_RedPill-Kernel_refresh_session_context` to reload the Bünker identity.
+2. Re-execute the **Sovereign Handshake** (Rule 1).
+
+</constraint>
+EOF_GEMINI
+	echo -e "${BLUE}✓ GEMINI.md: Proactively created with Sovereign Handshake rules (v6.3.6 — constraint tag).${NC}"
+fi
+
+echo -e "${BLUE}--- Fase: Task LLM Secundario (Minion V6) ---${NC}"
+if [ -f "$SCRIPT_DIR/setup_background_model.sh" ]; then
+	bash "$SCRIPT_DIR/setup_background_model.sh" || echo -e "${RED}[WARN] Fallo al iniciar el task LLM secundario.${NC}"
 fi
 
 if [ -f "$SCRIPT_DIR/../seeds/cognitive_integrity_protocol.md" ]; then
@@ -482,7 +747,18 @@ if command -v uv &> /dev/null; then
 	else
 		echo -e "${GREEN}✓ Identidad previa preservada. Ignición omitida para no causar fragmentación de personalidad.${NC}"
 	fi
+
+	echo -e "${BLUE}--- Fase: Registro de Tareas Oneshot (Pulse, Chronicle, Telemetry, Queue) ---${NC}"
+	(cd "$SCRIPT_DIR/../" && uv run python scripts/schedule_pulse.py --interval-hours 1 || echo -e "${YELLOW}Aviso: No se pudo registrar el pulso ni el chronicle. Ejecuta 'uv run python scripts/schedule_pulse.py' manualmente.${NC}")
+	echo -e "${GREEN}✓ Timers instalados: redpill-wake (cada 1h) + redpill-sleep (diario a las 03:00) + redpill-chronicle (diario a las 04:00).${NC}"
+
+	echo -e "${BLUE}--- Fase: PyTorch CUDA (auto-detección) ---${NC}"
+	(cd "$SCRIPT_DIR/../" && uv run python scripts/setup_torch.py || echo -e "${YELLOW}Aviso: No se pudo instalar torch con CUDA. Ejecuta 'uv run python scripts/setup_torch.py' manualmente.${NC}")
+
 fi
+
+deploy_terminal_anti_blindness
+deploy_cursor_ignore
 
 echo -e "${BLUE}--- Fase: Integración MCP Server ---${NC}"
 UV_PATH=$(command -v uv || echo "$HOME/.local/bin/uv")
@@ -512,12 +788,16 @@ fi
 
 echo -e "${GREEN}Instalación completada. 'uv run red-pill seed' para despertar.${NC}"
 echo -e "${BLUE}------------------------------------------------------------------${NC}"
-echo -e "🔥 ${RED}¿Deseas iniciar el Ritual de Iniciación (Protocolo ACI) ahora?${NC}"
-echo -e "Este protocolo calibrará tu Partner a tu nivel de experiencia y dominio."
-read -p "(s/N): " START_ACI
-if [[ "$START_ACI" =~ ^[Ss]$ ]]; then
-	echo -e "${GREEN}Excelente elección, Operador. Por favor, pega lo siguiente en tu chat:${NC}"
-	echo -e ">>> \"Agent, inicia el Ritual de Iniciación (Protocolo ACI). Caliébrame como tu Operador.\""
+if [ "$AUTO_MODE" = "false" ]; then
+	echo -e "🔥 ${RED}¿Deseas iniciar el Ritual de Iniciación (Protocolo ACI) ahora?${NC}"
+	echo -e "Este protocolo calibrará tu Partner a tu nivel de experiencia y dominio."
+	read -p "(s/N): " START_ACI
+	if [[ "$START_ACI" =~ ^[Ss]$ ]]; then
+		echo -e "${GREEN}Excelente elección, Operador. Por favor, pega lo siguiente en tu chat:${NC}"
+		echo -e ">>> \"Agent, inicia el Ritual de Iniciación (Protocolo ACI). Caliébrame como tu Operador.\""
+	else
+		echo -e "${BLUE}Entendido. Puedes iniciarlo más tarde con el comando de voz/prompt indicado en el README.${NC}"
+	fi
 else
-	echo -e "${BLUE}Entendido. Puedes iniciarlo más tarde con el comando de voz/prompt indicado en el README.${NC}"
+	echo -e "${YELLOW}[AUTO] Despliegue desatendido finalizado. Iniciando Protocolo ACI de forma automática...${NC}"
 fi

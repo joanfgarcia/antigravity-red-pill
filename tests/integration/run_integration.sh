@@ -32,8 +32,8 @@ manager = MemoryManager(url="http://localhost:6339")
 client = manager.client
 
 client.recreate_collection(
-    collection_name="integration_test",
-    vectors_config=VectorParams(size=384, distance=Distance.COSINE)
+	collection_name="integration_test",
+	vectors_config=VectorParams(size=384, distance=Distance.COSINE)
 )
 
 manager.add_memory("integration_test", "This is an integration test memory that must survive.", point_id="11111111-1111-1111-1111-111111111111")
@@ -57,17 +57,17 @@ import sys
 
 client = QdrantClient(url="http://localhost:6339")
 try:
-    hits = client.retrieve("integration_test", ids=["11111111-1111-1111-1111-111111111111"], with_payload=True)
-    # Corrected key from 'text_chunk' to 'content' (DS-004)
-    if hits and hits[0].payload.get("content") == "This is an integration test memory that must survive.":
-        print("SUCCESS LM-005: Integrations test passed. Memory survived container destruction.")
-        sys.exit(0)
-    else:
-        print(f"FAILED: Memory was corrupted or not found. Hits: {hits}")
-        sys.exit(1)
+	hits = client.retrieve("integration_test", ids=["11111111-1111-1111-1111-111111111111"], with_payload=True)
+	# Corrected key from 'text_chunk' to 'content' (DS-004)
+	if hits and hits[0].payload.get("content") == "This is an integration test memory that must survive.":
+		print("SUCCESS LM-005: Integrations test passed. Memory survived container destruction.")
+		sys.exit(0)
+	else:
+		print(f"FAILED: Memory was corrupted or not found. Hits: {hits}")
+		sys.exit(1)
 except Exception as e:
-    print(f"FAILED: Missing collection or exception: {e}")
-    sys.exit(1)
+	print(f"FAILED: Missing collection or exception: {e}")
+	sys.exit(1)
 EOF
 
 cd ../../

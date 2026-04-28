@@ -16,12 +16,9 @@ class TestAtomicWriteHeartbeat:
 
 		original = pulse_mod.HEARTBEAT_FILE
 		pulse_mod.HEARTBEAT_FILE = str(tmp_path / "pulse.json")
-
 		with patch("os.fsync", side_effect=OSError("disk full")):
 			with pytest.raises(OSError):
 				_atomic_write_heartbeat({"last_interaction": 1.0, "prev_interaction": 0.0})
-
-		# tmp file should not exist (cleaned up or never created because open failed)
 		tmp_file = pulse_mod.HEARTBEAT_FILE + ".tmp"
 		assert not os.path.exists(tmp_file)
 		pulse_mod.HEARTBEAT_FILE = original
@@ -32,12 +29,10 @@ class TestAtomicWriteHeartbeat:
 
 		original = pulse_mod.HEARTBEAT_FILE
 		pulse_mod.HEARTBEAT_FILE = str(tmp_path / "pulse.json")
-
 		with patch("os.fsync", side_effect=OSError("disk full")):
 			with patch("os.unlink", side_effect=OSError("already gone")):
 				with pytest.raises(OSError, match="disk full"):
 					_atomic_write_heartbeat({"last_interaction": 1.0, "prev_interaction": 0.0})
-
 		pulse_mod.HEARTBEAT_FILE = original
 
 	def test_successful_write(self, tmp_path):
@@ -46,15 +41,12 @@ class TestAtomicWriteHeartbeat:
 
 		original = pulse_mod.HEARTBEAT_FILE
 		pulse_mod.HEARTBEAT_FILE = str(tmp_path / "storage" / "pulse.json")
-
 		data = {"last_interaction": 123.0, "prev_interaction": 0.0}
 		_atomic_write_heartbeat(data)
-
 		result_path = pulse_mod.HEARTBEAT_FILE
 		with open(result_path) as f:
 			saved = json.load(f)
 		assert saved["last_interaction"] == 123.0
-
 		pulse_mod.HEARTBEAT_FILE = original
 
 
@@ -77,7 +69,6 @@ class TestRecordInteraction:
 
 		original = pulse_mod.HEARTBEAT_FILE
 		pulse_mod.HEARTBEAT_FILE = str(tmp_path / "pulse.json")
-		# Write a "previous" heartbeat just 1 second ago
 		data = {"last_interaction": time.time() - 1}
 		with open(str(tmp_path / "pulse.json"), "w") as f:
 			json.dump(data, f)
@@ -91,10 +82,9 @@ class TestRecordInteraction:
 
 		original = pulse_mod.HEARTBEAT_FILE
 		pulse_mod.HEARTBEAT_FILE = str(tmp_path / "pulse.json")
-		# Write a "previous" heartbeat 30 days ago (must be > 0 to not trigger 'initial')
 		import time
 
-		data = {"last_interaction": time.time() - (86400 * 30)}
+		data = {"last_interaction": time.time() - 86400 * 30}
 		with open(str(tmp_path / "pulse.json"), "w") as f:
 			json.dump(data, f)
 		result = record_interaction()

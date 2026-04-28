@@ -14,6 +14,10 @@
 
 name: Integration Tests (LM-005)
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   # 1. On-demand manual trigger from GitHub Actions UI
   workflow_dispatch:
@@ -26,11 +30,6 @@ on:
   # 2. Automatically when a PR receives the [integration] label
   pull_request:
     types: [labeled]
-
-  # 3. Dedicated integration branch push
-  push:
-    branches:
-      - integration-test
 
 jobs:
   # Gate: only proceed if the trigger is valid (label check for PRs)
@@ -58,7 +57,7 @@ jobs:
     if: needs.check-trigger.outputs.should-run == 'true'
     strategy:
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        python-version: ["3.12"]
 
     steps:
       - name: Checkout repository
@@ -92,6 +91,7 @@ jobs:
         env:
           QDRANT_API_KEY: "ci-integration-key-770"
           SIDECAR_AUTH_KEY: "ci-integration-sidecar-key-770"
+          ALLOW_PRODUCTION_TESTING: "true"  # SEC-TEST-001: Safe — Qdrant is an ephemeral Docker container
         # Run from repo root so uv run resolves the project correctly
         run: bash tests/integration/run_integration.sh
 

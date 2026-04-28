@@ -1,0 +1,33 @@
+# Swarm Flow Registry v1.0
+
+flows:
+  pre-pr:
+    name: "Standard Pre-Pull Request Audit"
+    description: "Chain: Linter -> Unit Tests -> Security Audit -> Changelog"
+    steps:
+      - minion: "ruff_linter"
+        strategy: "linear"
+        on_fail: "stop"
+      - minion: "pytest_runner"
+        strategy: "linear"
+        on_fail: "abort"
+      - minion: "smith_security"
+        strategy: "linear"
+        on_fail: "warn"
+      - minion: "changelog_generator"
+        strategy: "linear"
+
+  surgical-fix:
+    name: "Autonomous Bug Fix"
+    description: "Chain: Analysis -> Healer -> Verification"
+    steps:
+      - minion: "samantha_analysis"
+      - minion: "healer"
+      - minion: "pytest_runner"
+
+  deep-research:
+    name: "Architectural Search"
+    description: "Chain: Search -> Synthesis -> Design Recommendation"
+    steps:
+      - minion: "oracle_search"
+      - minion: "samantha_analysis"

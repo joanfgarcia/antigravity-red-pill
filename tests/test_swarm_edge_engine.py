@@ -9,7 +9,6 @@ class TestEdgeEngineInit:
 		model_dir = tmp_path / "models"
 		model_dir.mkdir()
 		(model_dir / "qwen2.5-coder-7b-instruct.gguf").write_bytes(b"fake")
-
 		with patch("os.getenv", return_value=str(tmp_path)):
 			from red_pill.swarm.agents.edge_engine import EdgeEngine
 
@@ -22,7 +21,6 @@ class TestEdgeEngineInit:
 		model_dir = tmp_path / "models"
 		model_dir.mkdir()
 		(model_dir / "other_model.gguf").write_bytes(b"fake")
-
 		with patch("os.getenv", return_value=str(tmp_path)):
 			from red_pill.swarm.agents.edge_engine import EdgeEngine
 
@@ -32,7 +30,7 @@ class TestEdgeEngineInit:
 
 	def test_no_model_dir(self, tmp_path):
 		"""Lines 36: model dir absent → model_path remains None."""
-		with patch("os.getenv", return_value=str(tmp_path)):  # no models subdir
+		with patch("os.getenv", return_value=str(tmp_path)):
 			from red_pill.swarm.agents.edge_engine import EdgeEngine
 
 			engine = EdgeEngine()
@@ -46,7 +44,7 @@ class TestEnsureLoaded:
 
 		engine = EdgeEngine(model_path=None)
 		engine._llm_loaded = True
-		engine._ensure_loaded()  # Should not change anything
+		engine._ensure_loaded()
 
 	def test_llama_not_available(self):
 		"""Lines 59-60: LLAMA_AVAILABLE=False → llm stays None."""
@@ -164,7 +162,6 @@ class TestFallbackCompress:
 
 		engine = EdgeEngine(model_path=None)
 		result = engine._fallback_compress("   ")
-		# Should return original stripped
 		assert isinstance(result, str)
 
 

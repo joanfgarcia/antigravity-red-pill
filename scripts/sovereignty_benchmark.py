@@ -38,7 +38,8 @@ async def run_sovereignty_benchmark():
 	await asyncio.sleep(5)  # Let them roar for a bit
 
 	# Final Snapshot of Telemetry while tasks are active
-	stats = HardwareSentinel.get_stats()
+	sentinel = HardwareSentinel()
+	stats = sentinel.get_stats()
 
 	# Graceful wait for results
 	try:
@@ -49,7 +50,7 @@ async def run_sovereignty_benchmark():
 	total_time = time.time() - start_time
 
 	# Final Snapshot of Telemetry
-	stats = HardwareSentinel.get_stats()
+	stats = sentinel.get_stats()
 
 	report = {
 		"benchmark_version": "5.3.0",
@@ -70,10 +71,17 @@ async def run_sovereignty_benchmark():
 	print("\n--- [BENCHMARK RESULTS] ---")
 	print(json.dumps(report, indent=2))
 
-	with open("SOVEREIGNTY_PROOF.json", "w") as f:
+	import os
+
+	from red_pill.config import cfg
+
+	reports_dir = os.path.join(cfg.IA_DIR, "reports")
+	os.makedirs(reports_dir, exist_ok=True)
+	output_path = os.path.join(reports_dir, "SOVEREIGNTY_PROOF.json")
+	with open(output_path, "w") as f:
 		json.dump(report, f, indent=2)
 
-	print("\n[Success] Evidence saved to SOVEREIGNTY_PROOF.json")
+	print(f"\n[Success] Evidence saved to {output_path}")
 	print("This data confirms that the Red Pill Protocol occupies all silicon tiers simultaneously.")
 
 

@@ -1,115 +1,127 @@
-"""Tests for config.py — targeting lines 18-20, 42-44, 85, 87, 223.
-These lines execute at module import time based on env vars.
-We test them by importing config in a subprocess-like manner via importlib.
+"""
+Tests for red_pill.config — RedPillConfig (Pydantic BaseSettings, v6.2.0).
+Tests the cascade loading, security validators, and field validation.
 """
 
-import importlib
-import os
-import sys
 import warnings
+from typing import Any
 
 import pytest
+from pydantic import ValidationError
+
+from red_pill.config import RedPillConfig, _load_affect_multipliers
 
 
-def _reimport_config(env_overrides: dict):
-	"""Re-import red_pill.config with custom environment variables."""
-	# Save original env and module
-	original_env = {}
-	for key in env_overrides:
-		original_env[key] = os.environ.get(key)
-		os.environ[key] = env_overrides[key]
-
-	# Remove cached module to force re-import
-	mod_name = "red_pill.config"
-	cached = sys.modules.get(mod_name)
-	if mod_name in sys.modules:
-		del sys.modules[mod_name]
-
-	try:
-		mod = importlib.import_module(mod_name)
-		return mod
-	finally:
-		# Restore env
-		for key, val in original_env.items():
-			if val is None:
-				os.environ.pop(key, None)
-			else:
-				os.environ[key] = val
-		# Restore original module
-		if cached is not None:
-			sys.modules[mod_name] = cached
-		elif mod_name in sys.modules:
-			del sys.modules[mod_name]
+def _make_config(**kwargs: Any) -> RedPillConfig:
+	"""
+	Build a RedPillConfig with custom field overrides for testing.
+	Bypasses the singleton cache entirely.
+	"""
+	return RedPillConfig(**kwargs)
 
 
 class TestConfigWarnings:
 	def test_qdrant_http_non_local_warns(self):
-		"""Lines 18-20: QDRANT_SCHEME=http + non-local host → UserWarning emitted."""
+		"""SEC-F04: QDRANT_SCHEME=http + non-local host → UserWarning emitted."""
 		with warnings.catch_warnings(record=True) as w:
 			warnings.simplefilter("always")
-			_reimport_config(
-				{
-					"QDRANT_SCHEME": "http",
-					"QDRANT_HOST": "remote.example.com",
-					"MILVUS_ENABLED": "False",
-				}
+			_make_config(
+				QDRANT_HOST="remote.example.com",
+				QDRANT_SCHEME="http",
+				MILVUS_ENABLED=False,
 			)
 		sec_warnings = [x for x in w if "SEC-F04" in str(x.message) or "cleartext" in str(x.message).lower()]
 		assert len(sec_warnings) > 0
 
 	def test_qdrant_https_no_warn(self):
-		"""Lines 17: QDRANT_SCHEME=https → no SEC-F04 warning."""
+		"""QDRANT_SCHEME=https → no SEC-F04 warning."""
 		with warnings.catch_warnings(record=True) as w:
 			warnings.simplefilter("always")
-			_reimport_config(
-				{
-					"QDRANT_SCHEME": "https",
-					"QDRANT_HOST": "remote.example.com",
-					"MILVUS_ENABLED": "False",
-				}
+			_make_config(
+				QDRANT_HOST="remote.example.com",
+				QDRANT_SCHEME="https",
+				MILVUS_ENABLED=False,
 			)
 		sec_warnings = [x for x in w if "SEC-F04" in str(x.message)]
 		assert len(sec_warnings) == 0
 
 	def test_milvus_unencrypted_non_local_warns(self):
-		"""Lines 42-44: MILVUS_ENABLED=True + MILVUS_SECURE=False + non-local → SEC-002 warning."""
-		with warnings.catch_warnings(record=True) as w:
-			warnings.simplefilter("always")
-			_reimport_config(
-				{
-					"QDRANT_SCHEME": "http",
-					"QDRANT_HOST": "localhost",
-					"MILVUS_ENABLED": "True",
-					"MILVUS_SECURE": "False",
-					"MILVUS_HOST": "milvus.remote.com",
-				}
-			)
-		sec_warnings = [x for x in w if "SEC-002" in str(x.message)]
-		assert len(sec_warnings) > 0
+		"""SEC-F03: MILVUS_ENABLED=True + MILVUS_SECURE=False + non-local → forced to True."""
+		cfg = _make_config(
+			QDRANT_HOST="localhost",
+			QDRANT_SCHEME="http",
+			MILVUS_ENABLED=True,
+			MILVUS_SECURE=False,
+			MILVUS_HOST="milvus.remote.com",
+		)
+		assert cfg.MILVUS_SECURE is True
 
 
 class TestConfigValidation:
 	def test_invalid_decay_strategy_raises(self):
-		"""Line 66: invalid DECAY_STRATEGY → ValueError."""
-		with pytest.raises(ValueError, match="DECAY_STRATEGY"):
-			_reimport_config({"DECAY_STRATEGY": "quantum", "MILVUS_ENABLED": "False"})
+		"""Invalid DECAY_STRATEGY → ValidationError."""
+		with pytest.raises((ValueError, ValidationError)):
+			_make_config(DECAY_STRATEGY="quantum")
 
 	def test_erosion_rate_out_of_bounds_raises(self):
-		"""Line 85: EROSION_RATE > 1.0 → ValueError."""
-		with pytest.raises(ValueError, match="EROSION_RATE"):
-			_reimport_config({"EROSION_RATE": "1.5", "MILVUS_ENABLED": "False"})
+		"""EROSION_RATE > 1.0 → ValidationError."""
+		with pytest.raises((ValueError, ValidationError)):
+			_make_config(EROSION_RATE=1.5)
 
 	def test_propagation_factor_out_of_bounds_raises(self):
-		"""Line 87: PROPAGATION_FACTOR > 1.0 → ValueError."""
-		with pytest.raises(ValueError, match="PROPAGATION_FACTOR"):
-			_reimport_config({"PROPAGATION_FACTOR": "2.0", "MILVUS_ENABLED": "False"})
+		"""PROPAGATION_FACTOR > 1.0 → ValidationError."""
+		with pytest.raises((ValueError, ValidationError)):
+			_make_config(PROPAGATION_FACTOR=2.0)
 
 	def test_metabolism_state_file_env_override(self):
-		"""Line 223: METABOLISM_STATE_FILE env set → overrides default path."""
-		mod = _reimport_config(
-			{
-				"METABOLISM_STATE_FILE": "/custom/path/state.json",
-				"MILVUS_ENABLED": "False",
-			}
-		)
-		assert mod.METABOLISM_STATE_FILE == "/custom/path/state.json"
+		"""METABOLISM_STATE_FILE field → overrides default path."""
+		cfg = _make_config(METABOLISM_STATE_FILE="/custom/path/state.json")
+		assert cfg.METABOLISM_STATE_FILE == "/custom/path/state.json"
+
+
+class TestConfigModuleAliases:
+	def test_module_aliases_resolve(self):
+		"""Module-level aliases (cfg.QDRANT_HOST etc.) resolve via __getattr__."""
+		import red_pill.config as cfg
+
+		assert isinstance(cfg.QDRANT_HOST, str)
+		assert isinstance(cfg.QDRANT_URL, str)
+		assert cfg.QDRANT_URL.startswith("http") or cfg.QDRANT_URL == ":memory:"
+		assert isinstance(cfg.EROSION_RATE, float)
+		assert isinstance(cfg.DEEP_RECALL_TRIGGERS, list)
+		assert "despierta" in cfg.DEEP_RECALL_TRIGGERS
+		assert isinstance(cfg.BAYESIAN_COLLECTIONS, list)
+		assert isinstance(cfg.MEMORY_ENGINES, dict)
+
+	def test_get_config_returns_model(self):
+		"""get_config() returns a RedPillConfig instance."""
+		from red_pill.config import get_config
+
+		cfg = get_config()
+		assert isinstance(cfg, RedPillConfig)
+
+	def test_enterprise_overrides_pattern(self):
+		"""Enterprise can inject read-only overrides via get_enterprise()."""
+		from red_pill.config import get_config, set_enterprise_overrides
+
+		set_enterprise_overrides({"CERBERUS_TOKEN": "test-token-xyz"})
+		cfg_inst = get_config()
+		assert cfg_inst.get_enterprise("CERBERUS_TOKEN") == "test-token-xyz"
+		assert cfg_inst.get_enterprise("NONEXISTENT_KEY", "default_val") == "default_val"
+		# Clean up
+		set_enterprise_overrides({"CERBERUS_TOKEN": ""})
+
+
+class TestAffectMultipliers:
+	def test_pioneer_model_loads(self):
+		"""Default PIONEER affect model loads correct multipliers."""
+		multipliers = _load_affect_multipliers("PIONEER")
+		assert "orange" in multipliers
+		assert isinstance(multipliers["orange"], float)
+
+	def test_unknown_model_falls_back(self):
+		"""Unknown affect model → falls back to PIONEER defaults."""
+		with warnings.catch_warnings(record=True):
+			warnings.simplefilter("always")
+			multipliers = _load_affect_multipliers("NONEXISTENT_MODEL_XYZ")
+		assert "orange" in multipliers

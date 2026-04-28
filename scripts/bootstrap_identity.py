@@ -33,6 +33,11 @@ def bootstrap():
 
 	manager = MemoryManager()
 
+	# INITIALIZE CORE COLLECTIONS ON FRESH INSTALL
+	from src.red_pill.seed import seed_project
+
+	seed_project(manager)
+
 	# 1. Ingest Identity
 	identity_text = f"""
 	# Identity Directive: Sovereign Identity

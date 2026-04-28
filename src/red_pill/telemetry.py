@@ -1,3 +1,4 @@
+import logging
 import os
 import shutil
 import subprocess
@@ -5,8 +6,12 @@ from typing import Any, Dict
 
 import psutil
 
+from red_pill.core.providers import BaseTelemetryProvider
 
-class HardwareSentinel:
+logger = logging.getLogger(__name__)
+
+
+class HardwareSentinel(BaseTelemetryProvider):
 	"""
 	Real-time hardware telemetry for the Red Pill Kernel.
 	Monitors CPU, GPU (Nvidia/AMD), and placeholders for NPU.
@@ -18,10 +23,23 @@ class HardwareSentinel:
 		bar = "█" * filled + "░" * (length - filled)
 		return f"[{bar}] {percent}%"
 
-	@staticmethod
-	def get_stats() -> Dict[str, Any]:
+	def get_stats(self) -> Dict[str, Any]:
+		# CPU Temperature (Linux-only, graceful fallback)
+		cpu_temp = None
+		if hasattr(psutil, "sensors_temperatures"):
+			temps = psutil.sensors_temperatures()
+			for chip in ["k10temp", "coretemp", "acpitz"]:
+				if chip in temps and temps[chip]:
+					cpu_temp = temps[chip][0].current
+					break
+
 		stats: Dict[str, Any] = {
-			"cpu": {"usage_percent": psutil.cpu_percent(interval=None), "count": psutil.cpu_count(logical=True), "load_avg": os.getloadavg()},
+			"cpu": {
+				"usage_percent": psutil.cpu_percent(interval=None),
+				"count": psutil.cpu_count(logical=True),
+				"load_avg": os.getloadavg() if hasattr(os, "getloadavg") else (0.0, 0.0, 0.0),
+				"temp": cpu_temp,
+			},
 			"memory": {
 				"total_gb": round(psutil.virtual_memory().total / (1024**3), 2),
 				"available_gb": round(psutil.virtual_memory().available / (1024**3), 2),
@@ -29,7 +47,15 @@ class HardwareSentinel:
 			},
 			"gpu": [],
 			"npu": {"status": "Undetected"},
+			"power": {"battery_percent": None, "ac_online": True},
 		}
+
+		# Battery & Power Logic
+		if hasattr(psutil, "sensors_battery"):
+			battery = psutil.sensors_battery()
+			if battery:
+				stats["power"]["battery_percent"] = round(battery.percent, 1)
+				stats["power"]["ac_online"] = battery.power_plugged
 
 		# NVIDIA GPU Logic (CUDA)
 		if shutil.which("nvidia-smi"):
@@ -104,7 +130,7 @@ class HardwareSentinel:
 		except Exception:
 			# Fallback if sysfs restricted
 			if os.path.exists("/sys/class/drm/renderD128"):
-				stats["gpu"].append({"name": "AMD Radeon", "type": "ROCm", "status": "Ready", "memory": "N/A"})
+				stats["gpu"].append({"name": "AMD Radeon (iGPU)", "type": "ROCm", "status": "Ready", "memory": "N/A"})
 
 		# Ryzen AI NPU
 		if os.path.exists("/sys/class/accel/accel0"):
@@ -112,15 +138,50 @@ class HardwareSentinel:
 
 		return stats
 
+	def compute_delta(self, before: Dict[str, Any], after: Dict[str, Any]) -> Dict[str, Any]:
+		"""Calculates the consumed VRAM and CPU load delta."""
+
+		# VRAM Delta (Sum across all GPUs)
+		def _get_vram(stats):
+			total_used = 0
+			for g in stats.get("gpu", []):
+				mem = g.get("memory", "0/0 MB")
+				try:
+					used = int(mem.split("/")[0])
+					total_used += used
+				except Exception:
+					continue
+			return total_used
+
+		vram_before = _get_vram(before)
+		vram_after = _get_vram(after)
+
+		return {
+			"vram_delta_mb": vram_after - vram_before,
+			"cpu_usage_start": before["cpu"]["usage_percent"],
+			"cpu_usage_end": after["cpu"]["usage_percent"],
+		}
+
+	def log_event(self, event_type: str, data: Dict[str, Any]):
+		"""Log an event for auditing (v6.8 Hardening)."""
+		logger.info(f"[SENTINEL-EVENT] type={event_type} data={data}")
+
+
+# Create a singleton instance
+sentinel = HardwareSentinel()
+
 
 def get_telemetry_report() -> str:
 	"""Generates a Markdown report for the IDE Control Panel."""
-	stats = HardwareSentinel.get_stats()
+	stats = sentinel.get_stats()
 
 	report = "### 🖥️ RED PILL HARDWARE CONTROL PANEL\n\n"
 
 	# CPU/RAM
-	report += f"[CPU] {stats['cpu']['usage_percent']}% | RAM: {stats['memory']['percent']}% ({stats['memory']['available_gb']}GB free)\n"
+	cpu_temp_str = f" @ {stats['cpu']['temp']}°C" if stats["cpu"].get("temp") is not None else ""
+	report += (
+		f"[CPU] {stats['cpu']['usage_percent']}%{cpu_temp_str} | RAM: {stats['memory']['percent']}% ({stats['memory']['available_gb']}GB free)\n"
+	)
 
 	# GPU
 	if stats["gpu"]:
@@ -136,5 +197,42 @@ def get_telemetry_report() -> str:
 
 	# NPU
 	report += f"[NPU] {stats['npu'].get('name', 'NPU')}: {stats['npu']['status']}\n"
+
+	# Power
+	pwr = stats.get("power", {})
+	if pwr.get("battery_percent") is not None:
+		ac_status = "🔌 AC" if pwr["ac_online"] else "🔋 BATTERY"
+		report += f"[POWER] {pwr['battery_percent']}% ({ac_status})\n"
+
+	# Memory Queue
+
+	try:
+		from red_pill.core.queue_manager import MemoryQueueManager
+		from red_pill.memory import MemoryManager
+
+		# Process Queue Status
+		pending = MemoryQueueManager().get_pending_count()
+		if pending >= 0:
+			report += f"\n[MEMORY QUEUE] {pending} pending engrams\n"
+
+		# Process Signal Status
+		mgr = MemoryManager()
+		count_result = mgr.client.count(collection_name="signal_memories")
+		sig_count = count_result.count
+		if sig_count >= 0:
+			report += f"[SYSTEM SIGNALS] {sig_count} unread warnings/alerts active\n"
+
+		# Process Minion Inbox Status
+		try:
+			from red_pill.core.inbox import MinionInbox
+
+			inbox_msgs = len(MinionInbox().get_unread(limit=1000))
+			if inbox_msgs >= 0:
+				report += f"[MINION INBOX] {inbox_msgs} unread background reports\n"
+		except Exception:
+			pass
+
+	except Exception:
+		pass
 
 	return report

@@ -1,5 +1,7 @@
 import logging
+import math
 import os
+import random
 import re
 from typing import Any, Dict, List
 
@@ -14,6 +16,11 @@ from red_pill.swarm.agents.edge_engine import EdgeEngine
 logger = logging.getLogger(__name__)
 
 
+def _laplace_noise(scale: float) -> float:
+	u = random.uniform(-0.5, 0.5)
+	return -scale * math.copysign(1.0, u) * math.log(1.0 - 2.0 * abs(u))
+
+
 class HiveMind:
 	"""
 	The Hive Mind (Milvus).
@@ -26,6 +33,13 @@ class HiveMind:
 		self.connected = False
 		if self.enabled and connections:
 			try:
+				# ARCH-01: Explicit Sovereignty Boundary Warning
+				logger.warning("--- [SOVEREIGNTY BOUNDARY WARNING] ---")
+				logger.warning("Hive Mind (Milvus) is ENABLED. You are establishing a connection to a collective neural network.")
+				logger.warning("By proceeding, you explicitly authorize the Red Pill Protocol to transmit anonymized engrams")
+				logger.warning("outside your local machine to the collective database. Your Zero-Egress guarantee is currently SUSPENDED.")
+				logger.warning("--------------------------------------")
+
 				# SEC-F03: Enforce TLS for remote connections
 				is_local = cfg.MILVUS_HOST in ["localhost", "127.0.0.1", "::1"]
 				secure_conn = cfg.MILVUS_SECURE
@@ -128,6 +142,8 @@ class HiveMind:
 					return False
 			except Exception as e:
 				logger.warning(f"HiveGuard Agentic Review failed: {e}. Falling back to conservative heuristics.")
+		else:
+			logger.warning("HF-004: EdgeEngine no disponible. Los engramas sociales usarán heurística estricta (degradación silenciosa mitigada).")
 
 		# Fallback: If no LLM, use a very strict heuristic to avoid 'Moltbook' noise.
 		# Only allow if it has key 'structural' words (trying to stay as agnostic as possible).
@@ -172,6 +188,14 @@ class HiveMind:
 		# v5.6.0: Forced Anonymization before crossing the boundary
 		masked_content = self._mask_identity_signals(content)
 
+		# SEC-HIVEMIND (v6.1.0): Differential Privacy via Laplace Noise
+		# Protects against vector inversion attacks.
+		if getattr(cfg, "HIVEMIND_DP_NOISE", True):
+			epsilon = getattr(cfg, "HIVEMIND_DP_EPSILON", 1.0)
+			# Assuming normalized sentence embeddings are bounded within [-1, 1], sensitivity = 1.0
+			scale = 1.0 / max(epsilon, 0.01)
+			vector = [v + _laplace_noise(scale) for v in vector]
+
 		try:
 			if not utility.has_collection(collection_name):
 				self._create_hive_collection(collection_name)
@@ -200,7 +224,7 @@ class HiveMind:
 		col = Collection(name, schema)
 
 		# Create index for search
-		index_params = {"metric_type": "L2", "index_type": "IVF_FLAT", "params": {"nlist": 128}}
+		index_params = {"metric_type": "L2", "index_type": "IVF_FLAT", "params": {"nlist": cfg.MILVUS_NLIST}}
 		col.create_index(field_name="vector", index_params=index_params)
 		col.load()
 

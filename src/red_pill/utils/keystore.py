@@ -9,9 +9,9 @@ which exposed the hash to anyone with read access to the vector database.
 
 Architecture:
 - WRITE  -> keystore.store_recovery_hash(hash)  -> ~/.config/red_pill/recovery.key (mode 600)
-- READ   -> keystore.load_recovery_hash()        -> str | None
-- CHECK  -> keystore.has_recovery_hash()         -> bool
-- DELETE -> keystore.delete_recovery_hash()      -> None  (Scorched Earth support)
+- READ   -> keystore.load_recovery_hash()		-> str | None
+- CHECK  -> keystore.has_recovery_hash()		 -> bool
+- DELETE -> keystore.delete_recovery_hash()	  -> None  (Scorched Earth support)
 
 Qdrant stores ONLY a boolean marker: {"irp_active": True} -- no hash, no password material.
 """

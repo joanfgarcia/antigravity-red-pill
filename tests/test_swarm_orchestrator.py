@@ -22,7 +22,6 @@ class TestGruOrchestrator:
 		model_dir = tmp_path / "models"
 		model_dir.mkdir()
 		(model_dir / "model.gguf").write_bytes(b"fake")
-
 		with patch("os.getenv", return_value=str(tmp_path)):
 			gru = GruOrchestrator()
 			result = gru.is_local_ready()
@@ -34,7 +33,6 @@ class TestGruOrchestrator:
 		from red_pill.swarm.orchestrator import GruOrchestrator
 
 		gru = GruOrchestrator()
-
 		mock_minion = MagicMock()
 		mock_minion.id = "test-id"
 
@@ -42,8 +40,6 @@ class TestGruOrchestrator:
 			return {"status": "ok"}
 
 		mock_minion.execute = fake_execute
-
-		# notify_user is imported directly in orchestrator.py, must patch there
 		with patch("red_pill.swarm.orchestrator.notify_user") as mock_notify:
 			results = await gru.deploy_swarm("health_check", [mock_minion])
 		assert mock_notify.called
@@ -55,18 +51,14 @@ class TestGruOrchestrator:
 		from red_pill.swarm.orchestrator import GruOrchestrator
 
 		gru = GruOrchestrator()
-
 		mock_minion = MagicMock()
 		mock_minion.id = "m-001"
 		mock_minion.execute = MagicMock(return_value={"data": 42})
-
-		# Make execute an async mock
 
 		async def fake_execute(task, **kwargs):
 			return {"data": 42}
 
 		mock_minion.execute = fake_execute
-
 		result = await gru._run_minion(mock_minion, "test_task")
 		assert result.status == "success"
 		assert result.minion_id == "m-001"
@@ -77,7 +69,6 @@ class TestGruOrchestrator:
 		from red_pill.swarm.orchestrator import GruOrchestrator
 
 		gru = GruOrchestrator()
-
 		mock_minion = MagicMock()
 		mock_minion.id = "m-002"
 
@@ -85,7 +76,6 @@ class TestGruOrchestrator:
 			raise RuntimeError("minion crashed")
 
 		mock_minion.execute = failing_execute
-
 		result = await gru._run_minion(mock_minion, "test_task")
 		assert result.status == "failed"
-		assert "crashed" in result.error
+		assert "crashed" in result.error  # type: ignore

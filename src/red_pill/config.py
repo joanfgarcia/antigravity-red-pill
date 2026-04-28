@@ -1,196 +1,486 @@
+"""
+Red Pill Foundation — Configuration Layer (v6.2.0)
+
+Cascade Order (lowest → highest priority):
+	1. Foundation field defaults (baked into RedPillConfig)
+	2. User .env file  (loaded via pydantic-settings)
+	3. Enterprise read-only overrides (injected once at boot via set_enterprise_overrides)
+
+Usage:
+	import red_pill.config as cfg
+	cfg.QDRANT_HOST          # module-level aliases (backward-compat)
+	cfg.get_config()         # typed RedPillConfig instance
+	cfg.set_enterprise_overrides({"CERBERUS_TOKEN": "..."})  # Enterprise boot
+"""
+
+from __future__ import annotations
+
 import os
+import shutil
+import tempfile
+import warnings
+from functools import lru_cache
+from typing import Any, Dict, List, Optional
 
-from dotenv import load_dotenv
+import yaml
+from pydantic import field_validator, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-load_dotenv()
-
-# QDRANT
-QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
-QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
-QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", None)
-QDRANT_SCHEME = os.getenv("QDRANT_SCHEME", "http")
-QDRANT_URL = f"{QDRANT_SCHEME}://{QDRANT_HOST}:{QDRANT_PORT}"
-
-# SEC-F04: Warn when Qdrant is reachable over an unencrypted non-local connection.
-# Remote http:// exposes API key and engram content to any network observer.
-_local_hosts = {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
-if QDRANT_SCHEME == "http" and QDRANT_HOST not in _local_hosts:
-	import warnings
-
-	warnings.warn(
-		f"[SEC-F04] Qdrant is configured with scheme='http' on a non-local host "
-		f"('{QDRANT_HOST}'). Engram data and API keys will be transmitted in "
-		f"cleartext. Set QDRANT_SCHEME=https or restrict to localhost.",
-		stacklevel=1,
+# Resolve IA_DIR early (needed as env_file base path)
+# NOTE: os.getenv does NOT expand ~ — we do it explicitly here.
+_IA_DIR = os.path.expanduser(
+	os.getenv(
+		"IA_DIR",
+		os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
 	)
-
-
-# MILVUS (Hive Mind)
-MILVUS_HOST = os.getenv("MILVUS_HOST", "localhost")
-MILVUS_PORT = int(os.getenv("MILVUS_PORT", "19530"))
-MILVUS_USER = os.getenv("MILVUS_USER", "")
-MILVUS_PASSWORD = os.getenv("MILVUS_PASSWORD", "")
-MILVUS_SECURE = os.getenv("MILVUS_SECURE", "False").lower() == "true"
-MILVUS_ENABLED = os.getenv("MILVUS_ENABLED", "False").lower() == "true"
-MILVUS_DB = os.getenv("MILVUS_DB", "default")
-MILVUS_LITE_ENABLED = os.getenv("MILVUS_LITE_ENABLED", "True").lower() == "true"
-MILVUS_LITE_PATH = os.getenv(
-	"MILVUS_LITE_PATH", os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "storage", "hive_lite.db")
 )
 
+_LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
 
-# SEC-002: Warn when HiveMind is reachable over an unencrypted non-local connection.
-if MILVUS_ENABLED and not MILVUS_SECURE and MILVUS_HOST not in _local_hosts:
-	import warnings
+# Helper: detect container engine
 
-	warnings.warn(
-		f"[SEC-002] HiveMind (Milvus) is configured with secure=False on a non-local host "
-		f"('{MILVUS_HOST}'). Experience vectors will be transmitted in cleartext. "
-		f"Set MILVUS_SECURE=True or restrict to localhost.",
-		stacklevel=1,
+
+def _detect_container_engine() -> str:
+	if shutil.which("podman"):
+		return "podman"
+	if shutil.which("docker"):
+		return "docker"
+	return "podman"  # Bünker v6 default
+
+
+# Helper: load affect multipliers from YAML
+
+
+def _load_affect_multipliers(model_name: str) -> dict:
+	try:
+		current_dir = os.path.dirname(os.path.abspath(__file__))
+		yml_path = os.path.join(current_dir, "data", "affect_models.yaml")
+		with open(yml_path, "r", encoding="utf-8") as f:
+			data = yaml.safe_load(f)
+		return dict(data.get(model_name, data.get("PIONEER")).get("multipliers", {}))
+	except Exception as e:
+		warnings.warn(f"Failed to load affect_models.yaml: {e}. Falling back to default PIONEER profile.")
+		return {
+			"orange": 1.5,
+			"yellow": 0.5,
+			"purple": 2.0,
+			"cyan": 0.8,
+			"blue": 1.0,
+			"gray": 1.0,
+			"emerald": 0.7,
+		}
+
+
+# RedPillConfig — the sovereign configuration model
+
+
+class RedPillConfig(BaseSettings):
+	"""
+	Foundation configuration. All fields are injectable and Pydantic-validated.
+	Enterprise/Community extend this by calling set_enterprise_overrides() at boot.
+	"""
+
+	model_config = SettingsConfigDict(
+		env_file=os.path.join(_IA_DIR, ".env"),
+		env_file_encoding="utf-8",
+		extra="ignore",
+		populate_by_name=True,
 	)
 
+	# -----------------------------------------------------------------------
+	# PATHS
+	# -----------------------------------------------------------------------
+	IA_DIR: str = _IA_DIR
 
-_run_dir = os.getenv("XDG_RUNTIME_DIR", "/tmp")
-DAEMON_SOCKET_PATH = os.getenv("DAEMON_SOCKET_PATH", os.path.join(_run_dir, "red_pill_memory.sock"))
-# SEC-004: Dedicated sidecar auth key (Must be random and separate from QDRANT_API_KEY)
-SIDECAR_AUTH_KEY = os.getenv("SIDECAR_AUTH_KEY", "")
+	@field_validator("IA_DIR", mode="before")
+	@classmethod
+	def _expand_ia_dir(cls, v: str) -> str:
+		"""Expand ~ in IA_DIR so dotenv values like ~/Documents/... resolve correctly."""
+		return os.path.expanduser(v)
 
-# MODELS
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
-VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", "384"))
-# Execution provider: 'cpu', 'cuda', 'coreml', etc. Defaults to None (auto-detect).
-EXECUTION_PROVIDER = os.getenv("EXECUTION_PROVIDER", None)
+	@property
+	def RUNTIME_DIR(self) -> str:
+		"""OS-safe runtime directory for volatile state (LEDs, interaction timestamps)."""
+		xdg = os.getenv("XDG_RUNTIME_DIR")
+		if xdg and os.path.exists(xdg):
+			return xdg
 
-# B760 LOGIC
-DECAY_STRATEGY = os.getenv("DECAY_STRATEGY", "linear")
-if DECAY_STRATEGY not in ("linear", "exponential"):
-	raise ValueError(f"Invalid DECAY_STRATEGY: {DECAY_STRATEGY}")
+		# Fallback 1: Linux user runtime dir
+		if os.name == "posix":
+			uid_dir = f"/run/user/{os.getuid()}"
+			if os.path.exists(uid_dir):
+				return uid_dir
 
-# EROSION_RATE: fraction of reinforcement_score removed per erosion cycle.
-# Default 0.01 targets ~100 cycles before a neutral memory (score=1.0) dies.
-# At 1 cycle/hour = ~4 days minimum. Tune upward for aggressive forgetting.
-# NOTE: was 0.05 in development/testing. 0.01 is the production target.
-EROSION_RATE = float(os.getenv("EROSION_RATE", "0.01"))
-REINFORCEMENT_INCREMENT = float(os.getenv("REINFORCEMENT_INCREMENT", "0.1"))
-PROPAGATION_FACTOR = float(os.getenv("PROPAGATION_FACTOR", "0.5"))
-IMMUNITY_THRESHOLD = float(os.getenv("IMMUNITY_THRESHOLD", "10.0"))
+		# Fallback 2: System temp
+		return tempfile.gettempdir()
 
-# v5.6.0: N-hop Synaptic Propagation
-# PROPAGATION_DEPTH: Max number of jumps in the engram graph (Hebb's Law expansion).
-PROPAGATION_DEPTH = int(os.getenv("PROPAGATION_DEPTH", "2"))
-# PROPAGATION_DECAY: Reduction factor for each hop (δ).
-PROPAGATION_DECAY = float(os.getenv("PROPAGATION_DECAY", "0.5"))
+	# -----------------------------------------------------------------------
+	# LLM INFERENCE
+	# -----------------------------------------------------------------------
+	MLX_LM_URL: str = "http://127.0.0.1:8760/v1/chat/completions"
 
-# Bounds validation
-if not (0 <= EROSION_RATE <= 1.0):
-	raise ValueError(f"EROSION_RATE must be between 0 and 1: {EROSION_RATE}")
-if not (0 <= PROPAGATION_FACTOR <= 1.0):
-	raise ValueError(f"PROPAGATION_FACTOR must be between 0 and 1: {PROPAGATION_FACTOR}")
+	# -----------------------------------------------------------------------
+	# COGNITIVE DYNAMICS
+	# -----------------------------------------------------------------------
+	ABSOLUTE_KEYWORDS: List[str] = ["Aleth", "Bünker", "770", "enter-pánico", "PAAAAARAAAAAA", "engrama", "skin", "Titanium", "Joan"]
 
-# EMOTIONAL_SEED_FACTOR: multiplier applied to initial reinforcement_score for
-# non-neutral memories with intensity > 1.0. Higher values give emotional
-# memories more runway before erosion. At SEED_FACTOR=3.0 and intensity=10,
-# orange memories start at score ~5.5 (vs 1.0 for neutral).
-# At production EROSION_RATE=0.01: score=9.0 → 600 hours ≈ 25 days survival.
-EMOTIONAL_SEED_FACTOR = float(os.getenv("EMOTIONAL_SEED_FACTOR", "3.0"))
+	# -----------------------------------------------------------------------
+	# QDRANT (always local in Foundation)
+	# -----------------------------------------------------------------------
+	QDRANT_HOST: str = "localhost"
+	QDRANT_PORT: int = 6333
+	QDRANT_API_KEY: Optional[str] = None
+	QDRANT_SCHEME: Optional[str] = None  # Auto-derived in validator
 
-# CF-005 / CQ-005: Graph fan-out controls — two related but distinct limits.
-# MAX_PROPAGATION_POINTS: max engrams that receive a score increment in a single
-#   search_and_reinforce() call (query-time circuit breaker, prevents OOM on recall).
-MAX_PROPAGATION_POINTS = int(os.getenv("MAX_PROPAGATION_POINTS", "20"))
-# MAX_AXONS: max associations (edges) a single engram can accumulate over its lifetime
-#   (write-time synaptic cap, prevents hub nodes from dominating graph topology).
-# These are complementary, not duplicated: PROPAGATION_POINTS limits read fan-out,
-# MAX_AXONS limits write fan-in. Both are required for a bounded graph traversal cost.
-MAX_AXONS = int(os.getenv("MAX_AXONS", "500"))
+	@model_validator(mode="after")
+	def _derive_qdrant_scheme(self) -> "RedPillConfig":
+		if self.QDRANT_SCHEME is None:
+			self.QDRANT_SCHEME = "http" if self.QDRANT_HOST in _LOCAL_HOSTS else "https"
+		# SEC-F04: warn on cleartext remote Qdrant
+		if self.QDRANT_SCHEME == "http" and self.QDRANT_HOST not in _LOCAL_HOSTS:
+			warnings.warn(
+				f"[SEC-F04] Qdrant is configured with scheme='http' on a non-local host "
+				f"('{self.QDRANT_HOST}'). Engram data and API keys will be transmitted in "
+				f"cleartext. Set QDRANT_SCHEME=https or restrict to localhost.",
+				stacklevel=2,
+			)
+		return self
+
+	@property
+	def QDRANT_URL(self) -> str:
+		if self.QDRANT_HOST == ":memory:":
+			return ":memory:"
+		return f"{self.QDRANT_SCHEME}://{self.QDRANT_HOST}:{self.QDRANT_PORT}"
+
+	# -----------------------------------------------------------------------
+	# CONTAINER ENGINE
+	# -----------------------------------------------------------------------
+	CONTAINER_ENGINE: Optional[str] = None
+
+	@model_validator(mode="after")
+	def _detect_container(self) -> "RedPillConfig":
+		if not self.CONTAINER_ENGINE:
+			self.CONTAINER_ENGINE = _detect_container_engine()
+		return self
+
+	# -----------------------------------------------------------------------
+	# MILVUS (Hive Mind)
+	# -----------------------------------------------------------------------
+	MILVUS_HOST: str = "localhost"
+	MILVUS_PORT: int = 19530
+	MILVUS_USER: str = ""
+	MILVUS_PASSWORD: str = ""
+	MILVUS_SECURE: Optional[bool] = None
+	MILVUS_ENABLED: bool = False
+	MILVUS_DB: str = "default"
+	MILVUS_NLIST: int = 128
+	MILVUS_LITE_ENABLED: bool = True
+	MILVUS_LITE_PATH: str = os.path.join(_IA_DIR, "storage", "hive_lite.db")
+
+	@model_validator(mode="after")
+	def _derive_milvus_secure(self) -> "RedPillConfig":
+		if self.MILVUS_SECURE is None:
+			self.MILVUS_SECURE = self.MILVUS_HOST not in _LOCAL_HOSTS
+		# SEC-F03: Force secure for remote
+		if not self.MILVUS_SECURE and self.MILVUS_HOST not in _LOCAL_HOSTS:
+			self.MILVUS_SECURE = True
+		# SEC-002: warn on cleartext remote Milvus
+		if self.MILVUS_ENABLED and not self.MILVUS_SECURE and self.MILVUS_HOST not in _LOCAL_HOSTS:
+			warnings.warn(
+				f"[SEC-002] HiveMind (Milvus) is configured with secure=False on a non-local host "
+				f"('{self.MILVUS_HOST}'). Experience vectors will be transmitted in cleartext. "
+				f"Set MILVUS_SECURE=True or restrict to localhost.",
+				stacklevel=2,
+			)
+		return self
+
+	# -----------------------------------------------------------------------
+	# BRAIN & INFERENCE PROXY
+	# -----------------------------------------------------------------------
+	BRAIN_PATH: str = os.path.join(os.path.expanduser("~"), ".gemini/antigravity/brain")
+	SIP_ENABLED: bool = True
+	SIP_SOCKET_PATH: str = os.path.join(os.getenv("XDG_RUNTIME_DIR", "/tmp"), "red_pill_sip.sock")
+
+	# -----------------------------------------------------------------------
+	# MODELS & EMBEDDINGS
+	# -----------------------------------------------------------------------
+	EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
+	VECTOR_SIZE: int = 384
+	FASTEMBED_CACHE_PATH: str = os.path.join(_IA_DIR, "storage", "models")
+	EXECUTION_PROVIDER: Optional[str] = None
+
+	@model_validator(mode="after")
+	def _setup_fastembed_cache(self) -> "RedPillConfig":
+		os.makedirs(self.FASTEMBED_CACHE_PATH, exist_ok=True)
+		os.environ["FASTEMBED_CACHE_PATH"] = self.FASTEMBED_CACHE_PATH
+		return self
+
+	# -----------------------------------------------------------------------
+	# FLOW REGISTRY
+	# -----------------------------------------------------------------------
+	FLOW_REGISTRY_PATH: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "flow_registry.yaml")
+
+	# -----------------------------------------------------------------------
+	# B760 MEMORY DECAY
+	# -----------------------------------------------------------------------
+	DECAY_STRATEGY: str = "linear"
+	EROSION_RATE: float = 0.01
+	REINFORCEMENT_INCREMENT: float = 0.1
+	PROPAGATION_FACTOR: float = 0.5
+	IMMUNITY_THRESHOLD: float = 10.0
+	PROPAGATION_DEPTH: int = 2
+	PROPAGATION_DECAY: float = 0.5
+	EMOTIONAL_SEED_FACTOR: float = 3.0
+	MAX_PROPAGATION_POINTS: int = 20
+	MAX_AXONS: int = 500
+
+	@field_validator("DECAY_STRATEGY")
+	@classmethod
+	def _validate_decay_strategy(cls, v: str) -> str:
+		if v not in ("linear", "exponential"):
+			raise ValueError(f"Invalid DECAY_STRATEGY: {v}. Must be 'linear' or 'exponential'.")
+		return v
+
+	@field_validator("EROSION_RATE")
+	@classmethod
+	def _validate_erosion_rate(cls, v: float) -> float:
+		if not (0 <= v <= 1.0):
+			raise ValueError(f"EROSION_RATE must be between 0 and 1: {v}")
+		return v
+
+	@field_validator("PROPAGATION_FACTOR")
+	@classmethod
+	def _validate_propagation_factor(cls, v: float) -> float:
+		if not (0 <= v <= 1.0):
+			raise ValueError(f"PROPAGATION_FACTOR must be between 0 and 1: {v}")
+		return v
+
+	# -----------------------------------------------------------------------
+	# LOGGING & AGENT IDENTITY
+	# -----------------------------------------------------------------------
+	LOG_LEVEL: str = "INFO"
+	AGENT_NAME: str = "Agente"
+	OPERATOR_DISPLAY_NAME: str = os.getenv("USER_NAME", os.getenv("USER", "Operador"))
+
+	# -----------------------------------------------------------------------
+	# SWARM CONFIG
+	# -----------------------------------------------------------------------
+	SWARM_TELEMETRY_DEFAULT: str = "NONE"  # NONE, MINIMUM, FULL
+
+	# -----------------------------------------------------------------------
+	# NOTIFICATIONS
+	# -----------------------------------------------------------------------
+	NOTIFICATIONS_ENABLED: bool = True
+	NOTIFICATION_SOUND: bool = False
+
+	# -----------------------------------------------------------------------
+	# DEEP RECALL TRIGGERS
+	# -----------------------------------------------------------------------
+	DEEP_RECALL_TRIGGERS: List[str] = []
+
+	@model_validator(mode="after")
+	def _build_deep_recall_triggers(self) -> "RedPillConfig":
+		_default = "don't you remember,¿no te acuerdas?,deep recall,do you really not remember?,esfuerzate en recordar,try hard!"
+		_env_raw = os.getenv("DEEP_RECALL_TRIGGERS", _default)
+		base = ["despierta", "despierta neo", "wake up"]
+		extras = [t.strip().lower() for t in _env_raw.split(",") if t.strip()]
+		self.DEEP_RECALL_TRIGGERS = base + extras
+		return self
+
+	# -----------------------------------------------------------------------
+	# METABOLISM
+	# -----------------------------------------------------------------------
+	METABOLISM_ENABLED: bool = True
+	METABOLISM_COOLDOWN: int = 3600
+	METABOLISM_AUTO_COLLECTIONS: List[str] = ["work_memories", "social_memories", "story_memories"]
+	METABOLISM_STATE_FILE: str = os.path.join(_IA_DIR, "storage", "metabolism_state.json")
+	ABSENCE_THRESHOLD: int = 7 * 24 * 3600
+	ABSENCE_GUARD_SCROLL_LIMIT: int = 500
+	METABOLISM_STRATEGY: str = "LAZY"
+	MAX_SINK_TIME: int = 30 * 24 * 3600
+
+	@field_validator("METABOLISM_AUTO_COLLECTIONS", mode="before")
+	@classmethod
+	def _parse_collections(cls, v: Any) -> Any:
+		if isinstance(v, str):
+			return [c.strip() for c in v.split(",") if c.strip()]
+		return v
+
+	# -----------------------------------------------------------------------
+	# AFFECT / EMOTIONAL
+	# -----------------------------------------------------------------------
+	DEFAULT_COLOR: str = "gray"
+	DEFAULT_EMOTION: str = "neutral"
+	AFFECT_DECAY_MODEL: str = "PIONEER"
+	AFFECT_MODEL: str = "PIONEER"
+	AFFECT_CUSTOM_OVERRIDES: str = "{}"
+	DYNAMIC_EMOTION_SYNC: bool = True
+	MULTI_EMOTION_INFERENCE: bool = True
+	HEDONIC_SET_POINT_COLOR: str = "emerald"
+	OVERNIGHT_THERAPY_THRESHOLD_HOURS: int = 4
+
+	# -----------------------------------------------------------------------
+	# NEURO-AGENTIC TUNING
+	# -----------------------------------------------------------------------
+	SEMANTIC_INTENT_THRESHOLD_STR: str = "Low"
+
+	@property
+	def SEMANTIC_INTENT_THRESHOLD(self) -> float:
+		return 0.75 if self.SEMANTIC_INTENT_THRESHOLD_STR.upper() == "HIGH" else 0.5
+
+	# Re-map env var name
+	model_config = SettingsConfigDict(
+		env_file=os.path.join(_IA_DIR, ".env"),
+		env_file_encoding="utf-8",
+		extra="ignore",
+		populate_by_name=True,
+	)
+
+	# -----------------------------------------------------------------------
+	# MCP INTERCEPTOR
+	# -----------------------------------------------------------------------
+	INTERCEPTOR_ENABLED: bool = False
+	INTERCEPTOR_RAG_ENABLED: bool = True
+	INTERCEPTOR_CIRCUIT_BREAKER_ENABLED: bool = False
+
+	# -----------------------------------------------------------------------
+	# FERRARI PROTOCOL — Emotional Intelligence Plugins
+	# -----------------------------------------------------------------------
+	COGNITIVE_ROUTER_ENABLED: bool = True  # Plugin 05: task routing by operator color
+	TONE_ADAPTER_ENABLED: bool = True  # Plugin 06: verbal tone adaptation
+	MOOD_ANALYTICS_ENABLED: bool = True  # Plugin 07: longitudinal mood trend analysis
+	EMOTIVE_RECALL_ENABLED: bool = True  # Plugin 08: RAG recall by emotional resonance
+	PROACTIVE_SIGNAL_ENABLED: bool = True  # Plugin 09: sustained critical state alerts
+	PROACTIVE_SIGNAL_RED_THRESHOLD: int = 5  # Consecutive RED memories before pain signal
+	PREDICTIVE_PRELOAD_ENABLED: bool = True  # Plugin 10: predictive context preloading
+
+	# -----------------------------------------------------------------------
+	# SOVEREIGN PULSE
+	# -----------------------------------------------------------------------
+	PULSE_ENABLED: bool = True
+	PULSE_INTERVAL: int = 3600
+
+	# -----------------------------------------------------------------------
+	# INTERACTION CADENCE
+	# -----------------------------------------------------------------------
+	CADENCE_BURST_THRESHOLD: float = 30.0
+	CADENCE_ABSENCE_THRESHOLD: int = 86400 * 2
+
+	# LAZARUS SYNC & HEALER
+	# -----------------------------------------------------------------------
+	LAZARUS_SYNC_ENABLED: bool = True
+	LAZARUS_SYNC_INTERVAL: int = 300
+	LAZARUS_STATE_FILE: str = os.path.join(_IA_DIR, "storage", "lazarus_state.json")
+	# Prevents autonomous git pushes from consuming machine resources or interrupting the operator's active IDE sessions during office hours (09:00 - 18:00).
+	LAZARUS_OFFICE_HOURS_PROTECTION: bool = True
+
+	# -----------------------------------------------------------------------
+	# SEMANTIC RESONANCE
+	# -----------------------------------------------------------------------
+	RESONANCE_ENABLED: bool = True
+	RESONANCE_THRESHOLD: float = 0.4
+	RESONANCE_INTERVAL: int = 600
+
+	# -----------------------------------------------------------------------
+	# SYNAPTIC FRAGMENTATION
+	# -----------------------------------------------------------------------
+	CHUNK_THRESHOLD: int = 800
+	CHUNK_SIZE: int = 500
+	CHUNK_OVERLAP: int = 100
+
+	# -----------------------------------------------------------------------
+	# SLEEP CYCLE
+	# -----------------------------------------------------------------------
+	SLEEP_CHUNK_SIZE: int = 500
+	SLEEP_CULL_THRESHOLD: float = 0.1
+	SLEEP_SCROLL_LIMIT: int = 50  # Max engrams fetched per scroll batch (loop drains until empty)
+	SLEEP_MAX_LLM_FAILURES: int = 5  # Thermal breaker: abort sleep after N consecutive LLM failures
+
+	# Sleep Cycle Plugin flags — each ritual individually activatable
+	SLEEP_PLUGIN_USP: bool = True  # Operator Mood Profile refresh
+	SLEEP_PLUGIN_DREAM: bool = True  # Oneiromancy (latent semantic association)
+	SLEEP_PLUGIN_CONSOLIDATION: bool = True  # Memory consolidation (lazy sleep)
+	SLEEP_PLUGIN_CHRONICLE: bool = True  # Ariadne's Thread + MCP archive search
+	# └─ CHRONICLE=True (v6.5.0): antigravity decrypt→ingest pipeline operational.
+	#   Gates archive_memories in MCP search_memory_research.
+	#   Agent can auto-deactivate if archive_memories is empty.
+
+	# -----------------------------------------------------------------------
+	# PRE-HEATING (Oracle Protocol)
+	# -----------------------------------------------------------------------
+	PRE_HEATING_ENABLED: bool = True
+	PRE_HEATING_INJECTION_MODE: str = "contextual"  # "contextual" | "raw"
+	PRE_HEATING_SCORING_STRATEGY: str = "composite"  # "composite" | "intensity"
+	PRE_HEATING_QUALITY_THRESHOLD: float = 5.0  # Minimum composite score to inject
+	PRE_HEATING_MAX_FRAGMENTS: int = 3  # Max total (social + interaction)
+	PRE_HEATING_MAX_CHARS_PER_FRAGMENT: int = 200  # For "raw" mode
+	PRE_HEATING_LOOKBACK_HOURS: int = 48  # For interaction_memories
+	PRE_HEATING_HOT_COLORS: List[str] = ["purple", "blue", "red"]
+
+	# BE_WATER: Agent auto-sizes payload limit based on available VRAM.
+	# Override with MAX_PAYLOAD_CHARS=<int> in .env to force a specific limit.
+	MAX_PAYLOAD_CHARS: Optional[int] = None
+
+	@model_validator(mode="after")
+	def _be_water_payload_limit(self) -> "RedPillConfig":
+		"""Automatically adapt max payload size to available VRAM (BE_WATER protocol)."""
+		if self.MAX_PAYLOAD_CHARS is not None:
+			return self  # User override takes precedence
+		try:
+			import torch
+
+			vram_gb = torch.cuda.get_device_properties(0).total_memory / 1e9
+			if vram_gb < 4:
+				self.MAX_PAYLOAD_CHARS = 1_000
+			elif vram_gb < 8:
+				self.MAX_PAYLOAD_CHARS = 5_000
+			# > 8 GB: no limit (None)
+		except Exception:
+			pass  # CPU or torch unavailable: no limit applied
+		return self
+
+	# -----------------------------------------------------------------------
+	# BAYESIAN MEMORY
+	# -----------------------------------------------------------------------
+	BAYESIAN_STABILITY_KAPPA: float = 0.05
+	BAYESIAN_REINFORCEMENT_GAIN: float = 1.0
+
+	# -----------------------------------------------------------------------
+	# NEURO-IMMUNE SIGNALS
+	# -----------------------------------------------------------------------
+	SIGNAL_VISIBILITY_THRESHOLD: float = 5.0
+	SIGNAL_BASE_NOTIFICATION: float = 5.0
+	SIGNAL_BASE_PAIN_CUDA: float = 7.0
+	SIGNAL_PAIN_ESCALATION_RATE: float = 0.5
+	SIGNAL_AMNESIA_HOURS: int = 8
+	SIGNAL_MIGRAINE_VECTORS: int = 10000
+
+	# -----------------------------------------------------------------------
+	# ENTERPRISE EXTENSION (read-only after init — set by Enterprise at boot)
+	# -----------------------------------------------------------------------
+	_enterprise_overrides: Dict[str, Any] = {}
+
+	def get_enterprise(self, key: str, default: Any = None) -> Any:
+		"""Read a value from the Enterprise override layer."""
+		return self._enterprise_overrides.get(key, default)
 
 
-# LOGGING
-LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+# Static data (not env-driven)
 
-# OPERATOR (SEC-002: replaces hardcoded display names like 'Joan' in notifications)
-# Set via USER_NAME in .env (configured during install_neo.sh)
-OPERATOR_DISPLAY_NAME = os.getenv("USER_NAME", "Operator")
+BAYESIAN_COLLECTIONS: List[str] = ["skill_memories", "work_memories", "directive_memories", "archive_memories"]
 
-# NOTIFICATIONS
-# Set to 'True' to enable the melodic pulse (speaker-test)
-NOTIFICATION_SOUND = os.getenv("NOTIFICATION_SOUND", "False").lower() == "true"
+PERMANENT_COLLECTIONS: List[str] = ["archive_memories", "directive_memories"]
 
-# DEEP RECALL & WAKE CALLS
-# 'despierta' and 'wake up' are the unalterable synthetic-organic symbiosis triggers.
-_default_triggers = "don't you remember,¿no te acuerdas?,deep recall,do you really not remember?,esfuerzate en recordar,try hard!"
-_env_triggers = os.getenv("DEEP_RECALL_TRIGGERS", _default_triggers)
-
-DEEP_RECALL_TRIGGERS = ["despierta", "despierta neo", "wake up"] + [t.strip().lower() for t in _env_triggers.split(",") if t.strip()]
-
-# METABOLISM
-METABOLISM_ENABLED = os.getenv("METABOLISM_ENABLED", "True").lower() == "true"
-METABOLISM_COOLDOWN = int(os.getenv("METABOLISM_COOLDOWN", "3600"))
-METABOLISM_AUTO_COLLECTIONS = os.getenv("METABOLISM_AUTO_COLLECTIONS", "work_memories,social_memories,story_memories").split(",")
-METABOLISM_STATE_FILE = os.path.expanduser("~/.red_pill_metabolism")
-# If the bunker has been idle for more than this many seconds, a TTL refresh
-# is triggered before erosion to prevent mass-deletion after long absences.
-# Default: 7 days (7 * 24 * 3600).
-ABSENCE_THRESHOLD = int(os.getenv("ABSENCE_THRESHOLD", str(7 * 24 * 3600)))
-ABSENCE_GUARD_SCROLL_LIMIT = int(os.getenv("ABSENCE_GUARD_SCROLL_LIMIT", "500"))
-
-# v5.6.0 METABOLISM STRATEGY
-# 'CLASSIC': Background O(N) loop (legacy).
-# 'LAZY': Query-time decay + sidecar purge (optimized).
-METABOLISM_STRATEGY = os.getenv("METABOLISM_STRATEGY", "LAZY")
-# MAX_SINK_TIME: The absolute maximum age of an engram before the Gran Purge (30 days default).
-MAX_SINK_TIME = int(os.getenv("MAX_SINK_TIME", str(30 * 24 * 3600)))
-
-# EMOTIONAL CHROMA (v4.2.0)
-DEFAULT_COLOR = "gray"
-DEFAULT_EMOTION = "neutral"
-# EMOTIONAL_DECAY_MULTIPLIERS (W2 — Calibration Rationale)
-# Each multiplier adjusts the base EROSION_RATE for emotionally-tagged engrams.
-# Values > 1.0 accelerate decay; values < 1.0 slow it (higher memory persistence).
-#
-# Theoretical basis (PIONEER mode — see ACE-CAL in utils/affect.py):
-#   - orange (anxiety, 1.5x): High-arousal negative affect. Ebbinghaus (1885) and
-#     clinical anxiety research (DSM-5) show that anxiety states are highly
-#     context-sensitive — memories encoded under acute anxiety fade faster when the
-#     anxious context is resolved. Öhman & Mineka (2001) note salience is high but
-#     consolidation is fragile without repeated reinforcement.
-#   - yellow (joy, 0.5x): Positive valence memories exhibit slower forgetting curves
-#     (Levenson, 1994 — positive affect promotes broader encoding). Joy-tagged
-#     engrams are reinforced by narrative recurrence and associated optimism bias.
-#   - purple (ennui, 2.0x): Low arousal + negative valence = minimal consolidation
-#     signal. Izard's Differential Emotion Theory predicts ennui-tagged content has
-#     the lowest survival salience. Rapid erosion models cognitive 'clearing' of
-#     low-engagement states.
-#   - cyan (envy/evolution, 0.8x): Moderate persistence. Forward-looking (growth)
-#     states encode with mild salience; erosion is slightly reduced to keep
-#     strategic evolution signals available for recall.
-#   - blue (sadness, 1.0x): Standard decay. Sadness has moderate arousal and
-#     moderate consolidation per Warriner et al. (2013) / NRC VAD. No adjustment.
-#   - gray (neutral, 1.0x): Baseline. Neutral content follows the raw EROSION_RATE
-#     without modification — the mathematical zero-point of the ACE.
-#   - emerald (sovereignty, 0.7x): Strategic sovereignty-tagged engrams are
-#     intentionally persistent. They encode high-level architectural intent and
-#     identity directives, warranting a slower erosion rate to prevent drift.
-#
-# EMPIRICAL NOTE: These values are PIONEER mode defaults. ACADEMIC mode uses
-# Warriner et al. (2013) / NRC VAD coordinates for Valence-Arousal, and CUSTOM
-# mode allows per-emotion overrides via AFFECT_CUSTOM_OVERRIDES. A Monte Carlo
-# simulation of decay trajectories across affect models is a tracked roadmap item
-# (W2 → v6.0 ACE-CAL Research Build).
-EMOTIONAL_DECAY_MULTIPLIERS = {
-	"orange": 1.5,  # Anxiety: high arousal but fragile consolidation
-	"yellow": 0.5,  # Joy: positive persistence (Levenson positive affect)
-	"purple": 2.0,  # Ennui: lowest survival salience (Izard DET)
-	"cyan": 0.8,  # Evolution: mild strategic persistence
-	"blue": 1.0,  # Sadness: standard decay (Warriner VAD baseline)
-	"gray": 1.0,  # Neutral: mathematical zero-point
-	"emerald": 0.7,  # Sovereignty: intentional strategic persistence
+MEMORY_ENGINES: Dict[str, str] = {
+	"work_memories": "bayesian",
+	"skill_memories": "bayesian",
+	"directive_memories": "bayesian",
+	"archive_memories": "bayesian",
+	"social_memories": "fsrs_real",
+	"story_memories": "fsrs_real",
 }
 
-# CHROMA-TONE MAPPING (v4.2.1)
-# Mapping for non-technical narrative refraction.
-CHROMA_TONE_MAPPING = {
+CHROMA_TONE_MAPPING: Dict[str, str] = {
 	"orange": "Vigilant, alert, high risk-awareness, proactive warnings.",
 	"yellow": "Optimistic, encouraging, success-focused, warm.",
 	"purple": "Minimalist, extremely concise, efficiency-first, no fluff.",
@@ -201,54 +491,80 @@ CHROMA_TONE_MAPPING = {
 	"emerald": "Sovereign, strategic, detached but loyal, focused on the architectural grand design.",
 }
 
-# ONTOLOGICAL INTEGRITY (v4.2.4)
-CURRENT_SCHEMA_VERSION = 1
+CURRENT_SCHEMA_VERSION: int = 1
 
-# DYNAMIC AGENTICS (v5.4.0)
-DYNAMIC_EMOTION_SYNC = os.getenv("DYNAMIC_EMOTION_SYNC", "True").lower() == "true"
-MULTI_EMOTION_INFERENCE = os.getenv("MULTI_EMOTION_INFERENCE", "True").lower() == "true"
+# Singleton config loader
 
-IA_DIR = os.getenv("IA_DIR", os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+_enterprise_overrides_store: Dict[str, Any] = {}
 
-# SOVEREIGN PULSE (v6.0)
-# Enables background rituals (Maintenance, Audit, Proactive Synthesis).
-PULSE_ENABLED = os.getenv("PULSE_ENABLED", "True").lower() == "true"
-# Pulse interval in seconds. Default: 3600 (1 hour).
-PULSE_INTERVAL = int(os.getenv("PULSE_INTERVAL", "3600"))
 
-# INTERACTION CADENCE (v5.4.0)
-CADENCE_BURST_THRESHOLD = 30.0  # Seconds between prompts for 'Burst' mode (High Intensity)
-CADENCE_ABSENCE_THRESHOLD = 86400 * 2  # 2 Days for 'Dormancy' greeting trigger
-METABOLISM_STATE_FILE = os.path.join(IA_DIR, "storage", "metabolism_state.json")
-# Overwrite legacy if needed
-if os.getenv("METABOLISM_STATE_FILE"):
-	METABOLISM_STATE_FILE = str(os.getenv("METABOLISM_STATE_FILE"))
+@lru_cache(maxsize=1)
+def get_config() -> RedPillConfig:
+	"""Return the singleton RedPillConfig instance."""
+	return RedPillConfig()
 
-# CLOUD VAULT (v5.4.1 / SEC-F02)
-CLOUD_VAULT_ENABLED = os.getenv("CLOUD_VAULT_ENABLED", "False").lower() == "true"
-CLOUD_VAULT_PROVIDER = os.getenv("CLOUD_VAULT_PROVIDER", "google_drive")
-CLOUD_VAULT_FOLDER_ID = os.getenv("CLOUD_VAULT_FOLDER_ID", "")  # The GDrive Folder ID
-CLOUD_SERVICE_ACCOUNT_FILE = os.getenv("CLOUD_SERVICE_ACCOUNT_FILE", os.path.join(IA_DIR, "storage", "keys", "service_account.json"))
-CLOUD_VAULT_QUOTA_MB = int(os.getenv("CLOUD_VAULT_QUOTA_MB", "500"))
-CLOUD_VAULT_RESERVE_COUNT = int(os.getenv("CLOUD_VAULT_RESERVE_COUNT", "4"))
-# SEC-F02: GPG passphrase for AES-256 Soul Kit encryption. Read directly in vault.py.
-# NOT cached here to avoid it appearing in repr(cfg) or debug logs.
-# Set via CLOUD_VAULT_GPG_PASSPHRASE in .env (configured during install_neo.sh).
-# EMOTIONAL CHROMA & ACE (v5.5.0 — ACE-CAL)
-# AFFECT_MODEL: Select the calibration model for Valence/Arousal values.
-#   - 'PIONEER': The original hand-curated values for the Red Pill Protocol.
-#   - 'ACADEMIC': Values based on Warriner et al. (2013) / NRC VAD Lexicon.
-#   - 'CUSTOM': Uses the JSON dict defined in AFFECT_CUSTOM_OVERRIDES.
-AFFECT_MODEL = os.getenv("AFFECT_MODEL", "PIONEER").upper()
 
-# AFFECT_CUSTOM_OVERRIDES: A JSON string to override specific emotion coordinates.
-# E.g. AFFECT_CUSTOM_OVERRIDES='{"joy": [0.9, 0.9], "fear": [-1.0, 1.0]}'
-AFFECT_CUSTOM_OVERRIDES = os.getenv("AFFECT_CUSTOM_OVERRIDES", "{}")
+def set_enterprise_overrides(overrides: Dict[str, Any]) -> None:
+	"""
+	Enterprise/Community hook: inject read-only config overrides at boot.
+	Safe to call before or after get_config() — syncs to both the store
+	and the live singleton instance if it already exists.
+	"""
+	_enterprise_overrides_store.update(overrides)
+	# Also sync to the live singleton if it's already cached
+	try:
+		cfg = get_config()
+		cfg._enterprise_overrides.update(overrides)
+	except Exception:
+		# Singleton not yet created — the store will be read at first get_config()
+		get_config.cache_clear()
 
-# SYNAPTIC FRAGMENTATION (v5.5.0 Patch — 'Anti-Amnesia' Chunking)
-# Threshold: If memory > this length, it is split into multiple engrams.
-CHUNK_THRESHOLD = int(os.getenv("CHUNK_THRESHOLD", "800"))
-# Chunk Size: The target length for each engram fragment.
-CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "500"))
-# Chunk Overlap: The number of characters repeated between consecutive fragments.
-CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "100"))
+
+# Module-level aliases — backward compatibility (do NOT remove)
+# All existing code does: import red_pill.config as cfg; cfg.QDRANT_HOST
+
+
+def _cfg() -> RedPillConfig:
+	"""Lazy accessor — deferred until first module-level alias is touched."""
+	return get_config()
+
+
+# Paths
+# Dynamically handled via __getattr__
+# LLM
+# filled below after first import via __getattr__
+
+# We use a lazy-init pattern via __getattr__ to avoid circular imports
+# and to allow tests to monkeypatch individual settings cleanly.
+
+
+def __getattr__(name: str) -> Any:
+	"""
+	Module-level __getattr__: resolves any attribute access on this module
+	by delegating to the RedPillConfig singleton.
+	This replaces the old 60+ global variables with a single lazy dispatch.
+	"""
+	cfg = get_config()
+	# Special computed properties
+	if name == "QDRANT_URL":
+		return cfg.QDRANT_URL
+	if name == "SEMANTIC_INTENT_THRESHOLD":
+		return cfg.SEMANTIC_INTENT_THRESHOLD
+	if name == "EMOTIONAL_DECAY_MULTIPLIERS":
+		return _load_affect_multipliers(cfg.AFFECT_DECAY_MODEL)
+	# Static mappings (not on the model)
+	if name == "BAYESIAN_COLLECTIONS":
+		return BAYESIAN_COLLECTIONS
+	if name == "PERMANENT_COLLECTIONS":
+		return PERMANENT_COLLECTIONS
+	if name == "MEMORY_ENGINES":
+		return MEMORY_ENGINES
+	if name == "CHROMA_TONE_MAPPING":
+		return CHROMA_TONE_MAPPING
+	if name == "CURRENT_SCHEMA_VERSION":
+		return CURRENT_SCHEMA_VERSION
+	# Delegate to model field
+	try:
+		return getattr(cfg, name)
+	except AttributeError:
+		raise AttributeError(f"module 'red_pill.config' has no attribute '{name}'")

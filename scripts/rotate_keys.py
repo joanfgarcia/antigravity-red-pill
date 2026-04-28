@@ -70,6 +70,29 @@ def update_systemd_quadlet(new_key):
 		logger.error(f"Failed to restart Qdrant: {e}")
 		return False
 
+	# SEC-01: Health check verification
+	import time
+	import urllib.request
+
+	from red_pill import config as cfg
+
+	health_ok = False
+	for i in range(5):
+		time.sleep(2)
+		try:
+			req = urllib.request.Request(f"{cfg.QDRANT_URL}/collections", headers={"api-key": new_key})
+			with urllib.request.urlopen(req, timeout=2) as r:
+				if r.status == 200:
+					health_ok = True
+					break
+		except Exception as he:
+			logger.debug(f"Health check loop {i + 1} failing gracefully: {he}")
+
+	if not health_ok:
+		logger.error("x Health check failed. The new API key was not accepted by Qdrant. Manual intervention needed.")
+		return False
+
+	logger.info("✓ Health check Passed. Qdrant is accepting the new key.")
 	return True
 
 

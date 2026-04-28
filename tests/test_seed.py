@@ -31,8 +31,8 @@ class TestSeedProject:
 				seed_project(mgr)
 		assert mgr.client.create_collection.called
 
-	def test_already_seeded_skips_inject(self):
-		"""Lines 47-49: retrieve returns hits → inject_genesis not called."""
+	def test_always_calls_inject_genesis(self):
+		"""inject_genesis is always called for migrations."""
 		from red_pill.seed import seed_project
 
 		mgr = _make_manager()
@@ -41,7 +41,7 @@ class TestSeedProject:
 		with patch("red_pill.seed.inject_genesis") as mock_inject:
 			with patch("red_pill.seed.load_markdown_seeds"):
 				seed_project(mgr)
-		assert not mock_inject.called
+		assert mock_inject.called
 
 	def test_retrieve_exception_calls_inject(self):
 		"""Lines 52-53: retrieve raises → inject_genesis called as fallback."""
@@ -130,7 +130,7 @@ class TestLoadMarkdownSeeds:
 		try:
 			seed_dir.mkdir(exist_ok=True)
 			test_file.write_text("# Failing directive")
-			load_markdown_seeds(mgr)  # Must not raise
+			load_markdown_seeds(mgr)
 		finally:
 			if test_file.exists():
 				test_file.unlink()

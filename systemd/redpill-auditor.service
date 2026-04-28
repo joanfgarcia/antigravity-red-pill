@@ -1,0 +1,14 @@
+[Unit]
+Description=Red Pill Sentinel Auditor (Infrastructure Vitality Monitor)
+After=network.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/joan/Documents/IA/sharing
+ExecStart=/home/joan/Documents/IA/sharing/.venv/bin/python /home/joan/Documents/IA/sharing/scripts/auditor_run.py
+Environment=PYTHONPATH=/home/joan/Documents/IA/sharing/src
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

@@ -1,33 +1,14 @@
 import uuid
-from typing import Any, ClassVar, Dict, List, Literal, Union
+from typing import Any, ClassVar, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, field_validator
 
 import red_pill.config as cfg
 
 # Emotional Spectrum Definition (Inside Out 2 / v4.2.0)
-ValidColor = Literal["orange", "yellow", "purple", "cyan", "blue", "gray", "red", "green", "emerald"]
-ValidEmotion = Literal[
-	"joy",
-	"sadness",
-	"fear",
-	"disgust",
-	"anger",
-	"surprise",
-	"neutral",
-	"love",
-	"shame",
-	"guilt",
-	"desire",
-	"confusion",
-	"anxiety",
-	"envy",
-	"embarrassment",
-	"ennui",
-	"nostalgia",
-	"sarcasm",
-	"happiness",
-]
+ValidColor = Literal["orange", "yellow", "purple", "cyan", "blue", "gray", "red", "green", "emerald", "gold", "black", "white", "pink"]
+# We map it directly to str to embrace Samantha's open-ended emotional taxonomy (e.g. 'frustration', 'existential dread').
+ValidEmotion = str
 
 
 class CreateEngramRequest(BaseModel):
@@ -38,7 +19,8 @@ class CreateEngramRequest(BaseModel):
 	color: ValidColor = Field(default="gray")
 	emotion: ValidEmotion = Field(default="neutral")
 	intensity: float = Field(default=1.0, ge=0.0, le=10.0)
-	metadata: Dict[str, Union[str, int, float, bool, List[Any]]] = Field(default_factory=dict)
+	metadata: Dict[str, Any] = Field(default_factory=dict)
+	linguistic_markers: List[str] = Field(default_factory=list)
 
 	@field_validator("content")
 	@classmethod
@@ -57,6 +39,7 @@ class CreateEngramRequest(BaseModel):
 		"color",
 		"emotion",
 		"intensity",
+		"originator",
 	}
 
 	@field_validator("metadata")
@@ -85,9 +68,9 @@ class CreateEngramRequest(BaseModel):
 					for item in val:
 						if key == "emotional_profile" and isinstance(item, dict):
 							continue
-						if not isinstance(item, (str, int, float, bool)):
+						if isinstance(item, dict) or not isinstance(item, (str, int, float, bool, dict)):
 							raise ValueError(f"Complex type in metadata list {key}")
-				elif isinstance(val, dict):
+				elif isinstance(val, dict) and key not in ["last_3d", "last_7d", "last_30d", "global"]:
 					raise ValueError(f"Nested dict in metadata field {key}")
 
 			if key == "associations" and isinstance(val, list):
@@ -111,12 +94,14 @@ class CreateEngramRequest(BaseModel):
 				raise ValueError(f"Metadata field {key} exceeds limit")
 		return v
 
+
 class EngramPayload(BaseModel):
 	"""
 	Strict read-schema for data loaded from Qdrant.
 	Enforces the presence of core fields, mitigating 'Original Sin' schemaless debt.
 	Automatically injects FSRS baseline values (difficulty/stability) for graceful migration.
 	"""
+
 	content: str
 	importance: float
 	reinforcement_score: float = 1.0
@@ -126,10 +111,17 @@ class EngramPayload(BaseModel):
 	immune: bool = False
 	created_at: float
 	last_recalled_at: float
-	schema_version: str
+	schema_version: Union[str, int]
+	originator: Optional[str] = None
 
-	# FSRS Cognitive Model Dimensions (v6.0 PREP)
-	difficulty: float = 0.0
-	stability: float = 0.0
+	# Bayesian Utility Model (v6.1 Phase B.1)
+	# Alpha: Cumulative success weight (Prior/Reinforcement)
+	# Beta: Cumulative uncertainty/decay weight (Purity/Erosion)
+	utility_alpha: float = 1.0
+	utility_beta: float = 1.0
+
+	# Conversational DNA (v6.0 Claude-Pistis)
+	# Captures shared aliases, nicknames, and unique linguistic triggers.
+	linguistic_markers: List[str] = Field(default_factory=list)
 
 	model_config = {"extra": "allow"}

@@ -1,4 +1,4 @@
-import socket
+import subprocess
 from typing import Any, Dict
 
 import psutil
@@ -6,7 +6,7 @@ import requests
 
 import red_pill.config as cfg
 from red_pill.swarm.base import Minion
-from red_pill.telemetry import HardwareSentinel
+from red_pill.telemetry import HardwareSentinel, sentinel  # noqa: F401
 
 
 class KeymakerMinion(Minion):
@@ -22,36 +22,39 @@ class KeymakerMinion(Minion):
 		"""
 		Perform a full infrastructure health check.
 		"""
-		results: Dict[str, Any] = {"status": "optimal", "checks": [], "qdrant_online": False, "daemon_online": False, "npu_status": "Undetected"}
+		results: Dict[str, Any] = {"status": "optimal", "checks": [], "qdrant_online": False, "npu_status": "Undetected"}
 
-		# 1. Qdrant HTTP Check
+		# 1. Qdrant HTTP & Container Check
 
 		try:
-			resp = requests.get("http://localhost:6333/health", timeout=2)
+			headers = {}
+			if cfg.QDRANT_API_KEY:
+				headers["api-key"] = cfg.QDRANT_API_KEY
+			# Qdrant v1.x uses root / for health/version check
+			resp = requests.get(cfg.QDRANT_URL, headers=headers, timeout=2)
 			results["qdrant_online"] = resp.status_code == 200
-			results["checks"].append({"component": "Qdrant DB", "status": "UP" if results["qdrant_online"] else "DOWN"})
+
+			# Container status sub-check
+			engine = cfg.CONTAINER_ENGINE or "podman"
+			try:
+				container_proc = subprocess.run(
+					[engine, "ps", "--filter", "name=qdrant", "--format", "{{.Status}}"], capture_output=True, text=True, timeout=2
+				)
+				c_status = container_proc.stdout.strip() or "NOT FOUND"
+				results["checks"].append({"component": f"Qdrant ({cfg.CONTAINER_ENGINE})", "status": c_status})
+			except Exception as e:
+				results["checks"].append({"component": f"Qdrant ({cfg.CONTAINER_ENGINE})", "status": "CMD_ERROR", "details": str(e)})
+
+			results["checks"].append({"component": "Qdrant API", "status": "UP" if results["qdrant_online"] else "DOWN"})
 		except Exception:
-			results["checks"].append({"component": "Qdrant DB", "status": "UNREACHABLE"})
-
-		# 2. Daemon Socket Check
-
-		try:
-			with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-				client.settimeout(1)
-				client.connect(cfg.DAEMON_SOCKET_PATH)
-				results["daemon_online"] = True
-				results["checks"].append({"component": "Memory Sidecar", "status": "ACTIVE"})
-		except Exception:
-			results["checks"].append({"component": "Memory Sidecar", "status": "INACTIVE"})
-
-		# 3. Disk Space Check
+			results["checks"].append({"component": "Qdrant API", "status": "UNREACHABLE"})
 
 		usage = psutil.disk_usage("/")
 		results["checks"].append({"component": "Disk Storage", "status": f"{usage.percent}% used", "free_gb": round(usage.free / (1024**3), 2)})
 
 		# 4. NPU Latent Sentinel Check (v5.3.0)
 
-		stats = HardwareSentinel.get_stats()
+		stats = sentinel.get_stats()
 		npu_info = stats.get("npu", {})
 		if npu_info.get("status") == "Ready":
 			results["npu_status"] = "Active"
@@ -71,7 +74,35 @@ class KeymakerMinion(Minion):
 				{"component": "Healing Engine", "status": "COMPLETED", "details": "NPU-accelerated semantic sanitation executed."}
 			)
 
-		if not results["qdrant_online"] or not results["daemon_online"]:
+		# Passive Pain Signal Injection
+		from red_pill.memory import MemoryManager
+
+		try:
+			manager = MemoryManager()
+			if not results["qdrant_online"]:
+				manager.inject_signal("Qdrant Vector DB Offline", 9.0, "pain", "Keymaker")
+				results["status"] = "degraded"
+			else:
+				manager.evaporate_signals("Qdrant Vector DB Offline")
+
+			if results["npu_status"] == "OFFLINE":
+				manager.inject_signal("Latent Sentinel (NPU) Disconnected", 4.0, "pain", "Keymaker")
+			else:
+				manager.evaporate_signals("Latent Sentinel (NPU) Disconnected")
+		except Exception as e:
+			results["checks"].append({"component": "Signal Injection", "status": "ERROR", "details": str(e)})
+
+		if not results["qdrant_online"]:
 			results["status"] = "degraded"
 
 		return results
+
+
+if __name__ == "__main__":
+	import asyncio
+	import json
+
+	print("--- KEYMAKER INFRASTRUCTURE HEALTH CHECK ---")
+	minion = KeymakerMinion()
+	res = asyncio.run(minion.execute("check"))
+	print(json.dumps(res, indent=2))

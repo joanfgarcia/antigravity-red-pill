@@ -1,17 +1,19 @@
 import argparse
 import asyncio
+import importlib.metadata
 import logging
 import os
-import signal
+import subprocess
 import sys
-import time
-from typing import List
+from pathlib import Path
+from typing import Any, Dict, List
 
 import yaml  # type: ignore
 
 import red_pill.config as cfg
+from red_pill.events import CliCommandDispatchedEvent, get_event_bus
 from red_pill.memory import MemoryManager
-from red_pill.seed import seed_project
+from red_pill.seed import ID_DIR_ACTIVE_SKIN, seed_project
 from red_pill.soul import SoulManager
 from red_pill.swarm.agents.smith import SmithMinion
 from red_pill.swarm.base import SwarmResult
@@ -20,6 +22,9 @@ from red_pill.telemetry import get_telemetry_report
 from red_pill.utils.tone_analyzer import get_current_sync_state
 
 logger = logging.getLogger(__name__)
+
+# v6.0.1: Robust Script Resolution
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def switch_skin(skin_name: str) -> str:
@@ -40,7 +45,7 @@ def switch_skin(skin_name: str) -> str:
 	for key, value in skin.items():
 		report += f"{key.capitalize().replace('_', ' ')}: {value}\n"
 
-	# Persist Active Skin in Directives (v5.1.0)
+	# Persist Active Skin in Directives (v6.1.0: Singleton Upsert)
 	try:
 		manager = MemoryManager()
 		content = f"Active Skin: {skin_name.upper()}\n{yaml.dump(skin)}"
@@ -51,6 +56,7 @@ def switch_skin(skin_name: str) -> str:
 			metadata={"type": "active_skin", "skin_name": skin_name},
 			color=skin.get("chroma", "gray"),
 			force_immune=True,
+			point_id=ID_DIR_ACTIVE_SKIN,
 		)
 		return report + f"\n[OK] Skin '{skin_name}' synchronized with Sovereign Directives."
 	except Exception as e:
@@ -58,28 +64,179 @@ def switch_skin(skin_name: str) -> str:
 
 
 def handle_mode(args: argparse.Namespace) -> None:
-	"""CLI wrapper for skin switching."""
+	"""CLI wrapper for skin switching (with SEC-007 explicit consent)."""
+	neutral_skins = ["pioneer", "academic"]
+	if args.skin not in neutral_skins and not getattr(args, "yes", False):
+		print("\n--- [SEC-007 CONSENT REQUIRED] ---")
+		print(f"Warning: Skin '{args.skin.upper()}' modifies base AI neutrality and behavioral filters.")
+		print("For exact behavioral modifiers, see 'src/red_pill/data/lore_skins.yaml'")
+		print("By proceeding, you assume sovereignty over the agent's altered psychological posture.")
+		confirm = input("Type 'Y' to confirm and bypass safety protocols: ")
+		if confirm.strip().upper() != "Y":
+			print("Skin application aborted. Safety protocols maintained.")
+			return
 	print(switch_skin(args.skin))
 
 
-def handle_daemon() -> None:
-	"""Memory Sidecar."""
+def handle_audit() -> None:
+	"""Pre-PR Audit Protocol."""
+	script_path = os.path.join(PROJECT_ROOT, "scripts", "pre_pr_audit.py")
+	print(f"--- [DEPLOYING AUDIT PROTOCOL: {script_path}] ---")
 	try:
-		from red_pill.memory_daemon import MemoryDaemon
-
-		print("\n--- Despertando Sidecar de Memoria ---")
-		daemon = MemoryDaemon()
-
-		def stop_daemon(sig, frame):
-			daemon.stop()
-			sys.exit(0)
-
-		signal.signal(signal.SIGINT, stop_daemon)
-		signal.signal(signal.SIGTERM, stop_daemon)
-		daemon.start()
-	except Exception as e:
-		logger.error(f"Daemon failure: {e}")
+		subprocess.run([sys.executable, script_path], check=True)
+	except subprocess.CalledProcessError:
 		sys.exit(1)
+
+
+def handle_heal(dry_run: bool = False) -> None:
+	"""Samantha's Local Healing Cycle."""
+	script_path = os.path.join(PROJECT_ROOT, "scripts", "local_healer.py")
+	cmd = [sys.executable, script_path]
+	if dry_run:
+		cmd.append("--dry-run")
+	print(f"--- [DEPLOYING HEALER: {script_path}] ---")
+	try:
+		subprocess.run(cmd, check=True)
+	except subprocess.CalledProcessError:
+		sys.exit(1)
+
+
+def handle_benchmark() -> None:
+	"""Sovereignty Benchmark (Tri-Tier Hardware)."""
+	script_path = os.path.join(PROJECT_ROOT, "scripts", "sovereignty_benchmark.py")
+	print(f"--- [DEPLOYING BENCHMARK: {script_path}] ---")
+	subprocess.run([sys.executable, script_path])
+
+
+def handle_identity(args: argparse.Namespace) -> None:
+	"""Identity Management (Bootstrap/Refresh)."""
+	if args.id_cmd == "bootstrap":
+		script_path = os.path.join(PROJECT_ROOT, "scripts", "bootstrap_identity.py")
+		cmd = [sys.executable, script_path]
+		if args.ai_name:
+			cmd.extend(["--ai-name", args.ai_name])
+		if args.ai_role:
+			cmd.extend(["--ai-role", args.ai_role])
+		if args.user_name:
+			cmd.extend(["--user-name", args.user_name])
+		if args.user_role:
+			cmd.extend(["--user-role", args.user_role])
+		if args.skin:
+			cmd.extend(["--skin", args.skin])
+		subprocess.run(cmd)
+	elif args.id_cmd == "refresh":
+		script_path = os.path.join(PROJECT_ROOT, "scripts", "wake_up_v6.py")
+		print(f"--- [REFRESHING SESSION CONTEXT: {script_path}] ---")
+		subprocess.run([sys.executable, script_path])
+	elif args.id_cmd == "purge":
+		print("--- [WARNING: INITIATING GDPR PURGE] ---")
+		print("This will destroy all memories, directives, and identity context forever.")
+		confirm = input("Type 'PURGE' to confirm: ")
+		if confirm == "PURGE":
+			from red_pill.memory import MemoryManager
+
+			mgr = MemoryManager()
+			mgr.purge_identity()
+			print("[OK] Identity and collections purged. System is a blank slate.")
+		else:
+			print("Purge aborted.")
+
+
+def handle_telemetry() -> None:
+	"""One-shot telemetry scan (formerly daemon)."""
+	import sys
+	from pathlib import Path
+
+	project_root = str(Path(__file__).parent.parent.parent)
+	if project_root not in sys.path:
+		sys.path.append(project_root)
+
+	from scripts.bunker_telemetry import BunkerTelemetry
+
+	telemetry = BunkerTelemetry()
+	asyncio.run(telemetry.poll_telemetry(oneshot=True))
+
+
+def handle_interceptor(args: argparse.Namespace) -> None:
+	"""Interceptor Management (Manual Activation for Security Audits)."""
+	conf = cfg.get_config()
+	env_path = Path(conf.IA_DIR) / ".env"
+
+	if args.int_cmd == "enable":
+		print("\n--- [SEC-G01: BÜNKER INTERCEPTOR ACTIVATION] ---")
+		print("Warning: Activating the Interceptor will supplement all user prompts with")
+		print("local context (hardware telemetry, memories, and Lore Skin personality).")
+		print("This is a sovereign technical decision that may affect LLM reasoning costs.")
+		confirm = input("Type 'CONFIRM' to enable the pipeline: ")
+		if confirm.strip().upper() == "CONFIRM":
+			# Update .env
+			lines = []
+			replaced = False
+			if env_path.exists():
+				with open(env_path, "r") as f:
+					for line in f:
+						if line.startswith("INTERCEPTOR_ENABLED="):
+							lines.append("INTERCEPTOR_ENABLED=true\n")
+							replaced = True
+						else:
+							lines.append(line)
+			if not replaced:
+				lines.append("INTERCEPTOR_ENABLED=true\n")
+			with open(env_path, "w") as f:
+				f.writelines(lines)
+			print("[OK] Interceptor ENABLED. Protocol Nova is now active.")
+		else:
+			print("Activation aborted.")
+	elif args.int_cmd == "disable":
+		# Update .env
+		lines = []
+		if env_path.exists():
+			with open(env_path, "r") as f:
+				for line in f:
+					if line.startswith("INTERCEPTOR_ENABLED="):
+						lines.append("INTERCEPTOR_ENABLED=false\n")
+					else:
+						lines.append(line)
+		with open(env_path, "w") as f:
+			f.writelines(lines)
+		print("[OK] Interceptor DISABLED. Baseline neutrality restored.")
+	elif args.int_cmd == "status":
+		status = "ENABLED" if conf.INTERCEPTOR_ENABLED else "DISABLED"
+		print(f"Bünker Interceptor: {status}")
+
+
+def handle_daemon() -> None:
+	"""
+	Lazarus Daemon: starts the LazarusPulse heartbeat and blocks forever.
+	This is the entry point called by the systemd service (redpill.service).
+	The pulse runs all rituals (maintenance, sleep/consolidation, swarm, etc.)
+	every PULSE_INTERVAL seconds (default: 3600).
+	"""
+	import signal
+	import threading
+
+	from red_pill.heartbeat import LazarusPulse
+
+	mem_mgr = MemoryManager()
+	soul_mgr = SoulManager()
+	pulse = LazarusPulse(mem_mgr, soul_mgr)
+
+	stop_event = threading.Event()
+
+	def _shutdown(signum, frame):
+		print("\n[DAEMON] Signal received. Initiating graceful shutdown...")
+		pulse.stop()
+		stop_event.set()
+
+	signal.signal(signal.SIGTERM, _shutdown)
+	signal.signal(signal.SIGINT, _shutdown)
+
+	print(f"[DAEMON] Lazarus Pulse started. Interval: {cfg.PULSE_INTERVAL}s. PID: {os.getpid()}")
+	pulse.start()
+
+	# Block main thread until signal
+	stop_event.wait()
+	print("[DAEMON] Flatline. Goodbye.")
 
 
 def get_collection(type_str: str) -> str:
@@ -89,8 +246,58 @@ def get_collection(type_str: str) -> str:
 		"work": "work_memories",
 		"story": "story_memories",
 		"directive": "directive_memories",
+		"interaction": "interaction_memories",
 	}
 	return mapping.get(type_str, "directive_memories")
+
+
+# CLI Plugin Discovery (EntryPoints)
+# Enterprise/Community packages declare their commands in pyproject.toml:
+#
+#   [project.entry-points."red_pill.commands"]
+#   cerberus = "red_pill_enterprise.cli:CerberusPlugin"
+#
+# Each plugin class must implement:
+#   - register(subparsers: argparse._SubParsersAction) -> None
+#       Add your subparser(s) to the Foundation's main subparsers object.
+#   - handle(args: argparse.Namespace) -> bool
+#       Handle the command. Return True if handled, False to pass through.
+
+_PLUGIN_REGISTRY: Dict[str, Any] = {}
+
+
+def load_plugins(subparsers: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
+	"""
+	Discover and register CLI plugins via 'red_pill.commands' EntryPoints.
+	Called once before argparse.parse_args(), so plugins can add subcommands.
+	"""
+	try:
+		eps = importlib.metadata.entry_points(group="red_pill.commands")
+		for ep in eps:
+			try:
+				plugin_cls = ep.load()
+				plugin = plugin_cls()
+				plugin.register(subparsers)
+				_PLUGIN_REGISTRY[ep.name] = plugin
+				logger.debug(f"[CLI] Loaded plugin: {ep.name} ({ep.value})")
+			except Exception as e:
+				logger.warning(f"[CLI] Failed to load plugin '{ep.name}': {e}")
+	except Exception as e:
+		logger.debug(f"[CLI] EntryPoints discovery skipped: {e}")
+
+
+def _dispatch_plugins(args: argparse.Namespace) -> bool:
+	"""
+	Try each registered plugin's handle() method.
+	Returns True if a plugin handled the command (stops dispatch chain).
+	"""
+	for name, plugin in _PLUGIN_REGISTRY.items():
+		try:
+			if plugin.handle(args):
+				return True
+		except Exception as e:
+			logger.warning(f"[CLI] Plugin '{name}' raised an exception: {e}")
+	return False
 
 
 def main() -> None:
@@ -100,13 +307,18 @@ def main() -> None:
 
 	subparsers = parser.add_subparsers(dest="command")
 
+	# Load Enterprise / Community plugins BEFORE Foundation commands so they
+	# can extend (or wrap) any subparser group.
+	load_plugins(subparsers)
+
 	mode_parser = subparsers.add_parser("mode", help="Switch Lore Skin")
 	mode_parser.add_argument("skin", help="matrix, cyberpunk, 760, dune, 40k, gits, bladerunner, her, exmachina, terminator, 2001, creator")
+	mode_parser.add_argument("--yes", "--force", action="store_true", help="Bypass SEC-007 consent prompt")
 
 	subparsers.add_parser("seed", help="Initialize memory substrate")
 
 	add_parser = subparsers.add_parser("add", help="Add engram")
-	add_parser.add_argument("type", choices=["work", "social", "directive", "story"])
+	add_parser.add_argument("type", choices=["work", "social", "directive", "story", "interaction"])
 	add_parser.add_argument("content")
 	add_parser.add_argument("--color", choices=["orange", "yellow", "purple", "cyan", "blue", "gray"], default=cfg.DEFAULT_COLOR)
 	add_parser.add_argument(
@@ -117,21 +329,20 @@ def main() -> None:
 	add_parser.add_argument("--intensity", type=float, default=1.0)
 
 	search_parser = subparsers.add_parser("search", help="Search and reinforce")
-	search_parser.add_argument("type", choices=["work", "social", "directive", "story"])
+	search_parser.add_argument("type", choices=["work", "social", "directive", "story", "interaction"])
 	search_parser.add_argument("query")
 	search_parser.add_argument("--limit", type=int, default=3)
 	search_parser.add_argument("--deep", action="store_true", help="Deep Recall bypass")
 
 	erode_parser = subparsers.add_parser("erode", help="B760 erosion")
-	erode_parser.add_argument("type", choices=["work", "social", "directive", "story"])
+	erode_parser.add_argument("type", choices=["work", "social", "directive", "story", "interaction"])
 	erode_parser.add_argument("--rate", type=float)
 
 	diag_parser = subparsers.add_parser("diag", help="Diagnostics")
-	diag_parser.add_argument("type", choices=["work", "social", "directive", "story"])
-	subparsers.add_parser("daemon", help="Memory Sidecar")
+	diag_parser.add_argument("type", choices=["work", "social", "directive", "story", "interaction"])
 
 	sanitize_parser = subparsers.add_parser("sanitize", help="Sanitation & Migration Protocol")
-	sanitize_parser.add_argument("type", choices=["work", "social", "directive", "story"])
+	sanitize_parser.add_argument("type", choices=["work", "social", "directive", "story", "interaction"])
 	sanitize_parser.add_argument("--dry-run", action="store_true", help="Report without changes")
 	sanitize_parser.add_argument("--raw", action="store_true", help="Bypass Pydantic validation (Raw Read maintenance fallback)")
 
@@ -139,6 +350,9 @@ def main() -> None:
 
 	swarm_parser = subparsers.add_parser("swarm", help="Sovereign Swarm Operations")
 	swarm_sub = swarm_parser.add_subparsers(dest="swarm_cmd")
+
+	sleep_parser = subparsers.add_parser("sleep", help="Lazarus Maintenance Ritual")
+	sleep_parser.add_argument("--mode", choices=["lazy", "deep"], default="lazy", help="Deep mode forces full pruning")
 	audit_parser = swarm_sub.add_parser("audit", help="Launch Agent Smith Code Audit")
 	audit_parser.add_argument("--path", default=".", help="Target path for audit")
 
@@ -153,11 +367,17 @@ def main() -> None:
 	restore_parser = soul_sub.add_parser("restore", help="Restore soul from a backup directory")
 	restore_parser.add_argument("source", help="Path to backup source")
 	restore_parser.add_argument("--commit", action="store_true", help="Execute the restoration")
+	verify_parser = soul_sub.add_parser("verify", help="Verify backup integrity without restoring")
+	verify_parser.add_argument("source", help="Path to backup kit (.tar.gz or .enc)")
 	soul_sub.add_parser("sync", help="Check emotional sync state")
 	soul_sub.add_parser("vault", help="Inspect Cloud Vault status and backups")
+	migrate_parser = soul_sub.add_parser("migrate", help="v3.0 pre-flight: decrypt/re-encrypt LEAN_SOUL_KITs")
+	migrate_parser.add_argument("--status", action="store_true", help="Show migration state")
+	migrate_parser.add_argument("--decrypt", action="store_true", help="Step 1: decrypt .mls kits before pure-mls upgrade")
+	migrate_parser.add_argument("--reencrypt", action="store_true", help="Step 2: re-encrypt kits after pure-mls v3.0 upgrade")
 
 	edit_parser = subparsers.add_parser("edit", help="Edit engram attributes")
-	edit_parser.add_argument("type", choices=["work", "social", "directive", "story"])
+	edit_parser.add_argument("type", choices=["work", "social", "directive", "story", "interaction"])
 	edit_parser.add_argument("id", help="The UUID of the engram to edit")
 	edit_parser.add_argument("--color", choices=["orange", "yellow", "purple", "cyan", "blue", "gray"])
 	edit_parser.add_argument(
@@ -166,30 +386,112 @@ def main() -> None:
 	)
 	edit_parser.add_argument("--intensity", type=float)
 
-	signal_parser = subparsers.add_parser("signal", help="Sovereign Alert System (SAS) trigger")
-	signal_parser.add_argument("message", help="Notification message")
-	signal_parser.add_argument("--title", default="Red Pill: Task Complete", help="Notification title")
-	signal_parser.add_argument("--sound", action="store_true", help="Enable sensory pulse (sound)")
-	signal_parser.add_argument("--silent", action="store_true", help="Do not send desktop notification (Memory only)")
+	signal_parser = subparsers.add_parser("signal", help="Sovereign Alert System (SAS) management")
+	signal_sub = signal_parser.add_subparsers(dest="sig_cmd")
+
+	sig_push = signal_sub.add_parser("push", help="Trigger a new alert/notification")
+	sig_push.add_argument("message", help="Notification message")
+	sig_push.add_argument("--title", default="Red Pill: Task Complete", help="Notification title")
+	sig_push.add_argument("--sound", action="store_true", help="Enable sensory pulse (sound)")
+	sig_push.add_argument("--silent", action="store_true", help="Do not send desktop notification (Memory only)")
+	sig_push.add_argument("--intensity", type=float, default=7.0, help="Pain intensity (0.0 - 10.0)")
+
+	sig_evap = signal_sub.add_parser("evaporate", help="Clear one or all pain signals (Neural Reset)")
+	sig_evap.add_argument("--name", help="Specific signal name to clear (e.g. 'torch_cuda_mismatch')")
+	sig_evap.add_argument("--all", action="store_true", help="Purge ALL active signals")
 
 	init_parser = subparsers.add_parser("init", help="Bootstrap a Spec-Compliant project")
 	init_parser.add_argument("--flow", choices=["fire", "simple", "aidlc"], default="fire", help="Initial specs.md flow")
 
+	subparsers.add_parser("audit", help="Run Pre-PR Audit (Ruff, Mypy, Pytest)")
+
+	heal_parser = subparsers.add_parser("heal", help="Run Samantha Local Healer (Auto-fix Mypy)")
+	heal_parser.add_argument("--dry-run", action="store_true")
+
+	subparsers.add_parser("benchmark", help="Run Sovereignty Benchmark (Hardware Concurrency)")
+
+	id_parser = subparsers.add_parser("identity", help="Identity & Persona Management")
+	id_sub = id_parser.add_subparsers(dest="id_cmd")
+
+	boot_parser = id_sub.add_parser("bootstrap", help="Initialize Sovereign Identity")
+	boot_parser.add_argument("--ai-name")
+	boot_parser.add_argument("--ai-role")
+	boot_parser.add_argument("--user-name")
+	boot_parser.add_argument("--user-role")
+	boot_parser.add_argument("--skin")
+
+	id_sub.add_parser("refresh", help="Synthesize and refresh session context (wake_up)")
+	id_sub.add_parser("purge", help="GDPR Art 17: Right to be Forgotten. Destroys all memory collections and local identity.")
+
+	int_parser = subparsers.add_parser("interceptor", help="Bünker Interceptor Management")
+	int_sub = int_parser.add_subparsers(dest="int_cmd")
+	int_sub.add_parser("enable", help="Manually enable personal identity injection")
+	int_sub.add_parser("disable", help="Restore baseline AI neutrality")
+	int_sub.add_parser("status", help="Show interceptor state")
+
+	subparsers.add_parser("telemetry", help="Run a single-pass hardware/Bünker telemetry heartbeat (Oneshot)")
+
 	args = parser.parse_args()
 
 	log_level = logging.DEBUG if args.verbose else getattr(logging, cfg.LOG_LEVEL.upper(), logging.INFO)
-	logging.basicConfig(level=log_level, format="%(levelname)s: %(message)s")
+
+	if os.getenv("LOG_JSON", "False").lower() == "true":
+		import json
+
+		class JsonFormatter(logging.Formatter):
+			def format(self, record):
+				log_record = {
+					"timestamp": self.formatTime(record, self.datefmt),
+					"level": record.levelname,
+					"name": record.name,
+					"message": record.getMessage(),
+				}
+				if record.exc_info:
+					log_record["exception"] = self.formatException(record.exc_info)
+				return json.dumps(log_record)
+
+		handler = logging.StreamHandler()
+		handler.setFormatter(JsonFormatter())
+		logging.basicConfig(level=log_level, handlers=[handler])  # type: ignore
+	else:
+		logging.basicConfig(level=log_level, format="%(levelname)s: %(message)s")
+
+	# SEC-F04: Prevención de fuga de credenciales en logs
+	class SecretMasker(logging.Filter):
+		def filter(self, record):
+			try:
+				msg = str(record.msg)
+				secrets = [cfg.QDRANT_API_KEY, getattr(cfg, "SIDECAR_AUTH_KEY", ""), getattr(cfg, "MILVUS_PASSWORD", "")]
+				for secret in secrets:
+					if secret and isinstance(secret, str) and len(secret) > 4:
+						msg = msg.replace(secret, f"***{secret[-4:]}")
+				record.msg = msg
+			except Exception:
+				pass
+			return True
+
+	for h in logging.root.handlers:
+		h.addFilter(SecretMasker())
 
 	if not args.command:
 		parser.print_help()
 		sys.exit(0)
 
-	if args.command == "daemon":
-		handle_daemon()
+	elif args.command == "telemetry":
+		handle_telemetry()
 		return
+
 	elif args.command == "mode":
 		handle_mode(args)
 		return
+
+	# EventBus: let Enterprise/Community know which command was dispatched
+	get_event_bus().emit(
+		CliCommandDispatchedEvent(
+			command=args.command,
+			subcommand=getattr(args, "swarm_cmd", None) or getattr(args, "soul_cmd", None) or getattr(args, "id_cmd", None),
+		)
+	)
 
 	# Map CLI type to collection(s)
 	if getattr(args, "type", None):
@@ -203,9 +505,22 @@ def main() -> None:
 	try:
 		manager = MemoryManager(url=args.url) if args.url else MemoryManager()
 
+		# Telemetry initialization
+		points_affected = 0
+
 		if args.command == "seed":
 			seed_project(manager)
 			return
+		elif args.command == "sleep":
+			from red_pill.metabolism.sleep import perform_sleep_cycle
+
+			print("\n[LAZARUS PULSE] Initiating Maintenance Ritual (Sleep Cycle)...")
+			try:
+				points_affected = perform_sleep_cycle(manager, mode=args.mode)  # Pass mode from args
+				print(f"[OK] Ritual Complete. {points_affected} engrams consolidated via FSRS Fixation.")
+			except Exception as e:
+				print(f"[ERROR] Sleep cycle interrupted: {e}")
+			return  # Added return here
 		elif args.command == "backup":
 			print("\n--- [BÜNKER BACKUP: CREATING LOCAL SNAPSHOTS] ---")
 			results = manager.create_bunker_snapshot(collections=args.collections)
@@ -222,7 +537,7 @@ def main() -> None:
 			if args.swarm_cmd == "audit":
 				gru = GruOrchestrator()
 				smith = SmithMinion()
-				print(f"--- [DEPLOING SWARM: AGENT {smith.name.upper()}] ---")
+				print(f"--- [DEPLOYING SWARM: AGENT {smith.name.upper()}] ---")
 				# Explicitly type results for Mypy
 				swarm_results: List[SwarmResult] = asyncio.run(gru.deploy_swarm("audit", [smith], path=args.path))
 				for res in swarm_results:
@@ -243,21 +558,33 @@ def main() -> None:
 			if args.soul_cmd == "backup":
 				soul.full_backup()
 			elif args.soul_cmd == "export":
-				soul.export_soul()
+				from red_pill.interceptors import _init_sovereign_plugins
+
+				async def run_export():
+					await _init_sovereign_plugins()
+					await soul.export_soul()
+
+				asyncio.run(run_export())
 			elif args.soul_cmd == "rotate":
 				from scripts.rotate_keys import rotate
 
 				rotate()
 			elif args.soul_cmd == "restore":
 				soul.restore_soul(args.source, commit=args.commit)
+			elif args.soul_cmd == "verify":
+				if soul.verify_soul(args.source):
+					print(f"\n[OK] VERIFIED: {args.source} is healthy.")
+				else:
+					print(f"\n[FAIL] CORRUPT OR INVALID: {args.source}")
+					sys.exit(1)
 			elif args.soul_cmd == "sync":
 				state = get_current_sync_state()
 				print(f"--- [EMOTIONAL SYNC: {state['mood'].upper()}] ---")
 				print(f"Directive: {state['directive']}")
 			elif args.soul_cmd == "vault":
-				if soul.vault.enabled:
+				if soul.vault.enabled:  # type: ignore
 					print("--- [CLOUD VAULT: ACTIVE (Google Drive)] ---")
-					files = soul.vault.list_backups()
+					files = soul.vault.list_backups()  # type: ignore
 					if not files:
 						print("Vault is empty. Run 'red-pill soul export' to transmit your first kit.")
 					else:
@@ -265,7 +592,12 @@ def main() -> None:
 							print(f"- {f['name']} ({f['createdTime']}) [ID: {f['id']}]")
 				else:
 					print("--- [CLOUD VAULT: INACTIVE] ---")
-					print(f"To enable, set CLOUD_VAULT_ENABLED=True in .env and provide {cfg.CLOUD_SERVICE_ACCOUNT_FILE}")
+					print("To enable Cloud Sync, configure the 'cloud_sync' plugin in <IA_DIR>/plugins/cloud_sync/cloud_sync.json")
+			elif args.soul_cmd == "migrate":
+				from red_pill.soul_migrate import run_migrate_cli
+
+				migrate_args = sys.argv[sys.argv.index("migrate") + 1 :]
+				run_migrate_cli(migrate_args)
 			return
 		elif args.command == "init":
 			import subprocess
@@ -281,9 +613,24 @@ def main() -> None:
 				from red_pill import __version__
 
 				print(f"\n[OK] Flow '{args.flow}' initialized on disk (Notebook mode).")
-				notify_user("Project Initialized", f"Red Pill v{__version__} + specs.md {args.flow} flow is now live.")
+				notify_user("Project Initialized", f"Red Pill v{__version__} + specs.md {args.flow} flow is now live.", category="init")
 			except Exception as e:
 				print(f"[FAIL] Initialization failed: {e}")
+			return
+		elif args.command == "audit":
+			handle_audit()
+			return
+		elif args.command == "heal":
+			handle_heal(args.dry_run)
+			return
+		elif args.command == "benchmark":
+			handle_benchmark()
+			return
+		elif args.command == "identity":
+			handle_identity(args)
+			return
+		elif args.command == "interceptor":
+			handle_interceptor(args)
 			return
 
 		# Loop through requested collections
@@ -347,19 +694,32 @@ def main() -> None:
 				for key, value in stats.items():
 					print(f"{key.capitalize().replace('_', ' ')}: {value}")
 			elif args.command == "signal":
-				from red_pill.utils.observer import notify_user
+				if args.sig_cmd == "push":
+					from red_pill.utils.observer import notify_user
 
-				if not args.silent:
-					notify_user(args.title, args.message, sound=args.sound)
+					if not args.silent:
+						notify_user(args.title, args.message, sound=args.sound, category="manual")
 
-				# Record memory of the signal
-				manager.add_memory(
-					collection="directive_memories",
-					text=f"SAS Signal: {args.title} - {args.message}",
-					importance=1.0,
-					metadata={"type": "sas_signal", "timestamp": time.time(), "message": args.message},
-				)
-				print(f"[SAS] Signal recorded: {args.message}")
+					# Record memory of the signal (System Signal collections)
+					manager.inject_signal(name=args.title, intensity=args.intensity, signal_type="manual", source="cli")
+					print(f"[SAS] Signal recorded: {args.message}")
+
+				elif args.sig_cmd == "evaporate":
+					if args.all:
+						manager.evaporate_signals(name=None)
+						print("[SAS] Neural Reset: All signals cleared.")
+					elif args.name:
+						manager.evaporate_signals(name=args.name)
+						print(f"[SAS] Signal '{args.name}' evaporated.")
+					else:
+						print("[FAIL] Specify --name or --all to evaporate.")
+
+			else:
+				# --- Enterprise/Community Plugin Dispatch ---
+				# If no built-in command matched, let plugins handle it.
+				if not _dispatch_plugins(args):
+					parser.print_help()
+					sys.exit(1)
 
 	except Exception as e:
 		logger.error(f"Protocol Failure: {e}")

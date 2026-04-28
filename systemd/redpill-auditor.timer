@@ -1,0 +1,10 @@
+[Unit]
+Description=Timer for Red Pill Sentinel Auditor (Hourly Audit)
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
