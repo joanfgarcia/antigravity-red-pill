@@ -140,7 +140,7 @@ class TestEmotiveRecallPlugin:
 class TestProactiveSignalPlugin:
 	def setup_method(self):
 		mod = importlib.import_module("red_pill.interceptors.09_proactive_signal")
-		mod._pain_signal_emitted = False
+		mod._pain_signal_emitted = False  # type: ignore
 
 	def _get_plugin(self):
 		mod = importlib.import_module("red_pill.interceptors.09_proactive_signal")

@@ -1138,9 +1138,11 @@ async def handle_call_tool(
 	try:
 		return await registry.execute(name, arguments)
 	except Exception as e:
+		import tempfile
 		import traceback
 
-		with open("/tmp/mcp_crash.log", "a") as f:
+		log_path = os.path.join(tempfile.gettempdir(), "mcp_crash.log")
+		with open(log_path, "a", encoding="utf-8") as f:
 			f.write(f"Crash in {name}: {e}\n{traceback.format_exc()}\n")
 		raise e
 

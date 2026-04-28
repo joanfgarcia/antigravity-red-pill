@@ -13,8 +13,14 @@ def temp_inbox(tmp_path) -> Generator[MinionInbox, None, None]:
 	db_path = os.path.join(tmp_path, "test_minion_inbox.db")
 	inbox = MinionInbox(db_path=db_path)
 	yield inbox
-	if os.path.exists(db_path):
-		os.remove(db_path)
+	try:
+		if os.path.exists(db_path):
+			import gc
+
+			gc.collect()
+			os.remove(db_path)
+	except PermissionError:
+		pass
 
 
 def test_inbox_initialization(temp_inbox: MinionInbox):

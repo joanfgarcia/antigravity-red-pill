@@ -3,6 +3,7 @@ test_swarm_workflow.py — Updated for SwarmMessagingSkill v4.0 (pure-mls)
 """
 
 import os
+import tempfile
 from unittest.mock import MagicMock, patch
 
 
@@ -27,20 +28,28 @@ def test_dynamic_workflow():
 	seed_a = b"aleth_seed_workflow_test______"
 	seed_b = b"nova__seed_workflow_test______"
 
-	# Build two bridges
-	with patch("red_pill.utils.vault_crypto.VaultCrypto.get_identity", return_value=_mock_identity(seed_a)):
+	tmp_dir = tempfile.mkdtemp()
+	with (
+		patch("red_pill.utils.vault_crypto.VaultCrypto.get_identity", return_value=_mock_identity(seed_a)),
+		patch("red_pill.swarm.mls_manager.SWARM_STATE_DIR", tmp_dir),
+	):
 		bridge_a = MLSBridge(secret)
-	with patch("red_pill.utils.vault_crypto.VaultCrypto.get_identity", return_value=_mock_identity(seed_b)):
+	with (
+		patch("red_pill.utils.vault_crypto.VaultCrypto.get_identity", return_value=_mock_identity(seed_b)),
+		patch("red_pill.swarm.mls_manager.SWARM_STATE_DIR", tmp_dir),
+	):
 		bridge_b = MLSBridge(secret)
 
 	# A adds B → Welcome
 	kp_b, _ = bridge_b.get_my_key_package()
 	welcome = bridge_a.add_member_and_get_welcome("test", kp_b)
+	assert welcome is not None
 	bridge_b.process_welcome("test", welcome)
 
 	# B encrypts a LGTM payload
 	payload = {"intent": SwarmIntent.LGTM_APPROVED.value, "sender": "Aleph@Joan", "target": "Nova@David", "data": {"approval": True}, "v": "4.0"}
 	ciphertext = bridge_b.encrypt("test", json.dumps(payload).encode())
+	assert ciphertext is not None
 	pkg = {"mode": "pure_mls", "ciphertext": base64.b64encode(ciphertext).decode(), "sender": "agt_b"}
 
 	# A receives and decrypts

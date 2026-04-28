@@ -360,7 +360,9 @@ class LazarusPulse:
 		import datetime
 
 		# 1. Branch check
-		proc = await asyncio.create_subprocess_exec("git", "rev-parse", "--abbrev-ref", "HEAD", cwd=cfg.IA_DIR, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+		proc = await asyncio.create_subprocess_exec(
+			"git", "rev-parse", "--abbrev-ref", "HEAD", cwd=cfg.IA_DIR, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+		)
 		stdout, _ = await proc.communicate()
 		branch = stdout.decode().strip()
 		if branch in ["main", "master"]:
@@ -387,7 +389,9 @@ class LazarusPulse:
 		logger.info(f"Auto-Healer: Executing background commit & push for {trigger_event}...")
 		proc_add = await asyncio.create_subprocess_exec("git", "add", ".", cwd=cfg.IA_DIR)
 		await proc_add.communicate()
-		proc_commit = await asyncio.create_subprocess_exec("git", "commit", "-m", f"chore(auto-heal): background recovery [{trigger_event}]", cwd=cfg.IA_DIR)
+		proc_commit = await asyncio.create_subprocess_exec(
+			"git", "commit", "-m", f"chore(auto-heal): background recovery [{trigger_event}]", cwd=cfg.IA_DIR
+		)
 		await proc_commit.communicate()
 		proc_push = await asyncio.create_subprocess_exec("git", "push", "origin", "HEAD", cwd=cfg.IA_DIR)
 		await proc_push.communicate()
@@ -411,9 +415,13 @@ class LazarusPulse:
 
 				if event_id == "signal_ruff_failure":
 					logger.info("Auto-Healer: Attempting to heal 'signal_ruff_failure' (Ruff)...")
-					proc1 = await asyncio.create_subprocess_exec("uv", "run", "ruff", "check", "--fix", ".", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, cwd=cfg.IA_DIR)
+					proc1 = await asyncio.create_subprocess_exec(
+						"uv", "run", "ruff", "check", "--fix", ".", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, cwd=cfg.IA_DIR
+					)
 					await proc1.communicate()
-					proc2 = await asyncio.create_subprocess_exec("uv", "run", "ruff", "format", ".", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, cwd=cfg.IA_DIR)
+					proc2 = await asyncio.create_subprocess_exec(
+						"uv", "run", "ruff", "format", ".", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, cwd=cfg.IA_DIR
+					)
 					await proc2.communicate()
 					await self._try_auto_push(event_id)
 					healed_ids.append(report["id"])
@@ -422,6 +430,7 @@ class LazarusPulse:
 				if event_id == "signal_mypy_failure":
 					logger.info("Auto-Healer: Attempting to heal 'signal_mypy_failure' (HealerMinion)...")
 					from red_pill.swarm.agents.healer import HealerMinion
+
 					healer = HealerMinion()
 					# Execute healing on src directory
 					result = await healer.execute("Heal mypy", path=os.path.join(cfg.IA_DIR, "src", "red_pill"))

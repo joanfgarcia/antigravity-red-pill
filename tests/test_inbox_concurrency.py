@@ -14,7 +14,10 @@ async def test_inbox_mass_concurrency():
 	If WAL is not enabled or thread handling is poor, this will throw
 	sqlite3.OperationalError: database is locked.
 	"""
-	with tempfile.TemporaryDirectory() as tmpdir:
+	import sys
+
+	kwargs = {"ignore_cleanup_errors": True} if sys.version_info >= (3, 10) else {}
+	with tempfile.TemporaryDirectory(**kwargs) as tmpdir:  # type: ignore
 		db_path = os.path.join(tmpdir, "stress_inbox.db")
 		# Initialize to create schema and enable WAL
 		_ = MinionInbox(db_path=db_path)
@@ -39,3 +42,10 @@ async def test_inbox_mass_concurrency():
 		unread = check_inbox.get_unread(limit=500)
 
 		assert len(unread) == num_minions, f"Expected {num_minions} reports, got {len(unread)}"
+
+		# Free up SQLite connections to avoid WinError 32
+		del check_inbox
+		del _
+		import gc
+
+		gc.collect()

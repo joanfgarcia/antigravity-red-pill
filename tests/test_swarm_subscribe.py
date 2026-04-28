@@ -51,8 +51,9 @@ def test_execute_success(tmp_path):
 							assert os.path.exists(secure_path)
 
 							# ACT-P3-05: Verify permission lockdown
-							st = os.stat(secure_path)
-							assert stat.S_IMODE(st.st_mode) == 0o600
+							if os.name != "nt":
+								st = os.stat(secure_path)
+								assert stat.S_IMODE(st.st_mode) == 0o600
 
 
 def test_execute_permission_error(tmp_path):

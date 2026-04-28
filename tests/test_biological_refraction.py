@@ -21,7 +21,7 @@ def test_biological_refraction_in_sanitize():
 	manager.client.scroll.side_effect = [([legacy_point], None)]
 
 	# Mock add_memory to return specific IDs for the Twin Nodes
-	manager.add_memory = MagicMock(side_effect=["prompt-uuid", "response-uuid"])
+	manager.add_memory = MagicMock(side_effect=["prompt-uuid", "response-uuid"])  # type: ignore
 
 	# Execute sanitize
 	res = manager.sanitize("work_memories", dry_run=False, strict=False)

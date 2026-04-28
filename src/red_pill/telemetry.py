@@ -37,7 +37,7 @@ class HardwareSentinel(BaseTelemetryProvider):
 			"cpu": {
 				"usage_percent": psutil.cpu_percent(interval=None),
 				"count": psutil.cpu_count(logical=True),
-				"load_avg": os.getloadavg(),
+				"load_avg": os.getloadavg() if hasattr(os, "getloadavg") else (0.0, 0.0, 0.0),
 				"temp": cpu_temp,
 			},
 			"memory": {

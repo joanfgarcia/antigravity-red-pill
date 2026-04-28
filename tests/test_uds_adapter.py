@@ -1,3 +1,4 @@
+import socket
 import urllib.parse
 import urllib.request
 from unittest.mock import MagicMock, patch
@@ -16,6 +17,7 @@ def test_uds_opener_creation():
 	pass
 
 
+@pytest.mark.skipif(not hasattr(socket, "AF_UNIX"), reason="AF_UNIX not supported on Windows")
 @patch("socket.socket")
 def test_unix_socket_connection(mock_socket):
 	"""Ensure the connection binds AF_UNIX and unwraps the path correctly."""

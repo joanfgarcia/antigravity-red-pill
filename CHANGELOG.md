@@ -1,4 +1,13 @@
-## [6.8.1] - 2026-04-27
+## [6.8.1] - 2026-04-28
+
+### 🩺 Sovereign Vitality & CI Hardening
+- **[HEAL] Sentinel Auditor (Mypy)**: The `SentinelAuditor` now explicitly dissects Mypy output to generate granular, actionable pain signals containing exact project, file, and line numbers instead of generic "Mypy type errors detected" alerts.
+- **[CI] Windows Compatibility Parity**: Stabilized the cross-platform CI pipeline.
+  - Resolved `WinError 32` file locks in SQLite by forcing aggressive teardowns and memory garbage collection (`gc.collect()`).
+  - Swapped hardcoded Linux `/tmp` paths for robust `tempfile.gettempdir()`.
+  - Enforced `encoding="utf-8"` standard across all text file I/O operations.
+  - Dynamically bypassed Unix-exclusive modules (`os.getloadavg`, `AF_UNIX`, `S_IMODE`) during Windows execution.
+
 
 ### 🧠 Emotional Architecture
 - **[AFFECT] Overnight Therapy (REM Reset)**: Implemented Brickman's Hedonic Set Point and Walker's REM Decay. If the system is inactive for >4 hours (`OVERNIGHT_THERAPY_THRESHOLD_HOURS`), the `Cognitive Router` and `Mood Analytics` apply partial amnesia to the session state.

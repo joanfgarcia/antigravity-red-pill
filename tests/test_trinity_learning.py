@@ -19,7 +19,7 @@ async def test_bayesian_scolding_adjusts_weight_downward():
 
 	# Simulamos el setup de DB (que en producción se hará en init())
 	mock_db = QdrantClient(location=":memory:")
-	plugin.qdrant = mock_db  # Inyección directa para el test
+	plugin.qdrant = mock_db  # type: ignore  # Inyección directa para el test
 
 	await plugin.init()
 	await plugin.activate()

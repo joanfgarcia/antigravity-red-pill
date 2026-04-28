@@ -105,8 +105,8 @@ class TestSwarmMessagingE2E:
 		aleth = self._make_skill("Aleth@Joan", b"aleth_seed_32_bytes_long_!!!!!")
 		mock_transport = MagicMock()
 		# resolve_alias returns 4-tuple but kp_b64 is empty
-		mock_transport.resolve_alias.return_value = ("agt_nova_id", "Nova@David", "fake_pub", "")
-		aleth.tm.get_transport.return_value = mock_transport
+		mock_transport.resolve_alias.return_value = ("agt_nova_id", "Nova@David", "fake_pub", "")  # type: ignore
+		aleth.tm.get_transport.return_value = mock_transport  # type: ignore
 
 		result = aleth.execute_send("Nova", {"text": "hello"}, SwarmIntent.GOSSIP, "legion_770")
 		assert result["status"] == "error"
@@ -115,7 +115,7 @@ class TestSwarmMessagingE2E:
 	def test_execute_send_missing_transport(self):
 		"""execute_send should return error if transport not found for community."""
 		aleth = self._make_skill("Aleth@Joan", b"aleth_seed_32_bytes_long_!!!!!")
-		aleth.tm.get_transport.return_value = None
+		aleth.tm.get_transport.return_value = None  # type: ignore
 
 		result = aleth.execute_send("Nova", {"text": "hello"}, SwarmIntent.GOSSIP, "unknown_community")
 		assert result["status"] == "error"
@@ -168,10 +168,12 @@ class TestSwarmMessagingE2E:
 
 		nova_kp_bytes, _ = bridge_nova.get_my_key_package()
 		welcome_bytes = bridge_aleth.add_member_and_get_welcome("test_comm", nova_kp_bytes)
+		assert welcome_bytes is not None
 		bridge_nova.process_welcome("test_comm", welcome_bytes)
 
 		payload = {"intent": "gossip", "sender": "Aleth@Joan", "target": "Nova@David", "data": {"msg": "hi"}, "v": "4.0"}
 		ciphertext = bridge_aleth.encrypt("test_comm", json.dumps(payload).encode())
+		assert ciphertext is not None
 		ciphertext_b64 = base64.b64encode(ciphertext).decode()
 
 		# Simulate Nova receiving the package

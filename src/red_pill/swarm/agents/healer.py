@@ -50,6 +50,7 @@ class HealerMinion(Minion):
 			"message": f"Healing cycle complete. {total_fixes} lines repaired.",
 			"fixes": total_fixes,
 			"errors_addressed": len(raw_errors),
+			"modified_files": total_fixes > 0,
 		}
 
 	def _run_mypy(self, path: str) -> List[str]:

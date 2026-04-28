@@ -33,7 +33,7 @@ def test_sound_of_silence_compliance():
 			stem_no_version = re.sub("v\\d+(\\.\\d+)*", "", stem)
 			if stem_no_version != stem_no_version.upper():
 				violations.append(f"{file_path.relative_to(ROOT_DIR)} - Markdown file name must be UPPER_SNAKE_CASE")
-		content = file_path.read_text()
+		content = file_path.read_text(encoding="utf-8")
 		lines = content.splitlines()
 		for i, line in enumerate(lines, 1):
 			if "certification" not in [p.lower() for p in file_path.parts] and FILE_PROTOCOL_LINK.search(line):

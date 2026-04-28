@@ -47,8 +47,38 @@ class SentinelAuditor:
 		if ruff.returncode != 0:
 			report.status = "yellow"
 			report.findings.append(AuditFinding(type="formatting", severity=5.0, message="Ruff check failed", metadata={"stdout": ruff.stdout}))
+			from red_pill.core.inbox import MinionInbox
 
-		# 2. Testing (Pytest)
+			MinionInbox().drop_report("signal_ruff_failure", "SentinelAuditor", "pending", "Ruff formatting or linting failed.")
+
+		# 2. Typing (Mypy)
+		self.logger.info(f"Auditing types for {repo_path}")
+		mypy = subprocess.run([self.uv_path, "run", "mypy", "src/red_pill/"], cwd=repo_path, capture_output=True, text=True)
+		if mypy.returncode != 0:
+			report.status = "yellow"
+			repo_name = os.path.basename(repo_path)
+
+			# Parse Mypy output for explicit pain signals
+			errors = []
+			for line in mypy.stdout.splitlines():
+				if "error:" in line:
+					parts = line.split(":", 3)
+					if len(parts) >= 3:
+						file_path = parts[0].strip()
+						line_num = parts[1].strip()
+						msg = parts[3].strip() if len(parts) > 3 else parts[2].replace("error:", "").strip()
+						errors.append(f"[{repo_name}] {file_path}:{line_num} -> {msg}")
+
+			detailed_msg = "\\n".join(errors) if errors else "Mypy type check failed"
+
+			report.findings.append(
+				AuditFinding(type="typing", severity=6.0, message=f"Mypy errors:\\n{detailed_msg}", metadata={"stdout": mypy.stdout})
+			)
+			from red_pill.core.inbox import MinionInbox
+
+			MinionInbox().drop_report("signal_mypy_failure", "SentinelAuditor", "pending", f"Mypy type errors detected:\\n{detailed_msg}")
+
+		# 3. Testing (Pytest)
 		self.logger.info(f"Auditing tests for {repo_path}")
 		# Run subset of tests for speed in daily audit if repo is large
 		pytest = subprocess.run([self.uv_path, "run", "pytest", "-n", "auto", "--dist", "loadgroup"], cwd=repo_path, capture_output=True, text=True)

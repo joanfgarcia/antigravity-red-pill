@@ -27,7 +27,7 @@ def test_audit_repo_ruff_failure(mock_run, auditor):
 	mock_pytest = MagicMock()
 	mock_pytest.returncode = 0
 
-	mock_run.side_effect = [mock_ruff, mock_pytest]
+	mock_run.side_effect = [mock_ruff, mock_pytest, mock_pytest]
 
 	report = auditor.audit_repo(".")
 	assert report.status == "yellow"
@@ -39,7 +39,7 @@ def test_audit_repo_all_green(mock_run, auditor):
 	# Mock success for both
 	mock_res = MagicMock()
 	mock_res.returncode = 0
-	mock_run.return_value = mock_res
+	mock_run.side_effect = [mock_res, mock_res, mock_res]
 
 	report = auditor.audit_repo(".")
 	assert report.status == "green"
