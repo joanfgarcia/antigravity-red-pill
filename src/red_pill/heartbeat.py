@@ -255,10 +255,11 @@ class LazarusPulse:
 		"""
 		try:
 			import httpx
+			import red_pill.config as cfg
 			
 			# Hacemos un GET rápido al summary
 			async with httpx.AsyncClient() as client:
-				resp = await client.get("http://localhost:8080/inbox/summary", timeout=2.0)
+				resp = await client.get(f"{cfg.NEON_LINK_URL}/inbox/summary", timeout=2.0)
 				
 			if resp.status_code == 200:
 				summary = resp.json()

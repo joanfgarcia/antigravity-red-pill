@@ -269,6 +269,7 @@ class RedPillConfig(BaseSettings):
 	# ICE Mode enforces local zero-trust encryption via pure-mls for the MinionInbox.
 	# When False, the system defaults to WATER mode (O(1) raw SQLite speed).
 	ICE_MODE_ENABLED: bool = False
+	NEON_LINK_URL: str = "http://localhost:8770"
 
 	# -----------------------------------------------------------------------
 	# NOTIFICATIONS
