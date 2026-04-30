@@ -236,3 +236,93 @@ def get_telemetry_report() -> str:
 		pass
 
 	return report
+def get_cortex_status() -> dict:
+    """Returns a pure JSON-serializable dict of the full Cortex state (Phase 1 V6.9)."""
+    import red_pill.config as cfg
+    from red_pill.core.inbox import MinionInbox
+    from red_pill.core.queue_manager import MemoryQueueManager
+    from red_pill.identity import get_default_emotion, get_hedonic_set_point
+    from red_pill.memory import MemoryManager
+    from red_pill.utils.tone_analyzer import ToneAnalyzer
+
+    stats = sentinel.get_stats()
+
+    # Immutable system stats
+    system_status = {
+        "cpu": stats.get("cpu", {}),
+        "memory": stats.get("memory", {}),
+        "gpu": stats.get("gpu", []),
+        "npu": stats.get("npu", {}),
+        "power": stats.get("power", {})
+    }
+
+    # Immune & Queues
+    immune_status = {
+        "memory_queue_pending": 0,
+        "active_signals": [],
+        "minion_inbox_unread": 0
+    }
+
+    metabolism_status: Dict[str, Any] = {
+        "collections": {},
+        "last_sleep": 0.0
+    }
+
+    try:
+        immune_status["memory_queue_pending"] = MemoryQueueManager().get_pending_count()
+        immune_status["minion_inbox_unread"] = len(MinionInbox().get_unread(limit=1000))
+
+        mgr = MemoryManager()
+        # Fetch active signals
+        sig_result = mgr.client.scroll(collection_name="signal_memories", limit=100)
+        condensed_signals = []
+        for s in sig_result[0]:
+            if s.payload:
+                condensed_signals.append({
+                    "name": s.payload.get("name", "unknown"),
+                    "intensity": s.payload.get("intensity", 0.0),
+                    "emotion": s.payload.get("emotion", "neutral")
+                })
+        immune_status["active_signals"] = condensed_signals
+
+        # Collection sizes
+        for coll in cfg.PERMANENT_COLLECTIONS + cfg.BAYESIAN_COLLECTIONS + ["social_memories", "story_memories", "interaction_memories"]:
+            try:
+                metabolism_status["collections"][coll] = mgr.client.count(collection_name=coll).count
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    # Read sleep state
+    try:
+        import json
+        import os
+        if os.path.exists(cfg.METABOLISM_STATE_FILE):
+            with open(cfg.METABOLISM_STATE_FILE, "r") as f:
+                state = json.loads(f.read().strip())
+                if isinstance(state, dict):
+                    metabolism_status["last_sleep"] = state.get("last_run", 0.0)
+                else:
+                    metabolism_status["last_sleep"] = float(state)
+    except Exception:
+        pass
+
+    # Identity
+    try:
+        current_mood = ToneAnalyzer.get_dominant_mood()
+    except Exception:
+        current_mood = "neutral"
+
+    identity_status = {
+        "hedonic_set_point": get_hedonic_set_point(),
+        "default_emotion": get_default_emotion(),
+        "current_mood": current_mood
+    }
+
+    return {
+        "system": system_status,
+        "immune_system": immune_status,
+        "metabolism": metabolism_status,
+        "identity": identity_status
+    }

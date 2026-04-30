@@ -266,6 +266,9 @@ class RedPillConfig(BaseSettings):
 	# SWARM CONFIG
 	# -----------------------------------------------------------------------
 	SWARM_TELEMETRY_DEFAULT: str = "NONE"  # NONE, MINIMUM, FULL
+	# ICE Mode enforces local zero-trust encryption via pure-mls for the MinionInbox.
+	# When False, the system defaults to WATER mode (O(1) raw SQLite speed).
+	ICE_MODE_ENABLED: bool = False
 
 	# -----------------------------------------------------------------------
 	# NOTIFICATIONS
@@ -316,6 +319,8 @@ class RedPillConfig(BaseSettings):
 	AFFECT_CUSTOM_OVERRIDES: str = "{}"
 	DYNAMIC_EMOTION_SYNC: bool = True
 	MULTI_EMOTION_INFERENCE: bool = True
+	# [V6.9] Dynamic Gravity Point: HEDONIC_SET_POINT_COLOR is now read from storage/identity.json
+	# This serves as the fallback if identity.json is not yet created.
 	HEDONIC_SET_POINT_COLOR: str = "emerald"
 	OVERNIGHT_THERAPY_THRESHOLD_HOURS: int = 4
 

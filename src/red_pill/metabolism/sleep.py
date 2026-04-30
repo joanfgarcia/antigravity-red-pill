@@ -10,6 +10,7 @@ from qdrant_client.models import Filter
 
 import red_pill.config as cfg
 from red_pill.events import SleepCompletedEvent, get_event_bus
+from red_pill.metabolism.evolution import IdentityEvaluator
 from red_pill.utils.uds_adapter import get_uds_opener
 
 logger = logging.getLogger(__name__)
@@ -562,6 +563,11 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 	# PHASE GAMMA: Logical Distillation (The Session Anchor)
 	if new_work_hubs:
 		distill_session_anchors(memory_manager, new_work_hubs)
+
+	try:
+		IdentityEvaluator.evaluate_set_point(memory_manager)
+	except Exception as e:
+		logger.error(f"[SLEEP ENGINE] Personality evolution failed: {e}")
 
 	logger.info(f"=== LAZARUS PULSE: Sleep Cycle complete. {total_processed} engrams synaptically woven. ===")
 	try:

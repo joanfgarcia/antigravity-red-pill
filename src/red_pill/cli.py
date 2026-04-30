@@ -348,6 +348,9 @@ def main() -> None:
 
 	subparsers.add_parser("status", help="Hardware Control Panel")
 
+	cortex_parser = subparsers.add_parser("cortex", help="Cortex Status JSON API")
+	cortex_parser.add_argument("--json", action="store_true", help="Format output as JSON")
+
 	swarm_parser = subparsers.add_parser("swarm", help="Sovereign Swarm Operations")
 	swarm_sub = swarm_parser.add_subparsers(dest="swarm_cmd")
 
@@ -532,6 +535,13 @@ def main() -> None:
 			return
 		elif args.command == "status":
 			print(get_telemetry_report())
+			return
+		elif args.command == "cortex":
+			import json
+
+			from red_pill.telemetry import get_cortex_status
+			status_dict = get_cortex_status()
+			print(json.dumps(status_dict, indent=2))
 			return
 		elif args.command == "swarm":
 			if args.swarm_cmd == "audit":

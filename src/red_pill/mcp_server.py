@@ -17,8 +17,6 @@ from red_pill import __version__ as CORE_VERSION
 from red_pill.cli import switch_skin
 from red_pill.memory import MemoryManager
 from red_pill.registry import registry
-from red_pill.skills.swarm_messaging import SwarmIntent, SwarmMessagingSkill
-from red_pill.skills.swarm_subscribe import SwarmSubscribeSkill
 from red_pill.soul import SoulManager
 from red_pill.swarm.agents.compressor import CompressorMinion
 from red_pill.swarm.agents.keymaker import KeymakerMinion
@@ -868,79 +866,6 @@ async def handle_refresh_session_context(arguments: Dict[str, Any]):
 		)
 	]
 
-
-@registry.register(
-	name="swarm_send_message",
-	description="[OFFICIAL] Package and dispatch a message to another Agent's Mailbox.",
-	schema={
-		"type": "object",
-		"properties": {
-			"target_alias": {"type": "string"},
-			"message": {"type": "string"},
-			"intent": {"type": "string", "enum": ["gossip", "code_review", "change_requested", "lgtm_approved"], "default": "gossip"},
-			"community_alias": {"type": "string"},
-			"payload_extra": {"type": "object"},
-		},
-		"required": ["target_alias", "message"],
-	},
-)
-async def handle_swarm_send_message(arguments: Dict[str, Any]):
-	shared_secret = os.getenv("SWARM_SHARED_SECRET")
-	if not shared_secret:
-		raise ValueError("CF-001: SWARM_SHARED_SECRET is required but not set.")
-
-	skill = SwarmMessagingSkill(agent_identity=f"{cfg.AGENT_NAME}@{cfg.OPERATOR_DISPLAY_NAME}", shared_secret=shared_secret.encode())
-	res = skill.execute_send(
-		target_alias=arguments["target_alias"],
-		payload_data={"message": arguments["message"], **arguments.get("payload_extra", {})},
-		intent=SwarmIntent(arguments.get("intent", "gossip")),
-		community_alias=arguments.get("community_alias", "legion_770"),
-	)
-	return [types.TextContent(type="text", text=f"Swarm Dispatch Result:\n{res}")]
-
-
-@registry.register(
-	name="swarm_subscribe",
-	description="[OFFICIAL] Dynamically subscribe to a new Firebase/Swarm Community HUB.",
-	schema={
-		"type": "object",
-		"properties": {"community_alias": {"type": "string"}, "db_url": {"type": "string"}, "service_acc_json_path": {"type": "string"}},
-		"required": ["community_alias", "db_url", "service_acc_json_path"],
-	},
-)
-async def handle_swarm_subscribe(arguments: Dict[str, Any]):
-	sub_skill = SwarmSubscribeSkill(agent_name=cfg.AGENT_NAME, operator_name=cfg.OPERATOR_DISPLAY_NAME)
-	res = sub_skill.execute(
-		community_alias=arguments["community_alias"], db_url=arguments["db_url"], service_acc_json_path=arguments["service_acc_json_path"]
-	)
-	return [types.TextContent(type="text", text=f"Swarm Subscription Result:\n{res}")]
-
-
-@registry.register(
-	name="swarm_check_mailbox",
-	description="[OFFICIAL] Scan the Firebase Hub inbox for new incoming messages.",
-	schema={"type": "object", "properties": {"community_alias": {"type": "string"}}},
-)
-async def handle_swarm_check_mailbox(arguments: Dict[str, Any]):
-	shared_secret = os.getenv("SWARM_SHARED_SECRET")
-	if not shared_secret:
-		raise ValueError("CF-001: SWARM_SHARED_SECRET is required but not set.")
-
-	skill = SwarmMessagingSkill(agent_identity=f"{cfg.AGENT_NAME}@{cfg.OPERATOR_DISPLAY_NAME}", shared_secret=shared_secret.encode())
-	community = arguments.get("community_alias", "legion_770")
-	messages = skill.check_mailbox(community_alias=community)
-
-	if not messages:
-		return [types.TextContent(type="text", text=f"Scanning Mailbox for {skill.agent_id}...\n[Status: No new messages]")]
-
-	formatted = f"Scanning Mailbox for {skill.agent_id}...\n[Status: {len(messages)} messages found]\n\n"
-	for idx, msg in enumerate(messages):
-		formatted += f"--- Message {idx + 1} ---\n"
-		formatted += f"From: {msg.get('sender', 'Unknown')}\n"
-		formatted += f"Intent: {msg.get('intent', 'Unknown')}\n"
-		formatted += f"Data: {msg.get('data', {})}\n"
-
-	return [types.TextContent(type="text", text=formatted)]
 
 
 @registry.register(
