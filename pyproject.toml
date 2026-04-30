@@ -39,6 +39,7 @@ dependencies = [
     "pluggy>=1.6.0",
     "pillow>=12.2.0",
     "python-multipart>=0.0.26",
+    "httpx>=0.28.1",
 ]
 
 [project.scripts]

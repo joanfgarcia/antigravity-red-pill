@@ -72,6 +72,7 @@ class LazarusPulse:
 				await self._usp_ritual()
 				await self._dream_ritual()
 				await self._consolidation_ritual()
+				await self._swarm_ritual()
 				await self._lazarus_ritual()
 				await self._resonance_ritual()
 				await self._auto_heal_ritual()
@@ -246,7 +247,37 @@ class LazarusPulse:
 		except Exception as e:
 			logger.error(f"Pulse: Consolidation ritual failed: {e}")
 
-
+	async def _swarm_ritual(self) -> None:
+		"""
+		Autonomous Neon-Link Polling:
+		- Consults the local Neon-Link Hub for unread decrypted Swarm messages.
+		- If found, injects a signal for a Swarm Minion to process them.
+		"""
+		try:
+			import httpx
+			
+			# Hacemos un GET rápido al summary
+			async with httpx.AsyncClient() as client:
+				resp = await client.get("http://localhost:8080/inbox/summary", timeout=2.0)
+				
+			if resp.status_code == 200:
+				summary = resp.json()
+				total_messages = sum(summary.values())
+				
+				if total_messages > 0:
+					logger.info(f"Pulse: Discovered {total_messages} pending Swarm messages in Neon-Link.")
+					self.memory_mgr.inject_signal(
+						"swarm_messages_pending", 
+						intensity=7.0, 
+						signal_type="anxiety", 
+						source="Neon-Link"
+					)
+				else:
+					self.memory_mgr.evaporate_signals("swarm_messages_pending")
+		except httpx.RequestError:
+			logger.debug("Pulse: Neon-Link Hub is offline or unreachable.")
+		except Exception as e:
+			logger.error(f"Pulse: Swarm polling failed: {e}")
 
 	async def _lazarus_ritual(self) -> None:
 		"""
