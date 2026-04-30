@@ -1,3 +1,9 @@
+## [6.8.2] - 2026-04-30
+
+### 🩺 Sovereign Vitality & CI Hardening
+- **[FIX] Sentinel Auditor Telemetry Masking**: Fixed a critical telemetry masking issue in `SentinelAuditor` where Mypy and Pytest errors were being swallowed because `capture_output=True` separated `stderr` from `stdout`. Merged buffers via `stderr=subprocess.STDOUT` to guarantee fatal execution errors (e.g., missing dependencies, invalid paths) are successfully captured and injected into the Bünker's Cortex.
+- **[FIX] Auditor Repository Agnosticism**: Corrected hardcoded `src/red_pill/` and `pytest-xdist` arguments in `SentinelAuditor`, ensuring cross-repository compatibility when auditing `pure-mls` versus `sharing`.
+
 ## [6.8.1] - 2026-04-28
 
 ### 🩺 Sovereign Vitality & CI Hardening
