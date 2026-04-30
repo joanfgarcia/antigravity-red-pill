@@ -8,12 +8,13 @@ from typing import Any, Dict, List, Optional
 import red_pill.config as cfg
 
 try:
-    import cryptography.hazmat.primitives.asymmetric.ed25519 as ed25519
-    from pure_mls.group import MLSGroup
-    HAS_PURE_MLS = True
-    from pure_mls.keys import KemKey, SignatureKey
+	import cryptography.hazmat.primitives.asymmetric.ed25519 as ed25519
+	from pure_mls.group import MLSGroup
+
+	HAS_PURE_MLS = True
+	from pure_mls.keys import KemKey, SignatureKey
 except ImportError:
-    HAS_PURE_MLS = False
+	HAS_PURE_MLS = False
 
 logger = logging.getLogger(__name__)
 
@@ -48,10 +49,11 @@ class MinionInbox:
 		sig_key = SignatureKey(private_key=ed25519.Ed25519PrivateKey.generate())
 		try:
 			from cryptography.hazmat.primitives.asymmetric import x25519
+
 			kem_key = KemKey(private_key=x25519.X25519PrivateKey.generate())
 		except ImportError:
 			logger.warning("x25519 not found, generating dummy KemKey")
-			kem_key = None # will fail later if not defined, but we'll try to import x25519 properly
+			kem_key = None  # will fail later if not defined, but we'll try to import x25519 properly
 
 		if os.path.exists(mls_path):
 			try:

@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import red_pill.config as cfg
 from red_pill.utils.tone_analyzer import ToneAnalyzer, get_current_sync_state
+from red_pill.identity import get_hedonic_set_point
 
 
 class TestGetDominantMood:
@@ -19,7 +20,7 @@ class TestGetDominantMood:
 		"""Line 65: empty scroll → returns DEFAULT_COLOR."""
 		mgr = self._make_manager([])
 		result = ToneAnalyzer.get_dominant_mood(manager=mgr)
-		assert result == str(getattr(cfg, "HEDONIC_SET_POINT_COLOR", cfg.DEFAULT_COLOR))
+		assert result == str(get_hedonic_set_point())
 
 	def test_returns_non_neutral_color_immediately(self):
 		"""Line 74: first non-default color found → returned immediately."""
@@ -51,14 +52,14 @@ class TestGetDominantMood:
 		p2.payload = {"color": cfg.DEFAULT_COLOR, "immune": False, "created_at": time.time()}
 		mgr = self._make_manager([p1, p2])
 		result = ToneAnalyzer.get_dominant_mood(manager=mgr)
-		assert result == str(getattr(cfg, "HEDONIC_SET_POINT_COLOR", cfg.DEFAULT_COLOR))
+		assert result == str(get_hedonic_set_point())
 
 	def test_outer_exception_returns_default(self):
 		"""Lines 79-81: outer exception → returns DEFAULT_COLOR."""
 		mgr = MagicMock()
 		mgr.client.scroll.side_effect = RuntimeError("Qdrant connection refused")
 		result = ToneAnalyzer.get_dominant_mood(manager=mgr)
-		assert result == str(getattr(cfg, "HEDONIC_SET_POINT_COLOR", cfg.DEFAULT_COLOR))
+		assert result == str(get_hedonic_set_point())
 
 	def test_immune_points_skipped(self):
 		"""Line 71: immune=True → skipped, returns default."""
@@ -68,7 +69,7 @@ class TestGetDominantMood:
 		p1.payload = {"color": "red", "immune": True, "created_at": time.time()}
 		mgr = self._make_manager([p1])
 		result = ToneAnalyzer.get_dominant_mood(manager=mgr)
-		assert result == str(getattr(cfg, "HEDONIC_SET_POINT_COLOR", cfg.DEFAULT_COLOR))
+		assert result == str(get_hedonic_set_point())
 
 
 class TestGetToneDirective:
