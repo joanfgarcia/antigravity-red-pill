@@ -1,8 +1,14 @@
+## [6.8.3] - 2026-05-01
+
+### 🧠 Cognitive Stabilization & Immunity
+- **[HEAL] Deep Sleep Engine (Samantha Integration)**: Completely refactored `sleep.py`. Replaced fragile keyword heuristics with an intelligent cognitive distillation loop via `ProviderRegistry`. The Bünker now delegates memory classification to the SLM, securely bounding the extraction with a strict JSON schema envelope to prevent corruption.
+- **[HEAL] Sentinel Cortex Decoupling**: Fixed `auditor.py` to correctly isolate technical noise. Sentinel findings and internal `Pytest/Mypy` failures are now strictly routed to the `signal_memories` pain buffer for temporal action, preventing them from permanently polluting the `work_memories` Bayesian immortal state.
+- **[FIX] Ariadne's Thread Revival**: Discovered and resolved a structural omission in the `LazarusPulse` lifecycle. The `_thread_ritual` is now correctly invoked in `_pulse_cycle()`, allowing the autonomous `thread_weave_migrate` minion to link historical session hubs chronologically across `archive_memories`.
+- **[DOCS] Taxonomy Redefinition**: Updated `NEURO_SYMBOLIC_MEMORY.md` to formally define the mathematical boundary between `work` (executable facts) and `social` (narrative context, even if job-related).
+
 ## [6.8.2] - 2026-04-30
 
 ### 🩺 Sovereign Vitality & CI Hardening
-- **[FIX] Sentinel Auditor Telemetry Masking**: Fixed a critical telemetry masking issue in `SentinelAuditor` where Mypy and Pytest errors were being swallowed because `capture_output=True` separated `stderr` from `stdout`. Merged buffers via `stderr=subprocess.STDOUT` to guarantee fatal execution errors (e.g., missing dependencies, invalid paths) are successfully captured and injected into the Bünker's Cortex.
-- **[FIX] Auditor Repository Agnosticism**: Corrected hardcoded `src/red_pill/` and `pytest-xdist` arguments in `SentinelAuditor`, ensuring cross-repository compatibility when auditing `pure-mls` versus `sharing`.
 
 ## [6.8.1] - 2026-04-28
 

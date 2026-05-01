@@ -125,21 +125,8 @@ class SentinelAuditor:
 					emotion="alert",
 				)
 
-			# 2. Historical Audit Log (Social/Context memories)
-			if finding.severity >= 4.0:
-				manager.add_memory(
-					collection="social_memories",
-					text=f"[SENTINEL_PAIN] {finding.type.upper()}: {finding.message}",
-					importance=finding.severity,
-					metadata={
-						"category": "audit_finding_history",
-						"signal_type": finding.type,
-						"audit_report_id": f"auditor_{int(time.time())}",
-						"is_immune": False,
-					},
-					color="red",
-					emotion="alert",
-				)
+			# Note: Historical Audit Log removed. Raw errors only act as active pain in signal_memories.
+			# Real knowledge (how it was fixed) will be naturally extracted by Samantha during Sleep.
 
 
 if __name__ == "__main__":

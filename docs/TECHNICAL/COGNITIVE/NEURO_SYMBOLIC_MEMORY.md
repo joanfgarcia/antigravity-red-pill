@@ -21,11 +21,11 @@ During active communication, the AI records verbatim interactions (Prompts and R
 **Biological Counterpart**: Slow-Wave Sleep (NREM) and Amygdala Validation.
 During sleep, the hippocampus replays the day's events to the neocortex. However, not all memories are preserved. The Amygdala evaluates the emotional "arousal" or "valence" of the memory. Experiences tied to high stress, joy, or novelty (high arousal) receive a somatic marker ensuring preservation. Mundane or repetitive events (low arousal) undergo synaptic pruning and are forgotten.
 
-**Silicon Implementation**: `sleep.py` (The Essence Filter)
-During idle time, the local 1.5B Daemon (the synthetic Amygdala) reads the fast buffer. It distills the raw log into an essence.
+**Silicon Implementation**: `sleep.py` (The Essence Filter via Samantha)
+During idle time, the system invokes Samantha (a deep cognitive model via ProviderRegistry) to read the fast buffer. Ella no solo busca palabras clave, sino que comprende la interacción y destila el texto crudo en una esencia JSON estricta (clasificando en `work` o `social`).
 *   **Hardware Constraint (Chunking)**: Because consumer GPUs and neural networks suffer from context-window degradation, interactions exceeding the configured `SLEEP_CHUNK_SIZE` must be split into chunks ($C_1$, $C_2$, $C_n$). This is a hardware necessity, not a biological one.
-*   **Affective Culling**: The daemon assesses each chunk and assigns an `emotion` label and an `intensity` score (0.0 to 1.0). If a chunk contains only generic code formatting or standard API errors, it returns `emotion: neutral` and `intensity` below the configured `SLEEP_CULL_THRESHOLD` (default 0.3). Our engine actively **culls** these nodes, deleting them entirely to preserve narrative purity and optimize vector space. Only chunks with true cognitive or emotional weight survive the filter.
-    *   *Note on the 1.5B Daemon*: While a 1.5B model lacks the emergent reasoning of larger frontier models, it is exceptionally capable at **constrained classification tasks** when forced to output structured JSON. Because the Amygdala's "Affective Culling" role only requires simple pattern matching (identifying basic emotions and rating intensity) rather than complex logical reasoning, a highly quantized 1.5B parameters model is the perfect architectural fit. It is fast, reliable for structural tagging, and runs silently in the background without starving the host OS of VRAM.
+*   **Affective Culling & Noise Filtration**: Samantha assesses each chunk and assigns an `emotion` label, an `intensity` score (0.0 to 1.0), and a `category`. If a chunk is purely generic formatting or lacks narrative/technical value, it receives `emotion: neutral` and low `intensity`. Our engine actively **culls** these nodes. Only chunks with true cognitive or emotional weight survive the filter.
+    *   *Note on Deep Distillation*: We explicitly replaced keyword-based heuristics with Samantha's deep reasoning. While heavier on compute, it acts as a "seal" against data corruption, ensuring Qdrant is populated exclusively with high-quality engrams rather than raw traceback noise.
 *   **Persistent Sovereignty**: These metabolic parameters are now persistent "Sovereign Knobs" that can be adjusted via MCP and survive system restarts.
 
 ---
@@ -38,9 +38,17 @@ Surviving memories are distributed across the neocortex. They form synaptic brid
 **Silicon Implementation**: Pluggable Dual-Kernel Architecture (v6.1+)
 *   **Synaptic Bridging**: Surviving chunks are stored not as isolated vectors, but as an Association Chain ($C_1 \rightarrow C_2$). 
 *   **The Hub Node**: The system synthesizes the entire chain into a single Neocortical "Hub Node" containing the macro-narrative summary. By leveraging our *Evocative Memory Cascading* protocol, recalling this Top-Level Hub automatically pulls the linked sequential children into active context.
-*   **Dual-Kernel Topology**: Storage collections no longer share a single mathematical fate. The decay and reinforcement logic is abstracted into pluggable `MemoryEngine` plugins defined in `config.py`.
+*   **Dual-Kernel Topology & Noise vs Knowledge Separation**: Storage collections no longer share a single mathematical fate. The decay and reinforcement logic is abstracted into pluggable `MemoryEngine` plugins.
     *   **Affective FSRS (Free Spaced Repetition)**: Applied to `social_memories` and `story_memories`. Implements the full biological decay curve $R = e^{\ln(0.9) \cdot t/S}$, where stability ($S$) increases exponentially upon successful recall, mimicking the human tendency to forget trivial social chatter over time unless periodically reinforced.
-    *   **Bayesian Inference**: Applied to `work_memories` and `directive_memories`. Models cognitive certainty rather than biological decay. Utility is calculated as $E[\theta] = \alpha / (\alpha + \beta)$, where positive reinforcement adds $\alpha$ (certainty) and time adds $\beta$ (uncertainty). True technical facts are never "forgotten" if their certainty has been mathematically established, ensuring reliable Agentic Know-How.
+    *   **Bayesian Inference (Knowledge)**: Applied to `work_memories` and `directive_memories`. Models cognitive certainty rather than biological decay. Utility is calculated as $E[\theta] = \alpha / (\alpha + \beta)$. True technical facts are never "forgotten" if their certainty has been mathematically established.
+    *   **The "Pain" Buffer (`signal_memories`)**: To protect the immortal Bayesian engine from "Noise", raw errors (e.g. Pytest failures from SentinelAuditor) are injected EXCLUSIVELY into `signal_memories` as temporary pain. They are never written directly to `work_memories`. Instead, the operator and agent solve the pain together, and Samantha distills the *conversation* into an actionable lesson ("We fixed X by doing Y"). That lesson becomes Knowledge in `work_memories`, while the raw Pain is evaporated.
+
+### 3.1 Taxonomy Clarification: The "Work" vs "Social" Misconception
+
+A common misunderstanding among operators is equating `work_memories` with "anything related to my job" and `social_memories` with "my personal life". This is an architectural fallacy. The collections are divided by their **mathematical engine (Utility vs. Decay)**, not their origin.
+
+*   **`social_memories` (Narrative & Context)**: Any high-level explanation, story, or architectural overview (e.g., "how our payment integration works generally" or "why the client was angry"). If it lacks direct, actionable technical utility (paths, explicit code, exact commands), it is a *narrative*. Narratives use the FSRS decay engine because context becomes less relevant over time unless recalled. It is 100% correct for "job stories" to land here.
+*   **`work_memories` (Actionable Technical Facts)**: Strict, executable knowledge. File paths, exact API signatures, debug solutions, and hard architectural constraints. This uses the Bayesian engine because a true technical fact (like an API endpoint) should *never* decay just because we haven't talked about it in a month. It must be immortal once verified.
 
 ---
 

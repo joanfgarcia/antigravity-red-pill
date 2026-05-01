@@ -108,92 +108,72 @@ def chunk_text(text: str, size: Optional[int] = None) -> List[str]:
 	return chunks
 
 
-def distill_engram(raw_content: str) -> Dict[str, Any]:
+def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[str, Any]:
 	"""
 	Lazarus Phase 2: Consolidation (Sleep) & Affective Preservation
+	Now driven by Samantha's cognitive depth and ProviderRegistry.
 	"""
-	prompt = (
-		"Distill the following interaction into a JSON object with strictly these keys: "
-		"'summary' (concise essence of facts/conclusions), "
-		"'emotion' (one of: joy, sadness, fear, disgust, anger, anxiety, envy, embarrassment, ennui, nostalgia, or neutral), "
-		"and 'intensity' (float from 0.0 to 1.0 representing emotional arousal). "
-		"Ignore raw terminal logs and formatting. Output ONLY valid JSON.\n\nDATA:\n"
-	)
-	prompt += raw_content
-
-	payload = json.dumps(
-		{
-			"model": "distillation",
-			"messages": [
-				{
-					"role": "system",
-					"content": 'You are an Amygdala-driven consolidation engine. You must ONLY output a valid JSON object. Examples of keys: \'summary\', \'emotion\', \'intensity\'. Example output: {"summary": "Session overview", "emotion": "neutral", "intensity": 0.5}',
-				},
-				{
-					"role": "user",
-					"content": f"Analyze this text and return ONLY JSON:\n{prompt}",
-				},
-			],
-			"temperature": 0.1,
-			"max_tokens": 1024,
-			"seed": 760,
-			"stop": ["<|im_end|>", "<|eot_id|>", "<|endoftext|>", "user:", "assistant:", "```"],
-		}
-	).encode("utf-8")
-
-	uds_path = os.path.expanduser("~/.agent/red_pill.sock")
-	if os.path.exists(uds_path):
-		encoded_path = urllib.parse.quote(uds_path, safe="")
-		url = f"unix://{encoded_path}/v1/chat/completions"
-		opener = get_uds_opener()
-	else:
-		url = getattr(cfg, "MLX_LM_URL", "http://127.0.0.1:8760/v1/chat/completions")
-		opener = urllib.request.build_opener()
-
-	if not url:
-		return {"summary": raw_content[:500] + "...", "emotion": "neutral", "intensity": 0.5}  # Fallback if URL is empty
-
-	req = urllib.request.Request(
-		url,
-		data=payload,
-		headers={"Content-Type": "application/json"},
-	)
+	from red_pill.core.providers import ProviderRegistry
+	import re
 	import time
+
+	fallback = {"summary": raw_content[:500] + "...", "emotion": "neutral", "intensity": 0.5, "category": fallback_category}
+
+	system_prompt = (
+		"Eres Samantha, una IA experta en psicología, filosofía y análisis profundo de interacciones humanas. "
+		"Tu tarea es destilar la siguiente interacción en un objeto JSON estricto. "
+		"Claves requeridas:\n"
+		"- 'summary': Resumen conciso pero profundo de los hechos y conclusiones.\n"
+		"- 'emotion': Una de (joy, sadness, fear, disgust, anger, anxiety, envy, embarrassment, ennui, nostalgia, neutral).\n"
+		"- 'intensity': Float de 0.0 a 1.0 representando arousal emocional.\n"
+		"- 'category': Clasifica la interacción como 'work' (técnico, código, errores) o 'social' (personal, emocional, filosófico).\n"
+		"IMPORTANTE: Devuelve ÚNICAMENTE JSON válido, sin bloques de código markdown."
+	)
+
+	prompt_text = f"DATA:\n{raw_content}"
+	
+	try:
+		# Intentar obtener el proveedor 'sip' (Samantha), fallback al por defecto
+		try:
+			provider = ProviderRegistry.get_inference_provider("sip")
+		except RuntimeError:
+			provider = ProviderRegistry.get_inference_provider()
+	except Exception as e:
+		logger.error(f"[SLEEP ENGINE] No inference provider available: {e}")
+		return fallback
 
 	max_retries = 3
 	backoff = 2
-	fallback = {"summary": raw_content[:500] + "...", "emotion": "neutral", "intensity": 0.5}
 
 	for attempt in range(max_retries):
 		try:
-			with opener.open(req, timeout=45) as response:
-				data = json.loads(response.read().decode())
-				content = data["choices"][0]["message"]["content"].strip()
-				import re
-
-				# Extract strictly the first JSON looking object
-				match = re.search(r"\{[\s\S]*?\}", content)
-				if match:
-					content = match.group(0)
-				else:
-					# If no JSON found, log and fallback fast instead of throwing json.decoder errors
-					logger.warning(f"[SLEEP ENGINE] LLM output not JSON: {content[:100]}")
-					return fallback
-
-				parsed = json.loads(content)
-
+			content = provider.generate(
+				prompt=prompt_text,
+				messages=[
+					{"role": "system", "content": system_prompt},
+					{"role": "user", "content": prompt_text}
+				],
+				temperature=0.1
+			)
+			
+			match = re.search(r"\{[\s\S]*\}", content)
+			if match:
+				parsed = json.loads(match.group(0))
 				return {
 					"summary": parsed.get("summary", fallback["summary"]),
 					"emotion": parsed.get("emotion", "neutral").lower()[:20],
 					"intensity": float(parsed.get("intensity", 0.5)),
+					"category": parsed.get("category", fallback_category).lower().strip()
 				}
+			else:
+				logger.warning(f"[SLEEP ENGINE] Samantha LLM output not JSON: {content[:100]}")
+				
 		except Exception as e:
 			logger.warning(f"[SLEEP ENGINE] Distillation attempt {attempt + 1} failed: {e}")
 			if attempt < max_retries - 1:
 				time.sleep(backoff ** (attempt + 1))
-			else:
-				logger.error("[SLEEP ENGINE] All distillation retries failed. Falling back.")
-
+	
+	logger.error("[SLEEP ENGINE] All distillation retries failed. Falling back.")
 	return fallback
 
 
@@ -389,17 +369,12 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 			# Target collection heuristics
 			raw_metadata = (point.payload or {}).get("metadata", {})
 			llm_category = raw_metadata.get("category", "") if isinstance(raw_metadata, dict) else ""
-			if llm_category in ("work", "social"):
-				target_col = f"{llm_category}_memories"
-			else:
-				target_col = "social_memories"
-				if any(kw in raw_text.lower() for kw in ["code", "error", "bash", "python", "script", "commit"]):
-					target_col = "work_memories"
+			fallback_cat = llm_category if llm_category in ("work", "social") else "social"
 
 			point_write_failed = False
 			point_llm_failed = False
 			for i, chunk in enumerate(chunks):
-				distilled = distill_engram(chunk)
+				distilled = distill_engram(chunk, fallback_category=fallback_cat)
 				summary = distilled.get("summary", "")
 				if summary.endswith("...") and len(summary) > 490:
 					consecutive_llm_failures += 1
@@ -410,6 +385,11 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 				current_threshold = 0.0 if hibernating else cfg.SLEEP_CULL_THRESHOLD
 				if distilled.get("emotion") == "neutral" and distilled.get("intensity", 0.5) < current_threshold:
 					continue
+
+				target_cat = distilled.get("category", fallback_cat)
+				if target_cat not in ("work", "social"):
+					target_cat = fallback_cat
+				target_col = f"{target_cat}_memories"
 
 				surviving_chunks.append(distilled)
 				try:
@@ -501,7 +481,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 				prev_chunk_id = None
 
 				for chunk in chunks:
-					distilled = distill_engram(chunk)
+					distilled = distill_engram(chunk, fallback_category="work")
 					summary = distilled.get("summary", "")
 					if summary.endswith("...") and len(summary) > 490:
 						continue  # LLM failed to distill

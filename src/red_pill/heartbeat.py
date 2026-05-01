@@ -76,6 +76,7 @@ class LazarusPulse:
 				await self._lazarus_ritual()
 				await self._resonance_ritual()
 				await self._auto_heal_ritual()
+				await self._thread_ritual()
 
 				# Wait for next beat
 				await asyncio.sleep(cfg.PULSE_INTERVAL)

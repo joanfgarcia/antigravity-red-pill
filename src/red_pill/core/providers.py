@@ -189,6 +189,8 @@ class BitNetInferenceProvider(BaseInferenceProvider):
 			# Use a short timeout for humble hardware to prevent hangs
 			result = subprocess.run(cmd, capture_output=True, text=True, timeout=60, env=env)
 			output = result.stdout
+			if result.stderr:
+				print(f"DEBUG (stderr):\n{result.stderr}")
 
 			# Parsing logic from experimental runner
 			if prompt in output:
