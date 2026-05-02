@@ -256,24 +256,20 @@ class LazarusPulse:
 		"""
 		try:
 			import httpx
+
 			import red_pill.config as cfg
-			
+
 			# Hacemos un GET rápido al summary
 			async with httpx.AsyncClient() as client:
 				resp = await client.get(f"{cfg.NEON_LINK_URL}/inbox/summary", timeout=2.0)
-				
+
 			if resp.status_code == 200:
 				summary = resp.json()
 				total_messages = sum(summary.values())
-				
+
 				if total_messages > 0:
 					logger.info(f"Pulse: Discovered {total_messages} pending Swarm messages in Neon-Link.")
-					self.memory_mgr.inject_signal(
-						"swarm_messages_pending", 
-						intensity=7.0, 
-						signal_type="anxiety", 
-						source="Neon-Link"
-					)
+					self.memory_mgr.inject_signal("swarm_messages_pending", intensity=7.0, signal_type="anxiety", source="Neon-Link")
 				else:
 					self.memory_mgr.evaporate_signals("swarm_messages_pending")
 		except httpx.RequestError:

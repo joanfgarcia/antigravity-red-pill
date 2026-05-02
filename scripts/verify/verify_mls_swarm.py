@@ -14,6 +14,7 @@ import os
 
 from red_pill.skills.swarm_messaging import SwarmMessagingSkill  # noqa: E402
 from red_pill.skills.swarm_subscribe import SwarmSubscribeSkill  # noqa: E402
+
 from red_pill.swarm.crypto import SwarmCrypto  # noqa: E402
 from red_pill.swarm.transports.manager import TransportManager  # noqa: E402
 

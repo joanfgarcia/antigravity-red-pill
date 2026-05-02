@@ -11,7 +11,6 @@ from qdrant_client.models import Filter
 import red_pill.config as cfg
 from red_pill.events import SleepCompletedEvent, get_event_bus
 from red_pill.metabolism.evolution import IdentityEvaluator
-from red_pill.utils.uds_adapter import get_uds_opener
 
 logger = logging.getLogger(__name__)
 
@@ -113,9 +112,10 @@ def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[
 	Lazarus Phase 2: Consolidation (Sleep) & Affective Preservation
 	Now driven by Samantha's cognitive depth and ProviderRegistry.
 	"""
-	from red_pill.core.providers import ProviderRegistry
 	import re
 	import time
+
+	from red_pill.core.providers import ProviderRegistry
 
 	fallback = {"summary": raw_content[:500] + "...", "emotion": "neutral", "intensity": 0.5, "category": fallback_category}
 
@@ -131,7 +131,7 @@ def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[
 	)
 
 	prompt_text = f"DATA:\n{raw_content}"
-	
+
 	try:
 		# Intentar obtener el proveedor 'sip' (Samantha), fallback al por defecto
 		try:
@@ -148,14 +148,9 @@ def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[
 	for attempt in range(max_retries):
 		try:
 			content = provider.generate(
-				prompt=prompt_text,
-				messages=[
-					{"role": "system", "content": system_prompt},
-					{"role": "user", "content": prompt_text}
-				],
-				temperature=0.1
+				prompt=prompt_text, messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt_text}], temperature=0.1
 			)
-			
+
 			match = re.search(r"\{[\s\S]*\}", content)
 			if match:
 				parsed = json.loads(match.group(0))
@@ -163,16 +158,16 @@ def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[
 					"summary": parsed.get("summary", fallback["summary"]),
 					"emotion": parsed.get("emotion", "neutral").lower()[:20],
 					"intensity": float(parsed.get("intensity", 0.5)),
-					"category": parsed.get("category", fallback_category).lower().strip()
+					"category": parsed.get("category", fallback_category).lower().strip(),
 				}
 			else:
 				logger.warning(f"[SLEEP ENGINE] Samantha LLM output not JSON: {content[:100]}")
-				
+
 		except Exception as e:
 			logger.warning(f"[SLEEP ENGINE] Distillation attempt {attempt + 1} failed: {e}")
 			if attempt < max_retries - 1:
 				time.sleep(backoff ** (attempt + 1))
-	
+
 	logger.error("[SLEEP ENGINE] All distillation retries failed. Falling back.")
 	return fallback
 

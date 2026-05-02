@@ -867,7 +867,6 @@ async def handle_refresh_session_context(arguments: Dict[str, Any]):
 	]
 
 
-
 @registry.register(
 	name="list_all_skins",
 	description="Retrieve the complete catalog of Lore Skins with their emotional tags and descriptions.",

@@ -540,6 +540,7 @@ def main() -> None:
 			import json
 
 			from red_pill.telemetry import get_cortex_status
+
 			status_dict = get_cortex_status()
 			print(json.dumps(status_dict, indent=2))
 			return

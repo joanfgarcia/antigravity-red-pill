@@ -3,6 +3,7 @@ import os
 from typing import Any, Dict, List, Optional
 
 from red_pill.swarm.transport import SwarmTransport
+
 from red_pill.swarm.transports.milvus_transport import MilvusTransport
 
 

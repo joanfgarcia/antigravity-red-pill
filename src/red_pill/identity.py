@@ -24,20 +24,24 @@ def _load_identity() -> Dict[str, Any]:
 			return {}
 	return {}
 
+
 def _save_identity(identity: Dict[str, Any]) -> None:
 	os.makedirs(os.path.dirname(IDENTITY_FILE), exist_ok=True)
 	with open(IDENTITY_FILE, "w") as f:
 		json.dump(identity, f, indent=4)
+
 
 def get_hedonic_set_point() -> str:
 	"""Returns the long-term dominant color (dynamic gravity point)."""
 	identity = _load_identity()
 	return str(identity.get("HEDONIC_SET_POINT_COLOR", getattr(cfg, "DEFAULT_COLOR", "gray")))
 
+
 def get_default_emotion() -> str:
 	"""Returns the default baseline emotion based on the gravity point."""
 	identity = _load_identity()
 	return str(identity.get("DEFAULT_EMOTION", getattr(cfg, "DEFAULT_EMOTION", "neutral")))
+
 
 def update_identity(color: str, emotion: str) -> None:
 	"""Updates the emergent personality baseline."""

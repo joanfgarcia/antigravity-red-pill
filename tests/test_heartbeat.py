@@ -109,8 +109,6 @@ async def test_consolidation_ritual_failure(pulse):
 		await pulse._consolidation_ritual()
 
 
-
-
 @pytest.mark.asyncio
 async def test_lazarus_ritual_disabled(pulse):
 	"""Covers heartbeat.py line 211 — LAZARUS_SYNC_ENABLED=False."""

@@ -6,7 +6,6 @@ The tactical 'Frontal Lobe' for sovereign infrastructure monitoring.
 import logging
 import os
 import subprocess
-import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -48,7 +47,9 @@ class SentinelAuditor:
 			report.status = "yellow"
 			errors = [line for line in ruff.stdout.splitlines() if ".py:" in line or "error" in line.lower()]
 			detailed_msg = "\n".join(errors[:5]) if errors else (ruff.stdout[-300:] if ruff.stdout else "Ruff check failed")
-			report.findings.append(AuditFinding(type="formatting", severity=5.0, message=f"Ruff check failed:\n{detailed_msg}", metadata={"stdout": ruff.stdout}))
+			report.findings.append(
+				AuditFinding(type="formatting", severity=5.0, message=f"Ruff check failed:\n{detailed_msg}", metadata={"stdout": ruff.stdout})
+			)
 			from red_pill.core.inbox import MinionInbox
 
 			MinionInbox().drop_report("signal_ruff_failure", "SentinelAuditor", "pending", f"Ruff formatting or linting failed:\n{detailed_msg}")
@@ -92,7 +93,9 @@ class SentinelAuditor:
 			if len(failed_tests) > 5:
 				detailed_msg += f"\n... and {len(failed_tests) - 5} more failures."
 
-			report.findings.append(AuditFinding(type="test", severity=8.0, message=f"Pytest suite failed:\n{detailed_msg}", metadata={"stdout": pytest.stdout}))
+			report.findings.append(
+				AuditFinding(type="test", severity=8.0, message=f"Pytest suite failed:\n{detailed_msg}", metadata={"stdout": pytest.stdout})
+			)
 
 		# Calculate global intensity based on findings
 		report.intensity = sum(f.severity for f in report.findings)
@@ -130,8 +133,6 @@ class SentinelAuditor:
 
 
 if __name__ == "__main__":
-	import time
-
 	logging.basicConfig(level=logging.INFO)
 	auditor = SentinelAuditor(target_repos=[os.path.expanduser("~/Documents/IA/pure-mls"), os.path.expanduser("~/Documents/IA/sharing")])
 	for repo in auditor.target_repos:

@@ -3,8 +3,8 @@
 from unittest.mock import MagicMock, patch
 
 import red_pill.config as cfg
-from red_pill.utils.tone_analyzer import ToneAnalyzer, get_current_sync_state
 from red_pill.identity import get_hedonic_set_point
+from red_pill.utils.tone_analyzer import ToneAnalyzer, get_current_sync_state
 
 
 class TestGetDominantMood:

@@ -20,10 +20,20 @@ def bunker_isolation(monkeypatch):
 	Universal isolation fixture (AUTO-USE).
 	Ensures that no test accidentally hits the production Qdrant or filesystem.
 	"""
+	from unittest.mock import MagicMock
+
 	from red_pill.config import get_config
+	from red_pill.core.providers import BaseInferenceProvider, BaseTelemetryProvider, ProviderRegistry
 
 	# 1. Clear the singleton cache so the next get_config() rebuilds with new envs
 	get_config.cache_clear()
+
+	# 1.5. Isolate ProviderRegistry and provide defaults to avoid "No inference provider" errors
+	ProviderRegistry.reset()
+	mock_inference = MagicMock(spec=BaseInferenceProvider)
+	mock_inference.generate.return_value = '{"summary": "test", "emotion": "neutral", "intensity": 0.5}'
+	ProviderRegistry.register_inference_provider("sip", mock_inference, default=True)
+	ProviderRegistry.register_telemetry_provider(MagicMock(spec=BaseTelemetryProvider))
 
 	# 2. Force isolated testing paths via environment
 	test_dir = tempfile.mkdtemp(prefix="bunker_test_")
