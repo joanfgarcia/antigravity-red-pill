@@ -1,3 +1,10 @@
+## [6.8.5] - 2026-05-02
+
+### 🌐 Omnipresence MVP (Phase 4 Sovereign Gateway)
+- **[FEAT] Asynchronous Egress Pipeline**: `worker.py` now polls active IDE `notificationContent` to extract LLM responses asynchronously. Enables the Bünker to reply to remote commands originating from the Telegram `neon-link` Gateway.
+- **[FEAT] SQLite Session Binding**: The Red-Pill worker is fully decoupled from the IDE frontend. Using the `events.db` WAL queue, it parses `/list` and `/switch` requests to bind incoming Telegram messages to specific IDE conversation cascades, curing the "Ghost Cascade" problem.
+- **[LIMITATION] Conversational Hook**: Identified that the IDE's gRPC backend currently hides raw conversational text from the public JSON endpoint. Complete extraction of unstructured chat requires a future deeper hook into the language server. The WAL database and async extraction architecture is otherwise fully proven.
+
 ## [6.8.4] - 2026-05-02
 
 ### 🧠 Chronicle Archival Pipeline (The 16K Engram Recovery)

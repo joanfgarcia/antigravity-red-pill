@@ -14,7 +14,7 @@ logger = logging.getLogger("test_bitnet_cuda")
 
 def test():
 	runner_bin = os.path.join(os.getcwd(), "3rdparty/BitNet-1.58b/build_cuda/bin/llama-cli")
-	model_path = os.path.join(os.getcwd(), "storage/models/falcon3-10b-instruct-1.58bit.gguf")
+	model_path = os.path.join(os.getcwd(), "storage/models/falcon3-10b-instruct-1.58bit-V2.gguf")
 	
 	if not os.path.exists(runner_bin):
 		logger.error(f"❌ CUDA Runner missing: {runner_bin}")

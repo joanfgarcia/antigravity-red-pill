@@ -39,6 +39,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [BITNET_1_58_SCALING_LAWS.md](TECHNICAL/HARDWARE/BITNET_1_58_SCALING_LAWS.md) | BitNet 1.58b math: VRAM density, MatMul annihilation, Pareto frontier |
 | [BITNET_BENCHMARK_STUDY.md](TECHNICAL/HARDWARE/BITNET_BENCHMARK_STUDY.md) | 1.58-bit intelligence benchmark: Zero-Shot, JSON extraction, Code Generation on RTX 5070 |
 | [BITNET_QUAD_FLAVOR_REPORT.md](BENCHMARKS/BITNET_QUAD_FLAVOR_REPORT.md) | **Phoenix Edition**: Multi-backend performance report (CPU, CUDA, ROCm, NPU) |
+| [BITNET_REMEDIATION_RUNBOOK.md](TECHNICAL/BITNET_REMEDIATION_RUNBOOK.md) | Remediation runbook for BitNet CUDA inference stabilization |
 | [TURBOQUANT_ROADMAP.md](TECHNICAL/HARDWARE/TURBOQUANT_ROADMAP.md) | TurboQuant KV Cache compression roadmap (QJL + PolarQuant, 2.5-3.5 bits) |
 
 ### Security
@@ -121,6 +122,7 @@ For humans operating, installing, or extending the system.
 | [HARDWARE_MODELS_BE_WATER.md](GUIDES/HARDWARE_MODELS_BE_WATER.md) | Hardware model compatibility matrix (Be Water tiers) |
 | [OPERATOR_DRESS_CODE.md](GUIDES/OPERATOR_DRESS_CODE.md) | Operator interaction style and formatting guide |
 | [TOKEN_SAVING_GUIDE.md](GUIDES/TOKEN_SAVING_GUIDE.md) | Strategies for reducing API token consumption |
+| [ALETH_BIOLOGY_INDEX](GUIDES/aleth_biology/00_INDEX.md) | **Hub**: Index to Aleth Biology documentation and metabolic logic |
 | [DISCLAIMER.md](GUIDES/DISCLAIMER.md) | Experimental software disclaimer and liability notice |
 
 ---

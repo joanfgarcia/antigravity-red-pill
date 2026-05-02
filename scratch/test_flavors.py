@@ -54,6 +54,7 @@ def run_flavor_bench(flavor_name, config):
 	]
 	if flavor_name == "ROCm":
 		libs.insert(0, "/opt/rocm-6.4.1/lib")
+		env["HSA_OVERRIDE_GFX_VERSION"] = "11.0.0"
 	env["LD_LIBRARY_PATH"] = ":".join(libs) + ":" + env.get("LD_LIBRARY_PATH", "")
 
 	cmd = [
