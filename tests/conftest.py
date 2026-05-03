@@ -11,7 +11,7 @@ import pytest
 # Force :memory: location for all unit tests to prevent production leakage.
 os.environ["QDRANT_HOST"] = ":memory:"
 os.environ["QDRANT_PORT"] = "0"
-os.environ["IA_DIR"] = tempfile.gettempdir()  # Redirect all storage to /tmp
+os.environ["APP_ROOT"] = tempfile.gettempdir()  # Redirect all storage to /tmp
 
 
 @pytest.fixture(autouse=True)
@@ -37,7 +37,8 @@ def bunker_isolation(monkeypatch):
 
 	# 2. Force isolated testing paths via environment
 	test_dir = tempfile.mkdtemp(prefix="bunker_test_")
-	monkeypatch.setenv("IA_DIR", test_dir)
+	monkeypatch.setenv("APP_ROOT", test_dir)
+	monkeypatch.setenv("WORKSPACE_ROOT", test_dir)
 
 	# 3. Force Qdrant into memory mode via env variables for Pydantic to capture
 	monkeypatch.setenv("QDRANT_HOST", ":memory:")

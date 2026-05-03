@@ -147,7 +147,7 @@ class GruOrchestrator:
 
 	def is_local_ready(self) -> bool:
 		"""Check if local SLM infrastructure is available."""
-		ia_dir = os.getenv("ANTIGRAVITY_IA_DIR", os.path.expanduser("~/Documents/IA"))
+		ia_dir = os.getenv("WORKSPACE_ROOT", os.path.expanduser("~/Documents/IA"))
 		model_dir = os.path.join(ia_dir, "models")
 		if not os.path.exists(model_dir):
 			return False

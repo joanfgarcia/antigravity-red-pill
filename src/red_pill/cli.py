@@ -160,7 +160,7 @@ def handle_telemetry() -> None:
 def handle_interceptor(args: argparse.Namespace) -> None:
 	"""Interceptor Management (Manual Activation for Security Audits)."""
 	conf = cfg.get_config()
-	env_path = Path(conf.IA_DIR) / ".env"
+	env_path = Path(conf.APP_ROOT) / ".env"
 
 	if args.int_cmd == "enable":
 		print("\n--- [SEC-G01: BÜNKER INTERCEPTOR ACTIVATION] ---")

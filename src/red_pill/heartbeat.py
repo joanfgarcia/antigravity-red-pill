@@ -353,7 +353,7 @@ class LazarusPulse:
 
 		# 1. Branch check
 		proc = await asyncio.create_subprocess_exec(
-			"git", "rev-parse", "--abbrev-ref", "HEAD", cwd=cfg.IA_DIR, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+			"git", "rev-parse", "--abbrev-ref", "HEAD", cwd=cfg.APP_ROOT, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
 		)
 		stdout, _ = await proc.communicate()
 		branch = stdout.decode().strip()
@@ -371,7 +371,7 @@ class LazarusPulse:
 				return
 
 		# 3. Check if there are changes
-		proc_status = await asyncio.create_subprocess_exec("git", "status", "--porcelain", cwd=cfg.IA_DIR, stdout=asyncio.subprocess.PIPE)
+		proc_status = await asyncio.create_subprocess_exec("git", "status", "--porcelain", cwd=cfg.APP_ROOT, stdout=asyncio.subprocess.PIPE)
 		stdout_status, _ = await proc_status.communicate()
 		if not stdout_status.strip():
 			logger.info("Auto-Healer: No files changed to commit.")
@@ -379,13 +379,13 @@ class LazarusPulse:
 
 		# 4. Commit and push
 		logger.info(f"Auto-Healer: Executing background commit & push for {trigger_event}...")
-		proc_add = await asyncio.create_subprocess_exec("git", "add", ".", cwd=cfg.IA_DIR)
+		proc_add = await asyncio.create_subprocess_exec("git", "add", ".", cwd=cfg.APP_ROOT)
 		await proc_add.communicate()
 		proc_commit = await asyncio.create_subprocess_exec(
-			"git", "commit", "-m", f"chore(auto-heal): background recovery [{trigger_event}]", cwd=cfg.IA_DIR
+			"git", "commit", "-m", f"chore(auto-heal): background recovery [{trigger_event}]", cwd=cfg.APP_ROOT
 		)
 		await proc_commit.communicate()
-		proc_push = await asyncio.create_subprocess_exec("git", "push", "origin", "HEAD", cwd=cfg.IA_DIR)
+		proc_push = await asyncio.create_subprocess_exec("git", "push", "origin", "HEAD", cwd=cfg.APP_ROOT)
 		await proc_push.communicate()
 		logger.info(f"Auto-Healer: Successfully healed and pushed: {trigger_event}")
 
@@ -408,11 +408,11 @@ class LazarusPulse:
 				if event_id == "signal_ruff_failure":
 					logger.info("Auto-Healer: Attempting to heal 'signal_ruff_failure' (Ruff)...")
 					proc1 = await asyncio.create_subprocess_exec(
-						"uv", "run", "ruff", "check", "--fix", ".", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, cwd=cfg.IA_DIR
+						"uv", "run", "ruff", "check", "--fix", ".", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, cwd=cfg.APP_ROOT
 					)
 					await proc1.communicate()
 					proc2 = await asyncio.create_subprocess_exec(
-						"uv", "run", "ruff", "format", ".", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, cwd=cfg.IA_DIR
+						"uv", "run", "ruff", "format", ".", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, cwd=cfg.APP_ROOT
 					)
 					await proc2.communicate()
 					await self._try_auto_push(event_id)
@@ -425,7 +425,7 @@ class LazarusPulse:
 
 					healer = HealerMinion()
 					# Execute healing on src directory
-					result = await healer.execute("Heal mypy", path=os.path.join(cfg.IA_DIR, "src", "red_pill"))
+					result = await healer.execute("Heal mypy", path=os.path.join(cfg.APP_ROOT, "src", "red_pill"))
 					if result.get("modified_files", False):
 						await self._try_auto_push(event_id)
 					healed_ids.append(report["id"])
@@ -435,7 +435,7 @@ class LazarusPulse:
 				if event_id.startswith("signal_cloud_sync_error"):
 					logger.info(f"Auto-Healer: Attempting to heal plugin error '{event_id}'...")
 					# e.g., run oauth refresh script or similar
-					script_path = os.path.join(cfg.IA_DIR, "scripts", "heal_cloud_sync.sh")
+					script_path = os.path.join(cfg.APP_ROOT, "scripts", "heal_cloud_sync.sh")
 					if os.path.exists(script_path):
 						process = await asyncio.create_subprocess_exec(
 							str(script_path),
@@ -476,7 +476,7 @@ class LazarusPulse:
 			return
 		try:
 			logger.info("Pulse: Initiating Thread Ritual (Ariadne's Weave)...")
-			script_path = os.path.join(cfg.IA_DIR, "scripts", "thread_weave_migrate.py")
+			script_path = os.path.join(cfg.APP_ROOT, "scripts", "thread_weave_migrate.py")
 			process = await asyncio.create_subprocess_exec(
 				"uv",
 				"run",
@@ -530,7 +530,7 @@ class LazarusPulse:
 
 		import os
 
-		script_path = os.path.join(cfg.IA_DIR, "scripts", f"heal_{tissue}.sh")
+		script_path = os.path.join(cfg.APP_ROOT, "scripts", f"heal_{tissue}.sh")
 		if os.path.exists(script_path):
 			logger.warning(f"Pulse [IMMUNE RESPONSE]: Deploying White Blood Cells for {tissue}...")
 			try:

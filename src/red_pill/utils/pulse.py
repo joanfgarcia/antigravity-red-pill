@@ -5,7 +5,7 @@ from typing import Any, Dict
 
 import red_pill.config as cfg
 
-HEARTBEAT_FILE = os.path.join(cfg.IA_DIR, "storage", "pulse.json")
+HEARTBEAT_FILE = os.path.join(cfg.APP_ROOT, "storage", "pulse.json")
 
 
 def record_interaction() -> Dict[str, Any]:

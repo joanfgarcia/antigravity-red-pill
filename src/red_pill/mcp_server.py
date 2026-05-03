@@ -768,7 +768,7 @@ async def handle_run_samantha_analysis(arguments: Dict[str, Any]):
 		f.write(text_input)
 
 	# We construct a completely detached background script call
-	script_path = os.path.join(cfg.IA_DIR, "scripts", "samantha_critic.py")
+	script_path = os.path.join(cfg.APP_ROOT, "scripts", "samantha_critic.py")
 
 	# The CLI will read the file, run the swarm, save to qdrant, and delete the temp file.
 	cmd = [GET_PYTHON(), script_path, "--event-id", event_id, "--input-file", tmp_path]
@@ -1027,7 +1027,7 @@ async def handle_configure_interceptor(arguments: Dict[str, Any]):
 		conf.INTERCEPTOR_ENABLED = enabled
 
 		# 2. Persist to .env (Best effort)
-		env_path = Path(conf.IA_DIR) / ".env"
+		env_path = Path(conf.APP_ROOT) / ".env"
 		if env_path.exists():
 			lines = []
 			replaced = False

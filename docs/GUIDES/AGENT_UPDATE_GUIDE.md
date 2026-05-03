@@ -437,6 +437,23 @@ The `perform_sleep_cycle()` function in `src/red_pill/metabolism/sleep.py` has t
 3.  **Tests of `perform_sleep_cycle`** must mock `red_pill.metabolism.sleep._check_llm_available` to return `True` (or explicitly test the LLM-down path), otherwise they will be skipped by the health guard in CI where no LLM runs.
 
 
+    #### §4.19 Agentic Self-Assembly Architecture (v6.8.6)
+    The Bünker directory structure has been formally decoupled to separate the agent's workspace from the Red-Pill library core.
+
+    > [!WARNING]
+    > **CRITICAL PRE-UPDATE VERIFICATION**: Before initiating the update via `upgrade.sh`, the Agent MUST verify that `WORKSPACE_ROOT` and `APP_ROOT` are correctly defined in the current `.env` file and that existing path aliases (e.g. Qdrant configurations or Backup export locations) will not overlap or be deleted during the merge process.
+
+    1.  **Environment File**: Replace `IA_DIR` in `.env` with `WORKSPACE_ROOT` and `APP_ROOT`. For Developer profiles, `WORKSPACE_ROOT=~/Documents/IA` and `APP_ROOT=~/Documents/IA/sharing`.
+    2.  **Profiles**: Define `RED_PILL_PROFILE=user` (or `developer`) to ensure scripts can tailor their behavior.
+    3.  **Transversal Directories**: `USER_ATLAS_DIR` and `ALETH_CORE_DIR` now live in `.env` as top-level citizens.
+    4.  **Hardware Adaptations**: When performing an update via `upgrade.sh`, ensure you rely on `git merge` instead of overwriting, to preserve hardware-specific PyTorch adaptations.
+
+    > [!IMPORTANT]
+    > **CRITICAL POST-UPDATE VERIFICATION**: After the update completes, the Agent MUST verify the path integrity before closing the operation:
+    > - Check that Qdrant (`QDRANT_HOST`, `QDRANT_PORT`) answers on its expected IP and has not fallen back to an incorrect configuration.
+    > - Confirm `storage/` directory paths (especially `APP_ROOT/storage/` for system states and `WORKSPACE_ROOT/backups/export/` for backups) have survived the git merge and are correctly targeted.
+    > Do not conclude the update process without explicitly logging these path verification checks.
+
 ## 5. Hierarchy of Directives
 
 Upon completion of any update, the agent **MUST** immediately execute:

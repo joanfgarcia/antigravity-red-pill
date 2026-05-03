@@ -41,13 +41,13 @@ else
 	echo -e "${BLUE}[INFO] No se detectó repositorio Git. Omitiendo sync de código.${NC}"
 fi
 
-# 2. IA_DIR & Environment Check
+# 2. WORKSPACE_ROOT & Environment Check
 if [ -f ".env" ]; then
 	set -a
 	source .env
 	set +a
-	if [[ "${IA_DIR:-}" == "~"* ]]; then
-		IA_DIR="${IA_DIR/#\~/$HOME}"
+	if [[ "${WORKSPACE_ROOT:-}" == "~"* ]]; then
+		WORKSPACE_ROOT="${WORKSPACE_ROOT/#\~/$HOME}"
 	fi
 fi
 

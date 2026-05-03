@@ -20,12 +20,12 @@ def test_config_isolation(bunker_isolation):
 	from red_pill import config as cfg
 
 	# Validate singleton alignment with environment
-	singleton_dir = cfg.get_config().IA_DIR
-	module_dir = cfg.IA_DIR
+	singleton_dir = cfg.get_config().APP_ROOT
+	module_dir = cfg.APP_ROOT
 
 	assert "bunker_test_" in singleton_dir, f"Pydantic singleton leaked: {singleton_dir}"
 	assert "bunker_test_" in module_dir, f"Module alias leaked: {module_dir}"
-	assert singleton_dir == module_dir, "Singleton and module alias drift detected in IA_DIR"
+	assert singleton_dir == module_dir, "Singleton and module alias drift detected in APP_ROOT"
 
 	# Validate isolation from host production paths
 	prod_path = os.path.expanduser("~/Documents/IA/sharing")

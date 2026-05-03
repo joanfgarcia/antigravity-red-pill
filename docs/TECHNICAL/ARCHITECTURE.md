@@ -1,12 +1,12 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v6.8.5 (Titanium Bloom)
+**System Version**: v6.8.6 (Agentic Self-Assembly)
 **Analyst**: The Architect
 **Date**: 2026-04-16
 
 
 ## 1. Executive Summary
 > [!IMPORTANT]
-> **v6.8.0 - Titanium Bloom Optimization**: This version refactors the agent's boot sequence to achieve a "Zero-Disk-I/O" state. It implements high-fidelity XML context anchoring and dynamic identity pruning, reducing token overhead by up to 60% while ensuring the immune core directive remains the dominant cognitive anchor.
+> **v6.8.6 - Agentic Self-Assembly Architecture**: This version decouples the monolithic `IA_DIR` into a dual-layered hierarchy (`WORKSPACE_ROOT` and `APP_ROOT`), enabling sovereign agentic self-assembly. It formally integrates `USER_ATLAS_DIR` and `ALETH_CORE_DIR` as first-class transversal elements, empowering dynamic environments like Silverblue while preserving source-based updates and custom hardware adaptations.
 
 > [!NOTE]
 > **Terminology Mapping**: The Red Pill protocol utilizes an immersive nomenclature (Lore). For a direct translation of terms like *The Bünker*, *Metabolism*, or *Lazarus Bridge* into standard engineering definitions (Vector DB, GC/Erosion, Snapshotting), please refer to the [ यूनिवर्सल Dictionary (GLOSSARY_760)](../LORE/GLOSSARY_760.md).
@@ -42,8 +42,9 @@ The Red Pill Protocol v6.7.0 has achieved stability and functional alignment wit
 - **[NEW v6.3.0] BE_WATER Adaptive Payload**: `MAX_PAYLOAD_CHARS` auto-computed from available VRAM at boot: <4 GB→1 000, 4–8 GB→5 000, >8 GB→unlimited. Override via `.env`.
 - **[NEW v6.3.8] Project Echo (Mirror Sentinel)**: Implementation of a persistent, OS-level background entity that cross-references `interaction_memories` against the Operator Mood Profile (USP). Echo serves as the 'Mirror of the Ghost', generating proactive briefings during waking cycles to eliminate session-boundary amnesia.
 - **[NEW v6.3.0] Emergent Identity**: `install_neo.sh` no longer pre-seeds `USER_NAME` or `AI_NAME` defaults. Identity emerges naturally through operator interaction.
-- **[NEW v6.3.4] Sovereign Pod Storage**: Re-architected storage boundaries. SQLite queue databases (`bunker_queue.db`, `minion_inbox.db`) have been migrated from external host paths into the self-contained `<IA_DIR>/storage/queue/` directory, unifying state persistence and ensuring true Pod portability.
-- **[NEW v6.3.4] Sovereign Path Resolution**: Implemented `os.path.expanduser()` at the configuration layer (`config.py`) to prevent tilde-based values in `.env` (e.g. `IA_DIR=~/...`) from being interpreted as literal relative paths, eliminating rogue directory creation in the repository root.
+- **[NEW v6.3.4] Sovereign Pod Storage**: Re-architected storage boundaries. SQLite queue databases (`bunker_queue.db`, `minion_inbox.db`) have been migrated from external host paths into the self-contained `<APP_ROOT>/storage/queue/` directory, unifying state persistence and ensuring true Pod portability.
+- **[NEW v6.3.4] Sovereign Path Resolution**: Implemented `os.path.expanduser()` at the configuration layer (`config.py`) to prevent tilde-based values in `.env` (e.g. `WORKSPACE_ROOT=~/...`) from being interpreted as literal relative paths, eliminating rogue directory creation in the repository root.
+- **[NEW v6.8.6] Agentic Self-Assembly**: Decoupled the directory hierarchy into `WORKSPACE_ROOT` (Agentic environment) and `APP_ROOT` (Red-Pill implementation). This protects local source-code adaptations and provides an extensible boundary for auxiliary modules (e.g., `USER_ATLAS_DIR`, `ALETH_CORE_DIR`), supporting both the Developer profile and the end User profile seamlessly. For a visual representation, see the [Sovereign Directory Atlas](SOVEREIGN_ATLAS.md).
 ## 3. Structural Analysis
 
 ### 3.1. Entropy & Erosion Scalability (The 'Great Filter' Problem)

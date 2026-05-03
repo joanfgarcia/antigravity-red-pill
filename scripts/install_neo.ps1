@@ -94,18 +94,19 @@ $DOCKER_CMD = $CONTAINER_ENGINE
 Write-Host "--- RED PILL KERNEL: WINDOWS ADAPTIVE INSTALLER ---" -ForegroundColor Blue
 
 # 2. Configuración del Búnker
-$DEFAULT_IA_DIR = Join-Path $HOME "Documents\IA"
+$DEFAULT_WORKSPACE = Join-Path $HOME "Documents\IA"
 if ($Auto) {
-    $IA_DIR = $DEFAULT_IA_DIR
+    $WORKSPACE_ROOT = $DEFAULT_WORKSPACE
 } else {
-    $IA_DIR = Read-Host "Elige la ruta para tu búnker IA (Default: $DEFAULT_IA_DIR)"
-    if (-not $IA_DIR) { $IA_DIR = $DEFAULT_IA_DIR }
+    $WORKSPACE_ROOT = Read-Host "Elige la ruta para tu WORKSPACE IA (Default: $DEFAULT_WORKSPACE)"
+    if (-not $WORKSPACE_ROOT) { $WORKSPACE_ROOT = $DEFAULT_WORKSPACE }
 }
+$APP_ROOT = (Resolve-Path "$PSScriptRoot\..").ProviderPath
 
-New-Item -ItemType Directory -Force -Path (Join-Path $IA_DIR "storage") | Out-Null
-New-Item -ItemType Directory -Force -Path (Join-Path $IA_DIR "scripts") | Out-Null
-New-Item -ItemType Directory -Force -Path (Join-Path $IA_DIR "backups\soul") | Out-Null
-New-Item -ItemType Directory -Force -Path (Join-Path $IA_DIR "seeds") | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $APP_ROOT "storage") | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $APP_ROOT "scripts") | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $APP_ROOT "backups\soul") | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $APP_ROOT "seeds") | Out-Null
 
 # 3. Fase: Personalización B760-Adaptive
 Write-Host "`n--- Fase: Personalización B760-Adaptive ---" -ForegroundColor Blue
@@ -122,7 +123,7 @@ if ($Auto) {
 }
 
 # 3.1 Fase: Caché de Modelos (v6.1.0)
-$DEFAULT_CACHE_DIR = Join-Path $IA_DIR "storage\models"
+$DEFAULT_CACHE_DIR = Join-Path $APP_ROOT "storage\models"
 if ($Auto) {
     $FASTEMBED_CACHE_PATH = $DEFAULT_CACHE_DIR
 } else {
@@ -147,7 +148,11 @@ if (-not $QDRANT_API_KEY) {
 $ENV_FILE = Join-Path $PSScriptRoot "..\.env"
 $ENV_CONTENT = @"
 QDRANT_API_KEY=$QDRANT_API_KEY
-ANTIGRAVITY_IA_DIR=$IA_DIR
+WORKSPACE_ROOT=$WORKSPACE_ROOT
+APP_ROOT=$APP_ROOT
+RED_PILL_PROFILE=user
+USER_ATLAS_DIR=$WORKSPACE_ROOT\atlas
+ALETH_CORE_DIR=$WORKSPACE_ROOT\Aleth_Core
 CONTAINER_ENGINE=$CONTAINER_ENGINE
 FASTEMBED_CACHE_PATH=$FASTEMBED_CACHE_PATH
 "@
@@ -158,7 +163,7 @@ Write-Host "Lanzando servidor Qdrant..." -ForegroundColor Green
 # Intentamos detener si ya existe
 & $DOCKER_CMD stop qdrant_red_pill 2>$null
 & $DOCKER_CMD rm qdrant_red_pill 2>$null
-& $DOCKER_CMD run -d --name qdrant_red_pill -p 127.0.0.1:6333:6333 -p 127.0.0.1:6334:6334 -v "${IA_DIR}\storage:/qdrant/storage:Z" -e "QDRANT__SERVICE__API_KEY=$QDRANT_API_KEY" qdrant/qdrant:v1.9.0
+& $DOCKER_CMD run -d --name qdrant_red_pill -p 127.0.0.1:6333:6333 -p 127.0.0.1:6334:6334 -v "${APP_ROOT}\storage:/qdrant/storage:Z" -e "QDRANT__SERVICE__API_KEY=$QDRANT_API_KEY" qdrant/qdrant:v1.9.0
 
 # 6. Sincronización Zero-Trust (GEMINI.md y Anchor)
 $CONFIG_DIR = Join-Path $HOME ".config\red_pill"
@@ -255,7 +260,7 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
 }
 
 # 8. Copia de Scripts Final
-Copy-Item "$PSScriptRoot\*" (Join-Path $IA_DIR "scripts") -Force -Exclude "install_neo.ps1"
+Copy-Item "$PSScriptRoot\*" (Join-Path $APP_ROOT "scripts") -Force -Exclude "install_neo.ps1"
 
 Write-Host "`nInstalación completada. 770 UP." -ForegroundColor Green
 Write-Host "Usa 'uv run red-pill status' para verificar el hardware." -ForegroundColor Gray

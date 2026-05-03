@@ -12,7 +12,7 @@ from red_pill.config import get_config
 
 cfg = get_config()
 
-IDENTITY_FILE = os.path.join(cfg.IA_DIR, "storage", "identity.json")
+IDENTITY_FILE = os.path.join(cfg.APP_ROOT, "storage", "identity.json")
 
 
 def _load_identity() -> Dict[str, Any]:

@@ -19,7 +19,7 @@ def _resolve_credential_path(raw_path: str) -> str:
 		return ""
 	if os.path.isabs(raw_path):
 		return raw_path
-	return os.path.join(cfg.IA_DIR, raw_path)
+	return os.path.join(cfg.APP_ROOT, raw_path)
 
 
 class CloudSyncPlugin(SovereignPlugin):
@@ -43,7 +43,7 @@ class CloudSyncPlugin(SovereignPlugin):
 
 	async def init(self) -> None:
 		# Token path: Sovereign Credential Standard (v6.4.1)
-		self.token_file = os.path.join(cfg.IA_DIR, "plugins", self.name, "token.json")
+		self.token_file = os.path.join(cfg.APP_ROOT, "plugins", self.name, "token.json")
 
 		if self.enabled and (self.service_account_file or self.client_secrets_file):
 			self._authenticate()

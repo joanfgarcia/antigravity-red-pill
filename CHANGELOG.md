@@ -1,3 +1,12 @@
+## [6.8.6] - 2026-05-03
+
+### 🏗️ Agentic Self-Assembly Architecture (Decoupled Sovereign Domain)
+- **[ARCH] Workspace vs App Decoupling**: Re-architected the monolithic `IA_DIR` concept into a dual-layered hierarchy: `WORKSPACE_ROOT` (the Agent's operational environment, e.g., `~/Documents/IA`) and `APP_ROOT` (the Red-Pill repository, e.g., `~/Documents/IA/sharing`). This formally decouples the application code from the agent's broader workspace.
+- **[FEAT] First-Class Transversal Directories**: Upgraded `USER_ATLAS_DIR` and `ALETH_CORE_DIR` to first-class citizens in `config.py` and `.env`. These now resolve relative to `WORKSPACE_ROOT` rather than being trapped inside the project root.
+- **[FEAT] Dynamic Discovery**: Refactored `install_neo.sh` and `install_neo.ps1` to perform dynamic auto-discovery of `WORKSPACE_ROOT` and `APP_ROOT` (Protocol 770 Safe-Path), adapting automatically to Silverblue/Office environments.
+- **[HEAL] Sovereign Updates Protection**: Upgraded `upgrade.sh` to respect `WORKSPACE_ROOT`. The update mechanism strictly relies on `git merge`, protecting the agent's local autonomy and custom hardware adaptations (e.g., ROCm/MLX patches) from being overwritten during autonomous updates.
+- **[FEAT] Red Pill Profiles**: Introduced the `RED_PILL_PROFILE` variable (defaulting to `user`) to allow environment-specific logic.
+
 ## [6.8.5] - 2026-05-02
 
 ### 🌐 Omnipresence MVP (Phase 4 Sovereign Gateway)

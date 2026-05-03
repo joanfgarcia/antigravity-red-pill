@@ -68,7 +68,7 @@ class HypervisorManager:
 			ephemeral_port = self.get_free_port()
 
 			# Resolve binary types
-			model_path = os.path.join(cfg.IA_DIR, profile.get("model_path", ""))
+			model_path = os.path.join(cfg.APP_ROOT, profile.get("model_path", ""))
 			binary_type = profile.get("binary_type", "gguf")
 
 			# Build command based on OS/binary type logic
@@ -78,7 +78,7 @@ class HypervisorManager:
 				cmd = ["mlx_lm.server", "--model", model_path, "--port", str(ephemeral_port)]
 			else:
 				# Assume llama-server for both BitNet custom and GGUF standard
-				llama_path = os.path.join(cfg.IA_DIR, "3rdparty", "BitNet-1.58b", "build", "bin", "llama-server")
+				llama_path = os.path.join(cfg.APP_ROOT, "3rdparty", "BitNet-1.58b", "build", "bin", "llama-server")
 				if not os.path.exists(llama_path):
 					llama_path = "llama-server"
 				ctx = str(profile.get("context_size", 2048))
