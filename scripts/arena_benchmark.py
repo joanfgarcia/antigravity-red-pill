@@ -2,10 +2,11 @@ import os
 import subprocess
 import time
 
-MODELS_DIR = "/home/joan/Documents/IA/sharing/models/gguf"
+WORKSPACE_ROOT = os.getenv("WORKSPACE_ROOT", os.path.expanduser("~/Documents/IA"))
+MODELS_DIR = os.path.join(WORKSPACE_ROOT, "sharing", "models", "gguf")
 MODELS = ["Falcon3-3B-Instruct-Heretic_Q4_K_M.gguf", "DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf", "qwen2.5-7b-instruct-q4_k_m-00001-of-00002.gguf"]
 
-LLAMA_CLI = "/home/joan/Documents/IA/sharing/3rdparty/llama_official/build/bin/llama-cli"
+LLAMA_CLI = os.path.join(WORKSPACE_ROOT, "sharing", "3rdparty", "llama_official", "build", "bin", "llama-cli")
 
 PROMPTS = {
 	"LOGIC_MATH": "I have 5 apples. I give 2 to you. Then I buy 3 more. How many apples do I have now?",

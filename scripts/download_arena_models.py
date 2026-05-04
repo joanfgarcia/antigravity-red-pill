@@ -24,9 +24,12 @@ urls = [
 	get_file("ChiKoi7/Falcon3-3B-Instruct-Heretic-GGUF"),
 ]
 
-os.makedirs("/home/joan/Documents/IA/sharing/models/gguf", exist_ok=True)
+WORKSPACE_ROOT = os.getenv("WORKSPACE_ROOT", os.path.expanduser("~/Documents/IA"))
+MODELS_DIR = os.path.join(WORKSPACE_ROOT, "sharing", "models", "gguf")
+
+os.makedirs(MODELS_DIR, exist_ok=True)
 for url in urls:
 	if url:
 		print(f"Downloading {url}...")
-		os.system(f"wget -b -q -c {url} -P /home/joan/Documents/IA/sharing/models/gguf")
+		os.system(f"wget -b -q -c {url} -P {MODELS_DIR}")
 		print("Download started in background.")

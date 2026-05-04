@@ -64,14 +64,14 @@ class AntigravityIDEClient:
 		if resp.status_code == 200:
 			data = resp.json()
 			traj = data.get("trajectorySummaries", {}).get(cascade_id, {})
-			return traj.get("status", "UNKNOWN")
+			return str(traj.get("status", "UNKNOWN"))
 		return f"ERROR_{resp.status_code}"
 
 	def start_cascade(self) -> str:
 		"""Starts a new cascade and returns the cascade_id"""
 		resp = requests.post(self._url("StartCascade"), headers=self._get_headers(), json={}, verify=False)
 		if resp.status_code == 200:
-			return resp.json().get("cascadeId")
+			return str(resp.json().get("cascadeId"))
 		raise RuntimeError(f"Failed to StartCascade: {resp.status_code} {resp.text}")
 
 	def send_user_message(self, cascade_id: str, text: str) -> bool:

@@ -235,9 +235,10 @@ class LlamaCppInferenceProvider(BaseInferenceProvider):
 		workspace = os.getenv("WORKSPACE_ROOT", os.path.expanduser("~/Documents/IA"))
 		runner_path = os.path.join(workspace, "sharing", "3rdparty", "llama_official", "build", "bin", "llama-cli")
 		if not os.path.exists(runner_path):
-			runner_path = shutil.which("llama-cli")
-			if not runner_path:
+			runner_path_opt = shutil.which("llama-cli")
+			if not runner_path_opt:
 				return None
+			runner_path = runner_path_opt
 
 		# 2. Locate model
 		model_path = os.path.join(workspace, "models", "gguf", model_name)
