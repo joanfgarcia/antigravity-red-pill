@@ -1,3 +1,12 @@
+## [6.8.7] - 2026-05-04
+
+### 🏎️ Inference Sovereign Engine (BE_WATER Local GGUF)
+- **[FEAT] Native Blackwell Architecture Pipeline**: Migrated from generic JIT compilation to native SASS instruction targeting via `gcc-13` and `CUDA 13.0`. Eliminates the catastrophic ~15GB JIT memory spikes on modern GPUs (sm_100).
+- **[ARCH] `LlamaCppInferenceProvider`**: Integrated a new hardware-agnostic local provider natively into the Bünker Swarm. Uses `BE_WATER` auto-discovery to dynamically adapt to host hardware capabilities.
+- **[HEAL] OOM Shield Protocol (Cgroup Guard)**: The Bünker now proactively wraps background memory-intensive tasks in a `systemd-run --user --scope -p MemoryMax=10G` cgroup, eliminating system panics during model loading.
+- **[ARCH] Graceful Model Degradation**: `GruOrchestrator` now sorts available `.gguf` files by size and boots the lightest available model when local constraints apply, avoiding hard-crashes on 4GB VRAM nodes.
+- **[DOCS] Hardware Directive & Scripts Index**: Explicitly documented the `CUDA 13.0+` requirement for the RTX 50-series in `HARDWARE_MODELS_BE_WATER.md` and cataloged `arena_benchmark.py` in `SCRIPTS_INDEX.md`.
+
 ## [6.8.6] - 2026-05-03
 
 ### 🏗️ Agentic Self-Assembly Architecture (Decoupled Sovereign Domain)

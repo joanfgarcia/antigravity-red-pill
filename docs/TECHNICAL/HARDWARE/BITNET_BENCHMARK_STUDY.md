@@ -10,7 +10,15 @@ This technical documentation summarizes the isolation, compilation, and evaluati
 ## 2. Infrastructure & Compilation Pipeline
 The models were processed and executed within an explicitly isolated minion script (`minion_benchmark.py`) under `sharing/experimental/BitNet/`.
 
-### 2.1 Weight Conversion (`setup_env.py`)
+### 2.1 BitNet Architecture & Kernel Types (I2_S, TL1, TL2)
+The 1.58-bit BitNet architecture achieves its revolutionary efficiency by replacing complex floating-point matrix multiplications (FP16) with simple additions and subtractions. This is possible because the model weights are strictly constrained to ternary values: **-1, 0, and 1**. 
+
+To exploit this at the hardware level, the execution engine relies on three specialized kernel types:
+- **I2_S (Inference 2-bit Standard):** The foundational kernel. It packs the ternary weights (-1, 0, 1) into 2-bit structures. This is the most compatible kernel and the baseline we use for reliable GGUF manipulation and GPU offloading (e.g., via CUDA on the RTX 5070).
+- **TL1 (Ternary Lookup 1):** Replaces mathematical operations with Lookup Tables (LUTs). Since the outcomes of adding/subtracting ternary weights are highly predictable, TL1 pre-calculates the results and simply "looks them up" in memory, drastically accelerating inference.
+- **TL2 (Ternary Lookup 2):** An advanced evolution of TL1 that processes multiple weights against multiple activations simultaneously in vectorized blocks. TL2 is specifically optimized for AVX instructions on CPUs and Tensor Cores on GPUs/NPUs, capable of achieving unprecedented throughput.
+
+### 2.2 Weight Conversion (`setup_env.py`)
 HuggingFace `safetensors` were locally transpiled and quantized into the `i2_s` GGUF schema:
 - **Baseline:** `microsoft/BitNet-b1.58-2B-4T`
 - **Candidate A:** `HF1BitLLM/Llama3-8B-1.58-100B-tokens` (Base)
@@ -18,7 +26,7 @@ HuggingFace `safetensors` were locally transpiled and quantized into the `i2_s` 
 
 *Conversion Overhead:* The 8B/10B models peaked at ~16GB RAM during `fp16` translation before folding into `i2_s` (occupying ~3.8GB on disk, allowing complete offload into the RTX 5070's 8GB VRAM envelope).
 
-### 2.2 Execution Engine (`llama-cli`)
+### 2.3 Execution Engine (`llama-cli`)
 Inference was orchestrated using the `bitnet.cpp` static binary.
 **Parameters:** `-c 1024` (Context Width), `-n 256` (Max Tokens), `-t 8` (CPU Threads), `--temp 0.2` (Low creativity).
 

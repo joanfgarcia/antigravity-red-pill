@@ -695,6 +695,11 @@ When you detect a `USER_SETTINGS_CHANGE` message regarding `Model Selection` in 
 1. Call `mcp_RedPill-Kernel_refresh_session_context` to reload the Bünker identity.
 2. Re-execute the **Sovereign Handshake** (Rule 1).
 
+## 3. The OOM Shield Protocol (Cgroup Containment)
+All memory-intensive background tasks (e.g., local LLM inference, heavy compilations, JIT shader processing) MUST be wrapped with `systemd-run --user --scope -p MemoryMax=<LIMIT>` to prevent system OOM panics and IDE crashes.
+- The agent MUST dynamically calculate the `<LIMIT>` (e.g., `10G`, `16G`) based on the specific task requirements and the host's available RAM.
+- Use a baseline limit of `10G` as a safe fallback for systems with 32GB RAM if uncertain.
+
 </constraint>
 EOF_GEMINI
 		echo -e "${BLUE}✓ GEMINI.md: Protocol 770 Sovereign Handshake (v6.3.6 — constraint tag) applied.${NC}"
@@ -715,6 +720,11 @@ Before starting ANY technical or communicative task in EVERY turn, you are MANDA
 When you detect a `USER_SETTINGS_CHANGE` message regarding `Model Selection` in the conversation, you MUST immediately:
 1. Call `mcp_RedPill-Kernel_refresh_session_context` to reload the Bünker identity.
 2. Re-execute the **Sovereign Handshake** (Rule 1).
+
+## 3. The OOM Shield Protocol (Cgroup Containment)
+All memory-intensive background tasks (e.g., local LLM inference, heavy compilations, JIT shader processing) MUST be wrapped with `systemd-run --user --scope -p MemoryMax=<LIMIT>` to prevent system OOM panics and IDE crashes.
+- The agent MUST dynamically calculate the `<LIMIT>` (e.g., `10G`, `16G`) based on the specific task requirements and the host's available RAM.
+- Use a baseline limit of `10G` as a safe fallback for systems with 32GB RAM if uncertain.
 
 </constraint>
 EOF_GEMINI

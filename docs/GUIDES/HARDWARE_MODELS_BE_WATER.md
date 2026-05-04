@@ -2,9 +2,18 @@
 
 The **Red Pill Protocol** is designed with absolute flexibility natively baked in. Under the *Be Water* philosophy, the AI's core logic separates its long-term memories and logic from the raw computing engine (the inference API). 
 
+> **📖 Lore & Teoría Cognitiva:** Para entender la teoría biológica detrás del tamaño de estos modelos (parámetros) y la diferencia vital entre arquitecturas *Base* e *Instruct*, consulta el Capítulo 2 del Libro: [Cerebros de Silicio y Asignación de Tareas](aleth_biology/02_CEREBROS_DE_SILICIO.md).
+
 Because Red Pill operates offline through `llama.cpp` acting as a localized OpenAI-compatible API, its intelligence must scale and adapt dynamically to whatever hardware the Host (the Operator's current machine) has available.
 
 Here is the definitive guide to picking the right model relative to the available VRAM and computational horsepower:
+
+---
+
+## ⚡ CUDA 13.0+ Requirement (Blackwell Architecture)
+> [!IMPORTANT]
+> If you are running on modern NVIDIA hardware (such as the RTX 50-series Blackwell architecture), you **MUST** install CUDA Toolkit >= 13.0. 
+> Older compilers (like `nvcc 12.4`) lack native `sm_100` support, forcing the driver to Just-In-Time (JIT) compile PTX instructions. This JIT compilation will consume over 15GB of system RAM during the initial model load, resulting in catastrophic OOM (Out Of Memory) Kernel Panics. With CUDA 13.0+, `llama.cpp` compiles native SASS instructions, keeping RAM overhead flat and achieving extreme inference speeds.
 
 ---
 

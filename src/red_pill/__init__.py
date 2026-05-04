@@ -1,5 +1,5 @@
 """Red Pill Protocol - Bünker Backend Core."""
 
-__version__ = "6.8.6"
+__version__ = "6.8.7"
 CORE_VERSION = __version__
 __model__ = "Gemini 1.5 Flash"

@@ -436,3 +436,13 @@ Deployed via `~/.config/systemd/user/`, these units form the autonomic layer of 
 
 ### 14.4 Content Quality Gate (Anti-BUG)
 To prevent the **Bayesian Utility Feedback Loop (BUG)**, the system now enforces a **Shannon Entropy Gate**. Engrams with low information density (terminal noise, repetitive boilerplate) are blocked from reinforcement. This ensures the Bayesian "Utility Alpha" only grows for meaningful technical knowledge, preserving the long-term integrity of the Bünker's professional collections.
+
+## 15. Workspace Protection & OOM Containment
+
+During the stabilization of GGUF inference on the RTX 5070 (Blackwell), severe memory leaks caused by JIT shader translation (`PTX-to-Blackwell`) triggered the Linux OOM Killer, repeatedly terminating the host IDE and the agent process.
+
+To neutralize this threat, the protocol adopts the **OOM Shield Protocol** using Linux cgroups via `systemd-run`.
+
+- **Cgroup Containment**: All memory-intensive executions (like `llama-cli` or heavy compilations) are wrapped in `systemd-run --user --scope -p MemoryMax=<LIMIT>`.
+- **Surgical Termination**: If the wrapped process exceeds the dynamic limit (e.g., `10G` or `16G` depending on available RAM), the kernel kills *only* the contained process.
+- **Sovereign Continuity**: The Agent and IDE remain completely unharmed, allowing the Agent to detect the failure, adjust the parameters, and try again without losing context.

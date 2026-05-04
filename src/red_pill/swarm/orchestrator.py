@@ -145,6 +145,21 @@ class GruOrchestrator:
 				"bitnet", BitNetInferenceProvider(runner_path=bitnet_bin, model_path=bitnet_model, grammar_path=grammar_path)
 			)
 
+		# 4. Local GGUF Provider (llama.cpp natively) - BE_WATER
+		from red_pill.core.providers import LlamaCppInferenceProvider
+
+		workspace = os.getenv("WORKSPACE_ROOT", os.path.expanduser("~/Documents/IA"))
+		gguf_dir = os.path.join(workspace, "models", "gguf")
+		if os.path.exists(gguf_dir):
+			gguf_files = [f for f in os.listdir(gguf_dir) if f.endswith(".gguf")]
+			if gguf_files:
+				# Sort by size to pick the lightest model (conservatively) to avoid OOM on smaller GPUs
+				gguf_files.sort(key=lambda x: os.path.getsize(os.path.join(gguf_dir, x)))
+				lightest_model = gguf_files[0]
+				local_gguf_provider = LlamaCppInferenceProvider.create_be_water(lightest_model)
+				if local_gguf_provider:
+					ProviderRegistry.register_inference_provider("local_gguf", local_gguf_provider)
+
 	def is_local_ready(self) -> bool:
 		"""Check if local SLM infrastructure is available."""
 		ia_dir = os.getenv("WORKSPACE_ROOT", os.path.expanduser("~/Documents/IA"))

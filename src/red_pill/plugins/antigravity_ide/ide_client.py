@@ -14,6 +14,7 @@ try:
 	from antigravity_history.discovery import discover_language_servers, find_all_endpoints
 except ImportError:
 	from pathlib import Path
+
 	sys.path.insert(0, str(Path.home() / "Documents" / "IA" / "antigravity-history" / "src"))
 	from antigravity_history.discovery import discover_language_servers, find_all_endpoints
 

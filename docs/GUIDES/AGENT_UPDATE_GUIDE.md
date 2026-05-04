@@ -454,6 +454,17 @@ The `perform_sleep_cycle()` function in `src/red_pill/metabolism/sleep.py` has t
     > - Confirm `storage/` directory paths (especially `APP_ROOT/storage/` for system states and `WORKSPACE_ROOT/backups/export/` for backups) have survived the git merge and are correctly targeted.
     > Do not conclude the update process without explicitly logging these path verification checks.
 
+    #### §4.20 The OOM Shield Protocol (Memory Containment)
+
+    > [!IMPORTANT]
+    > **Linux OOM Killer Protection**: To prevent the OS from killing the IDE or the agent process during memory-intensive operations (such as Blackwell JIT shader compilation or heavy GGUF inference), all such subprocesses MUST be contained.
+
+    The Red Pill ecosystem enforces the **OOM Shield Protocol**. When spawning any subprocess known to have unbounded memory spikes, wrap the command in a `systemd` transient scope:
+    ```bash
+    systemd-run --user --scope -p MemoryMax=10G <command>
+    ```
+    **Dynamic Allocation**: Agents should dynamically adjust the `MemoryMax` limit (e.g. `10G`, `16G`) based on the host's total RAM and current availability, falling back to a `10G` baseline for 32GB systems. This ensures the kernel reaps only the offending subprocess when the limit is breached, preserving the Agent's runtime environment.
+
 ## 5. Hierarchy of Directives
 
 Upon completion of any update, the agent **MUST** immediately execute:

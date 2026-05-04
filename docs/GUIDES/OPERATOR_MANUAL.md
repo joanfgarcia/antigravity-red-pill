@@ -68,6 +68,10 @@ Deploy specialized agents for complex tasks.
 	uv run red-pill swarm audit --path ./src
 	```
 
+### 7. Scripts & Utility Tools
+The ecosystem contains dozens of scripts for testing, auditing, and maintenance (including `arena_benchmark.py` and its interactive UX).
+*   **View Scripts Index:** [Read SCRIPTS_INDEX.md](../TECHNICAL/SCRIPTS_INDEX.md)
+
 ---
 
 ## 🖥️ MCP Sovereign Dashboard (IDE)
@@ -141,6 +145,10 @@ Despliega agentes especializados para tareas complejas.
 	```bash
 	uv run red-pill swarm audit --path ./src
 	```
+
+### 7. Scripts y Herramientas Utilitarias
+El ecosistema cuenta con decenas de scripts para pruebas, auditorías y mantenimiento (incluyendo `arena_benchmark.py` y su UX interactiva).
+*   **Ver Índice de Scripts:** [Leer SCRIPTS_INDEX.md](../TECHNICAL/SCRIPTS_INDEX.md)
 
 ---
 
