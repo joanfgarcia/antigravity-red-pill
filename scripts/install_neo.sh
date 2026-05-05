@@ -541,7 +541,7 @@ update_env "WORKSPACE_ROOT" "$WORKSPACE_ROOT"
 update_env "APP_ROOT" "$APP_ROOT"
 update_env "RED_PILL_PROFILE" "user"
 update_env "USER_ATLAS_DIR" "$WORKSPACE_ROOT/atlas"
-update_env "ALETH_CORE_DIR" "$WORKSPACE_ROOT/Aleth_Core"
+update_env "AGENT_CORE_DIR" "$WORKSPACE_ROOT/Titanium_Core"
 chmod 600 "$ENV_FILE"
 
 mkdir -p "$IA_DIR/scripts" "$IA_DIR/backups/qdrant" "$IA_DIR/backups/soul" "$IA_DIR/seeds" "$APP_ROOT/storage" "$IA_DIR/storage/queue"

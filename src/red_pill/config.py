@@ -89,7 +89,7 @@ class RedPillConfig(BaseSettings):
 	APP_ROOT: str = _APP_ROOT
 	RED_PILL_PROFILE: str = "user"
 	USER_ATLAS_DIR: str = os.path.join(_WORKSPACE_ROOT, "atlas")
-	ALETH_CORE_DIR: str = os.path.join(_WORKSPACE_ROOT, "Aleth_Core")
+	AGENT_CORE_DIR: str = os.path.join(_WORKSPACE_ROOT, "Titanium_Core")
 
 	@field_validator("WORKSPACE_ROOT", mode="before")
 	@classmethod

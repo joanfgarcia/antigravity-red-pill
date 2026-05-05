@@ -1033,7 +1033,14 @@ class MemoryManager:
 		return snapshots_created
 
 	def inject_signal(
-		self, name: str, intensity: float, signal_type: str, source: str, muted: bool = False, originator: Optional[str] = None, criticality: str = "WARNING"
+		self,
+		name: str,
+		intensity: float,
+		signal_type: str,
+		source: str,
+		muted: bool = False,
+		originator: Optional[str] = None,
+		criticality: str = "WARNING",
 	) -> None:
 		"""
 		Injects a biological/somatic signal into the immune dashboard.
@@ -1099,6 +1106,7 @@ class MemoryManager:
 		try:
 			import hashlib
 			import uuid
+
 			sig_hash = hashlib.sha256(name.encode("utf-8")).hexdigest()
 			point_id = str(uuid.UUID(sig_hash[:32]))
 			existing = self.client.retrieve(collection_name="signal_memories", ids=[point_id])

@@ -92,6 +92,7 @@ class IDEWorker:
 		# Handle Background Messages
 		if background_msgs:
 			from red_pill.core.inbox import MinionInbox
+
 			inbox = MinionInbox()
 			for r in background_msgs:
 				msg_id = r["id"]
@@ -102,10 +103,7 @@ class IDEWorker:
 					channel = r["channel"]
 
 					inbox.drop_report(
-						event_id=f"bg_msg_{msg_id}",
-						source=f"NeonLink ({channel})",
-						status="pending",
-						content=f"Message from {sender_id}: {text}"
+						event_id=f"bg_msg_{msg_id}", source=f"NeonLink ({channel})", status="pending", content=f"Message from {sender_id}: {text}"
 					)
 					cursor.execute("UPDATE inbox SET status = 'DELIVERED_BACKGROUND' WHERE id = ?", (msg_id,))
 				except Exception as e:
@@ -131,9 +129,7 @@ class IDEWorker:
 			for i, (cid, tdata) in enumerate(sorted_trajs):
 				idx = i + 1
 				title = tdata.get("summary", "Sin Título")
-				cursor.execute(
-					"INSERT INTO cascade_mappings (channel_user_id, cascade_id, title) VALUES (?, ?, ?)", (channel_user_id, cid, title)
-				)
+				cursor.execute("INSERT INTO cascade_mappings (channel_user_id, cascade_id, title) VALUES (?, ?, ?)", (channel_user_id, cid, title))
 				response_text += f"`[{idx}]` {title}\n"
 			response_text += "\nEnvía `/switch <número>` para anclar tu sesión."
 			cursor.execute(

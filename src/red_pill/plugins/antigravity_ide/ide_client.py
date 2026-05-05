@@ -84,22 +84,15 @@ class AntigravityIDEClient:
 		"""Injects a user message and triggers generation using the cascadeConfig."""
 		payload = {
 			"cascadeId": cascade_id,
-			"items": [
-				{
-					"text": text
-				}
-			],
+			"items": [{"text": text}],
 			"cascadeConfig": {
 				"plannerConfig": {
 					"requestedModel": {
 						"model": model_id  # Usa el placeholder nativo para respetar la selección del usuario en el IDE
 					},
-					"conversational": {
-						"plannerMode": "CONVERSATIONAL_PLANNER_MODE_DEFAULT",
-						"agenticMode": True
-					}
+					"conversational": {"plannerMode": "CONVERSATIONAL_PLANNER_MODE_DEFAULT", "agenticMode": True},
 				}
-			}
+			},
 		}
 		resp = requests.post(self._url("SendUserCascadeMessage"), headers=self._get_headers(), json=payload, verify=False)
 		if resp.status_code == 200:

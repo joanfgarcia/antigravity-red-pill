@@ -200,6 +200,22 @@ class GruOrchestrator:
 	def _trigger_sas(self, task: str, results: List[SwarmResult]) -> None:
 		"""Record memory and notify user of swarm completion with telemetry."""
 		success_count = len([r for r in results if r.status == "success"])
+
+		# SAS SUPPRESSION LOGIC
+		# Si no hay minions exitosos y el resultado indica que se saltó el procesamiento
+		# (ej. "no changes" o "already reported"), silenciamos la notificación para no molestar.
+		if success_count == 0 and len(results) > 0:
+			all_skipped = True
+			for r in results:
+				# Check errors or results for skip indications
+				msg = str(r.error).lower() + str(r.result).lower()
+				if not any(kw in msg for kw in ["no changes", "already reported", "skip", "nothing to process"]):
+					all_skipped = False
+					break
+			if all_skipped:
+				logger.info(f"SAS Notification suppressed: Minion task '{task}' skipped (no changes/already reported).")
+				return
+
 		task_preview = task[:100] if isinstance(task, str) else "task"
 
 		telemetry_summary = ""

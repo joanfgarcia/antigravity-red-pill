@@ -6,6 +6,7 @@
   - `ANTIGRAVITY_LS_PROXY.md`: Documents the internal cognitive execution, detailing the gRPC-Web connection and specific Protobuf-to-JSON mapping constraints required to bypass Antigravity's `oneof` traps.
   - `EVENT_ROUTER_ARCHITECTURE.md`: Defines the Unified Event Bus Contract (`events.db`) and the topological demultiplexing of `conversational` vs `background` signals.
 - **[HEAL] gRPC Payload Structure (Ghost Cascade)**: Resolved the critical payload deserialization crash in `ide_client.py`. The Antigravity Language Server expects a flat `items` array without the `chunk` wrapper. The worker now successfully injects context directly into the Bünker's active cascade without IDE frontend intervention.
+- **[FEAT] SAS Heuristic Silence**: Implemented a suppression layer in the Sovereign Alert System (`orchestrator.py`). Minions and Sentinels that gracefully skip their execution (e.g. "no changes", "already reported") will no longer trigger desktop notifications (`notify-send`), reducing operator fatigue.
 
 ## [6.8.7] - 2026-05-04
 
