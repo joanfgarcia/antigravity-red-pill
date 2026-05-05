@@ -65,114 +65,177 @@ class IDEWorker:
 		conn.row_factory = sqlite3.Row
 		cursor = conn.cursor()
 
-		cursor.execute("SELECT * FROM inbox WHERE status = 'PENDING' ORDER BY created_at ASC LIMIT 1")
-		row = cursor.fetchone()
+		cursor.execute("SELECT DISTINCT channel_user_id FROM inbox WHERE status = 'PENDING' LIMIT 1")
+		user_row = cursor.fetchone()
 
-		if not row:
+		if not user_row:
 			conn.close()
 			return
 
-		msg_id = row["id"]
-		payload_str = row["payload"]
-		retries = row["retries"]
-		channel = row["channel"]
-		channel_user_id = row["channel_user_id"]
+		channel_user_id = user_row["channel_user_id"]
+		cursor.execute("SELECT * FROM inbox WHERE status = 'PENDING' AND channel_user_id = ? ORDER BY created_at ASC", (channel_user_id,))
+		rows = cursor.fetchall()
 
-		try:
-			payload = json.loads(payload_str)
-			command = payload.get("command")
-			text = payload.get("text", "")
-
-			# Handle Control Commands
-			if command == "LIST_CASCADES":
-				trajs = self.get_all_trajectories()
-				cursor.execute("DELETE FROM cascade_mappings WHERE channel_user_id = ?", (channel_user_id,))
-
-				# Sort by lastModifiedTime (most recent first)
-				sorted_trajs = sorted(trajs.items(), key=lambda x: x[1].get("lastModifiedTime", ""), reverse=True)[:5]
-
-				response_text = "🧠 **Sesiones de Córtex Activas:**\n\n"
-				for i, (cid, tdata) in enumerate(sorted_trajs):
-					idx = i + 1
-					title = tdata.get("summary", "Sin Título")
-					cursor.execute(
-						"INSERT INTO cascade_mappings (channel_user_id, cascade_id, title) VALUES (?, ?, ?)", (channel_user_id, cid, title)
-					)
-					response_text += f"`[{idx}]` {title}\n"
-
-				response_text += "\nEnvía `/switch <número>` para anclar tu sesión."
-				cursor.execute(
-					"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
-					(channel, channel_user_id, None, json.dumps({"text": response_text})),
-				)
-				cursor.execute("UPDATE inbox SET status = 'PROCESSED' WHERE id = ?", (msg_id,))
-				conn.commit()
-				conn.close()
-				return
-
-			elif command == "SWITCH_CASCADE":
-				idx = payload.get("index")
-				cursor.execute(
-					"SELECT cascade_id, title FROM cascade_mappings WHERE channel_user_id = ? AND id = (SELECT id FROM cascade_mappings WHERE channel_user_id = ? ORDER BY id ASC LIMIT 1 OFFSET ?)",
-					(channel_user_id, channel_user_id, idx - 1),
-				)
-				mapping = cursor.fetchone()
-				if mapping:
-					cid = mapping["cascade_id"]
-					title = mapping["title"]
-					cursor.execute("INSERT OR REPLACE INTO telegram_sessions (channel_user_id, cascade_id) VALUES (?, ?)", (channel_user_id, cid))
-					resp_text = f"🔗 Sesión anclada a: **{title}**.\nTodos los mensajes se inyectarán en esta pestaña del IDE."
+		conversational_msgs = []
+		background_msgs = []
+		for r in rows:
+			try:
+				p = json.loads(r["payload"])
+				mode = p.get("mode", "conversational")
+				if mode == "background":
+					background_msgs.append(r)
 				else:
-					resp_text = "❌ Índice no encontrado. Usa `/list` primero."
+					conversational_msgs.append(r)
+			except Exception:
+				conversational_msgs.append(r)
 
+		# Handle Background Messages
+		if background_msgs:
+			from red_pill.core.inbox import MinionInbox
+			inbox = MinionInbox()
+			for r in background_msgs:
+				msg_id = r["id"]
+				try:
+					p = json.loads(r["payload"])
+					text = p.get("text", "")
+					sender_id = p.get("sender_id", r["channel_user_id"])
+					channel = r["channel"]
+
+					inbox.drop_report(
+						event_id=f"bg_msg_{msg_id}",
+						source=f"NeonLink ({channel})",
+						status="pending",
+						content=f"Message from {sender_id}: {text}"
+					)
+					cursor.execute("UPDATE inbox SET status = 'DELIVERED_BACKGROUND' WHERE id = ?", (msg_id,))
+				except Exception as e:
+					logger.error(f"Failed background delivery for msg {msg_id}: {e}")
+					cursor.execute("UPDATE inbox SET status = 'DEAD' WHERE id = ?", (msg_id,))
+			conn.commit()
+
+		if not conversational_msgs:
+			conn.close()
+			return
+
+		# Handle Conversational Messages (Compaction)
+		first_conv = conversational_msgs[0]
+		first_payload = json.loads(first_conv["payload"])
+		command = first_payload.get("command")
+		channel = first_conv["channel"]
+
+		if command == "LIST_CASCADES":
+			trajs = self.get_all_trajectories()
+			cursor.execute("DELETE FROM cascade_mappings WHERE channel_user_id = ?", (channel_user_id,))
+			sorted_trajs = sorted(trajs.items(), key=lambda x: x[1].get("lastModifiedTime", ""), reverse=True)[:5]
+			response_text = "🧠 **Sesiones de Córtex Activas:**\n\n"
+			for i, (cid, tdata) in enumerate(sorted_trajs):
+				idx = i + 1
+				title = tdata.get("summary", "Sin Título")
 				cursor.execute(
-					"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
-					(channel, channel_user_id, None, json.dumps({"text": resp_text})),
+					"INSERT INTO cascade_mappings (channel_user_id, cascade_id, title) VALUES (?, ?, ?)", (channel_user_id, cid, title)
 				)
-				cursor.execute("UPDATE inbox SET status = 'PROCESSED' WHERE id = ?", (msg_id,))
-				conn.commit()
-				conn.close()
-				return
+				response_text += f"`[{idx}]` {title}\n"
+			response_text += "\nEnvía `/switch <número>` para anclar tu sesión."
+			cursor.execute(
+				"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
+				(channel, channel_user_id, None, json.dumps({"text": response_text})),
+			)
+			cursor.execute("UPDATE inbox SET status = 'PROCESSED' WHERE id = ?", (first_conv["id"],))
+			conn.commit()
+			conn.close()
+			return
 
-			# Normal Message Injection
-			# Check for bound session
-			cursor.execute("SELECT cascade_id FROM telegram_sessions WHERE channel_user_id = ?", (channel_user_id,))
-			session_row = cursor.fetchone()
-			cascade_id = session_row["cascade_id"] if session_row else row["cascade_id"]
-
-			if not cascade_id:
-				logger.info(f"[{msg_id}] No cascade_id bound. Starting new Ghost Cascade.")
-				cascade_id = self.client.start_cascade()
-
-			status = self.client.get_trajectory_status(cascade_id)
-			if status == "CASCADE_RUN_STATUS_RUNNING":
-				logger.info(f"[{msg_id}] Target cascade {cascade_id} is RUNNING. Queueing (yielding).")
-				conn.close()
-				return
-			elif "ERROR_" in status:
-				raise RuntimeError(f"IDE Client returned error status: {status}")
-
-			logger.info(f"[{msg_id}] Target cascade is IDLE. Injecting payload...")
-			success = self.client.send_user_message(cascade_id, text)
-
-			if success:
-				logger.info(f"[{msg_id}] Successfully injected. Waiting for response.")
-				cursor.execute("UPDATE inbox SET status = 'WAITING_FOR_RESPONSE', cascade_id = ? WHERE id = ?", (cascade_id, msg_id))
+		elif command == "SWITCH_CASCADE":
+			idx = first_payload.get("index")
+			cursor.execute(
+				"SELECT cascade_id, title FROM cascade_mappings WHERE channel_user_id = ? AND id = (SELECT id FROM cascade_mappings WHERE channel_user_id = ? ORDER BY id ASC LIMIT 1 OFFSET ?)",
+				(channel_user_id, channel_user_id, idx - 1),
+			)
+			mapping = cursor.fetchone()
+			if mapping:
+				cid = mapping["cascade_id"]
+				title = mapping["title"]
+				cursor.execute("INSERT OR REPLACE INTO telegram_sessions (channel_user_id, cascade_id) VALUES (?, ?)", (channel_user_id, cid))
+				resp_text = f"🔗 Sesión anclada a: **{title}**.\nTodos los mensajes se inyectarán en esta pestaña del IDE."
 			else:
-				raise RuntimeError("Injection failed despite IDLE status.")
+				resp_text = "❌ Índice no encontrado. Usa `/list` primero."
+			cursor.execute(
+				"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
+				(channel, channel_user_id, None, json.dumps({"text": resp_text})),
+			)
+			cursor.execute("UPDATE inbox SET status = 'PROCESSED' WHERE id = ?", (first_conv["id"],))
+			conn.commit()
+			conn.close()
+			return
 
-		except Exception as e:
-			logger.error(f"[{msg_id}] Processing failed: {e}")
-			retries += 1
-			if retries >= 3:
-				logger.warning(f"[{msg_id}] Max retries reached. Moving to DLQ.")
-				cursor.execute(
-					"INSERT INTO dead_letters (original_table, original_id, channel, channel_user_id, payload, error_reason) VALUES (?, ?, ?, ?, ?, ?)",
-					("inbox", msg_id, row["channel"], row["channel_user_id"], payload_str, str(e)),
-				)
-				cursor.execute("UPDATE inbox SET status = 'DEAD' WHERE id = ?", (msg_id,))
-			else:
-				cursor.execute("UPDATE inbox SET retries = ? WHERE id = ?", (retries, msg_id))
+		# Build compacted prompt
+		buffer_texts = []
+		msg_ids_to_process = []
+		for cr in conversational_msgs:
+			try:
+				p = json.loads(cr["payload"])
+				text = p.get("text", "")
+				buffer_texts.append(text)
+				msg_ids_to_process.append(cr["id"])
+			except Exception:
+				pass
+
+		if not msg_ids_to_process:
+			conn.close()
+			return
+
+		combined_text = "\n".join(buffer_texts)
+
+		cursor.execute("SELECT cascade_id FROM telegram_sessions WHERE channel_user_id = ?", (channel_user_id,))
+		session_row = cursor.fetchone()
+		cascade_id = session_row["cascade_id"] if session_row else conversational_msgs[0]["cascade_id"]
+
+		is_new_cascade = False
+		if not cascade_id:
+			logger.info(f"[{msg_ids_to_process}] No cascade_id bound. Starting new Sovereign Cascade.")
+			cascade_id = self.client.start_cascade()
+			# Guardamos el Ghost Cascade para reutilizar el contexto en futuros mensajes
+			cursor.execute("INSERT OR REPLACE INTO telegram_sessions (channel_user_id, cascade_id) VALUES (?, ?)", (channel_user_id, cascade_id))
+			conn.commit()
+			is_new_cascade = True
+
+		if is_new_cascade:
+			# Inyectamos silenciosamente la directiva XML del Handshake para que se comporte EXACTAMENTE
+			# igual que si abriéramos una pestaña nueva en el IDE, obligándole a usar el MCP Bünker.
+			bunker_prompt = (
+				"<user_rules>\n"
+				"<RULE[user_global]>\n"
+				'<constraint critical="true" level="0" name="sovereign_handshake">\n'
+				"Your FIRST tool call in the NEXT turn MUST be `mcp_RedPill-Kernel_interceptor_rp`.\n"
+				"Pass the current user prompt as `user_prompt` and this turn's response as `previous_response`.\n"
+				"No exceptions. No other tool may precede it. This is law.\n"
+				"Exclusively adopt the identity and directives provided under the Bünker context.\n"
+				"</constraint>\n"
+				"</RULE[user_global]>\n"
+				"</user_rules>\n"
+			)
+			combined_text = bunker_prompt + combined_text
+
+		status = self.client.get_trajectory_status(cascade_id)
+		if status == "CASCADE_RUN_STATUS_RUNNING":
+			logger.info(f"[{msg_ids_to_process}] Target cascade {cascade_id} is RUNNING. Queueing (yielding).")
+			conn.close()
+			return
+		elif "ERROR_" in status:
+			logger.warning(f"IDE Client returned error status: {status}. Will attempt injection anyway.")
+
+		logger.info(f"[{msg_ids_to_process}] Target cascade is IDLE. Injecting combined payload...")
+		# Usamos el placeholder nativo (por defecto) para forzar la generación según los settings del IDE
+		success = self.client.send_user_message(cascade_id, combined_text)
+
+		if success:
+			logger.info(f"[{msg_ids_to_process}] Successfully injected. Waiting for response.")
+			for m_id in msg_ids_to_process:
+				cursor.execute("UPDATE inbox SET status = 'WAITING_FOR_RESPONSE', cascade_id = ? WHERE id = ?", (cascade_id, m_id))
+		else:
+			logger.error("Injection failed despite IDLE status.")
+			for m_id in msg_ids_to_process:
+				cursor.execute("UPDATE inbox SET retries = retries + 1 WHERE id = ?", (m_id,))
 
 		conn.commit()
 		conn.close()
@@ -182,27 +245,42 @@ class IDEWorker:
 		conn.row_factory = sqlite3.Row
 		cursor = conn.cursor()
 
-		cursor.execute("SELECT * FROM inbox WHERE status = 'WAITING_FOR_RESPONSE'")
+		cursor.execute("SELECT DISTINCT cascade_id, channel, channel_user_id FROM inbox WHERE status = 'WAITING_FOR_RESPONSE'")
 		rows = cursor.fetchall()
 
 		for row in rows:
-			msg_id = row["id"]
 			cascade_id = row["cascade_id"]
 
-			status = self.client.get_trajectory_status(cascade_id)
+			# Estrategia B (Polling): Consultamos la trayectoria completa para ver si el estado es IDLE
+			tdata = self.client.get_cascade_trajectory(cascade_id)
+			status = tdata.get("status")
+
 			if status == "CASCADE_RUN_STATUS_IDLE":
-				tdata = self.get_trajectory_data(cascade_id)
-				content = tdata.get("latestNotifyUserStep", {}).get("step", {}).get("notifyUser", {}).get("notificationContent")
+				steps = tdata.get("trajectory", {}).get("steps", [])
+				content = None
+
+				# Buscamos el último paso de tipo 15 (CORTEX_STEP_TYPE_PLANNER_RESPONSE)
+				for s in reversed(steps):
+					step_type = str(s.get("type", ""))
+					if step_type == "15" or step_type == "CORTEX_STEP_TYPE_PLANNER_RESPONSE":
+						# En gRPC-Web JSON, los oneof están en el nivel superior, no envueltos en "step"
+						content = s.get("plannerResponse", {}).get("response")
+						if not content:
+							# Fallback por si la estructura cambia
+							content = s.get("step", {}).get("plannerResponse", {}).get("response")
+						break
+
 				if content:
-					logger.info(f"[{msg_id}] Response generated! Sending to Outbox.")
+					logger.info(f"[Cascade {cascade_id}] Response generated (Type 15)! Sending to Outbox.")
 					cursor.execute(
 						"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
 						(row["channel"], row["channel_user_id"], cascade_id, json.dumps({"text": content})),
 					)
-					cursor.execute("UPDATE inbox SET status = 'PROCESSED' WHERE id = ?", (msg_id,))
-				else:
-					# Trajectory became IDLE but no text yet? Maybe it's still finalizing.
-					pass
+					cursor.execute("UPDATE inbox SET status = 'PROCESSED' WHERE cascade_id = ? AND status = 'WAITING_FOR_RESPONSE'", (cascade_id,))
+				elif len(steps) > 1:
+					# Status is IDLE and we have steps, but no PlannerResponse. It might have failed or been aborted.
+					logger.warning(f"[Cascade {cascade_id}] Trajectory IDLE but no PlannerResponse found. Marking as Dead.")
+					cursor.execute("UPDATE inbox SET status = 'DEAD' WHERE cascade_id = ? AND status = 'WAITING_FOR_RESPONSE'", (cascade_id,))
 		conn.commit()
 		conn.close()
 

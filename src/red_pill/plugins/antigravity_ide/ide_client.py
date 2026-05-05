@@ -69,21 +69,53 @@ class AntigravityIDEClient:
 
 	def start_cascade(self) -> str:
 		"""Starts a new cascade and returns the cascade_id"""
-		resp = requests.post(self._url("StartCascade"), headers=self._get_headers(), json={}, verify=False)
+		if not self.connected:
+			self._discover_endpoint()
+
+		payload = {
+			"trajectoryType": 4  # CORTEX_TRAJECTORY_TYPE_CASCADE
+		}
+		resp = requests.post(self._url("StartCascade"), headers=self._get_headers(), json=payload, verify=False)
 		if resp.status_code == 200:
 			return str(resp.json().get("cascadeId"))
 		raise RuntimeError(f"Failed to StartCascade: {resp.status_code} {resp.text}")
 
-	def send_user_message(self, cascade_id: str, text: str) -> bool:
-		"""Injects a user message into an existing cascade."""
-		payload = {"cascadeId": cascade_id, "message": {"text": text}}
+	def send_user_message(self, cascade_id: str, text: str, model_id: str = "MODEL_PLACEHOLDER_M37") -> bool:
+		"""Injects a user message and triggers generation using the cascadeConfig."""
+		payload = {
+			"cascadeId": cascade_id,
+			"items": [
+				{
+					"text": text
+				}
+			],
+			"cascadeConfig": {
+				"plannerConfig": {
+					"requestedModel": {
+						"model": model_id  # Usa el placeholder nativo para respetar la selección del usuario en el IDE
+					},
+					"conversational": {
+						"plannerMode": "CONVERSATIONAL_PLANNER_MODE_DEFAULT",
+						"agenticMode": True
+					}
+				}
+			}
+		}
 		resp = requests.post(self._url("SendUserCascadeMessage"), headers=self._get_headers(), json=payload, verify=False)
 		if resp.status_code == 200:
 			return True
 		elif resp.status_code == 500:
-			# Likely locked due to running
-			logger.warning("IDE returned 500 on injection. IDE is likely locked (RUNNING).")
+			logger.warning(f"IDE returned 500 on injection. IDE is likely locked (RUNNING). Body: {resp.text}")
 			return False
 		else:
 			logger.error(f"Failed to inject: {resp.status_code} {resp.text}")
 			return False
+
+	def get_cascade_trajectory(self, cascade_id: str) -> dict:
+		"""Fetches the full trajectory to read the generated steps (Strategy B Polling)."""
+		payload = {"cascadeId": cascade_id}
+		resp = requests.post(self._url("GetCascadeTrajectory"), headers=self._get_headers(), json=payload, verify=False)
+		if resp.status_code == 200:
+			return resp.json()
+		logger.error(f"Failed to get trajectory: {resp.status_code} {resp.text}")
+		return {}

@@ -1,3 +1,12 @@
+## [6.8.8] - 2026-05-05
+
+### 🌐 Neon-Link & Sovereign Event Router Architecture
+- **[ARCH] Documentation Decoupling**: Extirpated the monolithic `NEON_LINK_ARCHITECTURE.md` into three dedicated, highly focused architectural planes:
+  - `NEON_LINK_EDGE_HUB.md`: Documents the exterior Node.js/Python API Gateway (Telegram/Firebase).
+  - `ANTIGRAVITY_LS_PROXY.md`: Documents the internal cognitive execution, detailing the gRPC-Web connection and specific Protobuf-to-JSON mapping constraints required to bypass Antigravity's `oneof` traps.
+  - `EVENT_ROUTER_ARCHITECTURE.md`: Defines the Unified Event Bus Contract (`events.db`) and the topological demultiplexing of `conversational` vs `background` signals.
+- **[HEAL] gRPC Payload Structure (Ghost Cascade)**: Resolved the critical payload deserialization crash in `ide_client.py`. The Antigravity Language Server expects a flat `items` array without the `chunk` wrapper. The worker now successfully injects context directly into the Bünker's active cascade without IDE frontend intervention.
+
 ## [6.8.7] - 2026-05-04
 
 ### 🏎️ Inference Sovereign Engine (BE_WATER Local GGUF)
