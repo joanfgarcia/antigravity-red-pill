@@ -59,7 +59,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | Document | What it is |
 |----------|-----------|
 | [SWARM_ARCHITECTURE.md](TECHNICAL/SWARM/SWARM_ARCHITECTURE.md) | Swarm messaging technical spec (v3.0) — transport, discovery, topology, inter-agent protocol |
-| [NEON_LINK_ROUTING.md](TECHNICAL/NEON_LINK_ROUTING.md) | Neon-Link Routing Engine technical specification |
+| [NEON_LINK_ROUTING.md](TECHNICAL/SWARM/NEON_LINK_ROUTING.md) | Neon-Link Routing Engine technical specification |
 | [SWARM_INTEGRATION.md](TECHNICAL/SWARM/SWARM_INTEGRATION.md) | Guide for implementing new transports and swarm backends |
 | [HIVEMIND_GOVERNANCE.md](TECHNICAL/SWARM/HIVEMIND_GOVERNANCE.md) | Data sovereignty charter and participation policy for the HiveMind open network |
 | [MLS_ESTIMATION.md](TECHNICAL/SWARM/MLS_ESTIMATION.md) | MLS/TreeKEM group key agreement estimation and design |
