@@ -245,3 +245,24 @@ On fresh Silverblue installations, the `interaction_memories` collection was mis
 
 ### 3. Rationale
 Interaction data is the "Short-term Memory" of the AI. Elevating it to a genesis-level requirement ensures seamless persistence from the first turn, providing auditability and preventing "contextual blackouts" during deployment.
+
+---
+
+## [AD-008] Dual-Sentinel Nociception (The Fast-Fail Trade-off)
+**Date**: 2026-05-05  
+**Context**: Phase O.9 - Project MULTITUDE (Sovereign Alert Architecture)  
+**Status**: ACCEPTED & IMPLEMENTED  
+
+### 1. The Problem
+Chronically failing infrastructure tests (e.g. Mypy type checks) execute heavily during background audits. If a system is in a broken state, running these checks repeatedly wastes massive CPU and IO resources on reporting an error that the system is already aware of.
+
+### 2. The Decision
+Implement a **Fast-Fail** mechanism for Sentinels. Before running an audit, the Sentinel queries Qdrant for an existing active pain signal corresponding to its domain (`has_signal("signal_mypy_failure")`). If the signal exists, execution aborts immediately.
+
+### 3. The Trade-off
+This introduces **Temporal Blindness**. The system correctly captures "the first error" that triggers the pain signal, but remains entirely blind to subsequent errors of the same type until the original pain is resolved and a Force-Heal (`--force`) is executed. We explicitly accept this blindness constraint because the priority of the Immune System is nociception (feeling the pain) rather than complete cataloging of every wound instance.
+
+### 4. Implementation
+- `MemoryManager.has_signal()` added for O(1) checks without logging side-effects.
+- `SentinelAuditor` intercepts and aborts if `Fast-Fail` triggers.
+- `--force` flag enables **Force-Heal** mode, ignoring the check and evaporating the signals automatically if the audit passes cleanly.
