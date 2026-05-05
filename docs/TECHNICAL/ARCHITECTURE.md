@@ -428,7 +428,12 @@ The Auditor scrolls through the `signal_memories` collection to derive deep syst
 ### 14.2 Dual-Channel Pain Sync
 The Auditor implements a multi-tier nociception strategy. High-severity findings ($\text{severity} \ge 6.0$) are injected directly into `signal_memories` (The Cortex Status), triggering immediate active feedback in the operator's context. Moderate findings ($\text{severity} \ge 4.0$) are persisted in `social_memories` for historical epidemiological analysis. This dual-channel approach ensures that immediate infrastructure "pain" is felt by the agent, while maintaining long-term integrity logs.
 
-### 14.3 Systemd Orchestration (Autonomic Nervous System)
+### 14.3 Fast-Fail Nociception (The Blindness Trade-off)
+To optimize background resource consumption, Sentinels implement a **Fast-Fail** mechanism. If a Sentinel queries Qdrant and detects an existing active pain signal for a specific domain (e.g., `signal_mypy_failure`), it aborts execution immediately.
+- **Resource Savings**: 100% compute saved for known chronic errors.
+- **The Trade-off**: The system will only record "the first error" that triggers the pain. If subsequent errors of the same type occur while the pain is still active, the system remains blind to them until the original pain is resolved and the Sentinel is manually forced to re-evaluate (`--force`). This is an accepted design constraint to prevent continuous CPU burning on already-failed states.
+
+### 14.4 Systemd Orchestration (Autonomic Nervous System)
 The Auditor is deployed as a native OS-level background service to ensure persistent monitoring without manual triggering:
 - **`redpill-auditor.service`**: A oneshot unit that executes the auditor runner within the project's virtual environment.
 - **`redpill-auditor.timer`**: Triggers the service hourly with a randomized delay (`RandomizedDelaySec=15min`) to prevent resource spikes.

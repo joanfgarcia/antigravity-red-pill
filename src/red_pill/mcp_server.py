@@ -462,8 +462,10 @@ async def handle_fetch_signal_memories(arguments: Dict[str, Any]):
 			if p.payload:
 				content = p.payload.get("content", "Unknown Signal")
 				intensity = p.payload.get("intensity", 1.0)
+				criticality = p.payload.get("criticality", "WARNING")
+				created_at = p.payload.get("created_at", "Unknown Time")
 				originator = p.payload.get("originator", "Legacy (Pre-Audit)")
-				out.append(f"- [Intensity {intensity}] {content} | Origin: {originator}")
+				out.append(f"- [{criticality}] [Int {intensity}] {content} | Origin: {originator} | Since: {created_at}")
 
 		return [types.TextContent(type="text", text="[SYSTEM_SIGNAL] Bünker Alerts:\n" + "\n".join(out))]
 	except Exception as e:
