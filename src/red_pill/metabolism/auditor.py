@@ -3,10 +3,12 @@ Red Pill Sentinel Auditor (v6.6.0-alpha)
 The tactical 'Frontal Lobe' for sovereign infrastructure monitoring.
 """
 
+import json
 import logging
 import os
 import subprocess
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 
@@ -31,8 +33,67 @@ class SentinelAuditor:
 		self.force = force
 		self.logger = logging.getLogger("redpill.auditor")
 		self.uv_path = os.path.expanduser("~/.local/bin/uv")
+
+		# Auditor Cache System
+		self.cache_file = Path.home() / ".agent" / "auditor_cache.json"
+		self.cache_file.parent.mkdir(parents=True, exist_ok=True)
+
 		from red_pill.memory import MemoryManager
+
 		self.memory_mgr = MemoryManager()
+
+	def _get_project_mtime(self, repo_path: str) -> float:
+		"""Calculates the maximum modification time (mtime) of all python source files."""
+		repo_dir = Path(repo_path)
+		if not repo_dir.exists():
+			return 0.0
+
+		max_mtime = 0.0
+		# Check all python files
+		for p in repo_dir.rglob("*.py"):
+			if p.is_file():
+				try:
+					max_mtime = max(max_mtime, p.stat().st_mtime)
+				except FileNotFoundError:
+					pass
+
+		# Check pyproject.toml as well
+		for p in repo_dir.rglob("pyproject.toml"):
+			if p.is_file():
+				try:
+					max_mtime = max(max_mtime, p.stat().st_mtime)
+				except FileNotFoundError:
+					pass
+
+		return max_mtime
+
+	def _get_cached_mtime(self, repo_path: str) -> float:
+		"""Retrieves the cached mtime for a given repository."""
+		if not self.cache_file.exists():
+			return 0.0
+		try:
+			with open(self.cache_file, "r") as f:
+				cache = json.load(f)
+			return float(cache.get(repo_path, 0.0))
+		except Exception:
+			return 0.0
+
+	def _update_cached_mtime(self, repo_path: str, new_mtime: float):
+		"""Updates the cached mtime for a given repository."""
+		cache = {}
+		if self.cache_file.exists():
+			try:
+				with open(self.cache_file, "r") as f:
+					cache = json.load(f)
+			except Exception:
+				pass
+
+		cache[repo_path] = new_mtime
+		try:
+			with open(self.cache_file, "w") as f:
+				json.dump(cache, f, indent=4)
+		except Exception as e:
+			self.logger.warning(f"Failed to update auditor cache: {e}")
 
 	def audit_repo(self, repo_path: str) -> AuditReport:
 		"""Run standard sovereign checks on a repository."""
@@ -43,6 +104,15 @@ class SentinelAuditor:
 			report.findings.append(AuditFinding(type="infra", severity=10.0, message=f"Path not found: {repo_path}"))
 			return report
 
+		# --- Differential Audit Cache Check ---
+		current_mtime = self._get_project_mtime(repo_path)
+		cached_mtime = self._get_cached_mtime(repo_path)
+
+		if not self.force and current_mtime <= cached_mtime:
+			self.logger.info(f"Skipping audit for {repo_path} (No changes detected since last audit)")
+			return report  # Returns default green status with no findings
+		# --------------------------------------
+
 		# 1. Formatting & Linting (Ruff)
 		if not self.force and self.memory_mgr.has_signal("signal_ruff_failure"):
 			self.logger.info("Skipping Ruff check (Fast-Fail: signal_ruff_failure exists)")
@@ -50,7 +120,9 @@ class SentinelAuditor:
 			report.findings.append(AuditFinding(type="formatting", severity=5.0, message="Ruff check failed (Fast-Fail)"))
 		else:
 			self.logger.info(f"Auditing formatting for {repo_path}")
-			ruff = subprocess.run([self.uv_path, "run", "ruff", "check", "."], cwd=repo_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+			ruff = subprocess.run(
+				[self.uv_path, "run", "ruff", "check", "."], cwd=repo_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+			)
 			if ruff.returncode != 0:
 				report.status = "yellow"
 				errors = [line for line in ruff.stdout.splitlines() if ".py:" in line or "error" in line.lower()]
@@ -68,7 +140,9 @@ class SentinelAuditor:
 		else:
 			self.logger.info(f"Auditing types for {repo_path}")
 			mypy_target = "src/red_pill/" if os.path.exists(os.path.join(repo_path, "src/red_pill")) else "src/"
-			mypy = subprocess.run([self.uv_path, "run", "mypy", mypy_target], cwd=repo_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+			mypy = subprocess.run(
+				[self.uv_path, "run", "mypy", mypy_target], cwd=repo_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+			)
 			if mypy.returncode != 0:
 				report.status = "yellow"
 				repo_name = os.path.basename(repo_path)
@@ -120,6 +194,9 @@ class SentinelAuditor:
 		elif report.findings:
 			report.status = "yellow"
 
+		# Update Cache if audit ran
+		self._update_cached_mtime(repo_path, current_mtime)
+
 		return report
 
 	def sync_to_thalamus(self, report: AuditReport):
@@ -139,18 +216,21 @@ class SentinelAuditor:
 					signal_type="pain",
 					source="SentinelAuditor",
 					criticality=criticality,
-					originator="Sentinel"
+					originator="Sentinel",
 				)
 
 
 if __name__ == "__main__":
 	import argparse
+
 	parser = argparse.ArgumentParser()
 	parser.add_argument("--force", action="store_true", help="Force validation and heal existing signals")
 	args = parser.parse_args()
 
 	logging.basicConfig(level=logging.INFO)
-	auditor = SentinelAuditor(target_repos=[os.path.expanduser("~/Documents/IA/pure-mls"), os.path.expanduser("~/Documents/IA/sharing")], force=args.force)
+	auditor = SentinelAuditor(
+		target_repos=[os.path.expanduser("~/Documents/IA/pure-mls"), os.path.expanduser("~/Documents/IA/sharing")], force=args.force
+	)
 	for repo in auditor.target_repos:
 		res = auditor.audit_repo(repo)
 		auditor.sync_to_thalamus(res)
