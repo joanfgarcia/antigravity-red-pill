@@ -33,7 +33,6 @@ Este documento establece las reglas soberanas para la creación y organización 
 | `docs/TECHNICAL` | Specs, architecture diagrams, Decision Logs, and Data Models. / Especificaciones, diagramas, Decision Logs y Modelos. | Engineers / Ingenieros |
 | `docs/LORE` | Manifestos, stories, skins,; and Red Pill philosophy. / Manifiestos, historias, skins y filosofía. | Aleth / Operators |
 | `docs/GUIDES` | User tutorials, update guides, and operating manuals. / Tutoriales, guías de actualización y manuales. | Support / Soporte |
-| `docs/PLANS` | Roadmaps and feature-specific implementation plans. / Roadmaps y planes de implementación específicos. | Planners / Planificadores |
 | `docs/CERTIFICATION` | Security audits, Samantha/Smith reports, and version certifies. / Auditorías y reportes de certificación. | Smith / Keymaker |
 | `docs/COMMUNITY` | Code of conduct and decentralized network rules. / Código de conducta y reglas de la red. | Hive-Mind |
 | `docs/COORDINATION` | Cross-agent communication and synaptic bridge protocols. / Comunicación entre agentes y protocolos puente. | Swarm |
@@ -43,8 +42,7 @@ Este documento establece las reglas soberanas para la creación y organización 
 ## 🛠️ Documenting a Change / Cómo documentar un cambio
 
 1.  **Architecture / Arquitectura**: Add an entry in `docs/TECHNICAL/DECISION_LOG.md`.
-2.  **New Features / Nuevas Funcionalidades**: Create a plan in `docs/PLANS/[YEAR]-[MONTH]-[DAY]_FEATURE_NAME.md`.
-3.  **User Impact / Impacto al Usuario**: Update the relevant guide in `docs/GUIDES/`.
+2.  **User Impact / Impacto al Usuario**: Update the relevant guide in `docs/GUIDES/`.
 
 ---
 🇬🇧 *Status: Documentation standardized under the 770 Pact.*
