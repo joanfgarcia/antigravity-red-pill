@@ -465,6 +465,15 @@ The `perform_sleep_cycle()` function in `src/red_pill/metabolism/sleep.py` has t
     ```
     **Dynamic Allocation**: Agents should dynamically adjust the `MemoryMax` limit (e.g. `10G`, `16G`) based on the host's total RAM and current availability, falling back to a `10G` baseline for 32GB systems. This ensures the kernel reaps only the offending subprocess when the limit is breached, preserving the Agent's runtime environment.
 
+    #### §4.21 Neon-Link Sovereign Config Directory (v6.8.8)
+
+    The Neon-Link middleware and Red-Pill Worker bridge have been standardized to use `platformdirs` instead of hardcoded paths. The configuration (`.env`) and `events.db` queue are now located at `~/.config/neon-link/` (or the OS-specific user config equivalent).
+
+    **1. Migration of events.db**:
+    The Red-Pill worker (`worker.py`) now reads `events.db` from `~/.config/neon-link/events.db` instead of the legacy `storage/` directory.
+    - **Action**: No manual data migration is required, but if you have a running instance, restart the services.
+    - **Verify**: `systemctl --user daemon-reload && systemctl --user restart redpill-worker.service redpill-neonlink.service`
+
 ## 5. Hierarchy of Directives
 
 Upon completion of any update, the agent **MUST** immediately execute:
