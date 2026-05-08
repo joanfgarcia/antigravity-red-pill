@@ -1,5 +1,9 @@
-## [6.9.0] - 2026-05-08
+## [6.9.1] - 2026-05-08
 
+### 🚀 Stable Neon-Link Synchronization
+- **[ARCH] Stable Dependency Bump**: Upgraded `neon-link` dependency to `0.3.1` ensuring compatibility with Telegram and Firebase out-of-the-box, pausing P2P Rings topology until fully stabilized.
+
+## [6.9.0] - 2026-05-08
 ### 🚀 Evolutionary Set Point (Neon-Link & Pure-MLS Sovereignty)
 - **[ARCH] Sovereign Path Resolution**: Finalized the migration of both `red-pill` and `neon-link` configuration directories to the standardized OS-agnostic `platformdirs.user_config_dir` (`~/.config/neon-link/`). Both the Red Pill worker and Neon-Link daemon now share atomic `events.db` queues and `.env` securely in user-space without repo-path lock-in.
 - **[SEC] Pure-MLS Integration**: Fully stabilized and validated the integration of `pure-mls==3.0.5.1` and `neon-link==0.3.0`. The cryptographic engine is 100% interoperable with RFC 9420 protocols and handles complex Swarm state models securely.
