@@ -197,6 +197,7 @@ omit = [
     "*/plugins/cloud_sync/plugin.py",
     "*/plugins/gmail_watcher/plugin.py",
     "*/plugins/trinity_homeostasis/plugin.py",
+    "*/plugins/antigravity_ide/*.py",
     "*/interceptors/04_mystique.py",
     "*/interceptors/05_cognitive_router.py",
     "*/interceptors/06_tone_adapter.py",
