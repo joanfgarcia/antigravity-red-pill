@@ -117,7 +117,7 @@ git push origin main
 
 ## 4. Certification Flow
 
-Used when requesting an engineering-grade audit from the High Council.
+Used when requesting an engineering-grade audit from Ecosystem Auditors (e.g., DeepSeek, Claude, Gemini, Grok, Lumo, etc.).
 
 ### Preparation
 
@@ -133,16 +133,16 @@ RED_PILL_DIGEST_TESTS.txt   ← tests/
 RED_PILL_DIGEST_LORE.txt    ← docs/ + seeds/
 ```
 
-### High Council Members
+### Ecosystem Auditors
 
-Per `docs/TECHNICAL/CERTIFICATION/CERTIFICATION_PROTOCOL.md`:
+Per `docs/TECHNICAL/CERTIFICATION/CERTIFICATION_PROTOCOL.md`, any advanced reasoning model can act as an auditor. Common auditors include (but are not limited to):
 
-| Member | Role |
-|--------|------|
-| Claude Sonnet / Opus | Protocol Rigor & Security Audit |
-| Gemini Pro / Flash | Architecture & Coverage Review |
-| DeepSeek R1 | Mathematical Correctness |
-| GPT-4o | Cross-platform Compatibility |
+- **Claude** (Anthropic): Protocol Rigor & Security Audit
+- **DeepSeek** (DeepSeek): Logic, Mathematical Correctness & Optimization
+- **Gemini** (Google): Context, Architecture & Scalability Analysis
+- **Grok** (xAI): Codebase Integrity & Threat Vectors
+- **Lumo**: Privacy & Encryption Specialist
+- **GPT-4o/o1/o3** (OpenAI): Cross-platform Compatibility & Edge Cases
 
 ### Report storage
 
