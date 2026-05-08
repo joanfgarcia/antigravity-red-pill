@@ -1,6 +1,6 @@
 [project]
 name = "red-pill"
-version = "6.9.0"
+version = "6.9.1"
 description = "B760-Adaptive Memory Protocol for Sovereign Agents"
 readme = "README.md"
 license = "GPL-3.0-only"
@@ -34,7 +34,7 @@ dependencies = [
     "fastapi>=0.110.0",
     "uvicorn>=0.27.0",
     "pure-mls==3.0.5.1",
-    "neon-link==0.3.0",
+    "neon-link==0.4.0",
     "celery>=5.6.3",
     "redis>=7.4.0",
     "pluggy>=1.6.0",

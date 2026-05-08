@@ -1,5 +1,10 @@
-## [6.9.0] - 2026-05-08
+## [6.9.1] - 2026-05-08
 
+### 🚀 P2P Interconnective Fabric
+- **[ARCH] Neon-Rings Sublayer**: Upgraded dependency `neon-link` to `0.4.0` to integrate native P2P WebSocket topologies.
+- **[SEC] Protocol of Silence Hardening**: Enforced 96% strict coverage limits and zero-tolerance type hinting (`Awaitable` vs synchronous signatures) across external P2P bridges.
+
+## [6.9.0] - 2026-05-08
 ### 🚀 Evolutionary Set Point (Neon-Link & Pure-MLS Sovereignty)
 - **[ARCH] Sovereign Path Resolution**: Finalized the migration of both `red-pill` and `neon-link` configuration directories to the standardized OS-agnostic `platformdirs.user_config_dir` (`~/.config/neon-link/`). Both the Red Pill worker and Neon-Link daemon now share atomic `events.db` queues and `.env` securely in user-space without repo-path lock-in.
 - **[SEC] Pure-MLS Integration**: Fully stabilized and validated the integration of `pure-mls==3.0.5.1` and `neon-link==0.3.0`. The cryptographic engine is 100% interoperable with RFC 9420 protocols and handles complex Swarm state models securely.
