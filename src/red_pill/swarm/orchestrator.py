@@ -201,9 +201,8 @@ class GruOrchestrator:
 		"""Record memory and notify user of swarm completion with telemetry."""
 		success_count = len([r for r in results if r.status == "success"])
 
-		# SAS SUPPRESSION LOGIC
-		# Si no hay minions exitosos y el resultado indica que se saltó el procesamiento
-		# (ej. "no changes" o "already reported"), silenciamos la notificación para no molestar.
+		# SAS SUPPRESSION LOGIC (Desktop Notifications)
+		should_notify_desktop = True
 		if success_count == 0 and len(results) > 0:
 			all_skipped = True
 			for r in results:
@@ -213,8 +212,13 @@ class GruOrchestrator:
 					all_skipped = False
 					break
 			if all_skipped:
+				should_notify_desktop = False
 				logger.info(f"SAS Notification suppressed: Minion task '{task}' skipped (no changes/already reported).")
-				return
+			
+			# Anti-Spam for instant background crashes (duration < 0.5s)
+			if not all_skipped and all(r.duration < 0.5 for r in results):
+				should_notify_desktop = False
+				logger.info(f"SAS Notification suppressed: Minion task '{task}' failed instantly. Routing to Inbox only.")
 
 		task_preview = task[:100] if isinstance(task, str) else "task"
 
@@ -224,9 +228,13 @@ class GruOrchestrator:
 				delta = r.telemetry.get("vram_delta", "N/A")
 				vram_info = f" | VRAM: {delta}" if delta != "N/A" else ""
 				telemetry_summary += f"\n- {r.minion_id[:8]}: {r.duration}s{vram_info}"
+			else:
+				telemetry_summary += f"\n- {r.minion_id[:8]}: {r.duration}s"
 
 		message = f"Swarm Task Complete: {task_preview}. {success_count}/{len(results)} minions succeeded.{telemetry_summary}"
-		notify_user(title="Sovereign Swarm", message=message, sound=False, category="swarm")
+		
+		if should_notify_desktop:
+			notify_user(title="Sovereign Swarm", message=message, sound=False, category="swarm")
 
 		# Memory Signal (Agent)
 		try:
