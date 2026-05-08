@@ -1577,21 +1577,22 @@ wheels = [
 
 [[package]]
 name = "neon-link"
-version = "0.3.0"
+version = "0.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fastapi" },
     { name = "firebase-admin" },
     { name = "httpx" },
+    { name = "platformdirs" },
     { name = "pure-mls" },
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "requests" },
     { name = "uvicorn" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ff/d5/3a0da6b78e9f81f9d38759bbcfcbeb2d8f854da1500c38d0eaa2f90186d2/neon_link-0.3.0.tar.gz", hash = "sha256:63ca1f213e7ca508d5bc4942e3146ada60d04aa65aafccf03ef5f58591b4dbaf", size = 37286, upload-time = "2026-05-06T19:34:25.499Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/73/96/dbeedfa99e9ddc07020b34c70ea64162c7680ac2495138545ff05cfac5f4/neon_link-0.3.1.tar.gz", hash = "sha256:8ff3ed4928967160f2c9f5822a232da3af60ce4518048ebf5722dff75603ad2f", size = 38062, upload-time = "2026-05-08T18:17:19.732Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/91/e4/e57e26293fcb509f6baa1d91ef8f47c1c0f89f8c2b243a4c48ae31bb312e/neon_link-0.3.0-py3-none-any.whl", hash = "sha256:4e9a81955a4f6052a1be875a330e7a772ec3a6e8dab81eda599a569c327b4495", size = 31702, upload-time = "2026-05-06T19:34:24.086Z" },
+    { url = "https://files.pythonhosted.org/packages/01/f1/82ad6793bcdd7bdd80312cd626ba81fe115e1617eba1401984861e99f7a5/neon_link-0.3.1-py3-none-any.whl", hash = "sha256:149efd468b4c9a0b8a1d64c4ae25bbee2166529ca3db0cb932de950500a71ec4", size = 32472, upload-time = "2026-05-08T18:17:18.887Z" },
 ]
 
 [[package]]
@@ -2610,7 +2611,7 @@ wheels = [
 
 [[package]]
 name = "red-pill"
-version = "6.8.7"
+version = "6.9.1"
 source = { editable = "." }
 dependencies = [
     { name = "argon2-cffi" },
@@ -2679,7 +2680,7 @@ requires-dist = [
     { name = "huggingface-hub", extras = ["hf-transfer"], specifier = ">=1.4.1" },
     { name = "llama-cpp-python", extras = ["server"], specifier = ">=0.3.16" },
     { name = "mcp", specifier = ">=1.26.0" },
-    { name = "neon-link", specifier = "==0.3.0" },
+    { name = "neon-link", specifier = "==0.3.1" },
     { name = "pillow", specifier = ">=12.2.0" },
     { name = "pluggy", specifier = ">=1.6.0" },
     { name = "psutil", specifier = ">=7.2.2" },
