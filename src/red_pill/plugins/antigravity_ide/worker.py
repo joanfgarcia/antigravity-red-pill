@@ -14,7 +14,7 @@ from ide_client import AntigravityIDEClient
 logger = logging.getLogger(__name__)
 
 # Alineación con el estándar de Sovereign Gateway (Neon-Link)
-DB_PATH = Path(platformdirs.user_config_dir("neon-link")) / "events.db"
+DB_PATH = Path(platformdirs.user_data_dir("neon-link")) / "events.db"
 
 
 def get_connection():
