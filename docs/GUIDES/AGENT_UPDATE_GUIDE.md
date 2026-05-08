@@ -469,10 +469,29 @@ The `perform_sleep_cycle()` function in `src/red_pill/metabolism/sleep.py` has t
 
     The Neon-Link middleware and Red-Pill Worker bridge have been standardized to use `platformdirs` instead of hardcoded paths. The configuration (`.env`) and `events.db` queue are now located at `~/.config/neon-link/` (or the OS-specific user config equivalent).
 
-    **1. Migration of events.db**:
+    > [!WARNING]
+    > **BREAKING CHANGE**: The `red-pill` `.env` no longer configures Neon-Link. Neon-Link and Red-Pill now share a completely separate ecosystem configuration. If you do not initialize the Neon-Link configuration directory (`~/.config/neon-link/`), your agents will be deaf and blind to Telegram/Firebase commands.
+    
+    **1. Migration of events.db & .env**:
     The Red-Pill worker (`worker.py`) now reads `events.db` from `~/.config/neon-link/events.db` instead of the legacy `storage/` directory.
-    - **Action**: No manual data migration is required, but if you have a running instance, restart the services.
-    - **Verify**: `systemctl --user daemon-reload && systemctl --user restart redpill-worker.service redpill-neonlink.service`
+    - **Action**: Run `neon-link init` to bootstrap the new configuration directory if you haven't already. Migrate your Telegram tokens and Firebase credentials from the Red-Pill `.env` to `~/.config/neon-link/.env`.
+    - **Verify**: `cat ~/.config/neon-link/.env`
+
+    **2. Service Orchestration (How to bring up the ecosystem)**:
+    To ensure the agents know what to do and receive external events, you MUST start both the `neon-link` daemon (which routes external events to `events.db`) and the `red-pill` worker (which polls `events.db` and executes the agents).
+    ```bash
+    # Reload the systemd daemon to pick up any changes
+    systemctl --user daemon-reload
+    
+    # Enable and start the Edge Gateway (Neon-Link)
+    systemctl --user enable --now redpill-neonlink.service
+    
+    # Enable and start the Sovereign Worker (Red-Pill Agent execution)
+    systemctl --user enable --now redpill-worker.service
+    
+    # Verify status
+    systemctl --user status redpill-neonlink.service redpill-worker.service
+    ```
 
 ## 5. Hierarchy of Directives
 
