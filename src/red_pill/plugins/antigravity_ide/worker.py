@@ -5,13 +5,16 @@ import sys
 import time
 from pathlib import Path
 
+import platformdirs
+
 sys.path.insert(0, str(Path(__file__).parent.resolve()))
 import requests
 from ide_client import AntigravityIDEClient
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = Path.home() / "Documents" / "IA" / "sharing" / "storage" / "events.db"
+# Alineación con el estándar de Sovereign Gateway (Neon-Link)
+DB_PATH = Path(platformdirs.user_config_dir("neon-link")) / "events.db"
 
 
 def get_connection():
