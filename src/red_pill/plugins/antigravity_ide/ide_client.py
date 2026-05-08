@@ -109,6 +109,7 @@ class AntigravityIDEClient:
 		payload = {"cascadeId": cascade_id}
 		resp = requests.post(self._url("GetCascadeTrajectory"), headers=self._get_headers(), json=payload, verify=False)
 		if resp.status_code == 200:
-			return resp.json()
+			data: dict = resp.json()
+			return data
 		logger.error(f"Failed to get trajectory: {resp.status_code} {resp.text}")
 		return {}
