@@ -1,5 +1,12 @@
-## [6.8.8] - 2026-05-05
+## [6.9.0] - 2026-05-08
 
+### 🚀 Evolutionary Set Point (Neon-Link & Pure-MLS Sovereignty)
+- **[ARCH] Sovereign Path Resolution**: Finalized the migration of both `red-pill` and `neon-link` configuration directories to the standardized OS-agnostic `platformdirs.user_config_dir` (`~/.config/neon-link/`). Both the Red Pill worker and Neon-Link daemon now share atomic `events.db` queues and `.env` securely in user-space without repo-path lock-in.
+- **[SEC] Pure-MLS Integration**: Fully stabilized and validated the integration of `pure-mls==3.0.5.1` and `neon-link==0.3.0`. The cryptographic engine is 100% interoperable with RFC 9420 protocols and handles complex Swarm state models securely.
+- **[QA] Immutable Auditor Force-Execution**: Hardened `SentinelAuditor` tests to bypass caching mechanisms using `force=True`, eradicating false positive "all green" CI passes caused by stale filesystem modification times.
+- **[DOCS] The Architectural Manifesto**: Formally integrated the Red-Pill Architectural Manifesto into `README.md`, defining Zero-Friction Configuration, Local Sovereignty, and Unconditional Fail-Fast as immutable ecosystem principles.
+
+## [6.8.8] - 2026-05-05
 ### 🌐 Neon-Link & Sovereign Event Router Architecture
 - **[ARCH] Documentation Decoupling**: Extirpated the monolithic `NEON_LINK_ARCHITECTURE.md` into three dedicated, highly focused architectural planes:
   - `NEON_LINK_EDGE_HUB.md`: Documents the exterior Node.js/Python API Gateway (Telegram/Firebase).
