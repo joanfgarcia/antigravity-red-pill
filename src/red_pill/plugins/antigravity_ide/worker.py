@@ -5,9 +5,9 @@ import sqlite3
 import sys
 import time
 from pathlib import Path
-import requests
 
 import platformdirs
+import requests
 from dotenv import load_dotenv
 
 # Cargar la configuración agnóstica de Neon-Link primero (Single Source of Truth)
