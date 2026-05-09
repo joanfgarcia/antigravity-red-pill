@@ -5,9 +5,9 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
-import platformdirs
 
 import mcp.types as types
+import platformdirs
 from mcp.server import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server

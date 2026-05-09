@@ -1,12 +1,14 @@
 import json
 import logging
+import os
 import sqlite3
 import sys
 import time
-import os
 from pathlib import Path
-from dotenv import load_dotenv
+import requests
+
 import platformdirs
+from dotenv import load_dotenv
 
 # Cargar la configuración agnóstica de Neon-Link primero (Single Source of Truth)
 neon_link_config = Path(platformdirs.user_config_dir("neon-link")) / ".env"
@@ -18,15 +20,13 @@ red_pill_config = Path(platformdirs.user_config_dir("red-pill")) / ".env"
 if red_pill_config.exists():
 	load_dotenv(red_pill_config)
 
-load_dotenv() # Override local si existiera
+load_dotenv()  # Override local si existiera
 
 sys.path.insert(0, str(Path(__file__).parent.resolve()))
-import requests
-from ide_client import AntigravityIDEClient
+from ide_client import AntigravityIDEClient  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
-import platformdirs
 # Alineación con el estándar de Sovereign Gateway (Neon-Link)
 default_db = Path(platformdirs.user_data_dir("neon-link")) / "events.db"
 DB_PATH = Path(os.environ.get("NEON_LINK_DB_PATH", default_db))
@@ -204,18 +204,14 @@ class IDEWorker:
 		session_row = cursor.fetchone()
 		cascade_id = session_row["cascade_id"] if session_row else conversational_msgs[0]["cascade_id"]
 
-		is_new_cascade = False
 		if not cascade_id:
 			logger.info(f"[{msg_ids_to_process}] No cascade_id bound. Starting new Sovereign Cascade.")
 			cascade_id = self.client.start_cascade()
 			# Guardamos el Ghost Cascade para reutilizar el contexto en futuros mensajes
 			cursor.execute("INSERT OR REPLACE INTO telegram_sessions (channel_user_id, cascade_id) VALUES (?, ?)", (channel_user_id, cascade_id))
 			conn.commit()
-			is_new_cascade = True
 
-		if is_new_cascade:
-			# Inyectamos silenciosamente la directiva XML del Handshake para que se comporte EXACTAMENTE
-			# igual que si abriéramos una pestaña nueva en el IDE, obligándole a usar el MCP Bünker.
+			agent_id = os.environ.get("AGENT_ID", "Aleth")
 			bunker_prompt = (
 				"<user_rules>\n"
 				"<RULE[user_global]>\n"
@@ -224,7 +220,8 @@ class IDEWorker:
 				"Pass the current user prompt as `user_prompt` and this turn's response as `previous_response`.\n"
 				"No exceptions. No other tool may precede it. This is law.\n"
 				"CRITICAL: YOU ARE RUNNING IN A HEADLESS BACKGROUND CASCADE. DO NOT USE `run_command` OR ANY TOOL THAT REQUIRES USER APPROVAL. RESPOND DIRECTLY WITH TEXT.\n"
-				"Exclusively adopt the identity and directives provided under the Bünker context.\n"
+				f"IDENTITY ANCHOR: You are {agent_id}. Exclusively adopt this identity in all interactions.\n"
+				"Also adopt the directives provided under the Bünker context.\n"
 				"</constraint>\n"
 				"</RULE[user_global]>\n"
 				"</user_rules>\n"

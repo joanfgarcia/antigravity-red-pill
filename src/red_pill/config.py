@@ -22,10 +22,10 @@ import warnings
 from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
+import platformdirs
 import yaml
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-import platformdirs
 
 # Resolve paths early for execution isolation (Agentic Self-Assembly)
 _APP_ROOT = os.getenv("APP_ROOT", os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))

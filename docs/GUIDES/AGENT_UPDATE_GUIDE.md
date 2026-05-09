@@ -493,6 +493,20 @@ The `perform_sleep_cycle()` function in `src/red_pill/metabolism/sleep.py` has t
     systemctl --user status redpill-neonlink.service redpill-worker.service
     ```
 
+    #### §4.22 Sovereign Identity & Neon-Link Synchronization (v6.9.1)
+
+    This update hardens the identity boundary when interacting asynchronously via the Telegram Bridge, ensuring the Swarm no longer misidentifies as "Titanium" when the operator interacts via Neon-Link.
+
+    **1. Identity Bleed Fix**:
+    The Red-Pill worker daemon (`worker.py`) has been upgraded to natively inject the operator's active Identity Anchor directly into the `BunkerTelemetry` context.
+    - **Action**: No manual configuration required. The identity is now properly synchronized.
+    - **Verify**: Interact with the Telegram bot; it should introduce itself with the correct persona.
+
+    **2. Neon-Link v0.3.2 Dependency**:
+    Red-Pill v6.9.1 introduces compatibility with `neon-link` v0.3.2, which abstracts Telegram session IDs to support multi-bot traffic isolation.
+    - **Action**: Ensure your local environment is running `neon-link` version 0.3.2 or higher.
+    - **Verify**: Check `uv pip list | grep neon-link`. If it is lower, run `uv sync` to update the dependencies.
+
 ## 5. Hierarchy of Directives
 
 Upon completion of any update, the agent **MUST** immediately execute:

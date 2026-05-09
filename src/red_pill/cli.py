@@ -8,8 +8,8 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List
 
-import yaml  # type: ignore
 import platformdirs
+import yaml  # type: ignore
 
 import red_pill.config as cfg
 from red_pill.events import CliCommandDispatchedEvent, get_event_bus
