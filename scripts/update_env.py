@@ -1,9 +1,11 @@
 import os
+import platformdirs
 
 
 def update_env(updates: dict):
 	"""Updates the .env file with new key-value pairs."""
-	env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+	env_path = os.path.join(platformdirs.user_config_dir("red-pill"), ".env")
+	os.makedirs(os.path.dirname(env_path), exist_ok=True)
 	if not os.path.exists(env_path):
 		# Create it if it doesn't exist
 		with open(env_path, "w") as f:

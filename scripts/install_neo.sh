@@ -205,13 +205,14 @@ echo "------------------------------------------------------------------"
 
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ENV_FILE="$SCRIPT_DIR/../.env"
+mkdir -p "$HOME/.config/red-pill"
+ENV_FILE="$HOME/.config/red-pill/.env"
 
 # Load existing environment if available
-if [ -f .env ]; then
+if [ -f "$ENV_FILE" ]; then
 	echo -e "${YELLOW}Cargando .env...${NC}"
 	set -a
-	source .env
+	source "$ENV_FILE"
 	set +a
 	# Protocol 770 Fix: Expand tilde manually if loaded from .env (source doesn't do it)
 	if [[ "${WORKSPACE_ROOT:-}" == "~"* ]]; then
@@ -220,9 +221,9 @@ if [ -f .env ]; then
 	fi
 else
 	echo -e "${YELLOW}No .env found. Using .env.example...${NC}"
-	cp .env.example .env
+	cp "$SCRIPT_DIR/../.env.example" "$ENV_FILE" 2>/dev/null || touch "$ENV_FILE"
 	set -a
-	source .env
+	source "$ENV_FILE"
 	set +a
 fi
 # Dynamic WORKSPACE_ROOT discovery (Agentic Self-Assembly)
@@ -508,7 +509,6 @@ fi
 # SEC-004: Always generate a separate, random Sidecar Auth Key
 SIDECAR_AUTH_KEY=$(head -c 32 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 32)
 
-ENV_FILE="$SCRIPT_DIR/../.env"
 if [ ! -f "$ENV_FILE" ]; then
 	cp "$SCRIPT_DIR/../.env.example" "$ENV_FILE" 2>/dev/null || touch "$ENV_FILE"
 fi

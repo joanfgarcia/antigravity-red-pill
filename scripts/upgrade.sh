@@ -42,9 +42,9 @@ else
 fi
 
 # 2. WORKSPACE_ROOT & Environment Check
-if [ -f ".env" ]; then
+if [ -f "$HOME/.config/red-pill/.env" ]; then
 	set -a
-	source .env
+	source "$HOME/.config/red-pill/.env"
 	set +a
 	if [[ "${WORKSPACE_ROOT:-}" == "~"* ]]; then
 		WORKSPACE_ROOT="${WORKSPACE_ROOT/#\~/$HOME}"

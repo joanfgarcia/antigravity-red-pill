@@ -5,6 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
+import platformdirs
 
 import mcp.types as types
 from mcp.server import NotificationOptions, Server
@@ -1029,7 +1030,7 @@ async def handle_configure_interceptor(arguments: Dict[str, Any]):
 		conf.INTERCEPTOR_ENABLED = enabled
 
 		# 2. Persist to .env (Best effort)
-		env_path = Path(conf.APP_ROOT) / ".env"
+		env_path = Path(platformdirs.user_config_dir("red-pill")) / ".env"
 		if env_path.exists():
 			lines = []
 			replaced = False

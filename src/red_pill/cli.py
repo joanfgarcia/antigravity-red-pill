@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 import yaml  # type: ignore
+import platformdirs
 
 import red_pill.config as cfg
 from red_pill.events import CliCommandDispatchedEvent, get_event_bus
@@ -160,7 +161,7 @@ def handle_telemetry() -> None:
 def handle_interceptor(args: argparse.Namespace) -> None:
 	"""Interceptor Management (Manual Activation for Security Audits)."""
 	conf = cfg.get_config()
-	env_path = Path(conf.APP_ROOT) / ".env"
+	env_path = Path(platformdirs.user_config_dir("red-pill")) / ".env"
 
 	if args.int_cmd == "enable":
 		print("\n--- [SEC-G01: BÜNKER INTERCEPTOR ACTIVATION] ---")

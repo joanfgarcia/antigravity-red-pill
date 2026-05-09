@@ -7,8 +7,10 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import platformdirs
 from pathlib import Path
 from typing import Any, Dict, List
+from dotenv import load_dotenv
 
 QDRANT_URL = "http://localhost:6333"
 MLX_LM_URL = "http://localhost:8760/v1/chat/completions"
@@ -17,7 +19,8 @@ _run_dir = os.getenv("XDG_RUNTIME_DIR", "/tmp")
 
 # Load QDRANT_API_KEY from .env
 QDRANT_API_KEY = ""
-env_path = os.path.join(os.path.dirname(__file__), "../.env")
+env_path = os.path.join(platformdirs.user_config_dir("red-pill"), ".env")
+load_dotenv(env_path)
 if os.path.exists(env_path):
 	with open(env_path, "r") as f:
 		for line in f:

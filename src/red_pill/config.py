@@ -25,6 +25,7 @@ from typing import Any, Dict, List, Optional
 import yaml
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+import platformdirs
 
 # Resolve paths early for execution isolation (Agentic Self-Assembly)
 _APP_ROOT = os.getenv("APP_ROOT", os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -76,7 +77,7 @@ class RedPillConfig(BaseSettings):
 	"""
 
 	model_config = SettingsConfigDict(
-		env_file=os.path.join(_APP_ROOT, ".env"),
+		env_file=os.path.join(platformdirs.user_config_dir("red-pill"), ".env"),
 		env_file_encoding="utf-8",
 		extra="ignore",
 		populate_by_name=True,
@@ -339,7 +340,7 @@ class RedPillConfig(BaseSettings):
 
 	# Re-map env var name
 	model_config = SettingsConfigDict(
-		env_file=os.path.join(_APP_ROOT, ".env"),
+		env_file=os.path.join(platformdirs.user_config_dir("red-pill"), ".env"),
 		env_file_encoding="utf-8",
 		extra="ignore",
 		populate_by_name=True,
