@@ -9,7 +9,7 @@ Three-level field strategy:
 Supports 14 step types (10 content types + 4 system types skipped)
 """
 
-from typing import Optional, Any
+from typing import Any, Optional
 
 
 class FieldLevel:
