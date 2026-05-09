@@ -214,7 +214,7 @@ class GruOrchestrator:
 			if all_skipped:
 				should_notify_desktop = False
 				logger.info(f"SAS Notification suppressed: Minion task '{task}' skipped (no changes/already reported).")
-			
+
 			# Anti-Spam for instant background crashes (duration < 0.5s)
 			if not all_skipped and all(r.duration < 0.5 for r in results):
 				should_notify_desktop = False
@@ -232,7 +232,7 @@ class GruOrchestrator:
 				telemetry_summary += f"\n- {r.minion_id[:8]}: {r.duration}s"
 
 		message = f"Swarm Task Complete: {task_preview}. {success_count}/{len(results)} minions succeeded.{telemetry_summary}"
-		
+
 		if should_notify_desktop:
 			notify_user(title="Sovereign Swarm", message=message, sound=False, category="swarm")
 

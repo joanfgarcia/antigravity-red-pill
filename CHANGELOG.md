@@ -1,7 +1,10 @@
-## [6.9.1] - 2026-05-08
+## [6.9.1] - 2026-05-09
 
 ### 🚀 Stable Neon-Link Synchronization
 - **[ARCH] Stable Dependency Bump**: Upgraded `neon-link` dependency to `0.3.1` ensuring compatibility with Telegram and Firebase out-of-the-box, pausing P2P Rings topology until fully stabilized.
+- **[ARCH] Antigravity History Assimilation**: Native absorption of the `antigravity-history` library into the Red-Pill core. Eliminates external dependencies for LanguageServer discovery and trajectory extraction, ensuring a fully sovereign Chronicle Archival Pipeline.
+- **[FIX] IDE Client Dependency Decoupling**: Eradicated the hardcoded `sys.path.insert` hack in `ide_client.py`. It now properly imports the local `utils.antigravity_history` package.
+- **[COMPLIANCE] Apache 2.0 Attribution**: Formally added third-party acknowledgments to the root `NOTICE` file, securing legal compliance for the assimilated modules without compromising GPLv3 boundaries.
 
 ## [6.9.0] - 2026-05-08
 ### 🚀 Evolutionary Set Point (Neon-Link & Pure-MLS Sovereignty)

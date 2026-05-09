@@ -1,22 +1,14 @@
 import logging
-import sys
 
 import requests
 import urllib3
+
+from red_pill.utils.antigravity_history.discovery import discover_language_servers, find_all_endpoints
 
 # Suppress insecure request warnings for localhost https
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logger = logging.getLogger(__name__)
-
-# Fallback path if running standalone
-try:
-	from antigravity_history.discovery import discover_language_servers, find_all_endpoints
-except ImportError:
-	from pathlib import Path
-
-	sys.path.insert(0, str(Path.home() / "Documents" / "IA" / "antigravity-history" / "src"))
-	from antigravity_history.discovery import discover_language_servers, find_all_endpoints
 
 
 class AntigravityIDEClient:

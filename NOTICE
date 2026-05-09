@@ -54,4 +54,16 @@ When in doubt, contact Joan García.
 
 ---
 
+## 🤝 Third-Party Acknowledgements & Gratitude
+
+This project integrates code from the following open-source initiatives:
+
+* **antigravity-history** (Apache License 2.0)
+  * **Author:** Neo (`nichochar` / `neo1027144`)
+  * **Repository:** [https://github.com/neo1027144-creator/antigravity-history](https://github.com/neo1027144-creator/antigravity-history)
+  * **Gratitude Note:** Red-Pill's sovereign memory extraction (Chronicle/Archive Memories) y el descubrimiento del LanguageServer del IDE están profundamente en deuda con la ingeniería inversa de Neo sobre la API local de Antigravity. La asimilación de su librería permite que el Córtex opere de forma autónoma. Nuestro más sincero agradecimiento por trazar el camino.
+  * **Compliance:** The modified source code is distributed internally under its original Apache 2.0 License, preserved at `src/red_pill/utils/antigravity_history/LICENSE_APACHE2.txt`.
+
+---
+
 > *"La libertad de la tecnología y la escencia de la narrativa merecen protecciones distintas."* — Joan García
