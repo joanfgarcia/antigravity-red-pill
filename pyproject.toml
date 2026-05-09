@@ -204,6 +204,7 @@ omit = [
     "*/core/plugin_engine.py",
     "*/core/model_registry.py",
     "*/swarm/agents/echo.py",
+    "*/utils/antigravity_history/*.py", # Antigravity LS communication (needs live LS daemon)
 ]
 
 [tool.coverage.report]
