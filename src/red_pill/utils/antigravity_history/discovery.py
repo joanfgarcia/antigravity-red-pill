@@ -67,7 +67,7 @@ def _discover_linux() -> list[dict]:
 
 def _discover_windows() -> list[dict]:
 	"""Windows: query language_server processes via WMI."""
-	servers = []
+	servers: list[dict] = []
 	try:
 		result = subprocess.run(
 			[

@@ -9,7 +9,7 @@ Three-level field strategy:
 Supports 14 step types (10 content types + 4 system types skipped)
 """
 
-from typing import Optional
+from typing import Optional, Any
 
 
 class FieldLevel:
@@ -208,7 +208,7 @@ def _parse_code_action(step: dict, include_full: bool) -> Optional[dict]:
 	if description:
 		summary += f"\n{description}"
 
-	msg = {"role": "tool", "tool_name": "code_edit", "content": summary}
+	msg: dict[str, Any] = {"role": "tool", "tool_name": "code_edit", "content": summary}
 
 	if file_path:
 		msg["file_path"] = file_path

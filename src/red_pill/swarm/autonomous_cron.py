@@ -18,7 +18,7 @@ def is_ide_idle(idle_seconds=3600):
 	if not os.path.exists(brain_dir):
 		return True
 
-	latest_time = 0
+	latest_time = 0.0
 	for root, _, files in os.walk(brain_dir):
 		for f in files:
 			if f == "overview.txt":

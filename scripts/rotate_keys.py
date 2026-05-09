@@ -3,6 +3,7 @@ import logging
 import os
 import subprocess
 import sys
+
 import platformdirs
 
 # Ensure we can import red_pill

@@ -45,7 +45,7 @@ def call_api(
 	try:
 		resp = requests.post(url, headers=headers, json=params or {}, verify=False, timeout=timeout)
 		if resp.status_code == 200:
-			return resp.json()
+			return resp.json()  # type: ignore
 	except requests.exceptions.ConnectionError:
 		pass
 	except requests.exceptions.Timeout:
@@ -60,7 +60,7 @@ def get_all_trajectories(port: int, csrf: str) -> dict[str, Any]:
 	result = call_api(port, csrf, "GetAllCascadeTrajectories", timeout=3)
 	if not result:
 		return {}
-	return result.get("trajectorySummaries", {})
+	return result.get("trajectorySummaries", {})  # type: ignore
 
 
 def get_all_trajectories_merged(endpoints: list[dict]) -> tuple[dict[str, Any], dict[str, dict], list[tuple]]:
@@ -124,4 +124,4 @@ def get_trajectory_steps(port: int, csrf: str, cascade_id: str, step_count: int 
 	)
 	if not result:
 		return []
-	return result.get("steps", result.get("messages", []))
+	return result.get("steps", result.get("messages", []))  # type: ignore

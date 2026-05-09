@@ -7,9 +7,10 @@ import sys
 import time
 import urllib.error
 import urllib.request
-import platformdirs
 from pathlib import Path
 from typing import Any, Dict, List
+
+import platformdirs
 from dotenv import load_dotenv
 
 QDRANT_URL = "http://localhost:6333"

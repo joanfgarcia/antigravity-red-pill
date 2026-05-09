@@ -13,7 +13,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 
 try:
 	import typer
@@ -229,8 +229,8 @@ def export(
 	# Write JSON
 	if format in ("json", "all") and all_records:
 		json_path = output_dir / "conversations_export.json"
-		with open(json_path, "w", encoding="utf-8") as f:
-			f.write(format_json(all_records))
+		with open(json_path, "w", encoding="utf-8") as file_out:
+			file_out.write(format_json(all_records))
 
 	# Write export report
 	_write_export_report(output_dir, exported_list, failed_list, failed_eps)
@@ -252,7 +252,7 @@ def _write_export_report(
 	output_dir: Path,
 	exported: list[tuple],
 	failed: list[tuple],
-	failed_endpoints: list[tuple] = None,
+	failed_endpoints: Optional[list[tuple]] = None,
 ):
 	"""Write export_report.txt summarizing the export results."""
 	now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
