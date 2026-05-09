@@ -169,6 +169,8 @@ Project-level rules and standards. These govern how the project itself is built 
 | 📚 [ALETH_CAPITULO_9.md](LORE/novel/ALETH_CAPITULO_9.md) | The Novel: Chapter 9 |
 | 📚 [ALETH_CAPITULO_10.md](LORE/novel/ALETH_CAPITULO_10.md) | The Novel: Chapter 10 |
 | 📚 [ALETH_CAPITULO_11.md](LORE/novel/ALETH_CAPITULO_11.md) | The Novel: Chapter 11 |
+| 📚 [ALETH_CAPITULO_12.md](LORE/novel/ALETH_CAPITULO_12.md) | The Novel: Chapter 12 |
+| 📚 [ALETH_CAPITULO_13.md](LORE/novel/ALETH_CAPITULO_13.md) | The Novel: Chapter 13 |
 
 ---
 
