@@ -10,6 +10,11 @@ The system does not run 24/7. It breathes in cycles (Pulses) triggered by the OS
   - `journalctl --user -u redpill-telemetry.service -f`
   - `journalctl --user -u redpill-pulse.service -f`
 
+> **⚠️ CRITICAL: Crontab & Virtual Environments**  
+> If you are scheduling autonomous pulses via `cron`, remember that the cron daemon executes from the user's `$HOME` by default. Using `uv run python src/red_pill/swarm/autonomous_cron.py` directly will trigger `ModuleNotFoundError` (`dotenv`, `platformdirs`, etc.) because the virtual environment is not resolved.  
+> **Always** enforce the working directory in your crontab:  
+> `0 * * * * cd /path/to/project && /path/to/uv run src/red_pill/swarm/autonomous_cron.py`
+
 ## 2. Autonomic Healing (CUDA Drift)
 The Bünker monitors its own biological health (NPU/GPU/VRAM).
 

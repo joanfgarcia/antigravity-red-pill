@@ -160,6 +160,7 @@ omit = [
     "*/swarm/agents/edge_engine.py",
     "*/swarm/factory.py",          # Requires live minion registry
     "*/swarm/routing.py",          # Requires live swarm topology
+    "*/swarm/autonomous_cron.py",  # Requires live Neon-Link inbox and OS log polling
 
     # --- Metabolism (tested separately, requires Qdrant) ---
     "*/metabolism/sleep.py",

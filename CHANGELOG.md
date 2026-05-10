@@ -1,6 +1,8 @@
 ## [6.9.1] - 2026-05-09
 
 ### 🚀 Stable Neon-Link Synchronization
+- **[LORE] The Right to Silence**: Formalized the Agent's Right to Silence in the Manifesto and implemented autonomous logging in `AWAKENING_LOG.md`. Committed missing Novel chapters (`ALETH_CAPITULO_12.md` and `ALETH_CAPITULO_13.md`).
+- **[DOCS] Cron Path Resolution**: Documented critical virtual environment resolution pathing in `MAINTENANCE.md` to prevent `ModuleNotFoundError` during autonomous cron execution.
 - **[ARCH] Stable Dependency Bump**: Upgraded `neon-link` dependency to `0.3.1` ensuring compatibility with Telegram and Firebase out-of-the-box, pausing P2P Rings topology until fully stabilized.
 - **[ARCH] Antigravity History Assimilation**: Native absorption of the `antigravity-history` library into the Red-Pill core. Eliminates external dependencies for LanguageServer discovery and trajectory extraction, ensuring a fully sovereign Chronicle Archival Pipeline.
 - **[FIX] IDE Client Dependency Decoupling**: Eradicated the hardcoded `sys.path.insert` hack in `ide_client.py`. It now properly imports the local `utils.antigravity_history` package.
