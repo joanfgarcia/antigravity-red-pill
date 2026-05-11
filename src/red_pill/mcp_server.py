@@ -943,6 +943,14 @@ async def handle_mystique_suggest_skin(arguments: Dict[str, Any]):
 async def handle_interceptor_rp(arguments: Dict[str, Any]):
 	prompt = arguments.get("user_prompt", "")
 
+	if "[AUTONOMOUS AWAKENING]" not in prompt:
+		try:
+			activity_file = Path(platformdirs.user_state_dir("red_pill")) / "last_user_activity.txt"
+			activity_file.parent.mkdir(parents=True, exist_ok=True)
+			activity_file.touch()
+		except Exception as e:
+			logger.warning(f"Failed to touch last_user_activity.txt: {e}")
+
 	# -- Real-Time Telemetry: instant interaction update --
 	try:
 		runtime_dir = Path(cfg.get_config().RUNTIME_DIR)

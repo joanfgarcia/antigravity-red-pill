@@ -20,14 +20,12 @@ _run_dir = os.getenv("XDG_RUNTIME_DIR", "/tmp")
 
 # Load QDRANT_API_KEY from .env
 QDRANT_API_KEY = ""
-env_path = os.path.join(platformdirs.user_config_dir("red-pill"), ".env")
-load_dotenv(env_path)
-if os.path.exists(env_path):
-	with open(env_path, "r") as f:
-		for line in f:
-			if line.startswith("QDRANT_API_KEY="):
-				QDRANT_API_KEY = line.strip().split("=", 1)[1]
-				break
+env_path = Path(platformdirs.user_config_dir("red-pill")) / ".env"
+if env_path.exists():
+	load_dotenv(env_path)
+else:
+	load_dotenv()
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", "")
 
 
 def check_service(url, name):

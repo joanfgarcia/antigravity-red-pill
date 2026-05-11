@@ -1,3 +1,9 @@
+## [6.9.2] - 2026-05-11
+
+### 🛡️ Swarm Infrastructure & Protocol Compliance
+- **[HEAL] Config Path Sovereignty**: Fixed `.env` resolution in `chronicle_daily.py`, `wake_up_v6.py`, `chronicle_distill.py`, and `setup_torch.py`. Swarm scripts now reliably discover the configuration via `platformdirs.user_config_dir("red-pill")`, bypassing relative `cwd` execution failures.
+- **[COMPLIANCE] Sound of Silence Protocol**: Purged spaces in favor of tab indentation in the chronicle scripts. Eradicated hardcoded home directory paths in `autonomous_cron.py` utilizing dynamic `Path.home()`. The Sentinel test suite is fully green.
+
 ## [6.9.1] - 2026-05-09
 
 ### 🚀 Stable Neon-Link Synchronization

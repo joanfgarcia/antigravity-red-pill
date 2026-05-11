@@ -3,6 +3,7 @@ from typing import Any, Dict, List
 
 from qdrant_client.models import PointStruct
 
+import red_pill.config as cfg
 from red_pill.core.plugin_engine import PluginScope, Priority, SovereignPlugin
 from red_pill.memory import MemoryManager
 
@@ -83,7 +84,7 @@ class HomeostasisPlugin(SovereignPlugin):
 				points=[
 					PointStruct(
 						id=str(uuid.uuid4()),
-						vector=[0.0] * 1536,  # Vector dummy para metadatos
+						vector=[0.0] * cfg.EMBEDDING_DIM,  # Vector dummy alineado dinámicamente
 						payload={
 							"pain_signals": self.state.pain_signals,
 							"frustration": self.state.frustration,

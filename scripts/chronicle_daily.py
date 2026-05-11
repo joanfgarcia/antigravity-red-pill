@@ -78,10 +78,14 @@ def _inject_pain_signal(title: str, details: str, severity: float = 8.0) -> None
 def _get_antigravity_key() -> str | None:
 	"""Read ANTIGRAVITY_KEY from environment (loaded via .env by the caller)."""
 	import os
-
+	import platformdirs
 	from dotenv import load_dotenv
 
-	load_dotenv()
+	red_pill_config = Path(platformdirs.user_config_dir("red-pill")) / ".env"
+	if red_pill_config.exists():
+		load_dotenv(red_pill_config)
+	else:
+		load_dotenv()
 	return os.environ.get("ANTIGRAVITY_KEY")
 
 

@@ -24,9 +24,14 @@ import subprocess
 import sys
 from pathlib import Path
 
+import platformdirs
 from dotenv import load_dotenv
 
-load_dotenv()
+env_path = Path(platformdirs.user_config_dir("red-pill")) / ".env"
+if env_path.exists():
+	load_dotenv(env_path)
+else:
+	load_dotenv()
 
 
 # CUDA detection
