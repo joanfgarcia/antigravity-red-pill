@@ -41,6 +41,7 @@ dependencies = [
     "pillow>=12.2.0",
     "python-multipart>=0.0.26",
     "httpx>=0.28.1",
+    "urllib3>=2.7.0",
 ]
 
 [project.scripts]
