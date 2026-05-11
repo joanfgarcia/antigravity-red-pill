@@ -51,6 +51,7 @@ class IDEWorker:
 			try:
 				self.process_inbox()
 				self.check_for_replies()
+				self.check_minion_inbox_auto_inject()
 				self.update_heartbeat()
 				time.sleep(2)
 			except KeyboardInterrupt:
@@ -294,6 +295,47 @@ class IDEWorker:
 					logger.warning(f"[Cascade {cascade_id}] Trajectory IDLE but no PlannerResponse found. Marking as Dead.")
 					cursor.execute("UPDATE inbox SET status = 'DEAD' WHERE cascade_id = ? AND status = 'WAITING_FOR_RESPONSE'", (cascade_id,))
 		conn.commit()
+		conn.close()
+
+	def check_minion_inbox_auto_inject(self):
+		conn = get_connection()
+		conn.row_factory = sqlite3.Row
+		cursor = conn.cursor()
+
+		cursor.execute("SELECT cascade_id FROM telegram_sessions ORDER BY id DESC LIMIT 1")
+		session_row = cursor.fetchone()
+		if not session_row:
+			conn.close()
+			return
+
+		cascade_id = session_row["cascade_id"]
+		status = self.client.get_trajectory_status(cascade_id)
+
+		if status == "CASCADE_RUN_STATUS_RUNNING":
+			conn.close()
+			return
+
+		activity_file = Path(os.environ.get("HOME", "")) / ".gemini" / "antigravity" / "activity_tracker"
+		if activity_file.exists():
+			import time
+			if time.time() - activity_file.stat().st_mtime < 300: # 5 minutes threshold
+				conn.close()
+				return
+
+		from red_pill.core.inbox import MinionInbox
+		inbox = MinionInbox()
+		unread = inbox.pop_unread(limit=5)
+
+		if unread:
+			logger.info(f"Auto-injecting {len(unread)} unread minion reports into cascade {cascade_id}")
+			prompts = ["[SYSTEM AUTO-INJECT: Minion Background Reports]"]
+			for r in unread:
+				prompts.append(f"Source: {r['source']}\nStatus: {r['status']}\nEvent ID: {r['event_id']}\nContent: {r['content']}")
+
+			combined = "\n\n".join(prompts)
+			success = self.client.send_user_message(cascade_id, combined)
+			if not success:
+				logger.error("Auto-inject failed. Reports were lost from inbox.")
 		conn.close()
 
 
