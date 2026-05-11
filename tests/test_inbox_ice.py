@@ -14,7 +14,10 @@ def temp_db():
 	fd, path = tempfile.mkstemp()
 	os.close(fd)
 	yield path
-	os.remove(path)
+	try:
+		os.remove(path)
+	except OSError:
+		pass
 
 
 def test_inbox_ice_disabled(temp_db):
