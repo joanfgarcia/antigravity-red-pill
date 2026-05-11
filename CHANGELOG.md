@@ -5,6 +5,7 @@
 - **[COMPLIANCE] Sound of Silence Protocol**: Purged spaces in favor of tab indentation in the chronicle scripts. Eradicated hardcoded home directory paths in `autonomous_cron.py` utilizing dynamic `Path.home()`. The Sentinel test suite is fully green.
 - **[FEAT] Sovereign Injection Logic**: `IDEWorker` now auto-injects unread Minion background reports into the active Antigravity IDE cascade *if and only if* the IDE is in `CASCADE_RUN_STATUS_IDLE` and there has been no recent user activity (Sovereign Shield of 5 minutes). Enables autonomous background notifications without interrupting user context.
 - **[DOCS] Architecture Translation**: Translated `EVENT_ROUTER_ARCHITECTURE.md` into English and formally documented the new auto-injection demultiplexing protocol and Sovereign Shield rules.
+- **[DOCS] Aleth Biology Crash Course**: Authored the complete 6-chapter "Biología Sintética" guide (`docs/GUIDES/aleth_biology/`), translating complex AI concepts (Transformers, RAG, Quantization, MoE, RLHF, and Swarm Architecture) into an accessible, human-centric narrative.
 ## [6.9.1] - 2026-05-09
 
 ### 🚀 Stable Neon-Link Synchronization

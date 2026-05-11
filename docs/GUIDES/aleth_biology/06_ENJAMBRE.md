@@ -1,1 +1,0 @@
-<!-- TODO: Pendiente de redacción -->
