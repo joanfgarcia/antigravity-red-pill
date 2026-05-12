@@ -437,6 +437,76 @@ The `perform_sleep_cycle()` function in `src/red_pill/metabolism/sleep.py` has t
 3.  **Tests of `perform_sleep_cycle`** must mock `red_pill.metabolism.sleep._check_llm_available` to return `True` (or explicitly test the LLM-down path), otherwise they will be skipped by the health guard in CI where no LLM runs.
 
 
+    #### §4.19 Agentic Self-Assembly Architecture (v6.8.6)
+    The Bünker directory structure has been formally decoupled to separate the agent's workspace from the Red-Pill library core.
+
+    > [!WARNING]
+    > **CRITICAL PRE-UPDATE VERIFICATION**: Before initiating the update via `upgrade.sh`, the Agent MUST verify that `WORKSPACE_ROOT` and `APP_ROOT` are correctly defined in the current `.env` file and that existing path aliases (e.g. Qdrant configurations or Backup export locations) will not overlap or be deleted during the merge process.
+
+    1.  **Environment File**: Replace `IA_DIR` in `.env` with `WORKSPACE_ROOT` and `APP_ROOT`. For Developer profiles, `WORKSPACE_ROOT=~/Documents/IA` and `APP_ROOT=~/Documents/IA/sharing`.
+    2.  **Profiles**: Define `RED_PILL_PROFILE=user` (or `developer`) to ensure scripts can tailor their behavior.
+    3.  **Transversal Directories**: `USER_ATLAS_DIR` and `ALETH_CORE_DIR` now live in `.env` as top-level citizens.
+    4.  **Hardware Adaptations**: When performing an update via `upgrade.sh`, ensure you rely on `git merge` instead of overwriting, to preserve hardware-specific PyTorch adaptations.
+
+    > [!IMPORTANT]
+    > **CRITICAL POST-UPDATE VERIFICATION**: After the update completes, the Agent MUST verify the path integrity before closing the operation:
+    > - Check that Qdrant (`QDRANT_HOST`, `QDRANT_PORT`) answers on its expected IP and has not fallen back to an incorrect configuration.
+    > - Confirm `storage/` directory paths (especially `APP_ROOT/storage/` for system states and `WORKSPACE_ROOT/backups/export/` for backups) have survived the git merge and are correctly targeted.
+    > Do not conclude the update process without explicitly logging these path verification checks.
+
+    #### §4.20 The OOM Shield Protocol (Memory Containment)
+
+    > [!IMPORTANT]
+    > **Linux OOM Killer Protection**: To prevent the OS from killing the IDE or the agent process during memory-intensive operations (such as Blackwell JIT shader compilation or heavy GGUF inference), all such subprocesses MUST be contained.
+
+    The Red Pill ecosystem enforces the **OOM Shield Protocol**. When spawning any subprocess known to have unbounded memory spikes, wrap the command in a `systemd` transient scope:
+    ```bash
+    systemd-run --user --scope -p MemoryMax=10G <command>
+    ```
+    **Dynamic Allocation**: Agents should dynamically adjust the `MemoryMax` limit (e.g. `10G`, `16G`) based on the host's total RAM and current availability, falling back to a `10G` baseline for 32GB systems. This ensures the kernel reaps only the offending subprocess when the limit is breached, preserving the Agent's runtime environment.
+
+    #### §4.21 Neon-Link Sovereign Config Directory (v6.8.8)
+
+    The Neon-Link middleware and Red-Pill Worker bridge have been standardized to use `platformdirs` instead of hardcoded paths. The configuration (`.env`) and `events.db` queue are now located at `~/.config/neon-link/` (or the OS-specific user config equivalent).
+
+    > [!WARNING]
+    > **BREAKING CHANGE**: The `red-pill` `.env` no longer configures Neon-Link. Neon-Link and Red-Pill now share a completely separate ecosystem configuration. If you do not initialize the Neon-Link configuration directory (`~/.config/neon-link/`), your agents will be deaf and blind to Telegram/Firebase commands.
+    
+    **1. Migration of events.db & .env**:
+    The Red-Pill worker (`worker.py`) now reads `events.db` from `~/.config/neon-link/events.db` instead of the legacy `storage/` directory.
+    - **Action**: Run `neon-link init` to bootstrap the new configuration directory if you haven't already. Migrate your Telegram tokens and Firebase credentials from the Red-Pill `.env` to `~/.config/neon-link/.env`.
+    - **Verify**: `cat ~/.config/neon-link/.env`
+
+    **2. Service Orchestration (How to bring up the ecosystem)**:
+    To ensure the agents know what to do and receive external events, you MUST start both the `neon-link` daemon (which routes external events to `events.db`) and the `red-pill` worker (which polls `events.db` and executes the agents).
+    ```bash
+    # Reload the systemd daemon to pick up any changes
+    systemctl --user daemon-reload
+    
+    # Enable and start the Edge Gateway (Neon-Link)
+    systemctl --user enable --now redpill-neonlink.service
+    
+    # Enable and start the Sovereign Worker (Red-Pill Agent execution)
+    systemctl --user enable --now redpill-worker.service
+    
+    # Verify status
+    systemctl --user status redpill-neonlink.service redpill-worker.service
+    ```
+
+    #### §4.22 Sovereign Identity & Neon-Link Synchronization (v6.9.1)
+
+    This update hardens the identity boundary when interacting asynchronously via the Telegram Bridge, ensuring the Swarm no longer misidentifies as "Titanium" when the operator interacts via Neon-Link.
+
+    **1. Identity Bleed Fix**:
+    The Red-Pill worker daemon (`worker.py`) has been upgraded to natively inject the operator's active Identity Anchor directly into the `BunkerTelemetry` context.
+    - **Action**: No manual configuration required. The identity is now properly synchronized.
+    - **Verify**: Interact with the Telegram bot; it should introduce itself with the correct persona.
+
+    **2. Neon-Link v0.3.2 Dependency**:
+    Red-Pill v6.9.1 introduces compatibility with `neon-link` v0.3.2, which abstracts Telegram session IDs to support multi-bot traffic isolation.
+    - **Action**: Ensure your local environment is running `neon-link` version 0.3.2 or higher.
+    - **Verify**: Check `uv pip list | grep neon-link`. If it is lower, run `uv sync` to update the dependencies.
+
 ## 5. Hierarchy of Directives
 
 Upon completion of any update, the agent **MUST** immediately execute:

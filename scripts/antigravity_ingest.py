@@ -102,6 +102,9 @@ class ChronicleIngester:
 			role = msg.get("role")
 
 			content = msg.get("content", "")
+			if content:
+				content = content.replace("\x00", "")
+
 			if not content or role == "system":
 				continue  # Skip empty or system noise
 
@@ -126,8 +129,8 @@ class ChronicleIngester:
 			refined = self._refine_content(content)
 
 			payload = {
-				"raw_content": content,
-				"refined_content": refined,
+				"raw_content": content[:1024],
+				"refined_content": refined[:1024],
 				"session_id": session_id,
 				"sequence_index": idx,
 				"role": role,
@@ -158,8 +161,8 @@ class ChronicleIngester:
 				f_node_id = str(uuid.UUID(f_node_id[:32]))
 
 				f_payload = {
-					"raw_content": frag["content"],
-					"refined_content": frag["content"],
+					"raw_content": frag["content"][:1024],
+					"refined_content": frag["content"][:1024],
 					"parent_id": node_id,
 					"session_id": session_id,
 					"type": "idea_fragment",

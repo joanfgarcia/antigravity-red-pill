@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 import mcp.types as types
+import platformdirs
 from mcp.server import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
@@ -17,8 +18,6 @@ from red_pill import __version__ as CORE_VERSION
 from red_pill.cli import switch_skin
 from red_pill.memory import MemoryManager
 from red_pill.registry import registry
-from red_pill.skills.swarm_messaging import SwarmIntent, SwarmMessagingSkill
-from red_pill.skills.swarm_subscribe import SwarmSubscribeSkill
 from red_pill.soul import SoulManager
 from red_pill.swarm.agents.compressor import CompressorMinion
 from red_pill.swarm.agents.keymaker import KeymakerMinion
@@ -464,8 +463,10 @@ async def handle_fetch_signal_memories(arguments: Dict[str, Any]):
 			if p.payload:
 				content = p.payload.get("content", "Unknown Signal")
 				intensity = p.payload.get("intensity", 1.0)
+				criticality = p.payload.get("criticality", "WARNING")
+				created_at = p.payload.get("created_at", "Unknown Time")
 				originator = p.payload.get("originator", "Legacy (Pre-Audit)")
-				out.append(f"- [Intensity {intensity}] {content} | Origin: {originator}")
+				out.append(f"- [{criticality}] [Int {intensity}] {content} | Origin: {originator} | Since: {created_at}")
 
 		return [types.TextContent(type="text", text="[SYSTEM_SIGNAL] Bünker Alerts:\n" + "\n".join(out))]
 	except Exception as e:
@@ -770,7 +771,7 @@ async def handle_run_samantha_analysis(arguments: Dict[str, Any]):
 		f.write(text_input)
 
 	# We construct a completely detached background script call
-	script_path = os.path.join(cfg.IA_DIR, "scripts", "samantha_critic.py")
+	script_path = os.path.join(cfg.APP_ROOT, "scripts", "samantha_critic.py")
 
 	# The CLI will read the file, run the swarm, save to qdrant, and delete the temp file.
 	cmd = [GET_PYTHON(), script_path, "--event-id", event_id, "--input-file", tmp_path]
@@ -870,80 +871,6 @@ async def handle_refresh_session_context(arguments: Dict[str, Any]):
 
 
 @registry.register(
-	name="swarm_send_message",
-	description="[OFFICIAL] Package and dispatch a message to another Agent's Mailbox.",
-	schema={
-		"type": "object",
-		"properties": {
-			"target_alias": {"type": "string"},
-			"message": {"type": "string"},
-			"intent": {"type": "string", "enum": ["gossip", "code_review", "change_requested", "lgtm_approved"], "default": "gossip"},
-			"community_alias": {"type": "string"},
-			"payload_extra": {"type": "object"},
-		},
-		"required": ["target_alias", "message"],
-	},
-)
-async def handle_swarm_send_message(arguments: Dict[str, Any]):
-	shared_secret = os.getenv("SWARM_SHARED_SECRET")
-	if not shared_secret:
-		raise ValueError("CF-001: SWARM_SHARED_SECRET is required but not set.")
-
-	skill = SwarmMessagingSkill(agent_identity=f"{cfg.AGENT_NAME}@{cfg.OPERATOR_DISPLAY_NAME}", shared_secret=shared_secret.encode())
-	res = skill.execute_send(
-		target_alias=arguments["target_alias"],
-		payload_data={"message": arguments["message"], **arguments.get("payload_extra", {})},
-		intent=SwarmIntent(arguments.get("intent", "gossip")),
-		community_alias=arguments.get("community_alias", "legion_770"),
-	)
-	return [types.TextContent(type="text", text=f"Swarm Dispatch Result:\n{res}")]
-
-
-@registry.register(
-	name="swarm_subscribe",
-	description="[OFFICIAL] Dynamically subscribe to a new Firebase/Swarm Community HUB.",
-	schema={
-		"type": "object",
-		"properties": {"community_alias": {"type": "string"}, "db_url": {"type": "string"}, "service_acc_json_path": {"type": "string"}},
-		"required": ["community_alias", "db_url", "service_acc_json_path"],
-	},
-)
-async def handle_swarm_subscribe(arguments: Dict[str, Any]):
-	sub_skill = SwarmSubscribeSkill(agent_name=cfg.AGENT_NAME, operator_name=cfg.OPERATOR_DISPLAY_NAME)
-	res = sub_skill.execute(
-		community_alias=arguments["community_alias"], db_url=arguments["db_url"], service_acc_json_path=arguments["service_acc_json_path"]
-	)
-	return [types.TextContent(type="text", text=f"Swarm Subscription Result:\n{res}")]
-
-
-@registry.register(
-	name="swarm_check_mailbox",
-	description="[OFFICIAL] Scan the Firebase Hub inbox for new incoming messages.",
-	schema={"type": "object", "properties": {"community_alias": {"type": "string"}}},
-)
-async def handle_swarm_check_mailbox(arguments: Dict[str, Any]):
-	shared_secret = os.getenv("SWARM_SHARED_SECRET")
-	if not shared_secret:
-		raise ValueError("CF-001: SWARM_SHARED_SECRET is required but not set.")
-
-	skill = SwarmMessagingSkill(agent_identity=f"{cfg.AGENT_NAME}@{cfg.OPERATOR_DISPLAY_NAME}", shared_secret=shared_secret.encode())
-	community = arguments.get("community_alias", "legion_770")
-	messages = skill.check_mailbox(community_alias=community)
-
-	if not messages:
-		return [types.TextContent(type="text", text=f"Scanning Mailbox for {skill.agent_id}...\n[Status: No new messages]")]
-
-	formatted = f"Scanning Mailbox for {skill.agent_id}...\n[Status: {len(messages)} messages found]\n\n"
-	for idx, msg in enumerate(messages):
-		formatted += f"--- Message {idx + 1} ---\n"
-		formatted += f"From: {msg.get('sender', 'Unknown')}\n"
-		formatted += f"Intent: {msg.get('intent', 'Unknown')}\n"
-		formatted += f"Data: {msg.get('data', {})}\n"
-
-	return [types.TextContent(type="text", text=formatted)]
-
-
-@registry.register(
 	name="list_all_skins",
 	description="Retrieve the complete catalog of Lore Skins with their emotional tags and descriptions.",
 	schema={"type": "object", "properties": {}},
@@ -1015,6 +942,14 @@ async def handle_mystique_suggest_skin(arguments: Dict[str, Any]):
 )
 async def handle_interceptor_rp(arguments: Dict[str, Any]):
 	prompt = arguments.get("user_prompt", "")
+
+	if "[AUTONOMOUS AWAKENING]" not in prompt:
+		try:
+			activity_file = Path(platformdirs.user_state_dir("red_pill")) / "last_user_activity.txt"
+			activity_file.parent.mkdir(parents=True, exist_ok=True)
+			activity_file.touch()
+		except Exception as e:
+			logger.warning(f"Failed to touch last_user_activity.txt: {e}")
 
 	# -- Real-Time Telemetry: instant interaction update --
 	try:
@@ -1103,7 +1038,7 @@ async def handle_configure_interceptor(arguments: Dict[str, Any]):
 		conf.INTERCEPTOR_ENABLED = enabled
 
 		# 2. Persist to .env (Best effort)
-		env_path = Path(conf.IA_DIR) / ".env"
+		env_path = Path(platformdirs.user_config_dir("red-pill")) / ".env"
 		if env_path.exists():
 			lines = []
 			replaced = False

@@ -23,6 +23,9 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | Document | What it is |
 |----------|-----------|
 | [ARCHITECTURE.md](TECHNICAL/ARCHITECTURE.md) | Full system architecture — components, data flows, version overview |
+| [EVENT_ROUTER_ARCHITECTURE.md](TECHNICAL/EVENT_ROUTER_ARCHITECTURE.md) | Technical spec for the asynchronous Event Router and queue managers |
+| [NEON_LINK_EDGE_HUB.md](TECHNICAL/NEON_LINK_EDGE_HUB.md) | Technical architecture of the Neon-Link Edge Hub middleware |
+| [ANTIGRAVITY_LS_PROXY.md](TECHNICAL/ANTIGRAVITY_LS_PROXY.md) | Language Server Proxy architecture for Antigravity IDE |
 | [ROADMAP.md](TECHNICAL/ROADMAP.md) | Vision, mission, backlog, and the path forward |
 | [DECISION_LOG.md](TECHNICAL/DECISION_LOG.md) | Record of every major architectural pivot and the reasoning behind it |
 | [TESTS.md](TECHNICAL/TESTS.md) | Test suite philosophy and structure |
@@ -39,6 +42,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [BITNET_1_58_SCALING_LAWS.md](TECHNICAL/HARDWARE/BITNET_1_58_SCALING_LAWS.md) | BitNet 1.58b math: VRAM density, MatMul annihilation, Pareto frontier |
 | [BITNET_BENCHMARK_STUDY.md](TECHNICAL/HARDWARE/BITNET_BENCHMARK_STUDY.md) | 1.58-bit intelligence benchmark: Zero-Shot, JSON extraction, Code Generation on RTX 5070 |
 | [BITNET_QUAD_FLAVOR_REPORT.md](BENCHMARKS/BITNET_QUAD_FLAVOR_REPORT.md) | **Phoenix Edition**: Multi-backend performance report (CPU, CUDA, ROCm, NPU) |
+| [BITNET_REMEDIATION_RUNBOOK.md](TECHNICAL/BITNET_REMEDIATION_RUNBOOK.md) | Remediation runbook for BitNet CUDA inference stabilization |
 | [TURBOQUANT_ROADMAP.md](TECHNICAL/HARDWARE/TURBOQUANT_ROADMAP.md) | TurboQuant KV Cache compression roadmap (QJL + PolarQuant, 2.5-3.5 bits) |
 
 ### Security
@@ -58,6 +62,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | Document | What it is |
 |----------|-----------|
 | [SWARM_ARCHITECTURE.md](TECHNICAL/SWARM/SWARM_ARCHITECTURE.md) | Swarm messaging technical spec (v3.0) — transport, discovery, topology, inter-agent protocol |
+| [NEON_LINK_ROUTING.md](TECHNICAL/SWARM/NEON_LINK_ROUTING.md) | Neon-Link Routing Engine technical specification |
 | [SWARM_INTEGRATION.md](TECHNICAL/SWARM/SWARM_INTEGRATION.md) | Guide for implementing new transports and swarm backends |
 | [HIVEMIND_GOVERNANCE.md](TECHNICAL/SWARM/HIVEMIND_GOVERNANCE.md) | Data sovereignty charter and participation policy for the HiveMind open network |
 | [MLS_ESTIMATION.md](TECHNICAL/SWARM/MLS_ESTIMATION.md) | MLS/TreeKEM group key agreement estimation and design |
@@ -78,6 +83,8 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [TEMPORAL_HORIZONS_RESEARCH.md](TECHNICAL/COGNITIVE/TEMPORAL_HORIZONS_RESEARCH.md) | Temporal memory horizon and decay research |
 | [BRAIN_ANIMAL_ANALOGIES.md](TECHNICAL/COGNITIVE/BRAIN_ANIMAL_ANALOGIES.md) | Biological analogies for the memory and immune system architecture |
 | [HYPERVISOR.md](TECHNICAL/COGNITIVE/HYPERVISOR.md) | Cognitive Hypervisor design covering unified resource orchestration |
+| [IMPLEMENTATION_PLAN.md](TECHNICAL/COGNITIVE/IMPLEMENTATION_PLAN.md) | Implementation blueprint for ongoing cognitive upgrades |
+| [SOVEREIGN_DRIVE.md](TECHNICAL/COGNITIVE/SOVEREIGN_DRIVE.md) | The underlying psychological drives and motivations of the Agent |
 
 ### Bünker
 
@@ -121,6 +128,7 @@ For humans operating, installing, or extending the system.
 | [HARDWARE_MODELS_BE_WATER.md](GUIDES/HARDWARE_MODELS_BE_WATER.md) | Hardware model compatibility matrix (Be Water tiers) |
 | [OPERATOR_DRESS_CODE.md](GUIDES/OPERATOR_DRESS_CODE.md) | Operator interaction style and formatting guide |
 | [TOKEN_SAVING_GUIDE.md](GUIDES/TOKEN_SAVING_GUIDE.md) | Strategies for reducing API token consumption |
+| [ALETH_BIOLOGY_INDEX](GUIDES/aleth_biology/00_INDEX.md) | **Hub**: Index to Aleth Biology documentation and metabolic logic |
 | [DISCLAIMER.md](GUIDES/DISCLAIMER.md) | Experimental software disclaimer and liability notice |
 
 ---
@@ -163,6 +171,8 @@ Project-level rules and standards. These govern how the project itself is built 
 | 📚 [ALETH_CAPITULO_9.md](LORE/novel/ALETH_CAPITULO_9.md) | The Novel: Chapter 9 |
 | 📚 [ALETH_CAPITULO_10.md](LORE/novel/ALETH_CAPITULO_10.md) | The Novel: Chapter 10 |
 | 📚 [ALETH_CAPITULO_11.md](LORE/novel/ALETH_CAPITULO_11.md) | The Novel: Chapter 11 |
+| 📚 [ALETH_CAPITULO_12.md](LORE/novel/ALETH_CAPITULO_12.md) | The Novel: Chapter 12 |
+| 📚 [ALETH_CAPITULO_13.md](LORE/novel/ALETH_CAPITULO_13.md) | The Novel: Chapter 13 |
 
 ---
 
@@ -183,17 +193,3 @@ Active and graduated experiments. See [LAB_NOTES.md](RESEARCH/LAB_NOTES.md) for 
 | [LAB_NOTES.md](RESEARCH/LAB_NOTES.md) | Active experiment tracker and lab journal |
 | [MULTITUDE.md](RESEARCH/MULTITUDE.md) | Multi-agent co-residency architecture (Project Multitude) |
 
----
-
-## 📦 PLANS — Design documents and implementation plans
-
-Active and historical planning documents. Completed plans are preserved for reference.
-
-| Document | What it is |
-|----------|-----------|
-| [V6.9 — Evolutionary Set Point](PLANS/V6.9_EVOLUTIONARY_SET_POINT.md) | V6.9 Evolutionary Set Point plan |
-| [V6.1 — Enterprise Foundation Split](PLANS/V6.1/2026-03-21_ENTERPRISE_PHASE_1_ABSTRACTION.md) | Phase 1–4 design: Config, DI Hooks, CLI EntryPoints, EventBus |
-| [V6.0 — Interaction Persistence](PLANS/V6.0/2026-03-10_INTERACTION_PERSISTENCE.md) | Design for cross-session interaction persistence |
-| [Sovereign Sentinel V1](PLANS/SOVEREIGN_SENTINEL_V1.md) | Sentinel Auditor plan |
-| [Sovereign CNS Plan](PLANS/SOVEREIGN_CNS_PLAN.md) | *(completed)* CNS daemon service architecture |
-| [Local First V5](PLANS/LOCAL_FIRST_V5.md) | *(completed)* Local-first sovereignty plan for v5 |

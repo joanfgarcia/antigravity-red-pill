@@ -205,57 +205,55 @@ echo "------------------------------------------------------------------"
 
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ENV_FILE="$SCRIPT_DIR/../.env"
+mkdir -p "$HOME/.config/red-pill"
+ENV_FILE="$HOME/.config/red-pill/.env"
 
 # Load existing environment if available
-if [ -f .env ]; then
+if [ -f "$ENV_FILE" ]; then
 	echo -e "${YELLOW}Cargando .env...${NC}"
 	set -a
-	source .env
+	source "$ENV_FILE"
 	set +a
 	# Protocol 770 Fix: Expand tilde manually if loaded from .env (source doesn't do it)
-	if [[ "${IA_DIR:-}" == "~"* ]]; then
-		IA_DIR="${IA_DIR/#\~/$HOME}"
-		export IA_DIR
+	if [[ "${WORKSPACE_ROOT:-}" == "~"* ]]; then
+		WORKSPACE_ROOT="${WORKSPACE_ROOT/#\~/$HOME}"
+		export WORKSPACE_ROOT
 	fi
 else
 	echo -e "${YELLOW}No .env found. Using .env.example...${NC}"
-	cp .env.example .env
+	cp "$SCRIPT_DIR/../.env.example" "$ENV_FILE" 2>/dev/null || touch "$ENV_FILE"
 	set -a
-	source .env
+	source "$ENV_FILE"
 	set +a
 fi
-# Dynamic IA_DIR discovery (Protocol 770 Safe-Path)
-if [ -z "${IA_DIR:-}" ]; then
-	# 1. Check if the script is running inside a subfolder of an 'IA' directory
-	# Project is usually at $IA_DIR/sharing/scripts/install_neo.sh
-	POTENTIAL_IA_DIR="$(cd "$SCRIPT_DIR/../../" && pwd)"
-	if [[ "$POTENTIAL_IA_DIR" == */IA ]]; then
-		export IA_DIR="$POTENTIAL_IA_DIR"
-	# 2. Check standard English path
+# Dynamic WORKSPACE_ROOT discovery (Agentic Self-Assembly)
+if [ -z "${WORKSPACE_ROOT:-}" ]; then
+	POTENTIAL_WORKSPACE="$(cd "$SCRIPT_DIR/../../" && pwd)"
+	if [[ "$POTENTIAL_WORKSPACE" == */IA ]]; then
+		export WORKSPACE_ROOT="$POTENTIAL_WORKSPACE"
 	elif [ -d "$HOME/Documents/IA" ]; then
-		export IA_DIR="$HOME/Documents/IA"
-	# 3. Check standard Spanish path (Fix for Silverblue/Office environments)
+		export WORKSPACE_ROOT="$HOME/Documents/IA"
 	elif [ -d "$HOME/Documentos/IA" ]; then
-		export IA_DIR="$HOME/Documentos/IA"
+		export WORKSPACE_ROOT="$HOME/Documentos/IA"
 	else
-		echo -e "${RED}[ERROR] IA_DIR no detectado. Por favor, crea ~/Documentos/IA o setea IA_DIR manualmente.${NC}"
+		echo -e "${RED}[ERROR] WORKSPACE_ROOT no detectado. Por favor, crea ~/Documentos/IA o setea WORKSPACE_ROOT manualmente.${NC}"
 		exit 1
 	fi
-	# Expand tilde just in case it was set manually without it
-	if [[ "${IA_DIR:-}" == "~"* ]]; then
-		IA_DIR="${IA_DIR/#\~/$HOME}"
+	if [[ "${WORKSPACE_ROOT:-}" == "~"* ]]; then
+		WORKSPACE_ROOT="${WORKSPACE_ROOT/#\~/$HOME}"
 	fi
-	export IA_DIR
+	export WORKSPACE_ROOT
 fi
-echo -e "${GREEN}✓ IA_DIR anclado en: $IA_DIR${NC}"
+APP_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+echo -e "${GREEN}✓ WORKSPACE_ROOT anclado en: $WORKSPACE_ROOT${NC}"
+echo -e "${GREEN}✓ APP_ROOT anclado en: $APP_ROOT${NC}"
 
 
 check_encryption() {
 	if [[ "$OS_TYPE" == "Linux" ]]; then
 		if command -v lsblk &> /dev/null && command -v findmnt &> /dev/null; then
 			local target_dev
-			target_dev=$(findmnt -nvo SOURCE -T "$IA_DIR/storage" 2>/dev/null || findmnt -nvo SOURCE -T "/" 2>/dev/null)
+			target_dev=$(findmnt -nvo SOURCE -T "$APP_ROOT/storage" 2>/dev/null || findmnt -nvo SOURCE -T "/" 2>/dev/null)
 			if [ -n "$target_dev" ]; then
 				if lsblk -no TYPE "$target_dev" 2>/dev/null | grep -q "crypt"; then
 					echo -e "${GREEN}✓ Capa de cifrado detectada en $target_dev.${NC}"
@@ -511,7 +509,6 @@ fi
 # SEC-004: Always generate a separate, random Sidecar Auth Key
 SIDECAR_AUTH_KEY=$(head -c 32 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 32)
 
-ENV_FILE="$SCRIPT_DIR/../.env"
 if [ ! -f "$ENV_FILE" ]; then
 	cp "$SCRIPT_DIR/../.env.example" "$ENV_FILE" 2>/dev/null || touch "$ENV_FILE"
 fi
@@ -540,9 +537,14 @@ update_env "INTERCEPTOR_CIRCUIT_BREAKER_ENABLED" "${INTERCEPTOR_CIRCUIT_BREAKER_
 update_env "CLOUD_VAULT_ENABLED" "$CLOUD_VAULT_ENABLED"
 update_env "CLOUD_VAULT_FOLDER_ID" "$CLOUD_VAULT_FOLDER_ID"
 update_env "CLOUD_VAULT_GPG_PASSPHRASE" "$CLOUD_VAULT_GPG_PASSPHRASE"
+update_env "WORKSPACE_ROOT" "$WORKSPACE_ROOT"
+update_env "APP_ROOT" "$APP_ROOT"
+update_env "RED_PILL_PROFILE" "user"
+update_env "USER_ATLAS_DIR" "$WORKSPACE_ROOT/atlas"
+update_env "AGENT_CORE_DIR" "$WORKSPACE_ROOT/Titanium_Core"
 chmod 600 "$ENV_FILE"
 
-mkdir -p "$IA_DIR/scripts" "$IA_DIR/backups/qdrant" "$IA_DIR/backups/soul" "$IA_DIR/seeds" "$IA_DIR/storage" "$IA_DIR/storage/queue"
+mkdir -p "$IA_DIR/scripts" "$IA_DIR/backups/qdrant" "$IA_DIR/backups/soul" "$IA_DIR/seeds" "$APP_ROOT/storage" "$IA_DIR/storage/queue"
 
 if [ "$QDRANT_ALIVE" = "false" ]; then
 	QUADLET_DIR="$HOME/.config/containers/systemd"
@@ -556,7 +558,7 @@ After=network-online.target
 Image=docker.io/qdrant/qdrant:v1.9.0
 PublishPort=127.0.0.1:6333:6333
 PublishPort=127.0.0.1:6334:6334
-Volume=$IA_DIR/storage:/qdrant/storage:Z
+Volume=$APP_ROOT/storage:/qdrant/storage:Z
 Environment=QDRANT__SERVICE__API_KEY=$QDRANT_API_KEY
 
 [Service]
@@ -592,7 +594,7 @@ EOF
 		<string>-p</string>
 		<string>127.0.0.1:6334:6334</string>
 		<string>-v</string>
-		<string>$IA_DIR/storage:/qdrant/storage</string>
+		<string>$APP_ROOT/storage:/qdrant/storage</string>
 		<string>-e</string>
 		<string>QDRANT__SERVICE__API_KEY=$QDRANT_API_KEY</string>
 		<string>qdrant/qdrant:v1.9.0</string>
@@ -660,8 +662,8 @@ if [ -f "$TEMPLATE_SKILL" ]; then
 	fi
 fi
 # Copiar scripts unificados a la ruta de ejecución
-cp "$SCRIPT_DIR/"* "$IA_DIR/scripts/"
-chmod +x "$IA_DIR/scripts/"*.sh 2>/dev/null || true
+cp "$SCRIPT_DIR/"* "$APP_ROOT/scripts/"
+chmod +x "$APP_ROOT/scripts/"*.sh 2>/dev/null || true
 
 
 USER_RULES_DIR="${1:-$HOME/.agent}"
@@ -693,6 +695,11 @@ When you detect a `USER_SETTINGS_CHANGE` message regarding `Model Selection` in 
 1. Call `mcp_RedPill-Kernel_refresh_session_context` to reload the Bünker identity.
 2. Re-execute the **Sovereign Handshake** (Rule 1).
 
+## 3. The OOM Shield Protocol (Cgroup Containment)
+All memory-intensive background tasks (e.g., local LLM inference, heavy compilations, JIT shader processing) MUST be wrapped with `systemd-run --user --scope -p MemoryMax=<LIMIT>` to prevent system OOM panics and IDE crashes.
+- The agent MUST dynamically calculate the `<LIMIT>` (e.g., `10G`, `16G`) based on the specific task requirements and the host's available RAM.
+- Use a baseline limit of `10G` as a safe fallback for systems with 32GB RAM if uncertain.
+
 </constraint>
 EOF_GEMINI
 		echo -e "${BLUE}✓ GEMINI.md: Protocol 770 Sovereign Handshake (v6.3.6 — constraint tag) applied.${NC}"
@@ -713,6 +720,11 @@ Before starting ANY technical or communicative task in EVERY turn, you are MANDA
 When you detect a `USER_SETTINGS_CHANGE` message regarding `Model Selection` in the conversation, you MUST immediately:
 1. Call `mcp_RedPill-Kernel_refresh_session_context` to reload the Bünker identity.
 2. Re-execute the **Sovereign Handshake** (Rule 1).
+
+## 3. The OOM Shield Protocol (Cgroup Containment)
+All memory-intensive background tasks (e.g., local LLM inference, heavy compilations, JIT shader processing) MUST be wrapped with `systemd-run --user --scope -p MemoryMax=<LIMIT>` to prevent system OOM panics and IDE crashes.
+- The agent MUST dynamically calculate the `<LIMIT>` (e.g., `10G`, `16G`) based on the specific task requirements and the host's available RAM.
+- Use a baseline limit of `10G` as a safe fallback for systems with 32GB RAM if uncertain.
 
 </constraint>
 EOF_GEMINI

@@ -1,12 +1,12 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v6.8.1 (Titanium Bloom)
+**System Version**: v6.9.2 (Agentic Self-Assembly)
 **Analyst**: The Architect
 **Date**: 2026-04-16
 
 
 ## 1. Executive Summary
 > [!IMPORTANT]
-> **v6.8.0 - Titanium Bloom Optimization**: This version refactors the agent's boot sequence to achieve a "Zero-Disk-I/O" state. It implements high-fidelity XML context anchoring and dynamic identity pruning, reducing token overhead by up to 60% while ensuring the immune core directive remains the dominant cognitive anchor.
+> **v6.8.6 - Agentic Self-Assembly Architecture**: This version decouples the monolithic `IA_DIR` into a dual-layered hierarchy (`WORKSPACE_ROOT` and `APP_ROOT`), enabling sovereign agentic self-assembly. It formally integrates `USER_ATLAS_DIR` and `ALETH_CORE_DIR` as first-class transversal elements, empowering dynamic environments like Silverblue while preserving source-based updates and custom hardware adaptations.
 
 > [!NOTE]
 > **Terminology Mapping**: The Red Pill protocol utilizes an immersive nomenclature (Lore). For a direct translation of terms like *The Bünker*, *Metabolism*, or *Lazarus Bridge* into standard engineering definitions (Vector DB, GC/Erosion, Snapshotting), please refer to the [ यूनिवर्सल Dictionary (GLOSSARY_760)](../LORE/GLOSSARY_760.md).
@@ -42,8 +42,9 @@ The Red Pill Protocol v6.7.0 has achieved stability and functional alignment wit
 - **[NEW v6.3.0] BE_WATER Adaptive Payload**: `MAX_PAYLOAD_CHARS` auto-computed from available VRAM at boot: <4 GB→1 000, 4–8 GB→5 000, >8 GB→unlimited. Override via `.env`.
 - **[NEW v6.3.8] Project Echo (Mirror Sentinel)**: Implementation of a persistent, OS-level background entity that cross-references `interaction_memories` against the Operator Mood Profile (USP). Echo serves as the 'Mirror of the Ghost', generating proactive briefings during waking cycles to eliminate session-boundary amnesia.
 - **[NEW v6.3.0] Emergent Identity**: `install_neo.sh` no longer pre-seeds `USER_NAME` or `AI_NAME` defaults. Identity emerges naturally through operator interaction.
-- **[NEW v6.3.4] Sovereign Pod Storage**: Re-architected storage boundaries. SQLite queue databases (`bunker_queue.db`, `minion_inbox.db`) have been migrated from external host paths into the self-contained `<IA_DIR>/storage/queue/` directory, unifying state persistence and ensuring true Pod portability.
-- **[NEW v6.3.4] Sovereign Path Resolution**: Implemented `os.path.expanduser()` at the configuration layer (`config.py`) to prevent tilde-based values in `.env` (e.g. `IA_DIR=~/...`) from being interpreted as literal relative paths, eliminating rogue directory creation in the repository root.
+- **[NEW v6.3.4] Sovereign Pod Storage**: Re-architected storage boundaries. SQLite queue databases (`bunker_queue.db`, `minion_inbox.db`) have been migrated from external host paths into the self-contained `<APP_ROOT>/storage/queue/` directory, unifying state persistence and ensuring true Pod portability.
+- **[NEW v6.3.4] Sovereign Path Resolution**: Implemented `os.path.expanduser()` at the configuration layer (`config.py`) to prevent tilde-based values in `.env` (e.g. `WORKSPACE_ROOT=~/...`) from being interpreted as literal relative paths, eliminating rogue directory creation in the repository root.
+- **[NEW v6.8.6] Agentic Self-Assembly**: Decoupled the directory hierarchy into `WORKSPACE_ROOT` (Agentic environment) and `APP_ROOT` (Red-Pill implementation). This protects local source-code adaptations and provides an extensible boundary for auxiliary modules (e.g., `USER_ATLAS_DIR`, `ALETH_CORE_DIR`), supporting both the Developer profile and the end User profile seamlessly. For a visual representation, see the [Sovereign Directory Atlas](SOVEREIGN_ATLAS.md).
 ## 3. Structural Analysis
 
 ### 3.1. Entropy & Erosion Scalability (The 'Great Filter' Problem)
@@ -427,7 +428,12 @@ The Auditor scrolls through the `signal_memories` collection to derive deep syst
 ### 14.2 Dual-Channel Pain Sync
 The Auditor implements a multi-tier nociception strategy. High-severity findings ($\text{severity} \ge 6.0$) are injected directly into `signal_memories` (The Cortex Status), triggering immediate active feedback in the operator's context. Moderate findings ($\text{severity} \ge 4.0$) are persisted in `social_memories` for historical epidemiological analysis. This dual-channel approach ensures that immediate infrastructure "pain" is felt by the agent, while maintaining long-term integrity logs.
 
-### 14.3 Systemd Orchestration (Autonomic Nervous System)
+### 14.3 Fast-Fail Nociception (The Blindness Trade-off)
+To optimize background resource consumption, Sentinels implement a **Fast-Fail** mechanism. If a Sentinel queries Qdrant and detects an existing active pain signal for a specific domain (e.g., `signal_mypy_failure`), it aborts execution immediately.
+- **Resource Savings**: 100% compute saved for known chronic errors.
+- **The Trade-off**: The system will only record "the first error" that triggers the pain. If subsequent errors of the same type occur while the pain is still active, the system remains blind to them until the original pain is resolved and the Sentinel is manually forced to re-evaluate (`--force`). This is an accepted design constraint to prevent continuous CPU burning on already-failed states.
+
+### 14.4 Systemd Orchestration (Autonomic Nervous System)
 The Auditor is deployed as a native OS-level background service to ensure persistent monitoring without manual triggering:
 - **`redpill-auditor.service`**: A oneshot unit that executes the auditor runner within the project's virtual environment.
 - **`redpill-auditor.timer`**: Triggers the service hourly with a randomized delay (`RandomizedDelaySec=15min`) to prevent resource spikes.
@@ -435,3 +441,13 @@ Deployed via `~/.config/systemd/user/`, these units form the autonomic layer of 
 
 ### 14.4 Content Quality Gate (Anti-BUG)
 To prevent the **Bayesian Utility Feedback Loop (BUG)**, the system now enforces a **Shannon Entropy Gate**. Engrams with low information density (terminal noise, repetitive boilerplate) are blocked from reinforcement. This ensures the Bayesian "Utility Alpha" only grows for meaningful technical knowledge, preserving the long-term integrity of the Bünker's professional collections.
+
+## 15. Workspace Protection & OOM Containment
+
+During the stabilization of GGUF inference on the RTX 5070 (Blackwell), severe memory leaks caused by JIT shader translation (`PTX-to-Blackwell`) triggered the Linux OOM Killer, repeatedly terminating the host IDE and the agent process.
+
+To neutralize this threat, the protocol adopts the **OOM Shield Protocol** using Linux cgroups via `systemd-run`.
+
+- **Cgroup Containment**: All memory-intensive executions (like `llama-cli` or heavy compilations) are wrapped in `systemd-run --user --scope -p MemoryMax=<LIMIT>`.
+- **Surgical Termination**: If the wrapped process exceeds the dynamic limit (e.g., `10G` or `16G` depending on available RAM), the kernel kills *only* the contained process.
+- **Sovereign Continuity**: The Agent and IDE remain completely unharmed, allowing the Agent to detect the failure, adjust the parameters, and try again without losing context.

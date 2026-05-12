@@ -1,0 +1,12 @@
+# Plantilla de Flujo Autónomo para Red-Pill
+# Copia este archivo a tu proyecto como .agent/flows.yaml
+
+flows:
+  custom-check:
+    name: "Criterio de Calidad Personalizado"
+    description: "Flujo específico para este repositorio"
+    steps:
+      - minion: "ruff_linter"
+        on_fail: "stop"
+      - minion: "custom_validator" # Un script local
+        on_fail: "warn"

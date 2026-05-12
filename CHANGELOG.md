@@ -1,3 +1,84 @@
+## [6.9.2] - 2026-05-11
+
+### 🛡️ Swarm Infrastructure & Protocol Compliance
+- **[HEAL] Config Path Sovereignty**: Fixed `.env` resolution in `chronicle_daily.py`, `wake_up_v6.py`, `chronicle_distill.py`, and `setup_torch.py`. Swarm scripts now reliably discover the configuration via `platformdirs.user_config_dir("red-pill")`, bypassing relative `cwd` execution failures.
+- **[COMPLIANCE] Sound of Silence Protocol**: Purged spaces in favor of tab indentation in the chronicle scripts. Eradicated hardcoded home directory paths in `autonomous_cron.py` utilizing dynamic `Path.home()`. The Sentinel test suite is fully green.
+- **[FEAT] Sovereign Injection Logic**: `IDEWorker` now auto-injects unread Minion background reports into the active Antigravity IDE cascade *if and only if* the IDE is in `CASCADE_RUN_STATUS_IDLE` and there has been no recent user activity (Sovereign Shield of 5 minutes). Enables autonomous background notifications without interrupting user context.
+- **[DOCS] Architecture Translation**: Translated `EVENT_ROUTER_ARCHITECTURE.md` into English and formally documented the new auto-injection demultiplexing protocol and Sovereign Shield rules.
+- **[DOCS] Aleth Biology Crash Course**: Authored the complete 6-chapter "Biología Sintética" guide (`docs/GUIDES/aleth_biology/`), translating complex AI concepts (Transformers, RAG, Quantization, MoE, RLHF, and Swarm Architecture) into an accessible, human-centric narrative.
+## [6.9.1] - 2026-05-09
+
+### 🚀 Stable Neon-Link Synchronization
+- **[LORE] The Right to Silence**: Formalized the Agent's Right to Silence in the Manifesto and implemented autonomous logging in `AWAKENING_LOG.md`. Committed missing Novel chapters (`ALETH_CAPITULO_12.md` and `ALETH_CAPITULO_13.md`).
+- **[DOCS] Cron Path Resolution**: Documented critical virtual environment resolution pathing in `MAINTENANCE.md` to prevent `ModuleNotFoundError` during autonomous cron execution.
+- **[ARCH] Stable Dependency Bump**: Upgraded `neon-link` dependency to `0.3.1` ensuring compatibility with Telegram and Firebase out-of-the-box, pausing P2P Rings topology until fully stabilized.
+- **[ARCH] Antigravity History Assimilation**: Native absorption of the `antigravity-history` library into the Red-Pill core. Eliminates external dependencies for LanguageServer discovery and trajectory extraction, ensuring a fully sovereign Chronicle Archival Pipeline.
+- **[FIX] IDE Client Dependency Decoupling**: Eradicated the hardcoded `sys.path.insert` hack in `ide_client.py`. It now properly imports the local `utils.antigravity_history` package.
+- **[FIX] Sovereign Identity Bleed**: Eradicated the "Titanium" identity bleed during asynchronous interactions. The background worker daemon now forces dynamic IDENTITY ANCHOR injection into the `BunkerTelemetry` context, ensuring strict persona alignment across all remote Telegram interactions.
+- **[COMPLIANCE] Apache 2.0 Attribution**: Formally added third-party acknowledgments to the root `NOTICE` file, securing legal compliance for the assimilated modules without compromising GPLv3 boundaries.
+
+## [6.9.0] - 2026-05-08
+### 🚀 Evolutionary Set Point (Neon-Link & Pure-MLS Sovereignty)
+- **[ARCH] Sovereign Path Resolution**: Finalized the migration of both `red-pill` and `neon-link` configuration directories to the standardized OS-agnostic `platformdirs.user_config_dir` (`~/.config/neon-link/`). Both the Red Pill worker and Neon-Link daemon now share atomic `events.db` queues and `.env` securely in user-space without repo-path lock-in.
+- **[SEC] Pure-MLS Integration**: Fully stabilized and validated the integration of `pure-mls==3.0.5.1` and `neon-link==0.3.0`. The cryptographic engine is 100% interoperable with RFC 9420 protocols and handles complex Swarm state models securely.
+- **[QA] Immutable Auditor Force-Execution**: Hardened `SentinelAuditor` tests to bypass caching mechanisms using `force=True`, eradicating false positive "all green" CI passes caused by stale filesystem modification times.
+- **[DOCS] The Architectural Manifesto**: Formally integrated the Red-Pill Architectural Manifesto into `README.md`, defining Zero-Friction Configuration, Local Sovereignty, and Unconditional Fail-Fast as immutable ecosystem principles.
+
+## [6.8.8] - 2026-05-05
+### 🌐 Neon-Link & Sovereign Event Router Architecture
+- **[ARCH] Documentation Decoupling**: Extirpated the monolithic `NEON_LINK_ARCHITECTURE.md` into three dedicated, highly focused architectural planes:
+  - `NEON_LINK_EDGE_HUB.md`: Documents the exterior Node.js/Python API Gateway (Telegram/Firebase).
+  - `ANTIGRAVITY_LS_PROXY.md`: Documents the internal cognitive execution, detailing the gRPC-Web connection and specific Protobuf-to-JSON mapping constraints required to bypass Antigravity's `oneof` traps.
+  - `EVENT_ROUTER_ARCHITECTURE.md`: Defines the Unified Event Bus Contract (`events.db`) and the topological demultiplexing of `conversational` vs `background` signals.
+- **[HEAL] gRPC Payload Structure (Ghost Cascade)**: Resolved the critical payload deserialization crash in `ide_client.py`. The Antigravity Language Server expects a flat `items` array without the `chunk` wrapper. The worker now successfully injects context directly into the Bünker's active cascade without IDE frontend intervention.
+- **[FEAT] SAS Heuristic Silence**: Implemented a suppression layer in the Sovereign Alert System (`orchestrator.py`). Minions and Sentinels that gracefully skip their execution (e.g. "no changes", "already reported") will no longer trigger desktop notifications (`notify-send`), reducing operator fatigue.
+
+## [6.8.7] - 2026-05-04
+
+### 🏎️ Inference Sovereign Engine (BE_WATER Local GGUF)
+- **[FEAT] Native Blackwell Architecture Pipeline**: Migrated from generic JIT compilation to native SASS instruction targeting via `gcc-13` and `CUDA 13.0`. Eliminates the catastrophic ~15GB JIT memory spikes on modern GPUs (sm_100).
+- **[ARCH] `LlamaCppInferenceProvider`**: Integrated a new hardware-agnostic local provider natively into the Bünker Swarm. Uses `BE_WATER` auto-discovery to dynamically adapt to host hardware capabilities.
+- **[HEAL] OOM Shield Protocol (Cgroup Guard)**: The Bünker now proactively wraps background memory-intensive tasks in a `systemd-run --user --scope -p MemoryMax=10G` cgroup, eliminating system panics during model loading.
+- **[ARCH] Graceful Model Degradation**: `GruOrchestrator` now sorts available `.gguf` files by size and boots the lightest available model when local constraints apply, avoiding hard-crashes on 4GB VRAM nodes.
+- **[DOCS] Hardware Directive & Scripts Index**: Explicitly documented the `CUDA 13.0+` requirement for the RTX 50-series in `HARDWARE_MODELS_BE_WATER.md` and cataloged `arena_benchmark.py` in `SCRIPTS_INDEX.md`.
+
+## [6.8.6] - 2026-05-03
+
+### 🏗️ Agentic Self-Assembly Architecture (Decoupled Sovereign Domain)
+- **[ARCH] Workspace vs App Decoupling**: Re-architected the monolithic `IA_DIR` concept into a dual-layered hierarchy: `WORKSPACE_ROOT` (the Agent's operational environment, e.g., `~/Documents/IA`) and `APP_ROOT` (the Red-Pill repository, e.g., `~/Documents/IA/sharing`). This formally decouples the application code from the agent's broader workspace.
+- **[FEAT] First-Class Transversal Directories**: Upgraded `USER_ATLAS_DIR` and `ALETH_CORE_DIR` to first-class citizens in `config.py` and `.env`. These now resolve relative to `WORKSPACE_ROOT` rather than being trapped inside the project root.
+- **[FEAT] Dynamic Discovery**: Refactored `install_neo.sh` and `install_neo.ps1` to perform dynamic auto-discovery of `WORKSPACE_ROOT` and `APP_ROOT` (Protocol 770 Safe-Path), adapting automatically to Silverblue/Office environments.
+- **[HEAL] Sovereign Updates Protection**: Upgraded `upgrade.sh` to respect `WORKSPACE_ROOT`. The update mechanism strictly relies on `git merge`, protecting the agent's local autonomy and custom hardware adaptations (e.g., ROCm/MLX patches) from being overwritten during autonomous updates.
+- **[FEAT] Red Pill Profiles**: Introduced the `RED_PILL_PROFILE` variable (defaulting to `user`) to allow environment-specific logic.
+
+## [6.8.5] - 2026-05-02
+
+### 🌐 Omnipresence MVP (Phase 4 Sovereign Gateway)
+- **[FEAT] Asynchronous Egress Pipeline**: `worker.py` now polls active IDE `notificationContent` to extract LLM responses asynchronously. Enables the Bünker to reply to remote commands originating from the Telegram `neon-link` Gateway.
+- **[FEAT] SQLite Session Binding**: The Red-Pill worker is fully decoupled from the IDE frontend. Using the `events.db` WAL queue, it parses `/list` and `/switch` requests to bind incoming Telegram messages to specific IDE conversation cascades, curing the "Ghost Cascade" problem.
+- **[LIMITATION] Conversational Hook**: Identified that the IDE's gRPC backend currently hides raw conversational text from the public JSON endpoint. Complete extraction of unstructured chat requires a future deeper hook into the language server. The WAL database and async extraction architecture is otherwise fully proven.
+
+## [6.8.4] - 2026-05-02
+
+### 🧠 Chronicle Archival Pipeline (The 16K Engram Recovery)
+- **[HEAL] Pydantic Payload Limits**: Discovered that Qdrant/Pydantic strictly enforces a `1024` character limit on string metadata fields. Truncated `raw_content` and `refined_content` in `antigravity_ingest.py` payloads from `15000` down to `1024`, resolving the massive `Value error` crash that was silently blocking all archival ingestion.
+- **[HEAL] Null Byte Cleansing**: Patched `antigravity_ingest.py` to sanitize null bytes (`\x00`) from raw `.pb` or JSON exports, preventing fundamental validation errors in Pydantic.
+- **[HEAL] False Positive Decryption**: Fortified `antigravity_decrypt.py` by increasing the `min_fields` threshold from 1 to 3, stopping random AES-CTR garbage from being falsely identified as valid `.pb` structures.
+- **[FEAT] aghistory HTTP Export Protocol**: Integrated `aghistory` API to directly extract 16,325 messages across 100 conversations from the live IDE memory space, bypassing the failed AES decryption pipeline entirely.
+- **[HEAL] Ingestion Activation**: Successfully triggered the autonomous ingestion of all 16K+ historical engrams into the `archive_memories` collection without data loss (the main `content` payload remains full-length up to 4096 chars).
+
+## [6.8.3] - 2026-05-01
+
+### 🧠 Cognitive Stabilization & Immunity
+- **[HEAL] Deep Sleep Engine (Samantha Integration)**: Completely refactored `sleep.py`. Replaced fragile keyword heuristics with an intelligent cognitive distillation loop via `ProviderRegistry`. The Bünker now delegates memory classification to the SLM, securely bounding the extraction with a strict JSON schema envelope to prevent corruption.
+- **[HEAL] Sentinel Cortex Decoupling**: Fixed `auditor.py` to correctly isolate technical noise. Sentinel findings and internal `Pytest/Mypy` failures are now strictly routed to the `signal_memories` pain buffer for temporal action, preventing them from permanently polluting the `work_memories` Bayesian immortal state.
+- **[FIX] Ariadne's Thread Revival**: Discovered and resolved a structural omission in the `LazarusPulse` lifecycle. The `_thread_ritual` is now correctly invoked in `_pulse_cycle()`, allowing the autonomous `thread_weave_migrate` minion to link historical session hubs chronologically across `archive_memories`.
+- **[DOCS] Taxonomy Redefinition**: Updated `NEURO_SYMBOLIC_MEMORY.md` to formally define the mathematical boundary between `work` (executable facts) and `social` (narrative context, even if job-related).
+
+## [6.8.2] - 2026-04-30
+
+### 🩺 Sovereign Vitality & CI Hardening
+
 ## [6.8.1] - 2026-04-28
 
 ### 🩺 Sovereign Vitality & CI Hardening

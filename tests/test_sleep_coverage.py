@@ -1,4 +1,3 @@
-import json
 from unittest.mock import MagicMock, patch
 
 from red_pill.metabolism.sleep import distill_engram, perform_sleep_cycle, synthesize_hub
@@ -6,43 +5,26 @@ from red_pill.metabolism.sleep import distill_engram, perform_sleep_cycle, synth
 
 def test_distill_engram_markdown_cleaning():
 	"""Test cleaning of markdown fences from LLM response."""
-	mock_resp = MagicMock()
-	mock_resp.read.return_value = json.dumps(
-		{"choices": [{"message": {"content": '```json\n{"summary": "test", "emotion": "joy", "intensity": 0.9}\n```'}}]}
-	).encode()
-	mock_resp.__enter__.return_value = mock_resp
-	mock_resp.__exit__.return_value = False
-	mock_opener = MagicMock()
-	mock_opener.open.return_value = mock_resp
+	mock_provider = MagicMock()
+	mock_provider.generate.return_value = '```json\n{"summary": "test", "emotion": "joy", "intensity": 0.9}\n```'
 
-	with (
-		patch("red_pill.metabolism.sleep.os.path.exists", return_value=False),
-		patch("red_pill.metabolism.sleep.urllib.request.build_opener", return_value=mock_opener),
-	):
+	with patch("red_pill.core.providers.ProviderRegistry.get_inference_provider", return_value=mock_provider):
 		result = distill_engram("raw")
 	assert result["summary"] == "test"
 	assert result["emotion"] == "joy"
 
 	# Second call: backtick-only fence
-	mock_resp.read.return_value = json.dumps(
-		{"choices": [{"message": {"content": '```\n{"summary": "test2", "emotion": "sadness", "intensity": 0.1}\n```'}}]}
-	).encode()
-	with (
-		patch("red_pill.metabolism.sleep.os.path.exists", return_value=False),
-		patch("red_pill.metabolism.sleep.urllib.request.build_opener", return_value=mock_opener),
-	):
+	mock_provider.generate.return_value = '```\n{"summary": "test2", "emotion": "sadness", "intensity": 0.1}\n```'
+	with patch("red_pill.core.providers.ProviderRegistry.get_inference_provider", return_value=mock_provider):
 		result = distill_engram("raw")
 	assert result["summary"] == "test2"
 
 
 def test_distill_engram_error_path():
 	"""Test fallback on HTTP error or timeout."""
-	mock_opener = MagicMock()
-	mock_opener.open.side_effect = Exception("Timeout")
-	with (
-		patch("red_pill.metabolism.sleep.os.path.exists", return_value=False),
-		patch("red_pill.metabolism.sleep.urllib.request.build_opener", return_value=mock_opener),
-	):
+	mock_provider = MagicMock()
+	mock_provider.generate.side_effect = Exception("Timeout")
+	with patch("red_pill.core.providers.ProviderRegistry.get_inference_provider", return_value=mock_provider):
 		result = distill_engram("raw content that is quite long " * 10)
 		assert "raw content" in result["summary"]
 		assert result["emotion"] == "neutral"

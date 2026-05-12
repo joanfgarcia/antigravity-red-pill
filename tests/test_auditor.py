@@ -7,7 +7,7 @@ from red_pill.metabolism.auditor import SentinelAuditor
 
 @pytest.fixture
 def auditor():
-	return SentinelAuditor()
+	return SentinelAuditor(force=True)
 
 
 def test_audit_repo_not_found(auditor):

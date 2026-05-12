@@ -10,7 +10,7 @@ from typing import Any, Dict, Optional
 # Add src to pythonpath so it can run independently
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from red_pill.config import IA_DIR, get_config
+from red_pill.config import get_config
 from red_pill.core.inbox import MinionInbox
 from red_pill.core.queue_manager import MemoryQueueManager
 from red_pill.telemetry import sentinel
@@ -40,12 +40,12 @@ class BunkerTelemetry:
 			self.queue_mgr: Optional[MemoryQueueManager] = MemoryQueueManager()
 			if self.queue_mgr:
 				q_path = getattr(self.queue_mgr, "db_path", None)
-				self.db_path = Path(q_path) if q_path else Path(IA_DIR) / "storage" / "memory_queue.db"
+				self.db_path = Path(q_path) if q_path else Path(cfg.APP_ROOT) / "storage" / "queue" / "bunker_queue.db"
 				self.wal_path = Path(str(self.db_path) + "-wal")
 		except Exception as e:
 			logger.error(f"Failed to init MemoryQueueManager: {e}")
 			self.queue_mgr = None
-			self.db_path = Path(IA_DIR) / "storage" / "memory_queue.db"
+			self.db_path = Path(cfg.APP_ROOT) / "storage" / "queue" / "bunker_queue.db"
 			self.wal_path = Path(str(self.db_path) + "-wal")
 
 	def shutdown(self, sig, frame):
@@ -120,7 +120,7 @@ You are actively receiving this telemetry via IDE rule injection (`00_bunker_tel
 			self._atomic_write(ag_file, md_content)
 
 			# 2. Cursor IDE Rule (.mdc)
-			cursor_dir = Path(IA_DIR) / ".cursor" / "rules"
+			cursor_dir = Path(cfg.WORKSPACE_ROOT) / ".cursor" / "rules"
 			try:
 				cursor_dir.mkdir(parents=True, exist_ok=True)
 				# Prefix .mdc for Cursor generic context
@@ -132,7 +132,7 @@ You are actively receiving this telemetry via IDE rule injection (`00_bunker_tel
 				pass
 
 			# 3. Generic Fallback in root
-			fb_file = Path(IA_DIR) / ".bunker_telemetry.md"
+			fb_file = Path(cfg.WORKSPACE_ROOT) / ".bunker_telemetry.md"
 			self._atomic_write(fb_file, md_content)
 
 		except Exception as e:

@@ -320,7 +320,7 @@ def decrypt_aes_gcm(data: bytes, key: bytes, skip_bytes: int = 0) -> Optional[by
 		return None
 
 
-def is_valid_protobuf(data: bytes, min_fields: int = 1) -> bool:
+def is_valid_protobuf(data: bytes, min_fields: int = 3) -> bool:
 	"""Check if data looks like valid protobuf."""
 	try:
 		fields = parse_protobuf_wire_format(data[: min(5000, len(data))])
@@ -342,9 +342,9 @@ def decrypt_file(file_path: str, key: bytes, verbose: bool = False) -> Optional[
 
 	# List of decryption methods to try (in order of likelihood)
 	decrypt_methods = [
+		("AES-GCM", decrypt_aes_gcm),
 		("AES-CTR", decrypt_aes_ctr),
 		("AES-CBC", decrypt_aes_cbc),
-		("AES-GCM", decrypt_aes_gcm),
 	]
 
 	# Try different encryption methods

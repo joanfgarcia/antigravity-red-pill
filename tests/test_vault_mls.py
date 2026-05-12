@@ -15,7 +15,7 @@ def temp_ia_dir():
 		with patch.dict(
 			os.environ,
 			{
-				"ANTIGRAVITY_IA_DIR": tmp_dir,
+				"WORKSPACE_ROOT": tmp_dir,
 				"CLOUD_VAULT_ENABLED": "False",  # Disable real API calls
 				"CLOUD_VAULT_GPG_PASSPHRASE": "test_passphrase_770",
 			},

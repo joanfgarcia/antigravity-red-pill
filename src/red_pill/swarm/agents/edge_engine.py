@@ -29,7 +29,7 @@ class EdgeEngine:
 		self._llm_loaded = False
 		self._n_gpu_layers = n_gpu_layers
 
-		ia_dir = os.getenv("ANTIGRAVITY_IA_DIR")
+		ia_dir = os.getenv("WORKSPACE_ROOT")
 		if ia_dir:
 			model_dir = os.path.join(ia_dir, "models")
 		else:

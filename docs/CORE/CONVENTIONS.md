@@ -97,7 +97,6 @@ docs/CORE/          ✅
 docs/TECHNICAL/     ✅
 docs/GUIDES/        ✅
 docs/LORE/          ✅
-docs/PLANS/         ✅
 docs/CERTIFICATION/ ✅   ← not docs/certification/
 docs/COMMUNITY/     ✅
 ```

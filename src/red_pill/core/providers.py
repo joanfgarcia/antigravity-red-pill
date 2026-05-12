@@ -189,6 +189,8 @@ class BitNetInferenceProvider(BaseInferenceProvider):
 			# Use a short timeout for humble hardware to prevent hangs
 			result = subprocess.run(cmd, capture_output=True, text=True, timeout=60, env=env)
 			output = result.stdout
+			if result.stderr:
+				print(f"DEBUG (stderr):\n{result.stderr}")
 
 			# Parsing logic from experimental runner
 			if prompt in output:
@@ -207,4 +209,114 @@ class BitNetInferenceProvider(BaseInferenceProvider):
 
 	def stream(self, prompt: str, **kwargs) -> Iterator[str]:
 		# BitNet subprocess doesn't support easy streaming yet in this wrapper
+		yield self.generate(prompt, **kwargs)
+
+
+class LlamaCppInferenceProvider(BaseInferenceProvider):
+	"""
+	Provider for local GGUF inference using llama-cli directly.
+	Implements BE_WATER: auto-detects CUDA VRAM, systemd-run for OOM shielding,
+	and gracefully degrades to CPU if necessary.
+	"""
+
+	def __init__(self, runner_path: str, model_path: str, use_oom_shield: bool = False, memory_max: str = "10G", ngl: int = 0):
+		self.runner_path = runner_path
+		self.model_path = model_path
+		self.use_oom_shield = use_oom_shield
+		self.memory_max = memory_max
+		self.ngl = ngl
+
+	@classmethod
+	def create_be_water(cls, model_name: str) -> Optional["LlamaCppInferenceProvider"]:
+		import os
+		import shutil
+
+		# 1. Locate runner
+		workspace = os.getenv("WORKSPACE_ROOT", os.path.expanduser("~/Documents/IA"))
+		runner_path = os.path.join(workspace, "sharing", "3rdparty", "llama_official", "build", "bin", "llama-cli")
+		if not os.path.exists(runner_path):
+			runner_path_opt = shutil.which("llama-cli")
+			if not runner_path_opt:
+				return None
+			runner_path = runner_path_opt
+
+		# 2. Locate model
+		model_path = os.path.join(workspace, "models", "gguf", model_name)
+		if not os.path.exists(model_path):
+			return None
+
+		# 3. Detect VRAM & NGL
+		ngl = 0
+		try:
+			import torch
+
+			if torch.cuda.is_available():
+				vram_gb = torch.cuda.get_device_properties(0).total_memory / 1e9
+				if vram_gb > 3.0:
+					ngl = 99
+		except Exception:
+			pass
+
+		# 4. Detect OOM Shield capabilities
+		use_oom_shield = shutil.which("systemd-run") is not None
+		memory_max = "10G"  # Sensible default for 32GB systems, could be dynamic
+
+		return cls(runner_path=runner_path, model_path=model_path, use_oom_shield=use_oom_shield, memory_max=memory_max, ngl=ngl)
+
+	def generate(self, prompt: str, **kwargs) -> str:
+		import os
+		import subprocess
+
+		max_tokens = kwargs.get("max_tokens", 256)
+		temp = kwargs.get("temperature", 0.1)
+		ctx_size = kwargs.get("ctx_size", 2048)
+		chat_prompt = f"<|user|>\n{prompt}\n<|assistant|>\n"
+
+		cmd = []
+		if self.use_oom_shield:
+			cmd.extend(["systemd-run", "--user", "--scope", "-p", f"MemoryMax={self.memory_max}"])
+
+		cmd.extend(
+			[
+				str(self.runner_path),
+				"-m",
+				str(self.model_path),
+				"-p",
+				chat_prompt,
+				"-n",
+				str(max_tokens),
+				"-c",
+				str(ctx_size),
+				"-ngl",
+				str(self.ngl),
+				"--temp",
+				str(temp),
+				"--simple-io",  # Prevent interactive hang
+			]
+		)
+
+		env = os.environ.copy()
+		# Clean LD_LIBRARY_PATH for Vulkan/Native clashes
+		if "LD_LIBRARY_PATH" in env:
+			paths = env["LD_LIBRARY_PATH"].split(":")
+			clean_paths = [p for p in paths if "BitNet" not in p and "ollama" not in p]
+			env["LD_LIBRARY_PATH"] = ":".join(clean_paths)
+
+		try:
+			result = subprocess.run(cmd, capture_output=True, text=True, timeout=1200, env=env)
+			output = result.stdout
+
+			if "<|assistant|>" in output:
+				return output.split("<|assistant|>")[-1].strip()
+			elif "Assistant:" in output:
+				return output.split("Assistant:")[-1].strip()
+
+			lines = [line.strip() for line in output.split("\n") if line.strip()]
+			return lines[-1] if lines else ""
+		except subprocess.TimeoutExpired:
+			return "Error: Local Inference timed out."
+		except Exception as e:
+			return f"Error: Local subprocess failed: {e}"
+
+	def stream(self, prompt: str, **kwargs) -> Iterator[str]:
 		yield self.generate(prompt, **kwargs)

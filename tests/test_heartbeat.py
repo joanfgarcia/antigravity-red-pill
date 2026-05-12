@@ -110,22 +110,6 @@ async def test_consolidation_ritual_failure(pulse):
 
 
 @pytest.mark.asyncio
-async def test_swarm_ritual_with_messages(pulse):
-	"""Covers heartbeat.py lines 186-190 — swarm with incoming messages."""
-	mock_messages = [{"sender": "Nova", "message": "Hello", "intent": "gossip"}]
-	with patch("red_pill.heartbeat.SwarmMessagingSkill"):
-		with patch("asyncio.to_thread", AsyncMock(side_effect=[mock_messages, None])):
-			await pulse._swarm_ritual()
-
-
-@pytest.mark.asyncio
-async def test_swarm_ritual_failure(pulse):
-	"""Covers swarm exception path."""
-	with patch("red_pill.heartbeat.SwarmMessagingSkill", side_effect=Exception("Swarm init fail")):
-		await pulse._swarm_ritual()
-
-
-@pytest.mark.asyncio
 async def test_lazarus_ritual_disabled(pulse):
 	"""Covers heartbeat.py line 211 — LAZARUS_SYNC_ENABLED=False."""
 	with patch("red_pill.heartbeat.cfg") as mock_cfg:

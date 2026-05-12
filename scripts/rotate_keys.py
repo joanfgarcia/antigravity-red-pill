@@ -4,6 +4,8 @@ import os
 import subprocess
 import sys
 
+import platformdirs
+
 # Ensure we can import red_pill
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../")))
 
@@ -16,7 +18,7 @@ def generate_key():
 
 
 def update_env_file(new_key):
-	env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.env"))
+	env_path = os.path.join(platformdirs.user_config_dir("red-pill"), ".env")
 	if not os.path.exists(env_path):
 		logger.error(f".env file not found at {env_path}")
 		return False

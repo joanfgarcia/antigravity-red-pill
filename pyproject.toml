@@ -1,6 +1,6 @@
 [project]
 name = "red-pill"
-version = "6.8.1"
+version = "6.9.2"
 description = "B760-Adaptive Memory Protocol for Sovereign Agents"
 readme = "README.md"
 license = "GPL-3.0-only"
@@ -29,17 +29,19 @@ dependencies = [
     "google-auth-httplib2>=0.2.0",
     "google-auth-oauthlib>=1.2.0",
     "cryptography>=46.0.7",
-    "firebase-admin>=6.4.0",
     "pyjwt>=2.12.0",
     "watchfiles>=1.1.1",
     "fastapi>=0.110.0",
     "uvicorn>=0.27.0",
-    "pure-mls==3.0.4.0",
+    "pure-mls==3.0.5.1",
+    "neon-link>=0.3.1",
     "celery>=5.6.3",
     "redis>=7.4.0",
     "pluggy>=1.6.0",
     "pillow>=12.2.0",
     "python-multipart>=0.0.26",
+    "httpx>=0.28.1",
+    "urllib3>=2.7.0",
 ]
 
 [project.scripts]
@@ -88,7 +90,7 @@ fix = false
 
 [tool.ruff]
 line-length = 150
-exclude = ["3rdparty", ".venv", "build"]
+exclude = ["3rdparty", ".venv", "build", "scratch"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
@@ -159,6 +161,7 @@ omit = [
     "*/swarm/agents/edge_engine.py",
     "*/swarm/factory.py",          # Requires live minion registry
     "*/swarm/routing.py",          # Requires live swarm topology
+    "*/swarm/autonomous_cron.py",  # Requires live Neon-Link inbox and OS log polling
 
     # --- Metabolism (tested separately, requires Qdrant) ---
     "*/metabolism/sleep.py",
@@ -196,12 +199,14 @@ omit = [
     "*/plugins/cloud_sync/plugin.py",
     "*/plugins/gmail_watcher/plugin.py",
     "*/plugins/trinity_homeostasis/plugin.py",
+    "*/plugins/antigravity_ide/*.py",
     "*/interceptors/04_mystique.py",
     "*/interceptors/05_cognitive_router.py",
     "*/interceptors/06_tone_adapter.py",
     "*/core/plugin_engine.py",
     "*/core/model_registry.py",
     "*/swarm/agents/echo.py",
+    "*/utils/antigravity_history/*.py", # Antigravity LS communication (needs live LS daemon)
 ]
 
 [tool.coverage.report]

@@ -466,49 +466,6 @@ class TestMCPAdditionalTools:
 			result = await handle_call_tool("refresh_session_context", {})
 			assert "session refreshed" in result[0].text
 
-	async def test_swarm_send_message(self):
-		import os
-
-		from red_pill.mcp_server import handle_call_tool
-
-		old_secret = os.getenv("SWARM_SHARED_SECRET")
-		os.environ["SWARM_SHARED_SECRET"] = "supersecret"
-		try:
-			with patch("red_pill.mcp_server.SwarmMessagingSkill") as mock_skill:
-				mock_skill.return_value.execute_send.return_value = "sent"
-				result = await handle_call_tool("swarm_send_message", {"target_alias": "t", "message": "m"})
-				assert "sent" in result[0].text
-		finally:
-			if old_secret is not None:
-				os.environ["SWARM_SHARED_SECRET"] = old_secret
-			else:
-				if "SWARM_SHARED_SECRET" in os.environ:
-					del os.environ["SWARM_SHARED_SECRET"]
-
-	async def test_swarm_subscribe(self):
-		from red_pill.mcp_server import handle_call_tool
-
-		with patch("red_pill.mcp_server.SwarmSubscribeSkill") as mock_skill:
-			mock_skill.return_value.execute.return_value = "subscribed"
-			result = await handle_call_tool("swarm_subscribe", {"community_alias": "c", "db_url": "u", "service_acc_json_path": "p"})
-			assert "subscribed" in result[0].text
-
-	async def test_swarm_check_mailbox(self):
-		import os
-
-		from red_pill.mcp_server import handle_call_tool
-
-		old_secret = os.getenv("SWARM_SHARED_SECRET")
-		os.environ["SWARM_SHARED_SECRET"] = "supersecret"
-		try:
-			result = await handle_call_tool("swarm_check_mailbox", {"community_alias": "c"})
-			assert "Scanning Mailbox" in result[0].text
-		finally:
-			if old_secret is not None:
-				os.environ["SWARM_SHARED_SECRET"] = old_secret
-			else:
-				del os.environ["SWARM_SHARED_SECRET"]
-
 
 class TestInterceptorRp:
 	"""Silent Scribe Relay: tests for interceptor_rp auto-save behavior."""

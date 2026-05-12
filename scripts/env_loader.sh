@@ -1,15 +1,15 @@
 #!/bin/bash
 set -euo pipefail
 
-if [ -z "${IA_DIR:-}" ]; then
-	if [ -n "${ANTIGRAVITY_IA_DIR:-}" ]; then
-		export IA_DIR="$ANTIGRAVITY_IA_DIR"
-	else
-		export IA_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-	fi
+if [ -z "${APP_ROOT:-}" ]; then
+	export APP_ROOT="$(dirname "$(dirname "$(readlink -f "$0")")")"
 fi
 
 # Load .env if it exists
-if [ -f "$IA_DIR/.env" ]; then
-	export $(grep -v '^#' "$IA_DIR/.env" | xargs)
+ENV_FILE="$HOME/.config/red-pill/.env"
+if [ -f "$ENV_FILE" ]; then
+	export $(grep -v '^#' "$ENV_FILE" | xargs)
 fi
+
+# Backward compatibility for v6.8.7 bash scripts
+export IA_DIR="${WORKSPACE_ROOT:-$APP_ROOT}"

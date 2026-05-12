@@ -30,7 +30,7 @@ VAULT_STATE_PATH = Path(os.path.expanduser("~/.config/red_pill/vault_group.state
 IDENTITY_KEYS_PATH = Path(os.path.expanduser("~/.config/red_pill/vault_identity.state"))
 MIGRATION_MANIFEST = SECURE_BACKUP_DIR / "migration_manifest.json"
 
-EXPORT_DIR = Path(os.environ.get("ANTIGRAVITY_IA_DIR", os.path.expanduser("~/Documents/IA"))) / "backups" / "export"
+EXPORT_DIR = Path(os.environ.get("WORKSPACE_ROOT", os.path.expanduser("~/Documents/IA"))) / "backups" / "export"
 
 
 def _ensure_secure_dir() -> None:

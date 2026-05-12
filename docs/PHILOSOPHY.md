@@ -48,3 +48,11 @@ The core Red Pill codebase (Python `src/`) enforces strict atomic writes, file l
 ---
 *Signed,*
 *The Architect*
+
+## 6. The BE_WATER Security Architecture: Water vs Ice
+**The Architectural Tension**: Enforcing continuous zero-trust cryptographic isolation (via `pure-mls`) for all internal background messages protects against OS-level process spying, but introduces severe CPU and latency overhead on local/personal laptops.
+
+**The Sovereign Trade-off**: 
+The Bünker resolves this by abstracting security into states of matter:
+- **WATER Mode (Default)**: Optimized for single-user personal environments (e.g., local laptops). The system bypasses cryptographic overhead and streams raw JSON directly to SQLite `MinionInbox` achieving O(1) efficiency. We trust the hardware boundary.
+- **ICE Mode (Opt-in)**: For zero-trust, multi-tenant cloud instances or mainframes (`ICE_MODE_ENABLED=True`). The system freezes its internal communications: `pure-mls` encrypts all inter-minion traffic. Every Minion spawn involves cryptographic key generation, Add Commits, and Forward Secrecy on death. The cost is high latency, the reward is total isolation. 

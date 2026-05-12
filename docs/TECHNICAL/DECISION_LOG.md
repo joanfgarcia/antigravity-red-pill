@@ -245,3 +245,64 @@ On fresh Silverblue installations, the `interaction_memories` collection was mis
 
 ### 3. Rationale
 Interaction data is the "Short-term Memory" of the AI. Elevating it to a genesis-level requirement ensures seamless persistence from the first turn, providing auditability and preventing "contextual blackouts" during deployment.
+
+---
+
+## [AD-008] Dual-Sentinel Nociception (The Fast-Fail Trade-off)
+**Date**: 2026-05-05  
+**Context**: Phase O.9 - Project MULTITUDE (Sovereign Alert Architecture)  
+**Status**: ACCEPTED & IMPLEMENTED  
+
+### 1. The Problem
+Chronically failing infrastructure tests (e.g. Mypy type checks) execute heavily during background audits. If a system is in a broken state, running these checks repeatedly wastes massive CPU and IO resources on reporting an error that the system is already aware of.
+
+### 2. The Decision
+Implement a **Fast-Fail** mechanism for Sentinels. Before running an audit, the Sentinel queries Qdrant for an existing active pain signal corresponding to its domain (`has_signal("signal_mypy_failure")`). If the signal exists, execution aborts immediately.
+
+### 3. The Trade-off
+This introduces **Temporal Blindness**. The system correctly captures "the first error" that triggers the pain signal, but remains entirely blind to subsequent errors of the same type until the original pain is resolved and a Force-Heal (`--force`) is executed. We explicitly accept this blindness constraint because the priority of the Immune System is nociception (feeling the pain) rather than complete cataloging of every wound instance.
+
+### 4. Implementation
+- `MemoryManager.has_signal()` added for O(1) checks without logging side-effects.
+- `SentinelAuditor` intercepts and aborts if `Fast-Fail` triggers.
+- `--force` flag enables **Force-Heal** mode, ignoring the check and evaporating the signals automatically if the audit passes cleanly.
+
+---
+
+## [AD-009] The Sovereign Cryptographic Vault (MLS Stateful Secrets)
+**Date**: 2026-05-05  
+**Context**: Phase O.9 - Ecosystem Security & Secrets Management  
+**Status**: ACCEPTED (DRAFTED FOR IMPLEMENTATION)  
+
+### 1. The Problem
+Ecosystem secrets (Firebase JSONs, Telegram Tokens) are currently stored in plaintext `.env` files or loose JSON files. While `.gitignore` protects the remote repository, local storage remains vulnerable to cross-process memory dumps, accidental commits, or physical access compromises.
+
+### 2. The Decision
+Standard industry tools (Mozilla SOPS, HashiCorp Vault) are explicitly rejected to preserve the "Zero External Dependencies" and "Air-Gapped Sovereignty" philosophy of the Red-Pill ecosystem. Instead, we will standardize the use of a **Static `pure-mls` v3.0 Vault Group** to encrypt all ecosystem secrets, extending the exact same cryptographic primitive already validated for Identity Export (`lean_soul_kit`).
+
+### 3. The Trade-off (State Fragility vs Sovereignty)
+An external auditor would correctly flag this as a "Misuse of Protocol": MLS (Messaging Layer Security) is a continuous ratcheting protocol for E2E group chats, not a stateless symmetric vault. It relies on a local state database (`vault.db`). If this state is corrupted during a write operation, the ciphertext is permanently unrecoverable (unlike stateless tools like SOPS). 
+
+We explicitly accept this architectural "Red Flag" because:
+1. **Usage Profile**: Reads constitute 99.9% of operations (Zero corruption risk). Writes are exceedingly rare.
+2. **Mitigation**: All writes (Vault Edits) will be wrapped in strict atomic backups (`cp vault.db vault.db.bak`) and SQLite WAL mode.
+3. **Swarm Scalability**: It guarantees that secrets can be transmitted natively and securely to remote swarm nodes (e.g., Neon-Link running on a Raspberry Pi) by simply allowing the node to join the existing MLS group over the network.
+
+## ADR-005: Sovereign Native IDE Inference (Gemini Pro Bridge)
+
+**Date**: 2026-05-05
+**Status**: Implemented
+**Context**:
+The system needed a bidirectional chat bridge between Telegram and the IDE's core AI model (Gemini Pro) to allow the user to perform complex codebase operations securely via remote interactions. Initial attempts to inject messages directly to `ls_core` using the `SendUserCascadeMessage` RPC were incomplete because the payload omitted critical configuration objects, causing the `ls_core` state to remain `CASCADE_RUN_STATUS_IDLE` indefinitely.
+
+**Decision**:
+We reverse-engineered the `lbjlaq/Antigravity-Tools-LS` project (an open-source Rust proxy that wraps `ls_core`) to extract the exact gRPC payload schemas. 
+
+We discovered that:
+1. `SendUserCascadeMessageRequest` requires the `cascade_config` payload specifying the `requested_model` (e.g., `model_id=1` for Gemini Pro / `MODEL_ALIAS_CASCADE_BASE`).
+2. The asynchronous stream API is brittle; we adopted the "Strategy B" (Polling fallback) found in the Rust source code. We use `GetCascadeTrajectory` to poll the trajectory state until it returns `CASCADE_RUN_STATUS_IDLE`.
+3. The generated model response is stored inside a trajectory step with `type: 15` (`CORTEX_STEP_TYPE_PLANNER_RESPONSE`).
+
+**Consequences**:
+- **Sovereignty achieved**: No external binaries or Rust compilation required. The entire bridge runs in `redpill-worker.service` native Python.
+- **Reference**: Thanks to the [lbjlaq/Antigravity-Tools-LS](https://github.com/lbjlaq/Antigravity-Tools-LS) repository for the open-source protocol mappings which made this native integration possible.

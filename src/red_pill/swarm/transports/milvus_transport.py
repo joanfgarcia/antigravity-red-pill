@@ -8,12 +8,11 @@ except ImportError:
 
 import red_pill.config as cfg
 from red_pill.hive import HiveMind
-from red_pill.swarm.transport import SwarmTransport
 
 logger = logging.getLogger(__name__)
 
 
-class MilvusTransport(SwarmTransport):
+class MilvusTransport:
 	"""
 	Milvus-based transport for Swarm Messaging.
 	Acts as the 'Consensus Ledger' and 'Local Dock'.

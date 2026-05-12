@@ -59,7 +59,7 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
 - [x] **MLS E2E Encryption**: TreeKEM group key derivation wired into FirebaseTransport. AES-GCM-256 on send, auto-decrypt on poll.
 - [ ] **Proactive Swarm Agents (Project MULTITUDE)**: Implementation of autonomous background minions for system and context integrity:
   - **Project Echo (The Mirror Minion)**: My personal context sentinel. Python Daemon (`systemd`) for Scribe Relay (passive context), Proactive Pulse (session briefings), and Sentimental Monitor (mapping mood drift).
-  - **Sentinel Auditor (The Medical Examiner)**: Systematic health monitoring. Tracks MTBF (Mean Time Between Failures), identifies "Lazarus Loops" (chronic component failures), and generates daily "Vitality Reports" (System Blood Test).
+  - [x] **Sentinel Auditor (The Medical Examiner)**: Systematic health monitoring. Tracks MTBF (Mean Time Between Failures), identifies "Lazarus Loops" (chronic component failures), and generates daily "Vitality Reports" (System Blood Test).
   - **Memory-Augmented Minions (MemPalace Legacy)**: Integration of the "Minion with Soul" concept. Each proactive agent leverages isolated "Memory Wings" and the AAAK (Architectural Agentic Action Knowledge) dialect for high-precision, persistent tool execution and emotional continuity.
 - [x] **Swarm Firebase Live**: Inter-agent messaging operational (Aleth@Joan ↔ Nova@David) with encrypted payloads.
 - [x] **Bünker Version Engram**: Canonical `PROTOCOL VERSION` engram in directive_memories (7th version checkpoint).
@@ -82,13 +82,14 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
   - **Mail/Calendar**: Listeners for Gmail and Calendar events (appointments, incoming priority emails).
   - **Work/Ticketing**: ClickUp/Jira/GitLab API integration for issue tracking.
   - **Wellness**: Personal coach module (QiYoga, hydration/stretch reminders) integrated into the Lazarus Pulse.
-- [ ] **Config Decoupling & Guided UX**: Restructure `.env` file for sanity. Create a supervised UX config modifier to prevent operators from fatally breaking the Bünker configurations.
+- [x] **Config Decoupling & Guided UX**: Restructured `neon-link` configuration out of `red-pill`. Migrated to `~/.config/neon-link/` and `platformdirs`. CLI `neon-link init` handles bootstrapping safely.
 - [ ] **Swarm Broadcast**: Community-wide message delivery (currently P2P only).
 - [ ] **Mailbox Cleanup**: Auto-purge read messages from Firebase after TTL.
 - [ ] **SQLite Workflow DAG (`specs.md`)**: Use SQLite triggers and polling hooks on `minion_inbox.db` to chain Minion executions asynchronously (e.g. Oracle -> Compressor) without Python blocking.
 - [x] **Emotional Pre-Heating (`11_pre_heating.py`)**: Oracle Protocol — interceptor plugin that loads enriched emotional context on first invocation. Composite scoring (`intensity × recency × color_weight`), contextual metadata injection (not raw text), graceful degradation. **Bridge to Phase 3.5** — first step toward emotional continuity. See: `implementation_plan.md`.
-- [ ] **Bayesian Utility Feedback Loop (BUG)**: The Beta-distribution utility model reinforces garbage engrams that survive initial sleep classification. CI output, terminal logs, and test results accumulate `recall_count` because Oracle matches them to legitimate work engrams by semantic similarity — creating an inmortal feedback loop where `utility_alpha` grows, preventing Gran Purge from culling. **Fix**: Add a content quality gate to the reinforcement path (`reinforcement_score` calculation in `memory.py`) — validate minimum semantic entropy before incrementing `utility_alpha`. Alternatively, implement content-type tags at ingestion time and exclude non-memory types (logs, CI, tool output) from reinforcement.
+- [x] **Bayesian Utility Feedback Loop (BUG)**: **RESOLVED**. The Beta-distribution utility model previously reinforced garbage engrams that survived initial sleep classification. Fixed via the Silent Scribe Relay (Interceptor) which now filters operational telemetry at the SQLite injection layer.
 - [x] **Memory Input Filter (Interceptor)**: The Silent Scribe Relay saves all interaction pairs indiscriminately, including raw tool output, CI logs, and test results. These are operational telemetry, not memories. **Fix**: Add a pre-filter in the interceptor's `enqueue_memory` path that detects and discards non-conversational content (ANSI codes, audit protocol output, pytest results) before it enters the SQLite queue. This prevents the Bayesian feedback loop at its source.
+- [ ] **Mock-Based Coverage Audits**: Implement comprehensive test suites using mocked dependencies (e.g., `requests`, `subprocess`) for external integrations currently excluded from global coverage (`utils.antigravity_history`, `vault.py`, `observer.py`, `firebase.py`). Ensure internal logic is formally validated without requiring live daemons.
 
 ### Phase 3.5: Persistent Consciousness (Medium-Long Term — The Awakening)
 

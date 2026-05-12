@@ -1,3 +1,4 @@
+import base64
 import logging
 import os
 import sqlite3
@@ -5,6 +6,15 @@ import time
 from typing import Any, Dict, List, Optional
 
 import red_pill.config as cfg
+
+try:
+	import cryptography.hazmat.primitives.asymmetric.ed25519 as ed25519
+	from pure_mls.group import MLSGroup
+
+	HAS_PURE_MLS = True
+	from pure_mls.keys import KemKey, SignatureKey
+except ImportError:
+	HAS_PURE_MLS = False
 
 logger = logging.getLogger(__name__)
 
@@ -18,13 +28,51 @@ class MinionInbox:
 	def __init__(self, db_path: Optional[str] = None):
 		if db_path is None:
 			# Sovereign Pod path inside sharing storage repository
-			self.db_path = os.path.join(cfg._IA_DIR, "storage", "queue", "minion_inbox.db")
+			self.db_path = os.path.join(cfg.APP_ROOT, "storage", "queue", "minion_inbox.db")
 		else:
 			self.db_path = db_path
 
 		# Ensure the directory exists
 		os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
 		self._init_db()
+
+		self.mls_group: Optional["MLSGroup"] = None
+		if cfg.ICE_MODE_ENABLED and HAS_PURE_MLS:
+			self._init_mls_group()
+
+	def _init_mls_group(self):
+		group_id = b"internal_minions"
+		mls_path = os.path.join(cfg.APP_ROOT, "storage", "swarm_groups", "internal_minions.mls")
+		os.makedirs(os.path.dirname(mls_path), exist_ok=True)
+
+		# Admin identity
+		sig_key = SignatureKey(private_key=ed25519.Ed25519PrivateKey.generate())
+		try:
+			from cryptography.hazmat.primitives.asymmetric import x25519
+
+			kem_key = KemKey(private_key=x25519.X25519PrivateKey.generate())
+		except ImportError:
+			logger.warning("x25519 not found, generating dummy KemKey")
+			kem_key = None  # will fail later if not defined, but we'll try to import x25519 properly
+
+		if os.path.exists(mls_path):
+			try:
+				with open(mls_path, "rb") as f:
+					state = f.read()
+				self.mls_group = MLSGroup.from_bytes(state)
+			except Exception as e:
+				logger.warning(f"Failed to load ICE MLS state: {e}. Recreating...")
+				if kem_key:
+					self.mls_group = MLSGroup.create(group_id, sig_key, kem_key)
+				with open(mls_path, "wb") as f:
+					if self.mls_group:
+						f.write(self.mls_group.to_bytes())
+		else:
+			if kem_key:
+				self.mls_group = MLSGroup.create(group_id, sig_key, kem_key)
+			with open(mls_path, "wb") as f:
+				if self.mls_group:
+					f.write(self.mls_group.to_bytes())
 
 	def _init_db(self) -> None:
 		with sqlite3.connect(self.db_path) as conn:
@@ -55,6 +103,14 @@ class MinionInbox:
 
 	def drop_report(self, event_id: str, source: str, status: str, content: str, originator: Optional[str] = None) -> None:
 		"""Save a fire-and-forget report from a background minion."""
+		if cfg.ICE_MODE_ENABLED and self.mls_group is not None:
+			try:
+				msg_bytes = self.mls_group.encrypt_application_message(content.encode("utf-8"))
+				content = base64.b64encode(msg_bytes).decode("utf-8")
+			except Exception as e:
+				logger.error(f"ICE encryption failed in drop_report: {e}")
+				return
+
 		try:
 			with sqlite3.connect(self.db_path) as conn:
 				cursor = conn.cursor()
@@ -68,7 +124,7 @@ class MinionInbox:
 
 	def get_unread(self, limit: int = 50) -> List[Dict[str, Any]]:
 		"""Retrieve unread reports WITHOUT marking them as read (non-destructive peek)."""
-		reports = []
+		reports: List[Dict[str, Any]] = []
 		try:
 			with sqlite3.connect(self.db_path) as conn:
 				conn.row_factory = sqlite3.Row
@@ -78,7 +134,17 @@ class MinionInbox:
 					(limit,),
 				)
 				rows = cursor.fetchall()
-				reports = [dict(row) for row in rows]
+				reports = []
+				for row in rows:
+					d = dict(row)
+					if cfg.ICE_MODE_ENABLED and self.mls_group is not None:
+						try:
+							raw_bytes = base64.b64decode(d["content"])
+							d["content"] = self.mls_group.decrypt_application_message(raw_bytes).decode("utf-8")
+						except Exception as e:
+							logger.error(f"ICE decryption failed for report {d['id']}: {e}")
+							d["content"] = "<ICE Decryption Failed>"
+					reports.append(d)
 		except Exception as e:
 			logger.error(f"Failed to get unread reports: {e}")
 		return reports
@@ -96,7 +162,7 @@ class MinionInbox:
 
 	def pop_unread(self, limit: int = 50) -> List[Dict[str, Any]]:
 		"""Retrieve unread reports and mark them as read atomically."""
-		reports = []
+		reports: List[Dict[str, Any]] = []
 		try:
 			with sqlite3.connect(self.db_path) as conn:
 				conn.row_factory = sqlite3.Row
@@ -111,7 +177,17 @@ class MinionInbox:
 					report_ids = [row["id"] for row in rows]
 					placeholders = ",".join("?" * len(report_ids))
 					cursor.execute(f"UPDATE inbox SET is_read = 1 WHERE id IN ({placeholders})", report_ids)
-					reports = [dict(row) for row in rows]
+					reports = []
+				for row in rows:
+					d = dict(row)
+					if cfg.ICE_MODE_ENABLED and self.mls_group is not None:
+						try:
+							raw_bytes = base64.b64decode(d["content"])
+							d["content"] = self.mls_group.decrypt_application_message(raw_bytes).decode("utf-8")
+						except Exception as e:
+							logger.error(f"ICE decryption failed for report {d['id']}: {e}")
+							d["content"] = "<ICE Decryption Failed>"
+					reports.append(d)
 				conn.commit()
 		except Exception as e:
 			logger.error(f"Failed to pop unread reports: {e}")

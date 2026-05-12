@@ -6,17 +6,24 @@ Uses the local Edge Engine to perform semantic distillation on high-value points
 
 import logging
 import os
+from pathlib import Path
 
+import platformdirs
 import requests
 from dotenv import load_dotenv
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import FieldCondition, Filter, MatchValue
 
+env_path = Path(platformdirs.user_config_dir("red-pill")) / ".env"
+if env_path.exists():
+	load_dotenv(env_path)
+else:
+	load_dotenv()
+
 # Setup Logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("Distiller")
 
-load_dotenv()
 
 # Config
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")

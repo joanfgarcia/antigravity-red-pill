@@ -10,9 +10,9 @@ _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _PROJECT_ROOT="$(dirname "$_SCRIPT_DIR")"
 
 # 2. Load .env to get IA_DIR and QDRANT_API_KEY
-if [ -f "$_PROJECT_ROOT/.env" ]; then
+if [ -f "$HOME/.config/red-pill/.env" ]; then
 	set -a
-	source "$_PROJECT_ROOT/.env"
+	source "$HOME/.config/red-pill/.env"
 	set +a
 fi
 

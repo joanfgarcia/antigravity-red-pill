@@ -145,9 +145,24 @@ class GruOrchestrator:
 				"bitnet", BitNetInferenceProvider(runner_path=bitnet_bin, model_path=bitnet_model, grammar_path=grammar_path)
 			)
 
+		# 4. Local GGUF Provider (llama.cpp natively) - BE_WATER
+		from red_pill.core.providers import LlamaCppInferenceProvider
+
+		workspace = os.getenv("WORKSPACE_ROOT", os.path.expanduser("~/Documents/IA"))
+		gguf_dir = os.path.join(workspace, "models", "gguf")
+		if os.path.exists(gguf_dir):
+			gguf_files = [f for f in os.listdir(gguf_dir) if f.endswith(".gguf")]
+			if gguf_files:
+				# Sort by size to pick the lightest model (conservatively) to avoid OOM on smaller GPUs
+				gguf_files.sort(key=lambda x: os.path.getsize(os.path.join(gguf_dir, x)))
+				lightest_model = gguf_files[0]
+				local_gguf_provider = LlamaCppInferenceProvider.create_be_water(lightest_model)
+				if local_gguf_provider:
+					ProviderRegistry.register_inference_provider("local_gguf", local_gguf_provider)
+
 	def is_local_ready(self) -> bool:
 		"""Check if local SLM infrastructure is available."""
-		ia_dir = os.getenv("ANTIGRAVITY_IA_DIR", os.path.expanduser("~/Documents/IA"))
+		ia_dir = os.getenv("WORKSPACE_ROOT", os.path.expanduser("~/Documents/IA"))
 		model_dir = os.path.join(ia_dir, "models")
 		if not os.path.exists(model_dir):
 			return False
@@ -185,6 +200,26 @@ class GruOrchestrator:
 	def _trigger_sas(self, task: str, results: List[SwarmResult]) -> None:
 		"""Record memory and notify user of swarm completion with telemetry."""
 		success_count = len([r for r in results if r.status == "success"])
+
+		# SAS SUPPRESSION LOGIC (Desktop Notifications)
+		should_notify_desktop = True
+		if success_count == 0 and len(results) > 0:
+			all_skipped = True
+			for r in results:
+				# Check errors or results for skip indications
+				msg = str(r.error).lower() + str(r.result).lower()
+				if not any(kw in msg for kw in ["no changes", "already reported", "skip", "nothing to process"]):
+					all_skipped = False
+					break
+			if all_skipped:
+				should_notify_desktop = False
+				logger.info(f"SAS Notification suppressed: Minion task '{task}' skipped (no changes/already reported).")
+
+			# Anti-Spam for instant background crashes (duration < 0.5s)
+			if not all_skipped and all(r.duration < 0.5 for r in results):
+				should_notify_desktop = False
+				logger.info(f"SAS Notification suppressed: Minion task '{task}' failed instantly. Routing to Inbox only.")
+
 		task_preview = task[:100] if isinstance(task, str) else "task"
 
 		telemetry_summary = ""
@@ -193,9 +228,13 @@ class GruOrchestrator:
 				delta = r.telemetry.get("vram_delta", "N/A")
 				vram_info = f" | VRAM: {delta}" if delta != "N/A" else ""
 				telemetry_summary += f"\n- {r.minion_id[:8]}: {r.duration}s{vram_info}"
+			else:
+				telemetry_summary += f"\n- {r.minion_id[:8]}: {r.duration}s"
 
 		message = f"Swarm Task Complete: {task_preview}. {success_count}/{len(results)} minions succeeded.{telemetry_summary}"
-		notify_user(title="Sovereign Swarm", message=message, sound=False, category="swarm")
+
+		if should_notify_desktop:
+			notify_user(title="Sovereign Swarm", message=message, sound=False, category="swarm")
 
 		# Memory Signal (Agent)
 		try:

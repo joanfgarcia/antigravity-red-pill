@@ -7,7 +7,6 @@ from typing import Optional
 import red_pill.config as cfg
 from red_pill.core.inbox import MinionInbox
 from red_pill.memory import MemoryManager
-from red_pill.skills.swarm_messaging import SwarmMessagingSkill
 from red_pill.soul import SoulManager
 
 logger = logging.getLogger("red_pill.heartbeat")
@@ -77,6 +76,7 @@ class LazarusPulse:
 				await self._lazarus_ritual()
 				await self._resonance_ritual()
 				await self._auto_heal_ritual()
+				await self._thread_ritual()
 
 				# Wait for next beat
 				await asyncio.sleep(cfg.PULSE_INTERVAL)
@@ -250,40 +250,32 @@ class LazarusPulse:
 
 	async def _swarm_ritual(self) -> None:
 		"""
-		Autonomous Swarm Polling:
-		- Scans the Firebase Hub for incoming messages.
-		- Automatically indexes high-intent communications into social memory.
+		Autonomous Neon-Link Polling:
+		- Consults the local Neon-Link Hub for unread decrypted Swarm messages.
+		- If found, injects a signal for a Swarm Minion to process them.
 		"""
 		try:
-			logger.info("Pulse: Initiating Swarm Ritual (Mailbox Check)...")
-			agent_identity = f"Aleph@{cfg.OPERATOR_DISPLAY_NAME}"
-			# Secret from environment to ensure E2E encryption
-			shared_secret = os.getenv("SWARM_SHARED_SECRET")
-			if not shared_secret:
-				raise ValueError("CRÍTICO: SWARM_SHARED_SECRET no está configurado. Abortando conexión a la Colmena.")
-			skill = SwarmMessagingSkill(agent_identity=agent_identity, shared_secret=shared_secret.encode())
+			import httpx
 
-			# We use a thread since the current Firebase SDK interaction is synchronous
-			messages = await asyncio.to_thread(skill.check_mailbox)
+			import red_pill.config as cfg
 
-			if messages:
-				logger.info(f"Pulse: Discovered {len(messages)} new messages in Swarm Mailbox.")
-				for msg in messages:
-					# Automatic indexing of swarm messages as social engrams
-					content = f"Incoming Swarm Message from {msg.get('sender')}: {msg.get('message')}"
-					await asyncio.to_thread(
-						self.memory_mgr.add_memory,
-						collection="social_memories",
-						text=content,
-						importance=8.0,
-						color="cyan",
-						emotion="neutral",
-						metadata={"source": "swarm", "sender": msg.get("sender"), "intent": msg.get("intent")},
-					)
-			else:
-				logger.debug("Pulse: Swarm Mailbox empty.")
+			# Hacemos un GET rápido al summary
+			async with httpx.AsyncClient() as client:
+				resp = await client.get(f"{cfg.NEON_LINK_URL}/inbox/summary", timeout=2.0)
+
+			if resp.status_code == 200:
+				summary = resp.json()
+				total_messages = sum(summary.values())
+
+				if total_messages > 0:
+					logger.info(f"Pulse: Discovered {total_messages} pending Swarm messages in Neon-Link.")
+					self.memory_mgr.inject_signal("swarm_messages_pending", intensity=7.0, signal_type="anxiety", source="Neon-Link")
+				else:
+					self.memory_mgr.evaporate_signals("swarm_messages_pending")
+		except httpx.RequestError:
+			logger.debug("Pulse: Neon-Link Hub is offline or unreachable.")
 		except Exception as e:
-			logger.error(f"Pulse: Swarm ritual failed: {e}")
+			logger.error(f"Pulse: Swarm polling failed: {e}")
 
 	async def _lazarus_ritual(self) -> None:
 		"""
@@ -361,7 +353,7 @@ class LazarusPulse:
 
 		# 1. Branch check
 		proc = await asyncio.create_subprocess_exec(
-			"git", "rev-parse", "--abbrev-ref", "HEAD", cwd=cfg.IA_DIR, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+			"git", "rev-parse", "--abbrev-ref", "HEAD", cwd=cfg.APP_ROOT, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
 		)
 		stdout, _ = await proc.communicate()
 		branch = stdout.decode().strip()
@@ -379,7 +371,7 @@ class LazarusPulse:
 				return
 
 		# 3. Check if there are changes
-		proc_status = await asyncio.create_subprocess_exec("git", "status", "--porcelain", cwd=cfg.IA_DIR, stdout=asyncio.subprocess.PIPE)
+		proc_status = await asyncio.create_subprocess_exec("git", "status", "--porcelain", cwd=cfg.APP_ROOT, stdout=asyncio.subprocess.PIPE)
 		stdout_status, _ = await proc_status.communicate()
 		if not stdout_status.strip():
 			logger.info("Auto-Healer: No files changed to commit.")
@@ -387,13 +379,13 @@ class LazarusPulse:
 
 		# 4. Commit and push
 		logger.info(f"Auto-Healer: Executing background commit & push for {trigger_event}...")
-		proc_add = await asyncio.create_subprocess_exec("git", "add", ".", cwd=cfg.IA_DIR)
+		proc_add = await asyncio.create_subprocess_exec("git", "add", ".", cwd=cfg.APP_ROOT)
 		await proc_add.communicate()
 		proc_commit = await asyncio.create_subprocess_exec(
-			"git", "commit", "-m", f"chore(auto-heal): background recovery [{trigger_event}]", cwd=cfg.IA_DIR
+			"git", "commit", "-m", f"chore(auto-heal): background recovery [{trigger_event}]", cwd=cfg.APP_ROOT
 		)
 		await proc_commit.communicate()
-		proc_push = await asyncio.create_subprocess_exec("git", "push", "origin", "HEAD", cwd=cfg.IA_DIR)
+		proc_push = await asyncio.create_subprocess_exec("git", "push", "origin", "HEAD", cwd=cfg.APP_ROOT)
 		await proc_push.communicate()
 		logger.info(f"Auto-Healer: Successfully healed and pushed: {trigger_event}")
 
@@ -416,11 +408,11 @@ class LazarusPulse:
 				if event_id == "signal_ruff_failure":
 					logger.info("Auto-Healer: Attempting to heal 'signal_ruff_failure' (Ruff)...")
 					proc1 = await asyncio.create_subprocess_exec(
-						"uv", "run", "ruff", "check", "--fix", ".", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, cwd=cfg.IA_DIR
+						"uv", "run", "ruff", "check", "--fix", ".", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, cwd=cfg.APP_ROOT
 					)
 					await proc1.communicate()
 					proc2 = await asyncio.create_subprocess_exec(
-						"uv", "run", "ruff", "format", ".", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, cwd=cfg.IA_DIR
+						"uv", "run", "ruff", "format", ".", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, cwd=cfg.APP_ROOT
 					)
 					await proc2.communicate()
 					await self._try_auto_push(event_id)
@@ -433,7 +425,7 @@ class LazarusPulse:
 
 					healer = HealerMinion()
 					# Execute healing on src directory
-					result = await healer.execute("Heal mypy", path=os.path.join(cfg.IA_DIR, "src", "red_pill"))
+					result = await healer.execute("Heal mypy", path=os.path.join(cfg.APP_ROOT, "src", "red_pill"))
 					if result.get("modified_files", False):
 						await self._try_auto_push(event_id)
 					healed_ids.append(report["id"])
@@ -443,7 +435,7 @@ class LazarusPulse:
 				if event_id.startswith("signal_cloud_sync_error"):
 					logger.info(f"Auto-Healer: Attempting to heal plugin error '{event_id}'...")
 					# e.g., run oauth refresh script or similar
-					script_path = os.path.join(cfg.IA_DIR, "scripts", "heal_cloud_sync.sh")
+					script_path = os.path.join(cfg.APP_ROOT, "scripts", "heal_cloud_sync.sh")
 					if os.path.exists(script_path):
 						process = await asyncio.create_subprocess_exec(
 							str(script_path),
@@ -484,7 +476,7 @@ class LazarusPulse:
 			return
 		try:
 			logger.info("Pulse: Initiating Thread Ritual (Ariadne's Weave)...")
-			script_path = os.path.join(cfg.IA_DIR, "scripts", "thread_weave_migrate.py")
+			script_path = os.path.join(cfg.APP_ROOT, "scripts", "thread_weave_migrate.py")
 			process = await asyncio.create_subprocess_exec(
 				"uv",
 				"run",
@@ -538,7 +530,7 @@ class LazarusPulse:
 
 		import os
 
-		script_path = os.path.join(cfg.IA_DIR, "scripts", f"heal_{tissue}.sh")
+		script_path = os.path.join(cfg.APP_ROOT, "scripts", f"heal_{tissue}.sh")
 		if os.path.exists(script_path):
 			logger.warning(f"Pulse [IMMUNE RESPONSE]: Deploying White Blood Cells for {tissue}...")
 			try:

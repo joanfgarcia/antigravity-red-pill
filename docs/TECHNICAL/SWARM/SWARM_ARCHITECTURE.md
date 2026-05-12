@@ -40,6 +40,9 @@ We use a hybrid encryption model:
 ### 🆔 Identity & Fingerprinting
 Agents are identified by their **Fingerprint** (SHA-256 of the X25519 Public Key). Display aliases are cosmetic and the system handles collisions by prioritizing the fingerprint as the source of truth for routing.
 
+### 🔕 Sovereign Alert System (SAS) Heuristic Silence
+To prevent operator fatigue, the Orchestrator's notification system (`_trigger_sas`) implements heuristic silence. If a Swarm Task completes with `0` successes and its minions report skipping their execution (e.g. `"no changes"`, `"already reported"`), the `notify-send` desktop alert is intercepted and suppressed.
+
 ## 🚀 Autonomous Flow Orchestration (v6.1)
 The Swarm can now execute complex sequences of tasks via **Autonomous Flows**.
 

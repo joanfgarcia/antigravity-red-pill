@@ -5,6 +5,7 @@ if TYPE_CHECKING:
 	from red_pill.memory import MemoryManager
 
 import red_pill.config as cfg
+from red_pill.identity import get_hedonic_set_point
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +63,7 @@ class ToneAnalyzer:
 				)
 
 			if not points:
-				return str(getattr(cfg, "HEDONIC_SET_POINT_COLOR", cfg.DEFAULT_COLOR))
+				return str(get_hedonic_set_point())
 
 			import time
 
@@ -72,7 +73,7 @@ class ToneAnalyzer:
 			first_point_time = float(points[0].payload.get("created_at", 0)) if points[0].payload else 0
 			if now - first_point_time > threshold:
 				# Overnight Therapy Reset
-				return str(getattr(cfg, "HEDONIC_SET_POINT_COLOR", cfg.DEFAULT_COLOR))
+				return str(get_hedonic_set_point())
 
 			# Filter out memories from previous sessions
 			session_points = []
@@ -83,14 +84,14 @@ class ToneAnalyzer:
 				session_points.append(p)
 
 			if not session_points:
-				return str(getattr(cfg, "HEDONIC_SET_POINT_COLOR", cfg.DEFAULT_COLOR))
+				return str(get_hedonic_set_point())
 
 			# High Reactivity Logic: Pick the first non-neutral emotion found in the latest memories
 			# Otherwise, return the most frequent (consensus).
-			latest_color = str(getattr(cfg, "HEDONIC_SET_POINT_COLOR", cfg.DEFAULT_COLOR))
+			latest_color = str(get_hedonic_set_point())
 			for p in session_points:
 				if p.payload and not p.payload.get("immune", False):
-					color = p.payload.get("color", getattr(cfg, "HEDONIC_SET_POINT_COLOR", cfg.DEFAULT_COLOR))
+					color = p.payload.get("color", get_hedonic_set_point())
 					if color != cfg.DEFAULT_COLOR:
 						return str(color)
 					if latest_color == cfg.DEFAULT_COLOR:
@@ -99,7 +100,7 @@ class ToneAnalyzer:
 			return str(latest_color)
 		except Exception as e:
 			logger.warning(f"Mood analysis failed: {e}")
-			return str(getattr(cfg, "HEDONIC_SET_POINT_COLOR", cfg.DEFAULT_COLOR))
+			return str(get_hedonic_set_point())
 
 	@staticmethod
 	def get_tone_directive(mood_color: str) -> str:

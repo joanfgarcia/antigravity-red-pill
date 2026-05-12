@@ -16,29 +16,22 @@ def test_chunk_text_edge_cases():
 	assert chunk_text("short", size=10) == ["short"]
 
 
-@patch("red_pill.metabolism.sleep.os.path.exists", return_value=False)
-@patch("red_pill.metabolism.sleep.urllib.request.build_opener")
-def test_distill_engram(mock_build_opener, mock_exists):
-	mock_opener = MagicMock()
-	mock_response = MagicMock()
-	mock_response.read.return_value = json.dumps(
-		{"choices": [{"message": {"content": '{"summary": "test", "emotion": "joy", "intensity": 0.9}'}}]}
-	).encode()
-	mock_response.__enter__.return_value = mock_response
-	mock_opener.open.return_value = mock_response
-	mock_build_opener.return_value = mock_opener
+def test_distill_engram():
+	from red_pill.core.providers import ProviderRegistry
+
+	mock_inference = ProviderRegistry.get_inference_provider("sip")
+	mock_inference.generate.return_value = '{"summary": "test", "emotion": "joy", "intensity": 0.9}'
 	result = distill_engram("raw content")
 	assert result["summary"] == "test"
 	assert result["emotion"] == "joy"
 	assert result["intensity"] == 0.9
 
 
-@patch("red_pill.metabolism.sleep.os.path.exists", return_value=False)
-@patch("red_pill.metabolism.sleep.urllib.request.build_opener")
-def test_distill_engram_fallback(mock_build_opener, mock_exists):
-	mock_opener = MagicMock()
-	mock_opener.open.side_effect = Exception("Network fail")
-	mock_build_opener.return_value = mock_opener
+def test_distill_engram_fallback():
+	from red_pill.core.providers import ProviderRegistry
+
+	mock_inference = ProviderRegistry.get_inference_provider("sip")
+	mock_inference.generate.side_effect = Exception("Network fail")
 	result = distill_engram("raw content")
 	assert "raw content" in result["summary"]
 	assert result["emotion"] == "neutral"

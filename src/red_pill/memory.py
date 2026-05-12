@@ -1033,7 +1033,14 @@ class MemoryManager:
 		return snapshots_created
 
 	def inject_signal(
-		self, name: str, intensity: float, signal_type: str, source: str, muted: bool = False, originator: Optional[str] = None
+		self,
+		name: str,
+		intensity: float,
+		signal_type: str,
+		source: str,
+		muted: bool = False,
+		originator: Optional[str] = None,
+		criticality: str = "WARNING",
 	) -> None:
 		"""
 		Injects a biological/somatic signal into the immune dashboard.
@@ -1079,6 +1086,7 @@ class MemoryManager:
 				"signal_type": signal_type,
 				"signal_source": source,
 				"intensity": intensity,
+				"criticality": criticality,
 				"created_at": datetime.now(timezone.utc).isoformat(),
 				"originator": originator or "Legacy (Pre-Audit)",
 			}
@@ -1090,6 +1098,21 @@ class MemoryManager:
 			logger.info(f"Injected signal '{name}' (Intensity: {intensity})")
 		except Exception as e:
 			logger.error(f"Failed to inject signal '{name}': {e}")
+
+	def has_signal(self, name: str) -> bool:
+		"""
+		Checks if a specific signal already exists in the cortex (Fast-Fail for Sentinels).
+		"""
+		try:
+			import hashlib
+			import uuid
+
+			sig_hash = hashlib.sha256(name.encode("utf-8")).hexdigest()
+			point_id = str(uuid.UUID(sig_hash[:32]))
+			existing = self.client.retrieve(collection_name="signal_memories", ids=[point_id])
+			return bool(existing and len(existing) > 0)
+		except Exception:
+			return False
 
 	def evaporate_signals(self, name: Optional[str] = None) -> None:
 		"""

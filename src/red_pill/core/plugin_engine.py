@@ -43,7 +43,7 @@ class SovereignPlugin(abc.ABC):
 		from red_pill import config as cfg
 
 		# 1. Intentar ruta soberana: {IA_DIR}/plugins/{name}/{name}.json
-		sovereign_path = Path(cfg.IA_DIR) / "plugins" / self.name / f"{self.name}.json"
+		sovereign_path = Path(cfg.APP_ROOT) / "plugins" / self.name / f"{self.name}.json"
 
 		# 2. Fallback a ruta de fuentes (Legacy/Default)
 		fallback_path = self.directory / f"{self.name}.json"

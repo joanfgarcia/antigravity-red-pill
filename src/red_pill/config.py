@@ -22,18 +22,14 @@ import warnings
 from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
+import platformdirs
 import yaml
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Resolve IA_DIR early (needed as env_file base path)
-# NOTE: os.getenv does NOT expand ~ — we do it explicitly here.
-_IA_DIR = os.path.expanduser(
-	os.getenv(
-		"IA_DIR",
-		os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-	)
-)
+# Resolve paths early for execution isolation (Agentic Self-Assembly)
+_APP_ROOT = os.getenv("APP_ROOT", os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+_WORKSPACE_ROOT = os.path.expanduser(os.getenv("WORKSPACE_ROOT", os.path.dirname(_APP_ROOT)))
 
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
 
@@ -81,21 +77,29 @@ class RedPillConfig(BaseSettings):
 	"""
 
 	model_config = SettingsConfigDict(
-		env_file=os.path.join(_IA_DIR, ".env"),
+		env_file=os.path.join(platformdirs.user_config_dir("red-pill"), ".env"),
 		env_file_encoding="utf-8",
 		extra="ignore",
 		populate_by_name=True,
 	)
 
 	# -----------------------------------------------------------------------
-	# PATHS
+	# PATHS & PROFILES (Agentic Self-Assembly)
 	# -----------------------------------------------------------------------
-	IA_DIR: str = _IA_DIR
+	WORKSPACE_ROOT: str = _WORKSPACE_ROOT
+	APP_ROOT: str = _APP_ROOT
+	RED_PILL_PROFILE: str = "user"
+	USER_ATLAS_DIR: str = os.path.join(_WORKSPACE_ROOT, "atlas")
+	AGENT_CORE_DIR: str = os.path.join(_WORKSPACE_ROOT, "Titanium_Core")
 
-	@field_validator("IA_DIR", mode="before")
+	@field_validator("WORKSPACE_ROOT", mode="before")
 	@classmethod
-	def _expand_ia_dir(cls, v: str) -> str:
-		"""Expand ~ in IA_DIR so dotenv values like ~/Documents/... resolve correctly."""
+	def _expand_workspace_root(cls, v: str) -> str:
+		return os.path.expanduser(v)
+
+	@field_validator("USER_ATLAS_DIR", mode="before")
+	@classmethod
+	def _expand_user_atlas_dir(cls, v: str) -> str:
 		return os.path.expanduser(v)
 
 	@property
@@ -175,7 +179,7 @@ class RedPillConfig(BaseSettings):
 	MILVUS_DB: str = "default"
 	MILVUS_NLIST: int = 128
 	MILVUS_LITE_ENABLED: bool = True
-	MILVUS_LITE_PATH: str = os.path.join(_IA_DIR, "storage", "hive_lite.db")
+	MILVUS_LITE_PATH: str = os.path.join(_APP_ROOT, "storage", "hive_lite.db")
 
 	@model_validator(mode="after")
 	def _derive_milvus_secure(self) -> "RedPillConfig":
@@ -206,7 +210,7 @@ class RedPillConfig(BaseSettings):
 	# -----------------------------------------------------------------------
 	EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
 	VECTOR_SIZE: int = 384
-	FASTEMBED_CACHE_PATH: str = os.path.join(_IA_DIR, "storage", "models")
+	FASTEMBED_CACHE_PATH: str = os.path.join(_APP_ROOT, "storage", "models")
 	EXECUTION_PROVIDER: Optional[str] = None
 
 	@model_validator(mode="after")
@@ -266,6 +270,10 @@ class RedPillConfig(BaseSettings):
 	# SWARM CONFIG
 	# -----------------------------------------------------------------------
 	SWARM_TELEMETRY_DEFAULT: str = "NONE"  # NONE, MINIMUM, FULL
+	# ICE Mode enforces local zero-trust encryption via pure-mls for the MinionInbox.
+	# When False, the system defaults to WATER mode (O(1) raw SQLite speed).
+	ICE_MODE_ENABLED: bool = False
+	NEON_LINK_URL: str = "http://localhost:8770"
 
 	# -----------------------------------------------------------------------
 	# NOTIFICATIONS
@@ -293,7 +301,7 @@ class RedPillConfig(BaseSettings):
 	METABOLISM_ENABLED: bool = True
 	METABOLISM_COOLDOWN: int = 3600
 	METABOLISM_AUTO_COLLECTIONS: List[str] = ["work_memories", "social_memories", "story_memories"]
-	METABOLISM_STATE_FILE: str = os.path.join(_IA_DIR, "storage", "metabolism_state.json")
+	METABOLISM_STATE_FILE: str = os.path.join(_APP_ROOT, "storage", "metabolism_state.json")
 	ABSENCE_THRESHOLD: int = 7 * 24 * 3600
 	ABSENCE_GUARD_SCROLL_LIMIT: int = 500
 	METABOLISM_STRATEGY: str = "LAZY"
@@ -316,6 +324,8 @@ class RedPillConfig(BaseSettings):
 	AFFECT_CUSTOM_OVERRIDES: str = "{}"
 	DYNAMIC_EMOTION_SYNC: bool = True
 	MULTI_EMOTION_INFERENCE: bool = True
+	# [V6.9] Dynamic Gravity Point: HEDONIC_SET_POINT_COLOR is now read from storage/identity.json
+	# This serves as the fallback if identity.json is not yet created.
 	HEDONIC_SET_POINT_COLOR: str = "emerald"
 	OVERNIGHT_THERAPY_THRESHOLD_HOURS: int = 4
 
@@ -330,7 +340,7 @@ class RedPillConfig(BaseSettings):
 
 	# Re-map env var name
 	model_config = SettingsConfigDict(
-		env_file=os.path.join(_IA_DIR, ".env"),
+		env_file=os.path.join(platformdirs.user_config_dir("red-pill"), ".env"),
 		env_file_encoding="utf-8",
 		extra="ignore",
 		populate_by_name=True,
@@ -370,7 +380,7 @@ class RedPillConfig(BaseSettings):
 	# -----------------------------------------------------------------------
 	LAZARUS_SYNC_ENABLED: bool = True
 	LAZARUS_SYNC_INTERVAL: int = 300
-	LAZARUS_STATE_FILE: str = os.path.join(_IA_DIR, "storage", "lazarus_state.json")
+	LAZARUS_STATE_FILE: str = os.path.join(_APP_ROOT, "storage", "lazarus_state.json")
 	# Prevents autonomous git pushes from consuming machine resources or interrupting the operator's active IDE sessions during office hours (09:00 - 18:00).
 	LAZARUS_OFFICE_HOURS_PROTECTION: bool = True
 
