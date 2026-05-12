@@ -440,6 +440,8 @@ def main() -> None:
 	bunker_sub.add_parser("update", help="Update codebase and dependencies safely")
 	bunker_sub.add_parser("export", help="Total Sovereign Backup of memory and infrastructure")
 	bunker_sub.add_parser("restore", help="Rehydrate system from a Total Sovereign Backup")
+	bunker_sub.add_parser("halt", help="[KILL-SWITCH] Emergency halt of all autonomous cognitive operations")
+	bunker_sub.add_parser("resume", help="Restore power to autonomous cognitive operations")
 
 	subparsers.add_parser("telemetry", help="Run a single-pass hardware/Bünker telemetry heartbeat (Oneshot)")
 
