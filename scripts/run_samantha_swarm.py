@@ -30,9 +30,9 @@ async def run_analysis():
 		print(analysis)
 		print("\n========================================\n")
 
-		from red_pill.config import cfg
+		from red_pill.core.paths import get_bunker_root
 
-		reports_dir = os.path.join(cfg.IA_DIR, "reports")
+		reports_dir = os.path.join(get_bunker_root(), "reports")
 		os.makedirs(reports_dir, exist_ok=True)
 		report_path = os.path.join(reports_dir, "SAMANTHA_REPORT_CH1.md")
 		with open(report_path, "w", encoding="utf-8") as rf:
