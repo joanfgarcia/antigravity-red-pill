@@ -5,6 +5,7 @@ from red_pill.swarm.agents.echo import EchoMinion
 from red_pill.swarm.agents.healer import HealerMinion
 from red_pill.swarm.agents.samantha import SamanthaMinion
 from red_pill.swarm.agents.smith import SmithMinion
+from red_pill.swarm.agents.janitor import JanitorMinion
 from red_pill.swarm.base import Minion
 
 
@@ -19,6 +20,7 @@ class MinionFactory:
 		"command_runner": CommandMinion,
 		"healer": HealerMinion,
 		"echo_mirror": EchoMinion,
+		"janitor_cleanup": JanitorMinion,
 	}
 
 	# Specialized Command Aliases
