@@ -24,6 +24,19 @@ class BaseTelemetryProvider(ABC):
 class BaseInferenceProvider(ABC):
 	"""Abstract Base Class for LLM inference (OpenAI, Local BitNet, etc.)."""
 
+	def register_capability(self, task_name: str):
+		"""Marks this provider as validated for a specific task (The Exam)."""
+		if not hasattr(self, "_capabilities"):
+			self._capabilities = ["general"]
+		if task_name not in self._capabilities:
+			self._capabilities.append(task_name)
+
+	def validate_task_capability(self, task_name: str) -> bool:
+		"""Returns True if the provider is authorized for the task."""
+		if not hasattr(self, "_capabilities"):
+			return task_name == "general"
+		return task_name in self._capabilities or "all" in self._capabilities
+
 	@abstractmethod
 	def generate(self, prompt: str, **kwargs) -> str:
 		"""Generate a complete response for a prompt."""

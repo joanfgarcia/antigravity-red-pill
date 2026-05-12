@@ -1,5 +1,10 @@
 ## [7.0.0] - Unreleased
 
+### 🧠 Sovereign Routing & Cognitive Degradation
+- **[ARCH] Task Capability Exam**: Introduced strict validation inside `BaseInferenceProvider` (`validate_task_capability`). Models must now explicitly pass an authorization "exam" before they can be assigned to specialized tasks.
+- **[HEAL] Graceful Token Degradation**: Upgraded `InferenceRouter.get_provider_for_task()`. If the Bünker initiates low-priority tasks or encounters 429/402 quota limits, it autonomously downgrades to `tier="cheap"` (e.g. Flash/Mini) to preserve the Operator's API budget.
+- **[HEAL] Hardware Fault Tolerance**: Missing local accelerators (CUDA/ROCm) now gracefully trigger fallbacks rather than halting the swarm. A `CRITICAL BLINDNESS` exception only fires if the registry is completely empty.
+
 ### 🩺 Sovereign Vitality (Project IMMUNITY)
 - **[HEAL] Advanced Sentinel Auditor (Runtime & Vitals)**: Expanded the `SentinelAuditor` from a static code analyzer into a full sovereign immune system.
   - **[FEAT] Runtime Monitoring**: Added `audit_runtime()` to proactively monitor `systemctl --user` daemon states (e.g. `redpill-worker.service`) and continuously parse `journalctl --user` for errors, using a persistent cursor (`~/.agent/auditor_journal_cursor`) to prevent infinite pain loops.
