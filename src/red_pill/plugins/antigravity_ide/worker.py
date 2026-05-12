@@ -149,8 +149,10 @@ class IDEWorker:
 				if isinstance(nested, dict) and "command" in nested:
 					command = nested["command"]
 					first_payload = nested
-			except Exception:
-				pass
+			except Exception as e:
+				logger.error(f"[Worker Debug] json.loads failed: {e} on {first_payload['text']}")
+
+		logger.info(f"[Worker Debug] Extracted command: {command}, payload: {first_payload}")
 
 		channel = first_conv["channel"]
 
