@@ -24,6 +24,10 @@ Security and Cognitive Integrity are the highest priorities of the Red Pill Prot
 Red Pill Protocol is designed under the assumption that LLM outputs are inherently untrusted ("Agent Smith" attacks). 
 - **Memory Integrity:** All inputs to the Qdrant database require strict Pydantic validation (v2).
 - **System Access:** The `install_neo.sh` and execution binaries operate under a *Zero-Trust* policy, expressly avoiding sudden escalated privileges (`sudo`). By design, catastrophic memory operations require explicit manual backups.
+- **Sovereign Immune System (Sentinel Auditor):** The ecosystem features a triple-layered autonomous runtime auditor that guarantees infrastructure health without requiring human intervention. It verifies:
+  - **ADN:** Static code validation via `Ruff` and `Mypy`.
+  - **Runtime Organs:** Background daemon status (`systemctl --user`) and parsing of log errors (`journalctl --cursor-file`).
+  - **Biological Vitals:** Integrity checks for Memory DBs (Qdrant & SQLite), Thermal/VRAM monitoring (`nvidia-smi` limits), Network/LLM readiness, and Kernel safety (OOM Killer logs in `dmesg`).
 
 ## Narrative Fidelity & Safety Disclaimer
 
