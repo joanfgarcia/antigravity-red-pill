@@ -141,6 +141,17 @@ class IDEWorker:
 		first_conv = conversational_msgs[0]
 		first_payload = json.loads(first_conv["payload"])
 		command = first_payload.get("command")
+		
+		# If it's a bridged message, the command might be a JSON string inside 'text'
+		if not command and "text" in first_payload:
+			try:
+				nested = json.loads(first_payload["text"])
+				if isinstance(nested, dict) and "command" in nested:
+					command = nested["command"]
+					first_payload = nested
+			except Exception:
+				pass
+
 		channel = first_conv["channel"]
 
 		if command == "LIST_CASCADES":
