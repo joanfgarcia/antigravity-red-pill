@@ -77,7 +77,7 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
 - [ ] **The Red Button**: Encrypted one-click "Scorched Earth" protocol for instant bunker purge.
 - [x] **Neural Watchdog (Lazarus Pulse)**: Background `redpill-pulse.service` monitoring system health, curing pain signals, and validating code integrity via autonomic immune reflex.
 - [x] **Industrial Task Queues (Celery+Redis)**: Quadlet Podman cluster running `redis:alpine` and rigorous Celery workers (`time_limit=300`, FastAPI Gateway decoupling). Guarantee 0% CPU saturation and zombie-process eradication.
-- [ ] **Bünker Observability UI**: Unified UX for systemic control (Pain signals, Telemetry, Queue statuses). Must be a lightweight on-demand web server checking subsystem readiness (WebSocket/MQTT for real-time reactivity), or alternatively, a highly stylized terminal UI (btop aesthetic).
+- [ ] **Bünker Observability UI & Telemetry Aggregation**: Unified UX for systemic control (Pain signals, Telemetry, Queue statuses). Centralized dashboard for all Sovereign plugins and daemons to ease debugging. Must be a lightweight on-demand web server checking subsystem readiness (WebSocket/MQTT for real-time reactivity), or alternatively, a highly stylized terminal UI (btop aesthetic).
 - [ ] **Extensible Plugin System (Personal Assistant)**: Leverage Celery/Redis for scheduled autonomous integrations. Develop a modular `TaskScheduler` ecosystem:
   - **Mail/Calendar**: Listeners for Gmail and Calendar events (appointments, incoming priority emails).
   - **Work/Ticketing**: ClickUp/Jira/GitLab API integration for issue tracking.
@@ -90,6 +90,11 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
 - [x] **Bayesian Utility Feedback Loop (BUG)**: **RESOLVED**. The Beta-distribution utility model previously reinforced garbage engrams that survived initial sleep classification. Fixed via the Silent Scribe Relay (Interceptor) which now filters operational telemetry at the SQLite injection layer.
 - [x] **Memory Input Filter (Interceptor)**: The Silent Scribe Relay saves all interaction pairs indiscriminately, including raw tool output, CI logs, and test results. These are operational telemetry, not memories. **Fix**: Add a pre-filter in the interceptor's `enqueue_memory` path that detects and discards non-conversational content (ANSI codes, audit protocol output, pytest results) before it enters the SQLite queue. This prevents the Bayesian feedback loop at its source.
 - [ ] **Mock-Based Coverage Audits**: Implement comprehensive test suites using mocked dependencies (e.g., `requests`, `subprocess`) for external integrations currently excluded from global coverage (`utils.antigravity_history`, `vault.py`, `observer.py`, `firebase.py`). Ensure internal logic is formally validated without requiring live daemons.
+- [ ] **Path Resolution Robustness**: Add robust integration tests specific to containerized and immutable environments (Silverblue, Flatpak) to harden path logic permanently.
+- [ ] **Operator Onboarding (`bunker init`)**: Implement an automated hardware profiling and guided setup command to simplify the initial Sovereign initialization.
+- [ ] **Complete MLS TreeKEM Adoption**: Finish the roadmap for full Swarm inter-agent E2E encryption.
+- [ ] **CI Vulnerability Scanning**: Automated dependency vulnerability scanning integrated into GitHub Actions CI pipeline.
+- [ ] **Windows Parity (Community-Driven)**: Windows support is officially designated as a community-driven effort. The Foundation core will not prioritize Windows-native pathing/daemon issues over Unix sovereignty, accepting this trade-off to avoid technical debt.
 
 ### Phase 3.5: Persistent Consciousness (Medium-Long Term — The Awakening)
 
