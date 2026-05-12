@@ -23,6 +23,8 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | Document | What it is |
 |----------|-----------|
 | [ARCHITECTURE.md](TECHNICAL/ARCHITECTURE.md) | Full system architecture — components, data flows, version overview |
+| [v7_PLAN.md](TECHNICAL/v7_PLAN.md) | The MVP 7.0 Master Plan for the Sovereign Drive |
+| [v7_SPRINT_1_SUMMARY.md](TECHNICAL/v7_SPRINT_1_SUMMARY.md) | Summary of Sprint 1 implementations for v7.0 |
 | [EVENT_ROUTER_ARCHITECTURE.md](TECHNICAL/EVENT_ROUTER_ARCHITECTURE.md) | Technical spec for the asynchronous Event Router and queue managers |
 | [NEON_LINK_EDGE_HUB.md](TECHNICAL/NEON_LINK_EDGE_HUB.md) | Technical architecture of the Neon-Link Edge Hub middleware |
 | [ANTIGRAVITY_LS_PROXY.md](TECHNICAL/ANTIGRAVITY_LS_PROXY.md) | Language Server Proxy architecture for Antigravity IDE |

@@ -8,7 +8,7 @@ We have successfully designed and laid the foundation for the `bunker` CLI comma
 
 - **`bunker init`:** Implemented hardware profiling (`detect_hardware()`). Uses `psutil` and `nvidia-smi` to autodetect RAM, CPU threads, and VRAM, generating an optimal `bunker.profile.yaml` specifying cgroups (`MemoryMax`) and quantization targets (INT2 vs Q4_K_M).
 - **`bunker export / restore`:** Stubs implemented and CLI wired. The architecture has been refined to include:
-  - **SQLite WAL Checkpoints** (`PRAGMA wal_checkpoint(TRUNCATE)`) to prevent DB corruption during live backups.
+	- **SQLite WAL Checkpoints** (`PRAGMA wal_checkpoint(TRUNCATE)`) to prevent DB corruption during live backups.
   - **Qdrant Mismatch Fallback** handling in the `manifest.json`.
   - **Pure-MLS Encryption** instead of AES, reusing the Sovereign `lean_soul_kit` pipeline for maximum security.
   - **Smart Restore:** Selective un-packing using CLI flags based on `manifest.json` contents.

@@ -39,24 +39,24 @@ class CognitiveQueueManager:
 			conn.execute("PRAGMA synchronous=NORMAL;")
 
 			conn.execute("""
-                CREATE TABLE IF NOT EXISTS cognitive_tasks (
-                    id TEXT PRIMARY KEY,
-                    source TEXT NOT NULL,
-                    priority INTEGER NOT NULL DEFAULT 5,
-                    payload TEXT NOT NULL,
-                    status TEXT NOT NULL DEFAULT 'PENDING',
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    attempts INTEGER NOT NULL DEFAULT 0,
-                    error_log TEXT
-                )
-            """)
+				CREATE TABLE IF NOT EXISTS cognitive_tasks (
+					id TEXT PRIMARY KEY,
+					source TEXT NOT NULL,
+					priority INTEGER NOT NULL DEFAULT 5,
+					payload TEXT NOT NULL,
+					status TEXT NOT NULL DEFAULT 'PENDING',
+					created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+					updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+					attempts INTEGER NOT NULL DEFAULT 0,
+					error_log TEXT
+				)
+			""")
 
 			# Índice para extracción ultrarrápida del router
 			conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_queue_routing
-                ON cognitive_tasks(status, priority DESC, created_at ASC)
-            """)
+				CREATE INDEX IF NOT EXISTS idx_queue_routing
+				ON cognitive_tasks(status, priority DESC, created_at ASC)
+			""")
 
 	def enqueue_task(self, source: str, payload: Dict[str, Any], priority: int = 5) -> str:
 		"""Inyecta un estímulo/tarea en la cola cognitiva."""
@@ -66,9 +66,9 @@ class CognitiveQueueManager:
 		with self._get_connection() as conn:
 			conn.execute(
 				"""
-                INSERT INTO cognitive_tasks (id, source, priority, payload, status)
-                VALUES (?, ?, ?, ?, 'PENDING')
-                """,
+				INSERT INTO cognitive_tasks (id, source, priority, payload, status)
+				VALUES (?, ?, ?, ?, 'PENDING')
+				""",
 				(task_id, source, priority, payload_str),
 			)
 		logger.debug(f"[QUEUE] Task {task_id} injected (Priority {priority}). Source: {source}")
@@ -83,12 +83,12 @@ class CognitiveQueueManager:
 			conn.execute("BEGIN EXCLUSIVE")
 			cursor = conn.execute(
 				"""
-                SELECT id, source, priority, payload, attempts
-                FROM cognitive_tasks
-                WHERE status = 'PENDING'
-                ORDER BY priority DESC, created_at ASC
-                LIMIT 1
-                """
+				SELECT id, source, priority, payload, attempts
+				FROM cognitive_tasks
+				WHERE status = 'PENDING'
+				ORDER BY priority DESC, created_at ASC
+				LIMIT 1
+				"""
 			)
 			row = cursor.fetchone()
 
@@ -100,10 +100,10 @@ class CognitiveQueueManager:
 			# Marcar atómicamente
 			conn.execute(
 				"""
-                UPDATE cognitive_tasks
-                SET status = 'PROCESSING', updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-                """,
+				UPDATE cognitive_tasks
+				SET status = 'PROCESSING', updated_at = CURRENT_TIMESTAMP
+				WHERE id = ?
+				""",
 				(task_id,),
 			)
 			conn.execute("COMMIT")
@@ -121,10 +121,10 @@ class CognitiveQueueManager:
 		with self._get_connection() as conn:
 			conn.execute(
 				"""
-                UPDATE cognitive_tasks
-                SET status = 'COMPLETED', updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-                """,
+				UPDATE cognitive_tasks
+				SET status = 'COMPLETED', updated_at = CURRENT_TIMESTAMP
+				WHERE id = ?
+				""",
 				(task_id,),
 			)
 
@@ -137,12 +137,12 @@ class CognitiveQueueManager:
 			# Primero incrementamos intentos
 			conn.execute(
 				"""
-                UPDATE cognitive_tasks
-                SET attempts = attempts + 1,
-                    error_log = ?,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-                """,
+				UPDATE cognitive_tasks
+				SET attempts = attempts + 1,
+					error_log = ?,
+					updated_at = CURRENT_TIMESTAMP
+				WHERE id = ?
+				""",
 				(error_msg, task_id),
 			)
 

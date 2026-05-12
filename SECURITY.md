@@ -2,12 +2,12 @@
 
 ## Supported Versions
 
-The current actively maintained and supported version of the Red Pill Protocol is **`v6.9.2`**. The v6.x family receives security patches and bug fixes. All v5.x and earlier releases are **End-of-Life (EOL)** and may contain known vulnerabilities.
+The current actively maintained and supported version of the Red Pill Protocol is **`v7.0.0`**. The v7.x family receives security patches and bug fixes. All v6.x and earlier releases are **End-of-Life (EOL)** and may contain known vulnerabilities.
 
 | Version | Supported          | Notes |
 | ------- | ------------------ |-------|
-| 6.9.x   | :white_check_mark: | Current Sovereign Set Point / Stable branch |
-| 6.8.x   | :x:                | EOL. Please upgrade to 6.9 |
+| 7.0.x   | :white_check_mark: | Current Sovereign Set Point / Stable branch |
+| 6.9.x   | :x:                | EOL. Please upgrade to 7.0 |
 | < 5.6   | :x:                | Vulnerable to early prompt injections |
 
 ## Reporting a Vulnerability
