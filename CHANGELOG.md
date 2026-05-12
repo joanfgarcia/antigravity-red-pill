@@ -1,6 +1,9 @@
 ## [7.0.0] - Unreleased
 
 ### 🤖 Sovereign Daemon & Cognitive Queue
+- **[FEAT] Janitor Minion**: Implemented `JanitorMinion` as an independent swarm agent to autonomously purge stale events (`events.db`) and scratch files older than 7 days, maintaining long-term system sanity and preventing polling slowdowns. Deployed via a daily Systemd timer (`redpill-janitor.timer`).
+- **[HEAL] Telegram Pipeline Command Routing**: Fixed nested JSON payload parsing in `worker.py` to prevent recursive IDE AI inferences during system commands (e.g. `/list`).
+- **[HEAL] Ghost Process Purge**: Resolved a massive latency and loop bug caused by a stale polling `worker.py` process running in the background, enforcing exclusivity for the `redpill-worker.service`.
 - **[FEAT] SovereignDaemon**: Finalized `daemon.py` orchestrating task fetching and Right to Silence execution via systemd heartbeat.
 - **[FEAT] Cognitive Queue**: Implemented SQLite-backed Bayesian task queue (`cognitive_queue.py`) with frustration circuit breaker to prevent infinite loops.
 - **[FEAT] Dynamic Worker Scheduling**: Upgraded `schedule_pulse.py` to deploy `redpill-worker.timer` with a **1-minute interval** by default, optimizing Telegram-to-IDE latency.
