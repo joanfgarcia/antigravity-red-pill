@@ -6,10 +6,14 @@ Este documento consolida las iniciativas principales para el salto a la **v7.0**
 
 ## FASE 7.0 MVP (Fundamentos y Autonomía Controlada)
 
-### 1. Bünker Lifecycle CLI (`bunker init`, `install` & `update`) [Alta Prioridad]
-- **Objetivo:** Suite unificada de comandos que gestiona todo el ciclo de vida del Bünker: perfilado inicial, instalación determinista y actualizaciones continuas sin fricción.
-- **Enfoque Declarativo:** `bunker init` genera un archivo `bunker.profile.yaml` (definiendo límites y *workers*). Posteriormente, `bunker install` y `bunker update` leen este perfil para automatizar `uv sync`, descarga de modelos, migraciones de base de datos, despliegue de contenedores y reinicio seguro de daemons en `systemd`.
-- **Por qué:** Tiene el mayor ROI inmediato. Cierra el círculo operativo: desde el "Plug-and-Play" de la instalación hasta el mantenimiento *Zero-Downtime* de las actualizaciones.
+### 1. Bünker Lifecycle CLI (`init`, `install`, `update`, `export`, `restore`) [Alta Prioridad]
+- **Objetivo:** Suite unificada de comandos que gestiona todo el ciclo de vida del Bünker, desde el perfilado inicial hasta migraciones completas de hardware/OS.
+- **Enfoque Declarativo:** 
+  - `bunker init`: Genera el archivo base `bunker.profile.yaml`.
+  - `bunker install` / `update`: Automatizan dependencias, modelos, migraciones de base de datos y contenedores/systemd basándose en el perfil.
+  - `bunker export`: Genera un Snapshot TOTAL (Sovereign Backup) que encapsula no solo la memoria Qdrant/SQLite (*Soul*), sino todo el estado de configuración, `.env` (secretos), perfiles de agentes y claves criptográficas.
+  - `bunker restore`: Rehidrata completamente el ecosistema desde un Snapshot TOTAL tras una instalación en limpio.
+- **Por qué:** Cubre la necesidad crítica de supervivencia ante migraciones de Sistema Operativo (ej. salto a Ubuntu 26.04.1 con cifrado LUKS), garantizando portabilidad absoluta de la "Mente" y la infraestructura sin pérdida de contexto ni configuración.
 
 ### 2. Autonomía Cognitiva (Sovereign Drive) - SÓLO FASE 1
 - **Objetivo:** Implementar la infraestructura base para romper el ciclo síncrono del IDE.
