@@ -318,11 +318,13 @@ class IDEWorker:
 		activity_file = Path(os.environ.get("HOME", "")) / ".gemini" / "antigravity" / "activity_tracker"
 		if activity_file.exists():
 			import time
-			if time.time() - activity_file.stat().st_mtime < 300: # 5 minutes threshold
+
+			if time.time() - activity_file.stat().st_mtime < 300:  # 5 minutes threshold
 				conn.close()
 				return
 
 		from red_pill.core.inbox import MinionInbox
+
 		inbox = MinionInbox()
 		unread = inbox.pop_unread(limit=5)
 

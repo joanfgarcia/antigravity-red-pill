@@ -1,11 +1,12 @@
 import logging
-import os
 import subprocess
 from pathlib import Path
 from typing import Any, Dict
 
 import psutil
 import yaml
+
+from red_pill.core.paths import get_bunker_root
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,7 @@ def profile_hardware() -> None:
 
 	# Path is resolved relatively to the project root or workspace
 	# Using the standard behavior for Red Pill
-	workspace_root = os.getenv("IA_DIR", str(Path.home() / "Documents" / "IA" / "sharing"))
+	workspace_root = str(get_bunker_root())
 	profile_path = Path(workspace_root) / "bunker.profile.yaml"
 
 	with open(profile_path, "w") as f:
