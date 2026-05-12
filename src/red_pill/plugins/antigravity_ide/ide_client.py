@@ -105,3 +105,17 @@ class AntigravityIDEClient:
 			return data
 		logger.error(f"Failed to get trajectory: {resp.status_code} {resp.text}")
 		return {}
+
+	def get_cascade_trajectory_steps(self, cascade_id: str, start_index: int = 0, end_index: int = 1000) -> list:
+		"""Fetches the exact steps with pagination to avoid truncation limits."""
+		payload = {
+			"cascadeId": cascade_id,
+			"startIndex": start_index,
+			"endIndex": end_index
+		}
+		resp = requests.post(self._url("GetCascadeTrajectorySteps"), headers=self._get_headers(), json=payload, verify=False)
+		if resp.status_code == 200:
+			data: dict = resp.json()
+			return data.get("steps", data.get("messages", []))
+		logger.error(f"Failed to get trajectory steps: {resp.status_code} {resp.text}")
+		return []

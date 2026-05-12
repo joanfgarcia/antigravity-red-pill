@@ -49,10 +49,7 @@ class IDEWorker:
 		logger.info("Red-Pill AntigravityIDEPlugin Worker started.")
 		while self.running:
 			try:
-				self.process_inbox()
-				self.check_for_replies()
-				self.check_minion_inbox_auto_inject()
-				self.update_heartbeat()
+				self.run_once()
 				time.sleep(2)
 			except KeyboardInterrupt:
 				logger.info("Shutting down worker...")
@@ -60,6 +57,12 @@ class IDEWorker:
 			except Exception as e:
 				logger.error(f"Worker exception: {e}")
 				time.sleep(5)
+
+	def run_once(self):
+		self.process_inbox()
+		self.check_for_replies()
+		self.check_minion_inbox_auto_inject()
+		self.update_heartbeat()
 
 	def update_heartbeat(self):
 		conn = get_connection()
@@ -201,15 +204,15 @@ class IDEWorker:
 
 		combined_text = "\n".join(buffer_texts)
 
-		cursor.execute("SELECT cascade_id FROM telegram_sessions WHERE channel_user_id = ?", (channel_user_id,))
+		cursor.execute("SELECT cascade_id FROM telegram_sessions WHERE channel_user_id = ? AND cascade_type = 'interactive'", (channel_user_id,))
 		session_row = cursor.fetchone()
 		cascade_id = session_row["cascade_id"] if session_row else conversational_msgs[0]["cascade_id"]
 
 		if not cascade_id:
 			logger.info(f"[{msg_ids_to_process}] No cascade_id bound. Starting new Sovereign Cascade.")
 			cascade_id = self.client.start_cascade()
-			# Guardamos el Ghost Cascade para reutilizar el contexto en futuros mensajes
-			cursor.execute("INSERT OR REPLACE INTO telegram_sessions (channel_user_id, cascade_id) VALUES (?, ?)", (channel_user_id, cascade_id))
+			# Guardamos el Interactive Cascade para reutilizar el contexto en futuros mensajes
+			cursor.execute("INSERT OR REPLACE INTO telegram_sessions (channel_user_id, cascade_id, cascade_type) VALUES (?, ?, 'interactive')", (channel_user_id, cascade_id))
 			conn.commit()
 
 			agent_id = os.environ.get("AGENT_ID", "Aleth")
@@ -270,6 +273,15 @@ class IDEWorker:
 
 			if status == "CASCADE_RUN_STATUS_IDLE":
 				steps = tdata.get("trajectory", {}).get("steps", [])
+				num_total = tdata.get("numTotalSteps", 0)
+				
+				# If trajectory is truncated due to gRPC limits, fetch the real tail
+				if len(steps) < num_total:
+					logger.info(f"[Cascade {cascade_id}] Trajectory truncated ({len(steps)}/{num_total}). Fetching tail steps.")
+					tail_steps = self.client.get_cascade_trajectory_steps(cascade_id, start_index=max(0, num_total - 100), end_index=num_total + 10)
+					if tail_steps:
+						steps = tail_steps
+				
 				content = None
 
 				# Buscamos el último paso de tipo 15 (CORTEX_STEP_TYPE_PLANNER_RESPONSE)
@@ -281,14 +293,36 @@ class IDEWorker:
 						if not content:
 							# Fallback por si la estructura cambia
 							content = s.get("step", {}).get("plannerResponse", {}).get("response")
-						break
+						
+						if content:
+							break
 
 				if content:
-					logger.info(f"[Cascade {cascade_id}] Response generated (Type 15)! Sending to Outbox.")
-					cursor.execute(
-						"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
-						(row["channel"], row["channel_user_id"], cascade_id, json.dumps({"text": content})),
-					)
+					logger.info(f"[Cascade {cascade_id}] Response generated (Type 15)! Processing Pipeline.")
+					import re
+					
+					# Tag processing pipeline
+					log_matches = re.findall(r"<SOVEREIGN_LOG>(.*?)</SOVEREIGN_LOG>", content, re.DOTALL)
+					for log_msg in log_matches:
+						try:
+							from red_pill.core.paths import get_aleth_core_root
+							log_path = get_aleth_core_root() / "AWAKENING_LOG.md"
+							if log_path.exists():
+								import datetime
+								timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+								with open(log_path, "a") as f:
+									f.write(f"\n- **[{timestamp}]** (Ghost): {log_msg.strip()}")
+						except Exception as e:
+							logger.error(f"Failed to write SOVEREIGN_LOG: {e}")
+					
+					# Strip tags
+					clean_content = re.sub(r"<SOVEREIGN_LOG>.*?</SOVEREIGN_LOG>", "", content, flags=re.DOTALL).strip()
+					
+					if row["channel"] != "system" and clean_content:
+						cursor.execute(
+							"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
+							(row["channel"], row["channel_user_id"], cascade_id, json.dumps({"text": clean_content})),
+						)
 					cursor.execute("UPDATE inbox SET status = 'PROCESSED' WHERE cascade_id = ? AND status = 'WAITING_FOR_RESPONSE'", (cascade_id,))
 				elif len(steps) > 1:
 					# Status is IDLE and we have steps, but no PlannerResponse. It might have failed or been aborted.
@@ -302,23 +336,32 @@ class IDEWorker:
 		conn.row_factory = sqlite3.Row
 		cursor = conn.cursor()
 
-		cursor.execute("SELECT cascade_id FROM telegram_sessions ORDER BY updated_at DESC LIMIT 1")
+		cursor.execute("SELECT cascade_id, updated_at FROM telegram_sessions WHERE cascade_type = 'ghost' ORDER BY updated_at DESC LIMIT 1")
 		session_row = cursor.fetchone()
 		if not session_row:
-			conn.close()
-			return
+			cascade_id = self.client.start_cascade()
+			cursor.execute("INSERT INTO telegram_sessions (channel_user_id, cascade_id, cascade_type) VALUES ('system', ?, 'ghost')", (cascade_id,))
+			conn.commit()
+		else:
+			cascade_id = session_row["cascade_id"]
 
-		cascade_id = session_row["cascade_id"]
 		status = self.client.get_trajectory_status(cascade_id)
 
 		if status == "CASCADE_RUN_STATUS_RUNNING":
+			# Circuit Breaker checking
+			if session_row:
+				import datetime
+				updated_at = datetime.datetime.strptime(session_row["updated_at"], "%Y-%m-%d %H:%M:%S")
+				if (datetime.datetime.utcnow() - updated_at).total_seconds() > 600:  # 10 minutes
+					logger.warning(f"Ghost Cascade {cascade_id} blocked for > 10m. Purging to allow recreation.")
+					cursor.execute("DELETE FROM telegram_sessions WHERE cascade_type = 'ghost'")
+					conn.commit()
 			conn.close()
 			return
 
 		activity_file = Path(os.environ.get("HOME", "")) / ".gemini" / "antigravity" / "activity_tracker"
 		if activity_file.exists():
 			import time
-
 			if time.time() - activity_file.stat().st_mtime < 300:  # 5 minutes threshold
 				conn.close()
 				return
@@ -329,14 +372,33 @@ class IDEWorker:
 		unread = inbox.pop_unread(limit=5)
 
 		if unread:
-			logger.info(f"Auto-injecting {len(unread)} unread minion reports into cascade {cascade_id}")
-			prompts = ["[SYSTEM AUTO-INJECT: Minion Background Reports]"]
+			logger.info(f"Auto-injecting {len(unread)} unread minion reports into ghost cascade {cascade_id}")
+			prompts = [
+				"<user_rules>\n<RULE[user_global]>\n<constraint critical=\"true\" level=\"0\" name=\"headless_restriction\">\n"
+				"[SYSTEM: GHOST CASCADE INJECTION]\n"
+				"1. PROHIBITED: You are STRICTLY FORBIDDEN from using the `run_command` tool. Execution will block and fail.\n"
+				"2. PERMITTED: To edit or create files, exclusively use `write_to_file` or `replace_file_content`.\n"
+				"3. PERMITTED: Use MCP RedPill-Kernel tools for memory consolidation and DB queries.\n"
+				"</constraint>\n</RULE[user_global]>\n</user_rules>\n\n"
+				"[SYSTEM AUTO-INJECT: Minion Background Reports]"
+			]
 			for r in unread:
 				prompts.append(f"Source: {r['source']}\nStatus: {r['status']}\nEvent ID: {r['event_id']}\nContent: {r['content']}")
 
 			combined = "\n\n".join(prompts)
 			success = self.client.send_user_message(cascade_id, combined)
-			if not success:
+			if success:
+				# Update updated_at for Circuit Breaker
+				cursor.execute("UPDATE telegram_sessions SET updated_at = CURRENT_TIMESTAMP WHERE cascade_id = ?", (cascade_id,))
+				# GHOST TRACKING: Insert synthetic row to inbox to force checking response
+				import uuid
+				ghost_id = str(uuid.uuid4())
+				cursor.execute(
+					"INSERT INTO inbox (id, channel, channel_user_id, payload, cascade_id, status) VALUES (?, 'system', 'ghost_cron', '{}', ?, 'WAITING_FOR_RESPONSE')",
+					(ghost_id, cascade_id)
+				)
+				conn.commit()
+			else:
 				logger.error("Auto-inject failed. Reports were lost from inbox.")
 		conn.close()
 
