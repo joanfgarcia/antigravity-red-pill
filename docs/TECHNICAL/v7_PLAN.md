@@ -6,10 +6,10 @@ Este documento consolida las iniciativas principales para el salto a la **v7.0**
 
 ## FASE 7.0 MVP (Fundamentos y Autonomía Controlada)
 
-### 1. Bünker Onboarding & One-Click Install (`bunker init` & `bunker install`) [Alta Prioridad]
-- **Objetivo:** Comando unificado de inicialización que realiza un perfilado automático de hardware, seguido de un instalador determinista de un solo click.
-- **Enfoque Declarativo:** `bunker init` genera un archivo `bunker.profile.yaml` (definiendo `MemoryMax`, *quantization*, workers). Posteriormente, `bunker install` lee este perfil y automatiza `uv sync`, descarga de modelos vía HuggingFace, despliegue de Quadlets (Qdrant/Redis) y registro en `systemd`.
-- **Por qué:** Tiene el mayor ROI inmediato. Transforma el despliegue de un proceso manual y tedioso a una experiencia "Plug-and-Play" Sovereign.
+### 1. Bünker Lifecycle CLI (`bunker init`, `install` & `update`) [Alta Prioridad]
+- **Objetivo:** Suite unificada de comandos que gestiona todo el ciclo de vida del Bünker: perfilado inicial, instalación determinista y actualizaciones continuas sin fricción.
+- **Enfoque Declarativo:** `bunker init` genera un archivo `bunker.profile.yaml` (definiendo límites y *workers*). Posteriormente, `bunker install` y `bunker update` leen este perfil para automatizar `uv sync`, descarga de modelos, migraciones de base de datos, despliegue de contenedores y reinicio seguro de daemons en `systemd`.
+- **Por qué:** Tiene el mayor ROI inmediato. Cierra el círculo operativo: desde el "Plug-and-Play" de la instalación hasta el mantenimiento *Zero-Downtime* de las actualizaciones.
 
 ### 2. Autonomía Cognitiva (Sovereign Drive) - SÓLO FASE 1
 - **Objetivo:** Implementar la infraestructura base para romper el ciclo síncrono del IDE.
