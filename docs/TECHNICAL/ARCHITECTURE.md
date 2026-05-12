@@ -211,8 +211,13 @@ Project Lazarus is designed to be **Water**—fluid across all hardware tiers. T
 - **Containerization**: The Bünker (Qdrant) is backend-agnostic, running equally on local Docker, Podman, or cloud-native clusters.
 
 ### 9.1 Inference Plugin System (BitNet Multi-Backend)
+Para poder instanciar modelos a nivel Swarm usando 1.58-bits localmente y mantener el ecosistema descentralizado, hemos implementado el `InferenceRouter` (`routing.py`) que despacha promts usando la interfaz abstracta `BaseInferenceProvider`. Esto permite instanciar transparentemente `BitNetInferenceProvider` o delegar a APIs comerciales como OpenAI vía plugins.
 
-> **Full specification**: [INFERENCE_PLUGINS.md](INFERENCE_PLUGINS.md)
+### 9.2 Cognitive Degradation & Capability Exams (v7.0)
+Para proteger la integridad de las tareas y preservar el presupuesto de los modelos comerciales, el motor de inferencia incluye un sistema avanzado de **Examen de Capacidades**:
+- **Task Exam**: Todo proveedor implementa `validate_task_capability(task_name)`. Si un Minion requiere *high_reasoning*, el modelo debe haber superado el examen para esa capacidad o el router lo rechazará.
+- **Graceful Token Degradation**: Cuando los Minions ejecutan tareas asíncronas de mantenimiento (`tier="cheap"`) o el Bünker detecta rechazos HTTP (429 Rate Limit, 402 Exhausted), el enrutador fuerza dinámicamente un *downgrade* hacia modelos más baratos (ej. `Flash`, `Mini`) para evitar bloquear el enjambre.
+- **Hardware Fault Tolerance**: Si un modelo local detecta la ausencia de hardware (CUDA, ROCm), lanza un warning y se delega la ejecución al siguiente proveedor en la lista. Sólo se lanzará un error fatal de `CRITICAL BLINDNESS` si el registro de proveedores queda totalmente vacío.
 
 The BitNet b1.58 inference engine operates via a **multi-flavor plugin architecture**. Each flavor is an independent CMake build (`build_<name>/`) sharing the same source tree and model files. Flavors are activated/deactivated by editing the `FLAVORS` dict in the benchmark scripts.
 
