@@ -6,10 +6,10 @@ Este documento consolida las iniciativas principales para el salto a la **v7.0**
 
 ## FASE 7.0 MVP (Fundamentos y Autonomía Controlada)
 
-### 1. Bünker Onboarding & Profiling (`bunker init`) [Alta Prioridad]
-- **Objetivo:** Comando unificado de inicialización que realiza un perfilado automático de hardware (detección de CUDA, ROCm, NPU, RAM disponible).
-- **Enfoque Declarativo:** Debe generar un archivo `bunker.profile.yaml` que actúe como fuente de verdad para todos los componentes (definiendo límites como `MemoryMax`, *quantization*, número de workers y fallbacks). Esto facilitará enormemente su uso en entornos inmutables como Silverblue.
-- **Por qué:** Tiene el mayor ROI inmediato. Elimina la fricción manual en la instalación y calibración del entorno Sovereign.
+### 1. Bünker Onboarding & One-Click Install (`bunker init` & `bunker install`) [Alta Prioridad]
+- **Objetivo:** Comando unificado de inicialización que realiza un perfilado automático de hardware, seguido de un instalador determinista de un solo click.
+- **Enfoque Declarativo:** `bunker init` genera un archivo `bunker.profile.yaml` (definiendo `MemoryMax`, *quantization*, workers). Posteriormente, `bunker install` lee este perfil y automatiza `uv sync`, descarga de modelos vía HuggingFace, despliegue de Quadlets (Qdrant/Redis) y registro en `systemd`.
+- **Por qué:** Tiene el mayor ROI inmediato. Transforma el despliegue de un proceso manual y tedioso a una experiencia "Plug-and-Play" Sovereign.
 
 ### 2. Autonomía Cognitiva (Sovereign Drive) - SÓLO FASE 1
 - **Objetivo:** Implementar la infraestructura base para romper el ciclo síncrono del IDE.
