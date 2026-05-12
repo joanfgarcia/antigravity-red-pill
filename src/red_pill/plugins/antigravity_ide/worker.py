@@ -302,7 +302,7 @@ class IDEWorker:
 		conn.row_factory = sqlite3.Row
 		cursor = conn.cursor()
 
-		cursor.execute("SELECT cascade_id FROM telegram_sessions ORDER BY id DESC LIMIT 1")
+		cursor.execute("SELECT cascade_id FROM telegram_sessions ORDER BY updated_at DESC LIMIT 1")
 		session_row = cursor.fetchone()
 		if not session_row:
 			conn.close()

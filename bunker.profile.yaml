@@ -1,0 +1,6 @@
+hardware:
+  memory_max_gb: 25.9
+  workers: 8
+  cuda_enabled: true
+models:
+  quantization: Q4_K_M

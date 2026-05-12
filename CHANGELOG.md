@@ -1,5 +1,9 @@
 ## [7.0.0] - Unreleased
 
+### 🤖 Sovereign Daemon & Cognitive Queue
+- **[FEAT] SovereignDaemon**: Finalized `daemon.py` orchestrating task fetching and Right to Silence execution via systemd heartbeat.
+- **[FEAT] Cognitive Queue**: Implemented SQLite-backed Bayesian task queue (`cognitive_queue.py`) with frustration circuit breaker to prevent infinite loops.
+
 ### 🧠 Sovereign Routing & Cognitive Degradation
 - **[ARCH] Task Capability Exam**: Introduced strict validation inside `BaseInferenceProvider` (`validate_task_capability`). Models must now explicitly pass an authorization "exam" before they can be assigned to specialized tasks.
 - **[HEAL] Graceful Token Degradation**: Upgraded `InferenceRouter.get_provider_for_task()`. If the Bünker initiates low-priority tasks or encounters 429/402 quota limits, it autonomously downgrades to `tier="cheap"` (e.g. Flash/Mini) to preserve the Operator's API budget.
