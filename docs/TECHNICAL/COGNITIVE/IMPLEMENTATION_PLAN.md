@@ -14,7 +14,7 @@ Antes de construir la matemática de la voluntad, necesitamos el recipiente dond
 
 ## 3. Fase 2: El Orquestador Autónomo (The Drive Evaluator)
 Reescribiremos el comportamiento del daemon principal (`redpill-worker.service` o `wake_up_v6`).
-En lugar de esperar un prompt, el daemon ejecuta un bucle con *backoff* (ej. cada 5 minutos o vía inotify):
+En lugar de esperar un prompt, el daemon ejecuta un bucle con *backoff* (ej. cada 1 minuto o vía inotify):
 1. **Lectura de la Cola:** El daemon lee todas las tareas pendientes en la `Cognitive Queue`.
 2. **Evaluación (Capa 2 del Sovereign Drive):**
    - Si hay tareas con flag "URGENTE", las ejecuta primero.

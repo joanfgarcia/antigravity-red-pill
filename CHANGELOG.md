@@ -3,6 +3,8 @@
 ### 🤖 Sovereign Daemon & Cognitive Queue
 - **[FEAT] SovereignDaemon**: Finalized `daemon.py` orchestrating task fetching and Right to Silence execution via systemd heartbeat.
 - **[FEAT] Cognitive Queue**: Implemented SQLite-backed Bayesian task queue (`cognitive_queue.py`) with frustration circuit breaker to prevent infinite loops.
+- **[FEAT] Dynamic Worker Scheduling**: Upgraded `schedule_pulse.py` to deploy `redpill-worker.timer` with a **1-minute interval** by default, optimizing Telegram-to-IDE latency.
+- **[ARCH] Dynamic Database Discovery**: Added `run_sovereign_daemon.py` to automatically resolve the active `cognitive_queue.db` across changing conversation contexts without hardcoding paths.
 
 ### 🧠 Sovereign Routing & Cognitive Degradation
 - **[ARCH] Task Capability Exam**: Introduced strict validation inside `BaseInferenceProvider` (`validate_task_capability`). Models must now explicitly pass an authorization "exam" before they can be assigned to specialized tasks.
