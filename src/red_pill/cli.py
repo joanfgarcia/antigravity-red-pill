@@ -433,6 +433,14 @@ def main() -> None:
 	int_sub.add_parser("disable", help="Restore baseline AI neutrality")
 	int_sub.add_parser("status", help="Show interceptor state")
 
+	bunker_parser = subparsers.add_parser("bunker", help="Bünker Lifecycle & Orchestration")
+	bunker_sub = bunker_parser.add_subparsers(dest="bunker_cmd")
+	bunker_sub.add_parser("init", help="Hardware profiling and declarative profile generation")
+	bunker_sub.add_parser("install", help="Deterministic installation from bunker profile")
+	bunker_sub.add_parser("update", help="Update codebase and dependencies safely")
+	bunker_sub.add_parser("export", help="Total Sovereign Backup of memory and infrastructure")
+	bunker_sub.add_parser("restore", help="Rehydrate system from a Total Sovereign Backup")
+
 	subparsers.add_parser("telemetry", help="Run a single-pass hardware/Bünker telemetry heartbeat (Oneshot)")
 
 	args = parser.parse_args()
@@ -500,7 +508,7 @@ def main() -> None:
 	# Map CLI type to collection(s)
 	if getattr(args, "type", None):
 		collections = [get_collection(args.type)]
-	elif args.command in ["seed", "status", "swarm", "soul", "init"]:
+	elif args.command in ["seed", "status", "swarm", "soul", "init", "bunker"]:
 		collections = []  # Not needed for these
 	else:
 		# Default sweep for search/diag if no type specified
@@ -643,6 +651,11 @@ def main() -> None:
 			return
 		elif args.command == "interceptor":
 			handle_interceptor(args)
+			return
+		elif args.command == "bunker":
+			from red_pill.bunker_lifecycle import handle_bunker
+
+			handle_bunker(args)
 			return
 
 		# Loop through requested collections
