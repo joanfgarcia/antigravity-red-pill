@@ -1,7 +1,7 @@
 import asyncio
+import logging
 import os
 import sys
-import logging
 
 # Add src to path
 sys.path.append(os.path.join(os.getcwd(), "src"))

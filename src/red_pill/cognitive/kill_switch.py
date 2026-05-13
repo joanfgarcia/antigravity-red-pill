@@ -13,7 +13,7 @@ class SovereignKillSwitch:
 	inmunes a bloqueos de base de datos).
 	"""
 
-	def __init__(self, workspace: str = None):
+	def __init__(self, workspace: str | None = None):
 		if not workspace:
 			workspace = str(get_bunker_root())
 

@@ -8,6 +8,7 @@
 - **[FEAT] Cognitive Queue**: Implemented SQLite-backed Bayesian task queue (`cognitive_queue.py`) with frustration circuit breaker to prevent infinite loops.
 - **[FEAT] Dynamic Worker Scheduling**: Upgraded `schedule_pulse.py` to deploy `redpill-worker.timer` with a **1-minute interval** by default, optimizing Telegram-to-IDE latency.
 - **[ARCH] Dynamic Database Discovery**: Added `run_sovereign_daemon.py` to automatically resolve the active `cognitive_queue.db` across changing conversation contexts without hardcoding paths.
+- **[HEAL] Mypy/Ruff Strict Compliance**: Resolved 16 latent type and syntax validation errors across `ide_client.py`, `worker.py`, `kill_switch.py`, and `antigravity_decrypt.py`, enforcing 100% compliance with the Sound of Silence standard.
 
 ### 🧠 Sovereign Routing & Cognitive Degradation
 - **[ARCH] Task Capability Exam**: Introduced strict validation inside `BaseInferenceProvider` (`validate_task_capability`). Models must now explicitly pass an authorization "exam" before they can be assigned to specialized tasks.

@@ -1,8 +1,8 @@
-import sqlite3
 import json
 import logging
+import sqlite3
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger("CognitiveQueue")
 
@@ -38,7 +38,7 @@ class CognitiveQueue:
         """Injects a task into the queue (e.g. from Sentinel, Telegram, or internal Entropy)."""
         with sqlite3.connect(self.db_path) as conn:
             conn.execute('''
-                INSERT OR REPLACE INTO cognitive_tasks 
+                INSERT OR REPLACE INTO cognitive_tasks
                 (task_id, source_type, payload, base_urgency, expected_info_gain, updated_at)
                 VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             ''', (task_id, source_type, json.dumps(payload), base_urgency, expected_info_gain))
@@ -53,9 +53,9 @@ class CognitiveQueue:
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.execute('''
-                SELECT * FROM cognitive_tasks 
-                WHERE status = 'PENDING' 
-                ORDER BY (base_urgency * expected_info_gain) DESC 
+                SELECT * FROM cognitive_tasks
+                WHERE status = 'PENDING'
+                ORDER BY (base_urgency * expected_info_gain) DESC
                 LIMIT 1
             ''')
             row = cursor.fetchone()
@@ -79,21 +79,21 @@ class CognitiveQueue:
             row = conn.execute("SELECT failure_count, cost_accumulator FROM cognitive_tasks WHERE task_id = ?", (task_id,)).fetchone()
             if not row:
                 return
-            
+
             new_fails = row['failure_count'] + 1
             new_cost = row['cost_accumulator'] + cost_increment
 
             if new_fails >= MAX_FAILURES or new_cost > MAX_COST:
                 conn.execute('''
-                    UPDATE cognitive_tasks 
-                    SET status = 'FRUSTRATED', failure_count = ?, cost_accumulator = ?, updated_at = CURRENT_TIMESTAMP 
+                    UPDATE cognitive_tasks
+                    SET status = 'FRUSTRATED', failure_count = ?, cost_accumulator = ?, updated_at = CURRENT_TIMESTAMP
                     WHERE task_id = ?
                 ''', (new_fails, new_cost, task_id))
                 logger.warning(f"Cognitive Loop Broken: Task {task_id} labeled as FRUSTRATED. Reverting to IDLE.")
             else:
                 conn.execute('''
-                    UPDATE cognitive_tasks 
-                    SET status = 'PENDING', failure_count = ?, cost_accumulator = ?, updated_at = CURRENT_TIMESTAMP 
+                    UPDATE cognitive_tasks
+                    SET status = 'PENDING', failure_count = ?, cost_accumulator = ?, updated_at = CURRENT_TIMESTAMP
                     WHERE task_id = ?
                 ''', (new_fails, new_cost, task_id))
             conn.commit()

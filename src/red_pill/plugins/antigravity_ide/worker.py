@@ -300,7 +300,8 @@ class IDEWorker:
 								# Read all lines and reverse them to find the last PLANNER_RESPONSE
 								lines = f.readlines()
 								for line in reversed(lines):
-									if not line.strip(): continue
+									if not line.strip():
+										continue
 									try:
 										data = json.loads(line)
 										if data.get("type") in ("PLANNER_RESPONSE", "15") and "content" in data:
@@ -313,7 +314,7 @@ class IDEWorker:
 								logger.info(f"[Cascade {cascade_id}] Found response in overview.txt!")
 						except Exception as e:
 							logger.error(f"[Cascade {cascade_id}] Error reading overview.txt: {e}")
-					
+
 					# Fallback to gRPC API if overview.txt failed or didn't have content
 					if not content:
 						logger.info(f"[Cascade {cascade_id}] overview.txt failed, using gRPC tail fetch.")
@@ -326,14 +327,14 @@ class IDEWorker:
 					for s in reversed(steps):
 						step_type = str(s.get("type", ""))
 						if step_type == "15" or step_type == "CORTEX_STEP_TYPE_PLANNER_RESPONSE":
-						# En gRPC-Web JSON, los oneof están en el nivel superior, no envueltos en "step"
-						content = s.get("plannerResponse", {}).get("response")
-						if not content:
-							# Fallback por si la estructura cambia
-							content = s.get("step", {}).get("plannerResponse", {}).get("response")
+							# En gRPC-Web JSON, los oneof están en el nivel superior, no envueltos en "step"
+							content = s.get("plannerResponse", {}).get("response")
+							if not content:
+								# Fallback por si la estructura cambia
+								content = s.get("step", {}).get("plannerResponse", {}).get("response")
 
-						if content:
-							break
+							if content:
+								break
 
 				if content:
 					logger.info(f"[Cascade {cascade_id}] Response generated (Type 15)! Processing Pipeline.")

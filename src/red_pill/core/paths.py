@@ -37,3 +37,14 @@ def get_bunker_root() -> Path:
 def get_bunker_root_str() -> str:
 	"""Convenience method para APIs antiguas que requieren strings."""
 	return str(get_bunker_root())
+
+
+def get_aleth_core_root() -> Path:
+	"""
+	Resuelve el directorio transversal Aleth_Core.
+	Usa la variable de entorno ALETH_CORE_DIR si existe, sino asume que está al mismo nivel que el bunker_root.
+	"""
+	aleth_core_str = os.getenv("ALETH_CORE_DIR")
+	if aleth_core_str:
+		return Path(aleth_core_str)
+	return get_bunker_root().parent / "Aleth_Core"

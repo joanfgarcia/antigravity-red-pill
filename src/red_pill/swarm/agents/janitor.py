@@ -1,10 +1,9 @@
 import logging
-import os
-import sqlite3
 import shutil
+import sqlite3
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict
-from datetime import datetime, timedelta
 
 from red_pill.swarm.base import Minion
 
@@ -24,8 +23,8 @@ class JanitorMinion(Minion):
 		"""
 		Executes a cleaning cycle.
 		"""
-		self.log(f"--- [Janitor] Initializing Cleaning Cycle ---")
-		
+		self.log("--- [Janitor] Initializing Cleaning Cycle ---")
+
 		days_to_keep = kwargs.get("days_to_keep", 7)
 		results = {
 			"db_events_purged": 0,
@@ -56,22 +55,22 @@ class JanitorMinion(Minion):
 			conn = sqlite3.connect(db_path)
 			cursor = conn.cursor()
 			cutoff_date = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
-			
+
 			cursor.execute(
-				"DELETE FROM inbox WHERE status IN ('PROCESSED', 'DEAD', 'DELIVERED_BACKGROUND') AND created_at < ?", 
+				"DELETE FROM inbox WHERE status IN ('PROCESSED', 'DEAD', 'DELIVERED_BACKGROUND') AND created_at < ?",
 				(cutoff_date,)
 			)
 			inbox_deleted = cursor.rowcount
-			
+
 			cursor.execute(
-				"DELETE FROM outbox WHERE status IN ('SENT', 'DEAD') AND created_at < ?", 
+				"DELETE FROM outbox WHERE status IN ('SENT', 'DEAD') AND created_at < ?",
 				(cutoff_date,)
 			)
 			outbox_deleted = cursor.rowcount
-			
+
 			conn.commit()
 			conn.close()
-			
+
 			return inbox_deleted + outbox_deleted
 		except Exception as e:
 			logger.error(f"[Janitor] Failed to purge events.db: {e}")
@@ -81,7 +80,7 @@ class JanitorMinion(Minion):
 		deleted_count = 0
 		now = datetime.now().timestamp()
 		cutoff_time = now - (days * 86400)
-		
+
 		try:
 			for item in scratch_dir.iterdir():
 				try:
@@ -95,5 +94,5 @@ class JanitorMinion(Minion):
 					logger.error(f"[Janitor] Failed to delete {item}: {e}")
 		except Exception as e:
 			logger.error(f"[Janitor] Failed to read scratch folder {scratch_dir}: {e}")
-			
+
 		return deleted_count

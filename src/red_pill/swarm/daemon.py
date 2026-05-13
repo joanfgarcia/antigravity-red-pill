@@ -1,9 +1,9 @@
-import time
 import logging
+import time
 from pathlib import Path
-from typing import Optional
 
 from red_pill.swarm.cognitive_queue import CognitiveQueue
+
 # from red_pill.swarm.routing import InferenceRouter
 
 logger = logging.getLogger("SovereignDaemon")
@@ -23,8 +23,8 @@ class SovereignDaemon:
         If high, it injects a self-generated task (Sovereign Will).
         """
         # Placeholder for actual Bayesian entropy calculation (e.g. from procedural_memories)
-        entropy_level = 0.0 
-        
+        entropy_level = 0.0
+
         # Simulated injection of autonomous thought
         if entropy_level > 0.8:
             self.queue.push_task(
@@ -41,7 +41,7 @@ class SovereignDaemon:
         try:
             # Here we will bridge to the Swarm Minions (e.g., InferenceRouter)
             # result = InferenceRouter.execute(task['payload'])
-            
+
             self.queue.mark_completed(task['task_id'])
             logger.info(f"Task {task['task_id']} completed successfully.")
         except Exception as e:
@@ -54,7 +54,7 @@ class SovereignDaemon:
         Designed to run via a Cronjob or Systemd timer (redpill-worker.service).
         """
         task = self.queue.get_next_task()
-        
+
         if not task:
             logger.debug("Cognitive Queue is empty. Triggering Entropy Scan.")
             self.trigger_entropy_scan()

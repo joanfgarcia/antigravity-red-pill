@@ -457,11 +457,12 @@ def process_conversation_file(file_path: str, key: bytes, verbose: bool = False)
 		if overview_path.exists():
 			if verbose:
 				print(f"  ✓ Found overview.txt for {session_id}. Using fast-path parsing.", file=sys.stderr)
-			
+
 			messages = []
 			with open(overview_path, "r", encoding="utf-8") as f:
 				for line in f:
-					if not line.strip(): continue
+					if not line.strip():
+						continue
 					try:
 						data = json.loads(line)
 						content = data.get("content", "")
@@ -469,7 +470,7 @@ def process_conversation_file(file_path: str, key: bytes, verbose: bool = False)
 							messages.append({"content": content.strip(), "length": len(content)})
 					except Exception:
 						pass
-			
+
 			result["messages"] = messages
 			result["success"] = True
 			result["metadata"]["decrypted_size"] = overview_path.stat().st_size
