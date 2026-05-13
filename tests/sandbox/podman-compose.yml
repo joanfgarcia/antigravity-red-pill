@@ -2,8 +2,6 @@ version: '3'
 services:
   qdrant-db:
     image: qdrant/qdrant:latest
-    ports:
-      - "6333:6333"
     # Almacenamiento volátil en RAM para que el test sea ultra rápido y no deje basura
     tmpfs:
       - /qdrant/storage
