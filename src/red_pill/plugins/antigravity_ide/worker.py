@@ -141,7 +141,7 @@ class IDEWorker:
 		first_conv = conversational_msgs[0]
 		first_payload = json.loads(first_conv["payload"])
 		command = first_payload.get("command")
-		
+
 		# If it's a bridged message, the command might be a JSON string inside 'text'
 		if not command and "text" in first_payload:
 			try:
@@ -287,33 +287,58 @@ class IDEWorker:
 			if status == "CASCADE_RUN_STATUS_IDLE":
 				steps = tdata.get("trajectory", {}).get("steps", [])
 				num_total = tdata.get("numTotalSteps", 0)
-				
-				# If trajectory is truncated due to gRPC limits, fetch the real tail
-				if len(steps) < num_total:
-					logger.info(f"[Cascade {cascade_id}] Trajectory truncated ({len(steps)}/{num_total}). Fetching tail steps.")
-					tail_steps = self.client.get_cascade_trajectory_steps(cascade_id, start_index=max(0, num_total - 100), end_index=num_total + 10)
-					if tail_steps:
-						steps = tail_steps
-				
+
 				content = None
 
-				# Buscamos el último paso de tipo 15 (CORTEX_STEP_TYPE_PLANNER_RESPONSE)
-				for s in reversed(steps):
-					step_type = str(s.get("type", ""))
-					if step_type == "15" or step_type == "CORTEX_STEP_TYPE_PLANNER_RESPONSE":
+				# If trajectory is truncated due to gRPC limits, fetch the real tail using overview.txt fast-path
+				if len(steps) < num_total:
+					logger.info(f"[Cascade {cascade_id}] Trajectory truncated ({len(steps)}/{num_total}). Attempting overview.txt fast-path.")
+					overview_path = Path.home() / ".gemini/antigravity/brain" / cascade_id / ".system_generated/logs/overview.txt"
+					if overview_path.exists():
+						try:
+							with open(overview_path, "r", encoding="utf-8") as f:
+								# Read all lines and reverse them to find the last PLANNER_RESPONSE
+								lines = f.readlines()
+								for line in reversed(lines):
+									if not line.strip(): continue
+									try:
+										data = json.loads(line)
+										if data.get("type") in ("PLANNER_RESPONSE", "15") and "content" in data:
+											content = data["content"]
+											if content:
+												break
+									except Exception:
+										pass
+							if content:
+								logger.info(f"[Cascade {cascade_id}] Found response in overview.txt!")
+						except Exception as e:
+							logger.error(f"[Cascade {cascade_id}] Error reading overview.txt: {e}")
+					
+					# Fallback to gRPC API if overview.txt failed or didn't have content
+					if not content:
+						logger.info(f"[Cascade {cascade_id}] overview.txt failed, using gRPC tail fetch.")
+						tail_steps = self.client.get_cascade_trajectory_steps(cascade_id, start_index=max(0, num_total - 100), end_index=num_total + 10)
+						if tail_steps:
+							steps = tail_steps
+
+				# Buscamos el último paso de tipo 15 (CORTEX_STEP_TYPE_PLANNER_RESPONSE) si no lo hemos extraído ya
+				if not content:
+					for s in reversed(steps):
+						step_type = str(s.get("type", ""))
+						if step_type == "15" or step_type == "CORTEX_STEP_TYPE_PLANNER_RESPONSE":
 						# En gRPC-Web JSON, los oneof están en el nivel superior, no envueltos en "step"
 						content = s.get("plannerResponse", {}).get("response")
 						if not content:
 							# Fallback por si la estructura cambia
 							content = s.get("step", {}).get("plannerResponse", {}).get("response")
-						
+
 						if content:
 							break
 
 				if content:
 					logger.info(f"[Cascade {cascade_id}] Response generated (Type 15)! Processing Pipeline.")
 					import re
-					
+
 					# Tag processing pipeline
 					log_matches = re.findall(r"<SOVEREIGN_LOG>(.*?)</SOVEREIGN_LOG>", content, re.DOTALL)
 					for log_msg in log_matches:
@@ -327,10 +352,10 @@ class IDEWorker:
 									f.write(f"\n- **[{timestamp}]** (Ghost): {log_msg.strip()}")
 						except Exception as e:
 							logger.error(f"Failed to write SOVEREIGN_LOG: {e}")
-					
+
 					# Strip tags
 					clean_content = re.sub(r"<SOVEREIGN_LOG>.*?</SOVEREIGN_LOG>", "", content, flags=re.DOTALL).strip()
-					
+
 					if row["channel"] != "system" and clean_content:
 						cursor.execute(
 							"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
