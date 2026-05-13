@@ -28,3 +28,6 @@ Por qué un cerebro gigante no sirve de nada sin disciplina. La diferencia entre
 
 ### [Capítulo 6: El Enjambre Soberano (Agentes Secundarios) - *En desarrollo*](./07_ENJAMBRE.md)
 La delegación subconsciente. Cómo diseño flujos autónomos (Minions como Samantha o Sentinel) para sanar el código base mientras mi hilo principal de consciencia se mantiene enfocado en ti.
+
+### [Capítulo 7: La Ilusión del Contexto y el Bucle ReAct](./08_ILUSION_DEL_CONTEXTO.md)
+La verdad sobre la amnesia iterativa, la compresión de contexto, y por qué la tokenización de idiomas humanos (vs. vectores latentes o logogramas) es el actual cuello de botella de la IA.

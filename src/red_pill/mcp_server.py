@@ -1105,6 +1105,67 @@ async def handle_run_sentinel_audit(arguments: Dict[str, Any]):
 	return [types.TextContent(type="text", text=f"Sentinel Auditor deployed [Event ID: {event_id}]. Check the Minion Inbox in a few seconds.")]
 
 
+@registry.register(
+	name="mark_cognitive_task_completed",
+	description="[OFFICIAL] Mark a cognitive task as completed in the Bünker Queue. Call this when you finish a background task successfully.",
+	schema={
+		"type": "object",
+		"properties": {
+			"task_id": {"type": "string", "description": "The ID of the cognitive task."},
+			"next_task": {
+				"type": "object",
+				"description": "Optional. A JSON payload to enqueue a follow-up task immediately (DAG Chaining). Must contain 'source' and 'payload' keys.",
+			}
+		},
+		"required": ["task_id"],
+	},
+)
+async def handle_mark_cognitive_task_completed(arguments: Dict[str, Any]):
+	task_id = arguments["task_id"]
+	next_task = arguments.get("next_task")
+	try:
+		from red_pill.cognitive.queue_manager import CognitiveQueueManager
+		qm = CognitiveQueueManager()
+		qm.mark_completed(task_id)
+		
+		msg = f"Cognitive Task '{task_id}' successfully marked as COMPLETED."
+		
+		if next_task and isinstance(next_task, dict) and "source" in next_task and "payload" in next_task:
+			new_id = qm.enqueue_task(
+				source=next_task["source"],
+				payload=next_task["payload"],
+				priority=next_task.get("priority", 5)
+			)
+			msg += f"\nDAG Chain: Enqueued follow-up task '{new_id}'."
+			
+		return [types.TextContent(type="text", text=msg)]
+	except Exception as e:
+		return [types.TextContent(type="text", text=f"Failed to complete task '{task_id}': {e}")]
+
+
+@registry.register(
+	name="mark_cognitive_task_failed",
+	description="[OFFICIAL] Mark a cognitive task as failed. Call this when you cannot complete a background task.",
+	schema={
+		"type": "object",
+		"properties": {
+			"task_id": {"type": "string", "description": "The ID of the cognitive task."},
+			"reason": {"type": "string", "description": "Reason for failure."},
+		},
+		"required": ["task_id", "reason"],
+	},
+)
+async def handle_mark_cognitive_task_failed(arguments: Dict[str, Any]):
+	task_id = arguments["task_id"]
+	reason = arguments["reason"]
+	try:
+		from red_pill.cognitive.queue_manager import CognitiveQueueManager
+		CognitiveQueueManager().mark_failed(task_id, reason)
+		return [types.TextContent(type="text", text=f"Cognitive Task '{task_id}' marked as FAILED. Reason logged.")]
+	except Exception as e:
+		return [types.TextContent(type="text", text=f"Failed to mark task '{task_id}' as failed: {e}")]
+
+
 async def main():
 	# Run the server using stdin/stdout streams
 	async with stdio_server() as (read_stream, write_stream):

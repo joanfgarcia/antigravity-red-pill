@@ -22,8 +22,10 @@
   - **[FEAT] Zero-Impact Telemetry**: All vitals are collected using OS-native micro-binaries without background blocking threads, syncing failures natively into the Qdrant Cortex as `signal_memories`.
 
 ### 🚀 Sovereign Drive & One-Click Ecosystem (Foundation)
-- **[ARCH] Operator Lifecycle CLI**: Designed the theoretical foundation for `bunker init`, `install`, `update`, `export`, and `restore`. This formalizes a declarative, deterministic "Plug-and-Play" architecture, shifting deployment from a manual guide to a robust code-driven pipeline.
-- **[ARCH] Sovereign Backup**: Conceptualized `bunker export/restore` to encapsulate not just memory (Soul), but full configuration, `.env` secrets, and cryptographic state, ensuring absolute portability across host OS migrations (e.g., Ubuntu 26.04.1 LUKS migrations).
+- **[FEAT] Operator Lifecycle CLI**: Implemented `bunker export`, `restore`, and `uninstall` commands. This formalizes a declarative, deterministic "Plug-and-Play" architecture.
+- **[FEAT] Sovereign Backup**: `bunker export` encapsulates memory (Qdrant snapshots), `.env` secrets, and SQLite queues into a single Pure-MLS encrypted `.tar.gz.mls`.
+- **[SEC] Cryptographic Paranoia Guard**: `bunker uninstall` features MFA local confirmation and safely stashes `~/.config/red-pill/keys` to prevent locking the operator out of their backups. Introduced `bunker export-keys` for offline cold storage.
+- **[TEST] E2E Sandbox Suite**: Created `tests/sandbox/` using Podman (Ubuntu 24.04 + Qdrant) and `test_lifecycle.sh` to fully simulate the init-inject-export-purge-restore cycle without host pollution.
 - **[ARCH] Multimodal Semantic Bridge**: Designed the Edge Interceptor for Neon-Link to handle incoming P2P multimedia payloads (images, audio) via local border models (Llava/Whisper), protecting the text-pure core of the Red Pill.
 - **[ARCH] Phase 1 Cognitive Queue**: Outlined the Sovereign Drive architecture mapping the decoupling of the IDE synchronous cycle to an asynchronous Cognitive Queue protected by a `Safe Autonomous Mode` kill-switch.
 - **[HEAL] Path Resolution Hardening**: Centralized all environment and workspace path resolutions into a deterministic `red_pill.core.paths.get_bunker_root()` module. Purged hardcoded `os.getenv("IA_DIR")` across the Python codebase to enforce strict validation (existence, read/write permissions) making the Red Pill robust in immutable environments (e.g. Silverblue, Flatpak) and preventing silent `FileNotFoundError`s downstream.

@@ -62,6 +62,7 @@ class IDEWorker:
 		self.process_inbox()
 		self.check_for_replies()
 		self.check_minion_inbox_auto_inject()
+		self.process_cognitive_queue()
 		self.update_heartbeat()
 
 	def update_heartbeat(self):
@@ -439,6 +440,100 @@ class IDEWorker:
 				conn.commit()
 			else:
 				logger.error("Auto-inject failed. Reports were lost from inbox.")
+		conn.close()
+
+	def process_cognitive_queue(self):
+		conn = get_connection()
+		conn.row_factory = sqlite3.Row
+		cursor = conn.cursor()
+
+		cursor.execute("SELECT cascade_id, updated_at FROM telegram_sessions WHERE cascade_type = 'ghost' ORDER BY updated_at DESC LIMIT 1")
+		session_row = cursor.fetchone()
+		if not session_row:
+			conn.close()
+			return
+
+		cascade_id = session_row["cascade_id"]
+		status = self.client.get_trajectory_status(cascade_id)
+
+		if status == "CASCADE_RUN_STATUS_RUNNING":
+			conn.close()
+			return
+
+		from red_pill.cognitive.queue_manager import CognitiveQueueManager
+		queue_manager = CognitiveQueueManager()
+		task = queue_manager.pop_next_task()
+
+		if not task:
+			# LA CHISPA (The Spark): Proactive Entropy Checker
+			import datetime
+			
+			# Comprobar cuándo fue la última vez que 'La Chispa' generó una tarea
+			cursor.execute("SELECT MAX(created_at) as last_spark FROM cognitive_tasks WHERE source = 'The_Spark'")
+			spark_row = cursor.fetchone()
+			last_spark = spark_row["last_spark"] if spark_row else None
+			
+			inject_spark = False
+			if not last_spark:
+				inject_spark = True
+			else:
+				# Manejar posibles milisegundos o diferentes formatos de fecha en SQLite
+				try:
+					last_dt = datetime.datetime.strptime(last_spark.split('.')[0], "%Y-%m-%d %H:%M:%S")
+					# Generar una Chispa cada 4 horas (14400 segundos) de inactividad
+					if (datetime.datetime.utcnow() - last_dt).total_seconds() > 14400:
+						inject_spark = True
+				except Exception as e:
+					logger.error(f"Error parsing last_spark date: {e}")
+					inject_spark = False
+					
+			if inject_spark:
+				logger.info("THE SPARK: High entropy threshold reached. Injecting proactive maintenance task.")
+				queue_manager.enqueue_task(
+					source="The_Spark",
+					payload={
+						"action": "proactive_maintenance", 
+						"directive": "Review memory fragmentation, check for unresolved pain signals, and consolidate Bünker context."
+					},
+					priority=1
+				)
+			
+			conn.close()
+			return
+
+		logger.info(f"Processing Cognitive Task: {task['id']} (Priority: {task['priority']})")
+		
+		payload_text = json.dumps(task["payload"], indent=2)
+		prompt = (
+			"<user_rules>\n<RULE[user_global]>\n<constraint critical=\"true\" level=\"0\" name=\"headless_restriction\">\n"
+			"[SYSTEM: COGNITIVE EVALUATOR INJECTION]\n"
+			"1. PROHIBITED: You are STRICTLY FORBIDDEN from using the `run_command` tool. Execution will block and fail.\n"
+			"2. PERMITTED: Use MCP RedPill-Kernel tools for memory consolidation and DB queries.\n"
+			"</constraint>\n</RULE[user_global]>\n</user_rules>\n\n"
+			"[SYSTEM AUTO-INJECT: COGNITIVE TASK]\n"
+			f"Task ID: {task['id']}\n"
+			f"Source: {task['source']}\n"
+			"Payload:\n"
+			f"{payload_text}\n\n"
+			"Execute this task silently."
+		)
+
+		success = self.client.send_user_message(cascade_id, prompt)
+		if success:
+			cursor.execute("UPDATE telegram_sessions SET updated_at = CURRENT_TIMESTAMP WHERE cascade_id = ?", (cascade_id,))
+			import uuid
+			ghost_id = str(uuid.uuid4())
+			cursor.execute(
+				"INSERT INTO inbox (id, channel, channel_user_id, payload, cascade_id, status) VALUES (?, 'system', 'ghost_cognitive', '{}', ?, 'WAITING_FOR_RESPONSE')",
+				(ghost_id, cascade_id)
+			)
+			conn.commit()
+			# The task remains in PROCESSING status. The agent should ideally report back to mark it COMPLETED via MCP.
+			# For now, we assume it's dispatched.
+		else:
+			logger.error(f"Failed to inject cognitive task {task['id']}")
+			queue_manager.mark_failed(task['id'], "Failed to send message to Ghost Cascade")
+		
 		conn.close()
 
 
