@@ -75,15 +75,15 @@ def _install_linux(interval_hours: int, uv_path: str) -> None:
 	_write_systemd_timer("redpill-telemetry.timer", "30s", "Timer for Red Pill Telemetry Heartbeat")
 
 	# 4. Queue (Worker) - 1m
-	_write_systemd_unit("redpill-queue.service", f"{uv_path} run python -m red_pill.core.queue_worker --oneshot", "Red Pill Memory Queue Worker", type="oneshot")
+	_write_systemd_unit(
+		"redpill-queue.service", f"{uv_path} run python -m red_pill.core.queue_worker --oneshot", "Red Pill Memory Queue Worker", type="oneshot"
+	)
 	_write_systemd_timer("redpill-queue.timer", "1m", "Timer for Red Pill Memory Queue Worker")
 
 	# 5. Sovereign Daemon (Telegram/Ide Bridge) - 1m
 	DAEMON_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "run_sovereign_daemon.py")
 	_write_systemd_unit("redpill-worker.service", f"{uv_path} run python {DAEMON_SCRIPT}", "Sovereign Daemon Pulse", type="oneshot", nice=10)
 	_write_systemd_timer("redpill-worker.timer", "1m", "Timer for Sovereign Daemon Pulse")
-
-
 
 	# 4. Chronicle Daily (04:00, Persistent — runs on next boot if missed)
 	_write_systemd_unit(

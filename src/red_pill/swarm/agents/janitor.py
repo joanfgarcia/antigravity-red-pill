@@ -56,16 +56,10 @@ class JanitorMinion(Minion):
 			cursor = conn.cursor()
 			cutoff_date = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
 
-			cursor.execute(
-				"DELETE FROM inbox WHERE status IN ('PROCESSED', 'DEAD', 'DELIVERED_BACKGROUND') AND created_at < ?",
-				(cutoff_date,)
-			)
+			cursor.execute("DELETE FROM inbox WHERE status IN ('PROCESSED', 'DEAD', 'DELIVERED_BACKGROUND') AND created_at < ?", (cutoff_date,))
 			inbox_deleted = cursor.rowcount
 
-			cursor.execute(
-				"DELETE FROM outbox WHERE status IN ('SENT', 'DEAD') AND created_at < ?",
-				(cutoff_date,)
-			)
+			cursor.execute("DELETE FROM outbox WHERE status IN ('SENT', 'DEAD') AND created_at < ?", (cutoff_date,))
 			outbox_deleted = cursor.rowcount
 
 			conn.commit()

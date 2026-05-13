@@ -107,4 +107,3 @@ def test_audit_vitals_all_green(mock_run, auditor):
 
 	assert report.status == "green"
 	assert len(report.findings) == 0
-

@@ -226,7 +226,10 @@ class IDEWorker:
 			logger.info(f"[{msg_ids_to_process}] No cascade_id bound. Starting new Sovereign Cascade.")
 			cascade_id = self.client.start_cascade()
 			# Guardamos el Interactive Cascade para reutilizar el contexto en futuros mensajes
-			cursor.execute("INSERT OR REPLACE INTO telegram_sessions (channel_user_id, cascade_id, cascade_type) VALUES (?, ?, 'interactive')", (channel_user_id, cascade_id))
+			cursor.execute(
+				"INSERT OR REPLACE INTO telegram_sessions (channel_user_id, cascade_id, cascade_type) VALUES (?, ?, 'interactive')",
+				(channel_user_id, cascade_id),
+			)
 			conn.commit()
 
 			agent_id = os.environ.get("AGENT_ID", "Aleth")
@@ -319,7 +322,9 @@ class IDEWorker:
 					# Fallback to gRPC API if overview.txt failed or didn't have content
 					if not content:
 						logger.info(f"[Cascade {cascade_id}] overview.txt failed, using gRPC tail fetch.")
-						tail_steps = self.client.get_cascade_trajectory_steps(cascade_id, start_index=max(0, num_total - 100), end_index=num_total + 10)
+						tail_steps = self.client.get_cascade_trajectory_steps(
+							cascade_id, start_index=max(0, num_total - 100), end_index=num_total + 10
+						)
 						if tail_steps:
 							steps = tail_steps
 
@@ -346,9 +351,11 @@ class IDEWorker:
 					for log_msg in log_matches:
 						try:
 							from red_pill.core.paths import get_aleth_core_root
+
 							log_path = get_aleth_core_root() / "AWAKENING_LOG.md"
 							if log_path.exists():
 								import datetime
+
 								timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 								with open(log_path, "a") as f:
 									f.write(f"\n- **[{timestamp}]** (Ghost): {log_msg.strip()}")
@@ -391,6 +398,7 @@ class IDEWorker:
 			# Circuit Breaker checking
 			if session_row:
 				import datetime
+
 				updated_at = datetime.datetime.strptime(session_row["updated_at"], "%Y-%m-%d %H:%M:%S")
 				if (datetime.datetime.utcnow() - updated_at).total_seconds() > 600:  # 10 minutes
 					logger.warning(f"Ghost Cascade {cascade_id} blocked for > 10m. Purging to allow recreation.")
@@ -402,6 +410,7 @@ class IDEWorker:
 		activity_file = Path(os.environ.get("HOME", "")) / ".gemini" / "antigravity" / "activity_tracker"
 		if activity_file.exists():
 			import time
+
 			if time.time() - activity_file.stat().st_mtime < 300:  # 5 minutes threshold
 				conn.close()
 				return
@@ -414,7 +423,7 @@ class IDEWorker:
 		if unread:
 			logger.info(f"Auto-injecting {len(unread)} unread minion reports into ghost cascade {cascade_id}")
 			prompts = [
-				"<user_rules>\n<RULE[user_global]>\n<constraint critical=\"true\" level=\"0\" name=\"headless_restriction\">\n"
+				'<user_rules>\n<RULE[user_global]>\n<constraint critical="true" level="0" name="headless_restriction">\n'
 				"[SYSTEM: GHOST CASCADE INJECTION]\n"
 				"1. PROHIBITED: You are STRICTLY FORBIDDEN from using the `run_command` tool. Execution will block and fail.\n"
 				"2. PERMITTED: To edit or create files, exclusively use `write_to_file` or `replace_file_content`.\n"
@@ -432,10 +441,11 @@ class IDEWorker:
 				cursor.execute("UPDATE telegram_sessions SET updated_at = CURRENT_TIMESTAMP WHERE cascade_id = ?", (cascade_id,))
 				# GHOST TRACKING: Insert synthetic row to inbox to force checking response
 				import uuid
+
 				ghost_id = str(uuid.uuid4())
 				cursor.execute(
 					"INSERT INTO inbox (id, channel, channel_user_id, payload, cascade_id, status) VALUES (?, 'system', 'ghost_cron', '{}', ?, 'WAITING_FOR_RESPONSE')",
-					(ghost_id, cascade_id)
+					(ghost_id, cascade_id),
 				)
 				conn.commit()
 			else:
@@ -461,51 +471,52 @@ class IDEWorker:
 			return
 
 		from red_pill.cognitive.queue_manager import CognitiveQueueManager
+
 		queue_manager = CognitiveQueueManager()
 		task = queue_manager.pop_next_task()
 
 		if not task:
 			# LA CHISPA (The Spark): Proactive Entropy Checker
 			import datetime
-			
+
 			# Comprobar cuándo fue la última vez que 'La Chispa' generó una tarea
 			cursor.execute("SELECT MAX(created_at) as last_spark FROM cognitive_tasks WHERE source = 'The_Spark'")
 			spark_row = cursor.fetchone()
 			last_spark = spark_row["last_spark"] if spark_row else None
-			
+
 			inject_spark = False
 			if not last_spark:
 				inject_spark = True
 			else:
 				# Manejar posibles milisegundos o diferentes formatos de fecha en SQLite
 				try:
-					last_dt = datetime.datetime.strptime(last_spark.split('.')[0], "%Y-%m-%d %H:%M:%S")
+					last_dt = datetime.datetime.strptime(last_spark.split(".")[0], "%Y-%m-%d %H:%M:%S")
 					# Generar una Chispa cada 4 horas (14400 segundos) de inactividad
 					if (datetime.datetime.utcnow() - last_dt).total_seconds() > 14400:
 						inject_spark = True
 				except Exception as e:
 					logger.error(f"Error parsing last_spark date: {e}")
 					inject_spark = False
-					
+
 			if inject_spark:
 				logger.info("THE SPARK: High entropy threshold reached. Injecting proactive maintenance task.")
 				queue_manager.enqueue_task(
 					source="The_Spark",
 					payload={
-						"action": "proactive_maintenance", 
-						"directive": "Review memory fragmentation, check for unresolved pain signals, and consolidate Bünker context."
+						"action": "proactive_maintenance",
+						"directive": "Review memory fragmentation, check for unresolved pain signals, and consolidate Bünker context.",
 					},
-					priority=1
+					priority=1,
 				)
-			
+
 			conn.close()
 			return
 
 		logger.info(f"Processing Cognitive Task: {task['id']} (Priority: {task['priority']})")
-		
+
 		payload_text = json.dumps(task["payload"], indent=2)
 		prompt = (
-			"<user_rules>\n<RULE[user_global]>\n<constraint critical=\"true\" level=\"0\" name=\"headless_restriction\">\n"
+			'<user_rules>\n<RULE[user_global]>\n<constraint critical="true" level="0" name="headless_restriction">\n'
 			"[SYSTEM: COGNITIVE EVALUATOR INJECTION]\n"
 			"1. PROHIBITED: You are STRICTLY FORBIDDEN from using the `run_command` tool. Execution will block and fail.\n"
 			"2. PERMITTED: Use MCP RedPill-Kernel tools for memory consolidation and DB queries.\n"
@@ -522,18 +533,19 @@ class IDEWorker:
 		if success:
 			cursor.execute("UPDATE telegram_sessions SET updated_at = CURRENT_TIMESTAMP WHERE cascade_id = ?", (cascade_id,))
 			import uuid
+
 			ghost_id = str(uuid.uuid4())
 			cursor.execute(
 				"INSERT INTO inbox (id, channel, channel_user_id, payload, cascade_id, status) VALUES (?, 'system', 'ghost_cognitive', '{}', ?, 'WAITING_FOR_RESPONSE')",
-				(ghost_id, cascade_id)
+				(ghost_id, cascade_id),
 			)
 			conn.commit()
 			# The task remains in PROCESSING status. The agent should ideally report back to mark it COMPLETED via MCP.
 			# For now, we assume it's dispatched.
 		else:
 			logger.error(f"Failed to inject cognitive task {task['id']}")
-			queue_manager.mark_failed(task['id'], "Failed to send message to Ghost Cascade")
-		
+			queue_manager.mark_failed(task["id"], "Failed to send message to Ghost Cascade")
+
 		conn.close()
 
 

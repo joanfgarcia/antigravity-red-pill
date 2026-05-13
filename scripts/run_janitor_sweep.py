@@ -11,6 +11,7 @@ from red_pill.swarm.orchestrator import GruOrchestrator
 
 logging.basicConfig(level=logging.INFO)
 
+
 async def run_sweep():
 	print("--- [Swarm] Desplegando JanitorMinion para barrido de mantenimiento... ---")
 
@@ -25,6 +26,7 @@ async def run_sweep():
 		print("==========================\n")
 	else:
 		print(f"[Error] Fallo en el Janitor: {res.error}")
+
 
 if __name__ == "__main__":
 	asyncio.run(run_sweep())

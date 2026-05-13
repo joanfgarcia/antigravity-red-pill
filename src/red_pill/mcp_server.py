@@ -1115,7 +1115,7 @@ async def handle_run_sentinel_audit(arguments: Dict[str, Any]):
 			"next_task": {
 				"type": "object",
 				"description": "Optional. A JSON payload to enqueue a follow-up task immediately (DAG Chaining). Must contain 'source' and 'payload' keys.",
-			}
+			},
 		},
 		"required": ["task_id"],
 	},
@@ -1125,19 +1125,16 @@ async def handle_mark_cognitive_task_completed(arguments: Dict[str, Any]):
 	next_task = arguments.get("next_task")
 	try:
 		from red_pill.cognitive.queue_manager import CognitiveQueueManager
+
 		qm = CognitiveQueueManager()
 		qm.mark_completed(task_id)
-		
+
 		msg = f"Cognitive Task '{task_id}' successfully marked as COMPLETED."
-		
+
 		if next_task and isinstance(next_task, dict) and "source" in next_task and "payload" in next_task:
-			new_id = qm.enqueue_task(
-				source=next_task["source"],
-				payload=next_task["payload"],
-				priority=next_task.get("priority", 5)
-			)
+			new_id = qm.enqueue_task(source=next_task["source"], payload=next_task["payload"], priority=next_task.get("priority", 5))
 			msg += f"\nDAG Chain: Enqueued follow-up task '{new_id}'."
-			
+
 		return [types.TextContent(type="text", text=msg)]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"Failed to complete task '{task_id}': {e}")]
@@ -1160,6 +1157,7 @@ async def handle_mark_cognitive_task_failed(arguments: Dict[str, Any]):
 	reason = arguments["reason"]
 	try:
 		from red_pill.cognitive.queue_manager import CognitiveQueueManager
+
 		CognitiveQueueManager().mark_failed(task_id, reason)
 		return [types.TextContent(type="text", text=f"Cognitive Task '{task_id}' marked as FAILED. Reason logged.")]
 	except Exception as e:

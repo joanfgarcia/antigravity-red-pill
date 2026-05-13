@@ -206,15 +206,16 @@ class SentinelAuditor:
 
 		# 1. Find all redpill units
 		units_res = subprocess.run(
-			["systemctl", "--user", "list-units", "--all", "--plain", "--no-legend"],
-			stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+			["systemctl", "--user", "list-units", "--all", "--plain", "--no-legend"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
 		)
 		redpill_units = [line.split()[0] for line in units_res.stdout.splitlines() if line.startswith("redpill-")]
 
 		# 2. Check failed systemd units
 		failed_res = subprocess.run(
 			["systemctl", "--user", "list-units", "--state=failed", "--plain", "--no-legend"],
-			stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+			stdout=subprocess.PIPE,
+			stderr=subprocess.STDOUT,
+			text=True,
 		)
 		failed_daemons = [line.split()[0] for line in failed_res.stdout.splitlines() if line.startswith("redpill-")]
 
@@ -225,7 +226,7 @@ class SentinelAuditor:
 					type="daemon",
 					severity=9.0,
 					message="Failed Red Pill daemons detected:\n" + "\n".join(failed_daemons),
-					metadata={"failed_units": failed_daemons}
+					metadata={"failed_units": failed_daemons},
 				)
 			)
 
@@ -259,7 +260,7 @@ class SentinelAuditor:
 					type="journal",
 					severity=6.0,
 					message=f"Recent daemon errors in journal:\n{detailed_msg}",
-					metadata={"error_count": len(all_errors)}
+					metadata={"error_count": len(all_errors)},
 				)
 			)
 
@@ -279,6 +280,7 @@ class SentinelAuditor:
 
 		# 1. Qdrant
 		import urllib.request
+
 		try:
 			urllib.request.urlopen("http://localhost:6333", timeout=2)
 		except Exception:
@@ -289,6 +291,7 @@ class SentinelAuditor:
 		import sqlite3
 
 		import platformdirs
+
 		db_path = Path(platformdirs.user_data_dir("neon-link")) / "events.db"
 		if db_path.exists():
 			try:
@@ -303,8 +306,7 @@ class SentinelAuditor:
 
 		# 3. VRAM Exhaustion
 		vram_res = subprocess.run(
-			["nvidia-smi", "--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits"],
-			stdout=subprocess.PIPE, text=True
+			["nvidia-smi", "--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits"], stdout=subprocess.PIPE, text=True
 		)
 		if vram_res.returncode == 0 and vram_res.stdout.strip():
 			try:
@@ -319,11 +321,13 @@ class SentinelAuditor:
 		try:
 			urllib.request.urlopen("https://api.openai.com/v1/models", timeout=3)
 		except Exception as e:
-			if hasattr(e, 'code') and e.code == 401:
+			if hasattr(e, "code") and e.code == 401:
 				pass
 			else:
 				report.status = "yellow" if report.status == "green" else report.status
-				report.findings.append(AuditFinding(type="blindness", severity=7.0, message=f"Sensory Blindness: Cannot reach external LLM endpoints ({e})"))
+				report.findings.append(
+					AuditFinding(type="blindness", severity=7.0, message=f"Sensory Blindness: Cannot reach external LLM endpoints ({e})")
+				)
 
 		# 5. OOM Killer in dmesg
 		dmesg_res = subprocess.run(["dmesg", "-T"], stdout=subprocess.PIPE, text=True)
@@ -331,7 +335,11 @@ class SentinelAuditor:
 			oom_lines = [line for line in dmesg_res.stdout.splitlines()[-500:] if "Out of memory: Killed process" in line and "redpill" in line]
 			if oom_lines:
 				report.status = "red"
-				report.findings.append(AuditFinding(type="exhaustion", severity=10.0, message="OOM Killer executed against a redpill process:\n" + "\n".join(oom_lines[-5:])))
+				report.findings.append(
+					AuditFinding(
+						type="exhaustion", severity=10.0, message="OOM Killer executed against a redpill process:\n" + "\n".join(oom_lines[-5:])
+					)
+				)
 
 		report.intensity = sum(f.severity for f in report.findings)
 		if any(f.severity >= 8.0 for f in report.findings):
