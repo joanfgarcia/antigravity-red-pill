@@ -154,7 +154,7 @@ def bunker_export() -> None:
 		print(f"\n[WARNING] MLS Encryption failed or unavailable: {e}. Unencrypted kit at: {tar_path}")
 
 
-def bunker_restore(target_path: str = None) -> None:
+def bunker_restore(target_path: str = None, kem_path: str = None, sig_path: str = None) -> None:
 	"""
 	Smart Restore: Interprets manifest.json and selectively rehydrates the system.
 	"""
@@ -166,6 +166,20 @@ def bunker_restore(target_path: str = None) -> None:
 	from red_pill.utils.vault import SoulCryptographer
 
 	print("--- [BÜNKER RESTORE: SMART REHYDRATION] ---")
+	
+	config_dir = platformdirs.user_config_dir("red-pill")
+	if kem_path or sig_path:
+		print("0. Overriding Cryptographic Identity...")
+		os.makedirs(config_dir, exist_ok=True)
+		if kem_path and os.path.exists(kem_path):
+			dest_seed = os.path.join(config_dir, "vault.seed")
+			shutil.copy2(kem_path, dest_seed)
+			print(f"  -> Imported KEM (Seed): {kem_path}")
+		if sig_path and os.path.exists(sig_path):
+			dest_state = os.path.join(config_dir, "vault_group.state")
+			shutil.copy2(sig_path, dest_state)
+			print(f"  -> Imported Signature State: {sig_path}")
+
 	export_dir = os.path.join(str(get_bunker_root()), "backups", "export")
 	
 	if not target_path:
@@ -353,7 +367,11 @@ def handle_bunker(args) -> None:
 	elif args.bunker_cmd == "export":
 		bunker_export()
 	elif args.bunker_cmd == "restore":
-		bunker_restore()
+		bunker_restore(
+			target_path=getattr(args, "source", None),
+			kem_path=getattr(args, "kem", None),
+			sig_path=getattr(args, "sig", None)
+		)
 	elif args.bunker_cmd == "uninstall":
 		bunker_uninstall()
 	elif args.bunker_cmd == "export-keys":

@@ -145,6 +145,30 @@ red-pill swarm <subcommand>
 
 ---
 
+### `bunker` — Bünker Lifecycle & Portability
+```bash
+red-pill bunker <subcommand>
+```
+
+| Subcommand | Description |
+|------------|-------------|
+| `init` | Hardware profiling and declarative profile generation |
+| `install` | Deterministic installation from bunker profile |
+| `export` | **(Backup)** Packages memory, queues, secrets and config into a single `.tar.gz.mls` encrypted with pure-mls |
+| `export-keys` | **(Backup Keys)** Exports the Cryptographic Master Identity (KEM & signatures) to an unencrypted `.tar.gz` for offline safe storage |
+| `restore [source] [--kem PATH] [--sig PATH]` | Restores from a Soul Kit backup. Optionally provide specific KEM (`vault.seed`) or Signature (`vault_group.state`) to decrypt on a clean host |
+| `uninstall` | Safely obliterates the active Red-Pill environment while explicitly preserving Master Keys and Backups (MFA protected) |
+
+#### Decrypting a Sovereign Backup Manually with pure-mls
+If you need to manually inspect a backup outside the Bünker using the `pure-mls` CLI:
+```bash
+# Given you have your vault.seed (KEM) and vault_group.state (Signature)
+python -m pure_mls.cli decrypt --input TOTAL_SOVEREIGN_KIT.tar.gz.mls --output decrypted.tar.gz --seed ~/.config/red-pill/vault.seed --state ~/.config/red-pill/vault_group.state
+```
+*(Paths may vary depending on where you extracted your `export-keys` tarball)*
+
+---
+
 ### `signal` — Sovereign Alert System (SAS)
 ```bash
 red-pill signal <message> [--title TITLE] [--sound] [--silent]

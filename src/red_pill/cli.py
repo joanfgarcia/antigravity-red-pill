@@ -439,7 +439,12 @@ def main() -> None:
 	bunker_sub.add_parser("install", help="Deterministic installation from bunker profile")
 	bunker_sub.add_parser("update", help="Update codebase and dependencies safely")
 	bunker_sub.add_parser("export", help="Total Sovereign Backup of memory and infrastructure")
-	bunker_sub.add_parser("restore", help="Rehydrate system from a Total Sovereign Backup")
+	bunker_restore_parser = bunker_sub.add_parser("restore", help="Rehydrate system from a Total Sovereign Backup")
+	bunker_restore_parser.add_argument("source", nargs="?", help="Path to backup tarball")
+	bunker_restore_parser.add_argument("--kem", help="Optional path to custom Master KEM (vault.seed)")
+	bunker_restore_parser.add_argument("--sig", help="Optional path to custom Signature/State (vault_group.state)")
+	bunker_sub.add_parser("uninstall", help="Wipes environment keeping keys and backups")
+	bunker_sub.add_parser("export-keys", help="Extracts Master Identity to raw tarball")
 	bunker_sub.add_parser("halt", help="[KILL-SWITCH] Emergency halt of all autonomous cognitive operations")
 	bunker_sub.add_parser("resume", help="Restore power to autonomous cognitive operations")
 
