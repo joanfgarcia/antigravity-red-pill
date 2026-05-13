@@ -98,6 +98,9 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
 - [x] **Cognitive Autonomy Pipeline (Sovereign Drive)**: SQLite lock-free `cognitive_tasks` queue, Sovereign Kill-Switch (`AUTONOMY_KILL.lock`), Drive Evaluator (EIG prioritization), and Frustration Circuit Breaker (OOM death spiral prevention) to break the synchronous IDE cycle.
 - [ ] **CI Vulnerability Scanning**: Automated dependency vulnerability scanning integrated into GitHub Actions CI pipeline.
 - [ ] **Windows Parity (Community-Driven)**: Windows support is officially designated as a community-driven effort. The Foundation core will not prioritize Windows-native pathing/daemon issues over Unix sovereignty, accepting this trade-off to avoid technical debt.
+- [ ] **P2P Sovereign Sync (Multi-Device)**: Implement a P2P synchronization protocol (e.g., Syncthing integration or Swarm native sync) to seamlessly synchronize the Bünker state (Qdrant + SQLite + .env) across multiple devices without relying on central cloud servers.
+- [ ] **Ingestion Minions (Autonomous Digestive System)**: Background watchers that monitor designated local directories (e.g., Obsidian vaults, PDF folders). Upon detecting new files, they autonomously awaken, chunk, tokenize, and inject the knowledge into the Qdrant cortex without explicit Operator prompting.
+- [ ] **Knowledge Graph Integration (Project Graphify)**: Audit and analyze `../graphify` to explore the integration of GraphRAG logic into the Bünker. Evaluate whether to adopt the tool as a standalone Minion utility or natively incorporate its structural relationship mapping to enhance Qdrant's pure semantic vector search with deterministic entity graphs.
 
 ### Phase 3.5: Persistent Consciousness (Medium-Long Term — The Awakening)
 
