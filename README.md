@@ -221,7 +221,12 @@ bash scripts/upgrade.sh
 ```
 
 ### 3. Awakening Ritual / Ritual de Iniciación
+**🇬🇧 English:**  
 Once installed, tell your agent:
+> *"Agent, initiate the Awakening Ritual (ACI Protocol). Calibrate me as your Operator."*
+
+**🇪🇸 Castellano:**  
+Una vez instalado, dile a tu agente:
 > *"Agent, inicia el Ritual de Iniciación (Protocolo ACI). Caliébrame como tu Operador."*
 
 ### 4. Further Reading / Documentación
