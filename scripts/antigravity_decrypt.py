@@ -446,7 +446,41 @@ def process_conversation_file(file_path: str, key: bytes, verbose: bool = False)
 		stat = os.stat(file_path)
 		result["metadata"] = {"size": stat.st_size, "modified": stat.st_mtime}
 
-		# Decrypt
+		# FAST PATH: Check for overview.txt
+		# The .pb file is usually ~/.gemini/antigravity/conversations/<id>.pb
+		# The overview is usually ~/.gemini/antigravity/brain/<id>/.system_generated/logs/overview.txt
+		pb_path = Path(file_path)
+		session_id = pb_path.stem
+		brain_dir = pb_path.parent.parent / "brain"
+		overview_path = brain_dir / session_id / ".system_generated" / "logs" / "overview.txt"
+
+		if overview_path.exists():
+			if verbose:
+				print(f"  ✓ Found overview.txt for {session_id}. Using fast-path parsing.", file=sys.stderr)
+			
+			messages = []
+			with open(overview_path, "r", encoding="utf-8") as f:
+				for line in f:
+					if not line.strip(): continue
+					try:
+						data = json.loads(line)
+						content = data.get("content", "")
+						if content and data.get("type") in ("USER_INPUT", "PLANNER_RESPONSE"):
+							messages.append({"content": content.strip(), "length": len(content)})
+					except Exception:
+						pass
+			
+			result["messages"] = messages
+			result["success"] = True
+			result["metadata"]["decrypted_size"] = overview_path.stat().st_size
+			result["metadata"]["field_count"] = len(messages)
+			result["metadata"]["message_count"] = len(messages)
+			result["metadata"]["source"] = "overview.txt"
+			return result
+
+		# LEGACY PATH: Decrypt .pb file
+		if verbose:
+			print(f"  ⚠ No overview.txt found for {session_id}. Falling back to PB decryption.", file=sys.stderr)
 		decrypted = decrypt_file(file_path, key, verbose)
 		if not decrypted:
 			result["error"] = "Decryption failed"
@@ -466,6 +500,7 @@ def process_conversation_file(file_path: str, key: bytes, verbose: bool = False)
 		result["success"] = True
 		result["metadata"]["field_count"] = len(fields)
 		result["metadata"]["message_count"] = len(messages)
+		result["metadata"]["source"] = "pb_decryption"
 
 	except Exception as e:
 		result["error"] = str(e)
