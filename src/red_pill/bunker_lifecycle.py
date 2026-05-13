@@ -76,32 +76,34 @@ def bunker_export() -> None:
 	Sovereign Backup: Exports Qdrant, SQLite (w/ WAL checkpoint), .env, and plugins.
 	Encrypts the output using pure-mls.
 	"""
-	import sqlite3
 	import os
-	import platformdirs
 	import shutil
+	import sqlite3
 	import tarfile
 	import time
+
+	import platformdirs
+
 	from red_pill.soul import SoulManager
 	from red_pill.utils.vault import SoulCryptographer
-	
+
 	print("--- [BÜNKER EXPORT: SOVEREIGN BACKUP] ---")
-	
+
 	timestamp = time.strftime("%Y%m%d_%H%M%S")
 	export_dir = os.path.join(str(get_bunker_root()), "backups", "export")
 	os.makedirs(export_dir, exist_ok=True)
-	
+
 	tar_path = os.path.join(export_dir, f"TOTAL_SOVEREIGN_KIT_{timestamp}.tar.gz")
 	staging_dir = os.path.join(export_dir, f"staging_{timestamp}")
 	os.makedirs(staging_dir, exist_ok=True)
-	
+
 	print("1. Forcing SQLite PRAGMA wal_checkpoint(TRUNCATE)...")
 	dbs_to_backup = [
 		os.path.join(str(get_bunker_root()), "storage", "queue", "bunker_queue.db"),
 		os.path.join(str(get_bunker_root()), "storage", "queue", "minion_inbox.db"),
-		os.path.join(platformdirs.user_data_dir("neon-link"), "events.db")
+		os.path.join(platformdirs.user_data_dir("neon-link"), "events.db"),
 	]
-	
+
 	for db_path in dbs_to_backup:
 		if os.path.exists(db_path):
 			try:
@@ -112,35 +114,35 @@ def bunker_export() -> None:
 				shutil.copy2(db_path, dest)
 			except Exception as e:
 				print(f"[FAIL] Could not checkpoint/copy {db_path}: {e}")
-				
+
 	print("2. Capturing Qdrant Engine Snapshot & Generating manifest.json...")
 	soul = SoulManager()
 	soul.backup_qdrant(timestamp)
 	soul.create_manifest(timestamp)
-	
+
 	qdrant_backup_dir = os.path.join(soul.backup_root, "qdrant")
 	for f in os.listdir(qdrant_backup_dir):
 		if timestamp in f and (f.endswith(".snapshot") or f.endswith(".json")):
 			shutil.copy2(os.path.join(qdrant_backup_dir, f), staging_dir)
-			
+
 	print("3. Delegating sub-exports to Plugins (.env secrets)...")
 	red_pill_env = os.path.join(platformdirs.user_config_dir("red-pill"), ".env")
 	if os.path.exists(red_pill_env):
 		shutil.copy2(red_pill_env, os.path.join(staging_dir, "red_pill.env"))
-		
+
 	neon_env = os.path.join(platformdirs.user_config_dir("neon-link"), ".env")
 	if os.path.exists(neon_env):
 		shutil.copy2(neon_env, os.path.join(staging_dir, "neon_link.env"))
-		
+
 	print("4. Packing Tarball...")
 	with tarfile.open(tar_path, "w:gz") as tar:
 		for root, _, files in os.walk(staging_dir):
 			for file in files:
 				file_path = os.path.join(root, file)
 				tar.add(file_path, arcname=file)
-				
+
 	shutil.rmtree(staging_dir)
-	
+
 	print("5. Encrypting package to .mls via pure-mls cryptography...")
 	try:
 		cryptographer = SoulCryptographer()
@@ -159,14 +161,16 @@ def bunker_restore(target_path: str = None, kem_path: str = None, sig_path: str 
 	Smart Restore: Interprets manifest.json and selectively rehydrates the system.
 	"""
 	import os
-	import platformdirs
 	import shutil
 	import tarfile
+
+	import platformdirs
+
 	from red_pill.soul import SoulManager
 	from red_pill.utils.vault import SoulCryptographer
 
 	print("--- [BÜNKER RESTORE: SMART REHYDRATION] ---")
-	
+
 	config_dir = platformdirs.user_config_dir("red-pill")
 	if kem_path or sig_path:
 		print("0. Overriding Cryptographic Identity...")
@@ -181,7 +185,7 @@ def bunker_restore(target_path: str = None, kem_path: str = None, sig_path: str 
 			print(f"  -> Imported Signature State: {sig_path}")
 
 	export_dir = os.path.join(str(get_bunker_root()), "backups", "export")
-	
+
 	if not target_path:
 		if not os.path.exists(export_dir):
 			print("[ERROR] No backups directory found.")
@@ -191,23 +195,23 @@ def bunker_restore(target_path: str = None, kem_path: str = None, sig_path: str 
 			print("[ERROR] No .mls backup found to restore.")
 			return
 		target_path = max(mls_files, key=os.path.getctime)
-		
+
 	print(f"1. Decrypting .mls package: {os.path.basename(target_path)}")
 	cryptographer = SoulCryptographer()
 	decrypted_tar = cryptographer.decrypt_kit(target_path)
 	if not decrypted_tar:
 		print("[FAIL] Decryption failed or legacy format.")
 		return
-		
+
 	staging_dir = os.path.join(export_dir, "restore_staging")
 	if os.path.exists(staging_dir):
 		shutil.rmtree(staging_dir)
 	os.makedirs(staging_dir)
-	
+
 	print("2. Extracting kit...")
 	with tarfile.open(decrypted_tar, "r:gz") as tar:
 		tar.extractall(path=staging_dir)
-		
+
 	print("3. Restoring SQLite Queues and Event DBs...")
 	# Map extracted files back to system paths
 	restore_map = {
@@ -215,24 +219,24 @@ def bunker_restore(target_path: str = None, kem_path: str = None, sig_path: str 
 		"minion_inbox.db": os.path.join(str(get_bunker_root()), "storage", "queue", "minion_inbox.db"),
 		"events.db": os.path.join(platformdirs.user_data_dir("neon-link"), "events.db"),
 		"red_pill.env": os.path.join(platformdirs.user_config_dir("red-pill"), ".env"),
-		"neon_link.env": os.path.join(platformdirs.user_config_dir("neon-link"), ".env")
+		"neon_link.env": os.path.join(platformdirs.user_config_dir("neon-link"), ".env"),
 	}
-	
+
 	for extracted_file, dest_path in restore_map.items():
 		src_path = os.path.join(staging_dir, extracted_file)
 		if os.path.exists(src_path):
 			os.makedirs(os.path.dirname(dest_path), exist_ok=True)
 			shutil.copy2(src_path, dest_path)
 			print(f"  -> Restored {extracted_file}")
-			
+
 	print("4. Rehydrating Qdrant Memory (Vector Cortex)...")
 	soul = SoulManager()
 	soul.restore_soul(staging_dir, commit=True)
-	
+
 	print("5. Cleaning up ephemeral decrypted state...")
 	os.remove(decrypted_tar)
 	shutil.rmtree(staging_dir)
-	
+
 	print("\n[OK] SOVEREIGN RESTORE COMPLETE. Rebooting Bünker Daemons is recommended.")
 
 
@@ -242,31 +246,33 @@ def bunker_export_keys() -> None:
 	The user MUST store this securely offline (e.g., USB drive).
 	"""
 	import os
-	import platformdirs
 	import tarfile
 	import time
+
+	import platformdirs
+
 	from red_pill.core.paths import get_bunker_root
 
 	print("--- [BÜNKER MASTER KEY EXPORT] ---")
 	config_dir = platformdirs.user_config_dir("red-pill")
 	keys_dir = os.path.join(config_dir, "keys")
 	vault_state = os.path.join(config_dir, "vault_group.state")
-	
+
 	if not os.path.exists(keys_dir):
 		print("[ERROR] No Cryptographic Keys found to export.")
 		return
-		
+
 	timestamp = time.strftime("%Y%m%d_%H%M%S")
 	export_dir = os.path.join(str(get_bunker_root()), "backups")
 	os.makedirs(export_dir, exist_ok=True)
-	
+
 	tar_path = os.path.join(export_dir, f"SOVEREIGN_MASTER_KEYS_{timestamp}.tar.gz")
-	
+
 	with tarfile.open(tar_path, "w:gz") as tar:
 		tar.add(keys_dir, arcname="keys")
 		if os.path.exists(vault_state):
 			tar.add(vault_state, arcname="vault_group.state")
-			
+
 	print(f"\n[CRITICAL WARNING] Master Keys exported to: {tar_path}")
 	print("ANYONE with this file can decrypt your Soul Kits. MOVE IT TO A SECURE OFFLINE USB DRIVE IMMEDIATELY.")
 
@@ -278,8 +284,10 @@ def bunker_uninstall() -> None:
 	"""
 	import os
 	import random
-	import platformdirs
 	import shutil
+
+	import platformdirs
+
 	from red_pill.core.paths import get_bunker_root
 
 	print("\n!!! [WARNING] BÜNKER UNINSTALL INITIATED !!!")
@@ -288,27 +296,28 @@ def bunker_uninstall() -> None:
 	print(" - SQLite Queues and Event DBs")
 	print(" - .env configs and Plugins")
 	print("\n[NOTE] Backups and Cryptographic MASTER KEYS will NOT be deleted.")
-	
+
 	if os.getenv("BUNKER_FORCE_UNINSTALL") == "1":
 		print("\n[CI/CD OVERRIDE] BUNKER_FORCE_UNINSTALL=1 detected. Bypassing MFA confirmation.")
 	else:
 		challenge_code = f"{random.randint(100000, 999999):06d}"
 		print(f"\nTo proceed, type the following 6-digit authorization code: {challenge_code}")
 		user_input = input("> ")
-		
+
 		if user_input.strip() != challenge_code:
 			print("\n[ABORTED] Authorization code mismatch. The Bünker remains intact.")
 			return
-		
+
 	print("\n[AUTHORIZED] Initiating Purge Protocol...")
-	
+
 	# 1. Purge Qdrant Collections
 	print("-> Wiping Qdrant Vector Cortex...")
 	try:
-		from red_pill.soul import SoulManager
 		import requests
+
 		import red_pill.config as cfg
-		
+		from red_pill.soul import SoulManager
+
 		soul = SoulManager()
 		headers = {"api-key": cfg.QDRANT_API_KEY} if cfg.QDRANT_API_KEY else {}
 		colls = soul._get_collections()
@@ -317,25 +326,25 @@ def bunker_uninstall() -> None:
 			print(f"   Deleted collection: {coll}")
 	except Exception as e:
 		print(f"   [!] Failed to wipe Qdrant. Is it running? Error: {e}")
-		
+
 	# 2. Preserve Keys
 	config_dir = platformdirs.user_config_dir("red-pill")
 	keys_safe_dir = os.path.join(str(get_bunker_root()), "backups", "keys_vault_temp")
 	os.makedirs(keys_safe_dir, exist_ok=True)
-	
+
 	if os.path.exists(os.path.join(config_dir, "keys")):
 		shutil.copytree(os.path.join(config_dir, "keys"), os.path.join(keys_safe_dir, "keys"))
 	if os.path.exists(os.path.join(config_dir, "vault_group.state")):
 		shutil.copy2(os.path.join(config_dir, "vault_group.state"), os.path.join(keys_safe_dir, "vault_group.state"))
-		
+
 	# 3. Wipe Paths
 	paths_to_wipe = [
 		os.path.join(platformdirs.user_data_dir("neon-link")),
 		config_dir,  # This wipes the keys too
 		os.path.join(str(get_bunker_root()), "storage"),
-		os.path.join(str(get_bunker_root()), "plugins")
+		os.path.join(str(get_bunker_root()), "plugins"),
 	]
-	
+
 	for path in paths_to_wipe:
 		if os.path.exists(path):
 			try:
@@ -343,7 +352,7 @@ def bunker_uninstall() -> None:
 				print(f"-> Purged Directory: {path}")
 			except Exception as e:
 				print(f"   [!] Failed to purge {path}: {e}")
-				
+
 	# 4. Restore Keys to Config Dir
 	os.makedirs(config_dir, exist_ok=True)
 	if os.path.exists(os.path.join(keys_safe_dir, "keys")):
@@ -352,7 +361,7 @@ def bunker_uninstall() -> None:
 		shutil.copy2(os.path.join(keys_safe_dir, "vault_group.state"), os.path.join(config_dir, "vault_group.state"))
 	shutil.rmtree(keys_safe_dir)
 	print("-> Cryptographic Identity Preserved.")
-				
+
 	print("\n[OK] SOVEREIGN PURGE COMPLETE. The entity has been erased from this host.")
 
 
@@ -367,11 +376,7 @@ def handle_bunker(args) -> None:
 	elif args.bunker_cmd == "export":
 		bunker_export()
 	elif args.bunker_cmd == "restore":
-		bunker_restore(
-			target_path=getattr(args, "source", None),
-			kem_path=getattr(args, "kem", None),
-			sig_path=getattr(args, "sig", None)
-		)
+		bunker_restore(target_path=getattr(args, "source", None), kem_path=getattr(args, "kem", None), sig_path=getattr(args, "sig", None))
 	elif args.bunker_cmd == "uninstall":
 		bunker_uninstall()
 	elif args.bunker_cmd == "export-keys":
