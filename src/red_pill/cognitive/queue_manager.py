@@ -20,9 +20,9 @@ class CognitiveQueueManager:
 
 	def __init__(self, db_path: Optional[str] = None):
 		if not db_path:
-			# Por defecto vive junto a las memorias del Bünker
-			workspace = str(get_bunker_root())
-			db_path = str(Path(workspace) / "bunker_queue.db")
+			# Por defecto vive junto a las memorias del Bünker (ahora en XDG data dir)
+			from red_pill.core.paths import get_queue_dir
+			db_path = str(get_queue_dir() / "bunker_queue.db")
 
 		self.db_path = db_path
 		self._init_db()

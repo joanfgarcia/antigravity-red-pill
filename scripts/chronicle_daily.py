@@ -90,7 +90,6 @@ def _get_antigravity_key() -> str | None:
 	return os.environ.get("ANTIGRAVITY_KEY")
 
 
-
 def _find_pending(state: dict, only_yesterday: bool) -> list[Path]:
 	"""Return .pb files not yet processed, optionally filtered to last 48h."""
 	if not CONVERSATIONS_DIR.exists():
@@ -190,6 +189,7 @@ def main() -> None:
 			logger.info("Using LanguageServer Export (Fallback)")
 			try:
 				from red_pill.utils.antigravity_history.discovery import discover_language_servers
+
 				if not discover_language_servers():
 					logger.error("Antigravity LanguageServer is not running. Cannot fallback to export. Aborting pipeline.")
 					_inject_pain_signal(

@@ -40,7 +40,7 @@ class TestAtomicWriteHeartbeat:
 		import red_pill.utils.pulse as pulse_mod
 
 		original = pulse_mod.HEARTBEAT_FILE
-		pulse_mod.HEARTBEAT_FILE = str(tmp_path / "storage" / "pulse.json")
+		pulse_mod.HEARTBEAT_FILE = str(tmp_path / "state" / "pulse.json")
 		data = {"last_interaction": 123.0, "prev_interaction": 0.0}
 		_atomic_write_heartbeat(data)
 		result_path = pulse_mod.HEARTBEAT_FILE

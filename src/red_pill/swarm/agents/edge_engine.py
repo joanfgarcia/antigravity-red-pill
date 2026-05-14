@@ -2,6 +2,8 @@ import logging
 import os
 from typing import Any, Optional
 
+from red_pill.core.paths import get_models_dir
+
 logger = logging.getLogger(__name__)
 
 # 1. Fallback to basic extraction if llama_cpp is not available
@@ -34,8 +36,8 @@ class EdgeEngine:
 			model_dir = os.path.join(ia_dir, "models")
 		else:
 			current_dir = os.path.dirname(os.path.abspath(__file__))
-			project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(current_dir))))
-			model_dir = os.path.join(project_root, "storage", "models")
+			os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(current_dir))))
+			model_dir = str(get_models_dir())
 
 		# Discover model path eagerly (cheap filesystem ops) but defer loading
 		if not model_path and os.path.exists(model_dir):

@@ -294,39 +294,12 @@ class IDEWorker:
 
 				content = None
 
-				# If trajectory is truncated due to gRPC limits, fetch the real tail using overview.txt fast-path
+				# If trajectory is truncated due to gRPC limits, fetch the real tail using gRPC API
 				if len(steps) < num_total:
-					logger.info(f"[Cascade {cascade_id}] Trajectory truncated ({len(steps)}/{num_total}). Attempting overview.txt fast-path.")
-					overview_path = Path.home() / ".gemini/antigravity/brain" / cascade_id / ".system_generated/logs/overview.txt"
-					if overview_path.exists():
-						try:
-							with open(overview_path, "r", encoding="utf-8") as f:
-								# Read all lines and reverse them to find the last PLANNER_RESPONSE
-								lines = f.readlines()
-								for line in reversed(lines):
-									if not line.strip():
-										continue
-									try:
-										data = json.loads(line)
-										if data.get("type") in ("PLANNER_RESPONSE", "15") and "content" in data:
-											content = data["content"]
-											if content:
-												break
-									except Exception:
-										pass
-							if content:
-								logger.info(f"[Cascade {cascade_id}] Found response in overview.txt!")
-						except Exception as e:
-							logger.error(f"[Cascade {cascade_id}] Error reading overview.txt: {e}")
-
-					# Fallback to gRPC API if overview.txt failed or didn't have content
-					if not content:
-						logger.info(f"[Cascade {cascade_id}] overview.txt failed, using gRPC tail fetch.")
-						tail_steps = self.client.get_cascade_trajectory_steps(
-							cascade_id, start_index=max(0, num_total - 100), end_index=num_total + 10
-						)
-						if tail_steps:
-							steps = tail_steps
+					logger.info(f"[Cascade {cascade_id}] Trajectory truncated ({len(steps)}/{num_total}). Using gRPC tail fetch.")
+					tail_steps = self.client.get_cascade_trajectory_steps(cascade_id, start_index=max(0, num_total - 100), end_index=num_total + 10)
+					if tail_steps:
+						steps = tail_steps
 
 				# Buscamos el último paso de tipo 15 (CORTEX_STEP_TYPE_PLANNER_RESPONSE) si no lo hemos extraído ya
 				if not content:
@@ -444,7 +417,7 @@ class IDEWorker:
 
 				ghost_id = str(uuid.uuid4())
 				cursor.execute(
-					"INSERT INTO inbox (id, channel, channel_user_id, payload, cascade_id, status) VALUES (?, 'system', 'ghost_cron', '{}', ?, 'WAITING_FOR_RESPONSE')",
+					"INSERT INTO inbox (message_id, channel, channel_user_id, payload, cascade_id, status) VALUES (?, 'system', 'ghost_cron', '{}', ?, 'WAITING_FOR_RESPONSE')",
 					(ghost_id, cascade_id),
 				)
 				conn.commit()
@@ -480,9 +453,18 @@ class IDEWorker:
 			import datetime
 
 			# Comprobar cuándo fue la última vez que 'La Chispa' generó una tarea
-			cursor.execute("SELECT MAX(created_at) as last_spark FROM cognitive_tasks WHERE source = 'The_Spark'")
-			spark_row = cursor.fetchone()
-			last_spark = spark_row["last_spark"] if spark_row else None
+			from red_pill.core.paths import get_queue_dir
+			bq_conn = sqlite3.connect(get_queue_dir() / "bunker_queue.db")
+			bq_conn.row_factory = sqlite3.Row
+			bq_cursor = bq_conn.cursor()
+			try:
+				bq_cursor.execute("SELECT MAX(created_at) as last_spark FROM cognitive_tasks WHERE source = 'The_Spark'")
+				spark_row = bq_cursor.fetchone()
+				last_spark = spark_row["last_spark"] if spark_row else None
+			except Exception as e:
+				logger.error(f"Failed to query cognitive_tasks: {e}")
+				last_spark = None
+			bq_conn.close()
 
 			inject_spark = False
 			if not last_spark:
@@ -536,7 +518,7 @@ class IDEWorker:
 
 			ghost_id = str(uuid.uuid4())
 			cursor.execute(
-				"INSERT INTO inbox (id, channel, channel_user_id, payload, cascade_id, status) VALUES (?, 'system', 'ghost_cognitive', '{}', ?, 'WAITING_FOR_RESPONSE')",
+				"INSERT INTO inbox (message_id, channel, channel_user_id, payload, cascade_id, status) VALUES (?, 'system', 'ghost_cognitive', '{}', ?, 'WAITING_FOR_RESPONSE')",
 				(ghost_id, cascade_id),
 			)
 			conn.commit()

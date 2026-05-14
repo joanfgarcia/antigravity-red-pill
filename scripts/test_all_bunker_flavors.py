@@ -8,7 +8,7 @@ import time
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BITNET_DIR = os.path.join(PROJECT_ROOT, "3rdparty/BitNet-1.58b")
-MODEL_PATH = os.path.join(PROJECT_ROOT, "storage/models/falcon3-10b-instruct-1.58bit-V2.gguf")
+MODEL_PATH = os.path.expanduser("~/.local/share/red-pill/models/falcon3-10b-instruct-1.58bit-V2.gguf")
 PROMPT = "Di solo: 'Hola Joan, soy Aleth y estoy fluyendo'. No añadas nada más."
 
 FLAVORS = {

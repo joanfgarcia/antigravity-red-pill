@@ -7,6 +7,8 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from red_pill.core.paths import get_queue_dir
+
 # Add src to pythonpath so it can run independently
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
@@ -40,12 +42,12 @@ class BunkerTelemetry:
 			self.queue_mgr: Optional[MemoryQueueManager] = MemoryQueueManager()
 			if self.queue_mgr:
 				q_path = getattr(self.queue_mgr, "db_path", None)
-				self.db_path = Path(q_path) if q_path else Path(cfg.APP_ROOT) / "storage" / "queue" / "bunker_queue.db"
+				self.db_path = Path(q_path) if q_path else get_queue_dir() / "bunker_queue.db"
 				self.wal_path = Path(str(self.db_path) + "-wal")
 		except Exception as e:
 			logger.error(f"Failed to init MemoryQueueManager: {e}")
 			self.queue_mgr = None
-			self.db_path = Path(cfg.APP_ROOT) / "storage" / "queue" / "bunker_queue.db"
+			self.db_path = get_queue_dir() / "bunker_queue.db"
 			self.wal_path = Path(str(self.db_path) + "-wal")
 
 	def shutdown(self, sig, frame):

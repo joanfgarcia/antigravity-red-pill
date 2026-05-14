@@ -6,6 +6,7 @@ import time
 from typing import Any, Dict, List, Optional
 
 import red_pill.config as cfg
+from red_pill.core.paths import get_data_dir, get_queue_dir
 
 try:
 	import cryptography.hazmat.primitives.asymmetric.ed25519 as ed25519
@@ -28,7 +29,7 @@ class MinionInbox:
 	def __init__(self, db_path: Optional[str] = None):
 		if db_path is None:
 			# Sovereign Pod path inside sharing storage repository
-			self.db_path = os.path.join(cfg.APP_ROOT, "storage", "queue", "minion_inbox.db")
+			self.db_path = str(get_queue_dir() / "minion_inbox.db")
 		else:
 			self.db_path = db_path
 
@@ -42,7 +43,7 @@ class MinionInbox:
 
 	def _init_mls_group(self):
 		group_id = b"internal_minions"
-		mls_path = os.path.join(cfg.APP_ROOT, "storage", "swarm_groups", "internal_minions.mls")
+		mls_path = str(get_data_dir() / "swarm_groups" / "internal_minions.mls")
 		os.makedirs(os.path.dirname(mls_path), exist_ok=True)
 
 		# Admin identity

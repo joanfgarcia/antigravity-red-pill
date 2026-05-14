@@ -12,7 +12,7 @@ logger = logging.getLogger("validate_bitnet")
 def validate():
 	# 1. Configuration (Matching Enterprise Paths)
 	runner_bin = os.path.join(os.getcwd(), "3rdparty/BitNet-1.58b/build/bin/llama-cli")
-	model_path = os.path.join(os.getcwd(), "storage/models/falcon3-10b-instruct-1.58bit.gguf")
+	model_path = os.path.join(os.path.expanduser("~/.local/share/red-pill/models/falcon3-10b-instruct-1.58bit.gguf")
 	grammar_path = os.path.join(os.getcwd(), "src/red_pill/inference/bitnet/json.gbnf")
 
 	if not os.path.exists(runner_bin) or not os.path.exists(model_path):

@@ -1,5 +1,10 @@
 ## [7.0.0] - Unreleased
 
+### 🏗️ Sovereign Architecture & XDG Standard
+- **[ARCH] Total XDG Base Directory Enforcement**: Executed a "heart surgery" refactor completely eradicating hardcoded `storage/` directory paths across the entire Red-Pill and Neon-Link ecosystem. All data now complies strictly with Linux XDG standards (`~/.config`, `~/.local/share`, `~/.local/state`), handled via `platformdirs` inside `paths.py`.
+- **[HEAL] XDG Smith Filter**: Added an autonomous static-analysis unit test (`test_xdg_compliance.py`) and a strict `CONVENTIONS.md` manifesto rule to instantly fail any PR attempting to reintroduce localized `storage/` patterns.
+- **[HEAL] Database Path Collision Resolution**: Resolved critical `sqlite3.OperationalError` collision logic inside `worker.py` ensuring it queries `cognitive_tasks` directly from the XDG-compliant `bunker_queue.db` without cross-polluting `events.db`.
+
 ### 🧠 Sovereign Chronicle & Archival Pipeline
 - **[HEAL] Chronicle Fallback Optimization**: Refactored `chronicle_daily.py` to prioritize `ANTIGRAVITY_KEY` AES decryption for unadulterated historical accuracy. Native LanguageServer `aghistory export` is now an automated HTTP fallback if the key is missing or IDE is closed.
 - **[SEC] Overview Fast-Path Purge**: Eradicated the unreliable `overview.txt` parsing fast-path from `antigravity_decrypt.py` to ensure only cryptographically verified or IDE-exported (JSON) conversations are ingested, preventing truncation bugs on massive conversations.

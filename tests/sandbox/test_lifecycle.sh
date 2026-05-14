@@ -14,10 +14,9 @@ python -m red_pill.cli bunker init
 echo -e "\n[STAGE 3] Inyectando Estado (Mock Data)..."
 cat << 'EOF' > /tmp/inject_state.py
 import os, sqlite3
-from red_pill.core.paths import get_bunker_root
+from red_pill.core.paths import get_queue_dir
 import platformdirs
-
-queue_db = os.path.join(get_bunker_root(), "storage", "queue", "bunker_queue.db")
+queue_db = os.path.join(get_queue_dir(), "bunker_queue.db")
 os.makedirs(os.path.dirname(queue_db), exist_ok=True)
 conn = sqlite3.connect(queue_db)
 conn.execute("CREATE TABLE IF NOT EXISTS cognitive_tasks (id TEXT PRIMARY KEY, payload TEXT)")

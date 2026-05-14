@@ -4,7 +4,7 @@ import sqlite3
 import time
 from typing import Any, Dict, List, Optional
 
-import red_pill.config as cfg
+from red_pill.core.paths import get_queue_dir
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ class MemoryQueueManager:
 	def __init__(self, db_path: Optional[str] = None):
 		if db_path is None:
 			# Isolate memory queue from Minion inbox events for better WAL safety.
-			self.db_path = os.path.join(cfg.APP_ROOT, "storage", "queue", "bunker_queue.db")
+			self.db_path = str(get_queue_dir() / "bunker_queue.db")
 		else:
 			self.db_path = db_path
 

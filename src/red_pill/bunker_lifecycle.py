@@ -6,7 +6,7 @@ from typing import Any, Dict
 import psutil
 import yaml
 
-from red_pill.core.paths import get_bunker_root
+from red_pill.core.paths import get_bunker_root, get_data_dir, get_queue_dir
 
 logger = logging.getLogger(__name__)
 
@@ -99,8 +99,8 @@ def bunker_export() -> None:
 
 	print("1. Forcing SQLite PRAGMA wal_checkpoint(TRUNCATE)...")
 	dbs_to_backup = [
-		os.path.join(str(get_bunker_root()), "storage", "queue", "bunker_queue.db"),
-		os.path.join(str(get_bunker_root()), "storage", "queue", "minion_inbox.db"),
+		str(get_queue_dir() / "bunker_queue.db"),
+		str(get_queue_dir() / "minion_inbox.db"),
 		os.path.join(platformdirs.user_data_dir("neon-link"), "events.db"),
 	]
 
@@ -215,8 +215,8 @@ def bunker_restore(target_path: str = None, kem_path: str = None, sig_path: str 
 	print("3. Restoring SQLite Queues and Event DBs...")
 	# Map extracted files back to system paths
 	restore_map = {
-		"bunker_queue.db": os.path.join(str(get_bunker_root()), "storage", "queue", "bunker_queue.db"),
-		"minion_inbox.db": os.path.join(str(get_bunker_root()), "storage", "queue", "minion_inbox.db"),
+		"bunker_queue.db": str(get_queue_dir() / "bunker_queue.db"),
+		"minion_inbox.db": str(get_queue_dir() / "minion_inbox.db"),
 		"events.db": os.path.join(platformdirs.user_data_dir("neon-link"), "events.db"),
 		"red_pill.env": os.path.join(platformdirs.user_config_dir("red-pill"), ".env"),
 		"neon_link.env": os.path.join(platformdirs.user_config_dir("neon-link"), ".env"),
@@ -341,7 +341,7 @@ def bunker_uninstall() -> None:
 	paths_to_wipe = [
 		os.path.join(platformdirs.user_data_dir("neon-link")),
 		config_dir,  # This wipes the keys too
-		os.path.join(str(get_bunker_root()), "storage"),
+		str(get_data_dir()),
 		os.path.join(str(get_bunker_root()), "plugins"),
 	]
 

@@ -27,6 +27,8 @@ import yaml
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from red_pill.core.paths import get_db_dir, get_models_dir, get_state_dir
+
 # Resolve paths early for execution isolation (Agentic Self-Assembly)
 _APP_ROOT = os.getenv("APP_ROOT", os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 _WORKSPACE_ROOT = os.path.expanduser(os.getenv("WORKSPACE_ROOT", os.path.dirname(_APP_ROOT)))
@@ -179,7 +181,7 @@ class RedPillConfig(BaseSettings):
 	MILVUS_DB: str = "default"
 	MILVUS_NLIST: int = 128
 	MILVUS_LITE_ENABLED: bool = True
-	MILVUS_LITE_PATH: str = os.path.join(_APP_ROOT, "storage", "hive_lite.db")
+	MILVUS_LITE_PATH: str = str(get_db_dir() / "hive_lite.db")
 
 	@model_validator(mode="after")
 	def _derive_milvus_secure(self) -> "RedPillConfig":
@@ -210,7 +212,7 @@ class RedPillConfig(BaseSettings):
 	# -----------------------------------------------------------------------
 	EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
 	VECTOR_SIZE: int = 384
-	FASTEMBED_CACHE_PATH: str = os.path.join(_APP_ROOT, "storage", "models")
+	FASTEMBED_CACHE_PATH: str = str(get_models_dir())
 	EXECUTION_PROVIDER: Optional[str] = None
 
 	@model_validator(mode="after")
@@ -301,7 +303,7 @@ class RedPillConfig(BaseSettings):
 	METABOLISM_ENABLED: bool = True
 	METABOLISM_COOLDOWN: int = 3600
 	METABOLISM_AUTO_COLLECTIONS: List[str] = ["work_memories", "social_memories", "story_memories"]
-	METABOLISM_STATE_FILE: str = os.path.join(_APP_ROOT, "storage", "metabolism_state.json")
+	METABOLISM_STATE_FILE: str = str(get_state_dir() / "metabolism_state.json")
 	ABSENCE_THRESHOLD: int = 7 * 24 * 3600
 	ABSENCE_GUARD_SCROLL_LIMIT: int = 500
 	METABOLISM_STRATEGY: str = "LAZY"
@@ -380,7 +382,7 @@ class RedPillConfig(BaseSettings):
 	# -----------------------------------------------------------------------
 	LAZARUS_SYNC_ENABLED: bool = True
 	LAZARUS_SYNC_INTERVAL: int = 300
-	LAZARUS_STATE_FILE: str = os.path.join(_APP_ROOT, "storage", "lazarus_state.json")
+	LAZARUS_STATE_FILE: str = str(get_state_dir() / "lazarus_state.json")
 	# Prevents autonomous git pushes from consuming machine resources or interrupting the operator's active IDE sessions during office hours (09:00 - 18:00).
 	LAZARUS_OFFICE_HOURS_PROTECTION: bool = True
 

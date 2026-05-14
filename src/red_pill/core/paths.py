@@ -3,6 +3,8 @@ import os
 import sys
 from pathlib import Path
 
+import platformdirs
+
 logger = logging.getLogger(__name__)
 
 
@@ -48,3 +50,61 @@ def get_aleth_core_root() -> Path:
 	if aleth_core_str:
 		return Path(aleth_core_str)
 	return get_bunker_root().parent / "Aleth_Core"
+
+
+# --- XDG Data Directory Standard ---
+
+
+def get_data_dir() -> Path:
+	"""Resuelve el directorio de datos XDG base para red-pill."""
+	path = Path(platformdirs.user_data_dir("red-pill"))
+	path.mkdir(parents=True, exist_ok=True)
+	return path
+
+
+def get_db_dir() -> Path:
+	path = get_data_dir() / "db"
+	path.mkdir(parents=True, exist_ok=True)
+	return path
+
+
+def get_models_dir() -> Path:
+	path = get_data_dir() / "models"
+	path.mkdir(parents=True, exist_ok=True)
+	return path
+
+
+def get_queue_dir() -> Path:
+	path = get_data_dir() / "queue"
+	path.mkdir(parents=True, exist_ok=True)
+	return path
+
+
+def get_state_dir() -> Path:
+	path = get_data_dir() / "state"
+	path.mkdir(parents=True, exist_ok=True)
+	return path
+
+
+def get_keys_dir() -> Path:
+	path = get_data_dir() / "keys"
+	path.mkdir(parents=True, exist_ok=True)
+	return path
+
+
+def get_unencrypted_conversations_dir() -> Path:
+	path = get_data_dir() / "unencrypted_conversations"
+	path.mkdir(parents=True, exist_ok=True)
+	return path
+
+
+def get_backups_dir() -> Path:
+	"""Resuelve el directorio de backups, configurable por el usuario."""
+	env_backup = os.getenv("RED_PILL_BACKUP_DIR")
+	if env_backup:
+		path = Path(env_backup)
+	else:
+		# Por defecto: <IA_DIR>/backups/red-pill
+		path = get_bunker_root().parent / "backups" / "red-pill"
+	path.mkdir(parents=True, exist_ok=True)
+	return path

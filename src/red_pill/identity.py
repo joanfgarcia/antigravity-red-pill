@@ -9,10 +9,11 @@ import os
 from typing import Any, Dict, cast
 
 from red_pill.config import get_config
+from red_pill.core.paths import get_state_dir
 
 cfg = get_config()
 
-IDENTITY_FILE = os.path.join(cfg.APP_ROOT, "storage", "identity.json")
+IDENTITY_FILE = str(get_state_dir() / "identity.json")
 
 
 def _load_identity() -> Dict[str, Any]:

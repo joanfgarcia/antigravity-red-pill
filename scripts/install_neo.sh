@@ -460,7 +460,7 @@ else
 fi
 
 # SEC-011: Persistent Model Cache Path (v6.1.0)
-_default_cache="$IA_DIR/storage/models"
+_default_cache="$HOME/.local/share/red-pill/models"
 if [ "$AUTO_MODE" = "false" ]; then
 	read -p "Ruta Caché Modelos (Default: $_default_cache): " F_CACHE; FASTEMBED_CACHE_PATH=${F_CACHE:-"$_default_cache"}
 else
@@ -544,7 +544,7 @@ update_env "USER_ATLAS_DIR" "$WORKSPACE_ROOT/atlas"
 update_env "AGENT_CORE_DIR" "$WORKSPACE_ROOT/Titanium_Core"
 chmod 600 "$ENV_FILE"
 
-mkdir -p "$IA_DIR/scripts" "$IA_DIR/backups/qdrant" "$IA_DIR/backups/soul" "$IA_DIR/seeds" "$APP_ROOT/storage" "$IA_DIR/storage/queue"
+mkdir -p "$IA_DIR/scripts" "$IA_DIR/backups/qdrant" "$IA_DIR/backups/soul" "$IA_DIR/seeds" "$HOME/.local/share/red-pill/models" "$HOME/.local/share/red-pill/queue" "$HOME/.local/share/red-pill/tmp"
 
 if [ "$QDRANT_ALIVE" = "false" ]; then
 	QUADLET_DIR="$HOME/.config/containers/systemd"

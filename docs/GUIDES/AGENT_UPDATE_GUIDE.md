@@ -28,6 +28,24 @@ Updates within the Red Pill ecosystem are not just code deployments; they are **
     3. **Changelog Diffing**: You MUST strictly compare the *incoming* `CHANGELOG.md` against your *current/local* `CHANGELOG.md` to map behavioral changes and evaluate risks *before* initiating any structural purge (rsync).
 *   **The Bünker is Sacred**: No update process is authorized to modify engrams directly except via the `sanitize` protocol.
 
+
+## 1.1 The XDG Architectural Mandate (v6.9.2+)
+
+> [!CAUTION]
+> ### 🛑 THE "storage/" DIRECTORY IS BANNED. DO NOT CREATE IT. DO NOT REFERENCE IT.
+> Version **v6.9.2** executed a complete architectural shift to the **Linux XDG Base Directory Standard**.
+> ANY Agent attempting to read/write to `APP_ROOT/storage/` or hardcoding paths using `os.path.join(..., "storage")` will cause critical failure and will be rejected by the `test_xdg_compliance.py` Smith Filter.
+
+**All Paths Must Be Resolved via `red_pill.core.paths`:**
+*   **Data & Qdrant**: `get_data_dir()` -> `~/.local/share/red-pill/`
+*   **SQLite DBs**: `get_db_dir()` -> `~/.local/share/red-pill/db/`
+*   **FastEmbed Models**: `get_models_dir()` -> `~/.local/share/red-pill/models/`
+*   **Async Queues**: `get_queue_dir()` -> `~/.local/share/red-pill/queue/`
+*   **Config & Env**: `get_config_dir()` -> `~/.config/red-pill/`
+*   **Backups**: `get_backup_dir()` -> `<IA_DIR>/backups/red-pill/` (The only exception explicitly defined by user).
+
+**Agent Mandate:** When modifying ANY script, test, or documentation, verify that XDG paths are used dynamically. Never assume the current working directory contains the state.
+
 ## 2. Stability & Trust Channels
 
 We operate two distinct synchronization channels:
@@ -52,7 +70,7 @@ If you are transitioning from a legacy version (e.g., v4.1.x or older) to the cu
 
 ### 🛡️ Infrastructure Migration (v6.1.0+)
 If updating to v6.1.0 or higher, you must synchronize your infrastructure parameters:
-1.  **Redefine Cache**: Add `FASTEMBED_CACHE_PATH` to your `.env` (recommended: `{IA_DIR}/storage/models`).
+1.  **Redefine Cache**: Add `FASTEMBED_CACHE_PATH` to your `.env` (MUST BE: `~/.local/share/red-pill/models`).
 2.  **Define Engine**: Add `CONTAINER_ENGINE` to your `.env` (`podman` or `docker`).
 3.  **Migration**: Move any existing models from `/tmp/fastembed_cache` to your new persistent path to avoid re-downloading.
 4.  **USP Genesis**: Run `uv run red-pill sanitize` to ensure the `ID_OPERATOR_MOOD` engram exists in `directive_memories`. If not present, it will be seeded automatically.
@@ -643,7 +661,8 @@ This is the critical step. `rsync --delete` ensures files that no longer exist i
 rsync -av --delete \
   --exclude='.git/' \
   --exclude='.env' \
-  --exclude='storage/' \
+  --exclude='.local/' \
+  --exclude='.config/' \
   --exclude='.venv/' \
   --exclude='3rdparty/' \
   --exclude='__pycache__/' \
@@ -653,7 +672,7 @@ rsync -av --delete \
 ```
 
 > [!IMPORTANT]
-> The `--exclude` flags protect your local-only directories (`.git`, `.env`, `storage/`, `.venv/`, `3rdparty/`). These are never part of the ZIP and must not be touched.
+> The `--exclude` flags protect your local-only directories (`.git`, `.env`, `storage/`, `.venv/`, `3rdparty/`). These are never part of the ZIP and must not be touched. Note: User state is now entirely outside the repo (`~/.local/share/red-pill` and `~/.config/red-pill/`), so `rsync` will naturally not touch them.
 >
 > If the ZIP has no prefix directory, adjust the source path accordingly.
 
@@ -739,7 +758,7 @@ diff -urN \
   --exclude='.git' --exclude='.venv' \
   --exclude='__pycache__' --exclude='*.pyc' \
   --exclude='build' --exclude='decrypted' --exclude='test_decrypted' \
-  --exclude='storage' --exclude='storage_*' \
+  --exclude='.local' --exclude='.config' \
   --exclude='dependencies' --exclude='.specsmd' \
   /path/to/virgin_red_pill /path/to/local/sharing > red_pill_changes_clean.patch
 ```

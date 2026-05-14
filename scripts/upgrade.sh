@@ -65,7 +65,7 @@ if command -v uv &> /dev/null; then
 	# Sanitize engrams
 	uv run red-pill sanitize --dry-run || true
 	
-	# Reinstall timers (handles storage/queue creation and path changes)
+	# Reinstall timers (handles XDG data dir creation and path changes)
 	uv run python scripts/schedule_pulse.py --interval-hours 1
 	
 	# Thread Weaving (idempotent)
