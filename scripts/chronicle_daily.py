@@ -90,6 +90,7 @@ def _get_antigravity_key() -> str | None:
 	return os.environ.get("ANTIGRAVITY_KEY")
 
 
+
 def _find_pending(state: dict, only_yesterday: bool) -> list[Path]:
 	"""Return .pb files not yet processed, optionally filtered to last 48h."""
 	if not CONVERSATIONS_DIR.exists():
@@ -142,21 +143,12 @@ def main() -> None:
 	parser.add_argument("--dry-run", action="store_true", help="Show what would be processed without doing anything")
 	args = parser.parse_args()
 
+	sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
 	# ── Preflight: key ────────────────────────────────────────────────────────
 	key = _get_antigravity_key()
 	if not key:
-		msg = (
-			"ANTIGRAVITY_KEY not set. Chronicle pipeline cannot decrypt conversations.\n"
-			"  → Set it in .env: ANTIGRAVITY_KEY=<base64_key>\n"
-			"  → Recovery guide: docs/TECHNICAL/ANTIGRAVITY_KEY_RECOVERY.md"
-		)
-		logger.error(msg)
-		_inject_pain_signal(
-			title="chronicle_daily: ANTIGRAVITY_KEY missing",
-			details="The automated chronicle pipeline could not run because ANTIGRAVITY_KEY is not set in .env. See docs/TECHNICAL/ANTIGRAVITY_KEY_RECOVERY.md.",
-			severity=8.5,
-		)
-		sys.exit(1)
+		logger.warning("ANTIGRAVITY_KEY not set in .env. Will attempt LanguageServer (aghistory) fallback.")
 
 	# ── Load state ────────────────────────────────────────────────────────────
 	state = _load_processed()
@@ -185,13 +177,39 @@ def main() -> None:
 	try:
 		uv = ["uv", "run", "python"]
 
-		# ── Step 1: Decrypt ───────────────────────────────────────────────────
-		decrypt_ok = _run(
-			uv + [str(SCRIPTS_DIR / "antigravity_decrypt.py"), str(CONVERSATIONS_DIR), "--output", str(WORK_DIR), "--key", key], "DECRYPT"
-		)
-		if not decrypt_ok:
-			logger.error("Decrypt failed. Aborting pipeline.")
-			return
+		# ── Step 1: Decrypt or Export ─────────────────────────────────────────
+		if key:
+			logger.info("Using AES Decryption (ANTIGRAVITY_KEY found)")
+			decrypt_ok = _run(
+				uv + [str(SCRIPTS_DIR / "antigravity_decrypt.py"), str(CONVERSATIONS_DIR), "--output", str(WORK_DIR), "--key", key], "DECRYPT"
+			)
+			if not decrypt_ok:
+				logger.error("Decrypt failed. Aborting pipeline.")
+				return
+		else:
+			logger.info("Using LanguageServer Export (Fallback)")
+			try:
+				from red_pill.utils.antigravity_history.discovery import discover_language_servers
+				if not discover_language_servers():
+					logger.error("Antigravity LanguageServer is not running. Cannot fallback to export. Aborting pipeline.")
+					_inject_pain_signal(
+						title="chronicle_daily: Decryption Failed",
+						details="ANTIGRAVITY_KEY is missing and IDE is closed. Pipeline aborted.",
+						severity=8.0,
+					)
+					return
+			except ImportError as e:
+				logger.error(f"Failed to import antigravity_history discovery module: {e}")
+				return
+
+			export_cmd = uv + ["-m", "red_pill.utils.antigravity_history.cli", "export", "--output", str(WORK_DIR), "--format", "json"]
+			for pb in pending:
+				export_cmd.extend(["--id", pb.stem])
+
+			export_ok = _run(export_cmd, "EXPORT")
+			if not export_ok:
+				logger.error("Export fallback failed. Aborting pipeline.")
+				return
 
 		# ── Step 2: Ingest ────────────────────────────────────────────────────
 		ingest_ok = _run(uv + [str(SCRIPTS_DIR / "antigravity_ingest.py"), "--dir", str(WORK_DIR)], "INGEST")

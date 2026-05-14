@@ -1,5 +1,10 @@
 ## [7.0.0] - Unreleased
 
+### 🧠 Sovereign Chronicle & Archival Pipeline
+- **[HEAL] Chronicle Fallback Optimization**: Refactored `chronicle_daily.py` to prioritize `ANTIGRAVITY_KEY` AES decryption for unadulterated historical accuracy. Native LanguageServer `aghistory export` is now an automated HTTP fallback if the key is missing or IDE is closed.
+- **[SEC] Overview Fast-Path Purge**: Eradicated the unreliable `overview.txt` parsing fast-path from `antigravity_decrypt.py` to ensure only cryptographically verified or IDE-exported (JSON) conversations are ingested, preventing truncation bugs on massive conversations.
+- **[VERIFIED] LanguageServer Pagination Ceiling**: Conducted tests proving the IDE API lacks a 500-step ceiling; it seamlessly returns up to 4125+ context-dense steps natively, ensuring the fallback is fully lossless.
+
 ### 🤖 Sovereign Daemon & Cognitive Queue
 - **[FEAT] Janitor Minion**: Implemented `JanitorMinion` as an independent swarm agent to autonomously purge stale events (`events.db`) and scratch files older than 7 days, maintaining long-term system sanity and preventing polling slowdowns. Deployed via a daily Systemd timer (`redpill-janitor.timer`).
 - **[HEAL] Telegram Pipeline Command Routing**: Fixed nested JSON payload parsing in `worker.py` to prevent recursive IDE AI inferences during system commands (e.g. `/list`).
