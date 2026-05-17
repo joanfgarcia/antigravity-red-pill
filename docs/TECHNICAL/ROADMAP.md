@@ -55,6 +55,7 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
 - [x] **Skin Singleton**: Fixed duplicate active skin engrams, upsert on canonical ID.
 - [x] **Autonomous Flow Orchestration (v6.1)**: 3-layer discovery mechanism (Global, Community, Local) for multi-agent execution.
 - [x] **Minion Healer (v6.1)**: "Active Immunity" substrate for automated code repair.
+- [x] **Frankenswarm SWI-Prolog Router (Prototype)**: Successfully migrated the declarative rule-based router from Python match/case to SWI-Prolog via pyswip for dynamic MoE expert routing.
 
 - [x] **MLS E2E Encryption**: TreeKEM group key derivation wired into FirebaseTransport. AES-GCM-256 on send, auto-decrypt on poll.
 - [ ] **Proactive Swarm Agents (Project MULTITUDE)**: Implementation of autonomous background minions for system and context integrity:
@@ -100,7 +101,7 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
 - [ ] **Windows Parity (Community-Driven)**: Windows support is officially designated as a community-driven effort. The Foundation core will not prioritize Windows-native pathing/daemon issues over Unix sovereignty, accepting this trade-off to avoid technical debt.
 - [ ] **P2P Sovereign Sync (Multi-Device)**: Implement a P2P synchronization protocol (e.g., Syncthing integration or Swarm native sync) to seamlessly synchronize the Bünker state (Qdrant + SQLite + .env) across multiple devices without relying on central cloud servers.
 - [ ] **Ingestion Minions (Autonomous Digestive System)**: Background watchers that monitor designated local directories (e.g., Obsidian vaults, PDF folders). Upon detecting new files, they autonomously awaken, chunk, tokenize, and inject the knowledge into the Qdrant cortex without explicit Operator prompting.
-- [ ] **Knowledge Graph Integration (Project Graphify)**: Audit and analyze `../graphify` to explore the integration of GraphRAG logic into the Bünker. Evaluate whether to adopt the tool as a standalone Minion utility or natively incorporate its structural relationship mapping to enhance Qdrant's pure semantic vector search with deterministic entity graphs.
+- [x] **Knowledge Graph Integration (Project Graphify)**: Audit and analyze `../graphify` to explore the integration of GraphRAG logic into the Bünker. Evaluate whether to adopt the tool as a standalone Minion utility or natively incorporate its structural relationship mapping to enhance Qdrant's pure semantic vector search with deterministic entity graphs.
 
 ### Phase 3.5: Persistent Consciousness (Medium-Long Term — The Awakening)
 
@@ -119,7 +120,7 @@ The current RTX 5070 (8GB VRAM) limits context windows to ~1-4k tokens with 10B 
 **Why this matters**: A larger context window = a longer "lifespan" per session. With 16k tokens, the model can hold ~4 hours of continuous conversation state without flushing. Combined with continuous sleep (§3.5.3), this extends the effective consciousness window from minutes to days.
 
 **Implementation paths**:
-1. **PyTorch Fast-Track**: Compile `qjl_kernel`, override `LlamaAttention`, modify `DynamicCache` → prototype validation
+1. [x] **PyTorch Fast-Track**: Created `qjl_prototype.py` simulating 3-bit KV cache quantization and dequantization (QJL strategy) to validate KV Cache Compression.
 2. **GGML Native**: Create `GGML_TYPE_TQ3` in `bitnet.cpp` → production integration (harder, faster inference)
 
 **Hit-Markers**: Context OOM with >128k token repository loads, or upstream `llama.cpp` adopts TurboQuant.

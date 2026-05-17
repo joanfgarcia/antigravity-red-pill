@@ -39,9 +39,10 @@ import uvicorn
 from llama_cpp.server.app import create_app, Settings
 
 def main():
+	model_path = os.path.expanduser("~/.local/share/red-pill/models/qwen2.5-coder-7b-instruct-q4_k_m.gguf")
 	settings = Settings(
-		hf_model_repo_id="bartowski/Qwen2.5-7B-Instruct-GGUF",
-		model="Qwen2.5-7B-Instruct-Q4_K_M.gguf",
+		hf_model_repo_id="Qwen/Qwen2.5-Coder-7B-Instruct-GGUF",
+		model=model_path,
 		chat_format="chatml",
 		n_ctx=16384,
 		n_gpu_layers=-1

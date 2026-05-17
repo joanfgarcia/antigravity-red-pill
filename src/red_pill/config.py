@@ -326,8 +326,8 @@ class RedPillConfig(BaseSettings):
 	AFFECT_CUSTOM_OVERRIDES: str = "{}"
 	DYNAMIC_EMOTION_SYNC: bool = True
 	MULTI_EMOTION_INFERENCE: bool = True
-	# [V6.9] Dynamic Gravity Point: HEDONIC_SET_POINT_COLOR is now read from storage/identity.json
-	# This serves as the fallback if identity.json is not yet created.
+	# Dynamic Gravity Point: HEDONIC_SET_POINT_COLOR is read from XDG config at boot.
+	# This serves as the fallback if no config is yet present.
 	HEDONIC_SET_POINT_COLOR: str = "emerald"
 	OVERNIGHT_THERAPY_THRESHOLD_HOURS: int = 4
 
@@ -387,11 +387,12 @@ class RedPillConfig(BaseSettings):
 	LAZARUS_OFFICE_HOURS_PROTECTION: bool = True
 
 	# -----------------------------------------------------------------------
-	# SEMANTIC RESONANCE
+	# SEMANTIC RESONANCE & GRAPHRAG
 	# -----------------------------------------------------------------------
 	RESONANCE_ENABLED: bool = True
 	RESONANCE_THRESHOLD: float = 0.4
 	RESONANCE_INTERVAL: int = 600
+	GRAPHIFY_RAG_ENABLED: bool = True
 
 	# -----------------------------------------------------------------------
 	# SYNAPTIC FRAGMENTATION

@@ -77,6 +77,7 @@ If updating to v6.1.0 or higher, you must synchronize your infrastructure parame
 5.  **Skin Singleton**: Run `uv run red-pill search directive "Active Skin"` and verify only ONE result. If duplicates exist, purge them manually.
 6.  **Infrastructure Sync (Quadlets)**: If using Podman/Docker Quadlets, you must synchronize the `QDRANT__SERVICE__API_KEY` in the `.container` file if the `.env` changes.
     *   **Check**: `cat ~/.config/containers/systemd/qdrant.container`
+    *   **MANDATORY XDG VERIFICATION**: COMPRUEBA QUE EL VOLUME APUNTA A `~/.local/share/red-pill/db` Y NUNCA A `storage/`. LA CARPETA `storage/` ESTÁ BANEADA POR EL ESTÁNDAR XDG Y ROMPERÁ EL SISTEMA.
     *   **Action**: Restart service: `systemctl --user daemon-reload && systemctl --user restart qdrant.service`
 7.  **Services Sync**: Ensure you reload and enable the correct new event-driven services and timers: `systemctl --user daemon-reload && systemctl --user enable --now redpill-neonlink.service redpill-worker.service` (The legacy monolithic `redpill.service` is deprecated and must remain disabled).
 8.  **Qdrant Kill-Switch (SEC-02)**: If your Qdrant instance is exposed to the local network (`0.0.0.0`) or hosted remotely, the protocol will now refuse to boot unless you define a `QDRANT_API_KEY` in your `.env`. This is a hard-coded security protection.
@@ -330,8 +331,8 @@ Replace old version with new in all 6 file locations before pushing.
 
     **2. Queue Boundary Isolation**:
     The persistent databases `bunker_queue.db` and `minion_inbox.db` have been moved from the host-specific runtime path to the isolated storage layer.
-    - **New Path**: `<IA_DIR>/storage/queue/`
-    - **Migration**: The installer now creates this directory. Existing queues will be automatically relocated on first boot of v6.3.4.
+    - **New Path**: `~/.local/share/red-pill/queue/`
+    - **Migration**: The installer now creates this XDG directory. Existing queues will be automatically relocated on first boot.
 
     **3. Auto-Upgrade Script**:
     A new utility `scripts/upgrade.sh` is provided to automate the pull-and-sanitize workflow safely.

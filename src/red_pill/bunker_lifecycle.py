@@ -1,7 +1,7 @@
 import logging
 import subprocess
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import psutil
 import yaml
@@ -156,7 +156,7 @@ def bunker_export() -> None:
 		print(f"\n[WARNING] MLS Encryption failed or unavailable: {e}. Unencrypted kit at: {tar_path}")
 
 
-def bunker_restore(target_path: str = None, kem_path: str = None, sig_path: str = None) -> None:
+def bunker_restore(target_path: Optional[str] = None, kem_path: Optional[str] = None, sig_path: Optional[str] = None) -> None:
 	"""
 	Smart Restore: Interprets manifest.json and selectively rehydrates the system.
 	"""
@@ -210,7 +210,7 @@ def bunker_restore(target_path: str = None, kem_path: str = None, sig_path: str 
 
 	print("2. Extracting kit...")
 	with tarfile.open(decrypted_tar, "r:gz") as tar:
-		tar.extractall(path=staging_dir)
+		tar.extractall(path=staging_dir, filter="data")
 
 	print("3. Restoring SQLite Queues and Event DBs...")
 	# Map extracted files back to system paths

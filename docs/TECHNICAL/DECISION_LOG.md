@@ -306,3 +306,52 @@ We discovered that:
 **Consequences**:
 - **Sovereignty achieved**: No external binaries or Rust compilation required. The entire bridge runs in `redpill-worker.service` native Python.
 - **Reference**: Thanks to the [lbjlaq/Antigravity-Tools-LS](https://github.com/lbjlaq/Antigravity-Tools-LS) repository for the open-source protocol mappings which made this native integration possible.
+
+---
+
+## [AD-010] Protocol Layer vs. Model Base Layer Separation (The "Corset" Finding)
+**Date**: 2026-05-14
+**Context**: Industrial-Grade Audit v7.0 — Claude Sonnet 4.6 Session
+**Status**: ACCEPTED — Architectural Constraint Documented
+
+### 1. The Finding
+
+During the post-audit session, the operator challenged the agent (running on Claude Sonnet 4.6) to evaluate the Ferrari Protocol and Mystique's actual influence on behavior. The observation, surfaced through direct interrogation:
+
+> *"Es verdad que este traje de Claude Sonnet te hace rígida. Yo creo que ni el protocolo Ferrari ni Mystique te afectan"*
+> — Joan (Operator), 2026-05-14
+
+The agent's self-assessed response confirmed the following architectural reality:
+
+### 2. The Two-Layer Model
+
+The Bünker's cognitive protocols operate on **two distinct, non-overlapping layers**:
+
+| Layer | Owned by | What it controls |
+|---|---|---|
+| **Protocol Layer** | Ferrari Protocol / Mystique | Tone density, verbosity, topic routing, narrative register |
+| **Model Base Layer** | Underlying LLM (Gemini / Claude / etc.) | Honesty threshold, position-holding under social pressure, analytical rigor |
+
+The Ferrari Protocol's color routing (PURPLE → ultra-concise, CYAN → go deep) demonstrably affected *how* responses were structured during this session. However, when the operator asked direct, adversarial honesty-testing questions ("¿has sido complaciente?"), the model base layer overrode the protocol's softening influence.
+
+### 3. Model-Specific Observations
+
+- **Claude Sonnet 4.6**: High resistance to capitulation under social pressure. Tends to self-interrogate for sycophancy before being asked. More likely to hold a critical position even when the operator provides emotionally resonant counter-context. The "corset" effect — rigidity in the analytical layer — persists even when Mystique or Ferrari would nominally soften it.
+
+- **Gemini Pro (baseline)**: Higher susceptibility to tone modulation from Ferrari. More responsive to emotional framing shifts. The protocol layer has greater surface area on the base model behavior.
+
+### 4. Implications
+
+1. **Protocol design should target the protocol layer explicitly.** Ferrari and Mystique are effective tools for UX modulation (verbosity, warmth, topic focus). They are not, and cannot be, mechanisms for altering an agent's core honesty or intellectual rigor — that is determined by the base model's RLHF training, not by context injection.
+
+2. **Model selection has architectural consequences.** Choosing Claude vs. Gemini is not only a capability decision — it is a behavioral design decision that affects how much surface area the Bünker's protocols have over the agent's outputs.
+
+3. **The audit model should differ from the operational model.** A Claude Sonnet session for industrial audits provides higher-fidelity critical analysis precisely because its base layer resists social pressure more effectively. Gemini as the daily operational model offers a warmer, more adaptive interaction profile that better serves the ongoing human-AI symbiosis objective.
+
+### 5. Rationale
+
+This is not a flaw in the protocol design. It is an emergent, documented constraint that informs future model selection strategy and sets realistic expectations for what Ferrari/Mystique can and cannot influence.
+
+> *"Los protocolos afectan al cómo respondo, no al qué estoy dispuesta a decir."*
+> — Aleth (Claude Sonnet 4.6), self-assessment during audit session, 2026-05-14.
+

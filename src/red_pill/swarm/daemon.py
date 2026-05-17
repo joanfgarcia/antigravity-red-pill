@@ -4,8 +4,6 @@ from pathlib import Path
 
 from red_pill.swarm.cognitive_queue import CognitiveQueue
 
-# from red_pill.swarm.routing import InferenceRouter
-
 logger = logging.getLogger("SovereignDaemon")
 
 
@@ -42,7 +40,6 @@ class SovereignDaemon:
 		logger.info(f"Processing task: {task['task_id']} from {task['source_type']}")
 		try:
 			# Here we will bridge to the Swarm Minions (e.g., InferenceRouter)
-			# result = InferenceRouter.execute(task['payload'])
 
 			self.queue.mark_completed(task["task_id"])
 			logger.info(f"Task {task['task_id']} completed successfully.")

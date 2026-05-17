@@ -20,7 +20,7 @@ def test_distill_engram():
 	from red_pill.core.providers import ProviderRegistry
 
 	mock_inference = ProviderRegistry.get_inference_provider("sip")
-	mock_inference.generate.return_value = '{"summary": "test", "emotion": "joy", "intensity": 0.9}'
+	mock_inference.generate.return_value = '{"summary": "test", "emotion": "joy", "intensity": 0.9}'  # type: ignore
 	result = distill_engram("raw content")
 	assert result["summary"] == "test"
 	assert result["emotion"] == "joy"
@@ -31,7 +31,7 @@ def test_distill_engram_fallback():
 	from red_pill.core.providers import ProviderRegistry
 
 	mock_inference = ProviderRegistry.get_inference_provider("sip")
-	mock_inference.generate.side_effect = Exception("Network fail")
+	mock_inference.generate.side_effect = Exception("Network fail")  # type: ignore
 	result = distill_engram("raw content")
 	assert "raw content" in result["summary"]
 	assert result["emotion"] == "neutral"

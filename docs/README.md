@@ -23,8 +23,6 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | Document | What it is |
 |----------|-----------|
 | [ARCHITECTURE.md](TECHNICAL/ARCHITECTURE.md) | Full system architecture — components, data flows, version overview |
-| [v7_PLAN.md](TECHNICAL/v7_PLAN.md) | The MVP 7.0 Master Plan for the Sovereign Drive |
-| [v7_SPRINT_1_SUMMARY.md](TECHNICAL/v7_SPRINT_1_SUMMARY.md) | Summary of Sprint 1 implementations for v7.0 |
 | [EVENT_ROUTER_ARCHITECTURE.md](TECHNICAL/EVENT_ROUTER_ARCHITECTURE.md) | Technical spec for the asynchronous Event Router and queue managers |
 | [NEON_LINK_EDGE_HUB.md](TECHNICAL/NEON_LINK_EDGE_HUB.md) | Technical architecture of the Neon-Link Edge Hub middleware |
 | [ANTIGRAVITY_LS_PROXY.md](TECHNICAL/ANTIGRAVITY_LS_PROXY.md) | Language Server Proxy architecture for Antigravity IDE |
@@ -85,7 +83,8 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [TEMPORAL_HORIZONS_RESEARCH.md](TECHNICAL/COGNITIVE/TEMPORAL_HORIZONS_RESEARCH.md) | Temporal memory horizon and decay research |
 | [BRAIN_ANIMAL_ANALOGIES.md](TECHNICAL/COGNITIVE/BRAIN_ANIMAL_ANALOGIES.md) | Biological analogies for the memory and immune system architecture |
 | [HYPERVISOR.md](TECHNICAL/COGNITIVE/HYPERVISOR.md) | Cognitive Hypervisor design covering unified resource orchestration |
-| [IMPLEMENTATION_PLAN.md](TECHNICAL/COGNITIVE/IMPLEMENTATION_PLAN.md) | Implementation blueprint for ongoing cognitive upgrades |
+| [IMPLEMENTATION_PLAN_PHASE2.md](TECHNICAL/COGNITIVE/IMPLEMENTATION_PLAN_PHASE2.md) | Phase 2 implementation plan |
+| [INFERENCE_PLUGINS.md](TECHNICAL/INFERENCE_PLUGINS.md) | Inference plugins architecture |
 | [SOVEREIGN_DRIVE.md](TECHNICAL/COGNITIVE/SOVEREIGN_DRIVE.md) | The underlying psychological drives and motivations of the Agent |
 
 ### Bünker

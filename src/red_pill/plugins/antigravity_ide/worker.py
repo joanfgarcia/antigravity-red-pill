@@ -449,47 +449,14 @@ class IDEWorker:
 		task = queue_manager.pop_next_task()
 
 		if not task:
-			# LA CHISPA (The Spark): Proactive Entropy Checker
-			import datetime
+			# El Motor de Voluntad (Lóbulo Frontal) evalúa el entorno si la cola está vacía
+			from red_pill.cognitive.drive_evaluator import DriveEvaluator
 
-			# Comprobar cuándo fue la última vez que 'La Chispa' generó una tarea
-			from red_pill.core.paths import get_queue_dir
-			bq_conn = sqlite3.connect(get_queue_dir() / "bunker_queue.db")
-			bq_conn.row_factory = sqlite3.Row
-			bq_cursor = bq_conn.cursor()
-			try:
-				bq_cursor.execute("SELECT MAX(created_at) as last_spark FROM cognitive_tasks WHERE source = 'The_Spark'")
-				spark_row = bq_cursor.fetchone()
-				last_spark = spark_row["last_spark"] if spark_row else None
-			except Exception as e:
-				logger.error(f"Failed to query cognitive_tasks: {e}")
-				last_spark = None
-			bq_conn.close()
+			evaluator = DriveEvaluator(queue_manager)
+			injected = evaluator.evaluate_pulse()
 
-			inject_spark = False
-			if not last_spark:
-				inject_spark = True
-			else:
-				# Manejar posibles milisegundos o diferentes formatos de fecha en SQLite
-				try:
-					last_dt = datetime.datetime.strptime(last_spark.split(".")[0], "%Y-%m-%d %H:%M:%S")
-					# Generar una Chispa cada 4 horas (14400 segundos) de inactividad
-					if (datetime.datetime.utcnow() - last_dt).total_seconds() > 14400:
-						inject_spark = True
-				except Exception as e:
-					logger.error(f"Error parsing last_spark date: {e}")
-					inject_spark = False
-
-			if inject_spark:
-				logger.info("THE SPARK: High entropy threshold reached. Injecting proactive maintenance task.")
-				queue_manager.enqueue_task(
-					source="The_Spark",
-					payload={
-						"action": "proactive_maintenance",
-						"directive": "Review memory fragmentation, check for unresolved pain signals, and consolidate Bünker context.",
-					},
-					priority=1,
-				)
+			if injected > 0:
+				logger.info(f"[DRIVE] Evaluator injected {injected} new cognitive tasks.")
 
 			conn.close()
 			return

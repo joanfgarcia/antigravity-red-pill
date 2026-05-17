@@ -178,6 +178,7 @@ Music/
 .cargo/
 .npm/
 .vscode/extensions/
+# Legacy cleanup: old storage paths excluded from Cursor indexer (not active data dirs)
 .antigravity/storage/
 .gemini/antigravity/storage/
 Documents/IA/storage/
@@ -558,7 +559,7 @@ After=network-online.target
 Image=docker.io/qdrant/qdrant:v1.9.0
 PublishPort=127.0.0.1:6333:6333
 PublishPort=127.0.0.1:6334:6334
-Volume=$APP_ROOT/storage:/qdrant/storage:Z
+Volume=$HOME/.local/share/red-pill/db:/qdrant/storage:Z
 Environment=QDRANT__SERVICE__API_KEY=$QDRANT_API_KEY
 
 [Service]
@@ -594,7 +595,7 @@ EOF
 		<string>-p</string>
 		<string>127.0.0.1:6334:6334</string>
 		<string>-v</string>
-		<string>$APP_ROOT/storage:/qdrant/storage</string>
+		<string>$HOME/.local/share/red-pill/db:/qdrant/storage</string>
 		<string>-e</string>
 		<string>QDRANT__SERVICE__API_KEY=$QDRANT_API_KEY</string>
 		<string>qdrant/qdrant:v1.9.0</string>

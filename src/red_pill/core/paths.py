@@ -52,9 +52,6 @@ def get_aleth_core_root() -> Path:
 	return get_bunker_root().parent / "Aleth_Core"
 
 
-# --- XDG Data Directory Standard ---
-
-
 def get_data_dir() -> Path:
 	"""Resuelve el directorio de datos XDG base para red-pill."""
 	path = Path(platformdirs.user_data_dir("red-pill"))

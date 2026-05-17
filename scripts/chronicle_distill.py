@@ -41,6 +41,7 @@ Context: You are summarizing a dialogue part (User prompt or Assistant response)
 
 Rules:
 - Extract core technical decisions, key code snippets, or philosophical insights.
+- Analyze the underlying emotional state (mood, sentiment) and philosophical load of the interaction.
 - Remove conversational filler (greetings, politeness, noise).
 - Keep it concise but dense with meaning.
 - Output ONLY the distilled text. No "Here is the summary".
@@ -55,9 +56,12 @@ def distill_text(content: str) -> str:
 	"""Sends content to the local Edge Engine for distillation."""
 	try:
 		payload = {
-			"model": "qwen2.5-coder-7b-instruct",  # Using the active model
+			"model": "samantha-mistral-instruct-7b.i1-Q4_K_M.gguf",
 			"messages": [
-				{"role": "system", "content": "You are the Bünker Scribe. Distill the essence into high-density knowledge."},
+				{
+					"role": "system",
+					"content": "You are Samantha, the Bünker Scribe. Distill the essence, emotional state, and philosophical load into high-density knowledge.",
+				},
 				{"role": "user", "content": DISTILL_PROMPT.format(content=content[:4000])},  # Cap input
 			],
 			"temperature": 0.1,
@@ -119,7 +123,7 @@ def process_batch():
 			# Update Point Payload
 			client.set_payload(
 				collection_name=COLLECTION_NAME,
-				payload={"refined_content": summary, "cognitive_status": "distilled", "distillation_model": "qwen2.5-coder-7b"},
+				payload={"refined_content": summary, "cognitive_status": "distilled", "distillation_model": "samantha-mistral-instruct-7b"},
 				points=[point.id],
 			)
 			processed_count += 1

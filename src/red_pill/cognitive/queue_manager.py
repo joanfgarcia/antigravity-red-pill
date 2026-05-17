@@ -2,10 +2,7 @@ import json
 import logging
 import sqlite3
 import uuid
-from pathlib import Path
 from typing import Any, Dict, Optional
-
-from red_pill.core.paths import get_bunker_root
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +19,7 @@ class CognitiveQueueManager:
 		if not db_path:
 			# Por defecto vive junto a las memorias del Bünker (ahora en XDG data dir)
 			from red_pill.core.paths import get_queue_dir
+
 			db_path = str(get_queue_dir() / "bunker_queue.db")
 
 		self.db_path = db_path

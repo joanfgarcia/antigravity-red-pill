@@ -1,11 +1,22 @@
 ## [7.0.0] - Unreleased
 
+### 🧭 Sovereign Drive & Structural Graph (Cognitive Autonomy Pipeline)
+- **[FEAT] Sovereign Drive & Ambition Mode**: Fully integrated `DriveEvaluator` into the `IDEWorker` loop. The Bünker now possesses "Ambition", evaluating system entropy during idle times and injecting proactive architectural maintenance tasks via the `CognitiveQueueManager` without human intervention.
+- **[FEAT] Graphify Knowledge Graph RAG**: Deployed the AST-based Knowledge Graph (`graphify`) as a sovereign MCP plugin. The agent is now structurally aware and can traverse dependencies natively.
+- **[FEAT] Decoupled Graphify Architecture**: Added the `GRAPHIFY_RAG_ENABLED` flag in `config.py`. The background AST sync is strictly conditional, preventing crashes if the server is not installed locally.
+- **[DOCS] Field Agent Anchor Protocol**: Created the `project_anchor_management` skill to instruct all Field Agents on how to create, read, and maintain the `.agent/ATLAS.md` Cognitive Anchor in any repository.
+- **[FEAT] Sovereign Project Scaffolding**: Upgraded the `scaffold-sovereign-project` skill. It now automatically provisions the `.agent/ATLAS.md` initial anchor during `uv init`, ensuring all new projects are born self-aware.
+
 ### 🏗️ Sovereign Architecture & XDG Standard
 - **[ARCH] Total XDG Base Directory Enforcement**: Executed a "heart surgery" refactor completely eradicating hardcoded `storage/` directory paths across the entire Red-Pill and Neon-Link ecosystem. All data now complies strictly with Linux XDG standards (`~/.config`, `~/.local/share`, `~/.local/state`), handled via `platformdirs` inside `paths.py`.
 - **[HEAL] XDG Smith Filter**: Added an autonomous static-analysis unit test (`test_xdg_compliance.py`) and a strict `CONVENTIONS.md` manifesto rule to instantly fail any PR attempting to reintroduce localized `storage/` patterns.
 - **[HEAL] Database Path Collision Resolution**: Resolved critical `sqlite3.OperationalError` collision logic inside `worker.py` ensuring it queries `cognitive_tasks` directly from the XDG-compliant `bunker_queue.db` without cross-polluting `events.db`.
+- **[FIX] XDG Pulse & Background Pathing**: Patched `schedule_pulse.py` to correctly register `bunker_telemetry.py` timers. Fixed `setup_background_model.sh` to construct the local LLM daemon with strict XDG cache paths (`~/.local/share/red-pill/models/`) instead of relative dirs.
+- **[FIX] Zero-Conf Smith Guard**: Eradicated absolute `/home/joan/` paths from `cloud_sync.json.example` in favor of agnostics (`~/.agent/credentials/`). Cleaned up legacy `storage/queue/` contradiction in the `AGENT_UPDATE_GUIDE.md`.
 
 ### 🧠 Sovereign Chronicle & Archival Pipeline
+- **[HEAL] Chronicle LS Fallback Reversion**: Disabled the AES GCM decryption path due to Protobuf binary parsing incompatibilities with legacy keys. The extraction pipeline now defaults securely and exclusively to the native LanguageServer (`aghistory export`), yielding 100% data coherence.
+- **[SEC] Working Tree Cleanliness**: Instituted `CONVENTIONS.md` Rule 2 enforcing strict `scratch/` directory isolation for ad-hoc scripts and outputs. Purged >3900 `graphify-out` cache artifacts and 12GB backend `.tar.gz` dumps from the Git index, isolating them in `.gitignore`.
 - **[HEAL] Chronicle Fallback Optimization**: Refactored `chronicle_daily.py` to prioritize `ANTIGRAVITY_KEY` AES decryption for unadulterated historical accuracy. Native LanguageServer `aghistory export` is now an automated HTTP fallback if the key is missing or IDE is closed.
 - **[SEC] Overview Fast-Path Purge**: Eradicated the unreliable `overview.txt` parsing fast-path from `antigravity_decrypt.py` to ensure only cryptographically verified or IDE-exported (JSON) conversations are ingested, preventing truncation bugs on massive conversations.
 - **[VERIFIED] LanguageServer Pagination Ceiling**: Conducted tests proving the IDE API lacks a 500-step ceiling; it seamlessly returns up to 4125+ context-dense steps natively, ensuring the fallback is fully lossless.

@@ -26,3 +26,17 @@ Always use the centralized resolvers provided by `src/red_pill/core/paths.py`. T
 
 ---
 *Failure to comply with this rule will result in the `tests/test_xdg_compliance.py` Smith Filter failing the CI/CD pipeline.*
+
+---
+
+## 🚨 RULE 2: Working Tree Cleanliness (Scratch Directory)
+
+To maintain a pure architectural root directory, the creation of ad-hoc or temporary files in the repository root is strictly forbidden.
+
+### Prohibitions
+- **NEVER** create `test_*.py`, `check_*.py`, `demo_*.py` or similar one-off scripts in the repository root.
+- **NEVER** output `.json`, `.db`, or `.log` files to the repository root.
+
+### Approved Resolver (The Scratch Dir)
+- All "throwaway" scripts, temporary debugging tests, or experimental outputs **MUST** be placed in the `scratch/` directory.
+- The `scratch/` directory is gitignored by default and serves as the sandbox for experimental and disposable code.

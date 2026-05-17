@@ -89,5 +89,4 @@ def test_bunker_restore_stub(capsys):
 	bunker_restore()
 	captured = capsys.readouterr()
 	assert "[BÜNKER RESTORE: SMART REHYDRATION]" in captured.out
-	assert "Validating manifest.json" in captured.out
-	assert "selective extraction" in captured.out
+	assert "Decrypting .mls package" in captured.out
