@@ -32,3 +32,17 @@ If a plugin requires its own database or large state files, these MUST be stored
 1. **Clean Sources**: Never write to the `src/` directory at runtime.
 2. **Absolute Resolution**: Use `red_pill.config.IA_DIR` to resolve absolute paths for credentials or logs.
 3. **No Secrets in Repo**: Ensure that ANY `*.json` or `*.key` files created during development are placed in the sovereign `plugins/` folder immediately.
+
+## 4. Sentinel Metabolism Plugins (Health Checks)
+
+The `SentinelAuditor` dynamically discovers and executes health checks using a Registry Pattern, allowing the community or the operator to add service-specific health checks without modifying the core `auditor.py`.
+
+### 4.1 Creating a Health Plugin
+Drop a new Python file in `src/red_pill/metabolism/sentinel_plugins/`. The file must contain a class that inherits from `SentinelPlugin` and implements:
+- `name`: Display name.
+- `is_enabled(cfg)`: Auto-discovery logic (check `config.py` flags).
+- `audit(cfg)`: Returns a list of `AuditFinding` objects.
+- `heal(cfg, finding)`: Attempts an automated remediation step (e.g., `subprocess.run(["systemctl", "restart", "..."])`).
+
+### 4.2 Auto-Discovery
+`pkgutil` and `importlib` automatically load all plugins during `audit_vitals()`.

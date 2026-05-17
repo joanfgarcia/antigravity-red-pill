@@ -278,31 +278,35 @@ class SentinelAuditor:
 		report = AuditReport(status="green")
 		self.logger.info("Auditing System Vitals...")
 
-		# 1. Qdrant
-		import urllib.request
+		# -- DYNAMIC PLUGIN DISCOVERY --
+		import importlib
+		import inspect
+		import pkgutil
+
+		import red_pill.config as cfg
+		import red_pill.metabolism.sentinel_plugins as plugins_pkg
+		from red_pill.metabolism.sentinel_plugins.base import SentinelPlugin
+
+		config = cfg.get_config()
 
 		try:
-			urllib.request.urlopen("http://localhost:6333", timeout=2)
-		except Exception:
-			report.status = "red"
-			report.findings.append(AuditFinding(type="amnesia", severity=10.0, message="Qdrant Vector DB is UNREACHABLE"))
-
-		# 2. SQLite
-		import sqlite3
-
-		import platformdirs
-
-		db_path = Path(platformdirs.user_data_dir("neon-link")) / "events.db"
-		if db_path.exists():
-			try:
-				with sqlite3.connect(db_path, timeout=2) as conn:
-					res = conn.execute("PRAGMA integrity_check").fetchone()
-					if not res or res[0] != "ok":
-						report.status = "red"
-						report.findings.append(AuditFinding(type="amnesia", severity=10.0, message="SQLite events.db is CORRUPTED"))
-			except Exception as e:
-				report.status = "red"
-				report.findings.append(AuditFinding(type="amnesia", severity=10.0, message=f"SQLite events.db is LOCKED/UNREADABLE: {e}"))
+			for _, name, _ in pkgutil.iter_modules(plugins_pkg.__path__):
+				module = importlib.import_module(f"red_pill.metabolism.sentinel_plugins.{name}")
+				for _, obj in inspect.getmembers(module, inspect.isclass):
+					if issubclass(obj, SentinelPlugin) and obj is not SentinelPlugin:
+						plugin = obj()
+						try:
+							if plugin.is_enabled(config):
+								self.logger.info(f"Executing health check plugin: {plugin.name}")
+								plugin_findings = plugin.audit(config)
+								if plugin_findings:
+									report.findings.extend(plugin_findings)
+						except Exception as e:
+							self.logger.error(f"Plugin {plugin.name} failed during audit: {e}")
+							report.status = "red"
+							report.findings.append(AuditFinding(type="blindness", severity=10.0, message=f"Plugin {plugin.name} CRASHED: {e}"))
+		except Exception as e:
+			self.logger.error(f"Failed to load sentinel plugins: {e}")
 
 		# 3. VRAM Exhaustion
 		vram_res = subprocess.run(
@@ -318,6 +322,8 @@ class SentinelAuditor:
 				pass
 
 		# 4. Sensory Blindness (Network/LLM)
+		import urllib.error
+		import urllib.request
 		try:
 			urllib.request.urlopen("https://api.openai.com/v1/models", timeout=3)
 		except Exception as e:
