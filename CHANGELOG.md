@@ -1,6 +1,8 @@
 ## [7.0.0] - Unreleased
 
 ### 🧭 Sovereign Drive & Structural Graph (Cognitive Autonomy Pipeline)
+- **[FIX] Telegram Ghost Responses**: Resolved trajectory truncation issues by implementing `TelegramResponseExtractor` to read directly from `overview.txt` bypassing gRPC limits.
+- **[FEAT] Telegram Headless Sessions**: Added `/new` command to Neon-Link allowing the operator to start and anchor to fresh, headless cascades directly from Telegram.
 - **[FEAT] Sovereign Drive & Ambition Mode**: Fully integrated `DriveEvaluator` into the `IDEWorker` loop. The Bünker now possesses "Ambition", evaluating system entropy during idle times and injecting proactive architectural maintenance tasks via the `CognitiveQueueManager` without human intervention.
 - **[FEAT] Graphify Knowledge Graph RAG**: Deployed the AST-based Knowledge Graph (`graphify`) as a sovereign MCP plugin. The agent is now structurally aware and can traverse dependencies natively.
 - **[FEAT] Decoupled Graphify Architecture**: Added the `GRAPHIFY_RAG_ENABLED` flag in `config.py`. The background AST sync is strictly conditional, preventing crashes if the server is not installed locally.
