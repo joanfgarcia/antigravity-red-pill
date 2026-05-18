@@ -305,10 +305,12 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 		try:
 			import subprocess
 			import time
-			# Notify OS
-			subprocess.run(["notify-send", "-a", "Red-Pill", "-i", "weather-clear-night", "Bünker Cortex", "El Hilo de Ariadna está tejiendo...\nConsolidación de memoria iniciada."], check=False)
-			# Inject status signal
-			memory_manager.inject_signal("ariadne_thread_running", intensity=1.0, signal_type="status", source="SLEEP_ENGINE")
+
+			from red_pill.core.notifier import SovereignNotifier
+
+			# Notify OS and Bünker
+			SovereignNotifier.notify_os("Bünker Cortex", "El Hilo de Ariadna está tejiendo...\nConsolidación de memoria iniciada.", icon="weather-clear-night")
+			SovereignNotifier.notify_bunker(memory_manager, "ariadne_thread_running", intensity=1.0, source="SLEEP_ENGINE")
 
 			start_sh = os.path.expanduser("~/.agent/model-daemon/start.sh")
 			if os.path.exists(start_sh):
@@ -325,12 +327,12 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 				else:
 					logger.error("[SLEEP ENGINE] Ephemeral Server failed to start within 60s.")
 					ephemeral_process.terminate()
-					subprocess.run(["notify-send", "-a", "Red-Pill", "-u", "critical", "Bünker Cortex", "Fallo al iniciar el servidor efímero."], check=False)
-					memory_manager.evaporate_signals("ariadne_thread_running")
+					SovereignNotifier.notify_os("Bünker Cortex", "Fallo al iniciar el servidor efímero.", urgency="critical")
+					SovereignNotifier.clear_bunker_signal(memory_manager, "ariadne_thread_running")
 					return 0
 			else:
 				logger.error("[SLEEP ENGINE] start.sh not found for ephemeral server. Aborting.")
-				memory_manager.inject_signal("local_llm_offline", intensity=7.0, signal_type="pain", source="SLEEP_ENGINE")
+				SovereignNotifier.notify_bunker(memory_manager, "local_llm_offline", intensity=7.0, signal_type="pain", source="SLEEP_ENGINE")
 				return 0
 		except Exception as e:
 			logger.error(f"[SLEEP ENGINE] Failed to start Ephemeral Server: {e}")
@@ -575,8 +577,9 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 
 	logger.info(f"=== LAZARUS PULSE: Sleep Cycle complete. {total_processed} engrams synaptically woven. ===")
 	try:
-		memory_manager.evaporate_signals("local_llm_offline")
-		memory_manager.evaporate_signals("ariadne_thread_running")
+		from red_pill.core.notifier import SovereignNotifier
+		SovereignNotifier.clear_bunker_signal(memory_manager, "local_llm_offline")
+		SovereignNotifier.clear_bunker_signal(memory_manager, "ariadne_thread_running")
 	except Exception:
 		pass
 
@@ -587,8 +590,11 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 			ephemeral_process.wait(timeout=10)
 		except Exception:
 			ephemeral_process.kill()
-		import subprocess
-		subprocess.run(["notify-send", "-a", "Red-Pill", "-i", "dialog-information", "Bünker Cortex", f"Hilo de Ariadna finalizado.\n{total_processed} engramas consolidados en el neocórtex."], check=False)
+		try:
+			from red_pill.core.notifier import SovereignNotifier
+			SovereignNotifier.notify_os("Bünker Cortex", f"Hilo de Ariadna finalizado.\n{total_processed} engramas consolidados en el neocórtex.", icon="dialog-information")
+		except Exception:
+			pass
 
 	get_event_bus().emit(SleepCompletedEvent(collection=collection, processed_count=total_processed, mode=mode))
 	return total_processed
