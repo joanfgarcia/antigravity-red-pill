@@ -24,6 +24,7 @@
 - **[VERIFIED] LanguageServer Pagination Ceiling**: Conducted tests proving the IDE API lacks a 500-step ceiling; it seamlessly returns up to 4125+ context-dense steps natively, ensuring the fallback is fully lossless.
 
 ### 🤖 Sovereign Daemon & Cognitive Queue
+- **[FEAT] Autonomous Ephemeral Sleep**: Upgraded `sleep.py` to transparently spawn an Ephemeral Local LLM Server using `systemd-run` (`MemoryMax=10G`) for nocturnal memory consolidation, shutting it down immediately after. Integrated OS Desktop Notifications (`notify-send`) and database pain signals to keep the Operator informed without polluting the IDE cascade.
 - **[FEAT] Autonomous Cognitive DAG**: Upgraded `CognitiveQueueManager` to support `parent_task_id`, enabling asynchronous dependency chaining (DAG) inside the SQLite queue.
 - **[FEAT] Zero-Daemon Plugin Architecture**: Refactored `queue_worker.py` to process DAG tasks dynamically via `MinionFactory`. Eradicated hardcoded routing, ensuring minions act as decoupled plugins executed efficiently via systemd oneshot timers.
 - **[FEAT] Janitor Minion**: Implemented `JanitorMinion` as an independent swarm agent to autonomously purge stale events (`events.db`) and scratch files older than 7 days, maintaining long-term system sanity and preventing polling slowdowns. Deployed via a daily Systemd timer (`redpill-janitor.timer`).

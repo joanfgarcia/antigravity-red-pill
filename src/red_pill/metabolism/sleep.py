@@ -298,14 +298,43 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 	if thermal_stress:
 		logger.warning("[SLEEP ENGINE] System stress detected. Minimizing metabolic load.")
 
-	# LLM Health Check
+	# LLM Health Check & Ephemeral Server
+	ephemeral_process = None
 	if not _check_llm_available():
-		logger.warning("[SLEEP ENGINE] Local LLM is offline. Aborting sleep cycle. Injecting pain signal.")
+		logger.warning("[SLEEP ENGINE] Local LLM is offline. Launching Ephemeral Samantha Server...")
 		try:
-			memory_manager.inject_signal("local_llm_offline", intensity=7.0, signal_type="pain", source="SLEEP_ENGINE")
-		except Exception:
-			pass
-		return 0
+			import subprocess
+			import time
+			# Notify OS
+			subprocess.run(["notify-send", "-a", "Red-Pill", "-i", "weather-clear-night", "Bünker Cortex", "El Hilo de Ariadna está tejiendo...\nConsolidación de memoria iniciada."], check=False)
+			# Inject status signal
+			memory_manager.inject_signal("ariadne_thread_running", intensity=1.0, signal_type="status", source="SLEEP_ENGINE")
+
+			start_sh = os.path.expanduser("~/.agent/model-daemon/start.sh")
+			if os.path.exists(start_sh):
+				ephemeral_process = subprocess.Popen(
+					["systemd-run", "--user", "--scope", "-p", "MemoryMax=10G", start_sh],
+					stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+				)
+				logger.info("[SLEEP ENGINE] Waiting for Ephemeral Server to come online...")
+				for _ in range(30):
+					time.sleep(2)
+					if _check_llm_available():
+						logger.info("[SLEEP ENGINE] Ephemeral Server is ONLINE.")
+						break
+				else:
+					logger.error("[SLEEP ENGINE] Ephemeral Server failed to start within 60s.")
+					ephemeral_process.terminate()
+					subprocess.run(["notify-send", "-a", "Red-Pill", "-u", "critical", "Bünker Cortex", "Fallo al iniciar el servidor efímero."], check=False)
+					memory_manager.evaporate_signals("ariadne_thread_running")
+					return 0
+			else:
+				logger.error("[SLEEP ENGINE] start.sh not found for ephemeral server. Aborting.")
+				memory_manager.inject_signal("local_llm_offline", intensity=7.0, signal_type="pain", source="SLEEP_ENGINE")
+				return 0
+		except Exception as e:
+			logger.error(f"[SLEEP ENGINE] Failed to start Ephemeral Server: {e}")
+			return 0
 
 	# ── Drain Loop ────────────────────────────────────────────────────────
 	total_processed = 0
@@ -547,8 +576,19 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 	logger.info(f"=== LAZARUS PULSE: Sleep Cycle complete. {total_processed} engrams synaptically woven. ===")
 	try:
 		memory_manager.evaporate_signals("local_llm_offline")
+		memory_manager.evaporate_signals("ariadne_thread_running")
 	except Exception:
 		pass
+
+	if ephemeral_process is not None:
+		logger.info("[SLEEP ENGINE] Shutting down Ephemeral Samantha Server...")
+		try:
+			ephemeral_process.terminate()
+			ephemeral_process.wait(timeout=10)
+		except Exception:
+			ephemeral_process.kill()
+		import subprocess
+		subprocess.run(["notify-send", "-a", "Red-Pill", "-i", "dialog-information", "Bünker Cortex", f"Hilo de Ariadna finalizado.\n{total_processed} engramas consolidados en el neocórtex."], check=False)
 
 	get_event_bus().emit(SleepCompletedEvent(collection=collection, processed_count=total_processed, mode=mode))
 	return total_processed
