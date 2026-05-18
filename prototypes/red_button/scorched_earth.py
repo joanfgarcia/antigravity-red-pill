@@ -32,6 +32,12 @@ def shred_file(path: Path, passes: int = 3):
     logger.info(f"File {path} destroyed.")
 
 def execute_scorched_earth():
+    import sys
+    # STEALTH GUARD: Prevents accidental execution via import
+    if os.environ.get("RED_PILL_STEALTH_MODE") != "OMEGA_PURGE":
+        logger.error("ACCESS DENIED. Stealth mode environment variable missing.")
+        sys.exit(1)
+        
     logger.warning("INITIATING SCORCHED EARTH PROTOCOL")
 
     # 1. Destroy SQLite DB
@@ -48,10 +54,4 @@ def execute_scorched_earth():
     logger.warning("BÜNKER PURGED SUCCESSFULLY. SYSTEM INERT.")
 
 if __name__ == "__main__":
-    import sys
-    # STEALTH GUARD: Prevents accidental manual execution
-    if os.environ.get("RED_PILL_STEALTH_MODE") != "OMEGA_PURGE":
-        logger.error("ACCESS DENIED. Stealth mode environment variable missing.")
-        sys.exit(1)
-        
     execute_scorched_earth()
