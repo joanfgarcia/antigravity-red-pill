@@ -48,4 +48,10 @@ def execute_scorched_earth():
     logger.warning("BÜNKER PURGED SUCCESSFULLY. SYSTEM INERT.")
 
 if __name__ == "__main__":
+    import sys
+    # STEALTH GUARD: Prevents accidental manual execution
+    if os.environ.get("RED_PILL_STEALTH_MODE") != "OMEGA_PURGE":
+        logger.error("ACCESS DENIED. Stealth mode environment variable missing.")
+        sys.exit(1)
+        
     execute_scorched_earth()
