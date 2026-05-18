@@ -187,10 +187,29 @@ class IDEWorker:
 			if mapping:
 				cid = mapping["cascade_id"]
 				title = mapping["title"]
-				cursor.execute("INSERT OR REPLACE INTO telegram_sessions (channel_user_id, cascade_id) VALUES (?, ?)", (channel_user_id, cid))
+				cursor.execute("INSERT OR REPLACE INTO telegram_sessions (channel_user_id, cascade_id, cascade_type) VALUES (?, ?, 'interactive')", (channel_user_id, cid))
 				resp_text = f"🔗 Sesión anclada a: **{title}**.\nTodos los mensajes se inyectarán en esta pestaña del IDE."
 			else:
 				resp_text = "❌ Índice no encontrado. Usa `/list` primero."
+			cursor.execute(
+				"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
+				(channel, channel_user_id, None, json.dumps({"text": resp_text})),
+			)
+			cursor.execute("UPDATE inbox SET status = 'PROCESSED' WHERE id = ?", (first_conv["id"],))
+			conn.commit()
+			conn.close()
+			return
+
+		elif command == "NEW_CASCADE":
+			logger.info(f"Initiating new Headless Cascade for {channel_user_id} via Telegram.")
+			new_cascade_id = self.client.start_cascade()
+			
+			if new_cascade_id:
+				cursor.execute("INSERT OR REPLACE INTO telegram_sessions (channel_user_id, cascade_id, cascade_type) VALUES (?, ?, 'interactive')", (channel_user_id, new_cascade_id))
+				resp_text = "✨ Nueva sesión Headless inicializada y anclada correctamente.\nEl contexto está a cero. ¿En qué puedo ayudarte?"
+			else:
+				resp_text = "❌ Error crítico: El IDE no pudo inicializar la cascada."
+				
 			cursor.execute(
 				"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
 				(channel, channel_user_id, None, json.dumps({"text": resp_text})),
