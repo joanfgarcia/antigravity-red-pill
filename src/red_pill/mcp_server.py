@@ -220,7 +220,7 @@ async def handle_run_security_audit(arguments: Dict[str, Any]):
 	async def _run_bg():
 		try:
 			from red_pill.core.inbox import MinionInbox
-			from red_pill.utils.observer import notify_user
+			from red_pill.core.notifier import SovereignNotifier
 
 			results = await GruOrchestrator().deploy_swarm("audit", [SmithMinion()], trace=False, path=path)
 			res = results[0]
@@ -236,18 +236,18 @@ async def handle_run_security_audit(arguments: Dict[str, Any]):
 			def _deliver_report():
 				MinionInbox().drop_report(event_id=event_id, source="SmithMinion", status=res.status, content=audit_text)
 				if res.status != "success":
-					notify_user("Security Audit", f"Audit [{event_id}] {res.status}", category="system")
+					SovereignNotifier.notify_os("Security Audit", f"Audit [{event_id}] {res.status}", category="system")
 
 			await asyncio.to_thread(_deliver_report)
 		except Exception as e:
 			logger.error(f"Async Audit [{event_id}] crashed: {e}")
 			err_msg = str(e)
 			from red_pill.core.inbox import MinionInbox
-			from red_pill.utils.observer import notify_user
+			from red_pill.core.notifier import SovereignNotifier
 
 			def _deliver_err():
 				MinionInbox().drop_report(event_id=event_id, source="SmithMinion", status="crashed", content=f"Exception: {err_msg}")
-				notify_user("Audit Crash", f"[{event_id}] Failed", category="system")
+				SovereignNotifier.notify_os("Audit Crash", f"[{event_id}] Failed", category="system")
 
 			await asyncio.to_thread(_deliver_err)
 
@@ -282,7 +282,7 @@ async def handle_search_memory_research(arguments: Dict[str, Any]):
 	async def _run_bg():
 		try:
 			from red_pill.core.inbox import MinionInbox
-			from red_pill.utils.observer import notify_user
+			from red_pill.core.notifier import SovereignNotifier
 
 			oracle = OracleMinion()
 			if collections:
@@ -294,18 +294,18 @@ async def handle_search_memory_research(arguments: Dict[str, Any]):
 			def _deliver_report():
 				MinionInbox().drop_report(event_id=event_id, source="OracleMinion", status=res.status, content=content)
 				if res.status != "success":
-					notify_user("Oracle Research", f"Synthesis [{event_id}] Ready", category="system")
+					SovereignNotifier.notify_os("Oracle Research", f"Synthesis [{event_id}] Ready", category="system")
 
 			await asyncio.to_thread(_deliver_report)
 		except Exception as e:
 			logger.error(f"Oracle Research [{event_id}] crashed: {e}")
 			err_msg = str(e)
 			from red_pill.core.inbox import MinionInbox
-			from red_pill.utils.observer import notify_user
+			from red_pill.core.notifier import SovereignNotifier
 
 			def _deliver_err():
 				MinionInbox().drop_report(event_id=event_id, source="OracleMinion", status="crashed", content=f"Exception: {err_msg}")
-				notify_user("Oracle Crash", f"[{event_id}] Failed", category="system")
+				SovereignNotifier.notify_os("Oracle Crash", f"[{event_id}] Failed", category="system")
 
 			await asyncio.to_thread(_deliver_err)
 
@@ -517,7 +517,7 @@ async def handle_check_system_health(arguments: Dict[str, Any]):
 	async def _run_bg():
 		try:
 			from red_pill.core.inbox import MinionInbox
-			from red_pill.utils.observer import notify_user
+			from red_pill.core.notifier import SovereignNotifier
 
 			results = await GruOrchestrator().deploy_swarm("health", [KeymakerMinion()], trace=False)
 			res = results[0]
@@ -531,18 +531,18 @@ async def handle_check_system_health(arguments: Dict[str, Any]):
 			def _deliver_report():
 				MinionInbox().drop_report(event_id=event_id, source="KeymakerMinion", status=res.status, content=health)
 				if res.status != "success":
-					notify_user("Health Check", f"Status [{event_id}] Ready", category="system")
+					SovereignNotifier.notify_os("Health Check", f"Status [{event_id}] Ready", category="system")
 
 			await asyncio.to_thread(_deliver_report)
 		except Exception as e:
 			logger.error(f"Health Check [{event_id}] crashed: {e}")
 			err_msg = str(e)
 			from red_pill.core.inbox import MinionInbox
-			from red_pill.utils.observer import notify_user
+			from red_pill.core.notifier import SovereignNotifier
 
 			def _deliver_err():
 				MinionInbox().drop_report(event_id=event_id, source="KeymakerMinion", status="crashed", content=f"Exception: {err_msg}")
-				notify_user("Health Check Crash", f"[{event_id}] Failed", category="system")
+				SovereignNotifier.notify_os("Health Check Crash", f"[{event_id}] Failed", category="system")
 
 			await asyncio.to_thread(_deliver_err)
 
@@ -576,7 +576,7 @@ async def handle_compress_prompt(arguments: Dict[str, Any]):
 	async def _run_bg():
 		try:
 			from red_pill.core.inbox import MinionInbox
-			from red_pill.utils.observer import notify_user
+			from red_pill.core.notifier import SovereignNotifier
 
 			results = await GruOrchestrator().deploy_swarm("compress", [CompressorMinion()], trace=False, text=text)
 			res = results[0]
@@ -589,18 +589,18 @@ async def handle_compress_prompt(arguments: Dict[str, Any]):
 			def _deliver_report():
 				MinionInbox().drop_report(event_id=event_id, source="CompressorMinion", status=res.status, content=content)
 				if res.status != "success":
-					notify_user("Prompt Compressor", f"Compression [{event_id}] Ready", category="system")
+					SovereignNotifier.notify_os("Prompt Compressor", f"Compression [{event_id}] Ready", category="system")
 
 			await asyncio.to_thread(_deliver_report)
 		except Exception as e:
 			logger.error(f"Compressor [{event_id}] crashed: {e}")
 			err_msg = str(e)
 			from red_pill.core.inbox import MinionInbox
-			from red_pill.utils.observer import notify_user
+			from red_pill.core.notifier import SovereignNotifier
 
 			def _deliver_err():
 				MinionInbox().drop_report(event_id=event_id, source="CompressorMinion", status="crashed", content=f"Exception: {err_msg}")
-				notify_user("Compressor Crash", f"[{event_id}] Failed", category="system")
+				SovereignNotifier.notify_os("Compressor Crash", f"[{event_id}] Failed", category="system")
 
 			await asyncio.to_thread(_deliver_err)
 
@@ -809,8 +809,8 @@ async def handle_run_pre_pr_audit(arguments: Dict[str, Any]):
 			result = subprocess.run(cmd, capture_output=True, text=True)
 			status = "PASSED" if result.returncode == 0 else "FAILED"
 
+			from red_pill.core.notifier import SovereignNotifier
 			from red_pill.memory import MemoryManager
-			from red_pill.utils.observer import notify_user
 
 			out_text = str(result.stdout or "")
 			MemoryManager().add_memory(
@@ -819,7 +819,7 @@ async def handle_run_pre_pr_audit(arguments: Dict[str, Any]):
 				importance=8.0,
 			)
 			logger.info(f"Async Audit [{event_id}] finished and saved to memory.")
-			notify_user("Bünker Audit", f"Audit [{event_id}] {status}", category="system")
+			SovereignNotifier.notify_os("Bünker Audit", f"Audit [{event_id}] {status}", category="system")
 		except Exception as e:
 			logger.error(f"Async Audit [{event_id}] crashed: {e}")
 

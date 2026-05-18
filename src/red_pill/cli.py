@@ -629,7 +629,7 @@ def main() -> None:
 		elif args.command == "init":
 			import subprocess
 
-			from red_pill.utils.observer import notify_user
+			from red_pill.core.notifier import SovereignNotifier
 
 			print(f"--- [INITIALIZING SPECS.MD FLOW: {args.flow.upper()}] ---")
 			try:
@@ -640,7 +640,7 @@ def main() -> None:
 				from red_pill import __version__
 
 				print(f"\n[OK] Flow '{args.flow}' initialized on disk (Notebook mode).")
-				notify_user("Project Initialized", f"Red Pill v{__version__} + specs.md {args.flow} flow is now live.", category="init")
+				SovereignNotifier.notify_os("Project Initialized", f"Red Pill v{__version__} + specs.md {args.flow} flow is now live.", category="init")
 			except Exception as e:
 				print(f"[FAIL] Initialization failed: {e}")
 			return
@@ -727,10 +727,10 @@ def main() -> None:
 					print(f"{key.capitalize().replace('_', ' ')}: {value}")
 			elif args.command == "signal":
 				if args.sig_cmd == "push":
-					from red_pill.utils.observer import notify_user
+					from red_pill.core.notifier import SovereignNotifier
 
 					if not args.silent:
-						notify_user(args.title, args.message, sound=args.sound, category="manual")
+						SovereignNotifier.notify_os(args.title, args.message, sound=args.sound, category="manual")
 
 					# Record memory of the signal (System Signal collections)
 					manager.inject_signal(name=args.title, intensity=args.intensity, signal_type="manual", source="cli")

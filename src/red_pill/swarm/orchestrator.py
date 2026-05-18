@@ -9,12 +9,12 @@ from typing import List, Union, cast
 from red_pill.config import FLOW_REGISTRY_PATH, SIP_SOCKET_PATH
 from red_pill.core.inbox import MinionInbox
 from red_pill.core.model_registry import ModelRegistry
+from red_pill.core.notifier import SovereignNotifier
 from red_pill.core.providers import BitNetInferenceProvider, OpenAIInferenceProvider, ProviderRegistry, SipInferenceProvider
 from red_pill.swarm.base import Minion, SwarmResult
 from red_pill.swarm.factory import MinionFactory
 from red_pill.swarm.flow_engine import FlowEngine
 from red_pill.swarm.routing import InferenceRouter
-from red_pill.utils.observer import notify_user
 from red_pill.utils.specs_adapter import SpecsAdapter
 
 logger = logging.getLogger(__name__)
@@ -234,7 +234,7 @@ class GruOrchestrator:
 		message = f"Swarm Task Complete: {task_preview}. {success_count}/{len(results)} minions succeeded.{telemetry_summary}"
 
 		if should_notify_desktop:
-			notify_user(title="Sovereign Swarm", message=message, sound=False, category="swarm")
+			SovereignNotifier.notify_os(title="Sovereign Swarm", message=message, sound=False, category="swarm")
 
 		# Memory Signal (Agent)
 		try:
