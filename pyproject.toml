@@ -223,6 +223,7 @@ show_missing = true
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
+norecursedirs = ["prototypes", "scripts", "docs", "3rdparty"]
 timeout = 10
 markers = [
     "integration: tests that require a real environment (Qdrant, Milvus, models)"
