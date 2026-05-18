@@ -43,6 +43,7 @@ class CognitiveQueueManager:
 					priority INTEGER NOT NULL DEFAULT 5,
 					payload TEXT NOT NULL,
 					status TEXT NOT NULL DEFAULT 'PENDING',
+					parent_task_id TEXT DEFAULT NULL,
 					created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 					updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 					attempts INTEGER NOT NULL DEFAULT 0,
@@ -50,26 +51,33 @@ class CognitiveQueueManager:
 				)
 			""")
 
+			# Migración para añadir la columna si la tabla ya existía
+			try:
+				conn.execute("ALTER TABLE cognitive_tasks ADD COLUMN parent_task_id TEXT DEFAULT NULL")
+			except sqlite3.OperationalError:
+				pass  # La columna ya existe
+
 			# Índice para extracción ultrarrápida del router
 			conn.execute("""
 				CREATE INDEX IF NOT EXISTS idx_queue_routing
 				ON cognitive_tasks(status, priority DESC, created_at ASC)
 			""")
 
-	def enqueue_task(self, source: str, payload: Dict[str, Any], priority: int = 5) -> str:
-		"""Inyecta un estímulo/tarea en la cola cognitiva."""
+	def enqueue_task(self, source: str, payload: Dict[str, Any], priority: int = 5, parent_task_id: Optional[str] = None) -> str:
+		"""Inyecta un estímulo/tarea en la cola cognitiva. Si tiene un parent_task_id, entra como BLOCKED."""
 		task_id = str(uuid.uuid4())
 		payload_str = json.dumps(payload)
+		initial_status = "BLOCKED" if parent_task_id else "PENDING"
 
 		with self._get_connection() as conn:
 			conn.execute(
 				"""
-				INSERT INTO cognitive_tasks (id, source, priority, payload, status)
-				VALUES (?, ?, ?, ?, 'PENDING')
+				INSERT INTO cognitive_tasks (id, source, priority, payload, status, parent_task_id)
+				VALUES (?, ?, ?, ?, ?, ?)
 				""",
-				(task_id, source, priority, payload_str),
+				(task_id, source, priority, payload_str, initial_status, parent_task_id),
 			)
-		logger.debug(f"[QUEUE] Task {task_id} injected (Priority {priority}). Source: {source}")
+		logger.debug(f"[QUEUE] Task {task_id} injected (Priority {priority}, Status {initial_status}). Source: {source}")
 		return task_id
 
 	def pop_next_task(self) -> Optional[Dict[str, Any]]:
@@ -115,7 +123,7 @@ class CognitiveQueueManager:
 			}
 
 	def mark_completed(self, task_id: str) -> None:
-		"""Marca una tarea como finalizada exitosamente."""
+		"""Marca una tarea como finalizada exitosamente y desbloquea tareas hijas (Flujo DAG)."""
 		with self._get_connection() as conn:
 			conn.execute(
 				"""
@@ -125,6 +133,18 @@ class CognitiveQueueManager:
 				""",
 				(task_id,),
 			)
+			# DAG: Desbloquear dependencias
+			cursor = conn.execute(
+				"""
+				UPDATE cognitive_tasks
+				SET status = 'PENDING', updated_at = CURRENT_TIMESTAMP
+				WHERE parent_task_id = ? AND status = 'BLOCKED'
+				""",
+				(task_id,),
+			)
+			unlocked_count = cursor.rowcount
+			if unlocked_count > 0:
+				logger.debug(f"[QUEUE-DAG] Task {task_id} completed. Unlocked {unlocked_count} child tasks.")
 
 	def mark_failed(self, task_id: str, error_msg: str) -> None:
 		"""

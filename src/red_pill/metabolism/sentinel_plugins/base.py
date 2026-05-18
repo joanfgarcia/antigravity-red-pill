@@ -17,7 +17,7 @@ class SentinelPlugin(ABC):
 	@abstractmethod
 	def audit(self, cfg: Any) -> List[Any]:
 		"""
-		Ejecuta la prueba de salud. 
+		Ejecuta la prueba de salud.
 		Debe devolver una lista de objetos AuditFinding (vía importación diferida si es necesario).
 		"""
 		pass

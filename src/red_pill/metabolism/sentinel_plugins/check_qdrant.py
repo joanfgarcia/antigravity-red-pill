@@ -22,9 +22,7 @@ class QdrantCheck(SentinelPlugin):
 			url = getattr(cfg, "QDRANT_URL", "http://localhost:6333")
 			urllib.request.urlopen(url, timeout=2)
 		except Exception:
-			findings.append(
-				AuditFinding(type="amnesia", severity=10.0, message="Qdrant Vector DB is UNREACHABLE")
-			)
+			findings.append(AuditFinding(type="amnesia", severity=10.0, message="Qdrant Vector DB is UNREACHABLE"))
 		return findings
 
 	def heal(self, cfg: Any, finding: AuditFinding) -> bool:

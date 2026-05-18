@@ -309,14 +309,15 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 			from red_pill.core.notifier import SovereignNotifier
 
 			# Notify OS and Bünker
-			SovereignNotifier.notify_os("Bünker Cortex", "El Hilo de Ariadna está tejiendo...\nConsolidación de memoria iniciada.", icon="weather-clear-night")
+			SovereignNotifier.notify_os(
+				"Bünker Cortex", "El Hilo de Ariadna está tejiendo...\nConsolidación de memoria iniciada.", icon="weather-clear-night"
+			)
 			SovereignNotifier.notify_bunker(memory_manager, "ariadne_thread_running", intensity=1.0, source="SLEEP_ENGINE")
 
 			start_sh = os.path.expanduser("~/.agent/model-daemon/start.sh")
 			if os.path.exists(start_sh):
 				ephemeral_process = subprocess.Popen(
-					["systemd-run", "--user", "--scope", "-p", "MemoryMax=10G", start_sh],
-					stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+					["systemd-run", "--user", "--scope", "-p", "MemoryMax=10G", start_sh], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
 				)
 				logger.info("[SLEEP ENGINE] Waiting for Ephemeral Server to come online...")
 				for _ in range(30):
@@ -578,6 +579,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 	logger.info(f"=== LAZARUS PULSE: Sleep Cycle complete. {total_processed} engrams synaptically woven. ===")
 	try:
 		from red_pill.core.notifier import SovereignNotifier
+
 		SovereignNotifier.clear_bunker_signal(memory_manager, "local_llm_offline")
 		SovereignNotifier.clear_bunker_signal(memory_manager, "ariadne_thread_running")
 	except Exception:
@@ -592,7 +594,10 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 			ephemeral_process.kill()
 		try:
 			from red_pill.core.notifier import SovereignNotifier
-			SovereignNotifier.notify_os("Bünker Cortex", f"Hilo de Ariadna finalizado.\n{total_processed} engramas consolidados en el neocórtex.", icon="dialog-information")
+
+			SovereignNotifier.notify_os(
+				"Bünker Cortex", f"Hilo de Ariadna finalizado.\n{total_processed} engramas consolidados en el neocórtex.", icon="dialog-information"
+			)
 		except Exception:
 			pass
 

@@ -83,6 +83,7 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
   - **Mail/Calendar**: Listeners for Gmail and Calendar events (appointments, incoming priority emails).
   - **Work/Ticketing**: ClickUp/Jira/GitLab API integration for issue tracking.
   - **Wellness**: Personal coach module (QiYoga, hydration/stretch reminders) integrated into the Lazarus Pulse.
+  - [x] **File Ingestion Watchdog**: Sovereign plugin to autonomously monitor directories (e.g. Obsidian vaults) and vectorize `.md`/`.pdf` documents into the Qdrant Bünker via the Cognitive DAG.
 - [x] **Config Decoupling & Guided UX**: Restructured `neon-link` configuration out of `red-pill`. Migrated to `~/.config/neon-link/` and `platformdirs`. CLI `neon-link init` handles bootstrapping safely.
 - [ ] **Swarm Broadcast**: Community-wide message delivery (currently P2P only).
 - [ ] **Mailbox Cleanup**: Auto-purge read messages from Firebase after TTL.

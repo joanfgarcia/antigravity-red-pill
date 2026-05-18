@@ -72,14 +72,7 @@ class FileIngestionPlugin(SovereignPlugin):
 		SovereignNotifier.notify_os("Ingestion Pipeline", f"Detectado nuevo archivo: {filename}.\nIniciando vectorización.", icon="document-new")
 
 		# Create a DAG task for the 'ingestor' minion
-		self.queue_manager.enqueue(
-			task_type="plugin",
-			priority=50,
-			payload={
-				"minion": "ingestor",
-				"kwargs": {"file_path": file_path}
-			}
-		)
+		self.queue_manager.enqueue(task_type="plugin", priority=50, payload={"minion": "ingestor", "kwargs": {"file_path": file_path}})
 
 	async def hook(self, scope: PluginScope, payload: Dict[str, Any]) -> Dict[str, Any]:
 		return payload

@@ -5,11 +5,13 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+
 class TelegramResponseExtractor:
 	"""
 	Extracts the latest agent response directly from the IDE's overview.txt log file.
 	This bypasses gRPC trajectory truncation issues.
 	"""
+
 	def __init__(self, brain_dir: Optional[Path] = None):
 		self.brain_dir = brain_dir or (Path.home() / ".gemini" / "antigravity" / "brain")
 

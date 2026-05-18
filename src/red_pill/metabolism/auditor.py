@@ -324,6 +324,7 @@ class SentinelAuditor:
 		# 4. Sensory Blindness (Network/LLM)
 		import urllib.error
 		import urllib.request
+
 		try:
 			urllib.request.urlopen("https://api.openai.com/v1/models", timeout=3)
 		except Exception as e:

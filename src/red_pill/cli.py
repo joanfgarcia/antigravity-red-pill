@@ -640,7 +640,9 @@ def main() -> None:
 				from red_pill import __version__
 
 				print(f"\n[OK] Flow '{args.flow}' initialized on disk (Notebook mode).")
-				SovereignNotifier.notify_os("Project Initialized", f"Red Pill v{__version__} + specs.md {args.flow} flow is now live.", category="init")
+				SovereignNotifier.notify_os(
+					"Project Initialized", f"Red Pill v{__version__} + specs.md {args.flow} flow is now live.", category="init"
+				)
 			except Exception as e:
 				print(f"[FAIL] Initialization failed: {e}")
 			return

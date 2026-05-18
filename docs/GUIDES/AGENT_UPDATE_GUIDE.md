@@ -526,6 +526,14 @@ The `perform_sleep_cycle()` function in `src/red_pill/metabolism/sleep.py` has t
     - **Action**: Ensure your local environment is running `neon-link` version 0.3.2 or higher.
     - **Verify**: Check `uv pip list | grep neon-link`. If it is lower, run `uv sync` to update the dependencies.
 
+    #### §4.23 Autonomous Cognitive DAG (v6.10.0)
+
+    The cognitive asynchronous queue (`minion_inbox.db`) now supports Directed Acyclic Graph (DAG) task chaining directly via SQLite state tracking. Tasks can be enqueued with a `parent_task_id`, keeping them in a `BLOCKED` state until the parent task triggers `mark_completed()`, which atomically unlocks them.
+
+    **1. Schema Migration**:
+    The system automatically executes a non-destructive `ALTER TABLE` during initialization to add the `parent_task_id` column to `cognitive_tasks`.
+    - **Action**: No manual database migration or `upgrade.sh` intervention is required. The Python layer handles the schema evolution safely via `queue_manager.py`.
+
 ## 5. Hierarchy of Directives
 
 Upon completion of any update, the agent **MUST** immediately execute:

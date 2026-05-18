@@ -4,12 +4,14 @@ from dataclasses import dataclass
 @dataclass
 class CognitiveTask:
 	"""Representa una tarea atómica dentro del enjambre soberano."""
-	domain: str	   # Dominio de especialidad: "logic", "code", "general"
-	payload: str	  # El texto en bruto o instrucciones de la tarea
+
+	domain: str  # Dominio de especialidad: "logic", "code", "general"
+	payload: str  # El texto en bruto o instrucciones de la tarea
+
 
 class SwarmRouter:
 	"""
-	Capa de triaje determinista. 
+	Capa de triaje determinista.
 	Inspecciona la tarea y decide a qué modelo/experto delegarla.
 	"""
 

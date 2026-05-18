@@ -295,6 +295,7 @@ class IDEWorker:
 				content = None
 
 				from red_pill.plugins.antigravity_ide.telegram_extractor import TelegramResponseExtractor
+
 				extractor = TelegramResponseExtractor()
 				content = extractor.get_latest_response(cascade_id)
 
@@ -302,7 +303,9 @@ class IDEWorker:
 					# If trajectory is truncated due to gRPC limits, fetch the real tail using gRPC API
 					if len(steps) < num_total:
 						logger.info(f"[Cascade {cascade_id}] Trajectory truncated ({len(steps)}/{num_total}). Using gRPC tail fetch.")
-						tail_steps = self.client.get_cascade_trajectory_steps(cascade_id, start_index=max(0, num_total - 100), end_index=num_total + 10)
+						tail_steps = self.client.get_cascade_trajectory_steps(
+							cascade_id, start_index=max(0, num_total - 100), end_index=num_total + 10
+						)
 						if tail_steps:
 							steps = tail_steps
 
