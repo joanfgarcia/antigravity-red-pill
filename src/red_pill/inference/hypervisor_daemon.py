@@ -82,7 +82,8 @@ class HypervisorManager:
 				if not os.path.exists(llama_path):
 					llama_path = "llama-server"
 				ctx = str(profile.get("context_size", 2048))
-				cmd = [llama_path, "-m", model_path, "--port", str(ephemeral_port), "-c", ctx]
+				ngl = str(profile.get("n_gpu_layers", 999))
+				cmd = [llama_path, "-m", model_path, "--port", str(ephemeral_port), "-c", ctx, "-ngl", ngl]
 
 			logger.info(f"Exec: {' '.join(cmd)}")
 			process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -182,7 +183,7 @@ def main():
 	parser.add_argument("--tcp-port", type=int, default=8760, help="TCP Fallback Port")
 	args = parser.parse_args()
 
-	uds_path = os.path.expanduser("~/.agent/red_pill.sock")
+	uds_path = cfg.SIP_SOCKET_PATH
 	if os.path.exists(uds_path):
 		os.remove(uds_path)
 

@@ -531,7 +531,10 @@ def main() -> None:
 			seed_project(manager)
 			return
 		elif args.command == "sleep":
+			from red_pill.core.providers import ProviderRegistry, SipInferenceProvider
 			from red_pill.metabolism.sleep import perform_sleep_cycle
+
+			ProviderRegistry.register_inference_provider("sip", SipInferenceProvider(socket_path=cfg.SIP_SOCKET_PATH))
 
 			print("\n[LAZARUS PULSE] Initiating Maintenance Ritual (Sleep Cycle)...")
 			try:

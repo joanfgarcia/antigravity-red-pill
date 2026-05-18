@@ -44,7 +44,7 @@ def _check_llm_available() -> bool:
 	import os
 	import socket
 
-	uds_path = os.path.expanduser("~/.agent/red_pill.sock")
+	uds_path = cfg.SIP_SOCKET_PATH
 	if os.path.exists(uds_path):
 		try:
 			s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)

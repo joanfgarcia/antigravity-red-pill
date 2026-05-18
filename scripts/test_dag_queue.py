@@ -1,4 +1,3 @@
-import asyncio
 import logging
 
 from red_pill.cognitive.queue_manager import CognitiveQueueManager
