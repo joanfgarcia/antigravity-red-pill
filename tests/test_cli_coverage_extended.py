@@ -82,7 +82,7 @@ def test_main_backup_error():
 def test_main_signal_logic():
 	test_args = ["red-pill", "signal", "push", "Test message", "--title", "Test Title", "--sound"]
 	with patch("sys.argv", test_args):
-		with patch("red_pill.utils.observer.notify_user") as mock_notify:
+		with patch("red_pill.core.notifier.SovereignNotifier.notify_os") as mock_notify:
 			with patch("red_pill.cli.MemoryManager"):
 				main()
 				mock_notify.assert_any_call("Test Title", "Test message", sound=True, category="manual")
@@ -116,7 +116,7 @@ def test_main_init_command():
 	test_args = ["red-pill", "init", "--flow", "simple"]
 	with patch("sys.argv", test_args):
 		with patch("subprocess.run") as mock_run:
-			with patch("red_pill.utils.observer.notify_user") as mock_notify:
+			with patch("red_pill.core.notifier.SovereignNotifier.notify_os") as mock_notify:
 				main()
 				mock_run.assert_called_once()
 				assert "specsmd@latest" in mock_run.call_args[0][0]

@@ -29,7 +29,7 @@ class TestGruOrchestrator:
 
 	@pytest.mark.asyncio
 	async def test_deploy_swarm_success(self):
-		"""Lines 29-37: minions deployed, notify_user called."""
+		"""Lines 29-37: minions deployed, notify_os called."""
 		from red_pill.swarm.orchestrator import GruOrchestrator
 
 		gru = GruOrchestrator()
@@ -40,7 +40,7 @@ class TestGruOrchestrator:
 			return {"status": "ok"}
 
 		mock_minion.execute = fake_execute
-		with patch("red_pill.swarm.orchestrator.notify_user") as mock_notify:
+		with patch("red_pill.core.notifier.SovereignNotifier.notify_os") as mock_notify:
 			results = await gru.deploy_swarm("health_check", [mock_minion])
 		assert mock_notify.called
 		assert len(results) == 1
