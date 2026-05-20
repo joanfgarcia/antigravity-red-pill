@@ -105,3 +105,45 @@ def get_backups_dir() -> Path:
 		path = get_bunker_root().parent / "backups" / "red-pill"
 	path.mkdir(parents=True, exist_ok=True)
 	return path
+
+
+def migrate_legacy_xdg_config() -> None:
+	"""
+	Autonomously bridges the migration from legacy underscored ~/.config/red_pill
+	to the XDG-standard hyphenated ~/.config/red-pill directory.
+	"""
+	import shutil
+	from pathlib import Path
+	import platformdirs
+	import logging
+
+	logger = logging.getLogger(__name__)
+
+	legacy_dir = Path.home() / ".config" / "red_pill"
+	target_dir = Path(platformdirs.user_config_dir("red-pill"))
+
+	if legacy_dir.exists() and legacy_dir.is_dir():
+		logger.info(f"[XDG-MIGRATION] Legacy directory found at {legacy_dir}. Initiating bridge...")
+		target_dir.mkdir(parents=True, exist_ok=True)
+
+		assets = ["vault.seed", "vault_group.state", "vault_identity.state", "recovery.key", "swarm_groups"]
+		migrated_any = False
+
+		for asset in assets:
+			source_path = legacy_dir / asset
+			target_path = target_dir / asset
+
+			if source_path.exists() and not target_path.exists():
+				logger.info(f"[XDG-MIGRATION] Migrating {asset} -> {target_path}")
+				try:
+					if source_path.is_dir():
+						shutil.copytree(source_path, target_path, dirs_exist_ok=True)
+					else:
+						shutil.copy2(source_path, target_path)
+					migrated_any = True
+				except Exception as e:
+					logger.error(f"[XDG-MIGRATION] Failed to migrate {asset}: {e}")
+
+		if migrated_any:
+			logger.info("[XDG-MIGRATION] Migration complete. Retaining legacy directory as backup.")
+

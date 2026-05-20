@@ -2,6 +2,7 @@ import logging
 import os
 from typing import Optional
 
+import platformdirs
 from pure_mls.group import MLSGroup
 
 from red_pill.utils.vault_crypto import VaultCrypto
@@ -9,7 +10,7 @@ from red_pill.utils.vault_crypto import VaultCrypto
 logger = logging.getLogger(__name__)
 
 # SEC-001: Vault State Persistence
-VAULT_STATE_PATH = os.path.join(os.path.expanduser("~/.config/red_pill"), "vault_group.state")
+VAULT_STATE_PATH = os.path.join(platformdirs.user_config_dir("red-pill"), "vault_group.state")
 
 
 class SoulCryptographer:

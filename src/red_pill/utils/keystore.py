@@ -21,10 +21,12 @@ import os
 import stat
 from typing import Optional
 
+import platformdirs
+
 logger = logging.getLogger(__name__)
 
 # Default path; can be overridden via env var for testing.
-_DEFAULT_KEYSTORE_DIR = os.path.expanduser("~/.config/red_pill")
+_DEFAULT_KEYSTORE_DIR = platformdirs.user_config_dir("red-pill")
 _DEFAULT_KEYSTORE_FILE = "recovery.key"
 
 KEYSTORE_DIR = os.getenv("RED_PILL_KEYSTORE_DIR", _DEFAULT_KEYSTORE_DIR)
@@ -103,7 +105,7 @@ def load_recovery_hash() -> Optional[str]:
 		raise PermissionError(
 			f"SEC-001: Keystore file {KEYSTORE_PATH!r} has insecure permissions "
 			f"({oct(file_stat.st_mode)}). Expected mode 600. "
-			"Run: chmod 600 ~/.config/red_pill/recovery.key"
+			"Run: chmod 600 ~/.config/red-pill/recovery.key"
 		)
 
 	with open(KEYSTORE_PATH, "r") as f:

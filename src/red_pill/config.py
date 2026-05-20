@@ -27,7 +27,9 @@ import yaml
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from red_pill.core.paths import get_db_dir, get_models_dir, get_state_dir
+from red_pill.core.paths import get_db_dir, get_models_dir, get_state_dir, migrate_legacy_xdg_config
+migrate_legacy_xdg_config()
+
 
 # Resolve paths early for execution isolation (Agentic Self-Assembly)
 _APP_ROOT = os.getenv("APP_ROOT", os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))

@@ -152,10 +152,16 @@ class SipInferenceProvider(BaseInferenceProvider):
 		}
 
 		conn = UnixHTTPConnection(self.socket_path)
-		conn.request("POST", "/v1/chat/completions", body=json.dumps(payload))
+		headers = {"Content-Type": "application/json"}
+		conn.request("POST", "/v1/chat/completions", body=json.dumps(payload), headers=headers)
 		response = conn.getresponse()
-		data = json.loads(response.read().decode())
-		return str(data["choices"][0]["message"]["content"])
+		raw_resp = response.read().decode()
+		try:
+			data = json.loads(raw_resp)
+			return str(data["choices"][0]["message"]["content"])
+		except (KeyError, IndexError, json.JSONDecodeError) as e:
+			print(f"[SIP DEBUG] KeyError or parse error: {e}. Raw response: {raw_resp[:1000]}")
+			raise e
 
 	def stream(self, prompt: str, **kwargs) -> Iterator[str]:
 		return iter([])

@@ -42,14 +42,16 @@ def test_synthesize_hub_error_path():
 		assert "Aggregated Memory Sequence" in result
 
 
-def test_perform_sleep_cycle_collection_missing():
+@patch("red_pill.metabolism.sleep._check_llm_available", return_value=True)
+def test_perform_sleep_cycle_collection_missing(mock_llm):
 	mock_mgr = MagicMock()
 	mock_mgr.client.collection_exists.return_value = False
 	result = perform_sleep_cycle(mock_mgr)
 	assert result == 0
 
 
-def test_perform_sleep_cycle_scroll_error():
+@patch("red_pill.metabolism.sleep._check_llm_available", return_value=True)
+def test_perform_sleep_cycle_scroll_error(mock_llm):
 	mock_mgr = MagicMock()
 	mock_mgr.client.collection_exists.return_value = True
 	mock_mgr.client.scroll.side_effect = Exception("Qdrant error")

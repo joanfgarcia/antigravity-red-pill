@@ -66,13 +66,15 @@ def test_perform_sleep_cycle(mock_distill, mock_llm):
 	assert mock_client.delete.called
 
 
-def test_perform_sleep_cycle_no_collection():
+@patch("red_pill.metabolism.sleep._check_llm_available", return_value=True)
+def test_perform_sleep_cycle_no_collection(mock_llm):
 	mock_mem_mgr = MagicMock()
 	mock_mem_mgr.client.collection_exists.return_value = False
 	assert perform_sleep_cycle(mock_mem_mgr) == 0
 
 
-def test_perform_sleep_cycle_empty_buffer():
+@patch("red_pill.metabolism.sleep._check_llm_available", return_value=True)
+def test_perform_sleep_cycle_empty_buffer(mock_llm):
 	mock_mem_mgr = MagicMock()
 	mock_mem_mgr.client.collection_exists.return_value = True
 	mock_mem_mgr.client.scroll.return_value = ([], None)

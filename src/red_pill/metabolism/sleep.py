@@ -155,10 +155,10 @@ def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[
 			if match:
 				parsed = json.loads(match.group(0))
 				return {
-					"summary": parsed.get("summary", fallback["summary"]),
-					"emotion": parsed.get("emotion", "neutral").lower()[:20],
-					"intensity": float(parsed.get("intensity", 0.5)),
-					"category": parsed.get("category", fallback_category).lower().strip(),
+					"summary": parsed.get("summary", fallback["summary"]) or fallback["summary"],
+					"emotion": (parsed.get("emotion") or "neutral").lower()[:20],
+					"intensity": float(parsed.get("intensity") if parsed.get("intensity") is not None else 0.5),
+					"category": (parsed.get("category") or fallback_category).lower().strip(),
 				}
 			else:
 				logger.warning(f"[SLEEP ENGINE] Samantha LLM output not JSON: {content[:100]}")

@@ -22,12 +22,15 @@ import shutil
 import time
 from pathlib import Path
 
+import platformdirs
+
 logger = logging.getLogger(__name__)
 
 # Migration staging area — 0700 permissions, never uploaded to cloud
-SECURE_BACKUP_DIR = Path(os.path.expanduser("~/.config/red_pill/soul_migrate"))
-VAULT_STATE_PATH = Path(os.path.expanduser("~/.config/red_pill/vault_group.state"))
-IDENTITY_KEYS_PATH = Path(os.path.expanduser("~/.config/red_pill/vault_identity.state"))
+SECURE_BACKUP_DIR = Path(platformdirs.user_config_dir("red-pill")) / "soul_migrate"
+VAULT_STATE_PATH = Path(platformdirs.user_config_dir("red-pill")) / "vault_group.state"
+IDENTITY_KEYS_PATH = Path(platformdirs.user_config_dir("red-pill")) / "vault_identity.state"
+
 MIGRATION_MANIFEST = SECURE_BACKUP_DIR / "migration_manifest.json"
 
 EXPORT_DIR = Path(os.environ.get("WORKSPACE_ROOT", os.path.expanduser("~/Documents/IA"))) / "backups" / "export"
