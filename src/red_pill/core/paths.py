@@ -112,10 +112,11 @@ def migrate_legacy_xdg_config() -> None:
 	Autonomously bridges the migration from legacy underscored ~/.config/red_pill
 	to the XDG-standard hyphenated ~/.config/red-pill directory.
 	"""
+	import logging
 	import shutil
 	from pathlib import Path
+
 	import platformdirs
-	import logging
 
 	logger = logging.getLogger(__name__)
 
@@ -146,4 +147,3 @@ def migrate_legacy_xdg_config() -> None:
 
 		if migrated_any:
 			logger.info("[XDG-MIGRATION] Migration complete. Retaining legacy directory as backup.")
-

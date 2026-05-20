@@ -28,6 +28,7 @@ from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from red_pill.core.paths import get_db_dir, get_models_dir, get_state_dir, migrate_legacy_xdg_config
+
 migrate_legacy_xdg_config()
 
 
