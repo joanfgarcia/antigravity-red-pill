@@ -23,6 +23,9 @@
 ### 🛡️ Audit & Vulnerability Remediation (v7.0.0 Release Hardening)
 - **[SEC] Read-Only Environment Mounts (1B)**: Hardened Docker services inside `docker/queue/compose.yaml`. The `.env` volume mounts for both `celery-worker` and `api-gateway` are now explicitly flagged read-only (`:ro`). This eliminates container escape vectors involving host-side environment rewriting.
 - **[QA] Git Leakage Cleanup (1C)**: Untracked and excluded `tests/test_results.txt` from the repository index. Added an explicit exclude rule to the root `.gitignore` to prevent host-specific execution data from leaking into public code tracking.
+- **[SEC] Dependency Vulnerability Fix (CVE-2026-45409)**: Upgraded transitive dependency `idna` from `3.11` to `3.15` in `uv.lock`, eliminating the security vulnerability reported by `pip-audit`.
+- **[CI/CD] Purge Outdated pure-mls Warning**: Cleaned up the pip-audit step in `.github/workflows/ci.yml`. Since `pure-mls` has been published on PyPI, we removed the custom filtering logic and the legacy git dependency warning, allowing `pip-audit` to naturally verify it.
+
 
 ### 🧭 Sovereign Drive & Structural Graph (Cognitive Autonomy Pipeline)
 - **[FIX] Telegram Ghost Responses**: Resolved trajectory truncation issues by implementing `TelegramResponseExtractor` to read directly from `overview.txt` bypassing gRPC limits.
