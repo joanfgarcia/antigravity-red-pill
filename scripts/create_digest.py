@@ -5,6 +5,7 @@ import sys
 def create_digest(repo_path: str, output_file: str, ignore_dirs: list[str] = None):
 	if ignore_dirs is None:
 		ignore_dirs = [
+			# Version control & tooling artifacts
 			".git",
 			"__pycache__",
 			"venv",
@@ -14,8 +15,17 @@ def create_digest(repo_path: str, output_file: str, ignore_dirs: list[str] = Non
 			"build",
 			".mypy_cache",
 			".ruff_cache",
+			# Test suite: reviewed separately via RED_PILL_DIGEST_TESTS
 			"tests",
+			# Documentation: excluded from CORE digest by design.
+			# Key supply-chain and architecture info lives in root-level files
+			# (pyproject.toml, CHANGELOG.md, NOTICE, README.md) which ARE included.
+			# docs/ contains: LORE (narrative, CC BY-NC), CERTIFICATION/ (past audit
+			# reports that are NOT the current codebase state), and GUIDES/TECHNICAL
+			# that duplicate information already in inline docstrings and config.
+			# If a future auditor needs docs/, pass them via a separate LORE digest.
 			"docs",
+			# Build scripts: reviewed separately if needed
 			"scripts",
 		]
 
