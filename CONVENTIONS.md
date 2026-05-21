@@ -10,7 +10,7 @@ All configurations, application states, queues, logs, and models **MUST** strict
 - **NEVER** create `.db` files or caches inside the project root (`WORKSPACE_ROOT`).
 
 ### Approved Resolver (The Only Way)
-Always use the centralized resolvers provided by `src/red_pill/core/paths.py`. This module uses `platformdirs` to guarantee OS-agnostic compliance.
+All path resolution across the entire codebase for configurations, databases, models, queues, state, etc. **MUST** strictly go through the centralized resolvers provided by [paths.py](file:///home/joan/Documents/IA/sharing/src/red_pill/core/paths.py). Ad-hoc path resolution using relative directories, `os.path.join(os.getcwd(), ...)` or direct file system assumptions is strictly forbidden. This module uses `platformdirs` to guarantee OS-agnostic compliance and serves as the single source of truth for all system paths.
 
 | Data Type | XDG Standard | Path Resolver |
 |-----------|--------------|---------------|

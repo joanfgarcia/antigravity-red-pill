@@ -339,3 +339,13 @@ class LlamaCppInferenceProvider(BaseInferenceProvider):
 
 	def stream(self, prompt: str, **kwargs) -> Iterator[str]:
 		yield self.generate(prompt, **kwargs)
+
+
+# Self-registration of default local provider
+try:
+	import red_pill.config as cfg
+	ProviderRegistry.register_inference_provider(
+		"sip", SipInferenceProvider(socket_path=cfg.SIP_SOCKET_PATH), default=True
+	)
+except Exception:
+	pass

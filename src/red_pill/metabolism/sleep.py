@@ -54,7 +54,11 @@ def _check_llm_available() -> bool:
 			s.close()
 			return True
 		except OSError:
-			return False
+			logger.warning(f"[SLEEP ENGINE] UDS connection refused on {uds_path}. Cleaning up orphan socket file.")
+			try:
+				os.remove(uds_path)
+			except Exception as e:
+				logger.error(f"[SLEEP ENGINE] Failed to remove orphan socket {uds_path}: {e}")
 
 	# Fallback: probe TCP endpoint
 	mlx_url = getattr(cfg, "MLX_LM_URL", "") or ""

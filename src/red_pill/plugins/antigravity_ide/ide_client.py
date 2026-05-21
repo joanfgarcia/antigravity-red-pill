@@ -65,7 +65,8 @@ class AntigravityIDEClient:
 			self._discover_endpoint()
 
 		payload = {
-			"trajectoryType": 4  # CORTEX_TRAJECTORY_TYPE_CASCADE
+			"trajectoryType": 4,  # CORTEX_TRAJECTORY_TYPE_CASCADE
+			"source": "CORTEX_TRAJECTORY_SOURCE_AGENT_API"
 		}
 		resp = requests.post(self._url("StartCascade"), headers=self._get_headers(), json=payload, verify=False)
 		if resp.status_code == 200:
