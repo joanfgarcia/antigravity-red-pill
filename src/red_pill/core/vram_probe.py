@@ -6,10 +6,7 @@ Responsabilidad única: detectar cuánta VRAM libre hay en el hardware instalado
 capas de inferencia en ModelRegistry y para el preflight check del ciclo de
 sueño.
 
-Backends por orden de prioridad:
-  1. CUDA (NVIDIA) — via nvidia-smi
-  2. ROCm  (AMD)   — via sysfs /sys/class/drm/
-  3. CPU fallback  — devuelve 0 MB (tier más conservador se selecciona siempre)
+Backends por orden de prioridad: CUDA (nvidia-smi) → ROCm (sysfs DRM) → CPU fallback (0 MB).
 """
 
 import logging
