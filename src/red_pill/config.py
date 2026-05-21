@@ -425,6 +425,7 @@ class RedPillConfig(BaseSettings):
 	SLEEP_CULL_THRESHOLD: float = 0.1
 	SLEEP_SCROLL_LIMIT: int = 50  # Max engrams fetched per scroll batch (loop drains until empty)
 	SLEEP_MAX_LLM_FAILURES: int = 5  # Thermal breaker: abort sleep after N consecutive LLM failures
+	SLEEP_MIN_FREE_VRAM_MB: int = 1500  # Preflight: skip sleep if GPU has less free VRAM than this
 
 	# Sleep Cycle Plugin flags — each ritual individually activatable
 	SLEEP_PLUGIN_USP: bool = True  # Operator Mood Profile refresh

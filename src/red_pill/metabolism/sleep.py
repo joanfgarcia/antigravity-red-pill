@@ -10,6 +10,7 @@ from qdrant_client.models import Filter
 
 import red_pill.config as cfg
 from red_pill.core.paths import get_daemon_dir, get_staging_dir, get_thread_state_path
+from red_pill.core.vram_probe import VramProbe
 from red_pill.events import SleepCompletedEvent, get_event_bus
 from red_pill.metabolism.evolution import IdentityEvaluator
 
@@ -415,6 +416,32 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 	if thermal_stress:
 		logger.warning("[SLEEP ENGINE] System stress detected. Minimizing metabolic load.")
 
+	# ── VRAM Preflight Check ──────────────────────────────────────────────
+	# Query free VRAM right now — before attempting to load the LLM. If the
+	# GPU is already occupied (game, other model, IDE inference), abort this
+	# cycle gracefully rather than fighting for VRAM mid-distillation.
+	_vram_backend = VramProbe.get_backend()
+	if _vram_backend != "cpu":
+		_free_vram_mb = VramProbe.get_free_mb()
+		_min_free_mb = cfg.SLEEP_MIN_FREE_VRAM_MB
+		if _free_vram_mb < _min_free_mb:
+			logger.warning(
+				f"[SLEEP ENGINE] VRAM preflight failed: {_free_vram_mb} MB free, "
+				f"{_min_free_mb} MB required. Aborting sleep cycle."
+			)
+			try:
+				memory_manager.inject_signal(
+					"vram_busy",
+					intensity=3.0,
+					signal_type="pain",
+					muted=True,
+					source="SLEEP_ENGINE",
+				)
+			except Exception as _e:
+				logger.debug(f"[SLEEP ENGINE] vram_busy signal failed: {_e}")
+			return 0
+		logger.debug(f"[SLEEP ENGINE] VRAM preflight OK: {_free_vram_mb} MB free ({_vram_backend}).")
+
 	# LLM Health Check & Ephemeral Server
 	ephemeral_server = EphemeralServer()
 	if not _check_llm_available():
@@ -669,6 +696,9 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 
 		SovereignNotifier.clear_bunker_signal(memory_manager, "local_llm_offline")
 		SovereignNotifier.clear_bunker_signal(memory_manager, "ariadne_thread_running")
+		# Auto-evaporate any pending vram_busy signal: the cycle completed successfully,
+		# meaning the GPU had enough headroom. Clear the alert so the Córtex stays clean.
+		SovereignNotifier.clear_bunker_signal(memory_manager, "vram_busy")
 	except Exception:
 		pass
 

@@ -10,14 +10,21 @@ profiles:
     capabilities: ["distillation", "emotional_intelligence", "deep"]
     hardware_affinity:
       n_ctx: 4096
+      # vram_tiers: selects inference parameters based on FREE VRAM available
+      # at the moment the sleep cycle launches (not total installed VRAM).
+      # min_free_gb: minimum free VRAM in GB required to use this tier.
+      # Tiers are sorted ascending; the first tier whose min_free_gb is met
+      # by the currently free VRAM is selected. Exceeding all tiers uses the
+      # highest one. Reduce values by ~0.5-1 GB from hardware total to account
+      # for driver/framebuffer overhead and other GPU residents.
       vram_tiers:
-        - limit_gb: 2
+        - min_free_gb: 2
           n_gpu_layers: 0
-        - limit_gb: 4
+        - min_free_gb: 3
           n_gpu_layers: 16
-        - limit_gb: 6
+        - min_free_gb: 5
           n_gpu_layers: 24
-        - limit_gb: 8
+        - min_free_gb: 7
           n_gpu_layers: -1
 
   smith:
