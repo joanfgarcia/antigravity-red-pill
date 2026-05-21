@@ -20,6 +20,9 @@ Always use the centralized resolvers provided by `src/red_pill/core/paths.py`. T
 | AI Models (.gguf) | `~/.local/share/red-pill/models/` | `get_models_dir()` |
 | Background Queues | `~/.local/share/red-pill/queue/` | `get_queue_dir()` |
 | Ephemeral State | `~/.local/state/red-pill/` | `get_state_dir()` |
+| Daemon Execution | `~/.agent/model-daemon/` | `get_daemon_dir()` |
+| Model Profiles | `~/.agent/model_profiles.yaml` | `get_model_profiles_path()` |
+| Model Files | `~/.local/share/red-pill/models/<name>` | `resolve_model_path(name)` |
 
 ### Exceptions
 - **Backups**: By default, backups do NOT go to XDG. They must go to the user's defined AI directory: `<IA_DIR>/backups/red-pill/` (resolved via `get_backup_dir()`).

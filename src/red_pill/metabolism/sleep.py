@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 from qdrant_client.models import Filter
 
 import red_pill.config as cfg
+from red_pill.core.paths import get_daemon_dir
 from red_pill.events import SleepCompletedEvent, get_event_bus
 from red_pill.metabolism.evolution import IdentityEvaluator
 
@@ -314,11 +315,32 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 			)
 			SovereignNotifier.notify_bunker(memory_manager, "ariadne_thread_running", intensity=1.0, source="SLEEP_ENGINE")
 
-			start_sh = os.path.expanduser("~/.agent/model-daemon/start.sh")
+			start_sh = str(get_daemon_dir() / "start.sh")
 			if os.path.exists(start_sh):
-				ephemeral_process = subprocess.Popen(
-					["systemd-run", "--user", "--scope", "-p", "MemoryMax=10G", start_sh], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-				)
+				import shutil
+				if shutil.which("systemctl"):
+					subprocess.run(["systemctl", "--user", "restart", "red-pill-minion.service"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+					ephemeral_process = "systemd_service"
+				elif shutil.which("launchctl"):
+					import getpass
+					uid = os.getuid()
+					subprocess.run(["launchctl", "kickstart", "-k", f"gui/{uid}/com.agent.modeldaemon"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+					ephemeral_process = "launchd_service"
+				else:
+					# Fallback direct execution using cgroups/nice depending on availability
+					import sys
+					cmd = []
+					if shutil.which("systemd-run"):
+						cmd = ["systemd-run", "--user", "--scope", "-p", "MemoryMax=10G", "-p", "Nice=19", "-p", "IOSchedulingClass=3", start_sh]
+					elif shutil.which("nice"):
+						cmd = ["nice", "-n", "19"]
+						if sys.platform == "darwin" and shutil.which("taskpolicy"):
+							cmd += ["taskpolicy", "-c", "background"]
+						cmd.append(start_sh)
+					else:
+						cmd = [start_sh]
+					ephemeral_process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
 				logger.info("[SLEEP ENGINE] Waiting for Ephemeral Server to come online...")
 				for _ in range(30):
 					time.sleep(2)
@@ -327,7 +349,8 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 						break
 				else:
 					logger.error("[SLEEP ENGINE] Ephemeral Server failed to start within 60s.")
-					ephemeral_process.terminate()
+					if ephemeral_process not in ("systemd_service", "launchd_service") and ephemeral_process is not None:
+						ephemeral_process.terminate()
 					SovereignNotifier.notify_os("Bünker Cortex", "Fallo al iniciar el servidor efímero.", urgency="critical")
 					SovereignNotifier.clear_bunker_signal(memory_manager, "ariadne_thread_running")
 					return 0
@@ -585,7 +608,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 	except Exception:
 		pass
 
-	if ephemeral_process is not None:
+	if ephemeral_process is not None and ephemeral_process not in ("systemd_service", "launchd_service"):
 		logger.info("[SLEEP ENGINE] Shutting down Ephemeral Samantha Server...")
 		try:
 			ephemeral_process.terminate()

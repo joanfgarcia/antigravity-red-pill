@@ -8,6 +8,17 @@ profiles:
     max_tokens: 1024
     use_mmap: false
     capabilities: ["distillation", "emotional_intelligence", "deep"]
+    hardware_affinity:
+      n_ctx: 4096
+      vram_tiers:
+        - limit_gb: 2
+          n_gpu_layers: 0
+        - limit_gb: 4
+          n_gpu_layers: 16
+        - limit_gb: 6
+          n_gpu_layers: 24
+        - limit_gb: 8
+          n_gpu_layers: -1
 
   smith:
     model_path: "3rdparty/BitNet-1.58b/models/2B-4T/ggml-model-i2_s.gguf"

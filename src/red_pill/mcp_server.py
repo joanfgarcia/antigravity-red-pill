@@ -156,8 +156,10 @@ async def handle_control_bunker(arguments: Dict[str, Any]):
 	elif cmd == "status":
 		output = get_telemetry_report()
 	elif cmd == "sleep":
-		from red_pill.metabolism.sleep import perform_sleep_cycle
+		from red_pill.core.providers import ProviderRegistry, SipInferenceProvider
+		ProviderRegistry.register_inference_provider("sip", SipInferenceProvider(socket_path=cfg.SIP_SOCKET_PATH))
 
+		from red_pill.metabolism.sleep import perform_sleep_cycle
 		count = perform_sleep_cycle(MemoryManager(), mode=val if val in ["lazy", "deep"] else "lazy")
 		output = f"Sleep cycle complete. {count} engrams consolidated."
 	else:

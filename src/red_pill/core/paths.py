@@ -147,3 +147,19 @@ def migrate_legacy_xdg_config() -> None:
 
 		if migrated_any:
 			logger.info("[XDG-MIGRATION] Migration complete. Retaining legacy directory as backup.")
+
+
+def resolve_model_path(model_filename: str) -> Path:
+	"""Resuelve la ruta absoluta de un archivo de modelo dentro del directorio de modelos."""
+	return get_models_dir() / model_filename
+
+
+def get_daemon_dir() -> Path:
+	"""Resuelve el directorio de ejecución del daemon del modelo (~/.agent/model-daemon)."""
+	return Path.home() / ".agent" / "model-daemon"
+
+
+def get_model_profiles_path() -> Path:
+	"""Resuelve la ruta del archivo de configuración de perfiles de modelos (~/.agent/model_profiles.yaml)."""
+	return Path.home() / ".agent" / "model_profiles.yaml"
+
