@@ -7,6 +7,19 @@
 - **[FIX] StartCascade API Validation**: Corrected gRPC-Web client payload in `ide_client.py` by adding `"source": "CORTEX_TRAJECTORY_SOURCE_AGENT_API"` to satisfy trajectory source validations.
 - **[ARCH] Total Path Centralization**: Overhauled all remaining hardcoded `~/.agent/` references in `sleep.py`, `ls_snatcher.py`, `config.py` and `manager.py`, routing them through central resolvers in `paths.py` in accordance with `CONVENTIONS.md`.
 
+### ⚡ VRAM-Aware Sleep Cycle (Hardware-Agnostic)
+- **[FEAT] `VramProbe`**: New `src/red_pill/core/vram_probe.py` module with hardware-agnostic free VRAM detection. Supports CUDA (nvidia-smi `memory.free`), ROCm (sysfs DRM `mem_info_vram_total - mem_info_vram_used`), and CPU fallback (0 MB → most conservative tier). No cache — always queries fresh at call time.
+- **[FEAT] VRAM Preflight Check**: `perform_sleep_cycle()` now calls `VramProbe.get_free_mb()` before launching the ephemeral LLM server. If free VRAM is below `SLEEP_MIN_FREE_VRAM_MB` (default: 1500 MB), the cycle aborts gracefully with a muted `vram_busy` pain signal instead of competing for VRAM at 03:00. CPU-only systems are unaffected.
+- **[FEAT] Auto-evaporation of `vram_busy`**: On successful sleep cycle completion, `vram_busy` is automatically cleared via `SovereignNotifier.clear_bunker_signal()` — no Auto-Healer intervention required.
+- **[REFACTOR] `ModelRegistry` VRAM tier semantics**: Renamed `limit_gb` → `min_free_gb` in `vram_tiers`. Now represents minimum **free** VRAM (not total installed). Values in `model_profiles.yaml.example` lowered by ~1 GB to account for driver/framebuffer overhead.
+- **[REFACTOR] `EphemeralServer` extraction**: Extracted the ~60-line inline ephemeral LLM server startup/teardown block from `perform_sleep_cycle()` into an `EphemeralServer` class (`start()` / `stop()`). Startup strategy (systemd → launchd → subprocess+cgroup) is now encapsulated and independently testable.
+- **[CONFIG] `SLEEP_MIN_FREE_VRAM_MB`**: New `.env` parameter (default: 1500). Set to `0` to disable the VRAM preflight check entirely.
+- **[SEC] Remove `allow-direct-references = true`**: Removed legacy Hatch metadata option. All dependencies (including `pure-mls`) are now standard PyPI packages. No direct git references remain in the dependency tree.
+
+### 📊 Supply Chain Transparency (pure-mls)
+- **[SEC] pure-mls PyPI migration documented**: `pure-mls==3.0.5.1` has been published to PyPI since 2026-05-06. The `pyproject.toml` dependency now carries an explicit inline comment documenting the PyPI URL and the historical git reference migration. `allow-direct-references` removed. Added to `NOTICE` with license and PyPI provenance.
+- **[DOCS] CHANGELOG historical correction**: Entry from v6.4.1 that described pure-mls as a "private git dep" filtered from pip-audit has been annotated with a correction note — this was true at that point in time but is no longer the case.
+
 ### 🧭 Sovereign Drive & Structural Graph (Cognitive Autonomy Pipeline)
 - **[FIX] Telegram Ghost Responses**: Resolved trajectory truncation issues by implementing `TelegramResponseExtractor` to read directly from `overview.txt` bypassing gRPC limits.
 - **[FEAT] Telegram Headless Sessions**: Added `/new` command to Neon-Link allowing the operator to start and anchor to fresh, headless cascades directly from Telegram.
@@ -353,7 +366,7 @@
 - **[FEAT] BitNet Submodule Regularization**: Created GitHub fork `joanfgarcia/BitNet-1.58b` (MIT) from `microsoft/BitNet`. Regularized orphan gitlink as proper git submodule with `.gitmodules`. Custom GPU patches (VRAM stabilization, LUT kernel, API server) preserved in fork.
 - **[NEW] `3rdparty/README.md`**: Setup guide for BitNet submodule — build instructions, model recommendations (Falcon3-10B-Instruct only: 98/100 benchmark), and instructions for ZIP recipients.
 - **[NEW] `AGENT_UPDATE_GUIDE §4.16`**: BitNet submodule setup as optional post-update step. Documents `git archive` exclusion.
-- **[FIX] CI pip-audit**: Upgraded 4 vulnerable deps (cryptography, requests, pyasn1, pygments). Filtered `pure-mls` from pip-audit (private git dep). Emits `::warning::` annotation.
+- **[FIX] CI pip-audit**: Upgraded 4 vulnerable deps (cryptography, requests, pyasn1, pygments). Filtered `pure-mls` from pip-audit *(note: at this point pure-mls was a private git+https dep; it was published to PyPI as `pure_mls-3.0.5.1` on 2026-05-06 — see v6.9.0 and v7.0.0)*. Emits `::warning::` annotation.
 - **[LICENSE] CC BY-NC 4.0 Clarification**: Added Additional Permissions §2.c — reading/sharing always free (including businesses); only commercial exploitation requires permission.
 
 ### 🧠 Roadmap: Emotional Pre-Heating (Oracle Protocol) — *Planned*

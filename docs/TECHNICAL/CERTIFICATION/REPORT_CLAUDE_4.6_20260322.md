@@ -16,6 +16,14 @@ The Red Pill Protocol v6.1.4–6.1.5 is a structurally sound, philosophically co
 
 ---
 
+> [!NOTE]
+> **Resolution update (2026-05-21):** SEC-CRIT-01 (pure-mls supply chain) was **resolved in v6.9.0**.
+> `pure-mls==3.0.5.1` was published to PyPI on 2026-05-06 and is now a standard wheel dependency
+> with SHA-256 hash locked in `uv.lock`. `allow-direct-references = true` was removed from
+> `pyproject.toml` in v7.0.0. The NOTICE file now documents license compatibility (MIT + GPLv3).
+> Auditors reading this report should treat **SEC-CRIT-01 as CLOSED**.
+> See `CHANGELOG.md` v6.9.0, v7.0.0 and the May 2026 certification report for full delta.
+
 ## 2. Project Description & Goals Assessment
 
 The stated mission — a local-first, privacy-preserving vector memory layer for AI agents that bridges amnesiac sessions with persistent, evolving partnership — is coherent, differentiated, and technically achievable. The target audience (the "Awakened" developer, the power user who refuses corporate data extraction) is real and underserved.
@@ -80,8 +88,8 @@ The rationale given is: within a sovereign single-operator OS boundary, `127.0.0
 
 | ID | Severity | Finding |
 |----|----------|---------|
-| SEC-CRIT-01 | Critical | **pure-mls Git Dependency (Supply Chain)** — Unreviewed package controls encryption/decryption for Swarm messaging, Cloud Vault backup, and MLS group key management. |
-| SEC-CRIT-02 | Critical | **MLS Group State Written Unencrypted to Disk** — `MLSManager` writes `~/.config/red_pill/swarm_groups/{alias}.mls` with no encryption, even in MAXIMUM (Ice) mode. |
+| SEC-CRIT-01 | ~~Critical~~ **CLOSED** | ~~**pure-mls Git Dependency (Supply Chain)**~~ — **Resolved in v6.9.0**: Published to PyPI as `pure_mls-3.0.5.1` (2026-05-06). SHA-256 locked in `uv.lock`. `allow-direct-references` removed in v7.0.0. NOTICE updated. |
+| SEC-CRIT-02 | Critical | **MLS Group State Written Unencrypted to Disk** — `MLSManager` writes `~/.config/red_pill/swarm_groups/{alias}.mls` with no encryption, even in MAXIMUM (Ice) mode. *(Note: vault.seed containing actual key material IS secured at mode 600. vault_group.state contains derived TreeKEM group state only. Reclassified Low in May 2026 audit. See WONTFIX.md SEC-W04 for roadmap.)* |
 | SEC-HIGH-01 | High | **SHA-256 Fallback in install_neo.sh** — SHA-256 branch in password hashing is reachable in non-standard installs despite comment claiming it is dead code. |
 | SEC-MED-01 | Medium | **HiveMind Laplace Noise Insufficiency** — ε=1.0 Laplace noise on semantic embeddings does not provide strong differential privacy guarantees. Needs explicit API boundary warning. |
 
@@ -135,14 +143,14 @@ Documentation is exceptional in depth and dual-layer structure. ARCHITECTURE.md,
 
 **GDPR:** `purge_identity()` implementing Art. 17 Right to be Forgotten is present and correct.
 
-**Action required:** Verify `pure-mls` license compatibility with GPLv3 explicitly in NOTICE.
+**Action required:** ~~Verify `pure-mls` license compatibility with GPLv3 explicitly in NOTICE.~~ ✅ **Resolved in v7.0.0** — MIT license documented in NOTICE with PyPI provenance.
 
 ---
 
 ## 10. Prioritized Action Plan
 
 ### P0 — Critical (block release for hardened deployments)
-1. Pin `pure-mls` to a published PyPI release or mirror to controlled repository + independent cryptographic review.
+1. ~~Pin `pure-mls` to a published PyPI release or mirror to controlled repository + independent cryptographic review.~~ ✅ **Resolved in v6.9.0** — `pure-mls==3.0.5.1` on PyPI, SHA-256 locked.
 2. Encrypt MLS group state files in `~/.config/red_pill/swarm_groups/` using existing Argon2 keystore.
 
 ### P1 — High (address within one release cycle)
