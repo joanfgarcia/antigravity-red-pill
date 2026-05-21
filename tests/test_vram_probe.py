@@ -15,10 +15,12 @@ from unittest.mock import patch
 
 # ── Tests: get_backend ────────────────────────────────────────────────────────
 
+
 class TestGetBackend:
 	def test_cuda_when_nvidia_smi_present(self):
 		"""If nvidia-smi is on PATH, backend must be 'cuda'."""
 		from red_pill.core.vram_probe import VramProbe
+
 		with patch("shutil.which", return_value="/usr/bin/nvidia-smi"):
 			assert VramProbe.get_backend() == "cuda"
 
@@ -40,6 +42,7 @@ class TestGetBackend:
 	def test_cpu_when_no_gpu_found(self):
 		"""If neither nvidia-smi nor AMD DRM card exists, backend must be 'cpu'."""
 		from red_pill.core.vram_probe import VramProbe
+
 		with patch("shutil.which", return_value=None):
 			with patch("os.path.isdir", return_value=False):
 				assert VramProbe.get_backend() == "cpu"
@@ -47,16 +50,19 @@ class TestGetBackend:
 
 # ── Tests: _nvidia_free_mb ────────────────────────────────────────────────────
 
+
 class TestNvidiaFreeMb:
 	def test_parses_single_gpu(self):
 		"""Single-GPU system: parses memory.free correctly."""
 		from red_pill.core.vram_probe import VramProbe
+
 		with patch("subprocess.check_output", return_value=b"6144\n"):
 			assert VramProbe._nvidia_free_mb() == 6144
 
 	def test_takes_first_gpu_in_multi_gpu(self):
 		"""Multi-GPU: must return only the first GPU's free VRAM."""
 		from red_pill.core.vram_probe import VramProbe
+
 		with patch("subprocess.check_output", return_value=b"6144\n2048\n"):
 			assert VramProbe._nvidia_free_mb() == 6144
 
@@ -65,17 +71,20 @@ class TestNvidiaFreeMb:
 		import subprocess
 
 		from red_pill.core.vram_probe import VramProbe
+
 		with patch("subprocess.check_output", side_effect=subprocess.CalledProcessError(1, "nvidia-smi")):
 			assert VramProbe._nvidia_free_mb() == 0
 
 	def test_returns_zero_on_parse_error(self):
 		"""If output cannot be parsed as int, must return 0."""
 		from red_pill.core.vram_probe import VramProbe
+
 		with patch("subprocess.check_output", return_value=b"N/A\n"):
 			assert VramProbe._nvidia_free_mb() == 0
 
 
 # ── Tests: _amd_free_mb ───────────────────────────────────────────────────────
+
 
 class TestAmdFreeMb:
 	def _make_sysfs(self, tmp_path, vram_total_bytes: int, vram_used_bytes: int, is_amdgpu: bool = True):
@@ -120,6 +129,7 @@ class TestAmdFreeMb:
 	def test_returns_zero_on_read_error(self):
 		"""If sysfs read fails, must return 0."""
 		from red_pill.core.vram_probe import VramProbe
+
 		with patch("os.path.isdir", return_value=True):
 			with patch("os.listdir", side_effect=PermissionError("no access")):
 				assert VramProbe._amd_free_mb() == 0
@@ -127,10 +137,12 @@ class TestAmdFreeMb:
 
 # ── Tests: get_free_mb dispatching ────────────────────────────────────────────
 
+
 class TestGetFreeMb:
 	def test_delegates_to_nvidia_on_cuda_backend(self):
 		"""get_free_mb() must call _nvidia_free_mb() when backend is 'cuda'."""
 		from red_pill.core.vram_probe import VramProbe
+
 		with patch.object(VramProbe, "get_backend", return_value="cuda"):
 			with patch.object(VramProbe, "_nvidia_free_mb", return_value=5000) as mock_nv:
 				result = VramProbe.get_free_mb()
@@ -140,6 +152,7 @@ class TestGetFreeMb:
 	def test_delegates_to_amd_on_rocm_backend(self):
 		"""get_free_mb() must call _amd_free_mb() when backend is 'rocm'."""
 		from red_pill.core.vram_probe import VramProbe
+
 		with patch.object(VramProbe, "get_backend", return_value="rocm"):
 			with patch.object(VramProbe, "_amd_free_mb", return_value=3000) as mock_amd:
 				result = VramProbe.get_free_mb()
@@ -149,6 +162,7 @@ class TestGetFreeMb:
 	def test_returns_zero_on_cpu_backend(self):
 		"""get_free_mb() must return 0 when backend is 'cpu'."""
 		from red_pill.core.vram_probe import VramProbe
+
 		with patch.object(VramProbe, "get_backend", return_value="cpu"):
 			result = VramProbe.get_free_mb()
 		assert result == 0
@@ -156,5 +170,6 @@ class TestGetFreeMb:
 	def test_result_is_always_int(self):
 		"""get_free_mb() must always return an int, never float."""
 		from red_pill.core.vram_probe import VramProbe
+
 		with patch.object(VramProbe, "get_backend", return_value="cpu"):
 			assert isinstance(VramProbe.get_free_mb(), int)

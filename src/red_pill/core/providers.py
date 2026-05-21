@@ -344,8 +344,7 @@ class LlamaCppInferenceProvider(BaseInferenceProvider):
 # Self-registration of default local provider
 try:
 	import red_pill.config as cfg
-	ProviderRegistry.register_inference_provider(
-		"sip", SipInferenceProvider(socket_path=cfg.SIP_SOCKET_PATH), default=True
-	)
+
+	ProviderRegistry.register_inference_provider("sip", SipInferenceProvider(socket_path=cfg.SIP_SOCKET_PATH), default=True)
 except Exception:
 	pass

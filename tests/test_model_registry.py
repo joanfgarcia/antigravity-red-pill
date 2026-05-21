@@ -15,6 +15,7 @@ from unittest.mock import patch
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _make_tiered_hardware():
 	"""Minimal hardware_affinity with three VRAM tiers using min_free_gb."""
 	return {
@@ -37,19 +38,23 @@ def _patch_free_mb(free_mb: int):
 
 # ── Tests: VRAM tier selection ────────────────────────────────────────────────
 
+
 class TestVramTierResolution:
 	def setup_method(self):
 		import red_pill.core.model_registry as mr
+
 		mr.ModelRegistry._profiles_cache = None
 
 	def _setup_profile(self, hardware: dict):
 		import red_pill.core.model_registry as mr
+
 		mr.ModelRegistry._profiles_cache = {"test_profile": _make_profile(hardware)}
 
 	def test_lowest_tier_selected_for_minimal_free_vram(self):
 		"""1.5 GB free → lowest tier (min_free_gb=2.0) must be selected."""
 		self._setup_profile(_make_tiered_hardware())
 		import red_pill.core.model_registry as mr
+
 		with _patch_free_mb(1536):  # 1.5 GB
 			result = mr.ModelRegistry.get_resolved_hardware_affinity("test_profile")
 		assert result["n_gpu_layers"] == 10
@@ -59,6 +64,7 @@ class TestVramTierResolution:
 		"""3 GB free → middle tier (min_free_gb=4.0) must be selected."""
 		self._setup_profile(_make_tiered_hardware())
 		import red_pill.core.model_registry as mr
+
 		with _patch_free_mb(3072):  # 3 GB
 			result = mr.ModelRegistry.get_resolved_hardware_affinity("test_profile")
 		assert result["n_gpu_layers"] == 20
@@ -68,6 +74,7 @@ class TestVramTierResolution:
 		"""6 GB free → highest tier (min_free_gb=7.0) must be selected."""
 		self._setup_profile(_make_tiered_hardware())
 		import red_pill.core.model_registry as mr
+
 		with _patch_free_mb(6144):  # 6 GB
 			result = mr.ModelRegistry.get_resolved_hardware_affinity("test_profile")
 		assert result["n_gpu_layers"] == 35
@@ -77,6 +84,7 @@ class TestVramTierResolution:
 		"""16 GB free (exceeds all tiers) → last/highest tier must be used."""
 		self._setup_profile(_make_tiered_hardware())
 		import red_pill.core.model_registry as mr
+
 		with _patch_free_mb(16384):  # 16 GB
 			result = mr.ModelRegistry.get_resolved_hardware_affinity("test_profile")
 		assert result["n_gpu_layers"] == 35
@@ -85,6 +93,7 @@ class TestVramTierResolution:
 		"""The internal 'min_free_gb' key must be stripped from the resolved dict."""
 		self._setup_profile(_make_tiered_hardware())
 		import red_pill.core.model_registry as mr
+
 		with _patch_free_mb(1024):
 			result = mr.ModelRegistry.get_resolved_hardware_affinity("test_profile")
 		assert "min_free_gb" not in result
@@ -93,6 +102,7 @@ class TestVramTierResolution:
 		"""The 'vram_tiers' key must not appear in the resolved hardware affinity."""
 		self._setup_profile(_make_tiered_hardware())
 		import red_pill.core.model_registry as mr
+
 		with _patch_free_mb(2048):
 			result = mr.ModelRegistry.get_resolved_hardware_affinity("test_profile")
 		assert "vram_tiers" not in result
@@ -103,6 +113,7 @@ class TestVramTierResolution:
 		hw["n_batch"] = 512
 		self._setup_profile(hw)
 		import red_pill.core.model_registry as mr
+
 		with _patch_free_mb(1024):
 			result = mr.ModelRegistry.get_resolved_hardware_affinity("test_profile")
 		assert result.get("n_batch") == 512
@@ -112,12 +123,14 @@ class TestVramTierResolution:
 		hw = {"n_gpu_layers": 99, "n_ctx": 1024}
 		self._setup_profile(hw)
 		import red_pill.core.model_registry as mr
+
 		result = mr.ModelRegistry.get_resolved_hardware_affinity("test_profile")
 		assert result == hw
 
 	def test_unknown_profile_returns_empty(self):
 		"""Querying a non-existent profile must return an empty dict without crash."""
 		import red_pill.core.model_registry as mr
+
 		mr.ModelRegistry._profiles_cache = {}
 		result = mr.ModelRegistry.get_resolved_hardware_affinity("non_existent")
 		assert result == {}
@@ -126,6 +139,7 @@ class TestVramTierResolution:
 		"""0 MB free (CPU or probe failure) → lowest tier must be selected."""
 		self._setup_profile(_make_tiered_hardware())
 		import red_pill.core.model_registry as mr
+
 		with _patch_free_mb(0):
 			result = mr.ModelRegistry.get_resolved_hardware_affinity("test_profile")
 		assert result["n_gpu_layers"] == 10
@@ -133,13 +147,16 @@ class TestVramTierResolution:
 
 # ── Tests: get_profile_by_capability ─────────────────────────────────────────
 
+
 class TestGetProfileByCapability:
 	def setup_method(self):
 		import red_pill.core.model_registry as mr
+
 		mr.ModelRegistry._profiles_cache = None
 
 	def test_returns_matching_profile(self):
 		import red_pill.core.model_registry as mr
+
 		mr.ModelRegistry._profiles_cache = {
 			"alpha": {"capabilities": ["embedding"], "hardware_affinity": {}},
 			"beta": {"capabilities": ["distillation", "chat"], "hardware_affinity": {}},
@@ -150,6 +167,7 @@ class TestGetProfileByCapability:
 
 	def test_fallback_to_first_profile_when_no_match(self):
 		import red_pill.core.model_registry as mr
+
 		mr.ModelRegistry._profiles_cache = {
 			"only_one": {"capabilities": ["embedding"], "hardware_affinity": {}},
 		}
@@ -158,6 +176,7 @@ class TestGetProfileByCapability:
 
 	def test_empty_cache_returns_empty(self):
 		import red_pill.core.model_registry as mr
+
 		mr.ModelRegistry._profiles_cache = {}
 		name, profile = mr.ModelRegistry.get_profile_by_capability("anything")
 		assert name == ""

@@ -187,4 +187,3 @@ def get_ingestion_dir() -> Path:
 def get_swarm_config_path() -> Path:
 	"""Resuelve la ruta del archivo de comunidades swarm (~/.agent/config/swarm_communities.json)."""
 	return get_agent_dir() / "config" / "swarm_communities.json"
-

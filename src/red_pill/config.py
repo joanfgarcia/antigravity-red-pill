@@ -406,6 +406,7 @@ class RedPillConfig(BaseSettings):
 	@model_validator(mode="after")
 	def _build_ingestion_directories(self) -> "RedPillConfig":
 		from red_pill.core.paths import get_ingestion_dir
+
 		_default = str(get_ingestion_dir())
 		_env_raw = os.getenv("INGESTION_DIRECTORIES", _default)
 		self.INGESTION_DIRECTORIES = [os.path.expanduser(p.strip()) for p in _env_raw.split(",") if p.strip()]

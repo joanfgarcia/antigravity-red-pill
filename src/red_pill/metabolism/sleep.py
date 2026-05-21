@@ -319,6 +319,7 @@ class EphemeralServer:
 
 		try:
 			from red_pill.core.notifier import SovereignNotifier
+
 			SovereignNotifier.notify_os(
 				"Bünker Cortex",
 				f"Hilo de Ariadna finalizado.\n{total_processed} engramas consolidados en el neocórtex.",
@@ -425,10 +426,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 		_free_vram_mb = VramProbe.get_free_mb()
 		_min_free_mb = cfg.SLEEP_MIN_FREE_VRAM_MB
 		if _free_vram_mb < _min_free_mb:
-			logger.warning(
-				f"[SLEEP ENGINE] VRAM preflight failed: {_free_vram_mb} MB free, "
-				f"{_min_free_mb} MB required. Aborting sleep cycle."
-			)
+			logger.warning(f"[SLEEP ENGINE] VRAM preflight failed: {_free_vram_mb} MB free, {_min_free_mb} MB required. Aborting sleep cycle.")
 			try:
 				memory_manager.inject_signal(
 					"vram_busy",
