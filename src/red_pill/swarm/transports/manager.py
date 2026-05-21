@@ -12,8 +12,12 @@ class TransportManager:
 	Orchestrates N communities and their respective transport plugins.
 	"""
 
-	def __init__(self, config_path: str = "~/.agent/config/swarm_communities.json"):
-		self.config_path = os.path.expanduser(config_path)
+	def __init__(self, config_path: Optional[str] = None):
+		if config_path is None:
+			from red_pill.core.paths import get_swarm_config_path
+			self.config_path = str(get_swarm_config_path())
+		else:
+			self.config_path = os.path.expanduser(config_path)
 		self.communities: Dict[str, SwarmTransport] = {}
 		self._load_communities()
 

@@ -9,14 +9,14 @@ from typing import Any, Dict, List, Optional
 from qdrant_client.models import Filter
 
 import red_pill.config as cfg
-from red_pill.core.paths import get_daemon_dir
+from red_pill.core.paths import get_daemon_dir, get_thread_state_path, get_staging_dir
 from red_pill.events import SleepCompletedEvent, get_event_bus
 from red_pill.metabolism.evolution import IdentityEvaluator
 
 logger = logging.getLogger(__name__)
 
 # ── Thread Weaving state ──────────────────────────────────────────────────────
-_THREAD_STATE_PATH = os.path.expanduser("~/.agent/thread_state.json")
+_THREAD_STATE_PATH = str(get_thread_state_path())
 
 
 def _load_thread_state() -> dict:
@@ -502,7 +502,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 		total_processed += batch_processed
 
 	# ── Staging Buffer Processing (Productor-Consumidor Fallback) ─────────
-	STAGING_DIR = os.path.expanduser("~/.agent/staging_buffer")
+	STAGING_DIR = str(get_staging_dir())
 	if os.path.exists(STAGING_DIR):
 		logger.info(f"[SLEEP ENGINE] Sweeping Staging Buffer: {STAGING_DIR}")
 		try:

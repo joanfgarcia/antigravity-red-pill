@@ -163,3 +163,28 @@ def get_model_profiles_path() -> Path:
 	"""Resuelve la ruta del archivo de configuración de perfiles de modelos (~/.agent/model_profiles.yaml)."""
 	return Path.home() / ".agent" / "model_profiles.yaml"
 
+
+def get_agent_dir() -> Path:
+	"""Resuelve el directorio raíz heredado/operacional del agente (~/.agent)."""
+	return Path.home() / ".agent"
+
+
+def get_thread_state_path() -> Path:
+	"""Resuelve la ruta del archivo de estado de hilos (~/.agent/thread_state.json)."""
+	return get_agent_dir() / "thread_state.json"
+
+
+def get_staging_dir() -> Path:
+	"""Resuelve el directorio de almacenamiento temporal staging (~/.agent/staging_buffer)."""
+	return get_agent_dir() / "staging_buffer"
+
+
+def get_ingestion_dir() -> Path:
+	"""Resuelve el directorio por defecto de ingesta de archivos (~/.agent/ingestion)."""
+	return get_agent_dir() / "ingestion"
+
+
+def get_swarm_config_path() -> Path:
+	"""Resuelve la ruta del archivo de comunidades swarm (~/.agent/config/swarm_communities.json)."""
+	return get_agent_dir() / "config" / "swarm_communities.json"
+
