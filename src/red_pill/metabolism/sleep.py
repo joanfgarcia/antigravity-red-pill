@@ -215,6 +215,118 @@ def synthesize_hub(summaries: List[str]) -> str:
 		return "Aggregated Memory Sequence Synthesis."
 
 
+class EphemeralServer:
+	"""
+	Manages the lifecycle of the ephemeral local LLM server used during the sleep
+	distillation cycle.
+
+	Start order:
+	1. Try systemd user service (Linux)
+	2. Try launchctl user agent (macOS)
+	3. Fall back to direct subprocess with systemd-run cgroup or nice(1).
+
+	The object tracks which path was taken so teardown can be handled correctly.
+	"""
+
+	def __init__(self):
+		self._process: Any = None  # subprocess.Popen | str | None
+
+	@property
+	def is_managed_service(self) -> bool:
+		"""True when the server is controlled by systemd/launchd (not a Popen)."""
+		return self._process in ("systemd_service", "launchd_service")
+
+	def start(self, memory_manager) -> bool:
+		"""
+		Attempts to bring the ephemeral LLM server online.
+		Returns True when the server is reachable, False on failure.
+		"""
+		import shutil
+		import subprocess
+		import sys
+		import time as _time
+
+		from red_pill.core.notifier import SovereignNotifier
+
+		SovereignNotifier.notify_os(
+			"Bünker Cortex",
+			"El Hilo de Ariadna está tejiendo...\nConsolidación de memoria iniciada.",
+			icon="weather-clear-night",
+		)
+		SovereignNotifier.notify_bunker(memory_manager, "ariadne_thread_running", intensity=1.0, source="SLEEP_ENGINE")
+
+		start_sh = str(get_daemon_dir() / "start.sh")
+		if not os.path.exists(start_sh):
+			logger.error("[EPHEMERAL SERVER] start.sh not found. Aborting.")
+			SovereignNotifier.notify_bunker(memory_manager, "local_llm_offline", intensity=7.0, signal_type="pain", source="SLEEP_ENGINE")
+			return False
+
+		if shutil.which("systemctl"):
+			subprocess.run(
+				["systemctl", "--user", "restart", "red-pill-minion.service"],
+				stdout=subprocess.DEVNULL,
+				stderr=subprocess.DEVNULL,
+			)
+			self._process = "systemd_service"
+		elif shutil.which("launchctl"):
+			uid = os.getuid()
+			subprocess.run(
+				["launchctl", "kickstart", "-k", f"gui/{uid}/com.agent.modeldaemon"],
+				stdout=subprocess.DEVNULL,
+				stderr=subprocess.DEVNULL,
+			)
+			self._process = "launchd_service"
+		else:
+			# Fallback: direct execution wrapped in cgroup/nice for resource safety
+			cmd: List[str] = []
+			if shutil.which("systemd-run"):
+				cmd = ["systemd-run", "--user", "--scope", "-p", "MemoryMax=10G", "-p", "Nice=19", "-p", "IOSchedulingClass=3", start_sh]
+			elif shutil.which("nice"):
+				cmd = ["nice", "-n", "19"]
+				if sys.platform == "darwin" and shutil.which("taskpolicy"):
+					cmd += ["taskpolicy", "-c", "background"]
+				cmd.append(start_sh)
+			else:
+				cmd = [start_sh]
+			self._process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+		logger.info("[EPHEMERAL SERVER] Waiting for LLM to come online...")
+		for _ in range(30):
+			_time.sleep(2)
+			if _check_llm_available():
+				logger.info("[EPHEMERAL SERVER] LLM is ONLINE.")
+				return True
+
+		logger.error("[EPHEMERAL SERVER] LLM failed to start within 60s.")
+		if not self.is_managed_service and self._process is not None:
+			self._process.terminate()
+		SovereignNotifier.notify_os("Bünker Cortex", "Fallo al iniciar el servidor efímero.", urgency="critical")
+		SovereignNotifier.clear_bunker_signal(memory_manager, "ariadne_thread_running")
+		return False
+
+	def stop(self, memory_manager, total_processed: int) -> None:
+		"""Gracefully shuts down the ephemeral server (Popen only; services self-manage)."""
+		if self._process is None or self.is_managed_service:
+			return
+
+		logger.info("[EPHEMERAL SERVER] Shutting down...")
+		try:
+			self._process.terminate()
+			self._process.wait(timeout=10)
+		except Exception:
+			self._process.kill()
+
+		try:
+			from red_pill.core.notifier import SovereignNotifier
+			SovereignNotifier.notify_os(
+				"Bünker Cortex",
+				f"Hilo de Ariadna finalizado.\n{total_processed} engramas consolidados en el neocórtex.",
+				icon="dialog-information",
+			)
+		except Exception:
+			pass
+
+
 def distill_session_anchors(memory_manager, hub_summaries: List[str]) -> Optional[str]:
 	"""
 	Phase Gamma: Logical Distillation.
@@ -304,62 +416,11 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 		logger.warning("[SLEEP ENGINE] System stress detected. Minimizing metabolic load.")
 
 	# LLM Health Check & Ephemeral Server
-	ephemeral_process: Any = None
+	ephemeral_server = EphemeralServer()
 	if not _check_llm_available():
 		logger.warning("[SLEEP ENGINE] Local LLM is offline. Launching Ephemeral Samantha Server...")
 		try:
-			import subprocess
-			import time
-
-			from red_pill.core.notifier import SovereignNotifier
-
-			# Notify OS and Bünker
-			SovereignNotifier.notify_os(
-				"Bünker Cortex", "El Hilo de Ariadna está tejiendo...\nConsolidación de memoria iniciada.", icon="weather-clear-night"
-			)
-			SovereignNotifier.notify_bunker(memory_manager, "ariadne_thread_running", intensity=1.0, source="SLEEP_ENGINE")
-
-			start_sh = str(get_daemon_dir() / "start.sh")
-			if os.path.exists(start_sh):
-				import shutil
-				if shutil.which("systemctl"):
-					subprocess.run(["systemctl", "--user", "restart", "red-pill-minion.service"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-					ephemeral_process = "systemd_service"
-				elif shutil.which("launchctl"):
-					uid = os.getuid()
-					subprocess.run(["launchctl", "kickstart", "-k", f"gui/{uid}/com.agent.modeldaemon"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-					ephemeral_process = "launchd_service"
-				else:
-					# Fallback direct execution using cgroups/nice depending on availability
-					import sys
-					cmd = []
-					if shutil.which("systemd-run"):
-						cmd = ["systemd-run", "--user", "--scope", "-p", "MemoryMax=10G", "-p", "Nice=19", "-p", "IOSchedulingClass=3", start_sh]
-					elif shutil.which("nice"):
-						cmd = ["nice", "-n", "19"]
-						if sys.platform == "darwin" and shutil.which("taskpolicy"):
-							cmd += ["taskpolicy", "-c", "background"]
-						cmd.append(start_sh)
-					else:
-						cmd = [start_sh]
-					ephemeral_process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-				logger.info("[SLEEP ENGINE] Waiting for Ephemeral Server to come online...")
-				for _ in range(30):
-					time.sleep(2)
-					if _check_llm_available():
-						logger.info("[SLEEP ENGINE] Ephemeral Server is ONLINE.")
-						break
-				else:
-					logger.error("[SLEEP ENGINE] Ephemeral Server failed to start within 60s.")
-					if ephemeral_process not in ("systemd_service", "launchd_service") and ephemeral_process is not None:
-						ephemeral_process.terminate()
-					SovereignNotifier.notify_os("Bünker Cortex", "Fallo al iniciar el servidor efímero.", urgency="critical")
-					SovereignNotifier.clear_bunker_signal(memory_manager, "ariadne_thread_running")
-					return 0
-			else:
-				logger.error("[SLEEP ENGINE] start.sh not found for ephemeral server. Aborting.")
-				SovereignNotifier.notify_bunker(memory_manager, "local_llm_offline", intensity=7.0, signal_type="pain", source="SLEEP_ENGINE")
+			if not ephemeral_server.start(memory_manager):
 				return 0
 		except Exception as e:
 			logger.error(f"[SLEEP ENGINE] Failed to start Ephemeral Server: {e}")
@@ -611,21 +672,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 	except Exception:
 		pass
 
-	if ephemeral_process is not None and ephemeral_process not in ("systemd_service", "launchd_service"):
-		logger.info("[SLEEP ENGINE] Shutting down Ephemeral Samantha Server...")
-		try:
-			ephemeral_process.terminate()
-			ephemeral_process.wait(timeout=10)
-		except Exception:
-			ephemeral_process.kill()
-		try:
-			from red_pill.core.notifier import SovereignNotifier
-
-			SovereignNotifier.notify_os(
-				"Bünker Cortex", f"Hilo de Ariadna finalizado.\n{total_processed} engramas consolidados en el neocórtex.", icon="dialog-information"
-			)
-		except Exception:
-			pass
+	ephemeral_server.stop(memory_manager, total_processed)
 
 	get_event_bus().emit(SleepCompletedEvent(collection=collection, processed_count=total_processed, mode=mode))
 	return total_processed

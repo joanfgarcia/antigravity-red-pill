@@ -7,9 +7,9 @@ from typing import Any, Dict, List
 from watchfiles import Change, awatch
 
 import red_pill.config as cfg
+from red_pill.cognitive.queue_manager import CognitiveQueueManager
 from red_pill.core.notifier import SovereignNotifier
 from red_pill.core.plugin_engine import PluginScope, Priority, SovereignPlugin
-from red_pill.cognitive.queue_manager import CognitiveQueueManager
 
 logger = logging.getLogger(__name__)
 

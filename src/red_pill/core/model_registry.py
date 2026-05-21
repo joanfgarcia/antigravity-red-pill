@@ -1,13 +1,55 @@
 import logging
 import os
 import shutil
-from typing import Dict, Optional
+import time
+from typing import Dict, Optional, Tuple
 
 import yaml
 
 from red_pill.core.paths import get_bunker_root, get_model_profiles_path
 
 logger = logging.getLogger(__name__)
+
+# ── VRAM detection cache ───────────────────────────────────────────────────────
+# Sentinel hardware queries (nvidia-smi) are expensive. We cache the result with
+# a TTL so that repeated sleep-cycle invocations don't hammer the driver.
+_VRAM_CACHE: Optional[Tuple[float, float]] = None  # (timestamp_monotonic, vram_gb)
+_VRAM_CACHE_TTL_SECONDS: float = float(os.getenv("RED_PILL_VRAM_CACHE_TTL", "300"))
+
+
+def _get_vram_gb() -> float:
+	"""
+	Queries GPU VRAM via the Sentinel telemetry provider.
+	Results are cached for RED_PILL_VRAM_CACHE_TTL seconds (default: 300).
+	Set RED_PILL_VRAM_CACHE_TTL=0 to disable caching.
+	"""
+	global _VRAM_CACHE
+	now = time.monotonic()
+
+	if _VRAM_CACHE is not None and _VRAM_CACHE_TTL_SECONDS > 0:
+		cached_ts, cached_gb = _VRAM_CACHE
+		if now - cached_ts < _VRAM_CACHE_TTL_SECONDS:
+			return cached_gb
+
+	try:
+		from red_pill.telemetry import sentinel
+		stats = sentinel.get_stats()
+		gpus = stats.get("gpu", [])
+		total_vram_mb = 0
+		if gpus:
+			# Parse "memory": "used/total MB" (e.g. "120/8151 MB")
+			mem_str = gpus[0].get("memory", "0/0 MB")
+			parts = mem_str.split("/")
+			if len(parts) > 1:
+				total_vram_mb = int(parts[1].split()[0])
+		vram_gb = total_vram_mb / 1024.0
+	except Exception as e:
+		logger.warning(f"Failed to detect GPU VRAM: {e}. Defaulting to lowest tier.")
+		vram_gb = 0.0
+
+	_VRAM_CACHE = (now, vram_gb)
+	logger.debug(f"[ModelRegistry] VRAM cache refreshed: {vram_gb:.2f} GB (TTL={_VRAM_CACHE_TTL_SECONDS}s)")
+	return vram_gb
 
 
 class ModelRegistry:
@@ -64,34 +106,25 @@ class ModelRegistry:
 
 	@classmethod
 	def get_resolved_hardware_affinity(cls, profile_name: str) -> dict:
-		"""Resolves hardware affinity dynamically based on available VRAM tiers."""
+		"""Resolves hardware affinity dynamically based on available VRAM tiers.
+
+		VRAM detection results are cached for RED_PILL_VRAM_CACHE_TTL seconds
+		(default: 300) to avoid repeated nvidia-smi invocations during
+		consecutive sleep cycles. Set RED_PILL_VRAM_CACHE_TTL=0 to disable.
+		"""
 		profile = cls.get_profile(profile_name)
 		hardware: dict = profile.get("hardware_affinity", {})
 
 		# If vram_tiers is defined, resolve dynamically based on VRAM
 		if "vram_tiers" in hardware:
-			try:
-				from red_pill.telemetry import sentinel
-				stats = sentinel.get_stats()
-				gpus = stats.get("gpu", [])
-				total_vram_mb = 0
-				if gpus:
-					# Parse "memory": "used/total MB" (e.g. "120/8151 MB")
-					mem_str = gpus[0].get("memory", "0/0 MB")
-					parts = mem_str.split("/")
-					if len(parts) > 1:
-						total_vram_mb = int(parts[1].split()[0])
-				total_vram_gb = total_vram_mb / 1024.0
-			except Exception as e:
-				logger.warning(f"Failed to detect GPU VRAM: {e}. Defaulting to lowest tier.")
-				total_vram_gb = 0.0
+			total_vram_gb = _get_vram_gb()
 
 			resolved = {}
 			for k, v in hardware.items():
 				if k != "vram_tiers":
 					resolved[k] = v
 
-			# Find matching tier
+			# Find the lowest tier whose limit_gb >= detected VRAM
 			tiers = sorted(hardware["vram_tiers"], key=lambda x: x.get("limit_gb", 0))
 			matched_tier = None
 			for tier in tiers:
@@ -99,6 +132,7 @@ class ModelRegistry:
 					matched_tier = tier
 					break
 			else:
+				# VRAM exceeds all defined tiers → use the highest
 				if tiers:
 					matched_tier = tiers[-1]
 
