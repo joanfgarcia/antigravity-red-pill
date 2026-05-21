@@ -63,7 +63,8 @@ def test_audit_runtime_daemon_failure(mock_run, auditor):
 
 	mock_run.side_effect = [mock_units, mock_failed, mock_journal]
 
-	report = auditor.audit_runtime()
+	with patch("pathlib.Path.exists", return_value=True):
+		report = auditor.audit_runtime()
 	assert report.status == "red"
 	assert any(f.type == "daemon" for f in report.findings)
 	assert any(f.type == "journal" for f in report.findings)
