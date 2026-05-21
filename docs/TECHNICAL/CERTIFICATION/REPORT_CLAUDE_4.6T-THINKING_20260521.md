@@ -296,7 +296,7 @@ This project is worthy of mention in discussions of local-first AI infrastructur
 **Model Family:** Claude 4 (Anthropic)
 **Interface:** Antigravity IDE via Sovereign Handshake MCP protocol
 **Audit Date:** 2026-05-21T11:37–12:05 UTC
-**Session Type:** Live filesystem access — not static digest analysis. The auditor had direct read access to all source files, test outputs, documentation, and real-time terminal execution results (Mypy, Ruff, Pytest) in the live repository at `/home/joan/Documents/IA/sharing/` on branch `feat/v7.0-foundation`, commit `e96ca39`.
+**Session Type:** Live filesystem access — not static digest analysis. The auditor had direct read access to all source files, test outputs, documentation, and real-time terminal execution results (Mypy, Ruff, Pytest) in the live repository at `$IA_DIR/sharing/` on branch `feat/v7.0-foundation`, commit `e96ca39`.
 
 **Agentic Profile:** General-purpose reasoning AI with extended thinking capability. No persistent memory between sessions. Audit performed in a single context window by reading source code directly, cross-validating digest files against live filesystem content, and observing real-time linter/test execution. Prior audit report (March 2026) was consulted for delta comparison — this is a deviation from the CERTIFICATION_PROTOCOL which mandates fresh evaluation; however, the prior report was used exclusively for delta analysis, not as an anchor for new findings.
 

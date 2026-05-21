@@ -104,6 +104,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [CERTIFICATION_PROTOCOL.md](TECHNICAL/CERTIFICATION/CERTIFICATION_PROTOCOL.md) | How certification audits are conducted and what they cover |
 | [SMITH_AUDIT.md](TECHNICAL/CERTIFICATION/SMITH_AUDIT.md) | Historical Agent Smith security audit report |
 | [REPORT_CLAUDE_4.6_20260322.md](TECHNICAL/CERTIFICATION/REPORT_CLAUDE_4.6_20260322.md) | Claude Sonnet 4.6 full audit — BETA-READY verdict, 2026-03-22 |
+| [REPORT_CLAUDE_4.6T-THINKING_20260521.md](TECHNICAL/CERTIFICATION/REPORT_CLAUDE_4.6T-THINKING_20260521.md) | Claude Sonnet 4.6 (Thinking) full audit — BETA-READY (elevated), all P0/P1 from prior audit resolved, 2026-05-21 |
 
 ### Operations
 
