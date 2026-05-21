@@ -1,4 +1,4 @@
-# Red Pill Protocol: Environment Configuration Reference (v6.1)
+# Red Pill Protocol: Environment Configuration Reference (v7.0)
 
 This document provides a comprehensive list of all parameters available in the `.env` file, their purposes, default values, and what specific behaviors they activate or deactivate within the Bünker ecosystem.
 
