@@ -20,6 +20,10 @@
 - **[SEC] pure-mls PyPI migration documented**: `pure-mls==3.0.5.1` has been published to PyPI since 2026-05-06. The `pyproject.toml` dependency now carries an explicit inline comment documenting the PyPI URL and the historical git reference migration. `allow-direct-references` removed. Added to `NOTICE` with license and PyPI provenance.
 - **[DOCS] CHANGELOG historical correction**: Entry from v6.4.1 that described pure-mls as a "private git dep" filtered from pip-audit has been annotated with a correction note — this was true at that point in time but is no longer the case.
 
+### 🛡️ Audit & Vulnerability Remediation (v7.0.0 Release Hardening)
+- **[SEC] Read-Only Environment Mounts (1B)**: Hardened Docker services inside `docker/queue/compose.yaml`. The `.env` volume mounts for both `celery-worker` and `api-gateway` are now explicitly flagged read-only (`:ro`). This eliminates container escape vectors involving host-side environment rewriting.
+- **[QA] Git Leakage Cleanup (1C)**: Untracked and excluded `tests/test_results.txt` from the repository index. Added an explicit exclude rule to the root `.gitignore` to prevent host-specific execution data from leaking into public code tracking.
+
 ### 🧭 Sovereign Drive & Structural Graph (Cognitive Autonomy Pipeline)
 - **[FIX] Telegram Ghost Responses**: Resolved trajectory truncation issues by implementing `TelegramResponseExtractor` to read directly from `overview.txt` bypassing gRPC limits.
 - **[FEAT] Telegram Headless Sessions**: Added `/new` command to Neon-Link allowing the operator to start and anchor to fresh, headless cascades directly from Telegram.

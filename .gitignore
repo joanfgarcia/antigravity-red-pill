@@ -42,6 +42,7 @@ dmypy.json
 .coverage
 htmlcov/
 *.log
+tests/test_results.txt
 
 # Local data
 /data/
