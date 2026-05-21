@@ -1,5 +1,12 @@
 ## [7.0.0] - Unreleased
 
+### 🏎️ Sovereign Daemon Hardware Affinity & OS Independence
+- **[FEAT] Dynamic Hardware Affinity**: Implemented dynamic VRAM profiling in `model_registry.py`. Models dynamically offload layers (`n_gpu_layers`) based on active system VRAM thresholds (configured via `vram_tiers` in `model_profiles.yaml`).
+- **[FEAT] Platform-Independent Daemons**: Extended `setup_background_model.sh` and `sleep.py` to support low-priority CPU priorization (`Nice=19`, `lowpriorityio`) and launch configurations for both Linux (systemd) and macOS (LaunchAgents).
+- **[FIX] Sleep Engine UDS Deadlock**: Overhauled `_check_llm_available` in `sleep.py` to capture connection errors, proactively remove stale UDS socket files, and automatically fallback to TCP probing to prevent hypervisor start deadlock.
+- **[FIX] StartCascade API Validation**: Corrected gRPC-Web client payload in `ide_client.py` by adding `"source": "CORTEX_TRAJECTORY_SOURCE_AGENT_API"` to satisfy trajectory source validations.
+- **[ARCH] Total Path Centralization**: Overhauled all remaining hardcoded `~/.agent/` references in `sleep.py`, `ls_snatcher.py`, `config.py` and `manager.py`, routing them through central resolvers in `paths.py` in accordance with `CONVENTIONS.md`.
+
 ### 🧭 Sovereign Drive & Structural Graph (Cognitive Autonomy Pipeline)
 - **[FIX] Telegram Ghost Responses**: Resolved trajectory truncation issues by implementing `TelegramResponseExtractor` to read directly from `overview.txt` bypassing gRPC limits.
 - **[FEAT] Telegram Headless Sessions**: Added `/new` command to Neon-Link allowing the operator to start and anchor to fresh, headless cascades directly from Telegram.

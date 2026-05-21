@@ -66,7 +66,7 @@ class ModelRegistry:
 	def get_resolved_hardware_affinity(cls, profile_name: str) -> dict:
 		"""Resolves hardware affinity dynamically based on available VRAM tiers."""
 		profile = cls.get_profile(profile_name)
-		hardware = profile.get("hardware_affinity", {})
+		hardware: dict = profile.get("hardware_affinity", {})
 
 		# If vram_tiers is defined, resolve dynamically based on VRAM
 		if "vram_tiers" in hardware:

@@ -9,7 +9,7 @@ from watchfiles import Change, awatch
 import red_pill.config as cfg
 from red_pill.core.notifier import SovereignNotifier
 from red_pill.core.plugin_engine import PluginScope, Priority, SovereignPlugin
-from red_pill.core.queue_manager import CognitiveQueueManager
+from red_pill.cognitive.queue_manager import CognitiveQueueManager
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +72,7 @@ class FileIngestionPlugin(SovereignPlugin):
 		SovereignNotifier.notify_os("Ingestion Pipeline", f"Detectado nuevo archivo: {filename}.\nIniciando vectorización.", icon="document-new")
 
 		# Create a DAG task for the 'ingestor' minion
-		self.queue_manager.enqueue(task_type="plugin", priority=50, payload={"minion": "ingestor", "kwargs": {"file_path": file_path}})
+		self.queue_manager.enqueue_task(source="plugin", payload={"minion": "ingestor", "kwargs": {"file_path": file_path}}, priority=50)
 
 	async def hook(self, scope: PluginScope, payload: Dict[str, Any]) -> Dict[str, Any]:
 		return payload

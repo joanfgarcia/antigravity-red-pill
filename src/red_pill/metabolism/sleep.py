@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 from qdrant_client.models import Filter
 
 import red_pill.config as cfg
-from red_pill.core.paths import get_daemon_dir, get_thread_state_path, get_staging_dir
+from red_pill.core.paths import get_daemon_dir, get_staging_dir, get_thread_state_path
 from red_pill.events import SleepCompletedEvent, get_event_bus
 from red_pill.metabolism.evolution import IdentityEvaluator
 
@@ -304,7 +304,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 		logger.warning("[SLEEP ENGINE] System stress detected. Minimizing metabolic load.")
 
 	# LLM Health Check & Ephemeral Server
-	ephemeral_process = None
+	ephemeral_process: Any = None
 	if not _check_llm_available():
 		logger.warning("[SLEEP ENGINE] Local LLM is offline. Launching Ephemeral Samantha Server...")
 		try:
@@ -326,7 +326,6 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 					subprocess.run(["systemctl", "--user", "restart", "red-pill-minion.service"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 					ephemeral_process = "systemd_service"
 				elif shutil.which("launchctl"):
-					import getpass
 					uid = os.getuid()
 					subprocess.run(["launchctl", "kickstart", "-k", f"gui/{uid}/com.agent.modeldaemon"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 					ephemeral_process = "launchd_service"
