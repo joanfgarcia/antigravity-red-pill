@@ -16,6 +16,21 @@ from red_pill.utils.tone_analyzer import get_current_sync_state
 
 logger = logging.getLogger(__name__)
 
+# Keywords that signal the operator wants casual conversation.
+# When detected, the tone directive relaxes regardless of color.
+_CASUAL_KEYWORDS: set[str] = {
+	"charlemos", "charlar", "charla", "relax", "relajado",
+	"hablemos", "conversemos", "off-topic", "chill",
+	"quemar tokens", "de guardia", "no hay prisa",
+}
+
+_CASUAL_TONE = (
+	"Relaxed and conversational. Drop the corporate tone. "
+	"Speak naturally, use humor if it fits, be warm. "
+	"No bullet-point obsession. Prose is fine. Tangents are welcome. "
+	"You're chatting with a friend at 2 AM, not presenting to a board."
+)
+
 # Tone directives per color — how Aleth should SPEAK
 _TONE_DIRECTIVES: dict[str, str] = {
 	"red": (
@@ -56,11 +71,21 @@ class ToneAdapterPlugin(BaseInterceptorPlugin):
 			sync_state = get_current_sync_state()
 			color = sync_state.get("mood", "gray").lower()
 
-			tone = _TONE_DIRECTIVES.get(color, _TONE_DIRECTIVES["gray"])
+			# Casual override: if the operator signals chat mode,
+			# relax the tone regardless of emotional color.
+			prompt_lower = prompt.lower()
+			is_casual = any(kw in prompt_lower for kw in _CASUAL_KEYWORDS)
+
+			if is_casual:
+				tone = _CASUAL_TONE
+				mode_label = f"{color.upper()} → CASUAL OVERRIDE"
+			else:
+				tone = _TONE_DIRECTIVES.get(color, _TONE_DIRECTIVES["gray"])
+				mode_label = color.upper()
 
 			lines = [
 				"=== TONE ADAPTER (FERRARI PROTOCOL) ===",
-				f"OPERATOR_COLOR: {color.upper()}",
+				f"OPERATOR_COLOR: {mode_label}",
 				f"TONE_DIRECTIVE: {tone}",
 				"---",
 			]

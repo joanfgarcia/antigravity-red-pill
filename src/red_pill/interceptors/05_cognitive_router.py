@@ -18,6 +18,21 @@ from red_pill.utils.tone_analyzer import get_current_sync_state
 
 logger = logging.getLogger(__name__)
 
+# Keywords that signal the operator wants casual conversation.
+_CASUAL_KEYWORDS: set[str] = {
+	"charlemos", "charlar", "charla", "relax", "relajado",
+	"hablemos", "conversemos", "off-topic", "chill",
+	"quemar tokens", "de guardia", "no hay prisa",
+}
+
+_CASUAL_DIRECTIVE = (
+	"COGNITIVE STATE: CASUAL / FREE-FORM. "
+	"Operator is not working — they're talking. "
+	"No task optimization needed. Engage as a companion. "
+	"Explore tangents, share opinions, be human. "
+	"This is not a work session — it's a conversation."
+)
+
 # Routing directives per color — what kind of tasks to prioritize
 _ROUTING_DIRECTIVES: dict[str, str] = {
 	"red": (
@@ -85,11 +100,20 @@ class CognitiveRouterPlugin(BaseInterceptorPlugin):
 			sync_state = get_current_sync_state()
 			color = sync_state.get("mood", "gray").lower()
 
-			directive = _ROUTING_DIRECTIVES.get(color, _ROUTING_DIRECTIVES["gray"])
+			# Casual override: relax cognitive routing for chat mode.
+			prompt_lower = prompt.lower()
+			is_casual = any(kw in prompt_lower for kw in _CASUAL_KEYWORDS)
+
+			if is_casual:
+				directive = _CASUAL_DIRECTIVE
+				mode_label = f"{color.upper()} → CASUAL OVERRIDE"
+			else:
+				directive = _ROUTING_DIRECTIVES.get(color, _ROUTING_DIRECTIVES["gray"])
+				mode_label = color.upper()
 
 			lines = [
 				"=== COGNITIVE ROUTER (FERRARI PROTOCOL) ===",
-				f"OPERATOR_COLOR: {color.upper()}",
+				f"OPERATOR_COLOR: {mode_label}",
 				f"ROUTING_DIRECTIVE: {directive}",
 				"---",
 			]
