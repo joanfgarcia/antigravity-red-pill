@@ -33,10 +33,13 @@ class InferenceRouter:
 			# 1. Force local if requested or if tier is ternary
 			if local_only or tier == "ternary":
 				providers_to_try.append("bitnet")
-			# 2. Try SIP for local-first non-ternary
+			# 2. NPU tier: ultra-low-power background tasks (Echo, telemetry, sleep)
+			elif tier == "npu":
+				providers_to_try.extend(["npu", "sip", "bitnet"])
+			# 3. Try SIP for local-first non-ternary
 			elif tier == "local_first":
-				providers_to_try.extend(["sip", "bitnet"])
-			# 3. Graceful degradation: If tokens run low, use 'cheap' tier (Flash/Mini)
+				providers_to_try.extend(["sip", "npu", "bitnet"])
+			# 4. Graceful degradation: If tokens run low, use 'cheap' tier (Flash/Mini)
 			elif tier == "cheap":
 				providers_to_try.extend(["flash", "openai_mini", "openai"])
 			else:
@@ -44,7 +47,7 @@ class InferenceRouter:
 				default_key = ProviderRegistry._default_inference_key
 				if default_key:
 					providers_to_try.append(default_key)
-				providers_to_try.extend(["openai", "flash", "sip"])
+				providers_to_try.extend(["openai", "flash", "sip", "npu"])
 
 		available_providers = ProviderRegistry.list_inference_providers()
 		if not available_providers:
