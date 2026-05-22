@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 """
-chronicle_daily.py — Autonomous Chronicle Ingestion Pipeline
+chronicle_daily.py — Autonomous Chronicle Ingestion Pipeline (Phase 2)
 
-Automates the full chronicle ritual for unprocessed conversations:
-	decrypt → ingest → distill → refine
-
-Designed to run as a systemd --user oneshot service (daily, Persistent=true).
-If the system was suspended at scheduled time, runs on next wake/boot.
+Automates the ingestion of extracted JSON conversations into the Qdrant Bünker.
+Reads from `~/.local/share/red-pill/unencrypted_conversations` and relies on a registry
+to track `step_count` for each conversation, preventing duplicate or redundant ingests.
 
 Usage:
-	uv run python scripts/chronicle_daily.py              # default: yesterday's conversations
-	uv run python scripts/chronicle_daily.py --all       # all unprocessed conversations
+	uv run python scripts/chronicle_daily.py              # default: process updates
+	uv run python scripts/chronicle_daily.py --all       # force check all
 	uv run python scripts/chronicle_daily.py --dry-run   # show what would be processed
 """
 
@@ -20,8 +18,7 @@ import logging
 import shutil
 import subprocess
 import sys
-import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 logging.basicConfig(
@@ -31,20 +28,19 @@ logging.basicConfig(
 logger = logging.getLogger("chronicle_daily")
 
 # ── Paths ────────────────────────────────────────────────────────────────────
-CONVERSATIONS_DIR = Path.home() / ".gemini/antigravity/conversations"
 PROCESSED_LOG = Path.home() / ".agent/chronicle_processed.json"
 WORK_DIR = Path("/tmp/chronicle_today")
 SCRIPTS_DIR = Path(__file__).parent
 
 
 def _load_processed() -> dict:
-	"""Load the set of already-processed session IDs."""
+	"""Load the registry of processed session IDs and their step counts."""
 	if PROCESSED_LOG.exists():
 		try:
 			return json.loads(PROCESSED_LOG.read_text())
 		except Exception:
 			pass
-	return {"processed": {}, "last_run": None, "stats": {"total_ingested": 0, "total_sessions": 0}}
+	return {"processed": {}, "registry": {}, "last_run": None, "stats": {"total_ingested": 0, "total_sessions": 0}}
 
 
 def _save_processed(state: dict) -> None:
@@ -52,61 +48,33 @@ def _save_processed(state: dict) -> None:
 	PROCESSED_LOG.write_text(json.dumps(state, indent=2))
 
 
-def _inject_pain_signal(title: str, details: str, severity: float = 8.0) -> None:
-	"""Inject a pain signal into signal_memories so the Cortex is notified."""
-	try:
-		from red_pill.memory import MemoryManager
+def _find_pending(state: dict) -> list[tuple[Path, int]]:
+	"""Return a list of (Path, step_count) for JSONs that need to be ingested."""
+	from red_pill.core.paths import get_unencrypted_conversations_dir
 
-		mem = MemoryManager()
-		mem.add_memory(
-			collection="signal_memories",
-			text=f"[PAIN] {title}: {details}",
-			metadata={
-				"title": title,
-				"details": details,
-				"severity": severity,
-				"source": "chronicle_daily",
-				"timestamp": datetime.now().isoformat(),
-			},
-			importance=severity,
-		)
-		logger.warning(f"Pain signal injected: {title}")
-	except Exception as e:
-		logger.error(f"Could not inject pain signal: {e}")
-
-
-def _get_antigravity_key() -> str | None:
-	"""Read ANTIGRAVITY_KEY from environment (loaded via .env by the caller)."""
-	import os
-
-	import platformdirs
-	from dotenv import load_dotenv
-
-	red_pill_config = Path(platformdirs.user_config_dir("red-pill")) / ".env"
-	if red_pill_config.exists():
-		load_dotenv(red_pill_config)
-	else:
-		load_dotenv()
-	return os.environ.get("ANTIGRAVITY_KEY")
-
-
-def _find_pending(state: dict, only_yesterday: bool) -> list[Path]:
-	"""Return .pb files not yet processed, optionally filtered to last 48h."""
-	if not CONVERSATIONS_DIR.exists():
-		logger.error(f"Conversations dir not found: {CONVERSATIONS_DIR}")
+	unencrypted_dir = get_unencrypted_conversations_dir()
+	if not unencrypted_dir.exists():
+		logger.error(f"Unencrypted conversations dir not found: {unencrypted_dir}")
 		return []
 
-	cutoff = datetime.now() - timedelta(hours=48) if only_yesterday else None
 	pending = []
-	for pb in sorted(CONVERSATIONS_DIR.glob("*.pb")):
-		session_id = pb.stem
-		if session_id in state["processed"]:
+	registry = state.setdefault("registry", {})
+
+	for json_file in sorted(unencrypted_dir.glob("*.json")):
+		cid = json_file.stem
+		try:
+			data = json.loads(json_file.read_text(encoding="utf-8"))
+			step_count = data.get("step_count", 0)
+		except Exception as e:
+			logger.warning(f"Could not read {json_file.name}: {e}")
 			continue
-		if cutoff:
-			mtime = datetime.fromtimestamp(pb.stat().st_mtime)
-			if mtime < cutoff:
-				continue
-		pending.append(pb)
+
+		last_step_count = registry.get(cid, -1)
+
+		# Only ingest if the JSON has more steps than what we last recorded
+		if step_count > last_step_count:
+			pending.append((json_file, step_count))
+
 	return pending
 
 
@@ -127,7 +95,6 @@ def _llm_available() -> bool:
 	import urllib.request
 
 	url = os.environ.get("MLX_LM_URL", "http://127.0.0.1:8760/v1/chat/completions")
-	# Just check the base URL
 	base = url.rsplit("/", 2)[0]
 	try:
 		urllib.request.urlopen(base, timeout=3)
@@ -138,40 +105,25 @@ def _llm_available() -> bool:
 
 def main() -> None:
 	parser = argparse.ArgumentParser(description="Autonomous Chronicle Ingestion Pipeline")
-	parser.add_argument("--all", action="store_true", help="Process all unprocessed conversations (not just yesterday's)")
+	parser.add_argument("--all", action="store_true", help="Process all unprocessed conversations")
 	parser.add_argument("--dry-run", action="store_true", help="Show what would be processed without doing anything")
 	args = parser.parse_args()
 
-	# ── Preflight: key ────────────────────────────────────────────────────────
-	key = _get_antigravity_key()
-	if not key:
-		msg = (
-			"ANTIGRAVITY_KEY not set. Chronicle pipeline cannot decrypt conversations.\n"
-			"  → Set it in .env: ANTIGRAVITY_KEY=<base64_key>\n"
-			"  → Recovery guide: docs/TECHNICAL/ANTIGRAVITY_KEY_RECOVERY.md"
-		)
-		logger.error(msg)
-		_inject_pain_signal(
-			title="chronicle_daily: ANTIGRAVITY_KEY missing",
-			details="The automated chronicle pipeline could not run because ANTIGRAVITY_KEY is not set in .env. See docs/TECHNICAL/ANTIGRAVITY_KEY_RECOVERY.md.",
-			severity=8.5,
-		)
-		sys.exit(1)
+	sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 	# ── Load state ────────────────────────────────────────────────────────────
 	state = _load_processed()
-	only_yesterday = not args.all
-	pending = _find_pending(state, only_yesterday)
+	pending_tuples = _find_pending(state)
 
-	if not pending:
-		logger.info("No pending conversations to process. All up to date.")
+	if not pending_tuples:
+		logger.info("No pending conversations to process. Registry is up to date.")
 		state["last_run"] = datetime.now().isoformat()
 		_save_processed(state)
 		return
 
-	logger.info(f"Found {len(pending)} pending conversation(s) to process.")
-	for p in pending:
-		logger.info(f"  → {p.name}")
+	logger.info(f"Found {len(pending_tuples)} pending conversation(s) requiring ingestion.")
+	for p, count in pending_tuples:
+		logger.info(f"  → {p.name} (Steps: {count})")
 
 	if args.dry_run:
 		logger.info("[DRY RUN] No changes made.")
@@ -185,46 +137,41 @@ def main() -> None:
 	try:
 		uv = ["uv", "run", "python"]
 
-		# ── Step 1: Decrypt ───────────────────────────────────────────────────
-		decrypt_ok = _run(
-			uv + [str(SCRIPTS_DIR / "antigravity_decrypt.py"), str(CONVERSATIONS_DIR), "--output", str(WORK_DIR), "--key", key], "DECRYPT"
-		)
-		if not decrypt_ok:
-			logger.error("Decrypt failed. Aborting pipeline.")
-			return
+		# ── Copy pending JSONs to isolated WORK_DIR ───────────────────────────
+		for json_file, _ in pending_tuples:
+			shutil.copy2(json_file, WORK_DIR)
 
-		# ── Step 2: Ingest ────────────────────────────────────────────────────
+		# ── Step 1: Ingest ────────────────────────────────────────────────────
 		ingest_ok = _run(uv + [str(SCRIPTS_DIR / "antigravity_ingest.py"), "--dir", str(WORK_DIR)], "INGEST")
 		if not ingest_ok:
 			logger.error("Ingest failed. Aborting pipeline.")
 			return
 
-		# ── Step 3: Distill (optional — skip if LLM not available) ───────────
+		# ── Step 2: Distill (Samantha) ───────────────────────────────────────
 		if _llm_available():
 			_run(uv + [str(SCRIPTS_DIR / "chronicle_distill.py")], "DISTILL")
 		else:
-			logger.warning("[DISTILL] Local LLM not available. Skipping distillation — will retry on next cycle.")
+			logger.warning("[DISTILL] Local LLM not available. Skipping Samantha distillation — will retry on next cycle.")
 
-		# ── Step 4: Refine ────────────────────────────────────────────────────
+		# ── Step 3: Refine ────────────────────────────────────────────────────
 		_run(uv + [str(SCRIPTS_DIR / "chronicle_refine.py")], "REFINE")
 
-		# ── Mark as processed ─────────────────────────────────────────────────
+		# ── Mark as processed in Registry ─────────────────────────────────────
 		now = datetime.now().isoformat()
-		for pb in pending:
-			state["processed"][pb.stem] = now
+		for json_file, step_count in pending_tuples:
+			cid = json_file.stem
+			state["registry"][cid] = step_count
+			state["processed"][cid] = now
+
 		state["last_run"] = now
-		state["stats"]["total_sessions"] += len(pending)
+		state["stats"]["total_sessions"] += len(pending_tuples)
 		_save_processed(state)
-		logger.info(f"Chronicle pipeline complete. {len(pending)} session(s) marked as processed.")
+		logger.info(f"Chronicle pipeline complete. {len(pending_tuples)} session(s) updated in the registry.")
 
 	finally:
-		# ── Cleanup work dir ──────────────────────────────────────────────────
 		if WORK_DIR.exists():
 			shutil.rmtree(WORK_DIR)
-			logger.info("Work dir cleaned up.")
 
 
 if __name__ == "__main__":
-	t0 = time.time()
 	main()
-	logger.info(f"Total time: {time.time() - t0:.1f}s")

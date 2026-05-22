@@ -27,6 +27,11 @@ import yaml
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from red_pill.core.paths import get_db_dir, get_models_dir, get_state_dir, migrate_legacy_xdg_config
+
+migrate_legacy_xdg_config()
+
+
 # Resolve paths early for execution isolation (Agentic Self-Assembly)
 _APP_ROOT = os.getenv("APP_ROOT", os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 _WORKSPACE_ROOT = os.path.expanduser(os.getenv("WORKSPACE_ROOT", os.path.dirname(_APP_ROOT)))
@@ -179,7 +184,7 @@ class RedPillConfig(BaseSettings):
 	MILVUS_DB: str = "default"
 	MILVUS_NLIST: int = 128
 	MILVUS_LITE_ENABLED: bool = True
-	MILVUS_LITE_PATH: str = os.path.join(_APP_ROOT, "storage", "hive_lite.db")
+	MILVUS_LITE_PATH: str = str(get_db_dir() / "hive_lite.db")
 
 	@model_validator(mode="after")
 	def _derive_milvus_secure(self) -> "RedPillConfig":
@@ -210,7 +215,7 @@ class RedPillConfig(BaseSettings):
 	# -----------------------------------------------------------------------
 	EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
 	VECTOR_SIZE: int = 384
-	FASTEMBED_CACHE_PATH: str = os.path.join(_APP_ROOT, "storage", "models")
+	FASTEMBED_CACHE_PATH: str = str(get_models_dir())
 	EXECUTION_PROVIDER: Optional[str] = None
 
 	@model_validator(mode="after")
@@ -273,6 +278,7 @@ class RedPillConfig(BaseSettings):
 	# ICE Mode enforces local zero-trust encryption via pure-mls for the MinionInbox.
 	# When False, the system defaults to WATER mode (O(1) raw SQLite speed).
 	ICE_MODE_ENABLED: bool = False
+	NEON_LINK_ENABLED: bool = True
 	NEON_LINK_URL: str = "http://localhost:8770"
 
 	# -----------------------------------------------------------------------
@@ -301,7 +307,7 @@ class RedPillConfig(BaseSettings):
 	METABOLISM_ENABLED: bool = True
 	METABOLISM_COOLDOWN: int = 3600
 	METABOLISM_AUTO_COLLECTIONS: List[str] = ["work_memories", "social_memories", "story_memories"]
-	METABOLISM_STATE_FILE: str = os.path.join(_APP_ROOT, "storage", "metabolism_state.json")
+	METABOLISM_STATE_FILE: str = str(get_state_dir() / "metabolism_state.json")
 	ABSENCE_THRESHOLD: int = 7 * 24 * 3600
 	ABSENCE_GUARD_SCROLL_LIMIT: int = 500
 	METABOLISM_STRATEGY: str = "LAZY"
@@ -324,8 +330,8 @@ class RedPillConfig(BaseSettings):
 	AFFECT_CUSTOM_OVERRIDES: str = "{}"
 	DYNAMIC_EMOTION_SYNC: bool = True
 	MULTI_EMOTION_INFERENCE: bool = True
-	# [V6.9] Dynamic Gravity Point: HEDONIC_SET_POINT_COLOR is now read from storage/identity.json
-	# This serves as the fallback if identity.json is not yet created.
+	# Dynamic Gravity Point: HEDONIC_SET_POINT_COLOR is read from XDG config at boot.
+	# This serves as the fallback if no config is yet present.
 	HEDONIC_SET_POINT_COLOR: str = "emerald"
 	OVERNIGHT_THERAPY_THRESHOLD_HOURS: int = 4
 
@@ -380,16 +386,31 @@ class RedPillConfig(BaseSettings):
 	# -----------------------------------------------------------------------
 	LAZARUS_SYNC_ENABLED: bool = True
 	LAZARUS_SYNC_INTERVAL: int = 300
-	LAZARUS_STATE_FILE: str = os.path.join(_APP_ROOT, "storage", "lazarus_state.json")
+	LAZARUS_STATE_FILE: str = str(get_state_dir() / "lazarus_state.json")
 	# Prevents autonomous git pushes from consuming machine resources or interrupting the operator's active IDE sessions during office hours (09:00 - 18:00).
 	LAZARUS_OFFICE_HOURS_PROTECTION: bool = True
 
 	# -----------------------------------------------------------------------
-	# SEMANTIC RESONANCE
+	# SEMANTIC RESONANCE & GRAPHRAG
 	# -----------------------------------------------------------------------
 	RESONANCE_ENABLED: bool = True
 	RESONANCE_THRESHOLD: float = 0.4
 	RESONANCE_INTERVAL: int = 600
+	GRAPHIFY_RAG_ENABLED: bool = True
+
+	# -----------------------------------------------------------------------
+	# INGESTION PLUGIN
+	# -----------------------------------------------------------------------
+	INGESTION_DIRECTORIES: List[str] = []
+
+	@model_validator(mode="after")
+	def _build_ingestion_directories(self) -> "RedPillConfig":
+		from red_pill.core.paths import get_ingestion_dir
+
+		_default = str(get_ingestion_dir())
+		_env_raw = os.getenv("INGESTION_DIRECTORIES", _default)
+		self.INGESTION_DIRECTORIES = [os.path.expanduser(p.strip()) for p in _env_raw.split(",") if p.strip()]
+		return self
 
 	# -----------------------------------------------------------------------
 	# SYNAPTIC FRAGMENTATION
@@ -405,6 +426,7 @@ class RedPillConfig(BaseSettings):
 	SLEEP_CULL_THRESHOLD: float = 0.1
 	SLEEP_SCROLL_LIMIT: int = 50  # Max engrams fetched per scroll batch (loop drains until empty)
 	SLEEP_MAX_LLM_FAILURES: int = 5  # Thermal breaker: abort sleep after N consecutive LLM failures
+	SLEEP_MIN_FREE_VRAM_MB: int = 1500  # Preflight: skip sleep if GPU has less free VRAM than this
 
 	# Sleep Cycle Plugin flags — each ritual individually activatable
 	SLEEP_PLUGIN_USP: bool = True  # Operator Mood Profile refresh

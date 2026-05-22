@@ -3,12 +3,13 @@ import os
 import stat
 from typing import Tuple
 
+import platformdirs
 from pure_mls.keys import KemKey, SignatureKey
 
 logger = logging.getLogger(__name__)
 
 # SEC-001: Vault Seed Keystore
-_DEFAULT_KEYSTORE_DIR = os.path.expanduser("~/.config/red_pill")
+_DEFAULT_KEYSTORE_DIR = platformdirs.user_config_dir("red-pill")
 _DEFAULT_SEED_FILE = "vault.seed"
 
 KEYSTORE_DIR = os.getenv("RED_PILL_KEYSTORE_DIR", _DEFAULT_KEYSTORE_DIR)

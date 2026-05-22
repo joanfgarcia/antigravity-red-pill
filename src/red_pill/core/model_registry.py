@@ -5,6 +5,9 @@ from typing import Dict, Optional
 
 import yaml
 
+from red_pill.core.paths import get_bunker_root, get_model_profiles_path
+from red_pill.core.vram_probe import VramProbe
+
 logger = logging.getLogger(__name__)
 
 
@@ -36,11 +39,9 @@ class ModelRegistry:
 
 	@classmethod
 	def _load_profiles(cls):
-		config_path = os.path.expanduser("~/.agent/model_profiles.yaml")
-		# The fallback seed is at the project root
-		seed_path = os.path.join(
-			os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), "model_profiles.yaml.example"
-		)
+		config_path = str(get_model_profiles_path())
+		# Fallback seed resolved dynamically via bunker root
+		seed_path = os.path.join(get_bunker_root(), "examples", "model_profiles.yaml.example")
 
 		# Auto-seed if missing
 		if not os.path.exists(config_path):
@@ -61,3 +62,50 @@ class ModelRegistry:
 						cls._profiles_cache.update(data["profiles"])
 			except Exception as e:
 				logger.error(f"Failed to load model profiles from {config_path}: {e}")
+
+	@classmethod
+	def get_resolved_hardware_affinity(cls, profile_name: str) -> dict:
+		"""Resolves hardware affinity based on free VRAM available right now.
+
+		Uses VramProbe.get_free_mb() to detect how much VRAM is currently free
+		on the host GPU (no cache — always a fresh query). The result determines
+		which vram_tiers entry is selected.
+
+		Each tier's 'min_free_gb' field represents the minimum free VRAM required
+		to use that tier. Tiers are sorted ascending; the first tier whose
+		min_free_gb is satisfied by the currently free VRAM is selected.
+		If free VRAM exceeds all tiers, the highest tier is used.
+
+		On CPU-only systems (VramProbe returns 0 MB), the lowest (most
+		conservative) tier is always selected.
+		"""
+		profile = cls.get_profile(profile_name)
+		hardware: dict = profile.get("hardware_affinity", {})
+
+		if "vram_tiers" not in hardware:
+			return hardware
+
+		free_vram_mb = VramProbe.get_free_mb()
+		free_vram_gb = free_vram_mb / 1024.0
+
+		resolved = {k: v for k, v in hardware.items() if k != "vram_tiers"}
+
+		# Sort tiers by min_free_gb ascending; select the first tier that fits
+		tiers = sorted(hardware["vram_tiers"], key=lambda x: x.get("min_free_gb", 0))
+		matched_tier = None
+		for tier in tiers:
+			if free_vram_gb <= tier.get("min_free_gb", 0):
+				matched_tier = tier
+				break
+		else:
+			# Free VRAM exceeds all defined tiers → use the highest
+			if tiers:
+				matched_tier = tiers[-1]
+
+		if matched_tier:
+			logger.info(f"[ModelRegistry] Free VRAM {free_vram_gb:.2f} GB → tier: {matched_tier}")
+			for k, v in matched_tier.items():
+				if k != "min_free_gb":
+					resolved[k] = v
+
+		return resolved

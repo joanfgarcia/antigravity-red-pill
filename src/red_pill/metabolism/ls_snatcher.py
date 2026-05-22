@@ -5,9 +5,11 @@ import ssl
 import urllib.request
 from typing import Any, Dict, List, Optional
 
+from red_pill.core.paths import get_staging_dir
+
 logger = logging.getLogger(__name__)
 
-STAGING_DIR = os.path.expanduser("~/.agent/staging_buffer")
+STAGING_DIR = str(get_staging_dir())
 
 
 def hex_to_port(hex_str: str) -> int:

@@ -31,7 +31,7 @@ def run_recovery_handshake():
 	if not has_recovery_hash():
 		print(
 			"CRITICAL: IRP marker exists in Qdrant but no recovery hash found in the OS keystore.\n"
-			"The keystore file may have been deleted or moved. Check: ~/.config/red_pill/recovery.key"
+			"The keystore file may have been deleted or moved. Check: ~/.config/red-pill/recovery.key"
 		)
 		return
 

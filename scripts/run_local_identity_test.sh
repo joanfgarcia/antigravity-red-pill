@@ -4,8 +4,8 @@
 
 PROJECT_ROOT="$(dirname "$(dirname "$(readlink -f "$0")")")"
 RUNNER="${PROJECT_ROOT}/3rdparty/BitNet-1.58b/build/bin/llama-cli"
-MODEL="${PROJECT_ROOT}/storage/models/samantha-mistral-instruct-7b.i1-Q4_K_M.gguf"
-PROMPT_FILE="${PROJECT_ROOT}/storage/tmp/soul_fragment.txt"
+MODEL="${HOME}/.local/share/red-pill/models/samantha-mistral-instruct-7b.i1-Q4_K_M.gguf"
+PROMPT_FILE="${HOME}/.local/share/red-pill/tmp/soul_fragment.txt"
 
 # Set Library paths for BitNet/llama.cpp
 LIB_PATH="${PROJECT_ROOT}/3rdparty/BitNet-1.58b/build/3rdparty/llama.cpp/src"

@@ -20,7 +20,7 @@ def test_distill_engram():
 	from red_pill.core.providers import ProviderRegistry
 
 	mock_inference = ProviderRegistry.get_inference_provider("sip")
-	mock_inference.generate.return_value = '{"summary": "test", "emotion": "joy", "intensity": 0.9}'
+	mock_inference.generate.return_value = '{"summary": "test", "emotion": "joy", "intensity": 0.9}'  # type: ignore
 	result = distill_engram("raw content")
 	assert result["summary"] == "test"
 	assert result["emotion"] == "joy"
@@ -31,7 +31,7 @@ def test_distill_engram_fallback():
 	from red_pill.core.providers import ProviderRegistry
 
 	mock_inference = ProviderRegistry.get_inference_provider("sip")
-	mock_inference.generate.side_effect = Exception("Network fail")
+	mock_inference.generate.side_effect = Exception("Network fail")  # type: ignore
 	result = distill_engram("raw content")
 	assert "raw content" in result["summary"]
 	assert result["emotion"] == "neutral"
@@ -66,13 +66,15 @@ def test_perform_sleep_cycle(mock_distill, mock_llm):
 	assert mock_client.delete.called
 
 
-def test_perform_sleep_cycle_no_collection():
+@patch("red_pill.metabolism.sleep._check_llm_available", return_value=True)
+def test_perform_sleep_cycle_no_collection(mock_llm):
 	mock_mem_mgr = MagicMock()
 	mock_mem_mgr.client.collection_exists.return_value = False
 	assert perform_sleep_cycle(mock_mem_mgr) == 0
 
 
-def test_perform_sleep_cycle_empty_buffer():
+@patch("red_pill.metabolism.sleep._check_llm_available", return_value=True)
+def test_perform_sleep_cycle_empty_buffer(mock_llm):
 	mock_mem_mgr = MagicMock()
 	mock_mem_mgr.client.collection_exists.return_value = True
 	mock_mem_mgr.client.scroll.return_value = ([], None)

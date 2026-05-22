@@ -4,8 +4,9 @@ import time
 from typing import Any, Dict
 
 import red_pill.config as cfg
+from red_pill.core.paths import get_state_dir
 
-HEARTBEAT_FILE = os.path.join(cfg.APP_ROOT, "storage", "pulse.json")
+HEARTBEAT_FILE = str(get_state_dir() / "pulse.json")
 
 
 def record_interaction() -> Dict[str, Any]:

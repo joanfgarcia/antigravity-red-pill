@@ -11,9 +11,11 @@ logger = logging.getLogger("validate_bitnet")
 
 def validate():
 	# 1. Configuration (Matching Enterprise Paths)
-	runner_bin = os.path.join(os.getcwd(), "3rdparty/BitNet-1.58b/build/bin/llama-cli")
-	model_path = os.path.join(os.getcwd(), "storage/models/falcon3-10b-instruct-1.58bit.gguf")
-	grammar_path = os.path.join(os.getcwd(), "src/red_pill/inference/bitnet/json.gbnf")
+	from red_pill.core.paths import get_bunker_root, get_models_dir
+
+	runner_bin = os.path.join(str(get_bunker_root()), "3rdparty/BitNet-1.58b/build/bin/llama-cli")
+	model_path = str(get_models_dir() / "falcon3-10b-instruct-1.58bit.gguf")
+	grammar_path = os.path.join(os.path.dirname(__file__), "bitnet", "json.gbnf")
 
 	if not os.path.exists(runner_bin) or not os.path.exists(model_path):
 		logger.error("❌ BitNet Hardware/Model missing at configured paths.")

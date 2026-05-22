@@ -14,30 +14,44 @@ class InferenceRouter:
 	@staticmethod
 	def get_provider_for_task(task_metadata: Dict[str, Any]) -> BaseInferenceProvider:
 		"""
-		Determines the best provider based on task requirements.
-		- local_only: Force BitNet
-		- model_tier: 'ternary' -> BitNet, 'enterprise' -> OpenAI
+		Determines the best provider based on task requirements, validating capabilities
+		and applying graceful degradation to cheaper models if token exhaustion occurs.
 		"""
 		local_only = task_metadata.get("local_only", False)
 		tier = task_metadata.get("model_tier", "standard")
+		required_capability = task_metadata.get("required_capability", "general")
+		strict_validation = task_metadata.get("strict_validation", False)
+
+		providers_to_try = []
 
 		# 1. Force local if requested or if tier is ternary
 		if local_only or tier == "ternary":
-			try:
-				return ProviderRegistry.get_inference_provider("bitnet")
-			except RuntimeError:
-				logger.warning("BitNet provider requested but not registered. Falling back to default.")
+			providers_to_try.append("bitnet")
+		# 2. Try SIP for local-first non-ternary
+		elif tier == "local_first":
+			providers_to_try.extend(["sip", "bitnet"])
+		# 3. Graceful degradation: If tokens run low, use 'cheap' tier (Flash/Mini)
+		elif tier == "cheap":
+			providers_to_try.extend(["flash", "openai_mini", "openai"])
+		else:
+			# Default standard
+			default_key = ProviderRegistry._default_inference_key
+			if default_key:
+				providers_to_try.append(default_key)
+			providers_to_try.extend(["openai", "flash", "sip"])
 
-		# 2. Try SIP for local-first non-ternary (e.g. Samantha)
-		if tier == "local_first":
-			try:
-				return ProviderRegistry.get_inference_provider("sip")
-			except RuntimeError:
-				pass
+		available_providers = ProviderRegistry.list_inference_providers()
+		if not available_providers:
+			# Critical Blindness: Nothing is available. Hardware warnings become fatal here.
+			raise RuntimeError("CRITICAL BLINDNESS: No inference providers available in registry. Hardware/Token failure total.")
 
-		# 3. Default to the primary registered provider (usually OpenAI)
-		try:
-			return ProviderRegistry.get_inference_provider()
-		except RuntimeError:
-			# Final fallback to OpenAI key-based if not registered (defensive)
-			raise RuntimeError("No inference providers available in registry.")
+		for p_key in providers_to_try:
+			if p_key in available_providers:
+				provider = ProviderRegistry.get_inference_provider(p_key)
+				# Run the Capability Exam
+				if provider.validate_task_capability(required_capability):
+					return provider
+				elif strict_validation:
+					raise RuntimeError(f"Strict validation failed: Provider '{p_key}' has not passed the exam for '{required_capability}'.")
+
+		raise RuntimeError(f"No registered inference provider passed the capability exam for task: {required_capability}")

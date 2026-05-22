@@ -8,10 +8,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 import asyncio
 import logging
 
+from red_pill.utils.observer import notify_user
+
 from red_pill.memory import MemoryManager
 from red_pill.swarm.agents.samantha import SamanthaMinion
 from red_pill.swarm.orchestrator import GruOrchestrator
-from red_pill.utils.observer import notify_user
 
 logger = logging.getLogger("samantha_critic")
 

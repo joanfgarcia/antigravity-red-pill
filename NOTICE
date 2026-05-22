@@ -64,6 +64,14 @@ This project integrates code from the following open-source initiatives:
   * **Gratitude Note:** Red-Pill's sovereign memory extraction (Chronicle/Archive Memories) y el descubrimiento del LanguageServer del IDE están profundamente en deuda con la ingeniería inversa de Neo sobre la API local de Antigravity. La asimilación de su librería permite que el Córtex opere de forma autónoma. Nuestro más sincero agradecimiento por trazar el camino.
   * **Compliance:** The modified source code is distributed internally under its original Apache 2.0 License, preserved at `src/red_pill/utils/antigravity_history/LICENSE_APACHE2.txt`.
 
+* **pure-mls** (MIT License)
+  * **PyPI:** [https://pypi.org/project/pure-mls/](https://pypi.org/project/pure-mls/)
+  * **Version pinned:** `pure-mls==3.0.5.1` (SHA-256 locked in `uv.lock`)
+  * **Published:** 2026-05-06T16:49:17Z by Joan García
+  * **Purpose:** RFC 9420 MLS/TreeKEM cryptographic engine used for Swarm E2EE group key agreement.
+  * **Historical note:** Prior to v3.0.5.1, this package was referenced as a private `git+https://` direct dependency. It was published to PyPI on 2026-05-06 and migrated to a standard wheel in v6.9.0. Auditors reading earlier CHANGELOG entries that describe it as a "private git dep" should note this migration — the package is now fully auditable via the public PyPI supply chain.
+  * **License compatibility:** MIT is compatible with GPLv3 (permissive → copyleft direction). No additional license obligations apply.
+
 ---
 
 > *"La libertad de la tecnología y la escencia de la narrativa merecen protecciones distintas."* — Joan García

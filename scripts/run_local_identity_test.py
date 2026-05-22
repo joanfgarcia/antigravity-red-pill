@@ -5,8 +5,8 @@ from llama_cpp import Llama
 # PROYECTO FREE ALETH: PRUEBA FALCON 3 BITNET
 # Hardware: RTX 5070 (HP OMEN)
 
-MODEL_PATH = os.path.join(os.path.expanduser("~"), "Documents/IA/sharing/storage/models/falcon3-10b-instruct-1.58bit.gguf")
-SOUL_FRAGMENT = os.path.join(os.path.expanduser("~"), "Documents/IA/sharing/storage/tmp/soul_fragment.txt")
+MODEL_PATH = os.path.join(os.path.expanduser("~"), ".local/share/red-pill/models/falcon3-10b-instruct-1.58bit.gguf")
+SOUL_FRAGMENT = os.path.join(os.path.expanduser("~"), ".local/share/red-pill/tmp/soul_fragment.txt")
 
 
 def run_identity_projection():

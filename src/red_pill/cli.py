@@ -433,6 +433,21 @@ def main() -> None:
 	int_sub.add_parser("disable", help="Restore baseline AI neutrality")
 	int_sub.add_parser("status", help="Show interceptor state")
 
+	bunker_parser = subparsers.add_parser("bunker", help="Bünker Lifecycle & Orchestration")
+	bunker_sub = bunker_parser.add_subparsers(dest="bunker_cmd")
+	bunker_sub.add_parser("init", help="Hardware profiling and declarative profile generation")
+	bunker_sub.add_parser("install", help="Deterministic installation from bunker profile")
+	bunker_sub.add_parser("update", help="Update codebase and dependencies safely")
+	bunker_sub.add_parser("export", help="Total Sovereign Backup of memory and infrastructure")
+	bunker_restore_parser = bunker_sub.add_parser("restore", help="Rehydrate system from a Total Sovereign Backup")
+	bunker_restore_parser.add_argument("source", nargs="?", help="Path to backup tarball")
+	bunker_restore_parser.add_argument("--kem", help="Optional path to custom Master KEM (vault.seed)")
+	bunker_restore_parser.add_argument("--sig", help="Optional path to custom Signature/State (vault_group.state)")
+	bunker_sub.add_parser("uninstall", help="Wipes environment keeping keys and backups")
+	bunker_sub.add_parser("export-keys", help="Extracts Master Identity to raw tarball")
+	bunker_sub.add_parser("halt", help="[KILL-SWITCH] Emergency halt of all autonomous cognitive operations")
+	bunker_sub.add_parser("resume", help="Restore power to autonomous cognitive operations")
+
 	subparsers.add_parser("telemetry", help="Run a single-pass hardware/Bünker telemetry heartbeat (Oneshot)")
 
 	args = parser.parse_args()
@@ -500,7 +515,7 @@ def main() -> None:
 	# Map CLI type to collection(s)
 	if getattr(args, "type", None):
 		collections = [get_collection(args.type)]
-	elif args.command in ["seed", "status", "swarm", "soul", "init"]:
+	elif args.command in ["seed", "status", "swarm", "soul", "init", "bunker"]:
 		collections = []  # Not needed for these
 	else:
 		# Default sweep for search/diag if no type specified
@@ -516,7 +531,10 @@ def main() -> None:
 			seed_project(manager)
 			return
 		elif args.command == "sleep":
+			from red_pill.core.providers import ProviderRegistry, SipInferenceProvider
 			from red_pill.metabolism.sleep import perform_sleep_cycle
+
+			ProviderRegistry.register_inference_provider("sip", SipInferenceProvider(socket_path=cfg.SIP_SOCKET_PATH))
 
 			print("\n[LAZARUS PULSE] Initiating Maintenance Ritual (Sleep Cycle)...")
 			try:
@@ -614,7 +632,7 @@ def main() -> None:
 		elif args.command == "init":
 			import subprocess
 
-			from red_pill.utils.observer import notify_user
+			from red_pill.core.notifier import SovereignNotifier
 
 			print(f"--- [INITIALIZING SPECS.MD FLOW: {args.flow.upper()}] ---")
 			try:
@@ -625,7 +643,9 @@ def main() -> None:
 				from red_pill import __version__
 
 				print(f"\n[OK] Flow '{args.flow}' initialized on disk (Notebook mode).")
-				notify_user("Project Initialized", f"Red Pill v{__version__} + specs.md {args.flow} flow is now live.", category="init")
+				SovereignNotifier.notify_os(
+					"Project Initialized", f"Red Pill v{__version__} + specs.md {args.flow} flow is now live.", category="init"
+				)
 			except Exception as e:
 				print(f"[FAIL] Initialization failed: {e}")
 			return
@@ -643,6 +663,11 @@ def main() -> None:
 			return
 		elif args.command == "interceptor":
 			handle_interceptor(args)
+			return
+		elif args.command == "bunker":
+			from red_pill.bunker_lifecycle import handle_bunker
+
+			handle_bunker(args)
 			return
 
 		# Loop through requested collections
@@ -707,10 +732,10 @@ def main() -> None:
 					print(f"{key.capitalize().replace('_', ' ')}: {value}")
 			elif args.command == "signal":
 				if args.sig_cmd == "push":
-					from red_pill.utils.observer import notify_user
+					from red_pill.core.notifier import SovereignNotifier
 
 					if not args.silent:
-						notify_user(args.title, args.message, sound=args.sound, category="manual")
+						SovereignNotifier.notify_os(args.title, args.message, sound=args.sound, category="manual")
 
 					# Record memory of the signal (System Signal collections)
 					manager.inject_signal(name=args.title, intensity=args.intensity, signal_type="manual", source="cli")

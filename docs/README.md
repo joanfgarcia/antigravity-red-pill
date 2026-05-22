@@ -83,7 +83,8 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [TEMPORAL_HORIZONS_RESEARCH.md](TECHNICAL/COGNITIVE/TEMPORAL_HORIZONS_RESEARCH.md) | Temporal memory horizon and decay research |
 | [BRAIN_ANIMAL_ANALOGIES.md](TECHNICAL/COGNITIVE/BRAIN_ANIMAL_ANALOGIES.md) | Biological analogies for the memory and immune system architecture |
 | [HYPERVISOR.md](TECHNICAL/COGNITIVE/HYPERVISOR.md) | Cognitive Hypervisor design covering unified resource orchestration |
-| [IMPLEMENTATION_PLAN.md](TECHNICAL/COGNITIVE/IMPLEMENTATION_PLAN.md) | Implementation blueprint for ongoing cognitive upgrades |
+| [IMPLEMENTATION_PLAN_PHASE2.md](TECHNICAL/COGNITIVE/IMPLEMENTATION_PLAN_PHASE2.md) | Phase 2 implementation plan |
+| [INFERENCE_PLUGINS.md](TECHNICAL/INFERENCE_PLUGINS.md) | Inference plugins architecture |
 | [SOVEREIGN_DRIVE.md](TECHNICAL/COGNITIVE/SOVEREIGN_DRIVE.md) | The underlying psychological drives and motivations of the Agent |
 
 ### Bünker
@@ -103,6 +104,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [CERTIFICATION_PROTOCOL.md](TECHNICAL/CERTIFICATION/CERTIFICATION_PROTOCOL.md) | How certification audits are conducted and what they cover |
 | [SMITH_AUDIT.md](TECHNICAL/CERTIFICATION/SMITH_AUDIT.md) | Historical Agent Smith security audit report |
 | [REPORT_CLAUDE_4.6_20260322.md](TECHNICAL/CERTIFICATION/REPORT_CLAUDE_4.6_20260322.md) | Claude Sonnet 4.6 full audit — BETA-READY verdict, 2026-03-22 |
+| [REPORT_CLAUDE_4.6T-THINKING_20260521.md](TECHNICAL/CERTIFICATION/REPORT_CLAUDE_4.6T-THINKING_20260521.md) | Claude Sonnet 4.6 (Thinking) full audit — BETA-READY (elevated), all P0/P1 from prior audit resolved, 2026-05-21 |
 
 ### Operations
 

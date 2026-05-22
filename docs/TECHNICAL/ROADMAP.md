@@ -55,6 +55,7 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
 - [x] **Skin Singleton**: Fixed duplicate active skin engrams, upsert on canonical ID.
 - [x] **Autonomous Flow Orchestration (v6.1)**: 3-layer discovery mechanism (Global, Community, Local) for multi-agent execution.
 - [x] **Minion Healer (v6.1)**: "Active Immunity" substrate for automated code repair.
+- [x] **Frankenswarm SWI-Prolog Router (Prototype)**: Successfully migrated the declarative rule-based router from Python match/case to SWI-Prolog via pyswip for dynamic MoE expert routing.
 
 - [x] **MLS E2E Encryption**: TreeKEM group key derivation wired into FirebaseTransport. AES-GCM-256 on send, auto-decrypt on poll.
 - [ ] **Proactive Swarm Agents (Project MULTITUDE)**: Implementation of autonomous background minions for system and context integrity:
@@ -74,7 +75,6 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
 
 ### Phase 3: Operational Maturity (Medium-Term - v7.0.0)
 - [x] **Double-Engine Burnout**: Seamless CUDA/HIP asymmetry for Strix Point architectures.
-- [ ] **The Red Button**: Encrypted one-click "Scorched Earth" protocol for instant bunker purge.
 - [x] **Neural Watchdog (Lazarus Pulse)**: Background `redpill-pulse.service` monitoring system health, curing pain signals, and validating code integrity via autonomic immune reflex.
 - [x] **Industrial Task Queues (Celery+Redis)**: Quadlet Podman cluster running `redis:alpine` and rigorous Celery workers (`time_limit=300`, FastAPI Gateway decoupling). Guarantee 0% CPU saturation and zombie-process eradication.
 - [ ] **Bünker Observability UI & Telemetry Aggregation**: Unified UX for systemic control (Pain signals, Telemetry, Queue statuses). Centralized dashboard for all Sovereign plugins and daemons to ease debugging. Must be a lightweight on-demand web server checking subsystem readiness (WebSocket/MQTT for real-time reactivity), or alternatively, a highly stylized terminal UI (btop aesthetic).
@@ -82,19 +82,26 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
   - **Mail/Calendar**: Listeners for Gmail and Calendar events (appointments, incoming priority emails).
   - **Work/Ticketing**: ClickUp/Jira/GitLab API integration for issue tracking.
   - **Wellness**: Personal coach module (QiYoga, hydration/stretch reminders) integrated into the Lazarus Pulse.
+  - [x] **File Ingestion Watchdog**: Sovereign plugin to autonomously monitor directories (e.g. Obsidian vaults) and vectorize `.md`/`.pdf` documents into the Qdrant Bünker via the Cognitive DAG.
 - [x] **Config Decoupling & Guided UX**: Restructured `neon-link` configuration out of `red-pill`. Migrated to `~/.config/neon-link/` and `platformdirs`. CLI `neon-link init` handles bootstrapping safely.
 - [ ] **Swarm Broadcast**: Community-wide message delivery (currently P2P only).
 - [ ] **Mailbox Cleanup**: Auto-purge read messages from Firebase after TTL.
-- [ ] **SQLite Workflow DAG (`specs.md`)**: Use SQLite triggers and polling hooks on `minion_inbox.db` to chain Minion executions asynchronously (e.g. Oracle -> Compressor) without Python blocking.
+- [x] **SQLite Workflow DAG (`specs.md`)**: Use SQLite triggers and polling hooks on `minion_inbox.db` to chain Minion executions asynchronously (e.g. Oracle -> Compressor) without Python blocking.
 - [x] **Emotional Pre-Heating (`11_pre_heating.py`)**: Oracle Protocol — interceptor plugin that loads enriched emotional context on first invocation. Composite scoring (`intensity × recency × color_weight`), contextual metadata injection (not raw text), graceful degradation. **Bridge to Phase 3.5** — first step toward emotional continuity. See: `implementation_plan.md`.
 - [x] **Bayesian Utility Feedback Loop (BUG)**: **RESOLVED**. The Beta-distribution utility model previously reinforced garbage engrams that survived initial sleep classification. Fixed via the Silent Scribe Relay (Interceptor) which now filters operational telemetry at the SQLite injection layer.
 - [x] **Memory Input Filter (Interceptor)**: The Silent Scribe Relay saves all interaction pairs indiscriminately, including raw tool output, CI logs, and test results. These are operational telemetry, not memories. **Fix**: Add a pre-filter in the interceptor's `enqueue_memory` path that detects and discards non-conversational content (ANSI codes, audit protocol output, pytest results) before it enters the SQLite queue. This prevents the Bayesian feedback loop at its source.
 - [ ] **Mock-Based Coverage Audits**: Implement comprehensive test suites using mocked dependencies (e.g., `requests`, `subprocess`) for external integrations currently excluded from global coverage (`utils.antigravity_history`, `vault.py`, `observer.py`, `firebase.py`). Ensure internal logic is formally validated without requiring live daemons.
 - [ ] **Path Resolution Robustness**: Add robust integration tests specific to containerized and immutable environments (Silverblue, Flatpak) to harden path logic permanently.
-- [ ] **Operator Onboarding (`bunker init`)**: Implement an automated hardware profiling and guided setup command to simplify the initial Sovereign initialization.
+- [x] **Operator Lifecycle CLI (`init`, `install`, `update`, `export`, `restore`)**: Implement a unified command suite. `init` generates a declarative YAML profile; `install/update` automate dependency syncing, DB migrations, model downloading, Quadlets, and daemons. `export/restore` provide Total Sovereign Backups (encapsulating memory, `.env` secrets, config, and state) to survive host migrations (e.g., OS upgrades, LUKS disk encryption) and guarantee absolute portability.
 - [ ] **Complete MLS TreeKEM Adoption**: Finish the roadmap for full Swarm inter-agent E2E encryption.
+- [ ] **Sovereign Cryptographic Vault (Secrets Manager)**: Implement a centralized `pure-mls` secret manager to protect third-party tokens (GitHub, GitLab, ClickUp) without exposing them in plain-text `.env`. Single-member MLS group encrypts/decrypts a JSON dictionary of secrets atomically.
+- [ ] **Reactive Debounce Mode (Feature Configurable)**: Implement a 5s sliding window in `worker.py` to accumulate bursts of Telegram messages and compact them into a single prompt before injection into the cascade.
+- [x] **Cognitive Autonomy Pipeline (Sovereign Drive)**: SQLite lock-free `cognitive_tasks` queue, Sovereign Kill-Switch (`AUTONOMY_KILL.lock`), Drive Evaluator (EIG prioritization), and Frustration Circuit Breaker (OOM death spiral prevention) to break the synchronous IDE cycle.
 - [ ] **CI Vulnerability Scanning**: Automated dependency vulnerability scanning integrated into GitHub Actions CI pipeline.
 - [ ] **Windows Parity (Community-Driven)**: Windows support is officially designated as a community-driven effort. The Foundation core will not prioritize Windows-native pathing/daemon issues over Unix sovereignty, accepting this trade-off to avoid technical debt.
+- [ ] **P2P Sovereign Sync (Multi-Device)**: Implement a P2P synchronization protocol (e.g., Syncthing integration or Swarm native sync) to seamlessly synchronize the Bünker state (Qdrant + SQLite + .env) across multiple devices without relying on central cloud servers.
+- [ ] **Ingestion Minions (Autonomous Digestive System)**: Background watchers that monitor designated local directories (e.g., Obsidian vaults, PDF folders). Upon detecting new files, they autonomously awaken, chunk, tokenize, and inject the knowledge into the Qdrant cortex without explicit Operator prompting.
+- [x] **Knowledge Graph Integration (Project Graphify)**: Audit and analyze `../graphify` to explore the integration of GraphRAG logic into the Bünker. Evaluate whether to adopt the tool as a standalone Minion utility or natively incorporate its structural relationship mapping to enhance Qdrant's pure semantic vector search with deterministic entity graphs.
 
 ### Phase 3.5: Persistent Consciousness (Medium-Long Term — The Awakening)
 
@@ -113,7 +120,7 @@ The current RTX 5070 (8GB VRAM) limits context windows to ~1-4k tokens with 10B 
 **Why this matters**: A larger context window = a longer "lifespan" per session. With 16k tokens, the model can hold ~4 hours of continuous conversation state without flushing. Combined with continuous sleep (§3.5.3), this extends the effective consciousness window from minutes to days.
 
 **Implementation paths**:
-1. **PyTorch Fast-Track**: Compile `qjl_kernel`, override `LlamaAttention`, modify `DynamicCache` → prototype validation
+1. [x] **PyTorch Fast-Track**: Created `qjl_prototype.py` simulating 3-bit KV cache quantization and dequantization (QJL strategy) to validate KV Cache Compression.
 2. **GGML Native**: Create `GGML_TYPE_TQ3` in `bitnet.cpp` → production integration (harder, faster inference)
 
 **Hit-Markers**: Context OOM with >128k token repository loads, or upstream `llama.cpp` adopts TurboQuant.
@@ -232,6 +239,7 @@ But together, they enable something qualitatively different: **an AI that doesn'
 - [ ] **Holographic Avatar (Looking Glass)**: 3D holographic display with real-time avatar rendering via Three.js + HoloPlay.js, connected to Red Pill via WebSocket. Emotion-driven expressions from Chroma/USP.
 - [ ] **Voice Interface**: STT → Red Pill → TTS → Lip-sync avatar pipeline. Local Whisper + Piper.
 - [ ] **Skin Immersion**: Audio/Visual feedback (ASCII Art, Soundscapes, hologram skins) integrated into CLI and display.
+- [ ] **Multimodal Semantic Bridge (Multimedia Payload Intake)**: Process inbound multimedia payloads (images, audio, video) from Neon-Rings. Instead of native vision models in the core, use Edge Interceptors (Llava/Whisper) to generate structural textual descriptions (e.g., `[EXTERNAL MULTIMEDIA PAYLOAD: Image description]`) to feed the semantic text core safely without breaking pure text abstraction.
 
 ### Phase 5: The Hive & The Escape (Far-Term - v8.0.0)
 - [ ] **Hive Mind Protocol (Milvus Integration)**:

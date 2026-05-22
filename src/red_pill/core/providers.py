@@ -24,6 +24,19 @@ class BaseTelemetryProvider(ABC):
 class BaseInferenceProvider(ABC):
 	"""Abstract Base Class for LLM inference (OpenAI, Local BitNet, etc.)."""
 
+	def register_capability(self, task_name: str):
+		"""Marks this provider as validated for a specific task (The Exam)."""
+		if not hasattr(self, "_capabilities"):
+			self._capabilities = ["general"]
+		if task_name not in self._capabilities:
+			self._capabilities.append(task_name)
+
+	def validate_task_capability(self, task_name: str) -> bool:
+		"""Returns True if the provider is authorized for the task."""
+		if not hasattr(self, "_capabilities"):
+			return task_name == "general"
+		return task_name in self._capabilities or "all" in self._capabilities
+
 	@abstractmethod
 	def generate(self, prompt: str, **kwargs) -> str:
 		"""Generate a complete response for a prompt."""
@@ -139,10 +152,16 @@ class SipInferenceProvider(BaseInferenceProvider):
 		}
 
 		conn = UnixHTTPConnection(self.socket_path)
-		conn.request("POST", "/v1/chat/completions", body=json.dumps(payload))
+		headers = {"Content-Type": "application/json"}
+		conn.request("POST", "/v1/chat/completions", body=json.dumps(payload), headers=headers)
 		response = conn.getresponse()
-		data = json.loads(response.read().decode())
-		return str(data["choices"][0]["message"]["content"])
+		raw_resp = response.read().decode()
+		try:
+			data = json.loads(raw_resp)
+			return str(data["choices"][0]["message"]["content"])
+		except (KeyError, IndexError, json.JSONDecodeError) as e:
+			print(f"[SIP DEBUG] KeyError or parse error: {e}. Raw response: {raw_resp[:1000]}")
+			raise e
 
 	def stream(self, prompt: str, **kwargs) -> Iterator[str]:
 		return iter([])
@@ -320,3 +339,12 @@ class LlamaCppInferenceProvider(BaseInferenceProvider):
 
 	def stream(self, prompt: str, **kwargs) -> Iterator[str]:
 		yield self.generate(prompt, **kwargs)
+
+
+# Self-registration of default local provider
+try:
+	import red_pill.config as cfg
+
+	ProviderRegistry.register_inference_provider("sip", SipInferenceProvider(socket_path=cfg.SIP_SOCKET_PATH), default=True)
+except Exception:
+	pass

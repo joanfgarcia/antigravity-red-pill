@@ -1,0 +1,22 @@
+version: '3'
+services:
+  qdrant-db:
+    image: qdrant/qdrant:latest
+    # Almacenamiento volátil en RAM para que el test sea ultra rápido y no deje basura
+    tmpfs:
+      - /qdrant/storage
+
+  redpill-core:
+    build: 
+      context: .
+      dockerfile: Containerfile
+    depends_on:
+      - qdrant-db
+    environment:
+      - QDRANT_URL=http://qdrant-db:6333
+      - IA_DIR=/home/aleth/.gemini/antigravity
+    # Montamos el código fuente de tu máquina en modo read-only para instalarlo en el sandbox
+    volumes:
+      - ../../:/opt/red-pill-src:ro
+    # Mantener el contenedor vivo para poder inyectar comandos
+    command: tail -f /dev/null

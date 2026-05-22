@@ -1,8 +1,8 @@
 {
     "enabled": true,
     "folder_id": "YOUR_DRIVE_FOLDER_ID",
-    "service_account_file": "/home/joan/Documents/IA/sharing/storage/keys/service_account.json",
-    "client_secrets_file": "/home/joan/Documents/IA/sharing/storage/keys/client_secrets.json",
+    "service_account_file": "~/.agent/credentials/service_account.json",
+    "client_secrets_file": "~/.agent/credentials/client_secrets.json",
     "quota_mb": 2048,
     "reserve_count": 3
 }

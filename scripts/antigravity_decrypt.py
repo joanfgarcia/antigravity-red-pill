@@ -446,7 +446,12 @@ def process_conversation_file(file_path: str, key: bytes, verbose: bool = False)
 		stat = os.stat(file_path)
 		result["metadata"] = {"size": stat.st_size, "modified": stat.st_mtime}
 
-		# Decrypt
+		# Decrypt .pb file
+		pb_path = Path(file_path)
+		session_id = pb_path.stem
+
+		if verbose:
+			print(f"  Decrypting PB file for {session_id}...", file=sys.stderr)
 		decrypted = decrypt_file(file_path, key, verbose)
 		if not decrypted:
 			result["error"] = "Decryption failed"
@@ -466,6 +471,7 @@ def process_conversation_file(file_path: str, key: bytes, verbose: bool = False)
 		result["success"] = True
 		result["metadata"]["field_count"] = len(fields)
 		result["metadata"]["message_count"] = len(messages)
+		result["metadata"]["source"] = "pb_decryption"
 
 	except Exception as e:
 		result["error"] = str(e)

@@ -199,6 +199,163 @@ class SentinelAuditor:
 
 		return report
 
+	def audit_runtime(self) -> AuditReport:
+		"""Run dynamic runtime checks on Daemons and Logs."""
+		report = AuditReport(status="green")
+		self.logger.info("Auditing System Daemons and Runtime Logs...")
+
+		# 1. Find all redpill units
+		units_res = subprocess.run(
+			["systemctl", "--user", "list-units", "--all", "--plain", "--no-legend"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+		)
+		redpill_units = [line.split()[0] for line in units_res.stdout.splitlines() if line.startswith("redpill-")]
+
+		# 2. Check failed systemd units
+		failed_res = subprocess.run(
+			["systemctl", "--user", "list-units", "--state=failed", "--plain", "--no-legend"],
+			stdout=subprocess.PIPE,
+			stderr=subprocess.STDOUT,
+			text=True,
+		)
+		failed_daemons = [line.split()[0] for line in failed_res.stdout.splitlines() if line.startswith("redpill-")]
+
+		if failed_daemons:
+			report.status = "red"
+			report.findings.append(
+				AuditFinding(
+					type="daemon",
+					severity=9.0,
+					message="Failed Red Pill daemons detected:\n" + "\n".join(failed_daemons),
+					metadata={"failed_units": failed_daemons},
+				)
+			)
+
+		# 3. Scan journalctl for errors since last audit using a cursor file
+		all_errors = []
+		if redpill_units:
+			cursor_file = Path.home() / ".agent" / "auditor_journal_cursor"
+			if not cursor_file.exists():
+				# Initialize cursor at the current end of journal to avoid parsing history
+				subprocess.run(["journalctl", "--user", "-n", "0", f"--cursor-file={cursor_file}"])
+
+			cmd = ["journalctl", "--user", f"--cursor-file={cursor_file}", "--no-pager"]
+			for u in redpill_units:
+				cmd.extend(["-u", u])
+
+			jour_res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+			if jour_res.returncode == 0:
+				for line in jour_res.stdout.splitlines():
+					# Case-insensitive check for error signatures
+					line_lower = line.lower()
+					if "error" in line_lower or "exception" in line_lower or "traceback" in line_lower or "fatal" in line_lower:
+						all_errors.append(line)
+
+		if all_errors:
+			report.status = "yellow" if report.status == "green" else report.status
+			detailed_msg = "\n".join(all_errors[:10])
+			if len(all_errors) > 10:
+				detailed_msg += f"\n... and {len(all_errors) - 10} more errors."
+			report.findings.append(
+				AuditFinding(
+					type="journal",
+					severity=6.0,
+					message=f"Recent daemon errors in journal:\n{detailed_msg}",
+					metadata={"error_count": len(all_errors)},
+				)
+			)
+
+		# Calculate global intensity based on findings
+		report.intensity = sum(f.severity for f in report.findings)
+		if any(f.severity >= 8.0 for f in report.findings):
+			report.status = "red"
+		elif report.findings:
+			report.status = "yellow"
+
+		return report
+
+	def audit_vitals(self) -> AuditReport:
+		"""Run dynamic runtime checks on System Vitals (Memory, VRAM, Net)."""
+		report = AuditReport(status="green")
+		self.logger.info("Auditing System Vitals...")
+
+		# -- DYNAMIC PLUGIN DISCOVERY --
+		import importlib
+		import inspect
+		import pkgutil
+
+		import red_pill.config as cfg
+		import red_pill.metabolism.sentinel_plugins as plugins_pkg
+		from red_pill.metabolism.sentinel_plugins.base import SentinelPlugin
+
+		config = cfg.get_config()
+
+		try:
+			for _, name, _ in pkgutil.iter_modules(plugins_pkg.__path__):
+				module = importlib.import_module(f"red_pill.metabolism.sentinel_plugins.{name}")
+				for _, obj in inspect.getmembers(module, inspect.isclass):
+					if issubclass(obj, SentinelPlugin) and obj is not SentinelPlugin:
+						plugin = obj()
+						try:
+							if plugin.is_enabled(config):
+								self.logger.info(f"Executing health check plugin: {plugin.name}")
+								plugin_findings = plugin.audit(config)
+								if plugin_findings:
+									report.findings.extend(plugin_findings)
+						except Exception as e:
+							self.logger.error(f"Plugin {plugin.name} failed during audit: {e}")
+							report.status = "red"
+							report.findings.append(AuditFinding(type="blindness", severity=10.0, message=f"Plugin {plugin.name} CRASHED: {e}"))
+		except Exception as e:
+			self.logger.error(f"Failed to load sentinel plugins: {e}")
+
+		# 3. VRAM Exhaustion
+		vram_res = subprocess.run(
+			["nvidia-smi", "--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits"], stdout=subprocess.PIPE, text=True
+		)
+		if vram_res.returncode == 0 and vram_res.stdout.strip():
+			try:
+				used, total = map(int, vram_res.stdout.strip().split(","))
+				if total > 0 and (used / total) > 0.95:
+					report.status = "yellow" if report.status == "green" else report.status
+					report.findings.append(AuditFinding(type="exhaustion", severity=8.0, message=f"VRAM Exhaustion Risk: {used}/{total} MB"))
+			except Exception:
+				pass
+
+		# 4. Sensory Blindness (Network/LLM)
+		import urllib.error
+		import urllib.request
+
+		try:
+			urllib.request.urlopen("https://api.openai.com/v1/models", timeout=3)
+		except Exception as e:
+			if hasattr(e, "code") and e.code == 401:
+				pass
+			else:
+				report.status = "yellow" if report.status == "green" else report.status
+				report.findings.append(
+					AuditFinding(type="blindness", severity=7.0, message=f"Sensory Blindness: Cannot reach external LLM endpoints ({e})")
+				)
+
+		# 5. OOM Killer in dmesg
+		dmesg_res = subprocess.run(["dmesg", "-T"], stdout=subprocess.PIPE, text=True)
+		if dmesg_res.returncode == 0:
+			oom_lines = [line for line in dmesg_res.stdout.splitlines()[-500:] if "Out of memory: Killed process" in line and "redpill" in line]
+			if oom_lines:
+				report.status = "red"
+				report.findings.append(
+					AuditFinding(
+						type="exhaustion", severity=10.0, message="OOM Killer executed against a redpill process:\n" + "\n".join(oom_lines[-5:])
+					)
+				)
+
+		report.intensity = sum(f.severity for f in report.findings)
+		if any(f.severity >= 8.0 for f in report.findings):
+			report.status = "red"
+		elif report.findings:
+			report.status = "yellow"
+
+		return report
+
 	def sync_to_thalamus(self, report: AuditReport):
 		"""Inject audit findings into signal_memories."""
 		self.logger.info(f"Sentinel Analysis complete. Status: {report.status}. Intensity: {report.intensity}")

@@ -26,6 +26,18 @@ async def main():
 		except Exception as e:
 			logger.error(f"Failed to audit {repo}: {e}")
 
+	try:
+		runtime_report = auditor.audit_runtime()
+		auditor.sync_to_thalamus(runtime_report)
+	except Exception as e:
+		logger.error(f"Failed to audit runtime: {e}")
+
+	try:
+		vitals_report = auditor.audit_vitals()
+		auditor.sync_to_thalamus(vitals_report)
+	except Exception as e:
+		logger.error(f"Failed to audit vitals: {e}")
+
 	logger.info("Sentinel Auditor: Audit cycle complete.")
 
 

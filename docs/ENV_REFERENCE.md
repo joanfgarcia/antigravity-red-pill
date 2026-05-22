@@ -1,4 +1,4 @@
-# Red Pill Protocol: Environment Configuration Reference (v6.1)
+# Red Pill Protocol: Environment Configuration Reference (v7.0)
 
 This document provides a comprehensive list of all parameters available in the `.env` file, their purposes, default values, and what specific behaviors they activate or deactivate within the Bünker ecosystem.
 
@@ -120,6 +120,7 @@ Plugins 05–10. Each is independently toggleable.
 | `SLEEP_PLUGIN_DREAM` | `True` | Oneiromancy: latent semantic association. |
 | `SLEEP_PLUGIN_CONSOLIDATION` | `True` | Hub Synthesis + memory consolidation. |
 | `SLEEP_PLUGIN_CHRONICLE` | `True` | Ariadne's Thread weaving across all 4 collections. Requires `ANTIGRAVITY_KEY`. |
+| `SLEEP_MIN_FREE_VRAM_MB` | `1500` | Minimum free VRAM (MB) required to start the sleep cycle. If the GPU has less free VRAM at 03:00 (e.g. occupied by a game or other model), the cycle aborts gracefully and emits a muted `vram_busy` pain signal. Set to `0` to disable the preflight check. CPU-only systems are unaffected. |
 
 ### ⚖️ BE_WATER Adaptive Payload (v6.3.0)
 

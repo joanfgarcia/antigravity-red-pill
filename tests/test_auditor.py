@@ -45,3 +45,66 @@ def test_audit_repo_all_green(mock_run, auditor):
 	assert report.status == "green"
 	assert len(report.findings) == 0
 	assert report.intensity == 0.0
+
+
+@patch("subprocess.run")
+def test_audit_runtime_daemon_failure(mock_run, auditor):
+	mock_units = MagicMock()
+	mock_units.returncode = 0
+	mock_units.stdout = "redpill-worker.service\nredpill-pulse.service"
+
+	mock_failed = MagicMock()
+	mock_failed.returncode = 0
+	mock_failed.stdout = "redpill-worker.service"
+
+	mock_journal = MagicMock()
+	mock_journal.returncode = 0
+	mock_journal.stdout = "Nov 01 12:00:00 Error: connection failed\nNov 01 12:01:00 Normal log line"
+
+	mock_run.side_effect = [mock_units, mock_failed, mock_journal]
+
+	with patch("pathlib.Path.exists", return_value=True):
+		report = auditor.audit_runtime()
+	assert report.status == "red"
+	assert any(f.type == "daemon" for f in report.findings)
+	assert any(f.type == "journal" for f in report.findings)
+
+
+@patch("subprocess.run")
+def test_audit_vitals_exhaustion(mock_run, auditor):
+	mock_vram = MagicMock()
+	mock_vram.returncode = 0
+	mock_vram.stdout = "7800,8192"  # > 95% used
+
+	mock_dmesg = MagicMock()
+	mock_dmesg.returncode = 0
+	mock_dmesg.stdout = "Out of memory: Killed process 1234 (redpill-worker)"
+
+	mock_run.side_effect = [mock_vram, mock_dmesg]
+
+	# We mock urllib and sqlite3 since those hit real system components
+	with patch("urllib.request.urlopen"), patch("pathlib.Path.exists", return_value=False):
+		report = auditor.audit_vitals()
+
+	assert report.status == "red"
+	assert any(f.type == "exhaustion" and "OOM Killer" in f.message for f in report.findings)
+	assert any(f.type == "exhaustion" and "VRAM Exhaustion" in f.message for f in report.findings)
+
+
+@patch("subprocess.run")
+def test_audit_vitals_all_green(mock_run, auditor):
+	mock_vram = MagicMock()
+	mock_vram.returncode = 0
+	mock_vram.stdout = "1024,8192"  # Low usage
+
+	mock_dmesg = MagicMock()
+	mock_dmesg.returncode = 0
+	mock_dmesg.stdout = "System functioning normally"
+
+	mock_run.side_effect = [mock_vram, mock_dmesg]
+
+	with patch("urllib.request.urlopen"), patch("pathlib.Path.exists", return_value=False):
+		report = auditor.audit_vitals()
+
+	assert report.status == "green"
+	assert len(report.findings) == 0

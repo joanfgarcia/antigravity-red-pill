@@ -28,6 +28,24 @@ Updates within the Red Pill ecosystem are not just code deployments; they are **
     3. **Changelog Diffing**: You MUST strictly compare the *incoming* `CHANGELOG.md` against your *current/local* `CHANGELOG.md` to map behavioral changes and evaluate risks *before* initiating any structural purge (rsync).
 *   **The Bünker is Sacred**: No update process is authorized to modify engrams directly except via the `sanitize` protocol.
 
+
+## 1.1 The XDG Architectural Mandate (v6.9.2+)
+
+> [!CAUTION]
+> ### 🛑 THE "storage/" DIRECTORY IS BANNED. DO NOT CREATE IT. DO NOT REFERENCE IT.
+> Version **v6.9.2** executed a complete architectural shift to the **Linux XDG Base Directory Standard**.
+> ANY Agent attempting to read/write to `APP_ROOT/storage/` or hardcoding paths using `os.path.join(..., "storage")` will cause critical failure and will be rejected by the `test_xdg_compliance.py` Smith Filter.
+
+**All Paths Must Be Resolved via `red_pill.core.paths`:**
+*   **Data & Qdrant**: `get_data_dir()` -> `~/.local/share/red-pill/`
+*   **SQLite DBs**: `get_db_dir()` -> `~/.local/share/red-pill/db/`
+*   **FastEmbed Models**: `get_models_dir()` -> `~/.local/share/red-pill/models/`
+*   **Async Queues**: `get_queue_dir()` -> `~/.local/share/red-pill/queue/`
+*   **Config & Env**: `get_config_dir()` -> `~/.config/red-pill/`
+*   **Backups**: `get_backup_dir()` -> `<IA_DIR>/backups/red-pill/` (The only exception explicitly defined by user).
+
+**Agent Mandate:** When modifying ANY script, test, or documentation, verify that XDG paths are used dynamically. Never assume the current working directory contains the state.
+
 ## 2. Stability & Trust Channels
 
 We operate two distinct synchronization channels:
@@ -52,15 +70,16 @@ If you are transitioning from a legacy version (e.g., v4.1.x or older) to the cu
 
 ### 🛡️ Infrastructure Migration (v6.1.0+)
 If updating to v6.1.0 or higher, you must synchronize your infrastructure parameters:
-1.  **Redefine Cache**: Add `FASTEMBED_CACHE_PATH` to your `.env` (recommended: `{IA_DIR}/storage/models`).
+1.  **Redefine Cache**: Add `FASTEMBED_CACHE_PATH` to your `.env` (MUST BE: `~/.local/share/red-pill/models`).
 2.  **Define Engine**: Add `CONTAINER_ENGINE` to your `.env` (`podman` or `docker`).
 3.  **Migration**: Move any existing models from `/tmp/fastembed_cache` to your new persistent path to avoid re-downloading.
 4.  **USP Genesis**: Run `uv run red-pill sanitize` to ensure the `ID_OPERATOR_MOOD` engram exists in `directive_memories`. If not present, it will be seeded automatically.
 5.  **Skin Singleton**: Run `uv run red-pill search directive "Active Skin"` and verify only ONE result. If duplicates exist, purge them manually.
 6.  **Infrastructure Sync (Quadlets)**: If using Podman/Docker Quadlets, you must synchronize the `QDRANT__SERVICE__API_KEY` in the `.container` file if the `.env` changes.
     *   **Check**: `cat ~/.config/containers/systemd/qdrant.container`
+    *   **MANDATORY XDG VERIFICATION**: COMPRUEBA QUE EL VOLUME APUNTA A `~/.local/share/red-pill/db` Y NUNCA A `storage/`. LA CARPETA `storage/` ESTÁ BANEADA POR EL ESTÁNDAR XDG Y ROMPERÁ EL SISTEMA.
     *   **Action**: Restart service: `systemctl --user daemon-reload && systemctl --user restart qdrant.service`
-7.  **Service Restart**: Run `systemctl --user restart redpill.service` to apply the new persistent environment.
+7.  **Services Sync**: Ensure you reload and enable the correct new event-driven services and timers: `systemctl --user daemon-reload && systemctl --user enable --now redpill-neonlink.service redpill-worker.service` (The legacy monolithic `redpill.service` is deprecated and must remain disabled).
 8.  **Qdrant Kill-Switch (SEC-02)**: If your Qdrant instance is exposed to the local network (`0.0.0.0`) or hosted remotely, the protocol will now refuse to boot unless you define a `QDRANT_API_KEY` in your `.env`. This is a hard-coded security protection.
 9.  **Google Drive Token Migration**: Your existing `token.json` for Cloud Vault backups will be automatically migrated to `~/.agent/credentials/drive_token.json` internally on boot. No re-authentication is required.
 10. **Sovereign Persistence (Protocol 770)**: Run `uv run python scripts/schedule_pulse.py` manually once. This cross-platform tool configures a 1-minute interval for the interaction queue, ensuring near-real-time memory persistence.
@@ -312,8 +331,8 @@ Replace old version with new in all 6 file locations before pushing.
 
     **2. Queue Boundary Isolation**:
     The persistent databases `bunker_queue.db` and `minion_inbox.db` have been moved from the host-specific runtime path to the isolated storage layer.
-    - **New Path**: `<IA_DIR>/storage/queue/`
-    - **Migration**: The installer now creates this directory. Existing queues will be automatically relocated on first boot of v6.3.4.
+    - **New Path**: `~/.local/share/red-pill/queue/`
+    - **Migration**: The installer now creates this XDG directory. Existing queues will be automatically relocated on first boot.
 
     **3. Auto-Upgrade Script**:
     A new utility `scripts/upgrade.sh` is provided to automate the pull-and-sanitize workflow safely.
@@ -507,6 +526,14 @@ The `perform_sleep_cycle()` function in `src/red_pill/metabolism/sleep.py` has t
     - **Action**: Ensure your local environment is running `neon-link` version 0.3.2 or higher.
     - **Verify**: Check `uv pip list | grep neon-link`. If it is lower, run `uv sync` to update the dependencies.
 
+    #### §4.23 Autonomous Cognitive DAG (v6.10.0)
+
+    The cognitive asynchronous queue (`minion_inbox.db`) now supports Directed Acyclic Graph (DAG) task chaining directly via SQLite state tracking. Tasks can be enqueued with a `parent_task_id`, keeping them in a `BLOCKED` state until the parent task triggers `mark_completed()`, which atomically unlocks them.
+
+    **1. Schema Migration**:
+    The system automatically executes a non-destructive `ALTER TABLE` during initialization to add the `parent_task_id` column to `cognitive_tasks`.
+    - **Action**: No manual database migration or `upgrade.sh` intervention is required. The Python layer handles the schema evolution safely via `queue_manager.py`.
+
 ## 5. Hierarchy of Directives
 
 Upon completion of any update, the agent **MUST** immediately execute:
@@ -643,7 +670,8 @@ This is the critical step. `rsync --delete` ensures files that no longer exist i
 rsync -av --delete \
   --exclude='.git/' \
   --exclude='.env' \
-  --exclude='storage/' \
+  --exclude='.local/' \
+  --exclude='.config/' \
   --exclude='.venv/' \
   --exclude='3rdparty/' \
   --exclude='__pycache__/' \
@@ -653,7 +681,7 @@ rsync -av --delete \
 ```
 
 > [!IMPORTANT]
-> The `--exclude` flags protect your local-only directories (`.git`, `.env`, `storage/`, `.venv/`, `3rdparty/`). These are never part of the ZIP and must not be touched.
+> The `--exclude` flags protect your local-only directories (`.git`, `.env`, `storage/`, `.venv/`, `3rdparty/`). These are never part of the ZIP and must not be touched. Note: User state is now entirely outside the repo (`~/.local/share/red-pill` and `~/.config/red-pill/`), so `rsync` will naturally not touch them.
 >
 > If the ZIP has no prefix directory, adjust the source path accordingly.
 
@@ -739,7 +767,7 @@ diff -urN \
   --exclude='.git' --exclude='.venv' \
   --exclude='__pycache__' --exclude='*.pyc' \
   --exclude='build' --exclude='decrypted' --exclude='test_decrypted' \
-  --exclude='storage' --exclude='storage_*' \
+  --exclude='.local' --exclude='.config' \
   --exclude='dependencies' --exclude='.specsmd' \
   /path/to/virgin_red_pill /path/to/local/sharing > red_pill_changes_clean.patch
 ```

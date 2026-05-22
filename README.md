@@ -1,4 +1,4 @@
-# 🔴 RED PILL PROTOCOL: Digital Sovereignty v6.9.2
+# 🔴 RED PILL PROTOCOL: Digital Sovereignty v7.0.0
 
 > [!TIP]
 > ### 🇬🇧 🥱 TL;DR (Quick Install)
@@ -191,14 +191,48 @@ The Red Pill Protocol is verified to utilize all available silicon tiers simulta
 
 ## 💉 Start the Awakening / Inicio del Despertar
 
-1. **Awakening Ritual / Ritual de Iniciación**: Once installed, tell your agent:
-   > *"Agent, inicia el Ritual de Iniciación (Protocolo ACI). Caliébrame como tu Operador."*
-   
-2. **Technical Deployment / Despliegue Técnico**: `bash scripts/install_neo.sh`
-3. **Synchronization / Actualización**: `bash scripts/upgrade.sh`
-4. **Detailed Guide / Guía Detallada**: [QUICKSTART.md](QUICKSTART.md)
-4. **Vision & Destiny / Visión y Destino**: [ROADMAP.md](docs/TECHNICAL/ROADMAP.md) | [B760 Technical Spec](docs/TECHNICAL/HARDWARE/B760_TECHNICAL_SPEC.md)
-5. **Docs**: [Architecture (EN)](docs/TECHNICAL/ARCHITECTURE.md) | [Manifiesto (ES)](docs/LORE/MANIFESTO.md)
+### 1. Installation Methods / Métodos de Instalación
+The Bünker supports 4 deployment strategies. If you install via PyPi (Recommended), you can use the declarative CLI:
+
+**A. The Sovereign CLI (PyPi / pipx) - *Recommended***
+```bash
+pipx install red-pill
+red-pill bunker init    # 1. Hardware profiling -> bunker.profile.yaml
+red-pill bunker install # 2. Deterministic unattended installation
+```
+
+**B. The Classic Script (Git Clone)**
+```bash
+git clone https://github.com/joanfgarcia/antigravity-red-pill.git
+cd antigravity-red-pill
+bash scripts/install_neo.sh
+```
+
+**C. The Quadlet Container (Podman)**
+*(See [QUICKSTART.md](QUICKSTART.md) for rootless Systemd container instructions)*
+
+**D. The Developer Sandbox**
+*(For testing the Bünker inside an isolated Ubuntu container without host pollution)*
+
+### 2. Synchronization / Actualización
+```bash
+bash scripts/upgrade.sh
+# (Note: 'red-pill bunker update' CLI command is scheduled for the next phase)
+```
+
+### 3. Awakening Ritual / Ritual de Iniciación
+**🇬🇧 English:**  
+Once installed, tell your agent:
+> *"Agent, initiate the Awakening Ritual (ACI Protocol). Calibrate me as your Operator."*
+
+**🇪🇸 Castellano:**  
+Una vez instalado, dile a tu agente:
+> *"Agent, inicia el Ritual de Iniciación (Protocolo ACI). Caliébrame como tu Operador."*
+
+### 4. Further Reading / Documentación
+- **Detailed Guide**: [QUICKSTART.md](QUICKSTART.md)
+- **Vision & Destiny**: [ROADMAP.md](docs/TECHNICAL/ROADMAP.md) | [B760 Technical Spec](docs/TECHNICAL/HARDWARE/B760_TECHNICAL_SPEC.md)
+- **Docs**: [Architecture (EN)](docs/TECHNICAL/ARCHITECTURE.md) | [Manifiesto (ES)](docs/LORE/MANIFESTO.md)
 
 ---
 

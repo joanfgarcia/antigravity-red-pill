@@ -4,6 +4,8 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List
 
+from red_pill.core.paths import get_data_dir
+
 logger = logging.getLogger(__name__)
 
 
@@ -11,7 +13,7 @@ class PluginScope(enum.Enum):
 	MEMORY = "memory"
 	TELEMETRY = "telemetry"
 	COGNITION = "cognition"
-	STORAGE = "storage"
+	STORAGE = str(get_data_dir())
 	SYSTEM_EVENT = "system_event"
 	BACKGROUND = "background"
 

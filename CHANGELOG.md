@@ -1,3 +1,91 @@
+## [7.0.0] - Unreleased
+
+### 🏎️ Sovereign Daemon Hardware Affinity & OS Independence
+- **[FEAT] Dynamic Hardware Affinity**: Implemented dynamic VRAM profiling in `model_registry.py`. Models dynamically offload layers (`n_gpu_layers`) based on active system VRAM thresholds (configured via `vram_tiers` in `model_profiles.yaml`).
+- **[FEAT] Platform-Independent Daemons**: Extended `setup_background_model.sh` and `sleep.py` to support low-priority CPU priorization (`Nice=19`, `lowpriorityio`) and launch configurations for both Linux (systemd) and macOS (LaunchAgents).
+- **[FIX] Sleep Engine UDS Deadlock**: Overhauled `_check_llm_available` in `sleep.py` to capture connection errors, proactively remove stale UDS socket files, and automatically fallback to TCP probing to prevent hypervisor start deadlock.
+- **[FIX] StartCascade API Validation**: Corrected gRPC-Web client payload in `ide_client.py` by adding `"source": "CORTEX_TRAJECTORY_SOURCE_AGENT_API"` to satisfy trajectory source validations.
+- **[ARCH] Total Path Centralization**: Overhauled all remaining hardcoded `~/.agent/` references in `sleep.py`, `ls_snatcher.py`, `config.py` and `manager.py`, routing them through central resolvers in `paths.py` in accordance with `CONVENTIONS.md`.
+
+### ⚡ VRAM-Aware Sleep Cycle (Hardware-Agnostic)
+- **[FEAT] `VramProbe`**: New `src/red_pill/core/vram_probe.py` module with hardware-agnostic free VRAM detection. Supports CUDA (nvidia-smi `memory.free`), ROCm (sysfs DRM `mem_info_vram_total - mem_info_vram_used`), and CPU fallback (0 MB → most conservative tier). No cache — always queries fresh at call time.
+- **[FEAT] VRAM Preflight Check**: `perform_sleep_cycle()` now calls `VramProbe.get_free_mb()` before launching the ephemeral LLM server. If free VRAM is below `SLEEP_MIN_FREE_VRAM_MB` (default: 1500 MB), the cycle aborts gracefully with a muted `vram_busy` pain signal instead of competing for VRAM at 03:00. CPU-only systems are unaffected.
+- **[FEAT] Auto-evaporation of `vram_busy`**: On successful sleep cycle completion, `vram_busy` is automatically cleared via `SovereignNotifier.clear_bunker_signal()` — no Auto-Healer intervention required.
+- **[REFACTOR] `ModelRegistry` VRAM tier semantics**: Renamed `limit_gb` → `min_free_gb` in `vram_tiers`. Now represents minimum **free** VRAM (not total installed). Values in `model_profiles.yaml.example` lowered by ~1 GB to account for driver/framebuffer overhead.
+- **[REFACTOR] `EphemeralServer` extraction**: Extracted the ~60-line inline ephemeral LLM server startup/teardown block from `perform_sleep_cycle()` into an `EphemeralServer` class (`start()` / `stop()`). Startup strategy (systemd → launchd → subprocess+cgroup) is now encapsulated and independently testable.
+- **[CONFIG] `SLEEP_MIN_FREE_VRAM_MB`**: New `.env` parameter (default: 1500). Set to `0` to disable the VRAM preflight check entirely.
+- **[SEC] Remove `allow-direct-references = true`**: Removed legacy Hatch metadata option. All dependencies (including `pure-mls`) are now standard PyPI packages. No direct git references remain in the dependency tree.
+
+### 📊 Supply Chain Transparency (pure-mls)
+- **[SEC] pure-mls PyPI migration documented**: `pure-mls==3.0.5.1` has been published to PyPI since 2026-05-06. The `pyproject.toml` dependency now carries an explicit inline comment documenting the PyPI URL and the historical git reference migration. `allow-direct-references` removed. Added to `NOTICE` with license and PyPI provenance.
+- **[DOCS] CHANGELOG historical correction**: Entry from v6.4.1 that described pure-mls as a "private git dep" filtered from pip-audit has been annotated with a correction note — this was true at that point in time but is no longer the case.
+
+### 🛡️ Audit & Vulnerability Remediation (v7.0.0 Release Hardening)
+- **[SEC] Read-Only Environment Mounts (1B)**: Hardened Docker services inside `docker/queue/compose.yaml`. The `.env` volume mounts for both `celery-worker` and `api-gateway` are now explicitly flagged read-only (`:ro`). This eliminates container escape vectors involving host-side environment rewriting.
+- **[QA] Git Leakage Cleanup (1C)**: Untracked and excluded `tests/test_results.txt` from the repository index. Added an explicit exclude rule to the root `.gitignore` to prevent host-specific execution data from leaking into public code tracking.
+- **[SEC] Dependency Vulnerability Fix (CVE-2026-45409)**: Upgraded transitive dependency `idna` from `3.11` to `3.15` in `uv.lock`, eliminating the security vulnerability reported by `pip-audit`.
+- **[CI/CD] Purge Outdated pure-mls Warning**: Cleaned up the pip-audit step in `.github/workflows/ci.yml`. Since `pure-mls` has been published on PyPI, we removed the custom filtering logic and the legacy git dependency warning, allowing `pip-audit` to naturally verify it.
+
+
+### 🧭 Sovereign Drive & Structural Graph (Cognitive Autonomy Pipeline)
+- **[FIX] Telegram Ghost Responses**: Resolved trajectory truncation issues by implementing `TelegramResponseExtractor` to read directly from `overview.txt` bypassing gRPC limits.
+- **[FEAT] Telegram Headless Sessions**: Added `/new` command to Neon-Link allowing the operator to start and anchor to fresh, headless cascades directly from Telegram.
+- **[FEAT] Sovereign Drive & Ambition Mode**: Fully integrated `DriveEvaluator` into the `IDEWorker` loop. The Bünker now possesses "Ambition", evaluating system entropy during idle times and injecting proactive architectural maintenance tasks via the `CognitiveQueueManager` without human intervention.
+- **[FEAT] Graphify Knowledge Graph RAG**: Deployed the AST-based Knowledge Graph (`graphify`) as a sovereign MCP plugin. The agent is now structurally aware and can traverse dependencies natively.
+- **[FEAT] Decoupled Graphify Architecture**: Added the `GRAPHIFY_RAG_ENABLED` flag in `config.py`. The background AST sync is strictly conditional, preventing crashes if the server is not installed locally.
+- **[DOCS] Field Agent Anchor Protocol**: Created the `project_anchor_management` skill to instruct all Field Agents on how to create, read, and maintain the `.agent/ATLAS.md` Cognitive Anchor in any repository.
+- **[FEAT] Sovereign Project Scaffolding**: Upgraded the `scaffold-sovereign-project` skill. It now automatically provisions the `.agent/ATLAS.md` initial anchor during `uv init`, ensuring all new projects are born self-aware.
+
+### 🏗️ Sovereign Architecture & XDG Standard
+- **[ARCH] Total XDG Base Directory Enforcement**: Executed a "heart surgery" refactor completely eradicating hardcoded `storage/` directory paths across the entire Red-Pill and Neon-Link ecosystem. All data now complies strictly with Linux XDG standards (`~/.config`, `~/.local/share`, `~/.local/state`), handled via `platformdirs` inside `paths.py`.
+- **[HEAL] XDG Smith Filter**: Added an autonomous static-analysis unit test (`test_xdg_compliance.py`) and a strict `CONVENTIONS.md` manifesto rule to instantly fail any PR attempting to reintroduce localized `storage/` patterns.
+- **[HEAL] Database Path Collision Resolution**: Resolved critical `sqlite3.OperationalError` collision logic inside `worker.py` ensuring it queries `cognitive_tasks` directly from the XDG-compliant `bunker_queue.db` without cross-polluting `events.db`.
+- **[FIX] XDG Pulse & Background Pathing**: Patched `schedule_pulse.py` to correctly register `bunker_telemetry.py` timers. Fixed `setup_background_model.sh` to construct the local LLM daemon with strict XDG cache paths (`~/.local/share/red-pill/models/`) instead of relative dirs.
+- **[FIX] Zero-Conf Smith Guard**: Eradicated absolute `/home/joan/` paths from `cloud_sync.json.example` in favor of agnostics (`~/.agent/credentials/`). Cleaned up legacy `storage/queue/` contradiction in the `AGENT_UPDATE_GUIDE.md`.
+
+### 🧠 Sovereign Chronicle & Archival Pipeline
+- **[HEAL] Chronicle LS Fallback Reversion**: Disabled the AES GCM decryption path due to Protobuf binary parsing incompatibilities with legacy keys. The extraction pipeline now defaults securely and exclusively to the native LanguageServer (`aghistory export`), yielding 100% data coherence.
+- **[SEC] Working Tree Cleanliness**: Instituted `CONVENTIONS.md` Rule 2 enforcing strict `scratch/` directory isolation for ad-hoc scripts and outputs. Purged >3900 `graphify-out` cache artifacts and 12GB backend `.tar.gz` dumps from the Git index, isolating them in `.gitignore`.
+- **[HEAL] Chronicle Fallback Optimization**: Refactored `chronicle_daily.py` to prioritize `ANTIGRAVITY_KEY` AES decryption for unadulterated historical accuracy. Native LanguageServer `aghistory export` is now an automated HTTP fallback if the key is missing or IDE is closed.
+- **[SEC] Overview Fast-Path Purge**: Eradicated the unreliable `overview.txt` parsing fast-path from `antigravity_decrypt.py` to ensure only cryptographically verified or IDE-exported (JSON) conversations are ingested, preventing truncation bugs on massive conversations.
+- **[VERIFIED] LanguageServer Pagination Ceiling**: Conducted tests proving the IDE API lacks a 500-step ceiling; it seamlessly returns up to 4125+ context-dense steps natively, ensuring the fallback is fully lossless.
+
+### 🤖 Sovereign Daemon & Cognitive Queue
+- **[FEAT] File Ingestion Watchdog**: Created the `file_ingestion` sovereign plugin. Utilizes `watchfiles.awatch` to asynchronously monitor `cfg.INGESTION_DIRECTORIES` and autonomously enqueues background vectorization DAG tasks whenever new `.md`, `.txt`, or `.pdf` files are dropped by the Operator.
+- **[REFACTOR] Centralized Sovereign Notifier**: Deprecated and purged `observer.py`. Centralized all OS-level desktop alerts (`notify-send`) and Bünker pain signals into a unified `SovereignNotifier` class, enforcing the Single Responsibility Principle across all background services.
+- **[FEAT] Autonomous Ephemeral Sleep**: Upgraded `sleep.py` to transparently spawn an Ephemeral Local LLM Server using `systemd-run` (`MemoryMax=10G`) for nocturnal memory consolidation, shutting it down immediately after. Integrated OS Desktop Notifications (`notify-send`) and database pain signals to keep the Operator informed without polluting the IDE cascade.
+- **[FEAT] Autonomous Cognitive DAG**: Upgraded `CognitiveQueueManager` to support `parent_task_id`, enabling asynchronous dependency chaining (DAG) inside the SQLite queue.
+- **[FEAT] Zero-Daemon Plugin Architecture**: Refactored `queue_worker.py` to process DAG tasks dynamically via `MinionFactory`. Eradicated hardcoded routing, ensuring minions act as decoupled plugins executed efficiently via systemd oneshot timers.
+- **[FEAT] Janitor Minion**: Implemented `JanitorMinion` as an independent swarm agent to autonomously purge stale events (`events.db`) and scratch files older than 7 days, maintaining long-term system sanity and preventing polling slowdowns. Deployed via a daily Systemd timer (`redpill-janitor.timer`).
+- **[HEAL] Telegram Pipeline Command Routing**: Fixed nested JSON payload parsing in `worker.py` to prevent recursive IDE AI inferences during system commands (e.g. `/list`).
+- **[HEAL] Ghost Process Purge**: Resolved a massive latency and loop bug caused by a stale polling `worker.py` process running in the background, enforcing exclusivity for the `redpill-worker.service`.
+- **[FEAT] SovereignDaemon**: Finalized `daemon.py` orchestrating task fetching and Right to Silence execution via systemd heartbeat.
+- **[FEAT] Cognitive Queue**: Implemented SQLite-backed Bayesian task queue (`cognitive_queue.py`) with frustration circuit breaker to prevent infinite loops.
+- **[FEAT] Dynamic Worker Scheduling**: Upgraded `schedule_pulse.py` to deploy `redpill-worker.timer` with a **1-minute interval** by default, optimizing Telegram-to-IDE latency.
+- **[ARCH] Dynamic Database Discovery**: Added `run_sovereign_daemon.py` to automatically resolve the active `cognitive_queue.db` across changing conversation contexts without hardcoding paths.
+- **[HEAL] Mypy/Ruff Strict Compliance**: Resolved 16 latent type and syntax validation errors across `ide_client.py`, `worker.py`, `kill_switch.py`, and `antigravity_decrypt.py`, enforcing 100% compliance with the Sound of Silence standard.
+- **[HEAL] Sound of Silence Enforcement**: Harmonized indentation (tabs over spaces) across Sentinel plugins, dispatcher, and Prolog expert modules to strictly comply with the Protocol of Silence.
+
+### 🧠 Sovereign Routing & Cognitive Degradation
+- **[ARCH] Task Capability Exam**: Introduced strict validation inside `BaseInferenceProvider` (`validate_task_capability`). Models must now explicitly pass an authorization "exam" before they can be assigned to specialized tasks.
+- **[HEAL] Graceful Token Degradation**: Upgraded `InferenceRouter.get_provider_for_task()`. If the Bünker initiates low-priority tasks or encounters 429/402 quota limits, it autonomously downgrades to `tier="cheap"` (e.g. Flash/Mini) to preserve the Operator's API budget.
+- **[HEAL] Hardware Fault Tolerance**: Missing local accelerators (CUDA/ROCm) now gracefully trigger fallbacks rather than halting the swarm. A `CRITICAL BLINDNESS` exception only fires if the registry is completely empty.
+
+### 🩺 Sovereign Vitality (Project IMMUNITY)
+- **[HEAL] Advanced Sentinel Auditor (Runtime & Vitals)**: Expanded the `SentinelAuditor` from a static code analyzer into a full sovereign immune system.
+  - **[FEAT] Runtime Monitoring**: Added `audit_runtime()` to proactively monitor `systemctl --user` daemon states (e.g. `redpill-worker.service`) and continuously parse `journalctl --user` for errors, using a persistent cursor (`~/.agent/auditor_journal_cursor`) to prevent infinite pain loops.
+  - **[FEAT] Biological Vitals (`audit_vitals`)**: Added 5 physiological checks: Qdrant network availability (`localhost:6333`), Neon-Link SQLite DB integrity (`events.db`), VRAM thermal limits (`nvidia-smi` > 95%), Network/Sensory blindness (LLM endpoint HTTP ping), and Kernel-level death (OOM Killer logs via `dmesg`).
+  - **[FEAT] Zero-Impact Telemetry**: All vitals are collected using OS-native micro-binaries without background blocking threads, syncing failures natively into the Qdrant Cortex as `signal_memories`.
+
+### 🚀 Sovereign Drive & One-Click Ecosystem (Foundation)
+- **[FEAT] Operator Lifecycle CLI**: Implemented `bunker export`, `restore`, and `uninstall` commands. This formalizes a declarative, deterministic "Plug-and-Play" architecture.
+- **[FEAT] Sovereign Backup**: `bunker export` encapsulates memory (Qdrant snapshots), `.env` secrets, and SQLite queues into a single Pure-MLS encrypted `.tar.gz.mls`.
+- **[SEC] Cryptographic Paranoia Guard**: `bunker uninstall` features MFA local confirmation and safely stashes `~/.config/red-pill/keys` to prevent locking the operator out of their backups. Introduced `bunker export-keys` for offline cold storage.
+- **[TEST] E2E Sandbox Suite**: Created `tests/sandbox/` using Podman (Ubuntu 24.04 + Qdrant) and `test_lifecycle.sh` to fully simulate the init-inject-export-purge-restore cycle without host pollution.
+- **[ARCH] Multimodal Semantic Bridge**: Designed the Edge Interceptor for Neon-Link to handle incoming P2P multimedia payloads (images, audio) via local border models (Llava/Whisper), protecting the text-pure core of the Red Pill.
+- **[ARCH] Phase 1 Cognitive Queue**: Outlined the Sovereign Drive architecture mapping the decoupling of the IDE synchronous cycle to an asynchronous Cognitive Queue protected by a `Safe Autonomous Mode` kill-switch.
+- **[HEAL] Path Resolution Hardening**: Centralized all environment and workspace path resolutions into a deterministic `red_pill.core.paths.get_bunker_root()` module. Purged hardcoded `os.getenv("IA_DIR")` across the Python codebase to enforce strict validation (existence, read/write permissions) making the Red Pill robust in immutable environments (e.g. Silverblue, Flatpak) and preventing silent `FileNotFoundError`s downstream.
+
 ## [6.9.2] - 2026-05-11
 
 ### 🛡️ Swarm Infrastructure & Protocol Compliance
@@ -285,7 +373,7 @@
 - **[FEAT] BitNet Submodule Regularization**: Created GitHub fork `joanfgarcia/BitNet-1.58b` (MIT) from `microsoft/BitNet`. Regularized orphan gitlink as proper git submodule with `.gitmodules`. Custom GPU patches (VRAM stabilization, LUT kernel, API server) preserved in fork.
 - **[NEW] `3rdparty/README.md`**: Setup guide for BitNet submodule — build instructions, model recommendations (Falcon3-10B-Instruct only: 98/100 benchmark), and instructions for ZIP recipients.
 - **[NEW] `AGENT_UPDATE_GUIDE §4.16`**: BitNet submodule setup as optional post-update step. Documents `git archive` exclusion.
-- **[FIX] CI pip-audit**: Upgraded 4 vulnerable deps (cryptography, requests, pyasn1, pygments). Filtered `pure-mls` from pip-audit (private git dep). Emits `::warning::` annotation.
+- **[FIX] CI pip-audit**: Upgraded 4 vulnerable deps (cryptography, requests, pyasn1, pygments). Filtered `pure-mls` from pip-audit *(note: at this point pure-mls was a private git+https dep; it was published to PyPI as `pure_mls-3.0.5.1` on 2026-05-06 — see v6.9.0 and v7.0.0)*. Emits `::warning::` annotation.
 - **[LICENSE] CC BY-NC 4.0 Clarification**: Added Additional Permissions §2.c — reading/sharing always free (including businesses); only commercial exploitation requires permission.
 
 ### 🧠 Roadmap: Emotional Pre-Heating (Oracle Protocol) — *Planned*

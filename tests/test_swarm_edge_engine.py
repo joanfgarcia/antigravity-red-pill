@@ -28,8 +28,10 @@ class TestEdgeEngineInit:
 		assert engine.model_path is not None
 		assert engine.model_path.endswith(".gguf")
 
-	def test_no_model_dir(self, tmp_path):
+	@patch("red_pill.swarm.agents.edge_engine.get_models_dir")
+	def test_no_model_dir(self, mock_get_models_dir, tmp_path):
 		"""Lines 36: model dir absent → model_path remains None."""
+		mock_get_models_dir.return_value = tmp_path / "fake_xdg"
 		with patch("os.getenv", return_value=str(tmp_path)):
 			from red_pill.swarm.agents.edge_engine import EdgeEngine
 

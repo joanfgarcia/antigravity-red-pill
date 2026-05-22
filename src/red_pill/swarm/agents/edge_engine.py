@@ -2,6 +2,8 @@ import logging
 import os
 from typing import Any, Optional
 
+from red_pill.core.paths import get_models_dir
+
 logger = logging.getLogger(__name__)
 
 # 1. Fallback to basic extraction if llama_cpp is not available
@@ -29,13 +31,14 @@ class EdgeEngine:
 		self._llm_loaded = False
 		self._n_gpu_layers = n_gpu_layers
 
-		ia_dir = os.getenv("WORKSPACE_ROOT")
-		if ia_dir:
-			model_dir = os.path.join(ia_dir, "models")
-		else:
-			current_dir = os.path.dirname(os.path.abspath(__file__))
-			project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(current_dir))))
-			model_dir = os.path.join(project_root, "storage", "models")
+		# XDG is the source of truth (RULE 1 — CONVENTIONS.md)
+		model_dir = str(get_models_dir())
+		# Optional override: WORKSPACE_ROOT/models for developer profiles
+		workspace_override = os.getenv("WORKSPACE_ROOT")
+		if workspace_override:
+			candidate = os.path.join(workspace_override, "models")
+			if os.path.isdir(candidate):
+				model_dir = candidate
 
 		# Discover model path eagerly (cheap filesystem ops) but defer loading
 		if not model_path and os.path.exists(model_dir):

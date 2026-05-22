@@ -178,6 +178,7 @@ Music/
 .cargo/
 .npm/
 .vscode/extensions/
+# Legacy cleanup: old storage paths excluded from Cursor indexer (not active data dirs)
 .antigravity/storage/
 .gemini/antigravity/storage/
 Documents/IA/storage/
@@ -460,7 +461,7 @@ else
 fi
 
 # SEC-011: Persistent Model Cache Path (v6.1.0)
-_default_cache="$IA_DIR/storage/models"
+_default_cache="$HOME/.local/share/red-pill/models"
 if [ "$AUTO_MODE" = "false" ]; then
 	read -p "Ruta Caché Modelos (Default: $_default_cache): " F_CACHE; FASTEMBED_CACHE_PATH=${F_CACHE:-"$_default_cache"}
 else
@@ -544,7 +545,7 @@ update_env "USER_ATLAS_DIR" "$WORKSPACE_ROOT/atlas"
 update_env "AGENT_CORE_DIR" "$WORKSPACE_ROOT/Titanium_Core"
 chmod 600 "$ENV_FILE"
 
-mkdir -p "$IA_DIR/scripts" "$IA_DIR/backups/qdrant" "$IA_DIR/backups/soul" "$IA_DIR/seeds" "$APP_ROOT/storage" "$IA_DIR/storage/queue"
+mkdir -p "$IA_DIR/scripts" "$IA_DIR/backups/qdrant" "$IA_DIR/backups/soul" "$IA_DIR/seeds" "$HOME/.local/share/red-pill/models" "$HOME/.local/share/red-pill/queue" "$HOME/.local/share/red-pill/tmp"
 
 if [ "$QDRANT_ALIVE" = "false" ]; then
 	QUADLET_DIR="$HOME/.config/containers/systemd"
@@ -558,7 +559,7 @@ After=network-online.target
 Image=docker.io/qdrant/qdrant:v1.9.0
 PublishPort=127.0.0.1:6333:6333
 PublishPort=127.0.0.1:6334:6334
-Volume=$APP_ROOT/storage:/qdrant/storage:Z
+Volume=$HOME/.local/share/red-pill/db:/qdrant/storage:Z
 Environment=QDRANT__SERVICE__API_KEY=$QDRANT_API_KEY
 
 [Service]
@@ -594,7 +595,7 @@ EOF
 		<string>-p</string>
 		<string>127.0.0.1:6334:6334</string>
 		<string>-v</string>
-		<string>$APP_ROOT/storage:/qdrant/storage</string>
+		<string>$HOME/.local/share/red-pill/db:/qdrant/storage</string>
 		<string>-e</string>
 		<string>QDRANT__SERVICE__API_KEY=$QDRANT_API_KEY</string>
 		<string>qdrant/qdrant:v1.9.0</string>

@@ -156,6 +156,10 @@ async def handle_control_bunker(arguments: Dict[str, Any]):
 	elif cmd == "status":
 		output = get_telemetry_report()
 	elif cmd == "sleep":
+		from red_pill.core.providers import ProviderRegistry, SipInferenceProvider
+
+		ProviderRegistry.register_inference_provider("sip", SipInferenceProvider(socket_path=cfg.SIP_SOCKET_PATH))
+
 		from red_pill.metabolism.sleep import perform_sleep_cycle
 
 		count = perform_sleep_cycle(MemoryManager(), mode=val if val in ["lazy", "deep"] else "lazy")
@@ -220,7 +224,7 @@ async def handle_run_security_audit(arguments: Dict[str, Any]):
 	async def _run_bg():
 		try:
 			from red_pill.core.inbox import MinionInbox
-			from red_pill.utils.observer import notify_user
+			from red_pill.core.notifier import SovereignNotifier
 
 			results = await GruOrchestrator().deploy_swarm("audit", [SmithMinion()], trace=False, path=path)
 			res = results[0]
@@ -236,18 +240,18 @@ async def handle_run_security_audit(arguments: Dict[str, Any]):
 			def _deliver_report():
 				MinionInbox().drop_report(event_id=event_id, source="SmithMinion", status=res.status, content=audit_text)
 				if res.status != "success":
-					notify_user("Security Audit", f"Audit [{event_id}] {res.status}", category="system")
+					SovereignNotifier.notify_os("Security Audit", f"Audit [{event_id}] {res.status}", category="system")
 
 			await asyncio.to_thread(_deliver_report)
 		except Exception as e:
 			logger.error(f"Async Audit [{event_id}] crashed: {e}")
 			err_msg = str(e)
 			from red_pill.core.inbox import MinionInbox
-			from red_pill.utils.observer import notify_user
+			from red_pill.core.notifier import SovereignNotifier
 
 			def _deliver_err():
 				MinionInbox().drop_report(event_id=event_id, source="SmithMinion", status="crashed", content=f"Exception: {err_msg}")
-				notify_user("Audit Crash", f"[{event_id}] Failed", category="system")
+				SovereignNotifier.notify_os("Audit Crash", f"[{event_id}] Failed", category="system")
 
 			await asyncio.to_thread(_deliver_err)
 
@@ -282,7 +286,7 @@ async def handle_search_memory_research(arguments: Dict[str, Any]):
 	async def _run_bg():
 		try:
 			from red_pill.core.inbox import MinionInbox
-			from red_pill.utils.observer import notify_user
+			from red_pill.core.notifier import SovereignNotifier
 
 			oracle = OracleMinion()
 			if collections:
@@ -294,18 +298,18 @@ async def handle_search_memory_research(arguments: Dict[str, Any]):
 			def _deliver_report():
 				MinionInbox().drop_report(event_id=event_id, source="OracleMinion", status=res.status, content=content)
 				if res.status != "success":
-					notify_user("Oracle Research", f"Synthesis [{event_id}] Ready", category="system")
+					SovereignNotifier.notify_os("Oracle Research", f"Synthesis [{event_id}] Ready", category="system")
 
 			await asyncio.to_thread(_deliver_report)
 		except Exception as e:
 			logger.error(f"Oracle Research [{event_id}] crashed: {e}")
 			err_msg = str(e)
 			from red_pill.core.inbox import MinionInbox
-			from red_pill.utils.observer import notify_user
+			from red_pill.core.notifier import SovereignNotifier
 
 			def _deliver_err():
 				MinionInbox().drop_report(event_id=event_id, source="OracleMinion", status="crashed", content=f"Exception: {err_msg}")
-				notify_user("Oracle Crash", f"[{event_id}] Failed", category="system")
+				SovereignNotifier.notify_os("Oracle Crash", f"[{event_id}] Failed", category="system")
 
 			await asyncio.to_thread(_deliver_err)
 
@@ -517,7 +521,7 @@ async def handle_check_system_health(arguments: Dict[str, Any]):
 	async def _run_bg():
 		try:
 			from red_pill.core.inbox import MinionInbox
-			from red_pill.utils.observer import notify_user
+			from red_pill.core.notifier import SovereignNotifier
 
 			results = await GruOrchestrator().deploy_swarm("health", [KeymakerMinion()], trace=False)
 			res = results[0]
@@ -531,18 +535,18 @@ async def handle_check_system_health(arguments: Dict[str, Any]):
 			def _deliver_report():
 				MinionInbox().drop_report(event_id=event_id, source="KeymakerMinion", status=res.status, content=health)
 				if res.status != "success":
-					notify_user("Health Check", f"Status [{event_id}] Ready", category="system")
+					SovereignNotifier.notify_os("Health Check", f"Status [{event_id}] Ready", category="system")
 
 			await asyncio.to_thread(_deliver_report)
 		except Exception as e:
 			logger.error(f"Health Check [{event_id}] crashed: {e}")
 			err_msg = str(e)
 			from red_pill.core.inbox import MinionInbox
-			from red_pill.utils.observer import notify_user
+			from red_pill.core.notifier import SovereignNotifier
 
 			def _deliver_err():
 				MinionInbox().drop_report(event_id=event_id, source="KeymakerMinion", status="crashed", content=f"Exception: {err_msg}")
-				notify_user("Health Check Crash", f"[{event_id}] Failed", category="system")
+				SovereignNotifier.notify_os("Health Check Crash", f"[{event_id}] Failed", category="system")
 
 			await asyncio.to_thread(_deliver_err)
 
@@ -576,7 +580,7 @@ async def handle_compress_prompt(arguments: Dict[str, Any]):
 	async def _run_bg():
 		try:
 			from red_pill.core.inbox import MinionInbox
-			from red_pill.utils.observer import notify_user
+			from red_pill.core.notifier import SovereignNotifier
 
 			results = await GruOrchestrator().deploy_swarm("compress", [CompressorMinion()], trace=False, text=text)
 			res = results[0]
@@ -589,18 +593,18 @@ async def handle_compress_prompt(arguments: Dict[str, Any]):
 			def _deliver_report():
 				MinionInbox().drop_report(event_id=event_id, source="CompressorMinion", status=res.status, content=content)
 				if res.status != "success":
-					notify_user("Prompt Compressor", f"Compression [{event_id}] Ready", category="system")
+					SovereignNotifier.notify_os("Prompt Compressor", f"Compression [{event_id}] Ready", category="system")
 
 			await asyncio.to_thread(_deliver_report)
 		except Exception as e:
 			logger.error(f"Compressor [{event_id}] crashed: {e}")
 			err_msg = str(e)
 			from red_pill.core.inbox import MinionInbox
-			from red_pill.utils.observer import notify_user
+			from red_pill.core.notifier import SovereignNotifier
 
 			def _deliver_err():
 				MinionInbox().drop_report(event_id=event_id, source="CompressorMinion", status="crashed", content=f"Exception: {err_msg}")
-				notify_user("Compressor Crash", f"[{event_id}] Failed", category="system")
+				SovereignNotifier.notify_os("Compressor Crash", f"[{event_id}] Failed", category="system")
 
 			await asyncio.to_thread(_deliver_err)
 
@@ -809,8 +813,8 @@ async def handle_run_pre_pr_audit(arguments: Dict[str, Any]):
 			result = subprocess.run(cmd, capture_output=True, text=True)
 			status = "PASSED" if result.returncode == 0 else "FAILED"
 
+			from red_pill.core.notifier import SovereignNotifier
 			from red_pill.memory import MemoryManager
-			from red_pill.utils.observer import notify_user
 
 			out_text = str(result.stdout or "")
 			MemoryManager().add_memory(
@@ -819,7 +823,7 @@ async def handle_run_pre_pr_audit(arguments: Dict[str, Any]):
 				importance=8.0,
 			)
 			logger.info(f"Async Audit [{event_id}] finished and saved to memory.")
-			notify_user("Bünker Audit", f"Audit [{event_id}] {status}", category="system")
+			SovereignNotifier.notify_os("Bünker Audit", f"Audit [{event_id}] {status}", category="system")
 		except Exception as e:
 			logger.error(f"Async Audit [{event_id}] crashed: {e}")
 
@@ -1103,6 +1107,65 @@ async def handle_run_sentinel_audit(arguments: Dict[str, Any]):
 
 	asyncio.create_task(_run_bg())
 	return [types.TextContent(type="text", text=f"Sentinel Auditor deployed [Event ID: {event_id}]. Check the Minion Inbox in a few seconds.")]
+
+
+@registry.register(
+	name="mark_cognitive_task_completed",
+	description="[OFFICIAL] Mark a cognitive task as completed in the Bünker Queue. Call this when you finish a background task successfully.",
+	schema={
+		"type": "object",
+		"properties": {
+			"task_id": {"type": "string", "description": "The ID of the cognitive task."},
+			"next_task": {
+				"type": "object",
+				"description": "Optional. A JSON payload to enqueue a follow-up task immediately (DAG Chaining). Must contain 'source' and 'payload' keys.",
+			},
+		},
+		"required": ["task_id"],
+	},
+)
+async def handle_mark_cognitive_task_completed(arguments: Dict[str, Any]):
+	task_id = arguments["task_id"]
+	next_task = arguments.get("next_task")
+	try:
+		from red_pill.cognitive.queue_manager import CognitiveQueueManager
+
+		qm = CognitiveQueueManager()
+		qm.mark_completed(task_id)
+
+		msg = f"Cognitive Task '{task_id}' successfully marked as COMPLETED."
+
+		if next_task and isinstance(next_task, dict) and "source" in next_task and "payload" in next_task:
+			new_id = qm.enqueue_task(source=next_task["source"], payload=next_task["payload"], priority=next_task.get("priority", 5))
+			msg += f"\nDAG Chain: Enqueued follow-up task '{new_id}'."
+
+		return [types.TextContent(type="text", text=msg)]
+	except Exception as e:
+		return [types.TextContent(type="text", text=f"Failed to complete task '{task_id}': {e}")]
+
+
+@registry.register(
+	name="mark_cognitive_task_failed",
+	description="[OFFICIAL] Mark a cognitive task as failed. Call this when you cannot complete a background task.",
+	schema={
+		"type": "object",
+		"properties": {
+			"task_id": {"type": "string", "description": "The ID of the cognitive task."},
+			"reason": {"type": "string", "description": "Reason for failure."},
+		},
+		"required": ["task_id", "reason"],
+	},
+)
+async def handle_mark_cognitive_task_failed(arguments: Dict[str, Any]):
+	task_id = arguments["task_id"]
+	reason = arguments["reason"]
+	try:
+		from red_pill.cognitive.queue_manager import CognitiveQueueManager
+
+		CognitiveQueueManager().mark_failed(task_id, reason)
+		return [types.TextContent(type="text", text=f"Cognitive Task '{task_id}' marked as FAILED. Reason logged.")]
+	except Exception as e:
+		return [types.TextContent(type="text", text=f"Failed to mark task '{task_id}' as failed: {e}")]
 
 
 async def main():

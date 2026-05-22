@@ -33,8 +33,15 @@ def test_pulse_sync_lifecycle(pulse):
 @pytest.mark.asyncio
 async def test_pulse_cycle_logic(pulse):
 	pulse._maintenance_ritual = AsyncMock()
+	pulse._hygiene_ritual = AsyncMock()
 	pulse._usp_ritual = AsyncMock()
 	pulse._dream_ritual = AsyncMock()
+	pulse._consolidation_ritual = AsyncMock()
+	pulse._swarm_ritual = AsyncMock()
+	pulse._lazarus_ritual = AsyncMock()
+	pulse._resonance_ritual = AsyncMock()
+	pulse._auto_heal_ritual = AsyncMock()
+	pulse._thread_ritual = AsyncMock()
 	pulse._running = True
 	with patch("asyncio.sleep", AsyncMock()) as mock_sleep:
 

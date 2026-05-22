@@ -72,6 +72,26 @@ Deploy specialized agents for complex tasks.
 The ecosystem contains dozens of scripts for testing, auditing, and maintenance (including `arena_benchmark.py` and its interactive UX).
 *   **View Scripts Index:** [Read SCRIPTS_INDEX.md](../TECHNICAL/SCRIPTS_INDEX.md)
 
+### 8. Bünker Lifecycle & Sovereign Autonomy (v7.0)
+Total portability and asynchronous operation management.
+*   **Init / Profile**: Auto-detects hardware to generate an optimal `bunker.profile.yaml`.
+	```bash
+	uv run red-pill bunker init
+	```
+*   **Sovereign Backup**: Safely exports Qdrant, SQLite (WAL-safe), plugins, and `.env` into a pure-mls encrypted snapshot.
+	```bash
+	uv run red-pill bunker export
+	uv run red-pill bunker restore
+	```
+*   **Emergency Kill-Switch**: Instantly halts all background autonomous cognitive operations without relying on the database (lock-immune).
+	```bash
+	uv run red-pill bunker halt
+	```
+	To restore autonomy, run:
+	```bash
+	uv run red-pill bunker resume
+	```
+
 ---
 
 ## 🖥️ MCP Sovereign Dashboard (IDE)
@@ -149,6 +169,26 @@ Despliega agentes especializados para tareas complejas.
 ### 7. Scripts y Herramientas Utilitarias
 El ecosistema cuenta con decenas de scripts para pruebas, auditorías y mantenimiento (incluyendo `arena_benchmark.py` y su UX interactiva).
 *   **Ver Índice de Scripts:** [Leer SCRIPTS_INDEX.md](../TECHNICAL/SCRIPTS_INDEX.md)
+
+### 8. Bünker Lifecycle y Autonomía Soberana (v7.0)
+Portabilidad total y gestión de operaciones asíncronas.
+*   **Init / Perfilado**: Autodetecta el hardware para generar un `bunker.profile.yaml` óptimo (INT2 vs Q4_K_M).
+	```bash
+	uv run red-pill bunker init
+	```
+*   **Backup Soberano**: Exporta de forma segura Qdrant, SQLite (modo WAL seguro), plugins y `.env` en un snapshot cifrado con pure-mls.
+	```bash
+	uv run red-pill bunker export
+	uv run red-pill bunker restore
+	```
+*   **Kill-Switch de Emergencia**: Corta instantáneamente todas las operaciones cognitivas autónomas en segundo plano mediante un archivo `.lock` inmune a bloqueos de BD.
+	```bash
+	uv run red-pill bunker halt
+	```
+	Para restaurar la autonomía:
+	```bash
+	uv run red-pill bunker resume
+	```
 
 ---
 

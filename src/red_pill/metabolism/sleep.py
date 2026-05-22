@@ -9,13 +9,15 @@ from typing import Any, Dict, List, Optional
 from qdrant_client.models import Filter
 
 import red_pill.config as cfg
+from red_pill.core.paths import get_daemon_dir, get_staging_dir, get_thread_state_path
+from red_pill.core.vram_probe import VramProbe
 from red_pill.events import SleepCompletedEvent, get_event_bus
 from red_pill.metabolism.evolution import IdentityEvaluator
 
 logger = logging.getLogger(__name__)
 
 # ── Thread Weaving state ──────────────────────────────────────────────────────
-_THREAD_STATE_PATH = os.path.expanduser("~/.agent/thread_state.json")
+_THREAD_STATE_PATH = str(get_thread_state_path())
 
 
 def _load_thread_state() -> dict:
@@ -44,7 +46,7 @@ def _check_llm_available() -> bool:
 	import os
 	import socket
 
-	uds_path = os.path.expanduser("~/.agent/red_pill.sock")
+	uds_path = cfg.SIP_SOCKET_PATH
 	if os.path.exists(uds_path):
 		try:
 			s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -53,7 +55,11 @@ def _check_llm_available() -> bool:
 			s.close()
 			return True
 		except OSError:
-			return False
+			logger.warning(f"[SLEEP ENGINE] UDS connection refused on {uds_path}. Cleaning up orphan socket file.")
+			try:
+				os.remove(uds_path)
+			except Exception as e:
+				logger.error(f"[SLEEP ENGINE] Failed to remove orphan socket {uds_path}: {e}")
 
 	# Fallback: probe TCP endpoint
 	mlx_url = getattr(cfg, "MLX_LM_URL", "") or ""
@@ -155,10 +161,10 @@ def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[
 			if match:
 				parsed = json.loads(match.group(0))
 				return {
-					"summary": parsed.get("summary", fallback["summary"]),
-					"emotion": parsed.get("emotion", "neutral").lower()[:20],
-					"intensity": float(parsed.get("intensity", 0.5)),
-					"category": parsed.get("category", fallback_category).lower().strip(),
+					"summary": parsed.get("summary", fallback["summary"]) or fallback["summary"],
+					"emotion": (parsed.get("emotion") or "neutral").lower()[:20],
+					"intensity": float(parsed.get("intensity") if parsed.get("intensity") is not None else 0.5),
+					"category": (parsed.get("category") or fallback_category).lower().strip(),
 				}
 			else:
 				logger.warning(f"[SLEEP ENGINE] Samantha LLM output not JSON: {content[:100]}")
@@ -208,6 +214,119 @@ def synthesize_hub(summaries: List[str]) -> str:
 	except Exception as e:
 		logger.error(f"[SLEEP ENGINE] Failed to synthesize hub: {e}")
 		return "Aggregated Memory Sequence Synthesis."
+
+
+class EphemeralServer:
+	"""
+	Manages the lifecycle of the ephemeral local LLM server used during the sleep
+	distillation cycle.
+
+	Start order:
+	1. Try systemd user service (Linux)
+	2. Try launchctl user agent (macOS)
+	3. Fall back to direct subprocess with systemd-run cgroup or nice(1).
+
+	The object tracks which path was taken so teardown can be handled correctly.
+	"""
+
+	def __init__(self):
+		self._process: Any = None  # subprocess.Popen | str | None
+
+	@property
+	def is_managed_service(self) -> bool:
+		"""True when the server is controlled by systemd/launchd (not a Popen)."""
+		return self._process in ("systemd_service", "launchd_service")
+
+	def start(self, memory_manager) -> bool:
+		"""
+		Attempts to bring the ephemeral LLM server online.
+		Returns True when the server is reachable, False on failure.
+		"""
+		import shutil
+		import subprocess
+		import sys
+		import time as _time
+
+		from red_pill.core.notifier import SovereignNotifier
+
+		SovereignNotifier.notify_os(
+			"Bünker Cortex",
+			"El Hilo de Ariadna está tejiendo...\nConsolidación de memoria iniciada.",
+			icon="weather-clear-night",
+		)
+		SovereignNotifier.notify_bunker(memory_manager, "ariadne_thread_running", intensity=1.0, source="SLEEP_ENGINE")
+
+		start_sh = str(get_daemon_dir() / "start.sh")
+		if not os.path.exists(start_sh):
+			logger.error("[EPHEMERAL SERVER] start.sh not found. Aborting.")
+			SovereignNotifier.notify_bunker(memory_manager, "local_llm_offline", intensity=7.0, signal_type="pain", source="SLEEP_ENGINE")
+			return False
+
+		if shutil.which("systemctl"):
+			subprocess.run(
+				["systemctl", "--user", "restart", "red-pill-minion.service"],
+				stdout=subprocess.DEVNULL,
+				stderr=subprocess.DEVNULL,
+			)
+			self._process = "systemd_service"
+		elif shutil.which("launchctl"):
+			uid = os.getuid()
+			subprocess.run(
+				["launchctl", "kickstart", "-k", f"gui/{uid}/com.agent.modeldaemon"],
+				stdout=subprocess.DEVNULL,
+				stderr=subprocess.DEVNULL,
+			)
+			self._process = "launchd_service"
+		else:
+			# Fallback: direct execution wrapped in cgroup/nice for resource safety
+			cmd: List[str] = []
+			if shutil.which("systemd-run"):
+				cmd = ["systemd-run", "--user", "--scope", "-p", "MemoryMax=10G", "-p", "Nice=19", "-p", "IOSchedulingClass=3", start_sh]
+			elif shutil.which("nice"):
+				cmd = ["nice", "-n", "19"]
+				if sys.platform == "darwin" and shutil.which("taskpolicy"):
+					cmd += ["taskpolicy", "-c", "background"]
+				cmd.append(start_sh)
+			else:
+				cmd = [start_sh]
+			self._process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+		logger.info("[EPHEMERAL SERVER] Waiting for LLM to come online...")
+		for _ in range(30):
+			_time.sleep(2)
+			if _check_llm_available():
+				logger.info("[EPHEMERAL SERVER] LLM is ONLINE.")
+				return True
+
+		logger.error("[EPHEMERAL SERVER] LLM failed to start within 60s.")
+		if not self.is_managed_service and self._process is not None:
+			self._process.terminate()
+		SovereignNotifier.notify_os("Bünker Cortex", "Fallo al iniciar el servidor efímero.", urgency="critical")
+		SovereignNotifier.clear_bunker_signal(memory_manager, "ariadne_thread_running")
+		return False
+
+	def stop(self, memory_manager, total_processed: int) -> None:
+		"""Gracefully shuts down the ephemeral server (Popen only; services self-manage)."""
+		if self._process is None or self.is_managed_service:
+			return
+
+		logger.info("[EPHEMERAL SERVER] Shutting down...")
+		try:
+			self._process.terminate()
+			self._process.wait(timeout=10)
+		except Exception:
+			self._process.kill()
+
+		try:
+			from red_pill.core.notifier import SovereignNotifier
+
+			SovereignNotifier.notify_os(
+				"Bünker Cortex",
+				f"Hilo de Ariadna finalizado.\n{total_processed} engramas consolidados en el neocórtex.",
+				icon="dialog-information",
+			)
+		except Exception:
+			pass
 
 
 def distill_session_anchors(memory_manager, hub_summaries: List[str]) -> Optional[str]:
@@ -298,14 +417,39 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 	if thermal_stress:
 		logger.warning("[SLEEP ENGINE] System stress detected. Minimizing metabolic load.")
 
-	# LLM Health Check
+	# ── VRAM Preflight Check ──────────────────────────────────────────────
+	# Query free VRAM right now — before attempting to load the LLM. If the
+	# GPU is already occupied (game, other model, IDE inference), abort this
+	# cycle gracefully rather than fighting for VRAM mid-distillation.
+	_vram_backend = VramProbe.get_backend()
+	if _vram_backend != "cpu":
+		_free_vram_mb = VramProbe.get_free_mb()
+		_min_free_mb = cfg.SLEEP_MIN_FREE_VRAM_MB
+		if _free_vram_mb < _min_free_mb:
+			logger.warning(f"[SLEEP ENGINE] VRAM preflight failed: {_free_vram_mb} MB free, {_min_free_mb} MB required. Aborting sleep cycle.")
+			try:
+				memory_manager.inject_signal(
+					"vram_busy",
+					intensity=3.0,
+					signal_type="pain",
+					muted=True,
+					source="SLEEP_ENGINE",
+				)
+			except Exception as _e:
+				logger.debug(f"[SLEEP ENGINE] vram_busy signal failed: {_e}")
+			return 0
+		logger.debug(f"[SLEEP ENGINE] VRAM preflight OK: {_free_vram_mb} MB free ({_vram_backend}).")
+
+	# LLM Health Check & Ephemeral Server
+	ephemeral_server = EphemeralServer()
 	if not _check_llm_available():
-		logger.warning("[SLEEP ENGINE] Local LLM is offline. Aborting sleep cycle. Injecting pain signal.")
+		logger.warning("[SLEEP ENGINE] Local LLM is offline. Launching Ephemeral Samantha Server...")
 		try:
-			memory_manager.inject_signal("local_llm_offline", intensity=7.0, signal_type="pain", source="SLEEP_ENGINE")
-		except Exception:
-			pass
-		return 0
+			if not ephemeral_server.start(memory_manager):
+				return 0
+		except Exception as e:
+			logger.error(f"[SLEEP ENGINE] Failed to start Ephemeral Server: {e}")
+			return 0
 
 	# ── Drain Loop ────────────────────────────────────────────────────────
 	total_processed = 0
@@ -443,7 +587,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 		total_processed += batch_processed
 
 	# ── Staging Buffer Processing (Productor-Consumidor Fallback) ─────────
-	STAGING_DIR = os.path.expanduser("~/.agent/staging_buffer")
+	STAGING_DIR = str(get_staging_dir())
 	if os.path.exists(STAGING_DIR):
 		logger.info(f"[SLEEP ENGINE] Sweeping Staging Buffer: {STAGING_DIR}")
 		try:
@@ -546,9 +690,17 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 
 	logger.info(f"=== LAZARUS PULSE: Sleep Cycle complete. {total_processed} engrams synaptically woven. ===")
 	try:
-		memory_manager.evaporate_signals("local_llm_offline")
+		from red_pill.core.notifier import SovereignNotifier
+
+		SovereignNotifier.clear_bunker_signal(memory_manager, "local_llm_offline")
+		SovereignNotifier.clear_bunker_signal(memory_manager, "ariadne_thread_running")
+		# Auto-evaporate any pending vram_busy signal: the cycle completed successfully,
+		# meaning the GPU had enough headroom. Clear the alert so the Córtex stays clean.
+		SovereignNotifier.clear_bunker_signal(memory_manager, "vram_busy")
 	except Exception:
 		pass
+
+	ephemeral_server.stop(memory_manager, total_processed)
 
 	get_event_bus().emit(SleepCompletedEvent(collection=collection, processed_count=total_processed, mode=mode))
 	return total_processed
