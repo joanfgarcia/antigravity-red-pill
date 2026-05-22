@@ -170,7 +170,8 @@ class SipInferenceProvider(BaseInferenceProvider):
 class BitNetInferenceProvider(BaseInferenceProvider):
 	"""
 	Provider for 1.58-bit (ternary) inference using local llama-cli.
-	Optimized for humble hardware (RTX 3050).
+	Optimized for 8GB VRAM (RTX 5070 Laptop GPU).
+	Max context: 16384 (CUDA) / 2048 (CPU).
 	"""
 
 	def __init__(self, runner_path: str, model_path: str, grammar_path: Optional[str] = None):
@@ -189,8 +190,9 @@ class BitNetInferenceProvider(BaseInferenceProvider):
 		grammar_path = kwargs.get("grammar_path", self.grammar_path)
 		use_mmap = kwargs.get("use_mmap", True)
 		ngl = kwargs.get("ngl", 0)  # Hardware Offload
+		ctx_size = kwargs.get("ctx_size", 4096)
 
-		cmd = [str(self.runner_path), "-m", str(model_path), "-p", str(prompt), "-n", str(max_tokens), "--temp", str(temp), "-ngl", str(ngl)]
+		cmd = [str(self.runner_path), "-m", str(model_path), "-p", str(prompt), "-n", str(max_tokens), "--temp", str(temp), "-ngl", str(ngl), "-c", str(ctx_size)]
 
 		if not use_mmap:
 			cmd.append("--no-mmap")
@@ -201,8 +203,9 @@ class BitNetInferenceProvider(BaseInferenceProvider):
 		try:
 			# LD_LIBRARY_PATH must be explicitly set for local subprocesses or they will fail to find libllama.so
 			env = os.environ.copy()
-			lib_path = os.path.join(os.getcwd(), "3rdparty/BitNet-1.58b/build/3rdparty/llama.cpp/src")
-			ggml_path = os.path.join(os.getcwd(), "3rdparty/BitNet-1.58b/build/3rdparty/llama.cpp/ggml/src")
+			build_dir = os.path.dirname(os.path.dirname(str(self.runner_path)))
+			lib_path = os.path.join(build_dir, "3rdparty", "llama.cpp", "src")
+			ggml_path = os.path.join(build_dir, "3rdparty", "llama.cpp", "ggml", "src")
 			env["LD_LIBRARY_PATH"] = f"{lib_path}:{ggml_path}:" + env.get("LD_LIBRARY_PATH", "")
 
 			# Use a short timeout for humble hardware to prevent hangs
@@ -211,8 +214,10 @@ class BitNetInferenceProvider(BaseInferenceProvider):
 			if result.stderr:
 				print(f"DEBUG (stderr):\n{result.stderr}")
 
-			# Parsing logic from experimental runner
-			if prompt in output:
+			# Parsing logic - handle Falcon3 chat template delimiters
+			if "<|assistant|>" in output:
+				return output.split("<|assistant|>")[-1].split("[end of text]")[0].strip()
+			elif prompt in output:
 				return output.split(prompt)[-1].split("[end of text]")[0].strip()
 			elif "Assistant:" in output:
 				return output.split("Assistant:")[-1].split("[end of text]")[0].strip()

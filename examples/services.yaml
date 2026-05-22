@@ -1,0 +1,57 @@
+services:
+  neon-link:
+    unit: neon-link.service
+    type: daemon-loop
+    loop_interval_s: 1
+    watchdog_multiplier: 3
+    health_url: "http://127.0.0.1:8770/health"
+    legacy_aliases:
+      - redpill-neonlink.service
+
+  redpill-llm:
+    unit: redpill-llm.service
+    type: daemon-listener
+    health_url: "http://127.0.0.1:8776/health"
+    legacy_aliases:
+      - red-pill-minion.service
+
+  redpill-echo:
+    unit: redpill-echo.service
+    type: daemon-loop
+    loop_interval_s: 60
+    watchdog_multiplier: 3
+
+  redpill-auditor:
+    unit: redpill-auditor.service
+    type: oneshot
+    max_runtime_s: 120
+
+  redpill-extractor:
+    unit: redpill-extractor.service
+    type: oneshot
+    max_runtime_s: 120
+
+  redpill-janitor:
+    unit: redpill-janitor.service
+    type: oneshot
+    max_runtime_s: 60
+
+  redpill-pulse:
+    unit: redpill-pulse.service
+    type: oneshot
+    max_runtime_s: 30
+
+  redpill-queue:
+    unit: redpill-queue.service
+    type: oneshot
+    max_runtime_s: 120
+
+  redpill-telemetry:
+    unit: redpill-telemetry.service
+    type: oneshot
+    max_runtime_s: 60
+
+  redpill-wake:
+    unit: redpill-wake.service
+    type: oneshot
+    max_runtime_s: 30

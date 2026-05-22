@@ -3,12 +3,14 @@ Description=Red Pill Echo Mirror Daemon (Context Persistence)
 After=network.target redpill-llm.service
 
 [Service]
-Type=simple
+Type=notify
+NotifyAccess=main
+WatchdogSec=180
 Environment="IA_DIR=/home/joan/Documents/IA/sharing"
 Environment="PYTHONPATH=/home/joan/Documents/IA/sharing/src"
 ExecStart=/home/joan/Documents/IA/sharing/.venv/bin/python /home/joan/Documents/IA/sharing/scripts/echo_daemon.py
 WorkingDirectory=/home/joan/Documents/IA/sharing
-Restart=always
+Restart=on-failure
 RestartSec=10
 StandardOutput=syslog
 StandardError=syslog

@@ -2,6 +2,9 @@
 
 > Multi-backend inference for Falcon 3 10B 1.58-bit (BitNet b1.58)
 > on the HP OMEN (AMD Ryzen AI 9 HX 370 / NVIDIA RTX 5070 / 32GB RAM)
+>
+> **Ver también**: [BITNET_WEIGHT_PIPELINE.md](./BITNET_WEIGHT_PIPELINE.md) para el pipeline
+> completo de pesos (bit-shifts, kernels CUDA, trampas conocidas).
 
 ## Table of Contents
 
