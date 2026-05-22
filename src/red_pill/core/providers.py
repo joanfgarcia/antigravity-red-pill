@@ -1,5 +1,9 @@
+import logging
+import os
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Iterator, List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 class BaseTelemetryProvider(ABC):
@@ -192,7 +196,21 @@ class BitNetInferenceProvider(BaseInferenceProvider):
 		ngl = kwargs.get("ngl", 0)  # Hardware Offload
 		ctx_size = kwargs.get("ctx_size", 4096)
 
-		cmd = [str(self.runner_path), "-m", str(model_path), "-p", str(prompt), "-n", str(max_tokens), "--temp", str(temp), "-ngl", str(ngl), "-c", str(ctx_size)]
+		cmd = [
+			str(self.runner_path),
+			"-m",
+			str(model_path),
+			"-p",
+			str(prompt),
+			"-n",
+			str(max_tokens),
+			"--temp",
+			str(temp),
+			"-ngl",
+			str(ngl),
+			"-c",
+			str(ctx_size),
+		]
 
 		if not use_mmap:
 			cmd.append("--no-mmap")
@@ -346,10 +364,168 @@ class LlamaCppInferenceProvider(BaseInferenceProvider):
 		yield self.generate(prompt, **kwargs)
 
 
-# Self-registration of default local provider
+class FastFlowLMInferenceProvider(BaseInferenceProvider):
+	"""
+	Provider for AMD XDNA2 NPU inference via FastFlowLM server.
+	Uses the OpenAI-compatible /v1/chat/completions API.
+
+	Performance (measured):
+		- Qwen3-0.6B: 96 tok/s @ ~2W
+		- Qwen3-8B:   10.6 tok/s @ ~2W
+
+	Requirements:
+		- FastFlowLM v0.9.42+ installed
+		- NPU validated: `flm validate`
+		- memlock=unlimited for the serving process
+		- Server running: `flm serve <model_tag>`
+	"""
+
+	def __init__(
+		self,
+		base_url: str = "http://localhost:52625",
+		model: str = "qwen3:8b",
+		timeout: float = 120.0,
+	):
+		self.base_url = base_url.rstrip("/")
+		self.model = model
+		self.timeout = timeout
+		self._available: Optional[bool] = None
+
+	def is_available(self) -> bool:
+		"""Check if the FastFlowLM server is reachable."""
+		try:
+			import httpx
+
+			with httpx.Client(timeout=2.0) as client:
+				resp = client.get(f"{self.base_url}/v1/models")
+				self._available = resp.status_code == 200
+		except Exception:
+			self._available = False
+		return self._available
+
+	def generate(self, prompt: str, **kwargs) -> str:
+		import httpx
+
+		model = kwargs.get("model", self.model)
+		temperature = kwargs.get("temperature", 0.7)
+		max_tokens = kwargs.get("max_tokens", 256)
+
+		# Build messages from kwargs or wrap prompt
+		messages = kwargs.get("messages")
+		if not messages:
+			system_prompt = kwargs.get("system_prompt")
+			messages = []
+			if system_prompt:
+				messages.append({"role": "system", "content": system_prompt})
+			messages.append({"role": "user", "content": prompt})
+
+		payload: Dict[str, Any] = {
+			"model": model,
+			"messages": messages,
+			"temperature": temperature,
+			"max_tokens": max_tokens,
+		}
+
+		try:
+			timeout_cfg = httpx.Timeout(self.timeout, connect=5.0)
+			with httpx.Client(timeout=timeout_cfg) as client:
+				response = client.post(
+					f"{self.base_url}/v1/chat/completions",
+					json=payload,
+				)
+				response.raise_for_status()
+				data = response.json()
+
+				content = str(data["choices"][0]["message"]["content"])
+
+				# Strip Qwen3 <think> blocks if present (thinking mode)
+				if "<think>" in content:
+					if "</think>" in content:
+						content = content.split("</think>")[-1].strip()
+					else:
+						# Truncated think block (max_tokens hit mid-thought)
+						content = content.split("<think>")[0].strip()
+
+				# Log performance metrics if available
+				usage = data.get("usage", {})
+				decode_tps = usage.get("decoding_speed_tps")
+				if decode_tps:
+					logger.debug(f"[NPU] {model}: {decode_tps:.1f} tok/s, {usage.get('total_tokens', '?')} tokens")
+
+				return content
+
+		except httpx.TimeoutException:
+			logger.warning(f"[NPU] FastFlowLM timeout after {self.timeout}s")
+			return "Error: NPU inference timed out."
+		except httpx.HTTPStatusError as e:
+			logger.error(f"[NPU] FastFlowLM HTTP error: {e.response.status_code}")
+			return f"Error: NPU inference HTTP {e.response.status_code}"
+		except Exception as e:
+			logger.error(f"[NPU] FastFlowLM error: {e}")
+			return f"Error: NPU inference failed: {e}"
+
+	def stream(self, prompt: str, **kwargs) -> Iterator[str]:
+		"""FastFlowLM supports streaming via SSE. Fallback to full generation."""
+		import httpx
+
+		model = kwargs.get("model", self.model)
+		temperature = kwargs.get("temperature", 0.7)
+		max_tokens = kwargs.get("max_tokens", 256)
+
+		messages = kwargs.get("messages")
+		if not messages:
+			messages = [{"role": "user", "content": prompt}]
+
+		payload: Dict[str, Any] = {
+			"model": model,
+			"messages": messages,
+			"temperature": temperature,
+			"max_tokens": max_tokens,
+			"stream": True,
+		}
+
+		try:
+			import json
+
+			timeout_cfg = httpx.Timeout(self.timeout, connect=5.0)
+			with httpx.Client(timeout=timeout_cfg) as client:
+				with client.stream("POST", f"{self.base_url}/v1/chat/completions", json=payload) as response:
+					for line in response.iter_lines():
+						if not line or not line.startswith("data: "):
+							continue
+						chunk_str = line[6:]  # strip "data: "
+						if chunk_str == "[DONE]":
+							break
+						try:
+							chunk = json.loads(chunk_str)
+							delta = chunk.get("choices", [{}])[0].get("delta", {})
+							token = delta.get("content", "")
+							if token:
+								yield token
+						except json.JSONDecodeError:
+							continue
+		except Exception:
+			# Fallback to non-streaming
+			yield self.generate(prompt, **kwargs)
+
+
+# Self-registration of default providers
 try:
 	import red_pill.config as cfg
 
 	ProviderRegistry.register_inference_provider("sip", SipInferenceProvider(socket_path=cfg.SIP_SOCKET_PATH), default=True)
+except Exception:
+	pass
+
+# NPU Provider: auto-register if FastFlowLM server is reachable
+try:
+	import red_pill.config as cfg  # noqa: F811
+
+	_flm_url = os.environ.get("FLM_BASE_URL", "http://localhost:52625")
+	_flm_model = os.environ.get("FLM_MODEL", "qwen3:8b")
+	_npu_provider = FastFlowLMInferenceProvider(base_url=_flm_url, model=_flm_model)
+	if _npu_provider.is_available():
+		ProviderRegistry.register_inference_provider("npu", _npu_provider)
+		logger.info(f"[NPU] FastFlowLM provider registered: {_flm_url} ({_flm_model})")
 except Exception:
 	pass
