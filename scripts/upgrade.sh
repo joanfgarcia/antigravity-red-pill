@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# 🛰️ Red Pill Sovereign Upgrade Tool (v6.8.0)
+# 🛰️ Red Pill Sovereign Upgrade Tool (v7.1.0)
 # This script automates the synchronization and migration of the Bünker.
 
 RED='\033[0;31m'
@@ -73,10 +73,28 @@ if command -v uv &> /dev/null; then
 	
 	# Version Sync Engram (Manual prompt for now, but ensured by guidance)
 	echo -e "${GREEN}✓ Estructura interna actualizada.${NC}"
+
+	# 5. Neon-Link Service Migration (v0.4.0 watchdog)
+	# Restart neon-link to pick up sd_notify/WatchdogSec changes
+	if systemctl --user is-active neon-link.service &>/dev/null; then
+		echo -e "${BLUE}Reiniciando Neon-Link (v0.4.0 watchdog migration)...${NC}"
+		systemctl --user restart neon-link.service
+		echo -e "${GREEN}✓ Neon-Link reiniciado con WatchdogSec habilitado.${NC}"
+	fi
+
+	# 6. Detect and disable legacy neon-link services
+	for LEGACY_SVC in redpill-neonlink.service; do
+		if systemctl --user is-enabled "$LEGACY_SVC" &>/dev/null; then
+			echo -e "${YELLOW}Deshabilitando servicio legacy: $LEGACY_SVC${NC}"
+			systemctl --user stop "$LEGACY_SVC" 2>/dev/null || true
+			systemctl --user disable "$LEGACY_SVC" 2>/dev/null || true
+			echo -e "${GREEN}✓ $LEGACY_SVC deshabilitado.${NC}"
+		fi
+	done
 else
 	echo -e "${RED}[ERROR] 'uv' no encontrado. Por favor, instala astral/uv para completar el upgrade.${NC}"
 fi
 
 echo -e "\n${GREEN}Upgrade Finalizado con éxito.${NC}"
-echo -e "Por favor, ${YELLOW}reinicia tu Servidor MCP${NC} en el IDE para cargar los nuevos módulos v6.8.0."
+echo -e "Por favor, ${YELLOW}reinicia tu Servidor MCP${NC} en el IDE para cargar los nuevos módulos v7.1.0."
 echo -e "${BLUE}------------------------------------------------------------------${NC}"

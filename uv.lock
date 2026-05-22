@@ -1577,7 +1577,7 @@ wheels = [
 
 [[package]]
 name = "neon-link"
-version = "0.3.1"
+version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fastapi" },
@@ -1590,9 +1590,9 @@ dependencies = [
     { name = "requests" },
     { name = "uvicorn" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/73/96/dbeedfa99e9ddc07020b34c70ea64162c7680ac2495138545ff05cfac5f4/neon_link-0.3.1.tar.gz", hash = "sha256:8ff3ed4928967160f2c9f5822a232da3af60ce4518048ebf5722dff75603ad2f", size = 38062, upload-time = "2026-05-08T18:17:19.732Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/70/e4/b4a2da6e3fa5b2e6877765b99fc08f1b7010e46914c916b76af99b6c48bf/neon_link-0.4.0.tar.gz", hash = "sha256:74b0d0dfd4ef13c68a464488ccbb8bd2708e989a66648b6dd4a6127199f7d915", size = 39522, upload-time = "2026-05-22T22:15:39.945Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/01/f1/82ad6793bcdd7bdd80312cd626ba81fe115e1617eba1401984861e99f7a5/neon_link-0.3.1-py3-none-any.whl", hash = "sha256:149efd468b4c9a0b8a1d64c4ae25bbee2166529ca3db0cb932de950500a71ec4", size = 32472, upload-time = "2026-05-08T18:17:18.887Z" },
+    { url = "https://files.pythonhosted.org/packages/fa/29/8877b580dea9d79826278a0b4305f6bc3cae91b2ac8a80a663ee9efea0ed/neon_link-0.4.0-py3-none-any.whl", hash = "sha256:219c5c09036bbe31042b87a84730bb3f2fc39326af13fbcea80b1f37bc9c22e8", size = 33983, upload-time = "2026-05-22T22:15:38.395Z" },
 ]
 
 [[package]]
@@ -2683,7 +2683,7 @@ requires-dist = [
     { name = "huggingface-hub", extras = ["hf-transfer"], specifier = ">=1.4.1" },
     { name = "llama-cpp-python", extras = ["server"], specifier = ">=0.3.16" },
     { name = "mcp", specifier = ">=1.26.0" },
-    { name = "neon-link", specifier = ">=0.3.1" },
+    { name = "neon-link", specifier = ">=0.4.0" },
     { name = "pillow", specifier = ">=12.2.0" },
     { name = "platformdirs", specifier = ">=4.9.2" },
     { name = "pluggy", specifier = ">=1.6.0" },

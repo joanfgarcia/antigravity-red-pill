@@ -43,3 +43,46 @@ To maintain the **Sound of Silence**, engineers must never use the term "daemon"
 uv run red-pill telemetry
 ```
 This command performs a full hardware and Bünker scan and exits cleanly, providing a snapshot of the current system state.
+
+## 5. Neon-Link Watchdog (v0.4.0+)
+
+Since `neon-link>=0.4.0`, the daemon sends native `sd_notify` heartbeats. The systemd unit must be configured with:
+
+```ini
+[Service]
+Type=notify
+WatchdogSec=3
+NotifyAccess=all
+Restart=on-failure
+```
+
+### Upgrade from pre-0.4.0
+1. Update dependency: `pip install --upgrade neon-link>=0.4.0` (or `uv sync`)
+2. Update the systemd unit file with `Type=notify` and `WatchdogSec=3`
+3. Reload and restart: `systemctl --user daemon-reload && systemctl --user restart neon-link.service`
+4. Disable legacy aliases: `systemctl --user disable redpill-neonlink.service`
+
+> **⚠️ CRITICAL:** The `neon-link-healer` (service + timer + script) is **removed** in v0.4.0. Native WatchdogSec replaces the curl-based health check. If the healer is still running, disable it:
+> ```bash
+> systemctl --user disable neon-link-healer.timer neon-link-healer.service
+> ```
+
+### Verification
+```bash
+# Check watchdog is active
+systemctl --user show neon-link.service | grep -E "Type|Watchdog"
+# Expected: Type=notify, WatchdogUSec=3000000
+```
+
+## 6. NPU Health Check (FastFlowLM)
+
+For systems with AMD XDNA2 NPU:
+```bash
+# Validate NPU stack
+flm validate
+# Expected: NPU FW Version >= 1.1.0, amdxdna >= 0.6, Memlock = infinity
+
+# Ensure memlock is unlimited (required after reboot)
+ulimit -l  # Should show "unlimited"
+# If not: sudo prlimit --memlock=unlimited --pid $$
+```

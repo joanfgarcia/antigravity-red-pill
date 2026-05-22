@@ -3,8 +3,10 @@ services:
     unit: neon-link.service
     type: daemon-loop
     loop_interval_s: 1
-    watchdog_multiplier: 3
+    watchdog_multiplier: 3       # WatchdogSec=3 — requires neon-link>=0.4.0
     health_url: "http://127.0.0.1:8770/health"
+    # systemd unit: Type=notify, WatchdogSec=3, NotifyAccess=all, Restart=on-failure
+    # neon-link v0.4.0 sends sd_notify("READY=1") + sd_notify("WATCHDOG=1") natively
     legacy_aliases:
       - redpill-neonlink.service
 

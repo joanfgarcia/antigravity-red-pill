@@ -5,6 +5,17 @@
 - **[FEAT] Hardware-Agnostic Telemetry Class**: Auto-detects ROCm/iGPU/AMD, NVIDIA/CUDA, or CPU/SysRAM.
 - **[FEAT] Dynamic Config Watcher**: Relies on `.env` mtime detection for hot changes (EMERGENCY_CLOUD_OVERRIDE, CONTEXT_HYDRATION_DEPTH).
 
+### 🔗 Neon-Link v0.4.0 — Watchdog Integration
+- **[ARCH] Neon-Link Dependency Bump**: Upgraded `neon-link>=0.4.0` in `pyproject.toml`. This release adds native `sd_notify` watchdog support, eliminating the need for the external `neon-link-healer` service.
+- **[FEAT] Upgrade Script Watchdog Migration**: `upgrade.sh` now auto-restarts `neon-link.service` to activate `WatchdogSec` and auto-disables legacy `redpill-neonlink.service` aliases.
+- **[DOCS] Service Health Contract**: Updated `neon-link` entry in `services.yaml` to reflect `Type=notify` + `WatchdogSec=3` configuration.
+
+### 🖥️ Multi-Backend Inference Benchmark (6 Backends)
+- **[FEAT] NPU Inference via FastFlowLM**: Verified AMD XDNA2 NPU running Qwen3-0.6B at **96.3 tok/s** and Qwen3-8B at **10.6 tok/s** using FastFlowLM v0.9.42 at ~2W power consumption.
+- **[FEAT] CPU Inference Fix**: Discovered `build_vulkan` binary handles CPU-only inference correctly at **12.87 tok/s** (the `build_cuda` binary crashes due to backend allocator mixing).
+- **[DOCS] MULTI_BACKEND_BENCHMARK.md**: Complete 6-backend test matrix (CUDA 23 tok/s, CPU 12.8 tok/s, NPU 10.6-96 tok/s, Vulkan iGPU 4.8 tok/s).
+- **[DOCS] model_profiles.yaml**: Added NPU model profiles (`npu_qwen3_small`, `npu_qwen3_large`) with FastFlowLM backend configuration.
+- **[RESEARCH] ROCm/HIP for iGPU**: Confirmed Vulkan outperforms ROCm for Radeon 880M (gfx1150 not officially supported, both DDR5-bandwidth-bound).
 ## [7.0.0] - 2026-05-22
 
 ### 🏎️ Sovereign Daemon Hardware Affinity & OS Independence
