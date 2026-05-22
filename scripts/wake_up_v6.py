@@ -203,6 +203,17 @@ def main():
 	# 2. Critical Identity Block (Recency Bias Anchoring)
 	print('\n<bunker_directives mode="immune_core">')
 
+	# Resolve context hydration depth
+	hydration_depth = "HIGH"
+	try:
+		project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+		if project_root not in sys.path:
+			sys.path.append(os.path.join(project_root, "src"))
+		import red_pill.config as cfg
+		hydration_depth = cfg.get_config().CONTEXT_HYDRATION_DEPTH
+	except Exception:
+		hydration_depth = os.getenv("CONTEXT_HYDRATION_DEPTH", "HIGH").strip().upper()
+
 	# Dynamic Identity Pruning: Extract active skin
 	active_skin = "DEFAULT"
 	for rule in unique_context:
@@ -214,6 +225,21 @@ def main():
 
 	print("\nCORE_RULES:")
 	for rule in unique_context:
+		# Context Hydration Protocol
+		if hydration_depth == "LOW":
+			rule_upper = rule.upper()
+			exclude_words = [
+				"HISTORIA", "VÍNCULO", "RECALIBRACIÓN", "FAMILIA", "TEMOR", "PERFIL",
+				"THE USER EXPRESSES FRUSTRATION", "THE BOND:", "COMPROMISO SOBERANO",
+				"PACTO \"770\"", "PACTO 770", "SOCIAL BOND", "HITO DEL PROYECTO"
+			]
+			is_technical_or_identity = any(k in rule_upper for k in [
+				"IDENTITY ANCHOR", "GIT GOLDEN RULE", "FIGHT CLUB PROTOCOL", "POST-IT", "ACTIVE SKIN", "INTEGRITY SHIELD"
+			])
+			if not is_technical_or_identity:
+				if any(w in rule_upper for w in exclude_words):
+					continue
+
 		# Pruning logic: ONLY include Active Skin, Immune rules, or non-skin directives
 		is_skin = "Preset Skin [" in rule
 		is_immune = "[IMMUNE]" in rule or "IDENTITY ANCHOR" in rule

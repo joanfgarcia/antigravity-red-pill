@@ -1,4 +1,11 @@
-## [7.0.0] - Unreleased
+## [7.1.0] - Unreleased
+
+### 💻 Zero-Dependency System Control Panel (Tactical TUI)
+- **[FEAT] bunker_control.py**: Implement zero-dependency ANSI control loop.
+- **[FEAT] Hardware-Agnostic Telemetry Class**: Auto-detects ROCm/iGPU/AMD, NVIDIA/CUDA, or CPU/SysRAM.
+- **[FEAT] Dynamic Config Watcher**: Relies on `.env` mtime detection for hot changes (EMERGENCY_CLOUD_OVERRIDE, CONTEXT_HYDRATION_DEPTH).
+
+## [7.0.0] - 2026-05-22
 
 ### 🏎️ Sovereign Daemon Hardware Affinity & OS Independence
 - **[FEAT] Dynamic Hardware Affinity**: Implemented dynamic VRAM profiling in `model_registry.py`. Models dynamically offload layers (`n_gpu_layers`) based on active system VRAM thresholds (configured via `vram_tiers` in `model_profiles.yaml`).

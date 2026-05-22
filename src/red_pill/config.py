@@ -132,6 +132,15 @@ class RedPillConfig(BaseSettings):
 	# COGNITIVE DYNAMICS
 	# -----------------------------------------------------------------------
 	ABSOLUTE_KEYWORDS: List[str] = ["Aleth", "Bünker", "770", "enter-pánico", "PAAAAARAAAAAA", "engrama", "skin", "Titanium", "Joan"]
+	CONTEXT_HYDRATION_DEPTH: str = "HIGH"
+	EMERGENCY_CLOUD_OVERRIDE: bool = False
+
+	@field_validator("CONTEXT_HYDRATION_DEPTH", mode="before")
+	@classmethod
+	def _normalize_hydration_depth(cls, v: Any) -> str:
+		if isinstance(v, str):
+			return v.strip().upper()
+		return "HIGH"
 
 	# -----------------------------------------------------------------------
 	# QDRANT (always local in Foundation)
@@ -528,12 +537,44 @@ CURRENT_SCHEMA_VERSION: int = 1
 # Singleton config loader
 
 _enterprise_overrides_store: Dict[str, Any] = {}
+_last_env_mtime: float = 0.0
+
+
+def get_config() -> RedPillConfig:
+	"""Return the singleton RedPillConfig instance, automatically reloading if .env has changed on disk."""
+	global _last_env_mtime
+	env_path = os.path.join(platformdirs.user_config_dir("red-pill"), ".env")
+	current_mtime = 0.0
+	if os.path.exists(env_path):
+		try:
+			current_mtime = os.path.getmtime(env_path)
+		except Exception:
+			pass
+
+	if current_mtime != _last_env_mtime:
+		_last_env_mtime = current_mtime
+		get_config_cached.cache_clear()
+
+	cfg = get_config_cached(env_path)
+	if _enterprise_overrides_store:
+		cfg._enterprise_overrides.update(_enterprise_overrides_store)
+	return cfg
 
 
 @lru_cache(maxsize=1)
-def get_config() -> RedPillConfig:
-	"""Return the singleton RedPillConfig instance."""
+def get_config_cached(env_file: Optional[str] = None) -> RedPillConfig:
+	if env_file:
+		return RedPillConfig(_env_file=env_file)
 	return RedPillConfig()
+
+
+def _clear_both_caches() -> None:
+	global _last_env_mtime
+	_last_env_mtime = 0.0
+	get_config_cached.cache_clear()
+
+
+get_config.cache_clear = _clear_both_caches
 
 
 def set_enterprise_overrides(overrides: Dict[str, Any]) -> None:
