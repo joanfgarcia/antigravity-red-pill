@@ -342,7 +342,15 @@ class IDEWorker:
 		session_row = cursor.fetchone()
 
 		try:
-			if session_row and self._caps.conversation_resume and session_row["cascade_id"]:
+			# Guard: cascade_id must be a valid UUID (not a stale placeholder like 'agy_ephemeral')
+			has_valid_session = (
+				session_row
+				and self._caps.conversation_resume
+				and session_row["cascade_id"]
+				and len(session_row["cascade_id"]) == 36
+				and "-" in session_row["cascade_id"]
+			)
+			if has_valid_session:
 				# Multi-turn: continue existing conversation
 				result = self._bridge.continue_conversation(
 					combined_text,
