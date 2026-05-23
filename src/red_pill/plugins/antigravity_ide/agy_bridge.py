@@ -133,7 +133,19 @@ class AgyBridge(IDEBridge):
 			logger.error(f"[AgyBridge] agy failed (rc={result.returncode}): {stderr}")
 			raise RuntimeError(f"agy failed (rc={result.returncode}): {stderr}")
 
-		return result.stdout.strip()
+		stdout = result.stdout.strip()
+		stderr = result.stderr.strip()
+
+		# Log stderr even on success for diagnostics
+		if stderr:
+			logger.warning(f"[AgyBridge] agy stderr (rc=0): {stderr[:500]}")
+
+		# Empty response with stderr hints at a silent failure
+		if not stdout and stderr:
+			logger.error(f"[AgyBridge] agy returned empty stdout with stderr: {stderr[:500]}")
+			raise RuntimeError(f"agy returned empty response: {stderr[:200]}")
+
+		return stdout
 
 	def get_capabilities(self) -> BridgeCapabilities:
 		return BridgeCapabilities(

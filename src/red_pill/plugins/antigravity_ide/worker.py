@@ -409,8 +409,13 @@ class IDEWorker:
 		# Strip tags for clean outbox output
 		clean_content = re.sub(r"<SOVEREIGN_LOG>.*?</SOVEREIGN_LOG>", "", response, flags=re.DOTALL).strip()
 
+		# Fallback: if the bridge returned empty, send an error instead of silence
+		if not clean_content:
+			clean_content = "⚠️ El agente procesó tu mensaje pero no generó respuesta. Reintenta en unos segundos."
+			logger.warning(f"[{msg_ids}] Empty response from bridge — sending error fallback to outbox")
+
 		# Push to outbox
-		if channel != "system" and clean_content:
+		if channel != "system":
 			cursor.execute(
 				"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
 				(channel, channel_user_id, None, json.dumps({"text": clean_content})),
