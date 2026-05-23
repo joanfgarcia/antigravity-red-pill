@@ -71,7 +71,14 @@ class GrpcBridge(IDEBridge):
 				error=str(e),
 			)
 
-	def continue_conversation(self, text: str, *, timeout: int = 120) -> ConversationResult:
+	def continue_conversation(
+		self,
+		text: str,
+		*,
+		conversation_id: str = "",
+		previous_response_len: int = 0,
+		timeout: int = 300,
+	) -> ConversationResult:
 		raise NotSupportedError(
 			"Conversation resume is not supported on gRPC backend. " "Use AgyBridge (IDE_BACKEND=agy) for this feature."
 		)

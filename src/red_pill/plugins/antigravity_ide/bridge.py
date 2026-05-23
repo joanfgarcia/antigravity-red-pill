@@ -36,6 +36,8 @@ class ConversationResult:
 	response: str
 	model: Optional[str] = None
 	error: Optional[str] = None
+	# Accumulated stdout length — used for prefix-stripping in multi-turn
+	accumulated_len: int = 0
 
 	@property
 	def ok(self) -> bool:
@@ -77,10 +79,20 @@ class IDEBridge(ABC):
 		...
 
 	@abstractmethod
-	def continue_conversation(self, text: str, *, timeout: int = 120) -> ConversationResult:
-		"""Continue the most recent conversation.
+	def continue_conversation(
+		self,
+		text: str,
+		*,
+		conversation_id: str = "",
+		previous_response_len: int = 0,
+		timeout: int = 300,
+	) -> ConversationResult:
+		"""Continue an existing conversation.
 
 		Used for multi-turn Telegram sessions.
+		Args:
+			conversation_id: UUID from the first prompt() call.
+			previous_response_len: Accumulated stdout length for prefix-stripping.
 		"""
 		...
 

@@ -322,56 +322,11 @@ class IDEWorker:
 		conn.commit()
 		conn.close()
 
-	def _find_active_log_path(self):
-		brain_dirs = [
-			Path.home() / ".gemini" / "antigravity-cli" / "brain",
-			Path.home() / ".gemini" / "antigravity" / "brain",
-		]
-		latest_log_path = None
-		latest_mtime = 0
-		for bdir in brain_dirs:
-			if not bdir.exists():
-				continue
-			try:
-				for conv_dir in bdir.iterdir():
-					if not conv_dir.is_dir():
-						continue
-					log_path = conv_dir / ".system_generated" / "logs" / "transcript.jsonl"
-					if log_path.exists():
-						mtime = log_path.stat().st_mtime
-						if mtime > latest_mtime:
-							latest_mtime = mtime
-							latest_log_path = log_path
-			except Exception:
-				continue
-		return latest_log_path
-
-	def _get_planner_steps(self, log_path) -> dict:
-		steps = {}
-		if not log_path or not log_path.exists():
-			return steps
-		try:
-			with open(log_path, "r", encoding="utf-8") as f:
-				for line in f:
-					if not line.strip():
-						continue
-					try:
-						data = json.loads(line)
-						if data.get("type") in ("PLANNER_RESPONSE", "CORTEX_STEP_TYPE_PLANNER_RESPONSE", "15") or data.get("source") == "MODEL":
-							content = data.get("content")
-							step_index = data.get("step_index")
-							if step_index is not None and isinstance(content, str) and content.strip():
-								steps[step_index] = content
-					except Exception:
-						continue
-		except Exception as e:
-			logger.error(f"Error reading planner steps from {log_path}: {e}")
-		return steps
-
 	def _process_via_bridge(self, combined_text, msg_ids, channel, channel_user_id, cursor, conn):
 		"""External Scribe Pattern: direct prompt → response → scribe → outbox.
 
 		Uses AgyBridge for synchronous, auto-approved prompt execution.
+		Multi-turn via --conversation <uuid> with prefix-stripping.
 		The worker acts as external scribe — saves prompt+response directly
 		without depending on the agent calling interceptor_rp.
 		"""
@@ -379,28 +334,26 @@ class IDEWorker:
 
 		logger.info(f"[{msg_ids}] Processing via {self._caps.backend.value.upper()} bridge (External Scribe Pattern)")
 
-		# Find the active log path and get initial planner steps
-		log_path = self._find_active_log_path()
-		initial_steps = self._get_planner_steps(log_path)
-
-		# Check if we should use continue_conversation (multi-turn Telegram session)
+		# Check if we have an existing agy session (multi-turn)
 		cursor.execute(
-			"SELECT cascade_id FROM telegram_sessions WHERE channel_user_id = ? AND cascade_type = 'agy_session'",
+			"SELECT cascade_id, accumulated_len FROM telegram_sessions WHERE channel_user_id = ? AND cascade_type = 'agy_session'",
 			(channel_user_id,),
 		)
-		has_session = cursor.fetchone()
+		session_row = cursor.fetchone()
 
 		try:
-			# Increased timeout to 300 seconds for heavy agent runs
-			if has_session and self._caps.conversation_resume:
-				result = self._bridge.continue_conversation(combined_text, timeout=300)
-			else:
-				result = self._bridge.prompt(combined_text, timeout=300)
-				# Mark that we have an active agy session for this user
-				cursor.execute(
-					"INSERT OR REPLACE INTO telegram_sessions (channel_user_id, cascade_id, cascade_type) VALUES (?, 'agy_ephemeral', 'agy_session')",
-					(channel_user_id,),
+			if session_row and self._caps.conversation_resume and session_row["cascade_id"]:
+				# Multi-turn: continue existing conversation
+				result = self._bridge.continue_conversation(
+					combined_text,
+					conversation_id=session_row["cascade_id"],
+					previous_response_len=session_row["accumulated_len"] or 0,
+					timeout=300,
 				)
+			else:
+				# First message: new ephemeral conversation (dir-diff captures UUID)
+				result = self._bridge.prompt(combined_text, timeout=300)
+
 		except Exception as e:
 			logger.error(f"[{msg_ids}] Bridge execution failed: {e}")
 			for m_id in msg_ids:
@@ -413,48 +366,40 @@ class IDEWorker:
 				cursor.execute("UPDATE inbox SET retries = retries + 1 WHERE id = ?", (m_id,))
 			return
 
+		# Store/update session for multi-turn
+		if result.conversation_id:
+			accumulated = result.accumulated_len if result.accumulated_len else len(result.response)
+			cursor.execute(
+				"INSERT OR REPLACE INTO telegram_sessions (channel_user_id, cascade_id, cascade_type, accumulated_len) VALUES (?, ?, 'agy_session', ?)",
+				(channel_user_id, result.conversation_id, accumulated),
+			)
+
 		response = result.response
-
-		# Find the new response from the log file
-		new_response = None
-		if log_path:
-			final_steps = self._get_planner_steps(log_path)
-			new_steps = [content for idx, content in final_steps.items() if idx not in initial_steps]
-			if new_steps:
-				new_response = new_steps[-1]
-				logger.info(f"[{msg_ids}] Extracted clean new response from transcript.jsonl")
-
-		# Fallback if log parsing failed or didn't find anything
-		if not new_response:
-			if "Error: timed out waiting for response" in response:
-				new_response = "Error: La respuesta ha tardado demasiado en generarse. Por favor, reintenta."
-			else:
-				new_response = response
 
 		# External Scribe: save prompt+response directly to SQLite
 		try:
-			self._scribe_relay(user_prompt=combined_text, agent_response=new_response)
+			self._scribe_relay(user_prompt=combined_text, agent_response=response)
 		except Exception as e:
 			logger.warning(f"[{msg_ids}] Scribe relay failed (non-fatal): {e}")
 
 		# Tag processing pipeline (same as legacy flow)
-		log_matches = re.findall(r"<SOVEREIGN_LOG>(.*?)</SOVEREIGN_LOG>", new_response, re.DOTALL)
+		log_matches = re.findall(r"<SOVEREIGN_LOG>(.*?)</SOVEREIGN_LOG>", response, re.DOTALL)
 		for log_msg in log_matches:
 			try:
 				from red_pill.core.paths import get_aleth_core_root
 
-				log_path_out = get_aleth_core_root() / "AWAKENING_LOG.md"
-				if log_path_out.exists():
+				log_path = get_aleth_core_root() / "AWAKENING_LOG.md"
+				if log_path.exists():
 					import datetime
 
 					timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-					with open(log_path_out, "a") as f:
+					with open(log_path, "a") as f:
 						f.write(f"\n- **[{timestamp}]** (AgyBridge): {log_msg.strip()}")
 			except Exception as e:
 				logger.error(f"Failed to write SOVEREIGN_LOG: {e}")
 
 		# Strip tags for clean outbox output
-		clean_content = re.sub(r"<SOVEREIGN_LOG>.*?</SOVEREIGN_LOG>", "", new_response, flags=re.DOTALL).strip()
+		clean_content = re.sub(r"<SOVEREIGN_LOG>.*?</SOVEREIGN_LOG>", "", response, flags=re.DOTALL).strip()
 
 		# Push to outbox
 		if channel != "system" and clean_content:

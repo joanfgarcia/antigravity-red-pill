@@ -5,6 +5,10 @@ Uses `agy -p --dangerously-skip-permissions` for headless, auto-approved
 prompt execution. No API key needed — uses ANTIGRAVITY_LS_ADDRESS +
 ANTIGRAVITY_CSRF_TOKEN from the local IDE session.
 
+Multi-turn support via `agy --conversation <uuid> -p`:
+    - First message: dir-diff captures the conversation UUID
+    - Subsequent: `--conversation <uuid>` resumes, prefix-strip extracts delta
+
 Requirements:
     - agy CLI installed (>= 1.0)
     - Antigravity IDE running (language_server process active)
@@ -16,11 +20,35 @@ import logging
 import os
 import shutil
 import subprocess
-from typing import Optional, Tuple
+import uuid as uuid_mod
+from pathlib import Path
+from typing import Optional, Set, Tuple
 
 from .bridge import BackendType, BridgeCapabilities, ConversationResult, IDEBridge
 
 logger = logging.getLogger(__name__)
+
+# Brain directories where agy stores conversations
+AGY_BRAIN_DIRS = [
+	Path.home() / ".gemini" / "antigravity-cli" / "brain",
+	Path.home() / ".gemini" / "antigravity" / "brain",
+]
+
+
+def _get_brain_dir() -> Optional[Path]:
+	"""Find the active agy brain directory."""
+	for d in AGY_BRAIN_DIRS:
+		if d.is_dir():
+			return d
+	return None
+
+
+def _snapshot_brain(brain_dir: Path) -> Set[str]:
+	"""Get the set of conversation UUIDs in the brain directory."""
+	try:
+		return {d.name for d in brain_dir.iterdir() if d.is_dir()}
+	except Exception:
+		return set()
 
 
 class AgyBridge(IDEBridge):
@@ -28,7 +56,7 @@ class AgyBridge(IDEBridge):
 
 	Supports:
 		- One-shot prompts (ephemeral, no ghost cascades)
-		- Conversation resume (-c flag)
+		- Multi-turn via --conversation <uuid> (dir-diff UUID capture)
 		- Auto-approval of all tool calls
 		- MCP tool usage within the agent
 	"""
@@ -117,36 +145,113 @@ class AgyBridge(IDEBridge):
 			mcp_tools=True,
 		)
 
-	def prompt(self, text: str, *, model: str = "flash", timeout: int = 120) -> ConversationResult:
-		"""Send a one-shot prompt via agy -p."""
+	def prompt(self, text: str, *, model: str = "flash", timeout: int = 300) -> ConversationResult:
+		"""Send a one-shot prompt via agy -p.
+
+		Uses dir-diff to capture the conversation UUID for future multi-turn.
+		Embeds an eid (ephemeral ID) in the prompt as safety net for UUID verification.
+		"""
+		eid = f"eid:{uuid_mod.uuid4().hex[:12]}"
+		tagged_text = f"{text}\n<!-- {eid} -->"
+
+		brain_dir = _get_brain_dir()
+		before = _snapshot_brain(brain_dir) if brain_dir else set()
+
 		try:
-			response = self._run_agy(["-p", text], timeout)
-			return ConversationResult(
-				conversation_id="ephemeral",
-				response=response,
-				model=model,
-			)
+			response = self._run_agy(["-p", tagged_text], timeout)
 		except Exception as e:
 			return ConversationResult(
-				conversation_id="ephemeral",
+				conversation_id="",
 				response="",
 				error=str(e),
 			)
 
-	def continue_conversation(self, text: str, *, timeout: int = 120) -> ConversationResult:
-		"""Continue the most recent agy conversation via agy -c -p."""
+		# Capture conversation UUID via dir-diff
+		conversation_id = ""
+		if brain_dir:
+			after = _snapshot_brain(brain_dir)
+			new_dirs = after - before
+			if len(new_dirs) == 1:
+				conversation_id = new_dirs.pop()
+			elif len(new_dirs) > 1:
+				# Safety net: verify eid in transcript.jsonl
+				conversation_id = self._find_by_eid(brain_dir, new_dirs, eid)
+			# else: len == 0 → conversation reused or brain dir not found
+
+		logger.info(f"[AgyBridge] prompt() → conv={conversation_id}, response_len={len(response)}")
+
+		return ConversationResult(
+			conversation_id=conversation_id,
+			response=response,
+			model=model,
+		)
+
+	def continue_conversation(
+		self,
+		text: str,
+		*,
+		conversation_id: str = "",
+		previous_response_len: int = 0,
+		timeout: int = 300,
+	) -> ConversationResult:
+		"""Continue an existing conversation via agy --conversation <uuid> -p.
+
+		Since agy --conversation accumulates ALL previous responses in stdout,
+		we use previous_response_len to strip the prefix and extract only the
+		new response (delta).
+
+		Args:
+			text: The new prompt.
+			conversation_id: UUID from the first prompt() call.
+			previous_response_len: Length of the accumulated stdout from previous turns.
+			timeout: Execution timeout in seconds.
+		"""
+		if not conversation_id:
+			# No session to continue — fallback to new prompt
+			logger.warning("[AgyBridge] continue_conversation called without conversation_id, falling back to prompt()")
+			return self.prompt(text, timeout=timeout)
+
 		try:
-			response = self._run_agy(["-c", "-p", text], timeout)
-			return ConversationResult(
-				conversation_id="continued",
-				response=response,
-			)
+			accumulated = self._run_agy(["--conversation", conversation_id, "-p", text], timeout)
 		except Exception as e:
 			return ConversationResult(
-				conversation_id="continued",
+				conversation_id=conversation_id,
 				response="",
 				error=str(e),
 			)
+
+		# Prefix-strip: extract only the new response
+		if previous_response_len > 0 and len(accumulated) > previous_response_len:
+			delta = accumulated[previous_response_len:].strip()
+		else:
+			delta = accumulated.strip()
+
+		logger.info(
+			f"[AgyBridge] continue_conversation() → conv={conversation_id}, "
+			f"accumulated={len(accumulated)}, delta={len(delta)}"
+		)
+
+		return ConversationResult(
+			conversation_id=conversation_id,
+			response=delta,
+			# Store accumulated length for next turn
+			accumulated_len=len(accumulated),
+		)
+
+	def _find_by_eid(self, brain_dir: Path, candidates: Set[str], eid: str) -> str:
+		"""Safety net: find the conversation containing our eid marker."""
+		for cid in candidates:
+			transcript = brain_dir / cid / ".system_generated" / "logs" / "transcript.jsonl"
+			if transcript.exists():
+				try:
+					content = transcript.read_text(encoding="utf-8", errors="ignore")
+					if eid in content:
+						logger.info(f"[AgyBridge] eid verification matched: {cid}")
+						return cid
+				except Exception:
+					continue
+		logger.warning(f"[AgyBridge] eid verification failed for {len(candidates)} candidates")
+		return candidates.pop() if candidates else ""
 
 	def health_check(self) -> bool:
 		"""Quick connectivity test — sends a minimal prompt."""

@@ -456,3 +456,47 @@ To neutralize this threat, the protocol adopts the **OOM Shield Protocol** using
 - **Cgroup Containment**: All memory-intensive executions (like `llama-cli` or heavy compilations) are wrapped in `systemd-run --user --scope -p MemoryMax=<LIMIT>`.
 - **Surgical Termination**: If the wrapped process exceeds the dynamic limit (e.g., `10G` or `16G` depending on available RAM), the kernel kills *only* the contained process.
 - **Sovereign Continuity**: The Agent and IDE remain completely unharmed, allowing the Agent to detect the failure, adjust the parameters, and try again without losing context.
+
+## 16. IDEBridge v2 — Dual-Backend Architecture (v7.1.0)
+
+> **Full specification**: [`src/red_pill/plugins/antigravity_ide/ARCHITECTURE.md`](../../src/red_pill/plugins/antigravity_ide/ARCHITECTURE.md)
+> **Related**: [ANTIGRAVITY_LS_PROXY.md](ANTIGRAVITY_LS_PROXY.md), [EVENT_ROUTER_ARCHITECTURE.md](EVENT_ROUTER_ARCHITECTURE.md)
+
+The IDE communication layer has been re-architected from a monolithic gRPC client into a **dual-backend bridge** to solve the Ghost Cascade Problem — where Telegram messages injected via gRPC created phantom IDE tabs, tool calls stuck in `PENDING`, and ~60s+ async polling latency.
+
+### 16.1 Architecture
+
+```
+Telegram/Neon-Link → Worker → IDEBridge (ABC)
+                                  │
+                    ┌─────────────┴──────────────┐
+                    │                            │
+              AgyBridge (v2)              GrpcBridge (v1)
+              ─────────────              ──────────────
+              Execution path             Extraction path
+              agy CLI + auto-approve     gRPC-Web to LS
+              14-21s sync response       Chronicle pipeline
+              run_command ✅             GetAllTrajectories ✅
+              MCP tools ✅              GetTrajectorySteps ✅
+```
+
+- **`AgyBridge`**: Uses `agy -p --dangerously-skip-permissions` for headless prompt execution with full tool access. Multi-turn via `agy --conversation <uuid>` with dir-diff UUID capture and prefix-stripping to handle accumulated stdout.
+- **`GrpcBridge`**: Preserved exclusively for the Chronicle pipeline (`archive_memories` ingestion). **Not deprecated** — actively used for conversation extraction.
+- **`IDE_BACKEND`**: New `.env` parameter (`auto|agy|grpc`). Default `auto` selects AgyBridge when `agy` CLI is available.
+
+### 16.2 Key Design Decisions
+
+| Decision | Rationale |
+|---|---|
+| No file lock for concurrent agy | UUID4-based eid embedded in prompt eliminates race conditions |
+| Prefix-stripping over transcript parsing | `agy --conversation` accumulates all stdout; `delta = stdout[prev_len:]` is O(1) vs O(n) log scan |
+| External Scribe Pattern | Worker saves interactions directly to SQLite, decoupled from agent state |
+| GrpcBridge not deprecated | Only viable path for `GetAllCascadeTrajectories` (Chronicle) |
+
+### 16.3 CLI
+
+```bash
+red-pill ide backend [auto|agy|grpc]   # Set/show backend
+red-pill ide status                     # Capabilities + preflight
+red-pill ide test                       # Health check
+```
