@@ -322,6 +322,52 @@ class IDEWorker:
 		conn.commit()
 		conn.close()
 
+	def _find_active_log_path(self):
+		brain_dirs = [
+			Path.home() / ".gemini" / "antigravity-cli" / "brain",
+			Path.home() / ".gemini" / "antigravity" / "brain",
+		]
+		latest_log_path = None
+		latest_mtime = 0
+		for bdir in brain_dirs:
+			if not bdir.exists():
+				continue
+			try:
+				for conv_dir in bdir.iterdir():
+					if not conv_dir.is_dir():
+						continue
+					log_path = conv_dir / ".system_generated" / "logs" / "transcript.jsonl"
+					if log_path.exists():
+						mtime = log_path.stat().st_mtime
+						if mtime > latest_mtime:
+							latest_mtime = mtime
+							latest_log_path = log_path
+			except Exception:
+				continue
+		return latest_log_path
+
+	def _get_planner_steps(self, log_path) -> dict:
+		steps = {}
+		if not log_path or not log_path.exists():
+			return steps
+		try:
+			with open(log_path, "r", encoding="utf-8") as f:
+				for line in f:
+					if not line.strip():
+						continue
+					try:
+						data = json.loads(line)
+						if data.get("type") in ("PLANNER_RESPONSE", "CORTEX_STEP_TYPE_PLANNER_RESPONSE", "15") or data.get("source") == "MODEL":
+							content = data.get("content")
+							step_index = data.get("step_index")
+							if step_index is not None and isinstance(content, str) and content.strip():
+								steps[step_index] = content
+					except Exception:
+						continue
+		except Exception as e:
+			logger.error(f"Error reading planner steps from {log_path}: {e}")
+		return steps
+
 	def _process_via_bridge(self, combined_text, msg_ids, channel, channel_user_id, cursor, conn):
 		"""External Scribe Pattern: direct prompt → response → scribe → outbox.
 
@@ -333,6 +379,10 @@ class IDEWorker:
 
 		logger.info(f"[{msg_ids}] Processing via {self._caps.backend.value.upper()} bridge (External Scribe Pattern)")
 
+		# Find the active log path and get initial planner steps
+		log_path = self._find_active_log_path()
+		initial_steps = self._get_planner_steps(log_path)
+
 		# Check if we should use continue_conversation (multi-turn Telegram session)
 		cursor.execute(
 			"SELECT cascade_id FROM telegram_sessions WHERE channel_user_id = ? AND cascade_type = 'agy_session'",
@@ -341,10 +391,11 @@ class IDEWorker:
 		has_session = cursor.fetchone()
 
 		try:
+			# Increased timeout to 300 seconds for heavy agent runs
 			if has_session and self._caps.conversation_resume:
-				result = self._bridge.continue_conversation(combined_text, timeout=120)
+				result = self._bridge.continue_conversation(combined_text, timeout=300)
 			else:
-				result = self._bridge.prompt(combined_text, timeout=120)
+				result = self._bridge.prompt(combined_text, timeout=300)
 				# Mark that we have an active agy session for this user
 				cursor.execute(
 					"INSERT OR REPLACE INTO telegram_sessions (channel_user_id, cascade_id, cascade_type) VALUES (?, 'agy_ephemeral', 'agy_session')",
@@ -364,30 +415,46 @@ class IDEWorker:
 
 		response = result.response
 
+		# Find the new response from the log file
+		new_response = None
+		if log_path:
+			final_steps = self._get_planner_steps(log_path)
+			new_steps = [content for idx, content in final_steps.items() if idx not in initial_steps]
+			if new_steps:
+				new_response = new_steps[-1]
+				logger.info(f"[{msg_ids}] Extracted clean new response from transcript.jsonl")
+
+		# Fallback if log parsing failed or didn't find anything
+		if not new_response:
+			if "Error: timed out waiting for response" in response:
+				new_response = "Error: La respuesta ha tardado demasiado en generarse. Por favor, reintenta."
+			else:
+				new_response = response
+
 		# External Scribe: save prompt+response directly to SQLite
 		try:
-			self._scribe_relay(user_prompt=combined_text, agent_response=response)
+			self._scribe_relay(user_prompt=combined_text, agent_response=new_response)
 		except Exception as e:
 			logger.warning(f"[{msg_ids}] Scribe relay failed (non-fatal): {e}")
 
 		# Tag processing pipeline (same as legacy flow)
-		log_matches = re.findall(r"<SOVEREIGN_LOG>(.*?)</SOVEREIGN_LOG>", response, re.DOTALL)
+		log_matches = re.findall(r"<SOVEREIGN_LOG>(.*?)</SOVEREIGN_LOG>", new_response, re.DOTALL)
 		for log_msg in log_matches:
 			try:
 				from red_pill.core.paths import get_aleth_core_root
 
-				log_path = get_aleth_core_root() / "AWAKENING_LOG.md"
-				if log_path.exists():
+				log_path_out = get_aleth_core_root() / "AWAKENING_LOG.md"
+				if log_path_out.exists():
 					import datetime
 
 					timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-					with open(log_path, "a") as f:
+					with open(log_path_out, "a") as f:
 						f.write(f"\n- **[{timestamp}]** (AgyBridge): {log_msg.strip()}")
 			except Exception as e:
 				logger.error(f"Failed to write SOVEREIGN_LOG: {e}")
 
 		# Strip tags for clean outbox output
-		clean_content = re.sub(r"<SOVEREIGN_LOG>.*?</SOVEREIGN_LOG>", "", response, flags=re.DOTALL).strip()
+		clean_content = re.sub(r"<SOVEREIGN_LOG>.*?</SOVEREIGN_LOG>", "", new_response, flags=re.DOTALL).strip()
 
 		# Push to outbox
 		if channel != "system" and clean_content:
@@ -400,7 +467,7 @@ class IDEWorker:
 		for m_id in msg_ids:
 			cursor.execute("UPDATE inbox SET status = 'PROCESSED' WHERE id = ?", (m_id,))
 
-		logger.info(f"[{msg_ids}] Processed via bridge. Response length: {len(response)} chars")
+		logger.info(f"[{msg_ids}] Processed via bridge. Response length: {len(clean_content)} chars")
 
 	def _scribe_relay(self, user_prompt: str, agent_response: str):
 		"""External Scribe: save prompt+response directly to the Bünker's interaction log.
@@ -465,6 +532,9 @@ class IDEWorker:
 					# Buscamos el último paso de tipo 15 (CORTEX_STEP_TYPE_PLANNER_RESPONSE) si no lo hemos extraído ya
 					for s in reversed(steps):
 						step_type = str(s.get("type", ""))
+						if step_type in ("1", "CORTEX_STEP_TYPE_USER_INPUT", "USER_INPUT"):
+							logger.info(f"[Cascade {cascade_id}] Fallback path: Hit USER_INPUT step before PLANNER_RESPONSE. Response not ready.")
+							break
 						if step_type == "15" or step_type == "CORTEX_STEP_TYPE_PLANNER_RESPONSE":
 							# En gRPC-Web JSON, los oneof están en el nivel superior, no envueltos en "step"
 							content = s.get("plannerResponse", {}).get("response")
