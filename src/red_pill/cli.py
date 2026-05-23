@@ -206,6 +206,63 @@ def handle_interceptor(args: argparse.Namespace) -> None:
 		print(f"Bünker Interceptor: {status}")
 
 
+def handle_ide(args: argparse.Namespace) -> None:
+	"""Antigravity IDE Bridge Management."""
+	conf = cfg.get_config()
+	env_path = Path(platformdirs.user_config_dir("red-pill")) / ".env"
+
+	if args.ide_cmd == "backend":
+		if args.value:
+			# Update .env (same pattern as handle_interceptor)
+			lines = []
+			replaced = False
+			if env_path.exists():
+				with open(env_path, "r") as f:
+					for line in f:
+						if line.startswith("IDE_BACKEND="):
+							lines.append(f"IDE_BACKEND={args.value}\n")
+							replaced = True
+						else:
+							lines.append(line)
+			if not replaced:
+				lines.append(f"IDE_BACKEND={args.value}\n")
+			with open(env_path, "w") as f:
+				f.writelines(lines)
+			print(f"[OK] IDE backend set to: {args.value.upper()}")
+		else:
+			print(f"Current IDE backend: {conf.IDE_BACKEND.upper()}")
+	elif args.ide_cmd == "status":
+		from red_pill.plugins.antigravity_ide.factory import create_bridge, preflight_check
+		pf = preflight_check()
+		bridge = create_bridge()
+		caps = bridge.get_capabilities()
+		print(f"--- [IDE BRIDGE: {caps.backend.value.upper()}] ---")
+		if pf.get("agy_version"):
+			print(f"agy version:         {pf['agy_version']}")
+		print(f"Auto-approve:        {'✅' if caps.auto_approve else '❌'}")
+		print(f"Ephemeral mode:      {'✅' if caps.ephemeral_mode else '❌'}")
+		print(f"Conversation resume: {'✅' if caps.conversation_resume else '❌'}")
+		print(f"Model selection:     {'✅' if caps.model_selection else '❌'}")
+		print(f"MCP tools:           {'✅' if caps.mcp_tools else '❌'}")
+		if pf.get("warnings"):
+			for w in pf["warnings"]:
+				print(f"⚠️  {w}")
+		if pf.get("errors"):
+			for e in pf["errors"]:
+				print(f"❌ {e}")
+	elif args.ide_cmd == "test":
+		from red_pill.plugins.antigravity_ide.factory import create_bridge
+		bridge = create_bridge()
+		backend_name = bridge.get_capabilities().backend.value.upper()
+		print(f"Testing {backend_name} bridge...")
+		if bridge.health_check():
+			print(f"[OK] {backend_name} bridge is healthy.")
+		else:
+			print(f"[FAIL] {backend_name} bridge is not responding.")
+	else:
+		print("Usage: red-pill ide [backend|status|test]")
+
+
 def handle_daemon() -> None:
 	"""
 	Lazarus Daemon: starts the LazarusPulse heartbeat and blocks forever.
@@ -448,6 +505,14 @@ def main() -> None:
 	bunker_sub.add_parser("halt", help="[KILL-SWITCH] Emergency halt of all autonomous cognitive operations")
 	bunker_sub.add_parser("resume", help="Restore power to autonomous cognitive operations")
 
+	# Antigravity IDE Bridge
+	ide_parser = subparsers.add_parser("ide", help="Antigravity IDE Bridge Management")
+	ide_sub = ide_parser.add_subparsers(dest="ide_cmd")
+	backend_parser = ide_sub.add_parser("backend", help="Set or show IDE backend")
+	backend_parser.add_argument("value", nargs="?", choices=["agy", "grpc", "auto"], help="Backend to use")
+	ide_sub.add_parser("status", help="Show IDE bridge capabilities and health")
+	ide_sub.add_parser("test", help="Run connectivity test against the IDE")
+
 	subparsers.add_parser("telemetry", help="Run a single-pass hardware/Bünker telemetry heartbeat (Oneshot)")
 
 	args = parser.parse_args()
@@ -515,7 +580,7 @@ def main() -> None:
 	# Map CLI type to collection(s)
 	if getattr(args, "type", None):
 		collections = [get_collection(args.type)]
-	elif args.command in ["seed", "status", "swarm", "soul", "init", "bunker"]:
+	elif args.command in ["seed", "status", "swarm", "soul", "init", "bunker", "ide"]:
 		collections = []  # Not needed for these
 	else:
 		# Default sweep for search/diag if no type specified
@@ -668,6 +733,9 @@ def main() -> None:
 			from red_pill.bunker_lifecycle import handle_bunker
 
 			handle_bunker(args)
+			return
+		elif args.command == "ide":
+			handle_ide(args)
 			return
 
 		# Loop through requested collections

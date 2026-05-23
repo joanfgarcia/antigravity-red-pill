@@ -25,6 +25,9 @@ load_dotenv()  # Override local si existiera
 sys.path.insert(0, str(Path(__file__).parent.resolve()))
 from ide_client import AntigravityIDEClient  # noqa: E402
 
+from red_pill.plugins.antigravity_ide.bridge import BackendType  # noqa: E402
+from red_pill.plugins.antigravity_ide.factory import create_bridge  # noqa: E402
+
 logger = logging.getLogger(__name__)
 
 # Alineación con el estándar de Sovereign Gateway (Neon-Link)
@@ -44,6 +47,15 @@ class IDEWorker:
 	def __init__(self):
 		self.client = AntigravityIDEClient()
 		self.running = True
+		# IDEBridge: create execution bridge based on config
+		try:
+			self._bridge = create_bridge()
+			self._caps = self._bridge.get_capabilities()
+			logger.info(f"[IDEWorker] Bridge: {self._caps.backend.value.upper()} (auto_approve={self._caps.auto_approve})")
+		except Exception as e:
+			logger.warning(f"[IDEWorker] Bridge creation failed, falling back to gRPC-only: {e}")
+			self._bridge = None
+			self._caps = None
 
 	def run(self):
 		logger.info("Red-Pill AntigravityIDEPlugin Worker started.")
@@ -60,9 +72,13 @@ class IDEWorker:
 
 	def run_once(self):
 		self.process_inbox()
-		self.check_for_replies()
-		self.check_minion_inbox_auto_inject()
-		self.process_cognitive_queue()
+		# check_for_replies: only needed for gRPC async polling (legacy flow)
+		if not self._caps or self._caps.backend == BackendType.GRPC:
+			self.check_for_replies()
+		# Ghost cascade and cognitive queue: gRPC-only (require persistent cascades)
+		if not self._caps or self._caps.backend == BackendType.GRPC:
+			self.check_minion_inbox_auto_inject()
+			self.process_cognitive_queue()
 		self.update_heartbeat()
 
 	def update_heartbeat(self):
@@ -243,6 +259,14 @@ class IDEWorker:
 
 		combined_text = "\n".join(buffer_texts)
 
+		# ---- IDEBridge: Direct execution path (AgyBridge) ----
+		if self._caps and self._caps.auto_approve:
+			self._process_via_bridge(combined_text, msg_ids_to_process, channel, channel_user_id, cursor, conn)
+			conn.commit()
+			conn.close()
+			return
+
+		# ---- Legacy gRPC path ----
 		cursor.execute("SELECT cascade_id FROM telegram_sessions WHERE channel_user_id = ? AND cascade_type = 'interactive'", (channel_user_id,))
 		session_row = cursor.fetchone()
 		cascade_id = session_row["cascade_id"] if session_row else conversational_msgs[0]["cascade_id"]
@@ -297,6 +321,110 @@ class IDEWorker:
 
 		conn.commit()
 		conn.close()
+
+	def _process_via_bridge(self, combined_text, msg_ids, channel, channel_user_id, cursor, conn):
+		"""External Scribe Pattern: direct prompt → response → scribe → outbox.
+
+		Uses AgyBridge for synchronous, auto-approved prompt execution.
+		The worker acts as external scribe — saves prompt+response directly
+		without depending on the agent calling interceptor_rp.
+		"""
+		import re
+
+		logger.info(f"[{msg_ids}] Processing via {self._caps.backend.value.upper()} bridge (External Scribe Pattern)")
+
+		# Check if we should use continue_conversation (multi-turn Telegram session)
+		cursor.execute(
+			"SELECT cascade_id FROM telegram_sessions WHERE channel_user_id = ? AND cascade_type = 'agy_session'",
+			(channel_user_id,),
+		)
+		has_session = cursor.fetchone()
+
+		try:
+			if has_session and self._caps.conversation_resume:
+				result = self._bridge.continue_conversation(combined_text, timeout=120)
+			else:
+				result = self._bridge.prompt(combined_text, timeout=120)
+				# Mark that we have an active agy session for this user
+				cursor.execute(
+					"INSERT OR REPLACE INTO telegram_sessions (channel_user_id, cascade_id, cascade_type) VALUES (?, 'agy_ephemeral', 'agy_session')",
+					(channel_user_id,),
+				)
+		except Exception as e:
+			logger.error(f"[{msg_ids}] Bridge execution failed: {e}")
+			for m_id in msg_ids:
+				cursor.execute("UPDATE inbox SET retries = retries + 1 WHERE id = ?", (m_id,))
+			return
+
+		if not result.ok:
+			logger.error(f"[{msg_ids}] Bridge returned error: {result.error}")
+			for m_id in msg_ids:
+				cursor.execute("UPDATE inbox SET retries = retries + 1 WHERE id = ?", (m_id,))
+			return
+
+		response = result.response
+
+		# External Scribe: save prompt+response directly to SQLite
+		try:
+			self._scribe_relay(user_prompt=combined_text, agent_response=response)
+		except Exception as e:
+			logger.warning(f"[{msg_ids}] Scribe relay failed (non-fatal): {e}")
+
+		# Tag processing pipeline (same as legacy flow)
+		log_matches = re.findall(r"<SOVEREIGN_LOG>(.*?)</SOVEREIGN_LOG>", response, re.DOTALL)
+		for log_msg in log_matches:
+			try:
+				from red_pill.core.paths import get_aleth_core_root
+
+				log_path = get_aleth_core_root() / "AWAKENING_LOG.md"
+				if log_path.exists():
+					import datetime
+
+					timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+					with open(log_path, "a") as f:
+						f.write(f"\n- **[{timestamp}]** (AgyBridge): {log_msg.strip()}")
+			except Exception as e:
+				logger.error(f"Failed to write SOVEREIGN_LOG: {e}")
+
+		# Strip tags for clean outbox output
+		clean_content = re.sub(r"<SOVEREIGN_LOG>.*?</SOVEREIGN_LOG>", "", response, flags=re.DOTALL).strip()
+
+		# Push to outbox
+		if channel != "system" and clean_content:
+			cursor.execute(
+				"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
+				(channel, channel_user_id, None, json.dumps({"text": clean_content})),
+			)
+
+		# Mark all messages as processed
+		for m_id in msg_ids:
+			cursor.execute("UPDATE inbox SET status = 'PROCESSED' WHERE id = ?", (m_id,))
+
+		logger.info(f"[{msg_ids}] Processed via bridge. Response length: {len(response)} chars")
+
+	def _scribe_relay(self, user_prompt: str, agent_response: str):
+		"""External Scribe: save prompt+response directly to the Bünker's interaction log.
+
+		This replaces the interceptor_rp-based scribe_relay for bridge-processed messages.
+		Saves both prompt and response in a single call, with no delay or dependency
+		on the agent remembering to invoke it.
+		"""
+		try:
+			from red_pill.core.paths import get_db_dir
+
+			db_path = get_db_dir() / "bunker.db"
+			conn_scribe = sqlite3.connect(str(db_path))
+			conn_scribe.execute(
+				"""INSERT INTO interactions (user_prompt, agent_response, timestamp)
+				VALUES (?, ?, CURRENT_TIMESTAMP)""",
+				(user_prompt[:2000], agent_response[:5000]),
+			)
+			conn_scribe.commit()
+			conn_scribe.close()
+			logger.debug("[Scribe] Saved interaction via External Scribe Pattern")
+		except Exception as e:
+			# Non-fatal: log but don't block the pipeline
+			logger.warning(f"[Scribe] Failed to save interaction: {e}")
 
 	def check_for_replies(self):
 		conn = get_connection()

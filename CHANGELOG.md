@@ -1,5 +1,16 @@
 ## [7.1.0] - Unreleased
 
+### 🔌 IDEBridge v2 — Dual-Backend Architecture (AgyBridge + GrpcBridge)
+- **[ARCH] `IDEBridge` Abstract Interface**: New `bridge.py` defining `IDEBridge` ABC with `prompt()`, `continue_conversation()`, `health_check()`, and `get_capabilities()`. Supports `BackendType.AGY` and `BackendType.GRPC` with clean `NotSupportedError` separation.
+- **[NEW] `AgyBridge`**: Execution backend via `agy -p --dangerously-skip-permissions`. Enables auto-approved `run_command` and MCP tool execution from Telegram/Neon-Link without security prompt gates. Supports ephemeral mode, conversation resume (`agy -c`), and model selection.
+- **[NEW] `GrpcBridge`**: Extraction backend preserving the existing gRPC-Web pipeline for Chronicle (`GetAllCascadeTrajectories`, `GetCascadeTrajectorySteps`). Execution methods raise `NotSupportedError`.
+- **[NEW] `factory.py`**: `create_bridge()` (execution routing) and `create_extraction_bridge()` (Chronicle pipeline) with `preflight_check()` for agy CLI discovery and version validation.
+- **[FEAT] External Scribe Pattern**: `worker.py` now captures prompt+response in a single synchronous call via `_process_via_bridge()`, saving interactions directly to `bunker.db` without depending on the agent invoking `interceptor_rp`. Decouples memory persistence from agent state.
+- **[FEAT] `red-pill ide` CLI**: New TUI subcommand with `backend` (set/show IDE_BACKEND), `status` (bridge capabilities + preflight), and `test` (health check).
+- **[CONFIG] `IDE_BACKEND`**: New `.env` parameter (`auto|agy|grpc`). Default `auto` selects AgyBridge when `agy` CLI is available, falls back to GrpcBridge.
+- **[PERF] Telegram Latency**: Reduced from ~60s+ (async gRPC polling with ghost cascades) to ~14-21s (synchronous agy execution).
+- **[VERIFIED] E2E Telegram Pipeline**: Confirmed `run_command` and MCP tool execution via Telegram without approval prompts. AgyBridge processes messages, Scribe saves to SQLite, response delivered to outbox.
+
 ### 🏗️ IDE-Agnostic Skill Architecture
 - **[ARCH] Sovereign Skill Migration**: Skills now live in `~/.agent/skills/` (canonical, IDE-agnostic) and are symlinked into IDE-specific directories (e.g., `~/.gemini/config/skills/`). Mirrors the rule architecture.
 - **[ARCH] Agent_Core Default**: Renamed default `AGENT_CORE_DIR` from `Titanium_Core` to `Agent_Core` across `config.py`, `install_neo.sh`, and `install_neo.ps1`.

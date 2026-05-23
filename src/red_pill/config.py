@@ -291,6 +291,19 @@ class RedPillConfig(BaseSettings):
 	NEON_LINK_URL: str = "http://localhost:8770"
 
 	# -----------------------------------------------------------------------
+	# ANTIGRAVITY IDE BRIDGE
+	# -----------------------------------------------------------------------
+	IDE_BACKEND: str = "auto"  # "agy" | "grpc" | "auto"
+
+	@field_validator("IDE_BACKEND")
+	@classmethod
+	def _validate_ide_backend(cls, v: str) -> str:
+		v = v.strip().lower()
+		if v not in ("agy", "grpc", "auto"):
+			raise ValueError(f"IDE_BACKEND must be 'agy', 'grpc', or 'auto': {v}")
+		return v
+
+	# -----------------------------------------------------------------------
 	# NOTIFICATIONS
 	# -----------------------------------------------------------------------
 	NOTIFICATIONS_ENABLED: bool = True
