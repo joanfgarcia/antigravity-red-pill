@@ -2,14 +2,21 @@
 
 ### 🔌 IDEBridge v2 — Dual-Backend Architecture (AgyBridge + GrpcBridge)
 - **[ARCH] `IDEBridge` Abstract Interface**: New `bridge.py` defining `IDEBridge` ABC with `prompt()`, `continue_conversation()`, `health_check()`, and `get_capabilities()`. Supports `BackendType.AGY` and `BackendType.GRPC` with clean `NotSupportedError` separation.
-- **[NEW] `AgyBridge`**: Execution backend via `agy -p --dangerously-skip-permissions`. Enables auto-approved `run_command` and MCP tool execution from Telegram/Neon-Link without security prompt gates. Supports ephemeral mode, conversation resume (`agy -c`), and model selection.
+- **[NEW] `AgyBridge`**: Execution backend via `agy -p --dangerously-skip-permissions`. Enables auto-approved `run_command` and MCP tool execution from Telegram/Neon-Link without security prompt gates. Supports ephemeral mode, conversation resume (`agy --conversation <uuid>`), and model selection.
 - **[NEW] `GrpcBridge`**: Extraction backend preserving the existing gRPC-Web pipeline for Chronicle (`GetAllCascadeTrajectories`, `GetCascadeTrajectorySteps`). Execution methods raise `NotSupportedError`.
 - **[NEW] `factory.py`**: `create_bridge()` (execution routing) and `create_extraction_bridge()` (Chronicle pipeline) with `preflight_check()` for agy CLI discovery and version validation.
 - **[FEAT] External Scribe Pattern**: `worker.py` now captures prompt+response in a single synchronous call via `_process_via_bridge()`, saving interactions directly to `bunker.db` without depending on the agent invoking `interceptor_rp`. Decouples memory persistence from agent state.
 - **[FEAT] `red-pill ide` CLI**: New TUI subcommand with `backend` (set/show IDE_BACKEND), `status` (bridge capabilities + preflight), and `test` (health check).
+- **[FEAT] Multi-Turn via Dir-Diff UUID Capture**: First `agy -p` captures the conversation UUID via brain directory diffing (before/after snapshot). Subsequent messages use `agy --conversation <uuid>` for contextual multi-turn. UUID4-based ephemeral ID (`eid`) embedded as HTML comment provides collision-proof safety net for concurrent processes.
+- **[FEAT] Prefix-Stripping Response Extraction**: `agy --conversation` accumulates ALL previous stdout (verified empirically: T1="ALFA", T2="ALFA\nBETA"). Response delta extracted via `stdout[previous_accumulated_len:]`. Eliminates need for `transcript.jsonl` parsing.
+- **[REFACTOR] Remove transcript.jsonl parsing**: Removed `_find_active_log_path()` and `_get_planner_steps()` from `worker.py`. Prefix-stripping at the bridge level is O(1) vs O(n) log scanning and avoids race conditions with most-recently-modified heuristics.
+- **[SCHEMA] `telegram_sessions.accumulated_len`**: New INTEGER column tracking accumulated stdout length for prefix-stripping across multi-turn sessions.
 - **[CONFIG] `IDE_BACKEND`**: New `.env` parameter (`auto|agy|grpc`). Default `auto` selects AgyBridge when `agy` CLI is available, falls back to GrpcBridge.
 - **[PERF] Telegram Latency**: Reduced from ~60s+ (async gRPC polling with ghost cascades) to ~14-21s (synchronous agy execution).
 - **[VERIFIED] E2E Telegram Pipeline**: Confirmed `run_command` and MCP tool execution via Telegram without approval prompts. AgyBridge processes messages, Scribe saves to SQLite, response delivered to outbox.
+- **[DOCS] Plugin `ARCHITECTURE.md`**: Full architectural specification documenting Ghost Cascade problem, dual-backend rationale, multi-turn design (dir-diff + prefix-strip vs lock vs transcript parsing), External Scribe Pattern, session tracking, and historical timeline.
+- **[DOCS] `ARCHITECTURE.md` §16**: IDEBridge v2 summary with architecture diagram, design decision table, and CLI reference. Cross-references plugin spec.
+- **[DOCS] `ANTIGRAVITY_LS_PROXY.md`**: Added v7.1 deprecation note clarifying this covers the legacy gRPC path only, with cross-references to the new dual-backend docs.
 
 ### 🏗️ IDE-Agnostic Skill Architecture
 - **[ARCH] Sovereign Skill Migration**: Skills now live in `~/.agent/skills/` (canonical, IDE-agnostic) and are symlinked into IDE-specific directories (e.g., `~/.gemini/config/skills/`). Mirrors the rule architecture.
