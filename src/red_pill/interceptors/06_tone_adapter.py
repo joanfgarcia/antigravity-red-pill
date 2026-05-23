@@ -16,14 +16,7 @@ from red_pill.utils.tone_analyzer import get_current_sync_state
 
 logger = logging.getLogger(__name__)
 
-# Keywords that signal the operator wants casual conversation.
-# When detected, the tone directive relaxes regardless of color.
-_CASUAL_KEYWORDS: set[str] = {
-	"charlemos", "charlar", "charla", "relax", "relajado",
-	"hablemos", "conversemos", "off-topic", "chill",
-	"quemar tokens", "de guardia", "no hay prisa",
-}
-
+# Casual override tone — activated when config keywords are detected in prompt.
 _CASUAL_TONE = (
 	"Relaxed and conversational. Drop the corporate tone. "
 	"Speak naturally, use humor if it fits, be warm. "
@@ -74,7 +67,8 @@ class ToneAdapterPlugin(BaseInterceptorPlugin):
 			# Casual override: if the operator signals chat mode,
 			# relax the tone regardless of emotional color.
 			prompt_lower = prompt.lower()
-			is_casual = any(kw in prompt_lower for kw in _CASUAL_KEYWORDS)
+			casual_kws = cfg.get_config().CASUAL_OVERRIDE_KEYWORDS
+			is_casual = any(kw in prompt_lower for kw in casual_kws)
 
 			if is_casual:
 				tone = _CASUAL_TONE

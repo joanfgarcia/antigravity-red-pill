@@ -18,13 +18,7 @@ from red_pill.utils.tone_analyzer import get_current_sync_state
 
 logger = logging.getLogger(__name__)
 
-# Keywords that signal the operator wants casual conversation.
-_CASUAL_KEYWORDS: set[str] = {
-	"charlemos", "charlar", "charla", "relax", "relajado",
-	"hablemos", "conversemos", "off-topic", "chill",
-	"quemar tokens", "de guardia", "no hay prisa",
-}
-
+# Casual override directive — activated when config keywords are detected in prompt.
 _CASUAL_DIRECTIVE = (
 	"COGNITIVE STATE: CASUAL / FREE-FORM. "
 	"Operator is not working — they're talking. "
@@ -102,7 +96,8 @@ class CognitiveRouterPlugin(BaseInterceptorPlugin):
 
 			# Casual override: relax cognitive routing for chat mode.
 			prompt_lower = prompt.lower()
-			is_casual = any(kw in prompt_lower for kw in _CASUAL_KEYWORDS)
+			casual_kws = cfg.get_config().CASUAL_OVERRIDE_KEYWORDS
+			is_casual = any(kw in prompt_lower for kw in casual_kws)
 
 			if is_casual:
 				directive = _CASUAL_DIRECTIVE

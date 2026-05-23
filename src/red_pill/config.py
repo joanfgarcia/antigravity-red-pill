@@ -379,6 +379,18 @@ class RedPillConfig(BaseSettings):
 	PROACTIVE_SIGNAL_RED_THRESHOLD: int = 5  # Consecutive RED memories before pain signal
 	PREDICTIVE_PRELOAD_ENABLED: bool = True  # Plugin 10: predictive context preloading
 
+	# Casual Override: keywords that signal the operator wants free-form conversation.
+	# When detected in the prompt, Plugins 05+06 relax their directives regardless of color.
+	# Comma-separated in .env: CASUAL_OVERRIDE_KEYWORDS="charlemos,relax,chill"
+	CASUAL_OVERRIDE_KEYWORDS: List[str] = []
+
+	@model_validator(mode="after")
+	def _build_casual_keywords(self) -> "RedPillConfig":
+		_default = "charlemos,charlar,charla,relax,relajado,hablemos,conversemos,off-topic,chill,quemar tokens,de guardia,no hay prisa"
+		_env_raw = os.getenv("CASUAL_OVERRIDE_KEYWORDS", _default)
+		self.CASUAL_OVERRIDE_KEYWORDS = [t.strip().lower() for t in _env_raw.split(",") if t.strip()]
+		return self
+
 	# -----------------------------------------------------------------------
 	# SOVEREIGN PULSE
 	# -----------------------------------------------------------------------
