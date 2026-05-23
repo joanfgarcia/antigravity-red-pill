@@ -107,6 +107,15 @@ class CognitiveRouterPlugin(BaseInterceptorPlugin):
 				_cr_state.set_casual(False)
 
 			if _cr_state.is_casual_active():
+				current_state = "casual"
+			else:
+				current_state = color
+
+			# Only inject on state transitions — silence otherwise
+			if not _cr_state.check_transition("router", current_state):
+				return ""
+
+			if _cr_state.is_casual_active():
 				directive = _CASUAL_DIRECTIVE
 				mode_label = f"{color.upper()} → CASUAL OVERRIDE"
 			else:

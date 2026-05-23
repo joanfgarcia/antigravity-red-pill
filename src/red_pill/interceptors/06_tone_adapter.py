@@ -65,6 +65,16 @@ class ToneAdapterPlugin(BaseInterceptorPlugin):
 			sync_state = get_current_sync_state()
 			color = sync_state.get("mood", "gray").lower()
 
+			# Determine current state key
+			if _cr_state.is_casual_active():
+				current_state = "casual"
+			else:
+				current_state = color
+
+			# Only inject on state transitions — silence otherwise
+			if not _cr_state.check_transition("tone", current_state):
+				return ""
+
 			# Casual override: read session-level latch from cognitive router.
 			if _cr_state.is_casual_active():
 				tone = _CASUAL_TONE
