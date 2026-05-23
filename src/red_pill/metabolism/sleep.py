@@ -113,6 +113,31 @@ def chunk_text(text: str, size: Optional[int] = None) -> List[str]:
 	return chunks
 
 
+def _sanitize_llm_json(raw_json: str) -> str:
+	"""
+	Sanitize JSON output from local LLMs that may contain invalid backslash
+	escape sequences (e.g. \\e, \\s, \\a).  JSON only allows: \\" \\\\
+	\\/ \\b \\f \\n \\r \\t \\uXXXX.  Any other \\X is illegal and causes
+	``json.loads`` to raise ``Invalid \\escape``.
+
+	Strategy: use a regex to find all backslash sequences and double the
+	backslash for any that are not in the legal set, turning them into
+	literal characters.
+	"""
+	import re as _re
+
+	_VALID_ESCAPES = frozenset('"\\bfnrtu/')
+
+	def _fix_escape(m: _re.Match) -> str:
+		char_after = m.group(1)
+		if char_after in _VALID_ESCAPES:
+			return m.group(0)  # legal — leave untouched
+		# Illegal escape: double the backslash so it becomes a literal '\'
+		return "\\\\" + char_after
+
+	return _re.sub(r"\\(.)", _fix_escape, raw_json)
+
+
 def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[str, Any]:
 	"""
 	Lazarus Phase 2: Consolidation (Sleep) & Affective Preservation
@@ -159,7 +184,8 @@ def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[
 
 			match = re.search(r"\{[\s\S]*\}", content)
 			if match:
-				parsed = json.loads(match.group(0))
+				sanitized = _sanitize_llm_json(match.group(0))
+				parsed = json.loads(sanitized)
 				return {
 					"summary": parsed.get("summary", fallback["summary"]) or fallback["summary"],
 					"emotion": (parsed.get("emotion") or "neutral").lower()[:20],
@@ -556,7 +582,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 					hub_id = memory_manager.add_memory(
 						collection=target_col,
 						text=hub_summary,
-						metadata={"lazarus_phase": "synthesis_hub", "source_buffer_id": raw_id},
+						metadata={"lazarus_phase": "synthesis_hub", "node_type": "synthesis_hub", "source_buffer_id": raw_id},
 						color="cyan",
 						emotion=surviving_chunks[-1]["emotion"],
 						intensity=max([c["intensity"] for c in surviving_chunks]),
@@ -653,7 +679,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 						hub_id = memory_manager.add_memory(
 							collection="work_memories",
 							text=hub_summary,
-							metadata={"lazarus_phase": "synthesis_hub", "source_buffer_id": raw_id},
+							metadata={"lazarus_phase": "synthesis_hub", "node_type": "synthesis_hub", "source_buffer_id": raw_id},
 							color="cyan",
 							emotion=surviving_chunks[-1]["emotion"],
 							intensity=max([c["intensity"] for c in surviving_chunks]),

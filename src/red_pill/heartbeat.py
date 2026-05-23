@@ -235,10 +235,22 @@ class LazarusPulse:
 	async def _consolidation_ritual(self) -> None:
 		"""
 		Autonomous Consolidation:
-		- Processes raw interactions into long-term memories.
+		- Phase 0: Snatch trajectories from active LanguageServers into staging.
+		- Phase 1: Processes raw interactions into long-term memories.
 		- Discards noise and fixates essence.
 		"""
 		try:
+			# Phase 0: LS Snatcher — extract conversations from active Language Servers
+			try:
+				from red_pill.metabolism.ls_snatcher import snatch_all_trajectories
+
+				logger.info("Pulse: Initiating LS Snatcher (Extracting LanguageServer trajectories)...")
+				snatched = await asyncio.to_thread(snatch_all_trajectories)
+				logger.info(f"Pulse: LS Snatcher complete. {snatched} trajectories staged.")
+			except Exception as e:
+				logger.warning(f"Pulse: LS Snatcher failed (non-fatal, continuing): {e}")
+
+			# Phase 1: Consolidation — process staging buffer + interaction_memories
 			from red_pill.metabolism.sleep import perform_sleep_cycle
 
 			logger.info("Pulse: Initiating Consolidation (Consolidating interactions)...")

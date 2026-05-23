@@ -406,7 +406,7 @@ The `~/.gemini/GEMINI.md` file defines the agent's boot protocol. After major pr
     - **Rule 2 — Model Change Identity Resync**: On model switch, call `refresh_session_context` immediately.
     - ~~Rule 3~~ — **REMOVED** (v6.2.5): deprecated End-of-Turn logging. Start-of-Turn Relay (Rule 1) is the canonical mechanism.
 
-2.  **Rules directory**: Check `~/.gemini/antigravity/rules/` for any referenced but missing rule files.
+2.  **Rules & Skills directory**: Check `~/.agent/rules/` and `~/.agent/skills/` for missing files. Verify symlinks to IDE directory (`~/.gemini/config/skills/`) are intact.
 3.  **Re-inject**: If any rule is missing, re-run `scripts/install_neo.sh` or manually update `~/.gemini/GEMINI.md`.
 
 ### 4.7 Merge Reconciliation Protocol

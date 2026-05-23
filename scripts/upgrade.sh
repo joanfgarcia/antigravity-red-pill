@@ -74,6 +74,24 @@ if command -v uv &> /dev/null; then
 	# Version Sync Engram (Manual prompt for now, but ensured by guidance)
 	echo -e "${GREEN}✓ Estructura interna actualizada.${NC}"
 
+	# Sync skills to ~/.agent/skills/ and re-symlink to IDE
+	AGENT_DIR="${HOME}/.agent"
+	GEMINI_SKILLS="${HOME}/.gemini/antigravity/skills"
+	if [ -d "$REPO_ROOT/skills" ]; then
+		echo -e "${BLUE}Sincronizando Skills soberanos (IDE-Agnostic)...${NC}"
+		mkdir -p "$AGENT_DIR/skills"
+		for skill_dir in "$REPO_ROOT/skills/"*/; do
+			skill_name=$(basename "$skill_dir")
+			[[ "$skill_name" == "memory_manager_template" ]] && continue
+			cp -r "$skill_dir" "$AGENT_DIR/skills/$skill_name"
+			if [ -d "$GEMINI_SKILLS" ]; then
+				rm -rf "$GEMINI_SKILLS/$skill_name" 2>/dev/null || true
+				ln -s "$AGENT_DIR/skills/$skill_name" "$GEMINI_SKILLS/$skill_name"
+			fi
+		done
+		echo -e "${GREEN}✓ Skills sincronizados en ~/.agent/skills/.${NC}"
+	fi
+
 	# 5. Neon-Link Service Migration (v0.4.0 watchdog)
 	# Restart neon-link to pick up sd_notify/WatchdogSec changes
 	if systemctl --user is-active neon-link.service &>/dev/null; then

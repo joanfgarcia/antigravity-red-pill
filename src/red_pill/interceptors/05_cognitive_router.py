@@ -13,6 +13,7 @@ Enable/Disable: COGNITIVE_ROUTER_ENABLED=true in .env
 import logging
 
 import red_pill.config as cfg
+from red_pill.interceptors import _05_cognitive_router_state as _cr_state
 from red_pill.interceptors.base import BaseInterceptorPlugin
 from red_pill.utils.tone_analyzer import get_current_sync_state
 
@@ -26,6 +27,7 @@ _CASUAL_DIRECTIVE = (
 	"Explore tangents, share opinions, be human. "
 	"This is not a work session — it's a conversation."
 )
+
 
 # Routing directives per color — what kind of tasks to prioritize
 _ROUTING_DIRECTIVES: dict[str, str] = {
@@ -94,12 +96,17 @@ class CognitiveRouterPlugin(BaseInterceptorPlugin):
 			sync_state = get_current_sync_state()
 			color = sync_state.get("mood", "gray").lower()
 
-			# Casual override: relax cognitive routing for chat mode.
+			# Casual override: session-level latch.
 			prompt_lower = prompt.lower()
 			casual_kws = cfg.get_config().CASUAL_OVERRIDE_KEYWORDS
-			is_casual = any(kw in prompt_lower for kw in casual_kws)
 
-			if is_casual:
+			# Activate on casual keywords, deactivate on work keywords.
+			if any(kw in prompt_lower for kw in casual_kws):
+				_cr_state.set_casual(True)
+			elif _cr_state.is_casual_active() and any(kw in prompt_lower for kw in _cr_state.WORK_KEYWORDS):
+				_cr_state.set_casual(False)
+
+			if _cr_state.is_casual_active():
 				directive = _CASUAL_DIRECTIVE
 				mode_label = f"{color.upper()} → CASUAL OVERRIDE"
 			else:

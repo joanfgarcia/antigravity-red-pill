@@ -852,11 +852,37 @@ async def handle_run_sovereignty_benchmark(arguments: Dict[str, Any]):
 
 
 @registry.register(
+	name="hot_reload_interceptors",
+	description="[OFFICIAL] Hot-reload the Ferrari Interceptor Pipeline in-process. Reloads all plugin modules via importlib without restarting the MCP server. Logs errors for the Sentinel.",
+	schema={"type": "object", "properties": {}},
+)
+async def handle_hot_reload_interceptors(arguments: Dict[str, Any]):
+	from red_pill.interceptors import reload_plugins
+
+	try:
+		report = reload_plugins()
+		return [types.TextContent(type="text", text=report)]
+	except Exception as e:
+		logger.error(f"[HOT RELOAD] Critical failure: {e}")
+		return [types.TextContent(type="text", text=f"[HOT RELOAD] Critical failure: {e}")]
+
+
+@registry.register(
 	name="refresh_session_context",
-	description="[OFFICIAL] Re-synthesize identity and session context using wake_up_v6.",
+	description="[OFFICIAL] Re-synthesize identity and session context using wake_up_v6. Also hot-reloads the interceptor pipeline.",
 	schema={"type": "object", "properties": {}},
 )
 async def handle_refresh_session_context(arguments: Dict[str, Any]):
+	# Hot-reload interceptors as part of session refresh
+	reload_report = ""
+	try:
+		from red_pill.interceptors import reload_plugins
+
+		reload_report = reload_plugins()
+	except Exception as e:
+		reload_report = f"[HOT RELOAD] Skipped due to error: {e}"
+		logger.warning(reload_report)
+
 	# Reset pre-heating gate on session refresh
 	try:
 		import importlib
@@ -866,12 +892,9 @@ async def handle_refresh_session_context(arguments: Dict[str, Any]):
 	except Exception:
 		pass
 
-	return [
-		types.TextContent(
-			type="text",
-			text=subprocess.run([GET_PYTHON(), os.path.join(PROJECT_ROOT, "scripts", "wake_up_v6.py")], capture_output=True, text=True).stdout,
-		)
-	]
+	wake_output = subprocess.run([GET_PYTHON(), os.path.join(PROJECT_ROOT, "scripts", "wake_up_v6.py")], capture_output=True, text=True).stdout
+
+	return [types.TextContent(type="text", text=f"{wake_output}\n\n{reload_report}")]
 
 
 @registry.register(

@@ -11,6 +11,7 @@ Enable/Disable: TONE_ADAPTER_ENABLED=true in .env
 import logging
 
 import red_pill.config as cfg
+from red_pill.interceptors import _05_cognitive_router_state as _cr_state
 from red_pill.interceptors.base import BaseInterceptorPlugin
 from red_pill.utils.tone_analyzer import get_current_sync_state
 
@@ -64,13 +65,8 @@ class ToneAdapterPlugin(BaseInterceptorPlugin):
 			sync_state = get_current_sync_state()
 			color = sync_state.get("mood", "gray").lower()
 
-			# Casual override: if the operator signals chat mode,
-			# relax the tone regardless of emotional color.
-			prompt_lower = prompt.lower()
-			casual_kws = cfg.get_config().CASUAL_OVERRIDE_KEYWORDS
-			is_casual = any(kw in prompt_lower for kw in casual_kws)
-
-			if is_casual:
+			# Casual override: read session-level latch from cognitive router.
+			if _cr_state.is_casual_active():
 				tone = _CASUAL_TONE
 				mode_label = f"{color.upper()} → CASUAL OVERRIDE"
 			else:

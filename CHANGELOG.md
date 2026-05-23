@@ -1,5 +1,29 @@
 ## [7.1.0] - Unreleased
 
+### 🏗️ IDE-Agnostic Skill Architecture
+- **[ARCH] Sovereign Skill Migration**: Skills now live in `~/.agent/skills/` (canonical, IDE-agnostic) and are symlinked into IDE-specific directories (e.g., `~/.gemini/config/skills/`). Mirrors the rule architecture.
+- **[ARCH] Agent_Core Default**: Renamed default `AGENT_CORE_DIR` from `Titanium_Core` to `Agent_Core` across `config.py`, `install_neo.sh`, and `install_neo.ps1`.
+- **[FEAT] install_neo.sh**: Rewrote skills deployment to copy to `~/.agent/skills/` and symlink to Antigravity. Moved `USER_RULES_DIR` definition before skills section.
+- **[FEAT] upgrade.sh**: Added skills sync step that copies to `~/.agent/skills/` and re-symlinks to IDE on upgrade.
+- **[DOCS] skill_creation SKILL.md**: Updated global skills path documentation.
+- **[DOCS] AGENT_UPDATE_GUIDE.md**: Updated troubleshooting to reference `~/.agent/skills/` with symlink verification.
+
+### 🧵 Ariadne Thread Fix (synthesis_hub Visibility)
+- **[FIX] sleep.py**: Hub nodes were created with `lazarus_phase: synthesis_hub` but missing `node_type: synthesis_hub`, making them invisible to all filtered queries. Added `node_type` to both hub synthesis locations.
+- **[FIX] Retroactive Patch**: Patched 1,898 existing hub nodes (662 work + 1,236 social) in Qdrant to add the missing `node_type` field.
+
+### 🏎️ Ferrari Pipeline — Session-Level Casual Mode
+- **[FEAT] Casual Mode Latch**: `05_cognitive_router` and `06_tone_adapter` now share a session-level latch via `_05_cognitive_router_state.py`. Saying "charlemos" activates casual mode for the entire conversation; work keywords ("arregla", "fix", "commit", etc.) deactivate it.
+- **[NEW] `_05_cognitive_router_state.py`**: Shared state module for casual mode latch between Ferrari plugins.
+
+### 🔥 Hot-Reload Interceptor Pipeline
+- **[FEAT] `reload_plugins()`**: New function in `interceptors/__init__.py` that hot-reloads all Ferrari plugins via `importlib.reload` without restarting the MCP server. Includes automatic rollback if all plugins fail, and structured `[HOT RELOAD][ERROR]` logs for the Sentinel.
+- **[FEAT] `hot_reload_interceptors` MCP Tool**: New standalone MCP tool for explicit pipeline reload.
+- **[FEAT] `refresh_session_context` Enhancement**: Now includes automatic hot-reload of interceptors as part of session refresh.
+
+### 🧠 LS Snatcher Integration
+- **[FEAT] heartbeat.py**: Integrated `snatch_all_trajectories` as Phase 0 of the heartbeat pipeline to capture conversation data from the Language Server.
+
 ### 💻 Zero-Dependency System Control Panel (Tactical TUI)
 - **[FEAT] bunker_control.py**: Implement zero-dependency ANSI control loop.
 - **[FEAT] Hardware-Agnostic Telemetry Class**: Auto-detects ROCm/iGPU/AMD, NVIDIA/CUDA, or CPU/SysRAM.
