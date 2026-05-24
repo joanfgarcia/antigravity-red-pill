@@ -6,12 +6,12 @@ prompt execution. No API key needed — uses ANTIGRAVITY_LS_ADDRESS +
 ANTIGRAVITY_CSRF_TOKEN from the local IDE session.
 
 Multi-turn support via `agy --conversation <uuid> -p`:
-    - First message: dir-diff captures the conversation UUID
-    - Subsequent: `--conversation <uuid>` resumes, prefix-strip extracts delta
+	- First message: dir-diff captures the conversation UUID
+	- Subsequent: `--conversation <uuid>` resumes, prefix-strip extracts delta
 
 Requirements:
-    - agy CLI installed (>= 1.0)
-    - Antigravity IDE running (language_server process active)
+	- agy CLI installed (>= 1.0)
+	- Antigravity IDE running (language_server process active)
 """
 
 from __future__ import annotations

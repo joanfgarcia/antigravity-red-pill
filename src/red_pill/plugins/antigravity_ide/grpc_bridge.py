@@ -2,9 +2,9 @@
 GrpcBridge — gRPC-Web bridge to Antigravity LanguageServer
 
 NOT @Deprecated — actively used for:
-    - Chronicle pipeline: conversation extraction → archive_memories
-    - GetAllCascadeTrajectories: list all IDE conversations
-    - GetCascadeTrajectorySteps: extract conversation content
+	- Chronicle pipeline: conversation extraction → archive_memories
+	- GetAllCascadeTrajectories: list all IDE conversations
+	- GetCascadeTrajectorySteps: extract conversation content
 
 For prompt execution (Telegram, AWAKENINGs), use AgyBridge instead.
 """

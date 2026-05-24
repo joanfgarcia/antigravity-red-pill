@@ -164,7 +164,7 @@ def _write_systemd_timer(name, interval, desc):
 
 
 def _uninstall_linux() -> None:
-	for timer in (WAKE_TIMER, SLEEP_TIMER, "redpill-telemetry.timer", "redpill-queue.timer", "redpill-chronicle.timer"):
+	for timer in (WAKE_TIMER, SLEEP_TIMER, "redpill-telemetry.timer", "redpill-queue.timer", "redpill-worker.timer", "redpill-chronicle.timer", "redpill-pulse.timer"):
 		subprocess.run(["systemctl", "--user", "disable", "--now", timer], check=False)
 	for name in (
 		WAKE_TIMER,
@@ -175,8 +175,13 @@ def _uninstall_linux() -> None:
 		"redpill-telemetry.service",
 		"redpill-queue.timer",
 		"redpill-queue.service",
+		"redpill-worker.timer",
+		"redpill-worker.service",
 		"redpill-chronicle.timer",
 		"redpill-chronicle.service",
+		"redpill-pulse.timer",
+		"redpill-pulse.service",
+		"red-pill-minion.service",
 	):
 		path = os.path.join(SYSTEMD_USER_DIR, name)
 		if os.path.exists(path):

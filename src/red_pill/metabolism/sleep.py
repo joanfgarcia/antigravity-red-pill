@@ -290,7 +290,7 @@ class EphemeralServer:
 
 		if shutil.which("systemctl"):
 			subprocess.run(
-				["systemctl", "--user", "restart", "red-pill-minion.service"],
+				["systemctl", "--user", "restart", "redpill-llm.service"],
 				stdout=subprocess.DEVNULL,
 				stderr=subprocess.DEVNULL,
 			)

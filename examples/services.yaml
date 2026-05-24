@@ -41,7 +41,12 @@ services:
   redpill-pulse:
     unit: redpill-pulse.service
     type: oneshot
-    max_runtime_s: 30
+    max_runtime_s: 600
+
+  redpill-sleep:
+    unit: redpill-sleep.service
+    type: oneshot
+    max_runtime_s: 600
 
   redpill-queue:
     unit: redpill-queue.service
@@ -56,4 +61,4 @@ services:
   redpill-wake:
     unit: redpill-wake.service
     type: oneshot
-    max_runtime_s: 30
+    max_runtime_s: 180

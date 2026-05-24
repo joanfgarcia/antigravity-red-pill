@@ -83,7 +83,13 @@ def test_audit_vitals_exhaustion(mock_run, auditor):
 	mock_run.side_effect = [mock_vram, mock_dmesg]
 
 	# We mock urllib and sqlite3 since those hit real system components
-	with patch("urllib.request.urlopen"), patch("pathlib.Path.exists", return_value=False):
+	from red_pill.core.service_contract import ServiceContract
+	dummy_manifest = {
+		"dummy": ServiceContract(name="dummy", unit="dummy.service", type="oneshot", max_runtime_s=60)
+	}
+	with patch("urllib.request.urlopen"), \
+			patch("pathlib.Path.exists", return_value=False), \
+			patch("red_pill.metabolism.sentinel_plugins.check_duplicate_services.load_manifest", return_value=dummy_manifest):
 		report = auditor.audit_vitals()
 
 	assert report.status == "red"
@@ -103,7 +109,13 @@ def test_audit_vitals_all_green(mock_run, auditor):
 
 	mock_run.side_effect = [mock_vram, mock_dmesg]
 
-	with patch("urllib.request.urlopen"), patch("pathlib.Path.exists", return_value=False):
+	from red_pill.core.service_contract import ServiceContract
+	dummy_manifest = {
+		"dummy": ServiceContract(name="dummy", unit="dummy.service", type="oneshot", max_runtime_s=60)
+	}
+	with patch("urllib.request.urlopen"), \
+			patch("pathlib.Path.exists", return_value=False), \
+			patch("red_pill.metabolism.sentinel_plugins.check_duplicate_services.load_manifest", return_value=dummy_manifest):
 		report = auditor.audit_vitals()
 
 	assert report.status == "green"

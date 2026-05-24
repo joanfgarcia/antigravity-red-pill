@@ -2,8 +2,8 @@
 IDEBridge Factory — Creates the appropriate bridge based on config.
 
 Two factories:
-    - create_bridge(): For prompt EXECUTION (Telegram, AWAKENINGs)
-    - create_extraction_bridge(): For conversation EXTRACTION (Chronicle)
+	- create_bridge(): For prompt EXECUTION (Telegram, AWAKENINGs)
+	- create_extraction_bridge(): For conversation EXTRACTION (Chronicle)
 
 Also provides preflight_check() for validating the environment
 before processing Neon-Link commands or autonomous tasks.

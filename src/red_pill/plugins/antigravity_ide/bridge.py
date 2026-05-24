@@ -2,8 +2,8 @@
 IDEBridge — Abstract Interface for Antigravity IDE Communication (v2)
 
 Two complementary implementations:
-  - AgyBridge (execution): agy CLI with --dangerously-skip-permissions
-  - GrpcBridge (extraction): gRPC-Web to LanguageServer (Chronicle pipeline)
+	- AgyBridge (execution): agy CLI with --dangerously-skip-permissions
+	- GrpcBridge (extraction): gRPC-Web to LanguageServer (Chronicle pipeline)
 
 Both bridges can coexist. AgyBridge for prompt execution (Telegram, AWAKENINGs).
 GrpcBridge for conversation extraction (Chronicle → archive_memories).
