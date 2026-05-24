@@ -310,6 +310,12 @@ class RedPillConfig(BaseSettings):
 	NOTIFICATION_SOUND: bool = False
 
 	# -----------------------------------------------------------------------
+	# REACTIVE DEBOUNCE (Telegram sliding window prompt accumulation)
+	# -----------------------------------------------------------------------
+	REACTIVE_DEBOUNCE_ENABLED: bool = False
+	REACTIVE_DEBOUNCE_SECONDS: int = 5
+
+	# -----------------------------------------------------------------------
 	# DEEP RECALL TRIGGERS
 	# -----------------------------------------------------------------------
 	DEEP_RECALL_TRIGGERS: Any = []

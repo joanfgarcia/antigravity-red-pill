@@ -25,6 +25,7 @@ load_dotenv()  # Override local si existiera
 sys.path.insert(0, str(Path(__file__).parent.resolve()))
 from ide_client import AntigravityIDEClient  # noqa: E402
 
+import red_pill.config as cfg  # noqa: E402
 from red_pill.plugins.antigravity_ide.bridge import BackendType  # noqa: E402
 from red_pill.plugins.antigravity_ide.factory import create_bridge  # noqa: E402
 
@@ -104,7 +105,20 @@ class IDEWorker:
 		conn.row_factory = sqlite3.Row
 		cursor = conn.cursor()
 
-		cursor.execute("SELECT DISTINCT channel_user_id FROM inbox WHERE status = 'PENDING' LIMIT 1")
+		debounce_seconds = cfg.REACTIVE_DEBOUNCE_SECONDS if cfg.REACTIVE_DEBOUNCE_ENABLED else 0
+
+		cursor.execute(
+			"""
+			SELECT channel_user_id
+			FROM inbox
+			WHERE status = 'PENDING'
+			GROUP BY channel_user_id
+			HAVING (strftime('%s', 'now') - strftime('%s', max(created_at))) >= ?
+				OR sum(case when payload LIKE '%"command"%' then 1 else 0 end) > 0
+			LIMIT 1
+			""",
+			(debounce_seconds,),
+		)
 		user_row = cursor.fetchone()
 
 		if not user_row:

@@ -1,5 +1,10 @@
 ## [7.1.0] - Unreleased
 
+### ✉️ Telegram Reactive Debounce Mode
+- **[FEAT] Reactive Debounce Mode (Accumulation Window)**: Introduced `REACTIVE_DEBOUNCE_ENABLED` and `REACTIVE_DEBOUNCE_SECONDS` configurations in `.env.example` and `config.py` to group fast bursts of Telegram messages in `worker.py` and compile them into a single compacted prompt before execution, optimizing token usage.
+- **[FEAT] Zero-Lag Command Bypass**: Configured the debounce window to be immediately bypassed if any message in the queue contains a command payload (e.g., `/switch`, `/list`, `/new`), ensuring instantaneous execution for operator interactions.
+- **[TEST] Debounce & Bypass Verification**: Created a robust mock SQLite suite in `tests/test_ide_worker.py` validating the debouncing aggregate query logic and command bypass triggers.
+
 ### 🛡️ Bünker Refactor & Lifecycle Hardening (XDG Migration & Hotfixes)
 - **[ARCH] XDG Base Directory Standard Compliance**: Refactored transient and configuration paths in `paths.py` to point to standard XDG paths.
   - `get_daemon_dir()` -> `$XDG_RUNTIME_DIR/red-pill/` (fallback to `$XDG_CACHE_HOME/red-pill/daemons/`).
