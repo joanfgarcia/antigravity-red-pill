@@ -90,9 +90,7 @@ class MoodAnalyticsPlugin(BaseInterceptorPlugin):
 			session_points.append(p)
 
 		if not session_points:
-			return (
-				"=== MOOD ANALYTICS (FERRARI PROTOCOL) ===\nSTATUS: OVERNIGHT THERAPY RESET (Blank Slate)\nDOMINANT_COLOR: EMERALD (Set Point)\n---"
-			)
+			return ""
 
 		colors = [p.payload.get("color", "gray") for p in session_points if p.payload and not p.payload.get("immune", False)]
 
