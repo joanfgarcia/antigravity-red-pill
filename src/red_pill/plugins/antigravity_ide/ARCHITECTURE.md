@@ -196,7 +196,42 @@ red-pill ide test            # Health check
 
 4. **Concurrent execution** — The systemd timer fires every ~60s. If a heavy `agy -p` execution takes >60s, the next timer fires while it's still running. The dir-diff + eid handles this correctly, but the timer should ideally be debounced.
 
-## 9. Historical Timeline
+## 9. Antigravity Python SDK Connection Audit & Viability Assessment
+
+During the development of the v7.1.0 lifecycle hardening, we conducted a comprehensive structural audit of the `google.antigravity` Python SDK (`google-antigravity` package) to determine if it could replace the CLI-based `AgyBridge` or directly connect to a running IDE Language Server.
+
+### Analysis & Structural Findings
+
+1. **Tight Coupling to Subprocess Execution**:
+   - `LocalConnectionStrategy` inside the SDK is hardcoded to spawn the `localharness` binary as a subprocess via `subprocess.Popen([self._binary_path])`.
+   - The strategy is strictly configured to communicate with this subprocess via WebSocket on an ephemeral port (reading the port and generated API key from stdout).
+   
+2. **Absence of gRPC-Web Client Capabilities**:
+   - The Python SDK contains **zero gRPC client code** or capabilities to query active IDE cascades. 
+   - It cannot communicate with the gRPC-Web endpoints exposed by the IDE Language Server (`ANTIGRAVITY_LS_ADDRESS`).
+   - Consequently, the SDK cannot replace `GrpcBridge` for the Chronicle ingestion pipeline.
+
+3. **Auto-Approval / Permission Gates Overhead**:
+   - Spawning the binary via `LocalConnectionStrategy` does not allow passing custom command-line flags (such as `--dangerously-skip-permissions`).
+   - All tool execution permissions (like `run_command` or `edit_file`) are routed back to the Python SDK over the WebSocket as `tool_confirmation_request` packets.
+   - While auto-approval can be achieved in Python by implementing a global `HookRunner` that returns `allow=True` for all tool calls, this introduces unnecessary roundtrip latency and Python execution overhead.
+
+### Design Trade-Off Decision
+
+Based on the architectural findings, the **CLI-based `AgyBridge` is finalized as the official execution backend** for the Bünker headless prompt runner:
+
+| Metric | CLI-based `AgyBridge` (v2) | SDK-based `LocalConnection` |
+|---|---|---|
+| **Spawns Subprocess** | Yes (`agy` CLI) | Yes (`localharness` via Python Popen) |
+| **Protocol** | CLI Stdout / Ephemeral | WebSocket Client + Proto Handshake |
+| **Permissions Bypass** | Native (`--dangerously-skip-permissions`) | Custom Python Hook (`HookRunner`) |
+| **IDE gRPC-Web Support** | None (requires GrpcBridge) | None (requires GrpcBridge) |
+| **Complexity & Overhead** | Low (Stateless CLI execution) | High (WebSocket loop + daemon threads) |
+| **Stability** | High | Medium (vulnerable to WS/D-Bus connection drops) |
+
+**Conclusion**: The `AgyBridge` CLI execution pattern is structurally superior for headless Telegram and Neon-Link execution, while `GrpcBridge` remains the canonical bridge for IDE-driven Chronicle telemetry.
+
+## 10. Historical Timeline
 
 | Date | Event |
 |---|---|
@@ -207,3 +242,4 @@ red-pill ide test            # Health check
 | 2026-05-23 | E2E Telegram test: `run_command` + MCP working via agy (14-21s) |
 | 2026-05-23 | `agy --conversation` stdout accumulation discovered (scenario B) |
 | 2026-05-24 | Dir-diff UUID capture + prefix-stripping implemented |
+| 2026-05-24 | Antigravity Python SDK Connection Audit & Viability Assessment concluded |

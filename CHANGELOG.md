@@ -19,6 +19,12 @@
 - **[FIX] Pydantic DotEnv Settings Parsing**: Avoided `pydantic-settings` JSON parsing failures for list variables by changing type annotations to `Any` combined with `@field_validator(..., mode="before")` for `DEEP_RECALL_TRIGGERS`, `METABOLISM_AUTO_COLLECTIONS`, and `PRE_HEATING_HOT_COLORS`.
 - **[TEST] Lifecycle E2E Sandbox Suite**: Added stages 2.5 and 2.6 in `tests/sandbox/test_lifecycle.sh` to execute and verify the automated `bunker install` and `bunker update` lifecycle routines in Podman sandboxes.
 
+### 🔌 Antigravity Python SDK Connection Audit
+- **[AUDIT] Viability Assessment of google-antigravity**: Conducted a comprehensive audit of the `LocalConnectionStrategy` inside the Google Antigravity SDK (`google-antigravity` package).
+  - Confirmed the SDK is tightly coupled to spawning the Go `localharness` binary as a subprocess via Popen, using WebSockets for execution feedback.
+  - Verified the SDK has no gRPC capabilities to interact with a running IDE Language Server (`ANTIGRAVITY_LS_ADDRESS`).
+  - Documented the design trade-off indicating that the CLI-based `AgyBridge` using `--dangerously-skip-permissions` is structurally superior and lower overhead for headless prompt running, while gRPC remains canonical for the Chronicle pipeline.
+
 ### 🔌 IDEBridge v2 — Dual-Backend Architecture (AgyBridge + GrpcBridge)
 - **[ARCH] `IDEBridge` Abstract Interface**: New `bridge.py` defining `IDEBridge` ABC with `prompt()`, `continue_conversation()`, `health_check()`, and `get_capabilities()`. Supports `BackendType.AGY` and `BackendType.GRPC` with clean `NotSupportedError` separation.
 - **[NEW] `AgyBridge`**: Execution backend via `agy -p --dangerously-skip-permissions`. Enables auto-approved `run_command` and MCP tool execution from Telegram/Neon-Link without security prompt gates. Supports ephemeral mode, conversation resume (`agy --conversation <uuid>`), and model selection.
