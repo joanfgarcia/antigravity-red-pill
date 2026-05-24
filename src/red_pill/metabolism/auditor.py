@@ -35,7 +35,8 @@ class SentinelAuditor:
 		self.uv_path = os.path.expanduser("~/.local/bin/uv")
 
 		# Auditor Cache System
-		self.cache_file = Path.home() / ".agent" / "auditor_cache.json"
+		from red_pill.core.paths import get_data_dir
+		self.cache_file = get_data_dir() / "auditor_cache.json"
 		self.cache_file.parent.mkdir(parents=True, exist_ok=True)
 
 		from red_pill.memory import MemoryManager
@@ -233,7 +234,8 @@ class SentinelAuditor:
 		# 3. Scan journalctl for errors since last audit using a cursor file
 		all_errors = []
 		if redpill_units:
-			cursor_file = Path.home() / ".agent" / "auditor_journal_cursor"
+			from red_pill.core.paths import get_data_dir
+			cursor_file = get_data_dir() / "auditor_journal_cursor"
 			if not cursor_file.exists():
 				# Initialize cursor at the current end of journal to avoid parsing history
 				subprocess.run(["journalctl", "--user", "-n", "0", f"--cursor-file={cursor_file}"])

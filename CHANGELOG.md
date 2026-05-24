@@ -1,5 +1,20 @@
 ## [7.1.0] - Unreleased
 
+### 🛡️ Bünker Refactor & Lifecycle Hardening (XDG Migration & Hotfixes)
+- **[ARCH] XDG Base Directory Standard Compliance**: Refactored transient and configuration paths in `paths.py` to point to standard XDG paths.
+  - `get_daemon_dir()` -> `$XDG_RUNTIME_DIR/red-pill/` (fallback to `$XDG_CACHE_HOME/red-pill/daemons/`).
+  - `get_thread_state_path()` -> `$XDG_DATA_HOME/red-pill/thread_state.json`.
+  - `get_staging_dir()` -> `$XDG_CACHE_HOME/red-pill/staging/`.
+  - `get_ingestion_dir()` -> `$XDG_DATA_HOME/red-pill/ingestion/`.
+  - `get_swarm_config_path()` -> `$XDG_CONFIG_HOME/red-pill/swarm_communities.json`.
+  - `get_model_profiles_path()` -> `$XDG_CONFIG_HOME/red-pill/model_profiles.yaml`.
+  - `get_log_dir()` -> `$XDG_STATE_HOME/red-pill/logs/`.
+- **[FEAT] Self-Healing Boot-Time Migration**: Implemented `migrate_legacy_agent_dirs()` in `paths.py` to automatically migrate legacy sqlite database files, state files, and staging/ingestion buffers from `~/.agent/` to compliant XDG standard locations on boot.
+- **[FEAT] Sentinel Auditor & Heartbeat XDG Path Alignment**: Patched `auditor.py` and `heartbeat.py` to use dynamic XDG path resolutions (`get_data_dir()`, `get_log_dir()`) instead of hardcoded `~/.agent/` references.
+- **[FEAT] Dynamic Daemon Environment Refactoring**: Refactored `setup_background_model.sh` to resolve the daemon runtime path dynamically using XDG standards, and updated the systemd unit template to target `redpill-llm.service` in the new path.
+- **[FIX] Active Service Cleanup & Consolidation**: Purged legacy failed services (`red-pill-minion.service`, `redpill-pulse.service`, `redpill-pulse.timer`) and updated `sleep.py` consolidation logic to target `redpill-llm.service`.
+- **[TEST] XDG Path Verification**: Expanded `test_xdg_compliance.py` with automated validation for XDG directory resolutions and legacy `.agent` state migration logic.
+
 ### 🔌 IDEBridge v2 — Dual-Backend Architecture (AgyBridge + GrpcBridge)
 - **[ARCH] `IDEBridge` Abstract Interface**: New `bridge.py` defining `IDEBridge` ABC with `prompt()`, `continue_conversation()`, `health_check()`, and `get_capabilities()`. Supports `BackendType.AGY` and `BackendType.GRPC` with clean `NotSupportedError` separation.
 - **[NEW] `AgyBridge`**: Execution backend via `agy -p --dangerously-skip-permissions`. Enables auto-approved `run_command` and MCP tool execution from Telegram/Neon-Link without security prompt gates. Supports ephemeral mode, conversation resume (`agy --conversation <uuid>`), and model selection.

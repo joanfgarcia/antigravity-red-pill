@@ -541,13 +541,13 @@ class LazarusPulse:
 			self.memory_mgr.evaporate_signals(f"autoheal_error_{tissue}")
 
 		import os
+		from red_pill.core.paths import get_log_dir
 
 		script_path = os.path.join(cfg.APP_ROOT, "scripts", f"heal_{tissue}.sh")
 		if os.path.exists(script_path):
 			logger.warning(f"Pulse [IMMUNE RESPONSE]: Deploying White Blood Cells for {tissue}...")
 			try:
-				log_dir = os.path.join(os.path.expanduser("~"), ".agent")
-				os.makedirs(log_dir, exist_ok=True)
+				log_dir = get_log_dir()
 				log_path = os.path.join(log_dir, f"immune_response_{tissue}.log")
 				with open(log_path, "a") as f:
 					f.write(f"\n--- Immune Response for {tissue} at {time.ctime()} ---\n")

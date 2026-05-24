@@ -42,6 +42,12 @@ Updates within the Red Pill ecosystem are not just code deployments; they are **
 *   **FastEmbed Models**: `get_models_dir()` -> `~/.local/share/red-pill/models/`
 *   **Async Queues**: `get_queue_dir()` -> `~/.local/share/red-pill/queue/`
 *   **Config & Env**: `get_config_dir()` -> `~/.config/red-pill/`
+*   **Thread State**: `get_thread_state_path()` -> `~/.local/share/red-pill/thread_state.json`
+*   **Staging Buffer**: `get_staging_dir()` -> `~/.cache/red-pill/staging/`
+*   **Ingestion Path**: `get_ingestion_dir()` -> `~/.local/share/red-pill/ingestion/`
+*   **Model Profiles**: `get_model_profiles_path()` -> `~/.config/red-pill/model_profiles.yaml`
+*   **Swarm Config**: `get_swarm_config_path()` -> `~/.config/red-pill/swarm_communities.json`
+*   **Daemon Directory**: `get_daemon_dir()` -> `$XDG_RUNTIME_DIR/red-pill/` (falls back to `~/.cache/red-pill/daemons/`)
 *   **Backups**: `get_backup_dir()` -> `<IA_DIR>/backups/red-pill/` (The only exception explicitly defined by user).
 
 **Agent Mandate:** When modifying ANY script, test, or documentation, verify that XDG paths are used dynamically. Never assume the current working directory contains the state.
