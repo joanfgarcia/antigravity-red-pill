@@ -10,8 +10,8 @@ def download_model():
 	repo_id = "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF"
 	filename = "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
 
-	models_dir = os.path.join(os.path.dirname(__file__), "..", "models")
-	os.makedirs(models_dir, exist_ok=True)
+	from red_pill.core.paths import get_models_dir
+	models_dir = str(get_models_dir())
 
 	local_path = os.path.join(models_dir, filename)
 	if os.path.exists(local_path):

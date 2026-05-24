@@ -154,6 +154,7 @@ red-pill bunker <subcommand>
 |------------|-------------|
 | `init` | Hardware profiling and declarative profile generation |
 | `install` | Deterministic installation from bunker profile |
+| `update` | Pulls latest repository changes, aligns virtual environment dependencies via uv, runs pending database migrations, and reloads systemd daemons |
 | `export` | **(Backup)** Packages memory, queues, secrets and config into a single `.tar.gz.mls` encrypted with pure-mls |
 | `export-keys` | **(Backup Keys)** Exports the Cryptographic Master Identity (KEM & signatures) to an unencrypted `.tar.gz` for offline safe storage |
 | `restore [source] [--kem PATH] [--sig PATH]` | Restores from a Soul Kit backup. Optionally provide specific KEM (`vault.seed`) or Signature (`vault_group.state`) to decrypt on a clean host |

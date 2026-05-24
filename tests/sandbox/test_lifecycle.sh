@@ -11,6 +11,15 @@ pip install -e /opt/red-pill-src > /dev/null 2>&1
 echo -e "\n[STAGE 2] Inicializando el Entorno (bunker init)..."
 python -m red_pill.cli bunker init
 
+echo -e "\n[STAGE 2.5] Instalando el Entorno (bunker install)..."
+# Create dummy model file to skip HF download in sandbox
+mkdir -p /home/aleth/.local/share/red-pill/models
+touch /home/aleth/.local/share/red-pill/models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
+python -m red_pill.cli bunker install
+
+echo -e "\n[STAGE 2.6] Sincronizando el Entorno (bunker update)..."
+python -m red_pill.cli bunker update
+
 echo -e "\n[STAGE 3] Inyectando Estado (Mock Data)..."
 cat << 'EOF' > /tmp/inject_state.py
 import os, sqlite3

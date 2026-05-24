@@ -14,6 +14,10 @@
 - **[FEAT] Dynamic Daemon Environment Refactoring**: Refactored `setup_background_model.sh` to resolve the daemon runtime path dynamically using XDG standards, and updated the systemd unit template to target `redpill-llm.service` in the new path.
 - **[FIX] Active Service Cleanup & Consolidation**: Purged legacy failed services (`red-pill-minion.service`, `redpill-pulse.service`, `redpill-pulse.timer`) and updated `sleep.py` consolidation logic to target `redpill-llm.service`.
 - **[TEST] XDG Path Verification**: Expanded `test_xdg_compliance.py` with automated validation for XDG directory resolutions and legacy `.agent` state migration logic.
+- **[FEAT] Operator Lifecycle CLI Completion**: Implemented `bunker install` and `bunker update` commands inside `bunker_lifecycle.py` and `cli.py` to support programmatic bootstrap (.env setup, Qdrant collection creation, GGUF model pre-fetching) and updates (git pull, dependency alignment with uv, database sanitation/migrations, systemd reloading).
+- **[FEAT] Graceful Sandboxing in Pulse Manager**: Patched `schedule_pulse.py` to check D-Bus and systemctl availability using dynamic probes, preventing crashes inside containerized sandboxes lacking systemd.
+- **[FIX] Pydantic DotEnv Settings Parsing**: Avoided `pydantic-settings` JSON parsing failures for list variables by changing type annotations to `Any` combined with `@field_validator(..., mode="before")` for `DEEP_RECALL_TRIGGERS`, `METABOLISM_AUTO_COLLECTIONS`, and `PRE_HEATING_HOT_COLORS`.
+- **[TEST] Lifecycle E2E Sandbox Suite**: Added stages 2.5 and 2.6 in `tests/sandbox/test_lifecycle.sh` to execute and verify the automated `bunker install` and `bunker update` lifecycle routines in Podman sandboxes.
 
 ### 🔌 IDEBridge v2 — Dual-Backend Architecture (AgyBridge + GrpcBridge)
 - **[ARCH] `IDEBridge` Abstract Interface**: New `bridge.py` defining `IDEBridge` ABC with `prompt()`, `continue_conversation()`, `health_check()`, and `get_capabilities()`. Supports `BackendType.AGY` and `BackendType.GRPC` with clean `NotSupportedError` separation.

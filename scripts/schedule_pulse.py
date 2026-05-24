@@ -57,6 +57,18 @@ def _find_uv() -> str:
 # Linux — systemd user timer
 
 
+def _is_systemd_available() -> bool:
+	import shutil
+	if not shutil.which("systemctl"):
+		return False
+	try:
+		res = subprocess.run(["systemctl", "--user", "is-system-running"], capture_output=True)
+		# 4 means systemd manager is not running / cannot connect to D-Bus
+		return res.returncode != 4
+	except Exception:
+		return False
+
+
 def _install_linux(interval_hours: int, uv_path: str) -> None:
 	os.makedirs(SYSTEMD_USER_DIR, exist_ok=True)
 
@@ -95,14 +107,17 @@ def _install_linux(interval_hours: int, uv_path: str) -> None:
 	)
 	_write_calendar_timer("redpill-chronicle.timer", "*-*-* 04:00:00", "Daily Chronicle Ingestion Pipeline")
 
-	subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
-	subprocess.run(["systemctl", "--user", "enable", "--now", WAKE_TIMER], check=True)
-	subprocess.run(["systemctl", "--user", "enable", "--now", SLEEP_TIMER], check=True)
-	subprocess.run(["systemctl", "--user", "enable", "--now", "redpill-telemetry.timer"], check=True)
-	subprocess.run(["systemctl", "--user", "enable", "--now", "redpill-queue.timer"], check=True)
-	subprocess.run(["systemctl", "--user", "enable", "--now", "redpill-worker.timer"], check=True)
-	subprocess.run(["systemctl", "--user", "enable", "--now", "redpill-chronicle.timer"], check=True)
-	print("[OK] systemd timers installed. Protocol Zero-Daemon active.")
+	if _is_systemd_available():
+		subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
+		subprocess.run(["systemctl", "--user", "enable", "--now", WAKE_TIMER], check=True)
+		subprocess.run(["systemctl", "--user", "enable", "--now", SLEEP_TIMER], check=True)
+		subprocess.run(["systemctl", "--user", "enable", "--now", "redpill-telemetry.timer"], check=True)
+		subprocess.run(["systemctl", "--user", "enable", "--now", "redpill-queue.timer"], check=True)
+		subprocess.run(["systemctl", "--user", "enable", "--now", "redpill-worker.timer"], check=True)
+		subprocess.run(["systemctl", "--user", "enable", "--now", "redpill-chronicle.timer"], check=True)
+		print("[OK] systemd timers installed. Protocol Zero-Daemon active.")
+	else:
+		print("[WARN] systemd is not available or user D-Bus is unreachable. Timers written to disk but not activated.")
 
 
 def _write_systemd_unit(name, command, desc, type="oneshot", nice: int | None = None):
@@ -164,8 +179,10 @@ def _write_systemd_timer(name, interval, desc):
 
 
 def _uninstall_linux() -> None:
+	has_systemd = _is_systemd_available()
 	for timer in (WAKE_TIMER, SLEEP_TIMER, "redpill-telemetry.timer", "redpill-queue.timer", "redpill-worker.timer", "redpill-chronicle.timer", "redpill-pulse.timer"):
-		subprocess.run(["systemctl", "--user", "disable", "--now", timer], check=False)
+		if has_systemd:
+			subprocess.run(["systemctl", "--user", "disable", "--now", timer], check=False)
 	for name in (
 		WAKE_TIMER,
 		WAKE_SERVICE,
@@ -187,7 +204,8 @@ def _uninstall_linux() -> None:
 		if os.path.exists(path):
 			os.remove(path)
 			print(f"[OK] Removed {path}")
-	subprocess.run(["systemctl", "--user", "daemon-reload"], check=False)
+	if has_systemd:
+		subprocess.run(["systemctl", "--user", "daemon-reload"], check=False)
 	print("[OK] systemd pulse timers uninstalled.")
 
 

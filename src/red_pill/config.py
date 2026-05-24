@@ -312,14 +312,24 @@ class RedPillConfig(BaseSettings):
 	# -----------------------------------------------------------------------
 	# DEEP RECALL TRIGGERS
 	# -----------------------------------------------------------------------
-	DEEP_RECALL_TRIGGERS: List[str] = []
+	DEEP_RECALL_TRIGGERS: Any = []
+
+	@field_validator("DEEP_RECALL_TRIGGERS", mode="before")
+	@classmethod
+	def _parse_deep_recall_triggers(cls, v: Any) -> Any:
+		if isinstance(v, str):
+			return [t.strip() for t in v.split(",") if t.strip()]
+		return v
 
 	@model_validator(mode="after")
 	def _build_deep_recall_triggers(self) -> "RedPillConfig":
-		_default = "don't you remember,¿no te acuerdas?,deep recall,do you really not remember?,esfuerzate en recordar,try hard!"
-		_env_raw = os.getenv("DEEP_RECALL_TRIGGERS", _default)
 		base = ["despierta", "despierta neo", "wake up"]
-		extras = [t.strip().lower() for t in _env_raw.split(",") if t.strip()]
+		if self.DEEP_RECALL_TRIGGERS:
+			extras = [t.strip().lower() for t in self.DEEP_RECALL_TRIGGERS if t.strip()]
+		else:
+			_default = "don't you remember,¿no te acuerdas?,deep recall,do you really not remember?,esfuerzate en recordar,try hard!"
+			_env_raw = os.getenv("DEEP_RECALL_TRIGGERS", _default)
+			extras = [t.strip().lower() for t in _env_raw.split(",") if t.strip()]
 		self.DEEP_RECALL_TRIGGERS = base + extras
 		return self
 
@@ -328,7 +338,7 @@ class RedPillConfig(BaseSettings):
 	# -----------------------------------------------------------------------
 	METABOLISM_ENABLED: bool = True
 	METABOLISM_COOLDOWN: int = 3600
-	METABOLISM_AUTO_COLLECTIONS: List[str] = ["work_memories", "social_memories", "story_memories"]
+	METABOLISM_AUTO_COLLECTIONS: Any = ["work_memories", "social_memories", "story_memories"]
 	METABOLISM_STATE_FILE: str = str(get_state_dir() / "metabolism_state.json")
 	ABSENCE_THRESHOLD: int = 7 * 24 * 3600
 	ABSENCE_GUARD_SCROLL_LIMIT: int = 500
@@ -481,7 +491,14 @@ class RedPillConfig(BaseSettings):
 	PRE_HEATING_MAX_FRAGMENTS: int = 3  # Max total (social + interaction)
 	PRE_HEATING_MAX_CHARS_PER_FRAGMENT: int = 200  # For "raw" mode
 	PRE_HEATING_LOOKBACK_HOURS: int = 48  # For interaction_memories
-	PRE_HEATING_HOT_COLORS: List[str] = ["purple", "blue", "red"]
+	PRE_HEATING_HOT_COLORS: Any = ["purple", "blue", "red"]
+
+	@field_validator("PRE_HEATING_HOT_COLORS", mode="before")
+	@classmethod
+	def _parse_colors(cls, v: Any) -> Any:
+		if isinstance(v, str):
+			return [c.strip() for c in v.split(",") if c.strip()]
+		return v
 
 	# BE_WATER: Agent auto-sizes payload limit based on available VRAM.
 	# Override with MAX_PAYLOAD_CHARS=<int> in .env to force a specific limit.
