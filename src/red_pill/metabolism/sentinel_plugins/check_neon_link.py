@@ -26,7 +26,15 @@ class NeonLinkCheck(SentinelPlugin):
 		return findings
 
 	def heal(self, cfg: Any, finding: AuditFinding) -> bool:
-		"""Auto-curación: Matar uvicorn de neon-link y relanzar start.sh"""
+		"""Auto-curación: Reiniciar neon-link vía systemd o relanzar start.sh."""
+		import shutil
+		if shutil.which("systemctl"):
+			try:
+				subprocess.run(["systemctl", "--user", "restart", "neon-link.service"], check=False, timeout=15)
+				return True
+			except Exception:
+				pass
+
 		try:
 			subprocess.run(["pkill", "-f", "neon-link"], check=False)
 			from red_pill.core.paths import get_bunker_root

@@ -154,7 +154,12 @@ As of v6.1.2, the **Bünker Telemetry Daemon (`bunker_telemetry.py`)** is the ma
     *   Linux: `systemctl --user status redpill-bunker.service`
     *   macOS: `launchctl list | grep redpill.bunker`
     *   Windows: Check Task Scheduler for `RedPillBunkerTelemetry`.
-3.  **Legacy Cleanup**: The old `memory_daemon.py` is DEPRECATED. Ensure its service is stopped and removed.
+3.  **Legacy & Duplicate Cleanup (CRITICAL)**:
+    *   **NO DUPLICATES ALLOWED**: The agent MUST audit systemd user services (using `systemctl --user list-units` or `ps -ef`) after every sync. Ensure that only the canonical units declared in `services.yaml` (located under `~/.config/red-pill/`) are active.
+    *   **Post-Update Service Audit**: Instantly after every update, the agent must check the list of active services and timers to ensure no legacy or duplicated services (like `bunker-queue.service` vs `redpill-queue.service`) are active or enabled. Only the correct/canonical services must be running.
+    *   **Healer Verification**: Verify that none of the automated metabolism healers (tissues) are accidentally spawning duplicates. Specifically, ensure `check_neon_link.py` and other sentinel plugins route restarts through `systemctl` instead of raw background processes.
+    *   **Legacy Purging**: Discard, stop, and disable any legacy or orphaned service files (e.g., `bunker-queue.service` or legacy `redpill-pulse.service`) to prevent concurrent locks on SQLite/Qdrant and prevent VRAM/CPU leaks.
+    *   The old `memory_daemon.py` is DEPRECATED. Ensure its service is stopped and removed.
 
 > [!IMPORTANT]
 > The `wake_up_v6.py` script no longer checks for the sidecar socket. If you see socket-related errors, your script is stale. Use the latest version.
