@@ -30,6 +30,9 @@ class ServiceContract:
 	health_url: Optional[str] = None
 	max_runtime_s: Optional[int] = None
 	legacy_aliases: List[str] = field(default_factory=list)
+	category: str = "core"
+	required: bool = True
+	enabled_config_key: Optional[str] = None
 
 	@property
 	def watchdog_sec(self) -> Optional[int]:
@@ -108,6 +111,9 @@ def load_manifest(path: Optional[Path] = None) -> Dict[str, ServiceContract]:
 			health_url=cfg.get("health_url"),
 			max_runtime_s=cfg.get("max_runtime_s"),
 			legacy_aliases=cfg.get("legacy_aliases", []),
+			category=cfg.get("category", "core"),
+			required=cfg.get("required", True),
+			enabled_config_key=cfg.get("enabled_config_key"),
 		)
 
 		errors = contract.validate()

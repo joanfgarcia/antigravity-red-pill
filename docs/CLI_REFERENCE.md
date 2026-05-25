@@ -96,6 +96,14 @@ Displays live telemetry: CPU, GPU (RTX), NPU, memory usage, active swarm agents,
 
 ---
 
+### `daemon` — Start the Lazarus Daemon
+```bash
+red-pill daemon
+```
+Starts the Lazarus Daemon (CNS background process), executing the periodic pulse, queue worker, and system health checks.
+
+---
+
 ### `sleep` — Lazarus Maintenance Ritual
 ```bash
 red-pill sleep [--mode {lazy,deep}]
@@ -254,6 +262,7 @@ red-pill seed                            # Init memory
 red-pill add work "Completed feature X"  # Store engram
 red-pill search work "authentication"    # Semantic recall
 red-pill status                          # Hardware panel
+red-pill daemon                          # Start Lazarus Daemon
 red-pill sleep                           # Consolidate memory
 red-pill soul export                     # Backup soul
 red-pill soul rotate                     # Rotate API keys

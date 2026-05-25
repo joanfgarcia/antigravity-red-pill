@@ -1,5 +1,11 @@
 ## [7.1.0] - Unreleased
 
+### 🛡️ Service Health Gating, Lazarus Daemon Fix & Compaction Optimization
+- **[FIX] Lazarus Daemon Command Integration**: Added the missing `daemon` subcommand to CLI subparsers in `src/red_pill/cli.py` and whitelisted it. This resolves the `INVALIDARGUMENT` crash loop of `redpill.service` under systemd.
+- **[FEAT] Configurable Service Health Gating**: Overhauled `ServiceContract` in `service_contract.py`, `examples/services.yaml`, and runtime configurations to add `category`, `required`, and `enabled_config_key` properties.
+- **[FEAT] Configuration-Aware Sentinel Monitoring**: Patched `check_duplicate_services.py` sentinel plugin to respect gating configs (e.g. `NEON_LINK_ENABLED`) and skip inactive optional services, avoiding false alarms.
+- **[FEAT] Compaction Feedback Loop Prevention**: Introduced `COMPACTION_THRESHOLD: int = 10` setting in `src/red_pill/config.py`. Modified the `refresh_session_context` tool in `src/red_pill/mcp_server.py` to count compactions using volatile `bunker_state.json`. If context refresh is triggered by compaction and is under the threshold, it skips the heavy 11KB context injection, returning a cached identity block to prevent loops.
+
 ### ✉️ Telegram Reactive Debounce Mode
 - **[FEAT] Reactive Debounce Mode (Accumulation Window)**: Introduced `REACTIVE_DEBOUNCE_ENABLED` and `REACTIVE_DEBOUNCE_SECONDS` configurations in `.env.example` and `config.py` to group fast bursts of Telegram messages in `worker.py` and compile them into a single compacted prompt before execution, optimizing token usage.
 - **[FEAT] Zero-Lag Command Bypass**: Configured the debounce window to be immediately bypassed if any message in the queue contains a command payload (e.g., `/switch`, `/list`, `/new`), ensuring instantaneous execution for operator interactions.

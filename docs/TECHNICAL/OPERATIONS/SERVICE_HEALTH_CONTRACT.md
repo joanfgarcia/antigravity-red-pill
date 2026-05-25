@@ -45,6 +45,9 @@ services:
     max_runtime_s: <int>                     # Maximum execution time before systemd kills it
 
     # Optional (all types)
+    category: core | plugin                  # Category of the service (default: core)
+    required: true | false                  # Vital service flag. If false, skipped when disabled or inactive (default: true)
+    enabled_config_key: <CONFIG_KEY>        # Config/Env key gating monitoring (e.g. NEON_LINK_ENABLED)
     legacy_aliases:                          # Services that MUST NOT coexist
       - old-name.service
 ```
@@ -204,15 +207,17 @@ The manifest is loaded via `red_pill.core.service_contract.load_manifest()` whic
 
 ## 6. Current Service Inventory
 
-| Service | Type | Loop/Timeout | Watchdog | Health |
-|---------|------|:---:|:---:|:---:|
-| `neon-link` | daemon-loop | 1s | WatchdogSec=3 | ✅ `:8770/health` |
-| `redpill-llm` | daemon-listener | — | ❌ (listener) | ✅ `:8776/health` |
-| `redpill-echo` | daemon-loop | 60s | WatchdogSec=180 | ❌ |
-| `redpill-auditor` | oneshot | 120s | ❌ | ❌ |
-| `redpill-extractor` | oneshot | 120s | ❌ | ❌ |
-| `redpill-janitor` | oneshot | 60s | ❌ | ❌ |
-| `redpill-pulse` | oneshot | 30s | ❌ | ❌ |
-| `redpill-queue` | oneshot | 120s | ❌ | ❌ |
-| `redpill-telemetry` | oneshot | 60s | ❌ | ❌ |
-| `redpill-wake` | oneshot | 30s | ❌ | ❌ |
+| Service | Type | Loop/Timeout | Watchdog | Health | Category | Required | Gated By |
+|---------|------|:---:|:---:|:---:|:---:|:---:|:---:|
+| `redpill` | daemon-loop | 3600s | WatchdogSec=10800 | ❌ | core | ✅ | `PULSE_ENABLED` |
+| `neon-link` | daemon-loop | 1s | WatchdogSec=3 | ✅ `:8770/health` | plugin | ❌ | `NEON_LINK_ENABLED` |
+| `redpill-llm` | daemon-listener | — | ❌ | ✅ `:8776/health` | core | ✅ | — |
+| `redpill-bunker` | daemon-loop | 10s | WatchdogSec=30 | ❌ | core | ✅ | — |
+| `redpill-echo` | daemon-loop | 60s | WatchdogSec=180 | ❌ | core | ❌ | — |
+| `redpill-auditor` | oneshot | 120s | ❌ | ❌ | core | ✅ | — |
+| `redpill-extractor` | oneshot | 120s | ❌ | ❌ | core | ❌ | — |
+| `redpill-janitor` | oneshot | 60s | ❌ | ❌ | core | ✅ | — |
+| `redpill-pulse` | oneshot | 30s | ❌ | ❌ | core | ❌ | — |
+| `redpill-queue` | oneshot | 120s | ❌ | ❌ | core | ❌ | — |
+| `redpill-telemetry` | oneshot | 60s | ❌ | ❌ | core | ❌ | — |
+| `redpill-wake` | oneshot | 30s | ❌ | ❌ | core | ❌ | — |

@@ -396,6 +396,7 @@ class RedPillConfig(BaseSettings):
 	INTERCEPTOR_ENABLED: bool = False
 	INTERCEPTOR_RAG_ENABLED: bool = True
 	INTERCEPTOR_CIRCUIT_BREAKER_ENABLED: bool = False
+	COMPACTION_THRESHOLD: int = 10
 
 	# -----------------------------------------------------------------------
 	# FERRARI PROTOCOL — Emotional Intelligence Plugins

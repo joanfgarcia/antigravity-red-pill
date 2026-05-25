@@ -233,6 +233,7 @@ def handle_ide(args: argparse.Namespace) -> None:
 			print(f"Current IDE backend: {conf.IDE_BACKEND.upper()}")
 	elif args.ide_cmd == "status":
 		from red_pill.plugins.antigravity_ide.factory import create_bridge, preflight_check
+
 		pf = preflight_check()
 		bridge = create_bridge()
 		caps = bridge.get_capabilities()
@@ -252,6 +253,7 @@ def handle_ide(args: argparse.Namespace) -> None:
 				print(f"❌ {e}")
 	elif args.ide_cmd == "test":
 		from red_pill.plugins.antigravity_ide.factory import create_bridge
+
 		bridge = create_bridge()
 		backend_name = bridge.get_capabilities().backend.value.upper()
 		print(f"Testing {backend_name} bridge...")
@@ -514,6 +516,7 @@ def main() -> None:
 	ide_sub.add_parser("test", help="Run connectivity test against the IDE")
 
 	subparsers.add_parser("telemetry", help="Run a single-pass hardware/Bünker telemetry heartbeat (Oneshot)")
+	subparsers.add_parser("daemon", help="Start the Lazarus Daemon (heartbeat pulse)")
 
 	args = parser.parse_args()
 
@@ -561,6 +564,10 @@ def main() -> None:
 		parser.print_help()
 		sys.exit(0)
 
+	elif args.command == "daemon":
+		handle_daemon()
+		return
+
 	elif args.command == "telemetry":
 		handle_telemetry()
 		return
@@ -580,7 +587,7 @@ def main() -> None:
 	# Map CLI type to collection(s)
 	if getattr(args, "type", None):
 		collections = [get_collection(args.type)]
-	elif args.command in ["seed", "status", "swarm", "soul", "init", "bunker", "ide"]:
+	elif args.command in ["seed", "status", "swarm", "soul", "init", "bunker", "ide", "daemon"]:
 		collections = []  # Not needed for these
 	else:
 		# Default sweep for search/diag if no type specified

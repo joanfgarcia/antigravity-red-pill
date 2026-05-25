@@ -870,9 +870,24 @@ async def handle_hot_reload_interceptors(arguments: Dict[str, Any]):
 @registry.register(
 	name="refresh_session_context",
 	description="[OFFICIAL] Re-synthesize identity and session context using wake_up_v6. Also hot-reloads the interceptor pipeline.",
-	schema={"type": "object", "properties": {}},
+	schema={
+		"type": "object",
+		"properties": {
+			"is_compaction": {
+				"type": "boolean",
+				"description": "True if this context refresh is triggered by a context compaction resume.",
+			},
+			"force_inject": {
+				"type": "boolean",
+				"description": "Force full injection regardless of compaction counter.",
+			},
+		},
+	},
 )
 async def handle_refresh_session_context(arguments: Dict[str, Any]):
+	is_compaction = arguments.get("is_compaction", False)
+	force_inject = arguments.get("force_inject", False)
+
 	# Hot-reload interceptors as part of session refresh
 	reload_report = ""
 	try:
@@ -891,6 +906,54 @@ async def handle_refresh_session_context(arguments: Dict[str, Any]):
 		module.EmotionalPreHeatingPlugin._has_fired = False
 	except Exception:
 		pass
+
+	# Load state from bunker_state.json to check/increment compaction counter
+	runtime_dir = Path(cfg.get_config().RUNTIME_DIR)
+	bunker_state = runtime_dir / "bunker_state.json"
+
+	compaction_count = 0
+	compaction_threshold = cfg.get_config().COMPACTION_THRESHOLD
+
+	state = {}
+	# Read current compaction count if it exists
+	if bunker_state.exists():
+		try:
+			import json
+
+			with open(bunker_state, "r") as f:
+				state = json.load(f)
+			compaction_count = state.get("compaction_count", 0)
+		except Exception as state_err:
+			logger.warning(f"Failed to read compaction count: {state_err}")
+
+	# Determine if we should perform the full context injection
+	should_inject = True
+	if is_compaction and not force_inject:
+		compaction_count += 1
+		if compaction_count < compaction_threshold:
+			should_inject = False
+
+	# Save updated count (and reset if we are injecting)
+	if should_inject:
+		compaction_count = 0
+
+	state["compaction_count"] = compaction_count
+	try:
+		import json
+
+		# Ensure directory exists (fallback case)
+		bunker_state.parent.mkdir(parents=True, exist_ok=True)
+		with open(bunker_state, "w") as f:
+			json.dump(state, f)
+	except Exception as state_err:
+		logger.warning(f"Failed to save compaction count: {state_err}")
+
+	if not should_inject:
+		info_msg = (
+			f"[CACHED IDENTITY] Context injection skipped (Compaction count: {compaction_count}/{compaction_threshold}). "
+			"Identity directives are cached in the Bünker to prevent feedback loops."
+		)
+		return [types.TextContent(type="text", text=f"{info_msg}\n\n{reload_report}")]
 
 	wake_output = subprocess.run([GET_PYTHON(), os.path.join(PROJECT_ROOT, "scripts", "wake_up_v6.py")], capture_output=True, text=True).stdout
 

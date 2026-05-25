@@ -302,7 +302,19 @@ class SentinelAuditor:
 								self.logger.info(f"Executing health check plugin: {plugin.name}")
 								plugin_findings = plugin.audit(config)
 								if plugin_findings:
-									report.findings.extend(plugin_findings)
+									for finding in plugin_findings:
+										self.logger.warning(f"Sentinel Auditor: Detected issue '{finding.type}': {finding.message}")
+										healed = False
+										try:
+											healed = plugin.heal(config, finding)
+										except Exception as heal_err:
+											self.logger.error(f"Plugin {plugin.name} failed during heal: {heal_err}")
+										
+										if healed:
+											self.logger.info(f"Sentinel Auditor: Successfully healed '{finding.type}' for {finding.metadata.get('service', 'unknown')}")
+										else:
+											self.logger.warning(f"Sentinel Auditor: Auto-heal failed/not supported for '{finding.type}'")
+											report.findings.append(finding)
 						except Exception as e:
 							self.logger.error(f"Plugin {plugin.name} failed during audit: {e}")
 							report.status = "red"

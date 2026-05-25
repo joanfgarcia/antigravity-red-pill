@@ -10,6 +10,7 @@ auto-configures monitoring for each service:
 Also detects runaway CPU and memory bloat for all active daemons.
 """
 
+import os
 import subprocess
 import urllib.error
 import urllib.request
@@ -43,7 +44,9 @@ class ServiceHealthCheck(SentinelPlugin):
 		try:
 			r = subprocess.run(
 				["systemctl", "--user", "is-active", unit],
-				capture_output=True, text=True, timeout=5,
+				capture_output=True,
+				text=True,
+				timeout=5,
 			)
 			return r.stdout.strip()
 		except Exception:
@@ -53,7 +56,9 @@ class ServiceHealthCheck(SentinelPlugin):
 		try:
 			r = subprocess.run(
 				["systemctl", "--user", "is-enabled", unit],
-				capture_output=True, text=True, timeout=5,
+				capture_output=True,
+				text=True,
+				timeout=5,
 			)
 			return r.stdout.strip() == "enabled"
 		except Exception:
@@ -63,7 +68,9 @@ class ServiceHealthCheck(SentinelPlugin):
 		try:
 			r = subprocess.run(
 				["systemctl", "--user", "show", unit, "--property=MainPID"],
-				capture_output=True, text=True, timeout=5,
+				capture_output=True,
+				text=True,
+				timeout=5,
 			)
 			main_pid = 0
 			for line in r.stdout.splitlines():
@@ -76,7 +83,9 @@ class ServiceHealthCheck(SentinelPlugin):
 			for flag in ["-p", "--ppid"]:
 				ps = subprocess.run(
 					["ps", flag, str(main_pid), "-o", "%cpu", "--no-headers"],
-					capture_output=True, text=True, timeout=5,
+					capture_output=True,
+					text=True,
+					timeout=5,
 				)
 				for line in ps.stdout.splitlines():
 					try:
@@ -91,7 +100,9 @@ class ServiceHealthCheck(SentinelPlugin):
 		try:
 			r = subprocess.run(
 				["systemctl", "--user", "show", unit, "--property=MemoryCurrent"],
-				capture_output=True, text=True, timeout=5,
+				capture_output=True,
+				text=True,
+				timeout=5,
 			)
 			for line in r.stdout.splitlines():
 				if line.startswith("MemoryCurrent="):
@@ -109,19 +120,38 @@ class ServiceHealthCheck(SentinelPlugin):
 		contracts: Dict[str, ServiceContract] = load_manifest()
 
 		if not contracts:
-			findings.append(AuditFinding(
-				type="config_missing",
-				severity=3.0,
-				message="Service manifest (services.yaml) not found or empty. Cannot audit services.",
-			))
+			findings.append(
+				AuditFinding(
+					type="config_missing",
+					severity=3.0,
+					message="Service manifest (services.yaml) not found or empty. Cannot audit services.",
+				)
+			)
 			return findings
 
 		for name, contract in contracts.items():
 			if contract.type == "oneshot":
 				continue  # systemd TimeoutStartSec handles these
 
+			# Optional service gating check (Config-driven)
+			if not contract.required and contract.enabled_config_key:
+				is_enabled = getattr(cfg, contract.enabled_config_key, None)
+				if is_enabled is None:
+					env_val = os.getenv(contract.enabled_config_key)
+					if env_val is not None:
+						is_enabled = env_val.lower() in ("true", "1", "yes")
+					else:
+						is_enabled = True
+				if not is_enabled:
+					continue
+
 			unit = contract.unit
 			state = self._unit_state(unit)
+
+			# Optional service gating check (State-driven for no config key)
+			if not contract.required and not contract.enabled_config_key:
+				if state == "inactive":
+					continue
 
 			# 1. DUPLICATE DETECTION
 			for alias in contract.legacy_aliases:
@@ -132,18 +162,37 @@ class ServiceHealthCheck(SentinelPlugin):
 					both_active = alias_state == "active" and state == "active"
 					severity = 9.0 if both_active else 5.0
 					state_str = "RUNNING" if alias_state == "active" else "ENABLED (dormant)"
-					findings.append(AuditFinding(
-						type="duplicate_service",
-						severity=severity,
-						message=(
-							f"Legacy service '{alias}' is {state_str} alongside "
-							f"canonical '{unit}'. Causes duplicate pollers."
-						),
-						metadata={"legacy": alias, "canonical": unit},
-					))
+					findings.append(
+						AuditFinding(
+							type="duplicate_service",
+							severity=severity,
+							message=(f"Legacy service '{alias}' is {state_str} alongside canonical '{unit}'. Causes duplicate pollers."),
+							metadata={"legacy": alias, "canonical": unit},
+						)
+					)
 
-			# Skip remaining checks if service isn't active
+			# Gating for non-active states: identify offline or stuck services
 			if state != "active":
+				if state == "activating":
+					findings.append(
+						AuditFinding(
+							type="hung_service",
+							severity=8.0,
+							message=f"Service '{unit}' stuck in 'activating' state (boot loop).",
+							metadata={"service": unit},
+						)
+					)
+				elif state in ("inactive", "failed"):
+					# For daemons, being inactive/failed is an anomaly
+					severity = 10.0 if state == "failed" else 8.0
+					findings.append(
+						AuditFinding(
+							type="service_down",
+							severity=severity,
+							message=f"Service '{unit}' is down (state: {state}).",
+							metadata={"service": unit, "state": state},
+						)
+					)
 				continue
 
 			# 2. HEALTH ENDPOINT (daemon-loop and daemon-listener)
@@ -152,44 +201,38 @@ class ServiceHealthCheck(SentinelPlugin):
 					urllib.request.urlopen(contract.health_url, timeout=5)
 				except Exception as e:
 					if not isinstance(e, urllib.error.HTTPError):
-						findings.append(AuditFinding(
-							type="hung_service",
-							severity=9.0,
-							message=(
-								f"Service '{unit}' is active but health endpoint "
-								f"'{contract.health_url}' is UNREACHABLE: {e}"
-							),
-							metadata={"service": unit, "url": contract.health_url},
-						))
-
-			# 3. STUCK 'activating' STATE
-			if state == "activating":
-				findings.append(AuditFinding(
-					type="hung_service",
-					severity=8.0,
-					message=f"Service '{unit}' stuck in 'activating' state (boot loop).",
-					metadata={"service": unit},
-				))
+						findings.append(
+							AuditFinding(
+								type="hung_service",
+								severity=9.0,
+								message=(f"Service '{unit}' is active but health endpoint '{contract.health_url}' is UNREACHABLE: {e}"),
+								metadata={"service": unit, "url": contract.health_url},
+							)
+						)
 
 			# 4. RUNAWAY CPU
 			cpu = self._get_unit_cpu(unit)
 			if cpu > CPU_THRESHOLD_PCT:
-				findings.append(AuditFinding(
-					type="runaway_cpu",
-					severity=7.0,
-					message=f"Service '{unit}' consuming {cpu:.1f}% CPU (threshold: {CPU_THRESHOLD_PCT:.0f}%).",
-					metadata={"service": unit, "cpu_pct": cpu},
-				))
+				findings.append(
+					AuditFinding(
+						type="runaway_cpu",
+						severity=7.0,
+						message=f"Service '{unit}' consuming {cpu:.1f}% CPU (threshold: {CPU_THRESHOLD_PCT:.0f}%).",
+						metadata={"service": unit, "cpu_pct": cpu},
+					)
+				)
 
 			# 5. MEMORY BLOAT
 			rss = self._get_unit_rss_mb(unit)
 			if rss > MEMORY_LIMIT_MB:
-				findings.append(AuditFinding(
-					type="memory_bloat",
-					severity=6.0,
-					message=f"Service '{unit}' using {rss:.0f} MB RSS (limit: {MEMORY_LIMIT_MB} MB).",
-					metadata={"service": unit, "rss_mb": rss},
-				))
+				findings.append(
+					AuditFinding(
+						type="memory_bloat",
+						severity=6.0,
+						message=f"Service '{unit}' using {rss:.0f} MB RSS (limit: {MEMORY_LIMIT_MB} MB).",
+						metadata={"service": unit, "rss_mb": rss},
+					)
+				)
 
 		return findings
 
@@ -210,7 +253,7 @@ class ServiceHealthCheck(SentinelPlugin):
 			except Exception:
 				return False
 
-		if finding.type in ("hung_service", "runaway_cpu"):
+		if finding.type in ("hung_service", "runaway_cpu", "service_down"):
 			service = meta.get("service")
 			if not service:
 				return False
