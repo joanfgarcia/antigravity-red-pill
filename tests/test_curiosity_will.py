@@ -18,12 +18,21 @@ def mock_curiosity_env(tmp_path, monkeypatch):
 	monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
 	monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
 	monkeypatch.setenv("IA_DIR", str(tmp_path))
+	monkeypatch.setenv("CURIOSITY_PROFILE", "balanced")
 
 	# Mock Path.home to return tmp_path
 	monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
 	# Enable curiosity engine setting
 	monkeypatch.setattr(cfg, "CURIOSITY_ENGINE_ENABLED", True)
+
+	# Mock urlopen to prevent real network calls and 30s timeouts
+	import urllib.request
+	mock_response = MagicMock()
+	mock_response.read.return_value = b'{"choices": [{"message": {"content": "{\\"action\\": \\"autonomous_research\\", \\"objective\\": \\"mocked_dynamic_task\\", \\"tools_allowed\\": []}"}}]}'
+	mock_context = MagicMock()
+	mock_context.__enter__.return_value = mock_response
+	monkeypatch.setattr(urllib.request, "urlopen", MagicMock(return_value=mock_context))
 
 	# Force cache reload to respect new XDG dirs
 	from red_pill.config import get_config
