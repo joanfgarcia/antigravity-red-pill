@@ -1,4 +1,7 @@
-# Estimación Técnica: Message Layer Security (MLS) / TreeKEM
+# [COMPLETED] Estimación Técnica: Message Layer Security (MLS) / TreeKEM
+
+> [!NOTE]
+> **This specification has been fully implemented in Red Pill v7.0/v7.1.** The `pure-mls` library was successfully integrated to handle TreeKEM group key agreements, active membership proposals, commits, welcomes, epoch changes, and full PFS/PCS protection.
 
 **Ticket/Hallazgo:** SEC-002 (Auditoría V6.1.0)
 **Componente:** `red_pill.skills.swarm_messaging` / `red_pill.crypto`

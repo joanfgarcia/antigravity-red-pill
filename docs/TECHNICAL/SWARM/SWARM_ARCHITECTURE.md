@@ -99,8 +99,8 @@ Estos son los flujos predefinidos disponibles por defecto:
 
 ## 📡 Inter-Agent Messaging Protocol (formerly SWARM_MESSAGING.md)
 
-> [!WARNING]
-> **Current Status: Proof-of-Concept.** The E2E encryption layer uses **pure-mls** (TreeKEM group key agreement). Perfect Forward Secrecy (PFS) and Post-Compromise Security (PCS) are **not yet fully implemented** due to the absence of asynchronous message events (`Commit`/`Welcome`/`Update`). See [`MLS_ESTIMATION.md`](./MLS_ESTIMATION.md) for the technical roadmap.
+> [!IMPORTANT]
+> **Current Status: Production-Ready (TreeKEM/MLS Active).** The E2E encryption layer is fully backed by **pure-mls** (TreeKEM group key agreement). It implements standard MLS epoch transitions, proposals, welcomes, and commits, guaranteeing both **Perfect Forward Secrecy (PFS)** and **Post-Compromise Security (PCS)** across the swarm messaging channels.
 
 ### The Watcher (RP-Watcher)
 - **Rol:** Un daemon en segundo plano (`RP-Watcher`) escucha las suscripciones activas del agente en la base de datos de Swarm (Firebase Realtime/Firestore).
