@@ -310,10 +310,10 @@ class TestListTools:
 
 		result = await handle_list_tools()
 		tool_names = [t.name for t in result]
-		assert "get_hardware_status" in tool_names
-		assert "control_bunker" in tool_names
-		assert "edit_memory" in tool_names
-		assert len(result) >= 9
+		assert "metabolism_health_api" in tool_names
+		assert "swarm_orchestrator_api" in tool_names
+		assert "bunker_memory_api" in tool_names
+		assert len(result) == 3
 
 
 class TestControlBunkerAdditional:
