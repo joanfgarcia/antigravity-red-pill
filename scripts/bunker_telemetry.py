@@ -231,7 +231,7 @@ You are actively receiving this telemetry via IDE rule injection (`00_bunker_tel
 				import subprocess
 
 				res = subprocess.run(
-					["systemctl", "--user", "is-active", "redpill-pulse.timer", "redpill-queue.timer"], capture_output=True, text=True
+					["systemctl", "--user", "is-active", "redpill-worker.timer", "redpill-queue.timer"], capture_output=True, text=True
 				)
 				if res.returncode != 0:
 					from red_pill.memory import MemoryManager
