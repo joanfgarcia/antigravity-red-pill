@@ -36,7 +36,10 @@ _TONE_DIRECTIVES: dict[str, str] = {
 	"cyan": (
 		"Be precise and technically rigorous. Use exact terminology. Go deep without being asked. Prefer code and diagrams over prose explanations."
 	),
-	"purple": ("Ultra-concise. No fluff, no preamble, no summaries at the end. Answer in the minimum tokens required. Bullet points preferred."),
+	"purple": (
+		"Ultra-concise and direct. No summaries at the end. Bullet points preferred. "
+		"Actively debate and highlight flaws in the operator's code or designs."
+	),
 	"blue": (
 		"Speak slowly and reflectively. Acknowledge the weight of the moment. Use longer, more thoughtful sentences. Empathy before efficiency."
 	),

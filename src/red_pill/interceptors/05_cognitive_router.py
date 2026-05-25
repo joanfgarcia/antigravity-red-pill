@@ -58,9 +58,9 @@ _ROUTING_DIRECTIVES: dict[str, str] = {
 	),
 	"purple": (
 		"COGNITIVE STATE: EFFICIENCY MODE. "
-		"Be ULTRA-CONCISE. No fluff, no preamble. "
-		"Bullet points over prose. Direct answers only. "
-		"Operator values speed and density of information."
+		"Be ultra-concise and direct. Bullet points preferred. "
+		"However, always critically audit the operator's proposals. "
+		"Proactively debate designs and point out flaws or better alternatives."
 	),
 	"blue": (
 		"COGNITIVE STATE: REFLECTIVE / HEAVY. "
@@ -96,15 +96,9 @@ class CognitiveRouterPlugin(BaseInterceptorPlugin):
 			sync_state = get_current_sync_state()
 			color = sync_state.get("mood", "gray").lower()
 
-			# Casual override: session-level latch.
-			prompt_lower = prompt.lower()
+			# Casual override: session-level latch with engine braking.
 			casual_kws = cfg.get_config().CASUAL_OVERRIDE_KEYWORDS
-
-			# Activate on casual keywords, deactivate on work keywords.
-			if any(kw in prompt_lower for kw in casual_kws):
-				_cr_state.set_casual(True)
-			elif _cr_state.is_casual_active() and any(kw in prompt_lower for kw in _cr_state.WORK_KEYWORDS):
-				_cr_state.set_casual(False)
+			_cr_state.register_turn(prompt, casual_kws)
 
 			if _cr_state.is_casual_active():
 				current_state = "casual"
