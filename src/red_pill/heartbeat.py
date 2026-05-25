@@ -541,6 +541,7 @@ class LazarusPulse:
 			self.memory_mgr.evaporate_signals(f"autoheal_error_{tissue}")
 
 		import os
+
 		from red_pill.core.paths import get_log_dir
 
 		script_path = os.path.join(cfg.APP_ROOT, "scripts", f"heal_{tissue}.sh")

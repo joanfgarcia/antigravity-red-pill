@@ -21,12 +21,12 @@ import os
 import stat
 from typing import Optional
 
-import platformdirs
+from red_pill.core.paths import get_config_dir
 
 logger = logging.getLogger(__name__)
 
 # Default path; can be overridden via env var for testing.
-_DEFAULT_KEYSTORE_DIR = platformdirs.user_config_dir("red-pill")
+_DEFAULT_KEYSTORE_DIR = str(get_config_dir())
 _DEFAULT_KEYSTORE_FILE = "recovery.key"
 
 KEYSTORE_DIR = os.getenv("RED_PILL_KEYSTORE_DIR", _DEFAULT_KEYSTORE_DIR)

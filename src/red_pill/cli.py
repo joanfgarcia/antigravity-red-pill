@@ -8,10 +8,10 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List
 
-import platformdirs
 import yaml  # type: ignore
 
 import red_pill.config as cfg
+from red_pill.core.paths import get_config_dir
 from red_pill.events import CliCommandDispatchedEvent, get_event_bus
 from red_pill.memory import MemoryManager
 from red_pill.seed import ID_DIR_ACTIVE_SKIN, seed_project
@@ -146,7 +146,6 @@ def handle_identity(args: argparse.Namespace) -> None:
 def handle_telemetry() -> None:
 	"""One-shot telemetry scan (formerly daemon)."""
 	import sys
-	from pathlib import Path
 
 	project_root = str(Path(__file__).parent.parent.parent)
 	if project_root not in sys.path:
@@ -161,7 +160,7 @@ def handle_telemetry() -> None:
 def handle_interceptor(args: argparse.Namespace) -> None:
 	"""Interceptor Management (Manual Activation for Security Audits)."""
 	conf = cfg.get_config()
-	env_path = Path(platformdirs.user_config_dir("red-pill")) / ".env"
+	env_path = get_config_dir() / ".env"
 
 	if args.int_cmd == "enable":
 		print("\n--- [SEC-G01: BÜNKER INTERCEPTOR ACTIVATION] ---")
@@ -209,7 +208,7 @@ def handle_interceptor(args: argparse.Namespace) -> None:
 def handle_ide(args: argparse.Namespace) -> None:
 	"""Antigravity IDE Bridge Management."""
 	conf = cfg.get_config()
-	env_path = Path(platformdirs.user_config_dir("red-pill")) / ".env"
+	env_path = get_config_dir() / ".env"
 
 	if args.ide_cmd == "backend":
 		if args.value:

@@ -29,7 +29,8 @@ class NeonLinkCheck(SentinelPlugin):
 		"""Auto-curación: Matar uvicorn de neon-link y relanzar start.sh"""
 		try:
 			subprocess.run(["pkill", "-f", "neon-link"], check=False)
-			neon_dir = os.path.expanduser("~/Documents/IA/neon-link")
+			from red_pill.core.paths import get_bunker_root
+			neon_dir = str(get_bunker_root().parent / "neon-link")
 			start_script = os.path.join(neon_dir, "start.sh")
 
 			if os.path.exists(start_script):

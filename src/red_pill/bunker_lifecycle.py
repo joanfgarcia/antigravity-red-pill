@@ -6,7 +6,15 @@ from typing import Any, Dict, Optional
 import psutil
 import yaml
 
-from red_pill.core.paths import get_bunker_root, get_data_dir, get_queue_dir
+from red_pill.core.paths import (
+	get_bunker_root,
+	get_config_dir,
+	get_data_dir,
+	get_neon_link_config_dir,
+	get_neon_link_data_dir,
+	get_neon_link_db_path,
+	get_queue_dir,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,9 +52,7 @@ def update_services_manifest(project_root: Path) -> None:
 	"""Updates the runtime services.yaml with the latest examples/services.yaml template."""
 	import shutil
 
-	import platformdirs
-
-	config_dir = Path(platformdirs.user_config_dir("red-pill"))
+	config_dir = get_config_dir()
 	config_dir.mkdir(parents=True, exist_ok=True)
 	runtime_manifest = config_dir / "services.yaml"
 	template_manifest = project_root / "examples" / "services.yaml"
@@ -110,8 +116,6 @@ def bunker_export() -> None:
 	import tarfile
 	import time
 
-	import platformdirs
-
 	from red_pill.soul import SoulManager
 	from red_pill.utils.vault import SoulCryptographer
 
@@ -129,7 +133,7 @@ def bunker_export() -> None:
 	dbs_to_backup = [
 		str(get_queue_dir() / "bunker_queue.db"),
 		str(get_queue_dir() / "minion_inbox.db"),
-		os.path.join(platformdirs.user_data_dir("neon-link"), "events.db"),
+		str(get_neon_link_db_path()),
 	]
 
 	for db_path in dbs_to_backup:
@@ -154,11 +158,11 @@ def bunker_export() -> None:
 			shutil.copy2(os.path.join(qdrant_backup_dir, f), staging_dir)
 
 	print("3. Delegating sub-exports to Plugins (.env secrets)...")
-	red_pill_env = os.path.join(platformdirs.user_config_dir("red-pill"), ".env")
+	red_pill_env = os.path.join(get_config_dir(), ".env")
 	if os.path.exists(red_pill_env):
 		shutil.copy2(red_pill_env, os.path.join(staging_dir, "red_pill.env"))
 
-	neon_env = os.path.join(platformdirs.user_config_dir("neon-link"), ".env")
+	neon_env = os.path.join(get_neon_link_config_dir(), ".env")
 	if os.path.exists(neon_env):
 		shutil.copy2(neon_env, os.path.join(staging_dir, "neon_link.env"))
 
@@ -192,14 +196,12 @@ def bunker_restore(target_path: Optional[str] = None, kem_path: Optional[str] = 
 	import shutil
 	import tarfile
 
-	import platformdirs
-
 	from red_pill.soul import SoulManager
 	from red_pill.utils.vault import SoulCryptographer
 
 	print("--- [BÜNKER RESTORE: SMART REHYDRATION] ---")
 
-	config_dir = platformdirs.user_config_dir("red-pill")
+	config_dir = str(get_config_dir())
 	if kem_path or sig_path:
 		print("0. Overriding Cryptographic Identity...")
 		os.makedirs(config_dir, exist_ok=True)
@@ -245,9 +247,9 @@ def bunker_restore(target_path: Optional[str] = None, kem_path: Optional[str] = 
 	restore_map = {
 		"bunker_queue.db": str(get_queue_dir() / "bunker_queue.db"),
 		"minion_inbox.db": str(get_queue_dir() / "minion_inbox.db"),
-		"events.db": os.path.join(platformdirs.user_data_dir("neon-link"), "events.db"),
-		"red_pill.env": os.path.join(platformdirs.user_config_dir("red-pill"), ".env"),
-		"neon_link.env": os.path.join(platformdirs.user_config_dir("neon-link"), ".env"),
+		"events.db": str(get_neon_link_db_path()),
+		"red_pill.env": os.path.join(get_config_dir(), ".env"),
+		"neon_link.env": os.path.join(get_neon_link_config_dir(), ".env"),
 	}
 
 	for extracted_file, dest_path in restore_map.items():
@@ -277,12 +279,8 @@ def bunker_export_keys() -> None:
 	import tarfile
 	import time
 
-	import platformdirs
-
-	from red_pill.core.paths import get_bunker_root
-
 	print("--- [BÜNKER MASTER KEY EXPORT] ---")
-	config_dir = platformdirs.user_config_dir("red-pill")
+	config_dir = str(get_config_dir())
 	keys_dir = os.path.join(config_dir, "keys")
 	vault_state = os.path.join(config_dir, "vault_group.state")
 
@@ -313,10 +311,6 @@ def bunker_uninstall() -> None:
 	import os
 	import random
 	import shutil
-
-	import platformdirs
-
-	from red_pill.core.paths import get_bunker_root
 
 	print("\n!!! [WARNING] BÜNKER UNINSTALL INITIATED !!!")
 	print("This action will obliterate the active Red-Pill environment:")
@@ -356,7 +350,7 @@ def bunker_uninstall() -> None:
 		print(f"   [!] Failed to wipe Qdrant. Is it running? Error: {e}")
 
 	# 2. Preserve Keys
-	config_dir = platformdirs.user_config_dir("red-pill")
+	config_dir = str(get_config_dir())
 	keys_safe_dir = os.path.join(str(get_bunker_root()), "backups", "keys_vault_temp")
 	os.makedirs(keys_safe_dir, exist_ok=True)
 
@@ -367,7 +361,7 @@ def bunker_uninstall() -> None:
 
 	# 3. Wipe Paths
 	paths_to_wipe = [
-		os.path.join(platformdirs.user_data_dir("neon-link")),
+		str(get_neon_link_data_dir()),
 		config_dir,  # This wipes the keys too
 		str(get_data_dir()),
 		os.path.join(str(get_bunker_root()), "plugins"),
@@ -404,13 +398,9 @@ def bunker_install() -> None:
 	import os
 	import shutil
 
-	import platformdirs
-
-	from red_pill.core.paths import get_bunker_root
-
 	print("--- [BÜNKER INSTALL: SELF-ASSEMBLY BOOTSTRAP] ---")
 
-	config_dir = Path(platformdirs.user_config_dir("red-pill"))
+	config_dir = get_config_dir()
 	config_dir.mkdir(parents=True, exist_ok=True)
 	env_file = config_dir / ".env"
 	bunker_root = get_bunker_root()

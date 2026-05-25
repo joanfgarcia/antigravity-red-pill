@@ -3,10 +3,16 @@ import json
 import os
 import sqlite3
 import time
-from pathlib import Path
 
-import platformdirs
 from dotenv import load_dotenv
+
+from red_pill.core.paths import (
+	get_aleth_core_root,
+	get_config_dir,
+	get_neon_link_config_dir,
+	get_neon_link_db_path,
+	get_state_dir,
+)
 
 
 def is_ide_idle(idle_seconds=3600):
@@ -14,7 +20,7 @@ def is_ide_idle(idle_seconds=3600):
 	Heurística de inactividad: Comprueba cuándo fue la última vez que el usuario
 	interactuó con el sistema comprobando la fecha de modificación de last_user_activity.txt.
 	"""
-	state_file = Path(platformdirs.user_state_dir("red_pill")) / "last_user_activity.txt"
+	state_file = get_state_dir() / "last_user_activity.txt"
 	if not state_file.exists():
 		return True
 
@@ -27,16 +33,16 @@ def is_ide_idle(idle_seconds=3600):
 
 def main():
 	# Cargar configuración soberana de Red-Pill (Identidad)
-	red_pill_config = Path(platformdirs.user_config_dir("red-pill")) / ".env"
+	red_pill_config = get_config_dir() / ".env"
 	if red_pill_config.exists():
 		load_dotenv(red_pill_config)
 
 	# Cargar configuración de Neon-Link (Base de datos)
-	neon_link_config = Path(platformdirs.user_config_dir("neon-link")) / ".env"
+	neon_link_config = get_neon_link_config_dir() / ".env"
 	if neon_link_config.exists():
 		load_dotenv(neon_link_config)
 
-	db_path = os.environ.get("NEON_LINK_DB_PATH", Path(platformdirs.user_data_dir("neon-link")) / "events.db")
+	db_path = os.environ.get("NEON_LINK_DB_PATH", get_neon_link_db_path())
 	user_name = os.environ.get("USER_NAME", "Operador")
 
 	# Comprobar si el Operador lleva inactivo 1 hora (3600 segundos)
@@ -61,7 +67,7 @@ def main():
 		return
 	channel_user_id, channel = row
 
-	from red_pill.core.paths import get_aleth_core_root
+	# get_aleth_core_root is imported at top
 
 	log_path = get_aleth_core_root() / "AWAKENING_LOG.md"
 	msg = {

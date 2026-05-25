@@ -6,15 +6,15 @@ Uses the local Edge Engine to perform semantic distillation on high-value points
 
 import logging
 import os
-from pathlib import Path
 
-import platformdirs
 import requests
 from dotenv import load_dotenv
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import FieldCondition, Filter, MatchValue
 
-env_path = Path(platformdirs.user_config_dir("red-pill")) / ".env"
+from red_pill.core.paths import get_config_dir
+
+env_path = get_config_dir() / ".env"
 if env_path.exists():
 	load_dotenv(env_path)
 else:

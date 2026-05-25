@@ -542,7 +542,7 @@ The `perform_sleep_cycle()` function in `src/red_pill/metabolism/sleep.py` has t
 
     #### §4.24 Service Health Gating & Compaction Optimization (v7.1.0)
 
-    This major update stabilizes the Lazarus daemon commands, introduces configuration-aware service health gating to prevent false positive downtime alarms, and implements context compaction limits to prevent model amnesia.
+    This major update stabilizes the Lazarus daemon commands, introduces configuration-aware service health gating to prevent false positive downtime alarms, implements context compaction limits to prevent model amnesia, and centralizes path resolution under strict XDG compliance.
 
     **1. Service Manifest Update**:
     The service contract schema now supports `category`, `required`, and `enabled_config_key` fields.
@@ -553,6 +553,11 @@ The `perform_sleep_cycle()` function in `src/red_pill/metabolism/sleep.py` has t
     The system now prevents feedback loops on Gemini Flash models when context compaction occurs.
     - **Action**: In your `.env` file, configure `COMPACTION_THRESHOLD=10` (default) to control how many compactions to wait before re-injecting the 11KB identity block.
     - **Verify**: The MCP tool `refresh_session_context` will automatically track the compaction count in `bunker_state.json` and skip full injection when under the threshold, providing a lightweight confirmation instead.
+
+    **3. Centralized XDG Paths & Operational State Migration**:
+    All non-agentic files (configs, caches, and databases) are now centralized under standard XDG paths (`$XDG_CONFIG_HOME/red-pill` and `$XDG_DATA_HOME/red-pill`), cleanly separating operational files from agéntico assets (which remain in `~/.agent/`).
+    - **Action**: The system automatically migrates legacy operational files (e.g., `thread_state.json`, `bunker_persona_cache.json`, `auditor_cache.json`, and keys) from `~/.agent/` to standard XDG locations during boot. For custom plugins like `neon-link`, database directories have been migrated to the new schema: events are stored at `$XDG_DATA_HOME/neon-link/events.db` and resolved dynamically via `get_neon_link_db_path()`.
+    - **Verify**: Confirm that `~/.agent` only contains agéntico assets (skills, rules, conventions) and that all sqlite `.db`, JSON caches, and state files now reside under standard XDG directories.
 
 ## 5. Hierarchy of Directives
 

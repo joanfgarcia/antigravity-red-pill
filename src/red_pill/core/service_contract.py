@@ -10,8 +10,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Literal, Optional
 
-import platformdirs
 import yaml
+
+from red_pill.core.paths import get_config_dir
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,7 @@ class ServiceContract:
 
 def _get_manifest_path() -> Path:
 	"""Resolve manifest path: XDG config dir first, then fallback to examples/."""
-	xdg_path = Path(platformdirs.user_config_dir("red-pill")) / "services.yaml"
+	xdg_path = get_config_dir() / "services.yaml"
 	if xdg_path.exists():
 		return xdg_path
 

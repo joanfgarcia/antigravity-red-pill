@@ -122,6 +122,22 @@ def get_config_dir() -> Path:
 	return Path(platformdirs.user_config_dir("red-pill"))
 
 
+def get_neon_link_config_dir() -> Path:
+	"""Resuelve el directorio de configuración XDG base para el plugin neon-link."""
+	return Path(platformdirs.user_config_dir("neon-link"))
+
+
+def get_neon_link_data_dir() -> Path:
+	"""Resuelve el directorio de datos XDG base para el plugin neon-link."""
+	return Path(platformdirs.user_data_dir("neon-link"))
+
+
+def get_neon_link_db_path() -> Path:
+	"""Resuelve la ruta a la base de datos de eventos de neon-link."""
+	return get_neon_link_data_dir() / "events.db"
+
+
+
 def migrate_legacy_xdg_config() -> None:
 	"""
 	Autonomously bridges the migration from legacy underscored ~/.config/red_pill

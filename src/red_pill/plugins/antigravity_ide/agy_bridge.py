@@ -24,6 +24,8 @@ import uuid as uuid_mod
 from pathlib import Path
 from typing import Optional, Set, Tuple
 
+from red_pill.core.paths import get_bunker_root
+
 from .bridge import BackendType, BridgeCapabilities, ConversationResult, IDEBridge
 
 logger = logging.getLogger(__name__)
@@ -122,7 +124,7 @@ class AgyBridge(IDEBridge):
 				text=True,
 				timeout=timeout + 10,
 				env=self._get_env(),
-				cwd=os.path.expanduser("~/Documents/IA"),
+				cwd=str(get_bunker_root().parent),
 			)
 		except subprocess.TimeoutExpired as e:
 			logger.error(f"[AgyBridge] Command timed out after {timeout + 10}s")

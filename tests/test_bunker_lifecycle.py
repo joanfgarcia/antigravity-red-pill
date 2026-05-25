@@ -93,15 +93,12 @@ def test_bunker_restore_stub(capsys):
 
 
 def test_bunker_install(tmp_path, monkeypatch):
-	import shutil
-	from red_pill.bunker_lifecycle import bunker_install
-	import red_pill.core.paths as core_paths
-	import platformdirs
 	import subprocess
 
+	import red_pill.bunker_lifecycle as bl
 	config_dir = tmp_path / "config"
-	monkeypatch.setattr(platformdirs, "user_config_dir", lambda name: str(config_dir))
-	monkeypatch.setattr(core_paths, "get_bunker_root", lambda: tmp_path)
+	monkeypatch.setattr(bl, "get_config_dir", lambda: config_dir)
+	monkeypatch.setattr(bl, "get_bunker_root", lambda: tmp_path)
 
 	env_example = tmp_path / ".env.example"
 	env_example.write_text("TEST_VAR=1")
@@ -117,7 +114,7 @@ def test_bunker_install(tmp_path, monkeypatch):
 	mock_run.stdout = "OK"
 	monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: mock_run)
 
-	bunker_install()
+	bl.bunker_install()
 
 	env_file = config_dir / ".env"
 	assert env_file.exists()
@@ -125,12 +122,12 @@ def test_bunker_install(tmp_path, monkeypatch):
 
 
 def test_bunker_update(tmp_path, monkeypatch):
-	from red_pill.bunker_lifecycle import bunker_update
-	import red_pill.core.paths as core_paths
-	import subprocess
 	import shutil
+	import subprocess
 
-	monkeypatch.setattr(core_paths, "get_bunker_root", lambda: tmp_path)
+	import red_pill.bunker_lifecycle as bl
+
+	monkeypatch.setattr(bl, "get_bunker_root", lambda: tmp_path)
 
 	(tmp_path / ".git").mkdir()
 
@@ -142,4 +139,4 @@ def test_bunker_update(tmp_path, monkeypatch):
 	monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/uv" if cmd == "uv" else None)
 	monkeypatch.setattr(os.path, "exists", lambda path: True if "uv" in path else False)
 
-	bunker_update()
+	bl.bunker_update()

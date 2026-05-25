@@ -309,7 +309,7 @@ class SentinelAuditor:
 											healed = plugin.heal(config, finding)
 										except Exception as heal_err:
 											self.logger.error(f"Plugin {plugin.name} failed during heal: {heal_err}")
-										
+
 										if healed:
 											self.logger.info(f"Sentinel Auditor: Successfully healed '{finding.type}' for {finding.metadata.get('service', 'unknown')}")
 										else:
@@ -399,8 +399,9 @@ if __name__ == "__main__":
 	args = parser.parse_args()
 
 	logging.basicConfig(level=logging.INFO)
+	from red_pill.core.paths import get_bunker_root
 	auditor = SentinelAuditor(
-		target_repos=[os.path.expanduser("~/Documents/IA/pure-mls"), os.path.expanduser("~/Documents/IA/sharing")], force=args.force
+		target_repos=[str(get_bunker_root().parent / "pure-mls"), str(get_bunker_root())], force=args.force
 	)
 	for repo in auditor.target_repos:
 		res = auditor.audit_repo(repo)

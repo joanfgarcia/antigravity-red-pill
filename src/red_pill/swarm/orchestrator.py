@@ -145,10 +145,10 @@ class GruOrchestrator:
 				"bitnet", BitNetInferenceProvider(runner_path=bitnet_bin, model_path=bitnet_model, grammar_path=grammar_path)
 			)
 
-		# 4. Local GGUF Provider (llama.cpp natively) - BE_WATER
+		from red_pill.core.paths import get_bunker_root
 		from red_pill.core.providers import LlamaCppInferenceProvider
 
-		workspace = os.getenv("WORKSPACE_ROOT", os.path.expanduser("~/Documents/IA"))
+		workspace = os.getenv("WORKSPACE_ROOT", str(get_bunker_root().parent))
 		gguf_dir = os.path.join(workspace, "models", "gguf")
 		if os.path.exists(gguf_dir):
 			gguf_files = [f for f in os.listdir(gguf_dir) if f.endswith(".gguf")]
@@ -162,7 +162,9 @@ class GruOrchestrator:
 
 	def is_local_ready(self) -> bool:
 		"""Check if local SLM infrastructure is available."""
-		ia_dir = os.getenv("WORKSPACE_ROOT", os.path.expanduser("~/Documents/IA"))
+		from red_pill.core.paths import get_bunker_root
+
+		ia_dir = os.getenv("WORKSPACE_ROOT", str(get_bunker_root().parent))
 		model_dir = os.path.join(ia_dir, "models")
 		if not os.path.exists(model_dir):
 			return False

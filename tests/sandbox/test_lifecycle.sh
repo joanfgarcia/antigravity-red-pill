@@ -23,8 +23,7 @@ python -m red_pill.cli bunker update
 echo -e "\n[STAGE 3] Inyectando Estado (Mock Data)..."
 cat << 'EOF' > /tmp/inject_state.py
 import os, sqlite3
-from red_pill.core.paths import get_queue_dir
-import platformdirs
+from red_pill.core.paths import get_queue_dir, get_config_dir
 queue_db = os.path.join(get_queue_dir(), "bunker_queue.db")
 os.makedirs(os.path.dirname(queue_db), exist_ok=True)
 conn = sqlite3.connect(queue_db)
@@ -34,7 +33,7 @@ conn.commit()
 conn.close()
 
 # Mocking .env
-env_dir = platformdirs.user_config_dir("red-pill")
+env_dir = get_config_dir()
 os.makedirs(env_dir, exist_ok=True)
 with open(os.path.join(env_dir, ".env"), "w") as f:
     f.write("TEST_SECRET=sovereign_test_123")

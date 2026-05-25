@@ -30,14 +30,16 @@ class FlowEngine:
 				flows[fid] = f
 
 		# 3. Load Local (Project specific)
-		if cwd:
-			local_path = Path(cwd) / self.local_filename
-			local_flows = self._read_yaml(local_path)
-			for fid, f in local_flows.items():
-				if flows.get(fid, {}).get("locked", False):
-					# SEC-P01: Locked flows cannot be overridden locally for compliance
-					continue
-				flows[fid] = f
+		from red_pill.core.paths import get_bunker_root
+
+		project_root = Path(cwd) if cwd else get_bunker_root()
+		local_path = project_root / self.local_filename
+		local_flows = self._read_yaml(local_path)
+		for fid, f in local_flows.items():
+			if flows.get(fid, {}).get("locked", False):
+				# SEC-P01: Locked flows cannot be overridden locally for compliance
+				continue
+			flows[fid] = f
 
 		return flows
 

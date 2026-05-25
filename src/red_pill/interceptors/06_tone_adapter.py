@@ -78,7 +78,7 @@ class ToneAdapterPlugin(BaseInterceptorPlugin):
 			# Casual override: read session-level latch from cognitive router.
 			if _cr_state.is_casual_active():
 				return ""
-				
+
 			tone = _TONE_DIRECTIVES.get(color, _TONE_DIRECTIVES["gray"])
 			mode_label = color.upper()
 

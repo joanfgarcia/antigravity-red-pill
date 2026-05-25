@@ -22,12 +22,11 @@ import warnings
 from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
-import platformdirs
 import yaml
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from red_pill.core.paths import get_db_dir, get_models_dir, get_state_dir, migrate_legacy_xdg_config
+from red_pill.core.paths import get_config_dir, get_db_dir, get_models_dir, get_state_dir, migrate_legacy_xdg_config
 
 migrate_legacy_xdg_config()
 
@@ -82,7 +81,7 @@ class RedPillConfig(BaseSettings):
 	"""
 
 	model_config = SettingsConfigDict(
-		env_file=os.path.join(platformdirs.user_config_dir("red-pill"), ".env"),
+		env_file=os.path.join(get_config_dir(), ".env"),
 		env_file_encoding="utf-8",
 		extra="ignore",
 		populate_by_name=True,
@@ -384,7 +383,7 @@ class RedPillConfig(BaseSettings):
 
 	# Re-map env var name
 	model_config = SettingsConfigDict(
-		env_file=os.path.join(platformdirs.user_config_dir("red-pill"), ".env"),
+		env_file=os.path.join(get_config_dir(), ".env"),
 		env_file_encoding="utf-8",
 		extra="ignore",
 		populate_by_name=True,
@@ -592,7 +591,7 @@ _last_env_mtime: float = 0.0
 def get_config() -> RedPillConfig:
 	"""Return the singleton RedPillConfig instance, automatically reloading if .env has changed on disk."""
 	global _last_env_mtime
-	env_path = os.path.join(platformdirs.user_config_dir("red-pill"), ".env")
+	env_path = os.path.join(get_config_dir(), ".env")
 	current_mtime = 0.0
 	if os.path.exists(env_path):
 		try:

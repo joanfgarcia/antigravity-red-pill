@@ -11,8 +11,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-import platformdirs
 from dotenv import load_dotenv
+
+from red_pill.core.paths import get_config_dir
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 logger = logging.getLogger("ExtractorOrchestrator")
@@ -20,7 +21,7 @@ logger = logging.getLogger("ExtractorOrchestrator")
 
 def load_env():
 	"""Load Red-Pill environment variables."""
-	env_path = Path(platformdirs.user_config_dir("red-pill")) / ".env"
+	env_path = get_config_dir() / ".env"
 	if env_path.exists():
 		load_dotenv(env_path)
 	else:

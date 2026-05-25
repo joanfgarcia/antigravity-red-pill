@@ -73,7 +73,45 @@ def test_migrate_legacy_agent_dirs(tmp_path, monkeypatch):
 	assert target_file.read_text() == '{"test": true}'
 
 
+def test_no_direct_platformdirs_imports():
+	"""
+	Asserts that no Python file in src/ (except red_pill/core/paths.py)
+	or in scripts/ imports 'platformdirs' directly.
+	"""
+	project_root = Path(__file__).parent.parent
+	src_dir = project_root / "src"
+	scripts_dir = project_root / "scripts"
+
+	violations = []
+
+	# Check src/
+	for py_file in src_dir.rglob("*.py"):
+		if py_file.name == "paths.py":
+			continue
+		try:
+			with open(py_file, "r", encoding="utf-8") as f:
+				content = f.read()
+			if "import platformdirs" in content or "from platformdirs" in content:
+				violations.append(str(py_file.relative_to(project_root)))
+		except Exception:
+			pass
+
+	# Check scripts/
+	if scripts_dir.exists():
+		for py_file in scripts_dir.rglob("*.py"):
+			try:
+				with open(py_file, "r", encoding="utf-8") as f:
+					content = f.read()
+				if "import platformdirs" in content or "from platformdirs" in content:
+					violations.append(str(py_file.relative_to(project_root)))
+			except Exception:
+				pass
+
+	assert not violations, "The following files import platformdirs directly instead of using paths.py:\n" + "\n".join(violations)
+
+
 if __name__ == "__main__":
 	test_no_legacy_storage_paths()
 	test_xdg_paths()
+	test_no_direct_platformdirs_imports()
 	print("XDG Compliance Tests Passed.")

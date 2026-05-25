@@ -10,8 +10,9 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List
 
-import platformdirs
 from dotenv import load_dotenv
+
+from red_pill.core.paths import get_config_dir, get_data_dir
 
 QDRANT_URL = "http://localhost:6333"
 MLX_LM_URL = "http://localhost:8760/v1/chat/completions"
@@ -20,7 +21,7 @@ _run_dir = os.getenv("XDG_RUNTIME_DIR", "/tmp")
 
 # Load QDRANT_API_KEY from .env
 QDRANT_API_KEY = ""
-env_path = Path(platformdirs.user_config_dir("red-pill")) / ".env"
+env_path = get_config_dir() / ".env"
 if env_path.exists():
 	load_dotenv(env_path)
 else:
@@ -142,7 +143,7 @@ def main():
 	# Hashing for cache
 	context_str = "".join(sorted(unique_context))
 	current_hash = hashlib.sha256(context_str.encode()).hexdigest()
-	cache_dir = Path(os.path.expanduser("~/.agent"))
+	cache_dir = get_data_dir()
 	cache_dir.mkdir(parents=True, exist_ok=True)
 	cache_path = cache_dir / "bunker_persona_cache.json"
 

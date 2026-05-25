@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 import mcp.types as types
-import platformdirs
 from mcp.server import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
@@ -16,6 +15,7 @@ import red_pill.config as cfg
 from red_pill import __model__ as MODEL_NAME
 from red_pill import __version__ as CORE_VERSION
 from red_pill.cli import switch_skin
+from red_pill.core.paths import get_config_dir, get_state_dir
 from red_pill.memory import MemoryManager
 from red_pill.registry import registry
 from red_pill.soul import SoulManager
@@ -1035,7 +1035,7 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 
 	if "[AUTONOMOUS AWAKENING]" not in prompt:
 		try:
-			activity_file = Path(platformdirs.user_state_dir("red_pill")) / "last_user_activity.txt"
+			activity_file = get_state_dir() / "last_user_activity.txt"
 			activity_file.parent.mkdir(parents=True, exist_ok=True)
 			activity_file.touch()
 		except Exception as e:
@@ -1128,7 +1128,7 @@ async def handle_configure_interceptor(arguments: Dict[str, Any]):
 		conf.INTERCEPTOR_ENABLED = enabled
 
 		# 2. Persist to .env (Best effort)
-		env_path = Path(platformdirs.user_config_dir("red-pill")) / ".env"
+		env_path = get_config_dir() / ".env"
 		if env_path.exists():
 			lines = []
 			replaced = False

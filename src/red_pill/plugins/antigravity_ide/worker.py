@@ -6,17 +6,18 @@ import sys
 import time
 from pathlib import Path
 
-import platformdirs
 import requests
 from dotenv import load_dotenv
 
+from red_pill.core.paths import get_config_dir, get_neon_link_config_dir, get_neon_link_db_path
+
 # Cargar la configuración agnóstica de Neon-Link primero (Single Source of Truth)
-neon_link_config = Path(platformdirs.user_config_dir("neon-link")) / ".env"
+neon_link_config = get_neon_link_config_dir() / ".env"
 if neon_link_config.exists():
 	load_dotenv(neon_link_config)
 
 # Cargar la configuración centralizada de Red-Pill
-red_pill_config = Path(platformdirs.user_config_dir("red-pill")) / ".env"
+red_pill_config = get_config_dir() / ".env"
 if red_pill_config.exists():
 	load_dotenv(red_pill_config)
 
@@ -32,7 +33,7 @@ from red_pill.plugins.antigravity_ide.factory import create_bridge  # noqa: E402
 logger = logging.getLogger(__name__)
 
 # Alineación con el estándar de Sovereign Gateway (Neon-Link)
-default_db = Path(platformdirs.user_data_dir("neon-link")) / "events.db"
+default_db = get_neon_link_db_path()
 DB_PATH = Path(os.environ.get("NEON_LINK_DB_PATH", default_db))
 
 

@@ -4,10 +4,8 @@ import socket
 import subprocess
 import sys
 import termios
+import time
 import tty
-from pathlib import Path
-
-import platformdirs
 
 # Add project src and scripts to sys.path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -15,7 +13,9 @@ sys.path.insert(0, os.path.join(project_root, "src"))
 sys.path.insert(0, os.path.join(project_root, "scripts"))
 
 from update_env import update_env
+
 import red_pill.config as cfg
+from red_pill.core.paths import get_config_dir, get_data_dir
 from red_pill.telemetry import sentinel
 
 
@@ -64,7 +64,7 @@ def run_service_command(action, service_name):
 
 
 def purge_persona_cache():
-	cache_path = os.path.expanduser("~/.agent/bunker_persona_cache.json")
+	cache_path = os.path.join(get_data_dir(), "bunker_persona_cache.json")
 	if os.path.exists(cache_path):
 		try:
 			os.remove(cache_path)
@@ -210,7 +210,7 @@ def main():
 			purged = purge_persona_cache()
 			action_msg = "Caché de persona purgada exitosamente" if purged else "No se pudo purgar la caché o no existía"
 		elif key == "9":
-			env_path = os.path.join(platformdirs.user_config_dir("red-pill"), ".env")
+			env_path = os.path.join(get_config_dir(), ".env")
 			if os.path.exists(env_path):
 				try:
 					os.utime(env_path, None)

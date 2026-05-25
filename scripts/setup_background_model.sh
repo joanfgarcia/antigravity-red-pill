@@ -48,7 +48,7 @@ from llama_cpp.server.app import create_app, Settings
 
 def main():
 	from red_pill.core.model_registry import ModelRegistry
-	from red_pill.core.paths import resolve_model_path
+	from red_pill.core.paths import resolve_model_path, get_daemon_dir
 
 	profile_name = os.getenv("MINION_PROFILE", "samantha")
 	profile = ModelRegistry.get_profile(profile_name)
@@ -83,13 +83,7 @@ def main():
 	tcp_sock.bind(("127.0.0.1", 8760))
 	tcp_sock.listen()
 	
-	import platformdirs
-	runtime_dir = os.getenv("XDG_RUNTIME_DIR")
-	if runtime_dir:
-		daemon_dir = os.path.join(runtime_dir, "red-pill")
-	else:
-		daemon_dir = os.path.join(platformdirs.user_cache_dir("red-pill"), "daemons")
-	os.makedirs(daemon_dir, exist_ok=True)
+	daemon_dir = str(get_daemon_dir())
 	uds_path = os.path.join(daemon_dir, "red_pill.sock")
 	if os.path.exists(uds_path):
 		os.remove(uds_path)
