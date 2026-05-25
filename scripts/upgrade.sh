@@ -58,6 +58,30 @@ if [ -d "$REPO_ROOT/~" ]; then
 	echo -e "${GREEN}✓ Directorio espurio ~/ eliminado.${NC}"
 fi
 
+# 3.5 Services Manifest Update
+CONFIG_DIR=""
+if command -v python3 &> /dev/null; then
+	CONFIG_DIR=$(python3 -c "import sys; sys.path.insert(0, './src'); from red_pill.core.paths import get_config_dir; print(get_config_dir())" 2>/dev/null || true)
+fi
+if [ -z "$CONFIG_DIR" ]; then
+	CONFIG_DIR="$HOME/.config/red-pill"
+fi
+if [ -f "$REPO_ROOT/examples/services.yaml" ]; then
+	echo -e "${BLUE}Sincronizando manifiesto de servicios (services.yaml)...${NC}"
+	mkdir -p "$CONFIG_DIR"
+	if [ -f "$CONFIG_DIR/services.yaml" ]; then
+		if ! cmp -s "$REPO_ROOT/examples/services.yaml" "$CONFIG_DIR/services.yaml"; then
+			cp "$CONFIG_DIR/services.yaml" "$CONFIG_DIR/services.yaml.bak"
+			echo -e "${YELLOW}Respaldado services.yaml previo en services.yaml.bak${NC}"
+			cp "$REPO_ROOT/examples/services.yaml" "$CONFIG_DIR/services.yaml"
+			echo -e "${GREEN}✓ Manifiesto services.yaml actualizado.${NC}"
+		fi
+	else
+		cp "$REPO_ROOT/examples/services.yaml" "$CONFIG_DIR/services.yaml"
+		echo -e "${GREEN}✓ Manifiesto services.yaml instalado en configuración.${NC}"
+	fi
+fi
+
 # 4. Dependency & Migration ignition
 if command -v uv &> /dev/null; then
 	echo -e "${BLUE}Igniciando migración de datos y timers...${NC}"

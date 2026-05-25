@@ -36,13 +36,15 @@ def test_no_legacy_storage_paths():
 
 def test_xdg_paths():
 	from red_pill.core.paths import (
-		get_thread_state_path,
-		get_staging_dir,
+		get_config_dir,
 		get_ingestion_dir,
-		get_swarm_config_path,
 		get_model_profiles_path,
+		get_staging_dir,
+		get_swarm_config_path,
+		get_thread_state_path,
 	)
 
+	assert ".agent" not in str(get_config_dir())
 	assert ".agent" not in str(get_thread_state_path())
 	assert ".agent" not in str(get_staging_dir())
 	assert ".agent" not in str(get_ingestion_dir())

@@ -117,6 +117,11 @@ def get_backups_dir() -> Path:
 	return path
 
 
+def get_config_dir() -> Path:
+	"""Resuelve el directorio de configuración XDG base para red-pill."""
+	return Path(platformdirs.user_config_dir("red-pill"))
+
+
 def migrate_legacy_xdg_config() -> None:
 	"""
 	Autonomously bridges the migration from legacy underscored ~/.config/red_pill
@@ -126,12 +131,10 @@ def migrate_legacy_xdg_config() -> None:
 	import shutil
 	from pathlib import Path
 
-	import platformdirs
-
 	logger = logging.getLogger(__name__)
 
 	legacy_dir = Path.home() / ".config" / "red_pill"
-	target_dir = Path(platformdirs.user_config_dir("red-pill"))
+	target_dir = get_config_dir()
 
 	if legacy_dir.exists() and legacy_dir.is_dir():
 		logger.info(f"[XDG-MIGRATION] Legacy directory found at {legacy_dir}. Initiating bridge...")
@@ -177,7 +180,7 @@ def get_daemon_dir() -> Path:
 
 def get_model_profiles_path() -> Path:
 	"""Resuelve la ruta del archivo de configuración de perfiles de modelos ($XDG_CONFIG_HOME/red-pill/model_profiles.yaml)."""
-	return Path(platformdirs.user_config_dir("red-pill")) / "model_profiles.yaml"
+	return get_config_dir() / "model_profiles.yaml"
 
 
 def get_agent_dir() -> Path:
@@ -206,7 +209,7 @@ def get_ingestion_dir() -> Path:
 
 def get_swarm_config_path() -> Path:
 	"""Resuelve la ruta del archivo de comunidades swarm ($XDG_CONFIG_HOME/red-pill/swarm_communities.json)."""
-	return Path(platformdirs.user_config_dir("red-pill")) / "swarm_communities.json"
+	return get_config_dir() / "swarm_communities.json"
 
 
 def migrate_legacy_agent_dirs() -> None:
@@ -215,6 +218,7 @@ def migrate_legacy_agent_dirs() -> None:
 	to their new standard XDG locations.
 	"""
 	import shutil
+
 	legacy_agent = Path.home() / ".agent"
 	if not legacy_agent.exists() or not legacy_agent.is_dir():
 		return

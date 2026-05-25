@@ -40,6 +40,34 @@ def detect_hardware() -> Dict[str, Any]:
 	return {"ram_gb": total_ram_gb, "cpu_cores": cpu_cores, "cpu_threads": cpu_threads, "has_nvidia": has_nvidia, "vram_gb": vram_gb}
 
 
+def update_services_manifest(project_root: Path) -> None:
+	"""Updates the runtime services.yaml with the latest examples/services.yaml template."""
+	import shutil
+
+	import platformdirs
+
+	config_dir = Path(platformdirs.user_config_dir("red-pill"))
+	config_dir.mkdir(parents=True, exist_ok=True)
+	runtime_manifest = config_dir / "services.yaml"
+	template_manifest = project_root / "examples" / "services.yaml"
+
+	if template_manifest.exists():
+		if runtime_manifest.exists():
+			with open(template_manifest, "r") as tf, open(runtime_manifest, "r") as rf:
+				t_content = tf.read()
+				r_content = rf.read()
+
+			if t_content != r_content:
+				backup_manifest = config_dir / "services.yaml.bak"
+				shutil.copy2(runtime_manifest, backup_manifest)
+				print(f"   [INFO] Stashing backup of old services.yaml to {backup_manifest}")
+				shutil.copy2(template_manifest, runtime_manifest)
+				print("   [OK] services.yaml updated to latest version.")
+		else:
+			shutil.copy2(template_manifest, runtime_manifest)
+			print("   [OK] services.yaml bootstrapped to user config.")
+
+
 def profile_hardware() -> None:
 	"""bunker init: Generates the bunker.profile.yaml based on hardware."""
 	print("--- [BÜNKER PROFILING: DETECTING HARDWARE] ---")
@@ -375,7 +403,9 @@ def bunker_install() -> None:
 	"""
 	import os
 	import shutil
+
 	import platformdirs
+
 	from red_pill.core.paths import get_bunker_root
 
 	print("--- [BÜNKER INSTALL: SELF-ASSEMBLY BOOTSTRAP] ---")
@@ -401,9 +431,13 @@ def bunker_install() -> None:
 	else:
 		print("1. Active .env configuration detected. Skipping template bootstrap.")
 
+	print("1.5 Bootstrapping services.yaml manifest...")
+	update_services_manifest(project_root)
+
 	print("2. Bootstrapping Qdrant schemas and collections...")
 	try:
 		import sys
+
 		venv_python = project_root / ".venv" / "bin" / "python"
 		if not venv_python.exists():
 			venv_python = Path(sys.executable)
@@ -420,7 +454,9 @@ def bunker_install() -> None:
 	try:
 		schedule_script = project_root / "scripts" / "schedule_pulse.py"
 		if schedule_script.exists():
-			res = subprocess.run([str(venv_python), str(schedule_script), "--interval-hours", "1"], cwd=str(project_root), capture_output=True, text=True)
+			res = subprocess.run(
+				[str(venv_python), str(schedule_script), "--interval-hours", "1"], cwd=str(project_root), capture_output=True, text=True
+			)
 			if res.returncode == 0:
 				print("   [OK] Systemd timers and services registered.")
 			else:
@@ -457,7 +493,9 @@ def bunker_update() -> None:
 	"""
 	import os
 	import shutil
+
 	from red_pill.core.paths import get_bunker_root
+
 	bunker_root = get_bunker_root()
 	if (bunker_root / ".env.example").exists() or os.getenv("PYTEST_CURRENT_TEST"):
 		project_root = bunker_root
@@ -486,7 +524,7 @@ def bunker_update() -> None:
 			uv_ran = True
 		else:
 			print(f"   [FAIL] Dependency sync failed: {res.stderr}")
-	
+
 	if not uv_ran:
 		try:
 			res = subprocess.run(["uv", "sync", "--frozen"], cwd=str(project_root), capture_output=True, text=True)
@@ -497,9 +535,13 @@ def bunker_update() -> None:
 		except FileNotFoundError:
 			print("   [FAIL] 'uv' binary not found. Skipping dependency alignment.")
 
+	print("2.5 Updating services.yaml manifest...")
+	update_services_manifest(project_root)
+
 	print("3. Running database migrations / checks...")
 	try:
 		import sys
+
 		venv_python = project_root / ".venv" / "bin" / "python"
 		if not venv_python.exists():
 			venv_python = Path(sys.executable)
@@ -507,14 +549,16 @@ def bunker_update() -> None:
 		migration_failed = False
 		migration_errors = []
 		for coll in ["work", "social", "directive", "story", "interaction"]:
-			res = subprocess.run([str(venv_python), "-m", "red_pill.cli", "sanitize", coll, "--dry-run"], cwd=str(project_root), capture_output=True, text=True)
+			res = subprocess.run(
+				[str(venv_python), "-m", "red_pill.cli", "sanitize", coll, "--dry-run"], cwd=str(project_root), capture_output=True, text=True
+			)
 			if res.returncode != 0:
 				migration_failed = True
 				migration_errors.append(f"{coll}: {res.stderr.strip()}")
 		if not migration_failed:
 			print("   [OK] Database structures checked and sanitized.")
 		else:
-			print(f"   [FAIL] Database sanitation check failed:\n" + "\n".join(migration_errors))
+			print("   [FAIL] Database sanitation check failed:\n" + "\n".join(migration_errors))
 	except Exception as e:
 		print(f"   [FAIL] Database migration exception: {e}")
 
