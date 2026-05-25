@@ -1,5 +1,12 @@
 ## [7.1.0] - Unreleased
 
+### 🔌 Consolidated MCP Architecture (API Triunvirato)
+- **[FEAT] API Triunvirato Consolidation**: Consolidate 32 custom MCP tools in the `RedPill-Kernel` server down to 3 unified API endpoints (`bunker_memory_api`, `metabolism_health_api`, and `swarm_orchestrator_api`), reducing static prompt token overhead by 85%+ (saving ~10.5k tokens).
+- **[FEAT] Hierarchical Dispatch & Dynamic Schemas**: Upgraded `ToolRegistry` in `registry.py` to support dynamic registration under parent tools using the `@registry.register_action` decorator. Generates flat `action`/`payload` parameter structures with dynamic `oneOf` enumerations inside `get_tools()`.
+- **[FEAT] Backward-Compatibility Shim**: Added an interception layer in `ToolRegistry.execute()` that automatically wraps legacy parameter calls in parent `payload` envelopes and redirects them to the appropriate action handler, ensuring zero disruption for legacy clients or test cases.
+- **[TEST] Consolidate Verification Suite**: Added `tests/test_mcp_consolidated.py` verifying parent schema auto-generation, unified signature execution, and compatibility redirection. Patched legacy schema assertions in `tests/test_mcp_server.py`.
+- **[FIX] Curiosity Will Test Isolation**: Hardened `tests/test_curiosity_will.py` by mocking `urllib.request.urlopen` by default in `mock_curiosity_env` to prevent offline test hangs/timeouts. Isolated `CURIOSITY_PROFILE=balanced` to block local `.env` configuration file overrides from contaminating assertions.
+
 ### 🏎️ Ferrari Protocol Cooldown (Engine Brake)
 - **[FEAT] Engine Brake Cooldown Latch**: Refactored `_05_cognitive_router_state.py` and `05_cognitive_router.py` to track consecutive turns. If the Operator sends 2 consecutive turns without work keywords, the session automatically decays back to `casual` mode.
 - **[FEAT] Active Technical Debate**: Updated the `purple` mood directive in `06_tone_adapter.py` to challenge the Operator, proactively debating system designs and pointing out architectural flaws.
