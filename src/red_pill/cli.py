@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import importlib.metadata
+import json
 import logging
 import os
 import subprocess
@@ -264,6 +265,55 @@ def handle_ide(args: argparse.Namespace) -> None:
 		print("Usage: red-pill ide [backend|status|test]")
 
 
+def handle_p2p(args: argparse.Namespace) -> None:
+	"""Sovereign P2P Synchronization (Delta Engine) Management."""
+	from red_pill.core.p2p_sync import SovereignSyncEngine, add_peer_alias, get_local_public_key
+
+	if args.p2p_cmd == "pair":
+		add_peer_alias(args.alias, args.node_id)
+		print(f"[OK] Peer alias '{args.alias}' mapped to node ID: {args.node_id}")
+		return
+
+	elif args.p2p_cmd == "advertise":
+		local_id = get_local_public_key()
+		print("\n📢 --- [LOCAL SOVEREIGN NODE IDENTITY] ---")
+		print(f"Node ID: {local_id}")
+		print("Provide this ID to your peer to establish a sync relationship.")
+		return
+
+	elif args.p2p_cmd == "sync":
+		engine = SovereignSyncEngine.from_default()
+		collections = args.collections
+		if not collections:
+			collections = cfg.METABOLISM_AUTO_COLLECTIONS
+
+		print("\n🔄 --- [TRANSMITTING P2P SYNC DATA] ---")
+		print(f"Peer: {args.peer}")
+		print(f"Collections: {', '.join(collections)}")
+		print(f"Since timestamp: {args.since}")
+
+		try:
+			session_id = engine.transmit_sync_payload(args.peer, collections, args.since)
+			print(f"[OK] Sync session '{session_id}' enqueued successfully.")
+			print("Chunks have been pushed to neon-link outbox for E2E routing.")
+		except Exception as e:
+			print(f"[ERROR] Sync transmission failed: {e}")
+		return
+
+	elif args.p2p_cmd == "process":
+		engine = SovereignSyncEngine.from_default()
+		print("\n🔄 --- [PROCESSING INCOMING SYNC DATA] ---")
+		try:
+			applied = engine.process_incoming_syncs()
+			print(f"[OK] Processed and applied {applied} sync session(s).")
+		except Exception as e:
+			print(f"[ERROR] Failed to process incoming syncs: {e}")
+		return
+
+	else:
+		print("Usage: red-pill p2p [pair|advertise|sync|process]")
+
+
 def handle_daemon() -> None:
 	"""
 	Lazarus Daemon: starts the LazarusPulse heartbeat and blocks forever.
@@ -418,6 +468,10 @@ def main() -> None:
 	audit_parser = swarm_sub.add_parser("audit", help="Launch Agent Smith Code Audit")
 	audit_parser.add_argument("--path", default=".", help="Target path for audit")
 
+	broadcast_parser = swarm_sub.add_parser("broadcast", help="Broadcast message to the Swarm community")
+	broadcast_parser.add_argument("message", help="Message content to broadcast")
+	broadcast_parser.add_argument("--channel", default="rings", choices=["rings", "firebase"], help="Transport channel to use (default: rings)")
+
 	backup_parser = subparsers.add_parser("backup", help="Create fast Qdrant snapshots (Pre-Migration Safety)")
 	backup_parser.add_argument("--collections", nargs="+", help="Specific collections to backup")
 
@@ -514,6 +568,23 @@ def main() -> None:
 	ide_sub.add_parser("status", help="Show IDE bridge capabilities and health")
 	ide_sub.add_parser("test", help="Run connectivity test against the IDE")
 
+	# P2P Sovereign Sync (v7.1.0)
+	p2p_parser = subparsers.add_parser("p2p", help="Sovereign P2P Synchronization (Delta Engine)")
+	p2p_sub = p2p_parser.add_subparsers(dest="p2p_cmd")
+
+	pair_p2p = p2p_sub.add_parser("pair", help="Map a peer alias to their public node ID")
+	pair_p2p.add_argument("alias", help="Human-readable name of the device")
+	pair_p2p.add_argument("node_id", help="The peer's public signature/node key ID")
+
+	p2p_sub.add_parser("advertise", help="Display local sovereign identity details for pairing")
+
+	sync_p2p = p2p_sub.add_parser("sync", help="Transmit delta sync package to a peer")
+	sync_p2p.add_argument("peer", help="Peer identifier or alias")
+	sync_p2p.add_argument("--since", type=float, default=0.0, help="Sync items modified after this timestamp")
+	sync_p2p.add_argument("--collections", nargs="+", help="Specific memory collections to sync")
+
+	p2p_sub.add_parser("process", help="Scan MinionInbox for incoming chunks and apply sync deltas")
+
 	subparsers.add_parser("telemetry", help="Run a single-pass hardware/Bünker telemetry heartbeat (Oneshot)")
 	subparsers.add_parser("daemon", help="Start the Lazarus Daemon (heartbeat pulse)")
 
@@ -522,7 +593,6 @@ def main() -> None:
 	log_level = logging.DEBUG if args.verbose else getattr(logging, cfg.LOG_LEVEL.upper(), logging.INFO)
 
 	if os.getenv("LOG_JSON", "False").lower() == "true":
-		import json
 
 		class JsonFormatter(logging.Formatter):
 			def format(self, record):
@@ -627,7 +697,6 @@ def main() -> None:
 			print(get_telemetry_report())
 			return
 		elif args.command == "cortex":
-			import json
 
 			from red_pill.telemetry import get_cortex_status
 
@@ -653,6 +722,35 @@ def main() -> None:
 								print(f"[{finding['severity']}] {finding['file']}:{finding['line']} - {finding['msg']}")
 					else:
 						print(f"ERROR en Minion {res.minion_id}: {res.error}")
+			elif args.swarm_cmd == "broadcast":
+				print("\n📢 --- [BROADCASTING SWARM MESSAGE] ---")
+				print(f"Message: {args.message}")
+				print(f"Channel: {args.channel}")
+
+				from red_pill.core.paths import get_neon_link_db_path
+				db_path = get_neon_link_db_path()
+
+				payload_json = json.dumps({
+					"text": args.message,
+					"mode": "background",
+					"priority": "normal",
+					"group_size": 100
+				})
+
+				try:
+					import sqlite3
+
+					conn = sqlite3.connect(str(db_path))
+					cursor = conn.cursor()
+					cursor.execute(
+						"INSERT INTO outbox (channel, channel_user_id, payload) VALUES (?, ?, ?)",
+						(args.channel, "broadcast", payload_json)
+					)
+					conn.commit()
+					conn.close()
+					print("[OK] Broadcast message enqueued to neon-link outbox successfully.")
+				except Exception as e:
+					print(f"[ERROR] Failed to enqueue broadcast message: {e}")
 			return
 		elif args.command == "soul":
 			soul = SoulManager()
@@ -742,6 +840,9 @@ def main() -> None:
 			return
 		elif args.command == "ide":
 			handle_ide(args)
+			return
+		elif args.command == "p2p":
+			handle_p2p(args)
 			return
 
 		# Loop through requested collections

@@ -114,6 +114,21 @@ def test_cli_main_swarm_audit(mock_run, mock_smith, mock_gru):
 
 
 @patch("red_pill.cli.MemoryManager")
+@patch("red_pill.core.paths.get_neon_link_db_path", return_value="/tmp/mock_neon_link.db")
+@patch("sqlite3.connect")
+def test_cli_main_swarm_broadcast(mock_connect, mock_db_path, mock_mgr):
+	"""Test 'red-pill swarm broadcast "hello" --channel firebase'."""
+	mock_conn = MagicMock()
+	mock_connect.return_value = mock_conn
+	with patch("sys.argv", ["red-pill", "swarm", "broadcast", "hello message", "--channel", "firebase"]):
+		main()
+		mock_connect.assert_called_once_with("/tmp/mock_neon_link.db")
+		mock_conn.cursor.return_value.execute.assert_called_once()
+		mock_conn.commit.assert_called_once()
+		mock_conn.close.assert_called_once()
+
+
+@patch("red_pill.cli.MemoryManager")
 def test_cli_main_diagnostic(mock_mgr):
 	"""Test 'red-pill diag work'."""
 	with patch("sys.argv", ["red-pill", "diag", "work"]):
@@ -304,3 +319,34 @@ def test_cli_main_block_is_callable():
 	from red_pill.cli import main as cli_main
 
 	assert callable(cli_main)
+
+
+@patch("red_pill.cli.handle_p2p")
+def test_cli_main_p2p_command(mock_handle):
+	"""Test red-pill p2p routing."""
+	with patch("sys.argv", ["red-pill", "p2p", "sync", "Nomad"]):
+		main()
+		mock_handle.assert_called_once()
+
+
+@patch("red_pill.core.p2p_sync.SovereignSyncEngine")
+@patch("red_pill.core.p2p_sync.add_peer_alias")
+@patch("red_pill.core.p2p_sync.get_local_public_key", return_value="abc123node")
+def test_handle_p2p_commands(mock_get_key, mock_add_alias, mock_engine):
+	from red_pill.cli import handle_p2p
+
+	args_pair = argparse.Namespace(p2p_cmd="pair", alias="nomad", node_id="xyz123node")
+	handle_p2p(args_pair)
+	mock_add_alias.assert_called_once_with("nomad", "xyz123node")
+
+	args_adv = argparse.Namespace(p2p_cmd="advertise")
+	handle_p2p(args_adv)
+	mock_get_key.assert_called_once()
+
+	args_sync = argparse.Namespace(p2p_cmd="sync", peer="nomad", since=100.0, collections=["work_memories"])
+	handle_p2p(args_sync)
+	mock_engine.from_default.return_value.transmit_sync_payload.assert_called_once_with("nomad", ["work_memories"], 100.0)
+
+	args_proc = argparse.Namespace(p2p_cmd="process")
+	handle_p2p(args_proc)
+	mock_engine.from_default.return_value.process_incoming_syncs.assert_called_once()

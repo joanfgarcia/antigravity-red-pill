@@ -447,6 +447,9 @@ class RedPillConfig(BaseSettings):
 	RESONANCE_THRESHOLD: float = 0.4
 	RESONANCE_INTERVAL: int = 600
 	GRAPHIFY_RAG_ENABLED: bool = True
+	CURIOSITY_ENGINE_ENABLED: bool = True
+	CURIOSITY_PROFILE: str = "balanced"
+
 
 	# -----------------------------------------------------------------------
 	# INGESTION PLUGIN

@@ -122,8 +122,101 @@ class CognitiveQueueManager:
 				"payload": json.loads(row["payload"]),
 			}
 
+	def _update_curiosity_rating(self, task_id: str, success: bool) -> None:
+		"""Actualiza las calificaciones de curiosidad en base al resultado de la ejecución."""
+		try:
+			from red_pill.config import get_config
+			if not getattr(get_config(), "CURIOSITY_ENGINE_ENABLED", True):
+				return
+
+			# 1. Obtener la tarea para extraer su payload y categoría
+			with self._get_connection() as conn:
+				cursor = conn.execute("SELECT payload FROM cognitive_tasks WHERE id = ?", (task_id,))
+				row = cursor.fetchone()
+				if not row:
+					return
+				payload = json.loads(row["payload"])
+
+			category = payload.get("category")
+			if not category:
+				# Mapeo de respaldo basado en la acción
+				action = payload.get("action")
+				if action == "orchestrate_minions":
+					category = "minion_maintenance"
+				elif action == "autonomous_research":
+					category = "strategic_synthesis"
+				elif action == "spawn_mcp_subagent":
+					category = "proactive_coding"
+				elif action == "autonomous_ingestion":
+					category = "active_learning"
+				elif action == "run_command" and "graphify" in payload.get("command", ""):
+					category = "graphify_sync"
+				else:
+					category = "dynamic_spark"
+
+			# 2. Cargar calificaciones
+			from red_pill.core.paths import get_state_dir
+			curiosity_file = get_state_dir() / "curiosity_ratings.json"
+			if not curiosity_file.exists():
+				return
+
+			with open(curiosity_file, "r") as f:
+				ratings = json.load(f)
+
+			profile_name = getattr(get_config(), "CURIOSITY_PROFILE", "balanced")
+			if profile_name not in ratings:
+				ratings[profile_name] = {}
+
+			profile_ratings = ratings[profile_name]
+			cat_data = profile_ratings.get(category)
+			if not cat_data:
+				# Si no existe, lo inicializamos para este perfil
+				cat_data = {
+					"rating": 25.0,
+					"uncertainty": 8.33,
+					"last_rho": 0.5,
+					"executed_count": 0
+				}
+				profile_ratings[category] = cat_data
+
+			# 3. Calcular recompensa en base al resultado (rho)
+			rho = 1.0 if success else 0.0
+			if not success:
+				teacher_reward = -0.5
+			else:
+				# Las chispas dinámicas ganan recompensa de curiosidad positiva.
+				# Las tareas fijas exitosas obtienen 0.0, permitiendo que su prioridad
+				# decante al agotarse la incertidumbre (evita inflación de tareas triviales).
+				teacher_reward = 0.5 if category == "dynamic_spark" else 0.0
+
+			rating = cat_data.get("rating", 25.0)
+			uncertainty = cat_data.get("uncertainty", 8.33)
+			executed_count = cat_data.get("executed_count", 0) + 1
+
+			# Actualización estilo TrueSkill simplificado
+			lr = 0.5
+			new_rating = max(10.0, min(100.0, rating + (lr * teacher_reward * uncertainty)))
+			new_uncertainty = max(2.0, uncertainty * 0.9)
+
+			cat_data["rating"] = round(new_rating, 2)
+			cat_data["uncertainty"] = round(new_uncertainty, 2)
+			cat_data["last_rho"] = rho
+			cat_data["executed_count"] = executed_count
+
+			profile_ratings[category] = cat_data
+			ratings[profile_name] = profile_ratings
+
+			with open(curiosity_file, "w") as f:
+				json.dump(ratings, f, indent=4)
+
+			logger.info(f"[CURIOSITY] Category '{category}' updated: rating={new_rating:.2f}, uncertainty={new_uncertainty:.2f}, reward={teacher_reward:.2f}")
+
+		except Exception as e:
+			logger.warning(f"[CURIOSITY] Failed to update curiosity ratings: {e}")
+
 	def mark_completed(self, task_id: str) -> None:
 		"""Marca una tarea como finalizada exitosamente y desbloquea tareas hijas (Flujo DAG)."""
+		self._update_curiosity_rating(task_id, success=True)
 		with self._get_connection() as conn:
 			conn.execute(
 				"""
@@ -151,6 +244,7 @@ class CognitiveQueueManager:
 		Marca un fallo. Incrementa intentos.
 		Si attempts > 3, activa el disyuntor y la etiqueta como FRUSTRATED.
 		"""
+		self._update_curiosity_rating(task_id, success=False)
 		with self._get_connection() as conn:
 			# Primero incrementamos intentos
 			conn.execute(
@@ -174,3 +268,4 @@ class CognitiveQueueManager:
 			else:
 				conn.execute("UPDATE cognitive_tasks SET status = 'PENDING' WHERE id = ?", (task_id,))
 				logger.warning(f"[QUEUE] Task {task_id} failed. Returned to PENDING queue.")
+

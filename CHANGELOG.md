@@ -1,5 +1,13 @@
 ## [7.1.0] - Unreleased
 
+### ✉️ Swarm Broadcast & Mailbox Cleanup (TTL)
+- **[FEAT] Swarm Broadcast (Multicast Routing)**: Added multicast routing rules in `neon-rings`'s `server.py` to broadcast events to all registered peer clients when `target_id="broadcast"` is specified. Added the CLI command `red-pill swarm broadcast "<message>" --channel <rings|firebase>` to enqueue broadcasts into the local outbox.
+- **[FEAT] Non-Destructive Polling & Duplicate Prevention**: Refactored `neon-link`'s `firebase.py` to retain polled messages in remote paths instead of immediate deletion, using a local SQLite `processed_firebase_messages` cache to prevent double-processing.
+- **[FEAT] Background Mailbox Cleanup (TTL Sweep)**: Introduced a background loop in `neon-link`'s `firebase.py` that periodically sweeps and deletes expired private messages (based on `NEON_LINK_TTL_HOURS`, default 24h), expired broadcast messages authored by the local agent, and local DB tracking cache entries older than 2x remote TTL.
+- **[FEAT] Janitor Database Purging**: Upgraded `JanitorMinion._purge_events_db` in `src/red_pill/swarm/agents/janitor.py` to clean expired local `processed_firebase_messages` tracking records.
+- **[TEST] E2E & Integration Verification**: Added unit/integration tests for P2P WebSocket multicast, non-destructive Firebase polling, local database tracking sweeps, and CLI broadcast commands.
+- **[DOCS] Sound of Silence & Standards Alignment**: Renamed guides to UPPER_SNAKE_CASE (`P2P_SYNC.md`, `CURIOSITY_PROFILES.md`), corrected absolute links/path violations, and documented the new Swarm Broadcast functionality in `SWARM_USER_MANUAL.md`.
+
 ### 🛡️ Service Health Gating, Lazarus Daemon Fix & Compaction Optimization
 - **[FIX] Lazarus Daemon Command Integration**: Added the missing `daemon` subcommand to CLI subparsers in `src/red_pill/cli.py` and whitelisted it. This resolves the `INVALIDARGUMENT` crash loop of `redpill.service` under systemd.
 - **[FEAT] Configurable Service Health Gating**: Overhauled `ServiceContract` in `service_contract.py`, `examples/services.yaml`, and runtime configurations to add `category`, `required`, and `enabled_config_key` properties.

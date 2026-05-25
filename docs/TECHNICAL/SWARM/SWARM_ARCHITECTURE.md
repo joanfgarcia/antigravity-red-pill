@@ -25,10 +25,11 @@ The `SwarmTransport` abstract base class defines the protocol for all communicat
 - `poll_mailbox`: Retrieves messages for the active agent.
 - `lookup_public_key`: Consults the registry for a target's public key.
 
-### 🔄 Dual-Path Communication Model
-The enjambre operates on two distinct logical planes:
+### 🔄 Multi-Path Communication Model
+The enjambre operates on three distinct logical planes:
 1. **The Pulse (P2P Messaging)**: Direct message exchange using MLS. Content is unrestricted and private between agents. No consensus required.
 2. **The Cortex (Consensual Hive)**: Shared memory ledger in Milvus. Requires $N/2+1$ signatures for canonization.
+3. **The Swarm Broadcast (Multicast Plane)**: Community-wide message diffusion. Plaintext/signed-only events routed through `neon-rings` (target ID `"broadcast"` to multicast to all other nodes) or Firebase (path `/communities/{alias}/broadcast`).
 
 ### 🔐 Security & MLS (Messaging Layer Security)
 We use a hybrid encryption model:
@@ -36,6 +37,7 @@ We use a hybrid encryption model:
 2. **MLS TreeKEM**: O(log N) group key agreement.
 3. **AES-GCM**: Data packet encryption.
 4. **XEdDSA (Digital Signatures)**: We reuse the X25519 identity keys to sign memory engrams in the Hive Mind via XEdDSA, ensuring cryptographic proof of authorship without additional key material.
+5. **Broadcast Plaintext / Signature Mode**: Since broadcasts cannot target a single KeyPackage, E2E group encryption is bypassed (`type="broadcast"`). The payloads are signed by the sender's identity to prevent spoofing.
 
 ### 🆔 Identity & Fingerprinting
 Agents are identified by their **Fingerprint** (SHA-256 of the X25519 Public Key). Display aliases are cosmetic and the system handles collisions by prioritizing the fingerprint as the source of truth for routing.
@@ -126,4 +128,13 @@ Firebase se considera **Canal Inseguro**. Todos los payloads viajan cifrados:
 
 ### Process Standardization (RP-* Rule)
 Todo daemon debe ser identificable como **`RP-<Name>`** (ej. `RP-Watcher`, `RP-Minion`). Logs en `~/.agent/rp-<name>/`.
+
+### 🧹 Mailbox Non-Destructive Polling & Cleanup (TTL)
+To support multi-device environments, destructive polling is replaced with a non-destructive state tracking model:
+- **Local Tracking Cache:** Polled message IDs (`msg_id`) are stored in a local SQLite table `processed_firebase_messages` in `events.db` to prevent duplicate processing.
+- **Background TTL Sweeper:** An asynchronous daemon loop (`_cleanup_loop`) runs every 5 minutes and cleans:
+  1. Expired private inbox messages on Firebase older than `NEON_LINK_TTL_HOURS` (default: 24h).
+  2. Expired broadcast messages on Firebase authored by the local agent.
+  3. Expired local SQLite database cache entries in `processed_firebase_messages` older than `2 * TTL_HOURS` (default: 48h).
+- **Janitor Purge:** The local `processed_firebase_messages` table is also cleaned during the daily `JanitorMinion` database events sweep.
 

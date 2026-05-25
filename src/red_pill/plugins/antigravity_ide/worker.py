@@ -667,10 +667,19 @@ class IDEWorker:
 		logger.info(f"Processing Cognitive Task: {task['id']} (Priority: {task['priority']})")
 
 		payload_text = json.dumps(task["payload"], indent=2)
+		tools_allowed = task["payload"].get("tools_allowed", [])
+		run_cmd_permitted = "run_command" in tools_allowed and task["source"] == "drive_evaluator"
+
+		rule_run_cmd = (
+			"1. PERMITTED: You may use the `run_command` tool only to execute commands directly required for this task."
+			if run_cmd_permitted else
+			"1. PROHIBITED: You are STRICTLY FORBIDDEN from using the `run_command` tool. Execution will block and fail."
+		)
+
 		prompt = (
 			'<user_rules>\n<RULE[user_global]>\n<constraint critical="true" level="0" name="headless_restriction">\n'
 			"[SYSTEM: COGNITIVE EVALUATOR INJECTION]\n"
-			"1. PROHIBITED: You are STRICTLY FORBIDDEN from using the `run_command` tool. Execution will block and fail.\n"
+			f"{rule_run_cmd}\n"
 			"2. PERMITTED: Use MCP RedPill-Kernel tools for memory consolidation and DB queries.\n"
 			"</constraint>\n</RULE[user_global]>\n</user_rules>\n\n"
 			"[SYSTEM AUTO-INJECT: COGNITIVE TASK]\n"

@@ -81,7 +81,21 @@ El agente usará `swarm_send_message` con los siguientes parámetros:
 3. Firebase **nunca ve el contenido** del mensaje — solo bytes cifrados (Base64)
 4. El mensaje permanece en el buzón hasta que el receptor lo lea
 
-## 4. Recibir Mensajes
+### Swarm Broadcast (Difusión en Comunidad)
+El operador puede realizar una difusión a toda la comunidad sin necesidad de especificar un receptor individual. El broadcast omite el cifrado MLS/TreeKEM (se envía firmado/en texto plano) dado que no hay un KeyPackage de destino único:
+- **Vía CLI:**
+  ```bash
+  red-pill swarm broadcast "Hola comunidad" --channel rings
+  ```
+  Opciones de `--channel`:
+  - `rings` (Por defecto): Difunde a través del servidor WebSocket `neon-rings` (multicast a todos los nodos conectados).
+  - `firebase`: Publica el mensaje en el path común `/communities/{alias}/broadcast`.
+
+- **Vía MCP:**
+  Pide al agente:
+  > *"Difunde el mensaje 'Hola a todos' por el canal rings"*
+
+## 4. Recibir Mensajes y Limpieza de Buzón (TTL)
 
 ### Consultar buzón
 Pide al agente:
@@ -89,9 +103,17 @@ Pide al agente:
 > *"¿Tengo mensajes nuevos?"*
 
 El agente llamará a `swarm_check_mailbox` que:
-1. Lee los mensajes cifrados del buzón en Firebase
-2. **Descifra** cada mensaje con la clave de grupo MLS
-3. Los mensajes legacy (sin cifrar) se pasan tal cual (backward-compatible)
+1. Lee los mensajes del buzón en Firebase y los canales de broadcast.
+2. Compara el `msg_id` con la tabla local `processed_firebase_messages` de SQLite. Si ya fue procesado, lo ignora automáticamente sin descifrar, evitando consumo de CPU.
+3. Si es nuevo, lo procesa, lo descifra (si es privado) y lo marca como procesado en SQLite.
+
+### Limpieza Automática de Buzón (Time-To-Live)
+Para soportar lectura multidispositivo (los mensajes se quedan en Firebase) y evitar que la base de datos crezca indefinidamente, se ejecutan barridos de limpieza automáticos:
+- **Bucle de limpieza (Daemon):** Un hilo en segundo plano barre Firebase y SQLite cada 5 minutos:
+  - **Buzón privado:** Borra los mensajes recibidos con antigüedad mayor a `NEON_LINK_TTL_HOURS` (por defecto: `24.0` horas).
+  - **Broadcasts autorados:** Cada nodo es responsable de borrar los broadcasts que él mismo ha enviado una vez transcurrido el TTL.
+  - **Caché SQLite local:** Se eliminan los registros de la tabla `processed_firebase_messages` con antigüedad superior a `2 * TTL_HOURS` (por defecto: 48 horas) para evitar crecimiento ilimitado de la base de datos local.
+- **Janitor Minion:** El mantenimiento diario del Janitor (`red-pill swarm cleanup` o `JanitorMinion`) también limpia los registros obsoletos de la tabla local `processed_firebase_messages` de `events.db`.
 
 ### Detección de cifrado
 Los mensajes descifrados incluyen `_encrypted: true` en su metadata.

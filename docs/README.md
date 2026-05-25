@@ -134,6 +134,7 @@ For humans operating, installing, or extending the system.
 | [OPERATOR_DRESS_CODE.md](GUIDES/OPERATOR_DRESS_CODE.md) | Operator interaction style and formatting guide |
 | [TOKEN_SAVING_GUIDE.md](GUIDES/TOKEN_SAVING_GUIDE.md) | Strategies for reducing API token consumption |
 | [ALETH_BIOLOGY_INDEX](GUIDES/aleth_biology/00_INDEX.md) | **Hub**: Index to Aleth Biology documentation and metabolic logic |
+| [P2P_SYNC.md](GUIDES/P2P_SYNC.md) | Sovereign P2P synchronization and device pairing guide |
 | [DISCLAIMER.md](GUIDES/DISCLAIMER.md) | Experimental software disclaimer and liability notice |
 
 ---

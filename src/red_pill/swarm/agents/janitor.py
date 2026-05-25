@@ -62,10 +62,13 @@ class JanitorMinion(Minion):
 			cursor.execute("DELETE FROM outbox WHERE status IN ('SENT', 'DEAD') AND created_at < ?", (cutoff_date,))
 			outbox_deleted = cursor.rowcount
 
+			cursor.execute("DELETE FROM processed_firebase_messages WHERE processed_at < ?", (cutoff_date,))
+			processed_fb_deleted = cursor.rowcount
+
 			conn.commit()
 			conn.close()
 
-			return inbox_deleted + outbox_deleted
+			return inbox_deleted + outbox_deleted + processed_fb_deleted
 		except Exception as e:
 			logger.error(f"[Janitor] Failed to purge events.db: {e}")
 			return 0
