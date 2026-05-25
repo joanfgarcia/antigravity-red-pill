@@ -540,6 +540,20 @@ The `perform_sleep_cycle()` function in `src/red_pill/metabolism/sleep.py` has t
     The system automatically executes a non-destructive `ALTER TABLE` during initialization to add the `parent_task_id` column to `cognitive_tasks`.
     - **Action**: No manual database migration or `upgrade.sh` intervention is required. The Python layer handles the schema evolution safely via `queue_manager.py`.
 
+    #### §4.24 Service Health Gating & Compaction Optimization (v7.1.0)
+
+    This major update stabilizes the Lazarus daemon commands, introduces configuration-aware service health gating to prevent false positive downtime alarms, and implements context compaction limits to prevent model amnesia.
+
+    **1. Service Manifest Update**:
+    The service contract schema now supports `category`, `required`, and `enabled_config_key` fields.
+    - **Action**: Check `~/.config/red-pill/services.yaml` and align it with the new manifest template `examples/services.yaml`. Specifically, ensure optional plugins like `neon-link` specify `required: false` and map to gating keys (e.g. `enabled_config_key: NEON_LINK_ENABLED`).
+    - **Verify**: Run `red-pill status` and confirm services load cleanly without configuration schema warnings.
+
+    **2. Compacted Context Injection Control**:
+    The system now prevents feedback loops on Gemini Flash models when context compaction occurs.
+    - **Action**: In your `.env` file, configure `COMPACTION_THRESHOLD=10` (default) to control how many compactions to wait before re-injecting the 11KB identity block.
+    - **Verify**: The MCP tool `refresh_session_context` will automatically track the compaction count in `bunker_state.json` and skip full injection when under the threshold, providing a lightweight confirmation instead.
+
 ## 5. Hierarchy of Directives
 
 Upon completion of any update, the agent **MUST** immediately execute:
