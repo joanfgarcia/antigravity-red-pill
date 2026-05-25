@@ -1,6 +1,6 @@
-import asyncio
 import importlib
 from unittest.mock import MagicMock, patch
+
 import pytest
 
 from red_pill.interceptors import _05_cognitive_router_state as _cr_state

@@ -14,8 +14,17 @@ _last_router_state: str | None = None
 _last_tone_state: str | None = None
 
 WORK_KEYWORDS = [
-	"arregla", "fix", "implementa", "modo trabajo", "trabaja",
-	"ejecuta", "despliega", "haz un", "crea un", "commit", "push",
+	"arregla",
+	"fix",
+	"implementa",
+	"modo trabajo",
+	"trabaja",
+	"ejecuta",
+	"despliega",
+	"haz un",
+	"crea un",
+	"commit",
+	"push",
 ]
 
 

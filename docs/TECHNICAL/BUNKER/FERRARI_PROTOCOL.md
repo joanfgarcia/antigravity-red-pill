@@ -73,6 +73,13 @@ USP color → real-time behavioral adaptation
 
 The USP was already computing all of this information. The Ferrari Protocol just puts it behind the wheel.
 
+### 3.1 Engine Brake Cooldown (v7.1.0)
+
+To make the protocol less restrictive ("más laxo"), v7.1.0 introduces an automatic **Engine Brake (Freno de Motor) Cooldown Latch**:
+- **Automatic Decay**: When the Operator is in a work mode (`PURPLE` or `CYAN`), the state decays automatically to `CASUAL` mode if the Operator sends **2 consecutive turns** without any work-related keywords (such as `arregla`, `fix`, `implementa`, `despliega`).
+- **Instant Override**: Explicit casual override keywords (e.g., `relax`, `charlemos`) trigger `CASUAL` mode instantly. Any work keyword immediately re-locks the agent into work mode, resetting the cooldown counter.
+- **Active Debate (Purple Mode)**: The `PURPLE` tone adapter is tuned to challenge the operator, proactively debating system designs and pointing out architectural flaws, which automatically relaxes into a conversational style once the engine brake kicks in.
+
 ---
 
 ## 4. Related Documents

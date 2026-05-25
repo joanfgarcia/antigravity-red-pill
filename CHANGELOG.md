@@ -1,5 +1,11 @@
 ## [7.1.0] - Unreleased
 
+### 🏎️ Ferrari Protocol Cooldown (Engine Brake)
+- **[FEAT] Engine Brake Cooldown Latch**: Refactored `_05_cognitive_router_state.py` and `05_cognitive_router.py` to track consecutive turns. If the Operator sends 2 consecutive turns without work keywords, the session automatically decays back to `casual` mode.
+- **[FEAT] Active Technical Debate**: Updated the `purple` mood directive in `06_tone_adapter.py` to challenge the Operator, proactively debating system designs and pointing out architectural flaws.
+- **[TEST] Cooldown Unit Tests**: Added a dedicated test suite `tests/test_ferrari_cooldown.py` validating the cooldown decay, keywords precedence, and routing/tone transition rules.
+- **[DOCS] Ferrari Protocol Specification**: Updated the technical docs under `docs/TECHNICAL/BUNKER/FERRARI_PROTOCOL.md` to document the engine brake cooldown latch and active debate mode.
+
 ### ✉️ Swarm Broadcast & Mailbox Cleanup (TTL)
 - **[FEAT] Swarm Broadcast (Multicast Routing)**: Added multicast routing rules in `neon-rings`'s `server.py` to broadcast events to all registered peer clients when `target_id="broadcast"` is specified. Added the CLI command `red-pill swarm broadcast "<message>" --channel <rings|firebase>` to enqueue broadcasts into the local outbox.
 - **[FEAT] Non-Destructive Polling & Duplicate Prevention**: Refactored `neon-link`'s `firebase.py` to retain polled messages in remote paths instead of immediate deletion, using a local SQLite `processed_firebase_messages` cache to prevent double-processing.
