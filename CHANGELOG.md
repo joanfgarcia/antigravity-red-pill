@@ -34,6 +34,9 @@
 - **[ARCH] Neon-Link Dependency Bump**: Upgraded `neon-link>=0.5.0` in `pyproject.toml`. This release integrates `neon-rings` as a P2P WebSocket transport plugin, implements non-destructive Firebase polling with background TTL sweep, and includes Protocol of Silence licensing.
 - **[DEPS] Transitive neon-rings**: `neon-rings>=0.1.1` is now pulled automatically as a transitive dependency of `neon-link>=0.5.0`.
 
+### 🧪 Test Fixes
+- **[FIX] Async Mock in `test_specs_adapter`**: Replaced broken `asyncio.Future()` assignment pattern on `mock_minion.execute` with a proper `async def` coroutine, fixing potential `RuntimeError` under stricter asyncio event loop policies. Removed redundant Future re-creation in the second test block.
+
 ### 🛡️ Service Health Gating, Lazarus Daemon Fix & Compaction Optimization
 - **[FIX] Lazarus Daemon Command Integration**: Added the missing `daemon` subcommand to CLI subparsers in `src/red_pill/cli.py` and whitelisted it. This resolves the `INVALIDARGUMENT` crash loop of `redpill.service` under systemd.
 - **[FEAT] Configurable Service Health Gating**: Overhauled `ServiceContract` in `service_contract.py`, `examples/services.yaml`, and runtime configurations to add `category`, `required`, and `enabled_config_key` properties.
