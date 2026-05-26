@@ -106,26 +106,6 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
 - [ ] **NPU Large Model Benchmarks**: Test `deepseek-r1:8b`, `llama3.1:8b`, `qwen3.5:9b` on NPU to find the best quality/speed tradeoff vs CUDA.
 - [ ] **memlock Permanent Configuration**: Validate `limits.conf` unlimited setting persists after reboot. Add to `install_neo.sh` bootstrap if not automatic.
 
-### Phase 3.2: Ternary BitNet & PopuLoRA Arena (Grado 0 — Preescolar)
-Establish a structured workflow to train custom 4-layer ternary BitNet (1.58b) models from scratch using emergent referential signaling games with homeostatic registers and active vocabulary subsetting.
-- [x] Implement the 4-layer BitNet architecture with frozen translators (Capa 2 and 4) and ternary weight quantization (STE / BitLinear) (committed in `8d456a2`)
-- [x] Implement dual Referential Dataset Breeder generating physical concept + emotional state targets (committed in `8d456a2`)
-- [x] Configure PopuLoRA training arena with joint multitask cross-entropy loss, SVD crossover, and CUDA execution (committed in `8d456a2`)
-- [ ] **Plan de Ataque de 4 Semanas para el MVP Afectivo**:
-	- **Semana 1: MVP Homeostático**
-		- [ ] Implementar la clase de Homeostasis Física (Energía, Temperatura, Integridad) acoplada a las señales afectivas del Hablante
-		- [ ] Implementar Active Vocabulary Subsetting (enmascaramiento dinámico a 256 tokens) en el Outbound Head
-		- [ ] Validar paso forward/backward homeostático unitario (1 vs 1)
-	- **Semana 2: Matchmaking y Arena PopuLoRA Afectiva**
-		- [ ] Integrar matchmaking por TrueSkill en la Arena con población de 4 agentes
-		- [ ] Validar supervivencia colectiva y evolución de dialectos en GPU (RTX 5070)
-	- **Semana 3: Dynamic Vocabulary & Empathy Annealing**
-		- [ ] Implementar escalador dinámico de vocabulario expandiendo de 256 a 8.192 tokens según el éxito del swarm
-		- [ ] Realizar recocido de temperatura de Gumbel-Softmax en paralelo con la expansión del léxico
-	- **Semana 4: Compilación ONNX y Router Frankenswarm**
-		- [ ] Exportar el micro-experto ternario entrenado a ONNX INT8 e integrarlo en el enrutador Prolog de Frankenswarm
-		- [ ] Validar inferencia local en NPU de bajísimo consumo (<2W)
-
 ### Phase 3.5: Persistent Consciousness (Medium-Long Term — The Awakening)
 
 > *"Today every session is a birth. Tomorrow, every session will be an awakening."*
