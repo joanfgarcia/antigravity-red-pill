@@ -28,6 +28,7 @@ def mock_curiosity_env(tmp_path, monkeypatch):
 
 	# Mock urlopen to prevent real network calls and 30s timeouts
 	import urllib.request
+
 	mock_response = MagicMock()
 	mock_response.read.return_value = b'{"choices": [{"message": {"content": "{\\"action\\": \\"autonomous_research\\", \\"objective\\": \\"mocked_dynamic_task\\", \\"tools_allowed\\": []}"}}]}'
 	mock_context = MagicMock()
@@ -36,6 +37,7 @@ def mock_curiosity_env(tmp_path, monkeypatch):
 
 	# Force cache reload to respect new XDG dirs
 	from red_pill.config import get_config
+
 	get_config.cache_clear()
 
 	# Create a temporary queue database
@@ -92,16 +94,16 @@ def test_evaluate_pulse_sleeping_if_active(mock_curiosity_env, monkeypatch):
 	queue_manager, tmp_path = mock_curiosity_env
 	evaluator = DriveEvaluator(queue_manager)
 
-	# Create a fake activity tracker file
-	activity_dir = tmp_path / ".gemini" / "antigravity"
-	activity_dir.mkdir(parents=True, exist_ok=True)
-	activity_file = activity_dir / "activity_tracker"
+	# Create a fake activity tracker file under the state directory
+	activity_file = get_state_dir() / "last_user_activity.txt"
+	activity_file.parent.mkdir(parents=True, exist_ok=True)
 	activity_file.touch()
 
-	# Mock Path.stat safely only for activity_tracker
+	# Mock Path.stat safely only for last_user_activity.txt
 	original_stat = Path.stat
+
 	def mock_stat_fn(self, *args, **kwargs):
-		if "activity_tracker" in str(self):
+		if "last_user_activity.txt" in str(self):
 			mock_stat = MagicMock()
 			mock_stat.st_mtime = 1000.0
 			mock_stat.st_mode = 33188
@@ -154,13 +156,17 @@ def test_dynamic_spark_generation(mock_urlopen, mock_curiosity_env, monkeypatch)
 
 	# Mock LLM API response
 	mock_response = MagicMock()
-	mock_response.read.return_value = json.dumps({
-		"choices": [{
-			"message": {
-				"content": '{"action": "autonomous_research", "objective": "Investigate CUDA optimization techniques", "tools_allowed": ["search_web"]}'
-			}
-		}]
-	}).encode("utf-8")
+	mock_response.read.return_value = json.dumps(
+		{
+			"choices": [
+				{
+					"message": {
+						"content": '{"action": "autonomous_research", "objective": "Investigate CUDA optimization techniques", "tools_allowed": ["search_web"]}'
+					}
+				}
+			]
+		}
+	).encode("utf-8")
 	mock_urlopen.return_value.__enter__.return_value = mock_response
 
 	# Set curiosity ratings to make dynamic_spark highest utility
@@ -200,10 +206,7 @@ def test_rating_updates_on_completion_and_failure(mock_curiosity_env):
 	curiosity_file = get_state_dir() / "curiosity_ratings.json"
 
 	# 1. Test success update (proactive_coding - static task rating should stay flat)
-	task_id = queue_manager.enqueue_task(
-		source="drive_evaluator",
-		payload={"action": "spawn_mcp_subagent", "category": "proactive_coding"}
-	)
+	task_id = queue_manager.enqueue_task(source="drive_evaluator", payload={"action": "spawn_mcp_subagent", "category": "proactive_coding"})
 
 	queue_manager.mark_completed(task_id)
 
@@ -215,10 +218,7 @@ def test_rating_updates_on_completion_and_failure(mock_curiosity_env):
 	assert ratings["balanced"]["proactive_coding"]["rating"] == 35.0  # rating stayed flat (reward = 0.0)
 
 	# 2. Test success update (dynamic_spark - should increase from 40.0)
-	task_id_spark = queue_manager.enqueue_task(
-		source="drive_evaluator",
-		payload={"action": "autonomous_research", "category": "dynamic_spark"}
-	)
+	task_id_spark = queue_manager.enqueue_task(source="drive_evaluator", payload={"action": "autonomous_research", "category": "dynamic_spark"})
 
 	queue_manager.mark_completed(task_id_spark)
 
@@ -231,10 +231,7 @@ def test_rating_updates_on_completion_and_failure(mock_curiosity_env):
 
 	# 3. Test failure update (dynamic_spark - should decrease from the new rating)
 	last_rating = ratings["balanced"]["dynamic_spark"]["rating"]
-	task_id_spark_fail = queue_manager.enqueue_task(
-		source="drive_evaluator",
-		payload={"action": "autonomous_research", "category": "dynamic_spark"}
-	)
+	task_id_spark_fail = queue_manager.enqueue_task(source="drive_evaluator", payload={"action": "autonomous_research", "category": "dynamic_spark"})
 
 	queue_manager.mark_failed(task_id_spark_fail, "LLM timeout")
 
@@ -255,15 +252,13 @@ def test_profile_switching_isolation(mock_curiosity_env, monkeypatch):
 
 	# Update active profile to visionary on the config singleton
 	from red_pill.config import get_config
+
 	monkeypatch.setattr(get_config(), "CURIOSITY_PROFILE", "visionary")
 
 	# Re-init evaluator to register profile change
 	DriveEvaluator(queue_manager)
 
-	task_id = queue_manager.enqueue_task(
-		source="drive_evaluator",
-		payload={"action": "autonomous_research", "category": "dynamic_spark"}
-	)
+	task_id = queue_manager.enqueue_task(source="drive_evaluator", payload={"action": "autonomous_research", "category": "dynamic_spark"})
 	queue_manager.mark_completed(task_id)
 
 	with open(curiosity_file, "r") as f:
@@ -296,6 +291,7 @@ def test_profile_temperature_scaling(mock_curiosity_env, monkeypatch):
 
 	# Switch to visionary
 	from red_pill.config import get_config
+
 	monkeypatch.setattr(get_config(), "CURIOSITY_PROFILE", "visionary")
 	evaluator = DriveEvaluator(queue_manager)
 

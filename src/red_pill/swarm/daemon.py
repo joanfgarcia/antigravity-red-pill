@@ -22,8 +22,30 @@ class SovereignDaemon:
 		If the queue is empty, the daemon checks memory/system entropy (Bayesian Engine).
 		If high, it injects a self-generated task (Sovereign Will).
 		"""
-		# Placeholder for actual Bayesian entropy calculation (e.g. from procedural_memories)
 		entropy_level = 0.0
+		try:
+			import subprocess
+
+			from red_pill.core.paths import get_aleth_core_root, get_bunker_root
+
+			# 1. Backlog Entropy
+			todo_path = get_aleth_core_root() / "TODO.md"
+			backlog_cnt = 0
+			if todo_path.exists():
+				with open(todo_path, "r", encoding="utf-8") as f:
+					backlog_cnt = f.read().count("[ ]")
+
+			# 2. Workspace Entropy
+			git_mods = 0
+			result = subprocess.run(["git", "status", "-s"], cwd=str(get_bunker_root()), capture_output=True, text=True, timeout=5)
+			if result.returncode == 0 and result.stdout.strip():
+				git_mods = 1
+
+			# Combined score
+			entropy_level = (backlog_cnt * 0.1) + (git_mods * 0.3)
+			logger.info(f"[Daemon] Calculated legacy system entropy: {entropy_level:.2f}")
+		except Exception as e:
+			logger.warning(f"[Daemon] Failed to calculate dynamic system entropy: {e}")
 
 		# Simulated injection of autonomous thought
 		if entropy_level > 0.8:

@@ -74,13 +74,23 @@ class IDEWorker:
 
 	def run_once(self):
 		self.process_inbox()
-		# check_for_replies: only needed for gRPC async polling (legacy flow)
 		if not self._caps or self._caps.backend == BackendType.GRPC:
 			self.check_for_replies()
-		# Ghost cascade and cognitive queue: gRPC-only (require persistent cascades)
-		if not self._caps or self._caps.backend == BackendType.GRPC:
 			self.check_minion_inbox_auto_inject()
 			self.process_cognitive_queue()
+		else:
+			self.check_minion_inbox_auto_inject_agy()
+			self.process_cognitive_queue_agy()
+			# Janitor sweep for local telegram sessions
+			try:
+				from telegram_session import TelegramSessionManager
+
+				tsm = TelegramSessionManager()
+				purged = tsm.run_janitor_sweep()
+				if purged > 0:
+					logger.info(f"[Janitor] Sweep complete. Purged {purged} archived conversations.")
+			except Exception as e:
+				logger.error(f"Janitor sweep failed: {e}")
 		self.update_heartbeat()
 
 	def update_heartbeat(self):
@@ -189,15 +199,24 @@ class IDEWorker:
 		channel = first_conv["channel"]
 
 		if command == "LIST_CASCADES":
-			trajs = self.get_all_trajectories()
+			from telegram_session import TelegramSessionManager
+
+			tsm = TelegramSessionManager()
+			sessions = tsm.list_sessions(channel_user_id)
+
 			cursor.execute("DELETE FROM cascade_mappings WHERE channel_user_id = ?", (channel_user_id,))
-			sorted_trajs = sorted(trajs.items(), key=lambda x: x[1].get("lastModifiedTime", ""), reverse=True)[:5]
-			response_text = "🧠 **Sesiones de Córtex Activas:**\n\n"
-			for i, (cid, tdata) in enumerate(sorted_trajs):
-				idx = i + 1
-				title = tdata.get("summary", "Sin Título")
-				cursor.execute("INSERT INTO cascade_mappings (channel_user_id, cascade_id, title) VALUES (?, ?, ?)", (channel_user_id, cid, title))
-				response_text += f"`[{idx}]` {title}\n"
+			response_text = "🧠 **Sesiones de Telegram Activas:**\n\n"
+			if not sessions:
+				response_text += "_No hay sesiones activas. Envía un mensaje o /new para crear una._\n"
+			else:
+				for i, sess in enumerate(sessions[:5]):
+					idx = i + 1
+					cid = sess["id"]
+					title = sess.get("summary", {}).get("summary", "Sin Título")
+					cursor.execute(
+						"INSERT INTO cascade_mappings (channel_user_id, cascade_id, title) VALUES (?, ?, ?)", (channel_user_id, cid, title)
+					)
+					response_text += f"`[{idx}]` {title}\n"
 			response_text += "\nEnvía `/switch <número>` para anclar tu sesión."
 			cursor.execute(
 				"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
@@ -219,10 +238,10 @@ class IDEWorker:
 				cid = mapping["cascade_id"]
 				title = mapping["title"]
 				cursor.execute(
-					"INSERT OR REPLACE INTO telegram_sessions (channel_user_id, cascade_id, cascade_type) VALUES (?, ?, 'interactive')",
+					"INSERT OR REPLACE INTO telegram_sessions (channel_user_id, cascade_id, cascade_type) VALUES (?, ?, 'local_session')",
 					(channel_user_id, cid),
 				)
-				resp_text = f"🔗 Sesión anclada a: **{title}**.\nTodos los mensajes se inyectarán en esta pestaña del IDE."
+				resp_text = f"🔗 Sesión anclada a: **{title}**.\nTodos los mensajes se inyectarán en esta conversación."
 			else:
 				resp_text = "❌ Índice no encontrado. Usa `/list` primero."
 			cursor.execute(
@@ -235,18 +254,17 @@ class IDEWorker:
 			return
 
 		elif command == "NEW_CASCADE":
-			logger.info(f"Initiating new Headless Cascade for {channel_user_id} via Telegram.")
-			new_cascade_id = self.client.start_cascade()
+			from telegram_session import TelegramSessionManager
 
-			if new_cascade_id:
-				cursor.execute(
-					"INSERT OR REPLACE INTO telegram_sessions (channel_user_id, cascade_id, cascade_type) VALUES (?, ?, 'interactive')",
-					(channel_user_id, new_cascade_id),
-				)
-				resp_text = "✨ Nueva sesión Headless inicializada y anclada correctamente.\nEl contexto está a cero. ¿En qué puedo ayudarte?"
-			else:
-				resp_text = "❌ Error crítico: El IDE no pudo inicializar la cascada."
+			tsm = TelegramSessionManager()
+			new_session = tsm.create_session(channel_user_id)
+			new_id = new_session["id"]
 
+			cursor.execute(
+				"INSERT OR REPLACE INTO telegram_sessions (channel_user_id, cascade_id, cascade_type) VALUES (?, ?, 'local_session')",
+				(channel_user_id, new_id),
+			)
+			resp_text = "✨ Nueva sesión de Telegram inicializada y anclada correctamente.\nEl contexto está a cero. ¿En qué puedo ayudarte?"
 			cursor.execute(
 				"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
 				(channel, channel_user_id, None, json.dumps({"text": resp_text})),
@@ -273,6 +291,65 @@ class IDEWorker:
 			return
 
 		combined_text = "\n".join(buffer_texts)
+
+		# Handle Delete Command
+		combined_text_clean = combined_text.strip()
+		if combined_text_clean.startswith("/delete"):
+			parts = combined_text_clean.split()
+			target_id = None
+			title = ""
+
+			from telegram_session import TelegramSessionManager
+
+			tsm = TelegramSessionManager()
+
+			if len(parts) == 2 and parts[1].isdigit():
+				idx = int(parts[1])
+				cursor.execute(
+					"SELECT cascade_id, title FROM cascade_mappings WHERE channel_user_id = ? AND id = (SELECT id FROM cascade_mappings WHERE channel_user_id = ? ORDER BY id ASC LIMIT 1 OFFSET ?)",
+					(channel_user_id, channel_user_id, idx - 1),
+				)
+				mapping = cursor.fetchone()
+				if mapping:
+					target_id = mapping["cascade_id"]
+					title = mapping["title"]
+				else:
+					resp_text = "❌ Índice no encontrado. Usa `/list` primero."
+			else:
+				# Delete currently active session
+				cursor.execute(
+					"SELECT cascade_id FROM telegram_sessions WHERE channel_user_id = ? AND cascade_type = 'local_session'",
+					(channel_user_id,),
+				)
+				session_row = cursor.fetchone()
+				if session_row:
+					target_id = session_row["cascade_id"]
+					sess = tsm.get_session(target_id)
+					if sess:
+						title = sess.get("summary", {}).get("summary", "Sin Título")
+				else:
+					resp_text = "❌ No tienes ninguna sesión activa para eliminar."
+
+			if target_id:
+				success = tsm.mark_for_deletion(target_id)
+				if success:
+					cursor.execute(
+						"DELETE FROM telegram_sessions WHERE channel_user_id = ? AND cascade_id = ?",
+						(channel_user_id, target_id),
+					)
+					resp_text = f"🗑️ La sesión **{title}** ha sido marcada para eliminación y copiada a la cola de ingesta. Se purgará del disco una vez archivada."
+				else:
+					resp_text = "❌ Error al intentar eliminar la sesión."
+
+			cursor.execute(
+				"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
+				(channel, channel_user_id, None, json.dumps({"text": resp_text})),
+			)
+			for m_id in msg_ids_to_process:
+				cursor.execute("UPDATE inbox SET status = 'PROCESSED' WHERE id = ?", (m_id,))
+			conn.commit()
+			conn.close()
+			return
 
 		# ---- IDEBridge: Direct execution path (AgyBridge) ----
 		if self._caps and self._caps.auto_approve:
@@ -341,42 +418,64 @@ class IDEWorker:
 		"""External Scribe Pattern: direct prompt → response → scribe → outbox.
 
 		Uses AgyBridge for synchronous, auto-approved prompt execution.
-		Multi-turn via --conversation <uuid> with prefix-stripping.
-		The worker acts as external scribe — saves prompt+response directly
-		without depending on the agent calling interceptor_rp.
+		Uses TelegramSessionManager for local context preservation on disk.
 		"""
 		import re
 
-		logger.info(f"[{msg_ids}] Processing via {self._caps.backend.value.upper()} bridge (External Scribe Pattern)")
+		from telegram_session import TelegramSessionManager
 
-		# Check if we have an existing agy session (multi-turn)
+		logger.info(f"[{msg_ids}] Processing via {self._caps.backend.value.upper()} bridge (Local Session Context)")
+
+		tsm = TelegramSessionManager()
+
+		# Get active local session ID
 		cursor.execute(
-			"SELECT cascade_id, accumulated_len FROM telegram_sessions WHERE channel_user_id = ? AND cascade_type = 'agy_session'",
+			"SELECT cascade_id FROM telegram_sessions WHERE channel_user_id = ? AND cascade_type = 'local_session'",
 			(channel_user_id,),
 		)
 		session_row = cursor.fetchone()
 
-		try:
-			# Guard: cascade_id must be a valid UUID (not a stale placeholder like 'agy_ephemeral')
-			has_valid_session = (
-				session_row
-				and self._caps.conversation_resume
-				and session_row["cascade_id"]
-				and len(session_row["cascade_id"]) == 36
-				and "-" in session_row["cascade_id"]
-			)
-			if has_valid_session:
-				# Multi-turn: continue existing conversation
-				result = self._bridge.continue_conversation(
-					combined_text,
-					conversation_id=session_row["cascade_id"],
-					previous_response_len=session_row["accumulated_len"] or 0,
-					timeout=300,
+		if session_row:
+			session_id = session_row["cascade_id"]
+			session = tsm.get_session(session_id)
+			if not session or session.get("status") == "pending_purge":
+				session = tsm.create_session(channel_user_id)
+				session_id = session["id"]
+				cursor.execute(
+					"INSERT OR REPLACE INTO telegram_sessions (channel_user_id, cascade_id, cascade_type) VALUES (?, ?, 'local_session')",
+					(channel_user_id, session_id),
 				)
-			else:
-				# First message: new ephemeral conversation (dir-diff captures UUID)
-				result = self._bridge.prompt(combined_text, timeout=300)
+		else:
+			session = tsm.create_session(channel_user_id)
+			session_id = session["id"]
+			cursor.execute(
+				"INSERT OR REPLACE INTO telegram_sessions (channel_user_id, cascade_id, cascade_type) VALUES (?, ?, 'local_session')",
+				(channel_user_id, session_id),
+			)
 
+		# 1. Append User Message
+		tsm.append_message(session_id, "user", combined_text)
+
+		# 2. Build Consolidated prompt
+		history_text = tsm.get_history_prompt(session)
+		agent_id = os.environ.get("AGENT_ID", "Aleth")
+
+		prompt = (
+			f"<user_rules>\n"
+			f"<RULE[user_global]>\n"
+			f'<constraint critical="true" level="0" name="headless_restriction">\n'
+			f"IDENTITY ANCHOR: You are {agent_id}. Exclusively adopt this identity in all interactions.\n"
+			f"Always use tabs (\\t) for indentation.\n"
+			f"Speak direct and surgically honest.\n"
+			f"</constraint>\n"
+			f"</RULE[user_global]>\n"
+			f"</user_rules>\n\n"
+			f"Previous interaction history:\n"
+			f"{history_text}\n"
+		)
+
+		try:
+			result = self._bridge.prompt(prompt, timeout=300)
 		except Exception as e:
 			logger.error(f"[{msg_ids}] Bridge execution failed: {e}")
 			for m_id in msg_ids:
@@ -389,23 +488,18 @@ class IDEWorker:
 				cursor.execute("UPDATE inbox SET retries = retries + 1 WHERE id = ?", (m_id,))
 			return
 
-		# Store/update session for multi-turn
-		if result.conversation_id:
-			accumulated = result.accumulated_len if result.accumulated_len else len(result.response)
-			cursor.execute(
-				"INSERT OR REPLACE INTO telegram_sessions (channel_user_id, cascade_id, cascade_type, accumulated_len) VALUES (?, ?, 'agy_session', ?)",
-				(channel_user_id, result.conversation_id, accumulated),
-			)
-
 		response = result.response
 
-		# External Scribe: save prompt+response directly to SQLite
+		# 3. Append Assistant Response to session history
+		tsm.append_message(session_id, "assistant", response)
+
+		# External Scribe
 		try:
 			self._scribe_relay(user_prompt=combined_text, agent_response=response)
 		except Exception as e:
 			logger.warning(f"[{msg_ids}] Scribe relay failed (non-fatal): {e}")
 
-		# Tag processing pipeline (same as legacy flow)
+		# Tag processing pipeline
 		log_matches = re.findall(r"<SOVEREIGN_LOG>(.*?)</SOVEREIGN_LOG>", response, re.DOTALL)
 		for log_msg in log_matches:
 			try:
@@ -417,28 +511,32 @@ class IDEWorker:
 
 					timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 					with open(log_path, "a") as f:
-						f.write(f"\n- **[{timestamp}]** (AgyBridge): {log_msg.strip()}")
+						f.write(f"\n- **[{timestamp}]** (Telegram): {log_msg.strip()}")
 			except Exception as e:
 				logger.error(f"Failed to write SOVEREIGN_LOG: {e}")
 
 		# Strip tags for clean outbox output
 		clean_content = re.sub(r"<SOVEREIGN_LOG>.*?</SOVEREIGN_LOG>", "", response, flags=re.DOTALL).strip()
 
-		# Fallback: if the bridge returned empty, send an error instead of silence
 		if not clean_content:
 			clean_content = "⚠️ El agente procesó tu mensaje pero no generó respuesta. Reintenta en unos segundos."
-			logger.warning(f"[{msg_ids}] Empty response from bridge — sending error fallback to outbox")
 
-		# Push to outbox
 		if channel != "system":
 			cursor.execute(
 				"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
 				(channel, channel_user_id, None, json.dumps({"text": clean_content})),
 			)
 
-		# Mark all messages as processed
 		for m_id in msg_ids:
 			cursor.execute("UPDATE inbox SET status = 'PROCESSED' WHERE id = ?", (m_id,))
+
+		# 4. Trigger compaction check
+		new_session_id = tsm.trigger_compaction(session_id, self._bridge)
+		if new_session_id:
+			cursor.execute(
+				"INSERT OR REPLACE INTO telegram_sessions (channel_user_id, cascade_id, cascade_type) VALUES (?, ?, 'local_session')",
+				(channel_user_id, new_session_id),
+			)
 
 		logger.info(f"[{msg_ids}] Processed via bridge. Response length: {len(clean_content)} chars")
 
@@ -672,8 +770,8 @@ class IDEWorker:
 
 		rule_run_cmd = (
 			"1. PERMITTED: You may use the `run_command` tool only to execute commands directly required for this task."
-			if run_cmd_permitted else
-			"1. PROHIBITED: You are STRICTLY FORBIDDEN from using the `run_command` tool. Execution will block and fail."
+			if run_cmd_permitted
+			else "1. PROHIBITED: You are STRICTLY FORBIDDEN from using the `run_command` tool. Execution will block and fail."
 		)
 
 		prompt = (
@@ -708,6 +806,78 @@ class IDEWorker:
 			queue_manager.mark_failed(task["id"], "Failed to send message to Ghost Cascade")
 
 		conn.close()
+
+	def check_minion_inbox_auto_inject_agy(self):
+		activity_file = Path(os.environ.get("HOME", "")) / ".gemini" / "antigravity" / "activity_tracker"
+		if activity_file.exists():
+			import time
+
+			if time.time() - activity_file.stat().st_mtime < 300:  # 5 minutes threshold
+				return
+
+		from red_pill.core.inbox import MinionInbox
+
+		inbox = MinionInbox()
+		unread = inbox.pop_unread(limit=5)
+
+		if unread:
+			logger.info(f"[Agy] Auto-injecting {len(unread)} unread minion reports synchronously")
+			prompts = [
+				'<user_rules>\n<RULE[user_global]>\n<constraint critical="true" level="0" name="headless_restriction">\n'
+				"[SYSTEM: HEADLESS INBOX INJECTION]\n"
+				"1. PERMITTED: Use MCP RedPill-Kernel tools for memory consolidation and DB queries.\n"
+				"</constraint>\n</RULE[user_global]>\n</user_rules>\n\n"
+				"[SYSTEM AUTO-INJECT: Minion Background Reports]"
+			]
+			for r in unread:
+				prompts.append(f"Source: {r['source']}\nStatus: {r['status']}\nEvent ID: {r['event_id']}\nContent: {r['content']}")
+
+			combined = "\n\n".join(prompts)
+			result = self._bridge.prompt(combined, timeout=300)
+			if result.ok:
+				logger.info("[Agy] Successfully processed minion reports")
+			else:
+				logger.error(f"[Agy] Failed to process minion reports: {result.error}")
+
+	def process_cognitive_queue_agy(self):
+		from red_pill.cognitive.queue_manager import CognitiveQueueManager
+
+		queue_manager = CognitiveQueueManager()
+		task = queue_manager.pop_next_task()
+
+		if not task:
+			from red_pill.cognitive.drive_evaluator import DriveEvaluator
+
+			evaluator = DriveEvaluator(queue_manager)
+			injected = evaluator.evaluate_pulse()
+			if injected > 0:
+				logger.info(f"[DRIVE] Evaluator injected {injected} new cognitive tasks.")
+			return
+
+		logger.info(f"[Agy] Processing Cognitive Task: {task['id']} (Priority: {task['priority']})")
+		payload_text = json.dumps(task["payload"], indent=2)
+
+		prompt = (
+			'<user_rules>\n<RULE[user_global]>\n<constraint critical="true" level="0" name="headless_restriction">\n'
+			"[SYSTEM: COGNITIVE EVALUATOR INJECTION]\n"
+			"1. PERMITTED: You are running headlessly via AgyBridge with auto-approval. You can use any tool including `run_command` if needed.\n"
+			"2. PERMITTED: Use MCP RedPill-Kernel tools for memory consolidation and DB queries.\n"
+			"</constraint>\n</RULE[user_global]>\n</user_rules>\n\n"
+			"[SYSTEM AUTO-INJECT: COGNITIVE TASK]\n"
+			f"Task ID: {task['id']}\n"
+			f"Source: {task['source']}\n"
+			"Payload:\n"
+			f"{payload_text}\n\n"
+			"Execute this task silently."
+		)
+
+		result = self._bridge.prompt(prompt, timeout=600)
+		if result.ok:
+			logger.info(f"[Agy] Cognitive task {task['id']} completed successfully")
+			queue_manager.mark_completed(task["id"])
+		else:
+			logger.error(f"[Agy] Cognitive task {task['id']} failed: {result.error}")
+			queue_manager.mark_failed(task["id"], result.error or "Empty response")
 
 
 if __name__ == "__main__":

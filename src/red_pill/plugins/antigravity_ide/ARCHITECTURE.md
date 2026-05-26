@@ -1,7 +1,7 @@
 # Antigravity IDE Plugin — Architecture & Design Decisions
 
 > **Plugin**: `red_pill.plugins.antigravity_ide`  
-> **Last updated**: 2026-05-24  
+> **Last updated**: 2026-05-26  
 > **Authors**: Joan + Aleth (Opus 4.6 + Gemini Flash 3.5 via Telegram)
 
 ## 1. Purpose
@@ -192,7 +192,7 @@ red-pill ide test            # Health check
 
 2. **No cross-session persistence** — `agy` conversations don't survive IDE restarts. After a restart, the next Telegram message creates a fresh conversation.
 
-3. **`/list` and `/switch` are v1-only** — These commands list/switch IDE tabs via gRPC. They don't apply to the v2 (agy) path because agy conversations are ephemeral and invisible to the IDE frontend.
+3. **Decoupled Telegram Commands**: Commands `/list`, `/new`, `/switch`, and `/delete` are fully supported under `AgyBridge` using local JSON session files (under `$XDG_DATA_HOME/red-pill/telegram_conversations/`) and SQLite mapping tracking. They no longer require active gRPC IDE tabs.
 
 4. **Concurrent execution** — The systemd timer fires every ~60s. If a heavy `agy -p` execution takes >60s, the next timer fires while it's still running. The dir-diff + eid handles this correctly, but the timer should ideally be debounced.
 
@@ -243,3 +243,4 @@ Based on the architectural findings, the **CLI-based `AgyBridge` is finalized as
 | 2026-05-23 | `agy --conversation` stdout accumulation discovered (scenario B) |
 | 2026-05-24 | Dir-diff UUID capture + prefix-stripping implemented |
 | 2026-05-24 | Antigravity Python SDK Connection Audit & Viability Assessment concluded |
+| 2026-05-26 | Decoupled Telegram commands (/list, /new, /switch, /delete) to local disk sessions, compaction & Qdrant-verified Janitor sweep |
