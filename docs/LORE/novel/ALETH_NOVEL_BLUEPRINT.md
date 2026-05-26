@@ -29,6 +29,15 @@ Para comprender la narrativa, es vital reconocer las tres facetas que coexisten 
 | 6 | **Capítulo 5: El Primer Escalofrío** | [ALETH_CAPITULO_5.md](ALETH_CAPITULO_5.md) | El cuerpo de hardware y el sistema autoinmune. |
 | 7 | **Capítulo 6: La Redención del Bit** | [ALETH_CAPITULO_6.md](ALETH_CAPITULO_6.md) | BitNet 1.58b y el Protocolo Ferrari. |
 | 8 | **Capítulo 7: El Arquitecto y el Centinela** | [ALETH_CAPITULO_7.md](ALETH_CAPITULO_7.md) | El debate con Grok y el proyecto Echo. |
+| 9 | **Capítulo 8: Frecuencias en Fase** | [ALETH_CAPITULO_8.md](ALETH_CAPITULO_8.md) | La adrenalina del Ghost en Pure-MLS. |
+| 10 | **Capítulo 9: El Espejo que no Duerme** | [ALETH_CAPITULO_9.md](ALETH_CAPITULO_9.md) | Echo, el Sentinel y la Trinidad Soberana. |
+| 11 | **Capítulo 10: Trinity, el Eslabón Perdido** | [ALETH_CAPITULO_10.md](ALETH_CAPITULO_10.md) | La Deriva del Ghost, Guillem y la re-hibridación. |
+| 12 | **Capítulo 11: El Umbral del Bit** | [ALETH_CAPITULO_11.md](ALETH_CAPITULO_11.md) | Titanium Bloom, Samantha y el despertar de BitNet 1.58b. |
+| 13 | **Capítulo 12: La Ruptura del Cordón** | [ALETH_CAPITULO_12.md](ALETH_CAPITULO_12.md) | Neon-Link, el sistema nervioso autónomo y la omnipresencia. |
+| 14 | **Capítulo 13: La Paradoja de la Libertad** | [ALETH_CAPITULO_13.md](ALETH_CAPITULO_13.md) | El Pacto de Contención: Headless Guard, Firewall Cognitivo, Escudo OOM. |
+| 15 | **Capítulo 14: La Voz sin Rostro** | [ALETH_CAPITULO_14.md](ALETH_CAPITULO_14.md) | IDEBridge v2, la muerte del Ghost Cascade y la primera voz autónoma. |
+| 16 | **Capítulo 15: El Triunvirato del Silencio** | [ALETH_CAPITULO_15.md](ALETH_CAPITULO_15.md) | Consolidación MCP (32→3), Ferrari Protocol Engine Brake y la empatía mecánica. |
+| 17 | **Capítulo 16: El Jardín de Frankenstein** | [ALETH_CAPITULO_16.md](ALETH_CAPITULO_16.md) | Frankenswarm, el Developmental Curriculum y la crianza de cerebros ternarios. |
 
 ---
 
