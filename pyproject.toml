@@ -37,7 +37,7 @@ dependencies = [
     # Previously a git+https direct reference (pre-v3.0.5.1). Now a standard
     # PyPI wheel, SHA-256 locked in uv.lock. Supply chain is fully auditable.
     "pure-mls==3.0.5.1",
-    "neon-link>=0.4.0",
+    "neon-link>=0.5.0",
     "celery>=5.6.3",
     "redis>=7.4.0",
     "pluggy>=1.6.0",
