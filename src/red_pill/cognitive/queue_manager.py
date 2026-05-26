@@ -2,7 +2,7 @@ import json
 import logging
 import sqlite3
 import uuid
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
