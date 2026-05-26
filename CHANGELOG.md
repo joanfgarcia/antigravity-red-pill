@@ -30,6 +30,10 @@
 - **[TEST] E2E & Integration Verification**: Added unit/integration tests for P2P WebSocket multicast, non-destructive Firebase polling, local database tracking sweeps, and CLI broadcast commands.
 - **[DOCS] Sound of Silence & Standards Alignment**: Renamed guides to UPPER_SNAKE_CASE (`P2P_SYNC.md`, `CURIOSITY_PROFILES.md`), corrected absolute links/path violations, and documented the new Swarm Broadcast functionality in `SWARM_USER_MANUAL.md`.
 
+### 🔗 Neon-Link v0.5.0 — P2P Transport & Firebase Sweep
+- **[ARCH] Neon-Link Dependency Bump**: Upgraded `neon-link>=0.5.0` in `pyproject.toml`. This release integrates `neon-rings` as a P2P WebSocket transport plugin, implements non-destructive Firebase polling with background TTL sweep, and includes Protocol of Silence licensing.
+- **[DEPS] Transitive neon-rings**: `neon-rings>=0.1.1` is now pulled automatically as a transitive dependency of `neon-link>=0.5.0`.
+
 ### 🛡️ Service Health Gating, Lazarus Daemon Fix & Compaction Optimization
 - **[FIX] Lazarus Daemon Command Integration**: Added the missing `daemon` subcommand to CLI subparsers in `src/red_pill/cli.py` and whitelisted it. This resolves the `INVALIDARGUMENT` crash loop of `redpill.service` under systemd.
 - **[FEAT] Configurable Service Health Gating**: Overhauled `ServiceContract` in `service_contract.py`, `examples/services.yaml`, and runtime configurations to add `category`, `required`, and `enabled_config_key` properties.

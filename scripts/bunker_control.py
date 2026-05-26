@@ -12,11 +12,11 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(project_root, "src"))
 sys.path.insert(0, os.path.join(project_root, "scripts"))
 
-from update_env import update_env
+from update_env import update_env  # noqa: E402
 
-import red_pill.config as cfg
-from red_pill.core.paths import get_config_dir, get_data_dir
-from red_pill.telemetry import sentinel
+import red_pill.config as cfg  # noqa: E402
+from red_pill.core.paths import get_config_dir, get_data_dir  # noqa: E402
+from red_pill.telemetry import sentinel  # noqa: E402
 
 
 def get_key_nonblocking(timeout=1.0):

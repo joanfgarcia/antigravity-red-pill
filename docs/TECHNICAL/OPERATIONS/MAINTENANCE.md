@@ -44,9 +44,9 @@ uv run red-pill telemetry
 ```
 This command performs a full hardware and Bünker scan and exits cleanly, providing a snapshot of the current system state.
 
-## 5. Neon-Link Watchdog (v0.4.0+)
+## 5. Neon-Link Watchdog & P2P Transport (v0.5.0+)
 
-Since `neon-link>=0.4.0`, the daemon sends native `sd_notify` heartbeats. The systemd unit must be configured with:
+Since `neon-link>=0.5.0`, the daemon includes native `sd_notify` heartbeats (from v0.4.0), P2P transport via `neon-rings`, non-destructive Firebase polling with background TTL sweep, and Protocol of Silence licensing. The systemd unit must be configured with:
 
 ```ini
 [Service]
@@ -56,8 +56,8 @@ NotifyAccess=all
 Restart=on-failure
 ```
 
-### Upgrade from pre-0.4.0
-1. Update dependency: `pip install --upgrade neon-link>=0.4.0` (or `uv sync`)
+### Upgrade from pre-0.5.0
+1. Update dependency: `uv sync` (resolves `neon-link>=0.5.0` and transitive `neon-rings>=0.1.1`)
 2. Update the systemd unit file with `Type=notify` and `WatchdogSec=3`
 3. Reload and restart: `systemctl --user daemon-reload && systemctl --user restart neon-link.service`
 4. Disable legacy aliases: `systemctl --user disable redpill-neonlink.service`
