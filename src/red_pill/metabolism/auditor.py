@@ -36,6 +36,7 @@ class SentinelAuditor:
 
 		# Auditor Cache System
 		from red_pill.core.paths import get_data_dir
+
 		self.cache_file = get_data_dir() / "auditor_cache.json"
 		self.cache_file.parent.mkdir(parents=True, exist_ok=True)
 
@@ -235,6 +236,7 @@ class SentinelAuditor:
 		all_errors = []
 		if redpill_units:
 			from red_pill.core.paths import get_data_dir
+
 			cursor_file = get_data_dir() / "auditor_journal_cursor"
 			if not cursor_file.exists():
 				# Initialize cursor at the current end of journal to avoid parsing history
@@ -311,7 +313,9 @@ class SentinelAuditor:
 											self.logger.error(f"Plugin {plugin.name} failed during heal: {heal_err}")
 
 										if healed:
-											self.logger.info(f"Sentinel Auditor: Successfully healed '{finding.type}' for {finding.metadata.get('service', 'unknown')}")
+											self.logger.info(
+												f"Sentinel Auditor: Successfully healed '{finding.type}' for {finding.metadata.get('service', 'unknown')}"
+											)
 										else:
 											self.logger.warning(f"Sentinel Auditor: Auto-heal failed/not supported for '{finding.type}'")
 											report.findings.append(finding)
@@ -400,9 +404,8 @@ if __name__ == "__main__":
 
 	logging.basicConfig(level=logging.INFO)
 	from red_pill.core.paths import get_bunker_root
-	auditor = SentinelAuditor(
-		target_repos=[str(get_bunker_root().parent / "pure-mls"), str(get_bunker_root())], force=args.force
-	)
+
+	auditor = SentinelAuditor(target_repos=[str(get_bunker_root().parent / "pure-mls"), str(get_bunker_root())], force=args.force)
 	for repo in auditor.target_repos:
 		res = auditor.audit_repo(repo)
 		auditor.sync_to_thalamus(res)

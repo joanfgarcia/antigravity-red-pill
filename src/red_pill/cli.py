@@ -697,7 +697,6 @@ def main() -> None:
 			print(get_telemetry_report())
 			return
 		elif args.command == "cortex":
-
 			from red_pill.telemetry import get_cortex_status
 
 			status_dict = get_cortex_status()
@@ -728,14 +727,10 @@ def main() -> None:
 				print(f"Channel: {args.channel}")
 
 				from red_pill.core.paths import get_neon_link_db_path
+
 				db_path = get_neon_link_db_path()
 
-				payload_json = json.dumps({
-					"text": args.message,
-					"mode": "background",
-					"priority": "normal",
-					"group_size": 100
-				})
+				payload_json = json.dumps({"text": args.message, "mode": "background", "priority": "normal", "group_size": 100})
 
 				try:
 					import sqlite3
@@ -743,8 +738,7 @@ def main() -> None:
 					conn = sqlite3.connect(str(db_path))
 					cursor = conn.cursor()
 					cursor.execute(
-						"INSERT INTO outbox (channel, channel_user_id, payload) VALUES (?, ?, ?)",
-						(args.channel, "broadcast", payload_json)
+						"INSERT INTO outbox (channel, channel_user_id, payload) VALUES (?, ?, ?)", (args.channel, "broadcast", payload_json)
 					)
 					conn.commit()
 					conn.close()

@@ -137,7 +137,6 @@ def get_neon_link_db_path() -> Path:
 	return get_neon_link_data_dir() / "events.db"
 
 
-
 def migrate_legacy_xdg_config() -> None:
 	"""
 	Autonomously bridges the migration from legacy underscored ~/.config/red_pill

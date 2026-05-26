@@ -111,8 +111,7 @@ class IDEBridge(ABC):
 		Only supported by GrpcBridge.
 		"""
 		raise NotSupportedError(
-			f"{type(self).__name__} does not support conversation extraction. "
-			"Use GrpcBridge (create_extraction_bridge()) for Chronicle pipeline."
+			f"{type(self).__name__} does not support conversation extraction. Use GrpcBridge (create_extraction_bridge()) for Chronicle pipeline."
 		)
 
 	def get_trajectory_steps(self, cascade_id: str, start_index: int = 0, end_index: int = 1000) -> List[Dict[str, Any]]:
@@ -122,6 +121,5 @@ class IDEBridge(ABC):
 		Only supported by GrpcBridge.
 		"""
 		raise NotSupportedError(
-			f"{type(self).__name__} does not support conversation extraction. "
-			"Use GrpcBridge (create_extraction_bridge()) for Chronicle pipeline."
+			f"{type(self).__name__} does not support conversation extraction. Use GrpcBridge (create_extraction_bridge()) for Chronicle pipeline."
 		)

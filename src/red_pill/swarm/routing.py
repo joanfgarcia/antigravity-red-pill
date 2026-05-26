@@ -22,6 +22,7 @@ class InferenceRouter:
 
 		# 0. Emergency Cloud Override
 		import red_pill.config as cfg
+
 		if cfg.get_config().EMERGENCY_CLOUD_OVERRIDE:
 			providers_to_try = ["openai", "flash"]
 		else:

@@ -35,6 +35,7 @@ class EmotionalPreHeatingPlugin(BaseInterceptorPlugin):
 			return ""
 
 		from red_pill.memory import MemoryManager
+
 		mgr = MemoryManager()
 		client = mgr.client
 

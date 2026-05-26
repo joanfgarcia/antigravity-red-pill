@@ -70,7 +70,9 @@ async def handle_get_prompt(name: str, arguments: Optional[Dict[str, Any]]) -> t
 
 @registry.register_action(
 	parent="metabolism_health_api",
-	action="get_hardware_status", description="Get real-time CPU, GPU (RTX 5070), and NPU telemetry.", schema={"type": "object", "properties": {}}
+	action="get_hardware_status",
+	description="Get real-time CPU, GPU (RTX 5070), and NPU telemetry.",
+	schema={"type": "object", "properties": {}},
 )
 async def handle_get_hardware_status(arguments: Dict[str, Any]):
 	# Reuse common logic below
@@ -79,7 +81,9 @@ async def handle_get_hardware_status(arguments: Dict[str, Any]):
 
 @registry.register_action(
 	parent="metabolism_health_api",
-	action="get_dashboard", description="Get a high-fidelity visual dashboard of the Red Pill ecosystem.", schema={"type": "object", "properties": {}}
+	action="get_dashboard",
+	description="Get a high-fidelity visual dashboard of the Red Pill ecosystem.",
+	schema={"type": "object", "properties": {}},
 )
 async def handle_get_dashboard(arguments: Dict[str, Any]):
 	stats = sentinel.get_stats()
@@ -823,7 +827,10 @@ async def handle_run_samantha_analysis(arguments: Dict[str, Any]):
 
 @registry.register_action(
 	parent="metabolism_health_api",
-	action="run_pre_pr_audit", description="[OFFICIAL] Run the Pre-PR Audit protocol.", schema={"type": "object", "properties": {}})
+	action="run_pre_pr_audit",
+	description="[OFFICIAL] Run the Pre-PR Audit protocol.",
+	schema={"type": "object", "properties": {}},
+)
 async def handle_run_pre_pr_audit(arguments: Dict[str, Any]):
 	import asyncio
 	import uuid
@@ -862,7 +869,9 @@ async def handle_run_pre_pr_audit(arguments: Dict[str, Any]):
 
 @registry.register_action(
 	parent="metabolism_health_api",
-	action="run_sovereignty_benchmark", description="[OFFICIAL] Execute the Sovereignty Benchmark.", schema={"type": "object", "properties": {}}
+	action="run_sovereignty_benchmark",
+	description="[OFFICIAL] Execute the Sovereignty Benchmark.",
+	schema={"type": "object", "properties": {}},
 )
 async def handle_run_sovereignty_benchmark(arguments: Dict[str, Any]):
 	return [

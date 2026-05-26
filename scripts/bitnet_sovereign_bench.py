@@ -175,6 +175,7 @@ def generate_report(results):
 
 def main():
 	import argparse
+
 	parser = argparse.ArgumentParser(description="BitNet Sovereign Benchmark")
 	parser.add_argument("--flavor", type=str, choices=list(FLAVORS.keys()), help="Flavor to benchmark")
 	args = parser.parse_args()

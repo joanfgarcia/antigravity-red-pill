@@ -58,21 +58,25 @@ class BitNetRunner:
 	def run(self, prompt, max_tokens=128, temp=0.1, ctx_size=None):
 		ctx = ctx_size or self.ctx_size
 		cmd = [
-			self.runner_path, "-m", self.model_path,
-			"-p", prompt,
-			"-n", str(max_tokens),
-			"--temp", str(temp),
-			"-c", str(ctx),
-			"-ngl", str(self.ngl),
+			self.runner_path,
+			"-m",
+			self.model_path,
+			"-p",
+			prompt,
+			"-n",
+			str(max_tokens),
+			"--temp",
+			str(temp),
+			"-c",
+			str(ctx),
+			"-ngl",
+			str(self.ngl),
 		]
 		if self.grammar_path:
 			cmd.extend(["--grammar-file", self.grammar_path])
 
 		try:
-			result = subprocess.run(
-				cmd, capture_output=True, text=True,
-				timeout=120, env=self._build_env()
-			)
+			result = subprocess.run(cmd, capture_output=True, text=True, timeout=120, env=self._build_env())
 			full_output = result.stdout + result.stderr
 
 			# Parse assistant response

@@ -211,6 +211,7 @@ def main():
 		if project_root not in sys.path:
 			sys.path.append(os.path.join(project_root, "src"))
 		import red_pill.config as cfg
+
 		hydration_depth = cfg.get_config().CONTEXT_HYDRATION_DEPTH
 	except Exception:
 		hydration_depth = os.getenv("CONTEXT_HYDRATION_DEPTH", "HIGH").strip().upper()
@@ -230,13 +231,23 @@ def main():
 		if hydration_depth == "LOW":
 			rule_upper = rule.upper()
 			exclude_words = [
-				"HISTORIA", "VÍNCULO", "RECALIBRACIÓN", "FAMILIA", "TEMOR", "PERFIL",
-				"THE USER EXPRESSES FRUSTRATION", "THE BOND:", "COMPROMISO SOBERANO",
-				"PACTO \"770\"", "PACTO 770", "SOCIAL BOND", "HITO DEL PROYECTO"
+				"HISTORIA",
+				"VÍNCULO",
+				"RECALIBRACIÓN",
+				"FAMILIA",
+				"TEMOR",
+				"PERFIL",
+				"THE USER EXPRESSES FRUSTRATION",
+				"THE BOND:",
+				"COMPROMISO SOBERANO",
+				'PACTO "770"',
+				"PACTO 770",
+				"SOCIAL BOND",
+				"HITO DEL PROYECTO",
 			]
-			is_technical_or_identity = any(k in rule_upper for k in [
-				"IDENTITY ANCHOR", "GIT GOLDEN RULE", "FIGHT CLUB PROTOCOL", "POST-IT", "ACTIVE SKIN", "INTEGRITY SHIELD"
-			])
+			is_technical_or_identity = any(
+				k in rule_upper for k in ["IDENTITY ANCHOR", "GIT GOLDEN RULE", "FIGHT CLUB PROTOCOL", "POST-IT", "ACTIVE SKIN", "INTEGRITY SHIELD"]
+			)
 			if not is_technical_or_identity:
 				if any(w in rule_upper for w in exclude_words):
 					continue

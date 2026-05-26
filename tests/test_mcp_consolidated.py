@@ -35,10 +35,7 @@ async def test_consolidated_execute_success():
 
 	with patch("red_pill.mcp_server.GruOrchestrator", return_value=mock_gru):
 		with patch("red_pill.mcp_server.OracleMinion"):
-			result = await registry.execute(
-				"bunker_memory_api",
-				{"action": "search_memory_research", "payload": {"query": "test query"}}
-			)
+			result = await registry.execute("bunker_memory_api", {"action": "search_memory_research", "payload": {"query": "test query"}})
 			assert len(result) == 1
 			assert "started" in result[0].text or "Oracle" in result[0].text
 
@@ -55,10 +52,7 @@ async def test_consolidated_execute_compatibility_shim():
 	with patch("red_pill.mcp_server.GruOrchestrator", return_value=mock_gru):
 		with patch("red_pill.mcp_server.OracleMinion"):
 			# Calling using legacy name: search_memory_research
-			result = await registry.execute(
-				"search_memory_research",
-				{"query": "test query"}
-			)
+			result = await registry.execute("search_memory_research", {"query": "test query"})
 			assert len(result) == 1
 			assert "started" in result[0].text
 

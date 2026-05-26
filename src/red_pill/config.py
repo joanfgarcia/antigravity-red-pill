@@ -450,7 +450,6 @@ class RedPillConfig(BaseSettings):
 	CURIOSITY_ENGINE_ENABLED: bool = True
 	CURIOSITY_PROFILE: str = "balanced"
 
-
 	# -----------------------------------------------------------------------
 	# INGESTION PLUGIN
 	# -----------------------------------------------------------------------

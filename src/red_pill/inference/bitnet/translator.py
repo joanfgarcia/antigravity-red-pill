@@ -15,13 +15,8 @@ class SovereignTranslator:
 
 	def __init__(self, storage_dir: str = None):
 		if storage_dir is None:
-			# Ruta por defecto dentro de APP_ROOT (si está definido) o en el directorio base
-			app_root = os.getenv("APP_ROOT")
-			if app_root:
-				self.storage_dir = os.path.join(app_root, "storage", "curriculum")
-			else:
-				base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
-				self.storage_dir = os.path.join(base_dir, "storage", "curriculum")
+			from red_pill.core.paths import get_data_dir
+			self.storage_dir = str(get_data_dir() / "curriculum")
 		else:
 			self.storage_dir = storage_dir
 

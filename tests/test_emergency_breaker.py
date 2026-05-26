@@ -16,7 +16,6 @@ from red_pill.swarm.routing import InferenceRouter
 
 
 class TestEmergencyBreaker:
-
 	@pytest.fixture(autouse=True)
 	def setup_teardown(self):
 		# Clean cache before and after test
@@ -68,11 +67,7 @@ class TestEmergencyBreaker:
 		with patch.object(mock_config, "EMERGENCY_CLOUD_OVERRIDE", True):
 			with patch("red_pill.config.get_config", return_value=mock_config):
 				# Query InferenceRouter for a standard task
-				task_metadata = {
-					"local_only": False,
-					"model_tier": "standard",
-					"required_capability": "general"
-				}
+				task_metadata = {"local_only": False, "model_tier": "standard", "required_capability": "general"}
 
 				# Mock ProviderRegistry to return available openai / flash providers
 				from red_pill.core.providers import BaseInferenceProvider
@@ -103,13 +98,24 @@ class TestEmergencyBreaker:
 			if hydration_depth == "LOW":
 				rule_upper = rule.upper()
 				exclude_words = [
-					"HISTORIA", "VÍNCULO", "RECALIBRACIÓN", "FAMILIA", "TEMOR", "PERFIL",
-					"THE USER EXPRESSES FRUSTRATION", "THE BOND:", "COMPROMISO SOBERANO",
-					"PACTO \"770\"", "PACTO 770", "SOCIAL BOND", "HITO DEL PROYECTO"
+					"HISTORIA",
+					"VÍNCULO",
+					"RECALIBRACIÓN",
+					"FAMILIA",
+					"TEMOR",
+					"PERFIL",
+					"THE USER EXPRESSES FRUSTRATION",
+					"THE BOND:",
+					"COMPROMISO SOBERANO",
+					'PACTO "770"',
+					"PACTO 770",
+					"SOCIAL BOND",
+					"HITO DEL PROYECTO",
 				]
-				is_technical_or_identity = any(k in rule_upper for k in [
-					"IDENTITY ANCHOR", "GIT GOLDEN RULE", "FIGHT CLUB PROTOCOL", "POST-IT", "ACTIVE SKIN", "INTEGRITY SHIELD"
-				])
+				is_technical_or_identity = any(
+					k in rule_upper
+					for k in ["IDENTITY ANCHOR", "GIT GOLDEN RULE", "FIGHT CLUB PROTOCOL", "POST-IT", "ACTIVE SKIN", "INTEGRITY SHIELD"]
+				)
 				if not is_technical_or_identity:
 					if any(w in rule_upper for w in exclude_words):
 						continue

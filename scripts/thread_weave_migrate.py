@@ -28,6 +28,7 @@ import sys
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("thread_weave_migrate")
 
+
 def migrate(dry_run: bool = False) -> None:
 	sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 	from red_pill.core.paths import get_thread_state_path

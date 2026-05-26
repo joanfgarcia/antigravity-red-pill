@@ -28,6 +28,7 @@ def run_simulation(ticks: int = 1000, profile: str = "balanced"):
 
 	# Clear config cache
 	from red_pill.config import get_config
+
 	get_config.cache_clear()
 
 	# Directorio temporal de estado
@@ -58,7 +59,7 @@ def run_simulation(ticks: int = 1000, profile: str = "balanced"):
 		"dynamic_spark": 0,
 		"sleep (operator active)": 0,
 		"sleep (below utility threshold)": 0,
-		"sleep (cooldowns active)": 0
+		"sleep (cooldowns active)": 0,
 	}
 
 	# Forzar desconexión física de actividad del operador
@@ -76,7 +77,7 @@ def run_simulation(ticks: int = 1000, profile: str = "balanced"):
 	evaluator._generate_dynamic_spark = lambda: {
 		"action": "autonomous_research",
 		"objective": "Simulated cuda kernels research",
-		"tools_allowed": ["search_memory_research"]
+		"tools_allowed": ["search_memory_research"],
 	}
 
 	# Mock de verificación de cooldowns para controlarla mediante simulated_time
@@ -90,6 +91,7 @@ def run_simulation(ticks: int = 1000, profile: str = "balanced"):
 			return bool((simulated_time - last_run) > cooldown_seconds)
 		except Exception:
 			return True
+
 	evaluator._is_cooldown_expired = mock_is_cooldown_expired
 
 	# Mock de timestamp update con tiempo simulado
@@ -104,6 +106,7 @@ def run_simulation(ticks: int = 1000, profile: str = "balanced"):
 		state[task_key] = simulated_time
 		with open(state_file, "w") as f:
 			json.dump(state, f)
+
 	evaluator._update_timestamp = mock_update_timestamp
 
 	for tick in range(ticks):
@@ -174,8 +177,10 @@ def run_simulation(ticks: int = 1000, profile: str = "balanced"):
 		print(f"- {key:<35} : {val:>4} times ({pct:>5.1f}%)")
 
 	print("-" * 50)
-	print(f"Total Sleeps (Inaction)             : {total_sleeps:>4} times ({(total_sleeps/total_ticks)*100:>5.1f}%)")
-	print(f"Total Active Decisions              : {total_ticks - total_sleeps:>4} times ({((total_ticks - total_sleeps)/total_ticks)*100:>5.1f}%)")
+	print(f"Total Sleeps (Inaction)             : {total_sleeps:>4} times ({(total_sleeps / total_ticks) * 100:>5.1f}%)")
+	print(
+		f"Total Active Decisions              : {total_ticks - total_sleeps:>4} times ({((total_ticks - total_sleeps) / total_ticks) * 100:>5.1f}%)"
+	)
 
 	# Mostrar calificaciones de curiosidad finales
 	if ratings_file.exists():

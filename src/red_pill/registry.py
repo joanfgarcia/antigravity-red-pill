@@ -31,7 +31,9 @@ class ToolRegistry:
 
 		return decorator
 
-	def register_action(self, parent: str, action: str, description: str, schema: Dict[str, Any], legacy_alias: Optional[str] = None, auth_level: int = 1):
+	def register_action(
+		self, parent: str, action: str, description: str, schema: Dict[str, Any], legacy_alias: Optional[str] = None, auth_level: int = 1
+	):
 		"""Decorator to register a sub-action under a consolidated parent tool."""
 
 		def decorator(func: Callable):
@@ -42,7 +44,7 @@ class ToolRegistry:
 				"schema": schema,
 				"handler": func,
 				"legacy_alias": legacy_alias,
-				"auth_level": auth_level
+				"auth_level": auth_level,
 			}
 			return func
 
@@ -63,17 +65,10 @@ class ToolRegistry:
 			parent_schema = {
 				"type": "object",
 				"properties": {
-					"action": {
-						"type": "string",
-						"enum": action_enums,
-						"description": f"The specific action to execute under {parent}."
-					},
-					"payload": {
-						"type": "object",
-						"description": "Serialized parameters matching the specified action."
-					}
+					"action": {"type": "string", "enum": action_enums, "description": f"The specific action to execute under {parent}."},
+					"payload": {"type": "object", "description": "Serialized parameters matching the specified action."},
 				},
-				"required": ["action", "payload"]
+				"required": ["action", "payload"],
 			}
 
 			tools.append(types.Tool(name=parent, description=parent_desc, inputSchema=parent_schema))
@@ -125,6 +120,7 @@ class ToolRegistry:
 
 			try:
 				from red_pill.core.providers import ProviderRegistry
+
 				audit_provider = ProviderRegistry.get_telemetry_provider()
 				audit_provider.log_event("ACTION_START", {"tool": name, "action": action, "args": payload})
 			except Exception as e:
@@ -158,6 +154,7 @@ class ToolRegistry:
 
 		try:
 			from red_pill.core.providers import ProviderRegistry
+
 			audit_provider = ProviderRegistry.get_telemetry_provider()
 			audit_provider.log_event("TOOL_START", {"tool": name, "args": arguments})
 		except Exception as e:

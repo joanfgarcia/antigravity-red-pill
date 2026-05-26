@@ -89,8 +89,7 @@ class AgyBridge(IDEBridge):
 			except Exception as e:
 				logger.error(f"Failed to discover LanguageServer: {e}")
 				raise RuntimeError(
-					"Cannot discover Antigravity IDE session. "
-					"Ensure the IDE is running or set ANTIGRAVITY_LS_ADDRESS and ANTIGRAVITY_CSRF_TOKEN."
+					"Cannot discover Antigravity IDE session. Ensure the IDE is running or set ANTIGRAVITY_LS_ADDRESS and ANTIGRAVITY_CSRF_TOKEN."
 				) from e
 		return env
 
@@ -240,10 +239,7 @@ class AgyBridge(IDEBridge):
 		else:
 			delta = accumulated.strip()
 
-		logger.info(
-			f"[AgyBridge] continue_conversation() → conv={conversation_id}, "
-			f"accumulated={len(accumulated)}, delta={len(delta)}"
-		)
+		logger.info(f"[AgyBridge] continue_conversation() → conv={conversation_id}, accumulated={len(accumulated)}, delta={len(delta)}")
 
 		return ConversationResult(
 			conversation_id=conversation_id,

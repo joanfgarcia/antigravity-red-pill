@@ -96,6 +96,7 @@ def test_bunker_install(tmp_path, monkeypatch):
 	import subprocess
 
 	import red_pill.bunker_lifecycle as bl
+
 	config_dir = tmp_path / "config"
 	monkeypatch.setattr(bl, "get_config_dir", lambda: config_dir)
 	monkeypatch.setattr(bl, "get_bunker_root", lambda: tmp_path)

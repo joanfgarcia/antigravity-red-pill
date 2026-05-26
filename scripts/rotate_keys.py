@@ -16,6 +16,7 @@ logger = logging.getLogger("key_rotator")
 def generate_key():
 	return base64.b64encode(os.urandom(32)).decode("utf-8").replace("=", "").replace("+", "").replace("/", "")[:32]
 
+
 def update_env_file(new_key):
 	env_path = os.path.join(get_config_dir(), ".env")
 	if not os.path.exists(env_path):

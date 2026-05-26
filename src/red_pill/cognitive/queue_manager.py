@@ -2,7 +2,7 @@ import json
 import logging
 import sqlite3
 import uuid
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 logger = logging.getLogger(__name__)
 
@@ -80,22 +80,35 @@ class CognitiveQueueManager:
 		logger.debug(f"[QUEUE] Task {task_id} injected (Priority {priority}, Status {initial_status}). Source: {source}")
 		return task_id
 
-	def pop_next_task(self) -> Optional[Dict[str, Any]]:
+	def pop_next_task(self, allowed_sources: Optional[List[str]] = None, exclude_sources: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
 		"""
-		Extrae la tarea de mayor prioridad. Marca como PROCESSING atómicamente.
+		Extrae la tarea de mayor prioridad, filtrando por origen si se especifica.
+		Marca como PROCESSING atómicamente.
 		Retorna la tarea o None si la cola está vacía.
 		"""
+		query = """
+			SELECT id, source, priority, payload, attempts
+			FROM cognitive_tasks
+			WHERE status = 'PENDING'
+		"""
+		params = []
+		if allowed_sources is not None:
+			if not allowed_sources:
+				return None
+			placeholders = ",".join(["?"] * len(allowed_sources))
+			query += f" AND source IN ({placeholders})"
+			params.extend(allowed_sources)
+		if exclude_sources is not None:
+			if exclude_sources:
+				placeholders = ",".join(["?"] * len(exclude_sources))
+				query += f" AND source NOT IN ({placeholders})"
+				params.extend(exclude_sources)
+
+		query += " ORDER BY priority DESC, created_at ASC LIMIT 1"
+
 		with self._get_connection() as conn:
 			conn.execute("BEGIN EXCLUSIVE")
-			cursor = conn.execute(
-				"""
-				SELECT id, source, priority, payload, attempts
-				FROM cognitive_tasks
-				WHERE status = 'PENDING'
-				ORDER BY priority DESC, created_at ASC
-				LIMIT 1
-				"""
-			)
+			cursor = conn.execute(query, params)
 			row = cursor.fetchone()
 
 			if not row:
@@ -126,6 +139,7 @@ class CognitiveQueueManager:
 		"""Actualiza las calificaciones de curiosidad en base al resultado de la ejecución."""
 		try:
 			from red_pill.config import get_config
+
 			if not getattr(get_config(), "CURIOSITY_ENGINE_ENABLED", True):
 				return
 
@@ -156,6 +170,7 @@ class CognitiveQueueManager:
 
 			# 2. Cargar calificaciones
 			from red_pill.core.paths import get_state_dir
+
 			curiosity_file = get_state_dir() / "curiosity_ratings.json"
 			if not curiosity_file.exists():
 				return
@@ -171,12 +186,7 @@ class CognitiveQueueManager:
 			cat_data = profile_ratings.get(category)
 			if not cat_data:
 				# Si no existe, lo inicializamos para este perfil
-				cat_data = {
-					"rating": 25.0,
-					"uncertainty": 8.33,
-					"last_rho": 0.5,
-					"executed_count": 0
-				}
+				cat_data = {"rating": 25.0, "uncertainty": 8.33, "last_rho": 0.5, "executed_count": 0}
 				profile_ratings[category] = cat_data
 
 			# 3. Calcular recompensa en base al resultado (rho)
@@ -209,7 +219,9 @@ class CognitiveQueueManager:
 			with open(curiosity_file, "w") as f:
 				json.dump(ratings, f, indent=4)
 
-			logger.info(f"[CURIOSITY] Category '{category}' updated: rating={new_rating:.2f}, uncertainty={new_uncertainty:.2f}, reward={teacher_reward:.2f}")
+			logger.info(
+				f"[CURIOSITY] Category '{category}' updated: rating={new_rating:.2f}, uncertainty={new_uncertainty:.2f}, reward={teacher_reward:.2f}"
+			)
 
 		except Exception as e:
 			logger.warning(f"[CURIOSITY] Failed to update curiosity ratings: {e}")
@@ -268,4 +280,3 @@ class CognitiveQueueManager:
 			else:
 				conn.execute("UPDATE cognitive_tasks SET status = 'PENDING' WHERE id = ?", (task_id,))
 				logger.warning(f"[QUEUE] Task {task_id} failed. Returned to PENDING queue.")
-

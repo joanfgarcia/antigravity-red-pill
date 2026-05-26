@@ -64,6 +64,7 @@ def mock_db(tmp_path, monkeypatch):
 
 	# Monkeypatch DB_PATH in worker module
 	import red_pill.plugins.antigravity_ide.worker as worker_module
+
 	monkeypatch.setattr(worker_module, "DB_PATH", db_path)
 	return db_path
 
@@ -84,7 +85,7 @@ def test_debounce_processing(mock_db, monkeypatch):
 	conn = sqlite3.connect(str(mock_db))
 	conn.execute(
 		"INSERT INTO inbox (channel, channel_user_id, payload, created_at) VALUES ('telegram', 'user_a', ?, datetime('now'))",
-		(json.dumps({"text": "hello"}),)
+		(json.dumps({"text": "hello"}),),
 	)
 	conn.commit()
 
@@ -95,7 +96,7 @@ def test_debounce_processing(mock_db, monkeypatch):
 	# Now insert a message from 'user_b' that is older (e.g., 5 seconds ago)
 	conn.execute(
 		"INSERT INTO inbox (channel, channel_user_id, payload, created_at) VALUES ('telegram', 'user_b', ?, datetime('now', '-5 seconds'))",
-		(json.dumps({"text": "world"}),)
+		(json.dumps({"text": "world"}),),
 	)
 	conn.commit()
 	conn.close()
@@ -122,12 +123,10 @@ def test_command_bypasses_debounce(mock_db, monkeypatch):
 	# Insert a command message from 'user_a' representing "just sent"
 	conn = sqlite3.connect(str(mock_db))
 	# We also need a row in cascade_mappings so SWITCH_CASCADE doesn't fail
-	conn.execute(
-		"INSERT INTO cascade_mappings (channel_user_id, cascade_id, title) VALUES ('user_a', 'test_uuid', 'Test Tab')"
-	)
+	conn.execute("INSERT INTO cascade_mappings (channel_user_id, cascade_id, title) VALUES ('user_a', 'test_uuid', 'Test Tab')")
 	conn.execute(
 		"INSERT INTO inbox (channel, channel_user_id, payload, created_at) VALUES ('telegram', 'user_a', ?, datetime('now'))",
-		(json.dumps({"command": "SWITCH_CASCADE", "index": 1}),)
+		(json.dumps({"command": "SWITCH_CASCADE", "index": 1}),),
 	)
 	conn.commit()
 	conn.close()

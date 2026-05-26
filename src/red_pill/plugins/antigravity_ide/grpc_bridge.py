@@ -79,9 +79,7 @@ class GrpcBridge(IDEBridge):
 		previous_response_len: int = 0,
 		timeout: int = 300,
 	) -> ConversationResult:
-		raise NotSupportedError(
-			"Conversation resume is not supported on gRPC backend. " "Use AgyBridge (IDE_BACKEND=agy) for this feature."
-		)
+		raise NotSupportedError("Conversation resume is not supported on gRPC backend. Use AgyBridge (IDE_BACKEND=agy) for this feature.")
 
 	def health_check(self) -> bool:
 		"""Check if the LanguageServer is reachable."""

@@ -42,6 +42,7 @@ def get_point_modification_time(payload: dict) -> float:
 
 def resolve_peer_id(peer_name_or_id: str) -> str:
 	from red_pill.core.paths import get_config_dir
+
 	peers_file = get_config_dir() / "peers.json"
 	if peers_file.exists():
 		try:
@@ -56,6 +57,7 @@ def resolve_peer_id(peer_name_or_id: str) -> str:
 
 def add_peer_alias(alias: str, node_id: str) -> None:
 	from red_pill.core.paths import get_config_dir
+
 	config_dir = get_config_dir()
 	os.makedirs(config_dir, exist_ok=True)
 	peers_file = config_dir / "peers.json"
@@ -84,7 +86,7 @@ def get_local_public_key() -> str:
 	paths_to_try = [
 		get_neon_link_config_dir() / "neon_link.seed",
 		get_neon_link_data_dir() / "neon_link.seed",
-		Path.home() / "Documents/IA/neon-link/storage/neon_link.seed"
+		Path.home() / "Documents/IA/neon-link/storage/neon_link.seed",
 	]
 	for p in paths_to_try:
 		if p.exists():
@@ -103,11 +105,13 @@ class SovereignSyncEngine:
 		self.db_path = db_path
 		self.qdrant_client = qdrant_client
 		from red_pill.cognitive.queue_manager import CognitiveQueueManager
+
 		CognitiveQueueManager(db_path=self.db_path)
 
 	@classmethod
 	def from_default(cls) -> "SovereignSyncEngine":
 		from red_pill.core.paths import get_queue_dir
+
 		db_path = str(get_queue_dir() / "bunker_queue.db")
 		client = QdrantClient(url=cfg.QDRANT_URL, api_key=cfg.QDRANT_API_KEY)
 		return cls(db_path, client)
@@ -119,7 +123,7 @@ class SovereignSyncEngine:
 			cursor = conn.cursor()
 			cursor.execute(
 				"SELECT id, source, priority, payload, status, parent_task_id, created_at, updated_at, attempts, error_log FROM cognitive_tasks WHERE updated_at > ?",
-				(ts_str,)
+				(ts_str,),
 			)
 			return [dict(row) for row in cursor.fetchall()]
 
@@ -155,8 +159,8 @@ class SovereignSyncEngine:
 							task["updated_at"],
 							task["attempts"],
 							task["error_log"],
-							task["id"]
-						)
+							task["id"],
+						),
 					)
 				else:
 					cursor.execute(
@@ -174,8 +178,8 @@ class SovereignSyncEngine:
 							task["created_at"],
 							task["updated_at"],
 							task["attempts"],
-							task["error_log"]
-						)
+							task["error_log"],
+						),
 					)
 			conn.commit()
 
@@ -207,7 +211,7 @@ class SovereignSyncEngine:
 				scroll_filter = models.Filter(
 					should=[
 						models.FieldCondition(key="created_at", range=models.Range(gt=last_sync_timestamp)),
-						models.FieldCondition(key="last_recalled_at", range=models.Range(gt=last_sync_timestamp))
+						models.FieldCondition(key="last_recalled_at", range=models.Range(gt=last_sync_timestamp)),
 					]
 				)
 
@@ -215,32 +219,19 @@ class SovereignSyncEngine:
 			offset = None
 			while True:
 				res_points, next_offset = self.qdrant_client.scroll(
-					collection_name=coll,
-					scroll_filter=scroll_filter,
-					limit=100,
-					with_payload=True,
-					with_vectors=True,
-					offset=offset
+					collection_name=coll, scroll_filter=scroll_filter, limit=100, with_payload=True, with_vectors=True, offset=offset
 				)
 				for p in res_points:
 					payload = p.payload or {}
 					pt_time = get_point_modification_time(payload)
 					if pt_time > last_sync_timestamp:
-						points.append({
-							"id": str(p.id) if isinstance(p.id, uuid.UUID) else p.id,
-							"vector": p.vector,
-							"payload": payload
-						})
+						points.append({"id": str(p.id) if isinstance(p.id, uuid.UUID) else p.id, "vector": p.vector, "payload": payload})
 				offset = next_offset
 				if offset is None:
 					break
 
 			if points:
-				delta[coll] = {
-					"points": points,
-					"vector_size": vector_size,
-					"distance": distance
-				}
+				delta[coll] = {"points": points, "vector_size": vector_size, "distance": distance}
 		return delta
 
 	def apply_qdrant_delta(self, delta: Dict[str, Any]) -> None:
@@ -258,10 +249,7 @@ class SovereignSyncEngine:
 				elif distance_str.upper() == "DOT":
 					dist_enum = models.Distance.DOT
 
-				self.qdrant_client.create_collection(
-					collection_name=coll,
-					vectors_config=models.VectorParams(size=vector_size, distance=dist_enum)
-				)
+				self.qdrant_client.create_collection(collection_name=coll, vectors_config=models.VectorParams(size=vector_size, distance=dist_enum))
 				self.qdrant_client.create_payload_index(collection_name=coll, field_name="immune", field_schema=models.PayloadSchemaType.BOOL)
 				self.qdrant_client.create_payload_index(collection_name=coll, field_name="importance", field_schema=models.PayloadSchemaType.FLOAT)
 
@@ -303,13 +291,7 @@ class SovereignSyncEngine:
 				except (ValueError, TypeError):
 					point_id = p["id"]
 
-				points_to_upsert.append(
-					models.PointStruct(
-						id=point_id,
-						vector=vector,
-						payload=payload
-					)
-				)
+				points_to_upsert.append(models.PointStruct(id=point_id, vector=vector, payload=payload))
 
 			if points_to_upsert:
 				self.qdrant_client.upsert(collection_name=coll, points=points_to_upsert)
@@ -317,11 +299,7 @@ class SovereignSyncEngine:
 	def generate_sync_payload(self, collections: List[str], last_sync_timestamp: float) -> bytes:
 		sqlite_delta = self.get_sqlite_delta(last_sync_timestamp)
 		qdrant_delta = self.get_qdrant_delta(collections, last_sync_timestamp)
-		payload_dict = {
-			"sqlite": sqlite_delta,
-			"qdrant": qdrant_delta,
-			"timestamp": time.time()
-		}
+		payload_dict = {"sqlite": sqlite_delta, "qdrant": qdrant_delta, "timestamp": time.time()}
 		raw_json = json.dumps(payload_dict)
 		compressed = gzip.compress(raw_json.encode("utf-8"))
 		return compressed
@@ -342,22 +320,15 @@ class SovereignSyncEngine:
 		chunks = transmitter.chunk_payload(payload)
 
 		from red_pill.core.paths import get_neon_link_db_path
+
 		db_path = get_neon_link_db_path()
 		resolved_peer = resolve_peer_id(target_peer)
 
 		with sqlite3.connect(str(db_path)) as conn:
 			cursor = conn.cursor()
 			for chunk in chunks:
-				payload_json = json.dumps({
-					"text": json.dumps(chunk),
-					"mode": "background",
-					"priority": "normal",
-					"group_size": 2
-				})
-				cursor.execute(
-					"INSERT INTO outbox (channel, channel_user_id, payload) VALUES (?, ?, ?)",
-					("rings", resolved_peer, payload_json)
-				)
+				payload_json = json.dumps({"text": json.dumps(chunk), "mode": "background", "priority": "normal", "group_size": 2})
+				cursor.execute("INSERT INTO outbox (channel, channel_user_id, payload) VALUES (?, ?, ?)", ("rings", resolved_peer, payload_json))
 			conn.commit()
 
 		logger.info(f"Enqueued {len(chunks)} sync chunks for peer {target_peer} (session: {chunks[0]['session_id']})")
@@ -365,6 +336,7 @@ class SovereignSyncEngine:
 
 	def process_incoming_syncs(self) -> int:
 		from red_pill.core.inbox import MinionInbox
+
 		inbox = MinionInbox()
 		unread = inbox.get_unread(limit=100)
 
@@ -438,13 +410,7 @@ class ChunkedPayloadTransmitter:
 			end = min(start + self.chunk_size, total_len)
 			chunk_data = b64_str[start:end]
 			sha256 = hashlib.sha256(chunk_data.encode("utf-8")).hexdigest()
-			chunks.append({
-				"session_id": session_id,
-				"chunk_index": chunk_idx,
-				"total_chunks": 0,
-				"payload": chunk_data,
-				"sha256": sha256
-			})
+			chunks.append({"session_id": session_id, "chunk_index": chunk_idx, "total_chunks": 0, "payload": chunk_data, "sha256": sha256})
 			chunk_idx += 1
 			start = end
 

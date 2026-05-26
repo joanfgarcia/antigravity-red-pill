@@ -86,7 +86,7 @@ def print_interface(stats, config):
 	# Hardware Telemetry Panel
 	print("\033[96m[ TELEMETRÍA DE HARDWARE ]\033[0m")
 	cpu_info = f"CPU: {stats['cpu']['usage_percent']}%"
-	if stats['cpu'].get('temp'):
+	if stats["cpu"].get("temp"):
 		cpu_info += f" @ {stats['cpu']['temp']}°C"
 	mem_info = f"RAM: {stats['memory']['percent']}% ({stats['memory']['available_gb']} GB libre)"
 	print(f"  {cpu_info} | {mem_info}")
@@ -156,11 +156,7 @@ def main():
 			# Use sentinel telemetry report structures
 			stats = sentinel.get_stats()
 		except Exception:
-			stats = {
-				"cpu": {"usage_percent": 0.0, "temp": None},
-				"memory": {"percent": 0.0, "available_gb": 0.0},
-				"gpu": []
-			}
+			stats = {"cpu": {"usage_percent": 0.0, "temp": None}, "memory": {"percent": 0.0, "available_gb": 0.0}, "gpu": []}
 
 		# Reload configuration (checks env mtime dynamically)
 		config = cfg.get_config()

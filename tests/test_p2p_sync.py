@@ -33,6 +33,7 @@ def temp_dbs() -> Generator[tuple[str, str], None, None]:
 		try:
 			if os.path.exists(path):
 				import gc
+
 				gc.collect()
 				os.remove(path)
 		except PermissionError:
@@ -74,7 +75,7 @@ def test_sqlite_delta_lww_deduplication(temp_dbs):
 			INSERT INTO cognitive_tasks (id, source, priority, payload, status, updated_at)
 			VALUES (?, 'Oracle', 5, '{"action": "test2"}', 'PENDING', ?)
 			""",
-			(task_id2, target_ts2)
+			(task_id2, target_ts2),
 		)
 		conn.commit()
 
@@ -107,83 +108,47 @@ def test_qdrant_point_delta_bidirectional_sync(qdrant_clients, temp_dbs):
 	coll_name = "work_memories"
 	vector_size = 4
 
-	client_src.create_collection(
-		collection_name=coll_name,
-		vectors_config=models.VectorParams(size=vector_size, distance=models.Distance.COSINE)
-	)
-	client_tgt.create_collection(
-		collection_name=coll_name,
-		vectors_config=models.VectorParams(size=vector_size, distance=models.Distance.COSINE)
-	)
+	client_src.create_collection(collection_name=coll_name, vectors_config=models.VectorParams(size=vector_size, distance=models.Distance.COSINE))
+	client_tgt.create_collection(collection_name=coll_name, vectors_config=models.VectorParams(size=vector_size, distance=models.Distance.COSINE))
 
 	now = time.time()
 
 	p1_id = uuid.uuid4()
 	p1_vector = [0.1, 0.2, 0.3, 0.4]
-	p1_payload = {
-		"content": "Source memory",
-		"created_at": now + 5,
-		"last_recalled_at": now + 5,
-		"immune": False
-	}
+	p1_payload = {"content": "Source memory", "created_at": now + 5, "last_recalled_at": now + 5, "immune": False}
 
 	p2_id = uuid.uuid4()
 	p2_vector = [0.5, 0.6, 0.7, 0.8]
-	p2_payload_src = {
-		"content": "Shared memory updated on source",
-		"created_at": now - 10,
-		"last_recalled_at": now + 10,
-		"reinforcement_score": 5.0
-	}
+	p2_payload_src = {"content": "Shared memory updated on source", "created_at": now - 10, "last_recalled_at": now + 10, "reinforcement_score": 5.0}
 
 	p3_id = uuid.uuid4()
 	p3_vector = [0.9, 0.1, 0.2, 0.3]
-	p3_payload_src = {
-		"content": "Shared memory older on source",
-		"created_at": now - 10,
-		"last_recalled_at": now - 10,
-		"reinforcement_score": 1.0
-	}
+	p3_payload_src = {"content": "Shared memory older on source", "created_at": now - 10, "last_recalled_at": now - 10, "reinforcement_score": 1.0}
 
 	client_src.upsert(
 		collection_name=coll_name,
 		points=[
 			models.PointStruct(id=p1_id, vector=p1_vector, payload=p1_payload),
 			models.PointStruct(id=p2_id, vector=p2_vector, payload=p2_payload_src),
-			models.PointStruct(id=p3_id, vector=p3_vector, payload=p3_payload_src)
-		]
+			models.PointStruct(id=p3_id, vector=p3_vector, payload=p3_payload_src),
+		],
 	)
 
-	p2_payload_tgt = {
-		"content": "Shared memory original target",
-		"created_at": now - 10,
-		"last_recalled_at": now,
-		"reinforcement_score": 2.0
-	}
+	p2_payload_tgt = {"content": "Shared memory original target", "created_at": now - 10, "last_recalled_at": now, "reinforcement_score": 2.0}
 
-	p3_payload_tgt = {
-		"content": "Shared memory newer target",
-		"created_at": now - 10,
-		"last_recalled_at": now + 20,
-		"reinforcement_score": 9.0
-	}
+	p3_payload_tgt = {"content": "Shared memory newer target", "created_at": now - 10, "last_recalled_at": now + 20, "reinforcement_score": 9.0}
 
 	p4_id = uuid.uuid4()
 	p4_vector = [0.2, 0.4, 0.6, 0.8]
-	p4_payload = {
-		"content": "Local target memory",
-		"created_at": now,
-		"last_recalled_at": now,
-		"immune": True
-	}
+	p4_payload = {"content": "Local target memory", "created_at": now, "last_recalled_at": now, "immune": True}
 
 	client_tgt.upsert(
 		collection_name=coll_name,
 		points=[
 			models.PointStruct(id=p2_id, vector=p2_vector, payload=p2_payload_tgt),
 			models.PointStruct(id=p3_id, vector=p3_vector, payload=p3_payload_tgt),
-			models.PointStruct(id=p4_id, vector=p4_vector, payload=p4_payload)
-		]
+			models.PointStruct(id=p4_id, vector=p4_vector, payload=p4_payload),
+		],
 	)
 
 	engine_src = SovereignSyncEngine(db_path=db_src, qdrant_client=client_src)
@@ -266,16 +231,14 @@ def test_transmission_and_incoming_processing(qdrant_clients, temp_dbs, monkeypa
 		conn.commit()
 
 	import red_pill.core.paths as paths
+
 	monkeypatch.setattr(paths, "get_neon_link_db_path", lambda: Path(path_nl))
 
 	engine_src = SovereignSyncEngine(db_path=db_src, qdrant_client=client_src)
 	engine_tgt = SovereignSyncEngine(db_path=db_tgt, qdrant_client=client_tgt)
 
 	coll_name = "work_memories"
-	client_src.create_collection(
-		collection_name=coll_name,
-		vectors_config=models.VectorParams(size=4, distance=models.Distance.COSINE)
-	)
+	client_src.create_collection(collection_name=coll_name, vectors_config=models.VectorParams(size=4, distance=models.Distance.COSINE))
 
 	client_src.upsert(
 		collection_name=coll_name,
@@ -283,16 +246,12 @@ def test_transmission_and_incoming_processing(qdrant_clients, temp_dbs, monkeypa
 			models.PointStruct(
 				id=uuid.uuid4(),
 				vector=[0.1, 0.2, 0.3, 0.4],
-				payload={"content": "Sync me!", "created_at": time.time(), "last_recalled_at": time.time()}
+				payload={"content": "Sync me!", "created_at": time.time(), "last_recalled_at": time.time()},
 			)
-		]
+		],
 	)
 
-	engine_src.transmit_sync_payload(
-		target_peer="TargetPeer",
-		collections=[coll_name],
-		last_sync_timestamp=0
-	)
+	engine_src.transmit_sync_payload(target_peer="TargetPeer", collections=[coll_name], last_sync_timestamp=0)
 
 	with sqlite3.connect(path_nl) as conn:
 		conn.row_factory = sqlite3.Row
@@ -304,15 +263,11 @@ def test_transmission_and_incoming_processing(qdrant_clients, temp_dbs, monkeypa
 		assert rows[0]["channel_user_id"] == "TargetPeer"
 
 		from red_pill.core.inbox import MinionInbox
+
 		inbox_tgt = MinionInbox()
 		for r in rows:
 			payload_data = json.loads(r["payload"])
-			inbox_tgt.drop_report(
-				event_id=f"test_sync_{uuid.uuid4()}",
-				source="NeonLink (rings)",
-				status="pending",
-				content=payload_data["text"]
-			)
+			inbox_tgt.drop_report(event_id=f"test_sync_{uuid.uuid4()}", source="NeonLink (rings)", status="pending", content=payload_data["text"])
 
 	applied = engine_tgt.process_incoming_syncs()
 	assert applied == 1

@@ -59,6 +59,7 @@ def _find_uv() -> str:
 
 def _is_systemd_available() -> bool:
 	import shutil
+
 	if not shutil.which("systemctl"):
 		return False
 	try:
@@ -180,7 +181,15 @@ def _write_systemd_timer(name, interval, desc):
 
 def _uninstall_linux() -> None:
 	has_systemd = _is_systemd_available()
-	for timer in (WAKE_TIMER, SLEEP_TIMER, "redpill-telemetry.timer", "redpill-queue.timer", "redpill-worker.timer", "redpill-chronicle.timer", "redpill-pulse.timer"):
+	for timer in (
+		WAKE_TIMER,
+		SLEEP_TIMER,
+		"redpill-telemetry.timer",
+		"redpill-queue.timer",
+		"redpill-worker.timer",
+		"redpill-chronicle.timer",
+		"redpill-pulse.timer",
+	):
 		if has_systemd:
 			subprocess.run(["systemctl", "--user", "disable", "--now", timer], check=False)
 	for name in (

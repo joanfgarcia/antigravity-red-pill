@@ -11,6 +11,7 @@ def download_model():
 	filename = "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
 
 	from red_pill.core.paths import get_models_dir
+
 	models_dir = str(get_models_dir())
 
 	local_path = os.path.join(models_dir, filename)
