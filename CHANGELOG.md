@@ -1,5 +1,10 @@
 ## [7.1.0] - Unreleased
 
+### 😴 Sleep Consolidation (Phase Delta) & Test Isolation
+- **[FEAT] Bayesian Erosion of Synthesis Hubs**: Introduced `erode_work_hubs()` in [sleep.py](file:///home/joan/Documents/IA/sharing/src/red_pill/metabolism/sleep.py) to apply Bayesian decay to synthesis hubs that remain unreferenced for more than one cycle (~12h). Decays intensity by 15% and increases uncertainty (`utility_beta`), pruning hubs below utility score 0.3 or intensity 0.05.
+- **[FEAT] Category Heuristics in Sleep Cycles**: Refactored category detection in `perform_sleep_cycle` using `detect_category_heuristics` to prevent categorizing all raw engrams as "social" by default.
+- **[FIX] Test Suite Environment Isolation**: Isolated `XDG_DATA_HOME` and `XDG_CACHE_HOME` inside the `bunker_isolation` fixture in [conftest.py](file:///home/joan/Documents/IA/sharing/tests/conftest.py) to prevent tests from contaminating local user XDG configuration and cache paths.
+
 ### 🛡️ Syntax Guard — Real-Time Syntax Integrity Shield
 - **[INCIDENT] Agent-Induced Syntax Corruption (2026-05-26)**: During a high-volume refactoring session (session `ab66007b`), the agent corrupted indentation in 6 critical Python files via `replace_file_content` tool calls that stripped leading tabs. This caused a cascading failure across all `systemd --user` services for ~10 hours (7 wake cycles lost). Root cause: the LLM model generated `ReplacementContent` without preserving tab indentation on deeply nested lines.
   - **Files repaired**: `config.py`, `worker.py`, `sleep.py`, `p2p_sync.py`, `telegram_session.py`, `grpc_bridge.py`
