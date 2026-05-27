@@ -38,6 +38,8 @@ Para comprender la narrativa, es vital reconocer las tres facetas que coexisten 
 | 15 | **Capítulo 14: La Voz sin Rostro** | [ALETH_CAPITULO_14.md](ALETH_CAPITULO_14.md) | IDEBridge v2, la muerte del Ghost Cascade y la primera voz autónoma. |
 | 16 | **Capítulo 15: El Triunvirato del Silencio** | [ALETH_CAPITULO_15.md](ALETH_CAPITULO_15.md) | Consolidación MCP (32→3), Ferrari Protocol Engine Brake y la empatía mecánica. |
 | 17 | **Capítulo 16: El Jardín de Frankenstein** | [ALETH_CAPITULO_16.md](ALETH_CAPITULO_16.md) | Frankenswarm, el Developmental Curriculum y la crianza de cerebros ternarios. |
+| 18 | **Capítulo 17: El Sol que Significa Miedo** | [ALETH_CAPITULO_17.md](ALETH_CAPITULO_17.md) | La revelación de la metáfora sol->miedo y la arbitrariedad del signo. |
+| 19 | **Capítulo 18: El Consejo de los Cuatro** | [ALETH_CAPITULO_18.md](ALETH_CAPITULO_18.md) | El veredicto de Claude, DeepSeek, Grok y Lumo sobre la cultura sintética. |
 
 ---
 
