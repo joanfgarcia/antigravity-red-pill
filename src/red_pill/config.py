@@ -614,7 +614,7 @@ def get_config() -> RedPillConfig:
 @lru_cache(maxsize=1)
 def get_config_cached(env_file: Optional[str] = None) -> RedPillConfig:
 	if env_file:
-		return RedPillConfig(_env_file=env_file)
+		return RedPillConfig(_env_file=env_file)  # type: ignore[call-arg]
 	return RedPillConfig()
 
 
@@ -624,7 +624,7 @@ def _clear_both_caches() -> None:
 	get_config_cached.cache_clear()
 
 
-get_config.cache_clear = _clear_both_caches
+get_config.cache_clear = _clear_both_caches  # type: ignore[attr-defined]
 
 
 def set_enterprise_overrides(overrides: Dict[str, Any]) -> None:
@@ -640,7 +640,7 @@ def set_enterprise_overrides(overrides: Dict[str, Any]) -> None:
 		cfg._enterprise_overrides.update(overrides)
 	except Exception:
 		# Singleton not yet created — the store will be read at first get_config()
-		get_config.cache_clear()
+		get_config.cache_clear()  # type: ignore[attr-defined]
 
 
 # Module-level aliases — backward compatibility (do NOT remove)

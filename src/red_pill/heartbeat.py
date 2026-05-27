@@ -64,6 +64,9 @@ class LazarusPulse:
 
 	async def _pulse_cycle(self) -> None:
 		"""The repeating biological cycle."""
+		# Fire-and-forget: launch the syntax guard watcher as a background task
+		asyncio.ensure_future(self._syntax_guard_watcher())
+
 		while self._running:
 			try:
 				logger.info("Lazarus Pulse: Beat triggered. Executing rituals...")
@@ -504,6 +507,119 @@ class LazarusPulse:
 				logger.info("Pulse: Thread Ritual complete. Timelines synchronized.")
 		except Exception as e:
 			logger.error(f"Pulse: Thread Ritual failed: {e}")
+
+	async def _syntax_guard_watcher(self) -> None:
+		"""
+		Background inotify watcher for critical Python modules.
+		Uses watchfiles (Rust/inotify) with debounce. On syntax error:
+		- Fires pain signal (signal_syntax_failure, severity 9.5)
+		- Auto-heals from git HEAD
+		- Sends desktop notification
+		Zero CPU when idle. Zero tokens. Milliseconds on trigger.
+		"""
+		DEBOUNCE_MS = 3000
+		FILE_COOLDOWN_S = 10
+
+		try:
+			from watchfiles import Change, awatch
+		except ImportError:
+			logger.warning("Pulse [SyntaxGuard]: watchfiles not installed. Watcher disabled.")
+			return
+
+		import py_compile
+		import subprocess
+		import time
+
+		app_root = cfg.APP_ROOT
+		watch_path = os.path.join(app_root, "src", "red_pill")
+
+		if not os.path.isdir(watch_path):
+			logger.warning(f"Pulse [SyntaxGuard]: Watch path not found: {watch_path}")
+			return
+
+		logger.info(f"Pulse [SyntaxGuard]: Watcher started (debounce={DEBOUNCE_MS}ms, path=src/red_pill)")
+
+		last_checked: dict[str, float] = {}
+
+		try:
+			async for changes in awatch(
+				watch_path,
+				debounce=DEBOUNCE_MS,
+				step=200,
+				watch_filter=lambda change, path: path.endswith(".py"),
+			):
+				if not self._running:
+					break
+
+				for change_type, path in changes:
+					if change_type == Change.deleted or not os.path.isfile(path):
+						continue
+
+					# Per-file cooldown
+					now = time.monotonic()
+					if now - last_checked.get(path, 0) < FILE_COOLDOWN_S:
+						continue
+					last_checked[path] = now
+
+					rel_path = os.path.relpath(path, app_root)
+
+					try:
+						py_compile.compile(path, doraise=True)
+					except py_compile.PyCompileError as e:
+						short_err = str(e).split("\n")[0]
+						logger.error(f"Pulse [SyntaxGuard]: 🔴 BROKEN: {rel_path} → {short_err}")
+
+						# Pain signal
+						try:
+							self.memory_mgr.inject_signal(
+								name="signal_syntax_failure",
+								intensity=9.5,
+								signal_type="pain",
+								source="SyntaxGuard",
+								criticality="CRITICAL",
+								originator="SyntaxGuard",
+							)
+						except Exception:
+							pass
+
+						# Desktop notification
+						try:
+							subprocess.Popen(
+								["notify-send", "-u", "critical", "-i", "dialog-error", "⚠️ Syntax Guard", f"BROKEN: {rel_path}\n{short_err}"],
+								stdout=subprocess.DEVNULL,
+								stderr=subprocess.DEVNULL,
+							)
+						except Exception:
+							pass
+
+						# Auto-heal from git HEAD
+						try:
+							result = subprocess.run(
+								["git", "checkout", "HEAD", "--", rel_path],
+								cwd=app_root,
+								capture_output=True,
+								text=True,
+								timeout=10,
+							)
+							if result.returncode == 0:
+								py_compile.compile(path, doraise=True)
+								logger.info(f"Pulse [SyntaxGuard]: ✅ Auto-healed {rel_path} from git HEAD")
+								self.memory_mgr.evaporate_signals("signal_syntax_failure")
+								try:
+									subprocess.Popen(
+										["notify-send", "-i", "dialog-information", "✅ Syntax Guard", f"Auto-healed: {rel_path}"],
+										stdout=subprocess.DEVNULL,
+										stderr=subprocess.DEVNULL,
+									)
+								except Exception:
+									pass
+						except Exception as heal_err:
+							logger.error(f"Pulse [SyntaxGuard]: Auto-heal failed for {rel_path}: {heal_err}")
+
+		except asyncio.CancelledError:
+			logger.info("Pulse [SyntaxGuard]: Watcher stopped.")
+		except Exception as e:
+			logger.error(f"Pulse [SyntaxGuard]: Watcher crashed: {e}")
 
 	def _trigger_immune_response(self, tissue: str) -> None:
 		"""

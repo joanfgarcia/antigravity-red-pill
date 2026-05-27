@@ -30,7 +30,7 @@ class TelegramSessionManager:
 		if path.exists():
 			try:
 				with open(path, "r", encoding="utf-8") as f:
-					return json.load(f)
+					return json.load(f) if path.exists() else None
 			except Exception as e:
 				logger.error(f"[TelegramSession] Failed to load session {session_id}: {e}")
 		return None
@@ -159,7 +159,7 @@ class TelegramSessionManager:
 		session["status"] = "pending_purge"
 		self.save_session(session_id, session)
 
-		return new_id
+		return str(new_id) if new_id else None
 
 	def run_janitor_sweep(self) -> int:
 		"""

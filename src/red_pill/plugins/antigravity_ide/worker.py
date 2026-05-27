@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent.resolve()))
 from ide_client import AntigravityIDEClient  # noqa: E402
 
 import red_pill.config as cfg  # noqa: E402
-from red_pill.plugins.antigravity_ide.bridge import BackendType  # noqa: E402
+from red_pill.plugins.antigravity_ide.bridge import BackendType, BridgeCapabilities, IDEBridge  # noqa: E402
 from red_pill.plugins.antigravity_ide.factory import create_bridge  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -49,6 +49,8 @@ class IDEWorker:
 	def __init__(self):
 		self.client = AntigravityIDEClient()
 		self.running = True
+		self._bridge: IDEBridge | None = None
+		self._caps: BridgeCapabilities = BridgeCapabilities(backend=BackendType.GRPC)
 		# IDEBridge: create execution bridge based on config
 		try:
 			self._bridge = create_bridge()
@@ -56,8 +58,6 @@ class IDEWorker:
 			logger.info(f"[IDEWorker] Bridge: {self._caps.backend.value.upper()} (auto_approve={self._caps.auto_approve})")
 		except Exception as e:
 			logger.warning(f"[IDEWorker] Bridge creation failed, falling back to gRPC-only: {e}")
-			self._bridge = None
-			self._caps = None
 
 	def run(self):
 		logger.info("Red-Pill AntigravityIDEPlugin Worker started.")
@@ -474,6 +474,12 @@ class IDEWorker:
 			f"{history_text}\n"
 		)
 
+		if not self._bridge:
+			logger.error(f"[{msg_ids}] No bridge available to execute prompt")
+			for m_id in msg_ids:
+				cursor.execute("UPDATE inbox SET retries = retries + 1 WHERE id = ?", (m_id,))
+			return
+
 		try:
 			result = self._bridge.prompt(prompt, timeout=300)
 		except Exception as e:
@@ -808,6 +814,8 @@ class IDEWorker:
 		conn.close()
 
 	def check_minion_inbox_auto_inject_agy(self):
+		if not self._bridge:
+			return
 		activity_file = Path(os.environ.get("HOME", "")) / ".gemini" / "antigravity" / "activity_tracker"
 		if activity_file.exists():
 			import time
@@ -840,6 +848,8 @@ class IDEWorker:
 				logger.error(f"[Agy] Failed to process minion reports: {result.error}")
 
 	def process_cognitive_queue_agy(self):
+		if not self._bridge:
+			return
 		from red_pill.cognitive.queue_manager import CognitiveQueueManager
 
 		queue_manager = CognitiveQueueManager()

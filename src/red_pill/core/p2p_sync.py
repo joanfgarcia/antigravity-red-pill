@@ -49,7 +49,7 @@ def resolve_peer_id(peer_name_or_id: str) -> str:
 			with open(peers_file, "r") as f:
 				peers = json.load(f)
 			if peer_name_or_id in peers:
-				return peers[peer_name_or_id]
+				return str(peers[peer_name_or_id])
 		except Exception:
 			pass
 	return peer_name_or_id
@@ -191,12 +191,14 @@ class SovereignSyncEngine:
 
 			coll_info = self.qdrant_client.get_collection(coll)
 			vectors_config = coll_info.config.params.vectors
-			if hasattr(vectors_config, "size"):
+			from qdrant_client.http.models import VectorParams
+
+			if isinstance(vectors_config, VectorParams):
 				vector_size = vectors_config.size
 				distance = vectors_config.distance.value if hasattr(vectors_config.distance, "value") else str(vectors_config.distance)
 			elif isinstance(vectors_config, dict):
 				first_val = list(vectors_config.values())[0] if vectors_config else None
-				if first_val and hasattr(first_val, "size"):
+				if isinstance(first_val, VectorParams):
 					vector_size = first_val.size
 					distance = first_val.distance.value if hasattr(first_val.distance, "value") else str(first_val.distance)
 				else:
@@ -314,7 +316,7 @@ class SovereignSyncEngine:
 		qdrant_delta = payload_dict.get("qdrant", {})
 		self.apply_qdrant_delta(qdrant_delta)
 
-	def transmit_sync_payload(self, target_peer: str, collections: List[str], last_sync_timestamp: float) -> str:
+	def transmit_sync_payload(self, target_peer: str, collections: List[str], last_sync_timestamp: float) -> str | None:
 		payload = self.generate_sync_payload(collections, last_sync_timestamp)
 		transmitter = ChunkedPayloadTransmitter()
 		chunks = transmitter.chunk_payload(payload)
@@ -332,7 +334,7 @@ class SovereignSyncEngine:
 			conn.commit()
 
 		logger.info(f"Enqueued {len(chunks)} sync chunks for peer {target_peer} (session: {chunks[0]['session_id']})")
-		return chunks[0]["session_id"]
+		return chunks[0]["session_id"] if chunks else None
 
 	def process_incoming_syncs(self) -> int:
 		from red_pill.core.inbox import MinionInbox
@@ -341,7 +343,7 @@ class SovereignSyncEngine:
 		unread = inbox.get_unread(limit=100)
 
 		transmitter = ChunkedPayloadTransmitter()
-		chunks_by_session = {}
+		chunks_by_session: dict[str, list[tuple[dict, int]]] = {}
 		reports_to_mark = []
 
 		for report in unread:

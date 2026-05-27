@@ -245,9 +245,10 @@ class DriveEvaluator:
 					content = content[7:]
 				if content.endswith("```"):
 					content = content[:-3]
-				content = content.strip()
 				task_payload = json.loads(content)
-				return task_payload
+				if isinstance(task_payload, dict):
+					return task_payload
+				return None
 		except Exception as e:
 			logger.warning(f"[DRIVE] Failed to generate dynamic spark via local LLM: {e}")
 			return None

@@ -85,7 +85,7 @@ class GrpcBridge(IDEBridge):
 		"""Check if the LanguageServer is reachable."""
 		try:
 			client = self._get_client()
-			return client.connected
+			return bool(client.connected)
 		except Exception:
 			return False
 
@@ -135,7 +135,8 @@ class GrpcBridge(IDEBridge):
 		"""
 		try:
 			client = self._get_client()
-			return client.get_cascade_trajectory_steps(cascade_id, start_index, end_index)
+			steps: List[Dict[str, Any]] = client.get_cascade_trajectory_steps(cascade_id, start_index, end_index)
+			return steps
 		except Exception as e:
 			logger.error(f"[GrpcBridge] get_trajectory_steps failed: {e}")
 			return []

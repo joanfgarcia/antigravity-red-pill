@@ -1,5 +1,18 @@
 ## [7.1.0] - Unreleased
 
+### 🛡️ Syntax Guard — Real-Time Syntax Integrity Shield
+- **[INCIDENT] Agent-Induced Syntax Corruption (2026-05-26)**: During a high-volume refactoring session (session `ab66007b`), the agent corrupted indentation in 6 critical Python files via `replace_file_content` tool calls that stripped leading tabs. This caused a cascading failure across all `systemd --user` services for ~10 hours (7 wake cycles lost). Root cause: the LLM model generated `ReplacementContent` without preserving tab indentation on deeply nested lines.
+  - **Files repaired**: `config.py`, `worker.py`, `sleep.py`, `p2p_sync.py`, `telegram_session.py`, `grpc_bridge.py`
+  - **Additional fixes**: Resolved infinite recursion bug in `config.py` `cache_clear` monkey-patching, and restored logic changes that were mixed with the indentation corruption in `drive_evaluator.py` and `p2p_sync.py`.
+- **[FEAT] Syntax Guard Watcher (inotify)**: Integrated a real-time filesystem watcher into `LazarusPulse._syntax_guard_watcher()` using `watchfiles.awatch` (Rust/inotify). Monitors all `.py` files under `src/red_pill/` with 3s debounce and 10s per-file cooldown. On `SyntaxError`/`IndentationError`:
+  - Fires pain signal `signal_syntax_failure` (severity 9.5)
+  - Sends desktop notification via `notify-send`
+  - Auto-heals by restoring the file from `git HEAD`
+  - Zero CPU when idle, zero tokens, milliseconds on trigger.
+- **[FEAT] Syntax Guard Sentinel Plugin (hourly safety net)**: New `check_syntax.py` sentinel plugin that runs `py_compile` on 24 critical modules during the hourly auditor cycle. Uses mtime cache to skip unchanged files. Provides defense-in-depth if the daemon is not running.
+- **[FIX] Config Cache Recursion Trap**: Refactored `_clear_both_caches()` in `config.py` to capture the original `get_config_cached.cache_clear` reference before monkey-patching, preventing infinite recursion when `cache_clear` is called.
+
+
 ### 🧠 Sovereign Drive desatendido y Sesiones de Telegram desacopladas
 - **[FEAT] Persistencia local de Telegram**: Implementada la clase `TelegramSessionManager` en [telegram_session.py](file:///home/joan/Documents/IA/sharing/src/red_pill/plugins/antigravity_ide/telegram_session.py) para guardar el historial de conversaciones de Telegram de forma estructurada e independiente en `$XDG_DATA_HOME/red-pill/telegram_conversations/`, evitando la creación de pestañas fantasmas en el IDE.
 - **[FEAT] Comandos desacoplados de Telegram**: Refactorizado [worker.py](file:///home/joan/Documents/IA/sharing/src/red_pill/plugins/antigravity_ide/worker.py) para soportar los comandos `/list`, `/new`, `/switch` y el nuevo `/delete` sobre los archivos de conversaciones locales y la base de datos de mapeo SQLite (`events.db`), sin necesidad de comunicación gRPC hacia la UI activa.

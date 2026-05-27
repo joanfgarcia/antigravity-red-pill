@@ -131,9 +131,9 @@ def _sanitize_llm_json(raw_json: str) -> str:
 	def _fix_escape(m: _re.Match) -> str:
 		char_after = m.group(1)
 		if char_after in _VALID_ESCAPES:
-			return m.group(0)  # legal — leave untouched
+			return str(m.group(0))  # legal — leave untouched
 		# Illegal escape: double the backslash so it becomes a literal '\'
-		return "\\\\" + char_after
+		return str("\\\\" + char_after)
 
 	return _re.sub(r"\\(.)", _fix_escape, raw_json)
 
