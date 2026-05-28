@@ -25,6 +25,7 @@ class SovereignDaemon:
 		# Call DriveEvaluator._scrape_context() as instructed to replace/retrieve context
 		try:
 			from red_pill.cognitive.drive_evaluator import DriveEvaluator
+
 			evaluator = DriveEvaluator(None)
 			context_data = evaluator._scrape_context()
 			logger.info(f"[Daemon] Scraped context for entropy scan:\n{context_data}")

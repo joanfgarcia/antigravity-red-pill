@@ -86,6 +86,8 @@
 - **[FEAT] Graceful Sandboxing in Pulse Manager**: Patched `schedule_pulse.py` to check D-Bus and systemctl availability using dynamic probes, preventing crashes inside containerized sandboxes lacking systemd.
 - **[FIX] Pydantic DotEnv Settings Parsing**: Avoided `pydantic-settings` JSON parsing failures for list variables by changing type annotations to `Any` combined with `@field_validator(..., mode="before")` for `DEEP_RECALL_TRIGGERS`, `METABOLISM_AUTO_COLLECTIONS`, and `PRE_HEATING_HOT_COLORS`.
 - **[TEST] Lifecycle E2E Sandbox Suite**: Added stages 2.5 and 2.6 in `tests/sandbox/test_lifecycle.sh` to execute and verify the automated `bunker install` and `bunker update` lifecycle routines in Podman sandboxes.
+- **[FEAT] Zip Upgrade Mode & Nested Unwrapping**: Added `--mode user` zip extraction support with robust nested folder auto-detection and unwrapping logic in [upgrade.sh](file:///home/joan/Documents/IA/sharing/scripts/upgrade.sh).
+- **[FEAT] Embedded Migrations in Upgrade Loop**: Integrated automatic dependency alignment (`uv sync`) and database schema migrations (`uv run python -m neon_link.db`) directly into the automated lifecycle [upgrade.sh](file:///home/joan/Documents/IA/sharing/scripts/upgrade.sh) script.
 
 ### 🔌 Antigravity Python SDK Connection Audit
 - **[AUDIT] Viability Assessment of google-antigravity**: Conducted a comprehensive audit of the `LocalConnectionStrategy` inside the Google Antigravity SDK (`google-antigravity` package).
@@ -126,6 +128,7 @@
 ### 🏎️ Ferrari Pipeline — Session-Level Casual Mode
 - **[FEAT] Casual Mode Latch**: `05_cognitive_router` and `06_tone_adapter` now share a session-level latch via `_05_cognitive_router_state.py`. Saying "charlemos" activates casual mode for the entire conversation; work keywords ("arregla", "fix", "commit", etc.) deactivate it.
 - **[NEW] `_05_cognitive_router_state.py`**: Shared state module for casual mode latch between Ferrari plugins.
+- **[FEAT] Complete Ferrari Pipeline Suppression**: Propagated the casual override silence latch across the entire Ferrari Protocol suite (plugins 05 to 11), ensuring absolute suppression (`""`) of background tone directives and proactive/preload headers when the casual override is active.
 
 ### 🔥 Hot-Reload Interceptor Pipeline
 - **[FEAT] `reload_plugins()`**: New function in `interceptors/__init__.py` that hot-reloads all Ferrari plugins via `importlib.reload` without restarting the MCP server. Includes automatic rollback if all plugins fail, and structured `[HOT RELOAD][ERROR]` logs for the Sentinel.

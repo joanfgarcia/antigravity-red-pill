@@ -52,18 +52,84 @@ def detect_category_heuristics(text: str) -> str:
 		return "work"
 
 	tech_keywords = {
-		"code", "código", "test", "pytest", "bug", "error", "git", "github", "diff", "patch",
-		"repo", "repository", "docker", "systemd", "systemctl", "mcp", "api", "endpoint",
-		"database", "db", "query", "python", "rust", "compile", "script", "cli", "command",
-		"terminal", "bash", "shell", "exception", "traceback", "stacktrace", "import", "class ",
-		"def ", "fn ", "const ", "impl ", "interface", "refactor", "build", "deploy", "server",
-		"client", "vram", "gpu", "cuda", "npu", "cpu", "memory", "cache", "token", "llm",
-		"prompt", "model", "config", "port", "socket", "grpc", "json", "xml", "yaml", "file",
-		"directory", "path", "permissions", "chmod", "chown", "ssh", "curl", "wget", "http"
+		"code",
+		"código",
+		"test",
+		"pytest",
+		"bug",
+		"error",
+		"git",
+		"github",
+		"diff",
+		"patch",
+		"repo",
+		"repository",
+		"docker",
+		"systemd",
+		"systemctl",
+		"mcp",
+		"api",
+		"endpoint",
+		"database",
+		"db",
+		"query",
+		"python",
+		"rust",
+		"compile",
+		"script",
+		"cli",
+		"command",
+		"terminal",
+		"bash",
+		"shell",
+		"exception",
+		"traceback",
+		"stacktrace",
+		"import",
+		"class ",
+		"def ",
+		"fn ",
+		"const ",
+		"impl ",
+		"interface",
+		"refactor",
+		"build",
+		"deploy",
+		"server",
+		"client",
+		"vram",
+		"gpu",
+		"cuda",
+		"npu",
+		"cpu",
+		"memory",
+		"cache",
+		"token",
+		"llm",
+		"prompt",
+		"model",
+		"config",
+		"port",
+		"socket",
+		"grpc",
+		"json",
+		"xml",
+		"yaml",
+		"file",
+		"directory",
+		"path",
+		"permissions",
+		"chmod",
+		"chown",
+		"ssh",
+		"curl",
+		"wget",
+		"http",
 	}
 
 	import re
-	words = set(re.findall(r'[a-zA-Z0-9_]+', text_lower))
+
+	words = set(re.findall(r"[a-zA-Z0-9_]+", text_lower))
 	if words.intersection(tech_keywords):
 		return "work"
 	return "social"
@@ -470,9 +536,7 @@ def erode_work_hubs(memory_manager) -> None:
 	from qdrant_client import models as qm
 
 	# Retrieve all synthesis hubs in work_memories
-	scroll_filter = qm.Filter(
-		must=[qm.FieldCondition(key="metadata.lazarus_phase", match=qm.MatchValue(value="synthesis_hub"))]
-	)
+	scroll_filter = qm.Filter(must=[qm.FieldCondition(key="metadata.lazarus_phase", match=qm.MatchValue(value="synthesis_hub"))])
 
 	try:
 		# Scroll to get all hubs (limit=1000 should be plenty for hubs)
@@ -520,22 +584,12 @@ def erode_work_hubs(memory_manager) -> None:
 			deletion_threshold = 0.3
 			if new_score <= deletion_threshold or new_intensity <= 0.05:
 				points_to_delete.append(hub.id)
-				logger.info(f"[SLEEP ENGINE] Hub {hub.id} in 'work_memories' eroded below threshold (score={new_score}, intensity={new_intensity}). Deleting.")
-			else:
-				update_payload = {
-					"utility_beta": new_beta,
-					"reinforcement_score": new_score,
-					"intensity": new_intensity,
-					"last_recalled_at": now
-				}
-				update_operations.append(
-					qm.SetPayloadOperation(
-						set_payload=qm.SetPayload(
-							payload=update_payload,
-							points=[hub.id]
-						)
-					)
+				logger.info(
+					f"[SLEEP ENGINE] Hub {hub.id} in 'work_memories' eroded below threshold (score={new_score}, intensity={new_intensity}). Deleting."
 				)
+			else:
+				update_payload = {"utility_beta": new_beta, "reinforcement_score": new_score, "intensity": new_intensity, "last_recalled_at": now}
+				update_operations.append(qm.SetPayloadOperation(set_payload=qm.SetPayload(payload=update_payload, points=[hub.id])))
 
 	if update_operations:
 		try:

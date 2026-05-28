@@ -326,10 +326,10 @@ def test_profile_temperature_scaling(mock_curiosity_env, monkeypatch):
 
 def test_fsrs_decay_calculation(mock_curiosity_env, monkeypatch):
 	queue_manager, tmp_path = mock_curiosity_env
-	
+
 	# Isolate Aleth_Core root to prevent writing to real TODO.md
 	monkeypatch.setattr("red_pill.core.paths.get_aleth_core_root", lambda: tmp_path / "aleth_core")
-	
+
 	evaluator = DriveEvaluator(queue_manager)
 
 	# 1. When last_user_activity.txt does not exist, temporal_decay should be 1.0
@@ -339,6 +339,7 @@ def test_fsrs_decay_calculation(mock_curiosity_env, monkeypatch):
 
 	# Let's mock todo_path
 	from red_pill.core.paths import get_aleth_core_root
+
 	todo_dir = get_aleth_core_root()
 	todo_dir.mkdir(parents=True, exist_ok=True)
 	todo_file = todo_dir / "TODO.md"
@@ -372,6 +373,7 @@ def test_fsrs_decay_calculation(mock_curiosity_env, monkeypatch):
 			activity_file.touch()
 
 			original_stat = Path.stat
+
 			def mock_stat_fn(self, *args, **kwargs):
 				if "last_user_activity.txt" in str(self):
 					mock_stat = MagicMock()
@@ -379,6 +381,7 @@ def test_fsrs_decay_calculation(mock_curiosity_env, monkeypatch):
 					mock_stat.st_mode = 33188
 					return mock_stat
 				return original_stat(self, *args, **kwargs)
+
 			monkeypatch.setattr(Path, "stat", mock_stat_fn)
 
 			with patch("red_pill.cognitive.drive_evaluator.logger") as mock_logger:
@@ -393,15 +396,17 @@ def test_fsrs_decay_calculation(mock_curiosity_env, monkeypatch):
 
 def test_sovereign_daemon_entropy_scan(mock_curiosity_env, monkeypatch):
 	queue_manager, tmp_path = mock_curiosity_env
-	
+
 	# Isolate Aleth_Core root to prevent writing to real TODO.md
 	monkeypatch.setattr("red_pill.core.paths.get_aleth_core_root", lambda: tmp_path / "aleth_core")
-	
+
 	from red_pill.swarm.daemon import SovereignDaemon
+
 	daemon = SovereignDaemon(tmp_path / "daemon_queue.db")
 
 	# Mock TODO.md path to have 4 pending tasks (4 * 0.2 = 0.8 entropy)
 	from red_pill.core.paths import get_aleth_core_root
+
 	todo_dir = get_aleth_core_root()
 	todo_dir.mkdir(parents=True, exist_ok=True)
 	todo_file = todo_dir / "TODO.md"

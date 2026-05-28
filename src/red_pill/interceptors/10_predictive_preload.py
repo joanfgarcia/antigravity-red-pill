@@ -50,6 +50,7 @@ class PredictivePreloadPlugin(BaseInterceptorPlugin):
 
 	async def execute(self, prompt: str) -> str:
 		from red_pill.interceptors import _05_cognitive_router_state as _cr_state
+
 		if _cr_state.is_casual_active():
 			return ""
 
