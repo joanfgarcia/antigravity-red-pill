@@ -13,32 +13,146 @@ NC='\033[0m'
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-echo -e "${BLUE}--- Iniciando Sincronización Soberana (Upgrade) ---${NC}"
+function print_help {
+	echo -e "${BLUE}🛰️ Red Pill Sovereign Upgrade Tool${NC}"
+	echo -e "Uso: ./scripts/upgrade.sh --mode <dev|user> [opciones]"
+	echo -e ""
+	echo -e "Opciones:"
+	echo -e "  ${GREEN}--mode dev${NC}           Actualización vía git pull origin (Perfil Core / Developer)"
+	echo -e "  ${GREEN}--mode user${NC}          Actualización vía ZIP local y rsync (Perfil Titanium / Morpheus)"
+	echo -e "  ${GREEN}--zip <path>${NC}         Ruta absoluta o relativa al archivo .zip (requerido si --mode user)"
+	echo -e "  ${GREEN}--auto${NC}               Omitir confirmaciones interactivas"
+	echo -e "  ${GREEN}--help${NC}               Mostrar esta ayuda"
+	echo -e ""
+}
 
+MODE=""
+ZIP_PATH=""
+AUTO_MODE=false
+
+while [[ "$#" -gt 0 ]]; do
+	case $1 in
+		--mode)
+			if [[ -z "${2:-}" ]]; then
+				echo -e "${RED}[ERROR] Falta el argumento para --mode${NC}"
+				exit 1
+			fi
+			MODE="$2"
+			shift
+			;;
+		--zip)
+			if [[ -z "${2:-}" ]]; then
+				echo -e "${RED}[ERROR] Falta el argumento para --zip${NC}"
+				exit 1
+			fi
+			ZIP_PATH="$2"
+			shift
+			;;
+		--auto)
+			AUTO_MODE=true
+			;;
+		--help|-h)
+			print_help
+			exit 0
+			;;
+		*)
+			echo -e "${RED}Parámetro desconocido: $1${NC}"
+			print_help
+			exit 1
+			;;
+	esac
+	shift
+done
+
+if [[ -z "$MODE" ]]; then
+	echo -e "${RED}[ERROR] Debes especificar un modo: --mode dev o --mode user${NC}"
+	print_help
+	exit 1
+fi
+
+if [[ "$MODE" != "dev" && "$MODE" != "user" ]]; then
+	echo -e "${RED}[ERROR] Debes especificar un modo válido: --mode dev o --mode user${NC}"
+	print_help
+	exit 1
+fi
+
+if [[ "$MODE" == "user" && -z "$ZIP_PATH" ]]; then
+	echo -e "${RED}[ERROR] El modo 'user' requiere especificar la ruta del ZIP: --zip <path>${NC}"
+	print_help
+	exit 1
+fi
+
+echo -e "${BLUE}--- Iniciando Sincronización Soberana (Upgrade) ---${NC}"
 cd "$REPO_ROOT"
 
 # 1. Code Sync
-if [ -d ".git" ]; then
-	echo -e "${YELLOW}Detectado repositorio Git. Sincronizando con el origen...${NC}"
-	git fetch origin
-	# Check current branch
-	CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-	echo -e "Rama actual: ${GREEN}$CURRENT_BRANCH${NC}"
-	
-	# Ask for confirmation before pull if NOT in auto mode
-	AUTO_MODE=false
-	if [[ "${1:-}" == "--auto" ]]; then AUTO_MODE=true; fi
-	
-	if [ "$AUTO_MODE" = "false" ]; then
-		read -p "¿Deseas ejecutar 'git pull' ahora? (y/N): " SHOULD_PULL
-		if [[ "$SHOULD_PULL" =~ ^[Yy]$ ]]; then
+if [[ "$MODE" == "dev" ]]; then
+	if [ -d ".git" ]; then
+		echo -e "${YELLOW}Detectado repositorio Git. Sincronizando con el origen (Modo Dev)...${NC}"
+		git fetch origin
+		CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+		echo -e "Rama actual: ${GREEN}$CURRENT_BRANCH${NC}"
+		
+		if [ "$AUTO_MODE" = false ]; then
+			read -p "¿Deseas ejecutar 'git pull' ahora? (y/N): " SHOULD_PULL
+			if [[ "$SHOULD_PULL" =~ ^[Yy]$ ]]; then
+				git pull origin "$CURRENT_BRANCH"
+			fi
+		else
 			git pull origin "$CURRENT_BRANCH"
 		fi
 	else
-		git pull origin "$CURRENT_BRANCH"
+		echo -e "${RED}[ERROR] No se detectó repositorio Git pero se especificó --mode dev.${NC}"
+		exit 1
 	fi
-else
-	echo -e "${BLUE}[INFO] No se detectó repositorio Git. Omitiendo sync de código.${NC}"
+elif [[ "$MODE" == "user" ]]; then
+	if [ ! -f "$ZIP_PATH" ]; then
+		echo -e "${RED}[ERROR] No se encuentra el archivo ZIP en: $ZIP_PATH${NC}"
+		exit 1
+	fi
+	
+	TEMP_DIR="/tmp/rp-update-temp"
+	echo -e "${BLUE}Extrayendo ZIP en directorio temporal ($TEMP_DIR)...${NC}"
+	rm -rf "$TEMP_DIR"
+	mkdir -p "$TEMP_DIR"
+	unzip -q "$ZIP_PATH" -d "$TEMP_DIR/"
+	
+	# Find the actual root inside the extracted zip.
+	# If the ZIP was packed with a single root directory (e.g. GitHub ZIP), we use that directory.
+	# Otherwise, if there are files or multiple directories at the root, we use the temp directory.
+	TOP_LEVEL_COUNT=$(find "$TEMP_DIR" -mindepth 1 -maxdepth 1 | wc -l)
+	TOP_LEVEL_DIR_COUNT=$(find "$TEMP_DIR" -mindepth 1 -maxdepth 1 -type d | wc -l)
+	if [ "$TOP_LEVEL_COUNT" -eq 1 ] && [ "$TOP_LEVEL_DIR_COUNT" -eq 1 ]; then
+		EXTRACTED_ROOT=$(find "$TEMP_DIR" -mindepth 1 -maxdepth 1 -type d)
+	else
+		EXTRACTED_ROOT="$TEMP_DIR"
+	fi
+	
+	echo -e "${YELLOW}Sincronizando código local con el contenido del ZIP (Modo User)...${NC}"
+	if [ "$AUTO_MODE" = false ]; then
+		read -p "¿Estás seguro de que quieres sobreescribir tu entorno con rsync --delete? (y/N): " SHOULD_RSYNC
+		if [[ ! "$SHOULD_RSYNC" =~ ^[Yy]$ ]]; then
+			echo -e "${RED}Operación abortada por el usuario.${NC}"
+			rm -rf "$TEMP_DIR"
+			exit 0
+		fi
+	fi
+	
+	rsync -a --delete \
+		--exclude='.git/' \
+		--exclude='.env' \
+		--exclude='.local/' \
+		--exclude='.config/' \
+		--exclude='.venv/' \
+		--exclude='3rdparty/' \
+		--exclude='__pycache__/' \
+		--exclude='*.pyc' \
+		--exclude='.agent/' \
+		--exclude='storage/' \
+		"$EXTRACTED_ROOT/" "$REPO_ROOT/"
+	
+	rm -rf "$TEMP_DIR"
+	echo -e "${GREEN}✓ Código actualizado con éxito vía ZIP. Se recomienda revisar 'git status' y hacer commit.${NC}"
 fi
 
 # 2. WORKSPACE_ROOT & Environment Check
