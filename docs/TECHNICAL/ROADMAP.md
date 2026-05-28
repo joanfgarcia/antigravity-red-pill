@@ -105,7 +105,11 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
 - [x] **NPU Inference Provider (FastFlowLM)**: Integrate `flm serve` (port 52625, OpenAI-compatible API) as a new `FastFlowLMInferenceProvider` in the Bünker's `ProviderRegistry`. This enables ~2W background inference on the AMD XDNA2 NPU for low-priority tasks (Echo, telemetry, sleep distillation). Requires `memlock=unlimited` at service level.
 - [ ] **NPU Large Model Benchmarks**: Test `deepseek-r1:8b`, `llama3.1:8b`, `qwen3.5:9b` on NPU to find the best quality/speed tradeoff vs CUDA.
 - [ ] **memlock Permanent Configuration**: Validate `limits.conf` unlimited setting persists after reboot. Add to `install_neo.sh` bootstrap if not automatic.
-- [ ] **Firmware Partition Protection (Project BIOS)**: Classify critical system modules (~15 files: `heartbeat.py`, `config.py`, `cli.py`, `worker.py`, `sleep.py`, `paths.py`, etc.) as immutable "firmware". Agent edits target a staging copy; promotion to production requires sandbox validation (py_compile + ruff + pytest) and explicit operator approval. Prevents agent-induced corruption of critical infrastructure. See: [RFC-001](BUNKER/RFC_001_FIRMWARE_PROTECTION.md).
+- [/] **Firmware Partition Protection (Project BIOS)**: Classify critical system modules (~15 files: `heartbeat.py`, `config.py`, `cli.py`, `worker.py`, `sleep.py`, `paths.py`, etc.) as immutable "firmware". Agent edits target a staging copy; promotion to production requires sandbox validation (py_compile + ruff + pytest) and explicit operator approval. Prevents agent-induced corruption of critical infrastructure. **Status: RFC-001 design complete.**
+- [x] **Lazarus Pulse Syntax Guard (AD-012)**: Embedded an inotify-based file watcher directly into the `LazarusPulse` watchdog service (`redpill-pulse.service`) to validate syntax in real-time before promotion.
+- [x] **FSRS-based Dynamic System Entropy**: Transitioned the `SovereignDaemon` from static cooldowns to dynamic entropy monitoring. The dynamic calculation integrates task backlog (`TODO.md`), local git changes (`+0.3` entropy), and time-since-last-activity (FSRS decay). Triggers memory compaction dynamically when entropy exceeds `0.8`.
+- [x] **Bayesian Hub Erosion (Sleep Engine)**: Automated cleanup of old/unreferenced synthesis hubs in `work_memories` during sleep cycles based on a Bayesian utility model ($\beta_{new} = \beta + 0.5$ and 15% intensity decay).
+
 
 ### Phase 3.5: Persistent Consciousness (Medium-Long Term — The Awakening)
 
