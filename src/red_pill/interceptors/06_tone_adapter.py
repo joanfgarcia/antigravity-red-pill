@@ -80,11 +80,10 @@ class ToneAdapterPlugin(BaseInterceptorPlugin):
 
 			# Casual override: read session-level latch from cognitive router.
 			if _cr_state.is_casual_active():
-				tone = _CASUAL_TONE
-				mode_label = f"{color.upper()} → CASUAL OVERRIDE"
-			else:
-				tone = _TONE_DIRECTIVES.get(color, _TONE_DIRECTIVES["gray"])
-				mode_label = color.upper()
+				return ""
+
+			tone = _TONE_DIRECTIVES.get(color, _TONE_DIRECTIVES["gray"])
+			mode_label = color.upper()
 
 			lines = [
 				"=== TONE ADAPTER (FERRARI PROTOCOL) ===",

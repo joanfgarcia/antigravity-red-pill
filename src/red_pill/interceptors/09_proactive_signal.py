@@ -43,6 +43,10 @@ class ProactiveSignalPlugin(BaseInterceptorPlugin):
 		return getattr(cfg.get_config(), "PROACTIVE_SIGNAL_ENABLED", True)
 
 	async def execute(self, prompt: str) -> str:
+		from red_pill.interceptors import _05_cognitive_router_state as _cr_state
+		if _cr_state.is_casual_active():
+			return ""
+
 		global _pain_signal_emitted
 		try:
 			from red_pill.memory import MemoryManager
