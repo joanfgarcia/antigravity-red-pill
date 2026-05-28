@@ -8,6 +8,7 @@ evaluación heurística del entorno y EIG (Expected Information Gain).
 
 import json
 import logging
+import math
 import time
 from typing import Any, Dict, Optional
 
@@ -327,14 +328,21 @@ class DriveEvaluator:
 		except Exception as e:
 			logger.warning(f"[DRIVE] Failed to calculate workspace entropy: {e}")
 
-		# Temporal Decay: horas de inactividad del usuario
+		# Temporal Decay: horas de inactividad del usuario (decaimiento hedónico FSRS)
 		try:
 			if activity_file.exists():
 				mtime = activity_file.stat().st_mtime
 				hours_idle = (time.time() - mtime) / 3600.0
-				temporal_decay = min(1.0, hours_idle * 0.1)
-				entropy += temporal_decay
-				logger.debug(f"[DRIVE] Temporal Decay Entropy: {temporal_decay:.2f} (hours idle: {hours_idle:.2f})")
+				# FSRS formula: R = e^(ln(0.9) * t / S)
+				# S (stability) is set to 0.5 days (12 hours) by default.
+				stability_days = 0.5
+				time_passed_days = hours_idle / 24.0
+				r = math.exp(math.log(0.9) * (time_passed_days / stability_days))
+				temporal_decay = 1.0 - r
+			else:
+				temporal_decay = 1.0
+			entropy += temporal_decay
+			logger.debug(f"[DRIVE] Temporal Decay Entropy (FSRS): {temporal_decay:.2f} (hours idle: {hours_idle:.2f})")
 		except Exception as e:
 			logger.warning(f"[DRIVE] Failed to calculate temporal decay entropy: {e}")
 

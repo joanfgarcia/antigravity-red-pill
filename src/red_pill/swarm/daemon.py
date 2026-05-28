@@ -22,28 +22,56 @@ class SovereignDaemon:
 		If the queue is empty, the daemon checks memory/system entropy (Bayesian Engine).
 		If high, it injects a self-generated task (Sovereign Will).
 		"""
+		# Call DriveEvaluator._scrape_context() as instructed to replace/retrieve context
+		try:
+			from red_pill.cognitive.drive_evaluator import DriveEvaluator
+			evaluator = DriveEvaluator(None)
+			context_data = evaluator._scrape_context()
+			logger.info(f"[Daemon] Scraped context for entropy scan:\n{context_data}")
+		except Exception as e:
+			logger.warning(f"[Daemon] Failed to scrape context via DriveEvaluator: {e}")
+
 		entropy_level = 0.0
 		try:
+			import math
 			import subprocess
 
-			from red_pill.core.paths import get_aleth_core_root, get_bunker_root
+			from red_pill.cognitive.drive_evaluator import DriveEvaluator
+			from red_pill.core.paths import get_aleth_core_root, get_bunker_root, get_state_dir
 
-			# 1. Backlog Entropy
+			# 1. Backlog Entropy: Cantidad de tareas [ ] pendientes en TODO.md (cada tarea añade 0.2 de entropía)
 			todo_path = get_aleth_core_root() / "TODO.md"
 			backlog_cnt = 0
 			if todo_path.exists():
 				with open(todo_path, "r", encoding="utf-8") as f:
 					backlog_cnt = f.read().count("[ ]")
+			backlog_entropy = backlog_cnt * 0.2
 
-			# 2. Workspace Entropy
+			# 2. Workspace Entropy: Presencia de ficheros modificados localmente (git status -s añade 0.3 de entropía)
 			git_mods = 0
 			result = subprocess.run(["git", "status", "-s"], cwd=str(get_bunker_root()), capture_output=True, text=True, timeout=5)
 			if result.returncode == 0 and result.stdout.strip():
 				git_mods = 1
+			workspace_entropy = git_mods * 0.3
+
+			# 3. Temporal Decay: Tiempo transcurrido desde la última interacción (decaimiento hedónico FSRS)
+			activity_file = get_state_dir() / "last_user_activity.txt"
+			if activity_file.exists():
+				mtime = activity_file.stat().st_mtime
+				hours_idle = (time.time() - mtime) / 3600.0
+				stability_days = 0.5
+				time_passed_days = hours_idle / 24.0
+				r = math.exp(math.log(0.9) * (time_passed_days / stability_days))
+				temporal_decay = 1.0 - r
+			else:
+				temporal_decay = 1.0
 
 			# Combined score
-			entropy_level = (backlog_cnt * 0.1) + (git_mods * 0.3)
-			logger.info(f"[Daemon] Calculated legacy system entropy: {entropy_level:.2f}")
+			entropy_level = backlog_entropy + workspace_entropy + temporal_decay
+			logger.info(
+				f"[Daemon] Calculated system entropy: {entropy_level:.2f} "
+				f"(backlog: {backlog_entropy:.2f}, workspace: {workspace_entropy:.2f}, temporal_decay: {temporal_decay:.2f})"
+			)
 		except Exception as e:
 			logger.warning(f"[Daemon] Failed to calculate dynamic system entropy: {e}")
 

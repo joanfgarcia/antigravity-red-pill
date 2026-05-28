@@ -322,3 +322,112 @@ def test_profile_temperature_scaling(mock_curiosity_env, monkeypatch):
 		req = args[0]
 		payload = json.loads(req.data.decode("utf-8"))
 		assert payload["temperature"] == 0.1
+
+
+def test_fsrs_decay_calculation(mock_curiosity_env, monkeypatch):
+	queue_manager, tmp_path = mock_curiosity_env
+	
+	# Isolate Aleth_Core root to prevent writing to real TODO.md
+	monkeypatch.setattr("red_pill.core.paths.get_aleth_core_root", lambda: tmp_path / "aleth_core")
+	
+	evaluator = DriveEvaluator(queue_manager)
+
+	# 1. When last_user_activity.txt does not exist, temporal_decay should be 1.0
+	activity_file = get_state_dir() / "last_user_activity.txt"
+	if activity_file.exists():
+		activity_file.unlink()
+
+	# Let's mock todo_path
+	from red_pill.core.paths import get_aleth_core_root
+	todo_dir = get_aleth_core_root()
+	todo_dir.mkdir(parents=True, exist_ok=True)
+	todo_file = todo_dir / "TODO.md"
+	with open(todo_file, "w") as f:
+		f.write("- [ ] Task 1\n")
+
+	# Mock git status to return empty (no mods)
+	with patch("subprocess.run") as mock_run:
+		mock_result = MagicMock()
+		mock_result.returncode = 0
+		mock_result.stdout = ""
+		mock_run.return_value = mock_result
+
+		# Case A: Activity file does not exist
+		if activity_file.exists():
+			activity_file.unlink()
+
+		# Mock time.time()
+		with patch("time.time", return_value=200000.0):
+			with patch("red_pill.cognitive.drive_evaluator.logger") as mock_logger:
+				evaluator.evaluate_pulse()
+				entropy_log = [call for call in mock_logger.info.call_args_list if "Total System Entropy" in call[0][0]]
+				assert len(entropy_log) > 0
+				log_msg = entropy_log[0][0][0]
+				calculated_entropy = float(log_msg.split(": ")[-1])
+				# backlog = 0.2, workspace = 0.0, no activity file -> temporal_decay = 1.0. Total = 1.2
+				assert calculated_entropy == pytest.approx(1.2)
+
+			# Case B: Activity file exists and has mtime = 200000 - 24 hours (86400 seconds)
+			activity_file.parent.mkdir(parents=True, exist_ok=True)
+			activity_file.touch()
+
+			original_stat = Path.stat
+			def mock_stat_fn(self, *args, **kwargs):
+				if "last_user_activity.txt" in str(self):
+					mock_stat = MagicMock()
+					mock_stat.st_mtime = 200000.0 - 86400.0
+					mock_stat.st_mode = 33188
+					return mock_stat
+				return original_stat(self, *args, **kwargs)
+			monkeypatch.setattr(Path, "stat", mock_stat_fn)
+
+			with patch("red_pill.cognitive.drive_evaluator.logger") as mock_logger:
+				evaluator.evaluate_pulse()
+				entropy_log = [call for call in mock_logger.info.call_args_list if "Total System Entropy" in call[0][0]]
+				assert len(entropy_log) > 0
+				log_msg = entropy_log[0][0][0]
+				calculated_entropy = float(log_msg.split(": ")[-1])
+				# backlog = 0.2, workspace = 0.0, temporal_decay = 1.0 - 0.81 = 0.19. Total = 0.39
+				assert calculated_entropy == pytest.approx(0.39)
+
+
+def test_sovereign_daemon_entropy_scan(mock_curiosity_env, monkeypatch):
+	queue_manager, tmp_path = mock_curiosity_env
+	
+	# Isolate Aleth_Core root to prevent writing to real TODO.md
+	monkeypatch.setattr("red_pill.core.paths.get_aleth_core_root", lambda: tmp_path / "aleth_core")
+	
+	from red_pill.swarm.daemon import SovereignDaemon
+	daemon = SovereignDaemon(tmp_path / "daemon_queue.db")
+
+	# Mock TODO.md path to have 4 pending tasks (4 * 0.2 = 0.8 entropy)
+	from red_pill.core.paths import get_aleth_core_root
+	todo_dir = get_aleth_core_root()
+	todo_dir.mkdir(parents=True, exist_ok=True)
+	todo_file = todo_dir / "TODO.md"
+	with open(todo_file, "w") as f:
+		f.write("- [ ] Task 1\n- [ ] Task 2\n- [ ] Task 3\n- [ ] Task 4\n")
+
+	# Mock git status to return modifications (0.3 entropy)
+	with patch("subprocess.run") as mock_run:
+		mock_result = MagicMock()
+		mock_result.returncode = 0
+		mock_result.stdout = "M src/red_pill/swarm/daemon.py\n"
+		mock_run.return_value = mock_result
+
+		# Mock activity file to not exist (1.0 temporal decay entropy)
+		activity_file = get_state_dir() / "last_user_activity.txt"
+		if activity_file.exists():
+			activity_file.unlink()
+
+		# Total entropy should be 0.8 + 0.3 + 1.0 = 2.1
+		# Verify that the daemon pushes a task because entropy > 0.8
+		with patch("time.time", return_value=1234567.0):
+			daemon.trigger_entropy_scan()
+
+			# Check if task was pushed to daemon queue
+			task = daemon.queue.get_next_task()
+			assert task is not None
+			assert task["source_type"] == "INTERNAL_ENTROPY"
+			payload = json.loads(task["payload"])
+			assert payload["action"] == "compress_memory"
