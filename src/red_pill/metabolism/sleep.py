@@ -316,8 +316,11 @@ def synthesize_hub(summaries: List[str]) -> str:
 					"role": "system",
 					"content": (
 						"You are a Neocortex synthesis sub-routine. Synthesize the provided memory chunks into a descriptive, "
-						"concise master summary. Do not use generic titles. Be specific about the core technical actions, "
-						"errors fixed, or philosophical/personal themes discussed. Output ONLY the summary string without any introductory phrases or formatting."
+						"concise master summary. Start the output with a descriptive, contextual title in square brackets "
+						"(e.g., '[Asymmetric Logic Loss Integration on BitNet Logic Specialist]' or '[Refactoring Ferrari Protocol Silence Latch]'), "
+						"followed by a newline, and then the summary. Do not use generic titles like '[Memory Synthesis]' or "
+						"'[Session Summary]'. Be highly specific about the core technical actions, errors fixed, or philosophical/personal "
+						"themes discussed. Output ONLY the title and summary string without any introductory phrases or formatting."
 					),
 				},
 				{"role": "user", "content": prompt},
@@ -347,9 +350,10 @@ def synthesize_hub(summaries: List[str]) -> str:
 				last_sum = summaries[-1][:60]
 				if len(summaries[-1]) > 60:
 					last_sum += "..."
-				return f"Aggregated Memory Sequence Synthesis ({len(summaries)} nodes): {first_sum} -> {last_sum}"
-			return f"Aggregated Memory Sequence Synthesis (1 node): {first_sum}"
-		return "Aggregated Memory Sequence Synthesis."
+				return f"[Aggregated Memory Sequence ({len(summaries)} nodes)] {first_sum} -> {last_sum}"
+			return f"[Aggregated Memory (1 node)] {first_sum}"
+		return "[Aggregated Memory Sequence]"
+
 
 
 class EphemeralServer:
