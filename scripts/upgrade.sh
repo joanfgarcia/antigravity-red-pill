@@ -200,6 +200,14 @@ fi
 if command -v uv &> /dev/null; then
 	echo -e "${BLUE}Igniciando migración de datos y timers...${NC}"
 	
+	# Sync virtualenv dependencies
+	echo -e "${BLUE}Sincronizando dependencias del entorno virtual (uv sync)...${NC}"
+	uv sync
+	
+	# Migrate Neon-Link database (inject sessions_mapping table)
+	echo -e "${BLUE}Migrando base de datos de Neon-Link (AgyBridge)...${NC}"
+	uv run python -m neon_link.db
+	
 	# Sanitize engrams
 	uv run red-pill sanitize --dry-run || true
 	
