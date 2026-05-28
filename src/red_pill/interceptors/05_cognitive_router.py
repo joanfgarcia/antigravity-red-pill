@@ -110,10 +110,11 @@ class CognitiveRouterPlugin(BaseInterceptorPlugin):
 				return ""
 
 			if _cr_state.is_casual_active():
-				return ""
-
-			directive = _ROUTING_DIRECTIVES.get(color, _ROUTING_DIRECTIVES["gray"])
-			mode_label = color.upper()
+				directive = _CASUAL_DIRECTIVE
+				mode_label = f"{color.upper()} → CASUAL OVERRIDE"
+			else:
+				directive = _ROUTING_DIRECTIVES.get(color, _ROUTING_DIRECTIVES["gray"])
+				mode_label = color.upper()
 
 			lines = [
 				"=== COGNITIVE ROUTER (FERRARI PROTOCOL) ===",
