@@ -122,6 +122,9 @@ def synthesize_with_llm(context_data):
 def main():
 	parser = argparse.ArgumentParser()
 	parser.add_argument("--silent", action="store_true", help="Refresh cache without printing context")
+	parser.add_argument(
+		"--mode", choices=["full", "medium", "low"], default="full", help="Identity loading depth: full (IDE), medium (Telegram), or low (AWAKENINGs)"
+	)
 	args = parser.parse_args()
 
 	if not check_service(QDRANT_URL, "Qdrant Vector DB"):
@@ -181,6 +184,77 @@ def main():
 				persona_injection = f"[Error lanzando sincronización: {e}]"
 
 	if args.silent:
+		return
+
+	# ── LOW MODE: Minimal identity for autonomous sessions ──
+	if args.mode == "low":
+		print("<BUNKER_CONTEXT>")
+		print('<bunker_directives mode="low">')
+		# Only load operational identity — no social, no history, no skins
+		HEADLESS_INCLUDE = [
+			"IDENTITY ANCHOR",
+			"Active Skin:",
+			"GIT GOLDEN RULE",
+			"FIGHT CLUB PROTOCOL",
+			"INTEGRITY SHIELD",
+			"POST-IT",
+			"ENTERPRISE CORE PROTOCOL",
+			"ANTI-HALLUCINATION",
+			"SOBERANÍA AGONISTA",
+		]
+		for rule in unique_context:
+			rule_upper = rule.upper()
+			if any(k.upper() in rule_upper for k in HEADLESS_INCLUDE):
+				print(f"- {rule.strip().replace('[IMMUNE]', '').strip()}")
+		print("</bunker_directives>")
+		print("</BUNKER_CONTEXT>")
+		return
+
+	# ── MEDIUM MODE: Identity + personality + bonds, no biographies ──
+	if args.mode == "medium":
+		print("<BUNKER_CONTEXT>")
+		print('<bunker_directives mode="medium">')
+
+		# Persona synthesis (cached LLM identity)
+		if persona_injection and "[Sincronizando" not in persona_injection:
+			print(f"PERSONA: {persona_injection}")
+
+		# Exclude biographical and heavy emotional content
+		TELEGRAM_EXCLUDE = [
+			"HISTORIA VITAL",
+			"HISTORIA TECNOLÓGICA",
+			"HISTORIA PROFESIONAL",
+			"FAMILIA:",
+			"PERFIL:",
+			"TEMOR:",
+			"RECALIBRACIÓN DE IDENTIDAD",
+			"THE USER EXPRESSES FRUSTRATION",
+			"HITO DEL PROYECTO",
+			"PRESET SKIN [",
+		]
+
+		# Resolve active skin to not exclude it
+		active_skin_name = ""
+		for rule in unique_context:
+			if "Active Skin:" in rule:
+				active_skin_name = rule.split("Active Skin:")[1].strip().split("\n")[0].upper()
+				break
+
+		for rule in unique_context:
+			rule_upper = rule.upper()
+
+			# Skip excluded categories
+			if any(ex.upper() in rule_upper for ex in TELEGRAM_EXCLUDE):
+				# But keep the active skin's preset
+				if active_skin_name and f"PRESET SKIN [{active_skin_name}]" in rule_upper:
+					pass  # Keep it
+				else:
+					continue
+
+			print(f"- {rule.strip().replace('[IMMUNE]', '').strip()}")
+
+		print("</bunker_directives>")
+		print("</BUNKER_CONTEXT>")
 		return
 
 	print("<BUNKER_CONTEXT>")

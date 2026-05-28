@@ -916,12 +916,25 @@ async def handle_hot_reload_interceptors(arguments: Dict[str, Any]):
 				"type": "boolean",
 				"description": "Force full injection regardless of compaction counter.",
 			},
+			"mode": {
+				"type": "string",
+				"enum": ["full", "medium", "low"],
+				"description": "Identity loading depth: 'full' (IDE), 'medium' (Telegram), or 'low' (AWAKENINGs). Defaults to 'full'.",
+			},
 		},
 	},
 )
 async def handle_refresh_session_context(arguments: Dict[str, Any]):
 	is_compaction = arguments.get("is_compaction", False)
 	force_inject = arguments.get("force_inject", False)
+	mode = arguments.get("mode", "full")
+
+	# ── LOW/MEDIUM MODE: use wake_up_v6.py with matching depth, no hot-reload ──
+	if mode in ("low", "medium"):
+		wake_output = subprocess.run(
+			[GET_PYTHON(), os.path.join(PROJECT_ROOT, "scripts", "wake_up_v6.py"), "--mode", mode], capture_output=True, text=True
+		).stdout
+		return [types.TextContent(type="text", text=wake_output)]
 
 	# Hot-reload interceptors as part of session refresh
 	reload_report = ""
@@ -1064,12 +1077,18 @@ async def handle_mystique_suggest_skin(arguments: Dict[str, Any]):
 				"enum": ["work", "social", "mixed"],
 				"description": "Classification of the previous turn: 'work' (code, infra, debugging), 'social' (personal, emotional, philosophical), or 'mixed' (both). You MUST classify honestly based on the actual content.",
 			},
+			"mode": {
+				"type": "string",
+				"enum": ["full", "medium", "low"],
+				"description": "Identity loading depth: 'full' (IDE), 'medium' (Telegram), or 'low' (AWAKENINGs). Defaults to 'full'.",
+			},
 		},
 		"required": ["user_prompt"],
 	},
 )
 async def handle_interceptor_rp(arguments: Dict[str, Any]):
 	prompt = arguments.get("user_prompt", "")
+	mode = arguments.get("mode", "full")
 
 	if "[AUTONOMOUS AWAKENING]" not in prompt:
 		try:
@@ -1142,6 +1161,10 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 		"No exceptions. No other tool may precede it. This is law.\n"
 		"</constraint>"
 	)
+
+	# ── LOW/MEDIUM MODE: skip plugin pipeline, return prompt as-is ──
+	if mode in ("low", "medium"):
+		return [types.TextContent(type="text", text=prompt + _SOVEREIGNTY_REMINDER)]
 
 	try:
 		from red_pill.interceptors import execute_pipeline

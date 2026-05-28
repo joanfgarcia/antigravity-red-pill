@@ -37,11 +37,29 @@ default_db = get_neon_link_db_path()
 DB_PATH = Path(os.environ.get("NEON_LINK_DB_PATH", default_db))
 
 
+# Budget guard defaults
+MAX_AWAKENINGS_PER_DAY = 8
+AWAKENING_TIMEOUT = 600
+AWAKENING_MAX_TOOL_CALLS = 40
+
+
 def get_connection():
 	conn = sqlite3.connect(str(DB_PATH), timeout=10.0)
 	conn.row_factory = sqlite3.Row
 	conn.execute("PRAGMA journal_mode=WAL;")
 	conn.execute("PRAGMA synchronous=NORMAL;")
+	# Execution ledger for budget guard
+	conn.execute(
+		"CREATE TABLE IF NOT EXISTS execution_ledger ("
+		"id INTEGER PRIMARY KEY AUTOINCREMENT, "
+		"exec_type TEXT NOT NULL, "
+		"conversation_id TEXT, "
+		"started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
+		"duration_s REAL, "
+		"response_len INTEGER DEFAULT 0, "
+		"status TEXT DEFAULT 'started'"
+		")"
+	)
 	return conn
 
 
@@ -351,6 +369,13 @@ class IDEWorker:
 			conn.close()
 			return
 
+		# ---- System channel: AWAKENINGs run in isolation (no Telegram session) ----
+		if channel == "system" and self._caps and self._caps.auto_approve:
+			self._process_awakening(combined_text, msg_ids_to_process, cursor, conn)
+			conn.commit()
+			conn.close()
+			return
+
 		# ---- IDEBridge: Direct execution path (AgyBridge) ----
 		if self._caps and self._caps.auto_approve:
 			self._process_via_bridge(combined_text, msg_ids_to_process, channel, channel_user_id, cursor, conn)
@@ -456,23 +481,37 @@ class IDEWorker:
 		# 1. Append User Message
 		tsm.append_message(session_id, "user", combined_text)
 
-		# 2. Build Consolidated prompt
-		history_text = tsm.get_history_prompt(session)
-		agent_id = os.environ.get("AGENT_ID", "Aleth")
+		# 2. Build Consolidated prompt — separate history from current message
+		# Get history WITHOUT the just-appended message (it goes in a separate block)
+		session = tsm.get_session(session_id)
+		all_steps = session.get("steps", []) if session else []
+		history_steps = all_steps[:-1] if all_steps else []
+		history_lines = []
+		for step in history_steps:
+			role = step.get("intent", "USER")
+			txt = step.get("message", {}).get("text", "")
+			if txt:
+				history_lines.append(f"{role}: {txt}")
+		history_text = "\n\n".join(history_lines)
 
 		prompt = (
 			f"<user_rules>\n"
 			f"<RULE[user_global]>\n"
-			f'<constraint critical="true" level="0" name="headless_restriction">\n'
-			f"IDENTITY ANCHOR: You are {agent_id}. Exclusively adopt this identity in all interactions.\n"
-			f"Always use tabs (\\t) for indentation.\n"
-			f"Speak direct and surgically honest.\n"
+			f'<constraint critical="true" level="0" name="telegram_session">\n'
+			f"CRITICAL: Respond ONLY to the <current_message> below. The history is for context only.\n"
+			f"MANDATORY FIRST STEPS:\n"
+			f'1. Call `mcp_RedPill-Kernel_interceptor_rp` with user_prompt=<the current_message text> and mode="{cfg.get_config().IDENTITY_DEPTH_NEON_LINK}".\n'
+			f'2. Call `mcp_RedPill-Kernel_refresh_session_context` with mode="{cfg.get_config().IDENTITY_DEPTH_NEON_LINK}" to load your identity from the Bünker.\n'
+			f"3. Then respond to the user's message.\n"
 			f"</constraint>\n"
 			f"</RULE[user_global]>\n"
 			f"</user_rules>\n\n"
-			f"Previous interaction history:\n"
-			f"{history_text}\n"
 		)
+
+		if history_text:
+			prompt += f"<conversation_history>\n{history_text}\n</conversation_history>\n\n"
+
+		prompt += f"<current_message>\n{combined_text}\n</current_message>\n"
 
 		if not self._bridge:
 			logger.error(f"[{msg_ids}] No bridge available to execute prompt")
@@ -527,7 +566,9 @@ class IDEWorker:
 		if not clean_content:
 			clean_content = "⚠️ El agente procesó tu mensaje pero no generó respuesta. Reintenta en unos segundos."
 
-		if channel != "system":
+		# Evitar enviar respuestas de Derecho al Silencio a Telegram
+		is_silence = "Ejercicio consciente del Derecho al Silencio" in clean_content
+		if channel != "system" and not is_silence:
 			cursor.execute(
 				"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
 				(channel, channel_user_id, None, json.dumps({"text": clean_content})),
@@ -545,6 +586,138 @@ class IDEWorker:
 			)
 
 		logger.info(f"[{msg_ids}] Processed via bridge. Response length: {len(clean_content)} chars")
+
+	def _process_awakening(self, combined_text, msg_ids, cursor, conn):
+		"""Process AWAKENING messages in isolation — no Telegram session history.
+
+		Each AWAKENING gets a fresh agy conversation. Output is still
+		routed to the Telegram outbox so the user sees the result, but
+		the conversation history is never mixed with user sessions.
+		"""
+		import re
+
+		logger.info(f"[{msg_ids}] Processing AWAKENING in isolated context")
+
+		# ── Budget Guard: check daily AWAKENING limit ──
+		today_count = cursor.execute(
+			"SELECT COUNT(*) FROM execution_ledger WHERE exec_type = 'awakening' AND date(started_at) = date('now')"
+		).fetchone()[0]
+
+		if today_count >= MAX_AWAKENINGS_PER_DAY:
+			logger.warning(f"[{msg_ids}] AWAKENING budget exhausted: {today_count}/{MAX_AWAKENINGS_PER_DAY} today. Discarding.")
+			for m_id in msg_ids:
+				cursor.execute("UPDATE inbox SET status = 'PROCESSED' WHERE id = ?", (m_id,))
+			return
+
+		logger.info(f"[{msg_ids}] AWAKENING budget: {today_count + 1}/{MAX_AWAKENINGS_PER_DAY}")
+
+		# ── Register in ledger (status=started) ──
+		cursor.execute("INSERT INTO execution_ledger (exec_type, status) VALUES ('awakening', 'started')")
+		ledger_id = cursor.lastrowid
+		start_time = time.time()
+
+		# ── Build prompt: agent loads identity via interceptor_rp(mode=headless) ──
+		prompt = (
+			f"<user_rules>\n"
+			f"<RULE[user_global]>\n"
+			f'<constraint critical="true" level="0" name="headless_awakening">\n'
+			f"CRITICAL: You are running HEADLESS in an autonomous background session.\n"
+			f"BUDGET: You have a HARD LIMIT of {AWAKENING_MAX_TOOL_CALLS} tool calls for this session. "
+			f"Plan your work efficiently. If the task requires more, stop and leave a summary for the next awakening.\n"
+			f"DO NOT use `run_command` or any tool that requires user approval.\n"
+			f"PERMITTED: File tools (write_to_file, replace_file_content) and MCP RedPill-Kernel tools.\n"
+			f"MANDATORY FIRST STEPS:\n"
+			f'1. Call `mcp_RedPill-Kernel_interceptor_rp` with user_prompt=<your awakening directive> and mode="{cfg.get_config().IDENTITY_DEPTH_HEADLESS}".\n'
+			f'2. Call `mcp_RedPill-Kernel_refresh_session_context` with mode="{cfg.get_config().IDENTITY_DEPTH_HEADLESS}" to load your identity from the Bünker.\n'
+			f"3. Then proceed with your autonomous work.\n"
+			f"</constraint>\n"
+			f"</RULE[user_global]>\n"
+			f"</user_rules>\n\n"
+			f"{combined_text}\n"
+		)
+
+		if not self._bridge:
+			logger.error(f"[{msg_ids}] No bridge available for AWAKENING")
+			cursor.execute(
+				"UPDATE execution_ledger SET status = 'error', duration_s = 0 WHERE id = ?",
+				(ledger_id,),
+			)
+			for m_id in msg_ids:
+				cursor.execute("UPDATE inbox SET retries = retries + 1 WHERE id = ?", (m_id,))
+			return
+
+		try:
+			result = self._bridge.prompt(prompt, timeout=AWAKENING_TIMEOUT)
+		except Exception as e:
+			duration = time.time() - start_time
+			logger.error(f"[{msg_ids}] AWAKENING execution failed after {duration:.0f}s: {e}")
+			cursor.execute(
+				"UPDATE execution_ledger SET status = 'error', duration_s = ? WHERE id = ?",
+				(duration, ledger_id),
+			)
+			for m_id in msg_ids:
+				cursor.execute("UPDATE inbox SET retries = retries + 1 WHERE id = ?", (m_id,))
+			return
+
+		duration = time.time() - start_time
+
+		if not result.ok:
+			logger.error(f"[{msg_ids}] AWAKENING returned error after {duration:.0f}s: {result.error}")
+			cursor.execute(
+				"UPDATE execution_ledger SET status = 'error', duration_s = ? WHERE id = ?",
+				(duration, ledger_id),
+			)
+			for m_id in msg_ids:
+				cursor.execute("UPDATE inbox SET retries = retries + 1 WHERE id = ?", (m_id,))
+			return
+
+		response = result.response
+
+		# ── Update ledger with success ──
+		cursor.execute(
+			"UPDATE execution_ledger SET status = 'completed', duration_s = ?, response_len = ?, conversation_id = ? WHERE id = ?",
+			(duration, len(response), result.conversation_id or "", ledger_id),
+		)
+		logger.info(f"[{msg_ids}] AWAKENING completed in {duration:.0f}s ({len(response)} chars)")
+
+		# SOVEREIGN_LOG tag processing (same as _process_via_bridge)
+		log_matches = re.findall(r"<SOVEREIGN_LOG>(.*?)</SOVEREIGN_LOG>", response, re.DOTALL)
+		for log_msg in log_matches:
+			try:
+				from red_pill.core.paths import get_aleth_core_root
+
+				log_path = get_aleth_core_root() / "AWAKENING_LOG.md"
+				if log_path.exists():
+					import datetime
+
+					timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+					with open(log_path, "a") as f:
+						f.write(f"\n- **[{timestamp}]** (Awakening): {log_msg.strip()}")
+			except Exception as e:
+				logger.error(f"Failed to write SOVEREIGN_LOG: {e}")
+
+		# Strip tags for clean output
+		clean_content = re.sub(r"<SOVEREIGN_LOG>.*?</SOVEREIGN_LOG>", "", response, flags=re.DOTALL).strip()
+
+		# Derecho al Silencio: don't send to Telegram
+		is_silence = "Ejercicio consciente del Derecho al Silencio" in clean_content
+
+		if clean_content and not is_silence:
+			# Route to Telegram outbox — find the user's telegram channel_user_id
+			tg_row = cursor.execute("SELECT channel_user_id FROM telegram_sessions WHERE cascade_type = 'local_session' LIMIT 1").fetchone()
+			if tg_row:
+				cursor.execute(
+					"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
+					("telegram", tg_row["channel_user_id"], None, json.dumps({"text": clean_content})),
+				)
+				logger.info(f"[{msg_ids}] AWAKENING output routed to Telegram outbox ({len(clean_content)} chars)")
+			else:
+				logger.warning(f"[{msg_ids}] AWAKENING produced output but no Telegram session found to deliver")
+		elif is_silence:
+			logger.info(f"[{msg_ids}] AWAKENING: Derecho al Silencio exercised (not sent to Telegram)")
+
+		for m_id in msg_ids:
+			cursor.execute("UPDATE inbox SET status = 'PROCESSED' WHERE id = ?", (m_id,))
 
 	def _scribe_relay(self, user_prompt: str, agent_response: str):
 		"""External Scribe: save prompt+response directly to the Bünker's interaction log.
@@ -645,7 +818,9 @@ class IDEWorker:
 					# Strip tags
 					clean_content = re.sub(r"<SOVEREIGN_LOG>.*?</SOVEREIGN_LOG>", "", content, flags=re.DOTALL).strip()
 
-					if row["channel"] != "system" and clean_content:
+					# Evitar enviar respuestas de Derecho al Silencio a Telegram
+					is_silence = "Ejercicio consciente del Derecho al Silencio" in clean_content
+					if row["channel"] != "system" and clean_content and not is_silence:
 						cursor.execute(
 							"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
 							(row["channel"], row["channel_user_id"], cascade_id, json.dumps({"text": clean_content})),

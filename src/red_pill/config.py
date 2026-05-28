@@ -134,12 +134,30 @@ class RedPillConfig(BaseSettings):
 	CONTEXT_HYDRATION_DEPTH: str = "HIGH"
 	EMERGENCY_CLOUD_OVERRIDE: bool = False
 
+	# -----------------------------------------------------------------------
+	# IDENTITY DEPTH (per-channel)
+	# Values: "full" | "medium" | "low"
+	# -----------------------------------------------------------------------
+	IDENTITY_DEPTH_IDE: str = "full"
+	IDENTITY_DEPTH_NEON_LINK: str = "medium"
+	IDENTITY_DEPTH_HEADLESS: str = "low"
+
 	@field_validator("CONTEXT_HYDRATION_DEPTH", mode="before")
 	@classmethod
 	def _normalize_hydration_depth(cls, v: Any) -> str:
 		if isinstance(v, str):
 			return v.strip().upper()
 		return "HIGH"
+
+	@field_validator("IDENTITY_DEPTH_IDE", "IDENTITY_DEPTH_NEON_LINK", "IDENTITY_DEPTH_HEADLESS", mode="before")
+	@classmethod
+	def _normalize_identity_depth(cls, v: Any) -> str:
+		_valid = {"full", "medium", "low"}
+		if isinstance(v, str):
+			normalized = v.strip().lower()
+			if normalized in _valid:
+				return normalized
+		return "medium"
 
 	# -----------------------------------------------------------------------
 	# QDRANT (always local in Foundation)

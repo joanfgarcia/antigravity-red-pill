@@ -244,3 +244,106 @@ Based on the architectural findings, the **CLI-based `AgyBridge` is finalized as
 | 2026-05-24 | Dir-diff UUID capture + prefix-stripping implemented |
 | 2026-05-24 | Antigravity Python SDK Connection Audit & Viability Assessment concluded |
 | 2026-05-26 | Decoupled Telegram commands (/list, /new, /switch, /delete) to local disk sessions, compaction & Qdrant-verified Janitor sweep |
+| 2026-05-28 | AWAKENING isolation (system channel), prompt restructure (`<current_message>`), session hygiene (dedup + empty-skip + size compaction) |
+| 2026-05-28 | Identity Depth system (full/medium/low), Budget Guard (execution_ledger + daily cap), `interceptor_rp` mode parameter |
+
+## 11. Identity Depth System
+
+### Problem
+
+The `interceptor_rp` → `refresh_session_context` → `wake_up_v6.py` pipeline loaded **21K chars** of identity context for every agent invocation, regardless of whether it was an interactive IDE session, a Telegram message, or a 2-minute autonomous AWAKENING. This wasted tokens and polluted headless sessions with social/biographical content.
+
+### Solution: Three-Tier Identity Loading
+
+The `wake_up_v6.py` script accepts a `--mode` parameter that controls the depth of identity loaded from Qdrant:
+
+| Mode | Chars | Content | Default use |
+|---|---|---|---|
+| `full` | ~10K | Everything: telemetry, persona, all rules, all skins, history, bonds | IDE interactive |
+| `medium` | ~6K | Persona + bonds + active skin + core protocols. Excludes biographical histories, inactive skins, emotional profiles | Telegram / Neon-Link |
+| `low` | ~2K | Identity Anchor + Active Skin + operational rules only (Git, tabs, Fight Club, Integrity Shield, Anti-Hallucination, Soberanía Agonista) | AWAKENINGs |
+
+### Configuration
+
+Three env vars in `~/.config/red-pill/.env` control which mode is used in each context:
+
+```env
+IDENTITY_DEPTH_IDE=full          # IDE interactive sessions
+IDENTITY_DEPTH_NEON_LINK=medium  # Telegram / Neon-Link channels
+IDENTITY_DEPTH_HEADLESS=low      # Autonomous AWAKENINGs
+```
+
+All three accept values `full`, `medium`, or `low`. Changing `IDENTITY_DEPTH_IDE=low` during a token shortage reduces identity payload from 10K to 2K immediately.
+
+### Flow
+
+```
+Worker builds prompt with MANDATORY FIRST STEPS:
+  1. Agent calls interceptor_rp(mode=<configured depth>)
+     → low/medium: skip 11 interceptor plugins
+     → full: run full pipeline
+  2. Agent calls refresh_session_context(mode=<configured depth>)
+     → Calls wake_up_v6.py --mode <depth>
+     → Loads identity from Qdrant with appropriate filtering
+  3. Agent proceeds with its task, carrying its identity
+```
+
+## 12. AWAKENING Isolation
+
+### Problem
+
+AWAKENINGs (autonomous cron wake-ups) were injected into the same Telegram session as user messages, contaminating the conversation history. The agent would confuse AWAKENING directives ("implement Vector 1") with user messages ("Hola, estás ahí?") and respond to the wrong context.
+
+### Solution
+
+AWAKENINGs and Telegram conversations are now **completely separate**:
+
+| Aspect | AWAKENING | Telegram |
+|---|---|---|
+| `channel` in inbox | `system` | `telegram` |
+| `channel_user_id` | `autonomous_awakening` | Joan's Telegram ID |
+| Session history | None (fresh context each time) | Persistent (with compaction) |
+| Worker method | `_process_awakening()` | `_process_via_bridge()` |
+| Identity depth | `IDENTITY_DEPTH_HEADLESS` | `IDENTITY_DEPTH_NEON_LINK` |
+| Output to Telegram | Yes (if not Derecho al Silencio) | Yes |
+
+### Files changed
+
+- `autonomous_cron.py`: AWAKENINGs use `channel="system"` instead of copying the last user's channel
+- `worker.py`: New `_process_awakening()` method routes system-channel messages to isolated agy execution
+
+## 13. Budget Guard
+
+### Problem
+
+Autonomous AWAKENINGs could run for 110+ steps and exhaust the daily Flash 3.5 quota, leaving no tokens for user Telegram messages.
+
+### Solution
+
+An **execution ledger** (`execution_ledger` table in `events.db`) tracks every autonomous execution:
+
+```sql
+CREATE TABLE execution_ledger (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    exec_type TEXT NOT NULL,           -- 'awakening'
+    conversation_id TEXT,
+    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    duration_s REAL,
+    response_len INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'started'      -- started | completed | error
+);
+```
+
+Before each AWAKENING, the worker checks:
+
+```
+today_count = SELECT COUNT(*) WHERE exec_type='awakening' AND date=today
+if today_count >= MAX_AWAKENINGS_PER_DAY (8):
+    → Discard + log "budget exhausted"
+```
+
+Additionally:
+- **Timeout**: 600s hard cap per AWAKENING (configurable via `AWAKENING_TIMEOUT`)
+- **Tool call limit**: Prompt instructs agent to use max 40 tool calls (configurable via `AWAKENING_MAX_TOOL_CALLS`)
+- **Telegram**: No budget gating — user's direct channel always passes
+

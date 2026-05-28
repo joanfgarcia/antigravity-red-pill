@@ -77,7 +77,23 @@ class TelegramSessionManager:
 		session = self.get_session(session_id)
 		if not session:
 			return None
-		session["steps"].append({"intent": "USER" if role.lower() == "user" else "ASSISTANT", "message": {"text": text}})
+
+		intent = "USER" if role.lower() == "user" else "ASSISTANT"
+
+		# Hygiene: skip empty assistant responses (e.g. quota exhausted)
+		if intent == "ASSISTANT" and not text.strip():
+			logger.debug(f"[TelegramSession] Skipping empty assistant response for {session_id}")
+			return session
+
+		# Hygiene: deduplicate consecutive identical USER messages (e.g. repeated AWAKENINGs)
+		steps = session.get("steps", [])
+		if intent == "USER" and steps:
+			last = steps[-1]
+			if last.get("intent") == "USER" and last.get("message", {}).get("text", "") == text:
+				logger.debug(f"[TelegramSession] Deduplicating identical USER message for {session_id}")
+				return session
+
+		session["steps"].append({"intent": intent, "message": {"text": text}})
 		session["summary"]["lastUpdatedAt"] = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
 		self.save_session(session_id, session)
 		return session
@@ -119,9 +135,18 @@ class TelegramSessionManager:
 		return True
 
 	def trigger_compaction(self, session_id: str, bridge) -> Optional[str]:
-		"""Compacts history if it is too long (N > 16 steps). Ingests old context, creates a new session."""
+		"""Compacts history if too long (steps > 16) or too heavy (chars > 4000)."""
+		MAX_STEPS = 16
+		MAX_CHARS = 4000
+
 		session = self.get_session(session_id)
-		if not session or len(session.get("steps", [])) < 16:
+		if not session:
+			return None
+
+		steps = session.get("steps", [])
+		total_chars = sum(len(s.get("message", {}).get("text", "")) for s in steps)
+
+		if len(steps) < MAX_STEPS and total_chars < MAX_CHARS:
 			return None
 
 		logger.info(f"[TelegramSession] Triggering compaction for {session_id}")

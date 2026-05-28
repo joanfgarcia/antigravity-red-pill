@@ -59,15 +59,10 @@ def main():
 		print("La cola de Neon-Link no está vacía. Abortando despertar.")
 		return
 
-	# Obtener el último canal activo de forma dinámica y agnóstica
-	cursor.execute("SELECT channel_user_id, channel FROM inbox ORDER BY created_at DESC LIMIT 1")
-	row = cursor.fetchone()
-	if not row:
-		print("No hay historial de canales activos. Abortando.")
-		return
-	channel_user_id, channel = row
-
-	# get_aleth_core_root is imported at top
+	# AWAKENINGs always go through the 'system' channel to avoid
+	# polluting user Telegram sessions with autonomous wake-ups
+	channel = "system"
+	channel_user_id = "autonomous_awakening"
 
 	log_path = get_aleth_core_root() / "AWAKENING_LOG.md"
 	msg = {
@@ -80,7 +75,7 @@ def main():
 	)
 	conn.commit()
 	conn.close()
-	print("Señal de despertar autónomo inyectada en el Córtex (events.db)")
+	print("Señal de despertar autónomo inyectada en el Córtex (events.db) via canal 'system'")
 
 
 if __name__ == "__main__":
