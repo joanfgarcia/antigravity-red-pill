@@ -111,6 +111,31 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
 - [x] **Bayesian Hub Erosion (Sleep Engine)**: Automated cleanup of old/unreferenced synthesis hubs in `work_memories` during sleep cycles based on a Bayesian utility model ($\beta_{new} = \beta + 0.5$ and 15% intensity decay).
 
 
+### Phase 3.1: War Economy — Async LLM Pipeline (v7.2.0) ✅/🔜
+
+> *"El worker no puede quedarse bloqueado bajo ninguna circunstancia."*
+
+**Goal**: Non-blocking local LLM processing. The worker signals, Samantha works, nobody waits.
+
+#### Phase 1 (v7.2.0 — Completed) ✅
+- [x] **SamanthaWorker Event-Driven Thread**: Daemon thread that sleeps via `Event.wait()` (0 CPU idle). Worker signals non-blockingly; thread boots Samantha once per batch, drains all tasks, grace period before shutdown.
+- [x] **Worker Watchdog**: Heartbeat monitoring (120s timeout). Auto-kills hung ephemeral processes, marks tasks FRUSTRATED, restarts thread.
+- [x] **Truncation Fallback**: When sessions exceed 20 steps and compaction hasn't completed, truncate to last 12 steps with context header.
+- [x] **`has_pending()` + `find_task_by_payload_key()`**: O(1) non-destructive queue checks for signaling and dedup.
+- [x] **Handler Registry Pattern**: Built-in handlers: `compact_session`, `classify`, `summarize`. Extensible via `@register_handler` decorator.
+- [x] **Test Suite**: 32 tests covering thread lifecycle, watchdog, callbacks, truncation, and error handling.
+
+#### Phase 2 (Planned — v7.3.0+) 🔜
+- [ ] **MCP Tool `compact_conversation`**: Generic tool for manual compaction from IDE or Telegram.
+- [ ] **CompactionStrategy Pattern**: Strategy interface for interchangeable compaction behaviors (Truncation vs Two-Pass vs Samantha-only). Selectable via config.
+- [ ] **Two-Pass Interceptor Compaction**: When Samantha fails repeatedly — lean prompt "compacta esta conversación" → extract summary → reload with full identity. ~1,100 extra Flash tokens. Fallback of last resort.
+- [ ] **Fast-Pass Priority Lane**: `threading.Queue` for synchronous intra-process callers. SamanthaWorker processes these before async queue. Only needed when cross-thread sync calls justify the complexity.
+- [ ] **Aging Anti-Starvation**: In-memory priority escalation for normal tasks when fast-pass volume exceeds 5%.
+- [ ] **Lifecycle `persistent`**: Config `SAMANTHA_LIFECYCLE=persistent` — delegate to Hypervisor GC (TTL=300s). For hardware with spare VRAM.
+
+> [!NOTE]
+> Phase 2 items are deferred until real-world usage surfaces the need. The aging algorithm solves a starvation problem that doesn't exist yet (<5% fast-pass volume). Two-pass compaction is a fallback for a fallback. Implement when the edge case materializes, not before.
+
 ### Phase 3.5: Persistent Consciousness (Medium-Long Term — The Awakening)
 
 > *"Today every session is a birth. Tomorrow, every session will be an awakening."*

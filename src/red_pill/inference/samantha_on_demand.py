@@ -17,7 +17,6 @@ import os
 import signal
 import socket
 import subprocess
-import sys
 import time
 import urllib.error
 import urllib.request
@@ -72,6 +71,7 @@ def _find_llama_binary() -> Optional[str]:
 		return bitnet_path
 
 	import shutil
+
 	system_path = shutil.which("llama-server")
 	if system_path:
 		return system_path
@@ -92,10 +92,14 @@ def _start_ephemeral() -> Optional[subprocess.Popen]:
 
 	cmd = [
 		llama_bin,
-		"-m", model_path,
-		"--port", str(_EPHEMERAL_PORT),
-		"-c", "2048",
-		"-ngl", "999",
+		"-m",
+		model_path,
+		"--port",
+		str(_EPHEMERAL_PORT),
+		"-c",
+		"2048",
+		"-ngl",
+		"999",
 	]
 
 	logger.info(f"[Samantha] Starting ephemeral instance: {' '.join(cmd)}")
@@ -146,19 +150,24 @@ def _call_llm(port: int, prompt: str, system_prompt: str = "", max_tokens: int =
 		messages.append({"role": "system", "content": system_prompt})
 	messages.append({"role": "user", "content": prompt})
 
-	payload = json.dumps({
-		"messages": messages,
-		"temperature": 0.0,
-		"max_tokens": max_tokens,
-		"seed": 770,
-		"stop": ["<|im_end|>", "<|endoftext|>"],
-	}).encode("utf-8")
+	payload = json.dumps(
+		{
+			"messages": messages,
+			"temperature": 0.0,
+			"max_tokens": max_tokens,
+			"seed": 770,
+			"stop": ["<|im_end|>", "<|endoftext|>"],
+		}
+	).encode("utf-8")
 
 	req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
 	try:
 		with urllib.request.urlopen(req, timeout=_REQUEST_TIMEOUT_S) as response:
 			data = json.loads(response.read().decode())
-			return data["choices"][0]["message"]["content"].strip()
+			content = data["choices"][0]["message"]["content"]
+			if isinstance(content, str):
+				return content.strip()
+			return None
 	except Exception as e:
 		logger.error(f"[Samantha] LLM request failed: {e}")
 		return None

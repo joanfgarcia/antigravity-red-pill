@@ -9,12 +9,10 @@ Verifies:
 - Truncation fallback in worker history construction
 """
 
-import json
 import os
 import tempfile
 import time
 import unittest
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 
@@ -25,6 +23,7 @@ class TestCognitiveQueueHasPending(unittest.TestCase):
 		self.tmp = tempfile.mkdtemp()
 		self.db_path = os.path.join(self.tmp, "test_queue.db")
 		from red_pill.cognitive.queue_manager import CognitiveQueueManager
+
 		self.qm = CognitiveQueueManager(db_path=self.db_path)
 
 	def test_empty_queue(self):
@@ -79,12 +78,14 @@ class TestSamanthaWorkerLifecycle(unittest.TestCase):
 	def test_daemon_attribute(self):
 		"""SamanthaWorker is a daemon thread."""
 		from red_pill.inference.samantha_worker import SamanthaWorker
+
 		sw = SamanthaWorker()
 		self.assertTrue(sw.daemon)
 
 	def test_start_and_stop(self):
 		"""Thread starts and stops cleanly."""
 		from red_pill.inference.samantha_worker import SamanthaWorker
+
 		sw = SamanthaWorker(idle_timeout=1)
 		sw.start()
 		self.assertTrue(sw.is_alive())
@@ -95,6 +96,7 @@ class TestSamanthaWorkerLifecycle(unittest.TestCase):
 	def test_healthy_after_start(self):
 		"""Thread reports healthy immediately after start."""
 		from red_pill.inference.samantha_worker import SamanthaWorker
+
 		sw = SamanthaWorker()
 		sw.start()
 		self.assertTrue(sw.is_healthy())
@@ -104,6 +106,7 @@ class TestSamanthaWorkerLifecycle(unittest.TestCase):
 	def test_empty_wake_survives(self):
 		"""Thread survives a wake signal with no pending tasks."""
 		from red_pill.inference.samantha_worker import SamanthaWorker
+
 		sw = SamanthaWorker(idle_timeout=1)
 		sw.start()
 		sw.wake()
@@ -115,6 +118,7 @@ class TestSamanthaWorkerLifecycle(unittest.TestCase):
 	def test_stats_initial(self):
 		"""Initial stats are zeroed."""
 		from red_pill.inference.samantha_worker import SamanthaWorker
+
 		sw = SamanthaWorker()
 		stats = sw.get_stats()
 		self.assertEqual(stats["processed"], 0)
@@ -124,6 +128,7 @@ class TestSamanthaWorkerLifecycle(unittest.TestCase):
 	def test_watchdog_timeout(self):
 		"""is_healthy returns False after timeout exceeds."""
 		from red_pill.inference.samantha_worker import SamanthaWorker
+
 		sw = SamanthaWorker()
 		sw._health_ts = time.time() - 200  # Simulate 200s ago
 		self.assertFalse(sw.is_healthy(timeout=120))
@@ -141,7 +146,9 @@ class TestEnqueueHelper(unittest.TestCase):
 
 			# Re-import to pick up the mock
 			import importlib
+
 			import red_pill.inference.samantha_worker as sw_mod
+
 			importlib.reload(sw_mod)
 
 			task_id = sw_mod.enqueue(action="compact_session", payload={"session_id": "abc"}, priority=7)
@@ -156,6 +163,7 @@ class TestHandlerRegistry(unittest.TestCase):
 	def test_handlers_registered(self):
 		"""All built-in handlers are registered."""
 		from red_pill.inference.samantha_worker import _HANDLERS
+
 		self.assertIn("compact_session", _HANDLERS)
 		self.assertIn("classify", _HANDLERS)
 		self.assertIn("summarize", _HANDLERS)
@@ -163,6 +171,7 @@ class TestHandlerRegistry(unittest.TestCase):
 	def test_compact_handler_with_empty_history(self):
 		"""compact_session handler skips empty history."""
 		from red_pill.inference.samantha_worker import _HANDLERS
+
 		handler = _HANDLERS["compact_session"]
 		result = handler({"history_text": ""}, lambda **kw: "summary")
 		self.assertEqual(result["status"], "skipped")
@@ -170,9 +179,11 @@ class TestHandlerRegistry(unittest.TestCase):
 	def test_compact_handler_calls_samantha(self):
 		"""compact_session handler calls samantha_fn with proper prompt."""
 		from red_pill.inference.samantha_worker import _HANDLERS
+
 		handler = _HANDLERS["compact_session"]
 
 		called_with = {}
+
 		def mock_samantha(prompt, system_prompt="", max_tokens=300):
 			called_with["prompt"] = prompt
 			return "This is a test summary"
@@ -185,10 +196,10 @@ class TestHandlerRegistry(unittest.TestCase):
 	def test_classify_handler(self):
 		"""classify handler returns category."""
 		from red_pill.inference.samantha_worker import _HANDLERS
+
 		handler = _HANDLERS["classify"]
 		result = handler(
-			{"text": "Fix the bug in auth", "categories": ["bug", "feature", "docs"]},
-			lambda prompt, system_prompt="", max_tokens=20: "bug"
+			{"text": "Fix the bug in auth", "categories": ["bug", "feature", "docs"]}, lambda prompt, system_prompt="", max_tokens=20: "bug"
 		)
 		self.assertEqual(result["status"], "completed")
 		self.assertEqual(result["category"], "bug")
@@ -271,7 +282,7 @@ class TestProcessTask(unittest.TestCase):
 
 	def test_handler_exception_marks_failed(self):
 		"""If handler raises, task is marked failed, not crashed."""
-		from red_pill.inference.samantha_worker import SamanthaWorker, _HANDLERS
+		from red_pill.inference.samantha_worker import _HANDLERS, SamanthaWorker
 
 		sw = SamanthaWorker()
 		mock_qm = MagicMock()
@@ -367,10 +378,7 @@ class TestTruncationFallback(unittest.TestCase):
 		steps = []
 		for i in range(n):
 			role = "USER" if i % 2 == 0 else "ASSISTANT"
-			steps.append({
-				"intent": role,
-				"message": {"text": f"Message {i} from {role.lower()}"}
-			})
+			steps.append({"intent": role, "message": {"text": f"Message {i} from {role.lower()}"}})
 		return steps
 
 	def test_no_truncation_under_threshold(self):
@@ -379,7 +387,6 @@ class TestTruncationFallback(unittest.TestCase):
 		history_steps = steps[:-1]  # Simulates all_steps[:-1]
 
 		TRUNCATION_THRESHOLD = 20
-		TRUNCATION_KEEP = 12
 
 		if len(history_steps) > TRUNCATION_THRESHOLD:
 			self.fail("Should not truncate")

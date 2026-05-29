@@ -5,7 +5,6 @@ Core service (config_key=None → always required).
 Specific checks: HTTP reachability of the Qdrant endpoint.
 """
 
-import subprocess
 import urllib.error
 import urllib.request
 from typing import Any, List
@@ -32,10 +31,12 @@ class QdrantCheck(ServiceSentinelPlugin):
 			urllib.request.urlopen(url, timeout=2)
 		except Exception as e:
 			if not isinstance(e, urllib.error.HTTPError):
-				findings.append(AuditFinding(
-					type="amnesia",
-					severity=10.0,
-					message=f"{self.name}: Vector DB is UNREACHABLE at {getattr(cfg, 'QDRANT_URL', 'unknown')}",
-					metadata={"service": self.service_unit}
-				))
+				findings.append(
+					AuditFinding(
+						type="amnesia",
+						severity=10.0,
+						message=f"{self.name}: Vector DB is UNREACHABLE at {getattr(cfg, 'QDRANT_URL', 'unknown')}",
+						metadata={"service": self.service_unit},
+					)
+				)
 		return findings

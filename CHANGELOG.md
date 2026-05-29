@@ -20,6 +20,7 @@
 ### 🔧 Infrastructure Hardening
 - **[FEAT] Secret Vault (`vault.py`)**: Secure credential storage with Fernet encryption for API keys and service tokens. AES-256-CBC with PBKDF2 key derivation.
 - **[FEAT] Sovereign Executor (`executor.py`)**: Task executor with OOM Shield (`systemd-run -p MemoryMax=10G`). 30-minute timeout. Gated behind `AUTONOMOUS_AGY_ENABLED`.
+- **[FIX] AWAKENING Idle Detection (Critical)**: Telegram messages were NOT touching `last_user_activity.txt`, causing `autonomous_cron.py` to think the operator had been offline for days even while actively chatting via Telegram. AWAKENINGs fired every hour consuming ~20% of Flash quota. Fix: Worker now touches the activity file on every non-AWAKENING inbox message, matching the interceptor's behavior. Also removed legacy stale activity file at `~/.local/state/red_pill/`.
 - **[FIX] Daemon Path Resolution**: Fixed `run_sovereign_daemon.py` to resolve cognitive queue database dynamically across changing conversation contexts.
 - **[FIX] CLI Daemon Subcommand**: Ensured `daemon` subcommand is properly registered in `cli.py`.
 - **[DOCS] Runbook (`RUNBOOK.md`)**: Operational guide for common maintenance tasks and emergency procedures.

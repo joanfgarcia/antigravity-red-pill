@@ -175,7 +175,7 @@ class TelegramSessionManager:
 				},
 				priority=7,
 			)
-			logger.info(f"[TelegramSession] Compaction enqueued for async processing via Samantha")
+			logger.info("[TelegramSession] Compaction enqueued for async processing via Samantha")
 		except Exception as e:
 			logger.error(f"[TelegramSession] Failed to enqueue compaction: {e}")
 

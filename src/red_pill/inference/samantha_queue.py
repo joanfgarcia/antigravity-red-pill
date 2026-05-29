@@ -10,7 +10,6 @@ Lifecycle:
 Designed to be called from the worker poll loop or via a systemd timer.
 """
 
-import json
 import logging
 from typing import Any, Callable, Dict, Optional
 
@@ -27,13 +26,16 @@ _HANDLERS: Dict[str, Callable] = {}
 
 def register_handler(action: str):
 	"""Decorator to register a Samantha task handler."""
+
 	def decorator(fn):
 		_HANDLERS[action] = fn
 		return fn
+
 	return decorator
 
 
 # ── Built-in handlers ─────────────────────────────────────
+
 
 @register_handler("compact_session")
 def _handle_compact_session(payload: Dict[str, Any], samantha_fn: Callable) -> Dict[str, Any]:
@@ -136,12 +138,12 @@ def drain_queue() -> int:
 
 	# Boot Samantha (on-demand lifecycle)
 	from red_pill.inference.samantha_on_demand import (
+		_EPHEMERAL_PORT,
 		_call_llm,
 		_is_hypervisor_alive,
 		_is_port_open,
 		_start_ephemeral,
 		_stop_ephemeral,
-		_EPHEMERAL_PORT,
 	)
 
 	ephemeral_proc = None

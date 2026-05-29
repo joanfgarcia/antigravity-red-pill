@@ -54,22 +54,26 @@ class ServiceSentinelPlugin(SentinelPlugin):
 		# ── Disabled + running → unwanted ──
 		if not desired_active:
 			if is_active:
-				return [AuditFinding(
-					type="service_unwanted",
-					severity=5.0,
-					message=f"{self.name}: service '{self.service_unit}' is running but {self.config_key}=False. Wasting resources.",
-					metadata={"service": self.service_unit, "config_key": self.config_key, "expected": "stopped", "actual": "active"},
-				)]
+				return [
+					AuditFinding(
+						type="service_unwanted",
+						severity=5.0,
+						message=f"{self.name}: service '{self.service_unit}' is running but {self.config_key}=False. Wasting resources.",
+						metadata={"service": self.service_unit, "config_key": self.config_key, "expected": "stopped", "actual": "active"},
+					)
+				]
 			return []
 
 		# ── Enabled + not running → down ──
 		if not is_active:
-			return [AuditFinding(
-				type="service_down",
-				severity=7.0,
-				message=f"{self.name}: service '{self.service_unit}' is not running.",
-				metadata={"service": self.service_unit, "expected": "active", "actual": "inactive"},
-			)]
+			return [
+				AuditFinding(
+					type="service_down",
+					severity=7.0,
+					message=f"{self.name}: service '{self.service_unit}' is not running.",
+					metadata={"service": self.service_unit, "expected": "active", "actual": "inactive"},
+				)
+			]
 
 		# ── Enabled + running → delegate to specific health checks ──
 		return self.audit_health(cfg)
@@ -103,6 +107,7 @@ class ServiceSentinelPlugin(SentinelPlugin):
 		val = getattr(cfg, self.config_key, None)
 		if val is None:
 			import os
+
 			env_val = os.getenv(self.config_key)
 			if env_val is not None:
 				return env_val.lower() in ("true", "1", "yes")
@@ -113,7 +118,9 @@ class ServiceSentinelPlugin(SentinelPlugin):
 		try:
 			r = subprocess.run(
 				["systemctl", "--user", "is-active", self.service_unit],
-				capture_output=True, text=True, timeout=5,
+				capture_output=True,
+				text=True,
+				timeout=5,
 			)
 			return r.stdout.strip() == "active"
 		except Exception:

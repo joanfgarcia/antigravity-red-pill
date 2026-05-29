@@ -34,12 +34,14 @@ class NeonLinkCheck(ServiceSentinelPlugin):
 			urllib.request.urlopen(cfg.NEON_LINK_URL, timeout=2)
 		except Exception as e:
 			if not isinstance(e, urllib.error.HTTPError):
-				findings.append(AuditFinding(
-					type="neon_hung",
-					severity=10.0,
-					message=f"{self.name}: bridge is HUNG/OFFLINE at {cfg.NEON_LINK_URL}: {e}",
-					metadata={"service": self.service_unit, "url": cfg.NEON_LINK_URL}
-				))
+				findings.append(
+					AuditFinding(
+						type="neon_hung",
+						severity=10.0,
+						message=f"{self.name}: bridge is HUNG/OFFLINE at {cfg.NEON_LINK_URL}: {e}",
+						metadata={"service": self.service_unit, "url": cfg.NEON_LINK_URL},
+					)
+				)
 		return findings
 
 	def heal_specific(self, cfg: Any, finding: AuditFinding) -> bool:
@@ -56,11 +58,7 @@ class NeonLinkCheck(ServiceSentinelPlugin):
 			start_script = os.path.join(neon_dir, "start.sh")
 
 			if os.path.exists(start_script):
-				subprocess.Popen(
-					["nohup", start_script], cwd=neon_dir,
-					stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-					preexec_fn=os.setpgrp
-				)
+				subprocess.Popen(["nohup", start_script], cwd=neon_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setpgrp)
 				return True
 		except Exception:
 			pass

@@ -89,9 +89,7 @@ class CognitiveQueueManager:
 					(source,),
 				).fetchone()
 			else:
-				row = conn.execute(
-					"SELECT 1 FROM cognitive_tasks WHERE status = 'PENDING' LIMIT 1"
-				).fetchone()
+				row = conn.execute("SELECT 1 FROM cognitive_tasks WHERE status = 'PENDING' LIMIT 1").fetchone()
 			return row is not None
 
 	def find_task_by_payload_key(self, source: str, key: str, value: str) -> Optional[Dict[str, Any]]:

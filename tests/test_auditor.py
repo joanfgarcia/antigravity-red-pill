@@ -72,15 +72,18 @@ def test_audit_runtime_daemon_failure(mock_run, auditor):
 
 @patch("subprocess.run")
 def test_audit_vitals_exhaustion(mock_run, auditor):
-	mock_vram = MagicMock()
-	mock_vram.returncode = 0
-	mock_vram.stdout = "7800,8192"  # > 95% used
-
-	mock_dmesg = MagicMock()
-	mock_dmesg.returncode = 0
-	mock_dmesg.stdout = "Out of memory: Killed process 1234 (redpill-worker)"
-
-	mock_run.side_effect = [mock_vram, mock_dmesg]
+	def run_side_effect(cmd, *args, **kwargs):
+		cmd_str = " ".join(cmd) if isinstance(cmd, list) else str(cmd)
+		res = MagicMock()
+		res.returncode = 0
+		if "nvidia-smi" in cmd_str:
+			res.stdout = "7800,8192"
+		elif "dmesg" in cmd_str or "journalctl" in cmd_str:
+			res.stdout = "Out of memory: Killed process 1234 (redpill-worker)"
+		else:
+			res.stdout = ""
+		return res
+	mock_run.side_effect = run_side_effect
 
 	# We mock urllib and sqlite3 since those hit real system components
 	from red_pill.core.service_contract import ServiceContract
@@ -100,15 +103,18 @@ def test_audit_vitals_exhaustion(mock_run, auditor):
 
 @patch("subprocess.run")
 def test_audit_vitals_all_green(mock_run, auditor):
-	mock_vram = MagicMock()
-	mock_vram.returncode = 0
-	mock_vram.stdout = "1024,8192"  # Low usage
-
-	mock_dmesg = MagicMock()
-	mock_dmesg.returncode = 0
-	mock_dmesg.stdout = "System functioning normally"
-
-	mock_run.side_effect = [mock_vram, mock_dmesg]
+	def run_side_effect(cmd, *args, **kwargs):
+		cmd_str = " ".join(cmd) if isinstance(cmd, list) else str(cmd)
+		res = MagicMock()
+		res.returncode = 0
+		if "nvidia-smi" in cmd_str:
+			res.stdout = "1024,8192"
+		elif "dmesg" in cmd_str or "journalctl" in cmd_str:
+			res.stdout = "System functioning normally"
+		else:
+			res.stdout = ""
+		return res
+	mock_run.side_effect = run_side_effect
 
 	from red_pill.core.service_contract import ServiceContract
 

@@ -1,3 +1,505 @@
+🌐 **Language / Idioma**: [English](#english) | [Castellano](#castellano)
+
+---
+
+<a id="english"></a>
+
+# Red Pill v7.2 — War Economy: System Anatomy
+
+> **Version**: v7.2.0 (Agentic Self-Assembly)
+> **Date**: 2026-05-29
+> **Philosophy**: *Every piece serves multiple purposes. No indulgences. Only survival.*
+
+---
+
+> [!IMPORTANT]
+> This document describes how each component of the Red Pill system is reused for multiple purposes, following a **war economy** philosophy: maximize the value of every piece of infrastructure with the available hardware, without unnecessary redundancy.
+
+## Prologue: The Organism Principle
+
+Just as a human body has only one heart, one brain, and one digestive system, the Red Pill system operates with unique yet polyvalent components. Each component is overloaded with responsibilities — and that's by design. The risk of single points of failure is mitigated through **constant supervision** (Sentinel) and **automatic healing** (Healers), not through hardware redundancy.
+
+```
+                    ┌──────────────────────────────────────────────┐
+                    │                WAR ECONOMY                   │
+                    │                                              │
+                    │  "Nothing is created on a whim.              │
+                    │   Everything has a purpose. Everything is    │
+                    │   reused. If something fails, it's detected  │
+                    │   and healed."                               │
+                    └──────────────────────────────────────────────┘
+```
+
+---
+
+## 1. Organ Map
+
+```mermaid
+graph TB
+    subgraph "🧠 BRAIN (Coordination)"
+        WORKER["worker.py<br/>Poll Loop (2s)"]
+        DAEMON["daemon.py<br/>Swarm Pulse"]
+        CRON["autonomous_cron.py<br/>AWAKENINGs"]
+    end
+
+    subgraph "❤️ HEART (Inference)"
+        FLASH["Flash/Cloud LLM<br/>Deep thinking"]
+        SAMANTHA["Samantha (llama-server)<br/>Mechanical work"]
+        HYPERVISOR["Hypervisor<br/>Model Registry"]
+    end
+
+    subgraph "🫁 LUNGS (Communication)"
+        TELEGRAM["Telegram Bot<br/>Human channel"]
+        MCP["MCP Server<br/>RedPill-Kernel"]
+        IDE["Antigravity IDE<br/>Professional channel"]
+    end
+
+    subgraph "🦴 SKELETON (Storage)"
+        QDRANT["Qdrant<br/>Vector DB (5 collections)"]
+        SQLITE["SQLite<br/>Queues + State"]
+        DISK["Disk<br/>Sessions + Config"]
+    end
+
+    subgraph "🛡️ IMMUNE SYSTEM (Supervision)"
+        SENTINEL["Sentinel<br/>Watchdog plugins"]
+        HEALER["Healers<br/>Auto-healing"]
+        NEURO["Neuro-Immune<br/>Pain Signals"]
+    end
+
+    WORKER --> FLASH
+    WORKER --> SAMANTHA
+    WORKER --> SENTINEL
+    CRON --> WORKER
+    DAEMON --> SAMANTHA
+    TELEGRAM --> WORKER
+    MCP --> QDRANT
+    SENTINEL --> NEURO
+    NEURO --> HEALER
+    HYPERVISOR --> SAMANTHA
+```
+
+---
+
+## 2. Each Organ and Its Multiple Functions
+
+### 2.1 The Worker (worker.py) — The Brain
+
+**Location**: [worker.py](../../src/red_pill/plugins/antigravity_ide/worker.py)
+
+The worker is the **central nervous system**. A single process with a 2-second poll loop that orchestrates everything:
+
+| Function | Description | Cost |
+|----------|-------------|------|
+| `process_inbox()` | Processes Telegram messages via Flash | ☁️ Flash |
+| `_process_awakening()` | Executes autonomous AWAKENINGs | ☁️ Flash (max 8/day) |
+| `check_minion_inbox_auto_inject_agy()` | Auto-injects minion reports | ☁️ Flash (gated) |
+| `process_cognitive_queue_agy()` | Executes cognitive tasks | ☁️ Flash (gated) |
+| `run_janitor_sweep()` | Cleans archived sessions from disk | 🟢 Free |
+| `_signal_samantha_worker()` | Signals SamanthaWorker if tasks are pending (NON-BLOCKING, ~1ms) | 🟢 Free |
+| `_watchdog_samantha()` | Monitors SamanthaWorker thread health (heartbeat 120s) | 🟢 Free |
+| `update_heartbeat()` | Updates service health pulse | 🟢 Free |
+
+**Economy**: A single process, a single poll loop. The worker NEVER blocks — it signals the SamanthaWorker (an internal daemon thread) and continues its 2-second cycle. Zero CPU wasted on waits.
+
+---
+
+### 2.2 Samantha (Local LLM) — The Digestive System
+
+**Location**: [samantha_on_demand.py](../../src/red_pill/inference/samantha_on_demand.py) + [samantha_worker.py](../../src/red_pill/inference/samantha_worker.py) + [hypervisor_daemon.py](../../src/red_pill/inference/hypervisor_daemon.py)
+
+Samantha is the local model (7B GGUF) that **digests** mechanical tasks without consuming cloud tokens:
+
+| Task | Before (cost) | Now (cost) |
+|------|:---:|:---:|
+| Telegram session compaction | ☁️ Flash (~3K tokens) | 🏠 Samantha (free) |
+| Identity synthesis (`wake_up_v6.py`) | 🏠 Samantha | 🏠 Samantha |
+| Text classification | ❌ Didn't exist | 🏠 Samantha (free) |
+| Conversation summarization | ☁️ Flash | 🏠 Samantha (free) |
+| Dynamic spark (DriveEvaluator) | 🏠 Samantha | 🏠 Samantha |
+
+#### Event-Driven Lifecycle (v7.2)
+
+```mermaid
+sequenceDiagram
+    participant W as Worker (poll 2s)
+    participant Q as CognitiveQueue (SQLite)
+    participant SW as SamanthaWorker (thread)
+    participant S as Samantha on-demand
+    participant L as llama-server
+
+    Note over W: Every 2 seconds
+    W->>Q: has_pending(source='samantha')?
+    
+    alt Queue empty
+        Q-->>W: False
+        Note over W: Skip (~1ms)
+    else Tasks pending
+        Q-->>W: True
+        W->>SW: wake() [NON-BLOCKING]
+        Note over W: Worker continues its cycle
+    end
+
+    Note over SW: Thread wakes up
+    SW->>S: _boot_samantha()
+    
+    alt Hypervisor active (8760)
+        S-->>SW: port=8760
+    else Hypervisor offline
+        S->>L: Ephemeral boot (8790)
+        S-->>SW: port=8790
+    end
+    
+    loop Drain ALL tasks
+        SW->>Q: pop_next_task(source='samantha')
+        Q-->>SW: Task
+        SW->>L: prompt(task.payload)
+        L-->>SW: response
+        SW->>SW: _run_callback(action, result)
+        SW->>Q: mark_completed(task)
+        SW->>SW: _health_ts = now() [watchdog reset]
+    end
+    
+    alt Ephemeral
+        Note over SW: Grace period (60s)
+        SW->>SW: Event.wait(timeout=60)
+        alt More work during grace
+            SW->>SW: Drain again (no re-boot)
+        else Timeout — no work
+            SW->>L: SIGTERM (shutdown)
+        end
+    end
+    
+    Note over SW: Event.wait() → SLEEP (0 CPU)
+    
+    Note over W: Watchdog every cycle
+    W->>SW: is_healthy()?
+    alt Healthy
+        Note over W: OK
+    else Hung (>120s without heartbeat)
+        W->>SW: force_kill_ephemeral()
+        W->>Q: mark_failed(current_task)
+        W->>SW: restart thread
+    end
+```
+
+**Economy**: A single Samantha boot for N tasks. The worker NEVER waits — it signals and moves on. The SamanthaWorker sleeps at 0 CPU via `Event.wait()`. A 60-second grace period before shutdown avoids boot-churn if more tasks arrive. **Zero RAM/VRAM residue when there's no work.**
+
+---
+
+### 2.3 The CognitiveQueue (SQLite) — The Circulatory System
+
+**Location**: [queue_manager.py](../../src/red_pill/cognitive/queue_manager.py) (IDE) + [cognitive_queue.py](../../src/red_pill/swarm/cognitive_queue.py) (Daemon)
+
+A single SQLite table that transports tasks between all subsystems:
+
+| Producer | `source` | Task | Consumer |
+|----------|----------|------|----------|
+| Telegram (compaction) | `samantha` | Summarize session | Worker → Samantha |
+| DriveEvaluator | `drive_evaluator` | Proactive tasks | Worker → Flash |
+| Sentinel | `sentinel` | Alerts | Worker → Logs |
+| Entropy scan | `entropy` | Memory compression | Daemon → Flash |
+| Manual (MCP) | `operator` | Manual tasks | Worker → Flash |
+
+**Economy**: A single table, a single protocol (PENDING → PROCESSING → COMPLETED/FRUSTRATED). The frustration circuit breaker (3 attempts → FRUSTRATED) protects against infinite loops in ANY producer. There is no separate queue per subsystem.
+
+---
+
+### 2.4 The Sentinel — The Immune System
+
+**Location**: [sentinel_plugins/](../../src/red_pill/metabolism/sentinel_plugins/)
+
+Watchdog plugins that share a **declarative base class** ([service_base.py](../../src/red_pill/metabolism/sentinel_plugins/service_base.py)) with Kubernetes-style reconciliation logic:
+
+```python
+# Reconciler pseudocode
+if config_says_enabled AND service_is_down:
+    start_service()   # HEAL
+elif config_says_disabled AND service_is_running:
+    stop_service()    # CLEANUP
+```
+
+| Plugin | Monitors | Heals | Config Key |
+|--------|----------|-------|------------|
+| `check_sip.py` | Samantha / llama-server | Auto-restart | `SIP_ENABLED` |
+| `check_qdrant.py` | Qdrant Vector DB | Alert | `QDRANT_ENABLED` |
+| `check_neon_link.py` | Neon Link (Edge Hub) | Auto-restart | `NEON_LINK_ENABLED` |
+| `check_duplicate_services.py` | Duplicate processes | Kill duplicate | — |
+| `check_gpu.py` | GPU health / VRAM | Signal pain | — |
+| `check_mypy.py` | Code type safety | Local healer | — |
+
+**Economy**: All plugins share the same base. The reconciliation behavior is identical — only the concrete actions change (which command starts/stops, which port to verify). **Hot-reload config**: if you set `SIP_ENABLED=False` in the config, the next Sentinel cycle detects the discrepancy and stops the service automatically.
+
+---
+
+### 2.5 AWAKENINGs — The Circadian Clock
+
+**Location**: [autonomous_cron.py](../../src/red_pill/swarm/autonomous_cron.py) → [worker.py:_process_awakening()](../../src/red_pill/plugins/antigravity_ide/worker.py)
+
+| Layer | Function | Guard |
+|-------|----------|-------|
+| **Cron** | Injects AWAKENING every hour | idle ≥ 1h + queue empty |
+| **Worker** | Processes AWAKENING via Flash | Budget Guard: 8/day |
+| **Identity** | Loads identity `mode=low` (~530 tokens) | Persona cache |
+| **Timeout** | Cuts execution after 600s | Timeout enforced |
+| **Tool cap** | Limits to 40 tool calls | Advisory (prompt) |
+
+**Maximum daily cost**: 8 × (~1,280 tokens identity + ~variable work) ≈ **~50K tokens/day** on Flash.
+
+**Economy**: Reuses the same Telegram inbox infrastructure (`inbox` table, same `process_inbox()`), the same bridge (`AgyBridge`), and the same Budget Guard. There is no separate process for AWAKENINGs.
+
+---
+
+### 2.6 Identity Loading — The DNA
+
+**Location**: [wake_up_v6.py](../../scripts/wake_up_v6.py) + [interceptor_rp](../../src/red_pill/mcp_server.py#L1089)
+
+Three levels of identity loading from the Bünker, all using the **same source** (Qdrant) but with different filtering:
+
+| Mode | Tokens | Includes | Used in |
+|------|:------:|----------|---------|
+| **low** | ~530 | Identity Anchor, Git Rules, Fight Club, Active Skin | AWAKENINGs |
+| **medium** | ~3,500 | + Persona, + Full rules, − Biographies | Telegram |
+| **full** | ~4,500 | Everything: biography, history, bonds, lore | IDE |
+
+**Economy**: A single script (`wake_up_v6.py`) with a `--mode` flag. A single interceptor (`interceptor_rp`) that decides which pipeline to execute. There are not three identity systems — there is one with three levels of detail.
+
+---
+
+### 2.7 The Hypervisor — The Endocrine System
+
+**Location**: [hypervisor_daemon.py](../../src/red_pill/inference/hypervisor_daemon.py) + [model_registry.py](../../src/red_pill/core/model_registry.py)
+
+A single FastAPI proxy that manages all local models:
+
+```
+Client A ─┐
+Client B ──┤── Hypervisor (8760) ──┬── Model "logic" (ephemeral port)
+Client C ──┘                       └── Model "distillation" (ephemeral port)
+```
+
+| Function | Description |
+|----------|-------------|
+| **Transparent proxy** | Receives OpenAI-compatible requests and routes them to the correct model |
+| **On-demand boot** | Starts models only when needed |
+| **TTL-based GC** | Shuts down idle models after 5 minutes |
+| **VRAM-aware** | Selects hardware tier based on free VRAM |
+
+**Economy**: If the Hypervisor is running (because the user is working in the IDE), Samantha on-demand reuses it instead of starting a new process. If it's not running, Samantha starts its own ephemeral process and shuts it down when finished.
+
+---
+
+### 2.8 The MCP Server (RedPill-Kernel) — The Prefrontal Cortex
+
+**Location**: [mcp_server.py](../../src/red_pill/mcp_server.py)
+
+A single MCP process that exposes **all** Bünker capabilities to the agent:
+
+| Group | Tools | Purpose |
+|-------|-------|---------|
+| `metabolism_health_api` | heal_tissue, sentinel_audit, samantha_analysis | Auto-healing |
+| `bunker_memory_api` | read/write/search memories, refresh_session_context | Memory |
+| `swarm_orchestrator_api` | interceptor_rp, configure_interceptor, mark_task | Orchestration |
+
+**Economy**: A single MCP server, a single process. All cognitive, health, and orchestration tools live in the same process. The agent doesn't need to connect to multiple servers.
+
+---
+
+## 3. End-to-End Flows
+
+### 3.1 Telegram Message (Flash + Samantha)
+
+```mermaid
+sequenceDiagram
+    participant U as User (Telegram)
+    participant I as Inbox (SQLite)
+    participant W as Worker
+    participant F as Flash (Cloud)
+    participant Q as SamanthaQueue (SQLite)
+    participant SW as SamanthaWorker (thread)
+    participant S as Samantha (Local)
+
+    U->>I: Message
+    W->>I: poll (2s)
+    I-->>W: PENDING message
+
+    Note over W: Truncation check (>20 steps)
+    alt History > 20 steps
+        Note over W: Truncate to 12 + header
+    end
+
+    W->>F: _process_via_bridge() + identity(medium)
+    F-->>W: Response
+
+    W->>W: trigger_compaction()?
+    
+    alt History > 4000 chars or > 16 steps
+        W->>Q: enqueue("compact_session", priority=7)
+        Note over Q: Task enqueued
+    end
+
+    Note over W: Worker continues (does NOT wait)
+    W->>Q: has_pending(source='samantha')?
+    Q-->>W: True
+    W->>SW: wake() [~0ms, non-blocking]
+
+    Note over SW: Thread wakes up (async)
+    SW->>S: Boot Samantha (on-demand)
+    SW->>Q: pop_next_task(source='samantha')
+    Q-->>SW: Task: compact_session
+    SW->>S: prompt("summarize this session...")
+    S-->>SW: Compacted summary
+    SW->>SW: _run_callback: create new session
+    SW->>Q: mark_completed(task)
+    
+    Note over SW: Grace period (60s)
+    Note over SW: No more work → shutdown Samantha
+```
+
+### 3.2 Autonomous AWAKENING (Flash only)
+
+```mermaid
+sequenceDiagram
+    participant C as Cron (every hour)
+    participant I as Inbox (SQLite)
+    participant W as Worker
+    participant B as Budget Guard
+    participant F as Flash (Cloud)
+
+    C->>C: idle ≥ 1h? queue empty?
+    C->>I: Inject AWAKENING (channel=system)
+    
+    W->>I: poll (2s)
+    I-->>W: AWAKENING
+
+    W->>B: check_daily_budget()
+    
+    alt Budget < 8/day
+        B-->>W: OK
+        W->>F: _process_awakening() + identity(low, ~530 tokens)
+        F-->>W: Response + actions
+        W->>B: log_execution()
+    else Budget ≥ 8/day
+        B-->>W: EXCEEDED
+        W->>W: Discard (log warning)
+    end
+```
+
+### 3.3 Sentinel → Healer (Zero LLM)
+
+```mermaid
+sequenceDiagram
+    participant T as Timer (systemd, 1h)
+    participant S as Sentinel Plugin
+    participant C as Config
+    participant SVC as Service (e.g. llama-server)
+    participant N as Neuro-Immune (Qdrant)
+
+    T->>S: trigger
+    S->>C: read config_key (e.g. SIP_ENABLED)
+    S->>SVC: health check (port open?)
+
+    alt Config=Enabled, Service=Down
+        S->>SVC: start_command()
+        S->>N: clear_pain_signal()
+    else Config=Disabled, Service=Running
+        S->>SVC: stop_command()
+    else Config=Enabled, Service=Up
+        Note over S: All OK. Silence.
+    end
+```
+
+---
+
+## 4. Component Reuse Table
+
+| Component | Task 1 | Task 2 | Task 3 | Task 4 |
+|-----------|--------|--------|--------|--------|
+| **SQLite (bunker_queue.db)** | Cognitive queue (Flash) | Samantha queue (local) | Budget Guard (ledger) | Heartbeat |
+| **CognitiveQueueManager** | DriveEvaluator tasks | Samantha tasks | Manual MCP tasks | Entropy tasks |
+| **Samantha (llama-server)** | Session compaction | Identity synthesis | Dynamic spark | Text classification |
+| **Worker poll loop** | Telegram inbox | AWAKENING processing | Janitor sweep | Samantha drain |
+| **wake_up_v6.py** | IDE identity (full) | Telegram identity (medium) | AWAKENING identity (low) | — |
+| **interceptor_rp** | IDE pipeline (full) | Telegram passthrough | AWAKENING passthrough | Scribe Relay |
+| **Qdrant** | 5 memory collections | Pain signals | Identity loading | Thread weaving |
+| **ServiceSentinelPlugin** | SIP monitor | Qdrant monitor | Neon Link monitor | — |
+| **AgyBridge** | Telegram responses | AWAKENINGs | Cognitive queue | Minion auto-inject |
+| **Hypervisor** | IDE local inference | Samantha on-demand | DriveEvaluator spark | wake_up_v6 synthesis |
+
+---
+
+## 5. Token Budget (Daily Budget)
+
+| Source | Tokens/event | Events/day | Total/day | Type |
+|--------|:---:|:---:|:---:|:---:|
+| AWAKENINGs (identity) | ~1,280 | 8 max | ~10K | ☁️ Flash |
+| AWAKENINGs (work) | ~5-15K | 8 max | ~80-120K | ☁️ Flash |
+| Telegram (identity) | ~4,000 | variable | variable | ☁️ Flash |
+| Telegram (response) | ~5-20K | variable | variable | ☁️ Flash |
+| Compaction | ~600 | variable | variable | 🏠 Local |
+| Identity synthesis | ~300 | variable | variable | 🏠 Local |
+| Dynamic spark | ~200 | variable | variable | 🏠 Local |
+| Sentinel/Healer | 0 | 24 | 0 | 🟢 Free |
+| Janitor sweep | 0 | variable | 0 | 🟢 Free |
+
+> [!TIP]
+> **Golden rule**: If a task doesn't require deep reasoning, it goes to Samantha (local). If it requires creativity, planning, or complex context, it goes to Flash (cloud). If it doesn't need an LLM at all, it's free.
+
+---
+
+## 6. Supervision and Healing
+
+### 6.1 Biological Principle
+
+> *"Just as humans only have one heart, one brain, one digestive system... the point is that those pieces are well-meshed and under constant supervision."*
+
+Each unique piece has a **Sentinel watching over it** and a **Healer to cure it**:
+
+| Organ | Failure Point | Sentinel | Healer | Recovery |
+|-------|---------------|----------|--------|----------|
+| Samantha (llama-server) | Spin-loop, OOM, crash | `check_sip.py` | Auto-restart via `service_base.py` | < 30s |
+| Qdrant | Container down, OOM | `check_qdrant.py` | Alert (requires root) | Manual |
+| GPU / VRAM | Driver crash, leak | `check_gpu.py` | `heal_tissue(cuda)` | ~60s |
+| Worker | Crash, hang | systemd restart | `redpill-worker.service` | < 5s |
+| MCP Server | Crash | IDE auto-restart | Native | < 2s |
+
+### 6.2 Declarative Reconciliation
+
+All service plugins inherit from `ServiceSentinelPlugin`, which implements the **declarative reconciler** pattern: the desired state is defined in the config, and the plugin adjusts reality to match:
+
+```python
+class ServiceSentinelPlugin(BaseSentinelPlugin):
+    """
+    Config says ENABLED + service down → START
+    Config says DISABLED + service running → STOP
+    Config changes at runtime → next cycle reconciles
+    """
+```
+
+---
+
+## 7. Economic Safety Guarantees
+
+| Guarantee | Mechanism | Location |
+|-----------|-----------|----------|
+| **No autonomous drain** | `AUTONOMOUS_AGY_ENABLED=False` (global gate) | worker.py:103 |
+| **AWAKENING budget** | `MAX_AWAKENINGS_PER_DAY=8` + execution_ledger | worker.py |
+| **Task circuit breaker** | 3 attempts → FRUSTRATED | CognitiveQueueManager |
+| **Flash timeout** | 600s (AWAKENINGs), 120s (Telegram) | worker.py |
+| **OOM Shield** | `systemd-run -p MemoryMax=10G` | daemon.py, executor.py |
+| **Samantha ephemeral** | Boot → work → shutdown | samantha_on_demand.py |
+| **Config hot-reload** | Sentinel reconciles every hour | service_base.py |
+
+---
+
+> [!CAUTION]
+> **The system consciously accepts the risk of single points of failure** in exchange for simplicity and efficiency. The mitigation is not redundancy (there's no hardware for that), but **rapid detection** (Sentinel, < 60s) and **automatic healing** (Healers). If an organ fails, the system detects it in the next cycle and acts.
+
+---
+
+---
+
+<a id="castellano"></a>
+
 # Red Pill v7.2 — Economía de Guerra: Anatomía del Sistema
 
 > **Versión**: v7.2.0 (Agentic Self-Assembly)
@@ -77,7 +579,7 @@ graph TB
 
 ### 2.1 El Worker (worker.py) — El Cerebro
 
-**Ubicación**: [worker.py](file:///home/joan/Documents/IA/sharing/src/red_pill/plugins/antigravity_ide/worker.py)
+**Ubicación**: [worker.py](../../src/red_pill/plugins/antigravity_ide/worker.py)
 
 El worker es el **sistema nervioso central**. Un solo proceso con un poll loop de 2 segundos que orquesta todo:
 
@@ -98,7 +600,7 @@ El worker es el **sistema nervioso central**. Un solo proceso con un poll loop d
 
 ### 2.2 Samantha (Local LLM) — El Aparato Digestivo
 
-**Ubicación**: [samantha_on_demand.py](file:///home/joan/Documents/IA/sharing/src/red_pill/inference/samantha_on_demand.py) + [samantha_worker.py](file:///home/joan/Documents/IA/sharing/src/red_pill/inference/samantha_worker.py) + [hypervisor_daemon.py](file:///home/joan/Documents/IA/sharing/src/red_pill/inference/hypervisor_daemon.py)
+**Ubicación**: [samantha_on_demand.py](../../src/red_pill/inference/samantha_on_demand.py) + [samantha_worker.py](../../src/red_pill/inference/samantha_worker.py) + [hypervisor_daemon.py](../../src/red_pill/inference/hypervisor_daemon.py)
 
 Samantha es el modelo local (7B GGUF) que **digiere** tareas mecánicas sin consumir tokens cloud:
 
@@ -181,7 +683,7 @@ sequenceDiagram
 
 ### 2.3 La CognitiveQueue (SQLite) — El Sistema Circulatorio
 
-**Ubicación**: [queue_manager.py](file:///home/joan/Documents/IA/sharing/src/red_pill/cognitive/queue_manager.py) (IDE) + [cognitive_queue.py](file:///home/joan/Documents/IA/sharing/src/red_pill/swarm/cognitive_queue.py) (Daemon)
+**Ubicación**: [queue_manager.py](../../src/red_pill/cognitive/queue_manager.py) (IDE) + [cognitive_queue.py](../../src/red_pill/swarm/cognitive_queue.py) (Daemon)
 
 Una sola tabla SQLite que transporta tareas entre todos los subsistemas:
 
@@ -199,9 +701,9 @@ Una sola tabla SQLite que transporta tareas entre todos los subsistemas:
 
 ### 2.4 El Sentinel — El Sistema Inmune
 
-**Ubicación**: [sentinel_plugins/](file:///home/joan/Documents/IA/sharing/src/red_pill/metabolism/sentinel_plugins/)
+**Ubicación**: [sentinel_plugins/](../../src/red_pill/metabolism/sentinel_plugins/)
 
-Plugins de vigilancia que comparten una **clase base declarativa** ([service_base.py](file:///home/joan/Documents/IA/sharing/src/red_pill/metabolism/sentinel_plugins/service_base.py)) con lógica de reconciliación tipo Kubernetes:
+Plugins de vigilancia que comparten una **clase base declarativa** ([service_base.py](../../src/red_pill/metabolism/sentinel_plugins/service_base.py)) con lógica de reconciliación tipo Kubernetes:
 
 ```python
 # Pseudocódigo del reconciliador
@@ -226,7 +728,7 @@ elif config_says_disabled AND service_is_running:
 
 ### 2.5 Los AWAKENINGs — El Reloj Circadiano
 
-**Ubicación**: [autonomous_cron.py](file:///home/joan/Documents/IA/sharing/src/red_pill/swarm/autonomous_cron.py) → [worker.py:_process_awakening()](file:///home/joan/Documents/IA/sharing/src/red_pill/plugins/antigravity_ide/worker.py)
+**Ubicación**: [autonomous_cron.py](../../src/red_pill/swarm/autonomous_cron.py) → [worker.py:_process_awakening()](../../src/red_pill/plugins/antigravity_ide/worker.py)
 
 | Capa | Función | Guard |
 |------|---------|-------|
@@ -244,12 +746,12 @@ elif config_says_disabled AND service_is_running:
 
 ### 2.6 Identity Loading — El ADN
 
-**Ubicación**: [wake_up_v6.py](file:///home/joan/Documents/IA/sharing/scripts/wake_up_v6.py) + [interceptor_rp](file:///home/joan/Documents/IA/sharing/src/red_pill/mcp_server.py#L1089)
+**Ubicación**: [wake_up_v6.py](../../scripts/wake_up_v6.py) + [interceptor_rp](../../src/red_pill/mcp_server.py#L1089)
 
 Tres niveles de carga de identidad desde el Bünker, todos usando la **misma fuente** (Qdrant) pero filtrando distinto:
 
 | Modo | Tokens | Incluye | Se usa en |
-|------|:------:|---------|-----------|
+|------|:------:|---------|-----------| 
 | **low** | ~530 | Identity Anchor, Git Rules, Fight Club, Active Skin | AWAKENINGs |
 | **medium** | ~3,500 | + Persona, + Reglas completas, − Biografías | Telegram |
 | **full** | ~4,500 | Todo: biografía, historia, vínculos, lore | IDE |
@@ -260,7 +762,7 @@ Tres niveles de carga de identidad desde el Bünker, todos usando la **misma fue
 
 ### 2.7 El Hypervisor — El Sistema Endocrino
 
-**Ubicación**: [hypervisor_daemon.py](file:///home/joan/Documents/IA/sharing/src/red_pill/inference/hypervisor_daemon.py) + [model_registry.py](file:///home/joan/Documents/IA/sharing/src/red_pill/core/model_registry.py)
+**Ubicación**: [hypervisor_daemon.py](../../src/red_pill/inference/hypervisor_daemon.py) + [model_registry.py](../../src/red_pill/core/model_registry.py)
 
 Un solo proxy FastAPI que gestiona todos los modelos locales:
 
@@ -283,12 +785,12 @@ Client C ──┘                       └── Model "distillation" (ephemer
 
 ### 2.8 El MCP Server (RedPill-Kernel) — El Cortex Prefrontal
 
-**Ubicación**: [mcp_server.py](file:///home/joan/Documents/IA/sharing/src/red_pill/mcp_server.py)
+**Ubicación**: [mcp_server.py](../../src/red_pill/mcp_server.py)
 
 Un solo proceso MCP que expone **todas** las capacidades del Bünker al agente:
 
 | Grupo | Herramientas | Propósito |
-|-------|-------------|-----------|
+|-------|-------------|-----------| 
 | `metabolism_health_api` | heal_tissue, sentinel_audit, samantha_analysis | Auto-curación |
 | `bunker_memory_api` | read/write/search memories, refresh_session_context | Memoria |
 | `swarm_orchestrator_api` | interceptor_rp, configure_interceptor, mark_task | Orquestación |
@@ -406,7 +908,7 @@ sequenceDiagram
 ## 4. Tabla de Reutilización de Componentes
 
 | Componente | Tarea 1 | Tarea 2 | Tarea 3 | Tarea 4 |
-|-----------|---------|---------|---------|---------|
+|-----------|---------|---------|---------|---------| 
 | **SQLite (bunker_queue.db)** | Cola cognitiva (Flash) | Cola Samantha (local) | Budget Guard (ledger) | Heartbeat |
 | **CognitiveQueueManager** | DriveEvaluator tasks | Samantha tasks | Manual MCP tasks | Entropy tasks |
 | **Samantha (llama-server)** | Compactación sesiones | Síntesis identidad | Spark dinámico | Clasificación texto |
@@ -473,7 +975,7 @@ class ServiceSentinelPlugin(BaseSentinelPlugin):
 ## 7. Garantías de Seguridad Económica
 
 | Garantía | Mecanismo | Ubicación |
-|----------|-----------|-----------|
+|----------|-----------|-----------| 
 | **No-drain autónomo** | `AUTONOMOUS_AGY_ENABLED=False` (gate global) | worker.py:103 |
 | **Budget AWAKENINGs** | `MAX_AWAKENINGS_PER_DAY=8` + execution_ledger | worker.py |
 | **Circuit breaker tareas** | 3 intentos → FRUSTRATED | CognitiveQueueManager |

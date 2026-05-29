@@ -12,9 +12,7 @@ Architecture:
 This replaces the synchronous drain_queue() that blocked the worker poll loop.
 """
 
-import json
 import logging
-import os
 import threading
 import time
 from typing import Any, Callable, Dict, Optional
@@ -33,13 +31,16 @@ _HANDLERS: Dict[str, Callable] = {}
 
 def register_handler(action: str):
 	"""Decorator to register a Samantha task handler."""
+
 	def decorator(fn):
 		_HANDLERS[action] = fn
 		return fn
+
 	return decorator
 
 
 # ── Built-in handlers ─────────────────────────────────────
+
 
 @register_handler("compact_session")
 def _handle_compact_session(payload: Dict[str, Any], samantha_fn: Callable) -> Dict[str, Any]:
@@ -102,6 +103,7 @@ def _handle_summarize(payload: Dict[str, Any], samantha_fn: Callable) -> Dict[st
 
 # ── Enqueue helper (used by producers) ────────────────────
 
+
 def enqueue(action: str, payload: Dict[str, Any], priority: int = 5) -> str:
 	"""Enqueue a task for Samantha processing.
 
@@ -123,6 +125,7 @@ def enqueue(action: str, payload: Dict[str, Any], priority: int = 5) -> str:
 
 
 # ── SamanthaWorker Thread ─────────────────────────────────
+
 
 class SamanthaWorker(threading.Thread):
 	"""
@@ -147,7 +150,7 @@ class SamanthaWorker(threading.Thread):
 		self._idle_timeout = idle_timeout
 		self._health_ts = time.time()
 		self._current_task_id: Optional[str] = None
-		self._ephemeral_proc = None  # Track ephemeral process for watchdog kill
+		self._ephemeral_proc: Optional[Any] = None  # Track ephemeral process for watchdog kill
 		self._stats = {"processed": 0, "failed": 0, "boots": 0}
 
 	def wake(self) -> None:
@@ -250,10 +253,10 @@ class SamanthaWorker(threading.Thread):
 		"""Boot Samantha on-demand. Returns port or None on failure."""
 		try:
 			from red_pill.inference.samantha_on_demand import (
+				_EPHEMERAL_PORT,
 				_is_hypervisor_alive,
 				_is_port_open,
 				_start_ephemeral,
-				_EPHEMERAL_PORT,
 			)
 
 			if _is_hypervisor_alive():
@@ -281,6 +284,7 @@ class SamanthaWorker(threading.Thread):
 		if self._ephemeral_proc:
 			try:
 				from red_pill.inference.samantha_on_demand import _stop_ephemeral
+
 				_stop_ephemeral(self._ephemeral_proc)
 				logger.info(f"[SamanthaWorker] Ephemeral shutdown. Session stats: {self._stats}")
 			except Exception as e:
@@ -348,7 +352,9 @@ class SamanthaWorker(threading.Thread):
 					)
 					new_id = new_session["id"]
 					tsm.append_message(new_id, "user", f"[Resumen de la sesión anterior]: {summary}")
-					tsm.append_message(new_id, "assistant", "Entendido. He archivado el historial en el Bünker y consolidado el contexto. Continuemos.")
+					tsm.append_message(
+						new_id, "assistant", "Entendido. He archivado el historial en el Bünker y consolidado el contexto. Continuemos."
+					)
 
 					# Mark old session for purge
 					old_session = tsm.get_session(session_id)

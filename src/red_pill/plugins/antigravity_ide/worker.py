@@ -9,7 +9,7 @@ from pathlib import Path
 import requests
 from dotenv import load_dotenv
 
-from red_pill.core.paths import get_config_dir, get_neon_link_config_dir, get_neon_link_db_path
+from red_pill.core.paths import get_config_dir, get_neon_link_config_dir, get_neon_link_db_path, get_state_dir
 
 # Cargar la configuración agnóstica de Neon-Link primero (Single Source of Truth)
 neon_link_config = get_neon_link_config_dir() / ".env"
@@ -158,9 +158,7 @@ class IDEWorker:
 				logger.error("[Watchdog] SamanthaWorker thread died — restarting")
 				self._restart_samantha_worker()
 			elif not self._samantha_worker.is_healthy():
-				logger.error(
-					f"[Watchdog] SamanthaWorker hung (task: {self._samantha_worker._current_task_id}) — killing"
-				)
+				logger.error(f"[Watchdog] SamanthaWorker hung (task: {self._samantha_worker._current_task_id}) — killing")
 				# Kill ephemeral process if running
 				self._samantha_worker.force_kill_ephemeral()
 				# Mark current task as frustrated
@@ -449,6 +447,16 @@ class IDEWorker:
 			conn.commit()
 			conn.close()
 			return
+
+		# ---- Touch idle-detection file for non-AWAKENING messages ----
+		# This prevents autonomous_cron from thinking the operator is idle
+		# when they are actively chatting via Telegram.
+		try:
+			activity_file = get_state_dir() / "last_user_activity.txt"
+			activity_file.parent.mkdir(parents=True, exist_ok=True)
+			activity_file.touch()
+		except Exception:
+			pass
 
 		# ---- IDEBridge: Direct execution path (AgyBridge) ----
 		if self._caps and self._caps.auto_approve:
