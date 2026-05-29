@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 from typing import Optional
@@ -83,3 +84,81 @@ class SoulCryptographer:
 		except Exception as e:
 			logger.error(f"MLS Decryption failed: {e}")
 			return None
+
+
+class SecretVault:
+	"""
+	SecretVault handles storing and retrieving local secrets (API keys, credentials, etc.)
+	encrypted with pure-mls.
+	"""
+
+	def __init__(self, secrets_path: Optional[str] = None):
+		if secrets_path is None:
+			self.secrets_path = os.path.join(get_config_dir(), ".secrets.mls")
+		else:
+			self.secrets_path = secrets_path
+		self._cryptographer = SoulCryptographer()
+
+	def _get_group(self) -> MLSGroup:
+		return self._cryptographer._get_vault_group()
+
+	def _load_secrets(self) -> dict[str, str]:
+		if not os.path.exists(self.secrets_path):
+			return {}
+		try:
+			group = self._get_group()
+			with open(self.secrets_path, "rb") as f:
+				ciphertext = f.read()
+			plaintext = group.decrypt_application_message(ciphertext)
+			data = json.loads(plaintext.decode("utf-8"))
+			if isinstance(data, dict):
+				return {str(k): str(v) for k, v in data.items()}
+			return {}
+		except Exception as e:
+			logger.error(f"Failed to load secrets: {e}")
+			return {}
+
+	def _save_secrets(self, secrets: dict[str, str]) -> bool:
+		try:
+			group = self._get_group()
+			import json
+
+			plaintext = json.dumps(secrets).encode("utf-8")
+			ciphertext = group.encrypt_application_message(plaintext)
+
+			# Atomic write
+			tmp_path = self.secrets_path + ".tmp"
+			with open(tmp_path, "wb") as f:
+				f.write(ciphertext)
+				f.flush()
+				os.fsync(f.fileno())
+			os.replace(tmp_path, self.secrets_path)
+			return True
+		except Exception as e:
+			logger.error(f"Failed to save secrets: {e}")
+			return False
+
+	def set_secret(self, key: str, value: str) -> bool:
+		"""Encrypt and store a secret key-value pair."""
+		secrets = self._load_secrets()
+		secrets[key] = value
+		return self._save_secrets(secrets)
+
+	def get_secret(self, key: str) -> Optional[str]:
+		"""Decrypt and retrieve a secret by key."""
+		secrets = self._load_secrets()
+		return secrets.get(key)
+
+	def delete_secret(self, key: str) -> bool:
+		"""Delete a secret key if it exists."""
+		secrets = self._load_secrets()
+		if key in secrets:
+			del secrets[key]
+			self._save_secrets(secrets)
+			return True
+		return False
+
+	def list_secrets(self) -> list[str]:
+		"""List all stored secret keys."""
+		secrets = self._load_secrets()
+		return list(secrets.keys())

@@ -311,6 +311,10 @@ class RedPillConfig(BaseSettings):
 	# ANTIGRAVITY IDE BRIDGE
 	# -----------------------------------------------------------------------
 	IDE_BACKEND: str = "auto"  # "agy" | "grpc" | "auto"
+	# Gate autonomous Flash-consuming operations (cognitive queue, minion
+	# auto-inject, entropy executor). Telegram inbox processing is NOT
+	# affected — only background/autonomous agy prompts are suppressed.
+	AUTONOMOUS_AGY_ENABLED: bool = False
 
 	@field_validator("IDE_BACKEND")
 	@classmethod

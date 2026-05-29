@@ -39,11 +39,19 @@ if __name__ == "__main__":
 	import logging
 
 	logging.basicConfig(level=logging.INFO)
-	db_path = get_latest_conversation_db()
-	if db_path:
-		print(f"[Daemon] Waking up. Target DB: {db_path}")
-		daemon = SovereignDaemon(db_path)
-		daemon.run_pulse()
+
+	# SovereignDaemon (entropy scan → task injection → executor → agy)
+	# is gated behind AUTONOMOUS_AGY_ENABLED to prevent Flash quota drain.
+	from red_pill.config import get_config
+
+	if get_config().AUTONOMOUS_AGY_ENABLED:
+		db_path = get_latest_conversation_db()
+		if db_path:
+			print(f"[Daemon] Waking up. Target DB: {db_path}")
+			daemon = SovereignDaemon(db_path)
+			daemon.run_pulse()
+	else:
+		print("[Daemon] AUTONOMOUS_AGY_ENABLED=False. Skipping entropy scan + executor. Telegram-only mode.")
 
 	print("[Daemon] Processing IDE Worker Telemetry/Telegram routing...")
 	worker = IDEWorker()

@@ -409,6 +409,42 @@ def _dispatch_plugins(args: argparse.Namespace) -> bool:
 	return False
 
 
+def handle_secrets(args: argparse.Namespace) -> None:
+	"""Local Secrets Management (pure-mls encrypted)."""
+	from red_pill.utils.vault import SecretVault
+
+	vault = SecretVault()
+
+	if args.secrets_cmd == "set":
+		if vault.set_secret(args.key, args.value):
+			print(f"[OK] Secret '{args.key}' encrypted and stored.")
+		else:
+			print(f"[FAIL] Could not store secret '{args.key}'.")
+	elif args.secrets_cmd == "get":
+		val = vault.get_secret(args.key)
+		if val is not None:
+			print(val)
+		else:
+			print(f"[FAIL] Secret '{args.key}' not found.")
+			sys.exit(1)
+	elif args.secrets_cmd == "delete":
+		if vault.delete_secret(args.key):
+			print(f"[OK] Secret '{args.key}' deleted.")
+		else:
+			print(f"[FAIL] Secret '{args.key}' not found.")
+			sys.exit(1)
+	elif args.secrets_cmd == "list":
+		keys = vault.list_secrets()
+		if keys:
+			for key in keys:
+				print(f"- {key}")
+		else:
+			print("No secrets stored.")
+	else:
+		print("Unknown secrets subcommand.")
+		sys.exit(1)
+
+
 def main() -> None:
 	parser = argparse.ArgumentParser(description="Red Pill Protocol CLI")
 	parser.add_argument("--url", help="Qdrant URL")
@@ -584,6 +620,22 @@ def main() -> None:
 	sync_p2p.add_argument("--collections", nargs="+", help="Specific memory collections to sync")
 
 	p2p_sub.add_parser("process", help="Scan MinionInbox for incoming chunks and apply sync deltas")
+
+	# Secrets Management (pure-mls encrypted)
+	secrets_parser = subparsers.add_parser("secrets", help="Manage encrypted local secrets")
+	secrets_sub = secrets_parser.add_subparsers(dest="secrets_cmd")
+
+	secrets_set = secrets_sub.add_parser("set", help="Encrypt and store a local secret")
+	secrets_set.add_argument("key", help="Secret key name")
+	secrets_set.add_argument("value", help="Secret value")
+
+	secrets_get = secrets_sub.add_parser("get", help="Retrieve and decrypt a local secret")
+	secrets_get.add_argument("key", help="Secret key name")
+
+	secrets_delete = secrets_sub.add_parser("delete", help="Delete a local secret")
+	secrets_delete.add_argument("key", help="Secret key name")
+
+	secrets_sub.add_parser("list", help="List all local secret keys")
 
 	subparsers.add_parser("telemetry", help="Run a single-pass hardware/Bünker telemetry heartbeat (Oneshot)")
 	subparsers.add_parser("daemon", help="Start the Lazarus Daemon (heartbeat pulse)")
@@ -837,6 +889,9 @@ def main() -> None:
 			return
 		elif args.command == "p2p":
 			handle_p2p(args)
+			return
+		elif args.command == "secrets":
+			handle_secrets(args)
 			return
 
 		# Loop through requested collections

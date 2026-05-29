@@ -1,4 +1,26 @@
-## [7.1.0] - Unreleased
+## [7.2.0] - Unreleased
+
+### 🏭 Economía de Guerra — Samantha Queue & Local LLM Pipeline
+- **[FEAT] Samantha On-Demand (`samantha_on_demand.py`)**: Ephemeral local LLM manager. Detects active Hypervisor (port 8760), boots ephemeral `llama-server` on port 8790 if not available, executes task, cleans up. Zero VRAM residue when idle.
+- **[FEAT] Samantha Queue (`samantha_queue.py`)**: Batch LLM task processor with handler registry pattern. Uses `CognitiveQueueManager` with `source='samantha'` for task routing. Built-in handlers: `compact_session`, `classify`, `summarize`. Post-processing callbacks for automatic session rotation after compaction.
+- **[REFACTOR] Telegram Compaction Pipeline**: Migrated `trigger_compaction()` in `telegram_session.py` from synchronous LLM invocation to asynchronous enqueue via Samantha Queue. Compaction is now a background task — zero Flash tokens consumed.
+- **[FEAT] Worker Samantha Integration**: Connected `drain_queue()` to the `worker.py` poll loop. Samantha tasks are drained in batch with a single LLM boot cycle per drain.
+
+### 🛡️ Sentinel Declarative Reconciliation
+- **[ARCH] `ServiceSentinelPlugin` Base Class (`service_base.py`)**: Kubernetes-style declarative reconciler for systemd services. Config-key-aware: `enabled+down→start`, `disabled+running→stop`, `enabled+running→audit_health()`. Hot-reload of config changes.
+- **[FEAT] SIP Sentinel Plugin (`check_sip.py`)**: Monitors `redpill-llm.service` (gated by `SIP_ENABLED`). Health check via `/health` endpoint. Detects stuck inference (CPU>200% + unresponsive). Auto-restart with ephemeral kill fallback.
+- **[REFACTOR] Neon-Link, Qdrant Sentinels**: Migrated `check_neon_link.py` and `check_qdrant.py` to inherit from `ServiceSentinelPlugin`, reducing boilerplate and unifying reconciliation behavior across all service monitors.
+- **[FEAT] Duplicate Service Guard (`check_duplicate_services.py`)**: Enhanced to read `services.yaml` manifest. Detects legacy alias duplicates, hung services (activating state), CPU/memory runaways (>50%/>500MB). Auto-stops legacy duplicates and restarts unhealthy services.
+
+### 🔧 Infrastructure Hardening
+- **[FEAT] Secret Vault (`vault.py`)**: Secure credential storage with Fernet encryption for API keys and service tokens. AES-256-CBC with PBKDF2 key derivation.
+- **[FEAT] Sovereign Executor (`executor.py`)**: Task executor with OOM Shield (`systemd-run -p MemoryMax=10G`). 30-minute timeout. Gated behind `AUTONOMOUS_AGY_ENABLED`.
+- **[FIX] Daemon Path Resolution**: Fixed `run_sovereign_daemon.py` to resolve cognitive queue database dynamically across changing conversation contexts.
+- **[FIX] CLI Daemon Subcommand**: Ensured `daemon` subcommand is properly registered in `cli.py`.
+- **[DOCS] Runbook (`RUNBOOK.md`)**: Operational guide for common maintenance tasks and emergency procedures.
+
+## [7.1.0] - 2026-05-29
+
 
 ### 🎭 Identity Depth System & AWAKENING Hardening
 - **[FEAT] Three-Tier Identity Loading (`full`/`medium`/`low`)**: Parameterized the `interceptor_rp` → `refresh_session_context` → `wake_up_v6.py` pipeline with a `--mode` flag. `full` (~10K chars) loads everything for IDE sessions; `medium` (~6K) loads persona, bonds, and active skin for Telegram; `low` (~2K) loads only operational core rules for AWAKENINGs. Reduces token overhead by up to 90% in headless contexts.

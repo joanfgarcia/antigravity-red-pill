@@ -98,6 +98,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [FERRARI_PROTOCOL.md](TECHNICAL/BUNKER/FERRARI_PROTOCOL.md) | Cognitive routing and tone adapter for operator mood states |
 | [V6_ZERO_TRUST_INIT.md](TECHNICAL/BUNKER/V6_ZERO_TRUST_INIT.md) | v6 zero-trust initialization protocol |
 | [ECHO_IMPLEMENTATION.md](TECHNICAL/BUNKER/ECHO_IMPLEMENTATION.md) | Technical implementation of the Echo Minion / landing pad |
+| [RFC_001_FIRMWARE_PROTECTION.md](TECHNICAL/BUNKER/RFC_001_FIRMWARE_PROTECTION.md) | Firmware partition protection RFC to prevent agent-induced code corruption (Project BIOS) |
 
 ### Certification
 
@@ -125,6 +126,7 @@ For humans operating, installing, or extending the system.
 | Document | What it is |
 |----------|-----------|
 | [OPERATOR_MANUAL.md](GUIDES/OPERATOR_MANUAL.md) | Essential CLI and lore-based interaction guide for operators |
+| [RUNBOOK.md](GUIDES/RUNBOOK.md) | Operational runbook and survival guide for operators |
 | [INITIATION_PROTOCOL.md](GUIDES/INITIATION_PROTOCOL.md) | Adaptive Cognitive Initiation (ACI) — how to wake up and calibrate the agent |
 | [AGENT_UPDATE_GUIDE.md](GUIDES/AGENT_UPDATE_GUIDE.md) | Step-by-step guide for updating the agent and MCP server |
 | [ENTERPRISE_QUICKSTART.md](GUIDES/ENTERPRISE_QUICKSTART.md) | Quick start guide for enterprise deployments |

@@ -133,6 +133,9 @@ class ServiceHealthCheck(SentinelPlugin):
 			if contract.type == "oneshot":
 				continue  # systemd TimeoutStartSec handles these
 
+			unit = contract.unit
+			state = self._unit_state(unit)
+
 			# Optional service gating check (Config-driven)
 			if not contract.required and contract.enabled_config_key:
 				is_enabled = getattr(cfg, contract.enabled_config_key, None)
@@ -143,10 +146,17 @@ class ServiceHealthCheck(SentinelPlugin):
 					else:
 						is_enabled = True
 				if not is_enabled:
+					# Config says disabled → if running, emit finding to stop it
+					if state == "active":
+						findings.append(
+							AuditFinding(
+								type="service_unwanted",
+								severity=5.0,
+								message=f"Service '{unit}' is running but {contract.enabled_config_key}=False in config. Wasting resources.",
+								metadata={"service": unit, "config_key": contract.enabled_config_key, "expected": "stopped", "actual": "active"},
+							)
+						)
 					continue
-
-			unit = contract.unit
-			state = self._unit_state(unit)
 
 			# Optional service gating check (State-driven for no config key)
 			if not contract.required and not contract.enabled_config_key:
@@ -249,6 +259,16 @@ class ServiceHealthCheck(SentinelPlugin):
 				subprocess.run(["systemctl", "--user", "stop", legacy], check=False, timeout=10)
 				subprocess.run(["systemctl", "--user", "disable", legacy], check=False, timeout=10)
 				subprocess.run(["systemctl", "--user", "daemon-reload"], check=False, timeout=10)
+				return True
+			except Exception:
+				return False
+
+		if finding.type == "service_unwanted":
+			service = meta.get("service")
+			if not service:
+				return False
+			try:
+				subprocess.run(["systemctl", "--user", "stop", service], check=False, timeout=10)
 				return True
 			except Exception:
 				return False

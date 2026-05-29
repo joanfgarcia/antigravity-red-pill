@@ -97,8 +97,12 @@ class IDEWorker:
 			self.check_minion_inbox_auto_inject()
 			self.process_cognitive_queue()
 		else:
-			self.check_minion_inbox_auto_inject_agy()
-			self.process_cognitive_queue_agy()
+			# Autonomous agy operations (minion auto-inject, cognitive queue)
+			# are gated behind AUTONOMOUS_AGY_ENABLED to prevent Flash quota
+			# drain. Telegram inbox processing above is NOT affected.
+			if cfg.get_config().AUTONOMOUS_AGY_ENABLED:
+				self.check_minion_inbox_auto_inject_agy()
+				self.process_cognitive_queue_agy()
 			# Janitor sweep for local telegram sessions
 			try:
 				from telegram_session import TelegramSessionManager
@@ -109,6 +113,16 @@ class IDEWorker:
 					logger.info(f"[Janitor] Sweep complete. Purged {purged} archived conversations.")
 			except Exception as e:
 				logger.error(f"Janitor sweep failed: {e}")
+			# Samantha Queue: drain pending local LLM tasks (compaction, classification, etc.)
+			# Single Samantha boot per drain cycle — no Flash tokens consumed.
+			try:
+				from red_pill.inference.samantha_queue import drain_queue
+
+				processed = drain_queue()
+				if processed > 0:
+					logger.info(f"[SamanthaQueue] Drained {processed} tasks in this cycle.")
+			except Exception as e:
+				logger.error(f"Samantha queue drain failed: {e}")
 		self.update_heartbeat()
 
 	def update_heartbeat(self):

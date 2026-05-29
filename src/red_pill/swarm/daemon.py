@@ -14,6 +14,7 @@ class SovereignDaemon:
 	"""
 
 	def __init__(self, db_path: Path):
+		self.db_path = db_path
 		self.queue = CognitiveQueue(db_path)
 		self.active = False
 
@@ -26,7 +27,7 @@ class SovereignDaemon:
 		try:
 			from red_pill.cognitive.drive_evaluator import DriveEvaluator
 
-			evaluator = DriveEvaluator(None)
+			evaluator = DriveEvaluator(None)  # type: ignore[arg-type]
 			context_data = evaluator._scrape_context()
 			logger.info(f"[Daemon] Scraped context for entropy scan:\n{context_data}")
 		except Exception as e:
@@ -90,10 +91,41 @@ class SovereignDaemon:
 		"""Routes the task to the Swarm executor. Uses Circuit Breaker on failure."""
 		logger.info(f"Processing task: {task['task_id']} from {task['source_type']}")
 		try:
-			# Here we will bridge to the Swarm Minions (e.g., InferenceRouter)
+			import subprocess
+			import sys
+
+			# Calculate limits (baseline of 10G limit as safe fallback)
+			mem_limit = "10G"
+
+			# Build command to run under systemd-run with cgroup containment
+			cmd = [
+				"systemd-run",
+				"--user",
+				"--scope",
+				"-p",
+				f"MemoryMax={mem_limit}",
+				sys.executable,
+				"-m",
+				"red_pill.swarm.executor",
+				"--task-id",
+				task["task_id"],
+				"--db-path",
+				str(self.db_path),
+			]
+
+			logger.info(f"[Daemon] Spawning background executor under systemd-run: {' '.join(cmd)}")
+
+			# Enforce 30-minute timeout (1800 seconds)
+			result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+
+			if result.returncode != 0:
+				raise RuntimeError(f"Executor exited with code {result.returncode}.\nStdout: {result.stdout}\nStderr: {result.stderr}")
 
 			self.queue.mark_completed(task["task_id"])
 			logger.info(f"Task {task['task_id']} completed successfully.")
+		except subprocess.TimeoutExpired:
+			logger.error(f"Task {task['task_id']} exceeded execution timeout limit (30 minutes). Terminating.")
+			self.queue.mark_frustrated(task["task_id"], cost_increment=15.0)
 		except Exception as e:
 			logger.error(f"Task {task['task_id']} failed: {e}")
 			self.queue.mark_frustrated(task["task_id"], cost_increment=15.0)

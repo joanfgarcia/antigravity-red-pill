@@ -355,7 +355,6 @@ def synthesize_hub(summaries: List[str]) -> str:
 		return "[Aggregated Memory Sequence]"
 
 
-
 class EphemeralServer:
 	"""
 	Manages the lifecycle of the ephemeral local LLM server used during the sleep
@@ -708,7 +707,10 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 		batch_processed = 0
 		for point in scroll_result:
 			raw_id = point.id
-			raw_text = (point.payload or {}).get("content", "")
+			payload = point.payload or {}
+			raw_text = payload.get("content", "")
+			if not raw_text and "prompt" in payload and "response" in payload:
+				raw_text = f"USER: {payload['prompt']}\n\nASSISTANT: {payload['response']}"
 			if not raw_text:
 				continue
 

@@ -134,8 +134,15 @@ class TelegramSessionManager:
 		logger.info(f"[TelegramSession] Session {session_id} marked as pending_purge and copied to staging")
 		return True
 
-	def trigger_compaction(self, session_id: str, bridge) -> Optional[str]:
-		"""Compacts history if too long (steps > 16) or too heavy (chars > 4000)."""
+	def trigger_compaction(self, session_id: str, bridge=None) -> Optional[str]:
+		"""Compacts history if too long (steps > 16) or too heavy (chars > 4000).
+
+		Enqueues summarization to the Samantha Queue (local LLM, zero Flash cost).
+		The actual summarization + session rotation happens asynchronously via
+		the queue's post-processing callback.
+
+		The `bridge` parameter is ignored (kept for backward compatibility).
+		"""
 		MAX_STEPS = 16
 		MAX_CHARS = 4000
 
@@ -149,42 +156,33 @@ class TelegramSessionManager:
 		if len(steps) < MAX_STEPS and total_chars < MAX_CHARS:
 			return None
 
-		logger.info(f"[TelegramSession] Triggering compaction for {session_id}")
+		logger.info(f"[TelegramSession] Enqueueing compaction for {session_id} ({len(steps)} steps, {total_chars} chars)")
 
 		# 1. Archive the old session in Qdrant (by copying to staging)
 		self.copy_to_staging(session_id)
 
-		# 2. Ask model via AgyBridge to summarize conversation context
+		# 2. Enqueue summarization to the Samantha Queue
 		history_text = self.get_history_prompt(session)
-		prompt_summary = (
-			"Resume la siguiente conversación de Telegram entre el operador (Joan) y el agente (Aleth). "
-			"Crea un resumen técnico y de progreso conciso para usarlo como contexto en el siguiente turno. "
-			"Sé directo y resume los puntos clave de decisión y tareas pendientes.\n\n"
-			f"{history_text}"
-		)
-
-		summary = "Resumen de contexto consolidado."
 		try:
-			res = bridge.prompt(prompt_summary, timeout=120)
-			if res.ok and res.response:
-				summary = res.response.strip()
-				logger.info("[TelegramSession] Compaction summary generated successfully")
+			from red_pill.inference.samantha_queue import enqueue
+
+			enqueue(
+				action="compact_session",
+				payload={
+					"session_id": session_id,
+					"channel_user_id": session.get("channel_user_id", ""),
+					"history_text": history_text,
+				},
+				priority=7,
+			)
+			logger.info(f"[TelegramSession] Compaction enqueued for async processing via Samantha")
 		except Exception as e:
-			logger.error(f"[TelegramSession] Compaction synthesis failed: {e}")
+			logger.error(f"[TelegramSession] Failed to enqueue compaction: {e}")
 
-		# 3. Create new session with the summary
-		new_session = self.create_session(channel_user_id=session["channel_user_id"], title=f"Compacted conversation (from {session_id[:8]})")
-		new_id = new_session["id"]
-
-		# Inyectamos el resumen en el nuevo historial
-		self.append_message(new_id, "user", f"[Resumen de la sesión anterior]: {summary}")
-		self.append_message(new_id, "assistant", "Entendido. He archivado el historial en el Bünker y consolidado el contexto. Continuemos.")
-
-		# También marcamos la vieja sesión para purgarla, ya que ya la copiamos a staging
-		session["status"] = "pending_purge"
-		self.save_session(session_id, session)
-
-		return str(new_id) if new_id else None
+		# Note: session rotation happens in the queue's _run_callbacks()
+		# after Samantha generates the summary. We don't return a new session ID
+		# here because it's asynchronous now.
+		return None
 
 	def run_janitor_sweep(self) -> int:
 		"""
