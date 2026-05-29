@@ -625,8 +625,9 @@ def main() -> None:
 
 	secrets_sub.add_parser("list", help="List all local secret keys")
 
-	subparsers.add_parser("telemetry", help="Run a single-pass hardware/Bünker telemetry heartbeat (Oneshot)")
-	subparsers.add_parser("daemon", help="Start the Lazarus Daemon (heartbeat pulse)")
+	subparsers.add_parser("telemetry", help="Run a single-pass hardware/Bünker telemetry check (Oneshot)")
+	daemon_parser = subparsers.add_parser("daemon", help="Start the Sovereign Daemon (plugin-based control plane)")
+	daemon_parser.add_argument("--oneshot", action="store_true", help="Tick all plugins once and exit (testing)")
 
 	args = parser.parse_args()
 

@@ -63,7 +63,7 @@ class SwarmMonitorPlugin(DaemonPlugin):
 
 			def _count() -> int:
 				with sqlite3.connect(self._inbox.db_path) as conn:
-					return conn.execute("SELECT COUNT(*) FROM inbox").fetchone()[0]
+					return int(conn.execute("SELECT COUNT(*) FROM inbox").fetchone()[0])
 
 			total = await asyncio.to_thread(_count)
 			if total > 500:

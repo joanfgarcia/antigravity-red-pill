@@ -15,6 +15,8 @@ from abc import ABC, abstractmethod
 
 
 class DaemonPlugin(ABC):
+	_last_tick: float = 0.0
+
 	"""Base class for all Sovereign Daemon plugins.
 
 	Plugins are lightweight monitor/control units that:
@@ -77,7 +79,7 @@ class DaemonPlugin(ABC):
 
 	def __init_subclass__(cls, **kwargs: object) -> None:
 		super().__init_subclass__(**kwargs)
-		cls._last_tick: float = 0.0
+		cls._last_tick = 0.0
 
 	def __repr__(self) -> str:
 		return f"<{self.__class__.__name__} name={self.name} interval={self.interval_s}s timeout={self.timeout_s}s>"

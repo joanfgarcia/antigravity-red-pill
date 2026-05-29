@@ -15,6 +15,9 @@
 > [!IMPORTANT]
 > This document describes how each component of the Red Pill system is reused for multiple purposes, following a **war economy** philosophy: maximize the value of every piece of infrastructure with the available hardware, without unnecessary redundancy.
 
+> [!NOTE]
+> **Axiom: Single-Tenant.** One operator, one machine, one agent. All concurrency is process-level (systemd timers + daemon), never user-level. SQLite WAL handles inter-process writes. There is no auth layer, no user isolation, no multi-tenant partitioning. This is by design — the system is a bespoke prosthesis, not a platform.
+
 ## Prologue: The Organism Principle
 
 Just as a human body has only one heart, one brain, and one digestive system, the Red Pill system operates with unique yet polyvalent components. Each component is overloaded with responsibilities — and that's by design. The risk of single points of failure is mitigated through **constant supervision** (Sentinel) and **automatic healing** (Healers), not through hardware redundancy.
@@ -539,6 +542,9 @@ The system consolidated from 3 daemons (2 already dead) + 1 redundant timer into
 
 > [!IMPORTANT]
 > Este documento describe cómo cada componente del sistema Red Pill se reutiliza para múltiples propósitos, siguiendo una filosofía de **economía de guerra**: maximizar el valor de cada pieza de infraestructura con el hardware disponible, sin redundancias innecesarias.
+
+> [!NOTE]
+> **Axioma: Single-Tenant.** Un operador, una máquina, un agente. Toda la concurrencia es a nivel de proceso (timers systemd + daemon), nunca a nivel de usuario. SQLite WAL gestiona las escrituras inter-proceso. No hay capa de auth, ni aislamiento de usuarios, ni particionado multi-tenant. Es por diseño — el sistema es una prótesis a medida, no una plataforma.
 
 ## Prólogo: El Principio del Organismo
 

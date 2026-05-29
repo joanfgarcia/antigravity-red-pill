@@ -27,7 +27,9 @@ logger = logging.getLogger(__name__)
 # Paths relative to APP_ROOT.
 CRITICAL_MODULES = [
 	"src/red_pill/config.py",
-	"src/red_pill/heartbeat.py",
+	"src/red_pill/rituals.py",
+	"src/red_pill/daemon/sovereign.py",
+	"src/red_pill/daemon/plugin.py",
 	"src/red_pill/memory.py",
 	"src/red_pill/core/paths.py",
 	"src/red_pill/core/storage.py",
