@@ -28,7 +28,6 @@ from red_pill.core.paths import get_bunker_root
 
 from .bridge import BackendType, BridgeCapabilities, ConversationResult, IDEBridge
 
-
 logger = logging.getLogger(__name__)
 
 

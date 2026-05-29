@@ -3,8 +3,6 @@ import json
 import os
 import sqlite3
 import time
-from pathlib import Path
-
 
 from dotenv import load_dotenv
 
@@ -23,8 +21,8 @@ def is_ide_idle(idle_seconds=3600):
 	Heurística de inactividad multi-señal.
 
 	Señales (OR — cualquiera activa = operador presente):
-	  1. last_user_activity.txt (MCP interceptor / Telegram worker)
-	  2. Antigravity IDE transcript.jsonl files (direct IDE sessions)
+	1. last_user_activity.txt (MCP interceptor / Telegram worker)
+	2. Antigravity IDE transcript.jsonl files (direct IDE sessions)
 
 	Returns True ONLY if ALL signals indicate idle > idle_seconds.
 	"""

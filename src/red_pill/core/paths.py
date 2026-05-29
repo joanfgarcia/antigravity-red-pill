@@ -227,8 +227,8 @@ def get_antigravity_root() -> Path:
 	Resuelve el directorio raíz del IDE Antigravity.
 
 	Orden de precedencia:
-	  1. $ANTIGRAVITY_ROOT (explícita override)
-	  2. ~/.gemini/antigravity (convención estándar)
+	1. $ANTIGRAVITY_ROOT (explícita override)
+	2. ~/.gemini/antigravity (convención estándar)
 	"""
 	override = os.getenv("ANTIGRAVITY_ROOT")
 	if override:

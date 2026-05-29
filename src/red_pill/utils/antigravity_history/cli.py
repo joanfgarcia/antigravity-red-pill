@@ -24,6 +24,7 @@ except ImportError:
 	print("ERROR: Missing dependencies. Run: pip install antigravity-history")
 	sys.exit(1)
 
+from red_pill.core.paths import get_antigravity_conversations_dir
 from red_pill.utils.antigravity_history import __version__
 from red_pill.utils.antigravity_history.api import (
 	get_all_trajectories_merged,
@@ -40,8 +41,6 @@ from red_pill.utils.antigravity_history.formatters import (
 	write_conversation,
 )
 from red_pill.utils.antigravity_history.parser import FieldLevel, parse_steps
-
-from red_pill.core.paths import get_antigravity_conversations_dir
 
 app = typer.Typer(
 	name="aghistory",

@@ -10,14 +10,10 @@ import asyncio
 import logging
 import os
 import sqlite3
-import subprocess
-import time
-from typing import Optional
 
 import red_pill.config as cfg
 from red_pill.core.inbox import MinionInbox
 from red_pill.memory import MemoryManager
-from red_pill.soul import SoulManager
 
 logger = logging.getLogger("red_pill.rituals")
 
@@ -371,7 +367,7 @@ async def auto_heal_ritual(mm: MemoryManager) -> None:
 				from red_pill.swarm.agents.healer import HealerMinion
 
 				healer = HealerMinion()
-				result = await healer.execute("Heal mypy", path=os.path.join(cfg.APP_ROOT, "src", "red_pill"))
+				await healer.execute("Heal mypy", path=os.path.join(cfg.APP_ROOT, "src", "red_pill"))
 				healed_ids.append(report["id"])
 				continue
 
