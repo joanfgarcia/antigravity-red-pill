@@ -174,29 +174,25 @@ def test_trigger_compaction(mock_telegram_env):
 		tsm.append_message(session_id, "user", f"message {i}")
 		tsm.append_message(session_id, "assistant", f"reply {i}")
 
-	# Mock AgyBridge
-	mock_bridge = MagicMock()
-	mock_res = MagicMock()
-	mock_res.ok = True
-	mock_res.response = "Resumen consolidado de tareas y progreso."
-	mock_bridge.prompt.return_value = mock_res
+	# Mock the Samantha queue enqueue (async path)
+	with patch("red_pill.inference.samantha_worker.enqueue") as mock_enqueue:
+		mock_enqueue.return_value = "task-id-123"
 
-	# Trigger compaction
-	new_id = tsm.trigger_compaction(session_id, mock_bridge)
-	assert new_id is not None
-	assert new_id != session_id
+		# Trigger compaction — now async, returns None
+		result = tsm.trigger_compaction(session_id)
+		assert result is None  # Async: no immediate new session
 
-	# Verify old session marked pending_purge
-	old_session = tsm.get_session(session_id)
-	assert old_session["status"] == "pending_purge"
+		# Verify enqueue was called with correct parameters
+		mock_enqueue.assert_called_once()
+		call_kwargs = mock_enqueue.call_args
+		assert call_kwargs[1]["action"] == "compact_session" or call_kwargs[0][0] == "compact_session"
+		payload = call_kwargs[1].get("payload") or call_kwargs[0][1]
+		assert payload["session_id"] == session_id
+		assert payload["channel_user_id"] == "user123"
+		assert len(payload["history_text"]) > 0
+
+	# Verify old session was copied to staging (archival)
 	assert (tsm.staging_dir / f"{session_id}.json").exists()
-
-	# Verify new session created with summary
-	new_session = tsm.get_session(new_id)
-	assert new_session["channel_user_id"] == "user123"
-	assert len(new_session["steps"]) == 2
-	assert "Resumen de la sesión anterior" in new_session["steps"][0]["message"]["text"]
-	assert "Resumen consolidado" in new_session["steps"][0]["message"]["text"]
 
 
 @patch("red_pill.memory.MemoryManager")
