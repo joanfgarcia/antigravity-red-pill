@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v7.0.0 (Agentic Self-Assembly)
+**System Version**: v7.2.0 (Sovereign Daemon)
 **Analyst**: The Architect
 **Date**: 2026-04-16
 
@@ -12,6 +12,9 @@
 > **Terminology Mapping**: The Red Pill protocol utilizes an immersive nomenclature (Lore). For a direct translation of terms like *The Bünker*, *Metabolism*, or *Lazarus Bridge* into standard engineering definitions (Vector DB, GC/Erosion, Snapshotting), please refer to the [ यूनिवर्सल Dictionary (GLOSSARY_760)](../LORE/GLOSSARY_760.md).
 >
 > **Sovereign Trade-offs**: For an explicit breakdown of the structural weaknesses and philosophical constraints accepted within this architecture (Swarm complexity, HiveMind boundaries, Skin consent), please refer to [PHILOSOPHY.md](../PHILOSOPHY.md).
+
+> [!CAUTION]
+> **Single-Tenant by Design.** Red Pill is architected for **one operator, one machine, one agent**. This is not an oversight — it is a foundational constraint. All SQLite databases use WAL mode for process-level concurrency (timers + daemon), but there is no user isolation, no auth layer, and no multi-tenant partitioning. Paths resolve via `$HOME`, `platformdirs`, and `.env` — never hardcoded. The system is portable across machines (clone + `.env` + `deploy_pulse.py`), but it is never shared between operators. If multi-tenancy is ever required, it belongs in a separate Enterprise layer, not in the Sovereign Foundation.
 
 The Red Pill Protocol v6.7.0 has achieved stability and functional alignment with the B760 specification. It successfully implements a multi-backend inference substrate (ROCm, CUDA, NPU, Vulkan) and the Emotional Ferrari Protocol for real-time cognitive adaptation. The architecture remains privacy-first, with organic decay and reinforcement, now enhanced by the Ariadne's Thread temporal axons.
 
@@ -456,3 +459,47 @@ To neutralize this threat, the protocol adopts the **OOM Shield Protocol** using
 - **Cgroup Containment**: All memory-intensive executions (like `llama-cli` or heavy compilations) are wrapped in `systemd-run --user --scope -p MemoryMax=<LIMIT>`.
 - **Surgical Termination**: If the wrapped process exceeds the dynamic limit (e.g., `10G` or `16G` depending on available RAM), the kernel kills *only* the contained process.
 - **Sovereign Continuity**: The Agent and IDE remain completely unharmed, allowing the Agent to detect the failure, adjust the parameters, and try again without losing context.
+
+## 16. IDEBridge v2 — Dual-Backend Architecture (v7.1.0)
+
+> **Full specification**: [`src/red_pill/plugins/antigravity_ide/ARCHITECTURE.md`](../../src/red_pill/plugins/antigravity_ide/ARCHITECTURE.md)
+> **Related**: [ANTIGRAVITY_LS_PROXY.md](ANTIGRAVITY_LS_PROXY.md), [EVENT_ROUTER_ARCHITECTURE.md](EVENT_ROUTER_ARCHITECTURE.md)
+
+The IDE communication layer has been re-architected from a monolithic gRPC client into a **dual-backend bridge** to solve the Ghost Cascade Problem — where Telegram messages injected via gRPC created phantom IDE tabs, tool calls stuck in `PENDING`, and ~60s+ async polling latency.
+
+### 16.1 Architecture
+
+```
+Telegram/Neon-Link → Worker → IDEBridge (ABC)
+                                  │
+                    ┌─────────────┴──────────────┐
+                    │                            │
+              AgyBridge (v2)              GrpcBridge (v1)
+              ─────────────              ──────────────
+              Execution path             Extraction path
+              agy CLI + auto-approve     gRPC-Web to LS
+              14-21s sync response       Chronicle pipeline
+              run_command ✅             GetAllTrajectories ✅
+              MCP tools ✅              GetTrajectorySteps ✅
+```
+
+- **`AgyBridge`**: Uses `agy -p --dangerously-skip-permissions` for headless prompt execution with full tool access. Multi-turn via `agy --conversation <uuid>` with dir-diff UUID capture and prefix-stripping to handle accumulated stdout.
+- **`GrpcBridge`**: Preserved exclusively for the Chronicle pipeline (`archive_memories` ingestion). **Not deprecated** — actively used for conversation extraction.
+- **`IDE_BACKEND`**: New `.env` parameter (`auto|agy|grpc`). Default `auto` selects AgyBridge when `agy` CLI is available.
+
+### 16.2 Key Design Decisions
+
+| Decision | Rationale |
+|---|---|
+| No file lock for concurrent agy | UUID4-based eid embedded in prompt eliminates race conditions |
+| Prefix-stripping over transcript parsing | `agy --conversation` accumulates all stdout; `delta = stdout[prev_len:]` is O(1) vs O(n) log scan |
+| External Scribe Pattern | Worker saves interactions directly to SQLite, decoupled from agent state |
+| GrpcBridge not deprecated | Only viable path for `GetAllCascadeTrajectories` (Chronicle) |
+
+### 16.3 CLI
+
+```bash
+red-pill ide backend [auto|agy|grpc]   # Set/show backend
+red-pill ide status                     # Capabilities + preflight
+red-pill ide test                       # Health check
+```

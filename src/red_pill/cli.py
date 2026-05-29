@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import importlib.metadata
+import json
 import logging
 import os
 import subprocess
@@ -8,10 +9,10 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List
 
-import platformdirs
 import yaml  # type: ignore
 
 import red_pill.config as cfg
+from red_pill.core.paths import get_config_dir
 from red_pill.events import CliCommandDispatchedEvent, get_event_bus
 from red_pill.memory import MemoryManager
 from red_pill.seed import ID_DIR_ACTIVE_SKIN, seed_project
@@ -146,7 +147,6 @@ def handle_identity(args: argparse.Namespace) -> None:
 def handle_telemetry() -> None:
 	"""One-shot telemetry scan (formerly daemon)."""
 	import sys
-	from pathlib import Path
 
 	project_root = str(Path(__file__).parent.parent.parent)
 	if project_root not in sys.path:
@@ -161,7 +161,7 @@ def handle_telemetry() -> None:
 def handle_interceptor(args: argparse.Namespace) -> None:
 	"""Interceptor Management (Manual Activation for Security Audits)."""
 	conf = cfg.get_config()
-	env_path = Path(platformdirs.user_config_dir("red-pill")) / ".env"
+	env_path = get_config_dir() / ".env"
 
 	if args.int_cmd == "enable":
 		print("\n--- [SEC-G01: BÜNKER INTERCEPTOR ACTIVATION] ---")
@@ -206,38 +206,134 @@ def handle_interceptor(args: argparse.Namespace) -> None:
 		print(f"Bünker Interceptor: {status}")
 
 
+def handle_ide(args: argparse.Namespace) -> None:
+	"""Antigravity IDE Bridge Management."""
+	conf = cfg.get_config()
+	env_path = get_config_dir() / ".env"
+
+	if args.ide_cmd == "backend":
+		if args.value:
+			# Update .env (same pattern as handle_interceptor)
+			lines = []
+			replaced = False
+			if env_path.exists():
+				with open(env_path, "r") as f:
+					for line in f:
+						if line.startswith("IDE_BACKEND="):
+							lines.append(f"IDE_BACKEND={args.value}\n")
+							replaced = True
+						else:
+							lines.append(line)
+			if not replaced:
+				lines.append(f"IDE_BACKEND={args.value}\n")
+			with open(env_path, "w") as f:
+				f.writelines(lines)
+			print(f"[OK] IDE backend set to: {args.value.upper()}")
+		else:
+			print(f"Current IDE backend: {conf.IDE_BACKEND.upper()}")
+	elif args.ide_cmd == "status":
+		from red_pill.plugins.antigravity_ide.factory import create_bridge, preflight_check
+
+		pf = preflight_check()
+		bridge = create_bridge()
+		caps = bridge.get_capabilities()
+		print(f"--- [IDE BRIDGE: {caps.backend.value.upper()}] ---")
+		if pf.get("agy_version"):
+			print(f"agy version:         {pf['agy_version']}")
+		print(f"Auto-approve:        {'✅' if caps.auto_approve else '❌'}")
+		print(f"Ephemeral mode:      {'✅' if caps.ephemeral_mode else '❌'}")
+		print(f"Conversation resume: {'✅' if caps.conversation_resume else '❌'}")
+		print(f"Model selection:     {'✅' if caps.model_selection else '❌'}")
+		print(f"MCP tools:           {'✅' if caps.mcp_tools else '❌'}")
+		if pf.get("warnings"):
+			for w in pf["warnings"]:
+				print(f"⚠️  {w}")
+		if pf.get("errors"):
+			for e in pf["errors"]:
+				print(f"❌ {e}")
+	elif args.ide_cmd == "test":
+		from red_pill.plugins.antigravity_ide.factory import create_bridge
+
+		bridge = create_bridge()
+		backend_name = bridge.get_capabilities().backend.value.upper()
+		print(f"Testing {backend_name} bridge...")
+		if bridge.health_check():
+			print(f"[OK] {backend_name} bridge is healthy.")
+		else:
+			print(f"[FAIL] {backend_name} bridge is not responding.")
+	else:
+		print("Usage: red-pill ide [backend|status|test]")
+
+
+def handle_p2p(args: argparse.Namespace) -> None:
+	"""Sovereign P2P Synchronization (Delta Engine) Management."""
+	from red_pill.core.p2p_sync import SovereignSyncEngine, add_peer_alias, get_local_public_key
+
+	if args.p2p_cmd == "pair":
+		add_peer_alias(args.alias, args.node_id)
+		print(f"[OK] Peer alias '{args.alias}' mapped to node ID: {args.node_id}")
+		return
+
+	elif args.p2p_cmd == "advertise":
+		local_id = get_local_public_key()
+		print("\n📢 --- [LOCAL SOVEREIGN NODE IDENTITY] ---")
+		print(f"Node ID: {local_id}")
+		print("Provide this ID to your peer to establish a sync relationship.")
+		return
+
+	elif args.p2p_cmd == "sync":
+		engine = SovereignSyncEngine.from_default()
+		collections = args.collections
+		if not collections:
+			collections = cfg.METABOLISM_AUTO_COLLECTIONS
+
+		print("\n🔄 --- [TRANSMITTING P2P SYNC DATA] ---")
+		print(f"Peer: {args.peer}")
+		print(f"Collections: {', '.join(collections)}")
+		print(f"Since timestamp: {args.since}")
+
+		try:
+			session_id = engine.transmit_sync_payload(args.peer, collections, args.since)
+			print(f"[OK] Sync session '{session_id}' enqueued successfully.")
+			print("Chunks have been pushed to neon-link outbox for E2E routing.")
+		except Exception as e:
+			print(f"[ERROR] Sync transmission failed: {e}")
+		return
+
+	elif args.p2p_cmd == "process":
+		engine = SovereignSyncEngine.from_default()
+		print("\n🔄 --- [PROCESSING INCOMING SYNC DATA] ---")
+		try:
+			applied = engine.process_incoming_syncs()
+			print(f"[OK] Processed and applied {applied} sync session(s).")
+		except Exception as e:
+			print(f"[ERROR] Failed to process incoming syncs: {e}")
+		return
+
+	else:
+		print("Usage: red-pill p2p [pair|advertise|sync|process]")
+
+
 def handle_daemon() -> None:
 	"""
-	Lazarus Daemon: starts the LazarusPulse heartbeat and blocks forever.
+	Sovereign Daemon: single-process plugin-based control plane.
+	Auto-discovers monitor plugins from red_pill.daemon.plugins/ and
+	supervises them with hard timeouts. Never executes heavy work.
+
 	This is the entry point called by the systemd service (redpill.service).
-	The pulse runs all rituals (maintenance, sleep/consolidation, swarm, etc.)
-	every PULSE_INTERVAL seconds (default: 3600).
 	"""
-	import signal
-	import threading
+	import argparse as _ap
 
-	from red_pill.heartbeat import LazarusPulse
+	# Re-parse for daemon-specific flags (--oneshot)
+	parser = _ap.ArgumentParser(description="Sovereign Daemon")
+	parser.add_argument("--oneshot", action="store_true", help="Tick all plugins once and exit")
+	# Only parse known args to avoid conflicts with the main CLI parser
+	daemon_args, _ = parser.parse_known_args(sys.argv[2:])
 
-	mem_mgr = MemoryManager()
-	soul_mgr = SoulManager()
-	pulse = LazarusPulse(mem_mgr, soul_mgr)
+	from red_pill.daemon.sovereign import SovereignDaemon
 
-	stop_event = threading.Event()
-
-	def _shutdown(signum, frame):
-		print("\n[DAEMON] Signal received. Initiating graceful shutdown...")
-		pulse.stop()
-		stop_event.set()
-
-	signal.signal(signal.SIGTERM, _shutdown)
-	signal.signal(signal.SIGINT, _shutdown)
-
-	print(f"[DAEMON] Lazarus Pulse started. Interval: {cfg.PULSE_INTERVAL}s. PID: {os.getpid()}")
-	pulse.start()
-
-	# Block main thread until signal
-	stop_event.wait()
-	print("[DAEMON] Flatline. Goodbye.")
+	daemon = SovereignDaemon()
+	daemon.run(oneshot=daemon_args.oneshot)
 
 
 def get_collection(type_str: str) -> str:
@@ -301,6 +397,42 @@ def _dispatch_plugins(args: argparse.Namespace) -> bool:
 	return False
 
 
+def handle_secrets(args: argparse.Namespace) -> None:
+	"""Local Secrets Management (pure-mls encrypted)."""
+	from red_pill.utils.vault import SecretVault
+
+	vault = SecretVault()
+
+	if args.secrets_cmd == "set":
+		if vault.set_secret(args.key, args.value):
+			print(f"[OK] Secret '{args.key}' encrypted and stored.")
+		else:
+			print(f"[FAIL] Could not store secret '{args.key}'.")
+	elif args.secrets_cmd == "get":
+		val = vault.get_secret(args.key)
+		if val is not None:
+			print(val)
+		else:
+			print(f"[FAIL] Secret '{args.key}' not found.")
+			sys.exit(1)
+	elif args.secrets_cmd == "delete":
+		if vault.delete_secret(args.key):
+			print(f"[OK] Secret '{args.key}' deleted.")
+		else:
+			print(f"[FAIL] Secret '{args.key}' not found.")
+			sys.exit(1)
+	elif args.secrets_cmd == "list":
+		keys = vault.list_secrets()
+		if keys:
+			for key in keys:
+				print(f"- {key}")
+		else:
+			print("No secrets stored.")
+	else:
+		print("Unknown secrets subcommand.")
+		sys.exit(1)
+
+
 def main() -> None:
 	parser = argparse.ArgumentParser(description="Red Pill Protocol CLI")
 	parser.add_argument("--url", help="Qdrant URL")
@@ -359,6 +491,10 @@ def main() -> None:
 	sleep_parser.add_argument("--mode", choices=["lazy", "deep"], default="lazy", help="Deep mode forces full pruning")
 	audit_parser = swarm_sub.add_parser("audit", help="Launch Agent Smith Code Audit")
 	audit_parser.add_argument("--path", default=".", help="Target path for audit")
+
+	broadcast_parser = swarm_sub.add_parser("broadcast", help="Broadcast message to the Swarm community")
+	broadcast_parser.add_argument("message", help="Message content to broadcast")
+	broadcast_parser.add_argument("--channel", default="rings", choices=["rings", "firebase"], help="Transport channel to use (default: rings)")
 
 	backup_parser = subparsers.add_parser("backup", help="Create fast Qdrant snapshots (Pre-Migration Safety)")
 	backup_parser.add_argument("--collections", nargs="+", help="Specific collections to backup")
@@ -448,14 +584,56 @@ def main() -> None:
 	bunker_sub.add_parser("halt", help="[KILL-SWITCH] Emergency halt of all autonomous cognitive operations")
 	bunker_sub.add_parser("resume", help="Restore power to autonomous cognitive operations")
 
-	subparsers.add_parser("telemetry", help="Run a single-pass hardware/Bünker telemetry heartbeat (Oneshot)")
+	# Antigravity IDE Bridge
+	ide_parser = subparsers.add_parser("ide", help="Antigravity IDE Bridge Management")
+	ide_sub = ide_parser.add_subparsers(dest="ide_cmd")
+	backend_parser = ide_sub.add_parser("backend", help="Set or show IDE backend")
+	backend_parser.add_argument("value", nargs="?", choices=["agy", "grpc", "auto"], help="Backend to use")
+	ide_sub.add_parser("status", help="Show IDE bridge capabilities and health")
+	ide_sub.add_parser("test", help="Run connectivity test against the IDE")
+
+	# P2P Sovereign Sync (v7.1.0)
+	p2p_parser = subparsers.add_parser("p2p", help="Sovereign P2P Synchronization (Delta Engine)")
+	p2p_sub = p2p_parser.add_subparsers(dest="p2p_cmd")
+
+	pair_p2p = p2p_sub.add_parser("pair", help="Map a peer alias to their public node ID")
+	pair_p2p.add_argument("alias", help="Human-readable name of the device")
+	pair_p2p.add_argument("node_id", help="The peer's public signature/node key ID")
+
+	p2p_sub.add_parser("advertise", help="Display local sovereign identity details for pairing")
+
+	sync_p2p = p2p_sub.add_parser("sync", help="Transmit delta sync package to a peer")
+	sync_p2p.add_argument("peer", help="Peer identifier or alias")
+	sync_p2p.add_argument("--since", type=float, default=0.0, help="Sync items modified after this timestamp")
+	sync_p2p.add_argument("--collections", nargs="+", help="Specific memory collections to sync")
+
+	p2p_sub.add_parser("process", help="Scan MinionInbox for incoming chunks and apply sync deltas")
+
+	# Secrets Management (pure-mls encrypted)
+	secrets_parser = subparsers.add_parser("secrets", help="Manage encrypted local secrets")
+	secrets_sub = secrets_parser.add_subparsers(dest="secrets_cmd")
+
+	secrets_set = secrets_sub.add_parser("set", help="Encrypt and store a local secret")
+	secrets_set.add_argument("key", help="Secret key name")
+	secrets_set.add_argument("value", help="Secret value")
+
+	secrets_get = secrets_sub.add_parser("get", help="Retrieve and decrypt a local secret")
+	secrets_get.add_argument("key", help="Secret key name")
+
+	secrets_delete = secrets_sub.add_parser("delete", help="Delete a local secret")
+	secrets_delete.add_argument("key", help="Secret key name")
+
+	secrets_sub.add_parser("list", help="List all local secret keys")
+
+	subparsers.add_parser("telemetry", help="Run a single-pass hardware/Bünker telemetry check (Oneshot)")
+	daemon_parser = subparsers.add_parser("daemon", help="Start the Sovereign Daemon (plugin-based control plane)")
+	daemon_parser.add_argument("--oneshot", action="store_true", help="Tick all plugins once and exit (testing)")
 
 	args = parser.parse_args()
 
 	log_level = logging.DEBUG if args.verbose else getattr(logging, cfg.LOG_LEVEL.upper(), logging.INFO)
 
 	if os.getenv("LOG_JSON", "False").lower() == "true":
-		import json
 
 		class JsonFormatter(logging.Formatter):
 			def format(self, record):
@@ -496,6 +674,10 @@ def main() -> None:
 		parser.print_help()
 		sys.exit(0)
 
+	elif args.command == "daemon":
+		handle_daemon()
+		return
+
 	elif args.command == "telemetry":
 		handle_telemetry()
 		return
@@ -515,7 +697,7 @@ def main() -> None:
 	# Map CLI type to collection(s)
 	if getattr(args, "type", None):
 		collections = [get_collection(args.type)]
-	elif args.command in ["seed", "status", "swarm", "soul", "init", "bunker"]:
+	elif args.command in ["seed", "status", "swarm", "soul", "init", "bunker", "ide", "daemon"]:
 		collections = []  # Not needed for these
 	else:
 		# Default sweep for search/diag if no type specified
@@ -556,8 +738,6 @@ def main() -> None:
 			print(get_telemetry_report())
 			return
 		elif args.command == "cortex":
-			import json
-
 			from red_pill.telemetry import get_cortex_status
 
 			status_dict = get_cortex_status()
@@ -582,6 +762,30 @@ def main() -> None:
 								print(f"[{finding['severity']}] {finding['file']}:{finding['line']} - {finding['msg']}")
 					else:
 						print(f"ERROR en Minion {res.minion_id}: {res.error}")
+			elif args.swarm_cmd == "broadcast":
+				print("\n📢 --- [BROADCASTING SWARM MESSAGE] ---")
+				print(f"Message: {args.message}")
+				print(f"Channel: {args.channel}")
+
+				from red_pill.core.paths import get_neon_link_db_path
+
+				db_path = get_neon_link_db_path()
+
+				payload_json = json.dumps({"text": args.message, "mode": "background", "priority": "normal", "group_size": 100})
+
+				try:
+					import sqlite3
+
+					conn = sqlite3.connect(str(db_path))
+					cursor = conn.cursor()
+					cursor.execute(
+						"INSERT INTO outbox (channel, channel_user_id, payload) VALUES (?, ?, ?)", (args.channel, "broadcast", payload_json)
+					)
+					conn.commit()
+					conn.close()
+					print("[OK] Broadcast message enqueued to neon-link outbox successfully.")
+				except Exception as e:
+					print(f"[ERROR] Failed to enqueue broadcast message: {e}")
 			return
 		elif args.command == "soul":
 			soul = SoulManager()
@@ -668,6 +872,15 @@ def main() -> None:
 			from red_pill.bunker_lifecycle import handle_bunker
 
 			handle_bunker(args)
+			return
+		elif args.command == "ide":
+			handle_ide(args)
+			return
+		elif args.command == "p2p":
+			handle_p2p(args)
+			return
+		elif args.command == "secrets":
+			handle_secrets(args)
 			return
 
 		# Loop through requested collections

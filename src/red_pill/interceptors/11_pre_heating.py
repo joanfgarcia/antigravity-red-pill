@@ -5,7 +5,6 @@ from qdrant_client import models
 
 from red_pill import config
 from red_pill.interceptors.base import BaseInterceptorPlugin
-from red_pill.memory import MemoryManager
 from red_pill.utils.pre_heating_scorer import composite_score, extract_contextual_metadata
 
 logger = logging.getLogger(__name__)
@@ -32,8 +31,15 @@ class EmotionalPreHeatingPlugin(BaseInterceptorPlugin):
 		return getattr(config, "PRE_HEATING_ENABLED", True)
 
 	async def execute(self, prompt: str) -> str:
-		if EmotionalPreHeatingPlugin._has_fired:
+		from red_pill.interceptors import _05_cognitive_router_state as _cr_state
+
+		if _cr_state.is_casual_active():
 			return ""
+
+		if self.__class__._has_fired:
+			return ""
+
+		from red_pill.memory import MemoryManager
 
 		mgr = MemoryManager()
 		client = mgr.client
@@ -130,7 +136,7 @@ class EmotionalPreHeatingPlugin(BaseInterceptorPlugin):
 
 		if not top_fragments:
 			# Graceful degradation - better cold than hallucinating
-			EmotionalPreHeatingPlugin._has_fired = True
+			self.__class__._has_fired = True
 			return ""
 
 		parts = []
@@ -162,5 +168,5 @@ class EmotionalPreHeatingPlugin(BaseInterceptorPlugin):
 		parts.append("---")
 
 		# Mark as fired so it doesn't trigger on subsequent turns
-		EmotionalPreHeatingPlugin._has_fired = True
+		self.__class__._has_fired = True
 		return "\n".join(parts)

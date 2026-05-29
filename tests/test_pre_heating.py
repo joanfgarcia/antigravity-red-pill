@@ -36,7 +36,7 @@ def mock_qdrant_point(color, intensity, created_at, content="dummy", category="s
 async def test_fires_once():
 	plugin = EmotionalPreHeatingPlugin()
 
-	with patch.object(plugin_module, "MemoryManager") as mock_mgr:
+	with patch("red_pill.memory.MemoryManager") as mock_mgr:
 		# First call should output something if context exists
 		mock_client = MagicMock()
 		mock_client.collection_exists.return_value = False
@@ -53,7 +53,7 @@ async def test_fires_once():
 async def test_graceful_degradation():
 	plugin = EmotionalPreHeatingPlugin()
 
-	with patch.object(plugin_module, "MemoryManager") as mock_mgr:
+	with patch("red_pill.memory.MemoryManager") as mock_mgr:
 		mock_client = MagicMock()
 		mock_client.collection_exists.return_value = True
 
@@ -102,7 +102,7 @@ async def test_raw_mode_truncation(monkeypatch):
 	monkeypatch.setattr(config, "PRE_HEATING_MAX_CHARS_PER_FRAGMENT", 10)
 
 	plugin = EmotionalPreHeatingPlugin()
-	with patch.object(plugin_module, "MemoryManager") as mock_mgr:
+	with patch("red_pill.memory.MemoryManager") as mock_mgr:
 		mock_client = MagicMock()
 		mock_client.collection_exists.return_value = True
 

@@ -6,9 +6,18 @@ import sys
 
 sys.path.append(os.path.join(os.getcwd(), "src"))
 
-from red_pill.heartbeat import LazarusPulse
 from red_pill.memory import MemoryManager
-from red_pill.soul import SoulManager
+from red_pill.rituals import (
+	consolidation_ritual,
+	dream_ritual,
+	hygiene_ritual,
+	lazarus_ritual,
+	maintenance_ritual,
+	resonance_ritual,
+	swarm_ritual,
+	thread_ritual,
+	usp_ritual,
+)
 
 SETUP_TORCH_SCRIPT = os.path.join(os.path.dirname(__file__), "setup_torch.py")
 
@@ -40,30 +49,29 @@ async def oneshot_pulse(cycle: str = "full") -> None:
 		full  — All rituals (legacy/manual use).
 	"""
 
-	print(f"Initiating Oneshot Lazarus Pulse (Cycle: {cycle})...")
+	print(f"Initiating Oneshot Pulse (Cycle: {cycle})...")
 
 	# CUDA drift check — always runs, non-blocking
 	_check_cuda_drift()
 
-	mem_mgr = MemoryManager()
-	soul_mgr = SoulManager()
-	pulse = LazarusPulse(mem_mgr, soul_mgr)
+	mm = MemoryManager()
 
 	# Maintenance always runs — system health checks (CUDA, Qdrant, Korsakoff)
-	await pulse._maintenance_ritual()
+	await maintenance_ritual(mm)
 
 	# Wake rituals — social connectivity, swarm, hive sync
 	if cycle in ("full", "wake"):
-		await pulse._swarm_ritual()
-		await pulse._lazarus_ritual()
-		await pulse._resonance_ritual()
+		await swarm_ritual(mm)
+		await lazarus_ritual(mm)
+		await resonance_ritual(mm)
+		await hygiene_ritual(mm)
 
 	# Sleep rituals — memory consolidation, oneiromancy, Ariadne's Thread
 	if cycle in ("full", "sleep"):
-		await pulse._usp_ritual()
-		await pulse._dream_ritual()
-		await pulse._consolidation_ritual()
-		await pulse._thread_ritual()  # Hilo de Ariadna
+		await usp_ritual(mm)
+		await dream_ritual(mm)
+		await consolidation_ritual(mm)
+		await thread_ritual()
 
 	print("Pulse complete. Returning to the void.")
 

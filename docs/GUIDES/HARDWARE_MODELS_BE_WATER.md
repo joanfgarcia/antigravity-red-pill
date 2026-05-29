@@ -48,9 +48,9 @@ For legacy hardware or machines like a standard corporate laptop/RTX 3050 4GB. H
 ---
 
 ## ⚖️ How to configure the Daemon
-
-Update the `scripts/setup_background_model.sh` (or `~/.agent/model-daemon/start.sh` if already injected) to point to the desired model parameters on HuggingFace:
-
+ 
+Update the `scripts/setup_background_model.sh` (or the injected daemon `start.sh` script) to point to the desired model parameters on HuggingFace:
+ 
 ```bash
 # Example for Samantha (Mid-to-Budget with slight CPU spillover)
 exec python3 -m llama_cpp.server \
@@ -59,8 +59,8 @@ exec python3 -m llama_cpp.server \
 	--port 8760 \
 	--host 127.0.0.1
 ```
-
+ 
 Restart the daemon:
 ```bash
-systemctl --user restart red-pill-minion.service
+systemctl --user restart redpill-llm.service
 ```

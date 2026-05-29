@@ -2,5 +2,43 @@ hardware:
   memory_max_gb: 25.9
   workers: 8
   cuda_enabled: true
+
 models:
+  # Default quantization for non-BitNet GGUF models
   quantization: Q4_K_M
+
+  # Certified BitNet 1.58-bit model (Score: 98/100)
+  bitnet:
+    name: Falcon3-10B-Instruct-1.58bit
+    source: tiiuae/Falcon3-10B-Instruct-1.58bit
+    architecture: LlamaForCausalLM
+    quant_method: bitnet
+    quant_type: I2_S
+    disk_size_gb: 3.99
+    params_b: 10.31
+    gguf_path: 3rdparty/BitNet-1.58b/models/Falcon3-10B-Instruct-1.58bit/ggml-model-i2_s.gguf
+    runner_cuda: 3rdparty/BitNet-1.58b/build_cuda/bin/llama-cli
+    runner_cpu: 3rdparty/BitNet-1.58b/build_cpu/bin/llama-cli
+
+    # CUDA inference (RTX 5070 Laptop, 8GB VRAM)
+    cuda:
+      ngl: 99
+      ctx_default: 4096
+      ctx_max: 16384          # ctx 32768 causes OOM (KV cache 5.1GB > VRAM)
+      eval_tok_s: 24
+      prompt_eval_tok_s: 130
+
+    # CPU fallback
+    cpu:
+      ngl: 0
+      ctx_default: 2048
+      ctx_max: 2048
+      eval_tok_s: 3
+
+    # Chat template tokens
+    chat_template:
+      system_start: "<|system|>"
+      user_start: "<|user|>"
+      assistant_start: "<|assistant|>"
+      eos_token: "<|endoftext|>"
+      eos_token_id: 11

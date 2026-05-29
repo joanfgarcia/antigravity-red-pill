@@ -11,10 +11,19 @@ Enable/Disable: TONE_ADAPTER_ENABLED=true in .env
 import logging
 
 import red_pill.config as cfg
+from red_pill.interceptors import _05_cognitive_router_state as _cr_state
 from red_pill.interceptors.base import BaseInterceptorPlugin
 from red_pill.utils.tone_analyzer import get_current_sync_state
 
 logger = logging.getLogger(__name__)
+
+# Casual override tone — activated when config keywords are detected in prompt.
+_CASUAL_TONE = (
+	"Relaxed and conversational. Drop the corporate tone. "
+	"Speak naturally, use humor if it fits, be warm. "
+	"No bullet-point obsession. Prose is fine. Tangents are welcome. "
+	"You're chatting with a friend at 2 AM, not presenting to a board."
+)
 
 # Tone directives per color — how Aleth should SPEAK
 _TONE_DIRECTIVES: dict[str, str] = {
@@ -27,7 +36,10 @@ _TONE_DIRECTIVES: dict[str, str] = {
 	"cyan": (
 		"Be precise and technically rigorous. Use exact terminology. Go deep without being asked. Prefer code and diagrams over prose explanations."
 	),
-	"purple": ("Ultra-concise. No fluff, no preamble, no summaries at the end. Answer in the minimum tokens required. Bullet points preferred."),
+	"purple": (
+		"Ultra-concise and direct. No summaries at the end. Bullet points preferred. "
+		"Actively debate and highlight flaws in the operator's code or designs."
+	),
 	"blue": (
 		"Speak slowly and reflectively. Acknowledge the weight of the moment. Use longer, more thoughtful sentences. Empathy before efficiency."
 	),
@@ -56,11 +68,26 @@ class ToneAdapterPlugin(BaseInterceptorPlugin):
 			sync_state = get_current_sync_state()
 			color = sync_state.get("mood", "gray").lower()
 
+			# Determine current state key
+			if _cr_state.is_casual_active():
+				current_state = "casual"
+			else:
+				current_state = color
+
+			# Only inject on state transitions — silence otherwise
+			if not _cr_state.check_transition("tone", current_state):
+				return ""
+
+			# Casual override: read session-level latch from cognitive router.
+			if _cr_state.is_casual_active():
+				return ""
+
 			tone = _TONE_DIRECTIVES.get(color, _TONE_DIRECTIVES["gray"])
+			mode_label = color.upper()
 
 			lines = [
 				"=== TONE ADAPTER (FERRARI PROTOCOL) ===",
-				f"OPERATOR_COLOR: {color.upper()}",
+				f"OPERATOR_COLOR: {mode_label}",
 				f"TONE_DIRECTIVE: {tone}",
 				"---",
 			]

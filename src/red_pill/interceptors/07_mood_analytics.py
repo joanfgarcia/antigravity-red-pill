@@ -56,6 +56,11 @@ class MoodAnalyticsPlugin(BaseInterceptorPlugin):
 		return getattr(cfg.get_config(), "MOOD_ANALYTICS_ENABLED", True)
 
 	async def execute(self, prompt: str) -> str:
+		from red_pill.interceptors import _05_cognitive_router_state as _cr_state
+
+		if _cr_state.is_casual_active():
+			return ""
+
 		try:
 			from red_pill.memory import MemoryManager
 
@@ -86,9 +91,7 @@ class MoodAnalyticsPlugin(BaseInterceptorPlugin):
 			session_points.append(p)
 
 		if not session_points:
-			return (
-				"=== MOOD ANALYTICS (FERRARI PROTOCOL) ===\nSTATUS: OVERNIGHT THERAPY RESET (Blank Slate)\nDOMINANT_COLOR: EMERALD (Set Point)\n---"
-			)
+			return ""
 
 		colors = [p.payload.get("color", "gray") for p in session_points if p.payload and not p.payload.get("immune", False)]
 

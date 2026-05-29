@@ -89,7 +89,7 @@ class ChronicleIngester:
 
 			if hasattr(psutil, "sensors_battery"):
 				battery = psutil.sensors_battery()
-				if battery and not battery.power_plugged:
+				if battery and battery.power_plugged is False:
 					# Hard Halt if battery is critical
 					if battery.percent < 20:
 						logger.warning(f"CRITICAL BATTERY ({battery.percent}%). Emergency shutdown of ingestion.")

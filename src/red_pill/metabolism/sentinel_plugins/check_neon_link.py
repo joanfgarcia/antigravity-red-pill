@@ -1,35 +1,60 @@
+"""
+Sentinel Plugin: Neon-Link Telegram Bridge.
+
+Specific checks when running:
+- HTTP reachability of the bridge endpoint (NEON_LINK_URL)
+"""
+
 import os
 import subprocess
 import urllib.error
 import urllib.request
-from typing import Any, List
+from typing import Any, List, Optional
 
 from red_pill.metabolism.auditor import AuditFinding
-from red_pill.metabolism.sentinel_plugins.base import SentinelPlugin
+from red_pill.metabolism.sentinel_plugins.service_base import ServiceSentinelPlugin
 
 
-class NeonLinkCheck(SentinelPlugin):
+class NeonLinkCheck(ServiceSentinelPlugin):
 	@property
 	def name(self) -> str:
 		return "Neon-Link Telegram Bridge"
 
-	def is_enabled(self, cfg: Any) -> bool:
-		return getattr(cfg, "NEON_LINK_ENABLED", True)
+	@property
+	def service_unit(self) -> str:
+		return "neon-link.service"
 
-	def audit(self, cfg: Any) -> List[AuditFinding]:
+	@property
+	def config_key(self) -> Optional[str]:
+		return "NEON_LINK_ENABLED"
+
+	def audit_health(self, cfg: Any) -> List[AuditFinding]:
 		findings = []
 		try:
 			urllib.request.urlopen(cfg.NEON_LINK_URL, timeout=2)
 		except Exception as e:
 			if not isinstance(e, urllib.error.HTTPError):
-				findings.append(AuditFinding(type="blindness", severity=10.0, message=f"Neon-Link Bridge is HUNG/OFFLINE: {e}"))
+				findings.append(
+					AuditFinding(
+						type="neon_hung",
+						severity=10.0,
+						message=f"{self.name}: bridge is HUNG/OFFLINE at {cfg.NEON_LINK_URL}: {e}",
+						metadata={"service": self.service_unit, "url": cfg.NEON_LINK_URL},
+					)
+				)
 		return findings
 
-	def heal(self, cfg: Any, finding: AuditFinding) -> bool:
-		"""Auto-curación: Matar uvicorn de neon-link y relanzar start.sh"""
+	def heal_specific(self, cfg: Any, finding: AuditFinding) -> bool:
+		"""Neon-Link fallback: try systemd restart, then pkill + start.sh."""
+		if self._restart_service():
+			return True
+
+		# Fallback: manual restart via start.sh
 		try:
 			subprocess.run(["pkill", "-f", "neon-link"], check=False)
-			neon_dir = os.path.expanduser("~/Documents/IA/neon-link")
+			from red_pill.core.paths import get_bunker_root
+
+			neon_dir = str(get_bunker_root().parent / "neon-link")
 			start_script = os.path.join(neon_dir, "start.sh")
 
 			if os.path.exists(start_script):

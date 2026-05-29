@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import signal
+import socket
 import sys
 
 # Fix path for local imports
@@ -11,6 +12,21 @@ from red_pill.swarm.factory import MinionFactory
 
 logger = logging.getLogger("red_pill.echo_daemon")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+
+
+def _sd_notify(state: str) -> None:
+	"""Send a notification to systemd (WatchdogSec / Type=notify). No-op if not under systemd."""
+	addr = os.environ.get("NOTIFY_SOCKET")
+	if not addr:
+		return
+	try:
+		sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+		if addr[0] == "@":
+			addr = "\0" + addr[1:]
+		sock.sendto(state.encode(), addr)
+		sock.close()
+	except Exception:
+		pass
 
 
 class EchoDaemon:
@@ -33,15 +49,17 @@ class EchoDaemon:
 		for sig in (signal.SIGINT, signal.SIGTERM):
 			loop.add_signal_handler(sig, lambda: self.stop())
 
+		_sd_notify("READY=1")
 		while self.running:
 			try:
 				# 1. Heartbeat - notify system we are alive
+				_sd_notify("WATCHDOG=1")
 				logger.debug("Echo Heartbeat: Monitoring The Blackwall...")
 
 				# 2. Monitor Pulse: Check for recent interactions
 				await self.echo.execute("monitor_pulse")
 
-				# 4. Sleep interval (configurable)
+				# 3. Sleep interval (configurable)
 				await asyncio.sleep(60)  # Default: check every minute
 			except Exception as e:
 				logger.error(f"Echo Daemon Loop Error: {e}")

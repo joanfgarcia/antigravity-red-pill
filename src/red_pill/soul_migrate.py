@@ -22,18 +22,18 @@ import shutil
 import time
 from pathlib import Path
 
-import platformdirs
+from red_pill.core.paths import get_bunker_root, get_config_dir
 
 logger = logging.getLogger(__name__)
 
 # Migration staging area — 0700 permissions, never uploaded to cloud
-SECURE_BACKUP_DIR = Path(platformdirs.user_config_dir("red-pill")) / "soul_migrate"
-VAULT_STATE_PATH = Path(platformdirs.user_config_dir("red-pill")) / "vault_group.state"
-IDENTITY_KEYS_PATH = Path(platformdirs.user_config_dir("red-pill")) / "vault_identity.state"
+SECURE_BACKUP_DIR = get_config_dir() / "soul_migrate"
+VAULT_STATE_PATH = get_config_dir() / "vault_group.state"
+IDENTITY_KEYS_PATH = get_config_dir() / "vault_identity.state"
 
 MIGRATION_MANIFEST = SECURE_BACKUP_DIR / "migration_manifest.json"
 
-EXPORT_DIR = Path(os.environ.get("WORKSPACE_ROOT", os.path.expanduser("~/Documents/IA"))) / "backups" / "export"
+EXPORT_DIR = Path(os.environ.get("WORKSPACE_ROOT", str(get_bunker_root().parent))) / "backups" / "export"
 
 
 def _ensure_secure_dir() -> None:

@@ -42,6 +42,12 @@ Updates within the Red Pill ecosystem are not just code deployments; they are **
 *   **FastEmbed Models**: `get_models_dir()` -> `~/.local/share/red-pill/models/`
 *   **Async Queues**: `get_queue_dir()` -> `~/.local/share/red-pill/queue/`
 *   **Config & Env**: `get_config_dir()` -> `~/.config/red-pill/`
+*   **Thread State**: `get_thread_state_path()` -> `~/.local/share/red-pill/thread_state.json`
+*   **Staging Buffer**: `get_staging_dir()` -> `~/.cache/red-pill/staging/`
+*   **Ingestion Path**: `get_ingestion_dir()` -> `~/.local/share/red-pill/ingestion/`
+*   **Model Profiles**: `get_model_profiles_path()` -> `~/.config/red-pill/model_profiles.yaml`
+*   **Swarm Config**: `get_swarm_config_path()` -> `~/.config/red-pill/swarm_communities.json`
+*   **Daemon Directory**: `get_daemon_dir()` -> `$XDG_RUNTIME_DIR/red-pill/` (falls back to `~/.cache/red-pill/daemons/`)
 *   **Backups**: `get_backup_dir()` -> `<IA_DIR>/backups/red-pill/` (The only exception explicitly defined by user).
 
 **Agent Mandate:** When modifying ANY script, test, or documentation, verify that XDG paths are used dynamically. Never assume the current working directory contains the state.
@@ -148,7 +154,12 @@ As of v6.1.2, the **Bünker Telemetry Daemon (`bunker_telemetry.py`)** is the ma
     *   Linux: `systemctl --user status redpill-bunker.service`
     *   macOS: `launchctl list | grep redpill.bunker`
     *   Windows: Check Task Scheduler for `RedPillBunkerTelemetry`.
-3.  **Legacy Cleanup**: The old `memory_daemon.py` is DEPRECATED. Ensure its service is stopped and removed.
+3.  **Legacy & Duplicate Cleanup (CRITICAL)**:
+    *   **NO DUPLICATES ALLOWED**: The agent MUST audit systemd user services (using `systemctl --user list-units` or `ps -ef`) after every sync. Ensure that only the canonical units declared in `services.yaml` (located under `~/.config/red-pill/`) are active.
+    *   **Post-Update Service Audit**: Instantly after every update, the agent must check the list of active services and timers to ensure no legacy or duplicated services (like `bunker-queue.service` vs `redpill-queue.service`) are active or enabled. Only the correct/canonical services must be running.
+    *   **Healer Verification**: Verify that none of the automated metabolism healers (tissues) are accidentally spawning duplicates. Specifically, ensure `check_neon_link.py` and other sentinel plugins route restarts through `systemctl` instead of raw background processes.
+    *   **Legacy Purging**: Discard, stop, and disable any legacy or orphaned service files (e.g., `bunker-queue.service` or legacy `redpill-pulse.service`) to prevent concurrent locks on SQLite/Qdrant and prevent VRAM/CPU leaks.
+    *   The old `memory_daemon.py` is DEPRECATED. Ensure its service is stopped and removed.
 
 > [!IMPORTANT]
 > The `wake_up_v6.py` script no longer checks for the sidecar socket. If you see socket-related errors, your script is stale. Use the latest version.
@@ -406,7 +417,7 @@ The `~/.gemini/GEMINI.md` file defines the agent's boot protocol. After major pr
     - **Rule 2 — Model Change Identity Resync**: On model switch, call `refresh_session_context` immediately.
     - ~~Rule 3~~ — **REMOVED** (v6.2.5): deprecated End-of-Turn logging. Start-of-Turn Relay (Rule 1) is the canonical mechanism.
 
-2.  **Rules directory**: Check `~/.gemini/antigravity/rules/` for any referenced but missing rule files.
+2.  **Rules & Skills directory**: Check `~/.agent/rules/` and `~/.agent/skills/` for missing files. Verify symlinks to IDE directory (`~/.gemini/config/skills/`) are intact.
 3.  **Re-inject**: If any rule is missing, re-run `scripts/install_neo.sh` or manually update `~/.gemini/GEMINI.md`.
 
 ### 4.7 Merge Reconciliation Protocol
@@ -533,6 +544,25 @@ The `perform_sleep_cycle()` function in `src/red_pill/metabolism/sleep.py` has t
     **1. Schema Migration**:
     The system automatically executes a non-destructive `ALTER TABLE` during initialization to add the `parent_task_id` column to `cognitive_tasks`.
     - **Action**: No manual database migration or `upgrade.sh` intervention is required. The Python layer handles the schema evolution safely via `queue_manager.py`.
+
+    #### §4.24 Service Health Gating & Compaction Optimization (v7.1.0)
+
+    This major update stabilizes the Lazarus daemon commands, introduces configuration-aware service health gating to prevent false positive downtime alarms, implements context compaction limits to prevent model amnesia, and centralizes path resolution under strict XDG compliance.
+
+    **1. Service Manifest Update**:
+    The service contract schema now supports `category`, `required`, and `enabled_config_key` fields.
+    - **Action**: Check `~/.config/red-pill/services.yaml` and align it with the new manifest template `examples/services.yaml`. Specifically, ensure optional plugins like `neon-link` specify `required: false` and map to gating keys (e.g. `enabled_config_key: NEON_LINK_ENABLED`).
+    - **Verify**: Run `red-pill status` and confirm services load cleanly without configuration schema warnings.
+
+    **2. Compacted Context Injection Control**:
+    The system now prevents feedback loops on Gemini Flash models when context compaction occurs.
+    - **Action**: In your `.env` file, configure `COMPACTION_THRESHOLD=10` (default) to control how many compactions to wait before re-injecting the 11KB identity block.
+    - **Verify**: The MCP tool `refresh_session_context` will automatically track the compaction count in `bunker_state.json` and skip full injection when under the threshold, providing a lightweight confirmation instead.
+
+    **3. Centralized XDG Paths & Operational State Migration**:
+    All non-agentic files (configs, caches, and databases) are now centralized under standard XDG paths (`$XDG_CONFIG_HOME/red-pill` and `$XDG_DATA_HOME/red-pill`), cleanly separating operational files from agéntico assets (which remain in `~/.agent/`).
+    - **Action**: The system automatically migrates legacy operational files (e.g., `thread_state.json`, `bunker_persona_cache.json`, `auditor_cache.json`, and keys) from `~/.agent/` to standard XDG locations during boot. For custom plugins like `neon-link`, database directories have been migrated to the new schema: events are stored at `$XDG_DATA_HOME/neon-link/events.db` and resolved dynamically via `get_neon_link_db_path()`.
+    - **Verify**: Confirm that `~/.agent` only contains agéntico assets (skills, rules, conventions) and that all sqlite `.db`, JSON caches, and state files now reside under standard XDG directories.
 
 ## 5. Hierarchy of Directives
 

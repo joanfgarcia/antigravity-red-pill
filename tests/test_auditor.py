@@ -72,18 +72,28 @@ def test_audit_runtime_daemon_failure(mock_run, auditor):
 
 @patch("subprocess.run")
 def test_audit_vitals_exhaustion(mock_run, auditor):
-	mock_vram = MagicMock()
-	mock_vram.returncode = 0
-	mock_vram.stdout = "7800,8192"  # > 95% used
-
-	mock_dmesg = MagicMock()
-	mock_dmesg.returncode = 0
-	mock_dmesg.stdout = "Out of memory: Killed process 1234 (redpill-worker)"
-
-	mock_run.side_effect = [mock_vram, mock_dmesg]
+	def run_side_effect(cmd, *args, **kwargs):
+		cmd_str = " ".join(cmd) if isinstance(cmd, list) else str(cmd)
+		res = MagicMock()
+		res.returncode = 0
+		if "nvidia-smi" in cmd_str:
+			res.stdout = "7800,8192"
+		elif "dmesg" in cmd_str or "journalctl" in cmd_str:
+			res.stdout = "Out of memory: Killed process 1234 (redpill-worker)"
+		else:
+			res.stdout = ""
+		return res
+	mock_run.side_effect = run_side_effect
 
 	# We mock urllib and sqlite3 since those hit real system components
-	with patch("urllib.request.urlopen"), patch("pathlib.Path.exists", return_value=False):
+	from red_pill.core.service_contract import ServiceContract
+
+	dummy_manifest = {"dummy": ServiceContract(name="dummy", unit="dummy.service", type="oneshot", max_runtime_s=60)}
+	with (
+		patch("urllib.request.urlopen"),
+		patch("pathlib.Path.exists", return_value=False),
+		patch("red_pill.metabolism.sentinel_plugins.check_duplicate_services.load_manifest", return_value=dummy_manifest),
+	):
 		report = auditor.audit_vitals()
 
 	assert report.status == "red"
@@ -93,17 +103,27 @@ def test_audit_vitals_exhaustion(mock_run, auditor):
 
 @patch("subprocess.run")
 def test_audit_vitals_all_green(mock_run, auditor):
-	mock_vram = MagicMock()
-	mock_vram.returncode = 0
-	mock_vram.stdout = "1024,8192"  # Low usage
+	def run_side_effect(cmd, *args, **kwargs):
+		cmd_str = " ".join(cmd) if isinstance(cmd, list) else str(cmd)
+		res = MagicMock()
+		res.returncode = 0
+		if "nvidia-smi" in cmd_str:
+			res.stdout = "1024,8192"
+		elif "dmesg" in cmd_str or "journalctl" in cmd_str:
+			res.stdout = "System functioning normally"
+		else:
+			res.stdout = ""
+		return res
+	mock_run.side_effect = run_side_effect
 
-	mock_dmesg = MagicMock()
-	mock_dmesg.returncode = 0
-	mock_dmesg.stdout = "System functioning normally"
+	from red_pill.core.service_contract import ServiceContract
 
-	mock_run.side_effect = [mock_vram, mock_dmesg]
-
-	with patch("urllib.request.urlopen"), patch("pathlib.Path.exists", return_value=False):
+	dummy_manifest = {"dummy": ServiceContract(name="dummy", unit="dummy.service", type="oneshot", max_runtime_s=60)}
+	with (
+		patch("urllib.request.urlopen"),
+		patch("pathlib.Path.exists", return_value=False),
+		patch("red_pill.metabolism.sentinel_plugins.check_duplicate_services.load_manifest", return_value=dummy_manifest),
+	):
 		report = auditor.audit_vitals()
 
 	assert report.status == "green"

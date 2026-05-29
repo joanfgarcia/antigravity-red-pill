@@ -34,6 +34,84 @@ def test_no_legacy_storage_paths():
 	assert not violations, "XDG Compliance violation (legacy 'storage' used):\n" + "\n".join(violations)
 
 
+def test_xdg_paths():
+	from red_pill.core.paths import (
+		get_config_dir,
+		get_ingestion_dir,
+		get_model_profiles_path,
+		get_staging_dir,
+		get_swarm_config_path,
+		get_thread_state_path,
+	)
+
+	assert ".agent" not in str(get_config_dir())
+	assert ".agent" not in str(get_thread_state_path())
+	assert ".agent" not in str(get_staging_dir())
+	assert ".agent" not in str(get_ingestion_dir())
+	assert ".agent" not in str(get_swarm_config_path())
+	assert ".agent" not in str(get_model_profiles_path())
+
+
+def test_migrate_legacy_agent_dirs(tmp_path, monkeypatch):
+	import red_pill.core.paths as core_paths
+
+	legacy_agent = tmp_path / ".agent"
+	legacy_agent.mkdir()
+
+	legacy_file = legacy_agent / "thread_state.json"
+	legacy_file.write_text('{"test": true}')
+
+	target_file = tmp_path / "new_thread_state.json"
+
+	monkeypatch.setattr(core_paths, "get_thread_state_path", lambda: target_file)
+	monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+	core_paths.migrate_legacy_agent_dirs()
+
+	assert not legacy_file.exists()
+	assert target_file.exists()
+	assert target_file.read_text() == '{"test": true}'
+
+
+def test_no_direct_platformdirs_imports():
+	"""
+	Asserts that no Python file in src/ (except red_pill/core/paths.py)
+	or in scripts/ imports 'platformdirs' directly.
+	"""
+	project_root = Path(__file__).parent.parent
+	src_dir = project_root / "src"
+	scripts_dir = project_root / "scripts"
+
+	violations = []
+
+	# Check src/
+	for py_file in src_dir.rglob("*.py"):
+		if py_file.name == "paths.py":
+			continue
+		try:
+			with open(py_file, "r", encoding="utf-8") as f:
+				content = f.read()
+			if "import platformdirs" in content or "from platformdirs" in content:
+				violations.append(str(py_file.relative_to(project_root)))
+		except Exception:
+			pass
+
+	# Check scripts/
+	if scripts_dir.exists():
+		for py_file in scripts_dir.rglob("*.py"):
+			try:
+				with open(py_file, "r", encoding="utf-8") as f:
+					content = f.read()
+				if "import platformdirs" in content or "from platformdirs" in content:
+					violations.append(str(py_file.relative_to(project_root)))
+			except Exception:
+				pass
+
+	assert not violations, "The following files import platformdirs directly instead of using paths.py:\n" + "\n".join(violations)
+
+
 if __name__ == "__main__":
 	test_no_legacy_storage_paths()
-	print("XDG Compliance Test Passed.")
+	test_xdg_paths()
+	test_no_direct_platformdirs_imports()
+	print("XDG Compliance Tests Passed.")

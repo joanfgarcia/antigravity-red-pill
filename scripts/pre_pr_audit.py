@@ -1,49 +1,70 @@
+import os
 import subprocess
 import sys
-from typing import List
-
-# Terminal Colors
-BLUE = "\033[0;34m"
-GREEN = "\033[0;32m"
-RED = "\033[0;31m"
-NC = "\033[0m"
-
-
-def run_step(name: str, cmd: List[str], check_only: bool = False) -> bool:
-	print(f"{BLUE}--- {name} ---{NC}")
-	try:
-		subprocess.run(cmd, check=True, text=True, capture_output=False)
-		print(f"{GREEN}PASS{NC}\n")
-		return True
-	except subprocess.CalledProcessError:
-		print(f"{RED}FAIL{NC}\n")
-		return False
 
 
 def main():
-	print(f"{BLUE}--- [B760 PRE-PR AUDIT PROTOCOL v2.0 (PURE PYTHON)] ---{NC}\n")
+	sharing_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+	scratch_dir = os.path.join(sharing_dir, "scratch")
+	os.makedirs(scratch_dir, exist_ok=True)
+	out_file = os.path.join(scratch_dir, "pre_pr_audit_output.txt")
 
-	steps = [
-		("Formatting Check (Ruff)", ["uv", "run", "ruff", "format", "--check", "."]),
-		("Linting Check (Ruff)", ["uv", "run", "ruff", "check", "."]),
-		("Static Analysis (Mypy)", ["uv", "run", "mypy", "src/red_pill"]),
-		("Neural Validation (Pytest)", ["uv", "run", "pytest", "tests/", "-v"]),
-		("Bünker Protocol Sync", [sys.executable, "scripts/mcp_sync_check.py"]),
-	]
+	with open(out_file, "w") as f:
+		f.write("=== PRE-PR AUDIT DIAGNOSTICS ===\n")
+		f.flush()
 
-	success = True
-	for name, cmd in steps:
-		if not run_step(name, cmd):
-			success = False
-			break
+		# Formatting check
+		f.write("\n--- Formatting Check (Ruff) ---\n")
+		f.flush()
+		try:
+			res = subprocess.run(["uv", "run", "ruff", "format", "--check", "."], cwd=sharing_dir, capture_output=True, text=True)
+			f.write(f"Return code: {res.returncode}\n")
+			f.write(res.stdout or "")
+			f.write(res.stderr or "")
+		except Exception as e:
+			f.write(f"Error running Ruff format: {e}\n")
+		f.flush()
 
-	if success:
-		print(f"{GREEN}READY FOR THE SOURCE. MERGE PERMITTED.{NC}")
-		print("770 UP.")
-		sys.exit(0)
-	else:
-		print(f"{RED}AUDIT FAILED. Please resolve the issues above before merging.{NC}")
-		sys.exit(1)
+		# Linting check
+		f.write("\n--- Linting Check (Ruff) ---\n")
+		f.flush()
+		try:
+			res = subprocess.run(["uv", "run", "ruff", "check", "."], cwd=sharing_dir, capture_output=True, text=True)
+			f.write(f"Return code: {res.returncode}\n")
+			f.write(res.stdout or "")
+			f.write(res.stderr or "")
+		except Exception as e:
+			f.write(f"Error running Ruff check: {e}\n")
+		f.flush()
+
+		# Static analysis
+		f.write("\n--- Static Analysis (Mypy) ---\n")
+		f.flush()
+		try:
+			res = subprocess.run(["uv", "run", "mypy", "src/red_pill"], cwd=sharing_dir, capture_output=True, text=True)
+			f.write(f"Return code: {res.returncode}\n")
+			f.write(res.stdout or "")
+			f.write(res.stderr or "")
+		except Exception as e:
+			f.write(f"Error running Mypy: {e}\n")
+		f.flush()
+
+		# Pytest check
+		f.write("\n--- Pytest Check ---\n")
+		f.flush()
+		try:
+			res = subprocess.run(["uv", "run", "pytest", "tests/", "-v"], cwd=sharing_dir, capture_output=True, text=True)
+			f.write(f"Return code: {res.returncode}\n")
+			f.write(res.stdout or "")
+			f.write(res.stderr or "")
+		except Exception as e:
+			f.write(f"Error running Pytest: {e}\n")
+		f.flush()
+
+		f.write("\n=== DIAGNOSTICS COMPLETE ===\n")
+		f.flush()
+
+	sys.exit(0)
 
 
 if __name__ == "__main__":

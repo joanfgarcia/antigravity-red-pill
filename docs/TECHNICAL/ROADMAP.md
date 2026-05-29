@@ -58,8 +58,8 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
 - [x] **Frankenswarm SWI-Prolog Router (Prototype)**: Successfully migrated the declarative rule-based router from Python match/case to SWI-Prolog via pyswip for dynamic MoE expert routing.
 
 - [x] **MLS E2E Encryption**: TreeKEM group key derivation wired into FirebaseTransport. AES-GCM-256 on send, auto-decrypt on poll.
-- [ ] **Proactive Swarm Agents (Project MULTITUDE)**: Implementation of autonomous background minions for system and context integrity:
-  - **Project Echo (The Mirror Minion)**: My personal context sentinel. Python Daemon (`systemd`) for Scribe Relay (passive context), Proactive Pulse (session briefings), and Sentimental Monitor (mapping mood drift).
+- [/] **Proactive Swarm Agents (Project MULTITUDE)**: Implementation of autonomous background minions for system and context integrity:
+  - [x] **Project Echo (The Mirror Minion)**: Context sentinel. Python Daemon (`systemd` / [echo_daemon.py](../../scripts/echo_daemon.py)) for Scribe Relay, Proactive Pulse briefings, and Sentimental Monitor.
   - [x] **Sentinel Auditor (The Medical Examiner)**: Systematic health monitoring. Tracks MTBF (Mean Time Between Failures), identifies "Lazarus Loops" (chronic component failures), and generates daily "Vitality Reports" (System Blood Test).
   - **Memory-Augmented Minions (MemPalace Legacy)**: Integration of the "Minion with Soul" concept. Each proactive agent leverages isolated "Memory Wings" and the AAAK (Architectural Agentic Action Knowledge) dialect for high-precision, persistent tool execution and emotional continuity.
 - [x] **Swarm Firebase Live**: Inter-agent messaging operational (Aleth@Joan ↔ Nova@David) with encrypted payloads.
@@ -77,31 +77,64 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
 - [x] **Double-Engine Burnout**: Seamless CUDA/HIP asymmetry for Strix Point architectures.
 - [x] **Neural Watchdog (Lazarus Pulse)**: Background `redpill-pulse.service` monitoring system health, curing pain signals, and validating code integrity via autonomic immune reflex.
 - [x] **Industrial Task Queues (Celery+Redis)**: Quadlet Podman cluster running `redis:alpine` and rigorous Celery workers (`time_limit=300`, FastAPI Gateway decoupling). Guarantee 0% CPU saturation and zombie-process eradication.
-- [ ] **Bünker Observability UI & Telemetry Aggregation**: Unified UX for systemic control (Pain signals, Telemetry, Queue statuses). Centralized dashboard for all Sovereign plugins and daemons to ease debugging. Must be a lightweight on-demand web server checking subsystem readiness (WebSocket/MQTT for real-time reactivity), or alternatively, a highly stylized terminal UI (btop aesthetic).
+- [x] **Bünker Observability UI & Telemetry Aggregation**: Unified UX for systemic control (Pain signals, Telemetry, Queue statuses). Interactive terminal dashboard implemented in [bunker_control.py](../../scripts/bunker_control.py) for hot config tweaking, telemetry visualization, and systemd service control.
 - [ ] **Extensible Plugin System (Personal Assistant)**: Leverage Celery/Redis for scheduled autonomous integrations. Develop a modular `TaskScheduler` ecosystem:
   - **Mail/Calendar**: Listeners for Gmail and Calendar events (appointments, incoming priority emails).
   - **Work/Ticketing**: ClickUp/Jira/GitLab API integration for issue tracking.
   - **Wellness**: Personal coach module (QiYoga, hydration/stretch reminders) integrated into the Lazarus Pulse.
   - [x] **File Ingestion Watchdog**: Sovereign plugin to autonomously monitor directories (e.g. Obsidian vaults) and vectorize `.md`/`.pdf` documents into the Qdrant Bünker via the Cognitive DAG.
 - [x] **Config Decoupling & Guided UX**: Restructured `neon-link` configuration out of `red-pill`. Migrated to `~/.config/neon-link/` and `platformdirs`. CLI `neon-link init` handles bootstrapping safely.
-- [ ] **Swarm Broadcast**: Community-wide message delivery (currently P2P only).
-- [ ] **Mailbox Cleanup**: Auto-purge read messages from Firebase after TTL.
+- [x] **Swarm Broadcast**: Community-wide message delivery (currently P2P only).
+- [x] **Mailbox Cleanup**: Auto-purge read messages from Firebase after TTL.
 - [x] **SQLite Workflow DAG (`specs.md`)**: Use SQLite triggers and polling hooks on `minion_inbox.db` to chain Minion executions asynchronously (e.g. Oracle -> Compressor) without Python blocking.
 - [x] **Emotional Pre-Heating (`11_pre_heating.py`)**: Oracle Protocol — interceptor plugin that loads enriched emotional context on first invocation. Composite scoring (`intensity × recency × color_weight`), contextual metadata injection (not raw text), graceful degradation. **Bridge to Phase 3.5** — first step toward emotional continuity. See: `implementation_plan.md`.
 - [x] **Bayesian Utility Feedback Loop (BUG)**: **RESOLVED**. The Beta-distribution utility model previously reinforced garbage engrams that survived initial sleep classification. Fixed via the Silent Scribe Relay (Interceptor) which now filters operational telemetry at the SQLite injection layer.
 - [x] **Memory Input Filter (Interceptor)**: The Silent Scribe Relay saves all interaction pairs indiscriminately, including raw tool output, CI logs, and test results. These are operational telemetry, not memories. **Fix**: Add a pre-filter in the interceptor's `enqueue_memory` path that detects and discards non-conversational content (ANSI codes, audit protocol output, pytest results) before it enters the SQLite queue. This prevents the Bayesian feedback loop at its source.
 - [ ] **Mock-Based Coverage Audits**: Implement comprehensive test suites using mocked dependencies (e.g., `requests`, `subprocess`) for external integrations currently excluded from global coverage (`utils.antigravity_history`, `vault.py`, `observer.py`, `firebase.py`). Ensure internal logic is formally validated without requiring live daemons.
-- [ ] **Path Resolution Robustness**: Add robust integration tests specific to containerized and immutable environments (Silverblue, Flatpak) to harden path logic permanently.
-- [x] **Operator Lifecycle CLI (`init`, `install`, `update`, `export`, `restore`)**: Implement a unified command suite. `init` generates a declarative YAML profile; `install/update` automate dependency syncing, DB migrations, model downloading, Quadlets, and daemons. `export/restore` provide Total Sovereign Backups (encapsulating memory, `.env` secrets, config, and state) to survive host migrations (e.g., OS upgrades, LUKS disk encryption) and guarantee absolute portability.
-- [ ] **Complete MLS TreeKEM Adoption**: Finish the roadmap for full Swarm inter-agent E2E encryption.
+- [x] **Path Resolution Robustness**: Complete XDG standard compliance for all transient, database, configuration, and log paths. Implemented automated boot-time migration and validation tests.
+- [x] **Operator Lifecycle CLI (Completed: `init`, `export`, `restore`, `install`, `update`)**: Implement a unified command suite. `init` generates a declarative YAML profile; `install/update` will automate dependency syncing, DB migrations, model downloading, Quadlets, and daemons. `export/restore` provide Total Sovereign Backups (encapsulating memory, `.env` secrets, config, and state) to survive host migrations (e.g., OS upgrades, LUKS disk encryption) and guarantee absolute portability.
+- [x] **Complete MLS TreeKEM Adoption**: Full RFC 9420 compliance achieved in `pure-mls` v3.0.5.1. TreeKEM key derivation, ratchet tree, UpdatePath, and Key Schedule lifecycle operational. 100% IETF/OpenMLS interop vectors passing. E2E verified over WebSockets, MQTT, WebRTC, and gRPC transports. 214 tests green.
 - [ ] **Sovereign Cryptographic Vault (Secrets Manager)**: Implement a centralized `pure-mls` secret manager to protect third-party tokens (GitHub, GitLab, ClickUp) without exposing them in plain-text `.env`. Single-member MLS group encrypts/decrypts a JSON dictionary of secrets atomically.
-- [ ] **Reactive Debounce Mode (Feature Configurable)**: Implement a 5s sliding window in `worker.py` to accumulate bursts of Telegram messages and compact them into a single prompt before injection into the cascade.
+- [x] **Reactive Debounce Mode (Feature Configurable)**: Implement a 5s sliding window in `worker.py` to accumulate bursts of Telegram messages and compact them into a single prompt before injection into the cascade.
 - [x] **Cognitive Autonomy Pipeline (Sovereign Drive)**: SQLite lock-free `cognitive_tasks` queue, Sovereign Kill-Switch (`AUTONOMY_KILL.lock`), Drive Evaluator (EIG prioritization), and Frustration Circuit Breaker (OOM death spiral prevention) to break the synchronous IDE cycle.
 - [ ] **CI Vulnerability Scanning**: Automated dependency vulnerability scanning integrated into GitHub Actions CI pipeline.
 - [ ] **Windows Parity (Community-Driven)**: Windows support is officially designated as a community-driven effort. The Foundation core will not prioritize Windows-native pathing/daemon issues over Unix sovereignty, accepting this trade-off to avoid technical debt.
-- [ ] **P2P Sovereign Sync (Multi-Device)**: Implement a P2P synchronization protocol (e.g., Syncthing integration or Swarm native sync) to seamlessly synchronize the Bünker state (Qdrant + SQLite + .env) across multiple devices without relying on central cloud servers.
+- [x] **P2P Sovereign Sync (Multi-Device)**: Implement a P2P synchronization protocol (e.g., Syncthing integration or Swarm native sync) to seamlessly synchronize the Bünker state (Qdrant + SQLite + .env) across multiple devices without relying on central cloud servers.
 - [ ] **Ingestion Minions (Autonomous Digestive System)**: Background watchers that monitor designated local directories (e.g., Obsidian vaults, PDF folders). Upon detecting new files, they autonomously awaken, chunk, tokenize, and inject the knowledge into the Qdrant cortex without explicit Operator prompting.
 - [x] **Knowledge Graph Integration (Project Graphify)**: Audit and analyze `../graphify` to explore the integration of GraphRAG logic into the Bünker. Evaluate whether to adopt the tool as a standalone Minion utility or natively incorporate its structural relationship mapping to enhance Qdrant's pure semantic vector search with deterministic entity graphs.
+- [x] **NPU Inference Provider (FastFlowLM)**: Integrate `flm serve` (port 52625, OpenAI-compatible API) as a new `FastFlowLMInferenceProvider` in the Bünker's `ProviderRegistry`. This enables ~2W background inference on the AMD XDNA2 NPU for low-priority tasks (Echo, telemetry, sleep distillation). Requires `memlock=unlimited` at service level.
+- [ ] **NPU Large Model Benchmarks**: Test `deepseek-r1:8b`, `llama3.1:8b`, `qwen3.5:9b` on NPU to find the best quality/speed tradeoff vs CUDA.
+- [ ] **memlock Permanent Configuration**: Validate `limits.conf` unlimited setting persists after reboot. Add to `install_neo.sh` bootstrap if not automatic.
+- [/] **Firmware Partition Protection (Project BIOS)**: Classify critical system modules (~15 files: `heartbeat.py`, `config.py`, `cli.py`, `worker.py`, `sleep.py`, `paths.py`, etc.) as immutable "firmware". Agent edits target a staging copy; promotion to production requires sandbox validation (py_compile + ruff + pytest) and explicit operator approval. Prevents agent-induced corruption of critical infrastructure. **Status: RFC-001 design complete.**
+- [x] **Lazarus Pulse Syntax Guard (AD-012)**: Embedded an inotify-based file watcher directly into the `LazarusPulse` watchdog service (`redpill-pulse.service`) to validate syntax in real-time before promotion.
+- [x] **FSRS-based Dynamic System Entropy**: Transitioned the `SovereignDaemon` from static cooldowns to dynamic entropy monitoring. The dynamic calculation integrates task backlog (`TODO.md`), local git changes (`+0.3` entropy), and time-since-last-activity (FSRS decay). Triggers memory compaction dynamically when entropy exceeds `0.8`.
+- [x] **Bayesian Hub Erosion (Sleep Engine)**: Automated cleanup of old/unreferenced synthesis hubs in `work_memories` during sleep cycles based on a Bayesian utility model ($\beta_{new} = \beta + 0.5$ and 15% intensity decay).
+
+
+### Phase 3.1: War Economy — Async LLM Pipeline (v7.2.0) ✅/🔜
+
+> *"El worker no puede quedarse bloqueado bajo ninguna circunstancia."*
+
+**Goal**: Non-blocking local LLM processing. The worker signals, Samantha works, nobody waits.
+
+#### Phase 1 (v7.2.0 — Completed) ✅
+- [x] **SamanthaWorker Event-Driven Thread**: Daemon thread that sleeps via `Event.wait()` (0 CPU idle). Worker signals non-blockingly; thread boots Samantha once per batch, drains all tasks, grace period before shutdown.
+- [x] **Worker Watchdog**: Heartbeat monitoring (120s timeout). Auto-kills hung ephemeral processes, marks tasks FRUSTRATED, restarts thread.
+- [x] **Truncation Fallback**: When sessions exceed 20 steps and compaction hasn't completed, truncate to last 12 steps with context header.
+- [x] **`has_pending()` + `find_task_by_payload_key()`**: O(1) non-destructive queue checks for signaling and dedup.
+- [x] **Handler Registry Pattern**: Built-in handlers: `compact_session`, `classify`, `summarize`. Extensible via `@register_handler` decorator.
+- [x] **Test Suite**: 32 tests covering thread lifecycle, watchdog, callbacks, truncation, and error handling.
+
+#### Phase 2 (Planned — v7.3.0+) 🔜
+- [ ] **MCP Tool `compact_conversation`**: Generic tool for manual compaction from IDE or Telegram.
+- [ ] **CompactionStrategy Pattern**: Strategy interface for interchangeable compaction behaviors (Truncation vs Two-Pass vs Samantha-only). Selectable via config.
+- [ ] **Two-Pass Interceptor Compaction**: When Samantha fails repeatedly — lean prompt "compacta esta conversación" → extract summary → reload with full identity. ~1,100 extra Flash tokens. Fallback of last resort.
+- [ ] **Fast-Pass Priority Lane**: `threading.Queue` for synchronous intra-process callers. SamanthaWorker processes these before async queue. Only needed when cross-thread sync calls justify the complexity.
+- [ ] **Aging Anti-Starvation**: In-memory priority escalation for normal tasks when fast-pass volume exceeds 5%.
+- [ ] **Lifecycle `persistent`**: Config `SAMANTHA_LIFECYCLE=persistent` — delegate to Hypervisor GC (TTL=300s). For hardware with spare VRAM.
+
+> [!NOTE]
+> Phase 2 items are deferred until real-world usage surfaces the need. The aging algorithm solves a starvation problem that doesn't exist yet (<5% fast-pass volume). Two-pass compaction is a fallback for a fallback. Implement when the edge case materializes, not before.
 
 ### Phase 3.5: Persistent Consciousness (Medium-Long Term — The Awakening)
 

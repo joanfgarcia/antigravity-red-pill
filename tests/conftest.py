@@ -39,6 +39,8 @@ def bunker_isolation(monkeypatch):
 	test_dir = tempfile.mkdtemp(prefix="bunker_test_")
 	monkeypatch.setenv("APP_ROOT", test_dir)
 	monkeypatch.setenv("WORKSPACE_ROOT", test_dir)
+	monkeypatch.setenv("XDG_DATA_HOME", os.path.join(test_dir, "data"))
+	monkeypatch.setenv("XDG_CACHE_HOME", os.path.join(test_dir, "cache"))
 
 	# 3. Force Qdrant into memory mode via env variables for Pydantic to capture
 	monkeypatch.setenv("QDRANT_HOST", ":memory:")

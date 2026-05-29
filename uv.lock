@@ -595,6 +595,15 @@ wheels = [
 ]
 
 [[package]]
+name = "execnet"
+version = "2.1.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/bf/89/780e11f9588d9e7128a3f87788354c7946a9cbb1401ad38a48c4db9a4f07/execnet-2.1.2.tar.gz", hash = "sha256:63d83bfdd9a23e35b9c6a3261412324f964c2ec8dcd8d3c6916ee9373e0befcd", size = 166622, upload-time = "2025-11-12T09:56:37.75Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ab/84/02fc1827e8cdded4aa65baef11296a9bbe595c474f0d6d758af082d849fd/execnet-2.1.2-py3-none-any.whl", hash = "sha256:67fba928dd5a544b783f6056f449e5e3931a5c378b128bc18501f7ea79e296ec", size = 40708, upload-time = "2025-11-12T09:56:36.333Z" },
+]
+
+[[package]]
 name = "fastapi"
 version = "0.136.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1577,12 +1586,13 @@ wheels = [
 
 [[package]]
 name = "neon-link"
-version = "0.3.1"
+version = "0.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fastapi" },
     { name = "firebase-admin" },
     { name = "httpx" },
+    { name = "neon-rings" },
     { name = "platformdirs" },
     { name = "pure-mls" },
     { name = "pydantic" },
@@ -1590,9 +1600,22 @@ dependencies = [
     { name = "requests" },
     { name = "uvicorn" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/73/96/dbeedfa99e9ddc07020b34c70ea64162c7680ac2495138545ff05cfac5f4/neon_link-0.3.1.tar.gz", hash = "sha256:8ff3ed4928967160f2c9f5822a232da3af60ce4518048ebf5722dff75603ad2f", size = 38062, upload-time = "2026-05-08T18:17:19.732Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/22/0a/6b574d5ad28a832d84aa9d50cd8c8aa475f6dfbf27ebf78774fd2ef4d0b4/neon_link-0.5.0.tar.gz", hash = "sha256:1e7f4c8727efd844fcffc85089269068e84116ce9881241e82c04a6d06cdfe29", size = 44794, upload-time = "2026-05-26T16:21:38.583Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/01/f1/82ad6793bcdd7bdd80312cd626ba81fe115e1617eba1401984861e99f7a5/neon_link-0.3.1-py3-none-any.whl", hash = "sha256:149efd468b4c9a0b8a1d64c4ae25bbee2166529ca3db0cb932de950500a71ec4", size = 32472, upload-time = "2026-05-08T18:17:18.887Z" },
+    { url = "https://files.pythonhosted.org/packages/81/8b/517a0b790aebd00f1205b8c969607afa279782c1eb3a3fd3d18adfb1a825/neon_link-0.5.0-py3-none-any.whl", hash = "sha256:89941e33032ba2acd95c4c1fb2dde83b5c8847756ad597d2dc57315d5deb6552", size = 39345, upload-time = "2026-05-26T16:21:39.733Z" },
+]
+
+[[package]]
+name = "neon-rings"
+version = "0.1.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cryptography" },
+    { name = "websockets" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/fb/76/1f3a5bd788d014c10b3f23cf600076ec7e823d76c84f55cfce8ed98d766f/neon_rings-0.1.1.tar.gz", hash = "sha256:348ac2738d3337cdc7f4cdb18e8717ecc45ccd7a354022978fcb94973af04591", size = 138984, upload-time = "2026-05-25T22:13:33.259Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d4/f2/f80564cba8a578cc82b1fb2cfa919486dcaf2e067683ff93b91183f316c5/neon_rings-0.1.1-py3-none-any.whl", hash = "sha256:1c10922ce30b5db8840bd45cff2ddd4af50d0760d6a67415c422b6c162777f96", size = 26959, upload-time = "2026-05-25T22:13:32.081Z" },
 ]
 
 [[package]]
@@ -2500,6 +2523,19 @@ wheels = [
 ]
 
 [[package]]
+name = "pytest-xdist"
+version = "3.8.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "execnet" },
+    { name = "pytest" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/78/b4/439b179d1ff526791eb921115fca8e44e596a13efeda518b9d845a619450/pytest_xdist-3.8.0.tar.gz", hash = "sha256:7e578125ec9bc6050861aa93f2d59f1d8d085595d6551c2c90b6f4fad8d3a9f1", size = 88069, upload-time = "2025-07-01T13:30:59.346Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ca/31/d4e37e9e550c2b92a9cbc2e4d0b7420a27224968580b5a447f420847c975/pytest_xdist-3.8.0-py3-none-any.whl", hash = "sha256:202ca578cfeb7370784a8c33d6d05bc6e13b4f25b5053c30a152269fd10f0b88", size = 46396, upload-time = "2025-07-01T13:30:56.632Z" },
+]
+
+[[package]]
 name = "python-dateutil"
 version = "2.9.0.post0"
 source = { registry = "https://pypi.org/simple" }
@@ -2611,7 +2647,7 @@ wheels = [
 
 [[package]]
 name = "red-pill"
-version = "7.0.0"
+version = "7.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "argon2-cffi" },
@@ -2644,6 +2680,7 @@ dependencies = [
     { name = "qdrant-client" },
     { name = "redis" },
     { name = "requests" },
+    { name = "starlette" },
     { name = "torch" },
     { name = "torchaudio" },
     { name = "torchvision" },
@@ -2662,6 +2699,7 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
     { name = "pytest-timeout" },
+    { name = "pytest-xdist" },
     { name = "ruff" },
     { name = "types-pyyaml" },
     { name = "types-requests" },
@@ -2683,7 +2721,7 @@ requires-dist = [
     { name = "huggingface-hub", extras = ["hf-transfer"], specifier = ">=1.4.1" },
     { name = "llama-cpp-python", extras = ["server"], specifier = ">=0.3.16" },
     { name = "mcp", specifier = ">=1.26.0" },
-    { name = "neon-link", specifier = ">=0.3.1" },
+    { name = "neon-link", specifier = ">=0.5.0" },
     { name = "pillow", specifier = ">=12.2.0" },
     { name = "platformdirs", specifier = ">=4.9.2" },
     { name = "pluggy", specifier = ">=1.6.0" },
@@ -2699,6 +2737,7 @@ requires-dist = [
     { name = "qdrant-client", specifier = ">=1.8.0" },
     { name = "redis", specifier = ">=7.4.0" },
     { name = "requests", specifier = ">=2.31.0" },
+    { name = "starlette", specifier = ">=1.0.1" },
     { name = "torch", specifier = ">=2.2.0" },
     { name = "torchaudio" },
     { name = "torchvision" },
@@ -2717,6 +2756,7 @@ dev = [
     { name = "pytest-asyncio", specifier = ">=0.23.0" },
     { name = "pytest-cov", specifier = ">=4.1.0" },
     { name = "pytest-timeout", specifier = ">=2.4.0" },
+    { name = "pytest-xdist", specifier = ">=3.5.0" },
     { name = "ruff", specifier = ">=0.3.0" },
     { name = "types-pyyaml", specifier = ">=6.0.12.20250915" },
     { name = "types-requests" },
@@ -3065,15 +3105,15 @@ wheels = [
 
 [[package]]
 name = "starlette"
-version = "0.52.1"
+version = "1.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
     { name = "typing-extensions", marker = "python_full_version < '3.13'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c4/68/79977123bb7be889ad680d79a40f339082c1978b5cfcf62c2d8d196873ac/starlette-0.52.1.tar.gz", hash = "sha256:834edd1b0a23167694292e94f597773bc3f89f362be6effee198165a35d62933", size = 2653702, upload-time = "2026-01-18T13:34:11.062Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c5/bf/616a066c2760f6c2b1ae3437cc28149734d069fbb46511712beae118a68c/starlette-1.2.0.tar.gz", hash = "sha256:3c5a6b23fff42492914e93890bb80cbfea72dbf37de268eec06185d62a4ca553", size = 2668923, upload-time = "2026-05-28T11:42:50.568Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/81/0d/13d1d239a25cbfb19e740db83143e95c772a1fe10202dda4b76792b114dd/starlette-0.52.1-py3-none-any.whl", hash = "sha256:0029d43eb3d273bc4f83a08720b4912ea4b071087a3b48db01b7c839f7954d74", size = 74272, upload-time = "2026-01-18T13:34:09.188Z" },
+    { url = "https://files.pythonhosted.org/packages/9f/85/492183764d5d01d4514be3730fdb8e228a80605783099551c51627578b5d/starlette-1.2.0-py3-none-any.whl", hash = "sha256:36e0c76ac59157e75dc4b3bdeafba97fb04eaf1878045f15dbef666a6f092ed7", size = 73213, upload-time = "2026-05-28T11:42:48.801Z" },
 ]
 
 [[package]]

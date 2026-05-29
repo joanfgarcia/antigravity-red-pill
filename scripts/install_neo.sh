@@ -542,7 +542,7 @@ update_env "WORKSPACE_ROOT" "$WORKSPACE_ROOT"
 update_env "APP_ROOT" "$APP_ROOT"
 update_env "RED_PILL_PROFILE" "user"
 update_env "USER_ATLAS_DIR" "$WORKSPACE_ROOT/atlas"
-update_env "AGENT_CORE_DIR" "$WORKSPACE_ROOT/Titanium_Core"
+update_env "AGENT_CORE_DIR" "$WORKSPACE_ROOT/Agent_Core"
 chmod 600 "$ENV_FILE"
 
 mkdir -p "$IA_DIR/scripts" "$IA_DIR/backups/qdrant" "$IA_DIR/backups/soul" "$IA_DIR/seeds" "$HOME/.local/share/red-pill/models" "$HOME/.local/share/red-pill/queue" "$HOME/.local/share/red-pill/tmp"
@@ -617,11 +617,12 @@ if ! command -v uv &> /dev/null; then
 	exit 1
 fi
 
+USER_RULES_DIR="${1:-$HOME/.agent}"
+
 GEMINI_ROOT="$HOME/.gemini/antigravity"
-echo -e "${BLUE}--- Fase: Despliegue de Infraestructura de Reglas (Antigravity) ---${NC}"
+echo -e "${BLUE}--- Fase: Despliegue de Infraestructura Soberana (IDE-Agnostic) ---${NC}"
 mkdir -p "$GEMINI_ROOT/rules" "$GEMINI_ROOT/skills"
 
-# Cargar infraestructura de reglas y habilidades (Deploy Robusto)
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 if [ -d "$REPO_ROOT/seeds" ]; then
@@ -629,12 +630,18 @@ if [ -d "$REPO_ROOT/seeds" ]; then
 	echo -e "${GREEN}✓ snapshot_rule.md desplegada.${NC}"
 fi
 
+# Skills: Deploy to ~/.agent/skills/ (IDE-agnostic canonical) and symlink to IDE
 if [ -d "$REPO_ROOT/skills" ]; then
-	# Copy all skills except the template
-	mkdir -p "$GEMINI_ROOT/skills"
-	cp -r "$REPO_ROOT/skills/"* "$GEMINI_ROOT/skills/"
-	rm -rf "$GEMINI_ROOT/skills/memory_manager_template" 2>/dev/null || true
-	echo -e "${GREEN}✓ Habilidades (Skills) desplegadas en Antigravity.${NC}"
+	mkdir -p "$USER_RULES_DIR/skills"
+	for skill_dir in "$REPO_ROOT/skills/"*/; do
+		skill_name=$(basename "$skill_dir")
+		[[ "$skill_name" == "memory_manager_template" ]] && continue
+		cp -r "$skill_dir" "$USER_RULES_DIR/skills/$skill_name"
+		# Symlink to IDE (idempotent: remove existing target first)
+		rm -rf "$GEMINI_ROOT/skills/$skill_name" 2>/dev/null || true
+		ln -s "$USER_RULES_DIR/skills/$skill_name" "$GEMINI_ROOT/skills/$skill_name"
+	done
+	echo -e "${GREEN}✓ Skills desplegados en ~/.agent/skills/ (symlinked a Antigravity).${NC}"
 fi
 
 # 6.2 Git Sovereign Guard (v6.2.0)
@@ -647,12 +654,11 @@ if [ -d "$REPO_ROOT/scripts/git-hooks" ] && [ -d "$REPO_ROOT/.git" ]; then
 fi
 
 # Generar Skill de Memoria Dinámico
-mkdir -p "$GEMINI_ROOT/skills/memory_manager"
+mkdir -p "$USER_RULES_DIR/skills/memory_manager"
 TEMPLATE_SKILL="$REPO_ROOT/skills/memory_manager_template/SKILL.md"
-DEST_SKILL="$GEMINI_ROOT/skills/memory_manager/SKILL.md"
+DEST_SKILL="$USER_RULES_DIR/skills/memory_manager/SKILL.md"
 
 if [ -f "$TEMPLATE_SKILL" ]; then
-	# Absolute binary path calculation
 	REDPILL_DIR="$REPO_ROOT"
 	BINARY_PATH="$REDPILL_DIR/.venv/bin/red-pill"
 	cp "$TEMPLATE_SKILL" "$DEST_SKILL"
@@ -662,12 +668,14 @@ if [ -f "$TEMPLATE_SKILL" ]; then
 		sed -i "s|red-pill|$BINARY_PATH|g" "$DEST_SKILL"
 	fi
 fi
+# Symlink memory_manager to IDE
+rm -rf "$GEMINI_ROOT/skills/memory_manager" 2>/dev/null || true
+ln -s "$USER_RULES_DIR/skills/memory_manager" "$GEMINI_ROOT/skills/memory_manager"
+
 # Copiar scripts unificados a la ruta de ejecución
 cp "$SCRIPT_DIR/"* "$APP_ROOT/scripts/"
 chmod +x "$APP_ROOT/scripts/"*.sh 2>/dev/null || true
 
-
-USER_RULES_DIR="${1:-$HOME/.agent}"
 mkdir -p "$USER_RULES_DIR/rules"
 # CF-003: Protect rules from local manipulation
 chmod 700 "$USER_RULES_DIR" "$USER_RULES_DIR/rules"

@@ -20,7 +20,7 @@ class TestAuditLow(unittest.TestCase):
 
 	def test_tcg_003_lore_skins_integrity(self):
 		"""Verify TCG-003: Integrity of the lore_skins.yaml resource."""
-		skin_path = Path("src/red_pill/data/lore_skins.yaml")
+		skin_path = Path(__file__).parent.parent / "src" / "red_pill" / "data" / "lore_skins.yaml"
 		self.assertTrue(skin_path.exists(), f"Lore skins not found at {skin_path.absolute()}")
 		with open(skin_path, "r") as f:
 			data = yaml.safe_load(f)

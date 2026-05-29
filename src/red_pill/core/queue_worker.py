@@ -31,8 +31,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 
 def process_cognitive_tasks(cog_queue: CognitiveQueueManager, oneshot: bool = False):
 	"""Process up to 5 DAG tasks from the cognitive queue using the Swarm MinionFactory."""
+	allowed_sources = list(MinionFactory.MAPPING.keys()) + list(MinionFactory.COMMAND_ALIASES.keys())
 	for _ in range(5):
-		task = cog_queue.pop_next_task()
+		task = cog_queue.pop_next_task(allowed_sources=allowed_sources)
 		if not task:
 			break
 

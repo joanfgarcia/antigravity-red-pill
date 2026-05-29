@@ -24,10 +24,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-import platformdirs
 from dotenv import load_dotenv
 
-env_path = Path(platformdirs.user_config_dir("red-pill")) / ".env"
+from red_pill.core.paths import get_config_dir
+
+env_path = get_config_dir() / ".env"
 if env_path.exists():
 	load_dotenv(env_path)
 else:

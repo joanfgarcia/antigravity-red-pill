@@ -34,6 +34,21 @@ Based on Oudeyer's *Intelligent Adaptive Curiosity*.
   - Abandonment Condition: If $C > E[R]$, the *Right to Silence* is activated.
   - **Catharsis:** The desire vector is flushed to zero. The system forcefully returns to the *IDLE* state or selects a minimum-energy recovery task.
 
+### Layer 4: Curiosity-Driven Incentive Engine & Creative Profiles (v7.1.0)
+Based on PopuLoRA (Co-evolving LLM Populations for Reasoning Self-Play) and TrueSkill concepts.
+- **Adaptive Utility:** Replaces static task cooldowns with a dynamic utility model where candidate task utility is computed as:
+  $$ U_c = \mu_c + \sigma_c \cdot k $$
+  Where $\mu_c$ is the task category rating, $\sigma_c$ is its uncertainty, and $k = 0.5$ is the exploration multiplier.
+- **Feedback & Curiosity Decay:** Upon task execution:
+  - Failures incur a penalty ($R_c = -0.5$).
+  - Successful `dynamic_spark` tasks receive a positive curiosity reward ($R_c = 0.5$) to incentivize proactive generation.
+  - Successful static tasks (e.g., maintenance) receive $R_c = 0.0$. Their uncertainty ($\sigma_c$) decays naturally ($\gamma = 0.9$), causing their utility to drop over time as they become predictable, forcing the system to seek new creative sparks or enter homeostasis (Sleep).
+- **Creative Profiles:** The engine is modulated by the `CURIOSITY_PROFILE` configuration, providing three presets:
+  - `balanced`: Balanced maintenance and spark intervals. Temp = `0.3`.
+  - `visionary`: Low maintenance frequency, high spark/coding rate. Temp = `0.7` (high-entropy prompts).
+  - `sentinel`: Low spark rate (Temp = `0.1` for deterministic execution), high maintenance/security verification frequency.
+- **Profile Isolation:** Ratings are persisted inside `curiosity_ratings.json` isolated by profile name to prevent convergence pollution when switching profiles. For details, see the [Curiosity Profiles Guide](../../GUIDES/CURIOSITY_PROFILES.md).
+
 ## 3. Execution Conditions (Efficiency over Loop)
 To guarantee the stability of the Bünker and avoid choking system resources (CPU/GPU):
 - The **Sovereign Drive** MUST NEVER operate in a `while(true)` loop.

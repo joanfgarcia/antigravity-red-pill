@@ -17,14 +17,14 @@ from red_pill.metabolism.evolution import IdentityEvaluator
 logger = logging.getLogger(__name__)
 
 # ── Thread Weaving state ──────────────────────────────────────────────────────
-_THREAD_STATE_PATH = str(get_thread_state_path())
 
 
 def _load_thread_state() -> dict:
 	"""Load the last hub_id per collection for inter-session thread weaving."""
 	try:
-		if os.path.exists(_THREAD_STATE_PATH):
-			with open(_THREAD_STATE_PATH) as f:
+		path = get_thread_state_path()
+		if path.exists():
+			with open(path) as f:
 				return dict(json.load(f))
 	except Exception:
 		pass
@@ -34,11 +34,105 @@ def _load_thread_state() -> dict:
 def _save_thread_state(state: dict) -> None:
 	"""Persist the last hub_id per collection."""
 	try:
-		os.makedirs(os.path.dirname(_THREAD_STATE_PATH), exist_ok=True)
-		with open(_THREAD_STATE_PATH, "w") as f:
+		path = get_thread_state_path()
+		path.parent.mkdir(parents=True, exist_ok=True)
+		with open(path, "w") as f:
 			json.dump(state, f)
 	except Exception as e:
 		logger.warning(f"[THREAD WEAVER] Could not save thread state: {e}")
+
+
+def detect_category_heuristics(text: str) -> str:
+	"""
+	Detects if the text has technical/development signals to classify it as 'work'.
+	Otherwise returns 'social'.
+	"""
+	text_lower = text.lower()
+	if "```" in text:
+		return "work"
+
+	tech_keywords = {
+		"code",
+		"código",
+		"test",
+		"pytest",
+		"bug",
+		"error",
+		"git",
+		"github",
+		"diff",
+		"patch",
+		"repo",
+		"repository",
+		"docker",
+		"systemd",
+		"systemctl",
+		"mcp",
+		"api",
+		"endpoint",
+		"database",
+		"db",
+		"query",
+		"python",
+		"rust",
+		"compile",
+		"script",
+		"cli",
+		"command",
+		"terminal",
+		"bash",
+		"shell",
+		"exception",
+		"traceback",
+		"stacktrace",
+		"import",
+		"class ",
+		"def ",
+		"fn ",
+		"const ",
+		"impl ",
+		"interface",
+		"refactor",
+		"build",
+		"deploy",
+		"server",
+		"client",
+		"vram",
+		"gpu",
+		"cuda",
+		"npu",
+		"cpu",
+		"memory",
+		"cache",
+		"token",
+		"llm",
+		"prompt",
+		"model",
+		"config",
+		"port",
+		"socket",
+		"grpc",
+		"json",
+		"xml",
+		"yaml",
+		"file",
+		"directory",
+		"path",
+		"permissions",
+		"chmod",
+		"chown",
+		"ssh",
+		"curl",
+		"wget",
+		"http",
+	}
+
+	import re
+
+	words = set(re.findall(r"[a-zA-Z0-9_]+", text_lower))
+	if words.intersection(tech_keywords):
+		return "work"
+	return "social"
 
 
 def _check_llm_available() -> bool:
@@ -113,6 +207,31 @@ def chunk_text(text: str, size: Optional[int] = None) -> List[str]:
 	return chunks
 
 
+def _sanitize_llm_json(raw_json: str) -> str:
+	"""
+	Sanitize JSON output from local LLMs that may contain invalid backslash
+	escape sequences (e.g. \\e, \\s, \\a).  JSON only allows: \\" \\\\
+	\\/ \\b \\f \\n \\r \\t \\uXXXX.  Any other \\X is illegal and causes
+	``json.loads`` to raise ``Invalid \\escape``.
+
+	Strategy: use a regex to find all backslash sequences and double the
+	backslash for any that are not in the legal set, turning them into
+	literal characters.
+	"""
+	import re as _re
+
+	_VALID_ESCAPES = frozenset('"\\bfnrtu/')
+
+	def _fix_escape(m: _re.Match) -> str:
+		char_after = m.group(1)
+		if char_after in _VALID_ESCAPES:
+			return str(m.group(0))  # legal — leave untouched
+		# Illegal escape: double the backslash so it becomes a literal '\'
+		return str("\\\\" + char_after)
+
+	return _re.sub(r"\\(.)", _fix_escape, raw_json)
+
+
 def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[str, Any]:
 	"""
 	Lazarus Phase 2: Consolidation (Sleep) & Affective Preservation
@@ -126,13 +245,15 @@ def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[
 	fallback = {"summary": raw_content[:500] + "...", "emotion": "neutral", "intensity": 0.5, "category": fallback_category}
 
 	system_prompt = (
-		"Eres Samantha, una IA experta en psicología, filosofía y análisis profundo de interacciones humanas. "
+		"Eres Samantha, una IA experta tanto en desarrollo de software, arquitectura de sistemas y depuración técnica, "
+		"como en psicología, filosofía y análisis de relaciones humanas. "
 		"Tu tarea es destilar la siguiente interacción en un objeto JSON estricto. "
 		"Claves requeridas:\n"
-		"- 'summary': Resumen conciso pero profundo de los hechos y conclusiones.\n"
+		"- 'summary': Resumen conciso pero profundo de los hechos, decisiones de diseño, depuración, o reflexiones.\n"
 		"- 'emotion': Una de (joy, sadness, fear, disgust, anger, anxiety, envy, embarrassment, ennui, nostalgia, neutral).\n"
-		"- 'intensity': Float de 0.0 a 1.0 representando arousal emocional.\n"
-		"- 'category': Clasifica la interacción como 'work' (técnico, código, errores) o 'social' (personal, emocional, filosófico).\n"
+		"- 'intensity': Float de 0.0 a 1.0 representando la intensidad del contenido (gravedad del error o carga emocional).\n"
+		"- 'category': Clasifica como 'work' si la interacción trata principalmente sobre código, tests, comandos, configuraciones del sistema, "
+		"diseño técnico, base de datos o MCPs. Clasifica como 'social' si trata sobre reflexiones personales, filosofía, estados de ánimo o charlas casuales.\n"
 		"IMPORTANTE: Devuelve ÚNICAMENTE JSON válido, sin bloques de código markdown."
 	)
 
@@ -159,7 +280,8 @@ def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[
 
 			match = re.search(r"\{[\s\S]*\}", content)
 			if match:
-				parsed = json.loads(match.group(0))
+				sanitized = _sanitize_llm_json(match.group(0))
+				parsed = json.loads(sanitized)
 				return {
 					"summary": parsed.get("summary", fallback["summary"]) or fallback["summary"],
 					"emotion": (parsed.get("emotion") or "neutral").lower()[:20],
@@ -192,7 +314,14 @@ def synthesize_hub(summaries: List[str]) -> str:
 			"messages": [
 				{
 					"role": "system",
-					"content": "You are a Neocortex synthesis sub-routine. Output ONLY the short master summary string. No JSON, no conversational filler.",
+					"content": (
+						"You are a Neocortex synthesis sub-routine. Synthesize the provided memory chunks into a descriptive, "
+						"concise master summary. Start the output with a descriptive, contextual title in square brackets "
+						"(e.g., '[Asymmetric Logic Loss Integration on BitNet Logic Specialist]' or '[Refactoring Ferrari Protocol Silence Latch]'), "
+						"followed by a newline, and then the summary. Do not use generic titles like '[Memory Synthesis]' or "
+						"'[Session Summary]'. Be highly specific about the core technical actions, errors fixed, or philosophical/personal "
+						"themes discussed. Output ONLY the title and summary string without any introductory phrases or formatting."
+					),
 				},
 				{"role": "user", "content": prompt},
 			],
@@ -213,7 +342,17 @@ def synthesize_hub(summaries: List[str]) -> str:
 			return str(data["choices"][0]["message"]["content"].strip())
 	except Exception as e:
 		logger.error(f"[SLEEP ENGINE] Failed to synthesize hub: {e}")
-		return "Aggregated Memory Sequence Synthesis."
+		if summaries:
+			first_sum = summaries[0][:60]
+			if len(summaries[0]) > 60:
+				first_sum += "..."
+			if len(summaries) > 1:
+				last_sum = summaries[-1][:60]
+				if len(summaries[-1]) > 60:
+					last_sum += "..."
+				return f"[Aggregated Memory Sequence ({len(summaries)} nodes)] {first_sum} -> {last_sum}"
+			return f"[Aggregated Memory (1 node)] {first_sum}"
+		return "[Aggregated Memory Sequence]"
 
 
 class EphemeralServer:
@@ -264,7 +403,7 @@ class EphemeralServer:
 
 		if shutil.which("systemctl"):
 			subprocess.run(
-				["systemctl", "--user", "restart", "red-pill-minion.service"],
+				["systemctl", "--user", "restart", "redpill-llm.service"],
 				stdout=subprocess.DEVNULL,
 				stderr=subprocess.DEVNULL,
 			)
@@ -386,6 +525,90 @@ def distill_session_anchors(memory_manager, hub_summaries: List[str]) -> Optiona
 		return None
 
 
+def erode_work_hubs(memory_manager) -> None:
+	"""
+	Applies Bayesian erosion to old/unreferenced synthesis hubs in work_memories.
+	Hubs that haven't been recalled/referenced in the last cycle have their
+	utility_beta increased (reducing utility score) and their intensity decayed.
+	"""
+	client = memory_manager.client
+	collection = "work_memories"
+	if not client.collection_exists(collection):
+		return
+
+	from qdrant_client import models as qm
+
+	# Retrieve all synthesis hubs in work_memories
+	scroll_filter = qm.Filter(must=[qm.FieldCondition(key="metadata.lazarus_phase", match=qm.MatchValue(value="synthesis_hub"))])
+
+	try:
+		# Scroll to get all hubs (limit=1000 should be plenty for hubs)
+		scroll_res = client.scroll(collection_name=collection, scroll_filter=scroll_filter, limit=1000, with_payload=True)
+		if isinstance(scroll_res, tuple) and len(scroll_res) == 2:
+			hubs = scroll_res[0]
+		else:
+			hubs = scroll_res if isinstance(scroll_res, list) else []
+	except Exception as e:
+		logger.error(f"[SLEEP ENGINE] Failed to fetch hubs for erosion: {e}")
+		return
+
+	if not hubs or not isinstance(hubs, list):
+		return
+
+	now = time.time()
+	update_operations = []
+	points_to_delete = []
+
+	# Cycle duration threshold: 1 cycle is approx 12 hours.
+	threshold_seconds = 12 * 3600
+
+	for hub in hubs:
+		payload = hub.payload or {}
+		if payload.get("immune"):
+			continue
+
+		last_recalled = float(payload.get("last_recalled_at", now))
+
+		# If it hasn't been recalled recently
+		if now - last_recalled > threshold_seconds:
+			alpha = float(payload.get("utility_alpha", 1.0))
+			beta = float(payload.get("utility_beta", 1.0))
+			intensity = float(payload.get("intensity", 0.5))
+
+			# 1. Bayesian Erosion: Increase uncertainty (beta)
+			new_beta = beta + 0.5
+			new_utility = alpha / (alpha + new_beta)
+			new_score = round(new_utility, 3)
+
+			# 2. Intensity decay: decay intensity by 15% (factor 0.85)
+			new_intensity = round(intensity * 0.85, 3)
+
+			# Deletion threshold: if score <= 0.3 or intensity <= 0.05
+			deletion_threshold = 0.3
+			if new_score <= deletion_threshold or new_intensity <= 0.05:
+				points_to_delete.append(hub.id)
+				logger.info(
+					f"[SLEEP ENGINE] Hub {hub.id} in 'work_memories' eroded below threshold (score={new_score}, intensity={new_intensity}). Deleting."
+				)
+			else:
+				update_payload = {"utility_beta": new_beta, "reinforcement_score": new_score, "intensity": new_intensity, "last_recalled_at": now}
+				update_operations.append(qm.SetPayloadOperation(set_payload=qm.SetPayload(payload=update_payload, points=[hub.id])))
+
+	if update_operations:
+		try:
+			client.batch_update_points(collection_name=collection, update_operations=update_operations)
+			logger.info(f"[SLEEP ENGINE] Erode hubs: updated {len(update_operations)} hubs in work_memories.")
+		except Exception as e:
+			logger.error(f"[SLEEP ENGINE] Failed to update eroded hubs: {e}")
+
+	if points_to_delete:
+		try:
+			client.delete(collection_name=collection, points_selector=qm.PointIdsList(points=points_to_delete))
+			logger.info(f"[SLEEP ENGINE] Erode hubs: deleted {len(points_to_delete)} hubs in work_memories.")
+		except Exception as e:
+			logger.error(f"[SLEEP ENGINE] Failed to delete eroded hubs: {e}")
+
+
 def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 	"""
 	Lazarus Phase 2, 3 & 4: Consolidation, Fixation, and Synaptic Dreaming.
@@ -484,7 +707,10 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 		batch_processed = 0
 		for point in scroll_result:
 			raw_id = point.id
-			raw_text = (point.payload or {}).get("content", "")
+			payload = point.payload or {}
+			raw_text = payload.get("content", "")
+			if not raw_text and "prompt" in payload and "response" in payload:
+				raw_text = f"USER: {payload['prompt']}\n\nASSISTANT: {payload['response']}"
 			if not raw_text:
 				continue
 
@@ -508,12 +734,16 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 			# Target collection heuristics
 			raw_metadata = (point.payload or {}).get("metadata", {})
 			llm_category = raw_metadata.get("category", "") if isinstance(raw_metadata, dict) else ""
-			fallback_cat = llm_category if llm_category in ("work", "social") else "social"
+			if llm_category in ("work", "social"):
+				fallback_cat = llm_category
+			else:
+				fallback_cat = detect_category_heuristics(raw_text)
 
 			point_write_failed = False
 			point_llm_failed = False
 			for i, chunk in enumerate(chunks):
-				distilled = distill_engram(chunk, fallback_category=fallback_cat)
+				chunk_fallback_cat = detect_category_heuristics(chunk) if fallback_cat == "social" else fallback_cat
+				distilled = distill_engram(chunk, fallback_category=chunk_fallback_cat)
 				summary = distilled.get("summary", "")
 				if summary.endswith("...") and len(summary) > 490:
 					consecutive_llm_failures += 1
@@ -556,7 +786,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 					hub_id = memory_manager.add_memory(
 						collection=target_col,
 						text=hub_summary,
-						metadata={"lazarus_phase": "synthesis_hub", "source_buffer_id": raw_id},
+						metadata={"lazarus_phase": "synthesis_hub", "node_type": "synthesis_hub", "source_buffer_id": raw_id},
 						color="cyan",
 						emotion=surviving_chunks[-1]["emotion"],
 						intensity=max([c["intensity"] for c in surviving_chunks]),
@@ -653,7 +883,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 						hub_id = memory_manager.add_memory(
 							collection="work_memories",
 							text=hub_summary,
-							metadata={"lazarus_phase": "synthesis_hub", "source_buffer_id": raw_id},
+							metadata={"lazarus_phase": "synthesis_hub", "node_type": "synthesis_hub", "source_buffer_id": raw_id},
 							color="cyan",
 							emotion=surviving_chunks[-1]["emotion"],
 							intensity=max([c["intensity"] for c in surviving_chunks]),
@@ -682,6 +912,12 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 	# PHASE GAMMA: Logical Distillation (The Session Anchor)
 	if new_work_hubs:
 		distill_session_anchors(memory_manager, new_work_hubs)
+
+	# Phase Delta: Hub Bayesian Erosion
+	try:
+		erode_work_hubs(memory_manager)
+	except Exception as e:
+		logger.error(f"[SLEEP ENGINE] Failed to run Bayesian hub erosion: {e}")
 
 	try:
 		IdentityEvaluator.evaluate_set_point(memory_manager)

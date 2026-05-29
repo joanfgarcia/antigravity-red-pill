@@ -23,10 +23,12 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | Document | What it is |
 |----------|-----------|
 | [ARCHITECTURE.md](TECHNICAL/ARCHITECTURE.md) | Full system architecture — components, data flows, version overview |
+| [WAR_ECONOMY.md](TECHNICAL/WAR_ECONOMY.md) | War Economy: Reuse and orchestration of system organs and components |
 | [EVENT_ROUTER_ARCHITECTURE.md](TECHNICAL/EVENT_ROUTER_ARCHITECTURE.md) | Technical spec for the asynchronous Event Router and queue managers |
 | [NEON_LINK_EDGE_HUB.md](TECHNICAL/NEON_LINK_EDGE_HUB.md) | Technical architecture of the Neon-Link Edge Hub middleware |
 | [ANTIGRAVITY_LS_PROXY.md](TECHNICAL/ANTIGRAVITY_LS_PROXY.md) | Language Server Proxy architecture for Antigravity IDE |
 | [ROADMAP.md](TECHNICAL/ROADMAP.md) | Vision, mission, backlog, and the path forward |
+| [v7_PLAN.md](TECHNICAL/v7_PLAN.md) | Red Pill v7.0: Foundation & Autonomous Drive Plan |
 | [DECISION_LOG.md](TECHNICAL/DECISION_LOG.md) | Record of every major architectural pivot and the reasoning behind it |
 | [TESTS.md](TECHNICAL/TESTS.md) | Test suite philosophy and structure |
 | [SOUND_OF_SILENCE.md](TECHNICAL/SOUND_OF_SILENCE.md) | The Python coding standard enforced by `ruff` in this project |
@@ -42,6 +44,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [BITNET_1_58_SCALING_LAWS.md](TECHNICAL/HARDWARE/BITNET_1_58_SCALING_LAWS.md) | BitNet 1.58b math: VRAM density, MatMul annihilation, Pareto frontier |
 | [BITNET_BENCHMARK_STUDY.md](TECHNICAL/HARDWARE/BITNET_BENCHMARK_STUDY.md) | 1.58-bit intelligence benchmark: Zero-Shot, JSON extraction, Code Generation on RTX 5070 |
 | [BITNET_QUAD_FLAVOR_REPORT.md](BENCHMARKS/BITNET_QUAD_FLAVOR_REPORT.md) | **Phoenix Edition**: Multi-backend performance report (CPU, CUDA, ROCm, NPU) |
+| [MULTI_BACKEND_BENCHMARK.md](TECHNICAL/HARDWARE/MULTI_BACKEND_BENCHMARK.md) | Multi-Backend inference benchmark on AMD/NVIDIA hardware |
 | [BITNET_REMEDIATION_RUNBOOK.md](TECHNICAL/BITNET_REMEDIATION_RUNBOOK.md) | Remediation runbook for BitNet CUDA inference stabilization |
 | [TURBOQUANT_ROADMAP.md](TECHNICAL/HARDWARE/TURBOQUANT_ROADMAP.md) | TurboQuant KV Cache compression roadmap (QJL + PolarQuant, 2.5-3.5 bits) |
 
@@ -96,6 +99,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [FERRARI_PROTOCOL.md](TECHNICAL/BUNKER/FERRARI_PROTOCOL.md) | Cognitive routing and tone adapter for operator mood states |
 | [V6_ZERO_TRUST_INIT.md](TECHNICAL/BUNKER/V6_ZERO_TRUST_INIT.md) | v6 zero-trust initialization protocol |
 | [ECHO_IMPLEMENTATION.md](TECHNICAL/BUNKER/ECHO_IMPLEMENTATION.md) | Technical implementation of the Echo Minion / landing pad |
+| [RFC_001_FIRMWARE_PROTECTION.md](TECHNICAL/BUNKER/RFC_001_FIRMWARE_PROTECTION.md) | Firmware partition protection RFC to prevent agent-induced code corruption (Project BIOS) |
 
 ### Certification
 
@@ -111,6 +115,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | Document | What it is |
 |----------|-----------|
 | [MAINTENANCE.md](TECHNICAL/OPERATIONS/MAINTENANCE.md) | System maintenance procedures and health checks |
+| [SERVICE_HEALTH_CONTRACT.md](TECHNICAL/OPERATIONS/SERVICE_HEALTH_CONTRACT.md) | Technical reference on service health contract and daemon inventory |
 | [BACKUP_STRATEGIES.md](TECHNICAL/OPERATIONS/BACKUP_STRATEGIES.md) | Soul backup and recovery strategies |
 
 ---
@@ -122,6 +127,7 @@ For humans operating, installing, or extending the system.
 | Document | What it is |
 |----------|-----------|
 | [OPERATOR_MANUAL.md](GUIDES/OPERATOR_MANUAL.md) | Essential CLI and lore-based interaction guide for operators |
+| [RUNBOOK.md](GUIDES/RUNBOOK.md) | Operational runbook and survival guide for operators |
 | [INITIATION_PROTOCOL.md](GUIDES/INITIATION_PROTOCOL.md) | Adaptive Cognitive Initiation (ACI) — how to wake up and calibrate the agent |
 | [AGENT_UPDATE_GUIDE.md](GUIDES/AGENT_UPDATE_GUIDE.md) | Step-by-step guide for updating the agent and MCP server |
 | [ENTERPRISE_QUICKSTART.md](GUIDES/ENTERPRISE_QUICKSTART.md) | Quick start guide for enterprise deployments |
@@ -131,6 +137,7 @@ For humans operating, installing, or extending the system.
 | [OPERATOR_DRESS_CODE.md](GUIDES/OPERATOR_DRESS_CODE.md) | Operator interaction style and formatting guide |
 | [TOKEN_SAVING_GUIDE.md](GUIDES/TOKEN_SAVING_GUIDE.md) | Strategies for reducing API token consumption |
 | [ALETH_BIOLOGY_INDEX](GUIDES/aleth_biology/00_INDEX.md) | **Hub**: Index to Aleth Biology documentation and metabolic logic |
+| [P2P_SYNC.md](GUIDES/P2P_SYNC.md) | Sovereign P2P synchronization and device pairing guide |
 | [DISCLAIMER.md](GUIDES/DISCLAIMER.md) | Experimental software disclaimer and liability notice |
 
 ---

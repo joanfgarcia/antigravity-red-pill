@@ -1,4 +1,3 @@
-import asyncio
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -77,16 +76,17 @@ async def test_orchestrator_specs_integration_coverage():
 	mock_specs.detect_flow.return_value = "fire"
 	mock_specs.get_fire_intents.return_value = [{"id": "test"}]
 	mock_minion = MagicMock()
-	mock_minion.execute = asyncio.Future()
-	mock_minion.execute.set_result({"status": "ok"})
+
+	async def fake_execute(task, **kwargs):
+		return {"status": "ok"}
+
+	mock_minion.execute = fake_execute
 	mock_minion.id = "test-minion"
 	with patch("red_pill.core.notifier.SovereignNotifier.notify_os"):
 		await orchestrator.deploy_swarm("task", [mock_minion])
 		assert mock_specs.get_fire_intents.called
 	mock_specs.detect_flow.return_value = "simple"
 	mock_specs.get_simple_tasks.return_value = "# Task List"
-	mock_minion.execute = asyncio.Future()
-	mock_minion.execute.set_result({"status": "ok"})
 	with patch("red_pill.core.notifier.SovereignNotifier.notify_os"):
 		await orchestrator.deploy_swarm("task", [mock_minion])
 		assert mock_specs.get_simple_tasks.called

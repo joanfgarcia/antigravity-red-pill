@@ -2,6 +2,11 @@
 
 **Propósito:** Documentar el enlazamiento (hacking) entre el daemon de Red-Pill y el servidor local de Antigravity (Gemini), permitiendo la ejecución de inferencia "Headless" sin la intervención de la UI gráfica del IDE.
 
+> [!IMPORTANT]
+> **v7.1.0 — Dual-Backend Architecture**: Este documento describe el **path gRPC legacy (v1)**, que ahora se usa exclusivamente para la extracción de conversaciones (Chronicle pipeline). La ejecución de prompts desde Telegram/Neon-Link ha migrado al **AgyBridge (v2)** usando `agy CLI`.
+> - Arquitectura dual-backend: [§16 — ARCHITECTURE.md](ARCHITECTURE.md#16-idebridge-v2--dual-backend-architecture-v710)
+> - Especificación completa del plugin: [`antigravity_ide/ARCHITECTURE.md`](../../src/red_pill/plugins/antigravity_ide/ARCHITECTURE.md)
+
 ## 1. Conexión gRPC-Web Dinámica
 El plugin del IDE de Antigravity expone un servidor gRPC-Web local. El puerto no es estático; se negocia en cada sesión y se escribe en un archivo local (ej. `.port` o se extrae mediante heurística en `ide_client.py`).
 - **Endpoint:** `https://localhost:<PORT>/Antigravity.CascadeService/`

@@ -1,9 +1,7 @@
 import sqlite3
-from pathlib import Path
 from typing import Any, List
 
-import platformdirs
-
+from red_pill.core.paths import get_neon_link_db_path
 from red_pill.metabolism.auditor import AuditFinding
 from red_pill.metabolism.sentinel_plugins.base import SentinelPlugin
 
@@ -18,7 +16,7 @@ class SQLiteCheck(SentinelPlugin):
 
 	def audit(self, cfg: Any) -> List[AuditFinding]:
 		findings = []
-		db_path = Path(platformdirs.user_data_dir("neon-link")) / "events.db"
+		db_path = get_neon_link_db_path()
 		if db_path.exists():
 			try:
 				with sqlite3.connect(db_path, timeout=2) as conn:

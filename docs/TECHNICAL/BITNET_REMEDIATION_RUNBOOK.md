@@ -1,5 +1,8 @@
 # RUNBOOK: BitNet CUDA Remediation (RTX 5070)
 
+> **Documento complementario**: Para la documentación exhaustiva del pipeline de pesos
+> (bit-shifts, permutaciones WMMA, kernels CUDA), ver [BITNET_WEIGHT_PIPELINE.md](./BITNET_WEIGHT_PIPELINE.md).
+
 ## Contexto Técnico
 El sistema BitNet 1.58b utiliza una representación ternaria de pesos. En la RTX 5070, la inferencia estaba produciendo ruido incoherente debido a que los kernels de dequantización específicos para la arquitectura de GPU estaban en estado de placeholder (vaciados durante una limpieza anterior o mala sincronización de rama).
 

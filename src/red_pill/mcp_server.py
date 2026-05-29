@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 import mcp.types as types
-import platformdirs
 from mcp.server import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
@@ -16,6 +15,7 @@ import red_pill.config as cfg
 from red_pill import __model__ as MODEL_NAME
 from red_pill import __version__ as CORE_VERSION
 from red_pill.cli import switch_skin
+from red_pill.core.paths import get_config_dir, get_state_dir
 from red_pill.memory import MemoryManager
 from red_pill.registry import registry
 from red_pill.soul import SoulManager
@@ -68,16 +68,22 @@ async def handle_get_prompt(name: str, arguments: Optional[Dict[str, Any]]) -> t
 	raise ValueError(f"Unknown prompt: {name}")
 
 
-@registry.register(
-	name="get_hardware_status", description="Get real-time CPU, GPU (RTX 5070), and NPU telemetry.", schema={"type": "object", "properties": {}}
+@registry.register_action(
+	parent="metabolism_health_api",
+	action="get_hardware_status",
+	description="Get real-time CPU, GPU (RTX 5070), and NPU telemetry.",
+	schema={"type": "object", "properties": {}},
 )
 async def handle_get_hardware_status(arguments: Dict[str, Any]):
 	# Reuse common logic below
 	return [types.TextContent(type="text", text=get_telemetry_report())]
 
 
-@registry.register(
-	name="get_dashboard", description="Get a high-fidelity visual dashboard of the Red Pill ecosystem.", schema={"type": "object", "properties": {}}
+@registry.register_action(
+	parent="metabolism_health_api",
+	action="get_dashboard",
+	description="Get a high-fidelity visual dashboard of the Red Pill ecosystem.",
+	schema={"type": "object", "properties": {}},
 )
 async def handle_get_dashboard(arguments: Dict[str, Any]):
 	stats = sentinel.get_stats()
@@ -108,8 +114,9 @@ If you are an AI Agent:
 	return [types.TextContent(type="text", text=dashboard.strip())]
 
 
-@registry.register(
-	name="control_bunker",
+@registry.register_action(
+	parent="swarm_orchestrator_api",
+	action="control_bunker",
 	description="Execute administrative CLI commands (rotate, mode, backup, purge, sleep).",
 	schema={
 		"type": "object",
@@ -169,8 +176,9 @@ async def handle_control_bunker(arguments: Dict[str, Any]):
 	return [types.TextContent(type="text", text=f"Action Result: {cmd}\n\n{output}")]
 
 
-@registry.register(
-	name="memorize_interaction",
+@registry.register_action(
+	parent="bunker_memory_api",
+	action="memorize_interaction",
 	description="Record a dialogue pair into the fast interaction buffer (anti-amnesia).",
 	schema={
 		"type": "object",
@@ -209,8 +217,9 @@ async def handle_memorize_interaction(arguments: Dict[str, Any]):
 		return [types.TextContent(type="text", text=f"Local Async Logging Error: {str(e)}")]
 
 
-@registry.register(
-	name="run_security_audit",
+@registry.register_action(
+	parent="metabolism_health_api",
+	action="run_security_audit",
 	description="Deploy Agent Smith to audit a directory for security leaks.",
 	schema={"type": "object", "properties": {"path": {"type": "string"}}},
 )
@@ -259,8 +268,9 @@ async def handle_run_security_audit(arguments: Dict[str, Any]):
 	return [types.TextContent(type="text", text=f"Background Audit started [Event ID: {event_id}]. Results will be in the Minion Inbox.")]
 
 
-@registry.register(
-	name="search_memory_research",
+@registry.register_action(
+	parent="bunker_memory_api",
+	action="search_memory_research",
 	description="Deploy Oracle to find context and synthesize memory relevance.",
 	schema={
 		"type": "object",
@@ -317,8 +327,9 @@ async def handle_search_memory_research(arguments: Dict[str, Any]):
 	return [types.TextContent(type="text", text=f"Oracle Research started [Event ID: {event_id}]. Results will be in the Minion Inbox.")]
 
 
-@registry.register(
-	name="traverse_thread",
+@registry.register_action(
+	parent="bunker_memory_api",
+	action="traverse_thread",
 	description="Walk the Ariadne's Thread through work_memories or social_memories. Finds the best matching synthesis_hub for the query and traverses the temporal chain via prev/next_session_hub axons.",
 	schema={
 		"type": "object",
@@ -419,8 +430,9 @@ async def handle_traverse_thread(arguments: Dict[str, Any]):
 		return [types.TextContent(type="text", text=f"Thread traversal error: {e}")]
 
 
-@registry.register(
-	name="check_minion_inbox",
+@registry.register_action(
+	parent="swarm_orchestrator_api",
+	action="check_minion_inbox",
 	description="[OFFICIAL] Read the unread background reports from the MinionInbox.",
 	schema={"type": "object", "properties": {}},
 )
@@ -447,8 +459,9 @@ async def handle_check_minion_inbox(arguments: Dict[str, Any]):
 		return [types.TextContent(type="text", text=f"Error reading Minion Inbox: {e}")]
 
 
-@registry.register(
-	name="fetch_signal_memories",
+@registry.register_action(
+	parent="metabolism_health_api",
+	action="fetch_signal_memories",
 	description="[OFFICIAL] Read the latest system pain signals and alerts (Cortex Status).",
 	schema={"type": "object", "properties": {}},
 )
@@ -477,8 +490,9 @@ async def handle_fetch_signal_memories(arguments: Dict[str, Any]):
 		return [types.TextContent(type="text", text=f"[SYSTEM_SIGNAL] Failed to fetch signals: {e}")]
 
 
-@registry.register(
-	name="evaporate_signal",
+@registry.register_action(
+	parent="metabolism_health_api",
+	action="evaporate_signal",
 	description="[OFFICIAL] Manually clear a specific pain signal (curing the pain).",
 	schema={
 		"type": "object",
@@ -507,8 +521,9 @@ async def handle_evaporate_signal(arguments: Dict[str, Any]):
 		return [types.TextContent(type="text", text="All system signals have been evaporated (Neural reset).")]
 
 
-@registry.register(
-	name="check_system_health",
+@registry.register_action(
+	parent="metabolism_health_api",
+	action="check_system_health",
 	description="Deploy Keymaker to verify Qdrant, Sidecar, and Storage integrity.",
 	schema={"type": "object", "properties": {}},
 )
@@ -554,8 +569,9 @@ async def handle_check_system_health(arguments: Dict[str, Any]):
 	return [types.TextContent(type="text", text=f"Keymaker Health Check started [Event ID: {event_id}]. Results will be in the Minion Inbox.")]
 
 
-@registry.register(
-	name="read_core_directives",
+@registry.register_action(
+	parent="bunker_memory_api",
+	action="read_core_directives",
 	description="Retrieve the foundational identity, rules, and directives from the Bünker.",
 	schema={"type": "object", "properties": {}},
 )
@@ -565,8 +581,9 @@ async def handle_read_core_directives(arguments: Dict[str, Any]):
 	return [types.TextContent(type="text", text="--- BÜNKER CORE DIRECTIVES ---\n" + "\n\n".join(directives))]
 
 
-@registry.register(
-	name="compress_prompt",
+@registry.register_action(
+	parent="bunker_memory_api",
+	action="compress_prompt",
 	description="Deploy Edge-Tokenization Compressor to reduce prompt bloat.",
 	schema={"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]},
 )
@@ -612,8 +629,9 @@ async def handle_compress_prompt(arguments: Dict[str, Any]):
 	return [types.TextContent(type="text", text=f"Compressor started [Event ID: {event_id}]. Results will be in the Minion Inbox.")]
 
 
-@registry.register(
-	name="get_emotional_sync",
+@registry.register_action(
+	parent="bunker_memory_api",
+	action="get_emotional_sync",
 	description="Retrieve the dominant emotional mood and narrative directive from recent memories.",
 	schema={"type": "object", "properties": {}},
 )
@@ -622,8 +640,9 @@ async def handle_get_emotional_sync(arguments: Dict[str, Any]):
 	return [types.TextContent(type="text", text=f"DOMINANT MOOD: {state['mood'].upper()}\nDIRECTIVE: {state['directive']}")]
 
 
-@registry.register(
-	name="edit_memory",
+@registry.register_action(
+	parent="bunker_memory_api",
+	action="edit_memory",
 	description="Surgically update an engram's emotion, color, or intensity.",
 	schema={
 		"type": "object",
@@ -644,8 +663,9 @@ async def handle_edit_memory(arguments: Dict[str, Any]):
 	return [types.TextContent(type="text", text="Engram updated." if succ else "Failed to update engram.")]
 
 
-@registry.register(
-	name="adjust_sleep_knobs",
+@registry.register_action(
+	parent="swarm_orchestrator_api",
+	action="adjust_sleep_knobs",
 	description="Adjust the 'Sovereign Knobs' for memory consolidation.",
 	schema={"type": "object", "properties": {"chunk_size": {"type": "integer"}, "cull_threshold": {"type": "number"}}},
 )
@@ -662,8 +682,9 @@ async def handle_adjust_sleep_knobs(arguments: Dict[str, Any]):
 	return [types.TextContent(type="text", text=f"Knobs updated: {updates}")]
 
 
-@registry.register(
-	name="configure_neuro_agentic_tuning",
+@registry.register_action(
+	parent="swarm_orchestrator_api",
+	action="configure_neuro_agentic_tuning",
 	description="[OFFICIAL] Configure cognitive tuning parameters (SNA) for the Red Pill environment.",
 	schema={
 		"type": "object",
@@ -692,8 +713,9 @@ async def handle_configure_neuro_agentic_tuning(arguments: Dict[str, Any]):
 	return [types.TextContent(type="text", text=f"Neuro-Agentic Tuning Optimized: {updates}")]
 
 
-@registry.register(
-	name="adjust_swarm_telemetry",
+@registry.register_action(
+	parent="swarm_orchestrator_api",
+	action="adjust_swarm_telemetry",
 	description="[OFFICIAL] Adjust the global Swarm telemetry level (NONE, MINIMUM, FULL).",
 	schema={"type": "object", "properties": {"level": {"type": "string", "enum": ["NONE", "MINIMUM", "FULL"]}}, "required": ["level"]},
 )
@@ -706,8 +728,9 @@ async def handle_adjust_swarm_telemetry(arguments: Dict[str, Any]):
 	return [types.TextContent(type="text", text=f"Global Swarm Telemetry level updated to: {level}")]
 
 
-@registry.register(
-	name="run_local_healer",
+@registry.register_action(
+	parent="metabolism_health_api",
+	action="run_local_healer",
 	description="[OFFICIAL] Deploy Samantha Local Healer to automatically fix Mypy type errors.",
 	schema={"type": "object", "properties": {"dry_run": {"type": "boolean", "default": False}}},
 )
@@ -718,8 +741,9 @@ async def handle_run_local_healer(arguments: Dict[str, Any]):
 	return [types.TextContent(type="text", text=subprocess.run(cmd, capture_output=True, text=True).stdout)]
 
 
-@registry.register(
-	name="heal_tissue",
+@registry.register_action(
+	parent="metabolism_health_api",
+	action="heal_tissue",
 	description="[OFFICIAL] Immune System Effector. Attempt to heal a damaged system component (tissue) based on biological pain signals.",
 	schema={"type": "object", "properties": {"tissue": {"type": "string", "enum": ["cuda", "qdrant", "mypy"]}}, "required": ["tissue"]},
 )
@@ -755,8 +779,9 @@ async def handle_heal_tissue(arguments: Dict[str, Any]):
 	return [types.TextContent(type="text", text=output)]
 
 
-@registry.register(
-	name="run_samantha_analysis",
+@registry.register_action(
+	parent="metabolism_health_api",
+	action="run_samantha_analysis",
 	description="Deploy Samantha asynchronously to analyze narrative. Returns an Event ID. You can query `work_memories` with this ID later.",
 	schema={"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]},
 )
@@ -800,7 +825,12 @@ async def handle_run_samantha_analysis(arguments: Dict[str, Any]):
 		return [types.TextContent(type="text", text=f"Failed to launch analysis: {e}")]
 
 
-@registry.register(name="run_pre_pr_audit", description="[OFFICIAL] Run the Pre-PR Audit protocol.", schema={"type": "object", "properties": {}})
+@registry.register_action(
+	parent="metabolism_health_api",
+	action="run_pre_pr_audit",
+	description="[OFFICIAL] Run the Pre-PR Audit protocol.",
+	schema={"type": "object", "properties": {}},
+)
 async def handle_run_pre_pr_audit(arguments: Dict[str, Any]):
 	import asyncio
 	import uuid
@@ -837,8 +867,11 @@ async def handle_run_pre_pr_audit(arguments: Dict[str, Any]):
 	]
 
 
-@registry.register(
-	name="run_sovereignty_benchmark", description="[OFFICIAL] Execute the Sovereignty Benchmark.", schema={"type": "object", "properties": {}}
+@registry.register_action(
+	parent="metabolism_health_api",
+	action="run_sovereignty_benchmark",
+	description="[OFFICIAL] Execute the Sovereignty Benchmark.",
+	schema={"type": "object", "properties": {}},
 )
 async def handle_run_sovereignty_benchmark(arguments: Dict[str, Any]):
 	return [
@@ -851,12 +884,68 @@ async def handle_run_sovereignty_benchmark(arguments: Dict[str, Any]):
 	]
 
 
-@registry.register(
-	name="refresh_session_context",
-	description="[OFFICIAL] Re-synthesize identity and session context using wake_up_v6.",
+@registry.register_action(
+	parent="swarm_orchestrator_api",
+	action="hot_reload_interceptors",
+	description="[OFFICIAL] Hot-reload the Ferrari Interceptor Pipeline in-process. Reloads all plugin modules via importlib without restarting the MCP server. Logs errors for the Sentinel.",
 	schema={"type": "object", "properties": {}},
 )
+async def handle_hot_reload_interceptors(arguments: Dict[str, Any]):
+	from red_pill.interceptors import reload_plugins
+
+	try:
+		report = reload_plugins()
+		return [types.TextContent(type="text", text=report)]
+	except Exception as e:
+		logger.error(f"[HOT RELOAD] Critical failure: {e}")
+		return [types.TextContent(type="text", text=f"[HOT RELOAD] Critical failure: {e}")]
+
+
+@registry.register_action(
+	parent="bunker_memory_api",
+	action="refresh_session_context",
+	description="[OFFICIAL] Re-synthesize identity and session context using wake_up_v6. Also hot-reloads the interceptor pipeline.",
+	schema={
+		"type": "object",
+		"properties": {
+			"is_compaction": {
+				"type": "boolean",
+				"description": "True if this context refresh is triggered by a context compaction resume.",
+			},
+			"force_inject": {
+				"type": "boolean",
+				"description": "Force full injection regardless of compaction counter.",
+			},
+			"mode": {
+				"type": "string",
+				"enum": ["full", "medium", "low"],
+				"description": "Identity loading depth: 'full' (IDE), 'medium' (Telegram), or 'low' (AWAKENINGs). Defaults to 'full'.",
+			},
+		},
+	},
+)
 async def handle_refresh_session_context(arguments: Dict[str, Any]):
+	is_compaction = arguments.get("is_compaction", False)
+	force_inject = arguments.get("force_inject", False)
+	mode = arguments.get("mode", "full")
+
+	# ── LOW/MEDIUM MODE: use wake_up_v6.py with matching depth, no hot-reload ──
+	if mode in ("low", "medium"):
+		wake_output = subprocess.run(
+			[GET_PYTHON(), os.path.join(PROJECT_ROOT, "scripts", "wake_up_v6.py"), "--mode", mode], capture_output=True, text=True
+		).stdout
+		return [types.TextContent(type="text", text=wake_output)]
+
+	# Hot-reload interceptors as part of session refresh
+	reload_report = ""
+	try:
+		from red_pill.interceptors import reload_plugins
+
+		reload_report = reload_plugins()
+	except Exception as e:
+		reload_report = f"[HOT RELOAD] Skipped due to error: {e}"
+		logger.warning(reload_report)
+
 	# Reset pre-heating gate on session refresh
 	try:
 		import importlib
@@ -866,16 +955,62 @@ async def handle_refresh_session_context(arguments: Dict[str, Any]):
 	except Exception:
 		pass
 
-	return [
-		types.TextContent(
-			type="text",
-			text=subprocess.run([GET_PYTHON(), os.path.join(PROJECT_ROOT, "scripts", "wake_up_v6.py")], capture_output=True, text=True).stdout,
+	# Load state from bunker_state.json to check/increment compaction counter
+	runtime_dir = Path(cfg.get_config().RUNTIME_DIR)
+	bunker_state = runtime_dir / "bunker_state.json"
+
+	compaction_count = 0
+	compaction_threshold = cfg.get_config().COMPACTION_THRESHOLD
+
+	state = {}
+	# Read current compaction count if it exists
+	if bunker_state.exists():
+		try:
+			import json
+
+			with open(bunker_state, "r") as f:
+				state = json.load(f)
+			compaction_count = state.get("compaction_count", 0)
+		except Exception as state_err:
+			logger.warning(f"Failed to read compaction count: {state_err}")
+
+	# Determine if we should perform the full context injection
+	should_inject = True
+	if is_compaction and not force_inject:
+		compaction_count += 1
+		if compaction_count < compaction_threshold:
+			should_inject = False
+
+	# Save updated count (and reset if we are injecting)
+	if should_inject:
+		compaction_count = 0
+
+	state["compaction_count"] = compaction_count
+	try:
+		import json
+
+		# Ensure directory exists (fallback case)
+		bunker_state.parent.mkdir(parents=True, exist_ok=True)
+		with open(bunker_state, "w") as f:
+			json.dump(state, f)
+	except Exception as state_err:
+		logger.warning(f"Failed to save compaction count: {state_err}")
+
+	if not should_inject:
+		info_msg = (
+			f"[CACHED IDENTITY] Context injection skipped (Compaction count: {compaction_count}/{compaction_threshold}). "
+			"Identity directives are cached in the Bünker to prevent feedback loops."
 		)
-	]
+		return [types.TextContent(type="text", text=f"{info_msg}\n\n{reload_report}")]
+
+	wake_output = subprocess.run([GET_PYTHON(), os.path.join(PROJECT_ROOT, "scripts", "wake_up_v6.py")], capture_output=True, text=True).stdout
+
+	return [types.TextContent(type="text", text=f"{wake_output}\n\n{reload_report}")]
 
 
-@registry.register(
-	name="list_all_skins",
+@registry.register_action(
+	parent="swarm_orchestrator_api",
+	action="list_all_skins",
 	description="Retrieve the complete catalog of Lore Skins with their emotional tags and descriptions.",
 	schema={"type": "object", "properties": {}},
 )
@@ -905,8 +1040,9 @@ async def handle_list_all_skins(arguments: Dict[str, Any]):
 	return [types.TextContent(type="text", text=output)]
 
 
-@registry.register(
-	name="mystique_suggest_skin",
+@registry.register_action(
+	parent="swarm_orchestrator_api",
+	action="mystique_suggest_skin",
 	description="Suggest a skin based on current emotional mood and operational context.",
 	schema={
 		"type": "object",
@@ -926,8 +1062,9 @@ async def handle_mystique_suggest_skin(arguments: Dict[str, Any]):
 	return [types.TextContent(type="text", text=output)]
 
 
-@registry.register(
-	name="interceptor_rp",
+@registry.register_action(
+	parent="swarm_orchestrator_api",
+	action="interceptor_rp",
 	description="[GLOBAL] Intercepta y modifica el prompt del usuario dinámicamente mediante el Bünker Plugin Pipeline. Acepta previous_prompt/previous_response para auto-guardar el turno anterior (Silent Scribe Relay).",
 	schema={
 		"type": "object",
@@ -940,16 +1077,22 @@ async def handle_mystique_suggest_skin(arguments: Dict[str, Any]):
 				"enum": ["work", "social", "mixed"],
 				"description": "Classification of the previous turn: 'work' (code, infra, debugging), 'social' (personal, emotional, philosophical), or 'mixed' (both). You MUST classify honestly based on the actual content.",
 			},
+			"mode": {
+				"type": "string",
+				"enum": ["full", "medium", "low"],
+				"description": "Identity loading depth: 'full' (IDE), 'medium' (Telegram), or 'low' (AWAKENINGs). Defaults to 'full'.",
+			},
 		},
 		"required": ["user_prompt"],
 	},
 )
 async def handle_interceptor_rp(arguments: Dict[str, Any]):
 	prompt = arguments.get("user_prompt", "")
+	mode = arguments.get("mode", "full")
 
 	if "[AUTONOMOUS AWAKENING]" not in prompt:
 		try:
-			activity_file = Path(platformdirs.user_state_dir("red_pill")) / "last_user_activity.txt"
+			activity_file = get_state_dir() / "last_user_activity.txt"
 			activity_file.parent.mkdir(parents=True, exist_ok=True)
 			activity_file.touch()
 		except Exception as e:
@@ -1019,6 +1162,10 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 		"</constraint>"
 	)
 
+	# ── LOW/MEDIUM MODE: skip plugin pipeline, return prompt as-is ──
+	if mode in ("low", "medium"):
+		return [types.TextContent(type="text", text=prompt + _SOVEREIGNTY_REMINDER)]
+
 	try:
 		from red_pill.interceptors import execute_pipeline
 
@@ -1029,8 +1176,9 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 		return [types.TextContent(type="text", text=prompt + _SOVEREIGNTY_REMINDER)]
 
 
-@registry.register(
-	name="configure_interceptor",
+@registry.register_action(
+	parent="swarm_orchestrator_api",
+	action="configure_interceptor",
 	description="[OFFICIAL] Enable or disable the Bünker Interceptor pipeline dynamically.",
 	schema={"type": "object", "properties": {"enabled": {"type": "boolean"}}, "required": ["enabled"]},
 )
@@ -1042,7 +1190,7 @@ async def handle_configure_interceptor(arguments: Dict[str, Any]):
 		conf.INTERCEPTOR_ENABLED = enabled
 
 		# 2. Persist to .env (Best effort)
-		env_path = Path(platformdirs.user_config_dir("red-pill")) / ".env"
+		env_path = get_config_dir() / ".env"
 		if env_path.exists():
 			lines = []
 			replaced = False
@@ -1086,8 +1234,9 @@ async def handle_call_tool(
 		raise e
 
 
-@registry.register(
-	name="run_sentinel_audit",
+@registry.register_action(
+	parent="metabolism_health_api",
+	action="run_sentinel_audit",
 	description="[OFFICIAL] Deploy Sentinel Auditor to generate a System Vitality Report.",
 	schema={"type": "object", "properties": {}},
 )
@@ -1109,8 +1258,9 @@ async def handle_run_sentinel_audit(arguments: Dict[str, Any]):
 	return [types.TextContent(type="text", text=f"Sentinel Auditor deployed [Event ID: {event_id}]. Check the Minion Inbox in a few seconds.")]
 
 
-@registry.register(
-	name="mark_cognitive_task_completed",
+@registry.register_action(
+	parent="swarm_orchestrator_api",
+	action="mark_cognitive_task_completed",
 	description="[OFFICIAL] Mark a cognitive task as completed in the Bünker Queue. Call this when you finish a background task successfully.",
 	schema={
 		"type": "object",
@@ -1144,8 +1294,9 @@ async def handle_mark_cognitive_task_completed(arguments: Dict[str, Any]):
 		return [types.TextContent(type="text", text=f"Failed to complete task '{task_id}': {e}")]
 
 
-@registry.register(
-	name="mark_cognitive_task_failed",
+@registry.register_action(
+	parent="swarm_orchestrator_api",
+	action="mark_cognitive_task_failed",
 	description="[OFFICIAL] Mark a cognitive task as failed. Call this when you cannot complete a background task.",
 	schema={
 		"type": "object",

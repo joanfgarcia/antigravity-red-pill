@@ -17,28 +17,38 @@ class InferenceRouter:
 		Determines the best provider based on task requirements, validating capabilities
 		and applying graceful degradation to cheaper models if token exhaustion occurs.
 		"""
-		local_only = task_metadata.get("local_only", False)
-		tier = task_metadata.get("model_tier", "standard")
 		required_capability = task_metadata.get("required_capability", "general")
 		strict_validation = task_metadata.get("strict_validation", False)
 
-		providers_to_try = []
+		# 0. Emergency Cloud Override
+		import red_pill.config as cfg
 
-		# 1. Force local if requested or if tier is ternary
-		if local_only or tier == "ternary":
-			providers_to_try.append("bitnet")
-		# 2. Try SIP for local-first non-ternary
-		elif tier == "local_first":
-			providers_to_try.extend(["sip", "bitnet"])
-		# 3. Graceful degradation: If tokens run low, use 'cheap' tier (Flash/Mini)
-		elif tier == "cheap":
-			providers_to_try.extend(["flash", "openai_mini", "openai"])
+		if cfg.get_config().EMERGENCY_CLOUD_OVERRIDE:
+			providers_to_try = ["openai", "flash"]
 		else:
-			# Default standard
-			default_key = ProviderRegistry._default_inference_key
-			if default_key:
-				providers_to_try.append(default_key)
-			providers_to_try.extend(["openai", "flash", "sip"])
+			local_only = task_metadata.get("local_only", False)
+			tier = task_metadata.get("model_tier", "standard")
+
+			providers_to_try = []
+
+			# 1. Force local if requested or if tier is ternary
+			if local_only or tier == "ternary":
+				providers_to_try.append("bitnet")
+			# 2. NPU tier: ultra-low-power background tasks (Echo, telemetry, sleep)
+			elif tier == "npu":
+				providers_to_try.extend(["npu", "sip", "bitnet"])
+			# 3. Try SIP for local-first non-ternary
+			elif tier == "local_first":
+				providers_to_try.extend(["sip", "npu", "bitnet"])
+			# 4. Graceful degradation: If tokens run low, use 'cheap' tier (Flash/Mini)
+			elif tier == "cheap":
+				providers_to_try.extend(["flash", "openai_mini", "openai"])
+			else:
+				# Default standard
+				default_key = ProviderRegistry._default_inference_key
+				if default_key:
+					providers_to_try.append(default_key)
+				providers_to_try.extend(["openai", "flash", "sip", "npu"])
 
 		available_providers = ProviderRegistry.list_inference_providers()
 		if not available_providers:

@@ -12,6 +12,6 @@ mock_dmesg.stdout = "System functioning normally"
 auditor = SentinelAuditor(force=True)
 
 with patch("subprocess.run", side_effect=[mock_vram, mock_dmesg]):
-    with patch("urllib.request.urlopen"), patch("pathlib.Path.exists", return_value=False):
-        report = auditor.audit_vitals()
-        print("REPORT FINDINGS:", report.findings)
+	with patch("urllib.request.urlopen"), patch("pathlib.Path.exists", return_value=False):
+		report = auditor.audit_vitals()
+		print("REPORT FINDINGS:", report.findings)

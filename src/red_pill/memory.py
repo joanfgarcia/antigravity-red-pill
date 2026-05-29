@@ -965,7 +965,8 @@ class MemoryManager:
 	def purge_identity(self) -> None:
 		"""
 		PRIV-GDPR: Art. 17 Right to be Forgotten.
-		Drops all local collections from Qdrant and wipes the local ~/.agent/ context.
+		Drops all local collections from Qdrant and wipes the local ~/.agent/ context
+		as well as standard XDG configuration, data, state, and cache directories.
 		"""
 		logger.warning("Initiating GDPR Article 17 Purge (Right to be Forgotten).")
 
@@ -980,16 +981,39 @@ class MemoryManager:
 			except Exception as e:
 				logger.error(f"Failed to drop collection {coll}: {e}")
 
-		# 2. Wipe ~/.agent/
-		agent_dir = os.path.expanduser("~/.agent")
-		if os.path.exists(agent_dir):
-			try:
-				import shutil
+		# 2. Wipe agéntico and XDG paths
+		import shutil
 
-				shutil.rmtree(agent_dir)
-				logger.info(f"Wiped local agent directory: {agent_dir}")
-			except Exception as e:
-				logger.error(f"Failed to wipe {agent_dir}: {e}")
+		from red_pill.core.paths import (
+			get_agent_dir,
+			get_config_dir,
+			get_daemon_dir,
+			get_data_dir,
+			get_log_dir,
+			get_staging_dir,
+			get_state_dir,
+		)
+
+		paths_to_wipe = [
+			get_agent_dir(),
+			get_config_dir(),
+			get_data_dir(),
+			get_state_dir(),
+			get_log_dir(),
+			get_daemon_dir(),
+			get_staging_dir(),
+		]
+
+		for path in paths_to_wipe:
+			if path.exists():
+				try:
+					if path.is_dir():
+						shutil.rmtree(path)
+					else:
+						path.unlink()
+					logger.info(f"Wiped path: {path}")
+				except Exception as e:
+					logger.error(f"Failed to wipe {path}: {e}")
 
 		# 3. Wipe generic metabolism state file
 		metabolism_file = os.path.expanduser("~/.red_pill_metabolism")

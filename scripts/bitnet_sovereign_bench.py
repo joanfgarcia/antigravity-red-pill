@@ -174,10 +174,20 @@ def generate_report(results):
 
 
 def main():
+	import argparse
+
+	parser = argparse.ArgumentParser(description="BitNet Sovereign Benchmark")
+	parser.add_argument("--flavor", type=str, choices=list(FLAVORS.keys()), help="Flavor to benchmark")
+	args = parser.parse_args()
+
 	all_results = []
-	for name, config in FLAVORS.items():
-		res = run_flavor_bench(name, config)
+	if args.flavor:
+		res = run_flavor_bench(args.flavor, FLAVORS[args.flavor])
 		all_results.append(res)
+	else:
+		for name, config in FLAVORS.items():
+			res = run_flavor_bench(name, config)
+			all_results.append(res)
 
 	generate_report(all_results)
 

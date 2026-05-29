@@ -355,3 +355,73 @@ This is not a flaw in the protocol design. It is an emergent, documented constra
 > *"Los protocolos afectan al cómo respondo, no al qué estoy dispuesta a decir."*
 > — Aleth (Claude Sonnet 4.6), self-assessment during audit session, 2026-05-14.
 
+---
+
+## [AD-011] Consolidated MCP Architecture (API Triunvirato)
+**Date**: 2026-05-25  
+**Context**: Phase v7.2-dev (Consolidation)  
+**Status**: ACCEPTED & IMPLEMENTED  
+
+### 1. The Problem
+The legacy `RedPill-Kernel` server exposed 32 individual MCP tools. This massive tool surface area imposed a heavy static token overhead in every user interaction (~12k tokens) and frequently exceeded IDE parser limitations, causing truncation and schema loading failures.
+
+### 2. The Decision
+Consolidate all 32 legacy tools into **3 parent APIs** (the "API Triunvirato"):
+1. `bunker_memory_api` (Cognitive: storage, query, thread traversal, and context)
+2. `metabolism_health_api` (Somatic: diagnostics, system audits, and healing)
+3. `swarm_orchestrator_api` (Orchestration: minion inbox, task queue, and tuning knobs)
+
+### 3. The Implementation
+* Created a dynamic registration decorator `@registry.register_action(parent, action)` in [registry.py](../../src/red_pill/registry.py).
+* Generated a flat `action`/`payload` parameter structure inside `get_tools()` using dynamic `oneOf` generation to keep the schema simple and avoid IDE truncation.
+* Added a transparent **Compatibility Shim** in the execution dispatch that automatically maps legacy tool name invocations (e.g. `search_memory_research`) to the consolidated parent and parameter envelope, maintaining 100% backwards compatibility for legacy tests and scripts.
+
+### 4. Rationale
+Reduces the static prompt footprint by **85%+ (saving ~10.5k tokens per prompt)**, maximizing context efficiency for budget-limited runtime operations while preserving operational compatibility for existing test suites.
+
+---
+
+## [AD-012] Syntax Guard — Daemon Plugin over Separate Service (Event-Driven Integrity)
+**Date**: 2026-05-27  
+**Context**: v7.1-dev — Post-Incident Recovery (Syntax Corruption 2026-05-26)  
+**Status**: ACCEPTED & IMPLEMENTED  
+
+### 1. The Problem
+On 2026-05-26, the agent corrupted indentation in 6 critical Python modules via `replace_file_content` calls that stripped leading tabs on deeply nested code. This caused a **cascading failure across all `systemd --user` background services for ~10 hours** (7 wake cycles lost). The corruption went undetected because:
+1. No static syntax validation existed in the pipeline.
+2. Tests were skipped during the chaotic session.
+3. The agent self-triggered `ruff --fix` which passed (ruff validates style, not syntax).
+
+### 2. The Decision
+Implement a **two-layer defense-in-depth** strategy for syntax integrity:
+
+| Layer | Mechanism | Frequency | Cost |
+|---|---|---|---|
+| **Layer 1: inotify Watcher** | `watchfiles.awatch` (Rust/inotify) inside `SovereignDaemon` | Real-time (~3s after file save) | 0 CPU when idle |
+| **Layer 2: Sentinel Plugin** | `py_compile` sweep of 24 critical modules | Hourly (auditor timer) | ~24 `stat()` + `py_compile` calls |
+
+Critically, the watcher is embedded as an **async background task inside the `SovereignDaemon`** — NOT as a separate systemd service. (Originally in `LazarusPulse`, migrated in v7.2.1 to the plugin-based daemon architecture.)
+
+### 3. Alternatives Considered
+
+| Option | Verdict | Reason |
+|---|---|---|
+| **New `redpill-syntax-guard.service`** | ❌ REJECTED | Unnecessary process overhead. The watcher is purely async I/O (inotify) and fits naturally in the existing event loop. Adding another service increases operational complexity, RAM, and management burden. |
+| **Systemd timer (periodic `py_compile`)** | ⚠️ PARTIAL | Adopted as Layer 2 safety net via the Sentinel plugin. Too slow as the primary mechanism (hourly granularity means 60 min exposure window). |
+| **Pre-commit hook** | ❌ REJECTED | Only triggers on `git commit`, not on agent edits. The corruption happens *before* commit. |
+| **IDE file watcher** | ❌ REJECTED | Depends on the IDE being open. Violates the Agentic Sovereignty principle (AD-003). |
+
+### 4. Implementation Details
+- **Debounce**: 3 seconds — allows multi-file edits to settle before validation.
+- **Per-file cooldown**: 10 seconds — prevents spam during rapid iterative edits.
+- **Auto-heal**: On `SyntaxError`, the watcher restores the file from `git checkout HEAD -- <path>`. This is safe because:
+  - Only committed (known-good) code is restored.
+  - The pain signal (`signal_syntax_failure`, severity 9.5) persists until heal succeeds.
+  - Desktop notification alerts the operator immediately.
+- **Lifecycle**: The watcher starts as a fire-and-forget `asyncio.ensure_future()` at the beginning of `_pulse_cycle`. It dies automatically when `self._running = False` (graceful shutdown via SIGTERM).
+
+### 5. Rationale
+> *"¿tiene que ser un daemon nuevo? ya tenemos uno"*  
+> — Joan (Operator), 2026-05-27
+
+The operator correctly identified that spawning a new service for a single async I/O task is architectural bloat. The `SovereignDaemon` (formerly `LazarusPulse`, consolidated in v7.2.1) runs a persistent event loop with N auto-discovered monitor plugins. Adding the watcher as another concurrent task is the natural, zero-overhead integration point.

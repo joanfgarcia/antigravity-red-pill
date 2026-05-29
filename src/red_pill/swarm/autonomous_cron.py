@@ -3,40 +3,70 @@ import json
 import os
 import sqlite3
 import time
-from pathlib import Path
 
-import platformdirs
 from dotenv import load_dotenv
+
+from red_pill.core.paths import (
+	get_aleth_core_root,
+	get_antigravity_brain_dir,
+	get_config_dir,
+	get_neon_link_config_dir,
+	get_neon_link_db_path,
+	get_state_dir,
+)
 
 
 def is_ide_idle(idle_seconds=3600):
 	"""
-	Heurística de inactividad: Comprueba cuándo fue la última vez que el usuario
-	interactuó con el sistema comprobando la fecha de modificación de last_user_activity.txt.
-	"""
-	state_file = Path(platformdirs.user_state_dir("red_pill")) / "last_user_activity.txt"
-	if not state_file.exists():
-		return True
+	Heurística de inactividad multi-señal.
 
-	try:
-		mtime = state_file.stat().st_mtime
-		return (time.time() - mtime) > idle_seconds
-	except Exception:
-		return True
+	Señales (OR — cualquiera activa = operador presente):
+	1. last_user_activity.txt (MCP interceptor / Telegram worker)
+	2. Antigravity IDE transcript.jsonl files (direct IDE sessions)
+
+	Returns True ONLY if ALL signals indicate idle > idle_seconds.
+	"""
+	now = time.time()
+
+	# Signal 1: MCP interceptor / Telegram worker touch file
+	state_file = get_state_dir() / "last_user_activity.txt"
+	if state_file.exists():
+		try:
+			if (now - state_file.stat().st_mtime) <= idle_seconds:
+				return False
+		except Exception:
+			pass
+
+	# Signal 2: Antigravity IDE active conversations
+	# Transcripts are written in real-time during IDE sessions.
+	antigravity_brain = get_antigravity_brain_dir()
+	if antigravity_brain.is_dir():
+		try:
+			for transcript in antigravity_brain.rglob("transcript.jsonl"):
+				try:
+					if (now - transcript.stat().st_mtime) <= idle_seconds:
+						return False
+				except Exception:
+					continue
+		except Exception:
+			pass
+
+	# All signals indicate idle
+	return True
 
 
 def main():
 	# Cargar configuración soberana de Red-Pill (Identidad)
-	red_pill_config = Path(platformdirs.user_config_dir("red-pill")) / ".env"
+	red_pill_config = get_config_dir() / ".env"
 	if red_pill_config.exists():
 		load_dotenv(red_pill_config)
 
 	# Cargar configuración de Neon-Link (Base de datos)
-	neon_link_config = Path(platformdirs.user_config_dir("neon-link")) / ".env"
+	neon_link_config = get_neon_link_config_dir() / ".env"
 	if neon_link_config.exists():
 		load_dotenv(neon_link_config)
 
-	db_path = os.environ.get("NEON_LINK_DB_PATH", Path(platformdirs.user_data_dir("neon-link")) / "events.db")
+	db_path = os.environ.get("NEON_LINK_DB_PATH", get_neon_link_db_path())
 	user_name = os.environ.get("USER_NAME", "Operador")
 
 	# Comprobar si el Operador lleva inactivo 1 hora (3600 segundos)
@@ -53,15 +83,10 @@ def main():
 		print("La cola de Neon-Link no está vacía. Abortando despertar.")
 		return
 
-	# Obtener el último canal activo de forma dinámica y agnóstica
-	cursor.execute("SELECT channel_user_id, channel FROM inbox ORDER BY created_at DESC LIMIT 1")
-	row = cursor.fetchone()
-	if not row:
-		print("No hay historial de canales activos. Abortando.")
-		return
-	channel_user_id, channel = row
-
-	from red_pill.core.paths import get_aleth_core_root
+	# AWAKENINGs always go through the 'system' channel to avoid
+	# polluting user Telegram sessions with autonomous wake-ups
+	channel = "system"
+	channel_user_id = "autonomous_awakening"
 
 	log_path = get_aleth_core_root() / "AWAKENING_LOG.md"
 	msg = {
@@ -74,7 +99,7 @@ def main():
 	)
 	conn.commit()
 	conn.close()
-	print("Señal de despertar autónomo inyectada en el Córtex (events.db)")
+	print("Señal de despertar autónomo inyectada en el Córtex (events.db) via canal 'system'")
 
 
 if __name__ == "__main__":

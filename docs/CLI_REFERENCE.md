@@ -96,6 +96,18 @@ Displays live telemetry: CPU, GPU (RTX), NPU, memory usage, active swarm agents,
 
 ---
 
+### `daemon` — Start the Sovereign Daemon
+```bash
+red-pill daemon [--oneshot]
+```
+Starts the Sovereign Daemon (plugin-based control plane). Auto-discovers monitor plugins from `daemon/plugins/`, supervises them with hard timeouts, and manages systemd watchdog integration.
+
+| Flag | Description |
+|------|-------------|
+| `--oneshot` | Tick all plugins once and exit (for testing) |
+
+---
+
 ### `sleep` — Lazarus Maintenance Ritual
 ```bash
 red-pill sleep [--mode {lazy,deep}]
@@ -154,6 +166,7 @@ red-pill bunker <subcommand>
 |------------|-------------|
 | `init` | Hardware profiling and declarative profile generation |
 | `install` | Deterministic installation from bunker profile |
+| `update` | Pulls latest repository changes, aligns virtual environment dependencies via uv, runs pending database migrations, and reloads systemd daemons |
 | `export` | **(Backup)** Packages memory, queues, secrets and config into a single `.tar.gz.mls` encrypted with pure-mls |
 | `export-keys` | **(Backup Keys)** Exports the Cryptographic Master Identity (KEM & signatures) to an unencrypted `.tar.gz` for offline safe storage |
 | `restore [source] [--kem PATH] [--sig PATH]` | Restores from a Soul Kit backup. Optionally provide specific KEM (`vault.seed`) or Signature (`vault_group.state`) to decrypt on a clean host |
@@ -253,6 +266,8 @@ red-pill seed                            # Init memory
 red-pill add work "Completed feature X"  # Store engram
 red-pill search work "authentication"    # Semantic recall
 red-pill status                          # Hardware panel
+red-pill daemon                          # Start Sovereign Daemon
+red-pill daemon --oneshot                # Test: tick all plugins once
 red-pill sleep                           # Consolidate memory
 red-pill soul export                     # Backup soul
 red-pill soul rotate                     # Rotate API keys

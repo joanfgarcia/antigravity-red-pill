@@ -35,7 +35,9 @@ class SentinelAuditor:
 		self.uv_path = os.path.expanduser("~/.local/bin/uv")
 
 		# Auditor Cache System
-		self.cache_file = Path.home() / ".agent" / "auditor_cache.json"
+		from red_pill.core.paths import get_data_dir
+
+		self.cache_file = get_data_dir() / "auditor_cache.json"
 		self.cache_file.parent.mkdir(parents=True, exist_ok=True)
 
 		from red_pill.memory import MemoryManager
@@ -233,7 +235,9 @@ class SentinelAuditor:
 		# 3. Scan journalctl for errors since last audit using a cursor file
 		all_errors = []
 		if redpill_units:
-			cursor_file = Path.home() / ".agent" / "auditor_journal_cursor"
+			from red_pill.core.paths import get_data_dir
+
+			cursor_file = get_data_dir() / "auditor_journal_cursor"
 			if not cursor_file.exists():
 				# Initialize cursor at the current end of journal to avoid parsing history
 				subprocess.run(["journalctl", "--user", "-n", "0", f"--cursor-file={cursor_file}"])
@@ -300,7 +304,21 @@ class SentinelAuditor:
 								self.logger.info(f"Executing health check plugin: {plugin.name}")
 								plugin_findings = plugin.audit(config)
 								if plugin_findings:
-									report.findings.extend(plugin_findings)
+									for finding in plugin_findings:
+										self.logger.warning(f"Sentinel Auditor: Detected issue '{finding.type}': {finding.message}")
+										healed = False
+										try:
+											healed = plugin.heal(config, finding)
+										except Exception as heal_err:
+											self.logger.error(f"Plugin {plugin.name} failed during heal: {heal_err}")
+
+										if healed:
+											self.logger.info(
+												f"Sentinel Auditor: Successfully healed '{finding.type}' for {finding.metadata.get('service', 'unknown')}"
+											)
+										else:
+											self.logger.warning(f"Sentinel Auditor: Auto-heal failed/not supported for '{finding.type}'")
+											report.findings.append(finding)
 						except Exception as e:
 							self.logger.error(f"Plugin {plugin.name} failed during audit: {e}")
 							report.status = "red"
@@ -385,9 +403,9 @@ if __name__ == "__main__":
 	args = parser.parse_args()
 
 	logging.basicConfig(level=logging.INFO)
-	auditor = SentinelAuditor(
-		target_repos=[os.path.expanduser("~/Documents/IA/pure-mls"), os.path.expanduser("~/Documents/IA/sharing")], force=args.force
-	)
+	from red_pill.core.paths import get_bunker_root
+
+	auditor = SentinelAuditor(target_repos=[str(get_bunker_root().parent / "pure-mls"), str(get_bunker_root())], force=args.force)
 	for repo in auditor.target_repos:
 		res = auditor.audit_repo(repo)
 		auditor.sync_to_thalamus(res)

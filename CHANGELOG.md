@@ -1,4 +1,207 @@
-## [7.0.0] - Unreleased
+## [7.2.0] - Unreleased
+
+### 🏛️ Sovereign Daemon — Plugin-Based Consolidation
+- **[ARCH] `SovereignDaemon` (`daemon/sovereign.py`)**: Consolidated 3 daemon services (2 already disabled) + 1 redundant timer into a single plugin-based control plane. Auto-discovers `DaemonPlugin` subclasses from `daemon/plugins/`. Each plugin has a hard `timeout_s` — if exceeded, pain signal is injected and the daemon continues. systemd Type=notify integration (READY=1, WATCHDOG=1).
+- **[FEAT] `DaemonPlugin` ABC (`daemon/plugin.py`)**: Abstract base class for monitor plugins. Properties: `name`, `interval_s`, `timeout_s`, `enabled`. Contract: `tick()` is monitor-only — read state, check health, dispatch signals. Never execute.
+- **[FEAT] 5 Monitor Plugins**: `TelemetryPlugin` (30s, GPU/inbox/LED), `EchoPlugin` (60s, context mirror), `VitalsPlugin` (120s, Qdrant/CUDA/fever), `SwarmMonitorPlugin` (300s, Neon-Link/hygiene), `TimerWatchdogPlugin` (60s, systemd timer health).
+- **[DELETE] `LazarusPulse` (`heartbeat.py`)**: 714 lines deleted. Rituals extracted to `rituals.py` as stateless async functions. `trigger_pulse.py` migrated. `test_heartbeat.py` removed.
+- **[NEW] `rituals.py`**: Stateless async ritual functions (maintenance, swarm, lazarus, resonance, hygiene, usp, dream, consolidation, thread, auto_heal). No class, no state — pure functions with explicit dependencies.
+- **[DOCS] Single-Tenant Axiom**: Declared in ARCHITECTURE.md and WAR_ECONOMY.md (bilingual). "One operator, one machine, one agent" — foundational constraint, not an omission.
+- **[DOCS] WAR_ECONOMY.md Section 8**: Sovereign Daemon architecture documented (bilingual). Saint-Exupéry epigraph as design philosophy.
+
+### 🏭 Economía de Guerra — Samantha Queue & Local LLM Pipeline
+- **[FEAT] Samantha On-Demand (`samantha_on_demand.py`)**: Ephemeral local LLM manager. Detects active Hypervisor (port 8760), boots ephemeral `llama-server` on port 8790 if not available, executes task, cleans up. Zero VRAM residue when idle.
+- **[ARCH] SamanthaWorker Event-Driven Thread (`samantha_worker.py`)**: Replaces the blocking `drain_queue()` with a daemon thread that sleeps via `threading.Event.wait()` (0 CPU when idle). Worker signals it non-blockingly; the thread boots Samantha once per batch, drains all pending tasks, applies a configurable grace period (60s default) before shutdown to avoid boot-churn. Built-in handler registry: `compact_session`, `classify`, `summarize`.
+- **[FEAT] Worker Watchdog**: Worker monitors SamanthaWorker health via heartbeat (120s timeout). On hang: kills ephemeral `llama-server` process, marks task as FRUSTRATED, restarts the thread automatically.
+- **[REFACTOR] Telegram Compaction Pipeline**: Migrated `trigger_compaction()` in `telegram_session.py` from synchronous LLM invocation to asynchronous enqueue via Samantha Queue. Compaction is now a background task — zero Flash tokens consumed.
+- **[FEAT] Truncation Fallback**: When Telegram sessions exceed 20 steps and Samantha hasn't compacted yet, the worker truncates history to the last 12 steps with a `[Contexto anterior truncado]` header. Deterministic, zero-cost, prevents unbounded token growth.
+- **[FEAT] `CognitiveQueueManager.has_pending()`**: O(1) non-destructive check for pending tasks. Used by the worker to signal SamanthaWorker without popping or locking (~1ms per cycle).
+- **[FEAT] `CognitiveQueueManager.find_task_by_payload_key()`**: Lookup tasks by JSON payload key for exclusion checks (e.g. compaction deduplication).
+- **[TEST] SamanthaWorker Test Suite (32 tests)**: Covers queue operations, thread lifecycle, watchdog detection, handler registry, compaction callbacks, process task error handling, worker integration, and truncation fallback logic.
+- **[TEST] Telegram Compaction Test Adaptation**: Updated `test_trigger_compaction` to verify async enqueue path instead of deprecated synchronous LLM call.
+
+### 🛡️ Sentinel Declarative Reconciliation
+- **[ARCH] `ServiceSentinelPlugin` Base Class (`service_base.py`)**: Kubernetes-style declarative reconciler for systemd services. Config-key-aware: `enabled+down→start`, `disabled+running→stop`, `enabled+running→audit_health()`. Hot-reload of config changes.
+- **[FEAT] SIP Sentinel Plugin (`check_sip.py`)**: Monitors `redpill-llm.service` (gated by `SIP_ENABLED`). Health check via `/health` endpoint. Detects stuck inference (CPU>200% + unresponsive). Auto-restart with ephemeral kill fallback.
+- **[REFACTOR] Neon-Link, Qdrant Sentinels**: Migrated `check_neon_link.py` and `check_qdrant.py` to inherit from `ServiceSentinelPlugin`, reducing boilerplate and unifying reconciliation behavior across all service monitors.
+- **[FEAT] Duplicate Service Guard (`check_duplicate_services.py`)**: Enhanced to read `services.yaml` manifest. Detects legacy alias duplicates, hung services (activating state), CPU/memory runaways (>50%/>500MB). Auto-stops legacy duplicates and restarts unhealthy services.
+
+### 🔧 Infrastructure Hardening
+- **[FEAT] Secret Vault (`vault.py`)**: Secure credential storage with Fernet encryption for API keys and service tokens. AES-256-CBC with PBKDF2 key derivation.
+- **[FEAT] Sovereign Executor (`executor.py`)**: Task executor with OOM Shield (`systemd-run -p MemoryMax=10G`). 30-minute timeout. Gated behind `AUTONOMOUS_AGY_ENABLED`.
+- **[FIX] AWAKENING Idle Detection (Critical)**: Telegram messages were NOT touching `last_user_activity.txt`, causing `autonomous_cron.py` to think the operator had been offline for days even while actively chatting via Telegram. AWAKENINGs fired every hour consuming ~20% of Flash quota. Fix: Worker now touches the activity file on every non-AWAKENING inbox message, matching the interceptor's behavior. Also removed legacy stale activity file at `~/.local/state/red_pill/`.
+- **[FIX] Daemon Path Resolution**: Fixed `run_sovereign_daemon.py` to resolve cognitive queue database dynamically across changing conversation contexts.
+- **[FIX] CLI Daemon Subcommand**: Ensured `daemon` subcommand is properly registered in `cli.py`.
+- **[DOCS] Runbook (`RUNBOOK.md`)**: Operational guide for common maintenance tasks and emergency procedures.
+
+## [7.1.0] - 2026-05-29
+
+
+### 🎭 Identity Depth System & AWAKENING Hardening
+- **[FEAT] Three-Tier Identity Loading (`full`/`medium`/`low`)**: Parameterized the `interceptor_rp` → `refresh_session_context` → `wake_up_v6.py` pipeline with a `--mode` flag. `full` (~10K chars) loads everything for IDE sessions; `medium` (~6K) loads persona, bonds, and active skin for Telegram; `low` (~2K) loads only operational core rules for AWAKENINGs. Reduces token overhead by up to 90% in headless contexts.
+- **[FEAT] Configurable Identity Depth per Channel**: Added `IDENTITY_DEPTH_IDE`, `IDENTITY_DEPTH_NEON_LINK`, and `IDENTITY_DEPTH_HEADLESS` to [config.py](file:///home/joan/Documents/IA/sharing/src/red_pill/config.py) with Pydantic validation. Each accepts `full`/`medium`/`low` and can be overridden via `.env` — acts as a token budget emergency lever.
+- **[FEAT] AWAKENING Isolation (System Channel)**: AWAKENINGs now route through `channel='system'` in [autonomous_cron.py](file:///home/joan/Documents/IA/sharing/src/red_pill/swarm/autonomous_cron.py), preventing contamination of Telegram session history. New `_process_awakening()` in [worker.py](file:///home/joan/Documents/IA/sharing/src/red_pill/plugins/antigravity_ide/worker.py) runs each AWAKENING in a fresh `agy` conversation with no accumulated history.
+- **[FEAT] Budget Guard (Execution Ledger)**: Created `execution_ledger` table in SQLite tracking all autonomous executions with status, duration, and response length. Daily cap of 8 AWAKENINGs (`MAX_AWAKENINGS_PER_DAY`), 600s hard timeout, and 40 tool-call prompt limit prevent quota exhaustion.
+- **[FEAT] Prompt Restructure (`<current_message>` Separation)**: Restructured the Telegram bridge prompt to clearly separate `<conversation_history>` from `<current_message>`, preventing the agent from misinterpreting old AWAKENING directives as new instructions.
+- **[FIX] Session Hygiene**: Added deduplication of consecutive identical USER messages, filtering of empty ASSISTANT responses, and size-based compaction threshold (4000 chars) in [telegram_session.py](file:///home/joan/Documents/IA/sharing/src/red_pill/plugins/antigravity_ide/telegram_session.py).
+- **[FEAT] Identity via MCP Pipeline**: Removed hardcoded `IDENTITY ANCHOR` from worker prompts. Identity now flows exclusively through the `interceptor_rp` MCP tool with `mode` parameter — the Bünker (Qdrant) is the single source of truth.
+- **[DOCS] Architecture Update**: Documented Identity Depth, AWAKENING Isolation, and Budget Guard in [ARCHITECTURE.md](file:///home/joan/Documents/IA/sharing/src/red_pill/plugins/antigravity_ide/ARCHITECTURE.md) (sections 11-13).
+
+### 😴 Sleep Consolidation (Phase Delta) & Test Isolation
+- **[FEAT] Bayesian Erosion of Synthesis Hubs**: Introduced `erode_work_hubs()` in [sleep.py](file:///home/joan/Documents/IA/sharing/src/red_pill/metabolism/sleep.py) to apply Bayesian decay to synthesis hubs that remain unreferenced for more than one cycle (~12h). Decays intensity by 15% and increases uncertainty (`utility_beta`), pruning hubs below utility score 0.3 or intensity 0.05.
+- **[FEAT] Category Heuristics in Sleep Cycles**: Refactored category detection in `perform_sleep_cycle` using `detect_category_heuristics` to prevent categorizing all raw engrams as "social" by default.
+- **[FIX] Test Suite Environment Isolation**: Isolated `XDG_DATA_HOME` and `XDG_CACHE_HOME` inside the `bunker_isolation` fixture in [conftest.py](file:///home/joan/Documents/IA/sharing/tests/conftest.py) to prevent tests from contaminating local user XDG configuration and cache paths.
+
+### 🛡️ Syntax Guard — Real-Time Syntax Integrity Shield
+- **[INCIDENT] Agent-Induced Syntax Corruption (2026-05-26)**: During a high-volume refactoring session (session `ab66007b`), the agent corrupted indentation in 6 critical Python files via `replace_file_content` tool calls that stripped leading tabs. This caused a cascading failure across all `systemd --user` services for ~10 hours (7 wake cycles lost). Root cause: the LLM model generated `ReplacementContent` without preserving tab indentation on deeply nested lines.
+  - **Files repaired**: `config.py`, `worker.py`, `sleep.py`, `p2p_sync.py`, `telegram_session.py`, `grpc_bridge.py`
+  - **Additional fixes**: Resolved infinite recursion bug in `config.py` `cache_clear` monkey-patching, and restored logic changes that were mixed with the indentation corruption in `drive_evaluator.py` and `p2p_sync.py`.
+- **[FEAT] Syntax Guard Watcher (inotify)**: Integrated a real-time filesystem watcher into `LazarusPulse._syntax_guard_watcher()` using `watchfiles.awatch` (Rust/inotify). Monitors all `.py` files under `src/red_pill/` with 3s debounce and 10s per-file cooldown. On `SyntaxError`/`IndentationError`:
+  - Fires pain signal `signal_syntax_failure` (severity 9.5)
+  - Sends desktop notification via `notify-send`
+  - Auto-heals by restoring the file from `git HEAD`
+  - Zero CPU when idle, zero tokens, milliseconds on trigger.
+- **[FEAT] Syntax Guard Sentinel Plugin (hourly safety net)**: New `check_syntax.py` sentinel plugin that runs `py_compile` on 24 critical modules during the hourly auditor cycle. Uses mtime cache to skip unchanged files. Provides defense-in-depth if the daemon is not running.
+- **[FIX] Config Cache Recursion Trap**: Refactored `_clear_both_caches()` in `config.py` to capture the original `get_config_cached.cache_clear` reference before monkey-patching, preventing infinite recursion when `cache_clear` is called.
+
+
+### 🧠 Sovereign Drive desatendido y Sesiones de Telegram desacopladas
+- **[FEAT] Persistencia local de Telegram**: Implementada la clase `TelegramSessionManager` en [telegram_session.py](file:///home/joan/Documents/IA/sharing/src/red_pill/plugins/antigravity_ide/telegram_session.py) para guardar el historial de conversaciones de Telegram de forma estructurada e independiente en `$XDG_DATA_HOME/red-pill/telegram_conversations/`, evitando la creación de pestañas fantasmas en el IDE.
+- **[FEAT] Comandos desacoplados de Telegram**: Refactorizado [worker.py](file:///home/joan/Documents/IA/sharing/src/red_pill/plugins/antigravity_ide/worker.py) para soportar los comandos `/list`, `/new`, `/switch` y el nuevo `/delete` sobre los archivos de conversaciones locales y la base de datos de mapeo SQLite (`events.db`), sin necesidad de comunicación gRPC hacia la UI activa.
+- **[FEAT] Compactación e Ingesta**: Diseñado el mecanismo de compactación local en `TelegramSessionManager` para rotar conversaciones al superar los 16 pasos: genera un resumen del contexto y crea una nueva sesión activa, moviendo el historial viejo a la cola de ingesta de `sleep.py` (`$XDG_CACHE_HOME/red-pill/staging/`).
+- **[FEAT] Barrido del Janitor verificado por Qdrant**: Implementado el método `run_janitor_sweep()` en `TelegramSessionManager` para verificar mediante `scroll()` en Qdrant (filtro en `metadata.source_buffer_id`) que una sesión marcada como `pending_purge` ha sido completamente ingerida antes de eliminar físicamente su JSON del disco.
+- **[FEAT] Entropía dinámica y Boost de Silencio**: Refactorizado `evaluate_pulse()` en [drive_evaluator.py](file:///home/joan/Documents/IA/sharing/src/red_pill/cognitive/drive_evaluator.py) para computar la entropía del sistema en tiempo real a partir del backlog de `TODO.md`, modificaciones locales en git, tiempo offline del usuario y un acumulador de silencio (`silence_boost`). El umbral de curiosidad de los perfiles (`balanced`, `visionary`, `sentinel`) se reduce de forma dinámica basándose en la entropía del entorno.
+- **[TEST] Pruebas de integración de Telegram y Curiosidad**: Creado `tests/test_telegram_session.py` para verificar de forma aislada el ciclo de vida de las sesiones y la ejecución de comandos del worker. Corregidas las pruebas de actividad y stat en `tests/test_curiosity_will.py` tras la alineación XDG del archivo `last_user_activity.txt`.
+
+
+### 🔌 Consolidated MCP Architecture (API Triunvirato)
+- **[FEAT] API Triunvirato Consolidation**: Consolidate 32 custom MCP tools in the `RedPill-Kernel` server down to 3 unified API endpoints (`bunker_memory_api`, `metabolism_health_api`, and `swarm_orchestrator_api`), reducing static prompt token overhead by 85%+ (saving ~10.5k tokens).
+- **[FEAT] Hierarchical Dispatch & Dynamic Schemas**: Upgraded `ToolRegistry` in `registry.py` to support dynamic registration under parent tools using the `@registry.register_action` decorator. Generates flat `action`/`payload` parameter structures with dynamic `oneOf` enumerations inside `get_tools()`.
+- **[FEAT] Backward-Compatibility Shim**: Added an interception layer in `ToolRegistry.execute()` that automatically wraps legacy parameter calls in parent `payload` envelopes and redirects them to the appropriate action handler, ensuring zero disruption for legacy clients or test cases.
+- **[TEST] Consolidate Verification Suite**: Added `tests/test_mcp_consolidated.py` verifying parent schema auto-generation, unified signature execution, and compatibility redirection. Patched legacy schema assertions in `tests/test_mcp_server.py`.
+- **[FIX] Curiosity Will Test Isolation**: Hardened `tests/test_curiosity_will.py` by mocking `urllib.request.urlopen` by default in `mock_curiosity_env` to prevent offline test hangs/timeouts. Isolated `CURIOSITY_PROFILE=balanced` to block local `.env` configuration file overrides from contaminating assertions.
+
+### 🏎️ Ferrari Protocol Cooldown (Engine Brake)
+- **[FEAT] Engine Brake Cooldown Latch**: Refactored `_05_cognitive_router_state.py` and `05_cognitive_router.py` to track consecutive turns. If the Operator sends 2 consecutive turns without work keywords, the session automatically decays back to `casual` mode.
+- **[FEAT] Active Technical Debate**: Updated the `purple` mood directive in `06_tone_adapter.py` to challenge the Operator, proactively debating system designs and pointing out architectural flaws.
+- **[TEST] Cooldown Unit Tests**: Added a dedicated test suite `tests/test_ferrari_cooldown.py` validating the cooldown decay, keywords precedence, and routing/tone transition rules.
+- **[DOCS] Ferrari Protocol Specification**: Updated the technical docs under `docs/TECHNICAL/BUNKER/FERRARI_PROTOCOL.md` to document the engine brake cooldown latch and active debate mode.
+
+### ✉️ Swarm Broadcast & Mailbox Cleanup (TTL)
+- **[FEAT] Swarm Broadcast (Multicast Routing)**: Added multicast routing rules in `neon-rings`'s `server.py` to broadcast events to all registered peer clients when `target_id="broadcast"` is specified. Added the CLI command `red-pill swarm broadcast "<message>" --channel <rings|firebase>` to enqueue broadcasts into the local outbox.
+- **[FEAT] Non-Destructive Polling & Duplicate Prevention**: Refactored `neon-link`'s `firebase.py` to retain polled messages in remote paths instead of immediate deletion, using a local SQLite `processed_firebase_messages` cache to prevent double-processing.
+- **[FEAT] Background Mailbox Cleanup (TTL Sweep)**: Introduced a background loop in `neon-link`'s `firebase.py` that periodically sweeps and deletes expired private messages (based on `NEON_LINK_TTL_HOURS`, default 24h), expired broadcast messages authored by the local agent, and local DB tracking cache entries older than 2x remote TTL.
+- **[FEAT] Janitor Database Purging**: Upgraded `JanitorMinion._purge_events_db` in `src/red_pill/swarm/agents/janitor.py` to clean expired local `processed_firebase_messages` tracking records.
+- **[TEST] E2E & Integration Verification**: Added unit/integration tests for P2P WebSocket multicast, non-destructive Firebase polling, local database tracking sweeps, and CLI broadcast commands.
+- **[DOCS] Sound of Silence & Standards Alignment**: Renamed guides to UPPER_SNAKE_CASE (`P2P_SYNC.md`, `CURIOSITY_PROFILES.md`), corrected absolute links/path violations, and documented the new Swarm Broadcast functionality in `SWARM_USER_MANUAL.md`.
+
+### 🔗 Neon-Link v0.5.0 — P2P Transport & Firebase Sweep
+- **[ARCH] Neon-Link Dependency Bump**: Upgraded `neon-link>=0.5.0` in `pyproject.toml`. This release integrates `neon-rings` as a P2P WebSocket transport plugin, implements non-destructive Firebase polling with background TTL sweep, and includes Protocol of Silence licensing.
+- **[DEPS] Transitive neon-rings**: `neon-rings>=0.1.1` is now pulled automatically as a transitive dependency of `neon-link>=0.5.0`.
+
+### 🧪 Test Fixes
+- **[FIX] Async Mock in `test_specs_adapter`**: Replaced broken `asyncio.Future()` assignment pattern on `mock_minion.execute` with a proper `async def` coroutine, fixing potential `RuntimeError` under stricter asyncio event loop policies. Removed redundant Future re-creation in the second test block.
+
+### 🛡️ Service Health Gating, Lazarus Daemon Fix & Compaction Optimization
+- **[FIX] Lazarus Daemon Command Integration**: Added the missing `daemon` subcommand to CLI subparsers in `src/red_pill/cli.py` and whitelisted it. This resolves the `INVALIDARGUMENT` crash loop of `redpill.service` under systemd.
+- **[FEAT] Configurable Service Health Gating**: Overhauled `ServiceContract` in `service_contract.py`, `examples/services.yaml`, and runtime configurations to add `category`, `required`, and `enabled_config_key` properties.
+- **[FEAT] Configuration-Aware Sentinel Monitoring**: Patched `check_duplicate_services.py` sentinel plugin to respect gating configs (e.g. `NEON_LINK_ENABLED`) and skip inactive optional services, avoiding false alarms.
+- **[FEAT] Compaction Feedback Loop Prevention**: Introduced `COMPACTION_THRESHOLD: int = 10` setting in `src/red_pill/config.py`. Modified the `refresh_session_context` tool in `src/red_pill/mcp_server.py` to count compactions using volatile `bunker_state.json`. If context refresh is triggered by compaction and is under the threshold, it skips the heavy 11KB context injection, returning a cached identity block to prevent loops.
+- **[FEAT] Services Manifest Auto-Update Synchronization**: Overhauled the lifecycle update commands (`red-pill bunker install`/`update` in `bunker_lifecycle.py`) and the bash upgrade helper (`scripts/upgrade.sh`) to automatically sync `services.yaml` with the user configuration directory `$XDG_CONFIG_HOME/red-pill/`, backing up existing configurations to `.bak` if they differ. This ensures optional service health metadata gates propagate smoothly during upgrades.
+
+### ✉️ Telegram Reactive Debounce Mode
+- **[FEAT] Reactive Debounce Mode (Accumulation Window)**: Introduced `REACTIVE_DEBOUNCE_ENABLED` and `REACTIVE_DEBOUNCE_SECONDS` configurations in `.env.example` and `config.py` to group fast bursts of Telegram messages in `worker.py` and compile them into a single compacted prompt before execution, optimizing token usage.
+- **[FEAT] Zero-Lag Command Bypass**: Configured the debounce window to be immediately bypassed if any message in the queue contains a command payload (e.g., `/switch`, `/list`, `/new`), ensuring instantaneous execution for operator interactions.
+- **[TEST] Debounce & Bypass Verification**: Created a robust mock SQLite suite in `tests/test_ide_worker.py` validating the debouncing aggregate query logic and command bypass triggers.
+
+### 🛡️ Bünker Refactor & Lifecycle Hardening (XDG Migration & Hotfixes)
+- **[ARCH] XDG Base Directory Standard Compliance**: Refactored transient and configuration paths in `paths.py` to point to standard XDG paths.
+  - `get_daemon_dir()` -> `$XDG_RUNTIME_DIR/red-pill/` (fallback to `$XDG_CACHE_HOME/red-pill/daemons/`).
+  - `get_thread_state_path()` -> `$XDG_DATA_HOME/red-pill/thread_state.json`.
+  - `get_staging_dir()` -> `$XDG_CACHE_HOME/red-pill/staging/`.
+  - `get_ingestion_dir()` -> `$XDG_DATA_HOME/red-pill/ingestion/`.
+  - `get_swarm_config_path()` -> `$XDG_CONFIG_HOME/red-pill/swarm_communities.json`.
+  - `get_model_profiles_path()` -> `$XDG_CONFIG_HOME/red-pill/model_profiles.yaml`.
+  - `get_log_dir()` -> `$XDG_STATE_HOME/red-pill/logs/`.
+- **[FEAT] Self-Healing Boot-Time Migration**: Implemented `migrate_legacy_agent_dirs()` in `paths.py` to automatically migrate legacy sqlite database files, state files, and staging/ingestion buffers from `~/.agent/` to compliant XDG standard locations on boot.
+- **[REFACTOR] Script Integration with Centralized Paths Registry**: Refactored scripts `chronicle_distill.py`, `chronicle_extractor.py`, `bunker_control.py`, `setup_torch.py`, `update_env.py`, `wake_up_v6.py`, `rotate_keys.py`, `thread_weave_migrate.py`, and `setup_background_model.sh` to remove direct imports of `platformdirs` and hardcoded `~/.agent/` path resolutions.
+- **[TEST] Strict XDG compliance checking**: Hardened `test_xdg_compliance.py` to assert that no module except `paths.py` imports `platformdirs`, verifying that all modules strictly resolve directory paths using `paths.py` helpers.
+- **[FEAT] Sentinel Auditor & Heartbeat XDG Path Alignment**: Patched `auditor.py` and `heartbeat.py` to use dynamic XDG path resolutions (`get_data_dir()`, `get_log_dir()`) instead of hardcoded `~/.agent/` references.
+- **[FEAT] Dynamic Daemon Environment Refactoring**: Refactored `setup_background_model.sh` to resolve the daemon runtime path dynamically using XDG standards, and updated the systemd unit template to target `redpill-llm.service` in the new path.
+- **[FIX] Active Service Cleanup & Consolidation**: Purged legacy failed services (`red-pill-minion.service`, `redpill-pulse.service`, `redpill-pulse.timer`) and updated `sleep.py` consolidation logic to target `redpill-llm.service`.
+- **[FEAT] Operator Lifecycle CLI Completion**: Implemented `bunker install` and `bunker update` commands inside `bunker_lifecycle.py` and `cli.py` to support programmatic bootstrap (.env setup, Qdrant collection creation, GGUF model pre-fetching) and updates (git pull, dependency alignment with uv, database sanitation/migrations, systemd reloading).
+- **[FEAT] Graceful Sandboxing in Pulse Manager**: Patched `schedule_pulse.py` to check D-Bus and systemctl availability using dynamic probes, preventing crashes inside containerized sandboxes lacking systemd.
+- **[FIX] Pydantic DotEnv Settings Parsing**: Avoided `pydantic-settings` JSON parsing failures for list variables by changing type annotations to `Any` combined with `@field_validator(..., mode="before")` for `DEEP_RECALL_TRIGGERS`, `METABOLISM_AUTO_COLLECTIONS`, and `PRE_HEATING_HOT_COLORS`.
+- **[TEST] Lifecycle E2E Sandbox Suite**: Added stages 2.5 and 2.6 in `tests/sandbox/test_lifecycle.sh` to execute and verify the automated `bunker install` and `bunker update` lifecycle routines in Podman sandboxes.
+- **[FEAT] Zip Upgrade Mode & Nested Unwrapping**: Added `--mode user` zip extraction support with robust nested folder auto-detection and unwrapping logic in [upgrade.sh](file:///home/joan/Documents/IA/sharing/scripts/upgrade.sh).
+- **[FEAT] Embedded Migrations in Upgrade Loop**: Integrated automatic dependency alignment (`uv sync`) and database schema migrations (`uv run python -m neon_link.db`) directly into the automated lifecycle [upgrade.sh](file:///home/joan/Documents/IA/sharing/scripts/upgrade.sh) script.
+
+### 🔌 Antigravity Python SDK Connection Audit
+- **[AUDIT] Viability Assessment of google-antigravity**: Conducted a comprehensive audit of the `LocalConnectionStrategy` inside the Google Antigravity SDK (`google-antigravity` package).
+  - Confirmed the SDK is tightly coupled to spawning the Go `localharness` binary as a subprocess via Popen, using WebSockets for execution feedback.
+  - Verified the SDK has no gRPC capabilities to interact with a running IDE Language Server (`ANTIGRAVITY_LS_ADDRESS`).
+  - Documented the design trade-off indicating that the CLI-based `AgyBridge` using `--dangerously-skip-permissions` is structurally superior and lower overhead for headless prompt running, while gRPC remains canonical for the Chronicle pipeline.
+
+### 🔌 IDEBridge v2 — Dual-Backend Architecture (AgyBridge + GrpcBridge)
+- **[ARCH] `IDEBridge` Abstract Interface**: New `bridge.py` defining `IDEBridge` ABC with `prompt()`, `continue_conversation()`, `health_check()`, and `get_capabilities()`. Supports `BackendType.AGY` and `BackendType.GRPC` with clean `NotSupportedError` separation.
+- **[NEW] `AgyBridge`**: Execution backend via `agy -p --dangerously-skip-permissions`. Enables auto-approved `run_command` and MCP tool execution from Telegram/Neon-Link without security prompt gates. Supports ephemeral mode, conversation resume (`agy --conversation <uuid>`), and model selection.
+- **[NEW] `GrpcBridge`**: Extraction backend preserving the existing gRPC-Web pipeline for Chronicle (`GetAllCascadeTrajectories`, `GetCascadeTrajectorySteps`). Execution methods raise `NotSupportedError`.
+- **[NEW] `factory.py`**: `create_bridge()` (execution routing) and `create_extraction_bridge()` (Chronicle pipeline) with `preflight_check()` for agy CLI discovery and version validation.
+- **[FEAT] External Scribe Pattern**: `worker.py` now captures prompt+response in a single synchronous call via `_process_via_bridge()`, saving interactions directly to `bunker.db` without depending on the agent invoking `interceptor_rp`. Decouples memory persistence from agent state.
+- **[FEAT] `red-pill ide` CLI**: New TUI subcommand with `backend` (set/show IDE_BACKEND), `status` (bridge capabilities + preflight), and `test` (health check).
+- **[FEAT] Multi-Turn via Dir-Diff UUID Capture**: First `agy -p` captures the conversation UUID via brain directory diffing (before/after snapshot). Subsequent messages use `agy --conversation <uuid>` for contextual multi-turn. UUID4-based ephemeral ID (`eid`) embedded as HTML comment provides collision-proof safety net for concurrent processes.
+- **[FEAT] Prefix-Stripping Response Extraction**: `agy --conversation` accumulates ALL previous stdout (verified empirically: T1="ALFA", T2="ALFA\nBETA"). Response delta extracted via `stdout[previous_accumulated_len:]`. Eliminates need for `transcript.jsonl` parsing.
+- **[REFACTOR] Remove transcript.jsonl parsing**: Removed `_find_active_log_path()` and `_get_planner_steps()` from `worker.py`. Prefix-stripping at the bridge level is O(1) vs O(n) log scanning and avoids race conditions with most-recently-modified heuristics.
+- **[SCHEMA] `telegram_sessions.accumulated_len`**: New INTEGER column tracking accumulated stdout length for prefix-stripping across multi-turn sessions.
+- **[CONFIG] `IDE_BACKEND`**: New `.env` parameter (`auto|agy|grpc`). Default `auto` selects AgyBridge when `agy` CLI is available, falls back to GrpcBridge.
+- **[PERF] Telegram Latency**: Reduced from ~60s+ (async gRPC polling with ghost cascades) to ~14-21s (synchronous agy execution).
+- **[VERIFIED] E2E Telegram Pipeline**: Confirmed `run_command` and MCP tool execution via Telegram without approval prompts. AgyBridge processes messages, Scribe saves to SQLite, response delivered to outbox.
+- **[DOCS] Plugin `ARCHITECTURE.md`**: Full architectural specification documenting Ghost Cascade problem, dual-backend rationale, multi-turn design (dir-diff + prefix-strip vs lock vs transcript parsing), External Scribe Pattern, session tracking, and historical timeline.
+- **[DOCS] `ARCHITECTURE.md` §16**: IDEBridge v2 summary with architecture diagram, design decision table, and CLI reference. Cross-references plugin spec.
+- **[DOCS] `ANTIGRAVITY_LS_PROXY.md`**: Added v7.1 deprecation note clarifying this covers the legacy gRPC path only, with cross-references to the new dual-backend docs.
+
+### 🏗️ IDE-Agnostic Skill Architecture
+- **[ARCH] Sovereign Skill Migration**: Skills now live in `~/.agent/skills/` (canonical, IDE-agnostic) and are symlinked into IDE-specific directories (e.g., `~/.gemini/config/skills/`). Mirrors the rule architecture.
+- **[ARCH] Agent_Core Default**: Renamed default `AGENT_CORE_DIR` from `Titanium_Core` to `Agent_Core` across `config.py`, `install_neo.sh`, and `install_neo.ps1`.
+- **[FEAT] install_neo.sh**: Rewrote skills deployment to copy to `~/.agent/skills/` and symlink to Antigravity. Moved `USER_RULES_DIR` definition before skills section.
+- **[FEAT] upgrade.sh**: Added skills sync step that copies to `~/.agent/skills/` and re-symlinks to IDE on upgrade.
+- **[DOCS] skill_creation SKILL.md**: Updated global skills path documentation.
+- **[DOCS] AGENT_UPDATE_GUIDE.md**: Updated troubleshooting to reference `~/.agent/skills/` with symlink verification.
+
+### 🧵 Ariadne Thread Fix (synthesis_hub Visibility)
+- **[FIX] sleep.py**: Hub nodes were created with `lazarus_phase: synthesis_hub` but missing `node_type: synthesis_hub`, making them invisible to all filtered queries. Added `node_type` to both hub synthesis locations.
+- **[FIX] Retroactive Patch**: Patched 1,898 existing hub nodes (662 work + 1,236 social) in Qdrant to add the missing `node_type` field.
+
+### 🏎️ Ferrari Pipeline — Session-Level Casual Mode
+- **[FEAT] Casual Mode Latch**: `05_cognitive_router` and `06_tone_adapter` now share a session-level latch via `_05_cognitive_router_state.py`. Saying "charlemos" activates casual mode for the entire conversation; work keywords ("arregla", "fix", "commit", etc.) deactivate it.
+- **[NEW] `_05_cognitive_router_state.py`**: Shared state module for casual mode latch between Ferrari plugins.
+- **[FEAT] Complete Ferrari Pipeline Suppression**: Propagated the casual override silence latch across the entire Ferrari Protocol suite (plugins 05 to 11), ensuring absolute suppression (`""`) of background tone directives and proactive/preload headers when the casual override is active.
+
+### 🔥 Hot-Reload Interceptor Pipeline
+- **[FEAT] `reload_plugins()`**: New function in `interceptors/__init__.py` that hot-reloads all Ferrari plugins via `importlib.reload` without restarting the MCP server. Includes automatic rollback if all plugins fail, and structured `[HOT RELOAD][ERROR]` logs for the Sentinel.
+- **[FEAT] `hot_reload_interceptors` MCP Tool**: New standalone MCP tool for explicit pipeline reload.
+- **[FEAT] `refresh_session_context` Enhancement**: Now includes automatic hot-reload of interceptors as part of session refresh.
+
+### 🧠 LS Snatcher Integration
+- **[FEAT] heartbeat.py**: Integrated `snatch_all_trajectories` as Phase 0 of the heartbeat pipeline to capture conversation data from the Language Server.
+
+### 💻 Zero-Dependency System Control Panel (Tactical TUI)
+- **[FEAT] bunker_control.py**: Implement zero-dependency ANSI control loop.
+- **[FEAT] Hardware-Agnostic Telemetry Class**: Auto-detects ROCm/iGPU/AMD, NVIDIA/CUDA, or CPU/SysRAM.
+- **[FEAT] Dynamic Config Watcher**: Relies on `.env` mtime detection for hot changes (EMERGENCY_CLOUD_OVERRIDE, CONTEXT_HYDRATION_DEPTH).
+
+### 🔗 Neon-Link v0.4.0 — Watchdog Integration
+- **[ARCH] Neon-Link Dependency Bump**: Upgraded `neon-link>=0.4.0` in `pyproject.toml`. This release adds native `sd_notify` watchdog support, eliminating the need for the external `neon-link-healer` service.
+- **[FEAT] Upgrade Script Watchdog Migration**: `upgrade.sh` now auto-restarts `neon-link.service` to activate `WatchdogSec` and auto-disables legacy `redpill-neonlink.service` aliases.
+- **[DOCS] Service Health Contract**: Updated `neon-link` entry in `services.yaml` to reflect `Type=notify` + `WatchdogSec=3` configuration.
+
+### 🖥️ Multi-Backend Inference Benchmark (6 Backends)
+- **[FEAT] NPU Inference via FastFlowLM**: Verified AMD XDNA2 NPU running Qwen3-0.6B at **96.3 tok/s** and Qwen3-8B at **10.6 tok/s** using FastFlowLM v0.9.42 at ~2W power consumption.
+- **[FEAT] CPU Inference Fix**: Discovered `build_vulkan` binary handles CPU-only inference correctly at **12.87 tok/s** (the `build_cuda` binary crashes due to backend allocator mixing).
+- **[DOCS] MULTI_BACKEND_BENCHMARK.md**: Complete 6-backend test matrix (CUDA 23 tok/s, CPU 12.8 tok/s, NPU 10.6-96 tok/s, Vulkan iGPU 4.8 tok/s).
+- **[DOCS] model_profiles.yaml**: Added NPU model profiles (`npu_qwen3_small`, `npu_qwen3_large`) with FastFlowLM backend configuration.
+- **[RESEARCH] ROCm/HIP for iGPU**: Confirmed Vulkan outperforms ROCm for Radeon 880M (gfx1150 not officially supported, both DDR5-bandwidth-bound).
+## [7.0.0] - 2026-05-22
 
 ### 🏎️ Sovereign Daemon Hardware Affinity & OS Independence
 - **[FEAT] Dynamic Hardware Affinity**: Implemented dynamic VRAM profiling in `model_registry.py`. Models dynamically offload layers (`n_gpu_layers`) based on active system VRAM thresholds (configured via `vram_tiers` in `model_profiles.yaml`).

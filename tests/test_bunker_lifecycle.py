@@ -90,3 +90,54 @@ def test_bunker_restore_stub(capsys):
 	captured = capsys.readouterr()
 	assert "[BÜNKER RESTORE: SMART REHYDRATION]" in captured.out
 	assert "Decrypting .mls package" in captured.out
+
+
+def test_bunker_install(tmp_path, monkeypatch):
+	import subprocess
+
+	import red_pill.bunker_lifecycle as bl
+
+	config_dir = tmp_path / "config"
+	monkeypatch.setattr(bl, "get_config_dir", lambda: config_dir)
+	monkeypatch.setattr(bl, "get_bunker_root", lambda: tmp_path)
+
+	env_example = tmp_path / ".env.example"
+	env_example.write_text("TEST_VAR=1")
+
+	# Mock scripts
+	scripts_dir = tmp_path / "scripts"
+	scripts_dir.mkdir()
+	(scripts_dir / "schedule_pulse.py").write_text("pass")
+	(scripts_dir / "download_slm.py").write_text("pass")
+
+	mock_run = MagicMock()
+	mock_run.returncode = 0
+	mock_run.stdout = "OK"
+	monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: mock_run)
+
+	bl.bunker_install()
+
+	env_file = config_dir / ".env"
+	assert env_file.exists()
+	assert env_file.read_text() == "TEST_VAR=1"
+
+
+def test_bunker_update(tmp_path, monkeypatch):
+	import shutil
+	import subprocess
+
+	import red_pill.bunker_lifecycle as bl
+
+	monkeypatch.setattr(bl, "get_bunker_root", lambda: tmp_path)
+
+	(tmp_path / ".git").mkdir()
+
+	mock_run = MagicMock()
+	mock_run.returncode = 0
+	mock_run.stdout = "Already up to date."
+	monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: mock_run)
+
+	monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/uv" if cmd == "uv" else None)
+	monkeypatch.setattr(os.path, "exists", lambda path: True if "uv" in path else False)
+
+	bl.bunker_update()

@@ -6,7 +6,15 @@ from typing import Any, Dict, Optional
 import psutil
 import yaml
 
-from red_pill.core.paths import get_bunker_root, get_data_dir, get_queue_dir
+from red_pill.core.paths import (
+	get_bunker_root,
+	get_config_dir,
+	get_data_dir,
+	get_neon_link_config_dir,
+	get_neon_link_data_dir,
+	get_neon_link_db_path,
+	get_queue_dir,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +46,32 @@ def detect_hardware() -> Dict[str, Any]:
 		pass
 
 	return {"ram_gb": total_ram_gb, "cpu_cores": cpu_cores, "cpu_threads": cpu_threads, "has_nvidia": has_nvidia, "vram_gb": vram_gb}
+
+
+def update_services_manifest(project_root: Path) -> None:
+	"""Updates the runtime services.yaml with the latest examples/services.yaml template."""
+	import shutil
+
+	config_dir = get_config_dir()
+	config_dir.mkdir(parents=True, exist_ok=True)
+	runtime_manifest = config_dir / "services.yaml"
+	template_manifest = project_root / "examples" / "services.yaml"
+
+	if template_manifest.exists():
+		if runtime_manifest.exists():
+			with open(template_manifest, "r") as tf, open(runtime_manifest, "r") as rf:
+				t_content = tf.read()
+				r_content = rf.read()
+
+			if t_content != r_content:
+				backup_manifest = config_dir / "services.yaml.bak"
+				shutil.copy2(runtime_manifest, backup_manifest)
+				print(f"   [INFO] Stashing backup of old services.yaml to {backup_manifest}")
+				shutil.copy2(template_manifest, runtime_manifest)
+				print("   [OK] services.yaml updated to latest version.")
+		else:
+			shutil.copy2(template_manifest, runtime_manifest)
+			print("   [OK] services.yaml bootstrapped to user config.")
 
 
 def profile_hardware() -> None:
@@ -82,8 +116,6 @@ def bunker_export() -> None:
 	import tarfile
 	import time
 
-	import platformdirs
-
 	from red_pill.soul import SoulManager
 	from red_pill.utils.vault import SoulCryptographer
 
@@ -101,7 +133,7 @@ def bunker_export() -> None:
 	dbs_to_backup = [
 		str(get_queue_dir() / "bunker_queue.db"),
 		str(get_queue_dir() / "minion_inbox.db"),
-		os.path.join(platformdirs.user_data_dir("neon-link"), "events.db"),
+		str(get_neon_link_db_path()),
 	]
 
 	for db_path in dbs_to_backup:
@@ -126,11 +158,11 @@ def bunker_export() -> None:
 			shutil.copy2(os.path.join(qdrant_backup_dir, f), staging_dir)
 
 	print("3. Delegating sub-exports to Plugins (.env secrets)...")
-	red_pill_env = os.path.join(platformdirs.user_config_dir("red-pill"), ".env")
+	red_pill_env = os.path.join(get_config_dir(), ".env")
 	if os.path.exists(red_pill_env):
 		shutil.copy2(red_pill_env, os.path.join(staging_dir, "red_pill.env"))
 
-	neon_env = os.path.join(platformdirs.user_config_dir("neon-link"), ".env")
+	neon_env = os.path.join(get_neon_link_config_dir(), ".env")
 	if os.path.exists(neon_env):
 		shutil.copy2(neon_env, os.path.join(staging_dir, "neon_link.env"))
 
@@ -164,14 +196,12 @@ def bunker_restore(target_path: Optional[str] = None, kem_path: Optional[str] = 
 	import shutil
 	import tarfile
 
-	import platformdirs
-
 	from red_pill.soul import SoulManager
 	from red_pill.utils.vault import SoulCryptographer
 
 	print("--- [BÜNKER RESTORE: SMART REHYDRATION] ---")
 
-	config_dir = platformdirs.user_config_dir("red-pill")
+	config_dir = str(get_config_dir())
 	if kem_path or sig_path:
 		print("0. Overriding Cryptographic Identity...")
 		os.makedirs(config_dir, exist_ok=True)
@@ -217,9 +247,9 @@ def bunker_restore(target_path: Optional[str] = None, kem_path: Optional[str] = 
 	restore_map = {
 		"bunker_queue.db": str(get_queue_dir() / "bunker_queue.db"),
 		"minion_inbox.db": str(get_queue_dir() / "minion_inbox.db"),
-		"events.db": os.path.join(platformdirs.user_data_dir("neon-link"), "events.db"),
-		"red_pill.env": os.path.join(platformdirs.user_config_dir("red-pill"), ".env"),
-		"neon_link.env": os.path.join(platformdirs.user_config_dir("neon-link"), ".env"),
+		"events.db": str(get_neon_link_db_path()),
+		"red_pill.env": os.path.join(get_config_dir(), ".env"),
+		"neon_link.env": os.path.join(get_neon_link_config_dir(), ".env"),
 	}
 
 	for extracted_file, dest_path in restore_map.items():
@@ -249,12 +279,8 @@ def bunker_export_keys() -> None:
 	import tarfile
 	import time
 
-	import platformdirs
-
-	from red_pill.core.paths import get_bunker_root
-
 	print("--- [BÜNKER MASTER KEY EXPORT] ---")
-	config_dir = platformdirs.user_config_dir("red-pill")
+	config_dir = str(get_config_dir())
 	keys_dir = os.path.join(config_dir, "keys")
 	vault_state = os.path.join(config_dir, "vault_group.state")
 
@@ -285,10 +311,6 @@ def bunker_uninstall() -> None:
 	import os
 	import random
 	import shutil
-
-	import platformdirs
-
-	from red_pill.core.paths import get_bunker_root
 
 	print("\n!!! [WARNING] BÜNKER UNINSTALL INITIATED !!!")
 	print("This action will obliterate the active Red-Pill environment:")
@@ -328,7 +350,7 @@ def bunker_uninstall() -> None:
 		print(f"   [!] Failed to wipe Qdrant. Is it running? Error: {e}")
 
 	# 2. Preserve Keys
-	config_dir = platformdirs.user_config_dir("red-pill")
+	config_dir = str(get_config_dir())
 	keys_safe_dir = os.path.join(str(get_bunker_root()), "backups", "keys_vault_temp")
 	os.makedirs(keys_safe_dir, exist_ok=True)
 
@@ -339,7 +361,7 @@ def bunker_uninstall() -> None:
 
 	# 3. Wipe Paths
 	paths_to_wipe = [
-		os.path.join(platformdirs.user_data_dir("neon-link")),
+		str(get_neon_link_data_dir()),
 		config_dir,  # This wipes the keys too
 		str(get_data_dir()),
 		os.path.join(str(get_bunker_root()), "plugins"),
@@ -365,14 +387,201 @@ def bunker_uninstall() -> None:
 	print("\n[OK] SOVEREIGN PURGE COMPLETE. The entity has been erased from this host.")
 
 
+def bunker_install() -> None:
+	"""
+	bunker install:
+	1. Check if .env exists in the config directory; copy the template from the project if missing.
+	2. Bootstrap Qdrant collections (schemas, indices, and version engrams).
+	3. Execute schedule_pulse.py to register systemd units and timers.
+	4. Trigger download of default GGUF models.
+	"""
+	import os
+	import shutil
+
+	print("--- [BÜNKER INSTALL: SELF-ASSEMBLY BOOTSTRAP] ---")
+
+	config_dir = get_config_dir()
+	config_dir.mkdir(parents=True, exist_ok=True)
+	env_file = config_dir / ".env"
+	bunker_root = get_bunker_root()
+	if (bunker_root / ".env.example").exists() or os.getenv("PYTEST_CURRENT_TEST"):
+		project_root = bunker_root
+	else:
+		project_root = Path(__file__).parent.parent.parent
+
+	if not env_file.exists():
+		template = project_root / ".env.example"
+		if template.exists():
+			print(f"1. Bootstrapping .env configuration from template: {template}")
+			shutil.copy2(template, env_file)
+			env_file.chmod(0o600)
+		else:
+			print(f"[FAIL] Could not find .env template at {template}")
+			return
+	else:
+		print("1. Active .env configuration detected. Skipping template bootstrap.")
+
+	print("1.5 Bootstrapping services.yaml manifest...")
+	update_services_manifest(project_root)
+
+	print("2. Bootstrapping Qdrant schemas and collections...")
+	try:
+		import sys
+
+		venv_python = project_root / ".venv" / "bin" / "python"
+		if not venv_python.exists():
+			venv_python = Path(sys.executable)
+
+		res = subprocess.run([str(venv_python), "-m", "red_pill.cli", "seed"], cwd=str(project_root), capture_output=True, text=True)
+		if res.returncode == 0:
+			print("   [OK] Collections and schemas seeded successfully.")
+		else:
+			print(f"   [FAIL] Seed failed: {res.stderr}")
+	except Exception as e:
+		print(f"   [FAIL] Seed exception: {e}")
+
+	print("3. Registering Bünker systemd timers...")
+	try:
+		schedule_script = project_root / "scripts" / "schedule_pulse.py"
+		if schedule_script.exists():
+			res = subprocess.run(
+				[str(venv_python), str(schedule_script), "--interval-hours", "1"], cwd=str(project_root), capture_output=True, text=True
+			)
+			if res.returncode == 0:
+				print("   [OK] Systemd timers and services registered.")
+			else:
+				print(f"   [FAIL] Timer registration failed: {res.stderr}")
+		else:
+			print(f"   [FAIL] schedule_pulse.py not found at {schedule_script}")
+	except Exception as e:
+		print(f"   [FAIL] Timer registration exception: {e}")
+
+	print("4. Fetching default GGUF model files...")
+	try:
+		download_script = project_root / "scripts" / "download_slm.py"
+		if download_script.exists():
+			res = subprocess.run([str(venv_python), str(download_script)], cwd=str(project_root), capture_output=True, text=True)
+			if res.returncode == 0:
+				print("   [OK] Default GGUF models downloaded.")
+			else:
+				print(f"   [FAIL] Model download failed: {res.stderr}")
+		else:
+			print("   [INFO] No download_slm.py script found. Skipping model download.")
+	except Exception as e:
+		print(f"   [FAIL] Model download exception: {e}")
+
+	print("\n[OK] BÜNKER INSTALLATION PROCEDURES CONCLUDED.")
+
+
+def bunker_update() -> None:
+	"""
+	bunker update:
+	1. Run git pull on the sharing repository.
+	2. Run uv sync --frozen to align virtual environment dependencies.
+	3. Run any pending database migrations.
+	4. Reload systemd daemons (systemctl --user daemon-reload).
+	"""
+	import os
+	import shutil
+
+	from red_pill.core.paths import get_bunker_root
+
+	bunker_root = get_bunker_root()
+	if (bunker_root / ".env.example").exists() or os.getenv("PYTEST_CURRENT_TEST"):
+		project_root = bunker_root
+	else:
+		project_root = Path(__file__).parent.parent.parent
+
+	print("--- [BÜNKER UPDATE: SOVEREIGN SYNCHRONIZATION] ---")
+
+	if (project_root / ".git").exists():
+		print("1. Pulling latest code changes from origin...")
+		res = subprocess.run(["git", "pull"], cwd=str(project_root), capture_output=True, text=True)
+		if res.returncode == 0:
+			print(f"   [OK] Code synchronized:\n{res.stdout.strip()}")
+		else:
+			print(f"   [FAIL] Git pull failed: {res.stderr}")
+	else:
+		print("1. No Git repository detected. Skipping code synchronization.")
+
+	print("2. Aligning virtual environment dependencies via uv...")
+	uv_bin = shutil.which("uv") or os.path.expanduser("~/.local/bin/uv")
+	uv_ran = False
+	if uv_bin and os.path.exists(uv_bin):
+		res = subprocess.run([uv_bin, "sync", "--frozen"], cwd=str(project_root), capture_output=True, text=True)
+		if res.returncode == 0:
+			print("   [OK] Dependencies synchronized.")
+			uv_ran = True
+		else:
+			print(f"   [FAIL] Dependency sync failed: {res.stderr}")
+
+	if not uv_ran:
+		try:
+			res = subprocess.run(["uv", "sync", "--frozen"], cwd=str(project_root), capture_output=True, text=True)
+			if res.returncode == 0:
+				print("   [OK] Dependencies synchronized.")
+			else:
+				print(f"   [FAIL] Dependency sync failed: {res.stderr}")
+		except FileNotFoundError:
+			print("   [FAIL] 'uv' binary not found. Skipping dependency alignment.")
+
+	print("2.5 Updating services.yaml manifest...")
+	update_services_manifest(project_root)
+
+	print("3. Running database migrations / checks...")
+	try:
+		import sys
+
+		venv_python = project_root / ".venv" / "bin" / "python"
+		if not venv_python.exists():
+			venv_python = Path(sys.executable)
+
+		migration_failed = False
+		migration_errors = []
+		for coll in ["work", "social", "directive", "story", "interaction"]:
+			res = subprocess.run(
+				[str(venv_python), "-m", "red_pill.cli", "sanitize", coll, "--dry-run"], cwd=str(project_root), capture_output=True, text=True
+			)
+			if res.returncode != 0:
+				migration_failed = True
+				migration_errors.append(f"{coll}: {res.stderr.strip()}")
+		if not migration_failed:
+			print("   [OK] Database structures checked and sanitized.")
+		else:
+			print("   [FAIL] Database sanitation check failed:\n" + "\n".join(migration_errors))
+	except Exception as e:
+		print(f"   [FAIL] Database migration exception: {e}")
+
+	if shutil.which("systemctl"):
+		print("4. Reloading user systemd daemons...")
+		try:
+			res_running = subprocess.run(["systemctl", "--user", "is-system-running"], capture_output=True)
+			dbus_ok = res_running.returncode != 4
+		except Exception:
+			dbus_ok = False
+
+		if dbus_ok:
+			res = subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True, text=True)
+			if res.returncode == 0:
+				print("   [OK] User systemd services reloaded.")
+			else:
+				print(f"   [FAIL] systemd daemon-reload failed: {res.stderr}")
+		else:
+			print("   [INFO] systemd D-Bus init bus is unreachable. Skipping daemon-reload.")
+	else:
+		print("4. systemctl not found. Skipping daemon reload.")
+
+	print("\n[OK] BÜNKER SYNCHRONIZATION CONCLUDED.")
+
+
 def handle_bunker(args) -> None:
 	"""Dispatcher for 'bunker' CLI commands."""
 	if args.bunker_cmd == "init":
 		profile_hardware()
 	elif args.bunker_cmd == "install":
-		print("[NOT IMPLEMENTED] bunker install is under construction.")
+		bunker_install()
 	elif args.bunker_cmd == "update":
-		print("[NOT IMPLEMENTED] bunker update is under construction.")
+		bunker_update()
 	elif args.bunker_cmd == "export":
 		bunker_export()
 	elif args.bunker_cmd == "restore":

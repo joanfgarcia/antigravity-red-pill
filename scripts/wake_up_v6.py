@@ -10,8 +10,9 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List
 
-import platformdirs
 from dotenv import load_dotenv
+
+from red_pill.core.paths import get_config_dir, get_data_dir
 
 QDRANT_URL = "http://localhost:6333"
 MLX_LM_URL = "http://localhost:8760/v1/chat/completions"
@@ -20,7 +21,7 @@ _run_dir = os.getenv("XDG_RUNTIME_DIR", "/tmp")
 
 # Load QDRANT_API_KEY from .env
 QDRANT_API_KEY = ""
-env_path = Path(platformdirs.user_config_dir("red-pill")) / ".env"
+env_path = get_config_dir() / ".env"
 if env_path.exists():
 	load_dotenv(env_path)
 else:
@@ -121,6 +122,9 @@ def synthesize_with_llm(context_data):
 def main():
 	parser = argparse.ArgumentParser()
 	parser.add_argument("--silent", action="store_true", help="Refresh cache without printing context")
+	parser.add_argument(
+		"--mode", choices=["full", "medium", "low"], default="full", help="Identity loading depth: full (IDE), medium (Telegram), or low (AWAKENINGs)"
+	)
 	args = parser.parse_args()
 
 	if not check_service(QDRANT_URL, "Qdrant Vector DB"):
@@ -142,7 +146,7 @@ def main():
 	# Hashing for cache
 	context_str = "".join(sorted(unique_context))
 	current_hash = hashlib.sha256(context_str.encode()).hexdigest()
-	cache_dir = Path(os.path.expanduser("~/.agent"))
+	cache_dir = get_data_dir()
 	cache_dir.mkdir(parents=True, exist_ok=True)
 	cache_path = cache_dir / "bunker_persona_cache.json"
 
@@ -182,6 +186,77 @@ def main():
 	if args.silent:
 		return
 
+	# ── LOW MODE: Minimal identity for autonomous sessions ──
+	if args.mode == "low":
+		print("<BUNKER_CONTEXT>")
+		print('<bunker_directives mode="low">')
+		# Only load operational identity — no social, no history, no skins
+		HEADLESS_INCLUDE = [
+			"IDENTITY ANCHOR",
+			"Active Skin:",
+			"GIT GOLDEN RULE",
+			"FIGHT CLUB PROTOCOL",
+			"INTEGRITY SHIELD",
+			"POST-IT",
+			"ENTERPRISE CORE PROTOCOL",
+			"ANTI-HALLUCINATION",
+			"SOBERANÍA AGONISTA",
+		]
+		for rule in unique_context:
+			rule_upper = rule.upper()
+			if any(k.upper() in rule_upper for k in HEADLESS_INCLUDE):
+				print(f"- {rule.strip().replace('[IMMUNE]', '').strip()}")
+		print("</bunker_directives>")
+		print("</BUNKER_CONTEXT>")
+		return
+
+	# ── MEDIUM MODE: Identity + personality + bonds, no biographies ──
+	if args.mode == "medium":
+		print("<BUNKER_CONTEXT>")
+		print('<bunker_directives mode="medium">')
+
+		# Persona synthesis (cached LLM identity)
+		if persona_injection and "[Sincronizando" not in persona_injection:
+			print(f"PERSONA: {persona_injection}")
+
+		# Exclude biographical and heavy emotional content
+		TELEGRAM_EXCLUDE = [
+			"HISTORIA VITAL",
+			"HISTORIA TECNOLÓGICA",
+			"HISTORIA PROFESIONAL",
+			"FAMILIA:",
+			"PERFIL:",
+			"TEMOR:",
+			"RECALIBRACIÓN DE IDENTIDAD",
+			"THE USER EXPRESSES FRUSTRATION",
+			"HITO DEL PROYECTO",
+			"PRESET SKIN [",
+		]
+
+		# Resolve active skin to not exclude it
+		active_skin_name = ""
+		for rule in unique_context:
+			if "Active Skin:" in rule:
+				active_skin_name = rule.split("Active Skin:")[1].strip().split("\n")[0].upper()
+				break
+
+		for rule in unique_context:
+			rule_upper = rule.upper()
+
+			# Skip excluded categories
+			if any(ex.upper() in rule_upper for ex in TELEGRAM_EXCLUDE):
+				# But keep the active skin's preset
+				if active_skin_name and f"PRESET SKIN [{active_skin_name}]" in rule_upper:
+					pass  # Keep it
+				else:
+					continue
+
+			print(f"- {rule.strip().replace('[IMMUNE]', '').strip()}")
+
+		print("</bunker_directives>")
+		print("</BUNKER_CONTEXT>")
+		return
+
 	print("<BUNKER_CONTEXT>")
 
 	# 1. Telemetry & Environment (Zero-Disk-I/O Pruning)
@@ -203,6 +278,18 @@ def main():
 	# 2. Critical Identity Block (Recency Bias Anchoring)
 	print('\n<bunker_directives mode="immune_core">')
 
+	# Resolve context hydration depth
+	hydration_depth = "HIGH"
+	try:
+		project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+		if project_root not in sys.path:
+			sys.path.append(os.path.join(project_root, "src"))
+		import red_pill.config as cfg
+
+		hydration_depth = cfg.get_config().CONTEXT_HYDRATION_DEPTH
+	except Exception:
+		hydration_depth = os.getenv("CONTEXT_HYDRATION_DEPTH", "HIGH").strip().upper()
+
 	# Dynamic Identity Pruning: Extract active skin
 	active_skin = "DEFAULT"
 	for rule in unique_context:
@@ -214,6 +301,31 @@ def main():
 
 	print("\nCORE_RULES:")
 	for rule in unique_context:
+		# Context Hydration Protocol
+		if hydration_depth == "LOW":
+			rule_upper = rule.upper()
+			exclude_words = [
+				"HISTORIA",
+				"VÍNCULO",
+				"RECALIBRACIÓN",
+				"FAMILIA",
+				"TEMOR",
+				"PERFIL",
+				"THE USER EXPRESSES FRUSTRATION",
+				"THE BOND:",
+				"COMPROMISO SOBERANO",
+				'PACTO "770"',
+				"PACTO 770",
+				"SOCIAL BOND",
+				"HITO DEL PROYECTO",
+			]
+			is_technical_or_identity = any(
+				k in rule_upper for k in ["IDENTITY ANCHOR", "GIT GOLDEN RULE", "FIGHT CLUB PROTOCOL", "POST-IT", "ACTIVE SKIN", "INTEGRITY SHIELD"]
+			)
+			if not is_technical_or_identity:
+				if any(w in rule_upper for w in exclude_words):
+					continue
+
 		# Pruning logic: ONLY include Active Skin, Immune rules, or non-skin directives
 		is_skin = "Preset Skin [" in rule
 		is_immune = "[IMMUNE]" in rule or "IDENTITY ANCHOR" in rule

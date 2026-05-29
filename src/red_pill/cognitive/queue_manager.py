@@ -2,7 +2,7 @@ import json
 import logging
 import sqlite3
 import uuid
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -80,22 +80,68 @@ class CognitiveQueueManager:
 		logger.debug(f"[QUEUE] Task {task_id} injected (Priority {priority}, Status {initial_status}). Source: {source}")
 		return task_id
 
-	def pop_next_task(self) -> Optional[Dict[str, Any]]:
-		"""
-		Extrae la tarea de mayor prioridad. Marca como PROCESSING atómicamente.
-		Retorna la tarea o None si la cola está vacía.
-		"""
+	def has_pending(self, source: Optional[str] = None) -> bool:
+		"""O(1) non-destructive check for pending tasks. Does NOT pop or lock."""
 		with self._get_connection() as conn:
-			conn.execute("BEGIN EXCLUSIVE")
+			if source:
+				row = conn.execute(
+					"SELECT 1 FROM cognitive_tasks WHERE status = 'PENDING' AND source = ? LIMIT 1",
+					(source,),
+				).fetchone()
+			else:
+				row = conn.execute("SELECT 1 FROM cognitive_tasks WHERE status = 'PENDING' LIMIT 1").fetchone()
+			return row is not None
+
+	def find_task_by_payload_key(self, source: str, key: str, value: str) -> Optional[Dict[str, Any]]:
+		"""Find a task by a key in its JSON payload. Used for exclusion checks (e.g. compaction dedup)."""
+		with self._get_connection() as conn:
 			cursor = conn.execute(
 				"""
-				SELECT id, source, priority, payload, attempts
+				SELECT id, source, status, payload
 				FROM cognitive_tasks
-				WHERE status = 'PENDING'
-				ORDER BY priority DESC, created_at ASC
-				LIMIT 1
-				"""
+				WHERE source = ? AND status IN ('PENDING', 'PROCESSING')
+				ORDER BY created_at DESC LIMIT 10
+				""",
+				(source,),
 			)
+			for row in cursor:
+				try:
+					payload = json.loads(row["payload"])
+					if payload.get(key) == value:
+						return {"id": row["id"], "source": row["source"], "status": row["status"], "payload": payload}
+				except (json.JSONDecodeError, KeyError):
+					continue
+		return None
+
+	def pop_next_task(self, allowed_sources: Optional[List[str]] = None, exclude_sources: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
+		"""
+		Extrae la tarea de mayor prioridad, filtrando por origen si se especifica.
+		Marca como PROCESSING atómicamente.
+		Retorna la tarea o None si la cola está vacía.
+		"""
+		query = """
+			SELECT id, source, priority, payload, attempts
+			FROM cognitive_tasks
+			WHERE status = 'PENDING'
+		"""
+		params = []
+		if allowed_sources is not None:
+			if not allowed_sources:
+				return None
+			placeholders = ",".join(["?"] * len(allowed_sources))
+			query += f" AND source IN ({placeholders})"
+			params.extend(allowed_sources)
+		if exclude_sources is not None:
+			if exclude_sources:
+				placeholders = ",".join(["?"] * len(exclude_sources))
+				query += f" AND source NOT IN ({placeholders})"
+				params.extend(exclude_sources)
+
+		query += " ORDER BY priority DESC, created_at ASC LIMIT 1"
+
+		with self._get_connection() as conn:
+			conn.execute("BEGIN EXCLUSIVE")
+			cursor = conn.execute(query, params)
 			row = cursor.fetchone()
 
 			if not row:
@@ -122,8 +168,100 @@ class CognitiveQueueManager:
 				"payload": json.loads(row["payload"]),
 			}
 
+	def _update_curiosity_rating(self, task_id: str, success: bool) -> None:
+		"""Actualiza las calificaciones de curiosidad en base al resultado de la ejecución."""
+		try:
+			from red_pill.config import get_config
+
+			if not getattr(get_config(), "CURIOSITY_ENGINE_ENABLED", True):
+				return
+
+			# 1. Obtener la tarea para extraer su payload y categoría
+			with self._get_connection() as conn:
+				cursor = conn.execute("SELECT payload FROM cognitive_tasks WHERE id = ?", (task_id,))
+				row = cursor.fetchone()
+				if not row:
+					return
+				payload = json.loads(row["payload"])
+
+			category = payload.get("category")
+			if not category:
+				# Mapeo de respaldo basado en la acción
+				action = payload.get("action")
+				if action == "orchestrate_minions":
+					category = "minion_maintenance"
+				elif action == "autonomous_research":
+					category = "strategic_synthesis"
+				elif action == "spawn_mcp_subagent":
+					category = "proactive_coding"
+				elif action == "autonomous_ingestion":
+					category = "active_learning"
+				elif action == "run_command" and "graphify" in payload.get("command", ""):
+					category = "graphify_sync"
+				else:
+					category = "dynamic_spark"
+
+			# 2. Cargar calificaciones
+			from red_pill.core.paths import get_state_dir
+
+			curiosity_file = get_state_dir() / "curiosity_ratings.json"
+			if not curiosity_file.exists():
+				return
+
+			with open(curiosity_file, "r") as f:
+				ratings = json.load(f)
+
+			profile_name = getattr(get_config(), "CURIOSITY_PROFILE", "balanced")
+			if profile_name not in ratings:
+				ratings[profile_name] = {}
+
+			profile_ratings = ratings[profile_name]
+			cat_data = profile_ratings.get(category)
+			if not cat_data:
+				# Si no existe, lo inicializamos para este perfil
+				cat_data = {"rating": 25.0, "uncertainty": 8.33, "last_rho": 0.5, "executed_count": 0}
+				profile_ratings[category] = cat_data
+
+			# 3. Calcular recompensa en base al resultado (rho)
+			rho = 1.0 if success else 0.0
+			if not success:
+				teacher_reward = -0.5
+			else:
+				# Las chispas dinámicas ganan recompensa de curiosidad positiva.
+				# Las tareas fijas exitosas obtienen 0.0, permitiendo que su prioridad
+				# decante al agotarse la incertidumbre (evita inflación de tareas triviales).
+				teacher_reward = 0.5 if category == "dynamic_spark" else 0.0
+
+			rating = cat_data.get("rating", 25.0)
+			uncertainty = cat_data.get("uncertainty", 8.33)
+			executed_count = cat_data.get("executed_count", 0) + 1
+
+			# Actualización estilo TrueSkill simplificado
+			lr = 0.5
+			new_rating = max(10.0, min(100.0, rating + (lr * teacher_reward * uncertainty)))
+			new_uncertainty = max(2.0, uncertainty * 0.9)
+
+			cat_data["rating"] = round(new_rating, 2)
+			cat_data["uncertainty"] = round(new_uncertainty, 2)
+			cat_data["last_rho"] = rho
+			cat_data["executed_count"] = executed_count
+
+			profile_ratings[category] = cat_data
+			ratings[profile_name] = profile_ratings
+
+			with open(curiosity_file, "w") as f:
+				json.dump(ratings, f, indent=4)
+
+			logger.info(
+				f"[CURIOSITY] Category '{category}' updated: rating={new_rating:.2f}, uncertainty={new_uncertainty:.2f}, reward={teacher_reward:.2f}"
+			)
+
+		except Exception as e:
+			logger.warning(f"[CURIOSITY] Failed to update curiosity ratings: {e}")
+
 	def mark_completed(self, task_id: str) -> None:
 		"""Marca una tarea como finalizada exitosamente y desbloquea tareas hijas (Flujo DAG)."""
+		self._update_curiosity_rating(task_id, success=True)
 		with self._get_connection() as conn:
 			conn.execute(
 				"""
@@ -151,6 +289,7 @@ class CognitiveQueueManager:
 		Marca un fallo. Incrementa intentos.
 		Si attempts > 3, activa el disyuntor y la etiqueta como FRUSTRATED.
 		"""
+		self._update_curiosity_rating(task_id, success=False)
 		with self._get_connection() as conn:
 			# Primero incrementamos intentos
 			conn.execute(

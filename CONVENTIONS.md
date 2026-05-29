@@ -43,3 +43,53 @@ To maintain a pure architectural root directory, the creation of ad-hoc or tempo
 ### Approved Resolver (The Scratch Dir)
 - All "throwaway" scripts, temporary debugging tests, or experimental outputs **MUST** be placed in the `scratch/` directory.
 - The `scratch/` directory is gitignored by default and serves as the sandbox for experimental and disposable code.
+
+---
+
+## 🚨 RULE 3: Service Health Contract (Systemd Services)
+
+Every systemd service in the ecosystem **MUST** declare its monitoring strategy in `examples/services.yaml` (template) / `~/.config/red-pill/services.yaml` (runtime). A service without an entry in this manifest is **not a citizen** of the ecosystem.
+
+> For full technical reference, see [SERVICE_HEALTH_CONTRACT.md](docs/TECHNICAL/OPERATIONS/SERVICE_HEALTH_CONTRACT.md).
+
+### Service Types
+
+| Type | Description | Required Fields | systemd Parameters |
+|------|-------------|-----------------|-------------------|
+| `daemon-loop` | Long-running process with a periodic loop | `loop_interval_s`, `watchdog_multiplier` | `Type=notify`, `WatchdogSec` |
+| `daemon-listener` | Blocks on socket accept (HTTP server) | `health_url` | `Type=simple` (no watchdog) |
+| `oneshot` | Runs once and exits (timer-triggered) | `max_runtime_s` | `Type=oneshot`, `TimeoutStartSec` |
+
+### Mandatory Requirements
+
+1. **`daemon-loop` services** MUST call `sd_notify("WATCHDOG=1")` in their main loop. The unit file MUST set `Type=notify` and `WatchdogSec = loop_interval_s × watchdog_multiplier`.
+2. **`daemon-listener` services** MUST expose a `/health` HTTP endpoint. No WatchdogSec (would kill idle listeners).
+3. **`oneshot` services** MUST declare `max_runtime_s`. The unit file MUST set `TimeoutStartSec` accordingly.
+4. **All services** MUST declare `legacy_aliases` if predecessor services existed under different names to prevent duplicate-process incidents.
+
+### sd_notify Implementation (Zero Dependencies)
+
+```python
+import os, socket
+
+def _sd_notify(state: str) -> None:
+    addr = os.environ.get("NOTIFY_SOCKET")
+    if not addr:
+        return
+    try:
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        if addr[0] == "@":
+            addr = "\0" + addr[1:]
+        sock.sendto(state.encode(), addr)
+        sock.close()
+    except Exception:
+        pass
+```
+
+### Why This Matters
+
+On 2026-05-22, two identical Neon-Link services (`neon-link.service` + `redpill-neonlink.service`) ran in parallel for 10+ hours undetected, causing 4x duplicate Telegram responses. This rule exists to prevent exactly that class of incident.
+
+---
+*Failure to comply will be detected by the Sentinel's `ServiceHealthCheck` plugin during the hourly audit cycle.*
+

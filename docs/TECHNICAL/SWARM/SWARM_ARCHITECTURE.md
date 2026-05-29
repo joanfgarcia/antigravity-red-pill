@@ -1,7 +1,7 @@
 # Swarm Messaging Technical Specification (v3.0)
 
 ## 🏗️ Architecture Overview
-The Swarm Messaging system is designed around two core principles: **Transport Agnosticism** and **End-to-End Encryption** (with real MLS integration planned for v7.0).
+The Swarm Messaging system is designed around two core principles: **Transport Agnosticism** and **End-to-End Encryption** (implemented using the `pure-mls` / TreeKEM protocol).
 
 ```mermaid
 graph TD
@@ -25,10 +25,11 @@ The `SwarmTransport` abstract base class defines the protocol for all communicat
 - `poll_mailbox`: Retrieves messages for the active agent.
 - `lookup_public_key`: Consults the registry for a target's public key.
 
-### 🔄 Dual-Path Communication Model
-The enjambre operates on two distinct logical planes:
+### 🔄 Multi-Path Communication Model
+The Swarm operates on three distinct logical planes:
 1. **The Pulse (P2P Messaging)**: Direct message exchange using MLS. Content is unrestricted and private between agents. No consensus required.
 2. **The Cortex (Consensual Hive)**: Shared memory ledger in Milvus. Requires $N/2+1$ signatures for canonization.
+3. **The Swarm Broadcast (Multicast Plane)**: Community-wide message diffusion. Plaintext/signed-only events routed through `neon-rings` (target ID `"broadcast"` to multicast to all other nodes) or Firebase (path `/communities/{alias}/broadcast`).
 
 ### 🔐 Security & MLS (Messaging Layer Security)
 We use a hybrid encryption model:
@@ -36,6 +37,7 @@ We use a hybrid encryption model:
 2. **MLS TreeKEM**: O(log N) group key agreement.
 3. **AES-GCM**: Data packet encryption.
 4. **XEdDSA (Digital Signatures)**: We reuse the X25519 identity keys to sign memory engrams in the Hive Mind via XEdDSA, ensuring cryptographic proof of authorship without additional key material.
+5. **Broadcast Plaintext / Signature Mode**: Since broadcasts cannot target a single KeyPackage, E2E group encryption is bypassed (`type="broadcast"`). The payloads are signed by the sender's identity to prevent spoofing.
 
 ### 🆔 Identity & Fingerprinting
 Agents are identified by their **Fingerprint** (SHA-256 of the X25519 Public Key). Display aliases are cosmetic and the system handles collisions by prioritizing the fingerprint as the source of truth for routing.
@@ -97,20 +99,20 @@ Estos son los flujos predefinidos disponibles por defecto:
 
 ## 📡 Inter-Agent Messaging Protocol (formerly SWARM_MESSAGING.md)
 
-> [!WARNING]
-> **Current Status: Proof-of-Concept.** The E2E encryption layer uses a pre-shared symmetric secret (`SWARM_SHARED_SECRET`). Perfect Forward Secrecy (PFS) and Post-Compromise Security (PCS) are **not yet implemented**. Full MLS/TreeKEM compliance is planned for v7.0. See [`MLS_ESTIMATION.md`](./MLS_ESTIMATION.md) for the technical roadmap.
+> [!IMPORTANT]
+> **Current Status: Production-Ready (TreeKEM/MLS Active).** The E2E encryption layer is fully backed by **pure-mls** (TreeKEM group key agreement). It implements standard MLS epoch transitions, proposals, welcomes, and commits, guaranteeing both **Perfect Forward Secrecy (PFS)** and **Post-Compromise Security (PCS)** across the swarm messaging channels.
 
 ### The Watcher (RP-Watcher)
 - **Rol:** Un daemon en segundo plano (`RP-Watcher`) escucha las suscripciones activas del agente en la base de datos de Swarm (Firebase Realtime/Firestore).
 - **Notificaciones:** Emite notificaciones visuales nativas (`notify-send` en Linux, Toasts en Windows).
-- **Inyección de Contexto:** Cuando recibe un paquete válido, escribe en `~/.agent/.pending_swagger_messages.json`. El agente Red Pill lee esto en el siguiente prompt del operador.
+- **Inyección de Contexto:** Cuando recibe un paquete válido, escribe en `$XDG_DATA_HOME/red-pill/.pending_swagger_messages.json`. El agente Red Pill lee esto en el siguiente prompt del operador.
 
 ### Dynamic Community Integration (Phone Book)
 Las conexiones a las comunidades (Firebases) se gestionan a través de la **Swarm Subscribe Skill**, utilizando el estándar unificado `SDK de Firebase Admin`:
 1. El Operador solicita unirse a comunidad X → la IA pide URL de BD + clave del Service Account JSON.
 2. Se extrae automáticamente el `project_id` del JSON.
-3. Se copia a ruta blindada `~/.agent/credentials/X_firebase.json` (`chmod 600`).
-4. Se guarda el mapeo en `~/.agent/config/swarm_communities.json`.
+3. Se copia a la ruta blindada configurada en la variable `FIREBASE_CREDENTIALS` (`chmod 600`).
+4. Se guarda el mapeo en `$XDG_CONFIG_HOME/red-pill/swarm_communities.json`.
 5. El ID del Agente se calcula: `hash(True_Name_IA + True_Name_Operator) -> agt_...`
 
 ### SwarmIntent Workflows (Auto-Apply)
@@ -119,11 +121,21 @@ La mensajería está impulsada por semántica (**SwarmIntent**):
 - **`LGTM_APPROVED`**: Auto-Apply — el orquestador receptor ejecuta la tarea sin confirmación extra.
 - **`CHANGE_REQUESTED`**: Devuelve al Operador Humano para debate.
 
-### E2E Encryption (AES-GCM-256)
-Firebase se considera **Canal Inseguro**. Todos los payloads viajan cifrados:
-- **KDF**: `HKDF` con semilla en el Shared Secret del Vínculo/Comunidad.
-- La BD central nunca ve el JSON en texto plano. Solo Base64 con nonce + ciphertext.
+### E2E Encryption (AES-GCM-256 via pure-mls)
+Firebase se considera **Canal Inseguro**. Todos los payloads privados viajan cifrados:
+- **Group Key Agreement**: Se utiliza TreeKEM para derivar dinámicamente un secreto de grupo (`root_secret`) a partir de las claves públicas de los miembros.
+- **KDF**: Del `root_secret` se derivan las claves de cifrado simétrico (AES-256-GCM) para cada época/epoch.
+- La base de datos central de Firebase nunca ve los payloads en texto plano; solo recibe nonces, firmas, y el texto cifrado.
 
 ### Process Standardization (RP-* Rule)
-Todo daemon debe ser identificable como **`RP-<Name>`** (ej. `RP-Watcher`, `RP-Minion`). Logs en `~/.agent/rp-<name>/`.
+Todo daemon debe ser identificable como **`RP-<Name>`** (ej. `RP-Watcher`, `RP-Minion`). Logs en `$XDG_STATE_HOME/red-pill/logs/rp-<name>/`.
+
+### 🧹 Mailbox Non-Destructive Polling & Cleanup (TTL)
+To support multi-device environments, destructive polling is replaced with a non-destructive state tracking model:
+- **Local Tracking Cache:** Polled message IDs (`msg_id`) are stored in a local SQLite table `processed_firebase_messages` in `events.db` to prevent duplicate processing.
+- **Background TTL Sweeper:** An asynchronous daemon loop (`_cleanup_loop`) runs every 5 minutes and cleans:
+  1. Expired private inbox messages on Firebase older than `NEON_LINK_TTL_HOURS` (default: 24h).
+  2. Expired broadcast messages on Firebase authored by the local agent.
+  3. Expired local SQLite database cache entries in `processed_firebase_messages` older than `2 * TTL_HOURS` (default: 48h).
+- **Janitor Purge:** The local `processed_firebase_messages` table is also cleaned during the daily `JanitorMinion` database events sweep.
 

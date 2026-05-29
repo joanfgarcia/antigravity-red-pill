@@ -22,12 +22,11 @@ import warnings
 from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
-import platformdirs
 import yaml
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from red_pill.core.paths import get_db_dir, get_models_dir, get_state_dir, migrate_legacy_xdg_config
+from red_pill.core.paths import get_config_dir, get_db_dir, get_models_dir, get_state_dir, migrate_legacy_xdg_config
 
 migrate_legacy_xdg_config()
 
@@ -82,7 +81,7 @@ class RedPillConfig(BaseSettings):
 	"""
 
 	model_config = SettingsConfigDict(
-		env_file=os.path.join(platformdirs.user_config_dir("red-pill"), ".env"),
+		env_file=os.path.join(get_config_dir(), ".env"),
 		env_file_encoding="utf-8",
 		extra="ignore",
 		populate_by_name=True,
@@ -95,7 +94,7 @@ class RedPillConfig(BaseSettings):
 	APP_ROOT: str = _APP_ROOT
 	RED_PILL_PROFILE: str = "user"
 	USER_ATLAS_DIR: str = os.path.join(_WORKSPACE_ROOT, "atlas")
-	AGENT_CORE_DIR: str = os.path.join(_WORKSPACE_ROOT, "Titanium_Core")
+	AGENT_CORE_DIR: str = os.path.join(_WORKSPACE_ROOT, "Agent_Core")
 
 	@field_validator("WORKSPACE_ROOT", mode="before")
 	@classmethod
@@ -132,6 +131,33 @@ class RedPillConfig(BaseSettings):
 	# COGNITIVE DYNAMICS
 	# -----------------------------------------------------------------------
 	ABSOLUTE_KEYWORDS: List[str] = ["Aleth", "Bünker", "770", "enter-pánico", "PAAAAARAAAAAA", "engrama", "skin", "Titanium", "Joan"]
+	CONTEXT_HYDRATION_DEPTH: str = "HIGH"
+	EMERGENCY_CLOUD_OVERRIDE: bool = False
+
+	# -----------------------------------------------------------------------
+	# IDENTITY DEPTH (per-channel)
+	# Values: "full" | "medium" | "low"
+	# -----------------------------------------------------------------------
+	IDENTITY_DEPTH_IDE: str = "full"
+	IDENTITY_DEPTH_NEON_LINK: str = "medium"
+	IDENTITY_DEPTH_HEADLESS: str = "low"
+
+	@field_validator("CONTEXT_HYDRATION_DEPTH", mode="before")
+	@classmethod
+	def _normalize_hydration_depth(cls, v: Any) -> str:
+		if isinstance(v, str):
+			return v.strip().upper()
+		return "HIGH"
+
+	@field_validator("IDENTITY_DEPTH_IDE", "IDENTITY_DEPTH_NEON_LINK", "IDENTITY_DEPTH_HEADLESS", mode="before")
+	@classmethod
+	def _normalize_identity_depth(cls, v: Any) -> str:
+		_valid = {"full", "medium", "low"}
+		if isinstance(v, str):
+			normalized = v.strip().lower()
+			if normalized in _valid:
+				return normalized
+		return "medium"
 
 	# -----------------------------------------------------------------------
 	# QDRANT (always local in Foundation)
@@ -282,22 +308,55 @@ class RedPillConfig(BaseSettings):
 	NEON_LINK_URL: str = "http://localhost:8770"
 
 	# -----------------------------------------------------------------------
+	# ANTIGRAVITY IDE BRIDGE
+	# -----------------------------------------------------------------------
+	IDE_BACKEND: str = "auto"  # "agy" | "grpc" | "auto"
+	# Gate autonomous Flash-consuming operations (cognitive queue, minion
+	# auto-inject, entropy executor). Telegram inbox processing is NOT
+	# affected — only background/autonomous agy prompts are suppressed.
+	AUTONOMOUS_AGY_ENABLED: bool = False
+
+	@field_validator("IDE_BACKEND")
+	@classmethod
+	def _validate_ide_backend(cls, v: str) -> str:
+		v = v.strip().lower()
+		if v not in ("agy", "grpc", "auto"):
+			raise ValueError(f"IDE_BACKEND must be 'agy', 'grpc', or 'auto': {v}")
+		return v
+
+	# -----------------------------------------------------------------------
 	# NOTIFICATIONS
 	# -----------------------------------------------------------------------
 	NOTIFICATIONS_ENABLED: bool = True
 	NOTIFICATION_SOUND: bool = False
 
 	# -----------------------------------------------------------------------
+	# REACTIVE DEBOUNCE (Telegram sliding window prompt accumulation)
+	# -----------------------------------------------------------------------
+	REACTIVE_DEBOUNCE_ENABLED: bool = False
+	REACTIVE_DEBOUNCE_SECONDS: int = 5
+
+	# -----------------------------------------------------------------------
 	# DEEP RECALL TRIGGERS
 	# -----------------------------------------------------------------------
-	DEEP_RECALL_TRIGGERS: List[str] = []
+	DEEP_RECALL_TRIGGERS: Any = []
+
+	@field_validator("DEEP_RECALL_TRIGGERS", mode="before")
+	@classmethod
+	def _parse_deep_recall_triggers(cls, v: Any) -> Any:
+		if isinstance(v, str):
+			return [t.strip() for t in v.split(",") if t.strip()]
+		return v
 
 	@model_validator(mode="after")
 	def _build_deep_recall_triggers(self) -> "RedPillConfig":
-		_default = "don't you remember,¿no te acuerdas?,deep recall,do you really not remember?,esfuerzate en recordar,try hard!"
-		_env_raw = os.getenv("DEEP_RECALL_TRIGGERS", _default)
 		base = ["despierta", "despierta neo", "wake up"]
-		extras = [t.strip().lower() for t in _env_raw.split(",") if t.strip()]
+		if self.DEEP_RECALL_TRIGGERS:
+			extras = [t.strip().lower() for t in self.DEEP_RECALL_TRIGGERS if t.strip()]
+		else:
+			_default = "don't you remember,¿no te acuerdas?,deep recall,do you really not remember?,esfuerzate en recordar,try hard!"
+			_env_raw = os.getenv("DEEP_RECALL_TRIGGERS", _default)
+			extras = [t.strip().lower() for t in _env_raw.split(",") if t.strip()]
 		self.DEEP_RECALL_TRIGGERS = base + extras
 		return self
 
@@ -306,7 +365,7 @@ class RedPillConfig(BaseSettings):
 	# -----------------------------------------------------------------------
 	METABOLISM_ENABLED: bool = True
 	METABOLISM_COOLDOWN: int = 3600
-	METABOLISM_AUTO_COLLECTIONS: List[str] = ["work_memories", "social_memories", "story_memories"]
+	METABOLISM_AUTO_COLLECTIONS: Any = ["work_memories", "social_memories", "story_memories"]
 	METABOLISM_STATE_FILE: str = str(get_state_dir() / "metabolism_state.json")
 	ABSENCE_THRESHOLD: int = 7 * 24 * 3600
 	ABSENCE_GUARD_SCROLL_LIMIT: int = 500
@@ -346,7 +405,7 @@ class RedPillConfig(BaseSettings):
 
 	# Re-map env var name
 	model_config = SettingsConfigDict(
-		env_file=os.path.join(platformdirs.user_config_dir("red-pill"), ".env"),
+		env_file=os.path.join(get_config_dir(), ".env"),
 		env_file_encoding="utf-8",
 		extra="ignore",
 		populate_by_name=True,
@@ -358,6 +417,7 @@ class RedPillConfig(BaseSettings):
 	INTERCEPTOR_ENABLED: bool = False
 	INTERCEPTOR_RAG_ENABLED: bool = True
 	INTERCEPTOR_CIRCUIT_BREAKER_ENABLED: bool = False
+	COMPACTION_THRESHOLD: int = 10
 
 	# -----------------------------------------------------------------------
 	# FERRARI PROTOCOL — Emotional Intelligence Plugins
@@ -369,6 +429,18 @@ class RedPillConfig(BaseSettings):
 	PROACTIVE_SIGNAL_ENABLED: bool = True  # Plugin 09: sustained critical state alerts
 	PROACTIVE_SIGNAL_RED_THRESHOLD: int = 5  # Consecutive RED memories before pain signal
 	PREDICTIVE_PRELOAD_ENABLED: bool = True  # Plugin 10: predictive context preloading
+
+	# Casual Override: keywords that signal the operator wants free-form conversation.
+	# When detected in the prompt, Plugins 05+06 relax their directives regardless of color.
+	# Comma-separated in .env: CASUAL_OVERRIDE_KEYWORDS="charlemos,relax,chill"
+	CASUAL_OVERRIDE_KEYWORDS: List[str] = []
+
+	@model_validator(mode="after")
+	def _build_casual_keywords(self) -> "RedPillConfig":
+		_default = "charlemos,charlar,charla,relax,relajado,hablemos,conversemos,off-topic,chill,quemar tokens,de guardia,no hay prisa"
+		_env_raw = os.getenv("CASUAL_OVERRIDE_KEYWORDS", _default)
+		self.CASUAL_OVERRIDE_KEYWORDS = [t.strip().lower() for t in _env_raw.split(",") if t.strip()]
+		return self
 
 	# -----------------------------------------------------------------------
 	# SOVEREIGN PULSE
@@ -397,6 +469,8 @@ class RedPillConfig(BaseSettings):
 	RESONANCE_THRESHOLD: float = 0.4
 	RESONANCE_INTERVAL: int = 600
 	GRAPHIFY_RAG_ENABLED: bool = True
+	CURIOSITY_ENGINE_ENABLED: bool = True
+	CURIOSITY_PROFILE: str = "balanced"
 
 	# -----------------------------------------------------------------------
 	# INGESTION PLUGIN
@@ -447,7 +521,14 @@ class RedPillConfig(BaseSettings):
 	PRE_HEATING_MAX_FRAGMENTS: int = 3  # Max total (social + interaction)
 	PRE_HEATING_MAX_CHARS_PER_FRAGMENT: int = 200  # For "raw" mode
 	PRE_HEATING_LOOKBACK_HOURS: int = 48  # For interaction_memories
-	PRE_HEATING_HOT_COLORS: List[str] = ["purple", "blue", "red"]
+	PRE_HEATING_HOT_COLORS: Any = ["purple", "blue", "red"]
+
+	@field_validator("PRE_HEATING_HOT_COLORS", mode="before")
+	@classmethod
+	def _parse_colors(cls, v: Any) -> Any:
+		if isinstance(v, str):
+			return [c.strip() for c in v.split(",") if c.strip()]
+		return v
 
 	# BE_WATER: Agent auto-sizes payload limit based on available VRAM.
 	# Override with MAX_PAYLOAD_CHARS=<int> in .env to force a specific limit.
@@ -528,12 +609,44 @@ CURRENT_SCHEMA_VERSION: int = 1
 # Singleton config loader
 
 _enterprise_overrides_store: Dict[str, Any] = {}
+_last_env_mtime: float = 0.0
+
+
+def get_config() -> RedPillConfig:
+	"""Return the singleton RedPillConfig instance, automatically reloading if .env has changed on disk."""
+	global _last_env_mtime
+	env_path = os.path.join(get_config_dir(), ".env")
+	current_mtime = 0.0
+	if os.path.exists(env_path):
+		try:
+			current_mtime = os.path.getmtime(env_path)
+		except Exception:
+			pass
+
+	if current_mtime != _last_env_mtime:
+		_last_env_mtime = current_mtime
+		get_config_cached.cache_clear()
+
+	cfg = get_config_cached(env_path)
+	if _enterprise_overrides_store:
+		cfg._enterprise_overrides.update(_enterprise_overrides_store)
+	return cfg
 
 
 @lru_cache(maxsize=1)
-def get_config() -> RedPillConfig:
-	"""Return the singleton RedPillConfig instance."""
+def get_config_cached(env_file: Optional[str] = None) -> RedPillConfig:
+	if env_file:
+		return RedPillConfig(_env_file=env_file)  # type: ignore[call-arg]
 	return RedPillConfig()
+
+
+def _clear_both_caches() -> None:
+	global _last_env_mtime
+	_last_env_mtime = 0.0
+	get_config_cached.cache_clear()
+
+
+get_config.cache_clear = _clear_both_caches  # type: ignore[attr-defined]
 
 
 def set_enterprise_overrides(overrides: Dict[str, Any]) -> None:
@@ -549,7 +662,7 @@ def set_enterprise_overrides(overrides: Dict[str, Any]) -> None:
 		cfg._enterprise_overrides.update(overrides)
 	except Exception:
 		# Singleton not yet created — the store will be read at first get_config()
-		get_config.cache_clear()
+		get_config.cache_clear()  # type: ignore[attr-defined]
 
 
 # Module-level aliases — backward compatibility (do NOT remove)

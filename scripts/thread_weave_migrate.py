@@ -28,19 +28,19 @@ import sys
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("thread_weave_migrate")
 
-THREAD_STATE_PATH = os.path.expanduser("~/.agent/thread_state.json")
-COLLECTIONS = ["archive_memories", "work_memories", "social_memories", "directive_memories"]
-
 
 def migrate(dry_run: bool = False) -> None:
 	sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+	from red_pill.core.paths import get_thread_state_path
 	from red_pill.memory import MemoryManager
 
+	thread_state_path = get_thread_state_path()
+	collections = ["archive_memories", "work_memories", "social_memories", "directive_memories"]
 	mem = MemoryManager()
 	client = mem.client
 	thread_state: dict = {}
 
-	for col in COLLECTIONS:
+	for col in collections:
 		logger.info(f"=== {col} ===")
 
 		try:
@@ -88,8 +88,8 @@ def migrate(dry_run: bool = False) -> None:
 
 	# Save thread_state.json
 	if not dry_run:
-		os.makedirs(os.path.dirname(THREAD_STATE_PATH), exist_ok=True)
-		with open(THREAD_STATE_PATH, "w") as f:
+		os.makedirs(os.path.dirname(thread_state_path), exist_ok=True)
+		with open(thread_state_path, "w") as f:
 			json.dump(thread_state, f, indent=2)
 		logger.info(f"thread_state.json bootstrapped: {thread_state}")
 	else:

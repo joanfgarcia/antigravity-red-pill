@@ -82,6 +82,72 @@ def load_plugins():
 	_PLUGINS.sort(key=lambda p: p.__module__)
 
 
+def reload_plugins() -> str:
+	"""Hot-reload all interceptor plugins without restarting the MCP server.
+
+	Clears the plugin cache, reloads each module via importlib.reload,
+	and rebuilds the plugin list. Logs structured errors for the Sentinel
+	to detect and act upon (pain signal emission is the Sentinel's job).
+	Returns a status report.
+	"""
+	global _PLUGINS
+	import sys
+	import traceback
+
+	reloaded = []
+	errors = []
+
+	# Snapshot for rollback
+	old_plugins = list(_PLUGINS)
+	_PLUGINS.clear()
+
+	package_dir = Path(__file__).resolve().parent
+	for _, module_name, _ in pkgutil.iter_modules([str(package_dir)]):
+		if module_name == "base":
+			continue
+
+		fqn = f"red_pill.interceptors.{module_name}"
+		try:
+			if fqn in sys.modules:
+				module = importlib.reload(sys.modules[fqn])
+			else:
+				module = importlib.import_module(fqn)
+
+			for attr_name in dir(module):
+				attr = getattr(module, attr_name)
+				if isinstance(attr, type) and issubclass(attr, BaseInterceptorPlugin) and attr is not BaseInterceptorPlugin:
+					plugin_instance = attr()
+					if plugin_instance.is_enabled:
+						_PLUGINS.append(plugin_instance)
+						reloaded.append(plugin_instance.name)
+		except Exception as e:
+			tb = traceback.format_exc()
+			errors.append(f"{module_name}: {e}")
+			# Structured log — Sentinel greps for [HOT RELOAD][ERROR]
+			logger.error(f"[HOT RELOAD][ERROR] {module_name} failed:\n{tb}")
+
+	_PLUGINS.sort(key=lambda p: p.__module__)
+
+	# Rollback: if reload wiped everything, restore previous set
+	if not _PLUGINS and old_plugins:
+		_PLUGINS.extend(old_plugins)
+		logger.warning("[HOT RELOAD][ROLLBACK] All plugins failed to reload. Previous set restored.")
+
+	# ── Report ────────────────────────────────────────────────────────
+	if errors:
+		logger.warning(f"[HOT RELOAD][SUMMARY] {len(reloaded)} OK, {len(errors)} FAILED")
+	else:
+		logger.info(f"[HOT RELOAD][SUMMARY] {len(reloaded)} plugins reloaded cleanly.")
+
+	report = f"[HOT RELOAD] {len(reloaded)} plugins reloaded."
+	if errors:
+		report += f"\n⚠️  {len(errors)} ERRORS:\n" + "\n".join(f"  - {e}" for e in errors)
+		if not reloaded:
+			report += "\n🔄 ROLLBACK: previous plugins restored."
+	report += "\n\nPlugins active:\n" + "\n".join(f"  ✓ {name}" for name in reloaded)
+	return report
+
+
 async def _run_plugin_safe(plugin: BaseInterceptorPlugin, prompt: str) -> str:
 	try:
 		return await asyncio.wait_for(plugin.execute(prompt), timeout=plugin.timeout)
