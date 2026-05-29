@@ -2,9 +2,14 @@
 
 ### 🏭 Economía de Guerra — Samantha Queue & Local LLM Pipeline
 - **[FEAT] Samantha On-Demand (`samantha_on_demand.py`)**: Ephemeral local LLM manager. Detects active Hypervisor (port 8760), boots ephemeral `llama-server` on port 8790 if not available, executes task, cleans up. Zero VRAM residue when idle.
-- **[FEAT] Samantha Queue (`samantha_queue.py`)**: Batch LLM task processor with handler registry pattern. Uses `CognitiveQueueManager` with `source='samantha'` for task routing. Built-in handlers: `compact_session`, `classify`, `summarize`. Post-processing callbacks for automatic session rotation after compaction.
+- **[ARCH] SamanthaWorker Event-Driven Thread (`samantha_worker.py`)**: Replaces the blocking `drain_queue()` with a daemon thread that sleeps via `threading.Event.wait()` (0 CPU when idle). Worker signals it non-blockingly; the thread boots Samantha once per batch, drains all pending tasks, applies a configurable grace period (60s default) before shutdown to avoid boot-churn. Built-in handler registry: `compact_session`, `classify`, `summarize`.
+- **[FEAT] Worker Watchdog**: Worker monitors SamanthaWorker health via heartbeat (120s timeout). On hang: kills ephemeral `llama-server` process, marks task as FRUSTRATED, restarts the thread automatically.
 - **[REFACTOR] Telegram Compaction Pipeline**: Migrated `trigger_compaction()` in `telegram_session.py` from synchronous LLM invocation to asynchronous enqueue via Samantha Queue. Compaction is now a background task — zero Flash tokens consumed.
-- **[FEAT] Worker Samantha Integration**: Connected `drain_queue()` to the `worker.py` poll loop. Samantha tasks are drained in batch with a single LLM boot cycle per drain.
+- **[FEAT] Truncation Fallback**: When Telegram sessions exceed 20 steps and Samantha hasn't compacted yet, the worker truncates history to the last 12 steps with a `[Contexto anterior truncado]` header. Deterministic, zero-cost, prevents unbounded token growth.
+- **[FEAT] `CognitiveQueueManager.has_pending()`**: O(1) non-destructive check for pending tasks. Used by the worker to signal SamanthaWorker without popping or locking (~1ms per cycle).
+- **[FEAT] `CognitiveQueueManager.find_task_by_payload_key()`**: Lookup tasks by JSON payload key for exclusion checks (e.g. compaction deduplication).
+- **[TEST] SamanthaWorker Test Suite (32 tests)**: Covers queue operations, thread lifecycle, watchdog detection, handler registry, compaction callbacks, process task error handling, worker integration, and truncation fallback logic.
+- **[TEST] Telegram Compaction Test Adaptation**: Updated `test_trigger_compaction` to verify async enqueue path instead of deprecated synchronous LLM call.
 
 ### 🛡️ Sentinel Declarative Reconciliation
 - **[ARCH] `ServiceSentinelPlugin` Base Class (`service_base.py`)**: Kubernetes-style declarative reconciler for systemd services. Config-key-aware: `enabled+down→start`, `disabled+running→stop`, `enabled+running→audit_health()`. Hot-reload of config changes.

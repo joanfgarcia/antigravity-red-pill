@@ -1,6 +1,6 @@
-# Red Pill v7.1 — Economía de Guerra: Anatomía del Sistema
+# Red Pill v7.2 — Economía de Guerra: Anatomía del Sistema
 
-> **Versión**: v7.1.0 (Agentic Self-Assembly)
+> **Versión**: v7.2.0 (Agentic Self-Assembly)
 > **Fecha**: 2026-05-29
 > **Filosofía**: *Cada pieza tiene múltiples usos. No hay caprichos. Hay supervivencia.*
 
@@ -88,16 +88,17 @@ El worker es el **sistema nervioso central**. Un solo proceso con un poll loop d
 | `check_minion_inbox_auto_inject_agy()` | Auto-inyecta informes de minions | ☁️ Flash (gateado) |
 | `process_cognitive_queue_agy()` | Ejecuta tareas cognitivas | ☁️ Flash (gateado) |
 | `run_janitor_sweep()` | Limpia sesiones archivadas de disco | 🟢 Gratis |
-| `drain_queue()` | Drena cola de Samantha (compactación, clasificación) | 🏠 Local LLM |
+| `_signal_samantha_worker()` | Señaliza al SamanthaWorker si hay tareas pendientes (NON-BLOCKING, ~1ms) | 🟢 Gratis |
+| `_watchdog_samantha()` | Monitoriza salud del hilo SamanthaWorker (heartbeat 120s) | 🟢 Gratis |
 | `update_heartbeat()` | Actualiza pulso de salud del servicio | 🟢 Gratis |
 
-**Economía**: Un solo proceso, un solo poll loop. No hay daemon separado para cada función — el worker las combina todas en un ciclo de 2 segundos.
+**Economía**: Un solo proceso, un solo poll loop. El worker NUNCA se bloquea — señaliza al SamanthaWorker (un hilo daemon interno) y continúa su ciclo de 2 segundos. Cero CPU desperdiciado en esperas.
 
 ---
 
 ### 2.2 Samantha (Local LLM) — El Aparato Digestivo
 
-**Ubicación**: [samantha_on_demand.py](file:///home/joan/Documents/IA/sharing/src/red_pill/inference/samantha_on_demand.py) + [samantha_queue.py](file:///home/joan/Documents/IA/sharing/src/red_pill/inference/samantha_queue.py) + [hypervisor_daemon.py](file:///home/joan/Documents/IA/sharing/src/red_pill/inference/hypervisor_daemon.py)
+**Ubicación**: [samantha_on_demand.py](file:///home/joan/Documents/IA/sharing/src/red_pill/inference/samantha_on_demand.py) + [samantha_worker.py](file:///home/joan/Documents/IA/sharing/src/red_pill/inference/samantha_worker.py) + [hypervisor_daemon.py](file:///home/joan/Documents/IA/sharing/src/red_pill/inference/hypervisor_daemon.py)
 
 Samantha es el modelo local (7B GGUF) que **digiere** tareas mecánicas sin consumir tokens cloud:
 
@@ -109,45 +110,72 @@ Samantha es el modelo local (7B GGUF) que **digiere** tareas mecánicas sin cons
 | Resumen de conversaciones | ☁️ Flash | 🏠 Samantha (gratis) |
 | Spark dinámico (DriveEvaluator) | 🏠 Samantha | 🏠 Samantha |
 
-#### Lifecycle On-Demand
+#### Lifecycle Event-Driven (v7.2)
 
 ```mermaid
 sequenceDiagram
     participant W as Worker (poll 2s)
     participant Q as CognitiveQueue (SQLite)
+    participant SW as SamanthaWorker (thread)
     participant S as Samantha on-demand
     participant L as llama-server
 
     Note over W: Cada 2 segundos
-    W->>Q: pop_next_task(source='samantha')
+    W->>Q: has_pending(source='samantha')?
     
     alt Cola vacía
-        Q-->>W: None
-        Note over W: Skip (0 CPU)
+        Q-->>W: False
+        Note over W: Skip (~1ms)
     else Hay tareas
-        Q-->>W: Task 1
-        W->>S: drain_queue()
-        
-        alt Hypervisor activo (8760)
-            S->>L: Usar puerto 8760
-        else Hypervisor offline
-            S->>L: Boot efímero (8790)
-            Note over L: Arranque ~3-5s
+        Q-->>W: True
+        W->>SW: wake() [NON-BLOCKING]
+        Note over W: Worker continúa su ciclo
+    end
+
+    Note over SW: Thread se despierta
+    SW->>S: _boot_samantha()
+    
+    alt Hypervisor activo (8760)
+        S-->>SW: port=8760
+    else Hypervisor offline
+        S->>L: Boot efímero (8790)
+        S-->>SW: port=8790
+    end
+    
+    loop Drain ALL tasks
+        SW->>Q: pop_next_task(source='samantha')
+        Q-->>SW: Task
+        SW->>L: prompt(task.payload)
+        L-->>SW: respuesta
+        SW->>SW: _run_callback(action, result)
+        SW->>Q: mark_completed(task)
+        SW->>SW: _health_ts = now() [watchdog reset]
+    end
+    
+    alt Efímero
+        Note over SW: Grace period (60s)
+        SW->>SW: Event.wait(timeout=60)
+        alt Más trabajo durante grace
+            SW->>SW: Drain again (sin re-boot)
+        else Timeout — sin trabajo
+            SW->>L: SIGTERM (shutdown)
         end
-        
-        loop Todas las tareas
-            S->>L: prompt(task.payload)
-            L-->>S: respuesta
-            S->>Q: mark_completed(task)
-        end
-        
-        alt Efímero
-            S->>L: SIGTERM (shutdown)
-        end
+    end
+    
+    Note over SW: Event.wait() → SLEEP (0 CPU)
+    
+    Note over W: Watchdog cada ciclo
+    W->>SW: is_healthy()?
+    alt Healthy
+        Note over W: OK
+    else Hung (>120s sin heartbeat)
+        W->>SW: force_kill_ephemeral()
+        W->>Q: mark_failed(current_task)
+        W->>SW: restart thread
     end
 ```
 
-**Economía**: Un solo boot de Samantha para N tareas. Si el Hypervisor ya está corriendo (porque otro proceso lo necesita), no arrancamos nada. Si no está, arrancamos, procesamos todo el batch, y apagamos. **Zero residuo en RAM/VRAM cuando no hay trabajo.**
+**Economía**: Un solo boot de Samantha para N tareas. El worker NUNCA espera — señaliza y sigue. El SamanthaWorker duerme con 0 CPU via `Event.wait()`. Grace period de 60s antes de apagar para evitar boot-churn si llegan más tareas. **Zero residuo en RAM/VRAM cuando no hay trabajo.**
 
 ---
 
@@ -279,12 +307,18 @@ sequenceDiagram
     participant I as Inbox (SQLite)
     participant W as Worker
     participant F as Flash (Cloud)
-    participant Q as SamanthaQueue
+    participant Q as SamanthaQueue (SQLite)
+    participant SW as SamanthaWorker (thread)
     participant S as Samantha (Local)
 
     U->>I: Mensaje
     W->>I: poll (2s)
     I-->>W: Mensaje PENDING
+
+    Note over W: Truncation check (>20 steps)
+    alt Historia > 20 steps
+        Note over W: Truncar a 12 + header
+    end
 
     W->>F: _process_via_bridge() + identity(medium)
     F-->>W: Respuesta
@@ -292,23 +326,26 @@ sequenceDiagram
     W->>W: trigger_compaction()?
     
     alt Historia > 4000 chars o > 16 steps
-        W->>Q: enqueue("compact_session")
-        Note over Q: Tarea esperando
+        W->>Q: enqueue("compact_session", priority=7)
+        Note over Q: Tarea encolada
     end
 
-    Note over W: Siguiente ciclo (2s)
-    W->>Q: drain_queue()
-    Q-->>W: Task: compact_session
+    Note over W: Worker continúa (NO espera)
+    W->>Q: has_pending(source='samantha')?
+    Q-->>W: True
+    W->>SW: wake() [~0ms, non-blocking]
+
+    Note over SW: Thread despierta (asíncrono)
+    SW->>S: Boot Samantha (on-demand)
+    SW->>Q: pop_next_task(source='samantha')
+    Q-->>SW: Task: compact_session
+    SW->>S: prompt("resume esta sesión...")
+    S-->>SW: Resumen compactado
+    SW->>SW: _run_callback: crear nueva sesión
+    SW->>Q: mark_completed(task)
     
-    alt Hypervisor UP
-        W->>S: Usar Hypervisor (8760)
-    else Hypervisor DOWN
-        W->>S: Boot efímero → prompt → shutdown
-    end
-    
-    S-->>W: Resumen
-    W->>W: callback: crear nueva sesión
-    W->>I: Sesión rotada
+    Note over SW: Grace period (60s)
+    Note over SW: No más trabajo → shutdown Samantha
 ```
 
 ### 3.2 AWAKENING Autónomo (Flash only)
