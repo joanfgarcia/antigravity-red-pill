@@ -4,7 +4,9 @@
 - **[ARCH] `SovereignDaemon` (`daemon/sovereign.py`)**: Consolidated 3 daemon services (2 already disabled) + 1 redundant timer into a single plugin-based control plane. Auto-discovers `DaemonPlugin` subclasses from `daemon/plugins/`. Each plugin has a hard `timeout_s` — if exceeded, pain signal is injected and the daemon continues. systemd Type=notify integration (READY=1, WATCHDOG=1).
 - **[FEAT] `DaemonPlugin` ABC (`daemon/plugin.py`)**: Abstract base class for monitor plugins. Properties: `name`, `interval_s`, `timeout_s`, `enabled`. Contract: `tick()` is monitor-only — read state, check health, dispatch signals. Never execute.
 - **[FEAT] 5 Monitor Plugins**: `TelemetryPlugin` (30s, GPU/inbox/LED), `EchoPlugin` (60s, context mirror), `VitalsPlugin` (120s, Qdrant/CUDA/fever), `SwarmMonitorPlugin` (300s, Neon-Link/hygiene), `TimerWatchdogPlugin` (60s, systemd timer health).
-- **[DEPRECATE] `LazarusPulse` (`heartbeat.py`)**: Marked `@deprecated` — its rituals are already called by timer one-shots via `trigger_pulse.py`. Will be removed in v7.3.
+- **[DELETE] `LazarusPulse` (`heartbeat.py`)**: 714 lines deleted. Rituals extracted to `rituals.py` as stateless async functions. `trigger_pulse.py` migrated. `test_heartbeat.py` removed.
+- **[NEW] `rituals.py`**: Stateless async ritual functions (maintenance, swarm, lazarus, resonance, hygiene, usp, dream, consolidation, thread, auto_heal). No class, no state — pure functions with explicit dependencies.
+- **[DOCS] Single-Tenant Axiom**: Declared in ARCHITECTURE.md and WAR_ECONOMY.md (bilingual). "One operator, one machine, one agent" — foundational constraint, not an omission.
 - **[DOCS] WAR_ECONOMY.md Section 8**: Sovereign Daemon architecture documented (bilingual). Saint-Exupéry epigraph as design philosophy.
 
 ### 🏭 Economía de Guerra — Samantha Queue & Local LLM Pipeline
