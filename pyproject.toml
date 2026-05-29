@@ -198,6 +198,11 @@ omit = [
     "*/core/metabolism.py",      # Async metabolism daemon (running process needed)
     "*/core/providers.py",       # BitNet/GPU inference provider (requires hardware)
     "*/core/inbox.py",           # MCP daemon inbox (requires MCP server running)
+    "*/rituals.py",              # Timer-triggered rituals (requires live Qdrant + async)
+    "*/daemon/sovereign.py",     # Sovereign Daemon main loop (requires systemd)
+    "*/daemon/plugin.py",        # DaemonPlugin ABC (tested via sovereign.py)
+    "*/daemon/plugins/*.py",     # Daemon plugins (require live telemetry/Qdrant)
+    "*/swarm/executor.py",       # AGY Bridge executor (requires live IDE session)
     "*/swarm/mls_manager.py",    # Requires live MLS group negotiation
 
     # --- WIP / Experimental / Untested ---
