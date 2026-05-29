@@ -35,9 +35,21 @@ To maintain the **Sound of Silence**, the system favors ephemeral one-shots over
 | Obsolete Term | Canonical Term |
 | :--- | :--- |
 | `bunker_daemon.py` | `bunker_telemetry.py` → now `TelemetryPlugin` in `daemon/plugins/` |
-| `LazarusPulse` (heartbeat.py) | `SovereignDaemon` (daemon/sovereign.py) — `@deprecated` v7.2.1 |
+| `LazarusPulse` (heartbeat.py) | **DELETED v7.2.1** — rituals extracted to `rituals.py` |
 | Heavy blocking daemon | Timer-triggered one-shot (`redpill-*.timer`) |
 | `red-pill daemon` | ✅ Valid — starts the Sovereign Daemon (plugin-based, monitor-only) |
+
+## 3.1 Path Sovereignty
+
+> [!CAUTION]
+> **All filesystem paths to external tools (Antigravity IDE, Cursor, etc.) MUST resolve through `core/paths.py` functions.** Hardcoded paths like `Path.home() / ".gemini" / "antigravity"` are FORBIDDEN outside of `core/paths.py` and `config.py`. This is enforced by `test_path_sovereignty.py`.
+
+| Path | Function |
+| :--- | :--- |
+| `~/.gemini/antigravity/` | `get_antigravity_root()` |
+| `~/.gemini/antigravity/brain/` | `get_antigravity_brain_dir()` |
+| `~/.gemini/antigravity/rules/` | `get_antigravity_rules_dir()` |
+| `~/.gemini/antigravity/conversations/` | `get_antigravity_conversations_dir()` |
 
 ## 4. Manual Health Verification
 ```bash

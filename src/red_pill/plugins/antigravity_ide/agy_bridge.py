@@ -28,20 +28,22 @@ from red_pill.core.paths import get_bunker_root
 
 from .bridge import BackendType, BridgeCapabilities, ConversationResult, IDEBridge
 
-logger = logging.getLogger(__name__)
 
-# Brain directories where agy stores conversations
-AGY_BRAIN_DIRS = [
-	Path.home() / ".gemini" / "antigravity-cli" / "brain",
-	Path.home() / ".gemini" / "antigravity" / "brain",
-]
+logger = logging.getLogger(__name__)
 
 
 def _get_brain_dir() -> Optional[Path]:
 	"""Find the active agy brain directory."""
-	for d in AGY_BRAIN_DIRS:
-		if d.is_dir():
-			return d
+	from red_pill.core.paths import get_antigravity_brain_dir
+
+	# Primary: canonical path from paths.py
+	canonical = get_antigravity_brain_dir()
+	if canonical.is_dir():
+		return canonical
+	# Legacy fallback: antigravity-cli
+	legacy = Path.home() / ".gemini" / "antigravity-cli" / "brain"
+	if legacy.is_dir():
+		return legacy
 	return None
 
 

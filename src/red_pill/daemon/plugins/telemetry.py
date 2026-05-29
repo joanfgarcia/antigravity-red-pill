@@ -183,7 +183,9 @@ You are actively receiving this telemetry via IDE rule injection (`00_bunker_tel
 """
 
 		# 1. Antigravity rules
-		ag_dir = Path.home() / ".gemini" / "antigravity" / "rules"
+		from red_pill.core.paths import get_antigravity_rules_dir
+
+		ag_dir = get_antigravity_rules_dir()
 		ag_dir.mkdir(parents=True, exist_ok=True)
 		self._atomic_write(ag_dir / "00_bunker_telemetry.md", md)
 

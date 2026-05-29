@@ -222,18 +222,36 @@ def get_ingestion_dir() -> Path:
 	return path
 
 
-def get_antigravity_brain_dir() -> Path:
+def get_antigravity_root() -> Path:
 	"""
-	Resuelve el directorio de conversaciones del IDE Antigravity.
+	Resuelve el directorio raíz del IDE Antigravity.
 
 	Orden de precedencia:
-	  1. $ANTIGRAVITY_BRAIN_PATH (explícita override)
-	  2. ~/.gemini/antigravity/brain (convención estándar de Antigravity)
+	  1. $ANTIGRAVITY_ROOT (explícita override)
+	  2. ~/.gemini/antigravity (convención estándar)
 	"""
+	override = os.getenv("ANTIGRAVITY_ROOT")
+	if override:
+		return Path(override)
+	return Path.home() / ".gemini" / "antigravity"
+
+
+def get_antigravity_brain_dir() -> Path:
+	"""Resuelve el directorio de conversaciones del IDE Antigravity (brain/)."""
 	override = os.getenv("ANTIGRAVITY_BRAIN_PATH")
 	if override:
 		return Path(override)
-	return Path.home() / ".gemini" / "antigravity" / "brain"
+	return get_antigravity_root() / "brain"
+
+
+def get_antigravity_rules_dir() -> Path:
+	"""Resuelve el directorio de rules del IDE Antigravity (rules/)."""
+	return get_antigravity_root() / "rules"
+
+
+def get_antigravity_conversations_dir() -> Path:
+	"""Resuelve el directorio legacy de conversaciones CLI (conversations/)."""
+	return get_antigravity_root() / "conversations"
 
 
 def get_swarm_config_path() -> Path:

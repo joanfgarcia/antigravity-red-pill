@@ -41,6 +41,8 @@ from red_pill.utils.antigravity_history.formatters import (
 )
 from red_pill.utils.antigravity_history.parser import FieldLevel, parse_steps
 
+from red_pill.core.paths import get_antigravity_conversations_dir
+
 app = typer.Typer(
 	name="aghistory",
 	help="Export and recover your Antigravity conversations.",
@@ -134,7 +136,7 @@ def export(
 	default_ep = endpoints[0]
 
 	# Scan .pb files to find unindexed conversations
-	conv_dir = os.path.expanduser("~/.gemini/antigravity/conversations")
+	conv_dir = str(get_antigravity_conversations_dir())
 	if os.path.isdir(conv_dir):
 		pb_files = [f for f in os.listdir(conv_dir) if f.endswith(".pb")]
 		unindexed_count = 0
@@ -384,7 +386,7 @@ def recover(
 	conv_dir: str = typer.Option(
 		None,
 		"--conv-dir",
-		help="Conversations directory path (default: ~/.gemini/antigravity/conversations)",
+		help="Conversations directory path (default: get_antigravity_conversations_dir())",
 	),
 	dry_run: bool = typer.Option(False, "--dry-run", help="Detect only, do not recover"),
 	port: Optional[int] = typer.Option(None, "--port", help="Manually specify port"),
@@ -392,7 +394,7 @@ def recover(
 ):
 	"""Recover lost conversations (scan .pb files and reload via API)."""
 	if conv_dir is None:
-		conv_dir = os.path.expanduser("~/.gemini/antigravity/conversations")
+		conv_dir = str(get_antigravity_conversations_dir())
 
 	if not os.path.isdir(conv_dir):
 		err_console.print(f"[red]Directory not found: {conv_dir}[/red]")

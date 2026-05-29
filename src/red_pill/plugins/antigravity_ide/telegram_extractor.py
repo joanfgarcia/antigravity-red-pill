@@ -13,11 +13,15 @@ class TelegramResponseExtractor:
 	"""
 
 	def __init__(self, brain_dir: Optional[Path] = None):
-		self.brain_dirs = [
-			Path.home() / ".gemini" / "antigravity-cli" / "brain",
-			Path.home() / ".gemini" / "antigravity" / "brain",
-		]
-		if brain_dir:
+		from red_pill.core.paths import get_antigravity_brain_dir
+
+		canonical = get_antigravity_brain_dir()
+		self.brain_dirs = [canonical]
+		# Legacy fallback
+		legacy = Path.home() / ".gemini" / "antigravity-cli" / "brain"
+		if legacy != canonical:
+			self.brain_dirs.append(legacy)
+		if brain_dir and brain_dir not in self.brain_dirs:
 			self.brain_dirs.insert(0, brain_dir)
 
 	def get_latest_response(self, cascade_id: str) -> Optional[str]:
