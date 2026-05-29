@@ -80,6 +80,41 @@ class CognitiveQueueManager:
 		logger.debug(f"[QUEUE] Task {task_id} injected (Priority {priority}, Status {initial_status}). Source: {source}")
 		return task_id
 
+	def has_pending(self, source: Optional[str] = None) -> bool:
+		"""O(1) non-destructive check for pending tasks. Does NOT pop or lock."""
+		with self._get_connection() as conn:
+			if source:
+				row = conn.execute(
+					"SELECT 1 FROM cognitive_tasks WHERE status = 'PENDING' AND source = ? LIMIT 1",
+					(source,),
+				).fetchone()
+			else:
+				row = conn.execute(
+					"SELECT 1 FROM cognitive_tasks WHERE status = 'PENDING' LIMIT 1"
+				).fetchone()
+			return row is not None
+
+	def find_task_by_payload_key(self, source: str, key: str, value: str) -> Optional[Dict[str, Any]]:
+		"""Find a task by a key in its JSON payload. Used for exclusion checks (e.g. compaction dedup)."""
+		with self._get_connection() as conn:
+			cursor = conn.execute(
+				"""
+				SELECT id, source, status, payload
+				FROM cognitive_tasks
+				WHERE source = ? AND status IN ('PENDING', 'PROCESSING')
+				ORDER BY created_at DESC LIMIT 10
+				""",
+				(source,),
+			)
+			for row in cursor:
+				try:
+					payload = json.loads(row["payload"])
+					if payload.get(key) == value:
+						return {"id": row["id"], "source": row["source"], "status": row["status"], "payload": payload}
+				except (json.JSONDecodeError, KeyError):
+					continue
+		return None
+
 	def pop_next_task(self, allowed_sources: Optional[List[str]] = None, exclude_sources: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
 		"""
 		Extrae la tarea de mayor prioridad, filtrando por origen si se especifica.

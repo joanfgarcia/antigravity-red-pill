@@ -69,6 +69,7 @@ class IDEWorker:
 		self.running = True
 		self._bridge: IDEBridge | None = None
 		self._caps: BridgeCapabilities = BridgeCapabilities(backend=BackendType.GRPC)
+		self._samantha_worker = None
 		# IDEBridge: create execution bridge based on config
 		try:
 			self._bridge = create_bridge()
@@ -76,6 +77,15 @@ class IDEWorker:
 			logger.info(f"[IDEWorker] Bridge: {self._caps.backend.value.upper()} (auto_approve={self._caps.auto_approve})")
 		except Exception as e:
 			logger.warning(f"[IDEWorker] Bridge creation failed, falling back to gRPC-only: {e}")
+		# SamanthaWorker: background thread for local LLM tasks (non-blocking)
+		try:
+			from red_pill.inference.samantha_worker import SamanthaWorker
+
+			self._samantha_worker = SamanthaWorker()
+			self._samantha_worker.start()
+			logger.info("[IDEWorker] SamanthaWorker thread started")
+		except Exception as e:
+			logger.warning(f"[IDEWorker] SamanthaWorker init failed (local LLM tasks disabled): {e}")
 
 	def run(self):
 		logger.info("Red-Pill AntigravityIDEPlugin Worker started.")
@@ -113,16 +123,10 @@ class IDEWorker:
 					logger.info(f"[Janitor] Sweep complete. Purged {purged} archived conversations.")
 			except Exception as e:
 				logger.error(f"Janitor sweep failed: {e}")
-			# Samantha Queue: drain pending local LLM tasks (compaction, classification, etc.)
-			# Single Samantha boot per drain cycle — no Flash tokens consumed.
-			try:
-				from red_pill.inference.samantha_queue import drain_queue
-
-				processed = drain_queue()
-				if processed > 0:
-					logger.info(f"[SamanthaQueue] Drained {processed} tasks in this cycle.")
-			except Exception as e:
-				logger.error(f"Samantha queue drain failed: {e}")
+			# Samantha Queue: signal worker if there are pending tasks (NON-BLOCKING)
+			self._signal_samantha_worker()
+		# Watchdog: verify SamanthaWorker thread health
+		self._watchdog_samantha()
 		self.update_heartbeat()
 
 	def update_heartbeat(self):
@@ -130,6 +134,62 @@ class IDEWorker:
 		conn.execute("UPDATE system_health SET last_heartbeat = CURRENT_TIMESTAMP WHERE service_name = 'red_pill'")
 		conn.commit()
 		conn.close()
+
+	def _signal_samantha_worker(self):
+		"""NON-BLOCKING: check if there are pending Samantha tasks and signal the worker thread."""
+		if not self._samantha_worker:
+			return
+		try:
+			from red_pill.cognitive.queue_manager import CognitiveQueueManager
+			from red_pill.inference.samantha_worker import SAMANTHA_SOURCE
+
+			qm = CognitiveQueueManager()
+			if qm.has_pending(source=SAMANTHA_SOURCE):
+				self._samantha_worker.wake()
+		except Exception as e:
+			logger.error(f"[IDEWorker] Samantha signal failed: {e}")
+
+	def _watchdog_samantha(self):
+		"""Monitor SamanthaWorker thread health. Restart if stuck or dead."""
+		if not self._samantha_worker:
+			return
+		try:
+			if not self._samantha_worker.is_alive():
+				logger.error("[Watchdog] SamanthaWorker thread died — restarting")
+				self._restart_samantha_worker()
+			elif not self._samantha_worker.is_healthy():
+				logger.error(
+					f"[Watchdog] SamanthaWorker hung (task: {self._samantha_worker._current_task_id}) — killing"
+				)
+				# Kill ephemeral process if running
+				self._samantha_worker.force_kill_ephemeral()
+				# Mark current task as frustrated
+				if self._samantha_worker._current_task_id:
+					try:
+						from red_pill.cognitive.queue_manager import CognitiveQueueManager
+
+						qm = CognitiveQueueManager()
+						qm.mark_failed(self._samantha_worker._current_task_id, "Watchdog timeout")
+					except Exception:
+						pass
+				# Restart the thread
+				self._restart_samantha_worker()
+		except Exception as e:
+			logger.error(f"[Watchdog] Samantha check failed: {e}")
+
+	def _restart_samantha_worker(self):
+		"""Restart the SamanthaWorker thread."""
+		try:
+			if self._samantha_worker:
+				self._samantha_worker.stop()
+			from red_pill.inference.samantha_worker import SamanthaWorker
+
+			self._samantha_worker = SamanthaWorker()
+			self._samantha_worker.start()
+			logger.info("[Watchdog] SamanthaWorker restarted")
+		except Exception as e:
+			logger.error(f"[Watchdog] SamanthaWorker restart failed: {e}")
+			self._samantha_worker = None
 
 	def get_trajectory_data(self, cascade_id):
 		resp = requests.post(self.client._url("GetAllCascadeTrajectories"), headers=self.client._get_headers(), json={}, verify=False)
@@ -500,7 +560,19 @@ class IDEWorker:
 		session = tsm.get_session(session_id)
 		all_steps = session.get("steps", []) if session else []
 		history_steps = all_steps[:-1] if all_steps else []
-		history_lines = []
+
+		# Truncation fallback: if compaction is pending but not done,
+		# keep only the last 12 steps to prevent unbounded token growth.
+		TRUNCATION_THRESHOLD = 20  # Slightly above compaction threshold (16)
+		TRUNCATION_KEEP = 12
+		if len(history_steps) > TRUNCATION_THRESHOLD:
+			truncated_count = len(history_steps) - TRUNCATION_KEEP
+			history_steps = history_steps[-TRUNCATION_KEEP:]
+			logger.info(f"[Telegram] Truncated history: dropped {truncated_count} steps (compaction pending)")
+			history_lines = [f"[Contexto anterior truncado: {truncated_count} mensajes omitidos. Compactación pendiente vía Samantha.]"]
+		else:
+			history_lines = []
+
 		for step in history_steps:
 			role = step.get("intent", "USER")
 			txt = step.get("message", {}).get("text", "")

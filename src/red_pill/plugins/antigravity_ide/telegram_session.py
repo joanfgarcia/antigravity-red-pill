@@ -164,7 +164,7 @@ class TelegramSessionManager:
 		# 2. Enqueue summarization to the Samantha Queue
 		history_text = self.get_history_prompt(session)
 		try:
-			from red_pill.inference.samantha_queue import enqueue
+			from red_pill.inference.samantha_worker import enqueue
 
 			enqueue(
 				action="compact_session",
