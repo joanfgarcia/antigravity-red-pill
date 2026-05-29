@@ -222,6 +222,20 @@ def get_ingestion_dir() -> Path:
 	return path
 
 
+def get_antigravity_brain_dir() -> Path:
+	"""
+	Resuelve el directorio de conversaciones del IDE Antigravity.
+
+	Orden de precedencia:
+	  1. $ANTIGRAVITY_BRAIN_PATH (explícita override)
+	  2. ~/.gemini/antigravity/brain (convención estándar de Antigravity)
+	"""
+	override = os.getenv("ANTIGRAVITY_BRAIN_PATH")
+	if override:
+		return Path(override)
+	return Path.home() / ".gemini" / "antigravity" / "brain"
+
+
 def get_swarm_config_path() -> Path:
 	"""Resuelve la ruta del archivo de comunidades swarm ($XDG_CONFIG_HOME/red-pill/swarm_communities.json)."""
 	return get_config_dir() / "swarm_communities.json"

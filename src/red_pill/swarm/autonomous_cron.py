@@ -3,11 +3,14 @@ import json
 import os
 import sqlite3
 import time
+from pathlib import Path
+
 
 from dotenv import load_dotenv
 
 from red_pill.core.paths import (
 	get_aleth_core_root,
+	get_antigravity_brain_dir,
 	get_config_dir,
 	get_neon_link_config_dir,
 	get_neon_link_db_path,
@@ -17,18 +20,41 @@ from red_pill.core.paths import (
 
 def is_ide_idle(idle_seconds=3600):
 	"""
-	Heurística de inactividad: Comprueba cuándo fue la última vez que el usuario
-	interactuó con el sistema comprobando la fecha de modificación de last_user_activity.txt.
-	"""
-	state_file = get_state_dir() / "last_user_activity.txt"
-	if not state_file.exists():
-		return True
+	Heurística de inactividad multi-señal.
 
-	try:
-		mtime = state_file.stat().st_mtime
-		return (time.time() - mtime) > idle_seconds
-	except Exception:
-		return True
+	Señales (OR — cualquiera activa = operador presente):
+	  1. last_user_activity.txt (MCP interceptor / Telegram worker)
+	  2. Antigravity IDE transcript.jsonl files (direct IDE sessions)
+
+	Returns True ONLY if ALL signals indicate idle > idle_seconds.
+	"""
+	now = time.time()
+
+	# Signal 1: MCP interceptor / Telegram worker touch file
+	state_file = get_state_dir() / "last_user_activity.txt"
+	if state_file.exists():
+		try:
+			if (now - state_file.stat().st_mtime) <= idle_seconds:
+				return False
+		except Exception:
+			pass
+
+	# Signal 2: Antigravity IDE active conversations
+	# Transcripts are written in real-time during IDE sessions.
+	antigravity_brain = get_antigravity_brain_dir()
+	if antigravity_brain.is_dir():
+		try:
+			for transcript in antigravity_brain.rglob("transcript.jsonl"):
+				try:
+					if (now - transcript.stat().st_mtime) <= idle_seconds:
+						return False
+				except Exception:
+					continue
+		except Exception:
+			pass
+
+	# All signals indicate idle
+	return True
 
 
 def main():
