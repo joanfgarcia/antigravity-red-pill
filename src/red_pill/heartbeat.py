@@ -16,6 +16,12 @@ class LazarusPulse:
 	"""
 	The Heartbeat of the Sovereign Agent.
 	Runs autonomous rituals to maintain Bünker health and ontological integrity.
+
+	.. deprecated:: 7.2.0
+		LazarusPulse is superseded by :class:`red_pill.daemon.sovereign.SovereignDaemon`
+		with plugin-based architecture. Its rituals are now called by timer one-shots
+		(redpill-wake.timer, redpill-sleep.timer) via trigger_pulse.py.
+		This class is kept for backward compatibility and will be removed in v7.3.
 	"""
 
 	def __init__(self, memory_mgr: MemoryManager, soul_mgr: SoulManager) -> None:

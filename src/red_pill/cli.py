@@ -316,36 +316,24 @@ def handle_p2p(args: argparse.Namespace) -> None:
 
 def handle_daemon() -> None:
 	"""
-	Lazarus Daemon: starts the LazarusPulse heartbeat and blocks forever.
+	Sovereign Daemon: single-process plugin-based control plane.
+	Auto-discovers monitor plugins from red_pill.daemon.plugins/ and
+	supervises them with hard timeouts. Never executes heavy work.
+
 	This is the entry point called by the systemd service (redpill.service).
-	The pulse runs all rituals (maintenance, sleep/consolidation, swarm, etc.)
-	every PULSE_INTERVAL seconds (default: 3600).
 	"""
-	import signal
-	import threading
+	import argparse as _ap
 
-	from red_pill.heartbeat import LazarusPulse
+	# Re-parse for daemon-specific flags (--oneshot)
+	parser = _ap.ArgumentParser(description="Sovereign Daemon")
+	parser.add_argument("--oneshot", action="store_true", help="Tick all plugins once and exit")
+	# Only parse known args to avoid conflicts with the main CLI parser
+	daemon_args, _ = parser.parse_known_args(sys.argv[2:])
 
-	mem_mgr = MemoryManager()
-	soul_mgr = SoulManager()
-	pulse = LazarusPulse(mem_mgr, soul_mgr)
+	from red_pill.daemon.sovereign import SovereignDaemon
 
-	stop_event = threading.Event()
-
-	def _shutdown(signum, frame):
-		print("\n[DAEMON] Signal received. Initiating graceful shutdown...")
-		pulse.stop()
-		stop_event.set()
-
-	signal.signal(signal.SIGTERM, _shutdown)
-	signal.signal(signal.SIGINT, _shutdown)
-
-	print(f"[DAEMON] Lazarus Pulse started. Interval: {cfg.PULSE_INTERVAL}s. PID: {os.getpid()}")
-	pulse.start()
-
-	# Block main thread until signal
-	stop_event.wait()
-	print("[DAEMON] Flatline. Goodbye.")
+	daemon = SovereignDaemon()
+	daemon.run(oneshot=daemon_args.oneshot)
 
 
 def get_collection(type_str: str) -> str:
