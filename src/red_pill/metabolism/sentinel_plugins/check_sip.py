@@ -16,7 +16,6 @@ from red_pill.metabolism.sentinel_plugins.service_base import ServiceSentinelPlu
 HEALTH_TIMEOUT_S = 3
 INFERENCE_TEST_TIMEOUT_S = 5
 CPU_STUCK_THRESHOLD = 200.0
-MODEL_LOAD_GRACE_S = 180  # 3 minutes grace for model loading after boot
 
 
 class SipCheck(ServiceSentinelPlugin):
@@ -55,13 +54,18 @@ class SipCheck(ServiceSentinelPlugin):
 				health_ok = True
 		except urllib.error.HTTPError as he:
 			# Server responds but not healthy (e.g. 503 "Loading model")
-			# Grace period: model loading is normal during first ~3 min after boot
+			# Grace period: derives from model_profiles.yaml load_time_s (worst-case × 1.5 safety)
+			try:
+				from red_pill.core.model_registry import ModelRegistry
+				grace_s = int(ModelRegistry.get_max_load_time_s(backend="cuda") * 1.5)
+			except Exception:
+				grace_s = 180  # Fallback if registry unavailable
 			uptime_s = self._get_service_uptime()
-			if uptime_s is not None and uptime_s < MODEL_LOAD_GRACE_S:
+			if uptime_s is not None and uptime_s < grace_s:
 				import logging
 				logging.getLogger(__name__).info(
 					f"[{self.name}] HTTP {he.code} on port {port} — "
-					f"within grace period ({uptime_s:.0f}s / {MODEL_LOAD_GRACE_S}s). Letting it load."
+					f"within grace period ({uptime_s:.0f}s / {grace_s}s). Letting it load."
 				)
 			else:
 				uptime_str = f"{uptime_s:.0f}s" if uptime_s is not None else "unknown"
@@ -71,9 +75,9 @@ class SipCheck(ServiceSentinelPlugin):
 						severity=6.0,
 						message=(
 							f"{self.name}: /health returned HTTP {he.code} on port {port} "
-							f"(stuck loading, uptime: {uptime_str} > {MODEL_LOAD_GRACE_S}s grace)."
+							f"(stuck loading, uptime: {uptime_str} > {grace_s}s grace)."
 						),
-						metadata={"service": self.service_unit, "port": port, "http_code": he.code, "uptime_s": uptime_s},
+						metadata={"service": self.service_unit, "port": port, "http_code": he.code, "uptime_s": uptime_s, "grace_s": grace_s},
 					)
 				)
 		except Exception as e:

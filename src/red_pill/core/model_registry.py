@@ -109,3 +109,33 @@ class ModelRegistry:
 					resolved[k] = v
 
 		return resolved
+
+	@classmethod
+	def get_max_load_time_s(cls, backend: str = "default") -> int:
+		"""Returns the maximum expected load time across all profiles for a given backend.
+
+		Used by the Sentinel to set a model-aware grace period instead of a
+		hardcoded constant. Scans all profiles' hardware_affinity.load_time_s
+		and returns the worst-case value for the specified backend.
+
+		Falls back to 'default' key if the requested backend is not found
+		in a profile, then to MODEL_LOAD_GRACE_FALLBACK_S (180s).
+		"""
+		MODEL_LOAD_GRACE_FALLBACK_S = 180
+
+		if cls._profiles_cache is None:
+			cls._load_profiles()
+		if not cls._profiles_cache:
+			return MODEL_LOAD_GRACE_FALLBACK_S
+
+		max_time = 0
+		for _name, profile in cls._profiles_cache.items():
+			hw = profile.get("hardware_affinity", {})
+			load_times = hw.get("load_time_s", {})
+			if not load_times:
+				continue
+			t = load_times.get(backend, load_times.get("default", 0))
+			if t > max_time:
+				max_time = t
+
+		return max_time if max_time > 0 else MODEL_LOAD_GRACE_FALLBACK_S
