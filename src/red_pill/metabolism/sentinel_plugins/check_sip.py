@@ -52,6 +52,16 @@ class SipCheck(ServiceSentinelPlugin):
 			resp = urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=HEALTH_TIMEOUT_S)
 			if resp.status == 200:
 				health_ok = True
+		except urllib.error.HTTPError as he:
+			# Server responds but not healthy (e.g. 503 "Loading model")
+			findings.append(
+				AuditFinding(
+					type="sip_loading",
+					severity=6.0,
+					message=f"{self.name}: /health returned HTTP {he.code} on port {port} (server up but not ready).",
+					metadata={"service": self.service_unit, "port": port, "http_code": he.code},
+				)
+			)
 		except Exception as e:
 			findings.append(
 				AuditFinding(
@@ -76,6 +86,18 @@ class SipCheck(ServiceSentinelPlugin):
 				)
 
 		return findings
+
+	def heal_specific(self, cfg: Any, finding: AuditFinding) -> bool:
+		"""Restart the LLM service and evaporate any stale pain signals."""
+		healed = self._restart_service()
+		if healed:
+			try:
+				from red_pill.memory import MemoryManager
+				mm = MemoryManager()
+				mm.evaporate_signals("hypervisor_unreachable")
+			except Exception:
+				pass
+		return healed
 
 	# ── Specific helpers ──
 

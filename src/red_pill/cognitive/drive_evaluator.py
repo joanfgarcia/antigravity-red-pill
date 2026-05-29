@@ -195,6 +195,61 @@ class DriveEvaluator:
 
 	def _generate_dynamic_spark(self) -> Optional[Dict[str, Any]]:
 		"""Consulta al LLM local para sugerir una tarea proactiva en base al contexto."""
+		import os
+		import urllib.request
+
+		# ── Pre-flight: is the local LLM expected to be available? ──
+		sip_enabled = getattr(self.config, "SIP_ENABLED", None)
+		if sip_enabled is None:
+			sip_enabled = os.getenv("SIP_ENABLED", "true").lower() in ("true", "1", "yes")
+
+		url = self.config.MLX_LM_URL
+		base_url = url.rsplit("/v1/", 1)[0] if "/v1/" in url else url.rsplit("/", 1)[0]
+
+		llm_ready = False
+		try:
+			health_req = urllib.request.Request(f"{base_url}/health", method="GET")
+			resp = urllib.request.urlopen(health_req, timeout=3)
+			# 200 = healthy. Anything else (503 Loading model, etc.) is not ready.
+			llm_ready = resp.status == 200
+		except Exception:
+			llm_ready = False
+
+		if not llm_ready:
+			if not sip_enabled:
+				# Not expected to be up — skip silently, no pain needed
+				logger.debug("[DRIVE] LLM not available and SIP_ENABLED=False. Skipping spark (expected).")
+			else:
+				# Expected to be up but isn't — inject pain for Sentinel/Healer
+				try:
+					from red_pill.memory import MemoryManager
+					mm = MemoryManager()
+					if not mm.has_signal("hypervisor_unreachable"):
+						mm.inject_signal(
+							name="hypervisor_unreachable",
+							intensity=3.0,
+							signal_type="pain",
+							source="DriveEvaluator",
+							originator="drive_evaluator._generate_dynamic_spark",
+							criticality="WARNING",
+						)
+						logger.warning(f"[DRIVE] Local LLM unreachable at {base_url} (SIP_ENABLED=True). Pain signal injected.")
+					else:
+						logger.debug("[DRIVE] Local LLM still unreachable (pain already active). Skipping spark.")
+				except Exception as sig_err:
+					logger.warning(f"[DRIVE] LLM unreachable, failed to inject pain: {sig_err}")
+			return None
+
+		# ── LLM is healthy — evaporate any stale pain signal ──
+		try:
+			from red_pill.memory import MemoryManager
+			mm = MemoryManager()
+			if mm.has_signal("hypervisor_unreachable"):
+				mm.evaporate_signals("hypervisor_unreachable")
+				logger.info("[DRIVE] Local LLM recovered. Pain signal evaporated.")
+		except Exception:
+			pass
+
 		context_data = self._scrape_context()
 		if not context_data:
 			context_data = "No explicit backlog items found. System in standby."
@@ -219,8 +274,6 @@ class DriveEvaluator:
 			"Do not add any preamble, markdown formatting, or conversational filler."
 		)
 
-		import urllib.request
-
 		payload = {
 			"messages": [
 				{
@@ -235,7 +288,6 @@ class DriveEvaluator:
 		}
 
 		headers = {"Content-Type": "application/json"}
-		url = self.config.MLX_LM_URL
 
 		try:
 			req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
