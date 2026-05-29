@@ -1,5 +1,12 @@
 ## [7.2.0] - Unreleased
 
+### 🏛️ Sovereign Daemon — Plugin-Based Consolidation
+- **[ARCH] `SovereignDaemon` (`daemon/sovereign.py`)**: Consolidated 3 daemon services (2 already disabled) + 1 redundant timer into a single plugin-based control plane. Auto-discovers `DaemonPlugin` subclasses from `daemon/plugins/`. Each plugin has a hard `timeout_s` — if exceeded, pain signal is injected and the daemon continues. systemd Type=notify integration (READY=1, WATCHDOG=1).
+- **[FEAT] `DaemonPlugin` ABC (`daemon/plugin.py`)**: Abstract base class for monitor plugins. Properties: `name`, `interval_s`, `timeout_s`, `enabled`. Contract: `tick()` is monitor-only — read state, check health, dispatch signals. Never execute.
+- **[FEAT] 5 Monitor Plugins**: `TelemetryPlugin` (30s, GPU/inbox/LED), `EchoPlugin` (60s, context mirror), `VitalsPlugin` (120s, Qdrant/CUDA/fever), `SwarmMonitorPlugin` (300s, Neon-Link/hygiene), `TimerWatchdogPlugin` (60s, systemd timer health).
+- **[DEPRECATE] `LazarusPulse` (`heartbeat.py`)**: Marked `@deprecated` — its rituals are already called by timer one-shots via `trigger_pulse.py`. Will be removed in v7.3.
+- **[DOCS] WAR_ECONOMY.md Section 8**: Sovereign Daemon architecture documented (bilingual). Saint-Exupéry epigraph as design philosophy.
+
 ### 🏭 Economía de Guerra — Samantha Queue & Local LLM Pipeline
 - **[FEAT] Samantha On-Demand (`samantha_on_demand.py`)**: Ephemeral local LLM manager. Detects active Hypervisor (port 8760), boots ephemeral `llama-server` on port 8790 if not available, executes task, cleans up. Zero VRAM residue when idle.
 - **[ARCH] SamanthaWorker Event-Driven Thread (`samantha_worker.py`)**: Replaces the blocking `drain_queue()` with a daemon thread that sleeps via `threading.Event.wait()` (0 CPU when idle). Worker signals it non-blockingly; the thread boots Samantha once per batch, drains all pending tasks, applies a configurable grace period (60s default) before shutdown to avoid boot-churn. Built-in handler registry: `compact_session`, `classify`, `summarize`.

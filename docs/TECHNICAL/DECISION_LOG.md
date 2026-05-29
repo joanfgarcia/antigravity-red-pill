@@ -397,10 +397,10 @@ Implement a **two-layer defense-in-depth** strategy for syntax integrity:
 
 | Layer | Mechanism | Frequency | Cost |
 |---|---|---|---|
-| **Layer 1: inotify Watcher** | `watchfiles.awatch` (Rust/inotify) inside `LazarusPulse` | Real-time (~3s after file save) | 0 CPU when idle |
+| **Layer 1: inotify Watcher** | `watchfiles.awatch` (Rust/inotify) inside `SovereignDaemon` | Real-time (~3s after file save) | 0 CPU when idle |
 | **Layer 2: Sentinel Plugin** | `py_compile` sweep of 24 critical modules | Hourly (auditor timer) | ~24 `stat()` + `py_compile` calls |
 
-Critically, the watcher is embedded as an **async background task inside the existing `LazarusPulse` daemon** — NOT as a separate systemd service.
+Critically, the watcher is embedded as an **async background task inside the `SovereignDaemon`** — NOT as a separate systemd service. (Originally in `LazarusPulse`, migrated in v7.2.1 to the plugin-based daemon architecture.)
 
 ### 3. Alternatives Considered
 
@@ -424,4 +424,4 @@ Critically, the watcher is embedded as an **async background task inside the exi
 > *"¿tiene que ser un daemon nuevo? ya tenemos uno"*  
 > — Joan (Operator), 2026-05-27
 
-The operator correctly identified that spawning a new service for a single async I/O task is architectural bloat. The `LazarusPulse` already runs a persistent event loop with 10+ async rituals. Adding the watcher as another concurrent task is the natural, zero-overhead integration point. This follows the same pattern as `_swarm_ritual` (polling) and `_auto_heal_ritual` (reactive) — the daemon is designed to host exactly this kind of work.
+The operator correctly identified that spawning a new service for a single async I/O task is architectural bloat. The `SovereignDaemon` (formerly `LazarusPulse`, consolidated in v7.2.1) runs a persistent event loop with N auto-discovered monitor plugins. Adding the watcher as another concurrent task is the natural, zero-overhead integration point.

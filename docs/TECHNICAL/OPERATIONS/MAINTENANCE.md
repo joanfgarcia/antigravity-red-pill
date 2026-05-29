@@ -30,13 +30,14 @@ This script:
 4. Reinstalls the matching wheel without manual version entry.
 
 ## 3. Nomenclature Standards
-To maintain the **Sound of Silence**, engineers must never use the term "daemon" in new contributions. 
+To maintain the **Sound of Silence**, the system favors ephemeral one-shots over long-running processes. The ONE exception is the **Sovereign Daemon** (`red-pill daemon`), which runs monitor-only plugins with hard timeouts.
 
 | Obsolete Term | Canonical Term |
 | :--- | :--- |
-| `bunker_daemon.py` | `bunker_telemetry.py` |
-| `red-pill daemon` | `red-pill telemetry` |
-| `daemon process` | `Oneshot Task / Ritual / Pulse` |
+| `bunker_daemon.py` | `bunker_telemetry.py` → now `TelemetryPlugin` in `daemon/plugins/` |
+| `LazarusPulse` (heartbeat.py) | `SovereignDaemon` (daemon/sovereign.py) — `@deprecated` v7.2.1 |
+| Heavy blocking daemon | Timer-triggered one-shot (`redpill-*.timer`) |
+| `red-pill daemon` | ✅ Valid — starts the Sovereign Daemon (plugin-based, monitor-only) |
 
 ## 4. Manual Health Verification
 ```bash

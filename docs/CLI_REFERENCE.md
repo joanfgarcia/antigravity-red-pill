@@ -96,11 +96,15 @@ Displays live telemetry: CPU, GPU (RTX), NPU, memory usage, active swarm agents,
 
 ---
 
-### `daemon` — Start the Lazarus Daemon
+### `daemon` — Start the Sovereign Daemon
 ```bash
-red-pill daemon
+red-pill daemon [--oneshot]
 ```
-Starts the Lazarus Daemon (CNS background process), executing the periodic pulse, queue worker, and system health checks.
+Starts the Sovereign Daemon (plugin-based control plane). Auto-discovers monitor plugins from `daemon/plugins/`, supervises them with hard timeouts, and manages systemd watchdog integration.
+
+| Flag | Description |
+|------|-------------|
+| `--oneshot` | Tick all plugins once and exit (for testing) |
 
 ---
 
@@ -262,7 +266,8 @@ red-pill seed                            # Init memory
 red-pill add work "Completed feature X"  # Store engram
 red-pill search work "authentication"    # Semantic recall
 red-pill status                          # Hardware panel
-red-pill daemon                          # Start Lazarus Daemon
+red-pill daemon                          # Start Sovereign Daemon
+red-pill daemon --oneshot                # Test: tick all plugins once
 red-pill sleep                           # Consolidate memory
 red-pill soul export                     # Backup soul
 red-pill soul rotate                     # Rotate API keys

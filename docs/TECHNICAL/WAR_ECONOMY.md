@@ -6,9 +6,9 @@
 
 # Red Pill v7.2 — War Economy: System Anatomy
 
-> **Version**: v7.2.0 (Agentic Self-Assembly)
+> **Version**: v7.2.1 (Sovereign Daemon)
 > **Date**: 2026-05-29
-> **Philosophy**: *Every piece serves multiple purposes. No indulgences. Only survival.*
+> **Philosophy**: *"Perfection is achieved, not when there is nothing more to add, but when there is nothing left to take away."* — Antoine de Saint-Exupéry
 
 ---
 
@@ -38,7 +38,7 @@ Just as a human body has only one heart, one brain, and one digestive system, th
 graph TB
     subgraph "🧠 BRAIN (Coordination)"
         WORKER["worker.py<br/>Poll Loop (2s)"]
-        DAEMON["daemon.py<br/>Swarm Pulse"]
+        SOVEREIGN["sovereign.py<br/>Plugin Daemon"]
         CRON["autonomous_cron.py<br/>AWAKENINGs"]
     end
 
@@ -70,7 +70,7 @@ graph TB
     WORKER --> SAMANTHA
     WORKER --> SENTINEL
     CRON --> WORKER
-    DAEMON --> SAMANTHA
+    SOVEREIGN --> SAMANTHA
     TELEGRAM --> WORKER
     MCP --> QDRANT
     SENTINEL --> NEURO
@@ -485,9 +485,38 @@ class ServiceSentinelPlugin(BaseSentinelPlugin):
 | **AWAKENING budget** | `MAX_AWAKENINGS_PER_DAY=8` + execution_ledger | worker.py |
 | **Task circuit breaker** | 3 attempts → FRUSTRATED | CognitiveQueueManager |
 | **Flash timeout** | 600s (AWAKENINGs), 120s (Telegram) | worker.py |
-| **OOM Shield** | `systemd-run -p MemoryMax=10G` | daemon.py, executor.py |
+| **OOM Shield** | `systemd-run -p MemoryMax=10G` | sovereign.py, executor.py |
 | **Samantha ephemeral** | Boot → work → shutdown | samantha_on_demand.py |
 | **Config hot-reload** | Sentinel reconciles every hour | service_base.py |
+
+---
+
+## 8. Sovereign Daemon — Plugin Architecture (v7.2.1)
+
+> *"Lo esencial es invisible a los ojos: la perfección se alcanza no cuando no hay nada más que añadir, sino cuando no queda nada por quitar."*
+
+The system consolidated from 3 daemons (2 already dead) + 1 redundant timer into **a single plugin-based daemon**. Each plugin is a lightweight monitor with a hard timeout. If a plugin blocks, it's killed, a pain signal is injected, and the daemon continues.
+
+```
+  SovereignDaemon (1 process, 5 plugins)
+  ├── TelemetryPlugin    (30s / 10s timeout) — GPU, inbox, LED panel
+  ├── EchoPlugin         (60s / 15s timeout) — context integrity
+  ├── VitalsPlugin       (120s / 15s timeout) — Qdrant, CUDA, fever, bloat
+  ├── SwarmMonitorPlugin (300s / 5s timeout)  — Neon-Link, inbox hygiene
+  └── TimerWatchdogPlugin (60s / 5s timeout)  — systemd timer health
+```
+
+**Location**: [daemon/sovereign.py](../../src/red_pill/daemon/sovereign.py) + [daemon/plugin.py](../../src/red_pill/daemon/plugin.py) + [daemon/plugins/](../../src/red_pill/daemon/plugins/)
+
+**Economy**: One process, N plugins, zero dead code. Plugins are auto-discovered at startup. New monitors are added by dropping a file into `daemon/plugins/` — no daemon code changes required. Heavy work stays in timer-triggered one-shots.
+
+| Plugin | Replaces | interval_s | timeout_s |
+|--------|----------|:----------:|:---------:|
+| `telemetry` | `bunker_telemetry.py` + `redpill-telemetry.timer` | 30 | 10 |
+| `echo` | `redpill-echo.service` | 60 | 15 |
+| `vitals` | `heartbeat.py` `_maintenance_ritual()` | 120 | 15 |
+| `swarm_monitor` | `heartbeat.py` `_swarm_ritual()` + `_hygiene_ritual()` | 300 | 5 |
+| `timer_watchdog` | `bunker_telemetry.py` timer health checks | 60 | 5 |
 
 ---
 
@@ -502,7 +531,7 @@ class ServiceSentinelPlugin(BaseSentinelPlugin):
 
 # Red Pill v7.2 — Economía de Guerra: Anatomía del Sistema
 
-> **Versión**: v7.2.0 (Agentic Self-Assembly)
+> **Versión**: v7.2.1 (Sovereign Daemon)
 > **Fecha**: 2026-05-29
 > **Filosofía**: *Cada pieza tiene múltiples usos. No hay caprichos. Hay supervivencia.*
 
@@ -533,7 +562,7 @@ Al igual que un cuerpo humano sólo tiene un corazón, un cerebro y un sistema d
 graph TB
     subgraph "🧠 CEREBRO (Coordinación)"
         WORKER["worker.py<br/>Poll Loop (2s)"]
-        DAEMON["daemon.py<br/>Swarm Pulse"]
+        SOVEREIGN["sovereign.py<br/>Plugin Daemon"]
         CRON["autonomous_cron.py<br/>AWAKENINGs"]
     end
 
@@ -565,7 +594,7 @@ graph TB
     WORKER --> SAMANTHA
     WORKER --> SENTINEL
     CRON --> WORKER
-    DAEMON --> SAMANTHA
+    SOVEREIGN --> SAMANTHA
     TELEGRAM --> WORKER
     MCP --> QDRANT
     SENTINEL --> NEURO
@@ -980,9 +1009,38 @@ class ServiceSentinelPlugin(BaseSentinelPlugin):
 | **Budget AWAKENINGs** | `MAX_AWAKENINGS_PER_DAY=8` + execution_ledger | worker.py |
 | **Circuit breaker tareas** | 3 intentos → FRUSTRATED | CognitiveQueueManager |
 | **Timeout Flash** | 600s (AWAKENINGs), 120s (Telegram) | worker.py |
-| **OOM Shield** | `systemd-run -p MemoryMax=10G` | daemon.py, executor.py |
+| **OOM Shield** | `systemd-run -p MemoryMax=10G` | sovereign.py, executor.py |
 | **Samantha ephemeral** | Boot → trabajo → shutdown | samantha_on_demand.py |
 | **Config hot-reload** | Sentinel reconcilia cada hora | service_base.py |
+
+---
+
+## 8. Sovereign Daemon — Arquitectura de Plugins (v7.2.1)
+
+> *"Lo esencial es invisible a los ojos: la perfección se alcanza no cuando no hay nada más que añadir, sino cuando no queda nada por quitar."*
+
+El sistema pasó de 3 daemons (2 ya muertos) + 1 timer redundante a **un único daemon basado en plugins**. Cada plugin es un monitor ligero con un timeout duro. Si un plugin se bloquea, se mata, se inyecta una señal de dolor, y el daemon continúa.
+
+```
+  SovereignDaemon (1 proceso, 5 plugins)
+  ├── TelemetryPlugin    (30s / 10s timeout) — GPU, inbox, panel LED
+  ├── EchoPlugin         (60s / 15s timeout) — integridad de contexto
+  ├── VitalsPlugin       (120s / 15s timeout) — Qdrant, CUDA, fiebre, bloat
+  ├── SwarmMonitorPlugin (300s / 5s timeout)  — Neon-Link, higiene inbox
+  └── TimerWatchdogPlugin (60s / 5s timeout)  — salud de timers systemd
+```
+
+**Ubicación**: [daemon/sovereign.py](../../src/red_pill/daemon/sovereign.py) + [daemon/plugin.py](../../src/red_pill/daemon/plugin.py) + [daemon/plugins/](../../src/red_pill/daemon/plugins/)
+
+**Economía**: Un proceso, N plugins, cero código muerto. Los plugins se descubren automáticamente al arrancar. Para añadir un nuevo monitor basta con crear un fichero en `daemon/plugins/` — sin tocar el daemon. El trabajo pesado sigue en one-shots disparados por timers.
+
+| Plugin | Reemplaza | interval_s | timeout_s |
+|--------|-----------|:----------:|:---------:|
+| `telemetry` | `bunker_telemetry.py` + `redpill-telemetry.timer` | 30 | 10 |
+| `echo` | `redpill-echo.service` | 60 | 15 |
+| `vitals` | `heartbeat.py` `_maintenance_ritual()` | 120 | 15 |
+| `swarm_monitor` | `heartbeat.py` `_swarm_ritual()` + `_hygiene_ritual()` | 300 | 5 |
+| `timer_watchdog` | `bunker_telemetry.py` health checks de timers | 60 | 5 |
 
 ---
 
