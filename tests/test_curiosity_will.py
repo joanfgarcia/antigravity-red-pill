@@ -167,6 +167,7 @@ def test_dynamic_spark_generation(mock_urlopen, mock_curiosity_env, monkeypatch)
 			]
 		}
 	).encode("utf-8")
+	mock_urlopen.return_value.status = 200
 	mock_urlopen.return_value.__enter__.return_value = mock_response
 
 	# Set curiosity ratings to make dynamic_spark highest utility
@@ -279,6 +280,7 @@ def test_profile_temperature_scaling(mock_curiosity_env, monkeypatch):
 	with patch("urllib.request.urlopen") as mock_urlopen:
 		mock_response = MagicMock()
 		mock_response.read.return_value = b'{"choices": [{"message": {"content": "{}"}}]}'
+		mock_urlopen.return_value.status = 200
 		mock_urlopen.return_value.__enter__.return_value = mock_response
 
 		evaluator._generate_dynamic_spark()
@@ -298,6 +300,7 @@ def test_profile_temperature_scaling(mock_curiosity_env, monkeypatch):
 	with patch("urllib.request.urlopen") as mock_urlopen:
 		mock_response = MagicMock()
 		mock_response.read.return_value = b'{"choices": [{"message": {"content": "{}"}}]}'
+		mock_urlopen.return_value.status = 200
 		mock_urlopen.return_value.__enter__.return_value = mock_response
 
 		evaluator._generate_dynamic_spark()
@@ -314,6 +317,7 @@ def test_profile_temperature_scaling(mock_curiosity_env, monkeypatch):
 	with patch("urllib.request.urlopen") as mock_urlopen:
 		mock_response = MagicMock()
 		mock_response.read.return_value = b'{"choices": [{"message": {"content": "{}"}}]}'
+		mock_urlopen.return_value.status = 200
 		mock_urlopen.return_value.__enter__.return_value = mock_response
 
 		evaluator._generate_dynamic_spark()

@@ -392,6 +392,7 @@ class DriveEvaluator:
 				r = math.exp(math.log(0.9) * (time_passed_days / stability_days))
 				temporal_decay = 1.0 - r
 			else:
+				hours_idle = 0.0
 				temporal_decay = 1.0
 			entropy += temporal_decay
 			logger.debug(f"[DRIVE] Temporal Decay Entropy (FSRS): {temporal_decay:.2f} (hours idle: {hours_idle:.2f})")
