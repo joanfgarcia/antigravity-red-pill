@@ -205,19 +205,24 @@ The manifest is loaded via `red_pill.core.service_contract.load_manifest()` whic
 
 ---
 
-## 6. Current Service Inventory
+## 6. Current Service Inventory (v7.2.1 — Post-Sovereign Consolidation)
 
 | Service | Type | Loop/Timeout | Watchdog | Health | Category | Required | Gated By |
 |---------|------|:---:|:---:|:---:|:---:|:---:|:---:|
-| `redpill` | daemon-loop | 3600s | WatchdogSec=10800 | ❌ | core | ✅ | `PULSE_ENABLED` |
+| `redpill` | daemon-loop | 1s (plugin-based) | WatchdogSec=120 | ❌ | core | ✅ | — |
 | `neon-link` | daemon-loop | 1s | WatchdogSec=3 | ✅ `:8770/health` | plugin | ❌ | `NEON_LINK_ENABLED` |
 | `redpill-llm` | daemon-listener | — | ❌ | ✅ `:8776/health` | core | ✅ | — |
-| `redpill-bunker` | daemon-loop | 10s | WatchdogSec=30 | ❌ | core | ✅ | — |
-| `redpill-echo` | daemon-loop | 60s | WatchdogSec=180 | ❌ | core | ❌ | — |
+| `redpill-worker` | oneshot | 120s | ❌ | ❌ | core | ✅ | — |
 | `redpill-auditor` | oneshot | 120s | ❌ | ❌ | core | ✅ | — |
+| `redpill-queue` | oneshot | 120s | ❌ | ❌ | core | ❌ | — |
+| `redpill-wake` | oneshot | 30s | ❌ | ❌ | core | ❌ | — |
+| `redpill-sleep` | oneshot | 120s | ❌ | ❌ | core | ❌ | — |
+| `redpill-chronicle` | oneshot | 60s | ❌ | ❌ | core | ❌ | — |
 | `redpill-extractor` | oneshot | 120s | ❌ | ❌ | core | ❌ | — |
 | `redpill-janitor` | oneshot | 60s | ❌ | ❌ | core | ✅ | — |
-| `redpill-pulse` | oneshot | 30s | ❌ | ❌ | core | ❌ | — |
-| `redpill-queue` | oneshot | 120s | ❌ | ❌ | core | ❌ | — |
-| `redpill-telemetry` | oneshot | 60s | ❌ | ❌ | core | ❌ | — |
-| `redpill-wake` | oneshot | 30s | ❌ | ❌ | core | ❌ | — |
+
+> [!IMPORTANT]
+> **Decommissioned in v7.2.1**: `redpill-bunker` (→ TelemetryPlugin), `redpill-echo` (→ EchoPlugin), `redpill-telemetry` (→ TelemetryPlugin). These services are absorbed by the Sovereign Daemon's plugin architecture. Do NOT re-enable them.
+
+> [!NOTE]
+> The `redpill` service uses `NotifyAccess=all` because `uv run` forks the Python process as a child PID. The `sd_notify()` call comes from the child, not the main PID.

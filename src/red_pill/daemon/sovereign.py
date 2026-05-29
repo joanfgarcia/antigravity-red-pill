@@ -1,25 +1,11 @@
 """
 SovereignDaemon — The ONE daemon to rule them all.
 
-Single-process, plugin-based control plane.  Monitors and dispatches.
+Single-process, plugin-based control plane. Monitors and dispatches.
 Never executes heavy work — that belongs to timer-triggered one-shots.
 
-Architecture:
-  ┌─────────────────────────────────────────────┐
-  │  SovereignDaemon (PID 1 of Red Pill)        │
-  │  ┌──────────┐ ┌──────────┐ ┌──────────┐    │
-  │  │telemetry │ │  echo    │ │  vitals  │    │
-  │  │ 30s/10s  │ │ 60s/15s  │ │ 120s/15s │    │
-  │  └──────────┘ └──────────┘ └──────────┘    │
-  │  ┌──────────┐ ┌──────────────────────┐      │
-  │  │  swarm   │ │  timer_watchdog      │      │
-  │  │ 300s/5s  │ │  60s/5s              │      │
-  │  └──────────┘ └──────────────────────┘      │
-  │  [Optional] SyntaxGuard thread (inotify)    │
-  └─────────────────────────────────────────────┘
-
 "Perfection is achieved, not when there is nothing more to add,
- but when there is nothing left to take away."
+but when there is nothing left to take away."
 """
 
 import asyncio

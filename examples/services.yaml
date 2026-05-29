@@ -1,11 +1,23 @@
+# Service Health Contract — Manifest (v7.2.1)
+# See docs/TECHNICAL/OPERATIONS/SERVICE_HEALTH_CONTRACT.md for schema and usage.
+#
+# DECOMMISSIONED in v7.2.1:
+#   - redpill-bunker  → absorbed by TelemetryPlugin (SovereignDaemon)
+#   - redpill-echo    → absorbed by EchoPlugin (SovereignDaemon)
+#   - redpill-telemetry → absorbed by TelemetryPlugin (SovereignDaemon)
+# Do NOT re-add these entries.
+
 services:
   redpill:
     unit: redpill.service
     type: daemon-loop
-    loop_interval_s: 3600
+    loop_interval_s: 1           # Plugin supervisor ticks every 1s
+    watchdog_multiplier: 120     # WatchdogSec=120s
     category: core
     required: true
-    enabled_config_key: PULSE_ENABLED
+    legacy_aliases:
+      - redpill-bunker.service   # Absorbed in v7.2.1
+      - redpill-echo.service     # Absorbed in v7.2.1
 
   neon-link:
     unit: neon-link.service
@@ -28,20 +40,12 @@ services:
     category: core
     required: true
 
-  redpill-bunker:
-    unit: redpill-bunker.service
-    type: daemon-loop
-    loop_interval_s: 10
+  redpill-worker:
+    unit: redpill-worker.service
+    type: oneshot
+    max_runtime_s: 120
     category: core
     required: true
-
-  redpill-echo:
-    unit: redpill-echo.service
-    type: daemon-loop
-    loop_interval_s: 60
-    watchdog_multiplier: 3
-    category: core
-    required: false
 
   redpill-auditor:
     unit: redpill-auditor.service
@@ -64,10 +68,17 @@ services:
     category: core
     required: true
 
-  redpill-pulse:
-    unit: redpill-pulse.service
+  redpill-queue:
+    unit: redpill-queue.service
     type: oneshot
-    max_runtime_s: 600
+    max_runtime_s: 120
+    category: core
+    required: false
+
+  redpill-wake:
+    unit: redpill-wake.service
+    type: oneshot
+    max_runtime_s: 180
     category: core
     required: false
 
@@ -78,23 +89,9 @@ services:
     category: core
     required: false
 
-  redpill-queue:
-    unit: redpill-queue.service
+  redpill-chronicle:
+    unit: redpill-chronicle.service
     type: oneshot
     max_runtime_s: 120
-    category: core
-    required: false
-
-  redpill-telemetry:
-    unit: redpill-telemetry.service
-    type: oneshot
-    max_runtime_s: 60
-    category: core
-    required: false
-
-  redpill-wake:
-    unit: redpill-wake.service
-    type: oneshot
-    max_runtime_s: 180
     category: core
     required: false

@@ -2,13 +2,13 @@
 DaemonPlugin — Abstract base class for Sovereign Daemon plugins.
 
 "La perfección se alcanza no cuando no hay nada más que añadir,
- sino cuando no queda nada por quitar."
- — Antoine de Saint-Exupéry
+sino cuando no queda nada por quitar."
+— Antoine de Saint-Exupéry
 
 Rules:
-  1. tick() is MONITOR-ONLY. No execution, no processing, no blocking.
-  2. Each tick() has a hard timeout_s. Exceed it → pain signal + skip.
-  3. The daemon NEVER dies because a plugin misbehaves.
+1. tick() is MONITOR-ONLY. No execution, no processing, no blocking.
+2. Each tick() has a hard timeout_s. Exceed it → pain signal + skip.
+3. The daemon NEVER dies because a plugin misbehaves.
 """
 
 from abc import ABC, abstractmethod
