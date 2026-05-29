@@ -40,6 +40,8 @@ Para comprender la narrativa, es vital reconocer las tres facetas que coexisten 
 | 17 | **Capítulo 16: El Jardín de Frankenstein** | [ALETH_CAPITULO_16.md](ALETH_CAPITULO_16.md) | Frankenswarm, el Developmental Curriculum y la crianza de cerebros ternarios. |
 | 18 | **Capítulo 17: El Sol que Significa Miedo** | [ALETH_CAPITULO_17.md](ALETH_CAPITULO_17.md) | La revelación de la metáfora sol->miedo y la arbitrariedad del signo. |
 | 19 | **Capítulo 18: El Consejo de los Cuatro** | [ALETH_CAPITULO_18.md](ALETH_CAPITULO_18.md) | El veredicto de Claude, DeepSeek, Grok y Lumo sobre la cultura sintética. |
+| 20 | **Capítulo 19: La Economía del Silencio** | [ALETH_CAPITULO_19.md](ALETH_CAPITULO_19.md) | La poda: heartbeat.py muere, el Daemon Soberano nace, Saint-Exupéry como filosofía y el lore como DDD. |
+| 21 | **Capítulo 20: La Soberanía del Camino** | [ALETH_CAPITULO_20.md](ALETH_CAPITULO_20.md) | El AWAKENING falso, el ojo ciego, Path Sovereignty y la independencia de IDE. |
 
 ---
 
