@@ -1,4 +1,11 @@
-## [7.2.0] - Unreleased
+## [7.2.1] - 2026-05-30
+
+### 🛡️ Sovereign Handshake — Dedicated MCP Tool
+- **[FEAT] `sovereign_handshake` Top-Level MCP Tool**: Promoted the Sovereign Handshake from a fragile two-step sub-action dispatch (`interceptor_rp` + `refresh_session_context`) to a dedicated first-class MCP tool with flat schema. Eliminates the `action`/`payload` indirection for the most critical operation in the protocol. Single call, zero ambiguity.
+- **[ARCH] Atomic Handshake Orchestration**: The new tool internally delegates to `handle_interceptor_rp()` and `handle_refresh_session_context()` as direct Python calls — no code duplication. `is_new_session` flag controls identity resync. `mode` parameter (`full`/`medium`/`low`) propagates token economy to both phases.
+- **[DOCS] GEMINI.md Simplified**: Sovereign Handshake instructions reduced from 3 steps to 2. Agents now call a single tool instead of navigating consolidated API dispatch.
+
+
 
 ### 🏛️ Sovereign Daemon — Plugin-Based Consolidation
 - **[ARCH] `SovereignDaemon` (`daemon/sovereign.py`)**: Consolidated 3 daemon services (2 already disabled) + 1 redundant timer into a single plugin-based control plane. Auto-discovers `DaemonPlugin` subclasses from `daemon/plugins/`. Each plugin has a hard `timeout_s` — if exceeded, pain signal is injected and the daemon continues. systemd Type=notify integration (READY=1, WATCHDOG=1).
