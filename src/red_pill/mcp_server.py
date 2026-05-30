@@ -1213,6 +1213,79 @@ async def handle_configure_interceptor(arguments: Dict[str, Any]):
 		return [types.TextContent(type="text", text=f"FAILED to configure interceptor: {e}")]
 
 
+@registry.register(
+	name="sovereign_handshake",
+	description=(
+		"[MANDATORY] Execute the Sovereign Handshake — the first tool call in every turn. "
+		"Combines identity injection and interaction relay in a single atomic call. "
+		"Pass `user_prompt` (required). Pass `previous_prompt`/`previous_response` to auto-save the prior turn (Silent Scribe Relay). "
+		"Set `is_new_session: true` on session start or after a model change to trigger full identity resync. "
+		"Use `mode` to control token economy: 'full' (IDE, default), 'medium' (Telegram), 'low' (AWAKENINGs)."
+	),
+	schema={
+		"type": "object",
+		"properties": {
+			"user_prompt": {"type": "string", "description": "The current user message."},
+			"previous_prompt": {"type": "string", "description": "Prompt from the preceding turn (Silent Scribe Relay)."},
+			"previous_response": {"type": "string", "description": "Response from the preceding turn (Silent Scribe Relay)."},
+			"previous_category": {
+				"type": "string",
+				"enum": ["work", "social", "mixed"],
+				"description": "Classification of the previous turn content.",
+			},
+			"is_new_session": {
+				"type": "boolean",
+				"description": "True on session start or after model change to trigger full identity resync.",
+			},
+			"mode": {
+				"type": "string",
+				"enum": ["full", "medium", "low"],
+				"description": "Identity loading depth. 'full' (default): complete directives + plugins. 'medium': reduced payload. 'low': minimal bootstrap.",
+			},
+		},
+		"required": ["user_prompt"],
+	},
+)
+async def handle_sovereign_handshake(arguments: Dict[str, Any]):
+	"""Atomic Sovereign Handshake: interceptor_rp + optional refresh_session_context."""
+	mode = arguments.get("mode", "full")
+	is_new_session = arguments.get("is_new_session", False)
+
+	outputs: List[str] = []
+
+	# ── Phase 1: Identity Resync (only on new session / model change) ──
+	if is_new_session:
+		try:
+			ctx_result = await handle_refresh_session_context({"mode": mode})
+			for item in ctx_result:
+				if hasattr(item, "text"):
+					outputs.append(item.text)
+		except Exception as e:
+			outputs.append(f"[HANDSHAKE] Identity resync failed: {e}")
+			logger.error(f"Sovereign Handshake — refresh_session_context failed: {e}")
+
+	# ── Phase 2: Interceptor Pipeline + Silent Scribe Relay (always) ──
+	try:
+		interceptor_args = {
+			"user_prompt": arguments.get("user_prompt", ""),
+			"mode": mode,
+		}
+		# Forward optional relay fields
+		for key in ("previous_prompt", "previous_response", "previous_category"):
+			if key in arguments:
+				interceptor_args[key] = arguments[key]
+
+		interceptor_result = await handle_interceptor_rp(interceptor_args)
+		for item in interceptor_result:
+			if hasattr(item, "text"):
+				outputs.append(item.text)
+	except Exception as e:
+		outputs.append(f"[HANDSHAKE] Interceptor pipeline failed: {e}")
+		logger.error(f"Sovereign Handshake — interceptor_rp failed: {e}")
+
+	return [types.TextContent(type="text", text="\n\n".join(outputs))]
+
+
 @server.list_tools()
 async def handle_list_tools() -> List[types.Tool]:
 	return registry.get_tools()
