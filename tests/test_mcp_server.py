@@ -313,7 +313,8 @@ class TestListTools:
 		assert "metabolism_health_api" in tool_names
 		assert "swarm_orchestrator_api" in tool_names
 		assert "bunker_memory_api" in tool_names
-		assert len(result) == 3
+		assert "sovereign_handshake" in tool_names
+		assert len(result) == 4
 
 
 class TestControlBunkerAdditional:
