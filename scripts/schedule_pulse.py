@@ -8,6 +8,7 @@ Registers periodic oneshot tasks (Pulse, Telemetry, Queue).
 import argparse
 import os
 import platform
+import shlex
 import shutil
 import subprocess
 import sys
@@ -237,19 +238,19 @@ def _uninstall_macos() -> None:
 
 def _install_macos(interval_hours: int, uv_path: str) -> None:
 	# 1. Wake Pulse (Interval-based, hourly)
-	_write_launchd_plist("com.redpill.wake", f"{uv_path} run python {TRIGGER_SCRIPT} --cycle wake", interval_hours * 3600)
+	_write_launchd_plist("com.redpill.wake", f'"{uv_path}" run python "{TRIGGER_SCRIPT}" --cycle wake', interval_hours * 3600)
 	# 2. Sleep Pulse (Calendar-based, 03:00 daily)
-	_write_launchd_calendar_plist("com.redpill.sleep", f"{uv_path} run python {TRIGGER_SCRIPT} --cycle sleep", hour=3, minute=0)
+	_write_launchd_calendar_plist("com.redpill.sleep", f'"{uv_path}" run python "{TRIGGER_SCRIPT}" --cycle sleep', hour=3, minute=0)
 	# 3. Telemetry
-	_write_launchd_plist("com.redpill.telemetry", f"{uv_path} run python {TELEMETRY_SCRIPT} --oneshot", 30)
-	# 4. Queue
-	_write_launchd_plist("com.redpill.queue", f"{uv_path} run python {QUEUE_SCRIPT} --oneshot", 60)
+	_write_launchd_plist("com.redpill.telemetry", f'"{uv_path}" run python "{TELEMETRY_SCRIPT}" --oneshot', 30)
+	# 4. Queue (use module entrypoint — scripts/process_queue.py does not exist; mirror the Linux branch)
+	_write_launchd_plist("com.redpill.queue", f'"{uv_path}" run python -m red_pill.core.queue_worker --oneshot', 60)
 	print("[OK] launchd agents installed. Protocol Zero-Daemon active.")
 
 
 def _write_launchd_plist(label, command, interval_seconds):
 	plist_path = os.path.expanduser(f"~/Library/LaunchAgents/{label}.plist")
-	args = command.split(" ")
+	args = shlex.split(command)
 	args_xml = "".join([f"<string>{a}</string>" for a in args])
 	content = textwrap.dedent(f"""\
 		<?xml version="1.0" encoding="UTF-8"?>
@@ -281,7 +282,7 @@ def _write_launchd_plist(label, command, interval_seconds):
 def _write_launchd_calendar_plist(label: str, command: str, hour: int, minute: int) -> None:
 	"""Write a launchd plist that fires at a fixed daily time (StartCalendarInterval)."""
 	plist_path = os.path.expanduser(f"~/Library/LaunchAgents/{label}.plist")
-	args = command.split(" ")
+	args = shlex.split(command)
 	args_xml = "".join([f"<string>{a}</string>" for a in args])
 	content = textwrap.dedent(f"""\
 		<?xml version="1.0" encoding="UTF-8"?>
