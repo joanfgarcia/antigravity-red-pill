@@ -1,5 +1,4 @@
 import asyncio
-import functools
 import logging
 import os
 import subprocess
@@ -1264,7 +1263,6 @@ async def handle_call_tool(
 	schema={"type": "object", "properties": {}},
 )
 async def handle_run_sentinel_audit(arguments: Dict[str, Any]):
-	import asyncio
 	import uuid
 
 	event_id = str(uuid.uuid4())[:8]
