@@ -30,6 +30,23 @@ from red_pill.utils.tone_analyzer import get_current_sync_state
 
 logger = logging.getLogger(__name__)
 
+
+def _safe_create_task(coro, *, name: str = "background"):
+	"""Create an asyncio task with proper exception handling.
+
+	Prevents unhandled task exceptions from crashing the MCP event loop.
+	This is the root cause of the EOF disconnection bug: bare asyncio.create_task()
+	calls that raise exceptions silently kill the event loop in Python 3.12+.
+	"""
+
+	async def _wrapped():
+		try:
+			await coro
+		except Exception as e:
+			logger.error(f"Background task '{name}' failed (safely caught): {e}", exc_info=True)
+
+	return asyncio.create_task(_wrapped(), name=f"rp-{name}")
+
 # v6.0.1: Robust Script Resolution
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -264,7 +281,7 @@ async def handle_run_security_audit(arguments: Dict[str, Any]):
 
 			await asyncio.to_thread(_deliver_err)
 
-	asyncio.create_task(_run_bg())
+	_safe_create_task(_run_bg(), name="security_audit")
 	return [types.TextContent(type="text", text=f"Background Audit started [Event ID: {event_id}]. Results will be in the Minion Inbox.")]
 
 
@@ -323,7 +340,7 @@ async def handle_search_memory_research(arguments: Dict[str, Any]):
 
 			await asyncio.to_thread(_deliver_err)
 
-	asyncio.create_task(_run_bg())
+	_safe_create_task(_run_bg(), name="oracle_research")
 	return [types.TextContent(type="text", text=f"Oracle Research started [Event ID: {event_id}]. Results will be in the Minion Inbox.")]
 
 
@@ -565,7 +582,7 @@ async def handle_check_system_health(arguments: Dict[str, Any]):
 
 			await asyncio.to_thread(_deliver_err)
 
-	asyncio.create_task(_run_bg())
+	_safe_create_task(_run_bg(), name="health_check")
 	return [types.TextContent(type="text", text=f"Keymaker Health Check started [Event ID: {event_id}]. Results will be in the Minion Inbox.")]
 
 
@@ -625,7 +642,7 @@ async def handle_compress_prompt(arguments: Dict[str, Any]):
 
 			await asyncio.to_thread(_deliver_err)
 
-	asyncio.create_task(_run_bg())
+	_safe_create_task(_run_bg(), name="prompt_compressor")
 	return [types.TextContent(type="text", text=f"Compressor started [Event ID: {event_id}]. Results will be in the Minion Inbox.")]
 
 
@@ -1304,7 +1321,12 @@ async def handle_call_tool(
 		log_path = os.path.join(tempfile.gettempdir(), "mcp_crash.log")
 		with open(log_path, "a", encoding="utf-8") as f:
 			f.write(f"Crash in {name}: {e}\n{traceback.format_exc()}\n")
-		raise e
+		# CRITICAL FIX: Return error as TextContent instead of re-raising.
+		# Re-raising causes the MCP SDK to close the stdio connection (EOF),
+		# killing the entire server process. The client (Claude/Antigravity)
+		# then sees 'connection closed: EOF' on all subsequent calls.
+		logger.error(f"call_tool crash in '{name}': {e}", exc_info=True)
+		return [types.TextContent(type="text", text=f"[RED PILL ERROR] Tool '{name}' failed: {str(e)}")]
 
 
 @registry.register_action(
@@ -1314,7 +1336,6 @@ async def handle_call_tool(
 	schema={"type": "object", "properties": {}},
 )
 async def handle_run_sentinel_audit(arguments: Dict[str, Any]):
-	import asyncio
 	import uuid
 
 	event_id = str(uuid.uuid4())[:8]
@@ -1327,7 +1348,7 @@ async def handle_run_sentinel_audit(arguments: Dict[str, Any]):
 		except Exception as e:
 			logger.error(f"Sentinel Auditor [{event_id}] crashed: {e}")
 
-	asyncio.create_task(_run_bg())
+	_safe_create_task(_run_bg(), name="sentinel_audit")
 	return [types.TextContent(type="text", text=f"Sentinel Auditor deployed [Event ID: {event_id}]. Check the Minion Inbox in a few seconds.")]
 
 
@@ -1393,6 +1414,15 @@ async def handle_mark_cognitive_task_failed(arguments: Dict[str, Any]):
 
 
 async def main():
+	# Global safety net: catch unhandled exceptions in fire-and-forget tasks
+	def _handle_task_exception(loop, context):
+		exception = context.get('exception')
+		msg = context.get('message', 'Unhandled asyncio exception')
+		logger.error(f"[ASYNCIO SAFETY NET] {msg}: {exception}", exc_info=exception)
+
+	loop = asyncio.get_event_loop()
+	loop.set_exception_handler(_handle_task_exception)
+
 	# Run the server using stdin/stdout streams
 	async with stdio_server() as (read_stream, write_stream):
 		# ISO-LATCH: Redirect standard output and logging to standard error.
@@ -1408,6 +1438,7 @@ async def main():
 		logging.basicConfig(level=logging.INFO, stream=sys.stderr, force=True)
 
 		try:
+			logger.info(f"RedPill-Kernel v{CORE_VERSION} MCP server starting...")
 			await server.run(
 				read_stream,
 				write_stream,
@@ -1420,6 +1451,8 @@ async def main():
 					),
 				),
 			)
+		except Exception as e:
+			logger.critical(f"MCP server.run() crashed: {e}", exc_info=True)
 		finally:
 			sys.stdout = _original_stdout
 
