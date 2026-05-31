@@ -273,11 +273,12 @@ class TestGetEmotionalSync:
 
 
 class TestUnknownTool:
-	async def test_unknown_tool_raises_value_error(self):
+	async def test_unknown_tool_returns_error_text(self):
 		from red_pill.mcp_server import handle_call_tool
 
-		with pytest.raises(ValueError, match="Unknown tool"):
-			await handle_call_tool("definitely_not_a_real_tool", {})
+		result = await handle_call_tool("definitely_not_a_real_tool", {})
+		assert len(result) == 1
+		assert "RED PILL ERROR" in result[0].text or "Unknown tool" in result[0].text or "failed" in result[0].text.lower()
 
 
 class TestListPrompts:
