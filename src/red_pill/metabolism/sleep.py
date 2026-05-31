@@ -86,11 +86,11 @@ def detect_category_heuristics(text: str) -> str:
 		"traceback",
 		"stacktrace",
 		"import",
-		"class ",
-		"def ",
-		"fn ",
-		"const ",
-		"impl ",
+		"class",
+		"def",
+		"fn",
+		"const",
+		"impl",
 		"interface",
 		"refactor",
 		"build",
@@ -318,9 +318,10 @@ def synthesize_hub(summaries: List[str]) -> str:
 						"You are a Neocortex synthesis sub-routine. Synthesize the provided memory chunks into a descriptive, "
 						"concise master summary. Start the output with a descriptive, contextual title in square brackets "
 						"(e.g., '[Asymmetric Logic Loss Integration on BitNet Logic Specialist]' or '[Refactoring Ferrari Protocol Silence Latch]'), "
-						"followed by a newline, and then the summary. Do not use generic titles like '[Memory Synthesis]' or "
-						"'[Session Summary]'. Be highly specific about the core technical actions, errors fixed, or philosophical/personal "
-						"themes discussed. Output ONLY the title and summary string without any introductory phrases or formatting."
+						"followed by a newline, and then the summary. Do not use generic titles like '[Memory Synthesis]', "
+						"'[Session Summary]', or '[Aggregated Memory Sequence Synthesis]'. Be highly specific about the core technical actions, "
+						"errors fixed, or philosophical/personal themes discussed. Output ONLY the title and summary string without any "
+						"introductory phrases or formatting."
 					),
 				},
 				{"role": "user", "content": prompt},
@@ -739,11 +740,13 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 			else:
 				fallback_cat = detect_category_heuristics(raw_text)
 
+			# Consistent collection to prevent link fragmentation and hub overwriting
+			target_col = f"{fallback_cat}_memories"
+
 			point_write_failed = False
 			point_llm_failed = False
 			for i, chunk in enumerate(chunks):
-				chunk_fallback_cat = detect_category_heuristics(chunk) if fallback_cat == "social" else fallback_cat
-				distilled = distill_engram(chunk, fallback_category=chunk_fallback_cat)
+				distilled = distill_engram(chunk, fallback_category=fallback_cat)
 				summary = distilled.get("summary", "")
 				if summary.endswith("...") and len(summary) > 490:
 					consecutive_llm_failures += 1
@@ -754,11 +757,6 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 				current_threshold = 0.0 if hibernating else cfg.SLEEP_CULL_THRESHOLD
 				if distilled.get("emotion") == "neutral" and distilled.get("intensity", 0.5) < current_threshold:
 					continue
-
-				target_cat = distilled.get("category", fallback_cat)
-				if target_cat not in ("work", "social"):
-					target_cat = fallback_cat
-				target_col = f"{target_cat}_memories"
 
 				surviving_chunks.append(distilled)
 				try:

@@ -273,7 +273,7 @@ class ServiceHealthCheck(SentinelPlugin):
 			except Exception:
 				return False
 
-		if finding.type in ("hung_service", "runaway_cpu", "service_down"):
+		if finding.type in ("hung_service", "runaway_cpu", "service_down", "memory_bloat"):
 			service = meta.get("service")
 			if not service:
 				return False
