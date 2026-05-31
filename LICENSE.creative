@@ -12,8 +12,8 @@ This license applies EXCLUSIVELY to the following creative works:
   - All written prose, philosophy, and fictional universe descriptions not embedded in source code
 
 This license does NOT apply to:
-  - Source code (.py, .yaml, .toml, .sh and all other code/data files) → GPLv3
-  - lore_skins.yaml and any other data files used by the runtime → GPLv3
+  - Source code (.py, .yaml, .toml, .sh and all other code/data files) → AGPL-3.0
+  - lore_skins.yaml and any other data files used by the runtime → AGPL-3.0
 
 ─────────────────────────────────────────────────────────────────────────────
 
