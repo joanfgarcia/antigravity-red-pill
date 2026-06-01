@@ -168,8 +168,8 @@ class SentinelAuditor:
 			elif self.force:
 				self.memory_mgr.evaporate_signals("signal_mypy_failure")
 		# 3. Testing (Pytest)
-		if not self.force and self.memory_mgr.has_signal("signal_pytest_failure"):
-			self.logger.info("Skipping Pytest check (Fast-Fail: signal_pytest_failure exists)")
+		if not self.force and self.memory_mgr.has_signal("signal_test_failure"):
+			self.logger.info("Skipping Pytest check (Fast-Fail: signal_test_failure exists)")
 			report.status = "red"
 			report.findings.append(AuditFinding(type="test", severity=8.0, message="Pytest suite failed (Fast-Fail)"))
 		else:
@@ -187,7 +187,7 @@ class SentinelAuditor:
 					AuditFinding(type="test", severity=8.0, message=f"Pytest suite failed:\n{detailed_msg}", metadata={"stdout": pytest.stdout})
 				)
 			elif self.force:
-				self.memory_mgr.evaporate_signals("signal_pytest_failure")
+				self.memory_mgr.evaporate_signals("signal_test_failure")
 
 		# Calculate global intensity based on findings
 		report.intensity = sum(f.severity for f in report.findings)

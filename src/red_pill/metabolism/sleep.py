@@ -15,28 +15,28 @@ and *intentionally deferred* for the following reasons:
 
 1. The module works reliably in autonomous nightly cycles (AWAKENINGs).
 2. The macro phases (preflight → drain → staging → gamma → delta →
-   evolution → cleanup) are sequential and could be pipeline stages.
-   However, the drain loop's micro-level (chunk → distill → fixate →
-   link → hub) has tightly coupled mutable state that resists clean
-   plugin boundaries.
+	evolution → cleanup) are sequential and could be pipeline stages.
+	However, the drain loop's micro-level (chunk → distill → fixate →
+	link → hub) has tightly coupled mutable state that resists clean
+	plugin boundaries.
 3. The file is rarely modified — the cost/risk of reorganization does
-   not justify the marginal readability gain today.
+	not justify the marginal readability gain today.
 
 TRIGGER TO REVISIT: If the file exceeds ~1200 LOC, or if new phases
 need to be added to the cycle, revisit decomposition into:
 
-    metabolism/
-    ├── sleep.py              → Orchestrator (SleepPipeline + SleepContext)
-    ├── phases/preflight.py   → VRAM check, signal gating
-    ├── phases/drain.py       → Core drain loop (uses chunker, distiller)
-    ├── phases/staging.py     → Filesystem cascade ingestion
-    ├── phases/gamma.py       → Session anchor distillation
-    ├── phases/delta.py       → Bayesian hub erosion
-    ├── chunker.py            → chunk_text, _sanitize_llm_json
-    ├── distiller.py          → distill_engram, synthesize_hub
-    ├── categorizer.py        → detect_category_heuristics
-    ├── ephemeral_server.py   → EphemeralServer + _check_llm_available
-    └── thread_weaver.py      → Thread state persistence + linking
+	metabolism/
+	├── sleep.py              → Orchestrator (SleepPipeline + SleepContext)
+	├── phases/preflight.py   → VRAM check, signal gating
+	├── phases/drain.py       → Core drain loop (uses chunker, distiller)
+	├── phases/staging.py     → Filesystem cascade ingestion
+	├── phases/gamma.py       → Session anchor distillation
+	├── phases/delta.py       → Bayesian hub erosion
+	├── chunker.py            → chunk_text, _sanitize_llm_json
+	├── distiller.py          → distill_engram, synthesize_hub
+	├── categorizer.py        → detect_category_heuristics
+	├── ephemeral_server.py   → EphemeralServer + _check_llm_available
+	└── thread_weaver.py      → Thread state persistence + linking
 
 See: https://github.com/joanfgarcia/antigravity-red-pill/pull/62
 """
