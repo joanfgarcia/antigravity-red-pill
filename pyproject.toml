@@ -3,7 +3,7 @@ name = "red-pill"
 version = "7.2.1"
 description = "B760-Adaptive Memory Protocol for Sovereign Agents"
 readme = "README.md"
-license = "GPL-3.0-only"
+license = "AGPL-3.0-only"
 requires-python = ">=3.12"
 dependencies = [
     "qdrant-client>=1.8.0",
