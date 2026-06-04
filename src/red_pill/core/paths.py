@@ -182,6 +182,25 @@ def resolve_model_path(model_filename: str) -> Path:
 	return get_models_dir() / model_filename
 
 
+def resolve_llama_binary() -> Path:
+	"""Resuelve la ruta absoluta del binario de llama-server, priorizando build_cuda."""
+	bunker_root = get_bunker_root()
+	cuda_path = bunker_root / "3rdparty" / "BitNet-1.58b" / "build_cuda" / "bin" / "llama-server"
+	if cuda_path.exists():
+		return cuda_path
+	bitnet_path = bunker_root / "3rdparty" / "BitNet-1.58b" / "build" / "bin" / "llama-server"
+	if bitnet_path.exists():
+		return bitnet_path
+
+	import shutil
+
+	system_path = shutil.which("llama-server")
+	if system_path:
+		return Path(system_path)
+	return cuda_path
+
+
+
 def get_daemon_dir() -> Path:
 	"""Resuelve el directorio de ejecución del daemon del modelo ($XDG_RUNTIME_DIR/red-pill o fallback)."""
 	runtime_dir = os.getenv("XDG_RUNTIME_DIR")

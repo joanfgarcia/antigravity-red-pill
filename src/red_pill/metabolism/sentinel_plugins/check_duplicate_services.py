@@ -222,24 +222,28 @@ class ServiceHealthCheck(SentinelPlugin):
 
 			# 4. RUNAWAY CPU
 			cpu = self._get_unit_cpu(unit)
-			if cpu > CPU_THRESHOLD_PCT:
+			# LLM service naturally consumes 100%+ CPU during active inference; bypass CPU limit for it.
+			cpu_threshold = 9999.0 if unit == "redpill-llm.service" else CPU_THRESHOLD_PCT
+			if cpu > cpu_threshold:
 				findings.append(
 					AuditFinding(
 						type="runaway_cpu",
 						severity=7.0,
-						message=f"Service '{unit}' consuming {cpu:.1f}% CPU (threshold: {CPU_THRESHOLD_PCT:.0f}%).",
+						message=f"Service '{unit}' consuming {cpu:.1f}% CPU (threshold: {cpu_threshold:.0f}%).",
 						metadata={"service": unit, "cpu_pct": cpu},
 					)
 				)
 
 			# 5. MEMORY BLOAT
 			rss = self._get_unit_rss_mb(unit)
-			if rss > MEMORY_LIMIT_MB:
+			# LLM service current memory usage holds the active model parameters (up to 16 GB).
+			memory_limit = 16384 if unit == "redpill-llm.service" else MEMORY_LIMIT_MB
+			if rss > memory_limit:
 				findings.append(
 					AuditFinding(
 						type="memory_bloat",
 						severity=6.0,
-						message=f"Service '{unit}' using {rss:.0f} MB RSS (limit: {MEMORY_LIMIT_MB} MB).",
+						message=f"Service '{unit}' using {rss:.0f} MB RSS (limit: {memory_limit} MB).",
 						metadata={"service": unit, "rss_mb": rss},
 					)
 				)

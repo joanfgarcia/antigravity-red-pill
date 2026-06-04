@@ -23,13 +23,14 @@ import urllib.request
 from typing import Optional
 
 from red_pill.config import get_config
+from red_pill.core.paths import resolve_llama_binary
 
 logger = logging.getLogger(__name__)
 
 # Default port for ephemeral instances (different from hypervisor's 8760)
 _EPHEMERAL_PORT = 8790
 _BOOT_TIMEOUT_S = 60
-_REQUEST_TIMEOUT_S = 30
+_REQUEST_TIMEOUT_S = 60
 
 
 def _is_port_open(port: int) -> bool:
@@ -65,17 +66,10 @@ def _find_model_path() -> Optional[str]:
 
 def _find_llama_binary() -> Optional[str]:
 	"""Find llama-server binary."""
-	cfg = get_config()
-	bitnet_path = os.path.join(cfg.APP_ROOT, "3rdparty", "BitNet-1.58b", "build", "bin", "llama-server")
-	if os.path.exists(bitnet_path):
-		return bitnet_path
-
-	import shutil
-
-	system_path = shutil.which("llama-server")
-	if system_path:
-		return system_path
-	return None
+	try:
+		return str(resolve_llama_binary())
+	except Exception:
+		return None
 
 
 def _start_ephemeral() -> Optional[subprocess.Popen]:
@@ -142,7 +136,7 @@ def _stop_ephemeral(proc: subprocess.Popen) -> None:
 		logger.warning(f"[Samantha] Error stopping ephemeral instance: {e}")
 
 
-def _call_llm(port: int, prompt: str, system_prompt: str = "", max_tokens: int = 300) -> Optional[str]:
+def _call_llm(port: int, prompt: str, system_prompt: str = "", max_tokens: int = 300, temperature: float = 0.0) -> Optional[str]:
 	"""Send a completion request to llama-server."""
 	url = f"http://127.0.0.1:{port}/v1/chat/completions"
 	messages = []
@@ -152,8 +146,9 @@ def _call_llm(port: int, prompt: str, system_prompt: str = "", max_tokens: int =
 
 	payload = json.dumps(
 		{
+			"model": "samantha",
 			"messages": messages,
-			"temperature": 0.0,
+			"temperature": temperature,
 			"max_tokens": max_tokens,
 			"seed": 770,
 			"stop": ["<|im_end|>", "<|endoftext|>"],
@@ -177,6 +172,7 @@ def invoke(
 	prompt: str,
 	system_prompt: str = "",
 	max_tokens: int = 300,
+	temperature: float = 0.0,
 ) -> Optional[str]:
 	"""
 	Invoke Samantha on-demand.
@@ -188,7 +184,7 @@ def invoke(
 	# Path 1: Hypervisor is already running
 	if _is_hypervisor_alive():
 		logger.info("[Samantha] Using persistent Hypervisor on port 8760")
-		return _call_llm(8760, prompt, system_prompt, max_tokens)
+		return _call_llm(8760, prompt, system_prompt, max_tokens, temperature)
 
 	# Path 2: Ephemeral on-demand
 	logger.info("[Samantha] Hypervisor offline — attempting ephemeral boot")
@@ -196,14 +192,14 @@ def invoke(
 	# Check if ephemeral port is already occupied (avoid double-start)
 	if _is_port_open(_EPHEMERAL_PORT):
 		logger.info(f"[Samantha] Port {_EPHEMERAL_PORT} already in use — trying it")
-		return _call_llm(_EPHEMERAL_PORT, prompt, system_prompt, max_tokens)
+		return _call_llm(_EPHEMERAL_PORT, prompt, system_prompt, max_tokens, temperature)
 
 	proc = _start_ephemeral()
 	if not proc:
 		return None
 
 	try:
-		result = _call_llm(_EPHEMERAL_PORT, prompt, system_prompt, max_tokens)
+		result = _call_llm(_EPHEMERAL_PORT, prompt, system_prompt, max_tokens, temperature)
 		return result
 	finally:
 		_stop_ephemeral(proc)
