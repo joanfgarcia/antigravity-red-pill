@@ -1,3 +1,11 @@
+## [7.2.2] - 2026-06-04
+
+### 🏎️ Llama-Server Binary Resolution & Sentinel CPU/Memory Tuning
+- **[FEAT] Dynamic `llama-server` Binary Resolution**: Implemented `resolve_llama_binary()` to dynamically find and load the absolute path of `llama-server` binary, prioritizing the GPU-optimised `build_cuda` build over standard `build` or system path.
+- **[FEAT] Robust Hypervisor HTTP Health Probing**: Replaced the fragile TCP port connection test with an asynchronous HTTP `/health` endpoint check (wait up to 60s) in the hypervisor daemon startup block.
+- **[FEAT] Samantha On-Demand Temperature Parameterization**: Parameterized temperature and model configurations for ephemeral LLM invocations.
+- **[FEAT] Sentinel Service Exception Gates**: Bypassed CPU and memory constraints in `check_duplicate_services.py` for `redpill-llm.service` to support high-intensity active inference without triggering memory bloat alerts (up to 16 GB).
+
 ## [7.2.1] - 2026-05-30
 
 ### 🛡️ Sovereign Handshake — Dedicated MCP Tool
