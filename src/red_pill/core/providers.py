@@ -350,6 +350,9 @@ class LlamaCppInferenceProvider(BaseInferenceProvider):
 		return cls(runner_path=runner_path, model_path=model_path, use_oom_shield=use_oom_shield, memory_max=memory_max, ngl=ngl)
 
 	def generate(self, prompt: str, **kwargs) -> str:
+		if kwargs.get("backtrack_mode") and kwargs["backtrack_mode"] != "none":
+			return self.generate_with_backtrack(prompt, **kwargs)
+
 		import os
 		import subprocess
 
@@ -437,6 +440,130 @@ class LlamaCppInferenceProvider(BaseInferenceProvider):
 			return "Error: Local Inference timed out."
 		except Exception as e:
 			return f"Error: Local subprocess failed: {e}"
+
+	def generate_with_backtrack(self, prompt: str, **kwargs) -> str:
+		"""
+		Generates text using the python-native llama_cpp.Llama
+		with token-by-token backtracking and automatic KV-cache recycling.
+		"""
+		import numpy as np
+		from llama_cpp import Llama, llama_get_logits
+
+		max_tokens = kwargs.get("max_tokens", 256)
+		temp = kwargs.get("temperature", 0.7)
+		mode = kwargs.get("backtrack_mode", "confidence")
+		conf_thresh = kwargs.get("conf_thresh", 0.05)
+		lookahead_thresh = kwargs.get("lookahead_thresh", 0.02)
+		entropy_thresh = kwargs.get("entropy_thresh", 4.0)
+		max_backtracks = kwargs.get("max_backtracks", 15)
+
+		if not hasattr(self, "_llm") or self._llm is None:
+			self._llm = Llama(model_path=self.model_path, n_ctx=kwargs.get("ctx_size", 1024), n_gpu_layers=self.ngl, verbose=False)
+
+		llm = self._llm
+		prompt_tokens = llm.tokenize(prompt.encode("utf-8"))
+		current_tokens = list(prompt_tokens)
+		generated = []
+
+		blacklist_by_depth = {}
+		depth = 0
+		backtrack_count = 0
+
+		llm.reset()
+		llm.eval(current_tokens)
+		vocab_size = llm.n_vocab()
+
+		while len(generated) < max_tokens:
+			logits_ptr = llama_get_logits(llm.ctx)
+			logits = np.copy(np.ctypeslib.as_array(logits_ptr, shape=(vocab_size,)))
+			curr_blacklist = blacklist_by_depth.get(depth, set())
+
+			if curr_blacklist:
+				for token_id in curr_blacklist:
+					logits[token_id] = -float("Inf")
+
+			if temp <= 0.0:
+				next_token = np.argmax(logits)
+				prob = 1.0
+				probs = np.zeros(vocab_size)
+				probs[next_token] = 1.0
+			else:
+				exp_logits = np.exp(logits - np.max(logits))
+				probs = exp_logits / np.sum(exp_logits)
+
+				top_k = kwargs.get("top_k", 40)
+				if top_k > 0:
+					top_k_indices = np.argpartition(probs, -top_k)[-top_k:]
+					min_top_prob = np.min(probs[top_k_indices])
+					probs[probs < min_top_prob] = 0.0
+					probs /= np.sum(probs)
+
+				top_p = kwargs.get("top_p", 0.9)
+				if top_p < 1.0:
+					sorted_indices = np.argsort(probs)[::-1]
+					sorted_probs = probs[sorted_indices]
+					cumulative_probs = np.cumsum(sorted_probs)
+					indices_to_remove = cumulative_probs > top_p
+					indices_to_remove[1:] = indices_to_remove[:-1].copy()
+					indices_to_remove[0] = False
+					probs[sorted_indices[indices_to_remove]] = 0.0
+					probs /= np.sum(probs)
+
+				try:
+					next_token = np.random.choice(len(probs), p=probs)
+					prob = probs[next_token]
+				except ValueError:
+					next_token = np.argmax(logits)
+					prob = probs[next_token]
+
+			entropy = -np.sum(probs * np.log(probs + 1e-9))
+			trigger_backtrack = False
+
+			if mode == "confidence" and prob < conf_thresh:
+				trigger_backtrack = True
+			elif mode == "entropy" and entropy > entropy_thresh:
+				trigger_backtrack = True
+			elif mode == "lookahead" and len(generated) < max_tokens - 1:
+				llm.eval([next_token])
+				next_logits_ptr = llama_get_logits(llm.ctx)
+				next_logits = np.copy(np.ctypeslib.as_array(next_logits_ptr, shape=(vocab_size,)))
+				exp_logits = np.exp(next_logits - np.max(next_logits))
+				next_probs = exp_logits / np.sum(exp_logits)
+				max_next_prob = np.max(next_probs)
+
+				if max_next_prob < lookahead_thresh:
+					trigger_backtrack = True
+					llm.n_tokens -= 1
+
+			if trigger_backtrack and backtrack_count < max_backtracks:
+				backtrack_count += 1
+				if depth not in blacklist_by_depth:
+					blacklist_by_depth[depth] = set()
+				blacklist_by_depth[depth].add(next_token)
+
+				if len(blacklist_by_depth[depth]) >= 4 and depth > 0:
+					blacklist_by_depth[depth] = set()
+					depth -= 1
+					if generated:
+						generated.pop()
+						current_tokens.pop()
+						llm.n_tokens -= 1
+
+				llm.eval(current_tokens)
+				continue
+
+			generated.append(next_token)
+			current_tokens.append(next_token)
+			depth += 1
+			blacklist_by_depth[depth] = set()
+
+			if mode != "lookahead":
+				llm.eval([next_token])
+
+			if next_token == llm.token_eos():
+				break
+
+		return llm.detokenize(generated).decode("utf-8", errors="ignore").strip()
 
 	def stream(self, prompt: str, **kwargs) -> Iterator[str]:
 		yield self.generate(prompt, **kwargs)

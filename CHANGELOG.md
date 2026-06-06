@@ -1,3 +1,10 @@
+## [7.2.4] - 2026-06-06
+
+### 🧠 Token Backtracking & KV-Cache Rollback Integration
+- **[FEAT] Token-by-Token Backtracking**: Integrated dynamic backtracking support in `LlamaCppInferenceProvider` (`generate_with_backtrack`) allowing sequence rollbacks when confidence drops below threshold, entropy exceeds limit, or lookahead predicts a dead-end.
+- **[FEAT] OOM Shield Wrapping**: Wrapped heavy compilation and execution tasks with systemd cgroups memory constraints (`systemd-run --user --scope -p MemoryMax=10G`) preventing system OOM panics.
+- **[FEAT] Grid Search & Diagnostics**: Created `scripts/test_gguf_backtrack.py`, `scripts/test_gguf_backtrack_diagnostics.py`, and `scripts/test_backtrack_grid.py` to evaluate backtracking configurations.
+
 ## [7.2.3] - 2026-06-06
 
 ### 🔌 iGPU Vulkan Acceleration & Memory Guard Enhancement
