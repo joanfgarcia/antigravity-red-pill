@@ -4,7 +4,7 @@
 - **[FEAT] Dynamic Context Size Calculation**: Implemented automatic calculation of minimal context size (`ctx_size`) in `BitNetInferenceProvider` and `LlamaCppInferenceProvider` based on estimated prompt length and `max_tokens`. Reduces VRAM consumption and prevents `OutOfDeviceMemory` errors.
 - **[FEAT] Vulkan iGPU Device Support**: Added dedicated offloading support for integrated GPUs (`device='vulkan'` or `'igpu'`). Automatically targets Vulkan runner (`build_vulkan/bin/llama-cli`), enables complete offloading (`ngl=99`), caps context size, and configures Mesa AMD RADV driver env overrides (`VK_ICD_FILENAMES`).
 - **[FEAT] Model Path & Validation Guards**: Enhanced `LlamaCppInferenceProvider.create_be_water` with absolute path and preset searches, file size verification (guards against corrupt/incomplete models < 10MB), and file extension validation.
-- **[FEAT] Temporal Axon Thread Weaving Migration**: Deployed and executed [`thread_weave_migrate.py`](file:///home/joan/Documents/IA/sharing/scripts/thread_weave_migrate.py) to retroactively weave chronological chains (`prev_session_hub`/`next_session_hub`) across all synthesis hub nodes in Qdrant. Bootstrapped the temporal state tracker `thread_state.json`.
+- **[FEAT] Temporal Axon Thread Weaving Migration**: Deployed and executed `scripts/thread_weave_migrate.py` to retroactively weave chronological chains (`prev_session_hub`/`next_session_hub`) across all synthesis hub nodes in Qdrant. Bootstrapped the temporal state tracker `thread_state.json`.
 
 ## [7.2.2] - 2026-06-04
 
