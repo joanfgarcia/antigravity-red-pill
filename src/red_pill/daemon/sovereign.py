@@ -66,11 +66,7 @@ class SovereignDaemon:
 				# Find all DaemonPlugin subclasses in the module
 				for attr_name in dir(module):
 					attr = getattr(module, attr_name)
-					if (
-						isinstance(attr, type)
-						and issubclass(attr, DaemonPlugin)
-						and attr is not DaemonPlugin
-					):
+					if isinstance(attr, type) and issubclass(attr, DaemonPlugin) and attr is not DaemonPlugin:
 						plugin = attr()
 						if plugin.enabled:
 							self.plugins.append(plugin)
@@ -85,10 +81,7 @@ class SovereignDaemon:
 		try:
 			await asyncio.wait_for(plugin.tick(), timeout=plugin.timeout_s)
 		except asyncio.TimeoutError:
-			logger.error(
-				f"[SOVEREIGN] Plugin '{plugin.name}' TIMEOUT after {plugin.timeout_s}s. "
-				f"Skipping. Pain signal injected."
-			)
+			logger.error(f"[SOVEREIGN] Plugin '{plugin.name}' TIMEOUT after {plugin.timeout_s}s. Skipping. Pain signal injected.")
 			self._inject_timeout_pain(plugin)
 		except Exception as e:
 			logger.error(f"[SOVEREIGN] Plugin '{plugin.name}' error: {e}")
@@ -123,10 +116,7 @@ class SovereignDaemon:
 				logger.error(f"[SOVEREIGN] Plugin '{plugin.name}' on_start() failed: {e}")
 
 		_sd_notify("READY=1")
-		logger.info(
-			f"[SOVEREIGN] Daemon ready. {len(self.plugins)} plugins loaded. "
-			f"PID: {os.getpid()}"
-		)
+		logger.info(f"[SOVEREIGN] Daemon ready. {len(self.plugins)} plugins loaded. PID: {os.getpid()}")
 
 		while self.running:
 			now = time.monotonic()

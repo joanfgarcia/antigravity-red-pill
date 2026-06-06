@@ -83,6 +83,7 @@ def test_audit_vitals_exhaustion(mock_run, auditor):
 		else:
 			res.stdout = ""
 		return res
+
 	mock_run.side_effect = run_side_effect
 
 	# We mock urllib and sqlite3 since those hit real system components
@@ -114,6 +115,7 @@ def test_audit_vitals_all_green(mock_run, auditor):
 		else:
 			res.stdout = ""
 		return res
+
 	mock_run.side_effect = run_side_effect
 
 	from red_pill.core.service_contract import ServiceContract

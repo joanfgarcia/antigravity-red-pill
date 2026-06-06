@@ -47,6 +47,7 @@ def _safe_create_task(coro, *, name: str = "background"):
 
 	return asyncio.create_task(_wrapped(), name=f"rp-{name}")
 
+
 # v6.0.1: Robust Script Resolution
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -1416,8 +1417,8 @@ async def handle_mark_cognitive_task_failed(arguments: Dict[str, Any]):
 async def main():
 	# Global safety net: catch unhandled exceptions in fire-and-forget tasks
 	def _handle_task_exception(loop, context):
-		exception = context.get('exception')
-		msg = context.get('message', 'Unhandled asyncio exception')
+		exception = context.get("exception")
+		msg = context.get("message", "Unhandled asyncio exception")
 		logger.error(f"[ASYNCIO SAFETY NET] {msg}: {exception}", exc_info=exception)
 
 	loop = asyncio.get_event_loop()

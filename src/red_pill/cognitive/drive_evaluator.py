@@ -223,6 +223,7 @@ class DriveEvaluator:
 				# Expected to be up but isn't — inject pain for Sentinel/Healer
 				try:
 					from red_pill.memory import MemoryManager
+
 					mm = MemoryManager()
 					if not mm.has_signal("hypervisor_unreachable"):
 						mm.inject_signal(
@@ -243,6 +244,7 @@ class DriveEvaluator:
 		# ── LLM is healthy — evaporate any stale pain signal ──
 		try:
 			from red_pill.memory import MemoryManager
+
 			mm = MemoryManager()
 			if mm.has_signal("hypervisor_unreachable"):
 				mm.evaporate_signals("hypervisor_unreachable")

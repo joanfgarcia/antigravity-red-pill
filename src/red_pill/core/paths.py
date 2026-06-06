@@ -200,7 +200,6 @@ def resolve_llama_binary() -> Path:
 	return cuda_path
 
 
-
 def get_daemon_dir() -> Path:
 	"""Resuelve el directorio de ejecución del daemon del modelo ($XDG_RUNTIME_DIR/red-pill o fallback)."""
 	runtime_dir = os.getenv("XDG_RUNTIME_DIR")

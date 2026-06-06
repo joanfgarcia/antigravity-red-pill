@@ -46,8 +46,10 @@ class SwarmMonitorPlugin(DaemonPlugin):
 				if total > 0:
 					logger.info(f"[SWARM] {total} pending Neon-Link messages.")
 					self._mm.inject_signal(
-						"swarm_messages_pending", intensity=7.0,
-						signal_type="anxiety", source="Neon-Link",
+						"swarm_messages_pending",
+						intensity=7.0,
+						signal_type="anxiety",
+						source="Neon-Link",
 					)
 				else:
 					self._mm.evaporate_signals("swarm_messages_pending")
@@ -69,8 +71,10 @@ class SwarmMonitorPlugin(DaemonPlugin):
 			if total > 500:
 				logger.warning(f"[SWARM] Inbox bloat: {total} reports.")
 				self._mm.inject_signal(
-					"inbox_bloat_stasis", intensity=7.5,
-					signal_type="pain", source="MinionInbox",
+					"inbox_bloat_stasis",
+					intensity=7.5,
+					signal_type="pain",
+					source="MinionInbox",
 				)
 			else:
 				self._mm.evaporate_signals("inbox_bloat_stasis")

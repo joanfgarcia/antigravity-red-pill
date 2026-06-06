@@ -40,6 +40,7 @@ need to be added to the cycle, revisit decomposition into:
 
 See: https://github.com/joanfgarcia/antigravity-red-pill/pull/62
 """
+
 import json
 import logging
 import os

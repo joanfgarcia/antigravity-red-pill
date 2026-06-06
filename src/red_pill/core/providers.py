@@ -194,7 +194,16 @@ class BitNetInferenceProvider(BaseInferenceProvider):
 		grammar_path = kwargs.get("grammar_path", self.grammar_path)
 		use_mmap = kwargs.get("use_mmap", True)
 		ngl = kwargs.get("ngl", 0)  # Hardware Offload
-		ctx_size = kwargs.get("ctx_size", 4096)
+
+		# Dynamically calculate minimal context size if not explicitly set to prevent VRAM wastage/OOM
+		if "ctx_size" not in kwargs:
+			prompt_tokens_est = len(prompt.split()) * 2
+			required_tokens = prompt_tokens_est + max_tokens + 16
+			ctx_size = 32
+			while ctx_size < required_tokens:
+				ctx_size *= 2
+		else:
+			ctx_size = kwargs["ctx_size"]
 
 		cmd = [
 			str(self.runner_path),
@@ -269,7 +278,7 @@ class LlamaCppInferenceProvider(BaseInferenceProvider):
 		self.ngl = ngl
 
 	@classmethod
-	def create_be_water(cls, model_name: str) -> Optional["LlamaCppInferenceProvider"]:
+	def create_be_water(cls, model_name_or_path: str) -> Optional["LlamaCppInferenceProvider"]:
 		import os
 		import shutil
 
@@ -282,10 +291,44 @@ class LlamaCppInferenceProvider(BaseInferenceProvider):
 				return None
 			runner_path = runner_path_opt
 
-		# 2. Locate model
-		model_path = os.path.join(workspace, "models", "gguf", model_name)
-		if not os.path.exists(model_path):
+		# 2. Locate model and apply guards
+		model_path = None
+		if os.path.exists(model_name_or_path) and os.path.isfile(model_name_or_path):
+			model_path = os.path.abspath(model_name_or_path)
+		else:
+			# Preset search paths
+			search_paths = [
+				os.path.join(workspace, "models", "gguf", model_name_or_path),
+				os.path.join(workspace, "sharing", "models", "gguf", model_name_or_path),
+				os.path.join(workspace, "sharing", "3rdparty", "BitNet-1.58b", "models", model_name_or_path),
+				os.path.join(workspace, "experimental", "Samantha", model_name_or_path),
+			]
+			for p in search_paths:
+				if os.path.exists(p) and os.path.isfile(p):
+					model_path = os.path.abspath(p)
+					break
+
+		# Guard 1: Verify model existence
+		if not model_path:
+			logger.error(f"[LlamaCppInferenceProvider] Model not found: '{model_name_or_path}'")
 			return None
+
+		# Guard 2: Verify model file size (must be >= 10MB) to prevent corrupt loading
+		try:
+			file_size = os.path.getsize(model_path)
+			if file_size < 10 * 1024 * 1024:
+				logger.error(
+					f"[LlamaCppInferenceProvider] Guard failure: Model file is too small ({file_size / (1024 * 1024):.1f} MB), likely corrupt: {model_path}"
+				)
+				return None
+		except Exception as e:
+			logger.error(f"[LlamaCppInferenceProvider] Guard failure checking file size: {e}")
+			return None
+
+		# Guard 3: Verify extension
+		ext = os.path.splitext(model_path)[1].lower()
+		if ext not in (".gguf", ".bin"):
+			logger.warning(f"[LlamaCppInferenceProvider] Model extension is unusual ({ext}), proceeding with caution: {model_path}")
 
 		# 3. Detect VRAM & NGL
 		ngl = 0
@@ -303,16 +346,52 @@ class LlamaCppInferenceProvider(BaseInferenceProvider):
 		use_oom_shield = shutil.which("systemd-run") is not None
 		memory_max = "10G"  # Sensible default for 32GB systems, could be dynamic
 
+		logger.info(f"[LlamaCppInferenceProvider] Guard success. Loaded model from: {model_path}")
 		return cls(runner_path=runner_path, model_path=model_path, use_oom_shield=use_oom_shield, memory_max=memory_max, ngl=ngl)
 
 	def generate(self, prompt: str, **kwargs) -> str:
 		import os
 		import subprocess
 
+		import torch
+
 		max_tokens = kwargs.get("max_tokens", 256)
 		temp = kwargs.get("temperature", 0.1)
-		ctx_size = kwargs.get("ctx_size", 2048)
+
+		# Dynamically calculate minimal context size if not explicitly set to prevent VRAM wastage/OOM
+		if "ctx_size" not in kwargs:
+			# Estimate prompt length by words with safety factor of 2 (to cover BPE tokens)
+			prompt_tokens_est = len(prompt.split()) * 2
+			# Add max_tokens plus a small padding
+			required_tokens = prompt_tokens_est + max_tokens + 16
+			# Find the nearest power of 2 starting at 32
+			ctx_size = 32
+			while ctx_size < required_tokens:
+				ctx_size *= 2
+		else:
+			ctx_size = kwargs["ctx_size"]
+
 		chat_prompt = f"<|user|>\n{prompt}\n<|assistant|>\n"
+
+		# Hardware selection override
+		device = kwargs.get("device", "cuda" if torch.cuda.is_available() else "cpu").lower()
+		ngl = self.ngl
+		runner_path = self.runner_path
+		env = os.environ.copy()
+
+		if device in ("vulkan", "igpu"):
+			# Resolve Vulkan runner
+			workspace = os.getenv("WORKSPACE_ROOT", os.path.expanduser("~/Documents/IA"))
+			vulkan_runner = os.path.join(workspace, "sharing", "3rdparty", "BitNet-1.58b", "build_vulkan", "bin", "llama-cli")
+			if os.path.exists(vulkan_runner):
+				runner_path = vulkan_runner
+			ngl = kwargs.get("ngl", 99)  # Offload all layers to iGPU
+			# Cap context size to avoid OutOfDeviceMemory on iGPU
+			if "ctx_size" not in kwargs:
+				ctx_size = min(ctx_size, 2048)
+			# Set Vulkan AMD Mesa RADV driver automatically if available
+			if os.path.exists("/usr/share/vulkan/icd.d/radeon_icd.json"):
+				env["VK_ICD_FILENAMES"] = "/usr/share/vulkan/icd.d/radeon_icd.json"
 
 		cmd = []
 		if self.use_oom_shield:
@@ -320,7 +399,7 @@ class LlamaCppInferenceProvider(BaseInferenceProvider):
 
 		cmd.extend(
 			[
-				str(self.runner_path),
+				str(runner_path),
 				"-m",
 				str(self.model_path),
 				"-p",
@@ -330,14 +409,13 @@ class LlamaCppInferenceProvider(BaseInferenceProvider):
 				"-c",
 				str(ctx_size),
 				"-ngl",
-				str(self.ngl),
+				str(ngl),
 				"--temp",
 				str(temp),
 				"--simple-io",  # Prevent interactive hang
 			]
 		)
 
-		env = os.environ.copy()
 		# Clean LD_LIBRARY_PATH for Vulkan/Native clashes
 		if "LD_LIBRARY_PATH" in env:
 			paths = env["LD_LIBRARY_PATH"].split(":")

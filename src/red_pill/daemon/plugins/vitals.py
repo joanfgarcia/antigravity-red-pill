@@ -95,8 +95,10 @@ class VitalsPlugin(DaemonPlugin):
 				if hours_idle > threshold:
 					logger.warning(f"[VITALS] Korsakoff: {hours_idle:.1f}h idle.")
 					self._mm.inject_signal(
-						"korsakoff_amnesia", intensity=5.5,
-						signal_type="anxiety", source="HIPPOCAMPUS",
+						"korsakoff_amnesia",
+						intensity=5.5,
+						signal_type="anxiety",
+						source="HIPPOCAMPUS",
 					)
 				else:
 					self._mm.evaporate_signals("korsakoff_amnesia")

@@ -57,15 +57,16 @@ class SipCheck(ServiceSentinelPlugin):
 			# Grace period: derives from model_profiles.yaml load_time_s (worst-case × 1.5 safety)
 			try:
 				from red_pill.core.model_registry import ModelRegistry
+
 				grace_s = int(ModelRegistry.get_max_load_time_s(backend="cuda") * 1.5)
 			except Exception:
 				grace_s = 180  # Fallback if registry unavailable
 			uptime_s = self._get_service_uptime()
 			if uptime_s is not None and uptime_s < grace_s:
 				import logging
+
 				logging.getLogger(__name__).info(
-					f"[{self.name}] HTTP {he.code} on port {port} — "
-					f"within grace period ({uptime_s:.0f}s / {grace_s}s). Letting it load."
+					f"[{self.name}] HTTP {he.code} on port {port} — within grace period ({uptime_s:.0f}s / {grace_s}s). Letting it load."
 				)
 			else:
 				uptime_str = f"{uptime_s:.0f}s" if uptime_s is not None else "unknown"
@@ -74,8 +75,7 @@ class SipCheck(ServiceSentinelPlugin):
 						type="sip_loading",
 						severity=6.0,
 						message=(
-							f"{self.name}: /health returned HTTP {he.code} on port {port} "
-							f"(stuck loading, uptime: {uptime_str} > {grace_s}s grace)."
+							f"{self.name}: /health returned HTTP {he.code} on port {port} (stuck loading, uptime: {uptime_str} > {grace_s}s grace)."
 						),
 						metadata={"service": self.service_unit, "port": port, "http_code": he.code, "uptime_s": uptime_s, "grace_s": grace_s},
 					)
@@ -111,6 +111,7 @@ class SipCheck(ServiceSentinelPlugin):
 		if healed:
 			try:
 				from red_pill.memory import MemoryManager
+
 				mm = MemoryManager()
 				mm.evaporate_signals("hypervisor_unreachable")
 			except Exception:
@@ -176,7 +177,9 @@ class SipCheck(ServiceSentinelPlugin):
 		try:
 			result = subprocess.run(
 				["systemctl", "--user", "show", self.service_unit, "--property=ActiveEnterTimestamp"],
-				capture_output=True, text=True, timeout=5,
+				capture_output=True,
+				text=True,
+				timeout=5,
 			)
 			# Output: ActiveEnterTimestamp=Fri 2026-05-29 12:03:30 CEST
 			line = result.stdout.strip()
@@ -188,7 +191,9 @@ class SipCheck(ServiceSentinelPlugin):
 			# Parse systemd timestamp (locale-aware, use subprocess for safety)
 			ts_result = subprocess.run(
 				["date", "-d", ts_str, "+%s"],
-				capture_output=True, text=True, timeout=5,
+				capture_output=True,
+				text=True,
+				timeout=5,
 			)
 			epoch = float(ts_result.stdout.strip())
 			now = datetime.now(timezone.utc).timestamp()
