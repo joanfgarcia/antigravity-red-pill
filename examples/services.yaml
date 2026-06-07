@@ -34,7 +34,7 @@ services:
   redpill-llm:
     unit: redpill-llm.service
     type: daemon-listener
-    health_url: "http://127.0.0.1:8776/health"
+    health_url: "http://127.0.0.1:8760/health"
     legacy_aliases:
       - red-pill-minion.service
     category: core
