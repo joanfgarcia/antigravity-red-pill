@@ -14,7 +14,7 @@ This is ORTHOGONAL to `config.WORKSPACE_ROOT` (which is red-pill's own ecosystem
 """
 import logging
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import List, Optional
 
@@ -31,6 +31,7 @@ class Workspace:
 	root: Path
 	atlas: Optional[Path] = None   # hook (permissions step): explicit per-workspace standards path
 	graphify: bool = False         # hook (graphify timer step): index this workspace's AST
+	access: bool = False           # operator opt-in: grant FS access (additionalDirectories) to this workspace
 
 
 @dataclass(frozen=True)
@@ -86,6 +87,7 @@ def load_registry() -> WorkspaceRegistry:
 					root=_expand(entry["root"]),
 					atlas=_expand(entry["atlas"]) if entry.get("atlas") else None,
 					graphify=bool(entry.get("graphify", False)),
+					access=bool(entry.get("access", False)),
 				)
 			)
 		except Exception as exc:
@@ -136,3 +138,118 @@ def resolve_standards(ws: Workspace) -> Path:
 		return agent.resolve()
 	except Exception:
 		return agent
+
+
+# ── Registry writes (used by `red-pill workspace` / scripts/manage_workspaces.py) ──
+_REGISTRY_HEADER = """\
+# Workspace registry for red-pill — PROJECT workspaces (peers).
+# Managed by `red-pill workspace` (scripts/manage_workspaces.py); hand-editable too.
+#
+# agent_core = the agent's GLOBAL personal desk (transversal, shared across ALL workspaces).
+# Each workspace's rules/standards are discovered at runtime via the `.agent` convention.
+# Per-workspace fields:
+#   root     : the project repo root.
+#   atlas    : optional explicit standards path (null = auto-discover via .agent).
+#   graphify : whether the AST-refresh timer indexes this workspace.
+#   access   : operator opt-in — grant the agent filesystem access (additionalDirectories).
+#              false = in AUTONOMOUS mode the agent CANNOT operate in this workspace.
+"""
+
+
+def _to_tilde(p) -> str:
+	"""Render a path with $HOME collapsed to ~ for a tidy, portable registry file."""
+	home = str(Path.home())
+	s = str(p)
+	return "~" + s[len(home):] if s == home or s.startswith(home + os.sep) else s
+
+
+def serialize_registry(registry: WorkspaceRegistry) -> str:
+	"""Pure serialization (no I/O) — testable. Regenerates the documented header; PyYAML-style
+	inline comments are not preserved (we re-emit the header instead)."""
+	lines = [_REGISTRY_HEADER, "version: 1", f'agent_core: "{_to_tilde(registry.agent_core)}"']
+	if not registry.workspaces:
+		lines.append("workspaces: []")
+	else:
+		lines.append("workspaces:")
+		for w in registry.workspaces:
+			atlas = f'"{_to_tilde(w.atlas)}"' if w.atlas else "null"
+			lines.append(
+				f'  - {{ name: {w.name}, root: "{_to_tilde(w.root)}", atlas: {atlas}, '
+				f"graphify: {str(w.graphify).lower()}, access: {str(w.access).lower()} }}"
+			)
+	return "\n".join(lines) + "\n"
+
+
+def save_registry(registry: WorkspaceRegistry) -> Path:
+	"""Persist the registry to its XDG path."""
+	path = registry_path()
+	path.parent.mkdir(parents=True, exist_ok=True)
+	path.write_text(serialize_registry(registry), encoding="utf-8")
+	return path
+
+
+def _match(registry: WorkspaceRegistry, name_or_path: str) -> Optional[Workspace]:
+	"""Find a workspace by exact name, else by resolved root path."""
+	found = registry.get(name_or_path)
+	if found:
+		return found
+	try:
+		target = _expand(name_or_path).resolve()
+	except Exception:
+		target = _expand(name_or_path)
+	for ws in registry.workspaces:
+		try:
+			if ws.root.resolve() == target:
+				return ws
+		except Exception:
+			if ws.root == target:
+				return ws
+	return None
+
+
+def find_workspace(name_or_path: str) -> Optional[Workspace]:
+	"""Public lookup by name or root path against the on-disk registry."""
+	return _match(load_registry(), name_or_path)
+
+
+def add_or_enable_workspace(path, name: Optional[str] = None):
+	"""Register `path` (if new) with access=True, or flip an existing entry to access=True.
+	Returns (registry, workspace, was_new). Minimal by design: new entries default
+	atlas=None (auto-discovered via .agent) and graphify=False."""
+	registry = load_registry()
+	root = _expand(path)
+	existing = _match(registry, str(root))
+	if existing:
+		updated = replace(existing, access=True)
+		workspaces = [updated if w.name == existing.name else w for w in registry.workspaces]
+		ws_out, was_new = updated, False
+	else:
+		ws_out = Workspace(name=name or root.name, root=root, atlas=None, graphify=False, access=True)
+		workspaces = list(registry.workspaces) + [ws_out]
+		was_new = True
+	registry = WorkspaceRegistry(agent_core=registry.agent_core, workspaces=workspaces)
+	save_registry(registry)
+	return registry, ws_out, was_new
+
+
+def set_access(name_or_path: str, value: bool) -> Optional[Workspace]:
+	"""Flip a workspace's access flag. Returns the updated workspace, or None if not found."""
+	registry = load_registry()
+	target = _match(registry, name_or_path)
+	if not target:
+		return None
+	updated = replace(target, access=value)
+	workspaces = [updated if w.name == target.name else w for w in registry.workspaces]
+	save_registry(WorkspaceRegistry(agent_core=registry.agent_core, workspaces=workspaces))
+	return updated
+
+
+def remove_workspace(name_or_path: str) -> Optional[Workspace]:
+	"""Delete a workspace entry entirely. Returns the removed workspace, or None if not found."""
+	registry = load_registry()
+	target = _match(registry, name_or_path)
+	if not target:
+		return None
+	workspaces = [w for w in registry.workspaces if w.name != target.name]
+	save_registry(WorkspaceRegistry(agent_core=registry.agent_core, workspaces=workspaces))
+	return target

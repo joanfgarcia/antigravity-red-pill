@@ -244,6 +244,11 @@ if command -v uv &> /dev/null; then
 	uv run python scripts/inject_mcp.py --uv-path "$(command -v uv)" --redpill-dir "$REPO_ROOT" || true
 	command -v claude &> /dev/null && uv run python scripts/inject_settings.py --redpill-dir "$REPO_ROOT" || true
 
+	# Workspace access: re-sync from the registry; if interactive (tty), offer to add more.
+	if [ -t 0 ] && command -v claude &> /dev/null && [ -f "$REPO_ROOT/scripts/manage_workspaces.py" ]; then
+		uv run python scripts/manage_workspaces.py enable || true
+	fi
+
 	# 5. Neon-Link Service Migration (v0.4.0 watchdog)
 	# Restart neon-link to pick up sd_notify/WatchdogSec changes
 	if systemctl --user is-active neon-link.service &>/dev/null; then

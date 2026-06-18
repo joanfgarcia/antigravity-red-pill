@@ -81,3 +81,31 @@ def agent_core_vars():
 		val = os.path.expanduser(val.replace("${WORKSPACE_ROOT}", ws).replace("${HOME}", home))
 		agent_core = val
 	return {"AGENT_CORE_DIR": agent_core}
+
+
+def workspace_access_dirs():
+	"""Standalone reader (no red_pill import): filesystem dirs to GRANT from the registry.
+	Returns root (+ atlas if set) of every workspace with access: true. Empty on absence/error.
+	The single operator switch (workspaces.yaml:access) → the per-IDE adapters translate it."""
+	home = os.path.expanduser("~")
+	path = os.path.join(home, ".config", "red-pill", "workspaces.yaml")
+	if not os.path.exists(path):
+		return []
+	try:
+		import yaml
+
+		with open(path, encoding="utf-8") as f:
+			data = yaml.safe_load(f) or {}
+	except Exception:
+		return []
+	dirs = []
+	for entry in data.get("workspaces") or []:
+		if not isinstance(entry, dict) or not entry.get("access"):
+			continue
+		for key in ("root", "atlas"):
+			val = entry.get(key)
+			if val:
+				resolved = os.path.expanduser(str(val))
+				if resolved not in dirs:
+					dirs.append(resolved)
+	return dirs

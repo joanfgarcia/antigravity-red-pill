@@ -27,7 +27,7 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger("settings_injector")
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _config_common import build_vars, subst, agent_core_vars  # noqa: E402
+from _config_common import build_vars, subst, agent_core_vars, workspace_access_dirs  # noqa: E402
 
 PERMISSION_LIST_KEYS = ("allow", "ask", "deny", "additionalDirectories")
 
@@ -119,6 +119,8 @@ def main():
 	parser.add_argument("--uv-path", help="Path to uv (shared build_vars).")
 	parser.add_argument("--no-backup", action="store_true", help="Do not write a .bak before modifying.")
 	parser.add_argument("--remove", action="store_true", help="Remove the fragment's entries instead of merging.")
+	parser.add_argument("--extra-dir", action="append", default=[], help="Extra directory to add (or, with --remove, to remove). Repeatable.")
+	parser.add_argument("--print", dest="print_only", action="store_true", help="Resolve and print additionalDirectories; do not write.")
 	args = parser.parse_args()
 
 	seed = os.path.expanduser(args.seed) if args.seed else os.path.join(
@@ -133,11 +135,33 @@ def main():
 	with open(seed, encoding="utf-8") as f:
 		fragment = _strip_comments(subst(json.load(f), variables))
 
+	# ADD path: augment the seed (transversal) fragment with registry-derived workspace dirs
+	# (access: true) + any explicit --extra-dir. The REMOVE path keeps the fragment narrow.
+	if not args.remove:
+		extra = list(workspace_access_dirs()) + [os.path.expanduser(d) for d in args.extra_dir]
+		if extra:
+			ad = fragment.setdefault("permissions", {}).setdefault("additionalDirectories", [])
+			for d in extra:
+				if d not in ad:
+					ad.append(d)
+
+	if args.print_only:
+		for d in fragment.get("permissions", {}).get("additionalDirectories", []):
+			print(d)
+		return
+
 	target = resolve_target(args)
 	before = _load_json(target)
 	after = json.loads(json.dumps(before))  # deep copy
 	if args.remove:
-		remove_fragment(after, fragment)
+		# Targeted removal (e.g. `workspace disable`): drop ONLY the explicit dirs, never the
+		# transversal seed or other still-enabled workspaces. Without --extra-dir, remove the
+		# whole fragment (full uninstall).
+		if args.extra_dir:
+			drop = {"permissions": {"additionalDirectories": [os.path.expanduser(d) for d in args.extra_dir]}}
+			remove_fragment(after, drop)
+		else:
+			remove_fragment(after, fragment)
 	else:
 		deep_merge(after, fragment)
 

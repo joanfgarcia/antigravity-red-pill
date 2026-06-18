@@ -692,10 +692,15 @@ if [ -f "$SCRIPT_DIR/inject_anchor.py" ] && command -v uv &> /dev/null; then
 	echo -e "${GREEN}✓ Sovereign Handshake + Agent_Core anclados (GEMINI.md / ~/.claude/CLAUDE.md).${NC}"
 fi
 
-# Claude Code: grant access to transversal dirs (Agent_Core/atlas/XDG) — merge, never overwrite
+# Claude Code: grant access to transversal dirs (Agent_Core/XDG) + registry workspaces (access:true).
 if [ -f "$SCRIPT_DIR/inject_settings.py" ] && command -v uv &> /dev/null && command -v claude &> /dev/null; then
 	(cd "$REPO_ROOT" && uv run python scripts/inject_settings.py --redpill-dir "$REPO_ROOT" || true)
 	echo -e "${GREEN}✓ Claude Code: acceso a directorios transversales concedido.${NC}"
+	# Consent gate: in interactive installs, let the operator grant access to project workspaces.
+	if [ "$AUTO_MODE" = "false" ] && [ -f "$SCRIPT_DIR/manage_workspaces.py" ]; then
+		echo -e "${BLUE}--- Acceso del agente a workspaces de proyecto ---${NC}"
+		(cd "$REPO_ROOT" && uv run python scripts/manage_workspaces.py enable || true)
+	fi
 fi
 
 echo -e "${BLUE}--- Fase: Task LLM Secundario (Minion V6) ---${NC}"
