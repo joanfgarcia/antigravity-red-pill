@@ -52,7 +52,7 @@ from typing import Any, Dict, List, Optional
 from qdrant_client.models import Filter
 
 import red_pill.config as cfg
-from red_pill.core.paths import get_daemon_dir, get_staging_dir, get_thread_state_path
+from red_pill.core.paths import get_daemon_dir, get_daemon_persistent_dir, get_staging_dir, get_thread_state_path
 from red_pill.core.vram_probe import VramProbe
 from red_pill.events import SleepCompletedEvent, get_event_bus
 from red_pill.metabolism.evolution import IdentityEvaluator
@@ -439,7 +439,7 @@ class EphemeralServer:
 		)
 		SovereignNotifier.notify_bunker(memory_manager, "ariadne_thread_running", intensity=1.0, source="SLEEP_ENGINE")
 
-		start_sh = str(get_daemon_dir() / "start.sh")
+		start_sh = str(get_daemon_persistent_dir() / "start.sh")
 		if not os.path.exists(start_sh):
 			logger.error("[EPHEMERAL SERVER] start.sh not found. Aborting.")
 			SovereignNotifier.notify_bunker(memory_manager, "local_llm_offline", intensity=7.0, signal_type="pain", source="SLEEP_ENGINE")

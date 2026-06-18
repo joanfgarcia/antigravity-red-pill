@@ -234,7 +234,7 @@ class RedPillConfig(BaseSettings):
 	# -----------------------------------------------------------------------
 	BRAIN_PATH: str = os.path.join(os.path.expanduser("~"), ".gemini/antigravity/brain")
 	SIP_ENABLED: bool = True
-	SIP_SOCKET_PATH: str = os.path.join(os.getenv("XDG_RUNTIME_DIR", "/tmp"), "red_pill_sip.sock")
+	SIP_SOCKET_PATH: str = os.path.join(os.getenv("XDG_RUNTIME_DIR", "/tmp"), "red-pill", "red_pill.sock")
 
 	# -----------------------------------------------------------------------
 	# MODELS & EMBEDDINGS

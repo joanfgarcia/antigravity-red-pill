@@ -391,6 +391,30 @@ async def auto_heal_ritual(mm: MemoryManager) -> None:
 					mm.inject_signal(name=event_id.replace("signal_", ""), intensity=6.0, signal_type="pain", source="Auto-Healer", muted=False)
 					healed_ids.append(report["id"])
 
+			# SIP Provisioning heal — local LLM offline or missing volatile artifacts
+			if event_id in ("signal_local_llm_offline",) or event_id.startswith("signal_sip_missing_"):
+				logger.info(f"Auto-Healer: Attempting SIP provisioning heal for '{event_id}'...")
+				try:
+					from red_pill.metabolism.sentinel_plugins.check_sip_provisioning import SipProvisioningCheck
+
+					plugin = SipProvisioningCheck()
+					config = cfg.get_config()
+					findings = await asyncio.to_thread(plugin._audit_provisioning, config)
+					if findings:
+						healed = await asyncio.to_thread(plugin.heal_specific, config, findings[0])
+						if healed:
+							logger.info(f"Auto-Healer: SIP infrastructure re-provisioned successfully.")
+							mm.evaporate_signals("local_llm_offline")
+						else:
+							logger.warning(f"Auto-Healer: SIP heal_specific returned False for '{findings[0].type}'.")
+					else:
+						logger.info("Auto-Healer: SIP provisioning chain is intact, evaporating stale signal.")
+						mm.evaporate_signals("local_llm_offline")
+				except Exception as sip_err:
+					logger.error(f"Auto-Healer: SIP provisioning heal failed: {sip_err}")
+				healed_ids.append(report["id"])
+				continue
+
 		if healed_ids:
 			await asyncio.to_thread(inbox.mark_as_read, healed_ids)
 	except Exception as e:

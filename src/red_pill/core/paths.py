@@ -201,12 +201,33 @@ def resolve_llama_binary() -> Path:
 
 
 def get_daemon_dir() -> Path:
-	"""Resuelve el directorio de ejecución del daemon del modelo ($XDG_RUNTIME_DIR/red-pill o fallback)."""
+	"""Resuelve el directorio de RUNTIME del daemon ($XDG_RUNTIME_DIR/red-pill).
+
+	Este directorio es VOLÁTIL — se borra en cada reinicio del sistema.
+	Usar SOLO para artefactos de runtime: sockets UDS, PIDs, locks.
+	Para artefactos persistentes (venv, scripts), usar get_daemon_persistent_dir().
+	"""
 	runtime_dir = os.getenv("XDG_RUNTIME_DIR")
 	if runtime_dir:
 		path = Path(runtime_dir) / "red-pill"
 	else:
 		path = Path(platformdirs.user_cache_dir("red-pill")) / "daemons"
+	path.mkdir(parents=True, exist_ok=True)
+	return path
+
+
+def get_daemon_persistent_dir() -> Path:
+	"""Resuelve el directorio PERSISTENTE del daemon ($XDG_DATA_HOME/red-pill/daemon).
+
+	Almacena artefactos que deben sobrevivir al reinicio del sistema:
+	- .venv/ (entorno aislado con llama-cpp-python)
+	- run_dual_bind.py (script del servidor dual-bind)
+	- start.sh (launcher del daemon)
+	- Logs de ejecución
+
+	El socket UDS se crea en get_daemon_dir() (volátil, correcto por XDG spec).
+	"""
+	path = get_data_dir() / "daemon"
 	path.mkdir(parents=True, exist_ok=True)
 	return path
 

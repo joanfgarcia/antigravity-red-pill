@@ -763,7 +763,7 @@ async def handle_run_local_healer(arguments: Dict[str, Any]):
 	parent="metabolism_health_api",
 	action="heal_tissue",
 	description="[OFFICIAL] Immune System Effector. Attempt to heal a damaged system component (tissue) based on biological pain signals.",
-	schema={"type": "object", "properties": {"tissue": {"type": "string", "enum": ["cuda", "qdrant", "mypy"]}}, "required": ["tissue"]},
+	schema={"type": "object", "properties": {"tissue": {"type": "string", "enum": ["cuda", "qdrant", "mypy", "sip_provisioning"]}}, "required": ["tissue"]},
 )
 async def handle_heal_tissue(arguments: Dict[str, Any]):
 	tissue = arguments.get("tissue")
@@ -791,6 +791,35 @@ async def handle_heal_tissue(arguments: Dict[str, Any]):
 
 	elif tissue == "qdrant":
 		output = "Qdrant tissue healing requires host-level restart (`sudo systemctl restart qdrant`). Immune system currently lacks root privileges."
+
+	elif tissue == "sip_provisioning":
+		try:
+			logger.info("Auto-Immune: Attempting to re-provision SIP infrastructure...")
+			from red_pill.metabolism.sentinel_plugins.check_sip_provisioning import SipProvisioningCheck
+
+			plugin = SipProvisioningCheck()
+			config = cfg.get_config()
+			# Run audit to find what's broken
+			provisioning_findings = plugin._audit_provisioning(config)
+			if not provisioning_findings:
+				output = "SIP Provisioning: All artifacts present. No healing needed."
+			else:
+				# Attempt heal on the first actionable finding
+				healed = plugin.heal_specific(config, provisioning_findings[0])
+				if healed:
+					output = (
+						f"SIP Provisioning: Successfully re-provisioned. "
+						f"Healed {len(provisioning_findings)} issue(s): "
+						+ ", ".join(f.type for f in provisioning_findings)
+					)
+				else:
+					output = (
+						f"SIP Provisioning: Auto-heal failed. Issues found: "
+						+ "; ".join(f.message for f in provisioning_findings)
+					)
+		except Exception as e:
+			output = f"Critical immune failure while healing SIP provisioning: {e}"
+
 	else:
 		output = f"Unknown tissue type '{tissue}'. Cannot heal."
 

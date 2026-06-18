@@ -8,6 +8,7 @@ sys.path.append(os.path.join(os.getcwd(), "src"))
 
 from red_pill.memory import MemoryManager
 from red_pill.rituals import (
+	auto_heal_ritual,
 	consolidation_ritual,
 	dream_ritual,
 	hygiene_ritual,
@@ -59,12 +60,13 @@ async def oneshot_pulse(cycle: str = "full") -> None:
 	# Maintenance always runs — system health checks (CUDA, Qdrant, Korsakoff)
 	await maintenance_ritual(mm)
 
-	# Wake rituals — social connectivity, swarm, hive sync
+	# Wake rituals — social connectivity, swarm, hive sync, auto-heal
 	if cycle in ("full", "wake"):
 		await swarm_ritual(mm)
 		await lazarus_ritual(mm)
 		await resonance_ritual(mm)
 		await hygiene_ritual(mm)
+		await auto_heal_ritual(mm)
 
 	# Sleep rituals — memory consolidation, oneiromancy, Ariadne's Thread
 	if cycle in ("full", "sleep"):

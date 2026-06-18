@@ -988,6 +988,7 @@ class MemoryManager:
 			get_agent_dir,
 			get_config_dir,
 			get_daemon_dir,
+			get_daemon_persistent_dir,
 			get_data_dir,
 			get_log_dir,
 			get_staging_dir,
@@ -1001,6 +1002,7 @@ class MemoryManager:
 			get_state_dir(),
 			get_log_dir(),
 			get_daemon_dir(),
+			get_daemon_persistent_dir(),
 			get_staging_dir(),
 		]
 
