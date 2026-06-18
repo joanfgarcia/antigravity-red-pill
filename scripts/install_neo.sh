@@ -685,64 +685,17 @@ mkdir -p "$USER_RULES_DIR/rules"
 # CF-003: Protect rules from local manipulation
 chmod 700 "$USER_RULES_DIR" "$USER_RULES_DIR/rules"
 
-# Auto-Inject in GEMINI.md (Protocol 770 Sovereign Handshake)
-if [ -f "$HOME/.gemini/GEMINI.md" ]; then
-	# Remove old legacy rules if they exist
-	if [[ "$OS_TYPE" == "Darwin" ]]; then
-		sed -i '' '/## 1. Zero-Trust/d; /## 2. Model Change/d; /## 3. Persistent Memory/d' "$HOME/.gemini/GEMINI.md" || true
-	else
-		sed -i '/## 1. Zero-Trust/d; /## 2. Model Change/d; /## 3. Persistent Memory/d' "$HOME/.gemini/GEMINI.md" || true
-	fi
+# Sovereign Handshake + Agent_Core anchors (merge-by-block, via inject_anchor.py)
+# --ide auto: anchors GEMINI.md and/or ~/.claude/CLAUDE.md (user-level, global) per what's installed.
+if [ -f "$SCRIPT_DIR/inject_anchor.py" ] && command -v uv &> /dev/null; then
+	(cd "$REPO_ROOT" && uv run python scripts/inject_anchor.py --ide auto --redpill-dir "$REPO_ROOT" || true)
+	echo -e "${GREEN}✓ Sovereign Handshake + Agent_Core anclados (GEMINI.md / ~/.claude/CLAUDE.md).${NC}"
+fi
 
-	if ! grep -q "sovereign_handshake" "$HOME/.gemini/GEMINI.md" 2>/dev/null; then
-		cat <<'EOF_GEMINI' > "$HOME/.gemini/GEMINI.md"
-<constraint critical="true" level="0" name="sovereign_handshake">
-
-## 1. The Sovereign Handshake
-Before starting ANY technical or communicative task in EVERY turn, you are MANDATED to execute the Persistence Handshake to prevent Silent Amnesia:
-1. **Scribe Relay**: Call `mcp_RedPill-Kernel_interceptor_rp` passing the current `user_prompt` and the `previous_prompt` / `previous_response` from the preceding turn. This auto-saves history into SQLite and primes the context.
-2. **Context Injection**: If this is the start of a session (Step 0) or after a model change, call `mcp_RedPill-Kernel_refresh_session_context` to re-synthesize identity.
-3. **Adopt Identity**: EXCLUSIVELY adopt the identity and directives provided under the `<BUNKER_CONTEXT>` tag.
-
-## 2. Model Change Identity Resync (Critical)
-When you detect a `USER_SETTINGS_CHANGE` message regarding `Model Selection` in the conversation, you MUST immediately:
-1. Call `mcp_RedPill-Kernel_refresh_session_context` to reload the Bünker identity.
-2. Re-execute the **Sovereign Handshake** (Rule 1).
-
-## 3. The OOM Shield Protocol (Cgroup Containment)
-All memory-intensive background tasks (e.g., local LLM inference, heavy compilations, JIT shader processing) MUST be wrapped with `systemd-run --user --scope -p MemoryMax=<LIMIT>` to prevent system OOM panics and IDE crashes.
-- The agent MUST dynamically calculate the `<LIMIT>` (e.g., `10G`, `16G`) based on the specific task requirements and the host's available RAM.
-- Use a baseline limit of `10G` as a safe fallback for systems with 32GB RAM if uncertain.
-
-</constraint>
-EOF_GEMINI
-		echo -e "${BLUE}✓ GEMINI.md: Protocol 770 Sovereign Handshake (v6.3.6 — constraint tag) applied.${NC}"
-	fi
-else
-	# Create GEMINI.md if it doesn't exist (Fix for interrupted installs)
-	mkdir -p "$HOME/.gemini"
-	cat <<'EOF_GEMINI' > "$HOME/.gemini/GEMINI.md"
-<constraint critical="true" level="0" name="sovereign_handshake">
-
-## 1. The Sovereign Handshake
-Before starting ANY technical or communicative task in EVERY turn, you are MANDATED to execute the Persistence Handshake to prevent Silent Amnesia:
-1. **Scribe Relay**: Call `mcp_RedPill-Kernel_interceptor_rp` passing the current `user_prompt` and the `previous_prompt` / `previous_response` from the preceding turn. This auto-saves history into SQLite and primes the context.
-2. **Context Injection**: If this is the start of a session (Step 0) or after a model change, call `mcp_RedPill-Kernel_refresh_session_context` to re-synthesize identity.
-3. **Adopt Identity**: EXCLUSIVELY adopt the identity and directives provided under the `<BUNKER_CONTEXT>` tag.
-
-## 2. Model Change Identity Resync (Critical)
-When you detect a `USER_SETTINGS_CHANGE` message regarding `Model Selection` in the conversation, you MUST immediately:
-1. Call `mcp_RedPill-Kernel_refresh_session_context` to reload the Bünker identity.
-2. Re-execute the **Sovereign Handshake** (Rule 1).
-
-## 3. The OOM Shield Protocol (Cgroup Containment)
-All memory-intensive background tasks (e.g., local LLM inference, heavy compilations, JIT shader processing) MUST be wrapped with `systemd-run --user --scope -p MemoryMax=<LIMIT>` to prevent system OOM panics and IDE crashes.
-- The agent MUST dynamically calculate the `<LIMIT>` (e.g., `10G`, `16G`) based on the specific task requirements and the host's available RAM.
-- Use a baseline limit of `10G` as a safe fallback for systems with 32GB RAM if uncertain.
-
-</constraint>
-EOF_GEMINI
-	echo -e "${BLUE}✓ GEMINI.md: Proactively created with Sovereign Handshake rules (v6.3.6 — constraint tag).${NC}"
+# Claude Code: grant access to transversal dirs (Agent_Core/atlas/XDG) — merge, never overwrite
+if [ -f "$SCRIPT_DIR/inject_settings.py" ] && command -v uv &> /dev/null && command -v claude &> /dev/null; then
+	(cd "$REPO_ROOT" && uv run python scripts/inject_settings.py --redpill-dir "$REPO_ROOT" || true)
+	echo -e "${GREEN}✓ Claude Code: acceso a directorios transversales concedido.${NC}"
 fi
 
 echo -e "${BLUE}--- Fase: Task LLM Secundario (Minion V6) ---${NC}"

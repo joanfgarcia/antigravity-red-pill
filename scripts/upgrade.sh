@@ -238,6 +238,12 @@ if command -v uv &> /dev/null; then
 		echo -e "${GREEN}✓ Skills sincronizados en ~/.agent/skills/.${NC}"
 	fi
 
+	# Refresh IDE anchors (Sovereign Handshake + Agent_Core) + MCP config (idempotent)
+	echo -e "${BLUE}Refrescando anclas de IDE y configuración MCP...${NC}"
+	uv run python scripts/inject_anchor.py --ide auto --redpill-dir "$REPO_ROOT" || true
+	uv run python scripts/inject_mcp.py --uv-path "$(command -v uv)" --redpill-dir "$REPO_ROOT" || true
+	command -v claude &> /dev/null && uv run python scripts/inject_settings.py --redpill-dir "$REPO_ROOT" || true
+
 	# 5. Neon-Link Service Migration (v0.4.0 watchdog)
 	# Restart neon-link to pick up sd_notify/WatchdogSec changes
 	if systemctl --user is-active neon-link.service &>/dev/null; then

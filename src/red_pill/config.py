@@ -93,17 +93,19 @@ class RedPillConfig(BaseSettings):
 	WORKSPACE_ROOT: str = _WORKSPACE_ROOT
 	APP_ROOT: str = _APP_ROOT
 	RED_PILL_PROFILE: str = "user"
-	USER_ATLAS_DIR: str = os.path.join(_WORKSPACE_ROOT, "atlas")
 	AGENT_CORE_DIR: str = os.path.join(_WORKSPACE_ROOT, "Agent_Core")
+	# USER_ATLAS_DIR removed: the atlas is per-project now (workspaces.yaml / discovered via .agent).
+	# AGENT_CORE_DIR's effective source for anchors is workspaces.yaml:agent_core
+	# (see scripts/_config_common.agent_core_vars). Default here is relative for back-compat.
 
 	@field_validator("WORKSPACE_ROOT", mode="before")
 	@classmethod
 	def _expand_workspace_root(cls, v: str) -> str:
 		return os.path.expanduser(v)
 
-	@field_validator("USER_ATLAS_DIR", mode="before")
+	@field_validator("AGENT_CORE_DIR", mode="before")
 	@classmethod
-	def _expand_user_atlas_dir(cls, v: str) -> str:
+	def _expand_agent_core_dir(cls, v: str) -> str:
 		return os.path.expanduser(v)
 
 	@property

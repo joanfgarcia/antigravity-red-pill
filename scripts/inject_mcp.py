@@ -8,6 +8,10 @@ import sys
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger("mcp_injector")
 
+# Shared placeholder helpers live alongside this script.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _config_common import build_vars, subst  # noqa: E402
+
 
 # ── Target discovery (cross-platform IDE / CLI MCP config files) ──────────────
 def discover_targets(workspace=None):
@@ -34,34 +38,6 @@ def discover_targets(workspace=None):
 		targets.append(os.path.join(os.path.expanduser(workspace), ".mcp.json"))
 
 	return targets
-
-
-# ── Placeholder resolution for manifest definitions ───────────────────────────
-def build_vars(args):
-	npx = shutil.which("npx")
-	claude = shutil.which("claude") or os.path.expanduser("~/.local/bin/claude")
-	return {
-		"HOME": os.path.expanduser("~"),
-		"UV": args.uv_path or shutil.which("uv") or os.path.expanduser("~/.local/bin/uv"),
-		"NPX": npx or "",
-		"NPX_DIR": os.path.dirname(npx) if npx else "",
-		"CLAUDE_CLI": claude,
-		"GRAPHIFY_PY": os.path.expanduser("~/.local/share/uv/tools/graphifyy/bin/python3"),
-		"REDPILL_DIR": args.redpill_dir or "",
-		"WORKSPACE": os.path.expanduser(args.workspace) if args.workspace else "",
-	}
-
-
-def subst(value, variables):
-	if isinstance(value, str):
-		for key, val in variables.items():
-			value = value.replace("${%s}" % key, val)
-		return value
-	if isinstance(value, list):
-		return [subst(item, variables) for item in value]
-	if isinstance(value, dict):
-		return {key: subst(item, variables) for key, item in value.items()}
-	return value
 
 
 def load_manifest_servers(path, variables):

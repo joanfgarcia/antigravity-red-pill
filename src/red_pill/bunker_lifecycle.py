@@ -527,6 +527,19 @@ def bunker_update() -> None:
 
 	print("2.5 Updating services.yaml manifest...")
 	update_services_manifest(project_root)
+	print("2.6 Refreshing IDE anchors + MCP config...")
+	try:
+		import sys as _sys
+		anchor_py = project_root / ".venv" / "bin" / "python"
+		if not anchor_py.exists():
+			anchor_py = Path(_sys.executable)
+		subprocess.run([str(anchor_py), "scripts/inject_anchor.py", "--ide", "auto", "--redpill-dir", str(project_root)], cwd=str(project_root), capture_output=True, text=True)
+		subprocess.run([str(anchor_py), "scripts/inject_mcp.py", "--uv-path", uv_bin, "--redpill-dir", str(project_root)], cwd=str(project_root), capture_output=True, text=True)
+		if shutil.which("claude"):
+			subprocess.run([str(anchor_py), "scripts/inject_settings.py", "--redpill-dir", str(project_root)], cwd=str(project_root), capture_output=True, text=True)
+		print("   [OK] Anchors and MCP config refreshed.")
+	except Exception as e:
+		print(f"   [WARN] Anchor/MCP refresh skipped: {e}")
 
 	print("3. Running database migrations / checks...")
 	try:
