@@ -4,6 +4,70 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-016] Generalized Agent-Backend Bridges + First-Class Agentic Minion
+**Date**: 2026-06-18  
+**Context**: v7.3.0 — Swarm / agent execution  
+**Status**: ACCEPTED & IMPLEMENTED  
+
+### 1. The Problem
+The agent-execution abstraction (`IDEBridge`) lived under `plugins/antigravity_ide`, but it was no longer Antigravity-specific. And the only way to run an *agent* (agy) was `swarm/executor.py` — a parallel path NOT registered in `MinionFactory`, so "run an agent" was not a first-class swarm citizen. There was no Claude or local-model agent backend either.
+
+### 2. The Decision
+- Move the generic abstraction to **`red_pill/swarm/bridges/`** (`IDEBridge` → `AgentBridge`; `BackendType` now `agy|grpc|claude|local`; `ConversationResult`/`BridgeCapabilities`; `create_bridge(backend=…)`).
+- Add **`ClaudeBridge`** (`claude -p --dangerously-skip-permissions --output-format json` — session_id + result straight from JSON; no dir-diff/prefix-strip) and **`LocalBridge`** (local model via the SIP inference provider; a generation backend — `mcp_tools=False`, no resume — honest capabilities).
+- Promote agentic execution to a first-class **`AgentMinion`** (`swarm/agents/agent.py`), registered as `"agent"` in `MinionFactory`; backend selectable per task (`kwargs['backend']`, default = `IDE_BACKEND`).
+- Antigravity-specific backends (`AgyBridge`, `GrpcBridge`) stay in `plugins/antigravity_ide` and import the ABC from the new home.
+
+### 3. The Implementation
+`swarm/bridges/{base,factory,claude,local,__init__}.py`, `swarm/agents/agent.py`, register in `swarm/factory.py`. `config.IDE_BACKEND` accepts `claude|local`. Importers updated: `cli.py`, `swarm/executor.py`, `antigravity_ide/{agy_bridge,grpc_bridge,worker,__init__}.py`.
+
+### 4. Rationale
+Separation of concerns (generic abstraction vs IDE-specific implementations) + open/closed (a new backend is a new `AgentBridge` subclass; consumers unchanged) + unifying agent execution under one minion model. **Verified**: full suite collects (751 tests, no import breakage), worker/swarm/mcp suites pass (32), and both new backends run end-to-end through `AgentMinion` (claude → "OK" + real session_id; local → provider response). `executor.py` still works; full executor→AgentMinion convergence is a follow-up.
+
+---
+
+## [AD-017] Workspace Memory Lifecycle → red-pill *(PROPOSED — coordinate with the-luggage)*
+**Date**: 2026-06-18  
+**Context**: v7.3.0 — Memory / multi-IDE  
+**Status**: PROPOSED (design agreed with operator; pending the-luggage/David)  
+
+### 1. The Problem
+Azrael's `azrael-memory` — a **shared, cross-agent, per-workspace Markdown memory bank** (served by the standard `server-filesystem` MCP over `.claude/memory`), plus its maintenance (`sync_memory_bank` = Bünker→`.md` projection; daily *Memory Optimizer*; `redestile-arch`) and its usage directives — lives entirely in `the-luggage`. The Bünker (Qdrant) stores **engrams (vectors), not documents**; session-snapshots are per-project git artifacts. This Markdown bank covers a **distinct, multi-IDE need** neither of those serves, and it is Azrael-coupled **only by hardcoded paths/names** — the mechanisms are generic.
+
+### 2. The Decision (proposed)
+Generalize the **whole lifecycle** into red-pill, registry-driven:
+- Registry toggle `memory: true | "<path>"` per workspace; neutral folder **`.red-pill/memory`** (configurable; migration from `.claude/memory` provided).
+- **ONE** `server-filesystem` MCP, **multi-root** (one absolute dir per `memory:true` workspace) — token-efficient (cf. API Triunvirato discipline) and CWD-independent; never N redundant MCPs.
+- Processes (`sync_memory_bank`, optimizer, arch-distill) as generic, registry-parameterized jobs/minions.
+- Hoist the **generic usage directives** ("consult the code graph / memory before acting", closure protocol) to red-pill's **anchors** (universal across workspaces, incl. legacy). Azrael-specific rules (stack, visual system) stay in `the-luggage`.
+
+### 3. Open Questions (for David)
+Memory semantics (agent-comms bus vs shared notes); ownership boundary of `sync_memory_bank` (Bünker→`.md`, arguably red-pill's since it owns the Bünker); folder migration (`.claude/memory` referenced in ~9 the-luggage files); confirm a single multi-root MCP over per-workspace.
+
+### 4. Rationale
+Separation of responsibilities by layer (extraction / selection / serving / maintenance), generalization (every workspace — including the legacy monolith — inherits memory, not just Azrael), and token economy (one MCP, not N). It is also the natural **cross-agent coordination substrate** that was previously missing (agents could not exchange tasks via red-pill because the Bünker is engrams, not a shared bank).
+
+---
+
+## [AD-018] Daemon-Hosted MCPs over the Network *(PROPOSED)*
+**Date**: 2026-06-18  
+**Context**: v7.3.0 — MCP serving / coordination  
+**Status**: PROPOSED (pending client-support + security review)  
+
+### 1. The Problem
+MCPs are launched **per-IDE as stdio subprocesses**: N IDEs × M servers = duplicated processes and no shared, central state — so cross-agent coordination has no common substrate, and per-client process sprawl grows.
+
+### 2. The Decision (proposed)
+Host red-pill's MCPs in the **SovereignDaemon** as a `DaemonPlugin`, **dual-bind UDS + TCP** (the `run_dual_bind`/hypervisor precedent), with a **stdio↔network proxy** for third-party stdio servers (`server-filesystem`/memory, graphify). `inject_mcp` emits **URL** configs where the client supports them (Claude Code ✓), with a local stdio shim where it does not.
+
+### 3. Transparency consequence
+Because memory = one multi-root MCP and graphify = one merged MCP, **toggling a workspace changes roots/graph inside the server, never the MCP set** → the client's tool list is unchanged → **no restart** for memory/graph data. The exception is **`access`/`additionalDirectories`** (an IDE settings-file layer, read at session start, outside MCP) → that still needs a client restart. The daemon cannot change that.
+
+### 4. Open Questions
+Network-MCP support in Antigravity / Claude Desktop (Claude Code is fine); **security** — the RedPill-Kernel MCP runs subprocess/heal effectors, so it must NOT be exposed on an unauthenticated TCP port (prefer UDS file-perms, or localhost + token).
+
+---
+
 ## [AD-013] Peer Workspace Registry & `.agent` Standards Discovery
 **Date**: 2026-06-18  
 **Context**: v7.3.0 — Multi-workspace foundation  

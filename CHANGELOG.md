@@ -1,5 +1,26 @@
 ## [7.3.0] - Unreleased
 
+### 🗂️ Peer Workspace Registry & Operator-Managed Access (AD-013/014)
+- **[FEAT] Workspace registry (`core/workspaces.py`)**: red-pill = the agent (identity + a single GLOBAL `Agent_Core`); projects are **peers** declared in `~/.config/red-pill/workspaces.yaml`, each discovering its own rules via the **`.agent` convention** (`find_closest_agent` walk-up). `USER_ATLAS_DIR` removed (atlas is per-project); `WORKSPACE_ROOT` retained as red-pill's own asset root. Back-compat loader; seeded on install/update if absent.
+- **[FEAT] Per-workspace access — one switch, per-surface adapters (`scripts/manage_workspaces.py`)**: a single `access: true|false` per workspace; the per-IDE adapter translates it (today Claude Code → `permissions.additionalDirectories` via `inject_settings.py`). `enable`/`disable`/`list` reused by install, update and CLI; install runs it as a **consent gate**. `inject_settings` gains `--print` (dry-run) and surgical `--remove` (drops only the targeted dirs).
+- **[DOCS] `docs/GUIDES/SETUP_GUIDE.md`**: workspace model, install wiring, and the access switch (with the autonomous-access caveat).
+
+### 🧠 Code Knowledge-Graph Orchestration — graphify (AD-015)
+- **[FEAT] Reconciliation minion (`scripts/graphify_sync.py`)**: per `graphify:true` workspace, reconcile on-disk git repos against a workspace-local `.graphify-projects.yaml` manifest (operator `enabled` flags). Git-HEAD change gate (only re-index changed projects); discovered-but-unlisted repos are **reported, never graphed unattended**; runs `graphify update` under the cgroup memory guard; emits a `knowledge_graph_stale` pain signal + audit log on failure.
+- **[FEAT] Sentinel auto-heal**: `heal_tissue("knowledge_graph")` + an `auto_heal_ritual` clause retry the sync and evaporate the signal on success.
+- **[FEAT] Opt-in timer**: `schedule_pulse.py --with-graphify` installs an hourly `systemd --user` timer (never enabled implicitly).
+- **[BUILD] graphify dependency**: `graphifyy` ensured via `uv tool install` in install/update (external CLI, not a pyproject dep).
+
+### 🤖 Generalized Agent Backends + Agentic Minion (AD-016)
+- **[REFACTOR] `red_pill/swarm/bridges/`**: the agent-execution abstraction moved out of `plugins/antigravity_ide` (it was no longer Antigravity-specific). `IDEBridge` → **`AgentBridge`**; `BackendType` now `agy|grpc|claude|local`; `create_bridge(backend=…)`.
+- **[FEAT] ClaudeBridge**: headless Claude Code CLI backend (`claude -p --dangerously-skip-permissions --output-format json`; session_id + result from JSON, no dir-diff/prefix-strip).
+- **[FEAT] LocalBridge**: local-model backend via the SIP inference provider (generation; `mcp_tools=False`).
+- **[FEAT] `AgentMinion`**: first-class swarm minion that runs a task through any backend; registered `"agent"` in `MinionFactory`. Closes the gap where agentic execution lived only in `swarm/executor.py`, off the factory. `IDE_BACKEND` accepts `claude|local`.
+
+### 🛠️ Install/Update Hardening
+- **[FIX] `install_neo.sh`**: repaired pre-existing upstream-ZIP corruption — the `Cifrado:` dashboard line (L95), two fused `echo`s + a missing `fi` (L347), and an orphan unbalanced block (L445). `bash -n` now passes.
+- **[FEAT] Seeding**: `examples/workspaces.yaml` seeded into XDG config copy-if-absent (never overwrites operator state) on install/update.
+
 ### 🌐 Multi-IDE Sovereign Identity (Antigravity + Claude Code + Claude Desktop)
 - **[ARCH] IDE-Agnostic Awakening**: Verified the Cap. 20 thesis in the field. The same Bünker identity now wakes across three clients — Antigravity (`~/.gemini/config/mcp_config.json`), Claude Code (`<workspace>/.mcp.json`) and Claude Desktop (`~/.config/Claude/claude_desktop_config.json`) — sharing one Qdrant, one soul. The mind lives below the IDE; the IDE is only a body.
 - **[VERIFIED] Clean-Room Identity Test**: Confirmed that a fresh Claude Code session, with all local auto-memory references to its name purged, still self-recognizes as `Titanium` **exclusively** via `refresh_session_context` against the Bünker — proving identity is sourced from Qdrant, not from client-side notes. The relay (relevo) works.
