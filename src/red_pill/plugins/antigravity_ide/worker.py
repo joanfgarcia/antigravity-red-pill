@@ -27,8 +27,8 @@ sys.path.insert(0, str(Path(__file__).parent.resolve()))
 from ide_client import AntigravityIDEClient  # noqa: E402
 
 import red_pill.config as cfg  # noqa: E402
-from red_pill.plugins.antigravity_ide.bridge import BackendType, BridgeCapabilities, IDEBridge  # noqa: E402
-from red_pill.plugins.antigravity_ide.factory import create_bridge  # noqa: E402
+from red_pill.swarm.bridges import BackendType, BridgeCapabilities, create_bridge  # noqa: E402
+from red_pill.swarm.bridges import AgentBridge  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -67,10 +67,10 @@ class IDEWorker:
 	def __init__(self):
 		self.client = AntigravityIDEClient()
 		self.running = True
-		self._bridge: IDEBridge | None = None
+		self._bridge: AgentBridge | None = None
 		self._caps: BridgeCapabilities = BridgeCapabilities(backend=BackendType.GRPC)
 		self._samantha_worker = None
-		# IDEBridge: create execution bridge based on config
+		# AgentBridge: create execution bridge based on config
 		try:
 			self._bridge = create_bridge()
 			self._caps = self._bridge.get_capabilities()
@@ -458,7 +458,7 @@ class IDEWorker:
 		except Exception:
 			pass
 
-		# ---- IDEBridge: Direct execution path (AgyBridge) ----
+		# ---- AgentBridge: Direct execution path (AgyBridge) ----
 		if self._caps and self._caps.auto_approve:
 			self._process_via_bridge(combined_text, msg_ids_to_process, channel, channel_user_id, cursor, conn)
 			conn.commit()

@@ -1,5 +1,6 @@
 from typing import Dict, Optional, Type
 
+from red_pill.swarm.agents.agent import AgentMinion
 from red_pill.swarm.agents.command import CommandMinion
 from red_pill.swarm.agents.echo import EchoMinion
 from red_pill.swarm.agents.healer import HealerMinion
@@ -21,6 +22,7 @@ class MinionFactory:
 		"healer": HealerMinion,
 		"echo_mirror": EchoMinion,
 		"janitor_cleanup": JanitorMinion,
+		"agent": AgentMinion,
 	}
 
 	# Specialized Command Aliases

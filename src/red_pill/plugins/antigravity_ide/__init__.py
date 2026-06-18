@@ -1,23 +1,13 @@
 """
-Antigravity IDE Plugin for Red-Pill.
+Antigravity IDE backends — Antigravity-specific bridge implementations.
 
-Dual-backend bridge architecture:
-	- AgyBridge (execution): agy CLI for Neon-Link commands + autonomous AWAKENINGs
-	- GrpcBridge (extraction): gRPC-Web for Chronicle pipeline + archive_memories
+	- agy_bridge.AgyBridge  (execution): agy CLI for Neon-Link commands + AWAKENINGs
+	- grpc_bridge.GrpcBridge (extraction): gRPC-Web for the Chronicle pipeline
 
-Both bridges coexist. Config: IDE_BACKEND=agy|grpc|auto in .env
+The GENERIC agent-bridge abstraction + factory now live in
+``red_pill.swarm.bridges`` (AgentBridge, BackendType, create_bridge, …). These
+implementations import the ABC from there. Imported lazily by the factory — not
+eagerly here, to avoid pulling gRPC deps on every package import.
+
+Config: IDE_BACKEND=agy|grpc|claude|local|auto in .env
 """
-
-from .bridge import BackendType, BridgeCapabilities, ConversationResult, IDEBridge, NotSupportedError
-from .factory import create_bridge, create_extraction_bridge, preflight_check
-
-__all__ = [
-	"IDEBridge",
-	"BackendType",
-	"BridgeCapabilities",
-	"ConversationResult",
-	"NotSupportedError",
-	"create_bridge",
-	"create_extraction_bridge",
-	"preflight_check",
-]

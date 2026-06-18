@@ -14,12 +14,12 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List
 
-from .bridge import BackendType, BridgeCapabilities, ConversationResult, IDEBridge, NotSupportedError
+from red_pill.swarm.bridges.base import AgentBridge, BackendType, BridgeCapabilities, ConversationResult, NotSupportedError
 
 logger = logging.getLogger(__name__)
 
 
-class GrpcBridge(IDEBridge):
+class GrpcBridge(AgentBridge):
 	"""gRPC-Web bridge to LanguageServer.
 
 	Two roles:

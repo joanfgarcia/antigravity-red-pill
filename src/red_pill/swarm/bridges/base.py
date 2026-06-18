@@ -1,12 +1,16 @@
 """
-IDEBridge — Abstract Interface for Antigravity IDE Communication (v2)
+AgentBridge — Abstract interface for running an agent backend (v2, generalized).
 
-Two complementary implementations:
-	- AgyBridge (execution): agy CLI with --dangerously-skip-permissions
-	- GrpcBridge (extraction): gRPC-Web to LanguageServer (Chronicle pipeline)
+Generic abstraction for "run a prompt through an agent", independent of which
+backend executes it. Implementations:
+    - AgyBridge   (antigravity_ide): agy CLI               — execution
+    - ClaudeBridge (swarm/bridges):  claude CLI            — execution
+    - LocalBridge  (swarm/bridges):  local model (SIP)     — generation
+    - GrpcBridge  (antigravity_ide): gRPC to LanguageServer — extraction (Chronicle)
 
-Both bridges can coexist. AgyBridge for prompt execution (Telegram, AWAKENINGs).
-GrpcBridge for conversation extraction (Chronicle → archive_memories).
+Was `IDEBridge` under plugins/antigravity_ide; moved here once it stopped being
+Antigravity-specific. Antigravity-only backends still live in antigravity_ide and
+import this ABC from here.
 """
 
 from __future__ import annotations
@@ -26,6 +30,8 @@ class NotSupportedError(Exception):
 class BackendType(Enum):
 	AGY = "agy"
 	GRPC = "grpc"
+	CLAUDE = "claude"
+	LOCAL = "local"
 
 
 @dataclass
@@ -56,8 +62,8 @@ class BridgeCapabilities:
 	mcp_tools: bool = False  # Agent can use MCP tools autonomously
 
 
-class IDEBridge(ABC):
-	"""Abstract interface for Antigravity IDE communication.
+class AgentBridge(ABC):
+	"""Abstract interface for agent-backend communication.
 
 	Subclasses must implement the execution methods (prompt, continue_conversation,
 	health_check). Extraction methods (get_all_trajectories, get_trajectory_steps)
@@ -87,13 +93,7 @@ class IDEBridge(ABC):
 		previous_response_len: int = 0,
 		timeout: int = 300,
 	) -> ConversationResult:
-		"""Continue an existing conversation.
-
-		Used for multi-turn Telegram sessions.
-		Args:
-			conversation_id: UUID from the first prompt() call.
-			previous_response_len: Accumulated stdout length for prefix-stripping.
-		"""
+		"""Continue an existing conversation. Used for multi-turn sessions."""
 		...
 
 	@abstractmethod
@@ -105,21 +105,13 @@ class IDEBridge(ABC):
 	# Default: NotSupportedError. Only GrpcBridge overrides.
 
 	def get_all_trajectories(self) -> List[Dict[str, Any]]:
-		"""List all conversation summaries from the IDE.
-
-		Used by Chronicle to discover new conversations for archive ingestion.
-		Only supported by GrpcBridge.
-		"""
+		"""List all conversation summaries from the IDE (GrpcBridge only)."""
 		raise NotSupportedError(
 			f"{type(self).__name__} does not support conversation extraction. Use GrpcBridge (create_extraction_bridge()) for Chronicle pipeline."
 		)
 
 	def get_trajectory_steps(self, cascade_id: str, start_index: int = 0, end_index: int = 1000) -> List[Dict[str, Any]]:
-		"""Get all steps for a specific conversation.
-
-		Used by Chronicle to extract and decrypt conversation content.
-		Only supported by GrpcBridge.
-		"""
+		"""Get all steps for a specific conversation (GrpcBridge only)."""
 		raise NotSupportedError(
 			f"{type(self).__name__} does not support conversation extraction. Use GrpcBridge (create_extraction_bridge()) for Chronicle pipeline."
 		)

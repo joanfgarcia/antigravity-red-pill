@@ -232,7 +232,7 @@ def handle_ide(args: argparse.Namespace) -> None:
 		else:
 			print(f"Current IDE backend: {conf.IDE_BACKEND.upper()}")
 	elif args.ide_cmd == "status":
-		from red_pill.plugins.antigravity_ide.factory import create_bridge, preflight_check
+		from red_pill.swarm.bridges import create_bridge, preflight_check
 
 		pf = preflight_check()
 		bridge = create_bridge()
@@ -252,7 +252,7 @@ def handle_ide(args: argparse.Namespace) -> None:
 			for e in pf["errors"]:
 				print(f"❌ {e}")
 	elif args.ide_cmd == "test":
-		from red_pill.plugins.antigravity_ide.factory import create_bridge
+		from red_pill.swarm.bridges import create_bridge
 
 		bridge = create_bridge()
 		backend_name = bridge.get_capabilities().backend.value.upper()

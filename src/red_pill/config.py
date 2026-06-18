@@ -312,7 +312,7 @@ class RedPillConfig(BaseSettings):
 	# -----------------------------------------------------------------------
 	# ANTIGRAVITY IDE BRIDGE
 	# -----------------------------------------------------------------------
-	IDE_BACKEND: str = "auto"  # "agy" | "grpc" | "auto"
+	IDE_BACKEND: str = "auto"  # "agy" | "grpc" | "claude" | "local" | "auto"
 	# Gate autonomous Flash-consuming operations (cognitive queue, minion
 	# auto-inject, entropy executor). Telegram inbox processing is NOT
 	# affected — only background/autonomous agy prompts are suppressed.
@@ -322,8 +322,8 @@ class RedPillConfig(BaseSettings):
 	@classmethod
 	def _validate_ide_backend(cls, v: str) -> str:
 		v = v.strip().lower()
-		if v not in ("agy", "grpc", "auto"):
-			raise ValueError(f"IDE_BACKEND must be 'agy', 'grpc', or 'auto': {v}")
+		if v not in ("agy", "grpc", "claude", "local", "auto"):
+			raise ValueError(f"IDE_BACKEND must be 'agy', 'grpc', 'claude', 'local', or 'auto': {v}")
 		return v
 
 	# -----------------------------------------------------------------------

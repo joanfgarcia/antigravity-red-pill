@@ -26,7 +26,7 @@ from typing import Optional, Set, Tuple
 
 from red_pill.core.paths import get_bunker_root
 
-from .bridge import BackendType, BridgeCapabilities, ConversationResult, IDEBridge
+from red_pill.swarm.bridges.base import AgentBridge, BackendType, BridgeCapabilities, ConversationResult
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ def _snapshot_brain(brain_dir: Path) -> Set[str]:
 		return set()
 
 
-class AgyBridge(IDEBridge):
+class AgyBridge(AgentBridge):
 	"""Backend v2: agy CLI with --dangerously-skip-permissions.
 
 	Supports:

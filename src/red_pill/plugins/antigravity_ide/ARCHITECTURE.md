@@ -1,8 +1,15 @@
 # Antigravity IDE Plugin — Architecture & Design Decisions
 
 > **Plugin**: `red_pill.plugins.antigravity_ide`  
-> **Last updated**: 2026-05-26  
+> **Last updated**: 2026-06-18  
 > **Authors**: Joan + Aleth (Opus 4.6 + Gemini Flash 3.5 via Telegram)
+
+> [!NOTE]
+> The generic agent-bridge abstraction (`AgentBridge` ABC, ex-`IDEBridge`) + the
+> `create_bridge`/`preflight_check` factory moved to **`red_pill.swarm.bridges`**
+> once they stopped being Antigravity-specific. This package now holds only the
+> Antigravity backends (`agy_bridge.AgyBridge`, `grpc_bridge.GrpcBridge`), which
+> import the ABC from there. New backends: `swarm/bridges/claude.py`, `local.py`.
 
 ## 1. Purpose
 
