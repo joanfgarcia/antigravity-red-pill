@@ -10,6 +10,7 @@ import asyncio
 import logging
 import os
 import sqlite3
+import sys
 
 import red_pill.config as cfg
 from red_pill.core.inbox import MinionInbox
@@ -412,6 +413,25 @@ async def auto_heal_ritual(mm: MemoryManager) -> None:
 						mm.evaporate_signals("local_llm_offline")
 				except Exception as sip_err:
 					logger.error(f"Auto-Healer: SIP provisioning heal failed: {sip_err}")
+				healed_ids.append(report["id"])
+				continue
+
+			# Knowledge-graph heal — a graphify update failed; retry the reconciliation sync.
+			if event_id == "signal_knowledge_graph_stale":
+				logger.info("Auto-Healer: Attempting knowledge-graph heal (graphify_sync retry)...")
+				script_path = os.path.join(cfg.APP_ROOT, "scripts", "graphify_sync.py")
+				if os.path.exists(script_path):
+					process = await asyncio.create_subprocess_exec(
+						sys.executable, str(script_path),
+						stdout=asyncio.subprocess.PIPE,
+						stderr=asyncio.subprocess.PIPE,
+					)
+					await process.communicate()
+					if process.returncode == 0:
+						logger.info("Auto-Healer: graphify_sync retry OK. Evaporating signal.")
+						mm.evaporate_signals("knowledge_graph_stale")
+					else:
+						logger.warning(f"Auto-Healer: graphify_sync retry rc={process.returncode}. Escalating.")
 				healed_ids.append(report["id"])
 				continue
 

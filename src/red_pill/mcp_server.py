@@ -763,7 +763,7 @@ async def handle_run_local_healer(arguments: Dict[str, Any]):
 	parent="metabolism_health_api",
 	action="heal_tissue",
 	description="[OFFICIAL] Immune System Effector. Attempt to heal a damaged system component (tissue) based on biological pain signals.",
-	schema={"type": "object", "properties": {"tissue": {"type": "string", "enum": ["cuda", "qdrant", "mypy", "sip_provisioning"]}}, "required": ["tissue"]},
+	schema={"type": "object", "properties": {"tissue": {"type": "string", "enum": ["cuda", "qdrant", "mypy", "sip_provisioning", "knowledge_graph"]}}, "required": ["tissue"]},
 )
 async def handle_heal_tissue(arguments: Dict[str, Any]):
 	tissue = arguments.get("tissue")
@@ -819,6 +819,18 @@ async def handle_heal_tissue(arguments: Dict[str, Any]):
 					)
 		except Exception as e:
 			output = f"Critical immune failure while healing SIP provisioning: {e}"
+
+	elif tissue == "knowledge_graph":
+		try:
+			logger.info("Auto-Immune: Attempting knowledge-graph re-sync (graphify_sync)...")
+			cmd = [GET_PYTHON(), os.path.join(PROJECT_ROOT, "scripts", "graphify_sync.py")]
+			res = subprocess.run(cmd, capture_output=True, text=True)
+			if res.returncode == 0:
+				output = f"Knowledge graph re-synced. {res.stdout[-500:]}"
+			else:
+				output = f"Knowledge-graph re-sync failed (rc={res.returncode}). {str(res.stderr or res.stdout)[-500:]}"
+		except Exception as e:
+			output = f"Critical immune failure while healing knowledge graph: {e}"
 
 	else:
 		output = f"Unknown tissue type '{tissue}'. Cannot heal."
