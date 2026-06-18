@@ -104,10 +104,13 @@ def main():
 	# Resolve hardware affinity dynamically
 	hardware = ModelRegistry.get_resolved_hardware_affinity(profile_name)
 
+	# Chat format from profile (e.g. "chatml", "mistral-instruct", "llama-2")
+	chat_format = profile.get("chat_format", "chatml")
+
 	settings = Settings(
 		hf_model_repo_id=hf_repo_id_to_use,
 		model=model_param,
-		chat_format="chatml",
+		chat_format=chat_format,
 		n_ctx=hardware.get("n_ctx", profile.get("max_tokens", 4096)),
 		n_gpu_layers=hardware.get("n_gpu_layers", -1)
 	)

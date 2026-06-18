@@ -312,13 +312,16 @@ def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[
 		logger.error(f"[SLEEP ENGINE] No inference provider available: {e}")
 		return fallback
 
-	max_retries = 3
-	backoff = 2
+	max_retries = 2
+	backoff = 1
 
 	for attempt in range(max_retries):
 		try:
 			content = provider.generate(
-				prompt=prompt_text, messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt_text}], temperature=0.1
+				prompt=prompt_text,
+				messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt_text}],
+				temperature=0.1,
+				response_format={"type": "json_object"},
 			)
 
 			match = re.search(r"\{[\s\S]*\}", content)
@@ -337,7 +340,7 @@ def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[
 		except Exception as e:
 			logger.warning(f"[SLEEP ENGINE] Distillation attempt {attempt + 1} failed: {e}")
 			if attempt < max_retries - 1:
-				time.sleep(backoff ** (attempt + 1))
+				time.sleep(backoff)
 
 	logger.error("[SLEEP ENGINE] All distillation retries failed. Falling back.")
 	return fallback
@@ -688,8 +691,9 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 	# Query free VRAM right now — before attempting to load the LLM. If the
 	# GPU is already occupied (game, other model, IDE inference), abort this
 	# cycle gracefully rather than fighting for VRAM mid-distillation.
+	# Skip this check if the LLM is already online (resident model on GPU).
 	_vram_backend = VramProbe.get_backend()
-	if _vram_backend != "cpu":
+	if _vram_backend != "cpu" and not _check_llm_available():
 		_free_vram_mb = VramProbe.get_free_mb()
 		_min_free_mb = cfg.SLEEP_MIN_FREE_VRAM_MB
 		if _free_vram_mb < _min_free_mb:

@@ -154,6 +154,8 @@ class SipInferenceProvider(BaseInferenceProvider):
 			"messages": kwargs.get("messages", [{"role": "user", "content": prompt}]),
 			"temperature": kwargs.get("temperature", 0.3),
 		}
+		if "response_format" in kwargs:
+			payload["response_format"] = kwargs["response_format"]
 
 		conn = UnixHTTPConnection(self.socket_path)
 		headers = {"Content-Type": "application/json"}
