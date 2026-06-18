@@ -622,6 +622,14 @@ if ! command -v uv &> /dev/null; then
 	exit 1
 fi
 
+# Ensure graphify (code knowledge-graph CLI) — external tool dependency, idempotent.
+if ! uv tool list 2>/dev/null | grep -q graphifyy; then
+	echo -e "${BLUE}Instalando graphify (graphifyy) como herramienta externa...${NC}"
+	uv tool install graphifyy || echo -e "${YELLOW}[WARN] No se pudo instalar graphifyy (luego: uv tool install graphifyy).${NC}"
+else
+	echo -e "${GREEN}✓ graphify (graphifyy) ya instalado.${NC}"
+fi
+
 USER_RULES_DIR="${1:-$HOME/.agent}"
 
 GEMINI_ROOT="$HOME/.gemini/antigravity"

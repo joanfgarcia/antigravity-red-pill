@@ -210,7 +210,13 @@ if command -v uv &> /dev/null; then
 	# Sync virtualenv dependencies
 	echo -e "${BLUE}Sincronizando dependencias del entorno virtual (uv sync)...${NC}"
 	uv sync
-	
+
+	# Ensure graphify (code knowledge-graph CLI) — external tool dependency, idempotent.
+	if ! uv tool list 2>/dev/null | grep -q graphifyy; then
+		echo -e "${BLUE}Instalando graphify (graphifyy) como herramienta externa...${NC}"
+		uv tool install graphifyy || echo -e "${YELLOW}[WARN] No se pudo instalar graphifyy.${NC}"
+	fi
+
 	# Migrate Neon-Link database (inject sessions_mapping table)
 	echo -e "${BLUE}Migrando base de datos de Neon-Link (AgyBridge)...${NC}"
 	uv run python -m neon_link.db
