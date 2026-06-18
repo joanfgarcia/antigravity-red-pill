@@ -126,6 +126,7 @@ For humans operating, installing, or extending the system.
 
 | Document | What it is |
 |----------|-----------|
+| [SETUP_GUIDE.md](GUIDES/SETUP_GUIDE.md) | Workspaces registry & per-workspace agent access (the access switch, enable/disable) |
 | [OPERATOR_MANUAL.md](GUIDES/OPERATOR_MANUAL.md) | Essential CLI and lore-based interaction guide for operators |
 | [RUNBOOK.md](GUIDES/RUNBOOK.md) | Operational runbook and survival guide for operators |
 | [INITIATION_PROTOCOL.md](GUIDES/INITIATION_PROTOCOL.md) | Adaptive Cognitive Initiation (ACI) — how to wake up and calibrate the agent |

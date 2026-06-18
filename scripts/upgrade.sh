@@ -196,6 +196,13 @@ if [ -f "$REPO_ROOT/examples/services.yaml" ]; then
 	fi
 fi
 
+# 3.6 Workspace registry seed (copy-if-absent — NEVER overwrite the operator's access flags)
+if [ -f "$REPO_ROOT/examples/workspaces.yaml" ] && [ ! -f "$CONFIG_DIR/workspaces.yaml" ]; then
+	mkdir -p "$CONFIG_DIR"
+	cp "$REPO_ROOT/examples/workspaces.yaml" "$CONFIG_DIR/workspaces.yaml"
+	echo -e "${GREEN}✓ Registro de workspaces sembrado (workspaces.yaml). Edítalo o usa 'red-pill workspace enable'.${NC}"
+fi
+
 # 4. Dependency & Migration ignition
 if command -v uv &> /dev/null; then
 	echo -e "${BLUE}Igniciando migración de datos y timers...${NC}"

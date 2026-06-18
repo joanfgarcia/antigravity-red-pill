@@ -685,6 +685,15 @@ mkdir -p "$USER_RULES_DIR/rules"
 # CF-003: Protect rules from local manipulation
 chmod 700 "$USER_RULES_DIR" "$USER_RULES_DIR/rules"
 
+# Workspace registry seed (copy-if-absent — NEVER overwrite the operator's access flags)
+RP_CONFIG_DIR="$(cd "$REPO_ROOT" && python3 -c 'import sys; sys.path.insert(0, "./src"); from red_pill.core.paths import get_config_dir; print(get_config_dir())' 2>/dev/null || true)"
+[ -z "$RP_CONFIG_DIR" ] && RP_CONFIG_DIR="$HOME/.config/red-pill"
+if [ -f "$REPO_ROOT/examples/workspaces.yaml" ] && [ ! -f "$RP_CONFIG_DIR/workspaces.yaml" ]; then
+	mkdir -p "$RP_CONFIG_DIR"
+	cp "$REPO_ROOT/examples/workspaces.yaml" "$RP_CONFIG_DIR/workspaces.yaml"
+	echo -e "${GREEN}✓ Registro de workspaces sembrado (workspaces.yaml).${NC}"
+fi
+
 # Sovereign Handshake + Agent_Core anchors (merge-by-block, via inject_anchor.py)
 # --ide auto: anchors GEMINI.md and/or ~/.claude/CLAUDE.md (user-level, global) per what's installed.
 if [ -f "$SCRIPT_DIR/inject_anchor.py" ] && command -v uv &> /dev/null; then
