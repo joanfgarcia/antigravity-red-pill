@@ -276,6 +276,7 @@ class LlamaCppInferenceProvider(BaseInferenceProvider):
 		self.use_oom_shield = use_oom_shield
 		self.memory_max = memory_max
 		self.ngl = ngl
+		self._llm: Optional[Any] = None
 
 	@classmethod
 	def create_be_water(cls, model_name_or_path: str) -> Optional["LlamaCppInferenceProvider"]:
@@ -463,9 +464,9 @@ class LlamaCppInferenceProvider(BaseInferenceProvider):
 		llm = self._llm
 		prompt_tokens = llm.tokenize(prompt.encode("utf-8"))
 		current_tokens = list(prompt_tokens)
-		generated = []
+		generated: List[int] = []
 
-		blacklist_by_depth = {}
+		blacklist_by_depth: Dict[int, set[int]] = {}
 		depth = 0
 		backtrack_count = 0
 
@@ -483,7 +484,7 @@ class LlamaCppInferenceProvider(BaseInferenceProvider):
 					logits[token_id] = -float("Inf")
 
 			if temp <= 0.0:
-				next_token = np.argmax(logits)
+				next_token = int(np.argmax(logits))
 				prob = 1.0
 				probs = np.zeros(vocab_size)
 				probs[next_token] = 1.0
@@ -510,10 +511,10 @@ class LlamaCppInferenceProvider(BaseInferenceProvider):
 					probs /= np.sum(probs)
 
 				try:
-					next_token = np.random.choice(len(probs), p=probs)
+					next_token = int(np.random.choice(len(probs), p=probs))
 					prob = probs[next_token]
 				except ValueError:
-					next_token = np.argmax(logits)
+					next_token = int(np.argmax(logits))
 					prob = probs[next_token]
 
 			entropy = -np.sum(probs * np.log(probs + 1e-9))

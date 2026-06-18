@@ -116,8 +116,8 @@ class SentinelAuditor:
 		# --------------------------------------
 
 		# 1. Formatting & Linting (Ruff)
-		if not self.force and self.memory_mgr.has_signal("signal_ruff_failure"):
-			self.logger.info("Skipping Ruff check (Fast-Fail: signal_ruff_failure exists)")
+		if not self.force and self.memory_mgr.has_signal("signal_formatting_failure"):
+			self.logger.info("Skipping Ruff check (Fast-Fail: signal_formatting_failure exists)")
 			report.status = "yellow"
 			report.findings.append(AuditFinding(type="formatting", severity=5.0, message="Ruff check failed (Fast-Fail)"))
 		else:
@@ -133,10 +133,10 @@ class SentinelAuditor:
 					AuditFinding(type="formatting", severity=5.0, message=f"Ruff check failed:\n{detailed_msg}", metadata={"stdout": ruff.stdout})
 				)
 			elif self.force:
-				self.memory_mgr.evaporate_signals("signal_ruff_failure")
+				self.memory_mgr.evaporate_signals("signal_formatting_failure")
 		# 2. Typing (Mypy)
-		if not self.force and self.memory_mgr.has_signal("signal_mypy_failure"):
-			self.logger.info("Skipping Mypy check (Fast-Fail: signal_mypy_failure exists)")
+		if not self.force and self.memory_mgr.has_signal("signal_typing_failure"):
+			self.logger.info("Skipping Mypy check (Fast-Fail: signal_typing_failure exists)")
 			report.status = "yellow"
 			report.findings.append(AuditFinding(type="typing", severity=6.0, message="Mypy check failed (Fast-Fail)"))
 		else:
@@ -166,7 +166,7 @@ class SentinelAuditor:
 					AuditFinding(type="typing", severity=6.0, message=f"Mypy errors:\n{detailed_msg}", metadata={"stdout": mypy.stdout})
 				)
 			elif self.force:
-				self.memory_mgr.evaporate_signals("signal_mypy_failure")
+				self.memory_mgr.evaporate_signals("signal_typing_failure")
 		# 3. Testing (Pytest)
 		if not self.force and self.memory_mgr.has_signal("signal_test_failure"):
 			self.logger.info("Skipping Pytest check (Fast-Fail: signal_test_failure exists)")
@@ -252,6 +252,9 @@ class SentinelAuditor:
 					# Case-insensitive check for error signatures
 					line_lower = line.lower()
 					if "error" in line_lower or "exception" in line_lower or "traceback" in line_lower or "fatal" in line_lower:
+						# Prevent self-referential feedback loops from the auditor's own logging
+						if "active pain detected" in line_lower or "recent daemon errors in journal" in line_lower:
+							continue
 						all_errors.append(line)
 
 		if all_errors:
@@ -297,7 +300,7 @@ class SentinelAuditor:
 			for _, name, _ in pkgutil.iter_modules(plugins_pkg.__path__):
 				module = importlib.import_module(f"red_pill.metabolism.sentinel_plugins.{name}")
 				for _, obj in inspect.getmembers(module, inspect.isclass):
-					if issubclass(obj, SentinelPlugin) and obj is not SentinelPlugin:
+					if issubclass(obj, SentinelPlugin) and obj is not SentinelPlugin and not inspect.isabstract(obj):
 						plugin = obj()
 						try:
 							if plugin.is_enabled(config):

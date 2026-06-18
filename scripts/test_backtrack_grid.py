@@ -156,7 +156,7 @@ def generate_gguf_backtrack(
 
 
 def main():
-	workspace = os.getenv("WORKSPACE_ROOT", "/home/joan/Documents/IA")
+	workspace = os.getenv("WORKSPACE_ROOT", os.path.expanduser("~/Documents/IA"))
 	model_path = os.path.join(workspace, "sharing", "models", "gguf", "Falcon3-3B-Instruct-Heretic_Q4_K_M.gguf")
 
 	if not os.path.exists(model_path):
@@ -207,7 +207,7 @@ def main():
 			results.append({"desc": desc, "label": case["label"], "response": clean_resp, "backtracks": backtracks, "time": dt})
 
 	# Escribir los resultados en una tabla de markdown en los artefactos
-	report_path = "/home/joan/.gemini/antigravity/brain/426682cc-776c-436a-9332-8afcdbb382a9/backtrack_comparison_report.md"
+	report_path = os.path.expanduser("~/.gemini/antigravity/brain/426682cc-776c-436a-9332-8afcdbb382a9/backtrack_comparison_report.md")
 
 	with open(report_path, "w", encoding="utf-8") as f:
 		f.write("# Reporte Comparativo: Modos de Backtracking en Falcon-3B GGUF\n\n")

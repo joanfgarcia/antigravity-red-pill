@@ -156,7 +156,7 @@ def generate_gguf_backtrack(
 
 
 def main():
-	model_path = "/home/joan/.local/share/red-pill/models/samantha-mistral-instruct-7b.i1-Q4_K_M.gguf"
+	model_path = os.path.expanduser("~/.local/share/red-pill/models/samantha-mistral-instruct-7b.i1-Q4_K_M.gguf")
 
 	if not os.path.exists(model_path):
 		print(f"❌ Error: No se encontró el modelo de Samantha en {model_path}")
@@ -205,7 +205,7 @@ def main():
 			results.append({"desc": desc, "label": case["label"], "response": clean_resp, "backtracks": backtracks, "time": dt})
 
 	# Escribir los resultados en una tabla de markdown en los artefactos
-	report_path = "/home/joan/.gemini/antigravity/brain/426682cc-776c-436a-9332-8afcdbb382a9/backtrack_comparison_report.md"
+	report_path = os.path.expanduser("~/.gemini/antigravity/brain/426682cc-776c-436a-9332-8afcdbb382a9/backtrack_comparison_report.md")
 
 	with open(report_path, "w", encoding="utf-8") as f:
 		f.write("# Reporte Comparativo: Modos de Backtracking en Samantha (Mistral-7B)\n\n")

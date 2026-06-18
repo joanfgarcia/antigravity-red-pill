@@ -150,6 +150,10 @@ manager = HypervisorManager()
 async def startup_event():
 	asyncio.create_task(manager.garbage_collector())
 
+@app.get("/health")
+async def health_check():
+	return {"status": "ok", "active_models": list(manager.active_models.keys())}
+
 
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
 async def catch_all(request: Request, path: str):

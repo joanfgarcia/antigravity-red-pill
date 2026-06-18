@@ -68,7 +68,7 @@ def sample_token(logits, temperature=0.7, top_p=0.9, top_k=50, blacklist=None):
 
 
 def run_diagnostics():
-	workspace = os.getenv("WORKSPACE_ROOT", "/home/joan/Documents/IA")
+	workspace = os.getenv("WORKSPACE_ROOT", os.path.expanduser("~/Documents/IA"))
 	model_path = os.path.join(workspace, "sharing", "models", "gguf", "Falcon3-3B-Instruct-Heretic_Q4_K_M.gguf")
 
 	if not os.path.exists(model_path):
