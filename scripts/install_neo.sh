@@ -90,7 +90,11 @@ show_diagnostics_dashboard() {
 	echo -e "CPU/RAM:   ${GREEN}$CPU_CORES Cores / ${RAM_GB}GB RAM${NC}"
 	echo -e "VRAM:      ${GREEN}${VRAM_GB}GB (NVIDIA)${NC}"
 	echo -e "Container: ${GREEN}$DETECTED_ENGINE${NC}"
-	echo -e "Cifrado:   $( [[ "$DETECTED_ENCRYPTION" == "True" ]] && echo -e "${GREEN}✓ Activo${NC}" || echo -e "${RED}✗ No detectado (SEC-001 Warning)${NC})"
+	if [[ "$DETECTED_ENCRYPTION" == "True" ]]; then
+		echo -e "Cifrado:   ${GREEN}✓ Activo${NC}"
+	else
+		echo -e "Cifrado:   ${RED}✗ No detectado (SEC-001 Warning)${NC}"
+	fi
 	echo -e "${BLUE}------------------------------------------------------------------${NC}\n"
 }
 
@@ -344,7 +348,10 @@ if [ "$AUTO_MODE" = "false" ]; then
 else
 	DYNAMIC_EMOTION_SYNC=${DYNAMIC_EMOTION_SYNC:-"True"}
 	MULTI_EMOTION_INFERENCE=${MULTI_EMOTION_INFERENCE:-"True"}
-	echo -e "${YELLOW}[AUTO] Calibración echo -e "${BLUE}--- Fase: Configuración de Seguridad (Be Water) ---${NC}"
+	echo -e "${YELLOW}[AUTO] Calibración emocional por defecto o existente.${NC}"
+fi
+
+echo -e "${BLUE}--- Fase: Configuración de Seguridad (Be Water) ---${NC}"
 if [ "$AUTO_MODE" = "false" ]; then
 	echo "Elige tu nivel de seguridad para el Bünker:"
 	echo "1) NONE (Steam): Sin API Key ni contraseña (Solo para entornos de laboratorio/pruebas)"
@@ -438,15 +445,13 @@ if [ "$AUTO_MODE" = "false" ]; then
 		echo ""
 	else
 		CLOUD_VAULT_ENABLED="False"
+		CLOUD_VAULT_FOLDER_ID=""
+		CLOUD_VAULT_GPG_PASSPHRASE=""
 	fi
 else
 	CLOUD_VAULT_ENABLED=${CLOUD_VAULT_ENABLED:-"False"}
-fi
-SE=""
-	fi
-else
-	CLOUD_VAULT_ENABLED="False"
-	CLOUD_VAULT_FOLDER_ID=""
+	CLOUD_VAULT_FOLDER_ID=${CLOUD_VAULT_FOLDER_ID:-""}
+	CLOUD_VAULT_GPG_PASSPHRASE=${CLOUD_VAULT_GPG_PASSPHRASE:-""}
 fi
 
 echo -e "${BLUE}--- Fase: Localización del Bünker (Qdrant) ---${NC}"
