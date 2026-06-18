@@ -4,6 +4,79 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-013] Peer Workspace Registry & `.agent` Standards Discovery
+**Date**: 2026-06-18  
+**Context**: v7.3.0 — Multi-workspace foundation  
+**Status**: ACCEPTED & IMPLEMENTED  
+
+### 1. The Problem
+Configuration assumed a single project workspace (`WORKSPACE_ROOT`) plus a single global atlas (`USER_ATLAS_DIR`). In practice the agent operates across N independent project workspaces that are **peers** (e.g. a legacy monolith and a new-architecture monorepo) with no parent/child relationship, each carrying its own rules and standards. A flat configuration could neither represent them nor locate per-project standards.
+
+### 2. The Decision
+Separate three concerns previously conflated:
+- **red-pill = the agent**: identity, Bünker memory, and one GLOBAL `Agent_Core` desk (transversal, shared across all workspaces).
+- **Project workspaces = peers**, enumerated in a registry (`~/.config/red-pill/workspaces.yaml`), orthogonal to red-pill's own asset root (`WORKSPACE_ROOT`).
+- **Per-project standards = discovered at runtime via the `.agent` convention** (a directory or symlink at/above a workspace root), never hardcoded.
+
+`USER_ATLAS_DIR` is removed; `WORKSPACE_ROOT` is retained strictly as red-pill's own ecosystem/asset root.
+
+### 3. The Implementation
+- `core/workspaces.py`: registry loader, `find_closest_agent` (walk-up to the nearest `.agent`, capped at `$HOME`, degrades without raising), back-compat when no registry exists.
+- `examples/workspaces.yaml` template, seeded into XDG config on install/update if absent (copy-if-absent; never overwrites operator state).
+- Config injectors (`_config_common`, `inject_anchor`, `inject_settings`) read `agent_core` from the registry; `USER_ATLAS_DIR` removed from config and seeds.
+
+### 4. Rationale
+A registry plus **convention-over-configuration** (`.agent` discovery) decouples the agent from any single project layout and applies **separation of concerns**: the agent owns identity, the registry owns topology, each project owns its standards. Adding a workspace requires no code change.
+
+---
+
+## [AD-014] Operator-Managed Per-Workspace Access (Switch + Per-Surface Adapters)
+**Date**: 2026-06-18  
+**Context**: v7.3.0 — Workspace access control  
+**Status**: ACCEPTED & IMPLEMENTED  
+
+### 1. The Problem
+Granting the agent filesystem access to project workspaces was implicit and surface-specific. As IDE/CLI surfaces grow (Claude Code, Antigravity, Gemini, …), encoding "which workspaces" × "which surface" risks combinatorial configuration, and broad implicit grants conflict with least privilege.
+
+### 2. The Decision
+Model access as a **single per-workspace switch** (`access: true|false` in the registry — the operator's intent) and delegate translation to **per-surface adapters**. The registry stays IDE-agnostic; each surface owns how to express the grant in its own format (today: Claude Code → `permissions.additionalDirectories`). Grants pass through an explicit consent step at install time.
+
+### 3. The Implementation
+- `workspaces.py`: `access` field + CRUD (`add_or_enable`, `set_access`, `remove_workspace`).
+- `scripts/manage_workspaces.py`: one interactive routine (`enable`/`disable`/`list`) reused by install, update and CLI; surfaces the access list and the autonomous-access caveat.
+- `inject_settings.py`: consumes the registry; `--print` (dry-run for the consent gate); surgical `--remove` (drops only the targeted directories, never transversal grants or other enabled workspaces).
+
+### 4. Rationale
+Applies the **Adapter pattern** over a single source of truth: the operator sees one on/off per workspace; per-surface translation is isolated and additive, so a new IDE is a drop-in adapter with no change to the switch or the registry. The consent gate enforces **least privilege** — nothing project-level is granted without explicit operator action.
+
+---
+
+## [AD-015] Knowledge-Graph Orchestration via Minions (graphify)
+**Date**: 2026-06-18  
+**Context**: v7.3.0 — Code knowledge-graph lifecycle  
+**Status**: ACCEPTED — IMPLEMENTATION PENDING  
+
+### 1. The Problem
+The per-project code knowledge graph (graphify) is sound, but its lifecycle — scheduling refreshes, detecting which projects changed, surfacing failures — was driven externally and manually. This couples graph maintenance to a specific external host and provides neither an audit trail nor self-healing when a refresh fails.
+
+### 2. The Decision
+Separate three responsibilities along clean boundaries:
+- **Extraction** is owned by graphify (`update`, with `check-update` as the native, cron-safe change gate). **Per-project graph granularity is retained.**
+- **Project selection** is owned by the workspace, in a workspace-local manifest (a hidden file at the workspace root listing projects with an `enabled` flag) — keeping selection where the domain knowledge lives.
+- **Orchestration, scheduling and health** are owned by red-pill: a scheduled minion reconciles discovered git repositories against the manifest, runs `check-update`/`update` under the cgroup memory guard, reports failures to the Minion Inbox, and exposes a `knowledge_graph` tissue for the Sentinel auto-heal loop to retry.
+
+### 3. The Implementation (planned)
+- `graphifyy` as a managed dependency.
+- A reconciliation minion (`CommandMinion`-based) iterating registry workspaces with `graphify: true`.
+- A `systemd --user` timer (per the existing pulse-scheduler pattern).
+- `heal_tissue("knowledge_graph")` for sentinel-driven retry.
+- Auto-discovery (`find` for git repositories) acts as a **detector only**: new repositories are reported for operator classification, never graphed unattended.
+
+### 4. Rationale
+Applies **separation of responsibilities** by layer (extraction / selection / orchestration) and the **reconciliation** pattern (desired state in the manifest vs observed state on disk). Reusing graphify's native `check-update` gate avoids reimplementing change detection. Folding the lifecycle into red-pill's existing **minion → inbox → sentinel** machinery brings scheduling, auditability and self-healing under one consistent model instead of an external, manual one.
+
+---
+
 ## [AD-003] The Sovereign Native Pulse (Deprecating the Daemon for Timers)
 **Date**: 2026-03-19  
 **Context**: Phase O.7 (v6.1 Hotfix)  
