@@ -54,7 +54,7 @@ Applies the **Adapter pattern** over a single source of truth: the operator sees
 ## [AD-015] Knowledge-Graph Orchestration via Minions (graphify)
 **Date**: 2026-06-18  
 **Context**: v7.3.0 — Code knowledge-graph lifecycle  
-**Status**: ACCEPTED — IMPLEMENTATION PENDING  
+**Status**: ACCEPTED & IMPLEMENTED (serve model — per-project vs merged — still open)  
 
 ### 1. The Problem
 The per-project code knowledge graph (graphify) is sound, but its lifecycle — scheduling refreshes, detecting which projects changed, surfacing failures — was driven externally and manually. This couples graph maintenance to a specific external host and provides neither an audit trail nor self-healing when a refresh fails.
@@ -65,12 +65,14 @@ Separate three responsibilities along clean boundaries:
 - **Project selection** is owned by the workspace, in a workspace-local manifest (a hidden file at the workspace root listing projects with an `enabled` flag) — keeping selection where the domain knowledge lives.
 - **Orchestration, scheduling and health** are owned by red-pill: a scheduled minion reconciles discovered git repositories against the manifest, runs `check-update`/`update` under the cgroup memory guard, reports failures to the Minion Inbox, and exposes a `knowledge_graph` tissue for the Sentinel auto-heal loop to retry.
 
-### 3. The Implementation (planned)
-- `graphifyy` as a managed dependency.
-- A reconciliation minion (`CommandMinion`-based) iterating registry workspaces with `graphify: true`.
-- A `systemd --user` timer (per the existing pulse-scheduler pattern).
-- `heal_tissue("knowledge_graph")` for sentinel-driven retry.
-- Auto-discovery (`find` for git repositories) acts as a **detector only**: new repositories are reported for operator classification, never graphed unattended.
+### 3. The Implementation
+- `graphifyy` ensured as an external tool (`uv tool install`) in install/update — not a pyproject dependency, since it is a standalone CLI, not an imported library.
+- `scripts/graphify_sync.py`: reconciliation minion iterating registry workspaces with `graphify: true`; git-HEAD change gate with per-project state in the XDG state dir; emits a `knowledge_graph_stale` pain signal + audit log on failure.
+- Project selection in a workspace-local `.graphify-projects.yaml` (operator-owned `enabled` flags). Auto-discovery (`find` for git repositories) acts as a **detector only**: new repos are reported for operator classification, never graphed unattended.
+- `heal_tissue("knowledge_graph")` + an `auto_heal_ritual` clause: the Sentinel retries the sync on the stale signal and evaporates it on success.
+- `scripts/schedule_pulse.py --with-graphify`: an **opt-in** `systemd --user` timer (the recurring refresh is never enabled implicitly).
+- Change detection is git-HEAD based: `graphify check-update` only flags pending *semantic* (clustering) re-extraction, not code changes, so it is not the gate.
+- OPEN: the **serve** model (one MCP per per-project graph vs a per-workspace merged graph) — deferred as the higher-stakes, agent-facing decision.
 
 ### 4. Rationale
 Applies **separation of responsibilities** by layer (extraction / selection / orchestration) and the **reconciliation** pattern (desired state in the manifest vs observed state on disk). Reusing graphify's native `check-update` gate avoids reimplementing change detection. Folding the lifecycle into red-pill's existing **minion → inbox → sentinel** machinery brings scheduling, auditability and self-healing under one consistent model instead of an external, manual one.
