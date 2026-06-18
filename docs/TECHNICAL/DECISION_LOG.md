@@ -73,6 +73,7 @@ Separate three responsibilities along clean boundaries:
 - `scripts/schedule_pulse.py --with-graphify`: an **opt-in** `systemd --user` timer (the recurring refresh is never enabled implicitly).
 - Change detection is git-HEAD based: `graphify check-update` only flags pending *semantic* (clustering) re-extraction, not code changes, so it is not the gate.
 - OPEN: the **serve** model (one MCP per per-project graph vs a per-workspace merged graph) — deferred as the higher-stakes, agent-facing decision.
+- TUNABLE (future option): the graphify timer cadence currently follows the pulse interval (hourly by default, matching the legacy "Code Graph Refresh" coroutine it replaces). If a different cadence is ever wanted, add a dedicated `--graphify-interval-hours` to `schedule_pulse.py` to decouple it from the pulse — not done now (hourly is the established behaviour and, with the git-HEAD gate, cheap).
 
 ### 4. Rationale
 Applies **separation of responsibilities** by layer (extraction / selection / orchestration) and the **reconciliation** pattern (desired state in the manifest vs observed state on disk). Reusing graphify's native `check-update` gate avoids reimplementing change detection. Folding the lifecycle into red-pill's existing **minion → inbox → sentinel** machinery brings scheduling, auditability and self-healing under one consistent model instead of an external, manual one.
