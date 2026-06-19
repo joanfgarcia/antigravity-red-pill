@@ -12,7 +12,7 @@ For prompt execution (Telegram, AWAKENINGs), use AgyBridge instead.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from red_pill.swarm.bridges.base import AgentBridge, BackendType, BridgeCapabilities, ConversationResult, NotSupportedError
 
@@ -50,8 +50,18 @@ class GrpcBridge(AgentBridge):
 			mcp_tools=False,  # Tools get stuck in PENDING
 		)
 
-	def prompt(self, text: str, *, model: str = "flash", timeout: int = 120) -> ConversationResult:
+	def prompt(
+		self,
+		text: str,
+		*,
+		model: str = "flash",
+		effort: Optional[str] = None,
+		cwd: Optional[str] = None,
+		timeout: int = 120,
+	) -> ConversationResult:
 		"""Start a new cascade and inject a message (legacy gRPC flow).
+
+		effort/cwd: accepted for interface parity; N/A for the gRPC extraction backend.
 
 		Note: This is async — the response must be polled via check_for_replies.
 		The ConversationResult.response contains a status marker, not the actual response.

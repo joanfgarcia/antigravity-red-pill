@@ -19,6 +19,7 @@ from red_pill.core.paths import get_config_dir, get_state_dir
 from red_pill.memory import MemoryManager
 from red_pill.registry import registry
 from red_pill.soul import SoulManager
+from red_pill.swarm.agents.agent import AgentMinion
 from red_pill.swarm.agents.compressor import CompressorMinion
 from red_pill.swarm.agents.keymaker import KeymakerMinion
 from red_pill.swarm.agents.oracle import OracleMinion
@@ -343,6 +344,82 @@ async def handle_search_memory_research(arguments: Dict[str, Any]):
 
 	_safe_create_task(_run_bg(), name="oracle_research")
 	return [types.TextContent(type="text", text=f"Oracle Research started [Event ID: {event_id}]. Results will be in the Minion Inbox.")]
+
+
+@registry.register_action(
+	parent="swarm_orchestrator_api",
+	action="run_agent_task",
+	description=(
+		"Run a single agentic task through an agent backend (claude/agy/local) and return the result. "
+		"Generic execution substrate (mechanism): the CALLER supplies the role prompt, target workspace, "
+		"model and effort (policy) — red-pill just executes. Used by skills like swarm_team to launch each "
+		"role. async_mode=true (default) drops the result in the Minion Inbox (poll via check_minion_inbox); "
+		"async_mode=false waits and returns the result inline (only for short tasks — MCP call blocks)."
+	),
+	schema={
+		"type": "object",
+		"properties": {
+			"prompt": {"type": "string", "description": "The task/role prompt to run."},
+			"backend": {"type": "string", "description": "agy | claude | local. Omit → IDE_BACKEND config."},
+			"model": {"type": "string", "description": "Backend-specific model (e.g. opus, sonnet, haiku, claude-opus-4-8)."},
+			"effort": {"type": "string", "description": "Reasoning effort low|medium|high|xhigh|max (claude). Backend may ignore."},
+			"workspace": {"type": "string", "description": "Working dir the agent operates in (the target project). Omit → red-pill's own dir."},
+			"timeout": {"type": "integer", "description": "Seconds before the backend call is aborted (default 600)."},
+			"async_mode": {"type": "boolean", "description": "True (default): result to Minion Inbox. False: wait and return inline.", "default": True},
+		},
+		"required": ["prompt"],
+	},
+)
+async def handle_run_agent_task(arguments: Dict[str, Any]):
+	import asyncio
+	import uuid
+
+	prompt = arguments["prompt"]
+	# Explicit, typed param surface (kept clean for a later pydantic BaseModel hardening pass).
+	run_kwargs = {
+		"backend": arguments.get("backend"),
+		"model": arguments.get("model", "flash"),
+		"effort": arguments.get("effort"),
+		"cwd": arguments.get("workspace"),
+		"timeout": int(arguments.get("timeout", 600)),
+	}
+	async_mode = arguments.get("async_mode", True)
+
+	def _summarize(res) -> str:
+		if res.status == "success":
+			return str(res.result.get("response") or res.result)
+		return f"Agent task failed: {res.error}"
+
+	if not async_mode:
+		results = await GruOrchestrator().deploy_swarm(prompt, [AgentMinion()], trace=False, **run_kwargs)
+		return [types.TextContent(type="text", text=_summarize(results[0]))]
+
+	event_id = str(uuid.uuid4())[:8]
+
+	async def _run_bg():
+		try:
+			from red_pill.core.inbox import MinionInbox
+
+			results = await GruOrchestrator().deploy_swarm(prompt, [AgentMinion()], trace=False, **run_kwargs)
+			res = results[0]
+			content = _summarize(res)
+
+			def _deliver():
+				MinionInbox().drop_report(event_id=event_id, source="AgentRunner", status=res.status, content=content)
+
+			await asyncio.to_thread(_deliver)
+		except Exception as e:
+			logger.error(f"Agent task [{event_id}] crashed: {e}")
+			err_msg = str(e)
+			from red_pill.core.inbox import MinionInbox
+
+			def _deliver_err():
+				MinionInbox().drop_report(event_id=event_id, source="AgentRunner", status="crashed", content=f"Exception: {err_msg}")
+
+			await asyncio.to_thread(_deliver_err)
+
+	_safe_create_task(_run_bg(), name="agent_task")
+	return [types.TextContent(type="text", text=f"Agent task started [Event ID: {event_id}]. Result will be in the Minion Inbox.")]
 
 
 @registry.register_action(

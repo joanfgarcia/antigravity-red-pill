@@ -41,17 +41,21 @@ class ClaudeBridge(AgentBridge):
 				"Claude CLI (claude) not found in PATH. Install Claude Code and ensure `claude` is available."
 			)
 
-	def _run_claude(self, args: list, timeout: int) -> dict:
-		"""Execute claude CLI with common flags and parse the JSON result object."""
+	def _run_claude(self, args: list, timeout: int, cwd: Optional[str] = None) -> dict:
+		"""Execute claude CLI with common flags and parse the JSON result object.
+
+		cwd: working dir for the subprocess (the target project). None → red-pill's
+		own root (back-compat default for Telegram/AWAKENINGs callers).
+		"""
 		cmd = [self._claude_path, *args, "--dangerously-skip-permissions", "--output-format", "json"]
-		logger.debug(f"[ClaudeBridge] Running: {' '.join(cmd[:3])}... (timeout={timeout}s)")
+		logger.debug(f"[ClaudeBridge] Running: {' '.join(cmd[:3])}... (timeout={timeout}s, cwd={cwd or 'default'})")
 		try:
 			result = subprocess.run(
 				cmd,
 				capture_output=True,
 				text=True,
 				timeout=timeout + 10,
-				cwd=str(get_bunker_root().parent),
+				cwd=cwd or str(get_bunker_root().parent),
 			)
 		except subprocess.TimeoutExpired as e:
 			logger.error(f"[ClaudeBridge] Command timed out after {timeout + 10}s")
@@ -84,10 +88,30 @@ class ClaudeBridge(AgentBridge):
 		# The interface default ("flash") is agy-centric; ignore it for claude.
 		return ["--model", model] if model and model != "flash" else []
 
-	def prompt(self, text: str, *, model: str = "flash", timeout: int = 300) -> ConversationResult:
+	# Map the portable standard (low|medium|high) → claude's --effort. Claude also
+	# accepts xhigh/max, but the portable standard tops at high. None/unknown → omit
+	# (model default). This is the ClaudeBridge's slice of the standard→real mapping.
+	_EFFORT_MAP = {"low": "low", "medium": "medium", "high": "high"}
+
+	@classmethod
+	def _effort_args(cls, effort: Optional[str]) -> list:
+		mapped = cls._EFFORT_MAP.get((effort or "").strip().lower())
+		return ["--effort", mapped] if mapped else []
+
+	def prompt(
+		self,
+		text: str,
+		*,
+		model: str = "flash",
+		effort: Optional[str] = None,
+		cwd: Optional[str] = None,
+		timeout: int = 300,
+	) -> ConversationResult:
 		"""Send a one-shot prompt via `claude -p`. session_id comes from the JSON output."""
 		try:
-			data = self._run_claude(["-p", text, *self._model_args(model)], timeout)
+			data = self._run_claude(
+				["-p", text, *self._model_args(model), *self._effort_args(effort)], timeout, cwd=cwd
+			)
 		except Exception as e:
 			return ConversationResult(conversation_id="", response="", error=str(e))
 

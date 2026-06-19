@@ -17,6 +17,11 @@
 - **[FEAT] LocalBridge**: local-model backend via the SIP inference provider (generation; `mcp_tools=False`).
 - **[FEAT] `AgentMinion`**: first-class swarm minion that runs a task through any backend; registered `"agent"` in `MinionFactory`. Closes the gap where agentic execution lived only in `swarm/executor.py`, off the factory. `IDE_BACKEND` accepts `claude|local`.
 
+### 🧩 Agent-Task Launcher + Per-Workspace Memory
+- **[FEAT] `run_agent_task` (MCP `swarm_orchestrator_api`)**: generic single-task launcher over `AgentMinion` → `MinionInbox` (sync or async). Execution substrate for the-luggage's `swarm_team` skill — caller supplies prompt/workspace/backend/model/effort (policy), red-pill executes (mechanism). Verified end-to-end (claude/opus, cwd-scoped).
+- **[FEAT] `AgentBridge.prompt()` gains `cwd` + `effort`** (backward-compat, all 4 bridges): a portable effort STANDARD (`low|medium|high`) mapped per-bridge — ClaudeBridge → `--effort`; AgyBridge → model "(Mode)" variant (documented from `agy models`, TODO-wire); LocalBridge → n/a. `cwd` threads the target workspace to the subprocess (ClaudeBridge no longer hardcodes red-pill's root). `AgentMinion` propagates both.
+- **[FEAT] `migrate_memory.py`**: idempotent per-workspace relocation `<root>/.claude/memory` → `<root>/.red-pill/memory` (moves only `memory/`, never `.claude/` whole; skips existing dest). Hooked in `upgrade.sh` after `thread_weave`, before `inject_*`. `.red-pill/` = neutral (non-IDE) folder for agent data.
+
 ### 🛠️ Install/Update Hardening
 - **[FIX] `install_neo.sh`**: repaired pre-existing upstream-ZIP corruption — the `Cifrado:` dashboard line (L95), two fused `echo`s + a missing `fi` (L347), and an orphan unbalanced block (L445). `bash -n` now passes.
 - **[FEAT] Seeding**: `examples/workspaces.yaml` seeded into XDG config copy-if-absent (never overwrites operator state) on install/update.

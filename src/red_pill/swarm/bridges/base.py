@@ -62,6 +62,14 @@ class BridgeCapabilities:
 	mcp_tools: bool = False  # Agent can use MCP tools autonomously
 
 
+# ── Standard effort vocabulary (portable) ──────────────────────────────────
+# red-pill exposes ONE standard effort scale; each bridge MAPS it to its platform's
+# real control: ClaudeBridge → `--effort`; AgyBridge → the model's "(Mode)" variant
+# (agy fuses model+mode in the model name); LocalBridge → ignored (no effort knob).
+# Callers (skills, the bot) speak this standard and never the platform-specific value.
+STANDARD_EFFORTS = ("low", "medium", "high")
+
+
 class AgentBridge(ABC):
 	"""Abstract interface for agent-backend communication.
 
@@ -76,11 +84,26 @@ class AgentBridge(ABC):
 		...
 
 	@abstractmethod
-	def prompt(self, text: str, *, model: str = "flash", timeout: int = 120) -> ConversationResult:
+	def prompt(
+		self,
+		text: str,
+		*,
+		model: str = "flash",
+		effort: Optional[str] = None,
+		cwd: Optional[str] = None,
+		timeout: int = 120,
+	) -> ConversationResult:
 		"""Send a one-shot prompt and get a response.
 
 		This is the primary method for both Neon-Link commands
 		(Telegram, Minion Inbox, etc.) and autonomous AWAKENINGs.
+
+		effort: backend-specific reasoning-effort hint (e.g. claude
+			--effort low|medium|high|xhigh|max). None → backend default.
+			Ignored by backends that don't support it.
+		cwd: working directory the agent operates in (the target
+			workspace/project). None → backend default. Lets the caller
+			point the agent at a specific project instead of red-pill's dir.
 		"""
 		...
 

@@ -26,10 +26,14 @@ class AgentMinion(Minion):
 		kwargs:
 			backend: "agy" | "claude" | "local" | None (None → IDE_BACKEND config)
 			model:   backend-specific model hint (default "flash")
+			effort:  reasoning-effort hint (low|medium|high|xhigh|max); backend may ignore
+			cwd/workspace: working dir the agent operates in (target project)
 			timeout: seconds (default 300)
 		"""
 		backend = kwargs.get("backend")
 		model = kwargs.get("model", "flash")
+		effort = kwargs.get("effort")
+		cwd = kwargs.get("cwd") or kwargs.get("workspace")
 		timeout = int(kwargs.get("timeout", 300))
 		self.log(f"Delegando a agente (backend={backend or 'config'}): {task[:60]}...")
 		start = time.time()
@@ -39,7 +43,9 @@ class AgentMinion(Minion):
 
 			bridge = create_bridge(backend)
 			# bridge.prompt is a blocking subprocess call — run off the event loop.
-			result = await asyncio.to_thread(bridge.prompt, task, model=model, timeout=timeout)
+			result = await asyncio.to_thread(
+				bridge.prompt, task, model=model, effort=effort, cwd=cwd, timeout=timeout
+			)
 		except Exception as e:
 			return {"status": "error", "error": str(e), "duration": time.time() - start}
 

@@ -46,7 +46,16 @@ class LocalBridge(AgentBridge):
 			mcp_tools=False,
 		)
 
-	def prompt(self, text: str, *, model: str = "flash", timeout: int = 300) -> ConversationResult:
+	def prompt(
+		self,
+		text: str,
+		*,
+		model: str = "flash",
+		effort: Optional[str] = None,
+		cwd: Optional[str] = None,
+		timeout: int = 300,
+	) -> ConversationResult:
+		# effort/cwd: N/A for the local generation backend (no subprocess, no effort knob).
 		try:
 			provider = self._get_provider()
 			response = provider.generate(
