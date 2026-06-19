@@ -550,6 +550,9 @@ def main() -> None:
 
 	subparsers.add_parser("benchmark", help="Run Sovereignty Benchmark (Hardware Concurrency)")
 
+	doctor_parser = subparsers.add_parser("doctor", help="Verificación síncrona config<->runtime (post-install/update)")
+	doctor_parser.add_argument("--quiet", action="store_true", help="Solo el veredicto (oculta info no-bloqueante)")
+
 	id_parser = subparsers.add_parser("identity", help="Identity & Persona Management")
 	id_sub = id_parser.add_subparsers(dest="id_cmd")
 
@@ -859,6 +862,10 @@ def main() -> None:
 		elif args.command == "heal":
 			handle_heal(args.dry_run)
 			return
+		elif args.command == "doctor":
+			from red_pill.metabolism.doctor import run_doctor
+
+			sys.exit(run_doctor(getattr(args, "quiet", False)))
 		elif args.command == "benchmark":
 			handle_benchmark()
 			return

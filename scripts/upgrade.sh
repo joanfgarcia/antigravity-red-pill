@@ -283,6 +283,11 @@ if command -v uv &> /dev/null; then
 			echo -e "${GREEN}✓ $LEGACY_SVC deshabilitado.${NC}"
 		fi
 	done
+
+	# 7. Verificación post-update (config <-> runtime) — doctor síncrono.
+	# Cierra el hueco: hasta ahora el update aplicaba cambios pero nunca verificaba el resultado.
+	echo -e "${BLUE}Verificando salud post-update (doctor)...${NC}"
+	uv run python scripts/doctor.py || echo -e "${YELLOW}[doctor] reportó incidencias — revísalas arriba.${NC}"
 else
 	echo -e "${RED}[ERROR] 'uv' no encontrado. Por favor, instala astral/uv para completar el upgrade.${NC}"
 fi

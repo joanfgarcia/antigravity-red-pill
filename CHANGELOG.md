@@ -23,6 +23,7 @@
 - **[FEAT] `migrate_memory.py`**: idempotent per-workspace relocation `<root>/.claude/memory` → `<root>/.red-pill/memory` (moves only `memory/`, never `.claude/` whole; skips existing dest). Hooked in `upgrade.sh` after `thread_weave`, before `inject_*`. `.red-pill/` = neutral (non-IDE) folder for agent data.
 
 ### 🛠️ Install/Update Hardening
+- **[FEAT] `red-pill doctor`** (`metabolism/doctor.py` + `scripts/doctor.py` wrapper + CLI subcommand): synchronous, on-demand **config↔runtime** verification. Runs the sentinel plugins in **AUDIT-ONLY** mode (no heal → no false-green; `audit_vitals` heals-and-suppresses, which would mask a heal that ran but didn't fix) + `audit_runtime` (failed units) + two on-demand checks: expected `redpill-*.timer` present & active, and loaded LLM model == `MINION_PROFILE`. Verdict 🟢/🟡/🔴 + exit code (0 ok / 1 red). Hooked at the end of `upgrade.sh` — **closes the gap where an update applied changes but never verified the result** (cause of post-update breakage: wrong model, swapped ports, dead daemons, undefined timers). Verified live (correctly flagged real down/hung services).
 - **[FIX] `install_neo.sh`**: repaired pre-existing upstream-ZIP corruption — the `Cifrado:` dashboard line (L95), two fused `echo`s + a missing `fi` (L347), and an orphan unbalanced block (L445). `bash -n` now passes.
 - **[FEAT] Seeding**: `examples/workspaces.yaml` seeded into XDG config copy-if-absent (never overwrites operator state) on install/update.
 
