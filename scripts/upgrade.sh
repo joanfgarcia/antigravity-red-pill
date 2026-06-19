@@ -229,7 +229,11 @@ if command -v uv &> /dev/null; then
 	
 	# Thread Weaving (idempotent)
 	uv run python scripts/thread_weave_migrate.py
-	
+
+	# Per-workspace memory relocation (.claude/memory → .red-pill/memory, idempotente)
+	echo -e "${BLUE}Migrando memoria por-workspace (.claude/memory → .red-pill/memory)...${NC}"
+	uv run python scripts/migrate_memory.py || true
+
 	# Version Sync Engram (Manual prompt for now, but ensured by guidance)
 	echo -e "${GREEN}✓ Estructura interna actualizada.${NC}"
 
