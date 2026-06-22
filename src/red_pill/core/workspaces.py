@@ -12,32 +12,63 @@ absent, a back-compat registry is derived (agent_core from config, no project wo
 
 This is ORTHOGONAL to `config.WORKSPACE_ROOT` (which is red-pill's own ecosystem/asset root, infra).
 """
+
 import logging
 import os
-from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import List, Optional
 
 import yaml
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from red_pill.core.paths import get_agent_dir, get_config_dir
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
-class Workspace:
+class Workspace(BaseModel):
+	"""A single PROJECT workspace entry. Pydantic-validated: paths are ~-expanded,
+	`name` must be non-empty, flags are coerced to bool. Frozen (immutable) — mutate
+	via `model_copy(update=...)`."""
+
+	model_config = ConfigDict(frozen=True)
+
 	name: str
 	root: Path
-	atlas: Optional[Path] = None   # hook (permissions step): explicit per-workspace standards path
-	graphify: bool = False         # hook (graphify timer step): index this workspace's AST
-	access: bool = False           # operator opt-in: grant FS access (additionalDirectories) to this workspace
+	atlas: Optional[Path] = None  # hook (permissions step): explicit per-workspace standards path
+	graphify: bool = False  # hook (graphify timer step): index this workspace's AST
+	access: bool = False  # operator opt-in: grant FS access (additionalDirectories) to this workspace
+
+	@field_validator("name")
+	@classmethod
+	def _name_nonempty(cls, v: str) -> str:
+		if not str(v).strip():
+			raise ValueError("workspace name must be non-empty")
+		return v
+
+	@field_validator("root", "atlas", mode="before")
+	@classmethod
+	def _expand_paths(cls, v):
+		# Empty/None atlas → None; otherwise ~-expand. A missing `root` then fails
+		# validation (required), which is the point — malformed entries are rejected.
+		if v in (None, ""):
+			return None
+		return _expand(v)
 
 
-@dataclass(frozen=True)
-class WorkspaceRegistry:
+class WorkspaceRegistry(BaseModel):
+	"""The full registry: the agent's GLOBAL desk + the list of peer workspaces."""
+
+	model_config = ConfigDict(frozen=True)
+
 	agent_core: Path
-	workspaces: List[Workspace] = field(default_factory=list)
+	workspaces: List[Workspace] = Field(default_factory=list)
+	version: int = 1
+
+	@field_validator("agent_core", mode="before")
+	@classmethod
+	def _expand_agent_core(cls, v):
+		return _expand(v)
 
 	def get(self, name: str) -> Optional[Workspace]:
 		return next((w for w in self.workspaces if w.name == name), None)
@@ -77,22 +108,18 @@ def load_registry() -> WorkspaceRegistry:
 		logger.error("[workspaces] failed to parse %s: %s — using back-compat", path, exc)
 		return _back_compat_registry()
 
-	agent_core = _expand(raw.get("agent_core") or _back_compat_registry().agent_core)
+	agent_core = raw.get("agent_core") or _back_compat_registry().agent_core
 	workspaces: List[Workspace] = []
 	for entry in raw.get("workspaces") or []:
 		try:
-			workspaces.append(
-				Workspace(
-					name=entry["name"],
-					root=_expand(entry["root"]),
-					atlas=_expand(entry["atlas"]) if entry.get("atlas") else None,
-					graphify=bool(entry.get("graphify", False)),
-					access=bool(entry.get("access", False)),
-				)
-			)
+			workspaces.append(Workspace.model_validate(entry))
 		except Exception as exc:
 			logger.warning("[workspaces] skipping malformed workspace entry %r: %s", entry, exc)
-	return WorkspaceRegistry(agent_core=agent_core, workspaces=workspaces)
+	try:
+		return WorkspaceRegistry(agent_core=agent_core, workspaces=workspaces, version=int(raw.get("version", 1)))
+	except Exception as exc:
+		logger.error("[workspaces] invalid registry %s: %s — using back-compat", path, exc)
+		return _back_compat_registry()
 
 
 def agent_core_dir() -> Path:
@@ -160,13 +187,13 @@ def _to_tilde(p) -> str:
 	"""Render a path with $HOME collapsed to ~ for a tidy, portable registry file."""
 	home = str(Path.home())
 	s = str(p)
-	return "~" + s[len(home):] if s == home or s.startswith(home + os.sep) else s
+	return "~" + s[len(home) :] if s == home or s.startswith(home + os.sep) else s
 
 
 def serialize_registry(registry: WorkspaceRegistry) -> str:
 	"""Pure serialization (no I/O) — testable. Regenerates the documented header; PyYAML-style
 	inline comments are not preserved (we re-emit the header instead)."""
-	lines = [_REGISTRY_HEADER, "version: 1", f'agent_core: "{_to_tilde(registry.agent_core)}"']
+	lines = [_REGISTRY_HEADER, f"version: {registry.version}", f'agent_core: "{_to_tilde(registry.agent_core)}"']
 	if not registry.workspaces:
 		lines.append("workspaces: []")
 	else:
@@ -220,14 +247,14 @@ def add_or_enable_workspace(path, name: Optional[str] = None):
 	root = _expand(path)
 	existing = _match(registry, str(root))
 	if existing:
-		updated = replace(existing, access=True)
+		updated = existing.model_copy(update={"access": True})
 		workspaces = [updated if w.name == existing.name else w for w in registry.workspaces]
 		ws_out, was_new = updated, False
 	else:
 		ws_out = Workspace(name=name or root.name, root=root, atlas=None, graphify=False, access=True)
 		workspaces = list(registry.workspaces) + [ws_out]
 		was_new = True
-	registry = WorkspaceRegistry(agent_core=registry.agent_core, workspaces=workspaces)
+	registry = WorkspaceRegistry(agent_core=registry.agent_core, workspaces=workspaces, version=registry.version)
 	save_registry(registry)
 	return registry, ws_out, was_new
 
@@ -238,9 +265,9 @@ def set_access(name_or_path: str, value: bool) -> Optional[Workspace]:
 	target = _match(registry, name_or_path)
 	if not target:
 		return None
-	updated = replace(target, access=value)
+	updated = target.model_copy(update={"access": value})
 	workspaces = [updated if w.name == target.name else w for w in registry.workspaces]
-	save_registry(WorkspaceRegistry(agent_core=registry.agent_core, workspaces=workspaces))
+	save_registry(WorkspaceRegistry(agent_core=registry.agent_core, workspaces=workspaces, version=registry.version))
 	return updated
 
 
@@ -251,5 +278,5 @@ def remove_workspace(name_or_path: str) -> Optional[Workspace]:
 	if not target:
 		return None
 	workspaces = [w for w in registry.workspaces if w.name != target.name]
-	save_registry(WorkspaceRegistry(agent_core=registry.agent_core, workspaces=workspaces))
+	save_registry(WorkspaceRegistry(agent_core=registry.agent_core, workspaces=workspaces, version=registry.version))
 	return target
