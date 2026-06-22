@@ -112,3 +112,50 @@ def workspace_access_dirs():
 				if resolved not in dirs:
 					dirs.append(resolved)
 	return dirs
+
+
+def workspace_memory_dirs():
+	"""Standalone reader (no red_pill import): returns memory dirs of all workspaces with memory enabled.
+	If memory is True -> resolves to <root>/.red-pill/memory
+	If memory is a string -> resolves relative to <root> if relative, else absolute.
+	If memory is False/null/absent -> ignored."""
+	home = os.path.expanduser("~")
+	path = os.path.join(home, ".config", "red-pill", "workspaces.yaml")
+	if not os.path.exists(path):
+		return []
+	try:
+		import yaml
+
+		with open(path, encoding="utf-8") as f:
+			data = yaml.safe_load(f) or {}
+	except Exception:
+		return []
+	dirs = []
+	for entry in data.get("workspaces") or []:
+		if not isinstance(entry, dict):
+			continue
+		mem = entry.get("memory")
+		root = entry.get("root")
+		if not mem or not root:
+			continue
+		root_resolved = os.path.expanduser(str(root))
+		if isinstance(mem, bool) and mem:
+			resolved = os.path.join(root_resolved, ".red-pill", "memory")
+		elif isinstance(mem, str) and mem.strip():
+			mem_str = mem.strip()
+			if mem_str.lower() in ("true", "yes", "on"):
+				resolved = os.path.join(root_resolved, ".red-pill", "memory")
+			elif mem_str.lower() in ("false", "no", "off"):
+				continue
+			else:
+				mem_path = os.path.expanduser(mem_str)
+				if os.path.isabs(mem_path):
+					resolved = mem_path
+				else:
+					resolved = os.path.abspath(os.path.join(root_resolved, mem_path))
+		else:
+			continue
+		if resolved not in dirs:
+			dirs.append(resolved)
+	return dirs
+

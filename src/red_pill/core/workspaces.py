@@ -16,7 +16,7 @@ This is ORTHOGONAL to `config.WORKSPACE_ROOT` (which is red-pill's own ecosystem
 import logging
 import os
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -38,6 +38,7 @@ class Workspace(BaseModel):
 	atlas: Optional[Path] = None  # hook (permissions step): explicit per-workspace standards path
 	graphify: bool = False  # hook (graphify timer step): index this workspace's AST
 	access: bool = False  # operator opt-in: grant FS access (additionalDirectories) to this workspace
+	memory: Union[bool, Path] = False  # memory serving: true/false or custom path (e.g. true => root/.red-pill/memory/)
 
 	@field_validator("name")
 	@classmethod
@@ -54,6 +55,31 @@ class Workspace(BaseModel):
 		if v in (None, ""):
 			return None
 		return _expand(v)
+
+	@field_validator("memory", mode="before")
+	@classmethod
+	def _expand_memory(cls, v):
+		if v in (None, ""):
+			return False
+		if isinstance(v, str):
+			v_lower = v.strip().lower()
+			if v_lower in ("true", "yes", "on"):
+				return True
+			if v_lower in ("false", "no", "off"):
+				return False
+			return _expand(v)
+		return v
+
+	@property
+	def get_memory_path(self) -> Optional[Path]:
+		if not self.memory:
+			return None
+		if isinstance(self.memory, bool):
+			return self.root / ".red-pill" / "memory"
+		path = Path(self.memory)
+		if path.is_absolute():
+			return path
+		return (self.root / path).resolve()
 
 
 class WorkspaceRegistry(BaseModel):
@@ -180,6 +206,7 @@ _REGISTRY_HEADER = """\
 #   graphify : whether the AST-refresh timer indexes this workspace.
 #   access   : operator opt-in — grant the agent filesystem access (additionalDirectories).
 #              false = in AUTONOMOUS mode the agent CANNOT operate in this workspace.
+#   memory   : true/false or custom memory path (e.g. true => root/.red-pill/memory/)
 """
 
 
@@ -200,9 +227,16 @@ def serialize_registry(registry: WorkspaceRegistry) -> str:
 		lines.append("workspaces:")
 		for w in registry.workspaces:
 			atlas = f'"{_to_tilde(w.atlas)}"' if w.atlas else "null"
+			if isinstance(w.memory, bool):
+				memory_val = str(w.memory).lower()
+			elif w.memory:
+				memory_val = f'"{_to_tilde(w.memory)}"'
+			else:
+				memory_val = "false"
 			lines.append(
 				f'  - {{ name: {w.name}, root: "{_to_tilde(w.root)}", atlas: {atlas}, '
-				f"graphify: {str(w.graphify).lower()}, access: {str(w.access).lower()} }}"
+				f"graphify: {str(w.graphify).lower()}, access: {str(w.access).lower()}, "
+				f"memory: {memory_val} }}"
 			)
 	return "\n".join(lines) + "\n"
 

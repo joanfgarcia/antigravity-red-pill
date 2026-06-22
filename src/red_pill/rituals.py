@@ -301,8 +301,25 @@ async def consolidation_ritual(mm: MemoryManager) -> None:
 		logger.info("Pulse: Initiating Consolidation (Consolidating interactions)...")
 		await asyncio.to_thread(perform_sleep_cycle, mm, mode="lazy")
 		logger.info("Pulse: Consolidation complete. Memories fixed.")
+
+		# Phase 2: Workspace Memory Sync
+		await memory_sync_ritual(mm)
 	except Exception as e:
 		logger.error(f"Pulse: Consolidation ritual failed: {e}")
+
+
+async def memory_sync_ritual(mm: MemoryManager) -> None:
+	"""
+	Workspace Memory Sync Ritual.
+	Projects and consolidates the latest memories into workspace-local banks.
+	"""
+	try:
+		logger.info("Pulse: Initiating Workspace Memory Sync Ritual...")
+		from red_pill.metabolism.memory_sync import sync_all_workspaces
+		await asyncio.to_thread(sync_all_workspaces, mm)
+		logger.info("Pulse: Workspace Memory Sync complete.")
+	except Exception as e:
+		logger.error(f"Pulse: Workspace Memory Sync ritual failed: {e}")
 
 
 async def thread_ritual() -> None:

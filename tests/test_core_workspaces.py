@@ -31,6 +31,18 @@ class TestWorkspaceModel:
 		w = Workspace(name="demo", root="/tmp/x", graphify=True, access=True)
 		assert w.graphify is True and w.access is True
 
+	def test_memory_defaults_and_resolution(self):
+		w = Workspace(name="demo", root="/tmp/x")
+		assert w.memory is False
+		assert w.get_memory_path is None
+
+		w_bool = Workspace(name="demo", root="/tmp/x", memory=True)
+		assert w_bool.memory is True
+		assert w_bool.get_memory_path == Path("/tmp/x/.red-pill/memory")
+
+		w_custom = Workspace(name="demo", root="/tmp/x", memory="custom_mem")
+		assert w_custom.get_memory_path == Path("/tmp/x/custom_mem").resolve()
+
 	def test_name_must_be_nonempty(self):
 		with pytest.raises(ValidationError):
 			Workspace(name="  ", root="/tmp/x")
@@ -67,15 +79,21 @@ class TestSerializeRoundTrip:
 	def test_roundtrip(self):
 		reg = WorkspaceRegistry(
 			agent_core="~/Agent_Core",
-			workspaces=[Workspace(name="proj", root="~/code/proj", graphify=True, access=True)],
+			workspaces=[
+				Workspace(name="proj", root="~/code/proj", graphify=True, access=True, memory=True),
+				Workspace(name="proj2", root="~/code/proj2", memory="~/custom_mem"),
+			],
 		)
 		text = serialize_registry(reg)
 		raw = yaml.safe_load(text)
 		assert raw["version"] == 1
 		assert raw["workspaces"][0]["name"] == "proj"
 		# re-validate the emitted entry back into a model
-		w = Workspace.model_validate(raw["workspaces"][0])
-		assert w.graphify is True and w.access is True
+		w1 = Workspace.model_validate(raw["workspaces"][0])
+		assert w1.graphify is True and w1.access is True and w1.memory is True
+
+		w2 = Workspace.model_validate(raw["workspaces"][1])
+		assert w2.memory == Path.home() / "custom_mem"
 
 	def test_empty_workspaces_serialize(self):
 		reg = WorkspaceRegistry(agent_core="~/Agent_Core")

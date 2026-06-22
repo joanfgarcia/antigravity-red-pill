@@ -27,7 +27,7 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger("settings_injector")
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _config_common import agent_core_vars, build_vars, subst, workspace_access_dirs  # noqa: E402
+from _config_common import agent_core_vars, build_vars, subst, workspace_access_dirs, workspace_memory_dirs  # noqa: E402
 
 PERMISSION_LIST_KEYS = ("allow", "ask", "deny", "additionalDirectories")
 
@@ -138,7 +138,7 @@ def main():
 	# ADD path: augment the seed (transversal) fragment with registry-derived workspace dirs
 	# (access: true) + any explicit --extra-dir. The REMOVE path keeps the fragment narrow.
 	if not args.remove:
-		extra = list(workspace_access_dirs()) + [os.path.expanduser(d) for d in args.extra_dir]
+		extra = list(workspace_access_dirs()) + list(workspace_memory_dirs()) + [os.path.expanduser(d) for d in args.extra_dir]
 		if extra:
 			ad = fragment.setdefault("permissions", {}).setdefault("additionalDirectories", [])
 			for d in extra:

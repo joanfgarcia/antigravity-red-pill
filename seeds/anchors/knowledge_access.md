@@ -7,7 +7,7 @@ You have four distinct memory/knowledge spaces. **Reach for the right one; never
 |-------|-----------|-----------|
 | **Bünker** (red-pill engrams) | Your **brain** — associative, transversal, mid/long-term: your memories, history, your "life". Recalled, not filed. | who you are, what you've lived/learned. Loaded by the Sovereign Handshake; seeded by `memorize_interaction`. |
 | **Agent_Core** (`Titanium_Core`) | Your **desk** — deliberate notes/files, transversal, **yours**, across ALL projects. | research, plans, multi-session state, anything **not tied to a project**. (See the agent_core anchor.) |
-| **workspace-memory** (`<ws>/.red-pill/memory/`, MCP `workspace-memory`) | The **project's filing cabinet** — per-workspace task/project **artifacts**. | artifacts of *this* task/project + agent-to-agent handoff (below). |
+| **workspace-memory** (`<ws>/.red-pill/memory/`) | The **project's filing cabinet** — per-workspace task/project **artifacts** served via `RedPill-Kernel` actions. | artifacts of *this* task/project + agent-to-agent handoff (below). |
 | **graphify** (MCP) | The code **map** — structure & dependencies. | locate code before `grep`/`cat`. |
 
 **The rule:** *who am I / what did I learn* → Bünker · *a transversal note of mine, not project work* →
@@ -27,6 +27,12 @@ The per-workspace bank (`MEMORY.md` index + decisions/patterns/architecture + `h
    artifact is both result AND signal** — writing the artifact for phase N unblocks the dependent phase;
    an agent that depends on it polls the bank until the artifact appears (or starts immediately if it's
    already there). This is **local** coordination (filesystem bank), NOT cross-machine comms.
+
+**Served via RedPill-Kernel Actions (bunker_memory_api):**
+- `list_workspace_memory(workspace)` — List files in the workspace memory folder.
+- `read_workspace_memory(workspace, filename)` — Read a memory file (e.g. `MEMORY.md`, `decisions.md`).
+- `write_workspace_memory(workspace, filename, content)` — Write/update a memory file.
+*Note: Match your current working directory (CWD) to the registered workspaces to determine the active `workspace` name. Never edit or create files in the workspace's `.agent/` directory; all memory files reside strictly under `.red-pill/memory/`.*
 
 The handshake gives you who you are; Agent_Core is your desk; the graph shows where things are; the
 workspace bank carries the task's artifacts and the handoff between agents.

@@ -446,6 +446,14 @@ class RedPillConfig(BaseSettings):
 	COMPACTION_THRESHOLD: int = 10
 
 	# -----------------------------------------------------------------------
+	# WORKSPACE MEMORY COMPACTION
+	# -----------------------------------------------------------------------
+	WORKSPACE_MEMORY_COMPACT_BACKEND: str = "auto"
+	WORKSPACE_MEMORY_COMPACT_MODEL: str = "flash"
+	WORKSPACE_MEMORY_COMPACT_PROMPT: str = "seeds/memory/optimizer_prompt.txt"
+
+
+	# -----------------------------------------------------------------------
 	# FERRARI PROTOCOL — Emotional Intelligence Plugins
 	# -----------------------------------------------------------------------
 	COGNITIVE_ROUTER_ENABLED: bool = True  # Plugin 05: task routing by operator color

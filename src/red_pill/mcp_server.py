@@ -759,6 +759,174 @@ async def handle_edit_memory(arguments: Dict[str, Any]):
 
 
 @registry.register_action(
+	parent="bunker_memory_api",
+	action="read_workspace_memory",
+	description="Read a file from a registered workspace local memory directory (anti-amnesia index).",
+	schema={
+		"type": "object",
+		"properties": {
+			"workspace": {"type": "string", "description": "The name or path of the target workspace."},
+			"filename": {"type": "string", "description": "The name of the file to read (e.g., 'MEMORY.md', 'decisions.md')."},
+		},
+		"required": ["workspace", "filename"],
+	},
+)
+async def handle_read_workspace_memory(arguments: Dict[str, Any]):
+	workspace = arguments["workspace"]
+	filename = arguments["filename"]
+	import asyncio
+	from red_pill.core import workspaces as ws_core
+
+	def _read():
+		ws = ws_core.find_workspace(workspace)
+		if not ws:
+			return f"[ERROR] Workspace '{workspace}' not found in registry."
+		mem_path = ws.get_memory_path
+		if not mem_path:
+			return f"[ERROR] Memory serving is disabled for workspace '{workspace}'."
+		target_file = mem_path / filename
+		try:
+			if not os.path.abspath(target_file).startswith(os.path.abspath(mem_path)):
+				return "[ERROR] Security block: directory traversal attempt rejected."
+		except Exception as e:
+			return f"[ERROR] Security validation failed: {e}"
+
+		if not target_file.exists():
+			return f"[ERROR] File '{filename}' not found in workspace memory."
+		return target_file.read_text(encoding="utf-8")
+
+	res = await asyncio.to_thread(_read)
+	return [types.TextContent(type="text", text=res)]
+
+
+@registry.register_action(
+	parent="bunker_memory_api",
+	action="write_workspace_memory",
+	description="Write or overwrite a file in a registered workspace local memory directory.",
+	schema={
+		"type": "object",
+		"properties": {
+			"workspace": {"type": "string", "description": "The name or path of the target workspace."},
+			"filename": {"type": "string", "description": "The name of the file to write (e.g., 'MEMORY.md', 'decisions.md')."},
+			"content": {"type": "string", "description": "The content to write into the file."},
+		},
+		"required": ["workspace", "filename", "content"],
+	},
+)
+async def handle_write_workspace_memory(arguments: Dict[str, Any]):
+	workspace = arguments["workspace"]
+	filename = arguments["filename"]
+	content = arguments["content"]
+	import asyncio
+	from red_pill.core import workspaces as ws_core
+
+	def _write():
+		ws = ws_core.find_workspace(workspace)
+		if not ws:
+			return f"[ERROR] Workspace '{workspace}' not found in registry."
+		mem_path = ws.get_memory_path
+		if not mem_path:
+			return f"[ERROR] Memory serving is disabled for workspace '{workspace}'."
+		target_file = mem_path / filename
+		try:
+			if not os.path.abspath(target_file).startswith(os.path.abspath(mem_path)):
+				return "[ERROR] Security block: directory traversal attempt rejected."
+		except Exception as e:
+			return f"[ERROR] Security validation failed: {e}"
+
+		os.makedirs(str(mem_path), exist_ok=True)
+		target_file.write_text(content, encoding="utf-8")
+		return f"[OK] Successfully wrote '{filename}'."
+
+	res = await asyncio.to_thread(_write)
+	return [types.TextContent(type="text", text=res)]
+
+
+@registry.register_action(
+	parent="bunker_memory_api",
+	action="list_workspace_memory",
+	description="List memory files available in a registered workspace local memory directory.",
+	schema={
+		"type": "object",
+		"properties": {
+			"workspace": {"type": "string", "description": "The name or path of the target workspace."},
+		},
+		"required": ["workspace"],
+	},
+)
+async def handle_list_workspace_memory(arguments: Dict[str, Any]):
+	workspace = arguments["workspace"]
+	import asyncio
+	from red_pill.core import workspaces as ws_core
+
+	def _list():
+		ws = ws_core.find_workspace(workspace)
+		if not ws:
+			return f"[ERROR] Workspace '{workspace}' not found in registry."
+		mem_path = ws.get_memory_path
+		if not mem_path:
+			return f"[ERROR] Memory serving is disabled for workspace '{workspace}'."
+		if not mem_path.exists():
+			return "[]"
+		
+		files = []
+		for item in os.listdir(mem_path):
+			if os.path.isfile(os.path.join(mem_path, item)) and not item.startswith("."):
+				files.append(item)
+		import json
+		return json.dumps(files)
+
+	res = await asyncio.to_thread(_list)
+	return [types.TextContent(type="text", text=res)]
+
+
+@registry.register_action(
+	parent="swarm_orchestrator_api",
+	action="workspace_memory_enable",
+	description="Enable memory serving for a workspace, setting up scaffolding and pending indicators.",
+	schema={
+		"type": "object",
+		"properties": {
+			"workspace": {"type": "string", "description": "The name or root path of the workspace."},
+			"path": {"type": "string", "description": "Optional custom memory directory path (relative or absolute)."},
+		},
+		"required": ["workspace"],
+	},
+)
+async def handle_workspace_memory_enable(arguments: Dict[str, Any]):
+	workspace = arguments["workspace"]
+	path = arguments.get("path")
+	import asyncio
+	from red_pill.metabolism.memory_sync import enable_workspace_memory
+
+	res = await asyncio.to_thread(enable_workspace_memory, workspace, path)
+	status = "ENABLED" if res else "FAILED TO ENABLE"
+	return [types.TextContent(type="text", text=f"Workspace Memory: {status} for '{workspace}'.")]
+
+
+@registry.register_action(
+	parent="swarm_orchestrator_api",
+	action="workspace_memory_disable",
+	description="Disable memory serving for a workspace.",
+	schema={
+		"type": "object",
+		"properties": {
+			"workspace": {"type": "string", "description": "The name or root path of the workspace."},
+		},
+		"required": ["workspace"],
+	},
+)
+async def handle_workspace_memory_disable(arguments: Dict[str, Any]):
+	workspace = arguments["workspace"]
+	import asyncio
+	from red_pill.metabolism.memory_sync import disable_workspace_memory
+
+	res = await asyncio.to_thread(disable_workspace_memory, workspace)
+	status = "DISABLED" if res else "FAILED TO DISABLE"
+	return [types.TextContent(type="text", text=f"Workspace Memory: {status} for '{workspace}'.")]
+
+
+@registry.register_action(
 	parent="swarm_orchestrator_api",
 	action="adjust_sleep_knobs",
 	description="Adjust the 'Sovereign Knobs' for memory consolidation.",
