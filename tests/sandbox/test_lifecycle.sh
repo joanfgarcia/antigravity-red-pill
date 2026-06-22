@@ -20,6 +20,30 @@ python -m red_pill.cli bunker install
 echo -e "\n[STAGE 2.6] Sincronizando el Entorno (bunker update)..."
 python -m red_pill.cli bunker update
 
+echo -e "\n[STAGE 2.7] Verificando el Registro de Workspaces (pydantic round-trip)..."
+# Exercises the install/update-critical path end-to-end in a real environment:
+# manage_workspaces enable -> add_or_enable_workspace -> save_registry -> serialize,
+# then `list` -> load_registry (pydantic validation). A registry/serialization
+# regression fails the lifecycle here, not only in unit tests.
+MW="/opt/red-pill-src/scripts/manage_workspaces.py"
+WS_DIR="$(mktemp -d)"
+WS_NAME="$(basename "$WS_DIR")"
+printf '%s\n\n' "$WS_DIR" | python "$MW" enable
+if python "$MW" list | grep -q "$WS_NAME"; then
+    echo "[OK] Workspace registrado y validado (pydantic load_registry)."
+else
+    echo "[ERROR] El workspace no aparece en el registro tras 'enable'."
+    exit 1
+fi
+python "$MW" disable "$WS_NAME"
+if python "$MW" list | grep "$WS_NAME" | grep -q "sin acceso"; then
+    echo "[OK] Acceso revocado (access:false) y re-validado."
+else
+    echo "[ERROR] 'disable' no reflejo 'sin acceso' para $WS_NAME."
+    exit 1
+fi
+rm -rf "$WS_DIR"
+
 echo -e "\n[STAGE 3] Inyectando Estado (Mock Data)..."
 cat << 'EOF' > /tmp/inject_state.py
 import os, sqlite3
