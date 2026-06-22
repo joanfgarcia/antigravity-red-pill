@@ -20,10 +20,10 @@ import shutil
 import tempfile
 import warnings
 from functools import lru_cache
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 import yaml
-from pydantic import field_validator, model_validator
+from pydantic import BaseModel, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from red_pill.core.paths import get_config_dir, get_db_dir, get_models_dir, get_state_dir, migrate_legacy_xdg_config
@@ -69,6 +69,24 @@ def _load_affect_multipliers(model_name: str) -> dict:
 			"gray": 1.0,
 			"emerald": 0.7,
 		}
+
+
+# BridgeTarget — one step in an execution-bridge fallback cascade
+
+
+class BridgeTarget(BaseModel):
+	"""One step in an execution-bridge fallback cascade (Telegram/inbox worker).
+
+	The cascade is tried in order; the first target whose prompt() succeeds wins.
+	`model`/`effort` are per-target (e.g. claude/opus/high → agy/pro/medium →
+	local/samantha). `effort` speaks the portable STANDARD_EFFORTS scale; each
+	bridge maps it to its own control (claude → --effort, agy → model "(Mode)",
+	local → ignored).
+	"""
+
+	backend: Literal["agy", "claude", "local"]
+	model: Optional[str] = None
+	effort: Optional[Literal["low", "medium", "high"]] = None
 
 
 # RedPillConfig — the sovereign configuration model
@@ -317,6 +335,12 @@ class RedPillConfig(BaseSettings):
 	# auto-inject, entropy executor). Telegram inbox processing is NOT
 	# affected — only background/autonomous agy prompts are suppressed.
 	AUTONOMOUS_AGY_ENABLED: bool = False
+	# Ordered fallback cascade for inbox/Telegram execution. Empty (default) →
+	# single bridge via IDE_BACKEND (back-compat, no behaviour change). When set,
+	# the worker tries each target in order and uses the first with quota; if all
+	# fail, the pertinent error is surfaced to the user. JSON-encoded in .env, e.g.
+	# TELEGRAM_BRIDGE_CASCADE='[{"backend":"claude","model":"opus","effort":"high"}]'
+	TELEGRAM_BRIDGE_CASCADE: List[BridgeTarget] = []
 
 	@field_validator("IDE_BACKEND")
 	@classmethod

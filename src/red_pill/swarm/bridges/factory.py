@@ -58,6 +58,23 @@ def create_bridge(backend: Optional[str] = None) -> AgentBridge:
 	return GrpcBridge()
 
 
+def create_cascade_bridge() -> AgentBridge:
+	"""Execution bridge for the inbox/Telegram worker, cascade-aware.
+
+	If `TELEGRAM_BRIDGE_CASCADE` is configured, returns a CascadeBridge that tries
+	each target in order and uses the first with quota (first-with-quota wins). If
+	all fail, its prompt() raises AllModelsExhausted so the worker can surface the
+	pertinent error to the user. When the cascade is empty (default), falls back to
+	the single `IDE_BACKEND` bridge — no behaviour change.
+	"""
+	cascade = cfg.get_config().TELEGRAM_BRIDGE_CASCADE
+	if cascade:
+		from .cascade import CascadeBridge
+
+		return CascadeBridge(cascade)
+	return create_bridge()
+
+
 def create_extraction_bridge() -> AgentBridge:
 	"""Create the extraction bridge for the Chronicle pipeline.
 

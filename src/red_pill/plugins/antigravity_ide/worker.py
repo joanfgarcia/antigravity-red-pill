@@ -27,8 +27,14 @@ sys.path.insert(0, str(Path(__file__).parent.resolve()))
 from ide_client import AntigravityIDEClient  # noqa: E402
 
 import red_pill.config as cfg  # noqa: E402
-from red_pill.swarm.bridges import BackendType, BridgeCapabilities, create_bridge  # noqa: E402
-from red_pill.swarm.bridges import AgentBridge  # noqa: E402
+from red_pill.swarm.bridges import (  # noqa: E402
+	AgentBridge,  # noqa: E402
+	AllModelsExhausted,
+	BackendType,
+	BridgeCapabilities,
+	NoModelsConfigured,
+	create_cascade_bridge,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +69,17 @@ def get_connection():
 	return conn
 
 
+def _format_cascade_error(exc: Exception) -> str:
+	"""Build a user-facing Telegram message for an exhausted bridge cascade."""
+	if isinstance(exc, NoModelsConfigured):
+		return "⚠️ No hay ningún modelo configurado para atender el mensaje (TELEGRAM_BRIDGE_CASCADE vacío)."
+	errors = getattr(exc, "errors", None)
+	if errors:
+		lines = "\n".join(f"• {t.backend}/{t.model or 'default'}: {msg}" for t, msg in errors)
+		return f"⚠️ No pude atender tu mensaje — ningún modelo disponible:\n{lines}"
+	return f"⚠️ No pude atender tu mensaje: {exc}"
+
+
 class IDEWorker:
 	def __init__(self):
 		self.client = AntigravityIDEClient()
@@ -72,7 +89,7 @@ class IDEWorker:
 		self._samantha_worker = None
 		# AgentBridge: create execution bridge based on config
 		try:
-			self._bridge = create_bridge()
+			self._bridge = create_cascade_bridge()
 			self._caps = self._bridge.get_capabilities()
 			logger.info(f"[IDEWorker] Bridge: {self._caps.backend.value.upper()} (auto_approve={self._caps.auto_approve})")
 		except Exception as e:
@@ -615,6 +632,20 @@ class IDEWorker:
 
 		try:
 			result = self._bridge.prompt(prompt, timeout=300)
+		except (NoModelsConfigured, AllModelsExhausted) as e:
+			# Cascade exhausted (empty, or no model with quota) — surface the
+			# pertinent error to the user instead of silently bumping retries.
+			# Mark PROCESSED so a quota error isn't replayed on every poll.
+			logger.error(f"[{msg_ids}] Cascade exhausted: {e}")
+			err_text = _format_cascade_error(e)
+			if channel != "system":
+				cursor.execute(
+					"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
+					(channel, channel_user_id, None, json.dumps({"text": err_text})),
+				)
+			for m_id in msg_ids:
+				cursor.execute("UPDATE inbox SET status = 'PROCESSED' WHERE id = ?", (m_id,))
+			return
 		except Exception as e:
 			logger.error(f"[{msg_ids}] Bridge execution failed: {e}")
 			for m_id in msg_ids:

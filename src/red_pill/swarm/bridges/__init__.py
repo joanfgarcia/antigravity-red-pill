@@ -8,7 +8,8 @@ from .base import (
 	ConversationResult,
 	NotSupportedError,
 )
-from .factory import create_bridge, create_extraction_bridge, preflight_check
+from .cascade import AllModelsExhausted, CascadeBridge, CascadeError, NoModelsConfigured
+from .factory import create_bridge, create_cascade_bridge, create_extraction_bridge, preflight_check
 
 __all__ = [
 	"AgentBridge",
@@ -16,7 +17,12 @@ __all__ = [
 	"BridgeCapabilities",
 	"ConversationResult",
 	"NotSupportedError",
+	"CascadeBridge",
+	"CascadeError",
+	"NoModelsConfigured",
+	"AllModelsExhausted",
 	"create_bridge",
+	"create_cascade_bridge",
 	"create_extraction_bridge",
 	"preflight_check",
 ]
