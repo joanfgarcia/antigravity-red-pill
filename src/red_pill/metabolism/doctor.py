@@ -66,12 +66,39 @@ def _check_model_match() -> list:
 			out.append(("yellow", f"No se pudo resolver el modelo del perfil '{profile_name}' (revisar model_profiles.yaml)."))
 			return out
 		model_file = os.path.basename(str(model_path))
-		ps = subprocess.run(["pgrep", "-af", "llama"], stdout=subprocess.PIPE, text=True, timeout=10)
+
+		# Check if native llama-server is running
+		ps = subprocess.run(["pgrep", "-af", "llama-server"], stdout=subprocess.PIPE, text=True, timeout=10)
 		running = ps.stdout.strip()
-		if not running:
+
+		# Check if python dual-bind daemon is running
+		ps_py = subprocess.run(["pgrep", "-af", "run_dual_bind.py"], stdout=subprocess.PIPE, text=True, timeout=10)
+		running_py = ps_py.stdout.strip()
+
+		if not running and not running_py:
 			out.append(("info", f"Perfil configurado: '{profile_name}' ({model_file}); no hay servidor LLM activo — N/A."))
-		elif model_file not in running:
-			out.append(("red", f"Modelo en ejecución NO coincide con el configurado (perfil '{profile_name}' → {model_file})."))
+		elif running_py:
+			# Query uvicorn endpoint to find the loaded model
+			import json
+			import urllib.request
+			try:
+				resp = urllib.request.urlopen("http://127.0.0.1:8760/v1/models", timeout=3)
+				data = json.loads(resp.read().decode())
+				loaded_model = ""
+				if "data" in data and len(data["data"]) > 0:
+					loaded_model = os.path.basename(data["data"][0].get("id", ""))
+				if loaded_model:
+					if model_file == loaded_model:
+						out.append(("info", f"Perfil configurado: '{profile_name}' ({model_file}) cargado y activo."))
+					else:
+						out.append(("red", f"Modelo en ejecución NO coincide con el configurado (activo: '{loaded_model}', perfil '{profile_name}' → {model_file})."))
+				else:
+					out.append(("yellow", "No se pudo recuperar el ID del modelo desde la API local."))
+			except Exception as exc:
+				out.append(("yellow", f"Servidor dual-bind running pero no responde en puerto 8760: {exc}"))
+		elif running:
+			if model_file not in running:
+				out.append(("red", f"Modelo en ejecución NO coincide con el configurado (perfil '{profile_name}' → {model_file})."))
 	except Exception as exc:
 		out.append(("yellow", f"No se pudo verificar modelo↔config: {exc}"))
 	return out

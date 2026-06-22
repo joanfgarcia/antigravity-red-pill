@@ -29,7 +29,7 @@ def bootstrap():
 		print(f"Error loading lore skins: {e}")
 		sys.exit(1)
 
-	skin_data = skins.get(args.skin, skins.get("760"))
+	skins.get(args.skin, skins.get("760"))
 
 	manager = MemoryManager()
 

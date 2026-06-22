@@ -52,7 +52,7 @@ from typing import Any, Dict, List, Optional
 from qdrant_client.models import Filter
 
 import red_pill.config as cfg
-from red_pill.core.paths import get_daemon_dir, get_daemon_persistent_dir, get_staging_dir, get_thread_state_path
+from red_pill.core.paths import get_daemon_persistent_dir, get_staging_dir, get_thread_state_path
 from red_pill.core.vram_probe import VramProbe
 from red_pill.events import SleepCompletedEvent, get_event_bus
 from red_pill.metabolism.evolution import IdentityEvaluator

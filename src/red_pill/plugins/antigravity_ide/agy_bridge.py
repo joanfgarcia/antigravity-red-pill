@@ -25,7 +25,6 @@ from pathlib import Path
 from typing import Optional, Set, Tuple
 
 from red_pill.core.paths import get_bunker_root
-
 from red_pill.swarm.bridges.base import AgentBridge, BackendType, BridgeCapabilities, ConversationResult
 
 logger = logging.getLogger(__name__)
@@ -175,8 +174,8 @@ class AgyBridge(AgentBridge):
 
 		effort/cwd: accepted for interface parity. MAPPING is AgyBridge's job (TODO-wire):
 		agy fuses model+mode in the selectable model name (`agy models`):
-		  Gemini 3.5 Flash (Low|Medium|High) · Gemini 3.1 Pro (Low|High) ·
-		  Claude Sonnet 4.6 (Thinking) · Claude Opus 4.6 (Thinking) · GPT-OSS 120B (Medium).
+			Gemini 3.5 Flash (Low|Medium|High) · Gemini 3.1 Pro (Low|High) ·
+			Claude Sonnet 4.6 (Thinking) · Claude Opus 4.6 (Thinking) · GPT-OSS 120B (Medium).
 		So the portable (model, effort) → `agy --model "Base (Mode)"` (Claude variants have only
 		"(Thinking)" → effort ignored). Wire when agy becomes an active swarm backend; today agy
 		is not the initial backend, so this stays documented (current behavior: no --model).

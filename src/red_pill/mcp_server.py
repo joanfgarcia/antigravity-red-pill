@@ -891,7 +891,7 @@ async def handle_heal_tissue(arguments: Dict[str, Any]):
 					)
 				else:
 					output = (
-						f"SIP Provisioning: Auto-heal failed. Issues found: "
+						"SIP Provisioning: Auto-heal failed. Issues found: "
 						+ "; ".join(f.message for f in provisioning_findings)
 					)
 		except Exception as e:

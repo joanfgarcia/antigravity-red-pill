@@ -404,7 +404,7 @@ async def auto_heal_ritual(mm: MemoryManager) -> None:
 					if findings:
 						healed = await asyncio.to_thread(plugin.heal_specific, config, findings[0])
 						if healed:
-							logger.info(f"Auto-Healer: SIP infrastructure re-provisioned successfully.")
+							logger.info("Auto-Healer: SIP infrastructure re-provisioned successfully.")
 							mm.evaporate_signals("local_llm_offline")
 						else:
 							logger.warning(f"Auto-Healer: SIP heal_specific returned False for '{findings[0].type}'.")

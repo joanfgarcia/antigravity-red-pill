@@ -27,7 +27,7 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger("settings_injector")
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _config_common import build_vars, subst, agent_core_vars, workspace_access_dirs  # noqa: E402
+from _config_common import agent_core_vars, build_vars, subst, workspace_access_dirs  # noqa: E402
 
 PERMISSION_LIST_KEYS = ("allow", "ask", "deny", "additionalDirectories")
 

@@ -74,8 +74,11 @@ def agent_core_vars():
 	agent_core = _agent_core_from_registry(home)
 	if not agent_core:
 		raw = parse_env_file(os.path.join(home, ".config", "red-pill", ".env"))
-		ws = (os.environ.get("WORKSPACE_ROOT") or raw.get("WORKSPACE_ROOT")
-		      or os.path.join(home, "Documents", "IA"))
+		ws = (
+			os.environ.get("WORKSPACE_ROOT")
+			or raw.get("WORKSPACE_ROOT")
+			or os.path.join(home, "Documents", "IA")
+		)
 		ws = os.path.expanduser(ws.replace("${HOME}", home))
 		val = os.environ.get("AGENT_CORE_DIR") or raw.get("AGENT_CORE_DIR") or os.path.join(ws, "Agent_Core")
 		val = os.path.expanduser(val.replace("${WORKSPACE_ROOT}", ws).replace("${HOME}", home))

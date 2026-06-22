@@ -53,33 +53,42 @@ class SipCheck(ServiceSentinelPlugin):
 			if resp.status == 200:
 				health_ok = True
 		except urllib.error.HTTPError as he:
-			# Server responds but not healthy (e.g. 503 "Loading model")
-			# Grace period: derives from model_profiles.yaml load_time_s (worst-case × 1.5 safety)
-			try:
-				from red_pill.core.model_registry import ModelRegistry
+			# If 404, fallback to checking /v1/models (llama-cpp-python uvicorn server has no /health)
+			if he.code == 404:
+				try:
+					resp = urllib.request.urlopen(f"http://127.0.0.1:{port}/v1/models", timeout=HEALTH_TIMEOUT_S)
+					if resp.status == 200:
+						health_ok = True
+				except Exception:
+					pass
+			if not health_ok:
+				# Server responds but not healthy (e.g. 503 "Loading model")
+				# Grace period: derives from model_profiles.yaml load_time_s (worst-case × 1.5 safety)
+				try:
+					from red_pill.core.model_registry import ModelRegistry
 
-				grace_s = int(ModelRegistry.get_max_load_time_s(backend="cuda") * 1.5)
-			except Exception:
-				grace_s = 180  # Fallback if registry unavailable
-			uptime_s = self._get_service_uptime()
-			if uptime_s is not None and uptime_s < grace_s:
-				import logging
+					grace_s = int(ModelRegistry.get_max_load_time_s(backend="cuda") * 1.5)
+				except Exception:
+					grace_s = 180  # Fallback if registry unavailable
+				uptime_s = self._get_service_uptime()
+				if uptime_s is not None and uptime_s < grace_s:
+					import logging
 
-				logging.getLogger(__name__).info(
-					f"[{self.name}] HTTP {he.code} on port {port} — within grace period ({uptime_s:.0f}s / {grace_s}s). Letting it load."
-				)
-			else:
-				uptime_str = f"{uptime_s:.0f}s" if uptime_s is not None else "unknown"
-				findings.append(
-					AuditFinding(
-						type="sip_loading",
-						severity=6.0,
-						message=(
-							f"{self.name}: /health returned HTTP {he.code} on port {port} (stuck loading, uptime: {uptime_str} > {grace_s}s grace)."
-						),
-						metadata={"service": self.service_unit, "port": port, "http_code": he.code, "uptime_s": uptime_s, "grace_s": grace_s},
+					logging.getLogger(__name__).info(
+						f"[{self.name}] HTTP {he.code} on port {port} — within grace period ({uptime_s:.0f}s / {grace_s}s). Letting it load."
 					)
-				)
+				else:
+					uptime_str = f"{uptime_s:.0f}s" if uptime_s is not None else "unknown"
+					findings.append(
+						AuditFinding(
+							type="sip_loading",
+							severity=6.0,
+							message=(
+								f"{self.name}: /health returned HTTP {he.code} on port {port} (stuck loading, uptime: {uptime_str} > {grace_s}s grace)."
+							),
+							metadata={"service": self.service_unit, "port": port, "http_code": he.code, "uptime_s": uptime_s, "grace_s": grace_s},
+						)
+					)
 		except Exception as e:
 			findings.append(
 				AuditFinding(
@@ -130,6 +139,11 @@ class SipCheck(ServiceSentinelPlugin):
 				for i, part in enumerate(parts):
 					if part == "--port" and i + 1 < len(parts):
 						return int(parts[i + 1])
+
+			# Fallback for Python-based dual-bind server (run_dual_bind.py)
+			result_py = subprocess.run(["pgrep", "-f", "run_dual_bind.py"], capture_output=True, text=True, timeout=5)
+			if result_py.stdout.strip():
+				return 8760
 		except Exception:
 			pass
 		return None

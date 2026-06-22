@@ -392,10 +392,14 @@ def install_graphify_timer(uv_path: str, interval_hours: int = 1) -> None:
 		return
 	os.makedirs(SYSTEMD_USER_DIR, exist_ok=True)
 	script = os.path.join(PROJECT_ROOT, "scripts", "graphify_sync.py")
-	_write_systemd_unit(GRAPHIFY_SERVICE, f"{uv_path} run python {script}",
-	                    "Red Pill Graphify Reconciliation Sync", type="oneshot", nice=15)
-	_write_systemd_timer(GRAPHIFY_TIMER, f"{interval_hours}h",
-	                     "Timer for Red Pill Graphify Reconciliation Sync")
+	_write_systemd_unit(
+		GRAPHIFY_SERVICE, f"{uv_path} run python {script}",
+		"Red Pill Graphify Reconciliation Sync", type="oneshot", nice=15
+	)
+	_write_systemd_timer(
+		GRAPHIFY_TIMER, f"{interval_hours}h",
+		"Timer for Red Pill Graphify Reconciliation Sync"
+	)
 	if _is_systemd_available():
 		subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
 		subprocess.run(["systemctl", "--user", "enable", "--now", GRAPHIFY_TIMER], check=True)
