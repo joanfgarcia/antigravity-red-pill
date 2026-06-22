@@ -10,8 +10,8 @@ post-update breakage: wrong LLM model, swapped ports, dead daemons, undefined ti
 Reuses the existing audits (`SentinelAuditor.audit_runtime` + `audit_vitals` → the
 sentinel plugins reconcile daemons/ports/LLM/Qdrant/neon and auto-heal) and adds two
 on-demand checks the background flow doesn't frame as "verify":
-  - expected `redpill-*.timer` units present AND active,
-  - loaded LLM model matches the configured MINION_PROFILE.
+- expected `redpill-*.timer` units present AND active,
+- loaded LLM model matches the configured MINION_PROFILE.
 
 `run_doctor()` returns 0 if green/yellow (operational, warnings tolerated), 1 if red
 (something is broken) — usable as an install/update gate.

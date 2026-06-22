@@ -7,7 +7,7 @@ session_id, so multi-turn resume (`claude --resume <id>`) needs no dir-diff or
 prefix-stripping (unlike AgyBridge).
 
 Requirements:
-    - claude CLI installed and authenticated.
+- claude CLI installed and authenticated.
 """
 
 from __future__ import annotations
@@ -37,9 +37,7 @@ class ClaudeBridge(AgentBridge):
 	def __init__(self, claude_path: Optional[str] = None):
 		self._claude_path = claude_path or shutil.which(self.CLAUDE_BIN)
 		if not self._claude_path:
-			raise RuntimeError(
-				"Claude CLI (claude) not found in PATH. Install Claude Code and ensure `claude` is available."
-			)
+			raise RuntimeError("Claude CLI (claude) not found in PATH. Install Claude Code and ensure `claude` is available.")
 
 	def _run_claude(self, args: list, timeout: int, cwd: Optional[str] = None) -> dict:
 		"""Execute claude CLI with common flags and parse the JSON result object.
@@ -109,9 +107,7 @@ class ClaudeBridge(AgentBridge):
 	) -> ConversationResult:
 		"""Send a one-shot prompt via `claude -p`. session_id comes from the JSON output."""
 		try:
-			data = self._run_claude(
-				["-p", text, *self._model_args(model), *self._effort_args(effort)], timeout, cwd=cwd
-			)
+			data = self._run_claude(["-p", text, *self._model_args(model), *self._effort_args(effort)], timeout, cwd=cwd)
 		except Exception as e:
 			return ConversationResult(conversation_id="", response="", error=str(e))
 

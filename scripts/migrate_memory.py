@@ -8,8 +8,8 @@ which is IDE-specific). This migration moves ONLY the `memory/` directory — ne
 as a whole — for every registered project workspace.
 
 IDEMPOTENT and SAFE to re-run:
-  - skips a workspace whose `.claude/memory` is absent (nothing to move / already migrated),
-  - skips (never overwrites) if `.red-pill/memory` already exists at the destination.
+- skips a workspace whose `.claude/memory` is absent (nothing to move / already migrated),
+- skips (never overwrites) if `.red-pill/memory` already exists at the destination.
 
 Hooked from scripts/upgrade.sh. Run manually to inspect:
 	uv run python scripts/migrate_memory.py --dry-run

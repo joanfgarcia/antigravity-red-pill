@@ -8,13 +8,14 @@ CLAUDE.md, …) by a delimited, versioned region.
 Guiding principle: red-pill is a GUEST, never the owner. Every write preserves
 all foreign content; we only ever create/replace/remove OUR own marked region:
 
-    <!-- REDPILL:BEGIN <anchor> v=N -->
-    …seed body (placeholders resolved)…
-    <!-- REDPILL:END <anchor> -->
+<!-- REDPILL:BEGIN <anchor> v=N -->
+…seed body (placeholders resolved)…
+<!-- REDPILL:END <anchor> -->
 
 Seeds live in ``seeds/anchors/<anchor>.md`` and are passed through the shared
 ``subst()`` so placeholders like ${WORKSPACE_ROOT}/${AGENT_CORE_DIR} resolve.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -30,8 +31,7 @@ logger = logging.getLogger("anchor_injector")
 
 # Shared placeholder helpers live alongside this script.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _config_common import build_vars, subst, agent_core_vars  # noqa: E402
-
+from _config_common import agent_core_vars, build_vars, subst  # noqa: E402
 
 # ── Anchor block version (bump to force a re-splice on upgrade) ───────────────
 BLOCK_VERSION = {"sovereign_handshake": 1, "agent_core": 2}
@@ -45,24 +45,26 @@ def _version(anchor):
 @dataclass(frozen=True)
 class AnchorTarget:
 	ide: str
-	path: str | None          # static path (with ~); None => resolved at runtime / not a file
+	path: str | None  # static path (with ~); None => resolved at runtime / not a file
 	requires_workspace: bool  # path depends on --workspace
-	scriptable: bool          # False => lives in app UI/DB, only --print
+	scriptable: bool  # False => lives in app UI/DB, only --print
 
 
 ANCHOR_REGISTRY = [
-	AnchorTarget("antigravity", "~/.gemini/GEMINI.md", False, True),          # user-level, global
-	AnchorTarget("claude-code", "~/.claude/CLAUDE.md", False, True),          # user memory: global, cwd-independent
-	AnchorTarget("claude-code-project", None, True, True),                    # <workspace>/CLAUDE.md (project-scoped, opt-in)
-	AnchorTarget("claude-desktop-project", None, False, False),               # Project instructions: UI/DB, only --print
+	AnchorTarget("antigravity", "~/.gemini/GEMINI.md", False, True),  # user-level, global
+	AnchorTarget("claude-code", "~/.claude/CLAUDE.md", False, True),  # user memory: global, cwd-independent
+	AnchorTarget("claude-code-project", None, True, True),  # <workspace>/CLAUDE.md (project-scoped, opt-in)
+	AnchorTarget("claude-desktop-project", None, False, False),  # Project instructions: UI/DB, only --print
 ]
 REGISTRY_BY_IDE = {t.ide: t for t in ANCHOR_REGISTRY}
 
 
 def _claude_desktop_present():
-	for p in ("~/.config/Claude/claude_desktop_config.json",
-	          "~/Library/Application Support/Claude/claude_desktop_config.json",
-	          "~/AppData/Roaming/Claude/claude_desktop_config.json"):
+	for p in (
+		"~/.config/Claude/claude_desktop_config.json",
+		"~/Library/Application Support/Claude/claude_desktop_config.json",
+		"~/AppData/Roaming/Claude/claude_desktop_config.json",
+	):
 		if os.path.exists(os.path.expanduser(p)):
 			return True
 	return False
@@ -125,9 +127,7 @@ LEGACY_CONSTRAINT_NAMES = {
 	"sovereign_handshake": "sovereign_handshake",
 	"agent_core": "sovereign_atlas_awareness",
 }
-LEGACY_HEADING_RE = re.compile(
-	r"^## (?:1\. Zero-Trust|2\. Model Change|3\. Persistent Memory).*\n?", re.MULTILINE
-)
+LEGACY_HEADING_RE = re.compile(r"^## (?:1\. Zero-Trust|2\. Model Change|3\. Persistent Memory).*\n?", re.MULTILINE)
 
 
 def _legacy_constraint_re(name):
@@ -234,32 +234,23 @@ def _csv(value):
 
 
 def main():
-	parser = argparse.ArgumentParser(
-		description="Inject/merge red-pill anchor blocks into IDE instruction files."
-	)
-	parser.add_argument("--ide", default="auto",
-	                    help="csv: auto|all|antigravity|claude-code|claude-desktop-project")
-	parser.add_argument("--anchor", default="sovereign_handshake,agent_core",
-	                    help="csv of anchor seeds to inject (file names in --seeds-dir)")
-	parser.add_argument("--workspace",
-	                    help="Workspace root: resolves ${WORKSPACE} and targets Claude Code <ws>/CLAUDE.md")
+	parser = argparse.ArgumentParser(description="Inject/merge red-pill anchor blocks into IDE instruction files.")
+	parser.add_argument("--ide", default="auto", help="csv: auto|all|antigravity|claude-code|claude-desktop-project")
+	parser.add_argument("--anchor", default="sovereign_handshake,agent_core", help="csv of anchor seeds to inject (file names in --seeds-dir)")
+	parser.add_argument("--workspace", help="Workspace root: resolves ${WORKSPACE} and targets Claude Code <ws>/CLAUDE.md")
 	parser.add_argument("--redpill-dir", help="Red Pill source dir (resolves ${REDPILL_DIR}).")
 	parser.add_argument("--uv-path", help="Path to uv (shared build_vars; current anchors don't use it).")
 	parser.add_argument("--seeds-dir", help="Dir with <anchor>.md seeds. Default: ../seeds/anchors next to this script.")
 	parser.add_argument("--update", action="store_true", help="Rewrite the block even if unchanged.")
 	parser.add_argument("--no-backup", action="store_true", help="Do not write a .bak before modifying.")
-	parser.add_argument("--print", dest="print_only", action="store_true",
-	                    help="Print resolved anchor(s) to stdout; touch no files.")
-	parser.add_argument("--remove", action="store_true",
-	                    help="Remove red-pill anchor block(s) instead of writing.")
+	parser.add_argument("--print", dest="print_only", action="store_true", help="Print resolved anchor(s) to stdout; touch no files.")
+	parser.add_argument("--remove", action="store_true", help="Remove red-pill anchor block(s) instead of writing.")
 	args = parser.parse_args()
 
 	if args.seeds_dir:
 		seeds_dir = os.path.abspath(os.path.expanduser(args.seeds_dir))
 	else:
-		seeds_dir = os.path.abspath(
-			os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "seeds", "anchors")
-		)
+		seeds_dir = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "seeds", "anchors"))
 
 	anchors = _csv(args.anchor)
 	if not anchors:
@@ -302,8 +293,7 @@ def main():
 		target = REGISTRY_BY_IDE[ide]
 		path = resolve_target_path(target, args.workspace)
 		# Resolve bodies per-IDE: ${RELAY_CALL}/${WAKE_CALL} differ by client (see ide_call_vars).
-		bodies = ({a: subst(raw_bodies[a], {**variables, **ide_call_vars(ide)}) for a in anchors}
-		          if not args.remove else {})
+		bodies = {a: subst(raw_bodies[a], {**variables, **ide_call_vars(ide)}) for a in anchors} if not args.remove else {}
 
 		# Non-scriptable target (Claude Desktop Project instructions live in the app UI/DB).
 		if not target.scriptable:
