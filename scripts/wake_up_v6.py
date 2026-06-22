@@ -54,7 +54,9 @@ def check_llm_service_active():
 	try:
 		result = subprocess.run(
 			["systemctl", "--user", "is-active", "redpill-llm.service"],
-			capture_output=True, text=True, timeout=3,
+			capture_output=True,
+			text=True,
+			timeout=3,
 		)
 		return result.stdout.strip() == "active"
 	except Exception:
@@ -159,6 +161,7 @@ def main():
 			if project_root not in sys.path:
 				sys.path.insert(0, os.path.join(project_root, "src"))
 			from red_pill.memory import MemoryManager
+
 			MemoryManager().inject_signal("local_llm_offline", intensity=7.0, signal_type="pain", source="WAKE_UP_V6")
 		except Exception as sig_err:
 			print(f"WARN: Failed to emit pain signal: {sig_err}", file=sys.stderr)

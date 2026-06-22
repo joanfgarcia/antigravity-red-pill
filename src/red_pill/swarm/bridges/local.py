@@ -58,9 +58,7 @@ class LocalBridge(AgentBridge):
 		# effort/cwd: N/A for the local generation backend (no subprocess, no effort knob).
 		try:
 			provider = self._get_provider()
-			response = provider.generate(
-				prompt=text, messages=[{"role": "user", "content": text}], temperature=0.3
-			)
+			response = provider.generate(prompt=text, messages=[{"role": "user", "content": text}], temperature=0.3)
 		except Exception as e:
 			return ConversationResult(conversation_id="", response="", error=str(e))
 		return ConversationResult(

@@ -316,13 +316,13 @@ def handle_p2p(args: argparse.Namespace) -> None:
 
 def handle_memory(args) -> None:
 	"""Workspace memory CLI handler."""
-	from red_pill.metabolism.memory_sync import (
-		sync_all_workspaces,
-		compact_all_workspaces,
-		enable_workspace_memory,
-		disable_workspace_memory,
-	)
 	from red_pill.memory import MemoryManager
+	from red_pill.metabolism.memory_sync import (
+		compact_all_workspaces,
+		disable_workspace_memory,
+		enable_workspace_memory,
+		sync_all_workspaces,
+	)
 
 	if args.mem_cmd == "sync":
 		print("\n🔄 --- [WORKSPACE MEMORY: SYNCHRONIZING] ---")
@@ -348,7 +348,6 @@ def handle_memory(args) -> None:
 			print(f"[FAIL] Could not disable memory for {args.workspace}.")
 	else:
 		print("Usage: red-pill memory [sync|optimize|enable|disable]")
-
 
 
 def handle_daemon() -> None:
@@ -679,6 +678,11 @@ def main() -> None:
 	memory_disable = memory_sub.add_parser("disable", help="Disable memory serving for a workspace")
 	memory_disable.add_argument("workspace", help="Workspace name or root directory path")
 
+	# Central configuration TUI (B.2)
+	config_parser = subparsers.add_parser("config", help="Manage central configuration settings")
+	config_sub = config_parser.add_subparsers(dest="config_cmd")
+	config_sub.add_parser("tui", help="Interactive TUI configuration manager and dashboard")
+
 	subparsers.add_parser("telemetry", help="Run a single-pass hardware/Bünker telemetry check (Oneshot)")
 	daemon_parser = subparsers.add_parser("daemon", help="Start the Sovereign Daemon (plugin-based control plane)")
 	daemon_parser.add_argument("--oneshot", action="store_true", help="Tick all plugins once and exit (testing)")
@@ -744,14 +748,18 @@ def main() -> None:
 	get_event_bus().emit(
 		CliCommandDispatchedEvent(
 			command=args.command,
-			subcommand=getattr(args, "swarm_cmd", None) or getattr(args, "soul_cmd", None) or getattr(args, "id_cmd", None) or getattr(args, "mem_cmd", None),
+			subcommand=getattr(args, "swarm_cmd", None)
+			or getattr(args, "soul_cmd", None)
+			or getattr(args, "id_cmd", None)
+			or getattr(args, "mem_cmd", None)
+			or getattr(args, "config_cmd", None),
 		)
 	)
 
 	# Map CLI type to collection(s)
 	if getattr(args, "type", None):
 		collections = [get_collection(args.type)]
-	elif args.command in ["seed", "status", "swarm", "soul", "init", "bunker", "ide", "daemon", "memory"]:
+	elif args.command in ["seed", "status", "swarm", "soul", "init", "bunker", "ide", "daemon", "memory", "config"]:
 		collections = []  # Not needed for these
 	else:
 		# Default sweep for search/diag if no type specified
@@ -940,6 +948,14 @@ def main() -> None:
 		elif args.command == "memory":
 			handle_memory(args)
 			return
+		elif args.command == "config":
+			if args.config_cmd == "tui":
+				from red_pill.config_tui import run_tui
+
+				sys.exit(run_tui())
+			else:
+				config_parser.print_help()
+				sys.exit(0)
 
 		# Loop through requested collections
 		for collection in collections:

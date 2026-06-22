@@ -316,6 +316,7 @@ async def memory_sync_ritual(mm: MemoryManager) -> None:
 	try:
 		logger.info("Pulse: Initiating Workspace Memory Sync Ritual...")
 		from red_pill.metabolism.memory_sync import sync_all_workspaces
+
 		await asyncio.to_thread(sync_all_workspaces, mm)
 		logger.info("Pulse: Workspace Memory Sync complete.")
 	except Exception as e:
@@ -439,7 +440,8 @@ async def auto_heal_ritual(mm: MemoryManager) -> None:
 				script_path = os.path.join(cfg.APP_ROOT, "scripts", "graphify_sync.py")
 				if os.path.exists(script_path):
 					process = await asyncio.create_subprocess_exec(
-						sys.executable, str(script_path),
+						sys.executable,
+						str(script_path),
 						stdout=asyncio.subprocess.PIPE,
 						stderr=asyncio.subprocess.PIPE,
 					)

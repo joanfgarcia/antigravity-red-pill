@@ -18,14 +18,14 @@ def discover_targets(workspace=None):
 	"""Return the MCP config files that exist on this machine, plus seeds for
 	Antigravity and (if a workspace is given) the Claude Code project scope."""
 	candidates = [
-		"~/.gemini/config/mcp_config.json",                                # Antigravity 2.x (real path)
-		"~/.gemini/antigravity/mcp_config.json",                           # Antigravity (legacy/alt layout)
-		"~/.config/Claude/claude_desktop_config.json",                     # Claude Desktop (Linux)
+		"~/.gemini/config/mcp_config.json",  # Antigravity 2.x (real path)
+		"~/.gemini/antigravity/mcp_config.json",  # Antigravity (legacy/alt layout)
+		"~/.config/Claude/claude_desktop_config.json",  # Claude Desktop (Linux)
 		"~/Library/Application Support/Claude/claude_desktop_config.json",  # Claude Desktop (macOS)
-		"~/AppData/Roaming/Claude/claude_desktop_config.json",             # Claude Desktop (Windows)
+		"~/AppData/Roaming/Claude/claude_desktop_config.json",  # Claude Desktop (Windows)
 		"~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
 		"~/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/cline_mcp_settings.json",
-		"~/.claude.json",                                                  # Claude Code (User level CLI config)
+		"~/.claude.json",  # Claude Code (User level CLI config)
 	]
 	targets = [os.path.expanduser(c) for c in candidates if os.path.exists(os.path.expanduser(c))]
 
@@ -98,9 +98,7 @@ def inject(config_file, servers, assert_names=frozenset(), update=False, backup=
 
 
 def main():
-	parser = argparse.ArgumentParser(
-		description="Inject MCP servers (RedPill-Kernel and/or an external bundle) into IDE/CLI configs."
-	)
+	parser = argparse.ArgumentParser(description="Inject MCP servers (RedPill-Kernel and/or an external bundle) into IDE/CLI configs.")
 	parser.add_argument("--uv-path", help="Absolute path to uv (for RedPill-Kernel). Autodetected if omitted.")
 	parser.add_argument("--redpill-dir", help="Absolute path to Red Pill source — enables RedPill-Kernel injection.")
 	parser.add_argument("--manifest", help="External MCP bundle manifest (JSON). Injected skip-if-exists.")
@@ -131,10 +129,7 @@ def main():
 		logger.error("No se encontró ninguna config de cliente MCP donde inyectar.")
 		sys.exit(1)
 
-	changed = sum(
-		inject(t, servers, assert_names=assert_names, update=args.update, backup=not args.no_backup)
-		for t in targets
-	)
+	changed = sum(inject(t, servers, assert_names=assert_names, update=args.update, backup=not args.no_backup) for t in targets)
 	logger.info(f"Hecho. {changed}/{len(targets)} config(s) modificada(s).")
 
 

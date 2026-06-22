@@ -81,6 +81,7 @@ def _check_model_match() -> list:
 			# Query uvicorn endpoint to find the loaded model
 			import json
 			import urllib.request
+
 			try:
 				resp = urllib.request.urlopen("http://127.0.0.1:8760/v1/models", timeout=3)
 				data = json.loads(resp.read().decode())
@@ -91,7 +92,12 @@ def _check_model_match() -> list:
 					if model_file == loaded_model:
 						out.append(("info", f"Perfil configurado: '{profile_name}' ({model_file}) cargado y activo."))
 					else:
-						out.append(("red", f"Modelo en ejecución NO coincide con el configurado (activo: '{loaded_model}', perfil '{profile_name}' → {model_file})."))
+						out.append(
+							(
+								"red",
+								f"Modelo en ejecución NO coincide con el configurado (activo: '{loaded_model}', perfil '{profile_name}' → {model_file}).",
+							)
+						)
 				else:
 					out.append(("yellow", "No se pudo recuperar el ID del modelo desde la API local."))
 			except Exception as exc:

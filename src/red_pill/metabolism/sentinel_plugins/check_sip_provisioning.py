@@ -88,10 +88,7 @@ class SipProvisioningCheck(ServiceSentinelPlugin):
 				AuditFinding(
 					type="sip_missing_start_sh",
 					severity=8.0,
-					message=(
-						f"{self.name}: start.sh not found at {start_sh}. "
-						"Run setup_background_model.sh to create it."
-					),
+					message=(f"{self.name}: start.sh not found at {start_sh}. Run setup_background_model.sh to create it."),
 					metadata={"service": self.service_unit, "path": str(start_sh), "volatile": False},
 				)
 			)
@@ -104,8 +101,7 @@ class SipProvisioningCheck(ServiceSentinelPlugin):
 					type="sip_missing_dual_bind",
 					severity=7.0,
 					message=(
-						f"{self.name}: run_dual_bind.py not found at {dual_bind}. "
-						"The dual-bind TCP+UDS server script is required for the SIP daemon."
+						f"{self.name}: run_dual_bind.py not found at {dual_bind}. The dual-bind TCP+UDS server script is required for the SIP daemon."
 					),
 					metadata={"service": self.service_unit, "path": str(dual_bind), "volatile": False},
 				)
@@ -118,10 +114,7 @@ class SipProvisioningCheck(ServiceSentinelPlugin):
 				AuditFinding(
 					type="sip_missing_venv",
 					severity=8.0,
-					message=(
-						f"{self.name}: Isolated venv not found at {venv_dir}. "
-						"The llama-cpp-python[server] environment is required."
-					),
+					message=(f"{self.name}: Isolated venv not found at {venv_dir}. The llama-cpp-python[server] environment is required."),
 					metadata={"service": self.service_unit, "path": str(venv_dir), "volatile": False},
 				)
 			)
@@ -132,10 +125,7 @@ class SipProvisioningCheck(ServiceSentinelPlugin):
 					AuditFinding(
 						type="sip_missing_llama_cpp",
 						severity=7.0,
-						message=(
-							f"{self.name}: venv exists at {venv_dir} but "
-							"llama-cpp-python is not installed."
-						),
+						message=(f"{self.name}: venv exists at {venv_dir} but llama-cpp-python is not installed."),
 						metadata={"service": self.service_unit, "path": str(venv_dir)},
 					)
 				)
@@ -147,10 +137,7 @@ class SipProvisioningCheck(ServiceSentinelPlugin):
 				AuditFinding(
 					type="sip_missing_service_file",
 					severity=6.0,
-					message=(
-						f"{self.name}: systemd user service file not found at {service_path}. "
-						"Run setup_background_model.sh to create it."
-					),
+					message=(f"{self.name}: systemd user service file not found at {service_path}. Run setup_background_model.sh to create it."),
 					metadata={"service": self.service_unit, "path": str(service_path), "volatile": False},
 				)
 			)
@@ -252,10 +239,7 @@ class SipProvisioningCheck(ServiceSentinelPlugin):
 				return AuditFinding(
 					type="sip_missing_model_file",
 					severity=6.0,
-					message=(
-						f"{self.name}: Model GGUF file not found at {model_path} "
-						f"(profile: {profile_name}). The SIP daemon will fail to load."
-					),
+					message=(f"{self.name}: Model GGUF file not found at {model_path} (profile: {profile_name}). The SIP daemon will fail to load."),
 					metadata={
 						"service": self.service_unit,
 						"path": str(model_path),
@@ -325,19 +309,22 @@ class SipProvisioningCheck(ServiceSentinelPlugin):
 			# OOM Shield Protocol: wrap with systemd-run to contain memory usage
 			result = subprocess.run(
 				[
-					"systemd-run", "--user", "--scope",
-					"-p", "MemoryMax=10G",
-					"/bin/bash", setup_script,
+					"systemd-run",
+					"--user",
+					"--scope",
+					"-p",
+					"MemoryMax=10G",
+					"/bin/bash",
+					setup_script,
 				],
-				capture_output=True, text=True, timeout=300,
+				capture_output=True,
+				text=True,
+				timeout=300,
 				env={**os.environ, "APP_ROOT": app_root},
 			)
 
 			if result.returncode != 0:
-				logger.error(
-					f"[{self.name}] setup_background_model.sh failed "
-					f"(rc={result.returncode}): {result.stderr[-500:]}"
-				)
+				logger.error(f"[{self.name}] setup_background_model.sh failed (rc={result.returncode}): {result.stderr[-500:]}")
 				return False
 
 			logger.info(f"[{self.name}] SIP infrastructure re-provisioned successfully.")
@@ -346,7 +333,8 @@ class SipProvisioningCheck(ServiceSentinelPlugin):
 			# but ensure it's done in case the script was interrupted)
 			subprocess.run(
 				["systemctl", "--user", "daemon-reload"],
-				check=False, timeout=15,
+				check=False,
+				timeout=15,
 			)
 			self._restart_service()
 

@@ -16,7 +16,7 @@ import json
 import logging
 import shutil
 import subprocess
-from typing import Optional
+from typing import Any, Optional, cast
 
 from red_pill.core.paths import get_bunker_root
 
@@ -68,7 +68,7 @@ class ClaudeBridge(AgentBridge):
 		if not out:
 			raise RuntimeError("claude returned empty output")
 		try:
-			return json.loads(out)
+			return cast(dict[Any, Any], json.loads(out))
 		except json.JSONDecodeError as e:
 			raise RuntimeError(f"claude output was not JSON: {out[:200]}") from e
 

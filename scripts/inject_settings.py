@@ -14,6 +14,7 @@ permission bypass is a per-launch CLI flag for the headless awakening runner
 (``claude --permission-mode bypassPermissions``), so it never leaks into the
 operator's interactive session via a shared settings.json.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -109,9 +110,7 @@ def resolve_target(args):
 
 
 def main():
-	parser = argparse.ArgumentParser(
-		description="Merge red-pill's permissions fragment into a Claude Code settings.json."
-	)
+	parser = argparse.ArgumentParser(description="Merge red-pill's permissions fragment into a Claude Code settings.json.")
 	parser.add_argument("--target", help="settings.json path. Default ~/.claude/settings.json.")
 	parser.add_argument("--workspace", help="If set (and no --target), targets <ws>/.claude/settings.json.")
 	parser.add_argument("--seed", help="Fragment seed path. Default seeds/settings/claude-code.json.")
@@ -123,8 +122,10 @@ def main():
 	parser.add_argument("--print", dest="print_only", action="store_true", help="Resolve and print additionalDirectories; do not write.")
 	args = parser.parse_args()
 
-	seed = os.path.expanduser(args.seed) if args.seed else os.path.join(
-		os.path.dirname(os.path.abspath(__file__)), "..", "seeds", "settings", "claude-code.json"
+	seed = (
+		os.path.expanduser(args.seed)
+		if args.seed
+		else os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "seeds", "settings", "claude-code.json")
 	)
 	seed = os.path.abspath(seed)
 	if not os.path.exists(seed):

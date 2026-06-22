@@ -236,7 +236,9 @@ def _csv(value):
 def main():
 	parser = argparse.ArgumentParser(description="Inject/merge red-pill anchor blocks into IDE instruction files.")
 	parser.add_argument("--ide", default="auto", help="csv: auto|all|antigravity|claude-code|claude-desktop-project")
-	parser.add_argument("--anchor", default="sovereign_handshake,agent_core,knowledge_access", help="csv of anchor seeds to inject (file names in --seeds-dir)")
+	parser.add_argument(
+		"--anchor", default="sovereign_handshake,agent_core,knowledge_access", help="csv of anchor seeds to inject (file names in --seeds-dir)"
+	)
 	parser.add_argument("--workspace", help="Workspace root: resolves ${WORKSPACE} and targets Claude Code <ws>/CLAUDE.md")
 	parser.add_argument("--redpill-dir", help="Red Pill source dir (resolves ${REDPILL_DIR}).")
 	parser.add_argument("--uv-path", help="Path to uv (shared build_vars; current anchors don't use it).")

@@ -365,7 +365,11 @@ async def handle_search_memory_research(arguments: Dict[str, Any]):
 			"effort": {"type": "string", "description": "Reasoning effort low|medium|high|xhigh|max (claude). Backend may ignore."},
 			"workspace": {"type": "string", "description": "Working dir the agent operates in (the target project). Omit → red-pill's own dir."},
 			"timeout": {"type": "integer", "description": "Seconds before the backend call is aborted (default 600)."},
-			"async_mode": {"type": "boolean", "description": "True (default): result to Minion Inbox. False: wait and return inline.", "default": True},
+			"async_mode": {
+				"type": "boolean",
+				"description": "True (default): result to Minion Inbox. False: wait and return inline.",
+				"default": True,
+			},
 		},
 		"required": ["prompt"],
 	},
@@ -775,6 +779,7 @@ async def handle_read_workspace_memory(arguments: Dict[str, Any]):
 	workspace = arguments["workspace"]
 	filename = arguments["filename"]
 	import asyncio
+
 	from red_pill.core import workspaces as ws_core
 
 	def _read():
@@ -818,6 +823,7 @@ async def handle_write_workspace_memory(arguments: Dict[str, Any]):
 	filename = arguments["filename"]
 	content = arguments["content"]
 	import asyncio
+
 	from red_pill.core import workspaces as ws_core
 
 	def _write():
@@ -857,6 +863,7 @@ async def handle_write_workspace_memory(arguments: Dict[str, Any]):
 async def handle_list_workspace_memory(arguments: Dict[str, Any]):
 	workspace = arguments["workspace"]
 	import asyncio
+
 	from red_pill.core import workspaces as ws_core
 
 	def _list():
@@ -868,12 +875,13 @@ async def handle_list_workspace_memory(arguments: Dict[str, Any]):
 			return f"[ERROR] Memory serving is disabled for workspace '{workspace}'."
 		if not mem_path.exists():
 			return "[]"
-		
+
 		files = []
 		for item in os.listdir(mem_path):
 			if os.path.isfile(os.path.join(mem_path, item)) and not item.startswith("."):
 				files.append(item)
 		import json
+
 		return json.dumps(files)
 
 	res = await asyncio.to_thread(_list)
@@ -897,6 +905,7 @@ async def handle_workspace_memory_enable(arguments: Dict[str, Any]):
 	workspace = arguments["workspace"]
 	path = arguments.get("path")
 	import asyncio
+
 	from red_pill.metabolism.memory_sync import enable_workspace_memory
 
 	res = await asyncio.to_thread(enable_workspace_memory, workspace, path)
@@ -919,6 +928,7 @@ async def handle_workspace_memory_enable(arguments: Dict[str, Any]):
 async def handle_workspace_memory_disable(arguments: Dict[str, Any]):
 	workspace = arguments["workspace"]
 	import asyncio
+
 	from red_pill.metabolism.memory_sync import disable_workspace_memory
 
 	res = await asyncio.to_thread(disable_workspace_memory, workspace)
@@ -1008,7 +1018,11 @@ async def handle_run_local_healer(arguments: Dict[str, Any]):
 	parent="metabolism_health_api",
 	action="heal_tissue",
 	description="[OFFICIAL] Immune System Effector. Attempt to heal a damaged system component (tissue) based on biological pain signals.",
-	schema={"type": "object", "properties": {"tissue": {"type": "string", "enum": ["cuda", "qdrant", "mypy", "sip_provisioning", "knowledge_graph"]}}, "required": ["tissue"]},
+	schema={
+		"type": "object",
+		"properties": {"tissue": {"type": "string", "enum": ["cuda", "qdrant", "mypy", "sip_provisioning", "knowledge_graph"]}},
+		"required": ["tissue"],
+	},
 )
 async def handle_heal_tissue(arguments: Dict[str, Any]):
 	tissue = arguments.get("tissue")
@@ -1052,16 +1066,11 @@ async def handle_heal_tissue(arguments: Dict[str, Any]):
 				# Attempt heal on the first actionable finding
 				healed = plugin.heal_specific(config, provisioning_findings[0])
 				if healed:
-					output = (
-						f"SIP Provisioning: Successfully re-provisioned. "
-						f"Healed {len(provisioning_findings)} issue(s): "
-						+ ", ".join(f.type for f in provisioning_findings)
+					output = f"SIP Provisioning: Successfully re-provisioned. Healed {len(provisioning_findings)} issue(s): " + ", ".join(
+						f.type for f in provisioning_findings
 					)
 				else:
-					output = (
-						"SIP Provisioning: Auto-heal failed. Issues found: "
-						+ "; ".join(f.message for f in provisioning_findings)
-					)
+					output = "SIP Provisioning: Auto-heal failed. Issues found: " + "; ".join(f.message for f in provisioning_findings)
 		except Exception as e:
 			output = f"Critical immune failure while healing SIP provisioning: {e}"
 

@@ -452,7 +452,6 @@ class RedPillConfig(BaseSettings):
 	WORKSPACE_MEMORY_COMPACT_MODEL: str = "flash"
 	WORKSPACE_MEMORY_COMPACT_PROMPT: str = "seeds/memory/optimizer_prompt.txt"
 
-
 	# -----------------------------------------------------------------------
 	# FERRARI PROTOCOL — Emotional Intelligence Plugins
 	# -----------------------------------------------------------------------

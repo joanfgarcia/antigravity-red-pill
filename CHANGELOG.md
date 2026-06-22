@@ -1,5 +1,10 @@
 ## [7.3.0] - Unreleased
 
+### 🧬 TUI Dashboard & Configuration Manager (B.2)
+- **[FEAT] TUI Config Editor & Monitor (`config_tui.py`)**: Designed and built a terminal dashboard for `/home/joan/.config/red-pill/.env` management and live telemetry monitoring. Features a dual-tab layout (Monitor tab with live health metrics, Qdrant counts, SQLite outbox/inbox queues, VRAM/CPU; Config tab for atomic settings adjustment), custom comment-preserving `.env` parser, field validation, and fallback backups.
+- **[FEAT] CLI Integration (`cli.py`)**: Added the `config` group and `tui` subcommand (`red-pill config tui`) with interactive TTY verification.
+- **[TEST] TUI Test Coverage (`tests/test_config_tui.py`)**: Implemented tests for atomic save, comment preservation, telemetry scraping, validation error raising, and HSplit layout constructors.
+
 ### 🗂️ Peer Workspace Registry & Operator-Managed Access (AD-013/014)
 - **[FEAT] Workspace registry (`core/workspaces.py`)**: red-pill = the agent (identity + a single GLOBAL `Agent_Core`); projects are **peers** declared in `~/.config/red-pill/workspaces.yaml`, each discovering its own rules via the **`.agent` convention** (`find_closest_agent` walk-up). `USER_ATLAS_DIR` removed (atlas is per-project); `WORKSPACE_ROOT` retained as red-pill's own asset root. Back-compat loader; seeded on install/update if absent.
 - **[FEAT] Per-workspace access — one switch, per-surface adapters (`scripts/manage_workspaces.py`)**: a single `access: true|false` per workspace; the per-IDE adapter translates it (today Claude Code → `permissions.additionalDirectories` via `inject_settings.py`). `enable`/`disable`/`list` reused by install, update and CLI; install runs it as a **consent gate**. `inject_settings` gains `--print` (dry-run) and surgical `--remove` (drops only the targeted dirs).

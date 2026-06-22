@@ -43,9 +43,7 @@ class AgentMinion(Minion):
 
 			bridge = create_bridge(backend)
 			# bridge.prompt is a blocking subprocess call — run off the event loop.
-			result = await asyncio.to_thread(
-				bridge.prompt, task, model=model, effort=effort, cwd=cwd, timeout=timeout
-			)
+			result = await asyncio.to_thread(bridge.prompt, task, model=model, effort=effort, cwd=cwd, timeout=timeout)
 		except Exception as e:
 			return {"status": "error", "error": str(e), "duration": time.time() - start}
 

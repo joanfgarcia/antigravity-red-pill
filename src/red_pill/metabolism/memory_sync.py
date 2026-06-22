@@ -1,11 +1,11 @@
-import os
-import sys
-import time
-import shutil
 import importlib.util
 import logging
+import os
+import shutil
+import sys
+import time
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Any, List, Optional
 
 import red_pill.config as cfg
 from red_pill.core import workspaces as ws_core
@@ -84,12 +84,7 @@ def sync_workspace_memory(ws: Workspace, mm: MemoryManager) -> None:
 		points: List[Any] = []
 		offset = None
 		while True:
-			pts, offset = client.scroll(
-				collection_name="work_memories",
-				limit=100,
-				offset=offset,
-				with_payload=True
-			)
+			pts, offset = client.scroll(collection_name="work_memories", limit=100, offset=offset, with_payload=True)
 			points.extend(pts)
 			if not offset:
 				break
@@ -113,12 +108,12 @@ def sync_workspace_memory(ws: Workspace, mm: MemoryManager) -> None:
 			f"# Technical Decisions & Timeline: {ws.name}",
 			"",
 			"Chronological history of technical decisions, patterns, and events recorded in the Bünker.",
-			""
+			"",
 		]
 		for p in matching_points:
 			created_at_float = p.payload.get("created_at", 0.0)
 			try:
-				time_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(created_at_float))
+				time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(created_at_float))
 			except Exception:
 				time_str = "Unknown Date"
 			importance = p.payload.get("importance", 1.0)
@@ -143,7 +138,7 @@ def sync_workspace_memory(ws: Workspace, mm: MemoryManager) -> None:
 			elif not arch_file.exists():
 				# Write a placeholder if hooks return empty but file is missing
 				arch_file.write_text(f"# Architecture Index: {ws.name}\n\n(No custom hooks configured or executed)\n", encoding="utf-8")
-			
+
 			# Clean up indicator
 			if pending_indicator.exists():
 				try:
@@ -201,12 +196,7 @@ def compact_workspace_memory(ws: Workspace, mm: MemoryManager) -> None:
 		)
 
 		bridge = create_bridge(conf.WORKSPACE_MEMORY_COMPACT_BACKEND)
-		res = bridge.prompt(
-			text=full_prompt,
-			model=conf.WORKSPACE_MEMORY_COMPACT_MODEL,
-			cwd=str(ws.root),
-			timeout=300
-		)
+		res = bridge.prompt(text=full_prompt, model=conf.WORKSPACE_MEMORY_COMPACT_MODEL, cwd=str(ws.root), timeout=300)
 
 		if not res.ok:
 			logger.warning(f"Workspace Compaction [{ws.name}]: LLM execution failed: {res.error}")
@@ -226,7 +216,7 @@ def compact_workspace_memory(ws: Workspace, mm: MemoryManager) -> None:
 			if bak_file.exists():
 				bak_file.unlink()
 			shutil.copy2(str(memory_file), str(bak_file))
-		
+
 		os.replace(str(tmp_file), str(memory_file))
 		logger.info(f"Workspace Compaction [{ws.name}]: Consolidation completed atomically. Backup saved to MEMORY.md.bak.")
 
