@@ -628,7 +628,7 @@ def main() -> None:
 	ide_parser = subparsers.add_parser("ide", help="Antigravity IDE Bridge Management")
 	ide_sub = ide_parser.add_subparsers(dest="ide_cmd")
 	backend_parser = ide_sub.add_parser("backend", help="Set or show IDE backend")
-	backend_parser.add_argument("value", nargs="?", choices=["agy", "grpc", "auto"], help="Backend to use")
+	backend_parser.add_argument("value", nargs="?", choices=["agy", "grpc", "claude", "local", "auto"], help="Backend to use")
 	ide_sub.add_parser("status", help="Show IDE bridge capabilities and health")
 	ide_sub.add_parser("test", help="Run connectivity test against the IDE")
 
