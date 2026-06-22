@@ -25,6 +25,7 @@ def discover_targets(workspace=None):
 		"~/AppData/Roaming/Claude/claude_desktop_config.json",             # Claude Desktop (Windows)
 		"~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
 		"~/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/cline_mcp_settings.json",
+		"~/.claude.json",                                                  # Claude Code (User level CLI config)
 	]
 	targets = [os.path.expanduser(c) for c in candidates if os.path.exists(os.path.expanduser(c))]
 
