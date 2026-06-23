@@ -1,5 +1,8 @@
 ## [7.3.0] - Unreleased
 
+### ⚡ Liveness Probes & Hypervisor Health (BUG-001)
+- **[FIX] 3-State Liveness Model (`drive_evaluator.py`, `samantha_on_demand.py`)**: Resolved false `local_llm_offline` warnings and VRAM/RAM memory spikes by introducing a 3-state liveness probe (`ready` | `busy` | `down`). Probes distinguish a dead hypervisor (`down` / `ECONNREFUSED` -> triggers pain alerts) from a saturated one (`busy` / timeout -> suppresses pain and returns `True` to reuse the active hypervisor, preventing the spawning of duplicate ~8 GiB ephemeral model servers).
+
 ### 🧬 TUI Dashboard & Configuration Manager (B.2)
 - **[FEAT] TUI Config Editor & Monitor (`config_tui.py`)**: Designed and built a terminal dashboard for `/home/joan/.config/red-pill/.env` management and live telemetry monitoring. Features a dual-tab layout (Monitor tab with live health metrics, Qdrant counts, SQLite outbox/inbox queues, VRAM/CPU; Config tab for atomic settings adjustment), custom comment-preserving `.env` parser, field validation, and fallback backups.
 - **[FEAT] CLI Integration (`cli.py`)**: Added the `config` group and `tui` subcommand (`red-pill config tui`) with interactive TTY verification.

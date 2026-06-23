@@ -158,6 +158,17 @@ class AgyBridge(AgentBridge):
 			mcp_tools=True,
 		)
 
+	def _model_args(self, model: str) -> list:
+		if not model:
+			return []
+		if model == "flash":
+			actual_model = "Gemini 3.5 Flash (Medium)"
+		elif model == "pro":
+			actual_model = "Gemini 3.1 Pro (High)"
+		else:
+			actual_model = model
+		return ["--model", actual_model]
+
 	def prompt(
 		self,
 		text: str,
@@ -187,7 +198,7 @@ class AgyBridge(AgentBridge):
 		before = _snapshot_brain(brain_dir) if brain_dir else set()
 
 		try:
-			response = self._run_agy(["-p", tagged_text], timeout)
+			response = self._run_agy([*self._model_args(model), "-p", tagged_text], timeout)
 		except Exception as e:
 			return ConversationResult(
 				conversation_id="",

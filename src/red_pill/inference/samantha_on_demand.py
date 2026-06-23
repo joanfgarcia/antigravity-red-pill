@@ -34,12 +34,29 @@ _REQUEST_TIMEOUT_S = 60
 
 
 def _is_port_open(port: int) -> bool:
-	try:
-		with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-			s.settimeout(1)
-			return s.connect_ex(("127.0.0.1", port)) == 0
-	except Exception:
-		return False
+	# Is a server already listening here? Distinguish DOWN (connection refused →
+	# nothing listening) from BUSY (timeout → a live llama.cpp holds its single
+	# context lock while serving an in-flight completion). A BUSY hypervisor IS
+	# running: returning False here would spawn a redundant ~8 GiB ephemeral
+	# instance and worsen memory pressure. llama.cpp exposes no /health (404), so a
+	# 404/any HTTP answer also proves the server is alive.
+	for path in ("/health", "/v1/models"):
+		try:
+			req = urllib.request.Request(f"http://127.0.0.1:{port}{path}")
+			with urllib.request.urlopen(req, timeout=1) as response:
+				if response.status == 200:
+					return True
+		except urllib.error.HTTPError:
+			return True  # server answered (e.g. 404) → it is up
+		except urllib.error.URLError as ue:
+			if isinstance(ue.reason, (TimeoutError, socket.timeout)):
+				return True  # up but busy (lock held) → reuse, do not respawn
+			return False  # connection refused / DNS → nothing listening
+		except (TimeoutError, socket.timeout):
+			return True  # up but busy
+		except Exception:
+			return False
+	return False
 
 
 def _is_hypervisor_alive() -> bool:
