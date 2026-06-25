@@ -656,6 +656,94 @@ def erode_work_hubs(memory_manager) -> None:
 			logger.error(f"[SLEEP ENGINE] Failed to delete eroded hubs: {e}")
 
 
+def run_rhizodb_washout_and_pruning(memory_manager) -> None:
+	"""
+	Applies global periodic Washout and Structural Pruning to collections utilizing RhizoDB.
+	Washout formula: a_v = gamma * a_v + b(s_v)
+	Pruning rule: delete if a_v < 0.1 and s_v < 5.0 (days)
+	"""
+	client = memory_manager.client
+	now = time.time()
+	gamma = 0.85
+	S_max = 365.0
+
+	# Find collections utilizing rhizodb
+	rhizodb_collections = [col for col, eng in cfg.MEMORY_ENGINES.items() if eng == "rhizodb"]
+
+	for collection in rhizodb_collections:
+		if not client.collection_exists(collection):
+			continue
+
+		from qdrant_client import models as qm
+		from red_pill.affect import get_memory_engine
+
+		engine = get_memory_engine("rhizodb")
+
+		try:
+			# Scroll to get all points (limit=10000 to cover all social/story memories)
+			scroll_res = client.scroll(collection_name=collection, limit=10000, with_payload=True)
+			if isinstance(scroll_res, tuple) and len(scroll_res) == 2:
+				points = scroll_res[0]
+			else:
+				points = scroll_res if isinstance(scroll_res, list) else []
+		except Exception as e:
+			logger.error(f"[SLEEP ENGINE] Failed to fetch points for rhizodb processing in {collection}: {e}")
+			continue
+
+		if not points:
+			continue
+
+		update_operations = []
+		points_to_delete = []
+
+		for p in points:
+			payload = p.payload or {}
+			if payload.get("immune"):
+				continue
+
+			# 1. Run lazy decay first to get current activation/score
+			decay_updates = engine.calculate_lazy_decay(payload, current_time=now)
+
+			# If lazy decay wants to delete it
+			if decay_updates.get("_delete"):
+				points_to_delete.append(p.id)
+				continue
+
+			score = float(decay_updates.get("reinforcement_score", payload.get("reinforcement_score", 1.0)))
+			stability = float(payload.get("stability", 1.0))
+
+			# 2. Apply Washout: a_v = gamma * a_v + b(s_v)
+			# b(s_v) = (1 - gamma) * (stability / S_max)
+			b_sv = (1.0 - gamma) * (stability / S_max)
+			new_score = round(gamma * score + b_sv, 3)
+
+			# 3. Structural Pruning (Poda): delete if a_v < 0.1 and s_v < 5.0
+			if new_score < 0.1 and stability < 5.0:
+				points_to_delete.append(p.id)
+				logger.info(f"[SLEEP ENGINE] Pruning engram {p.id} in {collection}: activation={new_score}, stability={stability}")
+			else:
+				# Otherwise, update score and commit time
+				update_payload = {
+					"reinforcement_score": new_score,
+					"last_recalled_at": now
+				}
+				update_operations.append(qm.SetPayloadOperation(set_payload=qm.SetPayload(payload=update_payload, points=[p.id])))
+
+		# Execute updates and deletions
+		if update_operations:
+			try:
+				client.batch_update_points(collection_name=collection, update_operations=update_operations)
+			except Exception as e:
+				logger.error(f"[SLEEP ENGINE] Failed to update washout payloads in {collection}: {e}")
+
+		if points_to_delete:
+			try:
+				client.delete(collection_name=collection, points_selector=qm.PointIdsList(points=points_to_delete))
+				logger.info(f"[SLEEP ENGINE] Deleted {len(points_to_delete)} pruned engrams from {collection}.")
+			except Exception as e:
+				logger.error(f"[SLEEP ENGINE] Failed to delete pruned engrams in {collection}: {e}")
+
+
 def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 	"""
 	Lazarus Phase 2, 3 & 4: Consolidation, Fixation, and Synaptic Dreaming.
@@ -965,6 +1053,13 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 		erode_work_hubs(memory_manager)
 	except Exception as e:
 		logger.error(f"[SLEEP ENGINE] Failed to run Bayesian hub erosion: {e}")
+
+	# RhizoDB Washout and Structural Pruning
+	try:
+		run_rhizodb_washout_and_pruning(memory_manager)
+	except Exception as e:
+		logger.error(f"[SLEEP ENGINE] Failed to run RhizoDB washout and pruning: {e}")
+
 
 	try:
 		IdentityEvaluator.evaluate_set_point(memory_manager)

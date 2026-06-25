@@ -1,5 +1,12 @@
 ## [7.3.0] - Unreleased
 
+### 🧠 RhizoDB Memory Dynamics & Sleep Consolidation (Zenodo DOI: 10.5281/zenodo.20695703)
+- **[FEAT] RhizoDB Memory Engine (`affect.py`, `config.py`)**: Integrated Jorge Augusto Guberte's RhizoDB memory dynamics model as a first-class memory engine (`"rhizodb"`). Social memories (`social_memories`) and story memories (`story_memories`) now default to `"rhizodb"` routing.
+- **[FEAT] Saturated Activation & Asymptotic Stability (`affect.py`)**: Replaced linear/exponential memory decay with saturated activation updates ($a_v(t+1) = a_v(t) + (1.0 - a_v(t)) \cdot \alpha$) and asymptotic stability updates ($s_v(t+1) = s_v(t) + \eta \cdot \alpha \cdot (S_{\max} - s_v(t))$) capped at $S_{\max} = 365.0$ days with learning rate $\eta = 0.1$.
+- **[FEAT] Sleep Washout & Structural Pruning (`sleep.py`)**: Added a dedicated RhizoDB consolidation ritual in the sleep cycle applying periodic activation washout ($a_v \leftarrow \gamma \cdot a_v + b(s_v)$ where $\gamma = 0.85$ and $b(s_v) = (1.0 - \gamma) \cdot \frac{s_v}{S_{\max}}$) and structural pruning (physical eviction of points with activation $a_v < 0.1$ and stability $s_v < 5.0$ days).
+- **[TEST] Unit & Integration Test Coverage (`test_rhizodb_engine.py`, `test_sleep_rhizodb.py`)**: Added isolated unit testing for mathematical bounds and saturation limits of `RhizoDBEngine`, alongside mock-based integration testing of sleep cycle washout and pruning logic.
+- **[DOCS] Licensing & Attribution (`ARCHITECTURE.md`)**: Documented the mathematical model and added citation attribution to Jorge Augusto Guberte under the Creative Commons Attribution 4.0 International (CC BY 4.0) license.
+
 ### 🧩 Multi-IDE Cascades, Model Propagation & Chronicle Plugins (AD-017)
 - **[FEAT] Multi-IDE Cascades Configuration (`config.py`, `factory.py`, `worker.py`, `agent.py`)**: Separated execution bridge cascades into Telegram, autonomous awakenings, and background minions (`TELEGRAM_BRIDGE_CASCADE`, `AWAKENING_BRIDGE_CASCADE`, `DEFAULT_MINION_BRIDGE_CASCADE` with fallback to `IDE_BACKEND`).
 - **[FEAT] Model Trace Propagation (`worker.py`, `queue_manager.py`, `queue_worker.py`, `memory.py`, `sleep.py`)**: Propagated the real model name returned by bridges to Qdrant engrams (`sequence_chunk` and `synthesis_hub` under `metadata.model`) via self-healing SQLite migrations adding the `model` column to `interactions` and `memory_queue`.

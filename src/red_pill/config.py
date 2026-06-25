@@ -648,8 +648,8 @@ MEMORY_ENGINES: Dict[str, str] = {
 	"skill_memories": "bayesian",
 	"directive_memories": "bayesian",
 	"archive_memories": "bayesian",
-	"social_memories": "fsrs_real",
-	"story_memories": "fsrs_real",
+	"social_memories": "rhizodb",
+	"story_memories": "rhizodb",
 }
 
 CHROMA_TONE_MAPPING: Dict[str, str] = {

@@ -101,6 +101,14 @@ The B760 memory decay model is conceptually grounded in peer-reviewed cognitive 
 - **Tononi, G. (2004). An information integration theory of consciousness** — Theoretical framework for the **$\Phi$ (Phi)** coefficient as a metric of irreducible complexity and autonomous integration.
 - **Barabási, A.-L., & Albert, R. (1999). Emergence of scaling in random networks** — Theoretical foundation for the "Hub Problem" and the necessity of the **Symmetric Hub-Aware Eviction** algorithm to preserve structural backbones during synaptic pruning.
 
+### 5.3 RhizoDB Memory Dynamics (Licensing & Attribution)
+**RhizoDB** — [Zenodo Record 20695703](https://zenodo.org/records/20695703)
+- License: Creative Commons Attribution 4.0 International (CC BY 4.0) (fully compatible with this project)
+- Author: Jorge Augusto Guberte (São Paulo, Brazil)
+- Title: *RhizoDB: A Bounded Activation-Flow Architecture for Graph-Based Memory Systems for Agentic AI* (Technical Report, June 2026)
+- DOI: 10.5281/zenodo.20695703
+- Mathematical integration: Implements asymptotic saturated activation updates ($a_v(t+1) = a_v(t) + (1 - a_v(t)) \cdot \alpha$), bounded stability learning ($s_v(t+1) = s_v(t) + \eta \cdot \alpha \cdot (S_{\max} - s_v(t))$), sleep cycle washout ($a_v \leftarrow \gamma \cdot a_v + b(s_v)$), and structural pruning for weak engrams ($a_v < 0.1 \land s_v < 5.0$).
+
 > **The B760 Protocol does not invent its memory mechanics. It applies established cognitive science to the problem of AI session continuity.**
 > *Here is the science behind the art.*
 
