@@ -1,10 +1,6 @@
 import json
-import os
-from pathlib import Path
 from unittest.mock import patch
-import pytest
 
-from red_pill.core.paths import get_staging_dir, get_data_dir
 from red_pill.metabolism.chronicle.claude_code_plugin import ClaudeCodeExtractorPlugin
 
 
@@ -21,29 +17,23 @@ def test_claude_code_extractor_standard_and_incremental(tmp_path):
 	staging_dir.mkdir(parents=True, exist_ok=True)
 
 	# Mock Path.home to return tmp_path
-	with patch("red_pill.metabolism.chronicle.claude_code_plugin.Path.home", return_value=tmp_path), \
-		patch("red_pill.metabolism.chronicle.claude_code_plugin.get_data_dir", return_value=data_dir), \
-		patch("red_pill.metabolism.chronicle.claude_code_plugin.get_staging_dir", return_value=staging_dir):
-
+	with (
+		patch("red_pill.metabolism.chronicle.claude_code_plugin.Path.home", return_value=tmp_path),
+		patch("red_pill.metabolism.chronicle.claude_code_plugin.get_data_dir", return_value=data_dir),
+		patch("red_pill.metabolism.chronicle.claude_code_plugin.get_staging_dir", return_value=staging_dir),
+	):
 		# 1. Create a standard turn record
 		records = [
-			{
-				"type": "user",
-				"message": {
-					"content": "What is the status of the bridge?"
-				}
-			},
+			{"type": "user", "message": {"content": "What is the status of the bridge?"}},
 			{
 				"type": "assistant",
 				"uuid": "uuid-turn-1",
 				"message": {
 					"model": "claude-3-5-sonnet-20241022",
-					"content": [
-						{"type": "text", "text": "The bridge is modularized."}
-					],
-					"stop_reason": "end_turn"
-				}
-			}
+					"content": [{"type": "text", "text": "The bridge is modularized."}],
+					"stop_reason": "end_turn",
+				},
+			},
 		]
 
 		# Write to jsonl
@@ -83,52 +73,26 @@ def test_claude_code_extractor_standard_and_incremental(tmp_path):
 
 		# 3. Append sidechain and a new turn containing tool use & tool result
 		new_records = [
-			{
-				"type": "user",
-				"isSidechain": True,
-				"message": {
-					"content": "Ignore this sidechain message"
-				}
-			},
-			{
-				"type": "user",
-				"message": {
-					"content": "Verify CUDA again."
-				}
-			},
+			{"type": "user", "isSidechain": True, "message": {"content": "Ignore this sidechain message"}},
+			{"type": "user", "message": {"content": "Verify CUDA again."}},
 			{
 				"type": "assistant",
 				"uuid": "uuid-turn-2",
 				"message": {
 					"model": "claude-3-5-sonnet-20241022",
-					"content": [
-						{"type": "tool_use", "name": "check_cuda", "input": {"verbose": True}}
-					]
-				}
+					"content": [{"type": "tool_use", "name": "check_cuda", "input": {"verbose": True}}],
+				},
 			},
-			{
-				"type": "user",
-				"message": {
-					"content": [
-						{
-							"type": "tool_result",
-							"tool_use_id": "tool-1",
-							"content": "CUDA active"
-						}
-					]
-				}
-			},
+			{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "tool-1", "content": "CUDA active"}]}},
 			{
 				"type": "assistant",
 				"uuid": "uuid-turn-2",
 				"message": {
 					"model": "claude-3-5-sonnet-20241022",
-					"content": [
-						{"type": "text", "text": "CUDA is healthy."}
-					],
-					"stop_reason": "end_turn"
-				}
-			}
+					"content": [{"type": "text", "text": "CUDA is healthy."}],
+					"stop_reason": "end_turn",
+				},
+			},
 		]
 
 		# Append to the jsonl file
@@ -167,18 +131,14 @@ def test_claude_code_extractor_concurrency_partial_lines(tmp_path):
 	data_dir.mkdir(parents=True, exist_ok=True)
 	staging_dir.mkdir(parents=True, exist_ok=True)
 
-	with patch("red_pill.metabolism.chronicle.claude_code_plugin.Path.home", return_value=tmp_path), \
-		patch("red_pill.metabolism.chronicle.claude_code_plugin.get_data_dir", return_value=data_dir), \
-		patch("red_pill.metabolism.chronicle.claude_code_plugin.get_staging_dir", return_value=staging_dir):
-
+	with (
+		patch("red_pill.metabolism.chronicle.claude_code_plugin.Path.home", return_value=tmp_path),
+		patch("red_pill.metabolism.chronicle.claude_code_plugin.get_data_dir", return_value=data_dir),
+		patch("red_pill.metabolism.chronicle.claude_code_plugin.get_staging_dir", return_value=staging_dir),
+	):
 		# Write a complete user record and a partial/incomplete assistant record
 		# The assistant record does not have a trailing newline (or is malformed JSON)
-		user_record = {
-			"type": "user",
-			"message": {
-				"content": "Initiate calibration."
-			}
-		}
+		user_record = {"type": "user", "message": {"content": "Initiate calibration."}}
 
 		with open(session_file, "wb") as f:
 			f.write(json.dumps(user_record).encode("utf-8") + b"\n")
@@ -203,11 +163,7 @@ def test_claude_code_extractor_concurrency_partial_lines(tmp_path):
 			assistant_record = {
 				"type": "assistant",
 				"uuid": "uuid-turn-3",
-				"message": {
-					"model": "claude-3-5-sonnet-20241022",
-					"content": "Calibration complete.",
-					"stop_reason": "end_turn"
-				}
+				"message": {"model": "claude-3-5-sonnet-20241022", "content": "Calibration complete.", "stop_reason": "end_turn"},
 			}
 			f.write(json.dumps(assistant_record).encode("utf-8") + b"\n")
 

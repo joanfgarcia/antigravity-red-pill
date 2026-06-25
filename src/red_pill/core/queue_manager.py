@@ -60,7 +60,9 @@ class MemoryQueueManager:
 			cursor.execute("CREATE INDEX IF NOT EXISTS idx_status ON memory_queue (status)")
 			conn.commit()
 
-	def enqueue_memory(self, prompt: str, response: str, role: str, category: str = "mixed", originator: Optional[str] = None, model: Optional[str] = None) -> int:
+	def enqueue_memory(
+		self, prompt: str, response: str, role: str, category: str = "mixed", originator: Optional[str] = None, model: Optional[str] = None
+	) -> int:
 		"""Push a fast memory into the queue. Returns row ID.
 
 		Args:

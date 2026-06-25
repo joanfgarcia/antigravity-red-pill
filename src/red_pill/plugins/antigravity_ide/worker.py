@@ -3,9 +3,9 @@ import logging
 import os
 import sqlite3
 import sys
-from typing import Optional
 import time
 from pathlib import Path
+from typing import Optional
 
 import requests
 from dotenv import load_dotenv
@@ -96,7 +96,7 @@ class IDEWorker:
 			self._bridge_telegram = create_cascade_bridge(cfg_inst.TELEGRAM_BRIDGE_CASCADE, name="TELEGRAM_BRIDGE_CASCADE")
 			self._bridge_awakening = create_cascade_bridge(cfg_inst.AWAKENING_BRIDGE_CASCADE, name="AWAKENING_BRIDGE_CASCADE")
 			self._bridge_minion = create_cascade_bridge(cfg_inst.DEFAULT_MINION_BRIDGE_CASCADE, name="DEFAULT_MINION_BRIDGE_CASCADE")
-			
+
 			# Fallback for capabilities / legacy checks
 			self._caps = self._bridge_telegram.get_capabilities()
 			logger.info(f"[IDEWorker] Telegram Bridge: {self._bridge_telegram.get_capabilities().backend.value.upper()}")
@@ -105,6 +105,7 @@ class IDEWorker:
 		except Exception as e:
 			logger.warning(f"[IDEWorker] Bridge creation failed, falling back to gRPC-only: {e}")
 			from red_pill.swarm.bridges.factory import create_bridge
+
 			self._bridge_telegram = create_bridge("grpc")
 			self._bridge_awakening = create_bridge("grpc")
 			self._bridge_minion = create_bridge("grpc")
@@ -871,7 +872,7 @@ class IDEWorker:
 
 			db_path = get_db_dir() / "bunker.db"
 			conn_scribe = sqlite3.connect(str(db_path))
-			
+
 			# Self-healing migration for column 'model'
 			cursor = conn_scribe.cursor()
 			cursor.execute("PRAGMA table_info(interactions)")

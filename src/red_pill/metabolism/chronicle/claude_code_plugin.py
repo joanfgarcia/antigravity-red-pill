@@ -162,7 +162,7 @@ class ClaudeCodeExtractorPlugin(ChronicleExtractorPlugin):
 								msg = record.get("message", {})
 								current_model = msg.get("model") or current_model
 								assistant_uuid = record.get("uuid") or assistant_uuid
-								
+
 								assistant_blocks = extract_assistant_blocks(msg)
 								current_turn_steps.extend(assistant_blocks)
 

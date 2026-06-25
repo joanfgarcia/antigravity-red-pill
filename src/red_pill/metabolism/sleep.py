@@ -675,6 +675,7 @@ def run_rhizodb_washout_and_pruning(memory_manager) -> None:
 			continue
 
 		from qdrant_client import models as qm
+
 		from red_pill.affect import get_memory_engine
 
 		engine = get_memory_engine("rhizodb")
@@ -723,10 +724,7 @@ def run_rhizodb_washout_and_pruning(memory_manager) -> None:
 				logger.info(f"[SLEEP ENGINE] Pruning engram {p.id} in {collection}: activation={new_score}, stability={stability}")
 			else:
 				# Otherwise, update score and commit time
-				update_payload = {
-					"reinforcement_score": new_score,
-					"last_recalled_at": now
-				}
+				update_payload = {"reinforcement_score": new_score, "last_recalled_at": now}
 				update_operations.append(qm.SetPayloadOperation(set_payload=qm.SetPayload(payload=update_payload, points=[p.id])))
 
 		# Execute updates and deletions
@@ -1018,7 +1016,12 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 						hub_id = memory_manager.add_memory(
 							collection="work_memories",
 							text=hub_summary,
-							metadata={"lazarus_phase": "synthesis_hub", "node_type": "synthesis_hub", "source_buffer_id": raw_id, "model": model_name},
+							metadata={
+								"lazarus_phase": "synthesis_hub",
+								"node_type": "synthesis_hub",
+								"source_buffer_id": raw_id,
+								"model": model_name,
+							},
 							color="cyan",
 							emotion=surviving_chunks[-1]["emotion"],
 							intensity=max([c["intensity"] for c in surviving_chunks]),
@@ -1059,7 +1062,6 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 		run_rhizodb_washout_and_pruning(memory_manager)
 	except Exception as e:
 		logger.error(f"[SLEEP ENGINE] Failed to run RhizoDB washout and pruning: {e}")
-
 
 	try:
 		IdentityEvaluator.evaluate_set_point(memory_manager)

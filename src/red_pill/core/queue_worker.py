@@ -93,7 +93,11 @@ def run_queue_worker(poll_interval: int = 5, oneshot: bool = False):
 				queue.update_status(item["id"], "processing")
 				try:
 					uid = memory.record_interaction_pair(
-						prompt=item["prompt"], response=item["response"], role=item["role"], category=item.get("category", "mixed"), model=item.get("model")
+						prompt=item["prompt"],
+						response=item["response"],
+						role=item["role"],
+						category=item.get("category", "mixed"),
+						model=item.get("model"),
 					)
 					queue.update_status(item["id"], "completed")
 					logger.info(f"Memory {item['id']} successfully ingested. (ID: {uid})")

@@ -349,12 +349,12 @@ class RedPillConfig(BaseSettings):
 	def _parse_bridge_cascades(cls, v: Any) -> Any:
 		if isinstance(v, str):
 			import json
+
 			try:
 				return json.loads(v)
 			except Exception as e:
 				raise ValueError(f"Failed to parse JSON for bridge cascade: {e}")
 		return v
-
 
 	@field_validator("IDE_BACKEND")
 	@classmethod
@@ -413,11 +413,13 @@ class RedPillConfig(BaseSettings):
 	def _parse_chronicle_plugins(cls, v: Any) -> Any:
 		if isinstance(v, str):
 			import json
+
 			try:
 				return json.loads(v)
 			except Exception:
 				return [p.strip() for p in v.split(",") if p.strip()]
 		return v
+
 	METABOLISM_STATE_FILE: str = str(get_state_dir() / "metabolism_state.json")
 	ABSENCE_THRESHOLD: int = 7 * 24 * 3600
 	ABSENCE_GUARD_SCROLL_LIMIT: int = 500

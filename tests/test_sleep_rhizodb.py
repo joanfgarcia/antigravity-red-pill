@@ -1,8 +1,10 @@
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+
 import pytest
-import red_pill.config as cfg
+
 from red_pill.metabolism.sleep import run_rhizodb_washout_and_pruning
+
 
 def test_run_rhizodb_washout_and_pruning():
 	# Create mock memory manager and qdrant client
@@ -16,12 +18,7 @@ def test_run_rhizodb_washout_and_pruning():
 	# 1. Immune engram (should be skipped)
 	p_immune = MagicMock()
 	p_immune.id = "immune_engram"
-	p_immune.payload = {
-		"reinforcement_score": 0.8,
-		"stability": 10.0,
-		"immune": True,
-		"last_recalled_at": time.time()
-	}
+	p_immune.payload = {"reinforcement_score": 0.8, "stability": 10.0, "immune": True, "last_recalled_at": time.time()}
 
 	# 2. Strong engram (score 0.8, stability 200.0, recalled just now)
 	# Washout: gamma=0.85, S_max=365.0
@@ -30,23 +27,13 @@ def test_run_rhizodb_washout_and_pruning():
 	# Should be updated, not pruned
 	p_strong = MagicMock()
 	p_strong.id = "strong_engram"
-	p_strong.payload = {
-		"reinforcement_score": 0.8,
-		"stability": 200.0,
-		"immune": False,
-		"last_recalled_at": time.time()
-	}
+	p_strong.payload = {"reinforcement_score": 0.8, "stability": 200.0, "immune": False, "last_recalled_at": time.time()}
 
 	# 3. Weak engram that triggers pruning (score 0.09, stability 2.0)
 	# Should be pruned (new_score < 0.1 and stability < 5.0)
 	p_weak = MagicMock()
 	p_weak.id = "weak_engram"
-	p_weak.payload = {
-		"reinforcement_score": 0.09,
-		"stability": 2.0,
-		"immune": False,
-		"last_recalled_at": time.time()
-	}
+	p_weak.payload = {"reinforcement_score": 0.09, "stability": 2.0, "immune": False, "last_recalled_at": time.time()}
 
 	# Scroll side effect returns the points
 	mock_client.scroll.return_value = ([p_immune, p_strong, p_weak], None)

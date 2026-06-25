@@ -483,7 +483,9 @@ class MemoryManager:
 
 		return updated_points
 
-	def record_interaction_pair(self, prompt: str, response: str, role: str = "assistant", category: str = "mixed", model: Optional[str] = None) -> str:
+	def record_interaction_pair(
+		self, prompt: str, response: str, role: str = "assistant", category: str = "mixed", model: Optional[str] = None
+	) -> str:
 		"""
 		Lazarus Phase 1: Encoding (Fast Memory Buffer).
 		Saves raw interaction history directly into the `interaction_memories` collection.

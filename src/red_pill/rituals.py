@@ -287,14 +287,17 @@ async def consolidation_ritual(mm: MemoryManager) -> None:
 	try:
 		# Phase 0: Chronicle Plugins
 		from red_pill.metabolism.chronicle.base import ChronicleExtractorPlugin
+
 		plugin: ChronicleExtractorPlugin
 		for plugin_name in cfg.get_config().CHRONICLE_PLUGINS:
 			try:
 				if plugin_name == "antigravity":
 					from red_pill.metabolism.chronicle.antigravity_plugin import AntigravityExtractorPlugin
+
 					plugin = AntigravityExtractorPlugin()
 				elif plugin_name == "claude_code":
 					from red_pill.metabolism.chronicle.claude_code_plugin import ClaudeCodeExtractorPlugin
+
 					plugin = ClaudeCodeExtractorPlugin()
 				else:
 					logger.warning(f"Pulse: Unknown Chronicle plugin: {plugin_name}")

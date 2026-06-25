@@ -197,10 +197,7 @@ class RhizoDBEngine(MemoryEngine):
 		# 2. Stability Update with maximum ceiling S_max
 		new_stability = stability + self.eta * alpha * (self.S_max - stability)
 
-		return {
-			"reinforcement_score": round(new_score, 3),
-			"stability": round(new_stability, 3)
-		}
+		return {"reinforcement_score": round(new_score, 3), "stability": round(new_stability, 3)}
 
 
 def get_memory_engine(engine_type: str) -> MemoryEngine:
