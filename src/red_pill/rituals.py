@@ -10,6 +10,7 @@ import asyncio
 import logging
 import os
 import sqlite3
+import sys
 
 import red_pill.config as cfg
 from red_pill.core.inbox import MinionInbox
@@ -284,15 +285,29 @@ async def consolidation_ritual(mm: MemoryManager) -> None:
 	Phase 1: Processes raw interactions into long-term memories.
 	"""
 	try:
-		# Phase 0: LS Snatcher
-		try:
-			from red_pill.metabolism.ls_snatcher import snatch_all_trajectories
+		# Phase 0: Chronicle Plugins
+		from red_pill.metabolism.chronicle.base import ChronicleExtractorPlugin
 
-			logger.info("Pulse: Initiating LS Snatcher (Extracting LanguageServer trajectories)...")
-			snatched = await asyncio.to_thread(snatch_all_trajectories)
-			logger.info(f"Pulse: LS Snatcher complete. {snatched} trajectories staged.")
-		except Exception as e:
-			logger.warning(f"Pulse: LS Snatcher failed (non-fatal, continuing): {e}")
+		plugin: ChronicleExtractorPlugin
+		for plugin_name in cfg.get_config().CHRONICLE_PLUGINS:
+			try:
+				if plugin_name == "antigravity":
+					from red_pill.metabolism.chronicle.antigravity_plugin import AntigravityExtractorPlugin
+
+					plugin = AntigravityExtractorPlugin()
+				elif plugin_name == "claude_code":
+					from red_pill.metabolism.chronicle.claude_code_plugin import ClaudeCodeExtractorPlugin
+
+					plugin = ClaudeCodeExtractorPlugin()
+				else:
+					logger.warning(f"Pulse: Unknown Chronicle plugin: {plugin_name}")
+					continue
+
+				logger.info(f"Pulse: Running Chronicle Plugin '{plugin_name}'...")
+				snatched = await asyncio.to_thread(plugin.extract)
+				logger.info(f"Pulse: Plugin '{plugin_name}' staged {snatched} trajectories.")
+			except Exception as e:
+				logger.warning(f"Pulse: Chronicle Plugin '{plugin_name}' failed (non-fatal, continuing): {e}")
 
 		# Phase 1: Consolidation
 		from red_pill.metabolism.sleep import perform_sleep_cycle
@@ -300,8 +315,26 @@ async def consolidation_ritual(mm: MemoryManager) -> None:
 		logger.info("Pulse: Initiating Consolidation (Consolidating interactions)...")
 		await asyncio.to_thread(perform_sleep_cycle, mm, mode="lazy")
 		logger.info("Pulse: Consolidation complete. Memories fixed.")
+
+		# Phase 2: Workspace Memory Sync
+		await memory_sync_ritual(mm)
 	except Exception as e:
 		logger.error(f"Pulse: Consolidation ritual failed: {e}")
+
+
+async def memory_sync_ritual(mm: MemoryManager) -> None:
+	"""
+	Workspace Memory Sync Ritual.
+	Projects and consolidates the latest memories into workspace-local banks.
+	"""
+	try:
+		logger.info("Pulse: Initiating Workspace Memory Sync Ritual...")
+		from red_pill.metabolism.memory_sync import sync_all_workspaces
+
+		await asyncio.to_thread(sync_all_workspaces, mm)
+		logger.info("Pulse: Workspace Memory Sync complete.")
+	except Exception as e:
+		logger.error(f"Pulse: Workspace Memory Sync ritual failed: {e}")
 
 
 async def thread_ritual() -> None:
@@ -390,6 +423,50 @@ async def auto_heal_ritual(mm: MemoryManager) -> None:
 				else:
 					mm.inject_signal(name=event_id.replace("signal_", ""), intensity=6.0, signal_type="pain", source="Auto-Healer", muted=False)
 					healed_ids.append(report["id"])
+
+			# SIP Provisioning heal — local LLM offline or missing volatile artifacts
+			if event_id in ("signal_local_llm_offline",) or event_id.startswith("signal_sip_missing_"):
+				logger.info(f"Auto-Healer: Attempting SIP provisioning heal for '{event_id}'...")
+				try:
+					from red_pill.metabolism.sentinel_plugins.check_sip_provisioning import SipProvisioningCheck
+
+					plugin = SipProvisioningCheck()
+					config = cfg.get_config()
+					findings = await asyncio.to_thread(plugin._audit_provisioning, config)
+					if findings:
+						healed = await asyncio.to_thread(plugin.heal_specific, config, findings[0])
+						if healed:
+							logger.info("Auto-Healer: SIP infrastructure re-provisioned successfully.")
+							mm.evaporate_signals("local_llm_offline")
+						else:
+							logger.warning(f"Auto-Healer: SIP heal_specific returned False for '{findings[0].type}'.")
+					else:
+						logger.info("Auto-Healer: SIP provisioning chain is intact, evaporating stale signal.")
+						mm.evaporate_signals("local_llm_offline")
+				except Exception as sip_err:
+					logger.error(f"Auto-Healer: SIP provisioning heal failed: {sip_err}")
+				healed_ids.append(report["id"])
+				continue
+
+			# Knowledge-graph heal — a graphify update failed; retry the reconciliation sync.
+			if event_id == "signal_knowledge_graph_stale":
+				logger.info("Auto-Healer: Attempting knowledge-graph heal (graphify_sync retry)...")
+				script_path = os.path.join(cfg.APP_ROOT, "scripts", "graphify_sync.py")
+				if os.path.exists(script_path):
+					process = await asyncio.create_subprocess_exec(
+						sys.executable,
+						str(script_path),
+						stdout=asyncio.subprocess.PIPE,
+						stderr=asyncio.subprocess.PIPE,
+					)
+					await process.communicate()
+					if process.returncode == 0:
+						logger.info("Auto-Healer: graphify_sync retry OK. Evaporating signal.")
+						mm.evaporate_signals("knowledge_graph_stale")
+					else:
+						logger.warning(f"Auto-Healer: graphify_sync retry rc={process.returncode}. Escalating.")
+				healed_ids.append(report["id"])
+				continue
 
 		if healed_ids:
 			await asyncio.to_thread(inbox.mark_as_read, healed_ids)

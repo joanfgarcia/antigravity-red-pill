@@ -4,6 +4,11 @@ profiles:
   samantha:
     model_path: "experimental/Samantha/samantha-mistral-instruct-7b.i1-Q4_K_M.gguf"
     binary_type: "gguf"
+    # chat_format: template used by llama-cpp-python for chat completions.
+    # Must match the model's training format. Common values:
+    #   "chatml" (Samantha, OpenHermes), "mistral-instruct", "llama-2", "llama-3"
+    # If omitted, defaults to "chatml". Check GGUF metadata or model card.
+    chat_format: "chatml"
     temperature: 0.7
     max_tokens: 1024
     use_mmap: false

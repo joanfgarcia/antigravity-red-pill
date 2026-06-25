@@ -40,6 +40,7 @@ need to be added to the cycle, revisit decomposition into:
 
 See: https://github.com/joanfgarcia/antigravity-red-pill/pull/62
 """
+
 import json
 import logging
 import os
@@ -51,7 +52,7 @@ from typing import Any, Dict, List, Optional
 from qdrant_client.models import Filter
 
 import red_pill.config as cfg
-from red_pill.core.paths import get_daemon_dir, get_staging_dir, get_thread_state_path
+from red_pill.core.paths import get_daemon_persistent_dir, get_staging_dir, get_thread_state_path
 from red_pill.core.vram_probe import VramProbe
 from red_pill.events import SleepCompletedEvent, get_event_bus
 from red_pill.metabolism.evolution import IdentityEvaluator
@@ -311,13 +312,16 @@ def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[
 		logger.error(f"[SLEEP ENGINE] No inference provider available: {e}")
 		return fallback
 
-	max_retries = 3
-	backoff = 2
+	max_retries = 2
+	backoff = 1
 
 	for attempt in range(max_retries):
 		try:
 			content = provider.generate(
-				prompt=prompt_text, messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt_text}], temperature=0.1
+				prompt=prompt_text,
+				messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt_text}],
+				temperature=0.1,
+				response_format={"type": "json_object"},
 			)
 
 			match = re.search(r"\{[\s\S]*\}", content)
@@ -336,7 +340,7 @@ def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[
 		except Exception as e:
 			logger.warning(f"[SLEEP ENGINE] Distillation attempt {attempt + 1} failed: {e}")
 			if attempt < max_retries - 1:
-				time.sleep(backoff ** (attempt + 1))
+				time.sleep(backoff)
 
 	logger.error("[SLEEP ENGINE] All distillation retries failed. Falling back.")
 	return fallback
@@ -438,7 +442,7 @@ class EphemeralServer:
 		)
 		SovereignNotifier.notify_bunker(memory_manager, "ariadne_thread_running", intensity=1.0, source="SLEEP_ENGINE")
 
-		start_sh = str(get_daemon_dir() / "start.sh")
+		start_sh = str(get_daemon_persistent_dir() / "start.sh")
 		if not os.path.exists(start_sh):
 			logger.error("[EPHEMERAL SERVER] start.sh not found. Aborting.")
 			SovereignNotifier.notify_bunker(memory_manager, "local_llm_offline", intensity=7.0, signal_type="pain", source="SLEEP_ENGINE")
@@ -652,6 +656,92 @@ def erode_work_hubs(memory_manager) -> None:
 			logger.error(f"[SLEEP ENGINE] Failed to delete eroded hubs: {e}")
 
 
+def run_rhizodb_washout_and_pruning(memory_manager) -> None:
+	"""
+	Applies global periodic Washout and Structural Pruning to collections utilizing RhizoDB.
+	Washout formula: a_v = gamma * a_v + b(s_v)
+	Pruning rule: delete if a_v < 0.1 and s_v < 5.0 (days)
+	"""
+	client = memory_manager.client
+	now = time.time()
+	gamma = 0.85
+	S_max = 365.0
+
+	# Find collections utilizing rhizodb
+	rhizodb_collections = [col for col, eng in cfg.MEMORY_ENGINES.items() if eng == "rhizodb"]
+
+	for collection in rhizodb_collections:
+		if not client.collection_exists(collection):
+			continue
+
+		from qdrant_client import models as qm
+
+		from red_pill.affect import get_memory_engine
+
+		engine = get_memory_engine("rhizodb")
+
+		try:
+			# Scroll to get all points (limit=10000 to cover all social/story memories)
+			scroll_res = client.scroll(collection_name=collection, limit=10000, with_payload=True)
+			if isinstance(scroll_res, tuple) and len(scroll_res) == 2:
+				points = scroll_res[0]
+			else:
+				points = scroll_res if isinstance(scroll_res, list) else []
+		except Exception as e:
+			logger.error(f"[SLEEP ENGINE] Failed to fetch points for rhizodb processing in {collection}: {e}")
+			continue
+
+		if not points:
+			continue
+
+		update_operations = []
+		points_to_delete = []
+
+		for p in points:
+			payload = p.payload or {}
+			if payload.get("immune"):
+				continue
+
+			# 1. Run lazy decay first to get current activation/score
+			decay_updates = engine.calculate_lazy_decay(payload, current_time=now)
+
+			# If lazy decay wants to delete it
+			if decay_updates.get("_delete"):
+				points_to_delete.append(p.id)
+				continue
+
+			score = float(decay_updates.get("reinforcement_score", payload.get("reinforcement_score", 1.0)))
+			stability = float(payload.get("stability", 1.0))
+
+			# 2. Apply Washout: a_v = gamma * a_v + b(s_v)
+			# b(s_v) = (1 - gamma) * (stability / S_max)
+			b_sv = (1.0 - gamma) * (stability / S_max)
+			new_score = round(gamma * score + b_sv, 3)
+
+			# 3. Structural Pruning (Poda): delete if a_v < 0.1 and s_v < 5.0
+			if new_score < 0.1 and stability < 5.0:
+				points_to_delete.append(p.id)
+				logger.info(f"[SLEEP ENGINE] Pruning engram {p.id} in {collection}: activation={new_score}, stability={stability}")
+			else:
+				# Otherwise, update score and commit time
+				update_payload = {"reinforcement_score": new_score, "last_recalled_at": now}
+				update_operations.append(qm.SetPayloadOperation(set_payload=qm.SetPayload(payload=update_payload, points=[p.id])))
+
+		# Execute updates and deletions
+		if update_operations:
+			try:
+				client.batch_update_points(collection_name=collection, update_operations=update_operations)
+			except Exception as e:
+				logger.error(f"[SLEEP ENGINE] Failed to update washout payloads in {collection}: {e}")
+
+		if points_to_delete:
+			try:
+				client.delete(collection_name=collection, points_selector=qm.PointIdsList(points=points_to_delete))
+				logger.info(f"[SLEEP ENGINE] Deleted {len(points_to_delete)} pruned engrams from {collection}.")
+			except Exception as e:
+				logger.error(f"[SLEEP ENGINE] Failed to delete pruned engrams in {collection}: {e}")
+
+
 def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 	"""
 	Lazarus Phase 2, 3 & 4: Consolidation, Fixation, and Synaptic Dreaming.
@@ -687,8 +777,9 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 	# Query free VRAM right now — before attempting to load the LLM. If the
 	# GPU is already occupied (game, other model, IDE inference), abort this
 	# cycle gracefully rather than fighting for VRAM mid-distillation.
+	# Skip this check if the LLM is already online (resident model on GPU).
 	_vram_backend = VramProbe.get_backend()
-	if _vram_backend != "cpu":
+	if _vram_backend != "cpu" and not _check_llm_available():
 		_free_vram_mb = VramProbe.get_free_mb()
 		_min_free_mb = cfg.SLEEP_MIN_FREE_VRAM_MB
 		if _free_vram_mb < _min_free_mb:
@@ -776,6 +867,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 
 			# Target collection heuristics
 			raw_metadata = (point.payload or {}).get("metadata", {})
+			model_name = raw_metadata.get("model", "unknown") if isinstance(raw_metadata, dict) else "unknown"
 			llm_category = raw_metadata.get("category", "") if isinstance(raw_metadata, dict) else ""
 			if llm_category in ("work", "social"):
 				fallback_cat = llm_category
@@ -805,7 +897,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 					new_id = memory_manager.add_memory(
 						collection=target_col,
 						text=summary,
-						metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id},
+						metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id, "model": model_name},
 						color="blue" if target_col == "work_memories" else "purple",
 						emotion=distilled.get("emotion", "neutral"),
 						intensity=distilled.get("intensity", 0.5),
@@ -826,7 +918,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 					hub_id = memory_manager.add_memory(
 						collection=target_col,
 						text=hub_summary,
-						metadata={"lazarus_phase": "synthesis_hub", "node_type": "synthesis_hub", "source_buffer_id": raw_id},
+						metadata={"lazarus_phase": "synthesis_hub", "node_type": "synthesis_hub", "source_buffer_id": raw_id, "model": model_name},
 						color="cyan",
 						emotion=surviving_chunks[-1]["emotion"],
 						intensity=max([c["intensity"] for c in surviving_chunks]),
@@ -873,6 +965,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 					continue
 
 				raw_id = payload.get("id", filename.replace(".json", ""))
+				model_name = payload.get("model") or payload.get("summary", {}).get("model") or "unknown"
 				raw_text = ""
 				for step in payload.get("steps", []):
 					txt = step.get("message", {}).get("text", "")
@@ -904,7 +997,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 						new_id = memory_manager.add_memory(
 							collection="work_memories",
 							text=summary,
-							metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id},
+							metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id, "model": model_name},
 							color="blue",
 							emotion=distilled.get("emotion", "neutral"),
 							intensity=distilled.get("intensity", 0.5),
@@ -923,7 +1016,12 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 						hub_id = memory_manager.add_memory(
 							collection="work_memories",
 							text=hub_summary,
-							metadata={"lazarus_phase": "synthesis_hub", "node_type": "synthesis_hub", "source_buffer_id": raw_id},
+							metadata={
+								"lazarus_phase": "synthesis_hub",
+								"node_type": "synthesis_hub",
+								"source_buffer_id": raw_id,
+								"model": model_name,
+							},
 							color="cyan",
 							emotion=surviving_chunks[-1]["emotion"],
 							intensity=max([c["intensity"] for c in surviving_chunks]),
@@ -958,6 +1056,12 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 		erode_work_hubs(memory_manager)
 	except Exception as e:
 		logger.error(f"[SLEEP ENGINE] Failed to run Bayesian hub erosion: {e}")
+
+	# RhizoDB Washout and Structural Pruning
+	try:
+		run_rhizodb_washout_and_pruning(memory_manager)
+	except Exception as e:
+		logger.error(f"[SLEEP ENGINE] Failed to run RhizoDB washout and pruning: {e}")
 
 	try:
 		IdentityEvaluator.evaluate_set_point(memory_manager)

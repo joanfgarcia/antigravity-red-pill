@@ -154,6 +154,8 @@ class SipInferenceProvider(BaseInferenceProvider):
 			"messages": kwargs.get("messages", [{"role": "user", "content": prompt}]),
 			"temperature": kwargs.get("temperature", 0.3),
 		}
+		if "response_format" in kwargs:
+			payload["response_format"] = kwargs["response_format"]
 
 		conn = UnixHTTPConnection(self.socket_path)
 		headers = {"Content-Type": "application/json"}
@@ -194,7 +196,16 @@ class BitNetInferenceProvider(BaseInferenceProvider):
 		grammar_path = kwargs.get("grammar_path", self.grammar_path)
 		use_mmap = kwargs.get("use_mmap", True)
 		ngl = kwargs.get("ngl", 0)  # Hardware Offload
-		ctx_size = kwargs.get("ctx_size", 4096)
+
+		# Dynamically calculate minimal context size if not explicitly set to prevent VRAM wastage/OOM
+		if "ctx_size" not in kwargs:
+			prompt_tokens_est = len(prompt.split()) * 2
+			required_tokens = prompt_tokens_est + max_tokens + 16
+			ctx_size = 32
+			while ctx_size < required_tokens:
+				ctx_size *= 2
+		else:
+			ctx_size = kwargs["ctx_size"]
 
 		cmd = [
 			str(self.runner_path),
@@ -267,9 +278,10 @@ class LlamaCppInferenceProvider(BaseInferenceProvider):
 		self.use_oom_shield = use_oom_shield
 		self.memory_max = memory_max
 		self.ngl = ngl
+		self._llm: Optional[Any] = None
 
 	@classmethod
-	def create_be_water(cls, model_name: str) -> Optional["LlamaCppInferenceProvider"]:
+	def create_be_water(cls, model_name_or_path: str) -> Optional["LlamaCppInferenceProvider"]:
 		import os
 		import shutil
 
@@ -282,10 +294,44 @@ class LlamaCppInferenceProvider(BaseInferenceProvider):
 				return None
 			runner_path = runner_path_opt
 
-		# 2. Locate model
-		model_path = os.path.join(workspace, "models", "gguf", model_name)
-		if not os.path.exists(model_path):
+		# 2. Locate model and apply guards
+		model_path = None
+		if os.path.exists(model_name_or_path) and os.path.isfile(model_name_or_path):
+			model_path = os.path.abspath(model_name_or_path)
+		else:
+			# Preset search paths
+			search_paths = [
+				os.path.join(workspace, "models", "gguf", model_name_or_path),
+				os.path.join(workspace, "sharing", "models", "gguf", model_name_or_path),
+				os.path.join(workspace, "sharing", "3rdparty", "BitNet-1.58b", "models", model_name_or_path),
+				os.path.join(workspace, "experimental", "Samantha", model_name_or_path),
+			]
+			for p in search_paths:
+				if os.path.exists(p) and os.path.isfile(p):
+					model_path = os.path.abspath(p)
+					break
+
+		# Guard 1: Verify model existence
+		if not model_path:
+			logger.error(f"[LlamaCppInferenceProvider] Model not found: '{model_name_or_path}'")
 			return None
+
+		# Guard 2: Verify model file size (must be >= 10MB) to prevent corrupt loading
+		try:
+			file_size = os.path.getsize(model_path)
+			if file_size < 10 * 1024 * 1024:
+				logger.error(
+					f"[LlamaCppInferenceProvider] Guard failure: Model file is too small ({file_size / (1024 * 1024):.1f} MB), likely corrupt: {model_path}"
+				)
+				return None
+		except Exception as e:
+			logger.error(f"[LlamaCppInferenceProvider] Guard failure checking file size: {e}")
+			return None
+
+		# Guard 3: Verify extension
+		ext = os.path.splitext(model_path)[1].lower()
+		if ext not in (".gguf", ".bin"):
+			logger.warning(f"[LlamaCppInferenceProvider] Model extension is unusual ({ext}), proceeding with caution: {model_path}")
 
 		# 3. Detect VRAM & NGL
 		ngl = 0
@@ -303,16 +349,55 @@ class LlamaCppInferenceProvider(BaseInferenceProvider):
 		use_oom_shield = shutil.which("systemd-run") is not None
 		memory_max = "10G"  # Sensible default for 32GB systems, could be dynamic
 
+		logger.info(f"[LlamaCppInferenceProvider] Guard success. Loaded model from: {model_path}")
 		return cls(runner_path=runner_path, model_path=model_path, use_oom_shield=use_oom_shield, memory_max=memory_max, ngl=ngl)
 
 	def generate(self, prompt: str, **kwargs) -> str:
+		if kwargs.get("backtrack_mode") and kwargs["backtrack_mode"] != "none":
+			return self.generate_with_backtrack(prompt, **kwargs)
+
 		import os
 		import subprocess
 
+		import torch
+
 		max_tokens = kwargs.get("max_tokens", 256)
 		temp = kwargs.get("temperature", 0.1)
-		ctx_size = kwargs.get("ctx_size", 2048)
+
+		# Dynamically calculate minimal context size if not explicitly set to prevent VRAM wastage/OOM
+		if "ctx_size" not in kwargs:
+			# Estimate prompt length by words with safety factor of 2 (to cover BPE tokens)
+			prompt_tokens_est = len(prompt.split()) * 2
+			# Add max_tokens plus a small padding
+			required_tokens = prompt_tokens_est + max_tokens + 16
+			# Find the nearest power of 2 starting at 32
+			ctx_size = 32
+			while ctx_size < required_tokens:
+				ctx_size *= 2
+		else:
+			ctx_size = kwargs["ctx_size"]
+
 		chat_prompt = f"<|user|>\n{prompt}\n<|assistant|>\n"
+
+		# Hardware selection override
+		device = kwargs.get("device", "cuda" if torch.cuda.is_available() else "cpu").lower()
+		ngl = self.ngl
+		runner_path = self.runner_path
+		env = os.environ.copy()
+
+		if device in ("vulkan", "igpu"):
+			# Resolve Vulkan runner
+			workspace = os.getenv("WORKSPACE_ROOT", os.path.expanduser("~/Documents/IA"))
+			vulkan_runner = os.path.join(workspace, "sharing", "3rdparty", "BitNet-1.58b", "build_vulkan", "bin", "llama-cli")
+			if os.path.exists(vulkan_runner):
+				runner_path = vulkan_runner
+			ngl = kwargs.get("ngl", 99)  # Offload all layers to iGPU
+			# Cap context size to avoid OutOfDeviceMemory on iGPU
+			if "ctx_size" not in kwargs:
+				ctx_size = min(ctx_size, 2048)
+			# Set Vulkan AMD Mesa RADV driver automatically if available
+			if os.path.exists("/usr/share/vulkan/icd.d/radeon_icd.json"):
+				env["VK_ICD_FILENAMES"] = "/usr/share/vulkan/icd.d/radeon_icd.json"
 
 		cmd = []
 		if self.use_oom_shield:
@@ -320,7 +405,7 @@ class LlamaCppInferenceProvider(BaseInferenceProvider):
 
 		cmd.extend(
 			[
-				str(self.runner_path),
+				str(runner_path),
 				"-m",
 				str(self.model_path),
 				"-p",
@@ -330,14 +415,13 @@ class LlamaCppInferenceProvider(BaseInferenceProvider):
 				"-c",
 				str(ctx_size),
 				"-ngl",
-				str(self.ngl),
+				str(ngl),
 				"--temp",
 				str(temp),
 				"--simple-io",  # Prevent interactive hang
 			]
 		)
 
-		env = os.environ.copy()
 		# Clean LD_LIBRARY_PATH for Vulkan/Native clashes
 		if "LD_LIBRARY_PATH" in env:
 			paths = env["LD_LIBRARY_PATH"].split(":")
@@ -359,6 +443,130 @@ class LlamaCppInferenceProvider(BaseInferenceProvider):
 			return "Error: Local Inference timed out."
 		except Exception as e:
 			return f"Error: Local subprocess failed: {e}"
+
+	def generate_with_backtrack(self, prompt: str, **kwargs) -> str:
+		"""
+		Generates text using the python-native llama_cpp.Llama
+		with token-by-token backtracking and automatic KV-cache recycling.
+		"""
+		import numpy as np
+		from llama_cpp import Llama, llama_get_logits
+
+		max_tokens = kwargs.get("max_tokens", 256)
+		temp = kwargs.get("temperature", 0.7)
+		mode = kwargs.get("backtrack_mode", "confidence")
+		conf_thresh = kwargs.get("conf_thresh", 0.05)
+		lookahead_thresh = kwargs.get("lookahead_thresh", 0.02)
+		entropy_thresh = kwargs.get("entropy_thresh", 4.0)
+		max_backtracks = kwargs.get("max_backtracks", 15)
+
+		if not hasattr(self, "_llm") or self._llm is None:
+			self._llm = Llama(model_path=self.model_path, n_ctx=kwargs.get("ctx_size", 1024), n_gpu_layers=self.ngl, verbose=False)
+
+		llm = self._llm
+		prompt_tokens = llm.tokenize(prompt.encode("utf-8"))
+		current_tokens = list(prompt_tokens)
+		generated: List[int] = []
+
+		blacklist_by_depth: Dict[int, set[int]] = {}
+		depth = 0
+		backtrack_count = 0
+
+		llm.reset()
+		llm.eval(current_tokens)
+		vocab_size = llm.n_vocab()
+
+		while len(generated) < max_tokens:
+			logits_ptr = llama_get_logits(llm.ctx)
+			logits = np.copy(np.ctypeslib.as_array(logits_ptr, shape=(vocab_size,)))
+			curr_blacklist = blacklist_by_depth.get(depth, set())
+
+			if curr_blacklist:
+				for token_id in curr_blacklist:
+					logits[token_id] = -float("Inf")
+
+			if temp <= 0.0:
+				next_token = int(np.argmax(logits))
+				prob = 1.0
+				probs = np.zeros(vocab_size)
+				probs[next_token] = 1.0
+			else:
+				exp_logits = np.exp(logits - np.max(logits))
+				probs = exp_logits / np.sum(exp_logits)
+
+				top_k = kwargs.get("top_k", 40)
+				if top_k > 0:
+					top_k_indices = np.argpartition(probs, -top_k)[-top_k:]
+					min_top_prob = np.min(probs[top_k_indices])
+					probs[probs < min_top_prob] = 0.0
+					probs /= np.sum(probs)
+
+				top_p = kwargs.get("top_p", 0.9)
+				if top_p < 1.0:
+					sorted_indices = np.argsort(probs)[::-1]
+					sorted_probs = probs[sorted_indices]
+					cumulative_probs = np.cumsum(sorted_probs)
+					indices_to_remove = cumulative_probs > top_p
+					indices_to_remove[1:] = indices_to_remove[:-1].copy()
+					indices_to_remove[0] = False
+					probs[sorted_indices[indices_to_remove]] = 0.0
+					probs /= np.sum(probs)
+
+				try:
+					next_token = int(np.random.choice(len(probs), p=probs))
+					prob = probs[next_token]
+				except ValueError:
+					next_token = int(np.argmax(logits))
+					prob = probs[next_token]
+
+			entropy = -np.sum(probs * np.log(probs + 1e-9))
+			trigger_backtrack = False
+
+			if mode == "confidence" and prob < conf_thresh:
+				trigger_backtrack = True
+			elif mode == "entropy" and entropy > entropy_thresh:
+				trigger_backtrack = True
+			elif mode == "lookahead" and len(generated) < max_tokens - 1:
+				llm.eval([next_token])
+				next_logits_ptr = llama_get_logits(llm.ctx)
+				next_logits = np.copy(np.ctypeslib.as_array(next_logits_ptr, shape=(vocab_size,)))
+				exp_logits = np.exp(next_logits - np.max(next_logits))
+				next_probs = exp_logits / np.sum(exp_logits)
+				max_next_prob = np.max(next_probs)
+
+				if max_next_prob < lookahead_thresh:
+					trigger_backtrack = True
+					llm.n_tokens -= 1
+
+			if trigger_backtrack and backtrack_count < max_backtracks:
+				backtrack_count += 1
+				if depth not in blacklist_by_depth:
+					blacklist_by_depth[depth] = set()
+				blacklist_by_depth[depth].add(next_token)
+
+				if len(blacklist_by_depth[depth]) >= 4 and depth > 0:
+					blacklist_by_depth[depth] = set()
+					depth -= 1
+					if generated:
+						generated.pop()
+						current_tokens.pop()
+						llm.n_tokens -= 1
+
+				llm.eval(current_tokens)
+				continue
+
+			generated.append(next_token)
+			current_tokens.append(next_token)
+			depth += 1
+			blacklist_by_depth[depth] = set()
+
+			if mode != "lookahead":
+				llm.eval([next_token])
+
+			if next_token == llm.token_eos():
+				break
+
+		return llm.detokenize(generated).decode("utf-8", errors="ignore").strip()
 
 	def stream(self, prompt: str, **kwargs) -> Iterator[str]:
 		yield self.generate(prompt, **kwargs)

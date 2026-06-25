@@ -4,6 +4,146 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-016] Generalized Agent-Backend Bridges + First-Class Agentic Minion
+**Date**: 2026-06-18  
+**Context**: v7.3.0 — Swarm / agent execution  
+**Status**: ACCEPTED & IMPLEMENTED  
+
+### 1. The Problem
+The agent-execution abstraction (`IDEBridge`) lived under `plugins/antigravity_ide`, but it was no longer Antigravity-specific. And the only way to run an *agent* (agy) was `swarm/executor.py` — a parallel path NOT registered in `MinionFactory`, so "run an agent" was not a first-class swarm citizen. There was no Claude or local-model agent backend either.
+
+### 2. The Decision
+- Move the generic abstraction to **`red_pill/swarm/bridges/`** (`IDEBridge` → `AgentBridge`; `BackendType` now `agy|grpc|claude|local`; `ConversationResult`/`BridgeCapabilities`; `create_bridge(backend=…)`).
+- Add **`ClaudeBridge`** (`claude -p --dangerously-skip-permissions --output-format json` — session_id + result straight from JSON; no dir-diff/prefix-strip) and **`LocalBridge`** (local model via the SIP inference provider; a generation backend — `mcp_tools=False`, no resume — honest capabilities).
+- Promote agentic execution to a first-class **`AgentMinion`** (`swarm/agents/agent.py`), registered as `"agent"` in `MinionFactory`; backend selectable per task (`kwargs['backend']`, default = `IDE_BACKEND`).
+- Antigravity-specific backends (`AgyBridge`, `GrpcBridge`) stay in `plugins/antigravity_ide` and import the ABC from the new home.
+
+### 3. The Implementation
+`swarm/bridges/{base,factory,claude,local,__init__}.py`, `swarm/agents/agent.py`, register in `swarm/factory.py`. `config.IDE_BACKEND` accepts `claude|local`. Importers updated: `cli.py`, `swarm/executor.py`, `antigravity_ide/{agy_bridge,grpc_bridge,worker,__init__}.py`.
+
+### 4. Rationale
+Separation of concerns (generic abstraction vs IDE-specific implementations) + open/closed (a new backend is a new `AgentBridge` subclass; consumers unchanged) + unifying agent execution under one minion model. **Verified**: full suite collects (751 tests, no import breakage), worker/swarm/mcp suites pass (32), and both new backends run end-to-end through `AgentMinion` (claude → "OK" + real session_id; local → provider response). `executor.py` still works; full executor→AgentMinion convergence is a follow-up.
+
+---
+
+## [AD-017] Workspace Memory Lifecycle → red-pill *(PROPOSED — coordinate with the-luggage)*
+**Date**: 2026-06-18  
+**Context**: v7.3.0 — Memory / multi-IDE  
+**Status**: PROPOSED (design agreed with operator; pending the-luggage/David)  
+
+### 1. The Problem
+Azrael's `azrael-memory` — a **shared, cross-agent, per-workspace Markdown memory bank** (served by the standard `server-filesystem` MCP over `.claude/memory`), plus its maintenance (`sync_memory_bank` = Bünker→`.md` projection; daily *Memory Optimizer*; `redestile-arch`) and its usage directives — lives entirely in `the-luggage`. The Bünker (Qdrant) stores **engrams (vectors), not documents**; session-snapshots are per-project git artifacts. This Markdown bank covers a **distinct, multi-IDE need** neither of those serves, and it is Azrael-coupled **only by hardcoded paths/names** — the mechanisms are generic.
+
+### 2. The Decision (proposed)
+Generalize the **whole lifecycle** into red-pill, registry-driven:
+- Registry toggle `memory: true | "<path>"` per workspace; neutral folder **`.red-pill/memory`** (configurable; migration from `.claude/memory` provided).
+- **ONE** `server-filesystem` MCP, **multi-root** (one absolute dir per `memory:true` workspace) — token-efficient (cf. API Triunvirato discipline) and CWD-independent; never N redundant MCPs.
+- Processes (`sync_memory_bank`, optimizer, arch-distill) as generic, registry-parameterized jobs/minions.
+- Hoist the **generic usage directives** ("consult the code graph / memory before acting", closure protocol) to red-pill's **anchors** (universal across workspaces, incl. legacy). Azrael-specific rules (stack, visual system) stay in `the-luggage`.
+
+### 3. Open Questions (for David)
+Memory semantics (agent-comms bus vs shared notes); ownership boundary of `sync_memory_bank` (Bünker→`.md`, arguably red-pill's since it owns the Bünker); folder migration (`.claude/memory` referenced in ~9 the-luggage files); confirm a single multi-root MCP over per-workspace.
+
+### 4. Rationale
+Separation of responsibilities by layer (extraction / selection / serving / maintenance), generalization (every workspace — including the legacy monolith — inherits memory, not just Azrael), and token economy (one MCP, not N). It is also the natural **cross-agent coordination substrate** that was previously missing (agents could not exchange tasks via red-pill because the Bünker is engrams, not a shared bank).
+
+---
+
+## [AD-018] Daemon-Hosted MCPs over the Network *(PROPOSED)*
+**Date**: 2026-06-18  
+**Context**: v7.3.0 — MCP serving / coordination  
+**Status**: PROPOSED (pending client-support + security review)  
+
+### 1. The Problem
+MCPs are launched **per-IDE as stdio subprocesses**: N IDEs × M servers = duplicated processes and no shared, central state — so cross-agent coordination has no common substrate, and per-client process sprawl grows.
+
+### 2. The Decision (proposed)
+Host red-pill's MCPs in the **SovereignDaemon** as a `DaemonPlugin`, **dual-bind UDS + TCP** (the `run_dual_bind`/hypervisor precedent), with a **stdio↔network proxy** for third-party stdio servers (`server-filesystem`/memory, graphify). `inject_mcp` emits **URL** configs where the client supports them (Claude Code ✓), with a local stdio shim where it does not.
+
+### 3. Transparency consequence
+Because memory = one multi-root MCP and graphify = one merged MCP, **toggling a workspace changes roots/graph inside the server, never the MCP set** → the client's tool list is unchanged → **no restart** for memory/graph data. The exception is **`access`/`additionalDirectories`** (an IDE settings-file layer, read at session start, outside MCP) → that still needs a client restart. The daemon cannot change that.
+
+### 4. Open Questions
+Network-MCP support in Antigravity / Claude Desktop (Claude Code is fine); **security** — the RedPill-Kernel MCP runs subprocess/heal effectors, so it must NOT be exposed on an unauthenticated TCP port (prefer UDS file-perms, or localhost + token).
+
+---
+
+## [AD-013] Peer Workspace Registry & `.agent` Standards Discovery
+**Date**: 2026-06-18  
+**Context**: v7.3.0 — Multi-workspace foundation  
+**Status**: ACCEPTED & IMPLEMENTED  
+
+### 1. The Problem
+Configuration assumed a single project workspace (`WORKSPACE_ROOT`) plus a single global atlas (`USER_ATLAS_DIR`). In practice the agent operates across N independent project workspaces that are **peers** (e.g. a legacy monolith and a new-architecture monorepo) with no parent/child relationship, each carrying its own rules and standards. A flat configuration could neither represent them nor locate per-project standards.
+
+### 2. The Decision
+Separate three concerns previously conflated:
+- **red-pill = the agent**: identity, Bünker memory, and one GLOBAL `Agent_Core` desk (transversal, shared across all workspaces).
+- **Project workspaces = peers**, enumerated in a registry (`~/.config/red-pill/workspaces.yaml`), orthogonal to red-pill's own asset root (`WORKSPACE_ROOT`).
+- **Per-project standards = discovered at runtime via the `.agent` convention** (a directory or symlink at/above a workspace root), never hardcoded.
+
+`USER_ATLAS_DIR` is removed; `WORKSPACE_ROOT` is retained strictly as red-pill's own ecosystem/asset root.
+
+### 3. The Implementation
+- `core/workspaces.py`: registry loader, `find_closest_agent` (walk-up to the nearest `.agent`, capped at `$HOME`, degrades without raising), back-compat when no registry exists.
+- `examples/workspaces.yaml` template, seeded into XDG config on install/update if absent (copy-if-absent; never overwrites operator state).
+- Config injectors (`_config_common`, `inject_anchor`, `inject_settings`) read `agent_core` from the registry; `USER_ATLAS_DIR` removed from config and seeds.
+
+### 4. Rationale
+A registry plus **convention-over-configuration** (`.agent` discovery) decouples the agent from any single project layout and applies **separation of concerns**: the agent owns identity, the registry owns topology, each project owns its standards. Adding a workspace requires no code change.
+
+---
+
+## [AD-014] Operator-Managed Per-Workspace Access (Switch + Per-Surface Adapters)
+**Date**: 2026-06-18  
+**Context**: v7.3.0 — Workspace access control  
+**Status**: ACCEPTED & IMPLEMENTED  
+
+### 1. The Problem
+Granting the agent filesystem access to project workspaces was implicit and surface-specific. As IDE/CLI surfaces grow (Claude Code, Antigravity, Gemini, …), encoding "which workspaces" × "which surface" risks combinatorial configuration, and broad implicit grants conflict with least privilege.
+
+### 2. The Decision
+Model access as a **single per-workspace switch** (`access: true|false` in the registry — the operator's intent) and delegate translation to **per-surface adapters**. The registry stays IDE-agnostic; each surface owns how to express the grant in its own format (today: Claude Code → `permissions.additionalDirectories`). Grants pass through an explicit consent step at install time.
+
+### 3. The Implementation
+- `workspaces.py`: `access` field + CRUD (`add_or_enable`, `set_access`, `remove_workspace`).
+- `scripts/manage_workspaces.py`: one interactive routine (`enable`/`disable`/`list`) reused by install, update and CLI; surfaces the access list and the autonomous-access caveat.
+- `inject_settings.py`: consumes the registry; `--print` (dry-run for the consent gate); surgical `--remove` (drops only the targeted directories, never transversal grants or other enabled workspaces).
+
+### 4. Rationale
+Applies the **Adapter pattern** over a single source of truth: the operator sees one on/off per workspace; per-surface translation is isolated and additive, so a new IDE is a drop-in adapter with no change to the switch or the registry. The consent gate enforces **least privilege** — nothing project-level is granted without explicit operator action.
+
+---
+
+## [AD-015] Knowledge-Graph Orchestration via Minions (graphify)
+**Date**: 2026-06-18  
+**Context**: v7.3.0 — Code knowledge-graph lifecycle  
+**Status**: ACCEPTED & IMPLEMENTED (serve model — per-project vs merged — still open)  
+
+### 1. The Problem
+The per-project code knowledge graph (graphify) is sound, but its lifecycle — scheduling refreshes, detecting which projects changed, surfacing failures — was driven externally and manually. This couples graph maintenance to a specific external host and provides neither an audit trail nor self-healing when a refresh fails.
+
+### 2. The Decision
+Separate three responsibilities along clean boundaries:
+- **Extraction** is owned by graphify (`update`, with `check-update` as the native, cron-safe change gate). **Per-project graph granularity is retained.**
+- **Project selection** is owned by the workspace, in a workspace-local manifest (a hidden file at the workspace root listing projects with an `enabled` flag) — keeping selection where the domain knowledge lives.
+- **Orchestration, scheduling and health** are owned by red-pill: a scheduled minion reconciles discovered git repositories against the manifest, runs `check-update`/`update` under the cgroup memory guard, reports failures to the Minion Inbox, and exposes a `knowledge_graph` tissue for the Sentinel auto-heal loop to retry.
+
+### 3. The Implementation
+- `graphifyy` ensured as an external tool (`uv tool install`) in install/update — not a pyproject dependency, since it is a standalone CLI, not an imported library.
+- `scripts/graphify_sync.py`: reconciliation minion iterating registry workspaces with `graphify: true`; git-HEAD change gate with per-project state in the XDG state dir; emits a `knowledge_graph_stale` pain signal + audit log on failure.
+- Project selection in a workspace-local `.graphify-projects.yaml` (operator-owned `enabled` flags). Auto-discovery (`find` for git repositories) acts as a **detector only**: new repos are reported for operator classification, never graphed unattended.
+- `heal_tissue("knowledge_graph")` + an `auto_heal_ritual` clause: the Sentinel retries the sync on the stale signal and evaporates it on success.
+- `scripts/schedule_pulse.py --with-graphify`: an **opt-in** `systemd --user` timer (the recurring refresh is never enabled implicitly).
+- Change detection is git-HEAD based: `graphify check-update` only flags pending *semantic* (clustering) re-extraction, not code changes, so it is not the gate.
+- OPEN: the **serve** model (one MCP per per-project graph vs a per-workspace merged graph) — deferred as the higher-stakes, agent-facing decision.
+- TUNABLE (future option): the graphify timer cadence currently follows the pulse interval (hourly by default, matching the legacy "Code Graph Refresh" coroutine it replaces). If a different cadence is ever wanted, add a dedicated `--graphify-interval-hours` to `schedule_pulse.py` to decouple it from the pulse — not done now (hourly is the established behaviour and, with the git-HEAD gate, cheap).
+
+### 4. Rationale
+Applies **separation of responsibilities** by layer (extraction / selection / orchestration) and the **reconciliation** pattern (desired state in the manifest vs observed state on disk). Reusing graphify's native `check-update` gate avoids reimplementing change detection. Folding the lifecycle into red-pill's existing **minion → inbox → sentinel** machinery brings scheduling, auditability and self-healing under one consistent model instead of an external, manual one.
+
+---
+
 ## [AD-003] The Sovereign Native Pulse (Deprecating the Daemon for Timers)
 **Date**: 2026-03-19  
 **Context**: Phase O.7 (v6.1 Hotfix)  

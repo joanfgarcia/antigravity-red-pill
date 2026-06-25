@@ -1,46 +1,81 @@
 #!/bin/bash
 # Requerimientos: uv, python3.11+
+#
+# Architecture:
+#   PERSISTENT_DIR ($XDG_DATA_HOME/red-pill/daemon) — survives reboots
+#     ├── .venv/           (llama-cpp-python compiled env)
+#     ├── run_dual_bind.py (dual-bind TCP+UDS server)
+#     ├── start.sh         (daemon launcher)
+#     ├── output.log
+#     └── error.log
+#
+#   RUNTIME_DIR ($XDG_RUNTIME_DIR/red-pill) — volatile, per-boot
+#     └── red_pill.sock    (UDS socket, created at runtime by run_dual_bind.py)
+#
 set -e
 
 echo "=== Configurando el Daemon del Modelo en Segundo Plano ==="
 
 APP_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# Resolve XDG compliant daemon directory
+
+# Persistent dir: survives reboot (venv, scripts, logs)
+XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+PERSISTENT_DIR="$XDG_DATA_HOME/red-pill/daemon"
+
+# Runtime dir: volatile, for socket only (correct per XDG spec)
 if [ -n "${XDG_RUNTIME_DIR:-}" ]; then
-	DAEMON_DIR="$XDG_RUNTIME_DIR/red-pill"
+	RUNTIME_DIR="$XDG_RUNTIME_DIR/red-pill"
 else
 	XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
-	DAEMON_DIR="$XDG_CACHE_HOME/red-pill/daemons"
+	RUNTIME_DIR="$XDG_CACHE_HOME/red-pill/daemons"
 fi
-VENV_DIR="$DAEMON_DIR/.venv"
-START_SCRIPT="$DAEMON_DIR/start.sh"
+
+VENV_DIR="$PERSISTENT_DIR/.venv"
+START_SCRIPT="$PERSISTENT_DIR/start.sh"
 
 OS_NAME="$(uname -s)"
 
 echo "[1/4] Detectando OS y creando el entorno aislado..."
-mkdir -p "$DAEMON_DIR"
-uv venv "$VENV_DIR"
-source "$VENV_DIR/bin/activate"
+mkdir -p "$PERSISTENT_DIR"
+mkdir -p "$RUNTIME_DIR"
 
-if [ "$OS_NAME" = "Darwin" ]; then
-	echo "  > macOS (Darwin) detectado. Instalando mlx-lm y dependencias..."
-	uv pip install mlx-lm pyyaml psutil platformdirs
+# Reuse existing venv if llama-cpp-python is already compiled
+if [ -d "$VENV_DIR" ] && [ -f "$VENV_DIR/bin/python3" ]; then
+	echo "  > Venv existente detectado en $VENV_DIR. Verificando..."
+	if "$VENV_DIR/bin/python3" -c "import llama_cpp" 2>/dev/null; then
+		echo "  > llama-cpp-python ya compilado. Saltando instalación."
+		SKIP_INSTALL=1
+	else
+		echo "  > Venv incompleto. Re-instalando..."
+		SKIP_INSTALL=0
+	fi
 else
-	echo "  > Linux detectado. Instalando llama-cpp-python[server] y dependencias..."
-	uv pip install "llama-cpp-python[server]" pyyaml psutil platformdirs
+	uv venv "$VENV_DIR"
+	SKIP_INSTALL=0
+fi
+
+if [ "${SKIP_INSTALL:-0}" = "0" ]; then
+	source "$VENV_DIR/bin/activate"
+	if [ "$OS_NAME" = "Darwin" ]; then
+		echo "  > macOS (Darwin) detectado. Instalando mlx-lm y dependencias..."
+		uv pip install mlx-lm pyyaml psutil platformdirs
+	else
+		echo "  > Linux detectado. Instalando llama-cpp-python[server] y dependencias..."
+		uv pip install "llama-cpp-python[server]" pyyaml psutil platformdirs
+	fi
 fi
 
 echo "[2/4] Creando script de arranque..."
 if [ "$OS_NAME" = "Darwin" ]; then
 cat << 'START_EOF' > "$START_SCRIPT"
 #!/bin/bash
-export PATH="_DAEMON_DIR_/.venv/bin:$PATH"
+export PATH="_PERSISTENT_DIR_/.venv/bin:$PATH"
 export PYTHONPATH="_APP_ROOT_/src:$PYTHONPATH"
-source _DAEMON_DIR_/.venv/bin/activate
+source _PERSISTENT_DIR_/.venv/bin/activate
 exec mlx_lm.server --model lmstudio-community/Qwen3-Coder-30B-A3B-Instruct-MLX-8bit --port 8760
 START_EOF
 else
-cat << 'DUAL_BIND_EOF' > "$DAEMON_DIR/run_dual_bind.py"
+cat << 'DUAL_BIND_EOF' > "$PERSISTENT_DIR/run_dual_bind.py"
 import os
 import socket
 import uvicorn
@@ -69,10 +104,13 @@ def main():
 	# Resolve hardware affinity dynamically
 	hardware = ModelRegistry.get_resolved_hardware_affinity(profile_name)
 
+	# Chat format from profile (e.g. "chatml", "mistral-instruct", "llama-2")
+	chat_format = profile.get("chat_format", "chatml")
+
 	settings = Settings(
 		hf_model_repo_id=hf_repo_id_to_use,
 		model=model_param,
-		chat_format="chatml",
+		chat_format=chat_format,
 		n_ctx=hardware.get("n_ctx", profile.get("max_tokens", 4096)),
 		n_gpu_layers=hardware.get("n_gpu_layers", -1)
 	)
@@ -83,8 +121,9 @@ def main():
 	tcp_sock.bind(("127.0.0.1", 8760))
 	tcp_sock.listen()
 	
-	daemon_dir = str(get_daemon_dir())
-	uds_path = os.path.join(daemon_dir, "red_pill.sock")
+	# Socket UDS en directorio de runtime (volátil, correcto por XDG spec)
+	runtime_dir = str(get_daemon_dir())
+	uds_path = os.path.join(runtime_dir, "red_pill.sock")
 	if os.path.exists(uds_path):
 		os.remove(uds_path)
 	uds_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -106,20 +145,20 @@ DUAL_BIND_EOF
 
 cat << 'START_EOF' > "$START_SCRIPT"
 #!/bin/bash
-export PATH="_DAEMON_DIR_/.venv/bin:$PATH"
+export PATH="_PERSISTENT_DIR_/.venv/bin:$PATH"
 export PYTHONPATH="_APP_ROOT_/src:$PYTHONPATH"
-source _DAEMON_DIR_/.venv/bin/activate
+source _PERSISTENT_DIR_/.venv/bin/activate
 # Utilizando Llama-cpp-python server con Dual-Bind (UDS Local + TCP Público).
-exec python3 "_DAEMON_DIR_/run_dual_bind.py"
+exec python3 "_PERSISTENT_DIR_/run_dual_bind.py"
 START_EOF
 fi
 
 if [ "$OS_NAME" = "Darwin" ]; then
 	sed -i '' "s|_APP_ROOT_|$APP_ROOT|g" "$START_SCRIPT"
-	sed -i '' "s|_DAEMON_DIR_|$DAEMON_DIR|g" "$START_SCRIPT"
+	sed -i '' "s|_PERSISTENT_DIR_|$PERSISTENT_DIR|g" "$START_SCRIPT"
 else
 	sed -i "s|_APP_ROOT_|$APP_ROOT|g" "$START_SCRIPT"
-	sed -i "s|_DAEMON_DIR_|$DAEMON_DIR|g" "$START_SCRIPT"
+	sed -i "s|_PERSISTENT_DIR_|$PERSISTENT_DIR|g" "$START_SCRIPT"
 fi
 
 chmod +x "$START_SCRIPT"
@@ -137,7 +176,7 @@ if [ "$OS_NAME" = "Darwin" ]; then
 	<key>ProgramArguments</key>
 	<array>
 		<string>/bin/bash</string>
-		<string>_DAEMON_DIR_/start.sh</string>
+		<string>_PERSISTENT_DIR_/start.sh</string>
 	</array>
 	<key>RunAtLoad</key>
 	<true/>
@@ -148,13 +187,13 @@ if [ "$OS_NAME" = "Darwin" ]; then
 	<key>LowPriorityIO</key>
 	<true/>
 	<key>StandardErrorPath</key>
-	<string>_DAEMON_DIR_/error.log</string>
+	<string>_PERSISTENT_DIR_/error.log</string>
 	<key>StandardOutPath</key>
-	<string>_DAEMON_DIR_/output.log</string>
+	<string>_PERSISTENT_DIR_/output.log</string>
 </dict>
 </plist>
 PLIST_EOF
-	sed -i '' "s|_DAEMON_DIR_|$DAEMON_DIR|g" "$PLIST_PATH"
+	sed -i '' "s|_PERSISTENT_DIR_|$PERSISTENT_DIR|g" "$PLIST_PATH"
 	echo "  > Creado plist en $PLIST_PATH"
 else
 	mkdir -p "$HOME/.config/systemd/user"
@@ -166,17 +205,17 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/bin/bash _DAEMON_DIR_/start.sh
+ExecStart=/bin/bash _PERSISTENT_DIR_/start.sh
 Restart=always
 Nice=19
 IOSchedulingClass=idle
-StandardOutput=append:_DAEMON_DIR_/output.log
-StandardError=append:_DAEMON_DIR_/error.log
+StandardOutput=append:_PERSISTENT_DIR_/output.log
+StandardError=append:_PERSISTENT_DIR_/error.log
 
 [Install]
 WantedBy=default.target
 SERVICE_EOF
-	sed -i "s|_DAEMON_DIR_|$DAEMON_DIR|g" "$SERVICE_PATH"
+	sed -i "s|_PERSISTENT_DIR_|$PERSISTENT_DIR|g" "$SERVICE_PATH"
 	echo "  > Creado systemd service en $SERVICE_PATH"
 fi
 
@@ -191,5 +230,7 @@ else
 fi
 
 echo "=== Daemon Inyectado === "
+echo "Artefactos persistentes en: $PERSISTENT_DIR"
+echo "Socket de runtime en: $RUNTIME_DIR/red_pill.sock"
 echo "El modelo local de fondo se inicializará simulando una API de OpenAI en el puerto 8760."
-echo "Puedes comprobar el estado con: tail -f $DAEMON_DIR/error.log"
+echo "Puedes comprobar el estado con: systemctl --user status redpill-llm.service"

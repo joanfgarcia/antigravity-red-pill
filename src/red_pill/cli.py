@@ -232,7 +232,7 @@ def handle_ide(args: argparse.Namespace) -> None:
 		else:
 			print(f"Current IDE backend: {conf.IDE_BACKEND.upper()}")
 	elif args.ide_cmd == "status":
-		from red_pill.plugins.antigravity_ide.factory import create_bridge, preflight_check
+		from red_pill.swarm.bridges import create_bridge, preflight_check
 
 		pf = preflight_check()
 		bridge = create_bridge()
@@ -252,7 +252,7 @@ def handle_ide(args: argparse.Namespace) -> None:
 			for e in pf["errors"]:
 				print(f"❌ {e}")
 	elif args.ide_cmd == "test":
-		from red_pill.plugins.antigravity_ide.factory import create_bridge
+		from red_pill.swarm.bridges import create_bridge
 
 		bridge = create_bridge()
 		backend_name = bridge.get_capabilities().backend.value.upper()
@@ -312,6 +312,42 @@ def handle_p2p(args: argparse.Namespace) -> None:
 
 	else:
 		print("Usage: red-pill p2p [pair|advertise|sync|process]")
+
+
+def handle_memory(args) -> None:
+	"""Workspace memory CLI handler."""
+	from red_pill.memory import MemoryManager
+	from red_pill.metabolism.memory_sync import (
+		compact_all_workspaces,
+		disable_workspace_memory,
+		enable_workspace_memory,
+		sync_all_workspaces,
+	)
+
+	if args.mem_cmd == "sync":
+		print("\n🔄 --- [WORKSPACE MEMORY: SYNCHRONIZING] ---")
+		sync_all_workspaces(MemoryManager())
+		print("[OK] All workspace memories synchronized.")
+	elif args.mem_cmd == "optimize":
+		print("\n⚡ --- [WORKSPACE MEMORY: OPTIMIZING (COMPACTION)] ---")
+		compact_all_workspaces(MemoryManager())
+		print("[OK] Compaction cycle complete.")
+	elif args.mem_cmd == "enable":
+		print(f"\n📂 --- [WORKSPACE MEMORY: ENABLING {args.workspace}] ---")
+		success = enable_workspace_memory(args.workspace, custom_path=args.path)
+		if success:
+			print(f"[OK] Memory serving enabled for {args.workspace}.")
+		else:
+			print(f"[FAIL] Could not enable memory for {args.workspace}.")
+	elif args.mem_cmd == "disable":
+		print(f"\n📂 --- [WORKSPACE MEMORY: DISABLING {args.workspace}] ---")
+		success = disable_workspace_memory(args.workspace)
+		if success:
+			print(f"[OK] Memory serving disabled for {args.workspace}.")
+		else:
+			print(f"[FAIL] Could not disable memory for {args.workspace}.")
+	else:
+		print("Usage: red-pill memory [sync|optimize|enable|disable]")
 
 
 def handle_daemon() -> None:
@@ -550,6 +586,9 @@ def main() -> None:
 
 	subparsers.add_parser("benchmark", help="Run Sovereignty Benchmark (Hardware Concurrency)")
 
+	doctor_parser = subparsers.add_parser("doctor", help="Verificación síncrona config<->runtime (post-install/update)")
+	doctor_parser.add_argument("--quiet", action="store_true", help="Solo el veredicto (oculta info no-bloqueante)")
+
 	id_parser = subparsers.add_parser("identity", help="Identity & Persona Management")
 	id_sub = id_parser.add_subparsers(dest="id_cmd")
 
@@ -588,7 +627,7 @@ def main() -> None:
 	ide_parser = subparsers.add_parser("ide", help="Antigravity IDE Bridge Management")
 	ide_sub = ide_parser.add_subparsers(dest="ide_cmd")
 	backend_parser = ide_sub.add_parser("backend", help="Set or show IDE backend")
-	backend_parser.add_argument("value", nargs="?", choices=["agy", "grpc", "auto"], help="Backend to use")
+	backend_parser.add_argument("value", nargs="?", choices=["agy", "grpc", "claude", "local", "auto"], help="Backend to use")
 	ide_sub.add_parser("status", help="Show IDE bridge capabilities and health")
 	ide_sub.add_parser("test", help="Run connectivity test against the IDE")
 
@@ -624,6 +663,25 @@ def main() -> None:
 	secrets_delete.add_argument("key", help="Secret key name")
 
 	secrets_sub.add_parser("list", help="List all local secret keys")
+
+	# Workspace Memory Management (B.1)
+	memory_parser = subparsers.add_parser("memory", help="Manage workspace-local memory filing cabinet")
+	memory_sub = memory_parser.add_subparsers(dest="mem_cmd")
+
+	memory_sub.add_parser("sync", help="Synchronize engrams into all enabled workspace memory directories")
+	memory_sub.add_parser("optimize", help="Run LLM-compaction/optimization across all enabled workspace memories")
+
+	memory_enable = memory_sub.add_parser("enable", help="Enable memory serving for a workspace")
+	memory_enable.add_argument("workspace", help="Workspace name or root directory path")
+	memory_enable.add_argument("--path", help="Optional custom memory directory path (relative or absolute)")
+
+	memory_disable = memory_sub.add_parser("disable", help="Disable memory serving for a workspace")
+	memory_disable.add_argument("workspace", help="Workspace name or root directory path")
+
+	# Central configuration TUI (B.2)
+	config_parser = subparsers.add_parser("config", help="Manage central configuration settings")
+	config_sub = config_parser.add_subparsers(dest="config_cmd")
+	config_sub.add_parser("tui", help="Interactive TUI configuration manager and dashboard")
 
 	subparsers.add_parser("telemetry", help="Run a single-pass hardware/Bünker telemetry check (Oneshot)")
 	daemon_parser = subparsers.add_parser("daemon", help="Start the Sovereign Daemon (plugin-based control plane)")
@@ -690,14 +748,18 @@ def main() -> None:
 	get_event_bus().emit(
 		CliCommandDispatchedEvent(
 			command=args.command,
-			subcommand=getattr(args, "swarm_cmd", None) or getattr(args, "soul_cmd", None) or getattr(args, "id_cmd", None),
+			subcommand=getattr(args, "swarm_cmd", None)
+			or getattr(args, "soul_cmd", None)
+			or getattr(args, "id_cmd", None)
+			or getattr(args, "mem_cmd", None)
+			or getattr(args, "config_cmd", None),
 		)
 	)
 
 	# Map CLI type to collection(s)
 	if getattr(args, "type", None):
 		collections = [get_collection(args.type)]
-	elif args.command in ["seed", "status", "swarm", "soul", "init", "bunker", "ide", "daemon"]:
+	elif args.command in ["seed", "status", "swarm", "soul", "init", "bunker", "ide", "daemon", "memory", "config"]:
 		collections = []  # Not needed for these
 	else:
 		# Default sweep for search/diag if no type specified
@@ -859,6 +921,10 @@ def main() -> None:
 		elif args.command == "heal":
 			handle_heal(args.dry_run)
 			return
+		elif args.command == "doctor":
+			from red_pill.metabolism.doctor import run_doctor
+
+			sys.exit(run_doctor(getattr(args, "quiet", False)))
 		elif args.command == "benchmark":
 			handle_benchmark()
 			return
@@ -879,9 +945,17 @@ def main() -> None:
 		elif args.command == "p2p":
 			handle_p2p(args)
 			return
-		elif args.command == "secrets":
-			handle_secrets(args)
+		elif args.command == "memory":
+			handle_memory(args)
 			return
+		elif args.command == "config":
+			if args.config_cmd == "tui":
+				from red_pill.config_tui import run_tui
+
+				sys.exit(run_tui())
+			else:
+				config_parser.print_help()
+				sys.exit(0)
 
 		# Loop through requested collections
 		for collection in collections:

@@ -25,8 +25,7 @@ from pathlib import Path
 from typing import Optional, Set, Tuple
 
 from red_pill.core.paths import get_bunker_root
-
-from .bridge import BackendType, BridgeCapabilities, ConversationResult, IDEBridge
+from red_pill.swarm.bridges.base import AgentBridge, BackendType, BridgeCapabilities, ConversationResult
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +53,7 @@ def _snapshot_brain(brain_dir: Path) -> Set[str]:
 		return set()
 
 
-class AgyBridge(IDEBridge):
+class AgyBridge(AgentBridge):
 	"""Backend v2: agy CLI with --dangerously-skip-permissions.
 
 	Supports:
@@ -159,11 +158,38 @@ class AgyBridge(IDEBridge):
 			mcp_tools=True,
 		)
 
-	def prompt(self, text: str, *, model: str = "flash", timeout: int = 300) -> ConversationResult:
+	def _model_args(self, model: str) -> list:
+		if not model:
+			return []
+		if model == "flash":
+			actual_model = "Gemini 3.5 Flash (Medium)"
+		elif model == "pro":
+			actual_model = "Gemini 3.1 Pro (High)"
+		else:
+			actual_model = model
+		return ["--model", actual_model]
+
+	def prompt(
+		self,
+		text: str,
+		*,
+		model: str = "flash",
+		effort: Optional[str] = None,
+		cwd: Optional[str] = None,
+		timeout: int = 300,
+	) -> ConversationResult:
 		"""Send a one-shot prompt via agy -p.
 
 		Uses dir-diff to capture the conversation UUID for future multi-turn.
 		Embeds an eid (ephemeral ID) in the prompt as safety net for UUID verification.
+
+		effort/cwd: accepted for interface parity. MAPPING is AgyBridge's job (TODO-wire):
+		agy fuses model+mode in the selectable model name (`agy models`):
+			Gemini 3.5 Flash (Low|Medium|High) · Gemini 3.1 Pro (Low|High) ·
+			Claude Sonnet 4.6 (Thinking) · Claude Opus 4.6 (Thinking) · GPT-OSS 120B (Medium).
+		So the portable (model, effort) → `agy --model "Base (Mode)"` (Claude variants have only
+		"(Thinking)" → effort ignored). Wire when agy becomes an active swarm backend; today agy
+		is not the initial backend, so this stays documented (current behavior: no --model).
 		"""
 		eid = f"eid:{uuid_mod.uuid4().hex[:12]}"
 		tagged_text = f"{text}\n<!-- {eid} -->"
@@ -172,7 +198,7 @@ class AgyBridge(IDEBridge):
 		before = _snapshot_brain(brain_dir) if brain_dir else set()
 
 		try:
-			response = self._run_agy(["-p", tagged_text], timeout)
+			response = self._run_agy([*self._model_args(model), "-p", tagged_text], timeout)
 		except Exception as e:
 			return ConversationResult(
 				conversation_id="",

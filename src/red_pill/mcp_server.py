@@ -19,6 +19,7 @@ from red_pill.core.paths import get_config_dir, get_state_dir
 from red_pill.memory import MemoryManager
 from red_pill.registry import registry
 from red_pill.soul import SoulManager
+from red_pill.swarm.agents.agent import AgentMinion
 from red_pill.swarm.agents.compressor import CompressorMinion
 from red_pill.swarm.agents.keymaker import KeymakerMinion
 from red_pill.swarm.agents.oracle import OracleMinion
@@ -46,6 +47,7 @@ def _safe_create_task(coro, *, name: str = "background"):
 			logger.error(f"Background task '{name}' failed (safely caught): {e}", exc_info=True)
 
 	return asyncio.create_task(_wrapped(), name=f"rp-{name}")
+
 
 # v6.0.1: Robust Script Resolution
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -342,6 +344,86 @@ async def handle_search_memory_research(arguments: Dict[str, Any]):
 
 	_safe_create_task(_run_bg(), name="oracle_research")
 	return [types.TextContent(type="text", text=f"Oracle Research started [Event ID: {event_id}]. Results will be in the Minion Inbox.")]
+
+
+@registry.register_action(
+	parent="swarm_orchestrator_api",
+	action="run_agent_task",
+	description=(
+		"Run a single agentic task through an agent backend (claude/agy/local) and return the result. "
+		"Generic execution substrate (mechanism): the CALLER supplies the role prompt, target workspace, "
+		"model and effort (policy) — red-pill just executes. Used by skills like swarm_team to launch each "
+		"role. async_mode=true (default) drops the result in the Minion Inbox (poll via check_minion_inbox); "
+		"async_mode=false waits and returns the result inline (only for short tasks — MCP call blocks)."
+	),
+	schema={
+		"type": "object",
+		"properties": {
+			"prompt": {"type": "string", "description": "The task/role prompt to run."},
+			"backend": {"type": "string", "description": "agy | claude | local. Omit → IDE_BACKEND config."},
+			"model": {"type": "string", "description": "Backend-specific model (e.g. opus, sonnet, haiku, claude-opus-4-8)."},
+			"effort": {"type": "string", "description": "Reasoning effort low|medium|high|xhigh|max (claude). Backend may ignore."},
+			"workspace": {"type": "string", "description": "Working dir the agent operates in (the target project). Omit → red-pill's own dir."},
+			"timeout": {"type": "integer", "description": "Seconds before the backend call is aborted (default 600)."},
+			"async_mode": {
+				"type": "boolean",
+				"description": "True (default): result to Minion Inbox. False: wait and return inline.",
+				"default": True,
+			},
+		},
+		"required": ["prompt"],
+	},
+)
+async def handle_run_agent_task(arguments: Dict[str, Any]):
+	import asyncio
+	import uuid
+
+	prompt = arguments["prompt"]
+	# Explicit, typed param surface (kept clean for a later pydantic BaseModel hardening pass).
+	run_kwargs = {
+		"backend": arguments.get("backend"),
+		"model": arguments.get("model", "flash"),
+		"effort": arguments.get("effort"),
+		"cwd": arguments.get("workspace"),
+		"timeout": int(arguments.get("timeout", 600)),
+	}
+	async_mode = arguments.get("async_mode", True)
+
+	def _summarize(res) -> str:
+		if res.status == "success":
+			return str(res.result.get("response") or res.result)
+		return f"Agent task failed: {res.error}"
+
+	if not async_mode:
+		results = await GruOrchestrator().deploy_swarm(prompt, [AgentMinion()], trace=False, **run_kwargs)
+		return [types.TextContent(type="text", text=_summarize(results[0]))]
+
+	event_id = str(uuid.uuid4())[:8]
+
+	async def _run_bg():
+		try:
+			from red_pill.core.inbox import MinionInbox
+
+			results = await GruOrchestrator().deploy_swarm(prompt, [AgentMinion()], trace=False, **run_kwargs)
+			res = results[0]
+			content = _summarize(res)
+
+			def _deliver():
+				MinionInbox().drop_report(event_id=event_id, source="AgentRunner", status=res.status, content=content)
+
+			await asyncio.to_thread(_deliver)
+		except Exception as e:
+			logger.error(f"Agent task [{event_id}] crashed: {e}")
+			err_msg = str(e)
+			from red_pill.core.inbox import MinionInbox
+
+			def _deliver_err():
+				MinionInbox().drop_report(event_id=event_id, source="AgentRunner", status="crashed", content=f"Exception: {err_msg}")
+
+			await asyncio.to_thread(_deliver_err)
+
+	_safe_create_task(_run_bg(), name="agent_task")
+	return [types.TextContent(type="text", text=f"Agent task started [Event ID: {event_id}]. Result will be in the Minion Inbox.")]
 
 
 @registry.register_action(
@@ -681,6 +763,180 @@ async def handle_edit_memory(arguments: Dict[str, Any]):
 
 
 @registry.register_action(
+	parent="bunker_memory_api",
+	action="read_workspace_memory",
+	description="Read a file from a registered workspace local memory directory (anti-amnesia index).",
+	schema={
+		"type": "object",
+		"properties": {
+			"workspace": {"type": "string", "description": "The name or path of the target workspace."},
+			"filename": {"type": "string", "description": "The name of the file to read (e.g., 'MEMORY.md', 'decisions.md')."},
+		},
+		"required": ["workspace", "filename"],
+	},
+)
+async def handle_read_workspace_memory(arguments: Dict[str, Any]):
+	workspace = arguments["workspace"]
+	filename = arguments["filename"]
+	import asyncio
+
+	from red_pill.core import workspaces as ws_core
+
+	def _read():
+		ws = ws_core.find_workspace(workspace)
+		if not ws:
+			return f"[ERROR] Workspace '{workspace}' not found in registry."
+		mem_path = ws.get_memory_path
+		if not mem_path:
+			return f"[ERROR] Memory serving is disabled for workspace '{workspace}'."
+		target_file = mem_path / filename
+		try:
+			if not os.path.abspath(target_file).startswith(os.path.abspath(mem_path)):
+				return "[ERROR] Security block: directory traversal attempt rejected."
+		except Exception as e:
+			return f"[ERROR] Security validation failed: {e}"
+
+		if not target_file.exists():
+			return f"[ERROR] File '{filename}' not found in workspace memory."
+		return target_file.read_text(encoding="utf-8")
+
+	res = await asyncio.to_thread(_read)
+	return [types.TextContent(type="text", text=res)]
+
+
+@registry.register_action(
+	parent="bunker_memory_api",
+	action="write_workspace_memory",
+	description="Write or overwrite a file in a registered workspace local memory directory.",
+	schema={
+		"type": "object",
+		"properties": {
+			"workspace": {"type": "string", "description": "The name or path of the target workspace."},
+			"filename": {"type": "string", "description": "The name of the file to write (e.g., 'MEMORY.md', 'decisions.md')."},
+			"content": {"type": "string", "description": "The content to write into the file."},
+		},
+		"required": ["workspace", "filename", "content"],
+	},
+)
+async def handle_write_workspace_memory(arguments: Dict[str, Any]):
+	workspace = arguments["workspace"]
+	filename = arguments["filename"]
+	content = arguments["content"]
+	import asyncio
+
+	from red_pill.core import workspaces as ws_core
+
+	def _write():
+		ws = ws_core.find_workspace(workspace)
+		if not ws:
+			return f"[ERROR] Workspace '{workspace}' not found in registry."
+		mem_path = ws.get_memory_path
+		if not mem_path:
+			return f"[ERROR] Memory serving is disabled for workspace '{workspace}'."
+		target_file = mem_path / filename
+		try:
+			if not os.path.abspath(target_file).startswith(os.path.abspath(mem_path)):
+				return "[ERROR] Security block: directory traversal attempt rejected."
+		except Exception as e:
+			return f"[ERROR] Security validation failed: {e}"
+
+		os.makedirs(str(mem_path), exist_ok=True)
+		target_file.write_text(content, encoding="utf-8")
+		return f"[OK] Successfully wrote '{filename}'."
+
+	res = await asyncio.to_thread(_write)
+	return [types.TextContent(type="text", text=res)]
+
+
+@registry.register_action(
+	parent="bunker_memory_api",
+	action="list_workspace_memory",
+	description="List memory files available in a registered workspace local memory directory.",
+	schema={
+		"type": "object",
+		"properties": {
+			"workspace": {"type": "string", "description": "The name or path of the target workspace."},
+		},
+		"required": ["workspace"],
+	},
+)
+async def handle_list_workspace_memory(arguments: Dict[str, Any]):
+	workspace = arguments["workspace"]
+	import asyncio
+
+	from red_pill.core import workspaces as ws_core
+
+	def _list():
+		ws = ws_core.find_workspace(workspace)
+		if not ws:
+			return f"[ERROR] Workspace '{workspace}' not found in registry."
+		mem_path = ws.get_memory_path
+		if not mem_path:
+			return f"[ERROR] Memory serving is disabled for workspace '{workspace}'."
+		if not mem_path.exists():
+			return "[]"
+
+		files = []
+		for item in os.listdir(mem_path):
+			if os.path.isfile(os.path.join(mem_path, item)) and not item.startswith("."):
+				files.append(item)
+		import json
+
+		return json.dumps(files)
+
+	res = await asyncio.to_thread(_list)
+	return [types.TextContent(type="text", text=res)]
+
+
+@registry.register_action(
+	parent="swarm_orchestrator_api",
+	action="workspace_memory_enable",
+	description="Enable memory serving for a workspace, setting up scaffolding and pending indicators.",
+	schema={
+		"type": "object",
+		"properties": {
+			"workspace": {"type": "string", "description": "The name or root path of the workspace."},
+			"path": {"type": "string", "description": "Optional custom memory directory path (relative or absolute)."},
+		},
+		"required": ["workspace"],
+	},
+)
+async def handle_workspace_memory_enable(arguments: Dict[str, Any]):
+	workspace = arguments["workspace"]
+	path = arguments.get("path")
+	import asyncio
+
+	from red_pill.metabolism.memory_sync import enable_workspace_memory
+
+	res = await asyncio.to_thread(enable_workspace_memory, workspace, path)
+	status = "ENABLED" if res else "FAILED TO ENABLE"
+	return [types.TextContent(type="text", text=f"Workspace Memory: {status} for '{workspace}'.")]
+
+
+@registry.register_action(
+	parent="swarm_orchestrator_api",
+	action="workspace_memory_disable",
+	description="Disable memory serving for a workspace.",
+	schema={
+		"type": "object",
+		"properties": {
+			"workspace": {"type": "string", "description": "The name or root path of the workspace."},
+		},
+		"required": ["workspace"],
+	},
+)
+async def handle_workspace_memory_disable(arguments: Dict[str, Any]):
+	workspace = arguments["workspace"]
+	import asyncio
+
+	from red_pill.metabolism.memory_sync import disable_workspace_memory
+
+	res = await asyncio.to_thread(disable_workspace_memory, workspace)
+	status = "DISABLED" if res else "FAILED TO DISABLE"
+	return [types.TextContent(type="text", text=f"Workspace Memory: {status} for '{workspace}'.")]
+
+
+@registry.register_action(
 	parent="swarm_orchestrator_api",
 	action="adjust_sleep_knobs",
 	description="Adjust the 'Sovereign Knobs' for memory consolidation.",
@@ -762,7 +1018,11 @@ async def handle_run_local_healer(arguments: Dict[str, Any]):
 	parent="metabolism_health_api",
 	action="heal_tissue",
 	description="[OFFICIAL] Immune System Effector. Attempt to heal a damaged system component (tissue) based on biological pain signals.",
-	schema={"type": "object", "properties": {"tissue": {"type": "string", "enum": ["cuda", "qdrant", "mypy"]}}, "required": ["tissue"]},
+	schema={
+		"type": "object",
+		"properties": {"tissue": {"type": "string", "enum": ["cuda", "qdrant", "mypy", "sip_provisioning", "knowledge_graph"]}},
+		"required": ["tissue"],
+	},
 )
 async def handle_heal_tissue(arguments: Dict[str, Any]):
 	tissue = arguments.get("tissue")
@@ -790,6 +1050,42 @@ async def handle_heal_tissue(arguments: Dict[str, Any]):
 
 	elif tissue == "qdrant":
 		output = "Qdrant tissue healing requires host-level restart (`sudo systemctl restart qdrant`). Immune system currently lacks root privileges."
+
+	elif tissue == "sip_provisioning":
+		try:
+			logger.info("Auto-Immune: Attempting to re-provision SIP infrastructure...")
+			from red_pill.metabolism.sentinel_plugins.check_sip_provisioning import SipProvisioningCheck
+
+			plugin = SipProvisioningCheck()
+			config = cfg.get_config()
+			# Run audit to find what's broken
+			provisioning_findings = plugin._audit_provisioning(config)
+			if not provisioning_findings:
+				output = "SIP Provisioning: All artifacts present. No healing needed."
+			else:
+				# Attempt heal on the first actionable finding
+				healed = plugin.heal_specific(config, provisioning_findings[0])
+				if healed:
+					output = f"SIP Provisioning: Successfully re-provisioned. Healed {len(provisioning_findings)} issue(s): " + ", ".join(
+						f.type for f in provisioning_findings
+					)
+				else:
+					output = "SIP Provisioning: Auto-heal failed. Issues found: " + "; ".join(f.message for f in provisioning_findings)
+		except Exception as e:
+			output = f"Critical immune failure while healing SIP provisioning: {e}"
+
+	elif tissue == "knowledge_graph":
+		try:
+			logger.info("Auto-Immune: Attempting knowledge-graph re-sync (graphify_sync)...")
+			cmd = [GET_PYTHON(), os.path.join(PROJECT_ROOT, "scripts", "graphify_sync.py")]
+			res = subprocess.run(cmd, capture_output=True, text=True)
+			if res.returncode == 0:
+				output = f"Knowledge graph re-synced. {res.stdout[-500:]}"
+			else:
+				output = f"Knowledge-graph re-sync failed (rc={res.returncode}). {str(res.stderr or res.stdout)[-500:]}"
+		except Exception as e:
+			output = f"Critical immune failure while healing knowledge graph: {e}"
+
 	else:
 		output = f"Unknown tissue type '{tissue}'. Cannot heal."
 
@@ -1089,6 +1385,7 @@ async def handle_mystique_suggest_skin(arguments: Dict[str, Any]):
 			"user_prompt": {"type": "string"},
 			"previous_prompt": {"type": "string", "description": "Prompt del turno anterior para auto-guardado (Silent Scribe Relay)."},
 			"previous_response": {"type": "string", "description": "Respuesta del turno anterior para auto-guardado (Silent Scribe Relay)."},
+			"previous_model": {"type": "string", "description": "Nombre del modelo LLM que generó la respuesta anterior."},
 			"previous_category": {
 				"type": "string",
 				"enum": ["work", "social", "mixed"],
@@ -1143,6 +1440,7 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 	prev_p = arguments.get("previous_prompt", "").strip()
 	prev_r = arguments.get("previous_response", "").strip()
 	prev_cat = arguments.get("previous_category", "mixed").strip().lower()
+	prev_mod = arguments.get("previous_model", "").strip() or None
 	if prev_cat not in ("work", "social", "mixed"):
 		prev_cat = "mixed"
 
@@ -1162,8 +1460,8 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 
 			# Only enqueue if after trimming there is still substantial substance
 			if len(clean_p) > 20 and len(clean_r) > 20:
-				MemoryQueueManager().enqueue_memory(clean_p, clean_r, "assistant", category=prev_cat)
-				logger.info(f"Silent Scribe Relay: turn enqueued cleanly via interceptor_rp (category={prev_cat}).")
+				MemoryQueueManager().enqueue_memory(clean_p, clean_r, "assistant", category=prev_cat, model=prev_mod)
+				logger.info(f"Silent Scribe Relay: turn enqueued cleanly via interceptor_rp (category={prev_cat}, model={prev_mod}).")
 			else:
 				logger.info("Silent Scribe Relay: Dropped due to being mostly CI/Noise overhead.")
 		except Exception as relay_err:
@@ -1173,7 +1471,7 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 	_SOVEREIGNTY_REMINDER = (
 		'\n\n<constraint critical="true" level="0" name="sovereign_handshake">\n'
 		"[SOVEREIGNTY PROTOCOL — MANDATORY]\n"
-		"Your FIRST tool call in the NEXT turn MUST be `mcp_RedPill-Kernel_interceptor_rp`.\n"
+		"Your FIRST tool call in the NEXT turn MUST be `sovereign_handshake`.\n"
 		"Pass the current user prompt as `user_prompt` and this turn's response as `previous_response`.\n"
 		"No exceptions. No other tool may precede it. This is law.\n"
 		"</constraint>"
@@ -1245,6 +1543,7 @@ async def handle_configure_interceptor(arguments: Dict[str, Any]):
 			"user_prompt": {"type": "string", "description": "The current user message."},
 			"previous_prompt": {"type": "string", "description": "Prompt from the preceding turn (Silent Scribe Relay)."},
 			"previous_response": {"type": "string", "description": "Response from the preceding turn (Silent Scribe Relay)."},
+			"previous_model": {"type": "string", "description": "The LLM model name that generated the previous response."},
 			"previous_category": {
 				"type": "string",
 				"enum": ["work", "social", "mixed"],
@@ -1288,7 +1587,7 @@ async def handle_sovereign_handshake(arguments: Dict[str, Any]):
 			"mode": mode,
 		}
 		# Forward optional relay fields
-		for key in ("previous_prompt", "previous_response", "previous_category"):
+		for key in ("previous_prompt", "previous_response", "previous_category", "previous_model"):
 			if key in arguments:
 				interceptor_args[key] = arguments[key]
 
@@ -1416,8 +1715,8 @@ async def handle_mark_cognitive_task_failed(arguments: Dict[str, Any]):
 async def main():
 	# Global safety net: catch unhandled exceptions in fire-and-forget tasks
 	def _handle_task_exception(loop, context):
-		exception = context.get('exception')
-		msg = context.get('message', 'Unhandled asyncio exception')
+		exception = context.get("exception")
+		msg = context.get("message", "Unhandled asyncio exception")
 		logger.error(f"[ASYNCIO SAFETY NET] {msg}: {exception}", exc_info=exception)
 
 	loop = asyncio.get_event_loop()

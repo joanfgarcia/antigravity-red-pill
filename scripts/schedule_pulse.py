@@ -24,6 +24,8 @@ WAKE_SERVICE = "redpill-wake.service"
 WAKE_TIMER = "redpill-wake.timer"
 SLEEP_SERVICE = "redpill-sleep.service"
 SLEEP_TIMER = "redpill-sleep.timer"
+GRAPHIFY_SERVICE = "redpill-graphify.service"
+GRAPHIFY_TIMER = "redpill-graphify.timer"
 SYSTEMD_USER_DIR = os.path.expanduser("~/.config/systemd/user")
 
 # Launchd label (macOS)
@@ -379,12 +381,36 @@ def _uninstall_windows() -> None:
 # Main
 
 
+def install_graphify_timer(uv_path: str, interval_hours: int = 1) -> None:
+	"""Opt-in: install + enable the periodic graphify reconciliation sync timer.
+
+	NOT part of the default pulse install — invoked only via `--with-graphify`, so the
+	operator explicitly turns on the recurring knowledge-graph refresh. Linux/systemd only.
+	"""
+	if platform.system() != "Linux":
+		print("[graphify] timer install is Linux/systemd only; skipping.")
+		return
+	os.makedirs(SYSTEMD_USER_DIR, exist_ok=True)
+	script = os.path.join(PROJECT_ROOT, "scripts", "graphify_sync.py")
+	_write_systemd_unit(GRAPHIFY_SERVICE, f"{uv_path} run python {script}", "Red Pill Graphify Reconciliation Sync", type="oneshot", nice=15)
+	_write_systemd_timer(GRAPHIFY_TIMER, f"{interval_hours}h", "Timer for Red Pill Graphify Reconciliation Sync")
+	if _is_systemd_available():
+		subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
+		subprocess.run(["systemctl", "--user", "enable", "--now", GRAPHIFY_TIMER], check=True)
+		print("[OK] graphify timer installed & enabled.")
+	else:
+		print("[WARN] systemd unavailable; graphify units written to disk but not activated.")
+
+
 def main() -> None:
 	parser = argparse.ArgumentParser(description="Cross-platform pulse scheduler for Red Pill.")
 	parser.add_argument(
 		"--interval-hours", type=int, default=DEFAULT_INTERVAL_HOURS, help=f"How often to run the pulse in hours (default: {DEFAULT_INTERVAL_HOURS})"
 	)
 	parser.add_argument("--uninstall", action="store_true", help="Remove the scheduled job for the current platform")
+	parser.add_argument(
+		"--with-graphify", action="store_true", help="Also install+enable the periodic graphify reconciliation timer (opt-in, Linux only)"
+	)
 	args = parser.parse_args()
 
 	system = platform.system()
@@ -416,6 +442,9 @@ def main() -> None:
 	else:
 		print(f"[ERROR] Unsupported platform: {system}. Implement support or run trigger_pulse.py manually.")
 		sys.exit(1)
+
+	if args.with_graphify and system == "Linux":
+		install_graphify_timer(uv_path, args.interval_hours)
 
 
 if __name__ == "__main__":

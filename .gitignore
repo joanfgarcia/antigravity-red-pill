@@ -93,3 +93,5 @@ scratch/
 # Artefactos y Backups Pesados
 graphify-out/
 storage_backup_seguridad.tar.gz
+.claude/
+

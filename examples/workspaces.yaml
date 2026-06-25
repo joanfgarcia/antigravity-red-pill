@@ -1,0 +1,21 @@
+# Workspace registry for red-pill — PROJECT workspaces (peers).
+# Copy to ~/.config/red-pill/workspaces.yaml and edit for your machine.
+#
+# red-pill is the AGENT (identity + Bünker + a GLOBAL Agent_Core desk). On top of it you work
+# in N independent PROJECT workspaces (peers) — they have no parent/child relationship.
+#
+# - agent_core : the agent's GLOBAL personal desk (transversal, shared across ALL workspaces).
+#                YOU choose where to mount it (typically under your red-pill ecosystem root).
+# - workspaces : your project repos. Each one's rules/standards are DISCOVERED at runtime via the
+#                `.agent` convention (a dir or symlink at/above the workspace root) — never hardcoded.
+#                `atlas`    : optional explicit standards path (null = auto-discover via .agent).
+#                `graphify` : whether the AST-refresh timer indexes this workspace (hook).
+#                `access`   : operator opt-in — grant the agent filesystem access to this workspace
+#                             (Claude Code additionalDirectories today; other IDE/CLI surfaces as
+#                             their adapters land). Toggle via `red-pill workspace enable|disable`
+#                             or edit here. DEFAULT false = in AUTONOMOUS mode the agent CANNOT
+#                             operate in this workspace.
+version: 1
+agent_core: ~/Agent_Core
+workspaces:
+  - { name: example, root: ~/projects/example, atlas: null, graphify: false, access: false }

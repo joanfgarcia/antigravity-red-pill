@@ -20,10 +20,10 @@ import shutil
 import tempfile
 import warnings
 from functools import lru_cache
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 import yaml
-from pydantic import field_validator, model_validator
+from pydantic import BaseModel, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from red_pill.core.paths import get_config_dir, get_db_dir, get_models_dir, get_state_dir, migrate_legacy_xdg_config
@@ -71,6 +71,24 @@ def _load_affect_multipliers(model_name: str) -> dict:
 		}
 
 
+# BridgeTarget — one step in an execution-bridge fallback cascade
+
+
+class BridgeTarget(BaseModel):
+	"""One step in an execution-bridge fallback cascade (Telegram/inbox worker).
+
+	The cascade is tried in order; the first target whose prompt() succeeds wins.
+	`model`/`effort` are per-target (e.g. claude/opus/high → agy/pro/medium →
+	local/samantha). `effort` speaks the portable STANDARD_EFFORTS scale; each
+	bridge maps it to its own control (claude → --effort, agy → model "(Mode)",
+	local → ignored).
+	"""
+
+	backend: Literal["agy", "claude", "local"]
+	model: Optional[str] = None
+	effort: Optional[Literal["low", "medium", "high"]] = None
+
+
 # RedPillConfig — the sovereign configuration model
 
 
@@ -93,17 +111,19 @@ class RedPillConfig(BaseSettings):
 	WORKSPACE_ROOT: str = _WORKSPACE_ROOT
 	APP_ROOT: str = _APP_ROOT
 	RED_PILL_PROFILE: str = "user"
-	USER_ATLAS_DIR: str = os.path.join(_WORKSPACE_ROOT, "atlas")
 	AGENT_CORE_DIR: str = os.path.join(_WORKSPACE_ROOT, "Agent_Core")
+	# USER_ATLAS_DIR removed: the atlas is per-project now (workspaces.yaml / discovered via .agent).
+	# AGENT_CORE_DIR's effective source for anchors is workspaces.yaml:agent_core
+	# (see scripts/_config_common.agent_core_vars). Default here is relative for back-compat.
 
 	@field_validator("WORKSPACE_ROOT", mode="before")
 	@classmethod
 	def _expand_workspace_root(cls, v: str) -> str:
 		return os.path.expanduser(v)
 
-	@field_validator("USER_ATLAS_DIR", mode="before")
+	@field_validator("AGENT_CORE_DIR", mode="before")
 	@classmethod
-	def _expand_user_atlas_dir(cls, v: str) -> str:
+	def _expand_agent_core_dir(cls, v: str) -> str:
 		return os.path.expanduser(v)
 
 	@property
@@ -234,7 +254,7 @@ class RedPillConfig(BaseSettings):
 	# -----------------------------------------------------------------------
 	BRAIN_PATH: str = os.path.join(os.path.expanduser("~"), ".gemini/antigravity/brain")
 	SIP_ENABLED: bool = True
-	SIP_SOCKET_PATH: str = os.path.join(os.getenv("XDG_RUNTIME_DIR", "/tmp"), "red_pill_sip.sock")
+	SIP_SOCKET_PATH: str = os.path.join(os.getenv("XDG_RUNTIME_DIR", "/tmp"), "red-pill", "red_pill.sock")
 
 	# -----------------------------------------------------------------------
 	# MODELS & EMBEDDINGS
@@ -310,18 +330,38 @@ class RedPillConfig(BaseSettings):
 	# -----------------------------------------------------------------------
 	# ANTIGRAVITY IDE BRIDGE
 	# -----------------------------------------------------------------------
-	IDE_BACKEND: str = "auto"  # "agy" | "grpc" | "auto"
+	IDE_BACKEND: str = "auto"  # "agy" | "grpc" | "claude" | "local" | "auto"
 	# Gate autonomous Flash-consuming operations (cognitive queue, minion
 	# auto-inject, entropy executor). Telegram inbox processing is NOT
 	# affected — only background/autonomous agy prompts are suppressed.
 	AUTONOMOUS_AGY_ENABLED: bool = False
+	# Ordered fallback cascade for inbox/Telegram execution. Empty (default) →
+	# single bridge via IDE_BACKEND (back-compat, no behaviour change). When set,
+	# the worker tries each target in order and uses the first with quota; if all
+	# fail, the pertinent error is surfaced to the user. JSON-encoded in .env, e.g.
+	# TELEGRAM_BRIDGE_CASCADE='[{"backend":"claude","model":"opus","effort":"high"}]'
+	TELEGRAM_BRIDGE_CASCADE: List[BridgeTarget] = []
+	AWAKENING_BRIDGE_CASCADE: List[BridgeTarget] = []
+	DEFAULT_MINION_BRIDGE_CASCADE: List[BridgeTarget] = []
+
+	@field_validator("TELEGRAM_BRIDGE_CASCADE", "AWAKENING_BRIDGE_CASCADE", "DEFAULT_MINION_BRIDGE_CASCADE", mode="before")
+	@classmethod
+	def _parse_bridge_cascades(cls, v: Any) -> Any:
+		if isinstance(v, str):
+			import json
+
+			try:
+				return json.loads(v)
+			except Exception as e:
+				raise ValueError(f"Failed to parse JSON for bridge cascade: {e}")
+		return v
 
 	@field_validator("IDE_BACKEND")
 	@classmethod
 	def _validate_ide_backend(cls, v: str) -> str:
 		v = v.strip().lower()
-		if v not in ("agy", "grpc", "auto"):
-			raise ValueError(f"IDE_BACKEND must be 'agy', 'grpc', or 'auto': {v}")
+		if v not in ("agy", "grpc", "claude", "local", "auto"):
+			raise ValueError(f"IDE_BACKEND must be 'agy', 'grpc', 'claude', 'local', or 'auto': {v}")
 		return v
 
 	# -----------------------------------------------------------------------
@@ -366,6 +406,20 @@ class RedPillConfig(BaseSettings):
 	METABOLISM_ENABLED: bool = True
 	METABOLISM_COOLDOWN: int = 3600
 	METABOLISM_AUTO_COLLECTIONS: Any = ["work_memories", "social_memories", "story_memories"]
+	CHRONICLE_PLUGINS: List[str] = ["antigravity", "claude_code"]
+
+	@field_validator("CHRONICLE_PLUGINS", mode="before")
+	@classmethod
+	def _parse_chronicle_plugins(cls, v: Any) -> Any:
+		if isinstance(v, str):
+			import json
+
+			try:
+				return json.loads(v)
+			except Exception:
+				return [p.strip() for p in v.split(",") if p.strip()]
+		return v
+
 	METABOLISM_STATE_FILE: str = str(get_state_dir() / "metabolism_state.json")
 	ABSENCE_THRESHOLD: int = 7 * 24 * 3600
 	ABSENCE_GUARD_SCROLL_LIMIT: int = 500
@@ -418,6 +472,13 @@ class RedPillConfig(BaseSettings):
 	INTERCEPTOR_RAG_ENABLED: bool = True
 	INTERCEPTOR_CIRCUIT_BREAKER_ENABLED: bool = False
 	COMPACTION_THRESHOLD: int = 10
+
+	# -----------------------------------------------------------------------
+	# WORKSPACE MEMORY COMPACTION
+	# -----------------------------------------------------------------------
+	WORKSPACE_MEMORY_COMPACT_BACKEND: str = "auto"
+	WORKSPACE_MEMORY_COMPACT_MODEL: str = "flash"
+	WORKSPACE_MEMORY_COMPACT_PROMPT: str = "seeds/memory/optimizer_prompt.txt"
 
 	# -----------------------------------------------------------------------
 	# FERRARI PROTOCOL — Emotional Intelligence Plugins
@@ -589,8 +650,8 @@ MEMORY_ENGINES: Dict[str, str] = {
 	"skill_memories": "bayesian",
 	"directive_memories": "bayesian",
 	"archive_memories": "bayesian",
-	"social_memories": "fsrs_real",
-	"story_memories": "fsrs_real",
+	"social_memories": "rhizodb",
+	"story_memories": "rhizodb",
 }
 
 CHROMA_TONE_MAPPING: Dict[str, str] = {

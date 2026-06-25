@@ -131,6 +131,19 @@ Plugins 05–10. Each is independently toggleable.
 
 ---
 
+## 🔌 IDE Bridge & Extractor Cascades (v7.3.0)
+
+| Parameter | Default | Description |
+| :--- | :--- | :--- |
+| `IDE_BACKEND` | `auto` | Execution backend selector (`auto`, `agy`, `grpc`, `claude`, or `local`). `auto` prefers `agy` if available. |
+| `AUTONOMOUS_AGY_ENABLED` | `False` | Gathers and gates autonomous Flash-consuming operations like cognitive queue or entropy executor. |
+| `TELEGRAM_BRIDGE_CASCADE` | `[]` | JSON-encoded fallback cascade of model targets for Telegram/inbox processing. Example: `'[{"backend":"claude","model":"opus","effort":"high"}]'`. |
+| `AWAKENING_BRIDGE_CASCADE` | `[]` | JSON-encoded fallback cascade of model targets for autonomous awakening runs. |
+| `DEFAULT_MINION_BRIDGE_CASCADE` | `[]` | JSON-encoded fallback cascade of model targets for background agéntic minions if no model is explicitly requested. |
+| `CHRONICLE_PLUGINS` | `["antigravity", "claude_code"]` | List of enabled sequential extraction plugins to pull transcripts during sleep cycle. |
+
+---
+
 ## ☁️ Persistence & Encryption (Cloud Vault)
 
 | Parameter | Default | Description |

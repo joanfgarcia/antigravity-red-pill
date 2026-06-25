@@ -21,6 +21,7 @@ if src_dir not in sys.path:
 
 from red_pill.config import get_config  # noqa: E402
 from red_pill.core.model_registry import ModelRegistry  # noqa: E402
+from red_pill.core.paths import resolve_llama_binary  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] [HYPERVISOR] %(message)s")
 logger = logging.getLogger(__name__)
@@ -78,9 +79,7 @@ class HypervisorManager:
 				cmd = ["mlx_lm.server", "--model", model_path, "--port", str(ephemeral_port)]
 			else:
 				# Assume llama-server for both BitNet custom and GGUF standard
-				llama_path = os.path.join(cfg.APP_ROOT, "3rdparty", "BitNet-1.58b", "build", "bin", "llama-server")
-				if not os.path.exists(llama_path):
-					llama_path = "llama-server"
+				llama_path = str(resolve_llama_binary())
 				ctx = str(profile.get("context_size", 2048))
 				ngl = str(profile.get("n_gpu_layers", 999))
 				cmd = [llama_path, "-m", model_path, "--port", str(ephemeral_port), "-c", ctx, "-ngl", ngl]
@@ -91,11 +90,14 @@ class HypervisorManager:
 			active_model = ActiveModel(profile_name, profile, ephemeral_port, process)
 			self.active_models[profile_name] = active_model
 
-			# Wait for port to open (max 30s)
-			for _ in range(60):
-				with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-					if s.connect_ex(("127.0.0.1", ephemeral_port)) == 0:
+			# Wait for /health to return status: ok (max 60s)
+			for _ in range(120):
+				try:
+					resp = await self.http_client.get(f"http://127.0.0.1:{ephemeral_port}/health")
+					if resp.status_code == 200 and resp.json().get("status") == "ok":
 						break
+				except Exception:
+					pass
 				await asyncio.sleep(0.5)
 
 			logger.info(f"Model {profile_name} stabilized on port {ephemeral_port}")
@@ -147,6 +149,11 @@ manager = HypervisorManager()
 @app.on_event("startup")
 async def startup_event():
 	asyncio.create_task(manager.garbage_collector())
+
+
+@app.get("/health")
+async def health_check():
+	return {"status": "ok", "active_models": list(manager.active_models.keys())}
 
 
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])

@@ -52,3 +52,12 @@ profiles:
     max_tokens: 2048
     context_size: 4096
 ```
+
+## 5. Liveness Probes & Hypervisor Health (3-State Model)
+
+To prevent spawning duplicate ~8 GiB model server processes or triggering false-positive alerts under high resource saturation, the Hypervisor/Sentinel uses a **3-State Liveness Probe**:
+
+1. **`ready` (healthy)**: The server responds with `200 OK` on `/health` or `/v1/models`. Normal operation.
+2. **`busy` (healthy, but saturated)**: Probes result in an `HTTPError`, `URLError` with a timeout, or a socket timeout (e.g. because `llama-server` is single-concurrency under active generation and holds its context lock). The system treats the model as **alive**, suppresses pain signals, and reuses the active hypervisor instance without spawning duplicates.
+3. **`down` (unreachable)**: The probe receives `ECONNREFUSED` (nothing is listening on the socket/port). Only in this state does the Sentinel trigger pain alerts and allow spawning/re-spawning the model server.
+

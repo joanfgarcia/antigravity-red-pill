@@ -31,8 +31,13 @@ if confirm "Borrar Identidad (~/.gemini/antigravity)?"; then
 	rm -rf "$HOME/.gemini/antigravity"
 fi
 
-if confirm "Borrar Reglas Globales (~/.gemini/GEMINI.md)?"; then
-	rm -f "$HOME/.gemini/GEMINI.md"
+if confirm "Quitar el bloque red-pill (Sovereign Handshake/Agent_Core) de las anclas de IDE?"; then
+	RP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+	if command -v uv &> /dev/null && [ -f "$RP_DIR/scripts/inject_anchor.py" ]; then
+		(cd "$RP_DIR" && uv run python scripts/inject_anchor.py --remove --ide antigravity || true)
+	else
+		rm -f "$HOME/.gemini/GEMINI.md"
+	fi
 fi
 
 if confirm "Borrado total ($IA_DIR)?"; then

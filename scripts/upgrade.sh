@@ -196,6 +196,13 @@ if [ -f "$REPO_ROOT/examples/services.yaml" ]; then
 	fi
 fi
 
+# 3.6 Workspace registry seed (copy-if-absent — NEVER overwrite the operator's access flags)
+if [ -f "$REPO_ROOT/examples/workspaces.yaml" ] && [ ! -f "$CONFIG_DIR/workspaces.yaml" ]; then
+	mkdir -p "$CONFIG_DIR"
+	cp "$REPO_ROOT/examples/workspaces.yaml" "$CONFIG_DIR/workspaces.yaml"
+	echo -e "${GREEN}✓ Registro de workspaces sembrado (workspaces.yaml). Edítalo o usa 'red-pill workspace enable'.${NC}"
+fi
+
 # 4. Dependency & Migration ignition
 if command -v uv &> /dev/null; then
 	echo -e "${BLUE}Igniciando migración de datos y timers...${NC}"
@@ -203,7 +210,13 @@ if command -v uv &> /dev/null; then
 	# Sync virtualenv dependencies
 	echo -e "${BLUE}Sincronizando dependencias del entorno virtual (uv sync)...${NC}"
 	uv sync
-	
+
+	# Ensure graphify (code knowledge-graph CLI) — external tool dependency, idempotent.
+	if ! uv tool list 2>/dev/null | grep -q graphifyy; then
+		echo -e "${BLUE}Instalando graphify (graphifyy) como herramienta externa...${NC}"
+		uv tool install graphifyy || echo -e "${YELLOW}[WARN] No se pudo instalar graphifyy.${NC}"
+	fi
+
 	# Migrate Neon-Link database (inject sessions_mapping table)
 	echo -e "${BLUE}Migrando base de datos de Neon-Link (AgyBridge)...${NC}"
 	uv run python -m neon_link.db
@@ -216,7 +229,11 @@ if command -v uv &> /dev/null; then
 	
 	# Thread Weaving (idempotent)
 	uv run python scripts/thread_weave_migrate.py
-	
+
+	# Per-workspace memory relocation (.claude/memory → .red-pill/memory, idempotente)
+	echo -e "${BLUE}Migrando memoria por-workspace (.claude/memory → .red-pill/memory)...${NC}"
+	uv run python scripts/migrate_memory.py || true
+
 	# Version Sync Engram (Manual prompt for now, but ensured by guidance)
 	echo -e "${GREEN}✓ Estructura interna actualizada.${NC}"
 
@@ -238,6 +255,17 @@ if command -v uv &> /dev/null; then
 		echo -e "${GREEN}✓ Skills sincronizados en ~/.agent/skills/.${NC}"
 	fi
 
+	# Refresh IDE anchors (Sovereign Handshake + Agent_Core) + MCP config (idempotent)
+	echo -e "${BLUE}Refrescando anclas de IDE y configuración MCP...${NC}"
+	uv run python scripts/inject_anchor.py --ide auto --redpill-dir "$REPO_ROOT" || true
+	uv run python scripts/inject_mcp.py --uv-path "$(command -v uv)" --redpill-dir "$REPO_ROOT" || true
+	command -v claude &> /dev/null && uv run python scripts/inject_settings.py --redpill-dir "$REPO_ROOT" || true
+
+	# Workspace access: re-sync from the registry; if interactive (tty), offer to add more.
+	if [ -t 0 ] && command -v claude &> /dev/null && [ -f "$REPO_ROOT/scripts/manage_workspaces.py" ]; then
+		uv run python scripts/manage_workspaces.py enable || true
+	fi
+
 	# 5. Neon-Link Service Migration (v0.4.0 watchdog)
 	# Restart neon-link to pick up sd_notify/WatchdogSec changes
 	if systemctl --user is-active neon-link.service &>/dev/null; then
@@ -255,6 +283,11 @@ if command -v uv &> /dev/null; then
 			echo -e "${GREEN}✓ $LEGACY_SVC deshabilitado.${NC}"
 		fi
 	done
+
+	# 7. Verificación post-update (config <-> runtime) — doctor síncrono.
+	# Cierra el hueco: hasta ahora el update aplicaba cambios pero nunca verificaba el resultado.
+	echo -e "${BLUE}Verificando salud post-update (doctor)...${NC}"
+	uv run python scripts/doctor.py || echo -e "${YELLOW}[doctor] reportó incidencias — revísalas arriba.${NC}"
 else
 	echo -e "${RED}[ERROR] 'uv' no encontrado. Por favor, instala astral/uv para completar el upgrade.${NC}"
 fi

@@ -1,0 +1,11 @@
+{
+  "_comment": "red-pill settings fragment for Claude Code. Merged (not overwritten) into settings.json by scripts/inject_settings.py. Grants the agent access to its transversal dirs OUTSIDE the workspace. NO defaultMode here on purpose: autonomous bypass is a per-launch CLI flag, never a shared-session default.",
+  "permissions": {
+    "additionalDirectories": [
+      "${AGENT_CORE_DIR}",
+      "${HOME}/.local/share/red-pill",
+      "${HOME}/.config/red-pill",
+      "${HOME}/.cache/red-pill"
+    ]
+  }
+}

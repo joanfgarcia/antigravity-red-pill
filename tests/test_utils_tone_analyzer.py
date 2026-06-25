@@ -71,6 +71,35 @@ class TestGetDominantMood:
 		result = ToneAnalyzer.get_dominant_mood(manager=mgr)
 		assert result == str(get_hedonic_set_point())
 
+	def test_returns_default_when_first_point_older_than_threshold(self):
+		import time
+
+		p1 = MagicMock()
+		p1.payload = {"color": "red", "immune": False, "created_at": time.time() - 5 * 3600}
+		mgr = self._make_manager([p1])
+		result = ToneAnalyzer.get_dominant_mood(manager=mgr)
+		assert result == str(get_hedonic_set_point())
+
+	def test_break_on_older_points(self):
+		import time
+
+		p1 = MagicMock()
+		p1.payload = {"color": "red", "immune": False, "created_at": time.time()}
+		p2 = MagicMock()
+		p2.payload = {"color": "orange", "immune": False, "created_at": time.time() - 5 * 3600}
+		mgr = self._make_manager([p1, p2])
+		result = ToneAnalyzer.get_dominant_mood(manager=mgr)
+		assert result == "red"
+
+	def test_returns_default_when_session_points_empty(self):
+		import time
+
+		p1 = MagicMock()
+		p1.payload = {"color": "red", "immune": True, "created_at": time.time() - 5 * 3600}
+		mgr = self._make_manager([p1])
+		result = ToneAnalyzer.get_dominant_mood(manager=mgr)
+		assert result == str(get_hedonic_set_point())
+
 
 class TestGetToneDirective:
 	def test_known_color_returns_directive(self):

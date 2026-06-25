@@ -1,0 +1,11 @@
+# Workspace Memory: ${WORKSPACE_NAME}
+
+This is the local memory filing cabinet for this workspace, keeping technical decisions, architecture, and task handoffs decay-proof.
+
+## Active Anchors
+- [${WORKSPACE_NAME}-architecture.md](file://./${WORKSPACE_NAME}-architecture.md) — Fixed architectural guidelines.
+- [${WORKSPACE_NAME}-decisions.md](file://./${WORKSPACE_NAME}-decisions.md) — Chronological timeline of technical decisions and patterns.
+
+---
+## Compaction Index
+(No compacted logs yet. Synchronization runs daily.)

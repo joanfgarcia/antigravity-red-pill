@@ -196,6 +196,8 @@ class DriveEvaluator:
 	def _generate_dynamic_spark(self) -> Optional[Dict[str, Any]]:
 		"""Consulta al LLM local para sugerir una tarea proactiva en base al contexto."""
 		import os
+		import socket
+		import urllib.error
 		import urllib.request
 
 		# ── Pre-flight: is the local LLM expected to be available? ──
@@ -206,23 +208,43 @@ class DriveEvaluator:
 		url = self.config.MLX_LM_URL
 		base_url = url.rsplit("/v1/", 1)[0] if "/v1/" in url else url.rsplit("/", 1)[0]
 
-		llm_ready = False
-		try:
-			health_req = urllib.request.Request(f"{base_url}/health", method="GET")
-			resp = urllib.request.urlopen(health_req, timeout=3)
-			# 200 = healthy. Anything else (503 Loading model, etc.) is not ready.
-			llm_ready = resp.status == 200
-		except Exception:
-			llm_ready = False
+		# ── Liveness probe (3-state) ──
+		# Distinguish a DOWN hypervisor (connection refused → nothing is listening)
+		# from a BUSY one (timeout → llama.cpp holds its single context lock while
+		# serving real traffic). Only a truly DOWN LLM warrants pain; a BUSY one is
+		# healthy, so we skip the proactive spark instead of queueing another request
+		# onto a saturated server. llama.cpp exposes no /health (404), and a 404/503
+		# still proves uvicorn is alive.
+		def _probe(path: str, timeout: float) -> str:
+			"""Returns 'ready' | 'busy' | 'down'."""
+			try:
+				req = urllib.request.Request(f"{base_url}{path}", method="GET")
+				resp = urllib.request.urlopen(req, timeout=timeout)
+				return "ready" if resp.status == 200 else "busy"
+			except urllib.error.HTTPError:
+				return "busy"
+			except urllib.error.URLError as ue:
+				return "busy" if isinstance(ue.reason, (TimeoutError, socket.timeout)) else "down"
+			except (TimeoutError, socket.timeout):
+				return "busy"
+			except Exception:
+				return "down"
 
-		if not llm_ready:
+		status = _probe("/health", 3)
+		if status == "busy":
+			# /health 404s on llama.cpp → confirm via the canonical /v1/models probe.
+			# A timeout here still means BUSY (alive), never down.
+			status = _probe("/v1/models", 3)
+
+		if status == "down":
 			if not sip_enabled:
 				# Not expected to be up — skip silently, no pain needed
 				logger.debug("[DRIVE] LLM not available and SIP_ENABLED=False. Skipping spark (expected).")
 			else:
-				# Expected to be up but isn't — inject pain for Sentinel/Healer
+				# Truly unreachable (connection refused) — inject pain for Sentinel/Healer
 				try:
 					from red_pill.memory import MemoryManager
+
 					mm = MemoryManager()
 					if not mm.has_signal("hypervisor_unreachable"):
 						mm.inject_signal(
@@ -240,9 +262,16 @@ class DriveEvaluator:
 					logger.warning(f"[DRIVE] LLM unreachable, failed to inject pain: {sig_err}")
 			return None
 
-		# ── LLM is healthy — evaporate any stale pain signal ──
+		if status == "busy":
+			# Alive but saturated/loading — do NOT pile a spark request onto a server
+			# already serving traffic, and do NOT inject pain (it is healthy).
+			logger.debug("[DRIVE] Local LLM busy (serving traffic or loading). Skipping spark; no pain.")
+			return None
+
+		# ── status == "ready": LLM healthy — evaporate any stale pain signal ──
 		try:
 			from red_pill.memory import MemoryManager
+
 			mm = MemoryManager()
 			if mm.has_signal("hypervisor_unreachable"):
 				mm.evaporate_signals("hypervisor_unreachable")

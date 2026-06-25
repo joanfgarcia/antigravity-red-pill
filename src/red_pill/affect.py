@@ -140,6 +140,66 @@ class BayesianEngine(MemoryEngine):
 		return {"utility_alpha": round(new_alpha, 4), "utility_beta": round(new_beta, 4), "reinforcement_score": round(new_score, 3)}
 
 
+class RhizoDBEngine(MemoryEngine):
+	"""
+	RhizoDB Memory Dynamics Engine.
+	Inspired by and adapted from Jorge Augusto Guberte's RhizoDB paper:
+	"RhizoDB: A Bounded Activation-Flow Architecture for Graph-Based Memory Systems" (2026).
+	DOI: 10.5281/zenodo.20695703
+	License: CC BY 4.0
+
+	Activation Formula: R = e^(-lambda * t/S)
+	where 't' is time passed in days, 'S' is stability in days, and lambda is -ln(0.9).
+	Activation Update (on reinforcement): a_v(t+1) = a_v(t) + (1 - a_v(t)) * alpha
+	Stability Update (on reinforcement): s_v(t+1) = s_v(t) + eta * alpha * (S_max - s_v(t))
+	"""
+
+	def __init__(self, deletion_threshold: float = 0.05, S_max: float = 365.0, eta: float = 0.1):
+		self.deletion_threshold = deletion_threshold
+		self.S_max = S_max
+		self.eta = eta
+		# lambda = -ln(0.9) approx 0.10536
+		self.lambda_constant = -math.log(0.9)
+
+	def calculate_lazy_decay(self, payload: Dict[str, Any], current_time: float) -> Dict[str, Any]:
+		last_recalled = float(payload.get("last_recalled_at", current_time))
+		score = float(payload.get("reinforcement_score", 1.0))
+		stability = float(payload.get("stability", 1.0))
+
+		time_passed_seconds = max(0.0, current_time - last_recalled)
+		time_passed_days = time_passed_seconds / 86400.0
+
+		# a_v(t) = a_v(t_0) * e^(-lambda * dt / S)
+		power = -self.lambda_constant * (time_passed_days / stability)
+		power = max(min(power, 0), -20)
+		decay_factor = math.exp(power)
+
+		new_score = round(score * decay_factor, 3)
+
+		if new_score <= self.deletion_threshold:
+			return {"_delete": True, "score": new_score, "stability": stability}
+
+		if new_score < score:
+			return {"reinforcement_score": new_score}
+
+		return {}
+
+	def calculate_reinforcement(self, payload: Dict[str, Any], increment: float) -> Dict[str, Any]:
+		score = float(payload.get("reinforcement_score", 1.0))
+		stability = float(payload.get("stability", 1.0))
+
+		# increment maps to alpha (external stimulation force)
+		alpha = max(0.0, min(increment, 1.0))
+
+		# 1. Asymptotic Saturated Activation Update
+		new_score = score + (1.0 - score) * alpha
+
+		# 2. Stability Update with maximum ceiling S_max
+		new_stability = stability + self.eta * alpha * (self.S_max - stability)
+
+		return {"reinforcement_score": round(new_score, 3), "stability": round(new_stability, 3)}
+
+
 def get_memory_engine(engine_type: str) -> MemoryEngine:
 	"""Factory to return the appropriate engine."""
 	engine_type = engine_type.strip().lower()
@@ -147,5 +207,7 @@ def get_memory_engine(engine_type: str) -> MemoryEngine:
 		return BayesianEngine()
 	elif engine_type in ["fsrs_real", "fsrs"]:
 		return FSRSEngine()
+	elif engine_type in ["rhizodb"]:
+		return RhizoDBEngine()
 	else:
 		return FSRSEngine()  # Default fallback

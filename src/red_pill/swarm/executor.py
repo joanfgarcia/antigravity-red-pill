@@ -55,8 +55,8 @@ def execute_task(db_path: Path, task_id: str):
 	logging.getLogger("").addHandler(fh)
 
 	try:
-		# Use AgyBridge for execution — same pattern as Telegram/AWAKENING
-		from red_pill.plugins.antigravity_ide.factory import create_bridge
+		# Use the configured agent bridge — same pattern as Telegram/AWAKENING
+		from red_pill.swarm.bridges import create_bridge
 
 		bridge = create_bridge()
 		caps = bridge.get_capabilities()

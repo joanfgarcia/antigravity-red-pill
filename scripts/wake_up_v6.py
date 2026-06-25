@@ -43,6 +43,26 @@ def check_service(url, name):
 	return False
 
 
+def check_llm_service_active():
+	"""Check if the LLM daemon is active via systemctl (instant, no HTTP contention).
+
+	Unlike check_service(), this does NOT ping the LLM over HTTP.
+	When the LLM is busy (e.g. sleep cycle distillation), an HTTP check
+	with a 2s timeout would falsely report it as 'down'. systemctl
+	is-active is instant and only checks if the process is running.
+	"""
+	try:
+		result = subprocess.run(
+			["systemctl", "--user", "is-active", "redpill-llm.service"],
+			capture_output=True,
+			text=True,
+			timeout=3,
+		)
+		return result.stdout.strip() == "active"
+	except Exception:
+		return False
+
+
 def query_qdrant(collection, text):
 
 	# We use a dummy vector query just for keyword or semantic match fallback if needed.
@@ -132,8 +152,19 @@ def main():
 			print("CRITICAL: Qdrant is down. Execute launchctl or podman to start it.")
 		sys.exit(1)
 
-	if not args.silent and not check_service("http://localhost:8760/v1/models", "Local MLX LLM Daemon"):
-		print("WARN: Background LLM is down. Attempting raw initialization.")
+	if not args.silent and not check_llm_service_active():
+		# Only warn if the systemd service is truly inactive/failed.
+		# This avoids false alarms when the LLM is busy (e.g. sleep cycle).
+		print("WARN: Background LLM service is not active. Attempting raw initialization.")
+		try:
+			project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+			if project_root not in sys.path:
+				sys.path.insert(0, os.path.join(project_root, "src"))
+			from red_pill.memory import MemoryManager
+
+			MemoryManager().inject_signal("local_llm_offline", intensity=7.0, signal_type="pain", source="WAKE_UP_V6")
+		except Exception as sig_err:
+			print(f"WARN: Failed to emit pain signal: {sig_err}", file=sys.stderr)
 
 	_sidecar_status = "DEPRECATED (FastEmbed In-Band)"
 
@@ -151,20 +182,23 @@ def main():
 	cache_path = cache_dir / "bunker_persona_cache.json"
 
 	persona_injection = None
+	cache_is_stale = False
 	# Differential Boot: check if context hash matches to enable status:CACHED logic
+	# Two-tier cache: fresh (<1h, same hash) and stale (<24h, fallback when LLM busy)
 	if cache_path.exists():
 		try:
 			with open(cache_path, "r") as f:
 				cache = json.load(f)
 			cache_age = time.time() - cache.get("timestamp", 0)
+			cached_persona = cache.get("persona")
 			if cache.get("hash") == current_hash and cache_age < 3600:
-				persona_injection = cache.get("persona")
-				# If we aren't silent, and hash matches, we could return a cached header
-				# to save LLM tokens if the model is same. (Differential Boot)
-				if not args.silent:
-					# Verify if model is same (heuristic check)
-					# If we are here, we proceed with optimized injection
-					pass
+				# Tier 1: Fresh cache — identical context, less than 1 hour old
+				persona_injection = cached_persona
+			elif cached_persona and cache_age < 86400:
+				# Tier 2: Stale cache — usable as fallback for up to 24 hours
+				# (covers overnight sleep cycles, LLM busy, etc.)
+				persona_injection = cached_persona
+				cache_is_stale = True
 		except Exception:
 			pass
 
@@ -182,6 +216,12 @@ def main():
 				subprocess.Popen([sys.executable, __file__, "--silent"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 			except Exception as e:
 				persona_injection = f"[Error lanzando sincronización: {e}]"
+	elif cache_is_stale:
+		# Stale cache used — schedule background re-synthesis to refresh it
+		try:
+			subprocess.Popen([sys.executable, __file__, "--silent"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+		except Exception:
+			pass
 
 	if args.silent:
 		return

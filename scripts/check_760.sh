@@ -11,7 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo -e "${BLUE}--- Protocolo 760: Diagnóstico ---${NC}"
 
-if command -v grep &> /dev/null && [ -f "$HOME/.gemini/GEMINI.md" ] && grep -q "Zero-Trust Identity Sync" "$HOME/.gemini/GEMINI.md"; then
+if command -v grep &> /dev/null && [ -f "$HOME/.gemini/GEMINI.md" ] && grep -q "REDPILL:BEGIN sovereign_handshake" "$HOME/.gemini/GEMINI.md"; then
 	echo -e "${GREEN}[OK] GEMINI.md Zero-Trust Activo.${NC}"
 else
 	echo -e "${RED}[ERROR] GEMINI.md inyectado incorrectamente o ausente.${NC}"

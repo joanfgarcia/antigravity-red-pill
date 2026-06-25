@@ -83,6 +83,7 @@ def test_audit_vitals_exhaustion(mock_run, auditor):
 		else:
 			res.stdout = ""
 		return res
+
 	mock_run.side_effect = run_side_effect
 
 	# We mock urllib and sqlite3 since those hit real system components
@@ -114,6 +115,7 @@ def test_audit_vitals_all_green(mock_run, auditor):
 		else:
 			res.stdout = ""
 		return res
+
 	mock_run.side_effect = run_side_effect
 
 	from red_pill.core.service_contract import ServiceContract
@@ -123,6 +125,12 @@ def test_audit_vitals_all_green(mock_run, auditor):
 		patch("urllib.request.urlopen"),
 		patch("pathlib.Path.exists", return_value=False),
 		patch("red_pill.metabolism.sentinel_plugins.check_duplicate_services.load_manifest", return_value=dummy_manifest),
+		# Isolate the vitals (VRAM/OOM/net) logic from the dynamically-loaded sentinel
+		# plugin suite: those plugins check live services/paths (env-dependent) and are
+		# covered by their own tests + the sandbox lifecycle, not by this unit. Without
+		# this, the plugins fire service_down/sip_missing findings from the test's own
+		# mocks (Path.exists=False, empty systemctl) and the audit can never be green.
+		patch("pkgutil.iter_modules", return_value=[]),
 	):
 		report = auditor.audit_vitals()
 

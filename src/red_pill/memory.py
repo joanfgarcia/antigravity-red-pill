@@ -483,7 +483,9 @@ class MemoryManager:
 
 		return updated_points
 
-	def record_interaction_pair(self, prompt: str, response: str, role: str = "assistant", category: str = "mixed") -> str:
+	def record_interaction_pair(
+		self, prompt: str, response: str, role: str = "assistant", category: str = "mixed", model: Optional[str] = None
+	) -> str:
 		"""
 		Lazarus Phase 1: Encoding (Fast Memory Buffer).
 		Saves raw interaction history directly into the `interaction_memories` collection.
@@ -510,7 +512,7 @@ class MemoryManager:
 			"color": "gray",  # Unprocessed color
 			"difficulty": 5.0,  # Default FSRS D
 			"stability": 2.0,  # Default FSRS S (Low stability for volatile memory)
-			"metadata": {"type": "raw_interaction", "role": role, "category": category},
+			"metadata": {"type": "raw_interaction", "role": role, "category": category, "model": model or "unknown"},
 		}
 
 		vector = self._get_vector(text)
@@ -988,6 +990,7 @@ class MemoryManager:
 			get_agent_dir,
 			get_config_dir,
 			get_daemon_dir,
+			get_daemon_persistent_dir,
 			get_data_dir,
 			get_log_dir,
 			get_staging_dir,
@@ -1001,6 +1004,7 @@ class MemoryManager:
 			get_state_dir(),
 			get_log_dir(),
 			get_daemon_dir(),
+			get_daemon_persistent_dir(),
 			get_staging_dir(),
 		]
 

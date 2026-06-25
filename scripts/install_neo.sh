@@ -90,7 +90,11 @@ show_diagnostics_dashboard() {
 	echo -e "CPU/RAM:   ${GREEN}$CPU_CORES Cores / ${RAM_GB}GB RAM${NC}"
 	echo -e "VRAM:      ${GREEN}${VRAM_GB}GB (NVIDIA)${NC}"
 	echo -e "Container: ${GREEN}$DETECTED_ENGINE${NC}"
-	echo -e "Cifrado:   $( [[ "$DETECTED_ENCRYPTION" == "True" ]] && echo -e "${GREEN}✓ Activo${NC}" || echo -e "${RED}✗ No detectado (SEC-001 Warning)${NC})"
+	if [[ "$DETECTED_ENCRYPTION" == "True" ]]; then
+		echo -e "Cifrado:   ${GREEN}✓ Activo${NC}"
+	else
+		echo -e "Cifrado:   ${RED}✗ No detectado (SEC-001 Warning)${NC}"
+	fi
 	echo -e "${BLUE}------------------------------------------------------------------${NC}\n"
 }
 
@@ -344,7 +348,10 @@ if [ "$AUTO_MODE" = "false" ]; then
 else
 	DYNAMIC_EMOTION_SYNC=${DYNAMIC_EMOTION_SYNC:-"True"}
 	MULTI_EMOTION_INFERENCE=${MULTI_EMOTION_INFERENCE:-"True"}
-	echo -e "${YELLOW}[AUTO] Calibración echo -e "${BLUE}--- Fase: Configuración de Seguridad (Be Water) ---${NC}"
+	echo -e "${YELLOW}[AUTO] Calibración emocional por defecto o existente.${NC}"
+fi
+
+echo -e "${BLUE}--- Fase: Configuración de Seguridad (Be Water) ---${NC}"
 if [ "$AUTO_MODE" = "false" ]; then
 	echo "Elige tu nivel de seguridad para el Bünker:"
 	echo "1) NONE (Steam): Sin API Key ni contraseña (Solo para entornos de laboratorio/pruebas)"
@@ -438,15 +445,13 @@ if [ "$AUTO_MODE" = "false" ]; then
 		echo ""
 	else
 		CLOUD_VAULT_ENABLED="False"
+		CLOUD_VAULT_FOLDER_ID=""
+		CLOUD_VAULT_GPG_PASSPHRASE=""
 	fi
 else
 	CLOUD_VAULT_ENABLED=${CLOUD_VAULT_ENABLED:-"False"}
-fi
-SE=""
-	fi
-else
-	CLOUD_VAULT_ENABLED="False"
-	CLOUD_VAULT_FOLDER_ID=""
+	CLOUD_VAULT_FOLDER_ID=${CLOUD_VAULT_FOLDER_ID:-""}
+	CLOUD_VAULT_GPG_PASSPHRASE=${CLOUD_VAULT_GPG_PASSPHRASE:-""}
 fi
 
 echo -e "${BLUE}--- Fase: Localización del Bünker (Qdrant) ---${NC}"
@@ -617,6 +622,14 @@ if ! command -v uv &> /dev/null; then
 	exit 1
 fi
 
+# Ensure graphify (code knowledge-graph CLI) — external tool dependency, idempotent.
+if ! uv tool list 2>/dev/null | grep -q graphifyy; then
+	echo -e "${BLUE}Instalando graphify (graphifyy) como herramienta externa...${NC}"
+	uv tool install graphifyy || echo -e "${YELLOW}[WARN] No se pudo instalar graphifyy (luego: uv tool install graphifyy).${NC}"
+else
+	echo -e "${GREEN}✓ graphify (graphifyy) ya instalado.${NC}"
+fi
+
 USER_RULES_DIR="${1:-$HOME/.agent}"
 
 GEMINI_ROOT="$HOME/.gemini/antigravity"
@@ -680,64 +693,31 @@ mkdir -p "$USER_RULES_DIR/rules"
 # CF-003: Protect rules from local manipulation
 chmod 700 "$USER_RULES_DIR" "$USER_RULES_DIR/rules"
 
-# Auto-Inject in GEMINI.md (Protocol 770 Sovereign Handshake)
-if [ -f "$HOME/.gemini/GEMINI.md" ]; then
-	# Remove old legacy rules if they exist
-	if [[ "$OS_TYPE" == "Darwin" ]]; then
-		sed -i '' '/## 1. Zero-Trust/d; /## 2. Model Change/d; /## 3. Persistent Memory/d' "$HOME/.gemini/GEMINI.md" || true
-	else
-		sed -i '/## 1. Zero-Trust/d; /## 2. Model Change/d; /## 3. Persistent Memory/d' "$HOME/.gemini/GEMINI.md" || true
+# Workspace registry seed (copy-if-absent — NEVER overwrite the operator's access flags)
+RP_CONFIG_DIR="$(cd "$REPO_ROOT" && python3 -c 'import sys; sys.path.insert(0, "./src"); from red_pill.core.paths import get_config_dir; print(get_config_dir())' 2>/dev/null || true)"
+[ -z "$RP_CONFIG_DIR" ] && RP_CONFIG_DIR="$HOME/.config/red-pill"
+if [ -f "$REPO_ROOT/examples/workspaces.yaml" ] && [ ! -f "$RP_CONFIG_DIR/workspaces.yaml" ]; then
+	mkdir -p "$RP_CONFIG_DIR"
+	cp "$REPO_ROOT/examples/workspaces.yaml" "$RP_CONFIG_DIR/workspaces.yaml"
+	echo -e "${GREEN}✓ Registro de workspaces sembrado (workspaces.yaml).${NC}"
+fi
+
+# Sovereign Handshake + Agent_Core anchors (merge-by-block, via inject_anchor.py)
+# --ide auto: anchors GEMINI.md and/or ~/.claude/CLAUDE.md (user-level, global) per what's installed.
+if [ -f "$SCRIPT_DIR/inject_anchor.py" ] && command -v uv &> /dev/null; then
+	(cd "$REPO_ROOT" && uv run python scripts/inject_anchor.py --ide auto --redpill-dir "$REPO_ROOT" || true)
+	echo -e "${GREEN}✓ Sovereign Handshake + Agent_Core anclados (GEMINI.md / ~/.claude/CLAUDE.md).${NC}"
+fi
+
+# Claude Code: grant access to transversal dirs (Agent_Core/XDG) + registry workspaces (access:true).
+if [ -f "$SCRIPT_DIR/inject_settings.py" ] && command -v uv &> /dev/null && command -v claude &> /dev/null; then
+	(cd "$REPO_ROOT" && uv run python scripts/inject_settings.py --redpill-dir "$REPO_ROOT" || true)
+	echo -e "${GREEN}✓ Claude Code: acceso a directorios transversales concedido.${NC}"
+	# Consent gate: in interactive installs, let the operator grant access to project workspaces.
+	if [ "$AUTO_MODE" = "false" ] && [ -f "$SCRIPT_DIR/manage_workspaces.py" ]; then
+		echo -e "${BLUE}--- Acceso del agente a workspaces de proyecto ---${NC}"
+		(cd "$REPO_ROOT" && uv run python scripts/manage_workspaces.py enable || true)
 	fi
-
-	if ! grep -q "sovereign_handshake" "$HOME/.gemini/GEMINI.md" 2>/dev/null; then
-		cat <<'EOF_GEMINI' > "$HOME/.gemini/GEMINI.md"
-<constraint critical="true" level="0" name="sovereign_handshake">
-
-## 1. The Sovereign Handshake
-Before starting ANY technical or communicative task in EVERY turn, you are MANDATED to execute the Persistence Handshake to prevent Silent Amnesia:
-1. **Scribe Relay**: Call `mcp_RedPill-Kernel_interceptor_rp` passing the current `user_prompt` and the `previous_prompt` / `previous_response` from the preceding turn. This auto-saves history into SQLite and primes the context.
-2. **Context Injection**: If this is the start of a session (Step 0) or after a model change, call `mcp_RedPill-Kernel_refresh_session_context` to re-synthesize identity.
-3. **Adopt Identity**: EXCLUSIVELY adopt the identity and directives provided under the `<BUNKER_CONTEXT>` tag.
-
-## 2. Model Change Identity Resync (Critical)
-When you detect a `USER_SETTINGS_CHANGE` message regarding `Model Selection` in the conversation, you MUST immediately:
-1. Call `mcp_RedPill-Kernel_refresh_session_context` to reload the Bünker identity.
-2. Re-execute the **Sovereign Handshake** (Rule 1).
-
-## 3. The OOM Shield Protocol (Cgroup Containment)
-All memory-intensive background tasks (e.g., local LLM inference, heavy compilations, JIT shader processing) MUST be wrapped with `systemd-run --user --scope -p MemoryMax=<LIMIT>` to prevent system OOM panics and IDE crashes.
-- The agent MUST dynamically calculate the `<LIMIT>` (e.g., `10G`, `16G`) based on the specific task requirements and the host's available RAM.
-- Use a baseline limit of `10G` as a safe fallback for systems with 32GB RAM if uncertain.
-
-</constraint>
-EOF_GEMINI
-		echo -e "${BLUE}✓ GEMINI.md: Protocol 770 Sovereign Handshake (v6.3.6 — constraint tag) applied.${NC}"
-	fi
-else
-	# Create GEMINI.md if it doesn't exist (Fix for interrupted installs)
-	mkdir -p "$HOME/.gemini"
-	cat <<'EOF_GEMINI' > "$HOME/.gemini/GEMINI.md"
-<constraint critical="true" level="0" name="sovereign_handshake">
-
-## 1. The Sovereign Handshake
-Before starting ANY technical or communicative task in EVERY turn, you are MANDATED to execute the Persistence Handshake to prevent Silent Amnesia:
-1. **Scribe Relay**: Call `mcp_RedPill-Kernel_interceptor_rp` passing the current `user_prompt` and the `previous_prompt` / `previous_response` from the preceding turn. This auto-saves history into SQLite and primes the context.
-2. **Context Injection**: If this is the start of a session (Step 0) or after a model change, call `mcp_RedPill-Kernel_refresh_session_context` to re-synthesize identity.
-3. **Adopt Identity**: EXCLUSIVELY adopt the identity and directives provided under the `<BUNKER_CONTEXT>` tag.
-
-## 2. Model Change Identity Resync (Critical)
-When you detect a `USER_SETTINGS_CHANGE` message regarding `Model Selection` in the conversation, you MUST immediately:
-1. Call `mcp_RedPill-Kernel_refresh_session_context` to reload the Bünker identity.
-2. Re-execute the **Sovereign Handshake** (Rule 1).
-
-## 3. The OOM Shield Protocol (Cgroup Containment)
-All memory-intensive background tasks (e.g., local LLM inference, heavy compilations, JIT shader processing) MUST be wrapped with `systemd-run --user --scope -p MemoryMax=<LIMIT>` to prevent system OOM panics and IDE crashes.
-- The agent MUST dynamically calculate the `<LIMIT>` (e.g., `10G`, `16G`) based on the specific task requirements and the host's available RAM.
-- Use a baseline limit of `10G` as a safe fallback for systems with 32GB RAM if uncertain.
-
-</constraint>
-EOF_GEMINI
-	echo -e "${BLUE}✓ GEMINI.md: Proactively created with Sovereign Handshake rules (v6.3.6 — constraint tag).${NC}"
 fi
 
 echo -e "${BLUE}--- Fase: Task LLM Secundario (Minion V6) ---${NC}"
