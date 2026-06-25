@@ -1,5 +1,10 @@
 ## [7.3.0] - Unreleased
 
+### 🧩 Multi-IDE Cascades, Model Propagation & Chronicle Plugins (AD-017)
+- **[FEAT] Multi-IDE Cascades Configuration (`config.py`, `factory.py`, `worker.py`, `agent.py`)**: Separated execution bridge cascades into Telegram, autonomous awakenings, and background minions (`TELEGRAM_BRIDGE_CASCADE`, `AWAKENING_BRIDGE_CASCADE`, `DEFAULT_MINION_BRIDGE_CASCADE` with fallback to `IDE_BACKEND`).
+- **[FEAT] Model Trace Propagation (`worker.py`, `queue_manager.py`, `queue_worker.py`, `memory.py`, `sleep.py`)**: Propagated the real model name returned by bridges to Qdrant engrams (`sequence_chunk` and `synthesis_hub` under `metadata.model`) via self-healing SQLite migrations adding the `model` column to `interactions` and `memory_queue`.
+- **[FEAT] Chronicle Plugin System (`rituals.py`, `metabolism/chronicle/`)**: Refactored the monolithic trajectory Snatcher into a pluggable sequential architecture (`base.py`, `antigravity_plugin.py`), and created the `ClaudeCodeExtractorPlugin` for idempotent, concurrent, and incremental log tailing of Claude Code session transcripts (`~/.claude/projects/*.jsonl`) with transactional offset-state tracking.
+
 ### ⚡ Liveness Probes & Hypervisor Health (BUG-001)
 - **[FIX] 3-State Liveness Model (`drive_evaluator.py`, `samantha_on_demand.py`)**: Resolved false `local_llm_offline` warnings and VRAM/RAM memory spikes by introducing a 3-state liveness probe (`ready` | `busy` | `down`). Probes distinguish a dead hypervisor (`down` / `ECONNREFUSED` -> triggers pain alerts) from a saturated one (`busy` / timeout -> suppresses pain and returns `True` to reuse the active hypervisor, preventing the spawning of duplicate ~8 GiB ephemeral model servers).
 

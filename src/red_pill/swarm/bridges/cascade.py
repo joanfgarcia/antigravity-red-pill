@@ -55,8 +55,9 @@ class AllModelsExhausted(CascadeError):
 class CascadeBridge(AgentBridge):
 	"""AgentBridge that tries an ordered list of targets, first-with-quota wins."""
 
-	def __init__(self, targets: "List[BridgeTarget]"):
+	def __init__(self, targets: "List[BridgeTarget]", name: str = "cascade"):
 		self._targets: "List[BridgeTarget]" = list(targets or [])
+		self._name = name
 
 	def _build(self, backend: str) -> AgentBridge:
 		# Lazy import to avoid a factory ↔ cascade import cycle.
@@ -94,7 +95,7 @@ class CascadeBridge(AgentBridge):
 		(with per-target errors) if every target fails.
 		"""
 		if not self._targets:
-			raise NoModelsConfigured("no bridge targets configured in TELEGRAM_BRIDGE_CASCADE")
+			raise NoModelsConfigured(f"no bridge targets configured in {self._name}")
 
 		errors: List[Tuple["BridgeTarget", str]] = []
 		for t in self._targets:

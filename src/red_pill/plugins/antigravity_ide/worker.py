@@ -3,6 +3,7 @@ import logging
 import os
 import sqlite3
 import sys
+from typing import Optional
 import time
 from pathlib import Path
 
@@ -84,16 +85,30 @@ class IDEWorker:
 	def __init__(self):
 		self.client = AntigravityIDEClient()
 		self.running = True
-		self._bridge: AgentBridge | None = None
+		self._bridge_telegram: AgentBridge | None = None
+		self._bridge_awakening: AgentBridge | None = None
+		self._bridge_minion: AgentBridge | None = None
 		self._caps: BridgeCapabilities = BridgeCapabilities(backend=BackendType.GRPC)
 		self._samantha_worker = None
-		# AgentBridge: create execution bridge based on config
+		# AgentBridge: create execution bridges based on config
 		try:
-			self._bridge = create_cascade_bridge()
-			self._caps = self._bridge.get_capabilities()
-			logger.info(f"[IDEWorker] Bridge: {self._caps.backend.value.upper()} (auto_approve={self._caps.auto_approve})")
+			cfg_inst = cfg.get_config()
+			self._bridge_telegram = create_cascade_bridge(cfg_inst.TELEGRAM_BRIDGE_CASCADE, name="TELEGRAM_BRIDGE_CASCADE")
+			self._bridge_awakening = create_cascade_bridge(cfg_inst.AWAKENING_BRIDGE_CASCADE, name="AWAKENING_BRIDGE_CASCADE")
+			self._bridge_minion = create_cascade_bridge(cfg_inst.DEFAULT_MINION_BRIDGE_CASCADE, name="DEFAULT_MINION_BRIDGE_CASCADE")
+			
+			# Fallback for capabilities / legacy checks
+			self._caps = self._bridge_telegram.get_capabilities()
+			logger.info(f"[IDEWorker] Telegram Bridge: {self._bridge_telegram.get_capabilities().backend.value.upper()}")
+			logger.info(f"[IDEWorker] Awakening Bridge: {self._bridge_awakening.get_capabilities().backend.value.upper()}")
+			logger.info(f"[IDEWorker] Minion Bridge: {self._bridge_minion.get_capabilities().backend.value.upper()}")
 		except Exception as e:
 			logger.warning(f"[IDEWorker] Bridge creation failed, falling back to gRPC-only: {e}")
+			from red_pill.swarm.bridges.factory import create_bridge
+			self._bridge_telegram = create_bridge("grpc")
+			self._bridge_awakening = create_bridge("grpc")
+			self._bridge_minion = create_bridge("grpc")
+			self._caps = self._bridge_telegram.get_capabilities()
 		# SamanthaWorker: background thread for local LLM tasks (non-blocking)
 		try:
 			from red_pill.inference.samantha_worker import SamanthaWorker
@@ -624,14 +639,14 @@ class IDEWorker:
 
 		prompt += f"<current_message>\n{combined_text}\n</current_message>\n"
 
-		if not self._bridge:
+		if not self._bridge_telegram:
 			logger.error(f"[{msg_ids}] No bridge available to execute prompt")
 			for m_id in msg_ids:
 				cursor.execute("UPDATE inbox SET retries = retries + 1 WHERE id = ?", (m_id,))
 			return
 
 		try:
-			result = self._bridge.prompt(prompt, timeout=300)
+			result = self._bridge_telegram.prompt(prompt, timeout=300)
 		except (NoModelsConfigured, AllModelsExhausted) as e:
 			# Cascade exhausted (empty, or no model with quota) — surface the
 			# pertinent error to the user instead of silently bumping retries.
@@ -665,7 +680,7 @@ class IDEWorker:
 
 		# External Scribe
 		try:
-			self._scribe_relay(user_prompt=combined_text, agent_response=response)
+			self._scribe_relay(user_prompt=combined_text, agent_response=response, model=result.model)
 		except Exception as e:
 			logger.warning(f"[{msg_ids}] Scribe relay failed (non-fatal): {e}")
 
@@ -703,7 +718,7 @@ class IDEWorker:
 			cursor.execute("UPDATE inbox SET status = 'PROCESSED' WHERE id = ?", (m_id,))
 
 		# 4. Trigger compaction check
-		new_session_id = tsm.trigger_compaction(session_id, self._bridge)
+		new_session_id = tsm.trigger_compaction(session_id, self._bridge_telegram)
 		if new_session_id:
 			cursor.execute(
 				"INSERT OR REPLACE INTO telegram_sessions (channel_user_id, cascade_id, cascade_type) VALUES (?, ?, 'local_session')",
@@ -761,7 +776,7 @@ class IDEWorker:
 			f"{combined_text}\n"
 		)
 
-		if not self._bridge:
+		if not self._bridge_awakening:
 			logger.error(f"[{msg_ids}] No bridge available for AWAKENING")
 			cursor.execute(
 				"UPDATE execution_ledger SET status = 'error', duration_s = 0 WHERE id = ?",
@@ -772,7 +787,7 @@ class IDEWorker:
 			return
 
 		try:
-			result = self._bridge.prompt(prompt, timeout=AWAKENING_TIMEOUT)
+			result = self._bridge_awakening.prompt(prompt, timeout=AWAKENING_TIMEOUT)
 		except Exception as e:
 			duration = time.time() - start_time
 			logger.error(f"[{msg_ids}] AWAKENING execution failed after {duration:.0f}s: {e}")
@@ -844,7 +859,7 @@ class IDEWorker:
 		for m_id in msg_ids:
 			cursor.execute("UPDATE inbox SET status = 'PROCESSED' WHERE id = ?", (m_id,))
 
-	def _scribe_relay(self, user_prompt: str, agent_response: str):
+	def _scribe_relay(self, user_prompt: str, agent_response: str, model: Optional[str] = None):
 		"""External Scribe: save prompt+response directly to the Bünker's interaction log.
 
 		This replaces the interceptor_rp-based scribe_relay for bridge-processed messages.
@@ -856,10 +871,20 @@ class IDEWorker:
 
 			db_path = get_db_dir() / "bunker.db"
 			conn_scribe = sqlite3.connect(str(db_path))
+			
+			# Self-healing migration for column 'model'
+			cursor = conn_scribe.cursor()
+			cursor.execute("PRAGMA table_info(interactions)")
+			columns = [row[1] for row in cursor.fetchall()]
+			if "model" not in columns:
+				conn_scribe.execute("ALTER TABLE interactions ADD COLUMN model TEXT")
+				conn_scribe.commit()
+				logger.info("[Scribe] Added 'model' column to interactions table")
+
 			conn_scribe.execute(
-				"""INSERT INTO interactions (user_prompt, agent_response, timestamp)
-				VALUES (?, ?, CURRENT_TIMESTAMP)""",
-				(user_prompt[:2000], agent_response[:5000]),
+				"""INSERT INTO interactions (user_prompt, agent_response, timestamp, model)
+				VALUES (?, ?, CURRENT_TIMESTAMP, ?)""",
+				(user_prompt[:2000], agent_response[:5000], model),
 			)
 			conn_scribe.commit()
 			conn_scribe.close()
@@ -1114,7 +1139,7 @@ class IDEWorker:
 		conn.close()
 
 	def check_minion_inbox_auto_inject_agy(self):
-		if not self._bridge:
+		if not self._bridge_minion:
 			return
 		activity_file = Path(os.environ.get("HOME", "")) / ".gemini" / "antigravity" / "activity_tracker"
 		if activity_file.exists():
@@ -1141,14 +1166,14 @@ class IDEWorker:
 				prompts.append(f"Source: {r['source']}\nStatus: {r['status']}\nEvent ID: {r['event_id']}\nContent: {r['content']}")
 
 			combined = "\n\n".join(prompts)
-			result = self._bridge.prompt(combined, timeout=300)
+			result = self._bridge_minion.prompt(combined, timeout=300)
 			if result.ok:
 				logger.info("[Agy] Successfully processed minion reports")
 			else:
 				logger.error(f"[Agy] Failed to process minion reports: {result.error}")
 
 	def process_cognitive_queue_agy(self):
-		if not self._bridge:
+		if not self._bridge_minion:
 			return
 		from red_pill.cognitive.queue_manager import CognitiveQueueManager
 
@@ -1181,7 +1206,7 @@ class IDEWorker:
 			"Execute this task silently."
 		)
 
-		result = self._bridge.prompt(prompt, timeout=600)
+		result = self._bridge_minion.prompt(prompt, timeout=600)
 		if result.ok:
 			logger.info(f"[Agy] Cognitive task {task['id']} completed successfully")
 			queue_manager.mark_completed(task["id"])

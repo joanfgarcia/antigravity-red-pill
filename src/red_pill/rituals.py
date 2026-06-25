@@ -285,15 +285,26 @@ async def consolidation_ritual(mm: MemoryManager) -> None:
 	Phase 1: Processes raw interactions into long-term memories.
 	"""
 	try:
-		# Phase 0: LS Snatcher
-		try:
-			from red_pill.metabolism.ls_snatcher import snatch_all_trajectories
+		# Phase 0: Chronicle Plugins
+		from red_pill.metabolism.chronicle.base import ChronicleExtractorPlugin
+		plugin: ChronicleExtractorPlugin
+		for plugin_name in cfg.get_config().CHRONICLE_PLUGINS:
+			try:
+				if plugin_name == "antigravity":
+					from red_pill.metabolism.chronicle.antigravity_plugin import AntigravityExtractorPlugin
+					plugin = AntigravityExtractorPlugin()
+				elif plugin_name == "claude_code":
+					from red_pill.metabolism.chronicle.claude_code_plugin import ClaudeCodeExtractorPlugin
+					plugin = ClaudeCodeExtractorPlugin()
+				else:
+					logger.warning(f"Pulse: Unknown Chronicle plugin: {plugin_name}")
+					continue
 
-			logger.info("Pulse: Initiating LS Snatcher (Extracting LanguageServer trajectories)...")
-			snatched = await asyncio.to_thread(snatch_all_trajectories)
-			logger.info(f"Pulse: LS Snatcher complete. {snatched} trajectories staged.")
-		except Exception as e:
-			logger.warning(f"Pulse: LS Snatcher failed (non-fatal, continuing): {e}")
+				logger.info(f"Pulse: Running Chronicle Plugin '{plugin_name}'...")
+				snatched = await asyncio.to_thread(plugin.extract)
+				logger.info(f"Pulse: Plugin '{plugin_name}' staged {snatched} trajectories.")
+			except Exception as e:
+				logger.warning(f"Pulse: Chronicle Plugin '{plugin_name}' failed (non-fatal, continuing): {e}")
 
 		# Phase 1: Consolidation
 		from red_pill.metabolism.sleep import perform_sleep_cycle

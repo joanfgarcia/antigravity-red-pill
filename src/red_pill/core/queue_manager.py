@@ -52,11 +52,15 @@ class MemoryQueueManager:
 				cursor.execute("ALTER TABLE memory_queue ADD COLUMN originator TEXT")
 			except sqlite3.OperationalError:
 				pass
+			try:
+				cursor.execute("ALTER TABLE memory_queue ADD COLUMN model TEXT")
+			except sqlite3.OperationalError:
+				pass
 			# Index for fast lookup of pending items
 			cursor.execute("CREATE INDEX IF NOT EXISTS idx_status ON memory_queue (status)")
 			conn.commit()
 
-	def enqueue_memory(self, prompt: str, response: str, role: str, category: str = "mixed", originator: Optional[str] = None) -> int:
+	def enqueue_memory(self, prompt: str, response: str, role: str, category: str = "mixed", originator: Optional[str] = None, model: Optional[str] = None) -> int:
 		"""Push a fast memory into the queue. Returns row ID.
 
 		Args:
@@ -69,8 +73,8 @@ class MemoryQueueManager:
 			with sqlite3.connect(self.db_path) as conn:
 				cursor = conn.cursor()
 				cursor.execute(
-					"INSERT INTO memory_queue (prompt, response, role, status, created_at, category, originator) VALUES (?, ?, ?, 'pending', ?, ?, ?)",
-					(prompt, response, role, time.time(), category, originator),
+					"INSERT INTO memory_queue (prompt, response, role, status, created_at, category, originator, model) VALUES (?, ?, ?, 'pending', ?, ?, ?, ?)",
+					(prompt, response, role, time.time(), category, originator, model),
 				)
 				conn.commit()
 				return cursor.lastrowid or 0
@@ -86,7 +90,7 @@ class MemoryQueueManager:
 				conn.row_factory = sqlite3.Row
 				cursor = conn.cursor()
 				cursor.execute(
-					"SELECT id, prompt, response, role, category, originator FROM memory_queue WHERE status = 'pending' ORDER BY created_at ASC LIMIT ?",
+					"SELECT id, prompt, response, role, category, originator, model FROM memory_queue WHERE status = 'pending' ORDER BY created_at ASC LIMIT ?",
 					(limit,),
 				)
 				for row in cursor.fetchall():

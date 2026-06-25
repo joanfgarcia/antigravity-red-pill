@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 import shutil
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import red_pill.config as cfg
 
@@ -58,20 +58,18 @@ def create_bridge(backend: Optional[str] = None) -> AgentBridge:
 	return GrpcBridge()
 
 
-def create_cascade_bridge() -> AgentBridge:
-	"""Execution bridge for the inbox/Telegram worker, cascade-aware.
+def create_cascade_bridge(cascade: List[cfg.BridgeTarget], name: str = "cascade") -> AgentBridge:
+	"""Execution bridge, cascade-aware.
 
-	If `TELEGRAM_BRIDGE_CASCADE` is configured, returns a CascadeBridge that tries
-	each target in order and uses the first with quota (first-with-quota wins). If
-	all fail, its prompt() raises AllModelsExhausted so the worker can surface the
-	pertinent error to the user. When the cascade is empty (default), falls back to
-	the single `IDE_BACKEND` bridge — no behaviour change.
+	If `cascade` is configured, returns a CascadeBridge that tries each target in
+	order and uses the first with quota. If all fail, its prompt() raises
+	AllModelsExhausted. When the cascade is empty, falls back to the single
+	`IDE_BACKEND` bridge.
 	"""
-	cascade = cfg.get_config().TELEGRAM_BRIDGE_CASCADE
 	if cascade:
 		from .cascade import CascadeBridge
 
-		return CascadeBridge(cascade)
+		return CascadeBridge(cascade, name=name)
 	return create_bridge()
 
 

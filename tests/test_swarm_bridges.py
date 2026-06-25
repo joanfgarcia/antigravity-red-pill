@@ -200,7 +200,7 @@ class TestFactory:
 			patch("red_pill.config.get_config", return_value=cfg_obj),
 			patch("red_pill.swarm.bridges.factory.create_bridge") as CB,
 		):
-			create_cascade_bridge()
+			create_cascade_bridge([])
 		CB.assert_called_once_with()
 
 	def test_create_cascade_bridge_uses_cascade_when_configured(self):
@@ -215,7 +215,7 @@ class TestFactory:
 			patch.object(cfg_obj, "TELEGRAM_BRIDGE_CASCADE", targets),
 			patch("red_pill.config.get_config", return_value=cfg_obj),
 		):
-			bridge = create_cascade_bridge()
+			bridge = create_cascade_bridge(targets)
 		assert isinstance(bridge, CascadeBridge)
 
 	def test_preflight_ready_with_agy(self):

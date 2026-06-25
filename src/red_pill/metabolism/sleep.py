@@ -781,6 +781,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 
 			# Target collection heuristics
 			raw_metadata = (point.payload or {}).get("metadata", {})
+			model_name = raw_metadata.get("model", "unknown") if isinstance(raw_metadata, dict) else "unknown"
 			llm_category = raw_metadata.get("category", "") if isinstance(raw_metadata, dict) else ""
 			if llm_category in ("work", "social"):
 				fallback_cat = llm_category
@@ -810,7 +811,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 					new_id = memory_manager.add_memory(
 						collection=target_col,
 						text=summary,
-						metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id},
+						metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id, "model": model_name},
 						color="blue" if target_col == "work_memories" else "purple",
 						emotion=distilled.get("emotion", "neutral"),
 						intensity=distilled.get("intensity", 0.5),
@@ -831,7 +832,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 					hub_id = memory_manager.add_memory(
 						collection=target_col,
 						text=hub_summary,
-						metadata={"lazarus_phase": "synthesis_hub", "node_type": "synthesis_hub", "source_buffer_id": raw_id},
+						metadata={"lazarus_phase": "synthesis_hub", "node_type": "synthesis_hub", "source_buffer_id": raw_id, "model": model_name},
 						color="cyan",
 						emotion=surviving_chunks[-1]["emotion"],
 						intensity=max([c["intensity"] for c in surviving_chunks]),
@@ -878,6 +879,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 					continue
 
 				raw_id = payload.get("id", filename.replace(".json", ""))
+				model_name = payload.get("model") or payload.get("summary", {}).get("model") or "unknown"
 				raw_text = ""
 				for step in payload.get("steps", []):
 					txt = step.get("message", {}).get("text", "")
@@ -909,7 +911,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 						new_id = memory_manager.add_memory(
 							collection="work_memories",
 							text=summary,
-							metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id},
+							metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id, "model": model_name},
 							color="blue",
 							emotion=distilled.get("emotion", "neutral"),
 							intensity=distilled.get("intensity", 0.5),
@@ -928,7 +930,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 						hub_id = memory_manager.add_memory(
 							collection="work_memories",
 							text=hub_summary,
-							metadata={"lazarus_phase": "synthesis_hub", "node_type": "synthesis_hub", "source_buffer_id": raw_id},
+							metadata={"lazarus_phase": "synthesis_hub", "node_type": "synthesis_hub", "source_buffer_id": raw_id, "model": model_name},
 							color="cyan",
 							emotion=surviving_chunks[-1]["emotion"],
 							intensity=max([c["intensity"] for c in surviving_chunks]),

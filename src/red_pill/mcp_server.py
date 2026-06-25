@@ -1385,6 +1385,7 @@ async def handle_mystique_suggest_skin(arguments: Dict[str, Any]):
 			"user_prompt": {"type": "string"},
 			"previous_prompt": {"type": "string", "description": "Prompt del turno anterior para auto-guardado (Silent Scribe Relay)."},
 			"previous_response": {"type": "string", "description": "Respuesta del turno anterior para auto-guardado (Silent Scribe Relay)."},
+			"previous_model": {"type": "string", "description": "Nombre del modelo LLM que generó la respuesta anterior."},
 			"previous_category": {
 				"type": "string",
 				"enum": ["work", "social", "mixed"],
@@ -1439,6 +1440,7 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 	prev_p = arguments.get("previous_prompt", "").strip()
 	prev_r = arguments.get("previous_response", "").strip()
 	prev_cat = arguments.get("previous_category", "mixed").strip().lower()
+	prev_mod = arguments.get("previous_model", "").strip() or None
 	if prev_cat not in ("work", "social", "mixed"):
 		prev_cat = "mixed"
 
@@ -1458,8 +1460,8 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 
 			# Only enqueue if after trimming there is still substantial substance
 			if len(clean_p) > 20 and len(clean_r) > 20:
-				MemoryQueueManager().enqueue_memory(clean_p, clean_r, "assistant", category=prev_cat)
-				logger.info(f"Silent Scribe Relay: turn enqueued cleanly via interceptor_rp (category={prev_cat}).")
+				MemoryQueueManager().enqueue_memory(clean_p, clean_r, "assistant", category=prev_cat, model=prev_mod)
+				logger.info(f"Silent Scribe Relay: turn enqueued cleanly via interceptor_rp (category={prev_cat}, model={prev_mod}).")
 			else:
 				logger.info("Silent Scribe Relay: Dropped due to being mostly CI/Noise overhead.")
 		except Exception as relay_err:
@@ -1541,6 +1543,7 @@ async def handle_configure_interceptor(arguments: Dict[str, Any]):
 			"user_prompt": {"type": "string", "description": "The current user message."},
 			"previous_prompt": {"type": "string", "description": "Prompt from the preceding turn (Silent Scribe Relay)."},
 			"previous_response": {"type": "string", "description": "Response from the preceding turn (Silent Scribe Relay)."},
+			"previous_model": {"type": "string", "description": "The LLM model name that generated the previous response."},
 			"previous_category": {
 				"type": "string",
 				"enum": ["work", "social", "mixed"],
@@ -1584,7 +1587,7 @@ async def handle_sovereign_handshake(arguments: Dict[str, Any]):
 			"mode": mode,
 		}
 		# Forward optional relay fields
-		for key in ("previous_prompt", "previous_response", "previous_category"):
+		for key in ("previous_prompt", "previous_response", "previous_category", "previous_model"):
 			if key in arguments:
 				interceptor_args[key] = arguments[key]
 
