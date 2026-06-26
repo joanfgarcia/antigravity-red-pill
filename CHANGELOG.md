@@ -1,5 +1,18 @@
-## [7.3.0] - Unreleased
+## [7.3.1] - 2026-06-26
 
+### 🎭 Declarative Lore Skins & Directives Refactoring (CORE-003)
+- **[FEAT] Declarative Lore Skins (`lore_skins.yaml`)**: Optimized all 21 lore skins under the `modes` configuration to transition from first-person narrative prose into structured key-value refractions (e.g., `Style:`, `Tone:`, `Focus:`, `Lexicon:`). This retains 100% retrocompatibility with CLI and database schemas while preventing safety classifier / jailbreak triggers on advanced, modern LLMs (where the tipping point started with Gemini 3.5 and Claude Opus 4.8).
+- **[FEAT] Structured System Prompts (`sleep.py`, `samantha.py`, `edge_engine.py`)**: Restructured first-person conversational roleplay prompts in the Lazarus sleep engine (distillation, synthesis, and session anchor generation), Samantha minion, and local EdgeEngine (compression and synthesis) into structured, declarative, and token-efficient directives.
+- **[TEST] Skin Integrity Tests (`test_lore_skins.py`)**: Validated YAML integrity, schema constraints, ValidColor compliance, and integration of the mode-switching flow with Qdrant persistence.
+- **[FEAT] Version Engram Consolidation**: Replaced manually created duplicate version engrams in `directive_memories` with a single permanent genesis engram using a fixed UUID (`ID_PROTOCOL_VERSION`), keeping it automatically synchronized and unique across seeding and upgrades.
+
+
+### ⚡ Ariadne's Thread & Sentinel Timeout Resiliency
+- **[FIX] Sleep Engine Distillation robustness (`sleep.py`)**: Fixed a critical crash where LLM output with nested dictionaries or non-string fields (like `{"emotion": {"type": "joy"}}` or floats) threw `AttributeError` on `.lower()` during sleep consolidation, and ensured `detect_category_heuristics` handles non-string engram values.
+- **[FIX] Health Check Timeouts (`check_sip.py`, `doctor.py`)**: Increased port 8760 health probe timeouts from 3 seconds to 30 seconds to prevent false-positive `signal_sip_loading_failure` alarms when the local inference proxy is busy evaluating prompt prefixes.
+- **[TEST] Distillation Edge-Cases (`test_sleep.py`)**: Added unit tests to validate malformed JSON payloads and non-string inputs in sleep heuristics.
+
+## [7.3.0] - 2026-06-25
 ### 🧠 RhizoDB Memory Dynamics & Sleep Consolidation (Zenodo DOI: 10.5281/zenodo.20695703)
 - **[FEAT] RhizoDB Memory Engine (`affect.py`, `config.py`)**: Integrated Jorge Augusto Guberte's RhizoDB memory dynamics model as a first-class memory engine (`"rhizodb"`). Social memories (`social_memories`) and story memories (`story_memories`) now default to `"rhizodb"` routing.
 - **[FEAT] Saturated Activation & Asymptotic Stability (`affect.py`)**: Replaced linear/exponential memory decay with saturated activation updates ($a_v(t+1) = a_v(t) + (1.0 - a_v(t)) \cdot \alpha$) and asymptotic stability updates ($s_v(t+1) = s_v(t) + \eta \cdot \alpha \cdot (S_{\max} - s_v(t))$) capped at $S_{\max} = 365.0$ days with learning rate $\eta = 0.1$.

@@ -131,7 +131,7 @@ Plugins 05–10. Each is independently toggleable.
 
 ---
 
-## 🔌 IDE Bridge & Extractor Cascades (v7.3.0)
+## 🔌 IDE Bridge & Extractor Cascades (v7.3.1)
 
 | Parameter | Default | Description |
 | :--- | :--- | :--- |

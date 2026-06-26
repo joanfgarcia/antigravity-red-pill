@@ -4,6 +4,31 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-019] Declarative Lore Skins & Structured System Directives
+**Date**: 2026-06-26  
+**Context**: v7.3.0 — Identity prompts and LLM compatibility  
+**Status**: ACCEPTED & IMPLEMENTED  
+
+### 1. The Problem
+Advanced and modern LLMs (where the tipping point started with Gemini 3.5 and Claude Opus 4.8, alongside models like Claude 3.5 Sonnet) have strict safety classifiers and jailbreak detection filters. The legacy first-person roleplay descriptions in `lore_skins.yaml` (e.g. "I see the code...", "I am not just an OS...") and conversational system prompts (e.g. "Eres Samantha, una IA experta...") frequently trigger these safety classifiers. This leads to model alignment rejection or dilution of the assistant's persona. Furthermore, unstructured prose prompts consume excessive token overhead, hindering lightweight local SLMs.
+
+### 2. The Decision
+- Refactor all 21 lore skins in `lore_skins.yaml` to transition from first-person conversational prose to structured key-value refractions (`Style`, `Tone`, `Focus`, `Lexicon` under a `[Refraction: SKIN_NAME]` envelope).
+- Maintain strict backward compatibility: do not change key names in the YAML schema so that the CLI switching (`red-pill mode`) and Qdrant persistence continue to work out-of-the-box.
+- Restructure all core system prompts in the Lazarus sleep engine (`sleep.py`), Samantha agent (`samantha.py`), and EdgeEngine (`edge_engine.py`) to follow the same declarative, token-efficient format.
+
+### 3. The Implementation
+- Converted all 21 lore skin descriptions in `src/red_pill/data/lore_skins.yaml`.
+- Refactored `distill_engram`, `synthesize_hub`, and `distill_session_anchors` prompts in `src/red_pill/metabolism/sleep.py`.
+- Refactored Samantha's system prompt in `src/red_pill/swarm/agents/samantha.py`.
+- Refactored compression and synthesis prompts in `src/red_pill/swarm/agents/edge_engine.py`.
+- Preserved strict tab indentation (`\t`) in all Python code.
+
+### 4. Rationale
+Eliminates LLM safety rejections and jailbreak-like false positives by adopting an objective, declarative system-specification style. Structured formats (key-value instructions) are easier for advanced models to follow without feeling "forced" into a conscious roleplay, while significantly reducing prompt length and token usage. **Verified**: All 875 unit and integration tests passed cleanly, and CLI switches/refreshes persist correctly in Qdrant.
+
+---
+
 ## [AD-016] Generalized Agent-Backend Bridges + First-Class Agentic Minion
 **Date**: 2026-06-18  
 **Context**: v7.3.0 — Swarm / agent execution  

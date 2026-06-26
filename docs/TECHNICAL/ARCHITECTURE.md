@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v7.3.0 (Sovereign Daemon)
+**System Version**: v7.3.1 (Sovereign Daemon)
 **Analyst**: The Architect
 **Date**: 2026-04-16
 

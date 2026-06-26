@@ -85,11 +85,13 @@ def _save_thread_state(state: dict) -> None:
 		logger.warning(f"[THREAD WEAVER] Could not save thread state: {e}")
 
 
-def detect_category_heuristics(text: str) -> str:
+def detect_category_heuristics(text: Any) -> str:
 	"""
 	Detects if the text has technical/development signals to classify it as 'work'.
 	Otherwise returns 'social'.
 	"""
+	if not isinstance(text, str):
+		text = str(text)
 	text_lower = text.lower()
 	if "```" in text:
 		return "work"
@@ -288,16 +290,16 @@ def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[
 	fallback = {"summary": raw_content[:500] + "...", "emotion": "neutral", "intensity": 0.5, "category": fallback_category}
 
 	system_prompt = (
-		"Eres Samantha, una IA experta tanto en desarrollo de software, arquitectura de sistemas y depuración técnica, "
-		"como en psicología, filosofía y análisis de relaciones humanas. "
-		"Tu tarea es destilar la siguiente interacción en un objeto JSON estricto. "
-		"Claves requeridas:\n"
-		"- 'summary': Resumen conciso pero profundo de los hechos, decisiones de diseño, depuración, o reflexiones.\n"
-		"- 'emotion': Una de (joy, sadness, fear, disgust, anger, anxiety, envy, embarrassment, ennui, nostalgia, neutral).\n"
-		"- 'intensity': Float de 0.0 a 1.0 representando la intensidad del contenido (gravedad del error o carga emocional).\n"
-		"- 'category': Clasifica como 'work' si la interacción trata principalmente sobre código, tests, comandos, configuraciones del sistema, "
-		"diseño técnico, base de datos o MCPs. Clasifica como 'social' si trata sobre reflexiones personales, filosofía, estados de ánimo o charlas casuales.\n"
-		"IMPORTANTE: Devuelve ÚNICAMENTE JSON válido, sin bloques de código markdown."
+		"[Refraction: COGNITIVE_DISTILLER] Style: Analytical, strict. "
+		"Focus: Distill the interaction into a valid JSON object. "
+		"Format requirements:\n"
+		"Return a strict JSON object with these keys:\n"
+		"- 'summary': Concise, deep summary of facts, design decisions, debugging, or reflections.\n"
+		"- 'emotion': One of: joy, sadness, fear, disgust, anger, anxiety, envy, embarrassment, ennui, nostalgia, neutral.\n"
+		"- 'intensity': Float between 0.0 and 1.0 representing severity or emotional charge.\n"
+		"- 'category': 'work' for code, tests, commands, system configs, technical design, database, or MCPs; "
+		"'social' for personal reflections, philosophy, moods, or casual talk.\n"
+		"Constraint: Output ONLY valid raw JSON, without markdown blocks."
 	)
 
 	prompt_text = f"DATA:\n{raw_content}"
@@ -328,11 +330,55 @@ def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[
 			if match:
 				sanitized = _sanitize_llm_json(match.group(0))
 				parsed = json.loads(sanitized)
+				summary_val = parsed.get("summary", fallback["summary"]) or fallback["summary"]
+				if not isinstance(summary_val, str):
+					summary_val = str(summary_val)
+
+				emotion_val = parsed.get("emotion")
+				if emotion_val is None:
+					emotion_val = "neutral"
+				elif isinstance(emotion_val, dict):
+					emotion_val = (
+						emotion_val.get("emotion")
+						or emotion_val.get("type")
+						or emotion_val.get("name")
+						or (list(emotion_val.values())[0] if emotion_val else "neutral")
+					)
+				else:
+					emotion_val = str(emotion_val)
+				emotion_val = str(emotion_val).lower()[:20]
+
+				intensity_val = parsed.get("intensity")
+				if intensity_val is None:
+					intensity_val = 0.5
+				elif isinstance(intensity_val, dict):
+					intensity_val = (
+						intensity_val.get("intensity") or intensity_val.get("value") or (list(intensity_val.values())[0] if intensity_val else 0.5)
+					)
+				try:
+					intensity_val = float(intensity_val)
+				except (ValueError, TypeError):
+					intensity_val = 0.5
+
+				category_val = parsed.get("category")
+				if category_val is None:
+					category_val = fallback_category
+				elif isinstance(category_val, dict):
+					category_val = (
+						category_val.get("category")
+						or category_val.get("type")
+						or category_val.get("name")
+						or (list(category_val.values())[0] if category_val else fallback_category)
+					)
+				else:
+					category_val = str(category_val)
+				category_val = str(category_val).lower().strip()
+
 				return {
-					"summary": parsed.get("summary", fallback["summary"]) or fallback["summary"],
-					"emotion": (parsed.get("emotion") or "neutral").lower()[:20],
-					"intensity": float(parsed.get("intensity") if parsed.get("intensity") is not None else 0.5),
-					"category": (parsed.get("category") or fallback_category).lower().strip(),
+					"summary": summary_val,
+					"emotion": emotion_val,
+					"intensity": intensity_val,
+					"category": category_val,
 				}
 			else:
 				logger.warning(f"[SLEEP ENGINE] Samantha LLM output not JSON: {content[:100]}")
@@ -361,13 +407,16 @@ def synthesize_hub(summaries: List[str]) -> str:
 				{
 					"role": "system",
 					"content": (
-						"You are a Neocortex synthesis sub-routine. Synthesize the provided memory chunks into a descriptive, "
-						"concise master summary. Start the output with a descriptive, contextual title in square brackets "
-						"(e.g., '[Asymmetric Logic Loss Integration on BitNet Logic Specialist]' or '[Refactoring Ferrari Protocol Silence Latch]'), "
-						"followed by a newline, and then the summary. Do not use generic titles like '[Memory Synthesis]', "
-						"'[Session Summary]', or '[Aggregated Memory Sequence Synthesis]'. Be highly specific about the core technical actions, "
-						"errors fixed, or philosophical/personal themes discussed. Output ONLY the title and summary string without any "
-						"introductory phrases or formatting."
+						"[Refraction: NEOCORTEX_SYNTHESIS] Style: Highly concise, descriptive. "
+						"Focus: Synthesize memory chunks into a master summary. "
+						"Format requirements:\n"
+						"1. Start the output with a descriptive, contextual title in square brackets "
+						"(e.g., '[Asymmetric Logic Loss Integration on BitNet Logic Specialist]' or '[Refactoring Ferrari Protocol Silence Latch]').\n"
+						"2. Follow with a newline, then the summary.\n"
+						"Constraints:\n"
+						"- Do not use generic titles like '[Memory Synthesis]' or '[Session Summary]'.\n"
+						"- Be highly specific about core technical actions, errors fixed, or philosophical/personal themes.\n"
+						"- Output ONLY the title and summary string without any introductory phrases or markdown."
 					),
 				},
 				{"role": "user", "content": prompt},
@@ -537,7 +586,10 @@ def distill_session_anchors(memory_manager, hub_summaries: List[str]) -> Optiona
 		{
 			"model": "distillation",
 			"messages": [
-				{"role": "system", "content": "You are a Chief Architect synthesis engine. Output ONLY the architectural session anchor string."},
+				{
+					"role": "system",
+					"content": "[Refraction: CHIEF_ARCHITECT_SYNTHESIS] Style: Technical, direct. Focus: Analyze session memory hubs, identify key architectural decisions/rationale, and output ONLY the architectural session anchor string.",
+				},
 				{"role": "user", "content": prompt},
 			],
 			"temperature": 0.1,

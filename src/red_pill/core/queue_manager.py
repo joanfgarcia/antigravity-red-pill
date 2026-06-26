@@ -26,7 +26,7 @@ class MemoryQueueManager:
 		self._init_db()
 
 	def _init_db(self) -> None:
-		with sqlite3.connect(self.db_path) as conn:
+		with sqlite3.connect(self.db_path, timeout=30.0) as conn:
 			cursor = conn.cursor()
 			cursor.execute("PRAGMA journal_mode=WAL;")
 			cursor.execute("PRAGMA synchronous=NORMAL;")
@@ -72,7 +72,7 @@ class MemoryQueueManager:
 		if category not in ("work", "social", "mixed"):
 			category = "mixed"
 		try:
-			with sqlite3.connect(self.db_path) as conn:
+			with sqlite3.connect(self.db_path, timeout=30.0) as conn:
 				cursor = conn.cursor()
 				cursor.execute(
 					"INSERT INTO memory_queue (prompt, response, role, status, created_at, category, originator, model) VALUES (?, ?, ?, 'pending', ?, ?, ?, ?)",
@@ -88,7 +88,7 @@ class MemoryQueueManager:
 		"""Fetch pending memories to process them."""
 		items = []
 		try:
-			with sqlite3.connect(self.db_path) as conn:
+			with sqlite3.connect(self.db_path, timeout=30.0) as conn:
 				conn.row_factory = sqlite3.Row
 				cursor = conn.cursor()
 				cursor.execute(
@@ -104,7 +104,7 @@ class MemoryQueueManager:
 	def update_status(self, item_id: int, status: str) -> None:
 		"""Mark item as completed or error."""
 		try:
-			with sqlite3.connect(self.db_path) as conn:
+			with sqlite3.connect(self.db_path, timeout=30.0) as conn:
 				cursor = conn.cursor()
 				cursor.execute("UPDATE memory_queue SET status = ? WHERE id = ?", (status, item_id))
 				conn.commit()
@@ -114,7 +114,7 @@ class MemoryQueueManager:
 	def get_pending_count(self) -> int:
 		"""Returns the total number of engrams waiting in the queue."""
 		try:
-			with sqlite3.connect(self.db_path) as conn:
+			with sqlite3.connect(self.db_path, timeout=30.0) as conn:
 				cursor = conn.cursor()
 				cursor.execute("SELECT COUNT(*) FROM memory_queue WHERE status = 'pending'")
 				row = cursor.fetchone()
