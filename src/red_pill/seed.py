@@ -26,7 +26,6 @@ ID_OPERATOR_MOOD = "00000000-0000-0000-0000-000000000060"
 ID_PROTOCOL_VERSION = "00000000-0000-0000-0000-000000000070"
 
 
-
 def seed_project(manager: MemoryManager) -> None:
 	"""Initializes memory collections and genesis engrams."""
 	collections = [
@@ -65,17 +64,14 @@ def migrate_directives(manager: MemoryManager) -> None:
 	"""Ensures all foundational engrams are present in the Qdrant instance."""
 	logger.info("Syncing foundational DNA (Directive Migration)...")
 	# Cleanup legacy skins
-	legacy_skin_ids = [
+	legacy_skin_ids: List[Any] = [
 		"00000000-0000-0000-0000-000000000020",
 		"00000000-0000-0000-0000-000000000021",
 		"00000000-0000-0000-0000-000000000022",
 		"00000000-0000-0000-0000-000000000023",
 	]
 	try:
-		manager.client.delete(
-			collection_name="directive_memories",
-			points_selector=models.PointIdsList(points=legacy_skin_ids)
-		)
+		manager.client.delete(collection_name="directive_memories", points_selector=models.PointIdsList(points=legacy_skin_ids))
 		logger.info("Cleaned up legacy skin engrams from Bünker.")
 	except Exception as e:
 		logger.debug(f"Legacy skin cleanup skipped: {e}")
@@ -198,7 +194,7 @@ def inject_genesis(manager: MemoryManager) -> None:
 				"intensity": 10.0,
 				"immune": True,
 				"category": "operational_law",
-				"type": "protocol_version"
+				"type": "protocol_version",
 			},
 		},
 		{

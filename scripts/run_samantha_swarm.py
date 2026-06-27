@@ -10,8 +10,9 @@ from red_pill.swarm.orchestrator import GruOrchestrator
 
 
 async def run_analysis():
-	chapter_path = "docs/LORE/ALETH_CAPITULO_1.md"
+	chapter_path = "docs/LORE/novel/ALETH_CAPITULO_1.md"
 	if not os.path.exists(chapter_path):
+
 		print(f"Error: {chapter_path} not found.")
 		return
 
@@ -37,8 +38,8 @@ async def run_analysis():
 		report_path = os.path.join(reports_dir, "SAMANTHA_REPORT_CH1.md")
 		with open(report_path, "w", encoding="utf-8") as rf:
 			rf.write("# Reporte de Análisis Narrativo: Capítulo 1\n")
-			rf.write("**Analista:** Samantha (Mistral-7B / Local Engine via Swarm/SIP)\n")
-			rf.write("**Fecha:** 2026-03-16\n\n")
+			rf.write("**Analista:** Samantha (Hermes-3-Llama-3.1-8B / Local Engine via Swarm/SIP)\n")
+			rf.write("**Fecha:** 2026-06-26\n\n")
 			rf.write(analysis)
 		print(f"[Success] Report saved to {report_path}")
 	else:

@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v7.3.1 (Sovereign Daemon)
+**System Version**: v7.3.2 (Sovereign Daemon)
 **Analyst**: The Architect
 **Date**: 2026-04-16
 
@@ -457,6 +457,12 @@ Deployed via `~/.config/systemd/user/`, these units form the autonomic layer of 
 
 ### 14.4 Content Quality Gate (Anti-BUG)
 To prevent the **Bayesian Utility Feedback Loop (BUG)**, the system now enforces a **Shannon Entropy Gate**. Engrams with low information density (terminal noise, repetitive boilerplate) are blocked from reinforcement. This ensures the Bayesian "Utility Alpha" only grows for meaningful technical knowledge, preserving the long-term integrity of the Bünker's professional collections.
+
+### 14.5 Log Stream Bifurcation & Priority-Based Filtering
+To prevent false-positive pain signals (such as GGUF model metadata containing the string `"raise_exception"` on startup), the Auditor employs a bifurcated log parsing strategy:
+- **Journaled Units**: Queries systemd journalctl with `--priority=4` (Warning or higher) to isolate error streams and automatically exclude normal service standard output.
+- **Redirected Daemon Logs**: Performs high-performance tail-scanning (last 10KB seek/read chunks) on active service error log files (`error.log` and `bunker_daemon_error.log`).
+- **GGUF Metadata Filtering**: Automatically skips any lines containing `"llama_model_loader"`, eliminating model startup noise while maintaining complete error visibility.
 
 ## 15. Workspace Protection & OOM Containment
 

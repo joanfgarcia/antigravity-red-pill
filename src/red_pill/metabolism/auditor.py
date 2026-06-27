@@ -201,6 +201,26 @@ class SentinelAuditor:
 
 		return report
 
+	def _read_log_tail(self, filepath: Path, max_bytes: int = 10240) -> List[str]:
+		"""Reads the tail of a file safely up to max_bytes, returning lines."""
+		if not filepath.exists() or not filepath.is_file():
+			return []
+		try:
+			file_size = filepath.stat().st_size
+			with open(filepath, "rb") as f:
+				if file_size > max_bytes:
+					f.seek(-max_bytes, os.SEEK_END)
+					chunk = f.read(max_bytes)
+				else:
+					chunk = f.read()
+				lines = chunk.decode("utf-8", errors="ignore").splitlines()
+				if file_size > max_bytes and lines:
+					lines.pop(0)
+				return lines
+		except Exception as e:
+			self.logger.warning(f"Failed to read tail of {filepath}: {e}")
+			return []
+
 	def audit_runtime(self) -> AuditReport:
 		"""Run dynamic runtime checks on Daemons and Logs."""
 		report = AuditReport(status="green")
@@ -242,7 +262,7 @@ class SentinelAuditor:
 				# Initialize cursor at the current end of journal to avoid parsing history
 				subprocess.run(["journalctl", "--user", "-n", "0", f"--cursor-file={cursor_file}"])
 
-			cmd = ["journalctl", "--user", f"--cursor-file={cursor_file}", "--no-pager"]
+			cmd = ["journalctl", "--user", f"--cursor-file={cursor_file}", "--no-pager", "-p", "4"]
 			for u in redpill_units:
 				cmd.extend(["-u", u])
 
@@ -252,10 +272,29 @@ class SentinelAuditor:
 					# Case-insensitive check for error signatures
 					line_lower = line.lower()
 					if "error" in line_lower or "exception" in line_lower or "traceback" in line_lower or "fatal" in line_lower:
+						if "llama_model_loader" in line_lower:
+							continue
 						# Prevent self-referential feedback loops from the auditor's own logging
 						if "active pain detected" in line_lower or "recent daemon errors in journal" in line_lower:
 							continue
 						all_errors.append(line)
+
+		# 4. Scan external service error logs (stdout/stderr redirected to files)
+		external_logs = [
+			Path.home() / ".local/share/red-pill/daemon/error.log",
+			Path.home() / ".agent/bunker_daemon_error.log",
+		]
+		for log_path in external_logs:
+			if log_path.exists():
+				lines = self._read_log_tail(log_path)
+				for line in lines:
+					line_lower = line.lower()
+					if "error" in line_lower or "exception" in line_lower or "traceback" in line_lower or "fatal" in line_lower:
+						if "llama_model_loader" in line_lower:
+							continue
+						if "active pain detected" in line_lower or "recent daemon errors in journal" in line_lower:
+							continue
+						all_errors.append(f"[{log_path.name}] {line}")
 
 		if all_errors:
 			report.status = "yellow" if report.status == "green" else report.status

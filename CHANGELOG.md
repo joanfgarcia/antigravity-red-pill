@@ -1,3 +1,12 @@
+## [7.3.2] - 2026-06-27
+
+### 🩺 Log Stream Bifurcation & Native copytruncate Rotation (CORE-004)
+- **[FEAT] Priority-Based Journalctl Filtering (`auditor.py`)**: Configured the Sentinel Auditor to query systemd journalctl with `--priority=4` (Warning or higher). This filters out standard output logs (priority 6/info) and isolates warnings and errors.
+- **[FEAT] Redirected Log File Scanning (`auditor.py`)**: Added direct tail scanning of external error files (`error.log` and `bunker_daemon_error.log`) to ensure no error blindness for services redirecting stderr to disk.
+- **[FEAT] Model Loader Noise Exclusion (`auditor.py`)**: Excluded `"llama_model_loader"` signatures to permanently eliminate false-positive pain signals caused by GGUF metadata dumps during service startup.
+- **[FEAT] Native copytruncate Log Rotation (`janitor.py`)**: Implemented log rotation directly inside `JanitorMinion` using the `copytruncate` strategy (rotating files exceeding 10MB to `.1`, `.2`, etc.) without interrupting active daemons, along with automatic deletion of log backups older than 30 days.
+- **[TEST] Comprehensive Unit Tests (`test_auditor.py`, `test_janitor.py`)**: Added full test coverage for priority flags, log file scanning, noise exclusion, self-referential logging exclusion, and log rotation/cleanup logic.
+
 ## [7.3.1] - 2026-06-26
 
 ### 🎭 Declarative Lore Skins & Directives Refactoring (CORE-003)
