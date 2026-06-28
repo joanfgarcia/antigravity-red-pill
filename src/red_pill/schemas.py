@@ -113,6 +113,7 @@ class EngramPayload(BaseModel):
 	last_recalled_at: float
 	schema_version: Union[str, int]
 	originator: Optional[str] = None
+	parent_id: Optional[str] = None
 
 	# Bayesian Utility Model (v6.1 Phase B.1)
 	# Alpha: Cumulative success weight (Prior/Reinforcement)

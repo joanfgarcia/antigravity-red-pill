@@ -52,6 +52,26 @@ class JanitorMinion(Minion):
 		log_results = self._rotate_and_cleanup_logs(max_size_bytes=10 * 1024 * 1024, days_to_keep=30)
 		results.update(log_results)
 
+		# 4. Sweep orphaned parents in Qdrant (work and social collections)
+		try:
+			from red_pill.memory import MemoryManager
+
+			memory_manager = MemoryManager()
+			purged_work = self._cleanup_orphaned_parents(memory_manager, "work_memories")
+			purged_social = self._cleanup_orphaned_parents(memory_manager, "social_memories")
+			results["orphaned_parents_purged"] = purged_work + purged_social
+			self.log(f"Purged {purged_work} orphaned parents from work_memories and {purged_social} from social_memories.")
+		except Exception as e:
+			logger.error(f"[Janitor] Failed to execute orphaned parent sweep: {e}")
+
+		# 5. Archive and decouple old SQLite interactions
+		try:
+			archived = self.archive_old_sqlite_interactions()
+			results["sqlite_interactions_archived"] = archived
+			self.log(f"Archived {archived} old interactions from SQLite to universal_history.jsonl.")
+		except Exception as e:
+			logger.error(f"[Janitor] Failed to execute SQLite interactions archiving: {e}")
+
 		return results
 
 	def _rotate_and_cleanup_logs(self, max_size_bytes: int, days_to_keep: int) -> Dict[str, Any]:
@@ -171,3 +191,119 @@ class JanitorMinion(Minion):
 			logger.error(f"[Janitor] Failed to read scratch folder {scratch_dir}: {e}")
 
 		return deleted_count
+
+	def _cleanup_orphaned_parents(self, memory_manager, collection_name: str) -> int:
+		"""
+		Scans all raw_parent engrams in collection_name.
+		For each parent, checks if any of its children (listed in associations) exist in work_memories or social_memories.
+		If all child engrams have eroded/been deleted, deletes the parent engram.
+		"""
+		from qdrant_client.http import models
+
+		deleted_count = 0
+		if not memory_manager.client.collection_exists(collection_name):
+			return 0
+		try:
+			offset = None
+			parent_points = []
+			while True:
+				records, next_offset = memory_manager.client.scroll(
+					collection_name=collection_name,
+					scroll_filter=models.Filter(must=[models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="raw_parent"))]),
+					limit=100,
+					offset=offset,
+					with_payload=True,
+					with_vectors=False,
+				)
+				parent_points.extend(records)
+				if next_offset is None:
+					break
+				offset = next_offset
+
+			for parent in parent_points:
+				payload = parent.payload or {}
+				associations = payload.get("associations", [])
+				child_ids = []
+				for assoc in associations:
+					if isinstance(assoc, dict):
+						child_ids.append(assoc.get("id"))
+					else:
+						child_ids.append(str(assoc))
+
+				if not child_ids:
+					try:
+						memory_manager.client.delete(collection_name=collection_name, points_selector=models.PointIdsList(points=[parent.id]))
+						deleted_count += 1
+					except Exception:
+						pass
+					continue
+
+				child_exists = False
+				for col in ["work_memories", "social_memories"]:
+					try:
+						found = memory_manager.client.retrieve(collection_name=col, ids=child_ids, with_payload=False, with_vectors=False)
+						if found:
+							child_exists = True
+							break
+					except Exception:
+						pass
+
+				if not child_exists:
+					try:
+						memory_manager.client.delete(collection_name=collection_name, points_selector=models.PointIdsList(points=[parent.id]))
+						deleted_count += 1
+					except Exception:
+						pass
+
+		except Exception as e:
+			logger.error(f"[Janitor] Failed orphaned parents sweep in {collection_name}: {e}")
+		return deleted_count
+
+	def archive_old_sqlite_interactions(self) -> int:
+		"""
+		Decouples older conversations from SQLite interactions table.
+		Appends logs older than 30 days to Agent_Core/history/universal_history.jsonl
+		and purges them from the hot SQLite database to avoid bloat.
+		"""
+		import json
+
+		from red_pill.core.paths import get_db_dir
+
+		db_path = get_db_dir() / "bunker.db"
+		if not db_path.exists():
+			return 0
+
+		archived_count = 0
+		try:
+			conn = sqlite3.connect(str(db_path))
+			cursor = conn.cursor()
+
+			# Check if interactions table exists
+			cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='interactions'")
+			if not cursor.fetchone():
+				conn.close()
+				return 0
+
+			cutoff = datetime.utcnow() - timedelta(days=30)
+			cutoff_str = cutoff.strftime("%Y-%m-%d %H:%M:%S")
+
+			cursor.execute("SELECT user_prompt, agent_response, timestamp, model FROM interactions WHERE timestamp < ?", (cutoff_str,))
+			rows = cursor.fetchall()
+
+			if rows:
+				archive_dir = Path.home() / "Agent_Core" / "history"
+				archive_dir.mkdir(parents=True, exist_ok=True)
+				archive_file = archive_dir / "universal_history.jsonl"
+
+				with open(archive_file, "a") as f:
+					for row in rows:
+						item = {"timestamp": row[2], "user_prompt": row[0], "agent_response": row[1], "model": row[3] or "unknown"}
+						f.write(json.dumps(item) + "\n")
+						archived_count += 1
+
+				cursor.execute("DELETE FROM interactions WHERE timestamp < ?", (cutoff_str,))
+				conn.commit()
+			conn.close()
+		except Exception as e:
+			logger.error(f"[Janitor] Failed to archive SQLite interactions: {e}")
+		return archived_count

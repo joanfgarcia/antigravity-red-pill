@@ -1,3 +1,14 @@
+## [7.4.0] - 2026-06-28
+
+### 🕸️ Hierarchical Parent-Child Memory Graph Topology (CORE-006)
+- **[FEAT] Parent-Child Vector Graph Routing**: Replaced linear engram retrieval with a hierarchical parent-child graph layout. Verbatim conversation transcripts (`raw_parent`) are preserved and isolated from general vector searches via metadata filtering (`lazarus_phase: "raw_parent"`, `immune: true`).
+- **[FEAT] Semantic Chunk Routing**: Distilled child engrams (`sequence_chunk`) are dynamically routed to their target collection (`work_memories` or `social_memories`) based on their local semantic categorization.
+- **[FEAT] Cross-Collection Axon Resolution**: Implemented cross-collection resolution, enabling evocative cascades and parent node recovery to traverse the boundaries of work and social memories dynamically.
+- **[FEAT] Ariadne's Thread Threading**: Preserved temporal conversation walking by chaining sequential raw parent nodes (`prev_raw_parent`/`next_raw_parent`).
+- **[FEAT] SQLite Decoupling & Janitor Sweep**: Limited SQLite `interactions` table size to a 30-day window, moving historical data to a universal `universal_history.jsonl` file in Agent_Core. Added parent-culling sweep in `JanitorMinion` to clean up orphaned parents when all child chunks erode.
+- **[MIGRATION] Parent-Child Schema Migration**: Successfully migrated existing linear engrams to the new hierarchical topology.
+- **[TEST] Graph Integrity Test Coverage**: Added comprehensive test cases in `test_parent_child_memory.py` validating correct hierarchy resolution, linking, parent-culling, and history archiving.
+
 ## [7.3.3] - 2026-06-28
 
 ### ⚡ On-Demand local LLM Loading & VRAM Preemption (CORE-005)

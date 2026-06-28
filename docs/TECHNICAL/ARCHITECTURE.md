@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v7.3.3 (Sovereign Daemon)
+**System Version**: v7.4.0 (Sovereign Daemon)
 **Analyst**: The Architect
 **Date**: 2026-04-16
 
@@ -16,7 +16,7 @@
 > [!CAUTION]
 > **Single-Tenant by Design.** Red Pill is architected for **one operator, one machine, one agent**. This is not an oversight — it is a foundational constraint. All SQLite databases use WAL mode for process-level concurrency (timers + daemon), but there is no user isolation, no auth layer, and no multi-tenant partitioning. Paths resolve via `$HOME`, `platformdirs`, and `.env` — never hardcoded. The system is portable across machines (clone + `.env` + `deploy_pulse.py`), but it is never shared between operators. If multi-tenancy is ever required, it belongs in a separate Enterprise layer, not in the Sovereign Foundation.
 
-The Red Pill Protocol v6.7.0 has achieved stability and functional alignment with the B760 specification. It successfully implements a multi-backend inference substrate (ROCm, CUDA, NPU, Vulkan) and the Emotional Ferrari Protocol for real-time cognitive adaptation. The architecture remains privacy-first, with organic decay and reinforcement, now enhanced by the Ariadne's Thread temporal axons.
+The Red Pill Protocol v7.4.0 has achieved stability and functional alignment with the B760 specification. It successfully implements a multi-backend inference substrate (ROCm, CUDA, NPU, Vulkan) and the Emotional Ferrari Protocol for real-time cognitive adaptation. The architecture remains privacy-first, with organic decay and reinforcement, now enhanced by the Ariadne's Thread temporal axons.
 
 ## 2. B760 Spec Alignment
 - **Conformity**: 97%
@@ -48,6 +48,11 @@ The Red Pill Protocol v6.7.0 has achieved stability and functional alignment wit
 - **[NEW v6.3.4] Sovereign Pod Storage**: Re-architected storage boundaries. SQLite queue databases (`bunker_queue.db`, `minion_inbox.db`) have been migrated from external host paths into the self-contained `<APP_ROOT>/storage/queue/` directory, unifying state persistence and ensuring true Pod portability.
 - **[NEW v6.3.4] Sovereign Path Resolution**: Implemented `os.path.expanduser()` at the configuration layer (`config.py`) to prevent tilde-based values in `.env` (e.g. `WORKSPACE_ROOT=~/...`) from being interpreted as literal relative paths, eliminating rogue directory creation in the repository root.
 - **[NEW v6.8.6] Agentic Self-Assembly**: Decoupled the directory hierarchy into `WORKSPACE_ROOT` (Agentic environment) and `APP_ROOT` (Red-Pill implementation). This protects local source-code adaptations and provides an extensible boundary for auxiliary modules (e.g., `USER_ATLAS_DIR`, `ALETH_CORE_DIR`), supporting both the Developer profile and the end User profile seamlessly. For a visual representation, see the [Sovereign Directory Atlas](SOVEREIGN_ATLAS.md).
+- **[NEW v7.4.0] Parent-Child Vector Graph Topology**: Replaced the linear engram retrieval scheme with a hierarchical parent-child graph. Raw conversation transcripts (`raw_parent` engrams) are preserved in Qdrant but isolated from general vector searches via metadata filters. Concept nodes (`sequence_chunk`) and hubs (`synthesis_hub`) are linked back to their parent and routed dynamically to `work_memories` or `social_memories` based on their specific semantic categories. Ariadne's Thread is preserved across parent nodes for temporal traversal.
+- **[NEW v7.4.0] SQLite Decoupling & Universal History Archive**: Kept the hot SQLite `interactions` table clean by restricting its retention window to 30 days. Older entries are automatically decoupled, formatted, and appended to `~/Agent_Core/history/universal_history.jsonl` to serve as a permanent, un-decayed conversation archive.
+- **[NEW v7.4.0] Synaptic Orphan Sweep (Decay)**: Implemented parent-culling heuristics where `raw_parent` engrams are purged from long-term memory if all of their children chunks have eroded below metabolism thresholds.
+- **[NEW v7.4.0] Cross-Collection Axon Resolution**: Evocative cascade and parent context recovery traverse across dynamic memory collection boundaries (`work_memories` and `social_memories`) to retrieve linked associations dynamically.
+
 ## 3. Structural Analysis
 
 ### 3.1. Entropy & Erosion Scalability (The 'Great Filter' Problem)

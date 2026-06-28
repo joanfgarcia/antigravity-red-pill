@@ -924,6 +924,11 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 			else:
 				chunks = chunk_text(raw_text)
 
+			import uuid
+
+			parent_id = str(uuid.uuid4())
+			child_ids = []
+
 			surviving_chunks = []
 			prev_chunk_id = None
 			chunks_saved = 0
@@ -956,20 +961,30 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 					continue
 
 				surviving_chunks.append(distilled)
+
+				# Dynamic chunk-level routing
+				chunk_cat = distilled.get("category")
+				if chunk_cat not in ("work", "social"):
+					chunk_col = target_col
+				else:
+					chunk_col = f"{chunk_cat}_memories"
+
 				try:
 					new_id = memory_manager.add_memory(
-						collection=target_col,
+						collection=chunk_col,
 						text=summary,
-						metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id, "model": model_name},
-						color="blue" if target_col == "work_memories" else "purple",
+						metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id, "model": model_name, "parent_id": parent_id},
+						color="blue" if chunk_col == "work_memories" else "purple",
 						emotion=distilled.get("emotion", "neutral"),
 						intensity=distilled.get("intensity", 0.5),
 					)
 					if prev_chunk_id and new_id:
-						client.set_payload(collection_name=target_col, payload={"associations": [prev_chunk_id]}, points=[new_id])
-					prev_chunk_id = new_id
-					batch_processed += 1
-					chunks_saved += 1
+						client.set_payload(collection_name=chunk_col, payload={"associations": [prev_chunk_id]}, points=[new_id])
+					if new_id:
+						prev_chunk_id = new_id
+						child_ids.append(new_id)
+						batch_processed += 1
+						chunks_saved += 1
 				except Exception as e:
 					logger.error(f"[SLEEP ENGINE] Metabolic Fixation failed for {raw_id}: {e}")
 					point_write_failed = True
@@ -981,13 +996,20 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 					hub_id = memory_manager.add_memory(
 						collection=target_col,
 						text=hub_summary,
-						metadata={"lazarus_phase": "synthesis_hub", "node_type": "synthesis_hub", "source_buffer_id": raw_id, "model": model_name},
+						metadata={
+							"lazarus_phase": "synthesis_hub",
+							"node_type": "synthesis_hub",
+							"source_buffer_id": raw_id,
+							"model": model_name,
+							"parent_id": parent_id,
+						},
 						color="cyan",
 						emotion=surviving_chunks[-1]["emotion"],
 						intensity=max([c["intensity"] for c in surviving_chunks]),
 					)
 					if hub_id:
 						client.set_payload(collection_name=target_col, payload={"associations": [prev_chunk_id]}, points=[hub_id])
+						child_ids.append(hub_id)
 						batch_processed += 1
 						chunks_saved += 1
 						if target_col == "work_memories":
@@ -1004,8 +1026,43 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 				except Exception:
 					pass
 
+			# Save raw_parent verbatim engram
 			if chunks_saved > 0 and not point_write_failed:
-				client.delete(collection_name=collection, points_selector=[raw_id])
+				try:
+					parent_metadata = {
+						"lazarus_phase": "raw_parent",
+						"source_buffer_id": raw_id,
+						"model": model_name,
+						"associations": child_ids,
+						"immune": True,
+					}
+
+					# Ariadne's Thread for raw parents
+					thread_state = _load_thread_state()
+					prev_parent_key = f"last_raw_parent_{target_col}"
+					prev_parent_id = thread_state.get(prev_parent_key)
+					if prev_parent_id:
+						parent_metadata["prev_raw_parent"] = prev_parent_id
+
+					parent_id_written = memory_manager.add_memory(
+						collection=target_col,
+						text=raw_text,
+						metadata=parent_metadata,
+						point_id=parent_id,
+						force_immune=True,
+					)
+
+					if parent_id_written and prev_parent_id:
+						client.set_payload(collection_name=target_col, payload={"next_raw_parent": parent_id_written}, points=[prev_parent_id])
+
+					if parent_id_written:
+						thread_state[prev_parent_key] = parent_id_written
+						_save_thread_state(thread_state)
+
+					client.delete(collection_name=collection, points_selector=[raw_id])
+				except Exception as e:
+					logger.error(f"[SLEEP ENGINE] Failed to save raw parent engram: {e}")
+					point_write_failed = True
 			elif not point_llm_failed and not point_write_failed:
 				client.delete(collection_name=collection, points_selector=[raw_id])
 
@@ -1041,6 +1098,11 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 					os.remove(filepath)
 					continue
 
+				import uuid
+
+				parent_id = str(uuid.uuid4())
+				child_ids = []
+
 				chunks = chunk_text(raw_text)
 				surviving_chunks = []
 				prev_chunk_id = None
@@ -1056,19 +1118,29 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 						continue
 
 					surviving_chunks.append(distilled)
+
+					# Dynamic category routing for staging chunks
+					chunk_cat = distilled.get("category")
+					if chunk_cat not in ("work", "social"):
+						chunk_col = "work_memories"
+					else:
+						chunk_col = f"{chunk_cat}_memories"
+
 					try:
 						new_id = memory_manager.add_memory(
-							collection="work_memories",
+							collection=chunk_col,
 							text=summary,
-							metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id, "model": model_name},
-							color="blue",
+							metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id, "model": model_name, "parent_id": parent_id},
+							color="blue" if chunk_col == "work_memories" else "purple",
 							emotion=distilled.get("emotion", "neutral"),
 							intensity=distilled.get("intensity", 0.5),
 						)
 						if prev_chunk_id and new_id:
-							client.set_payload(collection_name="work_memories", payload={"associations": [prev_chunk_id]}, points=[new_id])
-						prev_chunk_id = new_id
-						total_processed += 1
+							client.set_payload(collection_name=chunk_col, payload={"associations": [prev_chunk_id]}, points=[new_id])
+						if new_id:
+							prev_chunk_id = new_id
+							child_ids.append(new_id)
+							total_processed += 1
 					except Exception:
 						pass
 
@@ -1084,6 +1156,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 								"node_type": "synthesis_hub",
 								"source_buffer_id": raw_id,
 								"model": model_name,
+								"parent_id": parent_id,
 							},
 							color="cyan",
 							emotion=surviving_chunks[-1]["emotion"],
@@ -1091,6 +1164,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 						)
 						if hub_id:
 							client.set_payload(collection_name="work_memories", payload={"associations": [prev_chunk_id]}, points=[hub_id])
+							child_ids.append(hub_id)
 							new_work_hubs.append(hub_summary)
 
 							# Thread Weaving
@@ -1103,6 +1177,43 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 							_save_thread_state(thread_state)
 					except Exception:
 						pass
+
+				# Save raw_parent verbatim engram for staging file
+				if len(child_ids) > 0:
+					try:
+						parent_metadata = {
+							"lazarus_phase": "raw_parent",
+							"source_buffer_id": raw_id,
+							"model": model_name,
+							"associations": child_ids,
+							"immune": True,
+						}
+
+						# Ariadne's Thread for raw parents in work_memories
+						thread_state = _load_thread_state()
+						prev_parent_key = "last_raw_parent_work_memories"
+						prev_parent_id = thread_state.get(prev_parent_key)
+						if prev_parent_id:
+							parent_metadata["prev_raw_parent"] = prev_parent_id
+
+						parent_id_written = memory_manager.add_memory(
+							collection="work_memories",
+							text=raw_text,
+							metadata=parent_metadata,
+							point_id=parent_id,
+							force_immune=True,
+						)
+
+						if parent_id_written and prev_parent_id:
+							client.set_payload(
+								collection_name="work_memories", payload={"next_raw_parent": parent_id_written}, points=[prev_parent_id]
+							)
+
+						if parent_id_written:
+							thread_state[prev_parent_key] = parent_id_written
+							_save_thread_state(thread_state)
+					except Exception as e:
+						logger.error(f"[SLEEP ENGINE] Failed to save raw parent engram for staging file: {e}")
 
 				# Purge document
 				logger.info(f"[SLEEP ENGINE] Ingested cascade {raw_id}. Purging staging file.")
