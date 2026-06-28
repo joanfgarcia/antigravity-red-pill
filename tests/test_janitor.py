@@ -1,10 +1,10 @@
 import os
-import shutil
 import tempfile
-from pathlib import Path
 from datetime import datetime, timedelta
+from pathlib import Path
+from unittest.mock import MagicMock
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from red_pill.swarm.agents.janitor import JanitorMinion
 
@@ -33,7 +33,7 @@ def test_janitor_log_rotation_and_cleanup(temp_dir):
 
 	# Initialize janitor
 	janitor = JanitorMinion()
-	object.__setattr__(janitor, 'log', MagicMock())
+	object.__setattr__(janitor, "log", MagicMock())
 
 	# Test copytruncate rotation
 	assert log_file.stat().st_size > 0

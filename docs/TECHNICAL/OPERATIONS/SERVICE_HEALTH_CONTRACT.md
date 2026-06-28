@@ -211,7 +211,7 @@ The manifest is loaded via `red_pill.core.service_contract.load_manifest()` whic
 |---------|------|:---:|:---:|:---:|:---:|:---:|:---:|
 | `redpill` | daemon-loop | 1s (plugin-based) | WatchdogSec=120 | ❌ | core | ✅ | — |
 | `neon-link` | daemon-loop | 1s | WatchdogSec=3 | ✅ `:8770/health` | plugin | ❌ | `NEON_LINK_ENABLED` |
-| `redpill-llm` | daemon-listener | — | ❌ | ✅ `:8776/health` | core | ✅ | — |
+| `redpill-llm` | daemon-listener | — | ❌ | ✅ `:8760/health` | core | ✅ | — |
 | `redpill-worker` | oneshot | 120s | ❌ | ❌ | core | ✅ | — |
 | `redpill-auditor` | oneshot | 120s | ❌ | ❌ | core | ✅ | — |
 | `redpill-queue` | oneshot | 120s | ❌ | ❌ | core | ❌ | — |

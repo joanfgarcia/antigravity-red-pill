@@ -153,15 +153,12 @@ def test_audit_runtime_priority_and_file_scanning(auditor):
 	mock_journal.stdout = "Normal log line\n[WARNING] connection timeout"
 
 	# Mock file exists and file tail reading
-	log_content = [
-		"error: connection reset by peer",
-		"llama_model_loader: loaded metadata with raise_exception"
-	]
+	log_content = ["error: connection reset by peer", "llama_model_loader: loaded metadata with raise_exception"]
 
 	with (
 		patch("subprocess.run") as mock_run,
 		patch("pathlib.Path.exists", return_value=True),
-		patch("red_pill.metabolism.auditor.SentinelAuditor._read_log_tail", return_value=log_content) as mock_tail,
+		patch("red_pill.metabolism.auditor.SentinelAuditor._read_log_tail", return_value=log_content),
 	):
 		mock_run.side_effect = [mock_units, mock_failed, mock_journal]
 
@@ -196,9 +193,7 @@ def test_audit_runtime_ignores_self_referential_and_loader(auditor):
 	mock_journal = MagicMock()
 	mock_journal.returncode = 0
 	mock_journal.stdout = (
-		"Active Pain detected: signal_journal_failure\n"
-		"recent daemon errors in journal:\n"
-		"llama_model_loader: loaded metadata with raise_exception"
+		"Active Pain detected: signal_journal_failure\nrecent daemon errors in journal:\nllama_model_loader: loaded metadata with raise_exception"
 	)
 
 	with (
@@ -212,4 +207,3 @@ def test_audit_runtime_ignores_self_referential_and_loader(auditor):
 		# Everything should be ignored, status stays green
 		assert report.status == "green"
 		assert len(report.findings) == 0
-

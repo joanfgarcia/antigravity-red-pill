@@ -55,10 +55,11 @@ class TestSeedProject:
 				seed_project(mgr)
 		assert mock_inject.called
 
+
 class TestInjectGenesis:
 	def test_skips_existing_state_engrams(self):
 		"""State-tracking engrams (MOOD/ACTIVE_SKIN) are skipped if retrieve returns hits."""
-		from red_pill.seed import inject_genesis, ID_OPERATOR_MOOD, ID_DIR_ACTIVE_SKIN
+		from red_pill.seed import ID_DIR_ACTIVE_SKIN, ID_OPERATOR_MOOD, inject_genesis
 
 		mgr = _make_manager()
 		mgr.client.retrieve.return_value = [MagicMock()]
@@ -84,7 +85,6 @@ class TestInjectGenesis:
 		mgr.client.retrieve.side_effect = Exception("db error")
 		inject_genesis(mgr)
 		assert mgr.add_memory.called
-
 
 
 class TestLoadMarkdownSeeds:

@@ -12,7 +12,6 @@ from red_pill.swarm.orchestrator import GruOrchestrator
 async def run_analysis():
 	chapter_path = "docs/LORE/novel/ALETH_CAPITULO_1.md"
 	if not os.path.exists(chapter_path):
-
 		print(f"Error: {chapter_path} not found.")
 		return
 

@@ -542,7 +542,18 @@ class EphemeralServer:
 
 	def stop(self, memory_manager, total_processed: int) -> None:
 		"""Gracefully shuts down the ephemeral server (Popen only; services self-manage)."""
-		if self._process is None or self.is_managed_service:
+		if self.is_managed_service:
+			try:
+				import urllib.request
+
+				req = urllib.request.Request("http://127.0.0.1:8760/unload", method="POST")
+				with urllib.request.urlopen(req, timeout=5):
+					logger.info("[EPHEMERAL SERVER] Explicit model unload triggered successfully on local daemon.")
+			except Exception as e:
+				logger.warning(f"[EPHEMERAL SERVER] Failed to trigger explicit model unload on local daemon: {e}")
+			return
+
+		if self._process is None:
 			return
 
 		logger.info("[EPHEMERAL SERVER] Shutting down...")

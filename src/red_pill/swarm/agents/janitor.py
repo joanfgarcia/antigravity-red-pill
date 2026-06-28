@@ -88,7 +88,7 @@ class JanitorMinion(Minion):
 		# Standard rotation logic: Shift backups log.3 -> log.4, log.2 -> log.3, log.1 -> log.2
 		for i in range(3, 0, -1):
 			old_file = log_path.with_name(f"{log_path.name}.{i}")
-			new_file = log_path.with_name(f"{log_path.name}.{i+1}")
+			new_file = log_path.with_name(f"{log_path.name}.{i + 1}")
 			if old_file.exists():
 				try:
 					if new_file.exists():
@@ -127,7 +127,6 @@ class JanitorMinion(Minion):
 				except Exception as e:
 					logger.error(f"[Janitor] Failed to delete rotated log {item}: {e}")
 		return purged_count
-
 
 	def _purge_events_db(self, db_path: Path, days: int) -> int:
 		try:

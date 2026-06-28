@@ -4,6 +4,32 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-020] On-Demand Model Loading & VRAM Preemption in local LLM Daemon
+**Date**: 2026-06-28  
+**Context**: v7.3.2 — VRAM Optimization & Nico Training Preemption  
+**Status**: ACCEPTED & IMPLEMENTED  
+
+### 1. The Problem
+The persistent local LLM daemon (`redpill-llm.service` running `run_dual_bind.py`) initialized llama-cpp globally at startup, locking ~5-6 GB of VRAM indefinitely. This blocked other resource-intensive GPU tasks (such as training the "Nico" model or running heavy compilation) and caused OOM panics or required manually stopping/starting the service.
+
+### 2. The Decision
+- Transition the daemon from a standard llama-cpp-python `create_app` server to a custom **FastAPI** wrapper supporting dynamic on-demand loading.
+- Implement an asynchronous reaper background task with **Priority-Aware Timeouts**: high-priority requests use a 5-minute timeout; low-priority requests (e.g., sleep cycle distillation batch) trigger an auto-unload after a rapid 10-second idle period.
+- Expose a `/unload` POST endpoint allowing external processes (like a GPU training script) to explicitly request VRAM release immediately.
+- Implement dynamic fallback execution: at request load time, check free VRAM (`VramProbe`). If VRAM is full (e.g. training Nico), automatically fall back to CPU execution (`n_gpu_layers=0`) to allow concurrent inference without crashes.
+- Validate configurations on `/health` (checking local file or HF repo existence) without loading the model.
+
+### 3. The Implementation
+- Rewrote the templated `run_dual_bind.py` in `scripts/setup_background_model.sh`.
+- Updated `stop()` in `src/red_pill/metabolism/sleep.py` to trigger the POST `/unload` request upon sleep completion.
+- Ran `scripts/setup_background_model.sh` to redeploy the daemon and reload systemd.
+
+### 4. Rationale
+Decouples inference from rigid VRAM reservation, achieving zero VRAM footprint when idle. The combination of preemption hook (`/unload`) and runtime fallback (`n_gpu_layers=0` CPU execution) enables co-existence of local training and inference without manual orchestration.
+*Comic note*: "If VRAM is busy, let CPU do the thinking. Rigidity is memory's worst enemy. Be Water."
+
+---
+
 ## [AD-019] Declarative Lore Skins & Structured System Directives
 **Date**: 2026-06-26  
 **Context**: v7.3.0 — Identity prompts and LLM compatibility  

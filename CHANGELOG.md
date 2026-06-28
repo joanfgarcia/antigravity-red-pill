@@ -1,3 +1,13 @@
+## [7.3.3] - 2026-06-28
+
+### ⚡ On-Demand local LLM Loading & VRAM Preemption (CORE-005)
+- **[FEAT] On-Demand Model Loading (`run_dual_bind.py`)**: Rewrote the background LLM daemon as a custom FastAPI application that loads the Samantha model dynamically in available silicon on the first `/v1/chat/completions` request.
+- **[FEAT] Priority-Aware Inactivity Reaper (`run_dual_bind.py`)**: Implemented an async background task to automatically unload the model from memory. Standard/interactive requests use a 5-minute timeout; low-priority requests (e.g., sleep cycle, compactions) trigger unloading after a rapid 10-second idle period.
+- **[FEAT] Explicit VRAM Preemption Endpoint (`run_dual_bind.py`)**: Exposed `POST /unload` to immediately release VRAM, allowing training or compilation scripts to reclaim GPU resources instantly.
+- **[FEAT] Dynamic Fallback Coexistence (`run_dual_bind.py`)**: Resolved hardware affinity at request time (using `VramProbe`). If GPU VRAM is busy (e.g. Nico training), the daemon automatically falls back to CPU RAM execution (`n_gpu_layers=0`) without crashing or blocking concurrent requests.
+- **[FEAT] Sleep Integration (`sleep.py`)**: Configured the sleep engine to explicitly trigger the `/unload` endpoint upon completion of the distillation cycle.
+- **[DOCS] Technical Architectural Updates**: Registered the new design in the decision log (`[AD-020]`), corrected the port number in the service health contract, and updated the hardware selection guide.
+
 ## [7.3.2] - 2026-06-27
 
 ### 🩺 Log Stream Bifurcation & Native copytruncate Rotation (CORE-004)
