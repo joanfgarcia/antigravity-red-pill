@@ -76,3 +76,26 @@ def test_main_qdrant_down(capsys):
 			assert e.value.code == 1
 			captured = capsys.readouterr()
 			assert "CRITICAL: Qdrant is down" in captured.out
+
+
+def test_query_qdrant_excludes_lazarus_phases():
+	with patch("urllib.request.urlopen") as mock_urlopen:
+		mock_response = MagicMock()
+		mock_response.read.return_value = json.dumps(
+			{
+				"result": {
+					"points": [
+						{"payload": {"content": "Core directive", "immune": True}},
+						{"payload": {"content": "Raw parent transcript", "immune": True, "lazarus_phase": "raw_parent"}},
+						{"payload": {"content": "Sequence chunk", "immune": True, "lazarus_phase": "sequence_chunk"}},
+						{"payload": {"content": "Synthesis hub", "immune": True, "lazarus_phase": "synthesis_hub"}},
+					]
+				}
+			}
+		).encode("utf-8")
+		mock_urlopen.return_value.__enter__.return_value = mock_response
+
+		results = wake_up_v6.query_qdrant("social_memories", "Active Skin")
+
+		assert len(results) == 1
+		assert "Core directive [IMMUNE]" in results

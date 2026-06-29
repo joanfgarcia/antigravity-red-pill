@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v7.4.1 (Sovereign Daemon)
+**System Version**: v7.4.2 (Sovereign Daemon)
 **Analyst**: The Architect
 **Date**: 2026-04-16
 
@@ -16,7 +16,7 @@
 > [!CAUTION]
 > **Single-Tenant by Design.** Red Pill is architected for **one operator, one machine, one agent**. This is not an oversight — it is a foundational constraint. All SQLite databases use WAL mode for process-level concurrency (timers + daemon), but there is no user isolation, no auth layer, and no multi-tenant partitioning. Paths resolve via `$HOME`, `platformdirs`, and `.env` — never hardcoded. The system is portable across machines (clone + `.env` + `deploy_pulse.py`), but it is never shared between operators. If multi-tenancy is ever required, it belongs in a separate Enterprise layer, not in the Sovereign Foundation.
 
-The Red Pill Protocol v7.4.1 has achieved stability and functional alignment with the B760 specification. It successfully implements a multi-backend inference substrate (ROCm, CUDA, NPU, Vulkan) and the Emotional Ferrari Protocol for real-time cognitive adaptation. The architecture remains privacy-first, with organic decay and reinforcement, now enhanced by the Ariadne's Thread temporal axons.
+The Red Pill Protocol v7.4.2 has achieved stability and functional alignment with the B760 specification. It successfully implements a multi-backend inference substrate (ROCm, CUDA, NPU, Vulkan) and the Emotional Ferrari Protocol for real-time cognitive adaptation. The architecture remains privacy-first, with organic decay and reinforcement, now enhanced by the Ariadne's Thread temporal axons.
 
 ## 2. B760 Spec Alignment
 - **Conformity**: 97%

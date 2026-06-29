@@ -1,3 +1,10 @@
+## [7.4.2] - 2026-06-29
+
+### 🗜️ Sovereign Handshake Context Optimization & Cache Fork-Bomb Fix (CORE-008)
+- **[FIX] Handshake Payload Optimization**: Filtered out consolidated/distilled engrams (`raw_parent`, `sequence_chunk`, and `synthesis_hub`) from Qdrant context loading in `wake_up_v6.py`. This prevents verbatim conversation histories from past sessions from polluting the bootstrap context, shrinking the `<BUNKER_CONTEXT>` size from 4000+ lines (~400KB) to under 90 lines.
+- **[FIX] Background Cache Synthesis Fork Loop**: Resolved a recursive subprocess spawning bug in `wake_up_v6.py` where silent background processes encountering a stale cache would recursively schedule new background tasks indefinitely. Background runs now perform direct LLM synthesis and update the cache inline.
+- **[TEST] Handshake Regression Coverage**: Added the unit test `test_query_qdrant_excludes_lazarus_phases` in `tests/test_wake_up_v6.py` to prevent future regressions.
+
 ## [7.4.1] - 2026-06-29
 
 ### 🩹 Sentinel Auditor Deadlock Resolution & Pain Escalation (CORE-007)
