@@ -382,8 +382,8 @@ async def auto_heal_ritual(mm: MemoryManager) -> None:
 		for report in unread:
 			event_id = report.get("event_id", "")
 
-			if event_id == "signal_ruff_failure":
-				logger.info("Auto-Healer: Attempting to heal 'signal_ruff_failure' (Ruff)...")
+			if event_id in ("signal_formatting_failure", "signal_ruff_failure"):
+				logger.info(f"Auto-Healer: Attempting to heal '{event_id}' (Ruff)...")
 				proc1 = await asyncio.create_subprocess_exec(
 					"uv", "run", "ruff", "check", "--fix", ".", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, cwd=cfg.APP_ROOT
 				)
@@ -392,15 +392,59 @@ async def auto_heal_ritual(mm: MemoryManager) -> None:
 					"uv", "run", "ruff", "format", ".", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, cwd=cfg.APP_ROOT
 				)
 				await proc2.communicate()
+
+				# Verify if formatting is now fully fixed
+				proc_check = await asyncio.create_subprocess_exec(
+					"uv", "run", "ruff", "check", ".", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, cwd=cfg.APP_ROOT
+				)
+				await proc_check.communicate()
+
+				if proc_check.returncode == 0:
+					logger.info(f"Auto-Healer: Successfully healed formatting for '{event_id}'")
+					mm.evaporate_signals("signal_formatting_failure")
+					mm.evaporate_signals("signal_ruff_failure")
+				else:
+					logger.warning(f"Auto-Healer: Formatting heal failed for '{event_id}'. Escalating pain.")
+					mm.evaporate_signals(event_id)
+					mm.inject_signal(
+						name=event_id,
+						intensity=8.0,
+						signal_type="pain",
+						source="Auto-Healer",
+						criticality="CRITICAL",
+						originator="AutoHealer",
+					)
 				healed_ids.append(report["id"])
 				continue
 
-			if event_id == "signal_mypy_failure":
-				logger.info("Auto-Healer: Attempting to heal 'signal_mypy_failure' (HealerMinion)...")
+			if event_id in ("signal_typing_failure", "signal_mypy_failure"):
+				logger.info(f"Auto-Healer: Attempting to heal '{event_id}' (HealerMinion)...")
 				from red_pill.swarm.agents.healer import HealerMinion
 
 				healer = HealerMinion()
 				await healer.execute("Heal mypy", path=os.path.join(cfg.APP_ROOT, "src", "red_pill"))
+
+				# Verify if type check passes now
+				proc_check = await asyncio.create_subprocess_exec(
+					"uv", "run", "mypy", "src/red_pill/", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, cwd=cfg.APP_ROOT
+				)
+				await proc_check.communicate()
+
+				if proc_check.returncode == 0:
+					logger.info(f"Auto-Healer: Successfully healed typing for '{event_id}'")
+					mm.evaporate_signals("signal_typing_failure")
+					mm.evaporate_signals("signal_mypy_failure")
+				else:
+					logger.warning(f"Auto-Healer: Typing heal failed for '{event_id}'. Escalating pain.")
+					mm.evaporate_signals(event_id)
+					mm.inject_signal(
+						name=event_id,
+						intensity=8.0,
+						signal_type="pain",
+						source="Auto-Healer",
+						criticality="CRITICAL",
+						originator="AutoHealer",
+					)
 				healed_ids.append(report["id"])
 				continue
 

@@ -2711,7 +2711,7 @@ wheels = [
 
 [[package]]
 name = "red-pill"
-version = "7.4.0"
+version = "7.4.1"
 source = { editable = "." }
 dependencies = [
     { name = "argon2-cffi" },

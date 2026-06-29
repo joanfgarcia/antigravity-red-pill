@@ -1,3 +1,11 @@
+## [7.4.1] - 2026-06-29
+
+### 🩹 Sentinel Auditor Deadlock Resolution & Pain Escalation (CORE-007)
+- **[FIX] Sentinel Auditor Deadlock Bypass**: Resolved a logical deadlock in `SentinelAuditor` by removing fast-fail bypasses during active warning signals for repository checks (formatting, typing, and test suites). This guarantees that success paths evaporate warning signals instead of skipping them.
+- **[FEAT] Auditor-Inbox Task Despatch**: Linked the Sentinel Auditor to the SQLite `MinionInbox` to automatically drop unread healing tasks on repository check failures.
+- **[FEAT] Direct Pain Escalation (Intensity 8.0)**: Enhanced `auto_heal_ritual` failure paths to evaporate existing warning signals before calling `inject_signal`, successfully forcing failure intensities to exactly `8.0` with `CRITICAL` status on repair failure.
+- **[FIX] Escalation Naming Alignment**: Aligned the escalated signal names in the healer failures with their respective warning names (`signal_formatting_failure`, `signal_typing_failure`).
+
 ## [7.4.0] - 2026-06-28
 
 ### 🕸️ Hierarchical Parent-Child Memory Graph Topology (CORE-006)

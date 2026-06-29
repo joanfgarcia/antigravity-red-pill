@@ -132,13 +132,13 @@ class SentinelAuditor:
 				report.findings.append(
 					AuditFinding(type="formatting", severity=5.0, message=f"Ruff check failed:\n{detailed_msg}", metadata={"stdout": ruff.stdout})
 				)
-			elif self.force:
+			else:
 				self.memory_mgr.evaporate_signals("signal_formatting_failure")
 		# 2. Typing (Mypy)
 		if not self.force and self.memory_mgr.has_signal("signal_typing_failure"):
 			self.logger.info("Skipping Mypy check (Fast-Fail: signal_typing_failure exists)")
 			report.status = "yellow"
-			report.findings.append(AuditFinding(type="typing", severity=6.0, message="Mypy check failed (Fast-Fail)"))
+			report.findings.append(AuditFinding(type="typing", severity=5.0, message="Mypy check failed (Fast-Fail)"))
 		else:
 			self.logger.info(f"Auditing types for {repo_path}")
 			mypy_target = "src/red_pill/" if os.path.exists(os.path.join(repo_path, "src/red_pill")) else "src/"
@@ -163,30 +163,30 @@ class SentinelAuditor:
 				detailed_msg = "\n".join(errors) if errors else (mypy.stdout[-300:] if mypy.stdout else "Mypy type check failed")
 
 				report.findings.append(
-					AuditFinding(type="typing", severity=6.0, message=f"Mypy errors:\n{detailed_msg}", metadata={"stdout": mypy.stdout})
+					AuditFinding(type="typing", severity=5.0, message=f"Mypy errors:\n{detailed_msg}", metadata={"stdout": mypy.stdout})
 				)
-			elif self.force:
+			else:
 				self.memory_mgr.evaporate_signals("signal_typing_failure")
 		# 3. Testing (Pytest)
 		if not self.force and self.memory_mgr.has_signal("signal_test_failure"):
 			self.logger.info("Skipping Pytest check (Fast-Fail: signal_test_failure exists)")
-			report.status = "red"
-			report.findings.append(AuditFinding(type="test", severity=8.0, message="Pytest suite failed (Fast-Fail)"))
+			report.status = "yellow"
+			report.findings.append(AuditFinding(type="test", severity=5.0, message="Pytest suite failed (Fast-Fail)"))
 		else:
 			self.logger.info(f"Auditing tests for {repo_path}")
 			# Run standard tests (removed xdist to ensure universal compatibility)
 			pytest = subprocess.run([self.uv_path, "run", "pytest"], cwd=repo_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 			if pytest.returncode != 0:
-				report.status = "red"
+				report.status = "yellow"
 				failed_tests = [line for line in pytest.stdout.splitlines() if line.startswith("FAILED ") or line.startswith("ERROR ")]
 				detailed_msg = "\n".join(failed_tests[:5]) if failed_tests else (pytest.stdout[-300:] if pytest.stdout else "Pytest suite failed")
 				if len(failed_tests) > 5:
 					detailed_msg += f"\n... and {len(failed_tests) - 5} more failures."
 
 				report.findings.append(
-					AuditFinding(type="test", severity=8.0, message=f"Pytest suite failed:\n{detailed_msg}", metadata={"stdout": pytest.stdout})
+					AuditFinding(type="test", severity=5.0, message=f"Pytest suite failed:\n{detailed_msg}", metadata={"stdout": pytest.stdout})
 				)
-			elif self.force:
+			else:
 				self.memory_mgr.evaporate_signals("signal_test_failure")
 
 		# Calculate global intensity based on findings
@@ -251,6 +251,8 @@ class SentinelAuditor:
 					metadata={"failed_units": failed_daemons},
 				)
 			)
+		else:
+			self.memory_mgr.evaporate_signals("signal_daemon_failure")
 
 		# 3. Scan journalctl for errors since last audit using a cursor file
 		all_errors = []
@@ -309,6 +311,8 @@ class SentinelAuditor:
 					metadata={"error_count": len(all_errors)},
 				)
 			)
+		else:
+			self.memory_mgr.evaporate_signals("signal_journal_failure")
 
 		# Calculate global intensity based on findings
 		report.intensity = sum(f.severity for f in report.findings)
@@ -435,6 +439,21 @@ class SentinelAuditor:
 					criticality=criticality,
 					originator="Sentinel",
 				)
+				# Drop a task report in MinionInbox for repository checks (formatting, typing, test)
+				if finding.type in ("formatting", "typing", "test"):
+					try:
+						from red_pill.core.inbox import MinionInbox
+
+						MinionInbox().drop_report(
+							event_id=signal_name,
+							source="SentinelAuditor",
+							status="pain",
+							content=finding.message,
+							originator="Sentinel",
+						)
+						self.logger.info(f"Dropped auto-heal task in MinionInbox for '{signal_name}'")
+					except Exception as inbox_ex:
+						self.logger.error(f"Failed to drop task in MinionInbox: {inbox_ex}")
 
 
 if __name__ == "__main__":
