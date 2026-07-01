@@ -8,8 +8,6 @@ an accidental negation removal in an earlier patch.
 import subprocess
 from pathlib import Path
 
-import pytest
-
 INSTALL_SCRIPT = Path(__file__).parent.parent / "scripts" / "install_neo.sh"
 
 
@@ -18,9 +16,9 @@ class TestChangeSkinLogic:
 	Regression guard for the CHANGE_SKIN conditional.
 
 	The logic must be:
-	  Question: "Re-inicializar Identidad y Skin? (s/N)"
-	  - User says "S" (yes, re-initialize) → SKIP_BOOTSTRAP stays false → wizard runs
-	  - User says "N" or empty (no, preserve) → SKIP_BOOTSTRAP=true → wizard skipped
+		Question: "Re-inicializar Identidad y Skin? (s/N)"
+		- User says "S" (yes, re-initialize) -> SKIP_BOOTSTRAP stays false -> wizard runs
+		- User says "N" or empty (no, preserve) -> SKIP_BOOTSTRAP=true -> wizard skipped
 
 	A previous patch accidentally removed the `!` negation, inverting this behavior.
 	"""

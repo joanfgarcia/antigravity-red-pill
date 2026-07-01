@@ -3,8 +3,7 @@
 Regression guards for the cfg.VECTOR_SIZE fix and emotional state logic.
 """
 
-import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -13,7 +12,6 @@ from red_pill.plugins.trinity_homeostasis.plugin import (
 	EmotionalState,
 	HomeostasisPlugin,
 )
-
 
 # ─── EmotionalState unit tests ───────────────────────────────────────────────
 
@@ -132,7 +130,7 @@ class TestHomeostasisPlugin:
 		# Verify upsert was called
 		plugin.memory_mgr.client.upsert.assert_called_once()
 		call_kwargs = plugin.memory_mgr.client.upsert.call_args
-		points = call_kwargs.kwargs.get("points") or call_kwargs[1].get("points") or call_kwargs[0][0] if not call_kwargs.kwargs else None
+		assert call_kwargs is not None, "upsert was called but call_args is empty"
 
 		# Extract from the actual call — check the vector dimension
 		upsert_call = plugin.memory_mgr.client.upsert.call_args
