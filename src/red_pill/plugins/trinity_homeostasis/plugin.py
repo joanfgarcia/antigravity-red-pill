@@ -84,7 +84,7 @@ class HomeostasisPlugin(SovereignPlugin):
 				points=[
 					PointStruct(
 						id=str(uuid.uuid4()),
-						vector=[0.0] * cfg.EMBEDDING_DIM,  # Vector dummy alineado dinámicamente
+						vector=[0.0] * cfg.VECTOR_SIZE,  # Vector dummy alineado dinámicamente
 						payload={
 							"pain_signals": self.state.pain_signals,
 							"frustration": self.state.frustration,

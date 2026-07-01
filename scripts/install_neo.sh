@@ -12,12 +12,12 @@ update_env() {
 	local value=$2
 	if grep -q "^${key}=" "$ENV_FILE"; then
 		if [[ "$OS_TYPE" == "Darwin" ]]; then
-			sed -i "" "s|^${key}=.*|${key}=${value}|g" "$ENV_FILE"
+			sed -i "" "s|^${key}=.*|${key}=\"${value}\"|g" "$ENV_FILE"
 		else
-			sed -i "s|^${key}=.*|${key}=${value}|g" "$ENV_FILE"
+			sed -i "s|^${key}=.*|${key}=\"${value}\"|g" "$ENV_FILE"
 		fi
 	else
-		echo "${key}=${value}" >> "$ENV_FILE"
+		echo "${key}=\"${value}\"" >> "$ENV_FILE"
 	fi
 	# Protocol 770 Fix: Export immediately to current session
 	export "${key}"="${value}"
@@ -38,6 +38,8 @@ else
 fi
 
 AUTO_MODE=false
+SKIP_BOOTSTRAP=false
+QDRANT_VERSION="v1.16.3"
 if [[ "${1:-}" == "--auto" ]]; then
 	AUTO_MODE=true
 fi
@@ -131,7 +133,7 @@ deploy_terminal_anti_blindness() {
 					should_apply=true
 				else
 					read -p "¿Deseas aplicar el parche Anti-Blindness en $(basename "$rc")? (y/N): " APPLY_PATCH
-					if [[ "$APPLY_PATCH" =~ ^[Yy]$ ]]; then should_apply=true; fi
+					if [[ "${APPLY_PATCH:-}" =~ ^[Yy]$ ]]; then should_apply=true; fi
 				fi
 
 				if [ "$should_apply" = true ]; then
@@ -166,7 +168,7 @@ deploy_cursor_ignore() {
 			should_create=true
 		else
 			read -p "¿Deseas crear un .cursorignore global en tu HOME para evitar indización masiva y uso excesivo de CPU? (y/N): " CREATE_IGNORE
-			if [[ "$CREATE_IGNORE" =~ ^[Yy]$ ]]; then should_create=true; fi
+			if [[ "${CREATE_IGNORE:-}" =~ ^[Yy]$ ]]; then should_create=true; fi
 		fi
 
 		if [ "$should_create" = true ]; then
@@ -278,11 +280,24 @@ check_encryption() {
 
 HAS_ENCRYPTION=$(check_encryption > /dev/null; echo $?)
 
-# Check if Qdrant is already running
+# Check if Qdrant is already running and if the API Key matches
 QDRANT_ALIVE=false
 if curl -s -f http://localhost:6333/health >/dev/null; then
 	QDRANT_ALIVE=true
-	echo -e "${GREEN}✓ Qdrant Kernel está activo.${NC}"
+	# SEC-011: Verify API Key if Qdrant is alive
+	if [[ -n "${QDRANT_API_KEY:-}" ]]; then
+		if ! curl -s -f -H "api-key: $QDRANT_API_KEY" http://localhost:6333/health >/dev/null; then
+			echo -e "${YELLOW}[SEC-011] API Key mismatch detectada entre .env y Qdrant Kernel.${NC}"
+			echo -e "${BLUE}Reiniciando motor para sincronizar secretos...${NC}"
+			systemctl --user stop qdrant.service 2>/dev/null || true
+			podman stop qdrant 2>/dev/null || docker stop qdrant 2>/dev/null || true
+			QDRANT_ALIVE=false
+		else
+			echo -e "${GREEN}✓ Qdrant Kernel está activo y autenticado.${NC}"
+		fi
+	else
+		echo -e "${GREEN}✓ Qdrant Kernel está activo.${NC}"
+	fi
 fi
 
 echo -e "${BLUE}--- Fase: Personalización B760-Adaptive ---${NC}"
@@ -290,7 +305,7 @@ if [ "$AUTO_MODE" = "false" ]; then
 	if [ -n "${LORE_SKIN:-}" ]; then
 		echo -e "Skin actual: ${LORE_SKIN}"
 		read -p "Re-inicializar Identidad y Skin? (s/N): " CHANGE_SKIN
-		if [[ ! "$CHANGE_SKIN" =~ ^[Ss]$ ]]; then
+		if [[ ! "${CHANGE_SKIN:-}" =~ ^[Ss]$ ]]; then
 			SKIP_BOOTSTRAP=true
 			echo -e "${BLUE}Preservando identidad actual.${NC}"
 		fi
@@ -309,7 +324,7 @@ if [ "$SKIP_BOOTSTRAP" = "false" ]; then
 			echo "Estas skins pueden saltarse los filtros de neutralidad corporativa y utilizar"
 			echo "lenguaje crudo o temáticas NSFW para mantener la fidelidad al Lore."
 			read -p "¿Aceptas activar este modo de Realismo Soberano? (y/N): " SKIN_CONSENT
-			if [[ ! "$SKIN_CONSENT" =~ ^[Yy]$ ]]; then
+			if [[ ! "${SKIN_CONSENT:-}" =~ ^[Yy]$ ]]; then
 				echo -e "${BLUE}Consentimiento denegado. Reventiendo a skin neutral (760).${NC}"
 				LORE_SKIN="760"
 			fi
@@ -550,7 +565,7 @@ update_env "USER_ATLAS_DIR" "$WORKSPACE_ROOT/atlas"
 update_env "AGENT_CORE_DIR" "$WORKSPACE_ROOT/Agent_Core"
 chmod 600 "$ENV_FILE"
 
-mkdir -p "$IA_DIR/scripts" "$IA_DIR/backups/qdrant" "$IA_DIR/backups/soul" "$IA_DIR/seeds" "$HOME/.local/share/red-pill/models" "$HOME/.local/share/red-pill/queue" "$HOME/.local/share/red-pill/tmp"
+mkdir -p "$WORKSPACE_ROOT/scripts" "$WORKSPACE_ROOT/backups/qdrant" "$WORKSPACE_ROOT/backups/soul" "$WORKSPACE_ROOT/seeds" "$HOME/.local/share/red-pill/models" "$HOME/.local/share/red-pill/queue" "$HOME/.local/share/red-pill/tmp"
 
 if [ "$QDRANT_ALIVE" = "false" ]; then
 	QUADLET_DIR="$HOME/.config/containers/systemd"
@@ -561,7 +576,7 @@ Description=Qdrant Vector Database
 After=network-online.target
 
 [Container]
-Image=docker.io/qdrant/qdrant:v1.9.0
+Image=docker.io/qdrant/qdrant:${QDRANT_VERSION}
 PublishPort=127.0.0.1:6333:6333
 PublishPort=127.0.0.1:6334:6334
 Volume=$HOME/.local/share/red-pill/db:/qdrant/storage:Z
@@ -603,7 +618,7 @@ EOF
 		<string>$HOME/.local/share/red-pill/db:/qdrant/storage</string>
 		<string>-e</string>
 		<string>QDRANT__SERVICE__API_KEY=$QDRANT_API_KEY</string>
-		<string>qdrant/qdrant:v1.9.0</string>
+		<string>qdrant/qdrant:${QDRANT_VERSION}</string>
 	</array>
 	<key>KeepAlive</key>
 	<true/>
@@ -786,6 +801,18 @@ else
 	echo "}"
 fi
 
+
+echo -e "${BLUE}--- Fase: Verificación de Integridad Final (Lazarus Check) ---${NC}"
+if [ -f "$SCRIPT_DIR/verify/check_bunker_health.py" ]; then
+	(cd "$REPO_ROOT" && uv run python scripts/verify/check_bunker_health.py)
+	if [ $? -ne 0 ]; then
+		echo -e "${RED}[ERROR CRÍTICO] La verificación de integridad del Bünker ha fallado.${NC}"
+		echo -e "${YELLOW}Por favor, revisa los logs y asegúrate de que Qdrant esté corriendo correctamente.${NC}"
+		exit 1
+	fi
+else
+	echo -e "${YELLOW}[WARN] Script de verificación no encontrado. Saltando Lazarus Check.${NC}"
+fi
 
 echo -e "${GREEN}Instalación completada. 'uv run red-pill seed' para despertar.${NC}"
 echo -e "${BLUE}------------------------------------------------------------------${NC}"

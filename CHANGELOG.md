@@ -1,3 +1,12 @@
+## [7.4.3] - 2026-07-01
+
+### 🩹 Titanium Patch Audit — Bugfixes & Regression Guards (CORE-009)
+- **[FIX] Homeostasis Plugin `cfg.EMBEDDING_DIM` → `cfg.VECTOR_SIZE`**: Fixed a latent `AttributeError` in `trinity_homeostasis/plugin.py` where the COGNITION hook referenced `cfg.EMBEDDING_DIM` — a constant that does not exist in `config.py`. The correct constant is `cfg.VECTOR_SIZE` (= 384). This bug silently crashed the homeostasis state persistence to Qdrant on every COGNITION hook trigger.
+- **[FIX] `install_neo.sh` CHANGE_SKIN Logic Inversion**: Restored the `!` negation operator in the CHANGE_SKIN conditional (line 308) that was accidentally removed during a previous defensive-quoting patch (`${CHANGE_SKIN:-}`). Without the negation, answering "S" (yes) to "Re-inicializar Identidad y Skin?" would *preserve* the current skin instead of re-initializing, and vice versa.
+- **[TEST] Homeostasis Plugin Regression Suite (`test_homeostasis_plugin.py`)**: 15 tests covering EmotionalState color thresholds/priorities/boundaries, VECTOR_SIZE existence guard, EMBEDDING_DIM non-existence guard, COGNITION/TELEMETRY hook behavior, export_state serialization, and tone directive mapping.
+- **[TEST] Install Script Logic Regression Suite (`test_install_neo_logic.py`)**: 9 tests with bash sandbox execution validating CHANGE_SKIN conditional semantics (S→no-skip, N→skip, empty→skip), script syntax (`bash -n`), negation presence guards for CHANGE_SKIN and SKIN_CONSENT, and SKIP_BOOTSTRAP initialization order.
+- **[AUDIT] Titanium Patch Triage**: Full diff analysis of `redpill_v7.3.0_install-update.patch` (ex-Titanium). Confirmed 5/6 `install_neo.sh` fixes already applied; `bunker_lifecycle.py` already integrated as `red_pill.bunker_lifecycle`. Only the two bugs above were actionable.
+
 ## [7.4.2] - 2026-06-29
 
 ### 🗜️ Sovereign Handshake Context Optimization & Cache Fork-Bomb Fix (CORE-008)
