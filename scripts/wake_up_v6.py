@@ -90,8 +90,12 @@ def query_qdrant(collection, text):
 
 			results: List[str] = []
 			for p in points:
-				content = p.get("payload", {}).get("content", "")
-				is_immune = p.get("payload", {}).get("immune", False)
+				payload = p.get("payload", {})
+				lazarus = payload.get("lazarus_phase")
+				if lazarus in ("raw_parent", "sequence_chunk", "synthesis_hub"):
+					continue
+				content = payload.get("content", "")
+				is_immune = payload.get("immune", False)
 				if is_immune and "[IMMUNE]" not in content:
 					content = f"{content} [IMMUNE]"
 				results.append(content)
@@ -202,7 +206,7 @@ def main():
 		except Exception:
 			pass
 
-	if not persona_injection:
+	if not persona_injection or (args.silent and cache_is_stale):
 		if args.silent:
 			persona_injection = synthesize_with_llm(unique_context)
 			try:
@@ -211,13 +215,15 @@ def main():
 			except Exception:
 				pass
 		else:
-			persona_injection = "[Sincronizando Identidad Bünker en segundo plano...]"
+			if not persona_injection:
+				persona_injection = "[Sincronizando Identidad Bünker en segundo plano...]"
 			try:
 				subprocess.Popen([sys.executable, __file__, "--silent"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 			except Exception as e:
-				persona_injection = f"[Error lanzando sincronización: {e}]"
-	elif cache_is_stale:
-		# Stale cache used — schedule background re-synthesis to refresh it
+				if not persona_injection:
+					persona_injection = f"[Error lanzando sincronización: {e}]"
+	elif cache_is_stale and not args.silent:
+		# Stale cache used in foreground — schedule background re-synthesis to refresh it
 		try:
 			subprocess.Popen([sys.executable, __file__, "--silent"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 		except Exception:

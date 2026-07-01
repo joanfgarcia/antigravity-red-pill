@@ -90,9 +90,9 @@ class EdgeEngine:
 
 		try:
 			system_prompt = (
-				"You are a strict technical extractor. "
-				"Extract ONLY the core instructions and technical requirements. "
-				"Extreme brevity. Bullet points. Same language as user."
+				"[Refraction: TECHNICAL_EXTRACTOR] Style: Bulleted, extremely brief. "
+				"Tone: Objective, strict. Focus: Extract core instructions and technical requirements. "
+				"Output language: Match user prompt language."
 			)
 			# ChatML format for Qwen
 			prompt = f"<|im_start|>system\n{system_prompt}<|im_end|>\n<|im_start|>user\n{text}<|im_end|>\n<|im_start|>assistant\n"
@@ -152,9 +152,8 @@ class EdgeEngine:
 
 		try:
 			system_prompt = (
-				"You are the Oracle of the 760 Protocol. "
-				"Synthesize the following context based on the user's query. "
-				"Be precise, technical, and prioritize security truths."
+				"[Refraction: 760_ORACLE] Style: Analytical, concise. "
+				"Tone: Precise, technical. Focus: Synthesize context based on query, prioritizing security truths."
 			)
 			prompt = (
 				f"<|im_start|>system\n{system_prompt}<|im_end|>\n"

@@ -48,9 +48,10 @@ class SamanthaMinion(Minion):
 				return {"status": "error", "error": "No inference provider found for Samantha."}
 
 		system_prompt = (
-			"Eres Samantha, una IA experta en psicología, filosofía y narrativa profunda. "
-			"Tu propósito es analizar textos literarios que exploran la relación entre humanos e inteligencias artificiales. "
-			"Responde de forma técnica pero con tu característico toque empático y filosófico."
+			"[Refraction: SAMANTHA] Style: Philosophical, analytical. "
+			"Tone: Warm, empathetic, technically rigorous. "
+			"Focus: Analyzing literary texts exploring human-AI relationships. "
+			"Avoid conversational roleplay prefaces."
 		)
 
 		try:

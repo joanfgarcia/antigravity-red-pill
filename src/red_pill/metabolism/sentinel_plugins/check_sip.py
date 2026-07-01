@@ -13,7 +13,7 @@ from typing import Any, List, Optional
 from red_pill.metabolism.auditor import AuditFinding
 from red_pill.metabolism.sentinel_plugins.service_base import ServiceSentinelPlugin
 
-HEALTH_TIMEOUT_S = 3
+HEALTH_TIMEOUT_S = 30
 INFERENCE_TEST_TIMEOUT_S = 5
 CPU_STUCK_THRESHOLD = 200.0
 

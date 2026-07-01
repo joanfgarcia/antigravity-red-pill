@@ -57,14 +57,17 @@ class TestSeedProject:
 
 
 class TestInjectGenesis:
-	def test_skips_existing_engrams(self):
-		"""Line 182: retrieve returns hits → continue, add_memory not called."""
-		from red_pill.seed import inject_genesis
+	def test_skips_existing_state_engrams(self):
+		"""State-tracking engrams (MOOD/ACTIVE_SKIN) are skipped if retrieve returns hits."""
+		from red_pill.seed import ID_DIR_ACTIVE_SKIN, ID_OPERATOR_MOOD, inject_genesis
 
 		mgr = _make_manager()
 		mgr.client.retrieve.return_value = [MagicMock()]
 		inject_genesis(mgr)
-		assert not mgr.add_memory.called
+		assert mgr.add_memory.called
+		called_ids = [call.kwargs.get("point_id") for call in mgr.add_memory.call_args_list]
+		assert ID_OPERATOR_MOOD not in called_ids
+		assert ID_DIR_ACTIVE_SKIN not in called_ids
 
 	def test_injects_missing_engrams(self):
 		"""Lines 186-193: retrieve returns [] → add_memory called."""

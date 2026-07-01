@@ -547,9 +547,13 @@ class MemoryManager:
 
 		vector = self._get_vector(query)
 
-		search_filter = None
 		if not deep_recall:
-			search_filter = models.Filter(must=[models.FieldCondition(key="reinforcement_score", range=models.Range(gte=0.2))])
+			search_filter = models.Filter(
+				must=[models.FieldCondition(key="reinforcement_score", range=models.Range(gte=0.2))],
+				must_not=[models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="raw_parent"))],
+			)
+		else:
+			search_filter = models.Filter(must_not=[models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="raw_parent"))])
 
 		try:
 			results = self.client.query_points(
@@ -673,11 +677,24 @@ class MemoryManager:
 			try:
 				# 2. Ephemeral Fetch (Pulling the actual memories into context)
 				points = self.client.retrieve(collection_name=collection, ids=list(evoked_ids), with_payload=True, with_vectors=False)
+				retrieved_ids = set()
 				for p in points:
 					if p.payload:
 						# Mark it as evoked for LLM context/parsing
 						p.payload["_is_evoked"] = True
 						cascade_results.append(p)
+						retrieved_ids.add(str(p.id))
+
+				# Cross-collection resolution for associated engrams split across collections
+				opposite_col = "social_memories" if collection == "work_memories" else "work_memories" if collection == "social_memories" else None
+				if opposite_col:
+					missing_ids = [eid for eid in evoked_ids if eid not in retrieved_ids]
+					if missing_ids:
+						opposite_points = self.client.retrieve(collection_name=opposite_col, ids=missing_ids, with_payload=True, with_vectors=False)
+						for p in opposite_points:
+							if p.payload:
+								p.payload["_is_evoked"] = True
+								cascade_results.append(p)
 			except Exception as e:
 				logger.error(f"Evocative Cascade lookup failed: {e}")
 
@@ -695,7 +712,12 @@ class MemoryManager:
 		try:
 			response = self.client.scroll(
 				collection_name=collection,
-				scroll_filter=models.Filter(must_not=[models.FieldCondition(key="immune", match=models.MatchValue(value=True))]),
+				scroll_filter=models.Filter(
+					must_not=[
+						models.FieldCondition(key="immune", match=models.MatchValue(value=True)),
+						models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="raw_parent")),
+					]
+				),
 				limit=limit,
 				with_payload=True,
 				with_vectors=True,
@@ -719,7 +741,12 @@ class MemoryManager:
 					query=cast(list[float], list(p.vector)) if p.vector is not None else [0.0],
 					limit=5,
 					with_payload=True,
-					query_filter=models.Filter(must_not=[models.HasIdCondition(has_id=[p.id])]),
+					query_filter=models.Filter(
+						must_not=[
+							models.HasIdCondition(has_id=[p.id]),
+							models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="raw_parent")),
+						]
+					),
 				).points
 			except Exception:
 				continue
@@ -1172,3 +1199,39 @@ class MemoryManager:
 			logger.debug(f"Evaporated signal '{name}'")
 		except Exception as e:
 			logger.warning(f"Failed to evaporate signal '{name}': {e}")
+
+	def retrieve_parent_context(self, child_id: str) -> Optional[Dict[str, Any]]:
+		"""
+		Retrieves the parent engram payload for a given child engram.
+		Scans both work_memories and social_memories to locate the child,
+		gets its parent_id, and then fetches the parent engram from either collection.
+		"""
+		collections = ["work_memories", "social_memories"]
+		parent_id = None
+
+		# 1. Retrieve the child to find parent_id
+		for col in collections:
+			try:
+				points = self.client.retrieve(collection_name=col, ids=[child_id], with_payload=True, with_vectors=False)
+				if points and points[0].payload:
+					payload = points[0].payload
+					parent_id = payload.get("parent_id")
+					if parent_id:
+						break
+			except Exception as e:
+				logger.error(f"Failed to retrieve child {child_id} in {col}: {e}")
+
+		if not parent_id:
+			logger.debug(f"Parent ID not found for child {child_id}")
+			return None
+
+		# 2. Retrieve the parent engram
+		for col in collections:
+			try:
+				points = self.client.retrieve(collection_name=col, ids=[parent_id], with_payload=True, with_vectors=False)
+				if points and points[0].payload:
+					return self._parse_payload(points[0].payload, strict=True)
+			except Exception as e:
+				logger.error(f"Failed to retrieve parent {parent_id} in {col}: {e}")
+
+		return None

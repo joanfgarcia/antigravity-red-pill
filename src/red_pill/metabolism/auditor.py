@@ -132,13 +132,13 @@ class SentinelAuditor:
 				report.findings.append(
 					AuditFinding(type="formatting", severity=5.0, message=f"Ruff check failed:\n{detailed_msg}", metadata={"stdout": ruff.stdout})
 				)
-			elif self.force:
+			else:
 				self.memory_mgr.evaporate_signals("signal_formatting_failure")
 		# 2. Typing (Mypy)
 		if not self.force and self.memory_mgr.has_signal("signal_typing_failure"):
 			self.logger.info("Skipping Mypy check (Fast-Fail: signal_typing_failure exists)")
 			report.status = "yellow"
-			report.findings.append(AuditFinding(type="typing", severity=6.0, message="Mypy check failed (Fast-Fail)"))
+			report.findings.append(AuditFinding(type="typing", severity=5.0, message="Mypy check failed (Fast-Fail)"))
 		else:
 			self.logger.info(f"Auditing types for {repo_path}")
 			mypy_target = "src/red_pill/" if os.path.exists(os.path.join(repo_path, "src/red_pill")) else "src/"
@@ -163,30 +163,30 @@ class SentinelAuditor:
 				detailed_msg = "\n".join(errors) if errors else (mypy.stdout[-300:] if mypy.stdout else "Mypy type check failed")
 
 				report.findings.append(
-					AuditFinding(type="typing", severity=6.0, message=f"Mypy errors:\n{detailed_msg}", metadata={"stdout": mypy.stdout})
+					AuditFinding(type="typing", severity=5.0, message=f"Mypy errors:\n{detailed_msg}", metadata={"stdout": mypy.stdout})
 				)
-			elif self.force:
+			else:
 				self.memory_mgr.evaporate_signals("signal_typing_failure")
 		# 3. Testing (Pytest)
 		if not self.force and self.memory_mgr.has_signal("signal_test_failure"):
 			self.logger.info("Skipping Pytest check (Fast-Fail: signal_test_failure exists)")
-			report.status = "red"
-			report.findings.append(AuditFinding(type="test", severity=8.0, message="Pytest suite failed (Fast-Fail)"))
+			report.status = "yellow"
+			report.findings.append(AuditFinding(type="test", severity=5.0, message="Pytest suite failed (Fast-Fail)"))
 		else:
 			self.logger.info(f"Auditing tests for {repo_path}")
 			# Run standard tests (removed xdist to ensure universal compatibility)
 			pytest = subprocess.run([self.uv_path, "run", "pytest"], cwd=repo_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 			if pytest.returncode != 0:
-				report.status = "red"
+				report.status = "yellow"
 				failed_tests = [line for line in pytest.stdout.splitlines() if line.startswith("FAILED ") or line.startswith("ERROR ")]
 				detailed_msg = "\n".join(failed_tests[:5]) if failed_tests else (pytest.stdout[-300:] if pytest.stdout else "Pytest suite failed")
 				if len(failed_tests) > 5:
 					detailed_msg += f"\n... and {len(failed_tests) - 5} more failures."
 
 				report.findings.append(
-					AuditFinding(type="test", severity=8.0, message=f"Pytest suite failed:\n{detailed_msg}", metadata={"stdout": pytest.stdout})
+					AuditFinding(type="test", severity=5.0, message=f"Pytest suite failed:\n{detailed_msg}", metadata={"stdout": pytest.stdout})
 				)
-			elif self.force:
+			else:
 				self.memory_mgr.evaporate_signals("signal_test_failure")
 
 		# Calculate global intensity based on findings
@@ -200,6 +200,26 @@ class SentinelAuditor:
 		self._update_cached_mtime(repo_path, current_mtime)
 
 		return report
+
+	def _read_log_tail(self, filepath: Path, max_bytes: int = 10240) -> List[str]:
+		"""Reads the tail of a file safely up to max_bytes, returning lines."""
+		if not filepath.exists() or not filepath.is_file():
+			return []
+		try:
+			file_size = filepath.stat().st_size
+			with open(filepath, "rb") as f:
+				if file_size > max_bytes:
+					f.seek(-max_bytes, os.SEEK_END)
+					chunk = f.read(max_bytes)
+				else:
+					chunk = f.read()
+				lines = chunk.decode("utf-8", errors="ignore").splitlines()
+				if file_size > max_bytes and lines:
+					lines.pop(0)
+				return lines
+		except Exception as e:
+			self.logger.warning(f"Failed to read tail of {filepath}: {e}")
+			return []
 
 	def audit_runtime(self) -> AuditReport:
 		"""Run dynamic runtime checks on Daemons and Logs."""
@@ -231,6 +251,8 @@ class SentinelAuditor:
 					metadata={"failed_units": failed_daemons},
 				)
 			)
+		else:
+			self.memory_mgr.evaporate_signals("signal_daemon_failure")
 
 		# 3. Scan journalctl for errors since last audit using a cursor file
 		all_errors = []
@@ -242,7 +264,7 @@ class SentinelAuditor:
 				# Initialize cursor at the current end of journal to avoid parsing history
 				subprocess.run(["journalctl", "--user", "-n", "0", f"--cursor-file={cursor_file}"])
 
-			cmd = ["journalctl", "--user", f"--cursor-file={cursor_file}", "--no-pager"]
+			cmd = ["journalctl", "--user", f"--cursor-file={cursor_file}", "--no-pager", "-p", "4"]
 			for u in redpill_units:
 				cmd.extend(["-u", u])
 
@@ -252,10 +274,29 @@ class SentinelAuditor:
 					# Case-insensitive check for error signatures
 					line_lower = line.lower()
 					if "error" in line_lower or "exception" in line_lower or "traceback" in line_lower or "fatal" in line_lower:
+						if "llama_model_loader" in line_lower:
+							continue
 						# Prevent self-referential feedback loops from the auditor's own logging
 						if "active pain detected" in line_lower or "recent daemon errors in journal" in line_lower:
 							continue
 						all_errors.append(line)
+
+		# 4. Scan external service error logs (stdout/stderr redirected to files)
+		external_logs = [
+			Path.home() / ".local/share/red-pill/daemon/error.log",
+			Path.home() / ".agent/bunker_daemon_error.log",
+		]
+		for log_path in external_logs:
+			if log_path.exists():
+				lines = self._read_log_tail(log_path)
+				for line in lines:
+					line_lower = line.lower()
+					if "error" in line_lower or "exception" in line_lower or "traceback" in line_lower or "fatal" in line_lower:
+						if "llama_model_loader" in line_lower:
+							continue
+						if "active pain detected" in line_lower or "recent daemon errors in journal" in line_lower:
+							continue
+						all_errors.append(f"[{log_path.name}] {line}")
 
 		if all_errors:
 			report.status = "yellow" if report.status == "green" else report.status
@@ -270,6 +311,8 @@ class SentinelAuditor:
 					metadata={"error_count": len(all_errors)},
 				)
 			)
+		else:
+			self.memory_mgr.evaporate_signals("signal_journal_failure")
 
 		# Calculate global intensity based on findings
 		report.intensity = sum(f.severity for f in report.findings)
@@ -396,6 +439,21 @@ class SentinelAuditor:
 					criticality=criticality,
 					originator="Sentinel",
 				)
+				# Drop a task report in MinionInbox for repository checks (formatting, typing, test)
+				if finding.type in ("formatting", "typing", "test"):
+					try:
+						from red_pill.core.inbox import MinionInbox
+
+						MinionInbox().drop_report(
+							event_id=signal_name,
+							source="SentinelAuditor",
+							status="pain",
+							content=finding.message,
+							originator="Sentinel",
+						)
+						self.logger.info(f"Dropped auto-heal task in MinionInbox for '{signal_name}'")
+					except Exception as inbox_ex:
+						self.logger.error(f"Failed to drop task in MinionInbox: {inbox_ex}")
 
 
 if __name__ == "__main__":

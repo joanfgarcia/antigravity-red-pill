@@ -1,5 +1,72 @@
-## [7.3.0] - Unreleased
+## [7.4.3] - 2026-07-01
 
+### 🩹 Titanium Patch Audit — Bugfixes & Regression Guards (CORE-009)
+- **[FIX] Homeostasis Plugin `cfg.EMBEDDING_DIM` → `cfg.VECTOR_SIZE`**: Fixed a latent `AttributeError` in `trinity_homeostasis/plugin.py` where the COGNITION hook referenced `cfg.EMBEDDING_DIM` — a constant that does not exist in `config.py`. The correct constant is `cfg.VECTOR_SIZE` (= 384). This bug silently crashed the homeostasis state persistence to Qdrant on every COGNITION hook trigger.
+- **[FIX] `install_neo.sh` CHANGE_SKIN Logic Inversion**: Restored the `!` negation operator in the CHANGE_SKIN conditional (line 308) that was accidentally removed during a previous defensive-quoting patch (`${CHANGE_SKIN:-}`). Without the negation, answering "S" (yes) to "Re-inicializar Identidad y Skin?" would *preserve* the current skin instead of re-initializing, and vice versa.
+- **[TEST] Homeostasis Plugin Regression Suite (`test_homeostasis_plugin.py`)**: 15 tests covering EmotionalState color thresholds/priorities/boundaries, VECTOR_SIZE existence guard, EMBEDDING_DIM non-existence guard, COGNITION/TELEMETRY hook behavior, export_state serialization, and tone directive mapping.
+- **[TEST] Install Script Logic Regression Suite (`test_install_neo_logic.py`)**: 9 tests with bash sandbox execution validating CHANGE_SKIN conditional semantics (S→no-skip, N→skip, empty→skip), script syntax (`bash -n`), negation presence guards for CHANGE_SKIN and SKIN_CONSENT, and SKIP_BOOTSTRAP initialization order.
+- **[AUDIT] Titanium Patch Triage**: Full diff analysis of `redpill_v7.3.0_install-update.patch` (ex-Titanium). Confirmed 5/6 `install_neo.sh` fixes already applied; `bunker_lifecycle.py` already integrated as `red_pill.bunker_lifecycle`. Only the two bugs above were actionable.
+
+## [7.4.2] - 2026-06-29
+
+### 🗜️ Sovereign Handshake Context Optimization & Cache Fork-Bomb Fix (CORE-008)
+- **[FIX] Handshake Payload Optimization**: Filtered out consolidated/distilled engrams (`raw_parent`, `sequence_chunk`, and `synthesis_hub`) from Qdrant context loading in `wake_up_v6.py`. This prevents verbatim conversation histories from past sessions from polluting the bootstrap context, shrinking the `<BUNKER_CONTEXT>` size from 4000+ lines (~400KB) to under 90 lines.
+- **[FIX] Background Cache Synthesis Fork Loop**: Resolved a recursive subprocess spawning bug in `wake_up_v6.py` where silent background processes encountering a stale cache would recursively schedule new background tasks indefinitely. Background runs now perform direct LLM synthesis and update the cache inline.
+- **[TEST] Handshake Regression Coverage**: Added the unit test `test_query_qdrant_excludes_lazarus_phases` in `tests/test_wake_up_v6.py` to prevent future regressions.
+
+## [7.4.1] - 2026-06-29
+
+### 🩹 Sentinel Auditor Deadlock Resolution & Pain Escalation (CORE-007)
+- **[FIX] Sentinel Auditor Deadlock Bypass**: Resolved a logical deadlock in `SentinelAuditor` by removing fast-fail bypasses during active warning signals for repository checks (formatting, typing, and test suites). This guarantees that success paths evaporate warning signals instead of skipping them.
+- **[FEAT] Auditor-Inbox Task Despatch**: Linked the Sentinel Auditor to the SQLite `MinionInbox` to automatically drop unread healing tasks on repository check failures.
+- **[FEAT] Direct Pain Escalation (Intensity 8.0)**: Enhanced `auto_heal_ritual` failure paths to evaporate existing warning signals before calling `inject_signal`, successfully forcing failure intensities to exactly `8.0` with `CRITICAL` status on repair failure.
+- **[FIX] Escalation Naming Alignment**: Aligned the escalated signal names in the healer failures with their respective warning names (`signal_formatting_failure`, `signal_typing_failure`).
+
+## [7.4.0] - 2026-06-28
+
+### 🕸️ Hierarchical Parent-Child Memory Graph Topology (CORE-006)
+- **[FEAT] Parent-Child Vector Graph Routing**: Replaced linear engram retrieval with a hierarchical parent-child graph layout. Verbatim conversation transcripts (`raw_parent`) are preserved and isolated from general vector searches via metadata filtering (`lazarus_phase: "raw_parent"`, `immune: true`).
+- **[FEAT] Semantic Chunk Routing**: Distilled child engrams (`sequence_chunk`) are dynamically routed to their target collection (`work_memories` or `social_memories`) based on their local semantic categorization.
+- **[FEAT] Cross-Collection Axon Resolution**: Implemented cross-collection resolution, enabling evocative cascades and parent node recovery to traverse the boundaries of work and social memories dynamically.
+- **[FEAT] Ariadne's Thread Threading**: Preserved temporal conversation walking by chaining sequential raw parent nodes (`prev_raw_parent`/`next_raw_parent`).
+- **[FEAT] SQLite Decoupling & Janitor Sweep**: Limited SQLite `interactions` table size to a 30-day window, moving historical data to a universal `universal_history.jsonl` file in Agent_Core. Added parent-culling sweep in `JanitorMinion` to clean up orphaned parents when all child chunks erode.
+- **[MIGRATION] Parent-Child Schema Migration**: Successfully migrated existing linear engrams to the new hierarchical topology.
+- **[TEST] Graph Integrity Test Coverage**: Added comprehensive test cases in `test_parent_child_memory.py` validating correct hierarchy resolution, linking, parent-culling, and history archiving.
+
+## [7.3.3] - 2026-06-28
+
+### ⚡ On-Demand local LLM Loading & VRAM Preemption (CORE-005)
+- **[FEAT] On-Demand Model Loading (`run_dual_bind.py`)**: Rewrote the background LLM daemon as a custom FastAPI application that loads the Samantha model dynamically in available silicon on the first `/v1/chat/completions` request.
+- **[FEAT] Priority-Aware Inactivity Reaper (`run_dual_bind.py`)**: Implemented an async background task to automatically unload the model from memory. Standard/interactive requests use a 5-minute timeout; low-priority requests (e.g., sleep cycle, compactions) trigger unloading after a rapid 10-second idle period.
+- **[FEAT] Explicit VRAM Preemption Endpoint (`run_dual_bind.py`)**: Exposed `POST /unload` to immediately release VRAM, allowing training or compilation scripts to reclaim GPU resources instantly.
+- **[FEAT] Dynamic Fallback Coexistence (`run_dual_bind.py`)**: Resolved hardware affinity at request time (using `VramProbe`). If GPU VRAM is busy (e.g. Nico training), the daemon automatically falls back to CPU RAM execution (`n_gpu_layers=0`) without crashing or blocking concurrent requests.
+- **[FEAT] Sleep Integration (`sleep.py`)**: Configured the sleep engine to explicitly trigger the `/unload` endpoint upon completion of the distillation cycle.
+- **[DOCS] Technical Architectural Updates**: Registered the new design in the decision log (`[AD-020]`), corrected the port number in the service health contract, and updated the hardware selection guide.
+
+## [7.3.2] - 2026-06-27
+
+### 🩺 Log Stream Bifurcation & Native copytruncate Rotation (CORE-004)
+- **[FEAT] Priority-Based Journalctl Filtering (`auditor.py`)**: Configured the Sentinel Auditor to query systemd journalctl with `--priority=4` (Warning or higher). This filters out standard output logs (priority 6/info) and isolates warnings and errors.
+- **[FEAT] Redirected Log File Scanning (`auditor.py`)**: Added direct tail scanning of external error files (`error.log` and `bunker_daemon_error.log`) to ensure no error blindness for services redirecting stderr to disk.
+- **[FEAT] Model Loader Noise Exclusion (`auditor.py`)**: Excluded `"llama_model_loader"` signatures to permanently eliminate false-positive pain signals caused by GGUF metadata dumps during service startup.
+- **[FEAT] Native copytruncate Log Rotation (`janitor.py`)**: Implemented log rotation directly inside `JanitorMinion` using the `copytruncate` strategy (rotating files exceeding 10MB to `.1`, `.2`, etc.) without interrupting active daemons, along with automatic deletion of log backups older than 30 days.
+- **[TEST] Comprehensive Unit Tests (`test_auditor.py`, `test_janitor.py`)**: Added full test coverage for priority flags, log file scanning, noise exclusion, self-referential logging exclusion, and log rotation/cleanup logic.
+
+## [7.3.1] - 2026-06-26
+
+### 🎭 Declarative Lore Skins & Directives Refactoring (CORE-003)
+- **[FEAT] Declarative Lore Skins (`lore_skins.yaml`)**: Optimized all 21 lore skins under the `modes` configuration to transition from first-person narrative prose into structured key-value refractions (e.g., `Style:`, `Tone:`, `Focus:`, `Lexicon:`). This retains 100% retrocompatibility with CLI and database schemas while preventing safety classifier / jailbreak triggers on advanced, modern LLMs (where the tipping point started with Gemini 3.5 and Claude Opus 4.8).
+- **[FEAT] Structured System Prompts (`sleep.py`, `samantha.py`, `edge_engine.py`)**: Restructured first-person conversational roleplay prompts in the Lazarus sleep engine (distillation, synthesis, and session anchor generation), Samantha minion, and local EdgeEngine (compression and synthesis) into structured, declarative, and token-efficient directives.
+- **[TEST] Skin Integrity Tests (`test_lore_skins.py`)**: Validated YAML integrity, schema constraints, ValidColor compliance, and integration of the mode-switching flow with Qdrant persistence.
+- **[FEAT] Version Engram Consolidation**: Replaced manually created duplicate version engrams in `directive_memories` with a single permanent genesis engram using a fixed UUID (`ID_PROTOCOL_VERSION`), keeping it automatically synchronized and unique across seeding and upgrades.
+
+
+### ⚡ Ariadne's Thread & Sentinel Timeout Resiliency
+- **[FIX] Sleep Engine Distillation robustness (`sleep.py`)**: Fixed a critical crash where LLM output with nested dictionaries or non-string fields (like `{"emotion": {"type": "joy"}}` or floats) threw `AttributeError` on `.lower()` during sleep consolidation, and ensured `detect_category_heuristics` handles non-string engram values.
+- **[FIX] Health Check Timeouts (`check_sip.py`, `doctor.py`)**: Increased port 8760 health probe timeouts from 3 seconds to 30 seconds to prevent false-positive `signal_sip_loading_failure` alarms when the local inference proxy is busy evaluating prompt prefixes.
+- **[TEST] Distillation Edge-Cases (`test_sleep.py`)**: Added unit tests to validate malformed JSON payloads and non-string inputs in sleep heuristics.
+
+## [7.3.0] - 2026-06-25
 ### 🧠 RhizoDB Memory Dynamics & Sleep Consolidation (Zenodo DOI: 10.5281/zenodo.20695703)
 - **[FEAT] RhizoDB Memory Engine (`affect.py`, `config.py`)**: Integrated Jorge Augusto Guberte's RhizoDB memory dynamics model as a first-class memory engine (`"rhizodb"`). Social memories (`social_memories`) and story memories (`story_memories`) now default to `"rhizodb"` routing.
 - **[FEAT] Saturated Activation & Asymptotic Stability (`affect.py`)**: Replaced linear/exponential memory decay with saturated activation updates ($a_v(t+1) = a_v(t) + (1.0 - a_v(t)) \cdot \alpha$) and asymptotic stability updates ($s_v(t+1) = s_v(t) + \eta \cdot \alpha \cdot (S_{\max} - s_v(t))$) capped at $S_{\max} = 365.0$ days with learning rate $\eta = 0.1$.

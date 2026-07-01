@@ -76,7 +76,7 @@ class MinionInbox:
 					f.write(self.mls_group.to_bytes())
 
 	def _init_db(self) -> None:
-		with sqlite3.connect(self.db_path) as conn:
+		with sqlite3.connect(self.db_path, timeout=30.0) as conn:
 			cursor = conn.cursor()
 			# Enable Write-Ahead Logging for graceful concurrency across minions
 			cursor.execute("PRAGMA journal_mode=WAL;")
@@ -113,7 +113,7 @@ class MinionInbox:
 				return
 
 		try:
-			with sqlite3.connect(self.db_path) as conn:
+			with sqlite3.connect(self.db_path, timeout=30.0) as conn:
 				cursor = conn.cursor()
 				cursor.execute(
 					"INSERT INTO inbox (event_id, source, status, content, timestamp, originator) VALUES (?, ?, ?, ?, ?, ?)",
@@ -126,34 +126,36 @@ class MinionInbox:
 	def get_unread(self, limit: int = 50) -> List[Dict[str, Any]]:
 		"""Retrieve unread reports WITHOUT marking them as read (non-destructive peek)."""
 		reports: List[Dict[str, Any]] = []
+		rows = []
 		try:
-			with sqlite3.connect(self.db_path) as conn:
+			with sqlite3.connect(self.db_path, timeout=30.0) as conn:
 				conn.row_factory = sqlite3.Row
 				cursor = conn.cursor()
 				cursor.execute(
 					"SELECT id, event_id, source, status, content, is_read, timestamp, originator FROM inbox WHERE is_read = 0 ORDER BY timestamp DESC LIMIT ?",
 					(limit,),
 				)
-				rows = cursor.fetchall()
-				reports = []
-				for row in rows:
-					d = dict(row)
-					if cfg.ICE_MODE_ENABLED and self.mls_group is not None:
-						try:
-							raw_bytes = base64.b64decode(d["content"])
-							d["content"] = self.mls_group.decrypt_application_message(raw_bytes).decode("utf-8")
-						except Exception as e:
-							logger.error(f"ICE decryption failed for report {d['id']}: {e}")
-							d["content"] = "<ICE Decryption Failed>"
-					reports.append(d)
+				db_rows = cursor.fetchall()
+				rows = [dict(row) for row in db_rows]
 		except Exception as e:
 			logger.error(f"Failed to get unread reports: {e}")
+			return []
+
+		for d in rows:
+			if cfg.ICE_MODE_ENABLED and self.mls_group is not None:
+				try:
+					raw_bytes = base64.b64decode(d["content"])
+					d["content"] = self.mls_group.decrypt_application_message(raw_bytes).decode("utf-8")
+				except Exception as e:
+					logger.error(f"ICE decryption failed for report {d['id']}: {e}")
+					d["content"] = "<ICE Decryption Failed>"
+			reports.append(d)
 		return reports
 
 	def mark_as_read(self, report_ids: List[int]) -> None:
 		"""Mark specific reports as read by ID."""
 		try:
-			with sqlite3.connect(self.db_path) as conn:
+			with sqlite3.connect(self.db_path, timeout=30.0) as conn:
 				cursor = conn.cursor()
 				placeholders = ",".join("?" * len(report_ids))
 				cursor.execute(f"UPDATE inbox SET is_read = 1 WHERE id IN ({placeholders})", report_ids)
@@ -164,8 +166,9 @@ class MinionInbox:
 	def pop_unread(self, limit: int = 50) -> List[Dict[str, Any]]:
 		"""Retrieve unread reports and mark them as read atomically."""
 		reports: List[Dict[str, Any]] = []
+		rows = []
 		try:
-			with sqlite3.connect(self.db_path) as conn:
+			with sqlite3.connect(self.db_path, timeout=30.0) as conn:
 				conn.row_factory = sqlite3.Row
 				cursor = conn.cursor()
 				# Fetch inside transaction
@@ -173,31 +176,32 @@ class MinionInbox:
 					"SELECT id, event_id, source, status, content, is_read, timestamp, originator FROM inbox WHERE is_read = 0 ORDER BY timestamp DESC LIMIT ?",
 					(limit,),
 				)
-				rows = cursor.fetchall()
+				db_rows = cursor.fetchall()
+				rows = [dict(row) for row in db_rows]
 				if rows:
 					report_ids = [row["id"] for row in rows]
 					placeholders = ",".join("?" * len(report_ids))
 					cursor.execute(f"UPDATE inbox SET is_read = 1 WHERE id IN ({placeholders})", report_ids)
-					reports = []
-				for row in rows:
-					d = dict(row)
-					if cfg.ICE_MODE_ENABLED and self.mls_group is not None:
-						try:
-							raw_bytes = base64.b64decode(d["content"])
-							d["content"] = self.mls_group.decrypt_application_message(raw_bytes).decode("utf-8")
-						except Exception as e:
-							logger.error(f"ICE decryption failed for report {d['id']}: {e}")
-							d["content"] = "<ICE Decryption Failed>"
-					reports.append(d)
 				conn.commit()
 		except Exception as e:
 			logger.error(f"Failed to pop unread reports: {e}")
+			return []
+
+		for d in rows:
+			if cfg.ICE_MODE_ENABLED and self.mls_group is not None:
+				try:
+					raw_bytes = base64.b64decode(d["content"])
+					d["content"] = self.mls_group.decrypt_application_message(raw_bytes).decode("utf-8")
+				except Exception as e:
+					logger.error(f"ICE decryption failed for report {d['id']}: {e}")
+					d["content"] = "<ICE Decryption Failed>"
+			reports.append(d)
 		return reports
 
 	def purge_read(self) -> None:
 		"""Delete all read messages to keep the inbox completely sterile."""
 		try:
-			with sqlite3.connect(self.db_path) as conn:
+			with sqlite3.connect(self.db_path, timeout=30.0) as conn:
 				cursor = conn.cursor()
 				cursor.execute("DELETE FROM inbox WHERE is_read = 1")
 				deleted = cursor.rowcount

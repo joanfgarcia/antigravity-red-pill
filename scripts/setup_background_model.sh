@@ -79,49 +79,212 @@ cat << 'DUAL_BIND_EOF' > "$PERSISTENT_DIR/run_dual_bind.py"
 import os
 import socket
 import uvicorn
-from llama_cpp.server.app import create_app, Settings
+import time
+import asyncio
+import gc
+import logging
+import json
+from typing import List, Dict, Any, Optional
+
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, StreamingResponse
+
+# Configuración básica de logs
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] [DUAL_BIND] %(message)s")
+logger = logging.getLogger(__name__)
+
+app = FastAPI(title="Red Pill Dynamic Inference Proxy")
+
+# Configuración global del modelo al importar
+from red_pill.core.model_registry import ModelRegistry
+from red_pill.core.paths import resolve_model_path
+
+PROFILE_NAME = os.getenv("MINION_PROFILE", "samantha")
+PROFILE = ModelRegistry.get_profile(PROFILE_NAME)
+MODEL_FILENAME = PROFILE.get("model_path", "samantha-mistral-instruct-7b.i1-Q4_K_M.gguf")
+MODEL_BASENAME = os.path.basename(MODEL_FILENAME)
+CHAT_FORMAT = PROFILE.get("chat_format", "chatml")
+
+# Resolve model path
+MODEL_PATH = str(resolve_model_path(MODEL_BASENAME))
+HF_REPO_ID = PROFILE.get("hf_model_repo_id", None)
+
+# Control de inactividad
+DEFAULT_HIGH_TIMEOUT = 300  # 5 minutos para tareas normales/interactivas
+DEFAULT_LOW_TIMEOUT = 10    # 10 segundos para tareas de baja prioridad (sleep cycle, etc.)
+
+class ModelManager:
+	def __init__(self):
+		self.model = None
+		self.lock = asyncio.Lock()
+		self.last_active = time.time()
+		self.last_priority = "high"
+		
+	async def get_model_under_lock(self):
+		self.last_active = time.time()
+		if self.model is None:
+			# Resolve hardware affinity dynamically right before loading to use free VRAM / CPU fallback
+			hardware = ModelRegistry.get_resolved_hardware_affinity(PROFILE_NAME)
+			n_ctx = hardware.get("n_ctx", PROFILE.get("max_tokens", 4096))
+			n_gpu_layers = hardware.get("n_gpu_layers", -1)
+			
+			logger.info(f"Loading model on demand: {MODEL_BASENAME} (GPU layers: {n_gpu_layers}, Context: {n_ctx})")
+			
+			from llama_cpp import Llama
+			
+			self.model = Llama(
+				model_path=MODEL_PATH,
+				chat_format=CHAT_FORMAT,
+				n_ctx=n_ctx,
+				n_gpu_layers=n_gpu_layers,
+				verbose=False
+			)
+			logger.info(f"Model {MODEL_BASENAME} successfully loaded into memory.")
+		return self.model
+
+	def unload_under_lock(self):
+		if self.model is not None:
+			logger.info(f"Unloading model {MODEL_BASENAME} from VRAM/RAM...")
+			self.model = None
+			gc.collect()
+			logger.info("VRAM/RAM cleared.")
+
+	async def check_idle(self):
+		async with self.lock:
+			if self.model is not None:
+				elapsed = time.time() - self.last_active
+				timeout = DEFAULT_LOW_TIMEOUT if self.last_priority == "low" else DEFAULT_HIGH_TIMEOUT
+				if elapsed > timeout:
+					logger.info(f"Model idle timeout reached ({elapsed:.0f}s > {timeout}s, priority: {self.last_priority}). Auto-unloading...")
+					self.unload_under_lock()
+
+manager = ModelManager()
+
+@app.on_event("startup")
+async def startup_event():
+	async def reaper():
+		while True:
+			await asyncio.sleep(5)
+			await manager.check_idle()
+			
+	asyncio.create_task(reaper())
+	logger.info(f"Dynamic model server initialized for profile '{PROFILE_NAME}'.")
+
+@app.get("/health")
+async def health():
+	if not os.path.exists(MODEL_PATH) and not HF_REPO_ID:
+		logger.error(f"Health check failed: Model file not found at {MODEL_PATH} and no hf_model_repo_id configured.")
+		return JSONResponse(
+			status_code=503,
+			content={"status": "error", "reason": f"Model file not found at {MODEL_PATH} and no Hugging Face repository configured."}
+		)
+	return {"status": "ok"}
+
+@app.get("/v1/models")
+async def models():
+	return {
+		"object": "list",
+		"data": [
+			{
+				"id": MODEL_BASENAME,
+				"object": "model",
+				"created": int(time.time()),
+				"owned_by": "openai"
+			}
+		]
+	}
+
+@app.post("/unload")
+@app.post("/v1/unload")
+async def unload_endpoint():
+	async with manager.lock:
+		manager.unload_under_lock()
+	return {"status": "unloaded"}
+
+@app.post("/v1/chat/completions")
+async def chat_completions(request: Request):
+	body = await request.json()
+	messages = body.get("messages", [])
+	stream = body.get("stream", False)
+	
+	priority_header = request.headers.get("X-Task-Priority", "").lower()
+	priority_body = body.get("priority", "").lower()
+	is_low_priority = (priority_header == "low") or (priority_body == "low")
+	
+	loop = asyncio.get_running_loop()
+	
+	if stream:
+		async def stream_generator():
+			async with manager.lock:
+				manager.last_priority = "low" if is_low_priority else "high"
+				model = await manager.get_model_under_lock()
+				
+				def get_iterator():
+					return model.create_chat_completion(
+						messages=messages,
+						stream=True,
+						**kwargs
+					)
+				
+				iterator = await loop.run_in_executor(None, get_iterator)
+				
+				try:
+					while True:
+						def get_next():
+							try:
+								return next(iterator)
+							except StopIteration:
+								return None
+								
+						chunk = await loop.run_in_executor(None, get_next)
+						if chunk is None:
+							break
+							
+						manager.last_active = time.time()
+						yield f"data: {json.dumps(chunk)}\n\n"
+						
+					yield "data: [DONE]\n\n"
+				except Exception as e:
+					logger.error(f"Error in stream generation: {e}")
+					yield f"data: {json.dumps({'error': str(e)})}\n\n"
+				finally:
+					manager.last_active = time.time()
+					
+		# Strip parameters that Llama.create_chat_completion accepts
+		kwargs = {
+			k: v for k, v in body.items() 
+			if k not in ("model", "messages", "stream", "priority")
+		}
+		return StreamingResponse(stream_generator(), media_type="text/event-stream")
+	else:
+		async with manager.lock:
+			manager.last_priority = "low" if is_low_priority else "high"
+			model = await manager.get_model_under_lock()
+			
+			kwargs = {
+				k: v for k, v in body.items() 
+				if k not in ("model", "messages", "stream", "priority")
+			}
+			
+			def run_completion():
+				return model.create_chat_completion(
+					messages=messages,
+					stream=False,
+					**kwargs
+				)
+				
+			response = await loop.run_in_executor(None, run_completion)
+			manager.last_active = time.time()
+			return JSONResponse(content=response)
 
 def main():
-	from red_pill.core.model_registry import ModelRegistry
-	from red_pill.core.paths import resolve_model_path, get_daemon_dir
+	from red_pill.core.paths import get_daemon_dir
 
-	profile_name = os.getenv("MINION_PROFILE", "samantha")
-	profile = ModelRegistry.get_profile(profile_name)
-
-	model_filename = profile.get("model_path", "samantha-mistral-instruct-7b.i1-Q4_K_M.gguf")
-	hf_repo_id = profile.get("hf_model_repo_id", None)
-
-	# Resolve model path via paths.py
-	model_path = str(resolve_model_path(os.path.basename(model_filename)))
-
-	if os.path.exists(model_path):
-		hf_repo_id_to_use = None
-		model_param = model_path
-	else:
-		hf_repo_id_to_use = hf_repo_id
-		model_param = model_filename
-
-	# Resolve hardware affinity dynamically
-	hardware = ModelRegistry.get_resolved_hardware_affinity(profile_name)
-
-	# Chat format from profile (e.g. "chatml", "mistral-instruct", "llama-2")
-	chat_format = profile.get("chat_format", "chatml")
-
-	settings = Settings(
-		hf_model_repo_id=hf_repo_id_to_use,
-		model=model_param,
-		chat_format=chat_format,
-		n_ctx=hardware.get("n_ctx", profile.get("max_tokens", 4096)),
-		n_gpu_layers=hardware.get("n_gpu_layers", -1)
-	)
-	app = create_app(settings)
-	
 	tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	tcp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 	tcp_sock.bind(("127.0.0.1", 8760))
 	tcp_sock.listen()
 	
-	# Socket UDS en directorio de runtime (volátil, correcto por XDG spec)
 	runtime_dir = str(get_daemon_dir())
 	uds_path = os.path.join(runtime_dir, "red_pill.sock")
 	if os.path.exists(uds_path):

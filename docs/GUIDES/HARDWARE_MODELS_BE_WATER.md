@@ -48,19 +48,24 @@ For legacy hardware or machines like a standard corporate laptop/RTX 3050 4GB. H
 ---
 
 ## ⚖️ How to configure the Daemon
- 
-Update the `scripts/setup_background_model.sh` (or the injected daemon `start.sh` script) to point to the desired model parameters on HuggingFace:
- 
-```bash
-# Example for Samantha (Mid-to-Budget with slight CPU spillover)
-exec python3 -m llama_cpp.server \
-	--hf_model_repo_id TheBloke/samantha-1.2-mistral-7B-GGUF \
-	--model "*Q4_K_M.gguf" \
-	--port 8760 \
-	--host 127.0.0.1
-```
- 
-Restart the daemon:
+
+The local LLM daemon (`redpill-llm.service`) dynamically loads profiles and resolves parameters using the central registry. 
+
+To configure or change the loaded model:
+1. Edit the active profile (e.g., `samantha`) in your model configuration file (`model_profiles.yaml` located in your bunker configuration directory).
+2. Set the `MINION_PROFILE` environment variable to select which profile the daemon should load (defaults to `samantha`).
+
+Because the daemon now loads the model **on demand**, you do not need to restart the service to apply changes if the daemon is currently idle. If you wish to force a reload immediately, restart the systemd service:
+
 ```bash
 systemctl --user restart redpill-llm.service
 ```
+
+### ⚙️ Priority, Inactivity & Preemption
+* The daemon automatically unloads the model from VRAM after a period of inactivity.
+* If a request is low-priority (e.g., sleep cycles, compactions), it unloads **10 seconds** after completion.
+* Normal/interactive requests stay in memory for **5 minutes**.
+* You can explicitly force the daemon to release VRAM immediately (e.g., when starting a training run on the GPU) by sending a POST request to the unload endpoint:
+  ```bash
+  curl -X POST http://127.0.0.1:8760/unload
+  ```

@@ -223,6 +223,10 @@ if command -v uv &> /dev/null; then
 	
 	# Sanitize engrams
 	uv run red-pill sanitize --dry-run || true
+
+	# Sync foundational engrams and core directives (idempotent)
+	echo -e "${BLUE}Actualizando directivas del Bünker y engramas de génesis (seed)...${NC}"
+	uv run red-pill seed
 	
 	# Reinstall timers (handles XDG data dir creation and path changes)
 	uv run python scripts/schedule_pulse.py --interval-hours 1

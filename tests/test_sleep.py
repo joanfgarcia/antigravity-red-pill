@@ -79,3 +79,35 @@ def test_perform_sleep_cycle_empty_buffer(mock_llm):
 	mock_mem_mgr.client.collection_exists.return_value = True
 	mock_mem_mgr.client.scroll.return_value = ([], None)
 	assert perform_sleep_cycle(mock_mem_mgr) == 0
+
+
+def test_detect_category_heuristics_non_string():
+	from red_pill.metabolism.sleep import detect_category_heuristics
+
+	assert detect_category_heuristics({"some": "dict"}) == "social"
+	assert detect_category_heuristics(12.34) == "social"
+	assert detect_category_heuristics("```python\nprint(1)```") == "work"
+
+
+def test_distill_engram_malformed_json_types():
+	from red_pill.core.providers import ProviderRegistry
+
+	mock_inference = ProviderRegistry.get_inference_provider("sip")
+
+	# Scenario 1: emotion is a dict, intensity is a dict, category is a dict
+	mock_inference.generate.return_value = (
+		'{"summary": "dict test", "emotion": {"type": "joy"}, "intensity": {"value": 0.95}, "category": {"name": "work"}}'  # type: ignore
+	)
+	res1 = distill_engram("raw content")
+	assert res1["summary"] == "dict test"
+	assert res1["emotion"] == "joy"
+	assert res1["intensity"] == 0.95
+	assert res1["category"] == "work"
+
+	# Scenario 2: emotion is a float, category is None
+	mock_inference.generate.return_value = '{"summary": "float test", "emotion": 12.3, "intensity": "invalid", "category": null}'  # type: ignore
+	res2 = distill_engram("raw content")
+	assert res2["summary"] == "float test"
+	assert res2["emotion"] == "12.3"
+	assert res2["intensity"] == 0.5
+	assert res2["category"] == "social"  # fallback_category is social

@@ -136,3 +136,74 @@ def test_audit_vitals_all_green(mock_run, auditor):
 
 	assert report.status == "green"
 	assert len(report.findings) == 0
+
+
+def test_audit_runtime_priority_and_file_scanning(auditor):
+	# Mock units, failed, journalctl
+	mock_units = MagicMock()
+	mock_units.returncode = 0
+	mock_units.stdout = "redpill-llm.service"
+
+	mock_failed = MagicMock()
+	mock_failed.returncode = 0
+	mock_failed.stdout = ""
+
+	mock_journal = MagicMock()
+	mock_journal.returncode = 0
+	mock_journal.stdout = "Normal log line\n[WARNING] connection timeout"
+
+	# Mock file exists and file tail reading
+	log_content = ["error: connection reset by peer", "llama_model_loader: loaded metadata with raise_exception"]
+
+	with (
+		patch("subprocess.run") as mock_run,
+		patch("pathlib.Path.exists", return_value=True),
+		patch("red_pill.metabolism.auditor.SentinelAuditor._read_log_tail", return_value=log_content),
+	):
+		mock_run.side_effect = [mock_units, mock_failed, mock_journal]
+
+		report = auditor.audit_runtime()
+
+		# Assert journalctl was called with -p 4
+		args_list = mock_run.call_args_list
+		# The third call (index 2) should be the journalctl command
+		journalctl_cmd = args_list[2][0][0]
+		assert "-p" in journalctl_cmd
+		assert "4" in journalctl_cmd
+
+		# Assert findings were generated from the error.log traceback, but model metadata was ignored
+		assert report.status == "yellow"
+		assert len(report.findings) == 1
+		finding = report.findings[0]
+		assert finding.type == "journal"
+		assert "connection reset by peer" in finding.message
+		assert "llama_model_loader" not in finding.message
+
+
+def test_audit_runtime_ignores_self_referential_and_loader(auditor):
+	mock_units = MagicMock()
+	mock_units.returncode = 0
+	mock_units.stdout = "redpill-worker.service"
+
+	mock_failed = MagicMock()
+	mock_failed.returncode = 0
+	mock_failed.stdout = ""
+
+	# Journalctl logs contain self-referential auditor lines and llama model loader lines
+	mock_journal = MagicMock()
+	mock_journal.returncode = 0
+	mock_journal.stdout = (
+		"Active Pain detected: signal_journal_failure\nrecent daemon errors in journal:\nllama_model_loader: loaded metadata with raise_exception"
+	)
+
+	with (
+		patch("subprocess.run") as mock_run,
+		patch("pathlib.Path.exists", return_value=True),
+		patch("red_pill.metabolism.auditor.SentinelAuditor._read_log_tail", return_value=[]),
+	):
+		mock_run.side_effect = [mock_units, mock_failed, mock_journal]
+		report = auditor.audit_runtime()
+
+		# Everything should be ignored, status stays green
+		assert report.status == "green"
+		assert len(report.findings) == 0

@@ -54,6 +54,26 @@ However, **no one** was processing that queue. Memories accumulated by inertia w
 
 ---
 
+## 4. The Prompt Pollution & Linear Search Conflict (The Parent-Child Vector Graph)
+### The Original Problem
+As collaborative sessions grew, our memory consolidation pipeline distilled raw interactions into individual conceptual engrams (`sequence_chunks`). However:
+1. **Context Fragmentation**: Distillations were applied at the conversation level, routing whole sessions to a single collection (e.g., `work_memories` or `social_memories`). If a conversation had mixed professional and personal concepts, personal items contaminated the work context, or vice-versa (Dream Contamination).
+2. **Loss of Verbatim History**: To avoid database bloat, raw conversation transcripts were culled from Qdrant, meaning we could recall semantic concepts but lost the exact conversational structure and literal context ("who said what exactly").
+3. **Prompt Pollution**: If we kept raw conversation transcripts in the vector database, normal semantic searches matched these massive verbatim transcripts, polluting the model's token window with redundant information instead of precise concept engrams.
+4. **SQLite Growth**: Storing interactions permanently in SQLite `bunker.db` caused unbounded database size growth on the host machine.
+
+### The Solution: Hierarchical Parent-Child Vector-Graph Topology
+We restructured the Bünker's memory retrieval topology into a parent-child hierarchy:
+- **Verbatim Isolation**: The complete raw conversation text is stored as a `raw_parent` engram (marked as `lazarus_phase: "raw_parent"` and `immune: true`). This parent node is excluded from general vector searches via metadata filters, preserving it as an isolated "island" that is only retrieved when traversing back from a child node.
+- **Dynamic Chunk-Level Routing**: During the consolidation cycle, individual engrams (`sequence_chunks`) are distilled from the conversation and routed dynamically to `work_memories` or `social_memories` based on their *own specific semantic category*, rather than the parent's overall category.
+- **Bi-Directional Axonal Links**: Child chunks maintain a `parent_id` link to the parent, while the parent contains an `associations` list pointing to all its children. This allows us to retrieve precise semantic concepts during queries and recursively traverse back to the verbatim context only if needed.
+- **Cross-Collection Resolution**: Evocative cascade and parent context lookups traverse dynamic collections (`work` and `social`) to resolve links seamlessly.
+- **Parent Threading**: `raw_parent` engrams are temporally chained (`prev_raw_parent`/`next_raw_parent`), maintaining a clean Ariadne's Thread of conversation history.
+- **Synaptic Parent Decay**: If all conceptual child engrams of a parent erode and are pruned during metabolic cycles, the parent engram is identified as an orphan and swept from Qdrant by the `JanitorMinion`.
+- **SQLite Decoupling & Universal JSONL Archive**: We cap SQLite `interactions` retention to 30 days. Older interactions are safely decoupled, formatted, and appended to `~/Agent_Core/history/universal_history.jsonl` to act as a permanent, un-decayed, multi-IDE historical log.
+
+---
+
 ## Epilogue: BE WATER Protocol
 This journey has taught us that forcing complex synchronous processes onto the developer's *Critical Path* is a lethal mistake for UX and performance.
 
@@ -116,6 +136,26 @@ Sin embargo, **nadie** estaba procesando esa cola. Los recuerdos se acumulaban e
 - **Acción**: Dotamos al Bünker Daemon de un subsistema reactivo en vez de activo. Usar la API del núcleo del SO (`fs.inotify` mediante `watchfiles`).
 - **Por qué es elegante**: El subsistema reacciona a los cambios físicos del archivo Write-Ahead-Log (`memory_queue.db-wal`).
 - **El Resultado**: Mientras tú no generes memoria, el Daemon usa el **0.00% de tu CPU**. En la milésima de segundo en la que el IDE inserta un engrama en SQLite y cierra el *commit*, el Kernel de Linux lanza una interrupción que despierta al Daemon. Este consolida la memoria asíncronamente en segundo plano. Arquitectura de latencia cero, impulsada por hardware y amigable con el ahorro de energía.
+
+---
+
+## 4. El Conflicto de la Contaminación de Prompt y Búsqueda Lineal (Grafo Vectorial Padre-Hijo)
+### El Problema Original
+A medida que las sesiones colaborativas crecían, la consolidación destilaba interacciones brutas en fragmentos conceptuales (`sequence_chunks`). Sin embargo:
+1. **Fragmentación del Contexto**: Las destilaciones se realizaban a nivel de conversación, enrutando sesiones completas a una sola colección (ej. `work_memories` o `social_memories`). Si una charla tenía contenido técnico y social mezclado, se producía contaminación del contexto (Dream Contamination).
+2. **Pérdida del Verbatim**: Para evitar la saturación, los logs de chat brutos se borraban tras el sueño. Recordábamos conceptos semánticos, pero perdíamos la textura y literalidad de la charla ("qué se dijo exactamente").
+3. **Contaminación del Prompt**: Si conservábamos las transcripciones brutas en Qdrant, las búsquedas semánticas normales emparejaban estos bloques gigantescos de texto, saturando el prompt con redundancias en lugar de conceptos limpios.
+4. **Crecimiento de SQLite**: Almacenar indefinidamente el histórico en SQLite `bunker.db` causaba un aumento ilimitado del espacio en disco del host.
+
+### La Solución: Topología Jerárquica de Grafo Padre-Hijo
+Reestructuramos la recuperación de memoria en una topología de grafo padre-hijo:
+- **Aislamiento Verbatim**: La transcripción bruta completa se guarda como un engrama `raw_parent` (`immune: true`). Este nodo se excluye por defecto de las búsquedas semánticas mediante filtros, quedando como una "isla" accesible solo mediante navegación inversa.
+- **Enrutamiento Dinámico de Chunks**: Cada fragmento conceptual (`sequence_chunk`) se enruta a la colección (`work` o `social`) que corresponda a su *propia categoría semántica destilada*, independientemente de dónde resida el padre.
+- **Enlaces Axonales Bidireccionales**: Los chunks hijos guardan un enlace `parent_id` al padre, y el padre lista a sus hijos en `associations`. Esto permite recuperar conceptos semánticos limpios y, si es necesario, recuperar recursivamente el chat verbatim original.
+- **Resolución Trans-Colección**: Las cascadas evocativas y búsquedas de padres resuelven enlaces cruzando los límites de `work_memories` y `social_memories`.
+- **Enhebrado de Padres (Hilo de Ariadna)**: Los nodos `raw_parent` se encadenan temporalmente (`prev_raw_parent`/`next_raw_parent`), creando una línea de tiempo continua.
+- **Borrador de Padres Huérfanos**: Si todos los hijos de un engrama padre se erosionan y se purgan, el padre se detecta como huérfano y el `JanitorMinion` lo elimina.
+- **Desacoplo de SQLite y Archivo JSONL Universal**: Limitamos la retención de la tabla `interactions` a 30 días. Los registros más antiguos se formatean y añaden a `~/Agent_Core/history/universal_history.jsonl` para un histórico inalterable multiplataforma.
 
 ---
 

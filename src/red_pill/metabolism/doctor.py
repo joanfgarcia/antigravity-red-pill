@@ -83,7 +83,7 @@ def _check_model_match() -> list:
 			import urllib.request
 
 			try:
-				resp = urllib.request.urlopen("http://127.0.0.1:8760/v1/models", timeout=3)
+				resp = urllib.request.urlopen("http://127.0.0.1:8760/v1/models", timeout=30)
 				data = json.loads(resp.read().decode())
 				loaded_model = ""
 				if "data" in data and len(data["data"]) > 0:

@@ -564,6 +564,36 @@ The `perform_sleep_cycle()` function in `src/red_pill/metabolism/sleep.py` has t
     - **Action**: The system automatically migrates legacy operational files (e.g., `thread_state.json`, `bunker_persona_cache.json`, `auditor_cache.json`, and keys) from `~/.agent/` to standard XDG locations during boot. For custom plugins like `neon-link`, database directories have been migrated to the new schema: events are stored at `$XDG_DATA_HOME/neon-link/events.db` and resolved dynamically via `get_neon_link_db_path()`.
     - **Verify**: Confirm that `~/.agent` only contains agéntico assets (skills, rules, conventions) and that all sqlite `.db`, JSON caches, and state files now reside under standard XDG directories.
 
+    #### §4.25 Prompt Anchors & Bünker Priority Optimization (v7.2.0)
+
+    This update refactors all prompt anchors and core directives to be extremely token-efficient and establishes a cognitive rule to prioritize Bünker semantic search over local file scans.
+
+    **1. Compressed Directives & Presets Elimination**:
+    Non-active Lore Skin presets have been removed from the Bünker (`directive_memories`) and are resolved dynamically from `lore_skins.yaml` using the active skin. Core directives (Soberanía Agonista, Git Rule, JARVIS, etc.) have been reworded to be concise and token-efficient.
+    - **Action**: Run `upgrade.sh` or manual seeding via `uv run red-pill seed` to clean up the legacy skin points and write the optimized directives.
+    - **Verify**: Run `read_core_directives` via the MCP server or view the output of a session context refresh. Confirm only active skin settings and compressed rules are listed.
+
+    **2. Bünker-First Priority (Cognitive Anchor)**:
+    A mandatory directive is added to the `knowledge_access` user rules to force the agent to query Qdrant semantic search first via the `search_memory_research` tool when lacking context, rather than scanning folders immediately with `grep_search`.
+    - **Action**: Compile and inject updated anchors:
+      ```bash
+      uv run python scripts/inject_anchor.py --workspace /path/to/workspace
+      ```
+    - **Verify**: Inspect `~/.gemini/GEMINI.md` and `~/.claude/CLAUDE.md` to ensure the new Bünker-First Priority directive is present.
+
+    #### §4.26 Lore Refactoring & Version Engram Consolidation (v7.3.1)
+
+    This update cleanses old duplicate version tracking engrams from Qdrant, consolidates version reporting under a single permanent UUID genesis engram (`ID_PROTOCOL_VERSION` with ID `00000000-0000-0000-0000-000000000070`), and refactors all 21 lore skins in `lore_skins.yaml` into structured key-value refractions (Style, Tone, Focus, Lexicon).
+
+    **1. Lore Refractions Verification**:
+    The system now uses dynamic structured schema parsing instead of first-person prose narrative to avoid safety/classifier false triggers on advanced LLMs (e.g. Gemini 3.5, Claude 4.8).
+    - **Verify**: Confirm that `read_core_directives` returns the active skin in structured key-value form and passes `test_lore_skins.py`.
+
+    **2. Version Engram Consolidation**:
+    Instead of manual duplicate insertions, the system seeds a permanent version tracking point in Qdrant with UUID `00000000-0000-0000-0000-000000000070`.
+    - **Action**: Run the upgrade or seed pipeline (`uv run red-pill seed`) which will clean up duplicate legacy version entries and write the single version engram.
+    - **Verify**: Run `red-pill search directive "version"` and verify only a single immune version engram matching `v7.3.1` is returned.
+
 ## 5. Hierarchy of Directives
 
 Upon completion of any update, the agent **MUST** immediately execute:
