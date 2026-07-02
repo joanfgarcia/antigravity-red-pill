@@ -1,3 +1,14 @@
+## [Unreleased]
+
+### 🧠 Default Local Model Upgrade — Hermes-3-Llama-3.1-8B
+- **[DOCS] Default Model Upgrade (`model_profiles.yaml.example`, `HARDWARE_MODELS_BE_WATER.md`)**: Promoted `Hermes-3-Llama-3.1-8B` (Q4_K_M, NousResearch) as the default Sweet Spot cognitive profile, replacing `Samantha-Mistral-7B`. Hermes-3 provides superior reasoning, 16K native context, and `logic` capability resolution for `samantha_on_demand.py`. Samantha-Mistral retained as legacy profile without `logic` capability.
+- **[FIX] Seed Path Correction (`model_profiles.yaml.example`)**: Updated seed file comment to reference `~/.config/red-pill/model_profiles.yaml` (XDG) instead of deprecated `~/.agent/model_profiles.yaml`.
+
+### 🩹 Fable-5 Fixes — knowledge_access Anchor & Neon-Link Gate
+- **[FIX] knowledge_access Anchor Portability (`seeds/anchors/knowledge_access.md`)**: Replaced hardcoded `/home/joan/Agent_Core` path with `${AGENT_CORE_DIR}` variable for cross-machine compatibility.
+- **[FIX] Neon-Link False Positive Gate (`config.py`, `check_neon_link.py`, `swarm_monitor.py`, `rituals.py`)**: Gated Neon-Link HTTP probes behind `NEON_LINK_HTTP_API` flag (default `False`). neon-link ≤0.5.1 ships FastAPI routes but never binds uvicorn, causing permanent `neon_hung` severity-10 false positives and heal restarts of healthy Telegram bridges.
+- **[TEST] Neon-Link Gate Regression Suite (`test_check_neon_link_gate.py`)**: 4 tests covering disabled/enabled probe behavior, error reporting, and config default validation.
+
 ## [7.4.3] - 2026-07-01
 
 ### 🩹 Titanium Patch Audit — Bugfixes & Regression Guards (CORE-009)

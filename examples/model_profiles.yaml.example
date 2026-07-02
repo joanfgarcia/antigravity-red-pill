@@ -1,20 +1,20 @@
 # SEED FILE - Do not commit actual local profiles here.
-# Copy this file to ~/.agent/model_profiles.yaml automatically during setup.
+# Copy this file to ~/.config/red-pill/model_profiles.yaml automatically during setup.
 profiles:
-  samantha:
-    model_path: "experimental/Samantha/samantha-mistral-instruct-7b.i1-Q4_K_M.gguf"
+  # ── Recommended Sweet Spot (6-8 GB VRAM) ──────────────────────
+  # Hermes-3-Llama-3.1-8B replaces Samantha-Mistral-7B as the default
+  # cognitive profile. Superior reasoning, instruction following, and
+  # 16K native context. Resolves as the primary "logic" capability.
+  hermes_8b:
+    model_path: "models/Hermes-3-Llama-3.1-8B.Q4_K_M.gguf"
     binary_type: "gguf"
-    # chat_format: template used by llama-cpp-python for chat completions.
-    # Must match the model's training format. Common values:
-    #   "chatml" (Samantha, OpenHermes), "mistral-instruct", "llama-2", "llama-3"
-    # If omitted, defaults to "chatml". Check GGUF metadata or model card.
     chat_format: "chatml"
-    temperature: 0.7
-    max_tokens: 1024
+    temperature: 0.3
+    max_tokens: 4096
     use_mmap: false
-    capabilities: ["distillation", "emotional_intelligence", "deep"]
+    capabilities: ["distillation", "logic", "emotional_intelligence", "deep"]
     hardware_affinity:
-      n_ctx: 4096
+      n_ctx: 16384
       # vram_tiers: selects inference parameters based on FREE VRAM available
       # at the moment the sleep cycle launches (not total installed VRAM).
       # min_free_gb: minimum free VRAM in GB required to use this tier.
@@ -22,6 +22,32 @@ profiles:
       # by the currently free VRAM is selected. Exceeding all tiers uses the
       # highest one. Reduce values by ~0.5-1 GB from hardware total to account
       # for driver/framebuffer overhead and other GPU residents.
+      vram_tiers:
+        - min_free_gb: 2
+          n_gpu_layers: 0
+        - min_free_gb: 4
+          n_gpu_layers: 12
+        - min_free_gb: 6
+          n_gpu_layers: 18
+        - min_free_gb: 8
+          n_gpu_layers: 24
+        - min_free_gb: 12
+          n_gpu_layers: -1
+
+  # ── Legacy: Samantha-Mistral-7B ────────────────────────────────
+  # Kept for operators who prefer the original empathy-tuned model.
+  # Does NOT carry "logic" capability — will not be auto-selected by
+  # samantha_on_demand.py unless explicitly set via MINION_PROFILE.
+  samantha:
+    model_path: "experimental/Samantha/samantha-mistral-instruct-7b.i1-Q4_K_M.gguf"
+    binary_type: "gguf"
+    chat_format: "chatml"
+    temperature: 0.7
+    max_tokens: 1024
+    use_mmap: false
+    capabilities: ["distillation", "emotional_intelligence", "deep"]
+    hardware_affinity:
+      n_ctx: 4096
       vram_tiers:
         - min_free_gb: 2
           n_gpu_layers: 0
