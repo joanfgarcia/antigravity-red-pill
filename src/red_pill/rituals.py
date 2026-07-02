@@ -128,6 +128,9 @@ async def swarm_ritual(mm: MemoryManager) -> None:
 	Autonomous Neon-Link Polling.
 	Consults the local Neon-Link Hub for unread decrypted Swarm messages.
 	"""
+	if not getattr(cfg, "NEON_LINK_HTTP_API", False):
+		logger.debug("Pulse: Neon-Link HTTP API disabled (NEON_LINK_HTTP_API=false); skipping inbox poll.")
+		return
 	try:
 		import httpx
 

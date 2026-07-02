@@ -326,6 +326,11 @@ class RedPillConfig(BaseSettings):
 	ICE_MODE_ENABLED: bool = False
 	NEON_LINK_ENABLED: bool = True
 	NEON_LINK_URL: str = "http://localhost:8770"
+	# neon-link releases up to 0.5.1 ship the FastAPI app (GET /health, /inbox/summary)
+	# but never serve it (no uvicorn caller in the daemon), so probing NEON_LINK_URL yields
+	# permanent false positives (neon_hung severity 10 + heal restarts, doctor RED).
+	# Flip to True only when the deployed neon-link actually binds the HTTP API.
+	NEON_LINK_HTTP_API: bool = False
 
 	# -----------------------------------------------------------------------
 	# ANTIGRAVITY IDE BRIDGE
