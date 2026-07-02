@@ -9,6 +9,12 @@
 - **[FIX] Neon-Link False Positive Gate (`config.py`, `check_neon_link.py`, `swarm_monitor.py`, `rituals.py`)**: Gated Neon-Link HTTP probes behind `NEON_LINK_HTTP_API` flag (default `False`). neon-link ≤0.5.1 ships FastAPI routes but never binds uvicorn, causing permanent `neon_hung` severity-10 false positives and heal restarts of healthy Telegram bridges.
 - **[TEST] Neon-Link Gate Regression Suite (`test_check_neon_link_gate.py`)**: 4 tests covering disabled/enabled probe behavior, error reporting, and config default validation.
 
+### 🩺 Homeostasis soul_memories Leak Fix
+- **[FIX] soul_memories Unbounded Growth (`trinity_homeostasis/plugin.py`)**: Replaced per-hook `uuid4()` with a deterministic singleton UUID (`_SOUL_POINT_ID`). Every `COGNITION` hook now upserts the same point instead of creating a new one, capping the collection at exactly 1 point. Added `_purge_leaked_duplicates()` to clean up accumulated points from pre-fix versions on init.
+- **[FIX] State Restore Reliability (`trinity_homeostasis/plugin.py`)**: Replaced `scroll(limit=1)` (non-deterministic ordering) with `retrieve(ids=[_SOUL_POINT_ID])` for guaranteed correct state recovery.
+- **[FEAT] Upgrade Purge Step (`scripts/upgrade.sh`)**: Added one-shot `soul_memories` cleanup to the upgrade pipeline, running after thread weaving migration.
+- **[TEST] Singleton & Purge Regression Suite (`test_homeostasis_plugin.py`)**: 4 new tests — deterministic UUID verification, consecutive-call idempotency, stale point purge, and clean-state no-op.
+
 ## [7.4.3] - 2026-07-01
 
 ### 🩹 Titanium Patch Audit — Bugfixes & Regression Guards (CORE-009)

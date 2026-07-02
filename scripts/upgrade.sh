@@ -234,6 +234,18 @@ if command -v uv &> /dev/null; then
 	# Thread Weaving (idempotent)
 	uv run python scripts/thread_weave_migrate.py
 
+	# soul_memories leak cleanup (v7.4.4 — purge duplicate points from pre-fix homeostasis plugin)
+	echo -e "${BLUE}Purgando duplicados de soul_memories (fix homeostasis singleton)...${NC}"
+	uv run python -c "
+from red_pill.plugins.trinity_homeostasis.plugin import HomeostasisPlugin
+import asyncio
+p = HomeostasisPlugin.__new__(HomeostasisPlugin)
+from red_pill.memory import MemoryManager
+p.memory_mgr = MemoryManager()
+p.collection = 'soul_memories'
+p._purge_leaked_duplicates()
+" 2>/dev/null && echo -e "${GREEN}✓ soul_memories limpia.${NC}" || echo -e "${YELLOW}[WARN] No se pudo purgar soul_memories (Qdrant offline?).${NC}"
+
 	# Per-workspace memory relocation (.claude/memory → .red-pill/memory, idempotente)
 	echo -e "${BLUE}Migrando memoria por-workspace (.claude/memory → .red-pill/memory)...${NC}"
 	uv run python scripts/migrate_memory.py || true

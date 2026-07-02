@@ -40,7 +40,9 @@ class TestChangeSkinLogic:
 		"""
 		result = subprocess.run(
 			["bash", "-c", script],
-			capture_output=True, text=True, timeout=5,
+			capture_output=True,
+			text=True,
+			timeout=5,
 		)
 		return result.stdout.strip()
 
@@ -74,7 +76,9 @@ class TestInstallScriptSyntax:
 		"""Run bash -n (syntax check only) on the install script."""
 		result = subprocess.run(
 			["bash", "-n", str(INSTALL_SCRIPT)],
-			capture_output=True, text=True, timeout=10,
+			capture_output=True,
+			text=True,
+			timeout=10,
 		)
 		assert result.returncode == 0, f"Syntax errors in install_neo.sh: {result.stderr}"
 
@@ -86,16 +90,13 @@ class TestInstallScriptSyntax:
 		content = INSTALL_SCRIPT.read_text()
 		# The correct pattern: `if [[ ! "${CHANGE_SKIN:-}" =~ ^[Ss]$ ]]; then`
 		assert '! "${CHANGE_SKIN:-}"' in content, (
-			"CRITICAL: CHANGE_SKIN conditional is missing the `!` negation operator. "
-			"This inverts the re-initialization logic."
+			"CRITICAL: CHANGE_SKIN conditional is missing the `!` negation operator. This inverts the re-initialization logic."
 		)
 
 	def test_skin_consent_negation_present(self):
 		"""SKIN_CONSENT must also use negation (deny consent → revert to 760)."""
 		content = INSTALL_SCRIPT.read_text()
-		assert '! "${SKIN_CONSENT:-}"' in content, (
-			"SKIN_CONSENT conditional is missing the `!` negation operator."
-		)
+		assert '! "${SKIN_CONSENT:-}"' in content, "SKIN_CONSENT conditional is missing the `!` negation operator."
 
 	def test_skip_bootstrap_initialized(self):
 		"""SKIP_BOOTSTRAP must be initialized before use."""
@@ -112,6 +113,4 @@ class TestInstallScriptSyntax:
 		assert init_line is not None, "SKIP_BOOTSTRAP is never initialized to false"
 		# If use_line is found before init_line, the variable is used before init
 		if use_line is not None:
-			assert init_line < use_line, (
-				f"SKIP_BOOTSTRAP used at line {use_line} before initialization at line {init_line}"
-			)
+			assert init_line < use_line, f"SKIP_BOOTSTRAP used at line {use_line} before initialization at line {init_line}"
