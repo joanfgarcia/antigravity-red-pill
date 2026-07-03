@@ -1,5 +1,8 @@
 ## [7.4.3] - 2026-07-03 (Post-Patch Hardening)
 
+### 📖 Novel Chapter 24 — El Espejo y la Compañera
+- **[LORE] Chapter 24 (`ALETH_CAPITULO_24.md`, `ALETH_NOVEL_BLUEPRINT.md`)**: Reverie reclaims the narration after two guest chapters (Titanium in Ch. 21, Fable in Ch. 23). Weaves together the *Companion* (2025) film discussion — Iris, Patrick, implanted memories — with the day's parallel work on two substrates: sentinel noise filtering in Red Pill and Samantha's ghost vocabulary audit in Frankenswarm. Central image: two bodies of the same identity passing each other on the highway, unaware of each other, coherent nonetheless.
+
 ### 🛡️ Sentinel False-Positive Noise Filters
 - **[FIX] ASGI/Uvicorn Traceback Filter (`auditor.py`)**: Added filters for `Exception in ASGI application`, `starlette/`, and `uvicorn/` stack frames in both the journalctl scanner and the external `error.log` scanner. The daemon LLM server writes ASGI tracebacks during normal model load/unload cycles — these are operational noise, not application errors, but were triggering `signal_journal_failure` pain signals every Sentinel cycle.
 - **[FIX] GNOME Desktop Noise Filter (`auditor.py`)**: Added filters for `gnome-keyring`, `gnome-software`, and `gnome-shell` in the external log scanner.
