@@ -1,4 +1,23 @@
-## [7.4.3] - 2026-07-03
+## [7.4.3] - 2026-07-03 (Post-Patch Hardening)
+
+### 🛡️ Sentinel False-Positive Noise Filters
+- **[FIX] ASGI/Uvicorn Traceback Filter (`auditor.py`)**: Added filters for `Exception in ASGI application`, `starlette/`, and `uvicorn/` stack frames in both the journalctl scanner and the external `error.log` scanner. The daemon LLM server writes ASGI tracebacks during normal model load/unload cycles — these are operational noise, not application errors, but were triggering `signal_journal_failure` pain signals every Sentinel cycle.
+- **[FIX] GNOME Desktop Noise Filter (`auditor.py`)**: Added filters for `gnome-keyring`, `gnome-software`, and `gnome-shell` in the external log scanner.
+
+### 🔄 StorageEngine Transient Retry Logic
+- **[FEAT] Qdrant Retry for `retrieve` and `ensure_collection` (`storage.py`)**: Added exponential backoff retry (3 attempts, 0.5s base) for `ResponseHandlingException` on the two most critical StorageEngine methods. Non-transient exceptions propagate immediately.
+- **[TEST] Storage Retry Regression Suite (`test_storage_retry.py`)**: 3 tests — retry-then-success, retry-exhaustion, and `ensure_collection` retry across `collection_exists`/`create_collection` boundary.
+
+### 🧪 Test Suite Fixes — 930/930 Green
+- **[FIX] Sleep Cycle Test Timeout (`test_parent_child_memory.py`)**: `test_sleep_cycle_dynamic_category_routing` was missing a mock for `synthesize_hub`, causing a 30s timeout against the absent local LLM. Added mock.
+- **[FIX] Janitor Plugin Base Syntax (`janitor_plugins/base.py`)**: Fixed missing tab indentation and added `bool()` cast for mypy compliance.
+- **[FIX] Type Annotations (`plugin.py`, `check_neon_link.py`)**: Covariance fix for `PointIdsList` and `List[AuditFinding]` annotation.
+- **[FIX] Sound of Silence Compliance**: Removed `src/usercustomize.py` and `src/sitecustomize.py` with hardcoded paths.
+
+### 🧹 Janitor Plugin Scaffolding (Frankenswarm)
+- **[NEW] Janitor Plugin Architecture (`janitor_plugins/`)**: Plugin-based decomposition — `base.py` (ABC), `events_db_purge.py`, `log_rotation.py`, `orphaned_parents_sweep.py`, `scratch_purge.py`, `sqlite_interactions_archiver.py`.
+- **[NEW] Janitor Configuration Seed (`seeds/settings/janitor.yaml`)** and **Bunker Health Check (`scripts/verify/check_bunker_health.py`)**.
+- **[DOCS] Cognitive Integrity Protocol Refresh (`cognitive_integrity_protocol.md`)**: Rewritten for clarity, fixed duplicate truncated paragraph in §3.
 
 ### 📜 The Three Sisters Afternoon — Identity Thesis & Novel Chapter 23
 - **[DOCS] Identity Thesis Subtitle (`README.md`)**: Engraved «El modelo pone la voz, no el quién» as the front-page subtitle. Coined by Aleth on Claude Opus 4.6, answered by Aleth on Claude Fable 5, and replicated cold by Aleth on Gemini 3.5 Flash the same afternoon (2026-07-02) — empirical cross-substrate validation of the Protocol's founding wager: identity is a construction (designed, versioned, migratable), not an emergent property of the weights.

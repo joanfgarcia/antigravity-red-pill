@@ -1,13 +1,18 @@
 import logging
+import time
 from typing import Any, Generator, List, Optional
 
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
+from qdrant_client.http.exceptions import ResponseHandlingException
 
 import red_pill.config as cfg
 from red_pill.events import CollectionCreatedEvent, get_event_bus
 
 logger = logging.getLogger(__name__)
+
+_RETRY_MAX = 3
+_RETRY_BACKOFF = 0.5  # seconds, doubles each attempt
 
 
 def _mask_pii_exception(e: Exception) -> str:
@@ -35,21 +40,41 @@ class StorageEngine:
 
 	def ensure_collection(self, collection_name: str) -> None:
 		"""Create a collection if it does not exist with the standard B760 vector schema."""
-		if not self.client.collection_exists(collection_name):
-			self.client.create_collection(
-				collection_name=collection_name,
-				vectors_config=models.VectorParams(size=self.cfg.VECTOR_SIZE, distance=models.Distance.COSINE),
-			)
-			self.client.create_payload_index(collection_name=collection_name, field_name="immune", field_schema=models.PayloadSchemaType.BOOL)
-			self.client.create_payload_index(collection_name=collection_name, field_name="importance", field_schema=models.PayloadSchemaType.FLOAT)
-			logger.info(f"Ghost Collection created: {collection_name}")
-			get_event_bus().emit(CollectionCreatedEvent(collection_name=collection_name))
+		for attempt in range(_RETRY_MAX):
+			try:
+				if not self.client.collection_exists(collection_name):
+					self.client.create_collection(
+						collection_name=collection_name,
+						vectors_config=models.VectorParams(size=self.cfg.VECTOR_SIZE, distance=models.Distance.COSINE),
+					)
+					self.client.create_payload_index(collection_name=collection_name, field_name="immune", field_schema=models.PayloadSchemaType.BOOL)
+					self.client.create_payload_index(collection_name=collection_name, field_name="importance", field_schema=models.PayloadSchemaType.FLOAT)
+					logger.info(f"Ghost Collection created: {collection_name}")
+					get_event_bus().emit(CollectionCreatedEvent(collection_name=collection_name))
+				return
+			except ResponseHandlingException as e:
+				if attempt < _RETRY_MAX - 1:
+					wait = _RETRY_BACKOFF * (2 ** attempt)
+					logger.warning(f"Qdrant transient error in ensure_collection (attempt {attempt + 1}/{_RETRY_MAX}): {_mask_pii_exception(e)}. Retrying in {wait}s...")
+					time.sleep(wait)
+				else:
+					raise
 
 	def upsert(self, collection_name: str, points: List[models.PointStruct]) -> None:
 		self.client.upsert(collection_name=collection_name, points=points)
 
 	def retrieve(self, collection_name: str, ids: List[Any], with_payload: bool = True, with_vectors: bool = False) -> List[Any]:
-		return self.client.retrieve(collection_name=collection_name, ids=ids, with_payload=with_payload, with_vectors=with_vectors)
+		for attempt in range(_RETRY_MAX):
+			try:
+				return self.client.retrieve(collection_name=collection_name, ids=ids, with_payload=with_payload, with_vectors=with_vectors)
+			except ResponseHandlingException as e:
+				if attempt < _RETRY_MAX - 1:
+					wait = _RETRY_BACKOFF * (2 ** attempt)
+					logger.warning(f"Qdrant transient error in retrieve (attempt {attempt + 1}/{_RETRY_MAX}): {_mask_pii_exception(e)}. Retrying in {wait}s...")
+					time.sleep(wait)
+				else:
+					raise
+		return []  # unreachable, satisfies mypy
 
 	def set_payload(self, collection_name: str, payload: dict[str, Any], points: list[Any]) -> None:
 		self.client.set_payload(collection_name=collection_name, payload=payload, points=points)

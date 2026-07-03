@@ -279,6 +279,11 @@ class SentinelAuditor:
 						# Prevent self-referential feedback loops from the auditor's own logging
 						if "active pain detected" in line_lower or "recent daemon errors in journal" in line_lower:
 							continue
+						# Filter ASGI/uvicorn framework internals (not real application errors)
+						if "exception in asgi application" in line_lower:
+							continue
+						if "starlette/" in line_lower or "uvicorn/" in line_lower:
+							continue
 						all_errors.append(line)
 
 		# 4. Scan external service error logs (stdout/stderr redirected to files)
@@ -295,6 +300,14 @@ class SentinelAuditor:
 						if "llama_model_loader" in line_lower:
 							continue
 						if "active pain detected" in line_lower or "recent daemon errors in journal" in line_lower:
+							continue
+						# Filter benign ASGI/uvicorn framework noise (model load/unload cycles)
+						if "exception in asgi application" in line_lower:
+							continue
+						if "starlette/" in line_lower or "uvicorn/" in line_lower:
+							continue
+						# Filter GNOME desktop noise (gnome-keyring, gnome-software, gnome-shell)
+						if "gnome-keyring" in line_lower or "gnome-software" in line_lower or "gnome-shell" in line_lower:
 							continue
 						all_errors.append(f"[{log_path.name}] {line}")
 

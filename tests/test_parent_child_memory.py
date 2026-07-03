@@ -118,41 +118,42 @@ def test_sleep_cycle_dynamic_category_routing(mock_llm):
 	with patch(
 		"red_pill.metabolism.sleep.chunk_text", side_effect=lambda text: ["joke chunk", "code chunk"] if "joke and write rust" in text else []
 	):
-		with patch("red_pill.metabolism.sleep.distill_engram") as mock_distill:
-			mock_distill.side_effect = [
-				{"summary": "funny joke summary", "emotion": "joy", "intensity": 0.9, "category": "social"},
-				{"summary": "rust code summary", "emotion": "neutral", "intensity": 0.8, "category": "work"},
-			]
+		with patch("red_pill.metabolism.sleep.synthesize_hub", return_value="[Mixed Session] joke + code"):
+			with patch("red_pill.metabolism.sleep.distill_engram") as mock_distill:
+				mock_distill.side_effect = [
+					{"summary": "funny joke summary", "emotion": "joy", "intensity": 0.9, "category": "social"},
+					{"summary": "rust code summary", "emotion": "neutral", "intensity": 0.8, "category": "work"},
+				]
 
-			child_id_1 = "child-joke-1"
-			child_id_2 = "child-code-2"
-			parent_id = "00000000-0000-0000-0000-000000000777"
-			mock_mgr.add_memory.side_effect = [child_id_1, child_id_2, "hub-id-mixed", parent_id]
+				child_id_1 = "child-joke-1"
+				child_id_2 = "child-code-2"
+				parent_id = "00000000-0000-0000-0000-000000000777"
+				mock_mgr.add_memory.side_effect = [child_id_1, child_id_2, "hub-id-mixed", parent_id]
 
-			with patch("red_pill.metabolism.sleep._load_thread_state", return_value={}):
-				with patch("uuid.uuid4", return_value=uuid.UUID(parent_id)):
-					processed = perform_sleep_cycle(mock_mgr)
-					assert processed > 0
+				with patch("red_pill.metabolism.sleep._load_thread_state", return_value={}):
+					with patch("uuid.uuid4", return_value=uuid.UUID(parent_id)):
+						processed = perform_sleep_cycle(mock_mgr)
+						assert processed > 0
 
-					# First chunk (joke) routed to social_memories
-					mock_mgr.add_memory.assert_any_call(
-						collection="social_memories",
-						text="funny joke summary",
-						metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id, "model": "opus", "parent_id": parent_id},
-						color="purple",
-						emotion="joy",
-						intensity=0.9,
-					)
+						# First chunk (joke) routed to social_memories
+						mock_mgr.add_memory.assert_any_call(
+							collection="social_memories",
+							text="funny joke summary",
+							metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id, "model": "opus", "parent_id": parent_id},
+							color="purple",
+							emotion="joy",
+							intensity=0.9,
+						)
 
-					# Second chunk (code) routed to work_memories
-					mock_mgr.add_memory.assert_any_call(
-						collection="work_memories",
-						text="rust code summary",
-						metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id, "model": "opus", "parent_id": parent_id},
-						color="blue",
-						emotion="neutral",
-						intensity=0.8,
-					)
+						# Second chunk (code) routed to work_memories
+						mock_mgr.add_memory.assert_any_call(
+							collection="work_memories",
+							text="rust code summary",
+							metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id, "model": "opus", "parent_id": parent_id},
+							color="blue",
+							emotion="neutral",
+							intensity=0.8,
+						)
 
 
 def test_search_excludes_raw_parents_by_default():

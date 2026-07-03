@@ -85,7 +85,7 @@ class HomeostasisPlugin(SovereignPlugin):
 				limit=500,
 				with_payload=True,
 			)
-			stale_ids = [str(p.id) for p in all_points if str(p.id) != _SOUL_POINT_ID]
+			stale_ids: list = [str(p.id) for p in all_points if str(p.id) != _SOUL_POINT_ID]  # type: ignore[arg-type]
 			if stale_ids:
 				from qdrant_client.models import PointIdsList
 
