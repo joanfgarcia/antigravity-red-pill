@@ -287,7 +287,9 @@ def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[
 
 	from red_pill.core.providers import ProviderRegistry
 
-	fallback = {"summary": raw_content[:500] + "...", "emotion": "neutral", "intensity": 0.5, "category": fallback_category}
+	# Explicit flag so callers can detect the fallback reliably — the old heuristic
+	# (summary endswith "..." and len > 490) misses short chunks whose raw fallback is <490 chars.
+	fallback = {"summary": raw_content[:500] + "...", "emotion": "neutral", "intensity": 0.5, "category": fallback_category, "_is_fallback": True}
 
 	system_prompt = (
 		"[Refraction: COGNITIVE_DISTILLER] Style: Analytical, strict. "
@@ -878,6 +880,10 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 	consecutive_llm_failures = 0
 	scroll_limit = cfg.SLEEP_SCROLL_LIMIT
 	max_llm_failures = cfg.SLEEP_MAX_LLM_FAILURES
+	# Raw points that never get deleted (write failures / LLM-failed with 0 chunks) would be
+	# re-scrolled from the top every batch and re-distilled into NEW parents (duplicates),
+	# spinning up to max_batches. Track them and exclude them from subsequent scrolls.
+	failed_ids: set = set()
 
 	while True:
 		batch_number += 1
@@ -893,7 +899,10 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 			break
 
 		try:
-			scroll_result, _ = client.scroll(collection_name=collection, scroll_filter=Filter(), limit=scroll_limit, with_payload=True)
+			from qdrant_client import models as _qm
+
+			scroll_filter = Filter(must_not=[_qm.HasIdCondition(has_id=list(failed_ids))]) if failed_ids else Filter()
+			scroll_result, _ = client.scroll(collection_name=collection, scroll_filter=scroll_filter, limit=scroll_limit, with_payload=True)
 		except Exception as e:
 			logger.error(f"[SLEEP ENGINE] Failed to fetch raw buffer: {e}")
 			break
@@ -950,7 +959,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 			for i, chunk in enumerate(chunks):
 				distilled = distill_engram(chunk, fallback_category=fallback_cat)
 				summary = distilled.get("summary", "")
-				if summary.endswith("...") and len(summary) > 490:
+				if distilled.get("_is_fallback"):
 					consecutive_llm_failures += 1
 					point_llm_failed = True
 					continue
@@ -1066,6 +1075,11 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 			elif not point_llm_failed and not point_write_failed:
 				client.delete(collection_name=collection, points_selector=[raw_id])
 
+			# Any raw point NOT deleted this pass would be re-scrolled and re-distilled into a
+			# fresh parent next batch — record it so the scroll filter skips it (no duplicates).
+			if point_write_failed or point_llm_failed:
+				failed_ids.add(raw_id)
+
 		total_processed += batch_processed
 
 	# ── Staging Buffer Processing (Productor-Consumidor Fallback) ─────────
@@ -1110,7 +1124,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 				for chunk in chunks:
 					distilled = distill_engram(chunk, fallback_category="work")
 					summary = distilled.get("summary", "")
-					if summary.endswith("...") and len(summary) > 490:
+					if distilled.get("_is_fallback"):
 						continue  # LLM failed to distill
 
 					current_threshold = 0.0 if hibernating else cfg.SLEEP_CULL_THRESHOLD

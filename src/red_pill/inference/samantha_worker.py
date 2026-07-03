@@ -368,11 +368,22 @@ class SamanthaWorker(threading.Thread):
 					logger.error(f"[SamanthaWorker] Compaction callback failed: {e}")
 
 	def _fail_all_pending(self, qm, reason: str) -> None:
-		"""Mark all pending Samantha tasks as failed (used when boot fails)."""
+		"""Mark each pending Samantha task failed ONCE (used when boot fails).
+
+		mark_failed re-queues a task to PENDING while attempts < 3, so we must make a
+		single pass over distinct ids — otherwise one transient boot failure re-pops and
+		burns all 3 retries in this loop, stranding every task as FRUSTRATED with no
+		chance to retry on a later wake().
+		"""
+		# Drain first (pop marks PROCESSING atomically, so tasks won't re-appear), then fail
+		# each exactly once — mark_failed re-queues to PENDING while attempts < 3.
+		drained = []
 		while True:
 			task = qm.pop_next_task(allowed_sources=[SAMANTHA_SOURCE])
 			if not task:
 				break
-			qm.mark_failed(task["id"], reason)
+			drained.append(task["id"])
+		for task_id in drained:
+			qm.mark_failed(task_id, reason)
 			self._stats["failed"] += 1
-		logger.warning(f"[SamanthaWorker] All pending tasks failed: {reason}")
+		logger.warning(f"[SamanthaWorker] {len(drained)} pending task(s) marked failed once: {reason}")

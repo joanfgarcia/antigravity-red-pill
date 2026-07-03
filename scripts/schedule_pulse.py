@@ -127,6 +127,9 @@ def _install_linux(interval_hours: int, uv_path: str) -> None:
 def _write_systemd_unit(name, command, desc, type="oneshot", nice: int | None = None):
 	path = os.path.join(SYSTEMD_USER_DIR, name)
 	nice_line = f"\nNice={nice}" if nice is not None else ""
+	# Minimal, stable PATH — do NOT freeze the installer session's PATH, which can carry
+	# ephemeral per-session dirs (e.g. Claude local-agent-mode plugin bins) ahead of the venv.
+	unit_path = f"{PROJECT_ROOT}/.venv/bin:{os.path.expanduser('~/.local/bin')}:/usr/local/bin:/usr/bin:/bin"
 	content = textwrap.dedent(f"""\
 		[Unit]
 		Description={desc}
@@ -134,7 +137,7 @@ def _write_systemd_unit(name, command, desc, type="oneshot", nice: int | None = 
 		[Service]
 		Type={type}
 		WorkingDirectory={PROJECT_ROOT}
-		Environment="PATH={os.environ.get("PATH")}"
+		Environment="PATH={unit_path}"
 		ExecStart={command}{nice_line}
 	""")
 	with open(path, "w") as f:

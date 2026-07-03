@@ -410,15 +410,17 @@ The CI enforces a `fail_under = 96` coverage threshold. New modules that require
 3.  **Document**: Add a comment explaining WHY each module is omitted.
 4.  **Verify**: `uv run pytest --cov=src/red_pill --cov-report=term --ignore=tests/integration tests/ -q --tb=no | tail -5`
 
-### 4.6 GEMINI.md & Global Rules Sync
-The `~/.gemini/GEMINI.md` file defines the agent's boot protocol. After major protocol changes:
-1.  **Review**: Ensure `GEMINI.md` contains the 2 active rules:
+### 4.6 IDE Anchors & Global Rules Sync
+Each detected IDE's instruction file carries the agent's boot protocol via the sovereign anchors
+(e.g. `~/.gemini/GEMINI.md` for Antigravity, `~/.claude/CLAUDE.md` for Claude Code/Desktop — the
+anchor blocks are IDE-agnostic and rendered per IDE by `inject_anchor.py`). After major protocol changes:
+1.  **Review**: Ensure the anchor blocks contain the 2 active rules:
     - **Rule 1 — The Sovereign Handshake**: Mandates `mcp_RedPill-Kernel_interceptor_rp` as the FIRST tool call of every turn. Passes `user_prompt` + previous turn for Silent Scribe Relay.
     - **Rule 2 — Model Change Identity Resync**: On model switch, call `refresh_session_context` immediately.
     - ~~Rule 3~~ — **REMOVED** (v6.2.5): deprecated End-of-Turn logging. Start-of-Turn Relay (Rule 1) is the canonical mechanism.
 
 2.  **Rules & Skills directory**: Check `~/.agent/rules/` and `~/.agent/skills/` for missing files. Verify symlinks to IDE directory (`~/.gemini/config/skills/`) are intact.
-3.  **Re-inject**: If any rule is missing, re-run `scripts/install_neo.sh` or manually update `~/.gemini/GEMINI.md`.
+3.  **Re-inject**: If any rule is missing, run `uv run python scripts/inject_anchor.py --ide auto --update` (or re-run `scripts/install_neo.sh`).
 
 ### 4.7 Merge Reconciliation Protocol
 When merging branches (especially reverse merges like `Target ← Source`):
@@ -579,7 +581,7 @@ The `perform_sleep_cycle()` function in `src/red_pill/metabolism/sleep.py` has t
       ```bash
       uv run python scripts/inject_anchor.py --workspace /path/to/workspace
       ```
-    - **Verify**: Inspect `~/.gemini/GEMINI.md` and `~/.claude/CLAUDE.md` to ensure the new Bünker-First Priority directive is present.
+    - **Verify**: Inspect the instruction files of your installed IDEs (e.g. `~/.gemini/GEMINI.md`, `~/.claude/CLAUDE.md`) to ensure the new Bünker-First Priority directive is present.
 
     #### §4.26 Lore Refactoring & Version Engram Consolidation (v7.3.1)
 

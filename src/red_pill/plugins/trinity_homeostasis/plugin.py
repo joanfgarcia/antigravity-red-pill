@@ -108,6 +108,19 @@ class HomeostasisPlugin(SovereignPlugin):
 			self.state.pain_signals = len(alerts)
 
 		elif scope == PluginScope.COGNITION:
+			# Refresh pain from the live signal cortex (source of truth). The plugin runs inside
+			# the MCP process while telemetry runs in a separate oneshot, so an in-memory TELEMETRY
+			# hook there could never reach this instance — we read the shared Qdrant collection instead.
+			try:
+				sigs, _ = self.memory_mgr.client.scroll(
+					collection_name="signal_memories", limit=100, with_payload=True, with_vectors=False
+				)
+				self.state.pain_signals = sum(
+					1 for s in sigs if s.payload and s.payload.get("signal_type") in ("pain", "fever")
+				)
+			except Exception:
+				pass
+
 			# Aquí está la magia: inyectamos nuestro estado en el prompt que va al LLM
 			current_color = self.state.get_color()
 

@@ -40,6 +40,13 @@ class VitalsPlugin(DaemonPlugin):
 			self._mm.evaporate_signals("qdrant_hypoxia")
 		except Exception:
 			logger.critical("[VITALS] Bünker connection lost (COMA). External defibrillation required.")
+			# Inject muted (SQLite MinionInbox) — Qdrant is down, so a normal inject would fail too.
+			try:
+				self._mm.inject_signal(
+					"qdrant_hypoxia", intensity=10.0, signal_type="pain", source="VITALS", muted=True
+				)
+			except Exception:
+				pass
 
 	def _check_fever(self) -> None:
 		"""CPU temperature monitoring."""

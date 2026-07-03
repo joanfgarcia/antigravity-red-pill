@@ -111,10 +111,11 @@ elif [[ "$MODE" == "user" ]]; then
 		exit 1
 	fi
 	
-	TEMP_DIR="/tmp/rp-update-temp"
+	# Private temp dir (mode 700, unpredictable name) — avoids TOCTOU/symlink attacks in
+	# the shared /tmp before the subsequent rsync --delete into the repo tree.
+	TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/rp-update.XXXXXX")"
+	trap 'rm -rf "$TEMP_DIR"' EXIT
 	echo -e "${BLUE}Extrayendo ZIP en directorio temporal ($TEMP_DIR)...${NC}"
-	rm -rf "$TEMP_DIR"
-	mkdir -p "$TEMP_DIR"
 	unzip -q "$ZIP_PATH" -d "$TEMP_DIR/"
 	
 	# Find the actual root inside the extracted zip.

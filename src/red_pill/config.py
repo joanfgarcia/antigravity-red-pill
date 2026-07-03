@@ -331,6 +331,10 @@ class RedPillConfig(BaseSettings):
 	# permanent false positives (neon_hung severity 10 + heal restarts, doctor RED).
 	# Flip to True only when the deployed neon-link actually binds the HTTP API.
 	NEON_LINK_HTTP_API: bool = False
+	# Defense-in-depth for P2P sync: only apply incoming sync payloads whose inbox originator
+	# is a known peer (peers.json). Sync flows into cognitive_tasks and can be executed
+	# autonomously, so fail closed by default — an unknown/absent originator is rejected.
+	P2P_SYNC_REQUIRE_KNOWN_PEER: bool = True
 
 	# -----------------------------------------------------------------------
 	# ANTIGRAVITY IDE BRIDGE

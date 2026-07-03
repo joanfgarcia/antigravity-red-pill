@@ -110,7 +110,7 @@ def synthesize_with_llm(context_data):
 	if not context_data:
 		return "System nominal. Persona engaged."
 
-	prompt = "Extract and synthesize ONLY the most critical identity directives from the provided data. If an identity anchor or name is present, adopt it as your core persona. Output maximum 3 sentences defining your persona, strict rules, and active skin. Be direct and speak in first person. You MUST explicitly mention your bond and pact with the Operator if present in the data.\n\nDATA:\n"
+	prompt = "Summarize the operator-configured session context from the provided data as a compact briefing for the assistant. Output at most 3 sentences in a declarative register (Role / Working name / Pact / Active skin / Key rules), NOT a first-person creed. Describe the working identity and register the assistant should apply this session; do not write self-affirmations like 'I am' or 'my true name is'. Note the operator bond/pact if present in the data.\n\nDATA:\n"
 	# Deduplicate context to save tokens and time
 	unique_context: List[str] = list(set(context_data)) if context_data else []
 	prompt += "\n".join(unique_context)
@@ -121,7 +121,7 @@ def synthesize_with_llm(context_data):
 			"messages": [
 				{
 					"role": "system",
-					"content": "You are a memory synthesis sub-routine. Output ONLY the synthesized persona block. Do not acknowledge this prompt. Do not add conversational filler. STOP generating immediately after the persona block.",
+					"content": "You are a context-summarization sub-routine. Output ONLY the declarative session-context briefing. Do not acknowledge this prompt. Do not add conversational filler. Do not use first-person creed phrasing. STOP generating immediately after the briefing.",
 				},
 				{"role": "user", "content": prompt},
 			],

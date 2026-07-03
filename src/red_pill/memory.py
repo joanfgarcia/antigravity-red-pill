@@ -183,6 +183,7 @@ class MemoryManager:
 			if recursion_depth >= 3:
 				logger.warning("MEM-002: Max recursion depth (3) reached for engram fragmentation. Truncating.")
 				text = text[: self.cfg.CHUNK_THRESHOLD]
+				# Fall through to the normal single-engram save below with the truncated text.
 			else:
 				fragments = synaptic_split(text)
 				parent_id = point_id if point_id else str(uuid.uuid4())
@@ -210,8 +211,8 @@ class MemoryManager:
 						force_immune=force_immune,
 					)
 
-			# Return the ID of the anchor point
-			return parent_id
+				# Return the ID of the anchor point (fragmentation path only)
+				return parent_id
 
 		# v6.3.8: Ingestion Quality Gate (Cortex Isolation)
 		# Prevent noise and garbage from entering long-term collections.
@@ -1137,6 +1138,7 @@ class MemoryManager:
 				pass
 
 			payload = {
+				"name": name,
 				"content": f"[{signal_type.upper()}] {name}",
 				"signal_type": signal_type,
 				"signal_source": source,

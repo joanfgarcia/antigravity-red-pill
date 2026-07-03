@@ -138,7 +138,7 @@ deploy_terminal_anti_blindness() {
 
 				if [ "$should_apply" = true ]; then
 					echo -e "${YELLOW}Aplicando parche Anti-Blindness en $(basename "$rc")...${NC}"
-					local tmp_rc="/tmp/$(basename "$rc").bak"
+					local tmp_rc; tmp_rc="$(mktemp "${TMPDIR:-/tmp}/$(basename "$rc").XXXXXX.bak")"
 					cp "$rc" "$tmp_rc"
 					cat << 'EOF_PATCH' > "$rc"
 # --- [RED PILL ANTIGRAVITY PATCH] ---
@@ -645,7 +645,9 @@ else
 	echo -e "${GREEN}✓ graphify (graphifyy) ya instalado.${NC}"
 fi
 
-USER_RULES_DIR="${1:-$HOME/.agent}"
+# NOT $1: in unattended mode $1 is "--auto" (see line ~43), which would create a literal
+# ./--auto/skills tree outside the controlled area. Allow an explicit env override instead.
+USER_RULES_DIR="${RED_PILL_AGENT_DIR:-$HOME/.agent}"
 
 GEMINI_ROOT="$HOME/.gemini/antigravity"
 echo -e "${BLUE}--- Fase: Despliegue de Infraestructura Soberana (IDE-Agnostic) ---${NC}"
@@ -718,10 +720,10 @@ if [ -f "$REPO_ROOT/examples/workspaces.yaml" ] && [ ! -f "$RP_CONFIG_DIR/worksp
 fi
 
 # Sovereign Handshake + Agent_Core anchors (merge-by-block, via inject_anchor.py)
-# --ide auto: anchors GEMINI.md and/or ~/.claude/CLAUDE.md (user-level, global) per what's installed.
+# --ide auto: anchors the instruction file of each detected IDE (e.g. GEMINI.md, CLAUDE.md) at user level.
 if [ -f "$SCRIPT_DIR/inject_anchor.py" ] && command -v uv &> /dev/null; then
 	(cd "$REPO_ROOT" && uv run python scripts/inject_anchor.py --ide auto --redpill-dir "$REPO_ROOT" || true)
-	echo -e "${GREEN}✓ Sovereign Handshake + Agent_Core anclados (GEMINI.md / ~/.claude/CLAUDE.md).${NC}"
+	echo -e "${GREEN}✓ Sovereign Handshake + Agent_Core anclados en los ficheros de instrucciones de los IDEs detectados.${NC}"
 fi
 
 # Claude Code: grant access to transversal dirs (Agent_Core/XDG) + registry workspaces (access:true).

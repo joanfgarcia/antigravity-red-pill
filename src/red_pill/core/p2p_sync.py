@@ -55,6 +55,36 @@ def resolve_peer_id(peer_name_or_id: str) -> str:
 	return peer_name_or_id
 
 
+def _known_peer_identifiers() -> set:
+	"""All accepted peer identifiers (aliases AND node ids) from peers.json."""
+	from red_pill.core.paths import get_config_dir
+
+	peers_file = get_config_dir() / "peers.json"
+	if not peers_file.exists():
+		return set()
+	try:
+		with open(peers_file, "r") as f:
+			peers = json.load(f)
+		return set(peers.keys()) | {str(v) for v in peers.values()}
+	except Exception:
+		return set()
+
+
+def _is_authorized_originator(originator: Optional[str]) -> bool:
+	"""Defense-in-depth: a sync payload is only applied if its originator is a known peer.
+
+	Sync chunks flow inbox → cognitive_tasks → autonomous execution, so an unauthenticated
+	upstream (e.g. neon-link with an open/misconfigured bridge) must not be able to inject
+	executable sync. Gated by P2P_SYNC_REQUIRE_KNOWN_PEER (default True). When enforcing, a
+	missing originator or one absent from peers.json is rejected (fail closed).
+	"""
+	if not getattr(cfg, "P2P_SYNC_REQUIRE_KNOWN_PEER", True):
+		return True
+	if not originator:
+		return False
+	return originator in _known_peer_identifiers()
+
+
 def add_peer_alias(alias: str, node_id: str) -> None:
 	from red_pill.core.paths import get_config_dir
 
@@ -347,6 +377,11 @@ class SovereignSyncEngine:
 		reports_to_mark = []
 
 		for report in unread:
+			# Defense-in-depth: only apply sync from a known peer. Blocks the
+			# unauthenticated-ingress → cognitive_tasks → autonomous-exec chain.
+			if not _is_authorized_originator(report.get("originator")):
+				logger.warning(f"Rejected sync report from unknown originator: {report.get('originator')!r}")
+				continue
 			content = report.get("content", "")
 			json_str = None
 			if content.strip().startswith("{") and content.strip().endswith("}"):

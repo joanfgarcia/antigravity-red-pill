@@ -373,10 +373,14 @@ class SentinelAuditor:
 			self.logger.error(f"Failed to load sentinel plugins: {e}")
 
 		# 3. VRAM Exhaustion
-		vram_res = subprocess.run(
-			["nvidia-smi", "--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits"], stdout=subprocess.PIPE, text=True
-		)
-		if vram_res.returncode == 0 and vram_res.stdout.strip():
+		try:
+			vram_res = subprocess.run(
+				["nvidia-smi", "--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits"], stdout=subprocess.PIPE, text=True
+			)
+		except FileNotFoundError:
+			# No NVIDIA host — skip VRAM check, never drop the whole vitals report.
+			vram_res = None
+		if vram_res is not None and vram_res.returncode == 0 and vram_res.stdout.strip():
 			try:
 				used, total = map(int, vram_res.stdout.strip().split(","))
 				if total > 0 and (used / total) > 0.95:
