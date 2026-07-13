@@ -140,6 +140,7 @@ _KNOWN_GGUF = {
 	"beck_8b": "Beck-8B-Q4_K_M.gguf",
 	"piaget_8b": "Piaget-8B-Q4_K_M.gguf",
 	"hermes_8b": "Hermes-3-Llama-3.1-8B.Q4_K_M.gguf",
+	"granite_8b": "Granite-4.1-8B-Q4_K_M.gguf",
 	"samantha": "samantha-mistral-instruct-7b.i1-Q4_K_M.gguf",
 }
 
@@ -203,7 +204,7 @@ def render_markdown(all_results: Dict[str, List[Dict[str, Any]]]) -> str:
 
 def main() -> None:
 	parser = argparse.ArgumentParser(description="Distiller bake-off aptitude harness.")
-	parser.add_argument("--models", default="qwen35_9b,beck_8b,piaget_8b,hermes_8b", help="Comma-separated candidate names.")
+	parser.add_argument("--models", default="qwen35_9b,beck_8b,piaget_8b,hermes_8b,granite_8b", help="Comma-separated candidate names.")
 	parser.add_argument(
 		"--n-gpu-layers",
 		type=int,
