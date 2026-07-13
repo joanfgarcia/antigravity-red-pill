@@ -548,13 +548,22 @@ class MemoryManager:
 
 		vector = self._get_vector(query)
 
+		# Structural exclusions: raw material never competes with distilled hubs.
+		# raw_parent = verbatim turn, sequence_chunk = pre-synthesis chunk,
+		# _is_fragment = oversized-engram shrapnel. All bury the real hubs.
+		structural_exclusions = [
+			models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="raw_parent")),
+			models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="sequence_chunk")),
+			models.FieldCondition(key="_is_fragment", match=models.MatchValue(value=True)),
+		]
+
 		if not deep_recall:
 			search_filter = models.Filter(
 				must=[models.FieldCondition(key="reinforcement_score", range=models.Range(gte=0.2))],
-				must_not=[models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="raw_parent"))],
+				must_not=list(structural_exclusions),
 			)
 		else:
-			search_filter = models.Filter(must_not=[models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="raw_parent"))])
+			search_filter = models.Filter(must_not=list(structural_exclusions))
 
 		try:
 			results = self.client.query_points(
