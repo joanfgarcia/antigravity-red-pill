@@ -344,7 +344,7 @@ if [ "$OS_NAME" = "Darwin" ]; then
 	<key>EnvironmentVariables</key>
 	<dict>
 		<key>MINION_PROFILE</key>
-		<string>hermes_8b</string>
+		<string>granite_8b</string>
 	</dict>
 	<key>RunAtLoad</key>
 	<true/>
@@ -374,8 +374,8 @@ After=network.target
 [Service]
 Type=simple
 # Distiller profile served by the background daemon. Overrides run_dual_bind's
-# "samantha" default so the sleep cycle uses the bake-off-winning distiller.
-Environment=MINION_PROFILE=hermes_8b
+# "samantha" default. granite_8b is the AD-022 primary; hermes_8b is the fallback.
+Environment=MINION_PROFILE=granite_8b
 ExecStart=/bin/bash _PERSISTENT_DIR_/start.sh
 Restart=always
 Nice=19

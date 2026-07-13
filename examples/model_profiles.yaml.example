@@ -7,8 +7,11 @@ profiles:
   #   Inference runs GPU / CPU / hybrid (partial offload) — vram_tiers pick
   #   n_gpu_layers by free VRAM. GPU needs the daemon's CUDA llama-cpp.
   #
-  #   distillation (sleep) -> hermes_8b   [PRIMARY, bake-off winner]
-  #       4/4 strict JSON, Spanish, valid emotion, NO <think> tax, ~1s/probe.
+  #   distillation (sleep) -> granite_8b  [PRIMARY]  + hermes_8b [FALLBACK]
+  #       Co-winners on format (4/4 JSON, Spanish, no <think>, ~1s) AND on tuned
+  #       fidelity (3/3 both-sides). Granite chosen on tiebreakers: Apache-2.0
+  #       license, small-expert fit, efficiency. Hermes kept as arch-risk fallback.
+  #       (AD-022; docs/BENCHMARKS/DISTILLER_FIDELITY.md)
   #   affective/narrative  -> piaget_8b   [alternative]
   #       4/4 JSON + best 3rd-person abstraction, but emits <think> (token tax).
   #   logic / general      -> hermes_8b
@@ -20,6 +23,33 @@ profiles:
   #       + output stripping before it can distill.
   #     samantha  -> legacy 7B, 0/4 JSON. Retired from distillation.
   # ===============================================================
+
+  # ── PRIMARY distiller (AD-022, jul 2026) ──────────────────────
+  # Granite-4.1-8B (IBM, Apache-2.0). Co-won the bake-off on format AND fidelity;
+  # chosen over Hermes on license + small-expert fit + efficiency. SOLE carrier of
+  # "distillation" -> deterministic selection by the sleep cycle. Hybrid arch: if a
+  # future llama.cpp fails to load it, move "distillation" to the hermes_8b fallback.
+  granite_8b:
+    model_path: "models/Granite-4.1-8B-Q4_K_M.gguf"
+    binary_type: "gguf"
+    chat_format: "chatml"
+    temperature: 0.3
+    max_tokens: 4096
+    use_mmap: false
+    capabilities: ["distillation", "logic", "emotional_intelligence", "deep"]
+    hardware_affinity:
+      n_ctx: 16384
+      vram_tiers:
+        - min_free_gb: 2
+          n_gpu_layers: 0
+        - min_free_gb: 4
+          n_gpu_layers: 12
+        - min_free_gb: 6
+          n_gpu_layers: 18
+        - min_free_gb: 8
+          n_gpu_layers: 24
+        - min_free_gb: 12
+          n_gpu_layers: -1
 
   # ── Multilingual generalist (NOT the distiller — see bake-off) ─
   # Qwen3.5-9B Instruct: Apache-2.0, 201 langs, large ctx, fits 8 GB. Strong
@@ -103,11 +133,11 @@ profiles:
         - min_free_gb: 12
           n_gpu_layers: -1
 
-  # ── PRIMARY distiller (bake-off winner, jul 2026) ─────────────
+  # ── FALLBACK distiller / primary "logic" (AD-022) ─────────────
   # Hermes-3-Llama-3.1-8B. Classic Llama arch (always loads, no <think> tax).
-  # Won the bake-off on format compliance: 4/4 strict JSON, Spanish, valid
-  # emotion, faithful 3rd-person summaries, ~1s/probe. SOLE carrier of
-  # "distillation" -> deterministic selection by the sleep cycle.
+  # Bake-off co-winner (4/4 format + 3/3 tuned fidelity); lost the tiebreaker to
+  # granite_8b on license (Llama-3.1 vs Apache-2.0). Kept as the arch-risk fallback
+  # and primary "logic" model; promote to "distillation" if granite fails to load.
   hermes_8b:
     model_path: "models/Hermes-3-Llama-3.1-8B.Q4_K_M.gguf"
     binary_type: "gguf"
@@ -115,7 +145,7 @@ profiles:
     temperature: 0.3
     max_tokens: 4096
     use_mmap: false
-    capabilities: ["distillation", "logic", "emotional_intelligence", "deep"]
+    capabilities: ["logic", "emotional_intelligence", "deep"]
     hardware_affinity:
       n_ctx: 16384
       # vram_tiers: selects inference parameters based on FREE VRAM available

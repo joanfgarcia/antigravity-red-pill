@@ -94,9 +94,13 @@ summaries ("*El usuario… el asistente discrepa/advierte/decide…*"). The both
 now in the production `distill_engram` prompt (`metabolism/sleep.py`) — a model-agnostic quality
 win. See [DISTILLER_FIDELITY.md](../../BENCHMARKS/DISTILLER_FIDELITY.md).
 
-**Net:** hermes_8b and granite_8b are co-winners on both format and (tuned) fidelity. Tiebreakers:
-Granite has better noise restraint + Apache-2.0 + efficiency; Hermes is already integrated. Final
-pick is the operator's.
+**Net:** hermes_8b and granite_8b are co-winners on both format and (tuned) fidelity.
+
+**Decision (AD-022, operator-ratified):** **granite_8b is the primary distiller** (sole
+`distillation` capability, `MINION_PROFILE=granite_8b`), **hermes_8b is the fallback** (keeps
+`logic`/`emotional_intelligence`). Granite won the tiebreakers — Apache-2.0 license, small-expert
+fit, efficiency — while Hermes stays as the arch-risk safety net (promote it if a future
+llama.cpp cannot load Granite's hybrid architecture).
 
 **Outcome:** the bake-off overturned the a-priori favorite. Qwen3.5-9B is a strong generalist
 but ignores the "no reasoning" instruction and rarely closes valid JSON; **hermes_8b** is the

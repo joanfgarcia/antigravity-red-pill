@@ -4,6 +4,51 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-022] Distiller Model Selection — Granite-4.1-8B (primary) + Hermes-3-8B (fallback)
+**Date**: 2026-07-13  
+**Context**: v7.5.0 — choosing the sleep-cycle distiller after the AD-021 remediation  
+**Status**: ACCEPTED (operator-ratified); live-config activation pending  
+
+### 1. The Problem
+The distiller is the most quality-critical model in the Bünker (it decides what becomes a
+permanent engram and how it is labelled). Samantha (Mistral-7B, 2023) was retired. The question
+was which small local model replaces it. Candidates were benchmarked, not chosen by reputation.
+
+### 2. The Evidence (measured, not assumed)
+Two GPU bake-offs (`scripts/distiller_bakeoff.py`, `scripts/distiller_fidelity.py`, RTX 5070):
+- **Format** (strict JSON / Spanish / no `<think>` / valid affect): `hermes_8b` and `granite_8b`
+  both 4/4 and fast (~1 s); `piaget_8b`/`beck_8b` 4/4 JSON but pay a `<think>` token tax;
+  `qwen35_9b` only 1/4 (verbose reasoning preamble); `samantha` 0/4.
+- **Fidelity** (captures BOTH user and assistant): under a naive prompt both hermes and granite
+  scored 2/3; under a prompt that explicitly demands both sides, **both reached 3/3**. The gap
+  was a *prompt* problem, fixed for all models in the production `distill_engram` prompt.
+- Net: hermes_8b and granite_8b are co-winners on every measured axis.
+
+### 3. The Decision
+**Granite-4.1-8B is the primary distiller; Hermes-3-8B is retained as fallback** (keeps
+`logic`/`emotional_intelligence` capabilities). Granite carries the sole `distillation` capability;
+`MINION_PROFILE=granite_8b`.
+
+### 4. Rationale (tiebreakers, since the models tied on merit)
+1. **License**: Granite is **Apache-2.0**; Hermes inherits the Llama-3.1 Community License
+   (field-of-use + 700M-MAU clauses). For a sovereign, redistributable project the piece that
+   distills memory should be the most permissively licensed — decisive, and non-speculative.
+2. **Philosophy fit**: Granite is IBM's deliberately-small, structured-output/RAG/tool-use
+   workhorse — a "small expert" by design, matching red-pill's model philosophy.
+3. **Trajectory**: newer, actively maintained, hybrid-arch efficiency, plausibly fresher/cleaner
+   training data (unverified — the bake-off, not recency, is the evidence).
+4. **Fallback = prudence**: Granite's architecture is newer; if a llama.cpp update fails to load
+   it, the sleep cycle degrades gracefully to Hermes.
+
+### 5. The Meta-Lesson
+Hermes-3 (2024) sweeping the newer/larger models is not an anomaly — it *validates* the
+small-expert thesis. A model fine-tuned for steerability and strict output beats a newer
+generalist on a narrow, format-bound task. And the biggest quality lever was not the model at
+all but the **both-sides prompt**. See [DISTILLER_SELECTION.md](COGNITIVE/DISTILLER_SELECTION.md),
+[DISTILLER_BAKEOFF.md](../BENCHMARKS/DISTILLER_BAKEOFF.md), [DISTILLER_FIDELITY.md](../BENCHMARKS/DISTILLER_FIDELITY.md).
+
+---
+
 ## [AD-021] Episodic Memory Remediation — Distiller, Embeddings, Non-Destructive Reads
 **Date**: 2026-07-13  
 **Context**: v7.5.0 — Retrospective (Aleth/Fable) on why social/work_memories never behaved as *useful* memory  
