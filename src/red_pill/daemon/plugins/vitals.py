@@ -42,9 +42,7 @@ class VitalsPlugin(DaemonPlugin):
 			logger.critical("[VITALS] Bünker connection lost (COMA). External defibrillation required.")
 			# Inject muted (SQLite MinionInbox) — Qdrant is down, so a normal inject would fail too.
 			try:
-				self._mm.inject_signal(
-					"qdrant_hypoxia", intensity=10.0, signal_type="pain", source="VITALS", muted=True
-				)
+				self._mm.inject_signal("qdrant_hypoxia", intensity=10.0, signal_type="pain", source="VITALS", muted=True)
 			except Exception:
 				pass
 

@@ -3,7 +3,6 @@ from typing import Any, Dict
 
 
 class JanitorPlugin(ABC):
-
 	@property
 	@abstractmethod
 	def name(self) -> str:

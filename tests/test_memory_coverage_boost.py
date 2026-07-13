@@ -1,3 +1,4 @@
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -13,14 +14,14 @@ from red_pill.utils.uds_adapter import get_uds_opener
 
 # 1. Boost identity.py
 def test_load_identity_corrupted_exception():
-	with patch("red_pill.identity.IDENTITY_FILE", "/nonexistent/invalid_path/identity.json"):
+	with patch("red_pill.identity.get_state_dir", return_value=Path("/nonexistent/invalid_path")):
 		# To trigger exception, we can patch os.path.exists to return True, but when opening, it raises Exception.
 		with patch("os.path.exists", return_value=True), patch("builtins.open", side_effect=IOError("Permission denied")):
 			assert _load_identity() == {}
 
 
 def test_load_identity_file_missing():
-	with patch("red_pill.identity.IDENTITY_FILE", "/nonexistent/path"):
+	with patch("red_pill.identity.get_state_dir", return_value=Path("/nonexistent/path")):
 		assert _load_identity() == {}
 
 

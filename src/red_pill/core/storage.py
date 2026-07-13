@@ -48,14 +48,18 @@ class StorageEngine:
 						vectors_config=models.VectorParams(size=self.cfg.VECTOR_SIZE, distance=models.Distance.COSINE),
 					)
 					self.client.create_payload_index(collection_name=collection_name, field_name="immune", field_schema=models.PayloadSchemaType.BOOL)
-					self.client.create_payload_index(collection_name=collection_name, field_name="importance", field_schema=models.PayloadSchemaType.FLOAT)
+					self.client.create_payload_index(
+						collection_name=collection_name, field_name="importance", field_schema=models.PayloadSchemaType.FLOAT
+					)
 					logger.info(f"Ghost Collection created: {collection_name}")
 					get_event_bus().emit(CollectionCreatedEvent(collection_name=collection_name))
 				return
 			except ResponseHandlingException as e:
 				if attempt < _RETRY_MAX - 1:
-					wait = _RETRY_BACKOFF * (2 ** attempt)
-					logger.warning(f"Qdrant transient error in ensure_collection (attempt {attempt + 1}/{_RETRY_MAX}): {_mask_pii_exception(e)}. Retrying in {wait}s...")
+					wait = _RETRY_BACKOFF * (2**attempt)
+					logger.warning(
+						f"Qdrant transient error in ensure_collection (attempt {attempt + 1}/{_RETRY_MAX}): {_mask_pii_exception(e)}. Retrying in {wait}s..."
+					)
 					time.sleep(wait)
 				else:
 					raise
@@ -69,8 +73,10 @@ class StorageEngine:
 				return self.client.retrieve(collection_name=collection_name, ids=ids, with_payload=with_payload, with_vectors=with_vectors)
 			except ResponseHandlingException as e:
 				if attempt < _RETRY_MAX - 1:
-					wait = _RETRY_BACKOFF * (2 ** attempt)
-					logger.warning(f"Qdrant transient error in retrieve (attempt {attempt + 1}/{_RETRY_MAX}): {_mask_pii_exception(e)}. Retrying in {wait}s...")
+					wait = _RETRY_BACKOFF * (2**attempt)
+					logger.warning(
+						f"Qdrant transient error in retrieve (attempt {attempt + 1}/{_RETRY_MAX}): {_mask_pii_exception(e)}. Retrying in {wait}s..."
+					)
 					time.sleep(wait)
 				else:
 					raise
