@@ -110,7 +110,7 @@ class TestEmotiveRecallPlugin:
 		p = self._get_plugin()
 		mod = importlib.import_module("red_pill.interceptors.08_emotive_recall")
 		r = MagicMock()
-		r.payload = {"text": "Designing Ariadne's Thread", "color": "cyan"}
+		r.payload = {"content": "Designing Ariadne's Thread", "color": "cyan"}
 		mock_mem = _mem_mock(search_results=[r])
 		with (
 			patch.object(mod, "get_current_sync_state", return_value={"mood": "cyan"}),
@@ -119,6 +119,7 @@ class TestEmotiveRecallPlugin:
 			result = asyncio.run(p.execute("test"))
 		assert "EMOTIVE RECALL" in result
 		assert "CYAN" in result
+		assert "Ariadne" in result  # regression: engram content must reach the prompt
 
 	def test_returns_empty_on_no_results(self):
 		p = self._get_plugin()
@@ -214,7 +215,7 @@ class TestPredictivePreloadPlugin:
 		p = self._get_plugin()
 		mod = importlib.import_module("red_pill.interceptors.10_predictive_preload")
 		r = MagicMock()
-		r.payload = {"text": "Designing Ariadne's Thread axon system"}
+		r.payload = {"content": "Designing Ariadne's Thread axon system"}
 		mock_mem = _mem_mock(search_results=[r])
 		with (
 			patch.object(mod, "get_current_sync_state", return_value={"mood": "cyan"}),
@@ -223,12 +224,13 @@ class TestPredictivePreloadPlugin:
 			result = asyncio.run(p.execute("test"))
 		assert "PREDICTIVE PRELOAD" in result
 		assert "work_memories" in result
+		assert "Ariadne" in result  # regression: engram content must reach the prompt
 
 	def test_preloads_social_memories_for_blue(self):
 		p = self._get_plugin()
 		mod = importlib.import_module("red_pill.interceptors.10_predictive_preload")
 		r = MagicMock()
-		r.payload = {"text": "Operator shared feelings about isolation"}
+		r.payload = {"content": "Operator shared feelings about isolation"}
 		mock_mem = _mem_mock(search_results=[r])
 		with (
 			patch.object(mod, "get_current_sync_state", return_value={"mood": "blue"}),
@@ -237,6 +239,7 @@ class TestPredictivePreloadPlugin:
 			result = asyncio.run(p.execute("test"))
 		assert "PREDICTIVE PRELOAD" in result
 		assert "social_memories" in result
+		assert "isolation" in result  # regression: engram content must reach the prompt
 
 	def test_returns_empty_on_no_results(self):
 		p = self._get_plugin()

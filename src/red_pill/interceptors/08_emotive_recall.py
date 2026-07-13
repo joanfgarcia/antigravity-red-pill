@@ -69,7 +69,7 @@ class EmotiveRecallPlugin(BaseInterceptorPlugin):
 				# Prefer memories of matching color, but don't exclude others
 				r_color = payload.get("color", color)
 				if r_color == color or len(echoes) < _TOP_K:
-					text = payload.get("text", "")
+					text = payload.get("content", "")
 					if text:
 						snippet = text[:_MAX_ECHO_CHARS].strip()
 						if len(text) > _MAX_ECHO_CHARS:

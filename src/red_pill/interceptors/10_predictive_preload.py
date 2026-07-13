@@ -78,7 +78,7 @@ class PredictivePreloadPlugin(BaseInterceptorPlugin):
 			snippets = []
 			for r in results:
 				payload = getattr(r, "payload", {}) or {}
-				text = payload.get("text", "")
+				text = payload.get("content", "")
 				if text:
 					snippet = text[:_MAX_SNIPPET_CHARS].strip()
 					if len(text) > _MAX_SNIPPET_CHARS:
