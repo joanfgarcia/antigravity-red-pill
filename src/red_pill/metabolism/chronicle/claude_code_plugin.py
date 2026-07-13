@@ -176,6 +176,7 @@ class ClaudeCodeExtractorPlugin(ChronicleExtractorPlugin):
 										payload = {
 											"id": stage_id,
 											"model": current_model or "unknown",
+											"workspace": proj_dir.name,
 											"steps": list(current_turn_steps),
 										}
 

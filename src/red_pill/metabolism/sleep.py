@@ -1139,6 +1139,8 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 
 				raw_id = payload.get("id", filename.replace(".json", ""))
 				model_name = payload.get("model") or payload.get("summary", {}).get("model") or "unknown"
+				staging_workspace = payload.get("workspace")
+				ws_meta = {"workspace": staging_workspace} if staging_workspace else {}
 				raw_text = ""
 				for step in payload.get("steps", []):
 					txt = step.get("message", {}).get("text", "")
@@ -1183,7 +1185,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 						new_id = memory_manager.add_memory(
 							collection=chunk_col,
 							text=summary,
-							metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id, "model": model_name, "parent_id": parent_id},
+							metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id, "model": model_name, "parent_id": parent_id, **ws_meta},
 							color="blue" if chunk_col == "work_memories" else "purple",
 							emotion=distilled.get("emotion", "neutral"),
 							intensity=distilled.get("intensity", 0.5),
@@ -1210,6 +1212,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 								"source_buffer_id": raw_id,
 								"model": model_name,
 								"parent_id": parent_id,
+								**ws_meta,
 							},
 							color="cyan",
 							emotion=surviving_chunks[-1]["emotion"],
@@ -1240,6 +1243,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 							"model": model_name,
 							"associations": child_ids,
 							"immune": True,
+							**ws_meta,
 						}
 
 						# Ariadne's Thread for raw parents in work_memories
