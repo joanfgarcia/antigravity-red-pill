@@ -30,6 +30,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [ROADMAP.md](TECHNICAL/ROADMAP.md) | Vision, mission, backlog, and the path forward |
 | [v7_PLAN.md](TECHNICAL/v7_PLAN.md) | Red Pill v7.0: Foundation & Autonomous Drive Plan |
 | [DECISION_LOG.md](TECHNICAL/DECISION_LOG.md) | Record of every major architectural pivot and the reasoning behind it |
+| [DISTILLER_SELECTION.md](TECHNICAL/COGNITIVE/DISTILLER_SELECTION.md) | How the sleep-cycle distiller model is chosen: bake-off method, findings, GPU/CPU/hybrid execution |
 | [TESTS.md](TECHNICAL/TESTS.md) | Test suite philosophy and structure |
 | [SOUND_OF_SILENCE.md](TECHNICAL/SOUND_OF_SILENCE.md) | The Python coding standard enforced by `ruff` in this project |
 | [SOVEREIGN_PLUGINS.md](TECHNICAL/SOVEREIGN_PLUGINS.md) | Defining the dual-path architecture: Code vs. State separation |

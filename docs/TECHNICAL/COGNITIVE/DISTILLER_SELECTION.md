@@ -65,11 +65,38 @@ red-pill supports GPU and CPU **simultaneously** via partial offload, and the pr
 
 | Model | JSON | Spanish | No `<think>` | Emotion ok | Avg latency | Verdict |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **hermes_8b** | 4/4 | 4/4 | 4/4 | 4/4 | 1.0 s | **PRIMARY** — cleanest format, no overhead |
+| **hermes_8b** | 4/4 | 4/4 | 4/4 | 4/4 | 1.0 s | co-winner — clean format, complete summaries |
+| **granite_8b** | 4/4 | 4/4¹ | 4/4 | 4/4 | 1.0 s | co-winner — clean format, best noise restraint, Apache-2.0 |
 | piaget_8b | 4/4 | 4/4 | 0/4 | 4/4 | 0.9 s | alt — best abstraction, `<think>` tax |
 | beck_8b | 4/4 | 4/4 | 0/4 | 4/4 | 1.0 s | copied input verbatim on emotional probe |
 | qwen35_9b | 1/4 | 1/4 | 4/4 | 1/4 | 9.5 s | NOT distiller — prose "Thinking Process", blows budget |
 | samantha | 0/4 | 0/4 | 4/4 | 0/4 | 2.6 s | retired legacy baseline |
+
+¹ The cheap language heuristic false-flagged one Granite summary as English (no accents / too
+few stopwords); it was in fact Spanish, so Granite is 4/4. On the noise probe Granite rated
+intensity 0.3 vs Hermes' 0.6 — better restraint for the culling filter.
+
+### Fidelity (both-sides) + prompt tuning — `scripts/distiller_fidelity.py`
+
+Format is a tie between hermes_8b and granite_8b, so a second eval checked whether the summary
+captures BOTH the user's point AND the assistant's response (deterministic per-side keyword
+coverage over 3 two-voice interactions), comparing a BASE prompt vs a TUNED one that explicitly
+demands both sides:
+
+| Model | BASE both-sides | TUNED both-sides |
+| :--- | :--- | :--- |
+| hermes_8b | 2/3 | **3/3** |
+| granite_8b | 2/3 | **3/3** |
+
+**It is a prompt problem, not a model problem.** Under BASE each model drops one side on one
+probe (Hermes on caching, Granite on philosophy); under TUNED both reach 3/3 with visibly better
+summaries ("*El usuario… el asistente discrepa/advierte/decide…*"). The both-sides instruction is
+now in the production `distill_engram` prompt (`metabolism/sleep.py`) — a model-agnostic quality
+win. See [DISTILLER_FIDELITY.md](../../BENCHMARKS/DISTILLER_FIDELITY.md).
+
+**Net:** hermes_8b and granite_8b are co-winners on both format and (tuned) fidelity. Tiebreakers:
+Granite has better noise restraint + Apache-2.0 + efficiency; Hermes is already integrated. Final
+pick is the operator's.
 
 **Outcome:** the bake-off overturned the a-priori favorite. Qwen3.5-9B is a strong generalist
 but ignores the "no reasoning" instruction and rarely closes valid JSON; **hermes_8b** is the
