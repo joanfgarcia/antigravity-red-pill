@@ -42,12 +42,14 @@ def test_distill_engram_fallback():
 def test_synthesize_hub(mock_build_opener, mock_exists):
 	mock_opener = MagicMock()
 	mock_response = MagicMock()
-	mock_response.read.return_value = json.dumps({"choices": [{"message": {"content": "Master summary"}}]}).encode()
+	mock_response.read.return_value = json.dumps(
+		{"choices": [{"message": {"content": "[TreeKEM Fix] Arreglado el leaf_index omitido en el hash del árbol."}}]}
+	).encode()
 	mock_response.__enter__.return_value = mock_response
 	mock_opener.open.return_value = mock_response
 	mock_build_opener.return_value = mock_opener
 	result = synthesize_hub(["s1", "s2"])
-	assert result == "Master summary"
+	assert result == "[TreeKEM Fix] Arreglado el leaf_index omitido en el hash del árbol."
 
 
 @patch("red_pill.metabolism.sleep._check_llm_available", return_value=True)

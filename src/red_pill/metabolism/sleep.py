@@ -277,6 +277,30 @@ def _sanitize_llm_json(raw_json: str) -> str:
 	return _re.sub(r"\\(.)", _fix_escape, raw_json)
 
 
+# Substrings that betray the distiller echoing its own prompt/format spec back
+# as if it were memory content (observed in production hubs).
+_TEMPLATE_ECHO_MARKERS = (
+	"synthesize these memory chunks",
+	"[memory synthesis",
+	"master summary",
+	"the emotion is one of",
+	"the intensity is a float",
+	"memory chunks into a",
+)
+
+
+def _is_template_echo(text: str) -> bool:
+	"""True if the distiller leaked its instructions (or produced nothing) instead of content.
+
+	No length heuristic: a legitimately short summary ("Bug de tree_hash arreglado.")
+	must survive. The high-precision signal is the instruction echo itself.
+	"""
+	if not text or not text.strip():
+		return True
+	low = text.strip().lower()
+	return any(marker in low for marker in _TEMPLATE_ECHO_MARKERS)
+
+
 def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[str, Any]:
 	"""
 	Lazarus Phase 2: Consolidation (Sleep) & Affective Preservation
@@ -376,6 +400,10 @@ def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[
 					category_val = str(category_val)
 				category_val = str(category_val).lower().strip()
 
+				if _is_template_echo(summary_val):
+					logger.warning("[SLEEP ENGINE] Distiller echoed the prompt/format spec — discarding and retrying.")
+					continue
+
 				return {
 					"summary": summary_val,
 					"emotion": emotion_val,
@@ -430,16 +458,7 @@ def synthesize_hub(summaries: List[str]) -> str:
 		}
 	).encode("utf-8")
 
-	# Reuse existing transport detection
-	url = getattr(cfg, "MLX_LM_URL", "http://127.0.0.1:8760/v1/chat/completions")
-	opener = urllib.request.build_opener()
-	req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
-	try:
-		with opener.open(req, timeout=60) as response:
-			data = json.loads(response.read().decode())
-			return str(data["choices"][0]["message"]["content"].strip())
-	except Exception as e:
-		logger.error(f"[SLEEP ENGINE] Failed to synthesize hub: {e}")
+	def _aggregate_fallback() -> str:
 		if summaries:
 			first_sum = summaries[0][:60]
 			if len(summaries[0]) > 60:
@@ -451,6 +470,22 @@ def synthesize_hub(summaries: List[str]) -> str:
 				return f"[Aggregated Memory Sequence ({len(summaries)} nodes)] {first_sum} -> {last_sum}"
 			return f"[Aggregated Memory (1 node)] {first_sum}"
 		return "[Aggregated Memory Sequence]"
+
+	# Reuse existing transport detection
+	url = getattr(cfg, "MLX_LM_URL", "http://127.0.0.1:8760/v1/chat/completions")
+	opener = urllib.request.build_opener()
+	req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+	try:
+		with opener.open(req, timeout=60) as response:
+			data = json.loads(response.read().decode())
+			result = str(data["choices"][0]["message"]["content"].strip())
+			if _is_template_echo(result):
+				logger.warning("[SLEEP ENGINE] Hub synthesis echoed the prompt — using deterministic aggregate.")
+				return _aggregate_fallback()
+			return result
+	except Exception as e:
+		logger.error(f"[SLEEP ENGINE] Failed to synthesize hub: {e}")
+		return _aggregate_fallback()
 
 
 class EphemeralServer:
@@ -621,6 +656,10 @@ def distill_session_anchors(memory_manager, hub_summaries: List[str]) -> Optiona
 		with opener.open(req, timeout=90) as response:
 			data = json.loads(response.read().decode())
 			anchor_text = data["choices"][0]["message"]["content"].strip()
+
+			if _is_template_echo(anchor_text):
+				logger.warning("[SLEEP ENGINE] Session anchor echoed the prompt — not persisting.")
+				return None
 
 			# Persist the Anchor
 			memory_manager.add_memory(
