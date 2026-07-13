@@ -36,12 +36,25 @@ class SoulCryptographer:
 				group.encrypt_application_message(b"ping")
 				return group
 			except Exception as e:
-				logger.warning(f"Sovereign Vault state incompatible or corrupt ({e}). Regenerating...")
+				# FAIL-CLOSED: an existing state that fails to load must NOT be silently
+				# regenerated. create() would derive fresh keys and orphan every Soul Kit and
+				# secret ever encrypted with the old ones. Surface the error; recovery is a
+				# deliberate act (restore a vault_group.state backup, or migrate by decrypting
+				# with the previous build and re-encrypting).
+				raise RuntimeError(
+					f"Sovereign Vault state at {VAULT_STATE_PATH} exists but failed to load ({e}). "
+					"Refusing to regenerate — that would derive new keys and make all prior "
+					"encrypted exports/secrets undecryptable. Restore a good backup or migrate deliberately."
+				) from e
 
+		# Genuine first run only (no state on disk). Create once and persist with 0600.
 		logger.info("Initializing new Sovereign Vault Group...")
 		group = MLSGroup.create(b"SovereignVaultV1", sig_key, kem_key)
-		with open(VAULT_STATE_PATH, "wb") as f:
-			f.write(group.to_bytes())
+		fd = os.open(VAULT_STATE_PATH, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+		try:
+			os.write(fd, group.to_bytes())
+		finally:
+			os.close(fd)
 		return group
 
 	def encrypt_kit(self, file_path: str) -> Optional[str]:
