@@ -39,6 +39,24 @@ _VALID_EMOTIONS = {"joy", "sadness", "fear", "disgust", "anger", "anxiety", "env
 _SPANISH_MARKERS = ("á", "é", "í", "ó", "ú", "ñ", "¿", "¡")
 _SPANISH_STOPWORDS = {"de", "la", "el", "que", "los", "con", "por", "una", "es", "se", "en", "y", "un", "para"}
 
+# Inlined from metabolism/sleep.py so the harness has ZERO red_pill deps and can
+# run under the daemon's CUDA venv (which lacks qdrant_client et al.).
+_TEMPLATE_ECHO_MARKERS = (
+	"synthesize these memory chunks",
+	"[memory synthesis",
+	"master summary",
+	"the emotion is one of",
+	"the intensity is a float",
+	"memory chunks into a",
+)
+
+
+def _is_template_echo(text: str) -> bool:
+	if not text or not text.strip():
+		return True
+	low = text.strip().lower()
+	return any(marker in low for marker in _TEMPLATE_ECHO_MARKERS)
+
 _DISTILL_SYSTEM = (
 	"Distill the interaction into ONLY a valid JSON object with keys: "
 	"summary (Spanish, concise), emotion (one of: joy, sadness, fear, disgust, anger, anxiety, envy, "
@@ -95,8 +113,6 @@ def extract_json(text: str) -> Optional[Dict[str, Any]]:
 
 def score_output(raw: str) -> Dict[str, Any]:
 	"""Deterministic heuristics scoring a single distillation output."""
-	from red_pill.metabolism.sleep import _is_template_echo
-
 	obj = extract_json(raw)
 	summary = str(obj.get("summary", "")) if obj else ""
 	emotion = str(obj.get("emotion", "")).lower() if obj else ""
@@ -117,26 +133,25 @@ def score_output(raw: str) -> Dict[str, Any]:
 	}
 
 
-def _load_profiles() -> Dict[str, Any]:
-	import red_pill.config as cfg  # noqa: F401
-	from red_pill.core.model_registry import ModelRegistry
-
-	ModelRegistry._load_profiles()
-	return ModelRegistry._profiles_cache or {}
-
-
-def _resolve_model_path(profile: Dict[str, Any]) -> Optional[Path]:
-	from red_pill.core.paths import get_models_dir
-
-	raw = profile.get("model_path", "")
-	candidates = [Path(raw), get_models_dir() / Path(raw).name]
-	for c in candidates:
-		if c.exists():
-			return c
-	return None
+# Candidate → GGUF basename map. Keeps the harness self-contained (no red_pill
+# imports) so it can run under the daemon's CUDA venv for real GPU measurement.
+_KNOWN_GGUF = {
+	"qwen35_9b": "Qwen3.5-9B-Q4_K_M.gguf",
+	"beck_8b": "Beck-8B-Q4_K_M.gguf",
+	"piaget_8b": "Piaget-8B-Q4_K_M.gguf",
+	"hermes_8b": "Hermes-3-Llama-3.1-8B.Q4_K_M.gguf",
+	"samantha": "samantha-mistral-instruct-7b.i1-Q4_K_M.gguf",
+}
 
 
-def run_model(name: str, model_path: Path, n_gpu_layers: int, n_ctx: int) -> List[Dict[str, Any]]:
+def _resolve_model_path(name: str, models_dir: Path) -> Optional[Path]:
+	if name not in _KNOWN_GGUF:
+		return None
+	path = models_dir / _KNOWN_GGUF[name]
+	return path if path.exists() else None
+
+
+def run_model(name: str, model_path: Path, n_gpu_layers: int, n_ctx: int, max_tokens: int = 256) -> List[Dict[str, Any]]:
 	from llama_cpp import Llama
 
 	logger.info(f"Loading {name} from {model_path} (ngl={n_gpu_layers}, ctx={n_ctx})...")
@@ -148,7 +163,7 @@ def run_model(name: str, model_path: Path, n_gpu_layers: int, n_ctx: int) -> Lis
 			out = llm.create_chat_completion(
 				messages=[{"role": "system", "content": _DISTILL_SYSTEM}, {"role": "user", "content": probe["user"]}],
 				temperature=0.1,
-				max_tokens=512,
+				max_tokens=max_tokens,
 			)
 			raw = out["choices"][0]["message"]["content"]
 		except Exception as e:
@@ -188,26 +203,37 @@ def render_markdown(all_results: Dict[str, List[Dict[str, Any]]]) -> str:
 
 def main() -> None:
 	parser = argparse.ArgumentParser(description="Distiller bake-off aptitude harness.")
-	parser.add_argument("--models", default="qwen35_9b,beck_8b,piaget_8b,hermes_8b", help="Comma-separated profile names.")
-	parser.add_argument("--n-gpu-layers", type=int, default=0, help="0 = CPU (safe vs live daemon VRAM). Bump if VRAM is free.")
+	parser.add_argument("--models", default="qwen35_9b,beck_8b,piaget_8b,hermes_8b", help="Comma-separated candidate names.")
+	parser.add_argument(
+		"--n-gpu-layers",
+		type=int,
+		default=-1,
+		help="-1 = all GPU; 0 = all CPU; N = hybrid (N layers on GPU, rest on CPU). "
+		"red-pill runs GPU and CPU simultaneously via partial offload — its vram_tiers pick N by free VRAM. "
+		"Any GPU offload needs a CUDA llama-cpp (the daemon venv); the project venv is a CPU build.",
+	)
 	parser.add_argument("--n-ctx", type=int, default=4096)
+	parser.add_argument("--max-tokens", type=int, default=512)
+	parser.add_argument("--models-dir", default=str(Path("~/.local/share/red-pill/models").expanduser()), help="Directory holding the candidate GGUFs.")
 	parser.add_argument("--out", default="docs/BENCHMARKS/DISTILLER_BAKEOFF.md")
 	args = parser.parse_args()
 
-	profiles = _load_profiles()
+	models_dir = Path(args.models_dir)
 	names = [n.strip() for n in args.models.split(",") if n.strip()]
 
 	all_results: Dict[str, List[Dict[str, Any]]] = {}
 	for name in names:
-		profile = profiles.get(name)
-		if not profile:
-			logger.warning(f"{name}: no profile found, skipping.")
-			continue
-		path = _resolve_model_path(profile)
+		path = _resolve_model_path(name, models_dir)
 		if not path:
-			logger.warning(f"{name}: GGUF not downloaded yet ({profile.get('model_path')}), skipping.")
+			logger.warning(f"{name}: GGUF not found in {models_dir}, skipping.")
 			continue
-		all_results[name] = run_model(name, path, args.n_gpu_layers, args.n_ctx)
+		try:
+			all_results[name] = run_model(name, path, args.n_gpu_layers, args.n_ctx, args.max_tokens)
+		except Exception as e:
+			# A model that won't even load (e.g. unsupported arch in this llama.cpp) is
+			# itself a finding — record it instead of crashing the whole bake-off.
+			logger.error(f"{name}: FAILED TO RUN — {e}")
+			all_results[name] = [{"probe": "load", "aptitude": "Model load", "raw": f"[LOAD ERROR] {e}", "score": score_output("")}]
 
 	if not all_results:
 		logger.error("No models were runnable (none downloaded?). Nothing to write.")

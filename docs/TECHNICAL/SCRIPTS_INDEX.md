@@ -35,3 +35,12 @@ This document catalogs the utility scripts found in the `scripts/` directory. Th
 
 ### `chronicle_*.py`
 **Purpose:** Scripts like `chronicle_daily.py` and `chronicle_distill.py` handle the semantic compression and consolidation of the agent's short-term memories into long-term directives.
+
+### `reembed_collections.py`
+**Purpose:** Recompute stored vectors after an `EMBEDDING_MODEL` change (e.g. English-only → multilingual). Same 384-dim → no schema migration. Resumable via a persisted cursor, `--dry-run` by default (`--execute` to write), excludes `archive_memories` unless listed.
+
+### `quarantine_fragments.py`
+**Purpose:** Move `_is_fragment` shrapnel (oversized-engram chunks) out of `work_memories`/`social_memories` into `archive_memories`. Order is upsert→verify→delete (no data loss), `--dry-run` by default. Run after a Qdrant snapshot.
+
+### `distiller_bakeoff.py`
+**Purpose:** Aptitude harness for the sleep-cycle distiller. Runs a battery of probes (technical, philosophical, noise-culling, emotional) against each candidate GGUF and scores outputs with deterministic heuristics (JSON, ES/EN, `<think>` tags, prompt-echo, valid emotion/intensity, latency). Writes `docs/BENCHMARKS/DISTILLER_BAKEOFF.md`. Defaults to CPU to spare the live daemon's VRAM.
