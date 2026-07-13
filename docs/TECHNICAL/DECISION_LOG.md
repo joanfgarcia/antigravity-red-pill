@@ -15,14 +15,30 @@ permanent engram and how it is labelled). Samantha (Mistral-7B, 2023) was retire
 was which small local model replaces it. Candidates were benchmarked, not chosen by reputation.
 
 ### 2. The Evidence (measured, not assumed)
-Two GPU bake-offs (`scripts/distiller_bakeoff.py`, `scripts/distiller_fidelity.py`, RTX 5070):
-- **Format** (strict JSON / Spanish / no `<think>` / valid affect): `hermes_8b` and `granite_8b`
-  both 4/4 and fast (~1 s); `piaget_8b`/`beck_8b` 4/4 JSON but pay a `<think>` token tax;
-  `qwen35_9b` only 1/4 (verbose reasoning preamble); `samantha` 0/4.
-- **Fidelity** (captures BOTH user and assistant): under a naive prompt both hermes and granite
-  scored 2/3; under a prompt that explicitly demands both sides, **both reached 3/3**. The gap
-  was a *prompt* problem, fixed for all models in the production `distill_engram` prompt.
-- Net: hermes_8b and granite_8b are co-winners on every measured axis.
+Two GPU bake-offs (`scripts/distiller_bakeoff.py`, `scripts/distiller_fidelity.py`, RTX 5070 8 GB,
+2026-07-13). Full raw outputs: [DISTILLER_BAKEOFF.md](../BENCHMARKS/DISTILLER_BAKEOFF.md) /
+[DISTILLER_FIDELITY.md](../BENCHMARKS/DISTILLER_FIDELITY.md).
+
+**Format aptitude** (technical / philosophical / noise / emotional probes):
+
+| Model | JSON | Spanish | No `<think>` | Emotion ok | Avg latency |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| granite_8b | 4/4 | 4/4 | 4/4 | 4/4 | 1.0 s |
+| hermes_8b | 4/4 | 4/4 | 4/4 | 4/4 | 1.1 s |
+| piaget_8b | 4/4 | 4/4 | 0/4 | 4/4 | 0.9 s |
+| beck_8b | 4/4 | 4/4 | 0/4 | 4/4 | 1.0 s |
+| qwen35_9b | 1/4 | 1/4 | 4/4 | 1/4 | 9.4 s |
+| samantha | 0/4 | 0/4 | 4/4 | 0/4 | 2.6 s |
+
+**Fidelity** (does the summary capture BOTH the user and the assistant), BASE vs TUNED prompt:
+
+| Model | BASE both-sides | TUNED both-sides |
+| :--- | :--- | :--- |
+| hermes_8b | 2/3 | 3/3 |
+| granite_8b | 2/3 | 3/3 |
+
+Net: `granite_8b` and `hermes_8b` co-win on every measured axis. The fidelity gap was a *prompt*
+problem (fixed for all models in the production `distill_engram` prompt), not a model deficiency.
 
 ### 3. The Decision
 **Granite-4.1-8B is the primary distiller; Hermes-3-8B is retained as fallback** (keeps

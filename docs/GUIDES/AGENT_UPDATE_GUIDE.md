@@ -596,6 +596,32 @@ The `perform_sleep_cycle()` function in `src/red_pill/metabolism/sleep.py` has t
     - **Action**: Run the upgrade or seed pipeline (`uv run red-pill seed`) which will clean up duplicate legacy version entries and write the single version engram.
     - **Verify**: Run `red-pill search directive "version"` and verify only a single immune version engram matching `v7.3.1` is returned.
 
+### 4.10 Model Profile Review (distiller & local models)
+
+The local model roster is not frozen. When self-updating, the agent SHOULD periodically review the
+model-profiles **seed** — `examples/model_profiles.yaml.example` (the authoritative source that
+`ModelRegistry` copies to the live `~/.config/red-pill/model_profiles.yaml` on first run) — and scan
+for newer/more-efficient GGUF releases of the roles it currently uses (distiller, logic, coding,
+telemetry). Small expert models age fast; a fresher Apache-licensed 8B may quietly beat an incumbent.
+
+**Rule — never swap a model on reputation.** Before promoting any candidate to a live role
+(especially `distillation`), re-run the reproducible harnesses and let the data decide:
+
+```bash
+# GPU (daemon CUDA venv) — format aptitude + both-sides fidelity
+~/.local/share/red-pill/daemon/.venv/bin/python scripts/distiller_bakeoff.py --n-gpu-layers -1
+~/.local/share/red-pill/daemon/.venv/bin/python scripts/distiller_fidelity.py --n-gpu-layers -1
+```
+
+Results land in `docs/BENCHMARKS/DISTILLER_BAKEOFF.md` and `DISTILLER_FIDELITY.md`. Record the outcome
+and the decision in `docs/TECHNICAL/DECISION_LOG.md` (see AD-022 for the template) and update the
+"Recommendations by task" block in the seed. Note the philosophy this vindicated: for a narrow,
+format-bound job a **small expert** beats a newer generalist, and the biggest quality lever is often
+the **prompt**, not the model.
+
+> Note: there is no separate `seeds/` model YAML or `agents.yaml` — the single source of truth is
+> `examples/model_profiles.yaml.example`. `seeds/settings/` only holds the Claude Code permissions seed.
+
 ## 5. Hierarchy of Directives
 
 Upon completion of any update, the agent **MUST** immediately execute:
