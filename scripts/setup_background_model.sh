@@ -341,6 +341,11 @@ if [ "$OS_NAME" = "Darwin" ]; then
 		<string>/bin/bash</string>
 		<string>_PERSISTENT_DIR_/start.sh</string>
 	</array>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>MINION_PROFILE</key>
+		<string>qwen35_9b</string>
+	</dict>
 	<key>RunAtLoad</key>
 	<true/>
 	<key>KeepAlive</key>
@@ -368,6 +373,9 @@ After=network.target
 
 [Service]
 Type=simple
+# Distiller profile served by the background daemon. Overrides run_dual_bind's
+# "samantha" default so the sleep cycle uses the modern distiller.
+Environment=MINION_PROFILE=qwen35_9b
 ExecStart=/bin/bash _PERSISTENT_DIR_/start.sh
 Restart=always
 Nice=19

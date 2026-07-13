@@ -1,10 +1,66 @@
 # SEED FILE - Do not commit actual local profiles here.
 # Copy this file to ~/.config/red-pill/model_profiles.yaml automatically during setup.
 profiles:
-  # ── Recommended Sweet Spot (6-8 GB VRAM) ──────────────────────
-  # Hermes-3-Llama-3.1-8B replaces Samantha-Mistral-7B as the default
-  # cognitive profile. Superior reasoning, instruction following, and
-  # 16K native context. Resolves as the primary "logic" capability.
+  # ── Recommended distiller (jul 2026) ──────────────────────────
+  # Qwen3.5-9B Instruct: Apache-2.0, multilingual (201 langs incl. Spanish),
+  # hybrid attention (small KV cache) so it fits an 8 GB RTX even at large
+  # context. SOLE carrier of "distillation" → deterministic selection by the
+  # sleep cycle. Download the GGUF Q4_K_M into models/ first.
+  # NOTE: needs a recent llama.cpp for the hybrid arch; if it fails to load,
+  # move "distillation" to hermes_8b (see PLAN_MEMORY_REMEDIATION.md Hito 4a).
+  qwen35_9b:
+    model_path: "models/Qwen3.5-9B-Q4_K_M.gguf"
+    binary_type: "gguf"
+    chat_format: "chatml"
+    temperature: 0.3
+    max_tokens: 4096
+    use_mmap: false
+    capabilities: ["distillation", "logic", "emotional_intelligence", "deep"]
+    hardware_affinity:
+      n_ctx: 32768
+      vram_tiers:
+        - min_free_gb: 2
+          n_gpu_layers: 0
+        - min_free_gb: 4
+          n_gpu_layers: 12
+        - min_free_gb: 6
+          n_gpu_layers: 18
+        - min_free_gb: 8
+          n_gpu_layers: 24
+        - min_free_gb: 12
+          n_gpu_layers: -1
+
+  # ── Bake-off candidate: domain-specialist distiller ───────────
+  # Beck-8B (finetune of Piaget-8B = Qwen3-8B + LoRA on psychology/philosophy
+  # reasoning traces). Strong affective/narrative judgment for the culling
+  # role. Promote by moving "distillation" here after the bake-off
+  # (see .red-pill/memory/PLAN_MEMORY_REMEDIATION.md, Hito 4a-bis).
+  beck_8b:
+    model_path: "models/Beck-8B-Q4_K_M.gguf"
+    binary_type: "gguf"
+    chat_format: "chatml"
+    temperature: 0.3
+    max_tokens: 4096
+    use_mmap: false
+    capabilities: ["logic", "emotional_intelligence", "deep"]
+    hardware_affinity:
+      n_ctx: 16384
+      vram_tiers:
+        - min_free_gb: 2
+          n_gpu_layers: 0
+        - min_free_gb: 4
+          n_gpu_layers: 12
+        - min_free_gb: 6
+          n_gpu_layers: 18
+        - min_free_gb: 8
+          n_gpu_layers: 24
+        - min_free_gb: 12
+          n_gpu_layers: -1
+
+  # ── Fallback distiller / primary "logic" ──────────────────────
+  # Hermes-3-Llama-3.1-8B. Classic Llama arch (always loads). Keeps "logic"
+  # (used by samantha_on_demand.py) but NOT "distillation" — promote it here
+  # if qwen35_9b fails the runtime smoke test.
   hermes_8b:
     model_path: "models/Hermes-3-Llama-3.1-8B.Q4_K_M.gguf"
     binary_type: "gguf"
@@ -12,7 +68,7 @@ profiles:
     temperature: 0.3
     max_tokens: 4096
     use_mmap: false
-    capabilities: ["distillation", "logic", "emotional_intelligence", "deep"]
+    capabilities: ["logic", "emotional_intelligence", "deep"]
     hardware_affinity:
       n_ctx: 16384
       # vram_tiers: selects inference parameters based on FREE VRAM available
@@ -45,7 +101,7 @@ profiles:
     temperature: 0.7
     max_tokens: 1024
     use_mmap: false
-    capabilities: ["distillation", "emotional_intelligence", "deep"]
+    capabilities: ["emotional_intelligence", "deep"]
     hardware_affinity:
       n_ctx: 4096
       vram_tiers:
