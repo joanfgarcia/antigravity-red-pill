@@ -2284,14 +2284,14 @@ wheels = [
 
 [[package]]
 name = "pure-mls"
-version = "3.0.5.1"
+version = "4.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/11/2d/b34dfc0b1ea8f84be89b4137e717434062af23d7ee2fc28a2debfecbe514/pure_mls-3.0.5.1.tar.gz", hash = "sha256:4cfccb1ebf6eae229952d87941c8cb3cdee58461fc10d20a18b994913e6c98a9", size = 42803, upload-time = "2026-05-06T16:49:17.888Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/77/a9/8f1cf19bb361546f032bfbdfd955627303911e7d1f491da065bd823ce187/pure_mls-4.0.0.tar.gz", hash = "sha256:7d958e7576cf2798766355ed55d943df2003c83c4aa6b8bb20a2950f43cb1aeb", size = 47690, upload-time = "2026-07-13T15:03:19.877Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9b/d4/6e87ccc978653a6e280aff8752b6997b08ea825a1248314e1094fccdf5a1/pure_mls-3.0.5.1-py3-none-any.whl", hash = "sha256:2b089dc46d3f7b63633fcfa6e8c3a8114359e01525bba88a7d9e080953e0a82a", size = 49512, upload-time = "2026-05-06T16:49:16.768Z" },
+    { url = "https://files.pythonhosted.org/packages/2a/ee/05b8f79fc996a52f7493979fef5e5a6927c17869b55d286216a2021572cc/pure_mls-4.0.0-py3-none-any.whl", hash = "sha256:ff33e25afaa3221eab06dbb59a78bf7e5d6e45cff042e1dc8768646b67903b06", size = 55128, upload-time = "2026-07-13T15:03:18.918Z" },
 ]
 
 [[package]]
@@ -2790,7 +2790,7 @@ requires-dist = [
     { name = "platformdirs", specifier = ">=4.9.2" },
     { name = "pluggy", specifier = ">=1.6.0" },
     { name = "psutil", specifier = ">=7.2.2" },
-    { name = "pure-mls", specifier = "==3.0.5.1" },
+    { name = "pure-mls", specifier = "==4.0.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pydantic-settings", specifier = ">=2.0.0" },
     { name = "pyjwt", specifier = ">=2.12.0" },

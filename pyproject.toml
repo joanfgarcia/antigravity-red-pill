@@ -36,7 +36,7 @@ dependencies = [
     # pure-mls is published on PyPI: https://pypi.org/project/pure-mls/
     # Previously a git+https direct reference (pre-v3.0.5.1). Now a standard
     # PyPI wheel, SHA-256 locked in uv.lock. Supply chain is fully auditable.
-    "pure-mls==3.0.5.1",
+    "pure-mls==4.0.0",
     "neon-link>=0.5.1",
     "celery>=5.6.3",
     "redis>=7.4.0",
