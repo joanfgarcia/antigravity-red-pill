@@ -571,6 +571,10 @@ class RedPillConfig(BaseSettings):
 	SLEEP_SCROLL_LIMIT: int = 50  # Max engrams fetched per scroll batch (loop drains until empty)
 	SLEEP_MAX_LLM_FAILURES: int = 5  # Thermal breaker: abort sleep after N consecutive LLM failures
 	SLEEP_MIN_FREE_VRAM_MB: int = 1500  # Preflight: skip sleep if GPU has less free VRAM than this
+	# When False (default), a read (search_and_reinforce) never DELETES eroded
+	# engrams — it only hides them from the result. Forgetting belongs to the
+	# sleep cycle (erode_work_hubs / rhizodb washout), not to a lookup.
+	READ_PATH_PRUNING_ENABLED: bool = False
 
 	# Sleep Cycle Plugin flags — each ritual individually activatable
 	SLEEP_PLUGIN_USP: bool = True  # Operator Mood Profile refresh

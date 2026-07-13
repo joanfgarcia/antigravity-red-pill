@@ -593,11 +593,15 @@ class MemoryManager:
 				decay_updates = engine.calculate_lazy_decay(hit.payload, current_time=time.time())
 
 				if decay_updates.get("_delete"):
-					logger.warning(f"Lazy decay DELETE ({engine_type}): engram {hit.id} in '{collection}' eroded below threshold. Removing.")
-					try:
-						self.client.delete(collection_name=collection, points_selector=models.PointIdsList(points=[hit.id]))
-					except Exception:
-						pass
+					# Eroded below threshold. Hide it from this result either way; only
+					# actually delete when read-path pruning is explicitly enabled.
+					# Forgetting is the sleep cycle's job, not a read's.
+					if self.cfg.READ_PATH_PRUNING_ENABLED:
+						logger.warning(f"Lazy decay DELETE ({engine_type}): engram {hit.id} in '{collection}' eroded below threshold. Removing.")
+						try:
+							self.client.delete(collection_name=collection, points_selector=models.PointIdsList(points=[hit.id]))
+						except Exception:
+							pass
 					continue
 
 				if decay_updates:
