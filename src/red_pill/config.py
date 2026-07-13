@@ -259,7 +259,10 @@ class RedPillConfig(BaseSettings):
 	# -----------------------------------------------------------------------
 	# MODELS & EMBEDDINGS
 	# -----------------------------------------------------------------------
-	EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
+	# Multilingual (Spanish/English) 384-dim model. Same vector size as the old
+	# all-MiniLM-L6-v2 (English-only) → no collection schema migration, but the
+	# stored vectors must be recomputed (scripts/reembed_collections.py).
+	EMBEDDING_MODEL: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 	VECTOR_SIZE: int = 384
 	FASTEMBED_CACHE_PATH: str = str(get_models_dir())
 	EXECUTION_PROVIDER: Optional[str] = None
