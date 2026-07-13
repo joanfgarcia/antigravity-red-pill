@@ -57,6 +57,7 @@ class EmotiveRecallPlugin(BaseInterceptorPlugin):
 				collection="social_memories",
 				query=query,
 				limit=_TOP_K + 2,  # Extra to allow filtering
+				caller="interceptor_08",
 			)
 
 			if not results:

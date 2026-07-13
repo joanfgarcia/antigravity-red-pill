@@ -77,6 +77,17 @@ class SleepCompletedEvent(RedPillEvent):
 
 
 @dataclasses.dataclass
+class RecallEvent(RedPillEvent):
+	"""Fired after MemoryManager.search_and_reinforce() returns — memory utility metric."""
+
+	collection: str = ""
+	caller: str = "unknown"
+	query_len: int = 0
+	hits: int = 0
+	top_score: Optional[float] = None
+
+
+@dataclasses.dataclass
 class CollectionCreatedEvent(RedPillEvent):
 	"""Fired after StorageEngine creates a new Qdrant collection."""
 

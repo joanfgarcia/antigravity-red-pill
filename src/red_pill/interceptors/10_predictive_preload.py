@@ -70,6 +70,7 @@ class PredictivePreloadPlugin(BaseInterceptorPlugin):
 				collection=collection,
 				query=query,
 				limit=top_k,
+				caller="interceptor_10",
 			)
 
 			if not results:

@@ -31,7 +31,7 @@ class OracleMinion(Minion):
 		# RAG search across requested collections
 		results = []
 		for collection in collections:
-			hits = manager.search_and_reinforce(collection, task, limit=3)
+			hits = manager.search_and_reinforce(collection, task, limit=3, caller="oracle")
 			results.extend([str(h.payload.get("content", "")) for h in hits if h.payload.get("content")])
 
 		background = "\n---\n".join(results) if results else ""

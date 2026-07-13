@@ -973,7 +973,7 @@ def main() -> None:
 							is_deep = True
 							break
 
-				search_results = manager.search_and_reinforce(collection, args.query, limit=args.limit, deep_recall=is_deep)
+				search_results = manager.search_and_reinforce(collection, args.query, limit=args.limit, deep_recall=is_deep, caller="cli_search")
 				if is_deep:
 					print(f"--- [DEEP RECALL ACTIVATED: {collection.upper()}] ---")
 				else:

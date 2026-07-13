@@ -31,7 +31,7 @@ class RagEnrichmentPlugin(BaseInterceptorPlugin):
 				results = []
 				for collection in ["directive_memories", "work_memories", "social_memories"]:
 					try:
-						hits = manager.search_and_reinforce(collection, prompt, limit=2)
+						hits = manager.search_and_reinforce(collection, prompt, limit=2, caller="interceptor_02")
 						results.extend(
 							[
 								str(h.payload.get("content", ""))

@@ -15,7 +15,7 @@ except ImportError:
 
 import red_pill.config as cfg
 from red_pill.affect import get_memory_engine
-from red_pill.events import MemoryAddedEvent, get_event_bus
+from red_pill.events import MemoryAddedEvent, RecallEvent, get_event_bus
 from red_pill.hive import HiveMind
 from red_pill.schemas import CreateEngramRequest, EngramPayload
 from red_pill.utils.affect import (
@@ -536,7 +536,20 @@ class MemoryManager:
 			logger.error(f"Failed to record interaction pair: {e}")
 			return ""
 
-	def search_and_reinforce(self, collection: str, query: str, limit: int = 3, deep_recall: bool = False, strict: bool = True) -> List[Any]:
+	def search_and_reinforce(
+		self, collection: str, query: str, limit: int = 3, deep_recall: bool = False, strict: bool = True, caller: str = "unknown"
+	) -> List[Any]:
+		"""Single exit point: run the search, then emit a lightweight recall metric."""
+		results = self._search_and_reinforce_impl(collection, query, limit=limit, deep_recall=deep_recall, strict=strict)
+		try:
+			top_score = getattr(results[0], "score", None) if results else None
+			get_event_bus().emit(RecallEvent(collection=collection, caller=caller, query_len=len(query), hits=len(results), top_score=top_score))
+			logger.info(f"[RECALL] caller={caller} collection={collection} hits={len(results)} top_score={top_score}")
+		except Exception as e:
+			logger.debug(f"[RECALL] telemetry emit failed: {e}")
+		return results
+
+	def _search_and_reinforce_impl(self, collection: str, query: str, limit: int = 3, deep_recall: bool = False, strict: bool = True) -> List[Any]:
 		if not deep_recall:
 			import re as regex_lib
 
