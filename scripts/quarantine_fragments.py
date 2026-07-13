@@ -10,10 +10,9 @@ hygiene: move them to archive_memories (searchable only via deep archive tools)
 and drop their immune flag.
 
 Safe by default:
-  * --dry-run is the DEFAULT. Pass --execute to actually move.
-  * Move order is upsert → verify → delete, so a crash never loses data.
-  * Reports how many parent engrams may be orphaned (the janitor's
-    orphaned-parents sweep will clean those; this is just a heads-up).
+- --dry-run is the DEFAULT. Pass --execute to actually move.
+- Move order is upsert -> verify -> delete, so a crash never loses data.
+- Reports how many parent engrams may be orphaned (janitor sweeps them later).
 
 The operator runs `--execute` AFTER a Qdrant snapshot. Do not run it from tests.
 """

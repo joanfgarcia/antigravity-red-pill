@@ -8,9 +8,9 @@ OLD model, so recall degrades until they are recomputed. Same 384-dim size means
 NO schema migration — only the vectors change, payloads and ids are untouched.
 
 Safe by default:
-  * --dry-run is the DEFAULT. Pass --execute to actually write.
-  * Resumable: a cursor is saved after every batch; re-running continues.
-  * archive_memories (huge) is excluded unless explicitly listed.
+- --dry-run is the DEFAULT. Pass --execute to actually write.
+- Resumable: a cursor is saved after every batch; re-running continues.
+- archive_memories (huge) is excluded unless explicitly listed.
 
 The operator runs `--execute` with the system idle. Do not run it from tests.
 """

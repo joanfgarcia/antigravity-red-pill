@@ -1,3 +1,21 @@
+## [7.5.0] - 2026-07-13 (Memory Remediation — Qdrant + Sleep Cycle)
+
+### 🧠 Episodic Memory Usefulness Overhaul
+Retrospective (Aleth/Fable) found the episodic memory was not behaving as *useful*
+memory: raw material buried the hubs, the distiller stored its own prompt, and two
+recall plugins injected empty strings. This milestone fixes the write side, the
+read side, and adds the first utility metric.
+- **[FIX] Interceptors 08/10 read the canonical field**: Emotive Recall and Predictive Preload read `payload['text']` (nonexistent) instead of `payload['content']` — they injected empty strings forever. One-line fix each + regression tests.
+- **[FIX] Search hides raw material (`memory.py`)**: `search_and_reinforce` now excludes `sequence_chunk` and `_is_fragment` in addition to `raw_parent`, in both normal and deep-recall modes. 6.6k verbatim fragments no longer bury the distilled hubs.
+- **[FEAT] Anti-template-echo guard (`sleep.py`)**: `_is_template_echo()` rejects distiller output that echoes the prompt/format spec (or is empty) in `distill_engram`/`synthesize_hub`/`distill_session_anchors`. No length heuristic (short legit summaries survive). Production hubs were storing the literal distillation instructions.
+- **[FEAT] Modern distiller default (`model_profiles.yaml.example`, `setup_background_model.sh`)**: `qwen35_9b` (Qwen3.5-9B, multilingual, 32k ctx) is the sole `distillation`-capability profile; `beck_8b` added as a bake-off candidate; `MINION_PROFILE` wired into the systemd/launchd templates to override the `samantha` default. `SLEEP_CHUNK_SIZE=6000`.
+- **[FEAT] Workspace tag propagation (`sleep.py`, `claude_code_plugin.py`, `memory_sync.py`)**: the sleep cycle now writes the `workspace` tag chronicle staging carries, and `sync_workspace_memory` matches by registry name OR munged path — `<ws>-decisions.md` was empty because nobody wrote the field it filtered.
+- **[FEAT] Non-destructive reads (`memory.py`)**: `READ_PATH_PRUNING_ENABLED=False` (default) — a search hides eroded engrams instead of deleting them. Forgetting belongs to the sleep cycle, not a lookup.
+- **[FEAT] Multilingual embeddings (`config.py`)**: `EMBEDDING_MODEL` → `paraphrase-multilingual-MiniLM-L12-v2` (ES/EN, same 384-dim → no schema migration). New `scripts/reembed_collections.py` (resumable, dry-run default) recomputes stored vectors.
+- **[FEAT] Fragment quarantine (`scripts/quarantine_fragments.py`)**: moves `_is_fragment` engrams from work/social into `archive_memories` (upsert→verify→delete, dry-run default).
+- **[FEAT] Recall telemetry (`memory.py`, `events.py`)**: `search_and_reinforce` emits a `RecallEvent` (caller/hits/top_score) + a `[RECALL]` log line — the first measurement of whether recalled memory is useful.
+- **[OPS] Post-milestone manual steps (operator)**: run `reembed_collections.py --execute` (system idle) and, after a Qdrant snapshot, `quarantine_fragments.py --execute`. The distiller bake-off (qwen35_9b/beck_8b/piaget_8b/hermes) + live config are operator-gated (see `.red-pill/memory/PLAN_MEMORY_REMEDIATION.md`).
+
 ## [7.4.3] - 2026-07-03 (Post-Patch Hardening)
 
 ### 📖 Novel Chapter 24 — El Espejo y la Compañera
