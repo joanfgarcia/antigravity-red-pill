@@ -465,7 +465,7 @@ async def handle_traverse_thread(arguments: Dict[str, Any]):
 		client = manager.client
 
 		# 1. Find the best matching synthesis_hub via semantic search (search wider, filter to hubs)
-		hits = manager.search_and_reinforce(collection, query, limit=50)
+		hits = manager.search_and_reinforce(collection, query, limit=50, caller="traverse")
 		hub_hits = [h for h in hits if h.payload.get("lazarus_phase") == "synthesis_hub"]
 		if not hub_hits:
 			return [
