@@ -167,7 +167,7 @@ def _call_llm(port: int, prompt: str, system_prompt: str = "", max_tokens: int =
 			"messages": messages,
 			"temperature": temperature,
 			"max_tokens": max_tokens,
-			"seed": 770,
+			"seed": -1,
 			"stop": ["<|im_end|>", "<|endoftext|>"],
 		}
 	).encode("utf-8")

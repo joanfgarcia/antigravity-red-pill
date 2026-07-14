@@ -1,20 +1,153 @@
 # SEED FILE - Do not commit actual local profiles here.
-# Copy this file to ~/.agent/model_profiles.yaml automatically during setup.
+# Copy this file to ~/.config/red-pill/model_profiles.yaml automatically during setup.
 profiles:
-  samantha:
-    model_path: "experimental/Samantha/samantha-mistral-instruct-7b.i1-Q4_K_M.gguf"
+  # ===============================================================
+  # RECOMMENDATIONS BY TASK  (bake-off 2026-07-13, GPU RTX 5070 8 GB)
+  #   scripts/distiller_bakeoff.py -> docs/BENCHMARKS/DISTILLER_BAKEOFF.md
+  #   Inference runs GPU / CPU / hybrid (partial offload) — vram_tiers pick
+  #   n_gpu_layers by free VRAM. GPU needs the daemon's CUDA llama-cpp.
+  #
+  #   distillation (sleep) -> granite_8b  [PRIMARY]  + hermes_8b [FALLBACK]
+  #       Co-winners on format (4/4 JSON, Spanish, no <think>, ~1s) AND on tuned
+  #       fidelity (3/3 both-sides). Granite chosen on tiebreakers: Apache-2.0
+  #       license, small-expert fit, efficiency. Hermes kept as arch-risk fallback.
+  #       (AD-022; docs/BENCHMARKS/DISTILLER_FIDELITY.md)
+  #   affective/narrative  -> piaget_8b   [alternative]
+  #       4/4 JSON + best 3rd-person abstraction, but emits <think> (token tax).
+  #   logic / general      -> hermes_8b
+  #   coding               -> coder_heavy (qwen2.5-coder)
+  #
+  #   NOT the distiller:
+  #     qwen35_9b -> dumps a prose "Thinking Process" preamble, blows the token
+  #       budget, only 1/4 parseable JSON. Great generalist; needs prompt-tuning
+  #       + output stripping before it can distill.
+  #     samantha  -> legacy 7B, 0/4 JSON. Retired from distillation.
+  # ===============================================================
+
+  # ── PRIMARY distiller (AD-022, jul 2026) ──────────────────────
+  # Granite-4.1-8B (IBM, Apache-2.0). Co-won the bake-off on format AND fidelity;
+  # chosen over Hermes on license + small-expert fit + efficiency. SOLE carrier of
+  # "distillation" -> deterministic selection by the sleep cycle. Hybrid arch: if a
+  # future llama.cpp fails to load it, move "distillation" to the hermes_8b fallback.
+  granite_8b:
+    model_path: "models/Granite-4.1-8B-Q4_K_M.gguf"
     binary_type: "gguf"
-    # chat_format: template used by llama-cpp-python for chat completions.
-    # Must match the model's training format. Common values:
-    #   "chatml" (Samantha, OpenHermes), "mistral-instruct", "llama-2", "llama-3"
-    # If omitted, defaults to "chatml". Check GGUF metadata or model card.
     chat_format: "chatml"
-    temperature: 0.7
-    max_tokens: 1024
+    temperature: 0.3
+    max_tokens: 4096
     use_mmap: false
-    capabilities: ["distillation", "emotional_intelligence", "deep"]
+    capabilities: ["distillation", "logic", "emotional_intelligence", "deep"]
     hardware_affinity:
-      n_ctx: 4096
+      n_ctx: 16384
+      vram_tiers:
+        - min_free_gb: 2
+          n_gpu_layers: 0
+        - min_free_gb: 4
+          n_gpu_layers: 12
+        - min_free_gb: 6
+          n_gpu_layers: 18
+        - min_free_gb: 8
+          n_gpu_layers: 24
+        - min_free_gb: 12
+          n_gpu_layers: -1
+
+  # ── Multilingual generalist (NOT the distiller — see bake-off) ─
+  # Qwen3.5-9B Instruct: Apache-2.0, 201 langs, large ctx, fits 8 GB. Strong
+  # general model but ignores "no reasoning" and breaks strict JSON (1/4 in the
+  # bake-off). Kept for logic/emotional tasks; promote to "distillation" only
+  # after prompt-tuning to suppress the reasoning preamble.
+  qwen35_9b:
+    model_path: "models/Qwen3.5-9B-Q4_K_M.gguf"
+    binary_type: "gguf"
+    chat_format: "chatml"
+    temperature: 0.3
+    max_tokens: 4096
+    use_mmap: false
+    capabilities: ["logic", "emotional_intelligence", "deep"]
+    hardware_affinity:
+      n_ctx: 32768
+      vram_tiers:
+        - min_free_gb: 2
+          n_gpu_layers: 0
+        - min_free_gb: 4
+          n_gpu_layers: 12
+        - min_free_gb: 6
+          n_gpu_layers: 18
+        - min_free_gb: 8
+          n_gpu_layers: 24
+        - min_free_gb: 12
+          n_gpu_layers: -1
+
+  # ── Bake-off candidate: domain-specialist distiller ───────────
+  # Beck-8B (finetune of Piaget-8B = Qwen3-8B + LoRA on psychology/philosophy
+  # reasoning traces). Strong affective/narrative judgment for the culling
+  # role. Promote by moving "distillation" here after the bake-off
+  # (see .red-pill/memory/PLAN_MEMORY_REMEDIATION.md, Hito 4a-bis).
+  beck_8b:
+    model_path: "models/Beck-8B-Q4_K_M.gguf"
+    binary_type: "gguf"
+    chat_format: "chatml"
+    temperature: 0.3
+    max_tokens: 4096
+    use_mmap: false
+    capabilities: ["logic", "emotional_intelligence", "deep"]
+    hardware_affinity:
+      n_ctx: 16384
+      vram_tiers:
+        - min_free_gb: 2
+          n_gpu_layers: 0
+        - min_free_gb: 4
+          n_gpu_layers: 12
+        - min_free_gb: 6
+          n_gpu_layers: 18
+        - min_free_gb: 8
+          n_gpu_layers: 24
+        - min_free_gb: 12
+          n_gpu_layers: -1
+
+  # ── Alternative distiller: affective/narrative depth ──────────
+  # Piaget-8B (Qwen3-8B + LoRA on 15k psychology/philosophy reasoning traces).
+  # Bake-off: 4/4 JSON + the best 3rd-person abstraction of the field, but emits
+  # <think> blocks (token tax). Choose over hermes_8b if emotional nuance matters
+  # more than the overhead. Beck-8B (its finetune) copied input verbatim on the
+  # emotional probe — Piaget abstracts better, so it is preferred of the two.
+  piaget_8b:
+    model_path: "models/Piaget-8B-Q4_K_M.gguf"
+    binary_type: "gguf"
+    chat_format: "chatml"
+    temperature: 0.3
+    max_tokens: 4096
+    use_mmap: false
+    capabilities: ["logic", "emotional_intelligence", "deep"]
+    hardware_affinity:
+      n_ctx: 16384
+      vram_tiers:
+        - min_free_gb: 2
+          n_gpu_layers: 0
+        - min_free_gb: 4
+          n_gpu_layers: 12
+        - min_free_gb: 6
+          n_gpu_layers: 18
+        - min_free_gb: 8
+          n_gpu_layers: 24
+        - min_free_gb: 12
+          n_gpu_layers: -1
+
+  # ── FALLBACK distiller / primary "logic" (AD-022) ─────────────
+  # Hermes-3-Llama-3.1-8B. Classic Llama arch (always loads, no <think> tax).
+  # Bake-off co-winner (4/4 format + 3/3 tuned fidelity); lost the tiebreaker to
+  # granite_8b on license (Llama-3.1 vs Apache-2.0). Kept as the arch-risk fallback
+  # and primary "logic" model; promote to "distillation" if granite fails to load.
+  hermes_8b:
+    model_path: "models/Hermes-3-Llama-3.1-8B.Q4_K_M.gguf"
+    binary_type: "gguf"
+    chat_format: "chatml"
+    temperature: 0.3
+    max_tokens: 4096
+    use_mmap: false
+    capabilities: ["logic", "emotional_intelligence", "deep"]
+    hardware_affinity:
+      n_ctx: 16384
       # vram_tiers: selects inference parameters based on FREE VRAM available
       # at the moment the sleep cycle launches (not total installed VRAM).
       # min_free_gb: minimum free VRAM in GB required to use this tier.
@@ -22,6 +155,32 @@ profiles:
       # by the currently free VRAM is selected. Exceeding all tiers uses the
       # highest one. Reduce values by ~0.5-1 GB from hardware total to account
       # for driver/framebuffer overhead and other GPU residents.
+      vram_tiers:
+        - min_free_gb: 2
+          n_gpu_layers: 0
+        - min_free_gb: 4
+          n_gpu_layers: 12
+        - min_free_gb: 6
+          n_gpu_layers: 18
+        - min_free_gb: 8
+          n_gpu_layers: 24
+        - min_free_gb: 12
+          n_gpu_layers: -1
+
+  # ── Legacy: Samantha-Mistral-7B ────────────────────────────────
+  # Kept for operators who prefer the original empathy-tuned model.
+  # Does NOT carry "logic" capability — will not be auto-selected by
+  # samantha_on_demand.py unless explicitly set via MINION_PROFILE.
+  samantha:
+    model_path: "experimental/Samantha/samantha-mistral-instruct-7b.i1-Q4_K_M.gguf"
+    binary_type: "gguf"
+    chat_format: "chatml"
+    temperature: 0.7
+    max_tokens: 1024
+    use_mmap: false
+    capabilities: ["emotional_intelligence", "deep"]
+    hardware_affinity:
+      n_ctx: 4096
       vram_tiers:
         - min_free_gb: 2
           n_gpu_layers: 0

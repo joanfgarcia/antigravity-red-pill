@@ -89,6 +89,10 @@ def sync_workspace_memory(ws: Workspace, mm: MemoryManager) -> None:
 			if not offset:
 				break
 
+		# A workspace matches by its registry name OR by the munged absolute path
+		# used by IDE chroniclers (Claude Code names project dirs "-home-joan-...").
+		ws_aliases = {ws.name, str(ws.root).replace(os.sep, "-")}
+
 		# Filter workspace-specific memories
 		matching_points = []
 		for p in points:
@@ -97,7 +101,7 @@ def sync_workspace_memory(ws: Workspace, mm: MemoryManager) -> None:
 			meta = p.payload.get("metadata", {})
 			# Check flat and nested metadata tags
 			ws_val = p.payload.get("workspace") or p.payload.get("project") or meta.get("workspace") or meta.get("project")
-			if ws_val == ws.name:
+			if ws_val in ws_aliases:
 				matching_points.append(p)
 
 		# Sort chronologically by created_at (default to 0.0 if missing)

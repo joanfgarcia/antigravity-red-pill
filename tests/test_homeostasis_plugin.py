@@ -9,6 +9,7 @@ import pytest
 
 import red_pill.config as cfg
 from red_pill.plugins.trinity_homeostasis.plugin import (
+	_SOUL_POINT_ID,
 	EmotionalState,
 	HomeostasisPlugin,
 )
@@ -65,9 +66,7 @@ class TestVectorSizeRegression:
 
 	def test_vector_size_attribute_exists(self):
 		"""cfg.VECTOR_SIZE must exist and be a positive integer."""
-		assert hasattr(cfg, "VECTOR_SIZE"), (
-			"cfg.VECTOR_SIZE is missing — the plugin depends on it for dummy vector creation"
-		)
+		assert hasattr(cfg, "VECTOR_SIZE"), "cfg.VECTOR_SIZE is missing — the plugin depends on it for dummy vector creation"
 		config = cfg.get_config()
 		assert isinstance(config.VECTOR_SIZE, int)
 		assert config.VECTOR_SIZE > 0
@@ -75,9 +74,7 @@ class TestVectorSizeRegression:
 	def test_embedding_dim_does_not_exist(self):
 		"""cfg.EMBEDDING_DIM must NOT exist — using it is a bug."""
 		config = cfg.get_config()
-		assert not hasattr(config, "EMBEDDING_DIM"), (
-			"cfg.EMBEDDING_DIM should not exist; use cfg.VECTOR_SIZE instead"
-		)
+		assert not hasattr(config, "EMBEDDING_DIM"), "cfg.EMBEDDING_DIM should not exist; use cfg.VECTOR_SIZE instead"
 
 	def test_dummy_vector_creation_matches_config(self):
 		"""The dummy vector [0.0] * cfg.VECTOR_SIZE must produce correct dimensionality."""
@@ -137,6 +134,35 @@ class TestHomeostasisPlugin:
 		assert upsert_call is not None
 
 	@pytest.mark.asyncio
+	async def test_cognition_hook_uses_deterministic_uuid(self):
+		"""COGNITION hook must use the singleton _SOUL_POINT_ID, not a random UUID."""
+		from red_pill.core.plugin_engine import PluginScope
+
+		plugin = self._make_plugin()
+		await plugin.hook(PluginScope.COGNITION, {})
+
+		# Extract the PointStruct from the upsert call
+		call_args = plugin.memory_mgr.client.upsert.call_args
+		points = call_args[1]["points"] if "points" in (call_args[1] or {}) else call_args[0][1] if len(call_args[0]) > 1 else call_args[1]["points"]
+		assert points[0].id == _SOUL_POINT_ID, f"Expected deterministic UUID {_SOUL_POINT_ID}, got {points[0].id}"
+
+	@pytest.mark.asyncio
+	async def test_cognition_hook_second_call_same_id(self):
+		"""Two consecutive COGNITION hooks must upsert the same point ID (no duplicates)."""
+		from red_pill.core.plugin_engine import PluginScope
+
+		plugin = self._make_plugin()
+		await plugin.hook(PluginScope.COGNITION, {})
+		await plugin.hook(PluginScope.COGNITION, {})
+
+		assert plugin.memory_mgr.client.upsert.call_count == 2
+		ids = []
+		for call in plugin.memory_mgr.client.upsert.call_args_list:
+			points = call[1]["points"]
+			ids.append(points[0].id)
+		assert ids[0] == ids[1] == _SOUL_POINT_ID
+
+	@pytest.mark.asyncio
 	async def test_telemetry_hook_counts_alerts(self):
 		"""TELEMETRY hook must update pain_signals from alerts."""
 		from red_pill.core.plugin_engine import PluginScope
@@ -178,3 +204,37 @@ class TestHomeostasisPlugin:
 		plugin = self._make_plugin()
 		tone = plugin._get_tone_for("UNKNOWN")
 		assert tone == "PURPLE"
+
+	def test_purge_leaked_duplicates_deletes_stale_points(self):
+		"""_purge_leaked_duplicates must delete all points except _SOUL_POINT_ID."""
+		from types import SimpleNamespace
+
+		plugin = self._make_plugin()
+
+		# Simulate 3 stale points + the singleton
+		stale1 = SimpleNamespace(id="aaaa-1111", payload={})
+		stale2 = SimpleNamespace(id="bbbb-2222", payload={})
+		singleton = SimpleNamespace(id=_SOUL_POINT_ID, payload={})
+		plugin.memory_mgr.client.scroll.return_value = ([stale1, stale2, singleton], None)
+
+		plugin._purge_leaked_duplicates()
+
+		# Should delete only the stale points
+		plugin.memory_mgr.client.delete.assert_called_once()
+		delete_call = plugin.memory_mgr.client.delete.call_args
+		deleted_ids = delete_call[1]["points_selector"].points
+		assert "aaaa-1111" in deleted_ids
+		assert "bbbb-2222" in deleted_ids
+		assert _SOUL_POINT_ID not in deleted_ids
+
+	def test_purge_does_nothing_when_clean(self):
+		"""_purge_leaked_duplicates must not call delete when only the singleton exists."""
+		from types import SimpleNamespace
+
+		plugin = self._make_plugin()
+		singleton = SimpleNamespace(id=_SOUL_POINT_ID, payload={})
+		plugin.memory_mgr.client.scroll.return_value = ([singleton], None)
+
+		plugin._purge_leaked_duplicates()
+
+		plugin.memory_mgr.client.delete.assert_not_called()

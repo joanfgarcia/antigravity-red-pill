@@ -24,10 +24,12 @@ This document provides a comprehensive list of all parameters available in the `
 ### Memory Processing (FastEmbed & Inference)
 | Parameter | Default | Description |
 | :--- | :--- | :--- |
-| `EMBEDDING_MODEL` | `sentence-transformers/all-MiniLM-L6-v2` | The FastEmbed model to use. Modifying this requires completely wiping the vector database. |
+| `EMBEDDING_MODEL` | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` | The FastEmbed model. Multilingual (ES/EN), 384-dim. Changing it keeps the vector size (no schema wipe) but stored vectors are stale until recomputed with `scripts/reembed_collections.py --execute`. |
 | `VECTOR_SIZE` | `384` | Expected dimensional output from the embedding model. Must match the model exactly. |
 | `EXECUTION_PROVIDER`| `None` | Hardware acceleration strategy (e.g., `cpu`, `cuda`, `coreml`). |
 | `FASTEMBED_CACHE_PATH` | `<project>/storage/models` | Absolute path to the locally cached embedding model weights. |
+| `READ_PATH_PRUNING_ENABLED` | `False` | When `False`, `search_and_reinforce` hides eroded engrams from a result but never DELETES them — forgetting is the sleep cycle's job, not a lookup's. `True` restores the legacy destructive-read behavior. |
+| `SLEEP_CHUNK_SIZE` | `6000` | Max characters per chunk the sleep cycle feeds the distiller. Large with a big-context distiller (qwen35_9b, 32k); keep `<=1000` with Samantha (4k ctx). |
 
 ---
 

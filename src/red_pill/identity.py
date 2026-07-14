@@ -13,13 +13,12 @@ from red_pill.core.paths import get_state_dir
 
 cfg = get_config()
 
-IDENTITY_FILE = str(get_state_dir() / "identity.json")
-
 
 def _load_identity() -> Dict[str, Any]:
-	if os.path.exists(IDENTITY_FILE):
+	identity_file = str(get_state_dir() / "identity.json")
+	if os.path.exists(identity_file):
 		try:
-			with open(IDENTITY_FILE, "r") as f:
+			with open(identity_file, "r") as f:
 				return cast(Dict[str, Any], json.load(f))
 		except Exception:
 			return {}
@@ -27,8 +26,9 @@ def _load_identity() -> Dict[str, Any]:
 
 
 def _save_identity(identity: Dict[str, Any]) -> None:
-	os.makedirs(os.path.dirname(IDENTITY_FILE), exist_ok=True)
-	with open(IDENTITY_FILE, "w") as f:
+	identity_file = str(get_state_dir() / "identity.json")
+	os.makedirs(os.path.dirname(identity_file), exist_ok=True)
+	with open(identity_file, "w") as f:
 		json.dump(identity, f, indent=4)
 
 

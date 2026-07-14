@@ -341,6 +341,11 @@ if [ "$OS_NAME" = "Darwin" ]; then
 		<string>/bin/bash</string>
 		<string>_PERSISTENT_DIR_/start.sh</string>
 	</array>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>MINION_PROFILE</key>
+		<string>granite_8b</string>
+	</dict>
 	<key>RunAtLoad</key>
 	<true/>
 	<key>KeepAlive</key>
@@ -368,12 +373,18 @@ After=network.target
 
 [Service]
 Type=simple
+# Distiller profile served by the background daemon. Overrides run_dual_bind's
+# "samantha" default. granite_8b is the AD-022 primary; hermes_8b is the fallback.
+Environment=MINION_PROFILE=granite_8b
 ExecStart=/bin/bash _PERSISTENT_DIR_/start.sh
 Restart=always
 Nice=19
 IOSchedulingClass=idle
-StandardOutput=append:_PERSISTENT_DIR_/output.log
-StandardError=append:_PERSISTENT_DIR_/error.log
+NoNewPrivileges=yes
+PrivateTmp=yes
+# journald rotates automatically; append: files grow unbounded.
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=default.target

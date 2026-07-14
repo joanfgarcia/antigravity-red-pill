@@ -279,6 +279,11 @@ class SentinelAuditor:
 						# Prevent self-referential feedback loops from the auditor's own logging
 						if "active pain detected" in line_lower or "recent daemon errors in journal" in line_lower:
 							continue
+						# Filter ASGI/uvicorn framework internals (not real application errors)
+						if "exception in asgi application" in line_lower:
+							continue
+						if "starlette/" in line_lower or "uvicorn/" in line_lower:
+							continue
 						all_errors.append(line)
 
 		# 4. Scan external service error logs (stdout/stderr redirected to files)
@@ -295,6 +300,14 @@ class SentinelAuditor:
 						if "llama_model_loader" in line_lower:
 							continue
 						if "active pain detected" in line_lower or "recent daemon errors in journal" in line_lower:
+							continue
+						# Filter benign ASGI/uvicorn framework noise (model load/unload cycles)
+						if "exception in asgi application" in line_lower:
+							continue
+						if "starlette/" in line_lower or "uvicorn/" in line_lower:
+							continue
+						# Filter GNOME desktop noise (gnome-keyring, gnome-software, gnome-shell)
+						if "gnome-keyring" in line_lower or "gnome-software" in line_lower or "gnome-shell" in line_lower:
 							continue
 						all_errors.append(f"[{log_path.name}] {line}")
 
@@ -373,10 +386,14 @@ class SentinelAuditor:
 			self.logger.error(f"Failed to load sentinel plugins: {e}")
 
 		# 3. VRAM Exhaustion
-		vram_res = subprocess.run(
-			["nvidia-smi", "--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits"], stdout=subprocess.PIPE, text=True
-		)
-		if vram_res.returncode == 0 and vram_res.stdout.strip():
+		try:
+			vram_res = subprocess.run(
+				["nvidia-smi", "--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits"], stdout=subprocess.PIPE, text=True
+			)
+		except FileNotFoundError:
+			# No NVIDIA host — skip VRAM check, never drop the whole vitals report.
+			vram_res = None
+		if vram_res is not None and vram_res.returncode == 0 and vram_res.stdout.strip():
 			try:
 				used, total = map(int, vram_res.stdout.strip().split(","))
 				if total > 0 and (used / total) > 0.95:

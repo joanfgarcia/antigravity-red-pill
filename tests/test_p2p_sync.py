@@ -267,7 +267,18 @@ def test_transmission_and_incoming_processing(qdrant_clients, temp_dbs, monkeypa
 		inbox_tgt = MinionInbox()
 		for r in rows:
 			payload_data = json.loads(r["payload"])
-			inbox_tgt.drop_report(event_id=f"test_sync_{uuid.uuid4()}", source="NeonLink (rings)", status="pending", content=payload_data["text"])
+			inbox_tgt.drop_report(
+				event_id=f"test_sync_{uuid.uuid4()}",
+				source="NeonLink (rings)",
+				status="pending",
+				content=payload_data["text"],
+				originator="TargetPeer",
+			)
+
+	# Fail-closed defense-in-depth: sync is only applied from a known peer.
+	import red_pill.core.p2p_sync as p2p
+
+	monkeypatch.setattr(p2p, "_known_peer_identifiers", lambda: {"TargetPeer"})
 
 	applied = engine_tgt.process_incoming_syncs()
 	assert applied == 1
@@ -282,3 +293,26 @@ def test_transmission_and_incoming_processing(qdrant_clients, temp_dbs, monkeypa
 			os.remove(path_nl)
 	except PermissionError:
 		pass
+
+
+def test_incoming_sync_rejected_from_unknown_originator(qdrant_clients, temp_dbs, monkeypatch):
+	"""A sync report from an originator not in peers.json must NOT be applied (fail closed)."""
+	import red_pill.core.p2p_sync as p2p
+	from red_pill.core.inbox import MinionInbox
+
+	_, client_tgt = qdrant_clients
+	_, db_tgt = temp_dbs
+	engine_tgt = SovereignSyncEngine(db_path=db_tgt, qdrant_client=client_tgt)
+
+	monkeypatch.setattr(p2p, "_known_peer_identifiers", lambda: {"TrustedPeer"})
+
+	chunk = {"session_id": "evil", "chunk_index": 0, "total_chunks": 1, "payload": "x", "sha256": "y"}
+	MinionInbox().drop_report(
+		event_id="evil_sync",
+		source="NeonLink (rings)",
+		status="pending",
+		content=json.dumps(chunk),
+		originator="AttackerBot",
+	)
+
+	assert engine_tgt.process_incoming_syncs() == 0

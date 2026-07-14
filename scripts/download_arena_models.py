@@ -1,5 +1,6 @@
 import json
 import os
+import subprocess
 import urllib.request
 
 
@@ -31,5 +32,6 @@ os.makedirs(MODELS_DIR, exist_ok=True)
 for url in urls:
 	if url:
 		print(f"Downloading {url}...")
-		os.system(f"wget -b -q -c {url} -P {MODELS_DIR}")
+		# argv form (no shell): a manipulated HF filename can't inject shell commands.
+		subprocess.Popen(["wget", "-b", "-q", "-c", url, "-P", MODELS_DIR])
 		print("Download started in background.")

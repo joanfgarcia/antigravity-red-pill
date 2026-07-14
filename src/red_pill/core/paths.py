@@ -96,12 +96,22 @@ def get_log_dir() -> Path:
 def get_keys_dir() -> Path:
 	path = get_data_dir() / "keys"
 	path.mkdir(parents=True, exist_ok=True)
+	# Sensitive: private keys/seeds. Enforce owner-only regardless of umask.
+	try:
+		os.chmod(path, 0o700)
+	except OSError:
+		pass
 	return path
 
 
 def get_unencrypted_conversations_dir() -> Path:
 	path = get_data_dir() / "unencrypted_conversations"
 	path.mkdir(parents=True, exist_ok=True)
+	# Sensitive: plaintext conversation content. Enforce owner-only regardless of umask.
+	try:
+		os.chmod(path, 0o700)
+	except OSError:
+		pass
 	return path
 
 
@@ -327,8 +337,12 @@ def migrate_legacy_agent_dirs() -> None:
 
 	for src, dst in migration_map:
 		if src.exists():
-			if dst.exists():
-				# If target already exists, skip to prevent overwriting newer state
+			# The dir getters above (get_keys_dir/get_staging_dir/…) mkdir on evaluation, so a
+			# directory dst always "exists" but may be empty. Treat empty-dir as absent so real
+			# legacy data is migrated, never rmtree'd unmigrated.
+			dst_has_data = dst.exists() and (dst.is_file() or any(dst.iterdir()))
+			if dst_has_data:
+				# If target already exists WITH data, skip to prevent overwriting newer state
 				# but delete the legacy source to keep ~/.agent clean
 				try:
 					if src.is_dir():
@@ -343,10 +357,11 @@ def migrate_legacy_agent_dirs() -> None:
 			try:
 				# Ensure target parent dir exists
 				dst.parent.mkdir(parents=True, exist_ok=True)
-				if src.is_dir():
-					shutil.move(str(src), str(dst))
-				else:
-					shutil.move(str(src), str(dst))
+				# Remove an empty dst dir the getters pre-created, so move lands src AT dst
+				# rather than nesting it inside (dst/src_basename).
+				if dst.is_dir() and not any(dst.iterdir()):
+					dst.rmdir()
+				shutil.move(str(src), str(dst))
 			except Exception as e:
 				logger.error(f"[XDG-MIGRATION] Failed to move {src.name}: {e}")
 

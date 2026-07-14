@@ -61,7 +61,7 @@ class SoulManager:
 
 				# 2. Download snapshot
 				snap_path = os.path.join(backup_dir, f"{coll}_{timestamp}.snapshot")
-				with requests.get(f"{self.qdrant_url}/collections/{coll}/snapshots/{snap_name}", headers=headers, stream=True) as r:
+				with requests.get(f"{self.qdrant_url}/collections/{coll}/snapshots/{snap_name}", headers=headers, stream=True, timeout=(5, 300)) as r:
 					r.raise_for_status()
 					with open(snap_path, "wb") as f:
 						shutil.copyfileobj(r.raw, f)

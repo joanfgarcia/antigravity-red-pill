@@ -29,7 +29,11 @@ class NeonLinkCheck(ServiceSentinelPlugin):
 		return "NEON_LINK_ENABLED"
 
 	def audit_health(self, cfg: Any) -> List[AuditFinding]:
-		findings = []
+		findings: List[AuditFinding] = []
+		# neon-link <=0.5.1 never serves its HTTP API: probing it would emit a permanent
+		# severity-10 false positive and trigger heal restarts of a healthy bridge.
+		if not getattr(cfg, "NEON_LINK_HTTP_API", False):
+			return findings
 		try:
 			urllib.request.urlopen(cfg.NEON_LINK_URL, timeout=2)
 		except Exception as e:

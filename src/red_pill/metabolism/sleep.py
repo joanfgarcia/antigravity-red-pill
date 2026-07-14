@@ -277,6 +277,30 @@ def _sanitize_llm_json(raw_json: str) -> str:
 	return _re.sub(r"\\(.)", _fix_escape, raw_json)
 
 
+# Substrings that betray the distiller echoing its own prompt/format spec back
+# as if it were memory content (observed in production hubs).
+_TEMPLATE_ECHO_MARKERS = (
+	"synthesize these memory chunks",
+	"[memory synthesis",
+	"master summary",
+	"the emotion is one of",
+	"the intensity is a float",
+	"memory chunks into a",
+)
+
+
+def _is_template_echo(text: str) -> bool:
+	"""True if the distiller leaked its instructions (or produced nothing) instead of content.
+
+	No length heuristic: a legitimately short summary ("Bug de tree_hash arreglado.")
+	must survive. The high-precision signal is the instruction echo itself.
+	"""
+	if not text or not text.strip():
+		return True
+	low = text.strip().lower()
+	return any(marker in low for marker in _TEMPLATE_ECHO_MARKERS)
+
+
 def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[str, Any]:
 	"""
 	Lazarus Phase 2: Consolidation (Sleep) & Affective Preservation
@@ -287,14 +311,18 @@ def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[
 
 	from red_pill.core.providers import ProviderRegistry
 
-	fallback = {"summary": raw_content[:500] + "...", "emotion": "neutral", "intensity": 0.5, "category": fallback_category}
+	# Explicit flag so callers can detect the fallback reliably — the old heuristic
+	# (summary endswith "..." and len > 490) misses short chunks whose raw fallback is <490 chars.
+	fallback = {"summary": raw_content[:500] + "...", "emotion": "neutral", "intensity": 0.5, "category": fallback_category, "_is_fallback": True}
 
 	system_prompt = (
 		"[Refraction: COGNITIVE_DISTILLER] Style: Analytical, strict. "
 		"Focus: Distill the interaction into a valid JSON object. "
 		"Format requirements:\n"
 		"Return a strict JSON object with these keys:\n"
-		"- 'summary': Concise, deep summary of facts, design decisions, debugging, or reflections.\n"
+		"- 'summary': Concise, deep summary of facts, design decisions, debugging, or reflections. "
+		"When the interaction has more than one voice, the summary MUST capture BOTH the user's point/question "
+		"AND the assistant's response, correction, or decision — never only one side.\n"
 		"- 'emotion': One of: joy, sadness, fear, disgust, anger, anxiety, envy, embarrassment, ennui, nostalgia, neutral.\n"
 		"- 'intensity': Float between 0.0 and 1.0 representing severity or emotional charge.\n"
 		"- 'category': 'work' for code, tests, commands, system configs, technical design, database, or MCPs; "
@@ -374,6 +402,10 @@ def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[
 					category_val = str(category_val)
 				category_val = str(category_val).lower().strip()
 
+				if _is_template_echo(summary_val):
+					logger.warning("[SLEEP ENGINE] Distiller echoed the prompt/format spec — discarding and retrying.")
+					continue
+
 				return {
 					"summary": summary_val,
 					"emotion": emotion_val,
@@ -428,16 +460,7 @@ def synthesize_hub(summaries: List[str]) -> str:
 		}
 	).encode("utf-8")
 
-	# Reuse existing transport detection
-	url = getattr(cfg, "MLX_LM_URL", "http://127.0.0.1:8760/v1/chat/completions")
-	opener = urllib.request.build_opener()
-	req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
-	try:
-		with opener.open(req, timeout=60) as response:
-			data = json.loads(response.read().decode())
-			return str(data["choices"][0]["message"]["content"].strip())
-	except Exception as e:
-		logger.error(f"[SLEEP ENGINE] Failed to synthesize hub: {e}")
+	def _aggregate_fallback() -> str:
 		if summaries:
 			first_sum = summaries[0][:60]
 			if len(summaries[0]) > 60:
@@ -449,6 +472,22 @@ def synthesize_hub(summaries: List[str]) -> str:
 				return f"[Aggregated Memory Sequence ({len(summaries)} nodes)] {first_sum} -> {last_sum}"
 			return f"[Aggregated Memory (1 node)] {first_sum}"
 		return "[Aggregated Memory Sequence]"
+
+	# Reuse existing transport detection
+	url = getattr(cfg, "MLX_LM_URL", "http://127.0.0.1:8760/v1/chat/completions")
+	opener = urllib.request.build_opener()
+	req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+	try:
+		with opener.open(req, timeout=60) as response:
+			data = json.loads(response.read().decode())
+			result = str(data["choices"][0]["message"]["content"].strip())
+			if _is_template_echo(result):
+				logger.warning("[SLEEP ENGINE] Hub synthesis echoed the prompt — using deterministic aggregate.")
+				return _aggregate_fallback()
+			return result
+	except Exception as e:
+		logger.error(f"[SLEEP ENGINE] Failed to synthesize hub: {e}")
+		return _aggregate_fallback()
 
 
 class EphemeralServer:
@@ -619,6 +658,10 @@ def distill_session_anchors(memory_manager, hub_summaries: List[str]) -> Optiona
 		with opener.open(req, timeout=90) as response:
 			data = json.loads(response.read().decode())
 			anchor_text = data["choices"][0]["message"]["content"].strip()
+
+			if _is_template_echo(anchor_text):
+				logger.warning("[SLEEP ENGINE] Session anchor echoed the prompt — not persisting.")
+				return None
 
 			# Persist the Anchor
 			memory_manager.add_memory(
@@ -878,6 +921,10 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 	consecutive_llm_failures = 0
 	scroll_limit = cfg.SLEEP_SCROLL_LIMIT
 	max_llm_failures = cfg.SLEEP_MAX_LLM_FAILURES
+	# Raw points that never get deleted (write failures / LLM-failed with 0 chunks) would be
+	# re-scrolled from the top every batch and re-distilled into NEW parents (duplicates),
+	# spinning up to max_batches. Track them and exclude them from subsequent scrolls.
+	failed_ids: set = set()
 
 	while True:
 		batch_number += 1
@@ -893,7 +940,10 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 			break
 
 		try:
-			scroll_result, _ = client.scroll(collection_name=collection, scroll_filter=Filter(), limit=scroll_limit, with_payload=True)
+			from qdrant_client import models as _qm
+
+			scroll_filter = Filter(must_not=[_qm.HasIdCondition(has_id=list(failed_ids))]) if failed_ids else Filter()
+			scroll_result, _ = client.scroll(collection_name=collection, scroll_filter=scroll_filter, limit=scroll_limit, with_payload=True)
 		except Exception as e:
 			logger.error(f"[SLEEP ENGINE] Failed to fetch raw buffer: {e}")
 			break
@@ -950,7 +1000,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 			for i, chunk in enumerate(chunks):
 				distilled = distill_engram(chunk, fallback_category=fallback_cat)
 				summary = distilled.get("summary", "")
-				if summary.endswith("...") and len(summary) > 490:
+				if distilled.get("_is_fallback"):
 					consecutive_llm_failures += 1
 					point_llm_failed = True
 					continue
@@ -1066,6 +1116,11 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 			elif not point_llm_failed and not point_write_failed:
 				client.delete(collection_name=collection, points_selector=[raw_id])
 
+			# Any raw point NOT deleted this pass would be re-scrolled and re-distilled into a
+			# fresh parent next batch — record it so the scroll filter skips it (no duplicates).
+			if point_write_failed or point_llm_failed:
+				failed_ids.add(raw_id)
+
 		total_processed += batch_processed
 
 	# ── Staging Buffer Processing (Productor-Consumidor Fallback) ─────────
@@ -1086,6 +1141,8 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 
 				raw_id = payload.get("id", filename.replace(".json", ""))
 				model_name = payload.get("model") or payload.get("summary", {}).get("model") or "unknown"
+				staging_workspace = payload.get("workspace")
+				ws_meta = {"workspace": staging_workspace} if staging_workspace else {}
 				raw_text = ""
 				for step in payload.get("steps", []):
 					txt = step.get("message", {}).get("text", "")
@@ -1110,7 +1167,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 				for chunk in chunks:
 					distilled = distill_engram(chunk, fallback_category="work")
 					summary = distilled.get("summary", "")
-					if summary.endswith("...") and len(summary) > 490:
+					if distilled.get("_is_fallback"):
 						continue  # LLM failed to distill
 
 					current_threshold = 0.0 if hibernating else cfg.SLEEP_CULL_THRESHOLD
@@ -1130,7 +1187,13 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 						new_id = memory_manager.add_memory(
 							collection=chunk_col,
 							text=summary,
-							metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id, "model": model_name, "parent_id": parent_id},
+							metadata={
+								"lazarus_phase": "sequence_chunk",
+								"source_buffer_id": raw_id,
+								"model": model_name,
+								"parent_id": parent_id,
+								**ws_meta,
+							},
 							color="blue" if chunk_col == "work_memories" else "purple",
 							emotion=distilled.get("emotion", "neutral"),
 							intensity=distilled.get("intensity", 0.5),
@@ -1157,6 +1220,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 								"source_buffer_id": raw_id,
 								"model": model_name,
 								"parent_id": parent_id,
+								**ws_meta,
 							},
 							color="cyan",
 							emotion=surviving_chunks[-1]["emotion"],
@@ -1187,6 +1251,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 							"model": model_name,
 							"associations": child_ids,
 							"immune": True,
+							**ws_meta,
 						}
 
 						# Ariadne's Thread for raw parents in work_memories

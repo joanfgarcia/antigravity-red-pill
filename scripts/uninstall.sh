@@ -41,5 +41,12 @@ if confirm "Quitar el bloque red-pill (Sovereign Handshake/Agent_Core) de las an
 fi
 
 if confirm "Borrado total ($IA_DIR)?"; then
-	rm -rf "$IA_DIR"
+	# Sentinel guard: refuse to rm -rf unless IA_DIR really is a red-pill install root.
+	# Protects against ANTIGRAVITY_IA_DIR being empty/$HOME/'/'.
+	if [ -f "$IA_DIR/red-pill/pyproject.toml" ] || [ -f "$IA_DIR/pyproject.toml" ]; then
+		rm -rf "$IA_DIR"
+	else
+		echo -e "${RED}[ABORTADO] '$IA_DIR' no parece un install de red-pill (sin pyproject.toml centinela).${NC}"
+		exit 1
+	fi
 fi

@@ -111,10 +111,11 @@ elif [[ "$MODE" == "user" ]]; then
 		exit 1
 	fi
 	
-	TEMP_DIR="/tmp/rp-update-temp"
+	# Private temp dir (mode 700, unpredictable name) — avoids TOCTOU/symlink attacks in
+	# the shared /tmp before the subsequent rsync --delete into the repo tree.
+	TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/rp-update.XXXXXX")"
+	trap 'rm -rf "$TEMP_DIR"' EXIT
 	echo -e "${BLUE}Extrayendo ZIP en directorio temporal ($TEMP_DIR)...${NC}"
-	rm -rf "$TEMP_DIR"
-	mkdir -p "$TEMP_DIR"
 	unzip -q "$ZIP_PATH" -d "$TEMP_DIR/"
 	
 	# Find the actual root inside the extracted zip.
@@ -233,6 +234,18 @@ if command -v uv &> /dev/null; then
 	
 	# Thread Weaving (idempotent)
 	uv run python scripts/thread_weave_migrate.py
+
+	# soul_memories leak cleanup (v7.4.4 — purge duplicate points from pre-fix homeostasis plugin)
+	echo -e "${BLUE}Purgando duplicados de soul_memories (fix homeostasis singleton)...${NC}"
+	uv run python -c "
+from red_pill.plugins.trinity_homeostasis.plugin import HomeostasisPlugin
+import asyncio
+p = HomeostasisPlugin.__new__(HomeostasisPlugin)
+from red_pill.memory import MemoryManager
+p.memory_mgr = MemoryManager()
+p.collection = 'soul_memories'
+p._purge_leaked_duplicates()
+" 2>/dev/null && echo -e "${GREEN}✓ soul_memories limpia.${NC}" || echo -e "${YELLOW}[WARN] No se pudo purgar soul_memories (Qdrant offline?).${NC}"
 
 	# Per-workspace memory relocation (.claude/memory → .red-pill/memory, idempotente)
 	echo -e "${BLUE}Migrando memoria por-workspace (.claude/memory → .red-pill/memory)...${NC}"

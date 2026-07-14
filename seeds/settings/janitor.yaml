@@ -1,0 +1,17 @@
+# Configuración global de tareas del Janitor Minion
+plugins:
+  events_db_purge:
+    enabled: true
+    days_to_keep: 7
+  scratch_purge:
+    enabled: true
+    days_to_keep: 7
+  log_rotation:
+    enabled: true
+    max_size_bytes: 10485760  # 10MB
+    days_to_keep: 7           # Retención de logs rotados
+  orphaned_parents_sweep:
+    enabled: true
+  sqlite_interactions_archiver:
+    enabled: true
+    days_to_keep: 30

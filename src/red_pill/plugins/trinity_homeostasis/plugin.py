@@ -1,4 +1,5 @@
 import datetime
+import logging
 from typing import Any, Dict, List
 
 from qdrant_client.models import PointStruct
@@ -6,6 +7,12 @@ from qdrant_client.models import PointStruct
 import red_pill.config as cfg
 from red_pill.core.plugin_engine import PluginScope, Priority, SovereignPlugin
 from red_pill.memory import MemoryManager
+
+logger = logging.getLogger(__name__)
+
+# Deterministic UUID — singleton point, upsert always overwrites.
+# Generated from uuid5(NAMESPACE_DNS, "red-pill.soul_memories.emotional_state")
+_SOUL_POINT_ID = "a7e3f1b0-770a-5d4e-b9c1-0e8f2a3b4c5d"
 
 
 class EmotionalState:
@@ -47,17 +54,48 @@ class HomeostasisPlugin(SovereignPlugin):
 		self.collection = "soul_memories"
 		self.memory_mgr.storage.ensure_collection(self.collection)
 
-		# Cargar estado previo si existe
-		points, _ = self.memory_mgr.client.scroll(collection_name=self.collection, limit=1, with_payload=True)
+		# Purge leaked duplicates from pre-fix versions (uuid4 per upsert).
+		# Keep only the singleton point; delete everything else.
+		self._purge_leaked_duplicates()
+
+		# Load previous state from the singleton point
+		try:
+			points = self.memory_mgr.client.retrieve(
+				collection_name=self.collection,
+				ids=[_SOUL_POINT_ID],
+				with_payload=True,
+			)
+		except Exception:
+			points = []
 
 		if points and points[0].payload:
-			payload = points[0].payload
+			p = points[0].payload
 			self.state = EmotionalState()
-			self.state.pain_signals = payload.get("pain_signals", 0)
-			self.state.frustration = payload.get("frustration", 0.0)
-			self.state.flow_momentum = payload.get("flow_momentum", 0.0)
+			self.state.pain_signals = p.get("pain_signals", 0)
+			self.state.frustration = p.get("frustration", 0.0)
+			self.state.flow_momentum = p.get("flow_momentum", 0.0)
 		else:
 			self.state = EmotionalState()
+
+	def _purge_leaked_duplicates(self) -> None:
+		"""One-time cleanup: delete all points except the singleton."""
+		try:
+			all_points, _ = self.memory_mgr.client.scroll(
+				collection_name=self.collection,
+				limit=500,
+				with_payload=True,
+			)
+			stale_ids: list = [str(p.id) for p in all_points if str(p.id) != _SOUL_POINT_ID]  # type: ignore[arg-type]
+			if stale_ids:
+				from qdrant_client.models import PointIdsList
+
+				self.memory_mgr.client.delete(
+					collection_name=self.collection,
+					points_selector=PointIdsList(points=stale_ids),
+				)
+				logger.info(f"[Homeostasis] Purged {len(stale_ids)} leaked soul_memories duplicates.")
+		except Exception as e:
+			logger.warning(f"[Homeostasis] Failed to purge leaked duplicates: {e}")
 
 	async def activate(self) -> None:
 		pass
@@ -70,21 +108,28 @@ class HomeostasisPlugin(SovereignPlugin):
 			self.state.pain_signals = len(alerts)
 
 		elif scope == PluginScope.COGNITION:
+			# Refresh pain from the live signal cortex (source of truth). The plugin runs inside
+			# the MCP process while telemetry runs in a separate oneshot, so an in-memory TELEMETRY
+			# hook there could never reach this instance — we read the shared Qdrant collection instead.
+			try:
+				sigs, _ = self.memory_mgr.client.scroll(collection_name="signal_memories", limit=100, with_payload=True, with_vectors=False)
+				self.state.pain_signals = sum(1 for s in sigs if s.payload and s.payload.get("signal_type") in ("pain", "fever"))
+			except Exception:
+				pass
+
 			# Aquí está la magia: inyectamos nuestro estado en el prompt que va al LLM
 			current_color = self.state.get_color()
 
 			# Forzamos la directiva emocional actual sobrepisando cualquier default
 			payload["system_prompt_overrides"] = {"OPERATOR_COLOR": current_color, "TONE_DIRECTIVE": self._get_tone_for(current_color)}
 
-			# Persistir estado asíncronamente en Qdrant
-			import uuid
-
+			# Persist state — deterministic ID, always overwrites the same point
 			self.memory_mgr.client.upsert(
 				collection_name=self.collection,
 				points=[
 					PointStruct(
-						id=str(uuid.uuid4()),
-						vector=[0.0] * cfg.VECTOR_SIZE,  # Vector dummy alineado dinámicamente
+						id=_SOUL_POINT_ID,
+						vector=[0.0] * cfg.VECTOR_SIZE,
 						payload={
 							"pain_signals": self.state.pain_signals,
 							"frustration": self.state.frustration,

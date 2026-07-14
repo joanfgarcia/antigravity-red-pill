@@ -4,6 +4,90 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-022] Distiller Model Selection — Granite-4.1-8B (primary) + Hermes-3-8B (fallback)
+**Date**: 2026-07-13  
+**Context**: v7.5.0 — choosing the sleep-cycle distiller after the AD-021 remediation  
+**Status**: ACCEPTED (operator-ratified); live-config activation pending  
+
+### 1. The Problem
+The distiller is the most quality-critical model in the Bünker (it decides what becomes a
+permanent engram and how it is labelled). Samantha (Mistral-7B, 2023) was retired. The question
+was which small local model replaces it. Candidates were benchmarked, not chosen by reputation.
+
+### 2. The Evidence (measured, not assumed)
+Two GPU bake-offs (`scripts/distiller_bakeoff.py`, `scripts/distiller_fidelity.py`, RTX 5070 8 GB,
+2026-07-13). Full raw outputs: [DISTILLER_BAKEOFF.md](../BENCHMARKS/DISTILLER_BAKEOFF.md) /
+[DISTILLER_FIDELITY.md](../BENCHMARKS/DISTILLER_FIDELITY.md).
+
+**Format aptitude** (technical / philosophical / noise / emotional probes):
+
+| Model | JSON | Spanish | No `<think>` | Emotion ok | Avg latency |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| granite_8b | 4/4 | 4/4 | 4/4 | 4/4 | 1.0 s |
+| hermes_8b | 4/4 | 4/4 | 4/4 | 4/4 | 1.1 s |
+| piaget_8b | 4/4 | 4/4 | 0/4 | 4/4 | 0.9 s |
+| beck_8b | 4/4 | 4/4 | 0/4 | 4/4 | 1.0 s |
+| qwen35_9b | 1/4 | 1/4 | 4/4 | 1/4 | 9.4 s |
+| samantha | 0/4 | 0/4 | 4/4 | 0/4 | 2.6 s |
+
+**Fidelity** (does the summary capture BOTH the user and the assistant), BASE vs TUNED prompt:
+
+| Model | BASE both-sides | TUNED both-sides |
+| :--- | :--- | :--- |
+| hermes_8b | 2/3 | 3/3 |
+| granite_8b | 2/3 | 3/3 |
+
+Net: `granite_8b` and `hermes_8b` co-win on every measured axis. The fidelity gap was a *prompt*
+problem (fixed for all models in the production `distill_engram` prompt), not a model deficiency.
+
+### 3. The Decision
+**Granite-4.1-8B is the primary distiller; Hermes-3-8B is retained as fallback** (keeps
+`logic`/`emotional_intelligence` capabilities). Granite carries the sole `distillation` capability;
+`MINION_PROFILE=granite_8b`.
+
+### 4. Rationale (tiebreakers, since the models tied on merit)
+1. **License**: Granite is **Apache-2.0**; Hermes inherits the Llama-3.1 Community License
+   (field-of-use + 700M-MAU clauses). For a sovereign, redistributable project the piece that
+   distills memory should be the most permissively licensed — decisive, and non-speculative.
+2. **Philosophy fit**: Granite is IBM's deliberately-small, structured-output/RAG/tool-use
+   workhorse — a "small expert" by design, matching red-pill's model philosophy.
+3. **Trajectory**: newer, actively maintained, hybrid-arch efficiency, plausibly fresher/cleaner
+   training data (unverified — the bake-off, not recency, is the evidence).
+4. **Fallback = prudence**: Granite's architecture is newer; if a llama.cpp update fails to load
+   it, the sleep cycle degrades gracefully to Hermes.
+
+### 5. The Meta-Lesson
+Hermes-3 (2024) sweeping the newer/larger models is not an anomaly — it *validates* the
+small-expert thesis. A model fine-tuned for steerability and strict output beats a newer
+generalist on a narrow, format-bound task. And the biggest quality lever was not the model at
+all but the **both-sides prompt**. See [DISTILLER_SELECTION.md](COGNITIVE/DISTILLER_SELECTION.md),
+[DISTILLER_BAKEOFF.md](../BENCHMARKS/DISTILLER_BAKEOFF.md), [DISTILLER_FIDELITY.md](../BENCHMARKS/DISTILLER_FIDELITY.md).
+
+---
+
+## [AD-021] Episodic Memory Remediation — Distiller, Embeddings, Non-Destructive Reads
+**Date**: 2026-07-13  
+**Context**: v7.5.0 — Retrospective (Aleth/Fable) on why social/work_memories never behaved as *useful* memory  
+**Status**: ACCEPTED & IMPLEMENTED (repo); operator-gated steps pending  
+
+### 1. The Problem
+Three compounding failures: (a) 87% of `work_memories` was raw material (`raw_parent`/`sequence_chunk`/`_is_fragment`) burying the distilled hubs; (b) the distiller (Samantha, Mistral-7B) stored its own prompt/format spec as memory, validated only by "is it JSON"; (c) recall was crippled — English-only embeddings over Spanish content, two interceptors reading a nonexistent payload field, and reads that *deleted* eroded engrams.
+
+### 2. The Decision
+- **Distiller**: retire Samantha from the `distillation` role. **Qwen2.5-Coder was explicitly rejected** by the operator — a coder is poor at the narrative/philosophical judgment the affective-culling role needs. Candidates (Qwen3.5-9B, Beck-8B, Piaget-8B, Hermes-3-8B) were benchmarked with `scripts/distiller_bakeoff.py` on GPU.
+  - **Bake-off outcome (2026-07-13, GPU RTX 5070)**: it overturned the a-priori favorite. **Qwen3.5-9B** is a strong generalist but ignores "no reasoning" and closes valid JSON only 1/4 of the time (verbose prose preamble). **hermes_8b** won on format compliance (4/4 strict JSON, Spanish, valid emotion, no `<think>`, ~1 s) and is now the sole `distillation` carrier; **piaget_8b** is the affective-depth alternative (`<think>` token tax). See [DISTILLER_SELECTION.md](COGNITIVE/DISTILLER_SELECTION.md) and [DISTILLER_BAKEOFF.md](../BENCHMARKS/DISTILLER_BAKEOFF.md). Inference supports GPU / CPU / hybrid partial-offload (vram_tiers).
+- **Embeddings**: `paraphrase-multilingual-MiniLM-L12-v2` (ES/EN), same 384-dim so no schema migration; a resumable dry-run-default script recomputes stored vectors.
+- **Non-destructive reads**: forgetting is the sleep cycle's job; a lookup must never delete. Gated behind `READ_PATH_PRUNING_ENABLED=False`.
+- **Guard + hygiene**: anti-template-echo guard on distillation; hide raw material from search; quarantine fragments to `archive_memories`; propagate the `workspace` tag; emit a recall utility metric.
+
+### 3. The Implementation
+Ten milestones on `fix/fable5-patches`, one local commit each (see `.red-pill/memory/PLAN_MEMORY_REMEDIATION.md`). Interceptor field fix, search exclusions, `_is_template_echo`, profile/template changes, workspace tag, `READ_PATH_PRUNING_ENABLED`, embedding model + `reembed_collections.py`, `quarantine_fragments.py`, `RecallEvent`, docs. Full suite green, ruff + mypy clean.
+
+### 4. Rationale
+The architecture (FSRS/Bayesian dual engine, hubs, Ariadne's Thread) was sound; execution failed at the distiller and the retriever. These are surgical fixes that keep the design and attack both what gets written and what gets recalled. The recall metric turns the "is memory useful" debate from opinion into data.
+
+---
+
 ## [AD-020] On-Demand Model Loading & VRAM Preemption in local LLM Daemon
 **Date**: 2026-06-28  
 **Context**: v7.3.2 — VRAM Optimization & Nico Training Preemption  

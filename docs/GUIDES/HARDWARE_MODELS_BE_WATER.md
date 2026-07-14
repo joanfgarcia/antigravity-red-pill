@@ -32,8 +32,8 @@ When running on robust GPUs (e.g., RTX 3060 12GB, RTX 4070, RTX 5070), we want m
 This is the standard threshold for decent laptops and modern mid-tier desktops. We aim for 7B/8B models in 4-bit quantization, allowing the entire model + KV cache to load directly into the VRAM for maximum speed.
 
 *   **Primary Recs:**
-	*   **Samantha-Mistral-7B (Q4_K_M)** (`TheBloke/samantha-1.2-mistral-7B-GGUF`): A Mistral 7B fine-tuned specifically on psychology, philosophy, and companionship. It excels at summarizing interactions and structuring emotional responses without hallucinating Hollywood-style narratives.
-	*   **Mistral-7B-Instruct-v0.2 (Q4_K_M)**: The solid standby. Good instruction following, though less specialized in "emotional sync" than Samantha.
+	*   **Hermes-3-Llama-3.1-8B (Q4_K_M)** (`NousResearch/Hermes-3-Llama-3.1-8B-GGUF`): A Llama 3.1 8B fine-tuned by NousResearch for instruction following, reasoning, and structured output. Superior context handling (16K native), stronger logic and tool-use capabilities than Samantha-Mistral, while retaining emotional intelligence. **Field-tested as the default `hermes_8b` profile — approved with flying colors.**
+	*   **Samantha-Mistral-7B (Q4_K_M)** (`TheBloke/samantha-1.2-mistral-7B-GGUF`): *(Legacy)* A Mistral 7B fine-tuned specifically on psychology, philosophy, and companionship. Still available for operators who prefer its empathy-first style, but no longer the default seed profile.
 
 ---
 

@@ -15,7 +15,7 @@ except ImportError:
 
 import red_pill.config as cfg
 from red_pill.affect import get_memory_engine
-from red_pill.events import MemoryAddedEvent, get_event_bus
+from red_pill.events import MemoryAddedEvent, RecallEvent, get_event_bus
 from red_pill.hive import HiveMind
 from red_pill.schemas import CreateEngramRequest, EngramPayload
 from red_pill.utils.affect import (
@@ -183,6 +183,7 @@ class MemoryManager:
 			if recursion_depth >= 3:
 				logger.warning("MEM-002: Max recursion depth (3) reached for engram fragmentation. Truncating.")
 				text = text[: self.cfg.CHUNK_THRESHOLD]
+				# Fall through to the normal single-engram save below with the truncated text.
 			else:
 				fragments = synaptic_split(text)
 				parent_id = point_id if point_id else str(uuid.uuid4())
@@ -210,8 +211,8 @@ class MemoryManager:
 						force_immune=force_immune,
 					)
 
-			# Return the ID of the anchor point
-			return parent_id
+				# Return the ID of the anchor point (fragmentation path only)
+				return parent_id
 
 		# v6.3.8: Ingestion Quality Gate (Cortex Isolation)
 		# Prevent noise and garbage from entering long-term collections.
@@ -535,7 +536,20 @@ class MemoryManager:
 			logger.error(f"Failed to record interaction pair: {e}")
 			return ""
 
-	def search_and_reinforce(self, collection: str, query: str, limit: int = 3, deep_recall: bool = False, strict: bool = True) -> List[Any]:
+	def search_and_reinforce(
+		self, collection: str, query: str, limit: int = 3, deep_recall: bool = False, strict: bool = True, caller: str = "unknown"
+	) -> List[Any]:
+		"""Single exit point: run the search, then emit a lightweight recall metric."""
+		results = self._search_and_reinforce_impl(collection, query, limit=limit, deep_recall=deep_recall, strict=strict)
+		try:
+			top_score = getattr(results[0], "score", None) if results else None
+			get_event_bus().emit(RecallEvent(collection=collection, caller=caller, query_len=len(query), hits=len(results), top_score=top_score))
+			logger.info(f"[RECALL] caller={caller} collection={collection} hits={len(results)} top_score={top_score}")
+		except Exception as e:
+			logger.debug(f"[RECALL] telemetry emit failed: {e}")
+		return results
+
+	def _search_and_reinforce_impl(self, collection: str, query: str, limit: int = 3, deep_recall: bool = False, strict: bool = True) -> List[Any]:
 		if not deep_recall:
 			import re as regex_lib
 
@@ -547,13 +561,22 @@ class MemoryManager:
 
 		vector = self._get_vector(query)
 
+		# Structural exclusions: raw material never competes with distilled hubs.
+		# raw_parent = verbatim turn, sequence_chunk = pre-synthesis chunk,
+		# _is_fragment = oversized-engram shrapnel. All bury the real hubs.
+		structural_exclusions = [
+			models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="raw_parent")),
+			models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="sequence_chunk")),
+			models.FieldCondition(key="_is_fragment", match=models.MatchValue(value=True)),
+		]
+
 		if not deep_recall:
 			search_filter = models.Filter(
 				must=[models.FieldCondition(key="reinforcement_score", range=models.Range(gte=0.2))],
-				must_not=[models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="raw_parent"))],
+				must_not=list(structural_exclusions),
 			)
 		else:
-			search_filter = models.Filter(must_not=[models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="raw_parent"))])
+			search_filter = models.Filter(must_not=list(structural_exclusions))
 
 		try:
 			results = self.client.query_points(
@@ -583,11 +606,15 @@ class MemoryManager:
 				decay_updates = engine.calculate_lazy_decay(hit.payload, current_time=time.time())
 
 				if decay_updates.get("_delete"):
-					logger.warning(f"Lazy decay DELETE ({engine_type}): engram {hit.id} in '{collection}' eroded below threshold. Removing.")
-					try:
-						self.client.delete(collection_name=collection, points_selector=models.PointIdsList(points=[hit.id]))
-					except Exception:
-						pass
+					# Eroded below threshold. Hide it from this result either way; only
+					# actually delete when read-path pruning is explicitly enabled.
+					# Forgetting is the sleep cycle's job, not a read's.
+					if self.cfg.READ_PATH_PRUNING_ENABLED:
+						logger.warning(f"Lazy decay DELETE ({engine_type}): engram {hit.id} in '{collection}' eroded below threshold. Removing.")
+						try:
+							self.client.delete(collection_name=collection, points_selector=models.PointIdsList(points=[hit.id]))
+						except Exception:
+							pass
 					continue
 
 				if decay_updates:
@@ -1137,6 +1164,7 @@ class MemoryManager:
 				pass
 
 			payload = {
+				"name": name,
 				"content": f"[{signal_type.upper()}] {name}",
 				"signal_type": signal_type,
 				"signal_source": source,

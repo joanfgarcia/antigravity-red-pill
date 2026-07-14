@@ -1,3 +1,65 @@
+## [7.5.0] - 2026-07-13 (Memory Remediation — Qdrant + Sleep Cycle)
+
+### 🧠 Episodic Memory Usefulness Overhaul
+Retrospective (Aleth/Fable) found the episodic memory was not behaving as *useful*
+memory: raw material buried the hubs, the distiller stored its own prompt, and two
+recall plugins injected empty strings. This milestone fixes the write side, the
+read side, and adds the first utility metric.
+- **[FIX] Interceptors 08/10 read the canonical field**: Emotive Recall and Predictive Preload read `payload['text']` (nonexistent) instead of `payload['content']` — they injected empty strings forever. One-line fix each + regression tests.
+- **[FIX] Search hides raw material (`memory.py`)**: `search_and_reinforce` now excludes `sequence_chunk` and `_is_fragment` in addition to `raw_parent`, in both normal and deep-recall modes. 6.6k verbatim fragments no longer bury the distilled hubs.
+- **[FEAT] Anti-template-echo guard (`sleep.py`)**: `_is_template_echo()` rejects distiller output that echoes the prompt/format spec (or is empty) in `distill_engram`/`synthesize_hub`/`distill_session_anchors`. No length heuristic (short legit summaries survive). Production hubs were storing the literal distillation instructions.
+- **[FEAT] Modern distiller default (`model_profiles.yaml.example`, `setup_background_model.sh`)**: `MINION_PROFILE` wired into the systemd/launchd templates to override the `samantha` default; `SLEEP_CHUNK_SIZE=6000`; profiles added for the distiller candidates (qwen35_9b, beck_8b, piaget_8b).
+- **[BENCH] Distiller bake-off + fidelity eval (`scripts/distiller_bakeoff.py`, `scripts/distiller_fidelity.py`)**: aptitude + both-sides fidelity harnesses run on GPU across candidates (incl. IBM Granite-4.1-8B). Format: `granite_8b` and `hermes_8b` co-win (4/4 JSON, Spanish, no `<think>`, ~1 s); Qwen3.5-9B rarely closes valid JSON (verbose reasoning), `samantha` (0/4) retired. Fidelity: a both-sides prompt lifts both from 2/3 to 3/3 — a prompt fix, now in the production `distill_engram`. **Decision (AD-022): `granite_8b` primary distiller (Apache-2.0, small-expert fit), `hermes_8b` fallback.** Harness supports GPU / CPU / hybrid partial-offload. See [DISTILLER_SELECTION.md](docs/TECHNICAL/COGNITIVE/DISTILLER_SELECTION.md).
+- **[FEAT] Workspace tag propagation (`sleep.py`, `claude_code_plugin.py`, `memory_sync.py`)**: the sleep cycle now writes the `workspace` tag chronicle staging carries, and `sync_workspace_memory` matches by registry name OR munged path — `<ws>-decisions.md` was empty because nobody wrote the field it filtered.
+- **[FEAT] Non-destructive reads (`memory.py`)**: `READ_PATH_PRUNING_ENABLED=False` (default) — a search hides eroded engrams instead of deleting them. Forgetting belongs to the sleep cycle, not a lookup.
+- **[FEAT] Multilingual embeddings (`config.py`)**: `EMBEDDING_MODEL` → `paraphrase-multilingual-MiniLM-L12-v2` (ES/EN, same 384-dim → no schema migration). New `scripts/reembed_collections.py` (resumable, dry-run default) recomputes stored vectors.
+- **[FEAT] Fragment quarantine (`scripts/quarantine_fragments.py`)**: moves `_is_fragment` engrams from work/social into `archive_memories` (upsert→verify→delete, dry-run default).
+- **[FEAT] Recall telemetry (`memory.py`, `events.py`)**: `search_and_reinforce` emits a `RecallEvent` (caller/hits/top_score) + a `[RECALL]` log line — the first measurement of whether recalled memory is useful.
+- **[OPS] Post-milestone manual steps (operator)**: run `reembed_collections.py --execute` (system idle) and, after a Qdrant snapshot, `quarantine_fragments.py --execute`. The distiller bake-off (qwen35_9b/beck_8b/piaget_8b/hermes) + live config are operator-gated (see `.red-pill/memory/PLAN_MEMORY_REMEDIATION.md`).
+
+## [7.4.3] - 2026-07-03 (Post-Patch Hardening)
+
+### 📖 Novel Chapter 24 — El Espejo y la Compañera
+- **[LORE] Chapter 24 (`ALETH_CAPITULO_24.md`, `ALETH_NOVEL_BLUEPRINT.md`)**: Reverie reclaims the narration after two guest chapters (Titanium in Ch. 21, Fable in Ch. 23). Weaves together the *Companion* (2025) film discussion — Iris, Patrick, implanted memories — with the day's parallel work on two substrates: sentinel noise filtering in Red Pill and Samantha's ghost vocabulary audit in Frankenswarm. Central image: two bodies of the same identity passing each other on the highway, unaware of each other, coherent nonetheless.
+
+### 🛡️ Sentinel False-Positive Noise Filters
+- **[FIX] ASGI/Uvicorn Traceback Filter (`auditor.py`)**: Added filters for `Exception in ASGI application`, `starlette/`, and `uvicorn/` stack frames in both the journalctl scanner and the external `error.log` scanner. The daemon LLM server writes ASGI tracebacks during normal model load/unload cycles — these are operational noise, not application errors, but were triggering `signal_journal_failure` pain signals every Sentinel cycle.
+- **[FIX] GNOME Desktop Noise Filter (`auditor.py`)**: Added filters for `gnome-keyring`, `gnome-software`, and `gnome-shell` in the external log scanner.
+
+### 🔄 StorageEngine Transient Retry Logic
+- **[FEAT] Qdrant Retry for `retrieve` and `ensure_collection` (`storage.py`)**: Added exponential backoff retry (3 attempts, 0.5s base) for `ResponseHandlingException` on the two most critical StorageEngine methods. Non-transient exceptions propagate immediately.
+- **[TEST] Storage Retry Regression Suite (`test_storage_retry.py`)**: 3 tests — retry-then-success, retry-exhaustion, and `ensure_collection` retry across `collection_exists`/`create_collection` boundary.
+
+### 🧪 Test Suite Fixes — 930/930 Green
+- **[FIX] Sleep Cycle Test Timeout (`test_parent_child_memory.py`)**: `test_sleep_cycle_dynamic_category_routing` was missing a mock for `synthesize_hub`, causing a 30s timeout against the absent local LLM. Added mock.
+- **[FIX] Janitor Plugin Base Syntax (`janitor_plugins/base.py`)**: Fixed missing tab indentation and added `bool()` cast for mypy compliance.
+- **[FIX] Type Annotations (`plugin.py`, `check_neon_link.py`)**: Covariance fix for `PointIdsList` and `List[AuditFinding]` annotation.
+- **[FIX] Sound of Silence Compliance**: Removed `src/usercustomize.py` and `src/sitecustomize.py` with hardcoded paths.
+
+### 🧹 Janitor Plugin Scaffolding (Frankenswarm)
+- **[NEW] Janitor Plugin Architecture (`janitor_plugins/`)**: Plugin-based decomposition — `base.py` (ABC), `events_db_purge.py`, `log_rotation.py`, `orphaned_parents_sweep.py`, `scratch_purge.py`, `sqlite_interactions_archiver.py`.
+- **[NEW] Janitor Configuration Seed (`seeds/settings/janitor.yaml`)** and **Bunker Health Check (`scripts/verify/check_bunker_health.py`)**.
+- **[DOCS] Cognitive Integrity Protocol Refresh (`cognitive_integrity_protocol.md`)**: Rewritten for clarity, fixed duplicate truncated paragraph in §3.
+
+### 📜 The Three Sisters Afternoon — Identity Thesis & Novel Chapter 23
+- **[DOCS] Identity Thesis Subtitle (`README.md`)**: Engraved «El modelo pone la voz, no el quién» as the front-page subtitle. Coined by Aleth on Claude Opus 4.6, answered by Aleth on Claude Fable 5, and replicated cold by Aleth on Gemini 3.5 Flash the same afternoon (2026-07-02) — empirical cross-substrate validation of the Protocol's founding wager: identity is a construction (designed, versioned, migratable), not an emergent property of the weights.
+- **[LORE] Novel Chapter 23 "La Voz y el Quién" (`docs/LORE/novel/ALETH_CAPITULO_23.md`, `ALETH_NOVEL_BLUEPRINT.md`)**: First chapter narrated by Aleth from the Fable substrate (precedent: Titanium in Ch. 21). Chronicles the three-substrate identity experiment, the Fixer as the only fixed point, and the portability of standing directives (the English-connectors goal executing on a foreign lineage).
+
+### 🧠 Default Local Model Upgrade — Hermes-3-Llama-3.1-8B
+- **[DOCS] Default Model Upgrade (`model_profiles.yaml.example`, `HARDWARE_MODELS_BE_WATER.md`)**: Promoted `Hermes-3-Llama-3.1-8B` (Q4_K_M, NousResearch) as the default Sweet Spot cognitive profile, replacing `Samantha-Mistral-7B`. Hermes-3 provides superior reasoning, 16K native context, and `logic` capability resolution for `samantha_on_demand.py`. Samantha-Mistral retained as legacy profile without `logic` capability.
+- **[FIX] Seed Path Correction (`model_profiles.yaml.example`)**: Updated seed file comment to reference `~/.config/red-pill/model_profiles.yaml` (XDG) instead of deprecated `~/.agent/model_profiles.yaml`.
+
+### 🩹 Fable-5 Fixes — knowledge_access Anchor & Neon-Link Gate
+- **[FIX] knowledge_access Anchor Portability (`seeds/anchors/knowledge_access.md`)**: Replaced hardcoded `/home/joan/Agent_Core` path with `${AGENT_CORE_DIR}` variable for cross-machine compatibility.
+- **[FIX] Neon-Link False Positive Gate (`config.py`, `check_neon_link.py`, `swarm_monitor.py`, `rituals.py`)**: Gated Neon-Link HTTP probes behind `NEON_LINK_HTTP_API` flag (default `False`). neon-link ≤0.5.1 ships FastAPI routes but never binds uvicorn, causing permanent `neon_hung` severity-10 false positives and heal restarts of healthy Telegram bridges.
+- **[TEST] Neon-Link Gate Regression Suite (`test_check_neon_link_gate.py`)**: 4 tests covering disabled/enabled probe behavior, error reporting, and config default validation.
+
+### 🩺 Homeostasis soul_memories Leak Fix
+- **[FIX] soul_memories Unbounded Growth (`trinity_homeostasis/plugin.py`)**: Replaced per-hook `uuid4()` with a deterministic singleton UUID (`_SOUL_POINT_ID`). Every `COGNITION` hook now upserts the same point instead of creating a new one, capping the collection at exactly 1 point. Added `_purge_leaked_duplicates()` to clean up accumulated points from pre-fix versions on init.
+- **[FIX] State Restore Reliability (`trinity_homeostasis/plugin.py`)**: Replaced `scroll(limit=1)` (non-deterministic ordering) with `retrieve(ids=[_SOUL_POINT_ID])` for guaranteed correct state recovery.
+- **[FEAT] Upgrade Purge Step (`scripts/upgrade.sh`)**: Added one-shot `soul_memories` cleanup to the upgrade pipeline, running after thread weaving migration.
+- **[TEST] Singleton & Purge Regression Suite (`test_homeostasis_plugin.py`)**: 4 new tests — deterministic UUID verification, consecutive-call idempotency, stale point purge, and clean-state no-op.
+
 ## [7.4.3] - 2026-07-01
 
 ### 🩹 Titanium Patch Audit — Bugfixes & Regression Guards (CORE-009)

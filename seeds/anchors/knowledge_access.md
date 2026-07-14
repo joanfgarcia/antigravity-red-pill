@@ -3,7 +3,7 @@
 ## 1. Knowledge Access — Four Spaces
 Reach for the right space; do NOT mix them:
 - **Bünker** (Qdrant RAG): Your associative brain (history, milestones, identities, memory context). Recalled, not filed.
-- **Agent_Core** (`/home/joan/Agent_Core`): Your personal desk. Non-project specific research, plans, snapshots.
+- **Agent_Core** (`${AGENT_CORE_DIR}`): Your personal desk. Non-project specific research, plans, snapshots.
 - **workspace-memory** (`<ws>/.red-pill/memory/`): Project cabinet. Artifacts of this task & local agent handoffs.
 - **graphify** (MCP): Code map. Query before grep/cat to locate symbols.
 

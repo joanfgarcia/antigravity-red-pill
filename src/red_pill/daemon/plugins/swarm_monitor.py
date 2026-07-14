@@ -34,6 +34,9 @@ class SwarmMonitorPlugin(DaemonPlugin):
 	async def _check_neon_link(self) -> None:
 		import red_pill.config as cfg
 
+		if not getattr(cfg, "NEON_LINK_HTTP_API", False):
+			logger.debug("[SWARM] Neon-Link HTTP API disabled (NEON_LINK_HTTP_API=false); skipping inbox poll.")
+			return
 		try:
 			import httpx
 

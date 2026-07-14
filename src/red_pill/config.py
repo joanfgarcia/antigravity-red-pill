@@ -259,7 +259,10 @@ class RedPillConfig(BaseSettings):
 	# -----------------------------------------------------------------------
 	# MODELS & EMBEDDINGS
 	# -----------------------------------------------------------------------
-	EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
+	# Multilingual (Spanish/English) 384-dim model. Same vector size as the old
+	# all-MiniLM-L6-v2 (English-only) → no collection schema migration, but the
+	# stored vectors must be recomputed (scripts/reembed_collections.py).
+	EMBEDDING_MODEL: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 	VECTOR_SIZE: int = 384
 	FASTEMBED_CACHE_PATH: str = str(get_models_dir())
 	EXECUTION_PROVIDER: Optional[str] = None
@@ -326,6 +329,15 @@ class RedPillConfig(BaseSettings):
 	ICE_MODE_ENABLED: bool = False
 	NEON_LINK_ENABLED: bool = True
 	NEON_LINK_URL: str = "http://localhost:8770"
+	# neon-link releases up to 0.5.1 ship the FastAPI app (GET /health, /inbox/summary)
+	# but never serve it (no uvicorn caller in the daemon), so probing NEON_LINK_URL yields
+	# permanent false positives (neon_hung severity 10 + heal restarts, doctor RED).
+	# Flip to True only when the deployed neon-link actually binds the HTTP API.
+	NEON_LINK_HTTP_API: bool = False
+	# Defense-in-depth for P2P sync: only apply incoming sync payloads whose inbox originator
+	# is a known peer (peers.json). Sync flows into cognitive_tasks and can be executed
+	# autonomously, so fail closed by default — an unknown/absent originator is rejected.
+	P2P_SYNC_REQUIRE_KNOWN_PEER: bool = True
 
 	# -----------------------------------------------------------------------
 	# ANTIGRAVITY IDE BRIDGE
@@ -562,6 +574,10 @@ class RedPillConfig(BaseSettings):
 	SLEEP_SCROLL_LIMIT: int = 50  # Max engrams fetched per scroll batch (loop drains until empty)
 	SLEEP_MAX_LLM_FAILURES: int = 5  # Thermal breaker: abort sleep after N consecutive LLM failures
 	SLEEP_MIN_FREE_VRAM_MB: int = 1500  # Preflight: skip sleep if GPU has less free VRAM than this
+	# When False (default), a read (search_and_reinforce) never DELETES eroded
+	# engrams — it only hides them from the result. Forgetting belongs to the
+	# sleep cycle (erode_work_hubs / rhizodb washout), not to a lookup.
+	READ_PATH_PRUNING_ENABLED: bool = False
 
 	# Sleep Cycle Plugin flags — each ritual individually activatable
 	SLEEP_PLUGIN_USP: bool = True  # Operator Mood Profile refresh
