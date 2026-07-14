@@ -128,7 +128,9 @@ def reembed_collection(
 
 def main() -> None:
 	parser = argparse.ArgumentParser(description="Re-embed stored engrams with the current EMBEDDING_MODEL.")
-	parser.add_argument("--collections", default=",".join(DEFAULT_COLLECTIONS), help="Comma-separated collections. archive_memories excluded by default.")
+	parser.add_argument(
+		"--collections", default=",".join(DEFAULT_COLLECTIONS), help="Comma-separated collections. archive_memories excluded by default."
+	)
 	parser.add_argument("--execute", action="store_true", help="Actually write vectors. Without it, runs a dry-run.")
 	parser.add_argument("--batch-size", type=int, default=256)
 	parser.add_argument("--reset-cursor", action="store_true", help="Ignore any saved resume cursor.")

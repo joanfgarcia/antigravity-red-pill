@@ -57,6 +57,7 @@ def _is_template_echo(text: str) -> bool:
 	low = text.strip().lower()
 	return any(marker in low for marker in _TEMPLATE_ECHO_MARKERS)
 
+
 _DISTILL_SYSTEM = (
 	"Distill the interaction into ONLY a valid JSON object with keys: "
 	"summary (Spanish, concise), emotion (one of: joy, sadness, fear, disgust, anger, anxiety, envy, "
@@ -172,7 +173,9 @@ def run_model(name: str, model_path: Path, n_gpu_layers: int, n_ctx: int, max_to
 		score = score_output(raw)
 		score["latency_s"] = round(time.time() - t0, 2)
 		results.append({"probe": probe["key"], "aptitude": probe["aptitude"], "raw": raw, "score": score})
-		logger.info(f"  {name}/{probe['key']}: json={score['json_ok']} lang={score['summary_lang']} think={score['has_think_tags']} {score['latency_s']}s")
+		logger.info(
+			f"  {name}/{probe['key']}: json={score['json_ok']} lang={score['summary_lang']} think={score['has_think_tags']} {score['latency_s']}s"
+		)
 	del llm
 	return results
 
@@ -180,7 +183,12 @@ def run_model(name: str, model_path: Path, n_gpu_layers: int, n_ctx: int, max_to
 def render_markdown(all_results: Dict[str, List[Dict[str, Any]]]) -> str:
 	lines = ["# Distiller Bake-off Results", "", "Heuristic aptitude scores per candidate. Operator confirms the winner.", ""]
 	# Aggregate table
-	lines += ["## Aggregate (per model, across the battery)", "", "| Model | JSON ok | Keys ok | Spanish | No <think> | No echo | Emotion ok | Avg latency |", "|---|---|---|---|---|---|---|---|"]
+	lines += [
+		"## Aggregate (per model, across the battery)",
+		"",
+		"| Model | JSON ok | Keys ok | Spanish | No <think> | No echo | Emotion ok | Avg latency |",
+		"|---|---|---|---|---|---|---|---|",
+	]
 	for name, results in all_results.items():
 		n = len(results) or 1
 		agg = {
@@ -192,7 +200,9 @@ def render_markdown(all_results: Dict[str, List[Dict[str, Any]]]) -> str:
 			"emo": sum(r["score"]["emotion_valid"] for r in results),
 			"lat": round(sum(r["score"]["latency_s"] for r in results) / n, 2),
 		}
-		lines.append(f"| {name} | {agg['json']}/{n} | {agg['keys']}/{n} | {agg['es']}/{n} | {agg['nothink']}/{n} | {agg['noecho']}/{n} | {agg['emo']}/{n} | {agg['lat']}s |")
+		lines.append(
+			f"| {name} | {agg['json']}/{n} | {agg['keys']}/{n} | {agg['es']}/{n} | {agg['nothink']}/{n} | {agg['noecho']}/{n} | {agg['emo']}/{n} | {agg['lat']}s |"
+		)
 	lines.append("")
 	# Raw outputs
 	for name, results in all_results.items():
@@ -215,7 +225,9 @@ def main() -> None:
 	)
 	parser.add_argument("--n-ctx", type=int, default=4096)
 	parser.add_argument("--max-tokens", type=int, default=512)
-	parser.add_argument("--models-dir", default=str(Path("~/.local/share/red-pill/models").expanduser()), help="Directory holding the candidate GGUFs.")
+	parser.add_argument(
+		"--models-dir", default=str(Path("~/.local/share/red-pill/models").expanduser()), help="Directory holding the candidate GGUFs."
+	)
 	parser.add_argument("--out", default="docs/BENCHMARKS/DISTILLER_BAKEOFF.md")
 	args = parser.parse_args()
 

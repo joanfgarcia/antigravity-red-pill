@@ -42,8 +42,7 @@ _BASE_PROMPT = (
 )
 
 _TUNED_PROMPT = (
-	_BASE_PROMPT
-	+ " The 'summary' MUST capture BOTH the user's point/question AND the assistant's response, "
+	_BASE_PROMPT + " The 'summary' MUST capture BOTH the user's point/question AND the assistant's response, "
 	"correction, or decision — never only one side. One or two sentences."
 )
 
@@ -124,7 +123,12 @@ def run(name: str, model_path: Path, ngl: int, n_ctx: int, max_tokens: int) -> D
 
 
 def render(results: Dict[str, Dict[str, List[Dict[str, Any]]]]) -> str:
-	lines = ["# Distiller Fidelity Eval (both-sides coverage)", "", "Does the summary reflect BOTH the user and the assistant? BASE vs TUNED prompt.", ""]
+	lines = [
+		"# Distiller Fidelity Eval (both-sides coverage)",
+		"",
+		"Does the summary reflect BOTH the user and the assistant? BASE vs TUNED prompt.",
+		"",
+	]
 	lines += ["| Model | Prompt | Both-sides | User-side | Asst-side |", "|---|---|---|---|---|"]
 	for name, byp in results.items():
 		for label in ("base", "tuned"):

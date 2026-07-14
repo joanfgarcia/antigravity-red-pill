@@ -1187,7 +1187,13 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 						new_id = memory_manager.add_memory(
 							collection=chunk_col,
 							text=summary,
-							metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id, "model": model_name, "parent_id": parent_id, **ws_meta},
+							metadata={
+								"lazarus_phase": "sequence_chunk",
+								"source_buffer_id": raw_id,
+								"model": model_name,
+								"parent_id": parent_id,
+								**ws_meta,
+							},
 							color="blue" if chunk_col == "work_memories" else "purple",
 							emotion=distilled.get("emotion", "neutral"),
 							intensity=distilled.get("intensity", 0.5),

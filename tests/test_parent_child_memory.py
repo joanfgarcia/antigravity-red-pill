@@ -87,8 +87,9 @@ def test_sleep_cycle_creates_parent_child_graph(mock_chunk, mock_llm):
 				mock_client.delete.assert_called_with(collection_name="interaction_memories", points_selector=[raw_id])
 
 
+@patch("red_pill.metabolism.sleep.distill_session_anchors", return_value=None)
 @patch("red_pill.metabolism.sleep._check_llm_available", return_value=True)
-def test_sleep_cycle_dynamic_category_routing(mock_llm):
+def test_sleep_cycle_dynamic_category_routing(mock_llm, mock_distill_anchors):
 	"""Verify that chunks route dynamically based on their category."""
 	mock_mgr = MagicMock()
 	mock_client = mock_mgr.client

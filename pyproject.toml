@@ -41,7 +41,7 @@ dependencies = [
     "celery>=5.6.3",
     "redis>=7.4.0",
     "pluggy>=1.6.0",
-    "pillow>=12.2.0",
+    "pillow>=12.3.0",
     "python-multipart>=0.0.26",
     "httpx>=0.28.1",
     "urllib3>=2.7.0",
@@ -96,7 +96,14 @@ ignore-vuln = [
 # Do not fail on unfixable vulnerabilities (transitive deps we don't control).
 fix = false
 
-
+# Pin transitive dependencies that have known vulnerabilities to patched versions.
+# These are NOT direct dependencies — uv constraint-dependencies forces the resolver
+# to pick versions >= the specified floor without polluting our direct dep list.
+[tool.uv]
+constraint-dependencies = [
+    "httplib2>=0.32.0",   # PYSEC-2026-3444
+    "setuptools>=83.0.0", # PYSEC-2026-3447
+]
 [tool.ruff]
 line-length = 150
 exclude = ["3rdparty", ".venv", "build", "scratch"]
