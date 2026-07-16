@@ -55,107 +55,13 @@ import red_pill.config as cfg
 from red_pill.core.paths import get_daemon_persistent_dir, get_staging_dir
 from red_pill.core.vram_probe import VramProbe
 from red_pill.events import SleepCompletedEvent, get_event_bus
+from red_pill.metabolism.categorizer import detect_category_heuristics
 from red_pill.metabolism.evolution import IdentityEvaluator
 from red_pill.metabolism.thread_weaver import _load_thread_state, _save_thread_state
 
 logger = logging.getLogger(__name__)
 
 # ── Thread Weaving state ──────────────────────────────────────────────────────
-
-
-def detect_category_heuristics(text: Any) -> str:
-	"""
-	Detects if the text has technical/development signals to classify it as 'work'.
-	Otherwise returns 'social'.
-	"""
-	if not isinstance(text, str):
-		text = str(text)
-	text_lower = text.lower()
-	if "```" in text:
-		return "work"
-
-	tech_keywords = {
-		"code",
-		"código",
-		"test",
-		"pytest",
-		"bug",
-		"error",
-		"git",
-		"github",
-		"diff",
-		"patch",
-		"repo",
-		"repository",
-		"docker",
-		"systemd",
-		"systemctl",
-		"mcp",
-		"api",
-		"endpoint",
-		"database",
-		"db",
-		"query",
-		"python",
-		"rust",
-		"compile",
-		"script",
-		"cli",
-		"command",
-		"terminal",
-		"bash",
-		"shell",
-		"exception",
-		"traceback",
-		"stacktrace",
-		"import",
-		"class",
-		"def",
-		"fn",
-		"const",
-		"impl",
-		"interface",
-		"refactor",
-		"build",
-		"deploy",
-		"server",
-		"client",
-		"vram",
-		"gpu",
-		"cuda",
-		"npu",
-		"cpu",
-		"memory",
-		"cache",
-		"token",
-		"llm",
-		"prompt",
-		"model",
-		"config",
-		"port",
-		"socket",
-		"grpc",
-		"json",
-		"xml",
-		"yaml",
-		"file",
-		"directory",
-		"path",
-		"permissions",
-		"chmod",
-		"chown",
-		"ssh",
-		"curl",
-		"wget",
-		"http",
-	}
-
-	import re
-
-	words = set(re.findall(r"[a-zA-Z0-9_]+", text_lower))
-	if words.intersection(tech_keywords):
-		return "work"
-	return "social"
 
 
 def _check_llm_available() -> bool:
