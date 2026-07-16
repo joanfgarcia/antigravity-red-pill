@@ -1,3 +1,19 @@
+## [7.6.0] - 2026-07-17 (Sleep Engine Decomposition — ADR-SLEEP-001)
+
+### 🧬 Sleep engine: God Class → agnostic phase pipeline (ADR-SLEEP-001, DONE)
+The 1325-LOC `sleep.py` was decomposed once both its documented triggers fired
+(>1200 LOC + new per-phase gating), verified commit-by-commit against `test_sleep*`.
+- **[ARCH] Phase A — library extraction (zero behavior change)**: `chunker`, `categorizer`, `distiller`, `ephemeral_server`, `thread_weaver`, `maintenance` split out of `sleep.py` (1325 → 545 LOC), re-exported for back-compat.
+- **[ARCH] Phase B — agnostic pipeline**: `perform_sleep_cycle` is now a thin runner over an ordered `SleepPhase` pipeline (`metabolism/phases/`, mirroring the JanitorPlugin/SentinelPlugin pattern). The coupled drain loop stays intact inside `ConsolidationPhase` (`requires_gpu`); erosion/washout/evolution are CPU-only phases. `sleep.py` → ~100 LOC.
+- **[FEAT] Partial deferral**: each phase declares `requires_gpu`, so when the card is committed to training the runner defers only the GPU-heavy consolidation (a benign, non-escalating `vram_busy` *status* signal, self-clearing on the next successful cycle) while CPU-only maintenance still runs — replacing the old all-or-nothing VRAM abort.
+
+### 🩹 VRAM contention + auditor fixes
+- **[FIX] Conservative `vram_tiers` (8 GB card)**: the graduated partial-offload tiers requested 12-24 GPU layers of an 8-9B Q4 at 2-6 GB free, crashing context creation while training held VRAM (the 3028× `Failed to create llama_context` storm). Now CPU below the headroom, full GPU only when the card is idle.
+- **[FIX] Auditor recency-window**: a per-file byte-offset cursor so a historical error stops re-firing (and escalating) a pain signal on every audit (error-in-log ≠ error-now).
+
+### 🔒 Security
+- **[SECURITY] `mcp` 1.28.0 → 1.28.1**: fixes CVE-2026-59950 (direct dependency; caught by the blocking pip-audit gate).
+
 ## [7.5.0] - 2026-07-13 (Memory Remediation — Qdrant + Sleep Cycle)
 
 ### 🧠 Episodic Memory Usefulness Overhaul
