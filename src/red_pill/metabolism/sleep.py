@@ -52,37 +52,15 @@ from typing import Any, Dict, List, Optional
 from qdrant_client.models import Filter
 
 import red_pill.config as cfg
-from red_pill.core.paths import get_daemon_persistent_dir, get_staging_dir, get_thread_state_path
+from red_pill.core.paths import get_daemon_persistent_dir, get_staging_dir
 from red_pill.core.vram_probe import VramProbe
 from red_pill.events import SleepCompletedEvent, get_event_bus
 from red_pill.metabolism.evolution import IdentityEvaluator
+from red_pill.metabolism.thread_weaver import _load_thread_state, _save_thread_state
 
 logger = logging.getLogger(__name__)
 
 # ── Thread Weaving state ──────────────────────────────────────────────────────
-
-
-def _load_thread_state() -> dict:
-	"""Load the last hub_id per collection for inter-session thread weaving."""
-	try:
-		path = get_thread_state_path()
-		if path.exists():
-			with open(path) as f:
-				return dict(json.load(f))
-	except Exception:
-		pass
-	return {}
-
-
-def _save_thread_state(state: dict) -> None:
-	"""Persist the last hub_id per collection."""
-	try:
-		path = get_thread_state_path()
-		path.parent.mkdir(parents=True, exist_ok=True)
-		with open(path, "w") as f:
-			json.dump(state, f)
-	except Exception as e:
-		logger.warning(f"[THREAD WEAVER] Could not save thread state: {e}")
 
 
 def detect_category_heuristics(text: Any) -> str:
