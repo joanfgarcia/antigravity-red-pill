@@ -4,6 +4,21 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [ADR-SLEEP-001] Sleep Engine Decomposition — Agnostic Phase Pipeline
+**Date**: 2026-05-31 (deferred) → 2026-07-16 (DONE)
+**Context**: `sleep.py` was a God Class (~1300 LOC). The original ADR (in the module docstring) deferred decomposition with an explicit trigger: revisit at >1200 LOC **or** when new phases are needed.
+**Status**: DONE — both triggers fired (the file crossed 1200 LOC and gained per-phase VRAM gating).
+
+### Decision
+Two phases, verified commit-by-commit against the existing `test_sleep*` suite:
+- **Phase A (zero behavior change)**: extract the library layer to focused modules — `chunker`, `categorizer`, `distiller`, `ephemeral_server`, `thread_weaver`, `maintenance`. `sleep.py` 1325 → 545 LOC, re-exporting for back-compat.
+- **Phase B (new capability)**: `perform_sleep_cycle` becomes a thin, agnostic runner over an ordered `SleepPhase` pipeline (`metabolism/phases/`, mirroring the JanitorPlugin/SentinelPlugin pattern). The tightly-coupled drain loop stays intact inside `ConsolidationPhase` (`requires_gpu`), as the original ADR warned it must; erosion, washout and evolution are CPU-only phases.
+
+### Why it earned its keep (not just tidiness)
+Each phase declares `requires_gpu`, so the runner defers **only** the GPU-heavy consolidation when the card is committed to training — a benign, non-escalating `vram_busy` *status* signal, self-clearing on the next successful cycle — while CPU-only maintenance still runs. **Partial deferral** replaces the old all-or-nothing VRAM abort. `sleep.py` ended at ~100 LOC; full suite green (961 passed).
+
+---
+
 ## [AD-022] Distiller Model Selection — Granite-4.1-8B (primary) + Hermes-3-8B (fallback)
 **Date**: 2026-07-13  
 **Context**: v7.5.0 — choosing the sleep-cycle distiller after the AD-021 remediation  
