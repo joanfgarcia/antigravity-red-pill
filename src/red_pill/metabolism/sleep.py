@@ -56,6 +56,7 @@ from red_pill.core.paths import get_daemon_persistent_dir, get_staging_dir
 from red_pill.core.vram_probe import VramProbe
 from red_pill.events import SleepCompletedEvent, get_event_bus
 from red_pill.metabolism.categorizer import detect_category_heuristics
+from red_pill.metabolism.chunker import _is_template_echo, _sanitize_llm_json, chunk_text
 from red_pill.metabolism.evolution import IdentityEvaluator
 from red_pill.metabolism.thread_weaver import _load_thread_state, _save_thread_state
 
@@ -98,91 +99,6 @@ def _check_llm_available() -> bool:
 			return False
 
 	return False  # No endpoint configured
-
-
-def chunk_text(text: str, size: Optional[int] = None) -> List[str]:
-	"""Break large interactions into biologially manageable sequences."""
-	if size is None:
-		size = cfg.SLEEP_CHUNK_SIZE
-
-	chunks = []
-	start = 0
-	while start < len(text):
-		end = start + size
-		if end >= len(text):
-			chunks.append(text[start:])
-			break
-		# Heuristic 1: Try finding a newline near the cut
-		last_break = text.rfind("\n", start, end)
-		if last_break != -1 and last_break > start + (size // 2):
-			end = last_break + 1
-		else:
-			# Heuristic 2: Try finding a sentence terminator or comma
-			found_punct = -1
-			for punct in [". ", "? ", "! ", ", "]:
-				p_idx = text.rfind(punct, start, end)
-				if p_idx > found_punct:
-					found_punct = p_idx
-
-			if found_punct != -1 and found_punct > start + (size // 2):
-				end = found_punct + 1  # Include the punctuation mark
-			else:
-				# Heuristic 3: Fallback to the last space
-				last_space = text.rfind(" ", start, end)
-				if last_space != -1 and last_space > start + (size // 2):
-					end = last_space + 1
-		chunks.append(text[start:end])
-		start = end
-	return chunks
-
-
-def _sanitize_llm_json(raw_json: str) -> str:
-	"""
-	Sanitize JSON output from local LLMs that may contain invalid backslash
-	escape sequences (e.g. \\e, \\s, \\a).  JSON only allows: \\" \\\\
-	\\/ \\b \\f \\n \\r \\t \\uXXXX.  Any other \\X is illegal and causes
-	``json.loads`` to raise ``Invalid \\escape``.
-
-	Strategy: use a regex to find all backslash sequences and double the
-	backslash for any that are not in the legal set, turning them into
-	literal characters.
-	"""
-	import re as _re
-
-	_VALID_ESCAPES = frozenset('"\\bfnrtu/')
-
-	def _fix_escape(m: _re.Match) -> str:
-		char_after = m.group(1)
-		if char_after in _VALID_ESCAPES:
-			return str(m.group(0))  # legal — leave untouched
-		# Illegal escape: double the backslash so it becomes a literal '\'
-		return str("\\\\" + char_after)
-
-	return _re.sub(r"\\(.)", _fix_escape, raw_json)
-
-
-# Substrings that betray the distiller echoing its own prompt/format spec back
-# as if it were memory content (observed in production hubs).
-_TEMPLATE_ECHO_MARKERS = (
-	"synthesize these memory chunks",
-	"[memory synthesis",
-	"master summary",
-	"the emotion is one of",
-	"the intensity is a float",
-	"memory chunks into a",
-)
-
-
-def _is_template_echo(text: str) -> bool:
-	"""True if the distiller leaked its instructions (or produced nothing) instead of content.
-
-	No length heuristic: a legitimately short summary ("Bug de tree_hash arreglado.")
-	must survive. The high-precision signal is the instruction echo itself.
-	"""
-	if not text or not text.strip():
-		return True
-	low = text.strip().lower()
-	return any(marker in low for marker in _TEMPLATE_ECHO_MARKERS)
 
 
 def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[str, Any]:
