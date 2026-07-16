@@ -11,7 +11,8 @@ import json
 from unittest.mock import MagicMock
 
 from red_pill.core.providers import ProviderRegistry
-from red_pill.metabolism.sleep import _is_template_echo, distill_engram
+from red_pill.metabolism.chunker import _is_template_echo
+from red_pill.metabolism.distiller import distill_engram
 
 
 def test_is_template_echo_positive():
