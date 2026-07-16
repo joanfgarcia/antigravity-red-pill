@@ -39,6 +39,9 @@ class SentinelAuditor:
 
 		self.cache_file = get_data_dir() / "auditor_cache.json"
 		self.cache_file.parent.mkdir(parents=True, exist_ok=True)
+		# Per-file byte offsets so the log scan only sees NEW content since the last
+		# audit — a stale error must not keep re-firing a signal (error-in-log ≠ error-now).
+		self.log_offsets_file = get_data_dir() / "auditor_logfile_offsets.json"
 
 		from red_pill.memory import MemoryManager
 
@@ -201,24 +204,53 @@ class SentinelAuditor:
 
 		return report
 
-	def _read_log_tail(self, filepath: Path, max_bytes: int = 10240) -> List[str]:
-		"""Reads the tail of a file safely up to max_bytes, returning lines."""
+	def _load_log_offsets(self) -> Dict[str, int]:
+		try:
+			if self.log_offsets_file.exists():
+				offsets: Dict[str, int] = json.loads(self.log_offsets_file.read_text(encoding="utf-8"))
+				return offsets
+		except Exception:
+			pass
+		return {}
+
+	def _save_log_offsets(self, offsets: Dict[str, int]) -> None:
+		try:
+			self.log_offsets_file.parent.mkdir(parents=True, exist_ok=True)
+			self.log_offsets_file.write_text(json.dumps(offsets), encoding="utf-8")
+		except Exception as e:
+			self.logger.warning(f"Failed to persist log offsets: {e}")
+
+	def _read_log_new_lines(self, filepath: Path, max_bytes: int = 262144) -> List[str]:
+		"""Return only lines written since the last audit (byte-offset cursor per file).
+
+		First sight of a file initializes the cursor at its current end and returns
+		nothing (history is not re-scanned — mirrors the journalctl cursor). Truncation
+		or rotation (size shrank) resets the cursor to 0. This is what stops a stale
+		error in the tail from re-firing a pain signal on every audit.
+		"""
 		if not filepath.exists() or not filepath.is_file():
 			return []
 		try:
-			file_size = filepath.stat().st_size
+			key = str(filepath.resolve())
+			offsets = self._load_log_offsets()
+			current_size = filepath.stat().st_size
+			if key not in offsets:
+				offsets[key] = current_size
+				self._save_log_offsets(offsets)
+				return []
+			start = offsets[key]
+			if current_size < start:
+				start = 0
+			if current_size - start > max_bytes:
+				start = current_size - max_bytes
 			with open(filepath, "rb") as f:
-				if file_size > max_bytes:
-					f.seek(-max_bytes, os.SEEK_END)
-					chunk = f.read(max_bytes)
-				else:
-					chunk = f.read()
-				lines = chunk.decode("utf-8", errors="ignore").splitlines()
-				if file_size > max_bytes and lines:
-					lines.pop(0)
-				return lines
+				f.seek(start)
+				chunk = f.read(current_size - start)
+			offsets[key] = current_size
+			self._save_log_offsets(offsets)
+			return chunk.decode("utf-8", errors="ignore").splitlines()
 		except Exception as e:
-			self.logger.warning(f"Failed to read tail of {filepath}: {e}")
+			self.logger.warning(f"Failed to read new lines of {filepath}: {e}")
 			return []
 
 	def audit_runtime(self) -> AuditReport:
@@ -293,7 +325,7 @@ class SentinelAuditor:
 		]
 		for log_path in external_logs:
 			if log_path.exists():
-				lines = self._read_log_tail(log_path)
+				lines = self._read_log_new_lines(log_path)
 				for line in lines:
 					line_lower = line.lower()
 					if "error" in line_lower or "exception" in line_lower or "traceback" in line_lower or "fatal" in line_lower:
