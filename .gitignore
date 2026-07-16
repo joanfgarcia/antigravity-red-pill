@@ -95,3 +95,6 @@ graphify-out/
 storage_backup_seguridad.tar.gz
 .claude/
 
+
+# Workspace memory bank (red-pill convention: <ws>/.red-pill/memory/) — never commit
+.red-pill/
