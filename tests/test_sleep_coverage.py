@@ -39,7 +39,7 @@ def test_synthesize_hub_error_path():
 		assert "Aggregated Memory Sequence" in result
 
 
-@patch("red_pill.metabolism.sleep._check_llm_available", return_value=True)
+@patch("red_pill.metabolism.phases.consolidation._check_llm_available", return_value=True)
 def test_perform_sleep_cycle_collection_missing(mock_llm):
 	mock_mgr = MagicMock()
 	mock_mgr.client.collection_exists.return_value = False
@@ -47,7 +47,7 @@ def test_perform_sleep_cycle_collection_missing(mock_llm):
 	assert result == 0
 
 
-@patch("red_pill.metabolism.sleep._check_llm_available", return_value=True)
+@patch("red_pill.metabolism.phases.consolidation._check_llm_available", return_value=True)
 def test_perform_sleep_cycle_scroll_error(mock_llm):
 	mock_mgr = MagicMock()
 	mock_mgr.client.collection_exists.return_value = True
@@ -65,14 +65,14 @@ def test_perform_sleep_cycle_affective_culling():
 	point.payload = {"content": "Normal sentence. Another sentence. Boring stuff."}
 	# 1 for signals, 1 for interaction, 1 for end of loop
 	mock_mgr.client.scroll.side_effect = [([], None), ([point], None), ([], None)]
-	with patch("red_pill.metabolism.sleep._check_llm_available", return_value=True):
-		with patch("red_pill.metabolism.sleep.chunk_text", return_value=["Boring part", "Interesting part"]):
-			with patch("red_pill.metabolism.sleep.distill_engram") as mock_distill:
+	with patch("red_pill.metabolism.phases.consolidation._check_llm_available", return_value=True):
+		with patch("red_pill.metabolism.phases.consolidation.chunk_text", return_value=["Boring part", "Interesting part"]):
+			with patch("red_pill.metabolism.phases.consolidation.distill_engram") as mock_distill:
 				mock_distill.side_effect = [
 					{"summary": "boring", "emotion": "neutral", "intensity": 0.1},
 					{"summary": "interesting", "emotion": "joy", "intensity": 0.8},
 				]
-				with patch("red_pill.metabolism.sleep.synthesize_hub", return_value="master summary"):
+				with patch("red_pill.metabolism.phases.consolidation.synthesize_hub", return_value="master summary"):
 					from unittest.mock import ANY
 
 					result = perform_sleep_cycle(mock_mgr)
@@ -90,8 +90,8 @@ def test_perform_sleep_cycle_fixate_error():
 	point.id = "idx-1"
 	point.payload = {"content": "some content"}
 	mock_mgr.client.scroll.return_value = ([point], None)
-	with patch("red_pill.metabolism.sleep._check_llm_available", return_value=True):
-		with patch("red_pill.metabolism.sleep.distill_engram", return_value={"summary": "s", "emotion": "e", "intensity": 0.5}):
+	with patch("red_pill.metabolism.phases.consolidation._check_llm_available", return_value=True):
+		with patch("red_pill.metabolism.phases.consolidation.distill_engram", return_value={"summary": "s", "emotion": "e", "intensity": 0.5}):
 			mock_mgr.add_memory.side_effect = Exception("Write failed")
 			result = perform_sleep_cycle(mock_mgr)
 			assert result == 0

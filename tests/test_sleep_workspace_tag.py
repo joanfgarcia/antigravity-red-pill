@@ -30,8 +30,8 @@ def _write_staging_file():
 		json.dump(payload, f)
 
 
-@patch("red_pill.metabolism.sleep._check_llm_available", return_value=True)
-@patch("red_pill.metabolism.sleep.distill_engram")
+@patch("red_pill.metabolism.phases.consolidation._check_llm_available", return_value=True)
+@patch("red_pill.metabolism.phases.consolidation.distill_engram")
 def test_workspace_tag_propagates_to_engrams(mock_distill, mock_llm):
 	_write_staging_file()
 	mock_distill.return_value = {"summary": "arreglado tree_hash leaf_index", "emotion": "joy", "intensity": 0.8, "category": "work"}

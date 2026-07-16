@@ -51,8 +51,8 @@ def test_synthesize_hub(mock_build_opener):
 	assert result == "[TreeKEM Fix] Arreglado el leaf_index omitido en el hash del árbol."
 
 
-@patch("red_pill.metabolism.sleep._check_llm_available", return_value=True)
-@patch("red_pill.metabolism.sleep.distill_engram")
+@patch("red_pill.metabolism.phases.consolidation._check_llm_available", return_value=True)
+@patch("red_pill.metabolism.phases.consolidation.distill_engram")
 def test_perform_sleep_cycle(mock_distill, mock_llm):
 	mock_mem_mgr = MagicMock()
 	mock_client = mock_mem_mgr.client
@@ -67,14 +67,14 @@ def test_perform_sleep_cycle(mock_distill, mock_llm):
 	assert mock_client.delete.called
 
 
-@patch("red_pill.metabolism.sleep._check_llm_available", return_value=True)
+@patch("red_pill.metabolism.phases.consolidation._check_llm_available", return_value=True)
 def test_perform_sleep_cycle_no_collection(mock_llm):
 	mock_mem_mgr = MagicMock()
 	mock_mem_mgr.client.collection_exists.return_value = False
 	assert perform_sleep_cycle(mock_mem_mgr) == 0
 
 
-@patch("red_pill.metabolism.sleep._check_llm_available", return_value=True)
+@patch("red_pill.metabolism.phases.consolidation._check_llm_available", return_value=True)
 def test_perform_sleep_cycle_empty_buffer(mock_llm):
 	mock_mem_mgr = MagicMock()
 	mock_mem_mgr.client.collection_exists.return_value = True
