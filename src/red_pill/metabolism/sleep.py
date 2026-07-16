@@ -891,11 +891,15 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 		if _free_vram_mb < _min_free_mb:
 			logger.warning(f"[SLEEP ENGINE] VRAM preflight failed: {_free_vram_mb} MB free, {_min_free_mb} MB required. Aborting sleep cycle.")
 			try:
+				# Deferred, not failed: the GPU is committed (training) so consolidation
+				# waits its turn. A "status" signal does NOT escalate (only "pain" does,
+				# see MemoryManager.inject_signal) and stays visible on the dashboard as a
+				# benign alert; the successful next cycle auto-clears it (~line 1318).
 				memory_manager.inject_signal(
 					"vram_busy",
 					intensity=3.0,
-					signal_type="pain",
-					muted=True,
+					signal_type="status",
+					muted=False,
 					source="SLEEP_ENGINE",
 				)
 			except Exception as _e:
