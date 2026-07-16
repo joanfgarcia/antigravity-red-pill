@@ -9,8 +9,8 @@ from red_pill.metabolism.sleep import perform_sleep_cycle
 from red_pill.swarm.agents.janitor import JanitorMinion
 
 
-@patch("red_pill.metabolism.sleep._check_llm_available", return_value=True)
-@patch("red_pill.metabolism.sleep.chunk_text", side_effect=lambda text: ["distilled compiler fix"] if "compiler error" in text else [])
+@patch("red_pill.metabolism.phases.consolidation._check_llm_available", return_value=True)
+@patch("red_pill.metabolism.phases.consolidation.chunk_text", side_effect=lambda text: ["distilled compiler fix"] if "compiler error" in text else [])
 def test_sleep_cycle_creates_parent_child_graph(mock_chunk, mock_llm):
 	mock_mgr = MagicMock()
 	mock_client = mock_mgr.client
@@ -37,7 +37,7 @@ def test_sleep_cycle_creates_parent_child_graph(mock_chunk, mock_llm):
 	mock_client.scroll.side_effect = mock_scroll
 
 	# Mock distill_engram to return 1 chunk
-	with patch("red_pill.metabolism.sleep.distill_engram") as mock_distill:
+	with patch("red_pill.metabolism.phases.consolidation.distill_engram") as mock_distill:
 		mock_distill.return_value = {"summary": "distilled compiler fix", "emotion": "neutral", "intensity": 0.8, "category": "work"}
 
 		# Mock add_memory return values
@@ -47,8 +47,8 @@ def test_sleep_cycle_creates_parent_child_graph(mock_chunk, mock_llm):
 		mock_mgr.add_memory.side_effect = [child_uuid, parent_uuid]
 
 		# Mock thread state loading/saving and uuid.uuid4
-		with patch("red_pill.metabolism.sleep._load_thread_state", return_value={}):
-			with patch("red_pill.metabolism.sleep._save_thread_state"):
+		with patch("red_pill.metabolism.phases.consolidation._load_thread_state", return_value={}):
+			with patch("red_pill.metabolism.phases.consolidation._save_thread_state"):
 				with patch("uuid.uuid4", return_value=uuid.UUID(parent_uuid)):
 					processed = perform_sleep_cycle(mock_mgr)
 					assert processed > 0
@@ -87,8 +87,8 @@ def test_sleep_cycle_creates_parent_child_graph(mock_chunk, mock_llm):
 				mock_client.delete.assert_called_with(collection_name="interaction_memories", points_selector=[raw_id])
 
 
-@patch("red_pill.metabolism.sleep.distill_session_anchors", return_value=None)
-@patch("red_pill.metabolism.sleep._check_llm_available", return_value=True)
+@patch("red_pill.metabolism.phases.consolidation.distill_session_anchors", return_value=None)
+@patch("red_pill.metabolism.phases.consolidation._check_llm_available", return_value=True)
 def test_sleep_cycle_dynamic_category_routing(mock_llm, mock_distill_anchors):
 	"""Verify that chunks route dynamically based on their category."""
 	mock_mgr = MagicMock()
@@ -117,10 +117,10 @@ def test_sleep_cycle_dynamic_category_routing(mock_llm, mock_distill_anchors):
 	mock_client.scroll.side_effect = mock_scroll
 
 	with patch(
-		"red_pill.metabolism.sleep.chunk_text", side_effect=lambda text: ["joke chunk", "code chunk"] if "joke and write rust" in text else []
+		"red_pill.metabolism.phases.consolidation.chunk_text", side_effect=lambda text: ["joke chunk", "code chunk"] if "joke and write rust" in text else []
 	):
-		with patch("red_pill.metabolism.sleep.synthesize_hub", return_value="[Mixed Session] joke + code"):
-			with patch("red_pill.metabolism.sleep.distill_engram") as mock_distill:
+		with patch("red_pill.metabolism.phases.consolidation.synthesize_hub", return_value="[Mixed Session] joke + code"):
+			with patch("red_pill.metabolism.phases.consolidation.distill_engram") as mock_distill:
 				mock_distill.side_effect = [
 					{"summary": "funny joke summary", "emotion": "joy", "intensity": 0.9, "category": "social"},
 					{"summary": "rust code summary", "emotion": "neutral", "intensity": 0.8, "category": "work"},
@@ -131,7 +131,7 @@ def test_sleep_cycle_dynamic_category_routing(mock_llm, mock_distill_anchors):
 				parent_id = "00000000-0000-0000-0000-000000000777"
 				mock_mgr.add_memory.side_effect = [child_id_1, child_id_2, "hub-id-mixed", parent_id]
 
-				with patch("red_pill.metabolism.sleep._load_thread_state", return_value={}):
+				with patch("red_pill.metabolism.phases.consolidation._load_thread_state", return_value={}):
 					with patch("uuid.uuid4", return_value=uuid.UUID(parent_id)):
 						processed = perform_sleep_cycle(mock_mgr)
 						assert processed > 0
