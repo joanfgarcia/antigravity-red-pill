@@ -207,7 +207,8 @@ class SentinelAuditor:
 	def _load_log_offsets(self) -> Dict[str, int]:
 		try:
 			if self.log_offsets_file.exists():
-				return json.loads(self.log_offsets_file.read_text(encoding="utf-8"))
+				offsets: Dict[str, int] = json.loads(self.log_offsets_file.read_text(encoding="utf-8"))
+				return offsets
 		except Exception:
 			pass
 		return {}
