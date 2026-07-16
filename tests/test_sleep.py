@@ -37,9 +37,8 @@ def test_distill_engram_fallback():
 	assert result["emotion"] == "neutral"
 
 
-@patch("red_pill.metabolism.sleep.os.path.exists", return_value=False)
-@patch("red_pill.metabolism.sleep.urllib.request.build_opener")
-def test_synthesize_hub(mock_build_opener, mock_exists):
+@patch("red_pill.metabolism.distiller.urllib.request.build_opener")
+def test_synthesize_hub(mock_build_opener):
 	mock_opener = MagicMock()
 	mock_response = MagicMock()
 	mock_response.read.return_value = json.dumps(
