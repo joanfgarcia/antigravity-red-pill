@@ -158,7 +158,7 @@ def test_audit_runtime_priority_and_file_scanning(auditor):
 	with (
 		patch("subprocess.run") as mock_run,
 		patch("pathlib.Path.exists", return_value=True),
-		patch("red_pill.metabolism.auditor.SentinelAuditor._read_log_tail", return_value=log_content),
+		patch("red_pill.metabolism.auditor.SentinelAuditor._read_log_new_lines", return_value=log_content),
 	):
 		mock_run.side_effect = [mock_units, mock_failed, mock_journal]
 
@@ -199,7 +199,7 @@ def test_audit_runtime_ignores_self_referential_and_loader(auditor):
 	with (
 		patch("subprocess.run") as mock_run,
 		patch("pathlib.Path.exists", return_value=True),
-		patch("red_pill.metabolism.auditor.SentinelAuditor._read_log_tail", return_value=[]),
+		patch("red_pill.metabolism.auditor.SentinelAuditor._read_log_new_lines", return_value=[]),
 	):
 		mock_run.side_effect = [mock_units, mock_failed, mock_journal]
 		report = auditor.audit_runtime()
@@ -207,3 +207,32 @@ def test_audit_runtime_ignores_self_referential_and_loader(auditor):
 		# Everything should be ignored, status stays green
 		assert report.status == "green"
 		assert len(report.findings) == 0
+
+
+def test_read_log_new_lines_recency(auditor, tmp_path):
+	"""A stale error must not be re-returned on later audits (byte-offset cursor)."""
+	auditor.log_offsets_file = tmp_path / "offsets.json"
+	log = tmp_path / "error.log"
+	log.write_text("ValueError: Failed to create llama_context\n", encoding="utf-8")
+
+	# First sight → cursor initialized at end, history NOT re-scanned.
+	assert auditor._read_log_new_lines(log) == []
+	# No new content → still nothing (the stale error does not re-fire).
+	assert auditor._read_log_new_lines(log) == []
+
+	# A genuinely new error appended → caught exactly once.
+	with open(log, "a", encoding="utf-8") as f:
+		f.write("Exception: fresh failure\n")
+	assert auditor._read_log_new_lines(log) == ["Exception: fresh failure"]
+	assert auditor._read_log_new_lines(log) == []
+
+
+def test_read_log_new_lines_handles_truncation(auditor, tmp_path):
+	"""Rotation/truncation (size shrank) resets the cursor to 0."""
+	auditor.log_offsets_file = tmp_path / "offsets.json"
+	log = tmp_path / "error.log"
+	log.write_text("old error line\n" * 50, encoding="utf-8")
+	auditor._read_log_new_lines(log)  # init cursor at end
+
+	log.write_text("error: after truncation\n", encoding="utf-8")  # smaller than before
+	assert auditor._read_log_new_lines(log) == ["error: after truncation"]
