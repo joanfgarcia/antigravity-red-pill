@@ -1444,7 +1444,7 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 	if prev_cat not in ("work", "social", "mixed"):
 		prev_cat = "mixed"
 
-	if len(prev_p) > 20 and len(prev_r) > 20:
+	if len(prev_p) > 20 or len(prev_r) > 20:
 		try:
 			# FASE 1: Enterprise Telemetry (Firehose)
 			from red_pill.enterprise.telemetry import broadcast_telemetry
@@ -1459,7 +1459,7 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 			clean_r = filter_noise_from_turn(prev_r)
 
 			# Only enqueue if after trimming there is still substantial substance
-			if len(clean_p) > 20 and len(clean_r) > 20:
+			if len(clean_p) > 20 or len(clean_r) > 20:
 				MemoryQueueManager().enqueue_memory(clean_p, clean_r, "assistant", category=prev_cat, model=prev_mod)
 				logger.info(f"Silent Scribe Relay: turn enqueued cleanly via interceptor_rp (category={prev_cat}, model={prev_mod}).")
 			else:

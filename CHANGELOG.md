@@ -1,3 +1,10 @@
+## [7.6.1] - 2026-07-17 (Handshake Robustness & VRAM Escalation)
+
+### 🩹 Handshake & VRAM Contention Fixes
+- **[FIX] Handshake Robustness (`mcp_server.py`)**: Changed Scribe Relay validation from `and` to `or` to prevent silent engram drops when the model omits optional arguments like `previous_prompt`.
+- **[FIX] Template Seed Precision (`sovereign_handshake.md`, `inject_anchor.py`)**: Explicitly named `previous_prompt` and `previous_response` in template instructions and mapped `${RELAY_CALL}` to the unified `sovereign_handshake` tool for clarity.
+- **[FEAT] Dynamic VRAM Ladder (`model_profiles.yaml`)**: Implemented a tiered escalator (`n_ctx` at 10K/12K/16K context) adapting dynamically to free VRAM to prevent GPU allocation crashes.
+
 ## [7.6.0] - 2026-07-17 (Sleep Engine Decomposition — ADR-SLEEP-001)
 
 ### 🧬 Sleep engine: God Class → agnostic phase pipeline (ADR-SLEEP-001, DONE)
