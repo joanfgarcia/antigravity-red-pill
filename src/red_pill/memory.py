@@ -855,15 +855,25 @@ class MemoryManager:
 			return assocs
 
 		try:
-			assoc_ids = [a["id"] if isinstance(a, dict) else str(a) for a in assocs]
-			records = self.client.retrieve(collection_name=collection, ids=assoc_ids, with_payload=["importance", "reinforcement_score"])
+			# P5: resolve target significance in each axon's OWN collection — scoring a
+			# cross axon against the local collection would misread it as a dead link
+			# (0.1) and evict the bridges first.
+			ids_by_collection: Dict[str, List[str]] = {}
+			for axon in normalize_associations(assocs):
+				target_col = axon.target_collection or collection
+				ids_by_collection.setdefault(target_col, []).append(axon.id)
 
 			hub_scores = {}
-			for r in records:
-				payload = r.payload or {}
-				imp = max(0.1, float(payload.get("importance", 1.0)))
-				reinf = max(0.1, float(payload.get("reinforcement_score", 1.0)))
-				hub_scores[str(r.id)] = imp * reinf
+			for target_col, ids in ids_by_collection.items():
+				try:
+					records = self.client.retrieve(collection_name=target_col, ids=ids, with_payload=["importance", "reinforcement_score"])
+				except Exception:
+					continue
+				for r in records:
+					payload = r.payload or {}
+					imp = max(0.1, float(payload.get("importance", 1.0)))
+					reinf = max(0.1, float(payload.get("reinforcement_score", 1.0)))
+					hub_scores[str(r.id)] = imp * reinf
 
 			eviction_scores = {}
 			for i, assoc in enumerate(assocs):
