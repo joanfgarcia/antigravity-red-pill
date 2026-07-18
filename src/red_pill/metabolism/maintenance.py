@@ -77,7 +77,7 @@ def erode_work_hubs(memory_manager) -> None:
 			# read-path lazy decay calibration (must sit below the prior mean 0.5).
 			from red_pill.affect import get_memory_engine
 
-			deletion_threshold = get_memory_engine("bayesian").deletion_threshold
+			deletion_threshold = getattr(get_memory_engine("bayesian"), "deletion_threshold", 0.2)
 			if new_score <= deletion_threshold or new_intensity <= 0.05:
 				points_to_delete.append(hub.id)
 				logger.info(
@@ -151,7 +151,7 @@ def promote_orphan_chunks(memory_manager, collections=("work_memories", "social_
 				continue
 			chunks.sort(key=lambda t: t[0])
 			representative = chunks[-1][1]
-			new_payload = {"lazarus_phase": "synthesis_hub", "node_type": "synthesis_hub", "promoted_from": "sequence_chunk"}
+			new_payload: dict = {"lazarus_phase": "synthesis_hub", "node_type": "synthesis_hub", "promoted_from": "sequence_chunk"}
 			if len(chunks) > 1:
 				new_payload["hub_rebuild_pending"] = True
 				flagged += 1
