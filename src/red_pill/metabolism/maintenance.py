@@ -25,8 +25,10 @@ def erode_work_hubs(memory_manager) -> None:
 
 	from qdrant_client import models as qm
 
-	# Retrieve all synthesis hubs in work_memories
-	scroll_filter = qm.Filter(must=[qm.FieldCondition(key="metadata.lazarus_phase", match=qm.MatchValue(value="synthesis_hub"))])
+	# Retrieve all synthesis hubs in work_memories. lazarus_phase lives at the
+	# payload top level (add_memory flattens metadata) — the old nested
+	# "metadata.lazarus_phase" key matched 0 points, so erosion never ran.
+	scroll_filter = qm.Filter(must=[qm.FieldCondition(key="lazarus_phase", match=qm.MatchValue(value="synthesis_hub"))])
 
 	try:
 		# Scroll to get all hubs (limit=1000 should be plenty for hubs)
@@ -70,8 +72,12 @@ def erode_work_hubs(memory_manager) -> None:
 			# 2. Intensity decay: decay intensity by 15% (factor 0.85)
 			new_intensity = round(intensity * 0.85, 3)
 
-			# Deletion threshold: if score <= 0.3 or intensity <= 0.05
-			deletion_threshold = 0.3
+			# Deletion threshold: single source of truth is the collection's own
+			# Bayesian engine, so sleep-side forgetting stays coherent with the
+			# read-path lazy decay calibration (must sit below the prior mean 0.5).
+			from red_pill.affect import get_memory_engine
+
+			deletion_threshold = get_memory_engine("bayesian").deletion_threshold
 			if new_score <= deletion_threshold or new_intensity <= 0.05:
 				points_to_delete.append(hub.id)
 				logger.info(

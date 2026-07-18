@@ -83,7 +83,11 @@ class BayesianEngine(MemoryEngine):
 	E[θ] = α / (α + β)
 	"""
 
-	def __init__(self, deletion_threshold: float = 0.5):
+	def __init__(self, deletion_threshold: float = 0.2):
+		# The threshold must sit strictly below the uniform-prior mean E[Beta(1,1)] = 0.5,
+		# or every engram without reinforcement history is born dead (utility 0.5 <= 0.5
+		# marked _delete at t=0). At 0.2, a prior engram survives ~19 days without a
+		# single recall before the sleep cycle may forget it: 1/(2+ln(1+t)) = 0.2 -> t = e^3-1.
 		self.deletion_threshold = deletion_threshold
 
 	def calculate_lazy_decay(self, payload: Dict[str, Any], current_time: float) -> Dict[str, Any]:

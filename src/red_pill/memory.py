@@ -694,7 +694,7 @@ class MemoryManager:
 			hit.payload = self._parse_payload(hit.payload, strict=strict)
 
 			_is_permanent = collection.strip() in self.cfg.PERMANENT_COLLECTIONS
-			if self.cfg.METABOLISM_STRATEGY == "LAZY" and not _is_permanent:
+			if self.cfg.METABOLISM_STRATEGY == "LAZY" and not _is_permanent and not hit.payload.get("immune"):
 				# Phase 2: Pluggable Memory Engine
 				engine_type = self.cfg.MEMORY_ENGINES.get(collection.strip(), "fsrs_real")
 				engine = get_memory_engine(engine_type)
@@ -703,16 +703,19 @@ class MemoryManager:
 				decay_updates = engine.calculate_lazy_decay(hit.payload, current_time=time.time())
 
 				if decay_updates.get("_delete"):
-					# Eroded below threshold. Hide it from this result either way; only
-					# actually delete when read-path pruning is explicitly enabled.
-					# Forgetting is the sleep cycle's job, not a read's.
+					# Eroded below the engine's threshold. Forgetting is the sleep
+					# cycle's job, not a read's: keep the hit, demote it in ranking,
+					# and let the reinforcement below rehabilitate it organically.
+					# Hiding it here starves it of reinforcement forever (death spiral).
 					if self.cfg.READ_PATH_PRUNING_ENABLED:
 						logger.warning(f"Lazy decay DELETE ({engine_type}): engram {hit.id} in '{collection}' eroded below threshold. Removing.")
 						try:
 							self.client.delete(collection_name=collection, points_selector=models.PointIdsList(points=[hit.id]))
 						except Exception:
 							pass
-					continue
+						continue
+					hit.payload["_eroded"] = True
+					decay_updates = {}
 
 				if decay_updates:
 					hit.payload.update(decay_updates)
@@ -734,6 +737,9 @@ class MemoryManager:
 				self.client.batch_update_points(collection_name=collection, update_operations=update_operations)
 			except Exception:
 				pass
+
+		# Healthy hits outrank eroded ones; the stable sort preserves similarity order within each group.
+		decayed_results.sort(key=lambda h: bool((h.payload or {}).get("_eroded")))
 
 		current_hop_ids = [str(hit.id) for hit in decayed_results]
 		visited_ids = set(current_hop_ids)
@@ -853,11 +859,13 @@ class MemoryManager:
 				if not p.payload:
 					continue
 				p.payload = self._parse_payload(p.payload, strict=strict)
-				# Activation check: never inject context the target's own engine considers eroded.
-				engine_type = self.cfg.MEMORY_ENGINES.get(target_col.strip(), "fsrs_real")
-				engine = get_memory_engine(engine_type)
-				if engine.calculate_lazy_decay(p.payload, current_time=time.time()).get("_delete"):
-					continue
+				# Activation check: never inject context the target's own engine considers
+				# eroded. Immune engrams are exempt — they cannot erode.
+				if not p.payload.get("immune"):
+					engine_type = self.cfg.MEMORY_ENGINES.get(target_col.strip(), "fsrs_real")
+					engine = get_memory_engine(engine_type)
+					if engine.calculate_lazy_decay(p.payload, current_time=time.time()).get("_delete"):
+						continue
 				p.payload["_is_evoked"] = True
 				p.payload["_axon_weight"] = weight_by_id[str(p.id)]
 				cascade_results.append(p)
