@@ -648,6 +648,8 @@ class MemoryManager:
 				for hit in decayed_results:
 					if hit.payload:
 						for axon in normalize_associations(hit.payload.get("associations", [])):
+							if axon.is_cross(collection):
+								continue  # typed cross axons reinforce on traversal (W·β, ADR §3.2), never via blind propagation
 							a_id_str = axon.id
 							increment_map[a_id_str] = increment_map.get(a_id_str, 0.0) + current_increment
 							if a_id_str not in visited_ids:
@@ -659,6 +661,8 @@ class MemoryManager:
 						for p in points:
 							if p.payload:
 								for axon in normalize_associations(p.payload.get("associations", [])):
+									if axon.is_cross(collection):
+										continue
 									a_id_str = axon.id
 									increment_map[a_id_str] = increment_map.get(a_id_str, 0.0) + current_increment
 									if a_id_str not in visited_ids:
@@ -685,17 +689,28 @@ class MemoryManager:
 
 		# --- v6.0: Sovereign Evocative Cascade (Hybrid Vector-Graph) ---
 		MAX_EVOKED = 3
+		MAX_CROSS_PER_HIT = 2  # ADR-AXON-001 §6: top axons by weight, per direct hit
 		evoked_ids: set[str] = set()
 		visited_ids = set(str(h.id) for h in decayed_results)
+		cross_selected: Dict[str, Dict[str, float]] = {}  # target_collection -> {id: weight}
 
 		# 1. Harvest `a_ids` (synapses forged organically by Sovereign Oneiromancy)
 		for hit in decayed_results:
 			if hit.payload:
-				for axon in normalize_associations(hit.payload.get("associations", [])):
+				axons = normalize_associations(hit.payload.get("associations", []))
+				for axon in axons:
+					if axon.is_cross(collection):
+						continue  # typed cross axons handled below (or dormant while AXON_READ_ENABLED is off)
 					str_id = axon.id
 					if str_id not in visited_ids and len(evoked_ids) < MAX_EVOKED:
 						evoked_ids.add(str_id)
 						visited_ids.add(str_id)
+				if self.cfg.AXON_READ_ENABLED:
+					cross = sorted((a for a in axons if a.is_cross(collection)), key=lambda a: a.weight, reverse=True)
+					for axon in cross[:MAX_CROSS_PER_HIT]:
+						if axon.id not in visited_ids and axon.target_collection:
+							cross_selected.setdefault(axon.target_collection, {})[axon.id] = axon.weight
+							visited_ids.add(axon.id)
 
 		cascade_results = []
 		if evoked_ids:
@@ -722,6 +737,40 @@ class MemoryManager:
 								cascade_results.append(p)
 			except Exception as e:
 				logger.error(f"Evocative Cascade lookup failed: {e}")
+
+		# 2b. Typed cross-collection traversal (ADR-AXON-001 §6, P4)
+		for target_col, weight_by_id in cross_selected.items():
+			try:
+				points = self.client.retrieve(collection_name=target_col, ids=list(weight_by_id.keys()), with_payload=True, with_vectors=False)
+			except Exception as e:
+				logger.error(f"Axon traversal retrieve failed for '{target_col}': {e}")
+				continue
+			found_ids = {str(p.id) for p in points}
+			orphans = set(weight_by_id.keys()) - found_ids
+			if orphans:
+				# Target eroded away: the weaver's repair pass GCs the axon next cycle.
+				logger.info(f"[AXON TRAVERSAL] {len(orphans)} dangling axon target(s) in '{target_col}' skipped.")
+
+			traversal_increments: Dict[str, float] = {}
+			for p in points:
+				if not p.payload:
+					continue
+				p.payload = self._parse_payload(p.payload, strict=strict)
+				# Activation check: never inject context the target's own engine considers eroded.
+				engine_type = self.cfg.MEMORY_ENGINES.get(target_col.strip(), "fsrs_real")
+				engine = get_memory_engine(engine_type)
+				if engine.calculate_lazy_decay(p.payload, current_time=time.time()).get("_delete"):
+					continue
+				p.payload["_is_evoked"] = True
+				p.payload["_axon_weight"] = weight_by_id[str(p.id)]
+				cascade_results.append(p)
+				# Traversal reinforcement: synthetic review of W·β on the destination (ADR §3.2).
+				traversal_increments[str(p.id)] = weight_by_id[str(p.id)] * self.cfg.AXON_BETA
+			if traversal_increments:
+				try:
+					self._reinforce_points(target_col, list(traversal_increments.keys()), traversal_increments)
+				except Exception as e:
+					logger.debug(f"Axon traversal reinforcement failed for '{target_col}': {e}")
 
 		# 3. Unified Stream (Direct Hits + Branching Memories)
 		return decayed_results + cascade_results
