@@ -18,7 +18,14 @@ from red_pill.core.paths import get_staging_dir
 from red_pill.core.vram_probe import VramProbe
 from red_pill.metabolism.categorizer import detect_category_heuristics
 from red_pill.metabolism.chunker import chunk_text
-from red_pill.metabolism.distiller import distill_engram, distill_session_anchors, synthesize_hub
+from red_pill.metabolism.distiller import (
+	build_emotional_vector,
+	derive_hub_affect,
+	distill_engram,
+	distill_session_anchors,
+	merge_relics,
+	synthesize_hub_v2,
+)
 from red_pill.metabolism.ephemeral_server import EphemeralServer, _check_llm_available
 from red_pill.metabolism.phases.base import SleepContext, SleepPhase
 from red_pill.metabolism.thread_weaver import _load_thread_state, _save_thread_state
@@ -184,6 +191,7 @@ class ConsolidationPhase(SleepPhase):
 
 				point_write_failed = False
 				point_llm_failed = False
+				fragment_affects = []
 				for i, chunk in enumerate(chunks):
 					distilled = distill_engram(chunk, fallback_category=fallback_cat)
 					summary = distilled.get("summary", "")
@@ -207,10 +215,17 @@ class ConsolidationPhase(SleepPhase):
 						chunk_col = f"{chunk_cat}_memories"
 
 					try:
+						chunk_metadata = {"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id, "model": model_name, "parent_id": parent_id}
+						if distilled.get("texture"):
+							chunk_metadata["texture"] = distilled["texture"]
+						if distilled.get("lang"):
+							chunk_metadata["lang"] = distilled["lang"]
+						if distilled.get("relics"):
+							chunk_metadata["relics"] = distilled["relics"]
 						new_id = memory_manager.add_memory(
 							collection=chunk_col,
 							text=summary,
-							metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id, "model": model_name, "parent_id": parent_id},
+							metadata=chunk_metadata,
 							color="blue" if chunk_col == "work_memories" else "purple",
 							emotion=distilled.get("emotion", "neutral"),
 							intensity=distilled.get("intensity", 0.5),
@@ -220,29 +235,48 @@ class ConsolidationPhase(SleepPhase):
 						if new_id:
 							prev_chunk_id = new_id
 							child_ids.append(new_id)
+							fragment_affects.append(
+								{
+									"child_id": str(new_id),
+									"emotion": distilled.get("emotion", "neutral"),
+									"intensity": distilled.get("intensity", 0.5),
+									"category": distilled.get("category", fallback_cat),
+								}
+							)
 							batch_processed += 1
 							chunks_saved += 1
 					except Exception as e:
 						logger.error(f"[SLEEP ENGINE] Metabolic Fixation failed for {raw_id}: {e}")
 						point_write_failed = True
 
-				# Hub Synthesis
+				# Hub Synthesis (v2: texture + language preserving, affect from history)
 				if len(surviving_chunks) > 1 and prev_chunk_id and not point_write_failed:
-					hub_summary = synthesize_hub([c["summary"] for c in surviving_chunks])
+					hub = synthesize_hub_v2(surviving_chunks)
+					hub_summary = f"{hub['title']}\n{hub['summary']}" if hub.get("title") else hub["summary"]
+					hub_emotion, hub_intensity = derive_hub_affect(surviving_chunks)
+					hub_metadata = {
+						"lazarus_phase": "synthesis_hub",
+						"node_type": "synthesis_hub",
+						"source_buffer_id": raw_id,
+						"model": model_name,
+						"parent_id": parent_id,
+						"emotional_vector": build_emotional_vector(fragment_affects),
+					}
+					if hub.get("texture"):
+						hub_metadata["texture"] = hub["texture"]
+					if hub.get("lang"):
+						hub_metadata["lang"] = hub["lang"]
+					hub_relics = merge_relics(surviving_chunks)
+					if hub_relics:
+						hub_metadata["relics"] = hub_relics
 					try:
 						hub_id = memory_manager.add_memory(
 							collection=target_col,
 							text=hub_summary,
-							metadata={
-								"lazarus_phase": "synthesis_hub",
-								"node_type": "synthesis_hub",
-								"source_buffer_id": raw_id,
-								"model": model_name,
-								"parent_id": parent_id,
-							},
+							metadata=hub_metadata,
 							color="cyan",
-							emotion=surviving_chunks[-1]["emotion"],
-							intensity=max([c["intensity"] for c in surviving_chunks]),
+							emotion=hub_emotion,
+							intensity=hub_intensity,
 						)
 						if hub_id:
 							client.set_payload(collection_name=target_col, payload={"associations": [prev_chunk_id]}, points=[hub_id])
@@ -350,6 +384,7 @@ class ConsolidationPhase(SleepPhase):
 					chunks = chunk_text(raw_text)
 					surviving_chunks = []
 					prev_chunk_id = None
+					fragment_affects = []
 
 					for chunk in chunks:
 						distilled = distill_engram(chunk, fallback_category="work")
@@ -371,16 +406,23 @@ class ConsolidationPhase(SleepPhase):
 							chunk_col = f"{chunk_cat}_memories"
 
 						try:
+							chunk_metadata = {
+								"lazarus_phase": "sequence_chunk",
+								"source_buffer_id": raw_id,
+								"model": model_name,
+								"parent_id": parent_id,
+								**ws_meta,
+							}
+							if distilled.get("texture"):
+								chunk_metadata["texture"] = distilled["texture"]
+							if distilled.get("lang"):
+								chunk_metadata["lang"] = distilled["lang"]
+							if distilled.get("relics"):
+								chunk_metadata["relics"] = distilled["relics"]
 							new_id = memory_manager.add_memory(
 								collection=chunk_col,
 								text=summary,
-								metadata={
-									"lazarus_phase": "sequence_chunk",
-									"source_buffer_id": raw_id,
-									"model": model_name,
-									"parent_id": parent_id,
-									**ws_meta,
-								},
+								metadata=chunk_metadata,
 								color="blue" if chunk_col == "work_memories" else "purple",
 								emotion=distilled.get("emotion", "neutral"),
 								intensity=distilled.get("intensity", 0.5),
@@ -390,28 +432,47 @@ class ConsolidationPhase(SleepPhase):
 							if new_id:
 								prev_chunk_id = new_id
 								child_ids.append(new_id)
+								fragment_affects.append(
+									{
+										"child_id": str(new_id),
+										"emotion": distilled.get("emotion", "neutral"),
+										"intensity": distilled.get("intensity", 0.5),
+										"category": distilled.get("category", "work"),
+									}
+								)
 								total_processed += 1
 						except Exception:
 							pass
 
-					# Hub Synthesis
+					# Hub Synthesis (v2)
 					if len(surviving_chunks) > 1 and prev_chunk_id:
-						hub_summary = synthesize_hub([c["summary"] for c in surviving_chunks])
+						hub = synthesize_hub_v2(surviving_chunks)
+						hub_summary = f"{hub['title']}\n{hub['summary']}" if hub.get("title") else hub["summary"]
+						hub_emotion, hub_intensity = derive_hub_affect(surviving_chunks)
+						hub_metadata = {
+							"lazarus_phase": "synthesis_hub",
+							"node_type": "synthesis_hub",
+							"source_buffer_id": raw_id,
+							"model": model_name,
+							"parent_id": parent_id,
+							"emotional_vector": build_emotional_vector(fragment_affects),
+							**ws_meta,
+						}
+						if hub.get("texture"):
+							hub_metadata["texture"] = hub["texture"]
+						if hub.get("lang"):
+							hub_metadata["lang"] = hub["lang"]
+						hub_relics = merge_relics(surviving_chunks)
+						if hub_relics:
+							hub_metadata["relics"] = hub_relics
 						try:
 							hub_id = memory_manager.add_memory(
 								collection="work_memories",
 								text=hub_summary,
-								metadata={
-									"lazarus_phase": "synthesis_hub",
-									"node_type": "synthesis_hub",
-									"source_buffer_id": raw_id,
-									"model": model_name,
-									"parent_id": parent_id,
-									**ws_meta,
-								},
+								metadata=hub_metadata,
 								color="cyan",
-								emotion=surviving_chunks[-1]["emotion"],
-								intensity=max([c["intensity"] for c in surviving_chunks]),
+								emotion=hub_emotion,
+								intensity=hub_intensity,
 							)
 							if hub_id:
 								client.set_payload(collection_name="work_memories", payload={"associations": [prev_chunk_id]}, points=[hub_id])

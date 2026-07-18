@@ -119,7 +119,7 @@ def test_sleep_cycle_dynamic_category_routing(mock_llm, mock_distill_anchors):
 	with patch(
 		"red_pill.metabolism.phases.consolidation.chunk_text", side_effect=lambda text: ["joke chunk", "code chunk"] if "joke and write rust" in text else []
 	):
-		with patch("red_pill.metabolism.phases.consolidation.synthesize_hub", return_value="[Mixed Session] joke + code"):
+		with patch("red_pill.metabolism.phases.consolidation.synthesize_hub_v2", return_value={"title": "[Mixed Session]", "summary": "joke + code", "texture": "", "lang": ""}):
 			with patch("red_pill.metabolism.phases.consolidation.distill_engram") as mock_distill:
 				mock_distill.side_effect = [
 					{"summary": "funny joke summary", "emotion": "joy", "intensity": 0.9, "category": "social"},

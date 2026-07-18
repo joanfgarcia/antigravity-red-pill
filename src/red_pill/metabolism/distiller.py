@@ -348,3 +348,113 @@ def distill_session_anchors(memory_manager, hub_summaries: List[str]) -> Optiona
 		return None
 
 
+
+
+# ─────────────────────── HUB v2 (ADR-AXON-001 / Eje 1) ───────────────────────
+
+HUB_TEXTURE_MAX_CHARS = 800
+
+
+def derive_hub_affect(chunks: List[Dict[str, Any]]) -> tuple:
+	"""Dominant emotion (intensity-weighted frequency) + max intensity.
+
+	Replaces the accidental legacy derivation (last chunk's emotion) with one
+	that answers to the whole fragment history (ADR §2.2).
+	"""
+	if not chunks:
+		return "neutral", 0.5
+	weights: Dict[str, float] = {}
+	for c in chunks:
+		emotion = str(c.get("emotion", "neutral"))
+		weights[emotion] = weights.get(emotion, 0.0) + float(c.get("intensity", 0.5))
+	dominant = max(weights, key=lambda k: weights[k])
+	return dominant, max(float(c.get("intensity", 0.5)) for c in chunks)
+
+
+def merge_relics(chunks: List[Dict[str, Any]], cap: int = 5, max_len: int = 200) -> List[str]:
+	"""Union of child relics, deduped and capped. Mechanical transport only —
+	relics never pass through an LLM again after gen-0 extraction (T4)."""
+	merged: List[str] = []
+	for c in chunks:
+		for relic in c.get("relics", []) or []:
+			if isinstance(relic, str) and relic and len(relic) <= max_len and relic not in merged:
+				merged.append(relic)
+			if len(merged) >= cap:
+				return merged
+	return merged
+
+
+def build_emotional_vector(fragment_affects: List[Dict[str, Any]]) -> Dict[str, Any]:
+	"""Per-fragment affect history for the hub payload (ADR §2.2).
+
+	fragment_affects entries: {child_id, emotion, intensity, category} collected
+	at chunk-write time so ids and evaluations can never misalign.
+	"""
+	return {"fragments": fragment_affects}
+
+
+def synthesize_hub_v2(chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
+	"""Neocortex Hub v2: master summary AND merged texture, language-preserving.
+
+	Falls back to the legacy synthesize_hub() text with empty texture if the
+	structured call fails — the hub must always exist.
+	"""
+	import re
+
+	from red_pill.core.providers import ProviderRegistry
+
+	summaries = [str(c.get("summary", "")) for c in chunks if c.get("summary")]
+	textures = [str(c.get("texture", "")) for c in chunks if c.get("texture")]
+	langs = [str(c.get("lang", "")) for c in chunks if c.get("lang")]
+	dominant_lang = max(set(langs), key=langs.count) if langs else ""
+
+	system_prompt = (
+		"[Refraction: NEOCORTEX_SYNTHESIS_V2] Style: Highly concise, conscious of texture.\n"
+		"You receive the factual summaries AND the atmosphere notes (textures) of the chronological "
+		"fragments of one interaction. Return a strict JSON object with these keys:\n"
+		"- 'title': descriptive, contextual, specific. Never generic like 'Memory Synthesis' or 'Session Summary'.\n"
+		"- 'summary': single cohesive master summary of the factual chunks. Highly concise, preserve key facts "
+		"and narrative trajectory.\n"
+		"- 'texture': merge of the fragment textures into AT MOST 4 sentences. Select only what matters for "
+		"identity, relationship and atmosphere; DISCARD the rest. Never concatenate the textures verbatim.\n"
+		f"- 'lang': ISO 639-1 code used.\n"
+		"IMPORTANT: write 'title', 'summary' and 'texture' in the DOMINANT language of the fragments"
+		+ (f" (which is '{dominant_lang}')" if dominant_lang else "")
+		+ ".\nConstraint: Output ONLY valid raw JSON, without markdown blocks."
+	)
+	user_prompt = "SUMMARIES:\n" + "\n".join(f"- {s}" for s in summaries)
+	if textures:
+		user_prompt += "\n\nTEXTURES:\n" + "\n".join(f"- {t}" for t in textures)
+
+	fallback_text = synthesize_hub(summaries)
+	fallback = {"title": "", "summary": fallback_text, "texture": "", "lang": dominant_lang, "_is_fallback": True}
+
+	try:
+		try:
+			provider = ProviderRegistry.get_inference_provider("sip")
+		except RuntimeError:
+			provider = ProviderRegistry.get_inference_provider()
+		content = provider.generate(
+			prompt=user_prompt,
+			messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
+			temperature=0.1,
+			response_format={"type": "json_object"},
+		)
+		match = re.search(r"\{[\s\S]*\}", content)
+		if not match:
+			return fallback
+		parsed = json.loads(_sanitize_llm_json(match.group(0)))
+		summary_val = str(parsed.get("summary") or "").strip()
+		if not summary_val or _is_template_echo(summary_val):
+			return fallback
+		texture_val = str(parsed.get("texture") or "").strip()
+		if _is_template_echo(texture_val):
+			texture_val = ""
+		if len(texture_val) > HUB_TEXTURE_MAX_CHARS:
+			logger.warning(f"[HUB-V2] texture over {HUB_TEXTURE_MAX_CHARS} chars ({len(texture_val)}) — truncating (compression instruction ignored).")
+			texture_val = texture_val[:HUB_TEXTURE_MAX_CHARS]
+		lang_val = str(parsed.get("lang") or dominant_lang).lower().strip()[:2]
+		return {"title": str(parsed.get("title") or "").strip(), "summary": summary_val, "texture": texture_val, "lang": lang_val}
+	except Exception as e:
+		logger.warning(f"[HUB-V2] structured synthesis failed ({e}) — falling back to legacy hub.")
+		return fallback
