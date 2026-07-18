@@ -771,6 +771,19 @@ class MemoryManager:
 					self._reinforce_points(target_col, list(traversal_increments.keys()), traversal_increments)
 				except Exception as e:
 					logger.debug(f"Axon traversal reinforcement failed for '{target_col}': {e}")
+			try:
+				from red_pill.events import AxonTraversalEvent
+
+				get_event_bus().emit(
+					AxonTraversalEvent(
+						source_collection=collection,
+						target_collection=target_col,
+						traversed=len(traversal_increments),
+						orphans=len(orphans),
+					)
+				)
+			except Exception as e:
+				logger.debug(f"Axon traversal telemetry emit failed: {e}")
 
 		# 3. Unified Stream (Direct Hits + Branching Memories)
 		return decayed_results + cascade_results

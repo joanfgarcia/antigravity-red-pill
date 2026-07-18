@@ -45,9 +45,29 @@ class AxonWeaverPhase(SleepPhase):
 			f"{sum(rejected) / len(rejected):.2f}" if rejected else "n/a",
 		)
 
+		effective_runs = int(load_axon_state().get("completed_runs", 0))
 		if stats["candidates_evaluated"] > 0:
 			state = load_axon_state()
-			state["completed_runs"] = int(state.get("completed_runs", 0)) + 1
+			effective_runs = int(state.get("completed_runs", 0)) + 1
+			state["completed_runs"] = effective_runs
 			state["last_stats"] = {k: v for k, v in stats.items() if not k.startswith("weights_")}
 			save_axon_state(state)
-			logger.info(f"[AXON WEAVER] Effective run #{state['completed_runs']} recorded (shadow gate P7).")
+			logger.info(f"[AXON WEAVER] Effective run #{effective_runs} recorded (shadow gate P7).")
+
+		try:
+			from red_pill.events import AxonWeaveEvent, get_event_bus
+
+			get_event_bus().emit(
+				AxonWeaveEvent(
+					candidates_evaluated=stats["candidates_evaluated"],
+					axons_woven=stats["axons_woven"],
+					axons_repaired=stats["axons_repaired"],
+					axons_pruned=stats["axons_pruned"],
+					rejected_by_gate=stats["rejected_by_gate"],
+					w_accepted_avg=round(sum(accepted) / len(accepted), 4) if accepted else None,
+					w_rejected_avg=round(sum(rejected) / len(rejected), 4) if rejected else None,
+					effective_runs=effective_runs,
+				)
+			)
+		except Exception as e:
+			logger.debug(f"[AXON WEAVER] telemetry emit failed: {e}")

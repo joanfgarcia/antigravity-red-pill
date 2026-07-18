@@ -95,6 +95,31 @@ class CollectionCreatedEvent(RedPillEvent):
 
 
 @dataclasses.dataclass
+class AxonWeaveEvent(RedPillEvent):
+	"""Fired after an AxonWeaverPhase cycle (ADR-AXON-001 P6) — includes the gate's
+	rejection stats so AXON_GATE can be tuned from data during the shadow rollout."""
+
+	candidates_evaluated: int = 0
+	axons_woven: int = 0
+	axons_repaired: int = 0
+	axons_pruned: int = 0
+	rejected_by_gate: int = 0
+	w_accepted_avg: Optional[float] = None
+	w_rejected_avg: Optional[float] = None
+	effective_runs: int = 0
+
+
+@dataclasses.dataclass
+class AxonTraversalEvent(RedPillEvent):
+	"""Fired when the evocative cascade traverses cross axons at query time."""
+
+	source_collection: str = ""
+	target_collection: str = ""
+	traversed: int = 0
+	orphans: int = 0
+
+
+@dataclasses.dataclass
 class SoulCreatedEvent(RedPillEvent):
 	"""Fired after 'redpill export' creates a new local backup zip."""
 
