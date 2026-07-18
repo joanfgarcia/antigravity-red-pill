@@ -109,7 +109,7 @@ def test_distill_engram_malformed_json_types():
 	mock_inference.generate.return_value = '{"summary": "float test", "emotion": 12.3, "intensity": "invalid", "category": null}'  # type: ignore
 	res2 = distill_engram("raw content")
 	assert res2["summary"] == "float test"
-	assert res2["emotion"] == "12.3"
+	assert res2["emotion"] == "neutral"  # V3: values outside the closed taxonomy normalize to neutral
 	assert res2["intensity"] == 0.5
 	assert res2["category"] == "social"  # fallback_category is social
 

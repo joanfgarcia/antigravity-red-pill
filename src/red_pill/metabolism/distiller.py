@@ -17,6 +17,34 @@ from red_pill.metabolism.chunker import _is_template_echo, _sanitize_llm_json
 logger = logging.getLogger(__name__)
 
 
+# Closed emotional taxonomy the erosion/affect stack understands. Anything the
+# distiller invents outside this list is normalized to neutral (and logged).
+VALID_EMOTIONS = frozenset(
+	{"joy", "sadness", "fear", "disgust", "anger", "anxiety", "envy", "embarrassment", "ennui", "nostalgia", "neutral"}
+)
+
+
+def _validate_relics(relics: Any, raw_content: str, max_relics: int = 2, max_len: int = 200) -> list:
+	"""Keep only quotes that are literal substrings of the source (whitespace-normalized).
+
+	The verbatim guarantee belongs to code, not to the LLM's discipline: the
+	workshop showed distillers paraphrase quotes within two generations.
+	"""
+	if not isinstance(relics, list):
+		return []
+	normalized_source = " ".join(str(raw_content).split())
+	kept: list = []
+	for relic in relics:
+		if not isinstance(relic, str):
+			continue
+		candidate = " ".join(relic.strip().strip('"').split())
+		if candidate and len(candidate) <= max_len and candidate in normalized_source and candidate not in kept:
+			kept.append(candidate)
+		if len(kept) >= max_relics:
+			break
+	return kept
+
+
 def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[str, Any]:
 	"""
 	Lazarus Phase 2: Consolidation (Sleep) & Affective Preservation
@@ -29,20 +57,46 @@ def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[
 
 	# Explicit flag so callers can detect the fallback reliably — the old heuristic
 	# (summary endswith "..." and len > 490) misses short chunks whose raw fallback is <490 chars.
-	fallback = {"summary": raw_content[:500] + "...", "emotion": "neutral", "intensity": 0.5, "category": fallback_category, "_is_fallback": True}
+	fallback = {
+		"summary": raw_content[:500] + "...",
+		"emotion": "neutral",
+		"intensity": 0.5,
+		"category": fallback_category,
+		"texture": "",
+		"lang": "",
+		"relics": [],
+		"_is_fallback": True,
+	}
 
+	# COGNITIVE_DISTILLER_V3 (unified, key-ordered). The metadata keys are emitted
+	# BEFORE 'texture' on purpose: the workshop showed that committing to
+	# emotion/intensity/category first anchors the texture against hallucination,
+	# while a texture-first framing inflates intensity and blurs category.
 	system_prompt = (
-		"[Refraction: COGNITIVE_DISTILLER] Style: Analytical, strict. "
-		"Focus: Distill the interaction into a valid JSON object. "
-		"Format requirements:\n"
-		"Return a strict JSON object with these keys:\n"
-		"- 'summary': Concise, deep summary of facts, design decisions, debugging, or reflections. "
-		"When the interaction has more than one voice, the summary MUST capture BOTH the user's point/question "
-		"AND the assistant's response, correction, or decision — never only one side.\n"
-		"- 'emotion': One of: joy, sadness, fear, disgust, anger, anxiety, envy, embarrassment, ennui, nostalgia, neutral.\n"
-		"- 'intensity': Float between 0.0 and 1.0 representing severity or emotional charge.\n"
+		"[Refraction: COGNITIVE_DISTILLER_V3] Style: Analytical first, expressive last.\n"
+		"Focus: Distill the interaction into a valid JSON object preserving both data and atmosphere.\n"
+		"Return a strict JSON object with these keys IN THIS EXACT ORDER:\n"
+		"- 'summary': Concise, deep summary of facts, design decisions, debugging, or reflections, "
+		"written in the SAME language as the source text. When the interaction has more than one voice, "
+		"the summary MUST capture BOTH the user's point/question AND the assistant's response, "
+		"correction, or decision — never only one side.\n"
+		"- 'emotion': EXACTLY one of: joy, sadness, fear, disgust, anger, anxiety, envy, embarrassment, "
+		"ennui, nostalgia, neutral. Never output any word outside this list; if unsure, use 'neutral'. "
+		"Judge the factual content only.\n"
+		"- 'intensity': Float between 0.0 and 1.0, judged on the factual content only. "
+		"Calibration anchors: 0.1-0.3 = routine or technical-neutral content; 0.4-0.6 = engaged "
+		"collaboration or mild emotion; 0.7-0.85 = strong explicit emotion or a relationship milestone; "
+		"0.9+ = exceptional identity-defining moments. Most purely technical fragments belong below 0.4.\n"
 		"- 'category': 'work' for code, tests, commands, system configs, technical design, database, or MCPs; "
-		"'social' for personal reflections, philosophy, moods, or casual talk.\n"
+		"'social' for personal reflections, philosophy, moods, or casual talk. Choose the DOMINANT register "
+		"of THIS fragment by volume; do not average with a wider conversation. Only these two values are allowed.\n"
+		"- 'texture': 2-4 sentences capturing atmosphere, relationship dynamics, creative friction, tiredness, "
+		"humor, doubts and rejected paths. Do NOT restate facts the summary already captures; record only what "
+		"it would lose. If the fragment is too short or purely mechanical, use an empty string. "
+		"WRITE IN THE SAME LANGUAGE AS THE SOURCE TEXT.\n"
+		"- 'relics': Array of 0-2 short quotes copied EXACTLY as written in the source (keep typos untouched), "
+		"chosen for identity or emotional charge. Empty array if none deserve preservation.\n"
+		"- 'lang': ISO 639-1 code of the source language.\n"
 		"Constraint: Output ONLY valid raw JSON, without markdown blocks."
 	)
 
@@ -122,11 +176,35 @@ def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[
 					logger.warning("[SLEEP ENGINE] Distiller echoed the prompt/format spec — discarding and retrying.")
 					continue
 
+				# V3 mechanical validation — guarantees live in code, not in the prompt.
+				if emotion_val not in VALID_EMOTIONS:
+					logger.warning(f"[DISTILL-V3] emotion '{emotion_val}' outside taxonomy — normalized to neutral.")
+					emotion_val = "neutral"
+				intensity_val = max(0.0, min(1.0, intensity_val))
+				if category_val not in ("work", "social"):
+					logger.warning(f"[DISTILL-V3] category '{category_val}' invalid — falling back to '{fallback_category}'.")
+					category_val = fallback_category
+
+				texture_val = parsed.get("texture", "")
+				if not isinstance(texture_val, str):
+					texture_val = ""
+				min_texture_chars = getattr(cfg, "MIN_TEXTURE_CHARS", 100)
+				if len(raw_content) < min_texture_chars or _is_template_echo(texture_val):
+					texture_val = ""
+
+				lang_val = parsed.get("lang", "")
+				lang_val = str(lang_val).lower().strip()[:2] if isinstance(lang_val, str) else ""
+
+				relics_val = _validate_relics(parsed.get("relics", []), raw_content)
+
 				return {
 					"summary": summary_val,
 					"emotion": emotion_val,
 					"intensity": intensity_val,
 					"category": category_val,
+					"texture": texture_val,
+					"lang": lang_val,
+					"relics": relics_val,
 				}
 			else:
 				logger.warning(f"[SLEEP ENGINE] Samantha LLM output not JSON: {content[:100]}")

@@ -571,6 +571,7 @@ class RedPillConfig(BaseSettings):
 	# -----------------------------------------------------------------------
 	SLEEP_CHUNK_SIZE: int = 500
 	SLEEP_CULL_THRESHOLD: float = 0.1
+	MIN_TEXTURE_CHARS: int = 100  # Fragments below this length get no texture (hallucination guard, T3/T1)
 	SLEEP_SCROLL_LIMIT: int = 50  # Max engrams fetched per scroll batch (loop drains until empty)
 	SLEEP_MAX_LLM_FAILURES: int = 5  # Thermal breaker: abort sleep after N consecutive LLM failures
 	SLEEP_MIN_FREE_VRAM_MB: int = 1500  # Preflight: skip sleep if GPU has less free VRAM than this
