@@ -572,6 +572,16 @@ class RedPillConfig(BaseSettings):
 	SLEEP_CHUNK_SIZE: int = 500
 	SLEEP_CULL_THRESHOLD: float = 0.1
 	MIN_TEXTURE_CHARS: int = 100  # Fragments below this length get no texture (hallucination guard, T3/T1)
+
+	# ── Synaptic Axons (ADR-AXON-001) ──
+	SLEEP_PLUGIN_AXONS: bool = False  # AxonWeaverPhase master switch (born dark; shadow rollout P7)
+	AXON_READ_ENABLED: bool = False  # Read-path: typed cascade injection + traversal reinforcement (P4)
+	AXON_ALPHA: float = 0.7  # Weight of semantic similarity vs temporal proximity in W
+	AXON_GATE: float = 0.6  # Composite threshold: connect when W = α·sim + (1-α)·(1-Δt/max) ≥ gate
+	AXON_WINDOW_HOURS: float = 48.0  # Weaving work window per cycle (bounds nightly cost)
+	AXON_DT_MAX_HOURS: float = 6.0  # Max temporal distance for a candidate pair
+	AXON_BETA: float = 0.2  # Traversal reinforcement fraction (synthetic review = W·β)
+	AXON_MAX_CROSS: int = 64  # Soft cap of cross-collection axons per engram (deferred pruning)
 	SLEEP_SCROLL_LIMIT: int = 50  # Max engrams fetched per scroll batch (loop drains until empty)
 	SLEEP_MAX_LLM_FAILURES: int = 5  # Thermal breaker: abort sleep after N consecutive LLM failures
 	SLEEP_MIN_FREE_VRAM_MB: int = 1500  # Preflight: skip sleep if GPU has less free VRAM than this
