@@ -12,8 +12,6 @@ Usage:
 import argparse
 import sys
 
-from qdrant_client import models
-
 sys.path.insert(0, "src")
 
 from red_pill.memory import MemoryManager  # noqa: E402

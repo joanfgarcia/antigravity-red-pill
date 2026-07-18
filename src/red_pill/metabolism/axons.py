@@ -61,7 +61,7 @@ def compute_axon_weight(similarity: float, delta_seconds: float) -> float:
 	"""W = α·sim + (1-α)·(1 - Δt/Δt_max). Callers gate on cfg.AXON_GATE."""
 	dt_max = cfg.AXON_DT_MAX_HOURS * 3600.0
 	temporal = max(0.0, 1.0 - (abs(delta_seconds) / dt_max)) if dt_max > 0 else 0.0
-	return round(cfg.AXON_ALPHA * similarity + (1.0 - cfg.AXON_ALPHA) * temporal, 4)
+	return float(round(cfg.AXON_ALPHA * similarity + (1.0 - cfg.AXON_ALPHA) * temporal, 4))
 
 
 def _split_associations(payload: dict, own_collection: str) -> Tuple[List[Any], List[Axon]]:
