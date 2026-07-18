@@ -10,6 +10,7 @@ maintenance phases still run.
 import json
 import logging
 import os
+import time
 
 from qdrant_client.models import Filter
 
@@ -215,7 +216,13 @@ class ConsolidationPhase(SleepPhase):
 						chunk_col = f"{chunk_cat}_memories"
 
 					try:
-						chunk_metadata = {"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id, "model": model_name, "parent_id": parent_id}
+						chunk_metadata = {
+							"lazarus_phase": "sequence_chunk",
+							"source_buffer_id": raw_id,
+							"model": model_name,
+							"parent_id": parent_id,
+							"category_reviewed_at": time.time(),
+						}
 						if distilled.get("texture"):
 							chunk_metadata["texture"] = distilled["texture"]
 						if distilled.get("lang"):
@@ -261,6 +268,7 @@ class ConsolidationPhase(SleepPhase):
 						"model": model_name,
 						"parent_id": parent_id,
 						"emotional_vector": build_emotional_vector(fragment_affects),
+						"category_reviewed_at": time.time(),
 					}
 					if hub.get("texture"):
 						hub_metadata["texture"] = hub["texture"]
@@ -411,6 +419,7 @@ class ConsolidationPhase(SleepPhase):
 								"source_buffer_id": raw_id,
 								"model": model_name,
 								"parent_id": parent_id,
+								"category_reviewed_at": time.time(),
 								**ws_meta,
 							}
 							if distilled.get("texture"):
@@ -456,6 +465,7 @@ class ConsolidationPhase(SleepPhase):
 							"model": model_name,
 							"parent_id": parent_id,
 							"emotional_vector": build_emotional_vector(fragment_affects),
+							"category_reviewed_at": time.time(),
 							**ws_meta,
 						}
 						if hub.get("texture"):

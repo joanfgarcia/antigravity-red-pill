@@ -582,6 +582,11 @@ class RedPillConfig(BaseSettings):
 	AXON_DT_MAX_HOURS: float = 6.0  # Max temporal distance for a candidate pair
 	AXON_BETA: float = 0.2  # Traversal reinforcement fraction (synthetic review = W·β)
 	AXON_MAX_CROSS: int = 64  # Soft cap of cross-collection axons per engram (deferred pruning)
+
+	# ── Revision (Track R2: retroactive re-classification) ──
+	SLEEP_PLUGIN_REVISION: bool = False  # RevisionPhase master switch (born dark)
+	REVISION_BATCH_SIZE: int = 50  # Engrams re-classified per cycle (200 on beefy hardware)
+	REVISION_DRY_RUN: bool = True  # Mark revision_would_move_to instead of moving (inspect first)
 	SLEEP_SCROLL_LIMIT: int = 50  # Max engrams fetched per scroll batch (loop drains until empty)
 	SLEEP_MAX_LLM_FAILURES: int = 5  # Thermal breaker: abort sleep after N consecutive LLM failures
 	SLEEP_MIN_FREE_VRAM_MB: int = 1500  # Preflight: skip sleep if GPU has less free VRAM than this

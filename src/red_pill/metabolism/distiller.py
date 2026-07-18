@@ -458,3 +458,42 @@ def synthesize_hub_v2(chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
 	except Exception as e:
 		logger.warning(f"[HUB-V2] structured synthesis failed ({e}) — falling back to legacy hub.")
 		return fallback
+
+
+def classify_category(text: str) -> Optional[str]:
+	"""Lightweight work/social re-classification for the RevisionPhase (R2).
+
+	Returns None on any failure so the caller leaves the engram unmarked and
+	a later cycle retries — never guess on a broken call.
+	"""
+	import re
+
+	from red_pill.core.providers import ProviderRegistry
+
+	system_prompt = (
+		"[Refraction: CATEGORY_REVISOR] Style: Analytical, strict.\n"
+		"Classify the given memory text. Return a strict JSON object with ONE key:\n"
+		"- 'category': 'work' for code, tests, commands, system configs, technical design, database, or MCPs; "
+		"'social' for personal reflections, philosophy, moods, relationship history, or casual talk. "
+		"Judge the DOMINANT register by volume. Only these two values are allowed.\n"
+		"Constraint: Output ONLY valid raw JSON, without markdown blocks."
+	)
+	try:
+		try:
+			provider = ProviderRegistry.get_inference_provider("sip")
+		except RuntimeError:
+			provider = ProviderRegistry.get_inference_provider()
+		content = provider.generate(
+			prompt=f"DATA:\n{text}",
+			messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": f"DATA:\n{text}"}],
+			temperature=0.0,
+			response_format={"type": "json_object"},
+		)
+		match = re.search(r"\{[\s\S]*\}", content)
+		if not match:
+			return None
+		category = str(json.loads(_sanitize_llm_json(match.group(0))).get("category", "")).lower().strip()
+		return category if category in ("work", "social") else None
+	except Exception as e:
+		logger.debug(f"[REVISION] classify_category failed: {e}")
+		return None

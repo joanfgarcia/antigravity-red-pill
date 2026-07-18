@@ -11,6 +11,7 @@ from red_pill.metabolism.phases.base import SleepContext, SleepPhase
 from red_pill.metabolism.phases.consolidation import ConsolidationPhase
 from red_pill.metabolism.phases.evolution_phase import EvolutionPhase
 from red_pill.metabolism.phases.maintenance_phases import ErosionPhase, WashoutPhase
+from red_pill.metabolism.phases.revision_phase import RevisionPhase
 
 # Ordered pipeline. GPU-heavy consolidation first (drain → staging → gamma),
 # then CPU-only housekeeping that runs even while consolidation is deferred.
@@ -21,6 +22,7 @@ SLEEP_PHASES: list[SleepPhase] = [
 	AxonWeaverPhase(),
 	ErosionPhase(),
 	WashoutPhase(),
+	RevisionPhase(),
 	EvolutionPhase(),
 ]
 
@@ -30,6 +32,7 @@ __all__ = [
 	"ConsolidationPhase",
 	"ErosionPhase",
 	"EvolutionPhase",
+	"RevisionPhase",
 	"SleepContext",
 	"SleepPhase",
 	"WashoutPhase",
