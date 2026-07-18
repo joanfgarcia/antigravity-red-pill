@@ -546,7 +546,9 @@ class ConsolidationPhase(SleepPhase):
 								prev_hub_id = thread_state.get("work_memories")
 								if prev_hub_id:
 									client.set_payload(collection_name="work_memories", payload={"prev_session_hub": prev_hub_id}, points=[hub_id])
-									client.set_payload(collection_name="work_memories", payload={"next_session_hub": str(hub_id)}, points=[prev_hub_id])
+									client.set_payload(
+										collection_name="work_memories", payload={"next_session_hub": str(hub_id)}, points=[prev_hub_id]
+									)
 								thread_state["work_memories"] = str(hub_id)
 								_save_thread_state(thread_state)
 						except Exception:

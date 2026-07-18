@@ -19,9 +19,7 @@ logger = logging.getLogger(__name__)
 
 # Closed emotional taxonomy the erosion/affect stack understands. Anything the
 # distiller invents outside this list is normalized to neutral (and logged).
-VALID_EMOTIONS = frozenset(
-	{"joy", "sadness", "fear", "disgust", "anger", "anxiety", "envy", "embarrassment", "ennui", "nostalgia", "neutral"}
-)
+VALID_EMOTIONS = frozenset({"joy", "sadness", "fear", "disgust", "anger", "anxiety", "envy", "embarrassment", "ennui", "nostalgia", "neutral"})
 
 
 def _validate_relics(relics: Any, raw_content: str, max_relics: int = 2, max_len: int = 200) -> list:
@@ -348,8 +346,6 @@ def distill_session_anchors(memory_manager, hub_summaries: List[str]) -> Optiona
 		return None
 
 
-
-
 # ─────────────────────── HUB v2 (ADR-AXON-001 / Eje 1) ───────────────────────
 
 HUB_TEXTURE_MAX_CHARS = 800
@@ -451,7 +447,9 @@ def synthesize_hub_v2(chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
 		if _is_template_echo(texture_val):
 			texture_val = ""
 		if len(texture_val) > HUB_TEXTURE_MAX_CHARS:
-			logger.warning(f"[HUB-V2] texture over {HUB_TEXTURE_MAX_CHARS} chars ({len(texture_val)}) — truncating (compression instruction ignored).")
+			logger.warning(
+				f"[HUB-V2] texture over {HUB_TEXTURE_MAX_CHARS} chars ({len(texture_val)}) — truncating (compression instruction ignored)."
+			)
 			texture_val = texture_val[:HUB_TEXTURE_MAX_CHARS]
 		lang_val = str(parsed.get("lang") or dominant_lang).lower().strip()[:2]
 		return {"title": str(parsed.get("title") or "").strip(), "summary": summary_val, "texture": texture_val, "lang": lang_val}

@@ -127,9 +127,7 @@ def promote_orphan_chunks(memory_manager, collections=("work_memories", "social_
 		offset = None
 		while True:
 			try:
-				points, offset = client.scroll(
-					collection_name=collection, limit=1000, offset=offset, with_payload=True, with_vectors=False
-				)
+				points, offset = client.scroll(collection_name=collection, limit=1000, offset=offset, with_payload=True, with_vectors=False)
 			except Exception as e:
 				logger.error(f"[SLEEP ENGINE] Orphan-promotion scroll failed in {collection}: {e}")
 				break
@@ -259,5 +257,3 @@ def run_rhizodb_washout_and_pruning(memory_manager) -> None:
 				logger.info(f"[SLEEP ENGINE] Deleted {len(points_to_delete)} pruned engrams from {collection}.")
 			except Exception as e:
 				logger.error(f"[SLEEP ENGINE] Failed to delete pruned engrams in {collection}: {e}")
-
-

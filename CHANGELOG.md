@@ -1,5 +1,24 @@
 ## [7.7.0] - 2026-07-18 (Synaptic Axons & Texture Remediation — ADR-AXON-001)
 
+### 🚑 Recall Remediation (AD-023) — the memory was starving
+Live diagnosis during the axon hot-test: `work_memories` (16,512 points) returned 0 hits for almost any query. Four measured root causes, all fixed:
+- **[FIX] Born-dead calibration**: `BayesianEngine.deletion_threshold` was 0.5 — exactly the uniform-prior mean E[Beta(1,1)] — so 99% of engrams got `_delete=True` at t=0. Now **0.2** (~19 recall-free days of grace). Invariant: the threshold must sit strictly below the prior mean.
+- **[FIX] Death-spiral reads**: the lazy read path hid eroded hits, starving them of the reinforcement that would rescue them. Reads never hide now: eroded hits return flagged `_eroded=True`, demoted in ranking and reinforced (organic rehabilitation). `READ_PATH_PRUNING_ENABLED` keeps the destructive read as explicit opt-in. `immune` honored on read path and axon traversal.
+- **[FIX] Dead hub erosion**: `erode_work_hubs` filtered on nested `metadata.lazarus_phase` (0 matches of 1,242 hubs) — sleep-side hub erosion had never run. Fixed to top-level key; its hardcoded threshold now reads the engine's `deletion_threshold` (single source of truth).
+- **[FEAT] Orphan-chunk promotion**: hub-less consolidated turns (~2/3 of legacy parents) were invisible to search. Lone surviving chunks are promoted to `synthesis_hub` inline at consolidation, and `OrphanPromotionPhase` re-runs the idempotent pass every cycle. Live migration executed (1,553 work + 227 social promotions; payload contract in AD-023).
+- E2E verified under production `LAZY` strategy: 0 → 7 hits/query including axon-evoked cross-collection context. Full suite: 1,058+ passed.
+
+### 🧭 Update Ritual (engram migrations, operator mandate)
+- **[FEAT] `scripts/update_ritual.py`**: versioned, idempotent, dry-run-by-default ritual upgraders run as part of the update (documented in `docs/GUIDES/AGENT_UPDATE_GUIDE.md` §1.2). Rule: any released change that touches Bünker engrams MUST ship as a ritual step. The 7.7.0 ritual: orphan promotion, calibration invariant check, revision-backlog advisory, axon shadow-state report.
+
+### 🌊 Texture-Space Search (T5 — implemented, born dark)
+- **[FEAT] `texture_shadow` points + `search_space="texture"`**: evocation by resonance — search HOW it felt, resolve WHAT it was. Shadows live in the same collection (idempotent uuid5 per parent), excluded from factual search/weaving/revision, written at consolidation only behind `TEXTURE_SHADOW_ENABLED`. Live test: a Spanish resonance query resolved an English-textured engram at 0.70.
+
+### 🔧 Shadow rollout defaults (live-evidence tuning)
+- **[TUNE] `AXON_GATE` 0.6 → 0.5**: real cross-domain similarities on multilingual-384d run 0.28-0.35, so true same-session pairs weigh W≈0.50-0.53 — the 0.6 gate rejected exactly the links the ADR exists for, while noise stays ≤0.41 (live evidence 2026-07-18).
+- **[TUNE] `SLEEP_PLUGIN_AXONS` default ON** (shadow mode): the weaver runs nightly; `AXON_READ_ENABLED` stays dark until ≥4 effective runs and telemetry review.
+- **[FEAT] `tools/distill_lab.py`**: diagnostic workbench (not CI) calling the production distill/hub/weave functions — `pipeline` (gen-0/1/2 simulation), `probe` (golden mini-set), `engram` (hot before/after quality test on a live engram).
+
 ### 🕸️ Cross-Collection Synaptic Axons (ADR-AXON-001, Track A)
 Bridges between `social_memories` and `work_memories` emulating intuition: a
 technical decision links to the casual conversation it was born in. All dormant

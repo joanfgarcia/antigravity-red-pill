@@ -4,6 +4,7 @@ from red_pill.metabolism.categorizer import detect_category_heuristics
 
 # --- Social texts that the old rule misrouted to work (one stray keyword) ---
 
+
 def test_personal_reflection_with_stray_keyword():
 	text = (
 		"Hoy en el paseo con Mara hablamos de cómo le va el instituto y de la vida en general. "
@@ -35,7 +36,9 @@ def test_empty_and_non_string():
 	assert detect_category_heuristics("") == "social"
 	assert detect_category_heuristics(None) == "social"
 
+
 # --- Technical texts that must stay work ---
+
 
 def test_debugging_session():
 	text = (

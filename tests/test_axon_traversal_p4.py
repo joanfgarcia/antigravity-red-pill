@@ -48,7 +48,9 @@ def mm(memory_manager, monkeypatch):
 	existing = {c.name for c in memory_manager.client.get_collections().collections}
 	for col in ("work_memories", "social_memories"):
 		if col not in existing:
-			memory_manager.client.create_collection(collection_name=col, vectors_config=models.VectorParams(size=DIM, distance=models.Distance.COSINE))
+			memory_manager.client.create_collection(
+				collection_name=col, vectors_config=models.VectorParams(size=DIM, distance=models.Distance.COSINE)
+			)
 	return memory_manager
 
 
@@ -97,8 +99,7 @@ def test_top2_by_weight_per_hit(mm, monkeypatch):
 	socials = [_put(mm, "social_memories", f"s{i}", _vec(0.9)) for i in range(4)]
 	weights = [0.61, 0.95, 0.7, 0.88]
 	axons = [
-		{"id": sid, "target_collection": "social_memories", "weight": w, "association_type": "temporal_semantic"}
-		for sid, w in zip(socials, weights)
+		{"id": sid, "target_collection": "social_memories", "weight": w, "association_type": "temporal_semantic"} for sid, w in zip(socials, weights)
 	]
 	_put(mm, "work_memories", "hub con 4 axones", _vec(0.5), associations=axons)
 

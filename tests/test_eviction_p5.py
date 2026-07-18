@@ -32,7 +32,9 @@ def mm(memory_manager):
 	existing = {c.name for c in memory_manager.client.get_collections().collections}
 	for col in ("work_memories", "social_memories"):
 		if col not in existing:
-			memory_manager.client.create_collection(collection_name=col, vectors_config=models.VectorParams(size=DIM, distance=models.Distance.COSINE))
+			memory_manager.client.create_collection(
+				collection_name=col, vectors_config=models.VectorParams(size=DIM, distance=models.Distance.COSINE)
+			)
 	return memory_manager
 
 

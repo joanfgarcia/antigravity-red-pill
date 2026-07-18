@@ -72,7 +72,10 @@ def test_perform_sleep_cycle_affective_culling():
 					{"summary": "boring", "emotion": "neutral", "intensity": 0.1},
 					{"summary": "interesting", "emotion": "joy", "intensity": 0.8},
 				]
-				with patch("red_pill.metabolism.phases.consolidation.synthesize_hub_v2", return_value={"title": "", "summary": "master summary", "texture": "", "lang": ""}):
+				with patch(
+					"red_pill.metabolism.phases.consolidation.synthesize_hub_v2",
+					return_value={"title": "", "summary": "master summary", "texture": "", "lang": ""},
+				):
 					from unittest.mock import ANY
 
 					result = perform_sleep_cycle(mock_mgr)

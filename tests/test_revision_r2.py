@@ -26,7 +26,9 @@ def mm(memory_manager):
 	existing = {c.name for c in memory_manager.client.get_collections().collections}
 	for col in ("work_memories", "social_memories"):
 		if col not in existing:
-			memory_manager.client.create_collection(collection_name=col, vectors_config=models.VectorParams(size=DIM, distance=models.Distance.COSINE))
+			memory_manager.client.create_collection(
+				collection_name=col, vectors_config=models.VectorParams(size=DIM, distance=models.Distance.COSINE)
+			)
 	return memory_manager
 
 
@@ -65,7 +67,9 @@ def test_execute_moves_leaf_same_id(mm, social_classifier):
 def test_execute_rewires_reciprocal_axon(mm, social_classifier):
 	twin = _put(mm, "social_memories", "recuerdo social", **{REVIEWED_KEY: NOW})
 	pid = _put(
-		mm, "work_memories", "charla mal archivada",
+		mm,
+		"work_memories",
+		"charla mal archivada",
 		associations=[{"id": twin, "target_collection": "social_memories", "weight": 0.8, "association_type": "temporal_semantic"}],
 	)
 	mm.client.set_payload(

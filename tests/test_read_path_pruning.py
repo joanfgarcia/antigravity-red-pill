@@ -56,9 +56,7 @@ def _seed_healthy(mm: MemoryManager):
 		"intensity": 1.0,
 		"lazarus_phase": "synthesis_hub",
 	}
-	mm.client.upsert(
-		collection_name="work_memories", points=[models.PointStruct(id=_HEALTHY_ID, vector=[0.1] * 384, payload=payload)]
-	)
+	mm.client.upsert(collection_name="work_memories", points=[models.PointStruct(id=_HEALTHY_ID, vector=[0.1] * 384, payload=payload)])
 
 
 def _count(mm: MemoryManager) -> int:

@@ -13,7 +13,15 @@ from red_pill.metabolism.distiller import (
 
 CHUNKS = [
 	{"summary": "s1", "texture": "cálido", "emotion": "joy", "intensity": 0.85, "category": "social", "lang": "es", "relics": ["cita uno"]},
-	{"summary": "s2", "texture": "técnico", "emotion": "neutral", "intensity": 0.3, "category": "work", "lang": "es", "relics": ["cita dos", "cita uno"]},
+	{
+		"summary": "s2",
+		"texture": "técnico",
+		"emotion": "neutral",
+		"intensity": 0.3,
+		"category": "work",
+		"lang": "es",
+		"relics": ["cita dos", "cita uno"],
+	},
 	{"summary": "s3", "texture": "", "emotion": "neutral", "intensity": 0.3, "category": "social", "lang": "es", "relics": []},
 ]
 

@@ -574,10 +574,13 @@ class RedPillConfig(BaseSettings):
 	MIN_TEXTURE_CHARS: int = 100  # Fragments below this length get no texture (hallucination guard, T3/T1)
 
 	# ── Synaptic Axons (ADR-AXON-001) ──
-	SLEEP_PLUGIN_AXONS: bool = False  # AxonWeaverPhase master switch (born dark; shadow rollout P7)
-	AXON_READ_ENABLED: bool = False  # Read-path: typed cascade injection + traversal reinforcement (P4)
+	SLEEP_PLUGIN_AXONS: bool = True  # AxonWeaverPhase ON in shadow mode (weaves; read-path stays dark until the gate below)
+	AXON_READ_ENABLED: bool = False  # Read-path: typed cascade injection + traversal reinforcement (enable after >=4 effective shadow runs)
 	AXON_ALPHA: float = 0.7  # Weight of semantic similarity vs temporal proximity in W
-	AXON_GATE: float = 0.6  # Composite threshold: connect when W = α·sim + (1-α)·(1-Δt/max) ≥ gate
+	AXON_GATE: float = 0.5  # Composite threshold: connect when W = α·sim + (1-α)·(1-Δt/max) ≥ gate.
+	# 0.6 rejected the true same-session pairs on real multilingual-384d data (cross-domain sims
+	# run 0.28-0.35 → same-session W ≈ 0.50-0.53); 0.5 weaves those and still rejects noise (live
+	# evidence 2026-07-18: correct pairs 0.525/0.509, junk ≤ 0.41).
 	AXON_WINDOW_HOURS: float = 48.0  # Weaving work window per cycle (bounds nightly cost)
 	AXON_DT_MAX_HOURS: float = 6.0  # Max temporal distance for a candidate pair
 	AXON_BETA: float = 0.2  # Traversal reinforcement fraction (synthetic review = W·β)

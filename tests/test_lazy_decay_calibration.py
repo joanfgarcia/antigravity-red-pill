@@ -11,8 +11,6 @@ The threshold must sit strictly below the prior mean so that an engram starts
 alive and only erodes after sustained non-recall (~19 days at 0.2).
 """
 
-import time
-
 from red_pill.affect import BayesianEngine, get_memory_engine
 
 DAY = 86400.0
@@ -61,9 +59,7 @@ class TestBayesianThresholdCalibration:
 
 	def test_missing_bayesian_fields_default_to_alive(self):
 		"""Legacy engrams without utility_alpha/utility_beta fall back to the prior — alive."""
-		updates = BayesianEngine().calculate_lazy_decay(
-			{"last_recalled_at": NOW, "reinforcement_score": 1.0}, current_time=NOW
-		)
+		updates = BayesianEngine().calculate_lazy_decay({"last_recalled_at": NOW, "reinforcement_score": 1.0}, current_time=NOW)
 		assert not updates.get("_delete")
 
 	def test_factory_returns_calibrated_engine(self):
@@ -73,7 +69,5 @@ class TestBayesianThresholdCalibration:
 class TestFSRSStillSane:
 	def test_fresh_fsrs_engram_is_alive(self):
 		engine = get_memory_engine("fsrs_real")
-		updates = engine.calculate_lazy_decay(
-			{"last_recalled_at": NOW, "reinforcement_score": 1.0, "stability": 1.0}, current_time=NOW
-		)
+		updates = engine.calculate_lazy_decay({"last_recalled_at": NOW, "reinforcement_score": 1.0, "stability": 1.0}, current_time=NOW)
 		assert not updates.get("_delete")

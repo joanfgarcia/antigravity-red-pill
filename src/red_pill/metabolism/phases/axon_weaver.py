@@ -34,8 +34,7 @@ class AxonWeaverPhase(SleepPhase):
 		accepted = stats.get("weights_accepted", [])
 		rejected = stats.get("weights_rejected", [])
 		logger.info(
-			"[AXON WEAVER] candidates=%d woven=%d repaired=%d pruned=%d rejected_by_gate=%d "
-			"W_accepted[min/avg/max]=%s W_rejected[avg]=%s",
+			"[AXON WEAVER] candidates=%d woven=%d repaired=%d pruned=%d rejected_by_gate=%d W_accepted[min/avg/max]=%s W_rejected[avg]=%s",
 			stats["candidates_evaluated"],
 			stats["axons_woven"],
 			stats["axons_repaired"],

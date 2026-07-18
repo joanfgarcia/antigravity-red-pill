@@ -57,7 +57,13 @@ def test_sleep_cycle_creates_parent_child_graph(mock_chunk, mock_llm):
 				mock_mgr.add_memory.assert_any_call(
 					collection="work_memories",
 					text="distilled compiler fix",
-					metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id, "model": "opus", "parent_id": parent_uuid, "category_reviewed_at": ANY},
+					metadata={
+						"lazarus_phase": "sequence_chunk",
+						"source_buffer_id": raw_id,
+						"model": "opus",
+						"parent_id": parent_uuid,
+						"category_reviewed_at": ANY,
+					},
 					color="blue",
 					emotion="neutral",
 					intensity=0.8,
@@ -117,9 +123,13 @@ def test_sleep_cycle_dynamic_category_routing(mock_llm, mock_distill_anchors):
 	mock_client.scroll.side_effect = mock_scroll
 
 	with patch(
-		"red_pill.metabolism.phases.consolidation.chunk_text", side_effect=lambda text: ["joke chunk", "code chunk"] if "joke and write rust" in text else []
+		"red_pill.metabolism.phases.consolidation.chunk_text",
+		side_effect=lambda text: ["joke chunk", "code chunk"] if "joke and write rust" in text else [],
 	):
-		with patch("red_pill.metabolism.phases.consolidation.synthesize_hub_v2", return_value={"title": "[Mixed Session]", "summary": "joke + code", "texture": "", "lang": ""}):
+		with patch(
+			"red_pill.metabolism.phases.consolidation.synthesize_hub_v2",
+			return_value={"title": "[Mixed Session]", "summary": "joke + code", "texture": "", "lang": ""},
+		):
 			with patch("red_pill.metabolism.phases.consolidation.distill_engram") as mock_distill:
 				mock_distill.side_effect = [
 					{"summary": "funny joke summary", "emotion": "joy", "intensity": 0.9, "category": "social"},
@@ -140,7 +150,13 @@ def test_sleep_cycle_dynamic_category_routing(mock_llm, mock_distill_anchors):
 						mock_mgr.add_memory.assert_any_call(
 							collection="social_memories",
 							text="funny joke summary",
-							metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id, "model": "opus", "parent_id": parent_id, "category_reviewed_at": ANY},
+							metadata={
+								"lazarus_phase": "sequence_chunk",
+								"source_buffer_id": raw_id,
+								"model": "opus",
+								"parent_id": parent_id,
+								"category_reviewed_at": ANY,
+							},
 							color="purple",
 							emotion="joy",
 							intensity=0.9,
@@ -150,7 +166,13 @@ def test_sleep_cycle_dynamic_category_routing(mock_llm, mock_distill_anchors):
 						mock_mgr.add_memory.assert_any_call(
 							collection="work_memories",
 							text="rust code summary",
-							metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id, "model": "opus", "parent_id": parent_id, "category_reviewed_at": ANY},
+							metadata={
+								"lazarus_phase": "sequence_chunk",
+								"source_buffer_id": raw_id,
+								"model": "opus",
+								"parent_id": parent_id,
+								"category_reviewed_at": ANY,
+							},
 							color="blue",
 							emotion="neutral",
 							intensity=0.8,

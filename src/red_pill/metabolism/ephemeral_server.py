@@ -174,5 +174,3 @@ class EphemeralServer:
 			)
 		except Exception:
 			pass
-
-

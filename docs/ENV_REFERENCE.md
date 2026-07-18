@@ -63,6 +63,27 @@ This document provides a comprehensive list of all parameters available in the `
 | `MAX_PROPAGATION_POINTS`| `20` | Maximum number of nodes that can receive reinforcement in a single query (Read Fan-Out). |
 | `MAX_AXONS` | `500` | Maximum number of connections (edges) one node can form over its lifetime (Write Fan-In limit). |
 
+### Synaptic Axons (ADR-AXON-001, v7.7.0)
+| Parameter | Default | Description |
+| :--- | :--- | :--- |
+| `SLEEP_PLUGIN_AXONS` | `True` | AxonWeaverPhase master switch. Weaves cross-collection axons in shadow mode each sleep cycle. |
+| `AXON_READ_ENABLED` | `False` | Typed cascade injection + traversal reinforcement at query time. Enable after ≥4 effective shadow runs and telemetry review. |
+| `AXON_ALPHA` | `0.7` | Weight of semantic similarity vs temporal proximity in the axon weight `W`. |
+| `AXON_GATE` | `0.5` | Connection threshold on `W`. Must stay below same-session `W` for real cross-domain similarities (~0.28-0.35 on multilingual-384d). |
+| `AXON_WINDOW_HOURS` | `48` | Weaving work window per cycle (bounds nightly cost). |
+| `AXON_DT_MAX_HOURS` | `6` | Maximum temporal distance for a candidate pair. |
+| `AXON_BETA` | `0.2` | Traversal reinforcement fraction: a traversed axon applies `W·β` to its destination as a synthetic review. |
+| `AXON_MAX_CROSS` | `64` | Soft cap of cross axons per engram (deferred pruning; hard ceiling at 2×). |
+
+### Texture & Revision (v7.7.0)
+| Parameter | Default | Description |
+| :--- | :--- | :--- |
+| `MIN_TEXTURE_CHARS` | `100` | Fragments below this length get no texture (hallucination guard). |
+| `TEXTURE_SHADOW_ENABLED` | `False` | Write searchable `texture_shadow` points at consolidation (T5 resonance search). |
+| `SLEEP_PLUGIN_REVISION` | `False` | RevisionPhase master switch (retroactive re-classification). |
+| `REVISION_BATCH_SIZE` | `50` | Engrams re-classified per sleep cycle (200 on beefy hardware). |
+| `REVISION_DRY_RUN` | `True` | Mark `revision_would_move_to` instead of moving engrams. |
+
 ### Memory Engrams (Fragmenter)
 | Parameter | Default | Description |
 | :--- | :--- | :--- |

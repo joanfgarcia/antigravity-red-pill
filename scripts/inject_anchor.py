@@ -102,7 +102,7 @@ def ide_call_vars(ide):
 			"WAKE_CALL": "`mcp_RedPill-Kernel_refresh_session_context`",
 		}
 	return {
-		"RELAY_CALL": 'the `sovereign_handshake` tool',
+		"RELAY_CALL": "the `sovereign_handshake` tool",
 		"WAKE_CALL": 'the `bunker_memory_api` tool with `{"action": "refresh_session_context", "payload": {}}`',
 	}
 
