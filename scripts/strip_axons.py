@@ -28,7 +28,28 @@ def main() -> None:
 
 	mm = MemoryManager()
 	client = mm.client
-	touched = {"axons_stripped": 0, "points_cleaned": 0}
+	touched = {"axons_stripped": 0, "points_cleaned": 0, "shadows_deleted": 0}
+
+	# T5 rollback: texture_shadow points are whole points, not fields — delete them.
+	from qdrant_client import models
+
+	for collection in COLLECTIONS:
+		try:
+			shadow_count = client.count(
+				collection_name=collection,
+				count_filter=models.Filter(must=[models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="texture_shadow"))]),
+				exact=True,
+			).count
+			touched["shadows_deleted"] += shadow_count
+			if args.execute and shadow_count:
+				client.delete(
+					collection_name=collection,
+					points_selector=models.FilterSelector(
+						filter=models.Filter(must=[models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="texture_shadow"))])
+					),
+				)
+		except Exception:
+			pass
 
 	for collection in COLLECTIONS:
 		offset = None
@@ -58,7 +79,9 @@ def main() -> None:
 				break
 
 	mode = "EXECUTED" if args.execute else "DRY-RUN"
-	print(f"[{mode}] points_cleaned={touched['points_cleaned']} cross_axons_stripped={touched['axons_stripped']}")
+	print(
+		f"[{mode}] points_cleaned={touched['points_cleaned']} cross_axons_stripped={touched['axons_stripped']} shadows_deleted={touched['shadows_deleted']}"
+	)
 	if not args.execute:
 		print("Re-run with --execute to apply.")
 

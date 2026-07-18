@@ -288,6 +288,11 @@ class ConsolidationPhase(SleepPhase):
 						)
 						if hub_id:
 							client.set_payload(collection_name=target_col, payload={"associations": [prev_chunk_id]}, points=[hub_id])
+							if cfg.TEXTURE_SHADOW_ENABLED and hub.get("texture"):
+								try:
+									memory_manager.add_texture_shadow(target_col, str(hub_id), hub["texture"])
+								except Exception as e:
+									logger.debug(f"[SLEEP ENGINE] texture shadow write failed for {hub_id}: {e}")
 							child_ids.append(hub_id)
 							batch_processed += 1
 							chunks_saved += 1
@@ -486,6 +491,11 @@ class ConsolidationPhase(SleepPhase):
 							)
 							if hub_id:
 								client.set_payload(collection_name="work_memories", payload={"associations": [prev_chunk_id]}, points=[hub_id])
+								if cfg.TEXTURE_SHADOW_ENABLED and hub.get("texture"):
+									try:
+										memory_manager.add_texture_shadow("work_memories", str(hub_id), hub["texture"])
+									except Exception as e:
+										logger.debug(f"[SLEEP ENGINE] texture shadow write failed for {hub_id}: {e}")
 								child_ids.append(hub_id)
 								new_work_hubs.append(hub_summary)
 

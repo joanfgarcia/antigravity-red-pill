@@ -537,16 +537,112 @@ class MemoryManager:
 			return ""
 
 	def search_and_reinforce(
-		self, collection: str, query: str, limit: int = 3, deep_recall: bool = False, strict: bool = True, caller: str = "unknown"
+		self,
+		collection: str,
+		query: str,
+		limit: int = 3,
+		deep_recall: bool = False,
+		strict: bool = True,
+		caller: str = "unknown",
+		search_space: str = "summary",
 	) -> List[Any]:
-		"""Single exit point: run the search, then emit a lightweight recall metric."""
-		results = self._search_and_reinforce_impl(collection, query, limit=limit, deep_recall=deep_recall, strict=strict)
+		"""Single exit point: run the search, then emit a lightweight recall metric.
+
+		search_space: 'summary' (default) searches the factual space as always;
+		'texture' searches the resonance space (T5) — texture_shadow points —
+		and resolves each match back to its parent engram.
+		"""
+		if search_space == "texture":
+			results = self._search_texture_space(collection, query, limit=limit, strict=strict)
+		else:
+			results = self._search_and_reinforce_impl(collection, query, limit=limit, deep_recall=deep_recall, strict=strict)
 		try:
 			top_score = getattr(results[0], "score", None) if results else None
 			get_event_bus().emit(RecallEvent(collection=collection, caller=caller, query_len=len(query), hits=len(results), top_score=top_score))
 			logger.info(f"[RECALL] caller={caller} collection={collection} hits={len(results)} top_score={top_score}")
 		except Exception as e:
 			logger.debug(f"[RECALL] telemetry emit failed: {e}")
+		return results
+
+	def add_texture_shadow(self, collection: str, parent_id: str, texture: str, created_at: Optional[float] = None) -> str:
+		"""T5: persist a texture_shadow point — the hub's atmosphere, searchable.
+
+		Same collection, own vector (embedding of the texture), excluded from the
+		factual search by lazarus_phase. No collection recreation needed (the
+		named-vector alternative would require migrating every point).
+		"""
+		import uuid as uuid_lib
+
+		shadow_id = str(uuid_lib.uuid5(uuid_lib.NAMESPACE_OID, f"texture_shadow:{parent_id}"))  # idempotent per parent
+		vector = self._get_vector(texture)
+		payload = {
+			"content": texture,
+			"lazarus_phase": "texture_shadow",
+			"parent_id": str(parent_id),
+			"created_at": created_at if created_at is not None else time.time(),
+			"immune": False,
+			"category_reviewed_at": time.time(),  # never a revision candidate
+		}
+		self.client.upsert(
+			collection_name=collection,
+			points=[models.PointStruct(id=shadow_id, vector=vector, payload=payload)],
+		)
+		return shadow_id
+
+	def _search_texture_space(self, collection: str, query: str, limit: int = 3, strict: bool = True) -> List[Any]:
+		"""T5: evocation by resonance — search HOW it felt, resolve WHAT it was.
+
+		Queries texture_shadow points and returns their parent engrams tagged with
+		`_texture_score` and `_texture_match` (the matching atmosphere text).
+		Parents get standard reinforcement: being remembered by resonance is a
+		recall like any other.
+		"""
+		vector = self._get_vector(query)
+		try:
+			shadows = self.client.query_points(
+				collection_name=collection,
+				query=vector,
+				query_filter=models.Filter(must=[models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="texture_shadow"))]),
+				limit=limit,
+				with_payload=True,
+				with_vectors=False,
+			).points
+		except Exception as e:
+			logger.error(f"Texture-space query failed: {_mask_pii_exception(e)}")
+			return []
+
+		parent_meta = {}
+		for shadow in shadows:
+			shadow_payload = shadow.payload or {}
+			parent_id = str(shadow_payload.get("parent_id", ""))
+			if parent_id and parent_id not in parent_meta:
+				parent_meta[parent_id] = {"score": float(shadow.score), "texture": str(shadow_payload.get("content", ""))}
+
+		if not parent_meta:
+			return []
+		try:
+			parents = self.client.retrieve(collection_name=collection, ids=list(parent_meta.keys()), with_payload=True, with_vectors=False)
+		except Exception as e:
+			logger.error(f"Texture-space parent resolution failed: {_mask_pii_exception(e)}")
+			return []
+
+		results = []
+		increments: Dict[str, float] = {}
+		for p in parents:
+			if not p.payload:
+				continue
+			p.payload = self._parse_payload(p.payload, strict=strict)
+			meta = parent_meta[str(p.id)]
+			p.payload["_texture_score"] = meta["score"]
+			p.payload["_texture_match"] = meta["texture"]
+			results.append(p)
+			increments[str(p.id)] = self.cfg.REINFORCEMENT_INCREMENT
+		if increments:
+			try:
+				self._reinforce_points(collection, list(increments.keys()), increments)
+			except Exception as e:
+				logger.debug(f"Texture-space reinforcement failed: {e}")
+		results.sort(key=lambda r: (r.payload or {}).get("_texture_score", 0.0), reverse=True)
 		return results
 
 	def _search_and_reinforce_impl(self, collection: str, query: str, limit: int = 3, deep_recall: bool = False, strict: bool = True) -> List[Any]:
@@ -567,6 +663,7 @@ class MemoryManager:
 		structural_exclusions = [
 			models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="raw_parent")),
 			models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="sequence_chunk")),
+			models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="texture_shadow")),
 			models.FieldCondition(key="_is_fragment", match=models.MatchValue(value=True)),
 		]
 

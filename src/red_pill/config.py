@@ -583,6 +583,9 @@ class RedPillConfig(BaseSettings):
 	AXON_BETA: float = 0.2  # Traversal reinforcement fraction (synthetic review = W·β)
 	AXON_MAX_CROSS: int = 64  # Soft cap of cross-collection axons per engram (deferred pruning)
 
+	# ── Texture space (T5: evocation by resonance) ──
+	TEXTURE_SHADOW_ENABLED: bool = False  # Write texture_shadow points at consolidation (born dark)
+
 	# ── Revision (Track R2: retroactive re-classification) ──
 	SLEEP_PLUGIN_REVISION: bool = False  # RevisionPhase master switch (born dark)
 	REVISION_BATCH_SIZE: int = 50  # Engrams re-classified per cycle (200 on beefy hardware)

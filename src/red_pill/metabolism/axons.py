@@ -28,6 +28,7 @@ TARGET_COLLECTION = "work_memories"
 _STRUCTURAL_EXCLUSIONS = [
 	models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="raw_parent")),
 	models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="sequence_chunk")),
+	models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="texture_shadow")),
 	models.FieldCondition(key="_is_fragment", match=models.MatchValue(value=True)),
 ]
 

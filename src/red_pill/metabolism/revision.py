@@ -96,6 +96,7 @@ def revise_classifications(memory_manager, batch_size: Optional[int] = None, dry
 			models.FieldCondition(key=REVIEWED_KEY, range=models.Range(gt=0)),
 			models.FieldCondition(key="immune", match=models.MatchValue(value=True)),
 			models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="raw_parent")),
+			models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="texture_shadow")),
 			models.FieldCondition(key="_is_fragment", match=models.MatchValue(value=True)),
 		]
 	)
