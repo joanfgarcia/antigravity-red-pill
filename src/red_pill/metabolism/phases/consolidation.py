@@ -34,6 +34,37 @@ from red_pill.metabolism.thread_weaver import _load_thread_state, _save_thread_s
 logger = logging.getLogger(__name__)
 
 
+def _promote_lone_chunk_to_hub(memory_manager, client, chunk_col: str, chunk_id, distilled: dict) -> bool:
+	"""A turn that distills to a single surviving chunk gets no synthesized hub,
+	which left its content invisible to direct recall (sequence_chunk is
+	structurally excluded from search). The lone chunk IS the turn's best
+	distillate, so promote it to synthesis_hub and weave it into the thread."""
+	try:
+		client.set_payload(
+			collection_name=chunk_col,
+			payload={"lazarus_phase": "synthesis_hub", "node_type": "synthesis_hub", "promoted_from": "sequence_chunk"},
+			points=[chunk_id],
+		)
+		if cfg.TEXTURE_SHADOW_ENABLED and distilled.get("texture"):
+			try:
+				memory_manager.add_texture_shadow(chunk_col, str(chunk_id), distilled["texture"])
+			except Exception as e:
+				logger.debug(f"[SLEEP ENGINE] texture shadow write failed for promoted chunk {chunk_id}: {e}")
+
+		# Thread Weaving — the promoted chunk is this session's hub for its collection
+		thread_state = _load_thread_state()
+		prev_hub_id = thread_state.get(chunk_col)
+		if prev_hub_id:
+			client.set_payload(collection_name=chunk_col, payload={"prev_session_hub": prev_hub_id}, points=[chunk_id])
+			client.set_payload(collection_name=chunk_col, payload={"next_session_hub": str(chunk_id)}, points=[prev_hub_id])
+		thread_state[chunk_col] = str(chunk_id)
+		_save_thread_state(thread_state)
+		return True
+	except Exception as e:
+		logger.error(f"[SLEEP ENGINE] Lone-chunk promotion failed for {chunk_id} in {chunk_col}: {e}")
+		return False
+
+
 class ConsolidationPhase(SleepPhase):
 	@property
 	def name(self) -> str:
@@ -176,6 +207,7 @@ class ConsolidationPhase(SleepPhase):
 
 				surviving_chunks = []
 				prev_chunk_id = None
+				last_chunk_col = None
 				chunks_saved = 0
 
 				# Target collection heuristics
@@ -241,6 +273,7 @@ class ConsolidationPhase(SleepPhase):
 							client.set_payload(collection_name=chunk_col, payload={"associations": [prev_chunk_id]}, points=[new_id])
 						if new_id:
 							prev_chunk_id = new_id
+							last_chunk_col = chunk_col
 							child_ids.append(new_id)
 							fragment_affects.append(
 								{
@@ -309,6 +342,13 @@ class ConsolidationPhase(SleepPhase):
 							_save_thread_state(thread_state)
 					except Exception:
 						pass
+				elif len(surviving_chunks) == 1 and prev_chunk_id and not point_write_failed:
+					# Single-survivor turn: promote the lone chunk to hub so the turn
+					# keeps a searchable representative (no LLM synthesis needed).
+					lone_col = last_chunk_col or target_col
+					if _promote_lone_chunk_to_hub(memory_manager, client, lone_col, prev_chunk_id, surviving_chunks[0]):
+						if lone_col == "work_memories":
+							new_work_hubs.append(surviving_chunks[0].get("summary", ""))
 
 				# Save raw_parent verbatim engram
 				if chunks_saved > 0 and not point_write_failed:
@@ -397,6 +437,7 @@ class ConsolidationPhase(SleepPhase):
 					chunks = chunk_text(raw_text)
 					surviving_chunks = []
 					prev_chunk_id = None
+					last_chunk_col = None
 					fragment_affects = []
 
 					for chunk in chunks:
@@ -445,6 +486,7 @@ class ConsolidationPhase(SleepPhase):
 								client.set_payload(collection_name=chunk_col, payload={"associations": [prev_chunk_id]}, points=[new_id])
 							if new_id:
 								prev_chunk_id = new_id
+								last_chunk_col = chunk_col
 								child_ids.append(new_id)
 								fragment_affects.append(
 									{
@@ -509,6 +551,12 @@ class ConsolidationPhase(SleepPhase):
 								_save_thread_state(thread_state)
 						except Exception:
 							pass
+					elif len(surviving_chunks) == 1 and prev_chunk_id:
+						# Single-survivor staging cascade: same promotion as the drain loop.
+						lone_col = last_chunk_col or "work_memories"
+						if _promote_lone_chunk_to_hub(memory_manager, client, lone_col, prev_chunk_id, surviving_chunks[0]):
+							if lone_col == "work_memories":
+								new_work_hubs.append(surviving_chunks[0].get("summary", ""))
 
 					# Save raw_parent verbatim engram for staging file
 					if len(child_ids) > 0:

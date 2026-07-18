@@ -102,6 +102,79 @@ def erode_work_hubs(memory_manager) -> None:
 			logger.error(f"[SLEEP ENGINE] Failed to delete eroded hubs: {e}")
 
 
+def promote_orphan_chunks(memory_manager, collections=("work_memories", "social_memories"), dry_run: bool = False) -> dict:
+	"""
+	Self-healing pass: a consolidated turn whose chunks have no synthesis_hub
+	sibling is invisible to direct recall (sequence_chunk is structurally excluded
+	from search, on the premise that "searches go through the hub" — but the hub
+	is only synthesized when MORE than one chunk survives). Promote the newest
+	chunk of each hub-less parent to synthesis_hub so every turn keeps a
+	searchable representative. Multi-chunk parents are additionally flagged
+	hub_rebuild_pending=True so a future LLM pass can synthesize a proper hub.
+
+	Doubles as the one-shot legacy migration (first run) and as a per-sleep-cycle
+	safety net for any future hub-synthesis failure.
+	"""
+	client = memory_manager.client
+	report: dict = {}
+
+	for collection in collections:
+		if not client.collection_exists(collection):
+			continue
+
+		chunks_by_parent: dict = {}
+		hub_parents = set()
+		offset = None
+		while True:
+			try:
+				points, offset = client.scroll(
+					collection_name=collection, limit=1000, offset=offset, with_payload=True, with_vectors=False
+				)
+			except Exception as e:
+				logger.error(f"[SLEEP ENGINE] Orphan-promotion scroll failed in {collection}: {e}")
+				break
+			for p in points:
+				payload = p.payload or {}
+				phase = payload.get("lazarus_phase")
+				parent = payload.get("parent_id")
+				if not parent:
+					continue
+				if phase == "sequence_chunk":
+					chunks_by_parent.setdefault(parent, []).append((float(payload.get("created_at", 0.0)), p.id))
+				elif phase == "synthesis_hub":
+					hub_parents.add(parent)
+			if offset is None:
+				break
+
+		promoted = 0
+		flagged = 0
+		for parent, chunks in chunks_by_parent.items():
+			if parent in hub_parents:
+				continue
+			chunks.sort(key=lambda t: t[0])
+			representative = chunks[-1][1]
+			new_payload = {"lazarus_phase": "synthesis_hub", "node_type": "synthesis_hub", "promoted_from": "sequence_chunk"}
+			if len(chunks) > 1:
+				new_payload["hub_rebuild_pending"] = True
+				flagged += 1
+			if not dry_run:
+				try:
+					client.set_payload(collection_name=collection, payload=new_payload, points=[representative])
+				except Exception as e:
+					logger.error(f"[SLEEP ENGINE] Orphan-chunk promotion failed for {representative} in {collection}: {e}")
+					continue
+			promoted += 1
+
+		report[collection] = {"hubless_parents_promoted": promoted, "multi_chunk_flagged": flagged}
+		if promoted:
+			logger.info(
+				f"[SLEEP ENGINE] Orphan promotion in {collection}: {promoted} hub-less parents got a searchable "
+				f"representative ({flagged} pending full hub rebuild){' [dry-run]' if dry_run else ''}."
+			)
+
+	return report
+
+
 def run_rhizodb_washout_and_pruning(memory_manager) -> None:
 	"""
 	Applies global periodic Washout and Structural Pruning to collections utilizing RhizoDB.

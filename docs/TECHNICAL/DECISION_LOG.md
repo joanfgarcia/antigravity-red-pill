@@ -4,6 +4,40 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-023] Recall Remediation — Bayesian Calibration, Non-Hiding Reads & Orphan-Chunk Promotion
+**Date**: 2026-07-18
+**Context**: v7.7.0 — live diagnosis during the axon tests: `search_and_reinforce` on `work_memories` (16,512 points) returned 0 hits for almost any query under `METABOLISM_STRATEGY=LAZY`, even with `deep_recall=True`. The 7.7.0 axons and texture layers are useless if direct recall returns empty.
+**Status**: EXECUTED — code fix + **live engram mass-update applied 2026-07-18** (see §4; any agent reasoning about engram payloads must read this section).
+
+### 1. Root causes (four, measured — not assumed)
+1. **Born-dead threshold**: `BayesianEngine.deletion_threshold` was 0.5 — exactly the uniform-prior mean E[Beta(1,1)]. Every engram without reinforcement history (α ≤ β: **99.0%** of the collection) got `_delete=True` at t=0. Not a timestamp problem: median `last_recalled_at` age was 1 day (Absence Guard keeps them fresh).
+2. **Death-spiral reads**: the read path *hid* eroded hits, so they could never be reinforced — yet a single recall (+0.5 α) is enough to rescue a prior engram. Hiding starved the rehab loop by design. `immune` engrams (53.7% — the `raw_parent` verbatims) were hidden too, despite every sleep path honoring the flag.
+3. **Dead erosion filter**: `erode_work_hubs` scrolled `metadata.lazarus_phase` (nested) but the field is stored top-level — matched **0 of 1,242 hubs**. Sleep-side hub erosion never ran (which accidentally preserved the data).
+4. **Hub-less turns invisible**: a hub is only synthesized when >1 chunk survives distillation, so single-survivor turns lived only as `sequence_chunk` — structurally excluded from search. Measured: 1,553/2,359 work parents and 227/253 social parents had **no searchable representative** (~2/3 of consolidated turns).
+
+### 2. Decision
+- Threshold 0.5 → **0.2** (a prior engram now survives ~19 recall-free days: `1/(2+ln(1+t)) = 0.2 → t = e³−1`). Invariant: the Bayesian deletion threshold must sit **strictly below the prior mean 0.5**.
+- Reads never hide: eroded hits return flagged `_eroded=True`, demoted below healthy hits, and are reinforced (organic rehabilitation). Forgetting belongs to the sleep cycle. `READ_PATH_PRUNING_ENABLED=True` keeps the legacy destructive read as explicit opt-in. `immune` is honored on the read path and axon traversal.
+- `erode_work_hubs`: filter fixed to top-level `lazarus_phase`; its hardcoded 0.3 threshold replaced by `get_memory_engine("bayesian").deletion_threshold` (single source of truth).
+- **Option A (operator-ratified)**: a single-survivor turn's lone chunk IS its hub. Consolidation promotes it inline (`_promote_lone_chunk_to_hub`: phase flip + thread weaving + texture shadow). `promote_orphan_chunks` runs every sleep cycle as `OrphanPromotionPhase` (after Consolidation, before AxonWeaver) — self-healing for any future hub-synthesis failure. Option B (a new searchable phase) was rejected as a patch, not a fix.
+
+### 3. Rejected alternative
+Mass synthetic rehabilitation review (Eje 3 of the memoria_bunker retrospective) was **not needed**: the data was never corrupted, only misjudged. Recalibration + recall-driven reinforcement rehabilitates organically.
+
+### 4. ⚠️ Engram mass-update (live migration, 2026-07-18)
+`promote_orphan_chunks(mm)` was executed against the live Bünker. Agents that update themselves or reason about payload schemas must account for:
+- **1,553** work + **227** social hub-less parents had their **newest chunk flipped** `sequence_chunk` → `synthesis_hub` (`node_type` set accordingly). Work hubs went 1,242 → 2,795.
+- Promoted engrams carry **`promoted_from: "sequence_chunk"`** (provenance marker — they are single-chunk distillates, not LLM syntheses).
+- Multi-chunk parents (**597** work + **63** social) additionally carry **`hub_rebuild_pending: true`**: a queue marker for a future LLM re-synthesis pass. Until that pass exists, treat these as partial representatives (newest chunk only). Do NOT strip the flag without synthesizing a real hub.
+- The migration is **idempotent** (re-run reports 0 pending) and did not touch: parents that already had a hub, `raw_parent` verbatims, or chunk siblings (still `sequence_chunk`, still search-excluded).
+- New read-path contract: results may include `_eroded: true` (decayed below threshold, kept for rehab — rank accordingly) — this is an ephemeral response field, never persisted.
+- Since erosion now actually runs, promoted hubs enter the normal hub lifecycle (β+0.5 per unrecalled cycle, forgotten at utility ≤ 0.2 — ~6 cycles from prior).
+
+### 5. Verification
+Live E2E: 0 hits → 6–8 hits/query on `work_memories`; promoted chunks surface in real queries (e.g. 4/7 hits for "umbral bayesiano decaimiento"). Full suite: 1,064 passed. Tests: `test_lazy_decay_calibration.py`, `test_read_path_pruning.py` (rewritten contract), `test_erode_work_hubs.py`, `test_orphan_chunk_promotion.py`.
+
+---
+
 ## [ADR-SLEEP-001] Sleep Engine Decomposition — Agnostic Phase Pipeline
 **Date**: 2026-05-31 (deferred) → 2026-07-16 (DONE)
 **Context**: `sleep.py` was a God Class (~1300 LOC). The original ADR (in the module docstring) deferred decomposition with an explicit trigger: revisit at >1200 LOC **or** when new phases are needed.
