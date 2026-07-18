@@ -1,3 +1,29 @@
+## [7.7.0] - 2026-07-18 (Synaptic Axons & Texture Remediation — ADR-AXON-001)
+
+### 🕸️ Cross-Collection Synaptic Axons (ADR-AXON-001, Track A)
+Bridges between `social_memories` and `work_memories` emulating intuition: a
+technical decision links to the casual conversation it was born in. All dormant
+behind flags (`SLEEP_PLUGIN_AXONS`, `AXON_READ_ENABLED`) for the shadow rollout.
+- **[FEAT] `Axon` model + `normalize_associations` (`schemas.py`)**: one parser for every historical wire format (legacy id strings + typed axon objects); all `associations` readers in `memory.py` hardened against `str(dict)` corruption. Lazy migration — writers unchanged.
+- **[FEAT] `AxonWeaverPhase` (`metabolism/axons.py`)**: CPU-only phase between consolidation and erosion. 48h window, server-side temporal-filtered candidates (±6h), composite gate `W = 0.7·sim + 0.3·temporal ≥ 0.6` so temporal proximity can create the semantically-distant links that motivate the ADR. Bidirectional idempotent writes, symmetry self-healing (a one-way link heals next cycle), dangling-link GC, deferred soft-cap pruning (`AXON_MAX_CROSS=64`, hard ceiling 2×), effective-run counter for the shadow gate.
+- **[FEAT] Typed evocative cascade + traversal reinforcement (`memory.py`)**: top-2 cross axons by weight per direct hit, explicit `target_collection` retrieval, activation check via the target's engine before injection, `_axon_weight` tag, and `W·β` synthetic-review reinforcement routed through the destination engine — fixing the silent no-op that dropped cross-collection ids from `_reinforce_points`.
+- **[FIX] ARCH-002 eviction resolves per collection**: cross axons were scored against the local collection, misread as dead links (0.1) and evicted first.
+- **[FEAT] Telemetry**: `AxonWeaveEvent` (with accepted/rejected weight averages, to tune `AXON_GATE` from data) + `AxonTraversalEvent`; persistent `axon_weaver_state.json`.
+- **[FEAT] Rollback net**: `scripts/strip_axons.py` (dry-run default) removes every payload addition of this line.
+
+### 🎨 Texture Remediation (Eje 1 retrospective, Track T)
+Cures the "flattening" the memoria_bunker retrospective diagnosed: hubs now
+carry atmosphere, not just facts. Validated in the AG distiller workshop
+(golden mini-set vs live Granite: PASS).
+- **[FEAT] `COGNITIVE_DISTILLER_V3` (`distiller.py`)**: key-ordered unified prompt (metadata BEFORE texture — anchors honesty per workshop findings), closed emotion taxonomy with mechanical normalization, intensity calibration anchors, binary category with dominant-register rule, `texture`/`lang`/`relics` fields, all in the source language.
+- **[FEAT] `NEOCORTEX_SYNTHESIS_V2`**: hubs synthesize summary AND merged texture (hard 800-char ceiling against concatenation) in the dominant fragment language; hub affect derives from the full fragment history (intensity-weighted dominant emotion) instead of the accidental last-chunk rule; `emotional_vector` preserves per-fragment `{child_id, emotion, intensity, category}`.
+- **[FEAT] Relics (verbatim quotes)**: validated as literal substrings in code (typos preserved), transported mechanically between generations (union, dedupe, cap 5) — never re-distilled after gen-0 (the workshop showed quotes die paraphrased at gen-2).
+- **[FIX] Chunker runt absorption**: trailing shards <15% of target size fold into the previous chunk (they induced texture hallucination); fragments under `MIN_TEXTURE_CHARS=100` get no texture.
+
+### ♻️ Classification Revision (Track R)
+- **[FIX] Density-based categorizer (`categorizer.py`)**: the any-single-keyword rule routed most personal conversations (and their hubs) into `work_memories` — root cause of the collection imbalance. Now: code fence, ≥3 distinct keywords, or >8% keyword density ⇒ work; ambiguity resolves to social.
+- **[FEAT] `RevisionPhase` (`metabolism/revision.py`)**: batch-bounded retroactive re-classification (GPU-deferred, born dark, dry-run first). Moves leaf engrams preserving their ID and rewires reciprocal axons; hubs are flagged, never moved (Ariadne's Thread anchors); immune untouched. New engrams are born reviewed, so the backlog is exactly the pre-fix legacy. CLI: `red-pill revision [--backlog|--drain] [--execute] [--batch-size N]`; upgrade/import advisory reads `backlog_count()`.
+
 ## [7.6.1] - 2026-07-18 (Handshake Robustness & VRAM Escalation)
 
 ### 🩹 Handshake & VRAM Contention Fixes

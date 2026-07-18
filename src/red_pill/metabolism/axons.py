@@ -190,8 +190,12 @@ def weave_cross_axons(memory_manager) -> Dict[str, Any]:
 				continue
 			stats["weights_accepted"].append(weight)
 			wrote_a = _append_axon(
-				client, SOURCE_COLLECTION, str(point.id), payload,
-				Axon(id=str(hit.id), target_collection=TARGET_COLLECTION, weight=weight, association_type=CROSS_TYPE), stats,
+				client,
+				SOURCE_COLLECTION,
+				str(point.id),
+				payload,
+				Axon(id=str(hit.id), target_collection=TARGET_COLLECTION, weight=weight, association_type=CROSS_TYPE),
+				stats,
 			)
 			if wrote_a:
 				# keep the in-memory payload in sync for subsequent candidates of the same source
@@ -199,8 +203,12 @@ def weave_cross_axons(memory_manager) -> Dict[str, Any]:
 					{"id": str(hit.id), "target_collection": TARGET_COLLECTION, "weight": weight, "association_type": CROSS_TYPE}
 				)
 				_append_axon(
-					client, TARGET_COLLECTION, str(hit.id), hit_payload,
-					Axon(id=str(point.id), target_collection=SOURCE_COLLECTION, weight=weight, association_type=CROSS_TYPE), stats,
+					client,
+					TARGET_COLLECTION,
+					str(hit.id),
+					hit_payload,
+					Axon(id=str(point.id), target_collection=SOURCE_COLLECTION, weight=weight, association_type=CROSS_TYPE),
+					stats,
 				)
 				stats["axons_woven"] += 1
 				touched[(SOURCE_COLLECTION, str(point.id))] = None
@@ -249,9 +257,7 @@ def _repair_symmetry(client, window_filter, stats: Dict[str, Any]) -> int:
 				if not cross_to_opposite:
 					continue
 				try:
-					targets = client.retrieve(
-						collection_name=opposite, ids=[a.id for a in cross_to_opposite], with_payload=True, with_vectors=False
-					)
+					targets = client.retrieve(collection_name=opposite, ids=[a.id for a in cross_to_opposite], with_payload=True, with_vectors=False)
 				except Exception:
 					continue
 				targets_by_id = {str(t.id): t for t in targets}
@@ -266,7 +272,10 @@ def _repair_symmetry(client, window_filter, stats: Dict[str, Any]) -> int:
 					_, target_cross = _split_associations(target.payload or {}, opposite)
 					if not any(t.id == str(point.id) for t in target_cross):
 						if _append_axon(
-							client, opposite, axon.id, target.payload,
+							client,
+							opposite,
+							axon.id,
+							target.payload,
 							Axon(id=str(point.id), target_collection=collection, weight=axon.weight, association_type=axon.association_type),
 							stats,
 						):

@@ -4,13 +4,12 @@ The R1 categorizer fix stops NEW misrouting; this sweeps the legacy backlog.
 Batch-bounded per cycle, born in dry-run: it marks what it WOULD move so the
 operator can inspect the plan before any engram changes collection.
 
-Move semantics (leaf engrams only):
-- same point ID upserted into the correct collection, original deleted —
-  inbound legacy references keep resolving via the cascade's opposite-collection
-  fallback, and typed reciprocal axons are rewritten here to the new collection.
-- synthesis_hubs are NEVER moved (they anchor Ariadne's Thread); misclassified
-  hubs are flagged in telemetry for manual decision.
-- immune engrams are never touched.
+Move semantics (leaf engrams only): the point is upserted under its same ID
+into the correct collection and the original deleted — inbound legacy
+references keep resolving via the cascade's opposite-collection fallback, and
+typed reciprocal axons are rewritten here to the new collection. Synthesis
+hubs are NEVER moved (they anchor Ariadne's Thread); misclassified hubs are
+flagged in telemetry for manual decision. Immune engrams are never touched.
 """
 
 import logging

@@ -417,7 +417,7 @@ def synthesize_hub_v2(chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
 		"and narrative trajectory.\n"
 		"- 'texture': merge of the fragment textures into AT MOST 4 sentences. Select only what matters for "
 		"identity, relationship and atmosphere; DISCARD the rest. Never concatenate the textures verbatim.\n"
-		f"- 'lang': ISO 639-1 code used.\n"
+		"- 'lang': ISO 639-1 code used.\n"
 		"IMPORTANT: write 'title', 'summary' and 'texture' in the DOMINANT language of the fragments"
 		+ (f" (which is '{dominant_lang}')" if dominant_lang else "")
 		+ ".\nConstraint: Output ONLY valid raw JSON, without markdown blocks."

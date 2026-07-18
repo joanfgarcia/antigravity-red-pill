@@ -2,7 +2,7 @@ import json
 import sqlite3
 import time
 import uuid
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 from red_pill.memory import MemoryManager
 from red_pill.metabolism.sleep import perform_sleep_cycle
@@ -57,7 +57,7 @@ def test_sleep_cycle_creates_parent_child_graph(mock_chunk, mock_llm):
 				mock_mgr.add_memory.assert_any_call(
 					collection="work_memories",
 					text="distilled compiler fix",
-					metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id, "model": "opus", "parent_id": parent_uuid},
+					metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id, "model": "opus", "parent_id": parent_uuid, "category_reviewed_at": ANY},
 					color="blue",
 					emotion="neutral",
 					intensity=0.8,
@@ -140,7 +140,7 @@ def test_sleep_cycle_dynamic_category_routing(mock_llm, mock_distill_anchors):
 						mock_mgr.add_memory.assert_any_call(
 							collection="social_memories",
 							text="funny joke summary",
-							metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id, "model": "opus", "parent_id": parent_id},
+							metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id, "model": "opus", "parent_id": parent_id, "category_reviewed_at": ANY},
 							color="purple",
 							emotion="joy",
 							intensity=0.9,
@@ -150,7 +150,7 @@ def test_sleep_cycle_dynamic_category_routing(mock_llm, mock_distill_anchors):
 						mock_mgr.add_memory.assert_any_call(
 							collection="work_memories",
 							text="rust code summary",
-							metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id, "model": "opus", "parent_id": parent_id},
+							metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id, "model": "opus", "parent_id": parent_id, "category_reviewed_at": ANY},
 							color="blue",
 							emotion="neutral",
 							intensity=0.8,
