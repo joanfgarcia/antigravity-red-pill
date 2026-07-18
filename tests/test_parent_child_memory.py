@@ -303,13 +303,12 @@ def test_janitor_archives_sqlite_to_jsonl(tmp_path):
 	conn.commit()
 	conn.close()
 
-	# Mock Path.home() to return tmp_path so the archived logs write to a temp folder
-	archive_dir = tmp_path / "Agent_Core" / "history"
-	archive_dir.mkdir(parents=True, exist_ok=True)
-	archive_file = archive_dir / "universal_history.jsonl"
+	# Mock get_aleth_core_root() so the archived logs write to a temp folder
+	aleth_core = tmp_path / "Aleth_Core"
+	archive_file = aleth_core / "history" / "universal_history.jsonl"
 
 	with patch("red_pill.core.paths.get_db_dir", return_value=db_dir):
-		with patch("red_pill.swarm.agents.janitor.Path.home", return_value=tmp_path):
+		with patch("red_pill.core.paths.get_aleth_core_root", return_value=aleth_core):
 			# Run archiver
 			count = minion.archive_old_sqlite_interactions()
 			assert count == 1
