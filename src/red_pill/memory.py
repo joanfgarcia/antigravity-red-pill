@@ -17,7 +17,7 @@ import red_pill.config as cfg
 from red_pill.affect import get_memory_engine
 from red_pill.events import MemoryAddedEvent, RecallEvent, get_event_bus
 from red_pill.hive import HiveMind
-from red_pill.schemas import CreateEngramRequest, EngramPayload
+from red_pill.schemas import CreateEngramRequest, EngramPayload, normalize_associations
 from red_pill.utils.affect import (
 	calculate_fsrs_initial_parameters,
 )
@@ -647,9 +647,8 @@ class MemoryManager:
 			if depth == 1:
 				for hit in decayed_results:
 					if hit.payload:
-						assocs = hit.payload.get("associations", [])
-						for a_id in assocs:
-							a_id_str = str(a_id)
+						for axon in normalize_associations(hit.payload.get("associations", [])):
+							a_id_str = axon.id
 							increment_map[a_id_str] = increment_map.get(a_id_str, 0.0) + current_increment
 							if a_id_str not in visited_ids:
 								next_hop_ids.add(a_id_str)
@@ -659,9 +658,8 @@ class MemoryManager:
 						points = self.client.retrieve(collection_name=collection, ids=current_hop_ids, with_payload=True, with_vectors=False)
 						for p in points:
 							if p.payload:
-								assocs = p.payload.get("associations", [])
-								for a_id in assocs:
-									a_id_str = str(a_id)
+								for axon in normalize_associations(p.payload.get("associations", [])):
+									a_id_str = axon.id
 									increment_map[a_id_str] = increment_map.get(a_id_str, 0.0) + current_increment
 									if a_id_str not in visited_ids:
 										next_hop_ids.add(a_id_str)
@@ -693,8 +691,8 @@ class MemoryManager:
 		# 1. Harvest `a_ids` (synapses forged organically by Sovereign Oneiromancy)
 		for hit in decayed_results:
 			if hit.payload:
-				for a_id in hit.payload.get("associations", []):
-					str_id = str(a_id)
+				for axon in normalize_associations(hit.payload.get("associations", [])):
+					str_id = axon.id
 					if str_id not in visited_ids and len(evoked_ids) < MAX_EVOKED:
 						evoked_ids.add(str_id)
 						visited_ids.add(str_id)
@@ -782,7 +780,8 @@ class MemoryManager:
 				if hit.score > 0.85:
 					assocs = p.payload.get("associations", [])
 					hit_id_str = str(hit.id)
-					if hit_id_str not in assocs:
+					existing_ids = {a.id for a in normalize_associations(assocs)}
+					if hit_id_str not in existing_ids:
 						assocs.append(hit_id_str)
 						if len(assocs) > self.cfg.MAX_AXONS:
 							assocs = self._symmetric_axons_eviction(collection, assocs)

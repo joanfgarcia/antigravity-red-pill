@@ -126,3 +126,66 @@ class EngramPayload(BaseModel):
 	linguistic_markers: List[str] = Field(default_factory=list)
 
 	model_config = {"extra": "allow"}
+
+
+class Axon(BaseModel):
+	"""One associative link in a point's `associations` payload list (ADR-AXON-001).
+
+	Wire formats accepted (see normalize_associations):
+	- legacy plain id string — same-collection link forged by Oneiromancy
+	- object with id / target_collection / weight / association_type
+	target_collection=None means "same collection as the owning point".
+	"""
+
+	id: str
+	target_collection: Optional[str] = None
+	weight: float = 1.0
+	association_type: str = "legacy"
+
+	@field_validator("weight", mode="before")
+	@classmethod
+	def clamp_weight(cls, v: Any) -> float:
+		try:
+			return max(0.0, min(1.0, float(v)))
+		except (TypeError, ValueError):
+			return 1.0
+
+	def is_cross(self, own_collection: str) -> bool:
+		return self.target_collection is not None and self.target_collection != own_collection
+
+	def to_payload(self) -> Union[str, Dict[str, Any]]:
+		"""Serialize back: legacy links stay plain strings (lazy migration)."""
+		if self.association_type == "legacy" and self.target_collection is None:
+			return self.id
+		payload: Dict[str, Any] = {"id": self.id, "weight": self.weight, "association_type": self.association_type}
+		if self.target_collection is not None:
+			payload["target_collection"] = self.target_collection
+		return payload
+
+
+def normalize_associations(raw: Any) -> List[Axon]:
+	"""Parse a payload `associations` list tolerating every historical format.
+
+	Readers MUST go through this: iterating raw entries with str(entry) turns a
+	dict axon into its repr and silently corrupts propagation (P1 guard).
+	"""
+	if not isinstance(raw, list):
+		return []
+	axons: List[Axon] = []
+	for entry in raw:
+		if isinstance(entry, Axon):
+			axons.append(entry)
+		elif isinstance(entry, dict):
+			entry_id = entry.get("id")
+			if entry_id:
+				axons.append(
+					Axon(
+						id=str(entry_id),
+						target_collection=entry.get("target_collection"),
+						weight=entry.get("weight", 1.0),
+						association_type=str(entry.get("association_type", "legacy")),
+					)
+				)
+		elif entry:
+			axons.append(Axon(id=str(entry)))
+	return axons
