@@ -1,9 +1,12 @@
-## [7.6.1] - 2026-07-17 (Handshake Robustness & VRAM Escalation)
+## [7.6.1] - 2026-07-18 (Handshake Robustness & VRAM Escalation)
 
 ### 🩹 Handshake & VRAM Contention Fixes
 - **[FIX] Handshake Robustness (`mcp_server.py`)**: Changed Scribe Relay validation from `and` to `or` to prevent silent engram drops when the model omits optional arguments like `previous_prompt`.
 - **[FIX] Template Seed Precision (`sovereign_handshake.md`, `inject_anchor.py`)**: Explicitly named `previous_prompt` and `previous_response` in template instructions and mapped `${RELAY_CALL}` to the unified `sovereign_handshake` tool for clarity.
 - **[FEAT] Dynamic VRAM Ladder (`model_profiles.yaml`)**: Implemented a tiered escalator (`n_ctx` at 10K/12K/16K context) adapting dynamically to free VRAM to prevent GPU allocation crashes.
+
+### 🧹 Path Sovereignty
+- **[FIX] Janitor rogue `~/Agent_Core` (`janitor.py`, `sqlite_interactions_archiver.py`)**: the SQLite interactions archiver hardcoded `Path.home()/Agent_Core/history`, bypassing `paths.py` (ignored `ALETH_CORE_DIR` and the `workspaces.yaml` `agent_core` registry) — every nightly sweep with >30-day-old interactions recreated a rogue `~/Agent_Core/` at the home root. Both sites now resolve through `get_aleth_core_root()`; the archiver test mocks the resolver instead of `Path.home()`.
 
 ## [7.6.0] - 2026-07-17 (Sleep Engine Decomposition — ADR-SLEEP-001)
 

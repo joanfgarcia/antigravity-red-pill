@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v7.6.0 (Sleep Engine Decomposition)
+**System Version**: v7.6.1 (Sleep Engine Decomposition)
 **Analyst**: The Architect
 **Date**: 2026-04-16
 
