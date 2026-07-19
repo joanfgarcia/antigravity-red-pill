@@ -4,6 +4,18 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-024] Murky Memory Policy (Self-Evocation Enforcement)
+**Date**: 2026-07-19
+**Status**: PROPOSED — decision deliberately deferred by the Operator ("hay que pensarlo bien").
+**Context**: the Self-Evocation Principle (a memory must let you intuit what it pointed to when the artifact is gone — the Operator's "book test") is enforced at ingestion (compact self-evocative tool markers) and audited by the HygienePhase, which counts **murky pointers** (engrams that are ONLY an opaque reference: path/url/uuid with <4 words of semantic residue) every cycle, report-only. First live audit: 15 in `work_memories`, 0 in `social_memories`.
+**Options on the table** (Operator's sketch, 2026-07-19):
+1. Purge them.
+2. Attempt enrichment (feasibility unproven — the referent may be recoverable from siblings/context or already gone).
+3. A `turbio` flag acting as an **erosion accelerator** and stripping the `immune` label — murky memories fade faster instead of dying instantly.
+**Constraint**: whatever is decided ships as a versioned `update_ritual.py` step per the engram-migration mandate. Until then: report-only, never touch.
+
+---
+
 ## [AD-023] Recall Remediation — Bayesian Calibration, Non-Hiding Reads & Orphan-Chunk Promotion
 **Date**: 2026-07-18
 **Context**: v7.7.0 — live diagnosis during the axon tests: `search_and_reinforce` on `work_memories` (16,512 points) returned 0 hits for almost any query under `METABOLISM_STRATEGY=LAZY`, even with `deep_recall=True`. The 7.7.0 axons and texture layers are useless if direct recall returns empty.
