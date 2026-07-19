@@ -2,7 +2,7 @@ import json
 import sqlite3
 import time
 import uuid
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 from red_pill.memory import MemoryManager
 from red_pill.metabolism.sleep import perform_sleep_cycle
@@ -57,7 +57,13 @@ def test_sleep_cycle_creates_parent_child_graph(mock_chunk, mock_llm):
 				mock_mgr.add_memory.assert_any_call(
 					collection="work_memories",
 					text="distilled compiler fix",
-					metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id, "model": "opus", "parent_id": parent_uuid},
+					metadata={
+						"lazarus_phase": "sequence_chunk",
+						"source_buffer_id": raw_id,
+						"model": "opus",
+						"parent_id": parent_uuid,
+						"category_reviewed_at": ANY,
+					},
 					color="blue",
 					emotion="neutral",
 					intensity=0.8,
@@ -117,9 +123,13 @@ def test_sleep_cycle_dynamic_category_routing(mock_llm, mock_distill_anchors):
 	mock_client.scroll.side_effect = mock_scroll
 
 	with patch(
-		"red_pill.metabolism.phases.consolidation.chunk_text", side_effect=lambda text: ["joke chunk", "code chunk"] if "joke and write rust" in text else []
+		"red_pill.metabolism.phases.consolidation.chunk_text",
+		side_effect=lambda text: ["joke chunk", "code chunk"] if "joke and write rust" in text else [],
 	):
-		with patch("red_pill.metabolism.phases.consolidation.synthesize_hub", return_value="[Mixed Session] joke + code"):
+		with patch(
+			"red_pill.metabolism.phases.consolidation.synthesize_hub_v2",
+			return_value={"title": "[Mixed Session]", "summary": "joke + code", "texture": "", "lang": ""},
+		):
 			with patch("red_pill.metabolism.phases.consolidation.distill_engram") as mock_distill:
 				mock_distill.side_effect = [
 					{"summary": "funny joke summary", "emotion": "joy", "intensity": 0.9, "category": "social"},
@@ -140,7 +150,13 @@ def test_sleep_cycle_dynamic_category_routing(mock_llm, mock_distill_anchors):
 						mock_mgr.add_memory.assert_any_call(
 							collection="social_memories",
 							text="funny joke summary",
-							metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id, "model": "opus", "parent_id": parent_id},
+							metadata={
+								"lazarus_phase": "sequence_chunk",
+								"source_buffer_id": raw_id,
+								"model": "opus",
+								"parent_id": parent_id,
+								"category_reviewed_at": ANY,
+							},
 							color="purple",
 							emotion="joy",
 							intensity=0.9,
@@ -150,7 +166,13 @@ def test_sleep_cycle_dynamic_category_routing(mock_llm, mock_distill_anchors):
 						mock_mgr.add_memory.assert_any_call(
 							collection="work_memories",
 							text="rust code summary",
-							metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id, "model": "opus", "parent_id": parent_id},
+							metadata={
+								"lazarus_phase": "sequence_chunk",
+								"source_buffer_id": raw_id,
+								"model": "opus",
+								"parent_id": parent_id,
+								"category_reviewed_at": ANY,
+							},
 							color="blue",
 							emotion="neutral",
 							intensity=0.8,
@@ -303,13 +325,12 @@ def test_janitor_archives_sqlite_to_jsonl(tmp_path):
 	conn.commit()
 	conn.close()
 
-	# Mock Path.home() to return tmp_path so the archived logs write to a temp folder
-	archive_dir = tmp_path / "Agent_Core" / "history"
-	archive_dir.mkdir(parents=True, exist_ok=True)
-	archive_file = archive_dir / "universal_history.jsonl"
+	# Mock get_aleth_core_root() so the archived logs write to a temp folder
+	aleth_core = tmp_path / "Aleth_Core"
+	archive_file = aleth_core / "history" / "universal_history.jsonl"
 
 	with patch("red_pill.core.paths.get_db_dir", return_value=db_dir):
-		with patch("red_pill.swarm.agents.janitor.Path.home", return_value=tmp_path):
+		with patch("red_pill.core.paths.get_aleth_core_root", return_value=aleth_core):
 			# Run archiver
 			count = minion.archive_old_sqlite_interactions()
 			assert count == 1

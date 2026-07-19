@@ -535,6 +535,12 @@ def main() -> None:
 	backup_parser = subparsers.add_parser("backup", help="Create fast Qdrant snapshots (Pre-Migration Safety)")
 	backup_parser.add_argument("--collections", nargs="+", help="Specific collections to backup")
 
+	revision_parser = subparsers.add_parser("revision", help="Retroactive category revision (Track R2)")
+	revision_parser.add_argument("--drain", action="store_true", help="Serial batches until the backlog is empty")
+	revision_parser.add_argument("--execute", action="store_true", help="Actually move engrams (default: dry-run marks only)")
+	revision_parser.add_argument("--batch-size", type=int, default=200, help="Engrams per batch (drain mode)")
+	revision_parser.add_argument("--backlog", action="store_true", help="Only report the unreviewed backlog and exit")
+
 	soul_parser = subparsers.add_parser("soul", help="B760 Soul Management")
 	soul_sub = soul_parser.add_subparsers(dest="soul_cmd")
 	soul_sub.add_parser("backup", help="Execute total soul backup (Qdrant + Files)")
@@ -996,6 +1002,22 @@ def main() -> None:
 				rate = args.rate if args.rate else None
 				manager.apply_erosion(collection, rate=rate)
 				print(f"Erosion applied to {collection}.")
+			elif args.command == "revision":
+				from red_pill.metabolism.revision import backlog_count, drain, revise_classifications
+
+				if args.backlog:
+					counts = backlog_count(manager.client)
+					print("--- [REVISION BACKLOG] ---")
+					for col, count in counts.items():
+						print(f"{col}: {count if count >= 0 else 'unavailable'} unreviewed engrams")
+				elif args.drain:
+					rev_results = drain(manager, batch_size=args.batch_size, dry_run=not args.execute)
+					print(f"--- [REVISION DRAIN {'EXECUTE' if args.execute else 'DRY-RUN'}] ---")
+					print(json.dumps(rev_results, indent=2))
+				else:
+					rev_results = revise_classifications(manager, dry_run=not args.execute)
+					print(f"--- [REVISION BATCH {'EXECUTE' if args.execute else 'DRY-RUN'}] ---")
+					print(json.dumps(rev_results, indent=2))
 			elif args.command == "sanitize":
 				san_results = manager.sanitize(collection, dry_run=args.dry_run, strict=not args.raw)
 				print(f"--- [SANITATION: {collection.upper()}] ---")

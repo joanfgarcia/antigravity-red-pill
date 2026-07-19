@@ -55,6 +55,13 @@ def chunk_text(text: str, size: Optional[int] = None) -> List[str]:
 					end = last_space + 1
 		chunks.append(text[start:end])
 		start = end
+
+	# Runt absorption: a trailing shard below 15% of the target size carries too
+	# little signal to distill on its own (observed to induce texture hallucination)
+	# — fold it into the previous chunk instead of emitting it.
+	if len(chunks) >= 2 and len(chunks[-1]) < size * 0.15:
+		chunks[-2] += chunks[-1]
+		chunks.pop()
 	return chunks
 
 

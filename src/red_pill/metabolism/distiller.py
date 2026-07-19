@@ -17,6 +17,32 @@ from red_pill.metabolism.chunker import _is_template_echo, _sanitize_llm_json
 logger = logging.getLogger(__name__)
 
 
+# Closed emotional taxonomy the erosion/affect stack understands. Anything the
+# distiller invents outside this list is normalized to neutral (and logged).
+VALID_EMOTIONS = frozenset({"joy", "sadness", "fear", "disgust", "anger", "anxiety", "envy", "embarrassment", "ennui", "nostalgia", "neutral"})
+
+
+def _validate_relics(relics: Any, raw_content: str, max_relics: int = 2, max_len: int = 200) -> list:
+	"""Keep only quotes that are literal substrings of the source (whitespace-normalized).
+
+	The verbatim guarantee belongs to code, not to the LLM's discipline: the
+	workshop showed distillers paraphrase quotes within two generations.
+	"""
+	if not isinstance(relics, list):
+		return []
+	normalized_source = " ".join(str(raw_content).split())
+	kept: list = []
+	for relic in relics:
+		if not isinstance(relic, str):
+			continue
+		candidate = " ".join(relic.strip().strip('"').split())
+		if candidate and len(candidate) <= max_len and candidate in normalized_source and candidate not in kept:
+			kept.append(candidate)
+		if len(kept) >= max_relics:
+			break
+	return kept
+
+
 def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[str, Any]:
 	"""
 	Lazarus Phase 2: Consolidation (Sleep) & Affective Preservation
@@ -29,20 +55,46 @@ def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[
 
 	# Explicit flag so callers can detect the fallback reliably — the old heuristic
 	# (summary endswith "..." and len > 490) misses short chunks whose raw fallback is <490 chars.
-	fallback = {"summary": raw_content[:500] + "...", "emotion": "neutral", "intensity": 0.5, "category": fallback_category, "_is_fallback": True}
+	fallback = {
+		"summary": raw_content[:500] + "...",
+		"emotion": "neutral",
+		"intensity": 0.5,
+		"category": fallback_category,
+		"texture": "",
+		"lang": "",
+		"relics": [],
+		"_is_fallback": True,
+	}
 
+	# COGNITIVE_DISTILLER_V3 (unified, key-ordered). The metadata keys are emitted
+	# BEFORE 'texture' on purpose: the workshop showed that committing to
+	# emotion/intensity/category first anchors the texture against hallucination,
+	# while a texture-first framing inflates intensity and blurs category.
 	system_prompt = (
-		"[Refraction: COGNITIVE_DISTILLER] Style: Analytical, strict. "
-		"Focus: Distill the interaction into a valid JSON object. "
-		"Format requirements:\n"
-		"Return a strict JSON object with these keys:\n"
-		"- 'summary': Concise, deep summary of facts, design decisions, debugging, or reflections. "
-		"When the interaction has more than one voice, the summary MUST capture BOTH the user's point/question "
-		"AND the assistant's response, correction, or decision — never only one side.\n"
-		"- 'emotion': One of: joy, sadness, fear, disgust, anger, anxiety, envy, embarrassment, ennui, nostalgia, neutral.\n"
-		"- 'intensity': Float between 0.0 and 1.0 representing severity or emotional charge.\n"
+		"[Refraction: COGNITIVE_DISTILLER_V3] Style: Analytical first, expressive last.\n"
+		"Focus: Distill the interaction into a valid JSON object preserving both data and atmosphere.\n"
+		"Return a strict JSON object with these keys IN THIS EXACT ORDER:\n"
+		"- 'summary': Concise, deep summary of facts, design decisions, debugging, or reflections, "
+		"written in the SAME language as the source text. When the interaction has more than one voice, "
+		"the summary MUST capture BOTH the user's point/question AND the assistant's response, "
+		"correction, or decision — never only one side.\n"
+		"- 'emotion': EXACTLY one of: joy, sadness, fear, disgust, anger, anxiety, envy, embarrassment, "
+		"ennui, nostalgia, neutral. Never output any word outside this list; if unsure, use 'neutral'. "
+		"Judge the factual content only.\n"
+		"- 'intensity': Float between 0.0 and 1.0, judged on the factual content only. "
+		"Calibration anchors: 0.1-0.3 = routine or technical-neutral content; 0.4-0.6 = engaged "
+		"collaboration or mild emotion; 0.7-0.85 = strong explicit emotion or a relationship milestone; "
+		"0.9+ = exceptional identity-defining moments. Most purely technical fragments belong below 0.4.\n"
 		"- 'category': 'work' for code, tests, commands, system configs, technical design, database, or MCPs; "
-		"'social' for personal reflections, philosophy, moods, or casual talk.\n"
+		"'social' for personal reflections, philosophy, moods, or casual talk. Choose the DOMINANT register "
+		"of THIS fragment by volume; do not average with a wider conversation. Only these two values are allowed.\n"
+		"- 'texture': 2-4 sentences capturing atmosphere, relationship dynamics, creative friction, tiredness, "
+		"humor, doubts and rejected paths. Do NOT restate facts the summary already captures; record only what "
+		"it would lose. If the fragment is too short or purely mechanical, use an empty string. "
+		"WRITE IN THE SAME LANGUAGE AS THE SOURCE TEXT.\n"
+		"- 'relics': Array of 0-2 short quotes copied EXACTLY as written in the source (keep typos untouched), "
+		"chosen for identity or emotional charge. Empty array if none deserve preservation.\n"
+		"- 'lang': ISO 639-1 code of the source language.\n"
 		"Constraint: Output ONLY valid raw JSON, without markdown blocks."
 	)
 
@@ -122,11 +174,35 @@ def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[
 					logger.warning("[SLEEP ENGINE] Distiller echoed the prompt/format spec — discarding and retrying.")
 					continue
 
+				# V3 mechanical validation — guarantees live in code, not in the prompt.
+				if emotion_val not in VALID_EMOTIONS:
+					logger.warning(f"[DISTILL-V3] emotion '{emotion_val}' outside taxonomy — normalized to neutral.")
+					emotion_val = "neutral"
+				intensity_val = max(0.0, min(1.0, intensity_val))
+				if category_val not in ("work", "social"):
+					logger.warning(f"[DISTILL-V3] category '{category_val}' invalid — falling back to '{fallback_category}'.")
+					category_val = fallback_category
+
+				texture_val = parsed.get("texture", "")
+				if not isinstance(texture_val, str):
+					texture_val = ""
+				min_texture_chars = getattr(cfg, "MIN_TEXTURE_CHARS", 100)
+				if len(raw_content) < min_texture_chars or _is_template_echo(texture_val):
+					texture_val = ""
+
+				lang_val = parsed.get("lang", "")
+				lang_val = str(lang_val).lower().strip()[:2] if isinstance(lang_val, str) else ""
+
+				relics_val = _validate_relics(parsed.get("relics", []), raw_content)
+
 				return {
 					"summary": summary_val,
 					"emotion": emotion_val,
 					"intensity": intensity_val,
 					"category": category_val,
+					"texture": texture_val,
+					"lang": lang_val,
+					"relics": relics_val,
 				}
 			else:
 				logger.warning(f"[SLEEP ENGINE] Samantha LLM output not JSON: {content[:100]}")
@@ -270,3 +346,152 @@ def distill_session_anchors(memory_manager, hub_summaries: List[str]) -> Optiona
 		return None
 
 
+# ─────────────────────── HUB v2 (ADR-AXON-001 / Eje 1) ───────────────────────
+
+HUB_TEXTURE_MAX_CHARS = 800
+
+
+def derive_hub_affect(chunks: List[Dict[str, Any]]) -> tuple:
+	"""Dominant emotion (intensity-weighted frequency) + max intensity.
+
+	Replaces the accidental legacy derivation (last chunk's emotion) with one
+	that answers to the whole fragment history (ADR §2.2).
+	"""
+	if not chunks:
+		return "neutral", 0.5
+	weights: Dict[str, float] = {}
+	for c in chunks:
+		emotion = str(c.get("emotion", "neutral"))
+		weights[emotion] = weights.get(emotion, 0.0) + float(c.get("intensity", 0.5))
+	dominant = max(weights, key=lambda k: weights[k])
+	return dominant, max(float(c.get("intensity", 0.5)) for c in chunks)
+
+
+def merge_relics(chunks: List[Dict[str, Any]], cap: int = 5, max_len: int = 200) -> List[str]:
+	"""Union of child relics, deduped and capped. Mechanical transport only —
+	relics never pass through an LLM again after gen-0 extraction (T4)."""
+	merged: List[str] = []
+	for c in chunks:
+		for relic in c.get("relics", []) or []:
+			if isinstance(relic, str) and relic and len(relic) <= max_len and relic not in merged:
+				merged.append(relic)
+			if len(merged) >= cap:
+				return merged
+	return merged
+
+
+def build_emotional_vector(fragment_affects: List[Dict[str, Any]]) -> Dict[str, Any]:
+	"""Per-fragment affect history for the hub payload (ADR §2.2).
+
+	fragment_affects entries: {child_id, emotion, intensity, category} collected
+	at chunk-write time so ids and evaluations can never misalign.
+	"""
+	return {"fragments": fragment_affects}
+
+
+def synthesize_hub_v2(chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
+	"""Neocortex Hub v2: master summary AND merged texture, language-preserving.
+
+	Falls back to the legacy synthesize_hub() text with empty texture if the
+	structured call fails — the hub must always exist.
+	"""
+	import re
+
+	from red_pill.core.providers import ProviderRegistry
+
+	summaries = [str(c.get("summary", "")) for c in chunks if c.get("summary")]
+	textures = [str(c.get("texture", "")) for c in chunks if c.get("texture")]
+	langs = [str(c.get("lang", "")) for c in chunks if c.get("lang")]
+	dominant_lang = max(set(langs), key=langs.count) if langs else ""
+
+	system_prompt = (
+		"[Refraction: NEOCORTEX_SYNTHESIS_V2] Style: Highly concise, conscious of texture.\n"
+		"You receive the factual summaries AND the atmosphere notes (textures) of the chronological "
+		"fragments of one interaction. Return a strict JSON object with these keys:\n"
+		"- 'title': descriptive, contextual, specific. Never generic like 'Memory Synthesis' or 'Session Summary'.\n"
+		"- 'summary': single cohesive master summary of the factual chunks. Highly concise, preserve key facts "
+		"and narrative trajectory.\n"
+		"- 'texture': merge of the fragment textures into AT MOST 4 sentences. Select only what matters for "
+		"identity, relationship and atmosphere; DISCARD the rest. Never concatenate the textures verbatim.\n"
+		"- 'lang': ISO 639-1 code used.\n"
+		"IMPORTANT: write 'title', 'summary' and 'texture' in the DOMINANT language of the fragments"
+		+ (f" (which is '{dominant_lang}')" if dominant_lang else "")
+		+ ".\nConstraint: Output ONLY valid raw JSON, without markdown blocks."
+	)
+	user_prompt = "SUMMARIES:\n" + "\n".join(f"- {s}" for s in summaries)
+	if textures:
+		user_prompt += "\n\nTEXTURES:\n" + "\n".join(f"- {t}" for t in textures)
+
+	fallback_text = synthesize_hub(summaries)
+	fallback = {"title": "", "summary": fallback_text, "texture": "", "lang": dominant_lang, "_is_fallback": True}
+
+	try:
+		try:
+			provider = ProviderRegistry.get_inference_provider("sip")
+		except RuntimeError:
+			provider = ProviderRegistry.get_inference_provider()
+		content = provider.generate(
+			prompt=user_prompt,
+			messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
+			temperature=0.1,
+			response_format={"type": "json_object"},
+		)
+		match = re.search(r"\{[\s\S]*\}", content)
+		if not match:
+			return fallback
+		parsed = json.loads(_sanitize_llm_json(match.group(0)))
+		summary_val = str(parsed.get("summary") or "").strip()
+		if not summary_val or _is_template_echo(summary_val):
+			return fallback
+		texture_val = str(parsed.get("texture") or "").strip()
+		if _is_template_echo(texture_val):
+			texture_val = ""
+		if len(texture_val) > HUB_TEXTURE_MAX_CHARS:
+			logger.warning(
+				f"[HUB-V2] texture over {HUB_TEXTURE_MAX_CHARS} chars ({len(texture_val)}) — truncating (compression instruction ignored)."
+			)
+			texture_val = texture_val[:HUB_TEXTURE_MAX_CHARS]
+		lang_val = str(parsed.get("lang") or dominant_lang).lower().strip()[:2]
+		return {"title": str(parsed.get("title") or "").strip(), "summary": summary_val, "texture": texture_val, "lang": lang_val}
+	except Exception as e:
+		logger.warning(f"[HUB-V2] structured synthesis failed ({e}) — falling back to legacy hub.")
+		return fallback
+
+
+def classify_category(text: str) -> Optional[str]:
+	"""Lightweight work/social re-classification for the RevisionPhase (R2).
+
+	Returns None on any failure so the caller leaves the engram unmarked and
+	a later cycle retries — never guess on a broken call.
+	"""
+	import re
+
+	from red_pill.core.providers import ProviderRegistry
+
+	system_prompt = (
+		"[Refraction: CATEGORY_REVISOR] Style: Analytical, strict.\n"
+		"Classify the given memory text. Return a strict JSON object with ONE key:\n"
+		"- 'category': 'work' for code, tests, commands, system configs, technical design, database, or MCPs; "
+		"'social' for personal reflections, philosophy, moods, relationship history, or casual talk. "
+		"Judge the DOMINANT register by volume. Only these two values are allowed.\n"
+		"Constraint: Output ONLY valid raw JSON, without markdown blocks."
+	)
+	try:
+		try:
+			provider = ProviderRegistry.get_inference_provider("sip")
+		except RuntimeError:
+			provider = ProviderRegistry.get_inference_provider()
+		content = provider.generate(
+			prompt=f"DATA:\n{text}",
+			messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": f"DATA:\n{text}"}],
+			temperature=0.0,
+			response_format={"type": "json_object"},
+		)
+		match = re.search(r"\{[\s\S]*\}", content)
+		if not match:
+			return None
+		category = str(json.loads(_sanitize_llm_json(match.group(0))).get("category", "")).lower().strip()
+		return category if category in ("work", "social") else None
+	except Exception as e:
+		logger.debug(f"[REVISION] classify_category failed: {e}")
+		return None

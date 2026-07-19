@@ -262,12 +262,13 @@ class JanitorMinion(Minion):
 	def archive_old_sqlite_interactions(self) -> int:
 		"""
 		Decouples older conversations from SQLite interactions table.
-		Appends logs older than 30 days to Agent_Core/history/universal_history.jsonl
-		and purges them from the hot SQLite database to avoid bloat.
+		Appends logs older than 30 days to <agent_core>/history/universal_history.jsonl
+		(resolved via paths.get_aleth_core_root) and purges them from the hot SQLite
+		database to avoid bloat.
 		"""
 		import json
 
-		from red_pill.core.paths import get_db_dir
+		from red_pill.core.paths import get_aleth_core_root, get_db_dir
 
 		db_path = get_db_dir() / "bunker.db"
 		if not db_path.exists():
@@ -291,7 +292,7 @@ class JanitorMinion(Minion):
 			rows = cursor.fetchall()
 
 			if rows:
-				archive_dir = Path.home() / "Agent_Core" / "history"
+				archive_dir = get_aleth_core_root() / "history"
 				archive_dir.mkdir(parents=True, exist_ok=True)
 				archive_file = archive_dir / "universal_history.jsonl"
 

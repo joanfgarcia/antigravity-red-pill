@@ -40,14 +40,19 @@ profiles:
     hardware_affinity:
       n_ctx: 16384
       vram_tiers:
-        # Tuned for the RTX 5070 8 GB shared with training. An 8-9B Q4 with a large
-        # KV cache only fits when the GPU is essentially idle; partial offload crashes
-        # context creation while training holds VRAM (the 3028-error storm of 2026-07-16).
-        # So: CPU below the headroom, full GPU only when free VRAM is nearly the whole card.
-        - min_free_gb: 7
+        # Dynamically scale n_ctx and offload based on free VRAM to prevent context creation crashes
+        - min_free_gb: 6.4
           n_gpu_layers: 0
+          n_ctx: 16384
+        - min_free_gb: 7.2
+          n_gpu_layers: -1
+          n_ctx: 10240
+        - min_free_gb: 8.0
+          n_gpu_layers: -1
+          n_ctx: 12288
         - min_free_gb: 999
           n_gpu_layers: -1
+          n_ctx: 16384
 
   # ── Multilingual generalist (NOT the distiller — see bake-off) ─
   # Qwen3.5-9B Instruct: Apache-2.0, 201 langs, large ctx, fits 8 GB. Strong
@@ -144,15 +149,19 @@ profiles:
       # not total installed). Tier selection is monotonic: more free VRAM → higher
       # tier → more n_gpu_layers. Keep partial-offload tiers OUT on an 8 GB card
       # shared with training — they crash context creation (see the block comment).
-      vram_tiers:
-        # Tuned for the RTX 5070 8 GB shared with training. An 8-9B Q4 with a large
-        # KV cache only fits when the GPU is essentially idle; partial offload crashes
-        # context creation while training holds VRAM (the 3028-error storm of 2026-07-16).
-        # So: CPU below the headroom, full GPU only when free VRAM is nearly the whole card.
-        - min_free_gb: 7
+        # Dynamically scale n_ctx and offload based on free VRAM to prevent context creation crashes
+        - min_free_gb: 6.4
           n_gpu_layers: 0
+          n_ctx: 16384
+        - min_free_gb: 7.2
+          n_gpu_layers: -1
+          n_ctx: 10240
+        - min_free_gb: 8.0
+          n_gpu_layers: -1
+          n_ctx: 12288
         - min_free_gb: 999
           n_gpu_layers: -1
+          n_ctx: 16384
 
   # ── Legacy: Samantha-Mistral-7B ────────────────────────────────
   # Kept for operators who prefer the original empathy-tuned model.

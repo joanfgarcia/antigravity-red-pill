@@ -2,7 +2,6 @@ import json
 import logging
 import sqlite3
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Any, Dict
 
 from red_pill.swarm.agents.janitor_plugins.base import JanitorPlugin
@@ -20,7 +19,7 @@ class SqliteInteractionsArchiverPlugin(JanitorPlugin):
 		plugin_cfg = config_dict.get("plugins", {}).get(self.name, {})
 		days_to_keep = plugin_cfg.get("days_to_keep", 30)
 
-		from red_pill.core.paths import get_db_dir
+		from red_pill.core.paths import get_aleth_core_root, get_db_dir
 
 		db_path = get_db_dir() / "bunker.db"
 		archived_count = 0
@@ -50,7 +49,7 @@ class SqliteInteractionsArchiverPlugin(JanitorPlugin):
 			rows = cursor.fetchall()
 
 			if rows:
-				archive_dir = Path.home() / "Agent_Core" / "history"
+				archive_dir = get_aleth_core_root() / "history"
 				archive_dir.mkdir(parents=True, exist_ok=True)
 				archive_file = archive_dir / "universal_history.jsonl"
 

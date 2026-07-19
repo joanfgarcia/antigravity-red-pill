@@ -17,7 +17,7 @@ import red_pill.config as cfg
 from red_pill.affect import get_memory_engine
 from red_pill.events import MemoryAddedEvent, RecallEvent, get_event_bus
 from red_pill.hive import HiveMind
-from red_pill.schemas import CreateEngramRequest, EngramPayload
+from red_pill.schemas import CreateEngramRequest, EngramPayload, normalize_associations
 from red_pill.utils.affect import (
 	calculate_fsrs_initial_parameters,
 )
@@ -537,16 +537,112 @@ class MemoryManager:
 			return ""
 
 	def search_and_reinforce(
-		self, collection: str, query: str, limit: int = 3, deep_recall: bool = False, strict: bool = True, caller: str = "unknown"
+		self,
+		collection: str,
+		query: str,
+		limit: int = 3,
+		deep_recall: bool = False,
+		strict: bool = True,
+		caller: str = "unknown",
+		search_space: str = "summary",
 	) -> List[Any]:
-		"""Single exit point: run the search, then emit a lightweight recall metric."""
-		results = self._search_and_reinforce_impl(collection, query, limit=limit, deep_recall=deep_recall, strict=strict)
+		"""Single exit point: run the search, then emit a lightweight recall metric.
+
+		search_space: 'summary' (default) searches the factual space as always;
+		'texture' searches the resonance space (T5) — texture_shadow points —
+		and resolves each match back to its parent engram.
+		"""
+		if search_space == "texture":
+			results = self._search_texture_space(collection, query, limit=limit, strict=strict)
+		else:
+			results = self._search_and_reinforce_impl(collection, query, limit=limit, deep_recall=deep_recall, strict=strict)
 		try:
 			top_score = getattr(results[0], "score", None) if results else None
 			get_event_bus().emit(RecallEvent(collection=collection, caller=caller, query_len=len(query), hits=len(results), top_score=top_score))
 			logger.info(f"[RECALL] caller={caller} collection={collection} hits={len(results)} top_score={top_score}")
 		except Exception as e:
 			logger.debug(f"[RECALL] telemetry emit failed: {e}")
+		return results
+
+	def add_texture_shadow(self, collection: str, parent_id: str, texture: str, created_at: Optional[float] = None) -> str:
+		"""T5: persist a texture_shadow point — the hub's atmosphere, searchable.
+
+		Same collection, own vector (embedding of the texture), excluded from the
+		factual search by lazarus_phase. No collection recreation needed (the
+		named-vector alternative would require migrating every point).
+		"""
+		import uuid as uuid_lib
+
+		shadow_id = str(uuid_lib.uuid5(uuid_lib.NAMESPACE_OID, f"texture_shadow:{parent_id}"))  # idempotent per parent
+		vector = self._get_vector(texture)
+		payload = {
+			"content": texture,
+			"lazarus_phase": "texture_shadow",
+			"parent_id": str(parent_id),
+			"created_at": created_at if created_at is not None else time.time(),
+			"immune": False,
+			"category_reviewed_at": time.time(),  # never a revision candidate
+		}
+		self.client.upsert(
+			collection_name=collection,
+			points=[models.PointStruct(id=shadow_id, vector=vector, payload=payload)],
+		)
+		return shadow_id
+
+	def _search_texture_space(self, collection: str, query: str, limit: int = 3, strict: bool = True) -> List[Any]:
+		"""T5: evocation by resonance — search HOW it felt, resolve WHAT it was.
+
+		Queries texture_shadow points and returns their parent engrams tagged with
+		`_texture_score` and `_texture_match` (the matching atmosphere text).
+		Parents get standard reinforcement: being remembered by resonance is a
+		recall like any other.
+		"""
+		vector = self._get_vector(query)
+		try:
+			shadows = self.client.query_points(
+				collection_name=collection,
+				query=vector,
+				query_filter=models.Filter(must=[models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="texture_shadow"))]),
+				limit=limit,
+				with_payload=True,
+				with_vectors=False,
+			).points
+		except Exception as e:
+			logger.error(f"Texture-space query failed: {_mask_pii_exception(e)}")
+			return []
+
+		parent_meta = {}
+		for shadow in shadows:
+			shadow_payload = shadow.payload or {}
+			parent_id = str(shadow_payload.get("parent_id", ""))
+			if parent_id and parent_id not in parent_meta:
+				parent_meta[parent_id] = {"score": float(shadow.score), "texture": str(shadow_payload.get("content", ""))}
+
+		if not parent_meta:
+			return []
+		try:
+			parents = self.client.retrieve(collection_name=collection, ids=list(parent_meta.keys()), with_payload=True, with_vectors=False)
+		except Exception as e:
+			logger.error(f"Texture-space parent resolution failed: {_mask_pii_exception(e)}")
+			return []
+
+		results = []
+		increments: Dict[str, float] = {}
+		for p in parents:
+			if not p.payload:
+				continue
+			p.payload = self._parse_payload(p.payload, strict=strict)
+			meta = parent_meta[str(p.id)]
+			p.payload["_texture_score"] = meta["score"]
+			p.payload["_texture_match"] = meta["texture"]
+			results.append(p)
+			increments[str(p.id)] = self.cfg.REINFORCEMENT_INCREMENT
+		if increments:
+			try:
+				self._reinforce_points(collection, list(increments.keys()), increments)
+			except Exception as e:
+				logger.debug(f"Texture-space reinforcement failed: {e}")
+		results.sort(key=lambda r: (r.payload or {}).get("_texture_score", 0.0), reverse=True)
 		return results
 
 	def _search_and_reinforce_impl(self, collection: str, query: str, limit: int = 3, deep_recall: bool = False, strict: bool = True) -> List[Any]:
@@ -567,6 +663,7 @@ class MemoryManager:
 		structural_exclusions = [
 			models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="raw_parent")),
 			models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="sequence_chunk")),
+			models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="texture_shadow")),
 			models.FieldCondition(key="_is_fragment", match=models.MatchValue(value=True)),
 		]
 
@@ -597,7 +694,7 @@ class MemoryManager:
 			hit.payload = self._parse_payload(hit.payload, strict=strict)
 
 			_is_permanent = collection.strip() in self.cfg.PERMANENT_COLLECTIONS
-			if self.cfg.METABOLISM_STRATEGY == "LAZY" and not _is_permanent:
+			if self.cfg.METABOLISM_STRATEGY == "LAZY" and not _is_permanent and not hit.payload.get("immune"):
 				# Phase 2: Pluggable Memory Engine
 				engine_type = self.cfg.MEMORY_ENGINES.get(collection.strip(), "fsrs_real")
 				engine = get_memory_engine(engine_type)
@@ -606,16 +703,19 @@ class MemoryManager:
 				decay_updates = engine.calculate_lazy_decay(hit.payload, current_time=time.time())
 
 				if decay_updates.get("_delete"):
-					# Eroded below threshold. Hide it from this result either way; only
-					# actually delete when read-path pruning is explicitly enabled.
-					# Forgetting is the sleep cycle's job, not a read's.
+					# Eroded below the engine's threshold. Forgetting is the sleep
+					# cycle's job, not a read's: keep the hit, demote it in ranking,
+					# and let the reinforcement below rehabilitate it organically.
+					# Hiding it here starves it of reinforcement forever (death spiral).
 					if self.cfg.READ_PATH_PRUNING_ENABLED:
 						logger.warning(f"Lazy decay DELETE ({engine_type}): engram {hit.id} in '{collection}' eroded below threshold. Removing.")
 						try:
 							self.client.delete(collection_name=collection, points_selector=models.PointIdsList(points=[hit.id]))
 						except Exception:
 							pass
-					continue
+						continue
+					hit.payload["_eroded"] = True
+					decay_updates = {}
 
 				if decay_updates:
 					hit.payload.update(decay_updates)
@@ -638,6 +738,9 @@ class MemoryManager:
 			except Exception:
 				pass
 
+		# Healthy hits outrank eroded ones; the stable sort preserves similarity order within each group.
+		decayed_results.sort(key=lambda h: bool((h.payload or {}).get("_eroded")))
+
 		current_hop_ids = [str(hit.id) for hit in decayed_results]
 		visited_ids = set(current_hop_ids)
 		current_increment = self.cfg.REINFORCEMENT_INCREMENT * self.cfg.PROPAGATION_FACTOR
@@ -647,9 +750,10 @@ class MemoryManager:
 			if depth == 1:
 				for hit in decayed_results:
 					if hit.payload:
-						assocs = hit.payload.get("associations", [])
-						for a_id in assocs:
-							a_id_str = str(a_id)
+						for axon in normalize_associations(hit.payload.get("associations", [])):
+							if axon.is_cross(collection):
+								continue  # typed cross axons reinforce on traversal (W·β, ADR §3.2), never via blind propagation
+							a_id_str = axon.id
 							increment_map[a_id_str] = increment_map.get(a_id_str, 0.0) + current_increment
 							if a_id_str not in visited_ids:
 								next_hop_ids.add(a_id_str)
@@ -659,9 +763,10 @@ class MemoryManager:
 						points = self.client.retrieve(collection_name=collection, ids=current_hop_ids, with_payload=True, with_vectors=False)
 						for p in points:
 							if p.payload:
-								assocs = p.payload.get("associations", [])
-								for a_id in assocs:
-									a_id_str = str(a_id)
+								for axon in normalize_associations(p.payload.get("associations", [])):
+									if axon.is_cross(collection):
+										continue
+									a_id_str = axon.id
 									increment_map[a_id_str] = increment_map.get(a_id_str, 0.0) + current_increment
 									if a_id_str not in visited_ids:
 										next_hop_ids.add(a_id_str)
@@ -687,17 +792,28 @@ class MemoryManager:
 
 		# --- v6.0: Sovereign Evocative Cascade (Hybrid Vector-Graph) ---
 		MAX_EVOKED = 3
+		MAX_CROSS_PER_HIT = 2  # ADR-AXON-001 §6: top axons by weight, per direct hit
 		evoked_ids: set[str] = set()
 		visited_ids = set(str(h.id) for h in decayed_results)
+		cross_selected: Dict[str, Dict[str, float]] = {}  # target_collection -> {id: weight}
 
 		# 1. Harvest `a_ids` (synapses forged organically by Sovereign Oneiromancy)
 		for hit in decayed_results:
 			if hit.payload:
-				for a_id in hit.payload.get("associations", []):
-					str_id = str(a_id)
+				axons = normalize_associations(hit.payload.get("associations", []))
+				for axon in axons:
+					if axon.is_cross(collection):
+						continue  # typed cross axons handled below (or dormant while AXON_READ_ENABLED is off)
+					str_id = axon.id
 					if str_id not in visited_ids and len(evoked_ids) < MAX_EVOKED:
 						evoked_ids.add(str_id)
 						visited_ids.add(str_id)
+				if self.cfg.AXON_READ_ENABLED:
+					cross = sorted((a for a in axons if a.is_cross(collection)), key=lambda a: a.weight, reverse=True)
+					for axon in cross[:MAX_CROSS_PER_HIT]:
+						if axon.id not in visited_ids and axon.target_collection:
+							cross_selected.setdefault(axon.target_collection, {})[axon.id] = axon.weight
+							visited_ids.add(axon.id)
 
 		cascade_results = []
 		if evoked_ids:
@@ -724,6 +840,55 @@ class MemoryManager:
 								cascade_results.append(p)
 			except Exception as e:
 				logger.error(f"Evocative Cascade lookup failed: {e}")
+
+		# 2b. Typed cross-collection traversal (ADR-AXON-001 §6, P4)
+		for target_col, weight_by_id in cross_selected.items():
+			try:
+				points = self.client.retrieve(collection_name=target_col, ids=list(weight_by_id.keys()), with_payload=True, with_vectors=False)
+			except Exception as e:
+				logger.error(f"Axon traversal retrieve failed for '{target_col}': {e}")
+				continue
+			found_ids = {str(p.id) for p in points}
+			orphans = set(weight_by_id.keys()) - found_ids
+			if orphans:
+				# Target eroded away: the weaver's repair pass GCs the axon next cycle.
+				logger.info(f"[AXON TRAVERSAL] {len(orphans)} dangling axon target(s) in '{target_col}' skipped.")
+
+			traversal_increments: Dict[str, float] = {}
+			for p in points:
+				if not p.payload:
+					continue
+				p.payload = self._parse_payload(p.payload, strict=strict)
+				# Activation check: never inject context the target's own engine considers
+				# eroded. Immune engrams are exempt — they cannot erode.
+				if not p.payload.get("immune"):
+					engine_type = self.cfg.MEMORY_ENGINES.get(target_col.strip(), "fsrs_real")
+					engine = get_memory_engine(engine_type)
+					if engine.calculate_lazy_decay(p.payload, current_time=time.time()).get("_delete"):
+						continue
+				p.payload["_is_evoked"] = True
+				p.payload["_axon_weight"] = weight_by_id[str(p.id)]
+				cascade_results.append(p)
+				# Traversal reinforcement: synthetic review of W·β on the destination (ADR §3.2).
+				traversal_increments[str(p.id)] = weight_by_id[str(p.id)] * self.cfg.AXON_BETA
+			if traversal_increments:
+				try:
+					self._reinforce_points(target_col, list(traversal_increments.keys()), traversal_increments)
+				except Exception as e:
+					logger.debug(f"Axon traversal reinforcement failed for '{target_col}': {e}")
+			try:
+				from red_pill.events import AxonTraversalEvent
+
+				get_event_bus().emit(
+					AxonTraversalEvent(
+						source_collection=collection,
+						target_collection=target_col,
+						traversed=len(traversal_increments),
+						orphans=len(orphans),
+					)
+				)
+			except Exception as e:
+				logger.debug(f"Axon traversal telemetry emit failed: {e}")
 
 		# 3. Unified Stream (Direct Hits + Branching Memories)
 		return decayed_results + cascade_results
@@ -782,7 +947,8 @@ class MemoryManager:
 				if hit.score > 0.85:
 					assocs = p.payload.get("associations", [])
 					hit_id_str = str(hit.id)
-					if hit_id_str not in assocs:
+					existing_ids = {a.id for a in normalize_associations(assocs)}
+					if hit_id_str not in existing_ids:
 						assocs.append(hit_id_str)
 						if len(assocs) > self.cfg.MAX_AXONS:
 							assocs = self._symmetric_axons_eviction(collection, assocs)
@@ -807,15 +973,25 @@ class MemoryManager:
 			return assocs
 
 		try:
-			assoc_ids = [a["id"] if isinstance(a, dict) else str(a) for a in assocs]
-			records = self.client.retrieve(collection_name=collection, ids=assoc_ids, with_payload=["importance", "reinforcement_score"])
+			# P5: resolve target significance in each axon's OWN collection — scoring a
+			# cross axon against the local collection would misread it as a dead link
+			# (0.1) and evict the bridges first.
+			ids_by_collection: Dict[str, List[str]] = {}
+			for axon in normalize_associations(assocs):
+				target_col = axon.target_collection or collection
+				ids_by_collection.setdefault(target_col, []).append(axon.id)
 
 			hub_scores = {}
-			for r in records:
-				payload = r.payload or {}
-				imp = max(0.1, float(payload.get("importance", 1.0)))
-				reinf = max(0.1, float(payload.get("reinforcement_score", 1.0)))
-				hub_scores[str(r.id)] = imp * reinf
+			for target_col, ids in ids_by_collection.items():
+				try:
+					records = self.client.retrieve(collection_name=target_col, ids=ids, with_payload=["importance", "reinforcement_score"])
+				except Exception:
+					continue
+				for r in records:
+					payload = r.payload or {}
+					imp = max(0.1, float(payload.get("importance", 1.0)))
+					reinf = max(0.1, float(payload.get("reinforcement_score", 1.0)))
+					hub_scores[str(r.id)] = imp * reinf
 
 			eviction_scores = {}
 			for i, assoc in enumerate(assocs):

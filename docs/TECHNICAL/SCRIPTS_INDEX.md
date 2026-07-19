@@ -30,6 +30,15 @@ This document catalogs the utility scripts found in the `scripts/` directory. Th
 
 ## 🧠 Memory & Cognitive Maintenance
 
+### `update_ritual.py`
+**Purpose:** Versioned, idempotent, dry-run-by-default engram migrations upgraders run as part of every update (operator mandate: any released change that touches Bünker engrams MUST ship here). The 7.7.0 ritual: calibration invariant check, orphan-chunk promotion, revision-backlog advisory, tool-noise purge/compaction, axon shadow-state report. See `docs/GUIDES/AGENT_UPDATE_GUIDE.md` §1.2.
+
+### `strip_axons.py`
+**Purpose:** Total rollback net for the ADR-AXON-001 payload additions — removes cross-collection axons, v7.7.0 payload fields and `texture_shadow` points. Dry-run by default.
+
+### `../tools/distill_lab.py`
+**Purpose:** Diagnostic workbench (NOT CI) for the sleep/distillation pipeline. Calls the PRODUCTION functions so diagnostics never drift from what the kernel runs at night: `pipeline` (gen-0/1/2 simulation over a text), `probe` (golden mini-set after any prompt change), `engram` (hot before/after quality test on a live engram, dry-run default).
+
 ### `antigravity_ingest.py` & `antigravity_decrypt.py`
 **Purpose:** Pipes and decrypts logs and session snapshots into the Qdrant Bünker (vector database) to ensure long-term persistence without amnesia.
 

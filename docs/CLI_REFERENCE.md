@@ -121,6 +121,23 @@ Triggers the sleep cycle: memory consolidation, FSRS decay, hub synthesis.
 
 ---
 
+### `revision` — Retroactive category revision (Track R2, v7.7.0)
+```bash
+red-pill revision [--backlog] [--drain] [--execute] [--batch-size N]
+```
+Re-classifies legacy engrams (work ↔ social) with the V3 distiller. Dry-run by default: marks `revision_would_move_to` without moving anything.
+
+| Flag | Description |
+|------|-------------|
+| `--backlog` | Report unreviewed engrams per collection and exit |
+| `--drain` | Serial batches until the backlog is empty |
+| `--execute` | Actually move engrams (same ID, reciprocal axons rewired) |
+| `--batch-size N` | Engrams per batch in drain mode (default 200) |
+
+Hubs are never moved (they anchor Ariadne's Thread) — misclassified hubs are flagged for manual decision. Immune engrams are untouched.
+
+---
+
 ### `backup` — Qdrant snapshot
 ```bash
 red-pill backup [--collections COLLECTION ...]

@@ -109,6 +109,20 @@ def test_distill_engram_malformed_json_types():
 	mock_inference.generate.return_value = '{"summary": "float test", "emotion": 12.3, "intensity": "invalid", "category": null}'  # type: ignore
 	res2 = distill_engram("raw content")
 	assert res2["summary"] == "float test"
-	assert res2["emotion"] == "12.3"
+	assert res2["emotion"] == "neutral"  # V3: values outside the closed taxonomy normalize to neutral
 	assert res2["intensity"] == 0.5
 	assert res2["category"] == "social"  # fallback_category is social
+
+
+def test_chunk_text_runt_absorption():
+	# A trailing shard under 15% of size folds into the previous chunk
+	text = ("A" * 490 + ". ") + ("B" * 480 + ". ") + "tail..."
+	chunks = chunk_text(text, size=500)
+	assert "".join(chunks) == text
+	assert len(chunks[-1]) >= 500 * 0.15 or len(chunks) == 1
+	assert chunks[-1].endswith("tail...")
+
+
+def test_chunk_text_runt_single_chunk_untouched():
+	# A single short text is never "absorbed" into nothing
+	assert chunk_text("tiny", size=500) == ["tiny"]

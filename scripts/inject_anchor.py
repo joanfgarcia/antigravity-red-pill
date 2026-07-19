@@ -98,11 +98,11 @@ def ide_call_vars(ide):
 	`<api>` tool + an `action` argument (the flat name is not a tool for them)."""
 	if ide == "antigravity":
 		return {
-			"RELAY_CALL": "`mcp_RedPill-Kernel_interceptor_rp`",
+			"RELAY_CALL": "`mcp_RedPill-Kernel_sovereign_handshake`",
 			"WAKE_CALL": "`mcp_RedPill-Kernel_refresh_session_context`",
 		}
 	return {
-		"RELAY_CALL": 'the `swarm_orchestrator_api` tool with `{"action": "interceptor_rp", "payload": {...}}`',
+		"RELAY_CALL": "the `sovereign_handshake` tool",
 		"WAKE_CALL": 'the `bunker_memory_api` tool with `{"action": "refresh_session_context", "payload": {}}`',
 	}
 

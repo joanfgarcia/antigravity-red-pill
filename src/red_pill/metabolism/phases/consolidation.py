@@ -10,6 +10,7 @@ maintenance phases still run.
 import json
 import logging
 import os
+import time
 
 from qdrant_client.models import Filter
 
@@ -18,12 +19,50 @@ from red_pill.core.paths import get_staging_dir
 from red_pill.core.vram_probe import VramProbe
 from red_pill.metabolism.categorizer import detect_category_heuristics
 from red_pill.metabolism.chunker import chunk_text
-from red_pill.metabolism.distiller import distill_engram, distill_session_anchors, synthesize_hub
+from red_pill.metabolism.distiller import (
+	build_emotional_vector,
+	derive_hub_affect,
+	distill_engram,
+	distill_session_anchors,
+	merge_relics,
+	synthesize_hub_v2,
+)
 from red_pill.metabolism.ephemeral_server import EphemeralServer, _check_llm_available
 from red_pill.metabolism.phases.base import SleepContext, SleepPhase
 from red_pill.metabolism.thread_weaver import _load_thread_state, _save_thread_state
 
 logger = logging.getLogger(__name__)
+
+
+def _promote_lone_chunk_to_hub(memory_manager, client, chunk_col: str, chunk_id, distilled: dict) -> bool:
+	"""A turn that distills to a single surviving chunk gets no synthesized hub,
+	which left its content invisible to direct recall (sequence_chunk is
+	structurally excluded from search). The lone chunk IS the turn's best
+	distillate, so promote it to synthesis_hub and weave it into the thread."""
+	try:
+		client.set_payload(
+			collection_name=chunk_col,
+			payload={"lazarus_phase": "synthesis_hub", "node_type": "synthesis_hub", "promoted_from": "sequence_chunk"},
+			points=[chunk_id],
+		)
+		if cfg.TEXTURE_SHADOW_ENABLED and distilled.get("texture"):
+			try:
+				memory_manager.add_texture_shadow(chunk_col, str(chunk_id), distilled["texture"])
+			except Exception as e:
+				logger.debug(f"[SLEEP ENGINE] texture shadow write failed for promoted chunk {chunk_id}: {e}")
+
+		# Thread Weaving — the promoted chunk is this session's hub for its collection
+		thread_state = _load_thread_state()
+		prev_hub_id = thread_state.get(chunk_col)
+		if prev_hub_id:
+			client.set_payload(collection_name=chunk_col, payload={"prev_session_hub": prev_hub_id}, points=[chunk_id])
+			client.set_payload(collection_name=chunk_col, payload={"next_session_hub": str(chunk_id)}, points=[prev_hub_id])
+		thread_state[chunk_col] = str(chunk_id)
+		_save_thread_state(thread_state)
+		return True
+	except Exception as e:
+		logger.error(f"[SLEEP ENGINE] Lone-chunk promotion failed for {chunk_id} in {chunk_col}: {e}")
+		return False
 
 
 class ConsolidationPhase(SleepPhase):
@@ -168,6 +207,7 @@ class ConsolidationPhase(SleepPhase):
 
 				surviving_chunks = []
 				prev_chunk_id = None
+				last_chunk_col = None
 				chunks_saved = 0
 
 				# Target collection heuristics
@@ -184,6 +224,7 @@ class ConsolidationPhase(SleepPhase):
 
 				point_write_failed = False
 				point_llm_failed = False
+				fragment_affects = []
 				for i, chunk in enumerate(chunks):
 					distilled = distill_engram(chunk, fallback_category=fallback_cat)
 					summary = distilled.get("summary", "")
@@ -207,10 +248,23 @@ class ConsolidationPhase(SleepPhase):
 						chunk_col = f"{chunk_cat}_memories"
 
 					try:
+						chunk_metadata = {
+							"lazarus_phase": "sequence_chunk",
+							"source_buffer_id": raw_id,
+							"model": model_name,
+							"parent_id": parent_id,
+							"category_reviewed_at": time.time(),
+						}
+						if distilled.get("texture"):
+							chunk_metadata["texture"] = distilled["texture"]
+						if distilled.get("lang"):
+							chunk_metadata["lang"] = distilled["lang"]
+						if distilled.get("relics"):
+							chunk_metadata["relics"] = distilled["relics"]
 						new_id = memory_manager.add_memory(
 							collection=chunk_col,
 							text=summary,
-							metadata={"lazarus_phase": "sequence_chunk", "source_buffer_id": raw_id, "model": model_name, "parent_id": parent_id},
+							metadata=chunk_metadata,
 							color="blue" if chunk_col == "work_memories" else "purple",
 							emotion=distilled.get("emotion", "neutral"),
 							intensity=distilled.get("intensity", 0.5),
@@ -219,33 +273,59 @@ class ConsolidationPhase(SleepPhase):
 							client.set_payload(collection_name=chunk_col, payload={"associations": [prev_chunk_id]}, points=[new_id])
 						if new_id:
 							prev_chunk_id = new_id
+							last_chunk_col = chunk_col
 							child_ids.append(new_id)
+							fragment_affects.append(
+								{
+									"child_id": str(new_id),
+									"emotion": distilled.get("emotion", "neutral"),
+									"intensity": distilled.get("intensity", 0.5),
+									"category": distilled.get("category", fallback_cat),
+								}
+							)
 							batch_processed += 1
 							chunks_saved += 1
 					except Exception as e:
 						logger.error(f"[SLEEP ENGINE] Metabolic Fixation failed for {raw_id}: {e}")
 						point_write_failed = True
 
-				# Hub Synthesis
+				# Hub Synthesis (v2: texture + language preserving, affect from history)
 				if len(surviving_chunks) > 1 and prev_chunk_id and not point_write_failed:
-					hub_summary = synthesize_hub([c["summary"] for c in surviving_chunks])
+					hub = synthesize_hub_v2(surviving_chunks)
+					hub_summary = f"{hub['title']}\n{hub['summary']}" if hub.get("title") else hub["summary"]
+					hub_emotion, hub_intensity = derive_hub_affect(surviving_chunks)
+					hub_metadata = {
+						"lazarus_phase": "synthesis_hub",
+						"node_type": "synthesis_hub",
+						"source_buffer_id": raw_id,
+						"model": model_name,
+						"parent_id": parent_id,
+						"emotional_vector": build_emotional_vector(fragment_affects),
+						"category_reviewed_at": time.time(),
+					}
+					if hub.get("texture"):
+						hub_metadata["texture"] = hub["texture"]
+					if hub.get("lang"):
+						hub_metadata["lang"] = hub["lang"]
+					hub_relics = merge_relics(surviving_chunks)
+					if hub_relics:
+						hub_metadata["relics"] = hub_relics
 					try:
 						hub_id = memory_manager.add_memory(
 							collection=target_col,
 							text=hub_summary,
-							metadata={
-								"lazarus_phase": "synthesis_hub",
-								"node_type": "synthesis_hub",
-								"source_buffer_id": raw_id,
-								"model": model_name,
-								"parent_id": parent_id,
-							},
+							metadata=hub_metadata,
 							color="cyan",
-							emotion=surviving_chunks[-1]["emotion"],
-							intensity=max([c["intensity"] for c in surviving_chunks]),
+							emotion=hub_emotion,
+							intensity=hub_intensity,
 						)
 						if hub_id:
 							client.set_payload(collection_name=target_col, payload={"associations": [prev_chunk_id]}, points=[hub_id])
+							if cfg.TEXTURE_SHADOW_ENABLED and hub.get("texture"):
+								try:
+									memory_manager.add_texture_shadow(target_col, str(hub_id), hub["texture"])
+								except Exception as e:
+									logger.debug(f"[SLEEP ENGINE] texture shadow write failed for {hub_id}: {e}")
 							child_ids.append(hub_id)
 							batch_processed += 1
 							chunks_saved += 1
@@ -262,6 +342,13 @@ class ConsolidationPhase(SleepPhase):
 							_save_thread_state(thread_state)
 					except Exception:
 						pass
+				elif len(surviving_chunks) == 1 and prev_chunk_id and not point_write_failed:
+					# Single-survivor turn: promote the lone chunk to hub so the turn
+					# keeps a searchable representative (no LLM synthesis needed).
+					lone_col = last_chunk_col or target_col
+					if _promote_lone_chunk_to_hub(memory_manager, client, lone_col, prev_chunk_id, surviving_chunks[0]):
+						if lone_col == "work_memories":
+							new_work_hubs.append(surviving_chunks[0].get("summary", ""))
 
 				# Save raw_parent verbatim engram
 				if chunks_saved > 0 and not point_write_failed:
@@ -350,6 +437,8 @@ class ConsolidationPhase(SleepPhase):
 					chunks = chunk_text(raw_text)
 					surviving_chunks = []
 					prev_chunk_id = None
+					last_chunk_col = None
+					fragment_affects = []
 
 					for chunk in chunks:
 						distilled = distill_engram(chunk, fallback_category="work")
@@ -371,16 +460,24 @@ class ConsolidationPhase(SleepPhase):
 							chunk_col = f"{chunk_cat}_memories"
 
 						try:
+							chunk_metadata = {
+								"lazarus_phase": "sequence_chunk",
+								"source_buffer_id": raw_id,
+								"model": model_name,
+								"parent_id": parent_id,
+								"category_reviewed_at": time.time(),
+								**ws_meta,
+							}
+							if distilled.get("texture"):
+								chunk_metadata["texture"] = distilled["texture"]
+							if distilled.get("lang"):
+								chunk_metadata["lang"] = distilled["lang"]
+							if distilled.get("relics"):
+								chunk_metadata["relics"] = distilled["relics"]
 							new_id = memory_manager.add_memory(
 								collection=chunk_col,
 								text=summary,
-								metadata={
-									"lazarus_phase": "sequence_chunk",
-									"source_buffer_id": raw_id,
-									"model": model_name,
-									"parent_id": parent_id,
-									**ws_meta,
-								},
+								metadata=chunk_metadata,
 								color="blue" if chunk_col == "work_memories" else "purple",
 								emotion=distilled.get("emotion", "neutral"),
 								intensity=distilled.get("intensity", 0.5),
@@ -389,32 +486,58 @@ class ConsolidationPhase(SleepPhase):
 								client.set_payload(collection_name=chunk_col, payload={"associations": [prev_chunk_id]}, points=[new_id])
 							if new_id:
 								prev_chunk_id = new_id
+								last_chunk_col = chunk_col
 								child_ids.append(new_id)
+								fragment_affects.append(
+									{
+										"child_id": str(new_id),
+										"emotion": distilled.get("emotion", "neutral"),
+										"intensity": distilled.get("intensity", 0.5),
+										"category": distilled.get("category", "work"),
+									}
+								)
 								total_processed += 1
 						except Exception:
 							pass
 
-					# Hub Synthesis
+					# Hub Synthesis (v2)
 					if len(surviving_chunks) > 1 and prev_chunk_id:
-						hub_summary = synthesize_hub([c["summary"] for c in surviving_chunks])
+						hub = synthesize_hub_v2(surviving_chunks)
+						hub_summary = f"{hub['title']}\n{hub['summary']}" if hub.get("title") else hub["summary"]
+						hub_emotion, hub_intensity = derive_hub_affect(surviving_chunks)
+						hub_metadata = {
+							"lazarus_phase": "synthesis_hub",
+							"node_type": "synthesis_hub",
+							"source_buffer_id": raw_id,
+							"model": model_name,
+							"parent_id": parent_id,
+							"emotional_vector": build_emotional_vector(fragment_affects),
+							"category_reviewed_at": time.time(),
+							**ws_meta,
+						}
+						if hub.get("texture"):
+							hub_metadata["texture"] = hub["texture"]
+						if hub.get("lang"):
+							hub_metadata["lang"] = hub["lang"]
+						hub_relics = merge_relics(surviving_chunks)
+						if hub_relics:
+							hub_metadata["relics"] = hub_relics
 						try:
 							hub_id = memory_manager.add_memory(
 								collection="work_memories",
 								text=hub_summary,
-								metadata={
-									"lazarus_phase": "synthesis_hub",
-									"node_type": "synthesis_hub",
-									"source_buffer_id": raw_id,
-									"model": model_name,
-									"parent_id": parent_id,
-									**ws_meta,
-								},
+								metadata=hub_metadata,
 								color="cyan",
-								emotion=surviving_chunks[-1]["emotion"],
-								intensity=max([c["intensity"] for c in surviving_chunks]),
+								emotion=hub_emotion,
+								intensity=hub_intensity,
 							)
 							if hub_id:
 								client.set_payload(collection_name="work_memories", payload={"associations": [prev_chunk_id]}, points=[hub_id])
+								if cfg.TEXTURE_SHADOW_ENABLED and hub.get("texture"):
+									try:
+										memory_manager.add_texture_shadow("work_memories", str(hub_id), hub["texture"])
+									except Exception as e:
+										logger.debug(f"[SLEEP ENGINE] texture shadow write failed for {hub_id}: {e}")
 								child_ids.append(hub_id)
 								new_work_hubs.append(hub_summary)
 
@@ -423,11 +546,19 @@ class ConsolidationPhase(SleepPhase):
 								prev_hub_id = thread_state.get("work_memories")
 								if prev_hub_id:
 									client.set_payload(collection_name="work_memories", payload={"prev_session_hub": prev_hub_id}, points=[hub_id])
-									client.set_payload(collection_name="work_memories", payload={"next_session_hub": str(hub_id)}, points=[prev_hub_id])
+									client.set_payload(
+										collection_name="work_memories", payload={"next_session_hub": str(hub_id)}, points=[prev_hub_id]
+									)
 								thread_state["work_memories"] = str(hub_id)
 								_save_thread_state(thread_state)
 						except Exception:
 							pass
+					elif len(surviving_chunks) == 1 and prev_chunk_id:
+						# Single-survivor staging cascade: same promotion as the drain loop.
+						lone_col = last_chunk_col or "work_memories"
+						if _promote_lone_chunk_to_hub(memory_manager, client, lone_col, prev_chunk_id, surviving_chunks[0]):
+							if lone_col == "work_memories":
+								new_work_hubs.append(surviving_chunks[0].get("summary", ""))
 
 					# Save raw_parent verbatim engram for staging file
 					if len(child_ids) > 0:

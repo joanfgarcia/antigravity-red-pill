@@ -6,10 +6,25 @@ GPU-heavy consolidation phase is deferred (the partial-deferral win of ADR-SLEEP
 
 import logging
 
-from red_pill.metabolism.maintenance import erode_work_hubs, run_rhizodb_washout_and_pruning
+from red_pill.metabolism.maintenance import erode_work_hubs, promote_orphan_chunks, run_rhizodb_washout_and_pruning
 from red_pill.metabolism.phases.base import SleepContext, SleepPhase
 
 logger = logging.getLogger(__name__)
+
+
+class OrphanPromotionPhase(SleepPhase):
+	"""Self-healing: hub-less consolidated turns get their newest chunk promoted
+	to synthesis_hub so every turn stays reachable by direct recall."""
+
+	@property
+	def name(self) -> str:
+		return "orphan_promotion"
+
+	def execute(self, ctx: SleepContext) -> None:
+		try:
+			promote_orphan_chunks(ctx.memory_manager)
+		except Exception as e:
+			logger.error(f"[SLEEP ENGINE] Failed to run orphan-chunk promotion: {e}")
 
 
 class ErosionPhase(SleepPhase):

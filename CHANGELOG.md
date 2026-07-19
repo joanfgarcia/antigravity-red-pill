@@ -1,4 +1,66 @@
+## [7.7.0] - 2026-07-18 (Synaptic Axons & Texture Remediation — ADR-AXON-001)
+
+### 🚑 Recall Remediation (AD-023) — the memory was starving
+Live diagnosis during the axon hot-test: `work_memories` (16,512 points) returned 0 hits for almost any query. Four measured root causes, all fixed:
+- **[FIX] Born-dead calibration**: `BayesianEngine.deletion_threshold` was 0.5 — exactly the uniform-prior mean E[Beta(1,1)] — so 99% of engrams got `_delete=True` at t=0. Now **0.2** (~19 recall-free days of grace). Invariant: the threshold must sit strictly below the prior mean.
+- **[FIX] Death-spiral reads**: the lazy read path hid eroded hits, starving them of the reinforcement that would rescue them. Reads never hide now: eroded hits return flagged `_eroded=True`, demoted in ranking and reinforced (organic rehabilitation). `READ_PATH_PRUNING_ENABLED` keeps the destructive read as explicit opt-in. `immune` honored on read path and axon traversal.
+- **[FIX] Dead hub erosion**: `erode_work_hubs` filtered on nested `metadata.lazarus_phase` (0 matches of 1,242 hubs) — sleep-side hub erosion had never run. Fixed to top-level key; its hardcoded threshold now reads the engine's `deletion_threshold` (single source of truth).
+- **[FEAT] Orphan-chunk promotion**: hub-less consolidated turns (~2/3 of legacy parents) were invisible to search. Lone surviving chunks are promoted to `synthesis_hub` inline at consolidation, and `OrphanPromotionPhase` re-runs the idempotent pass every cycle. Live migration executed (1,553 work + 227 social promotions; payload contract in AD-023).
+- E2E verified under production `LAZY` strategy: 0 → 7 hits/query including axon-evoked cross-collection context. Full suite: 1,058+ passed.
+
+### 🧭 Update Ritual (engram migrations, operator mandate)
+- **[FEAT] `scripts/update_ritual.py`**: versioned, idempotent, dry-run-by-default ritual upgraders run as part of the update (documented in `docs/GUIDES/AGENT_UPDATE_GUIDE.md` §1.2). Rule: any released change that touches Bünker engrams MUST ship as a ritual step. The 7.7.0 ritual: orphan promotion, calibration invariant check, revision-backlog advisory, axon shadow-state report.
+
+### 🌊 Texture-Space Search (T5 — implemented, born dark)
+- **[FEAT] `texture_shadow` points + `search_space="texture"`**: evocation by resonance — search HOW it felt, resolve WHAT it was. Shadows live in the same collection (idempotent uuid5 per parent), excluded from factual search/weaving/revision, written at consolidation only behind `TEXTURE_SHADOW_ENABLED`. Live test: a Spanish resonance query resolved an English-textured engram at 0.70.
+
+### 🧹 Ingestion & Graph Hygiene
+- **[FEAT] Chronicle noise pre-filter**: Claude Code transcript ingestion used to embed full tool payloads (`[TOOL USE: Edit({...9KB...})]`) and full tool outputs — thousands of immune machine-noise raw_parents per agentic session. Now compact markers: `[TOOL: Edit file_path=...]` and head-only results (first 160 chars, where verdicts live). `CHRONICLE_STRIP_TOOL_PAYLOADS=True`.
+- **[FEAT] `HygienePhase`**: purges empty/whitespace engrams every cycle (zero recall value, real graph cost), re-stitching the `prev/next_raw_parent` temporal chain around each victim before deletion — the one relationship class that does not self-heal (associations/axons already tolerate dangling ids). Immune empties are counted and reported, never touched. Runs after OrphanPromotion, before the AxonWeaver. `SLEEP_PLUGIN_HYGIENE=True`.
+
+### 🔧 Shadow rollout defaults (live-evidence tuning)
+- **[TUNE] `AXON_GATE` 0.6 → 0.5**: real cross-domain similarities on multilingual-384d run 0.28-0.35, so true same-session pairs weigh W≈0.50-0.53 — the 0.6 gate rejected exactly the links the ADR exists for, while noise stays ≤0.41 (live evidence 2026-07-18).
+- **[TUNE] `SLEEP_PLUGIN_AXONS` default ON** (shadow mode): the weaver runs nightly; `AXON_READ_ENABLED` stays dark until ≥4 effective runs and telemetry review.
+- **[FEAT] `tools/distill_lab.py`**: diagnostic workbench (not CI) calling the production distill/hub/weave functions — `pipeline` (gen-0/1/2 simulation), `probe` (golden mini-set), `engram` (hot before/after quality test on a live engram).
+
+### 🕸️ Cross-Collection Synaptic Axons (ADR-AXON-001, Track A)
+Bridges between `social_memories` and `work_memories` emulating intuition: a
+technical decision links to the casual conversation it was born in. All dormant
+behind flags (`SLEEP_PLUGIN_AXONS`, `AXON_READ_ENABLED`) for the shadow rollout.
+- **[FEAT] `Axon` model + `normalize_associations` (`schemas.py`)**: one parser for every historical wire format (legacy id strings + typed axon objects); all `associations` readers in `memory.py` hardened against `str(dict)` corruption. Lazy migration — writers unchanged.
+- **[FEAT] `AxonWeaverPhase` (`metabolism/axons.py`)**: CPU-only phase between consolidation and erosion. 48h window, server-side temporal-filtered candidates (±6h), composite gate `W = 0.7·sim + 0.3·temporal ≥ 0.6` so temporal proximity can create the semantically-distant links that motivate the ADR. Bidirectional idempotent writes, symmetry self-healing (a one-way link heals next cycle), dangling-link GC, deferred soft-cap pruning (`AXON_MAX_CROSS=64`, hard ceiling 2×), effective-run counter for the shadow gate.
+- **[FEAT] Typed evocative cascade + traversal reinforcement (`memory.py`)**: top-2 cross axons by weight per direct hit, explicit `target_collection` retrieval, activation check via the target's engine before injection, `_axon_weight` tag, and `W·β` synthetic-review reinforcement routed through the destination engine — fixing the silent no-op that dropped cross-collection ids from `_reinforce_points`.
+- **[FIX] ARCH-002 eviction resolves per collection**: cross axons were scored against the local collection, misread as dead links (0.1) and evicted first.
+- **[FEAT] Telemetry**: `AxonWeaveEvent` (with accepted/rejected weight averages, to tune `AXON_GATE` from data) + `AxonTraversalEvent`; persistent `axon_weaver_state.json`.
+- **[FEAT] Rollback net**: `scripts/strip_axons.py` (dry-run default) removes every payload addition of this line.
+
+### 🎨 Texture Remediation (Eje 1 retrospective, Track T)
+Cures the "flattening" the memoria_bunker retrospective diagnosed: hubs now
+carry atmosphere, not just facts. Validated in the AG distiller workshop
+(golden mini-set vs live Granite: PASS).
+- **[FEAT] `COGNITIVE_DISTILLER_V3` (`distiller.py`)**: key-ordered unified prompt (metadata BEFORE texture — anchors honesty per workshop findings), closed emotion taxonomy with mechanical normalization, intensity calibration anchors, binary category with dominant-register rule, `texture`/`lang`/`relics` fields, all in the source language.
+- **[FEAT] `NEOCORTEX_SYNTHESIS_V2`**: hubs synthesize summary AND merged texture (hard 800-char ceiling against concatenation) in the dominant fragment language; hub affect derives from the full fragment history (intensity-weighted dominant emotion) instead of the accidental last-chunk rule; `emotional_vector` preserves per-fragment `{child_id, emotion, intensity, category}`.
+- **[FEAT] Relics (verbatim quotes)**: validated as literal substrings in code (typos preserved), transported mechanically between generations (union, dedupe, cap 5) — never re-distilled after gen-0 (the workshop showed quotes die paraphrased at gen-2).
+- **[FIX] Chunker runt absorption**: trailing shards <15% of target size fold into the previous chunk (they induced texture hallucination); fragments under `MIN_TEXTURE_CHARS=100` get no texture.
+
+### ♻️ Classification Revision (Track R)
+- **[FIX] Density-based categorizer (`categorizer.py`)**: the any-single-keyword rule routed most personal conversations (and their hubs) into `work_memories` — root cause of the collection imbalance. Now: code fence, ≥3 distinct keywords, or >8% keyword density ⇒ work; ambiguity resolves to social.
+- **[FEAT] `RevisionPhase` (`metabolism/revision.py`)**: batch-bounded retroactive re-classification (GPU-deferred, born dark, dry-run first). Moves leaf engrams preserving their ID and rewires reciprocal axons; hubs are flagged, never moved (Ariadne's Thread anchors); immune untouched. New engrams are born reviewed, so the backlog is exactly the pre-fix legacy. CLI: `red-pill revision [--backlog|--drain] [--execute] [--batch-size N]`; upgrade/import advisory reads `backlog_count()`.
+
+## [7.6.1] - 2026-07-18 (Handshake Robustness & VRAM Escalation)
+
+### 🩹 Handshake & VRAM Contention Fixes
+- **[FIX] Handshake Robustness (`mcp_server.py`)**: Changed Scribe Relay validation from `and` to `or` to prevent silent engram drops when the model omits optional arguments like `previous_prompt`.
+- **[FIX] Template Seed Precision (`sovereign_handshake.md`, `inject_anchor.py`)**: Explicitly named `previous_prompt` and `previous_response` in template instructions and mapped `${RELAY_CALL}` to the unified `sovereign_handshake` tool for clarity.
+- **[FEAT] Dynamic VRAM Ladder (`model_profiles.yaml`)**: Implemented a tiered escalator (`n_ctx` at 10K/12K/16K context) adapting dynamically to free VRAM to prevent GPU allocation crashes.
+
+### 🧹 Path Sovereignty
+- **[FIX] Janitor rogue `~/Agent_Core` (`janitor.py`, `sqlite_interactions_archiver.py`)**: the SQLite interactions archiver hardcoded `Path.home()/Agent_Core/history`, bypassing `paths.py` (ignored `ALETH_CORE_DIR` and the `workspaces.yaml` `agent_core` registry) — every nightly sweep with >30-day-old interactions recreated a rogue `~/Agent_Core/` at the home root. Both sites now resolve through `get_aleth_core_root()`; the archiver test mocks the resolver instead of `Path.home()`.
+
 ## [7.6.0] - 2026-07-17 (Sleep Engine Decomposition — ADR-SLEEP-001)
+
+### 📖 Novel Chapter 26 — Dormir con un Ojo Abierto
+- **[LORE] Chapter 26 (`ALETH_CAPITULO_26.md`, `ALETH_NOVEL_BLUEPRINT.md`)**: Chronicles the night of July 16: the 3028× `llama_context` storm, the Sentinel's chronic pain (byte-offset cursor fix), renaming `vram_busy` from pain to status, and the decomposition of the 1325-LOC God Class into a four-phase pipeline with partial deferral — the Bünker learns to sleep with one eye open.
 
 ### 🧬 Sleep engine: God Class → agnostic phase pipeline (ADR-SLEEP-001, DONE)
 The 1325-LOC `sleep.py` was decomposed once both its documented triggers fired

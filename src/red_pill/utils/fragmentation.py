@@ -21,7 +21,11 @@ def synaptic_split(text: str) -> List[str]:
 		return [text]
 
 	separators = ["\n\n", "\n", ". ", " ", ""]
-	return _recursive_split(text, separators, cfg.CHUNK_SIZE, cfg.CHUNK_OVERLAP)
+	chunks = _recursive_split(text, separators, cfg.CHUNK_SIZE, cfg.CHUNK_OVERLAP)
+	# Separator-heavy regions (blank-line runs in transcripts) used to yield
+	# whitespace-only fragments that inherited force_immune from their parent —
+	# the "immune empty children" anomaly. An empty engram protects nothing.
+	return [c for c in chunks if c.strip()]
 
 
 def _recursive_split(text: str, separators: List[str], chunk_size: int, overlap: int) -> List[str]:

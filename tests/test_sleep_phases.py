@@ -13,6 +13,7 @@ EPH = "red_pill.metabolism.ephemeral_server"
 
 # ── Phase contract ────────────────────────────────────────────────────────────
 
+
 def test_phase_names_and_gpu_flags():
 	assert ConsolidationPhase().name == "consolidation"
 	assert ConsolidationPhase().requires_gpu is True
@@ -29,6 +30,7 @@ def test_is_enabled_default_and_disabled():
 
 
 # ── CPU-only phases delegate and swallow errors ────────────────────────────────
+
 
 def test_erosion_phase_delegates():
 	ctx = SleepContext(memory_manager=MagicMock())
@@ -62,6 +64,7 @@ def test_cpu_phases_swallow_exceptions():
 
 
 # ── _check_llm_available reachability probe ─────────────────────────────────────
+
 
 def test_check_llm_available_uds_ok():
 	from red_pill.metabolism import ephemeral_server as es
@@ -100,6 +103,7 @@ def test_check_llm_available_tcp_ok():
 
 
 # ── Runner: partial deferral ────────────────────────────────────────────────────
+
 
 def test_runner_defers_gpu_but_runs_cpu_maintenance():
 	"""GPU committed → consolidation self-defers (vram_busy kept), CPU phases still run."""
@@ -142,6 +146,7 @@ def test_runner_clears_vram_busy_on_real_cycle():
 
 
 # ── EphemeralServer lifecycle ───────────────────────────────────────────────────
+
 
 def _silence_notifier():
 	return patch.multiple(
