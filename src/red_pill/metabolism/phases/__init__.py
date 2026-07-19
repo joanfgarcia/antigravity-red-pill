@@ -10,6 +10,7 @@ from red_pill.metabolism.phases.axon_weaver import AxonWeaverPhase
 from red_pill.metabolism.phases.base import SleepContext, SleepPhase
 from red_pill.metabolism.phases.consolidation import ConsolidationPhase
 from red_pill.metabolism.phases.evolution_phase import EvolutionPhase
+from red_pill.metabolism.phases.hygiene_phase import HygienePhase
 from red_pill.metabolism.phases.maintenance_phases import ErosionPhase, OrphanPromotionPhase, WashoutPhase
 from red_pill.metabolism.phases.revision_phase import RevisionPhase
 
@@ -22,6 +23,7 @@ from red_pill.metabolism.phases.revision_phase import RevisionPhase
 SLEEP_PHASES: list[SleepPhase] = [
 	ConsolidationPhase(),
 	OrphanPromotionPhase(),
+	HygienePhase(),
 	AxonWeaverPhase(),
 	ErosionPhase(),
 	WashoutPhase(),
@@ -35,6 +37,7 @@ __all__ = [
 	"ConsolidationPhase",
 	"ErosionPhase",
 	"EvolutionPhase",
+	"HygienePhase",
 	"OrphanPromotionPhase",
 	"RevisionPhase",
 	"SleepContext",

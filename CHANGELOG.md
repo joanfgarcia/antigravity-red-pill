@@ -14,6 +14,10 @@ Live diagnosis during the axon hot-test: `work_memories` (16,512 points) returne
 ### 🌊 Texture-Space Search (T5 — implemented, born dark)
 - **[FEAT] `texture_shadow` points + `search_space="texture"`**: evocation by resonance — search HOW it felt, resolve WHAT it was. Shadows live in the same collection (idempotent uuid5 per parent), excluded from factual search/weaving/revision, written at consolidation only behind `TEXTURE_SHADOW_ENABLED`. Live test: a Spanish resonance query resolved an English-textured engram at 0.70.
 
+### 🧹 Ingestion & Graph Hygiene
+- **[FEAT] Chronicle noise pre-filter**: Claude Code transcript ingestion used to embed full tool payloads (`[TOOL USE: Edit({...9KB...})]`) and full tool outputs — thousands of immune machine-noise raw_parents per agentic session. Now compact markers: `[TOOL: Edit file_path=...]` and head-only results (first 160 chars, where verdicts live). `CHRONICLE_STRIP_TOOL_PAYLOADS=True`.
+- **[FEAT] `HygienePhase`**: purges empty/whitespace engrams every cycle (zero recall value, real graph cost), re-stitching the `prev/next_raw_parent` temporal chain around each victim before deletion — the one relationship class that does not self-heal (associations/axons already tolerate dangling ids). Immune empties are counted and reported, never touched. Runs after OrphanPromotion, before the AxonWeaver. `SLEEP_PLUGIN_HYGIENE=True`.
+
 ### 🔧 Shadow rollout defaults (live-evidence tuning)
 - **[TUNE] `AXON_GATE` 0.6 → 0.5**: real cross-domain similarities on multilingual-384d run 0.28-0.35, so true same-session pairs weigh W≈0.50-0.53 — the 0.6 gate rejected exactly the links the ADR exists for, while noise stays ≤0.41 (live evidence 2026-07-18).
 - **[TUNE] `SLEEP_PLUGIN_AXONS` default ON** (shadow mode): the weaver runs nightly; `AXON_READ_ENABLED` stays dark until ≥4 effective runs and telemetry review.

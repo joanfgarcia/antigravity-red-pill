@@ -83,6 +83,8 @@ This document provides a comprehensive list of all parameters available in the `
 | `SLEEP_PLUGIN_REVISION` | `False` | RevisionPhase master switch (retroactive re-classification). |
 | `REVISION_BATCH_SIZE` | `50` | Engrams re-classified per sleep cycle (200 on beefy hardware). |
 | `REVISION_DRY_RUN` | `True` | Mark `revision_would_move_to` instead of moving engrams. |
+| `CHRONICLE_STRIP_TOOL_PAYLOADS` | `True` | Chronicle ingestion writes compact `[TOOL: name target]` / head-only result markers instead of full JSON dumps (anti raw-noise). |
+| `SLEEP_PLUGIN_HYGIENE` | `True` | HygienePhase: purge empty engrams each cycle, re-stitching the raw_parent chain first (immune empties are reported, never touched). |
 
 ### Memory Engrams (Fragmenter)
 | Parameter | Default | Description |

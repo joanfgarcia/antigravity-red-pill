@@ -257,3 +257,76 @@ def run_rhizodb_washout_and_pruning(memory_manager) -> None:
 				logger.info(f"[SLEEP ENGINE] Deleted {len(points_to_delete)} pruned engrams from {collection}.")
 			except Exception as e:
 				logger.error(f"[SLEEP ENGINE] Failed to delete pruned engrams in {collection}: {e}")
+
+
+def purge_empty_engrams(memory_manager, collections=("work_memories", "social_memories"), dry_run: bool = False) -> dict:
+	"""
+	Hygiene pass: engrams whose content is empty/whitespace carry zero recall
+	value but real storage and graph cost. Purge them, but FIRST re-stitch the
+	raw_parent temporal chain (prev/next_raw_parent) around each victim — the
+	one relationship class that does not self-heal (associations and axons
+	already tolerate dangling ids via cascade fallback and weaver GC).
+	Immune engrams are never purged, only counted (an empty immune anchor is an
+	anomaly the operator should see, not one a janitor should resolve).
+	"""
+	from qdrant_client import models as qm
+
+	client = memory_manager.client
+	report: dict = {}
+
+	for collection in collections:
+		if not client.collection_exists(collection):
+			continue
+		victims = []
+		skipped_immune = 0
+		offset = None
+		while True:
+			try:
+				points, offset = client.scroll(collection_name=collection, limit=512, offset=offset, with_payload=True, with_vectors=False)
+			except Exception as e:
+				logger.error(f"[HYGIENE] scroll failed in {collection}: {e}")
+				break
+			for p in points:
+				payload = p.payload or {}
+				if str(payload.get("content", "")).strip():
+					continue
+				if payload.get("immune"):
+					skipped_immune += 1
+					continue
+				victims.append((p.id, payload))
+			if offset is None:
+				break
+
+		restitched = 0
+		for victim_id, payload in victims:
+			if dry_run:
+				continue
+			prev_id = payload.get("prev_raw_parent")
+			next_id = payload.get("next_raw_parent")
+			try:
+				if prev_id:
+					if next_id:
+						client.set_payload(collection_name=collection, payload={"next_raw_parent": str(next_id)}, points=[prev_id])
+					else:
+						client.delete_payload(collection_name=collection, keys=["next_raw_parent"], points=[prev_id])
+					restitched += 1
+				if next_id:
+					if prev_id:
+						client.set_payload(collection_name=collection, payload={"prev_raw_parent": str(prev_id)}, points=[next_id])
+					else:
+						client.delete_payload(collection_name=collection, keys=["prev_raw_parent"], points=[next_id])
+					restitched += 1
+			except Exception as e:
+				logger.debug(f"[HYGIENE] chain restitch failed around {victim_id}: {e}")
+			try:
+				client.delete(collection_name=collection, points_selector=qm.PointIdsList(points=[victim_id]))
+			except Exception as e:
+				logger.error(f"[HYGIENE] delete failed for {victim_id} in {collection}: {e}")
+
+		report[collection] = {"empty_purged": len(victims), "chains_restitched": restitched, "skipped_immune_empty": skipped_immune}
+		if victims or skipped_immune:
+			logger.info(
+				f"[HYGIENE] {collection}: {len(victims)} empty engrams {'found' if dry_run else 'purged'} "
+				f"({restitched} chain links restitched, {skipped_immune} immune empties left for the operator)."
+			)
+	return report

@@ -586,6 +586,10 @@ class RedPillConfig(BaseSettings):
 	AXON_BETA: float = 0.2  # Traversal reinforcement fraction (synthetic review = W·β)
 	AXON_MAX_CROSS: int = 64  # Soft cap of cross-collection axons per engram (deferred pruning)
 
+	# ── Chronicle ingestion hygiene ──
+	CHRONICLE_STRIP_TOOL_PAYLOADS: bool = True  # Compact [TOOL: name target] markers instead of full JSON dumps (anti raw-noise)
+	SLEEP_PLUGIN_HYGIENE: bool = True  # HygienePhase: purge empty engrams re-stitching the raw chain first
+
 	# ── Texture space (T5: evocation by resonance) ──
 	TEXTURE_SHADOW_ENABLED: bool = False  # Write texture_shadow points at consolidation (born dark)
 
