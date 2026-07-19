@@ -113,9 +113,9 @@ def test_claude_code_extractor_standard_and_incremental(tmp_path):
 			assert payload2["steps"][0]["intent"] == "USER"
 			assert payload2["steps"][0]["message"]["text"] == "Verify CUDA again."
 			assert payload2["steps"][1]["intent"] == "ASSISTANT"
-			assert "[TOOL USE: check_cuda" in payload2["steps"][1]["message"]["text"]
+			assert "[TOOL: check_cuda" in payload2["steps"][1]["message"]["text"]  # compact marker (CHRONICLE_STRIP_TOOL_PAYLOADS)
 			assert payload2["steps"][2]["intent"] == "USER"
-			assert "[TOOL RESULT: id=tool-1 output=CUDA active]" in payload2["steps"][2]["message"]["text"]
+			assert "[TOOL RESULT: CUDA active]" in payload2["steps"][2]["message"]["text"]
 			assert payload2["steps"][3]["intent"] == "ASSISTANT"
 			assert payload2["steps"][3]["message"]["text"] == "CUDA is healthy."
 
