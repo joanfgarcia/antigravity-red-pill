@@ -44,20 +44,20 @@ def ritual_7_7_0(mm, execute: bool) -> None:
 	# 1. Calibration invariant (AD-023): threshold strictly below the prior mean.
 	threshold = get_memory_engine("bayesian").deletion_threshold
 	status = "OK" if threshold < 0.5 else "VIOLATION — engrams are born dead, update your checkout"
-	print(f"[1/4] Bayesian deletion threshold: {threshold} ({status})")
+	print(f"[1/5] Bayesian deletion threshold: {threshold} ({status})")
 
 	# 2. Orphan-chunk promotion (idempotent engram migration).
 	report = promote_orphan_chunks(mm, dry_run=not execute)
 	for collection, stats in report.items():
 		print(
-			f"[2/4] {collection}: {stats['hubless_parents_promoted']} hub-less parents "
+			f"[2/5] {collection}: {stats['hubless_parents_promoted']} hub-less parents "
 			f"{'promoted' if execute else 'WOULD be promoted'} ({stats['multi_chunk_flagged']} flagged hub_rebuild_pending)"
 		)
 
 	# 3. Revision backlog advisory — operator decides, the ritual only informs.
 	counts = backlog_count(mm.client)
 	total = sum(c for c in counts.values() if c > 0)
-	print(f"[3/4] Revision backlog (engrams without category_reviewed_at): {counts}")
+	print(f"[3/5] Revision backlog (engrams without category_reviewed_at): {counts}")
 	if total:
 		print(
 			f"      {total} legacy engrams pending re-classification. Your call:\n"
@@ -66,10 +66,22 @@ def ritual_7_7_0(mm, execute: bool) -> None:
 			"                    uv run red-pill revision --drain --execute  (moves engrams)"
 		)
 
-	# 4. Axon shadow-rollout state.
+	# 4. Legacy tool-noise purge (family-level, conservative): verbatim families
+	# that are >=90% tool-dump noise with <200 chars of residual text are purged
+	# with chain restitching; mixed conversations are always kept whole.
+	from red_pill.metabolism.maintenance import purge_tool_noise_raw_parents
+
+	noise_report = purge_tool_noise_raw_parents(mm, dry_run=not execute)
+	for collection, stats in noise_report.items():
+		print(
+			f"[4/5] {collection}: {stats['families_purged']} pure-noise families "
+			f"({stats['points_purged']} points) {'purged' if execute else 'WOULD be purged'}; {stats['mixed_kept']} mixed kept whole"
+		)
+
+	# 5. Axon shadow-rollout state.
 	state = load_axon_state()
 	runs = int(state.get("completed_runs", 0))
-	print(f"[4/4] Axon weaver: SLEEP_PLUGIN_AXONS={cfg.SLEEP_PLUGIN_AXONS}, effective runs={runs}, AXON_READ_ENABLED={cfg.AXON_READ_ENABLED}")
+	print(f"[5/5] Axon weaver: SLEEP_PLUGIN_AXONS={cfg.SLEEP_PLUGIN_AXONS}, effective runs={runs}, AXON_READ_ENABLED={cfg.AXON_READ_ENABLED}")
 	if cfg.SLEEP_PLUGIN_AXONS and not cfg.AXON_READ_ENABLED and runs >= 4:
 		print("      Shadow gate reached (>=4 effective runs): review AxonWeaveEvent telemetry and consider AXON_READ_ENABLED=true.")
 

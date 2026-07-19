@@ -334,3 +334,131 @@ def purge_empty_engrams(memory_manager, collections=("work_memories", "social_me
 				f"({restitched} chain links restitched, {skipped_immune} immune empties left for the operator)."
 			)
 	return report
+
+
+_NOISE_MARKERS = ("[TOOL USE:", "[TOOL RESULT:")
+_DIALOG_PREFIXES = ("USER:", "ASSISTANT:", "Operator Prompt:", "AI Response Node:")
+
+
+def _tool_noise_ratio(full_text: str) -> float:
+	"""Fraction of characters inside legacy tool-dump blocks.
+
+	Line state machine: a line starting a [TOOL USE:/[TOOL RESULT: block is noise;
+	following lines stay noise until a dialog prefix or a new block starts
+	(legacy TOOL RESULT dumps span lines with no terminator). Role prefixes
+	glued to a marker ("ASSISTANT: [TOOL USE:...") count as noise too.
+	"""
+	if not full_text.strip():
+		return 1.0
+	noise_chars = 0
+	in_result_block = False
+	for line in full_text.splitlines(keepends=True):
+		stripped = line.strip()
+		body = stripped
+		for prefix in _DIALOG_PREFIXES:
+			if stripped.startswith(prefix):
+				body = stripped[len(prefix) :].strip()
+				break
+		if any(body.startswith(m) for m in _NOISE_MARKERS):
+			noise_chars += len(line)
+			in_result_block = body.startswith("[TOOL RESULT:")
+			continue
+		if stripped.startswith(_DIALOG_PREFIXES) and body and not any(body.startswith(m) for m in _NOISE_MARKERS):
+			in_result_block = False  # real dialog resumes
+			continue
+		if in_result_block or not stripped:
+			noise_chars += len(line) if in_result_block else 0
+			continue
+	return noise_chars / max(1, len(full_text))
+
+
+def purge_tool_noise_raw_parents(
+	memory_manager,
+	collections=("work_memories", "social_memories"),
+	dry_run: bool = True,
+	noise_threshold: float = 0.9,
+	max_residual_chars: int = 200,
+) -> dict:
+	"""Purge legacy verbatim families that are overwhelmingly tool-dump noise.
+
+	Judged at FAMILY level (anchor + fragments reassembled by chunk_index): a
+	fragment mid-JSON carries no marker, so per-fragment classification would
+	either miss it or need dangerous code-vs-noise guessing. A family is purged
+	only if noise ratio >= threshold AND the residual real text is under
+	max_residual_chars — mixed conversations that merely contain tool calls are
+	kept whole. The raw chain is restitched around each purged anchor.
+	Chronicle's compact markers (CHRONICLE_STRIP_TOOL_PAYLOADS) make new noise
+	impossible; this cleans what entered before the filter existed.
+	"""
+	from qdrant_client import models as qm
+
+	client = memory_manager.client
+	report: dict = {}
+
+	for collection in collections:
+		if not client.collection_exists(collection):
+			continue
+		families: dict = {}
+		offset = None
+		scroll_filter = qm.Filter(must=[qm.FieldCondition(key="lazarus_phase", match=qm.MatchValue(value="raw_parent"))])
+		while True:
+			try:
+				points, offset = client.scroll(
+					collection_name=collection, scroll_filter=scroll_filter, limit=512, offset=offset, with_payload=True, with_vectors=False
+				)
+			except Exception as e:
+				logger.error(f"[NOISE PURGE] scroll failed in {collection}: {e}")
+				break
+			for p in points:
+				payload = p.payload or {}
+				family_id = str(payload.get("parent_id") or p.id)
+				families.setdefault(family_id, []).append((payload.get("chunk_index", 0) or 0, str(p.id), payload))
+			if offset is None:
+				break
+
+		purged_points = 0
+		purged_families = 0
+		kept_mixed = 0
+		for family_id, members in families.items():
+			members.sort(key=lambda t: t[0])
+			full_text = "".join(str(pay.get("content", "")) for _, _, pay in members)
+			ratio = _tool_noise_ratio(full_text)
+			residual = len(full_text) * (1.0 - ratio)
+			if ratio < noise_threshold or residual > max_residual_chars:
+				if ratio > 0.3:
+					kept_mixed += 1
+				continue
+			purged_families += 1
+			purged_points += len(members)
+			if dry_run:
+				continue
+			anchor_payload = next((pay for _, pid, pay in members if pid == family_id), members[0][2])
+			try:
+				prev_id = anchor_payload.get("prev_raw_parent")
+				next_id = anchor_payload.get("next_raw_parent")
+				if prev_id:
+					if next_id:
+						client.set_payload(collection_name=collection, payload={"next_raw_parent": str(next_id)}, points=[prev_id])
+					else:
+						client.delete_payload(collection_name=collection, keys=["next_raw_parent"], points=[prev_id])
+				if next_id:
+					if prev_id:
+						client.set_payload(collection_name=collection, payload={"prev_raw_parent": str(prev_id)}, points=[next_id])
+					else:
+						client.delete_payload(collection_name=collection, keys=["prev_raw_parent"], points=[next_id])
+			except Exception as e:
+				logger.debug(f"[NOISE PURGE] chain restitch failed around {family_id}: {e}")
+			try:
+				client.delete(collection_name=collection, points_selector=qm.PointIdsList(points=[pid for _, pid, _ in members]))
+			except Exception as e:
+				logger.error(f"[NOISE PURGE] delete failed for family {family_id} in {collection}: {e}")
+
+		report[collection] = {
+			"families_scanned": len(families),
+			"families_purged": purged_families,
+			"points_purged": purged_points,
+			"mixed_kept": kept_mixed,
+			"dry_run": dry_run,
+		}
+		logger.info(f"[NOISE PURGE] {collection}: {report[collection]}")
+	return report
