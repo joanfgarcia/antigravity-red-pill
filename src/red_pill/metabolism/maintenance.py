@@ -290,7 +290,11 @@ def purge_empty_engrams(memory_manager, collections=("work_memories", "social_me
 				payload = p.payload or {}
 				if str(payload.get("content", "")).strip():
 					continue
-				if payload.get("immune"):
+				if payload.get("immune") and not payload.get("_is_fragment"):
+					# A deliberate immune anchor with no content is an anomaly for the
+					# operator. Fragment shrapnel, however, only INHERITED its immunity
+					# (force_immune cascades from the parent verbatim) — it protects
+					# nothing and gets purged like any other empty.
 					skipped_immune += 1
 					continue
 				victims.append((p.id, payload))

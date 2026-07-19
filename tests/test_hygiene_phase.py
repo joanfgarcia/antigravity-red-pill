@@ -77,3 +77,18 @@ def test_non_empty_untouched_and_dry_run(mm):
 	assert report["work_memories"]["empty_purged"] == 1  # contado
 	assert _get(mm, "work_memories", empty) is not None  # pero no borrado
 	assert _get(mm, "work_memories", real) is not None
+
+
+def test_immune_fragment_shrapnel_purged(mm):
+	# Inherited immunity (force_immune cascade) on empty shrapnel protects nothing
+	pid = _put(mm, "work_memories", "  ", immune=True, _is_fragment=True, parent_id="padre-inmune", lazarus_phase="raw_parent")
+	report = purge_empty_engrams(mm)
+	assert report["work_memories"]["empty_purged"] == 1
+	assert _get(mm, "work_memories", pid) is None
+
+
+def test_deliberate_immune_empty_still_reported_not_purged(mm):
+	pid = _put(mm, "work_memories", "", immune=True)  # sin _is_fragment: ancla deliberada rota
+	report = purge_empty_engrams(mm)
+	assert report["work_memories"]["skipped_immune_empty"] == 1
+	assert _get(mm, "work_memories", pid) is not None
