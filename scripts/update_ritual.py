@@ -77,6 +77,15 @@ def ritual_7_7_0(mm, execute: bool) -> None:
 			f"[4/5] {collection}: {stats['families_purged']} pure-noise families "
 			f"({stats['points_purged']} points) {'purged' if execute else 'WOULD be purged'}; {stats['mixed_kept']} mixed kept whole"
 		)
+	from red_pill.metabolism.maintenance import rewrite_tool_noise_families
+
+	rewrite_report = rewrite_tool_noise_families(mm, dry_run=not execute)
+	for collection, stats in rewrite_report.items():
+		if stats["families_rewritten"]:
+			print(
+				f"[4/5] {collection}: {stats['families_rewritten']} mixed families "
+				f"{'compacted' if execute else 'WOULD be compacted'} ({stats['chars_before']} -> {stats['chars_after']} chars, dialog byte-exact)"
+			)
 
 	# 5. Axon shadow-rollout state.
 	state = load_axon_state()

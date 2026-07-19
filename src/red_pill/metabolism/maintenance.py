@@ -279,6 +279,7 @@ def purge_empty_engrams(memory_manager, collections=("work_memories", "social_me
 			continue
 		victims = []
 		skipped_immune = 0
+		murky_pointers = 0
 		offset = None
 		while True:
 			try:
@@ -289,6 +290,10 @@ def purge_empty_engrams(memory_manager, collections=("work_memories", "social_me
 			for p in points:
 				payload = p.payload or {}
 				if str(payload.get("content", "")).strip():
+					# Self-evocation audit (report-only, operator's book test): a memory
+					# that is ONLY an opaque pointer is murky — count it, never touch it.
+					if _is_murky_pointer(str(payload.get("content", ""))):
+						murky_pointers += 1
 					continue
 				if payload.get("immune") and not payload.get("_is_fragment"):
 					# A deliberate immune anchor with no content is an anomaly for the
@@ -327,11 +332,17 @@ def purge_empty_engrams(memory_manager, collections=("work_memories", "social_me
 			except Exception as e:
 				logger.error(f"[HYGIENE] delete failed for {victim_id} in {collection}: {e}")
 
-		report[collection] = {"empty_purged": len(victims), "chains_restitched": restitched, "skipped_immune_empty": skipped_immune}
-		if victims or skipped_immune:
+		report[collection] = {
+			"empty_purged": len(victims),
+			"chains_restitched": restitched,
+			"skipped_immune_empty": skipped_immune,
+			"murky_pointers": murky_pointers,
+		}
+		if victims or skipped_immune or murky_pointers:
 			logger.info(
 				f"[HYGIENE] {collection}: {len(victims)} empty engrams {'found' if dry_run else 'purged'} "
-				f"({restitched} chain links restitched, {skipped_immune} immune empties left for the operator)."
+				f"({restitched} chain links restitched, {skipped_immune} immune empties and "
+				f"{murky_pointers} murky pointers reported for the operator)."
 			)
 	return report
 
@@ -461,4 +472,163 @@ def purge_tool_noise_raw_parents(
 			"dry_run": dry_run,
 		}
 		logger.info(f"[NOISE PURGE] {collection}: {report[collection]}")
+	return report
+
+
+def compact_tool_noise(text: str) -> str:
+	"""Retroactively apply the Chronicle compact-marker filter to a reassembled
+	verbatim: dialog survives byte-exact; legacy [TOOL USE: name({json})] lines
+	collapse to self-evocative markers and TOOL RESULT blocks keep only their
+	head (where verdicts live). Self-evocation principle: the memory must let
+	you intuit what it pointed to even when the artifact is gone."""
+	import json as json_lib
+	import re
+
+	from red_pill.metabolism.chronicle.claude_code_plugin import _render_tool_result, _render_tool_use
+
+	out: list = []
+	result_buf: list = []
+
+	def flush_result() -> None:
+		if result_buf:
+			body = "\n".join(result_buf)
+			inner = body[len("[TOOL RESULT:") :].strip() if body.startswith("[TOOL RESULT:") else body
+			out.append(_render_tool_result("", inner.rstrip("]")))
+			result_buf.clear()
+
+	for line in text.splitlines():
+		stripped = line.strip()
+		role = ""
+		body = stripped
+		for prefix in _DIALOG_PREFIXES:
+			if stripped.startswith(prefix):
+				role = prefix + " "
+				body = stripped[len(prefix) :].strip()
+				break
+		if body.startswith("[TOOL USE:"):
+			flush_result()
+			match = re.match(r"\[TOOL USE: (\w+)\((.*)\)\]\s*$", body)
+			if match:
+				try:
+					inp = json_lib.loads(match.group(2))
+				except Exception:
+					inp = {}
+				out.append(role + _render_tool_use(match.group(1), inp if isinstance(inp, dict) else {}))
+			else:
+				name = body[len("[TOOL USE:") :].strip().split("(")[0].strip() or "unknown"
+				out.append(role + _render_tool_use(name, {}))
+			continue
+		if body.startswith("[TOOL RESULT:"):
+			flush_result()
+			result_buf.append((role + body) if role else body)
+			continue
+		if result_buf and stripped and not role:
+			result_buf.append(line)
+			continue
+		flush_result()
+		out.append(line)
+	flush_result()
+	return "\n".join(out)
+
+
+_MURKY_TOKEN = None
+
+
+def _is_murky_pointer(content: str) -> bool:
+	"""A murky memory: content that is essentially ONLY an opaque reference
+	(path, url, uuid, buffer id) with no semantic residue to intuit the referent."""
+	import re
+
+	stripped = content.strip()
+	if not stripped or len(stripped) > 200:
+		return False
+	tokens = re.sub(
+		r"(https?://\S+|/[\w./-]{4,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|claude_code_[\w-]+|file:///\S+)",
+		" ",
+		stripped,
+	)
+	residue_words = [w for w in re.findall(r"[A-Za-zÀ-ÿ]{3,}", tokens)]
+	return tokens != stripped and len(residue_words) < 4
+
+
+def rewrite_tool_noise_families(
+	memory_manager,
+	collections=("work_memories", "social_memories"),
+	dry_run: bool = True,
+	min_noise_ratio: float = 0.3,
+	min_gain: float = 0.2,
+) -> dict:
+	"""Surgical compaction of MIXED verbatim families (operator-ratified):
+	reassemble by chunk_index, compact tool noise, re-store under the SAME
+	anchor id preserving chain, created_at, immunity and provenance. Families
+	below min_noise_ratio or whose compaction gains < min_gain are untouched."""
+	from qdrant_client import models as qm
+
+	client = memory_manager.client
+	report: dict = {}
+
+	for collection in collections:
+		if not client.collection_exists(collection):
+			continue
+		families: dict = {}
+		offset = None
+		scroll_filter = qm.Filter(must=[qm.FieldCondition(key="lazarus_phase", match=qm.MatchValue(value="raw_parent"))])
+		while True:
+			try:
+				points, offset = client.scroll(
+					collection_name=collection, scroll_filter=scroll_filter, limit=512, offset=offset, with_payload=True, with_vectors=False
+				)
+			except Exception as e:
+				logger.error(f"[NOISE REWRITE] scroll failed in {collection}: {e}")
+				break
+			for p in points:
+				payload = p.payload or {}
+				family_id = str(payload.get("parent_id") or p.id)
+				families.setdefault(family_id, []).append((payload.get("chunk_index", 0) or 0, str(p.id), payload))
+			if offset is None:
+				break
+
+		rewritten = 0
+		chars_before = 0
+		chars_after = 0
+		for family_id, members in families.items():
+			members.sort(key=lambda t: t[0])
+			full_text = "".join(str(pay.get("content", "")) for _, _, pay in members)
+			if _tool_noise_ratio(full_text) < min_noise_ratio:
+				continue
+			compacted = compact_tool_noise(full_text)
+			if len(compacted) >= len(full_text) * (1.0 - min_gain):
+				continue
+			rewritten += 1
+			chars_before += len(full_text)
+			chars_after += len(compacted)
+			if dry_run:
+				continue
+			anchor_payload = next((pay for _, pid, pay in members if pid == family_id), members[0][2])
+			preserved = {
+				k: anchor_payload[k]
+				for k in ("created_at", "source_buffer_id", "model", "prev_raw_parent", "next_raw_parent", "originator")
+				if anchor_payload.get(k) is not None
+			}
+			try:
+				client.delete(collection_name=collection, points_selector=qm.PointIdsList(points=[pid for _, pid, _ in members]))
+				new_id = memory_manager.add_memory(
+					collection=collection,
+					text=compacted,
+					point_id=family_id,
+					metadata={"lazarus_phase": "raw_parent", "rewritten_from": "tool_noise_compaction", "original_chars": len(full_text)},
+					force_immune=bool(anchor_payload.get("immune")),
+				)
+				if new_id:
+					client.set_payload(collection_name=collection, payload=preserved, points=[family_id])
+			except Exception as e:
+				logger.error(f"[NOISE REWRITE] rewrite failed for family {family_id} in {collection}: {e}")
+
+		report[collection] = {
+			"families_rewritten": rewritten,
+			"chars_before": chars_before,
+			"chars_after": chars_after,
+			"dry_run": dry_run,
+		}
+		logger.info(f"[NOISE REWRITE] {collection}: {report[collection]}")
 	return report
