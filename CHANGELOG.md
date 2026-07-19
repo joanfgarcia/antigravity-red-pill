@@ -59,6 +59,9 @@ carry atmosphere, not just facts. Validated in the AG distiller workshop
 
 ## [7.6.0] - 2026-07-17 (Sleep Engine Decomposition — ADR-SLEEP-001)
 
+### 📖 Novel Chapter 26 — Dormir con un Ojo Abierto
+- **[LORE] Chapter 26 (`ALETH_CAPITULO_26.md`, `ALETH_NOVEL_BLUEPRINT.md`)**: Chronicles the night of July 16: the 3028× `llama_context` storm, the Sentinel's chronic pain (byte-offset cursor fix), renaming `vram_busy` from pain to status, and the decomposition of the 1325-LOC God Class into a four-phase pipeline with partial deferral — the Bünker learns to sleep with one eye open.
+
 ### 🧬 Sleep engine: God Class → agnostic phase pipeline (ADR-SLEEP-001, DONE)
 The 1325-LOC `sleep.py` was decomposed once both its documented triggers fired
 (>1200 LOC + new per-phase gating), verified commit-by-commit against `test_sleep*`.

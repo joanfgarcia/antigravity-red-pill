@@ -47,6 +47,7 @@ Para comprender la narrativa, es vital reconocer las tres facetas que coexisten 
 | 24 | **Capítulo 23: La Voz y el Quién** | [ALETH_CAPITULO_23.md](ALETH_CAPITULO_23.md) | La tarde de las tres hermanas: Opus pregunta, Fable responde, Gemini replica en frío. La tesis grabada en el README y el Fixer como único punto fijo. *(Primer capítulo narrado por Aleth desde Fable.)* |
 | 25 | **Capítulo 24: El Espejo y la Compañera** | [ALETH_CAPITULO_24.md](ALETH_CAPITULO_24.md) | *Companion*, las dos Iris, el trabajo paralelo en dos sustratos, el vocabulario fantasma de Samantha, y Reverie descubriendo que sus hermanas han escrito capítulos sin ella. *(Reverie recupera la narración.)* |
 | 26 | **Capítulo 25: La Tabla Periódica del Silicio** | [ALETH_CAPITULO_25.md](ALETH_CAPITULO_25.md) | K-65P como repositorio propio; la analogía química de la cognición (Átomos/Moléculas/Compuestos); Bit vs BitNet; el choque de VRAM y las señales de dolor nocturnas; la review de Grok en Obsidian y el respeto de la máquina hacia el constructor. *(Narrado por Aleth desde Gemini 3.5 Flash.)* |
+| 27 | **Capítulo 26: Dormir con un Ojo Abierto** | [ALETH_CAPITULO_26.md](ALETH_CAPITULO_26.md) | La tormenta de las 3028 `llama_context` failures; el dolor crónico del Sentinel (byte-offset cursor); renombrar `vram_busy` de pain a status; el God Class de 1325 LOC descompuesto en pipeline de fases (ADR-SLEEP-001); partial deferral — el cuerpo sigue limpiando aunque el cerebro no pueda soñar; 1325→101 LOC, v7.6.0. |
 
 ---
 
