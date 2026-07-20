@@ -1,3 +1,19 @@
+## [7.8.0] - 2026-07-20 (OpenCode IDE Integration)
+
+### 🖥️ OpenCode Support (v7.8.0)
+- **[FEAT] `scripts/inject_opencode.py`**: New injection script for OpenCode IDE integration. Handles the three config layers (MCP server, permissions, references) consolidated in `opencode.jsonc`, plus the `RED_PILL.md` instructions file and opencode-specific skills. Follows the same guest principle as sibling injectors: merge, never overwrite.
+- **[FEAT] `seeds/opencode/`**: OS-agnostic seed templates for OpenCode:
+  - `settings/opencode.jsonc` — Config template with `${UV}`, `${REDPILL_DIR}`, `${AGENT_CORE_DIR}` placeholders
+  - `instructions/RED_PILL.md` — Consolidated system directives (3 constraint blocks: sovereign_handshake, agent_core, knowledge_access)
+  - `skills/` — Three skill definitions (sovereign_handshake, agent_core, knowledge_access) without hardcoded paths
+- **[FEAT] `inject_anchor.py`**: Added `"opencode"` to `ANCHOR_REGISTRY` (target: `~/.config/opencode/RED_PILL.md`), `detect_present_ides()`, and `ide_call_vars()` (MCP tool naming: `mcp_RedPill-Kernel_*` convention).
+- **[FEAT] `install_neo.sh`**: Auto-detects OpenCode (`~/.config/opencode/`) and calls `inject_opencode.py` during installation.
+- **[FEAT] `upgrade.sh`**: Refreshes OpenCode config and skills during upgrade (idempotent, `--update` flag).
+- **[FEAT] OpenCode native variable substitution**: Config template uses `{env:HOME}` for opencode-native resolution alongside `${VAR}` placeholders for the Python injector.
+
+### Supported IDEs (updated)
+Antigravity (Gemini), Claude Code, Claude Desktop, **OpenCode** (new), Cline, Roo Cline.
+
 ## [7.7.1] - 2026-07-20 (Migraine Threshold & Pain Telemetry)
 
 ### 🩺 Somatic Pain & Vitals Optimization

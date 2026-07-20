@@ -278,6 +278,12 @@ p._purge_leaked_duplicates()
 	uv run python scripts/inject_mcp.py --uv-path "$(command -v uv)" --redpill-dir "$REPO_ROOT" || true
 	command -v claude &> /dev/null && uv run python scripts/inject_settings.py --redpill-dir "$REPO_ROOT" || true
 
+	# Refresh OpenCode integration (MCP + anchors + skills)
+	if [ -d "$HOME/.config/opencode" ] && [ -f "$REPO_ROOT/scripts/inject_opencode.py" ]; then
+		echo -e "${BLUE}Refrescando configuración OpenCode...${NC}"
+		uv run python scripts/inject_opencode.py --update --redpill-dir "$REPO_ROOT" || true
+	fi
+
 	# Workspace access: re-sync from the registry; if interactive (tty), offer to add more.
 	if [ -t 0 ] && command -v claude &> /dev/null && [ -f "$REPO_ROOT/scripts/manage_workspaces.py" ]; then
 		uv run python scripts/manage_workspaces.py enable || true

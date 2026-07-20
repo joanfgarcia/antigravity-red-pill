@@ -803,6 +803,13 @@ else
 	echo "}"
 fi
 
+# OpenCode integration (MCP + anchors + skills)
+if [ -d "$HOME/.config/opencode" ] && [ -f "$SCRIPT_DIR/inject_opencode.py" ] && command -v uv &> /dev/null; then
+	echo -e "${BLUE}--- Fase: Integración OpenCode ---${NC}"
+	(cd "$REDPILL_DIR" && uv run python scripts/inject_opencode.py --uv-path "$UV_PATH" --redpill-dir "$REDPILL_DIR" || true)
+	echo -e "${GREEN}✓ OpenCode: configuración Red Pill inyectada (MCP + anchors + skills).${NC}"
+fi
+
 
 echo -e "${BLUE}--- Fase: Verificación de Integridad Final (Lazarus Check) ---${NC}"
 if [ -f "$SCRIPT_DIR/verify/check_bunker_health.py" ]; then
