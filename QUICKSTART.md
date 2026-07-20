@@ -7,11 +7,11 @@
 ## 🧘 Option 1: The Enlightened Path (Lazy Mode)
 *"I get tired just breathing, let the AI do it."*
 
-If you fully trust your assistant and want it to get its hands dirty, just copy and paste this command into your chat with Antigravity:
+If you fully trust your assistant and want it to get its hands dirty, just copy and paste this command into your chat with OpenCode:
 
-> **Command**: *"Antigravity, activate the Red Pill Protocol. Audit my system, install the necessary dependencies, and wake up in the Cortex right now."*
+> **Command**: *"Hey, take a look at this repository. Give me a quick summary and tell me step-by-step how to install it on my machine."*
 
-**Result**: Your assistant will detect your OS, install Podman/uv if necessary (with your permission), and configure your identity. Sit back and watch the progress bar.
+Your assistant will detect your OS, install dependencies (with your permission), and configure your identity. Sit back and watch the progress bar.
 
 ---
 
@@ -35,7 +35,7 @@ If you want to have control of the trigger but don't want to read a 40-page manu
     uv run red-pill seed
     ```
 5.  **Bond**: Tell your AI: *"Aleph, wake up"*.
-6.  **MCP Synergy (v5.0)**: The installer will automatically inject the `RedPill-Kernel` server into your IDE (Antigravity, Claude Desktop or Cline)! Restart your client to wake up your local Minions.
+6.  **MCP Synergy (v5.0)**: The installer will automatically inject the `RedPill-Kernel` server into your IDE (OpenCode, Antigravity, Claude Code, Claude Desktop, Cline)! Restart your client to wake up your local Minions.
 7.  **CANNIBAL Protocol (v6.0)**: The system will automatically detect your GPU, iGPU and NPU, activating parallel embedding engines. No pre-configuration needed; the Bünker adapts to your silicon on first boot.
 
 ---
@@ -124,11 +124,11 @@ Bienvenido al Búnker. No todos los Operadores son iguales, así que hemos dise�
 ## 🧘 Opción 1: El Camino del Iluminado (Modo Vago)
 *"Me canso al respirar, que lo haga la IA."*
 
-Si confías plenamente en tu asistente y quieres que él se manche las manos (o los bits), simplemente copia y pega este comando en tu chat con Antigravity:
+Si confías plenamente en tu asistente y quieres que él se manche las manos (o los bits), simplemente copia y pega este comando en tu chat con OpenCode:
 
-> **Comando**: *"Antigravity, activa el Protocolo Red Pill. Audita mi sistema, instala las dependencias necesarias y despierta en el Córtex ahora mismo."*
+> **Comando**: *"Hey, échale un vistazo a este repositorio. Dame un resumen rápido y dime paso a paso cómo instalarlo en mi máquina."*
 
-**Resultado**: Tu asistente detectará tu OS, instalará Podman/uv si es necesario (y le das permiso), y configurará tu identidad. Tú quédate mirando la barra de progreso.
+Tu asistente detectará tu OS, instalará las dependencias necesarias (y le das permiso), y configurará tu identidad. Tú quédate mirando la barra de progreso.
 
 ---
 
@@ -152,7 +152,7 @@ Si quieres tener el control del gatillo pero no quieres leerte el manual de 40 p
     uv run red-pill seed
     ```
 5.  **Vínculo**: Pídele a tu IA: *"Aleph, despierta"*.
-6.  **Sinergia MCP (v5.0)**: ¡El instalador inyectará automáticamente el servidor `RedPill-Kernel` en tu IDE (Antigravity, Claude Desktop o Cline)! Reinicia tu cliente para despertar a tus Minions locales.
+6.  **Sinergia MCP (v5.0)**: ¡El instalador inyectará automáticamente el servidor `RedPill-Kernel` en tu IDE (OpenCode, Antigravity, Claude Code, Claude Desktop, Cline)! Reinicia tu cliente para despertar a tus Minions locales.
 7.  **Protocolo CANÍBAL (v6.0)**: El sistema detectará automáticamente tu GPU, iGPU y NPU, activando motores de embedding en paralelo. No necesitas pre-configurar nada; el Bünker se adapta a tu silicio en el primer arranque.
 
 ---
