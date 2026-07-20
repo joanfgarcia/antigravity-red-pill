@@ -99,8 +99,9 @@ def ide_call_vars(ide):
 	Antigravity is lax — the server's compatibility shim resolves the flat action name.
 	Claude clients only call the ADVERTISED consolidated APIs, so they must use the
 	`<api>` tool + an `action` argument (the flat name is not a tool for them).
-	opencode prefixes MCP tools as mcp_<server>_<tool>, same as Antigravity."""
-	if ide in ("antigravity", "opencode"):
+	opencode does NOT prefix MCP tools — they appear under their resource
+	group names (bunker_memory_api, swarm_orchestrator_api, etc.)."""
+	if ide == "antigravity":
 		return {
 			"RELAY_CALL": "`mcp_RedPill-Kernel_sovereign_handshake`",
 			"WAKE_CALL": "`mcp_RedPill-Kernel_refresh_session_context`",

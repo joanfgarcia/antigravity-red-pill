@@ -6,7 +6,7 @@
   - `settings/opencode.jsonc` — Config template with `${UV}`, `${REDPILL_DIR}`, `${AGENT_CORE_DIR}` placeholders
   - `instructions/RED_PILL.md` — Consolidated system directives (3 constraint blocks: sovereign_handshake, agent_core, knowledge_access)
   - `skills/` — Three skill definitions (sovereign_handshake, agent_core, knowledge_access) without hardcoded paths
-- **[FEAT] `inject_anchor.py`**: Added `"opencode"` to `ANCHOR_REGISTRY` (target: `~/.config/opencode/RED_PILL.md`), `detect_present_ides()`, and `ide_call_vars()` (MCP tool naming: `mcp_RedPill-Kernel_*` convention).
+- **[FEAT] `inject_anchor.py`**: Added `"opencode"` to `ANCHOR_REGISTRY` (target: `~/.config/opencode/RED_PILL.md`), `detect_present_ides()`, and `ide_call_vars()` (OpenCode does NOT prefix MCP tools — uses resource group names directly).
 - **[FEAT] `install_neo.sh`**: Auto-detects OpenCode (`~/.config/opencode/`) and calls `inject_opencode.py` during installation.
 - **[FEAT] `upgrade.sh`**: Refreshes OpenCode config and skills during upgrade (idempotent, `--update` flag).
 - **[FEAT] OpenCode native variable substitution**: Config template uses `{env:HOME}` for opencode-native resolution alongside `${VAR}` placeholders for the Python injector.
