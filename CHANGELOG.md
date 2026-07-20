@@ -1,3 +1,9 @@
+## [7.7.1] - 2026-07-20 (Migraine Threshold & Pain Telemetry)
+
+### 🩺 Somatic Pain & Vitals Optimization
+- **[TUNE] `SIGNAL_MIGRAINE_VECTORS` 10,000 → 25,000**: Raised the default semantic vector density threshold for `work_memories` to **25,000** in [config.py](file:///home/joan/Documents/IA/sharing/src/red_pill/config.py) and [vitals.py](file:///home/joan/Documents/IA/sharing/src/red_pill/daemon/plugins/vitals.py). This aligns the homeostatis warning with larger active workspaces, avoiding premature `semantic_migraine` flags.
+- **[FEAT] Descriptive Pain Signals**: Updated `inject_signal` in [memory.py](file:///home/joan/Documents/IA/sharing/src/red_pill/memory.py) to accept a custom `message` payload. Modified `SentinelAuditor` in [auditor.py](file:///home/joan/Documents/IA/sharing/src/red_pill/metabolism/auditor.py) to pass detailed Pytest and Mypy failures into the active pain signals, allowing immediate identification of the failing project or test.
+
 ## [7.7.0] - 2026-07-18 (Synaptic Axons & Texture Remediation — ADR-AXON-001)
 
 ### 🚑 Recall Remediation (AD-023) — the memory was starving

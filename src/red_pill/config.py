@@ -669,7 +669,7 @@ class RedPillConfig(BaseSettings):
 	SIGNAL_BASE_PAIN_CUDA: float = 7.0
 	SIGNAL_PAIN_ESCALATION_RATE: float = 0.5
 	SIGNAL_AMNESIA_HOURS: int = 8
-	SIGNAL_MIGRAINE_VECTORS: int = 10000
+	SIGNAL_MIGRAINE_VECTORS: int = 25000
 
 	# -----------------------------------------------------------------------
 	# ENTERPRISE EXTENSION (read-only after init — set by Enterprise at boot)
