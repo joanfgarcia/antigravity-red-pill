@@ -543,9 +543,7 @@ def _is_murky_pointer(content: str) -> bool:
 	if not stripped or len(stripped) > 200:
 		return False
 	tokens = re.sub(
-		r"(https?://\S+|/[\w./-]{4,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|claude_code_[\w-]+|"
-		+ "file"
-		+ r":///\S+)",
+		r"(https?://\S+|/[\w./-]{4,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|claude_code_[\w-]+|" + "file" + r":///\S+)",
 		" ",
 		stripped,
 	)

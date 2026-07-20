@@ -97,7 +97,7 @@ def merge_opencode_config(config_path: str, template: dict, backup: bool = True)
 # ── Instructions file (RED_PILL.md) ──────────────────────────────────────────
 # Reuse the anchor splice logic from inject_anchor.py for versioned blocks.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from inject_anchor import splice_block, remove_block  # noqa: E402
+from inject_anchor import remove_block, splice_block  # noqa: E402
 
 BLOCK_VERSION = {"sovereign_handshake": 1, "agent_core": 2, "knowledge_access": 2}
 
@@ -107,8 +107,7 @@ def _read_seed(seed_path: str) -> str:
 		return f.read()
 
 
-def write_instructions(instructions_path: str, seeds_dir: str, variables: dict,
-					   backup: bool = True, update: bool = False) -> int:
+def write_instructions(instructions_path: str, seeds_dir: str, variables: dict, backup: bool = True, update: bool = False) -> int:
 	"""Write RED_PILL.md with versioned anchor blocks. Returns count of changed blocks."""
 	anchor_names = ["sovereign_handshake", "agent_core", "knowledge_access"]
 	changed = 0
@@ -123,8 +122,7 @@ def write_instructions(instructions_path: str, seeds_dir: str, variables: dict,
 				raw = _read_seed(seed_path)
 				# Extract block between markers
 				pattern = re.compile(
-					r"<!-- REDPILL:BEGIN %s(?: v=\d+)? -->.*?<!-- REDPILL:END %s -->" % (
-						re.escape(anchor), re.escape(anchor)),
+					r"<!-- REDPILL:BEGIN %s(?: v=\d+)? -->.*?<!-- REDPILL:END %s -->" % (re.escape(anchor), re.escape(anchor)),
 					re.DOTALL,
 				)
 				m = pattern.search(raw)
@@ -136,8 +134,7 @@ def write_instructions(instructions_path: str, seeds_dir: str, variables: dict,
 					body_start = block_text.find("\n") + 1
 					body_end = block_text.rfind("\n")
 					body = block_text[body_start:body_end].strip()
-					status = splice_block(instructions_path, anchor, body,
-										  BLOCK_VERSION[anchor], backup=backup, update=update)
+					status = splice_block(instructions_path, anchor, body, BLOCK_VERSION[anchor], backup=backup, update=update)
 					if status not in ("unchanged",):
 						changed += 1
 					logger.info(f"✓ opencode:{anchor} [{instructions_path}] → {status}")
@@ -147,8 +144,7 @@ def write_instructions(instructions_path: str, seeds_dir: str, variables: dict,
 
 		raw = _read_seed(seed_path)
 		body = subst(raw, variables)
-		status = splice_block(instructions_path, anchor, body,
-							  BLOCK_VERSION[anchor], backup=backup, update=update)
+		status = splice_block(instructions_path, anchor, body, BLOCK_VERSION[anchor], backup=backup, update=update)
 		if status not in ("unchanged",):
 			changed += 1
 		logger.info(f"✓ opencode:{anchor} [{instructions_path}] → {status}")
@@ -157,8 +153,7 @@ def write_instructions(instructions_path: str, seeds_dir: str, variables: dict,
 
 
 # ── Skills deployment ─────────────────────────────────────────────────────────
-def deploy_skills(skills_src_dir: str, skills_dest_dir: str, variables: dict,
-				  backup: bool = True) -> int:
+def deploy_skills(skills_src_dir: str, skills_dest_dir: str, variables: dict, backup: bool = True) -> int:
 	"""Deploy opencode skills with resolved placeholders. Returns count deployed."""
 	deployed = 0
 	if not os.path.isdir(skills_src_dir):
@@ -214,26 +209,19 @@ def ensure_package_json(config_dir: str, backup: bool = True) -> bool:
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
-	parser = argparse.ArgumentParser(
-		description="Inject red-pill configuration into opencode (MCP, permissions, references, instructions, skills)."
-	)
+	parser = argparse.ArgumentParser(description="Inject red-pill configuration into opencode (MCP, permissions, references, instructions, skills).")
 	parser.add_argument("--uv-path", help="Path to uv. Autodetected if omitted.")
 	parser.add_argument("--redpill-dir", help="Path to Red Pill source directory.")
-	parser.add_argument("--update", action="store_true",
-						help="Force-update anchor blocks even if unchanged.")
-	parser.add_argument("--no-backup", action="store_true",
-						help="Do not write .bak files before modifying.")
-	parser.add_argument("--print", dest="print_only", action="store_true",
-						help="Print resolved config to stdout; touch no files.")
-	parser.add_argument("--remove", action="store_true",
-						help="Remove red-pill config from opencode.")
+	parser.add_argument("--update", action="store_true", help="Force-update anchor blocks even if unchanged.")
+	parser.add_argument("--no-backup", action="store_true", help="Do not write .bak files before modifying.")
+	parser.add_argument("--print", dest="print_only", action="store_true", help="Print resolved config to stdout; touch no files.")
+	parser.add_argument("--remove", action="store_true", help="Remove red-pill config from opencode.")
 	args = parser.parse_args()
 
 	# Detect opencode
 	config_dir = detect_config_dir()
 	if not config_dir:
-		logger.error("opencode config directory not found (~/.config/opencode/). "
-					 "Install opencode first or create the directory.")
+		logger.error("opencode config directory not found (~/.config/opencode/). Install opencode first or create the directory.")
 		sys.exit(1)
 
 	# Resolve variables
@@ -298,12 +286,10 @@ def main():
 	anchor_seeds_dir = os.path.join(repo_root, "seeds", "anchors")
 	if os.path.isdir(anchor_seeds_dir):
 		# Use individual anchor seeds (canonical source)
-		write_instructions(instructions_path, anchor_seeds_dir, variables,
-						   backup=backup, update=args.update)
+		write_instructions(instructions_path, anchor_seeds_dir, variables, backup=backup, update=args.update)
 	else:
 		# Fallback to consolidated instruction seed
-		write_instructions(instructions_path, instructions_seeds, variables,
-						   backup=backup, update=args.update)
+		write_instructions(instructions_path, instructions_seeds, variables, backup=backup, update=args.update)
 
 	# ── 3. Deploy skills ───────────────────────────────────────────────────
 	skills_src = os.path.join(opencode_seeds, "skills")
