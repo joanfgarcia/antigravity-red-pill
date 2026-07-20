@@ -14,6 +14,13 @@
 ### Supported IDEs (updated)
 Antigravity (Gemini), Claude Code, Claude Desktop, **OpenCode** (new), Cline, Roo Cline.
 
+### 🔌 Scribe Relay & Plugin Architecture
+- **[FEAT] `seeds/opencode/plugins/redpill-scribe.js`**: OpenCode plugin using `chat.message` + `event` hooks to capture prompt+response and persist to `bunker.db` in the same turn. Eliminates the need for bridge-level scribe relay when hooks are available.
+- **[FEAT] `OPENCODE_SCRIBE_PLUGIN` env var**: When `true`, `OpenCodeBridge` skips `_scribe_relay()` to avoid double-writes. Persistence handled entirely by the plugin.
+- **[FEAT] Inject script plugin deployment**: `scripts/inject/opencode/inject.py` step 5 deploys plugins from `seeds/opencode/plugins/` to `~/.config/opencode/plugins/`.
+- **[FIX] Handshake preamble correction**: `interceptor_rp` call now says "fetch real-time telemetry" instead of "persist this turn" — scribe relay is not its job.
+- **[FIX] Docs coverage**: Added chapters 14–27 to `docs/README.md` (orphaned novel chapters caused test failure).
+
 ## [7.7.1] - 2026-07-20 (Migraine Threshold & Pain Telemetry)
 
 ### 🩺 Somatic Pain & Vitals Optimization
