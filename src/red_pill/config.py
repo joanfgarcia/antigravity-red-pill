@@ -84,9 +84,10 @@ class BridgeTarget(BaseModel):
 	local → ignored).
 	"""
 
-	backend: Literal["agy", "claude", "local"]
+	backend: Literal["agy", "claude", "opencode", "local"]
 	model: Optional[str] = None
 	effort: Optional[Literal["low", "medium", "high"]] = None
+	server_url: Optional[str] = None  # opencode only: http://localhost:PORT for --attach (None → direct/cold)
 
 
 # RedPillConfig — the sovereign configuration model
