@@ -163,10 +163,12 @@ def inject(args: argparse.Namespace) -> int:
 	changed += _write_instructions(instructions_path, seeds_dir, variables,
 								   backup, getattr(args, "update", False))
 
-	# 3. Skills
-	skills_src = os.path.join(opencode_seeds, "skills")
+	# 3. Skills (two-layer: generic from sharing/skills/, then IDE-specific overrides)
+	generic_skills = os.path.join(repo_root, "skills")
+	ide_skills = os.path.join(opencode_seeds, "skills")
 	skills_dest = os.path.join(config_dir, "skills")
-	changed += _deploy_skills(skills_src, skills_dest, variables, backup)
+	changed += _deploy_skills(generic_skills, skills_dest, variables, backup)
+	changed += _deploy_skills(ide_skills, skills_dest, variables, backup)
 
 	# 4. Package.json
 	_ensure_package_json(config_dir, backup)

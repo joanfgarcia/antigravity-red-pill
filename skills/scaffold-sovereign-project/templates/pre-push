@@ -1,0 +1,32 @@
+#!/bin/sh
+# Git pre-push hook to prevent force pushing
+
+while read local_ref local_sha remote_ref remote_sha
+do
+    if [ "$local_sha" = "0000000000000000000000000000000000000000" ]
+    then
+        # Deletion
+        continue
+    fi
+
+    if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]
+    then
+        # New branch
+        continue
+    fi
+
+    # Check if local is a descendant of remote
+    is_descendant=$(git merge-base --is-ancestor $remote_sha $local_sha && echo 1 || echo 0)
+    
+    if [ "$is_descendant" = "0" ]
+    then
+        echo "============================================================"
+        echo "🔴 SOVEREIGNTY GUARD: FORCE PUSH DETECTED AND BLOCKED"
+        echo "Pushing this branch would overwrite remote history."
+        echo "If you must rewrite history, disable this hook temporarily."
+        echo "============================================================"
+        exit 1
+    fi
+done
+
+exit 0
