@@ -173,4 +173,22 @@ def inject(args: argparse.Namespace) -> int:
 	# 4. Package.json
 	_ensure_package_json(config_dir, backup)
 
+	# 5. Plugins (redpill-scribe.js for scribe relay via hooks)
+	plugins_seed = os.path.join(opencode_seeds, "plugins")
+	plugins_dest = os.path.join(config_dir, "plugins")
+	if os.path.isdir(plugins_seed):
+		os.makedirs(plugins_dest, exist_ok=True)
+		for fname in os.listdir(plugins_seed):
+			src = os.path.join(plugins_seed, fname)
+			dst = os.path.join(plugins_dest, fname)
+			if os.path.isfile(src):
+				if os.path.exists(dst):
+					with open(src, encoding="utf-8") as fsrc, open(dst, encoding="utf-8") as fdst:
+						if fsrc.read() == fdst.read():
+							continue
+					if backup:
+						shutil.copy2(dst, dst + ".bak")
+				shutil.copy2(src, dst)
+				logger.info(f"  Plugin '{fname}' → {plugins_dest}")
+
 	return changed

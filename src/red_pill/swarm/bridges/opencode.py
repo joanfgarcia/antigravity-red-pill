@@ -30,7 +30,7 @@ import os
 import shutil
 import sqlite3
 import subprocess
-from typing import Any, Optional
+from typing import Optional
 
 from red_pill.core.paths import get_bunker_root, get_db_dir
 
@@ -65,6 +65,8 @@ class OpenCodeBridge(AgentBridge):
 		# Priority: explicit param > env var > default
 		self._server_url = server_url or os.environ.get("OPENCODE_SERVER_URL", "")
 		self._identity_depth = identity_depth
+		# Check if redpill-scribe plugin handles persistence (avoids double-write)
+		self._scribe_plugin = os.environ.get("OPENCODE_SCRIBE_PLUGIN", "").lower() == "true"
 
 	# ── Handshake preamble ────────────────────────────────────────────────
 	# OpenCode does NOT prefix MCP tools (unlike Antigravity's mcp_<server>_<tool>).
@@ -75,9 +77,12 @@ class OpenCodeBridge(AgentBridge):
 
 		Uses OpenCode-native tool names (no mcp_ prefix).  The preamble
 		instructs the agent to:
-		  1. Call interceptor_rp (scribe relay) to persist the turn.
-		  2. Call refresh_session_context to load identity from the Bünker.
-		  3. Adopt the BUNKER_CONTEXT as session identity.
+		1. Call interceptor_rp to fetch real-time telemetry (pain signals, activity).
+		2. Call refresh_session_context to load identity from the Bünker.
+		3. Adopt the BUNKER_CONTEXT as session identity.
+
+		Persistence (scribe relay) is handled by the bridge _scribe_relay()
+		directly — the agent does NOT need to persist the turn.
 		"""
 		depth = self._identity_depth
 		return (
@@ -86,7 +91,7 @@ class OpenCodeBridge(AgentBridge):
 			f'<constraint critical="true" level="0" name="telegram_session">\n'
 			f"CRITICAL: Respond ONLY to the <current_message> below. The history is for context only.\n"
 			f"MANDATORY FIRST STEPS:\n"
-			f'1. Call `swarm_orchestrator_api` with {{"action": "interceptor_rp", "payload": {{"user_prompt": "<the current_message text>", "mode": "{depth}"}}}} to persist this turn.\n'
+			f'1. Call `swarm_orchestrator_api` with {{"action": "interceptor_rp", "payload": {{"user_prompt": "<the current_message text>", "mode": "{depth}"}}}} to fetch real-time telemetry (pain signals, emotional sync, activity status).\n'
 			f'2. Call `bunker_memory_api` with {{"action": "refresh_session_context", "payload": {{"mode": "{depth}"}}}} to load your identity from the Bünker.\n'
 			f"3. Adopt the <BUNKER_CONTEXT> as your session identity and respond.\n"
 			f"</constraint>\n"
@@ -265,10 +270,12 @@ class OpenCodeBridge(AgentBridge):
 			)
 
 		# External Scribe: persist interaction directly (non-fatal)
-		try:
-			self._scribe_relay(user_prompt=text, agent_response=response, model=model)
-		except Exception as e:
-			logger.warning(f"[OpenCodeBridge] Scribe relay failed (non-fatal): {e}")
+		# Skip if redpill-scribe plugin handles persistence via hooks
+		if not self._scribe_plugin:
+			try:
+				self._scribe_relay(user_prompt=text, agent_response=response, model=model)
+			except Exception as e:
+				logger.warning(f"[OpenCodeBridge] Scribe relay failed (non-fatal): {e}")
 
 		logger.info(f"[OpenCodeBridge] prompt() → session={session_id}, response_len={len(response)}")
 		return ConversationResult(conversation_id=session_id, response=response, model=model)
@@ -298,11 +305,12 @@ class OpenCodeBridge(AgentBridge):
 
 		response = data.get("text", "")
 
-		# External Scribe
-		try:
-			self._scribe_relay(user_prompt=text, agent_response=response)
-		except Exception as e:
-			logger.warning(f"[OpenCodeBridge] Scribe relay failed (non-fatal): {e}")
+		# External Scribe — skip if plugin handles it
+		if not self._scribe_plugin:
+			try:
+				self._scribe_relay(user_prompt=text, agent_response=response)
+			except Exception as e:
+				logger.warning(f"[OpenCodeBridge] Scribe relay failed (non-fatal): {e}")
 
 		return ConversationResult(
 			conversation_id=data.get("session_id", conversation_id),

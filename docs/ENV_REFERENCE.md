@@ -160,7 +160,9 @@ Plugins 05–10. Each is independently toggleable.
 
 | Parameter | Default | Description |
 | :--- | :--- | :--- |
-| `IDE_BACKEND` | `auto` | Execution backend selector (`auto`, `agy`, `grpc`, `claude`, or `local`). `auto` prefers `agy` if available. |
+| `IDE_BACKEND` | `auto` | Execution backend selector (`auto`, `agy`, `grpc`, `claude`, `opencode`, or `local`). `auto` prefers `agy` if available. |
+| `OPENCODE_SERVER_URL` | | URL of persistent `opencode serve` instance (e.g. `http://localhost:4096`). Enables attached mode, avoiding MCP cold-start. |
+| `OPENCODE_SCRIBE_PLUGIN` | `False` | Set to `true` when the `redpill-scribe` OpenCode plugin handles persistence. Disables bridge `_scribe_relay()` to avoid double-writes. |
 | `AUTONOMOUS_AGY_ENABLED` | `False` | Gathers and gates autonomous Flash-consuming operations like cognitive queue or entropy executor. |
 | `TELEGRAM_BRIDGE_CASCADE` | `[]` | JSON-encoded fallback cascade of model targets for Telegram/inbox processing. Example: `'[{"backend":"claude","model":"opus","effort":"high"}]'`. |
 | `AWAKENING_BRIDGE_CASCADE` | `[]` | JSON-encoded fallback cascade of model targets for autonomous awakening runs. |
