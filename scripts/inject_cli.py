@@ -6,9 +6,9 @@ them.  This is the SINGLE entry-point called by install_neo.sh and
 upgrade.sh — those scripts never need to be modified when adding a new IDE.
 
 Usage:
-    python scripts/inject_cli.py --redpill-dir /path/to/red-pill [--uv-path /path/to/uv]
-    python scripts/inject_cli.py --list                    # show discovered adapters
-    python scripts/inject_cli.py --ide opencode --remove   # remove red-pill from one IDE
+	python scripts/inject_cli.py --redpill-dir /path/to/red-pill [--uv-path /path/to/uv]
+	python scripts/inject_cli.py --list                    # show discovered adapters
+	python scripts/inject_cli.py --ide opencode --remove   # remove red-pill from one IDE
 """
 
 from __future__ import annotations

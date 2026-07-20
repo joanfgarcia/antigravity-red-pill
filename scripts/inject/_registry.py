@@ -3,11 +3,11 @@
 Scans ``scripts/inject/<ide>/detect.py`` at runtime.  Each adapter is a
 Python module with two entry-points:
 
-    detect(workspace: str | None) -> bool
-        Return True if this IDE is present on the host.
+	detect(workspace: str | None) -> bool
+		Return True if this IDE is present on the host.
 
-    inject(args: argparse.Namespace) -> int
-        Execute the injection.  Return the number of files modified.
+	inject(args: argparse.Namespace) -> int
+		Execute the injection.  Return the number of files modified.
 
 New IDE support = create a directory with detect.py + inject.py.  Zero
 changes to install_neo.sh or upgrade.sh.

@@ -12,11 +12,11 @@ preamble into every prompt and saves interactions directly to bunker.db.
 Two execution modes:
 
 1. **Direct** (default): ``opencode run`` — cold start, MCP servers initialize
-   per call.  Zero dependencies beyond the opencode CLI.
+	per call.  Zero dependencies beyond the opencode CLI.
 
 2. **Attached**: ``opencode run --attach <url>`` — reuses a persistent
-   ``opencode serve`` instance, avoiding MCP cold-start.  Set
-   ``OPENCODE_SERVER_URL`` env var or pass ``server_url`` to the constructor.
+	``opencode serve`` instance, avoiding MCP cold-start.  Set
+	``OPENCODE_SERVER_URL`` env var or pass ``server_url`` to the constructor.
 
 Requirements:
 - opencode CLI installed and configured (~/.config/opencode/).

@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v7.7.0 (Synaptic Axons & Texture Remediation)
+**System Version**: v7.8.0 (OpenCode IDE Integration)
 **Analyst**: The Architect
 **Date**: 2026-04-16
 
