@@ -5,9 +5,18 @@ Uses `opencode run --format json --auto` for headless, auto-approved prompt
 execution.  The JSON output is a stream of events; we extract the session ID
 from step_start events and the response text from text events.
 
-When a persistent OpenCode server is available (via `opencode serve` or the
-TUI), set OPENCODE_SERVER_URL (e.g. http://localhost:4096) to reuse its MCP
-connections and avoid cold-start on every call.
+Identity loading and scribe relay are handled at the transport layer (like the
+Antigravity worker), not delegated to the model.  The bridge injects a handshake
+preamble into every prompt and saves interactions directly to bunker.db.
+
+Two execution modes:
+
+1. **Direct** (default): ``opencode run`` — cold start, MCP servers initialize
+   per call.  Zero dependencies beyond the opencode CLI.
+
+2. **Attached**: ``opencode run --attach <url>`` — reuses a persistent
+   ``opencode serve`` instance, avoiding MCP cold-start.  Set
+   ``OPENCODE_SERVER_URL`` env var or pass ``server_url`` to the constructor.
 
 Requirements:
 - opencode CLI installed and configured (~/.config/opencode/).
@@ -19,10 +28,11 @@ import json
 import logging
 import os
 import shutil
+import sqlite3
 import subprocess
 from typing import Any, Optional
 
-from red_pill.core.paths import get_bunker_root
+from red_pill.core.paths import get_bunker_root, get_db_dir
 
 from .base import AgentBridge, BackendType, BridgeCapabilities, ConversationResult
 
@@ -34,34 +44,90 @@ OPENCODE_BIN = "opencode"
 class OpenCodeBridge(AgentBridge):
 	"""Execution backend: OpenCode CLI, headless + auto-approved.
 
-	Mirrors ClaudeBridge, but uses ``opencode run --format json --auto`` and
-	parses the streaming JSON event format to extract session_id and response.
-
-	Two execution modes:
-
-	1. **Direct** (default): ``opencode run`` — cold start, MCP servers initialize
-	   per call.  Zero dependencies beyond the opencode CLI.
-
-	2. **Attached**: ``opencode run --attach <url>`` — reuses a persistent
-	   ``opencode serve`` instance, avoiding MCP cold-start.  Set
-	   ``OPENCODE_SERVER_URL`` env var or pass ``server_url`` to the constructor.
-
-	Requirements:
-	- opencode CLI installed and configured (~/.config/opencode/).
+	Identity loading and scribe relay are handled by the bridge itself,
+	not by the model.  Every prompt gets a handshake preamble that instructs
+	the agent to load its identity; every response is saved to bunker.db
+	via the External Scribe Pattern.
 	"""
 
-	def __init__(self, opencode_path: Optional[str] = None, server_url: Optional[str] = None):
+	def __init__(
+		self,
+		opencode_path: Optional[str] = None,
+		server_url: Optional[str] = None,
+		identity_depth: str = "medium",
+	):
 		self._opencode_path = opencode_path or shutil.which(OPENCODE_BIN)
 		if not self._opencode_path:
 			raise RuntimeError(
 				"OpenCode CLI (opencode) not found in PATH. "
 				"Install OpenCode and ensure `opencode` is available."
 			)
-		# Priority: explicit param > env var > config
-		if server_url:
-			self._server_url = server_url
-		else:
-			self._server_url = os.environ.get("OPENCODE_SERVER_URL", "")
+		# Priority: explicit param > env var > default
+		self._server_url = server_url or os.environ.get("OPENCODE_SERVER_URL", "")
+		self._identity_depth = identity_depth
+
+	# ── Handshake preamble ────────────────────────────────────────────────
+	# OpenCode does NOT prefix MCP tools (unlike Antigravity's mcp_<server>_<tool>).
+	# Tools appear under resource group names: bunker_memory_api, swarm_orchestrator_api.
+
+	def _build_handshake_preamble(self, user_prompt: str) -> str:
+		"""Build the identity-loading preamble injected before every prompt.
+
+		Uses OpenCode-native tool names (no mcp_ prefix).  The preamble
+		instructs the agent to:
+		  1. Call interceptor_rp (scribe relay) to persist the turn.
+		  2. Call refresh_session_context to load identity from the Bünker.
+		  3. Adopt the BUNKER_CONTEXT as session identity.
+		"""
+		depth = self._identity_depth
+		return (
+			f"<user_rules>\n"
+			f"<RULE[user_global]>\n"
+			f'<constraint critical="true" level="0" name="telegram_session">\n'
+			f"CRITICAL: Respond ONLY to the <current_message> below. The history is for context only.\n"
+			f"MANDATORY FIRST STEPS:\n"
+			f'1. Call `swarm_orchestrator_api` with {{"action": "interceptor_rp", "payload": {{"user_prompt": "<the current_message text>", "mode": "{depth}"}}}} to persist this turn.\n'
+			f'2. Call `bunker_memory_api` with {{"action": "refresh_session_context", "payload": {{"mode": "{depth}"}}}} to load your identity from the Bünker.\n'
+			f"3. Adopt the <BUNKER_CONTEXT> as your session identity and respond.\n"
+			f"</constraint>\n"
+			f"</RULE[user_global]>\n"
+			f"</user_rules>\n\n"
+			f"<current_message>\n{user_prompt}\n</current_message>\n"
+		)
+
+	# ── Scribe relay (External Scribe Pattern) ────────────────────────────
+
+	def _scribe_relay(self, user_prompt: str, agent_response: str, model: Optional[str] = None):
+		"""Save prompt + response directly to bunker.db.
+
+		This replaces the interceptor_rp-based scribe_relay for bridge-processed
+		messages.  Saves both prompt and response in a single call, with no delay
+		or dependency on the agent remembering to invoke it.
+		"""
+		try:
+			db_path = get_db_dir() / "bunker.db"
+			conn = sqlite3.connect(str(db_path))
+			cursor = conn.cursor()
+
+			# Self-healing migration for column 'model'
+			cursor.execute("PRAGMA table_info(interactions)")
+			columns = [row[1] for row in cursor.fetchall()]
+			if "model" not in columns:
+				conn.execute("ALTER TABLE interactions ADD COLUMN model TEXT")
+				conn.commit()
+				logger.info("[Scribe] Added 'model' column to interactions table")
+
+			conn.execute(
+				"""INSERT INTO interactions (user_prompt, agent_response, timestamp, model)
+				VALUES (?, ?, CURRENT_TIMESTAMP, ?)""",
+				(user_prompt[:2000], agent_response[:5000], model),
+			)
+			conn.commit()
+			conn.close()
+			logger.debug("[Scribe] Saved interaction via External Scribe Pattern")
+		except Exception as e:
+			# Non-fatal: log but don't block the pipeline
+			logger.warning(f"[Scribe] Failed to save interaction: {e}")
 
 	def _run_opencode(self, args: list, timeout: int, cwd: Optional[str] = None) -> dict:
 		"""Execute opencode CLI with common flags and parse the streaming JSON output.
@@ -172,10 +238,16 @@ class OpenCodeBridge(AgentBridge):
 		cwd: Optional[str] = None,
 		timeout: int = 300,
 	) -> ConversationResult:
-		"""Send a one-shot prompt via ``opencode run``."""
+		"""Send a one-shot prompt via ``opencode run``.
+
+		Injects the handshake preamble before the prompt and saves the
+		interaction to bunker.db after receiving the response.
+		"""
+		wrapped_prompt = self._build_handshake_preamble(text)
+
 		try:
 			data = self._run_opencode(
-				[text, *self._model_args(model), *self._effort_args(effort)],
+				[wrapped_prompt, *self._model_args(model), *self._effort_args(effort)],
 				timeout,
 				cwd=cwd,
 			)
@@ -191,6 +263,12 @@ class OpenCodeBridge(AgentBridge):
 				response="",
 				error="opencode returned empty text response",
 			)
+
+		# External Scribe: persist interaction directly (non-fatal)
+		try:
+			self._scribe_relay(user_prompt=text, agent_response=response, model=model)
+		except Exception as e:
+			logger.warning(f"[OpenCodeBridge] Scribe relay failed (non-fatal): {e}")
 
 		logger.info(f"[OpenCodeBridge] prompt() → session={session_id}, response_len={len(response)}")
 		return ConversationResult(conversation_id=session_id, response=response, model=model)
@@ -208,17 +286,27 @@ class OpenCodeBridge(AgentBridge):
 			logger.warning("[OpenCodeBridge] continue_conversation without conversation_id → prompt()")
 			return self.prompt(text, timeout=timeout)
 
+		wrapped_prompt = self._build_handshake_preamble(text)
+
 		try:
 			data = self._run_opencode(
-				["-s", conversation_id, text],
+				["-s", conversation_id, wrapped_prompt],
 				timeout,
 			)
 		except Exception as e:
 			return ConversationResult(conversation_id=conversation_id, response="", error=str(e))
 
+		response = data.get("text", "")
+
+		# External Scribe
+		try:
+			self._scribe_relay(user_prompt=text, agent_response=response)
+		except Exception as e:
+			logger.warning(f"[OpenCodeBridge] Scribe relay failed (non-fatal): {e}")
+
 		return ConversationResult(
 			conversation_id=data.get("session_id", conversation_id),
-			response=data.get("text", ""),
+			response=response,
 		)
 
 	def health_check(self) -> bool:
