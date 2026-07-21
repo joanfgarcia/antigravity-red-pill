@@ -1,3 +1,24 @@
+## [7.8.1] - 2026-07-21 (Branch Audit Remediation — injectors, interceptors, metabolism)
+
+Full audit + adversarial re-verification of the `fix/migraine-and-pain-signals` branch. All findings remediated; suite green (`1096 passed`).
+
+### 🐛 Fixes
+- **[FIX] `_config_common.py` single source (CRITICAL)**: the opencode adapter imported a divergent private copy at `scripts/inject/shared/_config_common.py` that lacked `${BUNKER_DB}` and the new recursive `subst()`, so the deployed `redpill-scribe.js` got `${BUNKER_DB}` written **literally** and opened a ghost DB. Deleted the duplicate, repointed the adapter at the canonical `scripts/_config_common.py`, and resolve `BUNKER_DB` via XDG by hand (no `import platformdirs`, satisfying `test_no_direct_platformdirs_imports`).
+- **[FIX] String-aware JSONC comment stripping**: both opencode injectors stripped comments with `re.sub(r"//.*$", ...)`, which truncated `https://` inside string values — a re-merge of an existing `opencode.jsonc` (with `"$schema": "https://..."`) then threw and **discarded the user's foreign keys**. New shared `strip_jsonc_comments()` matches JSON strings first (22 adversarial cases verified).
+- **[FIX] Subplugin flags + double execution (Mood Orchestrator)**: `fc3e58e` had made the main interceptor loop and the orchestrator both run subplugins 05–09, and left the individual `*_ENABLED` flags dead. Each subplugin now exposes `raw_enabled` (own switch); `is_enabled = raw_enabled and not MOOD_ORCHESTRATOR_ENABLED` (main loop skips while orchestrated → no double run); the orchestrator gates each subplugin on `raw_enabled` (flags effective again).
+- **[FIX] Fast-Fail deadlock → self-healing signals**: the Sentinel Auditor skipped a check (ruff/mypy/pytest) whenever its signal already existed, so a landed fix could never evaporate it — the stuck "N pain signals active". Removed the per-check Fast-Fail; the whole-audit differential mtime gate already handles the perf case, and checks now re-raise on failure / **evaporate on success**.
+- **[FIX] operator_profile writer/reader path divergence**: `update_operator_profile.py` hardcoded `~/.local/share` while the reader uses `get_data_dir()` — they diverged under a custom `$XDG_DATA_HOME`. Writer now uses `get_data_dir()` and writes atomically (temp + replace).
+- **[FIX] Signal content bloat**: cap the injected signal `message` at 500 chars (multi-line mypy/pytest dumps were inflating the `bunker_context`).
+- **[FIX] WAL on `OpenCodeBridge._scribe_relay`**: match the JS plugin so both sides write `bunker.db` concurrently without blocking.
+- **[STYLE] operator_profile scripts retabbed** to satisfy `test_sound_of_silence` (were space-indented).
+
+### 🔌 Claude Code Scribe (headless capture)
+- **[FEAT] Claude Code `Stop` hook (`redpill_scribe.py`)**: deterministic RAW CAPTURE LAYER for Claude Code, symmetric to the opencode plugin — reads the turn transcript and writes prompt+response to `bunker.db` `interactions` (dedup per session). Deployed to `~/.claude/hooks/` by `inject_settings.py` from `seeds/settings/hooks/`.
+- **[CHANGE] Sovereign Handshake → telemetry pull**: with capture handled by editor hooks, the per-turn `interceptor_rp` call is now an **empty-payload telemetry/context pull** (no `user_prompt`/`previous_*`), avoiding duplicate `interactions` rows. Anchor seed (`seeds/anchors/sovereign_handshake.md`) updated accordingly.
+
+### ✅ Tests
+- New coverage: real social+work fusion in `ToneAnalyzer` (the prior mock silently duplicated points), and the auditor self-heal cycle with `force=False`.
+
 ## [7.8.0] - 2026-07-20 (OpenCode IDE Integration)
 
 ### 🖥️ OpenCode Support (v7.8.0)
