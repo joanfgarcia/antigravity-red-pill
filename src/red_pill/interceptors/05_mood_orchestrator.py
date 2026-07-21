@@ -103,4 +103,14 @@ class MoodOrchestratorPlugin(BaseInterceptorPlugin):
 				logger.error(f"Mood Orchestrator: subplugin '{sp.name}' crashed: {e}")
 				_emit_pain_signal(sp.name, str(e))
 
+		# ── CHROMA KEY (dominant mood color) ──
+		try:
+			from red_pill.utils.tone_analyzer import get_current_sync_state
+
+			sync_state = get_current_sync_state()
+			color = sync_state.get("mood", "gray")
+			results.append(f"chroma: {color}")
+		except Exception:
+			pass
+
 		return "\n".join(results) if results else ""
