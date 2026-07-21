@@ -29,7 +29,12 @@ except ImportError:
 QDRANT_URL = f"http://{os.getenv('QDRANT_HOST', 'localhost')}:{os.getenv('QDRANT_PORT', '6333')}"
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", "")
 LLM_URL = "http://127.0.0.1:8760/v1/chat/completions"
-PROFILE_PATH = Path.home() / ".local/share/red-pill/operator_profile.md"
+# Use the SAME resolver as the reader (wake_up_v6.py) so writer and reader agree
+# under a custom $XDG_DATA_HOME — a hardcoded ~/.local/share path silently
+# diverged from get_data_dir() and the profile would never be found.
+from red_pill.core.paths import get_data_dir  # noqa: E402
+
+PROFILE_PATH = get_data_dir() / "operator_profile.md"
 INTERVAL_HOURS = int(os.getenv("OPERATOR_PROFILE_UPDATE_INTERVAL_HOURS", "24"))
 
 
@@ -155,7 +160,11 @@ def main():
 		return 1
 
 	PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
-	PROFILE_PATH.write_text(profile)
+	# Atomic write: the reader (wake_up ritual) may read concurrently; a partial
+	# write_text could hand it a truncated profile.
+	_tmp = PROFILE_PATH.with_name(PROFILE_PATH.name + ".tmp")
+	_tmp.write_text(profile)
+	_tmp.replace(PROFILE_PATH)
 	print(f"[OK] Profile written: '{profile}'")
 	return 0
 

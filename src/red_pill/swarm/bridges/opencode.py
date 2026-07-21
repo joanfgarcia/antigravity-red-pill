@@ -112,6 +112,9 @@ class OpenCodeBridge(AgentBridge):
 		try:
 			db_path = get_db_dir() / "bunker.db"
 			conn = sqlite3.connect(str(db_path))
+			# Match the JS scribe plugin: WAL lets both sides write bunker.db
+			# concurrently without blocking.
+			conn.execute("PRAGMA journal_mode=WAL")
 			cursor = conn.cursor()
 
 			# Self-healing migration for column 'model'

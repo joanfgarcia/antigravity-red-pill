@@ -476,7 +476,7 @@ class SentinelAuditor:
 					source="SentinelAuditor",
 					criticality=criticality,
 					originator="Sentinel",
-					message=finding.message,
+					message=(finding.message or "")[:500],
 				)
 				# Drop a task report in MinionInbox for repository checks (formatting, typing, test)
 				if finding.type in ("formatting", "typing", "test"):
