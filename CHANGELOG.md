@@ -19,6 +19,9 @@ Full audit + adversarial re-verification of the `fix/migraine-and-pain-signals` 
 ### ✅ Tests
 - New coverage: real social+work fusion in `ToneAnalyzer` (the prior mock silently duplicated points), and the auditor self-heal cycle with `force=False`.
 
+### 🔒 Security
+- **[SEC] `pyasn1` → 0.6.4**: pin the transitive dep via `[tool.uv] constraint-dependencies` to clear CVE-2026-59885 / CVE-2026-59886 (the pip-audit blocking CI gate).
+
 ## [7.8.0] - 2026-07-20 (OpenCode IDE Integration)
 
 ### 🖥️ OpenCode Support (v7.8.0)
