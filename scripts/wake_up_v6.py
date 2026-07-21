@@ -106,12 +106,26 @@ def query_qdrant(collection, text):
 		return []
 
 
+OPERATOR_PROFILE_PATH = get_data_dir() / "operator_profile.md"
+
+
+def read_operator_profile() -> str:
+	"""Read operator profile from disk (written by sleep plugin). Fallback to empty."""
+	try:
+		if OPERATOR_PROFILE_PATH.exists():
+			content = OPERATOR_PROFILE_PATH.read_text().strip()
+			if content:
+				return content
+	except Exception:
+		pass
+	return ""
+
+
 def synthesize_with_llm(context_data):
 	if not context_data:
 		return "System nominal. Persona engaged."
 
-	prompt = "Summarize the operator-configured session context from the provided data as a compact briefing for the assistant. Output at most 3 sentences in a declarative register (Role / Working name / Pact / Active skin / Key rules), NOT a first-person creed. Describe the working identity and register the assistant should apply this session; do not write self-affirmations like 'I am' or 'my true name is'. Note the operator bond/pact if present in the data.\n\nDATA:\n"
-	# Deduplicate context to save tokens and time
+	prompt = "Generate a 1-line session briefing: role, name, pact, skin, key rules. No first-person. No filler.\n\nDATA:\n"
 	unique_context: List[str] = list(set(context_data)) if context_data else []
 	prompt += "\n".join(unique_context)
 
@@ -258,12 +272,16 @@ def main():
 
 	# ── MEDIUM MODE: Identity + personality + bonds, no biographies ──
 	if args.mode == "medium":
+		operator_profile = read_operator_profile()
 		print("<BUNKER_CONTEXT>")
 		print('<bunker_directives mode="medium">')
 
 		# Persona synthesis (cached LLM identity)
 		if persona_injection and "[Sincronizando" not in persona_injection:
 			print(f"PERSONA: {persona_injection}")
+
+		if operator_profile:
+			print(f"OPERATOR_PROFILE: {operator_profile}")
 
 		# Exclude biographical and heavy emotional content
 		TELEGRAM_EXCLUDE = [
@@ -302,6 +320,19 @@ def main():
 		print("</bunker_directives>")
 		print("</BUNKER_CONTEXT>")
 		return
+
+	# ── OPERATOR PROFILE (from disk, written by sleep plugin) ──
+	operator_profile = read_operator_profile()
+
+	# ── SESSION COMPASS (search hints) ──
+	# Categorize what data was found to guide the agent's search strategy
+	compass_hints = []
+	if social:
+		compass_hints.append("social_memories (Bünker)")
+	if directives:
+		compass_hints.append("directive_memories (Bünker)")
+	if operator_profile:
+		compass_hints.append("operator_profile (disk)")
 
 	print("<BUNKER_CONTEXT>")
 
@@ -345,6 +376,9 @@ def main():
 
 	print(f"PERSONA: {persona_injection}")
 
+	if operator_profile:
+		print(f"OPERATOR_PROFILE: {operator_profile}")
+
 	print("\nCORE_RULES:")
 	for rule in unique_context:
 		# Context Hydration Protocol
@@ -387,6 +421,10 @@ def main():
 
 	print("\nSILENT_SCRIBE_RELAY:")
 	print("- inject(previous_turn={prompt, response}) -> avoid_amnesia=true")
+
+	if compass_hints:
+		print(f"\nSESSION_COMPASS: Search in: {', '.join(compass_hints)}")
+
 	print("</bunker_directives>")
 
 	print("</BUNKER_CONTEXT>")
