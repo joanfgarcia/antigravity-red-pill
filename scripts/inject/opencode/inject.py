@@ -16,8 +16,8 @@ import sys
 
 logger = logging.getLogger("inject_opencode")
 
-# Shared helpers
-sys.path.insert(0, str(os.path.join(os.path.dirname(__file__), "..", "shared")))
+# Shared helpers — single source of truth lives at scripts/_config_common.py.
+sys.path.insert(0, str(os.path.join(os.path.dirname(__file__), "..", "..")))
 from _config_common import agent_core_vars, build_vars, subst  # noqa: E402
 
 
@@ -182,13 +182,15 @@ def inject(args: argparse.Namespace) -> int:
 			src = os.path.join(plugins_seed, fname)
 			dst = os.path.join(plugins_dest, fname)
 			if os.path.isfile(src):
+				resolved = subst(_read_seed(src), variables)
 				if os.path.exists(dst):
-					with open(src, encoding="utf-8") as fsrc, open(dst, encoding="utf-8") as fdst:
-						if fsrc.read() == fdst.read():
+					with open(dst, encoding="utf-8") as fdst:
+						if fdst.read() == resolved:
 							continue
-					if backup:
-						shutil.copy2(dst, dst + ".bak")
-				shutil.copy2(src, dst)
+				if backup and os.path.exists(dst):
+					shutil.copy2(dst, dst + ".bak")
+				with open(dst, "w", encoding="utf-8") as fdst:
+					fdst.write(resolved)
 				logger.info(f"  Plugin '{fname}' → {plugins_dest}")
 
 	return changed
