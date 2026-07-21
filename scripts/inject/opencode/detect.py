@@ -1,4 +1,5 @@
 """Detect OpenCode installation."""
+
 import os
 
 

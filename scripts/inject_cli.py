@@ -23,7 +23,7 @@ logger = logging.getLogger("inject_cli")
 
 # Ensure the inject package is importable
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from inject._registry import discover_adapters, detect_present, inject_all  # noqa: E402
+from inject._registry import detect_present, discover_adapters, inject_all  # noqa: E402
 
 
 def main():

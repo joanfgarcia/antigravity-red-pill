@@ -1,4 +1,5 @@
 """Detect Antigravity (Gemini Code Assist) installation."""
+
 import os
 
 

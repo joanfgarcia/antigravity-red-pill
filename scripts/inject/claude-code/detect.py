@@ -1,4 +1,5 @@
 """Detect Claude Code installation."""
+
 import os
 
 

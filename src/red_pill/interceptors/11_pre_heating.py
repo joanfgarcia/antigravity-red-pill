@@ -1,6 +1,5 @@
 import logging
 import time
-from typing import List
 
 from qdrant_client import models
 
@@ -182,9 +181,7 @@ class EmotionalPreHeatingPlugin(BaseInterceptorPlugin):
 						if client.collection_exists("work_memories"):
 							results, _ = client.scroll(
 								collection_name="work_memories",
-								scroll_filter=models.Filter(
-									must=[models.FieldCondition(key="workspace", match=models.MatchValue(value=ws.name))]
-								),
+								scroll_filter=models.Filter(must=[models.FieldCondition(key="workspace", match=models.MatchValue(value=ws.name))]),
 								limit=3,
 								with_payload=True,
 							)
@@ -222,9 +219,7 @@ class EmotionalPreHeatingPlugin(BaseInterceptorPlugin):
 				cutoff = now - (7 * 24 * 3600)
 				results, _ = client.scroll(
 					collection_name="work_memories",
-					scroll_filter=models.Filter(
-						must=[models.FieldCondition(key="created_at", range=models.Range(gte=cutoff))]
-					),
+					scroll_filter=models.Filter(must=[models.FieldCondition(key="created_at", range=models.Range(gte=cutoff))]),
 					limit=3,
 					with_payload=True,
 				)
