@@ -125,8 +125,6 @@ def write_instructions(instructions_path: str, seeds_dir: str, variables: dict, 
 				if m:
 					# Extract just the body (between markers)
 					block_text = m.group(0)
-					begin_marker = "<!-- REDPILL:BEGIN %s v=%d -->" % (anchor, BLOCK_VERSION[anchor])
-					end_marker = "<!-- REDPILL:END %s -->" % anchor
 					body_start = block_text.find("\n") + 1
 					body_end = block_text.rfind("\n")
 					body = block_text[body_start:body_end].strip()
