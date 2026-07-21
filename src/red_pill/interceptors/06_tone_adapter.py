@@ -60,8 +60,16 @@ class ToneAdapterPlugin(BaseInterceptorPlugin):
 		return 0.5
 
 	@property
-	def is_enabled(self) -> bool:
+	def raw_enabled(self) -> bool:
+		"""This subplugin's own on/off switch, independent of orchestration."""
 		return getattr(cfg.get_config(), "TONE_ADAPTER_ENABLED", True)
+
+	@property
+	def is_enabled(self) -> bool:
+		# Standalone in the main loop ONLY when the Mood Orchestrator is off; when
+		# it is on, the orchestrator runs us directly (gating on raw_enabled), so
+		# returning False here prevents double execution.
+		return self.raw_enabled and not getattr(cfg.get_config(), "MOOD_ORCHESTRATOR_ENABLED", True)
 
 	async def execute(self, prompt: str) -> str:
 		try:

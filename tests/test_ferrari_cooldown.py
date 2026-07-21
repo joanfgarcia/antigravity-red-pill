@@ -77,7 +77,7 @@ def test_work_keywords_precedence():
 async def test_cognitive_router_plugin_transitions():
 	"""Tests the CognitiveRouterPlugin execution and transition emission."""
 	p = CognitiveRouterPlugin()
-	assert p.is_enabled
+	assert p.raw_enabled  # own switch on (is_enabled is False while orchestrated)
 
 	# Configure config mock for casual keywords
 	cfg_mock = MagicMock(CASUAL_OVERRIDE_KEYWORDS=["relax", "charlemos"], COGNITIVE_ROUTER_ENABLED=True)
@@ -114,7 +114,7 @@ async def test_cognitive_router_plugin_transitions():
 async def test_tone_adapter_plugin_transitions():
 	"""Tests the ToneAdapterPlugin execution and transition emission."""
 	p = ToneAdapterPlugin()
-	assert p.is_enabled
+	assert p.raw_enabled  # own switch on (is_enabled is False while orchestrated)
 
 	# Configure config mock for casual keywords
 	cfg_mock = MagicMock(CASUAL_OVERRIDE_KEYWORDS=["relax", "charlemos"], TONE_ADAPTER_ENABLED=True)

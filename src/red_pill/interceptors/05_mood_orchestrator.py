@@ -31,8 +31,11 @@ _SUBPLUGINS = [
 
 def _load_subplugin(module_path: str):
 	"""Load and return the first BaseInterceptorPlugin subclass from a module.
-	The orchestrator is agnostic — it loads ALL subplugins and calls execute().
-	Each subplugin checks its own is_enabled internally and returns '' if disabled."""
+	The orchestrator loads ALL subplugins and, in execute(), skips any whose own
+	``raw_enabled`` flag is off before calling their ``execute()`` — so the
+	individual *_ENABLED switches stay effective while orchestrated. (Their
+	``is_enabled`` returns False when orchestrated, which only keeps the main
+	interceptor loop from double-running them.)"""
 	try:
 		module = importlib.import_module(module_path)
 		for attr_name in dir(module):
@@ -94,6 +97,11 @@ class MoodOrchestratorPlugin(BaseInterceptorPlugin):
 
 		results = []
 		for sp in subplugins:
+			# Honor each subplugin's own on/off flag (raw_enabled), independent of
+			# MOOD_ORCHESTRATOR_ENABLED — otherwise the individual *_ENABLED flags
+			# would be dead whenever the orchestrator is running.
+			if not getattr(sp, "raw_enabled", True):
+				continue
 			try:
 				output = await asyncio.wait_for(sp.execute(prompt), timeout=sp.timeout)
 				if output and output.strip():
