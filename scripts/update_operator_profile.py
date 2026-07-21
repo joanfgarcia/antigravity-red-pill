@@ -9,8 +9,8 @@ Respects a configurable interval (OPERATOR_PROFILE_UPDATE_INTERVAL_HOURS).
 Skips if the file was recently updated.
 
 Usage:
-  uv run python scripts/update_operator_profile.py          # check interval, skip if fresh
-  uv run python scripts/update_operator_profile.py --force   # force update regardless of mtime
+	uv run python scripts/update_operator_profile.py          # check interval, skip if fresh
+	uv run python scripts/update_operator_profile.py --force   # force update regardless of mtime
 """
 import argparse
 import json
