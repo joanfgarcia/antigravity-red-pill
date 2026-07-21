@@ -11,6 +11,7 @@ import logging
 import os
 import sqlite3
 import sys
+from pathlib import Path
 
 import red_pill.config as cfg
 from red_pill.core.inbox import MinionInbox
@@ -321,6 +322,9 @@ async def consolidation_ritual(mm: MemoryManager) -> None:
 
 		# Phase 2: Workspace Memory Sync
 		await memory_sync_ritual(mm)
+
+		# Phase 3: Operator Profile Synthesis (periodic, Granite-mediated)
+		await operator_profile_ritual()
 	except Exception as e:
 		logger.error(f"Pulse: Consolidation ritual failed: {e}")
 
@@ -338,6 +342,32 @@ async def memory_sync_ritual(mm: MemoryManager) -> None:
 		logger.info("Pulse: Workspace Memory Sync complete.")
 	except Exception as e:
 		logger.error(f"Pulse: Workspace Memory Sync ritual failed: {e}")
+
+
+async def operator_profile_ritual() -> None:
+	"""
+	Operator Profile Synthesis Ritual.
+	Periodically queries Qdrant + Granite to update the operator profile on disk.
+	Respects OPERATOR_PROFILE_UPDATE_INTERVAL_HOURS (default 24h).
+	"""
+	try:
+		logger.info("Pulse: Initiating Operator Profile Synthesis Ritual...")
+		import subprocess
+
+		result = await asyncio.to_thread(
+			lambda: subprocess.run(
+				[sys.executable, str(Path(__file__).parent.parent.parent / "scripts" / "update_operator_profile.py")],
+				capture_output=True,
+				text=True,
+				timeout=60,
+			)
+		)
+		if result.returncode == 0:
+			logger.info(f"Pulse: Operator Profile Synthesis complete. {result.stdout.strip()}")
+		else:
+			logger.warning(f"Pulse: Operator Profile Synthesis skipped or failed: {result.stdout.strip()}")
+	except Exception as e:
+		logger.error(f"Pulse: Operator Profile Synthesis ritual failed: {e}")
 
 
 async def thread_ritual() -> None:
