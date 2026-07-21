@@ -1,5 +1,6 @@
 import logging
 import time
+from typing import List
 
 from qdrant_client import models
 
@@ -8,6 +9,8 @@ from red_pill.interceptors.base import BaseInterceptorPlugin
 from red_pill.utils.pre_heating_scorer import composite_score, extract_contextual_metadata
 
 logger = logging.getLogger(__name__)
+
+MAX_TRACKED_PROJECTS = getattr(config, "PRE_HEATING_MAX_TRACKED_PROJECTS", 3)
 
 
 class EmotionalPreHeatingPlugin(BaseInterceptorPlugin):
@@ -167,6 +170,89 @@ class EmotionalPreHeatingPlugin(BaseInterceptorPlugin):
 		parts.append(f"\nCALIBRATION: Quality threshold is {quality_threshold}. Material is reliable.")
 		parts.append("---")
 
+		# ── PROJECT STATUS (tracked workspaces) ──
+		try:
+			from red_pill.core.workspaces import list_tracked_workspaces
+
+			tracked = list_tracked_workspaces()[:MAX_TRACKED_PROJECTS]
+			if tracked:
+				parts.append("\n=== PROJECT STATUS ===")
+				for ws in tracked:
+					try:
+						if client.collection_exists("work_memories"):
+							results, _ = client.scroll(
+								collection_name="work_memories",
+								scroll_filter=models.Filter(
+									must=[models.FieldCondition(key="workspace", match=models.MatchValue(value=ws.name))]
+								),
+								limit=3,
+								with_payload=True,
+							)
+							recent = [p.payload.get("content", "") for p in results if p.payload and p.payload.get("content")]
+							if recent:
+								parts.append(f"[{ws.name}] Recent: {'; '.join(r[:80] for r in recent[:2])}")
+							else:
+								parts.append(f"[{ws.name}] No recent work memories")
+						else:
+							parts.append(f"[{ws.name}] work_memories collection not available")
+					except Exception as e:
+						logger.debug(f"Project status query failed for {ws.name}: {e}")
+						parts.append(f"[{ws.name}] Query failed")
+		except Exception as e:
+			logger.debug(f"Project status enumeration failed: {e}")
+
+		# ── RECENT WORK (cascading fallback) ──
+		try:
+			recent_work = self._query_recent_work(client, now)
+			if recent_work:
+				parts.append("\n=== RECENT WORK ===")
+				parts.append(recent_work)
+		except Exception as e:
+			logger.debug(f"Recent work query failed: {e}")
+
 		# Mark as fired so it doesn't trigger on subsequent turns
 		self.__class__._has_fired = True
 		return "\n".join(parts)
+
+	def _query_recent_work(self, client, now: float) -> str:
+		"""Query recent work with cascading fallback: work_memories → interaction_memories → omit."""
+		# Tier 1: work_memories (last 7 days)
+		try:
+			if client.collection_exists("work_memories"):
+				cutoff = now - (7 * 24 * 3600)
+				results, _ = client.scroll(
+					collection_name="work_memories",
+					scroll_filter=models.Filter(
+						must=[models.FieldCondition(key="created_at", range=models.Range(gte=cutoff))]
+					),
+					limit=3,
+					with_payload=True,
+				)
+				recent = [p.payload.get("content", "") for p in results if p.payload and p.payload.get("content")]
+				if recent:
+					return "Work: " + "; ".join(r[:100] for r in recent)
+		except Exception as e:
+			logger.debug(f"work_memories fallback failed: {e}")
+
+		# Tier 2: interaction_memories (last 48h, work category)
+		try:
+			if client.collection_exists("interaction_memories"):
+				cutoff = now - (48 * 3600)
+				results, _ = client.scroll(
+					collection_name="interaction_memories",
+					scroll_filter=models.Filter(
+						must=[
+							models.FieldCondition(key="created_at", range=models.Range(gte=cutoff)),
+							models.FieldCondition(key="category", match=models.MatchValue(value="work")),
+						]
+					),
+					limit=3,
+					with_payload=True,
+				)
+				recent = [p.payload.get("content", "") for p in results if p.payload and p.payload.get("content")]
+				if recent:
+					return "Recent sessions: " + "; ".join(r[:100] for r in recent)
+		except Exception as e:
+			logger.debug(f"interaction_memories fallback failed: {e}")
+
+		return ""
