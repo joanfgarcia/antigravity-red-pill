@@ -15,7 +15,9 @@
 #                             their adapters land). Toggle via `red-pill workspace enable|disable`
 #                             or edit here. DEFAULT false = in AUTONOMOUS mode the agent CANNOT
 #                             operate in this workspace.
+#                `track`    : include this workspace in Pre-Heating PROJECT_STATUS (operator opt-in).
+#                             DEFAULT false — only tracked workspaces inject project context.
 version: 1
 agent_core: ~/Agent_Core
 workspaces:
-  - { name: example, root: ~/projects/example, atlas: null, graphify: false, access: false }
+  - { name: example, root: ~/projects/example, atlas: null, graphify: false, access: false, track: false }
