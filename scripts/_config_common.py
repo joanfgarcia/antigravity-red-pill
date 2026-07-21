@@ -11,6 +11,7 @@ test forbids elsewhere).
 """
 
 import os
+import re
 import shutil
 from string import Template
 
@@ -54,6 +55,24 @@ def subst(value, variables):
 	if isinstance(value, dict):
 		return {key: subst(item, variables) for key, item in value.items()}
 	return value
+
+
+# ── JSONC comment stripping (string-aware) ────────────────────────────────────
+_JSONC_TOKEN = re.compile(r'"(?:\\.|[^"\\])*"|//[^\n]*|/\*.*?\*/', re.DOTALL)
+
+
+def strip_jsonc_comments(text):
+	"""Strip ``//`` line and ``/* */`` block comments from JSONC while preserving
+	comment-like sequences inside string values (e.g. the ``https://`` in a
+	``$schema`` URL). A naive ``re.sub(r'//.*$', ...)`` truncates such URLs mid-
+	string, yielding invalid JSON — which made re-merges of an existing
+	``opencode.jsonc`` throw and silently discard the user's foreign keys."""
+
+	def _repl(m):
+		tok = m.group(0)
+		return tok if tok.startswith('"') else ""
+
+	return _JSONC_TOKEN.sub(_repl, text)
 
 
 # ── Agent_Core / transversal vars (red-pill .env, with fallbacks) ─────────────

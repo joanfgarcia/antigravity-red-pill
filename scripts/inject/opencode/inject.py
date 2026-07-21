@@ -10,7 +10,6 @@ import argparse
 import json
 import logging
 import os
-import re
 import shutil
 import sys
 
@@ -18,7 +17,7 @@ logger = logging.getLogger("inject_opencode")
 
 # Shared helpers — single source of truth lives at scripts/_config_common.py.
 sys.path.insert(0, str(os.path.join(os.path.dirname(__file__), "..", "..")))
-from _config_common import agent_core_vars, build_vars, subst  # noqa: E402
+from _config_common import agent_core_vars, build_vars, strip_jsonc_comments, subst  # noqa: E402
 
 
 def _detect_config_dir() -> str | None:
@@ -52,10 +51,7 @@ def _merge_config(config_path: str, template: dict, backup: bool) -> bool:
 	if os.path.exists(config_path):
 		try:
 			with open(config_path, encoding="utf-8") as f:
-				content = f.read()
-				content = re.sub(r"//.*$", "", content, flags=re.MULTILINE)
-				content = re.sub(r"/\*.*?\*/", "", content, flags=re.DOTALL)
-				existing = json.loads(content)
+				existing = json.loads(strip_jsonc_comments(f.read()))
 		except Exception as exc:
 			logger.warning(f"Unreadable config at {config_path}: {exc}. Recreating.")
 			existing = {}

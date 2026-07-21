@@ -28,7 +28,7 @@ logger = logging.getLogger("opencode_injector")
 
 # Shared placeholder helpers live alongside this script.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _config_common import agent_core_vars, build_vars, subst  # noqa: E402
+from _config_common import agent_core_vars, build_vars, strip_jsonc_comments, subst  # noqa: E402
 
 # ── Config directory discovery ────────────────────────────────────────────────
 OPENCODE_CONFIG_DIRS = [
@@ -68,11 +68,7 @@ def merge_opencode_config(config_path: str, template: dict, backup: bool = True)
 	if os.path.exists(config_path):
 		try:
 			with open(config_path, encoding="utf-8") as f:
-				# Strip comments for JSONC parsing
-				content = f.read()
-				content = re.sub(r"//.*$", "", content, flags=re.MULTILINE)
-				content = re.sub(r"/\*.*?\*/", "", content, flags=re.DOTALL)
-				existing = json.loads(content)
+				existing = json.loads(strip_jsonc_comments(f.read()))
 		except Exception as exc:
 			logger.warning(f"Unreadable config at {config_path}: {exc}. Recreating.")
 			existing = {}
