@@ -175,12 +175,15 @@ sequenceDiagram
 | 02 | `02_rag_enrichment.py` | ON | Every prompt | `INTERCEPTOR_RAG_ENABLED` |
 | 03 | `03_circuit_breaker.py` | OFF | Every prompt | `INTERCEPTOR_CIRCUIT_BREAKER_ENABLED` |
 | 04 | `04_mystique.py` | ON | Every prompt | `DYNAMIC_EMOTION_SYNC` |
-| 05 | `05_cognitive_router.py` | ON | Every prompt | `COGNITIVE_ROUTER_ENABLED` |
-| 06 | `06_tone_adapter.py` | ON | Every prompt | `TONE_ADAPTER_ENABLED` |
-| 07 | `07_mood_analytics.py` | ON | Every prompt | `MOOD_ANALYTICS_ENABLED` |
-| 08 | `08_emotive_recall.py` | ON | Every prompt | `EMOTIVE_RECALL_ENABLED` |
-| 09 | `09_proactive_signal.py` | ON | Every prompt | `PROACTIVE_SIGNAL_ENABLED` |
-| 10 | `10_predictive_preload.py` | ON | Every prompt | `PREDICTIVE_PRELOAD_ENABLED` |
+| **05** | **`05_mood_orchestrator.py`** | **ON** | **Every prompt** | **`MOOD_ORCHESTRATOR_ENABLED`** |
+| 05a | `05_cognitive_router.py` | ON | Via orchestrator | `COGNITIVE_ROUTER_ENABLED` |
+| 06 | `06_tone_adapter.py` | ON | Via orchestrator | `TONE_ADAPTER_ENABLED` |
+| 07 | `07_mood_analytics.py` | ON | Via orchestrator | `MOOD_ANALYTICS_ENABLED` |
+| 08 | `08_emotive_recall.py` | ON | Via orchestrator | `EMOTIVE_RECALL_ENABLED` |
+| 09 | `09_proactive_signal.py` | ON | Via orchestrator | `PROACTIVE_SIGNAL_ENABLED` |
+| 10 | `10_predictive_preload.py` | ON | Via orchestrator | `PREDICTIVE_PRELOAD_ENABLED` |
+
+> **Orchestrator Pattern (v6.3.0)**: The orchestrator (05) is agnostic — it loads ALL subplugins and calls `execute()`. Each subplugin checks its own `is_enabled` internally and returns `""` if disabled. Adding a new subplugin = adding it to `_SUBPLUGINS` in the orchestrator, no changes to the orchestrator code needed.
 
 #### 6.2.1 The Emotional Ferrari Protocol (v6.3.0)
 

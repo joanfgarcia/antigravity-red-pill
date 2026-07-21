@@ -40,8 +40,6 @@ class ProactiveSignalPlugin(BaseInterceptorPlugin):
 
 	@property
 	def is_enabled(self) -> bool:
-		if getattr(cfg.get_config(), "MOOD_ORCHESTRATOR_ENABLED", True):
-			return False
 		return getattr(cfg.get_config(), "PROACTIVE_SIGNAL_ENABLED", True)
 
 	async def execute(self, prompt: str) -> str:

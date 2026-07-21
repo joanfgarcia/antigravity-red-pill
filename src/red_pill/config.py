@@ -626,6 +626,17 @@ class RedPillConfig(BaseSettings):
 	PRE_HEATING_MAX_CHARS_PER_FRAGMENT: int = 200  # For "raw" mode
 	PRE_HEATING_LOOKBACK_HOURS: int = 48  # For interaction_memories
 	PRE_HEATING_HOT_COLORS: Any = ["purple", "blue", "red"]
+	PRE_HEATING_MAX_TRACKED_PROJECTS: int = 3  # Max tracked workspaces in PROJECT_STATUS
+
+	# -----------------------------------------------------------------------
+	# MOOD ORCHESTRATOR (Hito 5a-5b)
+	# -----------------------------------------------------------------------
+	MOOD_ORCHESTRATOR_ENABLED: bool = True  # Enable orchestrator for plugins 05-09
+
+	# -----------------------------------------------------------------------
+	# OPERATOR PROFILE UPDATE (Hito 4b)
+	# -----------------------------------------------------------------------
+	OPERATOR_PROFILE_UPDATE_INTERVAL_HOURS: int = 24  # Hours between auto-updates
 
 	@field_validator("PRE_HEATING_HOT_COLORS", mode="before")
 	@classmethod

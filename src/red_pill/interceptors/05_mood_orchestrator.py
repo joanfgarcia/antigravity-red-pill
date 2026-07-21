@@ -30,7 +30,9 @@ _SUBPLUGINS = [
 
 
 def _load_subplugin(module_path: str):
-	"""Load and return the first BaseInterceptorPlugin subclass from a module."""
+	"""Load and return the first BaseInterceptorPlugin subclass from a module.
+	The orchestrator is agnostic — it loads ALL subplugins and calls execute().
+	Each subplugin checks its own is_enabled internally and returns '' if disabled."""
 	try:
 		module = importlib.import_module(module_path)
 		for attr_name in dir(module):
@@ -84,7 +86,7 @@ class MoodOrchestratorPlugin(BaseInterceptorPlugin):
 		subplugins = []
 		for module_path in _SUBPLUGINS:
 			sp = _load_subplugin(module_path)
-			if sp and sp.is_enabled:
+			if sp:
 				subplugins.append(sp)
 
 		if not subplugins:

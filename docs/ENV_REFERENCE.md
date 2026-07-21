@@ -130,6 +130,7 @@ Plugins 05–10. Each is independently toggleable.
 
 | Parameter | Default | Plugin | Description |
 | :--- | :--- | :--- | :--- |
+| `MOOD_ORCHESTRATOR_ENABLED` | `True` | 05 | Enable orchestrator that consolidates plugins 05-09 in a single pass |
 | `COGNITIVE_ROUTER_ENABLED` | `True` | 05 | Routes *task type* by color (architecture, maintenance, empathy). |
 | `TONE_ADAPTER_ENABLED` | `True` | 06 | Adapts *verbal style* (precise/warm/ultra-concise). |
 | `MOOD_ANALYTICS_ENABLED` | `True` | 07 | Trend analysis over last 15 memories (stable/improving/deteriorating). |
@@ -147,6 +148,13 @@ Plugins 05–10. Each is independently toggleable.
 | `SLEEP_PLUGIN_CONSOLIDATION` | `True` | Hub Synthesis + memory consolidation. |
 | `SLEEP_PLUGIN_CHRONICLE` | `True` | Ariadne's Thread weaving across all 4 collections. Requires `ANTIGRAVITY_KEY`. |
 | `SLEEP_MIN_FREE_VRAM_MB` | `1500` | Minimum free VRAM (MB) required to start the sleep cycle. If the GPU has less free VRAM at 03:00 (e.g. occupied by a game or other model), the cycle aborts gracefully and emits a muted `vram_busy` pain signal. Set to `0` to disable the preflight check. CPU-only systems are unaffected. |
+
+### 🔧 Operator Profile & Pre-Heating
+
+| Parameter | Default | Description |
+| :--- | :--- | :--- |
+| `OPERATOR_PROFILE_UPDATE_INTERVAL_HOURS` | `24` | Hours between automatic `operator_profile.md` updates during sleep ritual. |
+| `PRE_HEATING_MAX_TRACKED_PROJECTS` | `3` | Max tracked workspaces to show in PROJECT_STATUS (opt-in via `track: true` in workspaces.yaml). |
 
 ### ⚖️ BE_WATER Adaptive Payload (v6.3.0)
 
