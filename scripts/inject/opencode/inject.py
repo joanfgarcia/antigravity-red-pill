@@ -69,8 +69,7 @@ def _merge_config(config_path: str, template: dict, backup: bool) -> bool:
 	return True
 
 
-def _write_instructions(instructions_path: str, seeds_dir: str, variables: dict,
-						backup: bool, update: bool) -> int:
+def _write_instructions(instructions_path: str, seeds_dir: str, variables: dict, backup: bool, update: bool) -> int:
 	sys.path.insert(0, str(os.path.join(os.path.dirname(__file__), "..", "..")))
 	from inject_anchor import splice_block  # noqa: E402
 
@@ -82,8 +81,7 @@ def _write_instructions(instructions_path: str, seeds_dir: str, variables: dict,
 			logger.warning(f"Seed not found: {seed_path}")
 			continue
 		body = subst(_read_seed(seed_path), variables)
-		status = splice_block(instructions_path, anchor, body,
-							  BLOCK_VERSION[anchor], backup=backup, update=update)
+		status = splice_block(instructions_path, anchor, body, BLOCK_VERSION[anchor], backup=backup, update=update)
 		if status not in ("unchanged",):
 			changed += 1
 		logger.info(f"  opencode:{anchor} → {status}")
@@ -156,8 +154,7 @@ def inject(args: argparse.Namespace) -> int:
 	# 2. Instructions
 	instructions_path = os.path.join(config_dir, "RED_PILL.md")
 	seeds_dir = anchor_seeds if os.path.isdir(anchor_seeds) else os.path.join(opencode_seeds, "instructions")
-	changed += _write_instructions(instructions_path, seeds_dir, variables,
-								   backup, getattr(args, "update", False))
+	changed += _write_instructions(instructions_path, seeds_dir, variables, backup, getattr(args, "update", False))
 
 	# 3. Skills (two-layer: generic from sharing/skills/, then IDE-specific overrides)
 	generic_skills = os.path.join(repo_root, "skills")

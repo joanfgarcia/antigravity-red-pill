@@ -5,6 +5,7 @@ Query Qdrant → send to Granite → validate response.
 
 Usage: uv run python scripts/test_operator_profile.py
 """
+
 import json
 import os
 import sys
@@ -14,6 +15,7 @@ from pathlib import Path
 # Load .env
 try:
 	from dotenv import load_dotenv
+
 	load_dotenv(Path.home() / ".config/red-pill/.env")
 except ImportError:
 	pass
@@ -98,18 +100,20 @@ Be concise (max 100 chars). If no meaningful data, respond with exactly: INSUFFI
 DATA:
 {context}"""
 
-	payload = json.dumps({
-		"messages": [
-			{
-				"role": "system",
-				"content": "You are a context-summarization sub-routine. Summarize operator data into a single line. Be factual, not creative.",
-			},
-			{"role": "user", "content": prompt},
-		],
-		"temperature": 0.0,
-		"max_tokens": 100,
-		"seed": 760,
-	}).encode("utf-8")
+	payload = json.dumps(
+		{
+			"messages": [
+				{
+					"role": "system",
+					"content": "You are a context-summarization sub-routine. Summarize operator data into a single line. Be factual, not creative.",
+				},
+				{"role": "user", "content": prompt},
+			],
+			"temperature": 0.0,
+			"max_tokens": 100,
+			"seed": 760,
+		}
+	).encode("utf-8")
 
 	headers = {"Content-Type": "application/json"}
 	req = urllib.request.Request(LLM_URL, data=payload, headers=headers, method="POST")
@@ -145,13 +149,13 @@ def main():
 	social = query_social_memories(limit=5)
 	print(f"  Found: {len(social)} memories")
 	for i, s in enumerate(social):
-		print(f"  [{i+1}] {s[:120]}...")
+		print(f"  [{i + 1}] {s[:120]}...")
 
 	print("\n[2/4] Querying directive_memories...")
 	directives = query_directive_memories(limit=3)
 	print(f"  Found: {len(directives)} directives")
 	for i, d in enumerate(directives):
-		print(f"  [{i+1}] {d[:120]}...")
+		print(f"  [{i + 1}] {d[:120]}...")
 
 	if not social and not directives:
 		print("\n[WARN] No data found in Qdrant. Cannot test synthesis.")
@@ -160,7 +164,7 @@ def main():
 	# Step 2: Call Granite
 	print("\n[3/4] Calling Granite for synthesis...")
 	profile = call_granite(social, directives)
-	print(f"  Response: \"{profile}\"")
+	print(f'  Response: "{profile}"')
 
 	# Step 3: Validate
 	print("\n[4/4] Validating response...")

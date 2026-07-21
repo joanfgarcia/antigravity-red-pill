@@ -58,10 +58,7 @@ class OpenCodeBridge(AgentBridge):
 	):
 		self._opencode_path = opencode_path or shutil.which(OPENCODE_BIN)
 		if not self._opencode_path:
-			raise RuntimeError(
-				"OpenCode CLI (opencode) not found in PATH. "
-				"Install OpenCode and ensure `opencode` is available."
-			)
+			raise RuntimeError("OpenCode CLI (opencode) not found in PATH. Install OpenCode and ensure `opencode` is available.")
 		# Priority: explicit param > env var > default
 		self._server_url = server_url or os.environ.get("OPENCODE_SERVER_URL", "")
 		self._identity_depth = identity_depth

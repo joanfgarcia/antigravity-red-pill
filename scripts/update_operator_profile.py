@@ -12,6 +12,7 @@ Usage:
 	uv run python scripts/update_operator_profile.py          # check interval, skip if fresh
 	uv run python scripts/update_operator_profile.py --force   # force update regardless of mtime
 """
+
 import argparse
 import json
 import os
@@ -22,6 +23,7 @@ from pathlib import Path
 
 try:
 	from dotenv import load_dotenv
+
 	load_dotenv(Path.home() / ".config/red-pill/.env")
 except ImportError:
 	pass
@@ -99,15 +101,17 @@ If no meaningful data, respond: INSUFFICIENT_DATA
 DATA:
 {context}"""
 
-	payload = json.dumps({
-		"messages": [
-			{"role": "system", "content": "You are a context-summarizer. Output ONLY the 1-line profile. No filler."},
-			{"role": "user", "content": prompt},
-		],
-		"temperature": 0.0,
-		"max_tokens": 100,
-		"seed": 760,
-	}).encode("utf-8")
+	payload = json.dumps(
+		{
+			"messages": [
+				{"role": "system", "content": "You are a context-summarizer. Output ONLY the 1-line profile. No filler."},
+				{"role": "user", "content": prompt},
+			],
+			"temperature": 0.0,
+			"max_tokens": 100,
+			"seed": 760,
+		}
+	).encode("utf-8")
 
 	req = urllib.request.Request(LLM_URL, data=payload, headers={"Content-Type": "application/json"})
 	try:

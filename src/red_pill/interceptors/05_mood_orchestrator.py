@@ -40,11 +40,7 @@ def _load_subplugin(module_path: str):
 		module = importlib.import_module(module_path)
 		for attr_name in dir(module):
 			attr = getattr(module, attr_name)
-			if (
-				isinstance(attr, type)
-				and issubclass(attr, BaseInterceptorPlugin)
-				and attr is not BaseInterceptorPlugin
-			):
+			if isinstance(attr, type) and issubclass(attr, BaseInterceptorPlugin) and attr is not BaseInterceptorPlugin:
 				return attr()
 	except Exception as e:
 		logger.error(f"Mood Orchestrator: failed to load subplugin {module_path}: {e}")

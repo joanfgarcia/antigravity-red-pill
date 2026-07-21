@@ -124,9 +124,7 @@ class SentinelAuditor:
 		# signal only made signals un-clearable — a landed fix could never
 		# evaporate them (the stuck "N pain signals" the operator kept seeing).
 		self.logger.info(f"Auditing formatting for {repo_path}")
-		ruff = subprocess.run(
-			[self.uv_path, "run", "ruff", "check", "."], cwd=repo_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
-		)
+		ruff = subprocess.run([self.uv_path, "run", "ruff", "check", "."], cwd=repo_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 		if ruff.returncode != 0:
 			report.status = "yellow"
 			errors = [line for line in ruff.stdout.splitlines() if ".py:" in line or "error" in line.lower()]
@@ -139,9 +137,7 @@ class SentinelAuditor:
 		# 2. Typing (Mypy)
 		self.logger.info(f"Auditing types for {repo_path}")
 		mypy_target = "src/red_pill/" if os.path.exists(os.path.join(repo_path, "src/red_pill")) else "src/"
-		mypy = subprocess.run(
-			[self.uv_path, "run", "mypy", mypy_target], cwd=repo_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
-		)
+		mypy = subprocess.run([self.uv_path, "run", "mypy", mypy_target], cwd=repo_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 		if mypy.returncode != 0:
 			report.status = "yellow"
 			repo_name = os.path.basename(repo_path)
