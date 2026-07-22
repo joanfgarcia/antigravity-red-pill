@@ -37,6 +37,12 @@ profiles:
     # daemon switches to this function-calling formatter (minion role) on the same
     # loaded model. Empirically verified: Granite Q4 emits valid OpenAI tool_calls.
     minion_chat_format: "chatml-function-calling"
+    # Ordered device preference. First that can serve wins; if none can → 503.
+    # A request may override per-task via body["device_fallback"]. igpu/npu are
+    # recognised but not wired yet (skipped). cpu_n_ctx is RAM-sized, independent
+    # of the VRAM tiers, and used only by the isolated CPU worker.
+    device_fallback: ["gpu", "cpu"]
+    cpu_n_ctx: 16384
     temperature: 0.3
     max_tokens: 4096
     use_mmap: false

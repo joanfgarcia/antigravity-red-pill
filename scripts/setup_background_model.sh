@@ -77,7 +77,13 @@ START_EOF
 else
 cat << 'DUAL_BIND_EOF' > "$PERSISTENT_DIR/run_dual_bind.py"
 import os
+import sys
 import socket
+import signal
+import subprocess
+import shutil
+import math
+import argparse
 import uvicorn
 import time
 import asyncio
@@ -122,49 +128,187 @@ def _resolve_chat_format(body: Dict[str, Any]) -> str:
 MODEL_PATH = str(resolve_model_path(MODEL_BASENAME))
 HF_REPO_ID = PROFILE.get("hf_model_repo_id", None)
 
+# --- Device fallback cascade ----------------------------------------------
+# Ordered device preference. The backend tries each in turn; the first that can
+# serve wins. If none can, the request fails (503) — no implicit fallback beyond
+# what the list declares. A request may override this via body["device_fallback"].
+#   gpu  -> in-process llama.cpp with GPU offload (fast path, unchanged)
+#   cpu  -> isolated worker subprocess, CUDA detached, under an OOM shield
+#   igpu -> Vulkan/unified-memory (NOT wired yet; skipped with a warning)
+#   npu  -> FastFlowLM NPU (NOT wired for these models yet; skipped)
+DEFAULT_DEVICE_FALLBACK = ["gpu", "cpu"]
+DEVICE_FALLBACK = PROFILE.get("device_fallback", DEFAULT_DEVICE_FALLBACK)
+# CPU context is sized to RAM, independent of the VRAM tiers (a 16k KV fits easily
+# in system RAM even though it would never fit alongside the model on an 8 GB card).
+CPU_N_CTX = int(PROFILE.get("cpu_n_ctx", PROFILE.get("hardware_affinity", {}).get("n_ctx", PROFILE.get("max_tokens", 4096))))
+
+CPU_WORKER_PORT = int(os.getenv("CPU_WORKER_PORT", "8761"))
+IS_CPU_WORKER = os.getenv("MINION_CPU_WORKER") == "1"
+FORCED_NCTX = int(os.getenv("CPU_WORKER_NCTX", "0")) or None
+# Empirical footprint (Granite-4.1-8B-Q4, use_mmap=false): base ~8.8 GB + ~0.15 MB/token KV.
+_CPU_BASE_GB = 9.0
+_CPU_KV_MB_PER_TOKEN = 0.16
+
+
+def _cpu_shield_gb(n_ctx: int) -> int:
+	return math.ceil((_CPU_BASE_GB + (n_ctx * _CPU_KV_MB_PER_TOKEN) / 1024.0) * 1.15)
+
+
+def _cpu_worker_unit() -> str:
+	return f"redpill-cpu-worker-{CPU_WORKER_PORT}"
+
 # Control de inactividad
 DEFAULT_HIGH_TIMEOUT = 300  # 5 minutos para tareas normales/interactivas
 DEFAULT_LOW_TIMEOUT = 10    # 10 segundos para tareas de baja prioridad (sleep cycle, etc.)
 
+
+class BackendUnavailable(RuntimeError):
+	"""No device in the fallback cascade could serve the request."""
+
+
 class ModelManager:
 	def __init__(self):
-		self.model = None
+		self.model = None          # in-process (GPU or worker-local) Llama
+		self.worker = None         # subprocess.Popen of the CPU worker (parent only)
+		self.worker_port = None
+		self.mode = None           # "gpu" | "cpu" | None
+		self.n_ctx = None
 		self.lock = asyncio.Lock()
 		self.last_active = time.time()
 		self.last_priority = "high"
-		
-	async def get_model_under_lock(self):
+
+	async def ensure_backend_under_lock(self, prefs: Optional[List[str]] = None):
 		self.last_active = time.time()
-		if self.model is None:
-			# Resolve hardware affinity dynamically right before loading to use free VRAM / CPU fallback
-			hardware = ModelRegistry.get_resolved_hardware_affinity(PROFILE_NAME)
-			n_ctx = hardware.get("n_ctx", PROFILE.get("max_tokens", 4096))
-			n_gpu_layers = hardware.get("n_gpu_layers", -1)
-			
-			logger.info(f"Loading model on demand: {MODEL_BASENAME} (GPU layers: {n_gpu_layers}, Context: {n_ctx})")
-			
-			from llama_cpp import Llama
-			
-			self.model = Llama(
-				model_path=MODEL_PATH,
-				chat_format=CHAT_FORMAT,
-				n_ctx=n_ctx,
-				n_gpu_layers=n_gpu_layers,
-				verbose=False
-			)
-			logger.info(f"Model {MODEL_BASENAME} successfully loaded into memory.")
-		return self.model
+		if self.mode is not None:
+			return
+
+		# A CPU worker process always loads its model in-process (CUDA is already
+		# hidden by the parent's env). It never re-enters the cascade.
+		if IS_CPU_WORKER:
+			self._load_in_process(FORCED_NCTX or CPU_N_CTX, 0)
+			return
+
+		cascade = prefs or DEVICE_FALLBACK or DEFAULT_DEVICE_FALLBACK
+		errors = []
+		for device in cascade:
+			try:
+				if device == "gpu":
+					hardware = ModelRegistry.get_resolved_hardware_affinity(PROFILE_NAME)
+					n_gpu_layers = hardware.get("n_gpu_layers", -1)
+					if n_gpu_layers == 0:
+						errors.append("gpu: insufficient free VRAM")
+						continue
+					self._load_in_process(hardware.get("n_ctx", PROFILE.get("max_tokens", 4096)), n_gpu_layers)
+					return
+				elif device == "cpu":
+					self._start_cpu_worker(CPU_N_CTX)
+					return
+				elif device in ("igpu", "npu"):
+					logger.warning(f"Device '{device}' requested but not wired for {MODEL_BASENAME} yet; skipping.")
+					errors.append(f"{device}: not implemented")
+					continue
+				else:
+					errors.append(f"{device}: unknown device")
+					continue
+			except Exception as e:
+				logger.error(f"Device '{device}' failed to come up: {e!r}")
+				errors.append(f"{device}: {e}")
+				continue
+
+		raise BackendUnavailable(f"No usable device in preference {cascade}: {errors}")
+
+	def _load_in_process(self, n_ctx, n_gpu_layers):
+		where = "CPU worker" if IS_CPU_WORKER else "GPU/in-process"
+		logger.info(f"Loading model ({where}): {MODEL_BASENAME} (GPU layers: {n_gpu_layers}, Context: {n_ctx})")
+		from llama_cpp import Llama
+		self.model = Llama(
+			model_path=MODEL_PATH,
+			chat_format=CHAT_FORMAT,
+			n_ctx=n_ctx,
+			n_gpu_layers=n_gpu_layers,
+			verbose=False,
+		)
+		self.mode = "cpu" if IS_CPU_WORKER else "gpu"
+		self.n_ctx = n_ctx
+		logger.info(f"Model {MODEL_BASENAME} successfully loaded ({where}).")
+
+	def _start_cpu_worker(self, n_ctx):
+		shield = _cpu_shield_gb(n_ctx)
+		# GPU is the preferred path; falling back to CPU is a real degradation (much
+		# slower, higher RAM pressure) so it is logged at WARNING for visibility.
+		logger.warning(
+			f"GPU unavailable for {MODEL_BASENAME}: falling back to CPU inference "
+			f"(n_ctx={n_ctx}, OOM shield={shield}G). CPU is markedly slower than GPU."
+		)
+		unit = _cpu_worker_unit()
+		# Clean any stale scope from a previous crash so the named unit is free.
+		if shutil.which("systemctl"):
+			subprocess.run(["systemctl", "--user", "reset-failed", f"{unit}.scope"],
+				stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+		env = dict(os.environ)
+		env["CUDA_VISIBLE_DEVICES"] = ""          # detach from the (possibly busy) GPU
+		env["MINION_CPU_WORKER"] = "1"
+		env["CPU_WORKER_NCTX"] = str(n_ctx)
+		worker = [sys.executable, os.path.abspath(__file__), "--serve-cpu", "--port", str(CPU_WORKER_PORT)]
+		if shutil.which("systemd-run"):
+			cmd = ["systemd-run", "--user", "--scope", f"--unit={unit}",
+				"-p", f"MemoryMax={shield}G", "--"] + worker
+			self.worker = subprocess.Popen(cmd, env=env)
+		else:
+			# No systemd: still isolate the process group so we can kill it cleanly.
+			self.worker = subprocess.Popen(worker, env=env, start_new_session=True)
+		self.worker_port = CPU_WORKER_PORT
+		self._await_worker_health()
+		self.mode = "cpu"
+		self.n_ctx = n_ctx
+		logger.warning(f"CPU worker ready on 127.0.0.1:{self.worker_port} (pid={self.worker.pid}).")
+
+	def _await_worker_health(self, timeout=180):
+		import urllib.request
+		deadline = time.time() + timeout
+		url = f"http://127.0.0.1:{self.worker_port}/health"
+		last_err = None
+		while time.time() < deadline:
+			if self.worker.poll() is not None:
+				raise RuntimeError(f"CPU worker exited early (code {self.worker.returncode})")
+			try:
+				with urllib.request.urlopen(url, timeout=2) as r:
+					if r.status == 200:
+						return
+			except Exception as e:
+				last_err = e
+				time.sleep(1)
+		raise RuntimeError(f"CPU worker did not become healthy in {timeout}s (last: {last_err})")
 
 	def unload_under_lock(self):
 		if self.model is not None:
-			logger.info(f"Unloading model {MODEL_BASENAME} from VRAM/RAM...")
+			logger.info(f"Unloading in-process model {MODEL_BASENAME} from VRAM/RAM...")
 			self.model = None
 			gc.collect()
-			logger.info("VRAM/RAM cleared.")
+		if self.worker is not None:
+			logger.info(f"Stopping CPU worker (pid={self.worker.pid})...")
+			unit = _cpu_worker_unit()
+			if shutil.which("systemctl"):
+				subprocess.run(["systemctl", "--user", "stop", f"{unit}.scope"],
+					stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+			try:
+				self.worker.terminate()
+				self.worker.wait(timeout=10)
+			except Exception:
+				try:
+					os.killpg(os.getpgid(self.worker.pid), signal.SIGKILL)
+				except Exception:
+					pass
+			self.worker = None
+			self.worker_port = None
+		self.mode = None
+		self.n_ctx = None
+		logger.info("Backend released.")
 
 	async def check_idle(self):
 		async with self.lock:
-			if self.model is not None:
+			if self.mode is not None:
 				elapsed = time.time() - self.last_active
 				timeout = DEFAULT_LOW_TIMEOUT if self.last_priority == "low" else DEFAULT_HIGH_TIMEOUT
 				if elapsed > timeout:
@@ -173,15 +317,34 @@ class ModelManager:
 
 manager = ModelManager()
 
+
+def _proxy_to_worker(port: int, body: Dict[str, Any]) -> Dict[str, Any]:
+	"""Forward a chat request to the CPU worker (non-streamed) and return its JSON."""
+	import urllib.request
+	payload = dict(body)
+	payload["stream"] = False
+	data = json.dumps(payload).encode("utf-8")
+	req = urllib.request.Request(
+		f"http://127.0.0.1:{port}/v1/chat/completions",
+		data=data,
+		headers={"Content-Type": "application/json"},
+		method="POST",
+	)
+	with urllib.request.urlopen(req, timeout=600) as r:
+		return json.loads(r.read().decode("utf-8"))
+
+
 @app.on_event("startup")
 async def startup_event():
-	async def reaper():
-		while True:
-			await asyncio.sleep(5)
-			await manager.check_idle()
-			
-	asyncio.create_task(reaper())
-	logger.info(f"Dynamic model server initialized for profile '{PROFILE_NAME}'.")
+	# The CPU worker is supervised by the parent; it does not run its own reaper.
+	if not IS_CPU_WORKER:
+		async def reaper():
+			while True:
+				await asyncio.sleep(5)
+				await manager.check_idle()
+		asyncio.create_task(reaper())
+	role = "CPU worker" if IS_CPU_WORKER else "supervisor"
+	logger.info(f"Dynamic model server initialized for profile '{PROFILE_NAME}' ({role}).")
 
 @app.get("/health")
 async def health():
@@ -220,18 +383,37 @@ async def chat_completions(request: Request):
 	messages = body.get("messages", [])
 	stream = body.get("stream", False)
 	active_chat_format = _resolve_chat_format(body)
+	prefs = body.get("device_fallback")
 
 	priority_header = request.headers.get("X-Task-Priority", "").lower()
 	priority_body = body.get("priority", "").lower()
 	is_low_priority = (priority_header == "low") or (priority_body == "low")
-	
+
 	loop = asyncio.get_running_loop()
-	
-	if stream:
+
+	# Body-only keys that must not reach Llama.create_chat_completion.
+	strip = ("model", "messages", "stream", "priority", "chat_format", "device_fallback")
+
+	if stream and not IS_CPU_WORKER:
 		async def stream_generator():
 			async with manager.lock:
 				manager.last_priority = "low" if is_low_priority else "high"
-				model = await manager.get_model_under_lock()
+				try:
+					await manager.ensure_backend_under_lock(prefs)
+				except BackendUnavailable as e:
+					yield f"data: {json.dumps({'error': str(e)})}\n\n"
+					yield "data: [DONE]\n\n"
+					return
+
+				# CPU worker path: no streaming — emit one non-streamed chunk.
+				if manager.mode == "cpu":
+					result = await loop.run_in_executor(None, lambda: _proxy_to_worker(manager.worker_port, body))
+					manager.last_active = time.time()
+					yield f"data: {json.dumps(result)}\n\n"
+					yield "data: [DONE]\n\n"
+					return
+
+				model = manager.model
 				model.chat_format = active_chat_format
 
 				def get_iterator():
@@ -240,9 +422,9 @@ async def chat_completions(request: Request):
 						stream=True,
 						**kwargs
 					)
-				
+
 				iterator = await loop.run_in_executor(None, get_iterator)
-				
+
 				try:
 					while True:
 						def get_next():
@@ -250,45 +432,56 @@ async def chat_completions(request: Request):
 								return next(iterator)
 							except StopIteration:
 								return None
-								
+
 						chunk = await loop.run_in_executor(None, get_next)
 						if chunk is None:
 							break
-							
+
 						manager.last_active = time.time()
 						yield f"data: {json.dumps(chunk)}\n\n"
-						
+
 					yield "data: [DONE]\n\n"
 				except Exception as e:
 					logger.error(f"Error in stream generation: {e}")
 					yield f"data: {json.dumps({'error': str(e)})}\n\n"
 				finally:
 					manager.last_active = time.time()
-					
+
 		# Strip parameters that Llama.create_chat_completion accepts
 		kwargs = {
-			k: v for k, v in body.items() 
-			if k not in ("model", "messages", "stream", "priority", "chat_format")
+			k: v for k, v in body.items()
+			if k not in strip
 		}
 		return StreamingResponse(stream_generator(), media_type="text/event-stream")
 	else:
 		async with manager.lock:
 			manager.last_priority = "low" if is_low_priority else "high"
-			model = await manager.get_model_under_lock()
+			try:
+				await manager.ensure_backend_under_lock(prefs)
+			except BackendUnavailable as e:
+				return JSONResponse(status_code=503, content={"error": str(e)})
+
+			# Parent in CPU mode proxies to the isolated worker.
+			if manager.mode == "cpu" and not IS_CPU_WORKER:
+				result = await loop.run_in_executor(None, lambda: _proxy_to_worker(manager.worker_port, body))
+				manager.last_active = time.time()
+				return JSONResponse(content=result)
+
+			model = manager.model
 			model.chat_format = active_chat_format
 
 			kwargs = {
-				k: v for k, v in body.items() 
-				if k not in ("model", "messages", "stream", "priority", "chat_format")
+				k: v for k, v in body.items()
+				if k not in strip
 			}
-			
+
 			def run_completion():
 				return model.create_chat_completion(
 					messages=messages,
 					stream=False,
 					**kwargs
 				)
-				
+
 			response = await loop.run_in_executor(None, run_completion)
 			manager.last_active = time.time()
 			return JSONResponse(content=response)
@@ -296,11 +489,23 @@ async def chat_completions(request: Request):
 def main():
 	from red_pill.core.paths import get_daemon_dir
 
+	parser = argparse.ArgumentParser()
+	parser.add_argument("--serve-cpu", action="store_true", help="Run as an isolated CPU worker (CUDA detached by caller env).")
+	parser.add_argument("--port", type=int, default=None)
+	args, _ = parser.parse_known_args()
+
+	# CPU worker: TCP only, single port, in-process CPU model.
+	if args.serve_cpu or IS_CPU_WORKER:
+		port = args.port or CPU_WORKER_PORT
+		logger.info(f"Starting CPU worker on 127.0.0.1:{port} (CUDA_VISIBLE_DEVICES={os.getenv('CUDA_VISIBLE_DEVICES')!r})")
+		uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
+		return
+
 	tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	tcp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 	tcp_sock.bind(("127.0.0.1", 8760))
 	tcp_sock.listen()
-	
+
 	runtime_dir = str(get_daemon_dir())
 	uds_path = os.path.join(runtime_dir, "red_pill.sock")
 	if os.path.exists(uds_path):
@@ -309,11 +514,10 @@ def main():
 	uds_sock.bind(uds_path)
 	uds_sock.listen()
 	os.chmod(uds_path, 0o600)
-	
+
 	config = uvicorn.Config(app=app, log_level="info")
 	server = uvicorn.Server(config=config)
-	
-	import asyncio
+
 	loop = asyncio.new_event_loop()
 	asyncio.set_event_loop(loop)
 	loop.run_until_complete(server.serve(sockets=[tcp_sock, uds_sock]))
