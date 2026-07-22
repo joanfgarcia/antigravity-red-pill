@@ -83,3 +83,76 @@ class LocalBridge(AgentBridge):
 			return self._get_provider() is not None
 		except Exception:
 			return False
+
+
+class LocalToolBridge(AgentBridge):
+	"""Execution backend: local model with a bounded in-process TOOL loop.
+
+	Where LocalBridge does a single generation, this runs
+	local_minion.run_local_minion(): the model may call RedPill-Kernel MCP tools +
+	bash until it answers or hits the loop cap. Best for short, concrete, headless
+	tasks — see docs/TECHNICAL/MINIONS.md for capabilities and limits.
+	"""
+
+	def __init__(self, model_profile: Optional[str] = None):
+		self._model_profile = model_profile
+
+	def get_capabilities(self) -> BridgeCapabilities:
+		return BridgeCapabilities(
+			backend=BackendType.LOCAL,
+			auto_approve=True,        # tools run without a human gate (loop is bounded)
+			ephemeral_mode=True,
+			conversation_resume=False,
+			model_selection=False,
+			mcp_tools=True,
+		)
+
+	def prompt(
+		self,
+		text: str,
+		*,
+		model: str = "flash",
+		effort: Optional[str] = None,
+		cwd: Optional[str] = None,
+		timeout: int = 300,
+	) -> ConversationResult:
+		# Bounded local tool loop. Must be called OFF the event loop (AgentMinion uses
+		# asyncio.to_thread); we spin our own loop and enforce a wall-clock timeout on
+		# top of the loop's own iteration/error caps.
+		import asyncio
+
+		from red_pill.swarm.agents.local_minion import run_local_minion
+
+		try:
+			result = asyncio.run(asyncio.wait_for(run_local_minion(text, cwd=cwd), timeout=timeout))
+		except asyncio.TimeoutError:
+			return ConversationResult(conversation_id="", response="", error=f"local-tools minion timed out after {timeout}s")
+		except Exception as e:
+			return ConversationResult(conversation_id="", response="", error=str(e))
+
+		answer = result.get("answer", "")
+		return ConversationResult(
+			conversation_id=uuid_mod.uuid4().hex[:12],
+			response=answer,
+			model=self._model_profile or "local-tools",
+			error=None if result.get("ok") else (answer or "minion did not finish"),
+		)
+
+	def continue_conversation(
+		self,
+		text: str,
+		*,
+		conversation_id: str = "",
+		previous_response_len: int = 0,
+		timeout: int = 300,
+	) -> ConversationResult:
+		# Stateless — each run is a fresh bounded loop.
+		return self.prompt(text, timeout=timeout)
+
+	def health_check(self) -> bool:
+		try:
+			from red_pill.core.providers import ProviderRegistry
+
+			return ProviderRegistry.get_inference_provider("sip") is not None
+		except Exception:
+			return False

@@ -28,9 +28,10 @@ def create_bridge(backend: Optional[str] = None, **kwargs) -> AgentBridge:
 
 	Routes on `backend` (explicit) or `IDE_BACKEND` config:
 		- "agy"      : AgyBridge (requires agy CLI)            [antigravity_ide]
-		- "claude"   : ClaudeBridge (requires claude CLI)
-		- "opencode" : OpenCodeBridge (requires opencode CLI)
-		- "local"    : LocalBridge (local model via SIP provider)
+		- "claude"     : ClaudeBridge (requires claude CLI)
+		- "opencode"   : OpenCodeBridge (requires opencode CLI)
+		- "local"      : LocalBridge (local model via SIP provider — one-shot, no tools)
+		- "local-tools": LocalToolBridge (local model + bounded in-process tool loop)
 		- "grpc"     : GrpcBridge (legacy extraction backend)  [antigravity_ide]
 		- "auto"     : agy if available, else opencode if available, else grpc
 
@@ -55,6 +56,10 @@ def create_bridge(backend: Optional[str] = None, **kwargs) -> AgentBridge:
 		from .opencode import OpenCodeBridge
 
 		return OpenCodeBridge(**kwargs)
+	if backend in ("local-tools", "local_tools"):
+		from .local import LocalToolBridge
+
+		return LocalToolBridge()
 	if backend == "local":
 		from .local import LocalBridge
 

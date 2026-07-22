@@ -51,6 +51,20 @@ class BaseInferenceProvider(ABC):
 		"""Stream response tokens for a prompt."""
 		return iter([])
 
+	def chat(
+		self,
+		messages: List[Dict[str, Any]],
+		*,
+		tools: Optional[List[Dict[str, Any]]] = None,
+		tool_choice: Optional[str] = None,
+		temperature: float = 0.3,
+		max_tokens: int = 1024,
+		response_format: Optional[Dict[str, Any]] = None,
+		timeout: int = 600,
+	) -> Dict[str, Any]:
+		"""Full chat call returning the assistant MESSAGE dict (incl. tool_calls)."""
+		raise NotImplementedError("chat is not implemented for this provider")
+
 
 class ProviderRegistry:
 	"""Registry to manage and discover active providers (IoC)."""
