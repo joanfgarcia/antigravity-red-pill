@@ -129,6 +129,7 @@ def test_bunker_update(tmp_path, monkeypatch):
 	import red_pill.bunker_lifecycle as bl
 
 	monkeypatch.setattr(bl, "get_bunker_root", lambda: tmp_path)
+	monkeypatch.setattr("red_pill.core.paths.get_bunker_root", lambda: tmp_path)
 
 	(tmp_path / ".git").mkdir()
 
@@ -141,3 +142,46 @@ def test_bunker_update(tmp_path, monkeypatch):
 	monkeypatch.setattr(os.path, "exists", lambda path: True if "uv" in path else False)
 
 	bl.bunker_update()
+
+
+def test_bunker_update_regenerates_daemon_and_skills(tmp_path, monkeypatch):
+	"""update must re-run setup_background_model.sh and redeploy skills (success path)."""
+	import shutil
+	import subprocess
+
+	import red_pill.bunker_lifecycle as bl
+
+	monkeypatch.setattr("red_pill.core.paths.get_bunker_root", lambda: tmp_path)
+	(tmp_path / ".git").mkdir()
+	(tmp_path / ".env.example").write_text("X=1")
+
+	scripts_dir = tmp_path / "scripts"
+	scripts_dir.mkdir()
+	(scripts_dir / "setup_background_model.sh").write_text("#!/bin/bash\ntrue\n")
+
+	skill = tmp_path / "skills" / "demo"
+	skill.mkdir(parents=True)
+	(skill / "SKILL.md").write_text("---\nname: demo\n---\n")
+
+	agent_dir = tmp_path / "agenthome"
+	monkeypatch.setenv("RED_PILL_AGENT_DIR", str(agent_dir))
+
+	calls = []
+
+	def fake_run(cmd, *args, **kwargs):
+		calls.append(cmd)
+		m = MagicMock()
+		m.returncode = 0
+		m.stdout = "ok"
+		m.stderr = ""
+		return m
+
+	monkeypatch.setattr(subprocess, "run", fake_run)
+	monkeypatch.setattr(shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+	bl.bunker_update()
+
+	# The generated daemon is regenerated via setup_background_model.sh
+	assert any("setup_background_model.sh" in " ".join(map(str, c)) for c in calls if isinstance(c, (list, tuple)))
+	# Skills are redeployed to the agent skills dir
+	assert (agent_dir / "skills" / "demo" / "SKILL.md").exists()
