@@ -104,6 +104,19 @@ PROFILE = ModelRegistry.get_profile(PROFILE_NAME)
 MODEL_FILENAME = PROFILE.get("model_path", "samantha-mistral-instruct-7b.i1-Q4_K_M.gguf")
 MODEL_BASENAME = os.path.basename(MODEL_FILENAME)
 CHAT_FORMAT = PROFILE.get("chat_format", "chatml")
+# Minion mode: a request carrying tools/functions switches the chat handler to a
+# function-calling formatter so Granite emits OpenAI-style tool_calls. Distiller and
+# plain requests keep the profile default (CHAT_FORMAT) untouched — same loaded model.
+MINION_CHAT_FORMAT = PROFILE.get("minion_chat_format", "chatml-function-calling")
+
+
+def _resolve_chat_format(body: Dict[str, Any]) -> str:
+	explicit = body.get("chat_format")
+	if explicit:
+		return explicit
+	if body.get("tools") or body.get("functions"):
+		return MINION_CHAT_FORMAT
+	return CHAT_FORMAT
 
 # Resolve model path
 MODEL_PATH = str(resolve_model_path(MODEL_BASENAME))
@@ -206,7 +219,8 @@ async def chat_completions(request: Request):
 	body = await request.json()
 	messages = body.get("messages", [])
 	stream = body.get("stream", False)
-	
+	active_chat_format = _resolve_chat_format(body)
+
 	priority_header = request.headers.get("X-Task-Priority", "").lower()
 	priority_body = body.get("priority", "").lower()
 	is_low_priority = (priority_header == "low") or (priority_body == "low")
@@ -218,7 +232,8 @@ async def chat_completions(request: Request):
 			async with manager.lock:
 				manager.last_priority = "low" if is_low_priority else "high"
 				model = await manager.get_model_under_lock()
-				
+				model.chat_format = active_chat_format
+
 				def get_iterator():
 					return model.create_chat_completion(
 						messages=messages,
@@ -253,17 +268,18 @@ async def chat_completions(request: Request):
 		# Strip parameters that Llama.create_chat_completion accepts
 		kwargs = {
 			k: v for k, v in body.items() 
-			if k not in ("model", "messages", "stream", "priority")
+			if k not in ("model", "messages", "stream", "priority", "chat_format")
 		}
 		return StreamingResponse(stream_generator(), media_type="text/event-stream")
 	else:
 		async with manager.lock:
 			manager.last_priority = "low" if is_low_priority else "high"
 			model = await manager.get_model_under_lock()
-			
+			model.chat_format = active_chat_format
+
 			kwargs = {
 				k: v for k, v in body.items() 
-				if k not in ("model", "messages", "stream", "priority")
+				if k not in ("model", "messages", "stream", "priority", "chat_format")
 			}
 			
 			def run_completion():

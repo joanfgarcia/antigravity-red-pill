@@ -33,6 +33,10 @@ profiles:
     model_path: "models/Granite-4.1-8B-Q4_K_M.gguf"
     binary_type: "gguf"
     chat_format: "chatml"
+    # Distiller/sleep role uses chat_format above. When a request carries tools, the
+    # daemon switches to this function-calling formatter (minion role) on the same
+    # loaded model. Empirically verified: Granite Q4 emits valid OpenAI tool_calls.
+    minion_chat_format: "chatml-function-calling"
     temperature: 0.3
     max_tokens: 4096
     use_mmap: false
