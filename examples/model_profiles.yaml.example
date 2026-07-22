@@ -153,6 +153,7 @@ profiles:
       # not total installed). Tier selection is monotonic: more free VRAM → higher
       # tier → more n_gpu_layers. Keep partial-offload tiers OUT on an 8 GB card
       # shared with training — they crash context creation (see the block comment).
+      vram_tiers:
         # Dynamically scale n_ctx and offload based on free VRAM to prevent context creation crashes
         - min_free_gb: 6.4
           n_gpu_layers: 0
