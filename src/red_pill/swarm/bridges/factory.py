@@ -23,22 +23,26 @@ from .base import AgentBridge
 logger = logging.getLogger(__name__)
 
 
-def create_bridge(backend: Optional[str] = None) -> AgentBridge:
+def create_bridge(backend: Optional[str] = None, **kwargs) -> AgentBridge:
 	"""Create an execution bridge.
 
 	Routes on `backend` (explicit) or `IDE_BACKEND` config:
-		- "agy"    : AgyBridge (requires agy CLI)            [antigravity_ide]
-		- "claude" : ClaudeBridge (requires claude CLI)
-		- "local"  : LocalBridge (local model via SIP provider)
-		- "grpc"   : GrpcBridge (legacy extraction backend)  [antigravity_ide]
-		- "auto"   : agy if available, else grpc
+		- "agy"      : AgyBridge (requires agy CLI)            [antigravity_ide]
+		- "claude"     : ClaudeBridge (requires claude CLI)
+		- "opencode"   : OpenCodeBridge (requires opencode CLI)
+		- "local"      : LocalBridge (local model via SIP provider — one-shot, no tools)
+		- "local-tools": LocalToolBridge (local model + bounded in-process tool loop)
+		- "grpc"     : GrpcBridge (legacy extraction backend)  [antigravity_ide]
+		- "auto"     : agy if available, else opencode if available, else grpc
+
+	kwargs are forwarded to the bridge constructor (e.g. server_url for OpenCodeBridge).
 
 	For conversation extraction (Chronicle), use create_extraction_bridge().
 	"""
 	backend = (backend or cfg.get_config().IDE_BACKEND or "auto").strip().lower()
 
 	if backend == "auto":
-		backend = "agy" if shutil.which("agy") else "grpc"
+		backend = "agy" if shutil.which("agy") else "opencode" if shutil.which("opencode") else "grpc"
 
 	if backend == "agy":
 		from red_pill.plugins.antigravity_ide.agy_bridge import AgyBridge
@@ -48,6 +52,14 @@ def create_bridge(backend: Optional[str] = None) -> AgentBridge:
 		from .claude import ClaudeBridge
 
 		return ClaudeBridge()
+	if backend == "opencode":
+		from .opencode import OpenCodeBridge
+
+		return OpenCodeBridge(**kwargs)
+	if backend in ("local-tools", "local_tools"):
+		from .local import LocalToolBridge
+
+		return LocalToolBridge()
 	if backend == "local":
 		from .local import LocalBridge
 

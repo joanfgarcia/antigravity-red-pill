@@ -1,16 +1,16 @@
-# 🔴 RED PILL PROTOCOL: Digital Sovereignty v7.7.0
+# 🔴 RED PILL PROTOCOL: Digital Sovereignty v7.9.0
 ### *«El modelo pone la voz, no el quién»*
 
 > [!TIP]
 > ### 🇬🇧 🥱 TL;DR (Quick Install)
-> **If you want to install this, don't waste time. Copy and paste this message to your agent (Antigravity / Nova):**
+> **If you want to install this, don't waste time. Copy and paste this message to your agent (Antigravity / Nova / OpenCode):**
 > 
 > *"Hey, take a look at this repository. Give me a quick summary and tell me step-by-step how to install it on my machine."*
 > 
 > Let the AI work while you grab a coffee. ☕
 >
 > ### 🇪🇸 🥱 TL;DR (Instalación Rápida)
-> **Si quieres instalar esto, no pierdas tiempo. Copia y pega este mensaje a tu agente (Antigravity / Nova):**
+> **Si quieres instalar esto, no pierdas tiempo. Copia y pega este mensaje a tu agente (Antigravity / Nova / OpenCode):**
 > 
 > *"Hey, échale un vistazo a este repositorio. Dame un resumen rápido y dime paso a paso cómo instalarlo en mi máquina."*
 > 
@@ -87,7 +87,7 @@ The Red Pill Protocol is built for **Sovereign Environments**, but it adapts to 
 - **Immunity**: Core directives are protected from decay.
 - **Sovereign Swarm (v6.1)**: Integrated Minions (Agent Smith, Oracle, Healer) running natively within the Red Pill Kernel for local code auditing, RAG synthesis, and autonomous "Active Immunity" (auto-repair).
 - **Autonomous Flow Engine (v6.1)**: Multi-step task orchestration using a 3-layer discovery mechanism (Global, Community, Local) for complex engineering workflows.
-- **MCP Server (v5.0)**: Exposes the full Red Pill telemetry (CPU, GPU CUDA/ROCm, NPU), Swarm tools, and the new **`evaporate_signal`** tool for Neural Reset to IDEs.
+- **MCP Server (v5.0)**: Exposes the full Red Pill telemetry (CPU, GPU CUDA/ROCm, NPU), Swarm tools, and the new **`evaporate_signal`** tool for Neural Reset to IDEs. Supported clients: Antigravity (Gemini), Claude Code, Claude Desktop, OpenCode, Cline, Roo Cline.
 - **Sovereign Alert System (CLI)**: Manual signal injection and evaporation via `red-pill signal [push|evaporate]`.
 - [v] **Autonomous Flow Orchestration (v6.1)**: 3-layer hierarchy (Global, Community, Local) for complex multi-agent execution.
 - [v] **Minion Healer (v6.1)**: "Active Immunity" substrate for autonomous code repair using local SLMs.
@@ -150,7 +150,7 @@ El Protocolo Red Pill está diseñado para **Entornos Soberanos**:
 - **Erosión**: Los datos no reforzados se degradan naturalmente para mantener el contexto limpio.
 - **Inmunidad**: Las directivas centrales están protegidas contra el olvido.
 - **Sovereign Swarm (v5.0)**: Minions integrados (Agent Smith, Oracle, Keymaker) dentro del Kernel para auditorías locales de código, síntesis de memoria y diagnósticos de salud del ecosistema.
-- **Servidor MCP (v5.0)**: Expone la telemetría (CPU, GPU CUDA/ROCm, NPU) y los Minions a tu IDE local para interactuar con ellos sin gastar tokens externos.
+- **Servidor MCP (v5.0)**: Expone la telemetría (CPU, GPU CUDA/ROCm, NPU) y los Minions a tu IDE local para interactuar con ellos sin gastar tokens externos. Clientes soportados: Antigravity (Gemini), Claude Code, Claude Desktop, OpenCode, Cline, Roo Cline.
 - **Identidad Asimilada**: Tu identidad y reglas ("Lore Skin") ahora viven como vectores inmutables dentro del Bünker, resolviendo para siempre el problema del IDE que "olvida" quién eres.
 - **Inferencia de Emociones Híbrida (v5.2.0)**: Integración de **BERT-Emotion** para detectar automáticamente el sentimiento de los recuerdos. El Bünker "siente" lo que guardas y ajusta su color (Chroma) y persistencia sin intervención manual.
 - **Enjambre Soberano (v5.2.0)**: Orquestación avanzada de Minions (Gru) para tareas críticas de auditoría y síntesis de conocimiento profundo.

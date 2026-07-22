@@ -55,6 +55,7 @@ ANCHOR_REGISTRY = [
 	AnchorTarget("claude-code", "~/.claude/CLAUDE.md", False, True),  # user memory: global, cwd-independent
 	AnchorTarget("claude-code-project", None, True, True),  # <workspace>/CLAUDE.md (project-scoped, opt-in)
 	AnchorTarget("claude-desktop-project", None, False, False),  # Project instructions: UI/DB, only --print
+	AnchorTarget("opencode", "~/.config/opencode/RED_PILL.md", False, True),  # user-level, global
 ]
 REGISTRY_BY_IDE = {t.ide: t for t in ANCHOR_REGISTRY}
 
@@ -82,6 +83,8 @@ def detect_present_ides(workspace):
 		present.append("claude-code")
 	if _claude_desktop_present():
 		present.append("claude-desktop-project")
+	if os.path.isdir(os.path.expanduser("~/.config/opencode")):
+		present.append("opencode")
 	return present
 
 
@@ -95,7 +98,9 @@ def ide_call_vars(ide):
 	"""Per-IDE tool-call phrasing for the handshake (${RELAY_CALL}/${WAKE_CALL}).
 	Antigravity is lax — the server's compatibility shim resolves the flat action name.
 	Claude clients only call the ADVERTISED consolidated APIs, so they must use the
-	`<api>` tool + an `action` argument (the flat name is not a tool for them)."""
+	`<api>` tool + an `action` argument (the flat name is not a tool for them).
+	opencode does NOT prefix MCP tools — they appear under their resource
+	group names (bunker_memory_api, swarm_orchestrator_api, etc.)."""
 	if ide == "antigravity":
 		return {
 			"RELAY_CALL": "`mcp_RedPill-Kernel_sovereign_handshake`",

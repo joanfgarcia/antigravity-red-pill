@@ -48,6 +48,34 @@ def test_audit_repo_all_green(mock_run, auditor):
 
 
 @patch("subprocess.run")
+def test_self_heals_signal_on_pass_without_force(mock_run):
+	"""Regression for the Fast-Fail deadlock: with force=False AND a signal
+	already present, a passing run must still execute the real checks and
+	evaporate the signals. The old code skipped the run when a signal existed,
+	so a landed fix could never clear it (stuck pain signals)."""
+	auditor = SentinelAuditor(force=False)
+	auditor.memory_mgr = MagicMock()
+	auditor.memory_mgr.has_signal.return_value = True  # signals already present
+
+	green = MagicMock()
+	green.returncode = 0
+	mock_run.side_effect = [green, green, green]  # ruff, mypy, pytest all pass
+
+	# Bypass the differential mtime gate so the audit body runs.
+	with (
+		patch.object(auditor, "_get_project_mtime", return_value=100.0),
+		patch.object(auditor, "_get_cached_mtime", return_value=0.0),
+		patch.object(auditor, "_update_cached_mtime", return_value=None),
+	):
+		report = auditor.audit_repo(".")
+
+	assert report.status == "green"
+	assert len(report.findings) == 0
+	evaporated = {c.args[0] for c in auditor.memory_mgr.evaporate_signals.call_args_list}
+	assert evaporated == {"signal_formatting_failure", "signal_typing_failure", "signal_test_failure"}
+
+
+@patch("subprocess.run")
 def test_audit_runtime_daemon_failure(mock_run, auditor):
 	mock_units = MagicMock()
 	mock_units.returncode = 0

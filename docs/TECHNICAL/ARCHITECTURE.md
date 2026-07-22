@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v7.7.0 (Synaptic Axons & Texture Remediation)
+**System Version**: v7.9.0 (Minion Execution Substrate)
 **Analyst**: The Architect
 **Date**: 2026-04-16
 
@@ -175,12 +175,15 @@ sequenceDiagram
 | 02 | `02_rag_enrichment.py` | ON | Every prompt | `INTERCEPTOR_RAG_ENABLED` |
 | 03 | `03_circuit_breaker.py` | OFF | Every prompt | `INTERCEPTOR_CIRCUIT_BREAKER_ENABLED` |
 | 04 | `04_mystique.py` | ON | Every prompt | `DYNAMIC_EMOTION_SYNC` |
-| 05 | `05_cognitive_router.py` | ON | Every prompt | `COGNITIVE_ROUTER_ENABLED` |
-| 06 | `06_tone_adapter.py` | ON | Every prompt | `TONE_ADAPTER_ENABLED` |
-| 07 | `07_mood_analytics.py` | ON | Every prompt | `MOOD_ANALYTICS_ENABLED` |
-| 08 | `08_emotive_recall.py` | ON | Every prompt | `EMOTIVE_RECALL_ENABLED` |
-| 09 | `09_proactive_signal.py` | ON | Every prompt | `PROACTIVE_SIGNAL_ENABLED` |
-| 10 | `10_predictive_preload.py` | ON | Every prompt | `PREDICTIVE_PRELOAD_ENABLED` |
+| **05** | **`05_mood_orchestrator.py`** | **ON** | **Every prompt** | **`MOOD_ORCHESTRATOR_ENABLED`** |
+| 05a | `05_cognitive_router.py` | ON | Via orchestrator | `COGNITIVE_ROUTER_ENABLED` |
+| 06 | `06_tone_adapter.py` | ON | Via orchestrator | `TONE_ADAPTER_ENABLED` |
+| 07 | `07_mood_analytics.py` | ON | Via orchestrator | `MOOD_ANALYTICS_ENABLED` |
+| 08 | `08_emotive_recall.py` | ON | Via orchestrator | `EMOTIVE_RECALL_ENABLED` |
+| 09 | `09_proactive_signal.py` | ON | Via orchestrator | `PROACTIVE_SIGNAL_ENABLED` |
+| 10 | `10_predictive_preload.py` | ON | Via orchestrator | `PREDICTIVE_PRELOAD_ENABLED` |
+
+> **Orchestrator Pattern (v6.3.0; flag semantics corrected v7.8.1)**: The orchestrator (05) loads ALL subplugins listed in `_SUBPLUGINS` and, in `execute()`, skips any whose own `raw_enabled` flag is off before calling their `execute()` — so the individual `*_ENABLED` switches stay effective while orchestrated. Each subplugin's `is_enabled` returns `raw_enabled and not MOOD_ORCHESTRATOR_ENABLED`; that False-while-orchestrated value keeps the main interceptor loop from **double-running** them (the orchestrator owns them). Adding a new subplugin = adding it to `_SUBPLUGINS`, no orchestrator code changes needed.
 
 #### 6.2.1 The Emotional Ferrari Protocol (v6.3.0)
 
@@ -452,10 +455,10 @@ The Auditor scrolls through the `signal_memories` collection to derive deep syst
 ### 14.2 Dual-Channel Pain Sync
 The Auditor implements a multi-tier nociception strategy. High-severity findings ($\text{severity} \ge 6.0$) are injected directly into `signal_memories` (The Cortex Status), triggering immediate active feedback in the operator's context. Moderate findings ($\text{severity} \ge 4.0$) are persisted in `social_memories` for historical epidemiological analysis. This dual-channel approach ensures that immediate infrastructure "pain" is felt by the agent, while maintaining long-term integrity logs.
 
-### 14.3 Fast-Fail Nociception (The Blindness Trade-off)
-To optimize background resource consumption, Sentinels implement a **Fast-Fail** mechanism. If a Sentinel queries Qdrant and detects an existing active pain signal for a specific domain (e.g., `signal_mypy_failure`), it aborts execution immediately.
-- **Resource Savings**: 100% compute saved for known chronic errors.
-- **The Trade-off**: The system will only record "the first error" that triggers the pain. If subsequent errors of the same type occur while the pain is still active, the system remains blind to them until the original pain is resolved and the Sentinel is manually forced to re-evaluate (`--force`). This is an accepted design constraint to prevent continuous CPU burning on already-failed states.
+### 14.3 Differential Audit & Self-Healing Signals
+To optimize background resource consumption, the Auditor skips the **entire** audit for a repository whose source has not changed since the last run — a differential **mtime gate** in `audit_repo` (`current_mtime <= cached_mtime`). When the audit does run (source changed, or `--force`), every check (ruff/mypy/pytest) executes and is self-healing: it re-raises its signal on failure and **evaporates it on success**.
+- **Resource Savings**: unchanged repos cost ~0 (skipped wholesale); the hourly timer only does real work when code actually moved.
+- **Self-healing (v7.8.1)**: an earlier *per-check* Fast-Fail (abort a check if its signal already existed) was **removed** — it left signals un-clearable, because the check that would evaporate them was the one being skipped, so a landed fix could never turn off the pain (the "stuck N pain signals" symptom). Signals now clear automatically on the next audit after the fix lands.
 
 ### 14.4 Systemd Orchestration (Autonomic Nervous System)
 The Auditor is deployed as a native OS-level background service to ensure persistent monitoring without manual triggering:

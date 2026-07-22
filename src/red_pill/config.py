@@ -84,9 +84,10 @@ class BridgeTarget(BaseModel):
 	local → ignored).
 	"""
 
-	backend: Literal["agy", "claude", "local"]
+	backend: Literal["agy", "claude", "opencode", "local"]
 	model: Optional[str] = None
 	effort: Optional[Literal["low", "medium", "high"]] = None
+	server_url: Optional[str] = None  # opencode only: http://localhost:PORT for --attach (None → direct/cold)
 
 
 # RedPillConfig — the sovereign configuration model
@@ -625,6 +626,17 @@ class RedPillConfig(BaseSettings):
 	PRE_HEATING_MAX_CHARS_PER_FRAGMENT: int = 200  # For "raw" mode
 	PRE_HEATING_LOOKBACK_HOURS: int = 48  # For interaction_memories
 	PRE_HEATING_HOT_COLORS: Any = ["purple", "blue", "red"]
+	PRE_HEATING_MAX_TRACKED_PROJECTS: int = 3  # Max tracked workspaces in PROJECT_STATUS
+
+	# -----------------------------------------------------------------------
+	# MOOD ORCHESTRATOR (Hito 5a-5b)
+	# -----------------------------------------------------------------------
+	MOOD_ORCHESTRATOR_ENABLED: bool = True  # Enable orchestrator for plugins 05-09
+
+	# -----------------------------------------------------------------------
+	# OPERATOR PROFILE UPDATE (Hito 4b)
+	# -----------------------------------------------------------------------
+	OPERATOR_PROFILE_UPDATE_INTERVAL_HOURS: int = 24  # Hours between auto-updates
 
 	@field_validator("PRE_HEATING_HOT_COLORS", mode="before")
 	@classmethod
@@ -669,7 +681,7 @@ class RedPillConfig(BaseSettings):
 	SIGNAL_BASE_PAIN_CUDA: float = 7.0
 	SIGNAL_PAIN_ESCALATION_RATE: float = 0.5
 	SIGNAL_AMNESIA_HOURS: int = 8
-	SIGNAL_MIGRAINE_VECTORS: int = 10000
+	SIGNAL_MIGRAINE_VECTORS: int = 25000
 
 	# -----------------------------------------------------------------------
 	# ENTERPRISE EXTENSION (read-only after init — set by Enterprise at boot)

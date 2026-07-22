@@ -33,6 +33,16 @@ profiles:
     model_path: "models/Granite-4.1-8B-Q4_K_M.gguf"
     binary_type: "gguf"
     chat_format: "chatml"
+    # Distiller/sleep role uses chat_format above. When a request carries tools, the
+    # daemon switches to this function-calling formatter (minion role) on the same
+    # loaded model. Empirically verified: Granite Q4 emits valid OpenAI tool_calls.
+    minion_chat_format: "chatml-function-calling"
+    # Ordered device preference. First that can serve wins; if none can → 503.
+    # A request may override per-task via body["device_fallback"]. igpu/npu are
+    # recognised but not wired yet (skipped). cpu_n_ctx is RAM-sized, independent
+    # of the VRAM tiers, and used only by the isolated CPU worker.
+    device_fallback: ["gpu", "cpu"]
+    cpu_n_ctx: 16384
     temperature: 0.3
     max_tokens: 4096
     use_mmap: false
@@ -149,6 +159,7 @@ profiles:
       # not total installed). Tier selection is monotonic: more free VRAM → higher
       # tier → more n_gpu_layers. Keep partial-offload tiers OUT on an 8 GB card
       # shared with training — they crash context creation (see the block comment).
+      vram_tiers:
         # Dynamically scale n_ctx and offload based on free VRAM to prevent context creation crashes
         - min_free_gb: 6.4
           n_gpu_layers: 0

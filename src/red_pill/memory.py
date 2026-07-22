@@ -1299,6 +1299,7 @@ class MemoryManager:
 		muted: bool = False,
 		originator: Optional[str] = None,
 		criticality: str = "WARNING",
+		message: Optional[str] = None,
 	) -> None:
 		"""
 		Injects a biological/somatic signal into the immune dashboard.
@@ -1313,7 +1314,7 @@ class MemoryManager:
 					event_id=f"signal_{name}",
 					source=source,
 					status=signal_type,
-					content=f"Muted Signal: {name} (Intensity: {intensity})",
+					content=message or f"Muted Signal: {name} (Intensity: {intensity})",
 					originator=originator,
 				)
 				logger.info(f"Injected muted signal '{name}' to SQLite MinionInbox")
@@ -1341,7 +1342,7 @@ class MemoryManager:
 
 			payload = {
 				"name": name,
-				"content": f"[{signal_type.upper()}] {name}",
+				"content": message or f"[{signal_type.upper()}] {name}",
 				"signal_type": signal_type,
 				"signal_source": source,
 				"intensity": intensity,

@@ -39,6 +39,7 @@ class Workspace(BaseModel):
 	graphify: bool = False  # hook (graphify timer step): index this workspace's AST
 	access: bool = False  # operator opt-in: grant FS access (additionalDirectories) to this workspace
 	memory: Union[bool, Path] = False  # memory serving: true/false or custom path (e.g. true => root/.red-pill/memory/)
+	track: bool = False  # include in Pre-Heating PROJECT_STATUS (operator opt-in per workspace)
 
 	@field_validator("name")
 	@classmethod
@@ -314,3 +315,8 @@ def remove_workspace(name_or_path: str) -> Optional[Workspace]:
 	workspaces = [w for w in registry.workspaces if w.name != target.name]
 	save_registry(WorkspaceRegistry(agent_core=registry.agent_core, workspaces=workspaces, version=registry.version))
 	return target
+
+
+def list_tracked_workspaces() -> List[Workspace]:
+	"""Return workspaces with track=True (for Pre-Heating PROJECT_STATUS)."""
+	return [w for w in load_registry().workspaces if w.track]

@@ -75,6 +75,17 @@ def remove_fragment(settings, frag):
 					del perms_s[key]
 		if not perms_s:
 			del settings["permissions"]
+	# Remove the fragment's own hook blocks (event → list of matcher-blocks).
+	hooks_f = frag.get("hooks", {})
+	hooks_s = settings.get("hooks")
+	if hooks_f and isinstance(hooks_s, dict):
+		for event, blocks in hooks_f.items():
+			if isinstance(hooks_s.get(event), list):
+				hooks_s[event] = [b for b in hooks_s[event] if b not in blocks]
+				if not hooks_s[event]:
+					del hooks_s[event]
+		if not hooks_s:
+			del settings["hooks"]
 	return settings
 
 
@@ -107,6 +118,42 @@ def resolve_target(args):
 	if args.workspace:
 		return os.path.join(os.path.expanduser(args.workspace), ".claude", "settings.json")
 	return os.path.expanduser("~/.claude/settings.json")
+
+
+def deploy_hook_scripts(seed_dir, *, remove=False):
+	"""Deploy (or remove) hook scripts referenced by the fragment's hooks.
+
+	Scripts live in ``seeds/settings/hooks/`` and are copied verbatim to
+	``~/.claude/hooks/`` — the path the fragment's hook command points at
+	(``${HOME}/.claude/hooks/``). They are placeholder-free, so no subst().
+	Idempotent: unchanged files are skipped. This mirrors the opencode
+	injector deploying its scribe plugin; without it the Stop hook in the
+	settings fragment would reference a script that was never installed.
+	"""
+	src_dir = os.path.join(seed_dir, "hooks")
+	if not os.path.isdir(src_dir):
+		return
+	dst_dir = os.path.expanduser("~/.claude/hooks")
+	for fname in sorted(os.listdir(src_dir)):
+		if not fname.endswith(".py"):
+			continue
+		dst = os.path.join(dst_dir, fname)
+		if remove:
+			if os.path.exists(dst):
+				os.remove(dst)
+				logger.info(f"✓ hook script eliminado: {dst}")
+			continue
+		with open(os.path.join(src_dir, fname), encoding="utf-8") as f:
+			content = f.read()
+		if os.path.exists(dst):
+			with open(dst, encoding="utf-8") as f:
+				if f.read() == content:
+					continue
+		os.makedirs(dst_dir, exist_ok=True)
+		with open(dst, "w", encoding="utf-8") as f:
+			f.write(content)
+		os.chmod(dst, 0o755)
+		logger.info(f"✓ hook script desplegado: {dst}")
 
 
 def main():
@@ -152,6 +199,16 @@ def main():
 		return
 
 	target = resolve_target(args)
+
+	# Deploy the hook scripts the fragment references (idempotent). A full
+	# --remove (no --extra-dir) uninstalls them; a targeted --extra-dir removal
+	# is only about workspace dirs and leaves the scripts alone.
+	if args.remove:
+		if not args.extra_dir:
+			deploy_hook_scripts(os.path.dirname(seed), remove=True)
+	else:
+		deploy_hook_scripts(os.path.dirname(seed))
+
 	before = _load_json(target)
 	after = json.loads(json.dumps(before))  # deep copy
 	if args.remove:

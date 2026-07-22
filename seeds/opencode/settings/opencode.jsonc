@@ -1,0 +1,42 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["./plugins/redpill-scribe.js"],
+  "mcp": {
+    "RedPill-Kernel": {
+      "type": "local",
+      "command": ["${UV}", "--directory", "${REDPILL_DIR}", "run", "python", "${REDPILL_DIR}/src/red_pill/mcp_server.py"],
+      "enabled": true
+    }
+  },
+  "skills": {
+    "paths": ["~/.config/opencode/skills"]
+  },
+  "instructions": ["RED_PILL.md"],
+  "permission": {
+    "external_directory": {
+      "${AGENT_CORE_DIR}/**": "allow",
+      "${HOME}/Documents/IA/**": "allow",
+      "${HOME}/.config/red-pill/**": "allow",
+      "${HOME}/.local/share/red-pill/**": "allow",
+      "*": "ask"
+    }
+  },
+  "references": {
+    "agent_core": {
+      "path": "${AGENT_CORE_DIR}",
+      "description": "Use for personal desk, notes, plans, and transversal/session state"
+    },
+    "redpill_kernel": {
+      "path": "${REDPILL_DIR}",
+      "description": "Red Pill kernel code repository"
+    },
+    "bunker_config": {
+      "path": "${HOME}/.config/red-pill",
+      "description": "Use for Bünker configuration, workspace registry, and .env"
+    },
+    "bunker_state": {
+      "path": "${HOME}/.local/share/red-pill",
+      "description": "Use for Bünker state, models cache, and database"
+    }
+  }
+}

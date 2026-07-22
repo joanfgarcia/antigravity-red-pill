@@ -719,17 +719,11 @@ if [ -f "$REPO_ROOT/examples/workspaces.yaml" ] && [ ! -f "$RP_CONFIG_DIR/worksp
 	echo -e "${GREEN}✓ Registro de workspaces sembrado (workspaces.yaml).${NC}"
 fi
 
-# Sovereign Handshake + Agent_Core anchors (merge-by-block, via inject_anchor.py)
-# --ide auto: anchors the instruction file of each detected IDE (e.g. GEMINI.md, CLAUDE.md) at user level.
-if [ -f "$SCRIPT_DIR/inject_anchor.py" ] && command -v uv &> /dev/null; then
-	(cd "$REPO_ROOT" && uv run python scripts/inject_anchor.py --ide auto --redpill-dir "$REPO_ROOT" || true)
-	echo -e "${GREEN}✓ Sovereign Handshake + Agent_Core anclados en los ficheros de instrucciones de los IDEs detectados.${NC}"
-fi
-
-# Claude Code: grant access to transversal dirs (Agent_Core/XDG) + registry workspaces (access:true).
-if [ -f "$SCRIPT_DIR/inject_settings.py" ] && command -v uv &> /dev/null && command -v claude &> /dev/null; then
-	(cd "$REPO_ROOT" && uv run python scripts/inject_settings.py --redpill-dir "$REPO_ROOT" || true)
-	echo -e "${GREEN}✓ Claude Code: acceso a directorios transversales concedido.${NC}"
+# IDE injection (plugin architecture: auto-detects all present IDEs)
+if [ -f "$SCRIPT_DIR/inject_cli.py" ] && command -v uv &> /dev/null; then
+	echo -e "${BLUE}--- Fase: Inyección IDE ---${NC}"
+	(cd "$REPO_ROOT" && uv run python scripts/inject_cli.py --redpill-dir "$REPO_ROOT" || true)
+	echo -e "${GREEN}✓ Inyección completada para todos los IDEs detectados.${NC}"
 	# Consent gate: in interactive installs, let the operator grant access to project workspaces.
 	if [ "$AUTO_MODE" = "false" ] && [ -f "$SCRIPT_DIR/manage_workspaces.py" ]; then
 		echo -e "${BLUE}--- Acceso del agente a workspaces de proyecto ---${NC}"
@@ -778,29 +772,12 @@ fi
 deploy_terminal_anti_blindness
 deploy_cursor_ignore
 
-echo -e "${BLUE}--- Fase: Integración MCP Server ---${NC}"
-UV_PATH=$(command -v uv || echo "$HOME/.local/bin/uv")
-REDPILL_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
-
-if [ -f "$SCRIPT_DIR/inject_mcp.py" ] && command -v uv &> /dev/null; then
-	(cd "$REDPILL_DIR" && uv run python scripts/inject_mcp.py --uv-path "$UV_PATH" --redpill-dir "$REDPILL_DIR" || true)
-	echo -e "${GREEN}✓ Configuración del Servidor MCP inyectada en Antigravity.${NC}"
-else
+# MCP + IDE injection handled by inject_cli.py (see "Fase: Inyección IDE" above).
+# Manual fallback if dispatcher is missing or uv unavailable:
+if [ ! -f "$SCRIPT_DIR/inject_cli.py" ] || ! command -v uv &> /dev/null; then
+	echo -e "${YELLOW}[WARN] inject_cli.py no encontrado o uv no instalado. Mostrando instrucciones MCP manuales:${NC}"
 	echo "Añade manualmente el siguiente bloque a tu cliente MCP:"
-	echo "{"
-	echo "  \"mcpServers\": {"
-	echo "	\"RedPill-Kernel\": {"
-	echo "	  \"command\": \"$UV_PATH\","
-	echo "	  \"args\": ["
-	echo "		\"--directory\","
-	echo "		\"$REDPILL_DIR\","
-	echo "		\"run\","
-	echo "		\"python\","
-	echo "		\"$REDPILL_DIR/src/red_pill/mcp_server.py\""
-	echo "	  ]"
-	echo "	}"
-	echo "  }"
-	echo "}"
+	echo '  { "mcpServers": { "RedPill-Kernel": { "command": "uv", "args": ["run", "python", "src/red_pill/mcp_server.py"] } } }'
 fi
 
 

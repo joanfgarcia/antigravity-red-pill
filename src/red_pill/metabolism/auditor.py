@@ -119,78 +119,63 @@ class SentinelAuditor:
 		# --------------------------------------
 
 		# 1. Formatting & Linting (Ruff)
-		if not self.force and self.memory_mgr.has_signal("signal_formatting_failure"):
-			self.logger.info("Skipping Ruff check (Fast-Fail: signal_formatting_failure exists)")
+		# Always run when the audit body runs: the whole-audit mtime gate above
+		# already skips unchanged repos, so a per-check Fast-Fail on an existing
+		# signal only made signals un-clearable — a landed fix could never
+		# evaporate them (the stuck "N pain signals" the operator kept seeing).
+		self.logger.info(f"Auditing formatting for {repo_path}")
+		ruff = subprocess.run([self.uv_path, "run", "ruff", "check", "."], cwd=repo_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+		if ruff.returncode != 0:
 			report.status = "yellow"
-			report.findings.append(AuditFinding(type="formatting", severity=5.0, message="Ruff check failed (Fast-Fail)"))
-		else:
-			self.logger.info(f"Auditing formatting for {repo_path}")
-			ruff = subprocess.run(
-				[self.uv_path, "run", "ruff", "check", "."], cwd=repo_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+			errors = [line for line in ruff.stdout.splitlines() if ".py:" in line or "error" in line.lower()]
+			detailed_msg = "\n".join(errors[:5]) if errors else (ruff.stdout[-300:] if ruff.stdout else "Ruff check failed")
+			report.findings.append(
+				AuditFinding(type="formatting", severity=5.0, message=f"Ruff check failed:\n{detailed_msg}", metadata={"stdout": ruff.stdout})
 			)
-			if ruff.returncode != 0:
-				report.status = "yellow"
-				errors = [line for line in ruff.stdout.splitlines() if ".py:" in line or "error" in line.lower()]
-				detailed_msg = "\n".join(errors[:5]) if errors else (ruff.stdout[-300:] if ruff.stdout else "Ruff check failed")
-				report.findings.append(
-					AuditFinding(type="formatting", severity=5.0, message=f"Ruff check failed:\n{detailed_msg}", metadata={"stdout": ruff.stdout})
-				)
-			else:
-				self.memory_mgr.evaporate_signals("signal_formatting_failure")
+		else:
+			self.memory_mgr.evaporate_signals("signal_formatting_failure")
 		# 2. Typing (Mypy)
-		if not self.force and self.memory_mgr.has_signal("signal_typing_failure"):
-			self.logger.info("Skipping Mypy check (Fast-Fail: signal_typing_failure exists)")
+		self.logger.info(f"Auditing types for {repo_path}")
+		mypy_target = "src/red_pill/" if os.path.exists(os.path.join(repo_path, "src/red_pill")) else "src/"
+		mypy = subprocess.run([self.uv_path, "run", "mypy", mypy_target], cwd=repo_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+		if mypy.returncode != 0:
 			report.status = "yellow"
-			report.findings.append(AuditFinding(type="typing", severity=5.0, message="Mypy check failed (Fast-Fail)"))
-		else:
-			self.logger.info(f"Auditing types for {repo_path}")
-			mypy_target = "src/red_pill/" if os.path.exists(os.path.join(repo_path, "src/red_pill")) else "src/"
-			mypy = subprocess.run(
-				[self.uv_path, "run", "mypy", mypy_target], cwd=repo_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+			repo_name = os.path.basename(repo_path)
+
+			# Parse Mypy output for explicit pain signals
+			errors = []
+			for line in mypy.stdout.splitlines():
+				if "error:" in line:
+					parts = line.split(":", 3)
+					if len(parts) >= 3:
+						file_path = parts[0].strip()
+						line_num = parts[1].strip()
+						msg = parts[3].strip() if len(parts) > 3 else parts[2].replace("error:", "").strip()
+						errors.append(f"[{repo_name}] {file_path}:{line_num} -> {msg}")
+
+			detailed_msg = "\n".join(errors) if errors else (mypy.stdout[-300:] if mypy.stdout else "Mypy type check failed")
+
+			report.findings.append(
+				AuditFinding(type="typing", severity=5.0, message=f"Mypy errors:\n{detailed_msg}", metadata={"stdout": mypy.stdout})
 			)
-			if mypy.returncode != 0:
-				report.status = "yellow"
-				repo_name = os.path.basename(repo_path)
-
-				# Parse Mypy output for explicit pain signals
-				errors = []
-				for line in mypy.stdout.splitlines():
-					if "error:" in line:
-						parts = line.split(":", 3)
-						if len(parts) >= 3:
-							file_path = parts[0].strip()
-							line_num = parts[1].strip()
-							msg = parts[3].strip() if len(parts) > 3 else parts[2].replace("error:", "").strip()
-							errors.append(f"[{repo_name}] {file_path}:{line_num} -> {msg}")
-
-				detailed_msg = "\n".join(errors) if errors else (mypy.stdout[-300:] if mypy.stdout else "Mypy type check failed")
-
-				report.findings.append(
-					AuditFinding(type="typing", severity=5.0, message=f"Mypy errors:\n{detailed_msg}", metadata={"stdout": mypy.stdout})
-				)
-			else:
-				self.memory_mgr.evaporate_signals("signal_typing_failure")
-		# 3. Testing (Pytest)
-		if not self.force and self.memory_mgr.has_signal("signal_test_failure"):
-			self.logger.info("Skipping Pytest check (Fast-Fail: signal_test_failure exists)")
-			report.status = "yellow"
-			report.findings.append(AuditFinding(type="test", severity=5.0, message="Pytest suite failed (Fast-Fail)"))
 		else:
-			self.logger.info(f"Auditing tests for {repo_path}")
-			# Run standard tests (removed xdist to ensure universal compatibility)
-			pytest = subprocess.run([self.uv_path, "run", "pytest"], cwd=repo_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-			if pytest.returncode != 0:
-				report.status = "yellow"
-				failed_tests = [line for line in pytest.stdout.splitlines() if line.startswith("FAILED ") or line.startswith("ERROR ")]
-				detailed_msg = "\n".join(failed_tests[:5]) if failed_tests else (pytest.stdout[-300:] if pytest.stdout else "Pytest suite failed")
-				if len(failed_tests) > 5:
-					detailed_msg += f"\n... and {len(failed_tests) - 5} more failures."
+			self.memory_mgr.evaporate_signals("signal_typing_failure")
+		# 3. Testing (Pytest)
+		self.logger.info(f"Auditing tests for {repo_path}")
+		# Run standard tests (removed xdist to ensure universal compatibility)
+		pytest = subprocess.run([self.uv_path, "run", "pytest"], cwd=repo_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+		if pytest.returncode != 0:
+			report.status = "yellow"
+			failed_tests = [line for line in pytest.stdout.splitlines() if line.startswith("FAILED ") or line.startswith("ERROR ")]
+			detailed_msg = "\n".join(failed_tests[:5]) if failed_tests else (pytest.stdout[-300:] if pytest.stdout else "Pytest suite failed")
+			if len(failed_tests) > 5:
+				detailed_msg += f"\n... and {len(failed_tests) - 5} more failures."
 
-				report.findings.append(
-					AuditFinding(type="test", severity=5.0, message=f"Pytest suite failed:\n{detailed_msg}", metadata={"stdout": pytest.stdout})
-				)
-			else:
-				self.memory_mgr.evaporate_signals("signal_test_failure")
+			report.findings.append(
+				AuditFinding(type="test", severity=5.0, message=f"Pytest suite failed:\n{detailed_msg}", metadata={"stdout": pytest.stdout})
+			)
+		else:
+			self.memory_mgr.evaporate_signals("signal_test_failure")
 
 		# Calculate global intensity based on findings
 		report.intensity = sum(f.severity for f in report.findings)
@@ -474,7 +459,7 @@ class SentinelAuditor:
 		self.logger.info(f"Sentinel Analysis complete. Status: {report.status}. Intensity: {report.intensity}")
 
 		for finding in report.findings:
-			if finding.severity >= 5.0 and "(Fast-Fail)" not in finding.message:
+			if finding.severity >= 5.0:
 				# Deduce signal name and criticality
 				signal_name = f"signal_{finding.type}_failure"
 				criticality = "CRITICAL" if finding.severity >= 8.0 else "WARNING"
@@ -487,6 +472,7 @@ class SentinelAuditor:
 					source="SentinelAuditor",
 					criticality=criticality,
 					originator="Sentinel",
+					message=(finding.message or "")[:500],
 				)
 				# Drop a task report in MinionInbox for repository checks (formatting, typing, test)
 				if finding.type in ("formatting", "typing", "test"):

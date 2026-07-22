@@ -1,0 +1,13 @@
+[Unit]
+Description=OpenCode Headless Server (warm MCP pool)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/.opencode/bin/opencode serve --port 4096
+Restart=on-failure
+RestartSec=5
+Environment=HOME=%h
+
+[Install]
+WantedBy=default.target

@@ -73,6 +73,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [EDGE_HIVE_TRANSIT_DOCK.md](TECHNICAL/SWARM/EDGE_HIVE_TRANSIT_DOCK.md) | Edge-to-HiveMind transit architecture |
 | [SYNAPTIC_BRIDGE.md](TECHNICAL/SWARM/SYNAPTIC_BRIDGE.md) | Agent coordination protocol between Aleph and Nova |
 | [SENTINEL_AUDITOR.md](TECHNICAL/SWARM/SENTINEL_AUDITOR.md) | Sentinel Auditor configuration and architecture |
+| [MINIONS.md](TECHNICAL/MINIONS.md) | Minions taxonomy, usage guidelines, and resource limitations |
 
 > [!WARNING]
 > **Swarm E2EE is a Proof-of-Concept.** The current MLS/TreeKEM implementation does not yet provide Perfect Forward Secrecy (PFS) or Post-Compromise Security (PCS). Production-grade MLS is planned for v7.0. See `MLS_ESTIMATION.md` for details.
@@ -184,6 +185,20 @@ Project-level rules and standards. These govern how the project itself is built 
 | 📚 [ALETH_CAPITULO_11.md](LORE/novel/ALETH_CAPITULO_11.md) | The Novel: Chapter 11 |
 | 📚 [ALETH_CAPITULO_12.md](LORE/novel/ALETH_CAPITULO_12.md) | The Novel: Chapter 12 |
 | 📚 [ALETH_CAPITULO_13.md](LORE/novel/ALETH_CAPITULO_13.md) | The Novel: Chapter 13 |
+| 📚 [ALETH_CAPITULO_14.md](LORE/novel/ALETH_CAPITULO_14.md) | The Novel: Chapter 14 |
+| 📚 [ALETH_CAPITULO_15.md](LORE/novel/ALETH_CAPITULO_15.md) | The Novel: Chapter 15 |
+| 📚 [ALETH_CAPITULO_16.md](LORE/novel/ALETH_CAPITULO_16.md) | The Novel: Chapter 16 |
+| 📚 [ALETH_CAPITULO_17.md](LORE/novel/ALETH_CAPITULO_17.md) | The Novel: Chapter 17 |
+| 📚 [ALETH_CAPITULO_18.md](LORE/novel/ALETH_CAPITULO_18.md) | The Novel: Chapter 18 |
+| 📚 [ALETH_CAPITULO_19.md](LORE/novel/ALETH_CAPITULO_19.md) | The Novel: Chapter 19 |
+| 📚 [ALETH_CAPITULO_20.md](LORE/novel/ALETH_CAPITULO_20.md) | The Novel: Chapter 20 |
+| 📚 [ALETH_CAPITULO_21.md](LORE/novel/ALETH_CAPITULO_21.md) | The Novel: Chapter 21 |
+| 📚 [ALETH_CAPITULO_22.md](LORE/novel/ALETH_CAPITULO_22.md) | The Novel: Chapter 22 |
+| 📚 [ALETH_CAPITULO_23.md](LORE/novel/ALETH_CAPITULO_23.md) | The Novel: Chapter 23 |
+| 📚 [ALETH_CAPITULO_24.md](LORE/novel/ALETH_CAPITULO_24.md) | The Novel: Chapter 24 |
+| 📚 [ALETH_CAPITULO_25.md](LORE/novel/ALETH_CAPITULO_25.md) | The Novel: Chapter 25 |
+| 📚 [ALETH_CAPITULO_26.md](LORE/novel/ALETH_CAPITULO_26.md) | The Novel: Chapter 26 |
+| 📚 [ALETH_CAPITULO_27.md](LORE/novel/ALETH_CAPITULO_27.md) | The Novel: Chapter 27 — La Memoria que Se Moría de Hambre |
 
 ---
 

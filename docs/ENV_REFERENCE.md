@@ -130,6 +130,7 @@ Plugins 05–10. Each is independently toggleable.
 
 | Parameter | Default | Plugin | Description |
 | :--- | :--- | :--- | :--- |
+| `MOOD_ORCHESTRATOR_ENABLED` | `True` | 05 | Enable orchestrator that consolidates plugins 05-09 in a single pass |
 | `COGNITIVE_ROUTER_ENABLED` | `True` | 05 | Routes *task type* by color (architecture, maintenance, empathy). |
 | `TONE_ADAPTER_ENABLED` | `True` | 06 | Adapts *verbal style* (precise/warm/ultra-concise). |
 | `MOOD_ANALYTICS_ENABLED` | `True` | 07 | Trend analysis over last 15 memories (stable/improving/deteriorating). |
@@ -148,6 +149,13 @@ Plugins 05–10. Each is independently toggleable.
 | `SLEEP_PLUGIN_CHRONICLE` | `True` | Ariadne's Thread weaving across all 4 collections. Requires `ANTIGRAVITY_KEY`. |
 | `SLEEP_MIN_FREE_VRAM_MB` | `1500` | Minimum free VRAM (MB) required to start the sleep cycle. If the GPU has less free VRAM at 03:00 (e.g. occupied by a game or other model), the cycle aborts gracefully and emits a muted `vram_busy` pain signal. Set to `0` to disable the preflight check. CPU-only systems are unaffected. |
 
+### 🔧 Operator Profile & Pre-Heating
+
+| Parameter | Default | Description |
+| :--- | :--- | :--- |
+| `OPERATOR_PROFILE_UPDATE_INTERVAL_HOURS` | `24` | Hours between automatic `operator_profile.md` updates during sleep ritual. |
+| `PRE_HEATING_MAX_TRACKED_PROJECTS` | `3` | Max tracked workspaces to show in PROJECT_STATUS (opt-in via `track: true` in workspaces.yaml). |
+
 ### ⚖️ BE_WATER Adaptive Payload (v6.3.0)
 
 | Parameter | Default | Description |
@@ -160,7 +168,9 @@ Plugins 05–10. Each is independently toggleable.
 
 | Parameter | Default | Description |
 | :--- | :--- | :--- |
-| `IDE_BACKEND` | `auto` | Execution backend selector (`auto`, `agy`, `grpc`, `claude`, or `local`). `auto` prefers `agy` if available. |
+| `IDE_BACKEND` | `auto` | Execution backend selector (`auto`, `agy`, `grpc`, `claude`, `opencode`, or `local`). `auto` prefers `agy` if available. |
+| `OPENCODE_SERVER_URL` | | URL of persistent `opencode serve` instance (e.g. `http://localhost:4096`). Enables attached mode, avoiding MCP cold-start. |
+| `OPENCODE_SCRIBE_PLUGIN` | `False` | Set to `true` when the `redpill-scribe` OpenCode plugin handles persistence. Disables bridge `_scribe_relay()` to avoid double-writes. |
 | `AUTONOMOUS_AGY_ENABLED` | `False` | Gathers and gates autonomous Flash-consuming operations like cognitive queue or entropy executor. |
 | `TELEGRAM_BRIDGE_CASCADE` | `[]` | JSON-encoded fallback cascade of model targets for Telegram/inbox processing. Example: `'[{"backend":"claude","model":"opus","effort":"high"}]'`. |
 | `AWAKENING_BRIDGE_CASCADE` | `[]` | JSON-encoded fallback cascade of model targets for autonomous awakening runs. |

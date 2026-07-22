@@ -1,11 +1,26 @@
 {
   "_comment": "red-pill settings fragment for Claude Code. Merged (not overwritten) into settings.json by scripts/inject_settings.py. Grants the agent access to its transversal dirs OUTSIDE the workspace. NO defaultMode here on purpose: autonomous bypass is a per-launch CLI flag, never a shared-session default.",
+  "_comment_hooks": "Stop hook = RAW CAPTURE LAYER for Claude Code, symmetric to the opencode scribe plugin. Deterministically writes each turn's prompt+response into bunker.db interactions, so capture no longer depends on the agent invoking the handshake relay. Script deployed to ~/.claude/hooks/ by inject_settings.py from seeds/settings/hooks/.",
   "permissions": {
     "additionalDirectories": [
       "${AGENT_CORE_DIR}",
       "${HOME}/.local/share/red-pill",
       "${HOME}/.config/red-pill",
       "${HOME}/.cache/red-pill"
+    ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${HOME}/.claude/hooks/redpill_scribe.py",
+            "timeout": 10,
+            "statusMessage": "Scribe: guardando turno en bunker.db"
+          }
+        ]
+      }
     ]
   }
 }

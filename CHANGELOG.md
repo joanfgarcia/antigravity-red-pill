@@ -1,3 +1,75 @@
+## [7.9.0] - 2026-07-22 (Minion Execution Substrate — local tool-using minions & device fallback)
+
+Turns the local model (Granite via SIP) into a first-class tool-using minion and adds a device fallback cascade so it survives a GPU busy with training. One uniform command (`swarm_orchestrator_api run_agent_task`) now spans the whole minion range.
+
+### 🔌 Minions & Inference
+- **[FEAT] Local model tool-calling**: the dual-bind daemon switches `chat_format` per request — a body carrying `tools`/`functions` (or explicit `chat_format`) uses `chatml-function-calling` (minion role); distiller/plain requests keep the profile default (`minion_chat_format` key, default `chatml-function-calling`). Same loaded model, no second instance. Granite-4.1-8B-Q4 emits valid OpenAI `tool_calls`.
+- **[FEAT] Device fallback cascade** (`device_fallback`, default `["gpu","cpu"]`, per-request overridable): `gpu` = in-process; `cpu` = isolated worker subprocess with `CUDA_VISIBLE_DEVICES=""` under a `systemd-run --scope` OOM shield sized from the measured footprint (`~9 GB + ~0.16 MB/token`); `igpu`/`npu` recognised but not wired (skipped); no usable device → `503`. `cpu_n_ctx` is RAM-sized, independent of the VRAM tiers.
+- **[FEAT] In-house tool-using minion** (`swarm/agents/local_minion.py::run_local_minion`): bounded in-process loop (≤8 tool calls, own counter) — RedPill-Kernel MCP tools via `registry.execute` + a real-shell `run_bash` (cwd + timeout sandbox); recovers a `chatml-function-calling` empty-content quirk via a plain-chatml finalize pass.
+- **[FEAT] `local-tools` backend** (`LocalToolBridge`): wires `run_local_minion` into `run_agent_task`, invocable like any other backend. `BaseInferenceProvider.chat()` added to the provider contract (`SipInferenceProvider` forwards `tools`/`tool_choice`). `run_agent_task` schema documents `agy|claude|opencode|local|local-tools`.
+
+### 🐛 Fixes
+- **[FIX] `Failed to create llama_context` on CPU fallback** — root cause was a CUDA-compiled llama.cpp still touching the GPU with `n_gpu_layers=0` (fails even with the GPU free), NOT the context size. Resolved by running the CPU path as a CUDA-detached isolated worker. See `Aleth_Core/DIAGNOSTIC_LLAMA_CONTEXT_FAIL.md`.
+- **[FIX] `hermes_8b` profile**: restore the missing `vram_tiers:` key (orphaned sequence made `model_profiles.yaml.example` fail to parse).
+
+### 📚 Docs
+- **[DOCS] `docs/TECHNICAL/MINIONS.md`**: dual-audience (human + orchestrating agent) reference — taxonomy, invocation, capabilities/limitations matrix, decision guide.
+- **[DOCS] `skills/minion_delegation`**: skill that loads the decision guide when the agent is about to delegate; points to MINIONS.md.
+- **[DOCS] ROADMAP**: new Phase 3.2 (Minion Execution Substrate) with completed + parked items.
+
+## [7.8.1] - 2026-07-21 (Branch Audit Remediation — injectors, interceptors, metabolism)
+
+Full audit + adversarial re-verification of the `fix/migraine-and-pain-signals` branch. All findings remediated; suite green (`1096 passed`).
+
+### 🐛 Fixes
+- **[FIX] `_config_common.py` single source (CRITICAL)**: the opencode adapter imported a divergent private copy at `scripts/inject/shared/_config_common.py` that lacked `${BUNKER_DB}` and the new recursive `subst()`, so the deployed `redpill-scribe.js` got `${BUNKER_DB}` written **literally** and opened a ghost DB. Deleted the duplicate, repointed the adapter at the canonical `scripts/_config_common.py`, and resolve `BUNKER_DB` via XDG by hand (no `import platformdirs`, satisfying `test_no_direct_platformdirs_imports`).
+- **[FIX] String-aware JSONC comment stripping**: both opencode injectors stripped comments with `re.sub(r"//.*$", ...)`, which truncated `https://` inside string values — a re-merge of an existing `opencode.jsonc` (with `"$schema": "https://..."`) then threw and **discarded the user's foreign keys**. New shared `strip_jsonc_comments()` matches JSON strings first (22 adversarial cases verified).
+- **[FIX] Subplugin flags + double execution (Mood Orchestrator)**: `fc3e58e` had made the main interceptor loop and the orchestrator both run subplugins 05–09, and left the individual `*_ENABLED` flags dead. Each subplugin now exposes `raw_enabled` (own switch); `is_enabled = raw_enabled and not MOOD_ORCHESTRATOR_ENABLED` (main loop skips while orchestrated → no double run); the orchestrator gates each subplugin on `raw_enabled` (flags effective again).
+- **[FIX] Fast-Fail deadlock → self-healing signals**: the Sentinel Auditor skipped a check (ruff/mypy/pytest) whenever its signal already existed, so a landed fix could never evaporate it — the stuck "N pain signals active". Removed the per-check Fast-Fail; the whole-audit differential mtime gate already handles the perf case, and checks now re-raise on failure / **evaporate on success**.
+- **[FIX] operator_profile writer/reader path divergence**: `update_operator_profile.py` hardcoded `~/.local/share` while the reader uses `get_data_dir()` — they diverged under a custom `$XDG_DATA_HOME`. Writer now uses `get_data_dir()` and writes atomically (temp + replace).
+- **[FIX] Signal content bloat**: cap the injected signal `message` at 500 chars (multi-line mypy/pytest dumps were inflating the `bunker_context`).
+- **[FIX] WAL on `OpenCodeBridge._scribe_relay`**: match the JS plugin so both sides write `bunker.db` concurrently without blocking.
+- **[STYLE] operator_profile scripts retabbed** to satisfy `test_sound_of_silence` (were space-indented).
+
+### 🔌 Claude Code Scribe (headless capture)
+- **[FEAT] Claude Code `Stop` hook (`redpill_scribe.py`)**: deterministic RAW CAPTURE LAYER for Claude Code, symmetric to the opencode plugin — reads the turn transcript and writes prompt+response to `bunker.db` `interactions` (dedup per session). Deployed to `~/.claude/hooks/` by `inject_settings.py` from `seeds/settings/hooks/`.
+- **[CHANGE] Sovereign Handshake → telemetry pull**: with capture handled by editor hooks, the per-turn `interceptor_rp` call is now an **empty-payload telemetry/context pull** (no `user_prompt`/`previous_*`), avoiding duplicate `interactions` rows. Anchor seed (`seeds/anchors/sovereign_handshake.md`) updated accordingly.
+
+### ✅ Tests
+- New coverage: real social+work fusion in `ToneAnalyzer` (the prior mock silently duplicated points), and the auditor self-heal cycle with `force=False`.
+
+### 🔒 Security
+- **[SEC] `pyasn1` → 0.6.4**: pin the transitive dep via `[tool.uv] constraint-dependencies` to clear CVE-2026-59885 / CVE-2026-59886 (the pip-audit blocking CI gate).
+
+## [7.8.0] - 2026-07-20 (OpenCode IDE Integration)
+
+### 🖥️ OpenCode Support (v7.8.0)
+- **[FEAT] `scripts/inject_opencode.py`**: New injection script for OpenCode IDE integration. Handles the three config layers (MCP server, permissions, references) consolidated in `opencode.jsonc`, plus the `RED_PILL.md` instructions file and opencode-specific skills. Follows the same guest principle as sibling injectors: merge, never overwrite.
+- **[FEAT] `seeds/opencode/`**: OS-agnostic seed templates for OpenCode:
+  - `settings/opencode.jsonc` — Config template with `${UV}`, `${REDPILL_DIR}`, `${AGENT_CORE_DIR}` placeholders
+  - `instructions/RED_PILL.md` — Consolidated system directives (3 constraint blocks: sovereign_handshake, agent_core, knowledge_access)
+  - `skills/` — Three skill definitions (sovereign_handshake, agent_core, knowledge_access) without hardcoded paths
+- **[FEAT] `inject_anchor.py`**: Added `"opencode"` to `ANCHOR_REGISTRY` (target: `~/.config/opencode/RED_PILL.md`), `detect_present_ides()`, and `ide_call_vars()` (OpenCode does NOT prefix MCP tools — uses resource group names directly).
+- **[FEAT] `install_neo.sh`**: Auto-detects OpenCode (`~/.config/opencode/`) and calls `inject_opencode.py` during installation.
+- **[FEAT] `upgrade.sh`**: Refreshes OpenCode config and skills during upgrade (idempotent, `--update` flag).
+- **[FEAT] OpenCode native variable substitution**: Config template uses `{env:HOME}` for opencode-native resolution alongside `${VAR}` placeholders for the Python injector.
+
+### Supported IDEs (updated)
+Antigravity (Gemini), Claude Code, Claude Desktop, **OpenCode** (new), Cline, Roo Cline.
+
+### 🔌 Scribe Relay & Plugin Architecture
+- **[FEAT] `seeds/opencode/plugins/redpill-scribe.js`**: OpenCode plugin using `chat.message` + `event` hooks to capture prompt+response and persist to `bunker.db` in the same turn. Eliminates the need for bridge-level scribe relay when hooks are available.
+- **[FEAT] `OPENCODE_SCRIBE_PLUGIN` env var**: When `true`, `OpenCodeBridge` skips `_scribe_relay()` to avoid double-writes. Persistence handled entirely by the plugin.
+- **[FEAT] Inject script plugin deployment**: `scripts/inject/opencode/inject.py` step 5 deploys plugins from `seeds/opencode/plugins/` to `~/.config/opencode/plugins/`.
+- **[FIX] Handshake preamble correction**: `interceptor_rp` call now says "fetch real-time telemetry" instead of "persist this turn" — scribe relay is not its job.
+- **[FIX] Docs coverage**: Added chapters 14–27 to `docs/README.md` (orphaned novel chapters caused test failure).
+
+## [7.7.1] - 2026-07-20 (Migraine Threshold & Pain Telemetry)
+
+### 🩺 Somatic Pain & Vitals Optimization
+- **[TUNE] `SIGNAL_MIGRAINE_VECTORS` 10,000 → 25,000**: Raised the default semantic vector density threshold for `work_memories` to **25,000** in [config.py](file:///home/joan/Documents/IA/sharing/src/red_pill/config.py) and [vitals.py](file:///home/joan/Documents/IA/sharing/src/red_pill/daemon/plugins/vitals.py). This aligns the homeostatis warning with larger active workspaces, avoiding premature `semantic_migraine` flags.
+- **[FEAT] Descriptive Pain Signals**: Updated `inject_signal` in [memory.py](file:///home/joan/Documents/IA/sharing/src/red_pill/memory.py) to accept a custom `message` payload. Modified `SentinelAuditor` in [auditor.py](file:///home/joan/Documents/IA/sharing/src/red_pill/metabolism/auditor.py) to pass detailed Pytest and Mypy failures into the active pain signals, allowing immediate identification of the failing project or test.
+
 ## [7.7.0] - 2026-07-18 (Synaptic Axons & Texture Remediation — ADR-AXON-001)
 
 ### 🚑 Recall Remediation (AD-023) — the memory was starving

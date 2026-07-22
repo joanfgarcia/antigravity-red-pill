@@ -73,7 +73,7 @@ class VitalsPlugin(DaemonPlugin):
 
 		try:
 			count = self._mm.client.count(collection_name="work_memories").count
-			threshold = getattr(cfg, "SIGNAL_MIGRAINE_VECTORS", 50000)
+			threshold = getattr(cfg, "SIGNAL_MIGRAINE_VECTORS", 25000)
 			if count > threshold:
 				logger.warning(f"[VITALS] Semantic bloat: {count} vectors.")
 				self._mm.inject_signal("semantic_migraine", intensity=6.0, signal_type="fatigue", source="HIPPOCAMPUS")

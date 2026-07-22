@@ -272,11 +272,9 @@ p._purge_leaked_duplicates()
 		echo -e "${GREEN}✓ Skills sincronizados en ~/.agent/skills/.${NC}"
 	fi
 
-	# Refresh IDE anchors (Sovereign Handshake + Agent_Core) + MCP config (idempotent)
-	echo -e "${BLUE}Refrescando anclas de IDE y configuración MCP...${NC}"
-	uv run python scripts/inject_anchor.py --ide auto --redpill-dir "$REPO_ROOT" || true
-	uv run python scripts/inject_mcp.py --uv-path "$(command -v uv)" --redpill-dir "$REPO_ROOT" || true
-	command -v claude &> /dev/null && uv run python scripts/inject_settings.py --redpill-dir "$REPO_ROOT" || true
+	# Refresh IDE injection via the plugin dispatcher (auto-detects all present IDEs)
+	echo -e "${BLUE}Refrescando configuración de IDEs detectados...${NC}"
+	uv run python scripts/inject_cli.py --redpill-dir "$REPO_ROOT" || true
 
 	# Workspace access: re-sync from the registry; if interactive (tty), offer to add more.
 	if [ -t 0 ] && command -v claude &> /dev/null && [ -f "$REPO_ROOT/scripts/manage_workspaces.py" ]; then

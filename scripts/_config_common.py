@@ -1,19 +1,36 @@
 """Shared placeholder resolution for the red-pill config injectors.
 
-Imported by both ``inject_mcp.py`` and ``inject_anchor.py``. Kept standalone
-(no ``red_pill`` package import) so the MCP injector stays dependency-free.
+Single source of truth for the injectors: the top-level ones (``inject_mcp.py``,
+``inject_anchor.py``, ``inject_settings.py``) and the IDE-adapter submodules under
+``scripts/inject/*`` all import THIS module (the adapters via ``scripts/`` on
+``sys.path``; there is no private copy under ``inject/shared/`` anymore). Kept
+standalone (no ``red_pill`` import) so the MCP injector stays dependency-free —
+hence ``BUNKER_DB`` is resolved via XDG by hand rather than importing
+``platformdirs`` (which ``red_pill/core/paths.py`` owns and the XDG-compliance
+test forbids elsewhere).
 """
 
 import os
+import re
 import shutil
+from string import Template
+
+
+def _data_dir():
+	"""``$XDG_DATA_HOME/red-pill`` (or ``~/.local/share/red-pill``) — matches
+	``platformdirs.user_data_dir('red-pill')`` on Linux without importing it."""
+	base = os.environ.get("XDG_DATA_HOME") or os.path.join(os.path.expanduser("~"), ".local", "share")
+	return os.path.join(base, "red-pill")
 
 
 # ── Placeholder resolution for manifest / anchor definitions ──────────────────
 def build_vars(args):
 	npx = shutil.which("npx")
 	claude = shutil.which("claude") or os.path.expanduser("~/.local/bin/claude")
+	home = os.path.expanduser("~")
+	bunker_db = os.path.join(_data_dir(), "db", "bunker.db")
 	return {
-		"HOME": os.path.expanduser("~"),
+		"HOME": home,
 		"UV": getattr(args, "uv_path", None) or shutil.which("uv") or os.path.expanduser("~/.local/bin/uv"),
 		"NPX": npx or "",
 		"NPX_DIR": os.path.dirname(npx) if npx else "",
@@ -21,19 +38,41 @@ def build_vars(args):
 		"GRAPHIFY_PY": os.path.expanduser("~/.local/share/uv/tools/graphifyy/bin/python3"),
 		"REDPILL_DIR": getattr(args, "redpill_dir", None) or "",
 		"WORKSPACE": os.path.expanduser(args.workspace) if getattr(args, "workspace", None) else "",
+		"BUNKER_DB": bunker_db,
 	}
 
 
 def subst(value, variables):
+	"""Resolve ${KEY} placeholders using string.Template.safe_substitute.
+
+	Handles str, list, and dict recursively. Unrecognised placeholders are
+	left as-is (safe_substitute semantics).
+	"""
 	if isinstance(value, str):
-		for key, val in variables.items():
-			value = value.replace("${%s}" % key, val)
-		return value
+		return Template(value).safe_substitute(**variables)
 	if isinstance(value, list):
 		return [subst(item, variables) for item in value]
 	if isinstance(value, dict):
 		return {key: subst(item, variables) for key, item in value.items()}
 	return value
+
+
+# ── JSONC comment stripping (string-aware) ────────────────────────────────────
+_JSONC_TOKEN = re.compile(r'"(?:\\.|[^"\\])*"|//[^\n]*|/\*.*?\*/', re.DOTALL)
+
+
+def strip_jsonc_comments(text):
+	"""Strip ``//`` line and ``/* */`` block comments from JSONC while preserving
+	comment-like sequences inside string values (e.g. the ``https://`` in a
+	``$schema`` URL). A naive ``re.sub(r'//.*$', ...)`` truncates such URLs mid-
+	string, yielding invalid JSON — which made re-merges of an existing
+	``opencode.jsonc`` throw and silently discard the user's foreign keys."""
+
+	def _repl(m):
+		tok = m.group(0)
+		return tok if tok.startswith('"') else ""
+
+	return _JSONC_TOKEN.sub(_repl, text)
 
 
 # ── Agent_Core / transversal vars (red-pill .env, with fallbacks) ─────────────

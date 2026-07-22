@@ -3,10 +3,11 @@ AgentBridge — Abstract interface for running an agent backend (v2, generalized
 
 Generic abstraction for "run a prompt through an agent", independent of which
 backend executes it. Implementations:
-- AgyBridge   (antigravity_ide): agy CLI               — execution
-- ClaudeBridge (swarm/bridges):  claude CLI            — execution
-- LocalBridge  (swarm/bridges):  local model (SIP)     — generation
-- GrpcBridge  (antigravity_ide): gRPC to LanguageServer — extraction (Chronicle)
+- AgyBridge     (antigravity_ide): agy CLI               — execution
+- ClaudeBridge  (swarm/bridges):  claude CLI            — execution
+- OpenCodeBridge(swarm/bridges):  opencode CLI          — execution
+- LocalBridge   (swarm/bridges):  local model (SIP)     — generation
+- GrpcBridge    (antigravity_ide): gRPC to LanguageServer — extraction (Chronicle)
 
 Was `IDEBridge` under plugins/antigravity_ide; moved here once it stopped being
 Antigravity-specific. Antigravity-only backends still live in antigravity_ide and
@@ -31,6 +32,7 @@ class BackendType(Enum):
 	AGY = "agy"
 	GRPC = "grpc"
 	CLAUDE = "claude"
+	OPENCODE = "opencode"
 	LOCAL = "local"
 
 
@@ -65,7 +67,8 @@ class BridgeCapabilities:
 # ── Standard effort vocabulary (portable) ──────────────────────────────────
 # red-pill exposes ONE standard effort scale; each bridge MAPS it to its platform's
 # real control: ClaudeBridge → `--effort`; AgyBridge → the model's "(Mode)" variant
-# (agy fuses model+mode in the model name); LocalBridge → ignored (no effort knob).
+# (agy fuses model+mode in the model name); OpenCodeBridge → `--variant`;
+# LocalBridge → ignored (no effort knob).
 # Callers (skills, the bot) speak this standard and never the platform-specific value.
 STANDARD_EFFORTS = ("low", "medium", "high")
 

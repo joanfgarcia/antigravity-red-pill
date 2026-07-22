@@ -8,12 +8,22 @@ from red_pill.utils.tone_analyzer import ToneAnalyzer, get_current_sync_state
 
 
 class TestGetDominantMood:
-	def _make_manager(self, points, fallback_exception=None):
+	def _make_manager(self, social=None, work=None, order_by_fails=False):
+		"""Mock a MemoryManager whose .client.scroll returns DIFFERENT points per
+		collection. The refactor scrolls social_memories AND work_memories; a plain
+		return_value would hand the same list to both and silently duplicate every
+		point, so we key on collection_name to exercise real fusion."""
 		mgr = MagicMock()
-		if fallback_exception:
-			mgr.client.scroll.side_effect = [fallback_exception, (points, None)]
-		else:
-			mgr.client.scroll.return_value = (points, None)
+		social = social or []
+		work = work or []
+
+		def _scroll(**kwargs):
+			if order_by_fails and kwargs.get("order_by") is not None:
+				raise Exception("order_by not supported")
+			pts = social if kwargs.get("collection_name") == "social_memories" else work
+			return (pts, None)
+
+		mgr.client.scroll.side_effect = _scroll
 		return mgr
 
 	def test_returns_default_when_no_points(self):
@@ -38,7 +48,7 @@ class TestGetDominantMood:
 
 		p1 = MagicMock()
 		p1.payload = {"color": "orange", "immune": False, "created_at": time.time()}
-		mgr = self._make_manager([p1], fallback_exception=Exception("order_by not supported"))
+		mgr = self._make_manager([p1], order_by_fails=True)
 		result = ToneAnalyzer.get_dominant_mood(manager=mgr)
 		assert result == "orange"
 
@@ -99,6 +109,42 @@ class TestGetDominantMood:
 		mgr = self._make_manager([p1])
 		result = ToneAnalyzer.get_dominant_mood(manager=mgr)
 		assert result == str(get_hedonic_set_point())
+
+
+class TestMultiCollectionFusion:
+	"""The refactor merges social_memories + work_memories, sorted by created_at.
+	These exercise the cross-collection fusion the single-list mock could not."""
+
+	def _pt(self, color, age_s=0.0, immune=False):
+		import time
+
+		p = MagicMock()
+		p.payload = {"color": color, "immune": immune, "created_at": time.time() - age_s}
+		return p
+
+	def _mgr(self, social, work):
+		mgr = MagicMock()
+
+		def _scroll(**kwargs):
+			pts = social if kwargs.get("collection_name") == "social_memories" else work
+			return (pts, None)
+
+		mgr.client.scroll.side_effect = _scroll
+		return mgr
+
+	def test_color_pulled_from_work_collection(self):
+		"""social all gray, work has red → red wins (fusion reaches work_memories)."""
+		mgr = self._mgr([self._pt(cfg.DEFAULT_COLOR)], [self._pt("red")])
+		assert ToneAnalyzer.get_dominant_mood(manager=mgr) == "red"
+
+	def test_newest_across_collections_wins(self):
+		"""social red (older) + work orange (newer) → orange, by created_at sort."""
+		mgr = self._mgr([self._pt("red", age_s=120)], [self._pt("orange", age_s=10)])
+		assert ToneAnalyzer.get_dominant_mood(manager=mgr) == "orange"
+
+	def test_all_gray_both_collections_returns_setpoint(self):
+		mgr = self._mgr([self._pt(cfg.DEFAULT_COLOR)], [self._pt(cfg.DEFAULT_COLOR)])
+		assert ToneAnalyzer.get_dominant_mood(manager=mgr) == str(get_hedonic_set_point())
 
 
 class TestGetToneDirective:

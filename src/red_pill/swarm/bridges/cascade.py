@@ -59,11 +59,11 @@ class CascadeBridge(AgentBridge):
 		self._targets: "List[BridgeTarget]" = list(targets or [])
 		self._name = name
 
-	def _build(self, backend: str) -> AgentBridge:
+	def _build(self, backend: str, **kwargs) -> AgentBridge:
 		# Lazy import to avoid a factory ↔ cascade import cycle.
 		from .factory import create_bridge
 
-		return create_bridge(backend)
+		return create_bridge(backend, **kwargs)
 
 	def _primary_bridge(self) -> Optional[AgentBridge]:
 		"""First target that constructs successfully (for non-prompt delegation)."""
@@ -100,7 +100,10 @@ class CascadeBridge(AgentBridge):
 		errors: List[Tuple["BridgeTarget", str]] = []
 		for t in self._targets:
 			try:
-				bridge = self._build(t.backend)
+				build_kwargs = {}
+				if t.backend == "opencode" and t.server_url:
+					build_kwargs["server_url"] = t.server_url
+				bridge = self._build(t.backend, **build_kwargs)
 			except Exception as e:
 				logger.warning(f"[CascadeBridge] {_label(t)} unavailable: {e}")
 				errors.append((t, f"backend unavailable: {e}"))

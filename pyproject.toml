@@ -1,6 +1,6 @@
 [project]
 name = "red-pill"
-version = "7.7.0"
+version = "7.9.0"
 description = "B760-Adaptive Memory Protocol for Sovereign Agents"
 readme = "README.md"
 license = "AGPL-3.0-only"
@@ -103,6 +103,7 @@ fix = false
 constraint-dependencies = [
     "httplib2>=0.32.0",   # PYSEC-2026-3444
     "setuptools>=83.0.0", # PYSEC-2026-3447
+    "pyasn1>=0.6.4",      # CVE-2026-59885, CVE-2026-59886
 ]
 [tool.ruff]
 line-length = 150

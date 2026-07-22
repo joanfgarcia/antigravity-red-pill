@@ -59,7 +59,22 @@ class TestMoodAnalyticsPlugin:
 
 	def test_enabled_by_default(self):
 		p = self._get_plugin()
-		assert p.is_enabled is True
+		# The subplugin's own switch is on by default...
+		assert p.raw_enabled is True
+		# ...but is_enabled (standalone main-loop run) is False while the Mood
+		# Orchestrator owns it (default), so it isn't double-executed.
+		assert p.is_enabled is False
+
+	def test_standalone_when_orchestrator_off(self):
+		"""With the orchestrator off, the subplugin runs standalone (is_enabled True)."""
+		import red_pill.config as cfg
+
+		p = self._get_plugin()
+		with patch.object(cfg.get_config(), "MOOD_ORCHESTRATOR_ENABLED", False):
+			assert p.is_enabled is True
+		with patch.object(cfg.get_config(), "MOOD_ORCHESTRATOR_ENABLED", False):
+			with patch.object(cfg.get_config(), "MOOD_ANALYTICS_ENABLED", False):
+				assert p.is_enabled is False  # own switch off wins
 
 	def test_returns_block_with_data(self):
 		p = self._get_plugin()

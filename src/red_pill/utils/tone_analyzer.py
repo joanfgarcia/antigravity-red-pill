@@ -1,5 +1,6 @@
 import logging
-from typing import TYPE_CHECKING, Dict, Optional
+import time
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 if TYPE_CHECKING:
 	from red_pill.memory import MemoryManager
@@ -9,95 +10,119 @@ from red_pill.identity import get_hedonic_set_point
 
 logger = logging.getLogger(__name__)
 
+_TONE_COLLECTIONS: List[str] = ["social_memories", "work_memories"]
+
 
 class ToneAnalyzer:
 	"""
 	B760 Tone Analysis Engine.
 	Determines the dominant emotional chroma from recent memories.
+	Queries both social_memories and work_memories, merges by created_at,
+	and applies overnight-therapy threshold + high-reactivity logic.
 	"""
+
+	@staticmethod
+	def _scroll_collection(
+		client: Any,
+		collection: str,
+		limit: int,
+		scroll_filter: Any,
+	) -> list:
+		"""Scroll a single collection, falling back if order_by is unsupported."""
+		from qdrant_client.http import models as qm
+
+		try:
+			points, _ = client.scroll(
+				collection_name=collection,
+				limit=limit,
+				scroll_filter=scroll_filter,
+				order_by=qm.OrderBy(key="created_at", direction=qm.Direction.DESC),
+				with_payload=True,
+				with_vectors=False,
+			)
+			return points if points is not None else []
+		except Exception as e:
+			logger.debug(f"Scroll order_by failed for {collection}, falling back: {e}")
+			try:
+				points, _ = client.scroll(
+					collection_name=collection,
+					limit=limit,
+					scroll_filter=scroll_filter,
+					with_payload=True,
+					with_vectors=False,
+				)
+				return points if points is not None else []
+			except Exception as e2:
+				logger.warning(f"Scroll fallback also failed for {collection}: {e2}")
+				return []
 
 	@staticmethod
 	def get_dominant_mood(
 		collection: str = "social_memories",
-		limit: int = 3,
-		manager: Optional["MemoryManager"] = None,  # PERF-001: accept existing instance
+		limit: int = 5,
+		manager: Optional["MemoryManager"] = None,
 	) -> str:
 		"""
-		Scrolls the latest memories to find the most frequent chroma.
-		Increased limit for better sampling of the current context.
+		Scrolls the latest memories across both social_memories and work_memories,
+		merges them by created_at descending, and picks the dominant chroma.
 
 		Args:
-			collection: Qdrant collection to query.
-			limit: Number of recent memories to sample.
-			manager: Optional MemoryManager instance to reuse. If not provided,
-				a new instance is created for this call (backward-compatible).
-				Callers that already hold a MemoryManager (e.g. MCP server,
-				CLI sync command) should pass it to avoid redundant connections.
+			collection: Ignored — kept for backward compat. Always queries both.
+			limit: Per-collection scroll limit (total candidates = 2 * limit).
+			manager: Optional MemoryManager instance to reuse.
 		"""
-		# PERF-001: lazy import here to avoid circular imports at module level
 		from red_pill.memory import MemoryManager as _MemoryManager
 
 		try:
 			from qdrant_client.http import models
 
-			# Reuse caller's manager or create a local one
 			_manager = manager if manager is not None else _MemoryManager()
+			scroll_filter = models.Filter(must_not=[models.FieldCondition(key="immune", match=models.MatchValue(value=True))])
 
-			try:
-				points, _ = _manager.client.scroll(
-					collection_name=collection,
-					limit=limit,
-					scroll_filter=models.Filter(must_not=[models.FieldCondition(key="immune", match=models.MatchValue(value=True))]),
-					order_by=models.OrderBy(key="created_at", direction=models.Direction.DESC),
-					with_payload=True,
-					with_vectors=False,
-				)
-			except Exception as e:
-				logger.debug(f"Scroll order_by failed, falling back to basic scroll: {e}")
-				points, _ = _manager.client.scroll(
-					collection_name=collection,
-					limit=limit,
-					scroll_filter=models.Filter(must_not=[models.FieldCondition(key="immune", match=models.MatchValue(value=True))]),
-					with_payload=True,
-					with_vectors=False,
-				)
+			# Merge from both collections
+			all_points = []
+			for coll in _TONE_COLLECTIONS:
+				all_points.extend(ToneAnalyzer._scroll_collection(_manager.client, coll, limit, scroll_filter))
 
-			if not points:
+			if not all_points:
 				return str(get_hedonic_set_point())
 
-			import time
+			# Sort by created_at descending (newest first)
+			all_points.sort(
+				key=lambda p: float((p.payload or {}).get("created_at", 0)),
+				reverse=True,
+			)
 
 			now = time.time()
 			threshold = getattr(cfg, "OVERNIGHT_THERAPY_THRESHOLD_HOURS", 4) * 3600
 
-			first_point_time = float(points[0].payload.get("created_at", 0)) if points[0].payload else 0
-			if now - first_point_time > threshold:
-				# Overnight Therapy Reset
+			# Overnight Therapy Reset: if the newest memory is older than threshold, reset
+			newest_time = float((all_points[0].payload or {}).get("created_at", 0))
+			if now - newest_time > threshold:
+				logger.debug(
+					f"ToneAnalyzer: newest memory is {(now - newest_time) / 3600:.1f}h old (threshold {threshold / 3600:.0f}h) → overnight reset"
+				)
 				return str(get_hedonic_set_point())
 
-			# Filter out memories from previous sessions
-			session_points = []
-			for p in points:
-				p_time = float(p.payload.get("created_at", 0)) if p.payload else 0
-				if now - p_time > threshold:
-					break
-				session_points.append(p)
+			# Keep only session-window memories
+			session_points = [p for p in all_points if now - float((p.payload or {}).get("created_at", 0)) <= threshold]
 
 			if not session_points:
 				return str(get_hedonic_set_point())
 
-			# High Reactivity Logic: Pick the first non-neutral emotion found in the latest memories
-			# Otherwise, return the most frequent (consensus).
-			latest_color = str(get_hedonic_set_point())
+			# High Reactivity: first non-gray color wins
 			for p in session_points:
-				if p.payload and not p.payload.get("immune", False):
-					color = p.payload.get("color", get_hedonic_set_point())
-					if color != cfg.DEFAULT_COLOR:
-						return str(color)
-					if latest_color == cfg.DEFAULT_COLOR:
-						latest_color = str(color)
+				payload = p.payload or {}
+				if payload.get("immune", False):
+					continue
+				color = payload.get("color", cfg.DEFAULT_COLOR)
+				if color and color != cfg.DEFAULT_COLOR:
+					logger.debug(f"ToneAnalyzer: dominant color={color} from {p.id}")
+					return str(color)
 
-			return str(latest_color)
+			# All gray — return gray
+			return str(get_hedonic_set_point())
+
 		except Exception as e:
 			logger.warning(f"Mood analysis failed: {e}")
 			return str(get_hedonic_set_point())
