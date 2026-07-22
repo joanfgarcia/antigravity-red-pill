@@ -11,6 +11,7 @@ Turns the local model (Granite via SIP) into a first-class tool-using minion and
 ### 🐛 Fixes
 - **[FIX] `Failed to create llama_context` on CPU fallback** — root cause was a CUDA-compiled llama.cpp still touching the GPU with `n_gpu_layers=0` (fails even with the GPU free), NOT the context size. Resolved by running the CPU path as a CUDA-detached isolated worker. See `Aleth_Core/DIAGNOSTIC_LLAMA_CONTEXT_FAIL.md`.
 - **[FIX] `hermes_8b` profile**: restore the missing `vram_tiers:` key (orphaned sequence made `model_profiles.yaml.example` fail to parse).
+- **[FIX] `bunker update` applies daemon + skills**: a bare `git pull` never regenerated the generated dual-bind daemon (`run_dual_bind.py`) nor redeployed skills, so an existing install's `local-tools` minion (and the daemon device cascade) would break after `update`. `bunker_update()` now re-runs `setup_background_model.sh` (regenerate + restart `redpill-llm.service`) and redeploys `./skills` to the agent skills dir.
 
 ### 📚 Docs
 - **[DOCS] `docs/TECHNICAL/MINIONS.md`**: dual-audience (human + orchestrating agent) reference — taxonomy, invocation, capabilities/limitations matrix, decision guide.
