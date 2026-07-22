@@ -169,6 +169,40 @@ class SipInferenceProvider(BaseInferenceProvider):
 			print(f"[SIP DEBUG] KeyError or parse error: {e}. Raw response: {raw_resp[:1000]}")
 			raise e
 
+	def chat(self, messages, *, tools=None, tool_choice=None, temperature=0.3, max_tokens=1024, response_format=None, timeout=600):
+		"""Full chat call returning the assistant MESSAGE dict (incl. tool_calls).
+
+		Unlike generate() (which returns only text content, used by the distiller),
+		this forwards tools/tool_choice so the endpoint emits OpenAI-style tool_calls.
+		"""
+		import http.client
+		import json
+		import socket
+
+		class UnixHTTPConnection(http.client.HTTPConnection):
+			def __init__(self, path: str, timeout: int):
+				super().__init__("localhost", timeout=timeout)
+				self.path = path
+
+			def connect(self):
+				self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+				self.sock.settimeout(self.timeout)
+				self.sock.connect(self.path)
+
+		payload = {"model": self.model, "messages": messages, "temperature": temperature, "max_tokens": max_tokens}
+		if tools:
+			payload["tools"] = tools
+		if tool_choice:
+			payload["tool_choice"] = tool_choice
+		if response_format:
+			payload["response_format"] = response_format
+
+		conn = UnixHTTPConnection(self.socket_path, timeout=timeout)
+		conn.request("POST", "/v1/chat/completions", body=json.dumps(payload), headers={"Content-Type": "application/json"})
+		response = conn.getresponse()
+		data = json.loads(response.read().decode())
+		return data["choices"][0]["message"]
+
 	def stream(self, prompt: str, **kwargs) -> Iterator[str]:
 		return iter([])
 
