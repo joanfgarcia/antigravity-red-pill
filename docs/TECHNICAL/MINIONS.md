@@ -41,7 +41,7 @@ All MCP calls go through the `swarm_orchestrator_api` tool.
   "backend": "claude",        // "claude" | "agy" | "opencode" | "local" (omit → IDE_BACKEND)
   "model": "sonnet",          // backend-specific (opus/sonnet/haiku/claude-opus-4-8; opencode: provider/model)
   "effort": "medium",         // low|medium|high|xhigh|max (claude; others may ignore)
-  "workspace": "/home/joan/Documents/IA/sharing",  // omit → red-pill's own dir
+  "workspace": "/path/to/project",  // omit → red-pill's own dir
   "timeout": 600,             // seconds (default 600)
   "async_mode": true          // true (default) → Minion Inbox; false → wait + inline
 }
@@ -56,14 +56,18 @@ Same `run_agent_task` with `backend:"local"`. No tools, no loop — a single
 generation. Good for: summaries, classification, extraction, rewriting, a quick
 judgment. `model`/`effort` are largely ignored (the local daemon serves one model).
 
-### Local tool-using minion (in-process)
-**Not yet exposed as an MCP action** (see §5). Today it is a Python entry point:
+### Local tool-using minion
+Same `run_agent_task` with `backend:"local-tools"` — the local model runs a bounded
+in-process tool loop (MCP + bash) and returns the final answer:
+```jsonc
+{ "prompt": "How many entries in /path/to/dir? Use run_bash, then answer with the number.",
+  "backend": "local-tools", "workspace": "/path/to/dir", "async_mode": false }
+// → response: "51"
+```
+It is also callable directly as a Python entry point (same loop):
 ```python
 from red_pill.swarm.agents.local_minion import run_local_minion
-result = await run_local_minion(
-    "How many entries are in /home/joan/tmp? Use run_bash, then answer with the number.",
-    cwd="/home/joan/tmp",
-)
+result = await run_local_minion("…", cwd="/path/to/dir")
 # → {"ok": True, "answer": "51", "steps": 1, "messages": [...]}
 ```
 
@@ -148,14 +152,13 @@ Is there an LLM decision to make?
 
 ## 5. Current gaps (state as of 2026-07-22)
 
-- **`run_local_minion` is not wired into `run_agent_task`.** Today it is a Python
-  function, so the orchestrator cannot launch the *local tool-using* minion through the
-  standard MCP command — only `claude`/`agy`/`local`(one-shot) are reachable that way.
-  Planned: expose it as `backend:"local"` **with tools**, or a dedicated action.
-- **`opencode` missing from the `run_agent_task` backend enum** (works, undocumented).
 - **No context compaction** in the local tool loop (bounded by the 8-call cap instead).
 - Local endpoint model selection is fixed at daemon boot (`MINION_PROFILE`); the
   request `model` field is ignored (no per-request model routing yet).
+- **`opencode` against the local SIP endpoint** is not yet working (ai-sdk streaming
+  mismatch); `opencode` today drives its own hosted/Zen models.
+- The dual-bind daemon is generated from a setup-script heredoc (un-linted, un-tested);
+  see the ROADMAP item to promote it to a versioned source file.
 
 See also: `swarm/bridges/` (bridge implementations & the cascade), `swarm/agents/local_minion.py`
 (the in-house loop), `core/providers.py::SipInferenceProvider` (local inference client),

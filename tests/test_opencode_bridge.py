@@ -93,7 +93,9 @@ class TestScribeRelay:
 		with patch("red_pill.swarm.bridges.opencode.get_db_dir", return_value=tmp_path):
 			# Pre-create the table WITHOUT the model column to exercise the migration.
 			conn = sqlite3.connect(str(tmp_path / "bunker.db"))
-			conn.execute("CREATE TABLE interactions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_prompt TEXT, agent_response TEXT, timestamp DATETIME)")
+			conn.execute(
+				"CREATE TABLE interactions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_prompt TEXT, agent_response TEXT, timestamp DATETIME)"
+			)
 			conn.commit()
 			conn.close()
 
@@ -109,7 +111,9 @@ class TestScribeRelay:
 	def test_truncates_long_fields(self, bridge, tmp_path):
 		with patch("red_pill.swarm.bridges.opencode.get_db_dir", return_value=tmp_path):
 			conn = sqlite3.connect(str(tmp_path / "bunker.db"))
-			conn.execute("CREATE TABLE interactions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_prompt TEXT, agent_response TEXT, timestamp DATETIME, model TEXT)")
+			conn.execute(
+				"CREATE TABLE interactions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_prompt TEXT, agent_response TEXT, timestamp DATETIME, model TEXT)"
+			)
 			conn.commit()
 			conn.close()
 			bridge._scribe_relay("p" * 5000, "r" * 9000, model=None)

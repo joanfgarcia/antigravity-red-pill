@@ -13,6 +13,6 @@ except Exception:
 
 """Red Pill Protocol - Bünker Back Core System."""
 
-__version__ = "7.8.1"
+__version__ = "7.9.0"
 CORE_VERSION = __version__
 __model__ = "Gemini 1.5 Flash"

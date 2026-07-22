@@ -128,7 +128,7 @@ def _resolve_chat_format(body: Dict[str, Any]) -> str:
 MODEL_PATH = str(resolve_model_path(MODEL_BASENAME))
 HF_REPO_ID = PROFILE.get("hf_model_repo_id", None)
 
-# --- Device fallback cascade ----------------------------------------------
+# Device fallback cascade.
 # Ordered device preference. The backend tries each in turn; the first that can
 # serve wins. If none can, the request fails (503) — no implicit fallback beyond
 # what the list declares. A request may override this via body["device_fallback"].

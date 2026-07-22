@@ -1,3 +1,22 @@
+## [7.9.0] - 2026-07-22 (Minion Execution Substrate — local tool-using minions & device fallback)
+
+Turns the local model (Granite via SIP) into a first-class tool-using minion and adds a device fallback cascade so it survives a GPU busy with training. One uniform command (`swarm_orchestrator_api run_agent_task`) now spans the whole minion range.
+
+### 🔌 Minions & Inference
+- **[FEAT] Local model tool-calling**: the dual-bind daemon switches `chat_format` per request — a body carrying `tools`/`functions` (or explicit `chat_format`) uses `chatml-function-calling` (minion role); distiller/plain requests keep the profile default (`minion_chat_format` key, default `chatml-function-calling`). Same loaded model, no second instance. Granite-4.1-8B-Q4 emits valid OpenAI `tool_calls`.
+- **[FEAT] Device fallback cascade** (`device_fallback`, default `["gpu","cpu"]`, per-request overridable): `gpu` = in-process; `cpu` = isolated worker subprocess with `CUDA_VISIBLE_DEVICES=""` under a `systemd-run --scope` OOM shield sized from the measured footprint (`~9 GB + ~0.16 MB/token`); `igpu`/`npu` recognised but not wired (skipped); no usable device → `503`. `cpu_n_ctx` is RAM-sized, independent of the VRAM tiers.
+- **[FEAT] In-house tool-using minion** (`swarm/agents/local_minion.py::run_local_minion`): bounded in-process loop (≤8 tool calls, own counter) — RedPill-Kernel MCP tools via `registry.execute` + a real-shell `run_bash` (cwd + timeout sandbox); recovers a `chatml-function-calling` empty-content quirk via a plain-chatml finalize pass.
+- **[FEAT] `local-tools` backend** (`LocalToolBridge`): wires `run_local_minion` into `run_agent_task`, invocable like any other backend. `BaseInferenceProvider.chat()` added to the provider contract (`SipInferenceProvider` forwards `tools`/`tool_choice`). `run_agent_task` schema documents `agy|claude|opencode|local|local-tools`.
+
+### 🐛 Fixes
+- **[FIX] `Failed to create llama_context` on CPU fallback** — root cause was a CUDA-compiled llama.cpp still touching the GPU with `n_gpu_layers=0` (fails even with the GPU free), NOT the context size. Resolved by running the CPU path as a CUDA-detached isolated worker. See `Aleth_Core/DIAGNOSTIC_LLAMA_CONTEXT_FAIL.md`.
+- **[FIX] `hermes_8b` profile**: restore the missing `vram_tiers:` key (orphaned sequence made `model_profiles.yaml.example` fail to parse).
+
+### 📚 Docs
+- **[DOCS] `docs/TECHNICAL/MINIONS.md`**: dual-audience (human + orchestrating agent) reference — taxonomy, invocation, capabilities/limitations matrix, decision guide.
+- **[DOCS] `skills/minion_delegation`**: skill that loads the decision guide when the agent is about to delegate; points to MINIONS.md.
+- **[DOCS] ROADMAP**: new Phase 3.2 (Minion Execution Substrate) with completed + parked items.
+
 ## [7.8.1] - 2026-07-21 (Branch Audit Remediation — injectors, interceptors, metabolism)
 
 Full audit + adversarial re-verification of the `fix/migraine-and-pain-signals` branch. All findings remediated; suite green (`1096 passed`).

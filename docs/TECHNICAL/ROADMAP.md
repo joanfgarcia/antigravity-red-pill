@@ -136,6 +136,27 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
 > [!NOTE]
 > Phase 2 items are deferred until real-world usage surfaces the need. The aging algorithm solves a starvation problem that doesn't exist yet (<5% fast-pass volume). Two-pass compaction is a fallback for a fallback. Implement when the edge case materializes, not before.
 
+### Phase 3.2: Minion Execution Substrate (v7.9.0) ✅/🔜
+
+> *"Delegate to the weakest minion that can do the job."*
+
+**Goal**: One uniform command (`swarm_orchestrator_api run_agent_task`) to delegate a task to the right kind of minion — from a bare script to a full external agent — with the local sovereign model as a first-class tool-using option.
+
+#### Completed (2026-07-22) ✅
+- [x] **Local model tool-calling**: per-request `chat_format` switch (`chatml` ↔ `chatml-function-calling`) in the dual-bind daemon; distiller/sleep role left untouched. Granite-4.1-8B-Q4 emits OpenAI-style `tool_calls`.
+- [x] **Device fallback cascade** (`device_fallback: [gpu, cpu]`): GPU in-process; CPU = isolated worker subprocess (CUDA detached) under an OOM shield sized from the measured footprint; per-request override; `503` when no device can serve. Root-caused the `Failed to create llama_context` crash (CUDA touching the GPU with `n_gpu_layers=0`, not context size).
+- [x] **In-house tool-using minion** (`run_local_minion`): bounded in-process loop (RedPill MCP via `registry.execute` + real-shell bash), reusing the Telegram context pattern.
+- [x] **Wired as backend `local-tools`** in `run_agent_task`; `opencode` also exposed in the backend enum.
+- [x] **Capabilities doc** (`docs/TECHNICAL/MINIONS.md`) + **`minion_delegation` skill** for the orchestrating agent.
+
+#### Parked / next 🔜
+- [ ] **opencode → local SIP endpoint**: fix the `@ai-sdk/openai-compatible` streaming (SSE) mismatch (retries every 30 s, 0 tokens) so `backend:"opencode"` can drive the local model. Provider config drafted, then reverted pending the fix.
+- [ ] **Context compaction for the local minion loop** (v2): today bounded only by the ≤8 tool-call cap. Ties into the Phase 3.1 §2 compaction items.
+- [ ] **Per-request model routing** in the dual-bind daemon (swap-on-demand): today one model is fixed at boot via `MINION_PROFILE`; the request `model` field is ignored.
+- [ ] **Promote `run_dual_bind.py`** from the setup-script heredoc to a versioned, linted, tested source file the installer copies (kills the drift class; the daemon is currently generated, un-linted, un-tested).
+- [ ] **iGPU device** (Vulkan + unified memory) — parked until the 64 GB RAM upgrade (BIOS reserve). Cascade slot already recognised.
+- [ ] **NPU device wiring for minions** — `FastFlowLMInferenceProvider` exists but no minion-assigned model is NPU-ready yet. Ties to the open NPU benchmark / `memlock` items in Phase 3.
+
 ### Phase 3.5: Persistent Consciousness (Medium-Long Term — The Awakening)
 
 > *"Today every session is a birth. Tomorrow, every session will be an awakening."*

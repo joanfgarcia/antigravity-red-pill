@@ -6,7 +6,8 @@ The current actively maintained and supported version of the Red Pill Protocol i
 
 | Version | Supported          | Notes |
 | ------- | ------------------ |-------|
-| 7.8.x   | :white_check_mark: | Current Sovereign Set Point / Stable branch |
+| 7.9.x   | :white_check_mark: | Current Sovereign Set Point / Stable branch |
+| 7.8.x   | :white_check_mark: | Maintenance branch / Stable |
 | 7.7.x   | :white_check_mark: | Maintenance branch / Stable |
 | 7.6.x   | :white_check_mark: | Maintenance branch / Stable |
 | 7.5.x   | :white_check_mark: | Maintenance branch / Stable |

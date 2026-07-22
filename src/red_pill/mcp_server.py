@@ -360,7 +360,10 @@ async def handle_search_memory_research(arguments: Dict[str, Any]):
 		"type": "object",
 		"properties": {
 			"prompt": {"type": "string", "description": "The task/role prompt to run."},
-			"backend": {"type": "string", "description": "agy | claude | opencode | local | local-tools. local=one-shot local LLM (no tools); local-tools=local LLM with a bounded in-process tool loop (MCP + bash). Omit → IDE_BACKEND config."},
+			"backend": {
+				"type": "string",
+				"description": "agy | claude | opencode | local | local-tools. local=one-shot local LLM (no tools); local-tools=local LLM with a bounded in-process tool loop (MCP + bash). Omit → IDE_BACKEND config.",
+			},
 			"model": {"type": "string", "description": "Backend-specific model (e.g. opus, sonnet, haiku, claude-opus-4-8)."},
 			"effort": {"type": "string", "description": "Reasoning effort low|medium|high|xhigh|max (claude). Backend may ignore."},
 			"workspace": {"type": "string", "description": "Working dir the agent operates in (the target project). Omit → red-pill's own dir."},

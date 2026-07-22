@@ -100,7 +100,7 @@ class LocalToolBridge(AgentBridge):
 	def get_capabilities(self) -> BridgeCapabilities:
 		return BridgeCapabilities(
 			backend=BackendType.LOCAL,
-			auto_approve=True,        # tools run without a human gate (loop is bounded)
+			auto_approve=True,  # tools run without a human gate (loop is bounded)
 			ephemeral_mode=True,
 			conversation_resume=False,
 			model_selection=False,

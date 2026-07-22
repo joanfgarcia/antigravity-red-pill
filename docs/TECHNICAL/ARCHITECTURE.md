@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v7.8.1 (Branch Audit Remediation)
+**System Version**: v7.9.0 (Minion Execution Substrate)
 **Analyst**: The Architect
 **Date**: 2026-04-16
 

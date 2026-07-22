@@ -73,6 +73,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [EDGE_HIVE_TRANSIT_DOCK.md](TECHNICAL/SWARM/EDGE_HIVE_TRANSIT_DOCK.md) | Edge-to-HiveMind transit architecture |
 | [SYNAPTIC_BRIDGE.md](TECHNICAL/SWARM/SYNAPTIC_BRIDGE.md) | Agent coordination protocol between Aleph and Nova |
 | [SENTINEL_AUDITOR.md](TECHNICAL/SWARM/SENTINEL_AUDITOR.md) | Sentinel Auditor configuration and architecture |
+| [MINIONS.md](TECHNICAL/MINIONS.md) | Minions taxonomy, usage guidelines, and resource limitations |
 
 > [!WARNING]
 > **Swarm E2EE is a Proof-of-Concept.** The current MLS/TreeKEM implementation does not yet provide Perfect Forward Secrecy (PFS) or Post-Compromise Security (PCS). Production-grade MLS is planned for v7.0. See `MLS_ESTIMATION.md` for details.
