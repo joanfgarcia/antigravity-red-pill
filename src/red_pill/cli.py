@@ -433,6 +433,93 @@ def _dispatch_plugins(args: argparse.Namespace) -> bool:
 	return False
 
 
+def handle_job(args: argparse.Namespace) -> None:
+	"""Centralized Job Manager: cola persistente compartida (bunker_queue.db)."""
+	import json as _json
+
+	from red_pill.cognitive.queue_manager import CognitiveQueueManager
+
+	queue = CognitiveQueueManager()
+
+	if args.job_cmd == "submit":
+		# D2: todo lo que entra por CLI es BACKGROUND_DEFERRED por definición.
+		try:
+			payload = _json.loads(args.payload)
+		except _json.JSONDecodeError as e:
+			print(f"[ERROR] --payload debe ser JSON válido: {e}")
+			return
+		if args.title:
+			payload["title"] = args.title
+		job_id = queue.enqueue_task(source=args.source, payload=payload, priority=args.priority)
+		print(f"[OK] Job {job_id} encolado (source={args.source}, priority={args.priority}).")
+
+	elif args.job_cmd == "list":
+		statuses = ["PENDING", "PROCESSING", "PAUSED", "BLOCKED", "FRUSTRATED", "COMPLETED"] if args.all else None
+		tasks = queue.list_tasks(statuses=statuses)
+		if not tasks:
+			print("Cola vacía.")
+			return
+		print(f"{'ID':<10} {'SOURCE':<20} {'STATUS':<12} {'PRIO':<5} {'ATT':<4} {'PROGRESS':<10} TITLE")
+		for t in tasks:
+			progress = t.get("progress") or {}
+			pct = f"{progress.get('percent', '')}%" if isinstance(progress, dict) and progress.get("percent") is not None else "-"
+			print(f"{t['id'][:8]:<10} {t['source'][:19]:<20} {t['status']:<12} {t['priority']:<5} {t['attempts']:<4} {pct:<10} {t.get('title') or '-'}")
+
+	elif args.job_cmd == "status":
+		task = _find_job(queue, args.job_id)
+		if not task:
+			print(f"[ERROR] Job '{args.job_id}' no encontrado.")
+			return
+		print(_json.dumps(task, indent=2, ensure_ascii=False, default=str))
+
+	elif args.job_cmd in ("pause", "resume"):
+		task = _find_job(queue, args.job_id)
+		if not task:
+			print(f"[ERROR] Job '{args.job_id}' no encontrado.")
+			return
+		ok = queue.pause_task(task["id"]) if args.job_cmd == "pause" else queue.resume_task(task["id"])
+		if ok:
+			print(f"[OK] Job {task['id'][:8]} → {'PAUSED' if args.job_cmd == 'pause' else 'PENDING'}.")
+		else:
+			print(f"[WARN] Job {task['id'][:8]} en estado '{task['status']}': transición no aplicable.")
+
+	elif args.job_cmd == "process-queue":
+		_run_job_queue(queue)
+	else:
+		print("Uso: red-pill job {submit|list|status|pause|resume|process-queue}")
+
+
+def _find_job(queue, job_ref: str):
+	"""Resuelve un job por id completo o prefijo corto (el que muestra `job list`)."""
+	task = queue.get_task(job_ref)
+	if task:
+		return task
+	with queue._get_connection() as conn:
+		rows = conn.execute("SELECT id FROM cognitive_tasks WHERE id LIKE ?", (f"{job_ref}%",)).fetchall()
+	if len(rows) == 1:
+		return queue.get_task(rows[0]["id"])
+	return None
+
+
+def _run_job_queue(queue) -> None:
+	"""Runner shot-and-forget con run-lock (R6: exit 0 siempre)."""
+	import fcntl
+
+	from red_pill.core.paths import get_state_dir
+	from red_pill.core.queue_worker import process_driver_jobs
+
+	lock_path = get_state_dir() / "job_runner.lock"
+	with open(lock_path, "w") as lock_file:
+		try:
+			fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+		except BlockingIOError:
+			# Otro runner activo (timer solapado): ceder sin error.
+			print("[JOB] Runner ya activo. Cediendo (exit 0).")
+			return
+		completed = process_driver_jobs(queue)
+		print(f"[JOB] Cola procesada. {completed} job(s) completados. Apagando.")
+
+
 def handle_secrets(args: argparse.Namespace) -> None:
 	"""Local Secrets Management (pure-mls encrypted)."""
 	from red_pill.utils.vault import SecretVault
@@ -636,6 +723,30 @@ def main() -> None:
 	backend_parser.add_argument("value", nargs="?", choices=["agy", "grpc", "claude", "local", "auto"], help="Backend to use")
 	ide_sub.add_parser("status", help="Show IDE bridge capabilities and health")
 	ide_sub.add_parser("test", help="Run connectivity test against the IDE")
+
+	# Centralized Job Manager
+	job_parser = subparsers.add_parser("job", help="Centralized Job Manager (deferred, resumable jobs)")
+	job_sub = job_parser.add_subparsers(dest="job_cmd")
+
+	job_submit = job_sub.add_parser("submit", help="Encolar un job diferido (BACKGROUND_DEFERRED)")
+	job_submit.add_argument("--source", required=True, help="Source del driver que lo ejecuta (p.ej. flow_job)")
+	job_submit.add_argument("--payload", default="{}", help="Payload JSON del job")
+	job_submit.add_argument("--priority", type=int, default=5, help="Prioridad (mayor = más urgente, default 5)")
+	job_submit.add_argument("--title", help="Título descriptivo (se guarda en el payload)")
+
+	job_list = job_sub.add_parser("list", help="Listar jobs activos, pausados y en cola")
+	job_list.add_argument("--all", action="store_true", help="Incluir también COMPLETED")
+
+	job_status = job_sub.add_parser("status", help="Detalle completo de un job (checkpoint, progreso)")
+	job_status.add_argument("job_id", help="Id completo o prefijo corto")
+
+	job_pause = job_sub.add_parser("pause", help="Pausar un job (el runner no ejecuta el siguiente step)")
+	job_pause.add_argument("job_id", help="Id completo o prefijo corto")
+
+	job_resume = job_sub.add_parser("resume", help="Reanudar un job pausado desde su checkpoint")
+	job_resume.add_argument("job_id", help="Id completo o prefijo corto")
+
+	job_sub.add_parser("process-queue", help="Runner shot-and-forget: procesa la cola y se apaga (exit 0)")
 
 	# P2P Sovereign Sync (v7.1.0)
 	p2p_parser = subparsers.add_parser("p2p", help="Sovereign P2P Synchronization (Delta Engine)")
@@ -947,6 +1058,9 @@ def main() -> None:
 			return
 		elif args.command == "ide":
 			handle_ide(args)
+			return
+		elif args.command == "job":
+			handle_job(args)
 			return
 		elif args.command == "p2p":
 			handle_p2p(args)

@@ -360,6 +360,34 @@ class CognitiveQueueManager:
 					pass
 		return task
 
+	def list_tasks(self, statuses: Optional[List[str]] = None, limit: int = 50) -> List[Dict[str, Any]]:
+		"""Listado resumido para `red-pill job list` (activas por defecto, sin payload completo)."""
+		if statuses is None:
+			statuses = ["PENDING", "PROCESSING", "PAUSED", "BLOCKED", "FRUSTRATED"]
+		placeholders = ",".join(["?"] * len(statuses))
+		with self._get_connection() as conn:
+			rows = conn.execute(
+				f"""
+				SELECT id, source, priority, status, attempts, progress, updated_at,
+					json_extract(payload, '$.title') AS title
+				FROM cognitive_tasks
+				WHERE status IN ({placeholders})
+				ORDER BY status = 'PROCESSING' DESC, priority DESC, created_at ASC
+				LIMIT ?
+				""",
+				(*statuses, limit),
+			).fetchall()
+		tasks = []
+		for row in rows:
+			task = dict(row)
+			if task.get("progress"):
+				try:
+					task["progress"] = json.loads(task["progress"])
+				except (json.JSONDecodeError, TypeError):
+					pass
+			tasks.append(task)
+		return tasks
+
 	def save_checkpoint(self, task_id: str, checkpoint: Dict[str, Any], progress: Optional[Dict[str, Any]] = None) -> None:
 		"""Persiste el avance atómico tras un step().
 

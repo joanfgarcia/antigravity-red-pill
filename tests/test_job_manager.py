@@ -1,6 +1,5 @@
 """Centralized Job Manager F1: ResumableJobDriver + runner integrity rules R1-R5."""
 
-import json
 import sqlite3
 from typing import Any, Dict
 
@@ -8,7 +7,7 @@ import pytest
 
 from red_pill.cognitive.queue_manager import CognitiveQueueManager
 from red_pill.core.queue_worker import process_driver_jobs
-from red_pill.jobs.drivers import JobDeferred, ResumableJobDriver, StepOutcome, _REGISTRY, register_driver
+from red_pill.jobs.drivers import _REGISTRY, JobDeferred, ResumableJobDriver, StepOutcome, register_driver
 
 
 @pytest.fixture
