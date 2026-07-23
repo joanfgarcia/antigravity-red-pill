@@ -54,11 +54,39 @@ def process_driver_jobs(cog_queue: CognitiveQueueManager, max_jobs: int = 5) -> 
 	R4 checkpoint persistido tras cada step, R5 recuperación de huérfanos
 	acotada a los sources del propio runner.
 	"""
-	from red_pill.jobs.drivers import JobDeferred, get_driver, registered_sources
+	from red_pill.jobs.drivers import registered_sources
 
 	sources = registered_sources()
 	if not sources:
 		return 0
+
+	# Run-lock (R6): protege las dos vías de entrada (timer systemd y CLI manual).
+	# Si otro runner está activo, ceder sin error — el job seguirá ahí.
+	lock_file = None
+	try:
+		import fcntl
+
+		from red_pill.core.paths import get_state_dir
+
+		lock_file = open(get_state_dir() / "job_runner.lock", "w")
+		fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+	except BlockingIOError:
+		logger.info("Job runner already active; yielding (R6).")
+		if lock_file:
+			lock_file.close()
+		return 0
+	except Exception:
+		lock_file = None  # FS sin flock: seguimos — el timer systemd ya serializa su propia unit
+
+	try:
+		return _process_driver_jobs_locked(cog_queue, sources, max_jobs)
+	finally:
+		if lock_file:
+			lock_file.close()
+
+
+def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list, max_jobs: int) -> int:
+	from red_pill.jobs.drivers import JobDeferred, get_driver
 
 	# R5: huérfanos PROCESSING de un crash previo → PENDING (solo carril mecánico)
 	cog_queue.requeue_stale(sources)

@@ -502,22 +502,11 @@ def _find_job(queue, job_ref: str):
 
 
 def _run_job_queue(queue) -> None:
-	"""Runner shot-and-forget con run-lock (R6: exit 0 siempre)."""
-	import fcntl
-
-	from red_pill.core.paths import get_state_dir
+	"""Runner shot-and-forget (el run-lock R6 vive dentro de process_driver_jobs)."""
 	from red_pill.core.queue_worker import process_driver_jobs
 
-	lock_path = get_state_dir() / "job_runner.lock"
-	with open(lock_path, "w") as lock_file:
-		try:
-			fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-		except BlockingIOError:
-			# Otro runner activo (timer solapado): ceder sin error.
-			print("[JOB] Runner ya activo. Cediendo (exit 0).")
-			return
-		completed = process_driver_jobs(queue)
-		print(f"[JOB] Cola procesada. {completed} job(s) completados. Apagando.")
+	completed = process_driver_jobs(queue)
+	print(f"[JOB] Cola procesada. {completed} job(s) completados. Apagando.")
 
 
 def handle_secrets(args: argparse.Namespace) -> None:
