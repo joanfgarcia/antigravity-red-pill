@@ -382,3 +382,53 @@ def test_job_health_reports_stuck_and_frustrated_scoped(queue, clean_registry):
 	health = queue.job_health(["test_counting"], stuck_after_seconds=1800)
 
 	assert health == {"stuck": 1, "frustrated": 0}  # the cognitive lane never counts
+
+
+def test_runner_flock_second_runner_yields(queue, clean_registry, tmp_path, monkeypatch):
+	"""R6: while one runner holds the lock, a concurrent run exits 0 without popping."""
+	import fcntl
+
+	from red_pill.core import paths
+
+	state_dir = tmp_path / "state"
+	state_dir.mkdir()
+	monkeypatch.setattr(paths, "get_state_dir", lambda: state_dir)
+
+	register_driver(CountingDriver)
+	job_id = queue.enqueue_task(source="test_counting", payload={"total": 1})
+
+	holder = open(state_dir / "job_runner.lock", "w")
+	fcntl.flock(holder, fcntl.LOCK_EX | fcntl.LOCK_NB)
+	try:
+		assert process_driver_jobs(queue) == 0
+		assert queue.get_task(job_id)["status"] == "PENDING"  # untouched
+	finally:
+		holder.close()
+
+	assert process_driver_jobs(queue) == 1  # lock released -> normal run
+
+
+def test_vram_deferral_via_probe(queue, clean_registry, monkeypatch):
+	"""A GPU driver defers (checkpoint intact, no attempts) when VramProbe reports no headroom."""
+	from red_pill.core.vram_probe import VramProbe
+
+	class GpuStepDriver(ResumableJobDriver):
+		source = "test_gpu_step"
+		min_vram_mb = 4000
+
+		def step(self, payload, checkpoint_data):
+			return StepOutcome(completed=True, new_checkpoint={"ran": True})
+
+	register_driver(GpuStepDriver)
+	job_id = queue.enqueue_task(source="test_gpu_step", payload={})
+	queue.save_checkpoint(job_id, {"done": 2}, None)
+
+	monkeypatch.setattr(VramProbe, "get_free_mb", staticmethod(lambda: 512))
+	assert process_driver_jobs(queue) == 0
+	task = queue.get_task(job_id)
+	assert task["status"] == "PENDING"
+	assert task["attempts"] == 0
+	assert task["checkpoint_data"] == {"done": 2}
+
+	monkeypatch.setattr(VramProbe, "get_free_mb", staticmethod(lambda: 8000))
+	assert process_driver_jobs(queue) == 1
