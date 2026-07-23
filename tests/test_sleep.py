@@ -51,9 +51,10 @@ def test_synthesize_hub(mock_build_opener):
 	assert result == "[TreeKEM Fix] Arreglado el leaf_index omitido en el hash del árbol."
 
 
-@patch("red_pill.metabolism.phases.consolidation._check_llm_available", return_value=True)
+@patch("red_pill.metabolism.phases.consolidation.distill_session_anchors")
 @patch("red_pill.metabolism.phases.consolidation.distill_engram")
-def test_perform_sleep_cycle(mock_distill, mock_llm):
+@patch("red_pill.metabolism.phases.consolidation._check_llm_available", return_value=True)
+def test_perform_sleep_cycle(mock_llm, mock_distill, mock_anchors):
 	mock_mem_mgr = MagicMock()
 	mock_client = mock_mem_mgr.client
 	mock_client.collection_exists.return_value = True
@@ -132,8 +133,8 @@ def test_reassemble_raw_sequence():
 	from red_pill.metabolism.phases.consolidation import reassemble_raw_sequence
 
 	mock_client = MagicMock()
-	p0 = MagicMock(id="p0", payload={"parent_id": "seq-123", "chunk_index": 0, "content": "USER: Hola Barcelona, estamos en casa de "})
-	p1 = MagicMock(id="p1", payload={"parent_id": "seq-123", "chunk_index": 1, "content": "mi madre Victoria."})
+	p0 = MagicMock(id="p0", payload={"parent_id": "seq-123", "lazarus_phase": "raw_parent", "chunk_index": 0, "content": "USER: Hola Barcelona, estamos en casa de "})
+	p1 = MagicMock(id="p1", payload={"parent_id": "seq-123", "lazarus_phase": "raw_parent", "chunk_index": 1, "content": "mi madre Victoria."})
 
 	mock_client.scroll.return_value = ([p1, p0], None)  # out of order return from scroll
 

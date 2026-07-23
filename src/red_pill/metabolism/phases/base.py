@@ -6,15 +6,13 @@ orchestrator calls. The one addition is `requires_gpu`, which lets the runner de
 GPU-hungry phases while the card is committed to training and still run the rest.
 """
 
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Any
-
-
 import json
 import logging
 import os
 import time
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import Any
 
 logger = logging.getLogger(__name__)
 

@@ -513,8 +513,9 @@ def synthesize_hub_v2(
 		)
 		user_prompt = user_prompt[:max_hub_input_chars]
 
-	fallback_text = synthesize_hub(summaries)
-	fallback = {"title": "", "summary": fallback_text, "texture": "", "lang": dominant_lang, "_is_fallback": True}
+	def _make_fallback():
+		fallback_text = synthesize_hub(summaries)
+		return {"title": "", "summary": fallback_text, "texture": "", "lang": dominant_lang, "_is_fallback": True}
 
 	provider_alias = params.get("provider_alias", "sip")
 	temperature = float(params.get("temperature", 0.1))
@@ -528,15 +529,14 @@ def synthesize_hub_v2(
 			prompt=user_prompt,
 			messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
 			temperature=temperature,
-			response_format={"type": "json_object"},
 		)
 		match = re.search(r"\{[\s\S]*\}", content)
 		if not match:
-			return fallback
+			return _make_fallback()
 		parsed = json.loads(_sanitize_llm_json(match.group(0)))
 		summary_val = str(parsed.get("summary") or "").strip()
 		if not summary_val or _is_template_echo(summary_val):
-			return fallback
+			return _make_fallback()
 		texture_val = str(parsed.get("texture") or "").strip()
 		if _is_template_echo(texture_val):
 			texture_val = ""
@@ -546,9 +546,15 @@ def synthesize_hub_v2(
 			)
 			texture_val = texture_val[:HUB_TEXTURE_MAX_CHARS]
 		lang_val = str(parsed.get("lang") or dominant_lang).lower().strip()[:2]
-		return {"title": str(parsed.get("title") or "").strip(), "summary": summary_val, "texture": texture_val, "lang": lang_val}
+		return {
+			"title": str(parsed.get("title") or "").strip(),
+			"summary": summary_val,
+			"texture": texture_val,
+			"lang": lang_val,
+		}
 	except Exception as e:
-		logger.warning(f"[HUB-V2] structured synthesis failed ({e}) — falling back to legacy hub.")
+		logger.warning(f"[HUB-V2] LLM synthesis failed ({e}). Falling back to legacy concatenation.")
+		return _make_fallback()
 		return fallback
 
 

@@ -9,9 +9,10 @@ from red_pill.metabolism.sleep import perform_sleep_cycle
 from red_pill.swarm.agents.janitor import JanitorMinion
 
 
+@patch("red_pill.metabolism.phases.consolidation.distill_session_anchors", return_value=None)
 @patch("red_pill.metabolism.phases.consolidation._check_llm_available", return_value=True)
 @patch("red_pill.metabolism.phases.consolidation.chunk_text", side_effect=lambda text: ["distilled compiler fix"] if "compiler error" in text else [])
-def test_sleep_cycle_creates_parent_child_graph(mock_chunk, mock_llm):
+def test_sleep_cycle_creates_parent_child_graph(mock_chunk, mock_llm, mock_anchors):
 	mock_mgr = MagicMock()
 	mock_client = mock_mgr.client
 	mock_client.collection_exists.return_value = True
@@ -63,6 +64,8 @@ def test_sleep_cycle_creates_parent_child_graph(mock_chunk, mock_llm):
 						"model": "opus",
 						"parent_id": parent_uuid,
 						"category_reviewed_at": ANY,
+						"distiller_version": "v3",
+						"hub_depth": 1,
 					},
 					color="blue",
 					emotion="neutral",
@@ -156,6 +159,8 @@ def test_sleep_cycle_dynamic_category_routing(mock_llm, mock_distill_anchors):
 								"model": "opus",
 								"parent_id": parent_id,
 								"category_reviewed_at": ANY,
+								"distiller_version": "v3",
+								"hub_depth": 1,
 							},
 							color="purple",
 							emotion="joy",
@@ -172,6 +177,8 @@ def test_sleep_cycle_dynamic_category_routing(mock_llm, mock_distill_anchors):
 								"model": "opus",
 								"parent_id": parent_id,
 								"category_reviewed_at": ANY,
+								"distiller_version": "v3",
+								"hub_depth": 1,
 							},
 							color="blue",
 							emotion="neutral",

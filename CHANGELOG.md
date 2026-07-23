@@ -1,4 +1,27 @@
-## [7.9.1] - 2026-07-23 (Sleep Distiller Overhaul & Offline Embeddings)
+## [7.9.2] - 2026-07-23 (Metabolic V3 Autobiographical Distiller & Dynamic Hub Graph)
+
+Restauración completa de la voz autobiográfica en 1ª/2ª persona (Operador Joan / Agente Aleth), preservación de atmósfera vivencial (`texture`), extracción de reliquias literales, particionado dinámico multi-hub para conversaciones extensas, recolección de basura de nodos huérfanos y versión V3 con profundidad jerárquica ilimitada (`hub_depth`).
+
+### 🧠 Memoria Metabólica & Voz Autobiográfica (V3)
+- **[FEAT] Voz Autobiográfica en 1ª/2ª Persona (`distiller.py` & `distiller_v3.txt`)**: Re-escrito el prompt del destilador para eliminar la 3ª persona clínica despersonalizada (*"Joan informó que..."*) y adoptar la voz narrativa propia (*"Joan y yo reflexionamos sobre..."*).
+- **[FEAT] Textura Vivencial & Reliquias Literales**: Inyectado el campo `texture` que captura la atmósfera emocional del momento y preserva `relics` (expresiones clave literales exactas del usuario).
+- **[FEAT] Normalización de Emociones**: Mapeo de sinónimos en español (`EMOTION_SYNONYMS`) para adaptar emociones como *entusiasmo*, *ansiedad*, *alegría* o *tristeza* a la taxonomía cerrada.
+- **[FEAT] Auditoría Semántica por LLM (`audit_engram_quality`)**: Prompt `engram_quality_auditor.txt` para evaluar la calidad de voz del engrama y detectar resúmenes antiguos que requieran re-destilación.
+
+### 🌳 Grafo Jerárquico & Particionado Metabólico
+- **[FEAT] Multi-Hub Batching Partitioning (`consolidation.py`)**: Diálogos con más de 6 fragmentos se dividen en secuencias ordenadas (`[Parte 1/N]`, `[Parte 2/N]`) unidas por el Hilo de Ariadna (`prev_session_hub` / `next_session_hub`), garantizando 0 pérdida de información en sesiones extensas.
+- **[FEAT] Profundidad Dinámica `hub_depth` & Versión (`distiller_version: "v3"`)**: Asignación atómica de `distiller_version: "v3"` y cálculo recursivo dinámico (`hub_depth = max(child_depth) + 1`), dejando el sistema preparado para niveles de abstracción ilimitados (Gen-2, Gen-3, Gen-N).
+- **[FEAT] Recolección de Basura de Nodos Huérfanos (`cleanup_orphan_raw_parents`)**: Rutina en `maintenance.py` que detecta y borra nodos `raw_parent` cuyos hijos sintéticos se han erosionado completamente de Qdrant.
+
+### 🔬 Herramientas & CLI
+- **[FEAT] Subcomando `upgrade-all` en `distill_lab.py`**: Barrido incremental e in-place de recuerdos históricos con soporte para `--smart-audit`, `--force` y `--limit`.
+
+### 📋 Planificación Arquitectónica
+- **[DOCS] Unified Job Manager Plan**: Guardada la ancla de arquitectura en `Aleth_Core/IMPLEMENTATION_PLAN_UNIFIED_JOB_MANAGER.md` contemplando las 3 Clases de Servicio QoS (`IMMEDIATE`, `QUEUED_SYNC`, `BACKGROUND_DEFERRED`) y el principio *Zero-Daemon / Shot-and-Forget*.
+
+---
+
+# [7.9.1] - 2026-07-23 (Sleep Distiller Overhaul & Offline Embeddings)
 
 Elimina las comprobaciones de red a Hugging Face en embeddings, externaliza los prompts y parámetros en archivos YAML/TXT con validación Pydantic, unifica `distill_lab.py` como Fuente Única de Verdad, optimiza el fraccionamiento de diálogos y dota al ciclo de sueño de telemetría de fase en tiempo real.
 

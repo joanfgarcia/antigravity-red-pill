@@ -1,6 +1,5 @@
 """Unit tests for chunker.py turn-aware splitting and runt absorption."""
 
-import pytest
 from red_pill.metabolism.chunker import _is_template_echo, _sanitize_llm_json, chunk_text
 
 

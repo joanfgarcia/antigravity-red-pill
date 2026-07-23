@@ -18,6 +18,7 @@ class EmbeddingEngine:
 		if self.encoder is None:
 			try:
 				import os
+
 				from fastembed import TextEmbedding
 
 				cache_path = getattr(self.cfg, "FASTEMBED_CACHE_PATH", None)

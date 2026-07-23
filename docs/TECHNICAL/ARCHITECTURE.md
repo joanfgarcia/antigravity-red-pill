@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v7.9.1 (Sleep Distiller Overhaul & Offline Embeddings)
+**System Version**: v7.9.2 (Metabolic V3 Autobiographical Distiller & Dynamic Hub Graph)
 **Analyst**: The Architect
 **Date**: 2026-04-16
 

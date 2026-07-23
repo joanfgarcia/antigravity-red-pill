@@ -81,6 +81,7 @@ def test_synthesize_hub_v2_truncates_concatenated_texture(monkeypatch):
 
 def test_synthesize_hub_v2_falls_back_on_garbage(monkeypatch):
 	_mock_provider(monkeypatch, "not json at all")
+	monkeypatch.setattr("red_pill.metabolism.distiller.synthesize_hub", lambda summaries: "s1 s2 s3")
 	hub = synthesize_hub_v2(CHUNKS)
 	assert hub["_is_fallback"] is True
 	assert hub["texture"] == ""
