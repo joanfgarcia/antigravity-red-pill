@@ -178,9 +178,14 @@ class CognitiveQueueManager:
 
 			# 1. Obtener la tarea para extraer su payload y categoría
 			with self._get_connection() as conn:
-				cursor = conn.execute("SELECT payload FROM cognitive_tasks WHERE id = ?", (task_id,))
+				cursor = conn.execute("SELECT payload, source FROM cognitive_tasks WHERE id = ?", (task_id,))
 				row = cursor.fetchone()
 				if not row:
+					return
+				# El rating de curiosidad pertenece al carril cognitivo: los jobs
+				# mecánicos no deben alimentarlo (su categoría desconocida caería
+				# al fallback dynamic_spark e inflaría el rating).
+				if row["source"] != "drive_evaluator":
 					return
 				payload = json.loads(row["payload"])
 

@@ -1082,7 +1082,9 @@ class IDEWorker:
 		from red_pill.cognitive.queue_manager import CognitiveQueueManager
 
 		queue_manager = CognitiveQueueManager()
-		task = queue_manager.pop_next_task()
+		# Carril cognitivo: solo tareas del DriveEvaluator. Los jobs mecánicos
+		# (drivers del Job Manager) los consume el runner shot-and-forget.
+		task = queue_manager.pop_next_task(allowed_sources=["drive_evaluator"])
 
 		if not task:
 			# El Motor de Voluntad (Lóbulo Frontal) evalúa el entorno si la cola está vacía
@@ -1182,7 +1184,8 @@ class IDEWorker:
 		from red_pill.cognitive.queue_manager import CognitiveQueueManager
 
 		queue_manager = CognitiveQueueManager()
-		task = queue_manager.pop_next_task()
+		# Carril cognitivo: ver process_cognitive_queue — mismo aislamiento.
+		task = queue_manager.pop_next_task(allowed_sources=["drive_evaluator"])
 
 		if not task:
 			from red_pill.cognitive.drive_evaluator import DriveEvaluator
