@@ -191,7 +191,7 @@ sequenceDiagram
 
 ### 2.3 The CognitiveQueue (SQLite) — The Circulatory System
 
-**Location**: [queue_manager.py](../../src/red_pill/cognitive/queue_manager.py) (IDE) + [cognitive_queue.py](../../src/red_pill/swarm/cognitive_queue.py) (Daemon)
+**Location**: [queue_manager.py](../../src/red_pill/cognitive/queue_manager.py) (IDE)
 
 A single SQLite table that transports tasks between all subsystems:
 
@@ -718,7 +718,7 @@ sequenceDiagram
 
 ### 2.3 La CognitiveQueue (SQLite) — El Sistema Circulatorio
 
-**Ubicación**: [queue_manager.py](../../src/red_pill/cognitive/queue_manager.py) (IDE) + [cognitive_queue.py](../../src/red_pill/swarm/cognitive_queue.py) (Daemon)
+**Ubicación**: [queue_manager.py](../../src/red_pill/cognitive/queue_manager.py) (IDE)
 
 Una sola tabla SQLite que transporta tareas entre todos los subsistemas:
 
