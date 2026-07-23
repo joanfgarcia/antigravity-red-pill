@@ -365,3 +365,20 @@ def test_agentic_job_driver_cascade_order(queue, clean_registry, monkeypatch):
 	assert captured["targets"][0] == ("claude", "opus", "high")
 	assert captured["targets"][1][0] == "local"
 	assert outcome.completed
+
+
+def test_job_health_reports_stuck_and_frustrated_scoped(queue, clean_registry):
+	"""job_monitor input: stuck/frustrated counts are scoped to runner sources."""
+	register_driver(CountingDriver)
+	stuck_id = queue.enqueue_task(source="test_counting", payload={})
+	queue.enqueue_task(source="drive_evaluator", payload={})
+
+	queue.pop_next_task(allowed_sources=["test_counting"])  # -> PROCESSING
+	queue.pop_next_task(allowed_sources=["drive_evaluator"])  # cognitive lane, also PROCESSING
+	with queue._get_connection() as conn:
+		conn.execute("UPDATE cognitive_tasks SET updated_at = datetime('now', '-1 hour')")
+		conn.execute("UPDATE cognitive_tasks SET status = 'FRUSTRATED' WHERE id != ?", (stuck_id,))
+
+	health = queue.job_health(["test_counting"], stuck_after_seconds=1800)
+
+	assert health == {"stuck": 1, "frustrated": 0}  # the cognitive lane never counts

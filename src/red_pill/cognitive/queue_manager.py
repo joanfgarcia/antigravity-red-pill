@@ -388,6 +388,27 @@ class CognitiveQueueManager:
 			tasks.append(task)
 		return tasks
 
+	def job_health(self, sources: List[str], stuck_after_seconds: int = 1800) -> Dict[str, int]:
+		"""Salud del carril mecánico (solo lectura, para el DaemonPlugin job_monitor):
+		jobs PROCESSING sin latido reciente y jobs FRUSTRATED (disyuntor activado)."""
+		if not sources:
+			return {"stuck": 0, "frustrated": 0}
+		placeholders = ",".join(["?"] * len(sources))
+		with self._get_connection() as conn:
+			stuck = conn.execute(
+				f"""
+				SELECT COUNT(*) FROM cognitive_tasks
+				WHERE status = 'PROCESSING' AND source IN ({placeholders})
+					AND updated_at < datetime('now', ?)
+				""",
+				(*sources, f"-{int(stuck_after_seconds)} seconds"),
+			).fetchone()[0]
+			frustrated = conn.execute(
+				f"SELECT COUNT(*) FROM cognitive_tasks WHERE status = 'FRUSTRATED' AND source IN ({placeholders})",
+				(*sources,),
+			).fetchone()[0]
+		return {"stuck": stuck, "frustrated": frustrated}
+
 	def save_checkpoint(self, task_id: str, checkpoint: Dict[str, Any], progress: Optional[Dict[str, Any]] = None) -> None:
 		"""Persiste el avance atómico tras un step().
 
