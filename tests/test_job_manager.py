@@ -279,3 +279,89 @@ def test_flow_job_driver_on_fail_stop_raises_with_checkpoint_intact(queue, clean
 		driver.step({"flow_id": "test_flow"}, checkpoint)
 	# The checkpoint the runner persisted before the failure still targets stage 1.
 	assert checkpoint["step_index"] == 1
+
+
+class _FakeBridge:
+	def __init__(self, healthy=True, response="done", error=None):
+		self._healthy = healthy
+		self._response = response
+		self._error = error
+		self.prompt_calls = []
+
+	def health_check(self):
+		return self._healthy
+
+	def prompt(self, text, **kwargs):
+		self.prompt_calls.append((text, kwargs))
+
+		class _R:
+			response = self._response
+			error = self._error
+			conversation_id = "conv-1"
+			ok = self._error is None
+
+		return _R()
+
+
+def test_agentic_job_driver_routes_policy_to_bridge(queue, clean_registry, monkeypatch):
+	"""D1: payload policy (backend/model/effort/cwd) reaches the bridge untouched."""
+	from red_pill.jobs.drivers.agentic import AgenticJobDriver
+
+	fake = _FakeBridge()
+	captured = {}
+
+	def fake_create(backend=None, **kw):
+		captured["backend"] = backend
+		return fake
+
+	monkeypatch.setattr("red_pill.swarm.bridges.factory.create_bridge", fake_create)
+
+	driver = AgenticJobDriver()
+	payload = {"prompt": "audit the repo", "backend": "claude", "model": "opus", "effort": "high", "cwd": "/tmp/ws"}
+	driver.preflight(payload)
+	outcome = driver.step(payload, {})
+
+	assert captured["backend"] == "claude"
+	text, kwargs = fake.prompt_calls[-1]
+	assert text == "audit the repo"
+	assert kwargs == {"timeout": 600, "model": "opus", "effort": "high", "cwd": "/tmp/ws"}
+	assert outcome.completed
+	assert outcome.new_checkpoint["conversation_id"] == "conv-1"
+
+
+def test_agentic_job_driver_defers_when_backend_down(queue, clean_registry, monkeypatch):
+	"""R1: IDE closed / SIP down is a deferral, never a breaker-feeding failure."""
+	from red_pill.jobs.drivers.agentic import AgenticJobDriver
+
+	monkeypatch.setattr("red_pill.swarm.bridges.factory.create_bridge", lambda backend=None, **kw: _FakeBridge(healthy=False))
+
+	driver = AgenticJobDriver()
+	with pytest.raises(JobDeferred):
+		driver.preflight({"prompt": "x", "backend": "agy"})
+
+
+def test_agentic_job_driver_cascade_order(queue, clean_registry, monkeypatch):
+	"""cascade payload builds BridgeTargets in declared order."""
+	from red_pill.jobs.drivers.agentic import AgenticJobDriver
+
+	captured = {}
+
+	def fake_cascade(targets, name="cascade"):
+		captured["targets"] = [(t.backend, t.model, t.effort) for t in targets]
+		return _FakeBridge()
+
+	monkeypatch.setattr("red_pill.swarm.bridges.factory.create_cascade_bridge", fake_cascade)
+
+	driver = AgenticJobDriver()
+	payload = {
+		"prompt": "research",
+		"cascade": [
+			{"backend": "claude", "model": "opus", "effort": "high"},
+			{"backend": "local", "model": "samantha"},
+		],
+	}
+	outcome = driver.step(payload, {})
+
+	assert captured["targets"][0] == ("claude", "opus", "high")
+	assert captured["targets"][1][0] == "local"
+	assert outcome.completed
