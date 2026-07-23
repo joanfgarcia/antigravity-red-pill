@@ -23,9 +23,12 @@ _TEMPLATE_ECHO_MARKERS = (
 
 
 def chunk_text(text: str, size: Optional[int] = None) -> List[str]:
-	"""Break large interactions into biologically manageable sequences."""
+	"""Break large interactions into biologically manageable sequences, respecting turn boundaries."""
 	if size is None:
 		size = cfg.SLEEP_CHUNK_SIZE
+
+	if not text or not text.strip():
+		return []
 
 	chunks = []
 	start = 0
@@ -34,25 +37,37 @@ def chunk_text(text: str, size: Optional[int] = None) -> List[str]:
 		if end >= len(text):
 			chunks.append(text[start:])
 			break
-		# Heuristic 1: Try finding a newline near the cut
-		last_break = text.rfind("\n", start, end)
-		if last_break != -1 and last_break > start + (size // 2):
-			end = last_break + 1
-		else:
-			# Heuristic 2: Try finding a sentence terminator or comma
-			found_punct = -1
-			for punct in [". ", "? ", "! ", ", "]:
-				p_idx = text.rfind(punct, start, end)
-				if p_idx > found_punct:
-					found_punct = p_idx
 
-			if found_punct != -1 and found_punct > start + (size // 2):
-				end = found_punct + 1  # Include the punctuation mark
+		# Heuristic 0: Try finding turn/dialogue boundary markers (\nUSER:, \nASSISTANT:, \n---, \n\n)
+		turn_break = -1
+		for marker in ["\nUSER:", "\nASSISTANT:", "\nFixer:", "\nAleth:", "\n---", "\n\n"]:
+			t_idx = text.rfind(marker, start, end)
+			if t_idx > turn_break:
+				turn_break = t_idx
+
+		if turn_break != -1 and turn_break > start + (size // 3):
+			end = turn_break + 1
+		else:
+			# Heuristic 1: Try finding a newline near the cut
+			last_break = text.rfind("\n", start, end)
+			if last_break != -1 and last_break > start + (size // 2):
+				end = last_break + 1
 			else:
-				# Heuristic 3: Fallback to the last space
-				last_space = text.rfind(" ", start, end)
-				if last_space != -1 and last_space > start + (size // 2):
-					end = last_space + 1
+				# Heuristic 2: Try finding a sentence terminator or comma
+				found_punct = -1
+				for punct in [". ", "? ", "! ", ", "]:
+					p_idx = text.rfind(punct, start, end)
+					if p_idx > found_punct:
+						found_punct = p_idx
+
+				if found_punct != -1 and found_punct > start + (size // 2):
+					end = found_punct + 1  # Include the punctuation mark
+				else:
+					# Heuristic 3: Fallback to the last space
+					last_space = text.rfind(" ", start, end)
+					if last_space != -1 and last_space > start + (size // 2):
+						end = last_space + 1
+
 		chunks.append(text[start:end])
 		start = end
 

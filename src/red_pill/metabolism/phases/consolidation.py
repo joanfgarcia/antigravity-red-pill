@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import time
+from typing import Any
 
 from qdrant_client.models import Filter
 
@@ -32,6 +33,67 @@ from red_pill.metabolism.phases.base import SleepContext, SleepPhase
 from red_pill.metabolism.thread_weaver import _load_thread_state, _save_thread_state
 
 logger = logging.getLogger(__name__)
+
+
+def reassemble_raw_sequence(client, collection: str, point: Any) -> tuple[str, list[Any]]:
+	"""Re-assembles multi-chunk raw fragments sharing parent_id or source_buffer_id
+	into a single continuous, un-truncated text before distillation.
+	Returns (full_reassembled_text, list_of_all_processed_points)."""
+	payload = point.payload or {}
+	parent_id = payload.get("parent_id")
+	meta = payload.get("metadata", {}) if isinstance(payload.get("metadata"), dict) else {}
+	source_buf_id = payload.get("source_buffer_id") or meta.get("source_buffer_id")
+	is_fragment = payload.get("_is_fragment") or (payload.get("total_chunks", 1) > 1)
+
+	if not (is_fragment or parent_id or source_buf_id or payload.get("chunk_index") is not None):
+		content = payload.get("content", "")
+		if not content and "prompt" in payload and "response" in payload:
+			content = f"USER: {payload['prompt']}\n\nASSISTANT: {payload['response']}"
+		return content, [point]
+
+	from qdrant_client import models as _qm
+
+	filter_conds = []
+	if parent_id:
+		filter_conds.append(_qm.FieldCondition(key="parent_id", match=_qm.MatchValue(value=parent_id)))
+	elif source_buf_id:
+		filter_conds.append(_qm.FieldCondition(key="source_buffer_id", match=_qm.MatchValue(value=source_buf_id)))
+
+	sibling_points = []
+	if filter_conds:
+		try:
+			sibling_points, _ = client.scroll(
+				collection_name=collection,
+				scroll_filter=_qm.Filter(must=filter_conds),
+				limit=100,
+				with_payload=True,
+			)
+		except Exception as e:
+			logger.debug(f"[SLEEP ENGINE] Failed to fetch siblings for multi-chunk reassembly: {e}")
+			sibling_points = []
+
+	if not sibling_points:
+		sibling_points = [point]
+
+	def _get_idx(p):
+		p_load = p.payload or {}
+		p_meta = p_load.get("metadata", {}) if isinstance(p_load.get("metadata"), dict) else {}
+		idx = p_load.get("chunk_index") if p_load.get("chunk_index") is not None else p_meta.get("chunk_index")
+		return idx if isinstance(idx, int) else 0
+
+	sorted_siblings = sorted(sibling_points, key=_get_idx)
+
+	assembled_chunks = []
+	for p in sorted_siblings:
+		p_load = p.payload or {}
+		text = p_load.get("content", "")
+		if not text and "prompt" in p_load and "response" in p_load:
+			text = f"USER: {p_load['prompt']}\n\nASSISTANT: {p_load['response']}"
+		if text:
+			assembled_chunks.append(text)
+
+	full_text = "".join(assembled_chunks) if assembled_chunks else payload.get("content", "")
+	return full_text, sorted_siblings
 
 
 def _promote_lone_chunk_to_hub(memory_manager, client, chunk_col: str, chunk_id, distilled: dict) -> bool:
@@ -178,12 +240,17 @@ class ConsolidationPhase(SleepPhase):
 				break
 
 			batch_processed = 0
+			batch_processed_ids = set()
 			for point in scroll_result:
 				raw_id = point.id
-				payload = point.payload or {}
-				raw_text = payload.get("content", "")
-				if not raw_text and "prompt" in payload and "response" in payload:
-					raw_text = f"USER: {payload['prompt']}\n\nASSISTANT: {payload['response']}"
+				if raw_id in batch_processed_ids:
+					continue
+
+				raw_text, sibling_points = reassemble_raw_sequence(client, collection, point)
+				sibling_ids = [p.id for p in sibling_points]
+				for s_id in sibling_ids:
+					batch_processed_ids.add(s_id)
+
 				if not raw_text:
 					continue
 
@@ -250,6 +317,8 @@ class ConsolidationPhase(SleepPhase):
 					try:
 						chunk_metadata = {
 							"lazarus_phase": "sequence_chunk",
+							"distiller_version": "v3",
+							"hub_depth": 1,
 							"source_buffer_id": raw_id,
 							"model": model_name,
 							"parent_id": parent_id,
@@ -291,57 +360,72 @@ class ConsolidationPhase(SleepPhase):
 
 				# Hub Synthesis (v2: texture + language preserving, affect from history)
 				if len(surviving_chunks) > 1 and prev_chunk_id and not point_write_failed:
-					hub = synthesize_hub_v2(surviving_chunks)
-					hub_summary = f"{hub['title']}\n{hub['summary']}" if hub.get("title") else hub["summary"]
-					hub_emotion, hub_intensity = derive_hub_affect(surviving_chunks)
-					hub_metadata = {
-						"lazarus_phase": "synthesis_hub",
-						"node_type": "synthesis_hub",
-						"source_buffer_id": raw_id,
-						"model": model_name,
-						"parent_id": parent_id,
-						"emotional_vector": build_emotional_vector(fragment_affects),
-						"category_reviewed_at": time.time(),
-					}
-					if hub.get("texture"):
-						hub_metadata["texture"] = hub["texture"]
-					if hub.get("lang"):
-						hub_metadata["lang"] = hub["lang"]
-					hub_relics = merge_relics(surviving_chunks)
-					if hub_relics:
-						hub_metadata["relics"] = hub_relics
-					try:
-						hub_id = memory_manager.add_memory(
-							collection=target_col,
-							text=hub_summary,
-							metadata=hub_metadata,
-							color="cyan",
-							emotion=hub_emotion,
-							intensity=hub_intensity,
-						)
-						if hub_id:
-							client.set_payload(collection_name=target_col, payload={"associations": [prev_chunk_id]}, points=[hub_id])
-							if cfg.TEXTURE_SHADOW_ENABLED and hub.get("texture"):
-								try:
-									memory_manager.add_texture_shadow(target_col, str(hub_id), hub["texture"])
-								except Exception as e:
-									logger.debug(f"[SLEEP ENGINE] texture shadow write failed for {hub_id}: {e}")
-							child_ids.append(hub_id)
-							batch_processed += 1
-							chunks_saved += 1
-							if target_col == "work_memories":
-								new_work_hubs.append(hub_summary)
+					max_chunks_per_hub = getattr(cfg, "SLEEP_MAX_CHUNKS_PER_HUB", 6)
+					if len(surviving_chunks) > max_chunks_per_hub:
+						chunk_batches = [surviving_chunks[k:k + max_chunks_per_hub] for k in range(0, len(surviving_chunks), max_chunks_per_hub)]
+						affects_batches = [fragment_affects[k:k + max_chunks_per_hub] for k in range(0, len(fragment_affects), max_chunks_per_hub)]
+					else:
+						chunk_batches = [surviving_chunks]
+						affects_batches = [fragment_affects]
 
-							# Thread Weaving
-							thread_state = _load_thread_state()
-							prev_hub_id = thread_state.get(target_col)
-							if prev_hub_id:
-								client.set_payload(collection_name=target_col, payload={"prev_session_hub": prev_hub_id}, points=[hub_id])
-								client.set_payload(collection_name=target_col, payload={"next_session_hub": str(hub_id)}, points=[prev_hub_id])
-							thread_state[target_col] = str(hub_id)
-							_save_thread_state(thread_state)
-					except Exception:
-						pass
+					for b_idx, (c_batch, a_batch) in enumerate(zip(chunk_batches, affects_batches)):
+						hub = synthesize_hub_v2(c_batch)
+						hub_summary = f"{hub['title']}\n{hub['summary']}" if hub.get("title") else hub["summary"]
+						if len(chunk_batches) > 1:
+							hub_summary = f"[Parte {b_idx + 1}/{len(chunk_batches)}] {hub_summary}"
+
+						hub_emotion, hub_intensity = derive_hub_affect(c_batch)
+						max_child_depth = max([int(c.get("hub_depth", 1)) for c in c_batch if isinstance(c, dict) and str(c.get("hub_depth", "")).isdigit()], default=1)
+						hub_metadata = {
+							"lazarus_phase": "synthesis_hub",
+							"node_type": "synthesis_hub",
+							"distiller_version": "v3",
+							"hub_depth": max_child_depth + 1,
+							"source_buffer_id": raw_id,
+							"model": model_name,
+							"parent_id": parent_id,
+							"emotional_vector": build_emotional_vector(a_batch),
+							"category_reviewed_at": time.time(),
+						}
+						if hub.get("texture"):
+							hub_metadata["texture"] = hub["texture"]
+						if hub.get("lang"):
+							hub_metadata["lang"] = hub["lang"]
+						hub_relics = merge_relics(c_batch)
+						if hub_relics:
+							hub_metadata["relics"] = hub_relics
+						try:
+							hub_id = memory_manager.add_memory(
+								collection=target_col,
+								text=hub_summary,
+								metadata=hub_metadata,
+								color="cyan",
+								emotion=hub_emotion,
+								intensity=hub_intensity,
+							)
+							if hub_id:
+								client.set_payload(collection_name=target_col, payload={"associations": [prev_chunk_id]}, points=[hub_id])
+								if cfg.TEXTURE_SHADOW_ENABLED and hub.get("texture"):
+									try:
+										memory_manager.add_texture_shadow(target_col, str(hub_id), hub["texture"])
+									except Exception as e:
+										logger.debug(f"[SLEEP ENGINE] texture shadow write failed for {hub_id}: {e}")
+								child_ids.append(hub_id)
+								batch_processed += 1
+								chunks_saved += 1
+								if target_col == "work_memories":
+									new_work_hubs.append(hub_summary)
+
+								# Thread Weaving
+								thread_state = _load_thread_state()
+								prev_hub_id = thread_state.get(target_col)
+								if prev_hub_id:
+									client.set_payload(collection_name=target_col, payload={"prev_session_hub": prev_hub_id}, points=[hub_id])
+									client.set_payload(collection_name=target_col, payload={"next_session_hub": str(hub_id)}, points=[prev_hub_id])
+								thread_state[target_col] = str(hub_id)
+								_save_thread_state(thread_state)
+						except Exception as e:
+							logger.error(f"[SLEEP ENGINE] Failed to save multi-batch hub: {e}")
 				elif len(surviving_chunks) == 1 and prev_chunk_id and not point_write_failed:
 					# Single-survivor turn: promote the lone chunk to hub so the turn
 					# keeps a searchable representative (no LLM synthesis needed).
@@ -383,17 +467,18 @@ class ConsolidationPhase(SleepPhase):
 							thread_state[prev_parent_key] = parent_id_written
 							_save_thread_state(thread_state)
 
-						client.delete(collection_name=collection, points_selector=[raw_id])
+						client.delete(collection_name=collection, points_selector=sibling_ids)
 					except Exception as e:
 						logger.error(f"[SLEEP ENGINE] Failed to save raw parent engram: {e}")
 						point_write_failed = True
 				elif not point_llm_failed and not point_write_failed:
-					client.delete(collection_name=collection, points_selector=[raw_id])
+					client.delete(collection_name=collection, points_selector=sibling_ids)
 
 				# Any raw point NOT deleted this pass would be re-scrolled and re-distilled into a
 				# fresh parent next batch — record it so the scroll filter skips it (no duplicates).
 				if point_write_failed or point_llm_failed:
-					failed_ids.add(raw_id)
+					for s_id in sibling_ids:
+						failed_ids.add(s_id)
 
 			total_processed += batch_processed
 

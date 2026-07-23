@@ -11,6 +11,14 @@ from dataclasses import dataclass
 from typing import Any
 
 
+import json
+import logging
+import os
+import time
+
+logger = logging.getLogger(__name__)
+
+
 @dataclass
 class SleepContext:
 	"""Mutable state shared across phases of a single sleep cycle.
@@ -24,6 +32,30 @@ class SleepContext:
 	mode: str = "lazy"
 	total_processed: int = 0
 	deferred: bool = False  # set by a GPU phase that self-defers (VRAM committed to training)
+
+	def update_status(self, phase_name: str, status: str = "running", phase_index: int = 0, total_phases: int = 8) -> None:
+		"""Escribe atómicamente el estado de la fase de sueño en tiempo real."""
+		try:
+			from red_pill.core.paths import get_state_dir
+
+			state_dir = get_state_dir()
+			os.makedirs(state_dir, exist_ok=True)
+			status_file = state_dir / "sleep_phase_status.json"
+			payload = {
+				"active_phase": phase_name,
+				"status": status,
+				"phase_index": phase_index,
+				"total_phases": total_phases,
+				"total_processed": self.total_processed,
+				"deferred": self.deferred,
+				"updated_at": time.time(),
+			}
+			tmp_file = state_dir / "sleep_phase_status.json.tmp"
+			with open(tmp_file, "w", encoding="utf-8") as f:
+				json.dump(payload, f, indent=2)
+			os.replace(tmp_file, status_file)
+		except Exception as e:
+			logger.warning(f"[SLEEP-CONTEXT] Failed to write phase status: {e}")
 
 
 class SleepPhase(ABC):

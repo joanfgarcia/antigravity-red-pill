@@ -266,6 +266,7 @@ class RedPillConfig(BaseSettings):
 	EMBEDDING_MODEL: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 	VECTOR_SIZE: int = 384
 	FASTEMBED_CACHE_PATH: str = str(get_models_dir())
+	EMBEDDING_LOCAL_FILES_ONLY: bool = True
 	EXECUTION_PROVIDER: Optional[str] = None
 
 	@model_validator(mode="after")

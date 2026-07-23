@@ -126,3 +126,86 @@ def test_chunk_text_runt_absorption():
 def test_chunk_text_runt_single_chunk_untouched():
 	# A single short text is never "absorbed" into nothing
 	assert chunk_text("tiny", size=500) == ["tiny"]
+
+
+def test_reassemble_raw_sequence():
+	from red_pill.metabolism.phases.consolidation import reassemble_raw_sequence
+
+	mock_client = MagicMock()
+	p0 = MagicMock(id="p0", payload={"parent_id": "seq-123", "chunk_index": 0, "content": "USER: Hola Barcelona, estamos en casa de "})
+	p1 = MagicMock(id="p1", payload={"parent_id": "seq-123", "chunk_index": 1, "content": "mi madre Victoria."})
+
+	mock_client.scroll.return_value = ([p1, p0], None)  # out of order return from scroll
+
+	full_text, assembled_points = reassemble_raw_sequence(mock_client, "interaction_memories", p0)
+
+	assert full_text == "USER: Hola Barcelona, estamos en casa de mi madre Victoria."
+	assert [p.id for p in assembled_points] == ["p0", "p1"]
+
+
+def test_emotion_synonyms_normalization():
+	from red_pill.core.providers import ProviderRegistry
+
+	mock_inference = ProviderRegistry.get_inference_provider("sip")
+	mock_inference.generate.return_value = '{"summary": "test entusiasmo", "emotion": "entusiasmo", "intensity": 0.85, "category": "social"}'  # type: ignore
+	res = distill_engram("raw content")
+	assert res["emotion"] == "joy"
+
+	mock_inference.generate.return_value = '{"summary": "test ansiedad", "emotion": "ansiedad", "intensity": 0.7, "category": "social"}'  # type: ignore
+	res2 = distill_engram("raw content")
+	assert res2["emotion"] == "anxiety"
+
+
+def test_audit_engram_quality():
+	from red_pill.metabolism.distiller import audit_engram_quality
+
+	with patch("red_pill.core.providers.ProviderRegistry.get_inference_provider") as mock_prov:
+		mock_provider = MagicMock()
+		mock_prov.return_value = mock_provider
+
+		# Scenario 1: LLM deems memory clinical/3rd-person -> needs_redistillation = True
+		mock_provider.generate.return_value = '{"needs_redistillation": true, "reason": "3rd person clinical observer"}'
+		assert audit_engram_quality("Joan informó que...") is True
+
+		# Scenario 2: LLM deems memory clean 1st-person -> needs_redistillation = False
+		mock_provider.generate.return_value = '{"needs_redistillation": false, "reason": "Clean 1st-person voice"}'
+		assert audit_engram_quality("Me dijiste que en Barcelona estabas de visita...") is False
+
+
+def test_multi_hub_batching_partitioning():
+	import red_pill.config as cfg
+
+	max_chunks_per_hub = getattr(cfg, "SLEEP_MAX_CHUNKS_PER_HUB", 6)
+	surviving_chunks = [{"summary": f"Chunk {i}", "emotion": "neutral", "intensity": 0.5, "category": "work"} for i in range(14)]
+	fragment_affects = [{"child_id": f"id_{i}", "emotion": "neutral", "intensity": 0.5, "category": "work"} for i in range(14)]
+
+	if len(surviving_chunks) > max_chunks_per_hub:
+		chunk_batches = [surviving_chunks[k:k + max_chunks_per_hub] for k in range(0, len(surviving_chunks), max_chunks_per_hub)]
+		affects_batches = [fragment_affects[k:k + max_chunks_per_hub] for k in range(0, len(fragment_affects), max_chunks_per_hub)]
+	else:
+		chunk_batches = [surviving_chunks]
+		affects_batches = [fragment_affects]
+
+	assert len(chunk_batches) == 3
+	assert len(chunk_batches[0]) == 6
+	assert len(chunk_batches[1]) == 6
+	assert len(chunk_batches[2]) == 2
+	assert len(affects_batches) == 3
+
+
+def test_cleanup_orphan_raw_parents():
+	from red_pill.metabolism.maintenance import cleanup_orphan_raw_parents
+
+	mock_mem_mgr = MagicMock()
+	mock_client = mock_mem_mgr.client
+	mock_client.collection_exists.return_value = True
+
+	# parent1 has children that no longer exist (retrieve -> [])
+	parent1 = MagicMock(id="parent1", payload={"lazarus_phase": "raw_parent", "associations": ["child1", "child2"]})
+	mock_client.scroll.side_effect = [([parent1], None), ([], None)]
+	mock_client.retrieve.return_value = []
+
+	report = cleanup_orphan_raw_parents(mock_mem_mgr, collections=["work_memories"])
+	assert report["work_memories"] == 1
+	assert mock_client.delete.called
+

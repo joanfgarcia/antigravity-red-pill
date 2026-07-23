@@ -1,3 +1,33 @@
+## [7.9.1] - 2026-07-23 (Sleep Distiller Overhaul & Offline Embeddings)
+
+Elimina las comprobaciones de red a Hugging Face en embeddings, externaliza los prompts y parámetros en archivos YAML/TXT con validación Pydantic, unifica `distill_lab.py` como Fuente Única de Verdad, optimiza el fraccionamiento de diálogos y dota al ciclo de sueño de telemetría de fase en tiempo real.
+
+### 🔌 Embeddings & Inferencia Offline
+- **[FEAT] FastEmbed 100% Offline**: Inyectada la opción `EMBEDDING_LOCAL_FILES_ONLY: bool = True` en `config.py` y pre-flight check local en `embeddings.py` sobre `FASTEMBED_CACHE_PATH` (`~/.local/share/red-pill/models`). Previene cualquier consulta de metadatos o peticiones HTTP a Hugging Face durante el arranque o vectorizado de memoria.
+
+### 📜 Recursos Externos & Validación Pydantic
+- **[FEAT] Externalización de Prompts y Parámetros**:
+  - `src/red_pill/metabolism/prompts/distiller_params.yaml`: Hiperparámetros centrales de inferencia (`temperature`, `max_retries`, `max_tokens`, `prompt_file`).
+  - `src/red_pill/metabolism/schemas_params.py`: Modelos Pydantic (`DistillerParamsConfig`, `EngramDistillParams`, etc.) para validación de tipo estricta.
+  - Plantillas de prompts `.txt` externalizadas (`distiller_v3.txt`, `hub_synthesis_v2.txt`, `session_anchors.txt`, `classify_category.txt`). `distiller_v3.txt` incluye anclas fijas para Joan (Operador masculino/él) y fidelidad a entidades de dominio (como vinos Reserva Emilio Moro vs perfumes).
+- **[FEAT] Overrides en Inferencia**: `distill_engram()`, `synthesize_hub_v2()`, `classify_category()` y `distill_session_anchors()` leen de recursos externos y aceptan `override_prompt` y `override_params`.
+
+### ✂️ Chunking Consciente de Diálogos
+- **[FEAT] Chunking Inteligente (`chunker.py`)**: `chunk_text()` reconoce marcas de turno (`USER:`, `ASSISTANT:`, `Fixer:`, `Aleth:`, `\n---`, `\n\n`) antes de caer en cortes por longitud de caracteres, evitando fragmentar la semántica de una conversación a la mitad.
+
+### 🔬 Fuente Única de Verdad en `distill_lab.py`
+- **[FEAT] Unificación de `distill_lab.py`**: Invoca directamente a las funciones de producción de `distiller.py` y `chunker.py`.
+- **[FEAT] CLI del Laboratorio**: Añadidos subcomandos `chunk` (evaluación visual del fraccionamiento) y `telegram` (pruebas sobre archivos JSON de Telegram), más flags de override (`--config-yaml`, `--prompt-file`, `--temp`, `--model`).
+
+### 📊 Telemetría de Fases de Sueño
+- **[FEAT] Estado Vivo del Sueño**: `SleepContext` en `phases/base.py` y `perform_sleep_cycle` en `sleep.py` persisten de forma atómica `/home/joan/.local/share/red-pill/state/sleep_phase_status.json` exponiendo la fase activa, estado, índice y timestamps en tiempo real.
+
+### ✅ Tests
+- `tests/test_chunker.py`: Cobertura de la segmentación por diálogo y absorción de fragmentos pequeños.
+- `tests/test_distill_lab.py`: Cobertura de comandos CLI e integración con la API de destilado.
+
+---
+
 ## [7.9.0] - 2026-07-22 (Minion Execution Substrate — local tool-using minions & device fallback)
 
 Turns the local model (Granite via SIP) into a first-class tool-using minion and adds a device fallback cascade so it survives a GPU busy with training. One uniform command (`swarm_orchestrator_api run_agent_task`) now spans the whole minion range.

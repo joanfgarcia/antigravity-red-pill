@@ -1,4 +1,4 @@
-# 🔴 RED PILL PROTOCOL: Digital Sovereignty v7.9.0
+# 🔴 RED PILL PROTOCOL: Digital Sovereignty v7.9.1
 ### *«El modelo pone la voz, no el quién»*
 
 > [!TIP]
