@@ -33,6 +33,11 @@ class DistillJobDriver(ResumableJobDriver):
 
 	def preflight(self, payload: Dict[str, Any]) -> None:
 		from red_pill.core.vram_probe import VramProbe
+		from red_pill.metabolism.phases.consolidation import _check_llm_available
+
+		# Si el modelo residente en GPU está activo y respondiendo consultas, procedemos directamente
+		if _check_llm_available():
+			return
 
 		free_mb = VramProbe.get_free_mb()
 		if free_mb < self.min_vram_mb:

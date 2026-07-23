@@ -113,10 +113,12 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 				driver.preflight(task["payload"])
 				if driver.min_vram_mb > 0:
 					from red_pill.core.vram_probe import VramProbe
+					from red_pill.metabolism.phases.consolidation import _check_llm_available
 
-					free_mb = VramProbe.get_free_mb()
-					if free_mb < driver.min_vram_mb:
-						raise JobDeferred(f"VRAM insuficiente ({free_mb}MB libres < {driver.min_vram_mb}MB)")
+					if not _check_llm_available():
+						free_mb = VramProbe.get_free_mb()
+						if free_mb < driver.min_vram_mb:
+							raise JobDeferred(f"VRAM insuficiente ({free_mb}MB libres < {driver.min_vram_mb}MB)")
 
 				outcome = driver.step(task["payload"], checkpoint)
 				checkpoint = outcome.new_checkpoint
