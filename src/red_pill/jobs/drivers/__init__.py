@@ -36,3 +36,10 @@ def get_driver(source: str) -> ResumableJobDriver:
 def registered_sources() -> List[str]:
 	"""Sources del carril mecánico (el `allowed_sources` del runner)."""
 	return list(_REGISTRY.keys())
+
+
+# Drivers de serie (importados al final para que se auto-registren sin ciclos).
+from red_pill.jobs.drivers.flow import FlowJobDriver  # noqa: E402
+
+register_driver(FlowJobDriver)
+

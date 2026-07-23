@@ -215,3 +215,67 @@ def test_stale_recovery_scoped_to_runner_sources(queue, clean_registry):
 	assert queue.get_task(job_id)["status"] == "PENDING"
 	assert queue.get_task(job_id)["attempts"] == 1
 	assert queue.get_task(cognitive_id)["status"] == "PROCESSING"  # cognitive lane untouched
+
+
+class _FakeResult:
+	def __init__(self, status):
+		self.status = status
+
+
+class _FakeOrchestrator:
+	"""Two-step flow; deploy results are scripted per minion."""
+
+	workspace_root = "/tmp"
+
+	def __init__(self, flow, outcomes):
+		self._flow = flow
+		self._outcomes = outcomes
+		self.deployed = []
+
+		class _Engine:
+			def get_flow(_self, flow_id, cwd=None):
+				return flow if flow_id == "test_flow" else None
+
+		self.flow_engine = _Engine()
+
+	async def deploy_swarm(self, task, minions, trace=True, **kwargs):
+		self.deployed.append(minions[0])
+		return [_FakeResult(self._outcomes[minions[0]])]
+
+
+def test_flow_job_driver_checkpoints_per_stage(queue, clean_registry):
+	"""F3 pilot: flows become pausable/resumable — checkpoint is the stage index."""
+	from red_pill.jobs.drivers.flow import FlowJobDriver
+
+	flow = {"steps": [{"minion": "linter"}, {"minion": "auditor", "on_fail": "stop"}]}
+	fake = _FakeOrchestrator(flow, {"linter": "success", "auditor": "success"})
+
+	driver = FlowJobDriver()
+	driver._orchestrator = fake
+
+	first = driver.step({"flow_id": "test_flow"}, {})
+	assert not first.completed
+	assert first.new_checkpoint == {"step_index": 1, "results": ["linter: success"]}
+	assert first.progress == {"current_step": 1, "total_steps": 2, "percent": 50}
+
+	second = driver.step({"flow_id": "test_flow"}, first.new_checkpoint)
+	assert second.completed
+	assert fake.deployed == ["linter", "auditor"]
+
+
+def test_flow_job_driver_on_fail_stop_raises_with_checkpoint_intact(queue, clean_registry):
+	"""A failed stage with on_fail: stop is a real job failure (breaker path),
+	and the checkpoint still points at the failed stage for a resumed retry."""
+	from red_pill.jobs.drivers.flow import FlowJobDriver
+
+	flow = {"steps": [{"minion": "linter"}, {"minion": "auditor", "on_fail": "stop"}]}
+	fake = _FakeOrchestrator(flow, {"linter": "success", "auditor": "failed"})
+
+	driver = FlowJobDriver()
+	driver._orchestrator = fake
+
+	checkpoint = driver.step({"flow_id": "test_flow"}, {}).new_checkpoint
+	with pytest.raises(RuntimeError, match="stopped at step 1"):
+		driver.step({"flow_id": "test_flow"}, checkpoint)
+	# The checkpoint the runner persisted before the failure still targets stage 1.
+	assert checkpoint["step_index"] == 1
