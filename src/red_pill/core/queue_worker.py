@@ -29,6 +29,95 @@ logger = logging.getLogger("bunker_worker")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
 
+def _report_job(job_id: str, task: dict, status: str, content: str) -> None:
+	"""Deposita el reporte de fin/error de un job en el MinionInbox (patrón SAS)."""
+	try:
+		from red_pill.core.inbox import MinionInbox
+
+		title = task.get("payload", {}).get("title") or task.get("source", "job")
+		MinionInbox().drop_report(
+			event_id=job_id[:8],
+			source="JobRunner",
+			status=status,
+			content=f"Job '{title}' ({task.get('source')}) → {status}: {content}",
+			originator=f"queue_worker.process_driver_jobs({job_id})",
+		)
+	except Exception as e:
+		logger.error(f"Failed to report job {job_id} to MinionInbox: {e}")
+
+
+def process_driver_jobs(cog_queue: CognitiveQueueManager, max_jobs: int = 5) -> int:
+	"""Procesa jobs del carril mecánico vía ResumableJobDriver (Centralized Job Manager).
+
+	Reglas de integridad (plan F1): R1 deferral sin attempts, R2 skip-set por
+	invocación, R3 releer estado tras cada step (la pausa del operador gana),
+	R4 checkpoint persistido tras cada step, R5 recuperación de huérfanos
+	acotada a los sources del propio runner.
+	"""
+	from red_pill.jobs.drivers import JobDeferred, get_driver, registered_sources
+
+	sources = registered_sources()
+	if not sources:
+		return 0
+
+	# R5: huérfanos PROCESSING de un crash previo → PENDING (solo carril mecánico)
+	cog_queue.requeue_stale(sources)
+
+	completed_jobs = 0
+	# R2: todo job ya tratado en esta pasada queda excluido del pop — un diferido
+	# re-saldría en bucle estéril y un fallido quemaría el disyuntor en un solo
+	# run (el retry le corresponde al siguiente disparo del timer).
+	handled_ids: list = []
+	for _ in range(max_jobs):
+		task = cog_queue.pop_next_task(allowed_sources=sources, exclude_ids=handled_ids)
+		if not task:
+			break
+
+		job_id = task["id"]
+		handled_ids.append(job_id)
+		driver = get_driver(task["source"])
+		checkpoint = task.get("checkpoint_data") or {}
+		logger.info(f"Processing job {job_id} (source: {task['source']}, attempt {task['attempts']})")
+
+		try:
+			while True:
+				# R1: preflight de entorno antes de CADA step (VRAM/IDE/SIP)
+				driver.preflight(task["payload"])
+				if driver.min_vram_mb > 0:
+					from red_pill.core.vram_probe import VramProbe
+
+					free_mb = VramProbe.get_free_mb()
+					if free_mb < driver.min_vram_mb:
+						raise JobDeferred(f"VRAM insuficiente ({free_mb}MB libres < {driver.min_vram_mb}MB)")
+
+				outcome = driver.step(task["payload"], checkpoint)
+				checkpoint = outcome.new_checkpoint
+				# R4: el checkpoint se persiste inmediatamente tras el step
+				cog_queue.save_checkpoint(job_id, checkpoint, outcome.progress)
+
+				if outcome.completed:
+					cog_queue.mark_completed(job_id)
+					_report_job(job_id, task, "success", outcome.summary or "completed")
+					completed_jobs += 1
+					break
+
+				# R3: releer estado — una pausa del operador a mitad de step gana
+				current = cog_queue.get_task(job_id)
+				if current and current.get("status") == "PAUSED":
+					logger.info(f"Job {job_id} paused by operator; checkpoint saved, yielding.")
+					break
+
+		except JobDeferred as deferral:
+			cog_queue.defer_task(job_id)  # R1: PENDING sin attempts++
+			logger.info(f"Job {job_id} deferred (no failure): {deferral.reason}")
+		except Exception as e:
+			cog_queue.mark_failed(job_id, str(e))
+			_report_job(job_id, task, "failed", str(e))
+			logger.error(f"Job {job_id} step failed: {e}")
+
+	return completed_jobs
+
+
 def process_cognitive_tasks(cog_queue: CognitiveQueueManager, oneshot: bool = False):
 	"""Process up to 5 DAG tasks from the cognitive queue using the Swarm MinionFactory."""
 	allowed_sources = list(MinionFactory.MAPPING.keys()) + list(MinionFactory.COMMAND_ALIASES.keys())
@@ -85,6 +174,10 @@ def run_queue_worker(poll_interval: int = 5, oneshot: bool = False):
 			# 1. Process Cognitive DAG Tasks
 			if cog_queue:
 				process_cognitive_tasks(cog_queue, oneshot)
+
+			# 1b. Process mechanical driver jobs (Centralized Job Manager)
+			if cog_queue:
+				process_driver_jobs(cog_queue)
 
 			# 2. Process Memory Queue (Fast Buffer -> Qdrant)
 			items = queue.dequeue_pending(limit=10)

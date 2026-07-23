@@ -57,6 +57,16 @@ class CognitiveQueueManager:
 			except sqlite3.OperationalError:
 				pass  # La columna ya existe
 
+			# Migración Job Manager (F1): reanudación nativa de ResumableJobDriver
+			for ddl in (
+				"ALTER TABLE cognitive_tasks ADD COLUMN checkpoint_data TEXT DEFAULT NULL",
+				"ALTER TABLE cognitive_tasks ADD COLUMN progress TEXT DEFAULT NULL",
+			):
+				try:
+					conn.execute(ddl)
+				except sqlite3.OperationalError:
+					pass
+
 			# Índice para extracción ultrarrápida del router
 			conn.execute("""
 				CREATE INDEX IF NOT EXISTS idx_queue_routing
@@ -113,14 +123,22 @@ class CognitiveQueueManager:
 					continue
 		return None
 
-	def pop_next_task(self, allowed_sources: Optional[List[str]] = None, exclude_sources: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
+	def pop_next_task(
+		self,
+		allowed_sources: Optional[List[str]] = None,
+		exclude_sources: Optional[List[str]] = None,
+		exclude_ids: Optional[List[str]] = None,
+	) -> Optional[Dict[str, Any]]:
 		"""
 		Extrae la tarea de mayor prioridad, filtrando por origen si se especifica.
 		Marca como PROCESSING atómicamente.
 		Retorna la tarea o None si la cola está vacía.
+
+		exclude_ids: ids a saltar en esta pasada (jobs diferidos por entorno —
+		la ordenación determinista los devolvería como top en bucle estéril).
 		"""
 		query = """
-			SELECT id, source, priority, payload, attempts
+			SELECT id, source, priority, payload, attempts, checkpoint_data
 			FROM cognitive_tasks
 			WHERE status = 'PENDING'
 		"""
@@ -136,6 +154,10 @@ class CognitiveQueueManager:
 				placeholders = ",".join(["?"] * len(exclude_sources))
 				query += f" AND source NOT IN ({placeholders})"
 				params.extend(exclude_sources)
+		if exclude_ids:
+			placeholders = ",".join(["?"] * len(exclude_ids))
+			query += f" AND id NOT IN ({placeholders})"
+			params.extend(exclude_ids)
 
 		query += " ORDER BY priority DESC, created_at ASC LIMIT 1"
 
@@ -160,12 +182,14 @@ class CognitiveQueueManager:
 			)
 			conn.execute("COMMIT")
 
+			checkpoint_raw = row["checkpoint_data"]
 			return {
 				"id": task_id,
 				"source": row["source"],
 				"priority": row["priority"],
 				"attempts": row["attempts"],
 				"payload": json.loads(row["payload"]),
+				"checkpoint_data": json.loads(checkpoint_raw) if checkpoint_raw else {},
 			}
 
 	def _update_curiosity_rating(self, task_id: str, success: bool) -> None:
@@ -318,3 +342,89 @@ class CognitiveQueueManager:
 			else:
 				conn.execute("UPDATE cognitive_tasks SET status = 'PENDING' WHERE id = ?", (task_id,))
 				logger.warning(f"[QUEUE] Task {task_id} failed. Returned to PENDING queue.")
+
+	# ── Job Manager (F1): operaciones de ResumableJobDriver ────────────────────
+
+	def get_task(self, task_id: str) -> Optional[Dict[str, Any]]:
+		"""Fila completa de una tarea (estado, checkpoint, progreso). Para `job status` y R3."""
+		with self._get_connection() as conn:
+			row = conn.execute("SELECT * FROM cognitive_tasks WHERE id = ?", (task_id,)).fetchone()
+			if not row:
+				return None
+			task = dict(row)
+		for key in ("payload", "checkpoint_data", "progress"):
+			if task.get(key):
+				try:
+					task[key] = json.loads(task[key])
+				except (json.JSONDecodeError, TypeError):
+					pass
+		return task
+
+	def save_checkpoint(self, task_id: str, checkpoint: Dict[str, Any], progress: Optional[Dict[str, Any]] = None) -> None:
+		"""Persiste el avance atómico tras un step().
+
+		Incondicional sobre el id: el checkpoint es DATO, no estado — si el
+		operador pausó a mitad de step, el avance de ese step debe conservarse.
+		"""
+		with self._get_connection() as conn:
+			conn.execute(
+				"""
+				UPDATE cognitive_tasks
+				SET checkpoint_data = ?, progress = ?, updated_at = CURRENT_TIMESTAMP
+				WHERE id = ?
+				""",
+				(json.dumps(checkpoint), json.dumps(progress) if progress is not None else None, task_id),
+			)
+
+	def pause_task(self, task_id: str) -> bool:
+		"""PENDING/PROCESSING → PAUSED. El runner no ejecuta el siguiente step (R3)."""
+		with self._get_connection() as conn:
+			cursor = conn.execute(
+				"UPDATE cognitive_tasks SET status = 'PAUSED', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status IN ('PENDING', 'PROCESSING')",
+				(task_id,),
+			)
+			return cursor.rowcount > 0
+
+	def resume_task(self, task_id: str) -> bool:
+		"""PAUSED → PENDING. Reanuda en el siguiente disparo del runner."""
+		with self._get_connection() as conn:
+			cursor = conn.execute(
+				"UPDATE cognitive_tasks SET status = 'PENDING', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'PAUSED'",
+				(task_id,),
+			)
+			return cursor.rowcount > 0
+
+	def defer_task(self, task_id: str) -> bool:
+		"""Deferral por entorno no disponible (VRAM/IDE/SIP): PROCESSING → PENDING
+		SIN incrementar attempts (R1 — el disyuntor es para fallos reales del job).
+		Condicional sobre PROCESSING: una pausa del operador a mitad de step gana (R3)."""
+		with self._get_connection() as conn:
+			cursor = conn.execute(
+				"UPDATE cognitive_tasks SET status = 'PENDING', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'PROCESSING'",
+				(task_id,),
+			)
+			return cursor.rowcount > 0
+
+	def requeue_stale(self, sources: List[str], older_than_seconds: int = 900) -> int:
+		"""Recupera huérfanos PROCESSING de un crash del runner → PENDING con attempts+1.
+
+		ACOTADA por source (R5): el carril cognitivo deja PROCESSING colgando a
+		propósito (el agente reporta por MCP) y jamás debe resetearse desde aquí.
+		"""
+		if not sources:
+			return 0
+		placeholders = ",".join(["?"] * len(sources))
+		with self._get_connection() as conn:
+			cursor = conn.execute(
+				f"""
+				UPDATE cognitive_tasks
+				SET status = 'PENDING', attempts = attempts + 1, updated_at = CURRENT_TIMESTAMP
+				WHERE status = 'PROCESSING' AND source IN ({placeholders})
+					AND updated_at < datetime('now', ?)
+				""",
+				(*sources, f"-{int(older_than_seconds)} seconds"),
+			)
+			recovered = cursor.rowcount
+		if recovered:
+			logger.warning(f"[QUEUE] Recovered {recovered} stale PROCESSING job(s) from sources {sources}.")
+		return recovered
