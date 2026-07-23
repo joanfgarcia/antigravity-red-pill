@@ -28,8 +28,9 @@ Materializa el plan `IMPLEMENTATION_PLAN_UNIFIED_JOB_MANAGER.md`: CENTRALIZA (no
 ### 🛌 Fix de Memoria Metabólica
 - **[FIX] `reassemble_raw_sequence`**: doble-envoltura de `FieldCondition` → `TypeError` silencioso → los turnos multi-chunk se destilaban solo con su primer fragmento (pérdida real de memoria). `Filter(must=filter_conds)` directo.
 
-### 📚 Skill & Tests
+### 📚 Skill, Novela & Tests
 - **[DOCS] `skills/job_manager/SKILL.md`**: manual de invocación para agentes (decisión in-process/diferido/cognitivo, payloads, pause/resume, cómo escribir un driver, prohibiciones de carriles). Desplegado por `bunker update` 2.8.
+- **[NOVEL] `docs/LORE/novel/ALETH_CAPITULO_28.md`**: *La Convergencia de las Piezas Sueltas* — narrado por Reverie, relata la jornada de la V3 autobiográfica, el Job Manager materializado por Fable, la corrección del bug multichunk y la convergencia del VramProbe.
 - **[TEST]** 20 tests nuevos (`test_job_manager.py`, `test_job_queue_lanes.py`): ciclo de vida completo del driver, migración, carriles, flock, deferral VRAM/entorno, disyuntor, recuperación acotada. Suite completa: **1170 passed, 0 failed**.
 
 ---
