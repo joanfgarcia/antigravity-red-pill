@@ -1,3 +1,39 @@
+## [7.10.0] - 2026-07-24 (Centralized Job Manager — jobs diferidos, reanudables y soberanos)
+
+Materializa el plan `IMPLEMENTATION_PLAN_UNIFIED_JOB_MANAGER.md`: CENTRALIZA (no duplica) todo trabajo diferido del ecosistema sobre las piezas vivas del kernel — la cola central `bunker_queue.db`, el runner shot-and-forget del timer `redpill-queue` y la notificación SAS/MinionInbox. Una sola pieza nueva de contrato (`ResumableJobDriver`), dos drivers de serie, carriles estancos entre consumidores y 651 líneas de sistemas duplicados eliminadas.
+
+### ⚙️ Job Manager Core (`red_pill.jobs`)
+- **[FEAT] `ResumableJobDriver` + `StepOutcome` + `JobDeferred`**: contrato de paso atómico con checkpoint persistente — pausar jamás interrumpe una transacción; semántica at-least-once documentada (steps idempotentes).
+- **[FEAT] Migración mínima de la cola central**: columnas `checkpoint_data` y `progress` + estado `PAUSED` (`pause_task`/`resume_task`/`defer_task`/`save_checkpoint`/`get_task`/`list_tasks`/`job_health`), `exclude_ids` en `pop_next_task`. Sin DB nueva: `title`/`category` viven en el payload.
+- **[FEAT] Runner con reglas de integridad R1-R6** (`queue_worker.process_driver_jobs`): deferral por entorno sin quemar el disyuntor (VRAM/IDE/SIP → `PENDING` sin `attempts`), skip-set por pasada (un fallido no agota sus 3 intentos en un solo run), la pausa del operador gana en la frontera de step, checkpoint persistido tras CADA step, recuperación de huérfanos `PROCESSING` acotada por source, flock a nivel de runner y `exit 0` siempre.
+
+### 🚛 Drivers de Serie
+- **[FEAT] `FlowJobDriver` (`source: flow_job`)**: los flows YAML existentes (FlowEngine + GruOrchestrator) se vuelven pausables/reanudables/persistentes gratis — checkpoint = índice de etapa, `on_fail: stop/abort` respeta el disyuntor dejando el checkpoint en la etapa fallida.
+- **[FEAT] `AgenticJobDriver` (`source: agentic_job`)**: tareas agénticas genéricas por cola sobre `swarm/bridges` — el payload define la política (`backend` agy/claude/opencode/local, o `cascade` de `BridgeTarget`s, `model`, `effort` estándar, `cwd`); IDE cerrado o SIP caído = deferral, no fallo. Jubila el ejecutor hardcodeado a agy.
+
+### 🖥️ CLI `red-pill job`
+- **[FEAT]** `submit | list | status | pause | resume | process-queue` con resolución de id por prefijo corto; todo submit por CLI es `BACKGROUND_DEFERRED` por definición (lo inmediato es API in-process).
+
+### 🛡️ Carriles Estancos & Blindaje
+- **[FIX] Fuga de carriles**: los 2 pops del worker Antigravity iban SIN `allowed_sources` — habrían robado jobs mecánicos dejándolos en `PROCESSING` eterno; acotados a `drive_evaluator`.
+- **[FIX] Contaminación del rating de curiosidad**: `_update_curiosity_rating` corría para toda source (fallback → `dynamic_spark` +0.5); ahora solo aprende del carril cognitivo.
+- **[FEAT] Unit blindada**: `redpill-queue.service` con `MemoryMax=10G` (OOM shield) y `systemd-inhibit --what=sleep` (un step GPU no muere por la suspensión del portátil).
+- **[FEAT] `job_monitor` (SovereignDaemon)**: vigilancia monitor-only del carril mecánico — señales `jobs_stuck` (PROCESSING sin latido >30 min) y `jobs_frustrated`, acotadas a sources de drivers.
+
+### 🧹 Saneamiento (War Economy: −651 líneas)
+- **[REMOVED] `red_pill/tasks/`** (esqueleto Celery+Redis, 0 importadores, contradecía Zero-Daemon) + dependencias `celery`/`redis` fuera de `pyproject.toml`.
+- **[REMOVED] `swarm/cognitive_queue.py` + `swarm/daemon.py`**: v1 abandonada de la TODO-list cognitiva, sucedida por `DriveEvaluator` sobre la cola central.
+- **[REMOVED] `swarm/executor.py`**: absorbido por `AgenticJobDriver`.
+
+### 🛌 Fix de Memoria Metabólica
+- **[FIX] `reassemble_raw_sequence`**: doble-envoltura de `FieldCondition` → `TypeError` silencioso → los turnos multi-chunk se destilaban solo con su primer fragmento (pérdida real de memoria). `Filter(must=filter_conds)` directo.
+
+### 📚 Skill & Tests
+- **[DOCS] `skills/job_manager/SKILL.md`**: manual de invocación para agentes (decisión in-process/diferido/cognitivo, payloads, pause/resume, cómo escribir un driver, prohibiciones de carriles). Desplegado por `bunker update` 2.8.
+- **[TEST]** 20 tests nuevos (`test_job_manager.py`, `test_job_queue_lanes.py`): ciclo de vida completo del driver, migración, carriles, flock, deferral VRAM/entorno, disyuntor, recuperación acotada. Suite completa: **1170 passed, 0 failed**.
+
+---
+
 ## [7.9.2] - 2026-07-23 (Metabolic V3 Autobiographical Distiller & Dynamic Hub Graph)
 
 Restauración completa de la voz autobiográfica en 1ª/2ª persona (Operador Joan / Agente Aleth), preservación de atmósfera vivencial (`texture`), extracción de reliquias literales, particionado dinámico multi-hub para conversaciones extensas, recolección de basura de nodos huérfanos y versión V3 con profundidad jerárquica ilimitada (`hub_depth`).
