@@ -532,11 +532,11 @@ def synthesize_hub_v2(
 		)
 		match = re.search(r"\{[\s\S]*\}", content)
 		if not match:
-			return _make_fallback()
+			return _make_fallback()  # type: ignore
 		parsed = json.loads(_sanitize_llm_json(match.group(0)))
 		summary_val = str(parsed.get("summary") or "").strip()
 		if not summary_val or _is_template_echo(summary_val):
-			return _make_fallback()
+			return _make_fallback()  # type: ignore
 		texture_val = str(parsed.get("texture") or "").strip()
 		if _is_template_echo(texture_val):
 			texture_val = ""
@@ -555,7 +555,6 @@ def synthesize_hub_v2(
 	except Exception as e:
 		logger.warning(f"[HUB-V2] LLM synthesis failed ({e}). Falling back to legacy concatenation.")
 		return _make_fallback()
-		return fallback
 
 
 def classify_category(

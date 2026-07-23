@@ -91,7 +91,10 @@ def test_distill_lab_upgrade_all_cmd():
 
 	import distill_lab
 
-	with patch("red_pill.memory.MemoryManager", return_value=mock_mm), patch("distill_lab.distill_engram", return_value=mock_distill), patch("distill_lab.synthesize_hub_v2", return_value=mock_hub):
+	with (
+		patch("red_pill.memory.MemoryManager", return_value=mock_mm),
+		patch("distill_lab.distill_engram", return_value=mock_distill),
+		patch("distill_lab.synthesize_hub_v2", return_value=mock_hub),
+	):
 		with patch.object(sys, "argv", ["distill_lab.py", "upgrade-all", "--limit", "5"]):
 			distill_lab.main()
-

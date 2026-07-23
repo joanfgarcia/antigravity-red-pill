@@ -416,7 +416,11 @@ def cmd_upgrade_all(args) -> None:
 
 			if not args.force:
 				# Evaluamos semánticamente si el engrama sufre de tono clínico de 3ª persona o formato antiguo
-				needs_upgrade = audit_engram_quality(summary) if args.smart_audit else (not has_texture or summary.startswith("Joan ") or " informed that" in summary)
+				needs_upgrade = (
+					audit_engram_quality(summary)
+					if args.smart_audit
+					else (not has_texture or summary.startswith("Joan ") or " informed that" in summary)
+				)
 				if not needs_upgrade:
 					continue
 
@@ -513,7 +517,9 @@ def main() -> None:
 	p_upg = sub.add_parser("upgrade-all", help="Batch re-distill legacy engrams in Bünker to 1st-person autobiographical format")
 	p_upg.add_argument("--collection", choices=["work_memories", "social_memories"])
 	p_upg.add_argument("--limit", type=int, default=50, help="Max engrams to process (default: 50)")
-	p_upg.add_argument("--smart-audit", action="store_true", help="Use LLM semantic judgment (engram_quality_auditor) to decide if engram needs re-distilling")
+	p_upg.add_argument(
+		"--smart-audit", action="store_true", help="Use LLM semantic judgment (engram_quality_auditor) to decide if engram needs re-distilling"
+	)
 	p_upg.add_argument("--force", action="store_true", help="Force re-distilling even if texture is present")
 	p_upg.add_argument("--execute", action="store_true", help="Apply payload changes to Qdrant (default: dry-run)")
 

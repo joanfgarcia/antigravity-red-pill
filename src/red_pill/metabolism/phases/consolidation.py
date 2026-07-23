@@ -64,7 +64,7 @@ def reassemble_raw_sequence(client, collection: str, point: Any) -> tuple[str, l
 		try:
 			sibling_points, _ = client.scroll(
 				collection_name=collection,
-				scroll_filter=_qm.Filter(must=filter_conds),
+				scroll_filter=_qm.Filter(must=[_qm.FieldCondition(cond) for cond in filter_conds]),
 				limit=100,
 				with_payload=True,
 			)
@@ -362,8 +362,8 @@ class ConsolidationPhase(SleepPhase):
 				if len(surviving_chunks) > 1 and prev_chunk_id and not point_write_failed:
 					max_chunks_per_hub = getattr(cfg, "SLEEP_MAX_CHUNKS_PER_HUB", 6)
 					if len(surviving_chunks) > max_chunks_per_hub:
-						chunk_batches = [surviving_chunks[k:k + max_chunks_per_hub] for k in range(0, len(surviving_chunks), max_chunks_per_hub)]
-						affects_batches = [fragment_affects[k:k + max_chunks_per_hub] for k in range(0, len(fragment_affects), max_chunks_per_hub)]
+						chunk_batches = [surviving_chunks[k : k + max_chunks_per_hub] for k in range(0, len(surviving_chunks), max_chunks_per_hub)]
+						affects_batches = [fragment_affects[k : k + max_chunks_per_hub] for k in range(0, len(fragment_affects), max_chunks_per_hub)]
 					else:
 						chunk_batches = [surviving_chunks]
 						affects_batches = [fragment_affects]
@@ -375,7 +375,9 @@ class ConsolidationPhase(SleepPhase):
 							hub_summary = f"[Parte {b_idx + 1}/{len(chunk_batches)}] {hub_summary}"
 
 						hub_emotion, hub_intensity = derive_hub_affect(c_batch)
-						max_child_depth = max([int(c.get("hub_depth", 1)) for c in c_batch if isinstance(c, dict) and str(c.get("hub_depth", "")).isdigit()], default=1)
+						max_child_depth = max(
+							[int(c.get("hub_depth", 1)) for c in c_batch if isinstance(c, dict) and str(c.get("hub_depth", "")).isdigit()], default=1
+						)
 						hub_metadata = {
 							"lazarus_phase": "synthesis_hub",
 							"node_type": "synthesis_hub",

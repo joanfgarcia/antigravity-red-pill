@@ -133,7 +133,10 @@ def test_reassemble_raw_sequence():
 	from red_pill.metabolism.phases.consolidation import reassemble_raw_sequence
 
 	mock_client = MagicMock()
-	p0 = MagicMock(id="p0", payload={"parent_id": "seq-123", "lazarus_phase": "raw_parent", "chunk_index": 0, "content": "USER: Hola Barcelona, estamos en casa de "})
+	p0 = MagicMock(
+		id="p0",
+		payload={"parent_id": "seq-123", "lazarus_phase": "raw_parent", "chunk_index": 0, "content": "USER: Hola Barcelona, estamos en casa de "},
+	)
 	p1 = MagicMock(id="p1", payload={"parent_id": "seq-123", "lazarus_phase": "raw_parent", "chunk_index": 1, "content": "mi madre Victoria."})
 
 	mock_client.scroll.return_value = ([p1, p0], None)  # out of order return from scroll
@@ -181,8 +184,8 @@ def test_multi_hub_batching_partitioning():
 	fragment_affects = [{"child_id": f"id_{i}", "emotion": "neutral", "intensity": 0.5, "category": "work"} for i in range(14)]
 
 	if len(surviving_chunks) > max_chunks_per_hub:
-		chunk_batches = [surviving_chunks[k:k + max_chunks_per_hub] for k in range(0, len(surviving_chunks), max_chunks_per_hub)]
-		affects_batches = [fragment_affects[k:k + max_chunks_per_hub] for k in range(0, len(fragment_affects), max_chunks_per_hub)]
+		chunk_batches = [surviving_chunks[k : k + max_chunks_per_hub] for k in range(0, len(surviving_chunks), max_chunks_per_hub)]
+		affects_batches = [fragment_affects[k : k + max_chunks_per_hub] for k in range(0, len(fragment_affects), max_chunks_per_hub)]
 	else:
 		chunk_batches = [surviving_chunks]
 		affects_batches = [fragment_affects]
@@ -209,4 +212,3 @@ def test_cleanup_orphan_raw_parents():
 	report = cleanup_orphan_raw_parents(mock_mem_mgr, collections=["work_memories"])
 	assert report["work_memories"] == 1
 	assert mock_client.delete.called
-
