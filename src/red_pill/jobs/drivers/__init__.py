@@ -44,4 +44,3 @@ from red_pill.jobs.drivers.flow import FlowJobDriver  # noqa: E402
 
 register_driver(FlowJobDriver)
 register_driver(AgenticJobDriver)
-

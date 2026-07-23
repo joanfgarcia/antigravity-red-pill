@@ -463,7 +463,9 @@ def handle_job(args: argparse.Namespace) -> None:
 		for t in tasks:
 			progress = t.get("progress") or {}
 			pct = f"{progress.get('percent', '')}%" if isinstance(progress, dict) and progress.get("percent") is not None else "-"
-			print(f"{t['id'][:8]:<10} {t['source'][:19]:<20} {t['status']:<12} {t['priority']:<5} {t['attempts']:<4} {pct:<10} {t.get('title') or '-'}")
+			print(
+				f"{t['id'][:8]:<10} {t['source'][:19]:<20} {t['status']:<12} {t['priority']:<5} {t['attempts']:<4} {pct:<10} {t.get('title') or '-'}"
+			)
 
 	elif args.job_cmd == "status":
 		task = _find_job(queue, args.job_id)
