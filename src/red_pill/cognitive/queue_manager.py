@@ -435,10 +435,10 @@ class CognitiveQueueManager:
 			return cursor.rowcount > 0
 
 	def resume_task(self, task_id: str) -> bool:
-		"""PAUSED → PENDING. Reanuda en el siguiente disparo del runner."""
+		"""PAUSED/PROCESSING → PENDING. Reanuda en el siguiente disparo del runner."""
 		with self._get_connection() as conn:
 			cursor = conn.execute(
-				"UPDATE cognitive_tasks SET status = 'PENDING', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'PAUSED'",
+				"UPDATE cognitive_tasks SET status = 'PENDING', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status IN ('PAUSED', 'PROCESSING')",
 				(task_id,),
 			)
 			return cursor.rowcount > 0
