@@ -15,12 +15,12 @@ from qdrant_client import models
 from red_pill.jobs.drivers.base import JobDeferred, ResumableJobDriver, StepOutcome
 from red_pill.memory import MemoryManager
 from red_pill.metabolism.distiller import (
+	_is_template_echo,
 	audit_engram_quality,
 	build_emotional_vector,
 	distill_engram,
 	merge_relics,
 	synthesize_hub_v2,
-	_is_template_echo,
 )
 from red_pill.metabolism.sleep import chunk_text
 
@@ -33,15 +33,24 @@ class DistillJobDriver(ResumableJobDriver):
 
 	def preflight(self, payload: Dict[str, Any]) -> None:
 		from red_pill.core.vram_probe import VramProbe
-		from red_pill.metabolism.phases.consolidation import _check_llm_available
+		from red_pill.metabolism.ephemeral_server import _check_llm_available
 
-		# Si el modelo residente en GPU está activo y respondiendo consultas, procedemos directamente
+		# Si el modelo residente en GPU está activo, la re-síntesis usa ESE servidor:
+		# adelante sin probe (la VRAM libre es baja precisamente porque el modelo ya
+		# está cargado — un check de memoria libre aquí bloquearía el caso bueno).
 		if _check_llm_available():
 			return
 
+		# Cold-start: bootear el LLM efímero SÍ necesita margen real de GPU (mismo
+		# umbral que el preflight del ciclo de sueño). min_vram_mb de clase se queda
+		# a 0 a propósito para que el gate genérico del runner (sin bypass residente)
+		# no re-bloquee el caso residente.
+		import red_pill.config as cfg
+
+		min_free = int(payload.get("min_vram_mb", getattr(cfg, "SLEEP_MIN_FREE_VRAM_MB", 3500)))
 		free_mb = VramProbe.get_free_mb()
-		if free_mb < self.min_vram_mb:
-			raise JobDeferred(f"VRAM insuficiente para re-síntesis metabólica ({free_mb}MB libres < {self.min_vram_mb}MB)")
+		if free_mb < min_free:
+			raise JobDeferred(f"VRAM insuficiente para arrancar el LLM efímero ({free_mb}MB libres < {min_free}MB)")
 
 	def step(self, payload: Dict[str, Any], checkpoint_data: Dict[str, Any]) -> StepOutcome:
 		batch_size = int(payload.get("batch_size", 20))

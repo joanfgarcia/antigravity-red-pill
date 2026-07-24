@@ -46,6 +46,7 @@ dependencies = [
     "platformdirs>=4.9.2",
     "websockets>=16.0",
     "starlette>=1.0.1",
+    "prompt-toolkit>=3.0.0",
 ]
 
 [project.scripts]

@@ -31,6 +31,11 @@ red-pill job submit --source agentic_job --payload '{
 }' --title "Auditoría TODOs"
 ```
 
+```bash
+# Re-síntesis metabólica V3 de engramas (usa el LLM residente si está vivo; si no, difiere hasta tener VRAM)
+red-pill job submit --source distill_job --payload '{"batch_size": 15, "smart_audit": true}' --title "Re-síntesis V3"
+```
+
 - **Prioridad**: entero, **mayor = más urgente**, default 5 (convención única de toda la cola).
 - `agentic_job` acepta `cascade` en vez de `backend`: lista ordenada `[{"backend": "claude", "model": "opus", "effort": "high"}, {"backend": "local"}]` — prueba cada target hasta uno con cuota (mismo sustrato que Telegram).
 - Backend `local`/`local-tools`: el driver ya gestiona VRAM/CPU/RAM — si no hay recursos, el job se difiere solo, sin quemar reintentos.
@@ -46,6 +51,8 @@ red-pill job process-queue        # runner manual (el timer redpill-queue lo hac
 ```
 
 Los ids aceptan el prefijo corto que muestra `job list`. El runner tiene flock: lanzarlo con otro activo cede con `exit 0`, sin daño.
+
+**No invoques `process-queue` para "lanzar" un job** — bloquea la terminal mientras procesa (un distill de horas = horas cogida). Tras el `submit`, el timer `redpill-queue` (1 min) lo recoge solo, con OOM shield e inhibit. Arranque inmediato desatendido: `systemctl --user start redpill-queue.service`. El runner además **se pausa solo mientras el ciclo de sueño metabólico está corriendo** (heartbeat fresco en `sleep_phase_status.json`) y reanuda al terminar.
 
 ## 4. Leer resultados y salud
 

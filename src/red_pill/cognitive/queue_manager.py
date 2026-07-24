@@ -435,10 +435,22 @@ class CognitiveQueueManager:
 			return cursor.rowcount > 0
 
 	def resume_task(self, task_id: str) -> bool:
-		"""PAUSED/PROCESSING → PENDING. Reanuda en el siguiente disparo del runner."""
+		"""PAUSED → PENDING; también recupera huérfanos PROCESSING sin latido reciente.
+
+		El guard temporal (>15 min sin updated_at) evita la doble ejecución: un
+		PROCESSING con heartbeat fresco es un job VIVO en manos del runner —
+		reanudarlo lo duplicaría (carrera de checkpoints). El runner refresca
+		updated_at en cada checkpoint, así que un job largo legítimo late.
+		"""
 		with self._get_connection() as conn:
 			cursor = conn.execute(
-				"UPDATE cognitive_tasks SET status = 'PENDING', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status IN ('PAUSED', 'PROCESSING')",
+				"""
+				UPDATE cognitive_tasks SET status = 'PENDING', updated_at = CURRENT_TIMESTAMP
+				WHERE id = ? AND (
+					status = 'PAUSED'
+					OR (status = 'PROCESSING' AND updated_at < datetime('now', '-900 seconds'))
+				)
+				""",
 				(task_id,),
 			)
 			return cursor.rowcount > 0

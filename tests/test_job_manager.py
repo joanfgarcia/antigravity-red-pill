@@ -432,3 +432,68 @@ def test_vram_deferral_via_probe(queue, clean_registry, monkeypatch):
 
 	monkeypatch.setattr(VramProbe, "get_free_mb", staticmethod(lambda: 8000))
 	assert process_driver_jobs(queue) == 1
+
+
+def test_sleep_cycle_defers_driver_jobs(queue, clean_registry, tmp_path, monkeypatch):
+	"""While the metabolic sleep cycle is running (fresh heartbeat), driver jobs
+	defer cleanly (R1: PENDING, no attempts). A stale 'running' file (>300s,
+	e.g. after a power-off mid-sleep) must NOT defer."""
+	import json as _json
+	import time as _time
+
+	from red_pill.core import paths
+
+	state_dir = tmp_path / "state"
+	state_dir.mkdir()
+	monkeypatch.setattr(paths, "get_state_dir", lambda: state_dir)
+
+	register_driver(CountingDriver)
+	job_id = queue.enqueue_task(source="test_counting", payload={"total": 1})
+
+	status_file = state_dir / "sleep_phase_status.json"
+	status_file.write_text(_json.dumps({"status": "running", "updated_at": _time.time()}))
+	assert process_driver_jobs(queue) == 0
+	task = queue.get_task(job_id)
+	assert task["status"] == "PENDING" and task["attempts"] == 0
+
+	# Stale heartbeat (machine died mid-sleep) -> the job runs normally.
+	status_file.write_text(_json.dumps({"status": "running", "updated_at": _time.time() - 3600}))
+	assert process_driver_jobs(queue) == 1
+
+
+def test_resume_task_guards_live_processing(queue, clean_registry):
+	"""resume_task recovers stale PROCESSING orphans but never a live job
+	(fresh heartbeat) — that would double-execute it."""
+	register_driver(CountingDriver)
+	job_id = queue.enqueue_task(source="test_counting", payload={"total": 1})
+	queue.pop_next_task(allowed_sources=["test_counting"])  # live PROCESSING
+
+	assert queue.resume_task(job_id) is False
+	assert queue.get_task(job_id)["status"] == "PROCESSING"
+
+	with queue._get_connection() as conn:
+		conn.execute("UPDATE cognitive_tasks SET updated_at = datetime('now', '-1 hour') WHERE id = ?", (job_id,))
+
+	assert queue.resume_task(job_id) is True
+	assert queue.get_task(job_id)["status"] == "PENDING"
+
+
+def test_distill_preflight_resident_bypass_and_cold_boot_gate(monkeypatch):
+	"""Resident LLM -> run without probing (free VRAM is low BECAUSE the model is
+	loaded). Cold start -> defer unless there is headroom to boot the ephemeral."""
+	from red_pill.core.vram_probe import VramProbe
+	from red_pill.jobs.drivers.distill import DistillJobDriver
+	from red_pill.metabolism import ephemeral_server
+
+	driver = DistillJobDriver()
+
+	monkeypatch.setattr(ephemeral_server, "_check_llm_available", lambda: True)
+	monkeypatch.setattr(VramProbe, "get_free_mb", staticmethod(lambda: 100))
+	driver.preflight({})  # resident: no probe, no raise
+
+	monkeypatch.setattr(ephemeral_server, "_check_llm_available", lambda: False)
+	with pytest.raises(JobDeferred):
+		driver.preflight({})  # cold boot with 100MB free -> defer
+
+	monkeypatch.setattr(VramProbe, "get_free_mb", staticmethod(lambda: 8000))
+	driver.preflight({})  # cold boot with headroom -> proceed

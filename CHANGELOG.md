@@ -15,6 +15,10 @@ Materializa el plan `IMPLEMENTATION_PLAN_UNIFIED_JOB_MANAGER.md`: CENTRALIZA (no
 - **[FEAT] Preflight de Sueño Metabólico (R1)**: el Job Manager comprueba `sleep_phase_status.json` en cada step; si el ciclo de sueño nocturno (4 AM) está activo, se autodifiere (`JobDeferred`) evitando contienda de GPU/LLM.
 - **[FIX] Recuperación de jobs huérfanos en `resume_task`**: ampliada la transición para permitir devolver tareas interrumpidas en `PROCESSING` de vuelta a `PENDING`.
 - **[FIX] Sintaxis en `distiller.py`**: corregida la sangría de `return _make_fallback()` dentro del bloque `except` de `synthesize_hub_v2` que impedía la ejecución limpia del ciclo de sueño.
+- **[FIX] `import json` en `queue_worker.py`**: el preflight de sueño usaba `json.load` sin importarlo — el `NameError` moría en un `except` silencioso y el deferral por ciclo de sueño nunca se activaba. Ahora funciona (con test que fija además que un `running` rancio >300s, p.ej. tras un apagón a mitad de sueño, NO difiere).
+- **[FIX] Guard temporal en `resume_task`**: la recuperación de huérfanos `PROCESSING` exige >15 min sin latido (`updated_at`) — reanudar un job VIVO en manos del runner lo ejecutaría por duplicado (carrera de checkpoints). `PAUSED` reanuda siempre.
+- **[FIX] Cold-start del `DistillJobDriver`**: el bypass residente se mantiene, pero sin modelo cargado el preflight ahora SÍ exige margen real de VRAM para bootear el LLM efímero (`SLEEP_MIN_FREE_VRAM_MB`, override por payload) en vez de comparar contra `min_vram_mb = 0` (check inerte que dejaba al job pelear por la GPU en pleno entrenamiento).
+- **[FIX] `prompt-toolkit` declarado en `pyproject.toml`**: desapareció del venv con el saneamiento de dependencias (era transitiva) y rompía el TUI `red-pill config` en runtime; el `importorskip` de los tests lo enmascaraba.
 
 ### 🖥️ CLI `red-pill job`
 - **[FEAT]** `submit | list | status | pause | resume | process-queue` con resolución de id por prefijo corto; todo submit por CLI es `BACKGROUND_DEFERRED` por definición (lo inmediato es API in-process).
