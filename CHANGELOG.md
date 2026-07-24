@@ -12,6 +12,8 @@ Materializa el plan `IMPLEMENTATION_PLAN_UNIFIED_JOB_MANAGER.md`: CENTRALIZA (no
 - **[FEAT] `FlowJobDriver` (`source: flow_job`)**: los flows YAML existentes (FlowEngine + GruOrchestrator) se vuelven pausables/reanudables/persistentes gratis — checkpoint = índice de etapa, `on_fail: stop/abort` respeta el disyuntor dejando el checkpoint en la etapa fallida.
 - **[FEAT] `AgenticJobDriver` (`source: agentic_job`)**: tareas agénticas genéricas por cola sobre `swarm/bridges` — el payload define la política (`backend` agy/claude/opencode/local, o `cascade` de `BridgeTarget`s, `model`, `effort` estándar, `cwd`); IDE cerrado o SIP caído = deferral, no fallo. Jubila el ejecutor hardcodeado a agy.
 - **[FIX] Bypass de VRAM para LLM residente online**: actualizado `queue_worker.py` y `DistillJobDriver` para omitir el aplazamiento por VRAM libre (`_check_llm_available()`) cuando el modelo de inferencia en GPU ya está cargado y en reposo listo para consultas HTTP.
+- **[FEAT] Preflight de Sueño Metabólico (R1)**: el Job Manager comprueba `sleep_phase_status.json` en cada step; si el ciclo de sueño nocturno (4 AM) está activo, se autodifiere (`JobDeferred`) evitando contienda de GPU/LLM.
+- **[FIX] Recuperación de jobs huérfanos en `resume_task`**: ampliada la transición para permitir devolver tareas interrumpidas en `PROCESSING` de vuelta a `PENDING`.
 
 ### 🖥️ CLI `red-pill job`
 - **[FEAT]** `submit | list | status | pause | resume | process-queue` con resolución de id por prefijo corto; todo submit por CLI es `BACKGROUND_DEFERRED` por definición (lo inmediato es API in-process).
