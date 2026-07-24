@@ -109,16 +109,29 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 
 		try:
 			while True:
-				# R1: preflight de entorno antes de CADA step (VRAM/IDE/SIP)
+				# R1: preflight de entorno antes de CADA step (VRAM/IDE/SIP/Sueño)
+				from red_pill.core.paths import get_state_dir
+
+				# Si el ciclo de sueño metabólico nocturno está corriendo, diferimos limpiamente
+				try:
+					sleep_status_file = get_state_dir() / "sleep_phase_status.json"
+					if sleep_status_file.exists():
+						with open(sleep_status_file, "r", encoding="utf-8") as _sf:
+							_sdata = json.load(_sf)
+						if _sdata.get("status") == "running" and (time.time() - _sdata.get("updated_at", 0)) < 300:
+							raise JobDeferred("Ciclo de sueño metabólico en ejecución (NREM/REM 4 AM)")
+				except JobDeferred:
+					raise
+				except Exception:
+					pass
+
 				driver.preflight(task["payload"])
 				if driver.min_vram_mb > 0:
 					from red_pill.core.vram_probe import VramProbe
-					from red_pill.metabolism.phases.consolidation import _check_llm_available
 
-					if not _check_llm_available():
-						free_mb = VramProbe.get_free_mb()
-						if free_mb < driver.min_vram_mb:
-							raise JobDeferred(f"VRAM insuficiente ({free_mb}MB libres < {driver.min_vram_mb}MB)")
+					free_mb = VramProbe.get_free_mb()
+					if free_mb < driver.min_vram_mb:
+						raise JobDeferred(f"VRAM insuficiente ({free_mb}MB libres < {driver.min_vram_mb}MB)")
 
 				outcome = driver.step(task["payload"], checkpoint)
 				checkpoint = outcome.new_checkpoint

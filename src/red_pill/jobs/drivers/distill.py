@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 class DistillJobDriver(ResumableJobDriver):
 	source = "distill_job"
-	min_vram_mb = 1000
+	min_vram_mb = 0
 
 	def preflight(self, payload: Dict[str, Any]) -> None:
 		from red_pill.core.vram_probe import VramProbe
