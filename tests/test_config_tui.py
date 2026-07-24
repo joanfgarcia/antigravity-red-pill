@@ -3,8 +3,9 @@ Unit tests for the TUI Dashboard & Configuration Manager (config_tui.py).
 """
 
 import sqlite3
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 pytest.importorskip("prompt_toolkit")
 

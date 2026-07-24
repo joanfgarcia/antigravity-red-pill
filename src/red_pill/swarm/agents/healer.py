@@ -1,3 +1,4 @@
+import ast
 import logging
 import os
 import re
@@ -113,6 +114,13 @@ class HealerMinion(Minion):
 
 			raw_correction = engine.synthesize(context, prompt)
 			correction = self._clean_correction(raw_correction)
+			# El LLM (o la limpieza) puede perder la indentación inicial: si la línea
+			# original estaba indentada y la corrección llega a columna 0, re-indentar
+			# con el sangrado original. Una línea desindentada = SyntaxError garantizado.
+			if correction and not correction[:1].isspace():
+				indent = original_line[: len(original_line) - len(original_line.lstrip())]
+				if indent:
+					correction = indent + correction.lstrip()
 
 			if correction and correction != original_line:
 				self.log(f"  [Fix] L{err['line']}: {original_line.strip()} -> {correction.strip()}")
@@ -120,15 +128,29 @@ class HealerMinion(Minion):
 				fixes_applied += 1
 
 		if not dry_run and fixes_applied > 0:
+			new_source = "\n".join(lines) + "\n"
+			# Gate de sintaxis: JAMÁS escribir a disco código que no parsea. Un heal
+			# fallido debe dejar el archivo intacto, no mutilado (un healer que rompe
+			# distiller.py tumba el ciclo de sueño de las 03:00 entero).
+			try:
+				ast.parse(new_source)
+			except SyntaxError as e:
+				self.log(f"  [ABORT] Healed source for {file_path} does not parse ({e}). Discarding all fixes for this file.")
+				return 0
 			with open(file_path, "w") as f:
-				f.write("\n".join(lines) + "\n")
+				f.write(new_source)
 
 		return fixes_applied
 
 	def _clean_correction(self, raw: str) -> str:
-		"""Cleans LLM output to extract a single code line."""
-		clean = raw.strip()
-		clean = re.sub(r"^```python\s*", "", clean, flags=re.IGNORECASE)
-		clean = re.sub(r"^```\s*", "", clean, flags=re.IGNORECASE)
-		clean = re.sub(r"\s*```$", "", clean)
-		return clean.splitlines()[0] if clean.splitlines() else ""
+		"""Cleans LLM output to extract a single code line, PRESERVING leading indentation.
+
+		El .strip() original destruía el sangrado inicial de la línea corregida,
+		dejándola en columna 0 aunque el modelo la devolviera perfecta.
+		"""
+		clean = raw.strip("\n\r")
+		clean = re.sub(r"^```python[ \t]*\n?", "", clean, flags=re.IGNORECASE)
+		clean = re.sub(r"^```[ \t]*\n?", "", clean)
+		clean = re.sub(r"\n?[ \t]*```[ \t]*$", "", clean)
+		lines = [ln for ln in clean.splitlines() if ln.strip()]
+		return lines[0].rstrip() if lines else ""
