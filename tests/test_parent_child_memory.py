@@ -1,3 +1,4 @@
+import asyncio
 import json
 import sqlite3
 import time
@@ -7,6 +8,8 @@ from unittest.mock import ANY, MagicMock, patch
 from red_pill.memory import MemoryManager
 from red_pill.metabolism.sleep import perform_sleep_cycle
 from red_pill.swarm.agents.janitor import JanitorMinion
+from red_pill.swarm.agents.janitor_plugins.orphaned_parents_sweep import OrphanedParentsSweepPlugin
+from red_pill.swarm.agents.janitor_plugins.sqlite_interactions_archiver import SqliteInteractionsArchiverPlugin
 
 
 @patch("red_pill.metabolism.phases.consolidation.distill_session_anchors", return_value=None)
@@ -279,7 +282,7 @@ def test_janitor_cleans_orphaned_parents():
 	# child retrieve returns empty list (meaning child was deleted!)
 	mock_client.retrieve.return_value = []
 
-	purged = minion._cleanup_orphaned_parents(mock_mgr, "work_memories")
+	purged = OrphanedParentsSweepPlugin()._cleanup_orphaned_parents(minion, mock_mgr, "work_memories")
 	assert purged == 1
 	mock_client.delete.assert_called_once()
 
@@ -300,7 +303,7 @@ def test_janitor_does_not_clean_parents_with_live_children():
 	child_point = MagicMock(id=child_id, payload={"lazarus_phase": "sequence_chunk"})
 	mock_client.retrieve.return_value = [child_point]
 
-	purged = minion._cleanup_orphaned_parents(mock_mgr, "work_memories")
+	purged = OrphanedParentsSweepPlugin()._cleanup_orphaned_parents(minion, mock_mgr, "work_memories")
 	assert purged == 0
 	mock_client.delete.assert_not_called()
 
@@ -339,7 +342,8 @@ def test_janitor_archives_sqlite_to_jsonl(tmp_path):
 	with patch("red_pill.core.paths.get_db_dir", return_value=db_dir):
 		with patch("red_pill.core.paths.get_aleth_core_root", return_value=aleth_core):
 			# Run archiver
-			count = minion.archive_old_sqlite_interactions()
+			result = asyncio.run(SqliteInteractionsArchiverPlugin().execute(minion, {}))
+			count = result["sqlite_interactions_archived"]
 			assert count == 1
 
 			# Verify JSONL log contains the old entry
