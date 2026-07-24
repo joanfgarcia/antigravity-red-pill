@@ -47,6 +47,38 @@ def _report_job(job_id: str, task: dict, status: str, content: str) -> None:
 		logger.error(f"Failed to report job {job_id} to MinionInbox: {e}")
 
 
+def _nightly_cycle_active() -> "str | None":
+	"""Nombre del ciclo nocturno activo (sueño 03:00 / chronicle 04:00) o None.
+
+	Los ciclos metabólicos tienen prioridad absoluta sobre los driver jobs: la
+	comprobación primaria es la unit systemd ACTIVA (cubre toda la duración del
+	ciclo — el fichero de estado del sueño solo se refresca al inicio de cada
+	fase y una fase larga lo dejaría "rancio"). El fichero queda como respaldo
+	para ejecuciones manuales (`red-pill sleep`) fuera de systemd.
+	"""
+	try:
+		import subprocess
+
+		for unit in ("redpill-sleep.service", "redpill-chronicle.service"):
+			if subprocess.run(["systemctl", "--user", "is-active", "--quiet", unit], timeout=3).returncode == 0:
+				return unit
+	except Exception:
+		pass
+
+	try:
+		from red_pill.core.paths import get_state_dir
+
+		sleep_status_file = get_state_dir() / "sleep_phase_status.json"
+		if sleep_status_file.exists():
+			data = json.loads(sleep_status_file.read_text(encoding="utf-8"))
+			if data.get("status") == "running" and (time.time() - data.get("updated_at", 0)) < 300:
+				return "sleep_cycle (manual)"
+	except Exception:
+		pass
+
+	return None
+
+
 def process_driver_jobs(cog_queue: CognitiveQueueManager, max_jobs: int = 5) -> int:
 	"""Procesa jobs del carril mecánico vía ResumableJobDriver (Centralized Job Manager).
 
@@ -110,21 +142,10 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 
 		try:
 			while True:
-				# R1: preflight de entorno antes de CADA step (VRAM/IDE/SIP/Sueño)
-				from red_pill.core.paths import get_state_dir
-
-				# Si el ciclo de sueño metabólico nocturno está corriendo, diferimos limpiamente
-				try:
-					sleep_status_file = get_state_dir() / "sleep_phase_status.json"
-					if sleep_status_file.exists():
-						with open(sleep_status_file, "r", encoding="utf-8") as _sf:
-							_sdata = json.load(_sf)
-						if _sdata.get("status") == "running" and (time.time() - _sdata.get("updated_at", 0)) < 300:
-							raise JobDeferred("Ciclo de sueño metabólico en ejecución (NREM/REM 4 AM)")
-				except JobDeferred:
-					raise
-				except Exception:
-					pass
+				# R1: preflight de entorno antes de CADA step (VRAM/IDE/SIP/ciclos nocturnos)
+				nightly = _nightly_cycle_active()
+				if nightly:
+					raise JobDeferred(f"Ciclo nocturno con prioridad absoluta en ejecución: {nightly}")
 
 				driver.preflight(task["payload"])
 				if driver.min_vram_mb > 0:

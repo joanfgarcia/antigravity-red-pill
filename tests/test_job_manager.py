@@ -530,3 +530,21 @@ def test_purge_hygiene_cleans_old_and_marks_stuck(queue, clean_registry):
 	assert queue.get_task(ids["live"])["status"] == "PROCESSING"
 	assert queue.get_task(ids["pending"])["status"] == "PENDING"
 	assert queue.get_task(ids["paused"])["status"] == "PAUSED"
+
+
+def test_nightly_unit_active_defers_jobs(queue, clean_registry, monkeypatch):
+	"""While redpill-sleep/redpill-chronicle systemd units are ACTIVE the runner
+	yields (absolute priority for the 03:00/04:00 cycles), without attempts."""
+	import subprocess as _sp
+
+	class _Active:
+		returncode = 0
+
+	monkeypatch.setattr(_sp, "run", lambda *a, **kw: _Active())
+
+	register_driver(CountingDriver)
+	job_id = queue.enqueue_task(source="test_counting", payload={"total": 1})
+
+	assert process_driver_jobs(queue) == 0
+	task = queue.get_task(job_id)
+	assert task["status"] == "PENDING" and task["attempts"] == 0
