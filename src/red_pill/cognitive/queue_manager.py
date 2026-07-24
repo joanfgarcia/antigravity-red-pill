@@ -409,6 +409,41 @@ class CognitiveQueueManager:
 			).fetchone()[0]
 		return {"stuck": stuck, "frustrated": frustrated}
 
+	def purge_hygiene(self, completed_days: int = 7, frustrated_days: int = 14, stale_processing_hours: int = 24) -> Dict[str, int]:
+		"""Autolimpieza de la cola (invocada por el JanitorMinion nocturno):
+
+		- borra COMPLETED con más de `completed_days` días;
+		- borra FRUSTRATED con más de `frustrated_days` días (dead-letter caducado);
+		- PROCESSING sin latido > `stale_processing_hours` = colgado → FRUSTRATED,
+		  visible en `job list` hasta que la purga lo retire. El carril mecánico
+		  nunca llega aquí (requeue_stale lo recupera a los 15 min); esto caza los
+		  huérfanos de los demás carriles (samantha, cognitivo).
+
+		Nunca toca PENDING, PAUSED ni BLOCKED. Devuelve contadores por operación.
+		"""
+		with self._get_connection() as conn:
+			completed = conn.execute(
+				"DELETE FROM cognitive_tasks WHERE status = 'COMPLETED' AND updated_at < datetime('now', ?)",
+				(f"-{int(completed_days)} days",),
+			).rowcount
+			frustrated = conn.execute(
+				"DELETE FROM cognitive_tasks WHERE status = 'FRUSTRATED' AND updated_at < datetime('now', ?)",
+				(f"-{int(frustrated_days)} days",),
+			).rowcount
+			stuck = conn.execute(
+				"""
+				UPDATE cognitive_tasks
+				SET status = 'FRUSTRATED',
+					error_log = COALESCE(error_log, '') || ' [queue_hygiene: colgado en PROCESSING > ' || ? || 'h]',
+					updated_at = CURRENT_TIMESTAMP
+				WHERE status = 'PROCESSING' AND updated_at < datetime('now', ?)
+				""",
+				(int(stale_processing_hours), f"-{int(stale_processing_hours)} hours"),
+			).rowcount
+		if completed or frustrated or stuck:
+			logger.info(f"[QUEUE-HYGIENE] purged completed={completed} frustrated={frustrated}, stuck→FRUSTRATED={stuck}")
+		return {"completed_purged": completed, "frustrated_purged": frustrated, "stuck_marked": stuck}
+
 	def save_checkpoint(self, task_id: str, checkpoint: Dict[str, Any], progress: Optional[Dict[str, Any]] = None) -> None:
 		"""Persiste el avance atómico tras un step().
 

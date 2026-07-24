@@ -497,3 +497,36 @@ def test_distill_preflight_resident_bypass_and_cold_boot_gate(monkeypatch):
 
 	monkeypatch.setattr(VramProbe, "get_free_mb", staticmethod(lambda: 8000))
 	driver.preflight({})  # cold boot with headroom -> proceed
+
+
+def test_purge_hygiene_cleans_old_and_marks_stuck(queue, clean_registry):
+	"""Nightly janitor hygiene: old COMPLETED/FRUSTRATED rows go away, stale
+	PROCESSING becomes FRUSTRATED (dead-letter), and PENDING/PAUSED survive."""
+	ids = {}
+	for key, source, status, age in (
+		("old_completed", "samantha", "COMPLETED", "-10 days"),
+		("new_completed", "samantha", "COMPLETED", "-1 hour"),
+		("old_frustrated", "drive_evaluator", "FRUSTRATED", "-30 days"),
+		("stuck", "samantha", "PROCESSING", "-2 days"),
+		("live", "samantha", "PROCESSING", "-1 minute"),
+		("pending", "drive_evaluator", "PENDING", "-90 days"),
+		("paused", "distill_job", "PAUSED", "-90 days"),
+	):
+		ids[key] = queue.enqueue_task(source=source, payload={})
+		with queue._get_connection() as conn:
+			conn.execute(
+				"UPDATE cognitive_tasks SET status = ?, updated_at = datetime('now', ?) WHERE id = ?",
+				(status, age, ids[key]),
+			)
+
+	result = queue.purge_hygiene(completed_days=7, frustrated_days=14, stale_processing_hours=24)
+
+	assert result == {"completed_purged": 1, "frustrated_purged": 1, "stuck_marked": 1}
+	assert queue.get_task(ids["old_completed"]) is None
+	assert queue.get_task(ids["old_frustrated"]) is None
+	assert queue.get_task(ids["new_completed"])["status"] == "COMPLETED"
+	stuck = queue.get_task(ids["stuck"])
+	assert stuck["status"] == "FRUSTRATED" and "queue_hygiene" in stuck["error_log"]
+	assert queue.get_task(ids["live"])["status"] == "PROCESSING"
+	assert queue.get_task(ids["pending"])["status"] == "PENDING"
+	assert queue.get_task(ids["paused"])["status"] == "PAUSED"

@@ -72,6 +72,33 @@ class JanitorMinion(Minion):
 		except Exception as e:
 			logger.error(f"[Janitor] Failed to execute SQLite interactions archiving: {e}")
 
+		# 6. Queue hygiene: autolimpieza de bunker_queue.db (COMPLETED/FRUSTRATED
+		# antiguos fuera; PROCESSING colgado >24h → FRUSTRATED + señal de dolor).
+		try:
+			from red_pill.cognitive.queue_manager import CognitiveQueueManager
+
+			hygiene = CognitiveQueueManager().purge_hygiene()
+			results.update(hygiene)
+			self.log(
+				f"Queue hygiene: {hygiene['completed_purged']} completed y {hygiene['frustrated_purged']} "
+				f"frustrated purgados, {hygiene['stuck_marked']} colgados marcados FRUSTRATED."
+			)
+			if hygiene["stuck_marked"]:
+				try:
+					from red_pill.memory import MemoryManager
+
+					MemoryManager().inject_signal(
+						name="queue_stuck_tasks",
+						intensity=6.0,
+						signal_type="pain",
+						source="Janitor",
+						originator=f"queue_hygiene ({hygiene['stuck_marked']} tareas colgadas en PROCESSING)",
+					)
+				except Exception as sig_err:
+					logger.warning(f"[Janitor] Failed to inject queue_stuck_tasks signal: {sig_err}")
+		except Exception as e:
+			logger.error(f"[Janitor] Failed to execute queue hygiene: {e}")
+
 		return results
 
 	def _rotate_and_cleanup_logs(self, max_size_bytes: int, days_to_keep: int) -> Dict[str, Any]:
