@@ -8,8 +8,10 @@ Materializa el plan `IMPLEMENTATION_PLAN_UNIFIED_JOB_MANAGER.md`: CENTRALIZA (no
 - **[FEAT] Runner con reglas de integridad R1-R6** (`queue_worker.process_driver_jobs`): deferral por entorno sin quemar el disyuntor (VRAM/IDE/SIP → `PENDING` sin `attempts`), skip-set por pasada (un fallido no agota sus 3 intentos en un solo run), la pausa del operador gana en la frontera de step, checkpoint persistido tras CADA step, recuperación de huérfanos `PROCESSING` acotada por source, flock a nivel de runner y `exit 0` siempre.
 
 ### 🚛 Drivers de Serie
+- **[FEAT] `DistillJobDriver` (`source: distill_job`)**: driver especializado para la re-síntesis metabólica V3 del Bünker de forma diferida, atómica y reanudable por pasos.
 - **[FEAT] `FlowJobDriver` (`source: flow_job`)**: los flows YAML existentes (FlowEngine + GruOrchestrator) se vuelven pausables/reanudables/persistentes gratis — checkpoint = índice de etapa, `on_fail: stop/abort` respeta el disyuntor dejando el checkpoint en la etapa fallida.
 - **[FEAT] `AgenticJobDriver` (`source: agentic_job`)**: tareas agénticas genéricas por cola sobre `swarm/bridges` — el payload define la política (`backend` agy/claude/opencode/local, o `cascade` de `BridgeTarget`s, `model`, `effort` estándar, `cwd`); IDE cerrado o SIP caído = deferral, no fallo. Jubila el ejecutor hardcodeado a agy.
+- **[FIX] Bypass de VRAM para LLM residente online**: actualizado `queue_worker.py` y `DistillJobDriver` para omitir el aplazamiento por VRAM libre (`_check_llm_available()`) cuando el modelo de inferencia en GPU ya está cargado y en reposo listo para consultas HTTP.
 
 ### 🖥️ CLI `red-pill job`
 - **[FEAT]** `submit | list | status | pause | resume | process-queue` con resolución de id por prefijo corto; todo submit por CLI es `BACKGROUND_DEFERRED` por definición (lo inmediato es API in-process).
