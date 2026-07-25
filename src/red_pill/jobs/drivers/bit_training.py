@@ -22,6 +22,7 @@ class BitTrainingDriver(ResumableJobDriver):
 	min_vram_mb = 0  # El preflight gestiona la parada de redpill-llm si hace falta
 
 	def preflight(self, payload: Dict[str, Any]) -> None:
+		import time
 		# Si redpill-llm está activo ocupando la GPU, intentamos pararlo para liberar VRAM
 		try:
 			res = subprocess.run(
@@ -33,6 +34,7 @@ class BitTrainingDriver(ResumableJobDriver):
 			if res.stdout.strip() == "active":
 				logger.info("[BIT TRAINING DRIVER] Deteniendo redpill-llm.service para liberar VRAM...")
 				subprocess.run(["systemctl", "--user", "stop", "redpill-llm.service"], check=False)
+				time.sleep(2.0)
 		except Exception as e:
 			logger.warning(f"[BIT TRAINING DRIVER] Advertencia comprobando systemd: {e}")
 
@@ -76,6 +78,7 @@ class BitTrainingDriver(ResumableJobDriver):
 
 		env = dict(os.environ)
 		env["PYTHONPATH"] = "."
+		env["PYTHONUNBUFFERED"] = "1"
 
 		logger.info(f"[BIT TRAINING DRIVER] Ejecutando paso de entrenamiento en {frankenswarm_dir}...")
 		proc = subprocess.run(
