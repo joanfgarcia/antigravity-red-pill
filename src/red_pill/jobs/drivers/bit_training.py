@@ -47,8 +47,9 @@ class BitTrainingDriver(ResumableJobDriver):
 	def step(self, payload: Dict[str, Any], checkpoint_data: Dict[str, Any]) -> StepOutcome:
 		frankenswarm_dir = payload.get("cwd")
 		if not frankenswarm_dir:
+			from pathlib import Path
 			import red_pill.config as cfg
-			frankenswarm_dir = str(getattr(cfg, "IA_ROOT", cfg.APP_ROOT.parent) / "frankenswarm")
+			frankenswarm_dir = str(getattr(cfg, "IA_ROOT", Path(cfg.APP_ROOT).parent) / "frankenswarm")
 
 		if not os.path.exists(frankenswarm_dir):
 			raise ValueError(f"Directorio de frankenswarm no encontrado: {frankenswarm_dir}")

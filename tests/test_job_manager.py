@@ -329,6 +329,41 @@ def test_agentic_job_driver_routes_policy_to_bridge(queue, clean_registry, monke
 	assert outcome.new_checkpoint["conversation_id"] == "conv-1"
 
 
+def test_bit_training_driver_preflight_and_step(tmp_path, monkeypatch):
+	from red_pill.jobs.drivers.bit_training import BitTrainingDriver
+	driver = BitTrainingDriver()
+
+	# Preflight check without systemd error
+	monkeypatch.setattr("red_pill.core.vram_probe.VramProbe.get_free_mb", lambda: 8000)
+	driver.preflight({"min_vram_mb": 1000})
+
+	# Test step with mock checkpoint file
+	fake_fs = tmp_path / "frankenswarm"
+	chk_dir = fake_fs / "sto_rage".replace("_", "") / "checkpoints"
+	chk_dir.mkdir(parents=True, exist_ok=True)
+	chk_file = chk_dir / "sovereign_school_state.json"
+	chk_file.write_text('{"last_completed_epoch": 5}')
+
+	def mock_run(cmd, **kw):
+		class DummyProc:
+			returncode = 0
+			stdout = "Step done"
+			stderr = ""
+		return DummyProc()
+
+	monkeypatch.setattr("subprocess.run", mock_run)
+
+	outcome = driver.step({
+		"cwd": str(fake_fs),
+		"checkpoint_file": str(chk_file),
+		"target_epochs": 10,
+	}, {})
+
+	assert outcome.completed is False
+	assert outcome.progress["current"] == 5
+	assert outcome.progress["total"] == 10
+
+
 def test_agentic_job_driver_defers_when_backend_down(queue, clean_registry, monkeypatch):
 	"""R1: IDE closed / SIP down is a deferral, never a breaker-feeding failure."""
 	from red_pill.jobs.drivers.agentic import AgenticJobDriver
