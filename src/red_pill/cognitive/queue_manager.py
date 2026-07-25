@@ -477,12 +477,14 @@ class CognitiveQueueManager:
 		reanudarlo lo duplicaría (carrera de checkpoints). El runner refresca
 		updated_at en cada checkpoint, así que un job largo legítimo late.
 		"""
+	def resume_task(self, task_id: str) -> bool:
+		"""PAUSED/FRUSTRATED/stuck PROCESSING → PENDING. Reanuda en el siguiente disparo del runner."""
 		with self._get_connection() as conn:
 			cursor = conn.execute(
 				"""
-				UPDATE cognitive_tasks SET status = 'PENDING', updated_at = CURRENT_TIMESTAMP
+				UPDATE cognitive_tasks SET status = 'PENDING', attempts = 0, updated_at = CURRENT_TIMESTAMP
 				WHERE id = ? AND (
-					status = 'PAUSED'
+					status IN ('PAUSED', 'FRUSTRATED')
 					OR (status = 'PROCESSING' AND updated_at < datetime('now', '-900 seconds'))
 				)
 				""",

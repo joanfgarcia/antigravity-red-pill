@@ -62,7 +62,7 @@ class DistillJobDriver(ResumableJobDriver):
 
 		processed_so_far = int(checkpoint_data.get("processed", 0))
 		total_remaining = 0
-		points_to_process = []
+		points_to_process: list[tuple[str, Any]] = []
 
 		for col in collections:
 			if not client.collection_exists(col):
@@ -83,7 +83,7 @@ class DistillJobDriver(ResumableJobDriver):
 				total_remaining += len(pts)
 				for p in pts:
 					if len(points_to_process) < batch_size:
-						points_to_process.append((col, p))
+						points_to_process.append((str(col), p))
 			except Exception as e:
 				logger.warning(f"[DISTILL DRIVER] Error leyendo {col}: {e}")
 
@@ -97,19 +97,21 @@ class DistillJobDriver(ResumableJobDriver):
 
 		upgraded_in_step = 0
 		for col, point in points_to_process:
-			p_load = point.payload or {}
+			pid = getattr(point, "id", point)
+			if hasattr(pid, "id"):
+				pid = getattr(pid, "id")
+
+			p_load = getattr(point, "payload", {}) or {}
 			summary = str(p_load.get("summary") or p_load.get("content") or "")
 			has_texture = bool(p_load.get("texture"))
 
 			needs_upgrade = (
-				audit_engram_quality(summary)
-				if smart_audit
-				else (not has_texture or summary.startswith("Joan ") or " informed that" in summary)
+				audit_engram_quality(summary) if smart_audit else (not has_texture or summary.startswith("Joan ") or " informed that" in summary)
 			)
 
 			if not needs_upgrade:
 				# Marcar como V3 para no volver a auditar este punto
-				client.set_payload(collection_name=col, payload={"distiller_version": "v3"}, points=[point.id])
+				client.set_payload(collection_name=col, payload={"distiller_version": "v3"}, points=[pid])
 				upgraded_in_step += 1
 				continue
 
@@ -134,7 +136,7 @@ class DistillJobDriver(ResumableJobDriver):
 					pass
 
 			if not source_text:
-				client.set_payload(collection_name=col, payload={"distiller_version": "v3"}, points=[point.id])
+				client.set_payload(collection_name=col, payload={"distiller_version": "v3"}, points=[pid])
 				upgraded_in_step += 1
 				continue
 
@@ -142,7 +144,7 @@ class DistillJobDriver(ResumableJobDriver):
 			distilled = [distill_engram(c) for c in chunks if not _is_template_echo(c)]
 			distilled = [d for d in distilled if not d.get("_is_fallback")]
 			if not distilled:
-				client.set_payload(collection_name=col, payload={"distiller_version": "v3"}, points=[point.id])
+				client.set_payload(collection_name=col, payload={"distiller_version": "v3"}, points=[pid])
 				upgraded_in_step += 1
 				continue
 
@@ -159,7 +161,7 @@ class DistillJobDriver(ResumableJobDriver):
 				),
 				"category_reviewed_at": time.time(),
 			}
-			client.set_payload(collection_name=col, payload=upgrade_payload, points=[point.id])
+			client.set_payload(collection_name=col, payload=upgrade_payload, points=[pid])
 			upgraded_in_step += 1
 
 		new_total_processed = processed_so_far + upgraded_in_step
