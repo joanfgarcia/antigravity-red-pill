@@ -67,7 +67,7 @@ class BitTrainingDriver(ResumableJobDriver):
 			"--user",
 			"--scope",
 			"-p",
-			"MemoryMax=10G",
+			"MemoryMax=16G",
 			".venv/bin/python",
 			"src/bitnet/training/train_sovereign_school.py",
 			"--batch_size",
