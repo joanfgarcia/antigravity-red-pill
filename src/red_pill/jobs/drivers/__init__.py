@@ -40,9 +40,11 @@ def registered_sources() -> List[str]:
 
 # Drivers de serie (importados al final para que se auto-registren sin ciclos).
 from red_pill.jobs.drivers.agentic import AgenticJobDriver  # noqa: E402
+from red_pill.jobs.drivers.bit_training import BitTrainingDriver  # noqa: E402
 from red_pill.jobs.drivers.distill import DistillJobDriver  # noqa: E402
 from red_pill.jobs.drivers.flow import FlowJobDriver  # noqa: E402
 
 register_driver(FlowJobDriver)
 register_driver(AgenticJobDriver)
 register_driver(DistillJobDriver)
+register_driver(BitTrainingDriver)
