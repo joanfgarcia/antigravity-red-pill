@@ -23,20 +23,17 @@ class BitTrainingDriver(ResumableJobDriver):
 
 	def preflight(self, payload: Dict[str, Any]) -> None:
 		import time
-		# Si redpill-llm está activo ocupando la GPU, intentamos pararlo para liberar VRAM
+		import urllib.request
+
+		# Solicitar vaciado de VRAM al proxy dual-bind en lugar de pararlo
 		try:
-			res = subprocess.run(
-				["systemctl", "--user", "is-active", "redpill-llm.service"],
-				capture_output=True,
-				text=True,
-				check=False,
-			)
-			if res.stdout.strip() == "active":
-				logger.info("[BIT TRAINING DRIVER] Deteniendo redpill-llm.service para liberar VRAM...")
-				subprocess.run(["systemctl", "--user", "stop", "redpill-llm.service"], check=False)
-				time.sleep(2.0)
+			req = urllib.request.Request("http://127.0.0.1:8760/v1/unload", method="POST")
+			with urllib.request.urlopen(req, timeout=5) as response:
+				if response.status == 200:
+					logger.info("[BIT TRAINING DRIVER] VRAM liberada en el proxy dual-bind (redpill-llm.service).")
+					time.sleep(2.0)
 		except Exception as e:
-			logger.warning(f"[BIT TRAINING DRIVER] Advertencia comprobando systemd: {e}")
+			logger.debug(f"[BIT TRAINING DRIVER] Proxy dual-bind offline o inalcanzable para unload: {e}")
 
 		# Verificar VRAM libre tras intentar liberar
 		from red_pill.core.vram_probe import VramProbe
@@ -50,7 +47,9 @@ class BitTrainingDriver(ResumableJobDriver):
 		frankenswarm_dir = payload.get("cwd")
 		if not frankenswarm_dir:
 			from pathlib import Path
+
 			import red_pill.config as cfg
+
 			frankenswarm_dir = str(getattr(cfg, "IA_ROOT", Path(cfg.APP_ROOT).parent) / "frankenswarm")
 
 		if not os.path.exists(frankenswarm_dir):
@@ -77,7 +76,8 @@ class BitTrainingDriver(ResumableJobDriver):
 		]
 
 		env = dict(os.environ)
-		env["PYTHONPATH"] = "."
+		import red_pill.config as cfg
+		env["PYTHONPATH"] = f".:{cfg.APP_ROOT}/src"
 		env["PYTHONUNBUFFERED"] = "1"
 
 		logger.info(f"[BIT TRAINING DRIVER] Ejecutando paso de entrenamiento en {frankenswarm_dir}...")

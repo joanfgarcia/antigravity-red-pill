@@ -331,6 +331,7 @@ def test_agentic_job_driver_routes_policy_to_bridge(queue, clean_registry, monke
 
 def test_bit_training_driver_preflight_and_step(tmp_path, monkeypatch):
 	from red_pill.jobs.drivers.bit_training import BitTrainingDriver
+
 	driver = BitTrainingDriver()
 
 	# Preflight check without systemd error
@@ -349,15 +350,19 @@ def test_bit_training_driver_preflight_and_step(tmp_path, monkeypatch):
 			returncode = 0
 			stdout = "Step done"
 			stderr = ""
+
 		return DummyProc()
 
 	monkeypatch.setattr("subprocess.run", mock_run)
 
-	outcome = driver.step({
-		"cwd": str(fake_fs),
-		"checkpoint_file": str(chk_file),
-		"target_epochs": 10,
-	}, {})
+	outcome = driver.step(
+		{
+			"cwd": str(fake_fs),
+			"checkpoint_file": str(chk_file),
+			"target_epochs": 10,
+		},
+		{},
+	)
 
 	assert outcome.completed is False
 	assert outcome.progress["current"] == 5

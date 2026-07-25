@@ -56,11 +56,32 @@ class VramProbe:
 		"""
 		backend = VramProbe.get_backend()
 
+		actual_free = 0
 		if backend == "cuda":
-			return VramProbe._nvidia_free_mb()
-		if backend == "rocm":
-			return VramProbe._amd_free_mb()
-		return 0
+			actual_free = VramProbe._nvidia_free_mb()
+		elif backend == "rocm":
+			actual_free = VramProbe._amd_free_mb()
+		else:
+			return 0
+
+		try:
+			from red_pill.core.gpu_reservation import GpuReservationManager
+
+			current_pid = os.getpid()
+			if GpuReservationManager.is_exclusive_active(exclude_pid=current_pid):
+				logger.info("[VramProbe] Exclusive GPU reservation is active. Returning 0 MB free VRAM.")
+				return 0
+			reserved = GpuReservationManager.get_total_reserved_mb(exclude_pid=current_pid)
+			if reserved == -1:
+				return 0
+			if reserved > 0:
+				adjusted = max(0, actual_free - reserved)
+				logger.info(f"[VramProbe] Adjusted free VRAM: {adjusted} MB (Actual free: {actual_free} MB, Reserved by others: {reserved} MB)")
+				return adjusted
+		except Exception as e:
+			logger.warning(f"[VramProbe] Failed to apply GPU reservations: {e}")
+
+		return actual_free
 
 	@staticmethod
 	def _nvidia_free_mb() -> int:

@@ -513,7 +513,7 @@ def synthesize_hub_v2(
 		)
 		user_prompt = user_prompt[:max_hub_input_chars]
 
-	def _make_fallback():
+	def _make_fallback() -> Dict[str, Any]:
 		fallback_text = synthesize_hub(summaries)
 		return {"title": "", "summary": fallback_text, "texture": "", "lang": dominant_lang, "_is_fallback": True}
 

@@ -188,11 +188,22 @@ class ModelManager:
 			self._load_in_process(FORCED_NCTX or CPU_N_CTX, 0)
 			return
 
+		# Check if an exclusive GPU reservation is active
+		gpu_reserved = False
+		try:
+			from red_pill.core.gpu_reservation import GpuReservationManager
+			gpu_reserved = GpuReservationManager.is_exclusive_active()
+		except Exception as p_err:
+			logger.warning(f"Error checking GPU reservation: {p_err}")
+
 		cascade = prefs or DEVICE_FALLBACK or DEFAULT_DEVICE_FALLBACK
 		errors = []
 		for device in cascade:
 			try:
 				if device == "gpu":
+					if gpu_reserved:
+						errors.append("gpu: exclusive GPU reservation is active on host")
+						continue
 					hardware = ModelRegistry.get_resolved_hardware_affinity(PROFILE_NAME)
 					n_gpu_layers = hardware.get("n_gpu_layers", -1)
 					if n_gpu_layers == 0:

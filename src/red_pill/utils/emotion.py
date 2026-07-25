@@ -1,9 +1,8 @@
 import logging
-import os
 from typing import Any, Dict, List, Optional
 
-# Force CPU to avoid CUDA library mismatch in BERT
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+# Force CPU to avoid CUDA library mismatch in BERT (handled via device="cpu" in pipeline)
+# os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 logger = logging.getLogger(__name__)
 

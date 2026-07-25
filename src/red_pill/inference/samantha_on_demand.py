@@ -101,6 +101,34 @@ def _start_ephemeral() -> Optional[subprocess.Popen]:
 		logger.warning("[Samantha] No llama-server binary found — cannot start on-demand.")
 		return None
 
+	ngl = 999
+	try:
+		from red_pill.core.model_registry import ModelRegistry
+
+		name, profile = ModelRegistry.get_profile_by_capability("logic")
+		if name:
+			# Force CPU mode if train_sovereign_school.py is active
+			training_active = False
+			try:
+				import subprocess as sp
+
+				res = sp.run(["pgrep", "-f", "train_sovereign_school.py"], capture_output=True, text=True, timeout=2)
+				if res.stdout.strip():
+					training_active = True
+			except Exception:
+				pass
+
+			if training_active:
+				ngl = 0
+				logger.info("[Samantha] Ephemeral server: training active on host, forcing 0 GPU layers (CPU mode).")
+			else:
+				hardware = ModelRegistry.get_resolved_hardware_affinity(name)
+				ngl = hardware.get("n_gpu_layers", 999)
+				if ngl is None:
+					ngl = 999
+	except Exception as e:
+		logger.warning(f"[Samantha] Failed to resolve dynamic ngl: {e}. Defaulting to 999.")
+
 	cmd = [
 		llama_bin,
 		"-m",
@@ -110,7 +138,7 @@ def _start_ephemeral() -> Optional[subprocess.Popen]:
 		"-c",
 		"2048",
 		"-ngl",
-		"999",
+		str(ngl),
 	]
 
 	logger.info(f"[Samantha] Starting ephemeral instance: {' '.join(cmd)}")

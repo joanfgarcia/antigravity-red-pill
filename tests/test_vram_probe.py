@@ -141,35 +141,71 @@ class TestAmdFreeMb:
 class TestGetFreeMb:
 	def test_delegates_to_nvidia_on_cuda_backend(self):
 		"""get_free_mb() must call _nvidia_free_mb() when backend is 'cuda'."""
+		from red_pill.core.gpu_reservation import GpuReservationManager
 		from red_pill.core.vram_probe import VramProbe
 
 		with patch.object(VramProbe, "get_backend", return_value="cuda"):
 			with patch.object(VramProbe, "_nvidia_free_mb", return_value=5000) as mock_nv:
-				result = VramProbe.get_free_mb()
+				with patch.object(GpuReservationManager, "load_reservations", return_value=[]):
+					result = VramProbe.get_free_mb()
 		assert result == 5000
 		mock_nv.assert_called_once()
 
 	def test_delegates_to_amd_on_rocm_backend(self):
 		"""get_free_mb() must call _amd_free_mb() when backend is 'rocm'."""
+		from red_pill.core.gpu_reservation import GpuReservationManager
 		from red_pill.core.vram_probe import VramProbe
 
 		with patch.object(VramProbe, "get_backend", return_value="rocm"):
 			with patch.object(VramProbe, "_amd_free_mb", return_value=3000) as mock_amd:
-				result = VramProbe.get_free_mb()
+				with patch.object(GpuReservationManager, "load_reservations", return_value=[]):
+					result = VramProbe.get_free_mb()
 		assert result == 3000
 		mock_amd.assert_called_once()
 
 	def test_returns_zero_on_cpu_backend(self):
 		"""get_free_mb() must return 0 when backend is 'cpu'."""
+		from red_pill.core.gpu_reservation import GpuReservationManager
 		from red_pill.core.vram_probe import VramProbe
 
 		with patch.object(VramProbe, "get_backend", return_value="cpu"):
-			result = VramProbe.get_free_mb()
+			with patch.object(GpuReservationManager, "load_reservations", return_value=[]):
+				result = VramProbe.get_free_mb()
 		assert result == 0
 
 	def test_result_is_always_int(self):
 		"""get_free_mb() must always return an int, never float."""
+		from red_pill.core.gpu_reservation import GpuReservationManager
 		from red_pill.core.vram_probe import VramProbe
 
 		with patch.object(VramProbe, "get_backend", return_value="cpu"):
-			assert isinstance(VramProbe.get_free_mb(), int)
+			with patch.object(GpuReservationManager, "load_reservations", return_value=[]):
+				assert isinstance(VramProbe.get_free_mb(), int)
+
+	def test_ignores_own_exclusive_reservation(self):
+		"""get_free_mb() must not return 0 if the exclusive reservation is owned by the calling PID."""
+		from red_pill.core.gpu_reservation import GpuReservationManager
+		from red_pill.core.vram_probe import VramProbe
+
+		with patch.object(VramProbe, "get_backend", return_value="cuda"):
+			with patch.object(VramProbe, "_nvidia_free_mb", return_value=8192):
+				with patch.object(
+					GpuReservationManager, "load_reservations", return_value=[{"pid": 999999, "owner": "test", "vram_mb": 4096, "exclusive": True}]
+				):
+					with patch("os.getpid", return_value=999999):
+						with patch("psutil.pid_exists", return_value=True):
+							assert VramProbe.get_free_mb() == 8192
+
+	def test_ignores_own_partial_reservation(self):
+		"""get_free_mb() must not subtract the reservation if it belongs to the calling PID."""
+		from red_pill.core.gpu_reservation import GpuReservationManager
+		from red_pill.core.vram_probe import VramProbe
+
+		with patch.object(VramProbe, "get_backend", return_value="cuda"):
+			with patch.object(VramProbe, "_nvidia_free_mb", return_value=8192):
+				with patch.object(
+					GpuReservationManager, "load_reservations", return_value=[{"pid": 999999, "owner": "test", "vram_mb": 4096, "exclusive": False}]
+				):
+					with patch("os.getpid", return_value=999999):
+						with patch("psutil.pid_exists", return_value=True):
+							assert VramProbe.get_free_mb() == 8192

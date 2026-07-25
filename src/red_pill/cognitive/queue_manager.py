@@ -414,10 +414,7 @@ class CognitiveQueueManager:
 
 		- borra COMPLETED con más de `completed_days` días;
 		- borra FRUSTRATED con más de `frustrated_days` días (dead-letter caducado);
-		- PROCESSING sin latido > `stale_processing_hours` = colgado → FRUSTRATED,
-		  visible en `job list` hasta que la purga lo retire. El carril mecánico
-		  nunca llega aquí (requeue_stale lo recupera a los 15 min); esto caza los
-		  huérfanos de los demás carriles (samantha, cognitivo).
+		- PROCESSING sin latido > `stale_processing_hours` = colgado → FRUSTRATED, visible en `job list` hasta que la purga lo retire. El carril mecánico nunca llega aquí (requeue_stale lo recupera a los 15 min); esto caza los huérfanos de los demás carriles (samantha, cognitivo).
 
 		Nunca toca PENDING, PAUSED ni BLOCKED. Devuelve contadores por operación.
 		"""
@@ -470,15 +467,13 @@ class CognitiveQueueManager:
 			return cursor.rowcount > 0
 
 	def resume_task(self, task_id: str) -> bool:
-		"""PAUSED → PENDING; también recupera huérfanos PROCESSING sin latido reciente.
+		"""PAUSED/FRUSTRATED/stuck PROCESSING → PENDING. Reanuda en el siguiente disparo del runner.
 
 		El guard temporal (>15 min sin updated_at) evita la doble ejecución: un
 		PROCESSING con heartbeat fresco es un job VIVO en manos del runner —
 		reanudarlo lo duplicaría (carrera de checkpoints). El runner refresca
 		updated_at en cada checkpoint, así que un job largo legítimo late.
 		"""
-	def resume_task(self, task_id: str) -> bool:
-		"""PAUSED/FRUSTRATED/stuck PROCESSING → PENDING. Reanuda en el siguiente disparo del runner."""
 		with self._get_connection() as conn:
 			cursor = conn.execute(
 				"""
