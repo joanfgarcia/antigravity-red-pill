@@ -20,6 +20,15 @@ Materializa `RFC_GENERIC_SCRIPT_JOB_DRIVER.md` v2 (decisiones D1-D10 cerradas co
 - **[FEAT] Validación de la reanudación sucia**: tras kill o timeout el driver valida el checkpoint del satélite antes de relanzar (nunca reinicio silencioso desde cero); si el job cayó en su PRIMER step no hay nada que validar y arrancar limpio es lo correcto.
 - **[FEAT] `teardown()` en TODAS las salidas, deferral incluido**: sin esto, un job que cede ante el ciclo de sueño de las 03:00 dejaría el modelo residente descargado toda la noche.
 
+### 📏 Cadencia real de checkpoint (medida, no supuesta)
+- **[FEAT] Vigilante durante el step**: el driver observa el fichero de checkpoint MIENTRAS corre el hijo y registra cada escritura con su intervalo real. Distingue las dos magnitudes que es fácil confundir: **duración del step** (cuánto vive el proceso) y **unidad recuperable** (cada cuánto queda avance registrado — lo que cuesta un kill y desde donde retoma un resume). Un mtime tomado solo entre steps no ve los guardados internos y la inflaría hasta el step entero.
+- **[FIX] La escritura que más importa ya no se pierde**: parar el hilo en cuanto sale el proceso se saltaba el guardado de fin de época, que aterriza segundos antes de la salida. Ahora hay una última mirada tras el join.
+- **[FEAT] `job status` imprime lo medido**: duración media por step, cota del próximo y cadencia observada contra el objetivo. Es lo que permite decidir con datos si un job puede ceder la GPU (D9) en lugar de suponerlo.
+- **[CHANGE] Cota por defecto 4 h → 2 h**: las vidas de proceso medidas del trabajo más pesado van de 3h23m a ~11h, pero dimensionar un default ciego para el peor caso conocido dejaría a cualquier job colgado ocupando la tarjeta media jornada. Los trabajos largos declaran su cota real en la receta; para el resto, la escalada ×2 la descubre al coste de un step parcial.
+
+### 📜 Recetas YAML (la forma humana de encolar)
+- **[FEAT] `red-pill job submit --recipe <ruta|nombre>`**: un payload declarativo de veinte claves es correcto para la máquina e ilegible para una persona. La receta es ese mismo payload en YAML, con comentarios, y viviendo en el repo del satélite (`<proyecto>/.red-pill/jobs/<nombre>.yaml`) junto al script que describe — completa la doctrina del RFC: si el kernel no debe conocer al satélite, la receta tampoco es suya. Nombre corto resuelto subiendo directorios (como `.agent/`), `cwd` deducido de dónde vive la receta.
+
 ### 🖥️ CLI
 - **[FEAT] `job kill [--discard]`, `job logs [--tail]`, `--parent` en submit** (encadena fases por el DAG que la cola ya tenía).
 - **[FEAT] Validación en el submit**: un payload malformado muere al encolar con motivo claro, no tres intentos después y FRUSTRATED a las 3 de la mañana.
