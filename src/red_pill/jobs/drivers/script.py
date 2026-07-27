@@ -411,7 +411,7 @@ class ScriptJobDriver(ResumableJobDriver):
 	def _completion_reached(completion: Dict[str, Any], state: Dict[str, Any]) -> bool:
 		value = _dig(state, completion["key"])
 		if "equals" in completion:
-			return value == completion["equals"]
+			return value == completion["equals"] if "equals" in completion else False
 		if "contains" in completion:
 			return bool(value) and completion["contains"] in value
 		return bool(value)
@@ -434,7 +434,10 @@ class ScriptJobDriver(ResumableJobDriver):
 			# Un único guardado: la unidad recuperable es el step completo.
 			cadence = round(elapsed, 1)
 		else:
-			cadence = meta.get("checkpoint_interval_s")
+			# Sin escrituras observadas no hay medición: `None` (no 0.0) para que
+			# el guard de abajo no publique una cadencia inventada de cero.
+			stored = meta.get("checkpoint_interval_s")
+			cadence = float(stored) if stored is not None else None
 
 		if cadence is not None:
 			meta["checkpoint_interval_s"] = cadence

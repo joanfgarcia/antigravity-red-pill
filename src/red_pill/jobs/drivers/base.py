@@ -118,7 +118,7 @@ def compute_step_timeout(payload: Dict[str, Any], progress: Optional[Dict[str, A
 	else:
 		bound = int(cfg.JOB_STEP_TIMEOUT_DEFAULT)
 
-	return bound * (2 ** max(0, int(attempts)))
+	return int(bound * (2 ** max(0, int(attempts))))
 
 
 def update_step_ema(progress: Optional[Dict[str, Any]], elapsed_s: float) -> Dict[str, Any]:
