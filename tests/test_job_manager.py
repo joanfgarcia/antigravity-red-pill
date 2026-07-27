@@ -595,3 +595,80 @@ def test_nightly_unit_active_defers_jobs(queue, clean_registry, monkeypatch, sta
 	assert process_driver_jobs(queue) == 0
 	task = queue.get_task(job_id)
 	assert task["status"] == "PENDING" and task["attempts"] == 0
+
+
+# ── job purge: el verbo del operador para retirar filas terminales ──────────
+
+
+def _seed_statuses(queue, rows):
+	"""Encola una fila por (key, status) y la fuerza al estado pedido."""
+	ids = {}
+	for key, status in rows:
+		ids[key] = queue.enqueue_task(source="samantha", payload={})
+		with queue._get_connection() as conn:
+			conn.execute("UPDATE cognitive_tasks SET status = ? WHERE id = ?", (status, ids[key]))
+	return ids
+
+
+def test_purge_task_removes_terminal_rows_only(queue):
+	"""FRUSTRATED y COMPLETED se retiran; PENDING/PROCESSING jamás (un job vivo
+	se pausa o se abate, nunca se borra debajo del runner)."""
+	ids = _seed_statuses(queue, [
+		("frustrated", "FRUSTRATED"),
+		("completed", "COMPLETED"),
+		("pending", "PENDING"),
+		("processing", "PROCESSING"),
+	])
+
+	assert queue.purge_task(ids["frustrated"]) is True
+	assert queue.purge_task(ids["completed"]) is True
+	assert queue.purge_task(ids["pending"]) is False
+	assert queue.purge_task(ids["processing"]) is False
+
+	assert queue.get_task(ids["frustrated"]) is None
+	assert queue.get_task(ids["completed"]) is None
+	assert queue.get_task(ids["pending"])["status"] == "PENDING"
+	assert queue.get_task(ids["processing"])["status"] == "PROCESSING"
+
+
+def test_purge_task_paused_requires_force(queue):
+	"""Un PAUSED es trabajo reanudable, no basura: solo cae con force=True."""
+	ids = _seed_statuses(queue, [("paused", "PAUSED")])
+
+	assert queue.purge_task(ids["paused"]) is False
+	assert queue.get_task(ids["paused"])["status"] == "PAUSED"
+
+	assert queue.purge_task(ids["paused"], force=True) is True
+	assert queue.get_task(ids["paused"]) is None
+
+
+def test_purge_task_force_never_touches_live_rows(queue):
+	"""force amplía a PAUSED, no a los vivos: PENDING/PROCESSING siguen intocables."""
+	ids = _seed_statuses(queue, [("pending", "PENDING"), ("processing", "PROCESSING")])
+
+	assert queue.purge_task(ids["pending"], force=True) is False
+	assert queue.purge_task(ids["processing"], force=True) is False
+	assert queue.get_task(ids["pending"]) is not None
+	assert queue.get_task(ids["processing"]) is not None
+
+
+def test_purge_terminal_sweeps_frustrated_and_completed(queue):
+	"""El barrido retira todo lo terminal de una vez y respeta el resto de la cola."""
+	ids = _seed_statuses(queue, [
+		("f1", "FRUSTRATED"),
+		("f2", "FRUSTRATED"),
+		("done", "COMPLETED"),
+		("pending", "PENDING"),
+		("paused", "PAUSED"),
+		("blocked", "BLOCKED"),
+		("processing", "PROCESSING"),
+	])
+
+	assert queue.purge_terminal() == 3
+
+	for key in ("f1", "f2", "done"):
+		assert queue.get_task(ids[key]) is None
+	for key, status in (("pending", "PENDING"), ("paused", "PAUSED"), ("blocked", "BLOCKED"), ("processing", "PROCESSING")):
+		assert queue.get_task(ids[key])["status"] == status
+
+	assert queue.purge_terminal() == 0

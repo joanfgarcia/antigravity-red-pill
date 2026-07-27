@@ -1,3 +1,17 @@
+## [Unreleased]
+
+### 🧹 `job purge` — el operador puede limpiar su propia cola
+- **[FEAT] `red-pill job purge`**: retira filas terminales de la cola por id(s)
+  (`job purge <id> [<id>…]`) o en barrido (`job purge --terminal` = todos los
+  FRUSTRATED y COMPLETED). Con confirmación interactiva salvo `--yes`. Un PAUSED
+  solo cae por id y con `--force` (es trabajo reanudable, no basura); PENDING y
+  PROCESSING son intocables incluso con force — un job vivo se pausa o se abate,
+  nunca se borra debajo del runner. Complementa a `purge_hygiene` (la limpieza
+  temporal del Janitor nocturno): esto es el verbo en caliente. Motivación: 8
+  jobs `samantha` FRUSTRATED fosilizados ensuciando cada `job list` (28-jul).
+- **[TEST] 4 tests nuevos** en `tests/test_job_manager.py`: terminales sí,
+  vivos jamás, PAUSED gateado por force, barrido respeta el resto de la cola.
+
 ## [7.12.0] - 2026-07-27 (Captura de turnos: una sola tubería, del hook al engrama)
 
 Durante un mes hubo **dos sumideros**. Cuatro superficies de captura deterministas (plugin de opencode, hook Stop de Claude Code, bridge de opencode, worker de Antigravity) escribían cada turno en una tabla `interactions` de `bunker.db` que **ningún consumidor leía**; mientras tanto, la memoria se alimentaba solo del relay del handshake, es decir, de que el modelo se acordara de llamar. La mitad fiable escribía en un callejón sin salida y la mitad no fiable era la única que llegaba a Qdrant. El plugin lo documentaba en su cabecera ("Queue Worker → bunker_queue.db → Qdrant"): esa etapa nunca se escribió.
