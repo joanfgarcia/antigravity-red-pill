@@ -73,5 +73,4 @@ def test_janitor_discovers_all_plugins():
 		"orphaned_parents_sweep",
 		"queue_hygiene",
 		"scratch_purge",
-		"sqlite_interactions_archiver",
 	} <= names

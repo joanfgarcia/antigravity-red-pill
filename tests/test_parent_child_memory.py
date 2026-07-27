@@ -1,6 +1,3 @@
-import asyncio
-import json
-import sqlite3
 import time
 import uuid
 from unittest.mock import ANY, MagicMock, patch
@@ -9,7 +6,6 @@ from red_pill.memory import MemoryManager
 from red_pill.metabolism.sleep import perform_sleep_cycle
 from red_pill.swarm.agents.janitor import JanitorMinion
 from red_pill.swarm.agents.janitor_plugins.orphaned_parents_sweep import OrphanedParentsSweepPlugin
-from red_pill.swarm.agents.janitor_plugins.sqlite_interactions_archiver import SqliteInteractionsArchiverPlugin
 
 
 @patch("red_pill.metabolism.phases.consolidation.distill_session_anchors", return_value=None)
@@ -306,61 +302,3 @@ def test_janitor_does_not_clean_parents_with_live_children():
 	purged = OrphanedParentsSweepPlugin()._cleanup_orphaned_parents(minion, mock_mgr, "work_memories")
 	assert purged == 0
 	mock_client.delete.assert_not_called()
-
-
-def test_janitor_archives_sqlite_to_jsonl(tmp_path):
-	minion = JanitorMinion()
-
-	# Setup temporary bunker.db
-	db_dir = tmp_path / "storage" / "db"
-	db_dir.mkdir(parents=True, exist_ok=True)
-	db_file = db_dir / "bunker.db"
-
-	conn = sqlite3.connect(str(db_file))
-	conn.execute("""
-		CREATE TABLE interactions (
-			user_prompt TEXT,
-			agent_response TEXT,
-			timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			model TEXT
-		)
-	""")
-
-	# Insert one row that is old (past 30 days cutoff) and one recent
-	# SQLite format: YYYY-MM-DD HH:MM:SS
-	old_ts = "2026-05-01 12:00:00"
-	recent_ts = "2026-06-28 12:00:00"
-	conn.execute("INSERT INTO interactions VALUES (?, ?, ?, ?)", ("old prompt", "old response", old_ts, "gpt4"))
-	conn.execute("INSERT INTO interactions VALUES (?, ?, ?, ?)", ("recent prompt", "recent response", recent_ts, "opus"))
-	conn.commit()
-	conn.close()
-
-	# Mock get_aleth_core_root() so the archived logs write to a temp folder
-	aleth_core = tmp_path / "Aleth_Core"
-	archive_file = aleth_core / "history" / "universal_history.jsonl"
-
-	with patch("red_pill.core.paths.get_db_dir", return_value=db_dir):
-		with patch("red_pill.core.paths.get_aleth_core_root", return_value=aleth_core):
-			# Run archiver
-			result = asyncio.run(SqliteInteractionsArchiverPlugin().execute(minion, {}))
-			count = result["sqlite_interactions_archived"]
-			assert count == 1
-
-			# Verify JSONL log contains the old entry
-			assert archive_file.exists()
-			with open(archive_file) as f:
-				lines = f.readlines()
-				assert len(lines) == 1
-				data = json.loads(lines[0])
-				assert data["user_prompt"] == "old prompt"
-				assert data["timestamp"] == old_ts
-				assert data["model"] == "gpt4"
-
-			# Verify SQLite database has only the recent row left
-			conn2 = sqlite3.connect(str(db_file))
-			cursor = conn2.cursor()
-			cursor.execute("SELECT user_prompt FROM interactions")
-			rows = cursor.fetchall()
-			assert len(rows) == 1
-			assert rows[0][0] == "recent prompt"
-			conn2.close()
