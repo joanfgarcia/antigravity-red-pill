@@ -1,9 +1,6 @@
 """Coverage boost for config.py validators/branches and axons.py pure functions."""
 
-import json
-import os
 import tempfile
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -19,8 +16,8 @@ from red_pill.metabolism.axons import (
 )
 from red_pill.schemas import Axon, normalize_associations
 
-
 # ── Axons pure functions ──────────────────────────────────────────────────
+
 
 class TestComputeAxonWeight:
 	def test_zero_delta(self):
@@ -43,7 +40,7 @@ class TestSplitAssociations:
 		assert cross == []
 
 	def test_none_payload(self):
-		local, cross = _split_associations(None, "social_memories")
+		local, cross = _split_associations({}, "social_memories")
 		assert local == []
 		assert cross == []
 
@@ -124,7 +121,11 @@ class TestAppendAxon:
 		stats = {"hard_ceiling_hits": 0}
 		# Create max cross axons (AXON_MAX_CROSS * 2)
 		from red_pill import config as cfg
-		existing = [{"id": f"t{i}", "target_collection": "work_memories", "weight": 0.5, "association_type": "temporal_semantic"} for i in range(cfg.AXON_MAX_CROSS * 2)]
+
+		existing = [
+			{"id": f"t{i}", "target_collection": "work_memories", "weight": 0.5, "association_type": "temporal_semantic"}
+			for i in range(cfg.AXON_MAX_CROSS * 2)
+		]
 		axon = Axon(id="new_target", target_collection="work_memories", weight=0.8, association_type="temporal_semantic")
 		result = _append_axon(client, "social_memories", "src1", {"associations": existing}, axon, stats)
 		assert result is False
@@ -133,44 +134,53 @@ class TestAppendAxon:
 
 # ── Config validators & branches ──────────────────────────────────────────
 
+
 class TestDetectContainerEngine:
 	@patch("red_pill.config.shutil.which")
 	def test_podman_found(self, mock_which):
-		mock_which.side_effect=lambda cmd: "/usr/bin/podman" if cmd == "podman" else None
+		mock_which.side_effect = lambda cmd: "/usr/bin/podman" if cmd == "podman" else None
 		from red_pill.config import _detect_container_engine
+
 		assert _detect_container_engine() == "podman"
 
 	@patch("red_pill.config.shutil.which")
 	def test_docker_fallback(self, mock_which):
-		mock_which.side_effect=lambda cmd: "/usr/bin/docker" if cmd == "docker" else None
+		mock_which.side_effect = lambda cmd: "/usr/bin/docker" if cmd == "docker" else None
 		from red_pill.config import _detect_container_engine
+
 		assert _detect_container_engine() == "docker"
 
 	@patch("red_pill.config.shutil.which", return_value=None)
 	def test_default_podman(self, mock_which):
 		from red_pill.config import _detect_container_engine
+
 		assert _detect_container_engine() == "podman"
 
 
 class TestConfigValidators:
 	def test_normalize_hydration_depth(self):
 		from red_pill.config import RedPillConfig
+
 		assert RedPillConfig._normalize_hydration_depth("  high  ") == "HIGH"
 
 	def test_normalize_hydration_depth_non_string(self):
 		from red_pill.config import RedPillConfig
+
 		assert RedPillConfig._normalize_hydration_depth(123) == "HIGH"
 
 	def test_normalize_identity_depth_valid(self):
 		from red_pill.config import RedPillConfig
+
 		assert RedPillConfig._normalize_identity_depth("LOW") == "low"
 
 	def test_normalize_identity_depth_invalid(self):
 		from red_pill.config import RedPillConfig
+
 		assert RedPillConfig._normalize_identity_depth("INVALID") == "medium"
 
 	def test_normalize_identity_depth_non_string(self):
 		from red_pill.config import RedPillConfig
+
 		assert RedPillConfig._normalize_identity_depth(None) == "medium"
 
 	def test_qdrant_url_memory(self):
@@ -183,66 +193,80 @@ class TestConfigValidators:
 
 	def test_ide_backend_valid(self):
 		from red_pill.config import RedPillConfig
+
 		assert RedPillConfig._validate_ide_backend("CLAUDE") == "claude"
 
 	def test_ide_backend_invalid(self):
 		from red_pill.config import RedPillConfig
+
 		with pytest.raises(ValueError):
 			RedPillConfig._validate_ide_backend("invalid")
 
 	def test_parse_bridge_cascades_string(self):
 		from red_pill.config import RedPillConfig
+
 		result = RedPillConfig._parse_bridge_cascades('[{"backend": "local"}]')
 		assert isinstance(result, list)
 
 	def test_parse_bridge_cascades_invalid_json(self):
 		from red_pill.config import RedPillConfig
+
 		with pytest.raises(ValueError):
 			RedPillConfig._parse_bridge_cascades("not-json")
 
 	def test_parse_bridge_cascades_passthrough(self):
 		from red_pill.config import RedPillConfig
+
 		assert RedPillConfig._parse_bridge_cascades([{"backend": "local"}]) == [{"backend": "local"}]
 
 	def test_parse_deep_recall_triggers_string(self):
 		from red_pill.config import RedPillConfig
+
 		result = RedPillConfig._parse_deep_recall_triggers("wake up,despierta")
 		assert result == ["wake up", "despierta"]
 
 	def test_parse_deep_recall_triggers_passthrough(self):
 		from red_pill.config import RedPillConfig
+
 		assert RedPillConfig._parse_deep_recall_triggers(["a"]) == ["a"]
 
 	def test_parse_chronicle_plugins_json_string(self):
 		from red_pill.config import RedPillConfig
+
 		result = RedPillConfig._parse_chronicle_plugins('["antigravity"]')
 		assert result == ["antigravity"]
 
 	def test_parse_chronicle_plugins_csv_string(self):
 		from red_pill.config import RedPillConfig
+
 		result = RedPillConfig._parse_chronicle_plugins("antigravity, claude_code")
 		assert result == ["antigravity", "claude_code"]
 
 	def test_parse_chronicle_plugins_passthrough(self):
 		from red_pill.config import RedPillConfig
+
 		assert RedPillConfig._parse_chronicle_plugins(["x"]) == ["x"]
 
 	def test_parse_collections_string(self):
 		from red_pill.config import RedPillConfig
+
 		result = RedPillConfig._parse_collections("work, social")
 		assert result == ["work", "social"]
 
 	def test_parse_collections_passthrough(self):
 		from red_pill.config import RedPillConfig
+
 		assert RedPillConfig._parse_collections(["a"]) == ["a"]
 
 	def test_parse_colors_string(self):
 		from red_pill.config import RedPillConfig
+
 		result = RedPillConfig._parse_colors("purple, blue")
 		assert result == ["purple", "blue"]
 
 	def test_parse_colors_passthrough(self):
 		from red_pill.config import RedPillConfig
+
 		assert RedPillConfig._parse_colors(["red"]) == ["red"]
 
 	def test_semantic_intent_threshold_high(self):
@@ -319,36 +343,43 @@ class TestConfigValidators:
 class TestModuleLevelAliases:
 	def test_semantic_intent_threshold_alias(self):
 		import red_pill.config as cfg
+
 		val = cfg.SEMANTIC_INTENT_THRESHOLD
 		assert isinstance(val, float)
 
 	def test_bayesian_collections_alias(self):
 		import red_pill.config as cfg
+
 		val = cfg.BAYESIAN_COLLECTIONS
 		assert isinstance(val, (list, tuple, set))
 
 	def test_permanent_collections_alias(self):
 		import red_pill.config as cfg
+
 		val = cfg.PERMANENT_COLLECTIONS
 		assert isinstance(val, (list, tuple, set))
 
 	def test_memory_engines_alias(self):
 		import red_pill.config as cfg
+
 		val = cfg.MEMORY_ENGINES
 		assert isinstance(val, (list, tuple, set, dict))
 
 	def test_chroma_tone_mapping_alias(self):
 		import red_pill.config as cfg
+
 		val = cfg.CHROMA_TONE_MAPPING
 		assert isinstance(val, dict)
 
 	def test_current_schema_version_alias(self):
 		import red_pill.config as cfg
+
 		val = cfg.CURRENT_SCHEMA_VERSION
 		assert val is not None
 
 	def test_emotional_decay_multipliers_alias(self):
 		import red_pill.config as cfg
+
 		val = cfg.EMOTIONAL_DECAY_MULTIPLIERS
 		assert isinstance(val, dict)
 
@@ -356,11 +387,13 @@ class TestModuleLevelAliases:
 class TestLoadAffectMultipliers:
 	def test_missing_model_falls_back_to_pioneer(self):
 		from red_pill.config import _load_affect_multipliers
+
 		result = _load_affect_multipliers("NONEXISTENT_MODEL_999")
 		assert "orange" in result
 
 	def test_error_path_returns_defaults(self):
 		from red_pill.config import _load_affect_multipliers
+
 		with patch("builtins.open", side_effect=OSError("disk full")):
 			result = _load_affect_multipliers("PIONEER")
 		assert "orange" in result
@@ -375,19 +408,22 @@ class TestContainerDetection:
 class TestModuleLevelGetattr:
 	def test_cfg_function(self):
 		from red_pill.config import _cfg
+
 		result = _cfg()
 		assert result is not None
 
 	def test_get_config_cached_no_env(self):
 		from red_pill.config import get_config_cached
+
 		result = get_config_cached(None)
 		assert result is not None
 
 	def test_set_enterprise_overrides_when_singleton_not_ready(self, monkeypatch):
 		import red_pill.config as cfg_mod
+
 		monkeypatch.setattr(cfg_mod, "_enterprise_overrides_store", {})
 		# Force cache clear to simulate "singleton not yet created"
-		cfg_mod.get_config.cache_clear()
+		cfg_mod.get_config.cache_clear()  # type: ignore[attr-defined]
 		# This should hit the exception path and clear cache
 		cfg_mod.set_enterprise_overrides({"key": "value"})
 		assert cfg_mod._enterprise_overrides_store == {"key": "value"}
@@ -398,12 +434,26 @@ class TestHiveConnectionFailure:
 		fake_connections = MagicMock()
 		fake_connections.connect.side_effect = ConnectionError("refused")
 		monkeypatch.setattr("red_pill.hive.connections", fake_connections)
-		monkeypatch.setattr("red_pill.hive.cfg", type("C", (), {
-			"MILVUS_ENABLED": True, "MILVUS_HOST": "localhost", "MILVUS_PORT": 19530,
-			"MILVUS_SECURE": False, "MILVUS_TIMEOUT": 5, "MILVUS_LITE_ENABLED": False,
-			"MILVUS_USER": "", "MILVUS_PASSWORD": "", "MILVUS_DB": "default",
-		})())
+		monkeypatch.setattr(
+			"red_pill.hive.cfg",
+			type(
+				"C",
+				(),
+				{
+					"MILVUS_ENABLED": True,
+					"MILVUS_HOST": "localhost",
+					"MILVUS_PORT": 19530,
+					"MILVUS_SECURE": False,
+					"MILVUS_TIMEOUT": 5,
+					"MILVUS_LITE_ENABLED": False,
+					"MILVUS_USER": "",
+					"MILVUS_PASSWORD": "",
+					"MILVUS_DB": "default",
+				},
+			)(),
+		)
 		from red_pill.hive import HiveMind
+
 		hive = HiveMind()
 		assert hive.connected is False
 

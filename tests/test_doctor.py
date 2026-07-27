@@ -3,8 +3,6 @@
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from red_pill.metabolism.doctor import _check_model_match, _check_timers, run_doctor
 
 
@@ -100,8 +98,7 @@ class TestCheckModelMatch:
 		]
 		mock_response = MagicMock()
 		mock_response.read.return_value = json.dumps({"data": [{"id": "test.gguf"}]}).encode()
-		with patch("red_pill.core.model_registry.ModelRegistry") as mock_registry, \
-			 patch("urllib.request.urlopen", return_value=mock_response):
+		with patch("red_pill.core.model_registry.ModelRegistry") as mock_registry, patch("urllib.request.urlopen", return_value=mock_response):
 			mock_registry.get_profile.return_value = {"model_path": "/models/test.gguf"}
 			result = _check_model_match()
 			assert not any(r[0] == "red" for r in result)
@@ -115,8 +112,7 @@ class TestCheckModelMatch:
 		]
 		mock_response = MagicMock()
 		mock_response.read.return_value = json.dumps({"data": [{"id": "wrong.gguf"}]}).encode()
-		with patch("red_pill.core.model_registry.ModelRegistry") as mock_registry, \
-			 patch("urllib.request.urlopen", return_value=mock_response):
+		with patch("red_pill.core.model_registry.ModelRegistry") as mock_registry, patch("urllib.request.urlopen", return_value=mock_response):
 			mock_registry.get_profile.return_value = {"model_path": "/models/test.gguf"}
 			result = _check_model_match()
 			assert any(r[0] == "red" for r in result)
@@ -130,8 +126,7 @@ class TestCheckModelMatch:
 		]
 		mock_response = MagicMock()
 		mock_response.read.return_value = json.dumps({"data": []}).encode()
-		with patch("red_pill.core.model_registry.ModelRegistry") as mock_registry, \
-			 patch("urllib.request.urlopen", return_value=mock_response):
+		with patch("red_pill.core.model_registry.ModelRegistry") as mock_registry, patch("urllib.request.urlopen", return_value=mock_response):
 			mock_registry.get_profile.return_value = {"model_path": "/models/test.gguf"}
 			result = _check_model_match()
 			assert any(r[0] == "yellow" for r in result)
@@ -143,8 +138,10 @@ class TestCheckModelMatch:
 			MagicMock(stdout=""),
 			MagicMock(stdout="12345 python run_dual_bind.py\n"),
 		]
-		with patch("red_pill.core.model_registry.ModelRegistry") as mock_registry, \
-			 patch("urllib.request.urlopen", side_effect=ConnectionError("refused")):
+		with (
+			patch("red_pill.core.model_registry.ModelRegistry") as mock_registry,
+			patch("urllib.request.urlopen", side_effect=ConnectionError("refused")),
+		):
 			mock_registry.get_profile.return_value = {"model_path": "/models/test.gguf"}
 			result = _check_model_match()
 			assert any(r[0] == "yellow" for r in result)

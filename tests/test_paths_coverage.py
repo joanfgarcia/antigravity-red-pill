@@ -1,11 +1,7 @@
 """Coverage boost for red_pill.core.paths — path resolvers and migration branches."""
 
-import os
-import shutil
 from pathlib import Path
 from unittest.mock import patch
-
-import pytest
 
 from red_pill.core import paths
 

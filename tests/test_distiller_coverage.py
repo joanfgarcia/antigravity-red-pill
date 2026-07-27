@@ -1,20 +1,16 @@
 """Coverage boost for red_pill.metabolism.distiller — pure functions and branches."""
 
-import json
-import os
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 from red_pill.metabolism.distiller import (
 	EMOTION_SYNONYMS,
 	VALID_EMOTIONS,
+	_validate_relics,
 	build_emotional_vector,
 	derive_hub_affect,
 	load_distiller_config,
 	load_prompt_text,
 	merge_relics,
-	_validate_relics,
 )
 
 
@@ -132,7 +128,7 @@ class TestMergeRelics:
 		assert merge_relics(chunks) == ["valid quote"]
 
 	def test_empty_relics_list_in_chunk(self):
-		chunks = [{"relics": []}, {"relics": None}]
+		chunks: list[dict] = [{"relics": []}, {"relics": None}]
 		assert merge_relics(chunks) == []
 
 
