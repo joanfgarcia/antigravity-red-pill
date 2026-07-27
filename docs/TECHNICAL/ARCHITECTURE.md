@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v7.10.0 (Centralized Job Manager)
+**System Version**: v7.11.0 (Generic Script Job Driver)
 **Analyst**: The Architect
 **Date**: 2026-04-16
 

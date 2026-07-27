@@ -1,4 +1,4 @@
-## [Unreleased] (ScriptJobDriver — el kernel deja de conocer a sus satélites)
+## [7.11.0] - 2026-07-27 (ScriptJobDriver — el kernel deja de conocer a sus satélites)
 
 Materializa `RFC_GENERIC_SCRIPT_JOB_DRIVER.md` v2 (decisiones D1-D10 cerradas con el operador el 27-jul). Paga la deuda contraída con `BitTrainingDriver`: un único driver paramétrico ejecuta cualquier script por pasos sin que el kernel sepa nada del proyecto satélite.
 
