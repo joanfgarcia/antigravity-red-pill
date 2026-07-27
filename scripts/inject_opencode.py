@@ -186,6 +186,38 @@ def deploy_skills(skills_src_dir: str, skills_dest_dir: str, variables: dict, ba
 
 
 # ── package.json bootstrap ────────────────────────────────────────────────────
+def deploy_plugins(plugins_src_dir: str, plugins_dest_dir: str, variables: dict, backup: bool = True) -> int:
+	"""Deploy opencode plugins with resolved placeholders. Returns count deployed.
+
+	The scribe plugin is the capture surface for every opencode turn, so a seed
+	that never reaches the host is a month of lost memory. This step existed only
+	in the (uncalled) adapter under scripts/inject/opencode/, which is why edits
+	to the seed silently stayed in the repo.
+	"""
+	deployed = 0
+	if not os.path.isdir(plugins_src_dir):
+		return deployed
+
+	os.makedirs(plugins_dest_dir, exist_ok=True)
+	for fname in os.listdir(plugins_src_dir):
+		src = os.path.join(plugins_src_dir, fname)
+		if not os.path.isfile(src):
+			continue
+		dst = os.path.join(plugins_dest_dir, fname)
+		resolved = subst(_read_seed(src), variables)
+		if os.path.exists(dst):
+			with open(dst, encoding="utf-8") as fdst:
+				if fdst.read() == resolved:
+					continue
+			if backup:
+				shutil.copy2(dst, dst + ".bak")
+		with open(dst, "w", encoding="utf-8") as fdst:
+			fdst.write(resolved)
+		logger.info(f"✓ Plugin '{fname}' desplegado en {plugins_dest_dir}")
+		deployed += 1
+	return deployed
+
+
 def ensure_package_json(config_dir: str, backup: bool = True) -> bool:
 	"""Create package.json with @opencode-ai/plugin if it doesn't exist."""
 	pkg_path = os.path.join(config_dir, "package.json")
@@ -292,6 +324,11 @@ def main():
 
 	# ── 4. Ensure package.json ─────────────────────────────────────────────
 	ensure_package_json(config_dir, backup=backup)
+
+	# ── 5. Deploy plugins (the scribe that captures every turn) ────────────
+	plugins_src = os.path.join(opencode_seeds, "plugins")
+	plugins_dest = os.path.join(config_dir, "plugins")
+	deploy_plugins(plugins_src, plugins_dest, variables, backup=backup)
 
 	logger.info("OpenCode + Red Pill integration complete.")
 
