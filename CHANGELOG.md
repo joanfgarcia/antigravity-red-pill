@@ -27,7 +27,8 @@ Materializa `RFC_GENERIC_SCRIPT_JOB_DRIVER.md` v2 (decisiones D1-D10 cerradas co
 - **[CHANGE] Cota por defecto 4 h → 2 h**: las vidas de proceso medidas del trabajo más pesado van de 3h23m a ~11h, pero dimensionar un default ciego para el peor caso conocido dejaría a cualquier job colgado ocupando la tarjeta media jornada. Los trabajos largos declaran su cota real en la receta; para el resto, la escalada ×2 la descubre al coste de un step parcial.
 
 ### 📜 Recetas YAML (la forma humana de encolar)
-- **[FEAT] `red-pill job submit --recipe <ruta|nombre>`**: un payload declarativo de veinte claves es correcto para la máquina e ilegible para una persona. La receta es ese mismo payload en YAML, con comentarios, y viviendo en el repo del satélite (`<proyecto>/.red-pill/jobs/<nombre>.yaml`) junto al script que describe — completa la doctrina del RFC: si el kernel no debe conocer al satélite, la receta tampoco es suya. Nombre corto resuelto subiendo directorios (como `.agent/`), `cwd` deducido de dónde vive la receta.
+- **[FEAT] `red-pill job submit --recipe <ruta|nombre>`**: un payload declarativo de veinte claves es correcto para la máquina e ilegible para una persona. La receta es ese mismo payload en YAML, con comentarios, y viviendo en el repo del satélite junto al script que describe — completa la doctrina del RFC: si el kernel no debe conocer al satélite, la receta tampoco es suya. Nombre corto resuelto subiendo directorios (como `.agent/`), `cwd` deducido de dónde vive la receta.
+- **[FEAT] Búsqueda en sitios VERSIONADOS**: orden `.red-pill/jobs/` → `configs/jobs/` → `jobs/`. El primero es estado local del kernel (no se versiona) y sirve de override temporal; los otros dos son el hogar natural de una receta que describe cómo se ejecuta el proyecto y debe viajar con su historia.
 
 ### 🖥️ CLI
 - **[FEAT] `job kill [--discard]`, `job logs [--tail]`, `--parent` en submit** (encadena fases por el DAG que la cola ya tenía).

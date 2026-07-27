@@ -10,8 +10,8 @@ Eso completa la doctrina del RFC: si el kernel no debe conocer al satélite, la
 receta para ejecutarlo tampoco es del kernel — es del satélite, versionada con
 su código.
 
-	red-pill job submit --recipe ~/Documents/IA/frankenswarm/.red-pill/jobs/school.yaml
-	red-pill job submit --recipe school          # busca en ./.red-pill/jobs/
+	red-pill job submit --recipe ~/Documents/IA/frankenswarm/configs/jobs/school.yaml
+	red-pill job submit --recipe school          # busca subiendo directorios
 """
 
 from __future__ import annotations
@@ -19,7 +19,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-RECIPE_DIR = Path(".red-pill") / "jobs"
+# Orden de búsqueda deliberado: primero el directorio de estado local del kernel
+# (sin versionar — sirve para ajustes puntuales sin ensuciar el repo), después
+# los sitios VERSIONADOS, que son el hogar natural de la receta: describe cómo
+# se ejecuta el proyecto, así que pertenece al proyecto y viaja con su historia.
+RECIPE_DIRS = (Path(".red-pill") / "jobs", Path("configs") / "jobs", Path("jobs"))
 _META_KEYS = ("source", "priority", "parent")
 
 
@@ -38,11 +42,13 @@ def resolve_recipe_path(reference: str, base_dir: Optional[Path] = None) -> Path
 
 	start = (base_dir or Path.cwd()).resolve()
 	for directory in [start, *start.parents]:
-		for suffix in (".yaml", ".yml"):
-			found = directory / RECIPE_DIR / f"{reference}{suffix}"
-			if found.is_file():
-				return found.resolve()
-	raise FileNotFoundError(f"no hay ninguna receta '{reference}' en {RECIPE_DIR} subiendo desde {start}")
+		for recipe_dir in RECIPE_DIRS:
+			for suffix in (".yaml", ".yml"):
+				found = directory / recipe_dir / f"{reference}{suffix}"
+				if found.is_file():
+					return found.resolve()
+	searched = ", ".join(str(d) for d in RECIPE_DIRS)
+	raise FileNotFoundError(f"no hay ninguna receta '{reference}' en [{searched}] subiendo desde {start}")
 
 
 def load_recipe(reference: str, base_dir: Optional[Path] = None) -> Tuple[str, Dict[str, Any], int, Optional[str]]:
@@ -68,8 +74,15 @@ def load_recipe(reference: str, base_dir: Optional[Path] = None) -> Tuple[str, D
 
 	payload = {k: v for k, v in data.items() if k not in _META_KEYS}
 
-	# `.red-pill/jobs/x.yaml` → la raíz del proyecto son dos niveles por encima.
-	project_root = path.parent.parent.parent if path.parent.parent.name == ".red-pill" else path.parent
+	# `<raíz>/<dir de recetas>/x.yaml` → la raíz está por encima del directorio
+	# conocido (`configs/jobs`, `.red-pill/jobs`, `jobs`). Si la receta vive en
+	# otro sitio, su propio directorio hace de raíz.
+	project_root = path.parent
+	for recipe_dir in RECIPE_DIRS:
+		suffix_parts = recipe_dir.parts
+		if path.parent.parts[-len(suffix_parts) :] == suffix_parts:
+			project_root = Path(*path.parent.parts[: -len(suffix_parts)])
+			break
 	cwd = payload.get("cwd")
 	payload["cwd"] = str(project_root) if not cwd else str((project_root / cwd).resolve() if not Path(cwd).is_absolute() else Path(cwd).expanduser())
 

@@ -600,8 +600,8 @@ def test_preflight_defers_without_burning_attempts_when_vram_is_short(queue, cle
 # ── Recetas YAML: la forma humana de encolar (27 jul) ──────────────────────
 
 
-def _write_recipe(root, body: str):
-	recipe_dir = root / ".red-pill" / "jobs"
+def _write_recipe(root, body: str, where: str = "configs/jobs"):
+	recipe_dir = root / where
 	recipe_dir.mkdir(parents=True, exist_ok=True)
 	path = recipe_dir / "school.yaml"
 	path.write_text(body, encoding="utf-8")
@@ -633,7 +633,7 @@ control:
 """,
 	)
 
-	source, payload, priority, parent = load_recipe(str(project / ".red-pill" / "jobs" / "school.yaml"))
+	source, payload, priority, parent = load_recipe(str(project / "configs" / "jobs" / "school.yaml"))
 
 	assert (source, priority, parent) == ("script_job", 7, None)
 	assert payload["cwd"] == str(project)  # deducido, no repetido en el YAML
@@ -665,7 +665,7 @@ def test_recipe_without_source_is_rejected(tmp_path):
 	_write_recipe(project, "title: sin source\nstep_command: echo hi\n")
 
 	with pytest.raises(ValueError, match="source"):
-		load_recipe(str(project / ".red-pill" / "jobs" / "school.yaml"))
+		load_recipe(str(project / "configs" / "jobs" / "school.yaml"))
 
 
 def test_missing_recipe_names_where_it_looked(tmp_path):
@@ -729,3 +729,17 @@ pathlib.Path({str(state)!r}).write_text(json.dumps({{"epoch": 1}}))
 
 	assert outcome.progress["checkpoint_writes_in_step"] == 1
 	assert outcome.progress["checkpoint_interval_s"] >= 0
+
+
+def test_local_unversioned_recipe_overrides_the_versioned_one(tmp_path):
+	"""`.red-pill/jobs/` es estado del kernel: sirve de override sin ensuciar el repo."""
+	from red_pill.jobs.recipes import load_recipe
+
+	project = tmp_path / "frankenswarm"
+	_write_recipe(project, "source: script_job\ntitle: versionada\nstep_command: echo hi\n")
+	_write_recipe(project, "source: script_job\ntitle: local\nstep_command: echo hi\n", where=".red-pill/jobs")
+
+	_, payload, _, _ = load_recipe("school", base_dir=project)
+
+	assert payload["title"] == "local"
+	assert payload["cwd"] == str(project)  # la raíz se deduce igual en ambos sitios
