@@ -276,9 +276,13 @@ class ScriptJobDriver(ResumableJobDriver):
 			raise ValueError("step_command vacío tras tokenizar")
 
 		# Rutas relativas al cwd resueltas a absoluto: systemd-run no las resuelve.
+		# Absoluto SIN resolve(): el python de un venv es un symlink al intérprete
+		# base, y seguirlo lo saca del venv (el intérprete localiza pyvenv.cfg por
+		# la ruta con la que se le invoca) — el step moría con ModuleNotFoundError
+		# de sus propias dependencias (job ef18de08, 2026-07-28).
 		candidate = Path(cwd) / argv[0]
 		if not os.path.isabs(argv[0]) and candidate.exists():
-			argv[0] = str(candidate.resolve())
+			argv[0] = os.path.abspath(candidate)
 
 		if not self._has_systemd():
 			return argv
