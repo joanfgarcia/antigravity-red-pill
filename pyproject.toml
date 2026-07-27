@@ -1,6 +1,6 @@
 [project]
 name = "red-pill"
-version = "7.9.0"
+version = "7.12.0"
 description = "B760-Adaptive Memory Protocol for Sovereign Agents"
 readme = "README.md"
 license = "AGPL-3.0-only"
@@ -38,8 +38,6 @@ dependencies = [
     # PyPI wheel, SHA-256 locked in uv.lock. Supply chain is fully auditable.
     "pure-mls==4.0.0",
     "neon-link>=0.5.1",
-    "celery>=5.6.3",
-    "redis>=7.4.0",
     "pluggy>=1.6.0",
     "pillow>=12.3.0",
     "python-multipart>=0.0.26",
@@ -48,6 +46,7 @@ dependencies = [
     "platformdirs>=4.9.2",
     "websockets>=16.0",
     "starlette>=1.0.1",
+    "prompt-toolkit>=3.0.0",
 ]
 
 [project.scripts]
@@ -210,7 +209,6 @@ omit = [
     "*/daemon/sovereign.py",     # Sovereign Daemon main loop (requires systemd)
     "*/daemon/plugin.py",        # DaemonPlugin ABC (tested via sovereign.py)
     "*/daemon/plugins/*.py",     # Daemon plugins (require live telemetry/Qdrant)
-    "*/swarm/executor.py",       # AGY Bridge executor (requires live IDE session)
     "*/swarm/mls_manager.py",    # Requires live MLS group negotiation
     "*/inference/samantha_on_demand.py",  # Requires local LLM binary (llama-server)
     "*/inference/samantha_worker.py",     # Requires local LLM daemon thread
@@ -234,8 +232,6 @@ omit = [
     "*/interceptors/06_tone_adapter.py",
     "*/core/plugin_engine.py",
     "*/swarm/agents/echo.py",
-    "*/swarm/cognitive_queue.py",
-    "*/swarm/daemon.py",
     "*/swarm/agents/janitor.py",
     "*/utils/antigravity_history/*.py", # Antigravity LS communication (needs live LS daemon)
 ]

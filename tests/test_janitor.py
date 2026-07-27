@@ -6,7 +6,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from red_pill.swarm.agents.janitor import JanitorMinion
+from red_pill.swarm.agents.janitor import JanitorMinion, discover_plugins
+from red_pill.swarm.agents.janitor_plugins.log_rotation import LogRotationPlugin
 
 
 @pytest.fixture
@@ -37,7 +38,7 @@ def test_janitor_log_rotation_and_cleanup(temp_dir):
 
 	# Test copytruncate rotation
 	assert log_file.stat().st_size > 0
-	janitor._rotate_file_copytruncate(log_file)
+	LogRotationPlugin()._rotate_file_copytruncate(janitor, log_file)
 
 	# Verify active log is truncated to size 0
 	assert log_file.exists()
@@ -57,7 +58,19 @@ def test_janitor_log_rotation_and_cleanup(temp_dir):
 	# Set mtime of rotated_2 to 40 days ago to trigger expiration
 	os.utime(rotated_2, (old_time, old_time))
 
-	purged = janitor._cleanup_old_rotated_logs(temp_dir, "error.log", days=30)
+	purged = LogRotationPlugin()._cleanup_old_rotated_logs(janitor, temp_dir, "error.log", days=30)
 	assert purged == 2
 	assert not rotated_2.exists()
 	assert rotated_1.exists()
+
+
+def test_janitor_discovers_all_plugins():
+	"""El orquestador agnóstico descubre los plugins del paquete janitor_plugins."""
+	names = {p.name for p in discover_plugins()}
+	assert {
+		"events_db_purge",
+		"log_rotation",
+		"orphaned_parents_sweep",
+		"queue_hygiene",
+		"scratch_purge",
+	} <= names

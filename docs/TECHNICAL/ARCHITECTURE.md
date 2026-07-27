@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v7.9.0 (Minion Execution Substrate)
+**System Version**: v7.12.0 (Unified Turn Capture)
 **Analyst**: The Architect
 **Date**: 2026-04-16
 
@@ -518,7 +518,7 @@ Telegram/Neon-Link → Worker → IDEBridge (ABC)
 |---|---|
 | No file lock for concurrent agy | UUID4-based eid embedded in prompt eliminates race conditions |
 | Prefix-stripping over transcript parsing | `agy --conversation` accumulates all stdout; `delta = stdout[prev_len:]` is O(1) vs O(n) log scan |
-| External Scribe Pattern | Worker saves interactions directly to SQLite, decoupled from agent state |
+| External Scribe Pattern | Worker captures the turn itself, decoupled from agent state — it queues into `memory_queue` (the one sink the queue worker drains into `interaction_memories`), never into a private table |
 | GrpcBridge not deprecated | Only viable path for `GetAllCascadeTrajectories` (Chronicle) |
 
 ### 16.3 CLI

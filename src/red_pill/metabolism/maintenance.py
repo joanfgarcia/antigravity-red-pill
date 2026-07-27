@@ -633,3 +633,59 @@ def rewrite_tool_noise_families(
 		}
 		logger.info(f"[NOISE REWRITE] {collection}: {report[collection]}")
 	return report
+
+
+def cleanup_orphan_raw_parents(memory_manager, collections=("work_memories", "social_memories")) -> dict:
+	"""
+	Garbage collection routine for raw_parent engrams:
+	When all synthesized child engrams (sequence_chunks / synthesis_hubs) associated with
+	a raw_parent have eroded away due to lack of recall/utility, the raw_parent
+	no longer has active children in the memory graph and is safely garbage collected
+	(since the raw verbatim interaction is already archived in archive_memories).
+	"""
+	from qdrant_client import models as qm
+
+	client = memory_manager.client
+	report = {}
+
+	for col in collections:
+		if not client.collection_exists(col):
+			continue
+
+		try:
+			raw_parents, _ = client.scroll(
+				collection_name=col,
+				scroll_filter=qm.Filter(must=[qm.FieldCondition(key="lazarus_phase", match=qm.MatchValue(value="raw_parent"))]),
+				limit=500,
+				with_payload=True,
+			)
+		except Exception as e:
+			logger.error(f"[GARBAGE COLLECTION] Failed to scroll raw_parents in {col}: {e}")
+			continue
+
+		deleted_count = 0
+		for parent in raw_parents:
+			payload = parent.payload or {}
+			child_ids = payload.get("associations", [])
+			if not child_ids or not isinstance(child_ids, list):
+				continue
+
+			# Retrieve existing children in Qdrant
+			try:
+				existing = client.retrieve(collection_name=col, ids=child_ids, with_payload=False)
+			except Exception:
+				existing = []
+
+			if not existing:
+				# All child engrams have eroded away — safe to remove orphan raw_parent
+				try:
+					client.delete(collection_name=col, points_selector=qm.PointIdsList(points=[parent.id]))
+					deleted_count += 1
+				except Exception as e:
+					logger.error(f"[GARBAGE COLLECTION] Failed to delete orphan raw_parent {parent.id}: {e}")
+
+		report[col] = deleted_count
+		if deleted_count > 0:
+			logger.info(f"[GARBAGE COLLECTION] Cleaned up {deleted_count} orphan raw_parent(s) in {col}.")
+
+	return report

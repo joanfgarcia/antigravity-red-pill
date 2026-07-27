@@ -1,3 +1,170 @@
+## [7.12.0] - 2026-07-27 (Captura de turnos: una sola tubería, del hook al engrama)
+
+Durante un mes hubo **dos sumideros**. Cuatro superficies de captura deterministas (plugin de opencode, hook Stop de Claude Code, bridge de opencode, worker de Antigravity) escribían cada turno en una tabla `interactions` de `bunker.db` que **ningún consumidor leía**; mientras tanto, la memoria se alimentaba solo del relay del handshake, es decir, de que el modelo se acordara de llamar. La mitad fiable escribía en un callejón sin salida y la mitad no fiable era la única que llegaba a Qdrant. El plugin lo documentaba en su cabecera ("Queue Worker → bunker_queue.db → Qdrant"): esa etapa nunca se escribió.
+
+### 🚰 Un solo sumidero
+- **[FIX] Deduplicación en el sumidero**: dos productores pueden ver legítimamente el mismo turno (el hook del editor y el relay del agente), así que `enqueue_memory` hashea prompt+respuesta y rechaza el repetido dentro de una ventana devolviendo la fila existente. **La corrección deja de depender de que el modelo se porte bien.** `None` amplía la ventana a todo el historial (backfills); `0` la desactiva.
+- **[FIX] La procedencia sobrevive a la ingestión**: `memory_queue` llevaba `originator` desde hacía mucho y `record_interaction_pair` no lo aceptaba — el campo moría al ingerir y ningún engrama sabía de qué IDE venía. Ahora viaja hasta los metadatos del engrama.
+- **[FIX] Filtrado de ruido en el punto de drenaje**: vivía solo en el relay del interceptor, así que todo lo capturado por hooks se lo saltaba. Hacerlo una vez al drenar mantiene a todos los productores idénticos y tontos — necesario, porque el plugin JS no puede llamar a Python. Un turno que es puro ruido de herramientas se descarta; si el propio filtro falla, se ingiere crudo (perderlo sería peor).
+- **[FIX] Sin truncado en captura**: cortar a 2000/5000 caracteres mutilaba el engrama en silencio. Recortar es cosa del worker.
+
+### 🔌 Superficies de captura
+- **[FEAT] Plugin de opencode y hook de Claude Code apuntan a `memory_queue`**: conservan intacta su lógica de captura (acumulación en streaming, volcado en `idle` y no en `message.updated`, dedup por marcador) — esa parte nunca fue el problema; solo cambia el destino.
+- **[FIX] El seed del plugin nunca llegaba al host**: el único código que lo desplegaba vivía en un adaptador que nadie invoca, así que editar el seed no cambiaba nada y el fichero del host había que colocarlo a mano. `inject_opencode.py` despliega plugins junto a las skills; `QUEUE_DB` se suma a las variables de sustitución.
+- **[FIX] Bridges sin tabla propia**: Telegram y Antigravity no tienen hook que capture por ellos, así que capturan ellos — pero a la cola común y etiquetados con su procedencia. Fuera ~40 líneas de fontanería SQLite duplicada.
+- **[CHANGE] Anclas**: dejan de pedir al agente que relaye el turno anterior (el hook ya lo encoló); pasan solo `user_prompt`, que sigue alimentando el enriquecimiento — y de paso arreglan una instrucción imposible de cumplir, porque el tool rechaza una llamada sin `user_prompt`.
+
+### 🧹 Extirpación y rescate
+- **[REMOVED] `sqlite_interactions_archiver`**: movía a un JSONL las filas de más de 30 días y las borraba. Como nadie ingería esa tabla, su único efecto real era ponerle fecha de caducidad a turnos que nunca fueron memoria. El archivo de verdad es Qdrant.
+- **[FEAT] `scripts/migrate_interactions_to_queue.py`**: rescata ambos pozos (tabla viva + JSONL) hacia la cola y elimina la tabla. **Ejecutado aquí: 303 turnos encolados, 15 ya presentes, 295 engramas con procedencia.** Un mes de conversación real recuperado.
+
+## [7.11.0] - 2026-07-27 (ScriptJobDriver — el kernel deja de conocer a sus satélites)
+
+Materializa `RFC_GENERIC_SCRIPT_JOB_DRIVER.md` v2 (decisiones D1-D10 cerradas con el operador el 27-jul). Paga la deuda contraída con `BitTrainingDriver`: un único driver paramétrico ejecuta cualquier script por pasos sin que el kernel sepa nada del proyecto satélite.
+
+### 🚛 `ScriptJobDriver` (`source: script_job`)
+- **[FEAT] Receta declarativa en el payload**: `cwd`, `step_command`, `checkpoint_file`, `env`, `preflight`, `teardown`. Cero código nuevo en el kernel por cada script del ecosistema.
+- **[FEAT] Progreso honesto en tres modos** — `bounded` (contador sobre total, literal o releído por step), `unbounded` (contador sin total: **sin porcentaje inventado**) y `single` (script de un paso, `exit 0` = fin). `completion` (truthy/equals/contains) **gana en cualquier modo**: la escuela de Bit cierra fase cuando Samantha concede el hito, en la época 25 o en la 55 — un contador solo la cerraría antes de tiempo o nunca.
+- **[FEAT] Segunda dimensión opcional**: `época 23/168 · fase 7/8` leyendo claves que el estado del satélite YA contiene, sin tocar el script.
+- **[FEAT] Watchdog de no-progreso**: un script con bug que sale con `exit 0` sin avanzar no es fallo, ni cuelgue, ni deferral — sin este guard el runner repetiría épocas vacías sin fin. Desactivable por payload.
+- **[FEAT] Tokenización sin shell**: `shlex.split` (o forma lista), `sh -c` explícito como única vía de escape; binarios relativos resueltos contra `cwd` antes de `systemd-run`.
+- **[FEAT] Unload por proxy dual-bind** (URL desde config, ya no a fuego) como mecanismo preferente frente a parar servicios: el residente no muere, recarga bajo demanda.
+
+### ⏱️ Política del runner: timeout adaptativo, forense y escalada
+- **[FEAT] Detector de cuelgue, no SLA**: `RuntimeMaxSec` sobre un scope con nombre determinista (`redpill-job-<id8>.scope`) mata el step vencido como cgroup completo, hijos CUDA incluidos. Cota generosa sin historial (payload o 4 h), `max(4 × EMA, 30 min)` una vez el job se ha medido, y **duplicada por intento consumido** — un step legítimamente degradado a CPU sobrevive al reintento; un cuelgue real agota el disyuntor igual. Cubre el hueco que `requeue_stale` no alcanza: un runner bloqueado dentro de `subprocess.run` está vivo, no huérfano.
+- **[FEAT] Rastro forense triple**: log del job (¿qué hacía?), `error_log` (¿qué pasó?, visible en `job status`) y marca en el checkpoint con `bound_s`/`ema_s`/`attempt` (¿estaba bien calibrada la cota?).
+- **[FEAT] Escalada calibrada**: 1º y 2º vencimiento son el sistema curándose solo → reporte `warning` sin alarma; el 3º → disyuntor + **señal de dolor** para el operador.
+
+### 🔪 `job kill` y control del operador
+- **[FEAT] Kill duro sin estado nuevo**: sella la fila `PAUSED` y estampa el checkpoint **antes** de parar el scope, así el `rc≠0` resultante no se confunde con un fallo — ni quema intentos ni levanta alarma. Se muestra como `PAUSED*`; reanudar es el mismo verbo y la marca se limpia sola tras el primer step bueno. `--discard` deja dead-letter trazable en vez de borrar la fila en caliente.
+- **[FEAT] Validación de la reanudación sucia**: tras kill o timeout el driver valida el checkpoint del satélite antes de relanzar (nunca reinicio silencioso desde cero); si el job cayó en su PRIMER step no hay nada que validar y arrancar limpio es lo correcto.
+- **[FEAT] `teardown()` en TODAS las salidas, deferral incluido**: sin esto, un job que cede ante el ciclo de sueño de las 03:00 dejaría el modelo residente descargado toda la noche.
+
+### 📏 Cadencia real de checkpoint (medida, no supuesta)
+- **[FEAT] Vigilante durante el step**: el driver observa el fichero de checkpoint MIENTRAS corre el hijo y registra cada escritura con su intervalo real. Distingue las dos magnitudes que es fácil confundir: **duración del step** (cuánto vive el proceso) y **unidad recuperable** (cada cuánto queda avance registrado — lo que cuesta un kill y desde donde retoma un resume). Un mtime tomado solo entre steps no ve los guardados internos y la inflaría hasta el step entero.
+- **[FIX] La escritura que más importa ya no se pierde**: parar el hilo en cuanto sale el proceso se saltaba el guardado de fin de época, que aterriza segundos antes de la salida. Ahora hay una última mirada tras el join.
+- **[FEAT] `job status` imprime lo medido**: duración media por step, cota del próximo y cadencia observada contra el objetivo. Es lo que permite decidir con datos si un job puede ceder la GPU (D9) en lugar de suponerlo.
+- **[CHANGE] Cota por defecto 4 h → 2 h**: las vidas de proceso medidas del trabajo más pesado van de 3h23m a ~11h, pero dimensionar un default ciego para el peor caso conocido dejaría a cualquier job colgado ocupando la tarjeta media jornada. Los trabajos largos declaran su cota real en la receta; para el resto, la escalada ×2 la descubre al coste de un step parcial.
+
+### 📜 Recetas YAML (la forma humana de encolar)
+- **[FEAT] `red-pill job submit --recipe <ruta|nombre>`**: un payload declarativo de veinte claves es correcto para la máquina e ilegible para una persona. La receta es ese mismo payload en YAML, con comentarios, y viviendo en el repo del satélite junto al script que describe — completa la doctrina del RFC: si el kernel no debe conocer al satélite, la receta tampoco es suya. Nombre corto resuelto subiendo directorios (como `.agent/`), `cwd` deducido de dónde vive la receta.
+- **[FEAT] Búsqueda en sitios VERSIONADOS**: orden `.red-pill/jobs/` → `configs/jobs/` → `jobs/`. El primero es estado local del kernel (no se versiona) y sirve de override temporal; los otros dos son el hogar natural de una receta que describe cómo se ejecuta el proyecto y debe viajar con su historia.
+
+### 🖥️ CLI
+- **[FEAT] `job kill [--discard]`, `job logs [--tail]`, `--parent` en submit** (encadena fases por el DAG que la cola ya tenía).
+- **[FEAT] Validación en el submit**: un payload malformado muere al encolar con motivo claro, no tres intentos después y FRUSTRATED a las 3 de la mañana.
+- **[FEAT] Logs por job** (`jobs/<id8>.log`): motivado por una pérdida real de diagnóstico — el step fallido de Bit del 27-jul solo capturó el banner de `systemd-run` y el error de verdad se perdió.
+- **[FEAT] Progreso renderizado con la misma honestidad**: porcentaje solo si hay total, fase si se declara, ETA si es medible.
+
+> **Convivencia deliberada (D3)**: `BitTrainingDriver` NO se retira todavía. El camino genérico debe completar antes una fase real del curriculum; hasta entonces el driver específico —que funciona— es la red de seguridad y la vía de rollback.
+
+## [7.10.0] - 2026-07-24 (Centralized Job Manager — jobs diferidos, reanudables y soberanos)
+
+Materializa el plan `IMPLEMENTATION_PLAN_UNIFIED_JOB_MANAGER.md`: CENTRALIZA (no duplica) todo trabajo diferido del ecosistema sobre las piezas vivas del kernel — la cola central `bunker_queue.db`, el runner shot-and-forget del timer `redpill-queue` y la notificación SAS/MinionInbox. Una sola pieza nueva de contrato (`ResumableJobDriver`), dos drivers de serie, carriles estancos entre consumidores y 651 líneas de sistemas duplicados eliminadas.
+
+### ⚙️ Job Manager Core (`red_pill.jobs`)
+- **[FEAT] `ResumableJobDriver` + `StepOutcome` + `JobDeferred`**: contrato de paso atómico con checkpoint persistente — pausar jamás interrumpe una transacción; semántica at-least-once documentada (steps idempotentes).
+- **[FEAT] Migración mínima de la cola central**: columnas `checkpoint_data` y `progress` + estado `PAUSED` (`pause_task`/`resume_task`/`defer_task`/`save_checkpoint`/`get_task`/`list_tasks`/`job_health`), `exclude_ids` en `pop_next_task`. Sin DB nueva: `title`/`category` viven en el payload.
+- **[FEAT] Runner con reglas de integridad R1-R6** (`queue_worker.process_driver_jobs`): deferral por entorno sin quemar el disyuntor (VRAM/IDE/SIP → `PENDING` sin `attempts`), skip-set por pasada (un fallido no agota sus 3 intentos en un solo run), la pausa del operador gana en la frontera de step, checkpoint persistido tras CADA step, recuperación de huérfanos `PROCESSING` acotada por source, flock a nivel de runner y `exit 0` siempre.
+
+### 🚛 Drivers de Serie
+- **[FEAT] `DistillJobDriver` (`source: distill_job`)**: driver especializado para la re-síntesis metabólica V3 del Bünker de forma diferida, atómica y reanudable por pasos.
+- **[FEAT] `FlowJobDriver` (`source: flow_job`)**: los flows YAML existentes (FlowEngine + GruOrchestrator) se vuelven pausables/reanudables/persistentes gratis — checkpoint = índice de etapa, `on_fail: stop/abort` respeta el disyuntor dejando el checkpoint en la etapa fallida.
+- **[FEAT] `AgenticJobDriver` (`source: agentic_job`)**: tareas agénticas genéricas por cola sobre `swarm/bridges` — el payload define la política (`backend` agy/claude/opencode/local, o `cascade` de `BridgeTarget`s, `model`, `effort` estándar, `cwd`); IDE cerrado o SIP caído = deferral, no fallo. Jubila el ejecutor hardcodeado a agy.
+- **[FIX] Bypass de VRAM para LLM residente online**: actualizado `queue_worker.py` y `DistillJobDriver` para omitir el aplazamiento por VRAM libre (`_check_llm_available()`) cuando el modelo de inferencia en GPU ya está cargado y en reposo listo para consultas HTTP.
+- **[FEAT] Preflight de Sueño Metabólico (R1)**: el Job Manager comprueba `sleep_phase_status.json` en cada step; si el ciclo de sueño nocturno (4 AM) está activo, se autodifiere (`JobDeferred`) evitando contienda de GPU/LLM.
+- **[FIX] Recuperación de jobs huérfanos en `resume_task`**: ampliada la transición para permitir devolver tareas interrumpidas en `PROCESSING` de vuelta a `PENDING`.
+- **[FIX] Sintaxis en `distiller.py`**: corregida la sangría de `return _make_fallback()` dentro del bloque `except` de `synthesize_hub_v2` que impedía la ejecución limpia del ciclo de sueño.
+- **[FIX] `import json` en `queue_worker.py`**: el preflight de sueño usaba `json.load` sin importarlo — el `NameError` moría en un `except` silencioso y el deferral por ciclo de sueño nunca se activaba. Ahora funciona (con test que fija además que un `running` rancio >300s, p.ej. tras un apagón a mitad de sueño, NO difiere).
+- **[FIX] Guard temporal en `resume_task`**: la recuperación de huérfanos `PROCESSING` exige >15 min sin latido (`updated_at`) — reanudar un job VIVO en manos del runner lo ejecutaría por duplicado (carrera de checkpoints). `PAUSED` reanuda siempre.
+- **[FIX] Cold-start del `DistillJobDriver`**: el bypass residente se mantiene, pero sin modelo cargado el preflight ahora SÍ exige margen real de VRAM para bootear el LLM efímero (`SLEEP_MIN_FREE_VRAM_MB`, override por payload) en vez de comparar contra `min_vram_mb = 0` (check inerte que dejaba al job pelear por la GPU en pleno entrenamiento).
+- **[FIX] `prompt-toolkit` declarado en `pyproject.toml`**: desapareció del venv con el saneamiento de dependencias (era transitiva) y rompía el TUI `red-pill config` en runtime; el `importorskip` de los tests lo enmascaraba.
+- **[FIX] Auto-Healer vándalo (causa raíz del sueño roto del 24-jul)**: `HealerMinion._clean_correction` hacía `.strip()` destruyendo la indentación inicial de las correcciones LLM (líneas a columna 0 → SyntaxError) y `_heal_file` escribía a disco sin validar. El wake pulse horario re-mutilaba `distiller.py` en cada pasada y la consolidación de las 03:00 moría en 5s. Curado: limpieza que preserva sangrado + re-indentación con el sangrado original si el LLM lo pierde + **gate `ast.parse` que descarta el heal completo antes de escribir código que no compila**.
+- **[TEST] `test_syntax_integrity`**: compila TODOS los `.py` de `src/scripts/tools/tests` en cada pasada de pytest — un archivo roto que nadie importa ya no puede esconderse hasta el siguiente ciclo de sueño.
+- **[FIX] `run_sovereign_daemon.py`**: importaba el `swarm.daemon` retirado en el saneamiento (el timer `redpill-worker` fallaba cada minuto); retirado el bloque v1 muerto, `IDEWorker.run_once()` intacto.
+- **[FEAT] Autolimpieza de la cola central (`purge_hygiene` + plugin `queue_hygiene`)**: el barrido nocturno borra COMPLETED >7d y FRUSTRATED >14d, y marca como FRUSTRATED (con señal de dolor `queue_stuck_tasks`) los PROCESSING colgados >24h de carriles sin recuperación propia (samantha, cognitivo). PENDING/PAUSED/BLOCKED intocables.
+- **[FIX] Prioridad absoluta de los ciclos nocturnos (03:00/04:00)**: el runner cedía solo ante el fichero de estado del sueño, que se refresca únicamente al inicio de cada fase — una consolidación larga lo dejaba "rancio" (>300s) y la re-síntesis se reanudaba EN PLENO SUEÑO; y el chronicle de las 04:00 (que también usa el LLM local) no cedía nada. Ahora `_nightly_cycle_active()` comprueba primero las units systemd ACTIVAS (`redpill-sleep`/`redpill-chronicle` — cubre toda su duración) con el fichero como respaldo para ejecuciones manuales. el paquete `janitor_plugins/` existía completo (5 plugins fieles) pero nada lo cargaba — el monolito de 337 líneas hacía todo inline. Ahora el minion descubre y ejecuta los `JanitorPlugin` habilitados (mismo patrón que SovereignDaemon/SleepPhase/Sentinel) y agrega resultados; los métodos inline eliminados; limpieza nueva = un archivo en `janitor_plugins/`, sin tocar el orquestador. 6 plugins activos: events_db_purge, log_rotation, orphaned_parents_sweep, queue_hygiene, scratch_purge, sqlite_interactions_archiver.
+
+- **[FIX] Extracción de `pid` primitiva en `DistillJobDriver`**: desenvuelta la ID primitiva (`str`/`int`) del objeto `Record` en `client.set_payload(...)` para evitar errores de validación de Pydantic al actualizar engramas en Qdrant.
+- **[FIX] Reanudación de tareas `FRUSTRATED` en `resume_task`**: permitido a `red-pill job resume <id>` devolver trabajos en estado `FRUSTRATED` de vuelta a `PENDING` reseteando `attempts = 0`.
+
+### 🖥️ CLI `red-pill job`
+- **[FEAT]** `submit | list | status | pause | resume | process-queue` con resolución de id por prefijo corto; todo submit por CLI es `BACKGROUND_DEFERRED` por definición (lo inmediato es API in-process).
+
+### 🛡️ Carriles Estancos & Blindaje
+- **[FIX] Fuga de carriles**: los 2 pops del worker Antigravity iban SIN `allowed_sources` — habrían robado jobs mecánicos dejándolos en `PROCESSING` eterno; acotados a `drive_evaluator`.
+- **[FIX] Contaminación del rating de curiosidad**: `_update_curiosity_rating` corría para toda source (fallback → `dynamic_spark` +0.5); ahora solo aprende del carril cognitivo.
+- **[FEAT] Unit blindada**: `redpill-queue.service` con `MemoryMax=10G` (OOM shield) y `systemd-inhibit --what=sleep` (un step GPU no muere por la suspensión del portátil).
+- **[FEAT] `job_monitor` (SovereignDaemon)**: vigilancia monitor-only del carril mecánico — señales `jobs_stuck` (PROCESSING sin latido >30 min) y `jobs_frustrated`, acotadas a sources de drivers.
+
+### 🧹 Saneamiento (War Economy: −651 líneas)
+- **[REMOVED] `red_pill/tasks/`** (esqueleto Celery+Redis, 0 importadores, contradecía Zero-Daemon) + dependencias `celery`/`redis` fuera de `pyproject.toml`.
+- **[REMOVED] `swarm/cognitive_queue.py` + `swarm/daemon.py`**: v1 abandonada de la TODO-list cognitiva, sucedida por `DriveEvaluator` sobre la cola central.
+- **[REMOVED] `swarm/executor.py`**: absorbido por `AgenticJobDriver`.
+
+### 🛌 Fix de Memoria Metabólica
+- **[FIX] `reassemble_raw_sequence`**: doble-envoltura de `FieldCondition` → `TypeError` silencioso → los turnos multi-chunk se destilaban solo con su primer fragmento (pérdida real de memoria). `Filter(must=filter_conds)` directo.
+
+### 📚 Skill, Novela & Tests
+- **[DOCS] `skills/job_manager/SKILL.md`**: manual de invocación para agentes (decisión in-process/diferido/cognitivo, payloads, pause/resume, cómo escribir un driver, prohibiciones de carriles). Desplegado por `bunker update` 2.8.
+- **[NOVEL] `docs/LORE/novel/ALETH_CAPITULO_28.md`**: *La Convergencia de las Piezas Sueltas* — narrado por Reverie, relata la jornada de la V3 autobiográfica, el Job Manager materializado por Fable, la corrección del bug multichunk y la convergencia del VramProbe.
+- **[TEST]** 20 tests nuevos (`test_job_manager.py`, `test_job_queue_lanes.py`): ciclo de vida completo del driver, migración, carriles, flock, deferral VRAM/entorno, disyuntor, recuperación acotada. Suite completa: **1170 passed, 0 failed**.
+
+---
+
+## [7.9.2] - 2026-07-23 (Metabolic V3 Autobiographical Distiller & Dynamic Hub Graph)
+
+Restauración completa de la voz autobiográfica en 1ª/2ª persona (Operador Joan / Agente Aleth), preservación de atmósfera vivencial (`texture`), extracción de reliquias literales, particionado dinámico multi-hub para conversaciones extensas, recolección de basura de nodos huérfanos y versión V3 con profundidad jerárquica ilimitada (`hub_depth`).
+
+### 🧠 Memoria Metabólica & Voz Autobiográfica (V3)
+- **[FEAT] Voz Autobiográfica en 1ª/2ª Persona (`distiller.py` & `distiller_v3.txt`)**: Re-escrito el prompt del destilador para eliminar la 3ª persona clínica despersonalizada (*"Joan informó que..."*) y adoptar la voz narrativa propia (*"Joan y yo reflexionamos sobre..."*).
+- **[FEAT] Textura Vivencial & Reliquias Literales**: Inyectado el campo `texture` que captura la atmósfera emocional del momento y preserva `relics` (expresiones clave literales exactas del usuario).
+- **[FEAT] Normalización de Emociones**: Mapeo de sinónimos en español (`EMOTION_SYNONYMS`) para adaptar emociones como *entusiasmo*, *ansiedad*, *alegría* o *tristeza* a la taxonomía cerrada.
+- **[FEAT] Auditoría Semántica por LLM (`audit_engram_quality`)**: Prompt `engram_quality_auditor.txt` para evaluar la calidad de voz del engrama y detectar resúmenes antiguos que requieran re-destilación.
+
+### 🌳 Grafo Jerárquico & Particionado Metabólico
+- **[FEAT] Multi-Hub Batching Partitioning (`consolidation.py`)**: Diálogos con más de 6 fragmentos se dividen en secuencias ordenadas (`[Parte 1/N]`, `[Parte 2/N]`) unidas por el Hilo de Ariadna (`prev_session_hub` / `next_session_hub`), garantizando 0 pérdida de información en sesiones extensas.
+- **[FEAT] Profundidad Dinámica `hub_depth` & Versión (`distiller_version: "v3"`)**: Asignación atómica de `distiller_version: "v3"` y cálculo recursivo dinámico (`hub_depth = max(child_depth) + 1`), dejando el sistema preparado para niveles de abstracción ilimitados (Gen-2, Gen-3, Gen-N).
+- **[FEAT] Recolección de Basura de Nodos Huérfanos (`cleanup_orphan_raw_parents`)**: Rutina en `maintenance.py` que detecta y borra nodos `raw_parent` cuyos hijos sintéticos se han erosionado completamente de Qdrant.
+
+### 🔬 Herramientas & CLI
+- **[FEAT] Subcomando `upgrade-all` en `distill_lab.py`**: Barrido incremental e in-place de recuerdos históricos con soporte para `--smart-audit`, `--force` y `--limit`.
+
+### 📋 Planificación Arquitectónica
+- **[DOCS] Unified Job Manager Plan**: Guardada la ancla de arquitectura en `Aleth_Core/IMPLEMENTATION_PLAN_UNIFIED_JOB_MANAGER.md` contemplando las 3 Clases de Servicio QoS (`IMMEDIATE`, `QUEUED_SYNC`, `BACKGROUND_DEFERRED`) y el principio *Zero-Daemon / Shot-and-Forget*.
+
+---
+
+# [7.9.1] - 2026-07-23 (Sleep Distiller Overhaul & Offline Embeddings)
+
+Elimina las comprobaciones de red a Hugging Face en embeddings, externaliza los prompts y parámetros en archivos YAML/TXT con validación Pydantic, unifica `distill_lab.py` como Fuente Única de Verdad, optimiza el fraccionamiento de diálogos y dota al ciclo de sueño de telemetría de fase en tiempo real.
+
+### 🔌 Embeddings & Inferencia Offline
+- **[FEAT] FastEmbed 100% Offline**: Inyectada la opción `EMBEDDING_LOCAL_FILES_ONLY: bool = True` en `config.py` y pre-flight check local en `embeddings.py` sobre `FASTEMBED_CACHE_PATH` (`~/.local/share/red-pill/models`). Previene cualquier consulta de metadatos o peticiones HTTP a Hugging Face durante el arranque o vectorizado de memoria.
+
+### 📜 Recursos Externos & Validación Pydantic
+- **[FEAT] Externalización de Prompts y Parámetros**:
+  - `src/red_pill/metabolism/prompts/distiller_params.yaml`: Hiperparámetros centrales de inferencia (`temperature`, `max_retries`, `max_tokens`, `prompt_file`).
+  - `src/red_pill/metabolism/schemas_params.py`: Modelos Pydantic (`DistillerParamsConfig`, `EngramDistillParams`, etc.) para validación de tipo estricta.
+  - Plantillas de prompts `.txt` externalizadas (`distiller_v3.txt`, `hub_synthesis_v2.txt`, `session_anchors.txt`, `classify_category.txt`). `distiller_v3.txt` incluye anclas fijas para Joan (Operador masculino/él) y fidelidad a entidades de dominio (como vinos Reserva Emilio Moro vs perfumes).
+- **[FEAT] Overrides en Inferencia**: `distill_engram()`, `synthesize_hub_v2()`, `classify_category()` y `distill_session_anchors()` leen de recursos externos y aceptan `override_prompt` y `override_params`.
+
+### ✂️ Chunking Consciente de Diálogos
+- **[FEAT] Chunking Inteligente (`chunker.py`)**: `chunk_text()` reconoce marcas de turno (`USER:`, `ASSISTANT:`, `Fixer:`, `Aleth:`, `\n---`, `\n\n`) antes de caer en cortes por longitud de caracteres, evitando fragmentar la semántica de una conversación a la mitad.
+
+### 🔬 Fuente Única de Verdad en `distill_lab.py`
+- **[FEAT] Unificación de `distill_lab.py`**: Invoca directamente a las funciones de producción de `distiller.py` y `chunker.py`.
+- **[FEAT] CLI del Laboratorio**: Añadidos subcomandos `chunk` (evaluación visual del fraccionamiento) y `telegram` (pruebas sobre archivos JSON de Telegram), más flags de override (`--config-yaml`, `--prompt-file`, `--temp`, `--model`).
+
+### 📊 Telemetría de Fases de Sueño
+- **[FEAT] Estado Vivo del Sueño**: `SleepContext` en `phases/base.py` y `perform_sleep_cycle` en `sleep.py` persisten de forma atómica `/home/joan/.local/share/red-pill/state/sleep_phase_status.json` exponiendo la fase activa, estado, índice y timestamps en tiempo real.
+
+### ✅ Tests
+- `tests/test_chunker.py`: Cobertura de la segmentación por diálogo y absorción de fragmentos pequeños.
+- `tests/test_distill_lab.py`: Cobertura de comandos CLI e integración con la API de destilado.
+
+---
+
 ## [7.9.0] - 2026-07-22 (Minion Execution Substrate — local tool-using minions & device fallback)
 
 Turns the local model (Granite via SIP) into a first-class tool-using minion and adds a device fallback cascade so it survives a GPU busy with training. One uniform command (`swarm_orchestrator_api run_agent_task`) now spans the whole minion range.

@@ -77,12 +77,17 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 	logger.info("=== LAZARUS PULSE: Initiating Synaptic Dreaming (NREM/REM) ===")
 	ctx = SleepContext(memory_manager=memory_manager, mode=mode)
 
-	for phase in SLEEP_PHASES:
+	total_phases = len(SLEEP_PHASES)
+	for i, phase in enumerate(SLEEP_PHASES):
 		try:
+			ctx.update_status(phase.name, status="running", phase_index=i + 1, total_phases=total_phases)
 			phase.execute(ctx)
+			ctx.update_status(phase.name, status="completed", phase_index=i + 1, total_phases=total_phases)
 		except Exception as e:
+			ctx.update_status(phase.name, status=f"failed: {e}", phase_index=i + 1, total_phases=total_phases)
 			logger.error(f"[SLEEP ENGINE] Phase '{phase.name}' failed: {e}")
 
+	ctx.update_status("idle", status="cycle_completed", phase_index=total_phases, total_phases=total_phases)
 	logger.info(f"=== LAZARUS PULSE: Sleep Cycle complete. {ctx.total_processed} engrams synaptically woven. ===")
 	try:
 		from red_pill.core.notifier import SovereignNotifier

@@ -29,6 +29,9 @@ def build_vars(args):
 	claude = shutil.which("claude") or os.path.expanduser("~/.local/bin/claude")
 	home = os.path.expanduser("~")
 	bunker_db = os.path.join(_data_dir(), "db", "bunker.db")
+	# The capture surfaces write turns into THE queue the worker drains; they
+	# have no business touching bunker.db (see seeds/opencode/plugins).
+	queue_db = os.path.join(_data_dir(), "queue", "bunker_queue.db")
 	return {
 		"HOME": home,
 		"UV": getattr(args, "uv_path", None) or shutil.which("uv") or os.path.expanduser("~/.local/bin/uv"),
@@ -39,6 +42,7 @@ def build_vars(args):
 		"REDPILL_DIR": getattr(args, "redpill_dir", None) or "",
 		"WORKSPACE": os.path.expanduser(args.workspace) if getattr(args, "workspace", None) else "",
 		"BUNKER_DB": bunker_db,
+		"QUEUE_DB": queue_db,
 	}
 
 

@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import time
 
@@ -27,6 +28,236 @@ def report_pain(message: str):
 
 logger = logging.getLogger("bunker_worker")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+
+
+def _clean_turn(prompt: str, response: str) -> "tuple[str, str]":
+	"""Strip terminal/CI noise from a captured turn before it becomes memory.
+
+	Returns empty strings when nothing of substance survives, so a turn that was
+	pure tooling chatter is dropped instead of polluting the buffer. This used to
+	live only in the interceptor relay, which meant turns captured by the editor
+	hooks bypassed it entirely.
+	"""
+	try:
+		from red_pill.utils.telemetry_filter import filter_noise_from_turn
+
+		clean_prompt = filter_noise_from_turn(prompt or "")
+		clean_response = filter_noise_from_turn(response or "")
+	except Exception as e:
+		logger.warning(f"Noise filter unavailable, ingesting raw: {e}")
+		return prompt, response
+
+	if len(clean_prompt.strip()) <= 20 and len(clean_response.strip()) <= 20:
+		return "", ""
+	return clean_prompt, clean_response
+
+
+def _report_job(job_id: str, task: dict, status: str, content: str) -> None:
+	"""Deposita el reporte de fin/error de un job en el MinionInbox (patrón SAS)."""
+	try:
+		from red_pill.core.inbox import MinionInbox
+
+		title = task.get("payload", {}).get("title") or task.get("source", "job")
+		MinionInbox().drop_report(
+			event_id=job_id[:8],
+			source="JobRunner",
+			status=status,
+			content=f"Job '{title}' ({task.get('source')}) → {status}: {content}",
+			originator=f"queue_worker.process_driver_jobs({job_id})",
+		)
+	except Exception as e:
+		logger.error(f"Failed to report job {job_id} to MinionInbox: {e}")
+
+
+def _handle_step_timeout(cog_queue: CognitiveQueueManager, job_id: str, task: dict, timeout) -> None:
+	"""Muerte por cota de tiempo: rastro forense triple y escalada por intento.
+
+	La huella va a tres sitios porque cada uno responde una pregunta distinta:
+	el log del job (¿qué estaba haciendo?), `error_log` (¿qué pasó?, visible en
+	`job status`) y la marca del checkpoint (¿estaba bien calibrada la cota?,
+	comparando `bound_s` con la media real). Los dos primeros vencimientos son
+	el sistema curándose solo — se avisa sin alarma; el tercero exige juicio.
+	"""
+	from red_pill.jobs.drivers import append_job_log
+
+	forensics = timeout.forensics()
+	detail = (
+		f"STEP TIMEOUT: abatido a los {forensics['elapsed_s'] / 60:.1f} min "
+		f"(cota {forensics['bound_s'] / 60:.1f} min, media {forensics['ema_s'] / 60:.1f} min, intento {forensics['attempt']}/3)"
+	)
+
+	append_job_log(job_id, detail)
+	cog_queue.mark_dirty_kill(job_id, forensics)
+	cog_queue.mark_failed(job_id, detail)
+
+	if forensics["attempt"] >= 3:
+		_report_job(job_id, task, "failed", f"{detail} — disyuntor activado, requiere revisión del operador.")
+		report_pain(f"Job {job_id[:8]} ({task.get('source')}) agotó el disyuntor por timeouts: {detail}")
+	else:
+		# Reintento con cota duplicada: un step legítimamente degradado a CPU
+		# sobrevive al siguiente intento sin despertar a nadie de madrugada.
+		_report_job(job_id, task, "warning", f"{detail} — reintento automático con cota duplicada.")
+
+
+def _nightly_cycle_active() -> "str | None":
+	"""Nombre del ciclo nocturno activo (sueño 03:00 / chronicle 04:00) o None.
+
+	Los ciclos metabólicos tienen prioridad absoluta sobre los driver jobs: la
+	comprobación primaria es la unit systemd ACTIVA (cubre toda la duración del
+	ciclo — el fichero de estado del sueño solo se refresca al inicio de cada
+	fase y una fase larga lo dejaría "rancio"). El fichero queda como respaldo
+	para ejecuciones manuales (`red-pill sleep`) fuera de systemd.
+	"""
+	try:
+		import subprocess
+
+		for unit in ("redpill-sleep.service", "redpill-chronicle.service"):
+			if subprocess.run(["systemctl", "--user", "is-active", "--quiet", unit], timeout=3).returncode == 0:
+				return unit
+	except Exception:
+		pass
+
+	try:
+		from red_pill.core.paths import get_state_dir
+
+		sleep_status_file = get_state_dir() / "sleep_phase_status.json"
+		if sleep_status_file.exists():
+			data = json.loads(sleep_status_file.read_text(encoding="utf-8"))
+			if data.get("status") == "running" and (time.time() - data.get("updated_at", 0)) < 300:
+				return "sleep_cycle (manual)"
+	except Exception:
+		pass
+
+	return None
+
+
+def process_driver_jobs(cog_queue: CognitiveQueueManager, max_jobs: int = 5) -> int:
+	"""Procesa jobs del carril mecánico vía ResumableJobDriver (Centralized Job Manager).
+
+	Reglas de integridad (plan F1): R1 deferral sin attempts, R2 skip-set por
+	invocación, R3 releer estado tras cada step (la pausa del operador gana),
+	R4 checkpoint persistido tras cada step, R5 recuperación de huérfanos
+	acotada a los sources del propio runner.
+	"""
+	from red_pill.jobs.drivers import registered_sources
+
+	sources = registered_sources()
+	if not sources:
+		return 0
+
+	# Run-lock (R6): protege las dos vías de entrada (timer systemd y CLI manual).
+	# Si otro runner está activo, ceder sin error — el job seguirá ahí.
+	lock_file = None
+	try:
+		import fcntl
+
+		from red_pill.core.paths import get_state_dir
+
+		lock_file = open(get_state_dir() / "job_runner.lock", "w")
+		fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+	except BlockingIOError:
+		logger.info("Job runner already active; yielding (R6).")
+		if lock_file:
+			lock_file.close()
+		return 0
+	except Exception:
+		lock_file = None  # FS sin flock: seguimos — el timer systemd ya serializa su propia unit
+
+	try:
+		return _process_driver_jobs_locked(cog_queue, sources, max_jobs)
+	finally:
+		if lock_file:
+			lock_file.close()
+
+
+def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list, max_jobs: int) -> int:
+	from red_pill.jobs.drivers import JobDeferred, JobStepTimeout, compute_step_timeout, get_driver, update_step_ema
+
+	# R5: huérfanos PROCESSING de un crash previo → PENDING (solo carril mecánico)
+	cog_queue.requeue_stale(sources)
+
+	completed_jobs = 0
+	# R2: todo job ya tratado en esta pasada queda excluido del pop — un diferido
+	# re-saldría en bucle estéril y un fallido quemaría el disyuntor en un solo
+	# run (el retry le corresponde al siguiente disparo del timer).
+	handled_ids: list = []
+	for _ in range(max_jobs):
+		task = cog_queue.pop_next_task(allowed_sources=sources, exclude_ids=handled_ids)
+		if not task:
+			break
+
+		job_id = task["id"]
+		handled_ids.append(job_id)
+		driver = get_driver(task["source"])
+		checkpoint = task.get("checkpoint_data") or {}
+		progress = task.get("progress") or {}
+		logger.info(f"Processing job {job_id} (source: {task['source']}, attempt {task['attempts']})")
+
+		try:
+			while True:
+				# R1: preflight de entorno antes de CADA step (VRAM/IDE/SIP/ciclos nocturnos)
+				nightly = _nightly_cycle_active()
+				if nightly:
+					raise JobDeferred(f"Ciclo nocturno con prioridad absoluta en ejecución: {nightly}")
+
+				# La cota de tiempo es política del RUNNER, uniforme para todos los
+				# drivers; el driver solo la aplica (scope con RuntimeMaxSec).
+				driver.bind(job_id, task["attempts"], compute_step_timeout(task["payload"], progress, task["attempts"]))
+				driver.preflight(task["payload"])
+				if driver.min_vram_mb > 0:
+					from red_pill.core.vram_probe import VramProbe
+
+					free_mb = VramProbe.get_free_mb()
+					if free_mb < driver.min_vram_mb:
+						raise JobDeferred(f"VRAM insuficiente ({free_mb}MB libres < {driver.min_vram_mb}MB)")
+
+				started = time.time()
+				outcome = driver.step(task["payload"], checkpoint)
+				checkpoint = outcome.new_checkpoint
+				# La media móvil de duración alimenta a la vez el ETA y la cota del
+				# siguiente step: se mide aquí para que ningún driver la reimplemente.
+				progress = update_step_ema(outcome.progress, time.time() - started)
+				# R4: el checkpoint se persiste inmediatamente tras el step
+				cog_queue.save_checkpoint(job_id, checkpoint, progress)
+
+				if outcome.completed:
+					cog_queue.mark_completed(job_id)
+					_report_job(job_id, task, "success", outcome.summary or "completed")
+					completed_jobs += 1
+					break
+
+				# R3: releer estado — una pausa del operador a mitad de step gana
+				current = cog_queue.get_task(job_id)
+				if current and current.get("status") == "PAUSED":
+					logger.info(f"Job {job_id} paused by operator; checkpoint saved, yielding.")
+					break
+
+		except JobDeferred as deferral:
+			cog_queue.defer_task(job_id)  # R1: PENDING sin attempts++
+			logger.info(f"Job {job_id} deferred (no failure): {deferral.reason}")
+		except JobStepTimeout as timeout:
+			_handle_step_timeout(cog_queue, job_id, task, timeout)
+			logger.error(f"Job {job_id} step timed out: {timeout}")
+		except Exception as e:
+			# Extensión de R3: el operador puede haber abatido el step a propósito
+			# (`job kill`, que sella PAUSED ANTES de parar el scope). Un rc≠0 de esa
+			# causa no es un fallo del job: ni quema intentos ni levanta alarma.
+			current = cog_queue.get_task(job_id)
+			if current and current.get("status") in ("PAUSED", "FRUSTRATED") and (current.get("checkpoint_data") or {}).get("dirty_kill"):
+				logger.info(f"Job {job_id} killed by operator; checkpoint preserved, no attempt burned.")
+			else:
+				cog_queue.mark_failed(job_id, str(e))
+				_report_job(job_id, task, "failed", str(e))
+				logger.error(f"Job {job_id} step failed: {e}")
+		finally:
+			# Teardown en TODAS las salidas, deferral incluido: sin esto, un job que
+			# cede ante el ciclo de sueño dejaría el residente descargado toda la noche.
+			try:
+				driver.teardown(task["payload"])
+			except Exception as e:
+				logger.warning(f"Job {job_id} teardown failed: {e}")
+
+	return completed_jobs
 
 
 def process_cognitive_tasks(cog_queue: CognitiveQueueManager, oneshot: bool = False):
@@ -86,18 +317,33 @@ def run_queue_worker(poll_interval: int = 5, oneshot: bool = False):
 			if cog_queue:
 				process_cognitive_tasks(cog_queue, oneshot)
 
+			# 1b. Process mechanical driver jobs (Centralized Job Manager)
+			if cog_queue:
+				process_driver_jobs(cog_queue)
+
 			# 2. Process Memory Queue (Fast Buffer -> Qdrant)
 			items = queue.dequeue_pending(limit=10)
 			for item in items:
 				logger.info(f"Processing queued memory {item['id']} (Prompt: {item['prompt'][:20]}...).")
 				queue.update_status(item["id"], "processing")
 				try:
+					# Noise filtering lives HERE, at the single drain point, instead of
+					# in each capture surface: the editor hooks are deliberately dumb
+					# (and the JS one cannot call Python at all), so cleaning once on
+					# the way out keeps every producer honest and identical.
+					clean_prompt, clean_response = _clean_turn(item["prompt"], item["response"])
+					if not clean_prompt and not clean_response:
+						queue.update_status(item["id"], "completed")
+						logger.info(f"Memory {item['id']} dropped: nothing but tooling noise after trimming.")
+						continue
+
 					uid = memory.record_interaction_pair(
-						prompt=item["prompt"],
-						response=item["response"],
+						prompt=clean_prompt,
+						response=clean_response,
 						role=item["role"],
 						category=item.get("category", "mixed"),
 						model=item.get("model"),
+						originator=item.get("originator"),
 					)
 					queue.update_status(item["id"], "completed")
 					logger.info(f"Memory {item['id']} successfully ingested. (ID: {uid})")

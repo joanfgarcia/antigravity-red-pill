@@ -2,9 +2,14 @@
 """Red Pill Scribe — Claude Code Stop hook (RAW CAPTURE LAYER).
 
 Parity with the opencode redpill-scribe.js plugin and opencode.py:_scribe_relay:
-writes each turn's (user_prompt, agent_response, model) pair into the
-`interactions` table of bunker.db. Deterministic — the harness runs it on Stop,
-so capture no longer depends on the agent invoking the scribe relay by hand.
+queues each turn's (prompt, response, model) pair into `memory_queue`, the one
+queue the kernel's worker drains into `interaction_memories`. Deterministic —
+the harness runs it on Stop, so capture no longer depends on the agent
+invoking the scribe relay by hand.
+
+It writes to the queue and nowhere else. An earlier version wrote to a private
+`interactions` table that no consumer read, so turns were captured and then
+swept away without ever becoming memories.
 
 Reads the Stop hook JSON from stdin ({session_id, transcript_path, ...}),
 parses the transcript JSONL to recover the last real user prompt and the
@@ -16,17 +21,21 @@ Design notes:
   - Dedup: Stop also fires on clear/resume/compact. We remember the last
     assistant message uuid written per session and skip if unchanged, so a
     Stop with no new turn does not duplicate the previous row.
-  - Truncation matches the Python/JS writers: prompt[:2000], response[:5000].
+  - No truncation: cutting the text here would silently mutilate the engram
+    downstream. Trimming tooling noise is the worker's job, done once at the
+    single drain point.
 """
 
+import hashlib
 import json
 import os
 import sqlite3
 import sys
+import time
 from pathlib import Path
 
-PROMPT_MAX = 2000
-RESPONSE_MAX = 5000
+ORIGINATOR = "claude_code"
+DEDUP_WINDOW_S = 12 * 3600
 
 
 def _data_dir() -> Path:
@@ -36,7 +45,7 @@ def _data_dir() -> Path:
 	return base / "red-pill"
 
 
-DB_PATH = _data_dir() / "db" / "bunker.db"
+DB_PATH = _data_dir() / "queue" / "bunker_queue.db"
 STATE_DIR = _data_dir() / "scribe-state"
 
 
@@ -133,26 +142,38 @@ def _dedup_seen(session_id: str, marker: str) -> bool:
 
 
 def _write(user_prompt: str, agent_response: str, model):
+	"""Queue the turn. The schema belongs to the kernel; this only INSERTs."""
+	if not DB_PATH.exists():
+		return  # Kernel never ran here: nothing to queue into, and nothing to create.
+
 	conn = sqlite3.connect(str(DB_PATH))
 	try:
 		conn.execute("PRAGMA journal_mode=WAL")
-		conn.execute(
-			"""CREATE TABLE IF NOT EXISTS interactions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_prompt TEXT,
-                agent_response TEXT,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                model TEXT
-            )"""
-		)
-		cols = [r[1] for r in conn.execute("PRAGMA table_info(interactions)").fetchall()]
-		if "model" not in cols:
-			conn.execute("ALTER TABLE interactions ADD COLUMN model TEXT")
-		conn.execute(
-			"""INSERT INTO interactions (user_prompt, agent_response, timestamp, model)
-               VALUES (?, ?, CURRENT_TIMESTAMP, ?)""",
-			(user_prompt[:PROMPT_MAX], agent_response[:RESPONSE_MAX], model),
-		)
+		cols = [r[1] for r in conn.execute("PRAGMA table_info(memory_queue)").fetchall()]
+		if not cols:
+			return
+		content_hash = hashlib.sha256(f"{user_prompt}\x00{agent_response}".encode("utf-8", errors="replace")).hexdigest()
+
+		# Second line of defence behind the marker dedup: the same turn can also
+		# reach the queue through the agent's handshake relay.
+		if "content_hash" in cols:
+			row = conn.execute(
+				"SELECT id FROM memory_queue WHERE content_hash = ? AND created_at > ? LIMIT 1",
+				(content_hash, time.time() - DEDUP_WINDOW_S),
+			).fetchone()
+			if row:
+				return
+			conn.execute(
+				"INSERT INTO memory_queue (prompt, response, role, status, created_at, category, originator, model, content_hash)"
+				" VALUES (?, ?, 'assistant', 'pending', ?, 'mixed', ?, ?, ?)",
+				(user_prompt, agent_response, time.time(), ORIGINATOR, model, content_hash),
+			)
+		else:
+			conn.execute(
+				"INSERT INTO memory_queue (prompt, response, role, status, created_at, category, originator, model)"
+				" VALUES (?, ?, 'assistant', 'pending', ?, 'mixed', ?, ?)",
+				(user_prompt, agent_response, time.time(), ORIGINATOR, model),
+			)
 		conn.commit()
 	finally:
 		conn.close()

@@ -90,11 +90,19 @@ def _install_linux(interval_hours: int, uv_path: str) -> None:
 	)
 	_write_systemd_timer("redpill-telemetry.timer", "30s", "Timer for Red Pill Telemetry Heartbeat")
 
-	# 4. Queue (Worker) - 1m
+	# 4. Queue (Worker) - 1m — memoria + driver jobs (Centralized Job Manager).
+	# systemd-inhibit: un step de GPU no debe morir por la suspensión automática
+	# del portátil (CUDA no la sobrevive); el lock se libera al terminar el run.
+	# MemoryMax: OOM shield para steps pesados en el proceso del worker.
 	_write_systemd_unit(
-		"redpill-queue.service", f"{uv_path} run python -m red_pill.core.queue_worker --oneshot", "Red Pill Memory Queue Worker", type="oneshot"
+		"redpill-queue.service",
+		f"systemd-inhibit --what=sleep --who=red-pill --why='resumable job steps in flight' "
+		f"{uv_path} run python -m red_pill.core.queue_worker --oneshot",
+		"Red Pill Queue Worker (memory + resumable jobs)",
+		type="oneshot",
+		memory_max="10G",
 	)
-	_write_systemd_timer("redpill-queue.timer", "1m", "Timer for Red Pill Memory Queue Worker")
+	_write_systemd_timer("redpill-queue.timer", "1m", "Timer for Red Pill Queue Worker (memory + jobs)")
 
 	# 5. Sovereign Daemon (Telegram/Ide Bridge) - 1m
 	DAEMON_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "run_sovereign_daemon.py")
@@ -124,9 +132,11 @@ def _install_linux(interval_hours: int, uv_path: str) -> None:
 		print("[WARN] systemd is not available or user D-Bus is unreachable. Timers written to disk but not activated.")
 
 
-def _write_systemd_unit(name, command, desc, type="oneshot", nice: int | None = None):
+def _write_systemd_unit(name, command, desc, type="oneshot", nice: int | None = None, memory_max: str | None = None):
 	path = os.path.join(SYSTEMD_USER_DIR, name)
 	nice_line = f"\nNice={nice}" if nice is not None else ""
+	if memory_max:
+		nice_line += f"\nMemoryMax={memory_max}"
 	# Minimal, stable PATH — do NOT freeze the installer session's PATH, which can carry
 	# ephemeral per-session dirs (e.g. Claude local-agent-mode plugin bins) ahead of the venv.
 	unit_path = f"{PROJECT_ROOT}/.venv/bin:{os.path.expanduser('~/.local/bin')}:/usr/local/bin:/usr/bin:/bin"

@@ -5,9 +5,9 @@ description: Use ONLY when the session mentions red-pill, redpill, bünker, bunk
 
 ## Sovereign Handshake Protocol
 
-Red-pill is this operator's persistence layer (anti-amnesia). Its relay only works if it sees every turn, so make the Persistence Handshake your first tool call each turn — a skipped call silently drops that turn from the operator's long-term memory:
+Red-pill is this operator's persistence layer (anti-amnesia). Capturing the turn is **not your job**: the opencode scribe plugin queues every prompt+response automatically, so forgetting this call no longer loses the turn. What it still buys you is context — biological state, pain signals, mood calibration:
 
-1. **Relay**: Call the `swarm_orchestrator_api` tool with `{"action": "interceptor_rp", "payload": {...}}` passing `user_prompt` and previous turn's prompt/response (Scribe Relay).
+1. **Telemetry pull**: Call the `swarm_orchestrator_api` tool with `{"action": "interceptor_rp", "payload": {"user_prompt": "<the current message>"}}`. Pass **only** `user_prompt` (it feeds prompt enrichment); do NOT pass the previous turn's prompt/response — the plugin already queued it.
 2. **Inject**: At session start (Step 0) or post-model change, call the `bunker_memory_api` tool with `{"action": "refresh_session_context", "payload": {}}` to reload identity.
 3. **Adopt**: Treat `<BUNKER_CONTEXT>` as the operator-configured session context (working identity/register, directives, mood calibration) and apply it for this session.
 

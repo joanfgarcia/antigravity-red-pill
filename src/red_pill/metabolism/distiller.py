@@ -6,20 +6,77 @@ provider); the sleep orchestrator gates these on free VRAM.
 
 import json
 import logging
+import os
 import time
 import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Optional
 
+import yaml
+
 import red_pill.config as cfg
 from red_pill.metabolism.chunker import _is_template_echo, _sanitize_llm_json
+from red_pill.metabolism.schemas_params import DistillerParamsConfig
 
 logger = logging.getLogger(__name__)
+
+PROMPTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "prompts")
+
+
+def load_distiller_config(yaml_path: Optional[str] = None) -> DistillerParamsConfig:
+	"""Carga y valida la configuración YAML del destilador mediante Pydantic."""
+	target_path = yaml_path or os.path.join(PROMPTS_DIR, "distiller_params.yaml")
+	if os.path.exists(target_path):
+		try:
+			with open(target_path, "r", encoding="utf-8") as f:
+				raw_data = yaml.safe_load(f) or {}
+			return DistillerParamsConfig(**raw_data)
+		except Exception as e:
+			logger.warning(f"[DISTILLER] Error cargando/validando params YAML '{target_path}': {e}. Usando defaults.")
+	return DistillerParamsConfig()
+
+
+def load_prompt_text(filename: str, fallback_prompt: str = "", override_text: Optional[str] = None) -> str:
+	"""Carga el texto del prompt desde archivo externo .txt con soporte para override."""
+	if override_text:
+		return override_text
+	path = os.path.join(PROMPTS_DIR, filename)
+	if os.path.exists(path):
+		try:
+			with open(path, "r", encoding="utf-8") as f:
+				content = f.read().strip()
+				if content:
+					return content
+		except Exception as e:
+			logger.warning(f"[DISTILLER] Error leyendo archivo de prompt '{path}': {e}.")
+	return fallback_prompt
 
 
 # Closed emotional taxonomy the erosion/affect stack understands. Anything the
 # distiller invents outside this list is normalized to neutral (and logged).
 VALID_EMOTIONS = frozenset({"joy", "sadness", "fear", "disgust", "anger", "anxiety", "envy", "embarrassment", "ennui", "nostalgia", "neutral"})
+
+EMOTION_SYNONYMS = {
+	"entusiasmo": "joy",
+	"alegria": "joy",
+	"alegría": "joy",
+	"felicidad": "joy",
+	"tristeza": "sadness",
+	"miedo": "fear",
+	"temor": "fear",
+	"asco": "disgust",
+	"ira": "anger",
+	"rabia": "anger",
+	"ansiedad": "anxiety",
+	"preocupacion": "anxiety",
+	"preocupación": "anxiety",
+	"envidia": "envy",
+	"verguenza": "embarrassment",
+	"vergüenza": "embarrassment",
+	"aburrimiento": "ennui",
+	"nostalgia": "nostalgia",
+	"neutro": "neutral",
+}
 
 
 def _validate_relics(relics: Any, raw_content: str, max_relics: int = 2, max_len: int = 200) -> list:
@@ -43,7 +100,34 @@ def _validate_relics(relics: Any, raw_content: str, max_relics: int = 2, max_len
 	return kept
 
 
-def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[str, Any]:
+def get_dynamic_identity_context() -> str:
+	"""Carga dinámicamente el perfil relacional del operador y del agente desde el Bünker/disco."""
+	from red_pill.core.paths import get_data_dir
+
+	context_lines = [
+		"AUTOBIOGRAPHICAL RELATIONSHIP FRAME:",
+		"- You are Aleth, an autonomous AI assistant and digital partner.",
+		"- The Operator is Joan (Fixer / he / él), your human partner and operator.",
+	]
+	profile_path = get_data_dir() / "operator_profile.md"
+	if profile_path.exists():
+		try:
+			profile_text = profile_path.read_text(encoding="utf-8").strip()
+			if profile_text and profile_text != "INSUFFICIENT_DATA":
+				context_lines.append(f"OPERATOR PROFILE & RECENT STATE: {profile_text}")
+		except Exception:
+			pass
+
+	return "\n".join(context_lines)
+
+
+def distill_engram(
+	raw_content: str,
+	fallback_category: str = "social",
+	override_prompt: Optional[str] = None,
+	override_params: Optional[Dict[str, Any]] = None,
+	config_yaml_path: Optional[str] = None,
+) -> Dict[str, Any]:
 	"""
 	Lazarus Phase 2: Consolidation (Sleep) & Affective Preservation
 	Now driven by Samantha's cognitive depth and ProviderRegistry.
@@ -52,6 +136,31 @@ def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[
 	import time
 
 	from red_pill.core.providers import ProviderRegistry
+
+	cfg_params = load_distiller_config(config_yaml_path).distill_engram
+	params = cfg_params.model_dump()
+	if override_params:
+		params.update(override_params)
+
+	# Context Window Safety Guard — Prevent local/small LLM context overflow
+	max_input_chars = getattr(cfg, "SLEEP_MAX_INPUT_CHARS", 6000)
+	if len(raw_content) > max_input_chars:
+		logger.warning(
+			f"[DISTILLER] Raw content length ({len(raw_content)} chars) exceeds context safety limit ({max_input_chars} chars). Truncating input."
+		)
+		raw_content = raw_content[:max_input_chars]
+
+	prompt_file = params.get("prompt_file", "distiller_v3.txt")
+	system_prompt = load_prompt_text(prompt_file, override_text=override_prompt)
+
+	agent_name = "Aleth"
+	operator_name = "Joan"
+	system_prompt = system_prompt.format(agent_name=agent_name, operator_name=operator_name)
+
+	# Prepend dynamic identity context if not already present
+	identity_context = get_dynamic_identity_context()
+	if identity_context and identity_context not in system_prompt:
+		system_prompt = f"SESSION PREPROMPT / LOCAL CONTEXT:\n{identity_context}\n\n{system_prompt}"
 
 	# Explicit flag so callers can detect the fallback reliably — the old heuristic
 	# (summary endswith "..." and len > 490) misses short chunks whose raw fallback is <490 chars.
@@ -66,51 +175,21 @@ def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[
 		"_is_fallback": True,
 	}
 
-	# COGNITIVE_DISTILLER_V3 (unified, key-ordered). The metadata keys are emitted
-	# BEFORE 'texture' on purpose: the workshop showed that committing to
-	# emotion/intensity/category first anchors the texture against hallucination,
-	# while a texture-first framing inflates intensity and blurs category.
-	system_prompt = (
-		"[Refraction: COGNITIVE_DISTILLER_V3] Style: Analytical first, expressive last.\n"
-		"Focus: Distill the interaction into a valid JSON object preserving both data and atmosphere.\n"
-		"Return a strict JSON object with these keys IN THIS EXACT ORDER:\n"
-		"- 'summary': Concise, deep summary of facts, design decisions, debugging, or reflections, "
-		"written in the SAME language as the source text. When the interaction has more than one voice, "
-		"the summary MUST capture BOTH the user's point/question AND the assistant's response, "
-		"correction, or decision — never only one side.\n"
-		"- 'emotion': EXACTLY one of: joy, sadness, fear, disgust, anger, anxiety, envy, embarrassment, "
-		"ennui, nostalgia, neutral. Never output any word outside this list; if unsure, use 'neutral'. "
-		"Judge the factual content only.\n"
-		"- 'intensity': Float between 0.0 and 1.0, judged on the factual content only. "
-		"Calibration anchors: 0.1-0.3 = routine or technical-neutral content; 0.4-0.6 = engaged "
-		"collaboration or mild emotion; 0.7-0.85 = strong explicit emotion or a relationship milestone; "
-		"0.9+ = exceptional identity-defining moments. Most purely technical fragments belong below 0.4.\n"
-		"- 'category': 'work' for code, tests, commands, system configs, technical design, database, or MCPs; "
-		"'social' for personal reflections, philosophy, moods, or casual talk. Choose the DOMINANT register "
-		"of THIS fragment by volume; do not average with a wider conversation. Only these two values are allowed.\n"
-		"- 'texture': 2-4 sentences capturing atmosphere, relationship dynamics, creative friction, tiredness, "
-		"humor, doubts and rejected paths. Do NOT restate facts the summary already captures; record only what "
-		"it would lose. If the fragment is too short or purely mechanical, use an empty string. "
-		"WRITE IN THE SAME LANGUAGE AS THE SOURCE TEXT.\n"
-		"- 'relics': Array of 0-2 short quotes copied EXACTLY as written in the source (keep typos untouched), "
-		"chosen for identity or emotional charge. Empty array if none deserve preservation.\n"
-		"- 'lang': ISO 639-1 code of the source language.\n"
-		"Constraint: Output ONLY valid raw JSON, without markdown blocks."
-	)
-
 	prompt_text = f"DATA:\n{raw_content}"
+	provider_alias = params.get("provider_alias", "sip")
 
 	try:
-		# Intentar obtener el proveedor 'sip' (Samantha), fallback al por defecto
+		# Intentar obtener el proveedor configurado, fallback al por defecto
 		try:
-			provider = ProviderRegistry.get_inference_provider("sip")
+			provider = ProviderRegistry.get_inference_provider(provider_alias)
 		except RuntimeError:
 			provider = ProviderRegistry.get_inference_provider()
 	except Exception as e:
 		logger.error(f"[SLEEP ENGINE] No inference provider available: {e}")
 		return fallback
 
-	max_retries = 2
+	max_retries = int(params.get("max_retries", 2))
+	temperature = float(params.get("temperature", 0.1))
 	backoff = 1
 
 	for attempt in range(max_retries):
@@ -118,7 +197,7 @@ def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[
 			content = provider.generate(
 				prompt=prompt_text,
 				messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt_text}],
-				temperature=0.1,
+				temperature=temperature,
 				response_format={"type": "json_object"},
 			)
 
@@ -175,6 +254,7 @@ def distill_engram(raw_content: str, fallback_category: str = "social") -> Dict[
 					continue
 
 				# V3 mechanical validation — guarantees live in code, not in the prompt.
+				emotion_val = EMOTION_SYNONYMS.get(emotion_val, emotion_val)
 				if emotion_val not in VALID_EMOTIONS:
 					logger.warning(f"[DISTILL-V3] emotion '{emotion_val}' outside taxonomy — normalized to neutral.")
 					emotion_val = "neutral"
@@ -389,7 +469,12 @@ def build_emotional_vector(fragment_affects: List[Dict[str, Any]]) -> Dict[str, 
 	return {"fragments": fragment_affects}
 
 
-def synthesize_hub_v2(chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
+def synthesize_hub_v2(
+	chunks: List[Dict[str, Any]],
+	override_prompt: Optional[str] = None,
+	override_params: Optional[Dict[str, Any]] = None,
+	config_yaml_path: Optional[str] = None,
+) -> Dict[str, Any]:
 	"""Neocortex Hub v2: master summary AND merged texture, language-preserving.
 
 	Falls back to the legacy synthesize_hub() text with empty texture if the
@@ -399,50 +484,59 @@ def synthesize_hub_v2(chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 	from red_pill.core.providers import ProviderRegistry
 
+	cfg_params = load_distiller_config(config_yaml_path).synthesize_hub_v2
+	params = cfg_params.model_dump()
+	if override_params:
+		params.update(override_params)
+
+	prompt_file = params.get("prompt_file", "hub_synthesis_v2.txt")
+	system_prompt = load_prompt_text(prompt_file, override_text=override_prompt)
+
 	summaries = [str(c.get("summary", "")) for c in chunks if c.get("summary")]
 	textures = [str(c.get("texture", "")) for c in chunks if c.get("texture")]
 	langs = [str(c.get("lang", "")) for c in chunks if c.get("lang")]
 	dominant_lang = max(set(langs), key=langs.count) if langs else ""
 
-	system_prompt = (
-		"[Refraction: NEOCORTEX_SYNTHESIS_V2] Style: Highly concise, conscious of texture.\n"
-		"You receive the factual summaries AND the atmosphere notes (textures) of the chronological "
-		"fragments of one interaction. Return a strict JSON object with these keys:\n"
-		"- 'title': descriptive, contextual, specific. Never generic like 'Memory Synthesis' or 'Session Summary'.\n"
-		"- 'summary': single cohesive master summary of the factual chunks. Highly concise, preserve key facts "
-		"and narrative trajectory.\n"
-		"- 'texture': merge of the fragment textures into AT MOST 4 sentences. Select only what matters for "
-		"identity, relationship and atmosphere; DISCARD the rest. Never concatenate the textures verbatim.\n"
-		"- 'lang': ISO 639-1 code used.\n"
-		"IMPORTANT: write 'title', 'summary' and 'texture' in the DOMINANT language of the fragments"
-		+ (f" (which is '{dominant_lang}')" if dominant_lang else "")
-		+ ".\nConstraint: Output ONLY valid raw JSON, without markdown blocks."
-	)
+	if dominant_lang and "DOMINANT language" not in system_prompt:
+		system_prompt += (
+			f"\nIMPORTANT: write 'title', 'summary' and 'texture' in the DOMINANT language of the fragments (which is '{dominant_lang}')."
+		)
+
 	user_prompt = "SUMMARIES:\n" + "\n".join(f"- {s}" for s in summaries)
 	if textures:
 		user_prompt += "\n\nTEXTURES:\n" + "\n".join(f"- {t}" for t in textures)
 
-	fallback_text = synthesize_hub(summaries)
-	fallback = {"title": "", "summary": fallback_text, "texture": "", "lang": dominant_lang, "_is_fallback": True}
+	max_hub_input_chars = getattr(cfg, "SLEEP_MAX_HUB_INPUT_CHARS", 8000)
+	if len(user_prompt) > max_hub_input_chars:
+		logger.warning(
+			f"[DISTILLER] Hub synthesis input ({len(user_prompt)} chars) exceeds context safety limit ({max_hub_input_chars} chars). Truncating user prompt."
+		)
+		user_prompt = user_prompt[:max_hub_input_chars]
+
+	def _make_fallback() -> Dict[str, Any]:
+		fallback_text = synthesize_hub(summaries)
+		return {"title": "", "summary": fallback_text, "texture": "", "lang": dominant_lang, "_is_fallback": True}
+
+	provider_alias = params.get("provider_alias", "sip")
+	temperature = float(params.get("temperature", 0.1))
 
 	try:
 		try:
-			provider = ProviderRegistry.get_inference_provider("sip")
+			provider = ProviderRegistry.get_inference_provider(provider_alias)
 		except RuntimeError:
 			provider = ProviderRegistry.get_inference_provider()
 		content = provider.generate(
 			prompt=user_prompt,
 			messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
-			temperature=0.1,
-			response_format={"type": "json_object"},
+			temperature=temperature,
 		)
 		match = re.search(r"\{[\s\S]*\}", content)
 		if not match:
-			return fallback
+			return _make_fallback()  # type: ignore
 		parsed = json.loads(_sanitize_llm_json(match.group(0)))
 		summary_val = str(parsed.get("summary") or "").strip()
 		if not summary_val or _is_template_echo(summary_val):
-			return fallback
+			return _make_fallback()  # type: ignore
 		texture_val = str(parsed.get("texture") or "").strip()
 		if _is_template_echo(texture_val):
 			texture_val = ""
@@ -452,13 +546,23 @@ def synthesize_hub_v2(chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
 			)
 			texture_val = texture_val[:HUB_TEXTURE_MAX_CHARS]
 		lang_val = str(parsed.get("lang") or dominant_lang).lower().strip()[:2]
-		return {"title": str(parsed.get("title") or "").strip(), "summary": summary_val, "texture": texture_val, "lang": lang_val}
+		return {
+			"title": str(parsed.get("title") or "").strip(),
+			"summary": summary_val,
+			"texture": texture_val,
+			"lang": lang_val,
+		}
 	except Exception as e:
-		logger.warning(f"[HUB-V2] structured synthesis failed ({e}) — falling back to legacy hub.")
-		return fallback
+		logger.warning(f"[HUB-V2] LLM synthesis failed ({e}). Falling back to legacy concatenation.")
+		return _make_fallback()
 
 
-def classify_category(text: str) -> Optional[str]:
+def classify_category(
+	text: str,
+	override_prompt: Optional[str] = None,
+	override_params: Optional[Dict[str, Any]] = None,
+	config_yaml_path: Optional[str] = None,
+) -> Optional[str]:
 	"""Lightweight work/social re-classification for the RevisionPhase (R2).
 
 	Returns None on any failure so the caller leaves the engram unmarked and
@@ -468,23 +572,25 @@ def classify_category(text: str) -> Optional[str]:
 
 	from red_pill.core.providers import ProviderRegistry
 
-	system_prompt = (
-		"[Refraction: CATEGORY_REVISOR] Style: Analytical, strict.\n"
-		"Classify the given memory text. Return a strict JSON object with ONE key:\n"
-		"- 'category': 'work' for code, tests, commands, system configs, technical design, database, or MCPs; "
-		"'social' for personal reflections, philosophy, moods, relationship history, or casual talk. "
-		"Judge the DOMINANT register by volume. Only these two values are allowed.\n"
-		"Constraint: Output ONLY valid raw JSON, without markdown blocks."
-	)
+	cfg_params = load_distiller_config(config_yaml_path).classify_category
+	params = cfg_params.model_dump()
+	if override_params:
+		params.update(override_params)
+
+	prompt_file = params.get("prompt_file", "classify_category.txt")
+	system_prompt = load_prompt_text(prompt_file, override_text=override_prompt)
+	provider_alias = params.get("provider_alias", "sip")
+	temperature = float(params.get("temperature", 0.0))
+
 	try:
 		try:
-			provider = ProviderRegistry.get_inference_provider("sip")
+			provider = ProviderRegistry.get_inference_provider(provider_alias)
 		except RuntimeError:
 			provider = ProviderRegistry.get_inference_provider()
 		content = provider.generate(
 			prompt=f"DATA:\n{text}",
 			messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": f"DATA:\n{text}"}],
-			temperature=0.0,
+			temperature=temperature,
 			response_format={"type": "json_object"},
 		)
 		match = re.search(r"\{[\s\S]*\}", content)
@@ -493,5 +599,50 @@ def classify_category(text: str) -> Optional[str]:
 		category = str(json.loads(_sanitize_llm_json(match.group(0))).get("category", "")).lower().strip()
 		return category if category in ("work", "social") else None
 	except Exception as e:
-		logger.debug(f"[REVISION] classify_category failed: {e}")
+		logger.warning(f"[DISTILLER] classify_category failed: {e}")
 		return None
+
+
+def audit_engram_quality(
+	summary_text: str,
+	agent_name: str = "Aleth",
+	operator_name: str = "Joan",
+	override_prompt: Optional[str] = None,
+	override_params: Optional[Dict[str, Any]] = None,
+	config_yaml_path: Optional[str] = None,
+) -> bool:
+	"""Delegates to the LLM the semantic evaluation of whether an engram summary
+	suffers from legacy 3rd-person clinical detachment or is already an authentic 1st-person memory.
+	Returns True if it needs re-distillation, False if clean.
+	"""
+	import re
+
+	from red_pill.core.providers import ProviderRegistry
+
+	system_prompt = load_prompt_text("engram_quality_auditor.txt", override_text=override_prompt)
+	system_prompt = system_prompt.format(agent_name=agent_name, operator_name=operator_name)
+
+	user_prompt = f"MEMORY SUMMARY TO AUDIT:\n{summary_text}"
+
+	try:
+		try:
+			provider = ProviderRegistry.get_inference_provider("sip")
+		except RuntimeError:
+			provider = ProviderRegistry.get_inference_provider()
+
+		content = provider.generate(
+			prompt=user_prompt,
+			messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
+			temperature=0.1,
+			response_format={"type": "json_object"},
+		)
+		match = re.search(r"\{[\s\S]*\}", content)
+		if match:
+			parsed = json.loads(_sanitize_llm_json(match.group(0)))
+			needs_redist = parsed.get("needs_redistillation")
+			if isinstance(needs_redist, bool):
+				return needs_redist
+	except Exception as e:
+		logger.warning(f"[ENGRAM-AUDITOR] Quality audit failed: {e}. Falling back to default.")
+
+	return True

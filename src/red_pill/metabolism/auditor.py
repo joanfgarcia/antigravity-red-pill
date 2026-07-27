@@ -124,58 +124,101 @@ class SentinelAuditor:
 		# signal only made signals un-clearable — a landed fix could never
 		# evaporate them (the stuck "N pain signals" the operator kept seeing).
 		self.logger.info(f"Auditing formatting for {repo_path}")
-		ruff = subprocess.run([self.uv_path, "run", "ruff", "check", "."], cwd=repo_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-		if ruff.returncode != 0:
-			report.status = "yellow"
-			errors = [line for line in ruff.stdout.splitlines() if ".py:" in line or "error" in line.lower()]
-			detailed_msg = "\n".join(errors[:5]) if errors else (ruff.stdout[-300:] if ruff.stdout else "Ruff check failed")
-			report.findings.append(
-				AuditFinding(type="formatting", severity=5.0, message=f"Ruff check failed:\n{detailed_msg}", metadata={"stdout": ruff.stdout})
+		try:
+			ruff = subprocess.run(
+				[self.uv_path, "run", "ruff", "check", "."], cwd=repo_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=30
 			)
-		else:
-			self.memory_mgr.evaporate_signals("signal_formatting_failure")
+			if ruff.returncode != 0:
+				report.status = "yellow"
+				errors = [line for line in ruff.stdout.splitlines() if ".py:" in line or "error" in line.lower()]
+				detailed_msg = "\n".join(errors[:5]) if errors else (ruff.stdout[-300:] if ruff.stdout else "Ruff check failed")
+				report.findings.append(
+					AuditFinding(type="formatting", severity=5.0, message=f"Ruff check failed:\n{detailed_msg}", metadata={"stdout": ruff.stdout})
+				)
+			else:
+				self.memory_mgr.evaporate_signals("signal_formatting_failure")
+		except subprocess.TimeoutExpired as te:
+			report.status = "yellow"
+			report.findings.append(
+				AuditFinding(
+					type="formatting",
+					severity=6.0,
+					message="Ruff check timed out after 30s",
+					metadata={"stdout": te.stdout.decode() if isinstance(te.stdout, bytes) else (te.stdout or "")},
+				)
+			)
+
 		# 2. Typing (Mypy)
 		self.logger.info(f"Auditing types for {repo_path}")
 		mypy_target = "src/red_pill/" if os.path.exists(os.path.join(repo_path, "src/red_pill")) else "src/"
-		mypy = subprocess.run([self.uv_path, "run", "mypy", mypy_target], cwd=repo_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-		if mypy.returncode != 0:
-			report.status = "yellow"
-			repo_name = os.path.basename(repo_path)
-
-			# Parse Mypy output for explicit pain signals
-			errors = []
-			for line in mypy.stdout.splitlines():
-				if "error:" in line:
-					parts = line.split(":", 3)
-					if len(parts) >= 3:
-						file_path = parts[0].strip()
-						line_num = parts[1].strip()
-						msg = parts[3].strip() if len(parts) > 3 else parts[2].replace("error:", "").strip()
-						errors.append(f"[{repo_name}] {file_path}:{line_num} -> {msg}")
-
-			detailed_msg = "\n".join(errors) if errors else (mypy.stdout[-300:] if mypy.stdout else "Mypy type check failed")
-
-			report.findings.append(
-				AuditFinding(type="typing", severity=5.0, message=f"Mypy errors:\n{detailed_msg}", metadata={"stdout": mypy.stdout})
+		try:
+			mypy = subprocess.run(
+				[self.uv_path, "run", "mypy", mypy_target], cwd=repo_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=60
 			)
-		else:
-			self.memory_mgr.evaporate_signals("signal_typing_failure")
+			if mypy.returncode != 0:
+				report.status = "yellow"
+				repo_name = os.path.basename(repo_path)
+
+				# Parse Mypy output for explicit pain signals
+				errors = []
+				for line in mypy.stdout.splitlines():
+					if "error:" in line:
+						parts = line.split(":", 3)
+						if len(parts) >= 3:
+							file_path = parts[0].strip()
+							line_num = parts[1].strip()
+							msg = parts[3].strip() if len(parts) > 3 else parts[2].replace("error:", "").strip()
+							errors.append(f"[{repo_name}] {file_path}:{line_num} -> {msg}")
+
+				detailed_msg = "\n".join(errors[:5]) if errors else (mypy.stdout[-300:] if mypy.stdout else "Mypy type check failed")
+				if len(errors) > 5:
+					detailed_msg += f"\n... and {len(errors) - 5} more errors."
+
+				report.findings.append(
+					AuditFinding(type="typing", severity=5.0, message=f"Mypy errors:\n{detailed_msg}", metadata={"stdout": mypy.stdout})
+				)
+			else:
+				self.memory_mgr.evaporate_signals("signal_typing_failure")
+		except subprocess.TimeoutExpired as te:
+			report.status = "yellow"
+			report.findings.append(
+				AuditFinding(
+					type="typing",
+					severity=6.0,
+					message="Mypy check timed out after 60s",
+					metadata={"stdout": te.stdout.decode() if isinstance(te.stdout, bytes) else (te.stdout or "")},
+				)
+			)
+
 		# 3. Testing (Pytest)
 		self.logger.info(f"Auditing tests for {repo_path}")
 		# Run standard tests (removed xdist to ensure universal compatibility)
-		pytest = subprocess.run([self.uv_path, "run", "pytest"], cwd=repo_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-		if pytest.returncode != 0:
-			report.status = "yellow"
-			failed_tests = [line for line in pytest.stdout.splitlines() if line.startswith("FAILED ") or line.startswith("ERROR ")]
-			detailed_msg = "\n".join(failed_tests[:5]) if failed_tests else (pytest.stdout[-300:] if pytest.stdout else "Pytest suite failed")
-			if len(failed_tests) > 5:
-				detailed_msg += f"\n... and {len(failed_tests) - 5} more failures."
-
-			report.findings.append(
-				AuditFinding(type="test", severity=5.0, message=f"Pytest suite failed:\n{detailed_msg}", metadata={"stdout": pytest.stdout})
+		try:
+			pytest = subprocess.run(
+				[self.uv_path, "run", "pytest"], cwd=repo_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=120
 			)
-		else:
-			self.memory_mgr.evaporate_signals("signal_test_failure")
+			if pytest.returncode != 0:
+				report.status = "yellow"
+				failed_tests = [line for line in pytest.stdout.splitlines() if line.startswith("FAILED ") or line.startswith("ERROR ")]
+				detailed_msg = "\n".join(failed_tests[:5]) if failed_tests else (pytest.stdout[-300:] if pytest.stdout else "Pytest suite failed")
+				if len(failed_tests) > 5:
+					detailed_msg += f"\n... and {len(failed_tests) - 5} more failures."
+
+				report.findings.append(
+					AuditFinding(type="test", severity=5.0, message=f"Pytest suite failed:\n{detailed_msg}", metadata={"stdout": pytest.stdout})
+				)
+			else:
+				self.memory_mgr.evaporate_signals("signal_test_failure")
+		except subprocess.TimeoutExpired as te:
+			report.status = "yellow"
+			report.findings.append(
+				AuditFinding(
+					type="test",
+					severity=7.0,
+					message="Pytest suite timed out after 120s",
+					metadata={"stdout": te.stdout.decode() if isinstance(te.stdout, bytes) else (te.stdout or "")},
+				)
+			)
 
 		# Calculate global intensity based on findings
 		report.intensity = sum(f.severity for f in report.findings)

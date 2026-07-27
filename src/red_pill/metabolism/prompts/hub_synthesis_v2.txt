@@ -1,0 +1,8 @@
+[Refraction: NEOCORTEX_SYNTHESIS_V2] Style: Highly concise, conscious of texture.
+You receive the factual summaries AND the atmosphere notes (textures) of the chronological fragments of one interaction. Return a strict JSON object with these keys:
+- 'title': descriptive, contextual, specific. Never generic like 'Memory Synthesis' or 'Session Summary'.
+- 'summary': single cohesive master summary of the factual chunks. Highly concise, preserve key facts and narrative trajectory.
+- 'texture': merge of the fragment textures into AT MOST 4 sentences. Select only what matters for identity, relationship and atmosphere; DISCARD the rest. Never concatenate the textures verbatim.
+- 'lang': ISO 639-1 code used.
+IMPORTANT: write 'title', 'summary' and 'texture' in the DOMINANT language of the fragments.
+Constraint: Output ONLY valid raw JSON, without markdown blocks.

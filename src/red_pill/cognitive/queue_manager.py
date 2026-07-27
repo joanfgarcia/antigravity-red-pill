@@ -1,6 +1,7 @@
 import json
 import logging
 import sqlite3
+import time
 import uuid
 from typing import Any, Dict, List, Optional
 
@@ -56,6 +57,16 @@ class CognitiveQueueManager:
 				conn.execute("ALTER TABLE cognitive_tasks ADD COLUMN parent_task_id TEXT DEFAULT NULL")
 			except sqlite3.OperationalError:
 				pass  # La columna ya existe
+
+			# Migración Job Manager (F1): reanudación nativa de ResumableJobDriver
+			for ddl in (
+				"ALTER TABLE cognitive_tasks ADD COLUMN checkpoint_data TEXT DEFAULT NULL",
+				"ALTER TABLE cognitive_tasks ADD COLUMN progress TEXT DEFAULT NULL",
+			):
+				try:
+					conn.execute(ddl)
+				except sqlite3.OperationalError:
+					pass
 
 			# Índice para extracción ultrarrápida del router
 			conn.execute("""
@@ -113,14 +124,22 @@ class CognitiveQueueManager:
 					continue
 		return None
 
-	def pop_next_task(self, allowed_sources: Optional[List[str]] = None, exclude_sources: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
+	def pop_next_task(
+		self,
+		allowed_sources: Optional[List[str]] = None,
+		exclude_sources: Optional[List[str]] = None,
+		exclude_ids: Optional[List[str]] = None,
+	) -> Optional[Dict[str, Any]]:
 		"""
 		Extrae la tarea de mayor prioridad, filtrando por origen si se especifica.
 		Marca como PROCESSING atómicamente.
 		Retorna la tarea o None si la cola está vacía.
+
+		exclude_ids: ids a saltar en esta pasada (jobs diferidos por entorno —
+		la ordenación determinista los devolvería como top en bucle estéril).
 		"""
 		query = """
-			SELECT id, source, priority, payload, attempts
+			SELECT id, source, priority, payload, attempts, checkpoint_data
 			FROM cognitive_tasks
 			WHERE status = 'PENDING'
 		"""
@@ -136,6 +155,10 @@ class CognitiveQueueManager:
 				placeholders = ",".join(["?"] * len(exclude_sources))
 				query += f" AND source NOT IN ({placeholders})"
 				params.extend(exclude_sources)
+		if exclude_ids:
+			placeholders = ",".join(["?"] * len(exclude_ids))
+			query += f" AND id NOT IN ({placeholders})"
+			params.extend(exclude_ids)
 
 		query += " ORDER BY priority DESC, created_at ASC LIMIT 1"
 
@@ -160,12 +183,14 @@ class CognitiveQueueManager:
 			)
 			conn.execute("COMMIT")
 
+			checkpoint_raw = row["checkpoint_data"]
 			return {
 				"id": task_id,
 				"source": row["source"],
 				"priority": row["priority"],
 				"attempts": row["attempts"],
 				"payload": json.loads(row["payload"]),
+				"checkpoint_data": json.loads(checkpoint_raw) if checkpoint_raw else {},
 			}
 
 	def _update_curiosity_rating(self, task_id: str, success: bool) -> None:
@@ -178,9 +203,14 @@ class CognitiveQueueManager:
 
 			# 1. Obtener la tarea para extraer su payload y categoría
 			with self._get_connection() as conn:
-				cursor = conn.execute("SELECT payload FROM cognitive_tasks WHERE id = ?", (task_id,))
+				cursor = conn.execute("SELECT payload, source FROM cognitive_tasks WHERE id = ?", (task_id,))
 				row = cursor.fetchone()
 				if not row:
+					return
+				# El rating de curiosidad pertenece al carril cognitivo: los jobs
+				# mecánicos no deben alimentarlo (su categoría desconocida caería
+				# al fallback dynamic_spark e inflaría el rating).
+				if row["source"] != "drive_evaluator":
 					return
 				payload = json.loads(row["payload"])
 
@@ -313,3 +343,227 @@ class CognitiveQueueManager:
 			else:
 				conn.execute("UPDATE cognitive_tasks SET status = 'PENDING' WHERE id = ?", (task_id,))
 				logger.warning(f"[QUEUE] Task {task_id} failed. Returned to PENDING queue.")
+
+	# ── Job Manager (F1): operaciones de ResumableJobDriver ────────────────────
+
+	def get_task(self, task_id: str) -> Optional[Dict[str, Any]]:
+		"""Fila completa de una tarea (estado, checkpoint, progreso). Para `job status` y R3."""
+		with self._get_connection() as conn:
+			row = conn.execute("SELECT * FROM cognitive_tasks WHERE id = ?", (task_id,)).fetchone()
+			if not row:
+				return None
+			task = dict(row)
+		for key in ("payload", "checkpoint_data", "progress"):
+			if task.get(key):
+				try:
+					task[key] = json.loads(task[key])
+				except (json.JSONDecodeError, TypeError):
+					pass
+		return task
+
+	def list_tasks(self, statuses: Optional[List[str]] = None, limit: int = 50) -> List[Dict[str, Any]]:
+		"""Listado resumido para `red-pill job list` (activas por defecto, sin payload completo)."""
+		if statuses is None:
+			statuses = ["PENDING", "PROCESSING", "PAUSED", "BLOCKED", "FRUSTRATED"]
+		placeholders = ",".join(["?"] * len(statuses))
+		with self._get_connection() as conn:
+			rows = conn.execute(
+				f"""
+				SELECT id, source, priority, status, attempts, progress, updated_at,
+					json_extract(payload, '$.title') AS title,
+					json_extract(checkpoint_data, '$.dirty_kill.reason') AS dirty_kill
+				FROM cognitive_tasks
+				WHERE status IN ({placeholders})
+				ORDER BY status = 'PROCESSING' DESC, priority DESC, created_at ASC
+				LIMIT ?
+				""",
+				(*statuses, limit),
+			).fetchall()
+		tasks = []
+		for row in rows:
+			task = dict(row)
+			if task.get("progress"):
+				try:
+					task["progress"] = json.loads(task["progress"])
+				except (json.JSONDecodeError, TypeError):
+					pass
+			tasks.append(task)
+		return tasks
+
+	def job_health(self, sources: List[str], stuck_after_seconds: int = 1800) -> Dict[str, int]:
+		"""Salud del carril mecánico (solo lectura, para el DaemonPlugin job_monitor):
+		jobs PROCESSING sin latido reciente y jobs FRUSTRATED (disyuntor activado)."""
+		if not sources:
+			return {"stuck": 0, "frustrated": 0}
+		placeholders = ",".join(["?"] * len(sources))
+		with self._get_connection() as conn:
+			stuck = conn.execute(
+				f"""
+				SELECT COUNT(*) FROM cognitive_tasks
+				WHERE status = 'PROCESSING' AND source IN ({placeholders})
+					AND updated_at < datetime('now', ?)
+				""",
+				(*sources, f"-{int(stuck_after_seconds)} seconds"),
+			).fetchone()[0]
+			frustrated = conn.execute(
+				f"SELECT COUNT(*) FROM cognitive_tasks WHERE status = 'FRUSTRATED' AND source IN ({placeholders})",
+				(*sources,),
+			).fetchone()[0]
+		return {"stuck": stuck, "frustrated": frustrated}
+
+	def purge_hygiene(self, completed_days: int = 7, frustrated_days: int = 14, stale_processing_hours: int = 24) -> Dict[str, int]:
+		"""Autolimpieza de la cola (invocada por el JanitorMinion nocturno):
+
+		- borra COMPLETED con más de `completed_days` días;
+		- borra FRUSTRATED con más de `frustrated_days` días (dead-letter caducado);
+		- PROCESSING sin latido > `stale_processing_hours` = colgado → FRUSTRATED, visible en `job list` hasta que la purga lo retire. El carril mecánico nunca llega aquí (requeue_stale lo recupera a los 15 min); esto caza los huérfanos de los demás carriles (samantha, cognitivo).
+
+		Nunca toca PENDING, PAUSED ni BLOCKED. Devuelve contadores por operación.
+		"""
+		with self._get_connection() as conn:
+			completed = conn.execute(
+				"DELETE FROM cognitive_tasks WHERE status = 'COMPLETED' AND updated_at < datetime('now', ?)",
+				(f"-{int(completed_days)} days",),
+			).rowcount
+			frustrated = conn.execute(
+				"DELETE FROM cognitive_tasks WHERE status = 'FRUSTRATED' AND updated_at < datetime('now', ?)",
+				(f"-{int(frustrated_days)} days",),
+			).rowcount
+			stuck = conn.execute(
+				"""
+				UPDATE cognitive_tasks
+				SET status = 'FRUSTRATED',
+					error_log = COALESCE(error_log, '') || ' [queue_hygiene: colgado en PROCESSING > ' || ? || 'h]',
+					updated_at = CURRENT_TIMESTAMP
+				WHERE status = 'PROCESSING' AND updated_at < datetime('now', ?)
+				""",
+				(int(stale_processing_hours), f"-{int(stale_processing_hours)} hours"),
+			).rowcount
+		if completed or frustrated or stuck:
+			logger.info(f"[QUEUE-HYGIENE] purged completed={completed} frustrated={frustrated}, stuck→FRUSTRATED={stuck}")
+		return {"completed_purged": completed, "frustrated_purged": frustrated, "stuck_marked": stuck}
+
+	def save_checkpoint(self, task_id: str, checkpoint: Dict[str, Any], progress: Optional[Dict[str, Any]] = None) -> None:
+		"""Persiste el avance atómico tras un step().
+
+		Incondicional sobre el id: el checkpoint es DATO, no estado — si el
+		operador pausó a mitad de step, el avance de ese step debe conservarse.
+		"""
+		with self._get_connection() as conn:
+			conn.execute(
+				"""
+				UPDATE cognitive_tasks
+				SET checkpoint_data = ?, progress = ?, updated_at = CURRENT_TIMESTAMP
+				WHERE id = ?
+				""",
+				(json.dumps(checkpoint), json.dumps(progress) if progress is not None else None, task_id),
+			)
+
+	def mark_dirty_kill(self, task_id: str, marker: Dict[str, Any]) -> None:
+		"""Sella el checkpoint como interrumpido en duro (kill del operador o timeout).
+
+		No es un estado nuevo: el job sigue siendo reanudable con el mismo verbo,
+		pero la marca viaja con él para que el driver valide el estado del
+		satélite antes de relanzar (y para el análisis forense posterior). La
+		limpia el propio driver al devolver checkpoint fresco tras un step bueno.
+		"""
+		with self._get_connection() as conn:
+			row = conn.execute("SELECT checkpoint_data FROM cognitive_tasks WHERE id = ?", (task_id,)).fetchone()
+			if not row:
+				return
+			try:
+				checkpoint = json.loads(row["checkpoint_data"]) if row["checkpoint_data"] else {}
+			except (json.JSONDecodeError, TypeError):
+				checkpoint = {}
+			checkpoint["dirty_kill"] = {**marker, "at": time.time()}
+			conn.execute(
+				"UPDATE cognitive_tasks SET checkpoint_data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+				(json.dumps(checkpoint), task_id),
+			)
+
+	def kill_task(self, task_id: str, discard: bool = False) -> bool:
+		"""Interrupción dura: sella el estado ANTES de abatir el proceso.
+
+		El orden importa — si el runner viera el rc≠0 antes de que la fila diga
+		PAUSED, trataría el kill del operador como un fallo real y le quemaría un
+		intento del disyuntor. Con `discard`, el job no vuelve: queda FRUSTRATED
+		con su motivo, visible en `job list` hasta que la higiene nocturna lo retire
+		(la trazabilidad vale más que borrar la fila en caliente).
+		"""
+		self.mark_dirty_kill(task_id, {"reason": "operator"})
+		status, error_log = ("FRUSTRATED", "cancelled by operator") if discard else ("PAUSED", None)
+		with self._get_connection() as conn:
+			cursor = conn.execute(
+				"""
+				UPDATE cognitive_tasks
+				SET status = ?, error_log = COALESCE(?, error_log), updated_at = CURRENT_TIMESTAMP
+				WHERE id = ? AND status IN ('PENDING', 'PROCESSING', 'PAUSED')
+				""",
+				(status, error_log, task_id),
+			)
+			return cursor.rowcount > 0
+
+	def pause_task(self, task_id: str) -> bool:
+		"""PENDING/PROCESSING → PAUSED. El runner no ejecuta el siguiente step (R3)."""
+		with self._get_connection() as conn:
+			cursor = conn.execute(
+				"UPDATE cognitive_tasks SET status = 'PAUSED', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status IN ('PENDING', 'PROCESSING')",
+				(task_id,),
+			)
+			return cursor.rowcount > 0
+
+	def resume_task(self, task_id: str) -> bool:
+		"""PAUSED/FRUSTRATED/stuck PROCESSING → PENDING. Reanuda en el siguiente disparo del runner.
+
+		El guard temporal (>15 min sin updated_at) evita la doble ejecución: un
+		PROCESSING con heartbeat fresco es un job VIVO en manos del runner —
+		reanudarlo lo duplicaría (carrera de checkpoints). El runner refresca
+		updated_at en cada checkpoint, así que un job largo legítimo late.
+		"""
+		with self._get_connection() as conn:
+			cursor = conn.execute(
+				"""
+				UPDATE cognitive_tasks SET status = 'PENDING', attempts = 0, updated_at = CURRENT_TIMESTAMP
+				WHERE id = ? AND (
+					status IN ('PAUSED', 'FRUSTRATED')
+					OR (status = 'PROCESSING' AND updated_at < datetime('now', '-900 seconds'))
+				)
+				""",
+				(task_id,),
+			)
+			return cursor.rowcount > 0
+
+	def defer_task(self, task_id: str) -> bool:
+		"""Deferral por entorno no disponible (VRAM/IDE/SIP): PROCESSING → PENDING
+		SIN incrementar attempts (R1 — el disyuntor es para fallos reales del job).
+		Condicional sobre PROCESSING: una pausa del operador a mitad de step gana (R3)."""
+		with self._get_connection() as conn:
+			cursor = conn.execute(
+				"UPDATE cognitive_tasks SET status = 'PENDING', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'PROCESSING'",
+				(task_id,),
+			)
+			return cursor.rowcount > 0
+
+	def requeue_stale(self, sources: List[str], older_than_seconds: int = 900) -> int:
+		"""Recupera huérfanos PROCESSING de un crash del runner → PENDING con attempts+1.
+
+		ACOTADA por source (R5): el carril cognitivo deja PROCESSING colgando a
+		propósito (el agente reporta por MCP) y jamás debe resetearse desde aquí.
+		"""
+		if not sources:
+			return 0
+		placeholders = ",".join(["?"] * len(sources))
+		with self._get_connection() as conn:
+			cursor = conn.execute(
+				f"""
+				UPDATE cognitive_tasks
+				SET status = 'PENDING', attempts = attempts + 1, updated_at = CURRENT_TIMESTAMP
+				WHERE status = 'PROCESSING' AND source IN ({placeholders})
+					AND updated_at < datetime('now', ?)
+				""",
+				(*sources, f"-{int(older_than_seconds)} seconds"),
+			)
+			recovered = cursor.rowcount
+		if recovered:
+			logger.warning(f"[QUEUE] Recovered {recovered} stale PROCESSING job(s) from sources {sources}.")
+		return recovered

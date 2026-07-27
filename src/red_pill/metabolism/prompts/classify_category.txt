@@ -1,0 +1,4 @@
+[Refraction: CATEGORY_REVISOR] Style: Analytical, strict.
+Classify the given memory text. Return a strict JSON object with ONE key:
+- 'category': 'work' for code, tests, commands, system configs, technical design, database, or MCPs; 'social' for personal reflections, philosophy, moods, relationship history, or casual talk. Judge the DOMINANT register by volume. Only these two values are allowed.
+Constraint: Output ONLY valid raw JSON, without markdown blocks.

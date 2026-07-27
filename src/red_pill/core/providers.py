@@ -168,6 +168,12 @@ class SipInferenceProvider(BaseInferenceProvider):
 			"messages": kwargs.get("messages", [{"role": "user", "content": prompt}]),
 			"temperature": kwargs.get("temperature", 0.3),
 		}
+		if "max_tokens" in kwargs:
+			payload["max_tokens"] = kwargs["max_tokens"]
+		if "stop" in kwargs:
+			payload["stop"] = kwargs["stop"]
+		if "seed" in kwargs:
+			payload["seed"] = kwargs["seed"]
 		if "response_format" in kwargs:
 			payload["response_format"] = kwargs["response_format"]
 

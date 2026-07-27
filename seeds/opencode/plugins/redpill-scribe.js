@@ -2,16 +2,21 @@
  * Red Pill Scribe Plugin for OpenCode
  *
  * ── ROLE IN THE ARCHITECTURE ─────────────────────────────────────────────
- * This plugin is the RAW CAPTURE LAYER for opencode sessions. It writes
- * prompt+response pairs to bunker.db's `interactions` table via SQLite WAL.
+ * This plugin is the RAW CAPTURE LAYER for opencode sessions. It queues
+ * prompt+response pairs into bunker_queue.db's `memory_queue` via SQLite WAL.
  *
  * DATA PIPELINE (3 stages):
- *   1. THIS PLUGIN → bunker.db interactions (raw text, this file)
- *   2. Queue Worker → bunker_queue.db → Qdrant (embeddings, Python)
+ *   1. THIS PLUGIN → bunker_queue.db memory_queue (raw text, this file)
+ *   2. Queue Worker → interaction_memories in Qdrant (embeddings, Python)
  *   3. Sleep Cycle → social_memories / work_memories (consolidation, Python)
  *
  * Stages 2 and 3 are pure Python (red-pill kernel). This plugin only handles
  * stage 1. Do NOT add embedding, Qdrant, or consolidation logic here.
+ *
+ * It writes to THE queue the worker already drains. An earlier version wrote
+ * to a private `interactions` table in bunker.db that no consumer ever read,
+ * so every opencode turn was captured and then swept away by the janitor
+ * without becoming a memory. Do not reintroduce a second sink.
  *
  * ── CONCURRENCY ──────────────────────────────────────────────────────────
  * This plugin and the Python MCP server share bunker.db via SQLite WAL mode.
@@ -20,11 +25,9 @@
  *   JS:  db.exec("PRAGMA journal_mode=WAL")
  *   Python: conn.execute("PRAGMA journal_mode=WAL")
  *
- * The schema is idempotent (CREATE TABLE IF NOT EXISTS, ALTER IF MISSING).
- * If you change the schema here, you MUST also update:
- *   - src/red_pill/swarm/bridges/opencode.py  (_scribe_relay migration)
- *   - src/red_pill/plugins/antigravity_ide/worker.py  (same pattern)
- *   - Any Python code that reads `interactions` from bunker.db
+ * The schema is owned by Python (MemoryQueueManager creates and migrates it);
+ * this plugin only INSERTs. It degrades to a no-op if the table is missing,
+ * which happens only before the kernel has ever run.
  *
  * ── HOOK LIFECYCLE ───────────────────────────────────────────────────────
  *   chat.message         → capture user prompt
@@ -42,41 +45,29 @@
  * processing (embeddings, Qdrant, sleep) lives in tested Python code.
  * DRY is maintained by keeping this plugin as a thin capture shim only.
  *
- * BUNKER_DB path is injected at deploy time by inject_opencode.py.
+ * QUEUE_DB path is injected at deploy time by inject_opencode.py.
  * Runtime: Bun — uses bun:sqlite.
  */
 
-const BUNKER_DB = "${BUNKER_DB}";
+const QUEUE_DB = "${QUEUE_DB}";
+const ORIGINATOR = "opencode";
 
-function ensureTable(db) {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS interactions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_prompt TEXT,
-      agent_response TEXT,
-      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-      model TEXT
-    )
-  `);
-}
-
-function migrateModel(db) {
-  const cols = db.query("PRAGMA table_info(interactions)").all().map((r) => r.name);
-  if (!cols.includes("model")) {
-    db.exec("ALTER TABLE interactions ADD COLUMN model TEXT");
-  }
+function hasQueue(db) {
+  const row = db
+    .query("SELECT name FROM sqlite_master WHERE type='table' AND name='memory_queue'")
+    .get();
+  return Boolean(row);
 }
 
 function writeInteraction(db, prompt, response, model) {
   if (!prompt && !response) return;
+  // Full text on purpose: truncating here would silently mutilate the engram
+  // downstream. Noise trimming is the worker's job, at the single drain point.
   const stmt = db.prepare(
-    "INSERT INTO interactions (user_prompt, agent_response, timestamp, model) VALUES (?, ?, CURRENT_TIMESTAMP, ?)"
+    "INSERT INTO memory_queue (prompt, response, role, status, created_at, category, originator, model) " +
+      "VALUES (?, ?, 'assistant', 'pending', ?, 'mixed', ?, ?)"
   );
-  stmt.run(
-    (prompt || "").slice(0, 2000),
-    (response || "").slice(0, 5000),
-    model || null
-  );
+  stmt.run(prompt || "", response || "", Date.now() / 1000, ORIGINATOR, model || null);
 }
 
 /** @type {import("@opencode-ai/plugin").Plugin} */
@@ -84,12 +75,15 @@ export const RedPillScribe = async (ctx) => {
   let db;
   try {
     const { Database } = await import("bun:sqlite");
-    db = new Database(BUNKER_DB);
+    db = new Database(QUEUE_DB);
     db.exec("PRAGMA journal_mode=WAL");
-    ensureTable(db);
-    migrateModel(db);
+    if (!hasQueue(db)) {
+      console.error("[RedPillScribe] memory_queue missing; run the red-pill kernel once. Capture disabled.");
+      db.close();
+      return {};
+    }
   } catch (e) {
-    console.error("[RedPillScribe] Failed to open bunker.db:", e.message);
+    console.error("[RedPillScribe] Failed to open the queue:", e.message);
     return {};
   }
 

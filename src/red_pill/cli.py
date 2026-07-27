@@ -433,6 +433,222 @@ def _dispatch_plugins(args: argparse.Namespace) -> bool:
 	return False
 
 
+def handle_job(args: argparse.Namespace) -> None:
+	"""Centralized Job Manager: cola persistente compartida (bunker_queue.db)."""
+	import json as _json
+
+	from red_pill.cognitive.queue_manager import CognitiveQueueManager
+
+	queue = CognitiveQueueManager()
+
+	if args.job_cmd == "submit":
+		# D2: todo lo que entra por CLI es BACKGROUND_DEFERRED por definición.
+		source, priority, parent = args.source, args.priority, getattr(args, "parent", None)
+
+		if getattr(args, "recipe", None):
+			# La forma humana: el payload vive en YAML, versionado en el repo del
+			# satélite. Nadie debería teclear veinte claves JSON en una terminal.
+			from red_pill.jobs.recipes import load_recipe
+
+			try:
+				source, payload, recipe_priority, recipe_parent = load_recipe(args.recipe)
+			except (FileNotFoundError, ValueError) as e:
+				print(f"[ERROR] {e}")
+				return
+			priority = args.priority if args.priority != 5 else recipe_priority
+			parent = parent or recipe_parent
+		else:
+			if not args.source:
+				print("[ERROR] indica --source (o --recipe con una receta YAML).")
+				return
+			try:
+				payload = _json.loads(args.payload)
+			except _json.JSONDecodeError as e:
+				print(f"[ERROR] --payload debe ser JSON válido: {e}")
+				return
+
+		if args.title:
+			payload["title"] = args.title
+
+		# Validar AQUÍ: un payload malformado debe morir al encolar, no tres
+		# intentos después y FRUSTRATED de madrugada.
+		from red_pill.jobs.drivers import get_driver_class
+
+		driver_cls = get_driver_class(source)
+		if driver_cls:
+			try:
+				driver_cls.validate(payload)
+			except ValueError as e:
+				print(f"[ERROR] Payload inválido para '{source}': {e}")
+				return
+		job_id = queue.enqueue_task(source=source, payload=payload, priority=priority, parent_task_id=parent)
+		if parent:
+			print(f"[OK] Job {job_id} encolado como BLOCKED (se desbloquea al completar {parent[:8]}).")
+		else:
+			print(f"[OK] Job {job_id} encolado (source={source}, priority={priority}).")
+
+	elif args.job_cmd == "list":
+		statuses = ["PENDING", "PROCESSING", "PAUSED", "BLOCKED", "FRUSTRATED", "COMPLETED"] if args.all else None
+		tasks = queue.list_tasks(statuses=statuses)
+		if not tasks:
+			print("Cola vacía.")
+			return
+		print(f"{'ID':<10} {'SOURCE':<20} {'STATUS':<12} {'PRIO':<5} {'ATT':<4} {'PROGRESS':<24} TITLE")
+		for t in tasks:
+			# El asterisco marca una interrupción dura previa (kill o timeout):
+			# reanudable con el mismo verbo, pero la limpieza no está garantizada.
+			status = f"{t['status']}*" if t.get("dirty_kill") else t["status"]
+			print(
+				f"{t['id'][:8]:<10} {t['source'][:19]:<20} {status:<12} {t['priority']:<5} {t['attempts']:<4} {_format_progress(t.get('progress')):<24} {t.get('title') or '-'}"
+			)
+
+	elif args.job_cmd == "status":
+		task = _find_job(queue, args.job_id)
+		if not task:
+			print(f"[ERROR] Job '{args.job_id}' no encontrado.")
+			return
+		_print_measurements(task)
+		print(_json.dumps(task, indent=2, ensure_ascii=False, default=str))
+
+	elif args.job_cmd in ("pause", "resume"):
+		task = _find_job(queue, args.job_id)
+		if not task:
+			print(f"[ERROR] Job '{args.job_id}' no encontrado.")
+			return
+		ok = queue.pause_task(task["id"]) if args.job_cmd == "pause" else queue.resume_task(task["id"])
+		if ok:
+			print(f"[OK] Job {task['id'][:8]} → {'PAUSED' if args.job_cmd == 'pause' else 'PENDING'}.")
+		else:
+			print(f"[WARN] Job {task['id'][:8]} en estado '{task['status']}': transición no aplicable.")
+
+	elif args.job_cmd == "kill":
+		task = _find_job(queue, args.job_id)
+		if not task:
+			print(f"[ERROR] Job '{args.job_id}' no encontrado.")
+			return
+		_kill_job(queue, task, discard=args.discard)
+
+	elif args.job_cmd == "logs":
+		task = _find_job(queue, args.job_id)
+		if not task:
+			print(f"[ERROR] Job '{args.job_id}' no encontrado.")
+			return
+		from red_pill.jobs.drivers import job_log_path
+
+		log_path = job_log_path(task["id"])
+		if not log_path.exists():
+			print(f"[INFO] Sin log todavía para {task['id'][:8]} ({log_path}).")
+			return
+		lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+		print("\n".join(lines[-args.tail :]))
+
+	elif args.job_cmd == "process-queue":
+		_run_job_queue(queue)
+	else:
+		print("Uso: red-pill job {submit|list|status|pause|resume|kill|logs|process-queue}")
+
+
+def _print_measurements(task: dict) -> None:
+	"""Lo medido, en cristiano y antes del volcado JSON.
+
+	La cadencia de checkpoint es el dato que decide si un job puede ceder la GPU:
+	es el trabajo máximo que se pierde al interrumpirlo. Medida, no supuesta.
+	"""
+	import red_pill.config as cfg
+	from red_pill.jobs.drivers import compute_step_timeout, human_duration
+
+	progress = task.get("progress") or {}
+	if not isinstance(progress, dict) or not progress:
+		return
+
+	lines = [f"  progreso        : {_format_progress(progress)}"]
+	if progress.get("step_seconds_ema"):
+		lines.append(f"  duración media  : {human_duration(progress['step_seconds_ema'])} por step (último: {human_duration(progress.get('step_seconds_last', 0))})")
+		bound = compute_step_timeout(task.get("payload") or {}, progress, task.get("attempts", 0))
+		lines.append(f"  cota del próximo: {human_duration(bound)}")
+
+	cadence = progress.get("checkpoint_interval_s")
+	if cadence:
+		target = int(cfg.JOB_CHECKPOINT_CADENCE_TARGET)
+		verdict = "dentro del objetivo" if cadence <= target else f"POR ENCIMA del objetivo ({human_duration(target)}) — trabajo en riesgo si se interrumpe"
+		lines.append(f"  cadencia real   : guarda cada {human_duration(cadence)} ({progress.get('checkpoint_writes_in_step', 0)} por step) → {verdict}")
+
+	print("\n".join(lines) + "\n")
+
+
+def _format_progress(progress) -> str:
+	"""Progreso honesto: porcentaje solo cuando hay total, fase cuando se declara.
+
+	Un trabajo sin total conocido muestra su contador, no un porcentaje inventado.
+	"""
+	if not isinstance(progress, dict) or not progress:
+		return "-"
+
+	if progress.get("current") is None:
+		current = progress.get("current_step")
+		total = progress.get("total_steps")
+	else:
+		current, total = progress.get("current"), progress.get("total")
+
+	if current is None:
+		return "-"
+
+	text = f"{current}/{total}" if total else str(current)
+	if progress.get("percent") is not None:
+		text += f" ({progress['percent']}%)"
+	if progress.get("stage_current") is not None:
+		text += f" · {progress.get('stage_label', 'fase')} {progress['stage_current']}/{progress.get('stage_total')}"
+	if progress.get("eta_seconds"):
+		text += f" ~{round(progress['eta_seconds'] / 60)}m"
+	return text
+
+
+def _kill_job(queue, task: dict, discard: bool = False) -> None:
+	"""Interrupción dura: sellar el estado ANTES de abatir el scope.
+
+	Ese orden es lo que impide que el runner confunda el kill del operador con
+	un fallo del job y le queme un intento del disyuntor.
+	"""
+	import subprocess
+
+	job_id = task["id"]
+	if not queue.kill_task(job_id, discard=discard):
+		print(f"[WARN] Job {job_id[:8]} en estado '{task['status']}': no se puede abatir.")
+		return
+
+	unit = f"redpill-job-{job_id[:8]}.scope"
+	try:
+		result = subprocess.run(["systemctl", "--user", "stop", unit], capture_output=True, text=True, timeout=30)
+		stopped = result.returncode == 0
+	except Exception as e:
+		stopped = False
+		print(f"[WARN] No se pudo parar {unit}: {e}")
+
+	destino = "FRUSTRATED (descartado)" if discard else "PAUSED* (reanudable con `job resume`)"
+	print(f"[OK] Job {job_id[:8]} → {destino}.")
+	print(f"     Scope {unit}: {'abatido' if stopped else 'no estaba activo'}.")
+
+
+def _find_job(queue, job_ref: str):
+	"""Resuelve un job por id completo o prefijo corto (el que muestra `job list`)."""
+	task = queue.get_task(job_ref)
+	if task:
+		return task
+	with queue._get_connection() as conn:
+		rows = conn.execute("SELECT id FROM cognitive_tasks WHERE id LIKE ?", (f"{job_ref}%",)).fetchall()
+	if len(rows) == 1:
+		return queue.get_task(rows[0]["id"])
+	return None
+
+
+def _run_job_queue(queue) -> None:
+	"""Runner shot-and-forget (el run-lock R6 vive dentro de process_driver_jobs)."""
+	from red_pill.core.queue_worker import process_driver_jobs
+
+	completed = process_driver_jobs(queue)
+	print(f"[JOB] Cola procesada. {completed} job(s) completados. Apagando.")
+
+
 def handle_secrets(args: argparse.Namespace) -> None:
 	"""Local Secrets Management (pure-mls encrypted)."""
 	from red_pill.utils.vault import SecretVault
@@ -636,6 +852,40 @@ def main() -> None:
 	backend_parser.add_argument("value", nargs="?", choices=["agy", "grpc", "claude", "local", "auto"], help="Backend to use")
 	ide_sub.add_parser("status", help="Show IDE bridge capabilities and health")
 	ide_sub.add_parser("test", help="Run connectivity test against the IDE")
+
+	# Centralized Job Manager
+	job_parser = subparsers.add_parser("job", help="Centralized Job Manager (deferred, resumable jobs)")
+	job_sub = job_parser.add_subparsers(dest="job_cmd")
+
+	job_submit = job_sub.add_parser("submit", help="Encolar un job diferido (BACKGROUND_DEFERRED)")
+	job_submit.add_argument("--recipe", help="Receta YAML del satélite (ruta, o nombre corto buscado en .red-pill/jobs/). Sustituye a --source/--payload")
+	job_submit.add_argument("--source", help="Source del driver que lo ejecuta (p.ej. script_job). Innecesario con --recipe")
+	job_submit.add_argument("--payload", default="{}", help="Payload JSON del job")
+	job_submit.add_argument("--priority", type=int, default=5, help="Prioridad (mayor = más urgente, default 5)")
+	job_submit.add_argument("--title", help="Título descriptivo (se guarda en el payload)")
+	job_submit.add_argument("--parent", help="Id del job padre: entra BLOCKED y se desbloquea cuando el padre completa (DAG)")
+
+	job_list = job_sub.add_parser("list", help="Listar jobs activos, pausados y en cola")
+	job_list.add_argument("--all", action="store_true", help="Incluir también COMPLETED")
+
+	job_status = job_sub.add_parser("status", help="Detalle completo de un job (checkpoint, progreso)")
+	job_status.add_argument("job_id", help="Id completo o prefijo corto")
+
+	job_pause = job_sub.add_parser("pause", help="Pausar un job (el runner no ejecuta el siguiente step)")
+	job_pause.add_argument("job_id", help="Id completo o prefijo corto")
+
+	job_resume = job_sub.add_parser("resume", help="Reanudar un job pausado desde su checkpoint")
+	job_resume.add_argument("job_id", help="Id completo o prefijo corto")
+
+	job_kill = job_sub.add_parser("kill", help="Abatir el step en vuelo (duro): PAUSED* reanudable, con marca de kill sucio")
+	job_kill.add_argument("job_id", help="Id completo o prefijo corto")
+	job_kill.add_argument("--discard", action="store_true", help="Cancelar definitivamente: FRUSTRATED en lugar de reanudable")
+
+	job_logs = job_sub.add_parser("logs", help="Salida del proceso hijo de un job (stdout/stderr por step)")
+	job_logs.add_argument("job_id", help="Id completo o prefijo corto")
+	job_logs.add_argument("--tail", type=int, default=50, help="Últimas N líneas (default 50)")
+
+	job_sub.add_parser("process-queue", help="Runner shot-and-forget: procesa la cola y se apaga (exit 0)")
 
 	# P2P Sovereign Sync (v7.1.0)
 	p2p_parser = subparsers.add_parser("p2p", help="Sovereign P2P Synchronization (Delta Engine)")
@@ -947,6 +1197,9 @@ def main() -> None:
 			return
 		elif args.command == "ide":
 			handle_ide(args)
+			return
+		elif args.command == "job":
+			handle_job(args)
 			return
 		elif args.command == "p2p":
 			handle_p2p(args)

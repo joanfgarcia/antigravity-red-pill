@@ -1,0 +1,20 @@
+distill_engram:
+  temperature: 0.1
+  max_retries: 2
+  provider_alias: "sip"
+  prompt_file: "distiller_v3.txt"
+
+synthesize_hub_v2:
+  temperature: 0.1
+  provider_alias: "sip"
+  prompt_file: "hub_synthesis_v2.txt"
+
+classify_category:
+  temperature: 0.0
+  provider_alias: "sip"
+  prompt_file: "classify_category.txt"
+
+distill_session_anchors:
+  temperature: 0.1
+  max_tokens: 1024
+  prompt_file: "session_anchors.txt"

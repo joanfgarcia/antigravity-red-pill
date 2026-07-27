@@ -864,38 +864,26 @@ class IDEWorker:
 			cursor.execute("UPDATE inbox SET status = 'PROCESSED' WHERE id = ?", (m_id,))
 
 	def _scribe_relay(self, user_prompt: str, agent_response: str, model: Optional[str] = None):
-		"""External Scribe: save prompt+response directly to the Bünker's interaction log.
+		"""External Scribe: queue prompt+response for ingestion.
 
-		This replaces the interceptor_rp-based scribe_relay for bridge-processed messages.
-		Saves both prompt and response in a single call, with no delay or dependency
-		on the agent remembering to invoke it.
+		Antigravity exposes no editor hook, so this worker is the capture surface
+		for its headless turns. It queues into the same `memory_queue` every other
+		surface uses, with no dependency on the agent remembering anything.
 		"""
 		try:
-			from red_pill.core.paths import get_db_dir
+			from red_pill.core.queue_manager import MemoryQueueManager
 
-			db_path = get_db_dir() / "bunker.db"
-			conn_scribe = sqlite3.connect(str(db_path))
-
-			# Self-healing migration for column 'model'
-			cursor = conn_scribe.cursor()
-			cursor.execute("PRAGMA table_info(interactions)")
-			columns = [row[1] for row in cursor.fetchall()]
-			if "model" not in columns:
-				conn_scribe.execute("ALTER TABLE interactions ADD COLUMN model TEXT")
-				conn_scribe.commit()
-				logger.info("[Scribe] Added 'model' column to interactions table")
-
-			conn_scribe.execute(
-				"""INSERT INTO interactions (user_prompt, agent_response, timestamp, model)
-				VALUES (?, ?, CURRENT_TIMESTAMP, ?)""",
-				(user_prompt[:2000], agent_response[:5000], model),
+			MemoryQueueManager().enqueue_memory(
+				prompt=user_prompt,
+				response=agent_response,
+				role="assistant",
+				originator="antigravity",
+				model=model,
 			)
-			conn_scribe.commit()
-			conn_scribe.close()
-			logger.debug("[Scribe] Saved interaction via External Scribe Pattern")
+			logger.debug("[Scribe] Turn queued for ingestion (originator=antigravity)")
 		except Exception as e:
 			# Non-fatal: log but don't block the pipeline
-			logger.warning(f"[Scribe] Failed to save interaction: {e}")
+			logger.warning(f"[Scribe] Failed to queue interaction: {e}")
 
 	def check_for_replies(self):
 		conn = get_connection()
@@ -1082,7 +1070,9 @@ class IDEWorker:
 		from red_pill.cognitive.queue_manager import CognitiveQueueManager
 
 		queue_manager = CognitiveQueueManager()
-		task = queue_manager.pop_next_task()
+		# Carril cognitivo: solo tareas del DriveEvaluator. Los jobs mecánicos
+		# (drivers del Job Manager) los consume el runner shot-and-forget.
+		task = queue_manager.pop_next_task(allowed_sources=["drive_evaluator"])
 
 		if not task:
 			# El Motor de Voluntad (Lóbulo Frontal) evalúa el entorno si la cola está vacía
@@ -1182,7 +1172,8 @@ class IDEWorker:
 		from red_pill.cognitive.queue_manager import CognitiveQueueManager
 
 		queue_manager = CognitiveQueueManager()
-		task = queue_manager.pop_next_task()
+		# Carril cognitivo: ver process_cognitive_queue — mismo aislamiento.
+		task = queue_manager.pop_next_task(allowed_sources=["drive_evaluator"])
 
 		if not task:
 			from red_pill.cognitive.drive_evaluator import DriveEvaluator

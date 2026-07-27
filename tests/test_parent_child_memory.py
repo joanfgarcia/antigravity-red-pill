@@ -1,5 +1,3 @@
-import json
-import sqlite3
 import time
 import uuid
 from unittest.mock import ANY, MagicMock, patch
@@ -7,11 +5,13 @@ from unittest.mock import ANY, MagicMock, patch
 from red_pill.memory import MemoryManager
 from red_pill.metabolism.sleep import perform_sleep_cycle
 from red_pill.swarm.agents.janitor import JanitorMinion
+from red_pill.swarm.agents.janitor_plugins.orphaned_parents_sweep import OrphanedParentsSweepPlugin
 
 
+@patch("red_pill.metabolism.phases.consolidation.distill_session_anchors", return_value=None)
 @patch("red_pill.metabolism.phases.consolidation._check_llm_available", return_value=True)
 @patch("red_pill.metabolism.phases.consolidation.chunk_text", side_effect=lambda text: ["distilled compiler fix"] if "compiler error" in text else [])
-def test_sleep_cycle_creates_parent_child_graph(mock_chunk, mock_llm):
+def test_sleep_cycle_creates_parent_child_graph(mock_chunk, mock_llm, mock_anchors):
 	mock_mgr = MagicMock()
 	mock_client = mock_mgr.client
 	mock_client.collection_exists.return_value = True
@@ -63,6 +63,8 @@ def test_sleep_cycle_creates_parent_child_graph(mock_chunk, mock_llm):
 						"model": "opus",
 						"parent_id": parent_uuid,
 						"category_reviewed_at": ANY,
+						"distiller_version": "v3",
+						"hub_depth": 1,
 					},
 					color="blue",
 					emotion="neutral",
@@ -156,6 +158,8 @@ def test_sleep_cycle_dynamic_category_routing(mock_llm, mock_distill_anchors):
 								"model": "opus",
 								"parent_id": parent_id,
 								"category_reviewed_at": ANY,
+								"distiller_version": "v3",
+								"hub_depth": 1,
 							},
 							color="purple",
 							emotion="joy",
@@ -172,6 +176,8 @@ def test_sleep_cycle_dynamic_category_routing(mock_llm, mock_distill_anchors):
 								"model": "opus",
 								"parent_id": parent_id,
 								"category_reviewed_at": ANY,
+								"distiller_version": "v3",
+								"hub_depth": 1,
 							},
 							color="blue",
 							emotion="neutral",
@@ -272,7 +278,7 @@ def test_janitor_cleans_orphaned_parents():
 	# child retrieve returns empty list (meaning child was deleted!)
 	mock_client.retrieve.return_value = []
 
-	purged = minion._cleanup_orphaned_parents(mock_mgr, "work_memories")
+	purged = OrphanedParentsSweepPlugin()._cleanup_orphaned_parents(minion, mock_mgr, "work_memories")
 	assert purged == 1
 	mock_client.delete.assert_called_once()
 
@@ -293,63 +299,6 @@ def test_janitor_does_not_clean_parents_with_live_children():
 	child_point = MagicMock(id=child_id, payload={"lazarus_phase": "sequence_chunk"})
 	mock_client.retrieve.return_value = [child_point]
 
-	purged = minion._cleanup_orphaned_parents(mock_mgr, "work_memories")
+	purged = OrphanedParentsSweepPlugin()._cleanup_orphaned_parents(minion, mock_mgr, "work_memories")
 	assert purged == 0
 	mock_client.delete.assert_not_called()
-
-
-def test_janitor_archives_sqlite_to_jsonl(tmp_path):
-	minion = JanitorMinion()
-
-	# Setup temporary bunker.db
-	db_dir = tmp_path / "storage" / "db"
-	db_dir.mkdir(parents=True, exist_ok=True)
-	db_file = db_dir / "bunker.db"
-
-	conn = sqlite3.connect(str(db_file))
-	conn.execute("""
-		CREATE TABLE interactions (
-			user_prompt TEXT,
-			agent_response TEXT,
-			timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			model TEXT
-		)
-	""")
-
-	# Insert one row that is old (past 30 days cutoff) and one recent
-	# SQLite format: YYYY-MM-DD HH:MM:SS
-	old_ts = "2026-05-01 12:00:00"
-	recent_ts = "2026-06-28 12:00:00"
-	conn.execute("INSERT INTO interactions VALUES (?, ?, ?, ?)", ("old prompt", "old response", old_ts, "gpt4"))
-	conn.execute("INSERT INTO interactions VALUES (?, ?, ?, ?)", ("recent prompt", "recent response", recent_ts, "opus"))
-	conn.commit()
-	conn.close()
-
-	# Mock get_aleth_core_root() so the archived logs write to a temp folder
-	aleth_core = tmp_path / "Aleth_Core"
-	archive_file = aleth_core / "history" / "universal_history.jsonl"
-
-	with patch("red_pill.core.paths.get_db_dir", return_value=db_dir):
-		with patch("red_pill.core.paths.get_aleth_core_root", return_value=aleth_core):
-			# Run archiver
-			count = minion.archive_old_sqlite_interactions()
-			assert count == 1
-
-			# Verify JSONL log contains the old entry
-			assert archive_file.exists()
-			with open(archive_file) as f:
-				lines = f.readlines()
-				assert len(lines) == 1
-				data = json.loads(lines[0])
-				assert data["user_prompt"] == "old prompt"
-				assert data["timestamp"] == old_ts
-				assert data["model"] == "gpt4"
-
-			# Verify SQLite database has only the recent row left
-			conn2 = sqlite3.connect(str(db_file))
-			cursor = conn2.cursor()
-			cursor.execute("SELECT user_prompt FROM interactions")
-			rows = cursor.fetchall()
-			assert len(rows) == 1
-			assert rows[0][0] == "recent prompt"
-			conn2.close()

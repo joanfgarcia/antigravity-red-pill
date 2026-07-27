@@ -130,6 +130,21 @@ If you are an AI Agent:
 		dashboard += f"- **[{g.get('type', 'GPU')}] {g['name']}**: {HardwareSentinel._get_bar(g.get('usage', 0), 15)} | {g.get('temp', 'N/A')}°C\n"
 	dashboard += f"\n- **[NPU] {stats['npu'].get('name', 'NPU')}**: {stats['npu']['status']}\n"
 	dashboard += f"\n**Thermal State**: {thermal_state}\n"
+
+	try:
+		from red_pill.cognitive.queue_manager import CognitiveQueueManager
+		qm = CognitiveQueueManager()
+		with qm._get_connection() as conn:
+			tasks = conn.execute("SELECT id, source, status, priority, attempts, updated_at FROM cognitive_tasks WHERE status IN ('PROCESSING', 'PENDING', 'FRUSTRATED')").fetchall()
+		dashboard += "\n### 📋 Active Queue Tasks\n"
+		if tasks:
+			for t in tasks:
+				dashboard += f"- **{t['id'][:8]}** | {t['source']} | {t['status']} | Prio: {t['priority']} | Att: {t['attempts']} | Upd: {t['updated_at']}\n"
+		else:
+			dashboard += "No active or pending tasks in queue.\n"
+	except Exception as q_err:
+		dashboard += f"\nQueue Diagnostic Error: {q_err}\n"
+
 	return [types.TextContent(type="text", text=dashboard.strip())]
 
 

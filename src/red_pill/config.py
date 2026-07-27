@@ -147,6 +147,27 @@ class RedPillConfig(BaseSettings):
 	# LLM INFERENCE
 	# -----------------------------------------------------------------------
 	MLX_LM_URL: str = "http://127.0.0.1:8760/v1/chat/completions"
+	DUAL_BIND_PROXY_URL: str = "http://127.0.0.1:8760"  # Base URL of the dual-bind proxy (VRAM unload endpoint)
+
+	# -----------------------------------------------------------------------
+	# CENTRALIZED JOB MANAGER (ScriptJobDriver — RFC 2026-07-27)
+	# -----------------------------------------------------------------------
+	# Step timeout is a HANG DETECTOR, never an SLA: a false positive (killing a
+	# live step) is severe, a false negative (detecting a hang late) is cheap.
+	# Hence generous bounds, an adaptive bound from the job's own history, and
+	# a doubling per attempt so a run legitimately degraded to CPU survives.
+	# 2 h for a job that declared nothing. Deliberately NOT sized for the heaviest
+	# known workload: measured Bit epochs run 3h23m-3h49m on GPU and ~11 h after a
+	# CUDA OOM falls back to CPU, and a blind default that covered those would let
+	# every hung job idle the card for half a day. Long jobs declare their real
+	# bound in the recipe (`control.max_step_minutes`); for the rest, the ×2
+	# escalation per attempt discovers the truth at the cost of one partial step.
+	JOB_STEP_TIMEOUT_DEFAULT: int = 7200
+	JOB_STEP_TIMEOUT_FACTOR: int = 4  # bound = FACTOR × EMA(step_seconds)
+	JOB_STEP_TIMEOUT_FLOOR: int = 1800  # 30 min — never bound tighter than this
+	JOB_STEP_EMA_ALPHA: float = 0.3  # Smoothing of the observed step duration
+	JOB_STALL_LIMIT: int = 3  # Consecutive steps with no progress before failing
+	JOB_CHECKPOINT_CADENCE_TARGET: int = 600  # 10 min — advisory: steps longer than this hurt preemption
 
 	# -----------------------------------------------------------------------
 	# COGNITIVE DYNAMICS
@@ -266,6 +287,7 @@ class RedPillConfig(BaseSettings):
 	EMBEDDING_MODEL: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 	VECTOR_SIZE: int = 384
 	FASTEMBED_CACHE_PATH: str = str(get_models_dir())
+	EMBEDDING_LOCAL_FILES_ONLY: bool = True
 	EXECUTION_PROVIDER: Optional[str] = None
 
 	@model_validator(mode="after")
