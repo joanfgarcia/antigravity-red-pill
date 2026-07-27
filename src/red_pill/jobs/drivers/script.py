@@ -427,6 +427,7 @@ class ScriptJobDriver(ResumableJobDriver):
 		"""
 		writes = watcher.writes
 		progress["checkpoint_writes_in_step"] = writes
+		cadence: float | None = None
 
 		if watcher.intervals:
 			cadence = round(sum(watcher.intervals) / len(watcher.intervals), 1)
