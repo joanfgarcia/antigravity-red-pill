@@ -7,7 +7,8 @@ from step_start events and the response text from text events.
 
 Identity loading and scribe relay are handled at the transport layer (like the
 Antigravity worker), not delegated to the model.  The bridge injects a handshake
-preamble into every prompt and saves interactions directly to bunker.db.
+preamble into every prompt and queues each turn into `memory_queue`, the single
+sink the kernel's worker drains into `interaction_memories`.
 
 Two execution modes:
 
@@ -28,11 +29,10 @@ import json
 import logging
 import os
 import shutil
-import sqlite3
 import subprocess
 from typing import Optional
 
-from red_pill.core.paths import get_bunker_root, get_db_dir
+from red_pill.core.paths import get_bunker_root
 
 from .base import AgentBridge, BackendType, BridgeCapabilities, ConversationResult
 
@@ -46,8 +46,8 @@ class OpenCodeBridge(AgentBridge):
 
 	Identity loading and scribe relay are handled by the bridge itself,
 	not by the model.  Every prompt gets a handshake preamble that instructs
-	the agent to load its identity; every response is saved to bunker.db
-	via the External Scribe Pattern.
+	the agent to load its identity; every turn is queued for ingestion via
+	the External Scribe Pattern.
 	"""
 
 	def __init__(
@@ -62,7 +62,9 @@ class OpenCodeBridge(AgentBridge):
 		# Priority: explicit param > env var > default
 		self._server_url = server_url or os.environ.get("OPENCODE_SERVER_URL", "")
 		self._identity_depth = identity_depth
-		# Check if redpill-scribe plugin handles persistence (avoids double-write)
+		# When the opencode session runs under the redpill-scribe plugin, the
+		# plugin already captures the turn. Skipping here is the cheap guard; the
+		# hash check in enqueue_memory is the one that actually guarantees it.
 		self._scribe_plugin = os.environ.get("OPENCODE_SCRIBE_PLUGIN", "").lower() == "true"
 
 	# ── Handshake preamble ────────────────────────────────────────────────
@@ -99,40 +101,28 @@ class OpenCodeBridge(AgentBridge):
 
 	# ── Scribe relay (External Scribe Pattern) ────────────────────────────
 
-	def _scribe_relay(self, user_prompt: str, agent_response: str, model: Optional[str] = None):
-		"""Save prompt + response directly to bunker.db.
+	def _scribe_relay(self, user_prompt: str, agent_response: str, model: Optional[str] = None, originator: str = "opencode"):
+		"""Queue prompt + response for ingestion, with no dependency on the agent.
 
-		This replaces the interceptor_rp-based scribe_relay for bridge-processed
-		messages.  Saves both prompt and response in a single call, with no delay
-		or dependency on the agent remembering to invoke it.
+		Headless bridges (Telegram, agentic jobs) have no editor hook to capture
+		the turn for them, so the bridge captures it itself. It goes to the ONE
+		queue the worker drains into `interaction_memories` — the turn becomes a
+		memory instead of landing in a table nobody reads.
 		"""
 		try:
-			db_path = get_db_dir() / "bunker.db"
-			conn = sqlite3.connect(str(db_path))
-			# Match the JS scribe plugin: WAL lets both sides write bunker.db
-			# concurrently without blocking.
-			conn.execute("PRAGMA journal_mode=WAL")
-			cursor = conn.cursor()
+			from red_pill.core.queue_manager import MemoryQueueManager
 
-			# Self-healing migration for column 'model'
-			cursor.execute("PRAGMA table_info(interactions)")
-			columns = [row[1] for row in cursor.fetchall()]
-			if "model" not in columns:
-				conn.execute("ALTER TABLE interactions ADD COLUMN model TEXT")
-				conn.commit()
-				logger.info("[Scribe] Added 'model' column to interactions table")
-
-			conn.execute(
-				"""INSERT INTO interactions (user_prompt, agent_response, timestamp, model)
-				VALUES (?, ?, CURRENT_TIMESTAMP, ?)""",
-				(user_prompt[:2000], agent_response[:5000], model),
+			MemoryQueueManager().enqueue_memory(
+				prompt=user_prompt,
+				response=agent_response,
+				role="assistant",
+				originator=originator,
+				model=model,
 			)
-			conn.commit()
-			conn.close()
-			logger.debug("[Scribe] Saved interaction via External Scribe Pattern")
+			logger.debug(f"[Scribe] Turn queued for ingestion (originator={originator})")
 		except Exception as e:
 			# Non-fatal: log but don't block the pipeline
-			logger.warning(f"[Scribe] Failed to save interaction: {e}")
+			logger.warning(f"[Scribe] Failed to queue interaction: {e}")
 
 	def _run_opencode(self, args: list, timeout: int, cwd: Optional[str] = None) -> dict:
 		"""Execute opencode CLI with common flags and parse the streaming JSON output.
@@ -245,8 +235,8 @@ class OpenCodeBridge(AgentBridge):
 	) -> ConversationResult:
 		"""Send a one-shot prompt via ``opencode run``.
 
-		Injects the handshake preamble before the prompt and saves the
-		interaction to bunker.db after receiving the response.
+		Injects the handshake preamble before the prompt and queues the turn
+		for ingestion after receiving the response.
 		"""
 		wrapped_prompt = self._build_handshake_preamble(text)
 
