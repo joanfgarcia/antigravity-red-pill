@@ -443,11 +443,30 @@ def handle_job(args: argparse.Namespace) -> None:
 
 	if args.job_cmd == "submit":
 		# D2: todo lo que entra por CLI es BACKGROUND_DEFERRED por definición.
-		try:
-			payload = _json.loads(args.payload)
-		except _json.JSONDecodeError as e:
-			print(f"[ERROR] --payload debe ser JSON válido: {e}")
-			return
+		source, priority, parent = args.source, args.priority, getattr(args, "parent", None)
+
+		if getattr(args, "recipe", None):
+			# La forma humana: el payload vive en YAML, versionado en el repo del
+			# satélite. Nadie debería teclear veinte claves JSON en una terminal.
+			from red_pill.jobs.recipes import load_recipe
+
+			try:
+				source, payload, recipe_priority, recipe_parent = load_recipe(args.recipe)
+			except (FileNotFoundError, ValueError) as e:
+				print(f"[ERROR] {e}")
+				return
+			priority = args.priority if args.priority != 5 else recipe_priority
+			parent = parent or recipe_parent
+		else:
+			if not args.source:
+				print("[ERROR] indica --source (o --recipe con una receta YAML).")
+				return
+			try:
+				payload = _json.loads(args.payload)
+			except _json.JSONDecodeError as e:
+				print(f"[ERROR] --payload debe ser JSON válido: {e}")
+				return
+
 		if args.title:
 			payload["title"] = args.title
 
@@ -455,18 +474,18 @@ def handle_job(args: argparse.Namespace) -> None:
 		# intentos después y FRUSTRATED de madrugada.
 		from red_pill.jobs.drivers import get_driver_class
 
-		driver_cls = get_driver_class(args.source)
+		driver_cls = get_driver_class(source)
 		if driver_cls:
 			try:
 				driver_cls.validate(payload)
 			except ValueError as e:
-				print(f"[ERROR] Payload inválido para '{args.source}': {e}")
+				print(f"[ERROR] Payload inválido para '{source}': {e}")
 				return
-		job_id = queue.enqueue_task(source=args.source, payload=payload, priority=args.priority, parent_task_id=getattr(args, "parent", None))
-		if getattr(args, "parent", None):
-			print(f"[OK] Job {job_id} encolado como BLOCKED (se desbloquea al completar {args.parent[:8]}).")
+		job_id = queue.enqueue_task(source=source, payload=payload, priority=priority, parent_task_id=parent)
+		if parent:
+			print(f"[OK] Job {job_id} encolado como BLOCKED (se desbloquea al completar {parent[:8]}).")
 		else:
-			print(f"[OK] Job {job_id} encolado (source={args.source}, priority={args.priority}).")
+			print(f"[OK] Job {job_id} encolado (source={source}, priority={priority}).")
 
 	elif args.job_cmd == "list":
 		statuses = ["PENDING", "PROCESSING", "PAUSED", "BLOCKED", "FRUSTRATED", "COMPLETED"] if args.all else None
@@ -488,6 +507,7 @@ def handle_job(args: argparse.Namespace) -> None:
 		if not task:
 			print(f"[ERROR] Job '{args.job_id}' no encontrado.")
 			return
+		_print_measurements(task)
 		print(_json.dumps(task, indent=2, ensure_ascii=False, default=str))
 
 	elif args.job_cmd in ("pause", "resume"):
@@ -526,6 +546,34 @@ def handle_job(args: argparse.Namespace) -> None:
 		_run_job_queue(queue)
 	else:
 		print("Uso: red-pill job {submit|list|status|pause|resume|kill|logs|process-queue}")
+
+
+def _print_measurements(task: dict) -> None:
+	"""Lo medido, en cristiano y antes del volcado JSON.
+
+	La cadencia de checkpoint es el dato que decide si un job puede ceder la GPU:
+	es el trabajo máximo que se pierde al interrumpirlo. Medida, no supuesta.
+	"""
+	import red_pill.config as cfg
+	from red_pill.jobs.drivers import compute_step_timeout, human_duration
+
+	progress = task.get("progress") or {}
+	if not isinstance(progress, dict) or not progress:
+		return
+
+	lines = [f"  progreso        : {_format_progress(progress)}"]
+	if progress.get("step_seconds_ema"):
+		lines.append(f"  duración media  : {human_duration(progress['step_seconds_ema'])} por step (último: {human_duration(progress.get('step_seconds_last', 0))})")
+		bound = compute_step_timeout(task.get("payload") or {}, progress, task.get("attempts", 0))
+		lines.append(f"  cota del próximo: {human_duration(bound)}")
+
+	cadence = progress.get("checkpoint_interval_s")
+	if cadence:
+		target = int(cfg.JOB_CHECKPOINT_CADENCE_TARGET)
+		verdict = "dentro del objetivo" if cadence <= target else f"POR ENCIMA del objetivo ({human_duration(target)}) — trabajo en riesgo si se interrumpe"
+		lines.append(f"  cadencia real   : guarda cada {human_duration(cadence)} ({progress.get('checkpoint_writes_in_step', 0)} por step) → {verdict}")
+
+	print("\n".join(lines) + "\n")
 
 
 def _format_progress(progress) -> str:
@@ -810,7 +858,8 @@ def main() -> None:
 	job_sub = job_parser.add_subparsers(dest="job_cmd")
 
 	job_submit = job_sub.add_parser("submit", help="Encolar un job diferido (BACKGROUND_DEFERRED)")
-	job_submit.add_argument("--source", required=True, help="Source del driver que lo ejecuta (p.ej. flow_job)")
+	job_submit.add_argument("--recipe", help="Receta YAML del satélite (ruta, o nombre corto buscado en .red-pill/jobs/). Sustituye a --source/--payload")
+	job_submit.add_argument("--source", help="Source del driver que lo ejecuta (p.ej. script_job). Innecesario con --recipe")
 	job_submit.add_argument("--payload", default="{}", help="Payload JSON del job")
 	job_submit.add_argument("--priority", type=int, default=5, help="Prioridad (mayor = más urgente, default 5)")
 	job_submit.add_argument("--title", help="Título descriptivo (se guarda en el payload)")

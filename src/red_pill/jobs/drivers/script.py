@@ -16,15 +16,77 @@ import os
 import shlex
 import shutil
 import subprocess
+import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from red_pill.jobs.drivers.base import JobDeferred, JobStepTimeout, ResumableJobDriver, StepOutcome, job_log_path
+from red_pill.jobs.drivers.base import JobDeferred, JobStepTimeout, ResumableJobDriver, StepOutcome, append_job_log, human_duration, job_log_path
 
 logger = logging.getLogger(__name__)
 
 _VALID_MODES = ("single", "bounded", "unbounded")
+
+
+class _CheckpointWatcher:
+	"""Vigila el fichero de checkpoint MIENTRAS corre el step.
+
+	La granularidad que importa no es cuánto vive el proceso, sino cada cuánto
+	deja algo registrado: eso es lo que se pierde al interrumpirlo y desde donde
+	se retoma. Un step puede contener varios guardados, así que medirlo por el
+	mtime de antes y después lo inflaría hasta la duración del step entero.
+	Aquí se observa cada escritura, con su intervalo real.
+	"""
+
+	def __init__(self, state_path: Optional[Path], job_id: str, poll_seconds: float = 1.0):
+		self._state_path = state_path
+		self._job_id = job_id
+		self._poll = poll_seconds
+		self._stop = threading.Event()
+		self._thread: Optional[threading.Thread] = None
+		self._last_mtime: Optional[float] = None
+		self._last_seen: float = 0.0
+		self.intervals: List[float] = []
+		self.writes: int = 0
+
+	def __enter__(self) -> "_CheckpointWatcher":
+		self._last_mtime = self._current_mtime()
+		self._last_seen = time.time()
+		if self._state_path is not None:
+			self._thread = threading.Thread(target=self._watch, name="rp-checkpoint-watch", daemon=True)
+			self._thread.start()
+		return self
+
+	def __exit__(self, *exc: Any) -> None:
+		self._stop.set()
+		if self._thread:
+			self._thread.join(timeout=max(2.0, self._poll * 2))
+		# Última mirada: el guardado más importante es el del final de la época, y
+		# el proceso sale acto seguido — entre el último sondeo y su muerte cabe
+		# justo esa escritura. Sin este cierre, se perdería la que más importa.
+		self._check_once()
+
+	def _watch(self) -> None:
+		while not self._stop.wait(self._poll):
+			self._check_once()
+
+	def _check_once(self) -> None:
+		mtime = self._current_mtime()
+		if mtime is None or mtime == self._last_mtime:
+			return
+		now = time.time()
+		if self._last_mtime is not None:
+			self.intervals.append(now - self._last_seen)
+		self.writes += 1
+		note = f" (+{human_duration(self.intervals[-1])} desde el anterior)" if self.intervals else " (primero observado en este step)"
+		append_job_log(self._job_id, f"checkpoint escrito por el satélite{note}")
+		self._last_mtime, self._last_seen = mtime, now
+
+	def _current_mtime(self) -> Optional[float]:
+		try:
+			return self._state_path.stat().st_mtime if self._state_path and self._state_path.exists() else None
+		except OSError:
+			return None
 
 
 def _dig(data: Dict[str, Any], key_path: str) -> Any:
@@ -40,6 +102,7 @@ def _dig(data: Dict[str, Any], key_path: str) -> Any:
 class ScriptJobDriver(ResumableJobDriver):
 	source = "script_job"
 	min_vram_mb = 0  # El preflight declarativo decide; el gate genérico del runner no aplica aquí
+	checkpoint_poll_seconds = 1.0  # Sondeo del vigilante de checkpoints (un stat() por segundo)
 
 	# ── Validación en el submit ────────────────────────────────────────────
 
@@ -138,7 +201,7 @@ class ScriptJobDriver(ResumableJobDriver):
 			self._validate_after_dirty_kill(checkpoint_data["dirty_kill"], state_path, had_progress)
 
 		previous_state = self._read_state(state_path)
-		elapsed, returncode = self._run_command(payload, cwd)
+		elapsed, returncode, cadence = self._run_command(payload, cwd, state_path)
 
 		if returncode != 0:
 			tail = self._log_tail()
@@ -148,6 +211,7 @@ class ScriptJobDriver(ResumableJobDriver):
 
 		state = self._read_state(state_path)
 		progress, completed = self._evaluate(payload, state)
+		meta = self._record_cadence(cadence, elapsed, meta, progress)
 		meta = self._check_stall(payload, meta, previous_state, state, progress)
 
 		new_checkpoint: Dict[str, Any] = dict(state)
@@ -162,11 +226,13 @@ class ScriptJobDriver(ResumableJobDriver):
 
 	# ── Ejecución del comando ──────────────────────────────────────────────
 
-	def _run_command(self, payload: Dict[str, Any], cwd: str) -> Tuple[float, int]:
-		"""Lanza el comando bajo cgroups y devuelve (segundos, returncode).
+	def _run_command(self, payload: Dict[str, Any], cwd: str, state_path: Optional[Path] = None) -> Tuple[float, int, "_CheckpointWatcher"]:
+		"""Lanza el comando bajo cgroups y devuelve (segundos, returncode, cadencia).
 
 		stdout y stderr se transmiten al log del job — nunca se acumulan en
-		memoria ni se pierden tras el banner de systemd-run.
+		memoria ni se pierden tras el banner de systemd-run. En paralelo se
+		observa el fichero de checkpoint para saber cada cuánto deja el satélite
+		un avance recuperable de verdad.
 		"""
 		argv = self._build_argv(payload, cwd)
 		env = self._build_env(payload)
@@ -177,22 +243,23 @@ class ScriptJobDriver(ResumableJobDriver):
 		with open(log_path, "a", encoding="utf-8") as log_file:
 			log_file.write(f"\n===== step {time.strftime('%Y-%m-%d %H:%M:%S')} | job {self.short_id} | intento {self.attempts + 1} | cota {self.step_timeout_s}s =====\n")
 			log_file.flush()
-			try:
-				proc = subprocess.run(
-					argv,
-					cwd=cwd,
-					env=env,
-					stdout=log_file,
-					stderr=subprocess.STDOUT,
-					check=False,
-					timeout=self.step_timeout_s if (self.step_timeout_s and not self._has_systemd()) else None,
-				)
-				returncode = proc.returncode
-			except subprocess.TimeoutExpired:
-				log_file.write("\n[TIMEOUT] step abatido por la cota de tiempo.\n")
-				returncode = 124
+			with _CheckpointWatcher(state_path, self.job_id, self.checkpoint_poll_seconds) as watcher:
+				try:
+					proc = subprocess.run(
+						argv,
+						cwd=cwd,
+						env=env,
+						stdout=log_file,
+						stderr=subprocess.STDOUT,
+						check=False,
+						timeout=self.step_timeout_s if (self.step_timeout_s and not self._has_systemd()) else None,
+					)
+					returncode = proc.returncode
+				except subprocess.TimeoutExpired:
+					log_file.write("\n[TIMEOUT] step abatido por la cota de tiempo.\n")
+					returncode = 124
 
-		return time.time() - started, returncode
+		return time.time() - started, returncode, watcher
 
 	def _build_argv(self, payload: Dict[str, Any], cwd: str) -> List[str]:
 		"""Tokeniza el comando y lo envuelve en un scope con nombre.
@@ -348,6 +415,36 @@ class ScriptJobDriver(ResumableJobDriver):
 		if "contains" in completion:
 			return bool(value) and completion["contains"] in value
 		return bool(value)
+
+	def _record_cadence(self, watcher: "_CheckpointWatcher", elapsed: float, meta: Dict[str, Any], progress: Dict[str, Any]) -> Dict[str, Any]:
+		"""Consolida lo observado: cuántas veces guardó el satélite y cada cuánto.
+
+		Distingue las dos magnitudes que es fácil confundir: la duración del step
+		(cuánto vive el proceso) y la cadencia de checkpoint (cuánto trabajo se
+		pierde si lo interrumpes). Cuando el satélite guarda una sola vez por
+		step, ambas coinciden y el step ES la unidad recuperable; cuando guarda
+		varias, el step podría trocearse y el job volverse interrumpible.
+		"""
+		writes = watcher.writes
+		progress["checkpoint_writes_in_step"] = writes
+
+		if watcher.intervals:
+			cadence = round(sum(watcher.intervals) / len(watcher.intervals), 1)
+		elif writes >= 1:
+			# Un único guardado: la unidad recuperable es el step completo.
+			cadence = round(elapsed, 1)
+		else:
+			cadence = meta.get("checkpoint_interval_s")
+
+		if cadence is not None:
+			meta["checkpoint_interval_s"] = cadence
+			progress["checkpoint_interval_s"] = cadence
+			append_job_log(
+				self.job_id,
+				f"cadencia observada: {writes} checkpoint(s) en un step de {human_duration(elapsed)} → unidad recuperable ≈ {human_duration(cadence)}",
+			)
+
+		return meta
 
 	def _check_stall(
 		self,

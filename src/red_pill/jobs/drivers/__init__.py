@@ -17,6 +17,7 @@ from red_pill.jobs.drivers.base import (
 	StepOutcome,
 	append_job_log,
 	compute_step_timeout,
+	human_duration,
 	job_log_path,
 	update_step_ema,
 )
@@ -28,6 +29,7 @@ __all__ = [
 	"StepOutcome",
 	"append_job_log",
 	"compute_step_timeout",
+	"human_duration",
 	"job_log_path",
 	"update_step_ema",
 	"register_driver",

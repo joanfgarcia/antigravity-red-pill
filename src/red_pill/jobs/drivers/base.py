@@ -68,6 +68,16 @@ class JobStepTimeout(Exception):
 		}
 
 
+def human_duration(seconds: float) -> str:
+	"""Duración legible sin mentir por redondeo: segundos, minutos u horas."""
+	seconds = float(seconds or 0)
+	if seconds < 90:
+		return f"{seconds:.0f} s"
+	if seconds < 5400:
+		return f"{seconds / 60:.1f} min"
+	return f"{seconds / 3600:.1f} h"
+
+
 def job_log_path(job_id: str) -> Path:
 	"""Log por job. Un driver genérico no puede tragarse la salida del hijo:
 	sin esto, el error real se pierde detrás del banner del envoltorio."""

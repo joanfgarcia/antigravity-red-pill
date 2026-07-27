@@ -50,6 +50,12 @@ def isolated_state(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def fast_checkpoint_poll(monkeypatch):
+	"""Sondeo fino: las pruebas duran milisegundos, no horas."""
+	monkeypatch.setattr(ScriptJobDriver, "checkpoint_poll_seconds", 0.05)
+
+
+@pytest.fixture(autouse=True)
 def no_systemd(monkeypatch):
 	"""Por defecto las pruebas corren sin envoltorio systemd (portables en CI)."""
 	monkeypatch.setattr(ScriptJobDriver, "_has_systemd", staticmethod(lambda: False))
@@ -589,3 +595,137 @@ def test_preflight_defers_without_burning_attempts_when_vram_is_short(queue, cle
 	assert task["status"] == "PENDING"
 	assert task["attempts"] == 0  # R1: el entorno no quema el disyuntor
 	assert task["checkpoint_data"]["epoch"] == 9
+
+
+# ── Recetas YAML: la forma humana de encolar (27 jul) ──────────────────────
+
+
+def _write_recipe(root, body: str):
+	recipe_dir = root / ".red-pill" / "jobs"
+	recipe_dir.mkdir(parents=True, exist_ok=True)
+	path = recipe_dir / "school.yaml"
+	path.write_text(body, encoding="utf-8")
+	return path
+
+
+def test_recipe_carries_the_payload_and_infers_the_project_root(tmp_path):
+	"""La receta vive en el satélite; cwd se deduce de dónde está el fichero."""
+	from red_pill.jobs.recipes import load_recipe
+
+	project = tmp_path / "frankenswarm"
+	_write_recipe(
+		project,
+		"""
+source: script_job
+title: Escuela
+priority: 7
+step_command: .venv/bin/python train.py
+checkpoint_file: storage/state.json
+progress:
+  mode: bounded
+  current_key: current_epoch
+  total: 1408
+completion:
+  key: milestones_achieved
+  contains: 8_years
+control:
+  max_step_minutes: 780
+""",
+	)
+
+	source, payload, priority, parent = load_recipe(str(project / ".red-pill" / "jobs" / "school.yaml"))
+
+	assert (source, priority, parent) == ("script_job", 7, None)
+	assert payload["cwd"] == str(project)  # deducido, no repetido en el YAML
+	assert payload["completion"] == {"key": "milestones_achieved", "contains": "8_years"}
+	assert payload["control"]["max_step_minutes"] == 780
+	ScriptJobDriver.validate(payload)  # una receta válida produce un payload válido
+
+
+def test_recipe_short_name_resolves_walking_up_the_workspace(tmp_path):
+	"""`--recipe school` desde cualquier subdirectorio del proyecto."""
+	from red_pill.jobs.recipes import load_recipe, resolve_recipe_path
+
+	project = tmp_path / "frankenswarm"
+	expected = _write_recipe(project, "source: script_job\nstep_command: echo hi\n")
+	deep = project / "src" / "bitnet" / "training"
+	deep.mkdir(parents=True)
+
+	assert resolve_recipe_path("school", base_dir=deep) == expected.resolve()
+
+	source, payload, _, _ = load_recipe("school", base_dir=deep)
+	assert source == "script_job"
+	assert payload["title"] == "school"  # sin title explícito, el nombre del fichero
+
+
+def test_recipe_without_source_is_rejected(tmp_path):
+	from red_pill.jobs.recipes import load_recipe
+
+	project = tmp_path / "proyecto"
+	_write_recipe(project, "title: sin source\nstep_command: echo hi\n")
+
+	with pytest.raises(ValueError, match="source"):
+		load_recipe(str(project / ".red-pill" / "jobs" / "school.yaml"))
+
+
+def test_missing_recipe_names_where_it_looked(tmp_path):
+	from red_pill.jobs.recipes import resolve_recipe_path
+
+	with pytest.raises(FileNotFoundError, match="school"):
+		resolve_recipe_path("school", base_dir=tmp_path)
+
+
+# ── Cadencia real de checkpoint (medida, no supuesta) ──────────────────────
+
+
+def test_checkpoint_cadence_is_measured_during_the_step(tmp_path):
+	"""Lo que importa no es cuánto vive el proceso, sino cada cuánto deja avance.
+
+	Un step con varios guardados internos se mide por sus intervalos reales; si el
+	mtime solo se comparase entre steps, la cadencia se inflaría hasta el step entero.
+	"""
+	state = tmp_path / "state.json"
+	body = f"""
+import json, pathlib, time
+p = pathlib.Path({str(state)!r})
+for i in range(3):
+	time.sleep(0.4)
+	d = json.loads(p.read_text()) if p.exists() else {{"epoch": 0}}
+	d["epoch"] += 1
+	p.write_text(json.dumps(d))
+"""
+	payload = {
+		"cwd": str(tmp_path),
+		"step_command": _script(tmp_path, body),
+		"checkpoint_file": "state.json",
+		"progress": {"mode": "unbounded", "current_key": "epoch"},
+	}
+
+	driver = _bind(ScriptJobDriver())
+	outcome = driver.step(payload, {})
+
+	# Tres guardados dentro de un mismo step: la unidad recuperable es la época,
+	# no el step — señal de que este trabajo SÍ podría trocearse.
+	assert outcome.progress["checkpoint_writes_in_step"] >= 2
+	assert outcome.progress["checkpoint_interval_s"] >= 0
+
+
+def test_single_write_means_the_step_is_the_recoverable_unit(tmp_path):
+	"""Un solo guardado por step: interrumpir cuesta el step entero (caso de la escuela)."""
+	state = tmp_path / "state.json"
+	body = f"""
+import json, pathlib, time
+time.sleep(0.6)
+pathlib.Path({str(state)!r}).write_text(json.dumps({{"epoch": 1}}))
+"""
+	payload = {
+		"cwd": str(tmp_path),
+		"step_command": _script(tmp_path, body),
+		"checkpoint_file": "state.json",
+		"progress": {"mode": "unbounded", "current_key": "epoch"},
+	}
+
+	outcome = _bind(ScriptJobDriver()).step(payload, {})
+
+	assert outcome.progress["checkpoint_writes_in_step"] == 1
+	assert outcome.progress["checkpoint_interval_s"] >= 0
