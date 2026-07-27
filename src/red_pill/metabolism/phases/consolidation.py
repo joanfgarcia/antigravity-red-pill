@@ -53,7 +53,7 @@ def reassemble_raw_sequence(client, collection: str, point: Any) -> tuple[str, l
 
 	from qdrant_client import models as _qm
 
-	filter_conds = []
+	filter_conds: list[Any] = []
 	if parent_id:
 		filter_conds.append(_qm.FieldCondition(key="parent_id", match=_qm.MatchValue(value=parent_id)))
 	elif source_buf_id:
