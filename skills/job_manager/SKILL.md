@@ -36,6 +36,37 @@ red-pill job submit --source agentic_job --payload '{
 red-pill job submit --source distill_job --payload '{"batch_size": 15, "smart_audit": true}' --title "Re-síntesis V3"
 ```
 
+### Cualquier script externo: `script_job` + receta YAML
+
+Para trabajos por pasos de un proyecto satélite (entrenamientos, backups, migraciones) **no se escribe un driver nuevo**: se declara la receta y la ejecuta el driver genérico. La receta vive **en el repo del satélite**, no aquí — describe cómo se ejecuta ese proyecto, así que le pertenece:
+
+```bash
+red-pill job submit --recipe school     # busca subiendo: .red-pill/jobs/ → configs/jobs/ → jobs/
+```
+
+```yaml
+# <proyecto>/configs/jobs/school.yaml   (versionado, con comentarios)
+source: script_job
+title: Escuela Soberana Bit
+step_command: .venv/bin/python src/bitnet/training/train_sovereign_school.py --max_epochs_per_run 1
+checkpoint_file: storage/checkpoints/sovereign_school/school_state.json
+progress:                       # tres modos: bounded | unbounded | single
+  mode: bounded
+  current_key: current_epoch    # clave dentro del checkpoint del satélite
+  total: 1408
+  stage_current_key: current_stage_idx   # segunda dimensión opcional: "23/168 · etapa 7/8"
+  stage_total: 8
+completion:                     # gana en CUALQUIER modo: hay trabajos que cierran por hito, no por contador
+  key: milestones_achieved
+  contains: 8_years
+preflight: {vram_unload: true, min_free_vram_mb: 3500, memory_max: 16G}
+control: {max_step_minutes: 780, preemptible: false}
+```
+
+- **`cwd` se deduce** de dónde vive la receta; el payload se valida al encolar (un error muere en el submit, no tres intentos después).
+- Sin `total` **no se inventa porcentaje**: `unbounded` muestra el contador, `single` ni eso.
+- `.red-pill/jobs/` va primero en la búsqueda y **no se versiona**: sirve de override local para probar sin ensuciar el repo.
+
 - **Prioridad**: entero, **mayor = más urgente**, default 5 (convención única de toda la cola).
 - `agentic_job` acepta `cascade` en vez de `backend`: lista ordenada `[{"backend": "claude", "model": "opus", "effort": "high"}, {"backend": "local"}]` — prueba cada target hasta uno con cuota (mismo sustrato que Telegram).
 - Backend `local`/`local-tools`: el driver ya gestiona VRAM/CPU/RAM — si no hay recursos, el job se difiere solo, sin quemar reintentos.
@@ -44,13 +75,19 @@ red-pill job submit --source distill_job --payload '{"batch_size": 15, "smart_au
 
 ```bash
 red-pill job list                 # activas, pausadas, en cola (--all incluye COMPLETED)
-red-pill job status <id|prefijo>  # fila completa: checkpoint, progress, attempts
-red-pill job pause <id|prefijo>   # no interrumpe el step en curso; para en la frontera atómica
+red-pill job status <id|prefijo>  # fila completa + lo MEDIDO: duración media, cota del próximo step, cadencia real
+red-pill job logs <id> --tail 50  # la salida real del proceso hijo, por step
+red-pill job pause <id|prefijo>   # cooperativo: no interrumpe el step en curso; para en la frontera atómica
+red-pill job kill <id> [--discard]  # duro: abate el scope YA (SIGTERM al cgroup, hijos CUDA incluidos)
 red-pill job resume <id|prefijo>  # reanuda EXACTAMENTE desde el checkpoint
 red-pill job process-queue        # runner manual (el timer redpill-queue lo hace cada 1m solo)
 ```
 
 Los ids aceptan el prefijo corto que muestra `job list`. El runner tiene flock: lanzarlo con otro activo cede con `exit 0`, sin daño.
+
+**`pause` vs `kill`**: con steps de minutos da igual; con steps de horas, no. `pause` espera a que el step termine (no pierde nada); `kill` corta en segundos y pierde el step en vuelo, dejando el job como `PAUSED*` — reanudable con el mismo `resume`, pero **la marca de asterisco avisa de que la interrupción fue sucia** y el driver valida el checkpoint antes de relanzar. `--discard` lo cancela definitivamente (queda `FRUSTRATED` con su motivo, trazable, en vez de borrar la fila).
+
+**Un step colgado se detecta solo**: cota adaptativa (generosa sin historial, `max(4 × media, 30 min)` una vez medido, duplicada por intento para que un trabajo degradado a CPU sobreviva). Al vencer deja rastro triple —log del job, `error_log` y marca en el checkpoint con la cota y la media— y escala: aviso, aviso, y al tercero disyuntor con señal de dolor.
 
 **No invoques `process-queue` para "lanzar" un job** — bloquea la terminal mientras procesa (un distill de horas = horas cogida). Tras el `submit`, el timer `redpill-queue` (1 min) lo recoge solo, con OOM shield e inhibit. Arranque inmediato desatendido: `systemctl --user start redpill-queue.service`. El runner además **se pausa solo mientras el ciclo de sueño metabólico está corriendo** (heartbeat fresco en `sleep_phase_status.json`) y reanuda al terminar.
 

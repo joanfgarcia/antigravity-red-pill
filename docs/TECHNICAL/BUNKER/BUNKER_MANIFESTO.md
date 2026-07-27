@@ -70,7 +70,7 @@ We restructured the Bünker's memory retrieval topology into a parent-child hier
 - **Cross-Collection Resolution**: Evocative cascade and parent context lookups traverse dynamic collections (`work` and `social`) to resolve links seamlessly.
 - **Parent Threading**: `raw_parent` engrams are temporally chained (`prev_raw_parent`/`next_raw_parent`), maintaining a clean Ariadne's Thread of conversation history.
 - **Synaptic Parent Decay**: If all conceptual child engrams of a parent erode and are pruned during metabolic cycles, the parent engram is identified as an orphan and swept from Qdrant by the `JanitorMinion`.
-- **SQLite Decoupling & Universal JSONL Archive**: We cap SQLite `interactions` retention to 30 days. Older interactions are safely decoupled, formatted, and appended to `~/Agent_Core/history/universal_history.jsonl` to act as a permanent, un-decayed, multi-IDE historical log.
+- **~~SQLite Decoupling & Universal JSONL Archive~~ (retired in v7.12.0)**: We used to cap a SQLite `interactions` table at 30 days and append the overflow to `universal_history.jsonl` as a permanent multi-IDE log. The audit of 2026-07-27 showed the premise was false: **nothing ever read that table**. Four capture surfaces wrote every turn into it and the only consumer was the janitor that archived and deleted them, so the "permanent historical log" was in fact where turns went to avoid becoming memories. Capture now goes straight into `memory_queue`, the queue the worker drains into `interaction_memories`; the archive is Qdrant itself, and the sleep cycle consolidates from there. The 318 turns stranded in the old table and its JSONL were re-ingested.
 
 ---
 
@@ -155,7 +155,7 @@ Reestructuramos la recuperación de memoria en una topología de grafo padre-hij
 - **Resolución Trans-Colección**: Las cascadas evocativas y búsquedas de padres resuelven enlaces cruzando los límites de `work_memories` y `social_memories`.
 - **Enhebrado de Padres (Hilo de Ariadna)**: Los nodos `raw_parent` se encadenan temporalmente (`prev_raw_parent`/`next_raw_parent`), creando una línea de tiempo continua.
 - **Borrador de Padres Huérfanos**: Si todos los hijos de un engrama padre se erosionan y se purgan, el padre se detecta como huérfano y el `JanitorMinion` lo elimina.
-- **Desacoplo de SQLite y Archivo JSONL Universal**: Limitamos la retención de la tabla `interactions` a 30 días. Los registros más antiguos se formatean y añaden a `~/Agent_Core/history/universal_history.jsonl` para un histórico inalterable multiplataforma.
+- **~~Desacoplo de SQLite y Archivo JSONL Universal~~ (retirado en v7.12.0)**: limitábamos la tabla `interactions` a 30 días y volcábamos lo viejo a `universal_history.jsonl` como histórico multiplataforma. La auditoría del 27-07-2026 demostró que la premisa era falsa: **nadie leía esa tabla**. Cuatro superficies de captura escribían allí cada turno y el único consumidor era el janitor que los archivaba y borraba, así que el "histórico permanente" era en realidad el sitio donde los turnos iban a evitar convertirse en memoria. La captura entra ahora directamente en `memory_queue`, la cola que el worker drena hacia `interaction_memories`; el archivo de verdad es Qdrant y el ciclo de sueño consolida desde ahí. Los 318 turnos varados en la tabla y su JSONL fueron reingeridos.
 
 ---
 
