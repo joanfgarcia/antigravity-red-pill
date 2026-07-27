@@ -1,3 +1,33 @@
+## [Unreleased] (ScriptJobDriver — el kernel deja de conocer a sus satélites)
+
+Materializa `RFC_GENERIC_SCRIPT_JOB_DRIVER.md` v2 (decisiones D1-D10 cerradas con el operador el 27-jul). Paga la deuda contraída con `BitTrainingDriver`: un único driver paramétrico ejecuta cualquier script por pasos sin que el kernel sepa nada del proyecto satélite.
+
+### 🚛 `ScriptJobDriver` (`source: script_job`)
+- **[FEAT] Receta declarativa en el payload**: `cwd`, `step_command`, `checkpoint_file`, `env`, `preflight`, `teardown`. Cero código nuevo en el kernel por cada script del ecosistema.
+- **[FEAT] Progreso honesto en tres modos** — `bounded` (contador sobre total, literal o releído por step), `unbounded` (contador sin total: **sin porcentaje inventado**) y `single` (script de un paso, `exit 0` = fin). `completion` (truthy/equals/contains) **gana en cualquier modo**: la escuela de Bit cierra fase cuando Samantha concede el hito, en la época 25 o en la 55 — un contador solo la cerraría antes de tiempo o nunca.
+- **[FEAT] Segunda dimensión opcional**: `época 23/168 · fase 7/8` leyendo claves que el estado del satélite YA contiene, sin tocar el script.
+- **[FEAT] Watchdog de no-progreso**: un script con bug que sale con `exit 0` sin avanzar no es fallo, ni cuelgue, ni deferral — sin este guard el runner repetiría épocas vacías sin fin. Desactivable por payload.
+- **[FEAT] Tokenización sin shell**: `shlex.split` (o forma lista), `sh -c` explícito como única vía de escape; binarios relativos resueltos contra `cwd` antes de `systemd-run`.
+- **[FEAT] Unload por proxy dual-bind** (URL desde config, ya no a fuego) como mecanismo preferente frente a parar servicios: el residente no muere, recarga bajo demanda.
+
+### ⏱️ Política del runner: timeout adaptativo, forense y escalada
+- **[FEAT] Detector de cuelgue, no SLA**: `RuntimeMaxSec` sobre un scope con nombre determinista (`redpill-job-<id8>.scope`) mata el step vencido como cgroup completo, hijos CUDA incluidos. Cota generosa sin historial (payload o 4 h), `max(4 × EMA, 30 min)` una vez el job se ha medido, y **duplicada por intento consumido** — un step legítimamente degradado a CPU sobrevive al reintento; un cuelgue real agota el disyuntor igual. Cubre el hueco que `requeue_stale` no alcanza: un runner bloqueado dentro de `subprocess.run` está vivo, no huérfano.
+- **[FEAT] Rastro forense triple**: log del job (¿qué hacía?), `error_log` (¿qué pasó?, visible en `job status`) y marca en el checkpoint con `bound_s`/`ema_s`/`attempt` (¿estaba bien calibrada la cota?).
+- **[FEAT] Escalada calibrada**: 1º y 2º vencimiento son el sistema curándose solo → reporte `warning` sin alarma; el 3º → disyuntor + **señal de dolor** para el operador.
+
+### 🔪 `job kill` y control del operador
+- **[FEAT] Kill duro sin estado nuevo**: sella la fila `PAUSED` y estampa el checkpoint **antes** de parar el scope, así el `rc≠0` resultante no se confunde con un fallo — ni quema intentos ni levanta alarma. Se muestra como `PAUSED*`; reanudar es el mismo verbo y la marca se limpia sola tras el primer step bueno. `--discard` deja dead-letter trazable en vez de borrar la fila en caliente.
+- **[FEAT] Validación de la reanudación sucia**: tras kill o timeout el driver valida el checkpoint del satélite antes de relanzar (nunca reinicio silencioso desde cero); si el job cayó en su PRIMER step no hay nada que validar y arrancar limpio es lo correcto.
+- **[FEAT] `teardown()` en TODAS las salidas, deferral incluido**: sin esto, un job que cede ante el ciclo de sueño de las 03:00 dejaría el modelo residente descargado toda la noche.
+
+### 🖥️ CLI
+- **[FEAT] `job kill [--discard]`, `job logs [--tail]`, `--parent` en submit** (encadena fases por el DAG que la cola ya tenía).
+- **[FEAT] Validación en el submit**: un payload malformado muere al encolar con motivo claro, no tres intentos después y FRUSTRATED a las 3 de la mañana.
+- **[FEAT] Logs por job** (`jobs/<id8>.log`): motivado por una pérdida real de diagnóstico — el step fallido de Bit del 27-jul solo capturó el banner de `systemd-run` y el error de verdad se perdió.
+- **[FEAT] Progreso renderizado con la misma honestidad**: porcentaje solo si hay total, fase si se declara, ETA si es medible.
+
+> **Convivencia deliberada (D3)**: `BitTrainingDriver` NO se retira todavía. El camino genérico debe completar antes una fase real del curriculum; hasta entonces el driver específico —que funciona— es la red de seguridad y la vía de rollback.
+
 ## [7.10.0] - 2026-07-24 (Centralized Job Manager — jobs diferidos, reanudables y soberanos)
 
 Materializa el plan `IMPLEMENTATION_PLAN_UNIFIED_JOB_MANAGER.md`: CENTRALIZA (no duplica) todo trabajo diferido del ecosistema sobre las piezas vivas del kernel — la cola central `bunker_queue.db`, el runner shot-and-forget del timer `redpill-queue` y la notificación SAS/MinionInbox. Una sola pieza nueva de contrato (`ResumableJobDriver`), dos drivers de serie, carriles estancos entre consumidores y 651 líneas de sistemas duplicados eliminadas.
