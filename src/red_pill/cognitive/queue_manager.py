@@ -1,6 +1,7 @@
 import json
 import logging
 import sqlite3
+import time
 import uuid
 from typing import Any, Dict, List, Optional
 
@@ -369,7 +370,8 @@ class CognitiveQueueManager:
 			rows = conn.execute(
 				f"""
 				SELECT id, source, priority, status, attempts, progress, updated_at,
-					json_extract(payload, '$.title') AS title
+					json_extract(payload, '$.title') AS title,
+					json_extract(checkpoint_data, '$.dirty_kill.reason') AS dirty_kill
 				FROM cognitive_tasks
 				WHERE status IN ({placeholders})
 				ORDER BY status = 'PROCESSING' DESC, priority DESC, created_at ASC
@@ -456,6 +458,50 @@ class CognitiveQueueManager:
 				""",
 				(json.dumps(checkpoint), json.dumps(progress) if progress is not None else None, task_id),
 			)
+
+	def mark_dirty_kill(self, task_id: str, marker: Dict[str, Any]) -> None:
+		"""Sella el checkpoint como interrumpido en duro (kill del operador o timeout).
+
+		No es un estado nuevo: el job sigue siendo reanudable con el mismo verbo,
+		pero la marca viaja con él para que el driver valide el estado del
+		satélite antes de relanzar (y para el análisis forense posterior). La
+		limpia el propio driver al devolver checkpoint fresco tras un step bueno.
+		"""
+		with self._get_connection() as conn:
+			row = conn.execute("SELECT checkpoint_data FROM cognitive_tasks WHERE id = ?", (task_id,)).fetchone()
+			if not row:
+				return
+			try:
+				checkpoint = json.loads(row["checkpoint_data"]) if row["checkpoint_data"] else {}
+			except (json.JSONDecodeError, TypeError):
+				checkpoint = {}
+			checkpoint["dirty_kill"] = {**marker, "at": time.time()}
+			conn.execute(
+				"UPDATE cognitive_tasks SET checkpoint_data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+				(json.dumps(checkpoint), task_id),
+			)
+
+	def kill_task(self, task_id: str, discard: bool = False) -> bool:
+		"""Interrupción dura: sella el estado ANTES de abatir el proceso.
+
+		El orden importa — si el runner viera el rc≠0 antes de que la fila diga
+		PAUSED, trataría el kill del operador como un fallo real y le quemaría un
+		intento del disyuntor. Con `discard`, el job no vuelve: queda FRUSTRATED
+		con su motivo, visible en `job list` hasta que la higiene nocturna lo retire
+		(la trazabilidad vale más que borrar la fila en caliente).
+		"""
+		self.mark_dirty_kill(task_id, {"reason": "operator"})
+		status, error_log = ("FRUSTRATED", "cancelled by operator") if discard else ("PAUSED", None)
+		with self._get_connection() as conn:
+			cursor = conn.execute(
+				"""
+				UPDATE cognitive_tasks
+				SET status = ?, error_log = COALESCE(?, error_log), updated_at = CURRENT_TIMESTAMP
+				WHERE id = ? AND status IN ('PENDING', 'PROCESSING', 'PAUSED')
+				""",
+				(status, error_log, task_id),
+			)
+			return cursor.rowcount > 0
 
 	def pause_task(self, task_id: str) -> bool:
 		"""PENDING/PROCESSING → PAUSED. El runner no ejecuta el siguiente step (R3)."""

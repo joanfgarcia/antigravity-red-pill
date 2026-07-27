@@ -47,6 +47,36 @@ def _report_job(job_id: str, task: dict, status: str, content: str) -> None:
 		logger.error(f"Failed to report job {job_id} to MinionInbox: {e}")
 
 
+def _handle_step_timeout(cog_queue: CognitiveQueueManager, job_id: str, task: dict, timeout) -> None:
+	"""Muerte por cota de tiempo: rastro forense triple y escalada por intento.
+
+	La huella va a tres sitios porque cada uno responde una pregunta distinta:
+	el log del job (¿qué estaba haciendo?), `error_log` (¿qué pasó?, visible en
+	`job status`) y la marca del checkpoint (¿estaba bien calibrada la cota?,
+	comparando `bound_s` con la media real). Los dos primeros vencimientos son
+	el sistema curándose solo — se avisa sin alarma; el tercero exige juicio.
+	"""
+	from red_pill.jobs.drivers import append_job_log
+
+	forensics = timeout.forensics()
+	detail = (
+		f"STEP TIMEOUT: abatido a los {forensics['elapsed_s'] / 60:.1f} min "
+		f"(cota {forensics['bound_s'] / 60:.1f} min, media {forensics['ema_s'] / 60:.1f} min, intento {forensics['attempt']}/3)"
+	)
+
+	append_job_log(job_id, detail)
+	cog_queue.mark_dirty_kill(job_id, forensics)
+	cog_queue.mark_failed(job_id, detail)
+
+	if forensics["attempt"] >= 3:
+		_report_job(job_id, task, "failed", f"{detail} — disyuntor activado, requiere revisión del operador.")
+		report_pain(f"Job {job_id[:8]} ({task.get('source')}) agotó el disyuntor por timeouts: {detail}")
+	else:
+		# Reintento con cota duplicada: un step legítimamente degradado a CPU
+		# sobrevive al siguiente intento sin despertar a nadie de madrugada.
+		_report_job(job_id, task, "warning", f"{detail} — reintento automático con cota duplicada.")
+
+
 def _nightly_cycle_active() -> "str | None":
 	"""Nombre del ciclo nocturno activo (sueño 03:00 / chronicle 04:00) o None.
 
@@ -119,7 +149,7 @@ def process_driver_jobs(cog_queue: CognitiveQueueManager, max_jobs: int = 5) -> 
 
 
 def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list, max_jobs: int) -> int:
-	from red_pill.jobs.drivers import JobDeferred, get_driver
+	from red_pill.jobs.drivers import JobDeferred, JobStepTimeout, compute_step_timeout, get_driver, update_step_ema
 
 	# R5: huérfanos PROCESSING de un crash previo → PENDING (solo carril mecánico)
 	cog_queue.requeue_stale(sources)
@@ -138,6 +168,7 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 		handled_ids.append(job_id)
 		driver = get_driver(task["source"])
 		checkpoint = task.get("checkpoint_data") or {}
+		progress = task.get("progress") or {}
 		logger.info(f"Processing job {job_id} (source: {task['source']}, attempt {task['attempts']})")
 
 		try:
@@ -147,6 +178,9 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 				if nightly:
 					raise JobDeferred(f"Ciclo nocturno con prioridad absoluta en ejecución: {nightly}")
 
+				# La cota de tiempo es política del RUNNER, uniforme para todos los
+				# drivers; el driver solo la aplica (scope con RuntimeMaxSec).
+				driver.bind(job_id, task["attempts"], compute_step_timeout(task["payload"], progress, task["attempts"]))
 				driver.preflight(task["payload"])
 				if driver.min_vram_mb > 0:
 					from red_pill.core.vram_probe import VramProbe
@@ -155,10 +189,14 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 					if free_mb < driver.min_vram_mb:
 						raise JobDeferred(f"VRAM insuficiente ({free_mb}MB libres < {driver.min_vram_mb}MB)")
 
+				started = time.time()
 				outcome = driver.step(task["payload"], checkpoint)
 				checkpoint = outcome.new_checkpoint
+				# La media móvil de duración alimenta a la vez el ETA y la cota del
+				# siguiente step: se mide aquí para que ningún driver la reimplemente.
+				progress = update_step_ema(outcome.progress, time.time() - started)
 				# R4: el checkpoint se persiste inmediatamente tras el step
-				cog_queue.save_checkpoint(job_id, checkpoint, outcome.progress)
+				cog_queue.save_checkpoint(job_id, checkpoint, progress)
 
 				if outcome.completed:
 					cog_queue.mark_completed(job_id)
@@ -175,10 +213,27 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 		except JobDeferred as deferral:
 			cog_queue.defer_task(job_id)  # R1: PENDING sin attempts++
 			logger.info(f"Job {job_id} deferred (no failure): {deferral.reason}")
+		except JobStepTimeout as timeout:
+			_handle_step_timeout(cog_queue, job_id, task, timeout)
+			logger.error(f"Job {job_id} step timed out: {timeout}")
 		except Exception as e:
-			cog_queue.mark_failed(job_id, str(e))
-			_report_job(job_id, task, "failed", str(e))
-			logger.error(f"Job {job_id} step failed: {e}")
+			# Extensión de R3: el operador puede haber abatido el step a propósito
+			# (`job kill`, que sella PAUSED ANTES de parar el scope). Un rc≠0 de esa
+			# causa no es un fallo del job: ni quema intentos ni levanta alarma.
+			current = cog_queue.get_task(job_id)
+			if current and current.get("status") in ("PAUSED", "FRUSTRATED") and (current.get("checkpoint_data") or {}).get("dirty_kill"):
+				logger.info(f"Job {job_id} killed by operator; checkpoint preserved, no attempt burned.")
+			else:
+				cog_queue.mark_failed(job_id, str(e))
+				_report_job(job_id, task, "failed", str(e))
+				logger.error(f"Job {job_id} step failed: {e}")
+		finally:
+			# Teardown en TODAS las salidas, deferral incluido: sin esto, un job que
+			# cede ante el ciclo de sueño dejaría el residente descargado toda la noche.
+			try:
+				driver.teardown(task["payload"])
+			except Exception as e:
+				logger.warning(f"Job {job_id} teardown failed: {e}")
 
 	return completed_jobs
 
