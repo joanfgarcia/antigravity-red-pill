@@ -485,7 +485,7 @@ class MemoryManager:
 		return updated_points
 
 	def record_interaction_pair(
-		self, prompt: str, response: str, role: str = "assistant", category: str = "mixed", model: Optional[str] = None
+		self, prompt: str, response: str, role: str = "assistant", category: str = "mixed", model: Optional[str] = None, originator: Optional[str] = None
 	) -> str:
 		"""
 		Lazarus Phase 1: Encoding (Fast Memory Buffer).
@@ -495,6 +495,10 @@ class MemoryManager:
 
 		Args:
 			category: 'work', 'social', or 'mixed'. Classified by the LLM at write-time.
+			originator: where the turn was captured (claude_code, opencode, antigravity,
+				telegram...). The queue has carried this field for a long time and it
+				used to die here; without it an engram cannot say which surface it
+				came from.
 		"""
 		collection = "interaction_memories"
 		uid = str(uuid.uuid4())
@@ -513,7 +517,7 @@ class MemoryManager:
 			"color": "gray",  # Unprocessed color
 			"difficulty": 5.0,  # Default FSRS D
 			"stability": 2.0,  # Default FSRS S (Low stability for volatile memory)
-			"metadata": {"type": "raw_interaction", "role": role, "category": category, "model": model or "unknown"},
+			"metadata": {"type": "raw_interaction", "role": role, "category": category, "model": model or "unknown", "originator": originator or "unknown"},
 		}
 
 		vector = self._get_vector(text)

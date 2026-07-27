@@ -30,6 +30,28 @@ logger = logging.getLogger("bunker_worker")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
 
+def _clean_turn(prompt: str, response: str) -> "tuple[str, str]":
+	"""Strip terminal/CI noise from a captured turn before it becomes memory.
+
+	Returns empty strings when nothing of substance survives, so a turn that was
+	pure tooling chatter is dropped instead of polluting the buffer. This used to
+	live only in the interceptor relay, which meant turns captured by the editor
+	hooks bypassed it entirely.
+	"""
+	try:
+		from red_pill.utils.telemetry_filter import filter_noise_from_turn
+
+		clean_prompt = filter_noise_from_turn(prompt or "")
+		clean_response = filter_noise_from_turn(response or "")
+	except Exception as e:
+		logger.warning(f"Noise filter unavailable, ingesting raw: {e}")
+		return prompt, response
+
+	if len(clean_prompt.strip()) <= 20 and len(clean_response.strip()) <= 20:
+		return "", ""
+	return clean_prompt, clean_response
+
+
 def _report_job(job_id: str, task: dict, status: str, content: str) -> None:
 	"""Deposita el reporte de fin/error de un job en el MinionInbox (patrón SAS)."""
 	try:
@@ -305,12 +327,23 @@ def run_queue_worker(poll_interval: int = 5, oneshot: bool = False):
 				logger.info(f"Processing queued memory {item['id']} (Prompt: {item['prompt'][:20]}...).")
 				queue.update_status(item["id"], "processing")
 				try:
+					# Noise filtering lives HERE, at the single drain point, instead of
+					# in each capture surface: the editor hooks are deliberately dumb
+					# (and the JS one cannot call Python at all), so cleaning once on
+					# the way out keeps every producer honest and identical.
+					clean_prompt, clean_response = _clean_turn(item["prompt"], item["response"])
+					if not clean_prompt and not clean_response:
+						queue.update_status(item["id"], "completed")
+						logger.info(f"Memory {item['id']} dropped: nothing but tooling noise after trimming.")
+						continue
+
 					uid = memory.record_interaction_pair(
-						prompt=item["prompt"],
-						response=item["response"],
+						prompt=clean_prompt,
+						response=clean_response,
 						role=item["role"],
 						category=item.get("category", "mixed"),
 						model=item.get("model"),
+						originator=item.get("originator"),
 					)
 					queue.update_status(item["id"], "completed")
 					logger.info(f"Memory {item['id']} successfully ingested. (ID: {uid})")
