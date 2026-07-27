@@ -44,12 +44,12 @@ class BitTrainingDriver(ResumableJobDriver):
 			raise JobDeferred(f"VRAM insuficiente para entrenamiento Bit ({free_mb}MB libres < {min_free}MB)")
 
 	def step(self, payload: Dict[str, Any], checkpoint_data: Dict[str, Any]) -> StepOutcome:
+		from pathlib import Path
+
+		import red_pill.config as cfg
+
 		frankenswarm_dir = payload.get("cwd")
 		if not frankenswarm_dir:
-			from pathlib import Path
-
-			import red_pill.config as cfg
-
 			frankenswarm_dir = str(getattr(cfg, "IA_ROOT", Path(cfg.APP_ROOT).parent) / "frankenswarm")
 
 		if not os.path.exists(frankenswarm_dir):
@@ -61,14 +61,16 @@ class BitTrainingDriver(ResumableJobDriver):
 		epochs_per_step = int(payload.get("epochs_per_step", 1))
 
 		# Comando de entrenamiento por 1 época/paso atómico
+		python_bin = os.path.join(frankenswarm_dir, ".venv", "bin", "python")
+		train_script = os.path.join(frankenswarm_dir, "src", "bitnet", "training", "train_sovereign_school.py")
 		cmd = [
 			"systemd-run",
 			"--user",
 			"--scope",
 			"-p",
 			"MemoryMax=16G",
-			".venv/bin/python",
-			"src/bitnet/training/train_sovereign_school.py",
+			python_bin,
+			train_script,
 			"--batch_size",
 			str(batch_size),
 			"--max_epochs_per_run",
@@ -76,8 +78,7 @@ class BitTrainingDriver(ResumableJobDriver):
 		]
 
 		env = dict(os.environ)
-		import red_pill.config as cfg
-		env["PYTHONPATH"] = f".:{cfg.APP_ROOT}/src"
+		env["PYTHONPATH"] = f"{frankenswarm_dir}:{cfg.APP_ROOT}/src"
 		env["PYTHONUNBUFFERED"] = "1"
 
 		logger.info(f"[BIT TRAINING DRIVER] Ejecutando paso de entrenamiento en {frankenswarm_dir}...")

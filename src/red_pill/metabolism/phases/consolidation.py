@@ -64,7 +64,7 @@ def reassemble_raw_sequence(client, collection: str, point: Any) -> tuple[str, l
 		try:
 			sibling_points, _ = client.scroll(
 				collection_name=collection,
-				scroll_filter=_qm.Filter(must=[_qm.FieldCondition(key=str(cond)) for cond in filter_conds]),
+				scroll_filter=_qm.Filter(must=filter_conds),
 				limit=100,
 				with_payload=True,
 			)

@@ -70,4 +70,6 @@ EMOTION_CHROMA_MAP = {
 
 
 def get_chroma_for_emotion(emotion: str) -> str:
+	if not emotion:
+		return "gray"
 	return EMOTION_CHROMA_MAP.get(emotion.lower(), "gray")
