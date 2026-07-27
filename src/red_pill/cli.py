@@ -450,8 +450,23 @@ def handle_job(args: argparse.Namespace) -> None:
 			return
 		if args.title:
 			payload["title"] = args.title
-		job_id = queue.enqueue_task(source=args.source, payload=payload, priority=args.priority)
-		print(f"[OK] Job {job_id} encolado (source={args.source}, priority={args.priority}).")
+
+		# Validar AQUÍ: un payload malformado debe morir al encolar, no tres
+		# intentos después y FRUSTRATED de madrugada.
+		from red_pill.jobs.drivers import get_driver_class
+
+		driver_cls = get_driver_class(args.source)
+		if driver_cls:
+			try:
+				driver_cls.validate(payload)
+			except ValueError as e:
+				print(f"[ERROR] Payload inválido para '{args.source}': {e}")
+				return
+		job_id = queue.enqueue_task(source=args.source, payload=payload, priority=args.priority, parent_task_id=getattr(args, "parent", None))
+		if getattr(args, "parent", None):
+			print(f"[OK] Job {job_id} encolado como BLOCKED (se desbloquea al completar {args.parent[:8]}).")
+		else:
+			print(f"[OK] Job {job_id} encolado (source={args.source}, priority={args.priority}).")
 
 	elif args.job_cmd == "list":
 		statuses = ["PENDING", "PROCESSING", "PAUSED", "BLOCKED", "FRUSTRATED", "COMPLETED"] if args.all else None
@@ -459,12 +474,13 @@ def handle_job(args: argparse.Namespace) -> None:
 		if not tasks:
 			print("Cola vacía.")
 			return
-		print(f"{'ID':<10} {'SOURCE':<20} {'STATUS':<12} {'PRIO':<5} {'ATT':<4} {'PROGRESS':<10} TITLE")
+		print(f"{'ID':<10} {'SOURCE':<20} {'STATUS':<12} {'PRIO':<5} {'ATT':<4} {'PROGRESS':<24} TITLE")
 		for t in tasks:
-			progress = t.get("progress") or {}
-			pct = f"{progress.get('percent', '')}%" if isinstance(progress, dict) and progress.get("percent") is not None else "-"
+			# El asterisco marca una interrupción dura previa (kill o timeout):
+			# reanudable con el mismo verbo, pero la limpieza no está garantizada.
+			status = f"{t['status']}*" if t.get("dirty_kill") else t["status"]
 			print(
-				f"{t['id'][:8]:<10} {t['source'][:19]:<20} {t['status']:<12} {t['priority']:<5} {t['attempts']:<4} {pct:<10} {t.get('title') or '-'}"
+				f"{t['id'][:8]:<10} {t['source'][:19]:<20} {status:<12} {t['priority']:<5} {t['attempts']:<4} {_format_progress(t.get('progress')):<24} {t.get('title') or '-'}"
 			)
 
 	elif args.job_cmd == "status":
@@ -485,10 +501,84 @@ def handle_job(args: argparse.Namespace) -> None:
 		else:
 			print(f"[WARN] Job {task['id'][:8]} en estado '{task['status']}': transición no aplicable.")
 
+	elif args.job_cmd == "kill":
+		task = _find_job(queue, args.job_id)
+		if not task:
+			print(f"[ERROR] Job '{args.job_id}' no encontrado.")
+			return
+		_kill_job(queue, task, discard=args.discard)
+
+	elif args.job_cmd == "logs":
+		task = _find_job(queue, args.job_id)
+		if not task:
+			print(f"[ERROR] Job '{args.job_id}' no encontrado.")
+			return
+		from red_pill.jobs.drivers import job_log_path
+
+		log_path = job_log_path(task["id"])
+		if not log_path.exists():
+			print(f"[INFO] Sin log todavía para {task['id'][:8]} ({log_path}).")
+			return
+		lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+		print("\n".join(lines[-args.tail :]))
+
 	elif args.job_cmd == "process-queue":
 		_run_job_queue(queue)
 	else:
-		print("Uso: red-pill job {submit|list|status|pause|resume|process-queue}")
+		print("Uso: red-pill job {submit|list|status|pause|resume|kill|logs|process-queue}")
+
+
+def _format_progress(progress) -> str:
+	"""Progreso honesto: porcentaje solo cuando hay total, fase cuando se declara.
+
+	Un trabajo sin total conocido muestra su contador, no un porcentaje inventado.
+	"""
+	if not isinstance(progress, dict) or not progress:
+		return "-"
+
+	if progress.get("current") is None:
+		current = progress.get("current_step")
+		total = progress.get("total_steps")
+	else:
+		current, total = progress.get("current"), progress.get("total")
+
+	if current is None:
+		return "-"
+
+	text = f"{current}/{total}" if total else str(current)
+	if progress.get("percent") is not None:
+		text += f" ({progress['percent']}%)"
+	if progress.get("stage_current") is not None:
+		text += f" · {progress.get('stage_label', 'fase')} {progress['stage_current']}/{progress.get('stage_total')}"
+	if progress.get("eta_seconds"):
+		text += f" ~{round(progress['eta_seconds'] / 60)}m"
+	return text
+
+
+def _kill_job(queue, task: dict, discard: bool = False) -> None:
+	"""Interrupción dura: sellar el estado ANTES de abatir el scope.
+
+	Ese orden es lo que impide que el runner confunda el kill del operador con
+	un fallo del job y le queme un intento del disyuntor.
+	"""
+	import subprocess
+
+	job_id = task["id"]
+	if not queue.kill_task(job_id, discard=discard):
+		print(f"[WARN] Job {job_id[:8]} en estado '{task['status']}': no se puede abatir.")
+		return
+
+	unit = f"redpill-job-{job_id[:8]}.scope"
+	try:
+		result = subprocess.run(["systemctl", "--user", "stop", unit], capture_output=True, text=True, timeout=30)
+		stopped = result.returncode == 0
+	except Exception as e:
+		stopped = False
+		print(f"[WARN] No se pudo parar {unit}: {e}")
+
+	destino = "FRUSTRATED (descartado)" if discard else "PAUSED* (reanudable con `job resume`)"
+	print(f"[OK] Job {job_id[:8]} → {destino}.")
+	print(f"     Scope {unit}: {'abatido' if stopped else 'no estaba activo'}.")
 
 
 def _find_job(queue, job_ref: str):
@@ -724,6 +814,7 @@ def main() -> None:
 	job_submit.add_argument("--payload", default="{}", help="Payload JSON del job")
 	job_submit.add_argument("--priority", type=int, default=5, help="Prioridad (mayor = más urgente, default 5)")
 	job_submit.add_argument("--title", help="Título descriptivo (se guarda en el payload)")
+	job_submit.add_argument("--parent", help="Id del job padre: entra BLOCKED y se desbloquea cuando el padre completa (DAG)")
 
 	job_list = job_sub.add_parser("list", help="Listar jobs activos, pausados y en cola")
 	job_list.add_argument("--all", action="store_true", help="Incluir también COMPLETED")
@@ -736,6 +827,14 @@ def main() -> None:
 
 	job_resume = job_sub.add_parser("resume", help="Reanudar un job pausado desde su checkpoint")
 	job_resume.add_argument("job_id", help="Id completo o prefijo corto")
+
+	job_kill = job_sub.add_parser("kill", help="Abatir el step en vuelo (duro): PAUSED* reanudable, con marca de kill sucio")
+	job_kill.add_argument("job_id", help="Id completo o prefijo corto")
+	job_kill.add_argument("--discard", action="store_true", help="Cancelar definitivamente: FRUSTRATED en lugar de reanudable")
+
+	job_logs = job_sub.add_parser("logs", help="Salida del proceso hijo de un job (stdout/stderr por step)")
+	job_logs.add_argument("job_id", help="Id completo o prefijo corto")
+	job_logs.add_argument("--tail", type=int, default=50, help="Últimas N líneas (default 50)")
 
 	job_sub.add_parser("process-queue", help="Runner shot-and-forget: procesa la cola y se apaga (exit 0)")
 
