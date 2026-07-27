@@ -147,6 +147,21 @@ class RedPillConfig(BaseSettings):
 	# LLM INFERENCE
 	# -----------------------------------------------------------------------
 	MLX_LM_URL: str = "http://127.0.0.1:8760/v1/chat/completions"
+	DUAL_BIND_PROXY_URL: str = "http://127.0.0.1:8760"  # Base URL of the dual-bind proxy (VRAM unload endpoint)
+
+	# -----------------------------------------------------------------------
+	# CENTRALIZED JOB MANAGER (ScriptJobDriver — RFC 2026-07-27)
+	# -----------------------------------------------------------------------
+	# Step timeout is a HANG DETECTOR, never an SLA: a false positive (killing a
+	# live step) is severe, a false negative (detecting a hang late) is cheap.
+	# Hence generous bounds, an adaptive bound from the job's own history, and
+	# a doubling per attempt so a run legitimately degraded to CPU survives.
+	JOB_STEP_TIMEOUT_DEFAULT: int = 14400  # 4 h — bound for the first step (no history yet)
+	JOB_STEP_TIMEOUT_FACTOR: int = 4  # bound = FACTOR × EMA(step_seconds)
+	JOB_STEP_TIMEOUT_FLOOR: int = 1800  # 30 min — never bound tighter than this
+	JOB_STEP_EMA_ALPHA: float = 0.3  # Smoothing of the observed step duration
+	JOB_STALL_LIMIT: int = 3  # Consecutive steps with no progress before failing
+	JOB_CHECKPOINT_CADENCE_TARGET: int = 600  # 10 min — advisory: steps longer than this hurt preemption
 
 	# -----------------------------------------------------------------------
 	# COGNITIVE DYNAMICS
