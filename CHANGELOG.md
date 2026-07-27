@@ -1,3 +1,23 @@
+## [7.12.0] - 2026-07-27 (Captura de turnos: una sola tubería, del hook al engrama)
+
+Durante un mes hubo **dos sumideros**. Cuatro superficies de captura deterministas (plugin de opencode, hook Stop de Claude Code, bridge de opencode, worker de Antigravity) escribían cada turno en una tabla `interactions` de `bunker.db` que **ningún consumidor leía**; mientras tanto, la memoria se alimentaba solo del relay del handshake, es decir, de que el modelo se acordara de llamar. La mitad fiable escribía en un callejón sin salida y la mitad no fiable era la única que llegaba a Qdrant. El plugin lo documentaba en su cabecera ("Queue Worker → bunker_queue.db → Qdrant"): esa etapa nunca se escribió.
+
+### 🚰 Un solo sumidero
+- **[FIX] Deduplicación en el sumidero**: dos productores pueden ver legítimamente el mismo turno (el hook del editor y el relay del agente), así que `enqueue_memory` hashea prompt+respuesta y rechaza el repetido dentro de una ventana devolviendo la fila existente. **La corrección deja de depender de que el modelo se porte bien.** `None` amplía la ventana a todo el historial (backfills); `0` la desactiva.
+- **[FIX] La procedencia sobrevive a la ingestión**: `memory_queue` llevaba `originator` desde hacía mucho y `record_interaction_pair` no lo aceptaba — el campo moría al ingerir y ningún engrama sabía de qué IDE venía. Ahora viaja hasta los metadatos del engrama.
+- **[FIX] Filtrado de ruido en el punto de drenaje**: vivía solo en el relay del interceptor, así que todo lo capturado por hooks se lo saltaba. Hacerlo una vez al drenar mantiene a todos los productores idénticos y tontos — necesario, porque el plugin JS no puede llamar a Python. Un turno que es puro ruido de herramientas se descarta; si el propio filtro falla, se ingiere crudo (perderlo sería peor).
+- **[FIX] Sin truncado en captura**: cortar a 2000/5000 caracteres mutilaba el engrama en silencio. Recortar es cosa del worker.
+
+### 🔌 Superficies de captura
+- **[FEAT] Plugin de opencode y hook de Claude Code apuntan a `memory_queue`**: conservan intacta su lógica de captura (acumulación en streaming, volcado en `idle` y no en `message.updated`, dedup por marcador) — esa parte nunca fue el problema; solo cambia el destino.
+- **[FIX] El seed del plugin nunca llegaba al host**: el único código que lo desplegaba vivía en un adaptador que nadie invoca, así que editar el seed no cambiaba nada y el fichero del host había que colocarlo a mano. `inject_opencode.py` despliega plugins junto a las skills; `QUEUE_DB` se suma a las variables de sustitución.
+- **[FIX] Bridges sin tabla propia**: Telegram y Antigravity no tienen hook que capture por ellos, así que capturan ellos — pero a la cola común y etiquetados con su procedencia. Fuera ~40 líneas de fontanería SQLite duplicada.
+- **[CHANGE] Anclas**: dejan de pedir al agente que relaye el turno anterior (el hook ya lo encoló); pasan solo `user_prompt`, que sigue alimentando el enriquecimiento — y de paso arreglan una instrucción imposible de cumplir, porque el tool rechaza una llamada sin `user_prompt`.
+
+### 🧹 Extirpación y rescate
+- **[REMOVED] `sqlite_interactions_archiver`**: movía a un JSONL las filas de más de 30 días y las borraba. Como nadie ingería esa tabla, su único efecto real era ponerle fecha de caducidad a turnos que nunca fueron memoria. El archivo de verdad es Qdrant.
+- **[FEAT] `scripts/migrate_interactions_to_queue.py`**: rescata ambos pozos (tabla viva + JSONL) hacia la cola y elimina la tabla. **Ejecutado aquí: 303 turnos encolados, 15 ya presentes, 295 engramas con procedencia.** Un mes de conversación real recuperado.
+
 ## [7.11.0] - 2026-07-27 (ScriptJobDriver — el kernel deja de conocer a sus satélites)
 
 Materializa `RFC_GENERIC_SCRIPT_JOB_DRIVER.md` v2 (decisiones D1-D10 cerradas con el operador el 27-jul). Paga la deuda contraída con `BitTrainingDriver`: un único driver paramétrico ejecuta cualquier script por pasos sin que el kernel sepa nada del proyecto satélite.

@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v7.11.0 (Generic Script Job Driver)
+**System Version**: v7.12.0 (Unified Turn Capture)
 **Analyst**: The Architect
 **Date**: 2026-04-16
 
