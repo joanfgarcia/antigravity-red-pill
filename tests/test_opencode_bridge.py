@@ -8,8 +8,6 @@ installed: we pass an explicit binary path to bypass the PATH check and mock
 """
 
 import json
-import sqlite3
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -89,42 +87,32 @@ class TestCapabilitiesAndArgs:
 
 # ── Scribe relay (temp sqlite) ────────────────────────────────────────────────
 class TestScribeRelay:
-	def test_writes_interaction_and_migrates_model(self, bridge, tmp_path):
-		with patch("red_pill.swarm.bridges.opencode.get_db_dir", return_value=tmp_path):
-			# Pre-create the table WITHOUT the model column to exercise the migration.
-			conn = sqlite3.connect(str(tmp_path / "bunker.db"))
-			conn.execute(
-				"CREATE TABLE interactions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_prompt TEXT, agent_response TEXT, timestamp DATETIME)"
-			)
-			conn.commit()
-			conn.close()
+	def test_queues_the_turn_for_ingestion(self, bridge, tmp_path):
+		"""El bridge headless captura hacia LA cola, no hacia una tabla propia."""
+		from red_pill.core.queue_manager import MemoryQueueManager
 
+		queue = MemoryQueueManager(db_path=str(tmp_path / "bunker_queue.db"))
+		with patch("red_pill.core.queue_manager.MemoryQueueManager", return_value=queue):
 			bridge._scribe_relay("prompt-x", "response-y", model="opus")
 
-			conn = sqlite3.connect(str(tmp_path / "bunker.db"))
-			cols = [r[1] for r in conn.execute("PRAGMA table_info(interactions)").fetchall()]
-			assert "model" in cols  # self-healing migration ran
-			row = conn.execute("SELECT user_prompt, agent_response, model FROM interactions").fetchone()
-			conn.close()
-			assert row == ("prompt-x", "response-y", "opus")
+		item = queue.dequeue_pending(limit=1)[0]
+		assert (item["prompt"], item["response"], item["model"]) == ("prompt-x", "response-y", "opus")
+		assert item["originator"] == "opencode"  # procedencia, que la tabla vieja tiraba
 
-	def test_truncates_long_fields(self, bridge, tmp_path):
-		with patch("red_pill.swarm.bridges.opencode.get_db_dir", return_value=tmp_path):
-			conn = sqlite3.connect(str(tmp_path / "bunker.db"))
-			conn.execute(
-				"CREATE TABLE interactions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_prompt TEXT, agent_response TEXT, timestamp DATETIME, model TEXT)"
-			)
-			conn.commit()
-			conn.close()
+	def test_keeps_the_full_text(self, bridge, tmp_path):
+		"""Truncar aquí mutilaría el engrama; recortar ruido es cosa del worker."""
+		from red_pill.core.queue_manager import MemoryQueueManager
+
+		queue = MemoryQueueManager(db_path=str(tmp_path / "bunker_queue.db"))
+		with patch("red_pill.core.queue_manager.MemoryQueueManager", return_value=queue):
 			bridge._scribe_relay("p" * 5000, "r" * 9000, model=None)
-			conn = sqlite3.connect(str(tmp_path / "bunker.db"))
-			p, r = conn.execute("SELECT user_prompt, agent_response FROM interactions").fetchone()
-			conn.close()
-			assert len(p) == 2000 and len(r) == 5000
+
+		item = queue.dequeue_pending(limit=1)[0]
+		assert (len(item["prompt"]), len(item["response"])) == (5000, 9000)
 
 	def test_non_fatal_on_error(self, bridge):
-		with patch("red_pill.swarm.bridges.opencode.get_db_dir", return_value=Path("/nonexistent/dir/xyz")):
-			# Must not raise even if the DB path is unwritable.
+		with patch("red_pill.core.queue_manager.MemoryQueueManager", side_effect=RuntimeError("queue down")):
+			# Capturar no puede tumbar la respuesta al operador.
 			bridge._scribe_relay("p", "r")
 
 
