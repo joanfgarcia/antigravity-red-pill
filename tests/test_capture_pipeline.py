@@ -209,7 +209,11 @@ def test_worker_drains_memory_before_driver_jobs(tmp_path, monkeypatch):
 	monkeypatch.setattr(queue_worker, "MemoryManager", lambda: MagicMock())
 	monkeypatch.setattr(queue_worker, "drain_memory_queue", lambda *a, **kw: calls.append("drain") or 0)
 	monkeypatch.setattr(queue_worker, "process_cognitive_tasks", lambda *a, **kw: calls.append("cognitive"))
-	monkeypatch.setattr(queue_worker, "process_driver_jobs", lambda *a, **kw: calls.append(("driver", "on_step_boundary" in kw and kw["on_step_boundary"] is not None)))
+	monkeypatch.setattr(
+		queue_worker,
+		"process_driver_jobs",
+		lambda *a, **kw: calls.append(("driver", "on_step_boundary" in kw and kw["on_step_boundary"] is not None)),
+	)
 
 	queue_worker.run_queue_worker(oneshot=True)
 
