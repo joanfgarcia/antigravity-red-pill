@@ -14,6 +14,9 @@ La madrugada del 28-jul lo dejó claro: el sueño de las 03:00 y el entrenamient
 - **[FIX] El drenaje de memory_queue va PRIMERO en el ciclo del worker**: con el orden antiguo (cognitive → driver jobs → drain), un driver job continuo retenía `process_driver_jobs` HORAS en una sola invocación y los turnos capturados por los hooks quedaban sin ingerir a Qdrant toda esa ventana (ingesta diferida — la cola es durable y hay dedup, pero el Bünker vivía en el pasado). Drenaje extraído a `drain_memory_queue()` con `max_batches` acotado (absorbe backlog; un lote incompleto corta en seco).
 - **[FEAT] Respiradero entre steps** (`on_step_boundary` en `process_driver_jobs`): el reorden solo no bastaba — el worker cablea un drenaje de memory_queue entre step y step del job en curso. Blindado: un Qdrant caído jamás tumba un entrenamiento.
 
+### 🤖 CI
+- **[FIX] `integration.yml` era imparseable desde v5.5.0**: al job `integration` le faltaba `runs-on`, y un workflow inválido hace que GitHub registre un run fallido en 0s en CADA push a cualquier rama (no puede evaluar los triggers, así que falla siempre). Curado el esquema y restaurado el trigger documentado de push a `integration-test`, retirado por error en v6.3.3 (el gate interno lo seguía contemplando).
+
 ### 🔁 Reintentos ante fallos transitorios de Qdrant
 - **[REF] Decorador `retry_on_qdrant_error` en StorageEngine**: sustituye los dos bucles de retry duplicados inline (`ensure_collection`, `retrieve`) y extiende la protección a upsert, set_payload, batch_update_points, scroll, delete, query_points y el resto de operaciones. Captura solo `ResponseHandlingException` (errores de transporte httpx) — nunca catch-all ni None silencioso al agotar reintentos. Rescatado del stash pre-release del 1-jul y reimplementado limpio.
 
