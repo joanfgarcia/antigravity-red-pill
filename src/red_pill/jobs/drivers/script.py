@@ -170,7 +170,7 @@ class ScriptJobDriver(ResumableJobDriver):
 
 	def teardown(self, payload: Dict[str, Any]) -> None:
 		"""Restaura servicios en TODAS las salidas (incluido el deferral nocturno)."""
-		for service in ((payload.get("teardown") or {}).get("restore_services") or []):
+		for service in (payload.get("teardown") or {}).get("restore_services") or []:
 			self._systemctl("start", service)
 
 	@staticmethod
@@ -253,7 +253,9 @@ class ScriptJobDriver(ResumableJobDriver):
 
 		started = time.time()
 		with open(log_path, "a", encoding="utf-8") as log_file:
-			log_file.write(f"\n===== step {time.strftime('%Y-%m-%d %H:%M:%S')} | job {self.short_id} | intento {self.attempts + 1} | cota {self.step_timeout_s}s =====\n")
+			log_file.write(
+				f"\n===== step {time.strftime('%Y-%m-%d %H:%M:%S')} | job {self.short_id} | intento {self.attempts + 1} | cota {self.step_timeout_s}s =====\n"
+			)
 			log_file.flush()
 			with _CheckpointWatcher(state_path, self.job_id, self.checkpoint_poll_seconds) as watcher:
 				try:
@@ -379,7 +381,9 @@ class ScriptJobDriver(ResumableJobDriver):
 			if not had_progress:
 				logger.info(f"[SCRIPT JOB] Reanudando tras interrupción dura ({reason}) sin avance previo: se arranca de cero.")
 				return
-			raise RuntimeError(f"reanudación sucia (causa: {reason}): falta el checkpoint {state_path} pese a haber avance previo — revisar antes de relanzar")
+			raise RuntimeError(
+				f"reanudación sucia (causa: {reason}): falta el checkpoint {state_path} pese a haber avance previo — revisar antes de relanzar"
+			)
 		self._read_state(state_path)  # Un JSON truncado revienta aquí, con nombre y motivo
 		logger.info(f"[SCRIPT JOB] Reanudando tras interrupción dura ({reason}); checkpoint validado.")
 

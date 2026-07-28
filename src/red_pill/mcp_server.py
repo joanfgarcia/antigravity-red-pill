@@ -133,13 +133,18 @@ If you are an AI Agent:
 
 	try:
 		from red_pill.cognitive.queue_manager import CognitiveQueueManager
+
 		qm = CognitiveQueueManager()
 		with qm._get_connection() as conn:
-			tasks = conn.execute("SELECT id, source, status, priority, attempts, updated_at FROM cognitive_tasks WHERE status IN ('PROCESSING', 'PENDING', 'FRUSTRATED')").fetchall()
+			tasks = conn.execute(
+				"SELECT id, source, status, priority, attempts, updated_at FROM cognitive_tasks WHERE status IN ('PROCESSING', 'PENDING', 'FRUSTRATED')"
+			).fetchall()
 		dashboard += "\n### 📋 Active Queue Tasks\n"
 		if tasks:
 			for t in tasks:
-				dashboard += f"- **{t['id'][:8]}** | {t['source']} | {t['status']} | Prio: {t['priority']} | Att: {t['attempts']} | Upd: {t['updated_at']}\n"
+				dashboard += (
+					f"- **{t['id'][:8]}** | {t['source']} | {t['status']} | Prio: {t['priority']} | Att: {t['attempts']} | Upd: {t['updated_at']}\n"
+				)
 		else:
 			dashboard += "No active or pending tasks in queue.\n"
 	except Exception as q_err:

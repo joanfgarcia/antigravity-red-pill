@@ -485,7 +485,13 @@ class MemoryManager:
 		return updated_points
 
 	def record_interaction_pair(
-		self, prompt: str, response: str, role: str = "assistant", category: str = "mixed", model: Optional[str] = None, originator: Optional[str] = None
+		self,
+		prompt: str,
+		response: str,
+		role: str = "assistant",
+		category: str = "mixed",
+		model: Optional[str] = None,
+		originator: Optional[str] = None,
 	) -> str:
 		"""
 		Lazarus Phase 1: Encoding (Fast Memory Buffer).
@@ -517,7 +523,13 @@ class MemoryManager:
 			"color": "gray",  # Unprocessed color
 			"difficulty": 5.0,  # Default FSRS D
 			"stability": 2.0,  # Default FSRS S (Low stability for volatile memory)
-			"metadata": {"type": "raw_interaction", "role": role, "category": category, "model": model or "unknown", "originator": originator or "unknown"},
+			"metadata": {
+				"type": "raw_interaction",
+				"role": role,
+				"category": category,
+				"model": model or "unknown",
+				"originator": originator or "unknown",
+			},
 		}
 
 		vector = self._get_vector(text)
