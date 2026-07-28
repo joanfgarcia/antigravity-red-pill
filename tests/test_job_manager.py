@@ -572,6 +572,68 @@ def test_purge_hygiene_cleans_old_and_marks_stuck(queue, clean_registry):
 	assert queue.get_task(ids["paused"])["status"] == "PAUSED"
 
 
+def test_step_boundary_yields_to_higher_priority_job(queue, clean_registry):
+	"""La prioridad solo ordena pops: un job de múltiples steps debe CEDER en la
+	frontera de step cuando aparece un PENDING de mayor prioridad — el sueño de
+	las 03:00 no puede esperar a que un entrenamiento de días complete."""
+
+	class NightlyDriver(ResumableJobDriver):
+		source = "test_nightly"
+
+		def step(self, payload, checkpoint_data):
+			return StepOutcome(completed=True, new_checkpoint={"ran": True}, summary="ciclo nocturno")
+
+	class TrainingDriver(ResumableJobDriver):
+		source = "test_training"
+		_queue = None
+
+		def step(self, payload, checkpoint_data):
+			done = checkpoint_data.get("done", 0) + 1
+			if done == 2:  # a mitad del entrenamiento llegan las 03:00
+				TrainingDriver._queue.enqueue_task(source="test_nightly", payload={}, priority=8)
+			return StepOutcome(completed=done >= 10, new_checkpoint={"done": done})
+
+	register_driver(NightlyDriver)
+	register_driver(TrainingDriver)
+	training_id = queue.enqueue_task(source="test_training", payload={}, priority=5)
+	TrainingDriver._queue = queue
+
+	assert process_driver_jobs(queue) == 1  # el nocturno completó EN LA MISMA invocación
+
+	training = queue.get_task(training_id)
+	assert training["status"] == "PENDING" and training["attempts"] == 0  # cedió sin quemar intentos
+	assert training["checkpoint_data"] == {"done": 2}  # en la frontera de step, no a mitad
+	assert any(t["source"] == "test_nightly" for t in queue.list_tasks(statuses=["COMPLETED"]))
+
+
+def test_unrunnable_high_priority_job_does_not_starve_the_queue(queue, clean_registry):
+	"""Un job alto que se difiere una y otra vez (GPU externa ocupada) no mata de
+	hambre al resto: la cesión se evalúa tras AL MENOS un step, así que cada
+	invocación garantiza progreso del job que sí puede correr."""
+
+	class BlockedNightlyDriver(ResumableJobDriver):
+		source = "test_blocked_nightly"
+
+		def preflight(self, payload):
+			raise JobDeferred("GPU externa ocupada")
+
+		def step(self, payload, checkpoint_data):
+			raise AssertionError("step must not run when preflight defers")
+
+	register_driver(BlockedNightlyDriver)
+	register_driver(CountingDriver)
+	queue.enqueue_task(source="test_blocked_nightly", payload={}, priority=8)
+	training_id = queue.enqueue_task(source="test_counting", payload={"total": 3}, priority=5)
+
+	for expected_done in (1, 2):
+		process_driver_jobs(queue)
+		task = queue.get_task(training_id)
+		assert task["checkpoint_data"] == {"done": expected_done} and task["attempts"] == 0
+
+	process_driver_jobs(queue)
+	assert queue.get_task(training_id)["status"] == "COMPLETED"
+
+
 @pytest.mark.parametrize("state", ["active", "activating"])
 def test_nightly_unit_active_defers_jobs(queue, clean_registry, monkeypatch, state):
 	"""While redpill-sleep/redpill-chronicle systemd units are running the runner
@@ -613,12 +675,15 @@ def _seed_statuses(queue, rows):
 def test_purge_task_removes_terminal_rows_only(queue):
 	"""FRUSTRATED y COMPLETED se retiran; PENDING/PROCESSING jamás (un job vivo
 	se pausa o se abate, nunca se borra debajo del runner)."""
-	ids = _seed_statuses(queue, [
-		("frustrated", "FRUSTRATED"),
-		("completed", "COMPLETED"),
-		("pending", "PENDING"),
-		("processing", "PROCESSING"),
-	])
+	ids = _seed_statuses(
+		queue,
+		[
+			("frustrated", "FRUSTRATED"),
+			("completed", "COMPLETED"),
+			("pending", "PENDING"),
+			("processing", "PROCESSING"),
+		],
+	)
 
 	assert queue.purge_task(ids["frustrated"]) is True
 	assert queue.purge_task(ids["completed"]) is True
@@ -654,15 +719,18 @@ def test_purge_task_force_never_touches_live_rows(queue):
 
 def test_purge_terminal_sweeps_frustrated_and_completed(queue):
 	"""El barrido retira todo lo terminal de una vez y respeta el resto de la cola."""
-	ids = _seed_statuses(queue, [
-		("f1", "FRUSTRATED"),
-		("f2", "FRUSTRATED"),
-		("done", "COMPLETED"),
-		("pending", "PENDING"),
-		("paused", "PAUSED"),
-		("blocked", "BLOCKED"),
-		("processing", "PROCESSING"),
-	])
+	ids = _seed_statuses(
+		queue,
+		[
+			("f1", "FRUSTRATED"),
+			("f2", "FRUSTRATED"),
+			("done", "COMPLETED"),
+			("pending", "PENDING"),
+			("paused", "PAUSED"),
+			("blocked", "BLOCKED"),
+			("processing", "PROCESSING"),
+		],
+	)
 
 	assert queue.purge_terminal() == 3
 

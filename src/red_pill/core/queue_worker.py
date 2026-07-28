@@ -237,6 +237,16 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 					logger.info(f"Job {job_id} paused by operator; checkpoint saved, yielding.")
 					break
 
+				# Cesión por prioridad en frontera de step: un job de mayor prioridad
+				# recién encolado (el sueño de las 03:00 frente a un entrenamiento de
+				# días) no puede esperar a que este complete — la prioridad solo
+				# ordena pops. Se comprueba DESPUÉS de al menos un step: un job alto
+				# no-ejecutable (GPU externa ocupada, se difiere una y otra vez) no
+				# debe matar de hambre al resto, así que cada invocación garantiza
+				# progreso antes de volver a ceder el turno.
+				if cog_queue.has_higher_priority_pending(sources, int(task.get("priority") or 5)):
+					raise JobDeferred("cede el paso a un job PENDING de mayor prioridad")
+
 		except JobDeferred as deferral:
 			cog_queue.defer_task(job_id)  # R1: PENDING sin attempts++
 			logger.info(f"Job {job_id} deferred (no failure): {deferral.reason}")

@@ -563,6 +563,25 @@ class CognitiveQueueManager:
 			)
 			return cursor.rowcount > 0
 
+	def has_higher_priority_pending(self, sources: List[str], priority: int) -> bool:
+		"""¿Espera un job PENDING de los carriles dados con prioridad ESTRICTAMENTE mayor?
+
+		Alimenta la cesión en frontera de step del runner: la prioridad de la cola
+		solo ordena pops, y un job de múltiples steps (un entrenamiento de días)
+		monopolizaría el runner — el sueño de las 03:00 no puede esperar a que la
+		escuela complete. Acotado a los sources de drivers: el carril cognitivo
+		jamás desaloja a nadie.
+		"""
+		if not sources:
+			return False
+		placeholders = ",".join(["?"] * len(sources))
+		with self._get_connection() as conn:
+			row = conn.execute(
+				f"SELECT 1 FROM cognitive_tasks WHERE status = 'PENDING' AND priority > ? AND source IN ({placeholders}) LIMIT 1",
+				[priority, *sources],
+			).fetchone()
+		return row is not None
+
 	def defer_task(self, task_id: str) -> bool:
 		"""Deferral por entorno no disponible (VRAM/IDE/SIP): PROCESSING → PENDING
 		SIN incrementar attempts (R1 — el disyuntor es para fallos reales del job).
