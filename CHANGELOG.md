@@ -1,4 +1,4 @@
-## [7.13.0] - 2026-07-28 (La noche entra en la cola)
+## [7.13.0] - 2026-07-29 (La noche entra en la cola)
 
 La madrugada del 28-jul lo dejó claro: el sueño de las 03:00 y el entrenamiento de Bit compitieron por la VRAM sin que nadie arbitrara (3 OOM → Bit FRUSTRATED en la época 1030), y el chronicle de las 04:00 podía dispararse con el sueño aún corriendo. La causa de fondo: los ciclos nocturnos vivían FUERA del job manager, y la única defensa (`_nightly_cycle_active`) era ciega — las units oneshot reportan `activating` mientras corren, nunca `active`.
 
@@ -8,6 +8,14 @@ La madrugada del 28-jul lo dejó claro: el sueño de las 03:00 y el entrenamient
 - **[FEAT] Recetas versionadas del kernel** (`configs/jobs/`): el kernel también es satélite de su propia cola. Cota de step del sueño en 300 min (noches cargadas han llegado a ~4h; el default de 2h lo abatiría).
 - **[FEAT] `defer_exit_code` declarativo en ScriptJobDriver**: un código de salida del satélite que significa "ahora no puedo" se convierte en deferral limpio R1 — ni falso COMPLETED en modo `single` ni intento quemado. `trigger_pulse --cycle sleep` sale con 75 (EX_TEMPFAIL) cuando el ciclo se auto-difirió, leído de su propio `sleep_phase_status.json` acotado al arranque del run.
 - **[FEAT] `job submit --singleton`**: los timers diarios ceden si el job equivalente de ayer sigue vivo, en vez de duplicarlo.
+- **[FIX] Cesión por prioridad en frontera de step**: la prioridad de la cola solo ordenaba POPS — un entrenamiento de días popeado a las 23:00 retenía el runner más allá de las 03:00 y el sueño (prio 8) esperaba a que la school COMPLETARA: la migración entera derrotada en su primera noche. Ahora, entre step y step, si hay un PENDING de prioridad estrictamente mayor en los carriles de driver, el job actual se difiere (R1, sin quemar intento) y la misma invocación popea al prioritario. Se comprueba DESPUÉS de al menos un step: un prioritario no-ejecutable (GPU externa llena, se difiere en bucle) no mata de hambre al resto.
+
+### 🫁 Ingesta de memorias sin ayunas (memory_queue vs jobs largos)
+- **[FIX] El drenaje de memory_queue va PRIMERO en el ciclo del worker**: con el orden antiguo (cognitive → driver jobs → drain), un driver job continuo retenía `process_driver_jobs` HORAS en una sola invocación y los turnos capturados por los hooks quedaban sin ingerir a Qdrant toda esa ventana (ingesta diferida — la cola es durable y hay dedup, pero el Bünker vivía en el pasado). Drenaje extraído a `drain_memory_queue()` con `max_batches` acotado (absorbe backlog; un lote incompleto corta en seco).
+- **[FEAT] Respiradero entre steps** (`on_step_boundary` en `process_driver_jobs`): el reorden solo no bastaba — el worker cablea un drenaje de memory_queue entre step y step del job en curso. Blindado: un Qdrant caído jamás tumba un entrenamiento.
+
+### 🔁 Reintentos ante fallos transitorios de Qdrant
+- **[REF] Decorador `retry_on_qdrant_error` en StorageEngine**: sustituye los dos bucles de retry duplicados inline (`ensure_collection`, `retrieve`) y extiende la protección a upsert, set_payload, batch_update_points, scroll, delete, query_points y el resto de operaciones. Captura solo `ResponseHandlingException` (errores de transporte httpx) — nunca catch-all ni None silencioso al agotar reintentos. Rescatado del stash pre-release del 1-jul y reimplementado limpio.
 
 ### 🧠 Persistencia de hubs (regresión desde el 19-jul, #70)
 - **[FIX] `emotional_vector` sancionado en `CreateEngramRequest`**: TODOS los synthesis hubs fallaban al guardarse desde que #70 cableó `{"fragments": [...]}` (ADR-AXON-001 §2.2) — el validador solo permitía dicts anidados en las claves de ventana temporal. Nueve noches sin capa de hubs ni thread weaving (los chunks hijos sí se guardaron; re-sintetizable desde raw). Validación de forma estricta en vez de aplanar el contrato.
