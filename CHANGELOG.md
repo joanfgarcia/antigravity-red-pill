@@ -1,4 +1,19 @@
-## [Unreleased]
+## [7.13.0] - 2026-07-28 (La noche entra en la cola)
+
+La madrugada del 28-jul lo dejó claro: el sueño de las 03:00 y el entrenamiento de Bit compitieron por la VRAM sin que nadie arbitrara (3 OOM → Bit FRUSTRATED en la época 1030), y el chronicle de las 04:00 podía dispararse con el sueño aún corriendo. La causa de fondo: los ciclos nocturnos vivían FUERA del job manager, y la única defensa (`_nightly_cycle_active`) era ciega — las units oneshot reportan `activating` mientras corren, nunca `active`.
+
+### 🌙 Ciclos nocturnos como jobs (sleep/chronicle → cola central)
+- **[FIX] Detección de units oneshot en marcha**: el runner parsea el estado de `is-active` y acepta `activating`/`reloading`. Con `--quiet` (rc==0 solo para `active`) el deferral nocturno nunca funcionó; solo salvaba el fallback de fichero durante 300s.
+- **[CHANGE] Los timers de calendario ENCOLAN en vez de ejecutar**: `schedule_pulse` genera units que hacen `red-pill job submit --recipe configs/jobs/{sleep,chronicle}.yaml --singleton`. El runner serializa sueño (prio 8) > chronicle (7) > entrenamiento (5): nadie roba la VRAM a nadie y el chronicle espera si el sueño no ha terminado.
+- **[FEAT] Recetas versionadas del kernel** (`configs/jobs/`): el kernel también es satélite de su propia cola. Cota de step del sueño en 300 min (noches cargadas han llegado a ~4h; el default de 2h lo abatiría).
+- **[FEAT] `defer_exit_code` declarativo en ScriptJobDriver**: un código de salida del satélite que significa "ahora no puedo" se convierte en deferral limpio R1 — ni falso COMPLETED en modo `single` ni intento quemado. `trigger_pulse --cycle sleep` sale con 75 (EX_TEMPFAIL) cuando el ciclo se auto-difirió, leído de su propio `sleep_phase_status.json` acotado al arranque del run.
+- **[FEAT] `job submit --singleton`**: los timers diarios ceden si el job equivalente de ayer sigue vivo, en vez de duplicarlo.
+
+### 🧠 Persistencia de hubs (regresión desde el 19-jul, #70)
+- **[FIX] `emotional_vector` sancionado en `CreateEngramRequest`**: TODOS los synthesis hubs fallaban al guardarse desde que #70 cableó `{"fragments": [...]}` (ADR-AXON-001 §2.2) — el validador solo permitía dicts anidados en las claves de ventana temporal. Nueve noches sin capa de hubs ni thread weaving (los chunks hijos sí se guardaron; re-sintetizable desde raw). Validación de forma estricta en vez de aplanar el contrato.
+
+### ⚓ Anclas
+- **[CHANGE] Template único del sovereign handshake** con `${RELAY_INSTRUCTION}` condicional: con hooks de editor (Claude Code, opencode) solo `user_prompt`; sin hooks (Antigravity) también `previous_prompt`/`previous_response` — cura la Silent Amnesia de los turnos de Antigravity que el reminder MCP no compensaba.
 
 ### 🧹 `job purge` — el operador puede limpiar su propia cola
 - **[FEAT] `red-pill job purge`**: retira filas terminales de la cola por id(s)
