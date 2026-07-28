@@ -740,3 +740,33 @@ def test_purge_terminal_sweeps_frustrated_and_completed(queue):
 		assert queue.get_task(ids[key])["status"] == status
 
 	assert queue.purge_terminal() == 0
+
+
+# ── Respiradero entre steps (ingesta de memorias durante jobs largos) ──────
+
+
+def test_step_boundary_callback_breathes_between_steps(queue, clean_registry):
+	"""Un entrenamiento continuo retiene process_driver_jobs HORAS en una sola
+	invocación: el callback entre steps es el único respiradero de la ingesta
+	de memory_queue mientras tanto. Se invoca entre step y step (N-1 veces
+	para N steps), nunca tras el último — al completar, el bucle principal
+	ya drena por su cuenta."""
+	register_driver(CountingDriver)
+	queue.enqueue_task(source="test_counting", payload={"total": 4})
+
+	breaths = []
+	assert process_driver_jobs(queue, on_step_boundary=lambda: breaths.append(1)) == 1
+	assert len(breaths) == 3
+
+
+def test_step_boundary_callback_failure_never_kills_the_job(queue, clean_registry):
+	"""La ingesta de memorias jamás justifica perder un entrenamiento: si el
+	respiradero revienta (Qdrant caído), el job sigue stepeando como si nada."""
+	register_driver(CountingDriver)
+	job_id = queue.enqueue_task(source="test_counting", payload={"total": 3})
+
+	def explosive_drain():
+		raise RuntimeError("Qdrant caído")
+
+	assert process_driver_jobs(queue, on_step_boundary=explosive_drain) == 1
+	assert queue.get_task(job_id)["status"] == "COMPLETED"

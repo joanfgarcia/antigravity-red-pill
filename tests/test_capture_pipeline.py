@@ -161,3 +161,56 @@ def test_the_dead_end_archiver_is_gone():
 	from red_pill.swarm.agents.janitor import discover_plugins
 
 	assert "sqlite_interactions_archiver" not in {p.name for p in discover_plugins()}
+
+
+# ── Ingesta sin ayunas: el drenaje no espera a los driver jobs ─────────────
+
+
+@pytest.fixture
+def fake_memory():
+	"""MemoryManager de mentira: ingiere sin Qdrant y cuenta lo ingerido."""
+	memory = MagicMock()
+	memory.record_interaction_pair.return_value = "uid-fake"
+	return memory
+
+
+def test_drain_ingests_and_completes(queue, fake_memory):
+	from red_pill.core.queue_worker import drain_memory_queue
+
+	queue.enqueue_memory("una pregunta con sustancia suficiente", "una respuesta con sustancia suficiente", "assistant")
+
+	assert drain_memory_queue(queue, fake_memory) == 1
+	assert fake_memory.record_interaction_pair.call_count == 1
+	assert queue.get_pending_count() == 0
+
+
+def test_drain_absorbs_backlog_with_extra_batches(queue, fake_memory):
+	"""Tras un driver job de horas la cola llega con backlog: max_batches lo
+	vacía en una pasada, pero un lote incompleto corta en seco (bucle acotado)."""
+	from red_pill.core.queue_worker import drain_memory_queue
+
+	for i in range(12):
+		queue.enqueue_memory(f"pregunta con sustancia número {i}", f"respuesta con sustancia número {i}", "assistant")
+
+	assert drain_memory_queue(queue, fake_memory, limit=5, max_batches=1) == 5
+	assert drain_memory_queue(queue, fake_memory, limit=5, max_batches=10) == 7
+	assert queue.get_pending_count() == 0
+
+
+def test_worker_drains_memory_before_driver_jobs(tmp_path, monkeypatch):
+	"""El orden antiguo (cognitive → driver jobs → drain) dejaba los turnos de
+	los hooks sin ingerir durante TODO un entrenamiento continuo. El drenaje va
+	primero, y el carril de jobs recibe un respiradero para drenar entre steps."""
+	from red_pill.core import queue_worker
+
+	calls = []
+	monkeypatch.setattr(queue_worker, "MemoryQueueManager", lambda: MagicMock())
+	monkeypatch.setattr(queue_worker, "CognitiveQueueManager", lambda: MagicMock())
+	monkeypatch.setattr(queue_worker, "MemoryManager", lambda: MagicMock())
+	monkeypatch.setattr(queue_worker, "drain_memory_queue", lambda *a, **kw: calls.append("drain") or 0)
+	monkeypatch.setattr(queue_worker, "process_cognitive_tasks", lambda *a, **kw: calls.append("cognitive"))
+	monkeypatch.setattr(queue_worker, "process_driver_jobs", lambda *a, **kw: calls.append(("driver", "on_step_boundary" in kw and kw["on_step_boundary"] is not None)))
+
+	queue_worker.run_queue_worker(oneshot=True)
+
+	assert calls == ["drain", "cognitive", ("driver", True)]
