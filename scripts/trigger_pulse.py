@@ -7,10 +7,6 @@ import time
 
 sys.path.append(os.path.join(os.getcwd(), "src"))
 
-# Contrato con el job runner (defer_exit_code en la receta): "ahora no puedo,
-# reintenta" — deferral limpio en la cola, ni fallo ni ciclo dado por bueno.
-EX_TEMPFAIL = 75
-
 from red_pill.memory import MemoryManager
 from red_pill.rituals import (
 	auto_heal_ritual,
@@ -24,6 +20,10 @@ from red_pill.rituals import (
 	thread_ritual,
 	usp_ritual,
 )
+
+# Contrato con el job runner (defer_exit_code en la receta): "ahora no puedo,
+# reintenta" — deferral limpio en la cola, ni fallo ni ciclo dado por bueno.
+EX_TEMPFAIL = 75
 
 SETUP_TORCH_SCRIPT = os.path.join(os.path.dirname(__file__), "setup_torch.py")
 
