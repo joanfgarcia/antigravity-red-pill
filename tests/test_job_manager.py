@@ -572,15 +572,22 @@ def test_purge_hygiene_cleans_old_and_marks_stuck(queue, clean_registry):
 	assert queue.get_task(ids["paused"])["status"] == "PAUSED"
 
 
-def test_nightly_unit_active_defers_jobs(queue, clean_registry, monkeypatch):
-	"""While redpill-sleep/redpill-chronicle systemd units are ACTIVE the runner
-	yields (absolute priority for the 03:00/04:00 cycles), without attempts."""
+@pytest.mark.parametrize("state", ["active", "activating"])
+def test_nightly_unit_active_defers_jobs(queue, clean_registry, monkeypatch, state):
+	"""While redpill-sleep/redpill-chronicle systemd units are running the runner
+	yields (absolute priority for the 03:00/04:00 cycles), without attempts.
+
+	Las units nocturnas son Type=oneshot: mientras corren reportan "activating",
+	nunca "active" — detectar solo rc==0 dejó ciego al runner la madrugada del
+	28 jul 2026 (carrera de VRAM contra el sueño → Bit FRUSTRATED).
+	"""
 	import subprocess as _sp
 
-	class _Active:
-		returncode = 0
+	class _Running:
+		returncode = 0 if state == "active" else 3
+		stdout = f"{state}\n"
 
-	monkeypatch.setattr(_sp, "run", lambda *a, **kw: _Active())
+	monkeypatch.setattr(_sp, "run", lambda *a, **kw: _Running())
 
 	register_driver(CountingDriver)
 	job_id = queue.enqueue_task(source="test_counting", payload={"total": 1})

@@ -122,6 +122,13 @@ class ScriptJobDriver(ResumableJobDriver):
 		if cwd and not os.path.isdir(cwd):
 			raise ValueError(f"payload.cwd no existe: {cwd}")
 
+		defer_code = payload.get("defer_exit_code")
+		if defer_code is not None:
+			# 124/137/143 son los códigos canónicos de muerte por cota/señal: si el
+			# satélite los usara como deferral, un cuelgue real se reintentaría eternamente.
+			if not isinstance(defer_code, int) or not (1 <= defer_code <= 255) or defer_code in (124, 137, 143):
+				raise ValueError(f"payload.defer_exit_code debe ser un entero 1-255 distinto de 124/137/143 (recibido: {defer_code!r})")
+
 		progress = payload.get("progress") or {}
 		mode = progress.get("mode", "single")
 		if mode not in _VALID_MODES:
@@ -204,6 +211,11 @@ class ScriptJobDriver(ResumableJobDriver):
 		elapsed, returncode, cadence = self._run_command(payload, cwd, state_path)
 
 		if returncode != 0:
+			# El satélite puede declarar un código de salida que significa "ahora no
+			# puedo, reintenta" (p.ej. el sueño con la GPU comprometida): deferral
+			# limpio (R1) en vez de dar el step por completado o quemar un intento.
+			if returncode == payload.get("defer_exit_code"):
+				raise JobDeferred(f"el satélite pidió deferral (exit {returncode})")
 			tail = self._log_tail()
 			if self._looks_like_timeout(elapsed, returncode):
 				raise JobStepTimeout(elapsed_s=elapsed, bound_s=self.step_timeout_s, ema_s=elapsed, attempt=self.attempts + 1)

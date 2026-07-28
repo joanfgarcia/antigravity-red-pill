@@ -1,0 +1,14 @@
+# Chronicle diario (04:00) como job de la cola central.
+#
+# Antes se disparaba por systemd a las 04:00 hubiera acabado el sueño o no
+# (nadie lo controlaba). Como job, si el sueño sigue corriendo espera su turno:
+# el runner es secuencial y la prioridad 7 lo ordena tras el sueño (8) y por
+# delante del entrenamiento (5).
+source: script_job
+priority: 7
+title: Chronicle diario (ingesta de trayectorias)
+step_command: .venv/bin/python scripts/chronicle_daily.py
+progress:
+  mode: single
+control:
+  max_step_minutes: 60

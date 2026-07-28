@@ -470,6 +470,15 @@ def handle_job(args: argparse.Namespace) -> None:
 		if args.title:
 			payload["title"] = args.title
 
+		# Los timers de calendario re-encolan a diario: si el job de ayer sigue
+		# vivo (p.ej. deferido toda la noche), duplicarlo solo ensucia la cola.
+		if getattr(args, "singleton", False):
+			active = queue.list_tasks(statuses=["PENDING", "PROCESSING", "PAUSED", "BLOCKED"])
+			twin = next((t for t in active if t["source"] == source and t.get("title") == payload.get("title")), None)
+			if twin:
+				print(f"[OK] Ya hay un job vivo equivalente ({twin['id'][:8]}, {twin['status']}); no se encola otro (--singleton).")
+				return
+
 		# Validar AQUÍ: un payload malformado debe morir al encolar, no tres
 		# intentos después y FRUSTRATED de madrugada.
 		from red_pill.jobs.drivers import get_driver_class
@@ -862,6 +871,9 @@ def main() -> None:
 	job_submit.add_argument("--source", help="Source del driver que lo ejecuta (p.ej. script_job). Innecesario con --recipe")
 	job_submit.add_argument("--payload", default="{}", help="Payload JSON del job")
 	job_submit.add_argument("--priority", type=int, default=5, help="Prioridad (mayor = más urgente, default 5)")
+	job_submit.add_argument(
+		"--singleton", action="store_true", help="No encolar si ya hay un job vivo (PENDING/PROCESSING/PAUSED/BLOCKED) con el mismo source y title"
+	)
 	job_submit.add_argument("--title", help="Título descriptivo (se guarda en el payload)")
 	job_submit.add_argument("--parent", help="Id del job padre: entra BLOCKED y se desbloquea cuando el padre completa (DAG)")
 

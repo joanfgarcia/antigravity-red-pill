@@ -3,8 +3,13 @@ import asyncio
 import os
 import subprocess
 import sys
+import time
 
 sys.path.append(os.path.join(os.getcwd(), "src"))
+
+# Contrato con el job runner (defer_exit_code en la receta): "ahora no puedo,
+# reintenta" — deferral limpio en la cola, ni fallo ni ciclo dado por bueno.
+EX_TEMPFAIL = 75
 
 from red_pill.memory import MemoryManager
 from red_pill.rituals import (
@@ -87,4 +92,12 @@ if __name__ == "__main__":
 		help="Biological cycle to execute: wake (hourly), sleep (03:00 daily), full (all rituals)",
 	)
 	args = parser.parse_args()
+	started = time.time()
 	asyncio.run(oneshot_pulse(cycle=args.cycle))
+
+	if args.cycle == "sleep":
+		from red_pill.metabolism.sleep import last_cycle_deferred
+
+		if last_cycle_deferred(since=started):
+			print("Sleep cycle self-deferred (GPU committed). Exiting EX_TEMPFAIL for the job runner.")
+			sys.exit(EX_TEMPFAIL)

@@ -112,7 +112,12 @@ def _nightly_cycle_active() -> "str | None":
 		import subprocess
 
 		for unit in ("redpill-sleep.service", "redpill-chronicle.service"):
-			if subprocess.run(["systemctl", "--user", "is-active", "--quiet", unit], timeout=3).returncode == 0:
+			# Las units nocturnas son Type=oneshot: mientras su ExecStart corre
+			# reportan "activating", nunca "active" — con `--quiet` (rc==0 solo
+			# para "active") este check fue ciego toda la madrugada del 28 jul y
+			# la carrera de VRAM contra el sueño frustró el entrenamiento de Bit.
+			state = subprocess.run(["systemctl", "--user", "is-active", unit], capture_output=True, text=True, timeout=3).stdout.strip()
+			if state in ("active", "activating", "reloading"):
 				return unit
 	except Exception:
 		pass
