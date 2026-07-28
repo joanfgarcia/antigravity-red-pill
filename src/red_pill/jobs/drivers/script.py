@@ -122,6 +122,13 @@ class ScriptJobDriver(ResumableJobDriver):
 		if cwd and not os.path.isdir(cwd):
 			raise ValueError(f"payload.cwd no existe: {cwd}")
 
+		defer_code = payload.get("defer_exit_code")
+		if defer_code is not None:
+			# 124/137/143 son los códigos canónicos de muerte por cota/señal: si el
+			# satélite los usara como deferral, un cuelgue real se reintentaría eternamente.
+			if not isinstance(defer_code, int) or not (1 <= defer_code <= 255) or defer_code in (124, 137, 143):
+				raise ValueError(f"payload.defer_exit_code debe ser un entero 1-255 distinto de 124/137/143 (recibido: {defer_code!r})")
+
 		progress = payload.get("progress") or {}
 		mode = progress.get("mode", "single")
 		if mode not in _VALID_MODES:
@@ -163,7 +170,7 @@ class ScriptJobDriver(ResumableJobDriver):
 
 	def teardown(self, payload: Dict[str, Any]) -> None:
 		"""Restaura servicios en TODAS las salidas (incluido el deferral nocturno)."""
-		for service in ((payload.get("teardown") or {}).get("restore_services") or []):
+		for service in (payload.get("teardown") or {}).get("restore_services") or []:
 			self._systemctl("start", service)
 
 	@staticmethod
@@ -204,6 +211,11 @@ class ScriptJobDriver(ResumableJobDriver):
 		elapsed, returncode, cadence = self._run_command(payload, cwd, state_path)
 
 		if returncode != 0:
+			# El satélite puede declarar un código de salida que significa "ahora no
+			# puedo, reintenta" (p.ej. el sueño con la GPU comprometida): deferral
+			# limpio (R1) en vez de dar el step por completado o quemar un intento.
+			if returncode == payload.get("defer_exit_code"):
+				raise JobDeferred(f"el satélite pidió deferral (exit {returncode})")
 			tail = self._log_tail()
 			if self._looks_like_timeout(elapsed, returncode):
 				raise JobStepTimeout(elapsed_s=elapsed, bound_s=self.step_timeout_s, ema_s=elapsed, attempt=self.attempts + 1)
@@ -241,7 +253,9 @@ class ScriptJobDriver(ResumableJobDriver):
 
 		started = time.time()
 		with open(log_path, "a", encoding="utf-8") as log_file:
-			log_file.write(f"\n===== step {time.strftime('%Y-%m-%d %H:%M:%S')} | job {self.short_id} | intento {self.attempts + 1} | cota {self.step_timeout_s}s =====\n")
+			log_file.write(
+				f"\n===== step {time.strftime('%Y-%m-%d %H:%M:%S')} | job {self.short_id} | intento {self.attempts + 1} | cota {self.step_timeout_s}s =====\n"
+			)
 			log_file.flush()
 			with _CheckpointWatcher(state_path, self.job_id, self.checkpoint_poll_seconds) as watcher:
 				try:
@@ -367,7 +381,9 @@ class ScriptJobDriver(ResumableJobDriver):
 			if not had_progress:
 				logger.info(f"[SCRIPT JOB] Reanudando tras interrupción dura ({reason}) sin avance previo: se arranca de cero.")
 				return
-			raise RuntimeError(f"reanudación sucia (causa: {reason}): falta el checkpoint {state_path} pese a haber avance previo — revisar antes de relanzar")
+			raise RuntimeError(
+				f"reanudación sucia (causa: {reason}): falta el checkpoint {state_path} pese a haber avance previo — revisar antes de relanzar"
+			)
 		self._read_state(state_path)  # Un JSON truncado revienta aquí, con nombre y motivo
 		logger.info(f"[SCRIPT JOB] Reanudando tras interrupción dura ({reason}); checkpoint validado.")
 

@@ -112,7 +112,12 @@ def _nightly_cycle_active() -> "str | None":
 		import subprocess
 
 		for unit in ("redpill-sleep.service", "redpill-chronicle.service"):
-			if subprocess.run(["systemctl", "--user", "is-active", "--quiet", unit], timeout=3).returncode == 0:
+			# Las units nocturnas son Type=oneshot: mientras su ExecStart corre
+			# reportan "activating", nunca "active" — con `--quiet` (rc==0 solo
+			# para "active") este check fue ciego toda la madrugada del 28 jul y
+			# la carrera de VRAM contra el sueño frustró el entrenamiento de Bit.
+			state = subprocess.run(["systemctl", "--user", "is-active", unit], capture_output=True, text=True, timeout=3).stdout.strip()
+			if state in ("active", "activating", "reloading"):
 				return unit
 	except Exception:
 		pass
@@ -131,13 +136,19 @@ def _nightly_cycle_active() -> "str | None":
 	return None
 
 
-def process_driver_jobs(cog_queue: CognitiveQueueManager, max_jobs: int = 5) -> int:
+def process_driver_jobs(cog_queue: CognitiveQueueManager, max_jobs: int = 5, on_step_boundary=None) -> int:
 	"""Procesa jobs del carril mecánico vía ResumableJobDriver (Centralized Job Manager).
 
 	Reglas de integridad (plan F1): R1 deferral sin attempts, R2 skip-set por
 	invocación, R3 releer estado tras cada step (la pausa del operador gana),
 	R4 checkpoint persistido tras cada step, R5 recuperación de huérfanos
 	acotada a los sources del propio runner.
+
+	`on_step_boundary` se invoca entre step y step de un job en curso: un
+	entrenamiento continuo retiene esta función HORAS en una sola invocación,
+	y sin ese respiradero el resto del worker (la ingesta de memory_queue) se
+	quedaría en ayunas todo ese tiempo. Un fallo del callback nunca puede
+	tumbar el job.
 	"""
 	from red_pill.jobs.drivers import registered_sources
 
@@ -164,13 +175,13 @@ def process_driver_jobs(cog_queue: CognitiveQueueManager, max_jobs: int = 5) -> 
 		lock_file = None  # FS sin flock: seguimos — el timer systemd ya serializa su propia unit
 
 	try:
-		return _process_driver_jobs_locked(cog_queue, sources, max_jobs)
+		return _process_driver_jobs_locked(cog_queue, sources, max_jobs, on_step_boundary)
 	finally:
 		if lock_file:
 			lock_file.close()
 
 
-def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list, max_jobs: int) -> int:
+def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list, max_jobs: int, on_step_boundary=None) -> int:
 	from red_pill.jobs.drivers import JobDeferred, JobStepTimeout, compute_step_timeout, get_driver, update_step_ema
 
 	# R5: huérfanos PROCESSING de un crash previo → PENDING (solo carril mecánico)
@@ -226,11 +237,30 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 					completed_jobs += 1
 					break
 
+				# Respiradero entre steps: el job sigue, pero el resto del worker
+				# no puede esperar horas a que termine. Blindado — la ingesta de
+				# memorias jamás justifica perder un entrenamiento.
+				if on_step_boundary:
+					try:
+						on_step_boundary()
+					except Exception as e:
+						logger.warning(f"Step-boundary callback failed (job {job_id} continues): {e}")
+
 				# R3: releer estado — una pausa del operador a mitad de step gana
 				current = cog_queue.get_task(job_id)
 				if current and current.get("status") == "PAUSED":
 					logger.info(f"Job {job_id} paused by operator; checkpoint saved, yielding.")
 					break
+
+				# Cesión por prioridad en frontera de step: un job de mayor prioridad
+				# recién encolado (el sueño de las 03:00 frente a un entrenamiento de
+				# días) no puede esperar a que este complete — la prioridad solo
+				# ordena pops. Se comprueba DESPUÉS de al menos un step: un job alto
+				# no-ejecutable (GPU externa ocupada, se difiere una y otra vez) no
+				# debe matar de hambre al resto, así que cada invocación garantiza
+				# progreso antes de volver a ceder el turno.
+				if cog_queue.has_higher_priority_pending(sources, int(task.get("priority") or 5)):
+					raise JobDeferred("cede el paso a un job PENDING de mayor prioridad")
 
 		except JobDeferred as deferral:
 			cog_queue.defer_task(job_id)  # R1: PENDING sin attempts++
@@ -291,6 +321,50 @@ def process_cognitive_tasks(cog_queue: CognitiveQueueManager, oneshot: bool = Fa
 			report_pain(f"Cognitive Task {task['id']} ({task['source']}) failed: {e}")
 
 
+def drain_memory_queue(queue: MemoryQueueManager, memory: MemoryManager, limit: int = 10, max_batches: int = 1) -> int:
+	"""Drena memory_queue hacia Qdrant (Fast Buffer -> engramas). Devuelve items tratados.
+
+	`max_batches` permite vaciar backlog acumulado (p.ej. tras un driver job de
+	horas) sin convertir el drenaje en un bucle sin cota: se detiene en cuanto
+	un lote llega incompleto o al agotar los lotes concedidos.
+	"""
+	processed = 0
+	for _ in range(max_batches):
+		items = queue.dequeue_pending(limit=limit)
+		for item in items:
+			logger.info(f"Processing queued memory {item['id']} (Prompt: {item['prompt'][:20]}...).")
+			queue.update_status(item["id"], "processing")
+			try:
+				# Noise filtering lives HERE, at the single drain point, instead of
+				# in each capture surface: the editor hooks are deliberately dumb
+				# (and the JS one cannot call Python at all), so cleaning once on
+				# the way out keeps every producer honest and identical.
+				clean_prompt, clean_response = _clean_turn(item["prompt"], item["response"])
+				if not clean_prompt and not clean_response:
+					queue.update_status(item["id"], "completed")
+					logger.info(f"Memory {item['id']} dropped: nothing but tooling noise after trimming.")
+					continue
+
+				uid = memory.record_interaction_pair(
+					prompt=clean_prompt,
+					response=clean_response,
+					role=item["role"],
+					category=item.get("category", "mixed"),
+					model=item.get("model"),
+					originator=item.get("originator"),
+				)
+				queue.update_status(item["id"], "completed")
+				logger.info(f"Memory {item['id']} successfully ingested. (ID: {uid})")
+			except Exception as ingest_error:
+				logger.error(f"Memory {item['id']} ingestion failed: {ingest_error}")
+				queue.update_status(item["id"], "error")
+
+		processed += len(items)
+		if len(items) < limit:
+			break
+	return processed
+
+
 def run_queue_worker(poll_interval: int = 5, oneshot: bool = False):
 	"""
 	Background daemon that consumes the SQLite queues
@@ -313,45 +387,24 @@ def run_queue_worker(poll_interval: int = 5, oneshot: bool = False):
 
 	while True:
 		try:
-			# 1. Process Cognitive DAG Tasks
+			# 1. Memory Queue PRIMERO: los turnos capturados por los hooks son lo
+			# más perecedero del ciclo. Con el orden antiguo, un driver job de
+			# horas los dejaba sin ingerir toda su duración (ingesta diferida).
+			# max_batches>1 absorbe backlog sin retrasar los otros carriles en
+			# régimen normal (un lote incompleto corta en seco).
+			drained = drain_memory_queue(queue, memory, limit=10, max_batches=5)
+
+			# 2. Process Cognitive DAG Tasks
 			if cog_queue:
 				process_cognitive_tasks(cog_queue, oneshot)
 
-			# 1b. Process mechanical driver jobs (Centralized Job Manager)
+			# 3. Mechanical driver jobs (Centralized Job Manager). Puede retener
+			# el bucle HORAS (entrenamiento continuo): el respiradero entre steps
+			# mantiene viva la ingesta de memorias mientras tanto.
 			if cog_queue:
-				process_driver_jobs(cog_queue)
+				process_driver_jobs(cog_queue, on_step_boundary=lambda: drain_memory_queue(queue, memory, limit=10))
 
-			# 2. Process Memory Queue (Fast Buffer -> Qdrant)
-			items = queue.dequeue_pending(limit=10)
-			for item in items:
-				logger.info(f"Processing queued memory {item['id']} (Prompt: {item['prompt'][:20]}...).")
-				queue.update_status(item["id"], "processing")
-				try:
-					# Noise filtering lives HERE, at the single drain point, instead of
-					# in each capture surface: the editor hooks are deliberately dumb
-					# (and the JS one cannot call Python at all), so cleaning once on
-					# the way out keeps every producer honest and identical.
-					clean_prompt, clean_response = _clean_turn(item["prompt"], item["response"])
-					if not clean_prompt and not clean_response:
-						queue.update_status(item["id"], "completed")
-						logger.info(f"Memory {item['id']} dropped: nothing but tooling noise after trimming.")
-						continue
-
-					uid = memory.record_interaction_pair(
-						prompt=clean_prompt,
-						response=clean_response,
-						role=item["role"],
-						category=item.get("category", "mixed"),
-						model=item.get("model"),
-						originator=item.get("originator"),
-					)
-					queue.update_status(item["id"], "completed")
-					logger.info(f"Memory {item['id']} successfully ingested. (ID: {uid})")
-				except Exception as ingest_error:
-					logger.error(f"Memory {item['id']} ingestion failed: {ingest_error}")
-					queue.update_status(item["id"], "error")
-
-			if not items:
+			if not drained:
 				if oneshot:
 					logger.info("No pending items. Oneshot complete.")
 					break

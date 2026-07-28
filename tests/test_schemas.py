@@ -74,6 +74,21 @@ def test_association_cap():
 	assert len(request.metadata["associations"]) == cfg.MAX_AXONS  # type: ignore
 
 
+def test_emotional_vector_hub_metadata():
+	"""Hub affect history (ADR-AXON-001 §2.2) is a sanctioned structured field.
+
+	Regression for the 2026-07-28 sleep cycle: every synthesis hub failed to
+	persist because the validator rejected {"fragments": [...]} as a nested dict.
+	"""
+	affects = [{"child_id": str(uuid.uuid4()), "emotion": "joy", "intensity": 0.8, "category": "work"}]
+	request = CreateEngramRequest(content="Hub", metadata={"emotional_vector": {"fragments": affects}})  # type: ignore
+	assert request.metadata["emotional_vector"]["fragments"] == affects  # type: ignore
+	with pytest.raises(ValidationError, match="single 'fragments' list"):
+		CreateEngramRequest(content="Hub", metadata={"emotional_vector": {"other": 1}})  # type: ignore
+	with pytest.raises(ValidationError, match="Complex type in emotional_vector fragments"):
+		CreateEngramRequest(content="Hub", metadata={"emotional_vector": {"fragments": [{"deep": {"x": 1}}]}})  # type: ignore
+
+
 def test_validate_metadata_structure_directly():
 	"""Ensures custom validator directly catches nested dicts, complex lists, and long strings."""
 	validator = CreateEngramRequest.validate_metadata_structure

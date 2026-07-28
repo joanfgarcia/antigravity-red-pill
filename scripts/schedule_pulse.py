@@ -43,6 +43,12 @@ TELEMETRY_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "bunker_telemetry.py")
 QUEUE_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "process_queue.py")
 CHRONICLE_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "chronicle_daily.py")
 
+# Recetas de los ciclos nocturnos: los timers de calendario ENCOLAN el job en la
+# cola central en vez de ejecutar el ciclo directamente — el runner serializa
+# sueño/chronicle/entrenamiento y nadie roba la VRAM a nadie (28 jul 2026).
+SLEEP_RECIPE = os.path.join(PROJECT_ROOT, "configs", "jobs", "sleep.yaml")
+CHRONICLE_RECIPE = os.path.join(PROJECT_ROOT, "configs", "jobs", "chronicle.yaml")
+
 
 def _find_uv() -> str:
 	"""Return the absolute path to the uv binary."""
@@ -80,8 +86,12 @@ def _install_linux(interval_hours: int, uv_path: str) -> None:
 	_write_systemd_unit(WAKE_SERVICE, f"{uv_path} run python {TRIGGER_SCRIPT} --cycle wake", "Red Pill Wake Pulse", type="oneshot")
 	_write_systemd_timer(WAKE_TIMER, f"{interval_hours}h", "Timer for Red Pill Wake Pulse (Hourly)")
 
-	# 2. Sleep Pulse (03:00 Daily) — Memory consolidation, Ariadne's Thread
-	_write_systemd_unit(SLEEP_SERVICE, f"{uv_path} run python {TRIGGER_SCRIPT} --cycle sleep", "Red Pill Sleep Pulse", type="oneshot", nice=10)
+	# 2. Sleep Pulse (03:00 Daily) — Memory consolidation, Ariadne's Thread.
+	# La unit solo ENCOLA (segundos): el sueño real lo ejecuta el runner de la
+	# cola, con prioridad absoluta sobre el training y singleton anti-duplicados.
+	_write_systemd_unit(
+		SLEEP_SERVICE, f"{uv_path} run red-pill job submit --recipe {SLEEP_RECIPE} --singleton", "Red Pill Sleep Pulse (enqueue)", type="oneshot"
+	)
 	_write_calendar_timer(SLEEP_TIMER, "*-*-* 03:00:00", "Daily Sleep Consolidation Pulse")
 
 	# 3. Telemetry (Heartbeat) - 10s-30s
@@ -109,13 +119,14 @@ def _install_linux(interval_hours: int, uv_path: str) -> None:
 	_write_systemd_unit("redpill-worker.service", f"{uv_path} run python {DAEMON_SCRIPT}", "Sovereign Daemon Pulse", type="oneshot", nice=10)
 	_write_systemd_timer("redpill-worker.timer", "1m", "Timer for Sovereign Daemon Pulse")
 
-	# 4. Chronicle Daily (04:00, Persistent — runs on next boot if missed)
+	# 4. Chronicle Daily (04:00, Persistent — runs on next boot if missed).
+	# También encola: si el sueño sigue corriendo a las 04:00, el chronicle
+	# espera su turno en la cola en vez de pisarlo.
 	_write_systemd_unit(
 		"redpill-chronicle.service",
-		f"{uv_path} run python {CHRONICLE_SCRIPT}",
-		"Red Pill Chronicle Daily Pipeline",
+		f"{uv_path} run red-pill job submit --recipe {CHRONICLE_RECIPE} --singleton",
+		"Red Pill Chronicle Daily Pipeline (enqueue)",
 		type="oneshot",
-		nice=10,
 	)
 	_write_calendar_timer("redpill-chronicle.timer", "*-*-* 04:00:00", "Daily Chronicle Ingestion Pipeline")
 
@@ -254,8 +265,8 @@ def _uninstall_macos() -> None:
 def _install_macos(interval_hours: int, uv_path: str) -> None:
 	# 1. Wake Pulse (Interval-based, hourly)
 	_write_launchd_plist("com.redpill.wake", f'"{uv_path}" run python "{TRIGGER_SCRIPT}" --cycle wake', interval_hours * 3600)
-	# 2. Sleep Pulse (Calendar-based, 03:00 daily)
-	_write_launchd_calendar_plist("com.redpill.sleep", f'"{uv_path}" run python "{TRIGGER_SCRIPT}" --cycle sleep', hour=3, minute=0)
+	# 2. Sleep Pulse (Calendar-based, 03:00 daily) — encola en la cola central
+	_write_launchd_calendar_plist("com.redpill.sleep", f'"{uv_path}" run red-pill job submit --recipe "{SLEEP_RECIPE}" --singleton', hour=3, minute=0)
 	# 3. Telemetry
 	_write_launchd_plist("com.redpill.telemetry", f'"{uv_path}" run python "{TELEMETRY_SCRIPT}" --oneshot', 30)
 	# 4. Queue (use module entrypoint — scripts/process_queue.py does not exist; mirror the Linux branch)
@@ -335,8 +346,8 @@ def _write_launchd_calendar_plist(label: str, command: str, hour: int, minute: i
 def _install_windows(interval_hours: int, uv_path: str) -> None:
 	# 1. Wake Pulse (interval — MINUTE-based)
 	_create_win_task("RedPill-Wake", f'"{uv_path}" run python "{TRIGGER_SCRIPT}" --cycle wake', interval_hours * 60)
-	# 2. Sleep Pulse (daily at 03:00)
-	_create_win_daily_task("RedPill-Sleep", f'"{uv_path}" run python "{TRIGGER_SCRIPT}" --cycle sleep', "03:00")
+	# 2. Sleep Pulse (daily at 03:00) — encola en la cola central
+	_create_win_daily_task("RedPill-Sleep", f'"{uv_path}" run red-pill job submit --recipe "{SLEEP_RECIPE}" --singleton', "03:00")
 	# 3. Telemetry
 	_create_win_task(TASK_NAME_TELEMETRY, f'"{uv_path}" run python "{TELEMETRY_SCRIPT}" --oneshot', 1)
 	# 4. Queue

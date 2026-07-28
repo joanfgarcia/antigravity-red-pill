@@ -85,12 +85,28 @@ def _bind(driver: ScriptJobDriver, timeout: int = 300) -> ScriptJobDriver:
 		({"step_command": "echo hi", "checkpoint_file": "s.json", "progress": {"mode": "bounded"}}, "current_key"),
 		({"step_command": "echo hi", "checkpoint_file": "s.json", "progress": {"mode": "bounded", "current_key": "e"}}, "total"),
 		({"step_command": "echo hi", "cwd": "/no/existe/jamas"}, "cwd"),
+		({"step_command": "echo hi", "defer_exit_code": 0}, "defer_exit_code"),
+		({"step_command": "echo hi", "defer_exit_code": "75"}, "defer_exit_code"),
+		({"step_command": "echo hi", "defer_exit_code": 124}, "defer_exit_code"),
 	],
 )
 def test_validate_rejects_malformed_payload_at_submit(payload, expected):
 	"""Un payload incoherente muere al encolar, no tres intentos y FRUSTRATED después."""
 	with pytest.raises(ValueError, match=expected):
 		ScriptJobDriver.validate(payload)
+
+
+def test_defer_exit_code_defers_without_burning_attempts(queue, clean_registry, tmp_path):
+	"""El satélite declara un código de salida que significa "ahora no puedo"
+	(el sueño con la GPU comprometida sale con 75): deferral limpio R1 — ni
+	falso COMPLETED ni intento quemado."""
+	register_driver(ScriptJobDriver)
+	cmd = _script(tmp_path, "import sys; sys.exit(75)")
+	job_id = queue.enqueue_task(source="script_job", payload={"step_command": cmd, "defer_exit_code": 75, "cwd": str(tmp_path)})
+
+	assert process_driver_jobs(queue) == 0
+	task = queue.get_task(job_id)
+	assert task["status"] == "PENDING" and task["attempts"] == 0
 
 
 def test_validate_accepts_the_real_bit_payload(tmp_path):

@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v7.12.0 (Unified Turn Capture)
+**System Version**: v7.13.0 (Nightly Cycles in the Queue)
 **Analyst**: The Architect
 **Date**: 2026-04-16
 

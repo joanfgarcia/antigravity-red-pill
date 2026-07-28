@@ -1,0 +1,21 @@
+# Ciclo de sueño (03:00) como job de la cola central.
+#
+# El timer redpill-sleep ya no ejecuta el sueño: lo ENCOLA. El runner serializa
+# frente al entrenamiento y al chronicle — nadie roba la VRAM a nadie a mitad
+# de época (incidente del 28 jul 2026: 3 OOM → Bit FRUSTRATED). La noche es del
+# metabolismo: prioridad por encima del training (5) y del chronicle (7).
+source: script_job
+priority: 8
+title: Ciclo de sueño (consolidación nocturna)
+step_command: .venv/bin/python scripts/trigger_pulse.py --cycle sleep
+# El sueño se auto-difiere si la GPU está comprometida con algo externo a la
+# cola (juego, inferencia del IDE): reintento limpio, no fallo ni falso éxito.
+defer_exit_code: 75
+progress:
+  mode: single
+control:
+  # Noches cargadas (300+ engramas) han llegado a ~4h; la cota por defecto (2h)
+  # abatiría el primer sueño. Con historial manda la EMA (D5).
+  max_step_minutes: 300
+preflight:
+  memory_max: 10G

@@ -443,6 +443,36 @@ class CognitiveQueueManager:
 			logger.info(f"[QUEUE-HYGIENE] purged completed={completed} frustrated={frustrated}, stuck→FRUSTRATED={stuck}")
 		return {"completed_purged": completed, "frustrated_purged": frustrated, "stuck_marked": stuck}
 
+	def purge_task(self, task_id: str, force: bool = False) -> bool:
+		"""Retira una fila de la cola por orden del operador (`job purge`).
+
+		Solo estados terminales — FRUSTRATED y COMPLETED; PAUSED únicamente con
+		`force` (un pausado es trabajo reanudable, no basura). PENDING/PROCESSING
+		jamás: un job vivo se pausa o se abate, nunca se borra debajo del runner.
+		Complementa a purge_hygiene (temporal, nocturna): esto es la versión en
+		caliente y dirigida.
+		"""
+		allowed = ("FRUSTRATED", "COMPLETED", "PAUSED") if force else ("FRUSTRATED", "COMPLETED")
+		placeholders = ",".join("?" for _ in allowed)
+		with self._get_connection() as conn:
+			cursor = conn.execute(
+				f"DELETE FROM cognitive_tasks WHERE id = ? AND status IN ({placeholders})",
+				(task_id, *allowed),
+			)
+			return cursor.rowcount > 0
+
+	def purge_terminal(self) -> int:
+		"""Barre TODAS las filas FRUSTRATED y COMPLETED de una vez.
+
+		La versión inmediata de purge_hygiene, sin ventana temporal. No toca
+		PENDING, PAUSED, BLOCKED ni PROCESSING. Devuelve filas retiradas.
+		"""
+		with self._get_connection() as conn:
+			removed = conn.execute("DELETE FROM cognitive_tasks WHERE status IN ('FRUSTRATED', 'COMPLETED')").rowcount
+		if removed:
+			logger.info(f"[QUEUE-PURGE] operator purge removed {removed} terminal job(s)")
+		return removed
+
 	def save_checkpoint(self, task_id: str, checkpoint: Dict[str, Any], progress: Optional[Dict[str, Any]] = None) -> None:
 		"""Persiste el avance atómico tras un step().
 
@@ -532,6 +562,25 @@ class CognitiveQueueManager:
 				(task_id,),
 			)
 			return cursor.rowcount > 0
+
+	def has_higher_priority_pending(self, sources: List[str], priority: int) -> bool:
+		"""¿Espera un job PENDING de los carriles dados con prioridad ESTRICTAMENTE mayor?
+
+		Alimenta la cesión en frontera de step del runner: la prioridad de la cola
+		solo ordena pops, y un job de múltiples steps (un entrenamiento de días)
+		monopolizaría el runner — el sueño de las 03:00 no puede esperar a que la
+		escuela complete. Acotado a los sources de drivers: el carril cognitivo
+		jamás desaloja a nadie.
+		"""
+		if not sources:
+			return False
+		placeholders = ",".join(["?"] * len(sources))
+		with self._get_connection() as conn:
+			row = conn.execute(
+				f"SELECT 1 FROM cognitive_tasks WHERE status = 'PENDING' AND priority > ? AND source IN ({placeholders}) LIMIT 1",
+				[priority, *sources],
+			).fetchone()
+		return row is not None
 
 	def defer_task(self, task_id: str) -> bool:
 		"""Deferral por entorno no disponible (VRAM/IDE/SIP): PROCESSING → PENDING

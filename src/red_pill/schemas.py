@@ -70,8 +70,17 @@ class CreateEngramRequest(BaseModel):
 							continue
 						if isinstance(item, dict) or not isinstance(item, (str, int, float, bool, dict)):
 							raise ValueError(f"Complex type in metadata list {key}")
-				elif isinstance(val, dict) and key not in ["last_3d", "last_7d", "last_30d", "global"]:
-					raise ValueError(f"Nested dict in metadata field {key}")
+				elif isinstance(val, dict):
+					if key == "emotional_vector":
+						# ADR-AXON-001 §2.2: hub affect history {"fragments": [flat dicts]}
+						fragments = val.get("fragments")
+						if set(val.keys()) != {"fragments"} or not isinstance(fragments, list):
+							raise ValueError(f"Metadata field {key} must be a dict with a single 'fragments' list")
+						for frag in fragments:
+							if not isinstance(frag, dict) or any(not isinstance(fv, (str, int, float, bool)) for fv in frag.values()):
+								raise ValueError(f"Complex type in {key} fragments")
+					elif key not in ["last_3d", "last_7d", "last_30d", "global"]:
+						raise ValueError(f"Nested dict in metadata field {key}")
 
 			if key == "associations" and isinstance(val, list):
 				if len(val) > cfg.MAX_AXONS:

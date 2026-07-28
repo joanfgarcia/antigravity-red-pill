@@ -60,10 +60,29 @@ __all__ = [
 	"distill_engram",
 	"distill_session_anchors",
 	"erode_work_hubs",
+	"last_cycle_deferred",
 	"perform_sleep_cycle",
 	"run_rhizodb_washout_and_pruning",
 	"synthesize_hub",
 ]
+
+
+def last_cycle_deferred(since: float = 0.0) -> bool:
+	"""True si el último ciclo de sueño se auto-difirió (GPU comprometida).
+
+	Lee `sleep_phase_status.json` — el contrato público del sueño hacia fuera
+	(el mismo que consulta el runner de jobs). `since` acota la lectura a un
+	ciclo concreto: un fichero de una noche anterior no cuenta como deferral.
+	"""
+	import json
+
+	from red_pill.core.paths import get_state_dir
+
+	try:
+		data = json.loads((get_state_dir() / "sleep_phase_status.json").read_text(encoding="utf-8"))
+		return bool(data.get("deferred")) and float(data.get("updated_at", 0)) >= since
+	except Exception:
+		return False
 
 
 def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:

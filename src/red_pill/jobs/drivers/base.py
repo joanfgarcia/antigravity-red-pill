@@ -55,7 +55,9 @@ class JobStepTimeout(Exception):
 		self.bound_s = bound_s
 		self.ema_s = ema_s
 		self.attempt = attempt
-		super().__init__(f"step abatido por timeout tras {elapsed_s / 60:.1f} min (cota {bound_s / 60:.1f} min, media {ema_s / 60:.1f} min, intento {attempt})")
+		super().__init__(
+			f"step abatido por timeout tras {elapsed_s / 60:.1f} min (cota {bound_s / 60:.1f} min, media {ema_s / 60:.1f} min, intento {attempt})"
+		)
 
 	def forensics(self) -> Dict[str, Any]:
 		"""Datos para la marca `dirty_kill` — con esto se recalibra la cota."""

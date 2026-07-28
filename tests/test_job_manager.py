@@ -572,15 +572,84 @@ def test_purge_hygiene_cleans_old_and_marks_stuck(queue, clean_registry):
 	assert queue.get_task(ids["paused"])["status"] == "PAUSED"
 
 
-def test_nightly_unit_active_defers_jobs(queue, clean_registry, monkeypatch):
-	"""While redpill-sleep/redpill-chronicle systemd units are ACTIVE the runner
-	yields (absolute priority for the 03:00/04:00 cycles), without attempts."""
+def test_step_boundary_yields_to_higher_priority_job(queue, clean_registry):
+	"""La prioridad solo ordena pops: un job de múltiples steps debe CEDER en la
+	frontera de step cuando aparece un PENDING de mayor prioridad — el sueño de
+	las 03:00 no puede esperar a que un entrenamiento de días complete."""
+
+	class NightlyDriver(ResumableJobDriver):
+		source = "test_nightly"
+
+		def step(self, payload, checkpoint_data):
+			return StepOutcome(completed=True, new_checkpoint={"ran": True}, summary="ciclo nocturno")
+
+	class TrainingDriver(ResumableJobDriver):
+		source = "test_training"
+		_queue = None
+
+		def step(self, payload, checkpoint_data):
+			done = checkpoint_data.get("done", 0) + 1
+			if done == 2:  # a mitad del entrenamiento llegan las 03:00
+				TrainingDriver._queue.enqueue_task(source="test_nightly", payload={}, priority=8)
+			return StepOutcome(completed=done >= 10, new_checkpoint={"done": done})
+
+	register_driver(NightlyDriver)
+	register_driver(TrainingDriver)
+	training_id = queue.enqueue_task(source="test_training", payload={}, priority=5)
+	TrainingDriver._queue = queue
+
+	assert process_driver_jobs(queue) == 1  # el nocturno completó EN LA MISMA invocación
+
+	training = queue.get_task(training_id)
+	assert training["status"] == "PENDING" and training["attempts"] == 0  # cedió sin quemar intentos
+	assert training["checkpoint_data"] == {"done": 2}  # en la frontera de step, no a mitad
+	assert any(t["source"] == "test_nightly" for t in queue.list_tasks(statuses=["COMPLETED"]))
+
+
+def test_unrunnable_high_priority_job_does_not_starve_the_queue(queue, clean_registry):
+	"""Un job alto que se difiere una y otra vez (GPU externa ocupada) no mata de
+	hambre al resto: la cesión se evalúa tras AL MENOS un step, así que cada
+	invocación garantiza progreso del job que sí puede correr."""
+
+	class BlockedNightlyDriver(ResumableJobDriver):
+		source = "test_blocked_nightly"
+
+		def preflight(self, payload):
+			raise JobDeferred("GPU externa ocupada")
+
+		def step(self, payload, checkpoint_data):
+			raise AssertionError("step must not run when preflight defers")
+
+	register_driver(BlockedNightlyDriver)
+	register_driver(CountingDriver)
+	queue.enqueue_task(source="test_blocked_nightly", payload={}, priority=8)
+	training_id = queue.enqueue_task(source="test_counting", payload={"total": 3}, priority=5)
+
+	for expected_done in (1, 2):
+		process_driver_jobs(queue)
+		task = queue.get_task(training_id)
+		assert task["checkpoint_data"] == {"done": expected_done} and task["attempts"] == 0
+
+	process_driver_jobs(queue)
+	assert queue.get_task(training_id)["status"] == "COMPLETED"
+
+
+@pytest.mark.parametrize("state", ["active", "activating"])
+def test_nightly_unit_active_defers_jobs(queue, clean_registry, monkeypatch, state):
+	"""While redpill-sleep/redpill-chronicle systemd units are running the runner
+	yields (absolute priority for the 03:00/04:00 cycles), without attempts.
+
+	Las units nocturnas son Type=oneshot: mientras corren reportan "activating",
+	nunca "active" — detectar solo rc==0 dejó ciego al runner la madrugada del
+	28 jul 2026 (carrera de VRAM contra el sueño → Bit FRUSTRATED).
+	"""
 	import subprocess as _sp
 
-	class _Active:
-		returncode = 0
+	class _Running:
+		returncode = 0 if state == "active" else 3
+		stdout = f"{state}\n"
 
-	monkeypatch.setattr(_sp, "run", lambda *a, **kw: _Active())
+	monkeypatch.setattr(_sp, "run", lambda *a, **kw: _Running())
 
 	register_driver(CountingDriver)
 	job_id = queue.enqueue_task(source="test_counting", payload={"total": 1})
@@ -588,3 +657,116 @@ def test_nightly_unit_active_defers_jobs(queue, clean_registry, monkeypatch):
 	assert process_driver_jobs(queue) == 0
 	task = queue.get_task(job_id)
 	assert task["status"] == "PENDING" and task["attempts"] == 0
+
+
+# ── job purge: el verbo del operador para retirar filas terminales ──────────
+
+
+def _seed_statuses(queue, rows):
+	"""Encola una fila por (key, status) y la fuerza al estado pedido."""
+	ids = {}
+	for key, status in rows:
+		ids[key] = queue.enqueue_task(source="samantha", payload={})
+		with queue._get_connection() as conn:
+			conn.execute("UPDATE cognitive_tasks SET status = ? WHERE id = ?", (status, ids[key]))
+	return ids
+
+
+def test_purge_task_removes_terminal_rows_only(queue):
+	"""FRUSTRATED y COMPLETED se retiran; PENDING/PROCESSING jamás (un job vivo
+	se pausa o se abate, nunca se borra debajo del runner)."""
+	ids = _seed_statuses(
+		queue,
+		[
+			("frustrated", "FRUSTRATED"),
+			("completed", "COMPLETED"),
+			("pending", "PENDING"),
+			("processing", "PROCESSING"),
+		],
+	)
+
+	assert queue.purge_task(ids["frustrated"]) is True
+	assert queue.purge_task(ids["completed"]) is True
+	assert queue.purge_task(ids["pending"]) is False
+	assert queue.purge_task(ids["processing"]) is False
+
+	assert queue.get_task(ids["frustrated"]) is None
+	assert queue.get_task(ids["completed"]) is None
+	assert queue.get_task(ids["pending"])["status"] == "PENDING"
+	assert queue.get_task(ids["processing"])["status"] == "PROCESSING"
+
+
+def test_purge_task_paused_requires_force(queue):
+	"""Un PAUSED es trabajo reanudable, no basura: solo cae con force=True."""
+	ids = _seed_statuses(queue, [("paused", "PAUSED")])
+
+	assert queue.purge_task(ids["paused"]) is False
+	assert queue.get_task(ids["paused"])["status"] == "PAUSED"
+
+	assert queue.purge_task(ids["paused"], force=True) is True
+	assert queue.get_task(ids["paused"]) is None
+
+
+def test_purge_task_force_never_touches_live_rows(queue):
+	"""force amplía a PAUSED, no a los vivos: PENDING/PROCESSING siguen intocables."""
+	ids = _seed_statuses(queue, [("pending", "PENDING"), ("processing", "PROCESSING")])
+
+	assert queue.purge_task(ids["pending"], force=True) is False
+	assert queue.purge_task(ids["processing"], force=True) is False
+	assert queue.get_task(ids["pending"]) is not None
+	assert queue.get_task(ids["processing"]) is not None
+
+
+def test_purge_terminal_sweeps_frustrated_and_completed(queue):
+	"""El barrido retira todo lo terminal de una vez y respeta el resto de la cola."""
+	ids = _seed_statuses(
+		queue,
+		[
+			("f1", "FRUSTRATED"),
+			("f2", "FRUSTRATED"),
+			("done", "COMPLETED"),
+			("pending", "PENDING"),
+			("paused", "PAUSED"),
+			("blocked", "BLOCKED"),
+			("processing", "PROCESSING"),
+		],
+	)
+
+	assert queue.purge_terminal() == 3
+
+	for key in ("f1", "f2", "done"):
+		assert queue.get_task(ids[key]) is None
+	for key, status in (("pending", "PENDING"), ("paused", "PAUSED"), ("blocked", "BLOCKED"), ("processing", "PROCESSING")):
+		assert queue.get_task(ids[key])["status"] == status
+
+	assert queue.purge_terminal() == 0
+
+
+# ── Respiradero entre steps (ingesta de memorias durante jobs largos) ──────
+
+
+def test_step_boundary_callback_breathes_between_steps(queue, clean_registry):
+	"""Un entrenamiento continuo retiene process_driver_jobs HORAS en una sola
+	invocación: el callback entre steps es el único respiradero de la ingesta
+	de memory_queue mientras tanto. Se invoca entre step y step (N-1 veces
+	para N steps), nunca tras el último — al completar, el bucle principal
+	ya drena por su cuenta."""
+	register_driver(CountingDriver)
+	queue.enqueue_task(source="test_counting", payload={"total": 4})
+
+	breaths = []
+	assert process_driver_jobs(queue, on_step_boundary=lambda: breaths.append(1)) == 1
+	assert len(breaths) == 3
+
+
+def test_step_boundary_callback_failure_never_kills_the_job(queue, clean_registry):
+	"""La ingesta de memorias jamás justifica perder un entrenamiento: si el
+	respiradero revienta (Qdrant caído), el job sigue stepeando como si nada."""
+	register_driver(CountingDriver)
+	job_id = queue.enqueue_task(source="test_counting", payload={"total": 3})
+
+	def explosive_drain():
+		raise RuntimeError("Qdrant caído")
+
+	assert process_driver_jobs(queue, on_step_boundary=explosive_drain) == 1
+	assert queue.get_task(job_id)["status"] == "COMPLETED"

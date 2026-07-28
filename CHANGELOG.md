@@ -1,3 +1,43 @@
+## [7.13.0] - 2026-07-29 (La noche entra en la cola)
+
+La madrugada del 28-jul lo dejó claro: el sueño de las 03:00 y el entrenamiento de Bit compitieron por la VRAM sin que nadie arbitrara (3 OOM → Bit FRUSTRATED en la época 1030), y el chronicle de las 04:00 podía dispararse con el sueño aún corriendo. La causa de fondo: los ciclos nocturnos vivían FUERA del job manager, y la única defensa (`_nightly_cycle_active`) era ciega — las units oneshot reportan `activating` mientras corren, nunca `active`.
+
+### 🌙 Ciclos nocturnos como jobs (sleep/chronicle → cola central)
+- **[FIX] Detección de units oneshot en marcha**: el runner parsea el estado de `is-active` y acepta `activating`/`reloading`. Con `--quiet` (rc==0 solo para `active`) el deferral nocturno nunca funcionó; solo salvaba el fallback de fichero durante 300s.
+- **[CHANGE] Los timers de calendario ENCOLAN en vez de ejecutar**: `schedule_pulse` genera units que hacen `red-pill job submit --recipe configs/jobs/{sleep,chronicle}.yaml --singleton`. El runner serializa sueño (prio 8) > chronicle (7) > entrenamiento (5): nadie roba la VRAM a nadie y el chronicle espera si el sueño no ha terminado.
+- **[FEAT] Recetas versionadas del kernel** (`configs/jobs/`): el kernel también es satélite de su propia cola. Cota de step del sueño en 300 min (noches cargadas han llegado a ~4h; el default de 2h lo abatiría).
+- **[FEAT] `defer_exit_code` declarativo en ScriptJobDriver**: un código de salida del satélite que significa "ahora no puedo" se convierte en deferral limpio R1 — ni falso COMPLETED en modo `single` ni intento quemado. `trigger_pulse --cycle sleep` sale con 75 (EX_TEMPFAIL) cuando el ciclo se auto-difirió, leído de su propio `sleep_phase_status.json` acotado al arranque del run.
+- **[FEAT] `job submit --singleton`**: los timers diarios ceden si el job equivalente de ayer sigue vivo, en vez de duplicarlo.
+- **[FIX] Cesión por prioridad en frontera de step**: la prioridad de la cola solo ordenaba POPS — un entrenamiento de días popeado a las 23:00 retenía el runner más allá de las 03:00 y el sueño (prio 8) esperaba a que la school COMPLETARA: la migración entera derrotada en su primera noche. Ahora, entre step y step, si hay un PENDING de prioridad estrictamente mayor en los carriles de driver, el job actual se difiere (R1, sin quemar intento) y la misma invocación popea al prioritario. Se comprueba DESPUÉS de al menos un step: un prioritario no-ejecutable (GPU externa llena, se difiere en bucle) no mata de hambre al resto.
+
+### 🫁 Ingesta de memorias sin ayunas (memory_queue vs jobs largos)
+- **[FIX] El drenaje de memory_queue va PRIMERO en el ciclo del worker**: con el orden antiguo (cognitive → driver jobs → drain), un driver job continuo retenía `process_driver_jobs` HORAS en una sola invocación y los turnos capturados por los hooks quedaban sin ingerir a Qdrant toda esa ventana (ingesta diferida — la cola es durable y hay dedup, pero el Bünker vivía en el pasado). Drenaje extraído a `drain_memory_queue()` con `max_batches` acotado (absorbe backlog; un lote incompleto corta en seco).
+- **[FEAT] Respiradero entre steps** (`on_step_boundary` en `process_driver_jobs`): el reorden solo no bastaba — el worker cablea un drenaje de memory_queue entre step y step del job en curso. Blindado: un Qdrant caído jamás tumba un entrenamiento.
+
+### 🤖 CI
+- **[FIX] `integration.yml` era imparseable desde v5.5.0**: al job `integration` le faltaba `runs-on`, y un workflow inválido hace que GitHub registre un run fallido en 0s en CADA push a cualquier rama (no puede evaluar los triggers, así que falla siempre). Curado el esquema y restaurado el trigger documentado de push a `integration-test`, retirado por error en v6.3.3 (el gate interno lo seguía contemplando).
+
+### 🔁 Reintentos ante fallos transitorios de Qdrant
+- **[REF] Decorador `retry_on_qdrant_error` en StorageEngine**: sustituye los dos bucles de retry duplicados inline (`ensure_collection`, `retrieve`) y extiende la protección a upsert, set_payload, batch_update_points, scroll, delete, query_points y el resto de operaciones. Captura solo `ResponseHandlingException` (errores de transporte httpx) — nunca catch-all ni None silencioso al agotar reintentos. Rescatado del stash pre-release del 1-jul y reimplementado limpio.
+
+### 🧠 Persistencia de hubs (regresión desde el 19-jul, #70)
+- **[FIX] `emotional_vector` sancionado en `CreateEngramRequest`**: TODOS los synthesis hubs fallaban al guardarse desde que #70 cableó `{"fragments": [...]}` (ADR-AXON-001 §2.2) — el validador solo permitía dicts anidados en las claves de ventana temporal. Nueve noches sin capa de hubs ni thread weaving (los chunks hijos sí se guardaron; re-sintetizable desde raw). Validación de forma estricta en vez de aplanar el contrato.
+
+### ⚓ Anclas
+- **[CHANGE] Template único del sovereign handshake** con `${RELAY_INSTRUCTION}` condicional: con hooks de editor (Claude Code, opencode) solo `user_prompt`; sin hooks (Antigravity) también `previous_prompt`/`previous_response` — cura la Silent Amnesia de los turnos de Antigravity que el reminder MCP no compensaba.
+
+### 🧹 `job purge` — el operador puede limpiar su propia cola
+- **[FEAT] `red-pill job purge`**: retira filas terminales de la cola por id(s)
+  (`job purge <id> [<id>…]`) o en barrido (`job purge --terminal` = todos los
+  FRUSTRATED y COMPLETED). Con confirmación interactiva salvo `--yes`. Un PAUSED
+  solo cae por id y con `--force` (es trabajo reanudable, no basura); PENDING y
+  PROCESSING son intocables incluso con force — un job vivo se pausa o se abate,
+  nunca se borra debajo del runner. Complementa a `purge_hygiene` (la limpieza
+  temporal del Janitor nocturno): esto es el verbo en caliente. Motivación: 8
+  jobs `samantha` FRUSTRATED fosilizados ensuciando cada `job list` (28-jul).
+- **[TEST] 4 tests nuevos** en `tests/test_job_manager.py`: terminales sí,
+  vivos jamás, PAUSED gateado por force, barrido respeta el resto de la cola.
+
 ## [7.12.0] - 2026-07-27 (Captura de turnos: una sola tubería, del hook al engrama)
 
 Durante un mes hubo **dos sumideros**. Cuatro superficies de captura deterministas (plugin de opencode, hook Stop de Claude Code, bridge de opencode, worker de Antigravity) escribían cada turno en una tabla `interactions` de `bunker.db` que **ningún consumidor leía**; mientras tanto, la memoria se alimentaba solo del relay del handshake, es decir, de que el modelo se acordara de llamar. La mitad fiable escribía en un callejón sin salida y la mitad no fiable era la única que llegaba a Qdrant. El plugin lo documentaba en su cabecera ("Queue Worker → bunker_queue.db → Qdrant"): esa etapa nunca se escribió.
