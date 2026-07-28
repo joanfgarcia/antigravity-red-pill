@@ -295,8 +295,27 @@ def test_relative_binary_is_resolved_against_cwd(tmp_path):
 
 	argv = _bind(ScriptJobDriver())._build_argv({"step_command": ".venv/bin/python train.py"}, str(tmp_path))
 
-	assert argv[0] == str((venv_bin / "python").resolve())
+	assert argv[0] == os.path.abspath(venv_bin / "python")
 	assert os.path.isabs(argv[0])
+
+
+def test_venv_symlink_interpreter_is_not_followed(tmp_path):
+	"""Lección del job ef18de08 (2026-07-28): el python de un venv es un symlink
+	al intérprete base. Seguirlo con resolve() lo saca del venv (pyvenv.cfg se
+	localiza por la ruta invocada) y el step muere con ModuleNotFoundError de
+	sus propias dependencias. El argv debe quedar absoluto pero SIN resolver."""
+	system_python = tmp_path / "usr" / "python3"
+	system_python.parent.mkdir(parents=True)
+	system_python.write_text("#!/bin/sh\n")
+	venv_bin = tmp_path / "proj" / ".venv" / "bin"
+	venv_bin.mkdir(parents=True)
+	(venv_bin / "python").symlink_to(system_python)
+
+	cwd = str(tmp_path / "proj")
+	argv = _bind(ScriptJobDriver())._build_argv({"step_command": ".venv/bin/python train.py"}, cwd)
+
+	assert argv[0] == str(venv_bin / "python"), "el symlink del venv debe invocarse por SU ruta"
+	assert argv[0] != str(system_python.resolve())
 
 
 def test_scope_carries_name_memory_and_runtime_bound(tmp_path, monkeypatch):
