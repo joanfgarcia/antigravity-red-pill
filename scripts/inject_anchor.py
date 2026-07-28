@@ -34,7 +34,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _config_common import agent_core_vars, build_vars, subst  # noqa: E402
 
 # ── Anchor block version (bump to force a re-splice on upgrade) ───────────────
-BLOCK_VERSION = {"sovereign_handshake": 1, "agent_core": 2, "knowledge_access": 2}
+BLOCK_VERSION = {"sovereign_handshake": 3, "agent_core": 2, "knowledge_access": 2}
 
 
 def _version(anchor):
@@ -101,14 +101,18 @@ def ide_call_vars(ide):
 	`<api>` tool + an `action` argument (the flat name is not a tool for them).
 	opencode does NOT prefix MCP tools — they appear under their resource
 	group names (bunker_memory_api, swarm_orchestrator_api, etc.)."""
+	# Antigravity has NO editor hooks — the handshake itself is the relay.
 	if ide == "antigravity":
 		return {
 			"RELAY_CALL": "`mcp_RedPill-Kernel_sovereign_handshake`",
 			"WAKE_CALL": "`mcp_RedPill-Kernel_refresh_session_context`",
+			"RELAY_INSTRUCTION": "Call passing `user_prompt`, `previous_prompt` and `previous_response` (no editor hook — the handshake is the persistence relay).",
 		}
+	# Claude Code / OpenCode have editor hooks that capture prompt+response automatically.
 	return {
 		"RELAY_CALL": "the `sovereign_handshake` tool",
 		"WAKE_CALL": 'the `bunker_memory_api` tool with `{"action": "refresh_session_context", "payload": {}}`',
+		"RELAY_INSTRUCTION": "Call passing only `user_prompt` (the editor hook already captures prompt+response).",
 	}
 
 
