@@ -108,7 +108,8 @@ def run(execute: bool = False, snapshot: bool = True) -> Dict[str, int]:
 	# exceden el timeout por defecto del cliente (5s).
 	client = QdrantClient(url=getattr(config, "QDRANT_URL", "http://localhost:6333"), api_key=getattr(config, "QDRANT_API_KEY", None), timeout=600)
 
-	total = client.get_collection(COLLECTION).points_count
+	total_count = client.get_collection(COLLECTION).points_count
+	total = total_count if total_count is not None else 0
 	logger.info(f"Escaneando {COLLECTION} ({total} puntos)...")
 	nodes, fragments = _scan(client)
 
@@ -147,8 +148,9 @@ def run(execute: bool = False, snapshot: bool = True) -> Dict[str, int]:
 		except Exception as e:
 			logger.debug(f"Recableado {current} → {following} falló: {e}")
 
-	final = client.get_collection(COLLECTION).points_count
-	logger.info(f"COLAPSO COMPLETO: {total} → {final} puntos ({total - (final if final is not None else 0)} retirados).")
+	final_count = client.get_collection(COLLECTION).points_count
+	final = final_count if final_count is not None else 0
+	logger.info(f"COLAPSO COMPLETO: {total} → {final} puntos ({total - final} retirados).")
 	summary["final"] = final
 	return {key: value for key, value in summary.items() if value is not None}
 
