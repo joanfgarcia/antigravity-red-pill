@@ -148,6 +148,7 @@ class RedPillConfig(BaseSettings):
 	# -----------------------------------------------------------------------
 	MLX_LM_URL: str = "http://127.0.0.1:8760/v1/chat/completions"
 	DUAL_BIND_PROXY_URL: str = "http://127.0.0.1:8760"  # Base URL of the dual-bind proxy (VRAM unload endpoint)
+	LLM_GENERATE_TIMEOUT: int = 600  # Cota por llamada generate() al LLM local — un proxy mudo no puede congelar el sueño
 
 	# -----------------------------------------------------------------------
 	# CENTRALIZED JOB MANAGER (ScriptJobDriver — RFC 2026-07-27)
