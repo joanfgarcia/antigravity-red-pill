@@ -21,7 +21,16 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from red_pill.jobs.drivers.base import JobDeferred, JobStepTimeout, ResumableJobDriver, StepOutcome, append_job_log, human_duration, job_log_path
+from red_pill.jobs.drivers.base import (
+	JobDeferred,
+	JobPauseRequested,
+	JobStepTimeout,
+	ResumableJobDriver,
+	StepOutcome,
+	append_job_log,
+	human_duration,
+	job_log_path,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -122,12 +131,15 @@ class ScriptJobDriver(ResumableJobDriver):
 		if cwd and not os.path.isdir(cwd):
 			raise ValueError(f"payload.cwd no existe: {cwd}")
 
-		defer_code = payload.get("defer_exit_code")
-		if defer_code is not None:
-			# 124/137/143 son los códigos canónicos de muerte por cota/señal: si el
-			# satélite los usara como deferral, un cuelgue real se reintentaría eternamente.
-			if not isinstance(defer_code, int) or not (1 <= defer_code <= 255) or defer_code in (124, 137, 143):
-				raise ValueError(f"payload.defer_exit_code debe ser un entero 1-255 distinto de 124/137/143 (recibido: {defer_code!r})")
+		for code_key in ("defer_exit_code", "pause_exit_code"):
+			code = payload.get(code_key)
+			if code is not None:
+				# 124/137/143 son los códigos canónicos de muerte por cota/señal: si el
+				# satélite los usara como señal, un cuelgue real se malinterpretaría eternamente.
+				if not isinstance(code, int) or not (1 <= code <= 255) or code in (124, 137, 143):
+					raise ValueError(f"payload.{code_key} debe ser un entero 1-255 distinto de 124/137/143 (recibido: {code!r})")
+		if payload.get("defer_exit_code") is not None and payload.get("defer_exit_code") == payload.get("pause_exit_code"):
+			raise ValueError("defer_exit_code y pause_exit_code no pueden coincidir: significan cosas distintas")
 
 		progress = payload.get("progress") or {}
 		mode = progress.get("mode", "single")
@@ -216,6 +228,10 @@ class ScriptJobDriver(ResumableJobDriver):
 			# limpio (R1) en vez de dar el step por completado o quemar un intento.
 			if returncode == payload.get("defer_exit_code"):
 				raise JobDeferred(f"el satélite pidió deferral (exit {returncode})")
+			# ...o "esto exige juicio del operador" (un examen suspendido K veces):
+			# PAUSED con checkpoint intacto, reanudable con `job resume` tras revisar.
+			if returncode == payload.get("pause_exit_code"):
+				raise JobPauseRequested(f"el satélite pidió revisión del operador (exit {returncode})")
 			tail = self._log_tail()
 			if self._looks_like_timeout(elapsed, returncode):
 				raise JobStepTimeout(elapsed_s=elapsed, bound_s=self.step_timeout_s, ema_s=elapsed, attempt=self.attempts + 1)
