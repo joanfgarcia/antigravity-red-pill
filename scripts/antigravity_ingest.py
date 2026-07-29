@@ -105,12 +105,15 @@ class ChronicleIngester:
 		except Exception as e:
 			logger.debug(f"Evict of previous copies failed for {session_id}#{idx}: {e}")
 
-	def ingest_session(self, session_id: str, messages: List[Dict[str, Any]]):
+	def ingest_session(self, session_id: str, messages: List[Dict[str, Any]], originator: str = "antigravity"):
 		"""
 		Ingests ALL messages in a session sequentially.
 		Forges a continuous synaptic thread.
+
+		`originator` identifica la fuente (antigravity | claude_code | opencode);
+		el session_id ya debe venir namespaced por el plugin de fuente.
 		"""
-		logger.info(f"Ingesting session {session_id} ({len(messages)} messages)...")
+		logger.info(f"Ingesting session {session_id} ({len(messages)} messages, source={originator})...")
 
 		last_node_id = None
 
@@ -141,13 +144,15 @@ class ChronicleIngester:
 
 			ts = msg.get("timestamp")
 
-			# Parse ISO timestamp if present
+			# Parse ISO timestamp if present; epoch numérico (opencode) pasa directo
 			if isinstance(ts, str):
 				try:
 					ts = datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
 				except ValueError:
 					# In case of partial ISO or other strings
 					ts = time.time()
+			elif isinstance(ts, (int, float)) and not isinstance(ts, bool):
+				ts = float(ts)
 			else:
 				ts = time.time()
 
@@ -167,6 +172,7 @@ class ChronicleIngester:
 				"role": role,
 				"type": "chronicle_node",
 				"created_at": ts,
+				"originator": originator,
 			}
 
 			# Forge the Sequence Axon (Thread Continuity)
@@ -203,6 +209,7 @@ class ChronicleIngester:
 					"parent_id": node_id,
 					"session_id": session_id,
 					"type": "idea_fragment",
+					"originator": originator,
 					"associations": [{"id": node_id, "weight": 2.0}],  # Link to parent
 				}
 				self.mem.add_memory(
@@ -255,9 +262,10 @@ def main():
 			for session_data in sessions:
 				session_id = session_data.get("cascade_id") or session_data.get("session_id") or json_file.stem
 				messages = session_data.get("messages", [])
+				originator = session_data.get("originator", "antigravity")
 
 				if messages:
-					ingester.ingest_session(session_id, messages)
+					ingester.ingest_session(session_id, messages, originator=originator)
 
 		except Exception as e:
 			logger.error(f"Failed to process {json_file}: {e}")
