@@ -60,6 +60,35 @@ def test_orphan_fragments_follow_their_parent():
 	assert orphan_fragments(fragments, surviving_ids={"kept"}) == ["f2"]
 
 
+def test_execute_deletes_uuid_ids_verbatim(monkeypatch):
+	"""Los point ids del archivo son UUIDs string: el selector de borrado debe
+	pasarlos tal cual — una coacción a int revienta en el primer batch y dejaría
+	la herramienta de la Legión rota justo donde importa."""
+	from unittest.mock import MagicMock
+
+	import red_pill.tools.dedup_archive as mod
+
+	uid_keep = "3da688f6-0dba-4dad-93aa-c9694b3e92e6"
+	uid_drop = "90d422af-689a-42d1-8110-979cc9e6d9cf"
+	client = MagicMock()
+	client.get_collection.return_value.points_count = 2
+	client.scroll.side_effect = [
+		(
+			[
+				MagicMock(id=uid_keep, payload={"type": "chronicle_node", "session_id": "s1", "sequence_index": 0, "role": "user", "created_at": 2}),
+				MagicMock(id=uid_drop, payload={"type": "chronicle_node", "session_id": "s1", "sequence_index": 0, "role": "user", "created_at": 1}),
+			],
+			None,
+		)
+	]
+	monkeypatch.setattr("qdrant_client.QdrantClient", lambda *a, **kw: client)
+
+	mod.run(execute=True, snapshot=False)
+
+	deleted = client.delete.call_args.kwargs.get("points_selector") or client.delete.call_args.args[1]
+	assert deleted == [uid_drop]  # UUID string, tal cual
+
+
 def test_forward_axons_chain_survivors_in_sequence_order():
 	keepers, _ = choose_keepers(
 		[

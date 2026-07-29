@@ -121,12 +121,12 @@ def run(execute: bool = False, snapshot: bool = True) -> Dict[str, int]:
 	logger.info(f"Nodos con clave: {len(nodes)} → supervivientes {len(keepers)}, bajas {len(drop_nodes)}")
 	logger.info(f"Fragments: {len(fragments)} → huérfanos a podar {len(drop_frags)}")
 	logger.info(f"Axones secuenciales a recablear: {len(links)}")
-	logger.info(f"Intocables (legacy sin clave): {total - len(nodes) - len(fragments)}")
+	logger.info(f"Intocables (legacy sin clave): {total - (len(nodes) if nodes else 0) - (len(fragments) if fragments else 0)}")
 
 	summary = {"total": total, "keepers": len(keepers), "drop_nodes": len(drop_nodes), "drop_fragments": len(drop_frags)}
 	if not execute:
 		logger.info("[DRY RUN] Nada aplicado. Ejecuta con --execute para colapsar.")
-		return summary
+		return {key: value for key, value in summary.items() if value is not None}
 
 	if snapshot:
 		logger.info("Creando snapshot previo de la colección...")
@@ -135,6 +135,9 @@ def run(execute: bool = False, snapshot: bool = True) -> Dict[str, int]:
 
 	doomed = drop_nodes + drop_frags
 	for start in range(0, len(doomed), 1000):
+		# Los ids del archivo son UUIDs (sha256 → uuid): van tal cual. Coaccionar
+		# a int revienta con ValueError en el primer batch (verificado: el colapso
+		# real de 678K puntos corrió con ids string).
 		client.delete(COLLECTION, points_selector=doomed[start : start + 1000], wait=True)
 		logger.info(f"Borrados {min(start + 1000, len(doomed))}/{len(doomed)}")
 
@@ -145,9 +148,9 @@ def run(execute: bool = False, snapshot: bool = True) -> Dict[str, int]:
 			logger.debug(f"Recableado {current} → {following} falló: {e}")
 
 	final = client.get_collection(COLLECTION).points_count
-	logger.info(f"COLAPSO COMPLETO: {total} → {final} puntos ({total - final} retirados).")
+	logger.info(f"COLAPSO COMPLETO: {total} → {final} puntos ({total - (final if final is not None else 0)} retirados).")
 	summary["final"] = final
-	return summary
+	return {key: value for key, value in summary.items() if value is not None}
 
 
 def main() -> None:
