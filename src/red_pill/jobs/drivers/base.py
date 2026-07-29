@@ -42,6 +42,20 @@ class JobDeferred(Exception):
 		super().__init__(reason)
 
 
+class JobPauseRequested(Exception):
+	"""El satélite pide la pausa del operador (declarada vía `pause_exit_code`).
+
+	No es fallo ni deferral: el trabajo llegó a un punto que exige juicio humano
+	(un examen suspendido K veces, un umbral de calidad no alcanzado). El runner
+	sella PAUSED con el checkpoint intacto y CERO intentos quemados; se reanuda
+	con `red-pill job resume` cuando el operador haya revisado.
+	"""
+
+	def __init__(self, reason: str):
+		self.reason = reason
+		super().__init__(reason)
+
+
 class JobStepTimeout(Exception):
 	"""El step excedió su cota de tiempo y fue abatido como cgroup completo.
 

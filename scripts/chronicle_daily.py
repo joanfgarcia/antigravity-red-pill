@@ -2,9 +2,11 @@
 """
 chronicle_daily.py — Autonomous Chronicle Ingestion Pipeline (Phase 2)
 
-Automates the ingestion of extracted JSON conversations into the Qdrant Bünker.
-Reads from `~/.local/share/red-pill/unencrypted_conversations` and relies on a registry
-to track `step_count` for each conversation, preventing duplicate or redundant ingests.
+Orquestador agnóstico de fuentes: descubre los ChronicleSourcePlugin habilitados
+(antigravity, claude_code, opencode...), detecta deltas de step_count por fuente
+y archiva las conversaciones normalizadas en el Bünker (archive_memories).
+El registro (`chronicle_daily_registry.json`) guarda step_counts anidados por
+fuente para prevenir ingestas duplicadas o redundantes.
 
 Usage:
 	uv run python scripts/chronicle_daily.py              # default: process updates
@@ -28,19 +30,55 @@ logging.basicConfig(
 logger = logging.getLogger("chronicle_daily")
 
 # ── Paths ────────────────────────────────────────────────────────────────────
-PROCESSED_LOG = Path.home() / ".agent/chronicle_processed.json"
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+from red_pill.core.paths import get_data_dir  # noqa: E402
+
+PROCESSED_LOG = get_data_dir() / "chronicle_daily_registry.json"
 WORK_DIR = Path("/tmp/chronicle_today")
 SCRIPTS_DIR = Path(__file__).parent
 
 
+def _default_state() -> dict:
+	return {"processed": {}, "registry": {}, "last_run": None, "stats": {"total_ingested": 0, "total_sessions": 0}}
+
+
+def _migrate_flat_registry(state: dict) -> bool:
+	"""Formato plano pre-multi-fuente → anidado por fuente, sin perder lo sembrado.
+
+	El registro histórico era `{cid: step_count}` y solo conocía Antigravity; el
+	multi-fuente lo anida como `{source: {cid: step_count}}`. Sin esta migración,
+	el primer arranque daría el histórico de Antigravity por desconocido y lo
+	re-ingeriría entero (el timeout que ya nos abatió la madrugada del 29 jul).
+	"""
+	registry = state.get("registry", {})
+	if not registry or all(isinstance(v, dict) for v in registry.values()):
+		return False
+
+	state["registry"] = {"antigravity": registry}
+	processed = state.get("processed", {})
+	if processed and not all(isinstance(v, dict) for v in processed.values()):
+		state["processed"] = {"antigravity": processed}
+	logger.info(f"Migrated flat registry to per-source format ({len(registry)} antigravity sessions preserved).")
+	return True
+
+
 def _load_processed() -> dict:
-	"""Load the registry of processed session IDs and their step counts."""
+	"""Load the registry of processed session IDs and their step counts (per source)."""
+	state = _default_state()
 	if PROCESSED_LOG.exists():
 		try:
-			return json.loads(PROCESSED_LOG.read_text())
-		except Exception:
-			pass
-	return {"processed": {}, "registry": {}, "last_run": None, "stats": {"total_ingested": 0, "total_sessions": 0}}
+			loaded = json.loads(PROCESSED_LOG.read_text())
+			if isinstance(loaded, dict):
+				state.update(loaded)
+		except Exception as e:
+			logger.warning(f"Could not parse registry, starting fresh: {e}")
+
+	for key, default in _default_state().items():
+		state.setdefault(key, default)
+
+	if _migrate_flat_registry(state):
+		_save_processed(state)
+	return state
 
 
 def _save_processed(state: dict) -> None:
@@ -48,33 +86,41 @@ def _save_processed(state: dict) -> None:
 	PROCESSED_LOG.write_text(json.dumps(state, indent=2))
 
 
-def _find_pending(state: dict) -> list[tuple[Path, int]]:
-	"""Return a list of (Path, step_count) for JSONs that need to be ingested."""
-	from red_pill.core.paths import get_unencrypted_conversations_dir
+def _seed_new_sources(state: dict, plugins: list) -> bool:
+	"""Primer contacto con una fuente: siembra su histórico como ya procesado.
 
-	unencrypted_dir = get_unencrypted_conversations_dir()
-	if not unencrypted_dir.exists():
-		logger.error(f"Unencrypted conversations dir not found: {unencrypted_dir}")
-		return []
+	Evita la ingesta masiva inicial (timeouts de la cota del job) — a partir de
+	la siembra solo entran deltas; `--all` fuerza el reproceso completo.
+	"""
+	seeded = False
+	now = datetime.now().isoformat()
+	for plugin in plugins:
+		if plugin.name in state["registry"]:
+			continue
+		discovered = plugin.discover()
+		state["registry"][plugin.name] = {cid: step_count for cid, step_count in discovered}
+		state["processed"][plugin.name] = {cid: now for cid, _ in discovered}
+		state["stats"]["total_sessions"] += len(discovered)
+		logger.info(f"Auto-seeded source '{plugin.name}' with {len(discovered)} existing sessions.")
+		seeded = True
+	return seeded
 
+
+def _find_pending(state: dict, plugins: list, force_all: bool = False) -> list:
+	"""[(plugin, conversation_id, step_count)] de conversaciones que necesitan ingesta."""
 	pending = []
-	registry = state.setdefault("registry", {})
-
-	for json_file in sorted(unencrypted_dir.glob("*.json")):
-		cid = json_file.stem
+	for plugin in plugins:
+		source_registry = state["registry"].setdefault(plugin.name, {})
 		try:
-			data = json.loads(json_file.read_text(encoding="utf-8"))
-			step_count = data.get("step_count", 0)
+			discovered = plugin.discover()
 		except Exception as e:
-			logger.warning(f"Could not read {json_file.name}: {e}")
+			logger.error(f"Source '{plugin.name}' discovery failed: {e}")
 			continue
 
-		last_step_count = registry.get(cid, -1)
-
-		# Only ingest if the JSON has more steps than what we last recorded
-		if step_count > last_step_count:
-			pending.append((json_file, step_count))
-
+		for cid, step_count in discovered:
+			# Only ingest if the conversation has more steps than what we last recorded
+			if force_all or step_count > source_registry.get(cid, -1):
+				pending.append((plugin, cid, step_count))
 	return pending
 
 
@@ -109,21 +155,31 @@ def main() -> None:
 	parser.add_argument("--dry-run", action="store_true", help="Show what would be processed without doing anything")
 	args = parser.parse_args()
 
-	sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+	from red_pill.chronicle_sources.base import discover_source_plugins
+
+	plugins = discover_source_plugins()
+	if not plugins:
+		logger.error("No chronicle source plugins enabled (CHRONICLE_ARCHIVE_SOURCES). Nothing to do.")
+		return
+	logger.info(f"Active sources: {', '.join(p.name for p in plugins)}")
 
 	# ── Load state ────────────────────────────────────────────────────────────
 	state = _load_processed()
-	pending_tuples = _find_pending(state)
-
-	if not pending_tuples:
-		logger.info("No pending conversations to process. Registry is up to date.")
-		state["last_run"] = datetime.now().isoformat()
+	if _seed_new_sources(state, plugins) and not args.dry_run:
 		_save_processed(state)
+
+	pending = _find_pending(state, plugins, force_all=args.all)
+
+	if not pending:
+		logger.info("No pending conversations to process. Registry is up to date.")
+		if not args.dry_run:
+			state["last_run"] = datetime.now().isoformat()
+			_save_processed(state)
 		return
 
-	logger.info(f"Found {len(pending_tuples)} pending conversation(s) requiring ingestion.")
-	for p, count in pending_tuples:
-		logger.info(f"  → {p.name} (Steps: {count})")
+	logger.info(f"Found {len(pending)} pending conversation(s) requiring ingestion.")
+	for plugin, cid, step_count in pending:
+		logger.info(f"  → [{plugin.name}] {cid} (Steps: {step_count})")
 
 	if args.dry_run:
 		logger.info("[DRY RUN] No changes made.")
@@ -137,36 +193,52 @@ def main() -> None:
 	try:
 		uv = ["uv", "run", "python"]
 
-		# ── Copy pending JSONs to isolated WORK_DIR ───────────────────────────
-		for json_file, _ in pending_tuples:
-			shutil.copy2(json_file, WORK_DIR)
+		# ── Normalize pending conversations into isolated WORK_DIR ───────────
+		# Cada fuente entrega mensajes ya normalizados; el fichero lleva el
+		# session_id namespaced y el originator para que el ingester los persista.
+		completed = []  # solo lo cargado con éxito entra luego al registro
+		for plugin, cid, step_count in pending:
+			try:
+				messages = plugin.load(cid)
+			except Exception as e:
+				logger.warning(f"[{plugin.name}] Could not load {cid}, will retry next cycle: {e}")
+				continue
 
-		# ── Step 1: Ingest ────────────────────────────────────────────────────
-		ingest_ok = _run(uv + [str(SCRIPTS_DIR / "antigravity_ingest.py"), "--dir", str(WORK_DIR)], "INGEST")
-		if not ingest_ok:
-			logger.error("Ingest failed. Aborting pipeline.")
-			return
+			if messages:
+				payload = {"session_id": plugin.qualify(cid), "originator": plugin.name, "messages": messages}
+				work_file = WORK_DIR / f"{plugin.name}__{cid}.json"
+				work_file.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+			# Sin mensajes útiles también se registra: no reintentar cada noche
+			completed.append((plugin, cid, step_count))
 
-		# ── Step 2: Distill (Samantha) ───────────────────────────────────────
-		if _llm_available():
-			_run(uv + [str(SCRIPTS_DIR / "chronicle_distill.py")], "DISTILL")
+		if not any(WORK_DIR.iterdir()):
+			logger.info("Pending conversations yielded no ingestable messages.")
 		else:
-			logger.warning("[DISTILL] Local LLM not available. Skipping Samantha distillation — will retry on next cycle.")
+			# ── Step 1: Ingest ────────────────────────────────────────────────
+			ingest_ok = _run(uv + [str(SCRIPTS_DIR / "antigravity_ingest.py"), "--dir", str(WORK_DIR)], "INGEST")
+			if not ingest_ok:
+				logger.error("Ingest failed. Aborting pipeline.")
+				return
 
-		# ── Step 3: Refine ────────────────────────────────────────────────────
-		_run(uv + [str(SCRIPTS_DIR / "chronicle_refine.py")], "REFINE")
+			# ── Step 2: Distill (Samantha) ───────────────────────────────────
+			if _llm_available():
+				_run(uv + [str(SCRIPTS_DIR / "chronicle_distill.py")], "DISTILL")
+			else:
+				logger.warning("[DISTILL] Local LLM not available. Skipping Samantha distillation — will retry on next cycle.")
+
+			# ── Step 3: Refine ────────────────────────────────────────────────
+			_run(uv + [str(SCRIPTS_DIR / "chronicle_refine.py")], "REFINE")
 
 		# ── Mark as processed in Registry ─────────────────────────────────────
 		now = datetime.now().isoformat()
-		for json_file, step_count in pending_tuples:
-			cid = json_file.stem
-			state["registry"][cid] = step_count
-			state["processed"][cid] = now
+		for plugin, cid, step_count in completed:
+			state["registry"].setdefault(plugin.name, {})[cid] = step_count
+			state["processed"].setdefault(plugin.name, {})[cid] = now
 
 		state["last_run"] = now
-		state["stats"]["total_sessions"] += len(pending_tuples)
+		state["stats"]["total_sessions"] += len(completed)
 		_save_processed(state)
-		logger.info(f"Chronicle pipeline complete. {len(pending_tuples)} session(s) updated in the registry.")
+		logger.info(f"Chronicle pipeline complete. {len(completed)} session(s) updated in the registry.")
 
 	finally:
 		if WORK_DIR.exists():

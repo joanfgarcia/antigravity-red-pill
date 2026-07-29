@@ -148,6 +148,7 @@ class RedPillConfig(BaseSettings):
 	# -----------------------------------------------------------------------
 	MLX_LM_URL: str = "http://127.0.0.1:8760/v1/chat/completions"
 	DUAL_BIND_PROXY_URL: str = "http://127.0.0.1:8760"  # Base URL of the dual-bind proxy (VRAM unload endpoint)
+	LLM_GENERATE_TIMEOUT: int = 600  # Cota por llamada generate() al LLM local — un proxy mudo no puede congelar el sueño
 
 	# -----------------------------------------------------------------------
 	# CENTRALIZED JOB MANAGER (ScriptJobDriver — RFC 2026-07-27)
@@ -442,8 +443,11 @@ class RedPillConfig(BaseSettings):
 	METABOLISM_COOLDOWN: int = 3600
 	METABOLISM_AUTO_COLLECTIONS: Any = ["work_memories", "social_memories", "story_memories"]
 	CHRONICLE_PLUGINS: List[str] = ["antigravity", "claude_code"]
+	# Fuentes del ARCHIVO diario (chronicle_daily → archive_memories); no confundir
+	# con CHRONICLE_PLUGINS, que gobierna el snatching hacia la consolidación.
+	CHRONICLE_ARCHIVE_SOURCES: List[str] = ["antigravity", "claude_code", "opencode"]
 
-	@field_validator("CHRONICLE_PLUGINS", mode="before")
+	@field_validator("CHRONICLE_PLUGINS", "CHRONICLE_ARCHIVE_SOURCES", mode="before")
 	@classmethod
 	def _parse_chronicle_plugins(cls, v: Any) -> Any:
 		if isinstance(v, str):

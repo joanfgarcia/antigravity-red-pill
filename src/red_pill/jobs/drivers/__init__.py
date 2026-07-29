@@ -12,6 +12,7 @@ from typing import Dict, List, Optional, Type
 
 from red_pill.jobs.drivers.base import (
 	JobDeferred,
+	JobPauseRequested,
 	JobStepTimeout,
 	ResumableJobDriver,
 	StepOutcome,
@@ -24,6 +25,7 @@ from red_pill.jobs.drivers.base import (
 
 __all__ = [
 	"JobDeferred",
+	"JobPauseRequested",
 	"JobStepTimeout",
 	"ResumableJobDriver",
 	"StepOutcome",

@@ -88,12 +88,35 @@ def _bind(driver: ScriptJobDriver, timeout: int = 300) -> ScriptJobDriver:
 		({"step_command": "echo hi", "defer_exit_code": 0}, "defer_exit_code"),
 		({"step_command": "echo hi", "defer_exit_code": "75"}, "defer_exit_code"),
 		({"step_command": "echo hi", "defer_exit_code": 124}, "defer_exit_code"),
+		({"step_command": "echo hi", "pause_exit_code": 137}, "pause_exit_code"),
+		({"step_command": "echo hi", "defer_exit_code": 75, "pause_exit_code": 75}, "no pueden coincidir"),
 	],
 )
 def test_validate_rejects_malformed_payload_at_submit(payload, expected):
 	"""Un payload incoherente muere al encolar, no tres intentos y FRUSTRATED después."""
 	with pytest.raises(ValueError, match=expected):
 		ScriptJobDriver.validate(payload)
+
+
+def test_clear_stale_scope_resets_failed_unit(monkeypatch):
+	"""Un scope abatido por RuntimeMaxSec queda en estado `failed`: is-active no lo
+	ve (rc≠0) y el `stop` se omite, pero systemd-run rechaza el nombre ("already
+	loaded") — la madrugada del 29 jul esto quemó el disyuntor del chronicle con
+	fallos falsos. `reset-failed` incondicional libera el nombre siempre."""
+	import subprocess as _sp
+
+	calls = []
+
+	class _Failed:
+		returncode = 3  # unit en failed: is-active rc≠0, la rama del stop no entra
+
+	monkeypatch.setattr(_sp, "run", lambda argv, **kw: calls.append(argv) or _Failed())
+
+	driver = _bind(ScriptJobDriver())
+	driver._clear_stale_scope()
+
+	assert any("reset-failed" in argv for argv in calls)
+	assert not any("stop" in argv for argv in calls)  # inactivo: no había nada que parar
 
 
 def test_defer_exit_code_defers_without_burning_attempts(queue, clean_registry, tmp_path):
@@ -107,6 +130,22 @@ def test_defer_exit_code_defers_without_burning_attempts(queue, clean_registry, 
 	assert process_driver_jobs(queue) == 0
 	task = queue.get_task(job_id)
 	assert task["status"] == "PENDING" and task["attempts"] == 0
+
+
+def test_pause_exit_code_pauses_for_operator_review(queue, clean_registry, tmp_path):
+	"""El satélite declara un código que significa "esto exige juicio humano" (un
+	examen suspendido K veces). El viejo `sys.exit(1)` bajo el runner quemaba un
+	intento y el retry automático se saltaba la puerta del examen (la transición
+	fantasma a etapa 8 del 29 jul 2026); esto lo convierte en PAUSED con el
+	checkpoint intacto, cero intentos, reanudable tras la revisión."""
+	register_driver(ScriptJobDriver)
+	cmd = _script(tmp_path, "import sys; sys.exit(78)")
+	job_id = queue.enqueue_task(source="script_job", payload={"step_command": cmd, "pause_exit_code": 78, "cwd": str(tmp_path)})
+
+	assert process_driver_jobs(queue) == 0
+	task = queue.get_task(job_id)
+	assert task["status"] == "PAUSED" and task["attempts"] == 0
+	assert queue.resume_task(job_id)  # el operador revisa y reanuda
 
 
 def test_validate_accepts_the_real_bit_payload(tmp_path):

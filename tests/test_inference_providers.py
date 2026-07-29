@@ -54,3 +54,37 @@ def test_base_provider_behavior():
 	assert provider.generate("test") == "Mock response to: test"
 	chunks = list(provider.stream("test"))
 	assert chunks == ["Mock chunk for: test"]
+
+
+def test_sip_generate_times_out_against_mute_server(tmp_path):
+	"""Un proxy que acepta la conexión pero nunca responde no puede bloquear
+	generate() indefinidamente — el sueño del 29 jul 2026 se quedó 4h colgado
+	en hub synthesis por esto. El timeout debe aflorar como excepción para que
+	el llamante lo cuente como fallo (consecutive_llm_failures)."""
+	import socket
+	import threading
+
+	from red_pill.core.providers import SipInferenceProvider
+
+	sock_path = str(tmp_path / "mute.sock")
+	server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+	server.bind(sock_path)
+	server.listen(1)
+
+	def _accept_and_ignore():
+		try:
+			conn, _ = server.accept()
+			threading.Event().wait(5)  # acepta y calla: jamás responde
+			conn.close()
+		except Exception:
+			pass
+
+	thread = threading.Thread(target=_accept_and_ignore, daemon=True)
+	thread.start()
+	try:
+		provider = SipInferenceProvider(socket_path=sock_path)
+		with pytest.raises(Exception) as exc:
+			provider.generate("hola", timeout=1)
+		assert isinstance(exc.value, (TimeoutError, socket.timeout, OSError))
+	finally:
+		server.close()

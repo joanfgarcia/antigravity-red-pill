@@ -154,13 +154,23 @@ class SipInferenceProvider(BaseInferenceProvider):
 		import json
 		import socket
 
+		import red_pill.config as cfg
+
+		# Sin timeout, un proxy que acepta la conexión pero nunca responde (modelo
+		# descargado, GPU comprometida) bloquea INDEFINIDAMENTE: el sueño del
+		# 29 jul 2026 se quedó 4h colgado en hub synthesis por esto. El error debe
+		# fluir al manejo de fallos del llamante (consecutive_llm_failures), no
+		# congelar el ciclo entero.
+		timeout = int(kwargs.get("timeout", cfg.LLM_GENERATE_TIMEOUT))
+
 		class UnixHTTPConnection(http.client.HTTPConnection):
-			def __init__(self, path: str):
-				super().__init__("localhost")
+			def __init__(self, path: str, timeout: int):
+				super().__init__("localhost", timeout=timeout)
 				self.path = path
 
 			def connect(self):
 				self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+				self.sock.settimeout(self.timeout)
 				self.sock.connect(self.path)
 
 		payload = {
@@ -177,7 +187,7 @@ class SipInferenceProvider(BaseInferenceProvider):
 		if "response_format" in kwargs:
 			payload["response_format"] = kwargs["response_format"]
 
-		conn = UnixHTTPConnection(self.socket_path)
+		conn = UnixHTTPConnection(self.socket_path, timeout=timeout)
 		headers = {"Content-Type": "application/json"}
 		conn.request("POST", "/v1/chat/completions", body=json.dumps(payload), headers=headers)
 		response = conn.getresponse()
