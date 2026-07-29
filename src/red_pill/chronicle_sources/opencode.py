@@ -50,7 +50,7 @@ class OpencodeSourcePlugin(ChronicleSourcePlugin):
 	def _render_part(self, part: Dict[str, Any]) -> str:
 		p_type = part.get("type")
 		if p_type == "text":
-			return part.get("text", "")
+			return part.get("text", "") or ""
 		if p_type == "tool":
 			from red_pill.metabolism.chronicle.claude_code_plugin import _render_tool_use
 

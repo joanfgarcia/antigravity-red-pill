@@ -138,7 +138,7 @@ def run(execute: bool = False, snapshot: bool = True) -> Dict[str, int]:
 		# Los ids del archivo son UUIDs (sha256 → uuid): van tal cual. Coaccionar
 		# a int revienta con ValueError en el primer batch (verificado: el colapso
 		# real de 678K puntos corrió con ids string).
-		client.delete(COLLECTION, points_selector=doomed[start : start + 1000], wait=True)
+		client.delete(COLLECTION, points_selector=[str(point) for point in doomed[start : start + 1000]], wait=True)
 		logger.info(f"Borrados {min(start + 1000, len(doomed))}/{len(doomed)}")
 
 	for current, following in links:

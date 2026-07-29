@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v7.13.0 (Nightly Cycles in the Queue)
+**System Version**: v7.14.0 (Multi-Orchestrator Chronicle & Job Resilience)
 **Analyst**: The Architect
 **Date**: 2026-04-16
 

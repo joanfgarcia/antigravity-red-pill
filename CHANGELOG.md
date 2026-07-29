@@ -1,3 +1,22 @@
+## [7.14.0] - 2026-07-29 (Chronicle Multi-Orquestador & Resiliencia de Jobs)
+
+### 📜 Chronicle Multi-Orquestador & Plugin Architecture (`ChronicleSourcePlugin`)
+- **[FEAT] Archivo diario multi-orquestador**: `chronicle_daily` evoluciona a un orquestador agnóstico de fuentes. Descubre dinámicamente mediante `ChronicleSourcePlugin` los plugins habilitados (`antigravity`, `claude_code`, `opencode`), procesando deltas por `step_count` y manteniendo siembra aislada por orquestador.
+- **[FEAT] Soporte para Claude Code y OpenCode**:
+  - `claude_code`: ingesta trayectorias JSONL desde `~/.claude/projects`, compactando llamadas a herramientas.
+  - `opencode`: ingesta mensajes/partes desde SQLite (`part.type == "text" | "tool"`).
+- **[FIX] Registro XDG & Auto-siembra**: tras la migración XDG, el registro de procesamiento se reubica en el directorio de datos XDG. Si no existe, realiza un auto-seed a partir de los ficheros existentes para evitar re-ingestas masivas de todo el historial.
+
+### 🧹 Herramienta y CLI de Colapso de Deduplicación (`dedup-archive`)
+- **[FEAT] `red-pill tools dedup-archive`**: herramienta CLI para colapsar duplicados acumulados en `archive_memories`, preservando un punto único por `(session_id, sequence_index, role)` (priorizando la copia con árbol de fragmentos monolito-fragmentos existente) y podando fragmentos huérfanos.
+- **[FIX] Coacción de UUIDs en delete selector**: corrido el selector de puntos para pasar IDs como cadenas UUID explícitas en lugar de forzar enteros, evitando `ValueError`.
+
+### 🛡️ Resiliencia de Jobs & Detección de Despertar
+- **[FEAT] `pause_exit_code` declarativo**: permite a satélites solicitar pausado explícito (código 78) para intervención del operador con checkpoint intacto.
+- **[FIX] Limpieza incondicional de scopes estancados**: `_clear_stale_scope` ejecuta `systemd-run --reset-failed` incondicionalmente para evitar que scopes caducados (`RuntimeMaxSec`) bloqueen reintentos de jobs con nombres deterministas.
+- **[FIX] Timeout en SipInferenceProvider.generate()**: añade `LLM_GENERATE_TIMEOUT` (600s) en el socket unix para evitar que una proxy LLM muda/offline congele la síntesis del ciclo de sueño.
+- **[FIX] Detección de inactividad agnóstica (`fix(awakening)`)**: la detección de inactividad contempla procesos activos de Claude Code y OpenCode, evitando despertares prematuros durante sesiones de trabajo inter-orquestador.
+
 ## [7.13.0] - 2026-07-29 (La noche entra en la cola)
 
 La madrugada del 28-jul lo dejó claro: el sueño de las 03:00 y el entrenamiento de Bit compitieron por la VRAM sin que nadie arbitrara (3 OOM → Bit FRUSTRATED en la época 1030), y el chronicle de las 04:00 podía dispararse con el sueño aún corriendo. La causa de fondo: los ciclos nocturnos vivían FUERA del job manager, y la única defensa (`_nightly_cycle_active`) era ciega — las units oneshot reportan `activating` mientras corren, nunca `active`.
