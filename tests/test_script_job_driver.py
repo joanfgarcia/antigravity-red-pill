@@ -96,6 +96,27 @@ def test_validate_rejects_malformed_payload_at_submit(payload, expected):
 		ScriptJobDriver.validate(payload)
 
 
+def test_clear_stale_scope_resets_failed_unit(monkeypatch):
+	"""Un scope abatido por RuntimeMaxSec queda en estado `failed`: is-active no lo
+	ve (rc≠0) y el `stop` se omite, pero systemd-run rechaza el nombre ("already
+	loaded") — la madrugada del 29 jul esto quemó el disyuntor del chronicle con
+	fallos falsos. `reset-failed` incondicional libera el nombre siempre."""
+	import subprocess as _sp
+
+	calls = []
+
+	class _Failed:
+		returncode = 3  # unit en failed: is-active rc≠0, la rama del stop no entra
+
+	monkeypatch.setattr(_sp, "run", lambda argv, **kw: calls.append(argv) or _Failed())
+
+	driver = _bind(ScriptJobDriver())
+	driver._clear_stale_scope()
+
+	assert any("reset-failed" in argv for argv in calls)
+	assert not any("stop" in argv for argv in calls)  # inactivo: no había nada que parar
+
+
 def test_defer_exit_code_defers_without_burning_attempts(queue, clean_registry, tmp_path):
 	"""El satélite declara un código de salida que significa "ahora no puedo"
 	(el sueño con la GPU comprometida sale con 75): deferral limpio R1 — ni

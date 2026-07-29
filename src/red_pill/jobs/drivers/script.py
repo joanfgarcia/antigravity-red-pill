@@ -327,6 +327,7 @@ class ScriptJobDriver(ResumableJobDriver):
 			if active:
 				logger.warning(f"[SCRIPT JOB] Retirando scope huérfano {unit}.")
 				subprocess.run(["systemctl", "--user", "stop", unit], check=False, capture_output=True, timeout=15)
+			subprocess.run(["systemctl", "--user", "reset-failed", unit], check=False, capture_output=True, timeout=5)
 		except Exception:
 			pass
 
