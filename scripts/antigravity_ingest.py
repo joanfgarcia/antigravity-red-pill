@@ -74,6 +74,37 @@ class ChronicleIngester:
 		text = re.sub(r"\n{3,}", "\n\n", text)
 		return text.strip()
 
+	def _evict_previous_copies(self, session_id: str, idx: int, role: str, node_id: str) -> None:
+		"""Retira las copias previas de este mensaje lógico (otros ids) y sus fragments.
+
+		Best-effort: un fallo aquí no aborta la ingesta — el colapso nocturno de
+		`dedup_archive_memories.py` es la red de seguridad.
+		"""
+		from qdrant_client.http import models
+
+		try:
+			key_filter = models.Filter(
+				must=[
+					models.FieldCondition(key="session_id", match=models.MatchValue(value=session_id)),
+					models.FieldCondition(key="sequence_index", match=models.MatchValue(value=idx)),
+					models.FieldCondition(key="role", match=models.MatchValue(value=role)),
+				]
+			)
+			old_points, _ = self.mem.client.scroll(self.collection, scroll_filter=key_filter, limit=64, with_payload=False)
+			old_ids = [str(p.id) for p in old_points if str(p.id) != node_id]
+			if not old_ids:
+				return
+			self.mem.client.delete(
+				self.collection,
+				points_selector=models.FilterSelector(
+					filter=models.Filter(must=[models.FieldCondition(key="parent_id", match=models.MatchAny(any=old_ids))])
+				),
+				wait=True,
+			)
+			self.mem.client.delete(self.collection, points_selector=old_ids, wait=True)
+		except Exception as e:
+			logger.debug(f"Evict of previous copies failed for {session_id}#{idx}: {e}")
+
 	def ingest_session(self, session_id: str, messages: List[Dict[str, Any]]):
 		"""
 		Ingests ALL messages in a session sequentially.
@@ -150,6 +181,12 @@ class ChronicleIngester:
 			if fragments:
 				payload["type"] = "monolith_parent"
 				payload["fragment_count"] = len(fragments)
+
+			# Self-healing: el id incluye content[:100] y el contenido DERIVA entre
+			# exportaciones (telemetría, timestamps) — sin esto, cada re-ingesta de
+			# una sesión crecida acuña un id nuevo para el mismo mensaje y la
+			# colección se infla (725K puntos para 232 sesiones, jul 2026).
+			self._evict_previous_copies(session_id, idx, role, node_id)
 
 			# Add main node (or monolith parent)
 			self.mem.add_memory(collection=self.collection, text=refined[:5000], point_id=node_id, metadata=payload, importance=5.0)
