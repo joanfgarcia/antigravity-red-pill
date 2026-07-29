@@ -6,12 +6,7 @@ del mismo mensaje lógico. Aquí se fija el contrato del colapso: un punto por
 (session, idx, role), fragments huérfanos fuera, axón secuencial reconstruido.
 """
 
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
-
-from dedup_archive_memories import choose_keepers, forward_axons, orphan_fragments  # noqa: E402
+from red_pill.tools.dedup_archive import choose_keepers, forward_axons, orphan_fragments
 
 
 def _node(pid, session, idx, role, created_at):

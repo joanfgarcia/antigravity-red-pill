@@ -433,6 +433,19 @@ def _dispatch_plugins(args: argparse.Namespace) -> bool:
 	return False
 
 
+def handle_tools(args: argparse.Namespace) -> None:
+	"""Caja de herramientas de mantenimiento one-shot del Bünker."""
+	if args.tools_cmd == "dedup-archive":
+		import logging as _logging
+
+		from red_pill.tools.dedup_archive import run
+
+		_logging.basicConfig(level=_logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+		run(execute=args.execute, snapshot=not args.no_snapshot)
+	else:
+		print("Herramientas disponibles: dedup-archive. Uso: red-pill tools <herramienta> [--execute]")
+
+
 def handle_job(args: argparse.Namespace) -> None:
 	"""Centralized Job Manager: cola persistente compartida (bunker_queue.db)."""
 	import json as _json
@@ -790,6 +803,14 @@ def main() -> None:
 
 	diag_parser = subparsers.add_parser("diag", help="Diagnostics")
 	diag_parser.add_argument("type", choices=["work", "social", "directive", "story", "interaction"])
+
+	# Herramientas de mantenimiento one-shot (reparaciones post-actualización
+	# que cualquier Bünker de la Legión puede necesitar)
+	tools_parser = subparsers.add_parser("tools", help="Bünker maintenance toolbox")
+	tools_sub = tools_parser.add_subparsers(dest="tools_cmd")
+	dedup_parser = tools_sub.add_parser("dedup-archive", help="Colapsar duplicados de archive_memories (dry-run por defecto)")
+	dedup_parser.add_argument("--execute", action="store_true", help="Aplicar de verdad (default: dry-run)")
+	dedup_parser.add_argument("--no-snapshot", action="store_true", help="No crear snapshot previo (bajo tu responsabilidad)")
 
 	sanitize_parser = subparsers.add_parser("sanitize", help="Sanitation & Migration Protocol")
 	sanitize_parser.add_argument("type", choices=["work", "social", "directive", "story", "interaction"])
@@ -1276,6 +1297,9 @@ def main() -> None:
 			return
 		elif args.command == "job":
 			handle_job(args)
+			return
+		elif args.command == "tools":
+			handle_tools(args)
 			return
 		elif args.command == "p2p":
 			handle_p2p(args)
