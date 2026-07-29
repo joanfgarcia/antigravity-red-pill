@@ -28,7 +28,10 @@ logging.basicConfig(
 logger = logging.getLogger("chronicle_daily")
 
 # ── Paths ────────────────────────────────────────────────────────────────────
-PROCESSED_LOG = Path.home() / ".agent/chronicle_processed.json"
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+from red_pill.core.paths import get_data_dir
+
+PROCESSED_LOG = get_data_dir() / "chronicle_daily_registry.json"
 WORK_DIR = Path("/tmp/chronicle_today")
 SCRIPTS_DIR = Path(__file__).parent
 
@@ -40,7 +43,32 @@ def _load_processed() -> dict:
 			return json.loads(PROCESSED_LOG.read_text())
 		except Exception:
 			pass
-	return {"processed": {}, "registry": {}, "last_run": None, "stats": {"total_ingested": 0, "total_sessions": 0}}
+
+	# Auto-seed registry with existing files to prevent massive ingestion timeouts on new installations
+	state = {"processed": {}, "registry": {}, "last_run": None, "stats": {"total_ingested": 0, "total_sessions": 0}}
+	try:
+		from red_pill.core.paths import get_unencrypted_conversations_dir
+		unencrypted_dir = get_unencrypted_conversations_dir()
+		if unencrypted_dir.exists():
+			now = datetime.now().isoformat()
+			for json_file in unencrypted_dir.glob("*.json"):
+				cid = json_file.stem
+				try:
+					data = json.loads(json_file.read_text(encoding="utf-8"))
+					step_count = data.get("step_count", 0)
+					state["registry"][cid] = step_count
+					state["processed"][cid] = now
+				except Exception:
+					continue
+			state["last_run"] = now
+			state["stats"]["total_sessions"] = len(state["registry"])
+			PROCESSED_LOG.parent.mkdir(parents=True, exist_ok=True)
+			PROCESSED_LOG.write_text(json.dumps(state, indent=2))
+			logger.info(f"Auto-seeded chronicle registry with {len(state['registry'])} existing sessions.")
+	except Exception as e:
+		logger.warning(f"Failed to auto-seed chronicle registry: {e}")
+
+	return state
 
 
 def _save_processed(state: dict) -> None:
@@ -48,7 +76,7 @@ def _save_processed(state: dict) -> None:
 	PROCESSED_LOG.write_text(json.dumps(state, indent=2))
 
 
-def _find_pending(state: dict) -> list[tuple[Path, int]]:
+def _find_pending(state: dict, force_all: bool = False) -> list[tuple[Path, int]]:
 	"""Return a list of (Path, step_count) for JSONs that need to be ingested."""
 	from red_pill.core.paths import get_unencrypted_conversations_dir
 
@@ -72,7 +100,7 @@ def _find_pending(state: dict) -> list[tuple[Path, int]]:
 		last_step_count = registry.get(cid, -1)
 
 		# Only ingest if the JSON has more steps than what we last recorded
-		if step_count > last_step_count:
+		if force_all or step_count > last_step_count:
 			pending.append((json_file, step_count))
 
 	return pending
@@ -109,11 +137,9 @@ def main() -> None:
 	parser.add_argument("--dry-run", action="store_true", help="Show what would be processed without doing anything")
 	args = parser.parse_args()
 
-	sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
 	# ── Load state ────────────────────────────────────────────────────────────
 	state = _load_processed()
-	pending_tuples = _find_pending(state)
+	pending_tuples = _find_pending(state, force_all=args.all)
 
 	if not pending_tuples:
 		logger.info("No pending conversations to process. Registry is up to date.")
