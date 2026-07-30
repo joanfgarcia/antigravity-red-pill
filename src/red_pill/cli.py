@@ -601,11 +601,29 @@ def handle_job(args: argparse.Namespace) -> None:
 		if not task:
 			print(f"[ERROR] Job '{args.job_id}' no encontrado.")
 			return
-		ok = queue.pause_task(task["id"]) if args.job_cmd == "pause" else queue.resume_task(task["id"])
-		if ok:
-			print(f"[OK] Job {task['id'][:8]} → {'PAUSED' if args.job_cmd == 'pause' else 'PENDING'}.")
+		if args.job_cmd == "pause":
+			if queue.pause_task(task["id"]):
+				updated = queue.get_task(task["id"])
+				st = updated["status"] if updated else "PAUSED"
+				if st == "PAUSED":
+					print(f"[OK] Job {task['id'][:8]} pausado (PAUSED).")
+				else:
+					print(
+						f"[OK] Solicitud de pausa registrada para Job {task['id'][:8]} (PAUSING). Se pausará al finalizar el step actual (usa 'job resume' para cancelar)."
+					)
+			else:
+				print(f"[WARN] Job {task['id'][:8]} en estado '{task['status']}': transición a pausa no aplicable.")
 		else:
-			print(f"[WARN] Job {task['id'][:8]} en estado '{task['status']}': transición no aplicable.")
+			prev_st = task.get("status")
+			if queue.resume_task(task["id"]):
+				updated = queue.get_task(task["id"])
+				st = updated["status"] if updated else "PENDING"
+				if prev_st == "PAUSING" and st == "PROCESSING":
+					print(f"[OK] Pausa cancelada para Job {task['id'][:8]}. El job continuará ejecutándose en PROCESSING.")
+				else:
+					print(f"[OK] Job {task['id'][:8]} reanudado (PENDING).")
+			else:
+				print(f"[WARN] Job {task['id'][:8]} en estado '{task['status']}': reanudación no aplicable.")
 
 	elif args.job_cmd == "kill":
 		task = _find_job(queue, args.job_id)

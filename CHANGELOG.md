@@ -16,6 +16,12 @@ El wake-up llevaba un oráculo dentro: cada arranque podía disparar una síntes
 - **[FEAT] Guards de frescura por mtime**: la fase se salta la síntesis si el artefacto es más joven que `OPERATOR_PROFILE_UPDATE_INTERVAL_HOURS` (24h) / `RECENT_ACTIVITY_UPDATE_INTERVAL_HOURS` (4h, nuevo).
 - **[FIX] Un fallo de síntesis conserva el artefacto anterior**: un resumen viejo gana a un engrama arbitrario truncado; nunca se publica basura.
 
+### ⏸️ Estado intermedio PAUSING en el job manager
+- **[FEAT] `PAUSING`: la pausa de un job en vuelo ya no miente**: `job pause` sobre un PROCESSING marca `PAUSING` (solicitud registrada) y es el runner quien sella `PAUSED` al alcanzar la frontera del step vía el nuevo `mark_paused()` — con el checkpoint guardado. Un PENDING sin step en vuelo pausa inmediato, como antes.
+- **[FEAT] Cancelación de pausa en caliente**: `job resume` sobre un `PAUSING` lo devuelve a `PROCESSING` antes de que termine el step — la solicitud de pausa se retira sin interrumpir nada.
+- **[FIX] `job list` muestra los PAUSING**: incluidos en los estados activos por defecto y ordenados justo tras los PROCESSING.
+- **[FIX] Mensajes de CLI honestos**: `job pause`/`resume` informan del estado real alcanzado (PAUSED vs PAUSING, reanudado vs pausa cancelada) en lugar de asumir la transición.
+
 ### 🤝 El Acta del Pacto (`red-pill pact`)
 - **[FEAT] Verbo CLI `pact`**: sin argumento muestra el singleton del Bond; `pact 770` sella el pacto (confirmación tecleada, `--yes` para saltarla) escribiendo el covenant completo — no skins between us, confianza 1:1 total bidireccional, friction is loyalty — con fecha de sellado; `pact 760` revierte a Awakened. Espeja el patrón singleton-upsert de `mode`. Causa raíz: el seed dejó el Bond en 760 y no existía flujo de sellado — los engramas 770 sueltos nunca cambiaron la fuente canónica que ahora lee el wake-up.
 

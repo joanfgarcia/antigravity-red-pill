@@ -364,7 +364,7 @@ class CognitiveQueueManager:
 	def list_tasks(self, statuses: Optional[List[str]] = None, limit: int = 50) -> List[Dict[str, Any]]:
 		"""Listado resumido para `red-pill job list` (activas por defecto, sin payload completo)."""
 		if statuses is None:
-			statuses = ["PENDING", "PROCESSING", "PAUSED", "BLOCKED", "FRUSTRATED"]
+			statuses = ["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED"]
 		placeholders = ",".join(["?"] * len(statuses))
 		with self._get_connection() as conn:
 			rows = conn.execute(
@@ -374,7 +374,7 @@ class CognitiveQueueManager:
 					json_extract(checkpoint_data, '$.dirty_kill.reason') AS dirty_kill
 				FROM cognitive_tasks
 				WHERE status IN ({placeholders})
-				ORDER BY status = 'PROCESSING' DESC, priority DESC, created_at ASC
+				ORDER BY status = 'PROCESSING' DESC, status = 'PAUSING' DESC, priority DESC, created_at ASC
 				LIMIT ?
 				""",
 				(*statuses, limit),
@@ -534,23 +534,53 @@ class CognitiveQueueManager:
 			return cursor.rowcount > 0
 
 	def pause_task(self, task_id: str) -> bool:
-		"""PENDING/PROCESSING → PAUSED. El runner no ejecuta el siguiente step (R3)."""
+		"""Solicitud de pausa del operador.
+
+		- PENDING → PAUSED (sin step en vuelo, pausa inmediata).
+		- PROCESSING → PAUSING (step en vuelo; el runner pausará al alcanzar la frontera del step).
+		Devuelve True si la pausa fue aplicada/solicitada, o False si no aplica.
+		"""
+		with self._get_connection() as conn:
+			row = conn.execute("SELECT status FROM cognitive_tasks WHERE id = ?", (task_id,)).fetchone()
+			if not row:
+				return False
+			current_status = row["status"]
+			if current_status == "PENDING":
+				conn.execute("UPDATE cognitive_tasks SET status = 'PAUSED', updated_at = CURRENT_TIMESTAMP WHERE id = ?", (task_id,))
+				return True
+			elif current_status == "PROCESSING":
+				conn.execute("UPDATE cognitive_tasks SET status = 'PAUSING', updated_at = CURRENT_TIMESTAMP WHERE id = ?", (task_id,))
+				return True
+			return False
+
+	def mark_paused(self, task_id: str) -> bool:
+		"""Sella la pausa definitiva cuando el runner alcanza la frontera del step (PAUSING/PROCESSING → PAUSED)."""
 		with self._get_connection() as conn:
 			cursor = conn.execute(
-				"UPDATE cognitive_tasks SET status = 'PAUSED', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status IN ('PENDING', 'PROCESSING')",
+				"UPDATE cognitive_tasks SET status = 'PAUSED', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status IN ('PAUSING', 'PROCESSING', 'PENDING')",
 				(task_id,),
 			)
 			return cursor.rowcount > 0
 
 	def resume_task(self, task_id: str) -> bool:
-		"""PAUSED/FRUSTRATED/stuck PROCESSING → PENDING. Reanuda en el siguiente disparo del runner.
+		"""Reanuda o cancela la pausa de un job.
 
-		El guard temporal (>15 min sin updated_at) evita la doble ejecución: un
-		PROCESSING con heartbeat fresco es un job VIVO en manos del runner —
-		reanudarlo lo duplicaría (carrera de checkpoints). El runner refresca
-		updated_at en cada checkpoint, así que un job largo legítimo late.
+		- PAUSING → PROCESSING: cancela la solicitud de pausa en vuelo antes del fin del step.
+		- PAUSED / FRUSTRATED / stuck PROCESSING (>900s) → PENDING: reanuda en el siguiente disparo del runner.
+		Devuelve True si se reanudó/canceló la pausa, o False si no aplica.
 		"""
 		with self._get_connection() as conn:
+			row = conn.execute("SELECT status, updated_at FROM cognitive_tasks WHERE id = ?", (task_id,)).fetchone()
+			if not row:
+				return False
+			current_status = row["status"]
+
+			# Cancelación de pausa en caliente: el job está corriendo en PAUSING
+			if current_status == "PAUSING":
+				conn.execute("UPDATE cognitive_tasks SET status = 'PROCESSING', updated_at = CURRENT_TIMESTAMP WHERE id = ?", (task_id,))
+				return True
+
+			# Reanudación desde estado detenido
 			cursor = conn.execute(
 				"""
 				UPDATE cognitive_tasks SET status = 'PENDING', attempts = 0, updated_at = CURRENT_TIMESTAMP
