@@ -12,6 +12,8 @@ from red_pill.metabolism.phases.consolidation import ConsolidationPhase
 from red_pill.metabolism.phases.evolution_phase import EvolutionPhase
 from red_pill.metabolism.phases.hygiene_phase import HygienePhase
 from red_pill.metabolism.phases.maintenance_phases import ErosionPhase, OrphanPromotionPhase, WashoutPhase
+from red_pill.metabolism.phases.operator_profile_phase import OperatorProfilePhase
+from red_pill.metabolism.phases.recent_activity_phase import RecentActivityPhase
 from red_pill.metabolism.phases.revision_phase import RevisionPhase
 
 # Ordered pipeline. GPU-heavy consolidation first (drain → staging → gamma),
@@ -29,6 +31,8 @@ SLEEP_PHASES: list[SleepPhase] = [
 	WashoutPhase(),
 	RevisionPhase(),
 	EvolutionPhase(),
+	OperatorProfilePhase(),
+	RecentActivityPhase(),
 ]
 
 __all__ = [

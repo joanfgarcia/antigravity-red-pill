@@ -246,10 +246,11 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 					except Exception as e:
 						logger.warning(f"Step-boundary callback failed (job {job_id} continues): {e}")
 
-				# R3: releer estado — una pausa del operador a mitad de step gana
+				# R3: releer estado — una pausa del operador a mitad de step gana (PAUSING/PAUSED)
 				current = cog_queue.get_task(job_id)
-				if current and current.get("status") == "PAUSED":
-					logger.info(f"Job {job_id} paused by operator; checkpoint saved, yielding.")
+				if current and current.get("status") in ("PAUSING", "PAUSED"):
+					cog_queue.mark_paused(job_id)
+					logger.info(f"Job {job_id} reached step boundary while {current.get('status')}; checkpoint saved, now PAUSED.")
 					break
 
 				# Cesión por prioridad en frontera de step: un job de mayor prioridad
@@ -269,7 +270,7 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 			# El satélite pidió juicio humano (pause_exit_code): PAUSED con el
 			# checkpoint intacto y cero intentos — `job resume` cuando el operador
 			# haya revisado. Se reporta como aviso, no como dolor.
-			cog_queue.pause_task(job_id)
+			cog_queue.mark_paused(job_id)
 			_report_job(job_id, task, "warning", f"Pausado a petición del propio job: {pause.reason}")
 			logger.info(f"Job {job_id} paused at its own request: {pause.reason}")
 		except JobStepTimeout as timeout:

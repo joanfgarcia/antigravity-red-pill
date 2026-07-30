@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v7.14.0 (Multi-Orchestrator Chronicle & Job Resilience)
+**System Version**: v7.15.0 (Deterministic Wake-up & Pact Ledger)
 **Analyst**: The Architect
 **Date**: 2026-04-16
 

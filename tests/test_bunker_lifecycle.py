@@ -185,3 +185,55 @@ def test_bunker_update_regenerates_daemon_and_skills(tmp_path, monkeypatch):
 	assert any("setup_background_model.sh" in " ".join(map(str, c)) for c in calls if isinstance(c, (list, tuple)))
 	# Skills are redeployed to the agent skills dir
 	assert (agent_dir / "skills" / "demo" / "SKILL.md").exists()
+
+
+def test_parse_changelog_release():
+	from red_pill.bunker_lifecycle import parse_changelog_release
+
+	changelog = """## [7.15.0] - 2026-07-30 (El Despertar Determinista)
+
+Intro paragraph.
+
+### ⚡ Wake-up determinista
+- **[FEAT] algo**
+
+### 🤝 El Acta del Pacto
+- **[FEAT] otra cosa**
+
+## [7.14.0] - 2026-07-29 (Chronicle)
+
+### 🧹 Vieja sección
+"""
+	r = parse_changelog_release(changelog)
+	assert r["version"] == "7.15.0"
+	assert r["date"] == "2026-07-30"
+	assert r["codename"] == "El Despertar Determinista"
+	assert r["previous"] == "7.14.0"
+	assert "Wake-up determinista" in r["features"]
+	assert "El Acta del Pacto" in r["features"]
+	assert "Vieja sección" not in r["features"]
+
+
+def test_parse_changelog_release_empty():
+	from red_pill.bunker_lifecycle import parse_changelog_release
+
+	assert parse_changelog_release("no releases here") is None
+
+
+def test_refresh_protocol_version_engram(tmp_path, monkeypatch):
+	"""The engram text is built from the CHANGELOG heading — codename included, never invented."""
+	from unittest.mock import patch
+
+	from red_pill import bunker_lifecycle
+
+	(tmp_path / "CHANGELOG.md").write_text("## [9.9.9] - 2099-01-01 (Test Codename)\n\n### Feature One\n\n## [9.9.8] - 2098-12-31 (Old)\n")
+	with patch("red_pill.memory.MemoryManager") as mock_mgr:
+		ok = bunker_lifecycle.refresh_protocol_version_engram(tmp_path)
+
+	assert ok is True
+	kwargs = mock_mgr.return_value.add_memory.call_args.kwargs
+	assert kwargs["point_id"] == "00000000-0000-0000-0000-000000000070"
+	assert "v9.9.9" in kwargs["text"]
+	assert "Codename: Test Codename" in kwargs["text"]
+	assert "Previous stable: v9.9.8" in kwargs["text"]
+	assert kwargs["force_immune"] is True
