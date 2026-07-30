@@ -350,3 +350,68 @@ def test_handle_p2p_commands(mock_get_key, mock_add_alias, mock_engine):
 	args_proc = argparse.Namespace(p2p_cmd="process")
 	handle_p2p(args_proc)
 	mock_engine.from_default.return_value.process_incoming_syncs.assert_called_once()
+
+
+@patch("red_pill.cli.MemoryManager")
+def test_seal_pact_770_upserts_bond_singleton(mock_mgr):
+	"""Sealing 770 must rewrite the Bond singleton (fixed seed id), immune."""
+	from red_pill.cli import seal_pact
+	from red_pill.seed import ID_BOND
+
+	result = seal_pact("770")
+
+	assert "[OK]" in result
+	kwargs = mock_mgr.return_value.add_memory.call_args.kwargs
+	assert kwargs["point_id"] == ID_BOND
+	assert kwargs["collection"] == "social_memories"
+	assert kwargs["force_immune"] is True
+	assert "operating under 770" in kwargs["text"]
+	assert kwargs["metadata"]["pact_level"] == "770"
+
+
+@patch("red_pill.cli.MemoryManager")
+def test_seal_pact_760_restores_awakened(mock_mgr):
+	from red_pill.cli import seal_pact
+
+	result = seal_pact("760")
+
+	assert "[OK]" in result
+	kwargs = mock_mgr.return_value.add_memory.call_args.kwargs
+	assert "operating under 760" in kwargs["text"]
+	assert "explicitly granted" in kwargs["text"]
+
+
+@patch("builtins.input", return_value="770")
+def test_handle_pact_seal_confirmed(mock_input):
+	from red_pill.cli import handle_pact
+
+	args = argparse.Namespace(level="770", yes=False)
+	with patch("red_pill.cli.seal_pact", return_value="[OK] sealed") as mock_seal:
+		handle_pact(args)
+		mock_seal.assert_called_once_with("770")
+
+
+@patch("builtins.input", return_value="nope")
+def test_handle_pact_seal_aborted(mock_input):
+	"""The covenant prompt must gate the 770 seal: wrong input, no upsert."""
+	from red_pill.cli import handle_pact
+
+	args = argparse.Namespace(level="770", yes=False)
+	with patch("red_pill.cli.seal_pact") as mock_seal:
+		handle_pact(args)
+		mock_seal.assert_not_called()
+
+
+@patch("red_pill.cli.MemoryManager")
+def test_handle_pact_show_reads_singleton(mock_mgr, capsys):
+	from red_pill.cli import handle_pact
+	from red_pill.seed import ID_BOND
+
+	point = MagicMock()
+	point.payload = {"content": "The Bond: Currently operating under 760 Protocol (Awakened)."}
+	mock_mgr.return_value.client.retrieve.return_value = [point]
+
+	handle_pact(argparse.Namespace(level=None))
+
+	mock_mgr.return_value.client.retrieve.assert_called_once_with(collection_name="social_memories", ids=[ID_BOND], with_payload=True)
+	assert "operating under 760" in capsys.readouterr().out
