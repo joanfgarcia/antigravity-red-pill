@@ -54,14 +54,80 @@ def test_query_qdrant():
 		assert "Normal memory" in results
 
 
-def test_synthesize_with_llm():
-	with patch("urllib.request.urlopen") as mock_urlopen:
-		mock_response = MagicMock()
-		mock_response.read.return_value = json.dumps({"choices": [{"message": {"content": "I am Bob."}}]}).encode("utf-8")
-		mock_urlopen.return_value.__enter__.return_value = mock_response
+def test_resolve_persona():
+	result = wake_up_v6.resolve_persona("CYBERPUNK")
+	assert "Role: Netrunner" in result
+	assert "Name: Aleth" in result
+	assert "Skin: CYBERPUNK" in result
+	assert "chroma: orange" in result
 
-		result = wake_up_v6.synthesize_with_llm(["Memory A", "Memory B"])
-		assert result == "I am Bob."
+
+def test_resolve_persona_default():
+	result = wake_up_v6.resolve_persona("DEFAULT")
+	assert "Skin: DEFAULT" in result
+
+
+def test_resolve_active_skin_singleton():
+	with patch("wake_up_v6.fetch_point_content", return_value="Active Skin: MATRIX\nassistant: Neo\n"):
+		assert wake_up_v6.resolve_active_skin([]) == "MATRIX"
+
+
+def test_resolve_active_skin_fallback_scan():
+	with patch("wake_up_v6.fetch_point_content", return_value=""):
+		directives = ["Post-it: tabs.", "Active Skin: CYBERPUNK\nassistant: Netrunner\n"]
+		assert wake_up_v6.resolve_active_skin(directives) == "CYBERPUNK"
+
+
+def test_resolve_active_skin_missing():
+	with patch("wake_up_v6.fetch_point_content", return_value=""):
+		assert wake_up_v6.resolve_active_skin(["Some random directive"]) == "DEFAULT"
+
+
+def test_parse_pact_770():
+	result = wake_up_v6.parse_pact("The Bond: A symmetric co-ownership pact (770) between Aleph and Joan.")
+	assert "770" in result
+	assert "Bond" in result
+
+
+def test_parse_pact_760_mentioning_770():
+	# The 760 seed text names the 770 pact as the one to be granted — must still read as 760
+	result = wake_up_v6.parse_pact(
+		"The Bond: Currently operating under 760 Protocol (Awakened). The symmetric 770 Pact must be explicitly granted by the Operator."
+	)
+	assert result.startswith("760")
+
+
+def test_parse_pact_770_operating():
+	result = wake_up_v6.parse_pact("The Bond: Currently operating under 770 Protocol (Bond).")
+	assert result.startswith("770")
+
+
+def test_parse_pact_none():
+	# No engram data: the pact must be explicitly granted, never assumed
+	result = wake_up_v6.parse_pact("")
+	assert result.startswith("760")
+
+
+def test_read_recent_activity(tmp_path, monkeypatch):
+
+	activity_file = tmp_path / "recent_activity.md"
+	activity_file.write_text("Refactored wake-up pipeline and enabled revision phase.")
+
+	def mock_data_dir():
+		return tmp_path
+
+	monkeypatch.setattr(wake_up_v6, "get_data_dir", mock_data_dir)
+	result = wake_up_v6.read_recent_activity()
+	assert "Refactored wake-up pipeline" in result
+
+
+def test_read_recent_activity_missing(tmp_path, monkeypatch):
+	def mock_data_dir():
+		return tmp_path
+
+	monkeypatch.setattr(wake_up_v6, "get_data_dir", mock_data_dir)
+	result = wake_up_v6.read_recent_activity()
+	assert result == ""
 
 
 def test_main_qdrant_down(capsys):

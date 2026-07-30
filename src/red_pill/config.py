@@ -663,6 +663,7 @@ class RedPillConfig(BaseSettings):
 	# OPERATOR PROFILE UPDATE (Hito 4b)
 	# -----------------------------------------------------------------------
 	OPERATOR_PROFILE_UPDATE_INTERVAL_HOURS: int = 24  # Hours between auto-updates
+	RECENT_ACTIVITY_UPDATE_INTERVAL_HOURS: int = 4  # Freshness window before RecentActivityPhase re-synthesizes
 
 	@field_validator("PRE_HEATING_HOT_COLORS", mode="before")
 	@classmethod
