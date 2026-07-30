@@ -222,7 +222,7 @@ def test_parse_changelog_release_empty():
 
 def test_refresh_protocol_version_engram(tmp_path, monkeypatch):
 	"""The engram text is built from the CHANGELOG heading — codename included, never invented."""
-	from unittest.mock import MagicMock, patch
+	from unittest.mock import patch
 
 	from red_pill import bunker_lifecycle
 
