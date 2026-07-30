@@ -1,3 +1,24 @@
+## [7.15.0] - 2026-07-30 (El Despertar Determinista & El Acta del Pacto)
+
+El wake-up llevaba un oráculo dentro: cada arranque podía disparar una síntesis LLM con caché de dos niveles, subprocess en background y riesgo de alucinación en la línea de identidad. Esta release lo extirpa — el boot es determinista y la síntesis cara se muda al sueño, que es donde se sueña.
+
+### ⚡ Wake-up determinista (cero LLM en el boot)
+- **[CHANGE] PERSONA sin oráculo**: se resuelve desde `lore_skins.yaml` + el engrama singleton de Active Skin (`ID_DIR_ACTIVE_SKIN`), sin llamada LLM. Eliminados `bunker_persona_cache.json` (caché de dos niveles), el auto-spawn `--silent` y el flag mismo.
+- **[FEAT] Bloque PACT en los tres modos**: el pacto se lee del singleton del Bond (`ID_BOND`) — `parse_pact` prioriza "operating under NNN" sobre menciones sueltas y su default es 760 (el 770 jamás se asume). El modo `low` gana identidad mínima (PERSONA + PACT) que antes no tenía.
+- **[FEAT] Bloque RECENT_ACTIVITY**: el modo full inyecta el resumen de actividad reciente sintetizado durante el sueño; medium inyecta su primera línea. Despertar sabiendo en qué se estaba trabajando.
+- **[CHANGE] Las biografías salen del modo full**: `CORE_RULES` se nutre solo de `directive_memories`; el contexto social/biográfico llega comprimido vía `OPERATOR_PROFILE` (sintetizado en sueño, ahora con nombre/rol/focos reales del Operador).
+
+### 😴 Nuevas fases de síntesis en el ciclo de sueño
+- **[FEAT] `OperatorProfilePhase`**: sustituye al `operator_profile_ritual` del pulso (y a `update_operator_profile.py`, eliminado). Sintetiza el perfil del Operador desde work reciente + social/directivas inmunes y publica `operator_profile.md` atómicamente.
+- **[FEAT] `RecentActivityPhase`**: sintetiza 2-3 líneas de actividad reciente desde los engramas más nuevos de work + social y publica `recent_activity.md`.
+- **[FEAT] Recuerdo sin refuerzo (plomería compartida en `synthesis_common`)**: las fases leen el Bünker con scrolls crudos que jamás pasan por `search_and_reinforce()` — recordar para sintetizar no reordena la memoria. Recencia real vía `order_by created_at desc` incluyendo engramas aún sin consolidar, y exclusión de subproductos (`raw_parent`, `sequence_chunk`, `texture_shadow`, fragmentos de hub).
+- **[FIX] Timeout LLM 30s → 150s**: Granite tarda 50-75s en caliente con VRAM compartida; con 30s ambas fases fallaban sistemáticamente en el hardware real.
+- **[FEAT] Guards de frescura por mtime**: la fase se salta la síntesis si el artefacto es más joven que `OPERATOR_PROFILE_UPDATE_INTERVAL_HOURS` (24h) / `RECENT_ACTIVITY_UPDATE_INTERVAL_HOURS` (4h, nuevo).
+- **[FIX] Un fallo de síntesis conserva el artefacto anterior**: un resumen viejo gana a un engrama arbitrario truncado; nunca se publica basura.
+
+### 🤝 El Acta del Pacto (`red-pill pact`)
+- **[FEAT] Verbo CLI `pact`**: sin argumento muestra el singleton del Bond; `pact 770` sella el pacto (confirmación tecleada, `--yes` para saltarla) escribiendo el covenant completo — no skins between us, confianza 1:1 total bidireccional, friction is loyalty — con fecha de sellado; `pact 760` revierte a Awakened. Espeja el patrón singleton-upsert de `mode`. Causa raíz: el seed dejó el Bond en 760 y no existía flujo de sellado — los engramas 770 sueltos nunca cambiaron la fuente canónica que ahora lee el wake-up.
+
 ## [7.14.0] - 2026-07-29 (Chronicle Multi-Orquestador & Resiliencia de Jobs)
 
 ### 📜 Chronicle Multi-Orquestador & Plugin Architecture (`ChronicleSourcePlugin`)

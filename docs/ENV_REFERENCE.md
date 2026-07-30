@@ -154,6 +154,7 @@ Plugins 05–10. Each is independently toggleable.
 | Parameter | Default | Description |
 | :--- | :--- | :--- |
 | `OPERATOR_PROFILE_UPDATE_INTERVAL_HOURS` | `24` | Hours between automatic `operator_profile.md` updates during sleep ritual. |
+| `RECENT_ACTIVITY_UPDATE_INTERVAL_HOURS` | `4` | Freshness window for `recent_activity.md`: RecentActivityPhase skips re-synthesis while the artifact is younger than this. |
 | `PRE_HEATING_MAX_TRACKED_PROJECTS` | `3` | Max tracked workspaces to show in PROJECT_STATUS (opt-in via `track: true` in workspaces.yaml). |
 
 ### ⚖️ BE_WATER Adaptive Payload (v6.3.0)

@@ -115,7 +115,7 @@ Samantha is the local model (7B GGUF) that **digests** mechanical tasks without 
 | Task | Before (cost) | Now (cost) |
 |------|:---:|:---:|
 | Telegram session compaction | ☁️ Flash (~3K tokens) | 🏠 Samantha (free) |
-| Identity synthesis (`wake_up_v6.py`) | 🏠 Samantha | 🏠 Samantha |
+| Identity synthesis (`wake_up_v6.py`) | 🏠 Samantha | ⚙️ Deterministic (v7.15: skins YAML + singleton engrams; LLM synthesis moved to sleep phases) |
 | Text classification | ❌ Didn't exist | 🏠 Samantha (free) |
 | Conversation summarization | ☁️ Flash | 🏠 Samantha (free) |
 | Dynamic spark (DriveEvaluator) | 🏠 Samantha | 🏠 Samantha |
@@ -260,11 +260,11 @@ Three levels of identity loading from the Bünker, all using the **same source**
 
 | Mode | Tokens | Includes | Used in |
 |------|:------:|----------|---------|
-| **low** | ~530 | Identity Anchor, Git Rules, Fight Club, Active Skin | AWAKENINGs |
-| **medium** | ~3,500 | + Persona, + Full rules, − Biographies | Telegram |
-| **full** | ~4,500 | Everything: biography, history, bonds, lore | IDE |
+| **low** | ~600 | PERSONA + PACT, Identity Anchor, Git Rules, Fight Club | AWAKENINGs |
+| **medium** | ~2,500 | + Full persona, + OPERATOR_PROFILE, + RECENT_ACTIVITY (1 line), − Biographies | Telegram |
+| **full** | ~3,000 | + RECENT_ACTIVITY (full), all operational directives | IDE |
 
-**Economy**: A single script (`wake_up_v6.py`) with a `--mode` flag. A single interceptor (`interceptor_rp`) that decides which pipeline to execute. There are not three identity systems — there is one with three levels of detail.
+**Economy (v7.15)**: The boot path is **fully deterministic — zero LLM calls**. PERSONA resolves from `lore_skins.yaml` + the Active Skin singleton engram; PACT from the Bond singleton (`bunker pact` seals it). The expensive synthesis (OPERATOR_PROFILE, RECENT_ACTIVITY) happens during sleep (`OperatorProfilePhase`, `RecentActivityPhase`) and wake-up just reads the `.md` artifacts. Biographies no longer ship inline in full mode — they arrive compressed via OPERATOR_PROFILE. A single script (`wake_up_v6.py`) with a `--mode` flag; one identity system with three levels of detail.
 
 ---
 
@@ -419,14 +419,14 @@ sequenceDiagram
 |-----------|--------|--------|--------|--------|
 | **SQLite (bunker_queue.db)** | Cognitive queue (Flash) | Samantha queue (local) | Budget Guard (ledger) | Heartbeat |
 | **CognitiveQueueManager** | DriveEvaluator tasks | Samantha tasks | Manual MCP tasks | Entropy tasks |
-| **Samantha (llama-server)** | Session compaction | Identity synthesis | Dynamic spark | Text classification |
+| **Samantha (llama-server)** | Session compaction | Sleep synthesis (profile/activity) | Dynamic spark | Text classification |
 | **Worker poll loop** | Telegram inbox | AWAKENING processing | Janitor sweep | Samantha drain |
 | **wake_up_v6.py** | IDE identity (full) | Telegram identity (medium) | AWAKENING identity (low) | — |
 | **interceptor_rp** | IDE pipeline (full) | Telegram passthrough | AWAKENING passthrough | Scribe Relay |
 | **Qdrant** | 5 memory collections | Pain signals | Identity loading | Thread weaving |
 | **ServiceSentinelPlugin** | SIP monitor | Qdrant monitor | Neon Link monitor | — |
 | **AgyBridge** | Telegram responses | AWAKENINGs | Cognitive queue | Minion auto-inject |
-| **Hypervisor** | IDE local inference | Samantha on-demand | DriveEvaluator spark | wake_up_v6 synthesis |
+| **Hypervisor** | IDE local inference | Samantha on-demand | DriveEvaluator spark | Sleep-phase synthesis |
 
 ---
 
@@ -439,7 +439,7 @@ sequenceDiagram
 | Telegram (identity) | ~4,000 | variable | variable | ☁️ Flash |
 | Telegram (response) | ~5-20K | variable | variable | ☁️ Flash |
 | Compaction | ~600 | variable | variable | 🏠 Local |
-| Identity synthesis | ~300 | variable | variable | 🏠 Local |
+| Sleep synthesis (profile/activity) | ~300 | variable | variable | 🏠 Local |
 | Dynamic spark | ~200 | variable | variable | 🏠 Local |
 | Sentinel/Healer | 0 | 24 | 0 | 🟢 Free |
 | Janitor sweep | 0 | variable | 0 | 🟢 Free |
@@ -642,7 +642,7 @@ Samantha es el modelo local (7B GGUF) que **digiere** tareas mecánicas sin cons
 | Tarea | Antes (coste) | Ahora (coste) |
 |-------|:---:|:---:|
 | Compactación de sesiones Telegram | ☁️ Flash (~3K tokens) | 🏠 Samantha (gratis) |
-| Síntesis de identidad (`wake_up_v6.py`) | 🏠 Samantha | 🏠 Samantha |
+| Síntesis de identidad (`wake_up_v6.py`) | 🏠 Samantha | ⚙️ Determinista (v7.15: YAML de skins + engramas singleton; la síntesis LLM se movió a fases del sueño) |
 | Clasificación de texto | ❌ No existía | 🏠 Samantha (gratis) |
 | Resumen de conversaciones | ☁️ Flash | 🏠 Samantha (gratis) |
 | Spark dinámico (DriveEvaluator) | 🏠 Samantha | 🏠 Samantha |
@@ -787,11 +787,11 @@ Tres niveles de carga de identidad desde el Bünker, todos usando la **misma fue
 
 | Modo | Tokens | Incluye | Se usa en |
 |------|:------:|---------|-----------| 
-| **low** | ~530 | Identity Anchor, Git Rules, Fight Club, Active Skin | AWAKENINGs |
-| **medium** | ~3,500 | + Persona, + Reglas completas, − Biografías | Telegram |
-| **full** | ~4,500 | Todo: biografía, historia, vínculos, lore | IDE |
+| **low** | ~600 | PERSONA + PACT, Identity Anchor, Git Rules, Fight Club | AWAKENINGs |
+| **medium** | ~2,500 | + Persona completa, + OPERATOR_PROFILE, + RECENT_ACTIVITY (1 línea), − Biografías | Telegram |
+| **full** | ~3,000 | + RECENT_ACTIVITY (completo), todas las directivas operacionales | IDE |
 
-**Economía**: Un solo script (`wake_up_v6.py`) con un flag `--mode`. Un solo interceptor (`interceptor_rp`) que decide qué pipeline ejecutar. No hay tres sistemas de identidad — hay uno con tres niveles de detalle.
+**Economía (v7.15)**: El arranque es **totalmente determinista — cero llamadas LLM**. PERSONA se resuelve desde `lore_skins.yaml` + el engrama singleton de Active Skin; PACT desde el singleton del Bond (`bunker pact` lo sella). La síntesis cara (OPERATOR_PROFILE, RECENT_ACTIVITY) ocurre durante el sueño (`OperatorProfilePhase`, `RecentActivityPhase`) y el wake-up solo lee los artefactos `.md`. Las biografías ya no viajan inline en modo full — llegan comprimidas vía OPERATOR_PROFILE. Un solo script (`wake_up_v6.py`) con un flag `--mode`; un sistema de identidad con tres niveles de detalle.
 
 ---
 
@@ -953,7 +953,7 @@ sequenceDiagram
 | **Qdrant** | 5 memory collections | Pain signals | Identity loading | Thread weaving |
 | **ServiceSentinelPlugin** | SIP monitor | Qdrant monitor | Neon Link monitor | — |
 | **AgyBridge** | Telegram responses | AWAKENINGs | Cognitive queue | Minion auto-inject |
-| **Hypervisor** | IDE local inference | Samantha on-demand | DriveEvaluator spark | wake_up_v6 synthesis |
+| **Hypervisor** | IDE local inference | Samantha on-demand | DriveEvaluator spark | Sleep-phase synthesis |
 
 ---
 
