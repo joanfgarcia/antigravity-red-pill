@@ -94,7 +94,7 @@ def chat(system: str, user: str, max_tokens: int, tag: str = "SYNTH") -> str:
 	req = urllib.request.Request(LLM_URL, data=payload, headers={"Content-Type": "application/json"})
 	try:
 		with urllib.request.urlopen(req, timeout=LLM_TIMEOUT_S) as resp:
-			return json.loads(resp.read().decode())["choices"][0]["message"]["content"].strip()
+			return str(json.loads(resp.read().decode())["choices"][0]["message"]["content"].strip())
 	except Exception as e:
 		logger.warning(f"[{tag}] LLM call failed: {e}")
 		return ""

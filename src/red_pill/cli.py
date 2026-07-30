@@ -111,7 +111,7 @@ def handle_pact(args: argparse.Namespace) -> None:
 	if not args.level:
 		try:
 			points = MemoryManager().client.retrieve(collection_name="social_memories", ids=[ID_BOND], with_payload=True)
-			content = points[0].payload.get("content", "") if points else ""
+			content = points[0].payload.get("content", "") if points and points[0].payload else ""
 			print(f"--- [THE BOND (singleton {ID_BOND})] ---")
 			print(content or "(missing — run 'seed' to restore the genesis engram)")
 		except Exception as e:
