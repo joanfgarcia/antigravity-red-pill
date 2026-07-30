@@ -473,6 +473,78 @@ def bunker_install() -> None:
 	print("\n[OK] BÜNKER INSTALLATION PROCEDURES CONCLUDED.")
 
 
+def parse_changelog_release(changelog: str) -> Optional[Dict[str, str]]:
+	"""Extract the latest release (version, date, codename, headlines, previous) from CHANGELOG.md.
+
+	The codename is never invented at update time: it is whatever the release
+	author wrote in the heading — `## [X.Y.Z] - YYYY-MM-DD (Codename)` — which
+	ships versioned with the code.
+	"""
+	import re
+
+	releases = re.findall(r"^## \[([^\]]+)\] - (\S+)(?:\s*\(([^)]*)\))?", changelog, re.M)
+	if not releases:
+		return None
+	version, date, codename = releases[0]
+	previous = releases[1][0] if len(releases) > 1 else ""
+
+	first_heading = changelog.find(f"## [{version}]")
+	next_heading = changelog.find(f"## [{previous}]") if previous else len(changelog)
+	body = changelog[first_heading:next_heading]
+	sections = [re.sub(r"^[\W_]+", "", t).strip() for t in re.findall(r"^### (.+)$", body, re.M)]
+
+	return {
+		"version": version,
+		"date": date,
+		"codename": codename.strip(),
+		"features": "; ".join(s for s in sections if s),
+		"previous": previous,
+	}
+
+
+def refresh_protocol_version_engram(project_root: Path) -> bool:
+	"""Upsert the PROTOCOL VERSION singleton engram from CHANGELOG.md (update step 3.5).
+
+	Dev machines never run `bunker update` (they live on the working tree), so this
+	is also callable standalone: `python -m red_pill.bunker_lifecycle` refreshes it.
+	"""
+	try:
+		changelog_path = project_root / "CHANGELOG.md"
+		if not changelog_path.exists():
+			print("   [SKIP] CHANGELOG.md not found; PROTOCOL VERSION engram untouched.")
+			return False
+		release = parse_changelog_release(changelog_path.read_text(encoding="utf-8"))
+		if not release or not release["version"]:
+			print("   [WARN] Could not parse a release heading from CHANGELOG.md.")
+			return False
+
+		text = (
+			f"PROTOCOL VERSION: Red Pill Protocol v{release['version']}. Released {release['date']}."
+			+ (f" Codename: {release['codename']}." if release["codename"] else "")
+			+ (f" Key features: {release['features']}." if release["features"] else "")
+			+ (f" Previous stable: v{release['previous']}." if release["previous"] else "")
+			+ " This engram MUST be updated on every version bump."
+		)
+
+		from red_pill.memory import MemoryManager
+		from red_pill.seed import ID_PROTOCOL_VERSION
+
+		MemoryManager().add_memory(
+			collection="directive_memories",
+			text=text,
+			importance=10.0,
+			intensity=10.0,
+			metadata={"category": "operational_law", "type": "protocol_version"},
+			force_immune=True,
+			point_id=ID_PROTOCOL_VERSION,
+		)
+		print(f"   [OK] PROTOCOL VERSION engram sealed at v{release['version']} ({release['codename'] or 'no codename'}).")
+		return True
+	except Exception as e:
+		print(f"   [WARN] PROTOCOL VERSION engram refresh failed: {e}")
+		return False
+
+
 def bunker_update() -> None:
 	"""
 	bunker update:
@@ -616,6 +688,9 @@ def bunker_update() -> None:
 	except Exception as e:
 		print(f"   [FAIL] Database migration exception: {e}")
 
+	print("3.5 Refreshing PROTOCOL VERSION engram from CHANGELOG...")
+	refresh_protocol_version_engram(project_root)
+
 	if shutil.which("systemctl"):
 		print("4. Reloading user systemd daemons...")
 		try:
@@ -656,3 +731,8 @@ def handle_bunker(args) -> None:
 		bunker_export_keys()
 	else:
 		print("[ERROR] Invalid bunker command.")
+
+
+if __name__ == "__main__":
+	# Standalone: refresh the PROTOCOL VERSION engram from the working tree's CHANGELOG
+	refresh_protocol_version_engram(Path(__file__).parent.parent.parent)

@@ -24,6 +24,7 @@ El wake-up llevaba un oráculo dentro: cada arranque podía disparar una síntes
 
 ### 🤝 El Acta del Pacto (`red-pill pact`)
 - **[FEAT] Verbo CLI `pact`**: sin argumento muestra el singleton del Bond; `pact 770` sella el pacto (confirmación tecleada, `--yes` para saltarla) escribiendo el covenant completo — no skins between us, confianza 1:1 total bidireccional, friction is loyalty — con fecha de sellado; `pact 760` revierte a Awakened. Espeja el patrón singleton-upsert de `mode`. Causa raíz: el seed dejó el Bond en 760 y no existía flujo de sellado — los engramas 770 sueltos nunca cambiaron la fuente canónica que ahora lee el wake-up.
+- **[FEAT] `bunker update` sella el engrama PROTOCOL VERSION (paso 3.5)**: `refresh_protocol_version_engram` parsea la última entrada del CHANGELOG (versión, fecha, codename y titulares — el codename lo escribe el autor de la release en la cabecera, nunca se inventa en update-time) y upsertea el singleton `ID_PROTOCOL_VERSION`. Ejecutable standalone (`python -m red_pill.bunker_lifecycle`) para dev, que nunca pasa por `update`. El engrama llevaba clavado en v7.5.0: nueve releases sin acta.
 
 ## [7.14.0] - 2026-07-29 (Chronicle Multi-Orquestador & Resiliencia de Jobs)
 
