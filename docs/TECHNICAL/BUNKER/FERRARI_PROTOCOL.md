@@ -64,8 +64,8 @@ USP color → real-time behavioral adaptation
 
 | Plugin | What it does with the USP color |
 |---|---|
-| **05 Cognitive Router** | Routes *task type*: architecture proposals in CYAN, empathy-first in RED |
-| **06 Tone Adapter** | Adapts *verbal style*: rigorous in CYAN, warm in BLUE, ultra-concise in PURPLE |
+| **05 Cognitive Router** | Signals *state transitions*: compact `OPERATOR_COLOR` tag when the Operator's color changes (meaning lives in the CHROMA KEY, §3.2) |
+| **06 Tone Adapter** | Signals the *tone chroma* on transitions: compact tag, no inline prose (meaning lives in the CHROMA KEY, §3.2) |
 | **07 Mood Analytics** | Adds *temporal dimension*: is the color stable, improving, or deteriorating? |
 | **08 Emotive Recall** | Retrieves *emotional memory*: what happened last time the Operator was in this state? |
 | **09 Proactive Signal** | Triggers *autonomous care*: sustained RED emits a pain signal and shifts to empathy mode |
@@ -80,6 +80,24 @@ To make the protocol less restrictive ("más laxo"), v7.1.0 introduces an automa
 - **Instant Override**: Explicit casual override keywords (e.g., `relax`, `charlemos`) trigger `CASUAL` mode instantly. Any work keyword immediately re-locks the agent into work mode, resetting the cooldown counter.
 - **Absolute Silence Latch (All Plugins)**: When `CASUAL` mode is active, the entire interceptor pipeline (Plugins 05 through 11) is bypassed, returning absolute silence `""`. This guarantees complete natural personality agency, preventing any background tone directives, proactive warnings, or pre-heating headers from leaking into the prompt or affecting the agent's tone.
 - **Active Debate (Purple Mode)**: The `PURPLE` tone adapter is tuned to challenge the operator, proactively debating system designs and pointing out architectural flaws, which automatically relaxes into a conversational style once the engine brake kicks in.
+
+### 3.2 CHROMA KEY — Single Legend (v7.16.0)
+
+Before v7.16.0, plugins 05 and 06 each repeated per-color prose (`ROUTING_DIRECTIVE`, `TONE_DIRECTIVE`) on every state transition, and the final `chroma:` tag carried no explanation at all — a cold model had no way to know what *orange* or *gray* meant.
+
+Now color semantics are rendered **exactly once**, at the end of the pipeline:
+
+1. Each subplugin *paints* the chromas it mentions via `paint_chroma()` (`BaseInterceptorPlugin`) and emits only compact tags (`OPERATOR_COLOR: GRAY`, `DOMINANT_COLOR: CYAN`, …).
+2. The Mood Orchestrator aggregates the painted set across subplugins, adds the dominant mood, and appends a single legend:
+
+```
+chroma: gray
+=== CHROMA KEY (FERRARI PROTOCOL) ===
+gray → Professional, balanced, direct, objective (Standard).
+---
+```
+
+The vocabulary is `CHROMA_TONE_MAPPING` in `config.py` — the single source of truth for color meanings (extended in v7.16.0 with `red` and `green`). Colors without an entry are skipped silently; a subplugin that stays silent does not push its color into the legend. The persona chroma (resolved by `wake_up_v6.py`, injected outside the interceptor pipeline) carries its meaning inline on its own line for the same reason.
 
 ---
 

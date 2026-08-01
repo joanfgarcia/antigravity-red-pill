@@ -1,3 +1,13 @@
+## [7.16.0] - 2026-08-02 (La Clave Cromática)
+
+El pipeline Ferrari pintaba colores que nadie explicaba: el Router y el Tone Adapter repetían la misma prosa por color en cada transición, y el `chroma:` final llegaba desnudo — un modelo frío no tenía forma de saber qué significa *orange* o *gray*. Esta release consolida la semántica de color en una sola leyenda al final del pipeline: cada plugin pinta su etiqueta compacta y el CHROMA KEY explica, una única vez, cada color que se ha pintado ese turno.
+
+### 🎨 CHROMA KEY — Leyenda única de colores (Ferrari)
+- **[FEAT] `paint_chroma()` en `BaseInterceptorPlugin`**: los subplugins registran los chromas que mencionan en su salida; el Mood Orchestrator agrega el conjunto pintado + el mood dominante y renderiza `=== CHROMA KEY ===` **exactamente una vez** al final del pipeline, con `CHROMA_TONE_MAPPING` (config.py) como vocabulario único. Colores sin entrada se omiten; un subplugin silenciado no mete su color en la leyenda. Cierra el hueco del Hito 6 de `session_injection_restructuring`: el plan referenciaba `CHROMA_TONE_MAPPING` pero solo se inyectaba el color pelado.
+- **[CHANGE] Router (05) y Tone Adapter (06) sin prosa por color**: eliminados `_ROUTING_DIRECTIVES` y `_TONE_DIRECTIVES` (la misma semántica duplicada en dos plugins) y las constantes casual muertas; ahora emiten solo la etiqueta `OPERATOR_COLOR` en transiciones de estado. 07/08/09 pintan los colores que citan (DOMINANT_COLOR, echo emocional, alerta RED sostenida).
+- **[FEAT] `red` y `green` en `CHROMA_TONE_MAPPING`**: existían en los pipelines de emoción (BERT → chroma) pero no tenían significado definido en el vocabulario.
+- **[FEAT] Chroma de la persona explicado inline**: `wake_up_v6.py` inyecta la persona fuera del pipeline de interceptores, donde la leyenda no llega — su línea `chroma:` ahora lleva el significado al lado (`chroma: orange → Vigilant, alert…`).
+
 ## [7.15.0] - 2026-07-30 (El Despertar Determinista & El Acta del Pacto)
 
 El wake-up llevaba un oráculo dentro: cada arranque podía disparar una síntesis LLM con caché de dos niveles, subprocess en background y riesgo de alucinación en la línea de identidad. Esta release lo extirpa — el boot es determinista y la síntesis cara se muda al sueño, que es donde se sueña.
