@@ -8,6 +8,10 @@ El pipeline Ferrari pintaba colores que nadie explicaba: el Router y el Tone Ada
 - **[FEAT] `red` y `green` en `CHROMA_TONE_MAPPING`**: existían en los pipelines de emoción (BERT → chroma) pero no tenían significado definido en el vocabulario.
 - **[FEAT] Chroma de la persona explicado inline**: `wake_up_v6.py` inyecta la persona fuera del pipeline de interceptores, donde la leyenda no llega — su línea `chroma:` ahora lleva el significado al lado (`chroma: orange → Vigilant, alert…`).
 
+### 🔧 Vocabularios del freno de motor externalizados
+- **[CHANGE] `WORK_KEYWORDS` fuera del código**: la lista hardcodeada en `_05_cognitive_router_state.py` (monolingüe, no customizable) se convierte en `WORK_MODE_KEYWORDS` en config — seed bilingüe ES+EN, customizable por operador vía `.env` según su idioma y oficio, con recarga en caliente por mtime. Mismo patrón que `CASUAL_OVERRIDE_KEYWORDS`. `register_turn()` recibe ambos vocabularios explícitamente; el módulo de estado ya no conoce ninguna palabra.
+- **[DOCS] Seed visible en `.env.example`**: ambos vocabularios documentados y comentados (con los defaults servidos) en `.env.example` y `ENV_REFERENCE.md` — antes ni el casual estaba sembrado.
+
 ## [7.15.0] - 2026-07-30 (El Despertar Determinista & El Acta del Pacto)
 
 El wake-up llevaba un oráculo dentro: cada arranque podía disparar una síntesis LLM con caché de dos niveles, subprocess en background y riesgo de alucinación en la línea de identidad. Esta release lo extirpa — el boot es determinista y la síntesis cara se muda al sueño, que es donde se sueña.

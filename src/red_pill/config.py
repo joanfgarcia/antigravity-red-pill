@@ -542,6 +542,23 @@ class RedPillConfig(BaseSettings):
 		self.CASUAL_OVERRIDE_KEYWORDS = [t.strip().lower() for t in _env_raw.split(",") if t.strip()]
 		return self
 
+	# Work Mode: keywords that lock the engine-brake latch into work mode.
+	# Operator-customizable vocabulary (language, trade, personal jargon) — the
+	# code ships no hardcoded list. Comma-separated in .env:
+	# WORK_MODE_KEYWORDS="arregla,fix,deploy,maqueta,renderiza"
+	WORK_MODE_KEYWORDS: List[str] = []
+
+	@model_validator(mode="after")
+	def _build_work_keywords(self) -> "RedPillConfig":
+		_default = (
+			"arregla,fix,implementa,implement,modo trabajo,work mode,trabaja,ejecuta,execute,"
+			"despliega,deploy,haz un,crea un,create a,build the,commit,push,refactor,refactoriza,"
+			"debug,depura,compila,compile,testea"
+		)
+		_env_raw = os.getenv("WORK_MODE_KEYWORDS", _default)
+		self.WORK_MODE_KEYWORDS = [t.strip().lower() for t in _env_raw.split(",") if t.strip()]
+		return self
+
 	# -----------------------------------------------------------------------
 	# SOVEREIGN PULSE
 	# -----------------------------------------------------------------------

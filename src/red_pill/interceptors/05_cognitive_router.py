@@ -47,8 +47,9 @@ class CognitiveRouterPlugin(BaseInterceptorPlugin):
 			color = sync_state.get("mood", "gray").lower()
 
 			# Casual override: session-level latch with engine braking.
-			casual_kws = cfg.get_config().CASUAL_OVERRIDE_KEYWORDS
-			_cr_state.register_turn(prompt, casual_kws)
+			# Both vocabularies are operator-customizable via .env.
+			config = cfg.get_config()
+			_cr_state.register_turn(prompt, config.CASUAL_OVERRIDE_KEYWORDS, config.WORK_MODE_KEYWORDS)
 
 			if _cr_state.is_casual_active():
 				current_state = "casual"
