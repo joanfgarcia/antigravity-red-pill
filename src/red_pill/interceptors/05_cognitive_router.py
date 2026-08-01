@@ -1,11 +1,13 @@
 """
 Ferrari Plugin 05 — Cognitive Router
 =====================================
-Signals Operator emotional-state transitions (USP color) into the context.
+Signals the Operator's COGNITIVE BASELINE: the dominant USP color over the
+3-day horizon (multi-session, recomputed during sleep, survives the night).
 
-Emits a compact OPERATOR_COLOR tag on state changes and stays silent
-otherwise; the color's meaning is explained once by the Mood Orchestrator's
-CHROMA KEY legend, not inline here.
+This is the slow signal of the pair: the Tone Adapter (06) reads the
+immediate 4h session window instead. Emits a compact COGNITIVE_COLOR tag on
+state changes and stays silent otherwise; the color's meaning is explained
+once by the Mood Orchestrator's CHROMA KEY legend, not inline here.
 
 Enable/Disable: COGNITIVE_ROUTER_ENABLED=true in .env
 """
@@ -15,9 +17,16 @@ import logging
 import red_pill.config as cfg
 from red_pill.interceptors import _05_cognitive_router_state as _cr_state
 from red_pill.interceptors.base import BaseInterceptorPlugin
-from red_pill.utils.tone_analyzer import get_current_sync_state
+from red_pill.utils.mood_profile import get_dominant_operator_mood
 
 logger = logging.getLogger(__name__)
+
+
+def _get_cognitive_color() -> str:
+	"""Dominant USP color over the last_3d horizon (persisted engram read)."""
+	from red_pill.memory import MemoryManager
+
+	return get_dominant_operator_mood(MemoryManager()).lower()
 
 
 class CognitiveRouterPlugin(BaseInterceptorPlugin):
@@ -27,7 +36,7 @@ class CognitiveRouterPlugin(BaseInterceptorPlugin):
 
 	@property
 	def timeout(self) -> float:
-		return 0.5  # Pure in-memory lookup — very fast
+		return 2.0  # Single-point Qdrant retrieve of the USP engram
 
 	@property
 	def raw_enabled(self) -> bool:
@@ -43,8 +52,7 @@ class CognitiveRouterPlugin(BaseInterceptorPlugin):
 
 	async def execute(self, prompt: str) -> str:
 		try:
-			sync_state = get_current_sync_state()
-			color = sync_state.get("mood", "gray").lower()
+			color = _get_cognitive_color()
 
 			# Casual override: session-level latch with engine braking.
 			# Both vocabularies are operator-customizable via .env.
@@ -68,7 +76,7 @@ class CognitiveRouterPlugin(BaseInterceptorPlugin):
 			self.paint_chroma(color)
 			lines = [
 				"=== COGNITIVE ROUTER (FERRARI PROTOCOL) ===",
-				f"OPERATOR_COLOR: {color.upper()}",
+				f"COGNITIVE_COLOR: {color.upper()} (3-day baseline)",
 				"---",
 			]
 			return "\n".join(lines)

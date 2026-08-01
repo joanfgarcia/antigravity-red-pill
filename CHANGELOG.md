@@ -8,6 +8,10 @@ El pipeline Ferrari pintaba colores que nadie explicaba: el Router y el Tone Ada
 - **[FEAT] `red` y `green` en `CHROMA_TONE_MAPPING`**: existían en los pipelines de emoción (BERT → chroma) pero no tenían significado definido en el vocabulario.
 - **[FEAT] Chroma de la persona explicado inline**: `wake_up_v6.py` inyecta la persona fuera del pipeline de interceptores, donde la leyenda no llega — su línea `chroma:` ahora lleva el significado al lado (`chroma: orange → Vigilant, alert…`).
 
+### ⏱️ Cognitive Router y Tone Adapter: dos señales temporales de verdad
+- **[FIX] Ambos plugins leían la MISMA fuente**: 05 y 06 llamaban a `get_dominant_mood()` (ventana de sesión) y devolvían siempre el mismo color — la USP multi-horizonte que la doc Ferrari prometía no la consultaba ninguno. Ahora el **Cognitive Router** emite `COGNITIVE_COLOR` desde la USP horizonte `last_3d` (baseline multi-sesión: sobrevive la noche, se recalcula en el sueño) y el **Tone Adapter** emite `TONE_COLOR` desde la ventana de sesión de 4h (reset *Overnight Therapy*). Cómo viene el operador estos días vs cómo está ahora mismo; cuando divergen, la leyenda CHROMA KEY explica ambos colores una sola vez.
+- **[DOCS] FERRARI_PROTOCOL.md §3.3**: tabla de las dos señales (fuente, ventana, comportamiento de reset) — la semántica temporal por fin está escrita.
+
 ### 🔧 Vocabularios del freno de motor externalizados
 - **[CHANGE] `WORK_KEYWORDS` fuera del código**: la lista hardcodeada en `_05_cognitive_router_state.py` (monolingüe, no customizable) se convierte en `WORK_MODE_KEYWORDS` en config — seed bilingüe ES+EN, customizable por operador vía `.env` según su idioma y oficio, con recarga en caliente por mtime. Mismo patrón que `CASUAL_OVERRIDE_KEYWORDS`. `register_turn()` recibe ambos vocabularios explícitamente; el módulo de estado ya no conoce ninguna palabra.
 - **[DOCS] Seed visible en `.env.example`**: ambos vocabularios documentados y comentados (con los defaults servidos) en `.env.example` y `ENV_REFERENCE.md` — antes ni el casual estaba sembrado.

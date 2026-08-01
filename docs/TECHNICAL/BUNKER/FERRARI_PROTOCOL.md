@@ -64,8 +64,8 @@ USP color → real-time behavioral adaptation
 
 | Plugin | What it does with the USP color |
 |---|---|
-| **05 Cognitive Router** | Signals *state transitions*: compact `OPERATOR_COLOR` tag when the Operator's color changes (meaning lives in the CHROMA KEY, §3.2) |
-| **06 Tone Adapter** | Signals the *tone chroma* on transitions: compact tag, no inline prose (meaning lives in the CHROMA KEY, §3.2) |
+| **05 Cognitive Router** | Signals the *cognitive baseline*: dominant USP color over the **3-day horizon** (`COGNITIVE_COLOR`, slow signal — survives the night, recomputed during sleep). See §3.3 |
+| **06 Tone Adapter** | Signals the *immediate tone*: dominant color of the current **4h session window** (`TONE_COLOR`, fast signal — Overnight Therapy reset). See §3.3 |
 | **07 Mood Analytics** | Adds *temporal dimension*: is the color stable, improving, or deteriorating? |
 | **08 Emotive Recall** | Retrieves *emotional memory*: what happened last time the Operator was in this state? |
 | **09 Proactive Signal** | Triggers *autonomous care*: sustained RED emits a pain signal and shifts to empathy mode |
@@ -99,6 +99,17 @@ gray → Professional, balanced, direct, objective (Standard).
 ```
 
 The vocabulary is `CHROMA_TONE_MAPPING` in `config.py` — the single source of truth for color meanings (extended in v7.16.0 with `red` and `green`). Colors without an entry are skipped silently; a subplugin that stays silent does not push its color into the legend. The persona chroma (resolved by `wake_up_v6.py`, injected outside the interceptor pipeline) carries its meaning inline on its own line for the same reason.
+
+### 3.3 Two Temporal Signals — Cognitive vs Tone (v7.16.0)
+
+Until v7.16.0, plugins 05 and 06 read the **same** source (`ToneAnalyzer.get_dominant_mood()`, session window) and therefore always reported the same color — the USP multi-horizon vector this document describes was never actually consulted by either. Now each carries a genuinely distinct temporal signal:
+
+| Signal | Plugin | Source | Window | Reset behavior |
+|---|---|---|---|---|
+| `COGNITIVE_COLOR` | 05 | USP engram (`mood_profile`, `last_3d` horizon) | 3 days (Acute Window — cortisol analogy, §2) | None — survives the night; recomputed during the sleep cycle |
+| `TONE_COLOR` | 06 | `ToneAnalyzer.get_dominant_mood()` (social+work merge, first non-gray wins) | Current session (`OVERNIGHT_THERAPY_THRESHOLD_HOURS`, default 4h) | Overnight Therapy: resets to the hedonic set point if the newest memory is older than the threshold |
+
+*How the Operator has been these days* (cognitive) vs *how the Operator is right now* (tone). When they diverge, both colors appear in the prompt and the CHROMA KEY legend explains each once.
 
 ---
 

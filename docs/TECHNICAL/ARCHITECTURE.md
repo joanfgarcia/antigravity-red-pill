@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v7.15.0 (Deterministic Wake-up & Pact Ledger)
+**System Version**: v7.16.0 (The Chroma Key)
 **Analyst**: The Architect
 **Date**: 2026-04-16
 
@@ -196,8 +196,8 @@ USP (Qdrant social_memories)
   → current color (cyan / purple / red / ...)
         ↓
    [04 Mystique]       → Selects Lore Skin matching emotional chroma
-   [05 CognitiveRouter] → Signals state TRANSITIONS (compact OPERATOR_COLOR tag)
-   [06 ToneAdapter]     → Signals the tone chroma on transitions (compact tag)
+   [05 CognitiveRouter] → COGNITIVE_COLOR: 3-day USP baseline (slow signal, survives the night)
+   [06 ToneAdapter]     → TONE_COLOR: 4h session window (fast signal, Overnight Therapy reset)
    [07 MoodAnalytics]   → Injects TREND data (stable / improving / deteriorating)
    [08 EmotiveRecall]   → Injects MEMORY of past same-color interactions
    [09 ProactiveSignal] → Alerts on sustained RED (>5 consecutive) or high volatility

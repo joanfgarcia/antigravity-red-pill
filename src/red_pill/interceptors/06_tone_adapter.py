@@ -1,10 +1,15 @@
 """
 Ferrari Plugin 06 — Tone Adapter
 ==================================
-Signals the tone chroma on Operator emotional-state transitions.
-Separate from the Mystique skin — it tracks HOW the AI should speak, not
-the persona it wears. Emits a compact OPERATOR_COLOR tag; the tone meaning
-per color is explained once by the Mood Orchestrator's CHROMA KEY legend.
+Signals the Operator's IMMEDIATE TONE: the dominant color of the current
+session window (last 4h of memories, Overnight Therapy reset — see
+OVERNIGHT_THERAPY_THRESHOLD_HOURS).
+
+This is the fast signal of the pair: the Cognitive Router (05) reads the
+3-day USP baseline instead. Separate from the Mystique skin — it tracks HOW
+the AI should speak right now, not the persona it wears. Emits a compact
+TONE_COLOR tag; the tone meaning per color is explained once by the Mood
+Orchestrator's CHROMA KEY legend.
 
 Enable/Disable: TONE_ADAPTER_ENABLED=true in .env
 """
@@ -64,7 +69,7 @@ class ToneAdapterPlugin(BaseInterceptorPlugin):
 			self.paint_chroma(color)
 			lines = [
 				"=== TONE ADAPTER (FERRARI PROTOCOL) ===",
-				f"OPERATOR_COLOR: {color.upper()}",
+				f"TONE_COLOR: {color.upper()} (4h session window)",
 				"---",
 			]
 			return "\n".join(lines)

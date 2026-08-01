@@ -91,12 +91,12 @@ async def test_cognitive_router_plugin_transitions():
 
 	with (
 		patch("red_pill.config.get_config", return_value=cfg_mock),
-		patch.object(router_mod, "get_current_sync_state", return_value={"mood": "purple"}),
+		patch.object(router_mod, "_get_cognitive_color", return_value="purple"),
 	):
 		# Turn 1: work keyword -> triggers transition to purple, returns directive
 		res1 = await p.execute("trabaja en el commit")
 		assert "COGNITIVE ROUTER" in res1
-		assert "OPERATOR_COLOR: PURPLE" in res1
+		assert "COGNITIVE_COLOR: PURPLE" in res1
 
 		# Turn 2: same state, no transition -> returns empty string (silence)
 		res2 = await p.execute("ejecuta los tests")
@@ -114,7 +114,7 @@ async def test_cognitive_router_plugin_transitions():
 		# Turn 5: work keyword -> transitions back to purple, returns directive
 		res5 = await p.execute("despliega la app")
 		assert "COGNITIVE ROUTER" in res5
-		assert "OPERATOR_COLOR: PURPLE" in res5
+		assert "COGNITIVE_COLOR: PURPLE" in res5
 
 
 @pytest.mark.asyncio
@@ -138,7 +138,7 @@ async def test_tone_adapter_plugin_transitions():
 		_cr_state.register_turn("trabaja en el commit", ["relax", "charlemos"], ["trabaja", "ejecuta", "despliega", "commit"])
 		res1 = await p.execute("trabaja en el commit")
 		assert "TONE ADAPTER" in res1
-		assert "OPERATOR_COLOR: PURPLE" in res1
+		assert "TONE_COLOR: PURPLE" in res1
 		assert p.painted_chromas == {"purple"}  # tagged for the orchestrator's CHROMA KEY
 
 		# Turn 2: same state -> returns empty (silence)
@@ -161,4 +161,4 @@ async def test_tone_adapter_plugin_transitions():
 		_cr_state.register_turn("despliega la app", ["relax", "charlemos"], ["trabaja", "ejecuta", "despliega", "commit"])
 		res5 = await p.execute("despliega la app")
 		assert "TONE ADAPTER" in res5
-		assert "OPERATOR_COLOR: PURPLE" in res5
+		assert "TONE_COLOR: PURPLE" in res5
