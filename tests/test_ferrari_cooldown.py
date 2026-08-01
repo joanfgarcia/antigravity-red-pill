@@ -127,7 +127,8 @@ async def test_tone_adapter_plugin_transitions():
 		_cr_state.register_turn("trabaja en el commit", ["relax", "charlemos"])
 		res1 = await p.execute("trabaja en el commit")
 		assert "TONE ADAPTER" in res1
-		assert "TONE_DIRECTIVE:" in res1
+		assert "OPERATOR_COLOR: PURPLE" in res1
+		assert p.painted_chromas == {"purple"}  # tagged for the orchestrator's CHROMA KEY
 
 		# Turn 2: same state -> returns empty (silence)
 		_cr_state.register_turn("ejecuta los tests", ["relax", "charlemos"])
@@ -149,4 +150,4 @@ async def test_tone_adapter_plugin_transitions():
 		_cr_state.register_turn("despliega la app", ["relax", "charlemos"])
 		res5 = await p.execute("despliega la app")
 		assert "TONE ADAPTER" in res5
-		assert "TONE_DIRECTIVE:" in res5
+		assert "OPERATOR_COLOR: PURPLE" in res5

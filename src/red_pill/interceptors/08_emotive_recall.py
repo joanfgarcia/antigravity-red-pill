@@ -90,6 +90,7 @@ class EmotiveRecallPlugin(BaseInterceptorPlugin):
 			if not echoes:
 				return ""
 
+			self.paint_chroma(color)
 			lines = [
 				"=== EMOTIVE RECALL (FERRARI PROTOCOL) ===",
 				f"EMOTIONAL_ECHO ({color.upper()} state — past resonances):",

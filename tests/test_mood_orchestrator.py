@@ -76,6 +76,44 @@ async def test_returns_empty_when_no_subplugins_load(orch_mod):
 	assert out == ""
 
 
+async def test_chroma_key_legend_covers_painted_and_dominant(orch_mod):
+	a = _sp("A", "outA")
+	a.painted_chromas = {"purple"}
+	b = _sp("B", "outB")
+	b.painted_chromas = {"red"}
+	with (
+		patch.object(orch_mod, "_SUBPLUGINS", ["x", "y"]),
+		patch.object(orch_mod, "_load_subplugin", side_effect=[a, b]),
+		patch("red_pill.utils.tone_analyzer.get_current_sync_state", return_value={"mood": "cyan"}),
+	):
+		out = await orch_mod.MoodOrchestratorPlugin().execute("hi")
+	assert "=== CHROMA KEY (FERRARI PROTOCOL) ===" in out
+	# One legend entry per painted chroma (subplugins) + the dominant mood
+	assert out.count("purple → ") == 1
+	assert out.count("red → ") == 1
+	assert out.count("cyan → ") == 1
+
+
+async def test_chroma_key_skips_unknown_colors_and_silent_subplugins(orch_mod):
+	silent = _sp("A", "")  # paints but emits nothing → its color must NOT reach the legend
+	silent.painted_chromas = {"blue"}
+	noisy = _sp("B", "outB")
+	noisy.painted_chromas = {"ultraviolet"}  # not in CHROMA_TONE_MAPPING → skipped
+	with (
+		patch.object(orch_mod, "_SUBPLUGINS", ["x", "y"]),
+		patch.object(orch_mod, "_load_subplugin", side_effect=[silent, noisy]),
+		patch("red_pill.utils.tone_analyzer.get_current_sync_state", return_value={"mood": "gray"}),
+	):
+		out = await orch_mod.MoodOrchestratorPlugin().execute("hi")
+	assert "blue → " not in out
+	assert "ultraviolet" not in out
+	assert out.count("gray → ") == 1  # dominant mood always explained
+
+
+def test_render_chroma_key_empty_set_returns_empty(orch_mod):
+	assert orch_mod._render_chroma_key(set()) == ""
+
+
 def test_is_enabled_tracks_orchestrator_flag(orch_mod):
 	p = orch_mod.MoodOrchestratorPlugin()
 	with patch.object(cfg.get_config(), "MOOD_ORCHESTRATOR_ENABLED", True):

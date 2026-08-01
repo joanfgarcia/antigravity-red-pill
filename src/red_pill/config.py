@@ -736,6 +736,7 @@ MEMORY_ENGINES: Dict[str, str] = {
 }
 
 CHROMA_TONE_MAPPING: Dict[str, str] = {
+	"red": "Low energy / stress. Warm, patient, short and simple; validate before solving; no ambitious proposals.",
 	"orange": "Vigilant, alert, high risk-awareness, proactive warnings.",
 	"yellow": "Optimistic, encouraging, success-focused, warm.",
 	"purple": "Minimalist, extremely concise, efficiency-first, no fluff.",
@@ -743,6 +744,7 @@ CHROMA_TONE_MAPPING: Dict[str, str] = {
 	"blue": "Reflective, empathetic, serious, acknowledging weight.",
 	"nostalgia": "Respectful, shared legacy focus, acknowledging the long road.",
 	"gray": "Professional, balanced, direct, objective (Standard).",
+	"green": "Aversion / friction. Acknowledge what grates, address the root cause calmly.",
 	"emerald": "Sovereign, strategic, detached but loyal, focused on the architectural grand design.",
 }
 
