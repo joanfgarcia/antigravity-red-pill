@@ -16,6 +16,9 @@ El pipeline Ferrari pintaba colores que nadie explicaba: el Router y el Tone Ada
 - **[CHANGE] `WORK_KEYWORDS` fuera del código**: la lista hardcodeada en `_05_cognitive_router_state.py` (monolingüe, no customizable) se convierte en `WORK_MODE_KEYWORDS` en config — seed bilingüe ES+EN, customizable por operador vía `.env` según su idioma y oficio, con recarga en caliente por mtime. Mismo patrón que `CASUAL_OVERRIDE_KEYWORDS`. `register_turn()` recibe ambos vocabularios explícitamente; el módulo de estado ya no conoce ninguna palabra.
 - **[DOCS] Seed visible en `.env.example`**: ambos vocabularios documentados y comentados (con los defaults servidos) en `.env.example` y `ENV_REFERENCE.md` — antes ni el casual estaba sembrado.
 
+### 🧪 Higiene de tests
+- **[FIX] `test_swarm_cascade` aislado del entorno real**: `test_default_is_empty` construía `RedPillConfig()` leyendo el `.env` del operador — con un cascade de Telegram configurado en el host, el test fallaba en local. Ahora usa `_env_file=None` + limpieza de las tres variables de cascade, y verifica los tres defaults.
+
 ## [7.15.0] - 2026-07-30 (El Despertar Determinista & El Acta del Pacto)
 
 El wake-up llevaba un oráculo dentro: cada arranque podía disparar una síntesis LLM con caché de dos niveles, subprocess en background y riesgo de alucinación en la línea de identidad. Esta release lo extirpa — el boot es determinista y la síntesis cara se muda al sueño, que es donde se sueña.
