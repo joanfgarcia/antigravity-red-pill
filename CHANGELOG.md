@@ -2,6 +2,12 @@
 
 El wake-up llevaba un oráculo dentro: cada arranque podía disparar una síntesis LLM con caché de dos niveles, subprocess en background y riesgo de alucinación en la línea de identidad. Esta release lo extirpa — el boot es determinista y la síntesis cara se muda al sueño, que es donde se sueña.
 
+### 🛠️ Desacoplamiento del IDE de Antigravity & Resolución de OpenCode
+- **[FIX] Desacoplamiento total del IDE Worker**: `IDEWorker.run_once()` ya no degrada ni fuerza el sondeo del IDE de Antigravity vía gRPC cuando se han configurado cascadas para backends independientes (`TELEGRAM_BRIDGE_CASCADE` o `AWAKENING_BRIDGE_CASCADE`). El pulso opera de forma autónoma sin requerir que la ventana del IDE esté abierta.
+- **[FIX] Resolución de binario `opencode` en Service Managers**: Añadida resolución determinista (`OPENCODE_BIN` → `$PATH` → `~/.opencode/bin`) en `OpenCodeBridge` para garantizar la localización de la CLI en entornos de systemd/launchd con PATH restringido.
+- **[FIX] Visibilidad de errores en `CascadeBridge`**: Los errores de construcción en cascadas de bridges ahora se registran explícitamente en el log en lugar de silenciarse, previniendo caídas silenciosas a la ruta heredada.
+- **[FIX] Contención de errores en `process_inbox()`**: Envoltorio preventivo con `try...except` alrededor del procesamiento de la bandeja de entrada para evitar que un ítem corrupto detenga el latido de salud (`pulse/heartbeat`) del Córtex.
+
 ### ⚡ Wake-up determinista (cero LLM en el boot)
 - **[CHANGE] PERSONA sin oráculo**: se resuelve desde `lore_skins.yaml` + el engrama singleton de Active Skin (`ID_DIR_ACTIVE_SKIN`), sin llamada LLM. Eliminados `bunker_persona_cache.json` (caché de dos niveles), el auto-spawn `--silent` y el flag mismo.
 - **[FEAT] Bloque PACT en los tres modos**: el pacto se lee del singleton del Bond (`ID_BOND`) — `parse_pact` prioriza "operating under NNN" sobre menciones sueltas y su default es 760 (el 770 jamás se asume). El modo `low` gana identidad mínima (PERSONA + PACT) que antes no tenía.

@@ -134,11 +134,26 @@ class IDEWorker:
 				time.sleep(5)
 
 	def run_once(self):
-		self.process_inbox()
-		if not self._caps or self._caps.backend == BackendType.GRPC:
-			self.check_for_replies()
-			self.check_minion_inbox_auto_inject()
-			self.process_cognitive_queue()
+		# Containment: one poisoned inbox item must not kill the pulse (and with
+		# it the heartbeat that neon-link watches to report Córtex Offline).
+		try:
+			self.process_inbox()
+		except Exception:
+			logger.exception("[IDEWorker] process_inbox failed — pulse continues")
+		legacy_grpc = not self._caps or self._caps.backend == BackendType.GRPC
+		if legacy_grpc and cfg.get_config().TELEGRAM_BRIDGE_CASCADE:
+			# Degraded capabilities with a configured cascade mean every bridge
+			# failed to construct (see cascade construction errors at boot). The
+			# IDE polling path is Antigravity-only — never resurrect it here.
+			logger.error("[IDEWorker] TELEGRAM_BRIDGE_CASCADE set but no bridge could be built; skipping legacy IDE polling.")
+			legacy_grpc = False
+		if legacy_grpc:
+			try:
+				self.check_for_replies()
+				self.check_minion_inbox_auto_inject()
+				self.process_cognitive_queue()
+			except Exception:
+				logger.exception("[IDEWorker] legacy IDE polling failed — pulse continues")
 		else:
 			# Autonomous agy operations (minion auto-inject, cognitive queue)
 			# are gated behind AUTONOMOUS_AGY_ENABLED to prevent Flash quota
@@ -475,7 +490,10 @@ class IDEWorker:
 			return
 
 		# ---- System channel: AWAKENINGs run in isolation (no Telegram session) ----
-		if channel == "system" and self._caps and self._caps.auto_approve:
+		# A configured AWAKENING cascade forces the bridge path even when
+		# capabilities degraded (bridge construction failed) — never fall through
+		# to the Antigravity-only legacy path on behalf of non-IDE backends.
+		if channel == "system" and ((self._caps and self._caps.auto_approve) or cfg.get_config().AWAKENING_BRIDGE_CASCADE):
 			self._process_awakening(combined_text, msg_ids_to_process, cursor, conn)
 			conn.commit()
 			conn.close()
@@ -491,8 +509,11 @@ class IDEWorker:
 		except Exception:
 			pass
 
-		# ---- AgentBridge: Direct execution path (AgyBridge) ----
-		if self._caps and self._caps.auto_approve:
+		# ---- AgentBridge: Direct execution path (bridge cascade) ----
+		# Same rule: a configured TELEGRAM cascade routes through
+		# _process_via_bridge, which surfaces pertinent cascade errors to the
+		# user instead of dying in the legacy gRPC path when the IDE is absent.
+		if (self._caps and self._caps.auto_approve) or cfg.get_config().TELEGRAM_BRIDGE_CASCADE:
 			self._process_via_bridge(combined_text, msg_ids_to_process, channel, channel_user_id, cursor, conn)
 			conn.commit()
 			conn.close()
