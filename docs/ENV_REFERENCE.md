@@ -171,12 +171,23 @@ Plugins 05–10. Each is independently toggleable.
 | :--- | :--- | :--- |
 | `IDE_BACKEND` | `auto` | Execution backend selector (`auto`, `agy`, `grpc`, `claude`, `opencode`, or `local`). `auto` prefers `agy` if available. |
 | `OPENCODE_SERVER_URL` | | URL of persistent `opencode serve` instance (e.g. `http://localhost:4096`). Enables attached mode, avoiding MCP cold-start. |
+| `OPENCODE_BIN` | | Explicit path to the `opencode` binary. Wins over PATH resolution — the robust option for service-manager contexts. |
 | `OPENCODE_SCRIBE_PLUGIN` | `False` | Set to `true` when the `redpill-scribe` OpenCode plugin handles persistence. Disables bridge `_scribe_relay()` to avoid double-writes. |
 | `AUTONOMOUS_AGY_ENABLED` | `False` | Gathers and gates autonomous Flash-consuming operations like cognitive queue or entropy executor. |
 | `TELEGRAM_BRIDGE_CASCADE` | `[]` | JSON-encoded fallback cascade of model targets for Telegram/inbox processing. Example: `'[{"backend":"claude","model":"opus","effort":"high"}]'`. |
 | `AWAKENING_BRIDGE_CASCADE` | `[]` | JSON-encoded fallback cascade of model targets for autonomous awakening runs. |
 | `DEFAULT_MINION_BRIDGE_CASCADE` | `[]` | JSON-encoded fallback cascade of model targets for background agéntic minions if no model is explicitly requested. |
 | `CHRONICLE_PLUGINS` | `["antigravity", "claude_code"]` | List of enabled sequential extraction plugins to pull transcripts during sleep cycle. |
+
+> **⚠️ opencode + service managers (PATH requirement)**
+>
+> When `opencode` is used (as `IDE_BACKEND` or in any `*_BRIDGE_CASCADE`), the `opencode` binary must be resolvable from the **service manager's** environment — not just your login shell. Service managers run with a minimal PATH:
+>
+> - **Linux (systemd user units)**: add the install dir (e.g. `~/.opencode/bin`) to `Environment="PATH=..."` in `~/.config/systemd/user/redpill-*.service`, then `systemctl --user daemon-reload`.
+> - **macOS (launchd)**: set `PATH` under `EnvironmentVariables` in the plist.
+> - **Windows (Task Scheduler)**: put the install dir on the user/machine PATH, or set `OPENCODE_BIN`.
+>
+> Resolution order: `OPENCODE_BIN` env → `$PATH` → `~/.opencode/bin` (probed as last resort). If the binary is missing, bridge construction now fails **loudly** in the logs and the worker never falls back to the legacy Antigravity IDE path for non-IDE cascades — before v7.15.x this degraded silently and pulses crashed against a dead IDE.
 
 ---
 

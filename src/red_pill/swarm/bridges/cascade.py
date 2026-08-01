@@ -70,7 +70,11 @@ class CascadeBridge(AgentBridge):
 		for t in self._targets:
 			try:
 				return self._build(t.backend)
-			except Exception:
+			except Exception as e:
+				# NEVER swallow this silently: a failed construction degrades
+				# get_capabilities() to GRPC and the caller may route into the
+				# legacy Antigravity path without any trace of the real cause.
+				logger.error(f"[CascadeBridge:{self._name}] {_label(t)} failed to construct: {e}")
 				continue
 		return None
 

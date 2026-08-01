@@ -21,6 +21,11 @@ Two execution modes:
 
 Requirements:
 - opencode CLI installed and configured (~/.config/opencode/).
+- The `opencode` binary must be resolvable from the CALLING process. Service
+  managers run with a minimal PATH: on Linux add the install dir to
+  `Environment="PATH=..."` in ~/.config/systemd/user/*.service (equivalent:
+  launchd plist on macOS, Task Scheduler env on Windows). The bridge also
+  honours OPENCODE_BIN and probes ~/.opencode/bin as a last resort.
 """
 
 from __future__ import annotations
@@ -30,6 +35,7 @@ import logging
 import os
 import shutil
 import subprocess
+from pathlib import Path
 from typing import Optional
 
 from red_pill.core.paths import get_bunker_root
@@ -39,6 +45,22 @@ from .base import AgentBridge, BackendType, BridgeCapabilities, ConversationResu
 logger = logging.getLogger(__name__)
 
 OPENCODE_BIN = "opencode"
+
+
+def _resolve_opencode_bin() -> Optional[str]:
+	"""Resolve the opencode CLI: env override → PATH → well-known install dir.
+
+	Service managers (systemd user units, launchd, Task Scheduler) run with a
+	minimal PATH that rarely includes user-local bin dirs, so probe the
+	standard install location as a last resort.
+	"""
+	if env_path := os.environ.get("OPENCODE_BIN"):
+		return env_path
+	if found := shutil.which(OPENCODE_BIN):
+		return found
+	exe = "opencode.exe" if os.name == "nt" else OPENCODE_BIN
+	candidate = Path.home() / ".opencode" / "bin" / exe
+	return str(candidate) if candidate.is_file() else None
 
 
 class OpenCodeBridge(AgentBridge):
@@ -56,9 +78,13 @@ class OpenCodeBridge(AgentBridge):
 		server_url: Optional[str] = None,
 		identity_depth: str = "medium",
 	):
-		self._opencode_path = opencode_path or shutil.which(OPENCODE_BIN)
+		self._opencode_path = opencode_path or _resolve_opencode_bin()
 		if not self._opencode_path:
-			raise RuntimeError("OpenCode CLI (opencode) not found in PATH. Install OpenCode and ensure `opencode` is available.")
+			raise RuntimeError(
+				"OpenCode CLI (opencode) not found. Install OpenCode and ensure `opencode` is "
+				"on the service manager's PATH (Linux: Environment= in ~/.config/systemd/user/*.service; "
+				"macOS: launchd plist; Windows: Task Scheduler env), or set OPENCODE_BIN."
+			)
 		# Priority: explicit param > env var > default
 		self._server_url = server_url or os.environ.get("OPENCODE_SERVER_URL", "")
 		self._identity_depth = identity_depth
