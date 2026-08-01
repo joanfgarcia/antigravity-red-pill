@@ -22,10 +22,10 @@ Two execution modes:
 Requirements:
 - opencode CLI installed and configured (~/.config/opencode/).
 - The `opencode` binary must be resolvable from the CALLING process. Service
-  managers run with a minimal PATH: on Linux add the install dir to
-  `Environment="PATH=..."` in ~/.config/systemd/user/*.service (equivalent:
-  launchd plist on macOS, Task Scheduler env on Windows). The bridge also
-  honours OPENCODE_BIN and probes ~/.opencode/bin as a last resort.
+	managers run with a minimal PATH: on Linux add the install dir to
+	`Environment="PATH=..."` in ~/.config/systemd/user/*.service (equivalent:
+	launchd plist on macOS, Task Scheduler env on Windows). The bridge also
+	honours OPENCODE_BIN and probes ~/.opencode/bin as a last resort.
 """
 
 from __future__ import annotations
