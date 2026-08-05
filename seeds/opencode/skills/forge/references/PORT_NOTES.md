@@ -66,7 +66,7 @@ the mechanism layer adapts per harness (`references/runtime-adapters/`).
 
 1. **Sentinel rewritten to Python stdlib** (`scripts/usage-sentinel.sh` → `scripts/usage-sentinel.py`): same 93%/5-min/single-shot contract, but pure `json/os/subprocess/time/datetime` — runs identically on **Linux, macOS and Windows** (no `.sh`, no shell-isms). Launch `python3 usage-sentinel.py <project_dir>` (or harness background Bash tool). `usage-sentinel.md`, `mission-mode.md`, `controlled-stop.md`, `features.md`, `SKILL.md` and both runtime-adapters updated; auto-resume documented per-platform (systemd/`at`, launchd, `schtasks`).
 2. **Drift-check fixed** (`inject_opencode.py`): `_frontmatter_version()` now compiles `_VERSION_RE` with `re.MULTILINE` (the old `search(head, re.MULTILINE)` passed the flag as *pos*, so it always returned `None` and drift was never detected); `check_version_drift()` now takes a `kind` param and `main()` passes the correct seeds subdirs (`skills/`, `agents/`) instead of the `seeds/opencode` root.
-3. **Residue fixed**: `runtime-adapters/opencode.md` still referenced `~/.config/opencode/agents/cell-*.md` after the rename → now `forge-*.md`.
+ 3. **Residue fixed**: `runtime-adapters/opencode.md` still referenced `~/.config/opencode/agents/swarm-*.md` after the rename → now `forge-*.md`.
 
 ## v1.2.0 — Decomposition, versioning, Scout (2026-08-05, Operator-approved)
 
