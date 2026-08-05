@@ -174,7 +174,18 @@ def resolve_persona(skin_name: str) -> str:
 	chroma = skin_data.get("chroma", "gray")
 	personality = skin_data.get("personality", "")
 
-	return f"Role: {role}\nName: Aleth\nSkin: {skin_name or 'DEFAULT'}\nchroma: {chroma}\n{personality}"
+	# The persona is injected outside the interceptor pipeline, so the Mood
+	# Orchestrator's CHROMA KEY legend never covers this chroma — explain it here.
+	chroma_line = f"chroma: {chroma}"
+	try:
+		from red_pill.config import CHROMA_TONE_MAPPING
+
+		if chroma in CHROMA_TONE_MAPPING:
+			chroma_line = f"chroma: {chroma} → {CHROMA_TONE_MAPPING[chroma]}"
+	except Exception:
+		pass
+
+	return f"Role: {role}\nName: Aleth\nSkin: {skin_name or 'DEFAULT'}\n{chroma_line}\n{personality}"
 
 
 def parse_pact(bond_content: str) -> str:

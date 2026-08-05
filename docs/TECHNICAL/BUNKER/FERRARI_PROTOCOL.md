@@ -64,8 +64,8 @@ USP color → real-time behavioral adaptation
 
 | Plugin | What it does with the USP color |
 |---|---|
-| **05 Cognitive Router** | Routes *task type*: architecture proposals in CYAN, empathy-first in RED |
-| **06 Tone Adapter** | Adapts *verbal style*: rigorous in CYAN, warm in BLUE, ultra-concise in PURPLE |
+| **05 Cognitive Router** | Signals the *cognitive baseline*: dominant USP color over the **3-day horizon** (`COGNITIVE_COLOR`, slow signal — survives the night, recomputed during sleep). See §3.3 |
+| **06 Tone Adapter** | Signals the *immediate tone*: dominant color of the current **4h session window** (`TONE_COLOR`, fast signal — Overnight Therapy reset). See §3.3 |
 | **07 Mood Analytics** | Adds *temporal dimension*: is the color stable, improving, or deteriorating? |
 | **08 Emotive Recall** | Retrieves *emotional memory*: what happened last time the Operator was in this state? |
 | **09 Proactive Signal** | Triggers *autonomous care*: sustained RED emits a pain signal and shifts to empathy mode |
@@ -76,10 +76,40 @@ The USP was already computing all of this information. The Ferrari Protocol just
 ### 3.1 Engine Brake Cooldown (v7.1.0)
 
 To make the protocol less restrictive ("más laxo"), v7.1.0 introduces an automatic **Engine Brake (Freno de Motor) Cooldown Latch**:
-- **Automatic Decay**: When the Operator is in a work mode (`PURPLE` or `CYAN`), the state decays automatically to `CASUAL` mode if the Operator sends **2 consecutive turns** without any work-related keywords (such as `arregla`, `fix`, `implementa`, `despliega`).
-- **Instant Override**: Explicit casual override keywords (e.g., `relax`, `charlemos`) trigger `CASUAL` mode instantly. Any work keyword immediately re-locks the agent into work mode, resetting the cooldown counter.
+- **Automatic Decay**: When the Operator is in a work mode (`PURPLE` or `CYAN`), the state decays automatically to `CASUAL` mode if the Operator sends **2 consecutive turns** without any work-related keywords.
+- **Instant Override**: Explicit casual override keywords trigger `CASUAL` mode instantly. Any work keyword immediately re-locks the agent into work mode, resetting the cooldown counter.
+- **Operator Vocabularies (v7.16.0)**: both keyword sets are configuration, not code — `WORK_MODE_KEYWORDS` and `CASUAL_OVERRIDE_KEYWORDS` in `.env` (comma-separated, lowercase substring match). The shipped seed is bilingual ES+EN; each Operator tunes it to their language and trade (a designer's work words are not a netrunner's).
 - **Absolute Silence Latch (All Plugins)**: When `CASUAL` mode is active, the entire interceptor pipeline (Plugins 05 through 11) is bypassed, returning absolute silence `""`. This guarantees complete natural personality agency, preventing any background tone directives, proactive warnings, or pre-heating headers from leaking into the prompt or affecting the agent's tone.
 - **Active Debate (Purple Mode)**: The `PURPLE` tone adapter is tuned to challenge the operator, proactively debating system designs and pointing out architectural flaws, which automatically relaxes into a conversational style once the engine brake kicks in.
+
+### 3.2 CHROMA KEY — Single Legend (v7.16.0)
+
+Before v7.16.0, plugins 05 and 06 each repeated per-color prose (`ROUTING_DIRECTIVE`, `TONE_DIRECTIVE`) on every state transition, and the final `chroma:` tag carried no explanation at all — a cold model had no way to know what *orange* or *gray* meant.
+
+Now color semantics are rendered **exactly once**, at the end of the pipeline:
+
+1. Each subplugin *paints* the chromas it mentions via `paint_chroma()` (`BaseInterceptorPlugin`) and emits only compact tags (`OPERATOR_COLOR: GRAY`, `DOMINANT_COLOR: CYAN`, …).
+2. The Mood Orchestrator aggregates the painted set across subplugins, adds the dominant mood, and appends a single legend:
+
+```
+chroma: gray
+=== CHROMA KEY (FERRARI PROTOCOL) ===
+gray → Professional, balanced, direct, objective (Standard).
+---
+```
+
+The vocabulary is `CHROMA_TONE_MAPPING` in `config.py` — the single source of truth for color meanings (extended in v7.16.0 with `red` and `green`). Colors without an entry are skipped silently; a subplugin that stays silent does not push its color into the legend. The persona chroma (resolved by `wake_up_v6.py`, injected outside the interceptor pipeline) carries its meaning inline on its own line for the same reason.
+
+### 3.3 Two Temporal Signals — Cognitive vs Tone (v7.16.0)
+
+Until v7.16.0, plugins 05 and 06 read the **same** source (`ToneAnalyzer.get_dominant_mood()`, session window) and therefore always reported the same color — the USP multi-horizon vector this document describes was never actually consulted by either. Now each carries a genuinely distinct temporal signal:
+
+| Signal | Plugin | Source | Window | Reset behavior |
+|---|---|---|---|---|
+| `COGNITIVE_COLOR` | 05 | USP engram (`mood_profile`, `last_3d` horizon) | 3 days (Acute Window — cortisol analogy, §2) | None — survives the night; recomputed during the sleep cycle |
+| `TONE_COLOR` | 06 | `ToneAnalyzer.get_dominant_mood()` (social+work merge, first non-gray wins) | Current session (`OVERNIGHT_THERAPY_THRESHOLD_HOURS`, default 4h) | Overnight Therapy: resets to the hedonic set point if the newest memory is older than the threshold |
+
+*How the Operator has been these days* (cognitive) vs *how the Operator is right now* (tone). When they diverge, both colors appear in the prompt and the CHROMA KEY legend explains each once.
 
 ---
 

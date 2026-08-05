@@ -73,9 +73,16 @@ class TestBridgeTarget:
 
 
 class TestCascadeConfigParsing:
-	def test_default_is_empty(self):
-		cfg = RedPillConfig()
+	def test_default_is_empty(self, monkeypatch):
+		# Isolate from the operator's real environment: RedPillConfig is a
+		# BaseSettings that reads both process env and the config-dir .env file,
+		# so a populated cascade on the host machine would leak into the default.
+		for var in ("TELEGRAM_BRIDGE_CASCADE", "AWAKENING_BRIDGE_CASCADE", "DEFAULT_MINION_BRIDGE_CASCADE"):
+			monkeypatch.delenv(var, raising=False)
+		cfg = RedPillConfig(_env_file=None)
 		assert cfg.TELEGRAM_BRIDGE_CASCADE == []
+		assert cfg.AWAKENING_BRIDGE_CASCADE == []
+		assert cfg.DEFAULT_MINION_BRIDGE_CASCADE == []
 
 	def test_list_of_dicts_coerced(self):
 		cfg = RedPillConfig(TELEGRAM_BRIDGE_CASCADE=[{"backend": "claude", "model": "opus", "effort": "high"}])

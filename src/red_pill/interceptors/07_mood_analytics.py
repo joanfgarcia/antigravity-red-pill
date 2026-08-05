@@ -125,6 +125,8 @@ class MoodAnalyticsPlugin(BaseInterceptorPlugin):
 		second_half_avg = sum(_COLOR_WEIGHT.get(c, 0) for c in colors[:mid]) / max(len(colors[:mid]), 1)
 		trend = _trend_label(first_half_avg, second_half_avg)
 
+		self.paint_chroma(dominant)
+		self.paint_chroma(current)
 		lines = [
 			"=== MOOD ANALYTICS (FERRARI PROTOCOL) ===",
 			f"DOMINANT_COLOR: {dominant.upper()}",

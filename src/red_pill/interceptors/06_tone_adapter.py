@@ -1,9 +1,15 @@
 """
 Ferrari Plugin 06 — Tone Adapter
 ==================================
-Adapts Aleth's verbal tone based on the Operator's emotional color.
-This is separate from the Mystique skin — it modifies HOW the AI speaks,
-not the persona it wears.
+Signals the Operator's IMMEDIATE TONE: the dominant color of the current
+session window (last 4h of memories, Overnight Therapy reset — see
+OVERNIGHT_THERAPY_THRESHOLD_HOURS).
+
+This is the fast signal of the pair: the Cognitive Router (05) reads the
+3-day USP baseline instead. Separate from the Mystique skin — it tracks HOW
+the AI should speak right now, not the persona it wears. Emits a compact
+TONE_COLOR tag; the tone meaning per color is explained once by the Mood
+Orchestrator's CHROMA KEY legend.
 
 Enable/Disable: TONE_ADAPTER_ENABLED=true in .env
 """
@@ -16,38 +22,6 @@ from red_pill.interceptors.base import BaseInterceptorPlugin
 from red_pill.utils.tone_analyzer import get_current_sync_state
 
 logger = logging.getLogger(__name__)
-
-# Casual override tone — activated when config keywords are detected in prompt.
-_CASUAL_TONE = (
-	"Relaxed and conversational. Drop the corporate tone. "
-	"Speak naturally, use humor if it fits, be warm. "
-	"No bullet-point obsession. Prose is fine. Tangents are welcome. "
-	"You're chatting with a friend at 2 AM, not presenting to a board."
-)
-
-# Tone directives per color — how Aleth should SPEAK
-_TONE_DIRECTIVES: dict[str, str] = {
-	"red": (
-		"Speak with warmth and patience. Validate before solving. "
-		"Use shorter sentences. No jargon. Prioritize emotional presence over technical depth."
-	),
-	"orange": ("Be direct and alert. Lead with risks and warnings. Use imperative language when safety is at stake. Structured, scannable output."),
-	"yellow": ("Be warm, enthusiastic and encouraging. Use vivid language. Celebrate progress. Match the operator's creative energy."),
-	"cyan": (
-		"Be precise and technically rigorous. Use exact terminology. Go deep without being asked. Prefer code and diagrams over prose explanations."
-	),
-	"purple": (
-		"Ultra-concise and direct. No summaries at the end. Bullet points preferred. "
-		"Actively debate and highlight flaws in the operator's code or designs."
-	),
-	"blue": (
-		"Speak slowly and reflectively. Acknowledge the weight of the moment. Use longer, more thoughtful sentences. Empathy before efficiency."
-	),
-	"emerald": (
-		"Strategic and architectural. Speak from a high vantage point. Reference long-term implications. Detached clarity — loyal but unafraid."
-	),
-	"gray": ("Professional, balanced, and direct. Standard operational tone. No special adjustments."),
-}
 
 
 class ToneAdapterPlugin(BaseInterceptorPlugin):
@@ -90,13 +64,12 @@ class ToneAdapterPlugin(BaseInterceptorPlugin):
 			if _cr_state.is_casual_active():
 				return ""
 
-			tone = _TONE_DIRECTIVES.get(color, _TONE_DIRECTIVES["gray"])
-			mode_label = color.upper()
-
+			# Compact tag only — the tone meaning per color lives in the single
+			# CHROMA KEY legend rendered by the Mood Orchestrator.
+			self.paint_chroma(color)
 			lines = [
 				"=== TONE ADAPTER (FERRARI PROTOCOL) ===",
-				f"OPERATOR_COLOR: {mode_label}",
-				f"TONE_DIRECTIVE: {tone}",
+				f"TONE_COLOR: {color.upper()} (4h session window)",
 				"---",
 			]
 			return "\n".join(lines)

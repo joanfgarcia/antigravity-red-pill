@@ -47,6 +47,21 @@ def _load_subplugin(module_path: str):
 	return None
 
 
+def _render_chroma_key(painted: set) -> str:
+	"""Render the single CHROMA KEY legend for every chroma painted this turn.
+	Colors without an entry in CHROMA_TONE_MAPPING are skipped silently."""
+	if not painted:
+		return ""
+	mapping = getattr(cfg, "CHROMA_TONE_MAPPING", {})
+	entries = [(color, mapping[color]) for color in sorted(painted) if color in mapping]
+	if not entries:
+		return ""
+	lines = ["=== CHROMA KEY (FERRARI PROTOCOL) ==="]
+	lines += [f"{color} → {meaning}" for color, meaning in entries]
+	lines.append("---")
+	return "\n".join(lines)
+
+
 def _emit_pain_signal(source: str, error: str):
 	"""Emit a pain signal to Bünker when a subplugin fails."""
 	try:
@@ -92,6 +107,7 @@ class MoodOrchestratorPlugin(BaseInterceptorPlugin):
 			return ""
 
 		results = []
+		painted: set[str] = set()
 		for sp in subplugins:
 			# Honor each subplugin's own on/off flag (raw_enabled), independent of
 			# MOOD_ORCHESTRATOR_ENABLED — otherwise the individual *_ENABLED flags
@@ -102,6 +118,9 @@ class MoodOrchestratorPlugin(BaseInterceptorPlugin):
 				output = await asyncio.wait_for(sp.execute(prompt), timeout=sp.timeout)
 				if output and output.strip():
 					results.append(output.strip())
+					chromas = getattr(sp, "painted_chromas", None)
+					if isinstance(chromas, (set, frozenset, list, tuple)):
+						painted.update(c.lower() for c in chromas if isinstance(c, str))
 			except asyncio.TimeoutError:
 				logger.warning(f"Mood Orchestrator: subplugin '{sp.name}' timed out after {sp.timeout}s")
 				_emit_pain_signal(sp.name, "timeout")
@@ -109,14 +128,21 @@ class MoodOrchestratorPlugin(BaseInterceptorPlugin):
 				logger.error(f"Mood Orchestrator: subplugin '{sp.name}' crashed: {e}")
 				_emit_pain_signal(sp.name, str(e))
 
-		# ── CHROMA KEY (dominant mood color) ──
+		# ── CHROMA KEY (dominant mood color + single legend) ──
+		# Subplugins paint compact color tags only; the meaning of every chroma
+		# painted this turn is rendered here EXACTLY ONCE, so nothing repeats.
 		try:
 			from red_pill.utils.tone_analyzer import get_current_sync_state
 
 			sync_state = get_current_sync_state()
 			color = sync_state.get("mood", "gray")
 			results.append(f"chroma: {color}")
+			painted.add(color.lower())
 		except Exception:
 			pass
+
+		legend = _render_chroma_key(painted)
+		if legend:
+			results.append(legend)
 
 		return "\n".join(results) if results else ""

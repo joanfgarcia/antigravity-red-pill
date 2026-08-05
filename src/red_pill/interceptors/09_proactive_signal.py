@@ -93,6 +93,7 @@ class ProactiveSignalPlugin(BaseInterceptorPlugin):
 				break
 
 		if consecutive_red >= red_threshold:
+			self.paint_chroma("red")
 			output_lines += [
 				"=== PROACTIVE SIGNAL (FERRARI PROTOCOL) ===",
 				f"⚠️  ALERT: Operator has been in RED state for {consecutive_red} consecutive interactions.",

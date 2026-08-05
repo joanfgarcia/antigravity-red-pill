@@ -1,3 +1,24 @@
+## [7.16.0] - 2026-08-02 (La Clave Cromática)
+
+El pipeline Ferrari pintaba colores que nadie explicaba: el Router y el Tone Adapter repetían la misma prosa por color en cada transición, y el `chroma:` final llegaba desnudo — un modelo frío no tenía forma de saber qué significa *orange* o *gray*. Esta release consolida la semántica de color en una sola leyenda al final del pipeline: cada plugin pinta su etiqueta compacta y el CHROMA KEY explica, una única vez, cada color que se ha pintado ese turno.
+
+### 🎨 CHROMA KEY — Leyenda única de colores (Ferrari)
+- **[FEAT] `paint_chroma()` en `BaseInterceptorPlugin`**: los subplugins registran los chromas que mencionan en su salida; el Mood Orchestrator agrega el conjunto pintado + el mood dominante y renderiza `=== CHROMA KEY ===` **exactamente una vez** al final del pipeline, con `CHROMA_TONE_MAPPING` (config.py) como vocabulario único. Colores sin entrada se omiten; un subplugin silenciado no mete su color en la leyenda. Cierra el hueco del Hito 6 de `session_injection_restructuring`: el plan referenciaba `CHROMA_TONE_MAPPING` pero solo se inyectaba el color pelado.
+- **[CHANGE] Router (05) y Tone Adapter (06) sin prosa por color**: eliminados `_ROUTING_DIRECTIVES` y `_TONE_DIRECTIVES` (la misma semántica duplicada en dos plugins) y las constantes casual muertas; ahora emiten solo la etiqueta `OPERATOR_COLOR` en transiciones de estado. 07/08/09 pintan los colores que citan (DOMINANT_COLOR, echo emocional, alerta RED sostenida).
+- **[FEAT] `red` y `green` en `CHROMA_TONE_MAPPING`**: existían en los pipelines de emoción (BERT → chroma) pero no tenían significado definido en el vocabulario.
+- **[FEAT] Chroma de la persona explicado inline**: `wake_up_v6.py` inyecta la persona fuera del pipeline de interceptores, donde la leyenda no llega — su línea `chroma:` ahora lleva el significado al lado (`chroma: orange → Vigilant, alert…`).
+
+### ⏱️ Cognitive Router y Tone Adapter: dos señales temporales de verdad
+- **[FIX] Ambos plugins leían la MISMA fuente**: 05 y 06 llamaban a `get_dominant_mood()` (ventana de sesión) y devolvían siempre el mismo color — la USP multi-horizonte que la doc Ferrari prometía no la consultaba ninguno. Ahora el **Cognitive Router** emite `COGNITIVE_COLOR` desde la USP horizonte `last_3d` (baseline multi-sesión: sobrevive la noche, se recalcula en el sueño) y el **Tone Adapter** emite `TONE_COLOR` desde la ventana de sesión de 4h (reset *Overnight Therapy*). Cómo viene el operador estos días vs cómo está ahora mismo; cuando divergen, la leyenda CHROMA KEY explica ambos colores una sola vez.
+- **[DOCS] FERRARI_PROTOCOL.md §3.3**: tabla de las dos señales (fuente, ventana, comportamiento de reset) — la semántica temporal por fin está escrita.
+
+### 🔧 Vocabularios del freno de motor externalizados
+- **[CHANGE] `WORK_KEYWORDS` fuera del código**: la lista hardcodeada en `_05_cognitive_router_state.py` (monolingüe, no customizable) se convierte en `WORK_MODE_KEYWORDS` en config — seed bilingüe ES+EN, customizable por operador vía `.env` según su idioma y oficio, con recarga en caliente por mtime. Mismo patrón que `CASUAL_OVERRIDE_KEYWORDS`. `register_turn()` recibe ambos vocabularios explícitamente; el módulo de estado ya no conoce ninguna palabra.
+- **[DOCS] Seed visible en `.env.example`**: ambos vocabularios documentados y comentados (con los defaults servidos) en `.env.example` y `ENV_REFERENCE.md` — antes ni el casual estaba sembrado.
+
+### 🧪 Higiene de tests
+- **[FIX] `test_swarm_cascade` aislado del entorno real**: `test_default_is_empty` construía `RedPillConfig()` leyendo el `.env` del operador — con un cascade de Telegram configurado en el host, el test fallaba en local. Ahora usa `_env_file=None` + limpieza de las tres variables de cascade, y verifica los tres defaults.
+
 ## [7.15.0] - 2026-07-30 (El Despertar Determinista & El Acta del Pacto)
 
 El wake-up llevaba un oráculo dentro: cada arranque podía disparar una síntesis LLM con caché de dos niveles, subprocess en background y riesgo de alucinación en la línea de identidad. Esta release lo extirpa — el boot es determinista y la síntesis cara se muda al sueño, que es donde se sueña.

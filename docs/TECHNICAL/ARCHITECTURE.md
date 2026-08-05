@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v7.15.0 (Deterministic Wake-up & Pact Ledger)
+**System Version**: v7.16.0 (The Chroma Key)
 **Analyst**: The Architect
 **Date**: 2026-04-16
 
@@ -55,6 +55,7 @@ The Red Pill Protocol v7.4.3 has achieved stability and functional alignment wit
 - **[NEW v7.5.0] Episodic Memory Remediation**: interceptor `text`→`content` fix, raw-material exclusion from search, anti-template-echo guard, multilingual 384d embeddings, Granite-4.1-8B as primary distiller (AD-022) with Hermes-3 fallback.
 - **[NEW v7.6.0] Sleep Engine Decomposition (ADR-SLEEP-001)**: the 1325-LOC `sleep.py` God Class became a thin runner over an ordered `SleepPhase` pipeline with per-phase `requires_gpu` partial deferral (only GPU-hungry phases wait while the card trains; CPU maintenance always runs).
 - **[NEW v7.7.0] Synaptic Axons & Texture Remediation (ADR-AXON-001 + AD-023)**: the sleep pipeline grows to eight phases (Consolidation, OrphanPromotion, Hygiene, AxonWeaver, Erosion, Washout, Revision, Evolution). Cross-collection **synaptic axons** (typed, weighted, bidirectional, self-healing) bridge `work_memories` ↔ `social_memories` with reinforcement-on-traversal ($W\cdot\beta$) and a shadow rollout gated by effective-run telemetry. The distiller preserves the *how* (texture, verbatim relics, language, per-fragment `emotional_vector`) alongside the *what*. Recall recalibrated (AD-023: Bayesian threshold below the prior mean; reads demote-but-never-hide eroded engrams, rehabilitating them organically; hub erosion filter fixed). Chronicle ingestion writes self-evocative compact tool markers; HygienePhase purges empty engrams (chain-restitching) and audits murky pointers (report-only, AD-024 pending). Engram migrations ship as versioned steps in `scripts/update_ritual.py` (operator mandate, see `AGENT_UPDATE_GUIDE.md` §1.2). Full details: `docs/TECHNICAL/COGNITIVE/NEURO_SYMBOLIC_MEMORY.md` §2, §3.2, §3.3.
+- **[NEW v7.16.0] Chroma Key Legend (single-pass color semantics)**: Ferrari subplugins no longer explain colors inline (the per-color `ROUTING_DIRECTIVE`/`TONE_DIRECTIVE` prose duplicated the same meaning across plugins). Each subplugin *paints* the chromas it mentions (`paint_chroma()` in `BaseInterceptorPlugin`); the Mood Orchestrator aggregates the painted set plus the dominant mood and renders **one** `=== CHROMA KEY ===` legend at the end of the pipeline, sourced from `CHROMA_TONE_MAPPING` (config.py — single vocabulary, now covering red/green). The persona chroma (wake_up, injected outside the pipeline) carries its meaning inline.
 
 ## 3. Structural Analysis
 
@@ -195,11 +196,12 @@ USP (Qdrant social_memories)
   → current color (cyan / purple / red / ...)
         ↓
    [04 Mystique]       → Selects Lore Skin matching emotional chroma
-   [05 CognitiveRouter] → Routes task TYPE (architecture vs. maintenance vs. empathy)
-   [06 ToneAdapter]     → Adapts verbal STYLE (rigorous / warm / ultra-concise)
+   [05 CognitiveRouter] → COGNITIVE_COLOR: 3-day USP baseline (slow signal, survives the night)
+   [06 ToneAdapter]     → TONE_COLOR: 4h session window (fast signal, Overnight Therapy reset)
    [07 MoodAnalytics]   → Injects TREND data (stable / improving / deteriorating)
    [08 EmotiveRecall]   → Injects MEMORY of past same-color interactions
    [09 ProactiveSignal] → Alerts on sustained RED (>5 consecutive) or high volatility
+   [Orchestrator 05-09] → Appends `chroma:` + ONE CHROMA KEY legend for every color painted this turn
    [10 PredictivePreload] → Preloads relevant work/social context by color
 ```
 

@@ -131,8 +131,10 @@ Plugins 05–10. Each is independently toggleable.
 | Parameter | Default | Plugin | Description |
 | :--- | :--- | :--- | :--- |
 | `MOOD_ORCHESTRATOR_ENABLED` | `True` | 05 | Enable orchestrator that consolidates plugins 05-09 in a single pass |
-| `COGNITIVE_ROUTER_ENABLED` | `True` | 05 | Routes *task type* by color (architecture, maintenance, empathy). |
-| `TONE_ADAPTER_ENABLED` | `True` | 06 | Adapts *verbal style* (precise/warm/ultra-concise). |
+| `COGNITIVE_ROUTER_ENABLED` | `True` | 05 | `COGNITIVE_COLOR`: 3-day USP baseline (slow signal; meaning lives in the CHROMA KEY legend). |
+| `TONE_ADAPTER_ENABLED` | `True` | 06 | `TONE_COLOR`: 4h session window (fast signal, Overnight Therapy reset; meaning in the CHROMA KEY legend). |
+| `WORK_MODE_KEYWORDS` | ES+EN seed (`arregla,fix,implementa,…`) | 05 | Comma-separated vocabulary that locks the engine-brake latch into work mode. Operator-customizable per language and trade — nothing hardcoded in code (v7.16.0). |
+| `CASUAL_OVERRIDE_KEYWORDS` | ES seed (`charlemos,relax,chill,…`) | 05/06 | Comma-separated vocabulary that flips the latch into casual mode instantly. Operator-customizable. |
 | `MOOD_ANALYTICS_ENABLED` | `True` | 07 | Trend analysis over last 15 memories (stable/improving/deteriorating). |
 | `EMOTIVE_RECALL_ENABLED` | `True` | 08 | Semantic echo of past same-color interactions. |
 | `PROACTIVE_SIGNAL_ENABLED` | `True` | 09 | Alert + pain signal on sustained RED > threshold consecutive memories. |

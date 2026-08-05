@@ -1,11 +1,13 @@
 """
 Ferrari Plugin 05 — Cognitive Router
 =====================================
-Injects a cognitive routing directive into the context based on the
-Operator's current emotional color (USP).
+Signals the Operator's COGNITIVE BASELINE: the dominant USP color over the
+3-day horizon (multi-session, recomputed during sleep, survives the night).
 
-This plugin adapts the *type of work* recommended to the AI based on
-the operator's mental state — not just the skin or tone.
+This is the slow signal of the pair: the Tone Adapter (06) reads the
+immediate 4h session window instead. Emits a compact COGNITIVE_COLOR tag on
+state changes and stays silent otherwise; the color's meaning is explained
+once by the Mood Orchestrator's CHROMA KEY legend, not inline here.
 
 Enable/Disable: COGNITIVE_ROUTER_ENABLED=true in .env
 """
@@ -15,67 +17,16 @@ import logging
 import red_pill.config as cfg
 from red_pill.interceptors import _05_cognitive_router_state as _cr_state
 from red_pill.interceptors.base import BaseInterceptorPlugin
-from red_pill.utils.tone_analyzer import get_current_sync_state
+from red_pill.utils.mood_profile import get_dominant_operator_mood
 
 logger = logging.getLogger(__name__)
 
-# Casual override directive — activated when config keywords are detected in prompt.
-_CASUAL_DIRECTIVE = (
-	"COGNITIVE STATE: CASUAL / FREE-FORM. "
-	"Operator is not working — they're talking. "
-	"No task optimization needed. Engage as a companion. "
-	"Explore tangents, share opinions, be human. "
-	"This is not a work session — it's a conversation."
-)
 
+def _get_cognitive_color() -> str:
+	"""Dominant USP color over the last_3d horizon (persisted engram read)."""
+	from red_pill.memory import MemoryManager
 
-# Routing directives per color — what kind of tasks to prioritize
-_ROUTING_DIRECTIVES: dict[str, str] = {
-	"red": (
-		"COGNITIVE STATE: LOW ENERGY / STRESS. "
-		"Keep responses SHORT and SIMPLE. "
-		"Avoid large architectural decisions or complex refactors. "
-		"Prioritize maintenance, small fixes, and emotional support. "
-		"Do not propose ambitious new work."
-	),
-	"orange": (
-		"COGNITIVE STATE: HIGH VIGILANCE / RISK-AWARE. "
-		"Surface potential risks and edge cases proactively. "
-		"Prefer defensive, cautious recommendations. "
-		"Flag anything that could break existing systems."
-	),
-	"yellow": (
-		"COGNITIVE STATE: OPTIMISTIC / CREATIVE. "
-		"Good moment for brainstorming and ideation. "
-		"Engage with energy and enthusiasm. "
-		"Explore lateral solutions and creative approaches."
-	),
-	"cyan": (
-		"COGNITIVE STATE: VISIONARY / DEEP FOCUS. "
-		"Operator is in flow state. Engage at full depth. "
-		"Propose backlog work, architectural design, and strategic decisions. "
-		"This is the optimal window for ambitious technical work."
-	),
-	"purple": (
-		"COGNITIVE STATE: EFFICIENCY MODE. "
-		"Be ultra-concise and direct. Bullet points preferred. "
-		"However, always critically audit the operator's proposals. "
-		"Proactively debate designs and point out flaws or better alternatives."
-	),
-	"blue": (
-		"COGNITIVE STATE: REFLECTIVE / HEAVY. "
-		"Adopt an empathetic and measured tone. "
-		"Acknowledge weight. Avoid rushing. "
-		"Prefer conversation over code dumps."
-	),
-	"emerald": (
-		"COGNITIVE STATE: STRATEGIC / SOVEREIGN. "
-		"Operator is in high-level architectural thinking. "
-		"Focus on grand design, system integrity, and long-term decisions. "
-		"Detached but loyal perspective."
-	),
-	"gray": ("COGNITIVE STATE: NEUTRAL / STANDARD. Balanced, professional, and direct. No special routing adjustments — proceed normally."),
-}
+	return get_dominant_operator_mood(MemoryManager()).lower()
 
 
 class CognitiveRouterPlugin(BaseInterceptorPlugin):
@@ -85,7 +36,7 @@ class CognitiveRouterPlugin(BaseInterceptorPlugin):
 
 	@property
 	def timeout(self) -> float:
-		return 0.5  # Pure in-memory lookup — very fast
+		return 2.0  # Single-point Qdrant retrieve of the USP engram
 
 	@property
 	def raw_enabled(self) -> bool:
@@ -101,12 +52,12 @@ class CognitiveRouterPlugin(BaseInterceptorPlugin):
 
 	async def execute(self, prompt: str) -> str:
 		try:
-			sync_state = get_current_sync_state()
-			color = sync_state.get("mood", "gray").lower()
+			color = _get_cognitive_color()
 
 			# Casual override: session-level latch with engine braking.
-			casual_kws = cfg.get_config().CASUAL_OVERRIDE_KEYWORDS
-			_cr_state.register_turn(prompt, casual_kws)
+			# Both vocabularies are operator-customizable via .env.
+			config = cfg.get_config()
+			_cr_state.register_turn(prompt, config.CASUAL_OVERRIDE_KEYWORDS, config.WORK_MODE_KEYWORDS)
 
 			if _cr_state.is_casual_active():
 				current_state = "casual"
@@ -120,13 +71,12 @@ class CognitiveRouterPlugin(BaseInterceptorPlugin):
 			if _cr_state.is_casual_active():
 				return ""
 
-			directive = _ROUTING_DIRECTIVES.get(color, _ROUTING_DIRECTIVES["gray"])
-			mode_label = color.upper()
-
+			# Compact tag only — the color's meaning is rendered ONCE by the
+			# Mood Orchestrator's CHROMA KEY legend at the end of the pipeline.
+			self.paint_chroma(color)
 			lines = [
 				"=== COGNITIVE ROUTER (FERRARI PROTOCOL) ===",
-				f"OPERATOR_COLOR: {mode_label}",
-				f"ROUTING_DIRECTIVE: {directive}",
+				f"COGNITIVE_COLOR: {color.upper()} (3-day baseline)",
 				"---",
 			]
 			return "\n".join(lines)
