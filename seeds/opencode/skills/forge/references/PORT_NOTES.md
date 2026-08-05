@@ -14,7 +14,7 @@ the mechanism layer adapts per harness (`references/runtime-adapters/`).
 ## Feature set v1.0 (resolved at assembly, re-evaluated at escalation triggers)
 
 - Kernel K1-K7 (fixed): disk anchoring; mandatory evidence+validator; deterministic gate+render; assumption registry+coverage matrix; verification=execution+nudge; honest 3-category reporting; disk reconciliation.
-- Optional O1-O7 (orchestrator-decided, defaults per features.md): E2E smoke, multi-model panel+judge, dynamic escalation+ladder, worktree isolation, mission mode, sentinel/ledger 93%, doc anchor.
+- Optional O1-O7 (orchestrator-decided, defaults per features.md): E2E smoke, multi-model panel+judge, dynamic escalation+ladder, worktree isolation, mission mode, doc anchor.
 - Optional F1-F3 (off by default, operator-pinned possible): askBoundary, usageAudit, humanApprovalMarkers (`-approved.md`).
 - **Rule**: `off` never skips a gate check — degrades the mechanism, not the verification semantics.
 
@@ -28,8 +28,7 @@ the mechanism layer adapts per harness (`references/runtime-adapters/`).
 
 - **opencode skill name regex** is `[a-z0-9]+(-[a-z0-9]+)*` → directory/name `forge` (hyphen). The `name:` frontmatter must match the directory name.
 - **Cold-context subagents**: `task` starts with fresh context; ALL role context must be packed into the prompt. opencode subagents are also cold → the main-loop context contamination concern does not apply to role agents; it applies to the ORCHESTRATOR only (anchor on disk, not context).
-- **`node -e require()` with relative paths fails** in `node -e` (resolves against the eval module, not CWD). The v1.0 shell sentinel had to normalize `PROJECT_DIR` to absolute before use; the v1.1 Python sentinel (`usage-sentinel.py`) resolves `os.path.abspath()` itself — no shell path pitfalls.
-- **The sentinel is Python stdlib, not shell** (v1.1, OS-agnostic): same 93%/5-min/single-shot contract, runs on Linux/macOS/Windows. Do not reintroduce `.sh` here — the whole bundle must stay portable.
+- **`node -e require()` with relative paths fails** in `node -e` (resolves against the eval module, not CWD). Use absolute paths in the skill scripts.
 - **Schemas descriptions are metadata** — the runtime validator uses only the structural keywords; Spanish descriptions are doc-only (auditable, not functional).
 - **`opencode run` headless — VERIFIED (2026-08-05, checkpoint P10)**: prompt is POSITIONAL (`opencode run "<prompt>" --agent <role> --auto`); `-p` is the server PASSWORD, not the prompt. `--auto` = auto-approve permissions. In early docs/scripts `-p` was used wrongly; all invocations fixed. Verified end-to-end: full cycle (impl→valid→smoke→panel) via cycle-run.mjs with a stubbed binary; real headless run with the `forge-qa` agent confirmed the agent loads and responds.
 - **Gate check 7 field**: the final panel verdict lives at state.json top level as `final_panel` (or `last_panel`) with `vote: "CLEARED"` — per-phase `devil` entries do NOT satisfy it. Learned while building the gate-OPEN fixture; `render-artifacts.mjs` may rename on render (disk wins).
@@ -50,9 +49,15 @@ the mechanism layer adapts per harness (`references/runtime-adapters/`).
 
 ## Usage signals by opencode tier (Zed vs GO)
 
-- On this workstation only **opencode Zed** is enabled (API wallet, credit 0, Free models only). The `CELL_USAGE_HOOK` contract is documented in `usage-sentinel.md` §2: one JSON line, `max_utilization` = WORST across the provider's windows (GO: 5h/weekly/monthly — the hook aggregates them).
-- Zed caveat: a wallet reading 0 credits with Free models available must report the FREE-tier quota, not the wallet — otherwise a false STOP fires. Ledger + cut-calibration is the active defense until a real meter endpoint is known.
+- On this workstation only **opencode Zed** is enabled (API wallet, credit 0, Free models only). Missions rely on the job-manager's native survival (per-step checkpoint + job-monitor) and on the rate-limit fire drill (`controlled-stop.md` §3).
 - Rename checklist (when the operator renames the skill): frontmatter `name`, directory name, `permission.task` pattern, agent filenames + references in SKILL.md/docs, red-pill seeds path + `inject_opencode.py` remove-list, and the future `/cell` command alias.
+
+## v1.4.0 — Sentinel retirado: supervivencia nativa del job-manager (2026-08-05)
+
+1. **Removed `usage-sentinel.py`, `usage-probe.mjs`, `usage-sentinel.md`.** The custom token-watch (93% threshold, `STOP_REQUESTED.json`, window ledger) was redundant once every headless role goes through the red-pill Job Manager: the driver checkpoint (`checkpoint_data`) persists after every step, so a dry cut by subscription/API limit never loses the mission — the job resumes from the exact step (`job resume`), and the kernel job-monitor detects stuck/frustrated jobs by timeout and heartbeat.
+2. **`controlled-stop.md` rewritten**: keeps the Operator stop (§2), the canonical resume prompt (§4) and the disk-reconciliation protocol (§5, §6); the auto-stop §3 and ledger §3.2 are replaced by the native survival model (per-step checkpoint + job-monitor + rate-limit fire drill).
+3. `SKILL.md`, `mission-mode.md` (Pillar 6/7), `features.md` (O6 removed), `runtime-adapters/opencode.md` and `PORT_NOTES.md` updated. `cycle-run.mjs` drops the usage-probe check (exit 2 removed).
+4. **Tests**: Forge suite 23 cases (15 schema incl. provenance-required, 5 gate, 3 triage); Scout mini-suite (2 shard fixtures) using the Forge validator.
 
 ## v1.3.0 — Job Manager federation + transferable control (2026-08-05, Operator request)
 
@@ -64,7 +69,7 @@ the mechanism layer adapts per harness (`references/runtime-adapters/`).
 
 ## v1.2.1 — Sentinel OS-agnostic + drift-check fixes (2026-08-05, Operator request)
 
-1. **Sentinel rewritten to Python stdlib** (`scripts/usage-sentinel.sh` → `scripts/usage-sentinel.py`): same 93%/5-min/single-shot contract, but pure `json/os/subprocess/time/datetime` — runs identically on **Linux, macOS and Windows** (no `.sh`, no shell-isms). Launch `python3 usage-sentinel.py <project_dir>` (or harness background Bash tool). `usage-sentinel.md`, `mission-mode.md`, `controlled-stop.md`, `features.md`, `SKILL.md` and both runtime-adapters updated; auto-resume documented per-platform (systemd/`at`, launchd, `schtasks`).
+1. **Sentinel rewritten to Python stdlib** (`scripts/usage-sentinel.sh` → `scripts/usage-sentinel.py`): same 93%/5-min/single-shot contract, but pure `json/os/subprocess/time/datetime` — runs identically on **Linux, macOS and Windows** (no `.sh`, no shell-isms). *(Retirado después: la supervivencia a límites es nativa del job-manager — ver v1.4.0.)*
 2. **Drift-check fixed** (`inject_opencode.py`): `_frontmatter_version()` now compiles `_VERSION_RE` with `re.MULTILINE` (the old `search(head, re.MULTILINE)` passed the flag as *pos*, so it always returned `None` and drift was never detected); `check_version_drift()` now takes a `kind` param and `main()` passes the correct seeds subdirs (`skills/`, `agents/`) instead of the `seeds/opencode` root.
  3. **Residue fixed**: `runtime-adapters/opencode.md` still referenced `~/.config/opencode/agents/swarm-*.md` after the rename → now `forge-*.md`.
 
@@ -96,7 +101,7 @@ Towards full harness-agnosticism (Operator's direction: never marry a client —
 
 1. **`Provenance` def (common.defs.json, propagated to the 7 role-report schemas as local `$defs` — self-contained, same rule as Evidence)**: `{harness (enum: opencode|claude-code|codex|agy|local|antigravity|kimi|other), provider, model, version, timestamp}`. Optional in the role schemas (backward compatible — a role may emit it or not), **mandatory at ledger time**: the orchestrator STAMPS it at consolidation if missing. A report never lands in `usage_ledger.entries[]` without provenance. `gate-check.mjs` exposes the unique sources in `summary.provenance` (informational, never a gate check).
 2. **Cross-provider panel (feature O2, panel-policy.md §Cross-provider lenses)**: a lens may declare `backend` (claude|agy|opencode|local + codex/antigravity/kimi via `other`) → launched via `job_manager_api.job_submit` (`agentic_job`, `async_mode` implicit — result to Minion Inbox) → poll `job_status` / `check_minion_inbox`. *(Histórico v3.1: usaba `run_agent_task(backend=..., async_mode:true)`; sustituido por el job-manager en v1.3.0.)* Contract identical (same schema, same validate-report.mjs, same aggregation). Mandatory fallback: failed remote → local re-run with the same prompt, never a silent panel reduction. Scale: max 1 remote lens at L2, 2 at L3; judge + orchestrator always local. Only adversarial lenses (refuters, optionally validator) go remote.
-3. **Ledger v3.1**: `usage_ledger` keeps `{spent_tokens, capacity_est}` and gains `entries[]` — `{role, phase_id?, report, provenance, timestamp}`. The sentinel/budget logic is unchanged.
+3. **Ledger v3.1**: `usage_ledger` keeps `{spent_tokens, capacity_est}` and gains `entries[]` — `{role, phase_id?, report, provenance, timestamp}`. The budget logic is unchanged.
 4. **Fixture evidence**: `implementor_badprov_invalid` covers the provenance-required rule (15 schema cases in the suite; 23 total).
 5. **A2A deliberately NOT adopted (Operator stance)**: Google's A2A is on watch ("de reojo") — not convinced it becomes the de-facto standard; the local contract (schemas + ledger + report files) is already transport-independent and cheap to adapt. Revisit only if A2A shows durable traction.
 

@@ -7,7 +7,6 @@
 //   Phase A — schema contracts: 15 fixtures (9 schemas, valid+invalid) via validate-report.mjs.
 //   Phase B — deterministic gate: 5 state goldsets, one per violation family (checks 1-10).
 //   Phase C — triage plan: 3 fixtures (2 valid + recommendation, 1 invalid).
-//   Phase D — sentinel (usage-sentinel.py): fires at threshold, silent below, retires on close.
 
 import { readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -106,60 +105,6 @@ for (const f of triageFiles) {
     continue;
   }
   report(`triage  ${f.replace('.json', '')}`, true);
-}
-
-// ── Phase D: sentinel (usage-sentinel.py) ──
-const sentinelPy = join(SCRIPTS, 'usage-sentinel.py');
-const { spawnSync } = await import('node:child_process');
-const py = process.platform === 'win32' ? 'python' : 'python3';
-{
-  const proj = join(TMP, 'sentinel-proj');
-  mkdirSync(join(proj, '.cell'), { recursive: true });
-
-  // D1: fires at threshold — writes STOP_REQUESTED.json, one line, exit 0.
-  {
-    writeFileSync(join(proj, '.cell', 'state.json'), JSON.stringify({
-      mission_status: 'RUNNING',
-      usage_ledger: { spent_tokens: 95, capacity_est: 100 },
-    }));
-    const r = spawnSync(py, [sentinelPy, proj, '--threshold', '93', '--interval', '1'], { encoding: 'utf8', timeout: 30000 });
-    const flag = join(proj, '.cell', 'STOP_REQUESTED.json');
-    const hasFlag = readFileSync(flag, 'utf8') || '';
-    let ok = r.status === 0 && r.stdout.includes('SENTINEL-STOP') && hasFlag.includes('"utilization": 95');
-    let detail = ok ? '' : `status=${r.status} out=${JSON.stringify(r.stdout)} err=${r.stderr} flag=${hasFlag}`;
-    report('sentinel fires-at-threshold', ok, ok ? '' : detail);
-  }
-
-  // D2: silent below threshold — no flag, no stdout, keeps running until killed.
-  {
-    writeFileSync(join(proj, '.cell', 'state.json'), JSON.stringify({
-      mission_status: 'RUNNING',
-      usage_ledger: { spent_tokens: 10, capacity_est: 100 },
-    }));
-    try {
-      rmSync(join(proj, '.cell', 'STOP_REQUESTED.json'), { force: true });
-    } catch {}
-    let silent = false;
-    try {
-      const r = spawnSync(py, [sentinelPy, proj, '--threshold', '93', '--interval', '1'], { encoding: 'utf8', timeout: 2000 });
-      silent = r.signal === 'SIGTERM' || r.error?.code === 'ETIMEDOUT'; // still looping = no premature exit
-    } catch { silent = false; }
-    let ok = silent;
-    let detail = ok ? '' : `expected the sentinel to still be looping (no stop)`;
-    report('sentinel silent-below-threshold', ok, ok ? '' : detail);
-  }
-
-  // D3: retires by itself when mission_status stops being RUNNING.
-  {
-    writeFileSync(join(proj, '.cell', 'state.json'), JSON.stringify({
-      mission_status: 'COMPLETE',
-      usage_ledger: { spent_tokens: 10, capacity_est: 100 },
-    }));
-    const r = spawnSync(py, [sentinelPy, proj, '--threshold', '93', '--interval', '1'], { encoding: 'utf8', timeout: 30000 });
-    let ok = r.status === 0 && r.stdout.includes('SENTINEL-END');
-    let detail = ok ? '' : `status=${r.status} out=${JSON.stringify(r.stdout)} err=${r.stderr}`;
-    report('sentinel retires-on-close', ok, ok ? '' : detail);
-  }
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

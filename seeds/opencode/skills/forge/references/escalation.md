@@ -10,7 +10,7 @@ v3.0 escalates **dynamically**: the Orchestrator (main loop) picks an initial le
 |-------|------|----------------------|------------------|---------|
 | **L0** | Inline | Main loop does everything; Zero-Trust rules applied inline; minimal state.json (registry + evidence) | Auto-challenge (checklist in `zero-trust-rules.md`) | No |
 | **L1** | Loose agents | `task` subagent per role, sequential: Impl → Valid → Smoke; main loop consolidates into state.json | 1 generalist refuter | No |
-| **L2** | Cycle | Phase cycle: main-loop sequential `task` per step, OR headless driver `cycle-run.mjs` (`opencode run --agent <role> --auto` per role, zero context pollution) + validated schemas + deterministic recomputation + `budget` | Panel of 3 independent lenses (`task` in parallel, single message) + deterministic vote | Sentinel polling + usage-probe between tasks |
+| **L2** | Cycle | Phase cycle: main-loop sequential `task` per step, OR headless driver `cycle-run.mjs` (`opencode run --agent <role> --auto` per role, zero context pollution) + validated schemas + deterministic recomputation + `budget` | Panel of 3 independent lenses (`task` in parallel, single message) + deterministic vote | — |
 | **L3** | Mission | Blocks with per-phase worktrees (O4) + checkpoints. **In Mission Mode the default pattern is canonical mode** (`mission-mode.md` Pillar 2: implementor per task in background + Orchestrator validation), NOT a full-mission workflow | Panel of 5 lenses + judge + loop-until-dry (2 dry rounds, max 3) | Checkpoints per task + main loop always free |
 
 **Mission Mode** is orthogonal: it mounts on L3 and adds the autonomy contract, resumable checkpoints and the debt sweep (see `mission-mode.md`).

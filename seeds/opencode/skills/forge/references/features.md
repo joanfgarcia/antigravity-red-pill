@@ -20,7 +20,7 @@ The protocol is a set of features. The Orchestrator resolves each one at assembl
 | O3 | Dynamic L0-L3 escalation + anti-abandonment ladder | optional | `on` | escalation.md scoring + triggers. `off` → locked at the initial level (never below floor) |
 | O4 | Git-worktree isolation for parallel implementors | optional | `auto` | `auto` = `on` when ≥2 implementors mutate files in parallel; `on` = always isolate; `off` = sequential implementors only (no parallel mutation) |
 | O5 | Mission Mode | optional | only 15+ phases | Autonomy contract + canonical mode + checkpoints + debt sweep (mission-mode.md). `off` → team asks instead of deciding (L0-L3 protocol only) |
-| O6 | Usage sentinel + window ledger at 93% | optional | only long missions | usage-sentinel.md: Python sentinel (`usage-sentinel.py`, os-agnostic), usage-probe.mjs, ledger reservation, STOP_REQUESTED flag. `off` → no sentinel, no ledger; budget accounting only |
+| O5 | Mission Mode (autonomy contract, pillars 1-7) | optional | only 15+ phases |
 | O7 | Documentation Anchor for plan extraction | optional | `auto` | `auto` = `on` when the plan has ≥1 extracted point set; `on` = always extract P-nn via forge-doc-anchor; `off` = orchestrator extracts inline |
 | F1 | ASK boundary | optional | `off` | Non-mission: when the ladder is exhausted, ask the Operator instead of deciding. `on` = ask after 2 escalations; `off` = best-effort decision documented in `decisions[]` |
 | F2 | usageAudit | optional | `off` | Per-role skill/tool usage accounting in the ledger (`usage_audit[]` entries). `on` = track; `off` = aggregate only |
@@ -31,7 +31,7 @@ The protocol is a set of features. The Orchestrator resolves each one at assembl
 0. **Triage seeds the resolution (Step 0)**: the `forge-triage` agent produces the FIRST proposal (`triage_plan`: scope score, recommendation, feature values, level, panel, budget). The orchestrator presents it to the Operator (accept / pin features / `--force` to skip) and records the final values in `feature_rationale[]` with the triage rationale as source.
 1. **KERNEL (K1-K7)** is fixed: always on, no rationale needed (recorded as `kernel`).
 2. **`auto` resolution**: the value depends on the task scope (table above). Record the computed value AND the condition that produced it.
-3. **`on`/`off` override**: the Operator can pin any optional feature explicitly ("sin sentinel", "panel completo siempre"). Pinned values win over `auto`.
+3. **`on`/`off` override**: the Operator can pin any optional feature explicitly ("panel completo siempre"). Pinned values win over `auto`.
 4. **Every resolution writes `feature_rationale[]`**: `{feature: "O4", value: "on", reason: "2 implementors parallel on F2"}`. The final report includes the full matrix — the Operator can audit why the team had the shape it had.
 5. **Escalation re-evaluation**: on every `escalate()`/`deescalate()`, re-resolve O2 (panel size), O4 (parallel isolation) and O7 (anchor need). The other features stay unless the scope changed.
 6. **`off` never skips checks**: the corresponding gate check still runs with the degraded mechanism (inline by the orchestrator or by script); if the mechanism cannot produce evidence, the report shows the item unclaimed. Feature flags change EXECUTION SHAPE, never VERIFICATION SEMANTICS.

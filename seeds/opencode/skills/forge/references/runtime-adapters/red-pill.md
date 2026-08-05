@@ -81,7 +81,7 @@ checkpoint = { step_index: N, results: [summary, ...] }
 
 ### Aislamiento entre forges
 
-Every job carries `mission_id`. `job_list --mission <id>` lists only that mission; the sentinel and polling never mix missions. The `cwd` per workspace already separates `.cell/` on disk. A `forge_job` is REQUIRED to declare `mission_id` (validation at submit).
+Every job carries `mission_id`. `job_list --mission <id>` lists only that mission; the job-monitor and polling never mix missions. The `cwd` per workspace already separates `.cell/` on disk. A `forge_job` is REQUIRED to declare `mission_id` (validation at submit).
 
 ## Handoff between agents via `workspace-memory` (artifact = result + signal)
 

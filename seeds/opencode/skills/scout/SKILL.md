@@ -97,13 +97,13 @@ If the agent chooses to attend, Scout runs headless:
 1. Read the awakening target (workspace, pain signals, bundle) + materialized rules.
 2. Analyze (lenses) → shards → `.cell/shards.json` (+ ledger entries with provenance). `operator`-level shards are listed, never executed.
 3. Shape the work with `forge-triage` (NOT_NEEDED → nothing or loose pieces; condensed → one piece; PROCEED → full forge only if justified AND budget allows).
-4. Execute `auto` shards with single Forge roles (budget-aware, usage-probe between shards).
+4. Execute `auto` shards with single Forge roles (budget-aware).
 5. Write the awakening report: what was analyzed, shards found, shards executed, shards pending Operator, what was deliberately left unattended.
 
-**Budget discipline**: awakening runs honor the same sentinel/probe rules as Forge missions (usage-sentinel.md) — an awakening that exhausts budget stops with the report, never degrades. Closing is evidence: shards go DONE only with a validated `execution_ref`.
+**Budget discipline**: an awakening that exhausts its budget stops with the report, never degrades. Closing is evidence: shards go DONE only with a validated `execution_ref`.
 
 ## 9. References
 
 - `references/shards.md` — register format, dedup, consent flow, ledger.
 - `references/schemas/shard.schema.json` — the shard contract.
-- Forge bundle (`~/.config/opencode/skills/forge/`) — roles, gate, validate-report.mjs, usage-probe.mjs, sentinel.
+- Forge bundle (`~/.config/opencode/skills/forge/`) — roles, gate, validate-report.mjs.

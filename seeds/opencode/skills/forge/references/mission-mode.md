@@ -54,10 +54,9 @@ In v2.0, exhausting the 5 iterations marked the phase `⚠️ PARCIAL` and moved
 ## Pillar 4 — Mission watch and main thread ALWAYS available
 
 - **The main loop must stay free most of the time**: every step of >2 minutes (implementor, `mvn verify`, smokes with server, cycles) is launched in **background** (`task` subagent / background bash); the Orchestrator only consolidates short results. Thus the Operator can **hot-inject instructions at any time** — including the canonical order **"stop in a controlled way"** (`controlled-stop.md` §2), which is processed as soon as the main loop consolidates the step in progress, not hours later.
-- **Between tasks** (never mid-step), the Orchestrator runs `node <skill>/scripts/usage-probe.mjs .cell/state.json`: exit 2 = preventive auto-stop (`controlled-stop.md` §3); UNKNOWN = fail-open, note and continue.
 - The main loop receives the completion notification of each background step, evaluates the escalation triggers (see `escalation.md`), persists the checkpoint and launches the next. **The Orchestrator is never blind for more than one task.**
 - **Budget:** at assembly the cost per block is estimated. If `budget` runs out halfway: checkpoint + **honest partial report** with the resumption protocol ready. **Never** degrade the gates to "arrive" — a truly verified 60% is worth more than a lied 100% (Rule 5).
-- The sentinel's log lines and `escalation_log[]` leave the narrative trace: the Operator can reconstruct the full movie of the mission afterwards.
+- The `escalation_log[]` and the checkpoint journal leave the narrative trace: the Operator can reconstruct the full movie of the mission afterwards.
 
 ## Pillar 5 — Final mission report
 
@@ -72,43 +71,26 @@ At close (or when budget runs out), the Orchestrator generates `MISSION_REPORT.m
 
 ---
 
-## Pillar 6 — Survival to token limits (the INTERNAL sentinel, v1.0)
+## Pillar 6 — Survival to token limits
 
-> A 15+ phase mission can hit the session/weekly limit mid-work. The v3.1–v3.3 defense was an **external watchdog** (launchd/systemd + `mission-watchdog.sh`). **It was retired 2026-07-28 by Operator order**: in three real missions it never relaunched anything and left **loaded zombie agents** waking every 15 min for nothing. Post-mortem detail and the new mechanism: **[`usage-sentinel.md`](usage-sentinel.md)**.
+A 15+ phase mission can hit the session/weekly limit mid-work. The guarantee is **not** an in-session watcher — it is that no failure can lose work:
 
-**The three-piece contract, now all INSIDE opencode:**
-
-1. **The sentinel (background process, ~0 tokens, Python stdlib — os-agnostic).** Launched at assembly, lives the whole session:
-   ```bash
-   nohup python3 <skill>/scripts/usage-sentinel.py <project_dir> >/dev/null 2>&1 &
-   ```
-   Watches every 5 min taking the ledger signal (self-accounting, always available) + the optional external meter hook. While below the threshold it **prints nothing** — absolute silence, zero tokens. At **93%** it writes `.cell/STOP_REQUESTED.json` and emits **one** `SENTINEL-STOP` line; then it ends. If `mission_status` stops being `RUNNING`, it **retires by itself** — no zombie possible, because it dies with the session (background process of this session).
-   > **Why a pure process and not a subagent**: a polling subagent spends tokens from the same pool it tries to protect (each poll is a model turn). The sentinel is pure Python.
-
-2. **The Orchestrator executes the stop** (the sentinel only alarms, so it does not compete for `state.json`): protocol of `controlled-stop.md` §3 with `PAUSED_USAGE_LIMIT`. It also keeps the **double lock between tasks** — check the `.cell/STOP_REQUESTED.json` flag and the **reservation of the next step at 93%** (`controlled-stop.md` §3.2 rule 2) before launching anything in background. And it keeps the heartbeat (`updated_at` pre/post each long step).
-
-3. **Resumption, as an experimental one-shot OS task** (`usage-sentinel.md` §4): a single shot at `window_reset_at + 5 min` launching `opencode run "<resume prompt>" --auto` — `systemd-run --user --on-calendar`/`at` (Linux), launchd plist (macOS), `schtasks` (Windows). **Opt-in, off by default** (Operator decision: no blind scheduling without an OBSERVED reset time, and no background launcher that survives sessions without explicit opt-in). If there is no observed reset time, nothing is scheduled blindly: the prompt goes on screen.
-   > **Honesty about the design limit**: no internal thread survives the death of the session. That is why the real guarantee is **stopping at 93%**, not automatic return.
+1. **Job-manager missions survive cuts natively**: when the mission runs as a `forge_job` (or its roles as `agentic_job`s), the driver's checkpoint (`checkpoint_data`) is persisted in the queue DB after every step. A subscription/API dry cut kills the session window, NOT the job: it resumes from the exact step (`job_manager_api.job_resume`), and the kernel job-monitor detects stuck (`PROCESSING` without heartbeat) and frustrated (circuit breaker) jobs and surfaces them as signals.
+2. **Non-job missions**: covered by the per-step checkpoint, the §2 controlled stop (Pillar 7) and the §4 resume prompt on screen. The heartbeats (`updated_at` pre/post each long step) feed the journal that the reconciliation protocol reads on resume.
+3. **Rate-limit fire drill** (`controlled-stop.md` §3): on the FIRST dead agent with a limit/credits error, relaunch NOTHING and retry NOTHING — checkpoint, `INTERRUPTED_RATE_LIMIT`, parse `resets HH:MM` if present, and end the turn with the resume prompt. Every token after the first symptom is burned margin.
 
 ```
-mission ─▶ sentinel detects ≥93% ─▶ SENTINEL-STOP + flag ─┐
-        ├▶ "stop in a controlled way" ─▶ PAUSED_BY_OPERATOR ─┤
-        │                             (manual resumption)    │
-        └▶ step reservation does not fit in the 93% ────────▶┤
-                                                             ▼
-                    Orchestrator: checkpoint + PAUSED_USAGE_LIMIT
-                                 + scheduled resume (fireAt = reset, OPT-IN)
-                                 + PROMPT ON SCREEN (plan B always)
+mission ─▶ "stop in a controlled way" ─▶ PAUSED_BY_OPERATOR ─▶ resume prompt (manual)
+        ├▶ dry cut / rate limit ─▶ checkpoint + INTERRUPTED_RATE_LIMIT ─▶ resume prompt
+        └▶ job cut (forge_job) ─▶ checkpoint_data in queue DB ─▶ job_resume from exact step
 ```
 
-## Pillar 7 — Controlled stop, preventive auto-stop and self-accounting ledger (v1.0)
+## Pillar 7 — Controlled stop and canonical states
 
 Full detail in [`controlled-stop.md`](controlled-stop.md). Contract summary:
 
-- **Canonical Operator command**: **"stop in a controlled way"** (es: "para de forma controlada") → the team freezes the front, kills ONLY the processes registered in `live_processes[]`, checkpoints with `pause_context{}`, `mission_status: "PAUSED_BY_OPERATOR"`, the sentinel retires (it leaves by itself when the state changes) and **presents a self-contained resume prompt in the chat** (valid in that chat or a new one) starting with "Reconcile from disk". It works because the main thread is free (Pillar 4).
-- **Preventive auto-stop**: the sentinel watches continuously (§Pillar 6) and, between tasks and BEFORE every background launch, the Orchestrator checks the `.cell/STOP_REQUESTED.json` flag, `usage-probe.mjs` and the ledger reservation; at **93%** it executes the same stop with `mission_status: "PAUSED_USAGE_LIMIT"`. Fail-open ONLY toward the ledger: if the probe cannot measure, the next signal is sent.
-- **Self-accounting window ledger (`controlled-stop.md` §3.2)** — the defense that does NOT depend on OAuth: the Orchestrator sums the `subagent_tokens` of each task notification into `usage_ledger.spent_tokens`, reserves the estimated cost of each step before launching it (implementor ~250k) and stops at `PAUSED_USAGE_LIMIT` if `spent + reservation > 0.93 × capacity_est`. Capacity self-calibrates with each observed cut; limit errors ("resets HH:MM") fix `window_reset_at`. **Fire drill**: the first agent killed by the limit fires checkpoint + `INTERRUPTED_RATE_LIMIT` + immediate end of turn, without retries.
-- **Canonical states** (`controlled-stop.md` §1): `RUNNING | PAUSED_BY_OPERATOR | PAUSED_USAGE_LIMIT | INTERRUPTED_RATE_LIMIT | COMPLETE | COMPLETE_WITH_PENDING | PARTIAL`. v1.0 rule: `PAUSED_BY_OPERATOR` resumes ONLY by hand; `PAUSED_USAGE_LIMIT` may resume via the opt-in one-shot OS task (`fireAt = window_reset_at + 5 min`, `usage-sentinel.md` §4), and the on-screen prompt is always plan B.
+- **Canonical Operator command**: **"stop in a controlled way"** (es: "para de forma controlada") → the team freezes the front, kills ONLY the processes registered in `live_processes[]`, checkpoints with `pause_context{}`, `mission_status: "PAUSED_BY_OPERATOR"` (writing the job checkpoint too if running as a job), and **presents a self-contained resume prompt in the chat** (valid in that chat or a new one) starting with "Reconcile from disk". It works because the main thread is free (Pillar 4).
+- **Canonical states** (`controlled-stop.md` §1): `RUNNING | PAUSED_BY_OPERATOR | INTERRUPTED_RATE_LIMIT | COMPLETE | COMPLETE_WITH_PENDING | PARTIAL`. `PAUSED_BY_OPERATOR` resumes ONLY by hand; a dry-cut job resumes via `job resume` when the window is known to have reset; the on-screen prompt is always plan B.
 
 ## Model profile — guarantee with less powerful models
 
@@ -133,9 +115,8 @@ Plans are designed with the best available model (frontier-class), but **executi
 - [ ] Irreversible plan actions identified and classified (in-plan = execute with their gates; out-of-plan = pending_human)
 - [ ] Budget estimated per block; escalation floor set (`floor`)
 - [ ] **Model profile declared** (`modelProfile`: frontier/standard) — with standard model: strict mode + full panel + scoring +1
-- [ ] **Sentinel launched** (Pillar 6): `python3 <skill>/scripts/usage-sentinel.py <project_dir> &`, annotated in `state.json` (`sentinel{pid, threshold: 93, started_at}`). Costs ~0 tokens and retires by itself at mission close — **nothing to uninstall, zero persistent OS processes** (dies with the session)
 - [ ] **Canonical mode declared** (Pillar 2): one implementor per task in background + validation/smoke/panel by the Orchestrator + checkpoint per task (full phase-cycle scripts reserved for short bursts)
-- [ ] **`usage-probe.mjs` tested**: one verification call — confirms the ledger is readable or leaves the fail-open note
+- [ ] **Survival path confirmed** (Pillar 6): job-manager checkpoint per step (if running as a job) or per-task checkpoint + resume prompt on screen for non-job missions
 - [ ] `.cell/state.json` initialized with `mission`, `mission_status: "RUNNING"`, `plan_ref`, `coverage[]`, `blocks[]`, `live_processes: []`
 - [ ] First checkpoint written BEFORE launching the first step
 

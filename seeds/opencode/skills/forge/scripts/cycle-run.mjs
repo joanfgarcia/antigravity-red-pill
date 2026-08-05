@@ -25,7 +25,6 @@
 //
 // Exit codes: 0 = cycle complete (all steps done, reports validated)
 //             1 = a step failed (report invalid or agent error) — see log
-//             2 = usage STOP fired between steps (controlled-stop.md §3)
 //             3 = budget: --max-calls reached
 //             4 = manifest error / missing workdir
 //             5 = job-manager mode: job FAILED / FRUSTRATED
@@ -152,18 +151,6 @@ if (useJobManager) {
 // ── LEGACY DIRECT MODE (fallback, deprecated) ───────────────────────────────
 log(`LEGACY direct mode (spawnSync opencode run) — deprecated since v1.3.0; prefer --job-manager --mission <id>`);
 let calls = 0;
-const usageStop = () => {
-  const probe = spawnSync('node', [join(SKILL_DIR, 'usage-probe.mjs'), join(workdir, '.cell', 'state.json')], { encoding: 'utf8' });
-  if (probe.status === 2) {
-    log('usage STOP fired (exit 2) — controlled stop now (controlled-stop.md §3)');
-    return true;
-  }
-  if (existsSync(join(workdir, '.cell', 'STOP_REQUESTED.json'))) {
-    log('sentinel flag present — controlled stop now');
-    return true;
-  }
-  return false;
-};
 
 for (const phase of manifest.phases || []) {
   log(`phase ${phase.id}: ${phase.steps.length} steps`);
@@ -172,7 +159,6 @@ for (const phase of manifest.phases || []) {
       log(`budget reached (${maxCalls} calls) — exiting 3`);
       process.exit(3);
     }
-    if (usageStop()) process.exit(2);
 
     calls += 1;
     const reportPath = join(reportsDir, `${step.role}-${phase.id}.json`);

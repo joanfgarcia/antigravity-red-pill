@@ -27,7 +27,7 @@ If you decide to attend:
    PROCEED_CONDENSED → a single forge piece; PROCEED → full forge (only if the
    work justifies it AND the token budget allows it).
 5. Execute with forge or with individual pieces. Honor the ledger and the
-   sentinel (93% rule).
+   (budget-aware).
 6. Close shards with evidence (execution_ref), report to the Bünker: what was
    cured, what remains, what needs the Operator.
 7. Go back to sleep.
@@ -46,8 +46,7 @@ If you decide to attend:
 4. **Triage shapes, does not force**: NOT_NEEDED is a valid end state — the
    protocol does not need to engage for the awakening to be useful.
 5. **Budget is a boundary**: an awakening that exhausts budget stops with a
-   checkpoint + honest report; gates are never degraded to "arrive"
-   (usage-sentinel.md applies).
+   checkpoint + honest report; gates are never degraded to "arrive".
 6. **Closing is evidence**: shards transition to DONE only with a validated
    `execution_ref` — same Rule 1 as Forge. Intention does not close shards.
 
@@ -57,5 +56,5 @@ If you decide to attend:
 |-------|---------|
 | red-pill awakening scheduler | Injects the Prompt block (or its own per-kernel variant) |
 | scout skill | Provides shards register, lenses, consent derivation, awakening report format (SKILL.md §8) |
-| forge skill | Provides triage, pieces, gate, ledger, sentinel |
+| forge skill | Provides triage, pieces, gate, ledger |
 | Bünker | Receives the awakening report (work_memories); pain signals evaporate only when evidence exists |

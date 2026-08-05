@@ -29,8 +29,8 @@ Score the task (cap 8):
 | Score | Recommendation |
 |---|---|
 | 0-2 | `NOT_NEEDED` — plain execution (L0 inline at most). Do NOT invent reasons to engage the cell |
-| 3-4 | `PROCEED_CONDENSED` — L1-L2, minimal panel (single/three), no mission mode, no sentinel unless long |
-| 5-8 | `PROCEED` — L2-L3; mission mode only if 15+ phases; full panel (three/five); sentinel on for long missions |
+| 3-4 | `PROCEED_CONDENSED` — L1-L2, minimal panel (single/three), no mission mode |
+| 5-8 | `PROCEED` — L2-L3; mission mode only if 15+ phases; full panel (three/five) |
 
 A `NOT_NEEDED` verdict is a SUCCESS, not a failure: the skill exists for heavyweight tasks, and recommending against itself when the task is small is the feature. If the operator explicitly invoked a mission keyword, say so in `notes` and still score honestly (PROCEED only if the task really is heavy).
 
@@ -41,7 +41,6 @@ A `NOT_NEEDED` verdict is a SUCCESS, not a failure: the skill exists for heavywe
 - `O3` (dynamic escalation): `on`.
 - `O4` (worktree isolation): `auto` (on only if ≥2 parallel implementors mutate files).
 - `O5` (mission mode): `on` only 15+ phases; otherwise `off`.
-- `O6` (sentinel + ledger): `on` for long missions (hours) or when the operator cares about usage windows; otherwise `off`.
 - `O7` (doc anchor): `auto` (on for plans with ≥1 extracted point set).
 - `F1` askBoundary / `F2` usageAudit / `F3` approval markers: `off` unless the operator pinned them.
 

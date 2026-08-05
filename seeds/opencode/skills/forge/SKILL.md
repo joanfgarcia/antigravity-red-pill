@@ -1,5 +1,5 @@
 ---
-version: 1.3.0
+version: 1.4.0
 name: forge
 description: >-
   Multi-agent Zero-Trust execution composer. Orchestrates 10 composable role pieces (implementor, validator, smoke,
@@ -8,14 +8,15 @@ description: >-
   mode for huge plans (15+ phases) with controlled stop, and a feature matrix
   resolved by the orchestrator per task scope. Federation via the red-pill Job
   Manager (v1.3.0): headless roles run as agentic_jobs and full missions as a
-  resumable forge_job with transferable control (main loop ↔ driver). Sibling
+  resumable forge_job with transferable control (main loop ↔ driver); survival
+  to token limits is native (per-step checkpoint + job-monitor). Sibling
   of the scout skill (analysis + satellite shards). Activate when the operator
   says "levantar equipo", "cell mode", "team up", "full mission", "ejecuta el
   plan entero", or on any multi-phase task requiring exhaustive validation. Skill
   invocation is the explicit operator opt-in to multi-agent orchestration.
 ---
 
-# Forge v1.3.0 (opencode) — Zero-Trust Multi-Agent Composer
+# Forge v1.4.0 (opencode) — Zero-Trust Multi-Agent Composer
 
 > The composer skill: 10 composable role pieces (agents + portable specs in `references/roles/`), orchestrated by the main loop. Scout (`~/.config/opencode/skills/scout/`) is the sibling analysis skill — its shards execute on individual Forge pieces.
 
@@ -58,7 +59,6 @@ Every protocol step is a feature. The orchestrator resolves each feature at asse
 | O3 | Dynamic L0-L3 escalation + anti-abandonment ladder | optional | `on` |
 | O4 | Git-worktree isolation for parallel implementors | optional | `auto` (on if parallel) |
 | O5 | Mission Mode (autonomy contract, pillars 1-7) | optional | only 15+ phases |
-| O6 | Usage sentinel + window ledger at 93% | optional | only long missions |
 | O7 | Documentation Anchor agent for plan extraction | optional | `auto` (on for big plans) |
 | F1 | ASK boundary (non-mission: ladder exhausted → ask operator) | optional | `off` |
 | F2 | usageAudit (skill/tool usage per role in ledger) | optional | `off` |
@@ -81,7 +81,6 @@ Every role is an independent, versioned piece: an opencode subagent (the executa
 | ⚖️ Judge (L3) | `forge-judge` | `references/roles/judge.md` |
 | 📌 Documentation Anchor | `forge-doc-anchor` | `references/roles/doc_anchor.md` |
 | 🧪 QA Final | `forge-qa` | `references/roles/qa_final.md` |
-| 🛡️ Monitor | Not an agent: `usage-sentinel.py` + `usage-probe.mjs` (scripts) | `references/usage-sentinel.md` |
 
 **Cross-cutting (v1.2.0)**: scout (skill) composes the same pieces — shards from a scout analysis execute on individual roles without assembling the full team. Every piece emits provenance v3.1; the orchestrator stamps it at consolidation.
 
@@ -147,8 +146,8 @@ Seven pillars — full detail in `references/mission-mode.md`:
 3. **Anti-abandonment**: no phase gives up without exhausting the ladder; residual debt is re-attacked in a final sweep. `INTERRUPTED` phases resume, never escalate.
 4. **Main loop ALWAYS free**: every step >2 min goes to background (task/bash); the main loop only consolidates. Operator can hot-inject instructions anytime — including "para de forma controlada". Budget exhausted → checkpoint + honest partial report (never degrade gates to "arrive").
 5. **Final report** (`MISSION_REPORT.md`): verdict recomputed by the gate, point-by-point coverage, decisions, debt with diagnosis, and a "Requires your intervention" section solvable in minutes.
-6. **Token-limit survival (v1.0, all inside opencode)**: canonical states `RUNNING | PAUSED_BY_OPERATOR | PAUSED_USAGE_LIMIT | INTERRUPTED_RATE_LIMIT | COMPLETE*| PARTIAL`. Sentinel (`usage-sentinel.py` in background, Python stdlib, ~0 tokens, 93%) → flag file `.cell/STOP_REQUESTED.json`; orchestrator checks flag + probe + ledger between tasks. Resume: screen prompt (always) + experimental one-shot OS task — `systemd-run --user --on-calendar`/`at` on Linux, launchd on macOS, `schtasks` on Windows — launching `opencode run "<resume>" --auto` when `window_reset_at` was observed (`references/usage-sentinel.md` §4). `PAUSED_BY_OPERATOR` resumes manually only.
-7. **Controlled stop**: operator writes "para de forma controlada" → team freezes the front, kills ONLY registered PIDs from `live_processes[]`, checkpoints everything, and presents a self-contained resume prompt in the chat. Auto-stop at 93% executes the same stop with `PAUSED_USAGE_LIMIT`.
+6. **Token-limit survival**: canonical states `RUNNING | PAUSED_BY_OPERATOR | INTERRUPTED_RATE_LIMIT | COMPLETE*| PARTIAL`. Missions that run through the red-pill Job Manager survive dry cuts natively: the driver's checkpoint (`checkpoint_data`) is persisted after every step in the queue DB, so a subscription/API cut never loses the mission — the job resumes from the exact step (`job resume`), and the kernel job-monitor detects stuck/frustrated jobs. A mission NOT running as a job is covered by: per-step checkpoint, the §2 controlled stop, and the §4 resume prompt on screen. `PAUSED_BY_OPERATOR` resumes manually only.
+7. **Controlled stop**: operator writes "para de forma controlada" → team freezes the front, kills ONLY registered PIDs from `live_processes[]`, checkpoints everything (and writes the job checkpoint if running as a job), and presents a self-contained resume prompt in the chat.
 
 **Model profile** (`modelProfile: 'frontier'|'standard'`): with `standard` → strict mode (plan to the letter, zero improvisation, improvements registered as PROPOSAL), always 5-lens panel, escalation scoring +1. Gates are identical: they do not know which model wrote the JSON.
 
@@ -174,7 +173,7 @@ Rules do not change with level: they apply identically from L0 to L3 and mission
 
 | Environment | Status | Adapter |
 |-------------|--------|---------|
-| **opencode** | ✅ CANONICAL — task subagents, parallel calls, background tasks, Python sentinel (`usage-sentinel.py`), headless `cycle-run.mjs` | `references/runtime-adapters/opencode.md` |
+| **opencode** | ✅ CANONICAL — task subagents, parallel calls, background tasks, headless `cycle-run.mjs` | `references/runtime-adapters/opencode.md` |
 | **red-pill Job Manager** | 🔀 Federation channel (v1.3.0) — every headless role runs as an `agentic_job` (sabor A) or a full mission as a resumable `forge_job` (sabor B, **transferable control**), via `job_manager_api` MCP + recipes per role, `mission_id` isolation | `references/runtime-adapters/red-pill.md` |
 
 ## 9. Closing checklist (Final Gate)

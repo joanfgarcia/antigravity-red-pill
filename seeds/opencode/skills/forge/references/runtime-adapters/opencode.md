@@ -16,10 +16,10 @@ This is the reference runtime of Forge. Here the team deploys its full power: va
 | Mission implementor (**canonical mode**) | `task` subagent with `background: true` (high effort, worktree if it mutates files — feature O4). The main loop stays FREE while it works and consolidates the JSON on completion |
 | Long Orchestrator commands (`mvn verify`, smokes with server) | Bash tool (background when long); server PIDs registered in `live_processes[]` of state.json (controlled-stop.md §6) |
 | Mission blocks | The main loop in canonical mode (per task) — phase-cycle scripts only for short bursts |
-| Monitor | **No Monitor tool.** Sentinel = `python3 <skill>/scripts/usage-sentinel.py <project_dir> &` (background process of this session, ~0 tokens, dies with session) + orchestrator polls `.cell/STOP_REQUESTED.json` between tasks (`usage-sentinel.md`) |
+| Monitor | **No Monitor tool.** Survival is native when the mission runs as a job: the driver checkpoint (`checkpoint_data`) persists after every step and the kernel job-monitor detects stuck/frustrated jobs. Non-job missions rely on per-step checkpoints + the controlled stop (§2) |
 | Controlled stop | The Operator writes **"para de forma controlada"** → protocol of `controlled-stop.md` §2 (possible because the main loop is free) |
-| Usage auto-stop | `node scripts/usage-probe.mjs .cell/state.json` between tasks — exit 2 = stop (`controlled-stop.md` §3); `decision: "UNKNOWN"` = fail-open, continue. Ledger reservation at 93% before every background launch |
-| Resumption | Reconcile from disk (`controlled-stop.md` §5) → continue in canonical mode. Experimental OPT-IN one-shot: `systemd-run --user --on-calendar` / `at` launching `opencode run "<resume prompt>" --auto` (`usage-sentinel.md` §4) |
+| Usage/rate-limit cut | First dead agent with a limit error → checkpoint + `INTERRUPTED_RATE_LIMIT` + resume prompt, no retries (`controlled-stop.md` §3). A dry-cut job resumes from the exact step via `job resume` |
+| Resumption | Reconcile from disk (`controlled-stop.md` §5) → continue in canonical mode; for a job, `job_manager_api.job_resume <job_id>` first |
 | Closing gate | `node scripts/gate-check.mjs .cell/state.json` (Bash) |
 | .md artifacts | `node scripts/render-artifacts.mjs .cell/state.json <outdir>` (Bash) |
 
@@ -60,15 +60,15 @@ Main loop (Orchestrator):
 
 ```
 Main loop (Orchestrator), PER TASK:
-1. node scripts/usage-probe.mjs .cell/state.json   → exit 2 = auto-stop (controlled-stop.md §3)
-2. updated_at = now (pre-step heartbeat)
-3. task(forge-implementor, background: true, high effort)
+1. updated_at = now (pre-step heartbeat); if the mission runs as a job, the driver
+   already persists its checkpoint per step (survival is native)
+2. task(forge-implementor, background: true, high effort)
    ... main loop FREE: hot instructions / "para de forma controlada" ...
-4. Completion → consolidate implementor_result (advisory)
-5. Validation + smoke + adversarial panel EXECUTED BY THE ORCHESTRATOR with real evidence
+3. Completion → consolidate implementor_result (advisory)
+4. Validation + smoke + adversarial panel EXECUTED BY THE ORCHESTRATOR with real evidence
    (long commands in background bash; servers → live_processes[] and kill at end)
-6. disk_facts captured with git + full state.json checkpoint + post-step heartbeat
-7. Next task (or mini-gate + commit at block close)
+5. disk_facts captured with git + full state.json checkpoint + post-step heartbeat
+6. Next task (or mini-gate + commit at block close)
 ```
 
 Detail in `../mission-mode.md` (Pillars 2, 4 and 7) and `../controlled-stop.md`.

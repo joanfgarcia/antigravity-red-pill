@@ -10,7 +10,7 @@ node tests/run-tests.mjs          # self-locating via import.meta.url — works 
 
 Exit 0 = all green, 1 = any failure. Runs against the bundle it lives in (live config or seed copy).
 
-## Coverage (26 cases)
+## Coverage (23 cases)
 
 - **Schema contracts (15)**: 9 schemas × valid/invalid fixtures (incl. `implementor_badprov_invalid` for the v3.1 provenance rule), via `scripts/validate-report.mjs`.
   Invalid fixtures must be rejected; valid ones must pass.
@@ -21,7 +21,6 @@ Exit 0 = all green, 1 = any failure. Runs against the bundle it lives in (live c
   - `gate-closed-phases` — phase statuses (check 1), ASSUMED/INVESTIGATING (check 2), DISPROVEN without fix_ref (check 3), coverage SIN_CUBRIR/SIN_SMOKE/BLOCKED (check 4).
   - `gate-closed-mission` — decisions without rationale/sources + irreversible outside plan (check 8), pending_human (check 9), live processes (check 10).
 - **Triage goldsets (3)**: PROCEED valid, NOT_NEEDED valid, structurally invalid. Asserts `recommendation` too.
-- **Sentinel (3)**: `usage-sentinel.py` — fires at threshold (writes STOP_REQUESTED.json + one SENTINEL-STOP line + exit 0), silent below threshold (keeps looping, no premature exit), retires by itself on `mission_status != RUNNING`.
 
 ## Goldset format
 
