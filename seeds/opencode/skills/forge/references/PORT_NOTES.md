@@ -82,7 +82,6 @@ Enablement is PER-INSTANCE, never a design constant. Each machine/vendor picks i
 | Vendor / instance | Skills deployed | Note |
 |-------------------|-----------------|------|
 | opencode — this workstation (2026-08) | forge + scout + anchors (RED_PILL.md) | Canonical runtime |
-| Claude Code — this workstation | forge/scout NOT deployed | **LOCAL DECISION of this instance** (operator, 2026-08-05): opencode is the canonical runtime; Claude Code can deploy the same bundle via the mechanism delta documented in `runtime-adapters/claude-code.md` |
 | Gemini (future) | GEMINI.md + per-harness seeds | Undecided; same rule: seeds per harness |
 
 Design rules:
@@ -93,7 +92,7 @@ Design rules:
 
 ## Contract v3.1 — provenance + cross-provider panel (2026-08-05, Operator-approved)
 
-Towards full harness-agnosticism (Operator's direction: never marry a client — Codex, Claude Code, Antigravity, Kimi, opencode are all interchangeable execution backends). The protocol kernel (schemas/gate/rules) stays IDENTICAL; the mechanism layer grows a federation channel.
+Towards full harness-agnosticism (Operator's direction: never marry a client — Codex, Antigravity, Kimi, opencode are all interchangeable execution backends). The protocol kernel (schemas/gate/rules) stays IDENTICAL; the mechanism layer grows a federation channel.
 
 1. **`Provenance` def (common.defs.json, propagated to the 7 role-report schemas as local `$defs` — self-contained, same rule as Evidence)**: `{harness (enum: opencode|claude-code|codex|agy|local|antigravity|kimi|other), provider, model, version, timestamp}`. Optional in the role schemas (backward compatible — a role may emit it or not), **mandatory at ledger time**: the orchestrator STAMPS it at consolidation if missing. A report never lands in `usage_ledger.entries[]` without provenance. `gate-check.mjs` exposes the unique sources in `summary.provenance` (informational, never a gate check).
 2. **Cross-provider panel (feature O2, panel-policy.md §Cross-provider lenses)**: a lens may declare `backend` (claude|agy|opencode|local + codex/antigravity/kimi via `other`) → launched via `job_manager_api.job_submit` (`agentic_job`, `async_mode` implicit — result to Minion Inbox) → poll `job_status` / `check_minion_inbox`. *(Histórico v3.1: usaba `run_agent_task(backend=..., async_mode:true)`; sustituido por el job-manager en v1.3.0.)* Contract identical (same schema, same validate-report.mjs, same aggregation). Mandatory fallback: failed remote → local re-run with the same prompt, never a silent panel reduction. Scale: max 1 remote lens at L2, 2 at L3; judge + orchestrator always local. Only adversarial lenses (refuters, optionally validator) go remote.

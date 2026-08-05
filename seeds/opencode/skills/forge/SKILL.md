@@ -176,7 +176,6 @@ Rules do not change with level: they apply identically from L0 to L3 and mission
 |-------------|--------|---------|
 | **opencode** | ✅ CANONICAL — task subagents, parallel calls, background tasks, Python sentinel (`usage-sentinel.py`), headless `cycle-run.mjs` | `references/runtime-adapters/opencode.md` |
 | **red-pill Job Manager** | 🔀 Federation channel (v1.3.0) — every headless role runs as an `agentic_job` (sabor A) or a full mission as a resumable `forge_job` (sabor B, **transferable control**), via `job_manager_api` MCP + recipes per role, `mission_id` isolation | `references/runtime-adapters/red-pill.md` |
-| **Claude Code** | 📦 Alternate runtime — reference only | `references/runtime-adapters/claude-code.md` |
 
 ## 9. Closing checklist (Final Gate)
 
