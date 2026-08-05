@@ -1,13 +1,13 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "chip.schema.json",
-  "title": "Scout Chip — satellite task record (scout v1.0.0)",
+  "$id": "shard.schema.json",
+  "title": "Scout Shard — satellite task record (scout v1.0.0)",
   "description": "A finding outside the current scope that violates a materialized project rule. Self-contained task: what is wrong, where, and what to do. Validated by validate-report.mjs (forge bundle).",
   "type": "object",
   "required": ["id", "location", "standard_violated", "evidence", "suggested_action", "priority", "consent_level", "status", "created_at", "provenance"],
   "additionalProperties": false,
   "properties": {
-    "id": { "type": "string", "pattern": "^CHIP-\\d+$" },
+    "id": { "type": "string", "pattern": "^SHARD-\\d+$" },
     "location": { "type": "string", "minLength": 1, "description": "Where the finding lives (file path, state key, plan point...)" },
     "standard_violated": { "type": "string", "minLength": 10, "description": "The rule/convention violated + its source (conventions.md §2, AGENTS.md, schema...)" },
     "evidence": { "type": "string", "minLength": 20, "description": "How it shows — literal excerpt or concrete observation" },
@@ -15,8 +15,8 @@
     "priority": { "enum": ["low", "medium", "critical"], "description": "Impact of the violation" },
     "consent_level": { "enum": ["auto", "operator"], "description": "Derived, never self-declared: critical OR production OR irreversible → operator. Else auto" },
     "status": { "enum": ["OPEN", "ACCEPTED", "DISMISSED", "DONE"] },
-    "source_awakening": { "type": "string", "description": "Awakening/trigger id that produced the chip, if any" },
-    "execution_ref": { "type": "string", "description": "Report path produced when the chip executed (e.g. .swarm/reports/implementor-CHIP-03.json)" },
+    "source_awakening": { "type": "string", "description": "Awakening/trigger id that produced the shard, if any" },
+    "execution_ref": { "type": "string", "description": "Report path produced when the shard executed (e.g. .swarm/reports/implementor-SHARD-03.json)" },
     "created_at": { "type": "string", "description": "ISO-8601" },
     "provenance": {
       "type": "object",

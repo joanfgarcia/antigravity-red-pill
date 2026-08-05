@@ -1,9 +1,10 @@
 {
-  "id": "CHIP-01",
+  "id": "SHARD-01",
   "location": "src/lib/parser.ts:42",
   "standard_violated": "conventions.md §3: no console.log in lib code",
+  "evidence": "console.log(\"debug\", x) present in a production lib path",
   "suggested_action": "Remove the debug log or route it through the logger util (src/utils/logger.ts)",
-  "priority": "urgent",
+  "priority": "low",
   "consent_level": "auto",
   "status": "OPEN",
   "created_at": "2026-08-05T14:00:00Z",
