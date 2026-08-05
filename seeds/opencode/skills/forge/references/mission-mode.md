@@ -9,7 +9,7 @@ Mission Mode is **orthogonal to the ladder**: it mounts on L3 and adds seven pil
 ## Pillar 1 — Autonomy contract (zero questions during the mission)
 
 **Assembly phase (before touching code):**
-1. The Orchestrator reads the complete **anchor plan** (e.g. `BRAIN_AGENTIC_PLAN.md`), the `CONVENTIONS.md` resolved by hierarchy, the project memory and the ecosystem rules.
+1. The Orchestrator reads the complete **anchor plan** (e.g. `MISSION_PLAN.md`), the `CONVENTIONS.md` resolved by hierarchy, the project memory and the ecosystem rules.
 2. The Documentation Anchor (Plan/Explore-style agent) extracts **every plan point** as `coverage_entry` (P-nn) and detects ambiguities.
 3. Every detected ambiguity is **resolved at assembly** from the sources — never mid-mission.
 
@@ -23,7 +23,7 @@ Mission Mode is **orthogonal to the ladder**: it mounts on L3 and adds seven pil
 
 ## Pillar 2 — Canonical execution mode + per-task checkpoints (guarantee of reaching the end)
 
-The guarantee of completing a very long mission is not "an infinite session": it is that **no failure can lose work or context**. The brain mission post-mortem (2026-07, 19 blocks) proved that the full Zero-Trust cycle inside ONE workflow (high-effort implementor + validator + smoke + 5-lens panel × up to 5 iterations × 2+ phases) consumes hundreds of thousands of tokens, **does not fit in a session window** and dies halfway: port zombies, eternally RUNNING workflows, disk ≠ state.json. The hot-applied solution (decision D-12 of that mission) is the **canonical mode**:
+The guarantee of completing a very long mission is not "an infinite session": it is that **no failure can lose work or context**. Real mission post-mortems proved that the full Zero-Trust cycle inside ONE workflow (high-effort implementor + validator + smoke + 5-lens panel × up to 5 iterations × 2+ phases) consumes hundreds of thousands of tokens, **does not fit in a session window** and dies halfway: port zombies, eternally RUNNING workflows, disk ≠ state.json. The hot-applied solution (decision D-12 of that mission) is the **canonical mode**:
 
 **Canonical mode (default in every mission):**
 - **ONE implementor per task**, launched as a background `task` subagent (high effort, worktree if it mutates files in parallel — O4). The main loop stays free while it works (Pillar 4).
@@ -74,7 +74,7 @@ At close (or when budget runs out), the Orchestrator generates `MISSION_REPORT.m
 
 ## Pillar 6 — Survival to token limits (the INTERNAL sentinel, v1.0)
 
-> A 15+ phase mission can hit the session/weekly limit mid-work. The v3.1–v3.3 defense was an **external watchdog** (launchd/systemd + `mission-watchdog.sh`). **It was retired 2026-07-28 by Operator order**: in three real missions it never relaunched anything and left **loaded zombie agents** (brain, babel and vetinari at once) waking every 15 min for nothing. Post-mortem detail and the new mechanism: **[`usage-sentinel.md`](usage-sentinel.md)**.
+> A 15+ phase mission can hit the session/weekly limit mid-work. The v3.1–v3.3 defense was an **external watchdog** (launchd/systemd + `mission-watchdog.sh`). **It was retired 2026-07-28 by Operator order**: in three real missions it never relaunched anything and left **loaded zombie agents** waking every 15 min for nothing. Post-mortem detail and the new mechanism: **[`usage-sentinel.md`](usage-sentinel.md)**.
 
 **The three-piece contract, now all INSIDE opencode:**
 

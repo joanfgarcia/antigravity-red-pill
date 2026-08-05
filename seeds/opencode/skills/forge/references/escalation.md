@@ -97,7 +97,7 @@ Extra diversity recommended at L3: vary effort between refuters (judge always at
 
 ## EXHAUSTED vs INTERRUPTED — what fires what
 
-> **Lesson from the brain post-mortem (2026-07):** when agents died from subscription/API limits, the workflow returned the phase as `EXHAUSTED` — indistinguishable from genuine failure. That would fire the anti-abandonment ladder (burning more agents against a dead API) when in reality it only required WAITING and resuming. They are now distinguished:
+> **Lesson from real mission post-mortems:** when agents died from subscription/API limits, the workflow returned the phase as `EXHAUSTED` — indistinguishable from genuine failure. That would fire the anti-abandonment ladder (burning more agents against a dead API) when in reality it only required WAITING and resuming. They are now distinguished:
 
 | Phase status | Meaning | Orchestrator response |
 |---|---|---|

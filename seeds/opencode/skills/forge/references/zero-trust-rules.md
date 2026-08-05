@@ -96,7 +96,7 @@ When a system has multiple environments/contexts, ALL are verified separately.
 - Global config and per-project config → verify BOTH
 - The Devil's Advocate actively asks: *"Are there more contexts we have not considered?"*
 
-**Shared infrastructure (canonizes decision D-11 of the 2026-07 brain mission):** any schema or state change on infrastructure others use (shared DEV DB, queues, brokers) — e.g. Flyway migrations — is validated FIRST in an isolated ephemeral environment (Testcontainers / docker) applying the full chain; **only after green** does it touch the shared environment. A half-failed migration on the shared DEV DB blocks every developer and pod.
+**Shared infrastructure (canonizes decision D-11 of a 2026-07 mission):** any schema or state change on infrastructure others use (shared DEV DB, queues, brokers) — e.g. Flyway migrations — is validated FIRST in an isolated ephemeral environment (Testcontainers / docker) applying the full chain; **only after green** does it touch the shared environment. A half-failed migration on the shared DEV DB blocks every developer and pod.
 
 **Enforcement:** dedicated `env_segregation` lens in the adversarial panel (always present from L2).
 

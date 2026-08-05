@@ -81,7 +81,7 @@ Enablement is PER-INSTANCE, never a design constant. Each machine/vendor picks i
 
 | Vendor / instance | Skills deployed | Note |
 |-------------------|-----------------|------|
-| opencode — this workstation (jgarcia, 2026-08) | forge + scout + anchors (RED_PILL.md) | Canonical runtime |
+| opencode — this workstation (2026-08) | forge + scout + anchors (RED_PILL.md) | Canonical runtime |
 | Claude Code — this workstation | forge/scout NOT deployed | **LOCAL DECISION of this instance** (operator, 2026-08-05): opencode is the canonical runtime; Claude Code can deploy the same bundle via the mechanism delta documented in `runtime-adapters/claude-code.md` |
 | Gemini (future) | GEMINI.md + per-harness seeds | Undecided; same rule: seeds per harness |
 

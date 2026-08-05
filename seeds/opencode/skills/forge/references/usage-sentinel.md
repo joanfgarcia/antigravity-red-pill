@@ -6,12 +6,12 @@
 
 ## §0 — Why the external watchdog died (post-mortem 2026-07-28, Operator order)
 
-The v3.1–v3.3 watchdog lived **outside** the harness: a `.sh` loaded in launchd (macOS) or systemd (Linux) polling the mission state every 15 min and relaunching `claude -p` headless. On paper it was the only piece able to survive the session's death. In practice, after three real missions (brain, babel, vetinari):
+The v3.1–v3.3 watchdog lived **outside** the harness: a `.sh` loaded in launchd (macOS) or systemd (Linux) polling the mission state every 15 min and relaunching `claude -p` headless. On paper it was the only piece able to survive the session's death. In practice, after three real missions:
 
 | Observed problem | Consequence |
 |---|---|
 | **Never saw it relaunch a mission** in real conditions | The promised autonomy did not exist |
-| The launchd agents **stayed loaded after closing missions** | 3 simultaneous zombies (`brain`, `babel`, `vetinari`) consuming resources and waking every 15 min for nothing |
+| The launchd agents **stayed loaded after closing missions** | 3 simultaneous zombie processes consuming resources and waking every 15 min for nothing |
 | Uninstall depended on the Orchestrator reaching the end alive | A dry cut = permanent orphan agent |
 | Impossible to debug from inside the session | Silent failures (minimal PATH, `AbandonProcessGroup`, probes) |
 
@@ -87,7 +87,7 @@ The **next-step reservation remains in force and counts INSIDE the 93%** (`contr
 if spent + step_reservation > 0.93 × capacity_est  →  DO NOT launch: controlled stop NOW
 ```
 
-Indicative reservations: background implementor **~250k** (measured in the vetinari mission: 160k–365k), Orchestrator validation/smoke **~60k**, 1-phase cycle **~500k**, Bash commands **~0**. Thus the stop happens *before* starting something that does not fit, not mid-way.
+Indicative reservations: background implementor **~250k** (measured in real missions: 160k–365k), Orchestrator validation/smoke **~60k**, 1-phase cycle **~500k**, Bash commands **~0**. Thus the stop happens *before* starting something that does not fit, not mid-way.
 
 ## §3 — Double lock: the Orchestrator also watches the flag
 

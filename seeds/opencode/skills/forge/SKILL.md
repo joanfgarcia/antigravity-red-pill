@@ -19,8 +19,6 @@ description: >-
 
 > The composer skill: 10 composable role pieces (agents + portable specs in `references/roles/`), orchestrated by the main loop. Scout (`~/.config/opencode/skills/scout/`) is the sibling analysis skill — its chips execute on individual Forge pieces.
 
-> Team motto: *"Verifying is executing. If you did not execute it, you did not verify it."*
-
 > Design history and versioned deltas: `references/PORT_NOTES.md`.
 
 ## 1. Four non-negotiable premises
@@ -193,5 +191,3 @@ Verified deterministically by `scripts/gate-check.mjs` — the orchestrator cann
 - [ ] *(Mission)* `live_processes[]` empty — zero zombies (check 10)
 
 **If the gate is CLOSED → the task is NOT reported as DONE.** It is reported with its real state: partial, with pending items, with documented blockers.
-
-> *"I prefer an honest 80% completion report over a lie of 100%."*

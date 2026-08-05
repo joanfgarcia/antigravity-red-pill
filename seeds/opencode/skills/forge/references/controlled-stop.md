@@ -4,7 +4,7 @@
 >
 > ⚠️ **v1.0 — the external watchdog is RETIRED** (Operator order 2026-07-28). Its place is taken by a **Python sentinel inside the opencode session** (`usage-sentinel.py`, os-agnostic) that watches for free and stops at **93%**, plus an **experimental opt-in one-shot OS task** for automatic return — see `usage-sentinel.md`.
 
-Born from the brain mission post-mortem (2026-07, 19 blocks): dry cuts by subscription limit left port zombies, eternally RUNNING workflows and a state.json that did not reflect the disk. The stop became a first-class act: **a well-stopped mission resumes in minutes; a dry-cut mission takes hours to rebuild.**
+Born from real mission post-mortems: dry cuts by subscription limit left port zombies, eternally RUNNING workflows and a state.json that did not reflect the disk. The stop became a first-class act: **a well-stopped mission resumes in minutes; a dry-cut mission takes hours to rebuild.**
 
 ---
 
@@ -29,13 +29,13 @@ Mnemonic rule: **`PAUSED_BY_OPERATOR` = human decision → the human resumes. `P
 The Orchestrator executes IN THIS ORDER:
 
 1. **Freeze the front**: launch nothing new. Background agents: if within <2 min of finishing, wait and consolidate their result; otherwise stop them (task cancellation) and annotate the task as unclosed.
-2. **Kill the registered processes**: for each `live_processes[]` entry with `status: "RUNNING"` → `kill <pid>` → verify → `kill -9` if it resists → mark `status: "KILLED"`. **PROHIBITED to kill blindly by port** (lesson: Cerberus's backend was almost killed sweeping a "known" port): only PIDs registered by THIS mission are touched; the port serves only to verify it is free.
+2. **Kill the registered processes**: for each `live_processes[]` entry with `status: "RUNNING"` → `kill <pid>` → verify → `kill -9` if it resists → mark `status: "KILLED"`. **PROHIBITED to kill blindly by port** (lesson: a teammate's backend was almost killed sweeping a "known" port): only PIDs registered by THIS mission are touched; the port serves only to verify it is free.
 3. **Full checkpoint**: capture real `disk_facts` of the task in progress (git status + git log, not the agent's self-report), write the complete `pause_context{}` (format below), `mission_status: "PAUSED_BY_OPERATOR"` and `updated_at`.
 4. **Retire the sentinel and clean the resumption**: the sentinel (background process) retires by itself as soon as it sees `mission_status` stop being `RUNNING` — nothing to uninstall. If a scheduled resume `swarm-resume-<project>` remained from a previous pause, cancel it (`usage-sentinel.md` §4). Annotate `pause_context.sentinel: "RETIRED"`.
 5. **Render artifacts**: `node scripts/render-artifacts.mjs` — the .md files reflect the pause.
 6. **Present the resume prompt in the chat** (§4), filled with real data, and persist it also in `pause_context.resume_prompt`. The prompt is self-contained: it works in that same chat or pasted into a completely new one.
 
-**`pause_context{}` format** (canonizes the one used in the brain mission):
+**`pause_context{}` format**:
 
 ```jsonc
 "pause_context": {
@@ -45,7 +45,7 @@ The Orchestrator executes IN THIS ORDER:
   "resume_block": "B03",
   "resume_task": "F1-T3",
   "sentinel": "RETIRED",                                  // retires by itself on state change
-  "scheduled_resume": "swarm-resume-vetinari @ 2026-07-28T06:15:00+02:00",  // or null if not scheduled
+  "scheduled_resume": "swarm-resume-<mission> @ 2026-07-28T06:15:00+02:00",  // or null if not scheduled
   "repo_clean_head": "71b7276 (B01+B02 pushed, compiles green)",
   "partial_untracked": "model/adapter/ of F1-T3 (incomplete: decide continue or redo)",
   "resume_prompt": "Reconcile from disk: ..."             // the filled §4 prompt
@@ -83,7 +83,7 @@ The §3 protocol says "run the probe BETWEEN tasks". That assumes each task cons
 
 ## §3.2 — Self-accounting window ledger (works WITHOUT OAuth)
 
-> **brain mission post-mortem (2026-07-20, 4 identical dry cuts):** in ALL cuts `check-usage.py` was in FAIL-OPEN (expired OAuth token) and the team advanced blind to the hard cut. The OAuth probe cannot be the only defense. v3.3 added a source of truth that is ALWAYS available: **the harness reports the tokens of each subagent** (`subagent_tokens` in each task notification) and **limit errors say the exact reset time** ("You've hit your session limit · resets 1:10am").
+> **mission post-mortem (2026-07-20, 4 identical dry cuts):** in ALL cuts `check-usage.py` was in FAIL-OPEN (expired OAuth token) and the team advanced blind to the hard cut. The OAuth probe cannot be the only defense. v3.3 added a source of truth that is ALWAYS available: **the harness reports the tokens of each subagent** (`subagent_tokens` in each task notification) and **limit errors say the exact reset time** ("You've hit your session limit · resets 1:10am").
 
 The Orchestrator keeps in state.json a **window ledger**:
 
@@ -102,11 +102,11 @@ The Orchestrator keeps in state.json a **window ledger**:
 **The 7 ledger rules (mandatory in Mission Mode):**
 
 1. **ALWAYS account**: on consolidating each agent/cycle notification, add its `subagent_tokens` to `spent_tokens` (+~30k per own consolidation turn of the main loop, conservative estimate). Persisted with the heartbeat — zero cost, zero dependencies.
-2. **Reserve before launching**: each step type has an estimated cost (indicative table, calibratable with the mission's own data: background implementor **~250k** (measured in vetinari: 160k–365k), 1-phase cycle **~500k**, Orchestrator validation/smoke **~60k**, verify/build in Bash **~0**). Before launching: if `spent + reservation > 0.93 × capacity_est` → **do NOT launch**; execute the §3 stop (`PAUSED_USAGE_LIMIT`). The step reservation counts INSIDE that 93%, so the stop happens before starting something that does not fit — better stop one step earlier than die mid-way.
+2. **Reserve before launching**: each step type has an estimated cost (indicative table, calibratable with the mission's own data: background implementor **~250k** (measured in real missions: 160k–365k), 1-phase cycle **~500k**, Orchestrator validation/smoke **~60k**, verify/build in Bash **~0**). Before launching: if `spent + reservation > 0.93 × capacity_est` → **do NOT launch**; execute the §3 stop (`PAUSED_USAGE_LIMIT`). The step reservation counts INSIDE that 93%, so the stop happens before starting something that does not fit — better stop one step earlier than die mid-way.
 3. **Calibration at each cut**: if despite everything a hard cut arrives, `observed_spend_at_cut` (the accumulated spend at that moment) goes to `calibrations[]` and `capacity_est = 0.9 × median(observations)`. The skill learns the real subscription capacity of the workstation in 1-2 cuts; conservative initial default: **1.2M**.
 4. **Fire drill at the first symptom**: the FIRST notification of a dead agent with limit/credits error fires the IMMEDIATE reactive protocol — (a) parse `resets HH:MM` → `window_reset_at`; (b) calibrate (rule 3); (c) relaunch NOTHING, retry NOTHING; (d) full checkpoint + `mission_status: "INTERRUPTED_RATE_LIMIT"`; (e) end the turn cleanly in that same message. Every token spent after the first symptom is burned margin.
 5. **Window reset**: on resuming after `window_reset_at`, `spent_tokens` returns to 0 and `window_started_at = window_reset_at`. If the resumption arrives mid-window (e.g. scheduled resumption minutes after a freed weekly cut), the known spend is kept.
-6. **`window_reset_at` ONLY from real signals (lesson brain 2026-07-20)**: the window belongs to the **ACCOUNT, not the session** — it starts with the Operator's first request in that window (which may be another chat or another workstation), so `window_started_at + 5h` is an INVALID estimate that can delay the relaunch by hours. `window_reset_at` is only written if it comes from a real signal — the parsed "resets HH:MM" of a limit error — and `window_reset_source: "observed"` is annotated. **Without a real signal → `window_reset_at: null`** and NO resumption is scheduled blind: the on-screen prompt is the path (`usage-sentinel.md` §4). The ledger remains useful regardless: it measures THE MISSION's spend, which is a minimum of the account's spend — if the mission alone already touches the threshold, the account is worse; stopping is still correct. `capacity_est` is interpreted as "mission budget per window", not as the exact subscription capacity.
+6. **`window_reset_at` ONLY from real signals (lesson 2026-07-20)**: the window belongs to the **ACCOUNT, not the session** — it starts with the Operator's first request in that window (which may be another chat or another workstation), so `window_started_at + 5h` is an INVALID estimate that can delay the relaunch by hours. `window_reset_at` is only written if it comes from a real signal — the parsed "resets HH:MM" of a limit error — and `window_reset_source: "observed"` is annotated. **Without a real signal → `window_reset_at: null`** and NO resumption is scheduled blind: the on-screen prompt is the path (`usage-sentinel.md` §4). The ledger remains useful regardless: it measures THE MISSION's spend, which is a minimum of the account's spend — if the mission alone already touches the threshold, the account is worse; stopping is still correct. `capacity_est` is interpreted as "mission budget per window", not as the exact subscription capacity.
 7. **The resume prompt ALWAYS on screen**: every stop — human (§2), usage (§3) or ledger (§3.2) — ENDS by presenting the filled §4 prompt in the chat, as a copyable code block, IN ADDITION to persisting it in `pause_context.resume_prompt`. Even when there is a scheduled resumption: the on-screen prompt is the Operator's plan B if the automatic relaunch does not arrive or he wants to advance it by hand. A pause without a prompt in the chat is an INCOMPLETE pause.
 
 **Signal priority** (defense in depth): usage-probe with valid external meter (measures for real) → **ledger** (always available) → reactive fire-drill marker (rule 4) → disk checkpoint for the next session (last net). The mission uses the best signal available at each moment, never none.
@@ -151,7 +151,7 @@ Prompt rules:
 
 ## §5 — Mandatory reconciliation protocol (every start/resume)
 
-Steps 1-4 of §4 are **mandatory on EVERY resumption or start over an existing state.json**, whatever its origin (pasted prompt, scheduled task, new session after compaction). The brain post-mortem proved it: after each cut, the work applied on disk (migrated pom, intact migrations) was NOT reflected in state.json — trusting the JSON would have repeated or overwritten good work.
+Steps 1-4 of §4 are **mandatory on EVERY resumption or start over an existing state.json**, whatever its origin (pasted prompt, scheduled task, new session after compaction). Real post-mortems proved it: after each cut, the work applied on disk (migrated pom, intact migrations) was NOT reflected in state.json — trusting the JSON would have repeated or overwritten good work.
 
 Additionally, **`disk_facts` is the source of truth per task**: when consolidating each task, the Orchestrator captures them HIMSELF with git (`git rev-parse HEAD`, `git status --porcelain`, list of touched files) and persists them next to the phase status:
 
@@ -177,5 +177,5 @@ Every smoke/step that starts a server (Java backend, docker, http.server...) ful
      "purpose": "smoke F1-T3", "phase_id": "F1", "started_at": "...", "status": "RUNNING" }
    ```
 2. **Kill when the step ends** (not at block end): `kill` → verify → mark `KILLED`.
-3. **On resume**: sweep ONLY the registered PIDs (§4 step 2). A process on the expected port with an UNREGISTERED PID is NOT touched: it may belong to another project (Cerberus lesson).
+3. **On resume**: sweep ONLY the registered PIDs (§4 step 2). A process on the expected port with an UNREGISTERED PID is NOT touched: it may belong to another project (lesson: a teammate's backend was almost killed sweeping a "known" port).
 4. **The gate verifies it**: `gate-check.mjs` Check 10 (mission) — the mission does not close with `RUNNING` entries in `live_processes[]`.

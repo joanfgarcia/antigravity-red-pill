@@ -25,7 +25,7 @@ description: >-
 2. **Self-discovery** — scan a target (own `.swarm/state.json`, the bundle, any repo) for drift against materialized rules.
 3. **Satellite chips** — anything seen that is wrong or non-compliant OUTSIDE the current scope becomes a chip: `{id, location, standard_violated, evidence, suggested_action, priority, consent_level}` — a self-contained task with its own prompt.
 
-The chip pattern mirrors what strong agents do natively (Claude Fable's "chips"): noticing what is not your current task, but is wrong. Scout makes it a repeatable protocol.
+The chip pattern mirrors what strong agents do natively: noticing what is not your current task, but is wrong. Scout makes it a repeatable protocol.
 
 ## 2. The rules must be materialized
 

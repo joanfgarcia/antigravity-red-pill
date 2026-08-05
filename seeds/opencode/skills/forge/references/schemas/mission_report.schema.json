@@ -16,7 +16,7 @@
   "properties": {
     "mission": {
       "type": "string",
-      "description": "Nombre de la misión (p.ej. 'Refactor brain — plan v2.1')"
+      "description": "Nombre de la misión (p.ej. 'Refactor runtime — plan v2.1')"
     },
     "plan_ref": {
       "type": "string",
