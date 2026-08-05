@@ -315,7 +315,8 @@ class TestListTools:
 		assert "swarm_orchestrator_api" in tool_names
 		assert "bunker_memory_api" in tool_names
 		assert "sovereign_handshake" in tool_names
-		assert len(result) == 4
+		assert "job_manager_api" in tool_names
+		assert len(result) == 5
 
 
 class TestControlBunkerAdditional:

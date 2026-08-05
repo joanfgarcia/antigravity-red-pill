@@ -10,29 +10,29 @@ CONTROL TRANSFERIBLE (lo nuevo): el checkpoint en BD es la moneda compartida
 entre el driver y el main-loop del Orchestrator. Quien tiene el control ejecuta
 el siguiente paso:
 
-  - Driver en control (background): el runner recorre el manifest solo.
-  - Main-loop toma el control: `job pause` (frontera de paso) → `job status`
-    (lee step_index) → ejecuta N pasos inline (misma estructura de reporte,
-    mismos schemas) → `job checkpoint <id> {step_index: N}` → el job queda
-    PAUSED con el checkpoint actualizado.
-  - Main-loop suelta el control: `job resume <id>` → el driver continúa desde
-    step_index exactamente donde se quedó.
+	- Driver en control (background): el runner recorre el manifest solo.
+	- Main-loop toma el control: `job pause` (frontera de paso) → `job status`
+		(lee step_index) → ejecuta N pasos inline (misma estructura de reporte,
+		mismos schemas) → `job checkpoint <id> {step_index: N}` → el job queda
+		PAUSED con el checkpoint actualizado.
+	- Main-loop suelta el control: `job resume <id>` → el driver continúa desde
+		step_index exactamente donde se quedó.
 
 Manifest, reportes y checkpoint son IDENTICOS en ambos modos: por eso el
 handoff es atómico — no hay estado "de la otra mitad".
 
 PATRÓN RFC SLEEP_JOB_DRIVER (aplicado deliberadamente):
-  - Checkpoint en BD autoritativo; el fichero público `.swarm/forge_job_status.json`
-    es TELECOMETRÍA en vivo (espejo), nunca fuente de resume (auditoría A2 del RFC).
-  - `on_fail` por paso: `warn` (default) = marcar y continuar SIN quemar el
-    disyuntor (continue-on-error, semántica de unidad del sueño); `stop` =
-    RuntimeError → fallo real de job (attempts++, disyuntor si insiste).
-  - Un paso fallido con `warn` se registra en `results[]` como FAILED y avanza
-    `step_index`; el resto de la misión continúa.
-  - Kill/pause cooperativos por unidad: el runner relee estado en frontera (R3);
-    un kill marca PAUSED* y la unidad en vuelo completa antes de pausar.
-  - `progress` con las claves del renderer del CLI: `current/total/stage_*`
-    (el runner añade la EMA de duración por su cuenta).
+	- Checkpoint en BD autoritativo; el fichero público `.swarm/forge_job_status.json`
+		es TELECOMETRÍA en vivo (espejo), nunca fuente de resume (auditoría A2 del RFC).
+	- `on_fail` por paso: `warn` (default) = marcar y continuar SIN quemar el
+		disyuntor (continue-on-error, semántica de unidad del sueño); `stop` =
+		RuntimeError → fallo real de job (attempts++, disyuntor si insiste).
+	- Un paso fallido con `warn` se registra en `results[]` como FAILED y avanza
+		`step_index`; el resto de la misión continúa.
+	- Kill/pause cooperativos por unidad: el runner relee estado en frontera (R3);
+		un kill marca PAUSED* y la unidad en vuelo completa antes de pausar.
+	- `progress` con las claves del renderer del CLI: `current/total/stage_*`
+		(el runner añade la EMA de duración por su cuenta).
 
 payload:
 	{
