@@ -1,0 +1,9 @@
+# Forge — rol QA Final (auditoría completa antes del gate).
+source: agentic_job
+priority: 5
+backend: opencode
+model: flash
+effort: high
+timeout: 900
+control:
+  max_step_minutes: 20

@@ -1,0 +1,211 @@
+{
+  "$id": "azrael://swarm_team/v3/smoke_report",
+  "type": "object",
+  "required": [
+    "role",
+    "phase_id",
+    "tests"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "role": {
+      "const": "smoke_tester"
+    },
+    "phase_id": {
+      "type": "string"
+    },
+    "tests": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "expected",
+          "verdict"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^ST-\\d+$"
+          },
+          "type": {
+            "enum": [
+              "config_parse",
+              "api_mcp_call",
+              "script_exec",
+              "ui",
+              "integration_e2e",
+              "env_parity"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "evidence": {
+            "$ref": "#/$defs/Evidence"
+          },
+          "expected": {
+            "type": "string"
+          },
+          "observed": {
+            "type": "string"
+          },
+          "verdict": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "PENDING_HUMAN"
+            ]
+          },
+          "human_instructions": {
+            "type": "string",
+            "description": "Pasos exactos para que el humano verifique"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "verdict": {
+                  "enum": [
+                    "PASS",
+                    "FAIL"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "evidence",
+                "observed"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "verdict": {
+                  "const": "PENDING_HUMAN"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "human_instructions"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "parity_table": {
+      "type": "array",
+      "description": "REGLA 9 (Environment Symmetry): paridad funcional entre plataformas/entornos cuando aplica.",
+      "items": {
+        "type": "object",
+        "required": [
+          "capability",
+          "platforms",
+          "symmetric"
+        ],
+        "properties": {
+          "capability": {
+            "type": "string"
+          },
+          "platforms": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "symmetric": {
+            "type": "boolean"
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "provenance": {
+      "$ref": "#/$defs/Provenance",
+      "description": "v3.1: execution origin (harness/provider/model/timestamp). Emitted by the role, or STAMPED by the orchestrator at consolidation when the role did not emit it — a report never lands in the ledger without provenance."
+    }
+  },
+  "$defs": {
+    "Evidence": {
+      "type": "object",
+      "required": [
+        "command",
+        "exit_code",
+        "output_excerpt"
+      ],
+      "properties": {
+        "command": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "exit_code": {
+          "type": "integer"
+        },
+        "output_excerpt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "output_full_path": {
+          "type": "string"
+        },
+        "duration_ms": {
+          "type": "integer"
+        },
+        "timestamp": {
+          "type": "string"
+        }
+      }
+    },
+    "Provenance": {
+      "type": "object",
+      "required": [
+        "harness",
+        "timestamp"
+      ],
+      "properties": {
+        "harness": {
+          "type": "string",
+          "enum": [
+            "opencode",
+            "claude-code",
+            "codex",
+            "agy",
+            "local",
+            "antigravity",
+            "kimi",
+            "other"
+          ],
+          "description": "Client/harness that executed this role"
+        },
+        "provider": {
+          "type": "string",
+          "description": "Model provider (anthropic, openai, google, deepseek, azure, ollama...)"
+        },
+        "model": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string",
+          "description": "Harness or bundle version"
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "ISO-8601"
+        }
+      }
+    }
+  }
+}

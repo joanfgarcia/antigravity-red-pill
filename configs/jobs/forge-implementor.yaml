@@ -1,0 +1,11 @@
+# Forge — rol Implementor (ejecuta UNA fase con evidencia real).
+# source: agentic_job — el prompt con spec/criterios/contexto viaja dinámico
+# en el payload del submit; este recipe fija el perfil del rol.
+source: agentic_job
+priority: 5
+backend: opencode
+model: flash
+effort: high
+timeout: 900
+control:
+  max_step_minutes: 25

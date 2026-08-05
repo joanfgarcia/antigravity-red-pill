@@ -1,0 +1,104 @@
+{
+  "$id": "azrael://swarm_team/v3/common",
+  "$comment": "Definiciones canónicas compartidas del Swarm Team v3.0. Los schemas de rol las EMBEBEN como $defs locales (autocontenidos) para poder validarse sin registro de URIs y copiarse tal cual dentro de las plantillas Workflow. Si cambias algo aquí, propaga el cambio a todos los schemas y plantillas.",
+  "$defs": {
+    "Evidence": {
+      "type": "object",
+      "description": "REGLA 6 Zero-Trust: no hay 'verificado' sin output real. Toda evidencia registra QUÉ se ejecutó y QUÉ devolvió.",
+      "required": [
+        "command",
+        "exit_code",
+        "output_excerpt"
+      ],
+      "properties": {
+        "command": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Comando o acción REAL ejecutada"
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "exit_code": {
+          "type": "integer"
+        },
+        "output_excerpt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000,
+          "description": "Output LITERAL obtenido (extracto)"
+        },
+        "output_full_path": {
+          "type": "string",
+          "description": "Path al output completo si excede el extracto"
+        },
+        "duration_ms": {
+          "type": "integer"
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "ISO-8601; lo estampa el agente que ejecutó"
+        }
+      }
+    },
+    "Verdict": {
+      "enum": [
+        "PASS",
+        "FAIL",
+        "PENDING_HUMAN"
+      ],
+      "description": "Veredicto de un test/criterio. PENDING_HUMAN = no ejecutable por el equipo, requiere verificación humana con instrucciones."
+    },
+    "Role": {
+      "enum": [
+        "orchestrator",
+        "implementor",
+        "validator",
+        "smoke_tester",
+        "devils_advocate",
+        "doc_anchor",
+        "qa_final",
+        "monitor"
+      ]
+    },
+    "Provenance": {
+      "type": "object",
+      "description": "CANONICAL: execution origin of a role report (multi-backend audit). Propagate to every role schema as a local $defs (self-contained).",
+      "required": [
+        "harness",
+        "timestamp"
+      ],
+      "properties": {
+        "harness": {
+          "type": "string",
+          "enum": [
+            "opencode",
+            "claude-code",
+            "codex",
+            "agy",
+            "local",
+            "antigravity",
+            "kimi",
+            "other"
+          ],
+          "description": "Client/harness that executed this role"
+        },
+        "provider": {
+          "type": "string",
+          "description": "Model provider (anthropic, openai, google, deepseek, azure, ollama...)"
+        },
+        "model": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string",
+          "description": "Harness or bundle version"
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "ISO-8601"
+        }
+      }
+    }
+  }
+}

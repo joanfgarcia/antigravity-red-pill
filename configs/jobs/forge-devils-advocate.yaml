@@ -1,0 +1,9 @@
+# Forge — rol Devil's Advocate (refutador adversarial, UNA lente).
+source: agentic_job
+priority: 5
+backend: opencode
+model: flash
+effort: high
+timeout: 600
+control:
+  max_step_minutes: 15

@@ -1,0 +1,13 @@
+# Forge — rol Triage (Step 0 del protocolo).
+# source: agentic_job (un prompt vía backend) — el rol decide si la misión
+# necesita el protocolo Forge. prompt y cwd van DINÁMICOS en el payload del
+# submit: este recipe fija el perfil (backend/modelo/effort/timeout/prioridad).
+# Uso: job_manager_api.job_submit {source: agentic_job, payload: {prompt, cwd, ...}}
+source: agentic_job
+priority: 5
+backend: opencode
+model: flash
+effort: medium
+timeout: 600
+control:
+  max_step_minutes: 15

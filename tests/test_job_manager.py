@@ -770,3 +770,153 @@ def test_step_boundary_callback_failure_never_kills_the_job(queue, clean_registr
 
 	assert process_driver_jobs(queue, on_step_boundary=explosive_drain) == 1
 	assert queue.get_task(job_id)["status"] == "COMPLETED"
+
+
+# ── ForgeJobDriver (v1.3.0: control transferible, mission_id isolation) ───────
+
+def _forge_payload(workdir: str, mission_id: str = "m1", steps=None):
+	"""Payload mínimo válido de forge_job."""
+	if steps is None:
+		steps = [{"role": "implementor", "prompt": "haz X"}]
+	return {
+		"mission_id": mission_id,
+		"manifest": {"workdir": workdir, "phases": [{"id": "F1", "steps": steps}]},
+	}
+
+
+class _ForgeBridge(_FakeBridge):
+	def __init__(self, workdir: str, write_reports: bool = True):
+		super().__init__()
+		self.workdir = workdir
+		self.write_reports = write_reports
+
+	def prompt(self, text, **kwargs):
+		self.prompt_calls.append((text, kwargs))
+		if self.write_reports:
+			# El agente escribe su reporte conforme al contrato (como en vivo).
+			import json as _json
+			import os
+
+			m = __import__("re").search(r"to (\S+?) as JSON", text)
+			if m:
+				path = m.group(1)
+				os.makedirs(os.path.dirname(path), exist_ok=True)
+				with open(path, "w", encoding="utf-8") as f:
+					_json.dump({"role": "implementor", "summary": "hecho"}, f)
+		return type("R", (), {"response": "ok", "error": None, "conversation_id": "c1", "ok": True})()
+
+
+def test_forge_job_validate_requires_mission_id():
+	from red_pill.jobs.drivers.forge import ForgeJobDriver
+
+	d = ForgeJobDriver()
+	with pytest.raises(ValueError, match="mission_id"):
+		d.validate({"manifest": {"workdir": "/tmp", "phases": [{"id": "F1", "steps": [{"role": "implementor", "prompt": "x"}]}]}})
+	# on_fail inválido rechazado en submit
+	with pytest.raises(ValueError, match="on_fail"):
+		d.validate(_forge_payload("/tmp", steps=[{"role": "implementor", "prompt": "x", "on_fail": "explode"}]))
+
+
+def test_forge_job_steps_to_completion_with_checkpoint(tmp_path, monkeypatch):
+	from red_pill.jobs.drivers.forge import ForgeJobDriver
+
+	ws = tmp_path / "ws"
+	(ws / ".swarm" / "reports").mkdir(parents=True)
+	bridge = _ForgeBridge(str(ws))
+	monkeypatch.setattr("red_pill.swarm.bridges.factory.create_bridge", lambda b=None, **kw: bridge)
+
+	d = ForgeJobDriver()
+	payload = _forge_payload(str(ws), steps=[
+		{"role": "implementor", "prompt": "impl"},
+		{"role": "validator", "prompt": "valida"},
+	])
+	d.preflight(payload)
+	o1 = d.step(payload, {})
+	assert o1.new_checkpoint["step_index"] == 1 and not o1.completed
+	assert o1.progress["current"] == 1 and o1.progress["total"] == 2
+	o2 = d.step(payload, o1.new_checkpoint)
+	assert o2.completed and o2.new_checkpoint["step_index"] == 2
+	# Telemetría pública (espejo, no autoritativa)
+	status = (ws / ".swarm" / "forge_job_status.json").read_text()
+	assert '"step_index": 2' in status and '"status": "completed"' in status
+	# Reportes escritos por el agente en el workspace
+	assert (ws / ".swarm" / "reports" / "implementor-F1.json").is_file()
+
+
+def test_forge_job_resume_from_handoff_checkpoint(tmp_path, monkeypatch):
+	"""Control transferible: un checkpoint escrito desde fuera (handoff) se respeta."""
+	from red_pill.jobs.drivers.forge import ForgeJobDriver
+
+	ws = tmp_path / "ws"
+	(ws / ".swarm" / "reports").mkdir(parents=True)
+	bridge = _ForgeBridge(str(ws))
+	monkeypatch.setattr("red_pill.swarm.bridges.factory.create_bridge", lambda b=None, **kw: bridge)
+
+	d = ForgeJobDriver()
+	payload = _forge_payload(str(ws), steps=[{"role": "implementor", "prompt": "a"}, {"role": "validator", "prompt": "b"}, {"role": "smoke", "prompt": "c"}])
+
+	# El main-loop tomó el control tras el paso 1 y ejecutó el 2 inline:
+	handoff = {"step_index": 2, "results": ["impl", "valido-inline"]}
+	o = d.step(payload, handoff)
+	assert o.new_checkpoint["step_index"] == 3
+	assert o.new_checkpoint["results"] == ["impl", "valido-inline", "hecho"]
+	assert o.progress["stage_current"] == 1  # una sola fase
+
+
+def test_forge_job_continue_on_error_warns_not_burns_breaker(tmp_path, monkeypatch):
+	from red_pill.jobs.drivers.forge import ForgeJobDriver
+
+	ws = tmp_path / "ws"
+	(ws / ".swarm" / "reports").mkdir(parents=True)
+
+	class _Broken(_ForgeBridge):
+		def prompt(self, text, **kwargs):
+			return type("R", (), {"response": "", "error": "API down", "conversation_id": "x", "ok": False})()
+
+	monkeypatch.setattr("red_pill.swarm.bridges.factory.create_bridge", lambda b=None, **kw: _Broken(str(ws)))
+	d = ForgeJobDriver()
+	payload = _forge_payload(str(ws), steps=[
+		{"role": "implementor", "prompt": "x", "on_fail": "warn"},
+		{"role": "validator", "prompt": "y"},
+	])
+	o = d.step(payload, {})
+	# continue-on-error: avanza el índice y marca FAILED, sin lanzar (no quema attempts)
+	assert o.new_checkpoint["step_index"] == 1
+	assert "FAILED" in o.new_checkpoint["results"][0]
+
+
+def test_forge_job_on_fail_stop_raises(tmp_path, monkeypatch):
+	from red_pill.jobs.drivers.forge import ForgeJobDriver
+
+	ws = tmp_path / "ws"
+	(ws / ".swarm" / "reports").mkdir(parents=True)
+
+	class _Broken(_ForgeBridge):
+		def prompt(self, text, **kwargs):
+			return type("R", (), {"response": "", "error": "API down", "conversation_id": "x", "ok": False})()
+
+	monkeypatch.setattr("red_pill.swarm.bridges.factory.create_bridge", lambda b=None, **kw: _Broken(str(ws)))
+	d = ForgeJobDriver()
+	payload = _forge_payload(str(ws), steps=[{"role": "implementor", "prompt": "x", "on_fail": "stop"}])
+	with pytest.raises(RuntimeError, match="on_fail=stop"):
+		d.step(payload, {})
+
+
+def test_job_manager_mission_id_isolation(queue, clean_registry):
+	"""Dos forges en paralelo no se pisan: mission_id filtra jobs y update_checkpoint."""
+	register_driver(CountingDriver)
+	q = queue
+	id_a = q.enqueue_task(source="forge_job", payload=_forge_payload("/tmp", mission_id="A"), mission_id="A")
+	id_b = q.enqueue_task(source="forge_job", payload=_forge_payload("/tmp", mission_id="B"), mission_id="B")
+
+	only_a = q.list_tasks(mission_id="A")
+	assert [t["id"] for t in only_a] == [id_a]
+	assert [t["id"] for t in q.list_tasks(mission_id="B")] == [id_b]
+	assert len(q.list_tasks()) == 2
+
+	# update_checkpoint (handoff) solo aplica a jobs no-en-vuelo
+	assert q.update_checkpoint(id_a, {"step_index": 5}, {"current": 5, "total": 10, "percent": 50})
+	assert q.get_task(id_a)["checkpoint_data"]["step_index"] == 5
+	with q._get_connection() as c:
+		c.execute("UPDATE cognitive_tasks SET status='PROCESSING' WHERE id=?", (id_b,))
+	assert not q.update_checkpoint(id_b, {"step_index": 1})

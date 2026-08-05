@@ -1,0 +1,40 @@
+{
+  "expect_valid": true,
+  "expect_recommendation": "NOT_NEEDED",
+  "instance": {
+    "role": "triage",
+    "scope": {
+      "phases_estimated": 2,
+      "complexity_score": 1,
+      "touches_production": false
+    },
+    "recommendation": "NOT_NEEDED",
+    "features": {
+      "O1": "on",
+      "O2": "auto",
+      "O3": "on",
+      "O4": "auto",
+      "O5": "off",
+      "O6": "off",
+      "O7": "auto",
+      "F1": "off",
+      "F2": "off",
+      "F3": "off"
+    },
+    "execution": {
+      "level": "L0",
+      "model_profile": "frontier",
+      "mission_mode": false,
+      "panel_size": "none",
+      "worktree_isolation": false,
+      "budget_estimate_tokens": 5000
+    },
+    "rationale": [
+      {
+        "item": "threshold score",
+        "decision": "score 1 (single trivial fix)",
+        "reason": "task is a one-line doc fix with no multi-system surface"
+      }
+    ]
+  }
+}

@@ -1,0 +1,162 @@
+{
+  "expect": {
+    "gate": "CLOSED",
+    "verdict": "PARTIAL",
+    "violations_include": [
+      "Check 6"
+    ]
+  },
+  "state": {
+    "mission": "gate-open-test",
+    "mission_status": "RUNNING",
+    "plan_ref": "plan.md",
+    "phases": [
+      {
+        "id": "F1",
+        "status": "DONE",
+        "criteria": [
+          {
+            "criterion_id": "C-01",
+            "description": "a.txt has expected line",
+            "verdict": "PASS",
+            "evidence": {
+              "command": "grep -c paralelo a.txt",
+              "exit_code": 0,
+              "output_excerpt": "1"
+            }
+          }
+        ],
+        "tests": [
+          {
+            "id": "ST-01",
+            "type": "script_exec",
+            "expected": "exit 0",
+            "observed": "0",
+            "verdict": "PASS",
+            "evidence": {
+              "command": "bash run.sh",
+              "exit_code": 0,
+              "output_excerpt": "done"
+            }
+          }
+        ],
+        "devil": {
+          "vote": "CLEARED",
+          "lens": "correctness",
+          "refutations": [
+            {
+              "target_id": "C-01",
+              "claim": "wrong path in test",
+              "verdict": "UPHELD",
+              "criticality": "low",
+              "evidence": {
+                "command": "grep -c paralelo a.txt",
+                "exit_code": 0,
+                "output_excerpt": "1"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "registry": [
+      {
+        "id": "A-01",
+        "statement": "build tool is gradle",
+        "criticality": "low",
+        "status": "VERIFIED",
+        "verification": {
+          "command": "ls gradlew",
+          "exit_code": 0,
+          "output_excerpt": "gradlew"
+        },
+        "verified_by": "orchestrator"
+      }
+    ],
+    "coverage": [
+      {
+        "id": "P-01",
+        "requirement": "a.txt contains the parallel line",
+        "implemented": true,
+        "impl_refs": [
+          "a.txt"
+        ],
+        "test_ref": "T-01",
+        "smoke_ref": "ST-01",
+        "status": "CUBIERTO",
+        "phase_id": "F1"
+      }
+    ],
+    "decisions": [],
+    "debt": [],
+    "pending_human": [],
+    "live_processes": [],
+    "qa": {
+      "role": "qa_final",
+      "verdict": "COMPLETE",
+      "totals": {
+        "pass": 2,
+        "fail": 0,
+        "pending_human": 0
+      },
+      "preconditions": {
+        "assumptions_open": 0,
+        "coverage_uncovered": 0
+      },
+      "tests": [
+        {
+          "id": "T-01",
+          "type": "unit",
+          "expected": "pass",
+          "verdict": "PASS",
+          "evidence": {
+            "command": "grep -c paralelo a.txt",
+            "exit_code": 0,
+            "output_excerpt": "1"
+          }
+        }
+      ],
+      "pending_human": []
+    },
+    "usage_ledger": {
+      "spent_tokens": 100,
+      "capacity_est": 1200000
+    },
+    "final_panel": {
+      "role": "devils_advocate",
+      "phase_id": "F1",
+      "lens": "correctness",
+      "refutations": [
+        {
+          "target_id": "C-01",
+          "claim": "wrong path in test",
+          "verdict": "UPHELD",
+          "criticality": "low",
+          "evidence": {
+            "command": "grep -c paralelo a.txt",
+            "exit_code": 0,
+            "output_excerpt": "1"
+          }
+        }
+      ],
+      "new_assumptions": [],
+      "vote": "CLEARED",
+      "blocker_reasons": []
+    },
+    "tests": [
+      {
+        "id": "T1",
+        "verdict": "PASS",
+        "evidence": {
+          "command": "grep -r TODO .",
+          "output_excerpt": "a/b.js:12 TODO"
+        }
+      },
+      {
+        "id": "T2",
+        "verdict": "FAIL",
+        "fix_ref": "F1"
+      }
+    ]
+  }
+}

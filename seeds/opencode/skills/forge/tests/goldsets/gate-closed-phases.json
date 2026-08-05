@@ -1,0 +1,128 @@
+{
+  "expect": {
+    "gate": "CLOSED",
+    "verdict": "PARTIAL",
+    "violations_include": [
+      "Check 1",
+      "Check 2",
+      "Check 3",
+      "Check 4",
+      "Check 5"
+    ]
+  },
+  "state": {
+    "mission": "gate-open-test",
+    "mission_status": "RUNNING",
+    "plan_ref": "plan.md",
+    "phases": [
+      {
+        "phase_id": "P1",
+        "status": "PENDING"
+      },
+      {
+        "phase_id": "P2",
+        "status": "EXHAUSTED"
+      },
+      {
+        "phase_id": "P3",
+        "status": "INTERRUPTED"
+      },
+      {
+        "phase_id": "P4",
+        "status": "PARCIAL",
+        "debt_ref": "debt/D1"
+      }
+    ],
+    "registry": [
+      {
+        "id": "A1",
+        "statement": "A is true",
+        "status": "ASSUMED"
+      },
+      {
+        "id": "A2",
+        "statement": "B is true",
+        "status": "DISPROVEN"
+      }
+    ],
+    "coverage": [
+      {
+        "id": "C1",
+        "requirement": "feature x",
+        "status": "SIN_CUBRIR"
+      },
+      {
+        "id": "C2",
+        "requirement": "feature y",
+        "status": "SIN_SMOKE"
+      },
+      {
+        "id": "C3",
+        "requirement": "feature z",
+        "status": "BLOCKED"
+      }
+    ],
+    "decisions": [],
+    "debt": [],
+    "pending_human": [],
+    "live_processes": [],
+    "qa": {
+      "role": "qa_final",
+      "verdict": "COMPLETE",
+      "totals": {
+        "pass": 2,
+        "fail": 0,
+        "pending_human": 0
+      },
+      "preconditions": {
+        "assumptions_open": 0,
+        "coverage_uncovered": 0
+      },
+      "tests": [
+        {
+          "id": "T-01",
+          "type": "unit",
+          "expected": "pass",
+          "verdict": "PASS",
+          "evidence": {
+            "command": "grep -c paralelo a.txt",
+            "exit_code": 0,
+            "output_excerpt": "1"
+          }
+        }
+      ],
+      "pending_human": []
+    },
+    "usage_ledger": {
+      "spent_tokens": 100,
+      "capacity_est": 1200000
+    },
+    "final_panel": {
+      "role": "devils_advocate",
+      "phase_id": "F1",
+      "lens": "correctness",
+      "refutations": [
+        {
+          "target_id": "C-01",
+          "claim": "wrong path in test",
+          "verdict": "UPHELD",
+          "criticality": "low",
+          "evidence": {
+            "command": "grep -c paralelo a.txt",
+            "exit_code": 0,
+            "output_excerpt": "1"
+          }
+        }
+      ],
+      "new_assumptions": [],
+      "vote": "CLEARED",
+      "blocker_reasons": []
+    },
+    "tests": [
+      {
+        "id": "T3",
+        "verdict": "FAIL"
+      }
+    ]
+  }
+}

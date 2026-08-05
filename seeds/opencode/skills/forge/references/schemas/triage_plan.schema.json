@@ -1,0 +1,272 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "triage_plan.schema.json",
+  "title": "Triage Plan — activation gate + first feature resolution (forge v1.0)",
+  "description": "Output of the swarm-triage agent at Step 0. ADVISORY: final feature resolution is the Orchestrator's, recorded in feature_rationale[]. The triage proposes; the gate and the schemas do not change.",
+  "type": "object",
+  "required": [
+    "role",
+    "scope",
+    "recommendation",
+    "features",
+    "execution",
+    "rationale"
+  ],
+  "properties": {
+    "role": {
+      "const": "triage"
+    },
+    "scope": {
+      "type": "object",
+      "required": [
+        "phases_estimated",
+        "complexity_score",
+        "touches_production"
+      ],
+      "properties": {
+        "phases_estimated": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "complexity_score": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8
+        },
+        "touches_production": {
+          "type": "boolean"
+        },
+        "multi_system": {
+          "type": "boolean"
+        },
+        "parallelizable": {
+          "type": "boolean"
+        },
+        "source": {
+          "type": "string",
+          "description": "Task description or anchor plan read by the triage agent"
+        }
+      }
+    },
+    "recommendation": {
+      "type": "string",
+      "enum": [
+        "PROCEED",
+        "PROCEED_CONDENSED",
+        "NOT_NEEDED"
+      ],
+      "description": "NOT_NEEDED = the task does not need the swarm protocol (orchestrator runs it L0/inline). PROCEED_CONDENSED = swarm protocol with the minimal mechanism (no mission, small panel). PROCEED = full protocol."
+    },
+    "features": {
+      "type": "object",
+      "required": [
+        "O1",
+        "O2",
+        "O3",
+        "O4",
+        "O5",
+        "O6",
+        "O7",
+        "F1",
+        "F2",
+        "F3"
+      ],
+      "properties": {
+        "O1": {
+          "enum": [
+            "on",
+            "off",
+            "auto"
+          ]
+        },
+        "O2": {
+          "enum": [
+            "on",
+            "off",
+            "auto"
+          ]
+        },
+        "O3": {
+          "enum": [
+            "on",
+            "off",
+            "auto"
+          ]
+        },
+        "O4": {
+          "enum": [
+            "on",
+            "off",
+            "auto"
+          ]
+        },
+        "O5": {
+          "enum": [
+            "on",
+            "off",
+            "auto"
+          ]
+        },
+        "O6": {
+          "enum": [
+            "on",
+            "off",
+            "auto"
+          ]
+        },
+        "O7": {
+          "enum": [
+            "on",
+            "off",
+            "auto"
+          ]
+        },
+        "F1": {
+          "enum": [
+            "on",
+            "off",
+            "auto"
+          ]
+        },
+        "F2": {
+          "enum": [
+            "on",
+            "off",
+            "auto"
+          ]
+        },
+        "F3": {
+          "enum": [
+            "on",
+            "off",
+            "auto"
+          ]
+        }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "required": [
+        "level",
+        "model_profile",
+        "mission_mode",
+        "panel_size",
+        "worktree_isolation",
+        "budget_estimate_tokens"
+      ],
+      "properties": {
+        "level": {
+          "enum": [
+            "L0",
+            "L1",
+            "L2",
+            "L3"
+          ]
+        },
+        "model_profile": {
+          "enum": [
+            "frontier",
+            "standard"
+          ]
+        },
+        "mission_mode": {
+          "type": "boolean"
+        },
+        "panel_size": {
+          "enum": [
+            "none",
+            "single",
+            "three",
+            "five"
+          ]
+        },
+        "worktree_isolation": {
+          "type": "boolean"
+        },
+        "budget_estimate_tokens": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Estimated main-loop + agents budget for the whole task"
+        }
+      }
+    },
+    "rationale": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "item",
+          "decision",
+          "reason"
+        ],
+        "properties": {
+          "item": {
+            "type": "string",
+            "description": "The scored dimension: threshold score, a feature (O1..F3), level, panel, budget..."
+          },
+          "decision": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 10
+          }
+        }
+      }
+    },
+    "risks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "notes": {
+      "type": "string"
+    },
+    "provenance": {
+      "$ref": "#/$defs/Provenance",
+      "description": "v3.1: execution origin (harness/provider/model/timestamp). Emitted by the role, or STAMPED by the orchestrator at consolidation when the role did not emit it — a report never lands in the ledger without provenance."
+    }
+  },
+  "$defs": {
+    "Provenance": {
+      "type": "object",
+      "required": [
+        "harness",
+        "timestamp"
+      ],
+      "properties": {
+        "harness": {
+          "type": "string",
+          "enum": [
+            "opencode",
+            "claude-code",
+            "codex",
+            "agy",
+            "local",
+            "antigravity",
+            "kimi",
+            "other"
+          ],
+          "description": "Client/harness that executed this role"
+        },
+        "provider": {
+          "type": "string",
+          "description": "Model provider (anthropic, openai, google, deepseek, azure, ollama...)"
+        },
+        "model": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string",
+          "description": "Harness or bundle version"
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "ISO-8601"
+        }
+      }
+    }
+  }
+}

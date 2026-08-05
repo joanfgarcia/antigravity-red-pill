@@ -1,0 +1,9 @@
+# Forge — rol Validator (verifica criterios de aceptación por ejecución real).
+source: agentic_job
+priority: 5
+backend: opencode
+model: flash
+effort: medium
+timeout: 600
+control:
+  max_step_minutes: 15

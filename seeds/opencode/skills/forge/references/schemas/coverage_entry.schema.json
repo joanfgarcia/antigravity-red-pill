@@ -1,0 +1,24 @@
+{
+  "$id": "azrael://swarm_team/v3/coverage_entry",
+  "type": "object",
+  "required": ["id", "requirement", "status"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "pattern": "^P-\\d+$" },
+    "requirement": { "type": "string", "description": "Punto literal del plan ancla (REGLA 8: el plan es la ley)" },
+    "implemented": { "type": "boolean" },
+    "impl_refs": { "type": "array", "items": { "type": "string" }, "description": "Ficheros/commits que lo implementan" },
+    "test_ref": { "type": "string", "pattern": "^T-\\d+$" },
+    "smoke_ref": { "type": "string", "pattern": "^ST-\\d+$" },
+    "status": { "enum": ["CUBIERTO", "SIN_CUBRIR", "SIN_SMOKE", "PENDING_HUMAN", "BLOCKED", "EXTRA"] },
+    "blocked_reason": { "type": "string" },
+    "phase_id": { "type": "string", "description": "Fase que lo cubre" },
+    "notes": { "type": "string" }
+  },
+  "allOf": [
+    { "if": { "properties": { "status": { "const": "BLOCKED" } } },
+      "then": { "required": ["blocked_reason"] } },
+    { "if": { "properties": { "status": { "const": "CUBIERTO" } } },
+      "then": { "required": ["impl_refs", "smoke_ref"] } }
+  ]
+}
