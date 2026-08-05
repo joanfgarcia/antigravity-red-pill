@@ -1,15 +1,19 @@
 # LEGACY Adapter — Claude Code (reference only)
 
-The Claude Code runtime is the **upstream** of this port (swarm_team v3.4, repo `~/Discworld/Azrael/the-luggage/skills/swarm_team`). It remains intact there and is NOT deployed by this skill.
+This adapter documents how the same Forge protocol would map onto the Claude
+Code runtime (its native Agent/Workflow/Monitor tooling). It is **reference
+material only** — the canonical runtime is opencode; Claude Code can deploy the
+same bundle via this mechanism delta, but is not the supported path.
 
-**Key differences vs. this port:**
+**Mechanism mapping (opencode → Claude Code):**
 
-| Concept (upstream CC v3.4) | This port (opencode v1.0) |
-|----------------------------|---------------------------|
-| `Agent` tool with `run_in_background`, `Workflow` tool, `StructuredOutput` schemas, `Monitor` tool, `parallel()` | `task` subagents (background), main-loop cycle + `cycle-run.mjs`, `validate-report.mjs` (zero-dep runtime validator), Python sentinel (`usage-sentinel.py`, os-agnostic) + flag polling |
-| `check-usage.py` (OAuth probe) | `usage-probe.mjs` (ledger-first, provider-agnostic; optional `SWARM_USAGE_HOOK` external meter) |
-| Native scheduled tasks (`~/.claude/scheduled-tasks/`) | Experimental opt-in one-shot OS task (`systemd-run --user --on-calendar` / `at`) launching `opencode run "<prompt>" --auto` |
-| `phase-cycle.workflow.js` / `adversarial-panel.workflow.js` (JS workflow graphs) | Main-loop cycle + `cycle-run.mjs` headless driver; no Workflow tool in opencode |
-| Workflow `budget`, `resumeFromRunId` | Orchestrator-side budget accounting; resume by state.json checkpoint reconciliation |
+| Concept (opencode) | Claude Code equivalent |
+|--------------------|------------------------|
+| `task` subagents (background), main-loop cycle + `cycle-run.mjs`, `validate-report.mjs` (zero-dep runtime validator), Python sentinel (`usage-sentinel.py`, os-agnostic) + flag polling | `Agent` tool with `run_in_background`, `Workflow` tool, `StructuredOutput` schemas, `Monitor` tool, `parallel()` |
+| `usage-probe.mjs` (ledger-first, provider-agnostic; optional `SWARM_USAGE_HOOK` external meter) | `check-usage.py` (OAuth probe) |
+| Experimental opt-in one-shot OS task (`systemd-run --user --on-calendar` / `at`) launching `opencode run "<prompt>" --auto` | Native scheduled tasks |
+| Main-loop cycle + `cycle-run.mjs` headless driver; no Workflow tool in opencode | `phase-cycle.workflow.js` / `adversarial-panel.workflow.js` (JS workflow graphs) |
+| Orchestrator-side budget accounting; resume by state.json checkpoint reconciliation | Workflow `budget`, `resumeFromRunId` |
 
-Use `claude-code.md` upstream for historical reference of the full-power mechanics. This port implements the same protocol (schemas, gate, rules, ladder, mission pillars) with the opencode mechanism mapping.
+The protocol is identical (schemas, gate, rules, ladder, mission pillars); only
+the mechanism mapping differs.

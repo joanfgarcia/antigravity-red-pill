@@ -1,6 +1,6 @@
 # CANONICAL Adapter — opencode (task subagents + headless driver)
 
-This is the reference runtime of the port (v1.0). Here the team deploys its full power: validated JSON contracts, parallel adversarial panel, deterministic gate, resumption and Mission Mode.
+This is the reference runtime of Forge. Here the team deploys its full power: validated JSON contracts, parallel adversarial panel, deterministic gate, resumption and Mission Mode.
 
 > **Opt-in to orchestration:** when the Operator activates this skill ("levantar equipo", "modo swarm", "misión completa", "equipo de trabajo"), that invocation **constitutes the explicit opt-in** to multi-agent orchestration with the `task` tool that the skill instructs.
 

@@ -1,5 +1,5 @@
 {
-  "$id": "azrael://swarm_team/v3/assumption",
+  "$id": "redpill://forge/v3/assumption",
   "type": "object",
   "required": ["id", "statement", "source", "status", "criticality"],
   "additionalProperties": false,

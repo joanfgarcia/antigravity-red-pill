@@ -1,6 +1,6 @@
 # ALTERNATIVE Adapter — red-pill Job Manager (cola central + drivers)
 
-> **Status:** the **job-manager path** for **headless / autonomous / sovereign / heterogeneous** scenarios (no interactive IDE, different model per role, missions in background, or Bünker traceability). The canonical runtime of the port is opencode (`opencode.md`); for normal interactive orchestration use that one. **Since v1.3.0 the federation channel (contract v3.1) runs through the Centralized Job Manager** (`red-pill job` / `job_manager_api` MCP) — `run_agent_task` remains as the raw single-shot substrate for synchronous one-offs.
+> **Status:** the **job-manager path** for **headless / autonomous / sovereign / heterogeneous** scenarios (no interactive IDE, different model per role, missions in background, or Bünker traceability). The canonical runtime of Forge is opencode (`opencode.md`); for normal interactive orchestration use that one. **Since v1.3.0 the federation channel (contract v3.1) runs through the Centralized Job Manager** (`red-pill job` / `job_manager_api` MCP) — `run_agent_task` remains as the raw single-shot substrate for synchronous one-offs.
 
 ## What it is
 

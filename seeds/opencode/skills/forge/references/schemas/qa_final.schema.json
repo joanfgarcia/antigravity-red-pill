@@ -1,5 +1,5 @@
 {
-  "$id": "azrael://swarm_team/v3/qa_final",
+  "$id": "redpill://forge/v3/qa_final",
   "type": "object",
   "required": [
     "role",

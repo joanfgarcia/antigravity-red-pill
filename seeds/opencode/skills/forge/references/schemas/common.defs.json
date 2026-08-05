@@ -1,6 +1,6 @@
 {
-  "$id": "azrael://swarm_team/v3/common",
-  "$comment": "Definiciones canónicas compartidas del Swarm Team v3.0. Los schemas de rol las EMBEBEN como $defs locales (autocontenidos) para poder validarse sin registro de URIs y copiarse tal cual dentro de las plantillas Workflow. Si cambias algo aquí, propaga el cambio a todos los schemas y plantillas.",
+  "$id": "redpill://forge/v3/common",
+  "$comment": "Definiciones canónicas compartidas del protocolo Forge v3. Los schemas de rol las EMBEBEN como $defs locales (autocontenidos) para poder validarse sin registro de URIs y copiarse tal cual dentro de las plantillas Workflow. Si cambias algo aquí, propaga el cambio a todos los schemas y plantillas.",
   "$defs": {
     "Evidence": {
       "type": "object",

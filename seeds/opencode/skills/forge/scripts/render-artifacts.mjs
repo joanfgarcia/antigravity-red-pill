@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// render-artifacts.mjs — Forge v3.2 — Render humano de state.json.
+// render-artifacts.mjs — Forge — Render humano de state.json.
 // La FUENTE DE VERDAD es .swarm/state.json; estos .md son solo su proyección legible.
 // Uso: node render-artifacts.mjs [path/al/state.json] [outdir]   (defaults: .swarm/state.json, .swarm/)
 
@@ -11,7 +11,7 @@ const outDir = process.argv[3] || '.swarm';
 const state = JSON.parse(readFileSync(statePath, 'utf8'));
 mkdirSync(outDir, { recursive: true });
 
-const HEADER = `> ⚠️ GENERADO desde ${statePath} por render-artifacts.mjs — NO editar a mano.\n> Última actualización: ${state.updated_at || 'n/d'} · Protocolo: Forge v3.2 (Zero-Trust)\n\n`;
+const HEADER = `> ⚠️ GENERADO desde ${statePath} por render-artifacts.mjs — NO editar a mano.\n> Última actualización: ${state.updated_at || 'n/d'} · Protocolo: Forge (Zero-Trust)\n\n`;
 const ICON = { PASS: '✅', FAIL: '❌', PENDING_HUMAN: '⏳', DONE: '✅', PARCIAL: '⚠️', EXHAUSTED: '⚠️', VERIFIED: '✅', ASSUMED: '⚠️', DISPROVEN: '❌', INVESTIGATING: '🔍', CUBIERTO: '✅', SIN_CUBRIR: '🔴', SIN_SMOKE: '⚠️', BLOCKED: '⛔', EXTRA: '➕', CLEARED: '✅', BLOCKER: '⛔' };
 const ic = (s) => `${ICON[s] || ''} ${s}`.trim();
 const esc = (s) => String(s ?? '').replace(/\|/g, '\\|').replace(/\n/g, ' ');

@@ -1,5 +1,5 @@
 {
-  "$id": "azrael://swarm_team/v3/smoke_report",
+  "$id": "redpill://forge/v3/smoke_report",
   "type": "object",
   "required": [
     "role",

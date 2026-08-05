@@ -1,10 +1,10 @@
-# Controlled Stop and Resumption — Forge v1.0 (opencode port of v3.4)
+# Controlled Stop and Resumption — Forge
 
 > **Single source** of the stop protocol (human and automatic), the canonical resume prompt and disk reconciliation. Three consumers share this document: the Operator stop (§2), the usage-limit auto-stop (§3) and the **usage sentinel** (§3.3 and [`usage-sentinel.md`](usage-sentinel.md)).
 >
-> ⚠️ **v1.0 (port) — the external watchdog is RETIRED** (upstream v3.4, Operator order 2026-07-28). Its place is taken by a **Python sentinel inside the opencode session** (`usage-sentinel.py`, os-agnostic) that watches for free and stops at **93%**, plus an **experimental opt-in one-shot OS task** for automatic return — see `usage-sentinel.md`.
+> ⚠️ **v1.0 — the external watchdog is RETIRED** (Operator order 2026-07-28). Its place is taken by a **Python sentinel inside the opencode session** (`usage-sentinel.py`, os-agnostic) that watches for free and stops at **93%**, plus an **experimental opt-in one-shot OS task** for automatic return — see `usage-sentinel.md`.
 
-Born from the brain mission post-mortem (2026-07, 19 blocks): dry cuts by subscription limit left port zombies, eternally RUNNING workflows and a state.json that did not reflect the disk. v3.2 made the stop a first-class act: **a well-stopped mission resumes in minutes; a dry-cut mission takes hours to rebuild.**
+Born from the brain mission post-mortem (2026-07, 19 blocks): dry cuts by subscription limit left port zombies, eternally RUNNING workflows and a state.json that did not reflect the disk. The stop became a first-class act: **a well-stopped mission resumes in minutes; a dry-cut mission takes hours to rebuild.**
 
 ---
 
@@ -54,7 +54,7 @@ The Orchestrator executes IN THIS ORDER:
 
 ## §3 — Preventive auto-stop by usage limit
 
-The dry cut of the client is the NORMAL case of the subscription limit — the `INTERRUPTED_RATE_LIMIT` marker almost never gets written. v3.2 avoids it by **not reaching the cut**:
+The dry cut of the client is the NORMAL case of the subscription limit — the `INTERRUPTED_RATE_LIMIT` marker almost never gets written. The design avoids it by **not reaching the cut**:
 
 - The **sentinel** (`usage-sentinel.md`) watches continuously and free; the Orchestrator also checks **between tasks** (after consolidating one, before launching the next — never mid-step):
   ```bash

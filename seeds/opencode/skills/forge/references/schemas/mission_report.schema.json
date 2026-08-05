@@ -1,5 +1,5 @@
 {
-  "$id": "azrael://swarm_team/v3/mission_report",
+  "$id": "redpill://forge/v3/mission_report",
   "type": "object",
   "$comment": "MODO MISIÓN — Informe final. El veredicto ejecutivo es ADVISORY: gate-check.mjs lo recomputa desde state.json. Lo que el Operador recibe al volver.",
   "required": [

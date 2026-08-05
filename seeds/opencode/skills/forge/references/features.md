@@ -1,4 +1,4 @@
-# Feature Matrix — Forge v1.0 (opencode port)
+# Feature Matrix — Forge
 
 The protocol is a set of features. The Orchestrator resolves each one at assembly time into `.swarm/state.json` (`features{}` with `on|off|auto` values + `feature_rationale[]` with the reason per feature), and **re-evaluates at every escalation trigger** (escalation.md) — resolution is not a one-time event.
 

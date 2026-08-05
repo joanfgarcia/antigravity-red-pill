@@ -1,4 +1,4 @@
-# Dynamic L0-L3 Escalation — Forge v1.0 (port of v3.2)
+# Dynamic L0-L3 Escalation — Forge
 
 v3.0 escalates **dynamically**: the Orchestrator (main loop) picks an initial level by scoring, then **raises or lowers during execution** based on what happens. Escalation adjusts parallelism and redundancy — **never the gates**: the 9 Zero-Trust rules apply identically at every level.
 
@@ -95,9 +95,9 @@ Extra diversity recommended at L3: vary effort between refuters (judge always at
 
 ---
 
-## EXHAUSTED vs INTERRUPTED — what fires what (v3.2)
+## EXHAUSTED vs INTERRUPTED — what fires what
 
-> **Lesson from the brain post-mortem (2026-07):** when agents died from subscription/API limits, the workflow returned the phase as `EXHAUSTED` — indistinguishable from genuine failure. That would fire the anti-abandonment ladder (burning more agents against a dead API) when in reality it only required WAITING and resuming. Since v3.2 they are distinguished:
+> **Lesson from the brain post-mortem (2026-07):** when agents died from subscription/API limits, the workflow returned the phase as `EXHAUSTED` — indistinguishable from genuine failure. That would fire the anti-abandonment ladder (burning more agents against a dead API) when in reality it only required WAITING and resuming. They are now distinguished:
 
 | Phase status | Meaning | Orchestrator response |
 |---|---|---|

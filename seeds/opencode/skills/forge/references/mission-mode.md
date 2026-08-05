@@ -1,4 +1,4 @@
-# Mission Mode — Running huge plans non-stop (opencode port)
+# Mission Mode — Running huge plans non-stop
 
 > **Goal:** the Operator hands over an implementation plan of 15+ phases, says "full mission" and returns hours later to find the plan executed top-down, verified, with the best decisions taken and documented, and a final report where the ONLY pending items are punctual human interventions with exact instructions.
 
@@ -23,7 +23,7 @@ Mission Mode is **orthogonal to the ladder**: it mounts on L3 and adds seven pil
 
 ## Pillar 2 — Canonical execution mode + per-task checkpoints (guarantee of reaching the end)
 
-The guarantee of completing a very long mission is not "an infinite session": it is that **no failure can lose work or context**. The brain mission post-mortem (2026-07, 19 blocks) proved that the full Zero-Trust cycle inside ONE workflow (high-effort implementor + validator + smoke + 5-lens panel × up to 5 iterations × 2+ phases) consumes hundreds of thousands of tokens, **does not fit in a session window** and dies halfway: port zombies, eternally RUNNING workflows, disk ≠ state.json. The hot-applied solution (decision D-12 of that mission) is since v3.2 the **canonical mode**:
+The guarantee of completing a very long mission is not "an infinite session": it is that **no failure can lose work or context**. The brain mission post-mortem (2026-07, 19 blocks) proved that the full Zero-Trust cycle inside ONE workflow (high-effort implementor + validator + smoke + 5-lens panel × up to 5 iterations × 2+ phases) consumes hundreds of thousands of tokens, **does not fit in a session window** and dies halfway: port zombies, eternally RUNNING workflows, disk ≠ state.json. The hot-applied solution (decision D-12 of that mission) is the **canonical mode**:
 
 **Canonical mode (default in every mission):**
 - **ONE implementor per task**, launched as a background `task` subagent (high effort, worktree if it mutates files in parallel — O4). The main loop stays free while it works (Pillar 4).

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-# usage-sentinel.py — Forge (opencode port) — Background watch loop.
+# usage-sentinel.py — Forge — Background watch loop.
 #
-# OS-agnostic replacement of the Claude Code Monitor tool (and of the shell
-# sentinel of v1.0): Python stdlib ONLY (json/os/subprocess/time/datetime).
+# OS-agnostic sentinel for the usage watch: Python stdlib ONLY
+# (json/os/subprocess/time/datetime).
 # Runs on Linux, macOS and Windows with the same contract.
 #
 # Contract with the harness:

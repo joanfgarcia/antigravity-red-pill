@@ -2,8 +2,7 @@
 version: 1.3.0
 name: forge
 description: >-
-  Multi-agent Zero-Trust execution composer (opencode port of swarm_team v3.4).
-  Orchestrates 10 composable role pieces (implementor, validator, smoke,
+  Multi-agent Zero-Trust execution composer. Orchestrates 10 composable role pieces (implementor, validator, smoke,
   devil's advocate panel, judge, doc anchor, QA, triage) with JSON contracts
   validated, dynamic L0-L3 escalation, self-accounting usage ledger, mission
   mode for huge plans (15+ phases) with controlled stop, and a feature matrix
@@ -22,8 +21,7 @@ description: >-
 
 > Team motto: *"Verifying is executing. If you did not execute it, you did not verify it."*
 
-> This is the opencode port of the canonical Claude Code skill (swarm_team v3.4,
-> upstream in the-luggage repo). Port deltas: see `references/PORT_NOTES.md`.
+> Design history and versioned deltas: `references/PORT_NOTES.md`.
 
 ## 1. Four non-negotiable premises
 
@@ -180,7 +178,7 @@ Rules do not change with level: they apply identically from L0 to L3 and mission
 |-------------|--------|---------|
 | **opencode** | ✅ CANONICAL — task subagents, parallel calls, background tasks, Python sentinel (`usage-sentinel.py`), headless `cycle-run.mjs` | `references/runtime-adapters/opencode.md` |
 | **red-pill Job Manager** | 🔀 Federation channel (v1.3.0) — every headless role runs as an `agentic_job` (sabor A) or a full mission as a resumable `forge_job` (sabor B, **transferable control**), via `job_manager_api` MCP + recipes per role, `mission_id` isolation | `references/runtime-adapters/red-pill.md` |
-| **Claude Code** | 📦 Legacy upstream v3.4 — reference only | `references/runtime-adapters/claude-code.md` (upstream) |
+| **Claude Code** | 📦 Alternate runtime — reference only | `references/runtime-adapters/claude-code.md` |
 
 ## 9. Closing checklist (Final Gate)
 

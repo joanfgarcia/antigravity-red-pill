@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// cycle-run.mjs — Forge (opencode port) — headless L2 burst driver.
+// cycle-run.mjs — Forge — headless L2 burst driver.
 //
 // Short-burst executor for L2 (escalation.md): runs the phase cycle OUTSIDE
 // the main loop via cold-context `opencode run --agent <role> --auto`

@@ -1,5 +1,5 @@
 {
-  "$id": "azrael://swarm_team/v3/devil_refutation",
+  "$id": "redpill://forge/v3/devil_refutation",
   "type": "object",
   "required": [
     "role",

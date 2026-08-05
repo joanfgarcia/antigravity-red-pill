@@ -1,4 +1,4 @@
-# The 9 Zero-Trust Rules — Forge v1.0 (opencode port of v3.2)
+# The 9 Zero-Trust Rules — Forge
 
 > Team motto: *"Verifying is executing. If you did not execute it, you did not verify it."*
 
@@ -96,7 +96,7 @@ When a system has multiple environments/contexts, ALL are verified separately.
 - Global config and per-project config → verify BOTH
 - The Devil's Advocate actively asks: *"Are there more contexts we have not considered?"*
 
-**Shared infrastructure (v3.2, canonizes decision D-11 of the 2026-07 brain mission):** any schema or state change on infrastructure others use (shared DEV DB, queues, brokers) — e.g. Flyway migrations — is validated FIRST in an isolated ephemeral environment (Testcontainers / docker) applying the full chain; **only after green** does it touch the shared environment. A half-failed migration on the shared DEV DB blocks every developer and pod.
+**Shared infrastructure (canonizes decision D-11 of the 2026-07 brain mission):** any schema or state change on infrastructure others use (shared DEV DB, queues, brokers) — e.g. Flyway migrations — is validated FIRST in an isolated ephemeral environment (Testcontainers / docker) applying the full chain; **only after green** does it touch the shared environment. A half-failed migration on the shared DEV DB blocks every developer and pod.
 
 **Enforcement:** dedicated `env_segregation` lens in the adversarial panel (always present from L2).
 
@@ -137,7 +137,7 @@ When a system is designed to run on **multiple platforms/IDEs**, verify ALL have
 > [!WARNING]
 > This documents the incident (May 2026) that motivated v2.0. Read it to understand WHY the Zero-Trust rules exist.
 
-**Context:** Integration of Claude Desktop (now-retired environment) with the Azrael ecosystem (MCPs, configs, scripts).
+**Context:** Integration of a desktop agent harness (now-retired environment) with the workspace MCP ecosystem (MCPs, configs, scripts).
 
 **What happened:**
 1. The v1.0 team reported `55/55 PASS` on the test battery

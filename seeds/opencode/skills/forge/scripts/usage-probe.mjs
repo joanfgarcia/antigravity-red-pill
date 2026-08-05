@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// usage-probe.mjs — Forge (opencode port) — Usage probe (0 tokens).
+// usage-probe.mjs — Forge — Usage probe (0 tokens).
 //
 // Provider-agnostic replacement for check-usage.py (Claude-only OAuth probe).
 // Primary signal: the self-accounting window ledger persisted in state.json

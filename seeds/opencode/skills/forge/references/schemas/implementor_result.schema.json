@@ -1,5 +1,5 @@
 {
-  "$id": "azrael://swarm_team/v3/implementor_result",
+  "$id": "redpill://forge/v3/implementor_result",
   "type": "object",
   "required": [
     "role",

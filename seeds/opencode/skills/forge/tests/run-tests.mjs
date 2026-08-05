@@ -12,13 +12,14 @@
 import { readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const BUNDLE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SCRIPTS = join(BUNDLE, 'scripts');
 const SCHEMAS = join(BUNDLE, 'references', 'schemas');
 const GOLD = join(BUNDLE, 'tests', 'goldsets');
-const TMP = '/tmp/opencode/swarm-test/suite-run';
+const TMP = join(tmpdir(), 'forge-skill-tests');
 
 const SCHEMA_BY_KIND = {
   implementor: 'implementor_result', validator: 'validator_verdict', smoke: 'smoke_report',

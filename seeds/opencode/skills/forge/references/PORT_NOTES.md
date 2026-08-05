@@ -1,28 +1,15 @@
-# Port Notes — swarm_team v3.4 (Claude Code) → forge v1.0 (opencode)
+# Design Notes — Forge
 
-> Purpose: document every delta so the port is auditable and re-portable to any future harness. The protocol (schemas, gate, rules, ladder, mission pillars) is IDENTICAL; only the mechanism changes. Technical English applies to all authored files of this bundle.
+> Purpose: document the design evolution and every versioned delta so the
+> bundle is auditable. Technical English applies to all authored files of this
+> bundle.
 
-## What was copied verbatim (zero changes)
+## Design lineage
 
-- `references/schemas/*.schema.json` + `common.defs.json` — the 9 contracts + shared defs (self-contained `$defs`, no URI registry). Description strings are metadata only: validators ignore them; they remain in the original Spanish.
-- `scripts/gate-check.mjs` — deterministic gate (7 checks, 10 in mission), anti-trivial evidence regex.
-- `scripts/render-artifacts.mjs` — .md artifact renderer.
-- `scripts/validate-report.mjs` — NEW, zero-dependency JSON-Schema-subset runtime validator (port of the harness's StructuredOutput validation). Supports: type/const/enum/required/properties/additionalProperties/items/minItems/minLength/maxLength/pattern/minimum/allOf/if-then/$defs+$ref. Tested 14/14 against the 9 original schemas (valid + invalid fixtures).
-- `scripts/usage-probe.mjs` — NEW, provider-agnostic replacement for `check-usage.py` (which stays upstream, Claude-only): ledger-first (always available, no OAuth/network), optional `SWARM_USAGE_HOOK` external meter. Exit 0 CONTINUE / 2 STOP / 1 error; `decision:"UNKNOWN"` = fail-open. Tested: CONTINUE / STOP / UNKNOWN paths.
-- `scripts/usage-sentinel.py` — REWRITTEN (v1.1): same 93%/5-min/single-shot contract, but the shell loop (v1.0, `usage-sentinel.sh`) is now **Python stdlib only** (json/os/subprocess/time/datetime) — runs on Linux, macOS and Windows with identical behavior. The OAuth probe call to `check-usage.py` is a `node usage-probe.mjs` call; background launch is `nohup python3 ... &` (or the harness's background Bash tool). Tested: fires at threshold (writes `.swarm/STOP_REQUESTED.json` + one line + exits), silent below threshold, retires when `mission_status != RUNNING`, flag single-use.
-
-## Mechanism mapping (CC → opencode)
-
-| Concept | Claude Code v3.4 | opencode v1.0 |
-|---------|------------------|---------------|
-| Orchestrator | main loop, never subagent | SAME |
-| Roles as agents | `Agent` tool + `StructuredOutput` schema | `task` subagents (`~/.config/opencode/agents/swarm-*.md`, hidden) + `validate-report.mjs` (no runtime schema API) |
-| Parallel panel | `parallel()` | N `task` calls in a single message |
-| Background long steps | `Agent`/`Bash` with `run_in_background` | `task` with background + background Bash |
-| Workflow (phase-cycle/adversarial-panel) | `Workflow` tool (JS graphs, resumeFromRunId, budget) | No Workflow tool → main-loop cycle + headless driver `scripts/cycle-run.mjs` (short bursts only) |
-| Monitor (sentinel) | `Monitor` tool, ~0 tokens, in-app | Background process (Python stdlib, os-agnostic) of the session + orchestrator polls `.swarm/STOP_REQUESTED.json` (no notification channel) |
-| Usage probe | `check-usage.py` (OAuth) | `usage-probe.mjs` (ledger-first; hook optional) |
-| Auto-resume | Native scheduled tasks (`~/.claude/scheduled-tasks/`, persist across app restarts) | **Experimental, OPT-IN, off by default**: one-shot OS task — `systemd-run --user --on-calendar`/`at` (Linux), launchd (macOS), `schtasks` (Windows) — launching `opencode run "<resume>" --auto`; never scheduled without observed `window_reset_at`; Operator confirmed per stop |
+Forge is a zero-trust multi-agent composer designed for opencode and the
+red-pill ecosystem. Its protocol kernel — schemas, deterministic gate, nine
+zero-trust rules, escalation ladder, mission pillars — is the stable contract;
+the mechanism layer adapts per harness (`references/runtime-adapters/`).
 
 ## Feature set v1.0 (resolved at assembly, re-evaluated at escalation triggers)
 
@@ -31,13 +18,13 @@
 - Optional F1-F3 (off by default, operator-pinned possible): askBoundary, usageAudit, humanApprovalMarkers (`-approved.md`).
 - **Rule**: `off` never skips a gate check — degrades the mechanism, not the verification semantics.
 
-## Ported ecosystem features (web survey 2026-07)
+## Ecosystem-informed features (web survey 2026-07)
 
 1. **Multi-model heterogeneous panel** (inspired by `opencode-agentic-workflows` — ABIvan — consensus of free reviewers + consolidator): per-lens `model` override in `task` calls; aggregation stays deterministic (escalation.md). Decided by orchestrator per lens, default `auto`.
 2. **Git-worktree isolation** (inspired by `opencode-orchestrator` — agnusdei1207 — parallel worktree isolation): feature O4; helper `scripts/worktree.mjs`; merge only after the phase gate.
 3. **Verification nudge** (inspired by `opencode-swarm` — zaxbysauce — evidence-in-runtime): feature K5; before validation, ensure a non-trivial command ran (anti-grep list from gate check 6); if `commands_run` is empty/trivial, execute one first.
 
-## Gotchas verified in this port
+## Gotchas verified during development
 
 - **opencode skill name regex** is `[a-z0-9]+(-[a-z0-9]+)*` → directory/name `forge` (hyphen). The `name:` frontmatter must match the directory name.
 - **Cold-context subagents**: `task` starts with fresh context; ALL role context must be packed into the prompt. opencode subagents are also cold → the main-loop context contamination concern does not apply to role agents; it applies to the ORCHESTRATOR only (anchor on disk, not context).
@@ -50,7 +37,7 @@
 
 ## Red-pill packaging (seed)
 
-- Bundle seeds to `red-pill/seeds/opencode/skills/forge/` (+ `seeds/opencode/agents/swarm-*.md`).
+- Bundle seeds to `red-pill/seeds/opencode/skills/forge/` (+ `seeds/opencode/agents/forge-*.md`).
 - Extend `scripts/inject_opencode.py`: `deploy_skills()` currently copies ONLY `SKILL.md` → must full-copy (copytree) the skill dir; add `deploy_agents()`. Placeholder substitution applies only to `.md` files. Red-pill is a GUEST: only touches its marked regions of `opencode.jsonc`.
 - Backend `opencode` in `run_agent_task` = `opencode run --auto` (OpenCodeBridge) — validated; role prompts get the schema-instruction line (red-pill.md). **Since v1.3.0 the canonical path is `job_manager_api.job_submit` (`agentic_job`/`forge_job`); `run_agent_task` remains as the raw single-shot substrate.**
 
@@ -65,7 +52,7 @@
 
 - On this workstation only **opencode Zed** is enabled (API wallet, credit 0, Free models only). The `SWARM_USAGE_HOOK` contract is documented in `usage-sentinel.md` §2: one JSON line, `max_utilization` = WORST across the provider's windows (GO: 5h/weekly/monthly — the hook aggregates them).
 - Zed caveat: a wallet reading 0 credits with Free models available must report the FREE-tier quota, not the wallet — otherwise a false STOP fires. Ledger + cut-calibration is the active defense until a real meter endpoint is known.
-- Rename checklist (when the operator renames the skill): frontmatter `name`, directory name, `permission.task` pattern (`swarm-*`), agent filenames + references in SKILL.md/docs, red-pill seeds path + `inject_opencode.py` remove-list, and the future `/swarm` command alias.
+- Rename checklist (when the operator renames the skill): frontmatter `name`, directory name, `permission.task` pattern, agent filenames + references in SKILL.md/docs, red-pill seeds path + `inject_opencode.py` remove-list, and the future `/swarm` command alias.
 
 ## v1.3.0 — Job Manager federation + transferable control (2026-08-05, Operator request)
 
@@ -81,13 +68,12 @@
 2. **Drift-check fixed** (`inject_opencode.py`): `_frontmatter_version()` now compiles `_VERSION_RE` with `re.MULTILINE` (the old `search(head, re.MULTILINE)` passed the flag as *pos*, so it always returned `None` and drift was never detected); `check_version_drift()` now takes a `kind` param and `main()` passes the correct seeds subdirs (`skills/`, `agents/`) instead of the `seeds/opencode` root.
 3. **Residue fixed**: `runtime-adapters/opencode.md` still referenced `~/.config/opencode/agents/swarm-*.md` after the rename → now `forge-*.md`.
 
-## v1.2.0 — Rename to Forge, decomposition, versioning, Scout (2026-08-05, Operator-approved)
+## v1.2.0 — Decomposition, versioning, Scout (2026-08-05, Operator-approved)
 
-1. **Rename `swarm-team` → `forge`** (executed; no `-team` — Operator's pick). The rename checklist (previously documented here) is now HISTORY: frontmatter `name: forge`, dir `skills/forge/`, agents `forge-*`, `permission.task` `forge-*` in opencode.jsonc, seeds path, injector remove-list (cleans legacy `swarm-*` too). Conceptual "swarm" terms survive as protocol vocabulary: `.swarm/` anchor dir, "swarm mode", "modo swarm".
-2. **Decomposition — composer + pieces**: `SKILL.md` is now the COMPOSER (assembly, cycle, gate, escalation, mission); each role is a versioned piece: opencode agent `forge-<rol>` (executable) + portable spec `references/roles/<rol>.md` (Agent Skills format — runnable from ANY harness/backend). Pieces are usable standalone. Schemas/gate/rules unchanged.
-3. **Versioning (semver, no repo federation — Operator decision)**: `version:` in frontmatter of every skill + agent (forge 1.2.0, scout 1.0.0). `inject_opencode.py` gains `check_version_drift()` — read-only audit comparing seed vs deployed frontmatter versions. Federation of repos is overkill for a solo operator; criterion to federate later: a second external collaborator or a second consumer.
-4. **Scout (new sibling skill, `skills/scout/`)**: analysis + self-discovery + satellite chips. Dual use: standalone (autonomous awakenings) and piece of the Forge composer. Chip = self-contained task `{id, location, standard_violated, evidence, suggested_action, priority, consent_level}` in `.swarm/chips.json`, dedup by rule+location, consent derived (never self-declared: critical/production/irreversible → `operator`). Chips execute with ONE Forge role — never the full team. Agent `forge-scout` (lens analyst). Validates with Forge's `validate-report.mjs` (single canonical validator).
-5. **Tests**: Forge suite 23 cases (15 schema incl. provenance-required, 5 gate, 3 triage); Scout mini-suite (2 chip fixtures, chip_valid/chip_invalid) using the Forge validator.
+1. **Decomposition — composer + pieces**: `SKILL.md` is now the COMPOSER (assembly, cycle, gate, escalation, mission); each role is a versioned piece: opencode agent `forge-<rol>` (executable) + portable spec `references/roles/<rol>.md` (Agent Skills format — runnable from ANY harness/backend). Pieces are usable standalone. Schemas/gate/rules unchanged.
+2. **Versioning (semver, no repo federation — Operator decision)**: `version:` in frontmatter of every skill + agent (forge 1.2.0, scout 1.0.0). `inject_opencode.py` gains `check_version_drift()` — read-only audit comparing seed vs deployed frontmatter versions. Federation of repos is overkill for a solo operator; criterion to federate later: a second external collaborator or a second consumer.
+3. **Scout (new sibling skill, `skills/scout/`)**: analysis + self-discovery + satellite chips. Dual use: standalone (autonomous awakenings) and piece of the Forge composer. Chip = self-contained task `{id, location, standard_violated, evidence, suggested_action, priority, consent_level}` in `.swarm/chips.json`, dedup by rule+location, consent derived (never self-declared: critical/production/irreversible → `operator`). Chips execute with ONE Forge role — never the full team. Agent `forge-scout` (lens analyst). Validates with Forge's `validate-report.mjs` (single canonical validator).
+4. **Tests**: Forge suite 23 cases (15 schema incl. provenance-required, 5 gate, 3 triage); Scout mini-suite (2 chip fixtures, chip_valid/chip_invalid) using the Forge validator.
 
 ## Per-vendor enablement policy (v1.2.0)
 
@@ -95,8 +81,8 @@ Enablement is PER-INSTANCE, never a design constant. Each machine/vendor picks i
 
 | Vendor / instance | Skills deployed | Note |
 |-------------------|-----------------|------|
-| opencode — this workstation (jgarcia, 2026-08) | forge + scout + anchors (RED_PILL.md) | Canonical runtime of the port |
-| Claude Code — this workstation | forge/scout NOT deployed; keeps upstream `swarm_team` v3.4 (the-luggage) as its runtime | **LOCAL DECISION of this instance** (operator, 2026-08-05): Claude already ships its own team skill; the port stays as reference (runtime-adapters/claude-code.md). Another machine/operator is free to deploy forge on Claude Code — the mechanism delta (Workflow tool, Monitor, StructuredOutput) is documented there |
+| opencode — this workstation (jgarcia, 2026-08) | forge + scout + anchors (RED_PILL.md) | Canonical runtime |
+| Claude Code — this workstation | forge/scout NOT deployed | **LOCAL DECISION of this instance** (operator, 2026-08-05): opencode is the canonical runtime; Claude Code can deploy the same bundle via the mechanism delta documented in `runtime-adapters/claude-code.md` |
 | Gemini (future) | GEMINI.md + per-harness seeds | Undecided; same rule: seeds per harness |
 
 Design rules:
@@ -115,16 +101,9 @@ Towards full harness-agnosticism (Operator's direction: never marry a client —
 4. **Fixture evidence**: `implementor_badprov_invalid` covers the provenance-required rule (15 schema cases in the suite; 23 total).
 5. **A2A deliberately NOT adopted (Operator stance)**: Google's A2A is on watch ("de reojo") — not convinced it becomes the de-facto standard; the local contract (schemas + ledger + report files) is already transport-independent and cheap to adapt. Revisit only if A2A shows durable traction.
 
-## Not ported (intentionally)
-
-- `check-usage.py` (OAuth, Claude-only) → usage-probe.mjs.
-- Workflow JS graphs (phase-cycle/adversarial-panel/full-mission) → main-loop cycle + cycle-run.mjs; full-mission graph stays discouraged upstream too.
-- `mission-watchdog.sh` (retired upstream 2026-07-28 by Operator order).
-- Native scheduled tasks → experimental opt-in OS one-shot (see above).
-
 ## External survey — tikalk/adlc-team-skills (2026-08-05, Operator request)
 
-ADLC (Agentic SDLC, Tikal) solves a DIFFERENT problem: team-rule knowledge (index + pull-on-demand) and spec-pipeline discipline (mission-brief). It has NO adversarial panel, NO evidence-mandatory schemas, NO deterministic gate, NO usage budget discipline — its close is "a human reviews the PR". swarms' core (verification that cannot lie) is not covered by it. Adopted from the survey (below); deliberately NOT adopted: "model picks the skill per step" (weakens determinism — this bundle's protocol is fixed, the model only executes).
+ADLC (Agentic SDLC, Tikal) solves a DIFFERENT problem: team-rule knowledge (index + pull-on-demand) and spec-pipeline discipline (mission-brief). It has NO adversarial panel, NO evidence-mandatory schemas, NO deterministic gate, NO usage budget discipline — its close is "a human reviews the PR". Forge's core (verification that cannot lie) is not covered by it. Adopted from the survey (below); deliberately NOT adopted: "model picks the skill per step" (weakens determinism — this bundle's protocol is fixed, the model only executes).
 
 ### Adopted: context-stuffing rationale (a)
 
@@ -132,7 +111,7 @@ Progressive disclosure (SKILL.md + references loaded on demand) is now an explic
 
 ### Adopted: self-test suite (b)
 
-`tests/` — regression goldsets (22 cases: 14 schema fixtures, 5 gate states covering checks 1–10, 3 triage) + `tests/run-tests.mjs` (self-locating runner). Every gate/schema change must update goldsets in the same commit. Mirrors ADLC's evals-as-code idea without importing their framework.
+`tests/` — regression goldsets + `tests/run-tests.mjs` (self-locating runner). Every gate/schema change must update goldsets in the same commit. Mirrors ADLC's evals-as-code idea without importing their framework.
 
 ### Adopted: supply-chain rule (c)
 

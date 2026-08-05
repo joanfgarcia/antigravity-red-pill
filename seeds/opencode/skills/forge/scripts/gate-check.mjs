@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// gate-check.mjs — Forge v3.2 — Gate determinista de cierre (7 checks, 10 en misión).
+// gate-check.mjs — Forge — Gate determinista de cierre (7 checks, 10 en misión).
 // El veredicto de los agentes es ADVISORY: este script RECOMPUTA el estado real desde .swarm/state.json.
 // Uso: node gate-check.mjs [path/al/state.json]   (default: .swarm/state.json)
 // Output: JSON { gate: "OPEN"|"CLOSED", verdict, violations[], summary } — exit 1 si CLOSED.
@@ -109,7 +109,7 @@ if (isMission) {
       violations.push(`Check 9: pending_human '${p.item || p.test_id}' sin instrucciones accionables`);
     }
   }
-  // Check 10 — higiene de procesos (v3.2): la misión no cierra con procesos registrados vivos
+  // Check 10 — higiene de procesos: la misión no cierra con procesos registrados vivos
   for (const p of (state.live_processes || [])) {
     if (p.status !== 'KILLED') {
       violations.push(`Check 10: proceso registrado sin matar: pid ${p.pid} (${p.command || '?'}${p.port ? `, puerto ${p.port}` : ''}) — la misión no cierra con zombis (controlled-stop.md §6)`);

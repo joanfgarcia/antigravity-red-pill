@@ -1,13 +1,13 @@
 #!/usr/bin/env node
-// validate-report.mjs — Forge (opencode port) — Role contract gate.
+// validate-report.mjs — Forge — Role contract gate.
 //
-// Replaces Claude Code's runtime StructuredOutput validation. Every role report
+// Runtime JSON-Schema validator for role reports. Every role report
 // emitted to .swarm/reports/ is checked against its JSON Schema BEFORE the
 // orchestrator trusts it. Advisory results survive only if the contract holds;
 // the deterministic gate (gate-check.mjs) recomputes the official verdict.
 //
 // Zero external dependencies. Supports the JSON-Schema subset used by the
-// swarm_team role schemas in references/schemas/:
+// Forge role schemas in references/schemas/:
 //   type, const, enum, required, properties, additionalProperties,
 //   items (schema or primitive), minItems, minLength, maxLength, pattern,
 //   minimum, allOf, if/then, $defs + $ref (#/$defs/<name>).

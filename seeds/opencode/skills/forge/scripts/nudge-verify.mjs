@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// nudge-verify.mjs — Forge (opencode port) — K5 verification nudge.
+// nudge-verify.mjs — Forge — K5 verification nudge.
 //
 // Deterministic check behind the "verification = execution" nudge (Rule 1,
 // feature K5): before a validator/smoke step runs, the orchestrator (or the

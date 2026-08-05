@@ -153,7 +153,7 @@ def deploy_skills(skills_src_dir: str, skills_dest_dir: str, variables: dict, ba
 	"""Deploy opencode skills with resolved placeholders. Returns count deployed.
 
 	Full-directory copy (SKILL.md + references/ + scripts/ + schemas/), so
-	multi-file skills like swarm-team ship complete. Placeholder resolution
+	multi-file skills like forge ship complete. Placeholder resolution
 	applies ONLY to .md files; scripts/binaries copy byte-identical.
 	"""
 	deployed = 0
@@ -393,15 +393,15 @@ def main():
 					logger.info(f"✓ opencode:{anchor} removed [{instructions_path}]")
 		# Remove skills
 		skills_dir = os.path.join(config_dir, "skills")
-		for skill_name in ["sovereign_handshake", "agent_core", "knowledge_access", "forge", "scout", "swarm-team"]:
+		for skill_name in ["sovereign_handshake", "agent_core", "knowledge_access", "forge", "scout"]:
 			skill_path = os.path.join(skills_dir, skill_name)
 			if os.path.isdir(skill_path):
 				shutil.rmtree(skill_path)
 				logger.info(f"✓ Skill '{skill_name}' removed")
-		# Remove agents (forge-*; legacy swarm-* from pre-1.2.0 installs)
+		# Remove agents (forge-*)
 		agents_dir = os.path.join(config_dir, "agents")
 		for entry in os.listdir(agents_dir) if os.path.isdir(agents_dir) else []:
-			if (entry.startswith("forge-") or entry.startswith("swarm-")) and entry.endswith(".md"):
+			if entry.startswith("forge-") and entry.endswith(".md"):
 				os.remove(os.path.join(agents_dir, entry))
 				logger.info(f"✓ Agent '{entry}' removed")
 		logger.info("Red Pill removed from opencode.")

@@ -1,5 +1,5 @@
 {
-  "$id": "azrael://swarm_team/v3/validator_verdict",
+  "$id": "redpill://forge/v3/validator_verdict",
   "type": "object",
   "required": [
     "role",

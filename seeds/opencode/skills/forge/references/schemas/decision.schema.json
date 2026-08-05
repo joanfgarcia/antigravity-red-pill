@@ -1,5 +1,5 @@
 {
-  "$id": "azrael://swarm_team/v3/decision",
+  "$id": "redpill://forge/v3/decision",
   "type": "object",
   "$comment": "MODO MISIÓN — Contrato de autonomía: toda decisión que en modo normal sería una pregunta al Operador se toma con la mejor opción y se registra aquí. Nunca se decide en silencio.",
   "required": ["id", "question", "options_considered", "chosen", "rationale", "reversible", "sources_consulted"],

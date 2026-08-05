@@ -1,12 +1,12 @@
-# Usage Sentinel — Forge v1.0 (opencode port of v3.4)
+# Usage Sentinel — Forge
 
-> **Fully replaces the external watchdog** (`mission-watchdog.sh` + launchd/systemd), **retired in v3.4** (Operator order 2026-07-28: it never worked and left zombie processes). Single source of the consumption-watch mechanism and of automatic resumption. The stop protocol itself (what to do when stopping, the prompt, reconciliation) still lives in [`controlled-stop.md`](controlled-stop.md).
+> **Fully replaces the external watchdog** (`mission-watchdog.sh` + launchd/systemd), **retired** (Operator order 2026-07-28: it never worked and left zombie processes). Single source of the consumption-watch mechanism and of automatic resumption. The stop protocol itself (what to do when stopping, the prompt, reconciliation) still lives in [`controlled-stop.md`](controlled-stop.md).
 
 ---
 
 ## §0 — Why the external watchdog died (post-mortem 2026-07-28, Operator order)
 
-The v3.1–v3.3 watchdog lived **outside** Claude Code: a `.sh` loaded in launchd (macOS) or systemd (Linux) polling the mission state every 15 min and relaunching `claude -p` headless. On paper it was the only piece able to survive the session's death. In practice, after three real missions (brain, babel, vetinari):
+The v3.1–v3.3 watchdog lived **outside** the harness: a `.sh` loaded in launchd (macOS) or systemd (Linux) polling the mission state every 15 min and relaunching `claude -p` headless. On paper it was the only piece able to survive the session's death. In practice, after three real missions (brain, babel, vetinari):
 
 | Observed problem | Consequence |
 |---|---|
@@ -15,9 +15,9 @@ The v3.1–v3.3 watchdog lived **outside** Claude Code: a `.sh` loaded in launch
 | Uninstall depended on the Orchestrator reaching the end alive | A dry cut = permanent orphan agent |
 | Impossible to debug from inside the session | Silent failures (minimal PATH, `AbandonProcessGroup`, probes) |
 
-**Operator decision (2026-07-28):** *"drop the external-process machinery around Claude Code, since it does not seem to work and besides accumulating dead processes and eating resources I do not see it serving any purpose"*. Watch moves **inside** the app, and automatic resumption to native scheduled tasks.
+**Operator decision (2026-07-28):** *"drop the external-process machinery, since it does not seem to work and besides accumulating dead processes and eating resources I do not see it serving any purpose"*. Watch moves **inside** the app, and automatic resumption to native scheduled tasks.
 
-**Port decision (v1.0, opencode):** opencode has no Monitor tool and no native persistent scheduled tasks. The port maps: sentinel → **background process of this session** (Python stdlib, os-agnostic), auto-resumption → **experimental one-shot OS task** (systemd/`at` on Linux, launchd on macOS, `schtasks` on Windows) launching `opencode run "<prompt>" --auto`, **OPT-IN and off by default**. Everything else (93%, ledger, flag, on-screen prompt) is unchanged.
+**Design decision (v1.0, opencode):** opencode has no Monitor tool and no native persistent scheduled tasks. The mechanism maps: sentinel → **background process of this session** (Python stdlib, os-agnostic), auto-resumption → **experimental one-shot OS task** (systemd/`at` on Linux, launchd on macOS, `schtasks` on Windows) launching `opencode run "<prompt>" --auto`, **OPT-IN and off by default**. Everything else (93%, ledger, flag, on-screen prompt) is unchanged.
 
 ## §1 — The Sentinel: a background loop, not a subagent
 
@@ -59,7 +59,7 @@ start "" /b python <skill>\scripts\usage-sentinel.py <project_dir>
 
 ## §2 — 93% threshold and the next-step reservation
 
-**Before (v3.3):** OAuth probe at 98% (2% margin: insufficient to execute the stop) and ledger at 80% (too conservative, stopped missions with plenty of margin). **Now (v3.4): single 93% threshold** — Operator order («stop with sufficient margin, for example at 93%»). The remaining 7% is what is needed to checkpoint, kill processes, schedule the resumption and write the report before the client cuts mid-way.
+**Before:** OAuth probe at 98% (2% margin: insufficient to execute the stop) and ledger at 80% (too conservative, stopped missions with plenty of margin). **Now: single 93% threshold** — Operator order («stop with sufficient margin, for example at 93%»). The remaining 7% is what is needed to checkpoint, kill processes, schedule the resumption and write the report before the client cuts mid-way.
 
 ### Hook contract (provider-agnostic meter)
 
@@ -102,7 +102,7 @@ If the flag exists → controlled stop of `controlled-stop.md` §3 (`PAUSED_USAG
 
 ## §4 — Automatic resumption: experimental OPT-IN one-shot OS task
 
-The session dies with the limit and **no internal thread survives that** — to be honest: that is why the 93% margin is the real guarantee, not the resumption. For automatic return, the port offers ONE experimental mechanism (the upstream native scheduled tasks do not exist in opencode). It is a **single-shot** task, per-platform (the sentinel and the probe are already cross-platform; only the scheduler differs):
+The session dies with the limit and **no internal thread survives that** — to be honest: that is why the 93% margin is the real guarantee, not the resumption. For automatic return, Forge offers ONE experimental mechanism (the native scheduled tasks do not exist in opencode). It is a **single-shot** task, per-platform (the sentinel and the probe are already cross-platform; only the scheduler differs):
 
 ```bash
 # Linux (systemd user unit — survives only while the user session lives):

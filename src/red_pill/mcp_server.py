@@ -372,8 +372,7 @@ async def handle_search_memory_research(arguments: Dict[str, Any]):
 	description=(
 		"Run a single agentic task through an agent backend (claude/agy/opencode/local/local-tools) and return the result. "
 		"Generic execution substrate (mechanism): the CALLER supplies the role prompt, target workspace, "
-		"model and effort (policy) — red-pill just executes. Used by skills like swarm_team to launch each "
-		"role. async_mode=true (default) drops the result in the Minion Inbox (poll via check_minion_inbox); "
+		"model and effort (policy) — red-pill just executes. async_mode=true (default) drops the result in the Minion Inbox (poll via check_minion_inbox); "
 		"async_mode=false waits and returns the result inline (only for short tasks — MCP call blocks)."
 	),
 	schema={

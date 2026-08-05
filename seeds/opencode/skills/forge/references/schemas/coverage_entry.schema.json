@@ -1,5 +1,5 @@
 {
-  "$id": "azrael://swarm_team/v3/coverage_entry",
+  "$id": "redpill://forge/v3/coverage_entry",
   "type": "object",
   "required": ["id", "requirement", "status"],
   "additionalProperties": false,

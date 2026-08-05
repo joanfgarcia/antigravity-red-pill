@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// worktree.mjs — Forge (opencode port) — git-worktree isolation helper.
+// worktree.mjs — Forge — git-worktree isolation helper.
 //
 // Feature O4 (auto-resolved on when >=2 implementors mutate files in
 // parallel). Each parallel implementor works in an isolated worktree created
