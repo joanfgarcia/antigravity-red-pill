@@ -821,7 +821,7 @@ def test_forge_job_steps_to_completion_with_checkpoint(tmp_path, monkeypatch):
 	from red_pill.jobs.drivers.forge import ForgeJobDriver
 
 	ws = tmp_path / "ws"
-	(ws / ".swarm" / "reports").mkdir(parents=True)
+	(ws / ".cell" / "reports").mkdir(parents=True)
 	bridge = _ForgeBridge(str(ws))
 	monkeypatch.setattr("red_pill.swarm.bridges.factory.create_bridge", lambda b=None, **kw: bridge)
 
@@ -837,10 +837,10 @@ def test_forge_job_steps_to_completion_with_checkpoint(tmp_path, monkeypatch):
 	o2 = d.step(payload, o1.new_checkpoint)
 	assert o2.completed and o2.new_checkpoint["step_index"] == 2
 	# Telemetría pública (espejo, no autoritativa)
-	status = (ws / ".swarm" / "forge_job_status.json").read_text()
+	status = (ws / ".cell" / "forge_job_status.json").read_text()
 	assert '"step_index": 2' in status and '"status": "completed"' in status
 	# Reportes escritos por el agente en el workspace
-	assert (ws / ".swarm" / "reports" / "implementor-F1.json").is_file()
+	assert (ws / ".cell" / "reports" / "implementor-F1.json").is_file()
 
 
 def test_forge_job_resume_from_handoff_checkpoint(tmp_path, monkeypatch):
@@ -848,7 +848,7 @@ def test_forge_job_resume_from_handoff_checkpoint(tmp_path, monkeypatch):
 	from red_pill.jobs.drivers.forge import ForgeJobDriver
 
 	ws = tmp_path / "ws"
-	(ws / ".swarm" / "reports").mkdir(parents=True)
+	(ws / ".cell" / "reports").mkdir(parents=True)
 	bridge = _ForgeBridge(str(ws))
 	monkeypatch.setattr("red_pill.swarm.bridges.factory.create_bridge", lambda b=None, **kw: bridge)
 
@@ -867,7 +867,7 @@ def test_forge_job_continue_on_error_warns_not_burns_breaker(tmp_path, monkeypat
 	from red_pill.jobs.drivers.forge import ForgeJobDriver
 
 	ws = tmp_path / "ws"
-	(ws / ".swarm" / "reports").mkdir(parents=True)
+	(ws / ".cell" / "reports").mkdir(parents=True)
 
 	class _Broken(_ForgeBridge):
 		def prompt(self, text, **kwargs):
@@ -889,7 +889,7 @@ def test_forge_job_on_fail_stop_raises(tmp_path, monkeypatch):
 	from red_pill.jobs.drivers.forge import ForgeJobDriver
 
 	ws = tmp_path / "ws"
-	(ws / ".swarm" / "reports").mkdir(parents=True)
+	(ws / ".cell" / "reports").mkdir(parents=True)
 
 	class _Broken(_ForgeBridge):
 		def prompt(self, text, **kwargs):

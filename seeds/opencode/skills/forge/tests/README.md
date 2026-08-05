@@ -25,11 +25,11 @@ Exit 0 = all green, 1 = any failure. Runs against the bundle it lives in (live c
 
 ## Goldset format
 
-- Gate: `{ "expect": { "gate", "verdict", "violations_include[]" }, "state": {...} }` — `state` is a full `.swarm/state.json`.
+- Gate: `{ "expect": { "gate", "verdict", "violations_include[]" }, "state": {...} }` — `state` is a full `.cell/state.json`.
 - Triage: `{ "expect_valid": bool, "expect_recommendation"?, "instance": {...} }` — `instance` is a `triage_plan` payload.
 - Schemas: `schemas-fixtures.json` — map of `{kind}_{valid|invalid}` → instance.
 
 ## Rules
 
 - A gate check change REQUIRES a goldset update in the same commit (red or green, never removed silently).
-- Tests are dev tooling, not runtime protocol: the gate never runs tests during a swarm.
+- Tests are dev tooling, not runtime protocol: the gate never runs tests during a cell.

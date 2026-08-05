@@ -114,16 +114,16 @@ const { spawnSync } = await import('node:child_process');
 const py = process.platform === 'win32' ? 'python' : 'python3';
 {
   const proj = join(TMP, 'sentinel-proj');
-  mkdirSync(join(proj, '.swarm'), { recursive: true });
+  mkdirSync(join(proj, '.cell'), { recursive: true });
 
   // D1: fires at threshold — writes STOP_REQUESTED.json, one line, exit 0.
   {
-    writeFileSync(join(proj, '.swarm', 'state.json'), JSON.stringify({
+    writeFileSync(join(proj, '.cell', 'state.json'), JSON.stringify({
       mission_status: 'RUNNING',
       usage_ledger: { spent_tokens: 95, capacity_est: 100 },
     }));
     const r = spawnSync(py, [sentinelPy, proj, '--threshold', '93', '--interval', '1'], { encoding: 'utf8', timeout: 30000 });
-    const flag = join(proj, '.swarm', 'STOP_REQUESTED.json');
+    const flag = join(proj, '.cell', 'STOP_REQUESTED.json');
     const hasFlag = readFileSync(flag, 'utf8') || '';
     let ok = r.status === 0 && r.stdout.includes('SENTINEL-STOP') && hasFlag.includes('"utilization": 95');
     let detail = ok ? '' : `status=${r.status} out=${JSON.stringify(r.stdout)} err=${r.stderr} flag=${hasFlag}`;
@@ -132,12 +132,12 @@ const py = process.platform === 'win32' ? 'python' : 'python3';
 
   // D2: silent below threshold — no flag, no stdout, keeps running until killed.
   {
-    writeFileSync(join(proj, '.swarm', 'state.json'), JSON.stringify({
+    writeFileSync(join(proj, '.cell', 'state.json'), JSON.stringify({
       mission_status: 'RUNNING',
       usage_ledger: { spent_tokens: 10, capacity_est: 100 },
     }));
     try {
-      rmSync(join(proj, '.swarm', 'STOP_REQUESTED.json'), { force: true });
+      rmSync(join(proj, '.cell', 'STOP_REQUESTED.json'), { force: true });
     } catch {}
     let silent = false;
     try {
@@ -151,7 +151,7 @@ const py = process.platform === 'win32' ? 'python' : 'python3';
 
   // D3: retires by itself when mission_status stops being RUNNING.
   {
-    writeFileSync(join(proj, '.swarm', 'state.json'), JSON.stringify({
+    writeFileSync(join(proj, '.cell', 'state.json'), JSON.stringify({
       mission_status: 'COMPLETE',
       usage_ledger: { spent_tokens: 10, capacity_est: 100 },
     }));

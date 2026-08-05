@@ -12,7 +12,7 @@ Composable role piece of the Forge skill. Executable unit in opencode: the `forg
 Once, at Step 5, after the last phase's panel. Also usable standalone to QA any completed work against a plan.
 
 ## Cold-context prompt packing (mandatory)
-1. The path to `.swarm/state.json` — read the preconditions YOURSELF before testing (assumptions open, coverage uncovered).
+1. The path to `.cell/state.json` — read the preconditions YOURSELF before testing (assumptions open, coverage uncovered).
 2. The full plan reference (anchor plan path) and the acceptance criteria.
 3. The absolute `<report_path>` and the schema path.
 

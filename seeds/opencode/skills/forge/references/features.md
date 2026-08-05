@@ -1,6 +1,6 @@
 # Feature Matrix — Forge
 
-The protocol is a set of features. The Orchestrator resolves each one at assembly time into `.swarm/state.json` (`features{}` with `on|off|auto` values + `feature_rationale[]` with the reason per feature), and **re-evaluates at every escalation trigger** (escalation.md) — resolution is not a one-time event.
+The protocol is a set of features. The Orchestrator resolves each one at assembly time into `.cell/state.json` (`features{}` with `on|off|auto` values + `feature_rationale[]` with the reason per feature), and **re-evaluates at every escalation trigger** (escalation.md) — resolution is not a one-time event.
 
 **The one rule that preserves Zero-Trust:** a feature set to `off` NEVER skips a gate check. It degrades the MECHANISM, not the control: the step that a missing agent would do is executed by the orchestrator inline (or by a deterministic script), and what was not executed is shown in the report as unclaimed (never as PASS). Verdicts and checks remain exactly the same.
 
@@ -8,7 +8,7 @@ The protocol is a set of features. The Orchestrator resolves each one at assembl
 
 | ID | Feature | Class | Default | What it is |
 |----|---------|-------|---------|------------|
-| K1 | Disk anchoring | KERNEL | fixed | `.swarm/state.json` as source of truth, checkpoints after every task, `disk_facts` captured with git (controlled-stop.md §5). Not resolvable: always on |
+| K1 | Disk anchoring | KERNEL | fixed | `.cell/state.json` as source of truth, checkpoints after every task, `disk_facts` captured with git (controlled-stop.md §5). Not resolvable: always on |
 | K2 | Mandatory evidence + `validate-report.mjs` | KERNEL | fixed | Every report validated against its schema before trusting (Rule 6). **v3.1 provenance**: every report carries `provenance` (harness/provider/model/timestamp) — the role emits it, or the orchestrator STAMPS it at consolidation; a report never lands in the ledger without provenance. Not resolvable |
 | K3 | Deterministic gate + render | KERNEL | fixed | `gate-check.mjs` recomputes the official verdict (7 checks, 10 in mission); `render-artifacts.mjs` regenerates .md artifacts. Not resolvable |
 | K4 | Assumption Registry + Plan Coverage Matrix | KERNEL | fixed | Rules 2 and 3, deterministic reducer, gate checks 2/3/4. Not resolvable |
@@ -35,4 +35,4 @@ The protocol is a set of features. The Orchestrator resolves each one at assembl
 4. **Every resolution writes `feature_rationale[]`**: `{feature: "O4", value: "on", reason: "2 implementors parallel on F2"}`. The final report includes the full matrix — the Operator can audit why the team had the shape it had.
 5. **Escalation re-evaluation**: on every `escalate()`/`deescalate()`, re-resolve O2 (panel size), O4 (parallel isolation) and O7 (anchor need). The other features stay unless the scope changed.
 6. **`off` never skips checks**: the corresponding gate check still runs with the degraded mechanism (inline by the orchestrator or by script); if the mechanism cannot produce evidence, the report shows the item unclaimed. Feature flags change EXECUTION SHAPE, never VERIFICATION SEMANTICS.
-7. **The activation gate is a feature**: `NOT_NEEDED` from Triage is recorded (`triage.recommendation`) and the swarm protocol does not engage. Overriding it is `--force` — the Operator's explicit call, never the orchestrator's.
+7. **The activation gate is a feature**: `NOT_NEEDED` from Triage is recorded (`triage.recommendation`) and the cell protocol does not engage. Overriding it is `--force` — the Operator's explicit call, never the orchestrator's.

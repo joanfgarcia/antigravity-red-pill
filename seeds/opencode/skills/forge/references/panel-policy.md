@@ -38,7 +38,7 @@ Each lens may declare a `backend` in addition to `model`. The orchestrator assig
 
 Rules:
 
-1. **The contract never changes**: the cross-provider lens emits the SAME schema-conforming JSON to `.swarm/reports/`, validated by the SAME `validate-report.mjs`, aggregated by the SAME deterministic rule. The gate does not know which backend produced the report — and does not care: evidence must stand on its own.
+1. **The contract never changes**: the cross-provider lens emits the SAME schema-conforming JSON to `.cell/reports/`, validated by the SAME `validate-report.mjs`, aggregated by the SAME deterministic rule. The gate does not know which backend produced the report — and does not care: evidence must stand on its own.
 2. **The orchestrator stamps provenance**: if the remote report lacks `provenance`, the orchestrator stamps it (backend + model requested) when writing the ledger entry. `gate-check.mjs` summary shows the unique sources (`provenance.sources`) — the Operator can audit who attacked what.
 3. **Fallback is mandatory**: if the remote backend fails (timeout, no response, invalid JSON), the lens runs LOCAL with the same prompt. A failed backend never silently reduces the panel; the fallback is recorded in `feature_rationale[]`.
 4. **Scale discipline**: max 1 cross-provider lens at L2, max 2 at L3. The judge and the orchestrator always run local (the judge at the highest available effort, a different model than the refuter majority).

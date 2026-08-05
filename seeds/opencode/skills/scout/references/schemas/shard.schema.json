@@ -16,7 +16,7 @@
     "consent_level": { "enum": ["auto", "operator"], "description": "Derived, never self-declared: critical OR production OR irreversible → operator. Else auto" },
     "status": { "enum": ["OPEN", "ACCEPTED", "DISMISSED", "DONE"] },
     "source_awakening": { "type": "string", "description": "Awakening/trigger id that produced the shard, if any" },
-    "execution_ref": { "type": "string", "description": "Report path produced when the shard executed (e.g. .swarm/reports/implementor-SHARD-03.json)" },
+    "execution_ref": { "type": "string", "description": "Report path produced when the shard executed (e.g. .cell/reports/implementor-SHARD-03.json)" },
     "created_at": { "type": "string", "description": "ISO-8601" },
     "provenance": {
       "type": "object",

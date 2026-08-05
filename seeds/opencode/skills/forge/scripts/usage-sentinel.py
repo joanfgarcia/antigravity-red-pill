@@ -8,7 +8,7 @@
 # Contract with the harness:
 #   · Each stdout line is an EVENT (the orchestrator polls the flag file).
 #   · While there is nothing to say, it prints NOTHING → zero tokens.
-#   · On firing it writes .swarm/STOP_REQUESTED.json, prints ONE line and ends
+#   · On firing it writes .cell/STOP_REQUESTED.json, prints ONE line and ends
 #     (one alarm, not a machine gun).
 # Why a pure loop and not a subagent: a polling subagent spends tokens from the
 # SAME pool it tries to protect (each poll is a model turn). This loop is pure
@@ -19,8 +19,8 @@
 #   # Windows:   python  <skill>/scripts/usage-sentinel.py <project_dir>
 #
 # Options (CLI flags override env vars):
-#   --threshold N   stop threshold in %  (default SWARM_SENTINEL_THRESHOLD or 93)
-#   --interval S    seconds between polls (default SWARM_SENTINEL_INTERVAL or 300)
+#   --threshold N   stop threshold in %  (default CELL_SENTINEL_THRESHOLD or 93)
+#   --interval S    seconds between polls (default CELL_SENTINEL_INTERVAL or 300)
 
 from __future__ import annotations
 
@@ -81,12 +81,12 @@ def main() -> int:
     parser.add_argument("--interval", type=int, default=None)
     args = parser.parse_args()
 
-    threshold = args.threshold if args.threshold is not None else float(os.environ.get("SWARM_SENTINEL_THRESHOLD", "93"))
-    interval = args.interval if args.interval is not None else int(os.environ.get("SWARM_SENTINEL_INTERVAL", "300"))
+    threshold = args.threshold if args.threshold is not None else float(os.environ.get("CELL_SENTINEL_THRESHOLD", "93"))
+    interval = args.interval if args.interval is not None else int(os.environ.get("CELL_SENTINEL_INTERVAL", "300"))
 
     project_dir = os.path.abspath(args.project_dir)
-    state_path = os.path.join(project_dir, ".swarm", "state.json")
-    flag_path = os.path.join(project_dir, ".swarm", "STOP_REQUESTED.json")
+    state_path = os.path.join(project_dir, ".cell", "state.json")
+    flag_path = os.path.join(project_dir, ".cell", "STOP_REQUESTED.json")
     skill_dir = os.path.dirname(os.path.abspath(__file__))
     probe_path = os.path.join(skill_dir, "usage-probe.mjs")
 
@@ -136,7 +136,7 @@ def main() -> int:
             emit(
                 f"SENTINEL-STOP usage at {util}% (threshold {threshold}%, {spent} tokens spent). "
                 f"CONTROLLED STOP NOW: controlled-stop.md §3. Window reset: {resets}. "
-                f"Flag in .swarm/STOP_REQUESTED.json"
+                f"Flag in .cell/STOP_REQUESTED.json"
             )
             return 0
 

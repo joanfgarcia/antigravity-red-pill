@@ -2,7 +2,7 @@
 // validate-report.mjs — Forge — Role contract gate.
 //
 // Runtime JSON-Schema validator for role reports. Every role report
-// emitted to .swarm/reports/ is checked against its JSON Schema BEFORE the
+// emitted to .cell/reports/ is checked against its JSON Schema BEFORE the
 // orchestrator trusts it. Advisory results survive only if the contract holds;
 // the deterministic gate (gate-check.mjs) recomputes the official verdict.
 //

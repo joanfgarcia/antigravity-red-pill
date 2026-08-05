@@ -7,7 +7,7 @@
 // after the phase gate (escalation.md, runtime-adapters/opencode.md rule 5).
 //
 // Usage:
-//   node worktree.mjs <project_dir> create <phase_id>   → git worktree add .swarm/worktrees/<phase_id> -b swarm/<phase_id>
+//   node worktree.mjs <project_dir> create <phase_id>   → git worktree add .cell/worktrees/<phase_id> -b cell/<phase_id>
 //   node worktree.mjs <project_dir> changes <phase_id>  → diff of the worktree vs its base (the main HEAD at create time)
 //   node worktree.mjs <project_dir> apply <phase_id>    → apply the worktree diff onto the main tree (git apply --3way, no commit)
 //   node worktree.mjs <project_dir> remove <phase_id>   → git worktree remove --force
@@ -24,7 +24,7 @@ if (!projectDirArg || !cmd || !phaseId) {
   process.exit(1);
 }
 const projectDir = resolve(projectDirArg);
-const wtsDir = join(projectDir, '.swarm', 'worktrees');
+const wtsDir = join(projectDir, '.cell', 'worktrees');
 const wtDir = join(wtsDir, phaseId);
 const metaPath = join(wtsDir, `${phaseId}.meta.json`);
 
@@ -39,7 +39,7 @@ switch (cmd) {
     mkdirSync(wtsDir, { recursive: true });
     const head = git(['rev-parse', 'HEAD'], projectDir);
     if (!head.ok) { console.error(`no git HEAD in ${projectDir}: ${head.err}`); process.exit(1); }
-    const add = git(['worktree', 'add', '-b', `swarm/${phaseId}`, wtDir, head.out], projectDir);
+    const add = git(['worktree', 'add', '-b', `cell/${phaseId}`, wtDir, head.out], projectDir);
     if (!add.ok) { console.error(`worktree add failed: ${add.err}`); process.exit(1); }
     writeFileSync(metaPath, JSON.stringify({ phase_id: phaseId, base_head: head.out, created_at: new Date().toISOString() }, null, 2));
     console.log(`worktree ${phaseId} created at ${wtDir} (base ${head.out.slice(0, 7)})`);

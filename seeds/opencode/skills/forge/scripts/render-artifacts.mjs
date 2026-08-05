@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 // render-artifacts.mjs — Forge — Render humano de state.json.
-// La FUENTE DE VERDAD es .swarm/state.json; estos .md son solo su proyección legible.
-// Uso: node render-artifacts.mjs [path/al/state.json] [outdir]   (defaults: .swarm/state.json, .swarm/)
+// La FUENTE DE VERDAD es .cell/state.json; estos .md son solo su proyección legible.
+// Uso: node render-artifacts.mjs [path/al/state.json] [outdir]   (defaults: .cell/state.json, .cell/)
 
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-const statePath = process.argv[2] || '.swarm/state.json';
-const outDir = process.argv[3] || '.swarm';
+const statePath = process.argv[2] || '.cell/state.json';
+const outDir = process.argv[3] || '.cell';
 const state = JSON.parse(readFileSync(statePath, 'utf8'));
 mkdirSync(outDir, { recursive: true });
 

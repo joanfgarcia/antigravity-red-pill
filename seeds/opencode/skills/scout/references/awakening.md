@@ -21,7 +21,7 @@ If you decide to attend:
 1. Read the signals (fetch_signal_memories / cortex status / queues).
 2. For each critical or suspicious signal: run scout (forge-scout agent, ONE
    lens at a time) against the workspace's materialized rules.
-3. Consolidate findings into .swarm/shards.json (dedup; consent derived —
+3. Consolidate findings into .cell/shards.json (dedup; consent derived —
    shards that are operator-level are listed, never executed).
 4. Shape the work with forge-triage: NOT_NEEDED → loose pieces or nothing;
    PROCEED_CONDENSED → a single forge piece; PROCEED → full forge (only if the

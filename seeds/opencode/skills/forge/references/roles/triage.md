@@ -15,14 +15,14 @@ ALWAYS at Step 0 of a Forge activation (and standalone to decide whether a task 
 +1 per: phases ≥ 3 / ≥ 6 / ≥ 10 (up to +3); multi-system (env/MCP/integration) +1; touches production +1; requested autonomy (mission-like) +1; `modelProfile: standard` +1.
 
 ## Recommendation
-- **0-2 → `NOT_NEEDED`**: plain execution (L0 inline at most). The swarm protocol does NOT engage.
+- **0-2 → `NOT_NEEDED`**: plain execution (L0 inline at most). The cell protocol does NOT engage.
 - **3-4 → `PROCEED_CONDENSED`**: minimal mechanism — no mission, small panel.
 - **5-8 → `PROCEED`**: full protocol. Mission Mode only at 15+ phases.
 
 ## Cold-context prompt packing
 1. The task description (or the anchor plan path — read it).
 2. The scoring rubric above.
-3. The absolute `<report_path>` (`.swarm/reports/triage.json`) and the schema path.
+3. The absolute `<report_path>` (`.cell/reports/triage.json`) and the schema path.
 
 ## Output contract
 Write `<report_path>` as JSON conforming to `triage_plan.schema.json`.

@@ -3,7 +3,7 @@
 Convierte un manifest Forge (plan de fases → pasos con rol+prompt) en un job
 de la cola central. Cada step() ejecuta UN paso (un rol) vía el sustrato de
 bridges existente (`create_bridge`), escribe su reporte en el workspace
-(`.swarm/reports/<rol>-<phase>.json`) y avanza el checkpoint
+(`.cell/reports/<rol>-<phase>.json`) y avanza el checkpoint
 `{step_index, results[]}`.
 
 CONTROL TRANSFERIBLE (lo nuevo): el checkpoint en BD es la moneda compartida
@@ -22,7 +22,7 @@ Manifest, reportes y checkpoint son IDENTICOS en ambos modos: por eso el
 handoff es atómico — no hay estado "de la otra mitad".
 
 PATRÓN RFC SLEEP_JOB_DRIVER (aplicado deliberadamente):
-	- Checkpoint en BD autoritativo; el fichero público `.swarm/forge_job_status.json`
+	- Checkpoint en BD autoritativo; el fichero público `.cell/forge_job_status.json`
 		es TELECOMETRÍA en vivo (espejo), nunca fuente de resume (auditoría A2 del RFC).
 	- `on_fail` por paso: `warn` (default) = marcar y continuar SIN quemar el
 		disyuntor (continue-on-error, semántica de unidad del sueño); `stop` =
@@ -119,7 +119,7 @@ class ForgeJobDriver(ResumableJobDriver):
 			raise JobDeferred(f"bridge unavailable: {e}") from e
 
 	def _status_file(self, payload: Dict[str, Any]) -> Path:
-		return Path(payload["manifest"]["workdir"]) / ".swarm" / "forge_job_status.json"
+		return Path(payload["manifest"]["workdir"]) / ".cell" / "forge_job_status.json"
 
 	def _write_status(self, payload: Dict[str, Any], data: Dict[str, Any]) -> None:
 		"""Telemetría en vivo (espejo del checkpoint en BD). Nunca fuente de resume."""
@@ -134,14 +134,14 @@ class ForgeJobDriver(ResumableJobDriver):
 		"""Ejecuta UN rol vía bridges y escribe su reporte en el workspace.
 
 		El agente recibe el prompt con la instrucción de emitir su JSON
-		conforme al schema en `.swarm/reports/<rol>-<phase>.json`. Devolvemos
+		conforme al schema en `.cell/reports/<rol>-<phase>.json`. Devolvemos
 		el reporte leído del disco (el archivo es la fuente de verdad que
 		comparte el main-loop).
 		"""
 		from red_pill.swarm.bridges.factory import create_bridge
 
 		workdir = Path(payload["manifest"]["workdir"])
-		reports_dir = workdir / ".swarm" / "reports"
+		reports_dir = workdir / ".cell" / "reports"
 		reports_dir.mkdir(parents=True, exist_ok=True)
 
 		role = step.get("role", "step")

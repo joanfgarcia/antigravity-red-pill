@@ -140,7 +140,7 @@
    "exit_code": 0,
    "output_excerpt": "accepting"
   },
-  "verified_by": "swarm-validator"
+  "verified_by": "cell-validator"
  },
  "assumption_invalid": {
   "id": "A-1",

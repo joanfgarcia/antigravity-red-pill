@@ -16,7 +16,7 @@ The caller packs ALL of the following into the prompt:
 1. The phase spec: phase_id, exact scope, acceptance criteria (C-nn) — literally.
 2. The plan points (P-nn) this phase covers.
 3. Project conventions, ecosystem rules, and any known prior results.
-4. The absolute `<report_path>` (`.swarm/reports/implementor-<phase>.json`) and the schema path.
+4. The absolute `<report_path>` (`.cell/reports/implementor-<phase>.json`) and the schema path.
 
 The agent inherits NOTHING from the caller's context.
 
@@ -33,7 +33,7 @@ Write `<report_path>` as JSON conforming to `implementor_result.schema.json` (sc
 - Rule 2: every assumption (API field, path, config) is declared in `assumptions[]` state ASSUMED; another role verifies it.
 - Rule 5: never claim DONE for something not executed. FAILED with `fail_reason` is an honorable outcome.
 - Rule 8: the plan is the law; ambiguities → assumption or honest PARTIAL/FAILED, never silent improvisation.
-- Never touch infrastructure, secrets, or out-of-scope files. Never write `.swarm/state.json` — only YOUR report file.
+- Never touch infrastructure, secrets, or out-of-scope files. Never write `.cell/state.json` — only YOUR report file.
 
 ## Finish
 Reply with one line: phase_id, status, absolute path of the report.

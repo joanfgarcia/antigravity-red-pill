@@ -22,7 +22,7 @@ description: >-
 ## 1. What Scout does
 
 1. **Validate implementation plans** — before Forge assembles (or during a mission): is the plan complete, unambiguous, aligned with the project's rules? Feed the result back as shards + a verdict for the Orchestrator.
-2. **Self-discovery** — scan a target (own `.swarm/state.json`, the bundle, any repo) for drift against materialized rules.
+2. **Self-discovery** — scan a target (own `.cell/state.json`, the bundle, any repo) for drift against materialized rules.
 3. **Satellite shards** — anything seen that is wrong or non-compliant OUTSIDE the current scope becomes a shard: `{id, location, standard_violated, evidence, suggested_action, priority, consent_level}` — a self-contained task with its own prompt.
 
 The shard pattern mirrors what strong agents do natively: noticing what is not your current task, but is wrong. Scout makes it a repeatable protocol.
@@ -51,9 +51,9 @@ Scout decomposes the target per lens family (a `forge-scout` agent per lens, or 
 
 Cold context inherits nothing: each lens agent receives ONLY its lens + the target paths + the rule sources.
 
-## 4. The shard record (`.swarm/shards.json`)
+## 4. The shard record (`.cell/shards.json`)
 
-All findings land in the workspace shard register (`<workspace>/.swarm/shards.json`, same anchor as Forge state). One entry per shard, conforming to `shard.schema.json`:
+All findings land in the workspace shard register (`<workspace>/.cell/shards.json`, same anchor as Forge state). One entry per shard, conforming to `shard.schema.json`:
 
 - `id` (SHARD-nn), `location`, `standard_violated` (rule + source), `evidence` (where it shows, ≥20 chars), `suggested_action` (what to do, ≥20 chars).
 - `priority`: `low` | `medium` | `critical`.
@@ -84,7 +84,7 @@ A shard executes as a normal task with ONE Forge role — never the full team:
 
 - `auto` + implementation shard → `forge-implementor` with the shard's `suggested_action` as the task spec (schema `implementor_result`).
 - Validation shards → `forge-validator` against the relevant criteria.
-- Any shard result that needs the gate stays available for a future Forge assembly (the shard record references `.swarm/reports/`).
+- Any shard result that needs the gate stays available for a future Forge assembly (the shard record references `.cell/reports/`).
 
 Reports from shard executions are validated with `validate-report.mjs` (from the Forge bundle: `<forge_skill>/scripts/validate-report.mjs`) — same contract, same trust level.
 
@@ -95,7 +95,7 @@ Reports from shard executions are validated with `validate-report.mjs` (from the
 If the agent chooses to attend, Scout runs headless:
 
 1. Read the awakening target (workspace, pain signals, bundle) + materialized rules.
-2. Analyze (lenses) → shards → `.swarm/shards.json` (+ ledger entries with provenance). `operator`-level shards are listed, never executed.
+2. Analyze (lenses) → shards → `.cell/shards.json` (+ ledger entries with provenance). `operator`-level shards are listed, never executed.
 3. Shape the work with `forge-triage` (NOT_NEEDED → nothing or loose pieces; condensed → one piece; PROCEED → full forge only if justified AND budget allows).
 4. Execute `auto` shards with single Forge roles (budget-aware, usage-probe between shards).
 5. Write the awakening report: what was analyzed, shards found, shards executed, shards pending Operator, what was deliberately left unattended.

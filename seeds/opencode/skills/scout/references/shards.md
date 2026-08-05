@@ -1,6 +1,6 @@
 # Scout shards — register, dedup, consent, ledger (v1.0.0)
 
-## The register: `<workspace>/.swarm/shards.json`
+## The register: `<workspace>/.cell/shards.json`
 
 ```json
 { "shards": [ /* shard.schema.json entries */ ], "last_analysis": "ISO-8601" }

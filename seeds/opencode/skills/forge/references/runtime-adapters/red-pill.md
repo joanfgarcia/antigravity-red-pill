@@ -42,12 +42,12 @@ The Orchestrator stays the main loop (it decides escalation/panel/judge) and eac
 ```
 1. Pack ALL role context into the prompt (cold context inherits nothing) +
    the instruction to emit JSON conforming to the schema (references/schemas/)
-   into .swarm/reports/<role>-<phase>.json.
+   into .cell/reports/<role>-<phase>.json.
 2. job_manager_api.job_submit { source: agentic_job,
      payload: { prompt, cwd: <workspace>, backend, model, effort },
      mission_id: <mission> }
 3. Poll job_status (or wait for the Minion Inbox report) until COMPLETED.
-4. Consolidate the report into .swarm/state.json; run validate-report.mjs /
+4. Consolidate the report into .cell/state.json; run validate-report.mjs /
    gate-check.mjs / render-artifacts.mjs — the gates are identical.
 5. Provenance (v3.1): if the report lacks provenance, STAMP it (backend + model
    requested) at consolidation and record it in the ledger.
@@ -70,7 +70,7 @@ payload = {
 checkpoint = { step_index: N, results: [summary, ...] }
 ```
 
-- **Driver in control (background)**: the runner walks the manifest alone; each step executes one role and writes its report to `.swarm/reports/<role>-<phase>.json`; telemetry mirrors to `.swarm/forge_job_status.json` (never the resume source — the DB checkpoint is authoritative, RFC SleepJobDriver A2).
+- **Driver in control (background)**: the runner walks the manifest alone; each step executes one role and writes its report to `.cell/reports/<role>-<phase>.json`; telemetry mirrors to `.cell/forge_job_status.json` (never the resume source — the DB checkpoint is authoritative, RFC SleepJobDriver A2).
 - **`on_fail` per step**: `warn` (default) = mark FAILED and continue WITHOUT burning the circuit breaker (continue-on-error); `stop` = real job failure (attempts++, circuit breaker if it insists).
 - **Main loop takes control (on demand)**:
   1. `job_transfer <id>` → pause + return the checkpoint (step_index).
@@ -81,7 +81,7 @@ checkpoint = { step_index: N, results: [summary, ...] }
 
 ### Aislamiento entre forges
 
-Every job carries `mission_id`. `job_list --mission <id>` lists only that mission; the sentinel and polling never mix missions. The `cwd` per workspace already separates `.swarm/` on disk. A `forge_job` is REQUIRED to declare `mission_id` (validation at submit).
+Every job carries `mission_id`. `job_list --mission <id>` lists only that mission; the sentinel and polling never mix missions. The `cwd` per workspace already separates `.cell/` on disk. A `forge_job` is REQUIRED to declare `mission_id` (validation at submit).
 
 ## Handoff between agents via `workspace-memory` (artifact = result + signal)
 

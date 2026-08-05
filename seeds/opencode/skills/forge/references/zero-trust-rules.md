@@ -24,7 +24,7 @@ A REAL test executes the functionality and verifies the OUTPUT:
 
 ## RULE 2: Assumption Registry
 
-EVERY technical assumption must be registered (`registry[]` in `.swarm/state.json`, schema `assumption`).
+EVERY technical assumption must be registered (`registry[]` in `.cell/state.json`, schema `assumption`).
 
 - **What is an assumption?** Anything taken for granted without executing it:
   - *"This field exists in the schema"* → did you check the official docs?

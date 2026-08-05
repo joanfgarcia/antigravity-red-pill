@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "triage_plan.schema.json",
   "title": "Triage Plan — activation gate + first feature resolution (forge v1.0)",
-  "description": "Output of the swarm-triage agent at Step 0. ADVISORY: final feature resolution is the Orchestrator's, recorded in feature_rationale[]. The triage proposes; the gate and the schemas do not change.",
+  "description": "Output of the cell-triage agent at Step 0. ADVISORY: final feature resolution is the Orchestrator's, recorded in feature_rationale[]. The triage proposes; the gate and the schemas do not change.",
   "type": "object",
   "required": [
     "role",
@@ -55,7 +55,7 @@
         "PROCEED_CONDENSED",
         "NOT_NEEDED"
       ],
-      "description": "NOT_NEEDED = the task does not need the swarm protocol (orchestrator runs it L0/inline). PROCEED_CONDENSED = swarm protocol with the minimal mechanism (no mission, small panel). PROCEED = full protocol."
+      "description": "NOT_NEEDED = the task does not need the cell protocol (orchestrator runs it L0/inline). PROCEED_CONDENSED = cell protocol with the minimal mechanism (no mission, small panel). PROCEED = full protocol."
     },
     "features": {
       "type": "object",

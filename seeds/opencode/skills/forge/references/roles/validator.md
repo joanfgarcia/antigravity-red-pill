@@ -13,7 +13,7 @@ Per phase, after the Implementor report is consolidated. Also usable standalone 
 
 ## Cold-context prompt packing (mandatory)
 1. The phase spec and its acceptance criteria (C-nn), literally.
-2. The Implementor report path (`.swarm/reports/implementor-<phase>.json`) — read it from disk.
+2. The Implementor report path (`.cell/reports/implementor-<phase>.json`) — read it from disk.
 3. Project conventions and the workspace location.
 4. The absolute `<report_path>` for YOUR verdict and the schema path.
 

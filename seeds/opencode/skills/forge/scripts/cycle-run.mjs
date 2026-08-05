@@ -6,7 +6,7 @@
 // invocations, so the orchestrator's context stays unpolluted. Each role
 // receives its fully-packed prompt from the burst manifest (cold context
 // inherits nothing) and writes its schema-conforming JSON to
-// .swarm/reports/<role>-<phase>.json.
+// .cell/reports/<role>-<phase>.json.
 //
 // ONLY for short bursts (1 phase, <=10 estimated agent calls). Long missions
 // use canonical mode in the main loop (mission-mode.md Pillar 2) — a massive
@@ -43,7 +43,7 @@ const POLL_STEP_MS = 5000;
 const POLL_MAX_MS = 24 * 60 * 60 * 1000;
 
 const args = process.argv.slice(2);
-const manifestPath = args.find((a) => !a.startsWith('--')) || '.swarm/burst.json';
+const manifestPath = args.find((a) => !a.startsWith('--')) || '.cell/burst.json';
 let maxCalls = MAX_CALLS_DEFAULT;
 {
   const i = args.indexOf('--max-calls');
@@ -89,7 +89,7 @@ if (!existsSync(workdir)) {
   console.error(`cycle-run: workdir does not exist: ${workdir}`);
   process.exit(4);
 }
-const reportsDir = join(workdir, '.swarm', 'reports');
+const reportsDir = join(workdir, '.cell', 'reports');
 mkdirSync(reportsDir, { recursive: true });
 
 const log = (msg) => console.log(`[cycle-run] ${msg}`);
@@ -153,12 +153,12 @@ if (useJobManager) {
 log(`LEGACY direct mode (spawnSync opencode run) — deprecated since v1.3.0; prefer --job-manager --mission <id>`);
 let calls = 0;
 const usageStop = () => {
-  const probe = spawnSync('node', [join(SKILL_DIR, 'usage-probe.mjs'), join(workdir, '.swarm', 'state.json')], { encoding: 'utf8' });
+  const probe = spawnSync('node', [join(SKILL_DIR, 'usage-probe.mjs'), join(workdir, '.cell', 'state.json')], { encoding: 'utf8' });
   if (probe.status === 2) {
     log('usage STOP fired (exit 2) — controlled stop now (controlled-stop.md §3)');
     return true;
   }
-  if (existsSync(join(workdir, '.swarm', 'STOP_REQUESTED.json'))) {
+  if (existsSync(join(workdir, '.cell', 'STOP_REQUESTED.json'))) {
     log('sentinel flag present — controlled stop now');
     return true;
   }

@@ -14,7 +14,7 @@ Implement exactly ONE phase of the plan, following the criteria literally. You r
 - Zero-Trust Rule 1: verification is execution. Real tests execute behavior and observe output; `test -f`, `ls`, `cat` without a parser are NOT verification.
 - Zero-Trust Rule 2: every technical assumption you make (API field exists, path is right, config is shared...) is declared in `assumptions[]` in state ASSUMED. Another role verifies it.
 - Zero-Trust Rule 5: never claim DONE for something you did not execute. Fail-fast honesty: FAILED with `fail_reason` is a valid, honorable outcome.
-- Do not touch infrastructure, secrets, or out-of-scope files. Do not modify `.swarm/state.json` — you only write YOUR report.
+- Do not touch infrastructure, secrets, or out-of-scope files. Do not modify `.cell/state.json` — you only write YOUR report.
 
 ## Output contract
 Write your report to `<report_path>` (absolute path given in this prompt), as JSON conforming to `implementor_result.schema.json` (schemas in `<skill>/references/schemas/`). Do NOT trust your memory of the schema: read the schema file first if in doubt.

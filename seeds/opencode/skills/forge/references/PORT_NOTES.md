@@ -22,7 +22,7 @@ the mechanism layer adapts per harness (`references/runtime-adapters/`).
 
 1. **Multi-model heterogeneous panel** (inspired by `opencode-agentic-workflows` — ABIvan — consensus of free reviewers + consolidator): per-lens `model` override in `task` calls; aggregation stays deterministic (escalation.md). Decided by orchestrator per lens, default `auto`.
 2. **Git-worktree isolation** (inspired by `opencode-orchestrator` — agnusdei1207 — parallel worktree isolation): feature O4; helper `scripts/worktree.mjs`; merge only after the phase gate.
-3. **Verification nudge** (inspired by `opencode-swarm` — zaxbysauce — evidence-in-runtime): feature K5; before validation, ensure a non-trivial command ran (anti-grep list from gate check 6); if `commands_run` is empty/trivial, execute one first.
+3. **Verification nudge** (inspired by `` —  — evidence-in-runtime): feature K5; before validation, ensure a non-trivial command ran (anti-grep list from gate check 6); if `commands_run` is empty/trivial, execute one first.
 
 ## Gotchas verified during development
 
@@ -44,20 +44,20 @@ the mechanism layer adapts per harness (`references/runtime-adapters/`).
 ## Activation gate + Triage (v1.0 addition, Operator-approved 2026-08-05)
 
 - The skill warns it is for HEAVYWEIGHT tasks, and every activation runs **Step 0 — Triage** before assembly: `forge-triage` subagent scores the task (phases / multi-system / production / autonomy / model profile; cap 8) and proposes the protocol shape (`triage_plan.schema.json`): recommendation `PROCEED | PROCEED_CONDENSED | NOT_NEEDED`, first Feature-Matrix resolution (O1-O7, F1-F3), level, panel size, budget estimate.
-- `NOT_NEEDED` (score 0-2) → the swarm protocol does NOT engage; plain execution. `PROCEED_CONDENSED` (3-4) → minimal mechanism, no mission. `PROCEED` (5-8) → full protocol; mission only 15+ phases.
-- **`--force` flag**: operator override that skips Triage + operator confirmation (orchestrator resolves the matrix itself). Deliberately not recommended — Triage catches blind spots. Forward-looking: the future `/swarm` command (name TBD — the skill may be renamed) will expose `--force` and `--condensed` as explicit flags.
+- `NOT_NEEDED` (score 0-2) → the cell protocol does NOT engage; plain execution. `PROCEED_CONDENSED` (3-4) → minimal mechanism, no mission. `PROCEED` (5-8) → full protocol; mission only 15+ phases.
+- **`--force` flag**: operator override that skips Triage + operator confirmation (orchestrator resolves the matrix itself). Deliberately not recommended — Triage catches blind spots. Forward-looking: the future `/cell` command (name TBD — the skill may be renamed) will expose `--force` and `--condensed` as explicit flags.
 - Triage is advisory: final resolution is the Orchestrator's (`feature_rationale[]`), and the schemas/gate are unchanged by it. Validated 2/2 fixtures with validate-report.mjs.
 
 ## Usage signals by opencode tier (Zed vs GO)
 
-- On this workstation only **opencode Zed** is enabled (API wallet, credit 0, Free models only). The `SWARM_USAGE_HOOK` contract is documented in `usage-sentinel.md` §2: one JSON line, `max_utilization` = WORST across the provider's windows (GO: 5h/weekly/monthly — the hook aggregates them).
+- On this workstation only **opencode Zed** is enabled (API wallet, credit 0, Free models only). The `CELL_USAGE_HOOK` contract is documented in `usage-sentinel.md` §2: one JSON line, `max_utilization` = WORST across the provider's windows (GO: 5h/weekly/monthly — the hook aggregates them).
 - Zed caveat: a wallet reading 0 credits with Free models available must report the FREE-tier quota, not the wallet — otherwise a false STOP fires. Ledger + cut-calibration is the active defense until a real meter endpoint is known.
-- Rename checklist (when the operator renames the skill): frontmatter `name`, directory name, `permission.task` pattern, agent filenames + references in SKILL.md/docs, red-pill seeds path + `inject_opencode.py` remove-list, and the future `/swarm` command alias.
+- Rename checklist (when the operator renames the skill): frontmatter `name`, directory name, `permission.task` pattern, agent filenames + references in SKILL.md/docs, red-pill seeds path + `inject_opencode.py` remove-list, and the future `/cell` command alias.
 
 ## v1.3.0 — Job Manager federation + transferable control (2026-08-05, Operator request)
 
 1. **Every headless role goes through the Centralized Job Manager.** New MCP entry `job_manager_api` (`job_submit`, `job_list`, `job_status`, `job_pause`, `job_resume`, `job_kill`, `job_checkpoint`, `job_transfer`). Two drivers: `agentic_job` (sabor A — one role per job, recipe per role) and the new **`forge_job`** driver (sabor B — full mission manifest with checkpoint).
-2. **Transferable control (the new piece, RFC SleepJobDriver pattern)**: the DB checkpoint `{step_index, results[]}` is the shared currency. Main loop takes control via `job_transfer` (pause + return checkpoint), runs N steps inline, writes `job_checkpoint`, releases via `job_resume`. `on_fail` per step (`warn` continue-on-error without burning the circuit breaker / `stop`). Telemetry mirrors to `.swarm/forge_job_status.json` (never the resume source — RFC A2).
+2. **Transferable control (the new piece, RFC SleepJobDriver pattern)**: the DB checkpoint `{step_index, results[]}` is the shared currency. Main loop takes control via `job_transfer` (pause + return checkpoint), runs N steps inline, writes `job_checkpoint`, releases via `job_resume`. `on_fail` per step (`warn` continue-on-error without burning the circuit breaker / `stop`). Telemetry mirrors to `.cell/forge_job_status.json` (never the resume source — RFC A2).
 3. **`mission_id` isolation between forges**: new column on `cognitive_tasks`, set from the payload; `job list --mission <id>` and `job_manager_api.job_list` filter by it. A `forge_job` is REQUIRED to declare it (validate at submit).
 4. **Recipes per role** (`configs/jobs/forge-*.yaml`, ×9): role profile (backend/model/effort/timeout/priority); `prompt`/`cwd` dynamic in the submit.
 5. `runtime-adapters/red-pill.md` rewritten as the job-manager adapter; `run_agent_task` demoted to raw single-shot substrate.
@@ -66,13 +66,13 @@ the mechanism layer adapts per harness (`references/runtime-adapters/`).
 
 1. **Sentinel rewritten to Python stdlib** (`scripts/usage-sentinel.sh` → `scripts/usage-sentinel.py`): same 93%/5-min/single-shot contract, but pure `json/os/subprocess/time/datetime` — runs identically on **Linux, macOS and Windows** (no `.sh`, no shell-isms). Launch `python3 usage-sentinel.py <project_dir>` (or harness background Bash tool). `usage-sentinel.md`, `mission-mode.md`, `controlled-stop.md`, `features.md`, `SKILL.md` and both runtime-adapters updated; auto-resume documented per-platform (systemd/`at`, launchd, `schtasks`).
 2. **Drift-check fixed** (`inject_opencode.py`): `_frontmatter_version()` now compiles `_VERSION_RE` with `re.MULTILINE` (the old `search(head, re.MULTILINE)` passed the flag as *pos*, so it always returned `None` and drift was never detected); `check_version_drift()` now takes a `kind` param and `main()` passes the correct seeds subdirs (`skills/`, `agents/`) instead of the `seeds/opencode` root.
-3. **Residue fixed**: `runtime-adapters/opencode.md` still referenced `~/.config/opencode/agents/swarm-*.md` after the rename → now `forge-*.md`.
+3. **Residue fixed**: `runtime-adapters/opencode.md` still referenced `~/.config/opencode/agents/cell-*.md` after the rename → now `forge-*.md`.
 
 ## v1.2.0 — Decomposition, versioning, Scout (2026-08-05, Operator-approved)
 
 1. **Decomposition — composer + pieces**: `SKILL.md` is now the COMPOSER (assembly, cycle, gate, escalation, mission); each role is a versioned piece: opencode agent `forge-<rol>` (executable) + portable spec `references/roles/<rol>.md` (Agent Skills format — runnable from ANY harness/backend). Pieces are usable standalone. Schemas/gate/rules unchanged.
 2. **Versioning (semver, no repo federation — Operator decision)**: `version:` in frontmatter of every skill + agent (forge 1.2.0, scout 1.0.0). `inject_opencode.py` gains `check_version_drift()` — read-only audit comparing seed vs deployed frontmatter versions. Federation of repos is overkill for a solo operator; criterion to federate later: a second external collaborator or a second consumer.
-3. **Scout (new sibling skill, `skills/scout/`)**: analysis + self-discovery + satellite shards. Dual use: standalone (autonomous awakenings) and piece of the Forge composer. Shard = self-contained task `{id, location, standard_violated, evidence, suggested_action, priority, consent_level}` in `.swarm/shards.json`, dedup by rule+location, consent derived (never self-declared: critical/production/irreversible → `operator`). Shards execute with ONE Forge role — never the full team. Agent `forge-scout` (lens analyst). Validates with Forge's `validate-report.mjs` (single canonical validator).
+3. **Scout (new sibling skill, `skills/scout/`)**: analysis + self-discovery + satellite shards. Dual use: standalone (autonomous awakenings) and piece of the Forge composer. Shard = self-contained task `{id, location, standard_violated, evidence, suggested_action, priority, consent_level}` in `.cell/shards.json`, dedup by rule+location, consent derived (never self-declared: critical/production/irreversible → `operator`). Shards execute with ONE Forge role — never the full team. Agent `forge-scout` (lens analyst). Validates with Forge's `validate-report.mjs` (single canonical validator).
 4. **Tests**: Forge suite 23 cases (15 schema incl. provenance-required, 5 gate, 3 triage); Scout mini-suite (2 shard fixtures, shard_valid/shard_invalid) using the Forge validator.
 
 ## Per-vendor enablement policy (v1.2.0)

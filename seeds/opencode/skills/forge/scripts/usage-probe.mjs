@@ -5,7 +5,7 @@
 // Primary signal: the self-accounting window ledger persisted in state.json
 // (usage_ledger.spent_tokens / capacity_est). Always available: pure disk read,
 // no network, no OAuth. Optional secondary signal: an external hook command
-// (SWARM_USAGE_HOOK) that prints utilization JSON — lets operators plug a real
+// (CELL_USAGE_HOOK) that prints utilization JSON — lets operators plug a real
 // provider meter (e.g. an opencode server /usage endpoint) without changing
 // the probe.
 //
@@ -26,9 +26,9 @@ import { execFileSync } from 'node:child_process';
 
 const THRESHOLD = 93;
 const args = process.argv.slice(2);
-let statePath = args.find((a) => !a.startsWith('--')) || '.swarm/state.json';
+let statePath = args.find((a) => !a.startsWith('--')) || '.cell/state.json';
 const thresholdArg = args.indexOf('--threshold');
-const threshold = thresholdArg >= 0 ? Number(args[thresholdArg + 1]) : (process.env.SWARM_USAGE_THRESHOLD ? Number(process.env.SWARM_USAGE_THRESHOLD) : THRESHOLD);
+const threshold = thresholdArg >= 0 ? Number(args[thresholdArg + 1]) : (process.env.CELL_USAGE_THRESHOLD ? Number(process.env.CELL_USAGE_THRESHOLD) : THRESHOLD);
 
 const windows = {};
 let reason = '';
@@ -52,7 +52,7 @@ function readLedger(path) {
 
 // ── Signal 2: external hook (best-effort, fail-open) ─────────────────────────
 function readHook() {
-  const hook = process.env.SWARM_USAGE_HOOK;
+  const hook = process.env.CELL_USAGE_HOOK;
   if (!hook) return;
   try {
     const out = execFileSync('sh', ['-c', hook], { encoding: 'utf8', timeout: 45000, stdio: ['ignore', 'pipe', 'ignore'] });

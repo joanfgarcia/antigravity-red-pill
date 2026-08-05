@@ -31,7 +31,7 @@ The Orchestrator executes IN THIS ORDER:
 1. **Freeze the front**: launch nothing new. Background agents: if within <2 min of finishing, wait and consolidate their result; otherwise stop them (task cancellation) and annotate the task as unclosed.
 2. **Kill the registered processes**: for each `live_processes[]` entry with `status: "RUNNING"` → `kill <pid>` → verify → `kill -9` if it resists → mark `status: "KILLED"`. **PROHIBITED to kill blindly by port** (lesson: a teammate's backend was almost killed sweeping a "known" port): only PIDs registered by THIS mission are touched; the port serves only to verify it is free.
 3. **Full checkpoint**: capture real `disk_facts` of the task in progress (git status + git log, not the agent's self-report), write the complete `pause_context{}` (format below), `mission_status: "PAUSED_BY_OPERATOR"` and `updated_at`.
-4. **Retire the sentinel and clean the resumption**: the sentinel (background process) retires by itself as soon as it sees `mission_status` stop being `RUNNING` — nothing to uninstall. If a scheduled resume `swarm-resume-<project>` remained from a previous pause, cancel it (`usage-sentinel.md` §4). Annotate `pause_context.sentinel: "RETIRED"`.
+4. **Retire the sentinel and clean the resumption**: the sentinel (background process) retires by itself as soon as it sees `mission_status` stop being `RUNNING` — nothing to uninstall. If a scheduled resume `cell-resume-<project>` remained from a previous pause, cancel it (`usage-sentinel.md` §4). Annotate `pause_context.sentinel: "RETIRED"`.
 5. **Render artifacts**: `node scripts/render-artifacts.mjs` — the .md files reflect the pause.
 6. **Present the resume prompt in the chat** (§4), filled with real data, and persist it also in `pause_context.resume_prompt`. The prompt is self-contained: it works in that same chat or pasted into a completely new one.
 
@@ -45,7 +45,7 @@ The Orchestrator executes IN THIS ORDER:
   "resume_block": "B03",
   "resume_task": "F1-T3",
   "sentinel": "RETIRED",                                  // retires by itself on state change
-  "scheduled_resume": "swarm-resume-<mission> @ 2026-07-28T06:15:00+02:00",  // or null if not scheduled
+  "scheduled_resume": "cell-resume-<mission> @ 2026-07-28T06:15:00+02:00",  // or null if not scheduled
   "repo_clean_head": "71b7276 (B01+B02 pushed, compiles green)",
   "partial_untracked": "model/adapter/ of F1-T3 (incomplete: decide continue or redo)",
   "resume_prompt": "Reconcile from disk: ..."             // the filled §4 prompt
@@ -58,8 +58,8 @@ The dry cut of the client is the NORMAL case of the subscription limit — the `
 
 - The **sentinel** (`usage-sentinel.md`) watches continuously and free; the Orchestrator also checks **between tasks** (after consolidating one, before launching the next — never mid-step):
   ```bash
-  test -f .swarm/STOP_REQUESTED.json && echo "STOP REQUESTED BY THE SENTINEL"   # double lock
-  node <skill>/scripts/usage-probe.mjs .swarm/state.json     # exit 0 = continue · exit 2 = stop
+  test -f .cell/STOP_REQUESTED.json && echo "STOP REQUESTED BY THE SENTINEL"   # double lock
+  node <skill>/scripts/usage-probe.mjs .cell/state.json     # exit 0 = continue · exit 2 = stop
   ```
 - **Exit 2 (STOP) or sentinel flag**: some window ≥ threshold (**93%** — the remaining 7% is the real margin to execute this stop). The SAME §2 procedure executes with three differences: `mission_status: "PAUSED_USAGE_LIMIT"`, `stopped_by: "auto_usage"`, and the on-screen prompt indicates **when the window resets** (`window_reset_at`). Additionally the **resumption is scheduled** as an opt-in one-shot OS task if there is an observed reset time (`usage-sentinel.md` §4); the on-screen prompt is always plan B.
 - **Exit 0 with `decision: "UNKNOWN"`** (nothing measurable): FAIL-OPEN — the warning is noted in `notes[]` and the mission **continues**. Never stop on a false alarm; the reactive marker and the expired heartbeat stay as backup in case the limit really arrives.
@@ -113,7 +113,7 @@ The Orchestrator keeps in state.json a **window ledger**:
 
 ## §3.3 — The usage sentinel (replaces the external watchdog)
 
-Continuous watch is done by the **sentinel**: a background process running `scripts/usage-sentinel.py` (Python stdlib — Linux/macOS/Windows), costing **zero tokens** while silent, and at **93%** writing `.swarm/STOP_REQUESTED.json` and emitting one `SENTINEL-STOP` line. The Orchestrator **executes** the stop (§3): the sentinel only alarms, so it does not compete for `state.json`.
+Continuous watch is done by the **sentinel**: a background process running `scripts/usage-sentinel.py` (Python stdlib — Linux/macOS/Windows), costing **zero tokens** while silent, and at **93%** writing `.cell/STOP_REQUESTED.json` and emitting one `SENTINEL-STOP` line. The Orchestrator **executes** the stop (§3): the sentinel only alarms, so it does not compete for `state.json`.
 
 Full mechanism, launch, threshold, scheduled resumption and checklist:
 **[`usage-sentinel.md`](usage-sentinel.md)** — mandatory reading when assembling a mission.
@@ -124,7 +124,7 @@ Template (the Orchestrator fills it with real values; the scheduled OS task embe
 
 ```text
 Reconcile from disk: you are resuming the Forge mission "<mission>" in <project_dir>.
-BEFORE trusting <project_dir>/.swarm/state.json:
+BEFORE trusting <project_dir>/.cell/state.json:
 1. git status + git log --oneline -5 in <project_dir>; compare with the disk_facts of the
    last task and with pause_context.repo_clean_head / partial_untracked.
 2. Review live_processes[] of state.json: ps -p <pids>; kill ONLY the registered ones that
@@ -137,7 +137,7 @@ references/controlled-stop.md), set mission_status=RUNNING and updated_at=now, r
 usage sentinel (python3 <skill>/scripts/usage-sentinel.py <project_dir> — usage-sentinel.md §1),
 and continue from <resume_block>/<resume_task> in canonical mode: one implementor per task
 in background + validation/smoke/panel executed by you with real evidence + checkpoint
-after each task. Watch usage between tasks (flag .swarm/STOP_REQUESTED.json of the sentinel +
+after each task. Watch usage between tasks (flag .cell/STOP_REQUESTED.json of the sentinel +
 usage-probe.mjs + the 93% ledger reservation): if any fires, execute the preventive auto-stop
 (controlled-stop.md §3). If the Operator writes "para de forma controlada", execute the
 controlled stop of controlled-stop.md §2.

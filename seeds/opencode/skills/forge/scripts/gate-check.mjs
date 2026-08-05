@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 // gate-check.mjs — Forge — Gate determinista de cierre (7 checks, 10 en misión).
-// El veredicto de los agentes es ADVISORY: este script RECOMPUTA el estado real desde .swarm/state.json.
-// Uso: node gate-check.mjs [path/al/state.json]   (default: .swarm/state.json)
+// El veredicto de los agentes es ADVISORY: este script RECOMPUTA el estado real desde .cell/state.json.
+// Uso: node gate-check.mjs [path/al/state.json]   (default: .cell/state.json)
 // Output: JSON { gate: "OPEN"|"CLOSED", verdict, violations[], summary } — exit 1 si CLOSED.
 
 import { readFileSync } from 'node:fs';
 
-const statePath = process.argv[2] || '.swarm/state.json';
+const statePath = process.argv[2] || '.cell/state.json';
 let state;
 try {
   state = JSON.parse(readFileSync(statePath, 'utf8'));
