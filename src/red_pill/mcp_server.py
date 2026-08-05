@@ -1745,7 +1745,7 @@ async def handle_mark_cognitive_task_failed(arguments: Dict[str, Any]):
 #   job_submit → job_list/status → job_pause → job_checkpoint → job_resume
 
 
-def _queue() -> "CognitiveQueueManager":
+def _queue() -> Any:
 	from red_pill.cognitive.queue_manager import CognitiveQueueManager
 
 	return CognitiveQueueManager()
@@ -1754,11 +1754,13 @@ def _queue() -> "CognitiveQueueManager":
 def _resolve_job(qm, ref: str) -> Optional[Dict[str, Any]]:
 	"""Resuelve por id completo o prefijo corto (como el CLI)."""
 	task = qm.get_task(ref)
-	if task:
+	if isinstance(task, dict):
 		return task
 	for t in qm.list_tasks():
 		if t["id"].startswith(ref):
-			return qm.get_task(t["id"])
+			found = qm.get_task(t["id"])
+			if isinstance(found, dict):
+				return found
 	return None
 
 

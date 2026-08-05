@@ -44,9 +44,9 @@ payload:
 					"id": str,               # ej. "F1"
 					"steps": [
 						{ "role": "implementor", "agent": "forge-implementor",
-						  "prompt": "<FULL role prompt: spec, criteria, context>",
-						  "schema"?: "implementor_result",
-						  "on_fail"?: "warn" | "stop" }
+						"prompt": "<FULL role prompt: spec, criteria, context>",
+						"schema"?: "implementor_result",
+						"on_fail"?: "warn" | "stop" }
 					]
 				}
 			]
@@ -65,7 +65,7 @@ import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from red_pill.jobs.drivers.base import JobDeferred, ResumableJobDriver, StepOutcome
 
@@ -86,7 +86,8 @@ class ForgeJobDriver(ResumableJobDriver):
 	source = "forge_job"
 	min_vram_mb = 0  # backend remoto/CLI; los recursos los gestiona el bridge
 
-	def validate(self, payload: Dict[str, Any]) -> None:
+	@classmethod
+	def validate(cls, payload: Dict[str, Any]) -> None:
 		"""Falla en el SUBMIT, no tres intentos después."""
 		if not payload.get("mission_id"):
 			raise ValueError("forge_job payload requires 'mission_id' (aislamiento entre forges).")
@@ -166,7 +167,9 @@ class ForgeJobDriver(ResumableJobDriver):
 		# lo escribió, el resumen de la respuesta queda como evidencia mínima.
 		if report_path.is_file():
 			try:
-				return json.loads(report_path.read_text(encoding="utf-8"))
+				parsed = json.loads(report_path.read_text(encoding="utf-8"))
+				if isinstance(parsed, dict):
+					return parsed
 			except json.JSONDecodeError:
 				logger.warning(f"[ForgeJob] reporte {report_path} no es JSON válido; se usa resumen.")
 		return {"role": role, "phase_id": phase_id, "response_excerpt": (result.response or "")[:2000]}
@@ -232,9 +235,10 @@ class ForgeJobDriver(ResumableJobDriver):
 		"""Dimensión 2D fase (como el sueño: unidad X/Y · fase N/M)."""
 		phase_ids: List[str] = []
 		for s in steps:
-			if s.get("phase_id") not in phase_ids:
-				phase_ids.append(s.get("phase_id"))
-		current_phase = steps[index].get("phase_id") if index < len(steps) else None
+			pid = s.get("phase_id")
+			if pid is not None and pid not in phase_ids:
+				phase_ids.append(str(pid))
+		current_phase = str(steps[index].get("phase_id")) if index < len(steps) else ""
 		return {
 			"stage_current": phase_ids.index(current_phase) + 1 if current_phase in phase_ids else index + 1,
 			"stage_total": len(phase_ids),
