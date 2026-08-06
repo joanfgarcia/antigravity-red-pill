@@ -1,0 +1,216 @@
+{
+  "$id": "redpill://forge/v3/devil_refutation",
+  "type": "object",
+  "required": [
+    "role",
+    "lens",
+    "refutations",
+    "vote"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "role": {
+      "const": "devils_advocate"
+    },
+    "phase_id": {
+      "type": "string"
+    },
+    "lens": {
+      "enum": [
+        "general",
+        "correctness",
+        "env_segregation",
+        "plan_completeness",
+        "security",
+        "perf_repro"
+      ],
+      "description": "Lente adversarial asignada a este refutador del panel"
+    },
+    "refutations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "target_id",
+          "claim",
+          "verdict"
+        ],
+        "properties": {
+          "target_id": {
+            "type": "string",
+            "description": "ID del elemento cuestionado (C-nn, ST-nn, A-nn, P-nn, fase...)"
+          },
+          "claim": {
+            "type": "string",
+            "minLength": 10
+          },
+          "verdict": {
+            "enum": [
+              "REFUTED",
+              "UPHELD",
+              "UNVERIFIABLE"
+            ],
+            "description": "REFUTED = la validación era falsa/insuficiente (exige evidencia). UPHELD = la validación resiste. UNVERIFIABLE = no se pudo comprobar (se registra como asunción)."
+          },
+          "criticality": {
+            "enum": [
+              "low",
+              "medium",
+              "critical"
+            ]
+          },
+          "evidence": {
+            "$ref": "#/$defs/Evidence"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "verdict": {
+                  "const": "REFUTED"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "evidence",
+                "criticality"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "new_assumptions": {
+      "type": "array",
+      "description": "Asunciones IMPLÍCITAS descubiertas que nadie había documentado",
+      "items": {
+        "type": "object",
+        "required": [
+          "statement",
+          "criticality"
+        ],
+        "properties": {
+          "statement": {
+            "type": "string",
+            "minLength": 10
+          },
+          "criticality": {
+            "enum": [
+              "low",
+              "medium",
+              "critical"
+            ]
+          }
+        }
+      }
+    },
+    "vote": {
+      "enum": [
+        "CLEARED",
+        "BLOCKER"
+      ]
+    },
+    "blocker_reasons": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "provenance": {
+      "$ref": "#/$defs/Provenance",
+      "description": "v3.1: execution origin (harness/provider/model/timestamp). Emitted by the role, or STAMPED by the orchestrator at consolidation when the role did not emit it — a report never lands in the ledger without provenance."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "vote": {
+            "const": "BLOCKER"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "blocker_reasons"
+        ]
+      }
+    }
+  ],
+  "$defs": {
+    "Evidence": {
+      "type": "object",
+      "required": [
+        "command",
+        "exit_code",
+        "output_excerpt"
+      ],
+      "properties": {
+        "command": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "exit_code": {
+          "type": "integer"
+        },
+        "output_excerpt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "output_full_path": {
+          "type": "string"
+        },
+        "duration_ms": {
+          "type": "integer"
+        },
+        "timestamp": {
+          "type": "string"
+        }
+      }
+    },
+    "Provenance": {
+      "type": "object",
+      "required": [
+        "harness",
+        "timestamp"
+      ],
+      "properties": {
+        "harness": {
+          "type": "string",
+          "enum": [
+            "opencode",
+            "claude-code",
+            "codex",
+            "agy",
+            "local",
+            "antigravity",
+            "kimi",
+            "other"
+          ],
+          "description": "Client/harness that executed this role"
+        },
+        "provider": {
+          "type": "string",
+          "description": "Model provider (anthropic, openai, google, deepseek, azure, ollama...)"
+        },
+        "model": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string",
+          "description": "Harness or bundle version"
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "ISO-8601"
+        }
+      }
+    }
+  }
+}

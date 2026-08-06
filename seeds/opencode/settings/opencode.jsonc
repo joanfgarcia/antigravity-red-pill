@@ -19,6 +19,9 @@
       "${HOME}/.config/red-pill/**": "allow",
       "${HOME}/.local/share/red-pill/**": "allow",
       "*": "ask"
+    },
+    "task": {
+      "forge-*": "allow"
     }
   },
   "references": {

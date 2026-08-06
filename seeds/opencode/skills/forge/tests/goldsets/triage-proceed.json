@@ -1,0 +1,52 @@
+{
+  "expect_valid": true,
+  "expect_recommendation": "PROCEED",
+  "instance": {
+    "role": "triage",
+    "scope": {
+      "phases_estimated": 6,
+      "complexity_score": 5,
+      "touches_production": true,
+      "multi_system": true,
+      "parallelizable": true,
+      "source": "plan de migracion"
+    },
+    "recommendation": "PROCEED",
+    "features": {
+      "O1": "on",
+      "O2": "auto",
+      "O3": "on",
+      "O4": "auto",
+      "O5": "off",
+      "O6": "on",
+      "O7": "auto",
+      "F1": "off",
+      "F2": "off",
+      "F3": "off"
+    },
+    "execution": {
+      "level": "L2",
+      "model_profile": "frontier",
+      "mission_mode": false,
+      "panel_size": "three",
+      "worktree_isolation": false,
+      "budget_estimate_tokens": 900000
+    },
+    "rationale": [
+      {
+        "item": "threshold score",
+        "decision": "PROCEED",
+        "reason": "6 fases + produccion + multi-sistema superan el umbral de 4"
+      },
+      {
+        "item": "O6",
+        "decision": "on",
+        "reason": "mision larga con ventanas de uso que conviene proteger"
+      }
+    ],
+    "risks": [
+      "un riesgo"
+    ],
+    "notes": "ok"
+  }
+}

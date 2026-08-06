@@ -68,25 +68,39 @@ class CognitiveQueueManager:
 				except sqlite3.OperationalError:
 					pass
 
+			# Migración Forge (2026-08-05): mission_id para aislamiento entre forges.
+			# Almacena el payload[mission_id] de jobs mecánicos (forge_job, agentic_job)
+			# para filtrar/aislar misiones sin parsear payloads en cada consulta.
+			try:
+				conn.execute("ALTER TABLE cognitive_tasks ADD COLUMN mission_id TEXT DEFAULT NULL")
+			except sqlite3.OperationalError:
+				pass
+
 			# Índice para extracción ultrarrápida del router
 			conn.execute("""
 				CREATE INDEX IF NOT EXISTS idx_queue_routing
 				ON cognitive_tasks(status, priority DESC, created_at ASC)
 			""")
 
-	def enqueue_task(self, source: str, payload: Dict[str, Any], priority: int = 5, parent_task_id: Optional[str] = None) -> str:
-		"""Inyecta un estímulo/tarea en la cola cognitiva. Si tiene un parent_task_id, entra como BLOCKED."""
+	def enqueue_task(self, source: str, payload: Dict[str, Any], priority: int = 5, parent_task_id: Optional[str] = None, mission_id: Optional[str] = None) -> str:
+		"""Inyecta un estímulo/tarea en la cola cognitiva. Si tiene un parent_task_id, entra como BLOCKED.
+
+		`mission_id`: grupo de aislamiento entre forges (misiones independientes).
+		Si no se pasa, se lee de `payload["mission_id"]` — así los callers que ya
+		llevan la clave en el payload no tienen que duplicarla.
+		"""
 		task_id = str(uuid.uuid4())
 		payload_str = json.dumps(payload)
 		initial_status = "BLOCKED" if parent_task_id else "PENDING"
+		mission = mission_id or payload.get("mission_id")
 
 		with self._get_connection() as conn:
 			conn.execute(
 				"""
-				INSERT INTO cognitive_tasks (id, source, priority, payload, status, parent_task_id)
-				VALUES (?, ?, ?, ?, ?, ?)
+				INSERT INTO cognitive_tasks (id, source, priority, payload, status, parent_task_id, mission_id)
+				VALUES (?, ?, ?, ?, ?, ?, ?)
 				""",
-				(task_id, source, priority, payload_str, initial_status, parent_task_id),
+				(task_id, source, priority, payload_str, initial_status, parent_task_id, mission),
 			)
 		logger.debug(f"[QUEUE] Task {task_id} injected (Priority {priority}, Status {initial_status}). Source: {source}")
 		return task_id
@@ -361,24 +375,33 @@ class CognitiveQueueManager:
 					pass
 		return task
 
-	def list_tasks(self, statuses: Optional[List[str]] = None, limit: int = 50) -> List[Dict[str, Any]]:
-		"""Listado resumido para `red-pill job list` (activas por defecto, sin payload completo)."""
+	def list_tasks(self, statuses: Optional[List[str]] = None, limit: int = 50, mission_id: Optional[str] = None) -> List[Dict[str, Any]]:
+		"""Listado resumido para `red-pill job list` (activas por defecto, sin payload completo).
+
+		`mission_id`: filtra por el grupo de aislamiento entre forges (solo jobs
+		de esa misión). None = todas las misiones.
+		"""
 		if statuses is None:
 			statuses = ["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED"]
 		placeholders = ",".join(["?"] * len(statuses))
+		query = (
+			f"""
+			SELECT id, source, priority, status, attempts, progress, updated_at, mission_id,
+				json_extract(payload, '$.title') AS title,
+				json_extract(checkpoint_data, '$.dirty_kill.reason') AS dirty_kill
+			FROM cognitive_tasks
+			WHERE status IN ({placeholders})
+			"""
+		)
+		params: List = list(statuses)
+		if mission_id is not None:
+			query += " AND mission_id = ?"
+			params.append(mission_id)
+		query += " ORDER BY status = 'PROCESSING' DESC, status = 'PAUSING' DESC, priority DESC, created_at ASC LIMIT ?"
+		params.append(limit)
+
 		with self._get_connection() as conn:
-			rows = conn.execute(
-				f"""
-				SELECT id, source, priority, status, attempts, progress, updated_at,
-					json_extract(payload, '$.title') AS title,
-					json_extract(checkpoint_data, '$.dirty_kill.reason') AS dirty_kill
-				FROM cognitive_tasks
-				WHERE status IN ({placeholders})
-				ORDER BY status = 'PROCESSING' DESC, status = 'PAUSING' DESC, priority DESC, created_at ASC
-				LIMIT ?
-				""",
-				(*statuses, limit),
-			).fetchall()
+			rows = conn.execute(query, params).fetchall()
 		tasks = []
 		for row in rows:
 			task = dict(row)
@@ -488,6 +511,31 @@ class CognitiveQueueManager:
 				""",
 				(json.dumps(checkpoint), json.dumps(progress) if progress is not None else None, task_id),
 			)
+
+	def update_checkpoint(self, task_id: str, checkpoint: Dict[str, Any], progress: Optional[Dict[str, Any]] = None) -> bool:
+		"""Escribe un checkpoint en un job (handoff de control transferible).
+
+		El puente del handoff: cuando el main-loop toma el control de un
+		forge_job, ejecuta N pasos inline y escribe aquí el nuevo checkpoint
+		(`step_index` avanzado). El job debe estar PAUSED/PENDING — un job en
+		vuelo (PROCESSING) no se toca: el runner persiste sus propios checkpoints
+		tras cada step (R4). Devuelve True si se aplicó.
+		"""
+		with self._get_connection() as conn:
+			row = conn.execute("SELECT status FROM cognitive_tasks WHERE id = ?", (task_id,)).fetchone()
+			if not row:
+				return False
+			if row["status"] in ("PROCESSING", "PAUSING"):
+				return False
+			conn.execute(
+				"""
+				UPDATE cognitive_tasks
+				SET checkpoint_data = ?, progress = ?, updated_at = CURRENT_TIMESTAMP
+				WHERE id = ?
+				""",
+				(json.dumps(checkpoint), json.dumps(progress) if progress is not None else None, task_id),
+			)
+			return True
 
 	def mark_dirty_kill(self, task_id: str, marker: Dict[str, Any]) -> None:
 		"""Sella el checkpoint como interrumpido en duro (kill del operador o timeout).

@@ -547,6 +547,8 @@ def handle_job(args: argparse.Namespace) -> None:
 		if args.title:
 			payload["title"] = args.title
 
+		mission = getattr(args, "mission", None) or payload.get("mission_id")
+
 		# Los timers de calendario re-encolan a diario: si el job de ayer sigue
 		# vivo (p.ej. deferido toda la noche), duplicarlo solo ensucia la cola.
 		if getattr(args, "singleton", False):
@@ -567,25 +569,26 @@ def handle_job(args: argparse.Namespace) -> None:
 			except ValueError as e:
 				print(f"[ERROR] Payload inválido para '{source}': {e}")
 				return
-		job_id = queue.enqueue_task(source=source, payload=payload, priority=priority, parent_task_id=parent)
+		job_id = queue.enqueue_task(source=source, payload=payload, priority=priority, parent_task_id=parent, mission_id=mission)
 		if parent:
 			print(f"[OK] Job {job_id} encolado como BLOCKED (se desbloquea al completar {parent[:8]}).")
 		else:
-			print(f"[OK] Job {job_id} encolado (source={source}, priority={priority}).")
+			mission_note = f" mission={mission}" if mission else ""
+			print(f"[OK] Job {job_id} encolado (source={source}, priority={priority},{mission_note}).")
 
 	elif args.job_cmd == "list":
 		statuses = ["PENDING", "PROCESSING", "PAUSED", "BLOCKED", "FRUSTRATED", "COMPLETED"] if args.all else None
-		tasks = queue.list_tasks(statuses=statuses)
+		tasks = queue.list_tasks(statuses=statuses, mission_id=getattr(args, "mission", None))
 		if not tasks:
 			print("Cola vacía.")
 			return
-		print(f"{'ID':<10} {'SOURCE':<20} {'STATUS':<12} {'PRIO':<5} {'ATT':<4} {'PROGRESS':<24} TITLE")
+		print(f"{'ID':<10} {'SOURCE':<20} {'STATUS':<12} {'PRIO':<5} {'ATT':<4} {'MISSION':<10} {'PROGRESS':<24} TITLE")
 		for t in tasks:
 			# El asterisco marca una interrupción dura previa (kill o timeout):
 			# reanudable con el mismo verbo, pero la limpieza no está garantizada.
 			status = f"{t['status']}*" if t.get("dirty_kill") else t["status"]
 			print(
-				f"{t['id'][:8]:<10} {t['source'][:19]:<20} {status:<12} {t['priority']:<5} {t['attempts']:<4} {_format_progress(t.get('progress')):<24} {t.get('title') or '-'}"
+				f"{t['id'][:8]:<10} {t['source'][:19]:<20} {status:<12} {t['priority']:<5} {t['attempts']:<4} {(t.get('mission_id') or '-')[:9]:<10} {_format_progress(t.get('progress')):<24} {t.get('title') or '-'}"
 			)
 
 	elif args.job_cmd == "status":
@@ -1043,9 +1046,11 @@ def main() -> None:
 	)
 	job_submit.add_argument("--title", help="Título descriptivo (se guarda en el payload)")
 	job_submit.add_argument("--parent", help="Id del job padre: entra BLOCKED y se desbloquea cuando el padre completa (DAG)")
+	job_submit.add_argument("--mission", help="Grupo de aislamiento entre forges (mission_id)")
 
 	job_list = job_sub.add_parser("list", help="Listar jobs activos, pausados y en cola")
 	job_list.add_argument("--all", action="store_true", help="Incluir también COMPLETED")
+	job_list.add_argument("--mission", help="Solo jobs de esa misión (aislamiento entre forges)")
 
 	job_status = job_sub.add_parser("status", help="Detalle completo de un job (checkpoint, progreso)")
 	job_status.add_argument("job_id", help="Id completo o prefijo corto")

@@ -1,0 +1,8 @@
+{
+  "expect_valid": false,
+  "instance": {
+    "role": "triage",
+    "scope": {},
+    "recommendation": "PROCEED"
+  }
+}

@@ -372,8 +372,7 @@ async def handle_search_memory_research(arguments: Dict[str, Any]):
 	description=(
 		"Run a single agentic task through an agent backend (claude/agy/opencode/local/local-tools) and return the result. "
 		"Generic execution substrate (mechanism): the CALLER supplies the role prompt, target workspace, "
-		"model and effort (policy) — red-pill just executes. Used by skills like swarm_team to launch each "
-		"role. async_mode=true (default) drops the result in the Minion Inbox (poll via check_minion_inbox); "
+		"model and effort (policy) — red-pill just executes. async_mode=true (default) drops the result in the Minion Inbox (poll via check_minion_inbox); "
 		"async_mode=false waits and returns the result inline (only for short tasks — MCP call blocks)."
 	),
 	schema={
@@ -1734,6 +1733,300 @@ async def handle_mark_cognitive_task_failed(arguments: Dict[str, Any]):
 		return [types.TextContent(type="text", text=f"Cognitive Task '{task_id}' marked as FAILED. Reason logged.")]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"Failed to mark task '{task_id}' as failed: {e}")]
+
+
+# ── job_manager_api — ejecución de tareas a través del Centralized Job Manager ──
+#
+# El skill Forge (y cualquier otro cliente) encola, inspecciona y transfiere el
+# control de jobs por MCP. Sustrato: `CognitiveQueueManager` (cola central) +
+# `ResumableJobDriver` (drivers reanudables). El control transferible entre el
+# main-loop del Orchestrator y un forge_job en background usa:
+#   job_submit → job_list/status → job_pause → job_checkpoint → job_resume
+
+
+def _queue() -> Any:
+	from red_pill.cognitive.queue_manager import CognitiveQueueManager
+
+	return CognitiveQueueManager()
+
+
+def _resolve_job(qm, ref: str) -> Optional[Dict[str, Any]]:
+	"""Resuelve por id completo o prefijo corto (como el CLI)."""
+	task = qm.get_task(ref)
+	if isinstance(task, dict):
+		return task
+	for t in qm.list_tasks():
+		if t["id"].startswith(ref):
+			found = qm.get_task(t["id"])
+			if isinstance(found, dict):
+				return found
+	return None
+
+
+@registry.register_action(
+	parent="job_manager_api",
+	action="job_submit",
+	description=(
+		"[OFFICIAL] Encola un job en la cola central (Centralized Job Manager). "
+		"Fuente del sustrato de ejecución de tareas: `agentic_job` (prompt vía backend) o "
+		"`forge_job` (misión Forge completa con control transferible). Para lanzar un rol Forge "
+		"headless usa source=agentic_job con un recipe (backend/model/effort por rol). Un forge_job "
+		"con manifest recorre la misión completa paso a paso, pausable/reanudable. "
+		"Devolverá el job_id; resultados a MinionInbox (check_minion_inbox)."
+	),
+	schema={
+		"type": "object",
+		"properties": {
+			"source": {"type": "string", "enum": ["agentic_job", "forge_job"], "description": "Driver que ejecutará el job."},
+			"payload": {"type": "object", "description": "Payload del driver. agentic_job: {prompt, backend?, model?, effort?, cwd?, timeout?}. forge_job: {mission_id, manifest:{workdir, phases:[{id, steps:[{role, agent?, prompt, schema?, on_fail?}]}]}, backend?, model?, effort?, timeout?}."},
+			"priority": {"type": "integer", "description": "Mayor = más urgente (default 5)."},
+			"mission_id": {"type": "string", "description": "Grupo de aislamiento entre forges (se lee de payload si se omite)."},
+			"title": {"type": "string", "description": "Título legible del job."},
+		},
+		"required": ["source", "payload"],
+	},
+)
+async def handle_job_submit(arguments: Dict[str, Any]):
+	source = arguments["source"]
+	payload = dict(arguments.get("payload") or {})
+	if arguments.get("title"):
+		payload["title"] = arguments["title"]
+	mission_id = arguments.get("mission_id") or payload.get("mission_id")
+	try:
+		# Validación del driver EN EL SUBMIT (no tres intentos después).
+		from red_pill.jobs.drivers import get_driver_class
+
+		driver_cls = get_driver_class(source)
+		if not driver_cls:
+			return [types.TextContent(type="text", text=f"[ERROR] source '{source}' no registrado.")]
+		driver_cls().validate(payload)
+
+		qm = _queue()
+		job_id = qm.enqueue_task(source=source, payload=payload, priority=int(arguments.get("priority", 5)), mission_id=mission_id)
+		note = f"mission={mission_id}" if mission_id else "sin mission_id"
+		return [types.TextContent(type="text", text=f"[OK] Job encolado: {job_id} (source={source}, {note}, priority={arguments.get('priority', 5)}). Resultado a MinionInbox.")]
+	except Exception as e:
+		return [types.TextContent(type="text", text=f"[ERROR] job_submit falló: {e}")]
+
+
+@registry.register_action(
+	parent="job_manager_api",
+	action="job_list",
+	description="[OFFICIAL] Lista los jobs activos de la cola central. Filtra por misión para aislar forges.",
+	schema={
+		"type": "object",
+		"properties": {
+			"mission_id": {"type": "string", "description": "Solo jobs de esa misión (aislamiento entre forges)."},
+			"all": {"type": "boolean", "description": "Incluir COMPLETED (default: solo activos)."},
+		},
+	},
+)
+async def handle_job_list(arguments: Dict[str, Any]):
+	try:
+		statuses = None if arguments.get("all") else ["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED"]
+		tasks = _queue().list_tasks(statuses=statuses, mission_id=arguments.get("mission_id"))
+		if not tasks:
+			return [types.TextContent(type="text", text="Cola vacía (o sin jobs de esa misión).")]
+		lines = [f"{'ID':<10} {'SOURCE':<15} {'STATUS':<12} {'PRIO':<4} {'MISSION':<10} TITLE"]
+		for t in tasks:
+			lines.append(f"{t['id'][:8]:<10} {t['source'][:14]:<15} {t['status']:<12} {t['priority']:<4} {(t.get('mission_id') or '-')[:9]:<10} {t.get('title') or '-'}")
+		return [types.TextContent(type="text", text="\n".join(lines))]
+	except Exception as e:
+		return [types.TextContent(type="text", text=f"[ERROR] job_list falló: {e}")]
+
+
+@registry.register_action(
+	parent="job_manager_api",
+	action="job_status",
+	description="[OFFICIAL] Estado completo de un job: checkpoint, progreso, attempts, error_log.",
+	schema={
+		"type": "object",
+		"properties": {
+			"job_id": {"type": "string", "description": "Id completo o prefijo corto."},
+		},
+		"required": ["job_id"],
+	},
+)
+async def handle_job_status(arguments: Dict[str, Any]):
+	import json as _json
+
+	try:
+		task = _resolve_job(_queue(), arguments["job_id"])
+		if not task:
+			return [types.TextContent(type="text", text=f"[ERROR] Job '{arguments['job_id']}' no encontrado.")]
+		summary = {
+			"id": task["id"][:8],
+			"source": task["source"],
+			"status": task["status"],
+			"priority": task["priority"],
+			"attempts": task["attempts"],
+			"mission_id": task.get("mission_id"),
+			"title": task.get("payload", {}).get("title"),
+			"checkpoint": task.get("checkpoint_data"),
+			"progress": task.get("progress"),
+			"error_log": task.get("error_log"),
+		}
+		return [types.TextContent(type="text", text=_json.dumps(summary, ensure_ascii=False, indent=2, default=str))]
+	except Exception as e:
+		return [types.TextContent(type="text", text=f"[ERROR] job_status falló: {e}")]
+
+
+@registry.register_action(
+	parent="job_manager_api",
+	action="job_pause",
+	description="[OFFICIAL] Pausa un job (frontera de paso). Para un forge_job, el main-loop puede tomar el control tras pausar.",
+	schema={
+		"type": "object",
+		"properties": {
+			"job_id": {"type": "string"},
+		},
+		"required": ["job_id"],
+	},
+)
+async def handle_job_pause(arguments: Dict[str, Any]):
+	try:
+		qm = _queue()
+		task = _resolve_job(qm, arguments["job_id"])
+		if not task:
+			return [types.TextContent(type="text", text=f"[ERROR] Job '{arguments['job_id']}' no encontrado.")]
+		if qm.pause_task(task["id"]):
+			return [types.TextContent(type="text", text=f"[OK] Pausa solicitada para {task['id'][:8]} (se sella en frontera de paso).")]
+		return [types.TextContent(type="text", text=f"[WARN] Job {task['id'][:8]} en '{task['status']}': pausa no aplicable.")]
+	except Exception as e:
+		return [types.TextContent(type="text", text=f"[ERROR] job_pause falló: {e}")]
+
+
+@registry.register_action(
+	parent="job_manager_api",
+	action="job_resume",
+	description="[OFFICIAL] Reanuda un job pausado/frustrado. Para forge_job, SOLTAR el control tras un handoff con el main-loop.",
+	schema={
+		"type": "object",
+		"properties": {
+			"job_id": {"type": "string"},
+		},
+		"required": ["job_id"],
+	},
+)
+async def handle_job_resume(arguments: Dict[str, Any]):
+	try:
+		qm = _queue()
+		task = _resolve_job(qm, arguments["job_id"])
+		if not task:
+			return [types.TextContent(type="text", text=f"[ERROR] Job '{arguments['job_id']}' no encontrado.")]
+		if qm.resume_task(task["id"]):
+			return [types.TextContent(type="text", text=f"[OK] Job {task['id'][:8]} reanudado (PENDING). El runner lo retoma en el siguiente ciclo.")]
+		return [types.TextContent(type="text", text=f"[WARN] Job {task['id'][:8]} en '{task['status']}': reanudación no aplicable.")]
+	except Exception as e:
+		return [types.TextContent(type="text", text=f"[ERROR] job_resume falló: {e}")]
+
+
+@registry.register_action(
+	parent="job_manager_api",
+	action="job_kill",
+	description="[OFFICIAL] Interrupción dura de un job: sella PAUSED* (o descarta) y abate el scope. La unidad en vuelo completa.",
+	schema={
+		"type": "object",
+		"properties": {
+			"job_id": {"type": "string"},
+			"discard": {"type": "boolean", "description": "True = no reanudable (FRUSTRATED)."},
+		},
+		"required": ["job_id"],
+	},
+)
+async def handle_job_kill(arguments: Dict[str, Any]):
+	import subprocess as _sp
+
+	try:
+		qm = _queue()
+		task = _resolve_job(qm, arguments["job_id"])
+		if not task:
+			return [types.TextContent(type="text", text=f"[ERROR] Job '{arguments['job_id']}' no encontrado.")]
+		job_id = task["id"]
+		qm.kill_task(job_id, discard=bool(arguments.get("discard")))
+		# Abatir el scope systemd si existe (in-proceso = no-op, la unidad completa).
+		unit = f"redpill-job-{job_id[:8]}.scope"
+		try:
+			_sp.run(["systemctl", "--user", "stop", unit], capture_output=True, timeout=10)
+		except Exception:
+			pass
+		return [types.TextContent(type="text", text=f"[OK] Job {job_id[:8]} interrumpido (PAUSED*{', FRUSTRATED' if arguments.get('discard') else ''}).")]
+	except Exception as e:
+		return [types.TextContent(type="text", text=f"[ERROR] job_kill falló: {e}")]
+
+
+@registry.register_action(
+	parent="job_manager_api",
+	action="job_checkpoint",
+	description=(
+		"[OFFICIAL] Handoff de control transferible: escribe el checkpoint de un forge_job "
+		"PAUSED/PENDING desde fuera. El main-loop toma el control (job_pause), ejecuta N pasos "
+		"inline, y escribe aquí el step_index avanzado; luego job_resume para SOLTAR el control "
+		"y que el driver continúe. Solo aplica a jobs no-en-vuelo (PROCESSING/PAUSING se ignoran)."
+	),
+	schema={
+		"type": "object",
+		"properties": {
+			"job_id": {"type": "string"},
+			"checkpoint": {"type": "object", "description": "Nuevo checkpoint: {step_index: N, results: [...]}."},
+			"progress": {"type": "object", "description": "Opcional, clave del renderer del CLI (current/total/percent/stage_*)."},
+		},
+		"required": ["job_id", "checkpoint"],
+	},
+)
+async def handle_job_checkpoint(arguments: Dict[str, Any]):
+	try:
+		qm = _queue()
+		task = _resolve_job(qm, arguments["job_id"])
+		if not task:
+			return [types.TextContent(type="text", text=f"[ERROR] Job '{arguments['job_id']}' no encontrado.")]
+		ok = qm.update_checkpoint(task["id"], arguments["checkpoint"], arguments.get("progress"))
+		if ok:
+			return [types.TextContent(type="text", text=f"[OK] Checkpoint de {task['id'][:8]} actualizado. Soltar el control con job_resume.")]
+		return [types.TextContent(type="text", text=f"[WARN] Job {task['id'][:8]} en '{task['status']}': checkpoint no aplicable (debe estar PAUSED/PENDING).")]
+	except Exception as e:
+		return [types.TextContent(type="text", text=f"[ERROR] job_checkpoint falló: {e}")]
+
+
+@registry.register_action(
+	parent="job_manager_api",
+	action="job_transfer",
+	description=(
+		"[OFFICIAL] Helper del control transferible: pausa un forge_job y devuelve su checkpoint "
+		"para que el main-loop tome el control. Equivale a job_pause + job_status en un solo paso. "
+		"Para SOLTAR: job_resume."
+	),
+	schema={
+		"type": "object",
+		"properties": {
+			"job_id": {"type": "string"},
+		},
+		"required": ["job_id"],
+	},
+)
+async def handle_job_transfer(arguments: Dict[str, Any]):
+	import json as _json
+
+	try:
+		qm = _queue()
+		task = _resolve_job(qm, arguments["job_id"])
+		if not task:
+			return [types.TextContent(type="text", text=f"[ERROR] Job '{arguments['job_id']}' no encontrado.")]
+		paused = qm.pause_task(task["id"])
+		after = qm.get_task(task["id"])
+		return [types.TextContent(
+			type="text",
+			text=_json.dumps({
+				"job_id": task["id"][:8],
+				"paused": paused,
+				"status": after["status"] if after else task["status"],
+				"checkpoint": after.get("checkpoint_data") if after else task.get("checkpoint_data"),
+				"progress": after.get("progress") if after else task.get("progress"),
+				"note": "main-loop al control: ejecuta los pasos inline y escribe job_checkpoint; luego job_resume para soltar.",
+			}, ensure_ascii=False, indent=2, default=str),
+		)]
+	except Exception as e:
+		return [types.TextContent(type="text", text=f"[ERROR] job_transfer falló: {e}")]
 
 
 async def main():

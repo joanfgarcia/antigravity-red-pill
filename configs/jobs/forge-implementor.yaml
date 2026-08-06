@@ -1,0 +1,11 @@
+# Forge — rol Implementor (ejecuta UNA fase con evidencia real).
+# source: agentic_job — el prompt con spec/criterios/contexto viaja dinámico
+# en el payload del submit; este recipe fija el perfil del rol.
+source: agentic_job
+priority: 5
+backend: opencode
+model: flash  # PLACEHOLDER = "no especificar": el bridge opencode NO pasa -m y usa el modelo por defecto de opencode. Sobrescribir en el payload del submit (job_submit {model}) para fijar uno concreto, p.ej. anthropic/claude-sonnet-4-5.
+effort: high
+timeout: 900
+control:
+  max_step_minutes: 25

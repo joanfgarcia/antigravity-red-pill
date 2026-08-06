@@ -73,9 +73,11 @@ def merge_opencode_config(config_path: str, template: dict, backup: bool = True)
 			logger.warning(f"Unreadable config at {config_path}: {exc}. Recreating.")
 			existing = {}
 
+	# Snapshot before merge to detect actual changes (deep_merge mutates base)
+	existing_snapshot = json.loads(json.dumps(existing))
 	merged = _deep_merge(existing, template)
 
-	if merged == existing and existing:
+	if merged == existing_snapshot and existing_snapshot:
 		logger.info(f"• {config_path}: sin cambios (ya presente)")
 		return False
 
@@ -148,7 +150,12 @@ def write_instructions(instructions_path: str, seeds_dir: str, variables: dict, 
 
 # ── Skills deployment ─────────────────────────────────────────────────────────
 def deploy_skills(skills_src_dir: str, skills_dest_dir: str, variables: dict, backup: bool = True) -> int:
-	"""Deploy opencode skills with resolved placeholders. Returns count deployed."""
+	"""Deploy opencode skills with resolved placeholders. Returns count deployed.
+
+	Full-directory copy (SKILL.md + references/ + scripts/ + schemas/), so
+	multi-file skills like forge ship complete. Placeholder resolution
+	applies ONLY to .md files; scripts/binaries copy byte-identical.
+	"""
 	deployed = 0
 	if not os.path.isdir(skills_src_dir):
 		logger.warning(f"Skills source dir not found: {skills_src_dir}")
@@ -156,33 +163,147 @@ def deploy_skills(skills_src_dir: str, skills_dest_dir: str, variables: dict, ba
 
 	for skill_entry in os.listdir(skills_src_dir):
 		skill_src = os.path.join(skills_src_dir, skill_entry)
-		if not os.path.isdir(skill_src):
-			continue
 		skill_md = os.path.join(skill_src, "SKILL.md")
-		if not os.path.exists(skill_md):
+		if not os.path.isdir(skill_src) or not os.path.exists(skill_md):
 			continue
 
 		skill_dest_dir = os.path.join(skills_dest_dir, skill_entry)
 		os.makedirs(skill_dest_dir, exist_ok=True)
 
-		# Read, resolve placeholders, write
-		raw = _read_seed(skill_md)
-		resolved = subst(raw, variables)
+		skill_changed = 0
+		for root, dirs, files in os.walk(skill_src):
+			dirs[:] = [d for d in dirs if d != "__pycache__"]
+			rel_root = os.path.relpath(root, skill_src)
+			dest_root = skill_dest_dir if rel_root == "." else os.path.join(skill_dest_dir, rel_root)
+			os.makedirs(dest_root, exist_ok=True)
+			for name in files:
+				src_file = os.path.join(root, name)
+				dest_file = os.path.join(dest_root, name)
+				if name.endswith(".md"):
+					resolved = subst(_read_seed(src_file), variables)
+					if os.path.exists(dest_file):
+						with open(dest_file, encoding="utf-8") as f:
+							if f.read() == resolved:
+								continue
+						if backup:
+							shutil.copy2(dest_file, dest_file + ".bak")
+					with open(dest_file, "w", encoding="utf-8") as f:
+						f.write(resolved)
+				else:
+					if os.path.exists(dest_file) and _same_file(src_file, dest_file):
+						continue
+					if backup and os.path.exists(dest_file):
+						shutil.copy2(dest_file, dest_file + ".bak")
+					shutil.copy2(src_file, dest_file)
+				skill_changed += 1
 
-		skill_dest = os.path.join(skill_dest_dir, "SKILL.md")
-		if os.path.exists(skill_dest):
-			with open(skill_dest, encoding="utf-8") as f:
-				if f.read() == resolved:
-					continue  # unchanged
-			if backup:
-				shutil.copy2(skill_dest, skill_dest + ".bak")
-
-		with open(skill_dest, "w", encoding="utf-8") as f:
-			f.write(resolved)
-		deployed += 1
-		logger.info(f"✓ Skill '{skill_entry}' desplegada en {skill_dest_dir}")
+		if skill_changed:
+			deployed += 1
+			logger.info(f"✓ Skill '{skill_entry}' desplegada (copia completa) en {skill_dest_dir}")
+		else:
+			logger.info(f"· Skill '{skill_entry}' sin cambios")
 
 	return deployed
+
+
+def _same_file(a: str, b: str) -> bool:
+	import hashlib
+
+	def digest(p: str) -> str:
+		h = hashlib.sha256()
+		with open(p, "rb") as f:
+			for chunk in iter(lambda: f.read(65536), b""):
+				h.update(chunk)
+		return h.hexdigest()
+
+	return os.path.exists(a) and os.path.exists(b) and digest(a) == digest(b)
+
+
+# ── Agents deployment ─────────────────────────────────────────────────────────
+def deploy_agents(agents_src_dir: str, agents_dest_dir: str, variables: dict, backup: bool = True) -> int:
+	"""Deploy opencode subagent definitions (seeds/opencode/agents/forge-*.md).
+
+	Dest: <config>/agents/<name>.md (opencode loads agents from
+	~/.config/opencode/agents/). Placeholders resolved (agents are markdown).
+	"""
+	deployed = 0
+	if not os.path.isdir(agents_src_dir):
+		logger.warning(f"Agents source dir not found: {agents_src_dir}")
+		return 0
+
+	os.makedirs(agents_dest_dir, exist_ok=True)
+	for entry in sorted(os.listdir(agents_src_dir)):
+		if not entry.endswith(".md"):
+			continue
+		src = os.path.join(agents_src_dir, entry)
+		dest = os.path.join(agents_dest_dir, entry)
+		resolved = subst(_read_seed(src), variables)
+		if os.path.exists(dest):
+			with open(dest, encoding="utf-8") as f:
+				if f.read() == resolved:
+					continue
+			if backup:
+				shutil.copy2(dest, dest + ".bak")
+		with open(dest, "w", encoding="utf-8") as f:
+			f.write(resolved)
+		deployed += 1
+		logger.info(f"✓ Agent '{entry}' desplegado en {agents_dest_dir}")
+
+	return deployed
+
+
+# ── Version drift check (semver in frontmatter) ───────────────────────────────
+_VERSION_RE = re.compile(r"^version:\s*([0-9]+\.[0-9]+\.[0-9]+)", re.MULTILINE)
+
+
+def _frontmatter_version(path: str) -> str | None:
+	"""Return the `version:` value from the frontmatter of a seed/deployed file."""
+	try:
+		with open(path, encoding="utf-8") as f:
+			head = f.read(2048)
+	except OSError:
+		return None
+	m = _VERSION_RE.search(head)
+	return m.group(1) if m else None
+
+
+def check_version_drift(seeds_dir: str, deployed_dir: str, kind: str = "skills") -> int:
+	"""Report version mismatches between seed and deployed skills/agents.
+
+	Read-only audit: compares `version:` in frontmatter of every seed skill
+	(seeds/opencode/skills/*/SKILL.md) or agent (seeds/opencode/agents/*.md)
+	against the deployed copy. Returns the number of drifts found. A drift means
+	one side was edited and the other not re-synced — the gate-check of the
+	deploy.
+	"""
+	drifts = 0
+	if not os.path.isdir(seeds_dir) or not os.path.isdir(deployed_dir):
+		return 0
+	if kind == "agents":
+		# Agents: <seed>/<name>.md vs <deployed>/<name>.md
+		for name in sorted(os.listdir(seeds_dir)):
+			seed_file = os.path.join(seeds_dir, name)
+			deployed_file = os.path.join(deployed_dir, name)
+			if not os.path.isfile(seed_file) or not name.endswith(".md"):
+				continue
+			sv, dv = _frontmatter_version(seed_file), _frontmatter_version(deployed_file)
+			if dv != sv:
+				drifts += 1
+				logger.warning(f"⚠ Agent '{name}': seed v{sv or '?'} vs deployed v{dv or '?'} — re-run inject or sync seeds")
+	else:
+		# Skills: <seed>/<name>/SKILL.md vs <deployed>/<name>/SKILL.md
+		for name in sorted(os.listdir(seeds_dir)):
+			seed_file = os.path.join(seeds_dir, name, "SKILL.md")
+			deployed_file = os.path.join(deployed_dir, name, "SKILL.md")
+			if not os.path.isfile(seed_file):
+				continue
+			sv, dv = _frontmatter_version(seed_file), _frontmatter_version(deployed_file)
+			if dv != sv:
+				drifts += 1
+				logger.warning(f"⚠ Skill '{name}': seed v{sv or '?'} vs deployed v{dv or '?'} — re-run inject or sync seeds")
+	if drifts == 0:
+		logger.info(f"✓ Version drift check: all seeds and deployed {kind} in sync")
+	return drifts
 
 
 # ── package.json bootstrap ────────────────────────────────────────────────────
@@ -272,11 +393,17 @@ def main():
 					logger.info(f"✓ opencode:{anchor} removed [{instructions_path}]")
 		# Remove skills
 		skills_dir = os.path.join(config_dir, "skills")
-		for skill_name in ["sovereign_handshake", "agent_core", "knowledge_access"]:
+		for skill_name in ["sovereign_handshake", "agent_core", "knowledge_access", "forge", "scout"]:
 			skill_path = os.path.join(skills_dir, skill_name)
 			if os.path.isdir(skill_path):
 				shutil.rmtree(skill_path)
 				logger.info(f"✓ Skill '{skill_name}' removed")
+		# Remove agents (forge-*)
+		agents_dir = os.path.join(config_dir, "agents")
+		for entry in os.listdir(agents_dir) if os.path.isdir(agents_dir) else []:
+			if entry.startswith("forge-") and entry.endswith(".md"):
+				os.remove(os.path.join(agents_dir, entry))
+				logger.info(f"✓ Agent '{entry}' removed")
 		logger.info("Red Pill removed from opencode.")
 		return
 
@@ -322,6 +449,11 @@ def main():
 	skills_dest = os.path.join(config_dir, "skills")
 	deploy_skills(skills_src, skills_dest, variables, backup=backup)
 
+	# ── 3.5 Deploy agents (swarm-* subagents) ──────────────────────────────
+	agents_src = os.path.join(opencode_seeds, "agents")
+	agents_dest = os.path.join(config_dir, "agents")
+	deploy_agents(agents_src, agents_dest, variables, backup=backup)
+
 	# ── 4. Ensure package.json ─────────────────────────────────────────────
 	ensure_package_json(config_dir, backup=backup)
 
@@ -329,6 +461,13 @@ def main():
 	plugins_src = os.path.join(opencode_seeds, "plugins")
 	plugins_dest = os.path.join(config_dir, "plugins")
 	deploy_plugins(plugins_src, plugins_dest, variables, backup=backup)
+
+	# ── 6. Version drift audit (read-only) ─────────────────────────────────
+	skills_seeds_dir = os.path.join(opencode_seeds, "skills")
+	agents_seeds_dir = os.path.join(opencode_seeds, "agents")
+	check_version_drift(skills_seeds_dir, os.path.join(config_dir, "skills"), kind="skills")
+	if os.path.isdir(agents_seeds_dir):
+		check_version_drift(agents_seeds_dir, agents_dest, kind="agents")
 
 	logger.info("OpenCode + Red Pill integration complete.")
 

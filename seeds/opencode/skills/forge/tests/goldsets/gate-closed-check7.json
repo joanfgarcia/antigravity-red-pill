@@ -1,0 +1,19 @@
+{
+  "expect": {
+    "gate": "CLOSED",
+    "verdict": "PARTIAL",
+    "violations_include": [
+      "Check 7"
+    ]
+  },
+  "state": {
+    "mission": "smoke",
+    "mission_status": "RUNNING",
+    "phases": [],
+    "coverage": [],
+    "registry": [],
+    "decisions": [],
+    "usage_ledger": {},
+    "live_processes": []
+  }
+}

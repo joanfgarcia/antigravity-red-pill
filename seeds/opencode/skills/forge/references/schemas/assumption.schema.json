@@ -1,0 +1,48 @@
+{
+  "$id": "redpill://forge/v3/assumption",
+  "type": "object",
+  "required": ["id", "statement", "source", "status", "criticality"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "pattern": "^A-\\d+$" },
+    "statement": { "type": "string", "minLength": 10 },
+    "source": {
+      "type": "object",
+      "required": ["role", "phase_id"],
+      "properties": {
+        "role": { "enum": ["orchestrator", "implementor", "validator", "smoke_tester", "devils_advocate", "doc_anchor", "qa_final"] },
+        "phase_id": { "type": "string" }
+      }
+    },
+    "status": {
+      "enum": ["VERIFIED", "ASSUMED", "DISPROVEN", "INVESTIGATING"],
+      "description": "REGLA 2: ASSUMED/INVESTIGATING al cierre = blocker. El gate lo recomputa."
+    },
+    "criticality": { "enum": ["low", "medium", "critical"] },
+    "verification": { "$ref": "#/$defs/Evidence" },
+    "verified_by": { "type": "string" },
+    "fix_ref": { "type": "string", "description": "Obligatorio si DISPROVEN: fase/commit/cambio que corrige la asunción falsa" },
+    "notes": { "type": "string" }
+  },
+  "allOf": [
+    { "if": { "properties": { "status": { "enum": ["VERIFIED", "DISPROVEN"] } } },
+      "then": { "required": ["verification", "verified_by"] } },
+    { "if": { "properties": { "status": { "const": "DISPROVEN" } } },
+      "then": { "required": ["fix_ref"] } }
+  ],
+  "$defs": {
+    "Evidence": {
+      "type": "object",
+      "required": ["command", "exit_code", "output_excerpt"],
+      "properties": {
+        "command": { "type": "string", "minLength": 1 },
+        "cwd": { "type": "string" },
+        "exit_code": { "type": "integer" },
+        "output_excerpt": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "output_full_path": { "type": "string" },
+        "duration_ms": { "type": "integer" },
+        "timestamp": { "type": "string" }
+      }
+    }
+  }
+}

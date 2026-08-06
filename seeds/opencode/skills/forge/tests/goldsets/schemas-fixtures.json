@@ -1,0 +1,330 @@
+{
+ "implementor_valid": {
+  "role": "implementor",
+  "phase_id": "F1-T1",
+  "status": "DONE",
+  "changes": [
+   {
+    "path": "src/a.ts",
+    "kind": "modified",
+    "summary": "added hook"
+   }
+  ],
+  "commands_run": [
+   {
+    "command": "npm test",
+    "exit_code": 0,
+    "output_excerpt": "PASS 3"
+   }
+  ],
+  "assumptions": [
+   {
+    "statement": "Node >=20 is available on CI",
+    "criticality": "medium"
+   }
+  ],
+  "provenance": {
+   "harness": "opencode",
+   "provider": "deepseek",
+   "model": "deepseek-v4",
+   "timestamp": "2026-08-05T12:00:00Z"
+  }
+ },
+ "implementor_invalid": {
+  "role": "implementor",
+  "phase_id": "F1-T1",
+  "status": "DONE",
+  "changes": [
+   {
+    "path": "src/a.ts",
+    "kind": "bogus"
+   }
+  ],
+  "commands_run": [],
+  "assumptions": [
+   {
+    "statement": "short",
+    "criticality": "medium"
+   }
+  ]
+ },
+ "validator_valid": {
+  "role": "validator",
+  "phase_id": "F1-T1",
+  "verdict": "PASS",
+  "criteria_results": [
+   {
+    "criterion_id": "C-1",
+    "description": "hook runs",
+    "verdict": "PASS",
+    "evidence": {
+     "command": "npm test",
+     "exit_code": 0,
+     "output_excerpt": "ok"
+    }
+   }
+  ],
+  "assumptions_raised": [
+   {
+    "statement": "Build server is assumed reachable",
+    "criticality": "low"
+   }
+  ],
+  "provenance": {
+   "harness": "opencode",
+   "provider": "deepseek",
+   "model": "deepseek-v4",
+   "timestamp": "2026-08-05T12:00:00Z"
+  }
+ },
+ "validator_invalid": {
+  "role": "validator",
+  "phase_id": "F1-T1",
+  "verdict": "PASS",
+  "criteria_results": [
+   {
+    "criterion_id": "C-1",
+    "description": "hook runs",
+    "verdict": "PASS"
+   }
+  ],
+  "assumptions_raised": []
+ },
+ "smoke_valid": {
+  "role": "smoke_tester",
+  "phase_id": "F1-T1",
+  "tests": [
+   {
+    "id": "ST-1",
+    "type": "script_exec",
+    "expected": "exit 0",
+    "verdict": "PASS",
+    "evidence": {
+     "command": "./run.sh",
+     "exit_code": 0,
+     "output_excerpt": "ok"
+    },
+    "observed": "ok"
+   }
+  ],
+  "provenance": {
+   "harness": "opencode",
+   "provider": "deepseek",
+   "model": "deepseek-v4",
+   "timestamp": "2026-08-05T12:00:00Z"
+  }
+ },
+ "smoke_invalid": {
+  "role": "smoke_tester",
+  "phase_id": "F1-T1",
+  "tests": [
+   {
+    "id": "ST-1",
+    "type": "script_exec",
+    "expected": "exit 0",
+    "verdict": "PENDING_HUMAN"
+   }
+  ]
+ },
+ "assumption_valid": {
+  "id": "A-1",
+  "statement": "Postgres runs on 5432 in CI",
+  "source": {
+   "role": "implementor",
+   "phase_id": "F1-T1"
+  },
+  "status": "VERIFIED",
+  "criticality": "critical",
+  "verification": {
+   "command": "pg_isready",
+   "exit_code": 0,
+   "output_excerpt": "accepting"
+  },
+  "verified_by": "cell-validator"
+ },
+ "assumption_invalid": {
+  "id": "A-1",
+  "statement": "Postgres runs on 5432 in CI",
+  "source": {
+   "role": "implementor",
+   "phase_id": "F1-T1"
+  },
+  "status": "VERIFIED",
+  "criticality": "critical"
+ },
+ "coverage_valid": {
+  "id": "P-1",
+  "requirement": "deploy a hook",
+  "status": "CUBIERTO",
+  "impl_refs": [
+   "src/a.ts"
+  ],
+  "smoke_ref": "ST-1",
+  "phase_id": "F1-T1"
+ },
+ "coverage_invalid": {
+  "id": "P-1",
+  "requirement": "deploy a hook",
+  "status": "CUBIERTO"
+ },
+ "devil_valid": {
+  "role": "devils_advocate",
+  "lens": "correctness",
+  "phase_id": "F1-T1",
+  "refutations": [
+   {
+    "target_id": "C-1",
+    "claim": "The test passes for the wrong reason",
+    "verdict": "REFUTED",
+    "criticality": "critical",
+    "evidence": {
+     "command": "npm test",
+     "exit_code": 1,
+     "output_excerpt": "FAIL"
+    }
+   }
+  ],
+  "vote": "BLOCKER",
+  "blocker_reasons": [
+   "C-1 not actually validated"
+  ],
+  "provenance": {
+   "harness": "opencode",
+   "provider": "deepseek",
+   "model": "deepseek-v4",
+   "timestamp": "2026-08-05T12:00:00Z"
+  }
+ },
+ "qa_valid": {
+  "role": "qa_final",
+  "verdict": "COMPLETE",
+  "totals": {
+   "pass": 2,
+   "fail": 0,
+   "pending_human": 0
+  },
+  "preconditions": {
+   "assumptions_open": 0,
+   "coverage_uncovered": 0
+  },
+  "tests": [
+   {
+    "id": "ST-1",
+    "type": "script_exec",
+    "expected": "exit 0",
+    "verdict": "PASS",
+    "evidence": {
+     "command": "./run.sh",
+     "exit_code": 0,
+     "output_excerpt": "ok"
+    },
+    "observed": "ok"
+   }
+  ],
+  "provenance": {
+   "harness": "opencode",
+   "provider": "deepseek",
+   "model": "deepseek-v4",
+   "timestamp": "2026-08-05T12:00:00Z"
+  }
+ },
+ "decision_valid": {
+  "id": "D-1",
+  "question": "Which CI image to use?",
+  "options_considered": [
+   {
+    "option": "ubuntu-24",
+    "tradeoff": "older"
+   },
+   {
+    "option": "ubuntu-26",
+    "tradeoff": "newer"
+   }
+  ],
+  "chosen": "ubuntu-24",
+  "rationale": "guarantees node version pin",
+  "reversible": true,
+  "sources_consulted": [
+   "CI docs"
+  ]
+ },
+ "mission_valid": {
+  "mission": "hook migration",
+  "verdict": "PARTIAL",
+  "plan_coverage": {
+   "total_points": 2,
+   "covered": 1,
+   "pending_human": 0,
+   "blocked": 0
+  },
+  "blocks": [
+   {
+    "block_id": "B01",
+    "phases": [
+     "F1"
+    ],
+    "status": "DONE"
+   }
+  ],
+  "decisions": [
+   {
+    "id": "D-1"
+   }
+  ],
+  "debt": [
+   {
+    "ref": "F2",
+    "attempts_summary": "tried A then B",
+    "diagnosis": "dep missing"
+   }
+  ],
+  "pending_human": [
+   {
+    "item": "rotate key",
+    "why_blocked": "creds not available",
+    "instructions": "run: vault rotate key"
+   }
+  ],
+  "totals": {
+   "pass": 1,
+   "fail": 1,
+   "pending_human": 0
+  },
+  "provenance": {
+   "harness": "opencode",
+   "provider": "deepseek",
+   "model": "deepseek-v4",
+   "timestamp": "2026-08-05T12:00:00Z"
+  }
+ },
+ "implementor_badprov_invalid": {
+  "role": "implementor",
+  "phase_id": "F1-T1",
+  "status": "DONE",
+  "changes": [
+   {
+    "path": "src/a.ts",
+    "kind": "modified",
+    "summary": "added hook"
+   }
+  ],
+  "commands_run": [
+   {
+    "command": "npm test",
+    "exit_code": 0,
+    "output_excerpt": "PASS 3"
+   }
+  ],
+  "assumptions": [
+   {
+    "statement": "Node >=20 is available on CI",
+    "criticality": "medium"
+   }
+  ],
+  "provenance": {
+   "provider": "deepseek",
+   "model": "deepseek-v4",
+   "timestamp": "2026-08-05T12:00:00Z"
+  }
+ }
+}
