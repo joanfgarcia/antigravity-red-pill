@@ -3,7 +3,7 @@ seed: true  # SEED genérico: plantilla por-instalación. Activar config real co
 source: agentic_job
 priority: 5
 backend: opencode
-model: flash  # PLACEHOLDER = "no especificar": el bridge opencode NO pasa -m y usa el modelo por defecto de opencode. Sobrescribir en el payload del submit (job_submit {model}) para fijar uno concreto, p.ej. anthropic/claude-sonnet-4-5.
+model: flash  # SEED por-instalación: cada instalación configura el modelo de este rol. "flash" = default del harness (el bridge no pasa -m). Ver la política de modelos de referencia en Aleth_Core/NOTE_MODEL_POLICY_ROLES.md (p.ej. implementor → opencode-go/deepseek-v4-pro).
 effort: high
 timeout: 900
 control:

@@ -1,14 +1,22 @@
 """DagJobDriver — composición de etapas en DAG, con fan-out paralelo (RFC_JOB_DAG).
 
 PRIMERA ITERACIÓN (worktree feat/job-dag, 2026-08-06): usa type: agentic|script|subflow.
-PENDIENTE DE REFACTOR según RFC §0.1: la etapa debe ser un MINION del MinionFactory
-(agéntico o no-agéntico; la mezcla la resuelve el kernel), no un type propio. Ver
-RFC_JOB_DAG_PARALLELIZATION.md (v0.2) — D1-D5 para la próxima sesión de diseño.
+PENDIENTE DE REFACTOR a la arquitectura v0.5 del RFC (D1-D5 resueltos 2026-08-06):
+  · ÁRBOL recursivo: etapa atómica (minion del MinionFactory) O compuesta con
+    `sub_etapas`; `parallel: true` es INTENCIÓN declarativa (nivel ≤
+    max_parallel_level → paralelo; nivel mayor → secuencial sin error).
+  · forge_job/sleep_job pasan a ser RECETAS del DAG (dejan de ser drivers).
+  · GPU por etapa: `requires_gpu: true` → el driver aplica el probe de salud
+    (nvidia-smi + VRAM + -ngl), genérico y reutilizable (fleco §4.2.1 resuelto).
+  · Checkpoint por ruta aplanada (`validators/lens-correctness`) para resume
+    determinista a cualquier profundidad.
+  · on_fail warn|stop por etapa y sub-etapa (D2); estático al inicio (D3).
+Ver RFC_JOB_DAG_PARALLELIZATION.md §1, §2 y §4.
 
 Ejecuta un grafo acíclico de etapas (unidades atómicas) en la cola central.
 Cada step() ejecuta el siguiente conjunto de etapas cuyas dependencias están
 completas. El checkpoint en BD es autoritativo: `{completed_stage_ids, results}`.
-El fan-out (`parallel: N`) lanza N sub-invocaciones EN HILOS dentro del mismo
+El fan-out (`mode: parallel`) lanza N sub-invocaciones EN HILOS dentro del mismo
 step — el runner sigue viendo UN step atómico; el paralelismo vive dentro.
 
 Tipos de etapa:
