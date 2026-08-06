@@ -60,9 +60,11 @@ __all__ = [
 	"distill_engram",
 	"distill_session_anchors",
 	"erode_work_hubs",
+	"finalize_sleep_cycle",
 	"last_cycle_deferred",
 	"perform_sleep_cycle",
 	"run_rhizodb_washout_and_pruning",
+	"run_sleep_phase",
 	"synthesize_hub",
 ]
 
@@ -85,6 +87,53 @@ def last_cycle_deferred(since: float = 0.0) -> bool:
 		return False
 
 
+def run_sleep_phase(ctx: SleepContext, phase_index: int) -> None:
+	"""Ejecuta UNA fase del pipeline por índice (unidad atómica del sleep job).
+
+	Misma semántica que el bucle de `perform_sleep_cycle`: best-effort por fase
+	(try/except propio, log de error, el ciclo continúa), `update_status` con
+	telemetría 2D (fase N/M) ANTES y DESPUÉS de ejecutar. Extraído para que el
+	`SleepJobDriver` ejecute exactamente una fase por step sin duplicar lógica.
+	"""
+	total_phases = len(SLEEP_PHASES)
+	phase = SLEEP_PHASES[phase_index]
+	try:
+		ctx.update_status(phase.name, status="running", phase_index=phase_index + 1, total_phases=total_phases)
+		phase.execute(ctx)
+		ctx.update_status(phase.name, status="completed", phase_index=phase_index + 1, total_phases=total_phases)
+	except Exception as e:
+		ctx.update_status(phase.name, status=f"failed: {e}", phase_index=phase_index + 1, total_phases=total_phases)
+		logger.error(f"[SLEEP ENGINE] Phase '{phase.name}' failed: {e}")
+
+
+def finalize_sleep_cycle(ctx: SleepContext, mode: str = "lazy") -> int:
+	"""Finalizador compartido del ciclo de sueño (unidad 14 del job / one-shot).
+
+	Extraído de `perform_sleep_cycle` para que el camino one-shot y el
+	`SleepJobDriver` hagan exactamente lo mismo: limpiar señales (vram_busy solo
+	si no hubo deferral, local_llm_offline, ariadne_thread_running), emitir
+	`SleepCompletedEvent`, escribir `status="cycle_completed"` y devolver el total
+	procesado.
+	"""
+	total_phases = len(SLEEP_PHASES)
+	ctx.update_status("idle", status="cycle_completed", phase_index=total_phases, total_phases=total_phases)
+	logger.info(f"=== LAZARUS PULSE: Sleep Cycle complete. {ctx.total_processed} engrams synaptically woven. ===")
+	try:
+		from red_pill.core.notifier import SovereignNotifier
+
+		SovereignNotifier.clear_bunker_signal(ctx.memory_manager, "local_llm_offline")
+		SovereignNotifier.clear_bunker_signal(ctx.memory_manager, "ariadne_thread_running")
+		# Only clear the deferral alert if consolidation actually ran — i.e. the GPU
+		# had headroom. If it self-deferred, vram_busy stays up until a real cycle.
+		if not ctx.deferred:
+			SovereignNotifier.clear_bunker_signal(ctx.memory_manager, "vram_busy")
+	except Exception:
+		pass
+
+	get_event_bus().emit(SleepCompletedEvent(collection="interaction_memories", processed_count=ctx.total_processed, mode=mode))
+	return ctx.total_processed
+
+
 def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 	"""Run one sleep cycle as an agnostic pipeline over the ordered SleepPhases.
 
@@ -96,29 +145,7 @@ def perform_sleep_cycle(memory_manager, mode: str = "lazy") -> int:
 	logger.info("=== LAZARUS PULSE: Initiating Synaptic Dreaming (NREM/REM) ===")
 	ctx = SleepContext(memory_manager=memory_manager, mode=mode)
 
-	total_phases = len(SLEEP_PHASES)
-	for i, phase in enumerate(SLEEP_PHASES):
-		try:
-			ctx.update_status(phase.name, status="running", phase_index=i + 1, total_phases=total_phases)
-			phase.execute(ctx)
-			ctx.update_status(phase.name, status="completed", phase_index=i + 1, total_phases=total_phases)
-		except Exception as e:
-			ctx.update_status(phase.name, status=f"failed: {e}", phase_index=i + 1, total_phases=total_phases)
-			logger.error(f"[SLEEP ENGINE] Phase '{phase.name}' failed: {e}")
+	for i in range(len(SLEEP_PHASES)):
+		run_sleep_phase(ctx, i)
 
-	ctx.update_status("idle", status="cycle_completed", phase_index=total_phases, total_phases=total_phases)
-	logger.info(f"=== LAZARUS PULSE: Sleep Cycle complete. {ctx.total_processed} engrams synaptically woven. ===")
-	try:
-		from red_pill.core.notifier import SovereignNotifier
-
-		SovereignNotifier.clear_bunker_signal(memory_manager, "local_llm_offline")
-		SovereignNotifier.clear_bunker_signal(memory_manager, "ariadne_thread_running")
-		# Only clear the deferral alert if consolidation actually ran — i.e. the GPU
-		# had headroom. If it self-deferred, vram_busy stays up until a real cycle.
-		if not ctx.deferred:
-			SovereignNotifier.clear_bunker_signal(memory_manager, "vram_busy")
-	except Exception:
-		pass
-
-	get_event_bus().emit(SleepCompletedEvent(collection="interaction_memories", processed_count=ctx.total_processed, mode=mode))
-	return ctx.total_processed
+	return finalize_sleep_cycle(ctx, mode)

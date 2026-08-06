@@ -76,12 +76,14 @@ from red_pill.jobs.drivers.distill import DistillJobDriver  # noqa: E402
 from red_pill.jobs.drivers.flow import FlowJobDriver  # noqa: E402
 from red_pill.jobs.drivers.forge import ForgeJobDriver  # noqa: E402
 from red_pill.jobs.drivers.script import ScriptJobDriver  # noqa: E402
+from red_pill.jobs.drivers.sleep import SleepJobDriver  # noqa: E402
 
 register_driver(FlowJobDriver)
 register_driver(AgenticJobDriver)
 register_driver(DistillJobDriver)
 register_driver(ScriptJobDriver)
 register_driver(ForgeJobDriver)
+register_driver(SleepJobDriver)
 # BitTrainingDriver queda registrado a propósito hasta que el camino genérico
 # (ScriptJobDriver) complete una fase real del curriculum: es la red de
 # seguridad y la vía de rollback del entrenamiento en curso (D3 del RFC).

@@ -31,8 +31,25 @@ class SleepContext:
 	total_processed: int = 0
 	deferred: bool = False  # set by a GPU phase that self-defers (VRAM committed to training)
 
-	def update_status(self, phase_name: str, status: str = "running", phase_index: int = 0, total_phases: int = 8) -> None:
-		"""Escribe atómicamente el estado de la fase de sueño en tiempo real."""
+	def update_status(
+		self,
+		phase_name: str,
+		status: str = "running",
+		phase_index: int = 0,
+		total_phases: int = 8,
+		unit: str = "",
+		unit_index: int = 0,
+		total_units: int = 0,
+	) -> None:
+		"""Escribe atómicamente el estado de la fase de sueño en tiempo real.
+
+		Campos de unidad (aditivos, telemetría 2D del SleepJobDriver): el driver
+		reporta `unit`/`unit_index`/`total_units` además de la fase — el operador
+		ve en vivo "unidad 7/14 · fase 5/10". El fichero sigue siendo TELECOMETRÍA
+		(espejo), nunca fuente de resume (auditoría A2 del RFC_SLEEP_JOB_DRIVER).
+		`status` gana `"deferred"`: honesto cuando un step termina en deferral de
+		GPU, y apaga `_nightly_cycle_active` (solo considera "running").
+		"""
 		try:
 			from red_pill.core.paths import get_state_dir
 
@@ -48,6 +65,12 @@ class SleepContext:
 				"deferred": self.deferred,
 				"updated_at": time.time(),
 			}
+			if unit:
+				payload["unit"] = unit
+			if unit_index:
+				payload["unit_index"] = unit_index
+			if total_units:
+				payload["total_units"] = total_units
 			tmp_file = state_dir / "sleep_phase_status.json.tmp"
 			with open(tmp_file, "w", encoding="utf-8") as f:
 				json.dump(payload, f, indent=2)

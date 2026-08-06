@@ -1,21 +1,23 @@
-# Ciclo de sueño (03:00) como job de la cola central.
+# Ciclo de sueño (03:00) como job REANUDABLE de la cola central.
 #
-# El timer redpill-sleep ya no ejecuta el sueño: lo ENCOLA. El runner serializa
-# frente al entrenamiento y al chronicle — nadie roba la VRAM a nadie a mitad
-# de época (incidente del 28 jul 2026: 3 OOM → Bit FRUSTRATED). La noche es del
-# metabolismo: prioridad por encima del training (5) y del chronicle (7).
-source: script_job
+# El timer redpill-sleep ya no ejecuta el sueño: lo ENCOLA. Desde
+# RFC_SLEEP_JOB_DRIVER (Aprobado para diseño 2026-08-04) el sueño es un
+# SleepJobDriver (source: sleep_job) que recorre 14 unidades atómicas con
+# checkpoint — ya no es un script_job de un solo paso no reanudable.
+#
+# El runner serializa frente al entrenamiento y al chronicle — nadie roba la
+# VRAM a nadie a mitad de época (incidente del 28 jul 2026: 3 OOM → Bit
+# FRUSTRATED). La noche es del metabolismo: prioridad por encima del training
+# (5) y del chronicle (7).
+#
+# El driver reporta el progreso por contrato (progreso en `job status` unidad a
+# unidad), así que este recipe es solo METADATA: no hay step_command ni progress.
+# La preflight GPU por unidad vive en el driver (probe de salud real, D7).
+source: sleep_job
 priority: 8
 title: Ciclo de sueño (consolidación nocturna)
-step_command: .venv/bin/python scripts/trigger_pulse.py --cycle sleep
-# El sueño se auto-difiere si la GPU está comprometida con algo externo a la
-# cola (juego, inferencia del IDE): reintento limpio, no fallo ni falso éxito.
-defer_exit_code: 75
-progress:
-  mode: single
+mode: lazy
+# Noches cargadas (300+ engramas) han llegado a ~4h; la cota de timeout queda
+# INFORMATIVA (D6: sin timeout duro in-proceso, paridad con distill/flow).
 control:
-  # Noches cargadas (300+ engramas) han llegado a ~4h; la cota por defecto (2h)
-  # abatiría el primer sueño. Con historial manda la EMA (D5).
   max_step_minutes: 300
-preflight:
-  memory_max: 10G
