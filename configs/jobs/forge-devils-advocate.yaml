@@ -1,4 +1,5 @@
 # Forge — rol Devil's Advocate (refutador adversarial, UNA lente).
+seed: true  # SEED genérico: plantilla por-instalación. Activar config real copiando a .red-pill/jobs/ (ver NOTE_MODEL_POLICY_ROLES).
 source: agentic_job
 priority: 5
 backend: opencode

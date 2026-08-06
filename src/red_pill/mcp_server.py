@@ -1801,6 +1801,23 @@ async def handle_job_submit(arguments: Dict[str, Any]):
 			return [types.TextContent(type="text", text=f"[ERROR] source '{source}' no registrado.")]
 		driver_cls().validate(payload)
 
+		# Fail-safe: los jobs agénticos requieren un MODELO real, no el placeholder
+		# 'flash' (default del harness). Un job encolado sin config de modelos es
+		# una instalación sin activar: se bloquea en vez de correr a ciegas.
+		if source in ("agentic_job", "forge_job"):
+			model = payload.get("model")
+			if not model or model == "flash":
+				return [types.TextContent(
+					type="text",
+					text=(
+						f"[ERROR] job_submit sin modelo configurado (source={source}). "
+						"'flash' es el placeholder del default del harness, no una config activa. "
+						"Indica 'model' con un modelo real (p.ej. opencode-go/deepseek-v4-pro) o configura "
+						"los recipes por rol en .red-pill/jobs/ (ver Aleth_Core/NOTE_MODEL_POLICY_ROLES.md). "
+						"Bloqueado por seguridad."
+					),
+				)]
+
 		qm = _queue()
 		job_id = qm.enqueue_task(source=source, payload=payload, priority=int(arguments.get("priority", 5)), mission_id=mission_id)
 		note = f"mission={mission_id}" if mission_id else "sin mission_id"

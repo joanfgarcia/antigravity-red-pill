@@ -707,7 +707,7 @@ control:
 """,
 	)
 
-	source, payload, priority, parent = load_recipe(str(project / "configs" / "jobs" / "school.yaml"))
+	source, payload, priority, parent, _s = load_recipe(str(project / "configs" / "jobs" / "school.yaml"))
 
 	assert (source, priority, parent) == ("script_job", 7, None)
 	assert payload["cwd"] == str(project)  # deducido, no repetido en el YAML
@@ -727,7 +727,7 @@ def test_recipe_short_name_resolves_walking_up_the_workspace(tmp_path):
 
 	assert resolve_recipe_path("school", base_dir=deep) == expected.resolve()
 
-	source, payload, _, _ = load_recipe("school", base_dir=deep)
+	source, payload, _, _, _s = load_recipe("school", base_dir=deep)
 	assert source == "script_job"
 	assert payload["title"] == "school"  # sin title explícito, el nombre del fichero
 
@@ -813,7 +813,7 @@ def test_local_unversioned_recipe_overrides_the_versioned_one(tmp_path):
 	_write_recipe(project, "source: script_job\ntitle: versionada\nstep_command: echo hi\n")
 	_write_recipe(project, "source: script_job\ntitle: local\nstep_command: echo hi\n", where=".red-pill/jobs")
 
-	_, payload, _, _ = load_recipe("school", base_dir=project)
+	_, payload, _, _, _s = load_recipe("school", base_dir=project)
 
 	assert payload["title"] == "local"
 	assert payload["cwd"] == str(project)  # la raíz se deduce igual en ambos sitios

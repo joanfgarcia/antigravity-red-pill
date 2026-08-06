@@ -1,6 +1,7 @@
 # Forge — rol Implementor (ejecuta UNA fase con evidencia real).
 # source: agentic_job — el prompt con spec/criterios/contexto viaja dinámico
 # en el payload del submit; este recipe fija el perfil del rol.
+seed: true  # SEED genérico: plantilla por-instalación. Activar config real copiando a .red-pill/jobs/ (ver NOTE_MODEL_POLICY_ROLES).
 source: agentic_job
 priority: 5
 backend: opencode

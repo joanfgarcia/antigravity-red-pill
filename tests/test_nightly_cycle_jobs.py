@@ -38,7 +38,7 @@ def test_kernel_nightly_recipes_are_valid(name, source, priority):
 	"""
 	from red_pill.jobs.drivers import get_driver_class
 
-	source_loaded, payload, prio, parent = load_recipe(str(REPO_ROOT / "configs" / "jobs" / f"{name}.yaml"))
+	source_loaded, payload, prio, parent, _is_seed = load_recipe(str(REPO_ROOT / "configs" / "jobs" / f"{name}.yaml"))
 	assert source_loaded == source and parent is None
 	assert prio == priority
 	assert payload["cwd"] == str(REPO_ROOT)
@@ -50,7 +50,7 @@ def test_sleep_recipe_declares_sleep_job_driver():
 	vive en el driver (probe de salud real, D7), no en un exit code de script."""
 	from red_pill.jobs.drivers import get_driver_class
 
-	_, payload, _, _ = load_recipe(str(REPO_ROOT / "configs" / "jobs" / "sleep.yaml"))
+	_, payload, _, _, _ = load_recipe(str(REPO_ROOT / "configs" / "jobs" / "sleep.yaml"))
 	assert get_driver_class("sleep_job") is not None
 	assert "defer_exit_code" not in payload  # el deferral es nativo del driver
 	assert payload["mode"] == "lazy"
@@ -105,3 +105,53 @@ def test_submit_singleton_skips_live_duplicate(tmp_path, monkeypatch):
 	handle_job(_args(singleton=False))
 	pending = CognitiveQueueManager().list_tasks(statuses=["PENDING"])
 	assert len([t for t in pending if t.get("title") == "Ciclo de sueño"]) == 2
+
+
+def test_forge_recipe_seed_marked_in_repo():
+	"""Los recipes forge del repo (configs/jobs/) son SEEDS: seed=True."""
+	from red_pill.jobs.recipes import load_recipe
+
+	roles = ("forge-triage", "forge-implementor", "forge-validator", "forge-smoke-tester",
+		"forge-devils-advocate", "forge-judge", "forge-doc-anchor", "forge-qa", "forge-scout")
+	for name in roles:
+		_, payload, _, _, is_seed = load_recipe(str(REPO_ROOT / "configs" / "jobs" / f"{name}.yaml"))
+		assert is_seed is True, f"{name} debería ser seed"
+		# Los seeds no llevan modelo concreto: quedan en el default del harness.
+		assert payload.get("model", "flash") == "flash"
+
+
+def test_forge_config_local_overrides_seed_and_is_not_seed(tmp_path, monkeypatch):
+	"""Una config local en .red-pill/jobs/ gana al seed y NO se marca como seed."""
+	from red_pill.jobs.recipes import load_recipe
+
+	# Simula una instalación: configura local que copia el seed y fija modelo real.
+	ws = tmp_path / "ws"
+	(ws / ".red-pill" / "jobs").mkdir(parents=True)
+	local = ws / ".red-pill" / "jobs" / "forge-implementor.yaml"
+	local.write_text(
+		"source: agentic_job\n"
+		"priority: 5\n"
+		"backend: opencode\n"
+		"model: opencode-go/deepseek-v4-pro\n"
+		"effort: high\n",
+		encoding="utf-8",
+	)
+	_, payload, _, _, is_seed = load_recipe("forge-implementor", base_dir=ws)
+	assert is_seed is False
+	assert payload["model"] == "opencode-go/deepseek-v4-pro"
+
+
+def test_job_submit_mcp_blocks_agentic_without_model():
+	"""Fail-safe: job_submit bloquea un job agéntico sin modelo (flash = placeholder)."""
+	import asyncio
+
+	from red_pill.mcp_server import handle_job_submit
+
+	for bad_payload in ({}, {"prompt": "x"}, {"prompt": "x", "model": "flash"}):
+		res = asyncio.run(handle_job_submit({"source": "agentic_job", "payload": bad_payload}))
+		text = res[0].text
+		assert "sin modelo configurado" in text or "Bloqueado" in text, text
+
+	# Con modelo real pasa.
+	res = asyncio.run(handle_job_submit({"source": "agentic_job", "payload": {"prompt": "x", "model": "opencode-go/deepseek-v4-pro"}}))
+	assert "Job encolado" in res[0].text

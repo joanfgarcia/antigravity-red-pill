@@ -3,6 +3,7 @@
 # necesita el protocolo Forge. prompt y cwd van DINÁMICOS en el payload del
 # submit: este recipe fija el perfil (backend/modelo/effort/timeout/prioridad).
 # Uso: job_manager_api.job_submit {source: agentic_job, payload: {prompt, cwd, ...}}
+seed: true  # SEED genérico: plantilla por-instalación. Activar config real copiando a .red-pill/jobs/ (ver NOTE_MODEL_POLICY_ROLES).
 source: agentic_job
 priority: 5
 backend: opencode
