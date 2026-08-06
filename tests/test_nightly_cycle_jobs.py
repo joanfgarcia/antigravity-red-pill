@@ -15,7 +15,6 @@ from pathlib import Path
 
 import pytest
 
-from red_pill.jobs.drivers.script import ScriptJobDriver
 from red_pill.jobs.recipes import load_recipe
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -29,26 +28,32 @@ def isolated_state(tmp_path, monkeypatch):
 	return state
 
 
-@pytest.mark.parametrize("name, priority", [("sleep", 8), ("chronicle", 7)])
-def test_kernel_nightly_recipes_are_valid(name, priority):
+@pytest.mark.parametrize("name, source, priority", [("sleep", "sleep_job", 8), ("chronicle", "script_job", 7)])
+def test_kernel_nightly_recipes_are_valid(name, source, priority):
 	"""Las recetas del kernel cargan, validan en el submit y anclan cwd al repo.
 
 	El orden de prioridades es el contrato de la noche: sueño (8) > chronicle
-	(7) > entrenamiento (5) — mayor número = más urgente.
+	(7) > entrenamiento (5) — mayor número = más urgente. El sueño es un
+	`sleep_job` (RFC_SLEEP_JOB_DRIVER); el chronicle sigue siendo `script_job`.
 	"""
-	source, payload, prio, parent = load_recipe(str(REPO_ROOT / "configs" / "jobs" / f"{name}.yaml"))
-	assert source == "script_job" and parent is None
+	from red_pill.jobs.drivers import get_driver_class
+
+	source_loaded, payload, prio, parent = load_recipe(str(REPO_ROOT / "configs" / "jobs" / f"{name}.yaml"))
+	assert source_loaded == source and parent is None
 	assert prio == priority
 	assert payload["cwd"] == str(REPO_ROOT)
-	ScriptJobDriver.validate(payload)
+	get_driver_class(source_loaded)().validate(payload)
 
 
-def test_sleep_recipe_declares_defer_contract():
-	"""El sueño se auto-difiere con exit 75 (EX_TEMPFAIL): la receta debe
-	declararlo para que el runner reintente en vez de dar el ciclo por bueno."""
+def test_sleep_recipe_declares_sleep_job_driver():
+	"""El sueño es un driver reanudable (`sleep_job`): la preflight GPU por unidad
+	vive en el driver (probe de salud real, D7), no en un exit code de script."""
+	from red_pill.jobs.drivers import get_driver_class
+
 	_, payload, _, _ = load_recipe(str(REPO_ROOT / "configs" / "jobs" / "sleep.yaml"))
-	assert payload["defer_exit_code"] == 75
-	assert payload["progress"]["mode"] == "single"
+	assert get_driver_class("sleep_job") is not None
+	assert "defer_exit_code" not in payload  # el deferral es nativo del driver
+	assert payload["mode"] == "lazy"
 
 
 def test_last_cycle_deferred(isolated_state):
