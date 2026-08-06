@@ -3,7 +3,7 @@ seed: true  # SEED genérico: plantilla por-instalación. Activar config real co
 source: agentic_job
 priority: 5
 backend: opencode
-model: opencode-go/mimo-v2.5-pro  # política NOTE_MODEL_POLICY_ROLES (qa-final)
+model: flash  # PLACEHOLDER = "no especificar": el bridge opencode NO pasa -m y usa el modelo por defecto de opencode. Sobrescribir en el payload del submit (job_submit {model}) para fijar uno concreto, p.ej. anthropic/claude-sonnet-4-5.
 effort: high
 timeout: 900
 control:
