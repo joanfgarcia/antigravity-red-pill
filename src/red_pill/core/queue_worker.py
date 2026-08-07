@@ -209,10 +209,12 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 				# R1: preflight de entorno antes de CADA step (VRAM/IDE/SIP/ciclos nocturnos)
 				# Exención anti-deadlock (RFC_SLEEP_JOB_DRIVER §2.3): si el sueño es un
 				# driver job, su propio fichero "running" lo diferiría a sí mismo entre
-				# unidades → inanición. El source sleep_job se exime; los ajenos siguen
-				# difiriendo mientras el fichero esté fresco (prioridad nocturna deseada).
+				# unidades → inanición. Se exime el source legacy `sleep_job` y CUALQUIER
+				# job declarado `nightly_exempt: true` (la receta del sueño como dag_job
+				# — RFC_JOB_DAG); los ajenos siguen difiriendo mientras el fichero esté
+				# fresco (prioridad nocturna deseada).
 				nightly = _nightly_cycle_active()
-				if nightly and task["source"] != "sleep_job":
+				if nightly and task["source"] != "sleep_job" and not (task.get("payload") or {}).get("nightly_exempt"):
 					raise JobDeferred(f"Ciclo nocturno con prioridad absoluta en ejecución: {nightly}")
 
 				# La cota de tiempo es política del RUNNER, uniforme para todos los

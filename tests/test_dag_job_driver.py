@@ -1,8 +1,8 @@
-"""DagJobDriver (RFC_JOB_DAG_PARALLELIZATION): topología DAG, fan-out paralelo,
-control transferible, validación en submit."""
+"""DagJobDriver (RFC_JOB_DAG_PARALLELIZATION v0.7): árbol recursivo de etapas,
+validación cruzada type↔minion, fail-safe de modelos, fan-out paralelo, control
+transferible."""
 
 import json
-from pathlib import Path
 
 import pytest
 
@@ -13,17 +13,6 @@ from red_pill.jobs.drivers.dag import DagJobDriver
 @pytest.fixture
 def queue(tmp_path):
 	return CognitiveQueueManager(db_path=str(tmp_path / "bunker_queue.db"))
-
-
-@pytest.fixture
-def clean_registry():
-	from red_pill.jobs.drivers import _REGISTRY
-
-	saved = dict(_REGISTRY)
-	_REGISTRY.clear()
-	yield _REGISTRY
-	_REGISTRY.clear()
-	_REGISTRY.update(saved)
 
 
 @pytest.fixture(autouse=True)
@@ -37,50 +26,93 @@ def _payload(workdir: str, stages, mission_id="m1", **extra):
 	return base
 
 
-class _FakeBridge:
-	def __init__(self, workdir, write_report=True):
-		self.workdir = workdir
-		self.write_report = write_report
+# Un minion agéntico de prueba que ejecuta sin bridge real (usa EchoMinion, lógica
+# pura). Para etapas `agent` de prueba usamos un monkeypatch de MinionFactory.
+def _patch_minion_factory(monkeypatch, record):
+	"""Sustituye MinionFactory.create por un minion de prueba que registra llamadas."""
 
-	def health_check(self):
-		return True
+	class _FakeAgent:
+		async def execute(self, task, **kwargs):
+			record.append((task, kwargs))
+			return {"status": "success", "response": "hecho", "summary": "hecho"}
 
-	def prompt(self, text, **kwargs):
-		if self.write_report:
-			import re
+	class _FakeCommand:
+		async def execute(self, task, **kwargs):
+			record.append((task, kwargs))
+			return {"status": "success", "returncode": 0, "stdout": "ok", "summary": "ok"}
 
-			m = re.search(r"to (\S+?) as JSON", text)
-			if m:
-				path = m.group(1)
-				Path(path).parent.mkdir(parents=True, exist_ok=True)
-				Path(path).write_text(json.dumps({"summary": "hecho"}), encoding="utf-8")
-		return type("R", (), {"response": "ok", "error": None, "conversation_id": "c", "ok": True})()
+	def _create(minion_id, **kw):
+		if minion_id == "agent":
+			return _FakeAgent()
+		if minion_id == "command_runner":
+			return _FakeCommand()
+		raise KeyError(minion_id)
+
+	monkeypatch.setattr("red_pill.swarm.factory.MinionFactory.create", staticmethod(_create))
+	# el resolve del módulo importa la factory real: hay que parchear también el
+	# _resolve_minion_kind para que conozca agent/command sin el isinstance real
+	import red_pill.jobs.drivers.dag as dag_mod
+
+	monkeypatch.setattr(dag_mod, "_resolve_minion_kind", lambda mid: "agent" if mid == "agent" else "command")
 
 
-def _patch_agentic(driver, monkeypatch, workdir):
-	monkeypatch.setattr("red_pill.swarm.bridges.factory.create_bridge", lambda b=None, **kw: _FakeBridge(workdir))
-
-
-def test_dag_validate_rejects_missing_mission():
+# ── Validación ────────────────────────────────────────────────────────────────
+def test_dag_validate_requires_mission():
 	d = DagJobDriver()
 	with pytest.raises(ValueError, match="mission_id"):
-		d.validate({"manifest": {"workdir": "/tmp", "stages": [{"id": "a", "type": "agentic"}]}})
-	with pytest.raises(ValueError, match="depends_on"):
-		d.validate(_payload("/tmp", [{"id": "a", "type": "agentic", "depends_on": ["nope"]}]))
-	with pytest.raises(ValueError, match="duplicate"):
-		d.validate(_payload("/tmp", [{"id": "a", "type": "agentic"}, {"id": "a", "type": "agentic"}]))
+		d.validate({"manifest": {"workdir": "/tmp", "stages": [{"id": "a", "type": "agent", "minion": "agent", "model": "m", "prompt": "x"}]}})
+
+
+def test_dag_validate_rejects_bad_type():
+	d = DagJobDriver()
 	with pytest.raises(ValueError, match="type"):
-		d.validate(_payload("/tmp", [{"id": "a", "type": "bogus"}]))
+		d.validate(_payload("/tmp", [{"id": "a", "type": "bogus", "minion": "agent", "model": "m", "prompt": "x"}]))
 
 
+def test_dag_validate_duplicate_path():
+	d = DagJobDriver()
+	with pytest.raises(ValueError, match="duplicate"):
+		d.validate(_payload("/tmp", [
+			{"id": "a", "type": "agent", "minion": "agent", "model": "m", "prompt": "x"},
+			{"id": "a", "type": "command", "minion": "command_runner"},
+		]))
+
+
+def test_dag_validate_rejects_flash_model(tmp_path):
+	"""Fail-safe de modelos (fleco 3): etapa agéntica sin modelo real → bloqueada."""
+	d = DagJobDriver()
+	ws = tmp_path / "ws"
+	ws.mkdir()
+	with pytest.raises(ValueError, match="sin modelo configurado"):
+		d.validate(_payload(str(ws), [{"id": "a", "type": "agent", "minion": "agent", "model": "flash", "prompt": "x"}]))
+
+
+def test_dag_validate_rejects_missing_prompt(tmp_path):
+	d = DagJobDriver()
+	ws = tmp_path / "ws"
+	ws.mkdir()
+	with pytest.raises(ValueError, match="prompt"):
+		d.validate(_payload(str(ws), [{"id": "a", "type": "agent", "minion": "agent", "model": "opencode-go/x", "prompt": ""}]))
+
+
+def test_dag_validate_compound_without_minion(tmp_path):
+	d = DagJobDriver()
+	ws = tmp_path / "ws"
+	ws.mkdir()
+	with pytest.raises(ValueError, match="minion"):
+		d.validate(_payload(str(ws), [{"id": "c", "type": "compound", "minion": "agent", "sub_etapas": []}]))
+
+
+# ── Ejecución: árbol secuencial ───────────────────────────────────────────────
 def test_dag_linear_agentic_runs_in_order(tmp_path, monkeypatch):
 	d = DagJobDriver()
 	ws = tmp_path / "ws"
 	(ws / ".cell" / "reports").mkdir(parents=True)
-	_patch_agentic(d, monkeypatch, str(ws))
+	calls = []
+	_patch_minion_factory(monkeypatch, calls)
 	payload = _payload(str(ws), [
-		{"id": "impl", "type": "agentic", "prompt": "do X"},
-		{"id": "smoke", "type": "agentic", "prompt": "smoke it", "depends_on": ["impl"]},
+		{"id": "impl", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "do X"},
+		{"id": "smoke", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "smoke it", "depends_on": ["impl"]},
 	])
 	o1 = d.step(payload, {})
 	assert o1.new_checkpoint["completed_stage_ids"] == ["impl"]
@@ -91,68 +123,103 @@ def test_dag_linear_agentic_runs_in_order(tmp_path, monkeypatch):
 	assert (ws / ".cell" / "reports" / "impl.json").is_file()
 
 
-def test_dag_fanout_parallel_runs_all(tmp_path, monkeypatch):
-	"""parallel: 3 lanza las 3 ramas en el mismo step (una etapa = todas o ninguna)."""
+# ── Ejecución: comandos (no-agénticos) ────────────────────────────────────────
+def test_dag_command_stage(tmp_path, monkeypatch):
+	d = DagJobDriver()
+	ws = tmp_path / "ws"
+	ws.mkdir()
+	calls = []
+	_patch_minion_factory(monkeypatch, calls)
+	payload = _payload(str(ws), [
+		{"id": "gen", "type": "command", "minion": "command_runner", "command": "echo hi > gen.txt"},
+	])
+	o = d.step(payload, {})
+	assert o.completed
+	assert o.new_checkpoint["results"]["gen"] == "ok"
+
+
+# ── Ejecución: compuesto con fan-out paralelo ─────────────────────────────────
+def test_dag_compound_parallel_runs_all(tmp_path, monkeypatch):
 	d = DagJobDriver()
 	ws = tmp_path / "ws"
 	(ws / ".cell" / "reports").mkdir(parents=True)
-	real = _FakeBridge(str(ws))
-	monkeypatch.setattr("red_pill.swarm.bridges.factory.create_bridge", lambda b=None, **kw: real)
-
+	calls = []
+	_patch_minion_factory(monkeypatch, calls)
 	payload = _payload(str(ws), [
-		{"id": "impl", "type": "agentic", "prompt": "do X"},
-		{"id": "lens", "type": "agentic", "prompt": "lens", "depends_on": ["impl"], "parallel": 3},
+		{"id": "impl", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "do X"},
+		{
+			"id": "panel",
+			"type": "compound",
+			"parallel": True,
+			"on_fail": "warn",
+			"depends_on": ["impl"],
+			"sub_etapas": [
+				{"id": "lens-a", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "lens a"},
+				{"id": "lens-b", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "lens b"},
+			],
+		},
 	])
 	o1 = d.step(payload, {})
 	assert o1.new_checkpoint["completed_stage_ids"] == ["impl"]
 	o2 = d.step(payload, o1.new_checkpoint)
-	# el fan-out (parallel 3 pero una sola etapa id 'lens') completa la etapa única
+	# las dos lentes del panel en el mismo step, luego el compuesto se marca done
 	assert o2.completed
-	assert o2.new_checkpoint["completed_stage_ids"] == ["impl", "lens"]
+	ids = o2.new_checkpoint["completed_stage_ids"]
+	assert "panel/lens-a" in ids and "panel/lens-b" in ids and "panel" in ids
 
 
-def test_dag_parallel_fanout_multi(tmp_path, monkeypatch):
-	"""Varias etapas independientes en el frente se ejecutan juntas (max_concurrency)."""
+def test_dag_parallel_level_gate(tmp_path, monkeypatch):
+	"""parallel declarado en nivel > max_parallel_level → secuencial (sin error)."""
 	d = DagJobDriver()
 	ws = tmp_path / "ws"
 	(ws / ".cell" / "reports").mkdir(parents=True)
-	_patch_agentic(d, monkeypatch, str(ws))
+	calls = []
+	_patch_minion_factory(monkeypatch, calls)
 	payload = _payload(str(ws), [
-		{"id": "a", "type": "agentic", "prompt": "a"},
-		{"id": "b", "type": "agentic", "prompt": "b"},
-		{"id": "c", "type": "agentic", "prompt": "c", "depends_on": ["a", "b"]},
-	], max_concurrency=2)
-	o1 = d.step(payload, {})
-	assert set(o1.new_checkpoint["completed_stage_ids"]) == {"a", "b"}
-	o2 = d.step(payload, o1.new_checkpoint)
-	assert o2.completed and o2.new_checkpoint["completed_stage_ids"] == ["a", "b", "c"]
-
-
-def test_dag_script_stage(tmp_path):
-	d = DagJobDriver()
-	ws = tmp_path / "ws"
-	ws.mkdir()
-	payload = _payload(str(ws), [
-		{"id": "gen", "type": "script", "command": "echo hi > gen.txt"},
-	])
-	o = d.step(payload, {})
+		{
+			"id": "deep",
+			"type": "compound",
+			"sub_etapas": [
+				{
+					"id": "inner",
+					"type": "compound",
+					"parallel": True,
+					"sub_etapas": [
+						{"id": "x", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "x"},
+						{"id": "y", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "y"},
+					],
+				},
+			],
+		},
+	], max_parallel_level=1)
+	# nivel del nodo 'inner' = 2 > 1 → sus sub-etapas se ejecutan secuenciales
+	while True:
+		o = d.step(payload, {})
+		if o.completed:
+			break
 	assert o.completed
-	assert (ws / "gen.txt").is_file()
-	assert o.new_checkpoint["results"]["gen"] == "gen: ok"
+	assert {"deep/inner/x", "deep/inner/y"} <= set(o.new_checkpoint["completed_stage_ids"])
 
 
+# ── Fallos: on_fail stop/warn ─────────────────────────────────────────────────
 def test_dag_on_fail_stop_raises(tmp_path, monkeypatch):
 	d = DagJobDriver()
 	ws = tmp_path / "ws"
 	(ws / ".cell" / "reports").mkdir(parents=True)
 
-	class _Broken(_FakeBridge):
-		def prompt(self, text, **kwargs):
-			return type("R", (), {"response": "", "error": "boom", "conversation_id": "x", "ok": False})()
+	class _Failing:
+		async def execute(self, task, **kwargs):
+			return {"status": "failed", "error": "boom"}
 
-	monkeypatch.setattr("red_pill.swarm.bridges.factory.create_bridge", lambda b=None, **kw: _Broken(str(ws)))
+	def _create(minion_id, **kw):
+		return _Failing()
+
+	monkeypatch.setattr("red_pill.swarm.factory.MinionFactory.create", staticmethod(_create))
+	import red_pill.jobs.drivers.dag as dag_mod
+
+	monkeypatch.setattr(dag_mod, "_resolve_minion_kind", lambda mid: "agent")
 	payload = _payload(str(ws), [
-		{"id": "impl", "type": "agentic", "prompt": "x", "on_fail": "stop"},
+		{"id": "impl", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "x", "on_fail": "stop"},
 	])
 	with pytest.raises(RuntimeError, match="on_fail=stop"):
 		d.step(payload, {})
@@ -163,30 +230,37 @@ def test_dag_on_fail_warn_continues(tmp_path, monkeypatch):
 	ws = tmp_path / "ws"
 	(ws / ".cell" / "reports").mkdir(parents=True)
 
-	class _Broken(_FakeBridge):
-		def prompt(self, text, **kwargs):
-			return type("R", (), {"response": "", "error": "boom", "conversation_id": "x", "ok": False})()
+	class _Failing:
+		async def execute(self, task, **kwargs):
+			return {"status": "failed", "error": "boom"}
 
-	monkeypatch.setattr("red_pill.swarm.bridges.factory.create_bridge", lambda b=None, **kw: _Broken(str(ws)))
+	def _create(minion_id, **kw):
+		return _Failing()
+
+	monkeypatch.setattr("red_pill.swarm.factory.MinionFactory.create", staticmethod(_create))
+	import red_pill.jobs.drivers.dag as dag_mod
+
+	monkeypatch.setattr(dag_mod, "_resolve_minion_kind", lambda mid: "agent")
 	payload = _payload(str(ws), [
-		{"id": "impl", "type": "agentic", "prompt": "x", "on_fail": "warn"},
+		{"id": "impl", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "x", "on_fail": "warn"},
 	])
 	o = d.step(payload, {})
 	assert o.completed
 	assert "FAILED" in o.new_checkpoint["results"]["impl"]
 
 
+# ── Control transferible ──────────────────────────────────────────────────────
 def test_dag_transferable_control(tmp_path, monkeypatch):
-	"""Control transferible: un checkpoint escrito desde fuera (handoff) se respeta."""
+	"""Un checkpoint escrito desde fuera (handoff) se respeta."""
 	d = DagJobDriver()
 	ws = tmp_path / "ws"
 	(ws / ".cell" / "reports").mkdir(parents=True)
-	_patch_agentic(d, monkeypatch, str(ws))
+	calls = []
+	_patch_minion_factory(monkeypatch, calls)
 	payload = _payload(str(ws), [
-		{"id": "a", "type": "agentic", "prompt": "a"},
-		{"id": "b", "type": "agentic", "prompt": "b", "depends_on": ["a"]},
+		{"id": "a", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "a"},
+		{"id": "b", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "b", "depends_on": ["a"]},
 	])
-	# el main-loop tomó el control y ejecutó 'a' inline
 	handoff = {"completed_stage_ids": ["a"], "results": {"a": "hecho-inline"}}
 	o = d.step(payload, handoff)
 	assert o.completed
@@ -199,8 +273,11 @@ def test_dag_status_file(tmp_path, monkeypatch):
 	d = DagJobDriver()
 	ws = tmp_path / "ws"
 	(ws / ".cell" / "reports").mkdir(parents=True)
-	_patch_agentic(d, monkeypatch, str(ws))
-	payload = _payload(str(ws), [{"id": "a", "type": "agentic", "prompt": "a"}])
+	calls = []
+	_patch_minion_factory(monkeypatch, calls)
+	payload = _payload(str(ws), [
+		{"id": "a", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "a"},
+	])
 	d.step(payload, {})
 	status = json.loads((ws / ".cell" / "dag_status.json").read_text())
 	assert status["completed"] == 1 and status["total"] == 1

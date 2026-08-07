@@ -82,6 +82,7 @@ from red_pill.jobs.drivers.sleep import SleepJobDriver  # noqa: E402
 register_driver(FlowJobDriver)
 register_driver(AgenticJobDriver)
 register_driver(DistillJobDriver)
+register_driver(ScriptJobDriver)
 register_driver(ForgeJobDriver)
 register_driver(SleepJobDriver)
 register_driver(DagJobDriver)

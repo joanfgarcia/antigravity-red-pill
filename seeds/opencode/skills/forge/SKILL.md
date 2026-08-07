@@ -174,7 +174,7 @@ Rules do not change with level: they apply identically from L0 to L3 and mission
 | Environment | Status | Adapter |
 |-------------|--------|---------|
 | **opencode** | ✅ CANONICAL — task subagents, parallel calls, background tasks, headless `cycle-run.mjs` | `references/runtime-adapters/opencode.md` |
-| **red-pill Job Manager** | 🔀 Federation channel (v1.3.0) — every headless role runs as an `agentic_job` (sabor A) or a full mission as a resumable `forge_job` (sabor B, **transferable control**), via `job_manager_api` MCP + recipes per role, `mission_id` isolation | `references/runtime-adapters/red-pill.md` |
+| **red-pill Job Manager** | 🔀 Federation channel (v1.3.0) — every headless role runs as an `agentic_job` (sabor A) or a full mission as a resumable `dag_job` (sabor B, **transferable control**; legacy `forge_job` still accepted), via `job_manager_api` MCP + recipes per role, `mission_id` isolation | `references/runtime-adapters/red-pill.md` |
 
 ## 9. Closing checklist (Final Gate)
 

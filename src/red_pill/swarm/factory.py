@@ -6,6 +6,7 @@ from red_pill.swarm.agents.echo import EchoMinion
 from red_pill.swarm.agents.healer import HealerMinion
 from red_pill.swarm.agents.janitor import JanitorMinion
 from red_pill.swarm.agents.samantha import SamanthaMinion
+from red_pill.swarm.agents.sleep_minions import SleepFinalizeMinion, SleepPhaseMinion, SleepRitualMinion
 from red_pill.swarm.agents.smith import SmithMinion
 from red_pill.swarm.base import Minion
 
@@ -23,6 +24,11 @@ class MinionFactory:
 		"echo_mirror": EchoMinion,
 		"janitor_cleanup": JanitorMinion,
 		"agent": AgentMinion,
+		# Minions de sleep (RFC_JOB_DAG §4.2 fleco 2): el ciclo de sueño como
+		# receta del dag_job en vez de un driver con mecánica propia.
+		"sleep_ritual": SleepRitualMinion,
+		"sleep_phase": SleepPhaseMinion,
+		"sleep_finalize": SleepFinalizeMinion,
 	}
 
 	# Specialized Command Aliases

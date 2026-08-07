@@ -1,23 +1,123 @@
-# Ciclo de sueño (03:00) como job REANUDABLE de la cola central.
+# Ciclo de sueño (03:00) como RECETA del dag_job (RFC_JOB_DAG §4.2 fleco 2).
 #
-# El timer redpill-sleep ya no ejecuta el sueño: lo ENCOLA. Desde
-# RFC_SLEEP_JOB_DRIVER (Aprobado para diseño 2026-08-04) el sueño es un
-# SleepJobDriver (source: sleep_job) que recorre 14 unidades atómicas con
-# checkpoint — ya no es un script_job de un solo paso no reanudable.
+# El sueño ya NO es un SleepJobDriver: es un árbol de etapas del dag_job. Cada
+# unidad atómica del ciclo (3 rituales + 10 fases + thread + finalize) es un
+# minion de lógica pura (red_pill.swarm.agents.sleep_minions) declarado como
+# etapa del DAG. El dag_job aporta la mecánica (checkpoint por ruta, on_fail,
+# telemetría, control transferible) que antes vivía duplicada en sleep.py.
+#
+# Semántica fiel al pulso: best-effort por unidad (on_fail: warn = skip marcado,
+# el job NUNCA falla por una unidad que revienta) y GPU por etapa
+# (requires_gpu → preflight GPU real con deferral, jamás CPU disfrazada).
 #
 # El runner serializa frente al entrenamiento y al chronicle — nadie roba la
 # VRAM a nadie a mitad de época (incidente del 28 jul 2026: 3 OOM → Bit
 # FRUSTRATED). La noche es del metabolismo: prioridad por encima del training
 # (5) y del chronicle (7).
 #
-# El driver reporta el progreso por contrato (progreso en `job status` unidad a
-# unidad), así que este recipe es solo METADATA: no hay step_command ni progress.
-# La preflight GPU por unidad vive en el driver (probe de salud real, D7).
-source: sleep_job
+# El estado `total_processed` cruza entre fases: cada minion de fase parte del
+# total previo (lee sleep_phase_status.json) y devuelve el nuevo en su dict.
+source: dag_job
 priority: 8
 title: Ciclo de sueño (consolidación nocturna)
+mission_id: sleep-cycle
+nightly_exempt: true   # anti-deadlock: el sueño no se auto-difiere entre unidades
 mode: lazy
-# Noches cargadas (300+ engramas) han llegado a ~4h; la cota de timeout queda
-# INFORMATIVA (D6: sin timeout duro in-proceso, paridad con distill/flow).
 control:
   max_step_minutes: 300
+manifest:
+  workdir: .
+  stages:
+    - id: maintenance
+      type: command
+      minion: sleep_ritual
+      params: {ritual: maintenance}
+      on_fail: warn
+    - id: usp
+      type: command
+      minion: sleep_ritual
+      params: {ritual: usp}
+      on_fail: warn
+      depends_on: [maintenance]
+    - id: dream
+      type: command
+      minion: sleep_ritual
+      params: {ritual: dream}
+      on_fail: warn
+      depends_on: [usp]
+    - id: consolidation
+      type: command
+      minion: sleep_phase
+      params: {phase_index: 0}
+      requires_gpu: true
+      on_fail: warn
+      depends_on: [dream]
+    - id: orphan-promotion
+      type: command
+      minion: sleep_phase
+      params: {phase_index: 1}
+      on_fail: warn
+      depends_on: [consolidation]
+    - id: hygiene
+      type: command
+      minion: sleep_phase
+      params: {phase_index: 2}
+      on_fail: warn
+      depends_on: [orphan-promotion]
+    - id: axon-weaver
+      type: command
+      minion: sleep_phase
+      params: {phase_index: 3}
+      on_fail: warn
+      depends_on: [hygiene]
+    - id: erosion
+      type: command
+      minion: sleep_phase
+      params: {phase_index: 4}
+      on_fail: warn
+      depends_on: [axon-weaver]
+    - id: washout
+      type: command
+      minion: sleep_phase
+      params: {phase_index: 5}
+      on_fail: warn
+      depends_on: [erosion]
+    - id: revision
+      type: command
+      minion: sleep_phase
+      params: {phase_index: 6}
+      requires_gpu: true
+      on_fail: warn
+      depends_on: [washout]
+    - id: evolution
+      type: command
+      minion: sleep_phase
+      params: {phase_index: 7}
+      on_fail: warn
+      depends_on: [revision]
+    - id: operator-profile
+      type: command
+      minion: sleep_phase
+      params: {phase_index: 8}
+      requires_gpu: true
+      on_fail: warn
+      depends_on: [evolution]
+    - id: recent-activity
+      type: command
+      minion: sleep_phase
+      params: {phase_index: 9}
+      requires_gpu: true
+      on_fail: warn
+      depends_on: [operator-profile]
+    - id: thread
+      type: command
+      minion: sleep_ritual
+      params: {ritual: thread}
+      on_fail: warn
+      depends_on: [recent-activity]
+    - id: finalize
+      type: command
+      minion: sleep_finalize
+      params: {mode: lazy}
+      on_fail: warn
+      depends_on: [thread]
