@@ -24,7 +24,9 @@ from typing import Any, Dict, Optional, Tuple
 # los sitios VERSIONADOS, que son el hogar natural de la receta: describe cómo
 # se ejecuta el proyecto, así que pertenece al proyecto y viaja con su historia.
 RECIPE_DIRS = (Path(".red-pill") / "jobs", Path("configs") / "jobs", Path("jobs"))
-_META_KEYS = ("source", "priority", "parent")
+# 'seed': True marca una receta PLANTILLA por-instalación (no una config activa).
+# No viaja al payload: es metadata para que el caller distinga seeds de config real.
+_META_KEYS = ("source", "priority", "parent", "seed")
 
 
 def resolve_recipe_path(reference: str, base_dir: Optional[Path] = None) -> Path:
@@ -51,13 +53,17 @@ def resolve_recipe_path(reference: str, base_dir: Optional[Path] = None) -> Path
 	raise FileNotFoundError(f"no hay ninguna receta '{reference}' en [{searched}] subiendo desde {start}")
 
 
-def load_recipe(reference: str, base_dir: Optional[Path] = None) -> Tuple[str, Dict[str, Any], int, Optional[str]]:
-	"""Lee una receta y devuelve (source, payload, priority, parent).
+def load_recipe(reference: str, base_dir: Optional[Path] = None) -> Tuple[str, Dict[str, Any], int, Optional[str], bool]:
+	"""Lee una receta y devuelve (source, payload, priority, parent, is_seed).
 
 	`source`, `priority` y `parent` son metadatos del encolado; todo lo demás es
 	el payload tal cual. Un `cwd` ausente o relativo se resuelve contra la raíz
 	del proyecto que aloja la receta, de modo que la receta es portable y no
 	repite rutas absolutas.
+
+	`is_seed` es True cuando la receta declara `seed: true` — una PLANTILLA
+	genérica por-instalación, NO una config activa. El caller debe bloquear (o
+	avisar) cuando una receta seed llega a producción sin config real activa.
 	"""
 	import yaml
 
@@ -72,6 +78,7 @@ def load_recipe(reference: str, base_dir: Optional[Path] = None) -> Tuple[str, D
 	if not source:
 		raise ValueError(f"la receta {path} no declara `source` (p.ej. script_job)")
 
+	is_seed = bool(data.get("seed", False))
 	payload = {k: v for k, v in data.items() if k not in _META_KEYS}
 
 	# `<raíz>/<dir de recetas>/x.yaml` → la raíz está por encima del directorio
@@ -87,4 +94,4 @@ def load_recipe(reference: str, base_dir: Optional[Path] = None) -> Tuple[str, D
 	payload["cwd"] = str(project_root) if not cwd else str((project_root / cwd).resolve() if not Path(cwd).is_absolute() else Path(cwd).expanduser())
 
 	payload.setdefault("title", path.stem)
-	return str(source), payload, int(data.get("priority", 5)), data.get("parent")
+	return str(source), payload, int(data.get("priority", 5)), data.get("parent"), is_seed

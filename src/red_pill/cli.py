@@ -528,10 +528,23 @@ def handle_job(args: argparse.Namespace) -> None:
 			from red_pill.jobs.recipes import load_recipe
 
 			try:
-				source, payload, recipe_priority, recipe_parent = load_recipe(args.recipe)
+				source, payload, recipe_priority, recipe_parent, recipe_is_seed = load_recipe(args.recipe)
 			except (FileNotFoundError, ValueError) as e:
 				print(f"[ERROR] {e}")
 				return
+			# Fail-safe: una receta SEED (plantilla por-instalación) no es una
+			# config activa. Los roles agénticos requieren modelos reales — si
+			# la receta es seed, la instalación no está configurada: bloquea.
+			if recipe_is_seed:
+				cfg_source = payload.get("source", source)
+				if cfg_source in ("agentic_job", "forge_job"):
+					print(
+						f"[ERROR] La receta '{args.recipe}' es un SEED genérico, no una config activa. "
+						f"Activa la configuración real de esta instalación copiándola a .red-pill/jobs/ "
+						f"y ajustando el modelo por rol (ver Aleth_Core/NOTE_MODEL_POLICY_ROLES.md). "
+						f"Bloqueado por seguridad: no se encola un job agéntico sin modelos configurados."
+					)
+					return
 			priority = args.priority if args.priority != 5 else recipe_priority
 			parent = parent or recipe_parent
 		else:
