@@ -55,7 +55,7 @@ Every protocol step is a feature. The orchestrator resolves each feature at asse
 | K6 | Honest 3-category reporting (Rule 5) | KERNEL | fixed |
 | K7 | Disk reconciliation on every start/resume | KERNEL | fixed |
 | O1 | E2E smoke (Rule 4) | optional | `on` (off for doc-only) |
-| O2 | Adversarial panel, multi-model lenses + judge (3/5 lenses) | optional | `auto` (on ≥L2) |
+| O2 | Adversarial panel, multi-model lenses + judge (3/5 lenses) — as a dag_job compound `parallel: true` stage (RFC_JOB_DAG step 5) | optional | `auto` (on ≥L2) |
 | O3 | Dynamic L0-L3 escalation + anti-abandonment ladder | optional | `on` |
 | O4 | Git-worktree isolation for parallel implementors | optional | `auto` (on if parallel) |
 | O5 | Mission Mode (autonomy contract, pillars 1-7) | optional | only 15+ phases |

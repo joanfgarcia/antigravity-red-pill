@@ -282,3 +282,50 @@ def test_dag_status_file(tmp_path, monkeypatch):
 	status = json.loads((ws / ".cell" / "dag_status.json").read_text())
 	assert status["completed"] == 1 and status["total"] == 1
 	assert status["status"] == "completed"
+
+
+def test_dag_forge_panel_L3(tmp_path, monkeypatch):
+	"""Paso 5 del RFC: el panel adversarial de forge como etapa compuesta parallel.
+	Las 5 lentes corren en el mismo step (threads) y el judge espera sus reportes
+	vía depends_on; cada sub-etapa serializa su dict en .cell/reports/panel/."""
+	d = DagJobDriver()
+	ws = tmp_path / "ws"
+	(ws / ".cell" / "reports").mkdir(parents=True)
+	calls = []
+	_patch_minion_factory(monkeypatch, calls)
+	payload = _payload(str(ws), [
+		{"id": "impl", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "implementa"},
+		{
+			"id": "panel",
+			"type": "compound",
+			"parallel": True,
+			"on_fail": "warn",
+			"depends_on": ["impl"],
+			"sub_etapas": [
+				{"id": "lens-correctness", "type": "agent", "minion": "agent", "model": "opencode/big-pickle", "prompt": "refuta correctness"},
+				{"id": "lens-env-segregation", "type": "agent", "minion": "agent", "model": "opencode-go/mimo-v2.5-pro", "prompt": "refuta env"},
+				{"id": "lens-plan", "type": "agent", "minion": "agent", "model": "opencode-go/mimo-v2.5-pro", "prompt": "refuta plan"},
+				{"id": "lens-security", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "refuta security"},
+				{"id": "lens-perf-repro", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-flash", "prompt": "reproduce perf"},
+				{"id": "judge", "type": "agent", "minion": "agent", "model": "opencode-go/kimi-k2.7-code",
+					"depends_on": ["lens-correctness", "lens-env-segregation", "lens-plan", "lens-security", "lens-perf-repro"],
+					"prompt": "lee .cell/reports/panel/lens-*.json y adjudica"},
+			],
+		},
+	])
+	o1 = d.step(payload, {})
+	assert o1.new_checkpoint["completed_stage_ids"] == ["impl"]
+	o2 = d.step(payload, o1.new_checkpoint)
+	# Las 5 lentes corren en UN step (threads, paralelas); el judge con depends_on
+	# es una oleada posterior (espera sus reportes) → el compuesto 'panel' se marca
+	# done en el step siguiente. Checkpoint por sub-etapa (RFC §4.1).
+	assert o2.new_checkpoint["completed_stage_ids"] == ["impl"] + [f"panel/lens-{lid}" for lid in ("correctness", "env-segregation", "plan", "security", "perf-repro")]
+	o3 = d.step(payload, o2.new_checkpoint)
+	assert o3.completed
+	ids = o3.new_checkpoint["completed_stage_ids"]
+	for lid in ("lens-correctness", "lens-env-segregation", "lens-plan", "lens-security", "lens-perf-repro", "judge"):
+		assert f"panel/{lid}" in ids, f"falta panel/{lid}"
+	assert "panel" in ids
+	# Cada sub-etapa serializó su reporte en .cell/reports/panel/
+	for lid in ("lens-correctness", "lens-env-segregation", "lens-plan", "lens-security", "lens-perf-repro", "judge"):
+		assert (ws / ".cell" / "reports" / "panel" / f"{lid}.json").is_file(), f"falta reporte panel/{lid}.json"

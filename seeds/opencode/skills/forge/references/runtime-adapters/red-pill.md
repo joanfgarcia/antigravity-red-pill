@@ -102,4 +102,6 @@ It is **local** (filesystem) coordination, NOT neon-link. Do NOT use the Bünker
 
 - The schema is not validated at launch (the cold process could deviate) → the final gate remains the safety net.
 - Resumption goes through the DB checkpoint (`step_index`), not a shared `resumeFromRunId`.
-- The queue runner is sequential (one pop at a time): a parallel panel serializes on the queue, but each step is a normal bounded role call and the orchestrator collects concurrently.
+- The queue runner is sequential across JOBS (one pop at a time), but a `dag_job`
+  parallelizes INSIDE its step (threads): an L3 panel of 5 lenses runs in ONE step.
+  In sabor A (one `agentic_job` per lens) the queue still serializes them.
