@@ -115,7 +115,8 @@ def test_submit_singleton_skips_live_duplicate(tmp_path, monkeypatch):
 
 
 def test_forge_recipe_seed_marked_in_repo():
-	"""Los recipes forge del repo (configs/jobs/) son SEEDS: seed=True."""
+	"""Los recipes forge del repo (configs/jobs/) son SEEDS: seed=True y su etapa
+	atómica lleva el modelo en el default del harness (flash = placeholder)."""
 	from red_pill.jobs.recipes import load_recipe
 
 	roles = ("forge-triage", "forge-implementor", "forge-validator", "forge-smoke-tester",
@@ -123,29 +124,40 @@ def test_forge_recipe_seed_marked_in_repo():
 	for name in roles:
 		_, payload, _, _, is_seed = load_recipe(str(REPO_ROOT / "configs" / "jobs" / f"{name}.yaml"))
 		assert is_seed is True, f"{name} debería ser seed"
+		# Receta del dag_job: una etapa atómica agent con el perfil del rol.
+		stage = payload["manifest"]["stages"][0]
+		assert stage["type"] == "agent" and stage["minion"] == "agent"
 		# Los seeds no llevan modelo concreto: quedan en el default del harness.
-		assert payload.get("model", "flash") == "flash"
+		assert stage.get("model", "flash") == "flash"
 
 
 def test_forge_config_local_overrides_seed_and_is_not_seed(tmp_path, monkeypatch):
 	"""Una config local en .red-pill/jobs/ gana al seed y NO se marca como seed."""
 	from red_pill.jobs.recipes import load_recipe
 
-	# Simula una instalación: configura local que copia el seed y fija modelo real.
+	# Simula una instalación: configura local que copia el seed y fija modelo real
+	# en la etapa atómica del dag_job.
 	ws = tmp_path / "ws"
 	(ws / ".red-pill" / "jobs").mkdir(parents=True)
 	local = ws / ".red-pill" / "jobs" / "forge-implementor.yaml"
 	local.write_text(
-		"source: agentic_job\n"
+		"source: dag_job\n"
 		"priority: 5\n"
-		"backend: opencode\n"
-		"model: opencode-go/deepseek-v4-pro\n"
-		"effort: high\n",
+		"manifest:\n"
+		"  workdir: .\n"
+		"  stages:\n"
+		"    - id: implementor\n"
+		"      type: agent\n"
+		"      minion: agent\n"
+		"      backend: opencode\n"
+		"      model: opencode-go/deepseek-v4-pro\n"
+		"      effort: high\n"
+		"      prompt: <dinámico en el submit>\n",
 		encoding="utf-8",
 	)
 	_, payload, _, _, is_seed = load_recipe("forge-implementor", base_dir=ws)
 	assert is_seed is False
-	assert payload["model"] == "opencode-go/deepseek-v4-pro"
+	assert payload["manifest"]["stages"][0]["model"] == "opencode-go/deepseek-v4-pro"
 
 
 def test_job_submit_mcp_blocks_agentic_without_model():

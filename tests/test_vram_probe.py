@@ -17,12 +17,33 @@ from unittest.mock import patch
 
 
 class TestGetBackend:
-	def test_cuda_when_nvidia_smi_present(self):
-		"""If nvidia-smi is on PATH, backend must be 'cuda'."""
+	def test_cuda_when_nvidia_smi_responds(self):
+		"""If nvidia-smi is on PATH AND answers (exit 0), backend must be 'cuda'."""
 		from red_pill.core.vram_probe import VramProbe
 
 		with patch("shutil.which", return_value="/usr/bin/nvidia-smi"):
-			assert VramProbe.get_backend() == "cuda"
+			with patch("subprocess.run", return_value=type("R", (), {"returncode": 0, "stdout": "8192\n"})):
+				assert VramProbe.get_backend() == "cuda"
+
+	def test_cuda_false_positive_fixed_when_nvidia_smi_present_but_dead(self):
+		"""FIX RFC_JOB_DAG §5.6: nvidia-smi en PATH pero que FALLA (exit!=0) NO es
+		cuda — antes era un falso positivo que elegía el tier cuda y luego fallaba
+		la query de VRAM."""
+		from red_pill.core.vram_probe import VramProbe
+
+		with patch("shutil.which", return_value="/usr/bin/nvidia-smi"):
+			with patch("subprocess.run", return_value=type("R", (), {"returncode": 1, "stdout": ""})):
+				with patch("os.path.isdir", return_value=False):
+					assert VramProbe.get_backend() == "cpu"
+
+	def test_cuda_false_positive_fixed_when_probe_raises(self):
+		"""Si la query de nvidia-smi lanza excepción (timeout, permisos), NO cuda."""
+		from red_pill.core.vram_probe import VramProbe
+
+		with patch("shutil.which", return_value="/usr/bin/nvidia-smi"):
+			with patch("subprocess.run", side_effect=FileNotFoundError("nvidia-smi")):
+				with patch("os.path.isdir", return_value=False):
+					assert VramProbe.get_backend() == "cpu"
 
 	def test_rocm_when_amdgpu_sysfs_present(self, tmp_path):
 		"""If nvidia-smi absent but AMD DRM card exists, backend must be 'rocm'."""

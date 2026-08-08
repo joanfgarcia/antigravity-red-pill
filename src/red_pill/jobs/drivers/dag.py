@@ -416,6 +416,7 @@ class DagJobDriver(ResumableJobDriver):
 				new_checkpoint=checkpoint_data,
 				summary="dag complete" if done else "waiting on deps (should not happen)",
 				progress={"current": len(completed), "total": total_leaves, "percent": round(100 * len(completed) / total_leaves) if total_leaves else 0},
+				concurrency={"parallel_groups": 0, "parallel_stages": 0, "max_parallel_level": int(payload.get("max_parallel_level", _MAX_PARALLEL_LEVEL_DEFAULT)), "actually_parallel": False},
 			)
 
 		def _exec_one(path: str, stage: Dict[str, Any]) -> Tuple[str, str, bool]:
@@ -438,6 +439,8 @@ class DagJobDriver(ResumableJobDriver):
 		max_conc = int(payload.get("max_concurrency", _MAX_CONCURRENCY_DEFAULT))
 		max_parallel_level = int(payload.get("max_parallel_level", _MAX_PARALLEL_LEVEL_DEFAULT))
 		all_tasks: List[Tuple[str, str, bool]] = []
+		parallel_groups = 0
+		parallel_stages = 0
 
 		def _run_group(group: List[Tuple[str, Dict[str, Any]]]) -> List[Tuple[str, str, bool]]:
 			with concurrent.futures.ThreadPoolExecutor(max_workers=max_conc) as pool:
@@ -453,6 +456,8 @@ class DagJobDriver(ResumableJobDriver):
 				parent_parallel = bool(node and node.get("type") == _TYPE_COMPOUND and node.get("parallel"))
 			parallel = parent_parallel and level <= max_parallel_level and len(group) > 1
 			if parallel:
+				parallel_groups += 1
+				parallel_stages += len(group)
 				all_tasks.extend(_run_group(group))
 			else:
 				for path, stage in group:
@@ -502,4 +507,5 @@ class DagJobDriver(ResumableJobDriver):
 			new_checkpoint=checkpoint,
 			summary=f"dag {leaves_done}/{total_leaves}",
 			progress={"current": leaves_done, "total": total_leaves, "percent": round(100 * leaves_done / total_leaves) if total_leaves else 0},
+			concurrency={"parallel_groups": parallel_groups, "parallel_stages": parallel_stages, "max_parallel_level": max_parallel_level, "actually_parallel": parallel_groups > 0},
 		)

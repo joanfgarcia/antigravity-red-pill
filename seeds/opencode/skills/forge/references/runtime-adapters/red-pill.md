@@ -29,22 +29,29 @@ The skill talks to the job manager through MCP (no shell dependency):
 
 ### Recipes per role (`configs/jobs/forge-*.yaml` in the kernel repo)
 
-One recipe per role — the role's execution profile, versioned:
+One recipe per role — the role's execution profile as an ATOMIC dag_job stage, versioned:
 
 `forge-triage`, `forge-implementor`, `forge-validator`, `forge-smoke-tester`, `forge-devils-advocate`, `forge-judge`, `forge-doc-anchor`, `forge-qa`, `forge-scout`.
 
-Each fixes `source: agentic_job`, `backend: opencode`, `model`, `effort`, `timeout`, `priority`. The `prompt` and `cwd` are **dynamic** (per task) and travel in the submit payload — the recipe is the profile, not the content.
+Each is a `dag_job` recipe whose `manifest.stages[0]` defines the role's profile:
+`type: agent`, `minion: agent`, `backend`, `model`, `effort`. The `prompt` is
+**dynamic** (per task) — the skill injects it into the stage when composing the
+mission manifest. The recipe is the profile, not the content.
 
 ## Sabor A — Main loop in command (default): one role per job
 
-The Orchestrator stays the main loop (it decides escalation/panel/judge) and each headless role is an `agentic_job` enqueued and polled:
+The Orchestrator stays the main loop (it decides escalation/panel/judge) and each headless role runs as a **single-stage dag_job** (the role's recipe) enqueued and polled:
 
 ```
 1. Pack ALL role context into the prompt (cold context inherits nothing) +
    the instruction to emit JSON conforming to the schema (references/schemas/)
    into .cell/reports/<role>-<phase>.json.
-2. job_manager_api.job_submit { source: agentic_job,
-     payload: { prompt, cwd: <workspace>, backend, model, effort },
+2. job_manager_api.job_submit { source: dag_job,
+     payload: { mission_id,
+       manifest: { workdir: <workspace>, stages: [
+         { id: <role>, type: "agent", minion: "agent",
+           backend: <role-backend>, model: <role-model>, effort: <role-effort>,
+           prompt: <FULL> } ] } },
      mission_id: <mission> }
 3. Poll job_status (or wait for the Minion Inbox report) until COMPLETED.
 4. Consolidate the report into .cell/state.json; run validate-report.mjs /
@@ -53,7 +60,9 @@ The Orchestrator stays the main loop (it decides escalation/panel/judge) and eac
    requested) at consolidation and record it in the ledger.
 ```
 
-Parallel panel (L2/L3): enqueue N `agentic_job`s (one per lens) in a burst and poll them together — the queue serializes execution but the orchestrator collects concurrently via `job_list --mission <mission>`.
+Parallel panel (L2/L3): compose the panel as a COMPOUND stage with `parallel:
+true` (see Sabor B / `configs/jobs/forge-panel.yaml`) — the DAG parallelizes the
+lenses inside one step; do NOT fall back to N serialized `agentic_job`s.
 
 ## Sabor B — Full mission in background with TRANSFERABLE CONTROL
 

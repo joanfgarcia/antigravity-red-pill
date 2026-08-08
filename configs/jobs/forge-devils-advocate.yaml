@@ -1,10 +1,18 @@
-# Forge — rol Devil's Advocate (refutador adversarial, UNA lente).
+# Forge — rol Devil's Advocate (refutador adversarial, UNA lente) como etapa atómica.
 seed: true  # SEED genérico: plantilla por-instalación. Activar config real copiando a .red-pill/jobs/ (ver NOTE_MODEL_POLICY_ROLES).
-source: agentic_job
+source: dag_job
 priority: 5
+mission_id: forge-devils-advocate
 backend: opencode
-model: flash  # SEED por-instalación: cada instalación configura el modelo de este rol. "flash" = default del harness (el bridge no pasa -m). Ver la política de modelos de referencia en Aleth_Core/NOTE_MODEL_POLICY_ROLES.md (p.ej. implementor → opencode-go/deepseek-v4-pro).
-effort: high
 timeout: 600
 control:
   max_step_minutes: 15
+manifest:
+  workdir: .
+  stages:
+    - id: devils-advocate
+      type: agent
+      minion: agent
+      backend: opencode
+      model: flash  # SEED por-instalación. Ver Aleth_Core/NOTE_MODEL_POLICY_ROLES.md (devils-advocate → opencode/big-pickle, lente free).
+      effort: high

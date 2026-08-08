@@ -55,8 +55,9 @@ currency is the tree.
 ### Recipes (configs/jobs/)
 
 - `sleep.yaml` — the sleep cycle as a 15-stage tree (`nightly_exempt: true`).
-- `forge-*.yaml` — per-role seeds (`agentic_job`, not the tree) — forge composes
-  them into a dag_job tree at mission time.
+- `forge-*.yaml` — per-role seeds as single-stage dag_job recipes (one atomic
+  `type: agent` stage each: the role's profile) — the forge skill injects the
+  dynamic prompt and composes them into the mission tree.
 
 ## Nightly exemption (anti-deadlock)
 

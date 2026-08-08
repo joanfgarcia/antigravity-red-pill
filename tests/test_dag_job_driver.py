@@ -320,6 +320,11 @@ def test_dag_forge_panel_L3(tmp_path, monkeypatch):
 	# es una oleada posterior (espera sus reportes) → el compuesto 'panel' se marca
 	# done en el step siguiente. Checkpoint por sub-etapa (RFC §4.1).
 	assert o2.new_checkpoint["completed_stage_ids"] == ["impl"] + [f"panel/lens-{lid}" for lid in ("correctness", "env-segregation", "plan", "security", "perf-repro")]
+	# §3: StepOutcome informa el paralelismo real del step (RFC_JOB_DAG §3)
+	assert o2.concurrency is not None
+	assert o2.concurrency["parallel_groups"] == 1
+	assert o2.concurrency["parallel_stages"] == 5
+	assert o2.concurrency["actually_parallel"] is True
 	o3 = d.step(payload, o2.new_checkpoint)
 	assert o3.completed
 	ids = o3.new_checkpoint["completed_stage_ids"]
