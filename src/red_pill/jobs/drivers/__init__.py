@@ -75,18 +75,18 @@ from red_pill.jobs.drivers.bit_training import BitTrainingDriver  # noqa: E402
 from red_pill.jobs.drivers.dag import DagJobDriver  # noqa: E402
 from red_pill.jobs.drivers.distill import DistillJobDriver  # noqa: E402
 from red_pill.jobs.drivers.flow import FlowJobDriver  # noqa: E402
-from red_pill.jobs.drivers.forge import ForgeJobDriver  # noqa: E402
 from red_pill.jobs.drivers.script import ScriptJobDriver  # noqa: E402
-from red_pill.jobs.drivers.sleep import SleepJobDriver  # noqa: E402
 
 register_driver(FlowJobDriver)
 register_driver(AgenticJobDriver)
 register_driver(DistillJobDriver)
 register_driver(ScriptJobDriver)
-register_driver(ForgeJobDriver)
-register_driver(SleepJobDriver)
 register_driver(DagJobDriver)
 # BitTrainingDriver queda registrado a propósito hasta que el camino genérico
 # (ScriptJobDriver) complete una fase real del curriculum: es la red de
 # seguridad y la vía de rollback del entrenamiento en curso (D3 del RFC).
 register_driver(BitTrainingDriver)
+# NOTA (RFC_JOB_DAG v0.7, paso 4): forge_job y sleep_job ya NO se registran —
+# son recetas del dag_job (forge-panel.yaml / sleep.yaml). Los drivers legacy
+# siguen importables (red_pill.jobs.drivers.forge / .sleep) para jobs previos
+# y tests, pero no son fuentes del carril mecánico. Limpieza física pendiente.

@@ -1768,17 +1768,17 @@ def _resolve_job(qm, ref: str) -> Optional[Dict[str, Any]]:
 	action="job_submit",
 	description=(
 		"[OFFICIAL] Encola un job en la cola central (Centralized Job Manager). "
-		"Fuente del sustrato de ejecución de tareas: `agentic_job` (prompt vía backend), "
-		"`dag_job` (misión completa como árbol de etapas — RFC_JOB_DAG) o el legacy "
-		"`forge_job`. Para lanzar un rol Forge headless usa source=agentic_job con un recipe "
-		"(backend/model/effort por rol). Un dag_job con manifest.stages recorre la misión "
-		"recursivamente (etapas atómicas minion/compuestas sub_etapas, parallel intención), "
-		"pausable/reanudable. Devolverá el job_id; resultados a MinionInbox (check_minion_inbox)."
+		"Fuente del sustrato de ejecución de tareas: `agentic_job` (prompt vía backend) o "
+		"`dag_job` (misión completa como árbol de etapas — RFC_JOB_DAG). Para lanzar un rol Forge "
+		"headless usa source=agentic_job con un recipe (backend/model/effort por rol). Un dag_job "
+		"con manifest.stages recorre la misión recursivamente (etapas atómicas minion/compuestas "
+		"sub_etapas, parallel intención), pausable/reanudable. forge_job/sleep_job son legacy "
+		"(recetas del dag_job). Devolverá el job_id; resultados a MinionInbox (check_minion_inbox)."
 	),
 	schema={
 		"type": "object",
 		"properties": {
-			"source": {"type": "string", "enum": ["agentic_job", "dag_job", "forge_job"], "description": "Driver que ejecutará el job."},
+			"source": {"type": "string", "enum": ["agentic_job", "dag_job", "forge_job", "sleep_job"], "description": "Driver que ejecutará el job (forge_job/sleep_job legacy: solo jobs previos en cola)."},
 			"payload": {"type": "object", "description": "Payload del driver. agentic_job: {prompt, backend?, model?, effort?, cwd?, timeout?}. dag_job: {mission_id, manifest:{workdir, stages:[{id, type: agent|command|compound, minion, model?, prompt?, on_fail?, depends_on?, sub_etapas?}]}, max_parallel_level?, max_concurrency?, backend?, model?, effort?, timeout?}."},
 			"priority": {"type": "integer", "description": "Mayor = más urgente (default 5)."},
 			"mission_id": {"type": "string", "description": "Grupo de aislamiento entre forges (se lee de payload si se omite)."},
