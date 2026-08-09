@@ -135,10 +135,18 @@ def _gpu_health_probe() -> Tuple[bool, int, int]:
 		for line in (ps.stdout or "").splitlines():
 			low = line.lower()
 			if "-ngl" in low:
-				for part in line.split():
+				parts = line.split()
+				for i, part in enumerate(parts):
 					if part.startswith("-ngl"):
 						try:
-							ngl = int(part.split()[0] or part.split("=")[-1])
+							# Soporta `-ngl=33`, `-ngl33` y `-ngl 33` (valor en el
+							# siguiente token).
+							if "=" in part:
+								ngl = int(part.split("=")[-1])
+							elif part != "-ngl" and part[4:].lstrip("-").isdigit():
+								ngl = int(part[4:])
+							elif i + 1 < len(parts):
+								ngl = int(parts[i + 1])
 						except Exception:
 							ngl = 0
 						break

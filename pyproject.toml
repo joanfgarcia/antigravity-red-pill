@@ -182,6 +182,12 @@ omit = [
     # --- Metabolism (tested separately, requires Qdrant) ---
     "*/metabolism/sleep.py",
 
+    # --- Legacy job drivers RETIRED (RFC_JOB_DAG): forge_job/sleep_job ya no se
+    # registran — son recetas del dag_job. Código muerto a la espera de limpieza
+    # física; no se mide lo retirado. ---
+    "*/jobs/drivers/forge.py",
+    "*/jobs/drivers/sleep.py",
+
     # --- MCP Server tool handlers (require live Qdrant + MCP runtime) ---
     "*/mcp_server.py",
 

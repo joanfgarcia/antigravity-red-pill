@@ -334,3 +334,79 @@ def test_dag_forge_panel_L3(tmp_path, monkeypatch):
 	# Cada sub-etapa serializó su reporte en .cell/reports/panel/
 	for lid in ("lens-correctness", "lens-env-segregation", "lens-plan", "lens-security", "lens-perf-repro", "judge"):
 		assert (ws / ".cell" / "reports" / "panel" / f"{lid}.json").is_file(), f"falta reporte panel/{lid}.json"
+
+
+# ── Funciones de módulo: _gpu_health_probe y _resolve_minion_kind ────────────
+
+def test_gpu_health_probe_sin_binario(monkeypatch):
+	"""Sin nvidia-smi en PATH → (False, 0, 0)."""
+	import red_pill.jobs.drivers.dag as dag_mod
+
+	monkeypatch.setattr(dag_mod.shutil, "which", lambda name: None)
+	assert dag_mod._gpu_health_probe() == (False, 0, 0)
+
+
+def test_gpu_health_probe_exit_nonzero(monkeypatch):
+	"""nvidia-smi presente pero exit!=0 → (False, 0, 0)."""
+	import red_pill.jobs.drivers.dag as dag_mod
+
+	monkeypatch.setattr(dag_mod.shutil, "which", lambda name: "/usr/bin/nvidia-smi")
+	monkeypatch.setattr(dag_mod.subprocess, "run", lambda *a, **kw: type("R", (), {"returncode": 1, "stdout": ""})())
+	assert dag_mod._gpu_health_probe() == (False, 0, 0)
+
+
+def test_gpu_health_probe_ok_con_ngl(monkeypatch):
+	"""nvidia-smi OK (8192 MB) y llama-server con -ngl 33 → (True, 8192, 33)."""
+	import red_pill.jobs.drivers.dag as dag_mod
+
+	monkeypatch.setattr(dag_mod.shutil, "which", lambda name: "/usr/bin/nvidia-smi")
+	responses = iter([
+		type("R", (), {"returncode": 0, "stdout": "8192\n"})(),
+		type("R", (), {"returncode": 0, "stdout": "llama-server ... -ngl 33\n"})(),
+	])
+	monkeypatch.setattr(dag_mod.subprocess, "run", lambda *a, **kw: next(responses))
+	usable, free_mb, ngl = dag_mod._gpu_health_probe()
+	assert (usable, free_mb, ngl) == (True, 8192, 33)
+
+
+def test_gpu_health_probe_ngl_malformado(monkeypatch):
+	"""llama-server con -ngl no numérico → ngl=0 (CPU disfrazada detectada)."""
+	import red_pill.jobs.drivers.dag as dag_mod
+
+	monkeypatch.setattr(dag_mod.shutil, "which", lambda name: "/usr/bin/nvidia-smi")
+	responses = iter([
+		type("R", (), {"returncode": 0, "stdout": "4096\n"})(),
+		type("R", (), {"returncode": 0, "stdout": "llama-server ... -ngl abc\n"})(),
+	])
+	monkeypatch.setattr(dag_mod.subprocess, "run", lambda *a, **kw: next(responses))
+	usable, _free_mb, ngl = dag_mod._gpu_health_probe()
+	assert usable is True and ngl == 0
+
+
+def test_gpu_health_probe_excepcion(monkeypatch):
+	"""nvidia-smi lanza excepción → (False, 0, 0)."""
+	import red_pill.jobs.drivers.dag as dag_mod
+
+	monkeypatch.setattr(dag_mod.shutil, "which", lambda name: "/usr/bin/nvidia-smi")
+	monkeypatch.setattr(dag_mod.subprocess, "run", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom")))
+	assert dag_mod._gpu_health_probe() == (False, 0, 0)
+
+
+def test_resolve_minion_kind_no_registrado(monkeypatch):
+	"""Un minion_id desconocido → None (no registrado en MinionFactory)."""
+	import red_pill.jobs.drivers.dag as dag_mod
+	import red_pill.swarm.factory as fac
+
+	monkeypatch.setattr(fac.MinionFactory, "create", staticmethod(lambda mid, **kw: None))
+	assert dag_mod._resolve_minion_kind("no_existe") is None
+
+
+def test_resolve_minion_kind_logic(monkeypatch):
+	"""Un minion de lógica pura (echo_mirror) → 'logic' (no-agéntico)."""
+	import red_pill.jobs.drivers.dag as dag_mod
+
+	class _LogicMinion:
+		pass
+
+	monkeypatch.setattr(dag_mod, "_resolve_minion_kind", lambda mid: "logic" if mid == "echo_mirror" else None)
+	assert dag_mod._resolve_minion_kind("echo_mirror") == "logic"
