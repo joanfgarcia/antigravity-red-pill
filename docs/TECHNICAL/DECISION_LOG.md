@@ -4,6 +4,59 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-025] Job DAG — el dag_job como plantilla genérica recursiva de composición
+**Date**: 2026-08-08
+**Status**: PENDING — se integra al merge del PR #84 (feat/job-dag).
+**Context**: forge_job y sleep_job duplicaban la MISMA mecánica (checkpoint, on_fail por unidad, telemetría, control transferible). Dos drivers que solo cambiaban en el contenido de sus unidades. El DAG generaliza esa mecánica en un solo driver y reduce forge/sleep a recetas (configuración de etapas).
+**Decision**:
+- `dag_job` es la plantilla genérica: un árbol RECURSIVO de etapas. Cada etapa es **atómica** (un minion del MinionFactory: agéntico o no) **o compuesta** (sub_etapas con topología local). La recursión unifica todo: panel = sub-etapa paralela, sleep = receta secuencial, forge = receta mixta.
+- `forge_job`/`sleep_job` dejan de registrarse como drivers. Sus manifests pasan a ser recetas del dag_job. Los archivos quedan importables (legacy) para jobs previos y tests; limpieza física diferida.
+- Etapa agéntica se distingue por RESOLUCIÓN del minion (isinstance AgentMinion), no por un campo `type` redundante. `type` existe como red de VALIDACIÓN cruzada (type↔minion), no como fuente de comportamiento.
+- `parallel: true` es **INTENCIÓN declarativa, no obligación**: el orquestador decide cuándo paraleliza (max_parallel_level, default 2). Nivel mayor → secuencial sin error.
+- Checkpoint por sub-etapa con flags del padre: cada etapa atómica persiste SU reporte en `.cell/reports/<ruta>.json`; el padre solo marca `stage_flags`. Determinismo por identidad de ruta (ids aplanados), no por orden de hilos.
+**Por qué esto y no alternativas**: no un driver por caso (era la duplicación que motivó el RFC); no tipo de etapa propio (el kernel ya tenía la unidad — MinionFactory); no réplica de checkpoints en el padre (se elimina el problema del orden de hilos del fan-out, ver AD-026).
+
+---
+
+## [AD-026] DAG dinámico ACOTADO — branching y fan-out sí, reescritura agéntica no
+**Date**: 2026-08-08
+**Status**: PENDING — decisión de diseño, implementación futura (no en PR #84).
+**Context**: la pregunta "¿DAG dinámico?" se descompuso en tres capacidades distintas al repensar el RFC tras implementarlo. AutoGPT/BabyAGI fracasaron en "autonomía total con plan emergente" por goal drift (el agente justifica lo hecho en vez de avanzar). La lección: la autonomía sin anclas deriva.
+**Decision**:
+1. **Branching condicional — SÍ (futuro)**: etapa gate (minion agéntico) que devuelve un veredicto ∈ categorías DECLARADAS en el manifest → el DAG elige la rama. El árbol completo se declara al inicio; el validador no inventa ramas, solo elige entre las declaradas.
+2. **Fan-out por items — SÍ (futuro)**: una etapa devuelve una lista; el DAG instancia N veces una etapa plantilla. La lista viaja al checkpoint (determinista).
+3. **Reescritura arbitraria del manifest por un agente — NO**: pierde determinismo, auditoría y resume limpio. El operador/main-loop ya "reescribe" vía control transferible (job_transfer → inline → job_checkpoint → job_resume).
+**Regla de oro**: el agente NO reescribe el plan — declara un resultado, el DAG interpreta dentro de los límites del manifest.
+**Referencia de patrones**: LangGraph (conditional edges), Airflow (BranchPythonOperator / Dynamic Task Mapping), Temporal (signals): todos grafo estático + decisión en el nodo.
+
+---
+
+## [AD-027] Serialización del minion — la hace el DAG, no el minion (opción 3)
+**Date**: 2026-08-08
+**Status**: PENDING — implementado en PR #84.
+**Context**: los minions del MinionFactory devuelven dict en memoria (`{status, response, error, ...}`). La alternativa natural era que el minion escribiera `.cell/reports/<id>.json` él mismo, acoplando todos los minions al contrato de reporte del DAG.
+**Decision**: el `dag_job` serializa: tras `minion.execute()`, el DAG escribe el dict a `.cell/reports/<ruta>.json`. Los minions existentes NO se tocan (ni parámetro en el constructor, ni herencia JobMinion). Un minion que genere un artefacto grande puede escribir su propio archivo y devolver solo el resumen — sin mecanismo especial.
+**Por qué**: los minions son unidades puras (devuelven dict); la serialización es un contrato del consumidor (el DAG), no del minion. El carril cognitivo usa los mismos minions sin serialización.
+
+---
+
+## [AD-028] Fail-safe de modelos en TODAS las etapas agénticas del árbol
+**Date**: 2026-08-08
+**Status**: PENDING — implementado en PR #84 (extiende PR #83).
+**Context**: el PR #83 bloqueaba agentic_job/forge_job sin modelo real (flash = placeholder). El dag_job introduce N etapas agénticas por misión; validar solo el job no basta.
+**Decision**: `validate()` del dag_job recorre el árbol recursivamente: TODA etapa `type: agent` exige `model` real (no `flash`) + `prompt`, validado EN EL SUBMIT — antes de lanzar CUALQUIER etapa. El MCP/CLI bloquean igual.
+**Por qué**: una misión con una etapa agéntica sin configurar fallaría 3 intentos después y a las 3 de la mañana. El fail-safe lo detecta al encolar.
+
+---
+
+## [AD-029] Exención nocturna del runner generalizada (nightly_exempt)
+**Date**: 2026-08-08
+**Status**: PENDING — implementado en PR #84.
+**Context**: el runner difiere todos los driver jobs mientras el ciclo nocturno está activo (prioridad de la noche). La exención anti-deadlock era por source exacto (`sleep_job`): el sueño no podía auto-diferirse entre unidades. Al migrar sleep a receta dag_job, esa exención se rompía (el dag_job de sueño se diferiría a sí mismo → inanición).
+**Decision**: la exención pasa a un flag declarativo en el payload: `nightly_exempt: true` (lo declara la receta sleep). El runner exime ese flag además del source legacy. No es un chequeo por nombre de driver.
+
+---
+
 ## [AD-024] Murky Memory Policy (Self-Evocation Enforcement)
 **Date**: 2026-07-19
 **Status**: PROPOSED — decision deliberately deferred by the Operator ("hay que pensarlo bien").

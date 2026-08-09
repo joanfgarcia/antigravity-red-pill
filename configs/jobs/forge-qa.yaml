@@ -1,10 +1,18 @@
-# Forge — rol QA Final (auditoría completa antes del gate).
+# Forge — rol QA Final como UNA etapa atómica del dag_job.
 seed: true  # SEED genérico: plantilla por-instalación. Activar config real copiando a .red-pill/jobs/ (ver NOTE_MODEL_POLICY_ROLES).
-source: agentic_job
+source: dag_job
 priority: 5
+mission_id: forge-qa
 backend: opencode
-model: flash  # PLACEHOLDER = "no especificar": el bridge opencode NO pasa -m y usa el modelo por defecto de opencode. Sobrescribir en el payload del submit (job_submit {model}) para fijar uno concreto, p.ej. anthropic/claude-sonnet-4-5.
-effort: high
 timeout: 900
 control:
   max_step_minutes: 20
+manifest:
+  workdir: .
+  stages:
+    - id: qa
+      type: agent
+      minion: agent
+      backend: opencode
+      model: flash  # SEED por-instalación. Ver Aleth_Core/NOTE_MODEL_POLICY_ROLES.md (qa-final → opencode-go/mimo-v2.5-pro).
+      effort: high

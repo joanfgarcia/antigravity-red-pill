@@ -28,13 +28,14 @@ def isolated_state(tmp_path, monkeypatch):
 	return state
 
 
-@pytest.mark.parametrize("name, source, priority", [("sleep", "sleep_job", 8), ("chronicle", "script_job", 7)])
+@pytest.mark.parametrize("name, source, priority", [("sleep", "dag_job", 8), ("chronicle", "script_job", 7)])
 def test_kernel_nightly_recipes_are_valid(name, source, priority):
 	"""Las recetas del kernel cargan, validan en el submit y anclan cwd al repo.
 
 	El orden de prioridades es el contrato de la noche: sueño (8) > chronicle
-	(7) > entrenamiento (5) — mayor número = más urgente. El sueño es un
-	`sleep_job` (RFC_SLEEP_JOB_DRIVER); el chronicle sigue siendo `script_job`.
+	(7) > entrenamiento (5) — mayor número = más urgente. El sueño es una
+	receta del `dag_job` (RFC_JOB_DAG — cada unidad del ciclo es una etapa con
+	su minion); el chronicle sigue siendo `script_job`.
 	"""
 	from red_pill.jobs.drivers import get_driver_class
 
@@ -45,15 +46,21 @@ def test_kernel_nightly_recipes_are_valid(name, source, priority):
 	get_driver_class(source_loaded)().validate(payload)
 
 
-def test_sleep_recipe_declares_sleep_job_driver():
-	"""El sueño es un driver reanudable (`sleep_job`): la preflight GPU por unidad
-	vive en el driver (probe de salud real, D7), no en un exit code de script."""
+def test_sleep_recipe_declares_dag_driver():
+	"""El sueño es una receta del `dag_job`: cada unidad del ciclo es una etapa
+	con su minion (sleep_ritual/sleep_phase/sleep_finalize) y la preflight GPU
+	por etapa vive en el driver DAG (probe de salud real, D7)."""
 	from red_pill.jobs.drivers import get_driver_class
 
 	_, payload, _, _, _ = load_recipe(str(REPO_ROOT / "configs" / "jobs" / "sleep.yaml"))
-	assert get_driver_class("sleep_job") is not None
+	assert get_driver_class("dag_job") is not None
 	assert "defer_exit_code" not in payload  # el deferral es nativo del driver
 	assert payload["mode"] == "lazy"
+	assert payload["nightly_exempt"] is True  # anti-deadlock nocturno
+	stages = payload["manifest"]["stages"]
+	ids = [s["id"] for s in stages]
+	assert "consolidation" in ids and "finalize" in ids
+	assert all(s["type"] in ("agent", "command", "compound") for s in stages)
 
 
 def test_last_cycle_deferred(isolated_state):
@@ -108,7 +115,8 @@ def test_submit_singleton_skips_live_duplicate(tmp_path, monkeypatch):
 
 
 def test_forge_recipe_seed_marked_in_repo():
-	"""Los recipes forge del repo (configs/jobs/) son SEEDS: seed=True."""
+	"""Los recipes forge del repo (configs/jobs/) son SEEDS: seed=True y su etapa
+	atómica lleva el modelo en el default del harness (flash = placeholder)."""
 	from red_pill.jobs.recipes import load_recipe
 
 	roles = ("forge-triage", "forge-implementor", "forge-validator", "forge-smoke-tester",
@@ -116,29 +124,40 @@ def test_forge_recipe_seed_marked_in_repo():
 	for name in roles:
 		_, payload, _, _, is_seed = load_recipe(str(REPO_ROOT / "configs" / "jobs" / f"{name}.yaml"))
 		assert is_seed is True, f"{name} debería ser seed"
+		# Receta del dag_job: una etapa atómica agent con el perfil del rol.
+		stage = payload["manifest"]["stages"][0]
+		assert stage["type"] == "agent" and stage["minion"] == "agent"
 		# Los seeds no llevan modelo concreto: quedan en el default del harness.
-		assert payload.get("model", "flash") == "flash"
+		assert stage.get("model", "flash") == "flash"
 
 
 def test_forge_config_local_overrides_seed_and_is_not_seed(tmp_path, monkeypatch):
 	"""Una config local en .red-pill/jobs/ gana al seed y NO se marca como seed."""
 	from red_pill.jobs.recipes import load_recipe
 
-	# Simula una instalación: configura local que copia el seed y fija modelo real.
+	# Simula una instalación: configura local que copia el seed y fija modelo real
+	# en la etapa atómica del dag_job.
 	ws = tmp_path / "ws"
 	(ws / ".red-pill" / "jobs").mkdir(parents=True)
 	local = ws / ".red-pill" / "jobs" / "forge-implementor.yaml"
 	local.write_text(
-		"source: agentic_job\n"
+		"source: dag_job\n"
 		"priority: 5\n"
-		"backend: opencode\n"
-		"model: opencode-go/deepseek-v4-pro\n"
-		"effort: high\n",
+		"manifest:\n"
+		"  workdir: .\n"
+		"  stages:\n"
+		"    - id: implementor\n"
+		"      type: agent\n"
+		"      minion: agent\n"
+		"      backend: opencode\n"
+		"      model: opencode-go/deepseek-v4-pro\n"
+		"      effort: high\n"
+		"      prompt: <dinámico en el submit>\n",
 		encoding="utf-8",
 	)
 	_, payload, _, _, is_seed = load_recipe("forge-implementor", base_dir=ws)
 	assert is_seed is False
-	assert payload["model"] == "opencode-go/deepseek-v4-pro"
+	assert payload["manifest"]["stages"][0]["model"] == "opencode-go/deepseek-v4-pro"
 
 
 def test_job_submit_mcp_blocks_agentic_without_model():

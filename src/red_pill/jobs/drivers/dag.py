@@ -1,0 +1,519 @@
+"""DagJobDriver — plantilla genérica de composición recursiva (RFC_JOB_DAG v0.7).
+
+Ejecuta un ÁRBOL de etapas en la cola central: cada etapa es ATOMICA (un minion
+del MinionFactory, agéntico o no) o COMPUESTA (sub_etapas con topología local).
+forge_job/sleep_job pasan a ser recetas de este árbol — el dag_job implementa la
+mecánica una sola vez (checkpoint, on_fail, telemetría, fan-out, control
+transferible, GPU probe, fail-safe de modelos).
+
+Manifest recursivo (§4.1 del RFC):
+
+	stages:
+		# Etapa ATOMICA (hoja): un minion agéntico o no-agéntico.
+		- id: impl
+		type: agent                 # agent | command | compound
+		minion: agent               # id del MinionFactory — validado contra type
+		backend: opencode-go
+		model: opencode-go/deepseek-v4-pro
+		prompt: <FULL role prompt>
+		on_fail: stop
+
+		- id: lint
+		type: command
+		minion: ruff_linter         # alias de command_runner
+
+		# Etapa COMPUESTA (sub-DAG) con intención paralela (la ejecución la decide
+		# el orquestador según max_parallel_level — `parallel` es INTENCIÓN).
+		- id: panel-adversarial
+		type: compound
+		parallel: true
+		on_fail: warn
+		sub_etapas:
+			- id: lens-correctness
+			type: agent
+			minion: agent
+			model: opencode/big-pickle
+			- id: judge
+			type: agent
+			minion: agent
+			model: opencode-go/kimi-k2.7-code
+			depends_on: [lens-correctness]
+
+		# Etapa RECURSIVA (sub-etapa a su vez compuesta) — D5.
+		- id: mision-deep
+		type: compound
+		on_fail: stop
+		sub_etapas:
+			- id: pre-flight
+			type: agent
+			minion: agent
+			- id: full-sleep
+			type: compound
+			parallel: true          # nivel 2
+			sub_etapas:
+				- id: maintenance
+				type: command
+				minion: janitor_cleanup
+
+Checkpoint (autoritativo, en BD): { completed_stage_ids, results, stage_flags }.
+Los ids se APLANAN POR RUTA (`panel-adversarial/lens-correctness`) para que el
+orden topológico y el resume sean deterministas a cualquier profundidad. Cada
+etapa atómica persiste SU resultado en `.cell/reports/<ruta>.json` (opción 3 del
+RFC: el DAG serializa, los minions NO se tocan); el padre solo marca
+stage_flags[sub]=done y delega el detalle — no hay orden de hilos que normalizar.
+
+`parallel` es INTENCIÓN declarativa: una etapa compuesta puede declararla a
+cualquier profundidad; el orquestador decide cuándo paraleliza realmente
+(max_parallel_level, default 2). Nivel > cota → secuencial sin error.
+
+CONTROL TRANSFERIBLE: el checkpoint del DAG es la moneda compartida main-loop ↔
+driver (job_transfer → ejecuta etapas inline → job_checkpoint {completed_stage_ids}
+→ job_resume) sobre el árbol completo.
+
+payload:
+	{
+		"mission_id": str,
+		"manifest": {
+			"workdir": str,
+			"stages": [ ...arbol recursivo... ]
+		},
+		"max_parallel_level"?: int,   # default 2 (paralelismo real permitido)
+		"max_concurrency"?: int,      # cota de sub-etapas concurrentes (default 4)
+		"backend"?: str, "model"?: str, "effort"?: str,   # defaults para agent
+		"timeout"?: int, "title"?: str,
+	}
+"""
+
+from __future__ import annotations
+
+import asyncio
+import concurrent.futures
+import json
+import logging
+import shutil
+import subprocess
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+from red_pill.jobs.drivers.base import JobDeferred, ResumableJobDriver, StepOutcome
+
+logger = logging.getLogger(__name__)
+
+_MAX_PARALLEL_LEVEL_DEFAULT = 2
+_MAX_CONCURRENCY_DEFAULT = 4
+
+# Tipos de etapa del manifest (ampliados por decisión de operador 2026-08-07:
+# `type` explícito + `minion` con validación cruzada — la redundancia sirve para
+# detectar divergencias en el submit, no para definir el comportamiento).
+_TYPE_AGENT = "agent"
+_TYPE_COMMAND = "command"
+_TYPE_COMPOUND = "compound"
+_VALID_TYPES = (_TYPE_AGENT, _TYPE_COMMAND, _TYPE_COMPOUND)
+
+
+def _gpu_health_probe() -> Tuple[bool, int, int]:
+	"""Probe de salud GPU real (D7), generalizado desde sleep.py: nvidia-smi exit 0
+	+ VRAM efectiva + -ngl efectivo. Devuelve (usable, free_mb, ngl).
+	"""
+	if not shutil.which("nvidia-smi"):
+		return False, 0, 0
+	try:
+		free_out = subprocess.run(
+			["nvidia-smi", "--query-gpu=memory.free", "--format=csv,noheader,nounits"],
+			capture_output=True, text=True, timeout=5,
+		)
+		if free_out.returncode != 0:
+			return False, 0, 0
+		free_mb = int(free_out.stdout.strip().split("\n")[0].strip())
+	except Exception:
+		return False, 0, 0
+
+	ngl = -1
+	try:
+		ps = subprocess.run(["pgrep", "-af", "llama-server"], capture_output=True, text=True, timeout=5)
+		for line in (ps.stdout or "").splitlines():
+			low = line.lower()
+			if "-ngl" in low:
+				parts = line.split()
+				for i, part in enumerate(parts):
+					if part.startswith("-ngl"):
+						try:
+							# Soporta `-ngl=33`, `-ngl33` y `-ngl 33` (valor en el
+							# siguiente token).
+							if "=" in part:
+								ngl = int(part.split("=")[-1])
+							elif part != "-ngl" and part[4:].lstrip("-").isdigit():
+								ngl = int(part[4:])
+							elif i + 1 < len(parts):
+								ngl = int(parts[i + 1])
+						except Exception:
+							ngl = 0
+						break
+	except Exception:
+		pass
+
+	return True, free_mb, ngl
+
+
+def _resolve_minion_kind(minion_id: str) -> Optional[str]:
+	"""Resuelve el minion vía MinionFactory y devuelve 'agent' | 'command' | 'logic' | None.
+
+	None = minion_id no registrado. 'logic' = minion de lógica pura (echo, janitor,
+	healer, smith, samantha) — no-agéntico pero sin comando externo. Distinción
+	crítica para el fail-safe de modelos: solo 'agent' exige `model`+`prompt`.
+	"""
+	from red_pill.swarm.agents.agent import AgentMinion
+	from red_pill.swarm.agents.command import CommandMinion
+	from red_pill.swarm.factory import MinionFactory
+
+	minion = MinionFactory.create(minion_id)
+	if minion is None:
+		return None
+	if isinstance(minion, AgentMinion):
+		return _TYPE_AGENT
+	if isinstance(minion, CommandMinion):
+		return _TYPE_COMMAND
+	return "logic"
+
+
+def _iter_leaves(stages: List[Dict[str, Any]], prefix: str = ""):
+	"""Itera las etapas ATOMICAS (hojas) del árbol como (ruta, etapa), DFS estable."""
+	for s in stages:
+		path = f"{prefix}/{s['id']}" if prefix else s["id"]
+		if s.get("type") == _TYPE_COMPOUND:
+			yield from _iter_leaves(s.get("sub_etapas", []), path)
+		else:
+			yield path, s
+
+
+def _flatten_ids(stages: List[Dict[str, Any]], prefix: str = "") -> List[str]:
+	"""Todos los ids aplanados por ruta (incluidos compuestos), orden DFS."""
+	out: List[str] = []
+	for s in stages:
+		path = f"{prefix}/{s['id']}" if prefix else s["id"]
+		out.append(path)
+		if s.get("type") == _TYPE_COMPOUND:
+			out.extend(_flatten_ids(s.get("sub_etapas", []), path))
+	return out
+
+
+def _count_leaves(stages: List[Dict[str, Any]]) -> int:
+	return sum(1 for _ in _iter_leaves(stages))
+
+
+def _find_node(stages: List[Dict[str, Any]], node_id: str) -> Optional[Dict[str, Any]]:
+	"""Busca una etapa por id en todo el árbol (los ids son únicos globalmente)."""
+	for s in stages:
+		if s.get("id") == node_id:
+			return s
+		if s.get("type") == _TYPE_COMPOUND:
+			found = _find_node(s.get("sub_etapas", []), node_id)
+			if found:
+				return found
+	return None
+
+
+class DagJobDriver(ResumableJobDriver):
+	source = "dag_job"
+	min_vram_mb = 0  # los recursos se gestionan por etapa en preflight (GPU probe)
+
+	# ── Validación en el submit (recursiva sobre el árbol) ─────────────────────
+	@classmethod
+	def validate(cls, payload: Dict[str, Any]) -> None:
+		if not payload.get("mission_id"):
+			raise ValueError("dag_job payload requires 'mission_id'.")
+		manifest = payload.get("manifest")
+		if not isinstance(manifest, dict) or not manifest.get("workdir"):
+			raise ValueError("dag_job manifest requires 'workdir'.")
+		stages = manifest.get("stages")
+		if not isinstance(stages, list) or not stages:
+			raise ValueError("dag_job manifest requires 'stages' (non-empty).")
+		seen: List[str] = []
+		cls._validate_stages(stages, payload, seen, path="")
+
+	@classmethod
+	def _validate_stages(cls, stages: List[Dict[str, Any]], payload: Dict[str, Any], seen: List[str], path: str) -> None:
+		for s in stages:
+			sid = s.get("id")
+			if not sid:
+				raise ValueError("dag_job stage requires 'id'.")
+			stage_path = f"{path}/{sid}" if path else sid
+			if stage_path in seen:
+				raise ValueError(f"dag_job duplicate stage path '{stage_path}' (los ids son únicos globalmente).")
+			seen.append(stage_path)
+
+			stype = s.get("type")
+			if stype not in _VALID_TYPES:
+				raise ValueError(f"dag_job stage '{stage_path}' type '{stype}' not in agent|command|compound.")
+			if stype == _TYPE_COMPOUND:
+				if s.get("minion"):
+					raise ValueError(f"dag_job compound stage '{stage_path}' must not carry a minion.")
+				sub = s.get("sub_etapas")
+				if not isinstance(sub, list) or not sub:
+					raise ValueError(f"dag_job compound stage '{stage_path}' requires 'sub_etapas' (non-empty).")
+				cls._validate_stages(sub, payload, seen, path=stage_path)
+			else:
+				minion_id = s.get("minion")
+				if not minion_id:
+					raise ValueError(f"dag_job stage '{stage_path}' requires 'minion'.")
+				kind = _resolve_minion_kind(minion_id)
+				if kind is None:
+					raise ValueError(f"dag_job stage '{stage_path}' minion '{minion_id}' no registrado en MinionFactory.")
+				if stype == _TYPE_AGENT:
+					if kind != _TYPE_AGENT:
+						raise ValueError(
+							f"dag_job stage '{stage_path}' type mismatch: minion '{minion_id}' no es agéntico."
+						)
+					# Fail-safe de modelos (fleco 3 del RFC): TODA etapa agéntica del
+					# árbol exige model real (no el placeholder 'flash' del harness).
+					model = s.get("model") or payload.get("model")
+					if not model or model == "flash":
+						raise ValueError(
+							f"dag_job stage '{stage_path}' (agent) sin modelo configurado. "
+							"'flash' es el placeholder del default, no una config activa. "
+							"Indica 'model' con un modelo real (p.ej. opencode-go/deepseek-v4-pro). "
+							"Bloqueado por seguridad (fail-safe de modelos)."
+						)
+					if not s.get("prompt"):
+						raise ValueError(f"dag_job agent stage '{stage_path}' requires 'prompt'.")
+				else:
+					if kind == _TYPE_AGENT:
+						raise ValueError(
+							f"dag_job stage '{stage_path}' type mismatch: minion '{minion_id}' es agéntico, no '{stype}'."
+						)
+			for dep in s.get("depends_on", []):
+				# las deps referencian hermanos (ids del mismo nivel)
+				dep_path = f"{path}/{dep}" if path else dep
+				if dep_path not in seen:
+					raise ValueError(f"dag_job stage '{stage_path}' depends_on unknown '{dep}'.")
+
+	# ── Utilidades ─────────────────────────────────────────────────────────────
+	def _stages(self, payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+		stages = payload["manifest"].get("stages")
+		return list(stages) if isinstance(stages, list) else []
+
+	def _ancestor_deps_met(self, stages: List[Dict[str, Any]], prefix: str, completed: List[str]) -> bool:
+		"""Todas las deps de los ancestros compuestos de `prefix` satisfechas.
+
+		Una hoja solo puede ejecutarse si TODOS sus ancestros compuestos tienen
+		sus `depends_on` completados (el panel con `depends_on: [impl]` no puede
+		ejecutar sus lentes antes de `impl`).
+		"""
+		if not prefix:
+			return True
+		parts = prefix.split("/")
+		level_path = ""
+		for i, part in enumerate(parts):
+			level_path = f"{level_path}/{part}" if level_path else part
+			# nivel en el que vive el ancestro = parte i+1 de la ruta
+			parent_prefix = "/".join(parts[:i]) if i else ""
+			ancestor = _find_node(stages, part)
+			if ancestor is None:
+				continue
+			for dep in ancestor.get("depends_on", []):
+				dep_path = f"{parent_prefix}/{dep}" if parent_prefix else dep
+				if dep_path not in completed:
+					return False
+		return True
+
+	def _status_file(self, payload: Dict[str, Any]) -> Path:
+		return Path(payload["manifest"]["workdir"]) / ".cell" / "dag_status.json"
+
+	def _write_status(self, payload: Dict[str, Any], data: Dict[str, Any]) -> None:
+		try:
+			path = self._status_file(payload)
+			path.parent.mkdir(parents=True, exist_ok=True)
+			path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+		except OSError as e:
+			logger.warning(f"[DagJob] telemetría no escrita: {e}")
+
+	def preflight(self, payload: Dict[str, Any]) -> None:
+		workdir = Path(payload["manifest"]["workdir"])
+		if not workdir.is_dir():
+			raise JobDeferred(f"workspace {workdir} no disponible")
+
+	# ── GPU probe por etapa (fleco 1) ──────────────────────────────────────────
+	def _preflight_stage_gpu(self, stage: Dict[str, Any], stage_path: str, payload: Dict[str, Any]) -> None:
+		"""Probe de salud GPU real por etapa — espera (JobDeferred), nunca CPU disfrazada."""
+		if not stage.get("requires_gpu"):
+			return
+		from red_pill.metabolism.ephemeral_server import _check_llm_available
+
+		if _check_llm_available():
+			usable, _free, ngl = _gpu_health_probe()
+			if usable and (ngl == -1 or ngl > 0):
+				return
+		usable, free_mb, ngl = _gpu_health_probe()
+		if not usable:
+			raise JobDeferred(f"GPU no disponible para etapa '{stage_path}' (nvidia-smi no responde).")
+		if ngl == 0:
+			raise JobDeferred(f"LLM sirve en CPU disfrazada (-ngl 0) para etapa '{stage_path}': esperando GPU.")
+		import red_pill.config as cfg
+
+		min_free = int(payload.get("min_vram_mb", getattr(cfg, "SLEEP_MIN_FREE_VRAM_MB", 3500)))
+		if free_mb < min_free:
+			raise JobDeferred(f"VRAM insuficiente para etapa '{stage_path}' ({free_mb}MB libres < {min_free}MB).")
+
+	# ── Ejecución de una etapa ATOMICA ────────────────────────────────────────
+	def _run_atomic(self, payload: Dict[str, Any], stage: Dict[str, Any], stage_path: str) -> str:
+		"""Ejecuta UN minion (factory + execute directo — decisión 2026-08-07) y
+		devuelve su resumen. El DAG serializa `.cell/reports/<ruta>.json` (opción 3
+		del RFC: los minions devuelven dict en memoria; la serialización la hace
+		el DAG, uniforme para todos)."""
+		from red_pill.swarm.factory import MinionFactory
+
+		self._preflight_stage_gpu(stage, stage_path, payload)
+		workdir = Path(payload["manifest"]["workdir"])
+
+		minion = MinionFactory.create(str(stage.get("minion")))
+		if minion is None:
+			raise RuntimeError(f"dag stage '{stage_path}' minion no registrado.")
+
+		task = stage.get("prompt") or stage.get("command") or ""
+		kwargs: Dict[str, Any] = {"cwd": str(workdir), "timeout": int(stage.get("timeout") or payload.get("timeout", 600))}
+		for key in ("backend", "model", "effort"):
+			if stage.get(key) or payload.get(key):
+				kwargs[key] = stage.get(key) or payload.get(key)
+		if stage.get("command"):
+			kwargs["command"] = stage["command"]
+		if isinstance(stage.get("params"), dict):
+			kwargs.update(stage["params"])
+
+		result = asyncio.run(minion.execute(task, **kwargs))
+
+		reports_dir = workdir / ".cell" / "reports"
+		report_path = reports_dir / f"{stage_path}.json"
+		report_path.parent.mkdir(parents=True, exist_ok=True)
+		report_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+
+		status = result.get("status")
+		if status in ("failed", "error") or (result.get("returncode") not in (None, 0)):
+			raise RuntimeError(f"dag stage '{stage_path}' failed: {result.get('error') or result.get('stderr') or ''}")
+		summary = str(result.get("summary") or result.get("status") or result.get("response") or stage_path)
+		return summary
+
+	# ── step: ejecutar el siguiente frente del árbol ──────────────────────────
+	def step(self, payload: Dict[str, Any], checkpoint_data: Dict[str, Any]) -> StepOutcome:
+		stages = self._stages(payload)
+		completed = list(checkpoint_data.get("completed_stage_ids", []))
+		results = dict(checkpoint_data.get("results", {}))
+		flags = dict(checkpoint_data.get("stage_flags", {}))
+		total_leaves = _count_leaves(stages)
+
+		# Frente: hojas (etapas atómicas) no completadas con deps satisfechas.
+		front: List[Tuple[str, Dict[str, Any], str]] = []  # (path, stage, prefix)
+
+		for leaf_path, leaf in _iter_leaves(stages):
+			if leaf_path in completed:
+				continue
+			prefix = leaf_path.rsplit("/", 1)[0] if "/" in leaf_path else ""
+			if not self._ancestor_deps_met(stages, prefix, completed):
+				continue
+			deps_ok = all(
+				((f"{prefix}/{d}" if prefix else d) in completed)
+				for d in leaf.get("depends_on", [])
+			)
+			if deps_ok:
+				front.append((leaf_path, leaf, prefix))
+
+		if not front:
+			done = len(completed) >= total_leaves
+			return StepOutcome(
+				completed=done,
+				new_checkpoint=checkpoint_data,
+				summary="dag complete" if done else "waiting on deps (should not happen)",
+				progress={"current": len(completed), "total": total_leaves, "percent": round(100 * len(completed) / total_leaves) if total_leaves else 0},
+				concurrency={"parallel_groups": 0, "parallel_stages": 0, "max_parallel_level": int(payload.get("max_parallel_level", _MAX_PARALLEL_LEVEL_DEFAULT)), "actually_parallel": False},
+			)
+
+		def _exec_one(path: str, stage: Dict[str, Any]) -> Tuple[str, str, bool]:
+			"""Devuelve (path, summary, failed). El fallo se controla por on_fail."""
+			try:
+				return path, self._run_atomic(payload, stage, path), False
+			except Exception as e:
+				if stage.get("on_fail", "warn") == "stop":
+					return path, str(e), True
+				logger.warning(f"[DagJob] {self.short_id} etapa {path} fallida (warn): {e}")
+				return path, f"{path}: FAILED ({str(e)[:80]})", False
+
+		# Agrupar el frente por compuesto padre (prefix) para el paralelismo.
+		# Sub-etapas del MISMO nodo compuesto `parallel: true` (nivel ≤ cota) se
+		# lanzan juntas; el resto secuencial. Grupos independientes también juntos.
+		groups: Dict[str, List[Tuple[str, Dict[str, Any]]]] = {}
+		for leaf_path, leaf, prefix in front:
+			groups.setdefault(prefix, []).append((leaf_path, leaf))
+
+		max_conc = int(payload.get("max_concurrency", _MAX_CONCURRENCY_DEFAULT))
+		max_parallel_level = int(payload.get("max_parallel_level", _MAX_PARALLEL_LEVEL_DEFAULT))
+		all_tasks: List[Tuple[str, str, bool]] = []
+		parallel_groups = 0
+		parallel_stages = 0
+
+		def _run_group(group: List[Tuple[str, Dict[str, Any]]]) -> List[Tuple[str, str, bool]]:
+			with concurrent.futures.ThreadPoolExecutor(max_workers=max_conc) as pool:
+				futures = {pool.submit(_exec_one, p, s): p for p, s in group}
+				return [f.result() for f in concurrent.futures.as_completed(futures)]
+
+		for prefix, group in groups.items():
+			level = len(prefix.split("/")) if prefix else 0
+			parent_parallel = False
+			if prefix:
+				parent_id = prefix.rsplit("/", 1)[-1]
+				node = _find_node(stages, parent_id)
+				parent_parallel = bool(node and node.get("type") == _TYPE_COMPOUND and node.get("parallel"))
+			parallel = parent_parallel and level <= max_parallel_level and len(group) > 1
+			if parallel:
+				parallel_groups += 1
+				parallel_stages += len(group)
+				all_tasks.extend(_run_group(group))
+			else:
+				for path, stage in group:
+					all_tasks.append(_exec_one(path, stage))
+
+		new_results = dict(results)
+		new_flags = dict(flags)
+		new_completed = list(completed)
+		for path, summary, failed in all_tasks:
+			if failed:
+				raise RuntimeError(f"dag stage '{path}' failed with on_fail=stop: {summary}")
+			new_results[path] = summary
+			new_flags[path] = "done"
+			new_completed.append(path)
+
+		# Propagar completitud de los compuestos: un nodo compuesto se marca done
+		# cuando todas sus hojas descendientes lo están.
+		for node_path in _flatten_ids(stages):
+			if node_path in new_completed or node_path.endswith(("/",)):
+				continue
+			node = _find_node(stages, node_path.rsplit("/", 1)[-1])
+			if not node or node.get("type") != _TYPE_COMPOUND:
+				continue
+			if all(leaf_path in new_completed for leaf_path, _ in _iter_leaves(node.get("sub_etapas", []), node_path)):
+				new_completed.append(node_path)
+
+		# Orden estable y determinista (crítico para resume/control transferible).
+		flat_order = _flatten_ids(stages)
+		new_completed = [sid for sid in flat_order if sid in new_completed]
+
+		# Progreso basado SOLO en hojas (los compuestos marcados done no cuentan):
+		# si no, un árbol con compuestos inflaría el porcentaje.
+		leaves_done = sum(1 for lp, _ in _iter_leaves(stages) if lp in new_completed)
+
+		self._write_status(payload, {
+			"mission_id": payload.get("mission_id"),
+			"completed": leaves_done,
+			"total": total_leaves,
+			"status": "running" if leaves_done < total_leaves else "completed",
+			"updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+		})
+
+		done = leaves_done >= total_leaves
+		checkpoint = {"completed_stage_ids": new_completed, "results": new_results, "stage_flags": new_flags}
+		return StepOutcome(
+			completed=done,
+			new_checkpoint=checkpoint,
+			summary=f"dag {leaves_done}/{total_leaves}",
+			progress={"current": leaves_done, "total": total_leaves, "percent": round(100 * leaves_done / total_leaves) if total_leaves else 0},
+			concurrency={"parallel_groups": parallel_groups, "parallel_stages": parallel_stages, "max_parallel_level": max_parallel_level, "actually_parallel": parallel_groups > 0},
+		)

@@ -1,0 +1,70 @@
+# Forge — Panel Adversarial (feature O2) como etapa COMPUESTA del dag_job.
+#
+# RFC_JOB_DAG paso 5: el panel de lentes + judge deja de lanzarse como N jobs
+# agentic serializados en la cola y pasa a ser una etapa compuesta `parallel:
+# true` del árbol del DAG — las lentes corren en paralelo (mismo step, threads)
+# y el judge adjudica con depends_on. Es una PLANTILLA del nivel L3 (5 lentes +
+# judge); L2 usa 3 lentes, L1 una.
+#
+# seed: true — plantilla por-instalación. Este archivo NO se encola tal cual:
+# el skill forge lo inserta como sub-etapa de la misión dag_job. Cada instalación
+# fija sus modelos reales en .red-pill/jobs/ (ver NOTE_MODEL_POLICY_ROLES.md).
+#
+# El judge NO recibe los reportes en el prompt: lee del disco los reportes de
+# sus lentes (`.cell/reports/panel/<lens>.json`, escritos por cada sub-etapa) y
+# adjudica los conflictos (panel-policy.md §Aggregation). Cold context: el prompt
+# del judge debe instruir leerlos.
+source: dag_job
+priority: 5
+mission_id: forge-panel
+seed: true
+backend: opencode
+max_parallel_level: 2
+max_concurrency: 4
+manifest:
+  workdir: .
+  stages:
+    - id: impl
+      type: agent
+      minion: agent
+      model: flash  # SEED: config real por-instalación
+      prompt: <implementa la fase>
+      on_fail: stop
+
+    - id: panel
+      type: compound
+      parallel: true
+      on_fail: warn
+      depends_on: [impl]
+      sub_etapas:
+        - id: lens-correctness
+          type: agent
+          minion: agent
+          model: flash  # SEED: diversidad — 2+ modelos distintos en el panel
+          prompt: <refuta correctness con evidencia ejecutada>
+        - id: lens-env-segregation
+          type: agent
+          minion: agent
+          model: flash  # SEED
+          prompt: <refuta segregación de entorno>
+        - id: lens-plan-completeness
+          type: agent
+          minion: agent
+          model: flash  # SEED
+          prompt: <refuta cobertura del plan>
+        - id: lens-security
+          type: agent
+          minion: agent
+          model: flash  # SEED — lente que ataca superficie distinta
+          prompt: <refuta seguridad con evidencia ejecutada>
+        - id: lens-perf-repro
+          type: agent
+          minion: agent
+          model: flash  # SEED
+          prompt: <reproduce rendimiento y refuta>
+        - id: judge
+          type: agent
+          minion: agent
+          model: flash  # SEED — model distinto a la mayoría de refuters, max effort
+          depends_on: [lens-correctness, lens-env-segregation, lens-plan-completeness, lens-security, lens-perf-repro]
+          prompt: <lee .cell/reports/panel/lens-*.json y adjudica los conflictos>

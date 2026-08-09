@@ -1,14 +1,18 @@
-# Forge — rol Triage (Step 0 del protocolo).
-# source: agentic_job (un prompt vía backend) — el rol decide si la misión
-# necesita el protocolo Forge. prompt y cwd van DINÁMICOS en el payload del
-# submit: este recipe fija el perfil (backend/modelo/effort/timeout/prioridad).
-# Uso: job_manager_api.job_submit {source: agentic_job, payload: {prompt, cwd, ...}}
+# Forge — rol Triage (Step 0 del protocolo) como UNA etapa atómica del dag_job.
 seed: true  # SEED genérico: plantilla por-instalación. Activar config real copiando a .red-pill/jobs/ (ver NOTE_MODEL_POLICY_ROLES).
-source: agentic_job
+source: dag_job
 priority: 5
+mission_id: forge-triage
 backend: opencode
-model: flash  # PLACEHOLDER = "no especificar": el bridge opencode NO pasa -m y usa el modelo por defecto de opencode. Sobrescribir en el payload del submit (job_submit {model}) para fijar uno concreto, p.ej. anthropic/claude-sonnet-4-5.
-effort: medium
 timeout: 600
 control:
   max_step_minutes: 15
+manifest:
+  workdir: .
+  stages:
+    - id: triage
+      type: agent
+      minion: agent
+      backend: opencode
+      model: flash  # SEED por-instalación. Ver Aleth_Core/NOTE_MODEL_POLICY_ROLES.md (triage → opencode-go/deepseek-v4-flash).
+      effort: medium

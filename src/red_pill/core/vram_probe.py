@@ -34,9 +34,24 @@ class VramProbe:
 
 	@staticmethod
 	def get_backend() -> GpuBackend:
-		"""Returns the detected GPU backend: 'cuda', 'rocm', or 'cpu'."""
+		"""Returns the detected GPU backend: 'cuda', 'rocm', or 'cpu'.
+
+		FIX (RFC_JOB_DAG §5.6): 'cuda' exige que nvidia-smi RESPONDA con exit
+		code 0, no solo que el binario exista — un nvidia-smi presente pero sin
+		GPU NVIDIA detrás (binario muerto / driver sin tarjeta) era un falso
+		positivo que elegía el tier cuda y luego fallaba la query de VRAM.
+		"""
 		if shutil.which("nvidia-smi"):
-			return "cuda"
+			try:
+				probe = subprocess.run(
+					["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
+					capture_output=True, text=True, timeout=5,
+				)
+				if probe.returncode == 0 and probe.stdout.strip():
+					return "cuda"
+				logger.warning("[VramProbe] nvidia-smi presente pero no responde (exit!=0): GPU no usable, backend NO cuda.")
+			except Exception as e:
+				logger.warning(f"[VramProbe] nvidia-smi probe falló: {e}. Backend NO cuda.")
 		# AMD: check for at least one amdgpu DRM card with a busy_percent file
 		if os.path.isdir(_DRM_ROOT):
 			for card in sorted(os.listdir(_DRM_ROOT)):

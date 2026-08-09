@@ -54,3 +54,44 @@ Rules:
 ## Resolution into state.json
 
 At assembly (and on every escalation), the orchestrator writes into `features`/`feature_rationale[]`: `{feature: "O2", value: "on", panel: {lenses: [...], models: {lens: model}, judge: {...}}}` — the full panel composition is auditable post-mission.
+
+## Panel as a dag_job compound stage (RFC_JOB_DAG step 5)
+
+Since the DAG, the panel is NO LONGER N serialized `agentic_job`s — it is ONE
+compound stage of the mission tree with `parallel: true`: the lenses run in
+parallel (threads within a single step) and the judge adjudicates with
+`depends_on` on all of them. Template: `configs/jobs/forge-panel.yaml`.
+
+```yaml
+- id: panel
+  type: compound
+  parallel: true          # intención: el DAG decide según max_parallel_level
+  on_fail: warn
+  depends_on: [impl]
+  sub_etapas:
+    - id: lens-correctness
+      type: agent
+      minion: agent
+      model: <lens-correctness>
+      prompt: <refuta correctness con evidencia ejecutada>
+    - id: lens-env-segregation
+      type: agent
+      minion: agent
+      model: <lens-env>
+      prompt: <refuta segregación de entorno>
+    - id: lens-security
+      type: agent
+      minion: agent
+      model: <lens-security>      # superficie distinta → modelo distinto
+      prompt: <refuta seguridad con evidencia ejecutada>
+    - id: judge
+      type: agent
+      minion: agent
+      model: <judge>              # distinto a la mayoría, max effort
+      depends_on: [lens-correctness, lens-env-segregation, lens-security]
+      prompt: <lee .cell/reports/panel/lens-*.json y adjudica los conflictos>
+```
+
+The judge reads its lenses' refutations from DISK (`.cell/reports/panel/lens-*.json`,
+written by each sub-stage) — cold context: the judge's prompt MUST instruct
+reading them. The `depends_on` guarantees the files exist before the judge runs.

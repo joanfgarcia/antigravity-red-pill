@@ -11,7 +11,7 @@ Two drivers matter for Forge:
 | Driver | Source | What it runs |
 |--------|--------|--------------|
 | Agentic | `agentic_job` | ONE prompt via a backend (opencode/claude/agy/local). **Sabor A**: one role per job. Recipe per role fixes backend/model/effort. |
-| Forge | `forge_job` | A full mission manifest (phases→steps→roles) step by step with checkpoint. **Sabor B**: the whole mission in background, with **transferable control**. |
+| Dag | `dag_job` | A full mission as a RECURSIVE TREE of stages (minions + sub-stages, `parallel` intent). **Sabor B**: the whole mission in background, with **transferable control**. Since RFC_JOB_DAG v0.7 `forge_job` is the LEGACY name — new missions declare `dag_job` manifests (§4.1: atomic `minion`/compound `sub_etapas`). |
 
 ### MCP entry: `job_manager_api`
 
@@ -29,22 +29,29 @@ The skill talks to the job manager through MCP (no shell dependency):
 
 ### Recipes per role (`configs/jobs/forge-*.yaml` in the kernel repo)
 
-One recipe per role — the role's execution profile, versioned:
+One recipe per role — the role's execution profile as an ATOMIC dag_job stage, versioned:
 
 `forge-triage`, `forge-implementor`, `forge-validator`, `forge-smoke-tester`, `forge-devils-advocate`, `forge-judge`, `forge-doc-anchor`, `forge-qa`, `forge-scout`.
 
-Each fixes `source: agentic_job`, `backend: opencode`, `model`, `effort`, `timeout`, `priority`. The `prompt` and `cwd` are **dynamic** (per task) and travel in the submit payload — the recipe is the profile, not the content.
+Each is a `dag_job` recipe whose `manifest.stages[0]` defines the role's profile:
+`type: agent`, `minion: agent`, `backend`, `model`, `effort`. The `prompt` is
+**dynamic** (per task) — the skill injects it into the stage when composing the
+mission manifest. The recipe is the profile, not the content.
 
 ## Sabor A — Main loop in command (default): one role per job
 
-The Orchestrator stays the main loop (it decides escalation/panel/judge) and each headless role is an `agentic_job` enqueued and polled:
+The Orchestrator stays the main loop (it decides escalation/panel/judge) and each headless role runs as a **single-stage dag_job** (the role's recipe) enqueued and polled:
 
 ```
 1. Pack ALL role context into the prompt (cold context inherits nothing) +
    the instruction to emit JSON conforming to the schema (references/schemas/)
    into .cell/reports/<role>-<phase>.json.
-2. job_manager_api.job_submit { source: agentic_job,
-     payload: { prompt, cwd: <workspace>, backend, model, effort },
+2. job_manager_api.job_submit { source: dag_job,
+     payload: { mission_id,
+       manifest: { workdir: <workspace>, stages: [
+         { id: <role>, type: "agent", minion: "agent",
+           backend: <role-backend>, model: <role-model>, effort: <role-effort>,
+           prompt: <FULL> } ] } },
      mission_id: <mission> }
 3. Poll job_status (or wait for the Minion Inbox report) until COMPLETED.
 4. Consolidate the report into .cell/state.json; run validate-report.mjs /
@@ -53,35 +60,42 @@ The Orchestrator stays the main loop (it decides escalation/panel/judge) and eac
    requested) at consolidation and record it in the ledger.
 ```
 
-Parallel panel (L2/L3): enqueue N `agentic_job`s (one per lens) in a burst and poll them together — the queue serializes execution but the orchestrator collects concurrently via `job_list --mission <mission>`.
+Parallel panel (L2/L3): compose the panel as a COMPOUND stage with `parallel:
+true` (see Sabor B / `configs/jobs/forge-panel.yaml`) — the DAG parallelizes the
+lenses inside one step; do NOT fall back to N serialized `agentic_job`s.
 
 ## Sabor B — Full mission in background with TRANSFERABLE CONTROL
 
-`forge_job` runs the entire mission manifest as a resumable job. The checkpoint in the DB is the shared currency between the driver and the main loop:
+`dag_job` runs the entire mission manifest as a resumable job (RFC_JOB_DAG v0.7). The checkpoint in the DB is the shared currency between the driver and the main loop. Each step of the plan becomes an ATOMIC stage (`type: agent`, `minion: agent`, `model` per role policy, `prompt`), and the adversarial panel becomes a COMPOUND stage with `parallel: true`:
 
 ```
 payload = {
-  mission_id, manifest: { workdir, phases: [
-    { id: "F1", steps: [
-      { role: "implementor", agent: "forge-implementor", prompt: "<FULL>",
-        schema: "implementor_result", on_fail: "warn" | "stop" } ] } ] },
-  backend, model, effort, timeout
+  mission_id, manifest: { workdir, stages: [
+    { id: "impl", type: "agent", minion: "agent", model: "<per-role>", prompt: "<FULL>", on_fail: "stop" },
+    { id: "panel", type: "compound", parallel: true, depends_on: ["impl"], on_fail: "warn",
+      sub_etapas: [
+        { id: "lens-correctness", type: "agent", minion: "agent", model: "opencode/big-pickle", prompt: "..." },
+        { id: "judge", type: "agent", minion: "agent", model: "opencode-go/kimi-k2.7-code", prompt: "...",
+          depends_on: ["lens-correctness"] } ] } ] },
+  max_parallel_level, max_concurrency, timeout
 }
-checkpoint = { step_index: N, results: [summary, ...] }
+checkpoint = { completed_stage_ids: [...], results: {...}, stage_flags: {...} }
 ```
 
-- **Driver in control (background)**: the runner walks the manifest alone; each step executes one role and writes its report to `.cell/reports/<role>-<phase>.json`; telemetry mirrors to `.cell/forge_job_status.json` (never the resume source — the DB checkpoint is authoritative, RFC SleepJobDriver A2).
-- **`on_fail` per step**: `warn` (default) = mark FAILED and continue WITHOUT burning the circuit breaker (continue-on-error); `stop` = real job failure (attempts++, circuit breaker if it insists).
+Legacy `forge_job` (phases→steps) still runs for existing jobs; new missions use `dag_job`. The full manifest RFC: `Aleth_Core/RFC_JOB_DAG_PARALLELIZATION.md` §4.1.
+
+- **Driver in control (background)**: the runner walks the tree alone; each atomic stage executes one minion and the DAG serializes its report to `.cell/reports/<stage-path>.json`; telemetry mirrors to `.cell/dag_status.json` (never the resume source — the DB checkpoint is authoritative, RFC SleepJobDriver A2).
+- **`on_fail` per stage** (and per sub-stage): `warn` (default) = mark FAILED and continue WITHOUT burning the circuit breaker (continue-on-error); `stop` = real job failure (attempts++, circuit breaker if it insists).
 - **Main loop takes control (on demand)**:
-  1. `job_transfer <id>` → pause + return the checkpoint (step_index).
-  2. Execute N steps inline (same report structure, same schemas).
-  3. `job_checkpoint <id> { step_index: N+k }` → write the advanced checkpoint.
-  4. `job_resume <id>` → **release control**: the driver continues from N+k exactly.
+  1. `job_transfer <id>` → pause + return the checkpoint (`completed_stage_ids`).
+  2. Execute N stages inline (same report structure, same schemas).
+  3. `job_checkpoint <id> { completed_stage_ids: [...] }` → write the advanced checkpoint.
+  4. `job_resume <id>` → **release control**: the driver continues from the advanced tree exactly.
 - **Pause/kill are cooperative per step** (like SleepJobDriver): the in-flight unit completes, then the runner reads state at the boundary (R3) and pauses.
 
 ### Aislamiento entre forges
 
-Every job carries `mission_id`. `job_list --mission <id>` lists only that mission; the job-monitor and polling never mix missions. The `cwd` per workspace already separates `.cell/` on disk. A `forge_job` is REQUIRED to declare `mission_id` (validation at submit).
+Every job carries `mission_id`. `job_list --mission <id>` lists only that mission; the job-monitor and polling never mix missions. The `cwd` per workspace already separates `.cell/` on disk. A `dag_job` (and legacy `forge_job`) is REQUIRED to declare `mission_id` (validation at submit).
 
 ## Handoff between agents via `workspace-memory` (artifact = result + signal)
 
@@ -97,4 +111,6 @@ It is **local** (filesystem) coordination, NOT neon-link. Do NOT use the Bünker
 
 - The schema is not validated at launch (the cold process could deviate) → the final gate remains the safety net.
 - Resumption goes through the DB checkpoint (`step_index`), not a shared `resumeFromRunId`.
-- The queue runner is sequential (one pop at a time): a parallel panel serializes on the queue, but each step is a normal bounded role call and the orchestrator collects concurrently.
+- The queue runner is sequential across JOBS (one pop at a time), but a `dag_job`
+  parallelizes INSIDE its step (threads): an L3 panel of 5 lenses runs in ONE step.
+  In sabor A (one `agentic_job` per lens) the queue still serializes them.

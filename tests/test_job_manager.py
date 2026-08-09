@@ -772,142 +772,160 @@ def test_step_boundary_callback_failure_never_kills_the_job(queue, clean_registr
 	assert queue.get_task(job_id)["status"] == "COMPLETED"
 
 
-# ── ForgeJobDriver (v1.3.0: control transferible, mission_id isolation) ───────
+# ── DagJobDriver (RFC_JOB_DAG v0.7: misión como árbol, control transferible) ───
 
-def _forge_payload(workdir: str, mission_id: str = "m1", steps=None):
-	"""Payload mínimo válido de forge_job."""
-	if steps is None:
-		steps = [{"role": "implementor", "prompt": "haz X"}]
+def _dag_payload(workdir: str, mission_id: str = "m1", stages=None):
+	"""Payload mínimo válido de dag_job (una misión como árbol de etapas)."""
+	if stages is None:
+		stages = [{"id": "impl", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "haz X"}]
 	return {
 		"mission_id": mission_id,
-		"manifest": {"workdir": workdir, "phases": [{"id": "F1", "steps": steps}]},
+		"manifest": {"workdir": workdir, "stages": stages},
 	}
 
 
-class _ForgeBridge(_FakeBridge):
-	def __init__(self, workdir: str, write_reports: bool = True):
-		super().__init__()
-		self.workdir = workdir
-		self.write_reports = write_reports
+class _FakeAgentMinion:
+	"""Minion agéntico de prueba que registra llamadas y devuelve éxito."""
 
-	def prompt(self, text, **kwargs):
-		self.prompt_calls.append((text, kwargs))
-		if self.write_reports:
-			# El agente escribe su reporte conforme al contrato (como en vivo).
-			import json as _json
-			import os
+	def __init__(self):
+		self.calls = []
 
-			m = __import__("re").search(r"to (\S+?) as JSON", text)
-			if m:
-				path = m.group(1)
-				os.makedirs(os.path.dirname(path), exist_ok=True)
-				with open(path, "w", encoding="utf-8") as f:
-					_json.dump({"role": "implementor", "summary": "hecho"}, f)
-		return type("R", (), {"response": "ok", "error": None, "conversation_id": "c1", "ok": True})()
+	async def execute(self, task, **kwargs):
+		self.calls.append((task, kwargs))
+		return {"status": "success", "response": "ok", "summary": "hecho"}
 
 
-def test_forge_job_validate_requires_mission_id():
-	from red_pill.jobs.drivers.forge import ForgeJobDriver
+def _patch_dag_agent(monkeypatch):
+	"""Sustituye MinionFactory.create (solo 'agent') y _resolve_minion_kind."""
+	import red_pill.jobs.drivers.dag as dag_mod
+	import red_pill.swarm.factory as fac
 
-	d = ForgeJobDriver()
+	fake = _FakeAgentMinion()
+	monkeypatch.setattr(fac.MinionFactory, "create", staticmethod(lambda minion_id, **kw: fake if minion_id == "agent" else None))
+	monkeypatch.setattr(dag_mod, "_resolve_minion_kind", lambda mid: "agent" if mid == "agent" else None)
+	return fake
+
+
+def test_dag_job_validate_requires_mission_id():
+	from red_pill.jobs.drivers.dag import DagJobDriver
+
+	d = DagJobDriver()
 	with pytest.raises(ValueError, match="mission_id"):
-		d.validate({"manifest": {"workdir": "/tmp", "phases": [{"id": "F1", "steps": [{"role": "implementor", "prompt": "x"}]}]}})
-	# on_fail inválido rechazado en submit
-	with pytest.raises(ValueError, match="on_fail"):
-		d.validate(_forge_payload("/tmp", steps=[{"role": "implementor", "prompt": "x", "on_fail": "explode"}]))
+		d.validate({"manifest": {"workdir": "/tmp", "stages": [{"id": "a", "type": "agent", "minion": "agent", "model": "m", "prompt": "x"}]}})
+	# on_fail inválido / type inválido rechazados en submit
+	with pytest.raises(ValueError, match="type"):
+		d.validate(_dag_payload("/tmp", stages=[{"id": "impl", "type": "bogus", "minion": "agent", "model": "m", "prompt": "x"}]))
+	with pytest.raises(ValueError, match="model"):
+		d.validate(_dag_payload("/tmp", stages=[{"id": "impl", "type": "agent", "minion": "agent", "model": "flash", "prompt": "x"}]))
+	with pytest.raises(ValueError, match="depends_on"):
+		d.validate(_dag_payload("/tmp", stages=[
+			{"id": "impl", "type": "agent", "minion": "agent", "model": "m", "prompt": "x", "depends_on": ["nope"]},
+		]))
 
 
-def test_forge_job_steps_to_completion_with_checkpoint(tmp_path, monkeypatch):
-	from red_pill.jobs.drivers.forge import ForgeJobDriver
+def test_dag_job_steps_to_completion_with_checkpoint(tmp_path, monkeypatch):
+	from red_pill.jobs.drivers.dag import DagJobDriver
 
 	ws = tmp_path / "ws"
 	(ws / ".cell" / "reports").mkdir(parents=True)
-	bridge = _ForgeBridge(str(ws))
-	monkeypatch.setattr("red_pill.swarm.bridges.factory.create_bridge", lambda b=None, **kw: bridge)
+	_patch_dag_agent(monkeypatch)
 
-	d = ForgeJobDriver()
-	payload = _forge_payload(str(ws), steps=[
-		{"role": "implementor", "prompt": "impl"},
-		{"role": "validator", "prompt": "valida"},
+	d = DagJobDriver()
+	payload = _dag_payload(str(ws), stages=[
+		{"id": "impl", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "impl"},
+		{"id": "validator", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "valida", "depends_on": ["impl"]},
 	])
 	d.preflight(payload)
 	o1 = d.step(payload, {})
-	assert o1.new_checkpoint["step_index"] == 1 and not o1.completed
+	assert o1.new_checkpoint["completed_stage_ids"] == ["impl"] and not o1.completed
 	assert o1.progress["current"] == 1 and o1.progress["total"] == 2
 	o2 = d.step(payload, o1.new_checkpoint)
-	assert o2.completed and o2.new_checkpoint["step_index"] == 2
+	assert o2.completed and o2.new_checkpoint["completed_stage_ids"] == ["impl", "validator"]
 	# Telemetría pública (espejo, no autoritativa)
-	status = (ws / ".cell" / "forge_job_status.json").read_text()
-	assert '"step_index": 2' in status and '"status": "completed"' in status
-	# Reportes escritos por el agente en el workspace
-	assert (ws / ".cell" / "reports" / "implementor-F1.json").is_file()
+	status = (ws / ".cell" / "dag_status.json").read_text()
+	assert '"completed": 2' in status and '"status": "completed"' in status
+	# Reportes serializados por el DAG en el workspace
+	assert (ws / ".cell" / "reports" / "impl.json").is_file()
 
 
-def test_forge_job_resume_from_handoff_checkpoint(tmp_path, monkeypatch):
+def test_dag_job_resume_from_handoff_checkpoint(tmp_path, monkeypatch):
 	"""Control transferible: un checkpoint escrito desde fuera (handoff) se respeta."""
-	from red_pill.jobs.drivers.forge import ForgeJobDriver
+	from red_pill.jobs.drivers.dag import DagJobDriver
 
 	ws = tmp_path / "ws"
 	(ws / ".cell" / "reports").mkdir(parents=True)
-	bridge = _ForgeBridge(str(ws))
-	monkeypatch.setattr("red_pill.swarm.bridges.factory.create_bridge", lambda b=None, **kw: bridge)
+	_patch_dag_agent(monkeypatch)
 
-	d = ForgeJobDriver()
-	payload = _forge_payload(str(ws), steps=[{"role": "implementor", "prompt": "a"}, {"role": "validator", "prompt": "b"}, {"role": "smoke", "prompt": "c"}])
+	d = DagJobDriver()
+	payload = _dag_payload(str(ws), stages=[
+		{"id": "a", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "a"},
+		{"id": "b", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "b", "depends_on": ["a"]},
+		{"id": "c", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "c", "depends_on": ["b"]},
+	])
 
-	# El main-loop tomó el control tras el paso 1 y ejecutó el 2 inline:
-	handoff = {"step_index": 2, "results": ["impl", "valido-inline"]}
+	# El main-loop tomó el control tras la etapa 'a' y ejecutó 'b' inline:
+	handoff = {"completed_stage_ids": ["a", "b"], "results": {"a": "hecho", "b": "valido-inline"}}
 	o = d.step(payload, handoff)
-	assert o.new_checkpoint["step_index"] == 3
-	assert o.new_checkpoint["results"] == ["impl", "valido-inline", "hecho"]
-	assert o.progress["stage_current"] == 1  # una sola fase
+	assert o.completed
+	assert o.new_checkpoint["completed_stage_ids"] == ["a", "b", "c"]
+	assert o.new_checkpoint["results"]["b"] == "valido-inline"
 
 
-def test_forge_job_continue_on_error_warns_not_burns_breaker(tmp_path, monkeypatch):
-	from red_pill.jobs.drivers.forge import ForgeJobDriver
+def test_dag_job_continue_on_error_warns_not_burns_breaker(tmp_path, monkeypatch):
+	from red_pill.jobs.drivers.dag import DagJobDriver
 
 	ws = tmp_path / "ws"
 	(ws / ".cell" / "reports").mkdir(parents=True)
 
-	class _Broken(_ForgeBridge):
-		def prompt(self, text, **kwargs):
-			return type("R", (), {"response": "", "error": "API down", "conversation_id": "x", "ok": False})()
+	class _Failing(_FakeAgentMinion):
+		async def execute(self, task, **kwargs):
+			return {"status": "failed", "error": "API down"}
 
-	monkeypatch.setattr("red_pill.swarm.bridges.factory.create_bridge", lambda b=None, **kw: _Broken(str(ws)))
-	d = ForgeJobDriver()
-	payload = _forge_payload(str(ws), steps=[
-		{"role": "implementor", "prompt": "x", "on_fail": "warn"},
-		{"role": "validator", "prompt": "y"},
+	import red_pill.jobs.drivers.dag as dag_mod
+	import red_pill.swarm.factory as fac
+
+	monkeypatch.setattr(fac.MinionFactory, "create", staticmethod(lambda minion_id, **kw: _Failing() if minion_id == "agent" else None))
+	monkeypatch.setattr(dag_mod, "_resolve_minion_kind", lambda mid: "agent")
+	d = DagJobDriver()
+	payload = _dag_payload(str(ws), stages=[
+		{"id": "impl", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "x", "on_fail": "warn"},
+		{"id": "validator", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "y", "depends_on": ["impl"]},
 	])
 	o = d.step(payload, {})
-	# continue-on-error: avanza el índice y marca FAILED, sin lanzar (no quema attempts)
-	assert o.new_checkpoint["step_index"] == 1
-	assert "FAILED" in o.new_checkpoint["results"][0]
+	# continue-on-error: avanza y marca FAILED, sin lanzar (no quema attempts)
+	assert "FAILED" in o.new_checkpoint["results"]["impl"]
+	assert not o.completed
 
 
-def test_forge_job_on_fail_stop_raises(tmp_path, monkeypatch):
-	from red_pill.jobs.drivers.forge import ForgeJobDriver
+def test_dag_job_on_fail_stop_raises(tmp_path, monkeypatch):
+	from red_pill.jobs.drivers.dag import DagJobDriver
 
 	ws = tmp_path / "ws"
 	(ws / ".cell" / "reports").mkdir(parents=True)
 
-	class _Broken(_ForgeBridge):
-		def prompt(self, text, **kwargs):
-			return type("R", (), {"response": "", "error": "API down", "conversation_id": "x", "ok": False})()
+	class _Failing(_FakeAgentMinion):
+		async def execute(self, task, **kwargs):
+			return {"status": "failed", "error": "API down"}
 
-	monkeypatch.setattr("red_pill.swarm.bridges.factory.create_bridge", lambda b=None, **kw: _Broken(str(ws)))
-	d = ForgeJobDriver()
-	payload = _forge_payload(str(ws), steps=[{"role": "implementor", "prompt": "x", "on_fail": "stop"}])
+	import red_pill.jobs.drivers.dag as dag_mod
+	import red_pill.swarm.factory as fac
+
+	monkeypatch.setattr(fac.MinionFactory, "create", staticmethod(lambda minion_id, **kw: _Failing() if minion_id == "agent" else None))
+	monkeypatch.setattr(dag_mod, "_resolve_minion_kind", lambda mid: "agent")
+	d = DagJobDriver()
+	payload = _dag_payload(str(ws), stages=[
+		{"id": "impl", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "x", "on_fail": "stop"},
+	])
 	with pytest.raises(RuntimeError, match="on_fail=stop"):
 		d.step(payload, {})
 
 
 def test_job_manager_mission_id_isolation(queue, clean_registry):
-	"""Dos forges en paralelo no se pisan: mission_id filtra jobs y update_checkpoint."""
+	"""Dos misiones en paralelo no se pisan: mission_id filtra jobs y update_checkpoint."""
 	register_driver(CountingDriver)
 	q = queue
-	id_a = q.enqueue_task(source="forge_job", payload=_forge_payload("/tmp", mission_id="A"), mission_id="A")
-	id_b = q.enqueue_task(source="forge_job", payload=_forge_payload("/tmp", mission_id="B"), mission_id="B")
+	id_a = q.enqueue_task(source="dag_job", payload=_dag_payload("/tmp", mission_id="A"), mission_id="A")
+	id_b = q.enqueue_task(source="dag_job", payload=_dag_payload("/tmp", mission_id="B"), mission_id="B")
 
 	only_a = q.list_tasks(mission_id="A")
 	assert [t["id"] for t in only_a] == [id_a]

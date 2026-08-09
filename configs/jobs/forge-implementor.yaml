@@ -1,12 +1,21 @@
-# Forge — rol Implementor (ejecuta UNA fase con evidencia real).
-# source: agentic_job — el prompt con spec/criterios/contexto viaja dinámico
-# en el payload del submit; este recipe fija el perfil del rol.
+# Forge — rol Implementor como UNA etapa atómica del dag_job (RFC_JOB_DAG §3).
+# source: dag_job — el recipe define el PERFIL de la etapa (minion+model+effort).
+# El prompt (spec/criterios/contexto) viaja dinámico: el skill forge lo inyecta
+# en la etapa al componer el manifest de la misión.
 seed: true  # SEED genérico: plantilla por-instalación. Activar config real copiando a .red-pill/jobs/ (ver NOTE_MODEL_POLICY_ROLES).
-source: agentic_job
+source: dag_job
 priority: 5
+mission_id: forge-implementor
 backend: opencode
-model: flash  # PLACEHOLDER = "no especificar": el bridge opencode NO pasa -m y usa el modelo por defecto de opencode. Sobrescribir en el payload del submit (job_submit {model}) para fijar uno concreto, p.ej. anthropic/claude-sonnet-4-5.
-effort: high
 timeout: 900
 control:
   max_step_minutes: 25
+manifest:
+  workdir: .
+  stages:
+    - id: implementor
+      type: agent
+      minion: agent
+      backend: opencode
+      model: flash  # SEED por-instalación: cada instalación configura el modelo de este rol. "flash" = default del harness. Ver Aleth_Core/NOTE_MODEL_POLICY_ROLES.md (implementor → opencode-go/deepseek-v4-pro).
+      effort: high

@@ -28,6 +28,7 @@ class StepOutcome:
 	new_checkpoint: Dict[str, Any] = field(default_factory=dict)
 	summary: str = ""
 	progress: Optional[Dict[str, Any]] = None  # { current, total, percent, ... }
+	concurrency: Optional[Dict[str, Any]] = None  # informativo: {parallel_stages, max_parallel_level, actually_parallel}
 
 
 class JobDeferred(Exception):
