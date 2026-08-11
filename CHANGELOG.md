@@ -1,3 +1,75 @@
+## [7.17.0] - 2026-08-10 (El DAG Generaliza, Bit se Gradúa)
+
+El Job Manager madura: la composición deja de repetirse en drivers hermanos y
+se unifica en una plantilla recursiva (`dag_job`), el sueño pasa a ser una
+receta de esa plantilla, los jobs agénticos se blindan contra configs de
+modelos ausentes, y el driver específico de entrenamiento de Bit — que dio el
+sustrato del primer camino genérico — completa su ciclo y se retira: Bit v1
+cerró 1408+ épocas vía `script_job` y la Escuela entra en la fase de réplicas
+multi-semilla K-65P.
+
+### 🧬 Job DAG — plantilla genérica recursiva de composición (RFC_JOB_DAG, #84)
+- **[FEAT] `dag_job` (`source: dag_job`)**: ejecuta un ÁRBOL de etapas en la
+  cola central — cada etapa es atómica (un minion del `MinionFactory`,
+  agéntico o no) **o compuesta** (sub_etapas con `depends_on` para fan-in/
+  fan-out y `parallel: true` como intención declarativa de concurrencia, que
+  el orquestador acota por `max_parallel_level`). La recursión unifica todo:
+  un panel adversarial = sub-etapa paralela de lentes; sleep = receta de
+  sub-etapas secuenciales; forge = receta de sub-etapas mixtas.
+- **[FEAT] `parallel` es intención, no orden**: el manifest puede declararlo a
+  cualquier profundidad; el orquestador decide cuándo paraleliza de verdad
+  (default nivel 2, máx. 4 sub-etapas concurrentes por etapa, en threads
+  DENTRO del step — el runner sigue viendo un step atómico).
+- **[FEAT] Checkpoint autoritativo en BD** `{completed_stage_ids, results,
+  stage_flags}` con ids aplanados por ruta (`panel/lens-correctness`): el
+  resume y el control transferible operan sobre el árbol completo de forma
+  determinista, a cualquier profundidad.
+- **[FEAT] Cada etapa persiste SU resultado** en `.cell/reports/<ruta>.json`
+  (el DAG serializa; los minions no se tocan) y el padre solo marca flags —
+  no hay orden de hilos que normalizar.
+- **[FEAT] Probe GPU real por etapa** (`requires_gpu`): nvidia-smi exit 0 +
+  VRAM + `-ngl` efectivo, con deferral limpio (R1) — jamás CPU disfrazada.
+- **[FEAT] Fail-safe de modelos en TODAS las etapas agénticas del árbol**
+  (validación en el submit, no en runtime): una etapa sin `model` real (o con
+  el placeholder `flash`) bloquea el encolado.
+- **[FEAT] Control transferible heredado de forge**: `job_transfer` → el
+  main-loop ejecuta etapas inline → `job_checkpoint` → `job_resume`.
+- **[REF] `forge_job`/`sleep_job` dejan de registrarse** como sources: sus
+  manifests pasan a ser **recetas** del `dag_job` (`forge-panel.yaml`,
+  `sleep.yaml`). Los drivers legacy quedan importables para jobs previos y
+  tests; limpieza física pendiente.
+
+### 🌙 Ciclo de sueño como receta del DAG (RFC_JOB_DAG paso 2, de #81)
+- **[REF] `sleep.yaml` ahora es `source: dag_job`**: las 14 unidades atómicas
+  del ciclo (3 rituales + 10 fases + thread + finalize) son minions de lógica
+  pura declarados como etapas del árbol. `on_fail: warn` por unidad (best-effort:
+  el job NUNCA falla por una unidad que revienta) y `requires_gpu` donde la
+  fase infiere (preflight real con deferral). El estado `total_processed`
+  cruza entre fases. El runner serializa frente al entrenamiento y al
+  chronicle (prioridad 8): la noche es del metabolismo.
+
+### 🛡️ Fail-safe de modelos activa (#83)
+- **[FEAT] `load_recipe` distingue recetas seed de config real**: `seed: true`
+  (plantilla por-instalación) es metadata del encolado, no payload. Los
+  recipes forge pasan a `seed: true`.
+- **[FEAT] Bloqueo en el submit**: `agentic_job`/`forge_job` encolados sin
+  modelo activo (receta seed o placeholder `flash`) se rechazan al encolar —
+  el primer check antes de iniciar la misión.
+- **[FIX] `h2 4.3.0 → 4.4.1`** (CVE-2026-71554, transitiva vía
+  httpx[http2]) para pasar el paso SEC-F01 del CI.
+
+### 🚛 Retirada de `BitTrainingDriver` (D3 cumplida)
+- **[CHANGE] `bit_school_training` ya no es source del carril mecánico**: se
+  retira `register_driver(BitTrainingDriver)` (D3 del RFC del ScriptJobDriver,
+  "convivencia deliberada" cumplida). El camino genérico `script_job` + receta
+  versionada (`frankenswarm/configs/jobs/school.yaml`) completó una fase real
+  del curriculum — la Escuela de Bit v1 cerró 1408+ épocas — así que el driver
+  específico deja de ser red de seguridad y se quita del registro. El archivo
+  `drivers/bit_training.py` queda importable para jobs previos y tests;
+  limpieza física pendiente. El entrenamiento de Bit (incluidas las réplicas
+  multi-semilla K-65P) se encola con `red-pill job submit --recipe
+  school_k65p_*` → `script_job`.
+
 ## [7.16.0] - 2026-08-02 (La Clave Cromática)
 
 El pipeline Ferrari pintaba colores que nadie explicaba: el Router y el Tone Adapter repetían la misma prosa por color en cada transición, y el `chroma:` final llegaba desnudo — un modelo frío no tenía forma de saber qué significa *orange* o *gray*. Esta release consolida la semántica de color en una sola leyenda al final del pipeline: cada plugin pinta su etiqueta compacta y el CHROMA KEY explica, una única vez, cada color que se ha pintado ese turno.
