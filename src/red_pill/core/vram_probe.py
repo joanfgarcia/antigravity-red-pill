@@ -45,7 +45,9 @@ class VramProbe:
 			try:
 				probe = subprocess.run(
 					["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
-					capture_output=True, text=True, timeout=5,
+					capture_output=True,
+					text=True,
+					timeout=5,
 				)
 				if probe.returncode == 0 and probe.stdout.strip():
 					return "cuda"

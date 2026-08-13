@@ -49,7 +49,9 @@ def _gpu_health_probe() -> Tuple[bool, int, int]:
 	try:
 		free_out = subprocess.run(
 			["nvidia-smi", "--query-gpu=memory.free", "--format=csv,noheader,nounits"],
-			capture_output=True, text=True, timeout=5,
+			capture_output=True,
+			text=True,
+			timeout=5,
 		)
 		if free_out.returncode != 0:
 			return False, 0, 0
@@ -112,13 +114,15 @@ class SleepJobDriver(ResumableJobDriver):
 		from red_pill.metabolism.phases import SLEEP_PHASES
 
 		for i, phase in enumerate(SLEEP_PHASES):
-			units.append({
-				"unit": f"{phase.name}:{i + 1}",
-				"kind": "phase",
-				"phase_index": i,
-				"phase_name": phase.name,
-				"requires_gpu": phase.requires_gpu,
-			})
+			units.append(
+				{
+					"unit": f"{phase.name}:{i + 1}",
+					"kind": "phase",
+					"phase_index": i,
+					"phase_name": phase.name,
+					"requires_gpu": phase.requires_gpu,
+				}
+			)
 		units.append({"unit": "thread", "kind": "ritual", "ritual": "thread", "requires_gpu": False})
 		return units
 
@@ -165,7 +169,9 @@ class SleepJobDriver(ResumableJobDriver):
 
 		asyncio.run(rituals.thread_ritual())
 
-	def _write_public_status(self, payload: Dict[str, Any], unit: Dict[str, Any], ctx, new_index: int, total_units: int, status: str, total_phases: int = 1) -> None:
+	def _write_public_status(
+		self, payload: Dict[str, Any], unit: Dict[str, Any], ctx, new_index: int, total_units: int, status: str, total_phases: int = 1
+	) -> None:
 		"""Telemetría en vivo (espejo del checkpoint en BD — auditoría A2)."""
 		try:
 			ctx.update_status(
@@ -231,7 +237,11 @@ class SleepJobDriver(ResumableJobDriver):
 		new_index = resume_unit + 1
 		ctx.total_processed = getattr(ctx, "total_processed", total_processed)
 		self._write_public_status(
-			payload, unit, ctx, new_index, total_units,
+			payload,
+			unit,
+			ctx,
+			new_index,
+			total_units,
 			"deferred" if ctx.deferred else ("failed" if unit_failed else "running"),
 			total_phases=len(SLEEP_PHASES) if unit.get("kind") == "phase" else 1,
 		)

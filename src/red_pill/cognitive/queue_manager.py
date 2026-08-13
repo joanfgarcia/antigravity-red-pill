@@ -82,7 +82,9 @@ class CognitiveQueueManager:
 				ON cognitive_tasks(status, priority DESC, created_at ASC)
 			""")
 
-	def enqueue_task(self, source: str, payload: Dict[str, Any], priority: int = 5, parent_task_id: Optional[str] = None, mission_id: Optional[str] = None) -> str:
+	def enqueue_task(
+		self, source: str, payload: Dict[str, Any], priority: int = 5, parent_task_id: Optional[str] = None, mission_id: Optional[str] = None
+	) -> str:
 		"""Inyecta un estímulo/tarea en la cola cognitiva. Si tiene un parent_task_id, entra como BLOCKED.
 
 		`mission_id`: grupo de aislamiento entre forges (misiones independientes).
@@ -384,15 +386,13 @@ class CognitiveQueueManager:
 		if statuses is None:
 			statuses = ["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED"]
 		placeholders = ",".join(["?"] * len(statuses))
-		query = (
-			f"""
+		query = f"""
 			SELECT id, source, priority, status, attempts, progress, updated_at, mission_id,
 				json_extract(payload, '$.title') AS title,
 				json_extract(checkpoint_data, '$.dirty_kill.reason') AS dirty_kill
 			FROM cognitive_tasks
 			WHERE status IN ({placeholders})
 			"""
-		)
 		params: List = list(statuses)
 		if mission_id is not None:
 			query += " AND mission_id = ?"

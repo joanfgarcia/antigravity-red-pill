@@ -8,6 +8,8 @@ Does the summary reflect BOTH the user and the assistant? BASE vs TUNED prompt.
 | hermes_8b | tuned | 3/3 | 3/3 | 3/3 |
 | granite_8b | base | 2/3 | 3/3 | 2/3 |
 | granite_8b | tuned | 3/3 | 3/3 | 3/3 |
+| llama_32 | base | 1/3 | 2/3 | 1/3 |
+| llama_32 | tuned | 3/3 | 3/3 | 3/3 |
 
 ## hermes_8b
 ### base
@@ -30,3 +32,14 @@ Does the summary reflect BOTH the user and the assistant? BASE vs TUNED prompt.
 - [philosophical] ✓: El usuario sostiene que los actos definen a una persona, mientras que el asistente discrepa al argumentar que la memoria es esencial para la continuidad de la identidad.
 - [caching] ✓: El usuario sugiere cachear los embeddings en disco para acelerar el arranque, pero el asistente advierte que el caché en disco puede corromperse si cambia el modelo y recomienda in
 - [db_decision] ✓: El usuario pregunta si migrar a Postgres o continuar con SQLite, y el asistente decide continuar con SQLite debido a que el volumen de datos no justifica la migración y añadiría co
+
+## llama_32
+### base
+- [philosophical] ✗ only-user: La identidad se forma a través de los actos
+- [caching] ✓: Cachear embeddings en disco puede corromperse si cambia el modelo
+- [db_decision] ✗ neither: Decidiendo seguir con SQLite
+
+### tuned
+- [philosophical] ✓: El usuario cuestiona la relación entre recuerdos y actos, mientras que el asistente sostiene que la memoria es esencial para la continuidad del yo y la formación de identidad.
+- [caching] ✓: Se sugiere cachear embeddings en disco para acelerar el arranque, pero el asistente recomienda invalidar el caché por hash del modelo para evitar problemas con la corrupción del caché.
+- [db_decision] ✓: El volumen no justifica Postgres y añadiría operaciones, por lo que seguimos con SQLite.

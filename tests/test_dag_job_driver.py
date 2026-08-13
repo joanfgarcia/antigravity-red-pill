@@ -72,10 +72,15 @@ def test_dag_validate_rejects_bad_type():
 def test_dag_validate_duplicate_path():
 	d = DagJobDriver()
 	with pytest.raises(ValueError, match="duplicate"):
-		d.validate(_payload("/tmp", [
-			{"id": "a", "type": "agent", "minion": "agent", "model": "m", "prompt": "x"},
-			{"id": "a", "type": "command", "minion": "command_runner"},
-		]))
+		d.validate(
+			_payload(
+				"/tmp",
+				[
+					{"id": "a", "type": "agent", "minion": "agent", "model": "m", "prompt": "x"},
+					{"id": "a", "type": "command", "minion": "command_runner"},
+				],
+			)
+		)
 
 
 def test_dag_validate_rejects_flash_model(tmp_path):
@@ -110,10 +115,13 @@ def test_dag_linear_agentic_runs_in_order(tmp_path, monkeypatch):
 	(ws / ".cell" / "reports").mkdir(parents=True)
 	calls = []
 	_patch_minion_factory(monkeypatch, calls)
-	payload = _payload(str(ws), [
-		{"id": "impl", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "do X"},
-		{"id": "smoke", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "smoke it", "depends_on": ["impl"]},
-	])
+	payload = _payload(
+		str(ws),
+		[
+			{"id": "impl", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "do X"},
+			{"id": "smoke", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "smoke it", "depends_on": ["impl"]},
+		],
+	)
 	o1 = d.step(payload, {})
 	assert o1.new_checkpoint["completed_stage_ids"] == ["impl"]
 	assert not o1.completed
@@ -130,9 +138,12 @@ def test_dag_command_stage(tmp_path, monkeypatch):
 	ws.mkdir()
 	calls = []
 	_patch_minion_factory(monkeypatch, calls)
-	payload = _payload(str(ws), [
-		{"id": "gen", "type": "command", "minion": "command_runner", "command": "echo hi > gen.txt"},
-	])
+	payload = _payload(
+		str(ws),
+		[
+			{"id": "gen", "type": "command", "minion": "command_runner", "command": "echo hi > gen.txt"},
+		],
+	)
 	o = d.step(payload, {})
 	assert o.completed
 	assert o.new_checkpoint["results"]["gen"] == "ok"
@@ -145,20 +156,23 @@ def test_dag_compound_parallel_runs_all(tmp_path, monkeypatch):
 	(ws / ".cell" / "reports").mkdir(parents=True)
 	calls = []
 	_patch_minion_factory(monkeypatch, calls)
-	payload = _payload(str(ws), [
-		{"id": "impl", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "do X"},
-		{
-			"id": "panel",
-			"type": "compound",
-			"parallel": True,
-			"on_fail": "warn",
-			"depends_on": ["impl"],
-			"sub_etapas": [
-				{"id": "lens-a", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "lens a"},
-				{"id": "lens-b", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "lens b"},
-			],
-		},
-	])
+	payload = _payload(
+		str(ws),
+		[
+			{"id": "impl", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "do X"},
+			{
+				"id": "panel",
+				"type": "compound",
+				"parallel": True,
+				"on_fail": "warn",
+				"depends_on": ["impl"],
+				"sub_etapas": [
+					{"id": "lens-a", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "lens a"},
+					{"id": "lens-b", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "lens b"},
+				],
+			},
+		],
+	)
 	o1 = d.step(payload, {})
 	assert o1.new_checkpoint["completed_stage_ids"] == ["impl"]
 	o2 = d.step(payload, o1.new_checkpoint)
@@ -175,23 +189,27 @@ def test_dag_parallel_level_gate(tmp_path, monkeypatch):
 	(ws / ".cell" / "reports").mkdir(parents=True)
 	calls = []
 	_patch_minion_factory(monkeypatch, calls)
-	payload = _payload(str(ws), [
-		{
-			"id": "deep",
-			"type": "compound",
-			"sub_etapas": [
-				{
-					"id": "inner",
-					"type": "compound",
-					"parallel": True,
-					"sub_etapas": [
-						{"id": "x", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "x"},
-						{"id": "y", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "y"},
-					],
-				},
-			],
-		},
-	], max_parallel_level=1)
+	payload = _payload(
+		str(ws),
+		[
+			{
+				"id": "deep",
+				"type": "compound",
+				"sub_etapas": [
+					{
+						"id": "inner",
+						"type": "compound",
+						"parallel": True,
+						"sub_etapas": [
+							{"id": "x", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "x"},
+							{"id": "y", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "y"},
+						],
+					},
+				],
+			},
+		],
+		max_parallel_level=1,
+	)
 	# nivel del nodo 'inner' = 2 > 1 → sus sub-etapas se ejecutan secuenciales
 	while True:
 		o = d.step(payload, {})
@@ -218,9 +236,12 @@ def test_dag_on_fail_stop_raises(tmp_path, monkeypatch):
 	import red_pill.jobs.drivers.dag as dag_mod
 
 	monkeypatch.setattr(dag_mod, "_resolve_minion_kind", lambda mid: "agent")
-	payload = _payload(str(ws), [
-		{"id": "impl", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "x", "on_fail": "stop"},
-	])
+	payload = _payload(
+		str(ws),
+		[
+			{"id": "impl", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "x", "on_fail": "stop"},
+		],
+	)
 	with pytest.raises(RuntimeError, match="on_fail=stop"):
 		d.step(payload, {})
 
@@ -241,9 +262,12 @@ def test_dag_on_fail_warn_continues(tmp_path, monkeypatch):
 	import red_pill.jobs.drivers.dag as dag_mod
 
 	monkeypatch.setattr(dag_mod, "_resolve_minion_kind", lambda mid: "agent")
-	payload = _payload(str(ws), [
-		{"id": "impl", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "x", "on_fail": "warn"},
-	])
+	payload = _payload(
+		str(ws),
+		[
+			{"id": "impl", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "x", "on_fail": "warn"},
+		],
+	)
 	o = d.step(payload, {})
 	assert o.completed
 	assert "FAILED" in o.new_checkpoint["results"]["impl"]
@@ -257,10 +281,13 @@ def test_dag_transferable_control(tmp_path, monkeypatch):
 	(ws / ".cell" / "reports").mkdir(parents=True)
 	calls = []
 	_patch_minion_factory(monkeypatch, calls)
-	payload = _payload(str(ws), [
-		{"id": "a", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "a"},
-		{"id": "b", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "b", "depends_on": ["a"]},
-	])
+	payload = _payload(
+		str(ws),
+		[
+			{"id": "a", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "a"},
+			{"id": "b", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "b", "depends_on": ["a"]},
+		],
+	)
 	handoff = {"completed_stage_ids": ["a"], "results": {"a": "hecho-inline"}}
 	o = d.step(payload, handoff)
 	assert o.completed
@@ -275,9 +302,12 @@ def test_dag_status_file(tmp_path, monkeypatch):
 	(ws / ".cell" / "reports").mkdir(parents=True)
 	calls = []
 	_patch_minion_factory(monkeypatch, calls)
-	payload = _payload(str(ws), [
-		{"id": "a", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "a"},
-	])
+	payload = _payload(
+		str(ws),
+		[
+			{"id": "a", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "a"},
+		],
+	)
 	d.step(payload, {})
 	status = json.loads((ws / ".cell" / "dag_status.json").read_text())
 	assert status["completed"] == 1 and status["total"] == 1
@@ -293,33 +323,49 @@ def test_dag_forge_panel_L3(tmp_path, monkeypatch):
 	(ws / ".cell" / "reports").mkdir(parents=True)
 	calls = []
 	_patch_minion_factory(monkeypatch, calls)
-	payload = _payload(str(ws), [
-		{"id": "impl", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "implementa"},
-		{
-			"id": "panel",
-			"type": "compound",
-			"parallel": True,
-			"on_fail": "warn",
-			"depends_on": ["impl"],
-			"sub_etapas": [
-				{"id": "lens-correctness", "type": "agent", "minion": "agent", "model": "opencode/big-pickle", "prompt": "refuta correctness"},
-				{"id": "lens-env-segregation", "type": "agent", "minion": "agent", "model": "opencode-go/mimo-v2.5-pro", "prompt": "refuta env"},
-				{"id": "lens-plan", "type": "agent", "minion": "agent", "model": "opencode-go/mimo-v2.5-pro", "prompt": "refuta plan"},
-				{"id": "lens-security", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "refuta security"},
-				{"id": "lens-perf-repro", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-flash", "prompt": "reproduce perf"},
-				{"id": "judge", "type": "agent", "minion": "agent", "model": "opencode-go/kimi-k2.7-code",
-					"depends_on": ["lens-correctness", "lens-env-segregation", "lens-plan", "lens-security", "lens-perf-repro"],
-					"prompt": "lee .cell/reports/panel/lens-*.json y adjudica"},
-			],
-		},
-	])
+	payload = _payload(
+		str(ws),
+		[
+			{"id": "impl", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "implementa"},
+			{
+				"id": "panel",
+				"type": "compound",
+				"parallel": True,
+				"on_fail": "warn",
+				"depends_on": ["impl"],
+				"sub_etapas": [
+					{"id": "lens-correctness", "type": "agent", "minion": "agent", "model": "opencode/big-pickle", "prompt": "refuta correctness"},
+					{"id": "lens-env-segregation", "type": "agent", "minion": "agent", "model": "opencode-go/mimo-v2.5-pro", "prompt": "refuta env"},
+					{"id": "lens-plan", "type": "agent", "minion": "agent", "model": "opencode-go/mimo-v2.5-pro", "prompt": "refuta plan"},
+					{"id": "lens-security", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "refuta security"},
+					{
+						"id": "lens-perf-repro",
+						"type": "agent",
+						"minion": "agent",
+						"model": "opencode-go/deepseek-v4-flash",
+						"prompt": "reproduce perf",
+					},
+					{
+						"id": "judge",
+						"type": "agent",
+						"minion": "agent",
+						"model": "opencode-go/kimi-k2.7-code",
+						"depends_on": ["lens-correctness", "lens-env-segregation", "lens-plan", "lens-security", "lens-perf-repro"],
+						"prompt": "lee .cell/reports/panel/lens-*.json y adjudica",
+					},
+				],
+			},
+		],
+	)
 	o1 = d.step(payload, {})
 	assert o1.new_checkpoint["completed_stage_ids"] == ["impl"]
 	o2 = d.step(payload, o1.new_checkpoint)
 	# Las 5 lentes corren en UN step (threads, paralelas); el judge con depends_on
 	# es una oleada posterior (espera sus reportes) → el compuesto 'panel' se marca
 	# done en el step siguiente. Checkpoint por sub-etapa (RFC §4.1).
-	assert o2.new_checkpoint["completed_stage_ids"] == ["impl"] + [f"panel/lens-{lid}" for lid in ("correctness", "env-segregation", "plan", "security", "perf-repro")]
+	assert o2.new_checkpoint["completed_stage_ids"] == ["impl"] + [
+		f"panel/lens-{lid}" for lid in ("correctness", "env-segregation", "plan", "security", "perf-repro")
+	]
 	# §3: StepOutcome informa el paralelismo real del step (RFC_JOB_DAG §3)
 	assert o2.concurrency is not None
 	assert o2.concurrency["parallel_groups"] == 1
@@ -337,6 +383,7 @@ def test_dag_forge_panel_L3(tmp_path, monkeypatch):
 
 
 # ── Funciones de módulo: _gpu_health_probe y _resolve_minion_kind ────────────
+
 
 def test_gpu_health_probe_sin_binario(monkeypatch):
 	"""Sin nvidia-smi en PATH → (False, 0, 0)."""
@@ -360,10 +407,12 @@ def test_gpu_health_probe_ok_con_ngl(monkeypatch):
 	import red_pill.jobs.drivers.dag as dag_mod
 
 	monkeypatch.setattr(dag_mod.shutil, "which", lambda name: "/usr/bin/nvidia-smi")
-	responses = iter([
-		type("R", (), {"returncode": 0, "stdout": "8192\n"})(),
-		type("R", (), {"returncode": 0, "stdout": "llama-server ... -ngl 33\n"})(),
-	])
+	responses = iter(
+		[
+			type("R", (), {"returncode": 0, "stdout": "8192\n"})(),
+			type("R", (), {"returncode": 0, "stdout": "llama-server ... -ngl 33\n"})(),
+		]
+	)
 	monkeypatch.setattr(dag_mod.subprocess, "run", lambda *a, **kw: next(responses))
 	usable, free_mb, ngl = dag_mod._gpu_health_probe()
 	assert (usable, free_mb, ngl) == (True, 8192, 33)
@@ -374,10 +423,12 @@ def test_gpu_health_probe_ngl_malformado(monkeypatch):
 	import red_pill.jobs.drivers.dag as dag_mod
 
 	monkeypatch.setattr(dag_mod.shutil, "which", lambda name: "/usr/bin/nvidia-smi")
-	responses = iter([
-		type("R", (), {"returncode": 0, "stdout": "4096\n"})(),
-		type("R", (), {"returncode": 0, "stdout": "llama-server ... -ngl abc\n"})(),
-	])
+	responses = iter(
+		[
+			type("R", (), {"returncode": 0, "stdout": "4096\n"})(),
+			type("R", (), {"returncode": 0, "stdout": "llama-server ... -ngl abc\n"})(),
+		]
+	)
 	monkeypatch.setattr(dag_mod.subprocess, "run", lambda *a, **kw: next(responses))
 	usable, _free_mb, ngl = dag_mod._gpu_health_probe()
 	assert usable is True and ngl == 0

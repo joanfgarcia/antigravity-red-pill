@@ -774,6 +774,7 @@ def test_step_boundary_callback_failure_never_kills_the_job(queue, clean_registr
 
 # ── DagJobDriver (RFC_JOB_DAG v0.7: misión como árbol, control transferible) ───
 
+
 def _dag_payload(workdir: str, mission_id: str = "m1", stages=None):
 	"""Payload mínimo válido de dag_job (una misión como árbol de etapas)."""
 	if stages is None:
@@ -818,9 +819,14 @@ def test_dag_job_validate_requires_mission_id():
 	with pytest.raises(ValueError, match="model"):
 		d.validate(_dag_payload("/tmp", stages=[{"id": "impl", "type": "agent", "minion": "agent", "model": "flash", "prompt": "x"}]))
 	with pytest.raises(ValueError, match="depends_on"):
-		d.validate(_dag_payload("/tmp", stages=[
-			{"id": "impl", "type": "agent", "minion": "agent", "model": "m", "prompt": "x", "depends_on": ["nope"]},
-		]))
+		d.validate(
+			_dag_payload(
+				"/tmp",
+				stages=[
+					{"id": "impl", "type": "agent", "minion": "agent", "model": "m", "prompt": "x", "depends_on": ["nope"]},
+				],
+			)
+		)
 
 
 def test_dag_job_steps_to_completion_with_checkpoint(tmp_path, monkeypatch):
@@ -831,10 +837,20 @@ def test_dag_job_steps_to_completion_with_checkpoint(tmp_path, monkeypatch):
 	_patch_dag_agent(monkeypatch)
 
 	d = DagJobDriver()
-	payload = _dag_payload(str(ws), stages=[
-		{"id": "impl", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "impl"},
-		{"id": "validator", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "valida", "depends_on": ["impl"]},
-	])
+	payload = _dag_payload(
+		str(ws),
+		stages=[
+			{"id": "impl", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "impl"},
+			{
+				"id": "validator",
+				"type": "agent",
+				"minion": "agent",
+				"model": "opencode-go/deepseek-v4-pro",
+				"prompt": "valida",
+				"depends_on": ["impl"],
+			},
+		],
+	)
 	d.preflight(payload)
 	o1 = d.step(payload, {})
 	assert o1.new_checkpoint["completed_stage_ids"] == ["impl"] and not o1.completed
@@ -857,11 +873,14 @@ def test_dag_job_resume_from_handoff_checkpoint(tmp_path, monkeypatch):
 	_patch_dag_agent(monkeypatch)
 
 	d = DagJobDriver()
-	payload = _dag_payload(str(ws), stages=[
-		{"id": "a", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "a"},
-		{"id": "b", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "b", "depends_on": ["a"]},
-		{"id": "c", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "c", "depends_on": ["b"]},
-	])
+	payload = _dag_payload(
+		str(ws),
+		stages=[
+			{"id": "a", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "a"},
+			{"id": "b", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "b", "depends_on": ["a"]},
+			{"id": "c", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "c", "depends_on": ["b"]},
+		],
+	)
 
 	# El main-loop tomó el control tras la etapa 'a' y ejecutó 'b' inline:
 	handoff = {"completed_stage_ids": ["a", "b"], "results": {"a": "hecho", "b": "valido-inline"}}
@@ -887,10 +906,13 @@ def test_dag_job_continue_on_error_warns_not_burns_breaker(tmp_path, monkeypatch
 	monkeypatch.setattr(fac.MinionFactory, "create", staticmethod(lambda minion_id, **kw: _Failing() if minion_id == "agent" else None))
 	monkeypatch.setattr(dag_mod, "_resolve_minion_kind", lambda mid: "agent")
 	d = DagJobDriver()
-	payload = _dag_payload(str(ws), stages=[
-		{"id": "impl", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "x", "on_fail": "warn"},
-		{"id": "validator", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "y", "depends_on": ["impl"]},
-	])
+	payload = _dag_payload(
+		str(ws),
+		stages=[
+			{"id": "impl", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "x", "on_fail": "warn"},
+			{"id": "validator", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "y", "depends_on": ["impl"]},
+		],
+	)
 	o = d.step(payload, {})
 	# continue-on-error: avanza y marca FAILED, sin lanzar (no quema attempts)
 	assert "FAILED" in o.new_checkpoint["results"]["impl"]
@@ -913,9 +935,12 @@ def test_dag_job_on_fail_stop_raises(tmp_path, monkeypatch):
 	monkeypatch.setattr(fac.MinionFactory, "create", staticmethod(lambda minion_id, **kw: _Failing() if minion_id == "agent" else None))
 	monkeypatch.setattr(dag_mod, "_resolve_minion_kind", lambda mid: "agent")
 	d = DagJobDriver()
-	payload = _dag_payload(str(ws), stages=[
-		{"id": "impl", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "x", "on_fail": "stop"},
-	])
+	payload = _dag_payload(
+		str(ws),
+		stages=[
+			{"id": "impl", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "x", "on_fail": "stop"},
+		],
+	)
 	with pytest.raises(RuntimeError, match="on_fail=stop"):
 		d.step(payload, {})
 

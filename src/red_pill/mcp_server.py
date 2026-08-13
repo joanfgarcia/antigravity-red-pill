@@ -1778,8 +1778,15 @@ def _resolve_job(qm, ref: str) -> Optional[Dict[str, Any]]:
 	schema={
 		"type": "object",
 		"properties": {
-			"source": {"type": "string", "enum": ["agentic_job", "dag_job", "forge_job", "sleep_job"], "description": "Driver que ejecutará el job (forge_job/sleep_job legacy: solo jobs previos en cola)."},
-			"payload": {"type": "object", "description": "Payload del driver. agentic_job: {prompt, backend?, model?, effort?, cwd?, timeout?}. dag_job: {mission_id, manifest:{workdir, stages:[{id, type: agent|command|compound, minion, model?, prompt?, on_fail?, depends_on?, sub_etapas?}]}, max_parallel_level?, max_concurrency?, backend?, model?, effort?, timeout?}."},
+			"source": {
+				"type": "string",
+				"enum": ["agentic_job", "dag_job", "forge_job", "sleep_job"],
+				"description": "Driver que ejecutará el job (forge_job/sleep_job legacy: solo jobs previos en cola).",
+			},
+			"payload": {
+				"type": "object",
+				"description": "Payload del driver. agentic_job: {prompt, backend?, model?, effort?, cwd?, timeout?}. dag_job: {mission_id, manifest:{workdir, stages:[{id, type: agent|command|compound, minion, model?, prompt?, on_fail?, depends_on?, sub_etapas?}]}, max_parallel_level?, max_concurrency?, backend?, model?, effort?, timeout?}.",
+			},
 			"priority": {"type": "integer", "description": "Mayor = más urgente (default 5)."},
 			"mission_id": {"type": "string", "description": "Grupo de aislamiento entre forges (se lee de payload si se omite)."},
 			"title": {"type": "string", "description": "Título legible del job."},
@@ -1808,21 +1815,28 @@ async def handle_job_submit(arguments: Dict[str, Any]):
 		if source in ("agentic_job", "forge_job"):
 			model = payload.get("model")
 			if not model or model == "flash":
-				return [types.TextContent(
-					type="text",
-					text=(
-						f"[ERROR] job_submit sin modelo configurado (source={source}). "
-						"'flash' es el placeholder del default del harness, no una config activa. "
-						"Indica 'model' con un modelo real (p.ej. opencode-go/deepseek-v4-pro) o configura "
-						"los recipes por rol en .red-pill/jobs/ (ver Aleth_Core/NOTE_MODEL_POLICY_ROLES.md). "
-						"Bloqueado por seguridad."
-					),
-				)]
+				return [
+					types.TextContent(
+						type="text",
+						text=(
+							f"[ERROR] job_submit sin modelo configurado (source={source}). "
+							"'flash' es el placeholder del default del harness, no una config activa. "
+							"Indica 'model' con un modelo real (p.ej. opencode-go/deepseek-v4-pro) o configura "
+							"los recipes por rol en .red-pill/jobs/ (ver Aleth_Core/NOTE_MODEL_POLICY_ROLES.md). "
+							"Bloqueado por seguridad."
+						),
+					)
+				]
 
 		qm = _queue()
 		job_id = qm.enqueue_task(source=source, payload=payload, priority=int(arguments.get("priority", 5)), mission_id=mission_id)
 		note = f"mission={mission_id}" if mission_id else "sin mission_id"
-		return [types.TextContent(type="text", text=f"[OK] Job encolado: {job_id} (source={source}, {note}, priority={arguments.get('priority', 5)}). Resultado a MinionInbox.")]
+		return [
+			types.TextContent(
+				type="text",
+				text=f"[OK] Job encolado: {job_id} (source={source}, {note}, priority={arguments.get('priority', 5)}). Resultado a MinionInbox.",
+			)
+		]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"[ERROR] job_submit falló: {e}")]
 
@@ -1847,7 +1861,9 @@ async def handle_job_list(arguments: Dict[str, Any]):
 			return [types.TextContent(type="text", text="Cola vacía (o sin jobs de esa misión).")]
 		lines = [f"{'ID':<10} {'SOURCE':<15} {'STATUS':<12} {'PRIO':<4} {'MISSION':<10} TITLE"]
 		for t in tasks:
-			lines.append(f"{t['id'][:8]:<10} {t['source'][:14]:<15} {t['status']:<12} {t['priority']:<4} {(t.get('mission_id') or '-')[:9]:<10} {t.get('title') or '-'}")
+			lines.append(
+				f"{t['id'][:8]:<10} {t['source'][:14]:<15} {t['status']:<12} {t['priority']:<4} {(t.get('mission_id') or '-')[:9]:<10} {t.get('title') or '-'}"
+			)
 		return [types.TextContent(type="text", text="\n".join(lines))]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"[ERROR] job_list falló: {e}")]
@@ -1968,7 +1984,9 @@ async def handle_job_kill(arguments: Dict[str, Any]):
 			_sp.run(["systemctl", "--user", "stop", unit], capture_output=True, timeout=10)
 		except Exception:
 			pass
-		return [types.TextContent(type="text", text=f"[OK] Job {job_id[:8]} interrumpido (PAUSED*{', FRUSTRATED' if arguments.get('discard') else ''}).")]
+		return [
+			types.TextContent(type="text", text=f"[OK] Job {job_id[:8]} interrumpido (PAUSED*{', FRUSTRATED' if arguments.get('discard') else ''}).")
+		]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"[ERROR] job_kill falló: {e}")]
 
@@ -2001,7 +2019,11 @@ async def handle_job_checkpoint(arguments: Dict[str, Any]):
 		ok = qm.update_checkpoint(task["id"], arguments["checkpoint"], arguments.get("progress"))
 		if ok:
 			return [types.TextContent(type="text", text=f"[OK] Checkpoint de {task['id'][:8]} actualizado. Soltar el control con job_resume.")]
-		return [types.TextContent(type="text", text=f"[WARN] Job {task['id'][:8]} en '{task['status']}': checkpoint no aplicable (debe estar PAUSED/PENDING).")]
+		return [
+			types.TextContent(
+				type="text", text=f"[WARN] Job {task['id'][:8]} en '{task['status']}': checkpoint no aplicable (debe estar PAUSED/PENDING)."
+			)
+		]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"[ERROR] job_checkpoint falló: {e}")]
 
@@ -2032,17 +2054,24 @@ async def handle_job_transfer(arguments: Dict[str, Any]):
 			return [types.TextContent(type="text", text=f"[ERROR] Job '{arguments['job_id']}' no encontrado.")]
 		paused = qm.pause_task(task["id"])
 		after = qm.get_task(task["id"])
-		return [types.TextContent(
-			type="text",
-			text=_json.dumps({
-				"job_id": task["id"][:8],
-				"paused": paused,
-				"status": after["status"] if after else task["status"],
-				"checkpoint": after.get("checkpoint_data") if after else task.get("checkpoint_data"),
-				"progress": after.get("progress") if after else task.get("progress"),
-				"note": "main-loop al control: ejecuta los pasos inline y escribe job_checkpoint; luego job_resume para soltar.",
-			}, ensure_ascii=False, indent=2, default=str),
-		)]
+		return [
+			types.TextContent(
+				type="text",
+				text=_json.dumps(
+					{
+						"job_id": task["id"][:8],
+						"paused": paused,
+						"status": after["status"] if after else task["status"],
+						"checkpoint": after.get("checkpoint_data") if after else task.get("checkpoint_data"),
+						"progress": after.get("progress") if after else task.get("progress"),
+						"note": "main-loop al control: ejecuta los pasos inline y escribe job_checkpoint; luego job_resume para soltar.",
+					},
+					ensure_ascii=False,
+					indent=2,
+					default=str,
+				),
+			)
+		]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"[ERROR] job_transfer falló: {e}")]
 

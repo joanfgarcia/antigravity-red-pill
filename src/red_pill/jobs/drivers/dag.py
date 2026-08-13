@@ -121,7 +121,9 @@ def _gpu_health_probe() -> Tuple[bool, int, int]:
 	try:
 		free_out = subprocess.run(
 			["nvidia-smi", "--query-gpu=memory.free", "--format=csv,noheader,nounits"],
-			capture_output=True, text=True, timeout=5,
+			capture_output=True,
+			text=True,
+			timeout=5,
 		)
 		if free_out.returncode != 0:
 			return False, 0, 0
@@ -262,9 +264,7 @@ class DagJobDriver(ResumableJobDriver):
 					raise ValueError(f"dag_job stage '{stage_path}' minion '{minion_id}' no registrado en MinionFactory.")
 				if stype == _TYPE_AGENT:
 					if kind != _TYPE_AGENT:
-						raise ValueError(
-							f"dag_job stage '{stage_path}' type mismatch: minion '{minion_id}' no es agéntico."
-						)
+						raise ValueError(f"dag_job stage '{stage_path}' type mismatch: minion '{minion_id}' no es agéntico.")
 					# Fail-safe de modelos (fleco 3 del RFC): TODA etapa agéntica del
 					# árbol exige model real (no el placeholder 'flash' del harness).
 					model = s.get("model") or payload.get("model")
@@ -279,9 +279,7 @@ class DagJobDriver(ResumableJobDriver):
 						raise ValueError(f"dag_job agent stage '{stage_path}' requires 'prompt'.")
 				else:
 					if kind == _TYPE_AGENT:
-						raise ValueError(
-							f"dag_job stage '{stage_path}' type mismatch: minion '{minion_id}' es agéntico, no '{stype}'."
-						)
+						raise ValueError(f"dag_job stage '{stage_path}' type mismatch: minion '{minion_id}' es agéntico, no '{stype}'.")
 			for dep in s.get("depends_on", []):
 				# las deps referencian hermanos (ids del mismo nivel)
 				dep_path = f"{path}/{dep}" if path else dep
@@ -410,10 +408,7 @@ class DagJobDriver(ResumableJobDriver):
 			prefix = leaf_path.rsplit("/", 1)[0] if "/" in leaf_path else ""
 			if not self._ancestor_deps_met(stages, prefix, completed):
 				continue
-			deps_ok = all(
-				((f"{prefix}/{d}" if prefix else d) in completed)
-				for d in leaf.get("depends_on", [])
-			)
+			deps_ok = all(((f"{prefix}/{d}" if prefix else d) in completed) for d in leaf.get("depends_on", []))
 			if deps_ok:
 				front.append((leaf_path, leaf, prefix))
 
@@ -423,8 +418,17 @@ class DagJobDriver(ResumableJobDriver):
 				completed=done,
 				new_checkpoint=checkpoint_data,
 				summary="dag complete" if done else "waiting on deps (should not happen)",
-				progress={"current": len(completed), "total": total_leaves, "percent": round(100 * len(completed) / total_leaves) if total_leaves else 0},
-				concurrency={"parallel_groups": 0, "parallel_stages": 0, "max_parallel_level": int(payload.get("max_parallel_level", _MAX_PARALLEL_LEVEL_DEFAULT)), "actually_parallel": False},
+				progress={
+					"current": len(completed),
+					"total": total_leaves,
+					"percent": round(100 * len(completed) / total_leaves) if total_leaves else 0,
+				},
+				concurrency={
+					"parallel_groups": 0,
+					"parallel_stages": 0,
+					"max_parallel_level": int(payload.get("max_parallel_level", _MAX_PARALLEL_LEVEL_DEFAULT)),
+					"actually_parallel": False,
+				},
 			)
 
 		def _exec_one(path: str, stage: Dict[str, Any]) -> Tuple[str, str, bool]:
@@ -500,13 +504,16 @@ class DagJobDriver(ResumableJobDriver):
 		# si no, un árbol con compuestos inflaría el porcentaje.
 		leaves_done = sum(1 for lp, _ in _iter_leaves(stages) if lp in new_completed)
 
-		self._write_status(payload, {
-			"mission_id": payload.get("mission_id"),
-			"completed": leaves_done,
-			"total": total_leaves,
-			"status": "running" if leaves_done < total_leaves else "completed",
-			"updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-		})
+		self._write_status(
+			payload,
+			{
+				"mission_id": payload.get("mission_id"),
+				"completed": leaves_done,
+				"total": total_leaves,
+				"status": "running" if leaves_done < total_leaves else "completed",
+				"updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+			},
+		)
 
 		done = leaves_done >= total_leaves
 		checkpoint = {"completed_stage_ids": new_completed, "results": new_results, "stage_flags": new_flags}
@@ -515,5 +522,10 @@ class DagJobDriver(ResumableJobDriver):
 			new_checkpoint=checkpoint,
 			summary=f"dag {leaves_done}/{total_leaves}",
 			progress={"current": leaves_done, "total": total_leaves, "percent": round(100 * leaves_done / total_leaves) if total_leaves else 0},
-			concurrency={"parallel_groups": parallel_groups, "parallel_stages": parallel_stages, "max_parallel_level": max_parallel_level, "actually_parallel": parallel_groups > 0},
+			concurrency={
+				"parallel_groups": parallel_groups,
+				"parallel_stages": parallel_stages,
+				"max_parallel_level": max_parallel_level,
+				"actually_parallel": parallel_groups > 0,
+			},
 		)

@@ -1,0 +1,8 @@
+{
+  "status": "success",
+  "phase": "orphan_promotion",
+  "phase_index": 1,
+  "total_processed": 41,
+  "summary": "fase orphan_promotion ok (41 engramas)",
+  "duration": 1.579
+}

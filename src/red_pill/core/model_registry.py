@@ -72,9 +72,9 @@ class ModelRegistry:
 		which vram_tiers entry is selected.
 
 		Each tier's 'min_free_gb' field represents the minimum free VRAM required
-		to use that tier. Tiers are sorted ascending; the first tier whose
-		min_free_gb is satisfied by the currently free VRAM is selected.
-		If free VRAM exceeds all tiers, the highest tier is used.
+		to use that tier. Tiers are sorted ascending; the most demanding tier whose
+		min_free_gb is satisfied by the currently free VRAM is selected
+		(highest usable). If no tier fits, the most conservative (lowest) is used.
 
 		On CPU-only systems (VramProbe returns 0 MB), the lowest (most
 		conservative) tier is always selected.
@@ -90,17 +90,17 @@ class ModelRegistry:
 
 		resolved = {k: v for k, v in hardware.items() if k != "vram_tiers"}
 
-		# Sort tiers by min_free_gb ascending; select the first tier that fits
+		# Sort tiers by min_free_gb ascending; select the highest tier whose
+		# min_free_gb is <= free VRAM (it fits). None fits -> lowest (safest).
 		tiers = sorted(hardware["vram_tiers"], key=lambda x: x.get("min_free_gb", 0))
 		matched_tier = None
 		for tier in tiers:
-			if free_vram_gb <= tier.get("min_free_gb", 0):
+			if free_vram_gb >= tier.get("min_free_gb", 0):
 				matched_tier = tier
-				break
-		else:
-			# Free VRAM exceeds all defined tiers → use the highest
-			if tiers:
-				matched_tier = tiers[-1]
+		if matched_tier is None and tiers:
+			# No tier fits (free VRAM below every min_free_gb) -> use the
+			# most conservative (lowest) tier.
+			matched_tier = tiers[0]
 
 		if matched_tier:
 			logger.info(f"[ModelRegistry] Free VRAM {free_vram_gb:.2f} GB → tier: {matched_tier}")

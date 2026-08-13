@@ -79,6 +79,74 @@ EMOTION_SYNONYMS = {
 }
 
 
+def _detect_source_lang(text: str) -> str:
+	"""Cheap ISO 639-1 detection for the source text (es/en only, as used by the
+	distiller prompts). Returns '' when the signal is too weak to override the
+	LLM's label — the label only gets corrected on STRONG evidence.
+
+	Spanish markers (ñ, ¿, ¡, accented chars) are near-unambiguous; en is
+	inferred from absence of Spanish markers plus common English stopwords.
+	"""
+	low = (text or "").lower()
+	if any(ch in low for ch in ("ñ", "¿", "¡")):
+		return "es"
+	accent_count = sum(low.count(ch) for ch in "áéíóúü")
+	wrapped = f" {low} "
+	spanish_stop = sum(wrapped.count(w) for w in (" de ", " la ", " el ", " que ", " y ", " en ", " un ", " una ", " los ", " las "))
+	english_stop = sum(wrapped.count(w) for w in (" the ", " and ", " of ", " is ", " in ", " to ", " that ", " it "))
+	if accent_count >= 2:
+		return "es"
+	if spanish_stop >= 3 and english_stop == 0:
+		return "es"
+	if english_stop >= 3 and spanish_stop == 0 and accent_count == 0:
+		return "en"
+	return ""
+
+
+def _correct_lang_label(llm_lang: str, source_text: str) -> str:
+	"""Mechanical lang correction (V3 philosophy: guarantees in code, not prompt).
+
+	Small English-biased models (phi-4-mini measured 2026-08-13: 'en' on Spanish
+	text, 2/2 probes) mislabel the source language; the label feeds the hub
+	synthesis dominant-language hint and Qdrant metadata. Only override with
+	strong evidence; otherwise keep the model's label.
+	"""
+	llm_lang = str(llm_lang or "").lower().strip()[:2]
+	detected = _detect_source_lang(source_text)
+	if detected and detected != llm_lang:
+		return detected
+	return llm_lang
+
+
+def _resolve_prompt_for_profile(profile_name: Optional[str] = None) -> Optional[str]:
+	"""Look up the per-model `prompt_file` field from model_profiles.yaml.
+
+	If the active profile (from MINION_PROFILE env var, or `profile_name` if
+	passed) declares a `prompt_file`, return it. Otherwise return None (the
+	caller will fall back to the default `distiller_v3.txt`).
+
+	The bake-off 2026-08-13 established that smaller models (3-4B) need
+	MODE B (`distiller_v3_voice.txt`) for stable deixis/JSON, while
+	granite_8b works better with the lax `distiller_v3.txt`. This helper
+	implements that mapping at runtime without requiring callers to know
+	which prompt each model prefers.
+	"""
+	import os
+
+	if profile_name is None:
+		profile_name = os.getenv("MINION_PROFILE")
+	if not profile_name:
+		return None
+	try:
+		from red_pill.core.model_registry import ModelRegistry
+
+		profile = ModelRegistry.get_profile(profile_name)
+	except Exception:
+		return None
+	prompt_file = profile.get("prompt_file")
+	return prompt_file if isinstance(prompt_file, str) and prompt_file else None
+
+
 def _validate_relics(relics: Any, raw_content: str, max_relics: int = 2, max_len: int = 200) -> list:
 	"""Keep only quotes that are literal substrings of the source (whitespace-normalized).
 
@@ -150,7 +218,11 @@ def distill_engram(
 		)
 		raw_content = raw_content[:max_input_chars]
 
-	prompt_file = params.get("prompt_file", "distiller_v3.txt")
+	prompt_file = params.get("prompt_file")
+	if not prompt_file:
+		# Fall back to per-model prompt from the active profile (bake-off
+		# 2026-08-13). If the profile doesn't declare one, default to v3.
+		prompt_file = _resolve_prompt_for_profile() or "distiller_v3.txt"
 	system_prompt = load_prompt_text(prompt_file, override_text=override_prompt)
 
 	agent_name = "Aleth"
@@ -272,6 +344,7 @@ def distill_engram(
 
 				lang_val = parsed.get("lang", "")
 				lang_val = str(lang_val).lower().strip()[:2] if isinstance(lang_val, str) else ""
+				lang_val = _correct_lang_label(lang_val, raw_content)
 
 				relics_val = _validate_relics(parsed.get("relics", []), raw_content)
 
@@ -494,7 +567,11 @@ def synthesize_hub_v2(
 
 	summaries = [str(c.get("summary", "")) for c in chunks if c.get("summary")]
 	textures = [str(c.get("texture", "")) for c in chunks if c.get("texture")]
-	langs = [str(c.get("lang", "")) for c in chunks if c.get("lang")]
+	langs = []
+	for c in chunks:
+		c_lang = str(c.get("lang", ""))
+		if c_lang:
+			langs.append(_correct_lang_label(c_lang, str(c.get("summary", "")) or str(c.get("texture", ""))))
 	dominant_lang = max(set(langs), key=langs.count) if langs else ""
 
 	if dominant_lang and "DOMINANT language" not in system_prompt:
@@ -546,6 +623,7 @@ def synthesize_hub_v2(
 			)
 			texture_val = texture_val[:HUB_TEXTURE_MAX_CHARS]
 		lang_val = str(parsed.get("lang") or dominant_lang).lower().strip()[:2]
+		lang_val = _correct_lang_label(lang_val, user_prompt)
 		return {
 			"title": str(parsed.get("title") or "").strip(),
 			"summary": summary_val,

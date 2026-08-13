@@ -1,3 +1,103 @@
+## [Unreleased] - 2026-08-13 (Bake-off de Destilación: Llama-3.2, Gemma-3, Nemo-12B, Granite-3B, SmolLM3, Phi-4-Mini)
+
+Bake-off del destilador en 8 GB: aplicamos el patch de Titanium
+(`distiller_v3_voice.txt`, MODE B con self-check de 5 puntos), amplíamos la
+base de modelos a 9 candidatos LLM, descubrimos que cada familia necesita
+su propio prompt, y ruteamos esa decisión por perfil. La inferencia del
+bake-off corre con el binario `llama.cpp` (CLI, mismo backend que la
+producción vía SIP) — el wheel `llama-cpp-python` no enlaza CUDA en este
+entorno, así que el camino "sin abrir puerto" en local es subprocess al
+`llama-cli` con `--single-turn`.
+
+### 🧪 Destilación — ruteo per-model de prompt (bake-off 2026-08-13)
+- **[FEAT] `prompt_file` por perfil en `model_profiles.yaml`**: cada modelo
+  declara qué prompt de destilación prefiere. Resuelto en runtime por
+  `_resolve_prompt_for_profile()` en `distiller.py` leyendo
+  `MINION_PROFILE`. Mapeo resultante:
+  - `granite_8b` → `distiller_v3.txt` (laxo; granite ignora el self-check
+    y produce JSON limpio)
+  - `hermes_8b`, `llama_32`, `granite_3b`, `gemma_3_4b`, `smollm3_3b`,
+    `phi_mini`, `mistral_nemo_12b` → `distiller_v3_voice.txt` (MODE B;
+    los 3-4B necesitan andamiaje explícito)
+- **[FEAT] `distiller_v3_voice.txt` (MODE B)**: portada del patch de
+  Titanium. 3ª persona nombrada ("Joan me dice que…"), ejemplo GOOD/BAD,
+  self-check de 5 puntos. Los modelos 3B sin él caen a 1ª persona/plural
+  y rompen la coherencia de la Voz.
+- **[FIX] `model_registry.py` — selección de tier invertida**: el código
+  elegía con `free <= min` (lo opuesto de su docstring) y el `for-else`
+  forzaba el tier más bajo. Ahora elige el tier más alto que cabe
+  (`free >= min`) y cae al más conservador sólo si nada cabe. En nuestro
+  8 GB compartido con entrenamiento, esto evita caídas silenciosas a CPU
+  cuando la GPU sí tiene hueco.
+- **[FIX] `_correct_lang_label` en `distiller.py`**: phi-4-mini mide
+  `en` en fuentes en español (2/2 probes). Lo etiquetamos en código
+  con `_detect_source_lang()` (acentos + stopwords es/en); sólo cuando
+  hay evidencia fuerte se corrige, si no se respeta la etiqueta del
+  modelo. Añadido en `distill_engram` (1 sitio) y `synthesize_hub_v2`
+  (2 sitios).
+
+### 🗃️ Base de modelos — 9 candidatos LLM, cascade adaptada a 8 GB
+- **[FEAT] 9 perfiles LLM** en `~/.config/red-pill/model_profiles.yaml`
+  con tiers 8K/7K/6K/4K reescalados a nuestra VRAM:
+  - `granite_8b` (5.5 GB, primario) — `distiller_v3.txt`
+  - `hermes_8b` (4.7 GB) — `distiller_v3_voice.txt`
+  - `llama_32` (1.9 GB, del patch de Titanium) — cascade amplia
+  - `granite_3b` (2.0 GB, hermano pequeño)
+  - `gemma_3_4b` (2.4 GB, cascade conservadora por SWA)
+  - `smollm3_3b` (1.8 GB, native tools)
+  - `phi_mini` (2.5 GB, baseline de Titanium)
+  - `mistral_nemo_12b` (5.7 GB Q3_K_M, tight en 8 GB)
+  - `samantha` (4.1 GB, empathy-tuned, no destilador)
+- **[FEAT] Resueltos bake-off en 8 GB**: 145-205 t/s gen, 3-9 s/probe.
+  7/8 modelos mejoran con MODE B; granite_8b es el único que prefiere
+  el prompt laxo.
+
+### 🛠️ Infra de bake-off (sin afectar a producción)
+- **[FEAT] `scripts/llama_cli_runner.py`**: wrapper subprocess sobre
+  `~/3rdparty/llama_official/build/bin/llama-cli`. Usa `--single-turn
+  --no-display-prompt`. Parsea la respuesta del prefijo `| `. GPU
+  activada en subprocess, sin abrir puerto. Base de todo el bake-off.
+- **[FEAT] `scripts/model_battle_cli.py`**: bake-off de destilación
+  usando el CLI runner. Acepta `--chat-template-file` para modelos con
+  Jinja roto (Mistral-Nemo usa `selectattr("tool_calls")` que el jinja
+  bundled no reconoce).
+- **[FEAT] `scripts/model_battle_lib.py` + `scripts/model_battle_tool.py` +
+  `scripts/calibrate_bakeoff.py`**: infraestructura per-tarea
+  (herramienta/hub/clasificación/código), primer borrador de `tool_battle`
+  con 5 probes (simple, multi-sel, json_args, no_tool, multi_step).
+  Pendiente validación en GPU.
+- **[FEAT] `configs/chat_templates/mistral_nemo_simple.jinja`**: template
+  `[INST] {system}\n\n{user} [/INST]` sin features avanzadas. Resuelve
+  el segfault de nemo en el bundled jinja engine.
+- **[FEAT] 6 GGUFs nuevos** (~15 GB) en `~/.local/share/red-pill/models/`.
+
+### 📚 Docs
+- **[FEAT] `docs/2026-08-13-model-bakeoff.md`**: memoria del patch de
+  Titanium (qué modelos evaluaron, qué descartaron, matriz final).
+- **[FEAT] `docs/BENCHMARKS/DISTILLER_BAKEOFF_PHI.{json,md}` y
+  `DISTILLER_FIDELITY_PHI.*`**: benchmarks de phi-4-mini antes de la
+  migración a llama-3.2 (portados del patch de Titanium).
+- **[FEAT] `docs/BENCHMARKS/2026-08-13-pending.md`**: lo que queda para
+  la próxima sesión (verificar SIP con nemo template, sleep cycle de
+  prueba, tool-bake-off, harnesses hub/classify/code).
+
+### ⚠️ Notas operacionales
+- **llama-cpp-python (wheel) sin CUDA en este entorno**: 3 intentos de
+  rebuild con `CMAKE_ARGS="-DGGML_CUDA=on"` y `--config-settings
+  cmake.args=...` no logran instalar `libggml-cuda.so` en el wheel
+  (CUDA 13 + GCC 15 + scikit-build + llama.cpp 0.3.34 packaging
+  issues). Bake-off usa el binario `llama.cpp` directamente como
+  workaround.
+- **SIP/producción no tocado**: este commit sólo afecta a la
+  inferencia del bake-off. La producción sigue usando `llama.cpp` vía
+  SIP exactamente igual. Pendiente verificar que SIP respeta
+  `chat_template_file` para nemo.
+- **Archivos modificados pre-existentes**: además de los cambios
+  nuestros, el commit incluye modificaciones previas a la sesión en
+  drivers (`dag.py`, `forge.py`, `sleep.py`), `vram_probe.py`,
+  `queue_manager.py`, `mcp_server.py` y 5 archivos de test. Diff
+  contra `main` disponible para revisión.
+
 ## [7.17.0] - 2026-08-10 (El DAG Generaliza, Bit se Gradúa)
 
 El Job Manager madura: la composición deja de repetirse en drivers hermanos y
