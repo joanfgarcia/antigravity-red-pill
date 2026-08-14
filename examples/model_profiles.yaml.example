@@ -50,17 +50,23 @@ profiles:
     hardware_affinity:
       n_ctx: 16384
       vram_tiers:
-        # Dynamically scale n_ctx and offload based on free VRAM to prevent context creation crashes
-        - min_free_gb: 6.4
+        # Semantics (v7.18.0): the highest GPU tier whose min_free_gb FITS the
+        # free VRAM wins (free >= min); the n_gpu_layers: 0 tier is the CPU
+        # fallback, used only when no GPU tier fits. Scale n_ctx with free VRAM
+        # to prevent context-creation crashes.
+        - min_free_gb: 1.5
           n_gpu_layers: 0
           n_ctx: 16384
+        - min_free_gb: 6.5
+          n_gpu_layers: -1
+          n_ctx: 6144
         - min_free_gb: 7.2
           n_gpu_layers: -1
           n_ctx: 10240
-        - min_free_gb: 8.0
+        - min_free_gb: 7.7
           n_gpu_layers: -1
           n_ctx: 12288
-        - min_free_gb: 999
+        - min_free_gb: 8.2
           n_gpu_layers: -1
           n_ctx: 16384
 
@@ -83,10 +89,11 @@ profiles:
         # Tuned for the RTX 5070 8 GB shared with training. An 8-9B Q4 with a large
         # KV cache only fits when the GPU is essentially idle; partial offload crashes
         # context creation while training holds VRAM (the 3028-error storm of 2026-07-16).
-        # So: CPU below the headroom, full GPU only when free VRAM is nearly the whole card.
-        - min_free_gb: 7
+        # Semantics (v7.18.0): highest GPU tier that fits (free >= min) wins;
+        # the n_gpu_layers: 0 tier is the CPU fallback when no GPU tier fits.
+        - min_free_gb: 1.5
           n_gpu_layers: 0
-        - min_free_gb: 999
+        - min_free_gb: 7
           n_gpu_layers: -1
 
   # ── Bake-off candidate: domain-specialist distiller ───────────
@@ -108,10 +115,11 @@ profiles:
         # Tuned for the RTX 5070 8 GB shared with training. An 8-9B Q4 with a large
         # KV cache only fits when the GPU is essentially idle; partial offload crashes
         # context creation while training holds VRAM (the 3028-error storm of 2026-07-16).
-        # So: CPU below the headroom, full GPU only when free VRAM is nearly the whole card.
-        - min_free_gb: 7
+        # Semantics (v7.18.0): highest GPU tier that fits (free >= min) wins;
+        # the n_gpu_layers: 0 tier is the CPU fallback when no GPU tier fits.
+        - min_free_gb: 1.5
           n_gpu_layers: 0
-        - min_free_gb: 999
+        - min_free_gb: 7
           n_gpu_layers: -1
 
   # ── Alternative distiller: affective/narrative depth ──────────
@@ -134,10 +142,11 @@ profiles:
         # Tuned for the RTX 5070 8 GB shared with training. An 8-9B Q4 with a large
         # KV cache only fits when the GPU is essentially idle; partial offload crashes
         # context creation while training holds VRAM (the 3028-error storm of 2026-07-16).
-        # So: CPU below the headroom, full GPU only when free VRAM is nearly the whole card.
-        - min_free_gb: 7
+        # Semantics (v7.18.0): highest GPU tier that fits (free >= min) wins;
+        # the n_gpu_layers: 0 tier is the CPU fallback when no GPU tier fits.
+        - min_free_gb: 1.5
           n_gpu_layers: 0
-        - min_free_gb: 999
+        - min_free_gb: 7
           n_gpu_layers: -1
 
   # ── FALLBACK distiller / primary "logic" (AD-022) ─────────────
@@ -160,17 +169,23 @@ profiles:
       # tier → more n_gpu_layers. Keep partial-offload tiers OUT on an 8 GB card
       # shared with training — they crash context creation (see the block comment).
       vram_tiers:
-        # Dynamically scale n_ctx and offload based on free VRAM to prevent context creation crashes
-        - min_free_gb: 6.4
+        # Semantics (v7.18.0): the highest GPU tier whose min_free_gb FITS the
+        # free VRAM wins (free >= min); the n_gpu_layers: 0 tier is the CPU
+        # fallback, used only when no GPU tier fits. Scale n_ctx with free VRAM
+        # to prevent context-creation crashes.
+        - min_free_gb: 1.5
           n_gpu_layers: 0
           n_ctx: 16384
+        - min_free_gb: 6.5
+          n_gpu_layers: -1
+          n_ctx: 6144
         - min_free_gb: 7.2
           n_gpu_layers: -1
           n_ctx: 10240
-        - min_free_gb: 8.0
+        - min_free_gb: 7.7
           n_gpu_layers: -1
           n_ctx: 12288
-        - min_free_gb: 999
+        - min_free_gb: 8.2
           n_gpu_layers: -1
           n_ctx: 16384
 
@@ -189,11 +204,12 @@ profiles:
     hardware_affinity:
       n_ctx: 4096
       vram_tiers:
-        # 7B with a small context (4k): needs ~6 GB free to offload fully on the 8 GB
-        # card. CPU below that; full GPU only when the card is essentially idle.
-        - min_free_gb: 6
+        # 7B with a small context (4k): needs ~6 GB free to offload fully on the
+        # 8 GB card. Semantics (v7.18.0): highest GPU tier that fits (free >= min)
+        # wins; the n_gpu_layers: 0 tier is the CPU fallback when no GPU tier fits.
+        - min_free_gb: 1.5
           n_gpu_layers: 0
-        - min_free_gb: 999
+        - min_free_gb: 6
           n_gpu_layers: -1
 
   smith:
