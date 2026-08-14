@@ -27,8 +27,7 @@ from typing import Callable, Optional
 # Resolve llama-cli relative to the repo root (scripts/ → ../). Override with
 # LLAMA_CLI_PATH env var if the binary lives elsewhere.
 LLAMA_CLI = Path(
-	os.environ.get("LLAMA_CLI_PATH")
-	or (Path(__file__).resolve().parent.parent / "3rdparty" / "llama_official" / "build" / "bin" / "llama-cli")
+	os.environ.get("LLAMA_CLI_PATH") or (Path(__file__).resolve().parent.parent / "3rdparty" / "llama_official" / "build" / "bin" / "llama-cli")
 )
 
 

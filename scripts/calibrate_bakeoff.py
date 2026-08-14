@@ -21,8 +21,8 @@ Exit code 0 = match (within tolerance), 1 = mismatch, 2 = error.
 from __future__ import annotations
 
 import json
-import re
 import os
+import re
 import subprocess
 import sys
 import time
@@ -49,9 +49,8 @@ PROBES_SMOKE = [
 PROBES_DISTILL = [
 	Probe(
 		name="decision",
-		system_prompt=open(
-			str(Path(__file__).resolve().parent.parent / "src" / "red_pill" / "metabolism" / "prompts" / "distiller_v3_voice.txt")
-		).read()
+		system_prompt=open(str(Path(__file__).resolve().parent.parent / "src" / "red_pill" / "metabolism" / "prompts" / "distiller_v3_voice.txt"))
+		.read()
 		.replace("{agent_name}", "Aleth")
 		.replace("{operator_name}", "Joan"),
 		user_message=(

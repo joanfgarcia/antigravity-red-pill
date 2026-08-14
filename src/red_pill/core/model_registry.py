@@ -90,17 +90,28 @@ class ModelRegistry:
 
 		resolved = {k: v for k, v in hardware.items() if k != "vram_tiers"}
 
-		# Sort tiers by min_free_gb ascending; select the highest tier whose
-		# min_free_gb is <= free VRAM (it fits). None fits -> lowest (safest).
+		# Sort tiers by min_free_gb ascending. Pick the highest GPU-capable tier
+		# whose min_free_gb fits. Tiers with n_gpu_layers=0 are CPU fallback
+		# markers — they are NEVER preferred over a GPU tier that fits, even if
+		# the CPU tier has the highest min_free_gb threshold. The CPU fallback
+		# path is only used when no GPU tier fits (or when there are no GPU
+		# tiers at all).
 		tiers = sorted(hardware["vram_tiers"], key=lambda x: x.get("min_free_gb", 0))
+		gpu_tiers = [t for t in tiers if t.get("n_gpu_layers", 0) != 0]
+		cpu_tiers = [t for t in tiers if t.get("n_gpu_layers", 0) == 0]
 		matched_tier = None
-		for tier in tiers:
+		for tier in gpu_tiers:
 			if free_vram_gb >= tier.get("min_free_gb", 0):
 				matched_tier = tier
-		if matched_tier is None and tiers:
-			# No tier fits (free VRAM below every min_free_gb) -> use the
-			# most conservative (lowest) tier.
-			matched_tier = tiers[0]
+		if matched_tier is None:
+			# No GPU tier fits. Use the most conservative CPU tier as a graceful
+			# fallback (slowest but never OOMs due to under-spec).
+			if cpu_tiers:
+				matched_tier = cpu_tiers[0]
+			elif gpu_tiers:
+				# No CPU tier defined — fall back to the lowest GPU tier
+				# (the least-demanding one, which most often fits).
+				matched_tier = gpu_tiers[0]
 
 		if matched_tier:
 			logger.info(f"[ModelRegistry] Free VRAM {free_vram_gb:.2f} GB → tier: {matched_tier}")

@@ -9,6 +9,29 @@ producción vía SIP) — el wheel `llama-cpp-python` no enlaza CUDA en este
 entorno, así que el camino "sin abrir puerto" en local es subprocess al
 `llama-cli` con `--single-turn`.
 
+### 🔧 Fix post-bake-off: ModelRegistry + cascade (7.38 GB → GPU)
+- **[FIX] `model_registry.py` — tier selection respects GPU preference**:
+  el fix anterior (`free >= min`) elegía el tier más alto que CABE, pero
+  no distinguía tiers con `n_gpu_layers=0` (CPU fallback). Con cascade de
+  8 GB y VRAM compartida con entrenamiento, el daemon acababa en CPU
+  ("GPU unavailable") cuando perfectamente cabía granite_8b en GPU a
+  n_ctx reducido. Ahora separa `gpu_tiers` (n_gpu_layers > 0) de
+  `cpu_tiers` y solo el CPU tier es fallback (cuando ningún GPU tier
+  entra).
+- **[FIX] `granite_8b` cascade ajustada** en `model_profiles.yaml`:
+  - `min_free_gb: 1.5, n_gpu_layers: 0` (CPU fallback permanente)
+  - `min_free_gb: 6.5, n_gpu_layers: -1, n_ctx: 6144` (CPU squeezed)
+  - `min_free_gb: 7.2, n_gpu_layers: -1, n_ctx: 10240`
+  - `min_free_gb: 7.7, n_gpu_layers: -1, n_ctx: 12288`
+  - `min_free_gb: 8.2, n_gpu_layers: -1, n_ctx: 16384`
+  - `min_free_gb: 999, n_gpu_layers: -1, n_ctx: 16384`
+  Antes: el primer tier GPU estaba en 7.2 con `n_gpu_layers: 0` (CPU) —
+  imposible de alcanzar desde GPU. Ahora con 7.38 GB libres el daemon
+  carga granite_8b en GPU a n_ctx 10240 (verificado, 7.3 GB VRAM).
+- **[FIX] `.gitignore` — añade `.cell/`** (faltaba en el commit anterior).
+  Era runtime state (dag_status.json, reports/*.json) regenerado en
+  cada job run.
+
 ### 🧪 Destilación — ruteo per-model de prompt (bake-off 2026-08-13)
 - **[FEAT] `prompt_file` por perfil en `model_profiles.yaml`**: cada modelo
   declara qué prompt de destilación prefiere. Resuelto en runtime por

@@ -201,9 +201,9 @@ def _try_parse_tool_call(raw: str) -> dict | None:
 	"""Robustly find a tool_call JSON object in the raw output.
 
 	llama-cpp with `chatml-function-calling` may emit either:
-	  - a single JSON object with {name, arguments}
-	  - raw tool_calls array (OpenAI style)
-	  - free text that needs to be regex-extracted
+	- a single JSON object with {name, arguments}
+	- raw tool_calls array (OpenAI style)
+	- free text that needs to be regex-extracted
 	"""
 	# Try direct JSON parse first.
 	try:
