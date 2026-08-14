@@ -1,10 +1,10 @@
 """model_battle_lib.py — shared infrastructure for per-task model battle harnesses.
 
 Provides:
-  - BattleRunner: load GGUF, measure load time + VRAM peak, run probes.
-  - Probe, BattleResult dataclasses.
-  - format_summary: compact per-model summary table.
-  - KNOWN_GGUF: central registry (kept in sync with model_profiles.yaml basenames).
+- BattleRunner: load GGUF, measure load time + VRAM peak, run probes.
+- Probe, BattleResult dataclasses.
+- format_summary: compact per-model summary table.
+- KNOWN_GGUF: central registry (kept in sync with model_profiles.yaml basenames).
 
 Each per-task script imports this and defines its own probes + validators.
 """

@@ -1,4 +1,4 @@
-## [Unreleased] - 2026-08-13 (Bake-off de Destilación: Llama-3.2, Gemma-3, Nemo-12B, Granite-3B, SmolLM3, Phi-4-Mini)
+## [7.18.0] - 2026-08-13 (Bake-off de Destilación: Llama-3.2, Gemma-3, Nemo-12B, Granite-3B, SmolLM3, Phi-4-Mini)
 
 Bake-off del destilador en 8 GB: aplicamos el patch de Titanium
 (`distiller_v3_voice.txt`, MODE B con self-check de 5 puntos), amplíamos la

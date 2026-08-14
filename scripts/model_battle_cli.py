@@ -5,16 +5,16 @@ Same probes as `model_battle.py` (Titanium's distillation harness), but
 executes via the `llama-cli` binary instead of the Python bindings. This
 gives us:
 
-  - **GPU acceleration** (CUDA-backed, same backend as production via SIP).
-  - **Behavioral equivalence with production** (same binary, same kernels,
-    same quantization math). What we measure here is what production does.
-  - **No port required** (CLI mode, not server mode).
+**GPU acceleration** (CUDA-backed, same backend as production via SIP).
+**Behavioral equivalence with production** (same binary, same kernels,
+same quantization math). What we measure here is what production does.
+**No port required** (CLI mode, not server mode).
 
 Trade-off: ~1-2s subprocess spawn overhead per probe (loading model each
 time). For 3-5 probes per model this is negligible.
 
 Usage:
-  python scripts/model_battle_cli.py <model_name> <path/to.gguf> [prompt_path]
+python scripts/model_battle_cli.py <model_name> <path/to.gguf> [prompt_path]
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from llama_cli_runner import CliProbe, LlamaCliRunner
 
-DEFAULT_PROMPT = "/home/joan/Documents/IA/sharing/src/red_pill/metabolism/prompts/distiller_v3.txt"
+DEFAULT_PROMPT = str(Path(__file__).resolve().parent.parent / "src" / "red_pill" / "metabolism" / "prompts" / "distiller_v3.txt")
 prompt_path = sys.argv[3] if len(sys.argv) > 3 else DEFAULT_PROMPT
 PROMPT = open(prompt_path).read()
 PROMPT = PROMPT.replace("{agent_name}", "Aleth").replace("{operator_name}", "Joan")
@@ -75,7 +75,7 @@ def main(model_name: str, gguf_path: str, _prompt_unused: str = None):
 	# [INST]/[/INST] template fixes them.
 	ct_file = None
 	if "Nemo" in gguf_path or "nemo" in model_name:
-		ct_file = "/home/joan/Documents/IA/sharing/configs/chat_templates/mistral_nemo_simple.jinja"
+		ct_file = str(Path(__file__).resolve().parent.parent / "configs" / "chat_templates" / "mistral_nemo_simple.jinja")
 	runner = LlamaCliRunner(model_name, gguf_path, chat_template_file=ct_file)
 	for pname, raw_data in PROBES.items():
 		probe = CliProbe(

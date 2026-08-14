@@ -9,11 +9,11 @@ runs the same probe through both and compares the *structural* JSON output
 (not token-by-token).
 
 Usage:
-  python scripts/calibrate_bakeoff.py <model_name> <path/to.gguf> [probe_set]
+python scripts/calibrate_bakeoff.py <model_name> <path/to.gguf> [probe_set]
 
 probe_set is one of: smoke, distill (default: smoke).
-  smoke   — single short prompt "di hola" — fast, checks basic load parity.
-  distill — 3 distillation probes — slower, checks JSON/dict structure parity.
+smoke   — single short prompt "di hola" — fast, checks basic load parity.
+distill — 3 distillation probes — slower, checks JSON/dict structure parity.
 
 Exit code 0 = match (within tolerance), 1 = mismatch, 2 = error.
 """
@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import re
+import os
 import subprocess
 import sys
 import time
@@ -30,7 +31,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from model_battle_lib import BattleRunner, Probe, start_daemon_if_inactive, stop_daemon_if_active
 
-LLAMA_CLI = "/home/joan/Documents/IA/sharing/3rdparty/llama_official/build/bin/llama-cli"
+LLAMA_CLI = os.environ.get("LLAMA_CLI_PATH") or str(
+	Path(__file__).resolve().parent.parent / "3rdparty" / "llama_official" / "build" / "bin" / "llama-cli"
+)
 
 PROBES_SMOKE = [
 	Probe(
@@ -46,8 +49,9 @@ PROBES_SMOKE = [
 PROBES_DISTILL = [
 	Probe(
 		name="decision",
-		system_prompt=open("/home/joan/Documents/IA/sharing/src/red_pill/metabolism/prompts/distiller_v3_voice.txt")
-		.read()
+		system_prompt=open(
+			str(Path(__file__).resolve().parent.parent / "src" / "red_pill" / "metabolism" / "prompts" / "distiller_v3_voice.txt")
+		).read()
 		.replace("{agent_name}", "Aleth")
 		.replace("{operator_name}", "Joan"),
 		user_message=(

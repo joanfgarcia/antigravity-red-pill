@@ -3,25 +3,22 @@
 
 Measures how well a model emits valid tool_calls for representative scenarios:
 
-  1. simple     — single tool, clear intent, model should emit one tool_call.
-  2. multi_sel  — 3 tools available, pick the right one (no false-positive).
-  3. json_args  — complex typed args (list[str], int, ISO8601) parsed correctly.
-  4. no_tool    — model should NOT emit tool_calls; conversational reply.
-  5. multi_step — chain of tool calls (plan + execute).
+1. simple     — single tool, clear intent, model should emit one tool_call.
+2. multi_sel  — 3 tools available, pick the right one (no false-positive).
+3. json_args  — complex typed args (list[str], int, ISO8601) parsed correctly.
+4. no_tool    — model should NOT emit tool_calls; conversational reply.
+5. multi_step — chain of tool calls (plan + execute).
 
 Mirrors the OpenAI tool_calls format the daemon already uses via
 `minion_chat_format: chatml-function-calling`. Per-probe results written to
 docs/BENCHMARKS/TOOL_<MODEL>_<DATE>.jsonl.
 
 Usage:
-  python scripts/model_battle_tool.py <model_name> <path/to.gguf> [chat_format]
+python scripts/model_battle_tool.py <model_name> <path/to.gguf> [chat_format]
 
 Examples:
-  python scripts/model_battle_tool.py granite_8b \\
-      /home/joan/.local/share/red-pill/models/Granite-4.1-8B-Q4_K_M.gguf \\
-      chatml-function-calling
-  python scripts/model_battle_tool.py smollm3_3b \\
-      /home/joan/.local/share/red-pill/models/SmolLM3-3B-Q4_K_M.gguf
+python scripts/model_battle_tool.py granite_8b <red-pill-models>/Granite-4.1-8B-Q4_K_M.gguf chatml-function-calling
+python scripts/model_battle_tool.py smollm3_3b <red-pill-models>/SmolLM3-3B-Q4_K_M.gguf
 """
 
 from __future__ import annotations

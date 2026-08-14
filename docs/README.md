@@ -92,6 +92,17 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [INFERENCE_PLUGINS.md](TECHNICAL/INFERENCE_PLUGINS.md) | Inference plugins architecture |
 | [SOVEREIGN_DRIVE.md](TECHNICAL/COGNITIVE/SOVEREIGN_DRIVE.md) | The underlying psychological drives and motivations of the Agent |
 
+### Distiller Bake-off Reports
+
+| Document | What it is |
+|----------|-----------|
+| [2026-08-13-MODEL-BAKEOFF.md](2026-08-13-MODEL-BAKEOFF.md) | Bake-off 2026-08-13: per-model prompt routing (8 models × 2 prompts on GPU) |
+| [DISTILLER_BAKEOFF.md](BENCHMARKS/DISTILLER_BAKEOFF.md) | Cumulative distiller bake-off history (granite/hermes/piaget/beck/qwen35/samantha) |
+| [DISTILLER_FIDELITY.md](BENCHMARKS/DISTILLER_FIDELITY.md) | Both-sides fidelity eval across prompt + model combos |
+| [DISTILLER_BAKEOFF_PHI.md](BENCHMARKS/DISTILLER_BAKEOFF_PHI.md) | Phi-4-mini individual bake-off results |
+| [DISTILLER_FIDELITY_PHI.md](BENCHMARKS/DISTILLER_FIDELITY_PHI.md) | Phi-4-mini fidelity eval |
+| [2026-08-13-PENDING.md](BENCHMARKS/2026-08-13-PENDING.md) | Open TODOs for next session (SIP-nemo verification, tool-bake-off, more harnesses) |
+
 ### Bünker
 
 | Document | What it is |

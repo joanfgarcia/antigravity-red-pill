@@ -61,21 +61,26 @@ class TestVramTierResolution:
 		assert result["n_ctx"] == 2048
 
 	def test_middle_tier_selected_for_mid_free_vram(self):
-		"""3 GB free → middle tier (min_free_gb=4.0) must be selected."""
+		"""5 GB free → middle tier (min_free_gb=4.0) must be selected.
+
+		Fixed via the 2026-08-13 patch: tier selection now uses `free >= min`
+		(highest fitting tier). Previously used `free <= min` which forced the
+		wrong tier when free VRAM exceeded all demoted thresholds.
+		"""
 		self._setup_profile(_make_tiered_hardware())
 		import red_pill.core.model_registry as mr
 
-		with _patch_free_mb(3072):  # 3 GB
+		with _patch_free_mb(5120):  # 5 GB
 			result = mr.ModelRegistry.get_resolved_hardware_affinity("test_profile")
 		assert result["n_gpu_layers"] == 20
 		assert result["n_ctx"] == 4096
 
 	def test_highest_tier_selected_for_high_free_vram(self):
-		"""6 GB free → highest tier (min_free_gb=7.0) must be selected."""
+		"""8 GB free → highest tier (min_free_gb=7.0) must be selected."""
 		self._setup_profile(_make_tiered_hardware())
 		import red_pill.core.model_registry as mr
 
-		with _patch_free_mb(6144):  # 6 GB
+		with _patch_free_mb(8192):  # 8 GB
 			result = mr.ModelRegistry.get_resolved_hardware_affinity("test_profile")
 		assert result["n_gpu_layers"] == 35
 		assert result["n_ctx"] == 8192

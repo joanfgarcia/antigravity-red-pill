@@ -2,10 +2,9 @@
 
 Why: the llama-cpp-python wheel has been failing to install libggml-cuda.so in
 this environment (CUDA 13 + GCC 15 + scikit-build + llama.cpp 0.3.34 packaging
-issues). The llama.cpp binary we already have at
-`~/3rdparty/llama_official/build/bin/llama-cli` was built with CUDA, detects
-the RTX 5070, and is the EXACT binary used in production via SIP — so
-behavioural equivalence is guaranteed by construction.
+issues). The llama.cpp binary under `3rdparty/llama_official/build/bin/llama-cli`
+was built with CUDA, detects the RTX 5070, and is the EXACT binary used in
+production via SIP — so behavioural equivalence is guaranteed by construction.
 
 Uses CLI mode (no port), one subprocess per probe. ~1-2s spawn overhead per
 probe vs the Python bindings in-process.
@@ -17,6 +16,7 @@ perf summary (`[ Prompt:` or `common_memory_breakdown_print:`).
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import time
@@ -24,7 +24,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 
-LLAMA_CLI = Path("/home/joan/Documents/IA/sharing/3rdparty/llama_official/build/bin/llama-cli")
+# Resolve llama-cli relative to the repo root (scripts/ → ../). Override with
+# LLAMA_CLI_PATH env var if the binary lives elsewhere.
+LLAMA_CLI = Path(
+	os.environ.get("LLAMA_CLI_PATH")
+	or (Path(__file__).resolve().parent.parent / "3rdparty" / "llama_official" / "build" / "bin" / "llama-cli")
+)
 
 
 @dataclass

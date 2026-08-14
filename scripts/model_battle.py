@@ -4,17 +4,16 @@
 Mide, para un GGUF dado, la calidad de síntesis con un prompt de destilador
 sobre 3 probes (entidades, decision, filosofico):
 
-  - deixis (3ª persona nombrada, sin tú/te/contigo para MODE B; o 2ª pers para MODE A)
-  - relics verbatim (substring literal del DATA)
-  - lang, tiempo por probe, carga
+deixis (3ª persona nombrada, sin tú/te/contigo para MODE B; o 2ª pers para MODE A)
+relics verbatim (substring literal del DATA)
+lang, tiempo por probe, carga
 
 Uso:
-  python model_battle.py <nombre> <ruta-gguf> [ruta-prompt]
+python model_battle.py <nombre> <ruta-gguf> [ruta-prompt]
 
 Si no se pasa ruta-prompt, usa distiller_v3.txt (nuestro, MODE A 2ª persona).
 Para usar el prompt MODE B de Titanium (3ª persona nombrada):
-  python model_battle.py llama_32 <gguf> \\
-    /home/joan/Documents/IA/sharing/src/red_pill/metabolism/prompts/distiller_v3_voice.txt
+python model_battle.py llama_32 <gguf> <repo>/src/red_pill/metabolism/prompts/distiller_v3_voice.txt
 
 Nota: requiere el venv del daemon (llama-cpp-python) y VRAM libre
 (no debe estar el daemon sirviendo modelo en GPU).
@@ -25,10 +24,11 @@ import json
 import re
 import sys
 import time
+from pathlib import Path
 
 from llama_cpp import Llama
 
-DEFAULT_PROMPT = "/home/joan/Documents/IA/sharing/src/red_pill/metabolism/prompts/distiller_v3.txt"
+DEFAULT_PROMPT = str(Path(__file__).resolve().parent.parent / "src" / "red_pill" / "metabolism" / "prompts" / "distiller_v3.txt")
 prompt_path = sys.argv[3] if len(sys.argv) > 3 else DEFAULT_PROMPT
 PROMPT = open(prompt_path).read()
 PROMPT = PROMPT.replace("{agent_name}", "Aleth").replace("{operator_name}", "Joan")
