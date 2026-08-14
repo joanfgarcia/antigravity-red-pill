@@ -567,6 +567,12 @@ class CognitiveQueueManager:
 		intento del disyuntor. Con `discard`, el job no vuelve: queda FRUSTRATED
 		con su motivo, visible en `job list` hasta que la higiene nocturna lo retire
 		(la trazabilidad vale más que borrar la fila en caliente).
+
+		PAUSING se incluye en el filtro: es un estado transitorio entre PROCESSING
+		y PAUSED (R3: operador pausa a mitad de step, runner termina el step
+		actual antes de soltar). Si el operador mata en ese intervalo, la pausa
+		prevalece y debe poder convertirse en PAUSED/FRUSTRATED sin esperar al
+		checkpoint del runner.
 		"""
 		self.mark_dirty_kill(task_id, {"reason": "operator"})
 		status, error_log = ("FRUSTRATED", "cancelled by operator") if discard else ("PAUSED", None)
@@ -575,7 +581,7 @@ class CognitiveQueueManager:
 				"""
 				UPDATE cognitive_tasks
 				SET status = ?, error_log = COALESCE(?, error_log), updated_at = CURRENT_TIMESTAMP
-				WHERE id = ? AND status IN ('PENDING', 'PROCESSING', 'PAUSED')
+				WHERE id = ? AND status IN ('PENDING', 'PROCESSING', 'PAUSED', 'PAUSING')
 				""",
 				(status, error_log, task_id),
 			)
