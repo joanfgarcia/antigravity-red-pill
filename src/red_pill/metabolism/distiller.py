@@ -112,6 +112,10 @@ def _correct_lang_label(llm_lang: str, source_text: str) -> str:
 	strong evidence; otherwise keep the model's label.
 	"""
 	llm_lang = str(llm_lang or "").lower().strip()[:2]
+	if llm_lang not in ("", "en", "es"):
+		# The detector only tells es/en apart; accented chars are shared with
+		# ca/fr/pt, so a model that correctly says 'ca' must not be overridden.
+		return llm_lang
 	detected = _detect_source_lang(source_text)
 	if detected and detected != llm_lang:
 		return detected
@@ -218,16 +222,20 @@ def distill_engram(
 		)
 		raw_content = raw_content[:max_input_chars]
 
-	prompt_file = params.get("prompt_file")
+	# Prompt precedence: explicit caller override > per-model prompt declared
+	# by the active profile (bake-off 2026-08-13) > global params default.
+	# params always carries a prompt_file (schema default distiller_v3.txt),
+	# so checking params first would make the per-model routing unreachable.
+	prompt_file = (override_params or {}).get("prompt_file")
 	if not prompt_file:
-		# Fall back to per-model prompt from the active profile (bake-off
-		# 2026-08-13). If the profile doesn't declare one, default to v3.
-		prompt_file = _resolve_prompt_for_profile() or "distiller_v3.txt"
+		prompt_file = _resolve_prompt_for_profile() or params.get("prompt_file") or "distiller_v3.txt"
 	system_prompt = load_prompt_text(prompt_file, override_text=override_prompt)
 
 	agent_name = "Aleth"
 	operator_name = "Joan"
-	system_prompt = system_prompt.format(agent_name=agent_name, operator_name=operator_name)
+	# .replace, not .format: prompts like distiller_v3_voice.txt contain literal
+	# JSON braces that make str.format raise KeyError.
+	system_prompt = system_prompt.replace("{agent_name}", agent_name).replace("{operator_name}", operator_name)
 
 	# Prepend dynamic identity context if not already present
 	identity_context = get_dynamic_identity_context()
@@ -698,7 +706,7 @@ def audit_engram_quality(
 	from red_pill.core.providers import ProviderRegistry
 
 	system_prompt = load_prompt_text("engram_quality_auditor.txt", override_text=override_prompt)
-	system_prompt = system_prompt.format(agent_name=agent_name, operator_name=operator_name)
+	system_prompt = system_prompt.replace("{agent_name}", agent_name).replace("{operator_name}", operator_name)
 
 	user_prompt = f"MEMORY SUMMARY TO AUDIT:\n{summary_text}"
 
