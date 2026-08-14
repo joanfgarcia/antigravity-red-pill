@@ -1,7 +1,7 @@
 ## [7.18.0] - 2026-08-13 (Bake-off de Destilación: Llama-3.2, Gemma-3, Nemo-12B, Granite-3B, SmolLM3, Phi-4-Mini)
 
 Bake-off del destilador en 8 GB: aplicamos el patch de Titanium
-(`distiller_v3_voice.txt`, MODE B con self-check de 5 puntos), amplíamos la
+(`distiller_v3_voice.txt`, MODE B con self-check de 5 puntos), ampliamos la
 base de modelos a 9 candidatos LLM, descubrimos que cada familia necesita
 su propio prompt, y ruteamos esa decisión por perfil. La inferencia del
 bake-off corre con el binario `llama.cpp` (CLI, mismo backend que la
@@ -77,16 +77,17 @@ entorno, así que el camino "sin abrir puerto" en local es subprocess al
 
 ### 🛠️ Infra de bake-off (sin afectar a producción)
 - **[FEAT] `scripts/llama_cli_runner.py`**: wrapper subprocess sobre
-  `~/3rdparty/llama_official/build/bin/llama-cli`. Usa `--single-turn
+  `3rdparty/llama_official/build/bin/llama-cli` (raíz del repo). Usa `--single-turn
   --no-display-prompt`. Parsea la respuesta del prefijo `| `. GPU
   activada en subprocess, sin abrir puerto. Base de todo el bake-off.
 - **[FEAT] `scripts/model_battle_cli.py`**: bake-off de destilación
-  usando el CLI runner. Acepta `--chat-template-file` para modelos con
-  Jinja roto (Mistral-Nemo usa `selectattr("tool_calls")` que el jinja
-  bundled no reconoce).
+  usando el CLI runner. Para modelos con Jinja roto sustituye el template automáticamente
+  (detección de Nemo → `configs/chat_templates/mistral_nemo_simple.jinja`;
+  Mistral-Nemo usa `selectattr("tool_calls")` que el jinja bundled no
+  reconoce).
 - **[FEAT] `scripts/model_battle_lib.py` + `scripts/model_battle_tool.py` +
   `scripts/calibrate_bakeoff.py`**: infraestructura per-tarea
-  (herramienta/hub/clasificación/código), primer borrador de `tool_battle`
+  (herramienta/hub/clasificación/código), primer borrador de `model_battle_tool.py`
   con 5 probes (simple, multi-sel, json_args, no_tool, multi_step).
   Pendiente validación en GPU.
 - **[FEAT] `configs/chat_templates/mistral_nemo_simple.jinja`**: template
@@ -95,12 +96,12 @@ entorno, así que el camino "sin abrir puerto" en local es subprocess al
 - **[FEAT] 6 GGUFs nuevos** (~15 GB) en `~/.local/share/red-pill/models/`.
 
 ### 📚 Docs
-- **[FEAT] `docs/2026-08-13-model-bakeoff.md`**: memoria del patch de
+- **[FEAT] `docs/2026-08-13-MODEL-BAKEOFF.md`**: memoria del patch de
   Titanium (qué modelos evaluaron, qué descartaron, matriz final).
 - **[FEAT] `docs/BENCHMARKS/DISTILLER_BAKEOFF_PHI.{json,md}` y
   `DISTILLER_FIDELITY_PHI.*`**: benchmarks de phi-4-mini antes de la
   migración a llama-3.2 (portados del patch de Titanium).
-- **[FEAT] `docs/BENCHMARKS/2026-08-13-pending.md`**: lo que queda para
+- **[FEAT] `docs/BENCHMARKS/2026-08-13-PENDING.md`**: lo que queda para
   la próxima sesión (verificar SIP con nemo template, sleep cycle de
   prueba, tool-bake-off, harnesses hub/classify/code).
 
@@ -121,7 +122,7 @@ entorno, así que el camino "sin abrir puerto" en local es subprocess al
   `queue_manager.py`, `mcp_server.py` y 5 archivos de test. Diff
   contra `main` disponible para revisión.
 
-## [7.17.0] - 2026-08-10 (El DAG Generaliza, Bit se Gradúa)
+## [7.17.0] - 2026-08-11 (El DAG Generaliza, Bit se Gradúa)
 
 El Job Manager madura: la composición deja de repetirse en drivers hermanos y
 se unifica en una plantilla recursiva (`dag_job`), el sueño pasa a ser una
@@ -181,6 +182,21 @@ multi-semilla K-65P.
 - **[FIX] `h2 4.3.0 → 4.4.1`** (CVE-2026-71554, transitiva vía
   httpx[http2]) para pasar el paso SEC-F01 del CI.
 
+### 🔥 Skill Forge+Scout v1.4.0 federada por el Job Manager (06b3c349)
+- **[FEAT] `seeds/opencode/skills/forge/`**: composer Zero-Trust de 9 piezas de
+  rol (triage, orquestador, implementor, validator, smoke, devil's advocate,
+  judge, doc anchor, QA) con contratos JSON (`references/schemas/`), gate
+  determinista (`gate-check.mjs`), validador sin dependencias
+  (`validate-report.mjs`), render de artefactos y suite goldset propia
+  (`tests/run-tests.mjs`). Escalación dinámica L0-L3, Mission Mode y matriz de
+  features O1-O7/F1-F3.
+- **[FEAT] `seeds/opencode/skills/scout/`**: skill hermana de análisis — emite
+  shards (`shard.schema.json`) que las piezas Forge ejecutan.
+- **[FEAT] Federación por la cola central**: `jobs/drivers/forge.py`
+  (ForgeJobDriver reanudable), recetas `configs/jobs/forge-*.yaml` (panel
+  adversarial incluido) y 9 agentes opencode (`seeds/opencode/agents/`).
+  `inject_opencode.py` despliega skills+agents con placeholders resueltos.
+
 ### 🚛 Retirada de `BitTrainingDriver` (D3 cumplida)
 - **[CHANGE] `bit_school_training` ya no es source del carril mecánico**: se
   retira `register_driver(BitTrainingDriver)` (D3 del RFC del ScriptJobDriver,
@@ -193,7 +209,7 @@ multi-semilla K-65P.
   multi-semilla K-65P) se encola con `red-pill job submit --recipe
   school_k65p_*` → `script_job`.
 
-## [7.16.0] - 2026-08-02 (La Clave Cromática)
+## [7.16.0] - 2026-08-05 (La Clave Cromática)
 
 El pipeline Ferrari pintaba colores que nadie explicaba: el Router y el Tone Adapter repetían la misma prosa por color en cada transición, y el `chroma:` final llegaba desnudo — un modelo frío no tenía forma de saber qué significa *orange* o *gray*. Esta release consolida la semántica de color en una sola leyenda al final del pipeline: cada plugin pinta su etiqueta compacta y el CHROMA KEY explica, una única vez, cada color que se ha pintado ese turno.
 
@@ -211,18 +227,19 @@ El pipeline Ferrari pintaba colores que nadie explicaba: el Router y el Tone Ada
 - **[CHANGE] `WORK_KEYWORDS` fuera del código**: la lista hardcodeada en `_05_cognitive_router_state.py` (monolingüe, no customizable) se convierte en `WORK_MODE_KEYWORDS` en config — seed bilingüe ES+EN, customizable por operador vía `.env` según su idioma y oficio, con recarga en caliente por mtime. Mismo patrón que `CASUAL_OVERRIDE_KEYWORDS`. `register_turn()` recibe ambos vocabularios explícitamente; el módulo de estado ya no conoce ninguna palabra.
 - **[DOCS] Seed visible en `.env.example`**: ambos vocabularios documentados y comentados (con los defaults servidos) en `.env.example` y `ENV_REFERENCE.md` — antes ni el casual estaba sembrado.
 
+### 🛠️ Desacoplamiento del IDE de Antigravity & Resolución de OpenCode (#78)
+*(Mergeado tras el squash de la 7.15.0 — la release publicada v7.15.0 no lo contiene.)*
+- **[FIX] Desacoplamiento total del IDE Worker**: `IDEWorker.run_once()` ya no degrada ni fuerza el sondeo del IDE de Antigravity vía gRPC cuando se han configurado cascadas para backends independientes (`TELEGRAM_BRIDGE_CASCADE` o `AWAKENING_BRIDGE_CASCADE`). El pulso opera de forma autónoma sin requerir que la ventana del IDE esté abierta.
+- **[FIX] Resolución de binario `opencode` en Service Managers**: Añadida resolución determinista (`OPENCODE_BIN` → `$PATH` → `~/.opencode/bin`) en `OpenCodeBridge` para garantizar la localización de la CLI en entornos de systemd/launchd con PATH restringido.
+- **[FIX] Visibilidad de errores en `CascadeBridge`**: Los errores de construcción en cascadas de bridges ahora se registran explícitamente en el log en lugar de silenciarse, previniendo caídas silenciosas a la ruta heredada.
+- **[FIX] Contención de errores en `process_inbox()`**: Envoltorio preventivo con `try...except` alrededor del procesamiento de la bandeja de entrada para evitar que un ítem corrupto detenga el latido de salud (`pulse/heartbeat`) del Córtex.
+
 ### 🧪 Higiene de tests
 - **[FIX] `test_swarm_cascade` aislado del entorno real**: `test_default_is_empty` construía `RedPillConfig()` leyendo el `.env` del operador — con un cascade de Telegram configurado en el host, el test fallaba en local. Ahora usa `_env_file=None` + limpieza de las tres variables de cascade, y verifica los tres defaults.
 
 ## [7.15.0] - 2026-07-30 (El Despertar Determinista & El Acta del Pacto)
 
 El wake-up llevaba un oráculo dentro: cada arranque podía disparar una síntesis LLM con caché de dos niveles, subprocess en background y riesgo de alucinación en la línea de identidad. Esta release lo extirpa — el boot es determinista y la síntesis cara se muda al sueño, que es donde se sueña.
-
-### 🛠️ Desacoplamiento del IDE de Antigravity & Resolución de OpenCode
-- **[FIX] Desacoplamiento total del IDE Worker**: `IDEWorker.run_once()` ya no degrada ni fuerza el sondeo del IDE de Antigravity vía gRPC cuando se han configurado cascadas para backends independientes (`TELEGRAM_BRIDGE_CASCADE` o `AWAKENING_BRIDGE_CASCADE`). El pulso opera de forma autónoma sin requerir que la ventana del IDE esté abierta.
-- **[FIX] Resolución de binario `opencode` en Service Managers**: Añadida resolución determinista (`OPENCODE_BIN` → `$PATH` → `~/.opencode/bin`) en `OpenCodeBridge` para garantizar la localización de la CLI en entornos de systemd/launchd con PATH restringido.
-- **[FIX] Visibilidad de errores en `CascadeBridge`**: Los errores de construcción en cascadas de bridges ahora se registran explícitamente en el log en lugar de silenciarse, previniendo caídas silenciosas a la ruta heredada.
-- **[FIX] Contención de errores en `process_inbox()`**: Envoltorio preventivo con `try...except` alrededor del procesamiento de la bandeja de entrada para evitar que un ítem corrupto detenga el latido de salud (`pulse/heartbeat`) del Córtex.
 
 ### ⚡ Wake-up determinista (cero LLM en el boot)
 - **[CHANGE] PERSONA sin oráculo**: se resuelve desde `lore_skins.yaml` + el engrama singleton de Active Skin (`ID_DIR_ACTIVE_SKIN`), sin llamada LLM. Eliminados `bunker_persona_cache.json` (caché de dos niveles), el auto-spawn `--silent` y el flag mismo.

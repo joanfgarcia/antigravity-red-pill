@@ -3,6 +3,11 @@
 > De phi-4-mini a Llama-3.2-3B: qué partía, qué se evaluó, con qué nos quedamos
 > y qué estamos obteniendo en producción. Acompaña al patch
 > `2026-08-13-model-bakeoff.patch` (mismos cambios, formato git).
+>
+> **Host**: este documento es la memoria del patch de Titanium y describe SU
+> máquina (RTX 3050 4GB, wheel llama-cpp-python, llama_32 como primario). La
+> adaptación a este host (RTX 8GB compartida con entrenamiento, backend CLI
+> llama.cpp, granite_8b primario) está en el CHANGELOG 7.18.0.
 
 ---
 
@@ -135,7 +140,7 @@ contienda VRAM, no el archivo.
 | `scripts/model_battle.py` | NUEVO — harness de batalla |
 | `docs/BENCHMARKS/DISTILLER_FIDELITY.md` | Resultados llama_32 |
 | `docs/BENCHMARKS/DISTILLER_BAKEOFF_PHI.*`, `DISTILLER_FIDELITY_PHI.*` | NUEVOS — benchmarks phi (mañana) |
-| `docs/2026-08-13-model-bakeoff.md` | Este documento |
+| `docs/2026-08-13-MODEL-BAKEOFF.md` | Este documento |
 
 Fuera del patch (máquinas, no versionables):
 - `~/.config/red-pill/model_profiles.yaml`: perfil `llama_32` (cascade) + phi a 6144.
