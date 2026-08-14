@@ -219,7 +219,7 @@ def test_sleep_job_status_live(monkeypatch, tmp_path):
 	assert status["status"] == "running"
 
 
-def test_nightly_yield_self_exempt(queue, monkeypatch, tmp_path):
+def test_nightly_yield_self_exempt(queue, clean_registry, monkeypatch, tmp_path):
 	"""§2.3: sleep_job NO se difiere por su propio fichero 'running'; un job ajeno sí."""
 	import red_pill.core.paths as paths
 	from red_pill.jobs.drivers import ResumableJobDriver

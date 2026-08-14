@@ -527,14 +527,18 @@ class CognitiveQueueManager:
 				return False
 			if row["status"] in ("PROCESSING", "PAUSING"):
 				return False
-			conn.execute(
-				"""
-				UPDATE cognitive_tasks
-				SET checkpoint_data = ?, progress = ?, updated_at = CURRENT_TIMESTAMP
-				WHERE id = ?
-				""",
-				(json.dumps(checkpoint), json.dumps(progress) if progress is not None else None, task_id),
-			)
+			if progress is not None:
+				conn.execute(
+					"UPDATE cognitive_tasks SET checkpoint_data = ?, progress = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+					(json.dumps(checkpoint), json.dumps(progress), task_id),
+				)
+			else:
+				# Handoff sin progress: preservar el existente (borrarlo a NULL
+				# destruye step_seconds_ema y descalibra la cota del runner).
+				conn.execute(
+					"UPDATE cognitive_tasks SET checkpoint_data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+					(json.dumps(checkpoint), task_id),
+				)
 			return True
 
 	def mark_dirty_kill(self, task_id: str, marker: Dict[str, Any]) -> None:
