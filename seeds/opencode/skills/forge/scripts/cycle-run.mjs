@@ -30,8 +30,8 @@
 //             5 = job-manager mode: job FAILED / FRUSTRATED
 //             6 = job-manager mode: job PAUSED by operator (resume with job resume)
 
-import { execFileSync, spawnSync } from 'node:child_process';
-import { readFileSync, existsSync, mkdirSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { readFileSync, existsSync, mkdirSync, unlinkSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -116,7 +116,9 @@ if (useJobManager) {
     console.error(`cycle-run: job submit failed:\n${submit.stderr || submit.stdout}`);
     process.exit(4);
   }
-  const jobMatch = /([0-9a-f]{32})/.exec(submit.stdout || '');
+  // enqueue_task generates uuid4 WITH dashes (queue_manager.py) — a bare
+  // 32-hex regex never matches and this mode dies with exit 4.
+  const jobMatch = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i.exec(submit.stdout || '');
   if (!jobMatch) {
     console.error(`cycle-run: could not parse job id from:\n${submit.stdout}`);
     process.exit(4);
@@ -131,7 +133,12 @@ if (useJobManager) {
       log(`job status call failed (rc=${status.status}) — retrying`);
     } else {
       let row;
-      try { row = JSON.parse(status.stdout.split('\n').find((l) => l.trim().startsWith('{')) || status.stdout); } catch { row = null; }
+      // The CLI prints json.dumps(task, indent=2): a multi-line block whose
+      // first '{' line is just "{" — parse from the first brace to the end.
+      try {
+        const brace = status.stdout.indexOf('{');
+        row = brace >= 0 ? JSON.parse(status.stdout.slice(brace)) : null;
+      } catch { row = null; }
       const st = row?.status || '';
       const progress = row?.progress || {};
       log(`  ${jobId.slice(0, 8)} → ${st}${progress.current ? ` (${progress.current}/${progress.total})` : ''}`);
@@ -142,7 +149,7 @@ if (useJobManager) {
         console.error(`cycle-run: job stuck (no progress for 6h)`); process.exit(5);
       }
     }
-    spawnSync('sleep', ['5'], { stdio: 'ignore' });
+    spawnSync('sleep', [String(POLL_STEP_MS / 1000)], { stdio: 'ignore' });
   }
   console.error(`cycle-run: poll timeout`);
   process.exit(5);
@@ -201,7 +208,10 @@ process.exit(0);
 // ---------------------------------------------------------------------------
 
 function rm(p) {
-  try { require('node:fs').unlinkSync(p); } catch { /* ignore */ }
+  // require() does not exist in ESM — the old version threw a swallowed
+  // ReferenceError, so stale reports were never deleted and waitForReport
+  // accepted them as fresh (anti-zero-trust).
+  try { unlinkSync(p); } catch { /* ignore */ }
 }
 
 function waitForReport(reportPath) {

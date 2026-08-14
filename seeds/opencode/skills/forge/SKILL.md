@@ -2,7 +2,7 @@
 version: 1.4.0
 name: forge
 description: >-
-  Multi-agent Zero-Trust execution composer. Orchestrates 10 composable role pieces (implementor, validator, smoke,
+  Multi-agent Zero-Trust execution composer. Orchestrates 9 composable role pieces (orchestrator, implementor, validator, smoke,
   devil's advocate panel, judge, doc anchor, QA, triage) with JSON contracts
   validated, dynamic L0-L3 escalation, self-accounting usage ledger, mission
   mode for huge plans (15+ phases) with controlled stop, and a feature matrix
@@ -18,7 +18,7 @@ description: >-
 
 # Forge v1.4.0 (opencode) — Zero-Trust Multi-Agent Composer
 
-> The composer skill: 10 composable role pieces (agents + portable specs in `references/roles/`), orchestrated by the main loop. Scout (`~/.config/opencode/skills/scout/`) is the sibling analysis skill — its shards execute on individual Forge pieces.
+> The composer skill: 9 composable role pieces (agents + portable specs in `references/roles/`), orchestrated by the main loop. Scout (`~/.config/opencode/skills/scout/`) is the sibling analysis skill — its shards execute on individual Forge pieces.
 
 > Design history and versioned deltas: `references/PORT_NOTES.md`.
 

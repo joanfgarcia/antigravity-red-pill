@@ -27,7 +27,7 @@ If you decide to attend:
    PROCEED_CONDENSED → a single forge piece; PROCEED → full forge (only if the
    work justifies it AND the token budget allows it).
 5. Execute with forge or with individual pieces. Honor the ledger and the
-   (budget-aware).
+   escalation ladder (budget-aware).
 6. Close shards with evidence (execution_ref), report to the Bünker: what was
    cured, what remains, what needs the Operator.
 7. Go back to sleep.
