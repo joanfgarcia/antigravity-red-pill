@@ -17,7 +17,6 @@ perf summary (`[ Prompt:` or `common_memory_breakdown_print:`).
 from __future__ import annotations
 
 import os
-import re
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -42,16 +41,13 @@ class CliProbe:
 	tools_json: list[dict] = field(default_factory=list)
 
 
-# Pattern to extract the response body. llama-cli emits the response lines
-# starting with `| ` (it's a visual indicator). Everything after the LAST line
-# starting with `| ` and before the perf summary is the response.
-_RESPONSE_RE = re.compile(r"^\|\s?(.*)$", re.MULTILINE)
-_PERF_RE = re.compile(r"\[ (Prompt|Generation):.*\]", re.MULTILINE)
-
-
 def _parse_cli_output(stdout: str) -> str:
-	"""Extract the model response from llama-cli stdout."""
-	# Find the last `| ...` line and collect until perf summary.
+	"""Extract the model response from llama-cli stdout.
+
+	llama-cli emits the response lines prefixed with `| ` (a visual indicator).
+	Collect from the FIRST `|` line until the perf summary (`[ Prompt:` /
+	`[ Generation:` / `common_memory...`), keeping unprefixed continuation lines.
+	"""
 	lines = stdout.splitlines()
 	collecting = False
 	body: list[str] = []

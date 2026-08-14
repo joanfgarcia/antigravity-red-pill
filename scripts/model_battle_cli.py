@@ -41,30 +41,38 @@ PROBES = {
 }
 
 
-def _validator(raw: str) -> dict:
-	"""Titanium's validator adapted to our output format."""
-	m = re.search(r"\{[\s\S]*\}", raw)
-	if not m:
-		return {"valid": False, "reason": "no JSON"}
-	try:
-		obj = json.loads(m.group(0))
-	except Exception as e:
-		return {"valid": False, "reason": f"json: {e}"}
-	s = str(obj.get("summary", ""))
-	SPANISH_2ND = ("te digo", "te pregunto", "te cuento", "contigo", "tú ")
-	THIRD = ("dijo ", "respondió ", "preguntó ", "comentó ", "Joan me", "le digo")
-	bad = [w for w in SPANISH_2ND if w in s]
-	relics = obj.get("relics", [])
-	raw_lower = raw.lower()
-	verb = [r for r in relics if str(r).lower().strip().strip('"') in raw_lower]
-	tp = [w for w in THIRD if w in s]
-	return {
-		"valid": True,
-		"lang": obj.get("lang"),
-		"mode_b": bool(tp),
-		"bad_2nd": bad,
-		"relics": {"got": len(relics), "verbatim": len(verb)},
-	}
+def _make_validator(probe_data: str) -> callable:
+	"""Titanium's validator adapted to our output format.
+
+	Relics must be verbatim substrings of the PROBE data — comparing against
+	the model output would be a tautology (the relics come from it).
+	"""
+	probe_lower = probe_data.lower()
+
+	def _validator(raw: str) -> dict:
+		m = re.search(r"\{[\s\S]*\}", raw)
+		if not m:
+			return {"valid": False, "reason": "no JSON"}
+		try:
+			obj = json.loads(m.group(0))
+		except Exception as e:
+			return {"valid": False, "reason": f"json: {e}"}
+		s = str(obj.get("summary", ""))
+		SPANISH_2ND = ("te digo", "te pregunto", "te cuento", "contigo", "tú ")
+		THIRD = ("dijo ", "respondió ", "preguntó ", "comentó ", "Joan me", "le digo")
+		bad = [w for w in SPANISH_2ND if w in s]
+		relics = obj.get("relics", [])
+		verb = [r for r in relics if str(r).lower().strip().strip('"') in probe_lower]
+		tp = [w for w in THIRD if w in s]
+		return {
+			"valid": True,
+			"lang": obj.get("lang"),
+			"mode_b": bool(tp),
+			"bad_2nd": bad,
+			"relics": {"got": len(relics), "verbatim": len(verb)},
+		}
+
+	return _validator
 
 
 def main(model_name: str, gguf_path: str, _prompt_unused: str = None):
@@ -82,7 +90,7 @@ def main(model_name: str, gguf_path: str, _prompt_unused: str = None):
 			name=pname,
 			system_prompt=PROMPT,
 			user_message="DATA:\n" + raw_data,
-			validator=_validator,
+			validator=_make_validator(raw_data),
 			max_tokens=450,
 			temperature=0.1,
 		)

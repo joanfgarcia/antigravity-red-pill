@@ -29,6 +29,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from llama_cli_runner import _parse_cli_output
 from model_battle_lib import BattleRunner, Probe, start_daemon_if_inactive, stop_daemon_if_active
 
 LLAMA_CLI = os.environ.get("LLAMA_CLI_PATH") or str(
@@ -113,11 +114,23 @@ def _run_cli(model_name: str, gguf: str, probes: list[Probe], n_gpu_layers: int 
 			str(n_gpu_layers),
 			"-c",
 			"6144",
+			"--single-turn",  # exit after one response (no REPL waiting on stdin)
 			"--no-display-prompt",
 			"--log-disable",
 		]
 		t0 = time.time()
-		proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+		try:
+			proc = subprocess.run(cmd, capture_output=True, text=True, timeout=180, stdin=subprocess.DEVNULL)
+		except subprocess.TimeoutExpired:
+			results.append(
+				{
+					"probe": p.name,
+					"raw": "<<cli timeout>>",
+					"validation": {"valid": False, "reason": "cli timeout"},
+					"latency_s": time.time() - t0,
+				}
+			)
+			continue
 		dt = time.time() - t0
 		if proc.returncode != 0:
 			results.append(
@@ -129,7 +142,7 @@ def _run_cli(model_name: str, gguf: str, probes: list[Probe], n_gpu_layers: int 
 				}
 			)
 			continue
-		raw = proc.stdout.strip()
+		raw = _parse_cli_output(proc.stdout)
 		validation = {}
 		try:
 			validation = p.validator(raw)

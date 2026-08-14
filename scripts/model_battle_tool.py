@@ -344,9 +344,11 @@ def main(model_name: str, gguf_path: str, chat_format: str | None = None):
 					max_tokens=probe.max_tokens,
 				)
 				raw = out["choices"][0]["message"].get("content") or ""
-				# If the chat-format wraps tool_calls separately, capture them too.
+				# If the chat-format wraps tool_calls separately, they take priority:
+				# models often emit prose ALONGSIDE tool_calls, and judging the prose
+				# instead would produce false FAILs.
 				tcs = out["choices"][0]["message"].get("tool_calls") or []
-				if tcs and not raw:
+				if tcs:
 					raw = json.dumps(
 						[{"name": (tc.get("function") or {}).get("name"), "arguments": (tc.get("function") or {}).get("arguments")} for tc in tcs],
 						ensure_ascii=False,
