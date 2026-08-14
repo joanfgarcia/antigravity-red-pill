@@ -399,6 +399,20 @@ class DagJobDriver(ResumableJobDriver):
 		flags = dict(checkpoint_data.get("stage_flags", {}))
 		total_leaves = _count_leaves(stages)
 
+		# Re-derivar compuestos completados desde sus hojas: un checkpoint de
+		# handoff (job_checkpoint) puede listar solo hojas; sin esto, un
+		# depends_on sobre el compuesto nunca se satisface y el runner llamaría
+		# a step() para siempre con el mismo checkpoint (bucle estéril).
+		for node_path in _flatten_ids(stages):
+			if node_path in completed:
+				continue
+			node = _find_node(stages, node_path.rsplit("/", 1)[-1])
+			if not node or node.get("type") != _TYPE_COMPOUND:
+				continue
+			node_leaves = list(_iter_leaves(node.get("sub_etapas", []), node_path))
+			if node_leaves and all(lp in completed for lp, _ in node_leaves):
+				completed.append(node_path)
+
 		# Frente: hojas (etapas atómicas) no completadas con deps satisfechas.
 		front: List[Tuple[str, Dict[str, Any], str]] = []  # (path, stage, prefix)
 
@@ -413,15 +427,25 @@ class DagJobDriver(ResumableJobDriver):
 				front.append((leaf_path, leaf, prefix))
 
 		if not front:
-			done = len(completed) >= total_leaves
+			leaves_done = sum(1 for lp, _ in _iter_leaves(stages) if lp in completed)
+			done = leaves_done >= total_leaves
+			if not done:
+				# Sin frente y sin terminar = deps insatisfacibles o checkpoint
+				# corrupto. Devolver completed=False con el mismo checkpoint
+				# metería al runner en un bucle caliente infinito — mejor fallar
+				# con diagnóstico (el disyuntor del runner corta los reintentos).
+				raise RuntimeError(
+					f"dag sin frente ejecutable: {leaves_done}/{total_leaves} hojas completas "
+					f"y ninguna dependencia satisfecha (deps imposibles o checkpoint corrupto)"
+				)
 			return StepOutcome(
-				completed=done,
+				completed=True,
 				new_checkpoint=checkpoint_data,
-				summary="dag complete" if done else "waiting on deps (should not happen)",
+				summary="dag complete",
 				progress={
-					"current": len(completed),
+					"current": leaves_done,
 					"total": total_leaves,
-					"percent": round(100 * len(completed) / total_leaves) if total_leaves else 0,
+					"percent": round(100 * leaves_done / total_leaves) if total_leaves else 0,
 				},
 				concurrency={
 					"parallel_groups": 0,
@@ -435,6 +459,13 @@ class DagJobDriver(ResumableJobDriver):
 			"""Devuelve (path, summary, failed). El fallo se controla por on_fail."""
 			try:
 				return path, self._run_atomic(payload, stage, path), False
+			except JobDeferred:
+				# Espera de entorno (GPU ocupada, VRAM insuficiente), NO fallo de
+				# etapa: debe llegar al runner para re-encolar sin quemar attempts.
+				# Capturarla aquí convertía el deferral en etapa 'done' con
+				# on_fail=warn (fases GPU del sueño saltadas en silencio) o en
+				# fallo real con on_fail=stop (disyuntor, violando R1).
+				raise
 			except Exception as e:
 				if stage.get("on_fail", "warn") == "stop":
 					return path, str(e), True
@@ -488,7 +519,7 @@ class DagJobDriver(ResumableJobDriver):
 		# Propagar completitud de los compuestos: un nodo compuesto se marca done
 		# cuando todas sus hojas descendientes lo están.
 		for node_path in _flatten_ids(stages):
-			if node_path in new_completed or node_path.endswith(("/",)):
+			if node_path in new_completed:
 				continue
 			node = _find_node(stages, node_path.rsplit("/", 1)[-1])
 			if not node or node.get("type") != _TYPE_COMPOUND:

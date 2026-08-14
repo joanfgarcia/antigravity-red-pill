@@ -461,3 +461,83 @@ def test_resolve_minion_kind_logic(monkeypatch):
 
 	monkeypatch.setattr(dag_mod, "_resolve_minion_kind", lambda mid: "logic" if mid == "echo_mirror" else None)
 	assert dag_mod._resolve_minion_kind("echo_mirror") == "logic"
+
+
+# ── Regresiones 2026-08-14 (revisión post-bake-off) ──────────────────────────
+def test_dag_gpu_deferral_propagates_with_on_fail_warn(tmp_path, monkeypatch):
+	"""JobDeferred es espera de entorno, no fallo: con on_fail=warn la etapa GPU
+	NO debe marcarse done — el deferral tiene que llegar al runner (R1)."""
+	from red_pill.jobs.drivers.base import JobDeferred
+
+	d = DagJobDriver()
+	ws = tmp_path / "ws"
+	(ws / ".cell" / "reports").mkdir(parents=True)
+	calls = []
+	_patch_minion_factory(monkeypatch, calls)
+	import red_pill.jobs.drivers.dag as dag_mod
+
+	def _defer(stage, stage_path, payload):
+		raise JobDeferred(f"GPU no disponible para etapa '{stage_path}'")
+
+	monkeypatch.setattr(d, "_preflight_stage_gpu", lambda stage, stage_path, payload: _defer(stage, stage_path, payload))
+	payload = _payload(
+		str(ws),
+		[
+			{
+				"id": "consolidation",
+				"type": "agent",
+				"minion": "agent",
+				"model": "opencode-go/deepseek-v4-pro",
+				"prompt": "x",
+				"on_fail": "warn",
+				"requires_gpu": True,
+			},
+		],
+	)
+	with pytest.raises(JobDeferred):
+		d.step(payload, {})
+	assert not calls  # el minion nunca llegó a ejecutarse
+
+
+def test_dag_handoff_with_only_leaves_completes_composite_dep(tmp_path, monkeypatch):
+	"""Un checkpoint de handoff que lista solo hojas debe satisfacer depends_on
+	sobre el compuesto padre (antes: frente vacío + mismo checkpoint = livelock)."""
+	d = DagJobDriver()
+	ws = tmp_path / "ws"
+	(ws / ".cell" / "reports").mkdir(parents=True)
+	calls = []
+	_patch_minion_factory(monkeypatch, calls)
+	payload = _payload(
+		str(ws),
+		[
+			{
+				"id": "P",
+				"type": "compound",
+				"sub_etapas": [
+					{"id": "x", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "x"},
+				],
+			},
+			{"id": "b", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "b", "depends_on": ["P"]},
+		],
+	)
+	handoff = {"completed_stage_ids": ["P/x"], "results": {"P/x": "hecho-inline"}}
+	o = d.step(payload, handoff)
+	assert o.completed
+	assert "b" in o.new_checkpoint["results"]
+
+
+def test_dag_empty_front_incomplete_raises_instead_of_livelock(tmp_path, monkeypatch):
+	"""Frente vacío sin terminar = error diagnóstico, jamás completed=False estéril."""
+	d = DagJobDriver()
+	ws = tmp_path / "ws"
+	(ws / ".cell" / "reports").mkdir(parents=True)
+	calls = []
+	_patch_minion_factory(monkeypatch, calls)
+	payload = _payload(
+		str(ws),
+		[
+			{"id": "b", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "b", "depends_on": ["ghost"]},
+		],
+	)
+	with pytest.raises(RuntimeError, match="sin frente ejecutable"):
+		d.step(payload, {})
