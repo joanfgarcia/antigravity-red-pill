@@ -128,7 +128,10 @@ def test_dag_linear_agentic_runs_in_order(tmp_path, monkeypatch):
 	o2 = d.step(payload, o1.new_checkpoint)
 	assert o2.completed
 	assert o2.new_checkpoint["completed_stage_ids"] == ["impl", "smoke"]
-	assert (ws / ".cell" / "reports" / "impl.json").is_file()
+	# Etapa agéntica: el envelope del minion va aparte; `impl.json` queda para el
+	# reporte de rol que escribe el propio agente (contrato zero-trust de forge).
+	assert (ws / ".cell" / "reports" / "impl.envelope.json").is_file()
+	assert not (ws / ".cell" / "reports" / "impl.json").exists()
 
 
 # ── Ejecución: comandos (no-agénticos) ────────────────────────────────────────
@@ -377,9 +380,13 @@ def test_dag_forge_panel_L3(tmp_path, monkeypatch):
 	for lid in ("lens-correctness", "lens-env-segregation", "lens-plan", "lens-security", "lens-perf-repro", "judge"):
 		assert f"panel/{lid}" in ids, f"falta panel/{lid}"
 	assert "panel" in ids
-	# Cada sub-etapa serializó su reporte en .cell/reports/panel/
+	# Cada sub-etapa serializó su envelope en .cell/reports/panel/. La ruta
+	# `<lente>.json` NO se toca: es donde la lente escribe su refutación conforme
+	# a schema, y es lo que el judge lee (si el DAG la pisara, el judge adjudicaría
+	# sobre envelopes en vez de sobre evidencia).
 	for lid in ("lens-correctness", "lens-env-segregation", "lens-plan", "lens-security", "lens-perf-repro", "judge"):
-		assert (ws / ".cell" / "reports" / "panel" / f"{lid}.json").is_file(), f"falta reporte panel/{lid}.json"
+		assert (ws / ".cell" / "reports" / "panel" / f"{lid}.envelope.json").is_file(), f"falta envelope panel/{lid}"
+		assert not (ws / ".cell" / "reports" / "panel" / f"{lid}.json").exists(), f"el DAG pisó el reporte de rol panel/{lid}.json"
 
 
 # ── Funciones de módulo: _gpu_health_probe y _resolve_minion_kind ────────────
@@ -541,3 +548,107 @@ def test_dag_empty_front_incomplete_raises_instead_of_livelock(tmp_path, monkeyp
 	)
 	with pytest.raises(RuntimeError, match="sin frente ejecutable"):
 		d.step(payload, {})
+
+
+# ── Motor: cotas que atan y on_fail heredado (2026-08-14) ────────────────────
+def test_dag_stage_timeout_capped_by_step_budget(tmp_path, monkeypatch):
+	"""El timeout de la etapa se acota por lo que queda de la cota del step:
+	sin esto `control.max_step_minutes` era decorativo."""
+	d = DagJobDriver()
+	ws = tmp_path / "ws"
+	(ws / ".cell" / "reports").mkdir(parents=True)
+	seen = {}
+
+	class _Spy:
+		async def execute(self, task, **kwargs):
+			seen["timeout"] = kwargs.get("timeout")
+			return {"status": "success", "summary": "ok"}
+
+	monkeypatch.setattr("red_pill.swarm.factory.MinionFactory.create", staticmethod(lambda mid, **kw: _Spy()))
+	import red_pill.jobs.drivers.dag as dag_mod
+
+	monkeypatch.setattr(dag_mod, "_resolve_minion_kind", lambda mid: "agent")
+	payload = _payload(
+		str(ws),
+		[{"id": "a", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "x", "timeout": 6000}],
+	)
+	d.bind("job-1", attempts=0, step_timeout_s=30)  # cota del runner
+	d.step(payload, {})
+	assert seen["timeout"] <= 30, f"la etapa ignoró el presupuesto del step: {seen['timeout']}"
+
+
+def test_dag_yields_at_budget_boundary_keeping_progress(tmp_path, monkeypatch):
+	"""Cota agotada en frontera: CEDE con lo hecho (checkpoint persistido) en vez
+	de abatir el step — abatirlo re-ejecutaría etapas con efectos ya aplicados."""
+	d = DagJobDriver()
+	ws = tmp_path / "ws"
+	(ws / ".cell" / "reports").mkdir(parents=True)
+	calls = []
+	_patch_minion_factory(monkeypatch, calls)
+	payload = _payload(
+		str(ws),
+		[
+			{"id": "a", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "a"},
+			{"id": "b", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "b"},
+			{"id": "c", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "c"},
+		],
+	)
+	d.bind("job-1", attempts=0, step_timeout_s=30)
+	import red_pill.jobs.drivers.dag as dag_mod
+
+	# Cada etapa consume 60s de reloj: la cota de 30s se agota tras la primera.
+	state = {"t": 1000.0}
+	monkeypatch.setattr(dag_mod.time, "monotonic", lambda: state["t"])
+	real_run_atomic = d._run_atomic
+
+	def _slow(payload_, stage_, path_):
+		state["t"] += 60
+		return real_run_atomic(payload_, stage_, path_)
+
+	monkeypatch.setattr(d, "_run_atomic", _slow)
+	o = d.step(payload, {})
+	assert not o.completed
+	assert o.new_checkpoint["completed_stage_ids"] == ["a"], "cedió sin conservar lo hecho"
+	assert len(calls) == 1, "arrancó una etapa con la cota ya agotada"
+
+
+def test_dag_on_fail_inherited_from_compound(tmp_path, monkeypatch):
+	"""`on_fail: stop` en una etapa COMPUESTA acota a sus hojas (antes: letra muerta)."""
+	d = DagJobDriver()
+	ws = tmp_path / "ws"
+	(ws / ".cell" / "reports").mkdir(parents=True)
+
+	class _Failing:
+		async def execute(self, task, **kwargs):
+			return {"status": "failed", "error": "boom"}
+
+	monkeypatch.setattr("red_pill.swarm.factory.MinionFactory.create", staticmethod(lambda mid, **kw: _Failing()))
+	import red_pill.jobs.drivers.dag as dag_mod
+
+	monkeypatch.setattr(dag_mod, "_resolve_minion_kind", lambda mid: "agent")
+	payload = _payload(
+		str(ws),
+		[
+			{
+				"id": "fase",
+				"type": "compound",
+				"on_fail": "stop",  # la hoja no lo declara: lo hereda
+				"sub_etapas": [{"id": "x", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "x"}],
+			}
+		],
+	)
+	with pytest.raises(RuntimeError, match="on_fail=stop"):
+		d.step(payload, {})
+
+
+def test_dag_validate_rejects_bad_on_fail(tmp_path):
+	"""Una errata en on_fail se rechaza en el submit (antes: 'warn' silencioso)."""
+	d = DagJobDriver()
+	ws = tmp_path / "ws"
+	ws.mkdir()
+	payload = _payload(
+		str(ws),
+		[{"id": "a", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "x", "on_fail": "warm"}],
+	)
+	with pytest.raises(ValueError, match="on_fail"):
+		d.validate(payload)

@@ -127,6 +127,8 @@ stages:
 
 - ids flattened by path (`panel/judge`) — deterministic order = manifest DFS order.
 - Each atomic stage serializes its minion dict to `.cell/reports/<path>.json`
-  (the DAG does it — minions are untouched).
+  (the DAG does it — minions are untouched). For `type: agent` stages the
+  envelope goes to `<path>.envelope.json` instead: `<path>.json` belongs to the
+  role report the agent itself writes.
 - Compound nodes appear in `completed_stage_ids` only when all their leaves are done.
 - Resume/transfer operate on the WHOLE tree from this checkpoint.

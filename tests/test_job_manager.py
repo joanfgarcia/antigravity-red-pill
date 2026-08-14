@@ -860,8 +860,9 @@ def test_dag_job_steps_to_completion_with_checkpoint(tmp_path, monkeypatch):
 	# Telemetría pública (espejo, no autoritativa)
 	status = (ws / ".cell" / "dag_status.json").read_text()
 	assert '"completed": 2' in status and '"status": "completed"' in status
-	# Reportes serializados por el DAG en el workspace
-	assert (ws / ".cell" / "reports" / "impl.json").is_file()
+	# Envelopes serializados por el DAG (las etapas agénticas dejan `<id>.json`
+	# libre para el reporte de rol que escribe el agente).
+	assert (ws / ".cell" / "reports" / "impl.envelope.json").is_file()
 
 
 def test_dag_job_resume_from_handoff_checkpoint(tmp_path, monkeypatch):

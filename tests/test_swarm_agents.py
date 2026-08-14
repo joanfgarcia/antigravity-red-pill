@@ -297,3 +297,36 @@ class TestCompressorMinion:
 		result = run(compressor.execute("test", text="hello"))
 		for key in ["status", "compressed_prompt", "original_length", "compressed_length"]:
 			assert key in result, f"Missing key: {key}"
+
+
+class TestCommandMinionTimeout:
+	"""CommandMinion honra su cota de tiempo (2026-08-14).
+
+	Antes ignoraba el kwarg `timeout` por completo (`communicate()` sin
+	`wait_for`): una etapa command colgada bloqueaba el runner indefinidamente,
+	con el run-lock R6 impidiendo que otro runner entrara.
+	"""
+
+	@staticmethod
+	def _minion():
+		from red_pill.swarm.agents.command import CommandMinion
+
+		return CommandMinion()
+
+	def test_hanging_command_is_killed_at_timeout(self):
+		result = run(self._minion().execute("", command=["sleep", "30"], timeout=1))
+		assert result["status"] == "failed"
+		assert result["returncode"] == 124  # convención de timeout (ScriptJobDriver)
+		assert result["timed_out"] is True
+		assert result["duration"] < 15, "el comando no se abatió: siguió corriendo"
+
+	def test_fast_command_unaffected_by_timeout(self):
+		result = run(self._minion().execute("", command=["echo", "hola"], timeout=30))
+		assert result["status"] == "success"
+		assert result["returncode"] == 0
+		assert result["stdout"] == "hola"
+		assert "timed_out" not in result
+
+	def test_no_timeout_kwarg_still_works(self):
+		result = run(self._minion().execute("", command=["echo", "sin cota"]))
+		assert result["status"] == "success" and result["stdout"] == "sin cota"

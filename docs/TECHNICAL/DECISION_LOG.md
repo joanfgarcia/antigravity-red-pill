@@ -35,7 +35,7 @@ This document records the architectural and philosophical pivots of the project.
 **Date**: 2026-08-08
 **Status**: ACCEPTED — mergeado con el PR #84 (v7.17.0).
 **Context**: los minions del MinionFactory devuelven dict en memoria (`{status, response, error, ...}`). La alternativa natural era que el minion escribiera `.cell/reports/<id>.json` él mismo, acoplando todos los minions al contrato de reporte del DAG.
-**Decision**: el `dag_job` serializa: tras `minion.execute()`, el DAG escribe el dict a `.cell/reports/<ruta>.json`. Los minions existentes NO se tocan (ni parámetro en el constructor, ni herencia JobMinion). Un minion que genere un artefacto grande puede escribir su propio archivo y devolver solo el resumen — sin mecanismo especial.
+**Decision**: el `dag_job` serializa: tras `minion.execute()`, el DAG escribe el dict a `.cell/reports/<ruta>.json`. *(Enmienda 2026-08-14: en etapas `type: agent` el envelope va a `<ruta>.envelope.json` — ahí el reporte de verdad lo escribe el agente conforme al schema de su rol y el DAG lo pisaba, dejando al gate zero-trust validando envelopes.)* Los minions existentes NO se tocan (ni parámetro en el constructor, ni herencia JobMinion). Un minion que genere un artefacto grande puede escribir su propio archivo y devolver solo el resumen — sin mecanismo especial.
 **Por qué**: los minions son unidades puras (devuelven dict); la serialización es un contrato del consumidor (el DAG), no del minion. El carril cognitivo usa los mismos minions sin serialización.
 
 ---
