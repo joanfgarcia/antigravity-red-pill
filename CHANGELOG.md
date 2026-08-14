@@ -1,4 +1,4 @@
-## [7.18.0] - 2026-08-13 (Bake-off de Destilación: Llama-3.2, Gemma-3, Nemo-12B, Granite-3B, SmolLM3, Phi-4-Mini)
+## [7.18.0] - 2026-08-14 (Bake-off de Destilación + Auditoría de la ventana v7.15→v7.18)
 
 Bake-off del destilador en 8 GB: aplicamos el patch de Titanium
 (`distiller_v3_voice.txt`, MODE B con self-check de 5 puntos), ampliamos la
@@ -8,6 +8,191 @@ bake-off corre con el binario `llama.cpp` (CLI, mismo backend que la
 producción vía SIP) — el wheel `llama-cpp-python` no enlaza CUDA en este
 entorno, así que el camino "sin abrir puerto" en local es subprocess al
 `llama-cli` con `--single-turn`.
+
+La segunda mitad de la release es una **auditoría completa de la ventana
+v7.15.0 → HEAD** (13 commits, 151 ficheros), hecha porque buena parte de ese
+trabajo se escribió con modelos menos capaces. Encontró tres cosas que se
+vendían como funcionando y no funcionaban, y tres defectos del motor del
+`dag_job` en la ruta crítica de lo que viene después. Suite tras la auditoría:
+1564 tests en verde.
+
+### ⚠️ Cambio de contrato (BREAKING para consumidores de `.cell/reports/`)
+
+- **Etapas AGÉNTICAS del `dag_job`**: el envelope del minion pasa a
+  `.cell/reports/<ruta>.envelope.json`. La ruta `<ruta>.json` queda para el
+  reporte de rol que escribe el propio agente conforme a su schema. Las etapas
+  de lógica/comando NO cambian (ahí el dict devuelto sigue siendo el reporte).
+  **Por qué**: el DAG escribía su envelope encima del reporte del agente. La
+  colisión estaba viva en `forge-panel.yaml` — las lentes son `panel/lens-*` y
+  el prompt del judge lee `.cell/reports/panel/lens-*.json`, así que habría
+  adjudicado sobre envelopes en lugar de sobre evidencia, y el gate zero-trust
+  habría validado envelopes. Quien lea reportes de etapas agénticas debe
+  ajustar la ruta. (RFC_JOB_DAG §4.4.1)
+
+### ⚙️ Motor del `dag_job` — las cotas atan y el `on_fail` acota
+
+- **[FIX] `JobDeferred` llega al runner**: `_exec_one` lo capturaba con
+  `except Exception` antes de que escapara, convirtiendo una espera de entorno
+  en resultado de etapa. Con `on_fail: warn` — que es lo que declaran las 4
+  fases GPU de `sleep.yaml` — el ciclo nocturno las marcaba `done` y completaba
+  en silencio mientras el entrenamiento tenía la GPU; con `stop` quemaba
+  intentos contra el disyuntor, violando R1.
+- **[FIX] Livelock del frente vacío**: un checkpoint de handoff que listaba solo
+  hojas nunca satisfacía un `depends_on` sobre un compuesto → `step()` devolvía
+  `completed=False` con el MISMO checkpoint y el runner lo llamaba en bucle
+  caliente. La completitud de compuestos se re-deriva de las hojas al cargar, y
+  un frente vacío sin terminar lanza error diagnóstico en vez de un resultado
+  estéril.
+- **[FIX] `control.max_step_minutes` deja de ser decorativo**: ningún driver
+  leía `step_timeout_s` y `CommandMinion` ignoraba su propio timeout
+  (`communicate()` sin `wait_for`) — una etapa `command` colgada bloqueaba al
+  runner para siempre, con el run-lock R6 impidiendo que otro entrara. Ahora
+  `CommandMinion` abate el proceso (rc 124) y el DAG acota cada etapa por lo que
+  queda del presupuesto del step.
+- **[CHANGE] En frontera de grupo con el presupuesto agotado, el step CEDE**
+  con lo completado en lugar de abatirse: abatirlo descartaría etapas ya hechas
+  y las re-ejecutaría con sus efectos secundarios. El runner persiste el
+  checkpoint y reentra con presupuesto nuevo, pasando por pausa/kill/prioridad.
+  *Limitación explícita*: acota trabajo externo (subproceso, bridge); un minion
+  de lógica pura girando in-process no es interrumpible.
+- **[FIX] `on_fail` en etapas COMPUESTAS ya no es letra muerta**: solo se leía
+  en hojas, así que un `on_fail: stop` de fase se aceptaba y no acotaba nada, y
+  una errata degradaba a `warn` en silencio. Las hojas heredan el del ancestro
+  más cercano (lo más específico gana) y `validate()` rechaza cualquier valor
+  fuera de `warn|stop`.
+
+### 🧯 Config: la customización de vocabularios rompía el arranque
+
+- **[FIX] `WORK_MODE_KEYWORDS` / `CASUAL_OVERRIDE_KEYWORDS`**: eran campos
+  `List[str]` de un `BaseSettings`, y pydantic-settings exige JSON para tipos
+  complejos — reventaba con `SettingsError` ANTES de que corriera el
+  `model_validator` que leía `os.getenv`. Es decir: descomentar la línea que el
+  propio `.env.example` invita a editar dejaba `RedPillConfig()` inservible en
+  todo el kernel. La feature estrella de la 7.16.0 era inusable tal como estaba
+  documentada. Ahora `NoDecode` + validator que trocea el CSV, y los defaults
+  solo se aplican si la lista queda vacía. De paso se cura el bug latente de que
+  los valores puestos en el fichero `.env` (sin exportar) eran invisibles para
+  `os.getenv`.
+
+### 🧪 Destilador: el ruteo per-model era código muerto
+
+- **[FIX] `prompt_file` por perfil no se aplicaba nunca**: `params` SIEMPRE trae
+  `prompt_file` (default del schema), así que el `if not prompt_file` jamás caía
+  al resolver por perfil. Los 7 perfiles que declaran `distiller_v3_voice.txt`
+  no lo recibían en el pipeline de sueño. Precedencia nueva: override del
+  llamante > ruteo por perfil > default de params.
+- **[FIX] `KeyError` latente al activarlo**: `distiller_v3_voice.txt` lleva
+  llaves JSON literales y se renderizaba con `.format()` — que revienta, y fuera
+  del try/retry. El bake-off no lo vio porque sus scripts usan `.replace()`.
+  Ahora producción usa `.replace()` también (ídem `audit_engram_quality`).
+- **[FIX] `_correct_lang_label` machacaba idiomas válidos**: `áéíóúü` son
+  compartidos con catalán, francés y portugués, así que un modelo que etiquetaba
+  bien un texto catalán como `ca` acababa en `es`. Solo corrige dentro del eje
+  es/en que el detector entiende.
+
+### 🔩 Cola, jobs y superficie MCP
+
+- **[FIX] `kill_task` acepta `PAUSING`**: el filtro SQL solo incluía
+  PENDING/PROCESSING/PAUSED, así que matar un job pausado a mitad de step decía
+  "no se puede abatir" y había que esperar a la frontera.
+- **[FIX] `update_checkpoint` ya no borra el `progress`**: un handoff sin
+  `progress` (opcional según su schema) lo sobrescribía con NULL, destruyendo
+  `step_seconds_ema` y descalibrando la cota del siguiente step.
+- **[FIX] El acumulador del sueño cruzaba noches**: nada resetea
+  `sleep_phase_status.json` entre ciclos y `finalize` deja el total escrito, así
+  que la primera fase de la noche N+1 acumulaba encima de la N e inflaba
+  `total_processed` sin límite. Un remanente `cycle_completed` cuenta como 0.
+- **[FIX] `job_list --all` era un no-op** (`list_tasks(None)` aplica el mismo
+  filtro de activos: COMPLETED nunca aparecía pese a prometerlo el schema).
+- **[FIX] `_resolve_job` del MCP**: buscaba solo en estados activos (un job
+  COMPLETED — el caso típico de `job_status` — no resolvía por prefijo) y ante
+  un prefijo ambiguo se quedaba con el PRIMER match, peligroso alimentando
+  `job_kill`. Ahora busca en todos los estados y rehúsa los ambiguos.
+- **[FIX] `job_kill` ignoraba el booleano de `kill_task`** y anunciaba "[OK]
+  interrumpido" para jobs BLOCKED/COMPLETED/FRUSTRATED que no había tocado.
+- **[FIX] `job_resume` mentía con `PAUSING`** (anunciaba "reanudado (PENDING)"
+  cuando `resume_task` cancela la pausa y vuelve a PROCESSING).
+- **[FIX] `job_submit`**: el enum ofrecía `forge_job`/`sleep_job`, desregistrados
+  en el paso 4 del RFC_JOB_DAG — todo submit con ellos fallaba. Y el fail-safe
+  de modelos rechazaba payloads `agentic_job` válidos configurados por `cascade`.
+
+### 🗃️ Seed de perfiles: instalaciones nuevas condenadas a CPU
+
+- **[FIX] `examples/model_profiles.yaml.example`** seguía con la convención
+  anterior a la 7.18.0, donde `min_free_gb: 999` era el catch-all "GPU cuando
+  esté ociosa". Con la selección nueva (gana el tier GPU más alto que QUEPA) un
+  999 no cabe nunca: `qwen35_9b`, `beck_8b`, `piaget_8b` y `samantha` tenían ese
+  centinela como ÚNICO tier GPU → siempre CPU en cualquier instalación nueva.
+  Migrado a tiers alcanzables (granite/hermes replican la cascada validada).
+
+### 🔬 Harness de bake-off
+
+- **[FIX] ⚠️ La métrica "relics verbatim" estaba falseada**: `model_battle_cli.py`
+  comparaba los relics contra la SALIDA del modelo de la que se habían extraído
+  — una tautología que da ~100% siempre. **Las cifras `relics=N/N` publicadas de
+  las corridas CLI están infladas**; el gemelo `model_battle.py` lo hacía bien.
+- **[FIX] `calibrate_bakeoff.py` no podía haberse ejecutado nunca**: sin
+  `--single-turn`, `llama-cli` entra en REPL esperando stdin hasta un
+  `TimeoutExpired` sin capturar. Añadidos el flag, el parseo del prefijo `| ` y
+  el manejo del timeout.
+- **[FIX] `model_battle_tool.py` descartaba los `tool_calls`** cuando el modelo
+  emitía prosa junto a ellos (lo habitual) → el validador juzgaba la prosa y
+  producía FAIL falsos.
+- **[FIX] `inject_opencode.py --remove`** dejaba instaladas las skills `dag` y
+  `project_anchor_management` (la lista estaba hardcodeada mientras
+  `deploy_skills` despliega todas las sembradas).
+
+### 🌱 Seeds forge/scout
+
+- **[FIX] El modo `--job-manager` de `cycle-run.mjs` estaba muerto al nacer**:
+  regex de job id que esperaba 32 hex seguidos cuando `enqueue_task` emite uuid4
+  CON guiones; `JSON.parse` de la primera línea que empieza por `{` cuando el
+  CLI imprime `json.dumps(indent=2)` (esa línea es literalmente `{`); y un
+  `require()` dentro de un `.mjs` cuyo `ReferenceError` se tragaba un `catch`,
+  de modo que los reportes rancios nunca se borraban y se daban por frescos.
+- **[FIX] `validate-report.mjs` ignoraba `maximum`** (un `complexity_score: 99`
+  pasaba pese al tope de 8 del schema).
+- **[FIX] Schemas peleados con sus consumidores**: `decision.schema` prohibía
+  `executed`/`in_plan`, que es justo lo que lee el Check 8 del gate (no podía
+  dispararse con datos conformes); `triage_plan` exigía el slot `O6` retirado en
+  la v1.4.0; `coverage_entry` rechazaba el `verification_method` que la spec de
+  doc-anchor exige.
+- **[FIX] Menores**: fila O5 duplicada en `features.md`, conteo de piezas
+  (10 → 9, que es lo que tiene la tabla), y la frase rota del bloque
+  inject-verbatim de `scout/awakening.md`.
+
+### 📚 Documentación
+
+- **[FIX] El bloque de desacoplamiento del IDE (#78) estaba bajo 7.15.0**, pero
+  ese commit es POSTERIOR al squash de la release publicada: v7.15.0 no lo
+  contiene. Movido a 7.16.0 con la nota.
+- **[FIX] El commit de Forge+Scout (~7000 líneas, 81 ficheros) no aparecía en
+  ninguna entrada**; documentado en 7.17.0.
+- **[FIX] Enlaces muertos en Linux** por el renombrado a mayúsculas
+  (`2026-08-13-MODEL-BAKEOFF.md`, `2026-08-13-PENDING.md`), `tool_battle` →
+  `model_battle_tool.py`, y la ruta `~/3rdparty` que en realidad es relativa al
+  repo.
+- **[FIX] Gazapos de `2026-08-13-PENDING.md`**: "**PHP** backend", "**Robot**
+  [_KNOWN_GGUF]", y afirmaciones falsas sobre qué modelos estaban registrados.
+- **[FIX] `docs/2026-08-13-MODEL-BAKEOFF.md`** describía OTRA máquina (la de
+  Titanium: RTX 3050 4GB, wheel, llama_32 primario) mientras afirmaba hablar de
+  "producción". Añadida la nota de host.
+- **[FIX] `DECISION_LOG` AD-025..AD-029** seguían "PENDING — se integra al merge
+  del PR #84" con el PR ya mergeado y publicado en 7.17.0 → ACCEPTED.
+- **[DOCS] Contrato de reportes actualizado** en `dag.py`, `skills/dag/SKILL.md`,
+  `manifest.md`, el adaptador red-pill y AD-027 (enmienda del envelope).
+
+### 🧪 Cobertura añadida
+
+- 14 tests de regresión nuevos: renderizado del prompt MODE B y ruteo per-model
+  extremo a extremo, guard de idioma, deferral GPU con `on_fail: warn`, handoff
+  solo-hojas, frente vacío, tope de etapa por presupuesto, cesión en frontera,
+  herencia y validación de `on_fail`, y la **primera cobertura de
+  `CommandMinion`** (timeout que abate, comando rápido intacto, sin cota).
+- **Higiene**: `test_nightly_yield_self_exempt` registraba drivers en el
+  `_REGISTRY` global sin el fixture `clean_registry`, filtrando sources fantasma
+  al resto de la sesión de pytest. Y 3 tests afirmaban el comportamiento roto del
+  envelope (lo blindaban): reescritos para verificar lo contrario.
 
 ### 🔧 Fix post-bake-off: ModelRegistry + cascade (7.38 GB → GPU)
 - **[FIX] `model_registry.py` — tier selection respects GPU preference**:

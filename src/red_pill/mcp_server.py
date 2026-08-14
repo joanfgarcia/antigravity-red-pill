@@ -1963,7 +1963,11 @@ async def handle_job_resume(arguments: Dict[str, Any]):
 		was_pausing = task["status"] == "PAUSING"
 		if qm.resume_task(task["id"]):
 			if was_pausing:
-				return [types.TextContent(type="text", text=f"[OK] Job {task['id'][:8]}: pausa cancelada en caliente (PROCESSING, el step en vuelo continúa).")]
+				return [
+					types.TextContent(
+						type="text", text=f"[OK] Job {task['id'][:8]}: pausa cancelada en caliente (PROCESSING, el step en vuelo continúa)."
+					)
+				]
 			return [types.TextContent(type="text", text=f"[OK] Job {task['id'][:8]} reanudado (PENDING). El runner lo retoma en el siguiente ciclo.")]
 		return [types.TextContent(type="text", text=f"[WARN] Job {task['id'][:8]} en '{task['status']}': reanudación no aplicable.")]
 	except Exception as e:

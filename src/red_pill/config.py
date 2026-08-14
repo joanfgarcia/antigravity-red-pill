@@ -555,9 +555,9 @@ class RedPillConfig(BaseSettings):
 		if not self.CASUAL_OVERRIDE_KEYWORDS:
 			self.CASUAL_OVERRIDE_KEYWORDS = [
 				t.strip()
-				for t in (
-					"charlemos,charlar,charla,relax,relajado,hablemos,conversemos,off-topic,chill,quemar tokens,de guardia,no hay prisa"
-				).split(",")
+				for t in ("charlemos,charlar,charla,relax,relajado,hablemos,conversemos,off-topic,chill,quemar tokens,de guardia,no hay prisa").split(
+					","
+				)
 			]
 		if not self.WORK_MODE_KEYWORDS:
 			self.WORK_MODE_KEYWORDS = [

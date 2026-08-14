@@ -481,7 +481,6 @@ def test_dag_gpu_deferral_propagates_with_on_fail_warn(tmp_path, monkeypatch):
 	(ws / ".cell" / "reports").mkdir(parents=True)
 	calls = []
 	_patch_minion_factory(monkeypatch, calls)
-	import red_pill.jobs.drivers.dag as dag_mod
 
 	def _defer(stage, stage_path, payload):
 		raise JobDeferred(f"GPU no disponible para etapa '{stage_path}'")
