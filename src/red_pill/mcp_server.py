@@ -1750,17 +1750,23 @@ def _queue() -> Any:
 	return CognitiveQueueManager()
 
 
+_ALL_JOB_STATUSES = ["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED", "COMPLETED"]
+
+
 def _resolve_job(qm, ref: str) -> Optional[Dict[str, Any]]:
-	"""Resuelve por id completo o prefijo corto (como el CLI)."""
+	"""Resuelve por id completo o prefijo corto (como el CLI: busca en TODOS los
+	estados, incluido COMPLETED, y rehúsa prefijos ambiguos en vez de quedarse
+	con el primer match — job_kill sobre el job equivocado no es aceptable)."""
 	task = qm.get_task(ref)
 	if isinstance(task, dict):
 		return task
-	for t in qm.list_tasks():
-		if t["id"].startswith(ref):
-			found = qm.get_task(t["id"])
-			if isinstance(found, dict):
-				return found
-	return None
+	matches = sorted({t["id"] for t in qm.list_tasks(statuses=_ALL_JOB_STATUSES, limit=500) if t["id"].startswith(ref)})
+	if len(matches) > 1:
+		raise ValueError(f"prefijo '{ref}' ambiguo: {', '.join(m[:8] for m in matches)}")
+	if not matches:
+		return None
+	found = qm.get_task(matches[0])
+	return found if isinstance(found, dict) else None
 
 
 @registry.register_action(
@@ -1780,8 +1786,8 @@ def _resolve_job(qm, ref: str) -> Optional[Dict[str, Any]]:
 		"properties": {
 			"source": {
 				"type": "string",
-				"enum": ["agentic_job", "dag_job", "forge_job", "sleep_job"],
-				"description": "Driver que ejecutará el job (forge_job/sleep_job legacy: solo jobs previos en cola).",
+				"enum": ["agentic_job", "dag_job"],
+				"description": "Driver que ejecutará el job (forge_job/sleep_job fueron desregistrados — RFC_JOB_DAG paso 4 — y ya no admiten submits).",
 			},
 			"payload": {
 				"type": "object",
@@ -1812,9 +1818,13 @@ async def handle_job_submit(arguments: Dict[str, Any]):
 		# Fail-safe: los jobs agénticos requieren un MODELO real, no el placeholder
 		# 'flash' (default del harness). Un job encolado sin config de modelos es
 		# una instalación sin activar: se bloquea en vez de correr a ciegas.
-		if source in ("agentic_job", "forge_job"):
+		# Una cascade con modelo por target también cuenta como config activa
+		# (contrato de AgenticJobDriver: cascade: [{backend, model, effort}]).
+		if source == "agentic_job":
 			model = payload.get("model")
-			if not model or model == "flash":
+			cascade = payload.get("cascade")
+			has_cascade_models = isinstance(cascade, list) and any(isinstance(t, dict) and t.get("model") for t in cascade)
+			if (not model or model == "flash") and not has_cascade_models:
 				return [
 					types.TextContent(
 						type="text",
@@ -1855,7 +1865,9 @@ async def handle_job_submit(arguments: Dict[str, Any]):
 )
 async def handle_job_list(arguments: Dict[str, Any]):
 	try:
-		statuses = None if arguments.get("all") else ["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED"]
+		# list_tasks(None) también excluye COMPLETED — para `all` hay que pasar
+		# la lista completa explícita o el flag es un no-op.
+		statuses = _ALL_JOB_STATUSES if arguments.get("all") else ["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED"]
 		tasks = _queue().list_tasks(statuses=statuses, mission_id=arguments.get("mission_id"))
 		if not tasks:
 			return [types.TextContent(type="text", text="Cola vacía (o sin jobs de esa misión).")]
@@ -1948,7 +1960,10 @@ async def handle_job_resume(arguments: Dict[str, Any]):
 		task = _resolve_job(qm, arguments["job_id"])
 		if not task:
 			return [types.TextContent(type="text", text=f"[ERROR] Job '{arguments['job_id']}' no encontrado.")]
+		was_pausing = task["status"] == "PAUSING"
 		if qm.resume_task(task["id"]):
+			if was_pausing:
+				return [types.TextContent(type="text", text=f"[OK] Job {task['id'][:8]}: pausa cancelada en caliente (PROCESSING, el step en vuelo continúa).")]
 			return [types.TextContent(type="text", text=f"[OK] Job {task['id'][:8]} reanudado (PENDING). El runner lo retoma en el siguiente ciclo.")]
 		return [types.TextContent(type="text", text=f"[WARN] Job {task['id'][:8]} en '{task['status']}': reanudación no aplicable.")]
 	except Exception as e:
@@ -1977,7 +1992,13 @@ async def handle_job_kill(arguments: Dict[str, Any]):
 		if not task:
 			return [types.TextContent(type="text", text=f"[ERROR] Job '{arguments['job_id']}' no encontrado.")]
 		job_id = task["id"]
-		qm.kill_task(job_id, discard=bool(arguments.get("discard")))
+		if not qm.kill_task(job_id, discard=bool(arguments.get("discard"))):
+			return [
+				types.TextContent(
+					type="text",
+					text=f"[WARN] Job {job_id[:8]} en '{task['status']}': no se puede abatir (solo PENDING/PROCESSING/PAUSING/PAUSED).",
+				)
+			]
 		# Abatir el scope systemd si existe (in-proceso = no-op, la unidad completa).
 		unit = f"redpill-job-{job_id[:8]}.scope"
 		try:
@@ -1985,7 +2006,7 @@ async def handle_job_kill(arguments: Dict[str, Any]):
 		except Exception:
 			pass
 		return [
-			types.TextContent(type="text", text=f"[OK] Job {job_id[:8]} interrumpido (PAUSED*{', FRUSTRATED' if arguments.get('discard') else ''}).")
+			types.TextContent(type="text", text=f"[OK] Job {job_id[:8]} interrumpido ({'FRUSTRATED' if arguments.get('discard') else 'PAUSED*'}).")
 		]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"[ERROR] job_kill falló: {e}")]
