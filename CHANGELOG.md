@@ -1,3 +1,56 @@
+## [7.19.0] - 2026-08-14 (Cierre de Forge, `type: dag` y el Loop de Ideación)
+
+Las tres fases del plan de ejecución (`Aleth_Core/PLAN_IMPL_FORGE_DAG_LOOP.md`):
+
+### 🪦 Forge se cierra — la misión completa es `dag_job`
+
+- El burst manifest de Forge (fases → pasos) se compila a `stages` del `dag_job`
+  con `seeds/opencode/skills/forge/scripts/manifest-compile.mjs` (función pura:
+  fases → compounds, pasos → sub-etapas agénticas encadenadas, roles repetidos
+  sufijados, fases vacías omitidas).
+- `cycle-run.mjs --job-manager` encola `dag_job` (antes: `forge_job`, que
+  quedaba varado en la cola al estar desregistrado). Nuevo flag `--dry-run`
+  (imprime el payload sin encolar) y guardia de modelo (exit 4 sin `--model`).
+- **`src/red_pill/jobs/drivers/forge.py` BORRADO** — la documentación vigente ya
+  no menciona `forge_job` (PORT_NOTES conserva su historia con nota al inicio).
+
+### 🔗 `type: dag` — composición por REFERENCIA (RFC_JOB_DAG §4.5)
+
+- Cuarto tipo de etapa: `{type: dag, recipe: <receta>}` ejecuta OTRA receta
+  dag_job como sub-misión. Validación en el submit: resolución de la receta,
+  **detección de ciclos**, fail-safe de modelos propagado al sub-dag.
+- **Expansión en el submit** (`expand_manifest` en CLI y MCP): el job se persiste
+  ya aplanado a compounds — el resume determinista no depende de que la receta
+  siga igual en disco. El runner solo ve compounds y hojas.
+- **Panel adversarial por referencia**: un paso con `panel: true` compila a
+  `{type: dag, recipe: forge-panel}`. El adversarial se pide EXPLÍCITAMENTE
+  (decisión del Operador, 2026-08-14). `forge-panel.yaml` queda como receta del
+  panel puro (5 lentes + judge, sin implementador).
+
+### 🔁 Loop de ideación (RFC_DOSSIER_IDEACION §3.4/§3.6/§3.7) — capa sobre el dag_job
+
+- **`dossier_gate`** (`swarm/agents/dossier_gate.py`): minion de lógica pura que
+  ejecuta la tabla de transición determinista del dossier — la SELECCIÓN del
+  pase es mecánica (nunca la elige un agente), el CONTENIDO del pase es agéntico.
+  Doble tope (L2): fijo 20 + dinámico 3 pasadas sin hallazgos; hallazgo = claim/
+  pregunta/contradicción nueva. Estados de parada mapeados a la cola:
+  `matured/dead` → completed; `awaiting_operator/parked/superseded` →
+  `JobPauseRequested` (PAUSED, cero intentos).
+- 4 recetas de pase (`configs/jobs/dossier-{germination,research,synthesis,
+  hypothesis}.yaml`, seeds): el gate es la última etapa y re-encola el pase
+  siguiente con el MISMO `mission_id` (el ciclo vive fuera del árbol acíclico).
+- Criterio de madurez (L4): *"un modelo menos capaz no se equivoca porque no
+  sepa programar, se equivoca cuando tiene que tomar decisiones sobre cómo
+  rellenar los huecos que quedan en el plan"* — maduro = un coder ejecuta el
+  plan sin decisiones de diseño ni negocio.
+
+### 🧪 Calidad
+
+- Suite: **1592 passed** (23 tests nuevos del gate de dossier, 5 de `type: dag`,
+  4 del compilador). Skill forge: 28 passed. ruff y mypy limpios.
+
+---
+
 ## [7.18.0] - 2026-08-14 (Bake-off de Destilación + Auditoría de la ventana v7.15→v7.18)
 
 Bake-off del destilador en 8 GB: aplicamos el patch de Titanium
