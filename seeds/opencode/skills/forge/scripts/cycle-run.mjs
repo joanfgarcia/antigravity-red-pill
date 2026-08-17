@@ -34,6 +34,7 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync, existsSync, mkdirSync, unlinkSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { compileStages } from './manifest-compile.mjs';
 
 const SKILL_DIR = resolve(fileURLToPath(new URL('.', import.meta.url)));
 const MAX_CALLS_DEFAULT = 10;
@@ -51,6 +52,7 @@ let maxCalls = MAX_CALLS_DEFAULT;
   if (eq) maxCalls = parseInt(eq.split('=')[1], 10) || MAX_CALLS_DEFAULT;
 }
 const useJobManager = args.includes('--job-manager');
+const dryRun = args.includes('--dry-run');
 const missionId = (() => {
   const i = args.indexOf('--mission');
   if (i !== -1) return args[i + 1];
@@ -99,17 +101,33 @@ if (useJobManager) {
     console.error(`cycle-run: --job-manager requires --mission <id> (isolation between forges)`);
     process.exit(4);
   }
+  const stages = compileStages(manifest.phases || []);
+  // Guardia de modelo (RFC_JOB_DAG fail-safe): el validador del kernel exige
+  // modelo real por etapa agéntica. Aquí se comprueba antes de encolar para
+  // dar un error legible en vez del bloqueo genérico del submit.
+  const anyStepHasModel = (manifest.phases || []).some((phase) =>
+    (phase.steps || []).some((step) => step.model),
+  );
+  if (!model && !anyStepHasModel) {
+    console.error('cycle-run: dag_job exige modelo real por etapa agéntica: pasa --model o declara model por paso');
+    process.exit(4);
+  }
   const payload = {
     mission_id: missionId,
-    manifest: { workdir, phases: manifest.phases || [] },
+    manifest: { workdir, stages },
   };
   if (model) payload.model = model;
   if (effort) payload.effort = effort;
   payload.backend = backend;
   payload.timeout = Math.round(TIMEOUT_MS / 1000);
 
+  if (dryRun) {
+    console.log(JSON.stringify(payload, null, 2));
+    process.exit(0);
+  }
+
   const submit = spawnSync(
-    'red-pill', ['job', 'submit', '--source', 'forge_job', '--payload', JSON.stringify(payload), '--mission', missionId],
+    'red-pill', ['job', 'submit', '--source', 'dag_job', '--payload', JSON.stringify(payload), '--mission', missionId],
     { encoding: 'utf8', timeout: 30000 },
   );
   if (submit.status !== 0) {
@@ -124,7 +142,7 @@ if (useJobManager) {
     process.exit(4);
   }
   const jobId = jobMatch[1];
-  log(`forge_job encolado: ${jobId} (mission=${missionId}). Polling job status...`);
+  log(`dag_job encolado: ${jobId} (mission=${missionId}). Polling job status...`);
 
   const start = Date.now();
   while (Date.now() - start < POLL_MAX_MS) {
