@@ -11,7 +11,7 @@ Two drivers matter for Forge:
 | Driver | Source | What it runs |
 |--------|--------|--------------|
 | Agentic | `agentic_job` | ONE prompt via a backend (opencode/claude/agy/local). **Sabor A**: one role per job. Recipe per role fixes backend/model/effort. |
-| Dag | `dag_job` | A full mission as a RECURSIVE TREE of stages (minions + sub-stages, `parallel` intent). **Sabor B**: the whole mission in background, with **transferable control**. Since RFC_JOB_DAG v0.7 `forge_job` is the LEGACY name — new missions declare `dag_job` manifests (§4.1: atomic `minion`/compound `sub_etapas`). |
+| Dag | `dag_job` | A full mission as a RECURSIVE TREE of stages (minions + sub-stages, `parallel` intent). **Sabor B**: the whole mission in background, with **transferable control**. `forge_job` was RETIRED (2026-08-14): missions declare `dag_job` manifests (RFC_JOB_DAG §4.1). |
 
 ### MCP entry: `job_manager_api`
 
@@ -19,7 +19,7 @@ The skill talks to the job manager through MCP (no shell dependency):
 
 | Action | Purpose |
 |--------|---------|
-| `job_submit` | Enqueue a job (`agentic_job` or `forge_job`). Validates the payload at submit. |
+| `job_submit` | Enqueue a job (`agentic_job` or `dag_job`). Validates the payload at submit. |
 | `job_list` | List active jobs; filter by `mission_id` (isolation between forges). |
 | `job_status` | Full row: checkpoint, progress, attempts, error_log. |
 | `job_pause` / `job_resume` | Pause at a step boundary / resume from the checkpoint. |
@@ -82,7 +82,7 @@ payload = {
 checkpoint = { completed_stage_ids: [...], results: {...}, stage_flags: {...} }
 ```
 
-Legacy `forge_job` (phases→steps) still runs for existing jobs; new missions use `dag_job`. The full manifest RFC: `Aleth_Core/RFC_JOB_DAG_PARALLELIZATION.md` §4.1.
+`forge_job` is RETIRED (2026-08-14) — the burst manifest compiles to `dag_job` stages via `scripts/manifest-compile.mjs`. The full manifest RFC: `Aleth_Core/RFC_JOB_DAG_PARALLELIZATION.md` §4.1.
 
 - **Driver in control (background)**: the runner walks the tree alone; each atomic stage executes one minion and the DAG serializes its envelope to `.cell/reports/<stage-path>.envelope.json` (agent stages) or `<stage-path>.json` (logic/command stages) — the agent's own role report at `<stage-path>.json` is never overwritten; telemetry mirrors to `.cell/dag_status.json` (never the resume source — the DB checkpoint is authoritative, RFC SleepJobDriver A2).
 - **`on_fail` per stage** (and per sub-stage): `warn` (default) = mark FAILED and continue WITHOUT burning the circuit breaker (continue-on-error); `stop` = real job failure (attempts++, circuit breaker if it insists).
@@ -95,7 +95,7 @@ Legacy `forge_job` (phases→steps) still runs for existing jobs; new missions u
 
 ### Aislamiento entre forges
 
-Every job carries `mission_id`. `job_list --mission <id>` lists only that mission; the job-monitor and polling never mix missions. The `cwd` per workspace already separates `.cell/` on disk. A `dag_job` (and legacy `forge_job`) is REQUIRED to declare `mission_id` (validation at submit).
+Every job carries `mission_id`. `job_list --mission <id>` lists only that mission; the job-monitor and polling never mix missions. The `cwd` per workspace already separates `.cell/` on disk. A `dag_job` is REQUIRED to declare `mission_id` (validation at submit).
 
 ## Handoff between agents via `workspace-memory` (artifact = result + signal)
 

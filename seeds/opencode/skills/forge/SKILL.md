@@ -8,7 +8,7 @@ description: >-
   mode for huge plans (15+ phases) with controlled stop, and a feature matrix
   resolved by the orchestrator per task scope. Federation via the red-pill Job
   Manager (v1.3.0): headless roles run as agentic_jobs and full missions as a
-  resumable forge_job with transferable control (main loop ↔ driver); survival
+  resumable dag_job with transferable control (main loop ↔ driver); survival
   to token limits is native (per-step checkpoint + job-monitor). Sibling
   of the scout skill (analysis + satellite shards). Activate when the operator
   says "levantar equipo", "cell mode", "team up", "full mission", "ejecuta el
@@ -174,7 +174,7 @@ Rules do not change with level: they apply identically from L0 to L3 and mission
 | Environment | Status | Adapter |
 |-------------|--------|---------|
 | **opencode** | ✅ CANONICAL — task subagents, parallel calls, background tasks, headless `cycle-run.mjs` | `references/runtime-adapters/opencode.md` |
-| **red-pill Job Manager** | 🔀 Federation channel (v1.3.0) — every headless role runs as an `agentic_job` (sabor A) or a full mission as a resumable `dag_job` (sabor B, **transferable control**; legacy `forge_job` still accepted), via `job_manager_api` MCP + recipes per role, `mission_id` isolation | `references/runtime-adapters/red-pill.md` |
+| **red-pill Job Manager** | 🔀 Federation channel (v1.3.0) — every headless role runs as an `agentic_job` (sabor A) or a full mission as a resumable `dag_job` (sabor B, **transferable control**), via `job_manager_api` MCP + recipes per role, `mission_id` isolation | `references/runtime-adapters/red-pill.md` |
 
 ## 9. Closing checklist (Final Gate)
 

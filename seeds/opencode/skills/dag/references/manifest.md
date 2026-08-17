@@ -5,8 +5,8 @@
 >
 > ⚠️ **Functional but not final**: this contract matches the `feat/job-dag`
 > worktree build (2026-08-07), not yet merged to `main`. The shape is stable and
-> tested; the retirement of `forge_job`/`sleep_job` as drivers and the forge
-> panel migration are deferred until the recipes are validated in production.
+> tested. Update (2026-08-14): `forge_job` is RETIRED (forge.py deleted, FASE 1);
+> `sleep_job` remains importable as legacy until the sleep recipe covers it.
 
 ## Payload
 

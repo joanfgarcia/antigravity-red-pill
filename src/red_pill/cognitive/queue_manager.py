@@ -69,7 +69,7 @@ class CognitiveQueueManager:
 					pass
 
 			# Migración Forge (2026-08-05): mission_id para aislamiento entre forges.
-			# Almacena el payload[mission_id] de jobs mecánicos (forge_job, agentic_job)
+			# Almacena el payload[mission_id] de jobs mecánicos (dag_job, agentic_job)
 			# para filtrar/aislar misiones sin parsear payloads en cada consulta.
 			try:
 				conn.execute("ALTER TABLE cognitive_tasks ADD COLUMN mission_id TEXT DEFAULT NULL")
@@ -516,7 +516,7 @@ class CognitiveQueueManager:
 		"""Escribe un checkpoint en un job (handoff de control transferible).
 
 		El puente del handoff: cuando el main-loop toma el control de un
-		forge_job, ejecuta N pasos inline y escribe aquí el nuevo checkpoint
+		dag_job, ejecuta N pasos inline y escribe aquí el nuevo checkpoint
 		(`step_index` avanzado). El job debe estar PAUSED/PENDING — un job en
 		vuelo (PROCESSING) no se toca: el runner persiste sus propios checkpoints
 		tras cada step (R4). Devuelve True si se aplicó.

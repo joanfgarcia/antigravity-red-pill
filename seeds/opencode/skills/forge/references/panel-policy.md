@@ -2,6 +2,13 @@
 
 Policy for assembling the multi-model adversarial panel (port feature O2 — multi-model heterogeneous lenses, inspired by the ecosystem survey: `opencode-agentic-workflows` consensus pattern). The aggregation is deterministic (escalation.md); this policy only decides WHO attacks.
 
+## Explicit opt-in (Operator decision, 2026-08-14)
+
+**The adversarial panel is NOT implicit.** The plan author (the orchestrator)
+requests it EXPLICITLY per step: a burst-manifest step with `panel: true`
+compiles to `{type: "dag", recipe: "forge-panel"}` — the panel runs only for
+that step, by reference (RFC_JOB_DAG §4.5), never as a default side effect.
+
 ## Composition by level
 
 | Level | Lenses | Judge | Loop |

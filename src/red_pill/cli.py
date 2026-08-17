@@ -537,7 +537,7 @@ def handle_job(args: argparse.Namespace) -> None:
 			# la receta es seed, la instalación no está configurada: bloquea.
 			if recipe_is_seed:
 				cfg_source = payload.get("source", source)
-				if cfg_source in ("agentic_job", "forge_job", "dag_job"):
+				if cfg_source in ("agentic_job", "dag_job"):
 					print(
 						f"[ERROR] La receta '{args.recipe}' es un SEED genérico, no una config activa. "
 						f"Activa la configuración real de esta instalación copiándola a .red-pill/jobs/ "
@@ -582,6 +582,12 @@ def handle_job(args: argparse.Namespace) -> None:
 			except ValueError as e:
 				print(f"[ERROR] Payload inválido para '{source}': {e}")
 				return
+			# RFC_JOB_DAG §4.5: expandir las etapas `type: dag` a compounds con las
+			# stages de su receta — el job se persiste ya APLANADO (el determinismo
+			# del resume no depende de que la receta siga igual en disco).
+			expander = getattr(driver_cls, "expand_manifest", None)
+			if expander:
+				payload = expander(payload)
 		job_id = queue.enqueue_task(source=source, payload=payload, priority=priority, parent_task_id=parent, mission_id=mission)
 		if parent:
 			print(f"[OK] Job {job_id} encolado como BLOCKED (se desbloquea al completar {parent[:8]}).")

@@ -1,0 +1,36 @@
+# Dossier loop — Pase PRUEBA DE HIPÓTESIS (sandbox/worktree sobre proyectos).
+#
+# Resuelve contradicciones o dudas de viabilidad probando en un sandbox aislado
+# (worktree del proyecto afectado o directorio temporal, según L5): registra la
+# CONCLUSIÓN + rastro como evidencia en el dossier, nunca el experimento.
+#
+# seed: true — plantilla por-instalación. Config real en .red-pill/jobs/.
+source: dag_job
+priority: 5
+mission_id: dossier-loop
+seed: true
+backend: opencode
+max_parallel_level: 2
+max_concurrency: 2
+manifest:
+  workdir: .
+  stages:
+    - id: hypothesis
+      type: agent
+      minion: agent
+      backend: opencode
+      model: flash  # SEED por-instalación.
+      effort: high
+      prompt: >-
+        Eres el pase de PRUEBA DE HIPÓTESIS del loop de ideación. Lee el dossier
+        en {dossier_dir}/README.md y su state.yaml. Toma las contradicciones o
+        dudas de viabilidad y pruébalas en un sandbox aislado (worktree o
+        directorio temporal). Registra la CONCLUSIÓN + rastro como evidencia en
+        state.yaml (resuelve contradictions: false o viable según el resultado).
+        NO toques repositorios reales: solo sandbox.
+      on_fail: stop
+    - id: gate
+      type: command
+      minion: dossier_gate
+      params: {}
+      on_fail: stop

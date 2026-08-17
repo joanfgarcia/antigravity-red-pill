@@ -1,0 +1,36 @@
+# Dossier loop — Pase INVESTIGACIÓN (scout + consultas + evidencia).
+#
+# Responde las open_questions del dossier con evidencia traceable (shards del
+# scout, consultas, pruebas puntuales). Cada respuesta se anota como claim con
+# su evidence. El GATE final decide el siguiente paso (tabla determinista).
+#
+# seed: true — plantilla por-instalación. Config real en .red-pill/jobs/.
+source: dag_job
+priority: 5
+mission_id: dossier-loop
+seed: true
+backend: opencode
+max_parallel_level: 2
+max_concurrency: 2
+manifest:
+  workdir: .
+  stages:
+    - id: research
+      type: agent
+      minion: agent
+      backend: opencode
+      model: flash  # SEED por-instalación.
+      effort: high
+      prompt: >-
+        Eres el pase de INVESTIGACIÓN del loop de ideación. Lee el dossier en
+        {dossier_dir}/README.md y su state.yaml. Toma las open_questions sin
+        responder y busca evidencia (scout, shards, consultas). Añade cada
+        respuesta como claim con evidencia traceable en state.yaml, y elimina
+        de open_questions las ya respondidas. NO inventes la respuesta si no la
+        encuentras: déjala en open_questions.
+      on_fail: stop
+    - id: gate
+      type: command
+      minion: dossier_gate
+      params: {}
+      on_fail: stop

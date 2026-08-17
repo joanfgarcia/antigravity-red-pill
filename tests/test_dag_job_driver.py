@@ -651,3 +651,125 @@ def test_dag_validate_rejects_bad_on_fail(tmp_path):
 	)
 	with pytest.raises(ValueError, match="on_fail"):
 		d.validate(payload)
+
+
+# ── FASE 2: type: dag (composición por REFERENCIA, RFC_JOB_DAG §4.5) ──────────
+
+def _recipe(reference: str, stages):
+	"""Simula load_recipe: devuelve la 5-tupla (source, payload, priority, parent, is_seed)."""
+	return "dag_job", {"manifest": {"workdir": ".", "stages": stages}}, 5, None, False
+
+
+def test_dag_type_dag_expands_and_runs(tmp_path, monkeypatch):
+	"""Una etapa type: dag referencia una receta de 2 etapas → se expande a compound
+	y ambas hojas corren con ids aplanados bajo el id de la etapa referenciante."""
+	d = DagJobDriver()
+	ws = tmp_path / "ws"
+	(ws / ".cell" / "reports").mkdir(parents=True)
+	calls = []
+	_patch_minion_factory(monkeypatch, calls)
+
+	# Receta simulada: 2 etapas command.
+	monkeypatch.setattr(
+		DagJobDriver,
+		"_load_recipe",
+		classmethod(lambda cls, ref: _recipe(ref, [
+			{"id": "r1", "type": "command", "minion": "command_runner", "command": "echo uno"},
+			{"id": "r2", "type": "command", "minion": "command_runner", "command": "echo dos", "depends_on": ["r1"]},
+		])),
+	)
+	payload = _payload(str(ws), [
+		{"id": "sub", "type": "dag", "recipe": "test-recipe"},
+	])
+	# El submit expande SIEMPRE: el runner nunca ve type: dag.
+	expanded = DagJobDriver.expand_manifest(payload)
+	d.validate(expanded)
+	# r2 depende de r1: el frente de un step ejecuta solo las hojas con deps
+	# satisfechas (como el judge del panel) — dos steps.
+	o1 = d.step(expanded, {})
+	assert not o1.completed
+	assert "sub/r1" in o1.new_checkpoint["completed_stage_ids"]
+	o2 = d.step(expanded, o1.new_checkpoint)
+	assert o2.completed
+	ids = o2.new_checkpoint["completed_stage_ids"]
+	assert "sub/r1" in ids and "sub/r2" in ids and "sub" in ids
+	# Los reportes de las hojas aplanadas se serializan por ruta.
+	assert (ws / ".cell" / "reports" / "sub" / "r1.json").is_file()
+	assert (ws / ".cell" / "reports" / "sub" / "r2.json").is_file()
+
+
+def test_dag_type_dag_unknown_recipe_rejected(tmp_path, monkeypatch):
+	"""Receta inexistente → ValueError en validate()."""
+	d = DagJobDriver()
+	ws = tmp_path / "ws"
+	ws.mkdir()
+
+	def _missing(ref):
+		raise FileNotFoundError(f"no hay ninguna receta '{ref}'")
+
+	monkeypatch.setattr(DagJobDriver, "_load_recipe", classmethod(lambda cls, ref: _missing(ref)))
+	payload = _payload(str(ws), [{"id": "sub", "type": "dag", "recipe": "no-existe"}])
+	with pytest.raises((ValueError, FileNotFoundError)):
+		d.validate(payload)
+
+
+def test_dag_type_dag_cycle_rejected(tmp_path, monkeypatch):
+	"""Ciclo (receta A referencia a A) → ValueError en validate()."""
+	d = DagJobDriver()
+	ws = tmp_path / "ws"
+	ws.mkdir()
+
+	def _cyclic(ref):
+		return _recipe(ref, [{"id": "inner", "type": "dag", "recipe": ref}])
+
+	monkeypatch.setattr(DagJobDriver, "_load_recipe", classmethod(lambda cls, ref: _cyclic(ref)))
+	payload = _payload(str(ws), [{"id": "sub", "type": "dag", "recipe": "A"}])
+	with pytest.raises(ValueError, match="cíclica"):
+		d.validate(payload)
+	with pytest.raises(ValueError, match="cíclica"):
+		DagJobDriver.expand_manifest(payload)
+
+
+def test_dag_type_dag_failsafe_models_propagate(tmp_path, monkeypatch):
+	"""El fail-safe de modelos se propaga: receta con etapa agéntica en flash → ValueError."""
+	d = DagJobDriver()
+	ws = tmp_path / "ws"
+	ws.mkdir()
+	monkeypatch.setattr(
+		DagJobDriver,
+		"_load_recipe",
+		classmethod(lambda cls, ref: _recipe(ref, [
+			{"id": "agent-inner", "type": "agent", "minion": "agent", "model": "flash", "prompt": "x"},
+		])),
+	)
+	payload = _payload(str(ws), [{"id": "sub", "type": "dag", "recipe": "bad-recipe"}])
+	with pytest.raises(ValueError, match="sin modelo configurado"):
+		d.validate(payload)
+
+
+def test_dag_type_dag_on_fail_inherited(tmp_path, monkeypatch):
+	"""on_fail: stop en la etapa type: dag lo heredan las hojas de la receta expandida."""
+	d = DagJobDriver()
+	ws = tmp_path / "ws"
+	(ws / ".cell" / "reports").mkdir(parents=True)
+
+	class _Failing:
+		async def execute(self, task, **kwargs):
+			return {"status": "failed", "error": "boom"}
+
+	monkeypatch.setattr("red_pill.swarm.factory.MinionFactory.create", staticmethod(lambda mid, **kw: _Failing()))
+	import red_pill.jobs.drivers.dag as dag_mod
+
+	monkeypatch.setattr(dag_mod, "_resolve_minion_kind", lambda mid: "agent")
+	monkeypatch.setattr(
+		DagJobDriver,
+		"_load_recipe",
+		classmethod(lambda cls, ref: _recipe(ref, [
+			{"id": "inner", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "x"},
+		])),
+	)
+	payload = _payload(str(ws), [{"id": "sub", "type": "dag", "recipe": "fragile", "on_fail": "stop"}])
+	expanded = DagJobDriver.expand_manifest(payload)
+	d.validate(expanded)
+	with pytest.raises(RuntimeError, match="on_fail=stop"):
+		d.step(expanded, {})

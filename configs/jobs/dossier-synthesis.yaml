@@ -1,0 +1,36 @@
+# Dossier loop — Pase SÍNTESIS (integra claims, evalúa coherencia y viabilidad).
+#
+# Integra los claims con evidencia en una evaluación de coherencia: detecta
+# contradicciones entre claims/why/scope/objective y emite el veredicto de
+# viabilidad aparente (viable: true/false). El GATE decide el siguiente paso.
+#
+# seed: true — plantilla por-instalación. Config real en .red-pill/jobs/.
+source: dag_job
+priority: 5
+mission_id: dossier-loop
+seed: true
+backend: opencode
+max_parallel_level: 2
+max_concurrency: 2
+manifest:
+  workdir: .
+  stages:
+    - id: synthesis
+      type: agent
+      minion: agent
+      backend: opencode
+      model: flash  # SEED por-instalación.
+      effort: high
+      prompt: >-
+        Eres el pase de SÍNTESIS del loop de ideación. Lee el dossier en
+        {dossier_dir}/README.md y su state.yaml. Integra los claims con
+        evidencia: busca contradicciones entre claims, why, scope y objective
+        (marca contradictions: true si las hay), y evalúa la viabilidad
+        aparente (viable: true/false — "a ojo", sin garantizar nada). NO
+        declares viable si hay contradicciones sin resolver.
+      on_fail: stop
+    - id: gate
+      type: command
+      minion: dossier_gate
+      params: {}
+      on_fail: stop

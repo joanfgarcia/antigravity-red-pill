@@ -75,14 +75,14 @@ At close (or when budget runs out), the Orchestrator generates `MISSION_REPORT.m
 
 A 15+ phase mission can hit the session/weekly limit mid-work. The guarantee is **not** an in-session watcher — it is that no failure can lose work:
 
-1. **Job-manager missions survive cuts natively**: when the mission runs as a `forge_job` (or its roles as `agentic_job`s), the driver's checkpoint (`checkpoint_data`) is persisted in the queue DB after every step. A subscription/API dry cut kills the session window, NOT the job: it resumes from the exact step (`job_manager_api.job_resume`), and the kernel job-monitor detects stuck (`PROCESSING` without heartbeat) and frustrated (circuit breaker) jobs and surfaces them as signals.
+1. **Job-manager missions survive cuts natively**: when the mission runs as a `dag_job` (or its roles as `agentic_job`s), the driver's checkpoint (`checkpoint_data`) is persisted in the queue DB after every step. A subscription/API dry cut kills the session window, NOT the job: it resumes from the exact step (`job_manager_api.job_resume`), and the kernel job-monitor detects stuck (`PROCESSING` without heartbeat) and frustrated (circuit breaker) jobs and surfaces them as signals.
 2. **Non-job missions**: covered by the per-step checkpoint, the §2 controlled stop (Pillar 7) and the §4 resume prompt on screen. The heartbeats (`updated_at` pre/post each long step) feed the journal that the reconciliation protocol reads on resume.
 3. **Rate-limit fire drill** (`controlled-stop.md` §3): on the FIRST dead agent with a limit/credits error, relaunch NOTHING and retry NOTHING — checkpoint, `INTERRUPTED_RATE_LIMIT`, parse `resets HH:MM` if present, and end the turn with the resume prompt. Every token after the first symptom is burned margin.
 
 ```
 mission ─▶ "stop in a controlled way" ─▶ PAUSED_BY_OPERATOR ─▶ resume prompt (manual)
         ├▶ dry cut / rate limit ─▶ checkpoint + INTERRUPTED_RATE_LIMIT ─▶ resume prompt
-        └▶ job cut (forge_job) ─▶ checkpoint_data in queue DB ─▶ job_resume from exact step
+        └▶ job cut (dag_job) ─▶ checkpoint_data in queue DB ─▶ job_resume from exact step
 ```
 
 ## Pillar 7 — Controlled stop and canonical states

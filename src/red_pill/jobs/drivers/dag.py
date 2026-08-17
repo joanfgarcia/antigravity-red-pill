@@ -2,7 +2,7 @@
 
 Ejecuta un ÁRBOL de etapas en la cola central: cada etapa es ATOMICA (un minion
 del MinionFactory, agéntico o no) o COMPUESTA (sub_etapas con topología local).
-forge_job/sleep_job pasan a ser recetas de este árbol — el dag_job implementa la
+sleep (y el forge histórico) son recetas de este árbol — el dag_job implementa la
 mecánica una sola vez (checkpoint, on_fail, telemetría, fan-out, control
 transferible, GPU probe, fail-safe de modelos).
 
@@ -112,7 +112,8 @@ _MAX_CONCURRENCY_DEFAULT = 4
 _TYPE_AGENT = "agent"
 _TYPE_COMMAND = "command"
 _TYPE_COMPOUND = "compound"
-_VALID_TYPES = (_TYPE_AGENT, _TYPE_COMMAND, _TYPE_COMPOUND)
+_TYPE_DAG = "dag"  # cuarto tipo (RFC_JOB_DAG §4.5): composición por referencia
+_VALID_TYPES = (_TYPE_AGENT, _TYPE_COMMAND, _TYPE_COMPOUND, _TYPE_DAG)
 
 
 def _gpu_health_probe() -> Tuple[bool, int, int]:
@@ -261,7 +262,9 @@ class DagJobDriver(ResumableJobDriver):
 		cls._validate_stages(stages, payload, seen, path="")
 
 	@classmethod
-	def _validate_stages(cls, stages: List[Dict[str, Any]], payload: Dict[str, Any], seen: List[str], path: str) -> None:
+	def _validate_stages(cls, stages: List[Dict[str, Any]], payload: Dict[str, Any], seen: List[str], path: str, recipe_stack: Optional[List[str]] = None) -> None:
+		if recipe_stack is None:
+			recipe_stack = []
 		for s in stages:
 			sid = s.get("id")
 			if not sid:
@@ -273,14 +276,32 @@ class DagJobDriver(ResumableJobDriver):
 
 			stype = s.get("type")
 			if stype not in _VALID_TYPES:
-				raise ValueError(f"dag_job stage '{stage_path}' type '{stype}' not in agent|command|compound.")
+				raise ValueError(f"dag_job stage '{stage_path}' type '{stype}' not in agent|command|compound|dag.")
 			# `on_fail` se documenta en el manifest (RFC §7) pero nunca se validaba:
 			# una errata quedaba como 'warn' silencioso. Vale en cualquier nivel —
 			# en compuestos lo heredan sus hojas (_resolve_on_fail).
 			on_fail = s.get("on_fail")
 			if on_fail is not None and on_fail not in ("warn", "stop"):
 				raise ValueError(f"dag_job stage '{stage_path}' on_fail '{on_fail}' not in warn|stop.")
-			if stype == _TYPE_COMPOUND:
+			if stype == _TYPE_DAG:
+				# Composición por REFERENCIA (RFC_JOB_DAG §4.5): la etapa ejecuta
+				# OTRA receta dag_job como sub-misión. Se valida resolviendo la
+				# receta en el submit y validando su árbol recursivamente.
+				recipe_ref = s.get("recipe")
+				if not isinstance(recipe_ref, str) or not recipe_ref:
+					raise ValueError(f"dag_job stage '{stage_path}' type dag requires 'recipe' (nombre o ruta de receta).")
+				if s.get("minion") or s.get("sub_etapas"):
+					raise ValueError(f"dag_job dag stage '{stage_path}' must not carry minion/sub_etapas (vienen de la receta).")
+				if recipe_ref in recipe_stack:
+					raise ValueError(f"dag_job receta cíclica: '{recipe_ref}' ya está en la cadena {recipe_stack}.")
+				sub_source, sub_payload, _prio, _parent, _is_seed = cls._load_recipe(recipe_ref)
+				if sub_source != "dag_job":
+					raise ValueError(f"dag_job stage '{stage_path}' recipe '{recipe_ref}' es source '{sub_source}', no dag_job.")
+				sub_stages = (sub_payload.get("manifest") or {}).get("stages")
+				if not isinstance(sub_stages, list) or not sub_stages:
+					raise ValueError(f"dag_job stage '{stage_path}' recipe '{recipe_ref}' no tiene manifest.stages.")
+				cls._validate_stages(sub_stages, sub_payload, seen, path=stage_path, recipe_stack=recipe_stack + [recipe_ref])
+			elif stype == _TYPE_COMPOUND:
 				if s.get("minion"):
 					raise ValueError(f"dag_job compound stage '{stage_path}' must not carry a minion.")
 				sub = s.get("sub_etapas")
@@ -317,6 +338,52 @@ class DagJobDriver(ResumableJobDriver):
 				dep_path = f"{path}/{dep}" if path else dep
 				if dep_path not in seen:
 					raise ValueError(f"dag_job stage '{stage_path}' depends_on unknown '{dep}'.")
+
+	@classmethod
+	def _load_recipe(cls, reference: str) -> Tuple[str, Dict[str, Any], int, Optional[str], bool]:
+		"""Resuelve una receta con el MISMO mecanismo del CLI (RECIPE_DIRS)."""
+		from red_pill.jobs.recipes import load_recipe
+
+		return load_recipe(reference, base_dir=None)
+
+	@classmethod
+	def expand_manifest(cls, payload: Dict[str, Any]) -> Dict[str, Any]:
+		"""Aplana las etapas `type: dag` a `compound` con las stages de la receta.
+
+		Se llama en el SUBMIT (CLI/MCP) tras validate: el job se persiste con el
+		árbol ya expandido, de modo que step()/checkpoint/resume trabajan SIEMPRE
+		sobre compounds y hojas — el determinismo del resume no depende de que la
+		receta siga igual en disco (RFC_JOB_DAG §4.5). Devuelve un payload nuevo
+		(sin mutar el original).
+		"""
+		import copy
+
+		expanded = copy.deepcopy(payload)
+		expanded["manifest"]["stages"] = cls._expand_stages(expanded["manifest"]["stages"], recipe_stack=[])
+		return expanded
+
+	@classmethod
+	def _expand_stages(cls, stages: List[Dict[str, Any]], recipe_stack: List[str]) -> List[Dict[str, Any]]:
+		out: List[Dict[str, Any]] = []
+		for s in stages:
+			if s.get("type") == _TYPE_DAG:
+				recipe_ref = s["recipe"]
+				if recipe_ref in recipe_stack:
+					raise ValueError(f"dag_job receta cíclica: '{recipe_ref}' ya está en la cadena {recipe_stack}.")
+				_sub_source, sub_payload, _prio, _parent, _is_seed = cls._load_recipe(recipe_ref)
+				sub_stages = (sub_payload.get("manifest") or {}).get("stages") or []
+				compound: Dict[str, Any] = {"id": s["id"], "type": _TYPE_COMPOUND, "sub_etapas": cls._expand_stages(sub_stages, recipe_stack + [recipe_ref])}
+				for key in ("on_fail", "parallel", "depends_on"):
+					if s.get(key) is not None:
+						compound[key] = s[key]
+				out.append(compound)
+			elif s.get("type") == _TYPE_COMPOUND:
+				node = dict(s)
+				node["sub_etapas"] = cls._expand_stages(s.get("sub_etapas", []), recipe_stack)
+				out.append(node)
+			else:
+				out.append(s)
+		return out
 
 	# ── Utilidades ─────────────────────────────────────────────────────────────
 	def _stages(self, payload: Dict[str, Any]) -> List[Dict[str, Any]]:

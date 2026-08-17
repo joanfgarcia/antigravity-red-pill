@@ -1740,7 +1740,7 @@ async def handle_mark_cognitive_task_failed(arguments: Dict[str, Any]):
 # El skill Forge (y cualquier otro cliente) encola, inspecciona y transfiere el
 # control de jobs por MCP. Sustrato: `CognitiveQueueManager` (cola central) +
 # `ResumableJobDriver` (drivers reanudables). El control transferible entre el
-# main-loop del Orchestrator y un forge_job en background usa:
+# main-loop del Orchestrator y un dag_job en background usa:
 #   job_submit → job_list/status → job_pause → job_checkpoint → job_resume
 
 
@@ -1778,8 +1778,8 @@ def _resolve_job(qm, ref: str) -> Optional[Dict[str, Any]]:
 		"`dag_job` (misión completa como árbol de etapas — RFC_JOB_DAG). Para lanzar un rol Forge "
 		"headless usa source=agentic_job con un recipe (backend/model/effort por rol). Un dag_job "
 		"con manifest.stages recorre la misión recursivamente (etapas atómicas minion/compuestas "
-		"sub_etapas, parallel intención), pausable/reanudable. forge_job/sleep_job son legacy "
-		"(recetas del dag_job). Devolverá el job_id; resultados a MinionInbox (check_minion_inbox)."
+		"sub_etapas, parallel intención), pausable/reanudable. Devolverá el job_id; resultados a "
+		"MinionInbox (check_minion_inbox)."
 	),
 	schema={
 		"type": "object",
@@ -1787,7 +1787,7 @@ def _resolve_job(qm, ref: str) -> Optional[Dict[str, Any]]:
 			"source": {
 				"type": "string",
 				"enum": ["agentic_job", "dag_job"],
-				"description": "Driver que ejecutará el job (forge_job/sleep_job fueron desregistrados — RFC_JOB_DAG paso 4 — y ya no admiten submits).",
+				"description": "Driver que ejecutará el job (forge_job fue retirado — FASE 1 — y sleep_job está desregistrado: ya no admiten submits).",
 			},
 			"payload": {
 				"type": "object",
@@ -1814,6 +1814,11 @@ async def handle_job_submit(arguments: Dict[str, Any]):
 		if not driver_cls:
 			return [types.TextContent(type="text", text=f"[ERROR] source '{source}' no registrado.")]
 		driver_cls().validate(payload)
+		# RFC_JOB_DAG §4.5: expandir `type: dag` a compounds (job persistido ya
+		# aplanado; el resume no depende de que la receta siga igual en disco).
+		expander = getattr(driver_cls, "expand_manifest", None)
+		if expander:
+			payload = expander(payload)
 
 		# Fail-safe: los jobs agénticos requieren un MODELO real, no el placeholder
 		# 'flash' (default del harness). Un job encolado sin config de modelos es
@@ -1920,7 +1925,7 @@ async def handle_job_status(arguments: Dict[str, Any]):
 @registry.register_action(
 	parent="job_manager_api",
 	action="job_pause",
-	description="[OFFICIAL] Pausa un job (frontera de paso). Para un forge_job, el main-loop puede tomar el control tras pausar.",
+	description="[OFFICIAL] Pausa un job (frontera de paso). Para un dag_job, el main-loop puede tomar el control tras pausar.",
 	schema={
 		"type": "object",
 		"properties": {
@@ -1945,7 +1950,7 @@ async def handle_job_pause(arguments: Dict[str, Any]):
 @registry.register_action(
 	parent="job_manager_api",
 	action="job_resume",
-	description="[OFFICIAL] Reanuda un job pausado/frustrado. Para forge_job, SOLTAR el control tras un handoff con el main-loop.",
+	description="[OFFICIAL] Reanuda un job pausado/frustrado. Para dag_job, SOLTAR el control tras un handoff con el main-loop.",
 	schema={
 		"type": "object",
 		"properties": {
@@ -2020,7 +2025,7 @@ async def handle_job_kill(arguments: Dict[str, Any]):
 	parent="job_manager_api",
 	action="job_checkpoint",
 	description=(
-		"[OFFICIAL] Handoff de control transferible: escribe el checkpoint de un forge_job "
+		"[OFFICIAL] Handoff de control transferible: escribe el checkpoint de un dag_job "
 		"PAUSED/PENDING desde fuera. El main-loop toma el control (job_pause), ejecuta N pasos "
 		"inline, y escribe aquí el step_index avanzado; luego job_resume para SOLTAR el control "
 		"y que el driver continúe. Solo aplica a jobs no-en-vuelo (PROCESSING/PAUSING se ignoran)."
@@ -2057,7 +2062,7 @@ async def handle_job_checkpoint(arguments: Dict[str, Any]):
 	parent="job_manager_api",
 	action="job_transfer",
 	description=(
-		"[OFFICIAL] Helper del control transferible: pausa un forge_job y devuelve su checkpoint "
+		"[OFFICIAL] Helper del control transferible: pausa un dag_job y devuelve su checkpoint "
 		"para que el main-loop tome el control. Equivale a job_pause + job_status en un solo paso. "
 		"Para SOLTAR: job_resume."
 	),

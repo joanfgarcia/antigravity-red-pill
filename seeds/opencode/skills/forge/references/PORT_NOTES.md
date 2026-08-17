@@ -1,5 +1,10 @@
 # Design Notes — Forge
 
+> ⚠️ **2026-08-14 — `forge_job` RETIRED.** The legacy `forge_job` driver (sabor B)
+> was removed physically; the vigente path is `dag_job` with manifests compiled
+> by `scripts/manifest-compile.mjs`. This file remains as the HISTORICAL record of
+> the port v1.3.0 — history is not rewritten; new changes are documented forward.
+
 > Purpose: document the design evolution and every versioned delta so the
 > bundle is auditable. Technical English applies to all authored files of this
 > bundle.
