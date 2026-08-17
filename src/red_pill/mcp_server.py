@@ -1814,6 +1814,11 @@ async def handle_job_submit(arguments: Dict[str, Any]):
 		if not driver_cls:
 			return [types.TextContent(type="text", text=f"[ERROR] source '{source}' no registrado.")]
 		driver_cls().validate(payload)
+		# RFC_JOB_DAG §4.5: expandir `type: dag` a compounds (job persistido ya
+		# aplanado; el resume no depende de que la receta siga igual en disco).
+		expander = getattr(driver_cls, "expand_manifest", None)
+		if expander:
+			payload = expander(payload)
 
 		# Fail-safe: los jobs agénticos requieren un MODELO real, no el placeholder
 		# 'flash' (default del harness). Un job encolado sin config de modelos es
