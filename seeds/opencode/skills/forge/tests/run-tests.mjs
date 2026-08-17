@@ -107,5 +107,54 @@ for (const f of triageFiles) {
   report(`triage  ${f.replace('.json', '')}`, true);
 }
 
+// ── Phase D: manifest compiler (compileStages) ──
+const { compileStages } = await import(join(SCRIPTS, 'manifest-compile.mjs'));
+
+{
+  // D1 — Encadenado secuencial: 2 fases × 2 pasos.
+  const stages = compileStages([
+    { id: 'F1', steps: [{ role: 'implementor', prompt: 'a' }, { role: 'validator', prompt: 'b' }] },
+    { id: 'F2', steps: [{ role: 'qa', prompt: 'c' }, { role: 'smoke', prompt: 'd' }] },
+  ]);
+  let ok = stages.length === 2
+    && stages[0].id === 'F1' && stages[0].type === 'compound'
+    && stages[1].depends_on?.[0] === 'F1'
+    && stages[0].sub_etapas[0].depends_on === undefined
+    && stages[0].sub_etapas[1].depends_on?.[0] === 'implementor'
+    && stages[1].sub_etapas[1].depends_on?.[0] === 'qa';
+  report('compile encadenado secuencial', ok, ok ? '' : JSON.stringify(stages));
+}
+
+{
+  // D2 — Fase vacía omitida: F1 sin pasos no genera stage y F2 no depende de ella.
+  const stages = compileStages([
+    { id: 'F1', steps: [] },
+    { id: 'F2', steps: [{ role: 'qa', prompt: 'x' }] },
+  ]);
+  const ok = stages.length === 1 && stages[0].id === 'F2' && stages[0].depends_on === undefined;
+  report('compile fase vacía omitida', ok, ok ? '' : JSON.stringify(stages));
+}
+
+{
+  // D3 — Rol duplicado en la MISMA fase: validator, validator-2.
+  const stages = compileStages([
+    { id: 'F1', steps: [{ role: 'validator', prompt: 'a' }, { role: 'validator', prompt: 'b' }] },
+  ]);
+  const ids = stages[0].sub_etapas.map((s) => s.id);
+  const ok = ids[0] === 'validator' && ids[1] === 'validator-2';
+  report('compile rol duplicado', ok, ok ? '' : JSON.stringify(ids));
+}
+
+{
+  // D4 — Propagación: step.model/step.on_fail → sub-etapa; phase.on_fail → compound.
+  const stages = compileStages([
+    { id: 'F1', on_fail: 'warn', steps: [{ role: 'impl', prompt: 'x', model: 'm1', on_fail: 'stop' }] },
+  ]);
+  const leaf = stages[0].sub_etapas[0];
+  const ok = stages[0].on_fail === 'warn' && leaf.model === 'm1' && leaf.on_fail === 'stop'
+    && leaf.type === 'agent' && leaf.minion === 'agent';
+  report('compile propagación', ok, ok ? '' : JSON.stringify(stages));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
