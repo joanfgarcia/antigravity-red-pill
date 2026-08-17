@@ -1,11 +1,14 @@
 // manifest-compile.mjs — compilador puro del burst manifest de Forge a stages
-// del dag_job (PLAN_IMPL_FORGE_DAG_LOOP.md, Tarea 1.1).
+// del dag_job (PLAN_IMPL_FORGE_DAG_LOOP.md, Tarea 1.1; ampliado en 2.4).
 //
 // Convierte el burst manifest (fases → pasos con role/prompt) en las `stages`
 // de un manifest dag_job:
 //   - cada fase → etapa `compound` con `id = phase.id`
 //   - cada paso → sub-etapa `type: "agent"`, `minion: "agent"`,
 //     `id = step.role`, `prompt = step.prompt`
+//   - EXCEPCIÓN (2.4): un paso con `panel: true` → `{type: "dag",
+//     recipe: "forge-panel"}` — el panel adversarial se pide EXPLÍCITAMENTE
+//     (decisión del Operador 2026-08-14) y viaja por referencia.
 //   - orden secuencial DENTRO de la fase: cada paso depende del anterior
 //   - orden secuencial ENTRE fases: cada compound depende de la fase anterior
 //   - `step.model` → `stage.model`; `step.on_fail` → `stage.on_fail`;
@@ -40,6 +43,16 @@ export function compileStages(phases) {
 			const count = (seen.get(baseId) || 0) + 1;
 			seen.set(baseId, count);
 			const id = count === 1 ? baseId : `${baseId}-${count}`;
+
+			// 2.4: panel adversarial por REFERENCIA (decisión del Operador 2026-08-14).
+			if (step.panel === true) {
+				const ref = { id, type: 'dag', recipe: 'forge-panel' };
+				if (step.on_fail) ref.on_fail = step.on_fail;
+				if (prevStepId !== null) ref.depends_on = [prevStepId];
+				compound.sub_etapas.push(ref);
+				prevStepId = id;
+				continue;
+			}
 
 			const stage = { id, type: 'agent', minion: 'agent', prompt: step.prompt };
 			if (step.model) stage.model = step.model;

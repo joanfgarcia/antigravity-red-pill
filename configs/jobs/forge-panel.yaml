@@ -1,19 +1,20 @@
-# Forge — Panel Adversarial (feature O2) como etapa COMPUESTA del dag_job.
+# Forge — Panel Adversarial (feature O2) como receta del dag_job.
 #
-# RFC_JOB_DAG paso 5: el panel de lentes + judge deja de lanzarse como N jobs
-# agentic serializados en la cola y pasa a ser una etapa compuesta `parallel:
-# true` del árbol del DAG — las lentes corren en paralelo (mismo step, threads)
-# y el judge adjudica con depends_on. Es una PLANTILLA del nivel L3 (5 lentes +
-# judge); L2 usa 3 lentes, L1 una.
+# RECETA DEL PANEL PURO: contiene SOLO la etapa compound `panel` (5 lentes +
+# judge). Se referencia desde una misión con `{type: dag, recipe: forge-panel}`
+# (RFC_JOB_DAG §4.5) — el compilador del skill la emite cuando un paso del burst
+# manifest declara `panel: true`. La etapa de implementación NO vive aquí: es de
+# la misión que referencia el panel.
 #
-# seed: true — plantilla por-instalación. Este archivo NO se encola tal cual:
-# el skill forge lo inserta como sub-etapa de la misión dag_job. Cada instalación
-# fija sus modelos reales en .red-pill/jobs/ (ver NOTE_MODEL_POLICY_ROLES.md).
+# seed: true — plantilla por-instalación. Cada instalación fija sus modelos
+# reales en .red-pill/jobs/ (ver NOTE_MODEL_POLICY_ROLES.md).
+#
+# El adversarial se pide EXPLÍCITAMENTE: si un paso no declara `panel: true`, el
+# panel no corre (decisión del que monta el plan, 2026-08-14).
 #
 # El judge NO recibe los reportes en el prompt: lee del disco los reportes de
-# sus lentes (`.cell/reports/panel/<lens>.json`, escritos por cada sub-etapa) y
-# adjudica los conflictos (panel-policy.md §Aggregation). Cold context: el prompt
-# del judge debe instruir leerlos.
+# sus lentes (`.cell/reports/<ruta-panel>/<lens>.json`, escritos por cada
+# sub-etapa) y adjudica los conflictos (panel-policy.md §Aggregation).
 source: dag_job
 priority: 5
 mission_id: forge-panel
@@ -24,18 +25,10 @@ max_concurrency: 4
 manifest:
   workdir: .
   stages:
-    - id: impl
-      type: agent
-      minion: agent
-      model: flash  # SEED: config real por-instalación
-      prompt: <implementa la fase>
-      on_fail: stop
-
     - id: panel
       type: compound
       parallel: true
       on_fail: warn
-      depends_on: [impl]
       sub_etapas:
         - id: lens-correctness
           type: agent
@@ -67,4 +60,4 @@ manifest:
           minion: agent
           model: flash  # SEED — model distinto a la mayoría de refuters, max effort
           depends_on: [lens-correctness, lens-env-segregation, lens-plan-completeness, lens-security, lens-perf-repro]
-          prompt: <lee .cell/reports/panel/lens-*.json y adjudica los conflictos>
+          prompt: <lee .cell/reports/<ruta>/lens-*.json y adjudica los conflictos>

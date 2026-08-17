@@ -156,5 +156,25 @@ const { compileStages } = await import(join(SCRIPTS, 'manifest-compile.mjs'));
   report('compile propagación', ok, ok ? '' : JSON.stringify(stages));
 }
 
+{
+  // D5 — Panel por REFERENCIA (2.4): un paso con panel: true emite {type: dag,
+  // recipe: forge-panel} en su posición, sin copiar las lentes inline.
+  const stages = compileStages([
+    { id: 'F1', steps: [
+      { role: 'implementor', prompt: 'impl' },
+      { role: 'devils-advocate', prompt: 'ataca', panel: true },
+      { role: 'qa', prompt: 'cierra' },
+    ] },
+  ]);
+  const subs = stages[0].sub_etapas;
+  const panelRef = subs[1];
+  const ok = subs.length === 3
+    && panelRef.type === 'dag' && panelRef.recipe === 'forge-panel'
+    && panelRef.id === 'devils-advocate'
+    && panelRef.depends_on?.[0] === 'implementor'
+    && subs[2].depends_on?.[0] === 'devils-advocate';
+  report('compile panel por referencia', ok, ok ? '' : JSON.stringify(subs));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
