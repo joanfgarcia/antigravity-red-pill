@@ -17,7 +17,7 @@
 //   node cycle-run.mjs <burst-manifest.json> [--max-calls N] [--no-validate]
 //
 // MODE (v1.3.0): the canonical path is the JOB MANAGER.
-//   --job-manager --mission <id>   → enqueue the whole burst as a `forge_job`
+//   --job-manager --mission <id>   → enqueue the whole burst as a `dag_job`
 //     (resumable, transferable control) and poll job status to completion.
 //   Without flags → legacy direct mode (spawnSync opencode run per step) kept
 //     as fallback, but deprecated: the Operator wants every headless launch to

@@ -537,7 +537,7 @@ def handle_job(args: argparse.Namespace) -> None:
 			# la receta es seed, la instalación no está configurada: bloquea.
 			if recipe_is_seed:
 				cfg_source = payload.get("source", source)
-				if cfg_source in ("agentic_job", "forge_job", "dag_job"):
+				if cfg_source in ("agentic_job", "dag_job"):
 					print(
 						f"[ERROR] La receta '{args.recipe}' es un SEED genérico, no una config activa. "
 						f"Activa la configuración real de esta instalación copiándola a .red-pill/jobs/ "

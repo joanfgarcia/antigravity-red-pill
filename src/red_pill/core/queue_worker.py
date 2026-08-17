@@ -202,9 +202,9 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 		try:
 			driver = get_driver(task["source"])
 		except KeyError:
-			# Source sin driver registrado (p.ej. un forge_job/sleep_job legacy
-			# encolado antes de su retirada — RFC_JOB_DAG paso 4): se salta con
-			# aviso, nunca tumba el runner. El job queda en la cola para revisión.
+			# Source sin driver registrado (p.ej. un job legacy encolado antes de la
+			# retirada de su driver — RFC_JOB_DAG FASE 1): se salta con aviso,
+			# nunca tumba el runner. El job queda en la cola para revisión.
 			logger.warning(f"Skipping job {job_id}: source '{task['source']}' sin driver registrado (legacy?).")
 			continue
 		checkpoint = task.get("checkpoint_data") or {}

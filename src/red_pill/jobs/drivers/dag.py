@@ -2,7 +2,7 @@
 
 Ejecuta un ÁRBOL de etapas en la cola central: cada etapa es ATOMICA (un minion
 del MinionFactory, agéntico o no) o COMPUESTA (sub_etapas con topología local).
-forge_job/sleep_job pasan a ser recetas de este árbol — el dag_job implementa la
+sleep (y el forge histórico) son recetas de este árbol — el dag_job implementa la
 mecánica una sola vez (checkpoint, on_fail, telemetría, fan-out, control
 transferible, GPU probe, fail-safe de modelos).
 

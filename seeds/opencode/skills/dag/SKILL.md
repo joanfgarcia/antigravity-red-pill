@@ -18,12 +18,11 @@ description: >-
 
 > ⚠️ **STATUS: FUNCTIONAL BUT NOT FINAL.** This skill documents the DAG as built
 > in the `feat/job-dag` worktree (2026-08-07): the driver works, the tests pass
-> and the sleep recipe runs end-to-end, but the change is NOT merged to `main`
-> yet and two pieces of the RFC are deliberately deferred — the removal of
-> `forge_job`/`sleep_job` as registered drivers (kept as legacy until the DAG
-> recipes are validated in production) and the migration of the forge adversarial
-> panel to `parallel: true`. Treat this skill as the design-in-action, not a
-> frozen contract. Authority: `Aleth_Core/RFC_JOB_DAG_PARALLELIZATION.md` v0.7.
+> and the sleep recipe runs end-to-end. Update (2026-08-14): `forge_job` has been
+> RETIRED physically (FASE 1) — missions are `dag_job` manifests compiled from
+> the forge burst manifest; `sleep_job` remains importable as legacy until the
+> sleep recipe covers it in production. Treat this skill as the design-in-action,
+> not a frozen contract. Authority: `Aleth_Core/RFC_JOB_DAG_PARALLELIZATION.md`.
 
 > The generic composition skill for the red-pill `dag_job`. It sits ON TOP of the
 > forge/scout pieces: every mission — including a Forge mission — is expressed as
@@ -201,9 +200,9 @@ stages inherit from their leaves (no flag on compound).
   phases, `nightly_exempt: true` for the anti-deadlock exemption.
 - **forge**: the mission composer. Its adversarial panel becomes a compound
   `parallel: true` stage; each role becomes an atomic `type: agent` stage with
-  its OWN `backend`/`model`. The legacy `forge_job` driver still runs existing
-  jobs, but new missions use `dag_job`
-  (`seeds/opencode/skills/forge/references/runtime-adapters/red-pill.md`).
+  its OWN `backend`/`model`. `forge_job` is RETIRED (2026-08-14): the burst
+  manifest compiles to `dag_job` stages
+  (`seeds/opencode/skills/forge/scripts/manifest-compile.mjs`).
 
 ## 8. Runtimes (this skill is opencode-pure; the kernel is the piece)
 
