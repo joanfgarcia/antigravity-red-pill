@@ -2,6 +2,7 @@ from typing import Dict, Optional, Type
 
 from red_pill.swarm.agents.agent import AgentMinion
 from red_pill.swarm.agents.command import CommandMinion
+from red_pill.swarm.agents.dossier_gate import DossierGateMinion
 from red_pill.swarm.agents.echo import EchoMinion
 from red_pill.swarm.agents.healer import HealerMinion
 from red_pill.swarm.agents.janitor import JanitorMinion
@@ -29,6 +30,9 @@ class MinionFactory:
 		"sleep_ritual": SleepRitualMinion,
 		"sleep_phase": SleepPhaseMinion,
 		"sleep_finalize": SleepFinalizeMinion,
+		# Gate del loop de ideación (RFC_DOSSIER_IDEACION §3.4/§3.6): tabla de
+		# transición DETERMINISTA, sin LLM.
+		"dossier_gate": DossierGateMinion,
 	}
 
 	# Specialized Command Aliases

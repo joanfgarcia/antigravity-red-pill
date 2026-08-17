@@ -1,0 +1,39 @@
+# Dossier loop — Pase GERMINACIÓN (expande la chispa a llama).
+#
+# Convierte la idea en un topic delimitado de STORM: idea + scope + perspectivas
+# + preguntas iniciales (RFC_DOSSIER_IDEACION §3.1 lógica de expansión).
+# El pase agéntico lee el dossier (dossier_dir), lo actualiza, y el GATE final
+# (dossier_gate) ejecuta la tabla de transición determinista: decide si sigue
+# otro pase o el dossier alcanza un estado de parada.
+#
+# seed: true — plantilla por-instalación. Config real en .red-pill/jobs/
+# (ver NOTE_MODEL_POLICY_ROLES.md).
+source: dag_job
+priority: 5
+mission_id: dossier-loop
+seed: true
+backend: opencode
+max_parallel_level: 2
+max_concurrency: 2
+manifest:
+  workdir: .
+  stages:
+    - id: germination
+      type: agent
+      minion: agent
+      backend: opencode
+      model: flash  # SEED por-instalación: cada instalación configura su modelo.
+      effort: high
+      prompt: >-
+        Eres el pase de GERMINACIÓN del loop de ideación. Lee el dossier en
+        {dossier_dir}/README.md y su state.yaml. Convierte la idea en un topic
+        delimitado de STORM: rellena domain (superficie de contacto), scope
+        (lo que SÍ y lo que NO hacemos), y las open_questions iniciales.
+        NO inventes evidencia: solo estructura la idea. Actualiza state.yaml
+        (open_questions, domain, scope, type: idea) y deja rastro en el README.
+      on_fail: stop
+    - id: gate
+      type: command
+      minion: dossier_gate
+      params: {}
+      on_fail: stop
