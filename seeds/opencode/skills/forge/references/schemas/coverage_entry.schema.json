@@ -13,6 +13,7 @@
     "status": { "enum": ["CUBIERTO", "SIN_CUBRIR", "SIN_SMOKE", "PENDING_HUMAN", "BLOCKED", "EXTRA"] },
     "blocked_reason": { "type": "string" },
     "phase_id": { "type": "string", "description": "Fase que lo cubre" },
+    "verification_method": { "type": "string", "description": "COMO se probara/probo (spec portable de doc_anchor)" },
     "notes": { "type": "string" }
   },
   "allOf": [

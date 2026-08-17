@@ -82,3 +82,51 @@ def test_fallback_includes_v3_fields(monkeypatch):
 
 def test_taxonomy_matches_prompt():
 	assert "neutral" in VALID_EMOTIONS and len(VALID_EMOTIONS) == 11
+
+
+def test_voice_prompt_renders_without_keyerror():
+	# distiller_v3_voice.txt carries literal JSON braces; str.format would raise
+	# KeyError — the renderer must use .replace (bake-off 2026-08-13 regression).
+	from red_pill.metabolism.distiller import load_prompt_text
+
+	text = load_prompt_text("distiller_v3_voice.txt")
+	assert text, "distiller_v3_voice.txt missing or empty"
+	rendered = text.replace("{agent_name}", "Aleth").replace("{operator_name}", "Joan")
+	assert "{agent_name}" not in rendered and "{operator_name}" not in rendered
+
+
+def test_voice_prompt_flows_through_distill_engram(monkeypatch):
+	# End-to-end: force the voice prompt via override_params and confirm the
+	# provider receives a rendered system prompt (no crash, no raw placeholders).
+	provider = _mock_provider(monkeypatch, {"summary": "s", "emotion": "joy", "intensity": 0.5, "category": "social", "lang": "es"})
+	result = distill_engram(LONG_RAW, override_params={"prompt_file": "distiller_v3_voice.txt"})
+	assert not result.get("_is_fallback")
+	system_msg = provider.generate.call_args.kwargs["messages"][0]["content"]
+	assert "{agent_name}" not in system_msg and "Aleth" in system_msg
+
+
+def test_profile_prompt_routing_beats_params_default(monkeypatch):
+	# params yaml always ships a prompt_file default; the per-model routing from
+	# the active profile must still win (otherwise the routing is dead code).
+	import red_pill.metabolism.distiller as dist
+
+	monkeypatch.setattr(dist, "_resolve_prompt_for_profile", lambda profile_name=None: "distiller_v3_voice.txt")
+	seen = {}
+	real_load = dist.load_prompt_text
+
+	def spy(filename, fallback_prompt="", override_text=None):
+		seen["prompt_file"] = filename
+		return real_load(filename, fallback_prompt, override_text)
+
+	monkeypatch.setattr(dist, "load_prompt_text", spy)
+	_mock_provider(monkeypatch, {"summary": "s", "emotion": "joy", "intensity": 0.5, "category": "social", "lang": "es"})
+	distill_engram(LONG_RAW)
+	assert seen["prompt_file"] == "distiller_v3_voice.txt"
+
+
+def test_correct_lang_label_respects_non_es_en_labels():
+	from red_pill.metabolism.distiller import _correct_lang_label
+
+	catalan = "M'agrada la memòria històrica i la conversa d'ahir sobre allò que vàrem fer"
+	assert _correct_lang_label("ca", catalan) == "ca"  # accents must not force 'es'
+	assert _correct_lang_label("en", "hola qué tal, ¿vienes mañana a la reunión?") == "es"

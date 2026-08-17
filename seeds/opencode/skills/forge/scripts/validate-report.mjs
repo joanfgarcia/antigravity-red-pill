@@ -10,7 +10,7 @@
 // Forge role schemas in references/schemas/:
 //   type, const, enum, required, properties, additionalProperties,
 //   items (schema or primitive), minItems, minLength, maxLength, pattern,
-//   minimum, allOf, if/then, $defs + $ref (#/$defs/<name>).
+//   minimum, maximum, allOf, if/then, $defs + $ref (#/$defs/<name>).
 // Unknown keywords are ignored (draft-2020-12 semantics).
 //
 // Usage:
@@ -135,6 +135,9 @@ function validateRest(sch, data, errors, path, root) {
     }
   }
 
+  if (typeof data === 'number' && sch.maximum !== undefined && data > sch.maximum) {
+    errors.push(`[${path}] maximum ${sch.maximum} (got ${data})`);
+  }
   if (typeof data === 'number' && sch.minimum !== undefined && data < sch.minimum) {
     errors.push(`[${path}] minimum ${sch.minimum} (got ${data})`);
   }

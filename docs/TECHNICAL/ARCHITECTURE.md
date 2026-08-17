@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v7.17.0 (Bit Graduates & The Job DAG)
+**System Version**: v7.18.0 (Distiller Bake-off + Per-Model Prompt Routing)
 **Analyst**: The Architect
 **Date**: 2026-04-16
 

@@ -80,6 +80,7 @@ cookies/
 .cursor/rules/00_bunker_telemetry.mdc
 
 # Runtime-generated benchmark artifacts
+.cell/
 SOVEREIGNTY_PROOF.json
 
 # Experimental Ternary Models

@@ -391,9 +391,17 @@ def main():
 				status = remove_block(instructions_path, anchor, backup=backup)
 				if status != "absent":
 					logger.info(f"✓ opencode:{anchor} removed [{instructions_path}]")
-		# Remove skills
+		# Remove skills — derived from the seeds dir (whatever deploy_skills
+		# ships), not a hardcoded list that rots when a new skill is seeded.
 		skills_dir = os.path.join(config_dir, "skills")
-		for skill_name in ["sovereign_handshake", "agent_core", "knowledge_access", "forge", "scout"]:
+		seeded_skills = set()
+		skills_src = os.path.join(opencode_seeds, "skills")
+		if os.path.isdir(skills_src):
+			for entry in os.listdir(skills_src):
+				if os.path.exists(os.path.join(skills_src, entry, "SKILL.md")):
+					seeded_skills.add(entry)
+		seeded_skills.update(["sovereign_handshake", "agent_core", "knowledge_access"])  # legacy anchor-skills
+		for skill_name in sorted(seeded_skills):
 			skill_path = os.path.join(skills_dir, skill_name)
 			if os.path.isdir(skill_path):
 				shutil.rmtree(skill_path)

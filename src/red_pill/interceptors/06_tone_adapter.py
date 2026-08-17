@@ -67,9 +67,10 @@ class ToneAdapterPlugin(BaseInterceptorPlugin):
 			# Compact tag only — the tone meaning per color lives in the single
 			# CHROMA KEY legend rendered by the Mood Orchestrator.
 			self.paint_chroma(color)
+			window_h = getattr(cfg.get_config(), "OVERNIGHT_THERAPY_THRESHOLD_HOURS", 4)
 			lines = [
 				"=== TONE ADAPTER (FERRARI PROTOCOL) ===",
-				f"TONE_COLOR: {color.upper()} (4h session window)",
+				f"TONE_COLOR: {color.upper()} ({window_h}h session window)",
 				"---",
 			]
 			return "\n".join(lines)

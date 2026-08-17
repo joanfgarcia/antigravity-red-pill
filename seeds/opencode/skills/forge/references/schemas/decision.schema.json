@@ -30,6 +30,8 @@
       "items": { "type": "string" },
       "description": "Plan ancla, CONVENTIONS, memoria del proyecto, docs, código... que fundamentan la decisión"
     },
+    "executed": { "type": "boolean", "description": "true si la decision ya se materializo (la lee el Check 8 del gate: IRREVERSIBLE ejecutada fuera del plan)" },
+    "in_plan": { "type": "boolean", "description": "true si la accion estaba DENTRO del plan ancla (Check 8 del gate)" },
     "timestamp": { "type": "string" }
   }
 }

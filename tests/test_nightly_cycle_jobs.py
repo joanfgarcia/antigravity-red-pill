@@ -119,8 +119,17 @@ def test_forge_recipe_seed_marked_in_repo():
 	atómica lleva el modelo en el default del harness (flash = placeholder)."""
 	from red_pill.jobs.recipes import load_recipe
 
-	roles = ("forge-triage", "forge-implementor", "forge-validator", "forge-smoke-tester",
-		"forge-devils-advocate", "forge-judge", "forge-doc-anchor", "forge-qa", "forge-scout")
+	roles = (
+		"forge-triage",
+		"forge-implementor",
+		"forge-validator",
+		"forge-smoke-tester",
+		"forge-devils-advocate",
+		"forge-judge",
+		"forge-doc-anchor",
+		"forge-qa",
+		"forge-scout",
+	)
 	for name in roles:
 		_, payload, _, _, is_seed = load_recipe(str(REPO_ROOT / "configs" / "jobs" / f"{name}.yaml"))
 		assert is_seed is True, f"{name} debería ser seed"

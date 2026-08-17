@@ -59,7 +59,9 @@ Checkpoint (autoritativo, en BD): { completed_stage_ids, results, stage_flags }.
 Los ids se APLANAN POR RUTA (`panel-adversarial/lens-correctness`) para que el
 orden topológico y el resume sean deterministas a cualquier profundidad. Cada
 etapa atómica persiste SU resultado en `.cell/reports/<ruta>.json` (opción 3 del
-RFC: el DAG serializa, los minions NO se tocan); el padre solo marca
+RFC: el DAG serializa, los minions NO se tocan). En etapas AGÉNTICAS el envelope
+del minion va a `.cell/reports/<ruta>.envelope.json` y `<ruta>.json` queda para
+el reporte de rol que escribe el propio agente (contrato zero-trust); el padre solo marca
 stage_flags[sub]=done y delega el detalle — no hay orden de hilos que normalizar.
 
 `parallel` es INTENCIÓN declarativa: una etapa compuesta puede declararla a
@@ -92,6 +94,7 @@ import json
 import logging
 import shutil
 import subprocess
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -121,7 +124,9 @@ def _gpu_health_probe() -> Tuple[bool, int, int]:
 	try:
 		free_out = subprocess.run(
 			["nvidia-smi", "--query-gpu=memory.free", "--format=csv,noheader,nounits"],
-			capture_output=True, text=True, timeout=5,
+			capture_output=True,
+			text=True,
+			timeout=5,
 		)
 		if free_out.returncode != 0:
 			return False, 0, 0
@@ -202,6 +207,26 @@ def _count_leaves(stages: List[Dict[str, Any]]) -> int:
 	return sum(1 for _ in _iter_leaves(stages))
 
 
+def _resolve_on_fail(stages: List[Dict[str, Any]], leaf_path: str) -> str:
+	"""`on_fail` efectivo de una hoja: el suyo, o el del ancestro más cercano.
+
+	`on_fail` en una etapa COMPUESTA era letra muerta (solo se leía en hojas):
+	un `on_fail: stop` de fase se aceptaba en el manifest y no acotaba nada. Con
+	recetas que el propio sistema puede escribir (REP-RAP), un campo que el
+	validador admite y el motor ignora es una vía de deriva silenciosa. Lo más
+	específico gana: la hoja pisa a su ancestro.
+	"""
+	parts = leaf_path.split("/")
+	node = _find_node(stages, parts[-1])
+	if node and node.get("on_fail"):
+		return str(node["on_fail"])
+	for i in range(len(parts) - 2, -1, -1):  # ancestros, del más cercano al raíz
+		ancestor = _find_node(stages, parts[i])
+		if ancestor and ancestor.get("on_fail"):
+			return str(ancestor["on_fail"])
+	return "warn"
+
+
 def _find_node(stages: List[Dict[str, Any]], node_id: str) -> Optional[Dict[str, Any]]:
 	"""Busca una etapa por id en todo el árbol (los ids son únicos globalmente)."""
 	for s in stages:
@@ -217,6 +242,9 @@ def _find_node(stages: List[Dict[str, Any]], node_id: str) -> Optional[Dict[str,
 class DagJobDriver(ResumableJobDriver):
 	source = "dag_job"
 	min_vram_mb = 0  # los recursos se gestionan por etapa en preflight (GPU probe)
+
+	# Marca de inicio del step en curso (monotónica) — base de la cota de tiempo.
+	_step_started: Optional[float] = None
 
 	# ── Validación en el submit (recursiva sobre el árbol) ─────────────────────
 	@classmethod
@@ -246,6 +274,12 @@ class DagJobDriver(ResumableJobDriver):
 			stype = s.get("type")
 			if stype not in _VALID_TYPES:
 				raise ValueError(f"dag_job stage '{stage_path}' type '{stype}' not in agent|command|compound.")
+			# `on_fail` se documenta en el manifest (RFC §7) pero nunca se validaba:
+			# una errata quedaba como 'warn' silencioso. Vale en cualquier nivel —
+			# en compuestos lo heredan sus hojas (_resolve_on_fail).
+			on_fail = s.get("on_fail")
+			if on_fail is not None and on_fail not in ("warn", "stop"):
+				raise ValueError(f"dag_job stage '{stage_path}' on_fail '{on_fail}' not in warn|stop.")
 			if stype == _TYPE_COMPOUND:
 				if s.get("minion"):
 					raise ValueError(f"dag_job compound stage '{stage_path}' must not carry a minion.")
@@ -262,9 +296,7 @@ class DagJobDriver(ResumableJobDriver):
 					raise ValueError(f"dag_job stage '{stage_path}' minion '{minion_id}' no registrado en MinionFactory.")
 				if stype == _TYPE_AGENT:
 					if kind != _TYPE_AGENT:
-						raise ValueError(
-							f"dag_job stage '{stage_path}' type mismatch: minion '{minion_id}' no es agéntico."
-						)
+						raise ValueError(f"dag_job stage '{stage_path}' type mismatch: minion '{minion_id}' no es agéntico.")
 					# Fail-safe de modelos (fleco 3 del RFC): TODA etapa agéntica del
 					# árbol exige model real (no el placeholder 'flash' del harness).
 					model = s.get("model") or payload.get("model")
@@ -279,9 +311,7 @@ class DagJobDriver(ResumableJobDriver):
 						raise ValueError(f"dag_job agent stage '{stage_path}' requires 'prompt'.")
 				else:
 					if kind == _TYPE_AGENT:
-						raise ValueError(
-							f"dag_job stage '{stage_path}' type mismatch: minion '{minion_id}' es agéntico, no '{stype}'."
-						)
+						raise ValueError(f"dag_job stage '{stage_path}' type mismatch: minion '{minion_id}' es agéntico, no '{stype}'.")
 			for dep in s.get("depends_on", []):
 				# las deps referencian hermanos (ids del mismo nivel)
 				dep_path = f"{path}/{dep}" if path else dep
@@ -355,12 +385,50 @@ class DagJobDriver(ResumableJobDriver):
 		if free_mb < min_free:
 			raise JobDeferred(f"VRAM insuficiente para etapa '{stage_path}' ({free_mb}MB libres < {min_free}MB).")
 
+	# ── Cota de tiempo (política del RUNNER, aplicada aquí) ───────────────────
+	def _budget_left(self) -> Optional[float]:
+		"""Segundos que quedan de la cota del step, o None si no hay cota."""
+		if not self.step_timeout_s or self._step_started is None:
+			return None
+		return self.step_timeout_s - (time.monotonic() - self._step_started)
+
+	def _budget_spent(self) -> bool:
+		"""True si la cota del step se agotó (frontera: ceder, no abatir)."""
+		left = self._budget_left()
+		return left is not None and left <= 0
+
+	def _stage_timeout(self, stage: Dict[str, Any], payload: Dict[str, Any]) -> int:
+		"""Timeout de la etapa ACOTADO por lo que queda del presupuesto del step.
+
+		Sin esto, `control.max_step_minutes` es decorativo: cada etapa aplicaba su
+		propio timeout y la suma de etapas secuenciales no tenía techo (una etapa
+		colgada bloqueaba el runner entero, con el run-lock R6 impidiendo que
+		otro entrara).
+
+		El tope solo se aplica mientras quede presupuesto; una etapa ya lanzada
+		en un grupo paralelo conserva su timeout declarado (recortarlo a cero la
+		haría fallar por una cota que no es suya). El corte real está en la
+		frontera de grupo, cediendo con lo hecho.
+		"""
+		declared = int(stage.get("timeout") or payload.get("timeout", 600))
+		left = self._budget_left()
+		if left is None or left <= 0:
+			return declared
+		return max(1, min(declared, int(left)))
+
 	# ── Ejecución de una etapa ATOMICA ────────────────────────────────────────
 	def _run_atomic(self, payload: Dict[str, Any], stage: Dict[str, Any], stage_path: str) -> str:
 		"""Ejecuta UN minion (factory + execute directo — decisión 2026-08-07) y
-		devuelve su resumen. El DAG serializa `.cell/reports/<ruta>.json` (opción 3
-		del RFC: los minions devuelven dict en memoria; la serialización la hace
-		el DAG, uniforme para todos)."""
+		devuelve su resumen.
+
+		Serialización (opción 3 del RFC): los minions de LÓGICA devuelven su dict
+		en memoria y el DAG lo escribe en `.cell/reports/<ruta>.json` — ahí ese
+		fichero ES el reporte. Las etapas AGÉNTICAS son distintas: el agente
+		escribe él mismo su reporte conforme al schema de su rol en esa ruta (el
+		contrato zero-trust de forge: validate-report.mjs / gate-check.mjs leen
+		ese fichero), así que el envelope del minion va a `<ruta>.envelope.json`
+		y NO pisa la evidencia del rol.
+		"""
 		from red_pill.swarm.factory import MinionFactory
 
 		self._preflight_stage_gpu(stage, stage_path, payload)
@@ -371,7 +439,7 @@ class DagJobDriver(ResumableJobDriver):
 			raise RuntimeError(f"dag stage '{stage_path}' minion no registrado.")
 
 		task = stage.get("prompt") or stage.get("command") or ""
-		kwargs: Dict[str, Any] = {"cwd": str(workdir), "timeout": int(stage.get("timeout") or payload.get("timeout", 600))}
+		kwargs: Dict[str, Any] = {"cwd": str(workdir), "timeout": self._stage_timeout(stage, payload)}
 		for key in ("backend", "model", "effort"):
 			if stage.get(key) or payload.get(key):
 				kwargs[key] = stage.get(key) or payload.get(key)
@@ -383,7 +451,8 @@ class DagJobDriver(ResumableJobDriver):
 		result = asyncio.run(minion.execute(task, **kwargs))
 
 		reports_dir = workdir / ".cell" / "reports"
-		report_path = reports_dir / f"{stage_path}.json"
+		suffix = ".envelope.json" if stage.get("type") == _TYPE_AGENT else ".json"
+		report_path = reports_dir / f"{stage_path}{suffix}"
 		report_path.parent.mkdir(parents=True, exist_ok=True)
 		report_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -395,11 +464,26 @@ class DagJobDriver(ResumableJobDriver):
 
 	# ── step: ejecutar el siguiente frente del árbol ──────────────────────────
 	def step(self, payload: Dict[str, Any], checkpoint_data: Dict[str, Any]) -> StepOutcome:
+		self._step_started = time.monotonic()
 		stages = self._stages(payload)
 		completed = list(checkpoint_data.get("completed_stage_ids", []))
 		results = dict(checkpoint_data.get("results", {}))
 		flags = dict(checkpoint_data.get("stage_flags", {}))
 		total_leaves = _count_leaves(stages)
+
+		# Re-derivar compuestos completados desde sus hojas: un checkpoint de
+		# handoff (job_checkpoint) puede listar solo hojas; sin esto, un
+		# depends_on sobre el compuesto nunca se satisface y el runner llamaría
+		# a step() para siempre con el mismo checkpoint (bucle estéril).
+		for node_path in _flatten_ids(stages):
+			if node_path in completed:
+				continue
+			node = _find_node(stages, node_path.rsplit("/", 1)[-1])
+			if not node or node.get("type") != _TYPE_COMPOUND:
+				continue
+			node_leaves = list(_iter_leaves(node.get("sub_etapas", []), node_path))
+			if node_leaves and all(lp in completed for lp, _ in node_leaves):
+				completed.append(node_path)
 
 		# Frente: hojas (etapas atómicas) no completadas con deps satisfechas.
 		front: List[Tuple[str, Dict[str, Any], str]] = []  # (path, stage, prefix)
@@ -410,29 +494,52 @@ class DagJobDriver(ResumableJobDriver):
 			prefix = leaf_path.rsplit("/", 1)[0] if "/" in leaf_path else ""
 			if not self._ancestor_deps_met(stages, prefix, completed):
 				continue
-			deps_ok = all(
-				((f"{prefix}/{d}" if prefix else d) in completed)
-				for d in leaf.get("depends_on", [])
-			)
+			deps_ok = all(((f"{prefix}/{d}" if prefix else d) in completed) for d in leaf.get("depends_on", []))
 			if deps_ok:
 				front.append((leaf_path, leaf, prefix))
 
 		if not front:
-			done = len(completed) >= total_leaves
+			leaves_done = sum(1 for lp, _ in _iter_leaves(stages) if lp in completed)
+			done = leaves_done >= total_leaves
+			if not done:
+				# Sin frente y sin terminar = deps insatisfacibles o checkpoint
+				# corrupto. Devolver completed=False con el mismo checkpoint
+				# metería al runner en un bucle caliente infinito — mejor fallar
+				# con diagnóstico (el disyuntor del runner corta los reintentos).
+				raise RuntimeError(
+					f"dag sin frente ejecutable: {leaves_done}/{total_leaves} hojas completas "
+					f"y ninguna dependencia satisfecha (deps imposibles o checkpoint corrupto)"
+				)
 			return StepOutcome(
-				completed=done,
+				completed=True,
 				new_checkpoint=checkpoint_data,
-				summary="dag complete" if done else "waiting on deps (should not happen)",
-				progress={"current": len(completed), "total": total_leaves, "percent": round(100 * len(completed) / total_leaves) if total_leaves else 0},
-				concurrency={"parallel_groups": 0, "parallel_stages": 0, "max_parallel_level": int(payload.get("max_parallel_level", _MAX_PARALLEL_LEVEL_DEFAULT)), "actually_parallel": False},
+				summary="dag complete",
+				progress={
+					"current": leaves_done,
+					"total": total_leaves,
+					"percent": round(100 * leaves_done / total_leaves) if total_leaves else 0,
+				},
+				concurrency={
+					"parallel_groups": 0,
+					"parallel_stages": 0,
+					"max_parallel_level": int(payload.get("max_parallel_level", _MAX_PARALLEL_LEVEL_DEFAULT)),
+					"actually_parallel": False,
+				},
 			)
 
 		def _exec_one(path: str, stage: Dict[str, Any]) -> Tuple[str, str, bool]:
 			"""Devuelve (path, summary, failed). El fallo se controla por on_fail."""
 			try:
 				return path, self._run_atomic(payload, stage, path), False
+			except JobDeferred:
+				# Espera de entorno (GPU ocupada, VRAM insuficiente), NO fallo de
+				# etapa: debe llegar al runner para re-encolar sin quemar attempts.
+				# Capturarla aquí convertía el deferral en etapa 'done' con
+				# on_fail=warn (fases GPU del sueño saltadas en silencio) o en
+				# fallo real con on_fail=stop (disyuntor, violando R1).
+				raise
 			except Exception as e:
-				if stage.get("on_fail", "warn") == "stop":
+				if _resolve_on_fail(stages, path) == "stop":
 					return path, str(e), True
 				logger.warning(f"[DagJob] {self.short_id} etapa {path} fallida (warn): {e}")
 				return path, f"{path}: FAILED ({str(e)[:80]})", False
@@ -455,7 +562,14 @@ class DagJobDriver(ResumableJobDriver):
 				futures = {pool.submit(_exec_one, p, s): p for p, s in group}
 				return [f.result() for f in concurrent.futures.as_completed(futures)]
 
+		# Cota del step en las fronteras: al agotarse NO se abate el step (eso
+		# tiraría las etapas ya hechas y las re-ejecutaría con sus efectos), se
+		# CEDE con lo completado. El runner persiste el checkpoint (R4) y vuelve
+		# a entrar con presupuesto nuevo, pasando además por pausa/kill/prioridad.
+		stopped_on_budget = False
 		for prefix, group in groups.items():
+			if stopped_on_budget:
+				break
 			level = len(prefix.split("/")) if prefix else 0
 			parent_parallel = False
 			if prefix:
@@ -469,7 +583,18 @@ class DagJobDriver(ResumableJobDriver):
 				all_tasks.extend(_run_group(group))
 			else:
 				for path, stage in group:
+					if all_tasks and self._budget_spent():
+						stopped_on_budget = True
+						break
 					all_tasks.append(_exec_one(path, stage))
+			if all_tasks and self._budget_spent():
+				stopped_on_budget = True
+
+		if stopped_on_budget:
+			logger.info(
+				f"[DagJob] {self.short_id} cota del step agotada tras {len(all_tasks)} etapa(s): "
+				f"cede en frontera con el checkpoint persistido (el runner reentra con presupuesto nuevo)."
+			)
 
 		new_results = dict(results)
 		new_flags = dict(flags)
@@ -484,7 +609,7 @@ class DagJobDriver(ResumableJobDriver):
 		# Propagar completitud de los compuestos: un nodo compuesto se marca done
 		# cuando todas sus hojas descendientes lo están.
 		for node_path in _flatten_ids(stages):
-			if node_path in new_completed or node_path.endswith(("/",)):
+			if node_path in new_completed:
 				continue
 			node = _find_node(stages, node_path.rsplit("/", 1)[-1])
 			if not node or node.get("type") != _TYPE_COMPOUND:
@@ -500,13 +625,16 @@ class DagJobDriver(ResumableJobDriver):
 		# si no, un árbol con compuestos inflaría el porcentaje.
 		leaves_done = sum(1 for lp, _ in _iter_leaves(stages) if lp in new_completed)
 
-		self._write_status(payload, {
-			"mission_id": payload.get("mission_id"),
-			"completed": leaves_done,
-			"total": total_leaves,
-			"status": "running" if leaves_done < total_leaves else "completed",
-			"updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-		})
+		self._write_status(
+			payload,
+			{
+				"mission_id": payload.get("mission_id"),
+				"completed": leaves_done,
+				"total": total_leaves,
+				"status": "running" if leaves_done < total_leaves else "completed",
+				"updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+			},
+		)
 
 		done = leaves_done >= total_leaves
 		checkpoint = {"completed_stage_ids": new_completed, "results": new_results, "stage_flags": new_flags}
@@ -515,5 +643,10 @@ class DagJobDriver(ResumableJobDriver):
 			new_checkpoint=checkpoint,
 			summary=f"dag {leaves_done}/{total_leaves}",
 			progress={"current": leaves_done, "total": total_leaves, "percent": round(100 * leaves_done / total_leaves) if total_leaves else 0},
-			concurrency={"parallel_groups": parallel_groups, "parallel_stages": parallel_stages, "max_parallel_level": max_parallel_level, "actually_parallel": parallel_groups > 0},
+			concurrency={
+				"parallel_groups": parallel_groups,
+				"parallel_stages": parallel_stages,
+				"max_parallel_level": max_parallel_level,
+				"actually_parallel": parallel_groups > 0,
+			},
 		)

@@ -36,6 +36,7 @@ def silent_reports(monkeypatch):
 
 # ── Stubs para no tocar infraestructura real ──────────────────────────────────
 
+
 class _FakeMemoryManager:
 	client = None
 
@@ -69,13 +70,15 @@ def _fake_unit_table(phases=("consolidation", "erosion", "thread")):
 	"""Tabla reducida de unidades para test: 3 fases sin rituales reales."""
 	units = []
 	for i, name in enumerate(phases):
-		units.append({
-			"unit": f"{name}:{i + 1}",
-			"kind": "phase",
-			"phase_index": i,
-			"phase_name": name,
-			"requires_gpu": name == "consolidation",
-		})
+		units.append(
+			{
+				"unit": f"{name}:{i + 1}",
+				"kind": "phase",
+				"phase_index": i,
+				"phase_name": name,
+				"requires_gpu": name == "consolidation",
+			}
+		)
 	return units
 
 
@@ -105,6 +108,7 @@ def _make_driver():
 
 
 # ── Tests RFC §6 ──────────────────────────────────────────────────────────────
+
 
 def test_sleep_job_validate_mode():
 	d = _make_driver()
@@ -215,7 +219,7 @@ def test_sleep_job_status_live(monkeypatch, tmp_path):
 	assert status["status"] == "running"
 
 
-def test_nightly_yield_self_exempt(queue, monkeypatch, tmp_path):
+def test_nightly_yield_self_exempt(queue, clean_registry, monkeypatch, tmp_path):
 	"""§2.3: sleep_job NO se difiere por su propio fichero 'running'; un job ajeno sí."""
 	import red_pill.core.paths as paths
 	from red_pill.jobs.drivers import ResumableJobDriver

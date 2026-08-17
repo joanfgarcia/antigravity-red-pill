@@ -38,6 +38,11 @@ def _read_total_processed() -> int:
 		path = get_state_dir() / name
 		try:
 			data = json.loads(path.read_text(encoding="utf-8"))
+			# Un total con status=cycle_completed es el remanente de la noche
+			# ANTERIOR (finalize lo deja escrito); partir de él inflaría el
+			# acumulado indefinidamente noche tras noche.
+			if str(data.get("status", "")) == "cycle_completed":
+				return 0
 			return int(data.get("total_processed", 0))
 		except Exception:
 			continue

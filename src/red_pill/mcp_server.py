@@ -1750,17 +1750,23 @@ def _queue() -> Any:
 	return CognitiveQueueManager()
 
 
+_ALL_JOB_STATUSES = ["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED", "COMPLETED"]
+
+
 def _resolve_job(qm, ref: str) -> Optional[Dict[str, Any]]:
-	"""Resuelve por id completo o prefijo corto (como el CLI)."""
+	"""Resuelve por id completo o prefijo corto (como el CLI: busca en TODOS los
+	estados, incluido COMPLETED, y rehúsa prefijos ambiguos en vez de quedarse
+	con el primer match — job_kill sobre el job equivocado no es aceptable)."""
 	task = qm.get_task(ref)
 	if isinstance(task, dict):
 		return task
-	for t in qm.list_tasks():
-		if t["id"].startswith(ref):
-			found = qm.get_task(t["id"])
-			if isinstance(found, dict):
-				return found
-	return None
+	matches = sorted({t["id"] for t in qm.list_tasks(statuses=_ALL_JOB_STATUSES, limit=500) if t["id"].startswith(ref)})
+	if len(matches) > 1:
+		raise ValueError(f"prefijo '{ref}' ambiguo: {', '.join(m[:8] for m in matches)}")
+	if not matches:
+		return None
+	found = qm.get_task(matches[0])
+	return found if isinstance(found, dict) else None
 
 
 @registry.register_action(
@@ -1778,8 +1784,15 @@ def _resolve_job(qm, ref: str) -> Optional[Dict[str, Any]]:
 	schema={
 		"type": "object",
 		"properties": {
-			"source": {"type": "string", "enum": ["agentic_job", "dag_job", "forge_job", "sleep_job"], "description": "Driver que ejecutará el job (forge_job/sleep_job legacy: solo jobs previos en cola)."},
-			"payload": {"type": "object", "description": "Payload del driver. agentic_job: {prompt, backend?, model?, effort?, cwd?, timeout?}. dag_job: {mission_id, manifest:{workdir, stages:[{id, type: agent|command|compound, minion, model?, prompt?, on_fail?, depends_on?, sub_etapas?}]}, max_parallel_level?, max_concurrency?, backend?, model?, effort?, timeout?}."},
+			"source": {
+				"type": "string",
+				"enum": ["agentic_job", "dag_job"],
+				"description": "Driver que ejecutará el job (forge_job/sleep_job fueron desregistrados — RFC_JOB_DAG paso 4 — y ya no admiten submits).",
+			},
+			"payload": {
+				"type": "object",
+				"description": "Payload del driver. agentic_job: {prompt, backend?, model?, effort?, cwd?, timeout?}. dag_job: {mission_id, manifest:{workdir, stages:[{id, type: agent|command|compound, minion, model?, prompt?, on_fail?, depends_on?, sub_etapas?}]}, max_parallel_level?, max_concurrency?, backend?, model?, effort?, timeout?}.",
+			},
 			"priority": {"type": "integer", "description": "Mayor = más urgente (default 5)."},
 			"mission_id": {"type": "string", "description": "Grupo de aislamiento entre forges (se lee de payload si se omite)."},
 			"title": {"type": "string", "description": "Título legible del job."},
@@ -1805,24 +1818,35 @@ async def handle_job_submit(arguments: Dict[str, Any]):
 		# Fail-safe: los jobs agénticos requieren un MODELO real, no el placeholder
 		# 'flash' (default del harness). Un job encolado sin config de modelos es
 		# una instalación sin activar: se bloquea en vez de correr a ciegas.
-		if source in ("agentic_job", "forge_job"):
+		# Una cascade con modelo por target también cuenta como config activa
+		# (contrato de AgenticJobDriver: cascade: [{backend, model, effort}]).
+		if source == "agentic_job":
 			model = payload.get("model")
-			if not model or model == "flash":
-				return [types.TextContent(
-					type="text",
-					text=(
-						f"[ERROR] job_submit sin modelo configurado (source={source}). "
-						"'flash' es el placeholder del default del harness, no una config activa. "
-						"Indica 'model' con un modelo real (p.ej. opencode-go/deepseek-v4-pro) o configura "
-						"los recipes por rol en .red-pill/jobs/ (ver Aleth_Core/NOTE_MODEL_POLICY_ROLES.md). "
-						"Bloqueado por seguridad."
-					),
-				)]
+			cascade = payload.get("cascade")
+			has_cascade_models = isinstance(cascade, list) and any(isinstance(t, dict) and t.get("model") for t in cascade)
+			if (not model or model == "flash") and not has_cascade_models:
+				return [
+					types.TextContent(
+						type="text",
+						text=(
+							f"[ERROR] job_submit sin modelo configurado (source={source}). "
+							"'flash' es el placeholder del default del harness, no una config activa. "
+							"Indica 'model' con un modelo real (p.ej. opencode-go/deepseek-v4-pro) o configura "
+							"los recipes por rol en .red-pill/jobs/ (ver Aleth_Core/NOTE_MODEL_POLICY_ROLES.md). "
+							"Bloqueado por seguridad."
+						),
+					)
+				]
 
 		qm = _queue()
 		job_id = qm.enqueue_task(source=source, payload=payload, priority=int(arguments.get("priority", 5)), mission_id=mission_id)
 		note = f"mission={mission_id}" if mission_id else "sin mission_id"
-		return [types.TextContent(type="text", text=f"[OK] Job encolado: {job_id} (source={source}, {note}, priority={arguments.get('priority', 5)}). Resultado a MinionInbox.")]
+		return [
+			types.TextContent(
+				type="text",
+				text=f"[OK] Job encolado: {job_id} (source={source}, {note}, priority={arguments.get('priority', 5)}). Resultado a MinionInbox.",
+			)
+		]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"[ERROR] job_submit falló: {e}")]
 
@@ -1841,13 +1865,17 @@ async def handle_job_submit(arguments: Dict[str, Any]):
 )
 async def handle_job_list(arguments: Dict[str, Any]):
 	try:
-		statuses = None if arguments.get("all") else ["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED"]
+		# list_tasks(None) también excluye COMPLETED — para `all` hay que pasar
+		# la lista completa explícita o el flag es un no-op.
+		statuses = _ALL_JOB_STATUSES if arguments.get("all") else ["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED"]
 		tasks = _queue().list_tasks(statuses=statuses, mission_id=arguments.get("mission_id"))
 		if not tasks:
 			return [types.TextContent(type="text", text="Cola vacía (o sin jobs de esa misión).")]
 		lines = [f"{'ID':<10} {'SOURCE':<15} {'STATUS':<12} {'PRIO':<4} {'MISSION':<10} TITLE"]
 		for t in tasks:
-			lines.append(f"{t['id'][:8]:<10} {t['source'][:14]:<15} {t['status']:<12} {t['priority']:<4} {(t.get('mission_id') or '-')[:9]:<10} {t.get('title') or '-'}")
+			lines.append(
+				f"{t['id'][:8]:<10} {t['source'][:14]:<15} {t['status']:<12} {t['priority']:<4} {(t.get('mission_id') or '-')[:9]:<10} {t.get('title') or '-'}"
+			)
 		return [types.TextContent(type="text", text="\n".join(lines))]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"[ERROR] job_list falló: {e}")]
@@ -1932,7 +1960,14 @@ async def handle_job_resume(arguments: Dict[str, Any]):
 		task = _resolve_job(qm, arguments["job_id"])
 		if not task:
 			return [types.TextContent(type="text", text=f"[ERROR] Job '{arguments['job_id']}' no encontrado.")]
+		was_pausing = task["status"] == "PAUSING"
 		if qm.resume_task(task["id"]):
+			if was_pausing:
+				return [
+					types.TextContent(
+						type="text", text=f"[OK] Job {task['id'][:8]}: pausa cancelada en caliente (PROCESSING, el step en vuelo continúa)."
+					)
+				]
 			return [types.TextContent(type="text", text=f"[OK] Job {task['id'][:8]} reanudado (PENDING). El runner lo retoma en el siguiente ciclo.")]
 		return [types.TextContent(type="text", text=f"[WARN] Job {task['id'][:8]} en '{task['status']}': reanudación no aplicable.")]
 	except Exception as e:
@@ -1961,14 +1996,22 @@ async def handle_job_kill(arguments: Dict[str, Any]):
 		if not task:
 			return [types.TextContent(type="text", text=f"[ERROR] Job '{arguments['job_id']}' no encontrado.")]
 		job_id = task["id"]
-		qm.kill_task(job_id, discard=bool(arguments.get("discard")))
+		if not qm.kill_task(job_id, discard=bool(arguments.get("discard"))):
+			return [
+				types.TextContent(
+					type="text",
+					text=f"[WARN] Job {job_id[:8]} en '{task['status']}': no se puede abatir (solo PENDING/PROCESSING/PAUSING/PAUSED).",
+				)
+			]
 		# Abatir el scope systemd si existe (in-proceso = no-op, la unidad completa).
 		unit = f"redpill-job-{job_id[:8]}.scope"
 		try:
 			_sp.run(["systemctl", "--user", "stop", unit], capture_output=True, timeout=10)
 		except Exception:
 			pass
-		return [types.TextContent(type="text", text=f"[OK] Job {job_id[:8]} interrumpido (PAUSED*{', FRUSTRATED' if arguments.get('discard') else ''}).")]
+		return [
+			types.TextContent(type="text", text=f"[OK] Job {job_id[:8]} interrumpido ({'FRUSTRATED' if arguments.get('discard') else 'PAUSED*'}).")
+		]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"[ERROR] job_kill falló: {e}")]
 
@@ -2001,7 +2044,11 @@ async def handle_job_checkpoint(arguments: Dict[str, Any]):
 		ok = qm.update_checkpoint(task["id"], arguments["checkpoint"], arguments.get("progress"))
 		if ok:
 			return [types.TextContent(type="text", text=f"[OK] Checkpoint de {task['id'][:8]} actualizado. Soltar el control con job_resume.")]
-		return [types.TextContent(type="text", text=f"[WARN] Job {task['id'][:8]} en '{task['status']}': checkpoint no aplicable (debe estar PAUSED/PENDING).")]
+		return [
+			types.TextContent(
+				type="text", text=f"[WARN] Job {task['id'][:8]} en '{task['status']}': checkpoint no aplicable (debe estar PAUSED/PENDING)."
+			)
+		]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"[ERROR] job_checkpoint falló: {e}")]
 
@@ -2032,17 +2079,24 @@ async def handle_job_transfer(arguments: Dict[str, Any]):
 			return [types.TextContent(type="text", text=f"[ERROR] Job '{arguments['job_id']}' no encontrado.")]
 		paused = qm.pause_task(task["id"])
 		after = qm.get_task(task["id"])
-		return [types.TextContent(
-			type="text",
-			text=_json.dumps({
-				"job_id": task["id"][:8],
-				"paused": paused,
-				"status": after["status"] if after else task["status"],
-				"checkpoint": after.get("checkpoint_data") if after else task.get("checkpoint_data"),
-				"progress": after.get("progress") if after else task.get("progress"),
-				"note": "main-loop al control: ejecuta los pasos inline y escribe job_checkpoint; luego job_resume para soltar.",
-			}, ensure_ascii=False, indent=2, default=str),
-		)]
+		return [
+			types.TextContent(
+				type="text",
+				text=_json.dumps(
+					{
+						"job_id": task["id"][:8],
+						"paused": paused,
+						"status": after["status"] if after else task["status"],
+						"checkpoint": after.get("checkpoint_data") if after else task.get("checkpoint_data"),
+						"progress": after.get("progress") if after else task.get("progress"),
+						"note": "main-loop al control: ejecuta los pasos inline y escribe job_checkpoint; luego job_resume para soltar.",
+					},
+					ensure_ascii=False,
+					indent=2,
+					default=str,
+				),
+			)
+		]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"[ERROR] job_transfer falló: {e}")]
 

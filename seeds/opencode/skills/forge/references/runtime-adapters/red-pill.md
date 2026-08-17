@@ -84,7 +84,7 @@ checkpoint = { completed_stage_ids: [...], results: {...}, stage_flags: {...} }
 
 Legacy `forge_job` (phases→steps) still runs for existing jobs; new missions use `dag_job`. The full manifest RFC: `Aleth_Core/RFC_JOB_DAG_PARALLELIZATION.md` §4.1.
 
-- **Driver in control (background)**: the runner walks the tree alone; each atomic stage executes one minion and the DAG serializes its report to `.cell/reports/<stage-path>.json`; telemetry mirrors to `.cell/dag_status.json` (never the resume source — the DB checkpoint is authoritative, RFC SleepJobDriver A2).
+- **Driver in control (background)**: the runner walks the tree alone; each atomic stage executes one minion and the DAG serializes its envelope to `.cell/reports/<stage-path>.envelope.json` (agent stages) or `<stage-path>.json` (logic/command stages) — the agent's own role report at `<stage-path>.json` is never overwritten; telemetry mirrors to `.cell/dag_status.json` (never the resume source — the DB checkpoint is authoritative, RFC SleepJobDriver A2).
 - **`on_fail` per stage** (and per sub-stage): `warn` (default) = mark FAILED and continue WITHOUT burning the circuit breaker (continue-on-error); `stop` = real job failure (attempts++, circuit breaker if it insists).
 - **Main loop takes control (on demand)**:
   1. `job_transfer <id>` → pause + return the checkpoint (`completed_stage_ids`).

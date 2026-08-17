@@ -149,8 +149,7 @@ class ForgeJobDriver(ResumableJobDriver):
 		report_path = reports_dir / f"{role}-{phase_id}.json"
 
 		report_instruction = (
-			f"\n\nWrite your report to {report_path} as JSON conforming to your schema "
-			f"(role contract). Finish with a one-line summary."
+			f"\n\nWrite your report to {report_path} as JSON conforming to your schema (role contract). Finish with a one-line summary."
 		)
 		bridge = create_bridge(payload.get("backend"))
 		kwargs: Dict[str, Any] = {"timeout": int(payload.get("timeout", 600))}
@@ -203,15 +202,18 @@ class ForgeJobDriver(ResumableJobDriver):
 
 		# Telemetría pública (espejo, no autoritativa — auditoría A2 del RFC sleep).
 		phase_id_current = step.get("phase_id")
-		self._write_status(payload, {
-			"mission_id": payload.get("mission_id"),
-			"step_index": new_index,
-			"total_steps": total,
-			"current_role": role,
-			"phase_id": phase_id_current,
-			"status": "running" if new_index < total else "completed",
-			"updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-		})
+		self._write_status(
+			payload,
+			{
+				"mission_id": payload.get("mission_id"),
+				"step_index": new_index,
+				"total_steps": total,
+				"current_role": role,
+				"phase_id": phase_id_current,
+				"status": "running" if new_index < total else "completed",
+				"updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+			},
+		)
 
 		stage = self._stage_context(steps, index)
 		outcome = StepOutcome(

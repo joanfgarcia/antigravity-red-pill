@@ -143,6 +143,12 @@ _KNOWN_GGUF = {
 	"hermes_8b": "Hermes-3-Llama-3.1-8B.Q4_K_M.gguf",
 	"granite_8b": "Granite-4.1-8B-Q4_K_M.gguf",
 	"samantha": "samantha-mistral-instruct-7b.i1-Q4_K_M.gguf",
+	"phi_mini": "microsoft_Phi-4-mini-instruct-Q4_K_M.gguf",
+	"llama_32": "Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+	"gemma_3_4b": "google_gemma-3-4b-it-Q4_K_M.gguf",
+	"mistral_nemo_12b": "Mistral-Nemo-Instruct-2407-Q3_K_M.gguf",
+	"granite_3b": "granite-4.1-3b-Q4_K_M.gguf",
+	"smollm3_3b": "SmolLM3-3B-Q4_K_M.gguf",
 }
 
 

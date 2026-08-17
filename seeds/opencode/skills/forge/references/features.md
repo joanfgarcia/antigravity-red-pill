@@ -20,7 +20,6 @@ The protocol is a set of features. The Orchestrator resolves each one at assembl
 | O3 | Dynamic L0-L3 escalation + anti-abandonment ladder | optional | `on` | escalation.md scoring + triggers. `off` → locked at the initial level (never below floor) |
 | O4 | Git-worktree isolation for parallel implementors | optional | `auto` | `auto` = `on` when ≥2 implementors mutate files in parallel; `on` = always isolate; `off` = sequential implementors only (no parallel mutation) |
 | O5 | Mission Mode | optional | only 15+ phases | Autonomy contract + canonical mode + checkpoints + debt sweep (mission-mode.md). `off` → team asks instead of deciding (L0-L3 protocol only) |
-| O5 | Mission Mode (autonomy contract, pillars 1-7) | optional | only 15+ phases |
 | O7 | Documentation Anchor for plan extraction | optional | `auto` | `auto` = `on` when the plan has ≥1 extracted point set; `on` = always extract P-nn via forge-doc-anchor; `off` = orchestrator extracts inline |
 | F1 | ASK boundary | optional | `off` | Non-mission: when the ladder is exhausted, ask the Operator instead of deciding. `on` = ask after 2 escalations; `off` = best-effort decision documented in `decisions[]` |
 | F2 | usageAudit | optional | `off` | Per-role skill/tool usage accounting in the ledger (`usage_audit[]` entries). `on` = track; `off` = aggregate only |

@@ -20,11 +20,11 @@ import shutil
 import tempfile
 import warnings
 from functools import lru_cache
-from typing import Any, Dict, List, Literal, Optional
+from typing import Annotated, Any, Dict, List, Literal, Optional
 
 import yaml
 from pydantic import BaseModel, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from red_pill.core.paths import get_config_dir, get_db_dir, get_models_dir, get_state_dir, migrate_legacy_xdg_config
 
@@ -533,30 +533,41 @@ class RedPillConfig(BaseSettings):
 	# Casual Override: keywords that signal the operator wants free-form conversation.
 	# When detected in the prompt, Plugins 05+06 relax their directives regardless of color.
 	# Comma-separated in .env: CASUAL_OVERRIDE_KEYWORDS="charlemos,relax,chill"
-	CASUAL_OVERRIDE_KEYWORDS: List[str] = []
-
-	@model_validator(mode="after")
-	def _build_casual_keywords(self) -> "RedPillConfig":
-		_default = "charlemos,charlar,charla,relax,relajado,hablemos,conversemos,off-topic,chill,quemar tokens,de guardia,no hay prisa"
-		_env_raw = os.getenv("CASUAL_OVERRIDE_KEYWORDS", _default)
-		self.CASUAL_OVERRIDE_KEYWORDS = [t.strip().lower() for t in _env_raw.split(",") if t.strip()]
-		return self
+	# NoDecode: pydantic-settings would otherwise demand JSON for List fields and
+	# crash on the documented comma-separated format.
+	CASUAL_OVERRIDE_KEYWORDS: Annotated[List[str], NoDecode] = []
 
 	# Work Mode: keywords that lock the engine-brake latch into work mode.
 	# Operator-customizable vocabulary (language, trade, personal jargon) — the
 	# code ships no hardcoded list. Comma-separated in .env:
 	# WORK_MODE_KEYWORDS="arregla,fix,deploy,maqueta,renderiza"
-	WORK_MODE_KEYWORDS: List[str] = []
+	WORK_MODE_KEYWORDS: Annotated[List[str], NoDecode] = []
+
+	@field_validator("CASUAL_OVERRIDE_KEYWORDS", "WORK_MODE_KEYWORDS", mode="before")
+	@classmethod
+	def _split_keyword_csv(cls, v: Any) -> Any:
+		if isinstance(v, str):
+			return [t.strip().lower() for t in v.split(",") if t.strip()]
+		return v
 
 	@model_validator(mode="after")
-	def _build_work_keywords(self) -> "RedPillConfig":
-		_default = (
-			"arregla,fix,implementa,implement,modo trabajo,work mode,trabaja,ejecuta,execute,"
-			"despliega,deploy,haz un,crea un,create a,build the,commit,push,refactor,refactoriza,"
-			"debug,depura,compila,compile,testea"
-		)
-		_env_raw = os.getenv("WORK_MODE_KEYWORDS", _default)
-		self.WORK_MODE_KEYWORDS = [t.strip().lower() for t in _env_raw.split(",") if t.strip()]
+	def _fill_keyword_defaults(self) -> "RedPillConfig":
+		if not self.CASUAL_OVERRIDE_KEYWORDS:
+			self.CASUAL_OVERRIDE_KEYWORDS = [
+				t.strip()
+				for t in ("charlemos,charlar,charla,relax,relajado,hablemos,conversemos,off-topic,chill,quemar tokens,de guardia,no hay prisa").split(
+					","
+				)
+			]
+		if not self.WORK_MODE_KEYWORDS:
+			self.WORK_MODE_KEYWORDS = [
+				t.strip()
+				for t in (
+					"arregla,fix,implementa,implement,modo trabajo,work mode,trabaja,ejecuta,execute,"
+					"despliega,deploy,haz un,crea un,create a,build the,commit,push,refactor,refactoriza,"
+					"debug,depura,compila,compile,testea"
+				).split(",")
+			]
 		return self
 
 	# -----------------------------------------------------------------------

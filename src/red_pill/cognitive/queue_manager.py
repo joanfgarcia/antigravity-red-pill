@@ -82,7 +82,9 @@ class CognitiveQueueManager:
 				ON cognitive_tasks(status, priority DESC, created_at ASC)
 			""")
 
-	def enqueue_task(self, source: str, payload: Dict[str, Any], priority: int = 5, parent_task_id: Optional[str] = None, mission_id: Optional[str] = None) -> str:
+	def enqueue_task(
+		self, source: str, payload: Dict[str, Any], priority: int = 5, parent_task_id: Optional[str] = None, mission_id: Optional[str] = None
+	) -> str:
 		"""Inyecta un estímulo/tarea en la cola cognitiva. Si tiene un parent_task_id, entra como BLOCKED.
 
 		`mission_id`: grupo de aislamiento entre forges (misiones independientes).
@@ -384,15 +386,13 @@ class CognitiveQueueManager:
 		if statuses is None:
 			statuses = ["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED"]
 		placeholders = ",".join(["?"] * len(statuses))
-		query = (
-			f"""
+		query = f"""
 			SELECT id, source, priority, status, attempts, progress, updated_at, mission_id,
 				json_extract(payload, '$.title') AS title,
 				json_extract(checkpoint_data, '$.dirty_kill.reason') AS dirty_kill
 			FROM cognitive_tasks
 			WHERE status IN ({placeholders})
 			"""
-		)
 		params: List = list(statuses)
 		if mission_id is not None:
 			query += " AND mission_id = ?"
@@ -527,14 +527,18 @@ class CognitiveQueueManager:
 				return False
 			if row["status"] in ("PROCESSING", "PAUSING"):
 				return False
-			conn.execute(
-				"""
-				UPDATE cognitive_tasks
-				SET checkpoint_data = ?, progress = ?, updated_at = CURRENT_TIMESTAMP
-				WHERE id = ?
-				""",
-				(json.dumps(checkpoint), json.dumps(progress) if progress is not None else None, task_id),
-			)
+			if progress is not None:
+				conn.execute(
+					"UPDATE cognitive_tasks SET checkpoint_data = ?, progress = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+					(json.dumps(checkpoint), json.dumps(progress), task_id),
+				)
+			else:
+				# Handoff sin progress: preservar el existente (borrarlo a NULL
+				# destruye step_seconds_ema y descalibra la cota del runner).
+				conn.execute(
+					"UPDATE cognitive_tasks SET checkpoint_data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+					(json.dumps(checkpoint), task_id),
+				)
 			return True
 
 	def mark_dirty_kill(self, task_id: str, marker: Dict[str, Any]) -> None:
@@ -567,6 +571,12 @@ class CognitiveQueueManager:
 		intento del disyuntor. Con `discard`, el job no vuelve: queda FRUSTRATED
 		con su motivo, visible en `job list` hasta que la higiene nocturna lo retire
 		(la trazabilidad vale más que borrar la fila en caliente).
+
+		PAUSING se incluye en el filtro: es un estado transitorio entre PROCESSING
+		y PAUSED (R3: operador pausa a mitad de step, runner termina el step
+		actual antes de soltar). Si el operador mata en ese intervalo, la pausa
+		prevalece y debe poder convertirse en PAUSED/FRUSTRATED sin esperar al
+		checkpoint del runner.
 		"""
 		self.mark_dirty_kill(task_id, {"reason": "operator"})
 		status, error_log = ("FRUSTRATED", "cancelled by operator") if discard else ("PAUSED", None)
@@ -575,7 +585,7 @@ class CognitiveQueueManager:
 				"""
 				UPDATE cognitive_tasks
 				SET status = ?, error_log = COALESCE(?, error_log), updated_at = CURRENT_TIMESTAMP
-				WHERE id = ? AND status IN ('PENDING', 'PROCESSING', 'PAUSED')
+				WHERE id = ? AND status IN ('PENDING', 'PROCESSING', 'PAUSED', 'PAUSING')
 				""",
 				(status, error_log, task_id),
 			)

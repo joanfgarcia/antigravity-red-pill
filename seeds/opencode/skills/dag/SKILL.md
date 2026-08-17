@@ -121,6 +121,9 @@ via `MinionFactory` and checks it matches `type`. A `type: agent` with
 - ids are **flattened by path**: `panel-adversarial/lens-correctness`.
 - Each atomic stage persists ITS OWN report at `.cell/reports/<path>.json` (the
   DAG serializes the minion's dict — minions are untouched, RFC option 3).
+- **Agent stages are the exception**: the agent writes its own role-schema report
+  at `<path>.json`, so the DAG puts its envelope at `<path>.envelope.json` and
+  never clobbers the evidence the zero-trust gate validates.
 - A compound stage only marks `stage_flags[sub] = done` and is itself marked done
   when ALL its descendant leaves are done. **No thread-order to normalize** —
   determinism comes from path identity, not completion order.

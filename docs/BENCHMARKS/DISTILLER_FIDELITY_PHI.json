@@ -1,0 +1,62 @@
+{
+  "phi_mini": {
+    "base": [
+      {
+        "user_side": true,
+        "asst_side": false,
+        "both_sides": false,
+        "summary": "La identidad se forma por actos, no solo por recuerdos.",
+        "probe": "philosophical",
+        "prompt": "base",
+        "latency_s": 1.24
+      },
+      {
+        "user_side": true,
+        "asst_side": true,
+        "both_sides": true,
+        "summary": "Sugiere cachear embeddings en disco para mejorar el rendimiento, pero advierte sobre la corrupción del caché si se modifica el modelo, recomendando invalidar el caché por hash del modelo.",
+        "probe": "caching",
+        "prompt": "base",
+        "latency_s": 1.54
+      },
+      {
+        "user_side": false,
+        "asst_side": true,
+        "both_sides": false,
+        "summary": "Continuar con SQLite debido al volumen de datos y evitar complicaciones adicionales.",
+        "probe": "db_decision",
+        "prompt": "base",
+        "latency_s": 1.03
+      }
+    ],
+    "tuned": [
+      {
+        "user_side": true,
+        "asst_side": true,
+        "both_sides": true,
+        "summary": "El usuario plantea que los actos definen la identidad, mientras que el asistente argumenta que la continuidad del yo, que incluye memoria, es esencial para la identidad.",
+        "probe": "philosophical",
+        "prompt": "tuned",
+        "latency_s": 1.49
+      },
+      {
+        "user_side": true,
+        "asst_side": true,
+        "both_sides": true,
+        "summary": "El usuario sugiere cachear embeddings en disco para mejorar el rendimiento, mientras que el asistente advierte sobre la corrupción del caché en disco si se cambia el modelo, recomendando invalidarlo por hash del modelo.",
+        "probe": "caching",
+        "prompt": "tuned",
+        "latency_s": 1.88
+      },
+      {
+        "user_side": true,
+        "asst_side": true,
+        "both_sides": true,
+        "summary": "El usuario pregunta si migrar a Postgres o seguir con SQLite, y el asistente sugiere continuar con SQLite debido al volumen de datos y evitar complicaciones.",
+        "probe": "db_decision",
+        "prompt": "tuned",
+        "latency_s": 1.49
+      }
+    ]
+  }
+}

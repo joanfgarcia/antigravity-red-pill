@@ -145,7 +145,10 @@ class IDEWorker:
 			# Degraded capabilities with a configured cascade mean every bridge
 			# failed to construct (see cascade construction errors at boot). The
 			# IDE polling path is Antigravity-only — never resurrect it here.
-			logger.error("[IDEWorker] TELEGRAM_BRIDGE_CASCADE set but no bridge could be built; skipping legacy IDE polling.")
+			# Log once, not on every 2s pulse.
+			if not getattr(self, "_cascade_degraded_logged", False):
+				self._cascade_degraded_logged = True
+				logger.error("[IDEWorker] TELEGRAM_BRIDGE_CASCADE set but no bridge could be built; skipping legacy IDE polling.")
 			legacy_grpc = False
 		if legacy_grpc:
 			try:

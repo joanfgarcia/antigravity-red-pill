@@ -23,6 +23,7 @@ class _FakePhase:
 
 # ── SleepRitualMinion ─────────────────────────────────────────────────────────
 
+
 def test_ritual_ok(monkeypatch):
 	"""Ritual normal: ejecuta fn(MemoryManager()) y devuelve éxito."""
 	called = {}
@@ -65,6 +66,7 @@ def test_ritual_inexistente():
 
 def test_ritual_error(monkeypatch):
 	"""El ritual lanza → failed con el error."""
+
 	async def _boom(_mm):
 		raise RuntimeError("ritual roto")
 
@@ -78,6 +80,7 @@ def test_ritual_error(monkeypatch):
 
 
 # ── SleepPhaseMinion ──────────────────────────────────────────────────────────
+
 
 def test_phase_ok(monkeypatch):
 	"""Fase válida: construye ctx con total previo y devuelve el nuevo total."""
@@ -128,6 +131,7 @@ def test_phase_error(monkeypatch):
 
 # ── SleepFinalizeMinion ───────────────────────────────────────────────────────
 
+
 def test_finalize_ok(monkeypatch):
 	monkeypatch.setattr("red_pill.memory.MemoryManager", lambda: _FakeMM())
 	monkeypatch.setattr("red_pill.metabolism.phases.base.SleepContext", lambda **kw: _FakeMM())
@@ -155,6 +159,7 @@ def test_finalize_error(monkeypatch):
 
 
 # ── _read_total_processed ─────────────────────────────────────────────────────
+
 
 def test_read_total_processed_sin_fichero(monkeypatch, tmp_path):
 	monkeypatch.setattr("red_pill.core.paths.get_state_dir", lambda: tmp_path)
