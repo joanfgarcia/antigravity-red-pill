@@ -256,8 +256,10 @@ class ConsolidationPhase(SleepPhase):
 			try:
 				from qdrant_client import models as _qm
 
-				_must = [_qm.FieldCondition(key="timestamp", range=_qm.Range(lte=sleep_cutoff_ts))] if cutoff_enabled else []
-				_must_not = [_qm.HasIdCondition(has_id=list(failed_ids))] if failed_ids else []
+				# mypy: Qdrant Filter acepta la union de condiciones (invariante),
+				# asi que los acumuladores se tipan como list[Any].
+				_must: list[Any] = [_qm.FieldCondition(key="timestamp", range=_qm.Range(lte=sleep_cutoff_ts))] if cutoff_enabled else []
+				_must_not: list[Any] = [_qm.HasIdCondition(has_id=list(failed_ids))] if failed_ids else []
 				if _must and _must_not:
 					scroll_filter = Filter(must=_must, must_not=_must_not)
 				elif _must:
