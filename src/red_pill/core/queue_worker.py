@@ -250,6 +250,15 @@ def _process_driver_jobs_locked(cog_queue: CognitiveQueueManager, sources: list,
 					completed_jobs += 1
 					break
 
+				# Pausa a petición del propio driver a mitad de step (DAG paralelo
+				# con etapas ya completadas): el checkpoint YA incluye lo hecho —
+				# se sella PAUSED preservándolo, sin quemar intentos.
+				if outcome.pause_requested:
+					cog_queue.mark_paused(job_id)
+					_report_job(job_id, task, "warning", outcome.summary or "pausado a mitad de step")
+					logger.info(f"Job {job_id} paused mid-step at its own request; checkpoint preserved.")
+					break
+
 				# Respiradero entre steps: el job sigue, pero el resto del worker
 				# no puede esperar horas a que termine. Blindado — la ingesta de
 				# memorias jamás justifica perder un entrenamiento.

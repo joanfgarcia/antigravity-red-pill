@@ -150,6 +150,7 @@ Plugins 05–10. Each is independently toggleable.
 | `SLEEP_PLUGIN_CONSOLIDATION` | `True` | Hub Synthesis + memory consolidation. |
 | `SLEEP_PLUGIN_CHRONICLE` | `True` | Ariadne's Thread weaving across all 4 collections. Requires `ANTIGRAVITY_KEY`. |
 | `SLEEP_MIN_FREE_VRAM_MB` | `1500` | Minimum free VRAM (MB) required to start the sleep cycle. If the GPU has less free VRAM at 03:00 (e.g. occupied by a game or other model), the cycle aborts gracefully and emits a muted `vram_busy` pain signal. Set to `0` to disable the preflight check. CPU-only systems are unaffected. |
+| `SLEEP_CUTOFF_ENABLED` | `True` | Bounds the consolidation drain to engrams with `timestamp <=` the instant the cycle started (persisted in the job checkpoint). Engrams written while the cycle runs stay buffered for the next cycle, so the drain terminates deterministically. |
 
 ### 🔧 Operator Profile & Pre-Heating
 

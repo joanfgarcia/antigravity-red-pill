@@ -87,6 +87,7 @@ class SleepPhaseMinion(Minion):
 	specialization: str = "sleep_cycle_phase"
 
 	async def execute(self, task: str, **kwargs: Any) -> Dict[str, Any]:
+		from red_pill.jobs.drivers.base import JobPauseRequested
 		from red_pill.memory import MemoryManager
 		from red_pill.metabolism.phases import SLEEP_PHASES
 		from red_pill.metabolism.phases.base import SleepContext
@@ -103,6 +104,11 @@ class SleepPhaseMinion(Minion):
 				memory_manager=MemoryManager(),
 				mode=mode,
 				total_processed=_read_total_processed(),
+				sleep_cutoff_ts=float(kwargs.get("sleep_cutoff_ts") or 0),
+				# Sonda de pausa a mitad de fase inyectada por el dag_job (solo si
+				# la etapa es `pausable`): el drenaje la consulta por batch y lanza
+				# JobPauseRequested si el operador pausó el job a medias.
+				pause_probe=kwargs.get("pause_probe"),
 			)
 			run_sleep_phase(ctx, phase_index)
 			return {
@@ -113,6 +119,10 @@ class SleepPhaseMinion(Minion):
 				"summary": f"fase {phase.name} ok ({ctx.total_processed} engramas)",
 				"duration": round(time.time() - start, 3),
 			}
+		except JobPauseRequested:
+			# Pausa del operador a mitad de fase: propaga al runner (PAUSED con
+			# checkpoint intacto), jamás un fallo de etapa ni un warn-skip.
+			raise
 		except Exception as e:
 			return {"status": "failed", "error": str(e), "phase": phase.name, "phase_index": phase_index}
 

@@ -96,11 +96,17 @@ def run_sleep_phase(ctx: SleepContext, phase_index: int) -> None:
 	`SleepJobDriver` ejecute exactamente una fase por step sin duplicar lógica.
 	"""
 	total_phases = len(SLEEP_PHASES)
+	from red_pill.jobs.drivers.base import JobPauseRequested  # local: rompe el ciclo jobs↔metabolismo
+
 	phase = SLEEP_PHASES[phase_index]
 	try:
 		ctx.update_status(phase.name, status="running", phase_index=phase_index + 1, total_phases=total_phases)
 		phase.execute(ctx)
 		ctx.update_status(phase.name, status="completed", phase_index=phase_index + 1, total_phases=total_phases)
+	except JobPauseRequested:
+		# Pausa del operador a mitad de fase (sonda del drenaje): propaga al
+		# runner, que sella PAUSED con el checkpoint intacto — jamás un fallo.
+		raise
 	except Exception as e:
 		ctx.update_status(phase.name, status=f"failed: {e}", phase_index=phase_index + 1, total_phases=total_phases)
 		logger.error(f"[SLEEP ENGINE] Phase '{phase.name}' failed: {e}")

@@ -94,12 +94,13 @@ import json
 import logging
 import shutil
 import subprocess
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from red_pill.jobs.drivers.base import JobDeferred, ResumableJobDriver, StepOutcome
+from red_pill.jobs.drivers.base import JobDeferred, JobPauseRequested, ResumableJobDriver, StepOutcome
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +115,39 @@ _TYPE_COMMAND = "command"
 _TYPE_COMPOUND = "compound"
 _TYPE_DAG = "dag"  # cuarto tipo (RFC_JOB_DAG §4.5): composición por referencia
 _VALID_TYPES = (_TYPE_AGENT, _TYPE_COMMAND, _TYPE_COMPOUND, _TYPE_DAG)
+
+
+class _GroupPauseGate:
+	"""Puerta de pausa compartida por las etapas de UN grupo paralelo del DAG.
+
+	La sonda de pausa de cada etapa en vuelo registra aquí su solicitud
+	(`request_pause`) y consulta si TODAS las etapas aún corriendo son pausables
+	(`can_pause`). La regla del operador: la pausa a mitad de un grupo paralelo
+	solo se honra cuando todos los que siguen en vuelo son pausables; si alguno
+	no lo es, se difiere y se reevalúa en cada frontera de completación, de modo
+	que el trabajo ya completado (pausables o no) se preserva en el checkpoint.
+	"""
+	def __init__(self, group: List[Tuple[str, Dict[str, Any]]]):
+		self._lock = threading.Lock()
+		self._running = {path for path, _ in group}
+		self._pausable = {path: bool(stage.get("pausable", True)) for path, stage in group}
+		self._pause_requested = False
+
+	def finished(self, path: str) -> None:
+		with self._lock:
+			self._running.discard(path)
+
+	def request_pause(self) -> None:
+		with self._lock:
+			self._pause_requested = True
+
+	def can_pause(self) -> bool:
+		with self._lock:
+			return all(self._pausable[p] for p in self._running)
+
+	def pause_requested(self) -> bool:
+		with self._lock:
+			return self._pause_requested
 
 
 def _gpu_health_probe() -> Tuple[bool, int, int]:
@@ -484,7 +518,7 @@ class DagJobDriver(ResumableJobDriver):
 		return max(1, min(declared, int(left)))
 
 	# ── Ejecución de una etapa ATOMICA ────────────────────────────────────────
-	def _run_atomic(self, payload: Dict[str, Any], stage: Dict[str, Any], stage_path: str) -> str:
+	def _run_atomic(self, payload: Dict[str, Any], stage: Dict[str, Any], stage_path: str, gate: Any = None) -> str:
 		"""Ejecuta UN minion (factory + execute directo — decisión 2026-08-07) y
 		devuelve su resumen.
 
@@ -495,7 +529,13 @@ class DagJobDriver(ResumableJobDriver):
 		contrato zero-trust de forge: validate-report.mjs / gate-check.mjs leen
 		ese fichero), así que el envelope del minion va a `<ruta>.envelope.json`
 		y NO pisa la evidencia del rol.
+
+		`gate` es el `_GroupPauseGate` del grupo paralelo (None si secuencial).
+		La sonda de pausa a mitad de fase SOLO se inyecta si la etapa es
+		`pausable` (default true): una etapa no-pausable nunca se auto-pausa y su
+		trabajo jamás se descarta.
 		"""
+		from red_pill.jobs.drivers.base import build_pause_probe
 		from red_pill.swarm.factory import MinionFactory
 
 		self._preflight_stage_gpu(stage, stage_path, payload)
@@ -514,6 +554,15 @@ class DagJobDriver(ResumableJobDriver):
 			kwargs["command"] = stage["command"]
 		if isinstance(stage.get("params"), dict):
 			kwargs.update(stage["params"])
+		# Contexto del job para minions de lógica (sueño): la sonda de pausa a
+		# mitad de fase (solo si la etapa es `pausable`) y el cutoff que ancla el
+		# drenaje al momento en que ARRANCÓ el job (persistido en el checkpoint,
+		# inmune a pause/resume).
+		kwargs.setdefault(
+			"pause_probe",
+			build_pause_probe(self.job_id, gate=gate) if stage.get("pausable", True) else None,
+		)
+		kwargs.setdefault("sleep_cutoff_ts", getattr(self, "_sleep_cutoff_ts", 0.0))
 
 		result = asyncio.run(minion.execute(task, **kwargs))
 
@@ -537,6 +586,15 @@ class DagJobDriver(ResumableJobDriver):
 		results = dict(checkpoint_data.get("results", {}))
 		flags = dict(checkpoint_data.get("stage_flags", {}))
 		total_leaves = _count_leaves(stages)
+
+		# Drain cutoff del ciclo de sueño: anclado en el PRIMER step del job y
+		# persistido en el checkpoint — un pause/resume no desliza la ventana y
+		# no traga engrams escritos mientras el ciclo estuvo detenido. Lo reciben
+		# los minions de fase via _run_atomic (kwargs.sleep_cutoff_ts).
+		self._sleep_cutoff_ts = float(checkpoint_data.get("sleep_cutoff_ts") or 0)
+		if not checkpoint_data:
+			self._sleep_cutoff_ts = float(time.time())
+			logger.info(f"[DagJob] {self.short_id} drain cutoff pinned at {self._sleep_cutoff_ts:.0f} ({time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self._sleep_cutoff_ts))})")
 
 		# Re-derivar compuestos completados desde sus hojas: un checkpoint de
 		# handoff (job_checkpoint) puede listar solo hojas; sin esto, un
@@ -594,10 +652,15 @@ class DagJobDriver(ResumableJobDriver):
 				},
 			)
 
-		def _exec_one(path: str, stage: Dict[str, Any]) -> Tuple[str, str, bool]:
+		def _exec_one(path: str, stage: Dict[str, Any], gate: Any = None) -> Tuple[str, str, bool]:
 			"""Devuelve (path, summary, failed). El fallo se controla por on_fail."""
 			try:
-				return path, self._run_atomic(payload, stage, path), False
+				return path, self._run_atomic(payload, stage, path, gate), False
+			except JobPauseRequested:
+				# Pausa del operador a mitad de fase (sonda del drenaje): NUNCA es
+				# un fallo de etapa — propaga al runner, que sella PAUSED con el
+				# checkpoint intacto y reanuda la etapa en el siguiente ciclo.
+				raise
 			except JobDeferred:
 				# Espera de entorno (GPU ocupada, VRAM insuficiente), NO fallo de
 				# etapa: debe llegar al runner para re-encolar sin quemar attempts.
@@ -624,38 +687,75 @@ class DagJobDriver(ResumableJobDriver):
 		parallel_groups = 0
 		parallel_stages = 0
 
-		def _run_group(group: List[Tuple[str, Dict[str, Any]]]) -> List[Tuple[str, str, bool]]:
+		def _run_group(group: List[Tuple[str, Dict[str, Any]]]) -> Tuple[List[Tuple[str, str, bool]], bool]:
+			"""Corre un grupo paralelo con la puerta de pausa compartida.
+
+			Devuelve (tareas_completadas, pausa_honrada). La sonda de cada etapa
+			en vuelo registra la solicitud en el gate; la pausa se honra SOLO
+			cuando todas las etapas aún en vuelo son pausables, reevaluando en
+			cada frontera de completación. El trabajo ya completado (incluso de
+			etapas no-pausables) se devuelve para que el step lo preserve en el
+			checkpoint antes de propagar la pausa.
+			"""
+			gate = _GroupPauseGate(group)
+			tasks: List[Tuple[str, str, bool]] = []
+			paused = False
 			with concurrent.futures.ThreadPoolExecutor(max_workers=max_conc) as pool:
-				futures = {pool.submit(_exec_one, p, s): p for p, s in group}
-				return [f.result() for f in concurrent.futures.as_completed(futures)]
+				futures = {pool.submit(_exec_one, p, s, gate): p for p, s in group}
+				for fut in concurrent.futures.as_completed(futures):
+					path = futures[fut]
+					try:
+						tasks.append(fut.result())
+					except JobPauseRequested:
+						# La sonda la honró en vuelo (todas las restantes en vuelo
+						# eran pausables): preservar lo ya completado.
+						paused = True
+						break
+					gate.finished(path)
+					if gate.pause_requested() and gate.can_pause():
+						# Un no-pausable terminó y los restantes en vuelo son
+						# pausables: la pausa diferida se honra aquí.
+						paused = True
+						break
+			return tasks, paused
 
 		# Cota del step en las fronteras: al agotarse NO se abate el step (eso
 		# tiraría las etapas ya hechas y las re-ejecutaría con sus efectos), se
 		# CEDE con lo completado. El runner persiste el checkpoint (R4) y vuelve
 		# a entrar con presupuesto nuevo, pasando además por pausa/kill/prioridad.
 		stopped_on_budget = False
-		for prefix, group in groups.items():
-			if stopped_on_budget:
-				break
-			level = len(prefix.split("/")) if prefix else 0
-			parent_parallel = False
-			if prefix:
-				parent_id = prefix.rsplit("/", 1)[-1]
-				node = _find_node(stages, parent_id)
-				parent_parallel = bool(node and node.get("type") == _TYPE_COMPOUND and node.get("parallel"))
-			parallel = parent_parallel and level <= max_parallel_level and len(group) > 1
-			if parallel:
-				parallel_groups += 1
-				parallel_stages += len(group)
-				all_tasks.extend(_run_group(group))
-			else:
-				for path, stage in group:
-					if all_tasks and self._budget_spent():
-						stopped_on_budget = True
+		paused = False
+		try:
+			for prefix, group in groups.items():
+				if stopped_on_budget or paused:
+					break
+				level = len(prefix.split("/")) if prefix else 0
+				parent_parallel = False
+				if prefix:
+					parent_id = prefix.rsplit("/", 1)[-1]
+					node = _find_node(stages, parent_id)
+					parent_parallel = bool(node and node.get("type") == _TYPE_COMPOUND and node.get("parallel"))
+				parallel = parent_parallel and level <= max_parallel_level and len(group) > 1
+				if parallel:
+					parallel_groups += 1
+					parallel_stages += len(group)
+					group_tasks, group_paused = _run_group(group)
+					all_tasks.extend(group_tasks)
+					if group_paused:
+						paused = True
 						break
-					all_tasks.append(_exec_one(path, stage))
-			if all_tasks and self._budget_spent():
-				stopped_on_budget = True
+				else:
+					for path, stage in group:
+						if all_tasks and self._budget_spent():
+							stopped_on_budget = True
+							break
+						all_tasks.append(_exec_one(path, stage))
+				if all_tasks and self._budget_spent():
+					stopped_on_budget = True
+		except JobPauseRequested:
+			# Etapa secuencial pausable con sonda en vuelo: honrar la pausa
+			# preservando las etapas secuenciales ya completadas de este step.
+			paused = True
 
 		if stopped_on_budget:
 			logger.info(
@@ -704,11 +804,21 @@ class DagJobDriver(ResumableJobDriver):
 		)
 
 		done = leaves_done >= total_leaves
-		checkpoint = {"completed_stage_ids": new_completed, "results": new_results, "stage_flags": new_flags}
+		checkpoint = {
+			"completed_stage_ids": new_completed,
+			"results": new_results,
+			"stage_flags": new_flags,
+			"sleep_cutoff_ts": self._sleep_cutoff_ts,
+		}
+		if paused:
+			logger.info(
+				f"[DagJob] {self.short_id} pausa del operador honrada a mitad de step: "
+				f"{leaves_done}/{total_leaves} hojas completas preservadas en el checkpoint."
+			)
 		return StepOutcome(
-			completed=done,
+			completed=done and not paused,
 			new_checkpoint=checkpoint,
-			summary=f"dag {leaves_done}/{total_leaves}",
+			summary=f"dag {leaves_done}/{total_leaves}" + (" (pausado a mitad de step)" if paused else ""),
 			progress={"current": leaves_done, "total": total_leaves, "percent": round(100 * leaves_done / total_leaves) if total_leaves else 0},
 			concurrency={
 				"parallel_groups": parallel_groups,
@@ -716,4 +826,5 @@ class DagJobDriver(ResumableJobDriver):
 				"max_parallel_level": max_parallel_level,
 				"actually_parallel": parallel_groups > 0,
 			},
+			pause_requested=paused,
 		)

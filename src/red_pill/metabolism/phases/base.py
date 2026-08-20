@@ -30,6 +30,15 @@ class SleepContext:
 	mode: str = "lazy"
 	total_processed: int = 0
 	deferred: bool = False  # set by a GPU phase that self-defers (VRAM committed to training)
+	# Consolidation drain cutoff (epoch seconds). 0 = unset → the phase captures it
+	# at execute() start. The SleepJobDriver pins it at job start (unit 0) so a
+	# paused/resumed cycle does not slide the window forward.
+	sleep_cutoff_ts: float = 0.0
+	# Sonda de pausa a mitad de fase (callable que lanza JobPauseRequested cuando
+	# el operador pausa el job dueño mientras un step largo está en vuelo). La
+	# inyectan el dag_job (SleepPhaseMinion) y el SleepJobDriver; las fases
+	# pesadas (drenaje de consolidación) la invocan en cada frontera de batch.
+	pause_probe: Any = None
 
 	def update_status(
 		self,

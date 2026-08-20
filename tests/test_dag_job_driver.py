@@ -185,6 +185,103 @@ def test_dag_compound_parallel_runs_all(tmp_path, monkeypatch):
 	assert "panel/lens-a" in ids and "panel/lens-b" in ids and "panel" in ids
 
 
+# ── Pausa a mitad de step: flag `pausable` + gate de grupo paralelo ──────────
+
+def test_group_pause_gate_rule():
+	"""La pausa a mitad de un grupo paralelo solo se honra cuando TODAS las etapas
+	aún en vuelo son pausables; se reevalúa en cada completación."""
+	from red_pill.jobs.drivers.dag import _GroupPauseGate
+
+	gate = _GroupPauseGate(
+		[
+			("a", {"pausable": True}),
+			("b", {"pausable": False}),  # delicada: su trabajo no debe descartarse
+		]
+	)
+	gate.request_pause()
+	# B (no-pausable) sigue en vuelo → NO se puede pausar.
+	assert gate.pause_requested()
+	assert gate.can_pause() is False
+	# B completa → los restantes en vuelo (A, pausable) permiten pausar.
+	gate.finished("b")
+	assert gate.can_pause() is True
+	gate.finished("a")
+	assert gate.can_pause() is True  # grupo vacío → condición vacua
+
+
+def test_dag_pausable_gates_probe_injection(tmp_path, monkeypatch):
+	"""Una etapa no-pausable NO recibe sonda; una pausable sí (con job atado)."""
+	from red_pill.jobs.drivers.dag import DagJobDriver
+
+	d = DagJobDriver()
+	d.bind("job-deadbeef")
+	ws = tmp_path / "ws"
+	(ws / ".cell" / "reports").mkdir(parents=True)
+	calls = []
+	_patch_minion_factory(monkeypatch, calls)
+	payload = _payload(
+		str(ws),
+		[
+			{"id": "soft", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "p"},
+			{"id": "delicate", "type": "agent", "minion": "agent", "pausable": False, "model": "opencode-go/deepseek-v4-pro", "prompt": "d"},
+		],
+	)
+	d.step(payload, {})
+	by_task = {task: kwargs for task, kwargs in calls}
+	assert by_task["p"]["pause_probe"] is not None  # pausable por defecto → sonda
+	assert by_task["d"]["pause_probe"] is None  # pausable:false → sin sonda
+
+
+def test_dag_sequential_pause_honored_checkpoint_preserved(tmp_path, monkeypatch):
+	"""Una etapa secuencial pausable cuya sonda dispara honra la pausa y preserva
+	en el checkpoint las etapas ya completadas de este step."""
+	from red_pill.jobs.drivers.dag import DagJobDriver
+
+	class _ProbeAgent:
+		async def execute(self, task, **kwargs):
+			probe = kwargs.get("pause_probe")
+			if probe is not None:
+				probe()  # el operador pausó → lanza JobPauseRequested
+			return {"status": "success", "summary": "hecho"}
+
+	def _create(minion_id, **kw):
+		if minion_id == "command_runner":
+			class _Cmd:
+				async def execute(self, task, **kwargs):
+					return {"status": "success", "returncode": 0, "stdout": "ok", "summary": "ok"}
+			return _Cmd()
+		if minion_id == "agent":
+			return _ProbeAgent()
+		raise KeyError(minion_id)
+
+	monkeypatch.setattr("red_pill.swarm.factory.MinionFactory.create", staticmethod(_create))
+	import red_pill.jobs.drivers.dag as dag_mod
+
+	monkeypatch.setattr(dag_mod, "_resolve_minion_kind", lambda mid: "agent" if mid == "agent" else "command")
+	monkeypatch.setattr(
+		"red_pill.cognitive.queue_manager.CognitiveQueueManager.get_task",
+		lambda self, tid: {"id": tid, "status": "PAUSING"},
+	)
+
+	d = DagJobDriver()
+	d.bind("job-deadbeef")
+	ws = tmp_path / "ws"
+	(ws / ".cell" / "reports").mkdir(parents=True)
+	payload = _payload(
+		str(ws),
+		[
+			{"id": "gen", "type": "command", "minion": "command_runner", "command": "echo ok > gen.txt"},
+			{"id": "soft", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "p"},
+		],
+	)
+	o = d.step(payload, {})
+	assert o.pause_requested is True
+	assert not o.completed
+	# La etapa de comando ya completada se preserva; la pausable en vuelo no.
+	assert "gen" in o.new_checkpoint["completed_stage_ids"]
+	assert "soft" not in o.new_checkpoint["completed_stage_ids"]
+
+
 def test_dag_parallel_level_gate(tmp_path, monkeypatch):
 	"""parallel declarado en nivel > max_parallel_level → secuencial (sin error)."""
 	d = DagJobDriver()
@@ -600,9 +697,9 @@ def test_dag_yields_at_budget_boundary_keeping_progress(tmp_path, monkeypatch):
 	monkeypatch.setattr(dag_mod.time, "monotonic", lambda: state["t"])
 	real_run_atomic = d._run_atomic
 
-	def _slow(payload_, stage_, path_):
+	def _slow(payload_, stage_, path_, gate_=None):
 		state["t"] += 60
-		return real_run_atomic(payload_, stage_, path_)
+		return real_run_atomic(payload_, stage_, path_, gate_)
 
 	monkeypatch.setattr(d, "_run_atomic", _slow)
 	o = d.step(payload, {})

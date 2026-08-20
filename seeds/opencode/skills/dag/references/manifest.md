@@ -36,6 +36,7 @@ A stage is **atomic** or **compound**. Both may carry:
 | `id` | Unique GLOBALLY across the tree (paths are built from ids). |
 | `depends_on` | Sibling ids at the SAME level that must be `done` first. |
 | `on_fail` | `warn` (default: continue-on-error) or `stop` (real failure). |
+| `pausable` | `true` (default) or `false`. When `true`, the stage honors `job pause` **mid-phase** (the consolidation drain probes per batch/point and seals PAUSED with the checkpoint intact). A non-pausable stage never self-pauses and its work is never discarded. In a parallel group, the pause is honored only while ALL stages still in flight are pausable; if one is not, the pause is deferred and re-evaluated at each stage completion (completed work is preserved in the checkpoint). |
 
 ### Atomic (`type: agent` | `type: command`)
 
