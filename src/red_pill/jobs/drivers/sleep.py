@@ -29,9 +29,10 @@ import asyncio
 import logging
 import shutil
 import subprocess
+import time
 from typing import Any, Dict, List, Tuple
 
-from red_pill.jobs.drivers.base import JobDeferred, ResumableJobDriver, StepOutcome
+from red_pill.jobs.drivers.base import JobDeferred, JobPauseRequested, ResumableJobDriver, StepOutcome, build_pause_probe
 
 logger = logging.getLogger(__name__)
 
@@ -206,6 +207,17 @@ class SleepJobDriver(ResumableJobDriver):
 		total_processed = int(checkpoint_data.get("total_processed", 0))
 		mode = payload.get("mode", "lazy")
 
+		# Drain cutoff pinned at the moment the sleep JOB starts (unit 0) and
+		# persisted in the checkpoint: a pause/resume must not slide the window
+		# forward and swallow engrams written while the cycle was stopped. Each
+		# phase receives it so the consolidation drain only touches points whose
+		# insertion timestamp is <= this instant; the rest wait for next cycle.
+		sleep_cutoff_ts = float(checkpoint_data.get("sleep_cutoff_ts") or 0)
+		if resume_unit == 0:
+			sleep_cutoff_ts = float(time.time())
+		if sleep_cutoff_ts > 0:
+			logger.info(f"[SleepJob] {self.short_id} drain cutoff pinned at {sleep_cutoff_ts:.0f} ({time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(sleep_cutoff_ts))})")
+
 		if resume_unit >= total_units:
 			# Ciclo ya completo: el finalizador corre una única vez (unidad 14).
 			if checkpoint_data.get("finalized"):
@@ -218,7 +230,16 @@ class SleepJobDriver(ResumableJobDriver):
 		self._preflight_unit_gpu(unit, payload)
 
 		mm = MemoryManager()
-		ctx = SleepContext(memory_manager=mm, mode=mode, total_processed=total_processed)
+		ctx = SleepContext(
+			memory_manager=mm,
+			mode=mode,
+			total_processed=total_processed,
+			sleep_cutoff_ts=sleep_cutoff_ts,
+			# Sonda de pausa a mitad de fase: el drenaje la consulta por batch y
+			# lanza JobPauseRequested si el operador pausó el job a medias. Se
+			# inyecta solo si el payload declara `pausable: true` (default).
+			pause_probe=build_pause_probe(self.job_id) if payload.get("pausable", True) else None,
+		)
 
 		unit_failed = False
 		try:
@@ -229,6 +250,10 @@ class SleepJobDriver(ResumableJobDriver):
 					self._run_ritual(mm, unit["ritual"])
 			else:
 				self._run_phase(ctx, unit["phase_index"])
+		except JobPauseRequested:
+			# Pausa del operador a mitad de fase: el runner sella PAUSED con el
+			# checkpoint intacto — jamás un fallo de unidad ni un skip.
+			raise
 		except Exception as e:
 			# Fallo de unidad = skip marcado, NUNCA fallo de job (fiel al pulso).
 			unit_failed = True
@@ -251,6 +276,7 @@ class SleepJobDriver(ResumableJobDriver):
 			"total_processed": ctx.total_processed,
 			"mode": mode,
 			"total_units": total_units,
+			"sleep_cutoff_ts": sleep_cutoff_ts,
 		}
 		if unit_failed:
 			checkpoint["last_failed_unit"] = unit["unit"]
@@ -286,6 +312,7 @@ class SleepJobDriver(ResumableJobDriver):
 				memory_manager=MemoryManager(),
 				mode=payload.get("mode", "lazy"),
 				total_processed=int(checkpoint.get("total_processed", 0)),
+				sleep_cutoff_ts=float(checkpoint.get("sleep_cutoff_ts") or 0),
 			)
 		finalize_sleep_cycle(ctx, mode=payload.get("mode", "lazy"))
 		done = dict(checkpoint)

@@ -142,6 +142,19 @@ class ConsolidationPhase(SleepPhase):
 		collection = "interaction_memories"
 		new_work_hubs = []
 
+		# Drain cutoff: only engrams inserted up to the moment the sleep started are
+		# eligible this cycle. The SleepJobDriver pins it at job start (persisted in
+		# the checkpoint); the one-shot pulse captures it here at phase start. Points
+		# written by sessions still running during the sleep stay buffered for next
+		# cycle — the drain loop is guaranteed to terminate.
+		sleep_cutoff_ts = float(ctx.sleep_cutoff_ts or 0) or float(time.time())
+		cutoff_enabled = getattr(cfg, "SLEEP_CUTOFF_ENABLED", True)
+		if cutoff_enabled:
+			logger.info(
+				f"[SLEEP ENGINE] Drain bounded to engrams with timestamp <= {sleep_cutoff_ts:.0f} "
+				f"({time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(sleep_cutoff_ts))})"
+			)
+
 		if not client.collection_exists(collection):
 			logger.warning("Sleep cycle aborted: fast buffer does not exist.")
 			return
@@ -220,6 +233,19 @@ class ConsolidationPhase(SleepPhase):
 				logger.warning(f"[SLEEP ENGINE] Safety limit reached ({max_batches} batches). Forcing exit to protect hardware.")
 				break
 
+			# Pause probe + live progress at every batch boundary: a pause request
+			# from the operator is honored HERE (JobPauseRequested → the runner
+			# seals PAUSED with the checkpoint intact; on resume the drain continues
+			# with whatever remains, since processed points were already deleted).
+			# The per-batch status write keeps `total_processed` visible in the
+			# public file so a resumed cycle inherits the accumulated count.
+			if ctx.pause_probe is not None:
+				ctx.pause_probe()
+			ctx.total_processed = total_processed
+			from red_pill.metabolism.phases import SLEEP_PHASES as _sleep_phases
+
+			ctx.update_status(self.name, status="running", phase_index=0, total_phases=len(_sleep_phases))
+
 			if consecutive_llm_failures >= max_llm_failures:
 				logger.error("[SLEEP ENGINE] Thermal breaker tripped. Aborting drain loop.")
 				break
@@ -230,7 +256,18 @@ class ConsolidationPhase(SleepPhase):
 			try:
 				from qdrant_client import models as _qm
 
-				scroll_filter = Filter(must_not=[_qm.HasIdCondition(has_id=list(failed_ids))]) if failed_ids else Filter()
+				# mypy: Qdrant Filter acepta la union de condiciones (invariante),
+				# asi que los acumuladores se tipan como list[Any].
+				_must: list[Any] = [_qm.FieldCondition(key="timestamp", range=_qm.Range(lte=sleep_cutoff_ts))] if cutoff_enabled else []
+				_must_not: list[Any] = [_qm.HasIdCondition(has_id=list(failed_ids))] if failed_ids else []
+				if _must and _must_not:
+					scroll_filter = Filter(must=_must, must_not=_must_not)
+				elif _must:
+					scroll_filter = Filter(must=_must)
+				elif _must_not:
+					scroll_filter = Filter(must_not=_must_not)
+				else:
+					scroll_filter = Filter()
 				scroll_result, _ = client.scroll(collection_name=collection, scroll_filter=scroll_filter, limit=scroll_limit, with_payload=True)
 			except Exception as e:
 				logger.error(f"[SLEEP ENGINE] Failed to fetch raw buffer: {e}")
@@ -245,6 +282,13 @@ class ConsolidationPhase(SleepPhase):
 				raw_id = point.id
 				if raw_id in batch_processed_ids:
 					continue
+
+				# Pause probe PER POINT: una noche entera suele ser UN único batch
+				# (el scroll cabe en el límite), así que una frontera por batch
+				# sellaría la pausa solo al final del drenaje. Aquí la pausa del
+				# operador se honra en el siguiente punto (~segundos, no horas).
+				if ctx.pause_probe is not None:
+					ctx.pause_probe()
 
 				raw_text, sibling_points = reassemble_raw_sequence(client, collection, point)
 				sibling_ids = [p.id for p in sibling_points]
@@ -493,6 +537,13 @@ class ConsolidationPhase(SleepPhase):
 					if not filename.endswith(".json"):
 						continue
 					filepath = os.path.join(STAGING_DIR, filename)
+					try:
+						# Staging files written after the cutoff belong to the NEXT cycle.
+						if os.path.getmtime(filepath) > sleep_cutoff_ts:
+							logger.debug(f"[SLEEP ENGINE] Staging file {filename} written after cutoff; deferring to next cycle.")
+							continue
+					except OSError:
+						pass
 					try:
 						with open(filepath, "r") as f:
 							payload = json.load(f)

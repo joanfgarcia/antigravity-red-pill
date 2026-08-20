@@ -29,6 +29,7 @@ class StepOutcome:
 	summary: str = ""
 	progress: Optional[Dict[str, Any]] = None  # { current, total, percent, ... }
 	concurrency: Optional[Dict[str, Any]] = None  # informativo: {parallel_stages, max_parallel_level, actually_parallel}
+	pause_requested: bool = False  # el driver pidió pausa a mitad de step (el checkpoint ya incluye lo completado)
 
 
 class JobDeferred(Exception):
@@ -55,6 +56,39 @@ class JobPauseRequested(Exception):
 	def __init__(self, reason: str):
 		self.reason = reason
 		super().__init__(reason)
+
+
+def build_pause_probe(job_id: str, gate: Any = None):
+	"""Sonda de pausa a mitad de step para fases largas (p.ej. el drenaje de
+	consolidación del sueño).
+
+	Devuelve un callable que consulta el estado del job en la cola y lanza
+	`JobPauseRequested` si el operador solicitó pausa (PAUSING) mientras el step
+	está en vuelo. El runner lo sella PAUSED con el checkpoint intacto y cero
+	intentos. Devuelve None si no hay job_id (fases one-shot sin dueño).
+
+	`gate` (opcional) es el `_GroupPauseGate` del grupo paralelo del DAG: cuando
+	existe, la pausa SOLO se honra si TODAS las etapas aún en vuelo del grupo son
+	`pausable`; si alguna no lo es, la sonda registra la solicitud y el grupo la
+	reevalúa en cada frontera de completación (el trabajo ya hecho se preserva).
+	Sin gate (etapas secuenciales) la pausa es inmediata en el siguiente tick.
+	"""
+	if not job_id:
+		return None
+
+	def _probe() -> None:
+		from red_pill.cognitive.queue_manager import CognitiveQueueManager
+
+		task = CognitiveQueueManager().get_task(job_id)
+		if not (task and task.get("status") == "PAUSING"):
+			return
+		if gate is not None:
+			gate.request_pause()
+			if not gate.can_pause():
+				return
+		raise JobPauseRequested(f"pausa del operador a mitad de fase (job {job_id[:8]})")
+
+	return _probe
 
 
 class JobStepTimeout(Exception):

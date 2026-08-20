@@ -1,3 +1,41 @@
+## [7.20.0] - 2026-08-20 (Sueño con cota de drenaje y pausa a mitad de fase)
+
+### ⏱️ Cutoff de drenaje del sueño (`SLEEP_CUTOFF_ENABLED`)
+
+- El drenaje de consolidación se ancla a la ventana temporal del instante en que
+  ARRANCÓ el ciclo y la persiste en el checkpoint del job: un pause/resume no
+  desliza la ventana ni traga engrams escritos mientras el ciclo estuvo detenido.
+- Solo se consolidan engrams con `timestamp <= cutoff`; los escritos por sesiones
+  aún activas durante el sueño quedan en el buffer para el próximo ciclo — el
+  bucle termina de forma determinista (antes perseguía un objetivo en movimiento
+  hasta `SLEEP_MAX_BATCHES`).
+- El cutoff se captura con precisión completa (no truncado a segundos): un fichero
+  de staging escrito en el mismo segundo del arranque no se difiere por error.
+  Los ficheros de staging posteriores al cutoff también se difieren al próximo
+  ciclo.
+
+### ⏸️ Pausa a mitad de fase (sonda + flag `pausable`)
+
+- Nueva sonda a mitad de step: el drenaje consulta el estado del job por batch y
+  por punto; si el operador pausó (`job pause`), se sella PAUSED con el checkpoint
+  intacto y cero intentos — antes había que esperar a la frontera de step (horas
+  en una consolidación). La sonda la inyecta el driver (SleepJobDriver o DAG).
+- Flag `pausable` (default `true`): una etapa no-pausable no recibe sonda y su
+  trabajo jamás se descarta. Se declara por etapa en el manifest del DAG y por
+  payload en el sleep_job.
+- Regla de grupo paralelo: la pausa a mitad de un grupo `parallel` solo se honra
+  cuando TODAS las etapas aún en vuelo son pausables; si alguna no lo es, se
+  difiere y se reevalúa en cada completación. Lo ya completado se preserva en el
+  checkpoint (`StepOutcome.pause_requested`) antes de sellar PAUSED.
+
+### 🧪 Calidad
+
+- Suite: **1594 passed**. 3 tests nuevos: regla del gate de grupo paralelo,
+  gating de inyección de sonda (`pausable`), y pausa secuencial con checkpoint
+  preservado.
+
+---
+
 ## [7.19.0] - 2026-08-14 (Cierre de Forge, `type: dag` y el Loop de Ideación)
 
 Las tres fases del plan de ejecución (`Aleth_Core/PLAN_IMPL_FORGE_DAG_LOOP.md`):

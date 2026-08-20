@@ -145,6 +145,62 @@ def test_runner_clears_vram_busy_on_real_cycle():
 		assert "vram_busy" in cleared
 
 
+# ── Drain cutoff: the cycle terminates even if sessions keep writing ───────────
+
+def test_drain_cutoff_bounds_scroll_filter_and_terminates():
+	"""The drain only touches engrams with timestamp <= cutoff; points written
+	after the cycle started stay buffered for the NEXT cycle (no infinite drain)."""
+	cutoff = 1700000000
+	raw_point = MagicMock()
+	raw_point.id = "raw-1"
+	raw_point.payload = {
+		"content": "USER: check compiler error\n\nASSISTANT: compile clean",
+		"timestamp": cutoff - 10,  # inserted before the cycle started
+		"metadata": {"model": "opus", "category": "work"},
+	}
+	seen_filters = []
+	scroll_calls = {"n": 0}
+
+	def mock_scroll(collection_name, **kwargs):
+		if collection_name == "interaction_memories":
+			scroll_calls["n"] += 1
+			seen_filters.append(kwargs.get("scroll_filter"))
+			# First batch: the pre-cutoff point. After it is deleted (mocked),
+			# no other point with timestamp <= cutoff remains -> empty -> break.
+			return ([raw_point] if scroll_calls["n"] == 1 else [], None)
+		return ([], None)
+
+	mgr = MagicMock()
+	mgr.client.collection_exists.return_value = True
+	mgr.client.scroll.side_effect = mock_scroll
+	ctx = SleepContext(memory_manager=mgr, sleep_cutoff_ts=cutoff)
+
+	with (
+		patch(f"{CONS}.VramProbe.get_backend", return_value="cpu"),
+		patch(f"{CONS}._check_llm_available", return_value=True),
+		patch(f"{CONS}.chunk_text", side_effect=lambda text: ["distilled fix"]),
+		patch(f"{CONS}.distill_engram", return_value={"summary": "s", "emotion": "neutral", "intensity": 0.8, "category": "work"}),
+		patch(f"{CONS}.distill_session_anchors"),
+		patch(f"{CONS}.EphemeralServer") as server,
+		patch(f"{CONS}._load_thread_state", return_value={}),
+		patch(f"{CONS}._save_thread_state"),
+		patch("uuid.uuid4", return_value=__import__("uuid").UUID("00000000-0000-0000-0000-000000000999")),
+	):
+		mgr.add_memory.side_effect = ["child-1", "00000000-0000-0000-0000-000000000999"]
+		server.return_value = MagicMock()
+		ConsolidationPhase().execute(ctx)
+
+	# Every drain scroll carried the timestamp bound to the pinned cutoff.
+	assert seen_filters, "drain never scrolled"
+	for f in seen_filters:
+		conds = list(f.must or [])
+		ts_conds = [c for c in conds if getattr(c, "key", "") == "timestamp"]
+		assert ts_conds, f"missing timestamp bound in filter: {f}"
+		assert ts_conds[0].range.lte == cutoff
+	# The loop terminated after the eligible point was drained (no infinite drain).
+	assert scroll_calls["n"] == 2
+
+
 # ── EphemeralServer lifecycle ───────────────────────────────────────────────────
 
 
