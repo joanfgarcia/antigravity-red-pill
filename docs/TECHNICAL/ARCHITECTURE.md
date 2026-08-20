@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v7.19.0 (Distiller Bake-off + Per-Model Prompt Routing)
+**System Version**: v7.20.0 (Distiller Bake-off + Per-Model Prompt Routing)
 **Analyst**: The Architect
 **Date**: 2026-04-16
 
