@@ -428,6 +428,18 @@ class DagJobDriver(ResumableJobDriver):
 		stages = payload["manifest"].get("stages")
 		return list(stages) if isinstance(stages, list) else []
 
+	def _workdir(self, payload: Dict[str, Any]) -> Path:
+		"""workdir del manifest, anclado a payload['cwd'] si es relativo.
+
+		`load_recipe` ancla `cwd` a la raíz del proyecto de la receta; sin este
+		anclaje, un `workdir: "."` dependía del CWD del proceso runner (frágil
+		si el servicio cambia de WorkingDirectory)."""
+		raw = Path(payload["manifest"]["workdir"])
+		if raw.is_absolute():
+			return raw
+		base = payload.get("cwd")
+		return (Path(base) / raw).resolve() if base else raw.resolve()
+
 	def _ancestor_deps_met(self, stages: List[Dict[str, Any]], prefix: str, completed: List[str]) -> bool:
 		"""Todas las deps de los ancestros compuestos de `prefix` satisfechas.
 
@@ -453,7 +465,7 @@ class DagJobDriver(ResumableJobDriver):
 		return True
 
 	def _status_file(self, payload: Dict[str, Any]) -> Path:
-		return Path(payload["manifest"]["workdir"]) / ".cell" / "dag_status.json"
+		return self._workdir(payload) / ".cell" / "dag_status.json"
 
 	def _write_status(self, payload: Dict[str, Any], data: Dict[str, Any]) -> None:
 		try:
@@ -464,7 +476,7 @@ class DagJobDriver(ResumableJobDriver):
 			logger.warning(f"[DagJob] telemetría no escrita: {e}")
 
 	def preflight(self, payload: Dict[str, Any]) -> None:
-		workdir = Path(payload["manifest"]["workdir"])
+		workdir = self._workdir(payload)
 		if not workdir.is_dir():
 			raise JobDeferred(f"workspace {workdir} no disponible")
 
@@ -543,7 +555,7 @@ class DagJobDriver(ResumableJobDriver):
 		from red_pill.swarm.factory import MinionFactory
 
 		self._preflight_stage_gpu(stage, stage_path, payload)
-		workdir = Path(payload["manifest"]["workdir"])
+		workdir = self._workdir(payload)
 
 		minion = MinionFactory.create(str(stage.get("minion")))
 		if minion is None:

@@ -936,3 +936,17 @@ def test_run_atomic_passes_job_id(tmp_path, monkeypatch):
 	stages = [{"id": "a", "type": "agent", "minion": "agent", "model": "m", "prompt": "x"}]
 	drv.step(_payload(str(tmp_path), stages), {})
 	assert record[0][1].get("job_id") == "job-abc-123"
+
+
+def test_workdir_relative_anchored_to_cwd(tmp_path, monkeypatch):
+	"""workdir '.' se ancla a payload.cwd (el que load_recipe fija a la raíz de
+	la receta), no al CWD del proceso runner."""
+	record = []
+	_patch_minion_factory(monkeypatch, record)
+	drv = DagJobDriver()
+	stages = [{"id": "a", "type": "agent", "minion": "agent", "model": "m", "prompt": "x"}]
+	payload = _payload(".", stages)
+	payload["cwd"] = str(tmp_path)
+	drv.step(payload, {})
+	assert (tmp_path / ".cell" / "dag_status.json").is_file()
+	assert (tmp_path / ".cell" / "reports" / "a.envelope.json").is_file()
