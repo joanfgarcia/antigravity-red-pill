@@ -577,7 +577,7 @@ class DagJobDriver(ResumableJobDriver):
 
 		task = stage.get("prompt") or stage.get("command") or ""
 		kwargs: Dict[str, Any] = {"cwd": str(workdir), "timeout": self._stage_timeout(stage, payload)}
-		for key in ("backend", "model", "effort"):
+		for key in ("backend", "model", "effort", "mode"):
 			if stage.get(key) or payload.get(key):
 				kwargs[key] = stage.get(key) or payload.get(key)
 		if stage.get("command"):

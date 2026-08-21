@@ -1001,3 +1001,24 @@ def test_deferral_mid_front_yields_with_progress(tmp_path, monkeypatch):
 	assert "gpu" not in outcome.new_checkpoint["completed_stage_ids"]
 	with pytest.raises(JD):
 		drv.step(_payload(str(tmp_path), stages), outcome.new_checkpoint)
+
+
+def test_payload_mode_reaches_minions_and_params_win(tmp_path, monkeypatch):
+	"""El mode del payload (lazy/deep, RFC_SLEEP D4) llega a los minions vía
+	dag_job; un params.mode de etapa pisa al default del payload."""
+	record = []
+	_patch_minion_factory(monkeypatch, record)
+	stages = [
+		{"id": "a", "type": "agent", "minion": "agent", "model": "m", "prompt": "x"},
+		{"id": "b", "type": "agent", "minion": "agent", "model": "m", "prompt": "y", "params": {"mode": "lazy"}, "depends_on": ["a"]},
+	]
+	drv = DagJobDriver()
+	checkpoint = {}
+	payload = _payload(str(tmp_path), stages, mode="deep")
+	for _ in range(4):
+		outcome = drv.step(payload, checkpoint)
+		checkpoint = outcome.new_checkpoint
+		if outcome.completed:
+			break
+	assert record[0][1].get("mode") == "deep"   # hereda del payload
+	assert record[1][1].get("mode") == "lazy"   # params de etapa pisa al payload
