@@ -48,6 +48,13 @@ A mission is a **recursive tree of stages**. Each stage is either:
 - **COMPOUND** (internal node): groups `sub_etapas` with local topology.
   - `parallel: true` is **INTENT**, not an order — the orchestrator decides when
     it actually parallelizes (`max_parallel_level`, default 2).
+- **REFERENCE** (`type: dag`): runs ANOTHER dag_job recipe as a sub-mission
+  (`recipe: <name>`, resolved through RECIPE_DIRS like the CLI). Expanded at
+  SUBMIT time into a `compound` with the recipe's stages (ids flattened under
+  the referencing stage id), so the runner only ever sees compounds and leaves
+  and the resume never depends on the recipe file staying unchanged on disk.
+  Cycle detection rejects self-referencing recipes at submit. Composes a PASS,
+  never a LOOP (nesting stays acyclic — RFC_JOB_DAG §4.5).
 
 ### Mixed backends per stage
 
