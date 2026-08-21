@@ -23,9 +23,14 @@ Red Pill can delegate work to **minions**. This document is written for two read
 | **Local, one-shot** (`backend="local"`) | Single local-LLM call, returns text | No | No | 1 | local (Granite via SIP) |
 | **Local, tool-using** (`run_local_minion`) | Bounded in-memory tool loop on the local model | Yes (≤8) | MCP + bash | few | local (Granite via SIP) |
 | **External agentic** (`backend="claude"|"agy"|"opencode"`) | Full agent delegated to a vendor CLI | Yes (vendor) | MCP + bash + files | many | external (cloud/hosted) |
+| **Logic** (`sleep_ritual`, `sleep_phase`, `sleep_finalize`, `dossier_gate`, `echo`, `janitor_cleanup`…) | Pure in-process kernel logic — no shell, no LLM | No | n/a | 1 (call) | none (no LLM) |
 
 On top of all of these sits the **orchestrator** (you), which picks the kind, writes
-the role prompt, and collects results.
+the role prompt, and collects results. Logic minions are normally not spawned by
+hand: they run as `type: command` stages of a **dag_job recipe** (e.g. the sleep
+cycle `configs/jobs/sleep.yaml`, or the ideation-loop gate re-enqueued via
+`dossier_gate.enqueue_pass`) — the recipe declares them, the Job Manager runs them
+with checkpoint/on_fail/pause semantics (RFC_JOB_DAG).
 
 ---
 
