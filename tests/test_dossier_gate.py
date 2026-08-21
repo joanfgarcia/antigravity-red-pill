@@ -246,3 +246,19 @@ def asyncio_run(coro):
 	import asyncio
 
 	return asyncio.run(coro)
+
+
+# ── Remediación auditoría 2026-08-21 ─────────────────────────────────────────
+
+def test_pass_recipes_gate_depends_on_pass():
+	"""El gate jamás corre si su pase no completó: depends_on obligatorio."""
+	from pathlib import Path
+
+	import yaml
+
+	repo = Path(__file__).resolve().parents[1]
+	for name in ("germination", "research", "synthesis", "hypothesis"):
+		data = yaml.safe_load((repo / "configs" / "jobs" / f"dossier-{name}.yaml").read_text(encoding="utf-8"))
+		stages = data["manifest"]["stages"]
+		assert stages[-1]["minion"] == "dossier_gate"
+		assert stages[-1].get("depends_on") == [stages[0]["id"]], f"dossier-{name}: gate sin depends_on del pase"

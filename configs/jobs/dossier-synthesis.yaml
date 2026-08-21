@@ -34,3 +34,4 @@ manifest:
       minion: dossier_gate
       params: {}
       on_fail: stop
+      depends_on: [synthesis]
