@@ -694,10 +694,10 @@ class DagJobDriver(ResumableJobDriver):
 				raise
 			except JobDeferred:
 				# Espera de entorno (GPU ocupada, VRAM insuficiente), NO fallo de
-				# etapa: debe llegar al runner para re-encolar sin quemar attempts.
-				# Capturarla aquí convertía el deferral en etapa 'done' con
-				# on_fail=warn (fases GPU del sueño saltadas en silencio) o en
-				# fallo real con on_fail=stop (disyuntor, violando R1).
+				# etapa: se propaga al bucle del step, que cede con lo ya
+				# completado o, sin progreso, la re-lanza al runner para
+				# re-encolar sin quemar attempts (R1). Capturarla como fallo
+				# convertía el deferral en etapa 'done' (warn) o en disyuntor (stop).
 				raise
 			except Exception as e:
 				if _resolve_on_fail(stages, path) == "stop":
@@ -718,19 +718,21 @@ class DagJobDriver(ResumableJobDriver):
 		parallel_groups = 0
 		parallel_stages = 0
 
-		def _run_group(group: List[Tuple[str, Dict[str, Any]]]) -> Tuple[List[Tuple[str, str, bool]], bool]:
+		def _run_group(group: List[Tuple[str, Dict[str, Any]]]) -> Tuple[List[Tuple[str, str, bool]], bool, Optional[str]]:
 			"""Corre un grupo paralelo con la puerta de pausa compartida.
 
-			Devuelve (tareas_completadas, pausa_honrada). La sonda de cada etapa
-			en vuelo registra la solicitud en el gate; la pausa se honra SOLO
-			cuando todas las etapas aún en vuelo son pausables, reevaluando en
-			cada frontera de completación. El trabajo ya completado (incluso de
-			etapas no-pausables) se devuelve para que el step lo preserve en el
-			checkpoint antes de propagar la pausa.
+			Devuelve (tareas_completadas, pausa_honrada, motivo_deferral). La
+			sonda de cada etapa en vuelo registra la solicitud en el gate; la
+			pausa se honra SOLO cuando todas las etapas aún en vuelo son
+			pausables, reevaluando en cada frontera de completación. Un
+			JobDeferred de UNA etapa no descarta a sus hermanas: se sigue
+			recogiendo lo que complete y el deferral se decide en el cierre del
+			step (ceder con lo hecho, o re-lanzar si no hubo progreso).
 			"""
 			gate = _GroupPauseGate(group)
 			tasks: List[Tuple[str, str, bool]] = []
 			paused = False
+			deferred: Optional[str] = None
 			with concurrent.futures.ThreadPoolExecutor(max_workers=max_conc) as pool:
 				futures = {pool.submit(_exec_one, p, s, gate): p for p, s in group}
 				for fut in concurrent.futures.as_completed(futures):
@@ -742,13 +744,17 @@ class DagJobDriver(ResumableJobDriver):
 						# eran pausables): preservar lo ya completado.
 						paused = True
 						break
+					except JobDeferred as e:
+						deferred = str(e)
+						gate.finished(path)
+						continue
 					gate.finished(path)
 					if gate.pause_requested() and gate.can_pause():
 						# Un no-pausable terminó y los restantes en vuelo son
 						# pausables: la pausa diferida se honra aquí.
 						paused = True
 						break
-			return tasks, paused
+			return tasks, paused, deferred
 
 		# Cota del step en las fronteras: al agotarse NO se abate el step (eso
 		# tiraría las etapas ya hechas y las re-ejecutaría con sus efectos), se
@@ -756,9 +762,10 @@ class DagJobDriver(ResumableJobDriver):
 		# a entrar con presupuesto nuevo, pasando además por pausa/kill/prioridad.
 		stopped_on_budget = False
 		paused = False
+		deferred_reason: Optional[str] = None
 		try:
 			for prefix, group in groups.items():
-				if stopped_on_budget or paused:
+				if stopped_on_budget or paused or deferred_reason:
 					break
 				level = len(prefix.split("/")) if prefix else 0
 				parent_parallel = False
@@ -769,8 +776,10 @@ class DagJobDriver(ResumableJobDriver):
 				if parallel:
 					parallel_groups += 1
 					parallel_stages += len(group)
-					group_tasks, group_paused = _run_group(group)
+					group_tasks, group_paused, group_deferred = _run_group(group)
 					all_tasks.extend(group_tasks)
+					if group_deferred:
+						deferred_reason = group_deferred
 					if group_paused:
 						paused = True
 						break
@@ -779,13 +788,28 @@ class DagJobDriver(ResumableJobDriver):
 						if all_tasks and self._budget_spent():
 							stopped_on_budget = True
 							break
-						all_tasks.append(_exec_one(path, stage))
+						try:
+							all_tasks.append(_exec_one(path, stage))
+						except JobDeferred as e:
+							# No lanzar la siguiente etapa (el entorno no está);
+							# lo ya completado se preserva cediendo en el cierre.
+							deferred_reason = str(e)
+							break
 				if all_tasks and self._budget_spent():
 					stopped_on_budget = True
 		except JobPauseRequested:
 			# Etapa secuencial pausable con sonda en vuelo: honrar la pausa
 			# preservando las etapas secuenciales ya completadas de este step.
 			paused = True
+
+		if deferred_reason and not all_tasks:
+			# Sin progreso en este step: deferral limpio al runner (R1, sin attempts).
+			raise JobDeferred(deferred_reason)
+		if deferred_reason:
+			logger.info(
+				f"[DagJob] {self.short_id} deferral a mitad de frente ({deferred_reason}): "
+				f"cede con {len(all_tasks)} etapa(s) completada(s) en el checkpoint; el runner reentra."
+			)
 
 		if stopped_on_budget:
 			logger.info(

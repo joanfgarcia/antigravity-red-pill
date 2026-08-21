@@ -974,3 +974,30 @@ def test_type_dag_expansion_inherits_recipe_defaults(tmp_path, monkeypatch):
 	assert leaf["model"] == "opencode-go/deepseek-v4-pro"
 	assert leaf["backend"] == "opencode"
 	assert sub_payload["manifest"]["stages"][0].get("model") is None  # la receta original no se muta
+
+
+def test_deferral_mid_front_yields_with_progress(tmp_path, monkeypatch):
+	"""Frente [cpu, gpu]: la GPU difiere → el step preserva cpu en el checkpoint
+	(completed=False, sin excepción) y el SIGUIENTE step lanza el JobDeferred
+	limpio (frente = solo la diferida)."""
+	from red_pill.jobs.drivers.base import JobDeferred as JD
+
+	record = []
+	_patch_minion_factory(monkeypatch, record)
+
+	def _fake_gpu_probe(self, stage, stage_path, payload):
+		if stage.get("requires_gpu"):
+			raise JD(f"GPU ocupada ({stage_path})")
+
+	monkeypatch.setattr(DagJobDriver, "_preflight_stage_gpu", _fake_gpu_probe)
+	stages = [
+		{"id": "cpu", "type": "agent", "minion": "agent", "model": "m", "prompt": "x"},
+		{"id": "gpu", "type": "agent", "minion": "agent", "model": "m", "prompt": "y", "requires_gpu": True},
+	]
+	drv = DagJobDriver()
+	outcome = drv.step(_payload(str(tmp_path), stages), {})
+	assert outcome.completed is False
+	assert "cpu" in outcome.new_checkpoint["completed_stage_ids"]
+	assert "gpu" not in outcome.new_checkpoint["completed_stage_ids"]
+	with pytest.raises(JD):
+		drv.step(_payload(str(tmp_path), stages), outcome.new_checkpoint)
