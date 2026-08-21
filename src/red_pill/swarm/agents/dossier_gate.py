@@ -134,20 +134,29 @@ def apply_hallazgo(state: Dict[str, Any], had_findings: bool) -> Dict[str, Any]:
 	return state
 
 
+def _claim_key(c: Any) -> str:
+	"""Clave estable de un claim para comparar entre pases."""
+	if isinstance(c, dict):
+		return str(c.get("id") or c.get("claim") or c)
+	return str(c)
+
+
 def detect_findings(before: Dict[str, Any], after: Dict[str, Any]) -> bool:
 	"""¿Hubo hallazgo entre dos estados? (definición L2: claim/pregunta/
-	contradicción NUEVA — no cuenta rellenar contenido ni responder lo ya listado)."""
-	def q_count(s: Dict[str, Any]) -> int:
+	contradicción NUEVA). Comparación por CONTENIDO, no por conteo: responder
+	una pregunta y abrir otra en el mismo pase ES un hallazgo aunque el conteo
+	no cambie; una contradicción que PERSISTE de un pase anterior NO lo es."""
+	def _qs(s: Dict[str, Any]) -> set:
 		q = s.get("open_questions")
-		return len(q) if isinstance(q, list) else 0
+		return {str(x) for x in q} if isinstance(q, list) else set()
 
-	def c_count(s: Dict[str, Any]) -> int:
+	def _cs(s: Dict[str, Any]) -> set:
 		c = s.get("claims")
-		return len(c) if isinstance(c, list) else 0
+		return {_claim_key(x) for x in c} if isinstance(c, list) else set()
 
 	return (
-		q_count(after) > q_count(before)
-		or c_count(after) > c_count(before)
+		bool(_qs(after) - _qs(before))
+		or bool(_cs(after) - _cs(before))
 		or (bool(after.get("contradictions")) and not bool(before.get("contradictions")))
 	)
 
@@ -181,21 +190,30 @@ class DossierGateMinion(Minion):
 			"max_silent_passes": int(kwargs.get("max_silent_passes", DEFAULT_MAX_SILENT_PASSES)),
 		}
 
-		# Hallazgo del pase recién terminado: comparamos el estado ANTES del pase
-		# (prev_counts) con el estado actual. El propio pase actualiza el state.yaml;
-		# el gate solo mide la diferencia de contadores.
-		prev_q = int(state.get("prev_open_questions", -1))
-		prev_c = int(state.get("prev_claims", -1))
-		had_findings = False
-		if prev_q >= 0 and prev_c >= 0:
-			before = {"open_questions": list(range(prev_q)), "claims": list(range(prev_c)), "contradictions": False}
-			after = state
-			had_findings = detect_findings(before, after)
-		state = apply_hallazgo(state, had_findings)
+		# Idempotencia (contrato del runner: steps tolerantes a re-ejecución).
+		# Un resume tras pausa re-ejecuta este gate para el MISMO job: los
+		# contadores del loop solo avanzan la primera vez que este job lo corre.
+		job_id = str(kwargs.get("job_id") or "")
+		rerun = bool(job_id) and state.get("last_gate_job_id") == job_id
+		if not rerun:
+			# Hallazgo del pase recién terminado: comparar el snapshot del estado
+			# ANTERIOR (listas reales, no conteos) con el estado actual. El propio
+			# pase actualiza el state.yaml; el gate solo mide la diferencia.
+			before = {
+				"open_questions": state.get("prev_questions_snapshot") or [],
+				"claims": state.get("prev_claims_snapshot") or [],
+				"contradictions": bool(state.get("prev_contradictions")),
+			}
+			had_findings = bool(state.get("prev_seen")) and detect_findings(before, state)
+			state = apply_hallazgo(state, had_findings)
 
-		# Guardar snapshot de contadores para la próxima evaluación de hallazgo.
-		state["prev_open_questions"] = len(state.get("open_questions") or [])
-		state["prev_claims"] = len(state.get("claims") or [])
+			# Snapshot para la próxima evaluación (contenido, no conteos).
+			state["prev_questions_snapshot"] = [str(q) for q in (state.get("open_questions") or [])]
+			state["prev_claims_snapshot"] = [_claim_key(c) for c in (state.get("claims") or [])]
+			state["prev_contradictions"] = bool(state.get("contradictions"))
+			state["prev_seen"] = True
+			if job_id:
+				state["last_gate_job_id"] = job_id
 
 		verdict = compute_verdict(state, limits)
 		state["verdict"] = verdict.get("verdict")

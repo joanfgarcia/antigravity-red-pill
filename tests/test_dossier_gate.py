@@ -337,3 +337,36 @@ def test_enqueue_pass_skips_when_mission_has_live_job(monkeypatch):
 
 	monkeypatch.setattr("red_pill.cognitive.queue_manager.CognitiveQueueManager.enqueue_task", _boom)
 	assert enqueue_pass("research", "/ideas/i-1", "m-1", current_job_id="job-actual") == "job-vivo"
+
+
+def test_detect_findings_question_swap_same_count():
+	"""Responder una pregunta Y abrir otra = hallazgo, aunque el conteo no cambie."""
+	before = _state(open_questions=["a"])
+	after = _state(open_questions=["b"])
+	assert detect_findings(before, after) is True
+
+
+def test_detect_findings_persistent_contradiction_not_new():
+	before = _state(contradictions=True)
+	after = _state(contradictions=True)
+	assert detect_findings(before, after) is False
+
+
+def test_gate_rerun_same_job_does_not_recount(tmp_path, monkeypatch):
+	"""Re-ejecución del gate para el MISMO job (resume tras pausa): los
+	contadores del loop no se inflan; un job nuevo sí cuenta."""
+	import yaml
+
+	from red_pill.swarm.agents.dossier_gate import DossierGateMinion
+
+	_write_state(tmp_path, open_questions=[], claims=[{"id": "c1", "evidence": "e"}], viable=None)
+	monkeypatch.setattr(DossierGateMinion, "_enqueue_next_pass", lambda self, kw, np, st: "j1")
+	m = DossierGateMinion()
+	asyncio_run(m.execute("", dossier_dir=str(tmp_path), mission_id="m1", job_id="job-1"))
+	state1 = yaml.safe_load((tmp_path / "state.yaml").read_text(encoding="utf-8"))
+	asyncio_run(m.execute("", dossier_dir=str(tmp_path), mission_id="m1", job_id="job-1"))
+	state2 = yaml.safe_load((tmp_path / "state.yaml").read_text(encoding="utf-8"))
+	assert state2["pases_ejecutados"] == state1["pases_ejecutados"] == 1
+	asyncio_run(m.execute("", dossier_dir=str(tmp_path), mission_id="m1", job_id="job-2"))
+	state3 = yaml.safe_load((tmp_path / "state.yaml").read_text(encoding="utf-8"))
+	assert state3["pases_ejecutados"] == 2
