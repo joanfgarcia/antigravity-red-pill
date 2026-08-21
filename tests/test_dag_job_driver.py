@@ -870,3 +870,155 @@ def test_dag_type_dag_on_fail_inherited(tmp_path, monkeypatch):
 	d.validate(expanded)
 	with pytest.raises(RuntimeError, match="on_fail=stop"):
 		d.step(expanded, {})
+
+
+# ── Homónimos entre ramas: resolución por RUTA (auditoría 2026-08-21) ────────
+
+def _homonym_stages():
+	"""F1: scout→implementor(on_fail stop); F2: implementor(on_fail warn)→qa.
+	Roles repetidos ENTRE fases: exactamente lo que emite manifest-compile.mjs."""
+	return [
+		{"id": "F1", "type": "compound", "sub_etapas": [
+			{"id": "scout", "type": "agent", "minion": "agent", "model": "m", "prompt": "p"},
+			{"id": "implementor", "type": "agent", "minion": "agent", "model": "m", "prompt": "p", "depends_on": ["scout"], "on_fail": "stop"},
+		]},
+		{"id": "F2", "type": "compound", "depends_on": ["F1"], "sub_etapas": [
+			{"id": "implementor", "type": "agent", "minion": "agent", "model": "m", "prompt": "boom", "on_fail": "warn"},
+			{"id": "qa", "type": "agent", "minion": "agent", "model": "m", "prompt": "p", "depends_on": ["implementor"]},
+		]},
+	]
+
+
+def test_resolve_on_fail_by_path_not_by_homonym():
+	from red_pill.jobs.drivers.dag import _resolve_on_fail
+
+	stages = _homonym_stages()
+	assert _resolve_on_fail(stages, "F2/implementor") == "warn"  # antes: stop (homónimo F1)
+	assert _resolve_on_fail(stages, "F1/implementor") == "stop"
+
+
+def test_homonym_leaf_failure_honors_own_on_fail(tmp_path, monkeypatch):
+	"""La hoja F2/implementor (warn) falla → el job NO aborta pese al homónimo stop de F1."""
+	import red_pill.jobs.drivers.dag as dag_mod
+
+	record = []
+
+	class _Fake:
+		async def execute(self, task, **kwargs):
+			record.append(task)
+			if task == "boom":
+				return {"status": "failed", "error": "kaput"}
+			return {"status": "success", "summary": "ok"}
+
+	monkeypatch.setattr("red_pill.swarm.factory.MinionFactory.create", staticmethod(lambda mid, **kw: _Fake()))
+	monkeypatch.setattr(dag_mod, "_resolve_minion_kind", lambda mid: "agent")
+
+	drv = DagJobDriver()
+	drv.bind("job-homonym")
+	payload = _payload(str(tmp_path), _homonym_stages())
+	checkpoint = {}
+	outcome = None
+	for _ in range(10):
+		outcome = drv.step(payload, checkpoint)
+		checkpoint = outcome.new_checkpoint
+		if outcome.completed:
+			break
+	assert outcome is not None and outcome.completed  # warn honrado: la misión completa
+	assert "FAILED" in checkpoint["results"]["F2/implementor"]
+
+
+def test_run_atomic_passes_job_id(tmp_path, monkeypatch):
+	"""Los minions reciben el job_id que los ejecuta (idempotencia del gate)."""
+	record = []
+	_patch_minion_factory(monkeypatch, record)
+	drv = DagJobDriver()
+	drv.bind("job-abc-123")
+	stages = [{"id": "a", "type": "agent", "minion": "agent", "model": "m", "prompt": "x"}]
+	drv.step(_payload(str(tmp_path), stages), {})
+	assert record[0][1].get("job_id") == "job-abc-123"
+
+
+def test_workdir_relative_anchored_to_cwd(tmp_path, monkeypatch):
+	"""workdir '.' se ancla a payload.cwd (el que load_recipe fija a la raíz de
+	la receta), no al CWD del proceso runner."""
+	record = []
+	_patch_minion_factory(monkeypatch, record)
+	drv = DagJobDriver()
+	stages = [{"id": "a", "type": "agent", "minion": "agent", "model": "m", "prompt": "x"}]
+	payload = _payload(".", stages)
+	payload["cwd"] = str(tmp_path)
+	drv.step(payload, {})
+	assert (tmp_path / ".cell" / "dag_status.json").is_file()
+	assert (tmp_path / ".cell" / "reports" / "a.envelope.json").is_file()
+
+
+def test_type_dag_expansion_inherits_recipe_defaults(tmp_path, monkeypatch):
+	"""La receta referenciada declara model/backend top-level; su etapa agent sin
+	valor propio los hereda al expandir (paridad validate ↔ runtime)."""
+	sub_payload = {
+		"mission_id": "sub",
+		"model": "opencode-go/deepseek-v4-pro",
+		"backend": "opencode",
+		"manifest": {"workdir": ".", "stages": [
+			{"id": "lens", "type": "agent", "minion": "agent", "prompt": "x"},
+		]},
+	}
+	monkeypatch.setattr(
+		DagJobDriver,
+		"_load_recipe",
+		classmethod(lambda cls, ref: ("dag_job", sub_payload, 5, None, False)),
+	)
+	payload = _payload(str(tmp_path), [{"id": "panel", "type": "dag", "recipe": "fake-panel"}])
+	expanded = DagJobDriver.expand_manifest(payload)
+	leaf = expanded["manifest"]["stages"][0]["sub_etapas"][0]
+	assert leaf["model"] == "opencode-go/deepseek-v4-pro"
+	assert leaf["backend"] == "opencode"
+	assert sub_payload["manifest"]["stages"][0].get("model") is None  # la receta original no se muta
+
+
+def test_deferral_mid_front_yields_with_progress(tmp_path, monkeypatch):
+	"""Frente [cpu, gpu]: la GPU difiere → el step preserva cpu en el checkpoint
+	(completed=False, sin excepción) y el SIGUIENTE step lanza el JobDeferred
+	limpio (frente = solo la diferida)."""
+	from red_pill.jobs.drivers.base import JobDeferred as JD
+
+	record = []
+	_patch_minion_factory(monkeypatch, record)
+
+	def _fake_gpu_probe(self, stage, stage_path, payload):
+		if stage.get("requires_gpu"):
+			raise JD(f"GPU ocupada ({stage_path})")
+
+	monkeypatch.setattr(DagJobDriver, "_preflight_stage_gpu", _fake_gpu_probe)
+	stages = [
+		{"id": "cpu", "type": "agent", "minion": "agent", "model": "m", "prompt": "x"},
+		{"id": "gpu", "type": "agent", "minion": "agent", "model": "m", "prompt": "y", "requires_gpu": True},
+	]
+	drv = DagJobDriver()
+	outcome = drv.step(_payload(str(tmp_path), stages), {})
+	assert outcome.completed is False
+	assert "cpu" in outcome.new_checkpoint["completed_stage_ids"]
+	assert "gpu" not in outcome.new_checkpoint["completed_stage_ids"]
+	with pytest.raises(JD):
+		drv.step(_payload(str(tmp_path), stages), outcome.new_checkpoint)
+
+
+def test_payload_mode_reaches_minions_and_params_win(tmp_path, monkeypatch):
+	"""El mode del payload (lazy/deep, RFC_SLEEP D4) llega a los minions vía
+	dag_job; un params.mode de etapa pisa al default del payload."""
+	record = []
+	_patch_minion_factory(monkeypatch, record)
+	stages = [
+		{"id": "a", "type": "agent", "minion": "agent", "model": "m", "prompt": "x"},
+		{"id": "b", "type": "agent", "minion": "agent", "model": "m", "prompt": "y", "params": {"mode": "lazy"}, "depends_on": ["a"]},
+	]
+	drv = DagJobDriver()
+	checkpoint = {}
+	payload = _payload(str(tmp_path), stages, mode="deep")
+	for _ in range(4):
+		outcome = drv.step(payload, checkpoint)
+		checkpoint = outcome.new_checkpoint
+		if outcome.completed:
+			break
+	assert record[0][1].get("mode") == "deep"   # hereda del payload
+	assert record[1][1].get("mode") == "lazy"   # params de etapa pisa al payload

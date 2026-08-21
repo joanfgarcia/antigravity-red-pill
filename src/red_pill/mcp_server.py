@@ -1787,7 +1787,7 @@ def _resolve_job(qm, ref: str) -> Optional[Dict[str, Any]]:
 			"source": {
 				"type": "string",
 				"enum": ["agentic_job", "dag_job"],
-				"description": "Driver que ejecutará el job (forge_job fue retirado — FASE 1 — y sleep_job está desregistrado: ya no admiten submits).",
+				"description": "Driver que ejecutará el job (forge_job fue retirado — FASE 1 — y sleep_job fue retirado: ya no admiten submits).",
 			},
 			"payload": {
 				"type": "object",

@@ -118,6 +118,5 @@ manifest:
     - id: finalize
       type: command
       minion: sleep_finalize
-      params: {mode: lazy}
       on_fail: warn
       depends_on: [thread]

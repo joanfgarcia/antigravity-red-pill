@@ -134,20 +134,29 @@ def apply_hallazgo(state: Dict[str, Any], had_findings: bool) -> Dict[str, Any]:
 	return state
 
 
+def _claim_key(c: Any) -> str:
+	"""Clave estable de un claim para comparar entre pases."""
+	if isinstance(c, dict):
+		return str(c.get("id") or c.get("claim") or c)
+	return str(c)
+
+
 def detect_findings(before: Dict[str, Any], after: Dict[str, Any]) -> bool:
 	"""¿Hubo hallazgo entre dos estados? (definición L2: claim/pregunta/
-	contradicción NUEVA — no cuenta rellenar contenido ni responder lo ya listado)."""
-	def q_count(s: Dict[str, Any]) -> int:
+	contradicción NUEVA). Comparación por CONTENIDO, no por conteo: responder
+	una pregunta y abrir otra en el mismo pase ES un hallazgo aunque el conteo
+	no cambie; una contradicción que PERSISTE de un pase anterior NO lo es."""
+	def _qs(s: Dict[str, Any]) -> set:
 		q = s.get("open_questions")
-		return len(q) if isinstance(q, list) else 0
+		return {str(x) for x in q} if isinstance(q, list) else set()
 
-	def c_count(s: Dict[str, Any]) -> int:
+	def _cs(s: Dict[str, Any]) -> set:
 		c = s.get("claims")
-		return len(c) if isinstance(c, list) else 0
+		return {_claim_key(x) for x in c} if isinstance(c, list) else set()
 
 	return (
-		q_count(after) > q_count(before)
-		or c_count(after) > c_count(before)
+		bool(_qs(after) - _qs(before))
+		or bool(_cs(after) - _cs(before))
 		or (bool(after.get("contradictions")) and not bool(before.get("contradictions")))
 	)
 
@@ -181,21 +190,30 @@ class DossierGateMinion(Minion):
 			"max_silent_passes": int(kwargs.get("max_silent_passes", DEFAULT_MAX_SILENT_PASSES)),
 		}
 
-		# Hallazgo del pase recién terminado: comparamos el estado ANTES del pase
-		# (prev_counts) con el estado actual. El propio pase actualiza el state.yaml;
-		# el gate solo mide la diferencia de contadores.
-		prev_q = int(state.get("prev_open_questions", -1))
-		prev_c = int(state.get("prev_claims", -1))
-		had_findings = False
-		if prev_q >= 0 and prev_c >= 0:
-			before = {"open_questions": list(range(prev_q)), "claims": list(range(prev_c)), "contradictions": False}
-			after = state
-			had_findings = detect_findings(before, after)
-		state = apply_hallazgo(state, had_findings)
+		# Idempotencia (contrato del runner: steps tolerantes a re-ejecución).
+		# Un resume tras pausa re-ejecuta este gate para el MISMO job: los
+		# contadores del loop solo avanzan la primera vez que este job lo corre.
+		job_id = str(kwargs.get("job_id") or "")
+		rerun = bool(job_id) and state.get("last_gate_job_id") == job_id
+		if not rerun:
+			# Hallazgo del pase recién terminado: comparar el snapshot del estado
+			# ANTERIOR (listas reales, no conteos) con el estado actual. El propio
+			# pase actualiza el state.yaml; el gate solo mide la diferencia.
+			before = {
+				"open_questions": state.get("prev_questions_snapshot") or [],
+				"claims": state.get("prev_claims_snapshot") or [],
+				"contradictions": bool(state.get("prev_contradictions")),
+			}
+			had_findings = bool(state.get("prev_seen")) and detect_findings(before, state)
+			state = apply_hallazgo(state, had_findings)
 
-		# Guardar snapshot de contadores para la próxima evaluación de hallazgo.
-		state["prev_open_questions"] = len(state.get("open_questions") or [])
-		state["prev_claims"] = len(state.get("claims") or [])
+			# Snapshot para la próxima evaluación (contenido, no conteos).
+			state["prev_questions_snapshot"] = [str(q) for q in (state.get("open_questions") or [])]
+			state["prev_claims_snapshot"] = [_claim_key(c) for c in (state.get("claims") or [])]
+			state["prev_contradictions"] = bool(state.get("contradictions"))
+			state["prev_seen"] = True
+			if job_id:
+				state["last_gate_job_id"] = job_id
 
 		verdict = compute_verdict(state, limits)
 		state["verdict"] = verdict.get("verdict")
@@ -213,34 +231,88 @@ class DossierGateMinion(Minion):
 		next_pass = verdict.get("next_pass")
 		if next_pass not in PASSES:
 			return {"status": "error", "error": f"pase desconocido '{next_pass}'", "state": state}
-		job_id = self._enqueue_next_pass(kwargs, next_pass, state)
-		return {"status": "success", "verdict": "continue", "next_pass": next_pass, "summary": f"pase siguiente encolado: {next_pass} ({job_id[:8] if job_id else '?'})", "state": state}
+		next_job_id: Optional[str] = self._enqueue_next_pass(kwargs, next_pass, state)
+		return {"status": "success", "verdict": "continue", "next_pass": next_pass, "summary": f"pase siguiente encolado: {next_pass} ({next_job_id[:8] if next_job_id else '?'})", "state": state}
 
 	def _enqueue_next_pass(self, kwargs: Dict[str, Any], next_pass: str, state: Dict[str, Any]) -> Optional[str]:
-		"""Carga la receta del pase siguiente, inyecta dossier_dir/mission_id y la
-		encola como dag_job con el mismo mission_id. Devuelve el job_id o None."""
-		from red_pill.cognitive.queue_manager import CognitiveQueueManager
-		from red_pill.jobs.recipes import load_recipe
-
+		"""Delegado en `enqueue_pass` (única puerta de encolado del loop)."""
 		dossier_dir = kwargs.get("dossier_dir")
 		mission_id = kwargs.get("mission_id")
 		if not mission_id:
 			raise RuntimeError("dossier_gate: mission_id requerido para re-encolar el pase siguiente.")
 		if not dossier_dir:
 			raise RuntimeError("dossier_gate: dossier_dir requerido para re-encolar el pase siguiente.")
+		return enqueue_pass(next_pass, str(dossier_dir), str(mission_id), current_job_id=str(kwargs.get("job_id") or ""))
 
-		_source, payload, _prio, _parent, is_seed = load_recipe(f"dossier-{next_pass}")
-		if is_seed:
-			# La receta seed lleva modelos flash: hay que inyectar la config real
-			# del loop (la receta del pase anterior trae el model en su payload,
-			# no aquí). Si no hay modelo real disponible, el submit fallaría:
-			# subimos el error — nunca encolamos un pase sin config de modelos.
-			raise RuntimeError(f"receta dossier-{next_pass} es seed sin config real: copia su config a .red-pill/jobs/ (NOTE_MODEL_POLICY_ROLES).")
-		payload.setdefault("mission_id", mission_id)
-		payload["dossier_dir"] = str(dossier_dir)
-		payload["manifest"]["stages"] = _inject_gate_params(payload["manifest"]["stages"], str(dossier_dir), mission_id)
-		qm = CognitiveQueueManager()
-		return qm.enqueue_task(source="dag_job", payload=payload, priority=5, mission_id=mission_id)
+
+def _interpolate_dossier_prompts(stages: List[Dict[str, Any]], dossier_dir: str) -> List[Dict[str, Any]]:
+	"""Sustituye el literal `{dossier_dir}` en los prompts de TODAS las etapas
+	(recursivo). `str.replace`, NUNCA `str.format`: cualquier otra llave del
+	prompt rompería el render. Sin esto, el pase agéntico recibía el
+	placeholder crudo y no sabía dónde vive el dossier."""
+	import copy
+
+	out = copy.deepcopy(stages)
+
+	def _walk(nodes: List[Dict[str, Any]]) -> None:
+		for s in nodes:
+			if isinstance(s.get("prompt"), str):
+				s["prompt"] = s["prompt"].replace("{dossier_dir}", dossier_dir)
+			if isinstance(s.get("sub_etapas"), list):
+				_walk(s["sub_etapas"])
+
+	_walk(out)
+	return out
+
+
+def enqueue_pass(next_pass: str, dossier_dir: str, mission_id: str, priority: int = 5, current_job_id: str = "") -> Optional[str]:
+	"""Encola UN pase del loop de ideación — la única puerta de encolado del
+	loop (arranque del primer pase y re-encolado del gate, §3.6 del RFC).
+
+	Renderiza la receta para ESTE dossier (interpola `{dossier_dir}` en los
+	prompts, inyecta params al gate, fija el mission_id del loop) y aplica las
+	MISMAS garantías que el submit del CLI/MCP: `validate()` (fail-safe de
+	modelos) y `expand_manifest()` (aplana `type: dag`). Devuelve el job_id.
+
+	IDEMPOTENTE POR MISIÓN: el loop mantiene UN job vivo por `mission_id`
+	(pases secuenciales). Si la misión ya tiene un job vivo distinto del
+	actual, NO se encola un duplicado — se devuelve el existente. Esto hace
+	seguro el re-run del gate (contrato at-least-once del runner: resume tras
+	pausa o crash re-ejecuta el step) y cubre también el crash entre la
+	persistencia del state y el enqueue. FRUSTRATED queda fuera del guard: un
+	pase muerto no debe bloquear la resurrección manual del loop.
+
+	Arranque manual de un dossier (hasta que exista camino de chispa):
+		uv run python -c "from red_pill.swarm.agents.dossier_gate import enqueue_pass; \
+			print(enqueue_pass('germination', '/ruta/a/Aleth_Core/ideas/<id>', 'dossier-<id>'))"
+	"""
+	from red_pill.cognitive.queue_manager import CognitiveQueueManager
+	from red_pill.jobs.drivers.dag import DagJobDriver
+	from red_pill.jobs.recipes import load_recipe
+
+	if next_pass not in PASSES:
+		raise ValueError(f"pase desconocido '{next_pass}' (válidos: {PASSES}).")
+	qm = CognitiveQueueManager()
+	alive = [
+		t for t in qm.list_tasks(statuses=["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED"], mission_id=mission_id)
+		if t.get("id") != current_job_id
+	]
+	if alive:
+		return alive[0].get("id")
+	_source, payload, _prio, _parent, is_seed = load_recipe(f"dossier-{next_pass}")
+	if is_seed:
+		raise RuntimeError(
+			f"receta dossier-{next_pass} es seed sin config real: copia la config activa a "
+			"<repo-del-kernel>/.red-pill/jobs/ — el runner resuelve recetas subiendo desde SU CWD, "
+			"no desde el dossier (NOTE_MODEL_POLICY_ROLES)."
+		)
+	payload["mission_id"] = mission_id  # asignación: pisa el 'dossier-loop' de fábrica
+	payload["dossier_dir"] = str(dossier_dir)
+	stages = _interpolate_dossier_prompts(payload["manifest"]["stages"], str(dossier_dir))
+	payload["manifest"]["stages"] = _inject_gate_params(stages, str(dossier_dir), mission_id)
+	DagJobDriver.validate(payload)
+	payload = DagJobDriver.expand_manifest(payload)
+	return qm.enqueue_task(source="dag_job", payload=payload, priority=priority, mission_id=mission_id)
 
 
 def _inject_gate_params(stages: List[Dict[str, Any]], dossier_dir: str, mission_id: str) -> List[Dict[str, Any]]:

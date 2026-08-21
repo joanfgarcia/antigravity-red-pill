@@ -90,6 +90,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import copy
 import json
 import logging
 import shutil
@@ -242,6 +243,20 @@ def _count_leaves(stages: List[Dict[str, Any]]) -> int:
 	return sum(1 for _ in _iter_leaves(stages))
 
 
+def _apply_recipe_defaults(stages: List[Dict[str, Any]], defaults: Dict[str, Any]) -> None:
+	"""Copia los defaults agénticos top-level de una RECETA referenciada a sus
+	etapas `agent` sin valor propio. Sin esto, validate() aprobaba la etapa
+	contra el payload de la receta y el runtime la ejecutaba contra el payload
+	del PADRE — el fail-safe de modelos quedaba burlado por composición."""
+	for s in stages:
+		if s.get("type") == _TYPE_AGENT:
+			for key in ("backend", "model", "effort"):
+				if not s.get(key) and defaults.get(key):
+					s[key] = defaults[key]
+		elif s.get("type") == _TYPE_COMPOUND:
+			_apply_recipe_defaults(s.get("sub_etapas", []), defaults)
+
+
 def _resolve_on_fail(stages: List[Dict[str, Any]], leaf_path: str) -> str:
 	"""`on_fail` efectivo de una hoja: el suyo, o el del ancestro más cercano.
 
@@ -249,29 +264,33 @@ def _resolve_on_fail(stages: List[Dict[str, Any]], leaf_path: str) -> str:
 	un `on_fail: stop` de fase se aceptaba en el manifest y no acotaba nada. Con
 	recetas que el propio sistema puede escribir (REP-RAP), un campo que el
 	validador admite y el motor ignora es una vía de deriva silenciosa. Lo más
-	específico gana: la hoja pisa a su ancestro.
+	específico gana: la hoja pisa a su ancestro. La resolución es POR RUTA — un
+	homónimo de otra rama jamás decide el on_fail de esta.
 	"""
 	parts = leaf_path.split("/")
-	node = _find_node(stages, parts[-1])
+	node = _find_node_by_path(stages, leaf_path)
 	if node and node.get("on_fail"):
 		return str(node["on_fail"])
-	for i in range(len(parts) - 2, -1, -1):  # ancestros, del más cercano al raíz
-		ancestor = _find_node(stages, parts[i])
+	for i in range(len(parts) - 1, 0, -1):  # ancestros por ruta, del más cercano al raíz
+		ancestor = _find_node_by_path(stages, "/".join(parts[:i]))
 		if ancestor and ancestor.get("on_fail"):
 			return str(ancestor["on_fail"])
 	return "warn"
 
 
-def _find_node(stages: List[Dict[str, Any]], node_id: str) -> Optional[Dict[str, Any]]:
-	"""Busca una etapa por id en todo el árbol (los ids son únicos globalmente)."""
-	for s in stages:
-		if s.get("id") == node_id:
-			return s
-		if s.get("type") == _TYPE_COMPOUND:
-			found = _find_node(s.get("sub_etapas", []), node_id)
-			if found:
-				return found
-	return None
+def _find_node_by_path(stages: List[Dict[str, Any]], path: str) -> Optional[Dict[str, Any]]:
+	"""Resuelve una etapa por su RUTA aplanada (`panel/lens-a`), descendiendo nivel
+	a nivel. Las RUTAS son únicas (validate); los ids sueltos NO lo son entre
+	ramas (F1/implementor y F2/implementor conviven) — resolver por id global
+	devolvía el homónimo de otra rama, con su on_fail/parallel equivocados."""
+	nodes = stages
+	node: Optional[Dict[str, Any]] = None
+	for part in path.split("/"):
+		node = next((s for s in nodes if s.get("id") == part), None)
+		if node is None:
+			return None
+		nodes = node.get("sub_etapas", []) if node.get("type") == _TYPE_COMPOUND else []
+	return node
 
 
 class DagJobDriver(ResumableJobDriver):
@@ -390,8 +409,6 @@ class DagJobDriver(ResumableJobDriver):
 		receta siga igual en disco (RFC_JOB_DAG §4.5). Devuelve un payload nuevo
 		(sin mutar el original).
 		"""
-		import copy
-
 		expanded = copy.deepcopy(payload)
 		expanded["manifest"]["stages"] = cls._expand_stages(expanded["manifest"]["stages"], recipe_stack=[])
 		return expanded
@@ -405,7 +422,8 @@ class DagJobDriver(ResumableJobDriver):
 				if recipe_ref in recipe_stack:
 					raise ValueError(f"dag_job receta cíclica: '{recipe_ref}' ya está en la cadena {recipe_stack}.")
 				_sub_source, sub_payload, _prio, _parent, _is_seed = cls._load_recipe(recipe_ref)
-				sub_stages = (sub_payload.get("manifest") or {}).get("stages") or []
+				sub_stages = copy.deepcopy((sub_payload.get("manifest") or {}).get("stages") or [])
+				_apply_recipe_defaults(sub_stages, sub_payload)
 				compound: Dict[str, Any] = {"id": s["id"], "type": _TYPE_COMPOUND, "sub_etapas": cls._expand_stages(sub_stages, recipe_stack + [recipe_ref])}
 				for key in ("on_fail", "parallel", "depends_on"):
 					if s.get(key) is not None:
@@ -424,6 +442,18 @@ class DagJobDriver(ResumableJobDriver):
 		stages = payload["manifest"].get("stages")
 		return list(stages) if isinstance(stages, list) else []
 
+	def _workdir(self, payload: Dict[str, Any]) -> Path:
+		"""workdir del manifest, anclado a payload['cwd'] si es relativo.
+
+		`load_recipe` ancla `cwd` a la raíz del proyecto de la receta; sin este
+		anclaje, un `workdir: "."` dependía del CWD del proceso runner (frágil
+		si el servicio cambia de WorkingDirectory)."""
+		raw = Path(payload["manifest"]["workdir"])
+		if raw.is_absolute():
+			return raw
+		base = payload.get("cwd")
+		return (Path(base) / raw).resolve() if base else raw.resolve()
+
 	def _ancestor_deps_met(self, stages: List[Dict[str, Any]], prefix: str, completed: List[str]) -> bool:
 		"""Todas las deps de los ancestros compuestos de `prefix` satisfechas.
 
@@ -439,7 +469,7 @@ class DagJobDriver(ResumableJobDriver):
 			level_path = f"{level_path}/{part}" if level_path else part
 			# nivel en el que vive el ancestro = parte i+1 de la ruta
 			parent_prefix = "/".join(parts[:i]) if i else ""
-			ancestor = _find_node(stages, part)
+			ancestor = _find_node_by_path(stages, level_path)
 			if ancestor is None:
 				continue
 			for dep in ancestor.get("depends_on", []):
@@ -449,7 +479,7 @@ class DagJobDriver(ResumableJobDriver):
 		return True
 
 	def _status_file(self, payload: Dict[str, Any]) -> Path:
-		return Path(payload["manifest"]["workdir"]) / ".cell" / "dag_status.json"
+		return self._workdir(payload) / ".cell" / "dag_status.json"
 
 	def _write_status(self, payload: Dict[str, Any], data: Dict[str, Any]) -> None:
 		try:
@@ -460,7 +490,7 @@ class DagJobDriver(ResumableJobDriver):
 			logger.warning(f"[DagJob] telemetría no escrita: {e}")
 
 	def preflight(self, payload: Dict[str, Any]) -> None:
-		workdir = Path(payload["manifest"]["workdir"])
+		workdir = self._workdir(payload)
 		if not workdir.is_dir():
 			raise JobDeferred(f"workspace {workdir} no disponible")
 
@@ -539,7 +569,7 @@ class DagJobDriver(ResumableJobDriver):
 		from red_pill.swarm.factory import MinionFactory
 
 		self._preflight_stage_gpu(stage, stage_path, payload)
-		workdir = Path(payload["manifest"]["workdir"])
+		workdir = self._workdir(payload)
 
 		minion = MinionFactory.create(str(stage.get("minion")))
 		if minion is None:
@@ -547,7 +577,7 @@ class DagJobDriver(ResumableJobDriver):
 
 		task = stage.get("prompt") or stage.get("command") or ""
 		kwargs: Dict[str, Any] = {"cwd": str(workdir), "timeout": self._stage_timeout(stage, payload)}
-		for key in ("backend", "model", "effort"):
+		for key in ("backend", "model", "effort", "mode"):
 			if stage.get(key) or payload.get(key):
 				kwargs[key] = stage.get(key) or payload.get(key)
 		if stage.get("command"):
@@ -563,6 +593,7 @@ class DagJobDriver(ResumableJobDriver):
 			build_pause_probe(self.job_id, gate=gate) if stage.get("pausable", True) else None,
 		)
 		kwargs.setdefault("sleep_cutoff_ts", getattr(self, "_sleep_cutoff_ts", 0.0))
+		kwargs.setdefault("job_id", self.job_id)
 
 		result = asyncio.run(minion.execute(task, **kwargs))
 
@@ -603,7 +634,7 @@ class DagJobDriver(ResumableJobDriver):
 		for node_path in _flatten_ids(stages):
 			if node_path in completed:
 				continue
-			node = _find_node(stages, node_path.rsplit("/", 1)[-1])
+			node = _find_node_by_path(stages, node_path)
 			if not node or node.get("type") != _TYPE_COMPOUND:
 				continue
 			node_leaves = list(_iter_leaves(node.get("sub_etapas", []), node_path))
@@ -663,10 +694,10 @@ class DagJobDriver(ResumableJobDriver):
 				raise
 			except JobDeferred:
 				# Espera de entorno (GPU ocupada, VRAM insuficiente), NO fallo de
-				# etapa: debe llegar al runner para re-encolar sin quemar attempts.
-				# Capturarla aquí convertía el deferral en etapa 'done' con
-				# on_fail=warn (fases GPU del sueño saltadas en silencio) o en
-				# fallo real con on_fail=stop (disyuntor, violando R1).
+				# etapa: se propaga al bucle del step, que cede con lo ya
+				# completado o, sin progreso, la re-lanza al runner para
+				# re-encolar sin quemar attempts (R1). Capturarla como fallo
+				# convertía el deferral en etapa 'done' (warn) o en disyuntor (stop).
 				raise
 			except Exception as e:
 				if _resolve_on_fail(stages, path) == "stop":
@@ -687,19 +718,21 @@ class DagJobDriver(ResumableJobDriver):
 		parallel_groups = 0
 		parallel_stages = 0
 
-		def _run_group(group: List[Tuple[str, Dict[str, Any]]]) -> Tuple[List[Tuple[str, str, bool]], bool]:
+		def _run_group(group: List[Tuple[str, Dict[str, Any]]]) -> Tuple[List[Tuple[str, str, bool]], bool, Optional[str]]:
 			"""Corre un grupo paralelo con la puerta de pausa compartida.
 
-			Devuelve (tareas_completadas, pausa_honrada). La sonda de cada etapa
-			en vuelo registra la solicitud en el gate; la pausa se honra SOLO
-			cuando todas las etapas aún en vuelo son pausables, reevaluando en
-			cada frontera de completación. El trabajo ya completado (incluso de
-			etapas no-pausables) se devuelve para que el step lo preserve en el
-			checkpoint antes de propagar la pausa.
+			Devuelve (tareas_completadas, pausa_honrada, motivo_deferral). La
+			sonda de cada etapa en vuelo registra la solicitud en el gate; la
+			pausa se honra SOLO cuando todas las etapas aún en vuelo son
+			pausables, reevaluando en cada frontera de completación. Un
+			JobDeferred de UNA etapa no descarta a sus hermanas: se sigue
+			recogiendo lo que complete y el deferral se decide en el cierre del
+			step (ceder con lo hecho, o re-lanzar si no hubo progreso).
 			"""
 			gate = _GroupPauseGate(group)
 			tasks: List[Tuple[str, str, bool]] = []
 			paused = False
+			deferred: Optional[str] = None
 			with concurrent.futures.ThreadPoolExecutor(max_workers=max_conc) as pool:
 				futures = {pool.submit(_exec_one, p, s, gate): p for p, s in group}
 				for fut in concurrent.futures.as_completed(futures):
@@ -711,13 +744,17 @@ class DagJobDriver(ResumableJobDriver):
 						# eran pausables): preservar lo ya completado.
 						paused = True
 						break
+					except JobDeferred as e:
+						deferred = str(e)
+						gate.finished(path)
+						continue
 					gate.finished(path)
 					if gate.pause_requested() and gate.can_pause():
 						# Un no-pausable terminó y los restantes en vuelo son
 						# pausables: la pausa diferida se honra aquí.
 						paused = True
 						break
-			return tasks, paused
+			return tasks, paused, deferred
 
 		# Cota del step en las fronteras: al agotarse NO se abate el step (eso
 		# tiraría las etapas ya hechas y las re-ejecutaría con sus efectos), se
@@ -725,22 +762,24 @@ class DagJobDriver(ResumableJobDriver):
 		# a entrar con presupuesto nuevo, pasando además por pausa/kill/prioridad.
 		stopped_on_budget = False
 		paused = False
+		deferred_reason: Optional[str] = None
 		try:
 			for prefix, group in groups.items():
-				if stopped_on_budget or paused:
+				if stopped_on_budget or paused or deferred_reason:
 					break
 				level = len(prefix.split("/")) if prefix else 0
 				parent_parallel = False
 				if prefix:
-					parent_id = prefix.rsplit("/", 1)[-1]
-					node = _find_node(stages, parent_id)
+					node = _find_node_by_path(stages, prefix)
 					parent_parallel = bool(node and node.get("type") == _TYPE_COMPOUND and node.get("parallel"))
 				parallel = parent_parallel and level <= max_parallel_level and len(group) > 1
 				if parallel:
 					parallel_groups += 1
 					parallel_stages += len(group)
-					group_tasks, group_paused = _run_group(group)
+					group_tasks, group_paused, group_deferred = _run_group(group)
 					all_tasks.extend(group_tasks)
+					if group_deferred:
+						deferred_reason = group_deferred
 					if group_paused:
 						paused = True
 						break
@@ -749,13 +788,28 @@ class DagJobDriver(ResumableJobDriver):
 						if all_tasks and self._budget_spent():
 							stopped_on_budget = True
 							break
-						all_tasks.append(_exec_one(path, stage))
+						try:
+							all_tasks.append(_exec_one(path, stage))
+						except JobDeferred as e:
+							# No lanzar la siguiente etapa (el entorno no está);
+							# lo ya completado se preserva cediendo en el cierre.
+							deferred_reason = str(e)
+							break
 				if all_tasks and self._budget_spent():
 					stopped_on_budget = True
 		except JobPauseRequested:
 			# Etapa secuencial pausable con sonda en vuelo: honrar la pausa
 			# preservando las etapas secuenciales ya completadas de este step.
 			paused = True
+
+		if deferred_reason and not all_tasks:
+			# Sin progreso en este step: deferral limpio al runner (R1, sin attempts).
+			raise JobDeferred(deferred_reason)
+		if deferred_reason:
+			logger.info(
+				f"[DagJob] {self.short_id} deferral a mitad de frente ({deferred_reason}): "
+				f"cede con {len(all_tasks)} etapa(s) completada(s) en el checkpoint; el runner reentra."
+			)
 
 		if stopped_on_budget:
 			logger.info(
@@ -778,7 +832,7 @@ class DagJobDriver(ResumableJobDriver):
 		for node_path in _flatten_ids(stages):
 			if node_path in new_completed:
 				continue
-			node = _find_node(stages, node_path.rsplit("/", 1)[-1])
+			node = _find_node_by_path(stages, node_path)
 			if not node or node.get("type") != _TYPE_COMPOUND:
 				continue
 			if all(leaf_path in new_completed for leaf_path, _ in _iter_leaves(node.get("sub_etapas", []), node_path)):

@@ -93,7 +93,7 @@ def run_sleep_phase(ctx: SleepContext, phase_index: int) -> None:
 	Misma semántica que el bucle de `perform_sleep_cycle`: best-effort por fase
 	(try/except propio, log de error, el ciclo continúa), `update_status` con
 	telemetría 2D (fase N/M) ANTES y DESPUÉS de ejecutar. Extraído para que el
-	`SleepJobDriver` ejecute exactamente una fase por step sin duplicar lógica.
+	`dag_job` (receta del sueño) ejecute exactamente una fase por etapa sin duplicar lógica.
 	"""
 	total_phases = len(SLEEP_PHASES)
 	from red_pill.jobs.drivers.base import JobPauseRequested  # local: rompe el ciclo jobs↔metabolismo
@@ -113,10 +113,10 @@ def run_sleep_phase(ctx: SleepContext, phase_index: int) -> None:
 
 
 def finalize_sleep_cycle(ctx: SleepContext, mode: str = "lazy") -> int:
-	"""Finalizador compartido del ciclo de sueño (unidad 14 del job / one-shot).
+	"""Finalizador compartido del ciclo de sueño (etapa `finalize` del job / one-shot).
 
 	Extraído de `perform_sleep_cycle` para que el camino one-shot y el
-	`SleepJobDriver` hagan exactamente lo mismo: limpiar señales (vram_busy solo
+	`dag_job` (SleepFinalizeMinion) hagan exactamente lo mismo: limpiar señales (vram_busy solo
 	si no hubo deferral, local_llm_offline, ariadne_thread_running), emitir
 	`SleepCompletedEvent`, escribir `status="cycle_completed"` y devolver el total
 	procesado.

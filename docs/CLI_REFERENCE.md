@@ -108,6 +108,47 @@ Starts the Sovereign Daemon (plugin-based control plane). Auto-discovers monitor
 
 ---
 
+### `job` — Centralized Job Manager
+```bash
+red-pill job <subcommand>
+```
+Deferred, resumable jobs (`BACKGROUND_DEFERRED`) on the central queue — the substrate behind the sleep cycle, trainings, and DAG recipes (`dag_job`).
+
+| Subcommand | Description |
+|------------|-------------|
+| `submit` | Enqueue a deferred job (recipe, or raw source + payload) |
+| `list [--all] [--mission M]` | List active, paused and queued jobs. `--all` includes COMPLETED; `--mission` filters by isolation group |
+| `status <job_id>` | Full detail of one job (checkpoint, progress) |
+| `pause <job_id>` | Pause a job (the runner won't execute the next step) |
+| `resume <job_id>` | Resume a paused job from its checkpoint |
+| `kill <job_id> [--discard]` | Hard-kill the in-flight step: PAUSED* resumable with a dirty-kill mark; `--discard` cancels for good (FRUSTRATED) |
+| `logs <job_id> [--tail N]` | Child-process output of a job (stdout/stderr per step; default last 50 lines) |
+| `purge [job_ids ...] [--terminal] [--force] [--yes]` | Retire terminal jobs from the queue (FRUSTRATED/COMPLETED; PAUSED only by id with `--force`, never in a sweep) |
+| `process-queue` | Shot-and-forget runner: processes the queue and exits |
+
+`submit` flags:
+
+| Flag | Description |
+|------|-------------|
+| `--recipe` | Satellite YAML recipe (path, or short name resolved in `.red-pill/jobs/`). Replaces `--source`/`--payload` |
+| `--source` | Driver source that executes the job (e.g. `script_job`). Not needed with `--recipe` |
+| `--payload` | Job JSON payload (default `{}`) |
+| `--priority N` | Priority (higher = more urgent, default 5) |
+| `--singleton` | Don't enqueue if a live job (PENDING/PROCESSING/PAUSED/BLOCKED) with the same source and title already exists |
+| `--title` | Descriptive title (stored in the payload) |
+| `--parent ID` | Parent job id: enters BLOCKED and unblocks when the parent completes (DAG) |
+| `--mission ID` | Isolation group between forges (`mission_id`) |
+
+Example — enqueue the sleep cycle from its recipe, guarded against duplicates:
+
+```bash
+red-pill job submit --recipe sleep --singleton
+```
+
+Jobs can be referenced by full UUID or by the short prefix shown by `job list`.
+
+---
+
 ### `sleep` — Lazarus Maintenance Ritual
 ```bash
 red-pill sleep [--mode {lazy,deep}]
@@ -302,6 +343,8 @@ red-pill status                          # Hardware panel
 red-pill daemon                          # Start Sovereign Daemon
 red-pill daemon --oneshot                # Test: tick all plugins once
 red-pill sleep                           # Consolidate memory
+red-pill job submit --recipe sleep --singleton  # Enqueue deferred job
+red-pill job list                        # Job queue overview
 red-pill soul export                     # Backup soul
 red-pill soul rotate                     # Rotate API keys
 red-pill swarm audit --path ./src        # Code audit

@@ -86,8 +86,8 @@ register_driver(DagJobDriver)
 # recetas script_job) completara una fase real — la escuela v1 cerró 1408+
 # épocas vía `configs/jobs/school.yaml`. El archivo queda importable para
 # jobs previos y tests; deja de ser fuente del carril mecánico.
-# NOTA (RFC_JOB_DAG, FASE 1, 2026-08-14): forge_job se ha RETIRADO físicamente
-# (forge.py borrado) — la misión completa se encola como dag_job con el
-# compilador de manifest del skill forge. sleep_job sigue importable como
-# legacy (tests propios); limpieza física pendiente para cuando la receta
-# dag_job del sueño lo cubra en producción.
+# NOTA (RFC_JOB_DAG, 2026-08-21): forge_job y sleep_job RETIRADOS físicamente.
+# La misión forge se encola como dag_job (compilador del skill forge); el ciclo
+# de sueño es la receta dag_job configs/jobs/sleep.yaml, en producción desde el
+# 2026-08-21 (primer ciclo nocturno completo 15/15). Los jobs legacy encolados
+# con sources retirados los salta el runner con aviso (queue_worker).

@@ -246,3 +246,127 @@ def asyncio_run(coro):
 	import asyncio
 
 	return asyncio.run(coro)
+
+
+# ── Remediación auditoría 2026-08-21 ─────────────────────────────────────────
+
+def test_pass_recipes_gate_depends_on_pass():
+	"""El gate jamás corre si su pase no completó: depends_on obligatorio."""
+	from pathlib import Path
+
+	import yaml
+
+	repo = Path(__file__).resolve().parents[1]
+	for name in ("germination", "research", "synthesis", "hypothesis"):
+		data = yaml.safe_load((repo / "configs" / "jobs" / f"dossier-{name}.yaml").read_text(encoding="utf-8"))
+		stages = data["manifest"]["stages"]
+		assert stages[-1]["minion"] == "dossier_gate"
+		assert stages[-1].get("depends_on") == [stages[0]["id"]], f"dossier-{name}: gate sin depends_on del pase"
+
+
+def test_enqueue_pass_renders_validates_and_expands(monkeypatch):
+	"""enqueue_pass interpola {dossier_dir}, pisa el mission_id de fábrica y
+	aplica validate+expand antes de encolar."""
+	from red_pill.swarm.agents.dossier_gate import enqueue_pass
+
+	recipe_payload = {
+		"mission_id": "dossier-loop",
+		"manifest": {"workdir": "/tmp", "stages": [
+			{"id": "research", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "Lee {dossier_dir}/README.md"},
+			{"id": "gate", "type": "command", "minion": "dossier_gate", "params": {}, "depends_on": ["research"]},
+		]},
+	}
+	monkeypatch.setattr("red_pill.jobs.recipes.load_recipe", lambda ref, base_dir=None: ("dag_job", recipe_payload, 5, None, False))
+	monkeypatch.setattr("red_pill.jobs.drivers.dag._resolve_minion_kind", lambda mid: "agent" if mid == "agent" else "logic")
+	monkeypatch.setattr("red_pill.cognitive.queue_manager.CognitiveQueueManager.list_tasks", lambda self, statuses=None, limit=50, mission_id=None: [])
+	captured = {}
+
+	def _fake_enqueue(self, source, payload, priority=5, mission_id=None, **kw):
+		captured.update(payload=payload, mission_id=mission_id)
+		return "job-xyz"
+
+	monkeypatch.setattr("red_pill.cognitive.queue_manager.CognitiveQueueManager.enqueue_task", _fake_enqueue)
+	job_id = enqueue_pass("research", "/ideas/i-1", "mission-i-1")
+	assert job_id == "job-xyz"
+	assert captured["mission_id"] == "mission-i-1"
+	assert captured["payload"]["mission_id"] == "mission-i-1"          # pisado, no setdefault
+	stage = captured["payload"]["manifest"]["stages"][0]
+	assert "{dossier_dir}" not in stage["prompt"] and "/ideas/i-1" in stage["prompt"]
+	gate = captured["payload"]["manifest"]["stages"][-1]
+	assert gate["params"] == {"dossier_dir": "/ideas/i-1", "mission_id": "mission-i-1"}
+
+
+def test_enqueue_pass_failsafe_blocks_flash(monkeypatch):
+	from red_pill.swarm.agents.dossier_gate import enqueue_pass
+
+	recipe_payload = {
+		"mission_id": "dossier-loop",
+		"manifest": {"workdir": "/tmp", "stages": [
+			{"id": "research", "type": "agent", "minion": "agent", "model": "flash", "prompt": "x {dossier_dir}"},
+		]},
+	}
+	monkeypatch.setattr("red_pill.jobs.recipes.load_recipe", lambda ref, base_dir=None: ("dag_job", recipe_payload, 5, None, False))
+	monkeypatch.setattr("red_pill.jobs.drivers.dag._resolve_minion_kind", lambda mid: "agent")
+	monkeypatch.setattr("red_pill.cognitive.queue_manager.CognitiveQueueManager.list_tasks", lambda self, statuses=None, limit=50, mission_id=None: [])
+	with pytest.raises(ValueError):
+		enqueue_pass("research", "/ideas/i-1", "m-1")
+
+
+def test_enqueue_pass_rejects_seed(monkeypatch):
+	from red_pill.swarm.agents.dossier_gate import enqueue_pass
+
+	monkeypatch.setattr("red_pill.jobs.recipes.load_recipe", lambda ref, base_dir=None: ("dag_job", {}, 5, None, True))
+	monkeypatch.setattr("red_pill.cognitive.queue_manager.CognitiveQueueManager.list_tasks", lambda self, statuses=None, limit=50, mission_id=None: [])
+	with pytest.raises(RuntimeError, match="seed"):
+		enqueue_pass("research", "/ideas/i-1", "m-1")
+
+
+def test_enqueue_pass_skips_when_mission_has_live_job(monkeypatch):
+	"""Guard de idempotencia por misión: con un job vivo de la misma misión
+	(distinto del actual) NO se encola un duplicado — se devuelve el existente.
+	Cubre el re-run del gate (at-least-once) y el crash post-persist/pre-enqueue."""
+	from red_pill.swarm.agents.dossier_gate import enqueue_pass
+
+	monkeypatch.setattr(
+		"red_pill.cognitive.queue_manager.CognitiveQueueManager.list_tasks",
+		lambda self, statuses=None, limit=50, mission_id=None: [{"id": "job-vivo", "status": "PENDING", "mission_id": mission_id}],
+	)
+
+	def _boom(self, *a, **kw):
+		raise AssertionError("enqueue_task no debe llamarse con un job vivo en la misión")
+
+	monkeypatch.setattr("red_pill.cognitive.queue_manager.CognitiveQueueManager.enqueue_task", _boom)
+	assert enqueue_pass("research", "/ideas/i-1", "m-1", current_job_id="job-actual") == "job-vivo"
+
+
+def test_detect_findings_question_swap_same_count():
+	"""Responder una pregunta Y abrir otra = hallazgo, aunque el conteo no cambie."""
+	before = _state(open_questions=["a"])
+	after = _state(open_questions=["b"])
+	assert detect_findings(before, after) is True
+
+
+def test_detect_findings_persistent_contradiction_not_new():
+	before = _state(contradictions=True)
+	after = _state(contradictions=True)
+	assert detect_findings(before, after) is False
+
+
+def test_gate_rerun_same_job_does_not_recount(tmp_path, monkeypatch):
+	"""Re-ejecución del gate para el MISMO job (resume tras pausa): los
+	contadores del loop no se inflan; un job nuevo sí cuenta."""
+	import yaml
+
+	from red_pill.swarm.agents.dossier_gate import DossierGateMinion
+
+	_write_state(tmp_path, open_questions=[], claims=[{"id": "c1", "evidence": "e"}], viable=None)
+	monkeypatch.setattr(DossierGateMinion, "_enqueue_next_pass", lambda self, kw, np, st: "j1")
+	m = DossierGateMinion()
+	asyncio_run(m.execute("", dossier_dir=str(tmp_path), mission_id="m1", job_id="job-1"))
+	state1 = yaml.safe_load((tmp_path / "state.yaml").read_text(encoding="utf-8"))
+	asyncio_run(m.execute("", dossier_dir=str(tmp_path), mission_id="m1", job_id="job-1"))
+	state2 = yaml.safe_load((tmp_path / "state.yaml").read_text(encoding="utf-8"))
+	assert state2["pases_ejecutados"] == state1["pases_ejecutados"] == 1
+	asyncio_run(m.execute("", dossier_dir=str(tmp_path), mission_id="m1", job_id="job-2"))
+	state3 = yaml.safe_load((tmp_path / "state.yaml").read_text(encoding="utf-8"))
+	assert state3["pases_ejecutados"] == 2

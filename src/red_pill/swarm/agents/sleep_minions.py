@@ -1,7 +1,8 @@
 """Minions de sleep (lógica pura) — encapsulan cada unidad atómica del ciclo de
 sueño como un Minion del MinionFactory (RFC_JOB_DAG §4.2 fleco 2).
 
-Reducir cada unidad del SleepJobDriver a un minion permite que el ciclo de
+Reducir cada unidad del antiguo driver del sueño (sleep_job, retirado) a un
+minion permite que el ciclo de
 sueño se declare como una RECETA del dag_job (árbol de etapas) en vez de un
 driver con mecánica propia. El estado `total_processed` cruza entre fases: se
 reconstruye leyendo `sleep_phase_status.json` (el contrato público que ya

@@ -31,12 +31,12 @@ class SleepContext:
 	total_processed: int = 0
 	deferred: bool = False  # set by a GPU phase that self-defers (VRAM committed to training)
 	# Consolidation drain cutoff (epoch seconds). 0 = unset → the phase captures it
-	# at execute() start. The SleepJobDriver pins it at job start (unit 0) so a
-	# paused/resumed cycle does not slide the window forward.
+	# at execute() start. The dag_job sleep recipe pins it at job start (first
+	# step) so a paused/resumed cycle does not slide the window forward.
 	sleep_cutoff_ts: float = 0.0
 	# Sonda de pausa a mitad de fase (callable que lanza JobPauseRequested cuando
 	# el operador pausa el job dueño mientras un step largo está en vuelo). La
-	# inyectan el dag_job (SleepPhaseMinion) y el SleepJobDriver; las fases
+	# inyecta el dag_job (SleepPhaseMinion); las fases
 	# pesadas (drenaje de consolidación) la invocan en cada frontera de batch.
 	pause_probe: Any = None
 
@@ -52,7 +52,7 @@ class SleepContext:
 	) -> None:
 		"""Escribe atómicamente el estado de la fase de sueño en tiempo real.
 
-		Campos de unidad (aditivos, telemetría 2D del SleepJobDriver): el driver
+		Campos de unidad (aditivos, telemetría 2D del ciclo como job): el dag_job
 		reporta `unit`/`unit_index`/`total_units` además de la fase — el operador
 		ve en vivo "unidad 7/14 · fase 5/10". El fichero sigue siendo TELECOMETRÍA
 		(espejo), nunca fuente de resume (auditoría A2 del RFC_SLEEP_JOB_DRIVER).

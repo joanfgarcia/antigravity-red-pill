@@ -105,12 +105,30 @@ stages:
 - `parallel: true` is INTENT (see SKILL.md §3) — the orchestrator decides.
 - Marked `done` when ALL descendant leaves are `done`.
 
+### Reference (`type: dag`)
+
+```yaml
+- id: panel
+  type: dag              # fourth type (RFC_JOB_DAG §4.5)
+  recipe: forge-panel    # resolved via RECIPE_DIRS (.red-pill/jobs, configs/jobs, jobs)
+  on_fail: warn          # inherited by the recipe's leaves (most specific wins)
+```
+
+- Requires `recipe` (string); must NOT carry `minion` or `sub_etapas`.
+- Validated at submit by resolving the recipe and validating its tree
+  recursively (model fail-safe and `on_fail` validation propagate).
+- Expanded at submit (`expand_manifest`) into a `compound` whose ids flatten
+  under the referencing id (`panel/lens-a`); agent stages without their own
+  `backend`/`model`/`effort` inherit the referenced recipe's top-level defaults.
+- Self- or transitive self-reference → rejected (cycle detection). Composes a
+  PASS, never a LOOP (nesting stays acyclic).
+
 ## Validation (at submit — fails fast, not after 3 attempts)
 
 1. `mission_id` present.
 2. `manifest.workdir` present; `stages` non-empty.
 3. Every id unique (flattened path). `depends_on` references exist (siblings).
-4. `type` ∈ {agent, command, compound}.
+4. `type` ∈ {agent, command, compound, dag}.
 5. Type ↔ minion cross-check via `MinionFactory`: `type: agent` must resolve to
    `AgentMinion`; `type: command` must NOT resolve to an agent minion.
 6. Fail-safe models (recursive): every agent stage has a real `model` + `prompt`.
