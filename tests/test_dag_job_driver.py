@@ -870,3 +870,58 @@ def test_dag_type_dag_on_fail_inherited(tmp_path, monkeypatch):
 	d.validate(expanded)
 	with pytest.raises(RuntimeError, match="on_fail=stop"):
 		d.step(expanded, {})
+
+
+# ── Homónimos entre ramas: resolución por RUTA (auditoría 2026-08-21) ────────
+
+def _homonym_stages():
+	"""F1: scout→implementor(on_fail stop); F2: implementor(on_fail warn)→qa.
+	Roles repetidos ENTRE fases: exactamente lo que emite manifest-compile.mjs."""
+	return [
+		{"id": "F1", "type": "compound", "sub_etapas": [
+			{"id": "scout", "type": "agent", "minion": "agent", "model": "m", "prompt": "p"},
+			{"id": "implementor", "type": "agent", "minion": "agent", "model": "m", "prompt": "p", "depends_on": ["scout"], "on_fail": "stop"},
+		]},
+		{"id": "F2", "type": "compound", "depends_on": ["F1"], "sub_etapas": [
+			{"id": "implementor", "type": "agent", "minion": "agent", "model": "m", "prompt": "boom", "on_fail": "warn"},
+			{"id": "qa", "type": "agent", "minion": "agent", "model": "m", "prompt": "p", "depends_on": ["implementor"]},
+		]},
+	]
+
+
+def test_resolve_on_fail_by_path_not_by_homonym():
+	from red_pill.jobs.drivers.dag import _resolve_on_fail
+
+	stages = _homonym_stages()
+	assert _resolve_on_fail(stages, "F2/implementor") == "warn"  # antes: stop (homónimo F1)
+	assert _resolve_on_fail(stages, "F1/implementor") == "stop"
+
+
+def test_homonym_leaf_failure_honors_own_on_fail(tmp_path, monkeypatch):
+	"""La hoja F2/implementor (warn) falla → el job NO aborta pese al homónimo stop de F1."""
+	import red_pill.jobs.drivers.dag as dag_mod
+
+	record = []
+
+	class _Fake:
+		async def execute(self, task, **kwargs):
+			record.append(task)
+			if task == "boom":
+				return {"status": "failed", "error": "kaput"}
+			return {"status": "success", "summary": "ok"}
+
+	monkeypatch.setattr("red_pill.swarm.factory.MinionFactory.create", staticmethod(lambda mid, **kw: _Fake()))
+	monkeypatch.setattr(dag_mod, "_resolve_minion_kind", lambda mid: "agent")
+
+	drv = DagJobDriver()
+	drv.bind("job-homonym")
+	payload = _payload(str(tmp_path), _homonym_stages())
+	checkpoint = {}
+	outcome = None
+	for _ in range(10):
+		outcome = drv.step(payload, checkpoint)
+		checkpoint = outcome.new_checkpoint
+		if outcome.completed:
+			break
+	assert outcome is not None and outcome.completed  # warn honrado: la misión completa
+	assert "FAILED" in checkpoint["results"]["F2/implementor"]

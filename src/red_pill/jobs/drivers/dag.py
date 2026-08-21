@@ -249,29 +249,33 @@ def _resolve_on_fail(stages: List[Dict[str, Any]], leaf_path: str) -> str:
 	un `on_fail: stop` de fase se aceptaba en el manifest y no acotaba nada. Con
 	recetas que el propio sistema puede escribir (REP-RAP), un campo que el
 	validador admite y el motor ignora es una vía de deriva silenciosa. Lo más
-	específico gana: la hoja pisa a su ancestro.
+	específico gana: la hoja pisa a su ancestro. La resolución es POR RUTA — un
+	homónimo de otra rama jamás decide el on_fail de esta.
 	"""
 	parts = leaf_path.split("/")
-	node = _find_node(stages, parts[-1])
+	node = _find_node_by_path(stages, leaf_path)
 	if node and node.get("on_fail"):
 		return str(node["on_fail"])
-	for i in range(len(parts) - 2, -1, -1):  # ancestros, del más cercano al raíz
-		ancestor = _find_node(stages, parts[i])
+	for i in range(len(parts) - 1, 0, -1):  # ancestros por ruta, del más cercano al raíz
+		ancestor = _find_node_by_path(stages, "/".join(parts[:i]))
 		if ancestor and ancestor.get("on_fail"):
 			return str(ancestor["on_fail"])
 	return "warn"
 
 
-def _find_node(stages: List[Dict[str, Any]], node_id: str) -> Optional[Dict[str, Any]]:
-	"""Busca una etapa por id en todo el árbol (los ids son únicos globalmente)."""
-	for s in stages:
-		if s.get("id") == node_id:
-			return s
-		if s.get("type") == _TYPE_COMPOUND:
-			found = _find_node(s.get("sub_etapas", []), node_id)
-			if found:
-				return found
-	return None
+def _find_node_by_path(stages: List[Dict[str, Any]], path: str) -> Optional[Dict[str, Any]]:
+	"""Resuelve una etapa por su RUTA aplanada (`panel/lens-a`), descendiendo nivel
+	a nivel. Las RUTAS son únicas (validate); los ids sueltos NO lo son entre
+	ramas (F1/implementor y F2/implementor conviven) — resolver por id global
+	devolvía el homónimo de otra rama, con su on_fail/parallel equivocados."""
+	nodes = stages
+	node: Optional[Dict[str, Any]] = None
+	for part in path.split("/"):
+		node = next((s for s in nodes if s.get("id") == part), None)
+		if node is None:
+			return None
+		nodes = node.get("sub_etapas", []) if node.get("type") == _TYPE_COMPOUND else []
+	return node
 
 
 class DagJobDriver(ResumableJobDriver):
@@ -439,7 +443,7 @@ class DagJobDriver(ResumableJobDriver):
 			level_path = f"{level_path}/{part}" if level_path else part
 			# nivel en el que vive el ancestro = parte i+1 de la ruta
 			parent_prefix = "/".join(parts[:i]) if i else ""
-			ancestor = _find_node(stages, part)
+			ancestor = _find_node_by_path(stages, level_path)
 			if ancestor is None:
 				continue
 			for dep in ancestor.get("depends_on", []):
@@ -603,7 +607,7 @@ class DagJobDriver(ResumableJobDriver):
 		for node_path in _flatten_ids(stages):
 			if node_path in completed:
 				continue
-			node = _find_node(stages, node_path.rsplit("/", 1)[-1])
+			node = _find_node_by_path(stages, node_path)
 			if not node or node.get("type") != _TYPE_COMPOUND:
 				continue
 			node_leaves = list(_iter_leaves(node.get("sub_etapas", []), node_path))
@@ -732,8 +736,7 @@ class DagJobDriver(ResumableJobDriver):
 				level = len(prefix.split("/")) if prefix else 0
 				parent_parallel = False
 				if prefix:
-					parent_id = prefix.rsplit("/", 1)[-1]
-					node = _find_node(stages, parent_id)
+					node = _find_node_by_path(stages, prefix)
 					parent_parallel = bool(node and node.get("type") == _TYPE_COMPOUND and node.get("parallel"))
 				parallel = parent_parallel and level <= max_parallel_level and len(group) > 1
 				if parallel:
@@ -778,7 +781,7 @@ class DagJobDriver(ResumableJobDriver):
 		for node_path in _flatten_ids(stages):
 			if node_path in new_completed:
 				continue
-			node = _find_node(stages, node_path.rsplit("/", 1)[-1])
+			node = _find_node_by_path(stages, node_path)
 			if not node or node.get("type") != _TYPE_COMPOUND:
 				continue
 			if all(leaf_path in new_completed for leaf_path, _ in _iter_leaves(node.get("sub_etapas", []), node_path)):
