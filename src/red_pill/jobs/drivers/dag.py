@@ -90,6 +90,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import copy
 import json
 import logging
 import shutil
@@ -240,6 +241,20 @@ def _flatten_ids(stages: List[Dict[str, Any]], prefix: str = "") -> List[str]:
 
 def _count_leaves(stages: List[Dict[str, Any]]) -> int:
 	return sum(1 for _ in _iter_leaves(stages))
+
+
+def _apply_recipe_defaults(stages: List[Dict[str, Any]], defaults: Dict[str, Any]) -> None:
+	"""Copia los defaults agénticos top-level de una RECETA referenciada a sus
+	etapas `agent` sin valor propio. Sin esto, validate() aprobaba la etapa
+	contra el payload de la receta y el runtime la ejecutaba contra el payload
+	del PADRE — el fail-safe de modelos quedaba burlado por composición."""
+	for s in stages:
+		if s.get("type") == _TYPE_AGENT:
+			for key in ("backend", "model", "effort"):
+				if not s.get(key) and defaults.get(key):
+					s[key] = defaults[key]
+		elif s.get("type") == _TYPE_COMPOUND:
+			_apply_recipe_defaults(s.get("sub_etapas", []), defaults)
 
 
 def _resolve_on_fail(stages: List[Dict[str, Any]], leaf_path: str) -> str:
@@ -394,8 +409,6 @@ class DagJobDriver(ResumableJobDriver):
 		receta siga igual en disco (RFC_JOB_DAG §4.5). Devuelve un payload nuevo
 		(sin mutar el original).
 		"""
-		import copy
-
 		expanded = copy.deepcopy(payload)
 		expanded["manifest"]["stages"] = cls._expand_stages(expanded["manifest"]["stages"], recipe_stack=[])
 		return expanded
@@ -409,7 +422,8 @@ class DagJobDriver(ResumableJobDriver):
 				if recipe_ref in recipe_stack:
 					raise ValueError(f"dag_job receta cíclica: '{recipe_ref}' ya está en la cadena {recipe_stack}.")
 				_sub_source, sub_payload, _prio, _parent, _is_seed = cls._load_recipe(recipe_ref)
-				sub_stages = (sub_payload.get("manifest") or {}).get("stages") or []
+				sub_stages = copy.deepcopy((sub_payload.get("manifest") or {}).get("stages") or [])
+				_apply_recipe_defaults(sub_stages, sub_payload)
 				compound: Dict[str, Any] = {"id": s["id"], "type": _TYPE_COMPOUND, "sub_etapas": cls._expand_stages(sub_stages, recipe_stack + [recipe_ref])}
 				for key in ("on_fail", "parallel", "depends_on"):
 					if s.get(key) is not None:

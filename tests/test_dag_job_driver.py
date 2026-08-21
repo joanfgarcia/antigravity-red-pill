@@ -950,3 +950,27 @@ def test_workdir_relative_anchored_to_cwd(tmp_path, monkeypatch):
 	drv.step(payload, {})
 	assert (tmp_path / ".cell" / "dag_status.json").is_file()
 	assert (tmp_path / ".cell" / "reports" / "a.envelope.json").is_file()
+
+
+def test_type_dag_expansion_inherits_recipe_defaults(tmp_path, monkeypatch):
+	"""La receta referenciada declara model/backend top-level; su etapa agent sin
+	valor propio los hereda al expandir (paridad validate ↔ runtime)."""
+	sub_payload = {
+		"mission_id": "sub",
+		"model": "opencode-go/deepseek-v4-pro",
+		"backend": "opencode",
+		"manifest": {"workdir": ".", "stages": [
+			{"id": "lens", "type": "agent", "minion": "agent", "prompt": "x"},
+		]},
+	}
+	monkeypatch.setattr(
+		DagJobDriver,
+		"_load_recipe",
+		classmethod(lambda cls, ref: ("dag_job", sub_payload, 5, None, False)),
+	)
+	payload = _payload(str(tmp_path), [{"id": "panel", "type": "dag", "recipe": "fake-panel"}])
+	expanded = DagJobDriver.expand_manifest(payload)
+	leaf = expanded["manifest"]["stages"][0]["sub_etapas"][0]
+	assert leaf["model"] == "opencode-go/deepseek-v4-pro"
+	assert leaf["backend"] == "opencode"
+	assert sub_payload["manifest"]["stages"][0].get("model") is None  # la receta original no se muta
