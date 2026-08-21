@@ -1,3 +1,67 @@
+## [7.21.0] - 2026-08-21 (Remediación de la auditoría del DAG)
+
+Remediación completa de la auditoría del 21-ago (revisión de RFC_JOB_DAG /
+RFC_SLEEP_JOB_DRIVER / RFC_DOSSIER_IDEACION contra la implementación, hecha la
+mañana siguiente al PRIMER ciclo de sueño 15/15 en producción como receta del
+dag_job). Informe: `.red-pill/memory/REVIEW_2026-08-21_dag-audit.md`; plan
+ejecutado: `Aleth_Core/PLAN_IMPL_DAG_AUDIT_FIXES.md` (v1.1, con segunda vuelta
+adversarial).
+
+### ⚙️ Motor del `dag_job`
+
+- **[FIX] Resolución de etapas por RUTA, no por id global**: con hojas
+  homónimas entre compounds (`F1/implementor` y `F2/implementor` — lo que
+  emite el compilador de forge con roles repetidos entre fases),
+  `_resolve_on_fail` aplicaba el `on_fail` del homónimo de OTRA fase (una hoja
+  `warn` ejecutaba con `stop` y viceversa: la deriva silenciosa que §4.4.3
+  quería cerrar seguía abierta por composición). El flag `parallel` del padre y
+  la propagación de compuestos sufrían el mismo defecto latente.
+- **[FIX] `expand_manifest` hereda los defaults agénticos de la sub-receta**
+  (`backend`/`model`/`effort`): validate() aprobaba la etapa contra el payload
+  de la receta referenciada y el runtime la ejecutaba contra el del padre — el
+  fail-safe de modelos quedaba burlado por composición.
+- **[FIX] `JobDeferred` a mitad de frente cede con lo hecho**: las etapas ya
+  completadas del step se preservan en el checkpoint (paridad con la cota de
+  presupuesto); el deferral limpio se lanza en el siguiente step, sin re-ejecutar
+  efectos. Sin progreso, se propaga como siempre (R1).
+- `manifest.workdir` relativo se ancla a `payload.cwd` (el que `load_recipe` ya
+  fijaba a la raíz del proyecto de la receta); `.cell/` deja de depender del
+  CWD del proceso runner.
+- Los minions reciben `job_id` en kwargs (soporte de idempotencia del gate).
+
+### 🌙 Sueño
+
+- **[FIX] `mode: deep` dejaba de ser decorativo**: el `mode` del payload llega
+  a los minions de fase/finalize vía dag_job (antes TODA receta corría `lazy`
+  en silencio). `params.mode` por etapa sigue pisando al payload.
+- **`SleepJobDriver` legacy RETIRADO físicamente** — condición cumplida: la
+  receta `sleep.yaml` completó su primer ciclo nocturno en producción
+  (2026-08-21, 15/15). Los jobs legacy en cola los salta el runner con aviso.
+
+### 🔁 Loop de ideación
+
+- **[FIX] `{dossier_dir}` se interpola de verdad**: nueva `enqueue_pass()` —
+  única puerta de encolado del loop (arranque + re-encolado del gate) — que
+  renderiza los prompts (`str.replace` del literal), inyecta los params del
+  gate, fija el `mission_id` real del loop (pisando el `dossier-loop` de
+  fábrica) y aplica `validate()` + `expand_manifest()` como el CLI/MCP.
+  **Idempotente por misión**: un job vivo por `mission_id` (excluyendo el
+  actual; FRUSTRATED fuera) — el re-run del gate (at-least-once del runner) ya
+  no puede duplicar un pase, y el crash pre-enqueue no lo pierde.
+- **[FIX] El gate depende del pase** (`depends_on`) en las 4 recetas: ya no
+  puede correr sobre un dossier sin actualizar cuando el pase falla.
+- **[FIX] Hallazgos por CONTENIDO, no por conteo** (definición L2 real):
+  responder una pregunta y abrir otra ES hallazgo; una contradicción
+  persistente NO resetea el tope dinámico.
+- **[FIX] Gate idempotente por `job_id`**: un resume tras pausa no infla los
+  contadores del loop.
+
+### 📚 Docs
+
+- El skill `dag` documenta el cuarto tipo (`type: dag`, composición por
+  referencia) en SKILL.md y references/manifest.md.
+- `DECISION_LOG.md` cierra la "limpieza física diferida" de los drivers legacy.
+
 ## [7.20.0] - 2026-08-20 (Sueño con cota de drenaje y pausa a mitad de fase)
 
 ### ⏱️ Cutoff de drenaje del sueño (`SLEEP_CUTOFF_ENABLED`)
