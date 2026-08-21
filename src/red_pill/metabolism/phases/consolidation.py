@@ -143,7 +143,7 @@ class ConsolidationPhase(SleepPhase):
 		new_work_hubs = []
 
 		# Drain cutoff: only engrams inserted up to the moment the sleep started are
-		# eligible this cycle. The SleepJobDriver pins it at job start (persisted in
+		# eligible this cycle. The dag_job sleep recipe pins it at job start (persisted in
 		# the checkpoint); the one-shot pulse captures it here at phase start. Points
 		# written by sessions still running during the sleep stay buffered for next
 		# cycle — the drain loop is guaranteed to terminate.

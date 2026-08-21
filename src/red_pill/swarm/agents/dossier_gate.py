@@ -231,8 +231,8 @@ class DossierGateMinion(Minion):
 		next_pass = verdict.get("next_pass")
 		if next_pass not in PASSES:
 			return {"status": "error", "error": f"pase desconocido '{next_pass}'", "state": state}
-		job_id = self._enqueue_next_pass(kwargs, next_pass, state)
-		return {"status": "success", "verdict": "continue", "next_pass": next_pass, "summary": f"pase siguiente encolado: {next_pass} ({job_id[:8] if job_id else '?'})", "state": state}
+		next_job_id: Optional[str] = self._enqueue_next_pass(kwargs, next_pass, state)
+		return {"status": "success", "verdict": "continue", "next_pass": next_pass, "summary": f"pase siguiente encolado: {next_pass} ({next_job_id[:8] if next_job_id else '?'})", "state": state}
 
 	def _enqueue_next_pass(self, kwargs: Dict[str, Any], next_pass: str, state: Dict[str, Any]) -> Optional[str]:
 		"""Delegado en `enqueue_pass` (única puerta de encolado del loop)."""
