@@ -567,6 +567,7 @@ class DagJobDriver(ResumableJobDriver):
 			build_pause_probe(self.job_id, gate=gate) if stage.get("pausable", True) else None,
 		)
 		kwargs.setdefault("sleep_cutoff_ts", getattr(self, "_sleep_cutoff_ts", 0.0))
+		kwargs.setdefault("job_id", self.job_id)
 
 		result = asyncio.run(minion.execute(task, **kwargs))
 

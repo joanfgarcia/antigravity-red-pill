@@ -925,3 +925,14 @@ def test_homonym_leaf_failure_honors_own_on_fail(tmp_path, monkeypatch):
 			break
 	assert outcome is not None and outcome.completed  # warn honrado: la misión completa
 	assert "FAILED" in checkpoint["results"]["F2/implementor"]
+
+
+def test_run_atomic_passes_job_id(tmp_path, monkeypatch):
+	"""Los minions reciben el job_id que los ejecuta (idempotencia del gate)."""
+	record = []
+	_patch_minion_factory(monkeypatch, record)
+	drv = DagJobDriver()
+	drv.bind("job-abc-123")
+	stages = [{"id": "a", "type": "agent", "minion": "agent", "model": "m", "prompt": "x"}]
+	drv.step(_payload(str(tmp_path), stages), {})
+	assert record[0][1].get("job_id") == "job-abc-123"
