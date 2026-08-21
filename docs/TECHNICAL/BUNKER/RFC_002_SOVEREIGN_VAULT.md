@@ -8,7 +8,7 @@
 | **Status** | DRAFT |
 | **Author** | Joan García (Operator) / Aleth (Agent) |
 | **Created** | 2026-08-20 |
-| **Revised** | 2026-08-21 — design-review amendments: Phase 3 → TTL buffer, secret-scrub MUST, immutable month, shadow gate |
+| **Revised** | 2026-08-21 — design review, 2 passes: TTL buffer, secret-scrub MUST, immutable month, shadow gate, `memory_queue` source, archive-only gate |
 | **Triggered by** | Design review of the raw-capture architecture (scribe_relay + chronicle) |
 | **Related** | [RFC-001](./RFC_001_FIRMWARE_PROTECTION.md), [DECISION_LOG](../DECISION_LOG.md), [ROADMAP](../ROADMAP.md), [CHRONICLE_INGESTION_GUIDE](../../GUIDES/CHRONICLE_INGESTION_GUIDE.md) |
 
@@ -29,7 +29,9 @@ Today the Bünker records *everything* twice, and both times into Qdrant vectors
 - Everything lands in `memory_queue` (SQLite) → `drain_memory_queue`
   (`src/red_pill/core/queue_worker.py:345`) → `record_interaction_pair`
   (`src/red_pill/memory.py:487`) → collection `interaction_memories`.
-- The 03:00 Sleep cycle later consolidates that buffer into `work_memories`.
+- The 03:00 Sleep cycle later consolidates that buffer into `work_memories`,
+  deleting the processed points afterwards (`consolidation.py:516,521`) — the
+  buffer self-drains; only failed points and VRAM-deferred nights linger.
 
 **Pipeline B — Chronicle (`archive_memories`)**
 
@@ -50,7 +52,9 @@ Today the Bünker records *everything* twice, and both times into Qdrant vectors
    `idea_fragment` nodes, each embedded (`scripts/antigravity_ingest.py:183-215`).
 2. **Signal dilution.** Every turn — including tooling noise, failed attempts,
    small talk — competes semantically with the genuinely valuable engrams.
-   The vector store's recall degrades as raw noise scales.
+   Precision (2nd pass): the two *permanent* copies are the `work_memories`
+   chunks and the atomized archive nodes (`interaction_memories` is transient);
+   both permanent layers scale with volume, so recall degrades all the same.
 3. **No true "exact recall".** Semantic search finds the *vague* and loses the
    *detail*. There is no human-readable, navigable, greppable record of what was
    actually said.
@@ -134,32 +138,40 @@ firehose and returns to being a **curated memory**: only what the consolidation
    tokens, passwords, common credential shapes) to every message before it is
    written to the vault. Tool *inputs* are rendered into the vault (e.g. bash
    commands via `_render_tool_use`), so credentials typed in terminals WILL
-   reach disk unless scrubbed. Git history (MAY 15) must not be enabled before
+   reach disk unless scrubbed. Git history (MAY 16) must not be enabled before
    this exists.
+10. **`memory_queue` chronicle source** (required before rollout Phase 3): turns
+    whose only capture surface is the MCP `memorize_interaction` have no native
+    provider store — without this source they never reach the vault, and once
+    the TTL prunes the buffer their raw record is gone. The queue keeps every
+    row (`completed` rows are never purged today), so it doubles as the
+    canonical store for that surface: group rows lacking a session by
+    `originator` + day (`mcp:<originator>:<AAAA-MM-DD>`). Retention closes the
+    loop: completed rows may be purged only after the vault has rendered them.
 
 ### 3.2 SHOULD
 
-10. **Search mode**: a vault search action in the MCP (full-text via ripgrep,
+11. **Search mode**: a vault search action in the MCP (full-text via ripgrep,
     scoped by source/month, returns paths + snippets).
-11. **Graph links**: frontmatter carries `prev_session`/`next_session` (thread
+12. **Graph links**: frontmatter carries `prev_session`/`next_session` (thread
     continuity), so Obsidian renders a conversation graph.
-12. **Per-source and per-month indexes** generated automatically.
-13. **Registry**: `vault_registry.json` mirrors `chronicle_daily_registry.json`
+13. **Per-source and per-month indexes** generated automatically.
+14. **Registry**: `vault_registry.json` mirrors `chronicle_daily_registry.json`
     so reruns are cheap and audits possible.
-14. **Noise normalization** shared with the ingester (reuse `_refine_content`-style
+15. **Noise normalization** shared with the ingester (reuse `_refine_content`-style
     cleaning, moved to a common module).
 
 ### 3.3 MAY
 
-15. **Git history**: vault optionally git-initialized for immutable history.
+16. **Git history**: vault optionally git-initialized for immutable history.
     Gated on MUST 9: immutable history makes any leaked secret permanent, so
     the scrubber lands first.
-16. **Dual-write window**: superseded by the revised Phase 3 (§4.4) — the scribe
+17. **Dual-write window**: superseded by the revised S3 (§4.4) — the scribe
     keeps writing to `interaction_memories` permanently; the collection is now a
     TTL'd buffer, so there is no "stop" event, only pruning.
-17. **Automatic curation gate**: distill/refine may auto-promote vault fragments to
+18. **Automatic curation gate**: distill/refine may auto-promote vault fragments to
     Qdrant engrams (importance threshold or LLM judgment).
-18. **Narrative rollups**: monthly summary files (`<AAAA-MM>/_rollup.md`) distilled
+19. **Narrative rollups**: monthly summary files (`<AAAA-MM>/_rollup.md`) distilled
     by Samantha.
 
 ---
@@ -178,7 +190,7 @@ CAPTURE  (hooks / bridges / MCP)          →   memory_queue  (SQLite)
    │        │                                        │           │
    │        ▼                                        ▼           │
    │   SOVEREIGN VAULT (disk)                   Qdrant raw sink │
-   │   markdown tree + indexes               (deprecated later)  │
+   │   markdown tree + indexes               (gated in Phase 4)  │
    └───────────────┬────────────────────────────────────────────┘
                    │  (only curated content)
                    ▼
@@ -266,20 +278,25 @@ file, and Obsidian links rot.
 
 ### 4.4 Scribe Relay Evolution
 
-- Phase 1: scribe continues exactly as today; the vault is purely additive.
-- Phase 2 (optional): scribe writes the turn to the vault (append) *in addition*
+Steps are named S1–S3: scribe-evolution steps, not the §6 rollout phases.
+
+- S1: scribe continues exactly as today; the vault is purely additive.
+- S2 (optional): scribe writes the turn to the vault (append) *in addition*
   to the queue, so the vault is real-time, not only 04:00.
-- Phase 3 (revised 2026-08-21): `interaction_memories` is **not** deprecated —
-  it becomes a rolling short-term buffer (TTL ≈ 48–72h, pruned after Sleep
-  consolidation). Design-review evidence: the pre-heating interceptor
-  (`src/red_pill/interceptors/11_pre_heating.py:96-102,232-237`) queries this
-  collection *semantically* — top-3 recent raw context (48h) plus the tier-2
-  recent-work fallback — a query shape full-text over the vault cannot serve
-  (NG4). Keeping a TTL'd buffer leaves Sleep
-  (`src/red_pill/metabolism/phases/consolidation.py:142`) and pre-heating
-  untouched, caps long-term noise (the buffer never outgrows 2–3 days) and
-  shrinks this phase to adding a pruning step. Durable raw storage is the
-  vault; Qdrant keeps only the hot window.
+- S3 (revised 2026-08-21, 2nd pass): `interaction_memories` is **not**
+  deprecated — it stays as the rolling short-term buffer it already *almost*
+  is: Sleep deletes processed points after consolidation
+  (`consolidation.py:516,521`), so the collection self-drains nightly. The only
+  new mechanism is a **TTL backstop of 72h** for what the drain leaves behind
+  (failed points in `failed_ids`, VRAM-deferred nights). Constraint:
+  `TTL > PRE_HEATING_LOOKBACK_HOURS` (48h, `config.py:686`) — the pre-heating
+  interceptor (`src/red_pill/interceptors/11_pre_heating.py:96-102,232-237`)
+  queries this collection *semantically* (top-3 recent raw context plus the
+  tier-2 recent-work fallback), a query shape full-text over the vault cannot
+  serve (NG4); the TTL must never starve its window. Sleep
+  (`src/red_pill/metabolism/phases/consolidation.py:142`) and pre-heating stay
+  untouched. Durable raw storage is the vault; Qdrant keeps only the hot
+  window.
 - The MCP `memorize_interaction` anti-noise filter (`mcp_server.py:234`) is
   preserved and applied to the vault write.
 
@@ -287,8 +304,12 @@ file, and Obsidian links rot.
 
 The chronicle's existing synthesis steps (`chronicle_distill.py` — Samantha,
 `chronicle_refine.py`) already produce the "curated" signal. The change:
-**ingesting into `archive_memories` / `work_memories` becomes the gated step**,
-not the default. A node ascends to vectors when:
+**ingesting into `archive_memories` becomes the gated step**, not the default.
+Scope (2nd pass): the gate applies to the chronicle→archive path **only** —
+`work_memories` is fed by Sleep and already has its own curation stack
+(Samantha distillation, Lazarus erosion, tool-noise compaction, orphan GC);
+gating it would duplicate machinery and touch the Sleep engine for no signal
+gain. A node ascends to vectors when:
 
 - it is marked important by the operator, or
 - distill/refine assigns it significance above a threshold, or
@@ -304,6 +325,11 @@ it computes the would-be decision, stamps `significance` into vault frontmatter
 and counts it in the registry, while still ingesting everything. Recall impact
 is then measured by replaying real `search_memory_research` queries against
 gated vs ungated sets. Phase 4 flips the switch only on that evidence.
+
+**Prerequisite (2nd pass):** no query log exists today — telemetry does not
+record `search_memory_research` calls. Query logging (query text + timestamp)
+starts in rollout Phase 1, well before Phase 3.5, so the replay has a real
+corpus to draw from.
 
 ### 4.6 Search
 
@@ -324,7 +350,8 @@ standardize it, and dump it into the vault.
 ### 5.1 Sources of Truth (in priority order)
 
 1. **Provider stores (canonical):** opencode.db SQLite, Claude Code JSONL,
-   Antigravity exports — via the existing `ChronicleSourcePlugin.discover()/load()`.
+   Antigravity exports — via the existing `ChronicleSourcePlugin.discover()/load()` —
+   plus the `memory_queue` SQLite for MCP-only turns (MUST 10).
    These are the rawest and most complete.
 2. **`archive_memories` (fallback):** if a provider store is gone (e.g. old
    Antigravity exports), reconstruct sessions from the collection: points carry
@@ -359,7 +386,10 @@ A new script `scripts/vault_migrate.py` (or a `--vault-only` mode of
    `<vault>/<AAAA-MM>/<source>/<session>.md` → update registry.
 3. If `load()` fails for a source, attempt reconstruction from `archive_memories`.
 4. Rebuild generated indexes (`<vault>/index/<source>.md`, `<vault>/<AAAA-MM>/_rollup.md`).
-5. Dry-run mode (`--dry-run`) reports counts without writing.
+5. Dry-run mode (`--dry-run`) reports counts without writing; the report
+   compares per-source censuses against `memory_queue` originators to expose
+   any capture surface the sources miss (e.g. empirically confirm that
+   antigravity/Telegram turns really appear in the nightly exports).
 
 ---
 
@@ -368,9 +398,9 @@ A new script `scripts/vault_migrate.py` (or a `--vault-only` mode of
 | Phase | Scope | Behavior change | Risk |
 |---|---|---|---|
 | **0** | RFC review; decide §4.3 layout and vault location (§7; scribe fate resolved — see Q3) | — | — |
-| **1** | Vault renderer + `vault_migrate --all` backfill | None (additive) | Low |
+| **1** | Vault renderer + `vault_migrate --all` backfill + start the `search_memory_research` query log (3.5 prerequisite) | None (additive) | Low |
 | **2** | `search_vault` MCP action + index generation | None | Low |
-| **3** | `interaction_memories` becomes a TTL'd rolling buffer (48–72h, pruned post-Sleep); Sleep & pre-heating untouched (§4.4) | Low (older raw turns leave Qdrant — the vault holds them) | Low |
+| **3** | TTL backstop (72h) on `interaction_memories` (S3, §4.4) — Sleep already self-drains it; requires MUST 10 so no surface loses its only raw record | Low (stray raw turns leave Qdrant — the vault holds them) | Low |
 | **3.5** | Curation gate in **shadow**: log-only significance decisions + replayed-query recall measurement (§4.5) | None | Low |
 | **4** | Curation gate enforced: `archive_memories` ingest gated by significance | High (recall changes) | Medium (bounded by 3.5 evidence) |
 
@@ -401,7 +431,7 @@ revertible).
 6. **Workspace tagging**: should sessions carry their `workspace` so the vault
    can be browsed by project? *Recommendation:* yes — the §4.2 schema already
    carries the key; make it official.
-7. **Real-time vault**: does the scribe write to the vault live (Phase 2), or is
+7. **Real-time vault**: does the scribe write to the vault live (S2), or is
    the 04:00 batch enough? *Recommendation:* with the TTL buffer retained, the
    04:00 batch suffices; live append stays MAY.
 
@@ -417,6 +447,7 @@ revertible).
 | Recall regression during Phase 4 | Semantic store keeps the consolidated engrams; vault fills the exact-recall gap; both compose in search |
 | Double-writing during Phase 3 duplicates state | `memory_queue` content_hash dedup already exists; vault writes are idempotent |
 | Secrets (tokens, keys, credentials in tool inputs) reach plaintext markdown | MUST-9 scrubber in the shared renderer (§5.2); git history gated on it; vault covered by the pending LUKS-encrypted home plan |
+| A surface with no provider store loses its raw record once the TTL prunes | MUST 10: `memory_queue` chronicle source lands before Phase 3; queue rows purge only post-render (also caps today's unbounded queue growth) |
 
 ---
 
