@@ -8,7 +8,7 @@
 | **Status** | DRAFT |
 | **Author** | Joan García (Operator) / Aleth (Agent) |
 | **Created** | 2026-08-20 |
-| **Revised** | 2026-08-21 — design review, 2 passes: TTL buffer, secret-scrub MUST, immutable month, shadow gate, `memory_queue` source, archive-only gate |
+| **Revised** | 2026-08-21 — design review, 2 passes: TTL buffer, secret-scrub MUST, immutable month, shadow gate, `memory_queue` source, archive-only gate. 2026-08-22 — 3rd pass: layout DECIDED (B, `yyyy-mm`), agentic pass delineated (Distill→Refine as §4.5), hubs/reinforcement/forgetting confirmed unchanged |
 | **Triggered by** | Design review of the raw-capture architecture (scribe_relay + chronicle) |
 | **Related** | [RFC-001](./RFC_001_FIRMWARE_PROTECTION.md), [DECISION_LOG](../DECISION_LOG.md), [ROADMAP](../ROADMAP.md), [CHRONICLE_INGESTION_GUIDE](../../GUIDES/CHRONICLE_INGESTION_GUIDE.md) |
 
@@ -243,12 +243,11 @@ next_session: opencode:abc-124
   `archive_memories` (§5.1.2): their body is *refined* text, not verbatim — the
   flag keeps G4 honest about which files are literal transcripts.
 
-### 4.3 Structural Decision: source-first vs month-first
+### 4.3 Structural Decision: source-first vs month-first — **DECIDED**
 
-Proposal under review:
+**Decision (operator, 2026-08-22): B — month-first, `yyyy-mm` granularity.**
 
-- **A (operator's first instinct):** `<vault>/<source>/<AAAA-MM>/<session>.md`
-- **B (timeline-first):** `<vault>/<AAAA-MM>/<source>/<session>.md`
+- **B (timeline-first, chosen):** `<vault>/<AAAA-MM>/<source>/<session>.md`
 
 | Criterion | A — source-first | B — month-first |
 |---|---|---|
@@ -259,22 +258,22 @@ Proposal under review:
 | Graph/thread continuity | same | same (via frontmatter) |
 | Path stability | stable | stable — month pinned to first-message `created_at` (see below) |
 
-**Recommendation: B (month-first), with generated indexes as mitigation.**
-
 Rationale: the vault is a *chronicle* — its primary value is narrative/temporal.
 A session is an event in time; the month is the natural container. The "all
 sessions of a source" browsing is recovered with an auto-generated per-source
 index (`<vault>/index/<source>.md`) that lists sessions chronologically, and the
 frontmatter links keep the graph alive regardless of folder layout.
 
-> This is an explicit decision point for the operator. If A is chosen, the only
-> schema change is the path template; nothing else in this RFC depends on it.
+Day-level granularity (`yyyy-mm-dd`) was considered and **rejected**: splitting
+by day would fragment sessions that cross midnight, and the month boundary
+already demands the same immutability rule below — so day granularity only
+adds fragmentation without solving anything.
 
 **Path immutability rule (either layout):** the `<AAAA-MM>` segment derives from
 the `created_at` of the session's *first* message — never from `updated_at` or
-the last message. A session spanning a month boundary must not change path
-between reruns; otherwise §5.3 idempotency breaks, the registry sees a new
-file, and Obsidian links rot.
+the last message. A session spanning a month boundary stays in the month of its
+first message; it must not change path between reruns; otherwise §5.3
+idempotency breaks, the registry sees a new file, and Obsidian links rot.
 
 ### 4.4 Scribe Relay Evolution
 
@@ -300,10 +299,33 @@ Steps are named S1–S3: scribe-evolution steps, not the §6 rollout phases.
 - The MCP `memorize_interaction` anti-noise filter (`mcp_server.py:234`) is
   preserved and applied to the vault write.
 
-### 4.5 Curation Gate
+### 4.5 The Agentic Pass: Distill → Refine
 
-The chronicle's existing synthesis steps (`chronicle_distill.py` — Samantha,
-`chronicle_refine.py`) already produce the "curated" signal. The change:
+Between the mechanical vault write (§4.1) and the curation gate lives the
+**agentic pass** — two stages that today operate on Qdrant engrams and are
+re-targeted to operate on the vault files:
+
+1. **`chronicle_distill` (segmentation + selection).** Reads each vault session
+   file and splits it into fragments. Its job is *filtration*: keep only the
+   fragments that carry narrative/semantic value. It drops the uninteresting
+   bulk — tool-use detail, command invocations, routine agent plumbing —
+   unless a specific fragment is genuinely notable. Internal agent reasoning is
+   kept only when it is *actually interesting* (a decision, an insight), not as
+   a blanket transcript.
+2. **`chronicle_refine` (texture extraction).** On the surviving fragments it
+   extracts the *texture*: theme classification, summaries, emotional charge,
+   "relics" (memorable anchors worth keeping), cross-references. This is the
+   same extraction currently performed on Qdrant engrams
+   (`chronicle_distill.py` — Samantha, `chronicle_refine.py`), applied instead
+   to the vault markdown as its input source.
+
+The output of the agentic pass is the input to the curation gate (§4.6): a
+fragment becomes a candidate engram only after distill+refine have judged it.
+
+### 4.6 Curation Gate
+
+The chronicle's agentic pass (`chronicle_distill.py` — Samantha,
+`chronicle_refine.py`) produces the "curated" signal. The change:
 **ingesting into `archive_memories` becomes the gated step**, not the default.
 Scope (2nd pass): the gate applies to the chronicle→archive path **only** —
 `work_memories` is fed by Sleep and already has its own curation stack
@@ -331,7 +353,15 @@ record `search_memory_research` calls. Query logging (query text + timestamp)
 starts in rollout Phase 1, well before Phase 3.5, so the replay has a real
 corpus to draw from.
 
-### 4.6 Search
+**Hub formation & reinforcement/forgetting engines — unchanged.** Once a
+fragment ascends to Qdrant, the downstream lifecycle stays exactly as it is
+today: hubs assemble from related engrams in later phases, and the
+reinforcement/forgetting engines (FSRS stability, Lazarus erosion,
+reinforcement via re-recall) keep operating on the Qdrant collections
+unchanged. This RFC does not touch that machinery; it only changes *what*
+enters it.
+
+### 4.7 Search
 
 New first-class action `search_vault` in `bunker_memory_api`:
 
@@ -397,11 +427,11 @@ A new script `scripts/vault_migrate.py` (or a `--vault-only` mode of
 
 | Phase | Scope | Behavior change | Risk |
 |---|---|---|---|
-| **0** | RFC review; decide §4.3 layout and vault location (§7; scribe fate resolved — see Q3) | — | — |
+| **0** | RFC review; layout DECIDED (B, §4.3); decide vault location (§7); scribe fate resolved — see Q3 | — | — |
 | **1** | Vault renderer + `vault_migrate --all` backfill + start the `search_memory_research` query log (3.5 prerequisite) | None (additive) | Low |
 | **2** | `search_vault` MCP action + index generation | None | Low |
 | **3** | TTL backstop (72h) on `interaction_memories` (S3, §4.4) — Sleep already self-drains it; requires MUST 10 so no surface loses its only raw record | Low (stray raw turns leave Qdrant — the vault holds them) | Low |
-| **3.5** | Curation gate in **shadow**: log-only significance decisions + replayed-query recall measurement (§4.5) | None | Low |
+| **3.5** | Curation gate in **shadow**: log-only significance decisions + replayed-query recall measurement (§4.6) | None | Low |
 | **4** | Curation gate enforced: `archive_memories` ingest gated by significance | High (recall changes) | Medium (bounded by 3.5 evidence) |
 
 Each phase is independently revertible. Phase 4 is the single point of no
@@ -423,7 +453,7 @@ revertible).
    semantically and the vault cannot serve that query shape (§4.4).
 4. **Curation threshold**: what defines "significant enough to ascend"? Operator
    flag, distill score, reference count, or a combination? *Recommendation:*
-   decide with Phase 3.5 shadow data (§4.5), not a priori.
+   decide with Phase 3.5 shadow data (§4.6), not a priori.
 5. **Retention**: does the vault replace `archive_memories` entirely, or does
    `archive_memories` remain for the atomized/graph form? *Recommendation:*
    `archive_memories` ends curated-only; keeping "everything atomized" rebuilds
