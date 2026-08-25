@@ -15,6 +15,7 @@ from red_pill.core.paths import (
 	get_neon_link_db_path,
 	get_state_dir,
 )
+from red_pill.swarm.bridges.opencode import read_opencode_origins
 
 # Actividad EN DISCO de los IDEs sin interceptor propio (29 jul 2026): el touch
 # de last_user_activity.txt depende de que el agente llame al handshake — una
@@ -72,15 +73,38 @@ def is_ide_idle(idle_seconds=3600):
 		except Exception:
 			pass
 
-	# Signal 4: opencode local storage
-	try:
-		if OPENCODE_DATA_DIR.is_dir() and _any_fresh(OPENCODE_DATA_DIR.glob("opencode.db*")):
-			return False
-	except Exception:
-		pass
+	# Signal 4: opencode local storage. Distinguish real operator sessions from
+	# autonomous-awakening headless runs via the origin registry: a fresh session
+	# only counts as activity if it is NOT an "awakening" run. A session with no
+	# registry entry is assumed to be user activity (safe default). If the DB can't
+	# be read, fall back to the raw opencode.db mtime check.
+	if OPENCODE_DATA_DIR.is_dir():
+		try:
+			origins = read_opencode_origins()
+			db = OPENCODE_DATA_DIR / "opencode.db"
+			if db.exists():
+				cutoff_ms = int((now - idle_seconds) * 1000)
+				con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+				try:
+					fresh = con.execute("SELECT id FROM session WHERE time_updated > ?", (cutoff_ms,)).fetchall()
+				finally:
+					con.close()
+				for (sid,) in fresh:
+					if origins.get(sid, {}).get("origin", "user") != "awakening":
+						return False
+			else:
+				if _any_fresh(OPENCODE_DATA_DIR.glob("opencode.db*")):
+					return False
+		except Exception:
+			if _any_fresh(OPENCODE_DATA_DIR.glob("opencode.db*")):
+				return False
 
 	# All signals indicate idle
 	return True
+
+
+def _log(msg: str) -> None:
+	print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}")
 
 
 def main():
@@ -99,7 +123,7 @@ def main():
 
 	# Comprobar si el Operador lleva inactivo 1 hora (3600 segundos)
 	if not is_ide_idle(3600):
-		print("El Operador sigue activo en el IDE. Abortando despertar autónomo para no interrumpir.")
+		_log("El Operador sigue activo en el IDE. Abortando despertar autónomo para no interrumpir.")
 		return
 
 	conn = sqlite3.connect(db_path)
@@ -108,7 +132,7 @@ def main():
 	# Evitar inyectar un despertar si ya hay mensajes pendientes en la cola
 	cursor.execute("SELECT count(*) FROM inbox WHERE status = 'PENDING'")
 	if cursor.fetchone()[0] > 0:
-		print("La cola de Neon-Link no está vacía. Abortando despertar.")
+		_log("La cola de Neon-Link no está vacía. Abortando despertar.")
 		return
 
 	# AWAKENINGs always go through the 'system' channel to avoid
@@ -127,7 +151,7 @@ def main():
 	)
 	conn.commit()
 	conn.close()
-	print("Señal de despertar autónomo inyectada en el Córtex (events.db) via canal 'system'")
+	_log("Señal de despertar autónomo inyectada en el Córtex (events.db) via canal 'system'")
 
 
 if __name__ == "__main__":

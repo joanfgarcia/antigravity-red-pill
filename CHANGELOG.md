@@ -1,3 +1,52 @@
+## [7.22.0] - Unreleased (Despertar autónomo: aislamiento de actividad)
+
+Aislamiento de la actividad del operador frente a los runs headless del despertar
+autónomo: el cron ya no se suprime a sí mismo, el despertar no pisa un DAG en
+vuelo y el log del cron es trazable.
+
+### 🌅 Despertar autónomo
+
+- **[FEAT] `is_ide_idle()` consciente del origen**: la señal opencode ya no
+  trata cualquier mutación de `opencode.db` como actividad del operador. Nuevo
+  registro sidecar `~/.local/share/red-pill/opencode_origins.json`
+  (`session_id → {origin, ts}`) escrito por `OpenCodeBridge` tras cada run
+  headless; el cron consulta las sesiones frescas de la DB y solo cuenta como
+  actividad las de origen distinto de `awakening` (una sesión sin registro se
+  asume `user`, default seguro). Un despertar headless ya no suprime el
+  despertar de la hora siguiente.
+- **[FEAT] `cron.log` con timestamps**: `autonomous_cron.py` antepone
+  `[YYYY-MM-DD HH:MM:SS]` a cada salida (`_log()`) para diagnóstico trazable.
+- **[FEAT] Work Overlap Guard en el despertar**: la directiva de
+  `_process_awakening()` ordena consultar `job_list` antes de lanzar cualquier
+  job (especialmente `dag_job`); si hay un DAG en vuelo
+  (PENDING/PROCESSING/RESUMING) NO lanza otro y dedica el despertar a
+  monitorizarlo (`job_status`) y escanear otros problemas (señales, inbox,
+  health). Si lanza un DAG sin ninguno en vuelo, incluye `origin: "awakening"`
+  en su payload.
+
+### 🔗 Propagación del origen por la cola
+
+- **[FEAT] `AgenticJobDriver`** (`jobs/drivers/agentic.py`): `origin` del payload
+  al bridge (cascade o simple).
+- **[FEAT] `AgentMinion`** (`swarm/agents/agent.py`): acepta `origin` en kwargs y
+  lo pasa a la creación del bridge.
+- **[FEAT] `DagJobDriver`** (`jobs/drivers/dag.py`): `origin` del payload/etapa
+  del DAG fluye a los minions agénticos (`_run_atomic`).
+
+  Con ello, un DAG lanzado por un despertar (`origin: "awakening"`) etiqueta las
+  sesiones de sus minions como `awakening`, invisibles para el siguiente
+  despertar. Un DAG iniciado por el operador (sin `origin`) conserva el default
+  `user` y sigue contando como actividad.
+
+### 🧩 Internals
+
+- `OpenCodeBridge.__init__` acepta `origin` (default `"user"`) y lo registra tras
+  cada `prompt()`/`continue_conversation()`.
+- `CascadeBridge` y `create_cascade_bridge` propagan `origin` a sus targets.
+- El bridge del despertar se crea con `origin="awakening"`
+  (`plugins/antigravity_ide/worker.py`).
+- `tests/test_job_manager.py`: `fake_cascade` acepta `origin`.
+
 ## [7.21.0] - 2026-08-21 (Remediación de la auditoría del DAG)
 
 Remediación completa de la auditoría del 21-ago (revisión de RFC_JOB_DAG /

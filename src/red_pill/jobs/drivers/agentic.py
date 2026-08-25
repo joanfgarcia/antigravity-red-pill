@@ -33,13 +33,17 @@ class AgenticJobDriver(ResumableJobDriver):
 	def _create_bridge(self, payload: Dict[str, Any]):
 		from red_pill.swarm.bridges.factory import create_bridge, create_cascade_bridge
 
+		origin = payload.get("origin")
 		cascade_spec = payload.get("cascade")
 		if cascade_spec:
 			from red_pill.config import BridgeTarget
 
 			targets = [BridgeTarget(**t) for t in cascade_spec]
-			return create_cascade_bridge(targets, name=f"job:{payload.get('title', 'agentic')}")
-		return create_bridge(payload.get("backend"))
+			return create_cascade_bridge(targets, name=f"job:{payload.get('title', 'agentic')}", origin=origin)
+		kwargs: Dict[str, Any] = {}
+		if origin is not None:
+			kwargs["origin"] = origin
+		return create_bridge(payload.get("backend"), **kwargs)
 
 	def preflight(self, payload: Dict[str, Any]) -> None:
 		"""Entorno no disponible (IDE cerrado, SIP caído) → deferral R1, no fallo."""

@@ -580,6 +580,10 @@ class DagJobDriver(ResumableJobDriver):
 		for key in ("backend", "model", "effort", "mode"):
 			if stage.get(key) or payload.get(key):
 				kwargs[key] = stage.get(key) or payload.get(key)
+		# Origin fluye del payload (o de la etapa) a los minions agénticos para
+		# que el cron no confunda una sesión de un DAG con actividad del operador.
+		if stage.get("origin") or payload.get("origin"):
+			kwargs["origin"] = stage.get("origin") or payload.get("origin")
 		if stage.get("command"):
 			kwargs["command"] = stage["command"]
 		if isinstance(stage.get("params"), dict):

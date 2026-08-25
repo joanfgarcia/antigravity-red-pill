@@ -55,14 +55,19 @@ class AllModelsExhausted(CascadeError):
 class CascadeBridge(AgentBridge):
 	"""AgentBridge that tries an ordered list of targets, first-with-quota wins."""
 
-	def __init__(self, targets: "List[BridgeTarget]", name: str = "cascade"):
+	def __init__(self, targets: "List[BridgeTarget]", name: str = "cascade", origin: Optional[str] = None):
 		self._targets: "List[BridgeTarget]" = list(targets or [])
 		self._name = name
+		# Origin propagates to each built target so headless runs can be tagged
+		# (e.g. "awakening") for the autonomous cron's idle heuristic.
+		self._origin = origin
 
 	def _build(self, backend: str, **kwargs) -> AgentBridge:
 		# Lazy import to avoid a factory ↔ cascade import cycle.
 		from .factory import create_bridge
 
+		if self._origin:
+			kwargs.setdefault("origin", self._origin)
 		return create_bridge(backend, **kwargs)
 
 	def _primary_bridge(self) -> Optional[AgentBridge]:
