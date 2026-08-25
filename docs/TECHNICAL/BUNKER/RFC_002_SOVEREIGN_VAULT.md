@@ -218,7 +218,7 @@ created_at: 2026-08-20T04:00:00Z
 updated_at: 2026-08-21T04:00:00Z
 step_count: 47
 message_count: 32
-workspace: /home/joan/Documents/IA/sharing
+workspace: <workspace-root>
 prev_session: opencode:abc-122
 next_session: opencode:abc-124
 ---
