@@ -94,7 +94,7 @@ class IDEWorker:
 		try:
 			cfg_inst = cfg.get_config()
 			self._bridge_telegram = create_cascade_bridge(cfg_inst.TELEGRAM_BRIDGE_CASCADE, name="TELEGRAM_BRIDGE_CASCADE")
-			self._bridge_awakening = create_cascade_bridge(cfg_inst.AWAKENING_BRIDGE_CASCADE, name="AWAKENING_BRIDGE_CASCADE")
+			self._bridge_awakening = create_cascade_bridge(cfg_inst.AWAKENING_BRIDGE_CASCADE, name="AWAKENING_BRIDGE_CASCADE", origin="awakening")
 			self._bridge_minion = create_cascade_bridge(cfg_inst.DEFAULT_MINION_BRIDGE_CASCADE, name="DEFAULT_MINION_BRIDGE_CASCADE")
 
 			# Fallback for capabilities / legacy checks
@@ -794,6 +794,12 @@ class IDEWorker:
 			f"Plan your work efficiently. If the task requires more, stop and leave a summary for the next awakening.\n"
 			f"DO NOT use `run_command` or any tool that requires user approval.\n"
 			f"PERMITTED: File tools (write_to_file, replace_file_content) and MCP RedPill-Kernel tools.\n"
+			f"WORK OVERLAP GUARD: BEFORE submitting any `job_manager_api job_submit` (especially a dag_job), "
+			f"call `job_manager_api job_list` and check for any in-flight DAG job (source=dag_job, status PENDING/PROCESSING/RESUMING). "
+			f"If one is running, DO NOT launch a new DAG job — dedicate this awakening to monitoring that DAG (job_status) "
+			f"and scanning for other issues (fetch_signal_memories, check_minion_inbox, keymaker health). "
+			f"If you DO launch a DAG while none is in flight, include `\"origin\": \"awakening\"` in its payload so its "
+			f"minion sessions are not mistaken for operator activity by the next awakening.\n"
 			f"MANDATORY FIRST STEPS:\n"
 			f'1. Call `mcp_RedPill-Kernel_interceptor_rp` with user_prompt=<your awakening directive> and mode="{cfg.get_config().IDENTITY_DEPTH_HEADLESS}".\n'
 			f'2. Call `mcp_RedPill-Kernel_refresh_session_context` with mode="{cfg.get_config().IDENTITY_DEPTH_HEADLESS}" to load your identity from the Bünker.\n'

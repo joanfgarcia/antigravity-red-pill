@@ -241,6 +241,7 @@ elif config_says_disabled AND service_is_running:
 | Layer | Function | Guard |
 |-------|----------|-------|
 | **Cron** | Injects AWAKENING every hour | idle ≥ 1h + queue empty |
+| **Idle check** | `is_ide_idle()` multi-signal | ignores `awakening`-origin opencode sessions |
 | **Worker** | Processes AWAKENING via Flash | Budget Guard: 8/day |
 | **Identity** | Loads identity `mode=low` (~530 tokens) | Persona cache |
 | **Timeout** | Cuts execution after 600s | Timeout enforced |
@@ -249,6 +250,10 @@ elif config_says_disabled AND service_is_running:
 **Maximum daily cost**: 8 × (~1,280 tokens identity + ~variable work) ≈ **~50K tokens/day** on Flash.
 
 **Economy**: Reuses the same Telegram inbox infrastructure (`inbox` table, same `process_inbox()`), the same bridge (`AgyBridge`), and the same Budget Guard. There is no separate process for AWAKENINGs.
+
+**Activity isolation (v7.22)**: The idle heuristic (`is_ide_idle`) no longer treats every fresh `opencode.db` mutation as operator activity. `OpenCodeBridge` records each headless run's `session_id → origin` in `~/.local/share/red-pill/opencode_origins.json`; the cron only counts sessions whose origin is **not** `awakening` as real activity. An autonomous-awakening headless run therefore no longer suppresses the following hour's wake-up. User-initiated headless runs (DAG minions, agentic jobs) keep the default `user` origin and still count as activity. `cron.log` lines are now timestamped (`[YYYY-MM-DD HH:MM:SS]`).
+
+**Work Overlap Guard**: The awakening prompt (`_process_awakening`) instructs the agent to check `job_list` for any in-flight DAG before submitting a job. If one is running, it must **not** launch another DAG — instead it dedicates the awakening to monitoring that DAG and scanning for other issues. If it does launch a DAG while none is in flight, it tags the payload with `origin: "awakening"` so the tag propagates to its minion sessions (via `AgenticJobDriver` / `DagJobDriver` / `AgentMinion`) and stays invisible to the next awakening.
 
 ---
 
@@ -768,6 +773,7 @@ elif config_says_disabled AND service_is_running:
 | Capa | Función | Guard |
 |------|---------|-------|
 | **Cron** | Inyecta AWAKENING cada hora | idle ≥ 1h + cola vacía |
+| **Idle check** | `is_ide_idle()` multi-señal | ignora sesiones opencode de origen `awakening` |
 | **Worker** | Procesa AWAKENING vía Flash | Budget Guard: 8/día |
 | **Identity** | Carga identidad `mode=low` (~530 tokens) | Cache de persona |
 | **Timeout** | Corta ejecución tras 600s | Timeout enforced |
@@ -776,6 +782,10 @@ elif config_says_disabled AND service_is_running:
 **Coste diario máximo**: 8 × (~1,280 tokens identidad + ~variable trabajo) ≈ **~50K tokens/día** en Flash.
 
 **Economía**: Reutiliza la misma infraestructura de la inbox de Telegram (`inbox` table, mismo `process_inbox()`), la misma bridge (`AgyBridge`), y el mismo Budget Guard. No hay proceso separado para AWAKENINGs.
+
+**Aislamiento de actividad (v7.22)**: La heurística de inactividad (`is_ide_idle`) ya no trata cualquier mutación fresca de `opencode.db` como actividad del operador. `OpenCodeBridge` registra el `session_id → origin` de cada run headless en `~/.local/share/red-pill/opencode_origins.json`; el cron solo cuenta como actividad las sesiones cuyo origen NO es `awakening`. Un despertar headless ya no suprime el despertar de la hora siguiente. Los runs headless iniciados por el operador (minions DAG, jobs agénticos) mantienen el origen `user` por defecto y siguen contando como actividad. Las líneas de `cron.log` ahora llevan timestamp (`[YYYY-MM-DD HH:MM:SS]`).
+
+**Work Overlap Guard**: La directiva del despertar (`_process_awakening`) ordena consultar `job_list` antes de lanzar cualquier job. Si hay un DAG en vuelo, **no** debe lanzar otro — dedica el despertar a monitorizar ese DAG y escanear otros problemas. Si lanza un DAG sin ninguno en vuelo, etiqueta el payload con `origin: "awakening"` para que la etiqueta se propague a sus sesiones de minion (vía `AgenticJobDriver` / `DagJobDriver` / `AgentMinion`) y sea invisible para el siguiente despertar.
 
 ---
 

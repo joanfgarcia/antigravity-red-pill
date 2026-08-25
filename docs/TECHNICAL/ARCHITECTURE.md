@@ -1,5 +1,5 @@
 **Subject**: Red Pill Protocol (Sovereign Edition)
-**System Version**: v7.21.0 (Remediación de la auditoría del DAG)
+**System Version**: v7.22.0 (Despertar autónomo: aislamiento de actividad)
 **Analyst**: The Architect
 **Date**: 2026-04-16
 

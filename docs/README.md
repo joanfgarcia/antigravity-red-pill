@@ -113,6 +113,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [V6_ZERO_TRUST_INIT.md](TECHNICAL/BUNKER/V6_ZERO_TRUST_INIT.md) | v6 zero-trust initialization protocol |
 | [ECHO_IMPLEMENTATION.md](TECHNICAL/BUNKER/ECHO_IMPLEMENTATION.md) | Technical implementation of the Echo Minion / landing pad |
 | [RFC_001_FIRMWARE_PROTECTION.md](TECHNICAL/BUNKER/RFC_001_FIRMWARE_PROTECTION.md) | Firmware partition protection RFC to prevent agent-induced code corruption (Project BIOS) |
+| [RFC_002_SOVEREIGN_VAULT.md](TECHNICAL/BUNKER/RFC_002_SOVEREIGN_VAULT.md) | Sovereign Vault RFC — disk-based chronicle, Qdrant as curated-only memory, TTL buffer |
 
 ### Certification
 

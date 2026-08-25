@@ -70,18 +70,24 @@ def create_bridge(backend: Optional[str] = None, **kwargs) -> AgentBridge:
 	return GrpcBridge()
 
 
-def create_cascade_bridge(cascade: List[cfg.BridgeTarget], name: str = "cascade") -> AgentBridge:
+def create_cascade_bridge(cascade: List[cfg.BridgeTarget], name: str = "cascade", origin: Optional[str] = None) -> AgentBridge:
 	"""Execution bridge, cascade-aware.
 
 	If `cascade` is configured, returns a CascadeBridge that tries each target in
 	order and uses the first with quota. If all fail, its prompt() raises
 	AllModelsExhausted. When the cascade is empty, falls back to the single
 	`IDE_BACKEND` bridge.
+
+	`origin` tags every session the built bridge produces (e.g. "awakening"),
+	letting the autonomous cron tell real operator activity apart from
+	autonomous-awakening headless runs.
 	"""
 	if cascade:
 		from .cascade import CascadeBridge
 
-		return CascadeBridge(cascade, name=name)
+		return CascadeBridge(cascade, name=name, origin=origin)
+	if origin is not None:
+		return create_bridge(origin=origin)
 	return create_bridge()
 
 

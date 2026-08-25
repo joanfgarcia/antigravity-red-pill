@@ -386,7 +386,7 @@ def test_agentic_job_driver_cascade_order(queue, clean_registry, monkeypatch):
 
 	captured = {}
 
-	def fake_cascade(targets, name="cascade"):
+	def fake_cascade(targets, name="cascade", origin=None):
 		captured["targets"] = [(t.backend, t.model, t.effort) for t in targets]
 		return _FakeBridge()
 

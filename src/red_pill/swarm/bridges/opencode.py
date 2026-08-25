@@ -35,10 +35,11 @@ import logging
 import os
 import shutil
 import subprocess
+import time
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
-from red_pill.core.paths import get_bunker_root
+from red_pill.core.paths import get_bunker_root, get_state_dir
 
 from .base import AgentBridge, BackendType, BridgeCapabilities, ConversationResult
 
@@ -63,6 +64,47 @@ def _resolve_opencode_bin() -> Optional[str]:
 	return str(candidate) if candidate.is_file() else None
 
 
+def get_opencode_origins_path() -> Path:
+	"""Path to the session→origin sidecar registry used by the autonomous cron.
+
+	Maps opencode session_id → {"origin", "ts"} so the cron can tell whether a
+	fresh session is real operator activity ("user"/"job"/…) or merely an
+	autonomous-awakening headless run ("awakening") that should not suppress the
+	next wake-up.
+	"""
+	return get_state_dir() / "opencode_origins.json"
+
+
+def record_opencode_origin(session_id: str, origin: str) -> None:
+	"""Persist the origin of an opencode session (non-fatal on failure)."""
+	if not session_id:
+		return
+	path = get_opencode_origins_path()
+	try:
+		data: dict = {}
+		if path.exists():
+			try:
+				data = json.loads(path.read_text())
+			except (json.JSONDecodeError, OSError):
+				data = {}
+		data[session_id] = {"origin": origin, "ts": int(time.time())}
+		path.write_text(json.dumps(data))
+	except Exception as e:
+		logger.warning(f"[OpenCodeBridge] Failed to record origin {origin!r} for {session_id!r}: {e}")
+
+
+def read_opencode_origins() -> Dict[str, Any]:
+	"""Load the session→origin registry (empty dict on any failure)."""
+	path = get_opencode_origins_path()
+	if not path.exists():
+		return {}
+	try:
+		data: Any = json.loads(path.read_text())
+		return data if isinstance(data, dict) else {}
+	except (json.JSONDecodeError, OSError):
+		return {}
+
+
 class OpenCodeBridge(AgentBridge):
 	"""Execution backend: OpenCode CLI, headless + auto-approved.
 
@@ -77,6 +119,7 @@ class OpenCodeBridge(AgentBridge):
 		opencode_path: Optional[str] = None,
 		server_url: Optional[str] = None,
 		identity_depth: str = "medium",
+		origin: str = "user",
 	):
 		self._opencode_path = opencode_path or _resolve_opencode_bin()
 		if not self._opencode_path:
@@ -88,6 +131,9 @@ class OpenCodeBridge(AgentBridge):
 		# Priority: explicit param > env var > default
 		self._server_url = server_url or os.environ.get("OPENCODE_SERVER_URL", "")
 		self._identity_depth = identity_depth
+		# Origin tags the session for the autonomous cron's idle heuristic:
+		# "awakening" runs must not be mistaken for real operator activity.
+		self._origin = origin
 		# When the opencode session runs under the redpill-scribe plugin, the
 		# plugin already captures the turn. Skipping here is the cheap guard; the
 		# hash check in enqueue_memory is the one that actually guarantees it.
@@ -277,6 +323,7 @@ class OpenCodeBridge(AgentBridge):
 
 		response = data.get("text", "")
 		session_id = data.get("session_id", "")
+		record_opencode_origin(session_id, self._origin)
 
 		if not response:
 			return ConversationResult(
@@ -320,6 +367,7 @@ class OpenCodeBridge(AgentBridge):
 			return ConversationResult(conversation_id=conversation_id, response="", error=str(e))
 
 		response = data.get("text", "")
+		record_opencode_origin(data.get("session_id", conversation_id), self._origin)
 
 		# External Scribe — skip if plugin handles it
 		if not self._scribe_plugin:

@@ -1,12 +1,12 @@
 [project]
 name = "red-pill"
-version = "7.21.0"
+version = "7.22.0"
 description = "B760-Adaptive Memory Protocol for Sovereign Agents"
 readme = "README.md"
 license = "AGPL-3.0-only"
 requires-python = ">=3.12"
 dependencies = [
-    "qdrant-client>=1.8.0",
+    "qdrant-client==1.19.0",
     "fastembed>=0.2.0",
     "python-dotenv>=1.2.2",
     "requests>=2.31.0",

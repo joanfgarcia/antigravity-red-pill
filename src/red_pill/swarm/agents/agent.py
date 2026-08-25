@@ -35,20 +35,29 @@ class AgentMinion(Minion):
 		effort = kwargs.get("effort")
 		cwd = kwargs.get("cwd") or kwargs.get("workspace")
 		timeout = int(kwargs.get("timeout", 300))
+		origin = kwargs.get("origin")
 		self.log(f"Delegando a agente (backend={backend or 'config'}): {task[:60]}...")
 		start = time.time()
 
 		try:
 			import red_pill.config as cfg
 
+			bridge_kwargs: Dict[str, Any] = {}
+			if origin is not None:
+				bridge_kwargs["origin"] = origin
+
 			if backend is None:
 				from red_pill.swarm.bridges import create_cascade_bridge
 
-				bridge = create_cascade_bridge(cfg.get_config().DEFAULT_MINION_BRIDGE_CASCADE, name="DEFAULT_MINION_BRIDGE_CASCADE")
+				bridge = create_cascade_bridge(
+					cfg.get_config().DEFAULT_MINION_BRIDGE_CASCADE,
+					name="DEFAULT_MINION_BRIDGE_CASCADE",
+					**bridge_kwargs,
+				)
 			else:
 				from red_pill.swarm.bridges import create_bridge
 
-				bridge = create_bridge(backend)
+				bridge = create_bridge(backend, **bridge_kwargs)
 			# bridge.prompt is a blocking subprocess call — run off the event loop.
 			result = await asyncio.to_thread(bridge.prompt, task, model=model, effort=effort, cwd=cwd, timeout=timeout)
 		except Exception as e:
