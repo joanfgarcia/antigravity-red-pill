@@ -1,6 +1,6 @@
 [project]
 name = "red-pill"
-version = "7.21.0"
+version = "7.22.0"
 description = "B760-Adaptive Memory Protocol for Sovereign Agents"
 readme = "README.md"
 license = "AGPL-3.0-only"
