@@ -456,8 +456,10 @@ class RedPillConfig(BaseSettings):
 	# 2026-08-26): con él el árbol se regenera desde cero (--from-raw). Sin scrub → jamás en git.
 	MEMENTO_RAW_ENABLED: bool = True
 	# Umbrales de split (Q8 RESUELTA 2026-08-26): el trozo es la unidad de trabajo
-	# del distill local — suelo n_ctx=6144 (llama_cli_runner; EdgeEngine 8192) →
-	# ~12k chars ≈ ~4k tokens de contenido + prompt + salida. Mensajes = backstop.
+	# del distill local. OJO: 12k es de ESTE hardware (suelo n_ctx=6144 en
+	# llama_cli_runner; EdgeEngine 8192) — al configurar otro despliegue hay que
+	# recalcular: ≈ (n_ctx − ~800 prompt − ~600 salida) × 3 chars/token, y
+	# re-trocear con `memento_migrate --all` (ver ENV_REFERENCE). Msgs = backstop.
 	MEMENTO_SPLIT_MAX_MESSAGES: int = 200
 	MEMENTO_SPLIT_MAX_CHARS: int = 12000
 

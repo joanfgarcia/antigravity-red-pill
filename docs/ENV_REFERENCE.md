@@ -194,6 +194,27 @@ Plugins 05–10. Each is independently toggleable.
 
 ---
 
+## 📼 Memento Chronicle (RFC-002)
+
+| Parameter | Default | Description |
+| :--- | :--- | :--- |
+| `MEMENTO_ROOT` | `""` (→ `~/.local/share/red-pill/memento/`) | Root of the on-disk chronicle tree. Operator-overridable. |
+| `MEMENTO_SOURCES` | `[]` (→ follows `CHRONICLE_ARCHIVE_SOURCES`) | Per-source enable/disable for the Memento render. |
+| `MEMENTO_RAW_ENABLED` | `True` | Write `raw/` provider-native backups + `meta.json` (the single backup point; unscrubbed — never in git). |
+| `MEMENTO_SPLIT_MAX_MESSAGES` | `200` | Split trigger + per-chunk cap (backstop; chars bind first). |
+| `MEMENTO_SPLIT_MAX_CHARS` | `12000` | Split trigger + per-chunk budget. **Hardware-derived — recalculate per deployment (see below).** |
+
+> ⚠️ **`MEMENTO_SPLIT_MAX_CHARS` is NOT universal.** Splits are the work units
+> the local distill LLM consumes (RFC-002 §4.2), so the budget must be derived
+> from the smallest context the local model runs with on *this* hardware:
+> `MEMENTO_SPLIT_MAX_CHARS ≈ (n_ctx − ~800 prompt − ~600 output) × 3 chars/token`.
+> The `12000` default assumes the 4GB-VRAM floor (`n_ctx=6144`,
+> `scripts/llama_cli_runner.py`; EdgeEngine runs 8192). Whoever configures a
+> deployment — operator or agent — must recompute it when the hardware or the
+> model context changes, and re-run `memento_migrate --all` to re-chunk.
+
+---
+
 ## ☁️ Persistence & Encryption (Cloud Vault)
 
 | Parameter | Default | Description |

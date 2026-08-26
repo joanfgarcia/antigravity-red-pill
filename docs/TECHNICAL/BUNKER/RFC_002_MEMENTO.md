@@ -559,6 +559,13 @@ splits for context); line refs always point to `memento/index.md`.
    `distill_ref` so Aleth or the operator in Obsidian can navigate
    memento → distill → refine → Qdrant engram without losing provenance.
 
+   **Distill design is deferred to Phase 3.5 (operator, 2026-08-26):** the
+   techniques and prompts — chunk-wise summarization, map-reduce over splits,
+   overlap windows, whatever squeezes the most out of the local model *given
+   the hardware it runs on* — are designed when 3.5 lands, with the goal that
+   the distillation is good enough for `refine` to extract maximum value. The
+   Phase-1 splits only guarantee the input already fits the window (§4.2/Q8).
+
    **Fate of the current scripts (staged):** the Qdrant-targeting
    `chronicle_distill.py`/`chronicle_refine.py` keep running unchanged through
    Phase 3.5 (they feed today's pipeline and the shadow-gate measurement); the
@@ -664,7 +671,7 @@ New first-class action `search_memento` in `bunker_memory_api`:
 | `MEMENTO_SOURCES` | `CHRONICLE_ARCHIVE_SOURCES` (`config.py:448`) | Per-source enable/disable; defaults to the chronicle's own list so the two never silently diverge |
 | `MEMENTO_RAW_ENABLED` | `True` (operator, 2026-08-26) | Write `raw/` provider verbatim + `meta.json` — the backup layer / single backup point (unscrubbed; never in git) |
 | `MEMENTO_SPLIT_MAX_MESSAGES` | `200` (Q8 RESOLVED) | Split trigger + per-chunk cap, messages (backstop; chars bind first) |
-| `MEMENTO_SPLIT_MAX_CHARS` | `12000` (Q8 RESOLVED) | Split trigger + per-chunk budget, chars — sized to the local distill LLM's context floor (§4.2) |
+| `MEMENTO_SPLIT_MAX_CHARS` | `12000` (Q8 RESOLVED — **hardware-derived**) | Split trigger + per-chunk budget, chars. NOT universal: derive per deployment as `≈ (n_ctx − ~800 prompt − ~600 output) × 3 chars/token`, then re-chunk with `memento_migrate --all` (see ENV_REFERENCE) |
 | `INTERACTION_MEMORIES_TTL_HOURS` | `72` | §4.4 backstop; must stay `> max(PRE_HEATING_LOOKBACK_HOURS, hardcoded 48h of 11_pre_heating.py:234)` |
 
 All new keys live in `Settings` (`config.py`) like everything else; none exist
@@ -822,6 +829,12 @@ revertible).
     Cata reference (387 sessions): chars p50/p90/p99 = 13.7k/150k/308k → ~55%
     of sessions split, which is correct — those are precisely the ones that
     would not fit the distill window in one piece.
+    **The 12k figure is hardware-derived, not universal** (operator, 2026-08-26):
+    it assumes this machine's 4GB-VRAM floor. Whoever configures a deployment —
+    user or agent — must recompute `MEMENTO_SPLIT_MAX_CHARS` from the local
+    model's context (`≈ (n_ctx − prompt − output) × 3 chars/token`) and
+    re-chunk with `memento_migrate --all`. Documented in ENV_REFERENCE and in
+    the `config.py` comment.
 
 ---
 
