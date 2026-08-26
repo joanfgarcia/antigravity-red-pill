@@ -94,6 +94,12 @@ def test_render_month_pinned_to_first_message():
 	assert rendered.created_at is not None and rendered.created_at.endswith("Z")
 
 
+def test_render_accepts_epoch_string_timestamps():
+	msgs = [{"role": "user", "content": "reconstruida desde archive", "timestamp": "1787234592.0"}]
+	rendered = render_session("abc-123", "antigravity", "antigravity", msgs, reconstructed=True)
+	assert rendered.month == "2026-08" and rendered.created_at == "2026-08-20T14:03:12Z"
+
+
 def test_render_month_override_wins():
 	rendered = render_session("opencode:s1", "opencode", "opencode", _messages(), month_override="2026-07")
 	assert rendered.month == "2026-07"

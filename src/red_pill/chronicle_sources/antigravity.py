@@ -42,4 +42,11 @@ class AntigravitySourcePlugin(ChronicleSourcePlugin):
 		json_file = self._conversations_dir() / f"{conversation_id}.json"
 		data = json.loads(json_file.read_text(encoding="utf-8"))
 		messages = data.get("messages", [])
-		return [{"role": m.get("role"), "content": m.get("content", ""), "timestamp": m.get("timestamp")} for m in messages if isinstance(m, dict)]
+		normalized = [{"role": m.get("role"), "content": m.get("content", ""), "timestamp": m.get("timestamp")} for m in messages if isinstance(m, dict)]
+		# El export no trae timestamps (created_time llega vacío del pipeline de
+		# desencriptado): el mtime del fichero es el proxy disponible — fecha de
+		# export, no de conversación. Solo el primer mensaje se estampa, para que
+		# created_at/mes/hilo funcionen sin fingir horas por mensaje.
+		if normalized and not any(m.get("timestamp") for m in normalized):
+			normalized[0]["timestamp"] = json_file.stat().st_mtime
+		return normalized

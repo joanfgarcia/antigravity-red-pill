@@ -44,6 +44,10 @@ def _to_datetime(ts: Any) -> Optional[datetime]:
 			return None
 	if isinstance(ts, str):
 		try:
+			return _to_datetime(float(ts))  # epoch serializado como string (payloads de archive_memories)
+		except ValueError:
+			pass
+		try:
 			parsed = datetime.fromisoformat(ts.replace("Z", "+00:00"))
 		except ValueError:
 			return None

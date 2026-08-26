@@ -114,6 +114,38 @@ def _reconstruct(session_id: str) -> Optional[List[Dict[str, Any]]]:
 		return None
 
 
+def _orphan_sessions(registry: Any) -> List[Tuple[str, str]]:
+	"""[(source, session_id)] presentes en archive_memories pero en ningún provider store ni en el registry.
+
+	Prioridad de fuentes §5.1: los stores mandan; esto rescata SOLO lo que ya no
+	retiene ningún IDE. La fuente se infiere del prefijo del session_id
+	(antigravity acuñó los suyos sin prefijo, ver ChronicleSourcePlugin.session_prefix).
+	"""
+	known = {session_id for sessions in registry.state["registry"].values() for session_id in sessions}
+	try:
+		from red_pill.memory import MemoryManager
+
+		mem = MemoryManager()
+		session_ids, offset = set(), None
+		while True:
+			batch, offset = mem.client.scroll("archive_memories", limit=1000, with_payload=["session_id", "type"], offset=offset)
+			for point in batch:
+				payload = point.payload or {}
+				if payload.get("session_id") and payload.get("type") != "idea_fragment":
+					session_ids.add(str(payload["session_id"]))
+			if offset is None:
+				break
+	except Exception as e:
+		logger.error(f"archive_memories unavailable for orphan discovery: {e}")
+		return []
+
+	orphans = []
+	for session_id in sorted(session_ids - known):
+		source = session_id.split(":", 1)[0] if ":" in session_id else "antigravity"
+		orphans.append((source, session_id))
+	return orphans
+
+
 def _percentiles(values: List[int]) -> str:
 	if not values:
 		return "—"
@@ -163,6 +195,11 @@ def main() -> None:
 	parser.add_argument("--dry-run", action="store_true", help="Report pending work and memory_queue census without writing")
 	parser.add_argument("--source", action="append", default=[], help="Limit to a specific source (repeatable)")
 	parser.add_argument("--cata", action="store_true", help="Print the Q8 calibration report (markdown) and exit")
+	parser.add_argument(
+		"--reconstruct-orphans",
+		action="store_true",
+		help="Render sessions that exist only in archive_memories (no provider store retains them) as reconstructed: true (§5.1.2)",
+	)
 	args = parser.parse_args()
 
 	import red_pill.config as cfg
@@ -197,7 +234,7 @@ def main() -> None:
 		logger.info("[DRY RUN] No changes made.")
 		return
 
-	if not pending:
+	if not pending and not args.reconstruct_orphans:
 		registry.save()
 		return
 
@@ -256,6 +293,44 @@ def main() -> None:
 		)
 		touched_sources.add(plugin.name)
 		rendered_count += 1
+
+	if args.reconstruct_orphans:
+		orphans = _orphan_sessions(registry)
+		logger.info(f"Orphan sessions in archive_memories without provider store: {len(orphans)}")
+		for source, session_id in orphans:
+			messages = _reconstruct(session_id)
+			if not messages:
+				registry.upsert(source, session_id, {"rendered_at": now, "reconstructed": True})
+				skipped += 1
+				continue
+			rendered = render_session(
+				session_id,
+				source,
+				source,
+				messages,
+				reconstructed=True,
+				split_max_messages=split_max_messages,
+				split_max_chars=split_max_chars,
+				month_override=(registry.get(source, session_id) or {}).get("month"),
+			)
+			write_session(root, rendered)
+			registry.upsert(
+				source,
+				session_id,
+				{
+					"dir": rendered.dir_rel,
+					"month": rendered.month,
+					"created_at": rendered.created_at,
+					"rendered_at": now,
+					"message_count": rendered.message_count,
+					"body_chars": rendered.body_chars,
+					"has_splits": rendered.has_splits,
+					"memento_hash": rendered.memento_hash,
+					"reconstructed": True,
+				},
+			)
+			touched_sources.add(source)
+			rendered_count += 1
 
 	for source in sorted(touched_sources):
 		updated = recompute_chain(root, registry, source)
