@@ -460,6 +460,13 @@ class RedPillConfig(BaseSettings):
 	INTERACTION_MEMORIES_TTL_HOURS: int = 72
 	# §4.4.2: días de margen antes de purgar filas completed ya renderizadas en Memento
 	MEMENTO_QUEUE_RETENTION_DAYS: int = 7
+	# Fase 3.5 (§4.5-4.6): pase agéntico file-based + gate EN SOMBRA
+	MEMENTO_REFINE_MIN_SIGNIFICANCE: float = 0.3  # bajo esto, refine no escribe fichero (selección permisiva)
+	MEMENTO_GATE_MIN_SIGNIFICANCE: float = 0.5  # PROVISIONAL (Q4 abierta): umbral de la decisión would-ingest
+	MEMENTO_AGENTIC_NIGHT_LIMIT: int = 20  # sesiones por noche — acota el coste LLM dentro del job chronicle
+	# Fase 4 (§6): el flip REQUIERE aprobación del operador + evidencia de la sombra.
+	# True = el chronicle deja de ingerir en archive_memories las sesiones bajo el umbral.
+	MEMENTO_GATE_ENFORCED: bool = False
 	# raw/ = copia de respaldo provider-nativa y punto único de backup (operador,
 	# 2026-08-26): con él el árbol se regenera desde cero (--from-raw). Sin scrub → jamás en git.
 	MEMENTO_RAW_ENABLED: bool = True

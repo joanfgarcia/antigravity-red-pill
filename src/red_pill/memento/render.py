@@ -122,6 +122,7 @@ def render_session(
 	next_session: Optional[str] = None,
 	reconstructed: bool = False,
 	step_count: Optional[int] = None,
+	significance: Optional[float] = None,
 	split_max_messages: int = 30,
 	split_max_chars: int = 24000,
 	month_override: Optional[str] = None,
@@ -173,10 +174,11 @@ def render_session(
 	frontmatter.append(("message_count", len(blocks)))
 	if workspace:
 		frontmatter.append(("workspace", workspace))
-	# prev/next SIEMPRE presentes (null si no hay vecino): el frontmatter mantiene
-	# longitud fija y las actualizaciones del hilo no desplazan los line refs del cuerpo.
+	# prev/next/significance SIEMPRE presentes (null si no aplica): el frontmatter
+	# mantiene longitud fija y las actualizaciones in-place no desplazan los line refs.
 	frontmatter.append(("prev_session", prev_session))
 	frontmatter.append(("next_session", next_session))
+	frontmatter.append(("significance", significance))  # sello del shadow-gate (§4.6), lo escribe el pase agéntico
 	frontmatter.append(("reconstructed", reconstructed))
 
 	fm_lines = ["---"] + [f"{key}: {_yaml_value(value)}" for key, value in frontmatter] + ["---", ""]
@@ -241,12 +243,10 @@ def write_session(root: Path, rendered: RenderedSession) -> Path:
 	return root / rendered.dir_rel
 
 
-def update_frontmatter_links(index_file: Path, prev_session: Optional[str], next_session: Optional[str]) -> bool:
-	"""Reescribe SOLO prev/next_session del frontmatter (el hilo SHOULD-12).
-
-	Reemplazo in-place, jamás inserción: el frontmatter conserva su longitud, así
-	que ni el cuerpo ni sus line refs ni el `memento_hash` se mueven un ápice.
-	"""
+def update_frontmatter_fields(index_file: Path, fields: Dict[str, Any]) -> bool:
+	"""Reescribe campos del frontmatter por reemplazo in-place, jamás inserción:
+	el frontmatter conserva su longitud, así que ni el cuerpo ni sus line refs
+	ni el `memento_hash` se mueven un ápice. Solo toca claves ya presentes."""
 	text = index_file.read_text(encoding="utf-8")
 	lines = text.split("\n")
 	if not lines or lines[0].strip() != "---":
@@ -255,7 +255,7 @@ def update_frontmatter_links(index_file: Path, prev_session: Optional[str], next
 	if close is None:
 		return False
 
-	replacements = {"prev_session:": f"prev_session: {_yaml_value(prev_session)}", "next_session:": f"next_session: {_yaml_value(next_session)}"}
+	replacements = {f"{key}:": f"{key}: {_yaml_value(value)}" for key, value in fields.items()}
 	changed = False
 	for i in range(1, close):
 		for prefix, replacement in replacements.items():
@@ -266,3 +266,8 @@ def update_frontmatter_links(index_file: Path, prev_session: Optional[str], next
 		return False
 	index_file.write_text("\n".join(lines), encoding="utf-8")
 	return True
+
+
+def update_frontmatter_links(index_file: Path, prev_session: Optional[str], next_session: Optional[str]) -> bool:
+	"""El hilo SHOULD-12: reemplazo in-place de prev/next_session."""
+	return update_frontmatter_fields(index_file, {"prev_session": prev_session, "next_session": next_session})

@@ -515,6 +515,27 @@ async def auto_heal_ritual(mm: MemoryManager) -> None:
 				healed_ids.append(report["id"])
 				continue
 
+			# Memento heal (RFC-002 §4.5.1) — distill/refine stale tras un re-render:
+			# regeneración completa vía el pase agéntico, jamás parcheo de line refs.
+			if event_id == "signal_memento_stale_distill":
+				logger.info("Auto-Healer: Memento distill/refine stale — re-running agentic pass (--heal-stale)...")
+				script_path = os.path.join(cfg.APP_ROOT, "scripts", "memento_agentic.py")
+				if os.path.exists(script_path):
+					process = await asyncio.create_subprocess_exec(
+						sys.executable,
+						str(script_path),
+						"--heal-stale",
+						stdout=asyncio.subprocess.PIPE,
+						stderr=asyncio.subprocess.PIPE,
+					)
+					await process.communicate()
+					if process.returncode == 0:
+						logger.info("Auto-Healer: memento_agentic --heal-stale OK.")
+					else:
+						logger.warning(f"Auto-Healer: memento_agentic rc={process.returncode}. Escalating.")
+				healed_ids.append(report["id"])
+				continue
+
 		if healed_ids:
 			await asyncio.to_thread(inbox.mark_as_read, healed_ids)
 	except Exception as e:
