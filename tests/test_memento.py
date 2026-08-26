@@ -343,6 +343,41 @@ def test_claude_code_raw_roundtrip(tmp_path):
 	assert plugin.load_raw(raw_file) == loaded
 
 
+def test_memory_queue_source_groups_and_excludes(tmp_path):
+	import json
+	import sqlite3
+
+	from red_pill.chronicle_sources.memory_queue import MemoryQueueSourcePlugin
+
+	db = tmp_path / "bunker_queue.db"
+	con = sqlite3.connect(db)
+	con.execute("CREATE TABLE memory_queue (id INTEGER PRIMARY KEY, prompt TEXT, response TEXT, role TEXT, status TEXT, created_at REAL, originator TEXT)")
+	rows = [
+		("hola aleth", "hola joan", "user", "completed", 1787234592.0, "Aleth (Gemini 1.5 Flash)"),
+		("segundo turno", "respuesta", "user", "completed", 1787238192.0, "Aleth (Gemini 1.5 Flash)"),
+		("sin originator", "eco", "user", "completed", 1787234600.0, None),
+		("de opencode", "cubierto por su store", "user", "completed", 1787234700.0, "opencode"),
+	]
+	con.executemany("INSERT INTO memory_queue (prompt, response, role, status, created_at, originator) VALUES (?,?,?,?,?,?)", rows)
+	con.commit()
+	con.close()
+
+	plugin = MemoryQueueSourcePlugin(db_path=db)
+	discovered = dict(plugin.discover())
+	assert discovered == {"Aleth (Gemini 1.5 Flash):2026-08-20": 2, "unknown:2026-08-20": 1}  # opencode excluido
+
+	messages = plugin.load("Aleth (Gemini 1.5 Flash):2026-08-20")
+	assert [m["role"] for m in messages] == ["user", "assistant", "user", "assistant"]
+	assert messages[0]["content"] == "hola aleth" and messages[0]["timestamp"] == 1787234592.0
+	assert plugin.qualify("unknown:2026-08-20") == "mcp:unknown:2026-08-20"
+
+	raw_dir = tmp_path / "raw"
+	raw_dir.mkdir()
+	raw_file = plugin.export_raw("Aleth (Gemini 1.5 Flash):2026-08-20", raw_dir)
+	assert raw_file is not None and json.loads(raw_file.read_text())["group"].endswith("2026-08-20")
+	assert plugin.load_raw(raw_file) == messages
+
+
 def test_opencode_raw_roundtrip(tmp_path):
 	import json
 	import sqlite3

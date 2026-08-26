@@ -228,7 +228,7 @@ def test_opencode_missing_db_discovers_nothing(tmp_path):
 
 def test_discovery_finds_all_builtin_sources():
 	plugins = discover_source_plugins(only_enabled=False)
-	assert [p.name for p in plugins] == ["antigravity", "claude_code", "opencode"]
+	assert [p.name for p in plugins] == ["antigravity", "claude_code", "memory_queue", "opencode"]
 
 
 def test_discovery_respects_config_gating(monkeypatch):

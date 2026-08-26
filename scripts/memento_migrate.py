@@ -36,6 +36,7 @@ def _enabled_plugins(only: List[str]) -> List[Any]:
 	from red_pill.chronicle_sources.base import discover_source_plugins
 
 	enabled = list(getattr(cfg, "MEMENTO_SOURCES", []) or []) or list(getattr(cfg, "CHRONICLE_ARCHIVE_SOURCES", []))
+	enabled += list(getattr(cfg, "MEMENTO_EXTRA_SOURCES", []))
 	plugins = [p for p in discover_source_plugins(only_enabled=False) if p.name in enabled]
 	if only:
 		plugins = [p for p in plugins if p.name in only]

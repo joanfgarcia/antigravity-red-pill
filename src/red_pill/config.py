@@ -452,6 +452,8 @@ class RedPillConfig(BaseSettings):
 	# -----------------------------------------------------------------------
 	MEMENTO_ROOT: str = ""  # vacío = get_data_dir()/memento (Q2); el operador puede apuntarlo donde quiera
 	MEMENTO_SOURCES: List[str] = []  # vacío = sigue a CHRONICLE_ARCHIVE_SOURCES (no divergen en silencio)
+	# Fuentes solo-Memento (MUST 10): capturan al árbol sin tocar el archivo Qdrant (MUST 8)
+	MEMENTO_EXTRA_SOURCES: List[str] = ["memory_queue"]
 	# raw/ = copia de respaldo provider-nativa y punto único de backup (operador,
 	# 2026-08-26): con él el árbol se regenera desde cero (--from-raw). Sin scrub → jamás en git.
 	MEMENTO_RAW_ENABLED: bool = True
@@ -463,7 +465,7 @@ class RedPillConfig(BaseSettings):
 	MEMENTO_SPLIT_MAX_MESSAGES: int = 200
 	MEMENTO_SPLIT_MAX_CHARS: int = 12000
 
-	@field_validator("CHRONICLE_PLUGINS", "CHRONICLE_ARCHIVE_SOURCES", "MEMENTO_SOURCES", mode="before")
+	@field_validator("CHRONICLE_PLUGINS", "CHRONICLE_ARCHIVE_SOURCES", "MEMENTO_SOURCES", "MEMENTO_EXTRA_SOURCES", mode="before")
 	@classmethod
 	def _parse_chronicle_plugins(cls, v: Any) -> Any:
 		if isinstance(v, str):
