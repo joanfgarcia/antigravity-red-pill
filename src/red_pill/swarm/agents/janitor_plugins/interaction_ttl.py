@@ -5,10 +5,11 @@ drenaje deja atrás (failed_ids que hoy quedan para siempre, noches con la
 VRAM llena). El almacenamiento raw duradero es Memento — Qdrant conserva solo
 la ventana caliente.
 
-Guardarraíl: el TTL debe superar la ventana del pre-heating (config 48h y el
-hardcode 48h de 11_pre_heating.py:234) — si no, el plugin se niega a purgar.
-Los puntos llevan el epoch en `timestamp` (memory.py:513); se filtra también
-`created_at` por si generaciones antiguas lo usaron.
+Guardarraíl: el TTL debe superar la ventana del pre-heating
+(PRE_HEATING_LOOKBACK_HOURS, única fuente de verdad desde que el hardcode 48h
+del tier-2 de 11_pre_heating.py se alineó a la config) — si no, el plugin se
+niega a purgar. Los puntos llevan el epoch en `timestamp` (memory.py:513); se
+filtra también `created_at` por si generaciones antiguas lo usaron.
 """
 
 import logging
@@ -18,8 +19,6 @@ from typing import Any, Dict
 from red_pill.swarm.agents.janitor_plugins.base import JanitorPlugin
 
 logger = logging.getLogger(__name__)
-
-PRE_HEATING_HARDCODED_FLOOR_HOURS = 48  # 11_pre_heating.py tier-2
 
 
 class InteractionTTLPlugin(JanitorPlugin):
@@ -35,7 +34,7 @@ class InteractionTTLPlugin(JanitorPlugin):
 
 		plugin_cfg = config_dict.get("plugins", {}).get(self.name, {})
 		ttl_hours = int(plugin_cfg.get("ttl_hours", getattr(cfg, "INTERACTION_MEMORIES_TTL_HOURS", 72)))
-		floor = max(int(getattr(cfg, "PRE_HEATING_LOOKBACK_HOURS", 48)), PRE_HEATING_HARDCODED_FLOOR_HOURS)
+		floor = int(getattr(cfg, "PRE_HEATING_LOOKBACK_HOURS", 48))
 		if ttl_hours <= floor:
 			janitor.log(f"[Janitor] interaction_ttl SKIPPED: TTL {ttl_hours}h no supera la ventana del pre-heating ({floor}h).")
 			return {"purged": 0, "skipped": "ttl_below_preheating_window"}

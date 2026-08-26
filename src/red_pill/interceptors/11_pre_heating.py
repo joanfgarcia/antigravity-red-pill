@@ -93,14 +93,16 @@ class EmotionalPreHeatingPlugin(BaseInterceptorPlugin):
 				amygdala = potential_amygdala[:3]
 				candidates.extend(amygdala)
 
-			# 2. Fetch TOP 3 from interaction_memories (recent raw context, last 48h)
+			# 2. Fetch TOP 3 from interaction_memories (recent raw context, config window)
+			# NB: this collection stamps the epoch in `timestamp`, not `created_at`
+			# (record_interaction_pair, memory.py) — same for the filters below.
 			if client.collection_exists("interaction_memories"):
 				lookback = getattr(config, "PRE_HEATING_LOOKBACK_HOURS", 48)
 				cutoff_time = now - (lookback * 3600)
 
 				interaction_results, _ = client.scroll(
 					collection_name="interaction_memories",
-					scroll_filter=models.Filter(must=[models.FieldCondition(key="created_at", range=models.Range(gte=cutoff_time))]),
+					scroll_filter=models.Filter(must=[models.FieldCondition(key="timestamp", range=models.Range(gte=cutoff_time))]),
 					limit=5,
 					with_payload=True,
 				)
@@ -118,7 +120,10 @@ class EmotionalPreHeatingPlugin(BaseInterceptorPlugin):
 				continue
 
 			content = point.payload.get("content", "").strip()
-			if not content or point.payload.get("category", "") == "work":
+			# interaction_memories nests category under metadata; social carries it top-level
+			metadata = point.payload.get("metadata") or {}
+			category = point.payload.get("category") or metadata.get("category", "")
+			if not content or category == "work":
 				continue
 			if content in seen_content:
 				continue
@@ -126,7 +131,7 @@ class EmotionalPreHeatingPlugin(BaseInterceptorPlugin):
 			seen_content.add(content)
 			intensity = float(point.payload.get("intensity", 0.0))
 			color = point.payload.get("color", "gray")
-			created_at = float(point.payload.get("created_at", 0.0))
+			created_at = float(point.payload.get("created_at") or point.payload.get("timestamp") or 0.0)
 
 			score = composite_score(intensity, color, created_at, strategy=scoring_strategy)
 			scored_fragments.append({"score": score, "payload": point.payload, "timestamp": created_at})
@@ -229,16 +234,17 @@ class EmotionalPreHeatingPlugin(BaseInterceptorPlugin):
 		except Exception as e:
 			logger.debug(f"work_memories fallback failed: {e}")
 
-		# Tier 2: interaction_memories (last 48h, work category)
+		# Tier 2: interaction_memories (config window, work category)
 		try:
 			if client.collection_exists("interaction_memories"):
-				cutoff = now - (48 * 3600)
+				lookback = getattr(config, "PRE_HEATING_LOOKBACK_HOURS", 48)
+				cutoff = now - (lookback * 3600)
 				results, _ = client.scroll(
 					collection_name="interaction_memories",
 					scroll_filter=models.Filter(
 						must=[
-							models.FieldCondition(key="created_at", range=models.Range(gte=cutoff)),
-							models.FieldCondition(key="category", match=models.MatchValue(value="work")),
+							models.FieldCondition(key="timestamp", range=models.Range(gte=cutoff)),
+							models.FieldCondition(key="metadata.category", match=models.MatchValue(value="work")),
 						]
 					),
 					limit=3,

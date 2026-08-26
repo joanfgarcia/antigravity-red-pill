@@ -454,8 +454,9 @@ class RedPillConfig(BaseSettings):
 	MEMENTO_SOURCES: List[str] = []  # vacío = sigue a CHRONICLE_ARCHIVE_SOURCES (no divergen en silencio)
 	# Fuentes solo-Memento (MUST 10): capturan al árbol sin tocar el archivo Qdrant (MUST 8)
 	MEMENTO_EXTRA_SOURCES: List[str] = ["memory_queue"]
-	# Fase 3 (RFC-002 §4.4): TTL del buffer interaction_memories — DEBE superar la
-	# ventana del pre-heating (48h config + 48h hardcode); el plugin se niega si no.
+	# Fase 3 (RFC-002 §4.4): TTL del buffer interaction_memories — DEBE superar
+	# PRE_HEATING_LOOKBACK_HOURS (única ventana del pre-heating desde que el
+	# hardcode del tier-2 se alineó a la config); el plugin se niega si no.
 	INTERACTION_MEMORIES_TTL_HOURS: int = 72
 	# §4.4.2: días de margen antes de purgar filas completed ya renderizadas en Memento
 	MEMENTO_QUEUE_RETENTION_DAYS: int = 7

@@ -442,20 +442,27 @@ Steps are named S1–S3: scribe-evolution steps, not the §6 rollout phases.
   (failed points in `failed_ids` — which today stay *permanently* and are
   excluded from later scrolls via `must_not HasIdCondition`,
   `consolidation.py:262,525-527` — and VRAM-deferred nights).
-  **Honest grounds (corrected in the 5th pass):** the pre-heating interceptor
+  **Honest grounds (corrected in the 5th pass; filters fixed 2026-08-26):**
+  the pre-heating interceptor
   (`src/red_pill/interceptors/11_pre_heating.py`) does **not** query this
-  collection semantically. Block 1 (`:96-107`) is a `client.scroll()` with a
-  payload time filter (`created_at >= now - lookback`) and `limit=5`; the
-  tier-2 recent-work fallback (`:232-249`) is also a `scroll`, `limit=3`, with a
-  **hardcoded 48h cutoff** that ignores `PRE_HEATING_LOOKBACK_HOURS`
-  (`config.py:686`). A time-ordered scroll *could* in principle be served from
-  disk — the reason to keep the buffer is **simplicity**: the interceptor works,
-  is hot-path, and rewriting its data source is out of scope (NG3 spirit).
-  Constraint: `INTERACTION_MEMORIES_TTL_HOURS (72) > max(PRE_HEATING_LOOKBACK_HOURS
-  = 48, the hardcoded 48h of :234)`; whenever that hardcode is next touched it
-  must be aligned to the config so the constraint has a single source of truth.
+  collection semantically. Block 1 is a `client.scroll()` with a
+  payload time filter (`timestamp >= now - lookback`) and `limit=5`; the
+  tier-2 recent-work fallback is also a `scroll`, `limit=3`, over the same
+  config window. (Historical note: until 2026-08-26 block 1 filtered on
+  `created_at` — a field `record_interaction_pair` never wrote, the points
+  carry the epoch in `timestamp` (`memory.py:518`) — so it matched nothing,
+  and tier-2 carried a hardcoded 48h cutoff that ignored
+  `PRE_HEATING_LOOKBACK_HOURS` plus a top-level `category` filter that missed
+  the nested `metadata.category`. All three aligned to `timestamp` /
+  `metadata.category` / the config key.) A time-ordered scroll *could* in
+  principle be served from disk — the reason to keep the buffer is
+  **simplicity**: the interceptor works, is hot-path, and rewriting its data
+  source is out of scope (NG3 spirit).
+  Constraint: `INTERACTION_MEMORIES_TTL_HOURS (72) > PRE_HEATING_LOOKBACK_HOURS
+  (48)` — the config key is the single source of truth since the hardcode fell.
   **TTL mechanism (decided):** a `JanitorPlugin` (`interaction_ttl`) that
-  scroll-deletes points with `created_at` older than the TTL —
+  scroll-deletes points with `timestamp` (or a legacy `created_at`) older than
+  the TTL —
   `interaction_memories` is deliberately *not* added to
   `METABOLISM_AUTO_COLLECTIONS` (`config.py:444`): the erosion machinery is
   engram lifecycle (FSRS/Lazarus), the wrong tool for a plain age purge.
@@ -672,7 +679,7 @@ New first-class action `search_memento` in `bunker_memory_api`:
 | `MEMENTO_RAW_ENABLED` | `True` (operator, 2026-08-26) | Write `raw/` provider verbatim + `meta.json` — the backup layer / single backup point (unscrubbed; never in git) |
 | `MEMENTO_SPLIT_MAX_MESSAGES` | `200` (Q8 RESOLVED) | Split trigger + per-chunk cap, messages (backstop; chars bind first) |
 | `MEMENTO_SPLIT_MAX_CHARS` | `12000` (Q8 RESOLVED — **hardware-derived**) | Split trigger + per-chunk budget, chars. NOT universal: derive per deployment as `≈ (n_ctx − ~800 prompt − ~600 output) × 3 chars/token`, then re-chunk with `memento_migrate --all` (see ENV_REFERENCE) |
-| `INTERACTION_MEMORIES_TTL_HOURS` | `72` | §4.4 backstop; must stay `> max(PRE_HEATING_LOOKBACK_HOURS, hardcoded 48h of 11_pre_heating.py:234)` |
+| `INTERACTION_MEMORIES_TTL_HOURS` | `72` | §4.4 backstop; must stay `> PRE_HEATING_LOOKBACK_HOURS` (single source of truth since the tier-2 hardcode was aligned to the config, 2026-08-26) |
 
 All new keys live in `Settings` (`config.py`) like everything else; none exist
 today (`VAULT_ROOT` never existed either — the namespace is born with this RFC).
