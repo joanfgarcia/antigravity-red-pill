@@ -452,6 +452,9 @@ class RedPillConfig(BaseSettings):
 	# -----------------------------------------------------------------------
 	MEMENTO_ROOT: str = ""  # vacío = get_data_dir()/memento (Q2); el operador puede apuntarlo donde quiera
 	MEMENTO_SOURCES: List[str] = []  # vacío = sigue a CHRONICLE_ARCHIVE_SOURCES (no divergen en silencio)
+	# raw/ = copia de respaldo provider-nativa y punto único de backup (operador,
+	# 2026-08-26): con él el árbol se regenera desde cero (--from-raw). Sin scrub → jamás en git.
+	MEMENTO_RAW_ENABLED: bool = True
 	# Umbrales de split PROVISIONALES (Q8, pendientes de la cata de Fase 1)
 	MEMENTO_SPLIT_MAX_MESSAGES: int = 30
 	MEMENTO_SPLIT_MAX_CHARS: int = 24000

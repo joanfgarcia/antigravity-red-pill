@@ -146,6 +146,109 @@ def _orphan_sessions(registry: Any) -> List[Tuple[str, str]]:
 	return orphans
 
 
+def _export_raw(plugin: Any, cid: str, session_id: str, step_count: Optional[int], workspace: Optional[str], session_dir: Path, now: str) -> None:
+	"""Escribe `raw/raw.*` + `raw/meta.json`: la copia de respaldo autocontenida (§4.2)."""
+	import json as _json
+
+	try:
+		raw_dir = session_dir / "raw"
+		raw_dir.mkdir(parents=True, exist_ok=True)
+		raw_path = plugin.export_raw(cid, raw_dir)
+		if raw_path is None:
+			return
+		meta = {"session_id": session_id, "source": plugin.name, "conversation_id": cid, "step_count": step_count, "workspace": workspace, "exported_at": now}
+		(raw_dir / "meta.json").write_text(_json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+	except Exception as e:
+		logger.warning(f"[{plugin.name}] raw export failed for {cid}: {e}")
+
+
+def _raw_file_of(raw_dir: Path) -> Optional[Path]:
+	return next((f for f in sorted(raw_dir.glob("raw.*")) if f.name != "raw.meta"), None)
+
+
+def _load_from_raw(root: Path, registry: Any, plugin: Any, session_id: str) -> Optional[List[Dict[str, Any]]]:
+	"""Renormaliza desde la copia raw/ existente de una sesión ya renderizada antes."""
+	entry = registry.get(plugin.name, session_id) or {}
+	if not entry.get("dir"):
+		return None
+	raw_dir = root / entry["dir"] / "raw"
+	raw_file = _raw_file_of(raw_dir) if raw_dir.is_dir() else None
+	if raw_file is None:
+		return None
+	try:
+		return plugin.load_raw(raw_file) or None
+	except Exception as e:
+		logger.warning(f"[{plugin.name}] raw reload failed for {session_id}: {e}")
+		return None
+
+
+def _regenerate_from_raw(root: Path, registry: Any, split_max_messages: int, split_max_chars: int, now: str) -> Tuple[int, int]:
+	"""Regenera el árbol entero desde las copias raw/ (el respaldo ES la fuente). → (rendered, failed)."""
+	import json as _json
+
+	from red_pill.chronicle_sources.base import discover_source_plugins
+	from red_pill.memento.registry import recompute_chain
+	from red_pill.memento.render import render_session, write_session
+
+	plugins = {p.name: p for p in discover_source_plugins(only_enabled=False)}
+	rendered_count, failed = 0, 0
+	touched_sources = set()
+	for meta_file in sorted(root.glob("*/*/*/raw/meta.json")):
+		try:
+			meta = _json.loads(meta_file.read_text(encoding="utf-8"))
+			plugin = plugins.get(meta.get("source", ""))
+			raw_file = _raw_file_of(meta_file.parent)
+			if plugin is None or raw_file is None:
+				failed += 1
+				continue
+			messages = plugin.load_raw(raw_file)
+			if not messages:
+				failed += 1
+				continue
+			session_id = meta["session_id"]
+			entry = registry.get(plugin.name, session_id) or {}
+			month = entry.get("month") or meta_file.parents[3].name  # inmutabilidad §4.3: el path manda
+			rendered = render_session(
+				session_id,
+				plugin.name,
+				plugin.name,
+				messages,
+				workspace=meta.get("workspace"),
+				prev_session=entry.get("prev_session"),
+				next_session=entry.get("next_session"),
+				step_count=meta.get("step_count"),
+				split_max_messages=split_max_messages,
+				split_max_chars=split_max_chars,
+				month_override=month,
+			)
+			write_session(root, rendered)
+			registry.upsert(
+				plugin.name,
+				session_id,
+				{
+					"dir": rendered.dir_rel,
+					"month": rendered.month,
+					"created_at": rendered.created_at,
+					"rendered_at": now,
+					"message_count": rendered.message_count,
+					"step_count": meta.get("step_count"),
+					"body_chars": rendered.body_chars,
+					"has_splits": rendered.has_splits,
+					"memento_hash": rendered.memento_hash,
+					"reconstructed": False,
+				},
+			)
+			touched_sources.add(plugin.name)
+			rendered_count += 1
+		except Exception as e:
+			logger.warning(f"from-raw regeneration failed for {meta_file.parent.parent}: {e}")
+			failed += 1
+
+	for source in sorted(touched_sources):
+		recompute_chain(root, registry, source)
+	return rendered_count, failed
+
+
 def _percentiles(values: List[int]) -> str:
 	if not values:
 		return "—"
@@ -200,6 +303,11 @@ def main() -> None:
 		action="store_true",
 		help="Render sessions that exist only in archive_memories (no provider store retains them) as reconstructed: true (§5.1.2)",
 	)
+	parser.add_argument(
+		"--from-raw",
+		action="store_true",
+		help="Regenerate the whole tree from the raw/ backup copies (no provider stores needed) and exit",
+	)
 	args = parser.parse_args()
 
 	import red_pill.config as cfg
@@ -210,6 +318,16 @@ def main() -> None:
 	registry = MementoRegistry()
 	if args.cata:
 		print(_cata(registry))
+		return
+
+	if args.from_raw:
+		root = get_memento_root()
+		now = datetime.now(timezone.utc).isoformat()
+		rendered_count, failed = _regenerate_from_raw(
+			root, registry, int(getattr(cfg, "MEMENTO_SPLIT_MAX_MESSAGES", 30)), int(getattr(cfg, "MEMENTO_SPLIT_MAX_CHARS", 24000)), now
+		)
+		registry.save()
+		logger.info(f"From-raw regeneration complete: {rendered_count} session(s) rendered, {failed} failed.")
 		return
 
 	plugins = _enabled_plugins(args.source)
@@ -240,6 +358,7 @@ def main() -> None:
 
 	split_max_messages = int(getattr(cfg, "MEMENTO_SPLIT_MAX_MESSAGES", 30))
 	split_max_chars = int(getattr(cfg, "MEMENTO_SPLIT_MAX_CHARS", 24000))
+	raw_enabled = bool(getattr(cfg, "MEMENTO_RAW_ENABLED", True))
 	now = datetime.now(timezone.utc).isoformat()
 	rendered_count, skipped = 0, 0
 	touched_sources = set()
@@ -249,9 +368,14 @@ def main() -> None:
 		try:
 			messages = plugin.load(cid)
 		except Exception as e:
-			logger.warning(f"[{plugin.name}] load({cid}) failed ({e}); attempting reconstruction from archive_memories.")
-			messages = _reconstruct(session_id)
-			reconstructed = messages is not None
+			# Prioridad §5.1: store vivo > raw/ (verbatim) > archive_memories (refinado)
+			messages = _load_from_raw(root, registry, plugin, session_id)
+			if messages is None:
+				logger.warning(f"[{plugin.name}] load({cid}) failed ({e}); attempting reconstruction from archive_memories.")
+				messages = _reconstruct(session_id)
+				reconstructed = messages is not None
+			else:
+				logger.info(f"[{plugin.name}] load({cid}) failed; re-rendered from raw/ backup.")
 
 		if not messages:
 			# Sin mensajes útiles también se registra (sin dir): no reintentar cada noche
@@ -260,12 +384,13 @@ def main() -> None:
 			continue
 
 		entry = registry.get(plugin.name, session_id) or {}
+		workspace = plugin.workspace_of(cid)
 		rendered = render_session(
 			session_id,
 			plugin.name,
 			plugin.name,
 			messages,
-			workspace=plugin.workspace_of(cid),
+			workspace=workspace,
 			prev_session=entry.get("prev_session"),
 			next_session=entry.get("next_session"),
 			reconstructed=reconstructed,
@@ -274,7 +399,9 @@ def main() -> None:
 			split_max_chars=split_max_chars,
 			month_override=entry.get("month"),
 		)
-		write_session(root, rendered)
+		session_dir = write_session(root, rendered)
+		if raw_enabled and not reconstructed:
+			_export_raw(plugin, cid, session_id, step_count, workspace, session_dir, now)
 		registry.upsert(
 			plugin.name,
 			session_id,

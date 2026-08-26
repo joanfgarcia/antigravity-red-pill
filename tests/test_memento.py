@@ -231,3 +231,79 @@ def test_chain_skips_unrendered_sessions(tmp_path):
 	registry = MementoRegistry(path=tmp_path / "reg.json")
 	registry.upsert("opencode", "opencode:empty", {"step_count": 5})
 	assert recompute_chain(tmp_path, registry, "opencode") == 0
+
+
+# ── raw/ como respaldo: export + reload por fuente (§4.2, decisión operador 26-ago) ──
+
+
+def test_antigravity_raw_roundtrip(tmp_path, monkeypatch):
+	import json
+
+	from red_pill.chronicle_sources.antigravity import AntigravitySourcePlugin
+
+	convo_dir = tmp_path / "exports"
+	convo_dir.mkdir()
+	(convo_dir / "abc.json").write_text(
+		json.dumps({"cascade_id": "abc", "step_count": 2, "messages": [{"role": "user", "content": "hola"}, {"role": "assistant", "content": "qué tal"}]}),
+		encoding="utf-8",
+	)
+	plugin = AntigravitySourcePlugin()
+	monkeypatch.setattr(plugin, "_conversations_dir", lambda: convo_dir)
+
+	raw_dir = tmp_path / "raw"
+	raw_dir.mkdir()
+	raw_file = plugin.export_raw("abc", raw_dir)
+	assert raw_file is not None and raw_file.name == "raw.json"
+	assert plugin.load_raw(raw_file) == plugin.load("abc")  # copy2 preserva el mtime-proxy
+	assert plugin.load("abc")[0]["timestamp"] is not None
+
+
+def test_claude_code_raw_roundtrip(tmp_path):
+	import json
+
+	from red_pill.chronicle_sources.claude_code import ClaudeCodeSourcePlugin
+
+	proj = tmp_path / "projects" / "-home-joan-Workspace"
+	proj.mkdir(parents=True)
+	records = [
+		{"type": "user", "message": {"content": "hola claude"}, "timestamp": "2026-08-20T14:03:12Z"},
+		{"type": "assistant", "message": {"content": [{"type": "text", "text": "hola joan"}]}, "timestamp": "2026-08-20T14:03:41Z"},
+	]
+	(proj / "sess-1.jsonl").write_text("\n".join(json.dumps(r) for r in records), encoding="utf-8")
+	plugin = ClaudeCodeSourcePlugin(base_dir=tmp_path / "projects")
+
+	loaded = plugin.load("sess-1")
+	assert len(loaded) == 2 and loaded[0]["content"] == "hola claude"
+	raw_dir = tmp_path / "raw"
+	raw_dir.mkdir()
+	raw_file = plugin.export_raw("sess-1", raw_dir)
+	assert raw_file is not None and raw_file.name == "raw.jsonl"
+	assert plugin.load_raw(raw_file) == loaded
+
+
+def test_opencode_raw_roundtrip(tmp_path):
+	import json
+	import sqlite3
+
+	from red_pill.chronicle_sources.opencode import OpencodeSourcePlugin
+
+	db = tmp_path / "opencode.db"
+	con = sqlite3.connect(db)
+	con.execute("CREATE TABLE message (id TEXT, session_id TEXT, data TEXT, time_created INTEGER)")
+	con.execute("CREATE TABLE part (id TEXT, message_id TEXT, session_id TEXT, data TEXT, time_created INTEGER)")
+	con.execute(
+		"INSERT INTO message VALUES ('m1', 's1', ?, 1787234592000)",
+		(json.dumps({"role": "user", "time": {"created": 1787234592000}}),),
+	)
+	con.execute("INSERT INTO part VALUES ('p1', 'm1', 's1', ?, 1787234592000)", (json.dumps({"type": "text", "text": "hola opencode"}),))
+	con.commit()
+	con.close()
+
+	plugin = OpencodeSourcePlugin(db_path=db)
+	loaded = plugin.load("s1")
+	assert len(loaded) == 1 and loaded[0]["content"] == "hola opencode"
+	raw_dir = tmp_path / "raw"
+	raw_dir.mkdir()
+	raw_file = plugin.export_raw("s1", raw_dir)
+	assert raw_file is not None and raw_file.name == "raw.json"
+	assert plugin.load_raw(raw_file) == loaded

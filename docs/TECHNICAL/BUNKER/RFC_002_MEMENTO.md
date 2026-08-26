@@ -294,19 +294,28 @@ replaced by `-` (→ `opencode-abc-123`). Legal-but-hostile characters never rea
 the filesystem (sync tools, Windows, Obsidian). The real `session_id` lives in
 the frontmatter and the registry maps `session_id → directory`.
 
-#### `raw/` — provider verbatim (MAY, default OFF)
+#### `raw/` — provider verbatim (default **ON** — operator decision, 2026-08-26)
 
+- **Status upgrade (5th pass follow-up).** Originally MAY/default-OFF forensics;
+  the operator re-founded it: *the raw copy is the backup layer and the single
+  backup point* — provider stores prune (empirically: claude_code/opencode
+  retain ~5 weeks; antigravity exports rotate), so `raw/` is what makes the
+  whole tree regenerable from itself, forever. `MEMENTO_RAW_ENABLED` defaults
+  to `True` (§4.8).
 - `raw/` stores the session verbatim **in the provider's native shape** —
-  extension follows the source: `opencode` → `raw.json` (dump of
-  `[{role, content, timestamp}]` + relevant envelope), `claude_code` →
-  `raw.jsonl` (original JSONL slice), `antigravity` → `raw.json`, `pi` (future
-  example) → `raw.md` tree / flat MD if that is its native export, etc. No
-  cleaning beyond role filtering; **no secret scrubbing** (hence the git
-  exclusion in MAY 16 / MUST 9). `raw/` itself is never the search target.
-- Purpose: forensics only. The renderer does not read it; the migration
-  backfill prefers live provider stores over `raw/`. Enable only if the operator
-  wants an extra verbatim layer besides the provider store itself. `raw/` is
-  format-agnostic by design so new providers do not need conversion.
+  extension follows the source: `opencode` → `raw.json` (dump of the native
+  `message`/`part` rows), `claude_code` → `raw.jsonl` (original JSONL copy),
+  `antigravity` → `raw.json` (export copy; `copy2` preserves the mtime dating
+  proxy). No cleaning beyond role filtering; **no secret scrubbing** (hence the
+  git exclusion in MAY 16 / MUST 9). `raw/` itself is never the search target.
+- `raw/meta.json` sidecar (`session_id`, `source`, `conversation_id`,
+  `step_count`, `workspace`, `exported_at`) makes each copy self-contained: the
+  tree can be regenerated without registry or provider stores.
+- **Regeneration**: each source plugin implements `export_raw()`/`load_raw()`;
+  `memento_migrate --from-raw` walks the `raw/meta.json` sidecars and re-renders
+  the entire tree from the backups alone (verified byte-identical). Fallback
+  priority everywhere: live provider store > `raw/` (verbatim) >
+  `archive_memories` (refined, `reconstructed: true`).
 
 #### `memento/index.md` — canonical unified MD (MUST)
 
@@ -648,7 +657,7 @@ New first-class action `search_memento` in `bunker_memory_api`:
 |---|---|---|
 | `MEMENTO_ROOT` | `get_data_dir() / "memento"` → `~/.local/share/red-pill/memento/` | Tree root — operator-overridable (Q2 RESOLVED). Obsidian browsing via symlink if desired |
 | `MEMENTO_SOURCES` | `CHRONICLE_ARCHIVE_SOURCES` (`config.py:448`) | Per-source enable/disable; defaults to the chronicle's own list so the two never silently diverge |
-| `MEMENTO_RAW_ENABLED` | `False` | Write `raw/` provider verbatim (forensics; unscrubbed; never in git) |
+| `MEMENTO_RAW_ENABLED` | `True` (operator, 2026-08-26) | Write `raw/` provider verbatim + `meta.json` — the backup layer / single backup point (unscrubbed; never in git) |
 | `MEMENTO_SPLIT_MAX_MESSAGES` | `30` **(provisional — Q8, pending cata)** | Split-view threshold, messages |
 | `MEMENTO_SPLIT_MAX_CHARS` | `24000` **(provisional — Q8, pending cata; the 4th-pass 8k figure would split nearly every real session)** | Split-view threshold, chars |
 | `INTERACTION_MEMORIES_TTL_HOURS` | `72` | §4.4 backstop; must stay `> max(PRE_HEATING_LOOKBACK_HOURS, hardcoded 48h of 11_pre_heating.py:234)` |
@@ -671,6 +680,9 @@ claude_code 34, opencode 142.
    Antigravity exports — via the existing `ChronicleSourcePlugin.discover()/load()` —
    plus the `memory_queue` SQLite for MCP-only turns (MUST 10).
    These are the rawest and most complete.
+1.5. **`raw/` backups (verbatim):** once exported, each session's `raw/` copy
+   outlives the provider store's retention window — `load_raw()` re-renders
+   verbatim without the store (`--from-raw` regenerates the whole tree).
 2. **`archive_memories` (fallback):** if a provider store is gone (e.g. old
    Antigravity exports), reconstruct sessions from the collection: points carry
    `session_id`, `sequence_index`, `role`, `refined_content`/`raw_content`.

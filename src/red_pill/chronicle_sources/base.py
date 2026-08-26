@@ -14,6 +14,7 @@ import importlib
 import logging
 import pkgutil
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,19 @@ class ChronicleSourcePlugin(ABC):
 	def workspace_of(self, conversation_id: str) -> Optional[str]:
 		"""Workspace de la conversación si la fuente lo conoce (RFC-002 Q6); None si no aplica."""
 		return None
+
+	def export_raw(self, conversation_id: str, dest_dir: "Path") -> Optional["Path"]:
+		"""Copia verbatim provider-nativa a `dest_dir` (el `raw/` del Memento, RFC-002 §4.2).
+
+		El raw es la copia de respaldo y punto único de backup del operador: con
+		él el árbol se regenera desde cero sin provider stores. None si la fuente
+		no lo soporta.
+		"""
+		return None
+
+	def load_raw(self, raw_file: "Path") -> List[Dict[str, Any]]:
+		"""Renormaliza mensajes desde una copia `raw/` previa (regeneración sin store)."""
+		raise NotImplementedError(f"Source '{self.name}' does not support raw reload")
 
 	@abstractmethod
 	def discover(self) -> List[Tuple[str, int]]:
