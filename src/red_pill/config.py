@@ -447,7 +447,16 @@ class RedPillConfig(BaseSettings):
 	# con CHRONICLE_PLUGINS, que gobierna el snatching hacia la consolidación.
 	CHRONICLE_ARCHIVE_SOURCES: List[str] = ["antigravity", "claude_code", "opencode"]
 
-	@field_validator("CHRONICLE_PLUGINS", "CHRONICLE_ARCHIVE_SOURCES", mode="before")
+	# -----------------------------------------------------------------------
+	# MEMENTO CHRONICLE (RFC-002 §4.8)
+	# -----------------------------------------------------------------------
+	MEMENTO_ROOT: str = ""  # vacío = get_data_dir()/memento (Q2); el operador puede apuntarlo donde quiera
+	MEMENTO_SOURCES: List[str] = []  # vacío = sigue a CHRONICLE_ARCHIVE_SOURCES (no divergen en silencio)
+	# Umbrales de split PROVISIONALES (Q8, pendientes de la cata de Fase 1)
+	MEMENTO_SPLIT_MAX_MESSAGES: int = 30
+	MEMENTO_SPLIT_MAX_CHARS: int = 24000
+
+	@field_validator("CHRONICLE_PLUGINS", "CHRONICLE_ARCHIVE_SOURCES", "MEMENTO_SOURCES", mode="before")
 	@classmethod
 	def _parse_chronicle_plugins(cls, v: Any) -> Any:
 		if isinstance(v, str):

@@ -51,6 +51,11 @@ class ClaudeCodeSourcePlugin(ChronicleSourcePlugin):
 				logger.warning(f"[{self.name}] Could not read {path.name}: {e}")
 		return discovered
 
+	def workspace_of(self, conversation_id: str) -> Optional[str]:
+		"""El directorio del proyecto ES el workspace slug (`-home-joan-Workspace`, ...)."""
+		path = self._paths.get(conversation_id) or self._index_sessions().get(conversation_id)
+		return path.parent.name if path else None
+
 	def load(self, conversation_id: str) -> List[Dict[str, Any]]:
 		from red_pill.metabolism.chronicle.claude_code_plugin import extract_assistant_blocks, extract_user_content
 

@@ -14,7 +14,7 @@ import importlib
 import logging
 import pkgutil
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +38,10 @@ class ChronicleSourcePlugin(ABC):
 		import red_pill.config as cfg
 
 		return self.name in getattr(cfg, "CHRONICLE_ARCHIVE_SOURCES", ["antigravity"])
+
+	def workspace_of(self, conversation_id: str) -> Optional[str]:
+		"""Workspace de la conversación si la fuente lo conoce (RFC-002 Q6); None si no aplica."""
+		return None
 
 	@abstractmethod
 	def discover(self) -> List[Tuple[str, int]]:

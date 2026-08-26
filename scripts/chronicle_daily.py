@@ -163,6 +163,12 @@ def main() -> None:
 		return
 	logger.info(f"Active sources: {', '.join(p.name for p in plugins)}")
 
+	# ── Step 0: Memento (RFC-002) — render delta a disco; el archivo Qdrant no depende de él ──
+	memento_cmd = ["uv", "run", "python", str(SCRIPTS_DIR / "memento_migrate.py")]
+	if args.dry_run:
+		memento_cmd.append("--dry-run")
+	_run(memento_cmd, "MEMENTO")
+
 	# ── Load state ────────────────────────────────────────────────────────────
 	state = _load_processed()
 	if _seed_new_sources(state, plugins) and not args.dry_run:
