@@ -1,7 +1,6 @@
 """Índices generados del árbol Memento (RFC-002 SHOULD 13, Fase 2).
 
-- `<memento>/index/<source>.md`: todas las sesiones de una fuente, cronológicas
-  (recupera el browsing "todas las sesiones de X" que el layout mes-primero cede).
+- `<memento>/index/<source>.md`: todas las sesiones de una fuente, cronológicas (recupera el browsing "todas las sesiones de X" que el layout mes-primero cede).
 - `<memento>/<AAAA-MM>/_index.md`: las sesiones del mes, cruzando fuentes.
 
 Regenerables e idempotentes: se reconstruyen enteros en cada pasada del migrate.
