@@ -343,6 +343,52 @@ def test_claude_code_raw_roundtrip(tmp_path):
 	assert plugin.load_raw(raw_file) == loaded
 
 
+def test_antigravity_export_source_parses_frozen_transcripts(tmp_path):
+	from red_pill.chronicle_sources.antigravity_export import AntigravityExportSourcePlugin
+
+	md = "\n".join(
+		[
+			"# BitNet Inference Integration",
+			"",
+			"- **Cascade ID**: `bcd69401-9690-4026-a2ab-b0213a68cba4`",
+			"- **Steps**: 1533",
+			"- **Workspace**: file:///home/joan/Documents/IA/sharing",
+			"",
+			"---",
+			"",
+			"## 🧑 User  `2026-03-21T11:19:04.635484578Z`",
+			"Lee el snapshot y continuemos.",
+			"",
+			"### 🔧 Tool: `run_command`  `2026-03-21T11:19:09.1Z`",
+			"```bash",
+			"python3 wake_up_v6.py",
+			"```",
+			"",
+			"## 🤖 Assistant  `2026-03-21T11:19:30Z`",
+			"Snapshot leído. Continuamos.",
+		]
+	)
+	export_dir = tmp_path / "conversations_export"
+	export_dir.mkdir()
+	(export_dir / "BitNet Inference Integration.md").write_text(md, encoding="utf-8")
+	(export_dir / "CRONICA.md").write_text("# Crónica\nSin cascade id — documento, no conversación.", encoding="utf-8")
+
+	plugin = AntigravityExportSourcePlugin(export_dir=export_dir)
+	assert plugin.discover() == [("bcd69401-9690-4026-a2ab-b0213a68cba4", 1533)]
+	assert plugin.workspace_of("bcd69401-9690-4026-a2ab-b0213a68cba4") == "sharing"
+
+	messages = plugin.load("bcd69401-9690-4026-a2ab-b0213a68cba4")
+	assert [m["role"] for m in messages] == ["user", "assistant"]
+	assert "wake_up_v6.py" in messages[0]["content"]  # el tool block queda embebido en el turno
+	assert abs(messages[0]["timestamp"] - 1774091944.635484) < 0.01  # nanos truncados a µs
+
+	raw_dir = tmp_path / "raw"
+	raw_dir.mkdir()
+	raw_file = plugin.export_raw("bcd69401-9690-4026-a2ab-b0213a68cba4", raw_dir)
+	assert raw_file is not None and raw_file.name == "raw.md"
+	assert plugin.load_raw(raw_file) == messages
+
+
 def test_memory_queue_source_groups_and_excludes(tmp_path):
 	import json
 	import sqlite3

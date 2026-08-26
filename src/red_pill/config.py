@@ -452,8 +452,9 @@ class RedPillConfig(BaseSettings):
 	# -----------------------------------------------------------------------
 	MEMENTO_ROOT: str = ""  # vacío = get_data_dir()/memento (Q2); el operador puede apuntarlo donde quiera
 	MEMENTO_SOURCES: List[str] = []  # vacío = sigue a CHRONICLE_ARCHIVE_SOURCES (no divergen en silencio)
-	# Fuentes solo-Memento (MUST 10): capturan al árbol sin tocar el archivo Qdrant (MUST 8)
-	MEMENTO_EXTRA_SOURCES: List[str] = ["memory_queue"]
+	# Fuentes solo-Memento (MUST 10): capturan al árbol sin tocar el archivo Qdrant (MUST 8).
+	# antigravity_export = las 47 conversaciones de la era temprana congeladas el 23-mar-2026.
+	MEMENTO_EXTRA_SOURCES: List[str] = ["memory_queue", "antigravity_export"]
 	# Fase 3 (RFC-002 §4.4): TTL del buffer interaction_memories — DEBE superar
 	# PRE_HEATING_LOOKBACK_HOURS (única ventana del pre-heating desde que el
 	# hardcode del tier-2 se alineó a la config); el plugin se niega si no.
