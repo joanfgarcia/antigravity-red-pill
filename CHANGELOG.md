@@ -1,10 +1,73 @@
-## [7.22.0] - Unreleased (Despertar autónomo: aislamiento de actividad)
+## [7.22.0] - Unreleased (Memento Chronicle & Despertar autónomo)
 
-Aislamiento de la actividad del operador frente a los runs headless del despertar
-autónomo: el cron ya no se suprime a sí mismo, el despertar no pisa un DAG en
-vuelo y el log del cron es trazable.
+Dos frentes: **Memento** (RFC-002, fases 0–3.5 completas — la grabadora vuelve
+al disco y Qdrant emprende el camino a memoria curada) y el aislamiento de la
+actividad del operador frente a los runs headless del despertar autónomo.
+
+### 📼 Memento Chronicle (RFC-002, ex "Sovereign Vault")
+
+El archivo verbatim en disco: árbol markdown por-sesión
+(`<memento>/<AAAA-MM>/<source>/<session>/` con `raw/`+`memento/index.md`+
+`distill/`+`refine/`), greppable, navegable en Obsidian y regenerable desde sus
+propios respaldos. Backfill histórico ejecutado: **585 sesiones (feb–ago 2026,
+245MB)**, incluida la era temprana recuperada (los 47 transcripts del export
+manual del 23-mar — 2 de febrero — y 10 JSONs del backup del operador).
+
+- **[FEAT] Paquete `red_pill.memento`**: `render` (esquema canónico §4.2,
+  frontmatter de longitud fija, `memento_hash` normativo, split views),
+  `scrub` (MUST-9: redacción de credenciales antes de tocar disco), `clean`
+  (normalización compartida con el ingester — `_refine_content` ahora delega),
+  `registry` (+ hilo `prev/next` por fuente), `search`, `indexes`, `agentic`.
+- **[FEAT] `scripts/memento_migrate.py`**: delta nocturno / `--all` /
+  `--dry-run` (censo de memory_queue) / `--cata` (calibración Q8) /
+  `--reconstruct-orphans` (rescate desde archive_memories, `reconstructed:
+  true`) / `--from-raw` (regeneración total desde respaldos — verificada
+  byte-idéntica). Integrado como Step 0 de `chronicle_daily.py`.
+- **[FEAT] `raw/` como capa de respaldo** (decisión operador): cada fuente
+  exporta su verbatim nativo + `meta.json` autocontenido; prioridad
+  store vivo > raw/ > archive. 487/487 sesiones de provider respaldadas —
+  las podas de los IDEs ya no pierden nada.
+- **[FEAT] Fuentes nuevas**: `memory_queue` (MUST 10 — turnos MCP-only
+  agrupados `mcp:<originator>:<día>`; 152 pseudo-sesiones) y
+  `antigravity_export` (los transcripts congelados del 23-mar).
+  `workspace_of()` en todas las fuentes (Q6).
+- **[FEAT] `search_memento`** en `bunker_memory_api`: full-text exacto (rg +
+  fallback) con scopes memento/distill/refine y filtros fuente/mes/workspace —
+  recall híbrido componible con `search_memory_research`. Índices generados
+  por fuente y por mes.
+- **[FEAT] Pase agéntico file-based** (`memento/agentic.py` +
+  `scripts/memento_agentic.py`): Distill→Refine sobre `memento/index.md` con
+  los splits como unidades de trabajo del LLM local (Q8: 12k chars,
+  hardware-derived — ver ENV_REFERENCE), nocturno LLM-gated
+  (`MEMENTO_AGENTIC_NIGHT_LIMIT`), esquemas §4.5 con line refs y cross_refs
+  mecánicos. **Gate de curación EN SOMBRA** (§4.6): significance sellada
+  in-place + decisión would-ingest contada en el registry; `--shadow-report`.
+- **[FEAT] JanitorPlugins**: `interaction_ttl` (backstop 72h del buffer, con
+  guardarraíl vs la ventana del pre-heating), `queue_purge_rendered` (primera
+  purga de memory_queue de la historia, gateada por el registry) y
+  `memento_stale` (§4.5.1: hash mismatch → señal muted → rama nueva del
+  `auto_heal_ritual` relanza `--heal-stale`).
+- **[FEAT] Query-log persistido** (prerequisito Fase 3.5):
+  `search_query_log.jsonl` alimentado desde el `ACTION_START` del registry.
+- **[FEAT] Fase 4 cableada, OFF**: `MEMENTO_GATE_ENFORCED=False` guarda el
+  filtro de ingesta del chronicle (fail-open). El flip requiere aprobación del
+  operador respaldada por la evidencia de la sombra (Q4). **Hasta entonces los
+  ciclos de sueño y el archivo Qdrant siguen intactos (MUST 8).**
+- **[FIX] Pre-heating**: el bloque de interaction_memories filtraba por
+  `created_at`, campo que `record_interaction_pair` nunca escribe (el epoch va
+  en `timestamp`) — no casaba ningún punto desde su origen; tier-2 con cutoff
+  48h hardcodeado y `category` leído sin anidar. Los tres curados;
+  `PRE_HEATING_LOOKBACK_HOURS` es ahora la única fuente de verdad.
+- **[DOCS] RFC-002 renombrado a Memento** (colisión con la capa MLS "Sovereign
+  Vault Cryptography"; nota recíproca en el ROADMAP), 5ª pasada auditada
+  contra el código, ENV_REFERENCE con la sección Memento y la regla de
+  recálculo por hardware del umbral de split.
 
 ### 🌅 Despertar autónomo
+
+Aislamiento de la actividad del operador frente a los runs headless: el cron ya
+no se suprime a sí mismo, el despertar no pisa un DAG en vuelo y el log del
+cron es trazable.
 
 - **[FEAT] `is_ide_idle()` consciente del origen**: la señal opencode ya no
   trata cualquier mutación de `opencode.db` como actividad del operador. Nuevo
