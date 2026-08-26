@@ -108,6 +108,7 @@ def test_render_frontmatter_and_body():
 	assert "workspace: -home-joan-Workspace" in text
 	assert "step_count: 47" in text
 	assert "reconstructed: true" in text
+	assert "prev_session: null" in text and "next_session: null" in text  # longitud fija: los refs no se mueven
 	assert "# opencode:s1" in text
 	assert "— Usuario" in text and "— Asistente" in text
 	assert compute_hash(extract_body(text)) == rendered.memento_hash
@@ -168,6 +169,28 @@ def test_update_frontmatter_links_preserves_body_hash(tmp_path):
 	text = index_file.read_text(encoding="utf-8")
 	assert "prev_session: opencode:s1" in text and "next_session: opencode:s3" in text
 	assert compute_hash(extract_body(text)) == rendered.memento_hash
+	assert not update_frontmatter_links(index_file, "opencode:s1", "opencode:s3")  # sin cambios → no reescribe
+
+
+def test_chain_update_does_not_shift_split_line_refs(tmp_path):
+	rendered = render_session("opencode:dense2", "opencode", "opencode", _messages(25), split_max_messages=10, split_max_chars=100000)
+	session_dir = write_session(tmp_path, rendered)
+	index_file = session_dir / "memento" / "index.md"
+	assert update_frontmatter_links(index_file, "opencode:a", "opencode:b")
+
+	lines = index_file.read_text(encoding="utf-8").split("\n")
+	for filename, split_text in rendered.splits:
+		start = int(split_text.split("\n")[0].split("#l")[1].split("-")[0])
+		assert lines[start - 1].startswith("## "), f"{filename}: l{start} desplazado tras actualizar el hilo"
+
+
+def test_rerender_with_chain_links_keeps_hash_stable():
+	first = render_session("opencode:s1", "opencode", "opencode", _messages(25), split_max_messages=10, split_max_chars=100000)
+	second = render_session(
+		"opencode:s1", "opencode", "opencode", _messages(25),
+		prev_session="opencode:s0", next_session="opencode:s2", split_max_messages=10, split_max_chars=100000,
+	)
+	assert first.memento_hash == second.memento_hash  # el frontmatter no participa del hash ni mueve el cuerpo
 
 
 # ── Registry + hilo ──────────────────────────────────────────────────────────

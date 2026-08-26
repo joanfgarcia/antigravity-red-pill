@@ -62,6 +62,8 @@ def _display(dt: Optional[datetime]) -> str:
 
 
 def _yaml_value(value: Any) -> str:
+	if value is None:
+		return "null"
 	if isinstance(value, bool):
 		return "true" if value else "false"
 	text = str(value)
@@ -167,10 +169,10 @@ def render_session(
 	frontmatter.append(("message_count", len(blocks)))
 	if workspace:
 		frontmatter.append(("workspace", workspace))
-	if prev_session:
-		frontmatter.append(("prev_session", prev_session))
-	if next_session:
-		frontmatter.append(("next_session", next_session))
+	# prev/next SIEMPRE presentes (null si no hay vecino): el frontmatter mantiene
+	# longitud fija y las actualizaciones del hilo no desplazan los line refs del cuerpo.
+	frontmatter.append(("prev_session", prev_session))
+	frontmatter.append(("next_session", next_session))
 	frontmatter.append(("reconstructed", reconstructed))
 
 	fm_lines = ["---"] + [f"{key}: {_yaml_value(value)}" for key, value in frontmatter] + ["---", ""]
@@ -236,7 +238,11 @@ def write_session(root: Path, rendered: RenderedSession) -> Path:
 
 
 def update_frontmatter_links(index_file: Path, prev_session: Optional[str], next_session: Optional[str]) -> bool:
-	"""Reescribe SOLO prev/next_session del frontmatter (el hilo §SHOULD-12); el cuerpo — y su hash — no se tocan."""
+	"""Reescribe SOLO prev/next_session del frontmatter (el hilo SHOULD-12).
+
+	Reemplazo in-place, jamás inserción: el frontmatter conserva su longitud, así
+	que ni el cuerpo ni sus line refs ni el `memento_hash` se mueven un ápice.
+	"""
 	text = index_file.read_text(encoding="utf-8")
 	lines = text.split("\n")
 	if not lines or lines[0].strip() != "---":
@@ -245,14 +251,14 @@ def update_frontmatter_links(index_file: Path, prev_session: Optional[str], next
 	if close is None:
 		return False
 
-	kept = [line for line in lines[1:close] if not line.startswith(("prev_session:", "next_session:"))]
-	links = [f"prev_session: {_yaml_value(prev_session)}" for _ in [0] if prev_session]
-	links += [f"next_session: {_yaml_value(next_session)}" for _ in [0] if next_session]
-
-	insert_at = next((i for i, line in enumerate(kept) if line.startswith("reconstructed:")), len(kept))
-	new_lines = [lines[0]] + kept[:insert_at] + links + kept[insert_at:] + lines[close:]
-	new_text = "\n".join(new_lines)
-	if new_text == text:
+	replacements = {"prev_session:": f"prev_session: {_yaml_value(prev_session)}", "next_session:": f"next_session: {_yaml_value(next_session)}"}
+	changed = False
+	for i in range(1, close):
+		for prefix, replacement in replacements.items():
+			if lines[i].startswith(prefix) and lines[i] != replacement:
+				lines[i] = replacement
+				changed = True
+	if not changed:
 		return False
-	index_file.write_text(new_text, encoding="utf-8")
+	index_file.write_text("\n".join(lines), encoding="utf-8")
 	return True

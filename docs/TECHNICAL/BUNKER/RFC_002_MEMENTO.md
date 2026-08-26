@@ -346,7 +346,10 @@ reconstructed: false
 - Body = the already-normalized messages from `ChronicleSourcePlugin.load()`
   (`[{role, content, timestamp}]`, e.g. `src/red_pill/chronicle_sources/opencode.py:61`).
 - `prev/next_session` are computed at render time (SHOULD 12) — first-message
-  `created_at` ordering per source.
+  `created_at` ordering per source. Both keys are **always present** (`null`
+  when there is no neighbor): the frontmatter keeps a fixed line count, so
+  thread updates replace lines in place and never shift the body's line refs
+  (nor, therefore, the `memento_hash` anchoring §4.5.1).
 - `reconstructed: true` (frontmatter) marks sessions rebuilt from
   `archive_memories` (§5.1.2): their body is *refined* text, not verbatim — the
   flag keeps G4 honest about which files are literal transcripts.
