@@ -455,9 +455,11 @@ class RedPillConfig(BaseSettings):
 	# raw/ = copia de respaldo provider-nativa y punto único de backup (operador,
 	# 2026-08-26): con él el árbol se regenera desde cero (--from-raw). Sin scrub → jamás en git.
 	MEMENTO_RAW_ENABLED: bool = True
-	# Umbrales de split PROVISIONALES (Q8, pendientes de la cata de Fase 1)
-	MEMENTO_SPLIT_MAX_MESSAGES: int = 30
-	MEMENTO_SPLIT_MAX_CHARS: int = 24000
+	# Umbrales de split (Q8 RESUELTA 2026-08-26): el trozo es la unidad de trabajo
+	# del distill local — suelo n_ctx=6144 (llama_cli_runner; EdgeEngine 8192) →
+	# ~12k chars ≈ ~4k tokens de contenido + prompt + salida. Mensajes = backstop.
+	MEMENTO_SPLIT_MAX_MESSAGES: int = 200
+	MEMENTO_SPLIT_MAX_CHARS: int = 12000
 
 	@field_validator("CHRONICLE_PLUGINS", "CHRONICLE_ARCHIVE_SOURCES", "MEMENTO_SOURCES", mode="before")
 	@classmethod

@@ -277,7 +277,7 @@ def _cata(registry: Any) -> str:
 		lines.append(f"| {source} | {len(subset)} | {_percentiles([m for _s, m, _c in subset])} | {_percentiles([c for _s, _m, c in subset])} |")
 
 	lines += ["", "## Simulación de umbrales de split (mensajes / chars)", "", "| umbral | sesiones con split | % |", "|---|---|---|"]
-	for max_messages, max_chars in [(30, 8000), (30, 24000), (50, 48000), (100, 96000), (200, 192000)]:
+	for max_messages, max_chars in [(30, 8000), (200, 12000), (30, 24000), (50, 48000), (100, 96000), (200, 192000)]:
 		hits = sum(1 for _s, messages, chars in rows if messages > max_messages or chars > max_chars)
 		lines.append(f"| >{max_messages} msgs o >{max_chars} chars | {hits} | {hits * 100 // len(rows)}% |")
 

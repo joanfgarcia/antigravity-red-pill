@@ -372,8 +372,13 @@ reconstructed: false
 #### `memento/NNN-*.md` — split views for dense sessions (MAY)
 
 - Created only when a session exceeds the split threshold
-  (`MEMENTO_SPLIT_MAX_MESSAGES` / `MEMENTO_SPLIT_MAX_CHARS`, §4.8 —
-  **provisional values pending the calibration cata of Q8**). Each file is
+  (`MEMENTO_SPLIT_MAX_MESSAGES` / `MEMENTO_SPLIT_MAX_CHARS`, §4.8). Splits are
+  **deterministic LLM work units**, not reading pages (Q8, operator 2026-08-26):
+  the Phase-3.5 distill runs on a local model with a small context (floor
+  `n_ctx=6144`, `scripts/llama_cli_runner.py`; EdgeEngine 8192), so each chunk
+  must fit prompt + content + output in that window — hence the 12k-char
+  budget (~4k content tokens at a conservative 3 chars/token). Nothing semantic
+  happens at this layer; semantic sectioning is distill's job. Each file is
   `memento/<NNN>-<slug>.md` (`NNN` = `001–999`, same convention as
   distill/refine) — a slice of `memento/index.md` with a header
   `> [!ref] memento/index.md#l120-340` and the same `## TIMESTAMP — Role` blocks.
@@ -658,8 +663,8 @@ New first-class action `search_memento` in `bunker_memory_api`:
 | `MEMENTO_ROOT` | `get_data_dir() / "memento"` → `~/.local/share/red-pill/memento/` | Tree root — operator-overridable (Q2 RESOLVED). Obsidian browsing via symlink if desired |
 | `MEMENTO_SOURCES` | `CHRONICLE_ARCHIVE_SOURCES` (`config.py:448`) | Per-source enable/disable; defaults to the chronicle's own list so the two never silently diverge |
 | `MEMENTO_RAW_ENABLED` | `True` (operator, 2026-08-26) | Write `raw/` provider verbatim + `meta.json` — the backup layer / single backup point (unscrubbed; never in git) |
-| `MEMENTO_SPLIT_MAX_MESSAGES` | `30` **(provisional — Q8, pending cata)** | Split-view threshold, messages |
-| `MEMENTO_SPLIT_MAX_CHARS` | `24000` **(provisional — Q8, pending cata; the 4th-pass 8k figure would split nearly every real session)** | Split-view threshold, chars |
+| `MEMENTO_SPLIT_MAX_MESSAGES` | `200` (Q8 RESOLVED) | Split trigger + per-chunk cap, messages (backstop; chars bind first) |
+| `MEMENTO_SPLIT_MAX_CHARS` | `12000` (Q8 RESOLVED) | Split trigger + per-chunk budget, chars — sized to the local distill LLM's context floor (§4.2) |
 | `INTERACTION_MEMORIES_TTL_HOURS` | `72` | §4.4 backstop; must stay `> max(PRE_HEATING_LOOKBACK_HOURS, hardcoded 48h of 11_pre_heating.py:234)` |
 
 All new keys live in `Settings` (`config.py`) like everything else; none exist
@@ -808,13 +813,15 @@ revertible).
     accepts it as scope. It also feeds `cross_refs` candidate discovery (§4.5).
 7. **Real-time Memento**: **RESOLVED (operator, 2026-08-26)** — the 04:00 batch
     suffices while the TTL buffer exists; live append (S2) stays MAY.
-8. **Split threshold**: **OPEN — pending cata.** Operator decision 2026-08-26:
-    not decidable without data. Phase 1 runs a calibration cata over the
-    backfilled corpus (distribution of message counts / char sizes across the
-    316 historical sessions) and the thresholds are frozen then. Until that,
-    `MEMENTO_SPLIT_MAX_MESSAGES=30` / `MEMENTO_SPLIT_MAX_CHARS=24000` are
-    provisional placeholders (§4.8) — the 4th-pass `8k chars` figure is known
-    to be too low (it would split nearly every real session).
+8. **Split threshold**: **RESOLVED (operator, 2026-08-26, with the Phase-1
+    cata).** Deterministic only — anything semantic needs the LLM and belongs
+    to Phase 3.5. The binding constraint is not reading comfort but the local
+    distill LLM's context (floor `n_ctx=6144`): the chunk is the LLM work unit.
+    `MEMENTO_SPLIT_MAX_CHARS=12000` (~4k content tokens + prompt + output fits
+    the 6k floor with margin), `MEMENTO_SPLIT_MAX_MESSAGES=200` as backstop.
+    Cata reference (387 sessions): chars p50/p90/p99 = 13.7k/150k/308k → ~55%
+    of sessions split, which is correct — those are precisely the ones that
+    would not fit the distill window in one piece.
 
 ---
 
