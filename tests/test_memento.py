@@ -233,6 +233,68 @@ def test_chain_skips_unrendered_sessions(tmp_path):
 	assert recompute_chain(tmp_path, registry, "opencode") == 0
 
 
+# ── Fase 2: búsqueda + índices ───────────────────────────────────────────────
+
+
+def _build_tree(tmp_path):
+	root = tmp_path / "memento"
+	registry = MementoRegistry(path=tmp_path / "reg.json")
+	for i, ts in enumerate([1787234592.0, 1787238192.0]):
+		msgs = _messages(3, base_ts=ts)
+		msgs[0]["content"] = f"la palabra clave carpaccio aparece aquí ({i})"
+		rendered = render_session(f"opencode:s{i}", "opencode", "opencode", msgs)
+		write_session(root, rendered)
+		registry.upsert(
+			"opencode",
+			f"opencode:s{i}",
+			{
+				"dir": rendered.dir_rel,
+				"month": rendered.month,
+				"created_at": rendered.created_at,
+				"message_count": rendered.message_count,
+				"memento_hash": rendered.memento_hash,
+			},
+		)
+	return root, registry
+
+
+def test_search_memento_finds_exact_text(tmp_path):
+	from red_pill.memento.search import search_memento
+
+	root, _registry = _build_tree(tmp_path)
+	results = search_memento("carpaccio", root=root)
+	assert len(results) == 2
+	assert results[0]["path"].endswith("memento/index.md")
+	assert results[0]["session_id"].startswith("opencode:s")
+	assert "carpaccio" in results[0]["snippet"]
+
+	assert search_memento("carpaccio", root=root, month="1999-01") == []
+	assert search_memento("no-existe-esta-cadena", root=root) == []
+
+
+def test_search_memento_python_fallback(tmp_path):
+	from red_pill.memento.search import _SCOPE_GLOBS, _python_search
+
+	root, _registry = _build_tree(tmp_path)
+	hits = _python_search(root, "carpaccio", _SCOPE_GLOBS["memento"], "*/*/*/", 10)
+	assert len(hits) == 2
+
+
+def test_rebuild_indexes(tmp_path):
+	from red_pill.memento.indexes import rebuild_indexes
+
+	root, registry = _build_tree(tmp_path)
+	written = rebuild_indexes(root, registry)
+	assert written == 2  # index/opencode.md + 2026-08/_index.md
+
+	source_index = (root / "index" / "opencode.md").read_text(encoding="utf-8")
+	assert "opencode:s0" in source_index and "opencode:s1" in source_index
+	assert "../2026-08/opencode/opencode-s0/memento/index.md" in source_index
+
+	month_index = (root / "2026-08" / "_index.md").read_text(encoding="utf-8")
+	assert "2 sesiones este mes." in month_index
+
+
 # ── raw/ como respaldo: export + reload por fuente (§4.2, decisión operador 26-ago) ──
 
 

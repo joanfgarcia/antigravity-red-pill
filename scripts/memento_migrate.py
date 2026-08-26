@@ -326,6 +326,9 @@ def main() -> None:
 		rendered_count, failed = _regenerate_from_raw(
 			root, registry, int(getattr(cfg, "MEMENTO_SPLIT_MAX_MESSAGES", 30)), int(getattr(cfg, "MEMENTO_SPLIT_MAX_CHARS", 24000)), now
 		)
+		from red_pill.memento.indexes import rebuild_indexes
+
+		rebuild_indexes(root, registry)
 		registry.save()
 		logger.info(f"From-raw regeneration complete: {rendered_count} session(s) rendered, {failed} failed.")
 		return
@@ -463,6 +466,11 @@ def main() -> None:
 		updated = recompute_chain(root, registry, source)
 		if updated:
 			logger.info(f"[{source}] Thread chain updated on {updated} session(s).")
+
+	if touched_sources:
+		from red_pill.memento.indexes import rebuild_indexes
+
+		logger.info(f"Rebuilt {rebuild_indexes(root, registry)} index file(s).")
 
 	registry.save()
 	logger.info(f"Memento render complete: {rendered_count} session(s) rendered, {skipped} empty/failed.")
