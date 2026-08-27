@@ -447,7 +447,43 @@ class RedPillConfig(BaseSettings):
 	# con CHRONICLE_PLUGINS, que gobierna el snatching hacia la consolidación.
 	CHRONICLE_ARCHIVE_SOURCES: List[str] = ["antigravity", "claude_code", "opencode"]
 
-	@field_validator("CHRONICLE_PLUGINS", "CHRONICLE_ARCHIVE_SOURCES", mode="before")
+	# -----------------------------------------------------------------------
+	# MEMENTO CHRONICLE (RFC-002 §4.8)
+	# -----------------------------------------------------------------------
+	MEMENTO_ROOT: str = ""  # vacío = get_data_dir()/memento (Q2); el operador puede apuntarlo donde quiera
+	MEMENTO_SOURCES: List[str] = []  # vacío = sigue a CHRONICLE_ARCHIVE_SOURCES (no divergen en silencio)
+	# Fuentes solo-Memento (MUST 10): capturan al árbol sin tocar el archivo Qdrant (MUST 8).
+	# memory_queue = turnos MCP-only (MUST 10). antigravity_export es el snapshot
+	# manual del 23-mar-2026 (47 MD, era temprana) — legado del operador, opt-in
+	# vía .env (MEMENTO_EXTRA_SOURCES=memory_queue,antigravity_export) — no por
+	# defecto, porque la ruta ~/.gemini/antigravity/conversations_export no existe
+	# en instalaciones limpias y es snapshot, no store vivo.
+	MEMENTO_EXTRA_SOURCES: List[str] = ["memory_queue"]
+	# Fase 3 (RFC-002 §4.4): TTL del buffer interaction_memories — DEBE superar
+	# PRE_HEATING_LOOKBACK_HOURS (única ventana del pre-heating desde que el
+	# hardcode del tier-2 se alineó a la config); el plugin se niega si no.
+	INTERACTION_MEMORIES_TTL_HOURS: int = 72
+	# §4.4.2: días de margen antes de purgar filas completed ya renderizadas en Memento
+	MEMENTO_QUEUE_RETENTION_DAYS: int = 7
+	# Fase 3.5 (§4.5-4.6): pase agéntico file-based + gate EN SOMBRA
+	MEMENTO_REFINE_MIN_SIGNIFICANCE: float = 0.3  # bajo esto, refine no escribe fichero (selección permisiva)
+	MEMENTO_GATE_MIN_SIGNIFICANCE: float = 0.5  # PROVISIONAL (Q4 abierta): umbral de la decisión would-ingest
+	MEMENTO_AGENTIC_NIGHT_LIMIT: int = 20  # sesiones por noche — acota el coste LLM dentro del job chronicle
+	# Fase 4 (§6): el flip REQUIERE aprobación del operador + evidencia de la sombra.
+	# True = el chronicle deja de ingerir en archive_memories las sesiones bajo el umbral.
+	MEMENTO_GATE_ENFORCED: bool = False
+	# raw/ = copia de respaldo provider-nativa y punto único de backup (operador,
+	# 2026-08-26): con él el árbol se regenera desde cero (--from-raw). Sin scrub → jamás en git.
+	MEMENTO_RAW_ENABLED: bool = True
+	# Umbrales de split (Q8 RESUELTA 2026-08-26): el trozo es la unidad de trabajo
+	# del distill local. OJO: 12k es de ESTE hardware (suelo n_ctx=6144 en
+	# llama_cli_runner; EdgeEngine 8192) — al configurar otro despliegue hay que
+	# recalcular: ≈ (n_ctx − ~800 prompt − ~600 salida) × 3 chars/token, y
+	# re-trocear con `memento_migrate --all` (ver ENV_REFERENCE). Msgs = backstop.
+	MEMENTO_SPLIT_MAX_MESSAGES: int = 200
+	MEMENTO_SPLIT_MAX_CHARS: int = 12000
+
+	@field_validator("CHRONICLE_PLUGINS", "CHRONICLE_ARCHIVE_SOURCES", "MEMENTO_SOURCES", "MEMENTO_EXTRA_SOURCES", mode="before")
 	@classmethod
 	def _parse_chronicle_plugins(cls, v: Any) -> Any:
 		if isinstance(v, str):

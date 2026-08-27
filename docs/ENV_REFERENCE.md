@@ -194,6 +194,34 @@ Plugins 05–10. Each is independently toggleable.
 
 ---
 
+## 📼 Memento Chronicle (RFC-002)
+
+| Parameter | Default | Description |
+| :--- | :--- | :--- |
+| `MEMENTO_ROOT` | `""` (→ `~/.local/share/red-pill/memento/`) | Root of the on-disk chronicle tree. Operator-overridable. |
+| `MEMENTO_SOURCES` | `[]` (→ follows `CHRONICLE_ARCHIVE_SOURCES`) | Per-source enable/disable for the Memento render. |
+| `MEMENTO_RAW_ENABLED` | `True` | Write `raw/` provider-native backups + `meta.json` (the single backup point; unscrubbed — never in git). |
+| `MEMENTO_SPLIT_MAX_MESSAGES` | `200` | Split trigger + per-chunk cap (backstop; chars bind first). |
+| `MEMENTO_SPLIT_MAX_CHARS` | `12000` | Split trigger + per-chunk budget. **Hardware-derived — recalculate per deployment (see below).** |
+| `MEMENTO_EXTRA_SOURCES` | `["memory_queue"]` | Memento-only sources: capture to the tree without touching the Qdrant archive. `memory_queue` = MCP-only turns (MUST 10). `antigravity_export` = frozen early-era snapshot (47 MD, `conversations_export`, operator legacy) — **opt-in**: `MEMENTO_EXTRA_SOURCES=memory_queue,antigravity_export` — absent by default because the path is a local snapshot, not a live store, and clean installs don't have it. |
+| `INTERACTION_MEMORIES_TTL_HOURS` | `72` | Janitor TTL backstop over the interaction buffer. Must exceed `PRE_HEATING_LOOKBACK_HOURS` (the plugin refuses otherwise). |
+| `MEMENTO_QUEUE_RETENTION_DAYS` | `7` | Safety margin before purging completed memory_queue rows whose group is already rendered. |
+| `MEMENTO_REFINE_MIN_SIGNIFICANCE` | `0.3` | Below this, refine writes no file for the section (permissive selection). |
+| `MEMENTO_GATE_MIN_SIGNIFICANCE` | `0.5` | **Provisional (Q4 open)**: threshold of the shadow would-ingest decision. |
+| `MEMENTO_AGENTIC_NIGHT_LIMIT` | `20` | Sessions distilled+refined per nightly chronicle run (bounds local-LLM cost). |
+| `MEMENTO_GATE_ENFORCED` | `False` | **Phase 4 switch.** Flip ONLY with operator approval backed by shadow evidence: chronicle stops ingesting below-threshold sessions into archive_memories. |
+
+> ⚠️ **`MEMENTO_SPLIT_MAX_CHARS` is NOT universal.** Splits are the work units
+> the local distill LLM consumes (RFC-002 §4.2), so the budget must be derived
+> from the smallest context the local model runs with on *this* hardware:
+> `MEMENTO_SPLIT_MAX_CHARS ≈ (n_ctx − ~800 prompt − ~600 output) × 3 chars/token`.
+> The `12000` default assumes the 4GB-VRAM floor (`n_ctx=6144`,
+> `scripts/llama_cli_runner.py`; EdgeEngine runs 8192). Whoever configures a
+> deployment — operator or agent — must recompute it when the hardware or the
+> model context changes, and re-run `memento_migrate --all` to re-chunk.
+
+---
+
 ## ☁️ Persistence & Encryption (Cloud Vault)
 
 | Parameter | Default | Description |

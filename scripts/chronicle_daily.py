@@ -163,12 +163,44 @@ def main() -> None:
 		return
 	logger.info(f"Active sources: {', '.join(p.name for p in plugins)}")
 
+	# ── Step 0: Memento (RFC-002) — render delta a disco; el archivo Qdrant no depende de él ──
+	memento_cmd = ["uv", "run", "python", str(SCRIPTS_DIR / "memento_migrate.py")]
+	if args.dry_run:
+		memento_cmd.append("--dry-run")
+	_run(memento_cmd, "MEMENTO")
+
+	# ── Step 0.5: pase agéntico Memento (§4.5, gate en sombra) — LLM-gated, lote acotado ──
+	if not args.dry_run:
+		if _llm_available():
+			_run(["uv", "run", "python", str(SCRIPTS_DIR / "memento_agentic.py")], "MEMENTO-AGENTIC")
+		else:
+			logger.warning("[MEMENTO-AGENTIC] Local LLM not available. Skipping — will retry on next cycle.")
+
 	# ── Load state ────────────────────────────────────────────────────────────
 	state = _load_processed()
 	if _seed_new_sources(state, plugins) and not args.dry_run:
 		_save_processed(state)
 
 	pending = _find_pending(state, plugins, force_all=args.all)
+
+	# ── Fase 4 (RFC-002 §4.6): gate de curación sobre la ingesta a archive_memories ──
+	# Default OFF: el flip requiere aprobación del operador + evidencia de la sombra (Q4).
+	# Fail-open: sesiones aún sin veredicto agéntico se ingieren igual.
+	import red_pill.config as cfg  # noqa: E402
+
+	if getattr(cfg, "MEMENTO_GATE_ENFORCED", False):
+		from red_pill.memento.registry import MementoRegistry  # noqa: E402
+
+		memento_registry = MementoRegistry()
+		gated = []
+		for plugin, cid, step_count in pending:
+			entry = memento_registry.get(plugin.name, plugin.qualify(cid)) or {}
+			agentic = entry.get("agentic") or {}
+			if "gate_would_ingest" in agentic and not agentic["gate_would_ingest"]:
+				gated.append((plugin, cid, step_count))
+		if gated:
+			pending = [item for item in pending if item not in gated]
+			logger.info(f"[GATE] MEMENTO_GATE_ENFORCED: {len(gated)} session(s) below significance threshold — kept in Memento only.")
 
 	if not pending:
 		logger.info("No pending conversations to process. Registry is up to date.")

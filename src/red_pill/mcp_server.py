@@ -450,6 +450,51 @@ async def handle_run_agent_task(arguments: Dict[str, Any]):
 
 @registry.register_action(
 	parent="bunker_memory_api",
+	action="search_memento",
+	description=(
+		"Full-text/exact search over the Memento Chronicle (the on-disk verbatim archive, RFC-002). "
+		"Complements search_memory_research: semantic hits point to engrams; Memento hits point to exact passages "
+		"in memento/index.md with stable line refs. Scope 'distill'/'refine' searches the structured layers."
+	),
+	schema={
+		"type": "object",
+		"properties": {
+			"query": {"type": "string", "description": "Literal text to find (case-insensitive)."},
+			"source": {"type": "string", "description": "Optional: restrict to a source (antigravity, claude_code, opencode, memory_queue)."},
+			"month": {"type": "string", "description": "Optional: restrict to a month (AAAA-MM)."},
+			"workspace": {"type": "string", "description": "Optional: restrict to a workspace slug."},
+			"scope": {"type": "string", "enum": ["memento", "distill", "refine", "all"], "description": "Default: memento (canonical index.md)."},
+			"limit": {"type": "integer", "description": "Max results (default 20)."},
+		},
+		"required": ["query"],
+	},
+)
+async def handle_search_memento(arguments: Dict[str, Any]):
+	import asyncio
+
+	from red_pill.memento import get_memento_root
+	from red_pill.memento.search import search_memento
+
+	results = await asyncio.to_thread(
+		search_memento,
+		arguments["query"],
+		source=arguments.get("source"),
+		month=arguments.get("month"),
+		workspace=arguments.get("workspace"),
+		scope=arguments.get("scope", "memento"),
+		limit=int(arguments.get("limit", 20)),
+	)
+	if not results:
+		return [types.TextContent(type="text", text=f"No Memento matches for '{arguments['query']}'.")]
+	root = get_memento_root()
+	lines = [f"{len(results)} Memento hit(s) for '{arguments['query']}' (root: {root}):"]
+	for r in results:
+		lines.append(f"- {r['path']}#l{r['line']} [{r['session_id']}] {r['snippet']}")
+	return [types.TextContent(type="text", text="\n".join(lines))]
+
+
+@registry.register_action(
+	parent="bunker_memory_api",
 	action="traverse_thread",
 	description="Walk the Ariadne's Thread through work_memories or social_memories. Finds the best matching synthesis_hub for the query and traverses the temporal chain via prev/next_session_hub axons.",
 	schema={

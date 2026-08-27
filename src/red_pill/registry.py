@@ -127,6 +127,14 @@ class ToolRegistry:
 				logger.error(f"Sentinel Audit Failed (Degraded Mode): {e}")
 
 			try:
+				# RFC-002 §4.6: el ACTION_START era efímero; las queries de recall se persisten
+				from red_pill.core.query_log import record_query
+
+				record_query(action, payload)
+			except Exception as e:
+				logger.debug(f"Query log persistence failed (non-fatal): {e}")
+
+			try:
 				result = await handler(payload)
 				if not isinstance(result, list):
 					result = [types.TextContent(type="text", text=str(result))]

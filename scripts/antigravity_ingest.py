@@ -60,19 +60,12 @@ class ChronicleIngester:
 	def _refine_content(self, text: str) -> str:
 		"""
 		Heuristic Semantic Normalization.
-		Removes logs, ANSI noise, and repetitive boilerplate.
+		Delegates to the shared module (RFC-002 §5.2) so the ingester and the
+		Memento renderer produce byte-identical cleaned text.
 		"""
-		import re
+		from red_pill.memento.clean import normalize_noise
 
-		# Remove ANSI escape sequences
-		text = re.sub(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])", "", text)
-		# Remove common "loading" or "progress" noise
-		text = re.sub(r"\[.*\] (DEBUG|TRACE|INFO) .*", "", text)
-		# Remove massive hex blobs/base64 strings (likely artifacts/binary noise)
-		text = re.sub(r"[A-Za-z0-9+/]{200,}", "[CONTENT_BLOB_REDACTED]", text)
-		# Collapse multiple newlines
-		text = re.sub(r"\n{3,}", "\n\n", text)
-		return text.strip()
+		return normalize_noise(text)
 
 	def _evict_previous_copies(self, session_id: str, idx: int, role: str, node_id: str) -> None:
 		"""Retira las copias previas de este mensaje lógico (otros ids) y sus fragments.

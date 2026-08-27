@@ -121,3 +121,92 @@ async def test_disabled_by_config(monkeypatch):
 	monkeypatch.setattr(config, "PRE_HEATING_ENABLED", False)
 	plugin = EmotionalPreHeatingPlugin()
 	assert plugin.is_enabled is False
+
+
+def mock_interaction_point(content, ts, category="social"):
+	"""Point as record_interaction_pair writes it: epoch in `timestamp`, category nested in metadata."""
+	point = MagicMock()
+	point.payload = {
+		"content": content,
+		"timestamp": ts,
+		"color": "gray",
+		"intensity": 5.0,
+		"metadata": {"type": "raw_interaction", "category": category},
+	}
+	return point
+
+
+@pytest.mark.asyncio
+async def test_interaction_filters_use_timestamp_and_config_lookback(monkeypatch):
+	monkeypatch.setattr(config, "PRE_HEATING_LOOKBACK_HOURS", 24)
+
+	plugin = EmotionalPreHeatingPlugin()
+	now = time.time()
+
+	def scroll_side_effect(collection_name=None, **kwargs):
+		if collection_name == "social_memories":
+			return ([mock_qdrant_point("purple", 10.0, now)], None)
+		return ([], None)
+
+	with patch("red_pill.memory.MemoryManager") as mock_mgr, patch("red_pill.core.workspaces.list_tracked_workspaces", return_value=[]):
+		mock_client = MagicMock()
+		mock_client.collection_exists.return_value = True
+		mock_client.scroll.side_effect = scroll_side_effect
+		mock_mgr.return_value.client = mock_client
+
+		await plugin.execute("hello")
+
+	calls = [c for c in mock_client.scroll.call_args_list if c.kwargs.get("collection_name") == "interaction_memories"]
+	assert len(calls) == 2  # tier-1 raw context + tier-2 recent-work fallback
+
+	for call in calls:
+		range_conds = [c for c in call.kwargs["scroll_filter"].must if getattr(c, "range", None) is not None]
+		assert len(range_conds) == 1
+		assert range_conds[0].key == "timestamp"
+		assert range_conds[0].range.gte == pytest.approx(now - 24 * 3600, abs=30)
+
+	tier2_keys = {c.key for c in calls[1].kwargs["scroll_filter"].must}
+	assert "metadata.category" in tier2_keys
+
+
+@pytest.mark.asyncio
+async def test_interaction_points_scored_via_timestamp():
+	plugin = EmotionalPreHeatingPlugin()
+	now = time.time()
+
+	def scroll_side_effect(collection_name=None, **kwargs):
+		if collection_name == "interaction_memories":
+			return ([mock_interaction_point("USER: hola\n\nASSISTANT: hey", now)], None)
+		return ([], None)
+
+	with patch("red_pill.memory.MemoryManager") as mock_mgr, patch("red_pill.core.workspaces.list_tracked_workspaces", return_value=[]):
+		mock_client = MagicMock()
+		mock_client.collection_exists.return_value = True
+		mock_client.scroll.side_effect = scroll_side_effect
+		mock_mgr.return_value.client = mock_client
+
+		res = await plugin.execute("hello")
+
+	assert "EMOTIONAL PRE-HEATING" in res
+	assert "0.0h ago" in res  # age from `timestamp`, not the absent `created_at`
+
+
+@pytest.mark.asyncio
+async def test_interaction_work_turns_excluded_from_emotional_block():
+	plugin = EmotionalPreHeatingPlugin()
+	now = time.time()
+
+	def scroll_side_effect(collection_name=None, **kwargs):
+		if collection_name == "interaction_memories":
+			return ([mock_interaction_point("USER: fix bug\n\nASSISTANT: done", now, category="work")], None)
+		return ([], None)
+
+	with patch("red_pill.memory.MemoryManager") as mock_mgr, patch("red_pill.core.workspaces.list_tracked_workspaces", return_value=[]):
+		mock_client = MagicMock()
+		mock_client.collection_exists.return_value = True
+		mock_client.scroll.side_effect = scroll_side_effect
+		mock_mgr.return_value.client = mock_client
+
+		res = await plugin.execute("hello")
+
+	assert res == ""

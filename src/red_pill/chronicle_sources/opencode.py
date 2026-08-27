@@ -58,7 +58,7 @@ class OpencodeSourcePlugin(ChronicleSourcePlugin):
 			return _render_tool_use(part.get("tool", ""), state.get("input") or {})
 		return ""  # reasoning/step-start/step-finish/compaction: sin valor narrativo
 
-	def load(self, conversation_id: str) -> List[Dict[str, Any]]:
+	def _fetch_rows(self, conversation_id: str) -> Tuple[List[Any], List[Any]]:
 		con = self._connect()
 		try:
 			msg_rows = con.execute(
@@ -71,7 +71,27 @@ class OpencodeSourcePlugin(ChronicleSourcePlugin):
 			).fetchall()
 		finally:
 			con.close()
+		return msg_rows, part_rows
 
+	def load(self, conversation_id: str) -> List[Dict[str, Any]]:
+		msg_rows, part_rows = self._fetch_rows(conversation_id)
+		return self._normalize_rows(msg_rows, part_rows)
+
+	def export_raw(self, conversation_id: str, dest_dir: Path) -> Optional[Path]:
+		"""Volcado JSON de las filas nativas message/part — suficiente para regenerar sin la DB."""
+		msg_rows, part_rows = self._fetch_rows(conversation_id)
+		if not msg_rows:
+			return None
+		dest = dest_dir / "raw.json"
+		payload = {"session_id": conversation_id, "message_rows": [list(r) for r in msg_rows], "part_rows": [list(r) for r in part_rows]}
+		dest.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+		return dest
+
+	def load_raw(self, raw_file: Path) -> List[Dict[str, Any]]:
+		data = json.loads(raw_file.read_text(encoding="utf-8"))
+		return self._normalize_rows([tuple(r) for r in data.get("message_rows", [])], [tuple(r) for r in data.get("part_rows", [])])
+
+	def _normalize_rows(self, msg_rows: List[Any], part_rows: List[Any]) -> List[Dict[str, Any]]:
 		parts_by_message: Dict[str, List[Dict[str, Any]]] = {}
 		for message_id, raw in part_rows:
 			try:

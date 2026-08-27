@@ -2,6 +2,15 @@
 
 This guide documents the full pipeline to preserve and query historical Antigravity conversations in the Bünker memory substrate.
 
+> **Memento Chronicle (RFC-002).** Since v7.22.0 the raw layer lives on disk:
+> the nightly chronicle also renders every session to the Memento tree
+> (`~/.local/share/red-pill/memento/`, canonical `memento/index.md` + `raw/`
+> provider backups) before ingesting into Qdrant. Exact recall is served by the
+> `search_memento` MCP action; Qdrant ingestion described below continues
+> unchanged until the Phase-4 curation gate is enforced. See
+> [RFC_002_MEMENTO](../TECHNICAL/BUNKER/RFC_002_MEMENTO.md) and the Memento
+> section of [ENV_REFERENCE](../ENV_REFERENCE.md).
+
 ## Prerequisites
 
 -   Red Pill Protocol v6.2.0+ installed and running

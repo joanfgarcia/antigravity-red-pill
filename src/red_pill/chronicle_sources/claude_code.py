@@ -51,14 +51,38 @@ class ClaudeCodeSourcePlugin(ChronicleSourcePlugin):
 				logger.warning(f"[{self.name}] Could not read {path.name}: {e}")
 		return discovered
 
-	def load(self, conversation_id: str) -> List[Dict[str, Any]]:
-		from red_pill.metabolism.chronicle.claude_code_plugin import extract_assistant_blocks, extract_user_content
+	def workspace_of(self, conversation_id: str) -> Optional[str]:
+		"""El directorio del proyecto ES el workspace slug (`-home-joan-Workspace`, ...)."""
+		path = self._paths.get(conversation_id) or self._index_sessions().get(conversation_id)
+		return path.parent.name if path else None
 
+	def _transcript_path(self, conversation_id: str) -> Optional[Path]:
 		path = self._paths.get(conversation_id)
 		if path is None:
 			path = self._index_sessions().get(conversation_id)
-		if path is None or not path.exists():
+		return path if path is not None and path.exists() else None
+
+	def load(self, conversation_id: str) -> List[Dict[str, Any]]:
+		path = self._transcript_path(conversation_id)
+		if path is None:
 			raise FileNotFoundError(f"[{self.name}] Transcript not found for session {conversation_id}")
+		return self._parse_transcript(path)
+
+	def export_raw(self, conversation_id: str, dest_dir: Path) -> Optional[Path]:
+		import shutil
+
+		path = self._transcript_path(conversation_id)
+		if path is None:
+			return None
+		dest = dest_dir / "raw.jsonl"
+		shutil.copy2(path, dest)
+		return dest
+
+	def load_raw(self, raw_file: Path) -> List[Dict[str, Any]]:
+		return self._parse_transcript(raw_file)
+
+	def _parse_transcript(self, path: Path) -> List[Dict[str, Any]]:
+		from red_pill.metabolism.chronicle.claude_code_plugin import extract_assistant_blocks, extract_user_content
 
 		messages: List[Dict[str, Any]] = []
 		with open(path, "r", encoding="utf-8") as f:

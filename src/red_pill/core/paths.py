@@ -303,6 +303,16 @@ def get_antigravity_conversations_dir() -> Path:
 	return get_antigravity_root() / "conversations"
 
 
+def get_antigravity_conversations_export_dir() -> Path:
+	"""Directorio del export manual congelado del 23-mar-2026 (47 MD, era temprana).
+
+	No es una ruta viva del IDE — es un snapshot histórico para la fuente
+	``antigravity_export``. Respeta ``ANTIGRAVITY_ROOT`` al derivar de
+	``get_antigravity_root()``.
+	"""
+	return get_antigravity_root() / "conversations_export"
+
+
 def get_swarm_config_path() -> Path:
 	"""Resuelve la ruta del archivo de comunidades swarm ($XDG_CONFIG_HOME/red-pill/swarm_communities.json)."""
 	return get_config_dir() / "swarm_communities.json"
