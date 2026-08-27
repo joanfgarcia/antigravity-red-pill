@@ -696,17 +696,22 @@ claude_code 34, opencode 142.
 ### 5.1 Sources of Truth (in priority order)
 
 1. **Provider stores (canonical):** opencode.db SQLite, Claude Code JSONL,
-   Antigravity exports — via the existing `ChronicleSourcePlugin.discover()/load()` —
-   plus the `memory_queue` SQLite for MCP-only turns (MUST 10).
-   These are the rawest and most complete.
+    Antigravity exports — via the existing `ChronicleSourcePlugin.discover()/load()` —
+    plus the `memory_queue` SQLite for MCP-only turns (MUST 10).
+    These are the rawest and most complete. `antigravity_export` (the
+    23-mar-2026 frozen `conversations_export` snapshot, 47 MD — early era) is
+    **not** in this tier: it is an operator-local legacy snapshot, opt-in via
+    `MEMENTO_EXTRA_SOURCES=memory_queue,antigravity_export` (the path
+    `~/.gemini/antigravity/conversations_export` is not a live IDE store and
+    does not exist on clean installs; §4.2 `raw/` docs the agnosticism).
 1.5. **`raw/` backups (verbatim):** once exported, each session's `raw/` copy
-   outlives the provider store's retention window — `load_raw()` re-renders
-   verbatim without the store (`--from-raw` regenerates the whole tree).
+    outlives the provider store's retention window — `load_raw()` re-renders
+    verbatim without the store (`--from-raw` regenerates the whole tree).
 2. **`archive_memories` (fallback):** if a provider store is gone (e.g. old
-   Antigravity exports), reconstruct sessions from the collection: points carry
-   `session_id`, `sequence_index`, `role`, `refined_content`/`raw_content`.
-   Order by `sequence_index` and render with the same schema; rendered files
-   carry `reconstructed: true` in frontmatter (§4.2).
+    Antigravity exports), reconstruct sessions from the collection: points carry
+    `session_id`, `sequence_index`, `role`, `refined_content`/`raw_content`.
+    Order by `sequence_index` and render with the same schema; rendered files
+    carry `reconstructed: true` in frontmatter (§4.2).
 
 ### 5.2 Standardization
 

@@ -203,7 +203,7 @@ Plugins 05–10. Each is independently toggleable.
 | `MEMENTO_RAW_ENABLED` | `True` | Write `raw/` provider-native backups + `meta.json` (the single backup point; unscrubbed — never in git). |
 | `MEMENTO_SPLIT_MAX_MESSAGES` | `200` | Split trigger + per-chunk cap (backstop; chars bind first). |
 | `MEMENTO_SPLIT_MAX_CHARS` | `12000` | Split trigger + per-chunk budget. **Hardware-derived — recalculate per deployment (see below).** |
-| `MEMENTO_EXTRA_SOURCES` | `["memory_queue"]` | Memento-only sources (MUST 10): capture to the tree without touching the Qdrant archive. |
+| `MEMENTO_EXTRA_SOURCES` | `["memory_queue"]` | Memento-only sources: capture to the tree without touching the Qdrant archive. `memory_queue` = MCP-only turns (MUST 10). `antigravity_export` = frozen early-era snapshot (47 MD, `conversations_export`, operator legacy) — **opt-in**: `MEMENTO_EXTRA_SOURCES=memory_queue,antigravity_export` — absent by default because the path is a local snapshot, not a live store, and clean installs don't have it. |
 | `INTERACTION_MEMORIES_TTL_HOURS` | `72` | Janitor TTL backstop over the interaction buffer. Must exceed `PRE_HEATING_LOOKBACK_HOURS` (the plugin refuses otherwise). |
 | `MEMENTO_QUEUE_RETENTION_DAYS` | `7` | Safety margin before purging completed memory_queue rows whose group is already rendered. |
 | `MEMENTO_REFINE_MIN_SIGNIFICANCE` | `0.3` | Below this, refine writes no file for the section (permissive selection). |
