@@ -45,7 +45,9 @@ class AntigravityExportSourcePlugin(ChronicleSourcePlugin):
 	session_prefix = ""  # cascade_ids desnudos, como la fuente antigravity viva
 
 	def __init__(self, export_dir: Optional[Path] = None):
-		self.export_dir = Path(export_dir) if export_dir else Path.home() / ".gemini" / "antigravity" / "conversations_export"
+		from red_pill.core.paths import get_antigravity_conversations_export_dir
+
+		self.export_dir = Path(export_dir) if export_dir else get_antigravity_conversations_export_dir()
 		self._files: Dict[str, Path] = {}
 
 	def _metadata_of(self, md_file: Path) -> Dict[str, str]:
