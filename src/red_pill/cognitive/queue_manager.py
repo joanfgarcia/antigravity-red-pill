@@ -388,6 +388,7 @@ class CognitiveQueueManager:
 		placeholders = ",".join(["?"] * len(statuses))
 		query = f"""
 			SELECT id, source, priority, status, attempts, progress, updated_at, mission_id,
+				parent_task_id,
 				json_extract(payload, '$.title') AS title,
 				json_extract(checkpoint_data, '$.dirty_kill.reason') AS dirty_kill
 			FROM cognitive_tasks

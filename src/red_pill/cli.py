@@ -598,6 +598,10 @@ def handle_job(args: argparse.Namespace) -> None:
 	elif args.job_cmd == "list":
 		statuses = ["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED", "COMPLETED"] if args.all else None
 		tasks = queue.list_tasks(statuses=statuses, mission_id=getattr(args, "mission", None))
+		if getattr(args, "json", False):
+			# JOB-001: salida estructurada para parseo agéntico directo
+			print(_json.dumps(tasks, ensure_ascii=False, indent=1, default=str))
+			return
 		if not tasks:
 			print("Cola vacía.")
 			return
@@ -1070,6 +1074,7 @@ def main() -> None:
 	job_list = job_sub.add_parser("list", help="Listar jobs activos, pausados y en cola")
 	job_list.add_argument("--all", action="store_true", help="Incluir también COMPLETED")
 	job_list.add_argument("--mission", help="Solo jobs de esa misión (aislamiento entre forges)")
+	job_list.add_argument("--json", action="store_true", help="JOB-001: salida estructurada JSON (id/source/status/prio/mission/parent/progress/attempts/updated_at/title) para parseo agéntico")
 
 	job_status = job_sub.add_parser("status", help="Detalle completo de un job (checkpoint, progreso)")
 	job_status.add_argument("job_id", help="Id completo o prefijo corto")
