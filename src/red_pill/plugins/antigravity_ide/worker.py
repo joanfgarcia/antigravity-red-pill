@@ -3,9 +3,10 @@ import logging
 import os
 import sqlite3
 import sys
+import threading
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 import requests
 from dotenv import load_dotenv
@@ -81,6 +82,72 @@ def _format_cascade_error(exc: Exception) -> str:
 	return f"⚠️ No pude atender tu mensaje: {exc}"
 
 
+def _is_bridge_timeout(exc: Exception) -> bool:
+	"""Classify a bridge failure as a TIMEOUT (D24).
+
+	Bridge backends surface timeouts as `RuntimeError("... timed out after Ns")`
+	(raised from `subprocess.TimeoutExpired`). Anything else — spawn failures,
+	network errors, 5xx, quota messages — is transient, NOT a timeout.
+	"""
+	import subprocess
+
+	if isinstance(exc, subprocess.TimeoutExpired):
+		return True
+	text = str(exc).lower()
+	return isinstance(exc, RuntimeError) and ("timed out" in text or "timeout" in text)
+
+
+def _emit_d24_pain_signal(msg_ids, error_text: str) -> None:
+	"""D24 req. operador: if a timeout is NOT classified as such (and thus retried
+	with cap 3 instead of cap 1), emit a typed pain signal so someone investigates.
+	Dedup via has_signal to avoid spamming every pulse."""
+	try:
+		from red_pill.memory import MemoryManager
+
+		mm = MemoryManager()
+		name = "telegram_timeout_cap1_not_applied"
+		if mm.has_signal(name):
+			return
+		mm.inject_signal(
+			name=name,
+			intensity=6.0,
+			signal_type="pain",
+			source="TelegramWorker",
+			originator="worker._process_via_bridge",
+			criticality="WARNING",
+			message=f"Timeout del bridge clasificado como transitorio (cap 3 en vez de cap 1). msgs={msg_ids}. error={error_text[:300]}",
+		)
+	except Exception as e:
+		logger.warning(f"[D24] Failed to emit pain signal: {e}")
+
+
+def _detect_routing_keyword(text: str) -> Optional[str]:
+	"""Detect an explicit routing keyword at the START of a Telegram message
+	(D2/D10). Case-insensitive, first token. In Fase 1 this is signal-only:
+	the keyword is stripped from the prompt (D10) but execution stays fast path
+	(forward-compatible with Fase 2's heavy path).
+
+	Returns the matched keyword ('/mission', '#mission', '#heavy', '#job') or None.
+	"""
+	if not text:
+		return None
+	first = text.strip().split(maxsplit=1)[0].lower()
+	keywords = {"/mission", "#mission", "#heavy", "#job"}
+	return next((k for k in keywords if first == k), None)
+
+
+def _detect_escalate_marker(response: str, window: int = 64) -> bool:
+	"""Detect the [ESCALATE] marker at the START of a model response (D14).
+	Parsing is tolerant: the marker must appear within the first `window`
+	characters (ratified default 64), allowing for whitespace/prefix noise.
+	In Fase 1 this is signal-only — the full response is still delivered.
+	"""
+	if not response:
+		return False
+	head = response[:window].upper()
+	return "[ESCALATE]" in head
+
+
 class IDEWorker:
 	def __init__(self):
 		self.client = AntigravityIDEClient()
@@ -93,7 +160,15 @@ class IDEWorker:
 		# AgentBridge: create execution bridges based on config
 		try:
 			cfg_inst = cfg.get_config()
-			self._bridge_telegram = create_cascade_bridge(cfg_inst.TELEGRAM_BRIDGE_CASCADE, name="TELEGRAM_BRIDGE_CASCADE")
+			telegram_cascade = cfg_inst.TELEGRAM_BRIDGE_CASCADE
+			# D5 (Fase 1 guard): local is not capable of heavy work — filter it
+			# out of the conversational cascade unless explicitly allowed.
+			if not cfg_inst.LOCAL_ALLOWED_FOR_HEAVY and telegram_cascade:
+				filtered = [t for t in telegram_cascade if t.backend != "local"]
+				if len(filtered) != len(telegram_cascade):
+					logger.info("[IDEWorker] D5 guard: filtered local target(s) from TELEGRAM_BRIDGE_CASCADE")
+				telegram_cascade = filtered
+			self._bridge_telegram = create_cascade_bridge(telegram_cascade, name="TELEGRAM_BRIDGE_CASCADE")
 			self._bridge_awakening = create_cascade_bridge(cfg_inst.AWAKENING_BRIDGE_CASCADE, name="AWAKENING_BRIDGE_CASCADE", origin="awakening")
 			self._bridge_minion = create_cascade_bridge(cfg_inst.DEFAULT_MINION_BRIDGE_CASCADE, name="DEFAULT_MINION_BRIDGE_CASCADE")
 
@@ -120,6 +195,48 @@ class IDEWorker:
 		except Exception as e:
 			logger.warning(f"[IDEWorker] SamanthaWorker init failed (local LLM tasks disabled): {e}")
 
+		# D21: decoupled heartbeat thread + activity lease. The main pulse can
+		# block on a 300s bridge call; the heartbeat must keep beating DURING it
+		# or neon-link (60s threshold) declares a false "Córtex Offline". A dead
+		# main loop stops touching the lease → it expires (HEARTBEAT_LEASE) →
+		# the thread stops beating → real offline is still detected.
+		self._lease_lock = threading.Lock()
+		self._lease_touch = time.monotonic()
+		self._heartbeat_thread = threading.Thread(
+			target=self._heartbeat_thread_main,
+			name="heartbeat-daemon",
+			daemon=True,
+		)
+		self._heartbeat_thread.start()
+		logger.info("[IDEWorker] Heartbeat thread started (D21, lease=%ss)", cfg.get_config().HEARTBEAT_LEASE)
+
+	def _touch_lease(self):
+		"""Record worker activity. The heartbeat thread only beats while the lease
+		is fresh — a healthy main loop keeps touching at every pulse boundary and
+		before every bridge call."""
+		try:
+			with self._lease_lock:
+				self._lease_touch = time.monotonic()
+		except Exception as e:
+			logger.debug(f"[IDEWorker] lease touch failed: {e}")
+
+	def _heartbeat_thread_main(self):
+		"""Daemon thread: update system_health while the process lives and the
+		lease is fresh. Falls silent when the main loop is dead (lease expired) so
+		real offline is detectable. Uses its own connection to avoid sharing the
+		pulse's write transaction (D23)."""
+		lease = cfg.get_config().HEARTBEAT_LEASE
+		while True:
+			try:
+				with self._lease_lock:
+					fresh = (time.monotonic() - self._lease_touch) < lease
+				if fresh:
+					self.update_heartbeat()
+				time.sleep(20)
+			except Exception as e:
+				logger.warning(f"[IDEWorker] Heartbeat thread error: {e}")
+				time.sleep(20)
+
 	def run(self):
 		logger.info("Red-Pill AntigravityIDEPlugin Worker started.")
 		while self.running:
@@ -134,12 +251,20 @@ class IDEWorker:
 				time.sleep(5)
 
 	def run_once(self):
+		# D21: touch the heartbeat lease at the start of each pulse — the
+		# heartbeat thread only beats while this stays fresh.
+		self._touch_lease()
 		# Containment: one poisoned inbox item must not kill the pulse (and with
 		# it the heartbeat that neon-link watches to report Córtex Offline).
 		try:
 			self.process_inbox()
 		except Exception:
 			logger.exception("[IDEWorker] process_inbox failed — pulse continues")
+		# Fase 2: entrega de resultados de jobs Telegram (D18/D19) en cada pulse.
+		try:
+			self._check_telegram_jobs()
+		except Exception:
+			logger.exception("[IDEWorker] _check_telegram_jobs failed — pulse continues")
 		legacy_grpc = not self._caps or self._caps.backend == BackendType.GRPC
 		if legacy_grpc and cfg.get_config().TELEGRAM_BRIDGE_CASCADE:
 			# Degraded capabilities with a configured cascade mean every bridge
@@ -185,6 +310,78 @@ class IDEWorker:
 		conn.execute("UPDATE system_health SET last_heartbeat = CURRENT_TIMESTAMP WHERE service_name = 'red_pill'")
 		conn.commit()
 		conn.close()
+
+	def _handle_retry_failure(
+		self,
+		msg_ids,
+		channel,
+		channel_user_id,
+		cursor,
+		exc: Optional[Exception] = None,
+		error_text: Optional[str] = None,
+	) -> bool:
+		"""Increment retries with a cap by error class (D24).
+
+		Timeout → ONE retry allowed: the second timeout is DEAD (the same prompt
+		would burn the timeout again, blocking the pulse ~300s more and tripling
+		token cost). Transient errors (spawn/red/5xx) → cap 3 as before.
+
+		When the cap is reached: mark inbox DEAD, write the dead_letters row
+		(D12), and notify the user via outbox.
+
+		Returns True when the message was killed (DEAD), False otherwise.
+		"""
+		text = error_text or (str(exc) if exc else "unknown error")
+		is_timeout = _is_bridge_timeout(exc) if exc else "timed out" in (text or "").lower()
+
+		# D24 signal de dolor: if the failure LOOKS like a timeout but was NOT
+		# classified as one (classifier miss), the cap would wrongly be higher → flag it.
+		looks_like_timeout = "timed out" in (text or "").lower() or "timeout" in (text or "").lower()
+		if looks_like_timeout and not is_timeout:
+			_emit_d24_pain_signal(msg_ids, text)
+
+		# Cap in terms of the retries counter: timeout allows ONE retry (the
+		# second timeout → DEAD, so retries>=2 kills it); transients keep the
+		# legacy cap 3 (retries>=3 → DEAD). Mirrors diagram 4.5 for transients.
+		cap = 2 if is_timeout else 3
+
+		for m_id in msg_ids:
+			row = cursor.execute("SELECT retries FROM inbox WHERE id = ?", (m_id,)).fetchone()
+			retries = (row["retries"] if row else 0) + 1
+			if retries >= cap:
+				logger.error(f"[{msg_ids}] Retries exhausted (cap={cap}, class={'timeout' if is_timeout else 'transient'}) for msg {m_id}: {text}")
+				cursor.execute("UPDATE inbox SET status = 'DEAD', retries = ? WHERE id = ?", (retries, m_id))
+				# D12: write to the dead_letters table (neon-link events.db)
+				try:
+					orig = cursor.execute("SELECT payload FROM inbox WHERE id = ?", (m_id,)).fetchone()
+					payload = orig["payload"] if orig else None
+					cursor.execute(
+						"INSERT INTO dead_letters (original_table, original_id, channel, channel_user_id, payload, error_reason) "
+						"VALUES ('inbox', ?, ?, ?, ?, ?)",
+						(m_id, channel, channel_user_id, payload, text[:500]),
+					)
+				except Exception as e:
+					logger.warning(f"[{msg_ids}] Failed to write dead_letter for {m_id}: {e}")
+				if channel != "system":
+					cursor.execute(
+						"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
+						(
+							channel,
+							channel_user_id,
+							None,
+							json.dumps(
+								{
+									"text": "⚠️ Tu mensaje no pudo ser procesado tras "
+									f"{retries} intento(s). Reintenta con /new o revisa la cola con /queue. "
+									"Para prompts ambiciosos, considera prefijar con `/mission` o `#mission`."
+								}
+							),
+						),
+					)
+			else:
+				logger.warning(f"[{msg_ids}] Retry {retries}/{cap} for msg {m_id}: {text}")
+				cursor.execute("UPDATE inbox SET retries = ? WHERE id = ?", (retries, m_id))
+		return retries >= cap
 
 	def _signal_samantha_worker(self):
 		"""NON-BLOCKING: check if there are pending Samantha tasks and signal the worker thread."""
@@ -402,7 +599,7 @@ class IDEWorker:
 			new_id = new_session["id"]
 
 			cursor.execute(
-				"INSERT OR REPLACE INTO telegram_sessions (channel_user_id, cascade_id, cascade_type) VALUES (?, ?, 'local_session')",
+				"INSERT OR REPLACE INTO telegram_sessions (channel_user_id, cascade_id, cascade_type, model, backend) VALUES (?, ?, 'local_session', NULL, NULL)",
 				(channel_user_id, new_id),
 			)
 			resp_text = "✨ Nueva sesión de Telegram inicializada y anclada correctamente.\nEl contexto está a cero. ¿En qué puedo ayudarte?"
@@ -413,6 +610,157 @@ class IDEWorker:
 			cursor.execute("UPDATE inbox SET status = 'PROCESSED' WHERE id = ?", (first_conv["id"],))
 			conn.commit()
 			conn.close()
+			return
+
+		elif command == "LIST_MODELS":
+			# /models [--backend X] — lista el catálogo curado (D6/D7), sin agente.
+			from red_pill.core.model_catalog import ModelCatalog
+
+			try:
+				catalog = ModelCatalog()
+				models = catalog.models(backend=first_payload.get("backend"))
+			except Exception as e:
+				logger.error(f"[{first_conv['id']}] Model catalog error: {e}")
+				resp_text = f"⚠️ No se pudo leer el catálogo de modelos: {e}"
+			else:
+				if not models:
+					resp_text = "ℹ️ No hay modelos curados."
+				else:
+					lines = []
+					for m in models:
+						roles = ", ".join(m.get("roles", []) or []) or "-"
+						lines.append(f"• `{m['id']}` — {m.get('tier')} (prio {m.get('priority')}) roles: {roles}")
+					resp_text = "🧠 **Modelos curados:**\n" + "\n".join(lines)
+			cursor.execute(
+				"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
+				(channel, channel_user_id, None, json.dumps({"text": resp_text})),
+			)
+			cursor.execute("UPDATE inbox SET status = 'PROCESSED' WHERE id = ?", (first_conv["id"],))
+			conn.commit()
+			conn.close()
+			return
+
+		elif command == "SET_MODEL":
+			# /model <id> — valida contra el catálogo (D7) y persiste backend del catálogo (D8).
+			from red_pill.core.model_catalog import ModelCatalog
+
+			model_id = first_payload.get("model", "").strip()
+			try:
+				catalog = ModelCatalog()
+				entry = catalog.get(model_id)
+			except Exception as e:
+				logger.error(f"[{first_conv['id']}] Model catalog error: {e}")
+				entry = None
+			if not entry:
+				resp_text = f"❌ El modelo `{model_id}` no está en el catálogo curado. Usa `/models` para ver los disponibles."
+			else:
+				backend = entry.get("backend")
+				cursor.execute(
+					"UPDATE telegram_sessions SET model = ?, backend = ? WHERE channel_user_id = ?",
+					(model_id, backend, channel_user_id),
+				)
+				resp_text = f"✅ Modelo de sesión establecido: `{model_id}` (backend `{backend}`)."
+			cursor.execute(
+				"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
+				(channel, channel_user_id, None, json.dumps({"text": resp_text})),
+			)
+			cursor.execute("UPDATE inbox SET status = 'PROCESSED' WHERE id = ?", (first_conv["id"],))
+			conn.commit()
+			conn.close()
+			return
+
+		elif command == "SHOW_MODEL":
+			cursor.execute("SELECT model, backend FROM telegram_sessions WHERE channel_user_id = ?", (channel_user_id,))
+			row = cursor.fetchone()
+			if row and row["model"]:
+				resp_text = f"🔧 Modelo de sesión actual: `{row['model']}` (backend `{row['backend']}`)."
+			else:
+				resp_text = "ℹ️ Sin override de modelo — la sesión usa la cascade configurada en `.env`."
+			cursor.execute(
+				"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
+				(channel, channel_user_id, None, json.dumps({"text": resp_text})),
+			)
+			cursor.execute("UPDATE inbox SET status = 'PROCESSED' WHERE id = ?", (first_conv["id"],))
+			conn.commit()
+			conn.close()
+			return
+
+		elif command == "RESET_MODEL":
+			cursor.execute("UPDATE telegram_sessions SET model = NULL, backend = NULL WHERE channel_user_id = ?", (channel_user_id,))
+			resp_text = "↩️ Override de modelo eliminado — se vuelve a la cascade configurada en `.env`."
+			cursor.execute(
+				"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
+				(channel, channel_user_id, None, json.dumps({"text": resp_text})),
+			)
+			cursor.execute("UPDATE inbox SET status = 'PROCESSED' WHERE id = ?", (first_conv["id"],))
+			conn.commit()
+			conn.close()
+			return
+
+		elif command == "SHOW_QUEUE":
+			# /queue — estado de la cola central (script tonto, sin agente).
+			from red_pill.cognitive.queue_manager import CognitiveQueueManager
+
+			try:
+				queue = CognitiveQueueManager()
+				tasks = queue.list_tasks(limit=10)
+			except Exception as e:
+				logger.error(f"[{first_conv['id']}] Queue read error: {e}")
+				resp_text = f"⚠️ No se pudo leer la cola: {e}"
+			else:
+				if not tasks:
+					resp_text = "🗂️ La cola de jobs está vacía."
+				else:
+					lines = []
+					for t in tasks:
+						title = (t.get("title") or "")[:40]
+						lines.append(f"• `{t['id'][:8]}` **{t['status']}** prio={t['priority']} {title}")
+					resp_text = "🗂️ **Cola de jobs activos:**\n" + "\n".join(lines)
+			cursor.execute(
+				"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
+				(channel, channel_user_id, None, json.dumps({"text": resp_text})),
+			)
+			cursor.execute("UPDATE inbox SET status = 'PROCESSED' WHERE id = ?", (first_conv["id"],))
+			conn.commit()
+			conn.close()
+			return
+
+		elif command == "LIST_DEFERRED":
+			# /deferred — lista mensajes DEFERRED (D13, quota agotada).
+			cursor.execute("SELECT id, payload, retries FROM inbox WHERE status = 'DEFERRED' AND channel_user_id = ?", (channel_user_id,))
+			rows = cursor.fetchall()
+			if not rows:
+				resp_text = "ℹ️ No hay mensajes DEFERRED para esta sesión."
+			else:
+				lines = []
+				for r in rows:
+					text = ""
+					try:
+						text = (json.loads(r["payload"]).get("text") or "")[:50]
+					except Exception:
+						pass
+					lines.append(f"• `{r['id']}` (intentos {r['retries']}): {text}")
+				resp_text = "📋 **Mensajes DEFERRED** (quota agotada — usa `/model` con un modelo con quota o espera):\n" + "\n".join(lines)
+			cursor.execute(
+				"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
+				(channel, channel_user_id, None, json.dumps({"text": resp_text})),
+			)
+			cursor.execute("UPDATE inbox SET status = 'PROCESSED' WHERE id = ?", (first_conv["id"],))
+			conn.commit()
+			conn.close()
+			return
+
+		elif command == "HEAVY_PATH":
+			# /mission <prompt> — fuerza el heavy path (Fase 2): encola agentic_job.
+			# Implementación completa en la Fase 2; aquí delega en _enqueue_heavy.
+			self._enqueue_heavy_path(
+				text=first_payload.get("text", ""),
+				channel=channel,
+				channel_user_id=channel_user_id,
+				msg_ids=[first_conv["id"]],
+				cursor=cursor,
+				conn=conn,
+			)
 			return
 
 		# Build compacted prompt
@@ -593,14 +941,60 @@ class IDEWorker:
 
 		logger.info(f"[{msg_ids}] Processing via {self._caps.backend.value.upper()} bridge (Local Session Context)")
 
+		# D2/D10 (Fase 1, signal-only): detect an explicit routing keyword at the
+		# start of the message. We strip it from the PROMPT (it is routing, not
+		# content) but keep the ORIGINAL text for the session history (D11, so
+		# telegram_session dedup keeps matching). Fase 1 executes as fast path;
+		# the keyword is logged for forward-compatibility with Fase 2.
+		routing_keyword = _detect_routing_keyword(combined_text)
+		prompt_text = combined_text
+		if routing_keyword:
+			# Fase 2: el keyword dispara el heavy path (encola agentic_job). El
+			# prompt sin keyword (D10) se encola; el historial conserva el original (D11).
+			logger.info(f"[{msg_ids}] Routing keyword detected: {routing_keyword} → heavy path")
+			self._enqueue_heavy_path(
+				text=combined_text.strip()[len(routing_keyword) :].lstrip(),
+				history_text=combined_text,
+				channel=channel,
+				channel_user_id=channel_user_id,
+				msg_ids=msg_ids,
+				cursor=cursor,
+				conn=conn,
+			)
+			return
+
 		tsm = TelegramSessionManager()
 
 		# Get active local session ID
 		cursor.execute(
-			"SELECT cascade_id FROM telegram_sessions WHERE channel_user_id = ? AND cascade_type = 'local_session'",
+			"SELECT cascade_id, model, backend FROM telegram_sessions WHERE channel_user_id = ? AND cascade_type = 'local_session'",
 			(channel_user_id,),
 		)
 		session_row = cursor.fetchone()
+
+		# D9 (override de sesión): si el operador fijó un modelo con /model, la
+		# cascade dinámica antepone ese modelo a la cascade configurada, sin
+		# duplicar si ya coincide con algún target (resuelto por ModelCatalog).
+		session_model = session_row["model"] if session_row else None
+		session_backend = session_row["backend"] if session_row else None
+		bridge_telegram = self._bridge_telegram
+		if session_model:
+			try:
+				from red_pill.core.model_catalog import ModelCatalog
+
+				catalog = ModelCatalog()
+				cascade_targets = catalog.cascade_for(model_id=session_model)
+				if cascade_targets:
+					from red_pill.config import BridgeTarget
+					from red_pill.swarm.bridges.factory import create_cascade_bridge
+
+					targets = [BridgeTarget(**t) for t in cascade_targets]
+					override_bridge = create_cascade_bridge(targets, name="TELEGRAM_SESSION_OVERRIDE")
+					if override_bridge:
+						logger.info(f"[{msg_ids}] Session model override: {session_model} (backend={session_backend})")
+						bridge_telegram = override_bridge
+			except Exception as e:
+				logger.warning(f"[{msg_ids}] Session model override failed, using default cascade: {e}")
 
 		if session_row:
 			session_id = session_row["cascade_id"]
@@ -665,43 +1059,79 @@ class IDEWorker:
 		if history_text:
 			prompt += f"<conversation_history>\n{history_text}\n</conversation_history>\n\n"
 
-		prompt += f"<current_message>\n{combined_text}\n</current_message>\n"
+		prompt += f"<current_message>\n{prompt_text}\n</current_message>\n"
 
-		if not self._bridge_telegram:
+		if not bridge_telegram:
 			logger.error(f"[{msg_ids}] No bridge available to execute prompt")
-			for m_id in msg_ids:
-				cursor.execute("UPDATE inbox SET retries = retries + 1 WHERE id = ?", (m_id,))
+			self._handle_retry_failure(msg_ids, channel, channel_user_id, cursor, error_text="no bridge available")
 			return
 
+		# D23: commit-pre-prompt — release the events.db write-lock BEFORE the
+		# (potentially 300s) bridge call. The session INSERT OR REPLACE and
+		# user-message append are already consistent here. Without this, the
+		# implicit transaction keeps the write-lock for the whole prompt, which
+		# blocks neon-link's ingest/drain (BEGIN IMMEDIATE + busy_timeout=5000 →
+		# abort at ~5s) and would block the D21 heartbeat thread's UPDATE.
+		conn.commit()
+		# D21: keep the heartbeat lease fresh before the blocking bridge call.
+		self._touch_lease()
+
 		try:
-			result = self._bridge_telegram.prompt(prompt, timeout=300)
+			result = bridge_telegram.prompt(prompt, timeout=cfg.get_config().TELEGRAM_INLINE_TIMEOUT)
 		except (NoModelsConfigured, AllModelsExhausted) as e:
-			# Cascade exhausted (empty, or no model with quota) — surface the
-			# pertinent error to the user instead of silently bumping retries.
-			# Mark PROCESSED so a quota error isn't replayed on every poll.
+			# D13: cascade exhausta (vacía, o sin modelo con quota) → el mensaje NO
+			# se marca PROCESSED (nunca se reintentaría). Se marca DEFERRED:
+			# retry-able vía /deferred cuando vuelva quota/recursos. Sin reintento
+			# automático y sin detector de quota (fuera de alcance).
 			logger.error(f"[{msg_ids}] Cascade exhausted: {e}")
+			# D20 (Fase 3): consciencia de quota — marcar los targets sin quota
+			# para saltarlos en el siguiente intento.
+			try:
+				from red_pill.core.model_router import get_router
+
+				for t, _err in getattr(e, "errors", []) or []:
+					label = getattr(t, "model", None) or f"{t.backend}/default"
+					get_router().mark_exhausted(label)
+			except Exception:
+				pass
 			err_text = _format_cascade_error(e)
 			if channel != "system":
 				cursor.execute(
 					"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
-					(channel, channel_user_id, None, json.dumps({"text": err_text})),
+					(channel, channel_user_id, None, json.dumps({"text": err_text + "\n\n_El mensaje queda DEFERRED — cuando creas que ha vuelto la quota, usa /deferred._"})),
 				)
 			for m_id in msg_ids:
-				cursor.execute("UPDATE inbox SET status = 'PROCESSED' WHERE id = ?", (m_id,))
+				cursor.execute("UPDATE inbox SET status = 'DEFERRED' WHERE id = ?", (m_id,))
 			return
 		except Exception as e:
 			logger.error(f"[{msg_ids}] Bridge execution failed: {e}")
-			for m_id in msg_ids:
-				cursor.execute("UPDATE inbox SET retries = retries + 1 WHERE id = ?", (m_id,))
+			self._handle_retry_failure(msg_ids, channel, channel_user_id, cursor, exc=e)
 			return
 
 		if not result.ok:
 			logger.error(f"[{msg_ids}] Bridge returned error: {result.error}")
-			for m_id in msg_ids:
-				cursor.execute("UPDATE inbox SET retries = retries + 1 WHERE id = ?", (m_id,))
+			self._handle_retry_failure(msg_ids, channel, channel_user_id, cursor, error_text=result.error or "unknown error")
 			return
 
 		response = result.response
+
+		# D14 (Fase 2): si el modelo emite [ESCALATE], la tarea se ENCOLA como
+		# heavy path y el usuario recibe "⏳ en cola". La respuesta del fast path
+		# no se entrega (el modelo solo señaló la intención); se encola la
+		# petición original (prompt_text) con el contexto de sesión.
+		if _detect_escalate_marker(response):
+			model_label = getattr(result, "model", None) or "unknown"
+			logger.info(f"[{msg_ids}] [ESCALATE] marker detected (model={model_label}) → heavy path enqueue")
+			tsm.append_message(session_id, "assistant", response)
+			self._enqueue_heavy_path(
+				text=prompt_text,
+				channel=channel,
+				channel_user_id=channel_user_id,
+				msg_ids=msg_ids,
+				cursor=cursor,
+				conn=conn,
+			)
+			return
 
 		# 3. Append Assistant Response to session history
 		tsm.append_message(session_id, "assistant", response)
@@ -819,6 +1249,12 @@ class IDEWorker:
 			for m_id in msg_ids:
 				cursor.execute("UPDATE inbox SET retries = retries + 1 WHERE id = ?", (m_id,))
 			return
+
+		# D23: commit-pre-prompt — release the events.db write-lock (execution_ledger
+		# INSERT above) before the long AWAKENING bridge call.
+		conn.commit()
+		# D21: keep the heartbeat lease fresh before the blocking bridge call.
+		self._touch_lease()
 
 		try:
 			result = self._bridge_awakening.prompt(prompt, timeout=AWAKENING_TIMEOUT)
@@ -1190,6 +1626,7 @@ class IDEWorker:
 				prompts.append(f"Source: {r['source']}\nStatus: {r['status']}\nEvent ID: {r['event_id']}\nContent: {r['content']}")
 
 			combined = "\n\n".join(prompts)
+			self._touch_lease()
 			result = self._bridge_minion.prompt(combined, timeout=300)
 			if result.ok:
 				logger.info("[Agy] Successfully processed minion reports")
@@ -1231,6 +1668,7 @@ class IDEWorker:
 			"Execute this task silently."
 		)
 
+		self._touch_lease()
 		result = self._bridge_minion.prompt(prompt, timeout=600)
 		if result.ok:
 			logger.info(f"[Agy] Cognitive task {task['id']} completed successfully")
@@ -1238,6 +1676,192 @@ class IDEWorker:
 		else:
 			logger.error(f"[Agy] Cognitive task {task['id']} failed: {result.error}")
 			queue_manager.mark_failed(task["id"], result.error or "Empty response")
+
+
+	def _session_cascade_specs(self, channel_user_id: str, cursor) -> List[Dict[str, Any]]:
+		"""Cascade de BridgeTarget (dicts) para el heavy path (D16).
+
+		Si la sesión tiene override de modelo (/model), usa la cascade del
+		catálogo anteponiendo ese modelo (D9). Si no, usa la cascade configurada
+		en .env (TELEGRAM_BRIDGE_CASCADE). El payload del agentic_job lleva
+		`cascade` — el driver construye CascadeBridge con esos targets (D16:
+		siempre cascade, nunca backend/model/effort sueltos).
+		"""
+
+		cfg_inst = cfg.get_config()
+		# Override de sesión — router con consciencia de quota (D9/D20).
+		cursor.execute("SELECT model FROM telegram_sessions WHERE channel_user_id = ?", (channel_user_id,))
+		row = cursor.fetchone()
+		session_model = row["model"] if row and row["model"] else None
+		if session_model:
+			try:
+				from red_pill.core.model_router import get_router
+
+				entries = get_router().resolve_cascade(role="conversational", session_model=session_model)
+				if entries:
+					return [{"backend": e["backend"], "model": e["id"], "timeout": e.get("timeout")} for e in entries]
+			except Exception as e:
+				logger.warning(f"[HeavyPath] router cascade failed, using .env cascade: {e}")
+		# Cascade configurada (.env)
+		specs: List[Dict[str, Any]] = []
+		for t in cfg_inst.TELEGRAM_BRIDGE_CASCADE:
+			entry: Dict[str, Any] = {"backend": t.backend, "model": t.model}
+			if t.timeout:
+				entry["timeout"] = t.timeout
+			if t.effort:
+				entry["effort"] = t.effort
+			specs.append(entry)
+		return specs
+
+	def _enqueue_heavy_path(self, text: str, channel: str, channel_user_id: str, msg_ids, cursor, conn, history_text: Optional[str] = None) -> None:
+		"""Fase 2: encola un agentic_job con cascade de sesión (D16/D17/D18) y
+		acusa "⏳ en cola". El resultado lo entrega _check_telegram_jobs() (D19).
+
+		`text` es el prompt de la tarea (ya sin keyword, D10). `history_text`
+		(opcional) es la versión ORIGINAL del mensaje para el historial (D11) —
+		si no se pasa, se usa `text`.
+
+		Usa el contexto de la sesión (historial) como prompt. mission_id con
+		prefijo `telegram:` (D18) + payload.telegram_channel_user_id para el
+		delivery por Telegram.
+		"""
+		from telegram_session import TelegramSessionManager
+
+		from red_pill.cognitive.queue_manager import CognitiveQueueManager
+
+		if not text:
+			logger.error(f"[{msg_ids}] HEAVY_PATH sin texto — ignorando")
+			for m_id in msg_ids:
+				cursor.execute("UPDATE inbox SET status = 'DEAD' WHERE id = ?", (m_id,))
+			conn.commit()
+			conn.close()
+			return
+
+		# Construir prompt con contexto de sesión (historial local)
+		tsm = TelegramSessionManager()
+		cursor.execute(
+			"SELECT cascade_id FROM telegram_sessions WHERE channel_user_id = ? AND cascade_type = 'local_session'",
+			(channel_user_id,),
+		)
+		row = cursor.fetchone()
+		session_id = row["cascade_id"] if row else None
+		if not session_id:
+			# Crear sesión si el operador encoló antes de chatear (D11: contexto).
+			session = tsm.create_session(channel_user_id)
+			session_id = session["id"]
+			cursor.execute(
+				"INSERT OR REPLACE INTO telegram_sessions (channel_user_id, cascade_id, cascade_type, model, backend) VALUES (?, ?, 'local_session', NULL, NULL)",
+				(channel_user_id, session_id),
+			)
+		prompt = text
+		if session_id:
+			session = tsm.get_session(session_id)
+			if session:
+				steps = session.get("steps", [])
+				history = "\n".join(
+					f"{s.get('intent', 'USER')}: {s.get('message', {}).get('text', '')}" for s in steps if s.get("message", {}).get("text")
+				)
+				if history:
+					prompt = f"<conversation_history>\n{history[-4000:]}\n</conversation_history>\n\n<current_task>\n{text}\n</current_task>"
+		# Append user message to session history (D11: versión ORIGINAL con keyword)
+		if session_id:
+			tsm.append_message(session_id, "user", history_text or text)
+
+		cascade_specs = self._session_cascade_specs(channel_user_id, cursor)
+		mission_id = f"telegram:{channel_user_id}"
+		payload = {
+			"prompt": prompt,
+			"cascade": cascade_specs,
+			"title": f"telegram {text[:40]}",
+			"telegram_channel_user_id": channel_user_id,
+			"telegram_chat_id": channel,
+		}
+		queue = CognitiveQueueManager()
+		try:
+			job_id = queue.enqueue_task(
+				source="agentic_job",
+				payload=payload,
+				priority=7,
+				mission_id=mission_id,
+			)
+		except Exception as e:
+			logger.error(f"[{msg_ids}] Heavy path enqueue failed: {e}")
+			if channel != "system":
+				cursor.execute(
+					"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
+					(channel, channel_user_id, None, json.dumps({"text": f"⚠️ No se pudo encolar la misión: {e}"})),
+				)
+			for m_id in msg_ids:
+				cursor.execute("UPDATE inbox SET status = 'DEAD' WHERE id = ?", (m_id,))
+			conn.commit()
+			conn.close()
+			return
+
+		logger.info(f"[{msg_ids}] Heavy path enqueued: job={job_id}")
+		if channel != "system":
+			cursor.execute(
+				"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
+				(channel, channel_user_id, None, json.dumps({"text": "⏳ En cola, te aviso cuando termine."})),
+			)
+		for m_id in msg_ids:
+			cursor.execute("UPDATE inbox SET status = 'PROCESSED' WHERE id = ?", (m_id,))
+		conn.commit()
+		conn.close()
+
+	def _check_telegram_jobs(self) -> None:
+		"""Fase 2 delivery: en cada pulse busca jobs Telegram COMPLETED/FRUSTRATED
+		pendientes de entrega y los escribe al outbox (D18/D19).
+
+		- mission_id prefijo `telegram:` (D18).
+		- Solo COMPLETED/FRUSTRATED (no existe FAILED en la cola — v0.9).
+		- Dedup: tras entregar, `set_checkpoint_key('telegram_delivered', True)`.
+		"""
+		from red_pill.cognitive.queue_manager import CognitiveQueueManager
+
+		queue = CognitiveQueueManager()
+		try:
+			jobs = queue.list_tasks(statuses=["COMPLETED", "FRUSTRATED"], mission_prefix="telegram:", limit=50)
+		except Exception as e:
+			logger.error(f"[TelegramJobs] list_tasks failed: {e}")
+			return
+
+		for job in jobs:
+			job_id = job["id"]
+			detail = queue.get_task(job_id)
+			if not detail:
+				continue
+			checkpoint = detail.get("checkpoint_data") or {}
+			if checkpoint.get("telegram_delivered"):
+				continue  # D19: ya entregado (worker reiniciado no re-entrega)
+			channel_user_id = (detail.get("payload") or {}).get("telegram_channel_user_id")
+			channel = (detail.get("payload") or {}).get("telegram_chat_id") or "telegram"
+			if not channel_user_id:
+				continue
+
+			if detail.get("status") == "COMPLETED":
+				response = (checkpoint.get("response") or "").strip()
+				text = response or "✅ Misión completada (sin respuesta de texto)."
+			else:  # FRUSTRATED
+				err = detail.get("error_log") or "fallo del driver tras 3 intentos"
+				text = f"⚠️ La misión falló tras los reintentos: {err}"
+
+			conn = get_connection()
+			try:
+				conn.execute(
+					"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
+					(channel, channel_user_id, None, json.dumps({"text": text})),
+				)
+				conn.commit()
+			except Exception as e:
+				logger.error(f"[TelegramJobs] outbox insert failed for {job_id}: {e}")
+				conn.close()
+				continue
+			conn.close()
+
+			try:
+				queue.set_checkpoint_key(job_id, "telegram_delivered", True)
+			except Exception as e:
+				logger.warning(f"[TelegramJobs] set_checkpoint_key failed for {job_id}: {e}")
 
 
 if __name__ == "__main__":

@@ -88,6 +88,7 @@ class BridgeTarget(BaseModel):
 	model: Optional[str] = None
 	effort: Optional[Literal["low", "medium", "high"]] = None
 	server_url: Optional[str] = None  # opencode only: http://localhost:PORT for --attach (None → direct/cold)
+	timeout: Optional[int] = None  # per-target bridge timeout (s). None → use the method's timeout argument (D3/D14)
 
 
 # RedPillConfig — the sovereign configuration model
@@ -379,6 +380,24 @@ class RedPillConfig(BaseSettings):
 	TELEGRAM_BRIDGE_CASCADE: List[BridgeTarget] = []
 	AWAKENING_BRIDGE_CASCADE: List[BridgeTarget] = []
 	DEFAULT_MINION_BRIDGE_CASCADE: List[BridgeTarget] = []
+	# Fast-path inline timeout for Telegram conversational messages (D3). Used as
+	# the timeout argument the worker passes to CascadeBridge.prompt(); a
+	# per-target `timeout` in the cascade .env overrides it above (D14). Default
+	# 120s is the *method* default — the pro target is set to 300s via its own
+	# `timeout` in .env to avoid the aggressive-kill regression (guard §2C).
+	TELEGRAM_INLINE_TIMEOUT: int = 120
+	# Heartbeat lease (s) for the D21 decoupled heartbeat thread. The thread beats
+	# every ~20s while the process lives, but only while the last activity *touch*
+	# is newer than this lease. A dead main loop stops touching → lease expires →
+	# the thread stops beating → neon-link's 60s threshold detects real offline.
+	# Default 900s > worst-case single operation block (~610s). Touch points:
+	# start of run_once() and before each bridge call.
+	HEARTBEAT_LEASE: int = 900
+	# D5 (Fase 1 guard): when False (default), targets with backend='local' are
+	# filtered out of the Telegram execution cascade — a local model (e.g.
+	# Granite-4.1-8B) is NOT capable of heavy/ambitious tasks. In Fase 3 this is
+	# superseded by capability gating in the catalog (D13/D15). Retro-compatible.
+	LOCAL_ALLOWED_FOR_HEAVY: bool = False
 
 	@field_validator("TELEGRAM_BRIDGE_CASCADE", "AWAKENING_BRIDGE_CASCADE", "DEFAULT_MINION_BRIDGE_CASCADE", mode="before")
 	@classmethod

@@ -247,6 +247,15 @@ def get_model_profiles_path() -> Path:
 	return get_config_dir() / "model_profiles.yaml"
 
 
+def get_model_catalog_path() -> Path:
+	"""Ruta del catálogo curado de modelos ($XDG_CONFIG_HOME/red-pill/model_catalog.yaml).
+
+	Fuente de verdad de qué modelos existen y se pueden usar (RFC_TELEGRAM_RESILIENCE
+	§2A/D6). Auto-seeded desde examples/model_catalog.yaml.example por el CLI si falta.
+	"""
+	return get_config_dir() / "model_catalog.yaml"
+
+
 def get_agent_dir() -> Path:
 	"""Resuelve el directorio raíz heredado/operacional del agente (~/.agent)."""
 	return Path.home() / ".agent"
