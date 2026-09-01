@@ -116,7 +116,33 @@ class TestEnqueueHeavyPath:
 		assert "En cola" in json.loads(row[0])["text"]
 		conn2.close()
 
-	def test_uses_session_override_model(self, mock_db):
+	def test_uses_session_override_model(self, mock_db, tmp_path):
+		"""D9/D20: override de sesión → el router (catálogo aislado) antepone el modelo."""
+		from red_pill.core.model_catalog import ModelCatalog
+		from red_pill.core.model_router import CascadeRouter
+
+		# Catálogo aislado (CI no tiene ~/.config/red-pill/model_catalog.yaml)
+		catalog_yaml = tmp_path / "model_catalog.yaml"
+		catalog_yaml.write_text(
+			"""
+catalog:
+  providers:
+    opencode:
+      models:
+        - id: "opencode-go/deepseek-v4-pro"
+          backend: "opencode"
+          tier: "subscription"
+          priority: 1
+          roles: ["conversational"]
+          not_capable_for: []
+roles:
+  conversational:
+    - "opencode-go/deepseek-v4-pro"
+""",
+			encoding="utf-8",
+		)
+		router = CascadeRouter(catalog=ModelCatalog(path=catalog_yaml))
+
 		worker = IDEWorker.__new__(IDEWorker)
 		conn = sqlite3.connect(str(mock_db))
 		conn.row_factory = sqlite3.Row
@@ -128,11 +154,12 @@ class TestEnqueueHeavyPath:
 		)
 		conn.commit()
 
-		with patch("red_pill.cognitive.queue_manager.CognitiveQueueManager") as mock_qm:
-			mock_qm.return_value.enqueue_task.return_value = "job-abc"
-			worker._enqueue_heavy_path(
-				text="tarea", channel="telegram", channel_user_id="user_a", msg_ids=[1], cursor=cursor, conn=conn
-			)
+		with patch("red_pill.core.model_router.get_router", return_value=router):
+			with patch("red_pill.cognitive.queue_manager.CognitiveQueueManager") as mock_qm:
+				mock_qm.return_value.enqueue_task.return_value = "job-abc"
+				worker._enqueue_heavy_path(
+					text="tarea", channel="telegram", channel_user_id="user_a", msg_ids=[1], cursor=cursor, conn=conn
+				)
 
 		payload = mock_qm.return_value.enqueue_task.call_args[1]["payload"]
 		assert payload["cascade"][0]["model"] == "opencode-go/deepseek-v4-pro"
