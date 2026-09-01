@@ -11,18 +11,12 @@ Covers:
 
 import sqlite3
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 import red_pill.plugins.antigravity_ide.worker as worker_module
 from red_pill.plugins.antigravity_ide.worker import IDEWorker
-
-
-def _make_worker():
-	"""Worker with __init__ bypassed (no bridges/threads spawned)."""
-	monkeypatch_none = None
-	return IDEWorker()
 
 
 @pytest.fixture
