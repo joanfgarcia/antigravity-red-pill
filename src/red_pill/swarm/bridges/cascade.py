@@ -118,7 +118,13 @@ class CascadeBridge(AgentBridge):
 				errors.append((t, f"backend unavailable: {e}"))
 				continue
 
-			res = bridge.prompt(text, model=(t.model or model), effort=(t.effort or effort), cwd=cwd, timeout=timeout)
+			res = bridge.prompt(
+				text,
+				model=(t.model or model),
+				effort=(t.effort or effort),
+				cwd=cwd,
+				timeout=(t.timeout or timeout),
+			)
 			if res.ok:
 				logger.info(f"[CascadeBridge] served by {_label(t)}")
 				return res

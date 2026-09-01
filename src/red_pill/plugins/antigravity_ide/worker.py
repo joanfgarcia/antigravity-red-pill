@@ -3,6 +3,7 @@ import logging
 import os
 import sqlite3
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Optional
@@ -81,6 +82,72 @@ def _format_cascade_error(exc: Exception) -> str:
 	return f"⚠️ No pude atender tu mensaje: {exc}"
 
 
+def _is_bridge_timeout(exc: Exception) -> bool:
+	"""Classify a bridge failure as a TIMEOUT (D24).
+
+	Bridge backends surface timeouts as `RuntimeError("... timed out after Ns")`
+	(raised from `subprocess.TimeoutExpired`). Anything else — spawn failures,
+	network errors, 5xx, quota messages — is transient, NOT a timeout.
+	"""
+	import subprocess
+
+	if isinstance(exc, subprocess.TimeoutExpired):
+		return True
+	text = str(exc).lower()
+	return isinstance(exc, RuntimeError) and ("timed out" in text or "timeout" in text)
+
+
+def _emit_d24_pain_signal(msg_ids, error_text: str) -> None:
+	"""D24 req. operador: if a timeout is NOT classified as such (and thus retried
+	with cap 3 instead of cap 1), emit a typed pain signal so someone investigates.
+	Dedup via has_signal to avoid spamming every pulse."""
+	try:
+		from red_pill.memory import MemoryManager
+
+		mm = MemoryManager()
+		name = "telegram_timeout_cap1_not_applied"
+		if mm.has_signal(name):
+			return
+		mm.inject_signal(
+			name=name,
+			intensity=6.0,
+			signal_type="pain",
+			source="TelegramWorker",
+			originator="worker._process_via_bridge",
+			criticality="WARNING",
+			message=f"Timeout del bridge clasificado como transitorio (cap 3 en vez de cap 1). msgs={msg_ids}. error={error_text[:300]}",
+		)
+	except Exception as e:
+		logger.warning(f"[D24] Failed to emit pain signal: {e}")
+
+
+def _detect_routing_keyword(text: str) -> Optional[str]:
+	"""Detect an explicit routing keyword at the START of a Telegram message
+	(D2/D10). Case-insensitive, first token. In Fase 1 this is signal-only:
+	the keyword is stripped from the prompt (D10) but execution stays fast path
+	(forward-compatible with Fase 2's heavy path).
+
+	Returns the matched keyword ('/mission', '#mission', '#heavy', '#job') or None.
+	"""
+	if not text:
+		return None
+	first = text.strip().split(maxsplit=1)[0].lower()
+	keywords = {"/mission", "#mission", "#heavy", "#job"}
+	return next((k for k in keywords if first == k), None)
+
+
+def _detect_escalate_marker(response: str, window: int = 64) -> bool:
+	"""Detect the [ESCALATE] marker at the START of a model response (D14).
+	Parsing is tolerant: the marker must appear within the first `window`
+	characters (ratified default 64), allowing for whitespace/prefix noise.
+	In Fase 1 this is signal-only — the full response is still delivered.
+	"""
+	if not response:
+		return False
+	head = response[:window].upper()
+	return "[ESCALATE]" in head
+
+
 class IDEWorker:
 	def __init__(self):
 		self.client = AntigravityIDEClient()
@@ -93,7 +160,15 @@ class IDEWorker:
 		# AgentBridge: create execution bridges based on config
 		try:
 			cfg_inst = cfg.get_config()
-			self._bridge_telegram = create_cascade_bridge(cfg_inst.TELEGRAM_BRIDGE_CASCADE, name="TELEGRAM_BRIDGE_CASCADE")
+			telegram_cascade = cfg_inst.TELEGRAM_BRIDGE_CASCADE
+			# D5 (Fase 1 guard): local is not capable of heavy work — filter it
+			# out of the conversational cascade unless explicitly allowed.
+			if not cfg_inst.LOCAL_ALLOWED_FOR_HEAVY and telegram_cascade:
+				filtered = [t for t in telegram_cascade if t.backend != "local"]
+				if len(filtered) != len(telegram_cascade):
+					logger.info("[IDEWorker] D5 guard: filtered local target(s) from TELEGRAM_BRIDGE_CASCADE")
+				telegram_cascade = filtered
+			self._bridge_telegram = create_cascade_bridge(telegram_cascade, name="TELEGRAM_BRIDGE_CASCADE")
 			self._bridge_awakening = create_cascade_bridge(cfg_inst.AWAKENING_BRIDGE_CASCADE, name="AWAKENING_BRIDGE_CASCADE", origin="awakening")
 			self._bridge_minion = create_cascade_bridge(cfg_inst.DEFAULT_MINION_BRIDGE_CASCADE, name="DEFAULT_MINION_BRIDGE_CASCADE")
 
@@ -120,6 +195,48 @@ class IDEWorker:
 		except Exception as e:
 			logger.warning(f"[IDEWorker] SamanthaWorker init failed (local LLM tasks disabled): {e}")
 
+		# D21: decoupled heartbeat thread + activity lease. The main pulse can
+		# block on a 300s bridge call; the heartbeat must keep beating DURING it
+		# or neon-link (60s threshold) declares a false "Córtex Offline". A dead
+		# main loop stops touching the lease → it expires (HEARTBEAT_LEASE) →
+		# the thread stops beating → real offline is still detected.
+		self._lease_lock = threading.Lock()
+		self._lease_touch = time.monotonic()
+		self._heartbeat_thread = threading.Thread(
+			target=self._heartbeat_thread_main,
+			name="heartbeat-daemon",
+			daemon=True,
+		)
+		self._heartbeat_thread.start()
+		logger.info("[IDEWorker] Heartbeat thread started (D21, lease=%ss)", cfg.get_config().HEARTBEAT_LEASE)
+
+	def _touch_lease(self):
+		"""Record worker activity. The heartbeat thread only beats while the lease
+		is fresh — a healthy main loop keeps touching at every pulse boundary and
+		before every bridge call."""
+		try:
+			with self._lease_lock:
+				self._lease_touch = time.monotonic()
+		except Exception as e:
+			logger.debug(f"[IDEWorker] lease touch failed: {e}")
+
+	def _heartbeat_thread_main(self):
+		"""Daemon thread: update system_health while the process lives and the
+		lease is fresh. Falls silent when the main loop is dead (lease expired) so
+		real offline is detectable. Uses its own connection to avoid sharing the
+		pulse's write transaction (D23)."""
+		lease = cfg.get_config().HEARTBEAT_LEASE
+		while True:
+			try:
+				with self._lease_lock:
+					fresh = (time.monotonic() - self._lease_touch) < lease
+				if fresh:
+					self.update_heartbeat()
+				time.sleep(20)
+			except Exception as e:
+				logger.warning(f"[IDEWorker] Heartbeat thread error: {e}")
+				time.sleep(20)
+
 	def run(self):
 		logger.info("Red-Pill AntigravityIDEPlugin Worker started.")
 		while self.running:
@@ -134,6 +251,9 @@ class IDEWorker:
 				time.sleep(5)
 
 	def run_once(self):
+		# D21: touch the heartbeat lease at the start of each pulse — the
+		# heartbeat thread only beats while this stays fresh.
+		self._touch_lease()
 		# Containment: one poisoned inbox item must not kill the pulse (and with
 		# it the heartbeat that neon-link watches to report Córtex Offline).
 		try:
@@ -185,6 +305,78 @@ class IDEWorker:
 		conn.execute("UPDATE system_health SET last_heartbeat = CURRENT_TIMESTAMP WHERE service_name = 'red_pill'")
 		conn.commit()
 		conn.close()
+
+	def _handle_retry_failure(
+		self,
+		msg_ids,
+		channel,
+		channel_user_id,
+		cursor,
+		exc: Optional[Exception] = None,
+		error_text: Optional[str] = None,
+	) -> bool:
+		"""Increment retries with a cap by error class (D24).
+
+		Timeout → ONE retry allowed: the second timeout is DEAD (the same prompt
+		would burn the timeout again, blocking the pulse ~300s more and tripling
+		token cost). Transient errors (spawn/red/5xx) → cap 3 as before.
+
+		When the cap is reached: mark inbox DEAD, write the dead_letters row
+		(D12), and notify the user via outbox.
+
+		Returns True when the message was killed (DEAD), False otherwise.
+		"""
+		text = error_text or (str(exc) if exc else "unknown error")
+		is_timeout = _is_bridge_timeout(exc) if exc else "timed out" in (text or "").lower()
+
+		# D24 signal de dolor: if the failure LOOKS like a timeout but was NOT
+		# classified as one (classifier miss), the cap would wrongly be higher → flag it.
+		looks_like_timeout = "timed out" in (text or "").lower() or "timeout" in (text or "").lower()
+		if looks_like_timeout and not is_timeout:
+			_emit_d24_pain_signal(msg_ids, text)
+
+		# Cap in terms of the retries counter: timeout allows ONE retry (the
+		# second timeout → DEAD, so retries>=2 kills it); transients keep the
+		# legacy cap 3 (retries>=3 → DEAD). Mirrors diagram 4.5 for transients.
+		cap = 2 if is_timeout else 3
+
+		for m_id in msg_ids:
+			row = cursor.execute("SELECT retries FROM inbox WHERE id = ?", (m_id,)).fetchone()
+			retries = (row["retries"] if row else 0) + 1
+			if retries >= cap:
+				logger.error(f"[{msg_ids}] Retries exhausted (cap={cap}, class={'timeout' if is_timeout else 'transient'}) for msg {m_id}: {text}")
+				cursor.execute("UPDATE inbox SET status = 'DEAD', retries = ? WHERE id = ?", (retries, m_id))
+				# D12: write to the dead_letters table (neon-link events.db)
+				try:
+					orig = cursor.execute("SELECT payload FROM inbox WHERE id = ?", (m_id,)).fetchone()
+					payload = orig["payload"] if orig else None
+					cursor.execute(
+						"INSERT INTO dead_letters (original_table, original_id, channel, channel_user_id, payload, error_reason) "
+						"VALUES ('inbox', ?, ?, ?, ?, ?)",
+						(m_id, channel, channel_user_id, payload, text[:500]),
+					)
+				except Exception as e:
+					logger.warning(f"[{msg_ids}] Failed to write dead_letter for {m_id}: {e}")
+				if channel != "system":
+					cursor.execute(
+						"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
+						(
+							channel,
+							channel_user_id,
+							None,
+							json.dumps(
+								{
+									"text": "⚠️ Tu mensaje no pudo ser procesado tras "
+									f"{retries} intento(s). Reintenta con /new o revisa la cola con /queue. "
+									"Para prompts ambiciosos, considera prefijar con `/mission` o `#mission`."
+								}
+							),
+						),
+					)
+			else:
+				logger.warning(f"[{msg_ids}] Retry {retries}/{cap} for msg {m_id}: {text}")
+				cursor.execute("UPDATE inbox SET retries = ? WHERE id = ?", (retries, m_id))
+		return retries >= cap
 
 	def _signal_samantha_worker(self):
 		"""NON-BLOCKING: check if there are pending Samantha tasks and signal the worker thread."""
@@ -593,6 +785,17 @@ class IDEWorker:
 
 		logger.info(f"[{msg_ids}] Processing via {self._caps.backend.value.upper()} bridge (Local Session Context)")
 
+		# D2/D10 (Fase 1, signal-only): detect an explicit routing keyword at the
+		# start of the message. We strip it from the PROMPT (it is routing, not
+		# content) but keep the ORIGINAL text for the session history (D11, so
+		# telegram_session dedup keeps matching). Fase 1 executes as fast path;
+		# the keyword is logged for forward-compatibility with Fase 2.
+		routing_keyword = _detect_routing_keyword(combined_text)
+		prompt_text = combined_text
+		if routing_keyword:
+			logger.info(f"[{msg_ids}] Routing keyword detected: {routing_keyword} (Fase 1: fast path, signal-only)")
+			prompt_text = combined_text.strip()[len(routing_keyword) :].lstrip()
+
 		tsm = TelegramSessionManager()
 
 		# Get active local session ID
@@ -665,16 +868,25 @@ class IDEWorker:
 		if history_text:
 			prompt += f"<conversation_history>\n{history_text}\n</conversation_history>\n\n"
 
-		prompt += f"<current_message>\n{combined_text}\n</current_message>\n"
+		prompt += f"<current_message>\n{prompt_text}\n</current_message>\n"
 
 		if not self._bridge_telegram:
 			logger.error(f"[{msg_ids}] No bridge available to execute prompt")
-			for m_id in msg_ids:
-				cursor.execute("UPDATE inbox SET retries = retries + 1 WHERE id = ?", (m_id,))
+			self._handle_retry_failure(msg_ids, channel, channel_user_id, cursor, error_text="no bridge available")
 			return
 
+		# D23: commit-pre-prompt — release the events.db write-lock BEFORE the
+		# (potentially 300s) bridge call. The session INSERT OR REPLACE and
+		# user-message append are already consistent here. Without this, the
+		# implicit transaction keeps the write-lock for the whole prompt, which
+		# blocks neon-link's ingest/drain (BEGIN IMMEDIATE + busy_timeout=5000 →
+		# abort at ~5s) and would block the D21 heartbeat thread's UPDATE.
+		conn.commit()
+		# D21: keep the heartbeat lease fresh before the blocking bridge call.
+		self._touch_lease()
+
 		try:
-			result = self._bridge_telegram.prompt(prompt, timeout=300)
+			result = self._bridge_telegram.prompt(prompt, timeout=cfg.get_config().TELEGRAM_INLINE_TIMEOUT)
 		except (NoModelsConfigured, AllModelsExhausted) as e:
 			# Cascade exhausted (empty, or no model with quota) — surface the
 			# pertinent error to the user instead of silently bumping retries.
@@ -691,17 +903,22 @@ class IDEWorker:
 			return
 		except Exception as e:
 			logger.error(f"[{msg_ids}] Bridge execution failed: {e}")
-			for m_id in msg_ids:
-				cursor.execute("UPDATE inbox SET retries = retries + 1 WHERE id = ?", (m_id,))
+			self._handle_retry_failure(msg_ids, channel, channel_user_id, cursor, exc=e)
 			return
 
 		if not result.ok:
 			logger.error(f"[{msg_ids}] Bridge returned error: {result.error}")
-			for m_id in msg_ids:
-				cursor.execute("UPDATE inbox SET retries = retries + 1 WHERE id = ?", (m_id,))
+			self._handle_retry_failure(msg_ids, channel, channel_user_id, cursor, error_text=result.error or "unknown error")
 			return
 
 		response = result.response
+
+		# D14 (Fase 1, signal-only): detect the [ESCALATE] marker (tolerant parse,
+		# 64-char window). In Fase 1 the full response is still delivered and the
+		# marker is left as-is; Fase 2 will strip it and enqueue as heavy path.
+		if _detect_escalate_marker(response):
+			model_label = getattr(result, "model", None) or "unknown"
+			logger.info(f"[{msg_ids}] [ESCALATE] marker detected (model={model_label}) — Fase 1: signal-only, full response delivered")
 
 		# 3. Append Assistant Response to session history
 		tsm.append_message(session_id, "assistant", response)
@@ -819,6 +1036,12 @@ class IDEWorker:
 			for m_id in msg_ids:
 				cursor.execute("UPDATE inbox SET retries = retries + 1 WHERE id = ?", (m_id,))
 			return
+
+		# D23: commit-pre-prompt — release the events.db write-lock (execution_ledger
+		# INSERT above) before the long AWAKENING bridge call.
+		conn.commit()
+		# D21: keep the heartbeat lease fresh before the blocking bridge call.
+		self._touch_lease()
 
 		try:
 			result = self._bridge_awakening.prompt(prompt, timeout=AWAKENING_TIMEOUT)
@@ -1190,6 +1413,7 @@ class IDEWorker:
 				prompts.append(f"Source: {r['source']}\nStatus: {r['status']}\nEvent ID: {r['event_id']}\nContent: {r['content']}")
 
 			combined = "\n\n".join(prompts)
+			self._touch_lease()
 			result = self._bridge_minion.prompt(combined, timeout=300)
 			if result.ok:
 				logger.info("[Agy] Successfully processed minion reports")
@@ -1231,6 +1455,7 @@ class IDEWorker:
 			"Execute this task silently."
 		)
 
+		self._touch_lease()
 		result = self._bridge_minion.prompt(prompt, timeout=600)
 		if result.ok:
 			logger.info(f"[Agy] Cognitive task {task['id']} completed successfully")
