@@ -183,6 +183,14 @@ Plugins 05–10. Each is independently toggleable.
 | `DEFAULT_MINION_BRIDGE_CASCADE` | `[]` | JSON-encoded fallback cascade of model targets for background agéntic minions if no model is explicitly requested. |
 | `CHRONICLE_PLUGINS` | `["antigravity", "claude_code"]` | List of enabled sequential extraction plugins to pull transcripts during sleep cycle. |
 
+> **Catálogo curado de modelos (RFC_TELEGRAM_RESILIENCE §2A/D6/D20)**: el archivo
+> `$XDG_CONFIG_HOME/red-pill/model_catalog.yaml` (auto-seeded desde
+> `examples/model_catalog.yaml.example`) es la fuente de verdad de modelos.
+> `red-pill telegram models` lista el catálogo; `red-pill telegram roles` los
+> roles. Los comandos Telegram `/models`, `/model`, `/defaults`, `/deferred`,
+> `/queue`, `/mission` operan sobre él. Si el catálogo no existe, el runtime cae a
+> la cascade de `.env` (compatibilidad).
+
 > **⚠️ opencode + service managers (PATH requirement)**
 >
 > When `opencode` is used (as `IDE_BACKEND` or in any `*_BRIDGE_CASCADE`), the `opencode` binary must be resolvable from the **service manager's** environment — not just your login shell. Service managers run with a minimal PATH:

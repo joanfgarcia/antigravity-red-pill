@@ -57,6 +57,8 @@ def mock_db(tmp_path, monkeypatch):
 			channel_user_id TEXT PRIMARY KEY,
 			cascade_id TEXT,
 			cascade_type TEXT,
+model TEXT,
+			backend TEXT,
 			accumulated_len INTEGER
 		)
 		"""
@@ -123,37 +125,42 @@ class TestProcessViaBridgeRouting:
 		return worker, bridge
 
 	def test_keyword_stripped_from_prompt_but_kept_in_history(self, mock_db):
-		"""D10 (strip from prompt) + D11 (keep original in history)."""
+		"""Fase 2: keyword dispara el heavy path (enqueue) — el prompt encolado
+		NO lleva el keyword (D10) y el historial conserva el original (D11)."""
 		worker, bridge = self._make_worker()
 		conn = sqlite3.connect(str(mock_db))
 		conn.row_factory = sqlite3.Row
 		cursor = conn.cursor()
 
-		worker._process_via_bridge(
-			combined_text="#mission implementa el modulo X",
-			msg_ids=[1],
-			channel="telegram",
-			channel_user_id="user_a",
-			cursor=cursor,
-			conn=conn,
-		)
+		with patch("red_pill.cognitive.queue_manager.CognitiveQueueManager") as mock_qm:
+			mock_qm.return_value.enqueue_task.return_value = "job-123"
+			worker._process_via_bridge(
+				combined_text="#mission implementa el modulo X",
+				msg_ids=[1],
+				channel="telegram",
+				channel_user_id="user_a",
+				cursor=cursor,
+				conn=conn,
+			)
 
-		# The prompt passed to the bridge must NOT contain the keyword.
-		prompt_arg = bridge.prompt.call_args[0][0]
-		assert "#mission" not in prompt_arg
-		assert "implementa el modulo X" in prompt_arg
+		# El bridge NO se invoca (heavy path); se encola.
+		bridge.prompt.assert_not_called()
+		enqueued = mock_qm.return_value.enqueue_task.call_args[1]["payload"]
+		assert "#mission" not in enqueued["prompt"]
+		assert "implementa el modulo X" in enqueued["prompt"]
 
-		# The session history must keep the ORIGINAL (with keyword).
+		# El historial conserva la versión ORIGINAL (con keyword, D11).
 		from red_pill.plugins.antigravity_ide.telegram_session import TelegramSessionManager
 
+		conn.close()
+		conn2 = sqlite3.connect(str(mock_db))
+		conn2.row_factory = sqlite3.Row
 		tsm = TelegramSessionManager()
-		row = cursor.execute(
-			"SELECT cascade_id FROM telegram_sessions WHERE channel_user_id = 'user_a'"
-		).fetchone()
+		row = conn2.execute("SELECT cascade_id FROM telegram_sessions WHERE channel_user_id = 'user_a'").fetchone()
 		session = tsm.get_session(row["cascade_id"])
 		user_steps = [s for s in session["steps"] if s.get("intent") == "USER"]
 		assert user_steps and user_steps[-1]["message"]["text"] == "#mission implementa el modulo X"
-		conn.close()
+		conn2.close()
 
 	def test_normal_message_no_strip(self, mock_db):
 		worker, bridge = self._make_worker()
@@ -174,27 +181,36 @@ class TestProcessViaBridgeRouting:
 		assert "hola que tal" in prompt_arg
 		conn.close()
 
-	def test_escalate_marker_full_response_delivered(self, mock_db):
-		"""Fase 1: [ESCALATE] detected → full response still delivered to outbox."""
+	def test_escalate_marker_triggers_heavy_path(self, mock_db):
+		"""Fase 2: [ESCALATE] detectado → la tarea se ENCOLA (no se entrega la
+		respuesta del fast path)."""
 		worker, bridge = self._make_worker(response_text="[ESCALATE] implemento el módulo en background")
 		conn = sqlite3.connect(str(mock_db))
 		conn.row_factory = sqlite3.Row
 		cursor = conn.cursor()
 
-		worker._process_via_bridge(
-			combined_text="haz una tarea larga",
-			msg_ids=[1],
-			channel="telegram",
-			channel_user_id="user_a",
-			cursor=cursor,
-			conn=conn,
-		)
+		with patch("red_pill.cognitive.queue_manager.CognitiveQueueManager") as mock_qm:
+			mock_qm.return_value.enqueue_task.return_value = "job-456"
+			worker._process_via_bridge(
+				combined_text="haz una tarea larga",
+				msg_ids=[1],
+				channel="telegram",
+				channel_user_id="user_a",
+				cursor=cursor,
+				conn=conn,
+			)
 
-		outbox = cursor.execute("SELECT payload FROM outbox").fetchone()
-		assert outbox is not None
-		payload = json.loads(outbox["payload"])
-		assert "[ESCALATE] implemento el módulo en background" in payload["text"]
+		# Se encola la petición ORIGINAL (no la respuesta del fast path).
+		enqueued = mock_qm.return_value.enqueue_task.call_args[1]["payload"]
+		assert "haz una tarea larga" in enqueued["prompt"]
+		# El ack "⏳ en cola" va al outbox; la respuesta con marker NO se entrega.
 		conn.close()
+		conn2 = sqlite3.connect(str(mock_db))
+		outbox = conn2.execute("SELECT payload FROM outbox").fetchall()
+		outbox_texts = [json.loads(r[0])["text"] for r in outbox]
+		assert any("En cola" in t for t in outbox_texts)
+		assert not any("[ESCALATE]" in t for t in outbox_texts)
+		conn2.close()
 
 
 class TestD5LocalGuard:

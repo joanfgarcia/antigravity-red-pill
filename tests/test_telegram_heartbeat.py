@@ -55,6 +55,8 @@ def mock_db(tmp_path, monkeypatch):
 			channel_user_id TEXT PRIMARY KEY,
 			cascade_id TEXT,
 			cascade_type TEXT,
+model TEXT,
+			backend TEXT,
 			accumulated_len INTEGER
 		)
 		"""
