@@ -1,0 +1,71 @@
+# Curated model catalog (RFC_TELEGRAM_RESILIENCE §2A/D6/D20 — Fase 1B/3).
+# Source of truth for which models exist and can be used. Replaces the raw
+# `opencode models` offer (81 models) with a per-installation curated list,
+# following the model_profiles.yaml pattern.
+#
+# Copy to $XDG_CONFIG_HOME/red-pill/model_catalog.yaml and edit.
+#
+# Each provider lists models with:
+#   id            — canonical id as the backend expects it (e.g. opencode-go/deepseek-v4-pro)
+#   backend       — execution bridge backend (opencode | claude | agy | local)
+#   tier          — subscription | free | local
+#   priority      — global cascade ordering (lower = tried first)
+#   roles         — role aliases this model serves (scout/planning/coder/conversational)
+#   capabilities  — free-form capability tags (code, planning, adversarial, scout, conversational)
+#   not_capable_for — roles/tasks a WITH-QUOTA model is still NOT capable of (D13/D15 gating)
+#   timeout       — optional generous per-target bridge timeout (s) (D14)
+
+catalog:
+  providers:
+    opencode:
+      models:
+        - id: "opencode-go/deepseek-v4-pro"
+          backend: "opencode"
+          tier: "subscription"
+          priority: 1
+          roles: ["planning", "coder", "conversational"]
+          capabilities: ["code", "planning", "deep", "conversational"]
+          not_capable_for: []
+          timeout: 300
+        - id: "opencode/deepseek-v4-flash-free"
+          backend: "opencode"
+          tier: "free"
+          priority: 2
+          roles: ["conversational"]
+          capabilities: ["conversational", "quick"]
+          not_capable_for: ["coder", "planning"]
+        - id: "opencode/big-pickle"
+          backend: "opencode"
+          tier: "free"
+          priority: 3
+          roles: ["scout"]
+          capabilities: ["scout", "conversational"]
+          not_capable_for: ["coder", "planning"]
+
+    local:
+      models:
+        - id: "local/granite-8b"
+          backend: "local"
+          tier: "local"
+          priority: 9
+          roles: ["conversational"]
+          capabilities: ["conversational", "logic"]
+          not_capable_for: ["coder", "planning", "scout"]
+          timeout: 300
+
+# Role aliases → ordered cascade of model ids (RFC §2E.3).
+# A message invoking a role uses that cascade with its order/priority/gating.
+roles:
+  scout:
+    - "opencode-go/deepseek-v4-pro"
+    - "opencode/big-pickle"
+  planning:
+    - "opencode-go/deepseek-v4-pro"
+    - "opencode/deepseek-v4-flash-free"
+  coder:
+    - "opencode-go/deepseek-v4-pro"
+    - "opencode/deepseek-v4-flash-free"
+  conversational:
+    - "opencode-go/deepseek-v4-pro"
+    - "opencode/deepseek-v4-flash-free"
+    - "local/granite-8b"

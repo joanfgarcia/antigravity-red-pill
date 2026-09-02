@@ -35,6 +35,7 @@ class _FakeBridge:
 		self.calls += 1
 		self.last_model = model
 		self.last_effort = effort
+		self.last_timeout = timeout
 		if self._ok:
 			return ConversationResult(conversation_id="conv", response=self._response, model=model)
 		return ConversationResult(conversation_id="", response="", error=self._error or "boom")
@@ -70,6 +71,14 @@ class TestBridgeTarget:
 	def test_rejects_unknown_effort(self):
 		with pytest.raises(ValidationError):
 			BridgeTarget(backend="claude", effort="ultra")
+
+	def test_timeout_field_optional(self):
+		t = BridgeTarget(backend="claude", model="opus", timeout=300)
+		assert t.timeout == 300
+
+	def test_timeout_defaults_none(self):
+		t = BridgeTarget(backend="claude")
+		assert t.timeout is None
 
 
 class TestCascadeConfigParsing:
@@ -147,6 +156,33 @@ class TestCascadeBridge:
 		assert res.ok and res.response == "from-local"
 		assert ok_bridge.calls == 1
 
+	def test_per_target_timeout_overrides_method(self):
+		# Target declares timeout=45 → the bridge must be called with 45, NOT the
+		# method default (300) NOR the caller's timeout (200).
+		fb = _FakeBridge(ok=True)
+		with patch("red_pill.swarm.bridges.factory.create_bridge", side_effect=lambda b: fb):
+			CascadeBridge(_targets({"backend": "claude", "timeout": 45})).prompt("hi", timeout=200)
+		assert fb.last_timeout == 45
+
+	def test_method_timeout_used_when_target_has_none(self):
+		# Target without timeout → falls back to the caller's method timeout.
+		fb = _FakeBridge(ok=True)
+		with patch("red_pill.swarm.bridges.factory.create_bridge", side_effect=lambda b: fb):
+			CascadeBridge(_targets({"backend": "claude"})).prompt("hi", timeout=200)
+		assert fb.last_timeout == 200
+
+	def test_timeout_flows_through_fallback_targets(self):
+		# Each target gets its own effective timeout (per-target or method).
+		first = _FakeBridge(ok=False, error="boom")
+		second = _FakeBridge(ok=True)
+		built = {"claude": first, "agy": second}
+		with patch("red_pill.swarm.bridges.factory.create_bridge", side_effect=lambda b: built[b]):
+			res = CascadeBridge(
+				_targets({"backend": "claude", "timeout": 10}, {"backend": "agy", "timeout": 20})
+			).prompt("hi", timeout=30)
+		assert res.ok
+		assert first.last_timeout == 10 and second.last_timeout == 20
+
 
 class TestCascadeDelegation:
 	def test_get_capabilities_uses_primary(self):
@@ -185,3 +221,45 @@ class TestCascadeDelegation:
 	def test_health_check_false_if_none(self):
 		with patch("red_pill.swarm.bridges.factory.create_bridge", side_effect=lambda b: _FakeBridge(ok=False)):
 			assert CascadeBridge(_targets({"backend": "claude"})).health_check() is False
+
+
+class TestRegressionGuardD3:
+	"""Guard de regresión §2C/D3: el primario de TELEGRAM_BRIDGE_CASCADE del .env
+	real debe llevar un timeout generoso (300s) para que el default de método de
+	D3 (120s) no se convierta en un kill agresivo del primario (D14)."""
+
+	def _operator_env_path(self) -> str:
+		from red_pill.config import get_config_dir
+
+		return os.path.join(get_config_dir(), ".env")
+
+	def test_operator_env_primario_lleva_timeout_generoso(self):
+		env_path = self._operator_env_path()
+		if not os.path.exists(env_path):
+			pytest.skip(f"Operator .env not present at {env_path}")
+
+		with open(env_path, "r", encoding="utf-8") as f:
+			content = f.read()
+
+		# Locate the TELEGRAM_BRIDGE_CASCADE line
+		match = None
+		for line in content.splitlines():
+			if line.strip().startswith("TELEGRAM_BRIDGE_CASCADE"):
+				match = line
+				break
+		if not match:
+			pytest.skip("TELEGRAM_BRIDGE_CASCADE not set in operator .env")
+
+		# Parse the JSON value (strip var name and optional quotes)
+		raw = match.split("=", 1)[1].strip().strip("'").strip('"')
+		targets = json.loads(raw)
+		assert targets, "cascade must not be empty"
+		primario = targets[0]
+		assert primario.get("timeout") is not None, (
+			f"Primario {primario.get('model')} sin timeout en .env real → con "
+			"TELEGRAM_INLINE_TIMEOUT=120 (D3) sería un kill agresivo (D14). "
+			"Añade \"timeout\":300 al primario."
+		)
+		assert primario["timeout"] >= 300, (
+			f"Primario timeout={primario['timeout']} < 300s — no es generoso (D14)."
+		)

@@ -106,7 +106,10 @@ def search_memento(
 	prefix = f"{month or '*'}/{source or '*'}/*/"
 
 	hits = _rg_search(root, query, globs, prefix, max(limit * 3, limit))
-	if hits is None:
+	if not hits:
+		# rg vacío (rc=1, p.ej. glob sin coincidencia con la estructura del árbol,
+		# como en ripgrep 15 donde `*` no cruza separadores) o no disponible →
+		# siempre intentar el escaneo python como respaldo.
 		hits = _python_search(root, query, globs, prefix, max(limit * 3, limit))
 
 	results: List[Dict[str, Any]] = []

@@ -329,6 +329,49 @@ def handle_ide(args: argparse.Namespace) -> None:
 		print("Usage: red-pill ide [backend|status|test]")
 
 
+def handle_telegram(args: argparse.Namespace) -> None:
+	"""Telegram bridge utilities — scripts tontos de solo lectura (RFC §2A/D6/D20)."""
+	if args.telegram_cmd == "models":
+		from red_pill.core.model_catalog import ModelCatalog, ModelCatalogError
+
+		try:
+			catalog = ModelCatalog()
+			models = catalog.models(backend=args.backend)
+		except ModelCatalogError as e:
+			print(f"[ERROR] {e}")
+			return
+		if not models:
+			print(f"[INFO] No hay modelos curados para backend={args.backend or 'todos'}.")
+			return
+		print(f"🧠 Modelos curados ({len(models)}):")
+		for i, m in enumerate(models, start=1):
+			roles = ", ".join(m.get("roles", [])) or "-"
+			print(f"  {i}. {m['id']}  [tier={m.get('tier')}] [priority={m.get('priority')}] [roles={roles}]")
+	elif args.telegram_cmd == "roles":
+		from red_pill.core.model_catalog import ModelCatalog, ModelCatalogError
+
+		try:
+			catalog = ModelCatalog()
+		except ModelCatalogError as e:
+			print(f"[ERROR] {e}")
+			return
+		print("🎭 Roles definidos:")
+		for role in catalog.role_names():
+			cascade = [m["id"] for m in catalog.cascade_for(role=role)]
+			print(f"  {role}: {', '.join(cascade)}")
+	elif args.telegram_cmd == "queue":
+		from red_pill.cognitive.queue_manager import CognitiveQueueManager
+
+		queue = CognitiveQueueManager()
+		tasks = queue.list_tasks(limit=args.limit)
+		print(f"🗂️  Cola central ({len(tasks)} jobs activos):")
+		for t in tasks[: args.limit]:
+			title = (t.get("title") or "")[:60]
+			print(f"  {t['id'][:8]} {t['status']:<10} prio={t['priority']} {title}")
+	else:
+		print("Usage: red-pill telegram [models|roles|queue]")
+
+
 def handle_p2p(args: argparse.Namespace) -> None:
 	"""Sovereign P2P Synchronization (Delta Engine) Management."""
 	from red_pill.core.p2p_sync import SovereignSyncEngine, add_peer_alias, get_local_public_key
@@ -1053,6 +1096,15 @@ def main() -> None:
 	ide_sub.add_parser("status", help="Show IDE bridge capabilities and health")
 	ide_sub.add_parser("test", help="Run connectivity test against the IDE")
 
+	# Telegram bridge utilities (RFC_TELEGRAM_RESILIENCE) — scripts tontos, sin agente
+	tg_parser = subparsers.add_parser("telegram", help="Telegram bridge utilities (catalogo/cola)")
+	tg_sub = tg_parser.add_subparsers(dest="telegram_cmd")
+	tg_models = tg_sub.add_parser("models", help="List curated model catalog (no shell a 'opencode models')")
+	tg_models.add_argument("--backend", choices=["opencode", "claude", "agy", "local"], help="Filter models by backend")
+	tg_sub.add_parser("roles", help="List role aliases and their cascade")
+	tg_queue = tg_sub.add_parser("queue", help="Show queue + inbox/outbox state")
+	tg_queue.add_argument("--limit", type=int, default=50, help="Max jobs to show (default 50)")
+
 	# Centralized Job Manager
 	job_parser = subparsers.add_parser("job", help="Centralized Job Manager (deferred, resumable jobs)")
 	job_sub = job_parser.add_subparsers(dest="job_cmd")
@@ -1415,6 +1467,9 @@ def main() -> None:
 			return
 		elif args.command == "ide":
 			handle_ide(args)
+			return
+		elif args.command == "telegram":
+			handle_telegram(args)
 			return
 		elif args.command == "job":
 			handle_job(args)

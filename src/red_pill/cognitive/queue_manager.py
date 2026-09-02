@@ -377,11 +377,19 @@ class CognitiveQueueManager:
 					pass
 		return task
 
-	def list_tasks(self, statuses: Optional[List[str]] = None, limit: int = 50, mission_id: Optional[str] = None) -> List[Dict[str, Any]]:
+	def list_tasks(
+		self,
+		statuses: Optional[List[str]] = None,
+		limit: int = 50,
+		mission_id: Optional[str] = None,
+		mission_prefix: Optional[str] = None,
+	) -> List[Dict[str, Any]]:
 		"""Listado resumido para `red-pill job list` (activas por defecto, sin payload completo).
 
 		`mission_id`: filtra por el grupo de aislamiento entre forges (solo jobs
 		de esa misión). None = todas las misiones.
+		`mission_prefix` (D22): filtra por prefijo del mission_id (LIKE) — usado
+		por el delivery de Telegram (mission_id `telegram:...`). None = sin filtro.
 		"""
 		if statuses is None:
 			statuses = ["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED"]
@@ -398,6 +406,9 @@ class CognitiveQueueManager:
 		if mission_id is not None:
 			query += " AND mission_id = ?"
 			params.append(mission_id)
+		if mission_prefix is not None:
+			query += " AND mission_id LIKE ? || '%'"
+			params.append(mission_prefix)
 		query += " ORDER BY status = 'PROCESSING' DESC, status = 'PAUSING' DESC, priority DESC, created_at ASC LIMIT ?"
 		params.append(limit)
 
@@ -559,6 +570,28 @@ class CognitiveQueueManager:
 			except (json.JSONDecodeError, TypeError):
 				checkpoint = {}
 			checkpoint["dirty_kill"] = {**marker, "at": time.time()}
+			conn.execute(
+				"UPDATE cognitive_tasks SET checkpoint_data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+				(json.dumps(checkpoint), task_id),
+			)
+
+	def set_checkpoint_key(self, task_id: str, key: str, value: Any) -> None:
+		"""Read-modify-write de una clave del checkpoint (D22/D19).
+
+		A diferencia de `update_checkpoint()` — que REEMPLAZA el JSON completo y
+		destruiría `checkpoint_data.response` — este método añade/actualiza una
+		sola clave preservando el resto. Patrón de `mark_dirty_kill()`. Lo usa el
+		delivery de Telegram para sellar `telegram_delivered` sin tocar `response`.
+		"""
+		with self._get_connection() as conn:
+			row = conn.execute("SELECT checkpoint_data FROM cognitive_tasks WHERE id = ?", (task_id,)).fetchone()
+			if not row:
+				return
+			try:
+				checkpoint = json.loads(row["checkpoint_data"]) if row["checkpoint_data"] else {}
+			except (json.JSONDecodeError, TypeError):
+				checkpoint = {}
+			checkpoint[key] = value
 			conn.execute(
 				"UPDATE cognitive_tasks SET checkpoint_data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
 				(json.dumps(checkpoint), task_id),
