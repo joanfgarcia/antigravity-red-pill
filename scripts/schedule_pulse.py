@@ -26,6 +26,8 @@ SLEEP_SERVICE = "redpill-sleep.service"
 SLEEP_TIMER = "redpill-sleep.timer"
 GRAPHIFY_SERVICE = "redpill-graphify.service"
 GRAPHIFY_TIMER = "redpill-graphify.timer"
+BANK_JANITOR_SERVICE = "redpill-bank-janitor.service"
+BANK_JANITOR_TIMER = "redpill-bank-janitor.timer"
 SYSTEMD_USER_DIR = os.path.expanduser("~/.config/systemd/user")
 
 # Launchd label (macOS)
@@ -216,6 +218,8 @@ def _uninstall_linux() -> None:
 		"redpill-worker.timer",
 		"redpill-chronicle.timer",
 		"redpill-pulse.timer",
+		GRAPHIFY_TIMER,
+		BANK_JANITOR_TIMER,
 	):
 		if has_systemd:
 			subprocess.run(["systemctl", "--user", "disable", "--now", timer], check=False)
@@ -235,6 +239,10 @@ def _uninstall_linux() -> None:
 		"redpill-pulse.timer",
 		"redpill-pulse.service",
 		"red-pill-minion.service",
+		GRAPHIFY_TIMER,
+		GRAPHIFY_SERVICE,
+		BANK_JANITOR_TIMER,
+		BANK_JANITOR_SERVICE,
 	):
 		path = os.path.join(SYSTEMD_USER_DIR, name)
 		if os.path.exists(path):
@@ -426,6 +434,31 @@ def install_graphify_timer(uv_path: str, interval_hours: int = 1) -> None:
 		print("[WARN] systemd unavailable; graphify units written to disk but not activated.")
 
 
+def install_bank_janitor_timer(uv_path: str) -> None:
+	"""Opt-in: install + enable the nightly memory-bank hygiene timer (03:30).
+
+	NOT part of the default pulse install — invoked only via `--with-bank-janitor`.
+	Pure-logic hygiene (bank_janitor.py): archives stale unreferenced files, writes
+	bank_health.json and emits a pain signal on threshold — semantic compaction stays
+	on-demand (operator decision 2026-09-03). Linux/systemd only.
+	"""
+	if platform.system() != "Linux":
+		print("[bank-janitor] timer install is Linux/systemd only; skipping.")
+		return
+	os.makedirs(SYSTEMD_USER_DIR, exist_ok=True)
+	script = os.path.join(PROJECT_ROOT, "scripts", "bank_janitor.py")
+	_write_systemd_unit(
+		BANK_JANITOR_SERVICE, f"{uv_path} run python {script} --apply", "Red Pill Memory Bank Janitor (hygiene, no LLM)", type="oneshot", nice=15
+	)
+	_write_calendar_timer(BANK_JANITOR_TIMER, "*-*-* 03:30:00", "Nightly Memory Bank Hygiene (bank_health.json + pain on threshold)")
+	if _is_systemd_available():
+		subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
+		subprocess.run(["systemctl", "--user", "enable", "--now", BANK_JANITOR_TIMER], check=True)
+		print("[OK] bank-janitor timer installed & enabled.")
+	else:
+		print("[WARN] systemd unavailable; bank-janitor units written to disk but not activated.")
+
+
 def main() -> None:
 	parser = argparse.ArgumentParser(description="Cross-platform pulse scheduler for Red Pill.")
 	parser.add_argument(
@@ -434,6 +467,9 @@ def main() -> None:
 	parser.add_argument("--uninstall", action="store_true", help="Remove the scheduled job for the current platform")
 	parser.add_argument(
 		"--with-graphify", action="store_true", help="Also install+enable the periodic graphify reconciliation timer (opt-in, Linux only)"
+	)
+	parser.add_argument(
+		"--with-bank-janitor", action="store_true", help="Also install+enable the nightly memory-bank hygiene timer (opt-in, Linux only)"
 	)
 	args = parser.parse_args()
 
@@ -469,6 +505,8 @@ def main() -> None:
 
 	if args.with_graphify and system == "Linux":
 		install_graphify_timer(uv_path, args.interval_hours)
+	if args.with_bank_janitor and system == "Linux":
+		install_bank_janitor_timer(uv_path)
 
 
 if __name__ == "__main__":

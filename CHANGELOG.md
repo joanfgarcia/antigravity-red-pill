@@ -4,6 +4,27 @@ Dos frentes: **Memento** (RFC-002, fases 0–3.5 completas — la grabadora vuel
 al disco y Qdrant emprende el camino a memoria curada) y el aislamiento de la
 actividad del operador frente a los runs headless del despertar autónomo.
 
+### 🧹 `bank_janitor` — el 'Memory Optimizer' prometido, por fin real (sin LLM)
+
+- `scripts/bank_janitor.py` (patrón graphify_sync: núcleo testeable + timer
+  oneshot): para cada workspace del registro con banco `.red-pill/memory/`,
+  archiva ficheros >90d SIN referencia desde `MEMORY.md`, detecta duplicados
+  exactos (sha256) y referencias rotas del índice, escribe `bank_health.json`
+  y **emite señal de dolor** `memory_bank_bloat_<ws>` al córtex si salta un
+  umbral (`BANK_MAX_ACTIVE_BYTES` 1 MiB · `BANK_MAX_FILE_BYTES` 80 KiB ·
+  `BANK_MAX_BROKEN_RATIO` 0.2, override por entorno). La compactación
+  semántica NO se automatiza: bajo demanda del Operador (decisión 2026-09-03).
+- **Guard sin índice**: un banco sin `MEMORY.md` (o sin referencias) solo REPORTA los
+  candidatos a archivado y jamás mueve nada — sin índice no hay base para decidir
+  (`archive_suppressed_no_index` en `bank_health.json`).
+- `schedule_pulse.py`: opt-in `--with-bank-janitor` (timer calendario 03:30,
+  `nice=15`, `--apply`). El uninstall ahora retira también los timers de
+  graphify y bank-janitor (gap preexistente).
+- Origen: auditoría 2026-09-03 del circuito del memory bank de la capa Azrael —
+  los timers prometidos por `SETUP_GUIDE.md`/`AI_WORKSPACE_ARCHITECTURE.md`
+  (Memory Optimizer diario, Code Graph Refresh horario) no existían; el de
+  graphify ya estaba implementado (`graphify_sync.py`, AD-015) pero sin activar.
+
 ### 📼 Memento Chronicle (RFC-002, ex "Sovereign Vault")
 
 El archivo verbatim en disco: árbol markdown por-sesión
