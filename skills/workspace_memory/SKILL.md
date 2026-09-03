@@ -12,6 +12,19 @@ This Skill defines your inherent capability to manage and utilize the workspace-
 - **Decision Recording**: When you make a key technical decision (e.g. choosing a pattern, configuring a model, solving a bug), ensure it is memorized in Qdrant (`work_memories` collection) so it will automatically be projected into the workspace bank.
 - **Trainee Handoff**: If you are working on a multi-phase task or fanning out subagents, write status updates to memory files under `<root>/.red-pill/memory/` so subsequent agents can read them.
 
+## 💧 1b. Session-Start Hydration (MANDATORY when CWD is a registered workspace)
+
+The bank is useless if nobody reads it. At session start (and after compaction),
+if your CWD falls inside a registered workspace:
+1. `read_workspace_memory(workspace="<ws>", filename="MEMORY.md")` — the index
+   (`@fichero.md` refs, canonical convention — decisión operador 2026-09-03).
+2. `read_workspace_memory(workspace="<ws>", filename="bank_health.json")` — if
+   `thresholds_tripped` is non-empty, surface it: the bank needs attention
+   (oversized file, broken refs) and semantic compaction is operator on-demand.
+3. Anti-bloat: index + health ONLY. Read a bank file in full only when the task
+   at hand requires it — never preemptively.
+Skip silently (no calls) when CWD is outside every registered workspace.
+
 ## 🛠️ 2. MCP Tool Interface (RedPill-Kernel)
 You interact with the workspace filing cabinet using actions registered under the `RedPill-Kernel` MCP server (specifically under `bunker_memory_api` and `swarm_orchestrator_api` parents):
 

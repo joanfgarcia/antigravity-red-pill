@@ -1238,7 +1238,11 @@ class IDEWorker:
 			f"MANDATORY FIRST STEPS:\n"
 			f'1. Call `mcp_RedPill-Kernel_interceptor_rp` with user_prompt=<your awakening directive> and mode="{cfg.get_config().IDENTITY_DEPTH_HEADLESS}".\n'
 			f'2. Call `mcp_RedPill-Kernel_refresh_session_context` with mode="{cfg.get_config().IDENTITY_DEPTH_HEADLESS}" to load your identity from the Bünker.\n'
-			f"3. Then proceed with your autonomous work.\n"
+			f"3. Hydrate the workspace bank (max 2 calls, skip if CWD is outside every registered workspace): "
+			f"call `bunker_memory_api read_workspace_memory` for `MEMORY.md` of the workspace owning your CWD, "
+			f"plus its `bank_health.json`; if `thresholds_tripped` is non-empty, include it in your report — "
+			f"semantic compaction is operator on-demand, never auto-compact.\n"
+			f"4. Then proceed with your autonomous work.\n"
 			f"</constraint>\n"
 			f"</RULE[user_global]>\n"
 			f"</user_rules>\n\n"

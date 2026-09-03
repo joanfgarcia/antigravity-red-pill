@@ -22,6 +22,10 @@ actividad del operador frente a los runs headless del despertar autónomo.
   `file://` a `@refs`. Los enlaces markdown no-`@refs` se diagnostican como
   `non_canonical_refs` en `bank_health.json` (no cuentan como índice, para que la
   convención no degrade en silencio). Tests: `tests/test_bank_janitor.py` (7 casos).
+- **Hidratación al arrancar** (el bank no sirve si nadie lo lee): `skills/workspace_memory`
+  §1b obliga a leer `MEMORY.md` + `bank_health.json` del workspace del CWD al inicio
+  de sesión (índice + health, nunca ficheros completos de oficio); el prompt del
+  awakening lo cablea como paso 3 (máx. 2 llamadas, se salta fuera de workspaces).
 - `schedule_pulse.py`: opt-in `--with-bank-janitor` (timer calendario 03:30,
   `nice=15`, `--apply`). El uninstall ahora retira también los timers de
   graphify y bank-janitor (gap preexistente).
