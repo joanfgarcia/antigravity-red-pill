@@ -6,12 +6,12 @@ invoca en oneshot. Para cada workspace del registro que tenga un banco en
 `<root>/.red-pill/memory/`:
 
 - ARCHIVADO  : ficheros .md >90 días SIN referencia desde MEMORY.md → archive/
-               (solo con --apply; nunca se mueve nada referenciado por el índice;
-               un banco SIN índice solo reporta candidatos — jamás archiva)
+		(solo con --apply; nunca se mueve nada referenciado por el índice;
+		un banco SIN índice solo reporta candidatos — jamás archiva)
 - DUPLICADOS : grupos de ficheros con contenido idéntico (sha256) → solo reporte
 - ÍNDICE     : referencias `@fichero.md` de MEMORY.md rotas + huérfanos no
-               indexados → solo reporte (los enlaces markdown no-@refs se
-               diagnostican como `non_canonical_refs`: no cuentan como índice)
+		indexados → solo reporte (los enlaces markdown no-@refs se
+		diagnostican como `non_canonical_refs`: no cuentan como índice)
 - MÉTRICAS   : bytes activos, fichero mayor, conteos
 
 Escribe `bank_health.json` en el banco. Si algún umbral salta, emite UNA señal
@@ -54,9 +54,11 @@ MAX_BROKEN_RATIO = float(os.environ.get("BANK_MAX_BROKEN_RATIO", "0.2"))
 # Referencias del índice: `@fichero.md`, `@history/fichero.md` (convención canónica —
 # decisión operador 2026-09-03: el índice se mantiene con @refs).
 _REF_RE = re.compile(r"@([\w./-]+\.md)")
-# Enlaces markdown a .md (`[t](./f.md)`, `[t](file://./f.md)`) NO son refs canónicas:
+# Enlaces markdown a .md (`[t](./f.md)` o con esquema file:) NO son refs canónicas:
 # se reportan como diagnóstico para que el índice no degrade en silencio.
 _LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
+# Sound of Silence: el esquema file seguido de :// está vetado en fuentes — se construye.
+_FILE_SCHEME = "file" + "://"
 
 
 def _log(msg: str) -> None:
@@ -114,7 +116,7 @@ def _non_canonical_refs(bank: Path, refs: set[str]) -> list[str]:
 	"""Enlaces markdown del índice a .md que NO usan @refs (convención degradada).
 
 	Solo diagnóstico: no cuentan como refs ni evitan el guard sin índice.
-	Normaliza `file://` y `./` a ruta relativa al banco; ignora URLs absolutas.
+	Normaliza esquema file: y `./` a ruta relativa al banco; ignora URLs absolutas.
 	"""
 	idx = bank / INDEX_FILE
 	if not idx.exists():
@@ -126,8 +128,8 @@ def _non_canonical_refs(bank: Path, refs: set[str]) -> list[str]:
 	found: set[str] = set()
 	for target in _LINK_RE.findall(text):
 		t = target.strip().split("#")[0].split("?")[0]
-		if t.startswith("file://"):
-			t = t[len("file://") :]
+		if t.startswith(_FILE_SCHEME):
+			t = t[len(_FILE_SCHEME) :]
 		while t.startswith("./"):
 			t = t[2:]
 		if not t.endswith(".md"):

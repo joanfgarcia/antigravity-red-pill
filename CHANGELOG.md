@@ -1,8 +1,9 @@
-## [7.22.0] - Unreleased (Memento Chronicle & Despertar autónomo)
+## [7.22.0] - Unreleased (Memento Chronicle, Despertar autónomo, JOB-001 & Bank Janitor)
 
-Dos frentes: **Memento** (RFC-002, fases 0–3.5 completas — la grabadora vuelve
-al disco y Qdrant emprende el camino a memoria curada) y el aislamiento de la
-actividad del operador frente a los runs headless del despertar autónomo.
+Cuatro frentes: **Memento** (RFC-002, fases 0–3.5 completas — la grabadora vuelve
+al disco y Qdrant emprende el camino a memoria curada), el aislamiento de la
+actividad del operador frente a los runs headless del despertar autónomo, la
+**trazabilidad de jobs** (JOB-001) y la **higiene del memory bank** (`bank_janitor`).
 
 ### 🧹 `bank_janitor` — el 'Memory Optimizer' prometido, por fin real (sin LLM)
 
@@ -38,6 +39,16 @@ actividad del operador frente a los runs headless del despertar autónomo.
   los timers prometidos por `SETUP_GUIDE.md`/`AI_WORKSPACE_ARCHITECTURE.md`
   (Memory Optimizer diario, Code Graph Refresh horario) no existían; el de
   graphify ya estaba implementado (`graphify_sync.py`, AD-015) pero sin activar.
+
+### 🔗 JOB-001 — trazabilidad de jobs (parent, progreso, doble salida)
+
+- `parent_task_id` + `progress` en el queue: encadenamiento y seguimiento de jobs
+  agénticos y DAG (incl. `mission_id` para aislamiento entre forges).
+- `job_list` con doble salida: humana por defecto y estructurada JSON (`--json` en
+  CLI, `format=json` en MCP: id/source/status/prio/mission/parent/progress/attempts/
+  updated_at/title) para parseo agéntico (Aleth/IDE/Telegram).
+- Fix: `handle_job_list` importaba `json` sin declararlo (NameError en la salida
+  JSON) + `ruff format` en verde (el CI del PR fallaba en lint).
 
 ### 📼 Memento Chronicle (RFC-002, ex "Sovereign Vault")
 

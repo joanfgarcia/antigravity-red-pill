@@ -45,6 +45,9 @@ This document catalogs the utility scripts found in the `scripts/` directory. Th
 ### `chronicle_*.py`
 **Purpose:** Scripts like `chronicle_daily.py` and `chronicle_distill.py` handle the semantic compression and consolidation of the agent's short-term memories into long-term directives.
 
+### `bank_janitor.py`
+**Purpose:** Mechanical hygiene of the per-workspace memory bank (`<ws>/.red-pill/memory/`, no LLM): archives `.md` files >90d unreferenced from `MEMORY.md` (canonical `@refs`), detects exact duplicates (sha256) and broken index refs, writes `bank_health.json` per workspace and emits a `memory_bank_bloat_<ws>` pain signal on threshold. Dry-run by default (`--apply` to archive; a bank without index only ever reports — `archive_suppressed_no_index`). Opt-in nightly timer via `schedule_pulse.py --with-bank-janitor` (03:30). Index convention: `@fichero.md` (see `skills/workspace_memory` §1b–§1d).
+
 ### `reembed_collections.py`
 **Purpose:** Recompute stored vectors after an `EMBEDDING_MODEL` change (e.g. English-only → multilingual). Same 384-dim → no schema migration. Resumable via a persisted cursor, `--dry-run` by default (`--execute` to write), excludes `archive_memories` unless listed.
 
