@@ -35,7 +35,7 @@ actividad del operador frente a los runs headless del despertar autónomo, la
 - `schedule_pulse.py`: opt-in `--with-bank-janitor` (timer calendario 03:30,
   `nice=15`, `--apply`). El uninstall ahora retira también los timers de
   graphify y bank-janitor (gap preexistente).
-- Origen: auditoría 2026-09-03 del circuito del memory bank de la capa Azrael —
+- Origen: auditoría 2026-09-03 del circuito del memory bank —
   los timers prometidos por `SETUP_GUIDE.md`/`AI_WORKSPACE_ARCHITECTURE.md`
   (Memory Optimizer diario, Code Graph Refresh horario) no existían; el de
   graphify ya estaba implementado (`graphify_sync.py`, AD-015) pero sin activar.

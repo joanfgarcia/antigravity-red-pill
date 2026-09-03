@@ -19,8 +19,8 @@ These workspaces live in the **registry**: `~/.config/red-pill/workspaces.yaml`
 version: 1
 agent_core: ~/Documents/IA/Titanium_Core          # your GLOBAL desk (transversal)
 workspaces:
-  - { name: legacy, root: ~/Workspace,  atlas: ~/Workspace/project-atlas, graphify: false, access: false }
-  - { name: azrael, root: ~/Discworld, atlas: ~/Discworld/Azrael/atlas,  graphify: true,  access: true  }
+  - { name: legacy-app, root: ~/work/legacy-app, atlas: ~/work/legacy-app/atlas, graphify: false, access: false }
+  - { name: next-app, root: ~/work/next-app, atlas: ~/work/next-app/atlas,  graphify: true,  access: true  }
 ```
 
 | Field | Meaning |
@@ -33,7 +33,7 @@ workspaces:
 ### Monorepo pattern: one peer entry per architecture
 
 Workspaces are peers with no parent/child relationship — a legacy monorepo and a
-new-architecture repo are simply two entries (like `legacy` / `azrael` above, each
+new-architecture repo are simply two entries (like `legacy-app` / `next-app` above, each
 pointing at its own standards `atlas`). When `root` is a container of several git
 repos, the **project map** is not the `atlas:` field: it lives in
 **`.graphify-projects.yaml`** (which repos to index, `enabled` per repo) for the
