@@ -1098,7 +1098,12 @@ class IDEWorker:
 			if channel != "system":
 				cursor.execute(
 					"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
-					(channel, channel_user_id, None, json.dumps({"text": err_text + "\n\n_El mensaje queda DEFERRED — cuando creas que ha vuelto la quota, usa /deferred._"})),
+					(
+						channel,
+						channel_user_id,
+						None,
+						json.dumps({"text": err_text + "\n\n_El mensaje queda DEFERRED — cuando creas que ha vuelto la quota, usa /deferred._"}),
+					),
 				)
 			for m_id in msg_ids:
 				cursor.execute("UPDATE inbox SET status = 'DEFERRED' WHERE id = ?", (m_id,))
@@ -1228,12 +1233,20 @@ class IDEWorker:
 			f"call `job_manager_api job_list` and check for any in-flight DAG job (source=dag_job, status PENDING/PROCESSING/RESUMING). "
 			f"If one is running, DO NOT launch a new DAG job — dedicate this awakening to monitoring that DAG (job_status) "
 			f"and scanning for other issues (fetch_signal_memories, check_minion_inbox, keymaker health). "
-			f"If you DO launch a DAG while none is in flight, include `\"origin\": \"awakening\"` in its payload so its "
+			f"If `fetch_signal_memories` shows an active `memory_bank_bloat_<ws>` pain signal, read that workspace's "
+			f"`bank_health.json` (via `bunker_memory_api read_workspace_memory`) and include a one-line summary "
+			f"(biggest file, orphans, broken refs) in your report, offering the operator on-demand semantic compaction — "
+			f"NEVER auto-compact (operator decision 2026-09-03).\n"
+			f'If you DO launch a DAG while none is in flight, include `"origin": "awakening"` in its payload so its '
 			f"minion sessions are not mistaken for operator activity by the next awakening.\n"
 			f"MANDATORY FIRST STEPS:\n"
 			f'1. Call `mcp_RedPill-Kernel_interceptor_rp` with user_prompt=<your awakening directive> and mode="{cfg.get_config().IDENTITY_DEPTH_HEADLESS}".\n'
 			f'2. Call `mcp_RedPill-Kernel_refresh_session_context` with mode="{cfg.get_config().IDENTITY_DEPTH_HEADLESS}" to load your identity from the Bünker.\n'
-			f"3. Then proceed with your autonomous work.\n"
+			f"3. Hydrate the workspace bank (max 2 calls, skip if CWD is outside every registered workspace): "
+			f"call `bunker_memory_api read_workspace_memory` for `MEMORY.md` of the workspace owning your CWD, "
+			f"plus its `bank_health.json`; if `thresholds_tripped` is non-empty, include it in your report — "
+			f"semantic compaction is operator on-demand, never auto-compact.\n"
+			f"4. Then proceed with your autonomous work.\n"
 			f"</constraint>\n"
 			f"</RULE[user_global]>\n"
 			f"</user_rules>\n\n"
@@ -1676,7 +1689,6 @@ class IDEWorker:
 		else:
 			logger.error(f"[Agy] Cognitive task {task['id']} failed: {result.error}")
 			queue_manager.mark_failed(task["id"], result.error or "Empty response")
-
 
 	def _session_cascade_specs(self, channel_user_id: str, cursor) -> List[Dict[str, Any]]:
 		"""Cascade de BridgeTarget (dicts) para el heavy path (D16).

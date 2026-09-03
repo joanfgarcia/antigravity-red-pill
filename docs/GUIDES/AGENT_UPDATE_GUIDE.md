@@ -134,6 +134,18 @@ If updating to v6.1.0 or higher, you must synchronize your infrastructure parame
     uv run python scripts/schedule_pulse.py --uninstall
     ```
 
+    **Opt-in timers (NOT installed by default, Linux/systemd only):**
+    ```bash
+    uv run python scripts/schedule_pulse.py --interval-hours 1 --with-graphify --with-bank-janitor
+    ```
+    - `--with-graphify`: hourly AST-refresh (`graphify_sync.py`, `redpill-graphify.timer`).
+    - `--with-bank-janitor`: nightly memory-bank hygiene at **03:30** (`bank_janitor.py --apply`,
+      `redpill-bank-janitor.timer`): archives `.md` >90d unreferenced from `MEMORY.md`
+      (`@refs` canonical), writes `bank_health.json` per workspace and emits a
+      `memory_bank_bloat_<ws>` pain signal on threshold. Semantic compaction is NEVER
+      automatic — operator on-demand (see `scripts/bank_janitor.py --help`; dry-run
+      without `--apply` moves nothing). The uninstall above also removes both timers.
+
     **Verify timers are active:**
     ```bash
     # Linux

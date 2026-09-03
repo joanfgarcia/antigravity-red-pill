@@ -177,9 +177,7 @@ class TestCascadeBridge:
 		second = _FakeBridge(ok=True)
 		built = {"claude": first, "agy": second}
 		with patch("red_pill.swarm.bridges.factory.create_bridge", side_effect=lambda b: built[b]):
-			res = CascadeBridge(
-				_targets({"backend": "claude", "timeout": 10}, {"backend": "agy", "timeout": 20})
-			).prompt("hi", timeout=30)
+			res = CascadeBridge(_targets({"backend": "claude", "timeout": 10}, {"backend": "agy", "timeout": 20})).prompt("hi", timeout=30)
 		assert res.ok
 		assert first.last_timeout == 10 and second.last_timeout == 20
 
@@ -258,8 +256,6 @@ class TestRegressionGuardD3:
 		assert primario.get("timeout") is not None, (
 			f"Primario {primario.get('model')} sin timeout en .env real → con "
 			"TELEGRAM_INLINE_TIMEOUT=120 (D3) sería un kill agresivo (D14). "
-			"Añade \"timeout\":300 al primario."
+			'Añade "timeout":300 al primario.'
 		)
-		assert primario["timeout"] >= 300, (
-			f"Primario timeout={primario['timeout']} < 300s — no es generoso (D14)."
-		)
+		assert primario["timeout"] >= 300, f"Primario timeout={primario['timeout']} < 300s — no es generoso (D14)."

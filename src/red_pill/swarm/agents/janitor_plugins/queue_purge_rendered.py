@@ -40,7 +40,7 @@ class QueuePurgeRenderedPlugin(JanitorPlugin):
 		rendered_groups = set()
 		for session_id, entry in registry.sessions_of("memory_queue").items():
 			if entry.get("dir") and session_id.startswith("mcp:"):
-				rendered_groups.add(session_id[len("mcp:"):])  # "<originator>:<AAAA-MM-DD>"
+				rendered_groups.add(session_id[len("mcp:") :])  # "<originator>:<AAAA-MM-DD>"
 
 		if not rendered_groups:
 			janitor.log("[Janitor] queue_purge_rendered: nada renderizado aún — sin purga.")

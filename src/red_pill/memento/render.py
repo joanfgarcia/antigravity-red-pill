@@ -88,7 +88,7 @@ def extract_body(text: str) -> str:
 		return text
 	for i in range(1, len(lines)):
 		if lines[i].strip() == "---":
-			return "\n".join(lines[i + 1:])
+			return "\n".join(lines[i + 1 :])
 	return text
 
 

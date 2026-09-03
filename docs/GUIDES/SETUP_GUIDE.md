@@ -19,16 +19,29 @@ These workspaces live in the **registry**: `~/.config/red-pill/workspaces.yaml`
 version: 1
 agent_core: ~/Documents/IA/Titanium_Core          # your GLOBAL desk (transversal)
 workspaces:
-  - { name: legacy, root: ~/Workspace,  atlas: ~/Workspace/project-atlas, graphify: false, access: false }
-  - { name: azrael, root: ~/Discworld, atlas: ~/Discworld/Azrael/atlas,  graphify: true,  access: true  }
+  - { name: legacy-app, root: ~/work/legacy-app, atlas: ~/work/legacy-app/atlas, graphify: false, access: false }
+  - { name: next-app, root: ~/work/next-app, atlas: ~/work/next-app/atlas,  graphify: true,  access: true  }
 ```
 
 | Field | Meaning |
 |-------|---------|
-| `root`     | the project repo root. |
-| `atlas`    | optional explicit standards path (`null` = auto-discover via `.agent`). |
+| `root`     | the unit root — normally the project repo root. It MAY be a container dir holding several projects (each with its own git repo); inner projects are NOT separate registry entries. |
+| `atlas`    | optional explicit standards path (`null` = auto-discover via `.agent`). **Not** the map of inner projects — that lives in manifests (see below). |
 | `graphify` | whether the AST-refresh timer indexes this workspace. |
 | `access`   | **the switch** — grant the agent filesystem access to this workspace. |
+
+### Monorepo pattern: one peer entry per architecture
+
+Workspaces are peers with no parent/child relationship — a legacy monorepo and a
+new-architecture repo are simply two entries (like `legacy-app` / `next-app` above, each
+pointing at its own standards `atlas`). When `root` is a container of several git
+repos, the **project map** is not the `atlas:` field: it lives in
+**`.graphify-projects.yaml`** (which repos to index, `enabled` per repo) for the
+graph, and **`.agent/ATLAS.md`** per repo for the cognitive map and rules. The
+memory bank stays one per workspace root (`root/.red-pill/memory/`). Work setup
+reference: the new-arch standards repo (`atlas/`) additionally carries a TOML
+manifest listing every project (own git repo each) with its properties — that
+manifest, not `atlas:`, is the fleet map.
 
 ## What install wires up
 

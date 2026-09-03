@@ -127,6 +127,7 @@ class _CommitTrackingConn:
 	def __getattr__(self, name):
 		attr = getattr(self._conn, name)
 		if name == "commit":
+
 			def _tracked(*a, **kw):
 				self._call_order.append("commit")
 				return attr(*a, **kw)
@@ -143,9 +144,7 @@ class TestCommitBeforePrompt:
 		from red_pill.swarm.bridges import ConversationResult
 
 		bridge = MagicMock()
-		bridge.prompt.return_value = ConversationResult(
-			conversation_id="conv", response="respuesta de prueba", model="opencode-go/deepseek-v4-pro"
-		)
+		bridge.prompt.return_value = ConversationResult(conversation_id="conv", response="respuesta de prueba", model="opencode-go/deepseek-v4-pro")
 		worker._bridge_telegram = bridge
 		worker._caps = MagicMock()
 		worker._caps.backend.value = "opencode"

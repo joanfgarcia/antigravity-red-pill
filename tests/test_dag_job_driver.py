@@ -187,6 +187,7 @@ def test_dag_compound_parallel_runs_all(tmp_path, monkeypatch):
 
 # ── Pausa a mitad de step: flag `pausable` + gate de grupo paralelo ──────────
 
+
 def test_group_pause_gate_rule():
 	"""La pausa a mitad de un grupo paralelo solo se honra cuando TODAS las etapas
 	aún en vuelo son pausables; se reevalúa en cada completación."""
@@ -246,9 +247,11 @@ def test_dag_sequential_pause_honored_checkpoint_preserved(tmp_path, monkeypatch
 
 	def _create(minion_id, **kw):
 		if minion_id == "command_runner":
+
 			class _Cmd:
 				async def execute(self, task, **kwargs):
 					return {"status": "success", "returncode": 0, "stdout": "ok", "summary": "ok"}
+
 			return _Cmd()
 		if minion_id == "agent":
 			return _ProbeAgent()
@@ -752,6 +755,7 @@ def test_dag_validate_rejects_bad_on_fail(tmp_path):
 
 # ── FASE 2: type: dag (composición por REFERENCIA, RFC_JOB_DAG §4.5) ──────────
 
+
 def _recipe(reference: str, stages):
 	"""Simula load_recipe: devuelve la 5-tupla (source, payload, priority, parent, is_seed)."""
 	return "dag_job", {"manifest": {"workdir": ".", "stages": stages}}, 5, None, False
@@ -770,14 +774,22 @@ def test_dag_type_dag_expands_and_runs(tmp_path, monkeypatch):
 	monkeypatch.setattr(
 		DagJobDriver,
 		"_load_recipe",
-		classmethod(lambda cls, ref: _recipe(ref, [
-			{"id": "r1", "type": "command", "minion": "command_runner", "command": "echo uno"},
-			{"id": "r2", "type": "command", "minion": "command_runner", "command": "echo dos", "depends_on": ["r1"]},
-		])),
+		classmethod(
+			lambda cls, ref: _recipe(
+				ref,
+				[
+					{"id": "r1", "type": "command", "minion": "command_runner", "command": "echo uno"},
+					{"id": "r2", "type": "command", "minion": "command_runner", "command": "echo dos", "depends_on": ["r1"]},
+				],
+			)
+		),
 	)
-	payload = _payload(str(ws), [
-		{"id": "sub", "type": "dag", "recipe": "test-recipe"},
-	])
+	payload = _payload(
+		str(ws),
+		[
+			{"id": "sub", "type": "dag", "recipe": "test-recipe"},
+		],
+	)
 	# El submit expande SIEMPRE: el runner nunca ve type: dag.
 	expanded = DagJobDriver.expand_manifest(payload)
 	d.validate(expanded)
@@ -835,9 +847,14 @@ def test_dag_type_dag_failsafe_models_propagate(tmp_path, monkeypatch):
 	monkeypatch.setattr(
 		DagJobDriver,
 		"_load_recipe",
-		classmethod(lambda cls, ref: _recipe(ref, [
-			{"id": "agent-inner", "type": "agent", "minion": "agent", "model": "flash", "prompt": "x"},
-		])),
+		classmethod(
+			lambda cls, ref: _recipe(
+				ref,
+				[
+					{"id": "agent-inner", "type": "agent", "minion": "agent", "model": "flash", "prompt": "x"},
+				],
+			)
+		),
 	)
 	payload = _payload(str(ws), [{"id": "sub", "type": "dag", "recipe": "bad-recipe"}])
 	with pytest.raises(ValueError, match="sin modelo configurado"):
@@ -861,9 +878,14 @@ def test_dag_type_dag_on_fail_inherited(tmp_path, monkeypatch):
 	monkeypatch.setattr(
 		DagJobDriver,
 		"_load_recipe",
-		classmethod(lambda cls, ref: _recipe(ref, [
-			{"id": "inner", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "x"},
-		])),
+		classmethod(
+			lambda cls, ref: _recipe(
+				ref,
+				[
+					{"id": "inner", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "x"},
+				],
+			)
+		),
 	)
 	payload = _payload(str(ws), [{"id": "sub", "type": "dag", "recipe": "fragile", "on_fail": "stop"}])
 	expanded = DagJobDriver.expand_manifest(payload)
@@ -874,18 +896,28 @@ def test_dag_type_dag_on_fail_inherited(tmp_path, monkeypatch):
 
 # ── Homónimos entre ramas: resolución por RUTA (auditoría 2026-08-21) ────────
 
+
 def _homonym_stages():
 	"""F1: scout→implementor(on_fail stop); F2: implementor(on_fail warn)→qa.
 	Roles repetidos ENTRE fases: exactamente lo que emite manifest-compile.mjs."""
 	return [
-		{"id": "F1", "type": "compound", "sub_etapas": [
-			{"id": "scout", "type": "agent", "minion": "agent", "model": "m", "prompt": "p"},
-			{"id": "implementor", "type": "agent", "minion": "agent", "model": "m", "prompt": "p", "depends_on": ["scout"], "on_fail": "stop"},
-		]},
-		{"id": "F2", "type": "compound", "depends_on": ["F1"], "sub_etapas": [
-			{"id": "implementor", "type": "agent", "minion": "agent", "model": "m", "prompt": "boom", "on_fail": "warn"},
-			{"id": "qa", "type": "agent", "minion": "agent", "model": "m", "prompt": "p", "depends_on": ["implementor"]},
-		]},
+		{
+			"id": "F1",
+			"type": "compound",
+			"sub_etapas": [
+				{"id": "scout", "type": "agent", "minion": "agent", "model": "m", "prompt": "p"},
+				{"id": "implementor", "type": "agent", "minion": "agent", "model": "m", "prompt": "p", "depends_on": ["scout"], "on_fail": "stop"},
+			],
+		},
+		{
+			"id": "F2",
+			"type": "compound",
+			"depends_on": ["F1"],
+			"sub_etapas": [
+				{"id": "implementor", "type": "agent", "minion": "agent", "model": "m", "prompt": "boom", "on_fail": "warn"},
+				{"id": "qa", "type": "agent", "minion": "agent", "model": "m", "prompt": "p", "depends_on": ["implementor"]},
+			],
+		},
 	]
 
 
@@ -959,9 +991,12 @@ def test_type_dag_expansion_inherits_recipe_defaults(tmp_path, monkeypatch):
 		"mission_id": "sub",
 		"model": "opencode-go/deepseek-v4-pro",
 		"backend": "opencode",
-		"manifest": {"workdir": ".", "stages": [
-			{"id": "lens", "type": "agent", "minion": "agent", "prompt": "x"},
-		]},
+		"manifest": {
+			"workdir": ".",
+			"stages": [
+				{"id": "lens", "type": "agent", "minion": "agent", "prompt": "x"},
+			],
+		},
 	}
 	monkeypatch.setattr(
 		DagJobDriver,
@@ -1020,5 +1055,5 @@ def test_payload_mode_reaches_minions_and_params_win(tmp_path, monkeypatch):
 		checkpoint = outcome.new_checkpoint
 		if outcome.completed:
 			break
-	assert record[0][1].get("mode") == "deep"   # hereda del payload
-	assert record[1][1].get("mode") == "lazy"   # params de etapa pisa al payload
+	assert record[0][1].get("mode") == "deep"  # hereda del payload
+	assert record[1][1].get("mode") == "lazy"  # params de etapa pisa al payload

@@ -157,9 +157,7 @@ roles:
 		with patch("red_pill.core.model_router.get_router", return_value=router):
 			with patch("red_pill.cognitive.queue_manager.CognitiveQueueManager") as mock_qm:
 				mock_qm.return_value.enqueue_task.return_value = "job-abc"
-				worker._enqueue_heavy_path(
-					text="tarea", channel="telegram", channel_user_id="user_a", msg_ids=[1], cursor=cursor, conn=conn
-				)
+				worker._enqueue_heavy_path(text="tarea", channel="telegram", channel_user_id="user_a", msg_ids=[1], cursor=cursor, conn=conn)
 
 		payload = mock_qm.return_value.enqueue_task.call_args[1]["payload"]
 		assert payload["cascade"][0]["model"] == "opencode-go/deepseek-v4-pro"

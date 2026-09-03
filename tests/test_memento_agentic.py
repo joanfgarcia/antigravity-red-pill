@@ -18,7 +18,14 @@ def fake_transport(significance=0.8):
 	def transport(system, user, max_tokens):
 		if system == REFINE_SYSTEM:
 			return json.dumps(
-				{"significance": significance, "emotion": "cyan", "intensity": 0.7, "theme": "memento_test", "relics": ["carpaccio"], "cross_refs": []}
+				{
+					"significance": significance,
+					"emotion": "cyan",
+					"intensity": 0.7,
+					"theme": "memento_test",
+					"relics": ["carpaccio"],
+					"cross_refs": [],
+				}
 			)
 		return json.dumps({"title": "Panel adversarial de prueba", "summary": "Resumen denso de la sección.", "keywords": ["memento", "test"]})
 
@@ -28,7 +35,10 @@ def fake_transport(significance=0.8):
 def _tree_with_session(tmp_path, n_messages=5, session="opencode:s1"):
 	root = tmp_path / "memento"
 	registry = MementoRegistry(path=tmp_path / "reg.json")
-	msgs = [{"role": "user" if i % 2 == 0 else "assistant", "content": f"Mensaje {i} útil.", "timestamp": 1787234592.0 + i * 60} for i in range(n_messages)]
+	msgs = [
+		{"role": "user" if i % 2 == 0 else "assistant", "content": f"Mensaje {i} útil.", "timestamp": 1787234592.0 + i * 60}
+		for i in range(n_messages)
+	]
 	rendered = render_session(session, "opencode", "opencode", msgs)
 	write_session(root, rendered)
 	registry.upsert(

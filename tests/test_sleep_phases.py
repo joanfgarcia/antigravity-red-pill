@@ -147,6 +147,7 @@ def test_runner_clears_vram_busy_on_real_cycle():
 
 # ── Drain cutoff: the cycle terminates even if sessions keep writing ───────────
 
+
 def test_drain_cutoff_bounds_scroll_filter_and_terminates():
 	"""The drain only touches engrams with timestamp <= cutoff; points written
 	after the cycle started stay buffered for the NEXT cycle (no infinite drain)."""

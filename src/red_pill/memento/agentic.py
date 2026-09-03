@@ -29,7 +29,9 @@ Transport = Callable[[str, str, int], str]
 
 _TITLE_SLUG_RE = re.compile(r"[^a-z0-9]+")
 
-DISTILL_SYSTEM = "You are Samantha, the Bünker Scribe. You produce structured, high-density JSON distillations of agentic coding dialogue. Output ONLY valid JSON."
+DISTILL_SYSTEM = (
+	"You are Samantha, the Bünker Scribe. You produce structured, high-density JSON distillations of agentic coding dialogue. Output ONLY valid JSON."
+)
 DISTILL_USER = """Distill this conversation chunk into a navigable section.
 
 Rules:
@@ -42,7 +44,9 @@ Chunk:
 {content}
 """
 
-REFINE_SYSTEM = "You are Samantha, the Bünker Curator. You judge which distilled sections carry durable value for long-term memory. Output ONLY valid JSON."
+REFINE_SYSTEM = (
+	"You are Samantha, the Bünker Curator. You judge which distilled sections carry durable value for long-term memory. Output ONLY valid JSON."
+)
 REFINE_USER = """Judge this distilled section for long-term memory.
 
 Rules:
@@ -100,7 +104,7 @@ def _extract_json(text: str) -> Optional[Dict[str, Any]]:
 			depth -= 1
 			if depth == 0:
 				try:
-					parsed = json.loads(text[start:i + 1])
+					parsed = json.loads(text[start : i + 1])
 					return parsed if isinstance(parsed, dict) else None
 				except Exception:
 					return None
@@ -273,7 +277,9 @@ def run_agentic(root: Path, registry: Any, targets: List[Tuple[str, str]], trans
 		if index_file.exists():
 			update_frontmatter_fields(index_file, {"significance": round(max_significance, 2)})
 			# invariante §4.5.1: el sello NO puede mover el cuerpo
-			assert compute_hash(extract_body(index_file.read_text(encoding="utf-8"))) == entry.get("memento_hash"), "significance stamp moved the body"
+			assert compute_hash(extract_body(index_file.read_text(encoding="utf-8"))) == entry.get("memento_hash"), (
+				"significance stamp moved the body"
+			)
 		entry["agentic"] = {
 			"distilled_at": datetime.now(timezone.utc).isoformat(),
 			"hash": entry.get("memento_hash"),

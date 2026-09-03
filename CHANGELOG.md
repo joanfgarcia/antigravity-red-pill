@@ -1,8 +1,54 @@
-## [7.22.0] - Unreleased (Memento Chronicle & Despertar autónomo)
+## [7.22.0] - Unreleased (Memento Chronicle, Despertar autónomo, JOB-001 & Bank Janitor)
 
-Dos frentes: **Memento** (RFC-002, fases 0–3.5 completas — la grabadora vuelve
-al disco y Qdrant emprende el camino a memoria curada) y el aislamiento de la
-actividad del operador frente a los runs headless del despertar autónomo.
+Cuatro frentes: **Memento** (RFC-002, fases 0–3.5 completas — la grabadora vuelve
+al disco y Qdrant emprende el camino a memoria curada), el aislamiento de la
+actividad del operador frente a los runs headless del despertar autónomo, la
+**trazabilidad de jobs** (JOB-001) y la **higiene del memory bank** (`bank_janitor`).
+
+### 🧹 `bank_janitor` — el 'Memory Optimizer' prometido, por fin real (sin LLM)
+
+- `scripts/bank_janitor.py` (patrón graphify_sync: núcleo testeable + timer
+  oneshot): para cada workspace del registro con banco `.red-pill/memory/`,
+  archiva ficheros >90d SIN referencia desde `MEMORY.md`, detecta duplicados
+  exactos (sha256) y referencias rotas del índice, escribe `bank_health.json`
+  y **emite señal de dolor** `memory_bank_bloat_<ws>` al córtex si salta un
+  umbral (`BANK_MAX_ACTIVE_BYTES` 1 MiB · `BANK_MAX_FILE_BYTES` 80 KiB ·
+  `BANK_MAX_BROKEN_RATIO` 0.2, override por entorno). La compactación
+  semántica NO se automatiza: bajo demanda del Operador (decisión 2026-09-03).
+- **Guard sin índice**: un banco sin `MEMORY.md` (o sin referencias) solo REPORTA los
+  candidatos a archivado y jamás mueve nada — sin índice no hay base para decidir
+  (`archive_suppressed_no_index` en `bank_health.json`).
+- **Convención canónica `@refs`** (decisión operador 2026-09-03): el índice se mantiene
+  con `@fichero.md`; los `MEMORY.md` de `sharing`/`frankenswarm` migran sus enlaces
+  `file://` a `@refs`. Los enlaces markdown no-`@refs` se diagnostican como
+  `non_canonical_refs` en `bank_health.json` (no cuentan como índice, para que la
+  convención no degrade en silencio). Tests: `tests/test_bank_janitor.py` (7 casos).
+- **Hidratación al arrancar** (el bank no sirve si nadie lo lee): `skills/workspace_memory`
+  §1b obliga a leer `MEMORY.md` + `bank_health.json` del workspace del CWD al inicio
+  de sesión (índice + health, nunca ficheros completos de oficio); el prompt del
+  awakening lo cablea como paso 3 (máx. 2 llamadas, se salta fuera de workspaces).
+- **Write path** (`skills/workspace_memory` §1c): artefacto durable en un workspace →
+  fichero bajo `.red-pill/memory/` + entrada `@refs` en `MEMORY.md` (efímero fuera).
+- **Loop del dolor** (skill §1d + prompt awakening): ante `memory_bank_bloat_<ws>`
+  activa, resumir `bank_health.json` y ofrecer compactación on-demand — jamás
+  auto-compactar (decisión operador 2026-09-03).
+- `schedule_pulse.py`: opt-in `--with-bank-janitor` (timer calendario 03:30,
+  `nice=15`, `--apply`). El uninstall ahora retira también los timers de
+  graphify y bank-janitor (gap preexistente).
+- Origen: auditoría 2026-09-03 del circuito del memory bank —
+  los timers prometidos por `SETUP_GUIDE.md`/`AI_WORKSPACE_ARCHITECTURE.md`
+  (Memory Optimizer diario, Code Graph Refresh horario) no existían; el de
+  graphify ya estaba implementado (`graphify_sync.py`, AD-015) pero sin activar.
+
+### 🔗 JOB-001 — trazabilidad de jobs (parent, progreso, doble salida)
+
+- `parent_task_id` + `progress` en el queue: encadenamiento y seguimiento de jobs
+  agénticos y DAG (incl. `mission_id` para aislamiento entre forges).
+- `job_list` con doble salida: humana por defecto y estructurada JSON (`--json` en
+  CLI, `format=json` en MCP: id/source/status/prio/mission/parent/progress/attempts/
+  updated_at/title) para parseo agéntico (Aleth/IDE/Telegram).
+- Fix: `handle_job_list` importaba `json` sin declararlo (NameError en la salida
+  JSON) + `ruff format` en verde (el CI del PR fallaba en lint).
 
 ### 📼 Memento Chronicle (RFC-002, ex "Sovereign Vault")
 
