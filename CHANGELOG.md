@@ -26,6 +26,11 @@ actividad del operador frente a los runs headless del despertar autónomo.
   §1b obliga a leer `MEMORY.md` + `bank_health.json` del workspace del CWD al inicio
   de sesión (índice + health, nunca ficheros completos de oficio); el prompt del
   awakening lo cablea como paso 3 (máx. 2 llamadas, se salta fuera de workspaces).
+- **Write path** (`skills/workspace_memory` §1c): artefacto durable en un workspace →
+  fichero bajo `.red-pill/memory/` + entrada `@refs` en `MEMORY.md` (efímero fuera).
+- **Loop del dolor** (skill §1d + prompt awakening): ante `memory_bank_bloat_<ws>`
+  activa, resumir `bank_health.json` y ofrecer compactación on-demand — jamás
+  auto-compactar (decisión operador 2026-09-03).
 - `schedule_pulse.py`: opt-in `--with-bank-janitor` (timer calendario 03:30,
   `nice=15`, `--apply`). El uninstall ahora retira también los timers de
   graphify y bank-janitor (gap preexistente).

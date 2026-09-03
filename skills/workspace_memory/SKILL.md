@@ -25,6 +25,24 @@ if your CWD falls inside a registered workspace:
    at hand requires it — never preemptively.
 Skip silently (no calls) when CWD is outside every registered workspace.
 
+## 📥 1c. Deposit + Index (write path — keeps `orphans` at zero)
+
+When you produce a durable artifact inside a workspace (plan, review, audit,
+decision log, remediation report): deposit it under `<ws>/.red-pill/memory/`
+and index it in `MEMORY.md` with the canonical `@refs` convention (decisión
+operador 2026-09-03) — one line, e.g. `- @REVIEW_2026-09-03_x.md — qué decide`.
+Ephemeral notes, drafts and task scratch stay OUT of the bank. If you touch the
+index, keep every entry as `@fichero.md`: markdown links are diagnosed as
+`non_canonical_refs` by `scripts/bank_janitor.py` and never count as index.
+
+## 🚨 1d. Pain Loop (`memory_bank_bloat_<ws>` — report, never auto-compact)
+
+`scripts/bank_janitor.py` emits a `memory_bank_bloat_<ws>` pain signal to the
+córtex when thresholds trip. When you see one active (awakening scan or
+`fetch_signal_memories`): read that workspace's `bank_health.json`, report a
+one-line summary (biggest file, orphans, broken refs) and offer the operator
+on-demand semantic compaction. NEVER auto-compact (decisión operador 2026-09-03).
+
 ## 🛠️ 2. MCP Tool Interface (RedPill-Kernel)
 You interact with the workspace filing cabinet using actions registered under the `RedPill-Kernel` MCP server (specifically under `bunker_memory_api` and `swarm_orchestrator_api` parents):
 

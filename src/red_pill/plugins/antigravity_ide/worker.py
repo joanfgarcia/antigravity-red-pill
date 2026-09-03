@@ -1233,6 +1233,10 @@ class IDEWorker:
 			f"call `job_manager_api job_list` and check for any in-flight DAG job (source=dag_job, status PENDING/PROCESSING/RESUMING). "
 			f"If one is running, DO NOT launch a new DAG job — dedicate this awakening to monitoring that DAG (job_status) "
 			f"and scanning for other issues (fetch_signal_memories, check_minion_inbox, keymaker health). "
+			f"If `fetch_signal_memories` shows an active `memory_bank_bloat_<ws>` pain signal, read that workspace's "
+			f"`bank_health.json` (via `bunker_memory_api read_workspace_memory`) and include a one-line summary "
+			f"(biggest file, orphans, broken refs) in your report, offering the operator on-demand semantic compaction — "
+			f"NEVER auto-compact (operator decision 2026-09-03).\n"
 			f'If you DO launch a DAG while none is in flight, include `"origin": "awakening"` in its payload so its '
 			f"minion sessions are not mistaken for operator activity by the next awakening.\n"
 			f"MANDATORY FIRST STEPS:\n"
