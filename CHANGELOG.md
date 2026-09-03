@@ -17,6 +17,11 @@ actividad del operador frente a los runs headless del despertar autónomo.
 - **Guard sin índice**: un banco sin `MEMORY.md` (o sin referencias) solo REPORTA los
   candidatos a archivado y jamás mueve nada — sin índice no hay base para decidir
   (`archive_suppressed_no_index` en `bank_health.json`).
+- **Convención canónica `@refs`** (decisión operador 2026-09-03): el índice se mantiene
+  con `@fichero.md`; los `MEMORY.md` de `sharing`/`frankenswarm` migran sus enlaces
+  `file://` a `@refs`. Los enlaces markdown no-`@refs` se diagnostican como
+  `non_canonical_refs` en `bank_health.json` (no cuentan como índice, para que la
+  convención no degrade en silencio). Tests: `tests/test_bank_janitor.py` (7 casos).
 - `schedule_pulse.py`: opt-in `--with-bank-janitor` (timer calendario 03:30,
   `nice=15`, `--apply`). El uninstall ahora retira también los timers de
   graphify y bank-janitor (gap preexistente).

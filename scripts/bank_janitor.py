@@ -10,7 +10,8 @@ invoca en oneshot. Para cada workspace del registro que tenga un banco en
                un banco SIN índice solo reporta candidatos — jamás archiva)
 - DUPLICADOS : grupos de ficheros con contenido idéntico (sha256) → solo reporte
 - ÍNDICE     : referencias `@fichero.md` de MEMORY.md rotas + huérfanos no
-               indexados → solo reporte
+               indexados → solo reporte (los enlaces markdown no-@refs se
+               diagnostican como `non_canonical_refs`: no cuentan como índice)
 - MÉTRICAS   : bytes activos, fichero mayor, conteos
 
 Escribe `bank_health.json` en el banco. Si algún umbral salta, emite UNA señal
@@ -50,8 +51,12 @@ MAX_ACTIVE_BYTES = int(os.environ.get("BANK_MAX_ACTIVE_BYTES", str(1024 * 1024))
 MAX_FILE_BYTES = int(os.environ.get("BANK_MAX_FILE_BYTES", str(80 * 1024)))
 MAX_BROKEN_RATIO = float(os.environ.get("BANK_MAX_BROKEN_RATIO", "0.2"))
 
-# Referencias del índice: `@fichero.md`, `@history/fichero.md` (convención del scaffold).
+# Referencias del índice: `@fichero.md`, `@history/fichero.md` (convención canónica —
+# decisión operador 2026-09-03: el índice se mantiene con @refs).
 _REF_RE = re.compile(r"@([\w./-]+\.md)")
+# Enlaces markdown a .md (`[t](./f.md)`, `[t](file://./f.md)`) NO son refs canónicas:
+# se reportan como diagnóstico para que el índice no degrade en silencio.
+_LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 
 
 def _log(msg: str) -> None:
@@ -105,6 +110,35 @@ def _index_refs(bank: Path) -> set[str]:
 		return set()
 
 
+def _non_canonical_refs(bank: Path, refs: set[str]) -> list[str]:
+	"""Enlaces markdown del índice a .md que NO usan @refs (convención degradada).
+
+	Solo diagnóstico: no cuentan como refs ni evitan el guard sin índice.
+	Normaliza `file://` y `./` a ruta relativa al banco; ignora URLs absolutas.
+	"""
+	idx = bank / INDEX_FILE
+	if not idx.exists():
+		return []
+	try:
+		text = idx.read_text(encoding="utf-8")
+	except Exception:
+		return []
+	found: set[str] = set()
+	for target in _LINK_RE.findall(text):
+		t = target.strip().split("#")[0].split("?")[0]
+		if t.startswith("file://"):
+			t = t[len("file://") :]
+		while t.startswith("./"):
+			t = t[2:]
+		if not t.endswith(".md"):
+			continue
+		if "://" in t or t.startswith(("/", "..")):
+			continue
+		if t and t not in refs and t != INDEX_FILE:
+			found.add(t)
+	return sorted(found)
+
+
 def audit_bank(bank: Path, ws_name: str, apply: bool) -> dict:
 	files = _active_md_files(bank)
 	refs = _index_refs(bank)
@@ -120,6 +154,9 @@ def audit_bank(bank: Path, ws_name: str, apply: bool) -> dict:
 	broken_refs = sorted(r for r in refs if r not in rel_names)
 	orphans = sorted(n for n in rel_names if n not in refs and n != INDEX_FILE)
 	broken_ratio = (len(broken_refs) / len(refs)) if refs else 0.0
+	non_canonical = _non_canonical_refs(bank, refs)
+	if non_canonical:
+		print(f"  [WARN]  {INDEX_FILE} usa enlaces no canónicos (migrar a @refs): {', '.join(non_canonical)}")
 
 	# Duplicados exactos (sha256 sobre contenido)
 	by_hash: dict[str, list[str]] = defaultdict(list)
@@ -173,6 +210,7 @@ def audit_bank(bank: Path, ws_name: str, apply: bool) -> dict:
 			"refs_total": len(refs),
 			"broken_refs": broken_refs,
 			"orphans": orphans,
+			"non_canonical_refs": non_canonical,
 		},
 		"duplicates": dup_groups,
 		"archived": archived,
