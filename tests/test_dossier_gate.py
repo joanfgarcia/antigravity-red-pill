@@ -31,6 +31,7 @@ def _state(**over):
 
 # ── Tabla de transición (cada fila de §3.4) ──────────────────────────────────
 
+
 def test_verdict_germination_when_no_domain():
 	"""type: idea sin domain → germinación (expansión a llama)."""
 	assert compute_verdict(_state(domain=None)) == {"verdict": "continue", "next_pass": "germination"}
@@ -90,6 +91,7 @@ def test_verdict_respects_declared_pause():
 
 # ── Tope fijo (L2) ───────────────────────────────────────────────────────────
 
+
 def test_fixed_cap_triggers_awaiting_operator():
 	"""pases_ejecutados >= max_passes → awaiting_operator, aunque falte poco."""
 	v = compute_verdict(_state(pases_ejecutados=DEFAULT_MAX_PASSES))
@@ -104,6 +106,7 @@ def test_fixed_cap_parametrizable():
 
 
 # ── Tope dinámico (L2): pasadas sin hallazgos ────────────────────────────────
+
 
 def test_silent_cap_triggers_awaiting_operator():
 	"""3 pasadas sin hallazgos y sin criterio L4 → awaiting_operator."""
@@ -121,6 +124,7 @@ def test_silent_cap_triggers_awaiting_operator():
 
 
 # ── Hallazgos (definición L2) ────────────────────────────────────────────────
+
 
 def test_apply_hallazgo_resets_silent():
 	state = apply_hallazgo(_state(pasadas_sin_hallazgos=2), had_findings=True)
@@ -157,6 +161,7 @@ def test_detect_findings_no_finding_on_answered_question():
 
 # ── Params del gate ──────────────────────────────────────────────────────────
 
+
 def test_inject_gate_params_appends_dossier_and_mission():
 	from red_pill.swarm.agents.dossier_gate import _inject_gate_params
 
@@ -170,6 +175,7 @@ def test_inject_gate_params_appends_dossier_and_mission():
 
 
 # ── Integración del minion (I/O real sobre dossier temporal) ─────────────────
+
 
 def _write_state(tmp_path, **over):
 	import yaml
@@ -250,6 +256,7 @@ def asyncio_run(coro):
 
 # ── Remediación auditoría 2026-08-21 ─────────────────────────────────────────
 
+
 def test_pass_recipes_gate_depends_on_pass():
 	"""El gate jamás corre si su pase no completó: depends_on obligatorio."""
 	from pathlib import Path
@@ -271,14 +278,25 @@ def test_enqueue_pass_renders_validates_and_expands(monkeypatch):
 
 	recipe_payload = {
 		"mission_id": "dossier-loop",
-		"manifest": {"workdir": "/tmp", "stages": [
-			{"id": "research", "type": "agent", "minion": "agent", "model": "opencode-go/deepseek-v4-pro", "prompt": "Lee {dossier_dir}/README.md"},
-			{"id": "gate", "type": "command", "minion": "dossier_gate", "params": {}, "depends_on": ["research"]},
-		]},
+		"manifest": {
+			"workdir": "/tmp",
+			"stages": [
+				{
+					"id": "research",
+					"type": "agent",
+					"minion": "agent",
+					"model": "opencode-go/deepseek-v4-pro",
+					"prompt": "Lee {dossier_dir}/README.md",
+				},
+				{"id": "gate", "type": "command", "minion": "dossier_gate", "params": {}, "depends_on": ["research"]},
+			],
+		},
 	}
 	monkeypatch.setattr("red_pill.jobs.recipes.load_recipe", lambda ref, base_dir=None: ("dag_job", recipe_payload, 5, None, False))
 	monkeypatch.setattr("red_pill.jobs.drivers.dag._resolve_minion_kind", lambda mid: "agent" if mid == "agent" else "logic")
-	monkeypatch.setattr("red_pill.cognitive.queue_manager.CognitiveQueueManager.list_tasks", lambda self, statuses=None, limit=50, mission_id=None: [])
+	monkeypatch.setattr(
+		"red_pill.cognitive.queue_manager.CognitiveQueueManager.list_tasks", lambda self, statuses=None, limit=50, mission_id=None: []
+	)
 	captured = {}
 
 	def _fake_enqueue(self, source, payload, priority=5, mission_id=None, **kw):
@@ -289,7 +307,7 @@ def test_enqueue_pass_renders_validates_and_expands(monkeypatch):
 	job_id = enqueue_pass("research", "/ideas/i-1", "mission-i-1")
 	assert job_id == "job-xyz"
 	assert captured["mission_id"] == "mission-i-1"
-	assert captured["payload"]["mission_id"] == "mission-i-1"          # pisado, no setdefault
+	assert captured["payload"]["mission_id"] == "mission-i-1"  # pisado, no setdefault
 	stage = captured["payload"]["manifest"]["stages"][0]
 	assert "{dossier_dir}" not in stage["prompt"] and "/ideas/i-1" in stage["prompt"]
 	gate = captured["payload"]["manifest"]["stages"][-1]
@@ -301,13 +319,18 @@ def test_enqueue_pass_failsafe_blocks_flash(monkeypatch):
 
 	recipe_payload = {
 		"mission_id": "dossier-loop",
-		"manifest": {"workdir": "/tmp", "stages": [
-			{"id": "research", "type": "agent", "minion": "agent", "model": "flash", "prompt": "x {dossier_dir}"},
-		]},
+		"manifest": {
+			"workdir": "/tmp",
+			"stages": [
+				{"id": "research", "type": "agent", "minion": "agent", "model": "flash", "prompt": "x {dossier_dir}"},
+			],
+		},
 	}
 	monkeypatch.setattr("red_pill.jobs.recipes.load_recipe", lambda ref, base_dir=None: ("dag_job", recipe_payload, 5, None, False))
 	monkeypatch.setattr("red_pill.jobs.drivers.dag._resolve_minion_kind", lambda mid: "agent")
-	monkeypatch.setattr("red_pill.cognitive.queue_manager.CognitiveQueueManager.list_tasks", lambda self, statuses=None, limit=50, mission_id=None: [])
+	monkeypatch.setattr(
+		"red_pill.cognitive.queue_manager.CognitiveQueueManager.list_tasks", lambda self, statuses=None, limit=50, mission_id=None: []
+	)
 	with pytest.raises(ValueError):
 		enqueue_pass("research", "/ideas/i-1", "m-1")
 
@@ -316,7 +339,9 @@ def test_enqueue_pass_rejects_seed(monkeypatch):
 	from red_pill.swarm.agents.dossier_gate import enqueue_pass
 
 	monkeypatch.setattr("red_pill.jobs.recipes.load_recipe", lambda ref, base_dir=None: ("dag_job", {}, 5, None, True))
-	monkeypatch.setattr("red_pill.cognitive.queue_manager.CognitiveQueueManager.list_tasks", lambda self, statuses=None, limit=50, mission_id=None: [])
+	monkeypatch.setattr(
+		"red_pill.cognitive.queue_manager.CognitiveQueueManager.list_tasks", lambda self, statuses=None, limit=50, mission_id=None: []
+	)
 	with pytest.raises(RuntimeError, match="seed"):
 		enqueue_pass("research", "/ideas/i-1", "m-1")
 

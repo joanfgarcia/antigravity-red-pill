@@ -1098,7 +1098,12 @@ class IDEWorker:
 			if channel != "system":
 				cursor.execute(
 					"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
-					(channel, channel_user_id, None, json.dumps({"text": err_text + "\n\n_El mensaje queda DEFERRED — cuando creas que ha vuelto la quota, usa /deferred._"})),
+					(
+						channel,
+						channel_user_id,
+						None,
+						json.dumps({"text": err_text + "\n\n_El mensaje queda DEFERRED — cuando creas que ha vuelto la quota, usa /deferred._"}),
+					),
 				)
 			for m_id in msg_ids:
 				cursor.execute("UPDATE inbox SET status = 'DEFERRED' WHERE id = ?", (m_id,))
@@ -1228,7 +1233,7 @@ class IDEWorker:
 			f"call `job_manager_api job_list` and check for any in-flight DAG job (source=dag_job, status PENDING/PROCESSING/RESUMING). "
 			f"If one is running, DO NOT launch a new DAG job — dedicate this awakening to monitoring that DAG (job_status) "
 			f"and scanning for other issues (fetch_signal_memories, check_minion_inbox, keymaker health). "
-			f"If you DO launch a DAG while none is in flight, include `\"origin\": \"awakening\"` in its payload so its "
+			f'If you DO launch a DAG while none is in flight, include `"origin": "awakening"` in its payload so its '
 			f"minion sessions are not mistaken for operator activity by the next awakening.\n"
 			f"MANDATORY FIRST STEPS:\n"
 			f'1. Call `mcp_RedPill-Kernel_interceptor_rp` with user_prompt=<your awakening directive> and mode="{cfg.get_config().IDENTITY_DEPTH_HEADLESS}".\n'
@@ -1676,7 +1681,6 @@ class IDEWorker:
 		else:
 			logger.error(f"[Agy] Cognitive task {task['id']} failed: {result.error}")
 			queue_manager.mark_failed(task["id"], result.error or "Empty response")
-
 
 	def _session_cascade_specs(self, channel_user_id: str, cursor) -> List[Dict[str, Any]]:
 		"""Cascade de BridgeTarget (dicts) para el heavy path (D16).

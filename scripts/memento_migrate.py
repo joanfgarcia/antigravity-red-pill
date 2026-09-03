@@ -157,7 +157,14 @@ def _export_raw(plugin: Any, cid: str, session_id: str, step_count: Optional[int
 		raw_path = plugin.export_raw(cid, raw_dir)
 		if raw_path is None:
 			return
-		meta = {"session_id": session_id, "source": plugin.name, "conversation_id": cid, "step_count": step_count, "workspace": workspace, "exported_at": now}
+		meta = {
+			"session_id": session_id,
+			"source": plugin.name,
+			"conversation_id": cid,
+			"step_count": step_count,
+			"workspace": workspace,
+			"exported_at": now,
+		}
 		(raw_dir / "meta.json").write_text(_json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 	except Exception as e:
 		logger.warning(f"[{plugin.name}] raw export failed for {cid}: {e}")

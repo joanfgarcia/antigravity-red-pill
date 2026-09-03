@@ -7,7 +7,6 @@ Covers:
   - cascade integra el override de sesión (D9)
 """
 
-
 import pytest
 
 from red_pill.core.model_catalog import ModelCatalog

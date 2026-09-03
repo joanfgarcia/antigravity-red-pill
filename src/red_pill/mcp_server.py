@@ -1915,21 +1915,39 @@ async def handle_job_submit(arguments: Dict[str, Any]):
 )
 async def handle_job_list(arguments: Dict[str, Any]):
 	try:
+		import json
+
 		# list_tasks(None) también excluye COMPLETED — para `all` hay que pasar
 		# la lista completa explícita o el flag es un no-op.
 		statuses = _ALL_JOB_STATUSES if arguments.get("all") else ["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED"]
 		tasks = _queue().list_tasks(statuses=statuses, mission_id=arguments.get("mission_id"))
 		if arguments.get("json") or arguments.get("format") == "json":
 			# JOB-001: salida estructurada para parseo agéntico (Aleth/IDE/Telegram)
-			return [types.TextContent(type="text", text=json.dumps(
-				[{
-					"id": t["id"], "source": t["source"], "status": t["status"],
-					"priority": t["priority"], "mission_id": t.get("mission_id"),
-					"parent_task_id": t.get("parent_task_id"),
-					"title": t.get("title"), "progress": t.get("progress"),
-					"attempts": t["attempts"], "updated_at": t.get("updated_at"),
-					"dirty_kill": t.get("dirty_kill"),
-				} for t in tasks], ensure_ascii=False, indent=1))]
+			return [
+				types.TextContent(
+					type="text",
+					text=json.dumps(
+						[
+							{
+								"id": t["id"],
+								"source": t["source"],
+								"status": t["status"],
+								"priority": t["priority"],
+								"mission_id": t.get("mission_id"),
+								"parent_task_id": t.get("parent_task_id"),
+								"title": t.get("title"),
+								"progress": t.get("progress"),
+								"attempts": t["attempts"],
+								"updated_at": t.get("updated_at"),
+								"dirty_kill": t.get("dirty_kill"),
+							}
+							for t in tasks
+						],
+						ensure_ascii=False,
+						indent=1,
+					),
+				)
+			]
 		if not tasks:
 			return [types.TextContent(type="text", text="Cola vacía (o sin jobs de esa misión).")]
 

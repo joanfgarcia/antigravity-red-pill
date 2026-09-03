@@ -146,6 +146,7 @@ def detect_findings(before: Dict[str, Any], after: Dict[str, Any]) -> bool:
 	contradicción NUEVA). Comparación por CONTENIDO, no por conteo: responder
 	una pregunta y abrir otra en el mismo pase ES un hallazgo aunque el conteo
 	no cambie; una contradicción que PERSISTE de un pase anterior NO lo es."""
+
 	def _qs(s: Dict[str, Any]) -> set:
 		q = s.get("open_questions")
 		return {str(x) for x in q} if isinstance(q, list) else set()
@@ -220,7 +221,12 @@ class DossierGateMinion(Minion):
 		state_path.write_text(yaml.safe_dump(state, allow_unicode=True, sort_keys=False), encoding="utf-8")
 
 		if verdict["verdict"] in _TERMINAL:
-			return {"status": "success", "verdict": verdict["verdict"], "summary": f"dossier {verdict['verdict']}: {verdict.get('reason', '')}", "state": state}
+			return {
+				"status": "success",
+				"verdict": verdict["verdict"],
+				"summary": f"dossier {verdict['verdict']}: {verdict.get('reason', '')}",
+				"state": state,
+			}
 
 		if verdict["verdict"] in _PAUSE_STATES:
 			from red_pill.jobs.drivers.base import JobPauseRequested
@@ -232,7 +238,13 @@ class DossierGateMinion(Minion):
 		if next_pass not in PASSES:
 			return {"status": "error", "error": f"pase desconocido '{next_pass}'", "state": state}
 		next_job_id: Optional[str] = self._enqueue_next_pass(kwargs, next_pass, state)
-		return {"status": "success", "verdict": "continue", "next_pass": next_pass, "summary": f"pase siguiente encolado: {next_pass} ({next_job_id[:8] if next_job_id else '?'})", "state": state}
+		return {
+			"status": "success",
+			"verdict": "continue",
+			"next_pass": next_pass,
+			"summary": f"pase siguiente encolado: {next_pass} ({next_job_id[:8] if next_job_id else '?'})",
+			"state": state,
+		}
 
 	def _enqueue_next_pass(self, kwargs: Dict[str, Any], next_pass: str, state: Dict[str, Any]) -> Optional[str]:
 		"""Delegado en `enqueue_pass` (única puerta de encolado del loop)."""
@@ -294,7 +306,8 @@ def enqueue_pass(next_pass: str, dossier_dir: str, mission_id: str, priority: in
 		raise ValueError(f"pase desconocido '{next_pass}' (válidos: {PASSES}).")
 	qm = CognitiveQueueManager()
 	alive = [
-		t for t in qm.list_tasks(statuses=["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED"], mission_id=mission_id)
+		t
+		for t in qm.list_tasks(statuses=["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED"], mission_id=mission_id)
 		if t.get("id") != current_job_id
 	]
 	if alive:

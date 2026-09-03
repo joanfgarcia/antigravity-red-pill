@@ -1126,7 +1126,11 @@ def main() -> None:
 	job_list = job_sub.add_parser("list", help="Listar jobs activos, pausados y en cola")
 	job_list.add_argument("--all", action="store_true", help="Incluir también COMPLETED")
 	job_list.add_argument("--mission", help="Solo jobs de esa misión (aislamiento entre forges)")
-	job_list.add_argument("--json", action="store_true", help="JOB-001: salida estructurada JSON (id/source/status/prio/mission/parent/progress/attempts/updated_at/title) para parseo agéntico")
+	job_list.add_argument(
+		"--json",
+		action="store_true",
+		help="JOB-001: salida estructurada JSON (id/source/status/prio/mission/parent/progress/attempts/updated_at/title) para parseo agéntico",
+	)
 
 	job_status = job_sub.add_parser("status", help="Detalle completo de un job (checkpoint, progreso)")
 	job_status.add_argument("job_id", help="Id completo o prefijo corto")

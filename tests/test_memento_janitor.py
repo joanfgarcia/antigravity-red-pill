@@ -65,9 +65,7 @@ async def test_queue_purge_rendered_only_rendered_completed_and_cold(tmp_path):
 	registry.upsert("memory_queue", f"mcp:Aleth (Test):{time.strftime('%Y-%m-%d')}", {"dir": "2026-08/memory_queue/z", "month": "2026-08"})
 	registry.save()
 
-	result = await QueuePurgeRenderedPlugin().execute(
-		FakeJanitor(), {}, queue_db_path=db, registry_path=tmp_path / "reg.json"
-	)
+	result = await QueuePurgeRenderedPlugin().execute(FakeJanitor(), {}, queue_db_path=db, registry_path=tmp_path / "reg.json")
 	assert result["purged"] == 2
 
 	con = sqlite3.connect(db)

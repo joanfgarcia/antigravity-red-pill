@@ -9,7 +9,6 @@ Covers:
   - catálogo ausente → ModelCatalogError
 """
 
-
 import pytest
 
 from red_pill.core.model_catalog import ModelCatalog, ModelCatalogError

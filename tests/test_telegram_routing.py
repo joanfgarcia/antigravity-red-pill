@@ -115,9 +115,7 @@ class TestProcessViaBridgeRouting:
 
 		worker = IDEWorker.__new__(IDEWorker)
 		bridge = MagicMock()
-		bridge.prompt.return_value = ConversationResult(
-			conversation_id="conv", response=response_text, model="opencode-go/deepseek-v4-pro"
-		)
+		bridge.prompt.return_value = ConversationResult(conversation_id="conv", response=response_text, model="opencode-go/deepseek-v4-pro")
 		worker._bridge_telegram = bridge
 		worker._caps = MagicMock()
 		worker._caps.backend.value = "opencode"

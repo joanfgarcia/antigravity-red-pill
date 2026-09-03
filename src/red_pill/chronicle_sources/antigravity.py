@@ -40,7 +40,9 @@ class AntigravitySourcePlugin(ChronicleSourcePlugin):
 
 	def _normalize(self, data: Dict[str, Any], fallback_ts: Optional[float]) -> List[Dict[str, Any]]:
 		messages = data.get("messages", [])
-		normalized = [{"role": m.get("role"), "content": m.get("content", ""), "timestamp": m.get("timestamp")} for m in messages if isinstance(m, dict)]
+		normalized = [
+			{"role": m.get("role"), "content": m.get("content", ""), "timestamp": m.get("timestamp")} for m in messages if isinstance(m, dict)
+		]
 		# El export no trae timestamps (created_time llega vacío del pipeline de
 		# desencriptado): el mtime del fichero es el proxy disponible — fecha de
 		# export, no de conversación. Solo el primer mensaje se estampa, para que

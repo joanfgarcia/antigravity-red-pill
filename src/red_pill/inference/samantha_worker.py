@@ -104,8 +104,7 @@ def _handle_summarize(payload: Dict[str, Any], samantha_fn: Callable) -> Dict[st
 # ── Enqueue helper (used by producers) ────────────────────
 
 
-def enqueue(action: str, payload: Dict[str, Any], priority: int = 5,
-			parent_task_id: Optional[str] = None, mission_id: Optional[str] = None) -> str:
+def enqueue(action: str, payload: Dict[str, Any], priority: int = 5, parent_task_id: Optional[str] = None, mission_id: Optional[str] = None) -> str:
 	"""Enqueue a task for Samantha processing.
 
 	Args:
@@ -122,8 +121,7 @@ def enqueue(action: str, payload: Dict[str, Any], priority: int = 5,
 
 	payload["action"] = action
 	qm = CognitiveQueueManager()
-	task_id = qm.enqueue_task(source=SAMANTHA_SOURCE, payload=payload, priority=priority,
-		parent_task_id=parent_task_id, mission_id=mission_id)
+	task_id = qm.enqueue_task(source=SAMANTHA_SOURCE, payload=payload, priority=priority, parent_task_id=parent_task_id, mission_id=mission_id)
 	logger.info(f"[SamanthaQueue] Enqueued task {task_id}: {action}")
 	return task_id
 

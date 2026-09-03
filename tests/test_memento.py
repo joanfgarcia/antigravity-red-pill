@@ -106,9 +106,7 @@ def test_render_month_override_wins():
 
 
 def test_render_frontmatter_and_body():
-	rendered = render_session(
-		"opencode:s1", "opencode", "opencode", _messages(), workspace="-home-joan-Workspace", step_count=47, reconstructed=True
-	)
+	rendered = render_session("opencode:s1", "opencode", "opencode", _messages(), workspace="-home-joan-Workspace", step_count=47, reconstructed=True)
 	text = rendered.index_text
 	assert text.startswith("---\nsession_id: opencode:s1\nsource: opencode\n")
 	assert "workspace: -home-joan-Workspace" in text
@@ -193,8 +191,14 @@ def test_chain_update_does_not_shift_split_line_refs(tmp_path):
 def test_rerender_with_chain_links_keeps_hash_stable():
 	first = render_session("opencode:s1", "opencode", "opencode", _messages(25), split_max_messages=10, split_max_chars=100000)
 	second = render_session(
-		"opencode:s1", "opencode", "opencode", _messages(25),
-		prev_session="opencode:s0", next_session="opencode:s2", split_max_messages=10, split_max_chars=100000,
+		"opencode:s1",
+		"opencode",
+		"opencode",
+		_messages(25),
+		prev_session="opencode:s0",
+		next_session="opencode:s2",
+		split_max_messages=10,
+		split_max_chars=100000,
 	)
 	assert first.memento_hash == second.memento_hash  # el frontmatter no participa del hash ni mueve el cuerpo
 
@@ -306,7 +310,9 @@ def test_antigravity_raw_roundtrip(tmp_path, monkeypatch):
 	convo_dir = tmp_path / "exports"
 	convo_dir.mkdir()
 	(convo_dir / "abc.json").write_text(
-		json.dumps({"cascade_id": "abc", "step_count": 2, "messages": [{"role": "user", "content": "hola"}, {"role": "assistant", "content": "qué tal"}]}),
+		json.dumps(
+			{"cascade_id": "abc", "step_count": 2, "messages": [{"role": "user", "content": "hola"}, {"role": "assistant", "content": "qué tal"}]}
+		),
 		encoding="utf-8",
 	)
 	plugin = AntigravitySourcePlugin()
@@ -397,7 +403,9 @@ def test_memory_queue_source_groups_and_excludes(tmp_path):
 
 	db = tmp_path / "bunker_queue.db"
 	con = sqlite3.connect(db)
-	con.execute("CREATE TABLE memory_queue (id INTEGER PRIMARY KEY, prompt TEXT, response TEXT, role TEXT, status TEXT, created_at REAL, originator TEXT)")
+	con.execute(
+		"CREATE TABLE memory_queue (id INTEGER PRIMARY KEY, prompt TEXT, response TEXT, role TEXT, status TEXT, created_at REAL, originator TEXT)"
+	)
 	rows = [
 		("hola aleth", "hola joan", "user", "completed", 1787234592.0, "Aleth (Gemini 1.5 Flash)"),
 		("segundo turno", "respuesta", "user", "completed", 1787238192.0, "Aleth (Gemini 1.5 Flash)"),

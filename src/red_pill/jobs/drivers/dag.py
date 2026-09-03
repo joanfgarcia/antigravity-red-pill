@@ -128,6 +128,7 @@ class _GroupPauseGate:
 	no lo es, se difiere y se reevalúa en cada frontera de completación, de modo
 	que el trabajo ya completado (pausables o no) se preserva en el checkpoint.
 	"""
+
 	def __init__(self, group: List[Tuple[str, Dict[str, Any]]]):
 		self._lock = threading.Lock()
 		self._running = {path for path, _ in group}
@@ -315,7 +316,9 @@ class DagJobDriver(ResumableJobDriver):
 		cls._validate_stages(stages, payload, seen, path="")
 
 	@classmethod
-	def _validate_stages(cls, stages: List[Dict[str, Any]], payload: Dict[str, Any], seen: List[str], path: str, recipe_stack: Optional[List[str]] = None) -> None:
+	def _validate_stages(
+		cls, stages: List[Dict[str, Any]], payload: Dict[str, Any], seen: List[str], path: str, recipe_stack: Optional[List[str]] = None
+	) -> None:
 		if recipe_stack is None:
 			recipe_stack = []
 		for s in stages:
@@ -424,7 +427,11 @@ class DagJobDriver(ResumableJobDriver):
 				_sub_source, sub_payload, _prio, _parent, _is_seed = cls._load_recipe(recipe_ref)
 				sub_stages = copy.deepcopy((sub_payload.get("manifest") or {}).get("stages") or [])
 				_apply_recipe_defaults(sub_stages, sub_payload)
-				compound: Dict[str, Any] = {"id": s["id"], "type": _TYPE_COMPOUND, "sub_etapas": cls._expand_stages(sub_stages, recipe_stack + [recipe_ref])}
+				compound: Dict[str, Any] = {
+					"id": s["id"],
+					"type": _TYPE_COMPOUND,
+					"sub_etapas": cls._expand_stages(sub_stages, recipe_stack + [recipe_ref]),
+				}
 				for key in ("on_fail", "parallel", "depends_on"):
 					if s.get(key) is not None:
 						compound[key] = s[key]
@@ -629,7 +636,9 @@ class DagJobDriver(ResumableJobDriver):
 		self._sleep_cutoff_ts = float(checkpoint_data.get("sleep_cutoff_ts") or 0)
 		if not checkpoint_data:
 			self._sleep_cutoff_ts = float(time.time())
-			logger.info(f"[DagJob] {self.short_id} drain cutoff pinned at {self._sleep_cutoff_ts:.0f} ({time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self._sleep_cutoff_ts))})")
+			logger.info(
+				f"[DagJob] {self.short_id} drain cutoff pinned at {self._sleep_cutoff_ts:.0f} ({time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self._sleep_cutoff_ts))})"
+			)
 
 		# Re-derivar compuestos completados desde sus hojas: un checkpoint de
 		# handoff (job_checkpoint) puede listar solo hojas; sin esto, un

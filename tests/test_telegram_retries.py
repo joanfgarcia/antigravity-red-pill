@@ -165,9 +165,7 @@ class TestD24PainSignal:
 
 		# A ValueError with 'timeout' in the message — classifier says NOT timeout.
 		with patch.object(worker_module, "_emit_d24_pain_signal") as mock_signal:
-			worker._handle_retry_failure(
-				[msg_id], "telegram", "user_a", cursor, exc=ValueError("timeout waiting for server")
-			)
+			worker._handle_retry_failure([msg_id], "telegram", "user_a", cursor, exc=ValueError("timeout waiting for server"))
 			mock_signal.assert_called_once()
 		conn.close()
 
@@ -179,9 +177,7 @@ class TestD24PainSignal:
 		msg_id = _insert_msg(conn)
 
 		with patch.object(worker_module, "_emit_d24_pain_signal") as mock_signal:
-			worker._handle_retry_failure(
-				[msg_id], "telegram", "user_a", cursor, exc=RuntimeError("opencode timed out after 300s")
-			)
+			worker._handle_retry_failure([msg_id], "telegram", "user_a", cursor, exc=RuntimeError("opencode timed out after 300s"))
 			mock_signal.assert_not_called()
 		conn.close()
 
@@ -193,8 +189,6 @@ class TestD24PainSignal:
 		msg_id = _insert_msg(conn)
 
 		with patch.object(worker_module, "_emit_d24_pain_signal") as mock_signal:
-			worker._handle_retry_failure(
-				[msg_id], "telegram", "user_a", cursor, exc=RuntimeError("spawn failed")
-			)
+			worker._handle_retry_failure([msg_id], "telegram", "user_a", cursor, exc=RuntimeError("spawn failed"))
 			mock_signal.assert_not_called()
 		conn.close()
