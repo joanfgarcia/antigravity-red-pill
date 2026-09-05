@@ -97,7 +97,7 @@ def merge_opencode_config(config_path: str, template: dict, backup: bool = True)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from inject_anchor import remove_block, splice_block  # noqa: E402
 
-BLOCK_VERSION = {"sovereign_handshake": 1, "agent_core": 2, "knowledge_access": 2}
+BLOCK_VERSION = {"sovereign_handshake": 1, "agent_core": 2, "knowledge_access": 2, "frontmatter_docs": 3}
 
 
 def _read_seed(seed_path: str) -> str:
@@ -107,7 +107,7 @@ def _read_seed(seed_path: str) -> str:
 
 def write_instructions(instructions_path: str, seeds_dir: str, variables: dict, backup: bool = True, update: bool = False) -> int:
 	"""Write RED_PILL.md with versioned anchor blocks. Returns count of changed blocks."""
-	anchor_names = ["sovereign_handshake", "agent_core", "knowledge_access"]
+	anchor_names = ["sovereign_handshake", "agent_core", "knowledge_access", "frontmatter_docs"]
 	changed = 0
 
 	for anchor in anchor_names:
@@ -387,7 +387,7 @@ def main():
 		# Remove RED_PILL.md anchor blocks
 		instructions_path = os.path.join(config_dir, "RED_PILL.md")
 		if os.path.exists(instructions_path):
-			for anchor in ["sovereign_handshake", "agent_core", "knowledge_access"]:
+			for anchor in ["sovereign_handshake", "agent_core", "knowledge_access", "frontmatter_docs"]:
 				status = remove_block(instructions_path, anchor, backup=backup)
 				if status != "absent":
 					logger.info(f"✓ opencode:{anchor} removed [{instructions_path}]")

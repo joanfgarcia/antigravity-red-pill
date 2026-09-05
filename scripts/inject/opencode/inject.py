@@ -73,9 +73,9 @@ def _write_instructions(instructions_path: str, seeds_dir: str, variables: dict,
 	sys.path.insert(0, str(os.path.join(os.path.dirname(__file__), "..", "..")))
 	from inject_anchor import splice_block  # noqa: E402
 
-	BLOCK_VERSION = {"sovereign_handshake": 1, "agent_core": 2, "knowledge_access": 2}
+	BLOCK_VERSION = {"sovereign_handshake": 1, "agent_core": 2, "knowledge_access": 2, "frontmatter_docs": 3}
 	changed = 0
-	for anchor in ["sovereign_handshake", "agent_core", "knowledge_access"]:
+	for anchor in ["sovereign_handshake", "agent_core", "knowledge_access", "frontmatter_docs"]:
 		seed_path = os.path.join(seeds_dir, anchor + ".md")
 		if not os.path.exists(seed_path):
 			logger.warning(f"Seed not found: {seed_path}")
