@@ -34,7 +34,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _config_common import agent_core_vars, build_vars, subst  # noqa: E402
 
 # ── Anchor block version (bump to force a re-splice on upgrade) ───────────────
-BLOCK_VERSION = {"sovereign_handshake": 3, "agent_core": 2, "knowledge_access": 2}
+BLOCK_VERSION = {"sovereign_handshake": 3, "agent_core": 2, "knowledge_access": 2, "frontmatter_docs": 3}
 
 
 def _version(anchor):

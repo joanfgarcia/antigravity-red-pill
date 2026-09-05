@@ -156,6 +156,18 @@ cron es trazable.
   (`plugins/antigravity_ide/worker.py`).
 - `tests/test_job_manager.py`: `fake_cascade` acepta `origin`.
 
+### 📄 Frontmatter docs convention (Agent_Core & memory banks)
+
+- **[NEW] Anchor `frontmatter_docs`** (`seeds/anchors/frontmatter_docs.md`) +
+  registro en `inject_anchor.py`, `inject_opencode.py` e `inject/opencode/inject.py`:
+  todo `.md` de Agent_Core y bancos de memoria (`FRONTMATTER_TEMPLATE.md`) lleva
+  cabecera YAML con valores en inglés canónico. La doc de proyectos queda fuera de
+  scope (sigue la convención de cada proyecto).
+- **[NEW] Skill `frontmatter`** (`seeds/opencode/skills/frontmatter/SKILL.md`):
+  aplica la plantilla, el ciclo de vida y las reglas de archivo.
+- **[DOCS] `docs/CORE/DOCUMENTATION_MANUAL.md`** (§ Metadata Headers) y
+  **`docs/CORE/CONVENTIONS.md`** (§10.5): convención de cabeceras YAML.
+
 ## [7.21.0] - 2026-08-21 (Remediación de la auditoría del DAG)
 
 Remediación completa de la auditoría del 21-ago (revisión de RFC_JOB_DAG /
