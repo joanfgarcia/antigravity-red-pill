@@ -140,10 +140,12 @@ def _llm_available() -> bool:
 	import os
 	import urllib.request
 
+	# llama.cpp/llama-server responde 200 en /v1/models (o /health), no en la
+	# raíz base (404) — la probe debe apuntar a un endpoint real de salud.
 	url = os.environ.get("MLX_LM_URL", "http://127.0.0.1:8760/v1/chat/completions")
-	base = url.rsplit("/", 2)[0]
+	health = url.rsplit("/", 2)[0] + "/models"
 	try:
-		urllib.request.urlopen(base, timeout=3)
+		urllib.request.urlopen(health, timeout=3)
 		return True
 	except Exception:
 		return False

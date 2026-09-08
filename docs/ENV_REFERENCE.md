@@ -220,6 +220,15 @@ Plugins 05–10. Each is independently toggleable.
 | `MEMENTO_AGENTIC_NIGHT_LIMIT` | `20` | Sessions distilled+refined per nightly chronicle run (bounds local-LLM cost). |
 | `MEMENTO_GATE_ENFORCED` | `False` | **Phase 4 switch.** Flip ONLY with operator approval backed by shadow evidence: chronicle stops ingesting below-threshold sessions into archive_memories. |
 
+> ℹ️ **Agentic pass backend.** The file-based distill/refine (`memento/agentic.py`)
+> talks to the local llama-server via `EDGE_ENGINE_URL`
+> (`http://localhost:8760/v1/chat/completions`); availability is probed at
+> `EDGE_HEALTH_URL` (`http://localhost:8760/v1/models` — the server returns 404
+> on the bare `/v1` base, so the probe must target `/v1/models` or `/health`).
+> `EDGE_MODEL` must match the profile served by `redpill-llm.service` (default
+> `Granite-4.1-8B-Q4_K_M.gguf`, AD-022). If you change the served model, update
+> `EDGE_MODEL` in `src/red_pill/memento/agentic.py`.
+
 > ⚠️ **`MEMENTO_SPLIT_MAX_CHARS` is NOT universal.** Splits are the work units
 > the local distill LLM consumes (RFC-002 §4.2), so the budget must be derived
 > from the smallest context the local model runs with on *this* hardware:

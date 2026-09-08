@@ -1,0 +1,27 @@
+# Backfill del pase agéntico de Memento (RFC-002 §4.5 / §6, Fase 3.5) como job
+# de la cola central — regla job_dag_execution: tarea larga, jamás nohup.
+#
+# Relanza el backfill de sombra que quedó interrumpido (reboot). El marcado es
+# por sesión + crash-recovery: si el step muere, al re-lanzarlo se saltan las
+# sesiones ya destiladas (pending_agentic con root) y sigue desde donde iba.
+#
+# `--limit` acota el lote; el proceso termina antes si no quedan pendientes.
+# Modo bounded (2026-09-08): volumen a priori importante (597) → checkpoint por
+# sesión + progreso N/597 en job_status + pause/kill/resume granulares. El
+# satélite escribe {processed, total} vía RP_CHECKPOINT_FILE tras cada sesión.
+# Prioridad baja (3): el backfill de sombra espera tras sueño (8), chronicle (7)
+# y los trabajos activos — es reanudable, así que no pisa a nadie.
+source: script_job
+priority: 3
+title: Memento agentic backfill (sombra, resto)
+step_command: uv run python scripts/memento_agentic.py --limit 597
+checkpoint_file: state/memento_agentic_progress.json
+progress:
+  mode: bounded
+  current_key: processed
+  total: 597
+preflight:
+  llm_required: true            # LLM local caído → JobDeferred (reintenta, no falla)
+defer_exit_code: 77             # el script sale con esto si el LLM se cae a mitad
+control:
+  max_step_minutes: 480

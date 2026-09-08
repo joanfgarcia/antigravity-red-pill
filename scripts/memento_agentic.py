@@ -16,8 +16,10 @@ Usage:
 
 import argparse
 import logging
+import os
 import sys
 from pathlib import Path
+from typing import Optional
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("memento_agentic")
@@ -48,10 +50,17 @@ def _shadow_report(registry) -> str:
 	return "\n".join(lines)
 
 
+def _checkpoint_path() -> Optional[Path]:
+	"""Checkpoint del modo bounded: lo inyecta el ScriptJobDriver como RP_CHECKPOINT_FILE."""
+	raw = os.environ.get("RP_CHECKPOINT_FILE")
+	return Path(raw) if raw else None
+
+
 def main() -> None:
 	parser = argparse.ArgumentParser(description="Memento agentic pass: Distill → Refine (shadow gate)")
 	parser.add_argument("--limit", type=int, default=None, help="Max sessions this run (default: MEMENTO_AGENTIC_NIGHT_LIMIT)")
 	parser.add_argument("--heal-stale", action="store_true", help="Process only stale sessions (Healer branch, no limit)")
+	parser.add_argument("--force", action="store_true", help="Re-process sessions already distilled on disk (ignore the crash-recovery mark)")
 	parser.add_argument("--shadow-report", action="store_true", help="Print the shadow-gate summary and exit")
 	args = parser.parse_args()
 
@@ -65,7 +74,8 @@ def main() -> None:
 		print(_shadow_report(registry))
 		return
 
-	pending = pending_agentic(registry)
+	root = get_memento_root()
+	pending = pending_agentic(registry, root=root, force=args.force)
 	if args.heal_stale:
 		targets = [(source, session_id) for source, session_id, reason in pending if reason == "stale"]
 	else:
@@ -81,13 +91,24 @@ def main() -> None:
 		logger.warning("Local LLM not available — agentic pass deferred to next cycle.")
 		return
 
-	root = get_memento_root()
-	stats = run_agentic(root, registry, targets, http_transport)
+	stats = run_agentic(root, registry, targets, http_transport, checkpoint_path=_checkpoint_path())
 	registry.save()
 	logger.info(
 		f"Agentic pass complete: {stats['processed']} session(s) distilled+refined, "
 		f"{stats['failed']} failed, shadow would-ingest {stats['would_ingest']}/{stats['processed']}."
 	)
+	# Deferral declarativo (regla job_dag_execution, 2026-09-08): si el LLM local
+	# se cayó (3+ fallos consecutivos de conexión) o no se procesó nada por LLM
+	# caído, salir con RP_DEFER_EXIT_CODE para que el driver marque JobDeferred y
+	# el runner lo reintente cuando el recurso se libere — NO es un error del job.
+	if stats.get("aborted_llm_down") or (stats["processed"] == 0 and stats["failed"] > 0):
+		import os
+
+		defer_code = os.environ.get("RP_DEFER_EXIT_CODE")
+		if defer_code:
+			logger.warning(f"LLM local no disponible (0 procesadas, {stats['failed']} falladas) — saliendo con defer_exit_code={defer_code}")
+			sys.exit(int(defer_code))
+		logger.warning("LLM local no disponible y sin RP_DEFER_EXIT_CODE definido — salida limpia (0 procesadas).")
 
 
 if __name__ == "__main__":
