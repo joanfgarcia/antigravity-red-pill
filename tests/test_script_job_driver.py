@@ -160,6 +160,79 @@ def test_validate_accepts_the_real_bit_payload(tmp_path):
 	)
 
 
+# ── Preflight: LLM local requerido → defer, no fallo (regla job_dag_execution) ──
+
+
+def test_preflight_llm_required_defers_when_llm_down(queue, clean_registry, tmp_path, monkeypatch):
+	"""LLM local caído + preflight.llm_required → JobDeferred: vuelve a PENDING
+	sin gastar intento (el DAG es un planificador "ejecuta cuando se pueda")."""
+	from unittest.mock import patch
+
+	register_driver(ScriptJobDriver)
+	with patch.object(ScriptJobDriver, "_llm_healthy", staticmethod(lambda port: False)):
+		cmd = _script(tmp_path, "print('no debería correr')")
+		job_id = queue.enqueue_task(
+			source="script_job",
+			payload={"step_command": cmd, "cwd": str(tmp_path), "preflight": {"llm_required": True}},
+		)
+
+		assert process_driver_jobs(queue) == 0
+		task = queue.get_task(job_id)
+		assert task["status"] == "PENDING" and task["attempts"] == 0, "LLM caído debe diferir, no fallar ni quemar intento"
+
+
+def test_preflight_llm_required_runs_when_llm_up(queue, clean_registry, tmp_path, monkeypatch):
+	"""LLM disponible → el step corre normal."""
+	from unittest.mock import patch
+
+	register_driver(ScriptJobDriver)
+	with patch.object(ScriptJobDriver, "_llm_healthy", staticmethod(lambda port: True)):
+		cmd = _script(tmp_path, "print('ok')")
+		job_id = queue.enqueue_task(
+			source="script_job",
+			payload={"step_command": cmd, "cwd": str(tmp_path), "preflight": {"llm_required": True}},
+		)
+
+		assert process_driver_jobs(queue) == 1  # 1 job procesado con éxito
+		task = queue.get_task(job_id)
+		assert task["status"] == "COMPLETED"
+
+
+def test_build_env_exposes_defer_and_pause_codes(tmp_path):
+	"""El driver inyecta RP_DEFER_EXIT_CODE/RP_PAUSE_EXIT_CODE al proceso hijo
+	para que el satélite pueda salir declarativamente sin hardcodear el número."""
+	driver = _bind(ScriptJobDriver())
+	env = driver._build_env({"step_command": "echo hi", "defer_exit_code": 77, "pause_exit_code": 78})
+	assert env["RP_DEFER_EXIT_CODE"] == "77"
+	assert env["RP_PAUSE_EXIT_CODE"] == "78"
+	assert env["PYTHONUNBUFFERED"] == "1"
+
+
+def test_build_env_exposes_checkpoint_file_absoluto(tmp_path):
+	"""El driver inyecta RP_CHECKPOINT_FILE (resuelto contra cwd) para el modo
+	bounded: el satélite escribe {current_key: N} ahí tras cada avance."""
+	driver = _bind(ScriptJobDriver())
+	env = driver._build_env({"step_command": "echo hi", "checkpoint_file": "state/prog.json", "progress": {"mode": "bounded"}}, str(tmp_path))
+	assert env["RP_CHECKPOINT_FILE"] == str(tmp_path / "state" / "prog.json")
+
+
+def test_preflight_llm_healthy_fallback_v1models(monkeypatch):
+	"""El health-check prueba /health y cae a /v1/models si 404 (patrón check_sip)."""
+	import urllib.error
+
+	driver = _bind(ScriptJobDriver())
+	calls = []
+
+	def fake_urlopen(url, timeout):
+		calls.append(url)
+		raise urllib.error.HTTPError(url, 404, "nf", None, None)
+
+	monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+	# /health → 404 → /v1/models → también falla → False
+	assert driver._llm_healthy(8760) is False
+	assert any("/health" in c for c in calls) and any("/v1/models" in c for c in calls)
+
+
 # ── Modos de progreso y finalización (D6) ──────────────────────────────────
 
 

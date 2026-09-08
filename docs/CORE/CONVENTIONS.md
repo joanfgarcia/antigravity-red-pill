@@ -274,6 +274,37 @@ The Sound of Silence protocol is enforced automatically by `test_sound_of_silenc
 
 ---
 
+## 10.5 Markdown Metadata — Frontmatter (Desk & Workspace Docs)
+
+Repo `docs/` is reference (bilingual, ALL-CAPS, no frontmatter required). **Desk and
+memory-bank `.md`** (Agent_Core `Aleth_Core/`, `.red-pill/memory/`) MUST start with a
+YAML frontmatter header. Project docs follow each project's own conventions (out of scope):
+
+```yaml
+---
+type: rfc|plan|note|research|audit|log|lore|spec|index
+id: RFC-XXX            # optional
+title: "..."
+status: draft|ratified|in-design|implemented|closed|active|paused|archived
+created: YYYY-MM-DD
+updated: YYYY-MM-DD
+author: <Author Name(s)>  # actual author(s); e.g. Aleth (Netrunner), Joan García — never copy a placeholder
+project: aleth-core|red-pill|neon-link|frankenswarm|obsidian|personal
+related: [...]        # optional
+superseded_by:        # optional
+archived:             # optional
+archive_reason:       # optional
+tags: []
+---
+```
+
+Values are canonical **English** (metadata is machine-consumed). Full template &
+lifecycle: `Aleth_Core/FRONTMATTER_TEMPLATE.md` and `docs/CORE/DOCUMENTATION_MANUAL.md`.
+Lifecycle: born `draft` in the desk → implemented (source of truth moves to the
+project) → `archive/<project>/` with `status: archived`.
+
+---
+
 ## 11. Why This Matters for Agents
 
 An AI agent working on this codebase without this document would likely:

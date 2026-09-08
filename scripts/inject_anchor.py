@@ -34,7 +34,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _config_common import agent_core_vars, build_vars, subst  # noqa: E402
 
 # ── Anchor block version (bump to force a re-splice on upgrade) ───────────────
-BLOCK_VERSION = {"sovereign_handshake": 3, "agent_core": 2, "knowledge_access": 2}
+BLOCK_VERSION = {
+	"sovereign_handshake": 3,
+	"agent_core": 2,
+	"knowledge_access": 2,
+	"frontmatter_docs": 3,
+	"job_dag_execution": 1,
+}
 
 
 def _version(anchor):
@@ -246,7 +252,9 @@ def main():
 	parser = argparse.ArgumentParser(description="Inject/merge red-pill anchor blocks into IDE instruction files.")
 	parser.add_argument("--ide", default="auto", help="csv: auto|all|antigravity|claude-code|claude-desktop-project")
 	parser.add_argument(
-		"--anchor", default="sovereign_handshake,agent_core,knowledge_access", help="csv of anchor seeds to inject (file names in --seeds-dir)"
+		"--anchor",
+		default="sovereign_handshake,agent_core,knowledge_access,job_dag_execution",
+		help="csv of anchor seeds to inject (file names in --seeds-dir)",
 	)
 	parser.add_argument("--workspace", help="Workspace root: resolves ${WORKSPACE} and targets Claude Code <ws>/CLAUDE.md")
 	parser.add_argument("--redpill-dir", help="Red Pill source dir (resolves ${REDPILL_DIR}).")

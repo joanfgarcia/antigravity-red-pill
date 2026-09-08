@@ -63,8 +63,40 @@ preflight: {vram_unload: true, min_free_vram_mb: 3500, memory_max: 16G}
 control: {max_step_minutes: 780, preemptible: false}
 ```
 
+- **`preflight.llm_required: true`** cuando el step usa el **LLM local** (distill,
+  refine, síntesis, cualquier inferencia en :8760): si el LLM no responde, el
+  driver lanza `JobDeferred` y el job vuelve a PENDING **sin quemar intento** —
+  el DAG es un planificador "ejecuta cuando se pueda" y una GPU/LLM ocupada por
+  otra tarea NO es un fallo. Ver 2026-09-08: el backfill de sombra falló 595
+  sesiones y el chronicle murió por timeout porque el LLM estaba caído y el job
+  intentó arrancar igual.
+- **Semántica honesta del preflight (decisión 2026-09-08)**: `llm_required` es un
+  **filtro indicativo, no una garantía de carga**. Si el LLM está claramente caído
+  → defer (no se va a atender AHORA). Si responde → se deja pasar, sabiendo que
+  el modelo puede estar aún cargando y la primera llamada real tardará lo que
+  tarde. **No hay polling** deliberado: si no se atiende, el job vuelve a PENDING
+  y el runner lo reintenta (~1 min) hasta que el recurso esté libre — esa es la
+  espera "cuando se pueda". Esto es una limitación real, no un defecto: pasa igual
+  en una granja de un centro de datos, solo cambia la escala y el tamaño del modelo.
+- **`defer_exit_code`** (p.ej. `77`): si el step SÍ arrancó pero el LLM se cae a
+  mitad, el script puede salir con ese código para diferir (el driver lo pasa como
+  `$RP_DEFER_EXIT_CODE` al proceso hijo — usa `int(os.environ["RP_DEFER_EXIT_CODE"])`).
+  Distingue "no pude arrancar/continuar por entorno" de un fallo real del trabajo.
+
 - **`cwd` se deduce** de dónde vive la receta; el payload se valida al encolar (un error muere en el submit, no tres intentos después).
 - Sin `total` **no se inventa porcentaje**: `unbounded` muestra el contador, `single` ni eso.
+
+**Elegir el modo de progreso (decisión 2026-09-08):**
+- **`single`** → tareas **sencillas/cortas**: de una llamada al LLM hasta ~5-10.
+  No reporta N/total, sin checkpoint granulado; pause/kill resume relanza el
+  step desde cero (el rescate lo da el crash-recovery del satélite, no el job).
+- **`bounded`** → volumen **a priori importante y conocido** (p.ej. 597 sesiones
+  de síntesis). Exige `checkpoint_file` + `current_key` + `total`. El satélite
+  escribe `{current_key: N}` tras CADA avance (path en `$RP_CHECKPOINT_FILE`,
+  escritura atómica tmp+rename) → `job_status` muestra N/total, y pause/kill/
+  resume son **granulares** (continúa donde se quedó). Para trabajos diferibles
+  y reanudables, prioridad **baja** (p.ej. 3): esperan tras sueño/chronicle sin
+  pisar a los activos.
 - `.red-pill/jobs/` va primero en la búsqueda y **no se versiona**: sirve de override local para probar sin ensuciar el repo.
 
 - **Prioridad**: entero, **mayor = más urgente**, default 5 (convención única de toda la cola).

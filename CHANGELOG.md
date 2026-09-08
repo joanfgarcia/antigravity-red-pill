@@ -108,6 +108,72 @@ manual del 23-mar — 2 de febrero — y 10 JSONs del backup del operador).
   Vault Cryptography"; nota recíproca en el ROADMAP), 5ª pasada auditada
   contra el código, ENV_REFERENCE con la sección Memento y la regla de
   recálculo por hardware del umbral de split.
+- **[FIX] Health-check del LLM local** (`chronicle_daily.py:_llm_available` y
+  `memento/agentic.py:llm_available`): la probe derivaba la URL base con
+  `rsplit("/", 2)[0]` y golpeaba `…/v1` — el llama-server responde **404** ahí
+  (solo `/health` y `/v1/models` devuelven 200) → el pase agéntico en sombra y
+  el DISTILL legacy se saltaban cada noche aunque el modelo estuviera vivo.
+  Ahora ambas probes apuntan a `/v1/models` (`EDGE_HEALTH_URL`), y
+  `EDGE_MODEL` se alinea con el perfil servido por `redpill-llm.service`
+  (`Granite-4.1-8B-Q4_K_M.gguf`, AD-022) en vez del retirado
+  `samantha-mistral-…`. Verificado: `memento_agentic.py --limit 1` →
+  `1 session(s) distilled+refined` y el `--shadow-report` ya cuenta 1 sesión
+  destilada. La evaluación del backfill de sombra confirmó 0 violaciones del
+  `memento_hash` y 0 cross_refs no resolubles (265 verificadas).
+- **[KNOWN] Slugs con acentos** (RFC-002 §4.5.1, 2026-09-07): el slug regex es
+  ASCII puro y los títulos del distill son en español → `"Revisión"` →
+  `revisi-n-de-cambios`. **Decisión del operador: aceptado, no se arregla**
+  (cosmético, el archivo es deliberadamente en español, y re-slugear exigiría
+  re-distilar las sesiones afectadas). Si algún día se toca: transliteración
+  NFKD antes del regex.
+- **[RULE] `job_dag_execution`** (anchor global, level 1): cualquier tarea que
+  requiera **LLM local** (o larga/reanudable, >~2 min) DEBE ejecutarse mediante
+  el Centralized Job Manager — jamás `nohup`/`&` a pelo. Multi-etapa →
+  `dag_job` (skill `dag`, desplegado por fin en opencode); un solo paso →
+  plantilla nueva `configs/jobs/_TEMPLATE_single_step.yaml` (`script_job`).
+  Registrado en `inject_anchor.py`/`inject_opencode.py`/`inject/opencode/inject.py`
+  y desplegado en RED_PILL.md + CLAUDE.md (user y project root IA). Skill
+  `job_manager` re-sincronizado con la versión del repo (faltaba la sección
+  `script_job`). Origen: el backfill de sombra Memento se lanzó con `nohup`
+  directo — el arnés tenía el skill pero ninguna regla lo obligaba.
+- **[FIX] `memento_agentic` crash-recovery + marcado por sesión**: el registry
+  solo se guardaba al final del run — si el proceso moría (reboot), las
+  sesiones ya destiladas en disco quedaban sin marcado `agentic` y se
+  re-procesaban (el backfill de sombra hizo 71 sesiones, el reboot las perdió
+  del registry y el siguiente cycle las re-hizo). Ahora: `run_agentic` guarda
+  el registry **por sesión** y `pending_agentic` (con `root`) reconoce las
+  sesiones con `distill/`+`refine/` en disco como hechas — no se re-procesan
+  salvo `--force` explícito (nuevo flag en `memento_agentic.py`).
+- **[FIX] Preflight de LLM local + deferral (regla job_dag_execution)**:
+  un LLM caído / GPU ocupada por otra tarea ya NO mata un job. El 2026-09-08 el
+  backfill de sombra falló **595 sesiones** y el chronicle murió por timeout
+  porque ambos intentaron arrancar con el LLM no disponible, en vez de DIFERIR.
+  El DAG es un planificador "ejecuta cuando se pueda": la GPU ocupada NO es un
+  error, es una condición a esperar. Cambios: `ScriptJobDriver.preflight` acepta
+  `llm_required` (health-check del LLM local → `JobDeferred`, vuelve a PENDING
+  sin quemar intento); `_build_env` inyecta `RP_DEFER_EXIT_CODE`/`RP_PAUSE_EXIT_CODE`;
+  `memento_agentic` aborta con defer si el LLM se cae a mitad (3 fallos
+  consecutivos de conexión); recipe `memento_backfill` con `llm_required` +
+  `defer_exit_code: 77`. **Por qué no existía**: el concepto (`JobDeferred`,
+  "no marcar fallo lo que es entorno") y el preflight de VRAM ya estaban, pero
+  faltaba el preflight de LLM y los recipes no lo usaban — la doc hablaba de
+  "servicio caído → deferral" en abstracto, sin guía operativa concreta. Ahora
+  documentado en `job_manager` §2 y en la plantilla `_TEMPLATE_single_step.yaml`.
+- **[FEAT] Backfill Memento a modo `bounded` + prioridad baja**: 597 sesiones es
+  un volumen a priori importante → el recipe `memento_backfill` pasa de `single`
+  a `bounded` (checkpoint `state/memento_agentic_progress.json`, `current_key:
+  processed`, `total: 597`, prioridad 3). `memento_agentic` escribe `{processed,
+  total}` tras CADA sesión (path en `$RP_CHECKPOINT_FILE`, escritura atómica
+  tmp+rename, cuenta GLOBAL del registry para resume correcto aunque cambie
+  `--limit`); `script_job._build_env` expone `RP_CHECKPOINT_FILE` absoluto al
+  proceso hijo. Resultado: `job_status` muestra N/597 y pause/kill/resume son
+  **granulares**. **Guía de modo documentada**: `single` = tareas sencillas/
+  cortas (1 llamada LLM ~ 5-10, sin checkpoint granulado); `bounded` = volumen
+  a priori importante (exige `checkpoint_file` + `current_key` + `total`).
+  Semántica honesta de `preflight.llm_required` (decisión 2026-09-08): es un
+  filtro indicativo, NO una garantía de carga — sin polling; si no se atiende,
+  el job vuelve a PENDING y el runner reintenta hasta que el recurso se libere
+  (limitación real, misma dinámica que un datacenter).
 
 ### 🌅 Despertar autónomo
 
@@ -155,6 +221,25 @@ cron es trazable.
 - El bridge del despertar se crea con `origin="awakening"`
   (`plugins/antigravity_ide/worker.py`).
 - `tests/test_job_manager.py`: `fake_cascade` acepta `origin`.
+
+### 📄 Frontmatter docs convention (Agent_Core & memory banks)
+
+- **[NEW] Anchor `frontmatter_docs`** (`seeds/anchors/frontmatter_docs.md`) +
+  registro en `inject_anchor.py`, `inject_opencode.py` e `inject/opencode/inject.py`:
+  todo `.md` de Agent_Core y bancos de memoria (`FRONTMATTER_TEMPLATE.md`) lleva
+  cabecera YAML con valores en inglés canónico. La doc de proyectos queda fuera de
+  scope (sigue la convención de cada proyecto).
+- **[NEW] Skill `frontmatter`** (`seeds/opencode/skills/frontmatter/SKILL.md`):
+  aplica la plantilla, el ciclo de vida y las reglas de archivo.
+- **[FIX] Ubicación de skills genéricos** (decisión 2026-09-08): `seeds/` debe
+  contener solo skills con placeholders o IDE-específicos. `sovereign_handshake`,
+  `project_anchor_management` y `scout` no tenían placeholders ni dependencia de
+  opencode → movidos a `skills/` (la capa genérica que despliega CUALQUIER IDE).
+  Quedan en `seeds/opencode/skills/`: `agent_core`/`frontmatter`/`knowledge_access`
+  (con `${AGENT_CORE_DIR}`) y `dag`/`forge` (específicos de opencode). Antes estos
+  skills genéricos no llegaban a Claude Code ni Antigravity al sembrar.
+- **[DOCS] `docs/CORE/DOCUMENTATION_MANUAL.md`** (§ Metadata Headers) y
+  **`docs/CORE/CONVENTIONS.md`** (§10.5): convención de cabeceras YAML.
 
 ## [7.21.0] - 2026-08-21 (Remediación de la auditoría del DAG)
 

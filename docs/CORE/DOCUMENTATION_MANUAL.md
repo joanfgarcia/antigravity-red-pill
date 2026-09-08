@@ -45,5 +45,36 @@ Este documento establece las reglas soberanas para la creación y organización 
 2.  **User Impact / Impacto al Usuario**: Update the relevant guide in `docs/GUIDES/`.
 
 ---
+
+## 🗂️ Metadata Headers (Frontmatter)
+
+Repo `docs/` is **reference** (bilingual, ALL-CAPS, no frontmatter required).
+Desk & memory-bank `.md` (Agent_Core `Aleth_Core/`, `.red-pill/memory/`) MUST start
+with a YAML frontmatter header. Template & valid fields:
+`Aleth_Core/FRONTMATTER_TEMPLATE.md` (installed via seeds; resolved as `${AGENT_CORE_DIR}/FRONTMATTER_TEMPLATE.md`).
+
+| Field | Required | Values / Notes |
+|---|---|---|
+| `type` | ✅ | `rfc \| plan \| note \| research \| audit \| log \| lore \| spec \| index` |
+| `status` | ✅ | `draft \| ratified \| in-design \| implemented \| closed \| active \| paused \| archived` |
+| `created` | ✅ | `YYYY-MM-DD` |
+| `author` | ✅ | `<author name(s)>` — the actual author(s); e.g. `Aleth (Netrunner)`, `Joan García` (fill in, never copy a placeholder) |
+| `project` | ✅ | `aleth-core \| red-pill \| neon-link \| frankenswarm \| obsidian \| personal` |
+| `id`, `title`, `related`, `superseded_by`, `archived`, `archive_reason`, `tags` | ⬜ | optional |
+
+Values are canonical **English** (metadata is machine-consumed; no bilingual values).
+**Scope**: Agent_Core + memory banks only. Project documentation follows each
+project's own conventions — this header is not imposed on project docs.
+
+Lifecycle (see `design/RFC_FLUJO_RFCS.md` in Aleth_Core):
+- A doc born in the desk starts `draft`; once implemented, the source of truth is the
+  project code/docs, and the `.md` is only a design record (never a parallel canonical copy).
+- When its cycle ends, move it to `archive/<project>/` with `status: archived` +
+  `archived:`/`archive_reason:` (see `archive/README.md`).
+- YAML forbids tabs for indentation (use spaces); the rest of the document keeps
+  the tabs mandated by the Protocol of Silence.
+
+---
+
 🇬🇧 *Status: Documentation standardized under the 770 Pact.*
 🇪🇸 *Estado: Documentación estandarizada bajo el Pacto 770.*

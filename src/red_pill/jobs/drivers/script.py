@@ -180,10 +180,56 @@ class ScriptJobDriver(ResumableJobDriver):
 			if free_mb < min_free:
 				raise JobDeferred(f"VRAM insuficiente ({free_mb}MB libres < {min_free}MB)")
 
+		# Requisito de inferencia local: si el LLM no responde, DIFERIR en vez de
+		# fallar. El DAG es un planificador "ejecuta cuando se pueda": la GPU puede
+		# estar ocupada por otra tarea y esto NO es un error — el runner reintenta
+		# el job cuando el recurso se libere (regla job_dag_execution, 2026-09-08).
+		if pre.get("llm_required"):
+			llm_port = self._llm_port()
+			if not llm_port:
+				raise JobDeferred("LLM local no disponible (sin puerto de inferencia detectado)")
+			if not self._llm_healthy(llm_port):
+				raise JobDeferred(f"LLM local no responde (puerto {llm_port}) — se difiere hasta que la GPU/LLM se libere")
+
 	def teardown(self, payload: Dict[str, Any]) -> None:
 		"""Restaura servicios en TODAS las salidas (incluido el deferral nocturno)."""
 		for service in (payload.get("teardown") or {}).get("restore_services") or []:
 			self._systemctl("start", service)
+
+	@staticmethod
+	def _llm_port() -> Optional[int]:
+		"""Puerto del LLM local (por config o 8760 por convención del dual-bind)."""
+		try:
+			import red_pill.config as cfg
+
+			env = getattr(cfg, "MLX_LM_URL", "") or ""
+			if env and ":" in env:
+				import re
+
+				m = re.search(r":(\d+)", env)
+				if m:
+					return int(m.group(1))
+		except Exception:
+			pass
+		return 8760
+
+	@staticmethod
+	def _llm_healthy(port: int) -> bool:
+		"""Health-check del LLM local: /health o /v1/models (mismo patrón que check_sip)."""
+		import urllib.error
+		import urllib.request
+
+		for path in ("/health", "/v1/models"):
+			try:
+				resp = urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=3)
+				if resp.status == 200:
+					return True
+			except urllib.error.HTTPError as he:
+				if he.code != 404:
+					continue  # 404 en /health → probar /v1/models
+			except Exception:
+				continue
+		return False
 
 	@staticmethod
 	def _request_vram_unload(base_url: str) -> None:
@@ -263,7 +309,7 @@ class ScriptJobDriver(ResumableJobDriver):
 		un avance recuperable de verdad.
 		"""
 		argv = self._build_argv(payload, cwd)
-		env = self._build_env(payload)
+		env = self._build_env(payload, cwd)
 		log_path = self._log_path()
 		log_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -325,9 +371,22 @@ class ScriptJobDriver(ResumableJobDriver):
 		self._clear_stale_scope()
 		return scope + argv
 
-	def _build_env(self, payload: Dict[str, Any]) -> Dict[str, str]:
+	def _build_env(self, payload: Dict[str, Any], cwd: str = "") -> Dict[str, str]:
 		env = dict(os.environ)
 		env.update({str(k): str(v) for k, v in (payload.get("env") or {}).items()})
+		# Exponer los códigos de salida declarativos al proceso hijo: el satélite
+		# puede salir con defer_exit_code ("ahora no puedo, reintenta") o
+		# pause_exit_code ("revisión del operador") sin hardcodear el número.
+		if payload.get("defer_exit_code") is not None:
+			env["RP_DEFER_EXIT_CODE"] = str(payload["defer_exit_code"])
+		if payload.get("pause_exit_code") is not None:
+			env["RP_PAUSE_EXIT_CODE"] = str(payload["pause_exit_code"])
+		# Exponer el checkpoint_file al proceso hijo (modo bounded): el satélite
+		# escribe {current_key: N} ahí tras cada avance; el driver lo lee para
+		# el progreso y el resume (R4). Path absoluto resuelto contra cwd.
+		if payload.get("checkpoint_file"):
+			cp = Path(payload["checkpoint_file"])
+			env["RP_CHECKPOINT_FILE"] = str(cp if cp.is_absolute() else Path(cwd) / cp)
 		env["PYTHONUNBUFFERED"] = "1"  # Sin esto el log del job llega a trozos y tarde
 		return env
 

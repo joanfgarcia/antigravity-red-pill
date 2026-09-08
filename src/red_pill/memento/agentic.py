@@ -22,7 +22,8 @@ from red_pill.memento.render import compute_hash, extract_body, update_frontmatt
 logger = logging.getLogger(__name__)
 
 EDGE_ENGINE_URL = "http://localhost:8760/v1/chat/completions"
-EDGE_MODEL = "samantha-mistral-instruct-7b.i1-Q4_K_M.gguf"
+EDGE_HEALTH_URL = "http://localhost:8760/v1/models"
+EDGE_MODEL = "Granite-4.1-8B-Q4_K_M.gguf"
 
 # transport(system, user, max_tokens) -> str — inyectable para tests y para futuros bake-offs
 Transport = Callable[[str, str, int], str]
@@ -68,11 +69,11 @@ def slugify_title(title: str, max_len: int = 40) -> str:
 	return slug or "seccion"
 
 
-def llm_available(url: str = EDGE_ENGINE_URL) -> bool:
+def llm_available(url: str = EDGE_HEALTH_URL) -> bool:
 	import urllib.request
 
 	try:
-		urllib.request.urlopen(url.rsplit("/", 2)[0], timeout=3)
+		urllib.request.urlopen(url, timeout=3)
 		return True
 	except Exception:
 		return False
@@ -234,8 +235,15 @@ def refine_session(
 	return max_significance
 
 
-def pending_agentic(registry: Any) -> List[Tuple[str, str, str]]:
-	"""[(source, session_id, reason)] — sesiones renderizadas sin pase agéntico o con distill stale (§4.5.1)."""
+def pending_agentic(registry: Any, root: Optional[Path] = None, force: bool = False) -> List[Tuple[str, str, str]]:
+	"""[(source, session_id, reason)] — sesiones renderizadas sin pase agéntico o con distill stale (§4.5.1).
+
+	Recuperación ante crash (2026-09-07): el registry solo se guardaba al final
+	del run — si el proceso moría (reboot), las sesiones ya destiladas en disco
+	quedaban sin marcado `agentic` y se re-procesaban. Si `root` se pasa, una
+	sesión sin `agentic` pero con `distill/`+`refine/` en disco se considera
+	TERMINADA y no vuelve a la cola salvo `force=True` (re-procesado explícito).
+	"""
 	pending = []
 	for source, sessions in registry.state["registry"].items():
 		for session_id, entry in sessions.items():
@@ -243,14 +251,47 @@ def pending_agentic(registry: Any) -> List[Tuple[str, str, str]]:
 				continue
 			agentic = entry.get("agentic")
 			if not agentic:
+				if not force and root is not None and _distill_refine_present(root, entry["dir"]):
+					continue  # ya destilada en disco, pero el marcado se perdió (crash)
 				pending.append((source, session_id, "missing"))
 			elif agentic.get("hash") != entry.get("memento_hash"):
 				pending.append((source, session_id, "stale"))
 	return pending
 
 
-def run_agentic(root: Path, registry: Any, targets: List[Tuple[str, str]], transport: Transport) -> Dict[str, int]:
-	"""Distill → Refine → sello de significance + decisión shadow del gate, por sesión."""
+def _distill_refine_present(root: Path, dir_rel: str) -> bool:
+	"""True si la sesión ya tiene distill/ y refine/ con contenido en disco."""
+	base = root / dir_rel
+	distill = base / "distill"
+	refine = base / "refine"
+	return (distill.is_dir() and any(distill.glob("*.md"))) and (refine.is_dir() and any(refine.glob("*.md")))
+
+
+def _is_llm_connection_error(exc: Exception) -> bool:
+	"""True si la excepción indica que el LLM local no responde (connection refused / aborted).
+
+	Distingue "el LLM no está" (→ deferral) de un fallo real del trabajo.
+	"""
+	name = type(exc).__name__
+	msg = str(exc)
+	if name in ("NewConnectionError", "ConnectionError", "ConnectionRefusedError", "RemoteDisconnected"):
+		return True
+	if "Connection refused" in msg or "Failed to establish a new connection" in msg or "Connection aborted" in msg:
+		return True
+	if "Remote end closed connection" in msg:
+		return True
+	return False
+
+
+def run_agentic(root: Path, registry: Any, targets: List[Tuple[str, str]], transport: Transport, checkpoint_path: Optional[Path] = None) -> Dict[str, int]:
+	"""Distill → Refine → sello de significance + decisión shadow del gate, por sesión.
+
+	Si `checkpoint_path` se da (modo bounded del script_job), se escribe un
+	checkpoint JSON `{"processed": N, "total": T}` tras CADA sesión — la cuenta
+	se lee del registry (no del lote actual), para que el resume tras un
+	pause/kill continúe con el número correcto aunque el `--limit` del
+	relanzamiento cambie.
+	"""
 	from datetime import datetime, timezone
 
 	import red_pill.config as cfg
@@ -258,6 +299,13 @@ def run_agentic(root: Path, registry: Any, targets: List[Tuple[str, str]], trans
 	min_significance = float(getattr(cfg, "MEMENTO_REFINE_MIN_SIGNIFICANCE", 0.3))
 	gate_threshold = float(getattr(cfg, "MEMENTO_GATE_MIN_SIGNIFICANCE", 0.5))
 	stats = {"processed": 0, "failed": 0, "would_ingest": 0}
+	# Umbral de deferral por LLM caído (2026-09-08): si N sesiones consecutivas
+	# fallan por conexión al LLM local, el recurso no está disponible y esto NO
+	# es un error del trabajo — abortar para que el runner lo difiera y lo
+	# reintente cuando la GPU/LLM se liberen (regla job_dag_execution). No
+	# acumular cientos de "failed" quemando intentos.
+	CONSECUTIVE_CONNECTION_FAILURES = 3
+	consecutive_failures = 0
 
 	for source, session_id in targets:
 		entry = registry.get(source, session_id)
@@ -270,7 +318,20 @@ def run_agentic(root: Path, registry: Any, targets: List[Tuple[str, str]], trans
 		except Exception as e:
 			logger.warning(f"Agentic pass failed for {session_id}: {e}")
 			stats["failed"] += 1
+			if _is_llm_connection_error(e):
+				consecutive_failures += 1
+				if consecutive_failures >= CONSECUTIVE_CONNECTION_FAILURES:
+					stats["aborted_llm_down"] = True
+					logger.error(
+						f"LLM local caído tras {CONSECUTIVE_CONNECTION_FAILURES} fallos consecutivos de conexión "
+						f"({session_id}) — abortando con deferral; {stats['processed']} ya procesadas quedan marcadas."
+					)
+					return stats
+			else:
+				consecutive_failures = 0  # fallo de otra naturaleza: no cuenta para el deferral
 			continue
+
+		consecutive_failures = 0  # una sesión OK resetea el contador
 
 		would_ingest = max_significance >= gate_threshold
 		index_file = root / entry["dir"] / "memento" / "index.md"
@@ -289,4 +350,32 @@ def run_agentic(root: Path, registry: Any, targets: List[Tuple[str, str]], trans
 		}
 		stats["processed"] += 1
 		stats["would_ingest"] += int(would_ingest)
+		# Guardado incremental (2026-09-07): persistir el marcado POR SESIÓN para
+		# que un crash/reboot no pierda lo ya hecho y re-procese (RFC-002 §4.5.1).
+		if hasattr(registry, "save"):
+			registry.save()
+		if checkpoint_path is not None:
+			_advance_checkpoint(checkpoint_path, registry, len(targets))
 	return stats
+
+
+def _advance_checkpoint(checkpoint_path: Path, registry: Any, total: int) -> None:
+	"""Escribe el checkpoint del modo bounded: `{"processed": N, "total": T}`.
+
+	`processed` = sesiones con marcado `agentic` en el registry (no las del
+	lote actual): así el resume tras pause/kill refleja el progreso GLOBAL y el
+	driver cierra por contador cuando se alcanza el total.
+	"""
+	import json
+
+	processed = 0
+	for source, sessions in registry.state["registry"].items():
+		if not isinstance(sessions, dict):
+			continue
+		for entry in sessions.values():
+			if entry.get("agentic"):
+				processed += 1
+	checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+	tmp = checkpoint_path.with_suffix(checkpoint_path.suffix + ".tmp")
+	tmp.write_text(json.dumps({"processed": processed, "total": total}), encoding="utf-8")
+	tmp.replace(checkpoint_path)  # escritura atómica: el driver jamás lee un JSON a medias
