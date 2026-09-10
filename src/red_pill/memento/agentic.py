@@ -336,11 +336,25 @@ def run_agentic(root: Path, registry: Any, targets: List[Tuple[str, str]], trans
 		would_ingest = max_significance >= gate_threshold
 		index_file = root / entry["dir"] / "memento" / "index.md"
 		if index_file.exists():
+			# Invariante §4.5.1: el sello NO puede mover el cuerpo. La verificación
+			# compara el hash del body ANTES vs DESPUÉS del sello (mismo fichero en
+			# disco) — NUNCA contra el memento_hash del registry, que puede estar
+			# stale por un re-render concurrente (2026-09-10: assert falso positivo
+			# mató el backfill de 595 sesiones).
+			before = compute_hash(extract_body(index_file.read_text(encoding="utf-8")))
 			update_frontmatter_fields(index_file, {"significance": round(max_significance, 2)})
-			# invariante §4.5.1: el sello NO puede mover el cuerpo
-			assert compute_hash(extract_body(index_file.read_text(encoding="utf-8"))) == entry.get("memento_hash"), (
-				"significance stamp moved the body"
-			)
+			after = compute_hash(extract_body(index_file.read_text(encoding="utf-8")))
+			if before != after:
+				# §4.5.1 violado: el frontmatter tocó el body (bug real del renderer).
+				# Contar como fallo de esta sesión y CONTINUAR — el run no debe morir
+				# por una sesión (crash-recovery ya cubre el resume).
+				logger.error(
+					f"§4.5.1 VIOLADO: el sello de significance movió el cuerpo de {session_id} — "
+					f"hash antes={before[:12]} después={after[:12]}."
+				)
+				stats["failed"] += 1
+				consecutive_failures = 0
+				continue
 		entry["agentic"] = {
 			"distilled_at": datetime.now(timezone.utc).isoformat(),
 			"hash": entry.get("memento_hash"),
