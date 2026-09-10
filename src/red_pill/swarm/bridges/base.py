@@ -34,6 +34,7 @@ class BackendType(Enum):
 	CLAUDE = "claude"
 	OPENCODE = "opencode"
 	LOCAL = "local"
+	PI = "pi"
 
 
 @dataclass

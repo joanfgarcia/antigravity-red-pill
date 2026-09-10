@@ -28,7 +28,7 @@ logger = logging.getLogger("opencode_injector")
 
 # Shared placeholder helpers live alongside this script.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _config_common import agent_core_vars, build_vars, strip_jsonc_comments, subst  # noqa: E402
+from _config_common import LEGACY_SKILL_DIRS, agent_core_vars, build_vars, strip_jsonc_comments, subst  # noqa: E402
 
 # ── Config directory discovery ────────────────────────────────────────────────
 OPENCODE_CONFIG_DIRS = [
@@ -406,7 +406,7 @@ def main():
 			for entry in os.listdir(skills_src):
 				if os.path.exists(os.path.join(skills_src, entry, "SKILL.md")):
 					seeded_skills.add(entry)
-		seeded_skills.update(["sovereign_handshake", "agent_core", "knowledge_access"])  # legacy anchor-skills
+		seeded_skills.update(list(LEGACY_SKILL_DIRS))  # renames kebab-case 2026-09-10
 		for skill_name in sorted(seeded_skills):
 			skill_path = os.path.join(skills_dir, skill_name)
 			if os.path.isdir(skill_path):

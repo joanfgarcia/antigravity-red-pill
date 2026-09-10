@@ -260,10 +260,19 @@ p._purge_leaked_duplicates()
 	if [ -d "$REPO_ROOT/skills" ]; then
 		echo -e "${BLUE}Sincronizando Skills soberanos (IDE-Agnostic)...${NC}"
 		mkdir -p "$AGENT_DIR/skills"
+		RP_CMD="${UV_BIN:-$(command -v uv || echo "$HOME/.local/bin/uv")} run --no-sync --project \"$REPO_ROOT\" red-pill"
+		# Skills renombrados a kebab-case (Agent Skills standard): prunear legados
+		for legacy in agent_core knowledge_access context_distiller job_manager memory_manager memory_manager_template minion_delegation project_anchor_management skill_creation sovereign_handshake swarm_flow_manager workspace_memory; do
+			rm -rf "$AGENT_DIR/skills/$legacy" 2>/dev/null || true
+			rm -rf "$GEMINI_SKILLS/$legacy" 2>/dev/null || true
+		done
 		for skill_dir in "$REPO_ROOT/skills/"*/; do
 			skill_name=$(basename "$skill_dir")
-			[[ "$skill_name" == "memory_manager_template" ]] && continue
 			cp -r "$skill_dir" "$AGENT_DIR/skills/$skill_name"
+			# ${RED_PILL_CMD} → invocación uv (el CLI no está en el PATH del harness)
+			if grep -q '\${RED_PILL_CMD}' "$AGENT_DIR/skills/$skill_name/SKILL.md" 2>/dev/null; then
+				sed -i "s|\${RED_PILL_CMD}|$RP_CMD|g" "$AGENT_DIR/skills/$skill_name/SKILL.md"
+			fi
 			if [ -d "$GEMINI_SKILLS" ]; then
 				rm -rf "$GEMINI_SKILLS/$skill_name" 2>/dev/null || true
 				ln -s "$AGENT_DIR/skills/$skill_name" "$GEMINI_SKILLS/$skill_name"

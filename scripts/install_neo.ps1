@@ -220,8 +220,24 @@ $REPO_ROOT = (Resolve-Path "$PSScriptRoot\..").ProviderPath
 if (Test-Path "$REPO_ROOT\seeds") {
     Copy-Item "$REPO_ROOT\seeds\snapshot_rule.md" (Join-Path $GEMINI_ROOT "rules\snapshot_rule.md") -Force
 }
+$skillsDest = Join-Path $GEMINI_ROOT "skills"
+# Skills renombrados a kebab-case (Agent Skills standard): prunear legados
+$legacySkillDirs = @("agent_core","knowledge_access","context_distiller","job_manager","memory_manager","memory_manager_template","minion_delegation","project_anchor_management","skill_creation","sovereign_handshake","swarm_flow_manager","workspace_memory")
+foreach ($legacy in $legacySkillDirs) {
+    $legacyPath = Join-Path $skillsDest $legacy
+    if (Test-Path $legacyPath) { Remove-Item $legacyPath -Recurse -Force }
+}
 if (Test-Path "$REPO_ROOT\skills") {
-    Copy-Item "$REPO_ROOT\skills\*" (Join-Path $GEMINI_ROOT "skills") -Recurse -Force
+    Copy-Item "$REPO_ROOT\skills\*" $skillsDest -Recurse -Force
+    # ${RED_PILL_CMD} → invocación uv (el CLI no está en el PATH del harness)
+    $uvBin = if (Get-Command uv -ErrorAction SilentlyContinue) { (Get-Command uv).Source } else { Join-Path $HOME ".local\bin\uv" }
+    $rpCmd = "`"$uvBin`" run --no-sync --project `"$REPO_ROOT`" red-pill"
+    Get-ChildItem $skillsDest -Recurse -Filter "SKILL.md" | ForEach-Object {
+        $content = Get-Content $_.FullName -Raw
+        if ($content -match '\$\{RED_PILL_CMD\}') {
+            Set-Content -Path $_.FullName -Value ($content.Replace('${RED_PILL_CMD}', $rpCmd)) -NoNewline
+        }
+    }
 }
 
 # 6.2 Git Sovereign Guard (v6.2.0)

@@ -1,5 +1,5 @@
 ---
-name: agent_core
+name: agent-core
 description: Use when the session mentions agent_core, aleth_core, workspace root, peer workspaces, project rules, .agent directory, or transversal state. This skill establishes the agent's operational domain boundaries across independent project repos.
 ---
 

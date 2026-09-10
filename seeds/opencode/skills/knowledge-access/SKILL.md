@@ -1,5 +1,5 @@
 ---
-name: knowledge_access
+name: knowledge-access
 description: Use when the session mentions knowledge access, four spaces, bünker rag, qdrant, graphify, workspace memory, memory research, bunker-first, or semantic search. This skill defines the four knowledge spaces and mandates Bünker-first cognitive rule before local file search.
 ---
 

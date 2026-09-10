@@ -1,5 +1,5 @@
 ---
-name: project_anchor_management
+name: project-anchor-management
 description: Guía a los agentes de campo sobre cómo inicializar, leer y mantener el ancla cognitiva local (.agent/ATLAS.md) dentro de cualquier repositorio para no perder el contexto arquitectónico y estratégico.
 ---
 

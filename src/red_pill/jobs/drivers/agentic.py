@@ -8,7 +8,7 @@ antiguo swarm/executor.py (que hardcodeaba agy).
 payload:
 	{
 		"prompt": str,                       # la tarea (role prompt incluido)
-		"backend"?: "agy|claude|opencode|local|local-tools",
+		"backend"?: "agy|claude|opencode|local|local-tools|pi",
 		"cascade"?: [{backend, model, effort}, ...],  # → CascadeBridge
 		"model"?: str, "effort"?: "low|medium|high",
 		"cwd"?: str, "timeout"?: int, "title"?: str,

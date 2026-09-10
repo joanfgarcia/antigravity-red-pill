@@ -1,5 +1,5 @@
 ---
-name: context_distiller
+name: context-distiller
 description: Condensa el contexto actual de la conversación en un Snapshot de Memoria para liberar RAM y permitir el reinicio de sesión sin pérdida de conocimiento.
 ---
 

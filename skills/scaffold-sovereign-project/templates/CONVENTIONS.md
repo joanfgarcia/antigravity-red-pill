@@ -49,6 +49,20 @@ tests/test_e2e_mqtt.py                  ✅  (integration — end to end)
 tests/test_sound_of_silence.py          ✅  (governance test)
 ```
 
+### 1.5 Agent Skills (Agent Skills standard)
+
+Skills follow the [Agent Skills standard](https://agentskills.io/specification): the
+directory name MUST equal the frontmatter `name`, in **kebab-case** (lowercase
+`a-z`, digits `0-9`, hyphens only; 1–64 chars; no leading/trailing/double hyphens),
+with a non-empty `description` ≤1024 chars. Underscores are FORBIDDEN. Generic
+skills live in `skills/`; IDE-specific overrides in `seeds/<ide>/skills/` (the
+IDE-specific copy wins in its harness).
+
+```
+skills/my-capability/SKILL.md   ✅  (dir == name == my-capability)
+skills/my_capability/SKILL.md   ✗
+```
+
 ---
 
 ## 2. Directory Naming

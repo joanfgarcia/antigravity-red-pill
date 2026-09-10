@@ -1,5 +1,5 @@
 ---
-name: job_manager
+name: job-manager
 description: Encolar, ejecutar, pausar y monitorizar trabajos diferidos y reanudables (Centralized Job Manager) — flows YAML, tareas agénticas y drivers propios sobre la cola central de Red-Pill.
 ---
 
@@ -21,10 +21,10 @@ Regla de oro: por CLI **todo es diferido**. No existe `--mode` — un "inmediato
 
 ```bash
 # Un flow YAML existente, como job pausable/reanudable
-red-pill job submit --source flow_job --payload '{"flow_id": "vulnerability-sweep"}' --title "Barrido nocturno" --priority 7
+${RED_PILL_CMD} job submit --source flow_job --payload '{"flow_id": "vulnerability-sweep"}' --title "Barrido nocturno" --priority 7
 
 # Una tarea agéntica genérica (backend/modelo/effort en el payload)
-red-pill job submit --source agentic_job --payload '{
+${RED_PILL_CMD} job submit --source agentic_job --payload '{
   "prompt": "Audita los TODO de src/ y propón un plan",
   "backend": "claude", "model": "opus", "effort": "high",
   "cwd": "/ruta/al/workspace", "timeout": 900
@@ -33,7 +33,7 @@ red-pill job submit --source agentic_job --payload '{
 
 ```bash
 # Re-síntesis metabólica V3 de engramas (usa el LLM residente si está vivo; si no, difiere hasta tener VRAM)
-red-pill job submit --source distill_job --payload '{"batch_size": 15, "smart_audit": true}' --title "Re-síntesis V3"
+${RED_PILL_CMD} job submit --source distill_job --payload '{"batch_size": 15, "smart_audit": true}' --title "Re-síntesis V3"
 ```
 
 ### Cualquier script externo: `script_job` + receta YAML
@@ -41,7 +41,7 @@ red-pill job submit --source distill_job --payload '{"batch_size": 15, "smart_au
 Para trabajos por pasos de un proyecto satélite (entrenamientos, backups, migraciones) **no se escribe un driver nuevo**: se declara la receta y la ejecuta el driver genérico. La receta vive **en el repo del satélite**, no aquí — describe cómo se ejecuta ese proyecto, así que le pertenece:
 
 ```bash
-red-pill job submit --recipe school     # busca subiendo: .red-pill/jobs/ → configs/jobs/ → jobs/
+${RED_PILL_CMD} job submit --recipe school     # busca subiendo: .red-pill/jobs/ → configs/jobs/ → jobs/
 ```
 
 ```yaml
@@ -106,13 +106,13 @@ control: {max_step_minutes: 780, preemptible: false}
 ## 3. Operar la cola
 
 ```bash
-red-pill job list                 # activas, pausadas, en cola (--all incluye COMPLETED)
-red-pill job status <id|prefijo>  # fila completa + lo MEDIDO: duración media, cota del próximo step, cadencia real
-red-pill job logs <id> --tail 50  # la salida real del proceso hijo, por step
-red-pill job pause <id|prefijo>   # cooperativo: no interrumpe el step en curso; para en la frontera atómica
-red-pill job kill <id> [--discard]  # duro: abate el scope YA (SIGTERM al cgroup, hijos CUDA incluidos)
-red-pill job resume <id|prefijo>  # reanuda EXACTAMENTE desde el checkpoint
-red-pill job process-queue        # runner manual (el timer redpill-queue lo hace cada 1m solo)
+${RED_PILL_CMD} job list                 # activas, pausadas, en cola (--all incluye COMPLETED)
+${RED_PILL_CMD} job status <id|prefijo>  # fila completa + lo MEDIDO: duración media, cota del próximo step, cadencia real
+${RED_PILL_CMD} job logs <id> --tail 50  # la salida real del proceso hijo, por step
+${RED_PILL_CMD} job pause <id|prefijo>   # cooperativo: no interrumpe el step en curso; para en la frontera atómica
+${RED_PILL_CMD} job kill <id> [--discard]  # duro: abate el scope YA (SIGTERM al cgroup, hijos CUDA incluidos)
+${RED_PILL_CMD} job resume <id|prefijo>  # reanuda EXACTAMENTE desde el checkpoint
+${RED_PILL_CMD} job process-queue        # runner manual (el timer redpill-queue lo hace cada 1m solo)
 ```
 
 Los ids aceptan el prefijo corto que muestra `job list`. El runner tiene flock: lanzarlo con otro activo cede con `exit 0`, sin daño.
@@ -127,7 +127,7 @@ Los ids aceptan el prefijo corto que muestra `job list`. El runner tiene flock: 
 
 - **Fin/error de cada job** → reporte en `MinionInbox` (leer vía `check_minion_inbox` del MCP).
 - **Señales**: `jobs_stuck` (PROCESSING sin latido >30 min) y `jobs_frustrated` (disyuntor activado) las emite el plugin `job_monitor` del SovereignDaemon.
-- **`FRUSTRATED`** = 3 fallos reales. Diagnostica con `job status` (campo `error_log`), corrige la causa y `red-pill job resume <id>` NO aplica (solo PAUSED); re-encola con un submit nuevo o repara y resetea el estado a mano si procede.
+- **`FRUSTRATED`** = 3 fallos reales. Diagnostica con `job status` (campo `error_log`), corrige la causa y `${RED_PILL_CMD} job resume <id>` NO aplica (solo PAUSED); re-encola con un submit nuevo o repara y resetea el estado a mano si procede.
 
 ## 5. Escribir un driver nuevo
 

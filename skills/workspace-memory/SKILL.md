@@ -1,5 +1,5 @@
 ---
-name: workspace_memory
+name: workspace-memory
 description: Controls the local workspace-level memory filing cabinet, ensuring persistent technical context.
 ---
 
@@ -65,7 +65,7 @@ You interact with the workspace filing cabinet using actions registered under th
 
 ## 🚀 4. CLI Administration
 You can also run administrative operations from the command line:
-- **Enable Memory**: `red-pill memory enable <ws_name_or_path> [--path <custom_path>]`
-- **Disable Memory**: `red-pill memory disable <ws_name_or_path>`
-- **Sync Memories**: `red-pill memory sync` (projects Qdrant engrams to `<ws>-decisions.md` immediately)
-- **Consolidate (Compaction)**: `red-pill memory optimize` (compacts engrams via LLM immediately)
+- **Enable Memory**: `${RED_PILL_CMD} memory enable <ws_name_or_path> [--path <custom_path>]`
+- **Disable Memory**: `${RED_PILL_CMD} memory disable <ws_name_or_path>`
+- **Sync Memories**: `${RED_PILL_CMD} memory sync` (projects Qdrant engrams to `<ws>-decisions.md` immediately)
+- **Consolidate (Compaction)**: `${RED_PILL_CMD} memory optimize` (compacts engrams via LLM immediately)
