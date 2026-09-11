@@ -6,6 +6,38 @@ actividad del operador frente a los runs headless del despertar autónomo, la
 **trazabilidad de jobs** (JOB-001), la **higiene del memory bank** (`bank_janitor`)
 y el **arnés Pi** (kebab-case skills + chronicle source + injector).
 
+### 🧹 Chronicle/Memento — nightly solo-Memento, retirada de `archive_memories` + arnés de bake-off
+
+La pipeline nocturna deja de tocar la maquinaria legacy de Qdrant y queda
+pausable por etapa (incidente 2026-09-11: la pausa del operador quedó horas en
+`PAUSING` porque todo el pipeline era un único step).
+
+- **[REF] `configs/jobs/chronicle.yaml` → `dag_job`**: de `script_job` de un
+  solo paso a **2 etapas atómicas** (`memento` → `memento-agentic`). `job_pause`
+  aterriza en cada frontera de etapa, `job_resume` continúa exacto desde la
+  interrumpida. La pipeline nocturna queda **solo-Memento** (RFC-002).
+- **[ARCH] Retirada del legacy `archive_memories`**: desconectados
+  `chronicle_distill.py`/`chronicle_refine.py` (barrido no acotado de
+  `archive_memories`, causa de los timeouts nocturnos) y la ingesta legacy
+  (`antigravity_ingest`). El pase agéntico moderno es `memento-agentic` sobre el
+  árbol Memento (RFC-002 §4.5); `archive_memories` queda como fallback de
+  reconstrucción (§5.1.2). Eliminados `scripts/chronicle_daily.py` y
+  `tests/test_chronicle_registry.py`; limpiadas referencias (`schedule_pulse.py`,
+  `chronicle_sources/base.py`, `memento/registry.py`, `config.py`,
+  `seeds/pi/README.md`).
+- **[NEW] Arnés de bake-off de modelos**: `scripts/model_battle_tool.py`
+  (tool-calling vía bindings, con parser de formatos nativos — `<tool_call>`,
+  `<|tool_call>` de Gemma, `<function_call>`, OpenAI); `scripts/model_battle_tool_gpu.py`
+  (variante llama-server); wrappers `bakeoff_new_models.sh`/`bakeoff_tool_all.sh`;
+  `KNOWN_GGUF` ampliado (`tiny_aya`, `gemma4_e4b`, `r1_distill`).
+- **[NEW] `scripts/setup_cuda_bindings.sh`** — desacople de CUDA: crea un venv
+  **sidecar machine-local** (`~/.local/share/red-pill/llmtools-venv`) con los
+  bindings CUDA (índice abetlen `cuXXX`), sin tocar `uv.lock` (que sigue portable).
+  Resuelve el revert de `uv run` sobre el venv del repo.
+- **[DOC] Benchmarks** `docs/BENCHMARKS/2026-09-11-*` (destilación: tiny_aya,
+  gemma4_e4b, r1-distill; tool-calling: 6 modelos). Diseño del framework de
+  evaluación en `Aleth_Core/design/RFC_INVENTARIO_MODELOS_HARNESS.md`.
+
 ### 🔌 Arnes Pi (`pi-coding-agent`)
 
 Anclaje del Búnker a **pi-coding-agent** (Pi no soporta MCP: el puente es una

@@ -34,6 +34,10 @@ KNOWN_GGUF: dict[str, str] = {
 	"qwen35_9b": "Qwen3.5-9B-Q4_K_M.gguf",
 	"qwen3_8b": "Qwen3-8B-Q4_K_M.gguf",
 	"coder_heavy": "qwen2.5-coder-7b-instruct-q4_k_m.gguf",
+	# 2026-09-11 candidates (multilingual / tool-calling / reasoning-distill)
+	"tiny_aya": "tiny-aya-global-q4_k_m.gguf",
+	"gemma4_e4b": "gemma-4-E4B-it-Q4_0.gguf",
+	"r1_distill": "DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf",
 }
 
 

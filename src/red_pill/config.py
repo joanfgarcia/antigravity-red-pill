@@ -462,8 +462,9 @@ class RedPillConfig(BaseSettings):
 	METABOLISM_COOLDOWN: int = 3600
 	METABOLISM_AUTO_COLLECTIONS: Any = ["work_memories", "social_memories", "story_memories"]
 	CHRONICLE_PLUGINS: List[str] = ["antigravity", "claude_code"]
-	# Fuentes del ARCHIVO diario (chronicle_daily → archive_memories); no confundir
-	# con CHRONICLE_PLUGINS, que gobierna el snatching hacia la consolidación.
+	# Fuentes del ARCHIVO diario Memento (memento_migrate → árbol Memento); no
+	# confundir con CHRONICLE_PLUGINS, que gobierna el snatching hacia la
+	# consolidación. La ingesta a archive_memories se retiró 2026-09-11.
 	# "pi" entra por defecto: si Pi no está instalado, su discover() devuelve [].
 	CHRONICLE_ARCHIVE_SOURCES: List[str] = ["antigravity", "claude_code", "opencode", "pi"]
 

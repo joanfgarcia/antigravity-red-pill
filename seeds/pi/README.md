@@ -48,8 +48,10 @@ de `~/.pi/agent/sessions/` (formato v3 verificado contra pi 0.85.1: header
 `{"type":"session",...}`, entries con `timestamp` ISO, roles
 user/assistant/toolResult). `toolResult` se compacta a `[TOOL: <name>]`. Está
 activada por defecto vía `CHRONICLE_ARCHIVE_SOURCES` (incluye `"pi"`) →
-`chronicle_daily` la archiva en `archive_memories` y `memento_migrate` genera su
-árbol Memento con `export_raw`/`load_raw` (backup `raw/` + `--from-raw`).
+`memento_migrate` (etapa `memento` del chronicle diario) la vuelca al árbol
+Memento con `export_raw`/`load_raw` (backup `raw/` + `--from-raw`), y
+`memento_agentic` la destila/refina. Desde 2026-09-11 la ingesta a
+`archive_memories` (Qdrant) está retirada del pipeline.
 
 ## Uso agéntico (minion backend `pi`)
 

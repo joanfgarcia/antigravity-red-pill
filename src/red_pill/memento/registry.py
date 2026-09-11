@@ -1,10 +1,11 @@
 """`memento_registry.json` (RFC-002 §5.3) + hilo prev/next por fuente (SHOULD 12).
 
-Espejo del `chronicle_daily_registry.json`: mismo directorio (`get_data_dir()`),
-mismo envoltorio `{registry, last_run, stats}`. Clave: `{source: {session_id:
-{dir, month, created_at, rendered_at, message_count, step_count, body_chars,
-has_splits, memento_hash, prev_session, next_session}}}` — `memento_hash` es el
-ancla del contrato de invalidación §4.5.1; `created_at` alimenta el hilo.
+Mismo directorio (`get_data_dir()`) y envoltorio `{registry, last_run, stats}`
+que el retirado `chronicle_daily_registry.json` (2026-09-11). Clave: `{source:
+{session_id: {dir, month, created_at, rendered_at, message_count, step_count,
+body_chars, has_splits, memento_hash, prev_session, next_session}}}` —
+`memento_hash` es el ancla del contrato de invalidación §4.5.1; `created_at`
+alimenta el hilo.
 """
 
 from __future__ import annotations
