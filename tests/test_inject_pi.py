@@ -52,7 +52,7 @@ def test_inject_despliega_extension_y_skills(sandbox_home, adapter):
 	ext = pi_dir / "extensions" / "red-pill.ts"
 	assert ext.exists()
 	text = ext.read_text(encoding="utf-8")
-	assert f"process.env.RED_PILL_DIR ?? \"{REPO_ROOT}\"" in text  # placeholder resuelto
+	assert f'process.env.RED_PILL_DIR ?? "{REPO_ROOT}"' in text  # placeholder resuelto
 	assert "${RED_PILL_DIR}" not in text
 
 	for skill in ("job-manager", "workspace-memory", "memory-manager", "sovereign-handshake"):

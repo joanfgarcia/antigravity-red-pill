@@ -39,7 +39,11 @@ pytestmark = pytest.mark.skipif(PI_INDEX is None, reason="node + pi-coding-agent
 
 
 def _load_dirs():
-	dirs = [os.path.join(REPO_ROOT, "skills"), os.path.join(REPO_ROOT, "seeds", "opencode", "skills"), os.path.join(REPO_ROOT, "seeds", "pi", "skills")]
+	dirs = [
+		os.path.join(REPO_ROOT, "skills"),
+		os.path.join(REPO_ROOT, "seeds", "opencode", "skills"),
+		os.path.join(REPO_ROOT, "seeds", "pi", "skills"),
+	]
 	# Solo directorios con al menos un skill real (seeds/pi/skills puede estar vacío)
 	out = []
 	for d in dirs:
@@ -50,7 +54,7 @@ def _load_dirs():
 
 def test_pi_loader_carga_skills_sin_warnings():
 	script = (
-		'const { loadSkillsFromDir } = await import('
+		"const { loadSkillsFromDir } = await import("
 		+ json.dumps(PI_INDEX)
 		+ ");\n"
 		+ "const out = [];\n"

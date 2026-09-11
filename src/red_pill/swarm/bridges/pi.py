@@ -53,11 +53,7 @@ def _text_of(content: Any) -> str:
 	if isinstance(content, str):
 		return content
 	if isinstance(content, list):
-		return "\n".join(
-			b.get("text", "")
-			for b in content
-			if isinstance(b, dict) and b.get("type") == "text" and b.get("text")
-		)
+		return "\n".join(b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text" and b.get("text"))
 	return ""
 
 
@@ -70,16 +66,14 @@ class PiBridge(AgentBridge):
 			raise RuntimeError(
 				"Pi CLI (pi) not found. Install pi-coding-agent and ensure `pi` is on the "
 				"service manager's PATH (Linux: Environment= in ~/.config/systemd/user/*.service), "
-			"or set PI_BIN."
-		)
+				"or set PI_BIN."
+			)
 		self._pi_path = resolved
 		self._origin = origin
 		# When the red-pill harness extension is deployed, Pi itself relays the
 		# turn (agent_end) and injects identity/RAG (before_agent_start) — the
 		# bridge skips its own scribe to avoid double-queueing.
-		self._extension_present = os.path.exists(
-			Path.home() / ".pi" / "agent" / "extensions" / "red-pill.ts"
-		)
+		self._extension_present = os.path.exists(Path.home() / ".pi" / "agent" / "extensions" / "red-pill.ts")
 
 	def get_capabilities(self) -> BridgeCapabilities:
 		return BridgeCapabilities(

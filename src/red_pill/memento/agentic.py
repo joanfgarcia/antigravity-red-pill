@@ -283,7 +283,9 @@ def _is_llm_connection_error(exc: Exception) -> bool:
 	return False
 
 
-def run_agentic(root: Path, registry: Any, targets: List[Tuple[str, str]], transport: Transport, checkpoint_path: Optional[Path] = None) -> Dict[str, int]:
+def run_agentic(
+	root: Path, registry: Any, targets: List[Tuple[str, str]], transport: Transport, checkpoint_path: Optional[Path] = None
+) -> Dict[str, int]:
 	"""Distill → Refine → sello de significance + decisión shadow del gate, por sesión.
 
 	Si `checkpoint_path` se da (modo bounded del script_job), se escribe un
@@ -349,8 +351,7 @@ def run_agentic(root: Path, registry: Any, targets: List[Tuple[str, str]], trans
 				# Contar como fallo de esta sesión y CONTINUAR — el run no debe morir
 				# por una sesión (crash-recovery ya cubre el resume).
 				logger.error(
-					f"§4.5.1 VIOLADO: el sello de significance movió el cuerpo de {session_id} — "
-					f"hash antes={before[:12]} después={after[:12]}."
+					f"§4.5.1 VIOLADO: el sello de significance movió el cuerpo de {session_id} — hash antes={before[:12]} después={after[:12]}."
 				)
 				stats["failed"] += 1
 				consecutive_failures = 0

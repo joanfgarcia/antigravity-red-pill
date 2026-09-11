@@ -237,7 +237,14 @@ def pi_sessions(tmp_path):
 		{"type": "session", "version": 3, "id": "sess-1", "timestamp": "2026-09-10T10:00:00.000Z", "cwd": "/home/joan/Workspace"},
 		# Ruido de harness: no message, se ignora
 		{"type": "compaction", "id": "aaaa1111", "parentId": None, "timestamp": "2026-09-10T10:00:05.000Z", "summary": "…", "tokensBefore": 50000},
-		{"type": "model_change", "id": "bbbb2222", "parentId": "aaaa1111", "timestamp": "2026-09-10T10:00:06.000Z", "provider": "opencode", "modelId": "kimi-k2.6"},
+		{
+			"type": "model_change",
+			"id": "bbbb2222",
+			"parentId": "aaaa1111",
+			"timestamp": "2026-09-10T10:00:06.000Z",
+			"provider": "opencode",
+			"modelId": "kimi-k2.6",
+		},
 		{
 			"type": "message",
 			"id": "cccc3333",
@@ -267,7 +274,14 @@ def pi_sessions(tmp_path):
 			"id": "eeee5555",
 			"parentId": "dddd4444",
 			"timestamp": "2026-09-10T10:00:25.000Z",
-			"message": {"role": "toolResult", "toolCallId": "call_1", "toolName": "read", "content": [{"type": "text", "text": "def load():\n" + "x = 1\n" * 200}], "isError": False, "timestamp": 1784544153000},
+			"message": {
+				"role": "toolResult",
+				"toolCallId": "call_1",
+				"toolName": "read",
+				"content": [{"type": "text", "text": "def load():\n" + "x = 1\n" * 200}],
+				"isError": False,
+				"timestamp": 1784544153000,
+			},
 		},
 	]
 	session.write_text("\n".join(json.dumps(r) for r in records) + "\n", encoding="utf-8")

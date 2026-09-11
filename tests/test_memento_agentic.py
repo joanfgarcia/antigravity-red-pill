@@ -200,11 +200,17 @@ def test_run_agentic_escribe_checkpoint_bounded_por_sesion(tmp_path):
 
 	# La cuenta es GLOBAL del registry: s1 ya marcada + s2 recién procesada → 2.
 	rendered2 = render_session(
-		"opencode:s2", "opencode", "opencode",
+		"opencode:s2",
+		"opencode",
+		"opencode",
 		[{"role": "user", "content": "Mensaje útil.", "timestamp": 1787234592.0}],
 	)
 	write_session(root, rendered2)
-	registry.upsert("opencode", "opencode:s2", {"dir": rendered2.dir_rel, "month": rendered2.month, "created_at": rendered2.created_at, "memento_hash": rendered2.memento_hash})
+	registry.upsert(
+		"opencode",
+		"opencode:s2",
+		{"dir": rendered2.dir_rel, "month": rendered2.month, "created_at": rendered2.created_at, "memento_hash": rendered2.memento_hash},
+	)
 	cp2 = tmp_path / "state" / "prog2.json"
 	run_agentic(root, registry, [("opencode", "opencode:s2")], fake_transport(), checkpoint_path=cp2)
 	data2 = json.loads(cp2.read_text(encoding="utf-8"))

@@ -18,18 +18,21 @@ from red_pill.swarm.bridges.pi import PiBridge, _text_of
 
 
 def _sample_stream():
-	return "\n".join(
-		[
-			json.dumps({"type": "session", "version": 3, "id": "abc123def", "timestamp": "2026-09-10T10:00:00.000Z", "cwd": "/tmp"}),
-			json.dumps({"type": "agent_start"}),
-			json.dumps({"type": "turn_start"}),
-			json.dumps({"type": "message_start", "message": {"role": "assistant", "content": []}}),
-			json.dumps({"type": "message_update", "usage": {}, "assistantMessageEvent": {"type": "text_delta", "delta": "Hello"}}),
-			json.dumps({"type": "message_end", "message": {"role": "assistant", "content": [{"type": "text", "text": "Hello there"}]}}),
-			json.dumps({"type": "turn_end", "message": {"role": "assistant", "content": [{"type": "text", "text": "Hello there"}]}}),
-			json.dumps({"type": "agent_end", "messages": []}),
-		]
-	) + "\n"
+	return (
+		"\n".join(
+			[
+				json.dumps({"type": "session", "version": 3, "id": "abc123def", "timestamp": "2026-09-10T10:00:00.000Z", "cwd": "/tmp"}),
+				json.dumps({"type": "agent_start"}),
+				json.dumps({"type": "turn_start"}),
+				json.dumps({"type": "message_start", "message": {"role": "assistant", "content": []}}),
+				json.dumps({"type": "message_update", "usage": {}, "assistantMessageEvent": {"type": "text_delta", "delta": "Hello"}}),
+				json.dumps({"type": "message_end", "message": {"role": "assistant", "content": [{"type": "text", "text": "Hello there"}]}}),
+				json.dumps({"type": "turn_end", "message": {"role": "assistant", "content": [{"type": "text", "text": "Hello there"}]}}),
+				json.dumps({"type": "agent_end", "messages": []}),
+			]
+		)
+		+ "\n"
+	)
 
 
 @pytest.fixture()
