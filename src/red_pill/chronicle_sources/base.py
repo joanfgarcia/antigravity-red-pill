@@ -2,10 +2,11 @@
 
 NO confundir con `red_pill.metabolism.chronicle` (ChronicleExtractorPlugin):
 aquello snatchea trayectorias hacia staging para alimentar la CONSOLIDACIÓN;
-esto enumera y carga conversaciones completas para que `chronicle_daily.py`
-las archive en `archive_memories`. Mismo patrón agnóstico que JanitorMinion:
-añadir un orquestador nuevo (IDE/CLI) = un archivo nuevo en este paquete,
-sin tocar el pipeline.
+esto enumera y carga conversaciones completas para que `memento_migrate.py`
+las vuelque al árbol Memento (raw/ + index.md, RFC-002). Desde 2026-09-11 la
+ingesta a `archive_memories` está retirada. Mismo patrón agnóstico que
+JanitorMinion: añadir un orquestador nuevo (IDE/CLI) = un archivo nuevo en
+este paquete, sin tocar el pipeline.
 """
 
 from __future__ import annotations

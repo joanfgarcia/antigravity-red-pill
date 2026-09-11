@@ -22,7 +22,7 @@ Red Pill can delegate work to **minions**. This document is written for two read
 | **Simple** (`CommandMinion`) | Runs a shell command/script, captures output | No | n/a | 1 (exec) | none (no LLM) |
 | **Local, one-shot** (`backend="local"`) | Single local-LLM call, returns text | No | No | 1 | local (Granite via SIP) |
 | **Local, tool-using** (`run_local_minion`) | Bounded in-memory tool loop on the local model | Yes (≤8) | MCP + bash | few | local (Granite via SIP) |
-| **External agentic** (`backend="claude"|"agy"|"opencode"`) | Full agent delegated to a vendor CLI | Yes (vendor) | MCP + bash + files | many | external (cloud/hosted) |
+| **External agentic** (`backend="claude"|"agy"|"opencode"|"pi"`) | Full agent delegated to a vendor CLI | Yes (vendor) | MCP + bash + files | many | external (cloud/hosted) |
 | **Logic** (`sleep_ritual`, `sleep_phase`, `sleep_finalize`, `dossier_gate`, `echo`, `janitor_cleanup`…) | Pure in-process kernel logic — no shell, no LLM | No | n/a | 1 (call) | none (no LLM) |
 
 On top of all of these sits the **orchestrator** (you), which picks the kind, writes
@@ -43,8 +43,8 @@ All MCP calls go through the `swarm_orchestrator_api` tool.
 // action: "run_agent_task"
 {
   "prompt": "In workspace X, find and fix the failing test in module Y. Report the diff.",
-  "backend": "claude",        // "claude" | "agy" | "opencode" | "local" (omit → IDE_BACKEND)
-  "model": "sonnet",          // backend-specific (opus/sonnet/haiku/claude-opus-4-8; opencode: provider/model)
+  "backend": "claude",        // "claude" | "agy" | "opencode" | "pi" | "local" (omit → IDE_BACKEND)
+  "model": "sonnet",          // backend-specific (opus/sonnet/haiku/claude-opus-4-8; opencode/pi: provider/model)
   "effort": "medium",         // low|medium|high|xhigh|max (claude; others may ignore)
   "workspace": "/path/to/project",  // omit → red-pill's own dir
   "timeout": 600,             // seconds (default 600)

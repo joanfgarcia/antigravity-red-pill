@@ -140,6 +140,28 @@ def test_pending_agentic_detects_missing_and_stale(tmp_path):
 	assert pending_agentic(registry) == [("opencode", "opencode:s1", "stale")]
 
 
+def test_run_agentic_no_muere_con_memento_hash_stale(tmp_path):
+	"""Regresión 2026-09-10: el assert 'significance stamp moved the body' comparaba
+	contra el memento_hash del registry, que puede estar stale por un re-render
+	concurrente → falso positivo que mató el backfill de 595 sesiones. Ahora la
+	verificación compara el hash del body ANTES vs DESPUÉS del sello (mismo
+	fichero en disco), independiente del registry: una sesión con hash stale se
+	procesa y sella sin abortar el run."""
+	root, registry, rendered = _tree_with_session(tmp_path)
+	# Simula re-render concurrente: el disco cambió pero el registry guarda hash viejo.
+	registry.get("opencode", "opencode:s1")["memento_hash"] = "hash-viejo-stale"
+
+	stats = run_agentic(root, registry, [("opencode", "opencode:s1")], fake_transport())
+	assert stats["processed"] == 1, "la sesión stale se debe procesar y sellar"
+	assert stats["failed"] == 0
+
+	# El sello se escribió y el cuerpo NO se movió (hash antes==después del sello).
+	idx = root / rendered.dir_rel / "memento" / "index.md"
+	text = idx.read_text(encoding="utf-8")
+	assert "significance: 0.8" in text
+	assert compute_hash(extract_body(text)) == rendered.memento_hash, "el sello no debe mover el cuerpo"
+
+
 def test_pending_agentic_crash_recovery_detecta_disco_sin_marcado(tmp_path):
 	"""Regresión 2026-09-07: si el proceso muere (reboot) tras destilar en disco pero
 	antes de guardar el registry, las sesiones NO deben re-procesarse salvo --force."""
@@ -178,11 +200,17 @@ def test_run_agentic_escribe_checkpoint_bounded_por_sesion(tmp_path):
 
 	# La cuenta es GLOBAL del registry: s1 ya marcada + s2 recién procesada → 2.
 	rendered2 = render_session(
-		"opencode:s2", "opencode", "opencode",
+		"opencode:s2",
+		"opencode",
+		"opencode",
 		[{"role": "user", "content": "Mensaje útil.", "timestamp": 1787234592.0}],
 	)
 	write_session(root, rendered2)
-	registry.upsert("opencode", "opencode:s2", {"dir": rendered2.dir_rel, "month": rendered2.month, "created_at": rendered2.created_at, "memento_hash": rendered2.memento_hash})
+	registry.upsert(
+		"opencode",
+		"opencode:s2",
+		{"dir": rendered2.dir_rel, "month": rendered2.month, "created_at": rendered2.created_at, "memento_hash": rendered2.memento_hash},
+	)
 	cp2 = tmp_path / "state" / "prog2.json"
 	run_agentic(root, registry, [("opencode", "opencode:s2")], fake_transport(), checkpoint_path=cp2)
 	data2 = json.loads(cp2.read_text(encoding="utf-8"))

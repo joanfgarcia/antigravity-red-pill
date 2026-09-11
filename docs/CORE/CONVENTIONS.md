@@ -84,6 +84,31 @@ tests/test_sound_of_silence.py            ✅  (governance test)
 tests/test_coverage_gaps.py               ✅  (targeted coverage)
 ```
 
+### 1.7 Agent Skills (Agent Skills standard)
+
+**Skills are NOT `snake_case`.** They follow the [Agent Skills standard](https://agentskills.io/specification),
+consumed by opencode, Pi, Claude Code, Antigravity… — the dir name MUST equal the
+frontmatter `name`, in **kebab-case**:
+
+- **kebab-case only**: lowercase `a-z`, digits `0-9`, hyphens `-`. Underscores (`_`),
+  uppercase and spaces are FORBIDDEN.
+- **Length**: 1–64 chars; no leading/trailing/double hyphens.
+- **`description`**: required, non-empty, ≤1024 chars (drives progressive disclosure).
+- **Location**: generic skills in `skills/`; IDE-specific overrides in `seeds/<ide>/skills/`.
+  A skill lives in only ONE layer unless an IDE genuinely needs an override (the
+  IDE-specific copy wins in that harness — single merged dir per harness, no collisions).
+- **red-pill CLI**: never reference bare `red-pill` (NOT on the PATH). Use the
+  `${RED_PILL_CMD}` placeholder, resolved at seeding to
+  `uv run --no-sync --project <repo> red-pill`.
+
+```
+skills/workspace-memory/SKILL.md   ✅  (dir == name == workspace-memory)
+skills/workspace_memory/SKILL.md   ✗  (snake_case — PI warns, opencode rejects)
+```
+
+Validators: `tests/test_skill_convention.py` (repo) and Pi's own loader
+(`loadSkillsFromDir`, zero warnings).
+
 ---
 
 ## 2. Directory Naming
@@ -126,6 +151,7 @@ tests/    ✅  (lowercase)
 |---|---|---|
 | Human-readable documentation | `UPPERCASE.md` | `docs/` |
 | Agent runtime code / seeds / rules | `lowercase.md` | `seeds/`, `.agent/rules/` |
+| Agent Skills | `kebab-case` dir == `name`, `SKILL.md` | `skills/`, `seeds/<ide>/skills/` |
 | Python source / scripts | `lowercase.py` / `lowercase.sh` | `src/`, `scripts/` |
 | Unit tests | `test_lowercase.py` | `tests/` |
 | Integration tests | `test_lowercase_integration.py` | `tests/` |

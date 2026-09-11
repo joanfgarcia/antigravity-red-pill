@@ -84,7 +84,7 @@ class BridgeTarget(BaseModel):
 	local → ignored).
 	"""
 
-	backend: Literal["agy", "claude", "opencode", "local"]
+	backend: Literal["agy", "claude", "opencode", "local", "pi"]
 	model: Optional[str] = None
 	effort: Optional[Literal["low", "medium", "high"]] = None
 	server_url: Optional[str] = None  # opencode only: http://localhost:PORT for --attach (None → direct/cold)
@@ -367,7 +367,7 @@ class RedPillConfig(BaseSettings):
 	# -----------------------------------------------------------------------
 	# ANTIGRAVITY IDE BRIDGE
 	# -----------------------------------------------------------------------
-	IDE_BACKEND: str = "auto"  # "agy" | "grpc" | "claude" | "local" | "auto"
+	IDE_BACKEND: str = "auto"  # "agy" | "grpc" | "claude" | "local" | "pi" | "auto"
 	# Gate autonomous Flash-consuming operations (cognitive queue, minion
 	# auto-inject, entropy executor). Telegram inbox processing is NOT
 	# affected — only background/autonomous agy prompts are suppressed.
@@ -415,8 +415,8 @@ class RedPillConfig(BaseSettings):
 	@classmethod
 	def _validate_ide_backend(cls, v: str) -> str:
 		v = v.strip().lower()
-		if v not in ("agy", "grpc", "claude", "local", "auto"):
-			raise ValueError(f"IDE_BACKEND must be 'agy', 'grpc', 'claude', 'local', or 'auto': {v}")
+		if v not in ("agy", "grpc", "claude", "local", "pi", "auto"):
+			raise ValueError(f"IDE_BACKEND must be 'agy', 'grpc', 'claude', 'local', 'pi', or 'auto': {v}")
 		return v
 
 	# -----------------------------------------------------------------------
@@ -462,9 +462,11 @@ class RedPillConfig(BaseSettings):
 	METABOLISM_COOLDOWN: int = 3600
 	METABOLISM_AUTO_COLLECTIONS: Any = ["work_memories", "social_memories", "story_memories"]
 	CHRONICLE_PLUGINS: List[str] = ["antigravity", "claude_code"]
-	# Fuentes del ARCHIVO diario (chronicle_daily → archive_memories); no confundir
-	# con CHRONICLE_PLUGINS, que gobierna el snatching hacia la consolidación.
-	CHRONICLE_ARCHIVE_SOURCES: List[str] = ["antigravity", "claude_code", "opencode"]
+	# Fuentes del ARCHIVO diario Memento (memento_migrate → árbol Memento); no
+	# confundir con CHRONICLE_PLUGINS, que gobierna el snatching hacia la
+	# consolidación. La ingesta a archive_memories se retiró 2026-09-11.
+	# "pi" entra por defecto: si Pi no está instalado, su discover() devuelve [].
+	CHRONICLE_ARCHIVE_SOURCES: List[str] = ["antigravity", "claude_code", "opencode", "pi"]
 
 	# -----------------------------------------------------------------------
 	# MEMENTO CHRONICLE (RFC-002 §4.8)

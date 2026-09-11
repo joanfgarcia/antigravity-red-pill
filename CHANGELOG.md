@@ -1,9 +1,100 @@
-## [7.22.0] - Unreleased (Memento Chronicle, Despertar autónomo, JOB-001 & Bank Janitor)
+## [7.22.0] - Unreleased (Memento Chronicle, Despertar autónomo, JOB-001, Bank Janitor & Arnés Pi)
 
-Cuatro frentes: **Memento** (RFC-002, fases 0–3.5 completas — la grabadora vuelve
+Cinco frentes: **Memento** (RFC-002, fases 0–3.5 completas — la grabadora vuelve
 al disco y Qdrant emprende el camino a memoria curada), el aislamiento de la
 actividad del operador frente a los runs headless del despertar autónomo, la
-**trazabilidad de jobs** (JOB-001) y la **higiene del memory bank** (`bank_janitor`).
+**trazabilidad de jobs** (JOB-001), la **higiene del memory bank** (`bank_janitor`)
+y el **arnés Pi** (kebab-case skills + chronicle source + injector).
+
+### 🧹 Chronicle/Memento — nightly solo-Memento, retirada de `archive_memories` + arnés de bake-off
+
+La pipeline nocturna deja de tocar la maquinaria legacy de Qdrant y queda
+pausable por etapa (incidente 2026-09-11: la pausa del operador quedó horas en
+`PAUSING` porque todo el pipeline era un único step).
+
+- **[REF] `configs/jobs/chronicle.yaml` → `dag_job`**: de `script_job` de un
+  solo paso a **2 etapas atómicas** (`memento` → `memento-agentic`). `job_pause`
+  aterriza en cada frontera de etapa, `job_resume` continúa exacto desde la
+  interrumpida. La pipeline nocturna queda **solo-Memento** (RFC-002).
+- **[ARCH] Retirada del legacy `archive_memories`**: desconectados
+  `chronicle_distill.py`/`chronicle_refine.py` (barrido no acotado de
+  `archive_memories`, causa de los timeouts nocturnos) y la ingesta legacy
+  (`antigravity_ingest`). El pase agéntico moderno es `memento-agentic` sobre el
+  árbol Memento (RFC-002 §4.5); `archive_memories` queda como fallback de
+  reconstrucción (§5.1.2). Eliminados `scripts/chronicle_daily.py` y
+  `tests/test_chronicle_registry.py`; limpiadas referencias (`schedule_pulse.py`,
+  `chronicle_sources/base.py`, `memento/registry.py`, `config.py`,
+  `seeds/pi/README.md`).
+- **[NEW] Arnés de bake-off de modelos**: `scripts/model_battle_tool.py`
+  (tool-calling vía bindings, con parser de formatos nativos — `<tool_call>`,
+  `<|tool_call>` de Gemma, `<function_call>`, OpenAI); `scripts/model_battle_tool_gpu.py`
+  (variante llama-server); wrappers `bakeoff_new_models.sh`/`bakeoff_tool_all.sh`;
+  `KNOWN_GGUF` ampliado (`tiny_aya`, `gemma4_e4b`, `r1_distill`).
+- **[NEW] `scripts/setup_cuda_bindings.sh`** — desacople de CUDA: crea un venv
+  **sidecar machine-local** (`~/.local/share/red-pill/llmtools-venv`) con los
+  bindings CUDA (índice abetlen `cuXXX`), sin tocar `uv.lock` (que sigue portable).
+  Resuelve el revert de `uv run` sobre el venv del repo.
+- **[DOC] Benchmarks** `docs/BENCHMARKS/2026-09-11-*` (destilación: tiny_aya,
+  gemma4_e4b, r1-distill; tool-calling: 6 modelos). Diseño del framework de
+  evaluación en `Aleth_Core/design/RFC_INVENTARIO_MODELOS_HARNESS.md`.
+
+### 🔌 Arnes Pi (`pi-coding-agent`)
+
+Anclaje del Búnker a **pi-coding-agent** (Pi no soporta MCP: el puente es una
+extensión TS que invoca el CLI red-pill vía `uv run`). Los skills pasan al
+**Agent Skills standard** (kebab-case, directorio == `name`) y la norma de
+invocación del CLI se estandariza con el placeholder `${RED_PILL_CMD}`.
+
+- **[NEW] `seeds/pi/extensions/red-pill.ts`** + `seeds/pi/README.md`: extensión
+  que hace de puente sin MCP — resync de identidad (FULL) en pérdida de
+  contexto, RAG liviano por turno (LIGHT), Silent Scribe Relay
+  (`MemoryQueueManager`), herramientas `bunker_search`/`bunker_save` y comando
+  `/bunker`. Placeholders `${RED_PILL_DIR}`/`${UV}` resueltos al sembrar.
+- **[NEW] `scripts/inject/pi/`** (adapter autodetectado por `inject_cli.py`):
+  despliega la extensión y **fusiona** los skills en `~/.pi/agent/skills/`
+  (genérico `skills/` + override `seeds/pi/skills/`, gana el específico), sin
+  tocar `settings.json` ni configurar MCP. Soporta `--remove`; reseed
+  convergente e idempotente (prune de legados snake_case). Tests en sandbox
+  (`tests/test_inject_pi.py`) y validación con el loader real de Pi
+  (`tests/test_pi_skills_loader.py`, skip si no hay node/pi).
+- **[NEW] Backend agéntico `pi`**: `PiBridge` (`src/red_pill/swarm/bridges/pi.py`,
+  registrado en la factory) ejecuta prompts headless vía `pi --mode json`
+  (sesiones persistidas → las archiva `chronicle_sources/pi`; la extensión
+  inyecta identidad/RAG y hace el scribe si está desplegada). Uso:
+  `run_agent_task(backend="pi")`, `agentic_job` con `backend: pi`, o
+  `IDE_BACKEND=pi`. Añadido a `BackendType`, `BridgeTarget`, validator de
+  `IDE_BACKEND`, docs y `minion-delegation`. Tests: `tests/test_pi_bridge.py`.
+
+### 🏷️ Skills → Agent Skills standard (kebab-case)
+
+- **[ARCH] Renombrados** (git mv, frontmatter `name` alineado): `context-distiller`,
+  `job-manager`, `memory-manager` (era `memory_manager_template`), `minion-delegation`,
+  `project-anchor-management`, `skill-creation`, `sovereign-handshake`,
+  `swarm-flow-manager`, `workspace-memory`, `agent-core`, `knowledge-access`.
+  OpenCode lo enforcea; Pi avisa con warnings sobre caracteres inválidos.
+- **[NEW] Placeholder `${RED_PILL_CMD}`** (la norma: el CLI NO está en el PATH;
+  invocación `uv run --no-sync --project <repo> red-pill`) en `job-manager`,
+  `workspace-memory` y `memory-manager`; resuelto por `build_vars()` y por los
+  installers shell (sed). Los installers eliminan el caso especial de render de
+  `memory_manager`.
+- **[DOCS] `docs/CORE/CONVENTIONS.md`**: sección "Agent Skills standard" +
+  matriz de convención por tipo de artefacto; `skill-creation` fija la norma
+  (nombre kebab, dir==name, verificación con el loader de Pi);
+  `scaffold-sovereign-project/templates/CONVENTIONS.md` la siembra.
+- **[QA] `tests/test_skill_convention.py`**: dir==name + kebab + description.
+
+### 📼 Fuente chronicle Pi
+
+- **[NEW] `src/red_pill/chronicle_sources/pi.py`**: `PiSourcePlugin`
+  (`name="pi"`, prefijo `pi:`) lee las sesiones JSONL v3 de
+  `~/.pi/agent/sessions/` (timestamp ISO del entry, consistente con
+  claude_code), compacta `toolResult` a `[TOOL: <name>]`, con `workspace_of`
+  (slug del cwd), `export_raw` (backup `raw.jsonl`) y `load_raw` (regeneración
+  `--from-raw`).
+- **[FEAT] `CHRONICLE_ARCHIVE_SOURCES`** incluye `"pi"` por defecto → el archivo
+  diario (`archive_memories`) y el árbol Memento la ingieren (si Pi no está
+  instalado, `discover()` devuelve `[]` sin ruido). Tests en
+  `tests/test_chronicle_sources.py`.
 
 ### 🧹 `bank_janitor` — el 'Memory Optimizer' prometido, por fin real (sin LLM)
 

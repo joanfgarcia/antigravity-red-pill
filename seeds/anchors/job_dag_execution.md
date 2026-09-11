@@ -22,6 +22,6 @@ mediante el Centralized Job Manager**, no a pelo en un `nohup`/`&`:
    dolor si se frustra.
 
 La única excepción es una tarea que necesita respuesta AHORA en la sesión
-(chat, lint rápido) — esa va in-process, nunca como job (skill `job_manager` §1).
+(chat, lint rápido) — esa va in-process, nunca como job (skill `job-manager` §1).
 
 </constraint>
