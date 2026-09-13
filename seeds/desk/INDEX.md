@@ -54,8 +54,9 @@ Cada línea es una carpeta en [`planner/research/`](planner/research/README.md).
 ## Operación
 
 - [`ROADMAP.md`](ROADMAP.md) — hoja de ruta estratégica y curiosidad.
-- [`AWAKENING_LOG.md`](AWAKENING_LOG.md) — bitácora viva del despertar autónomo
-  (escrita por el kernel; **no mover de la raíz** — ruta hardcodeada).
+- [`awakening/`](awakening/) — logs de despertar autónomo, uno por sesión
+  (`YYYYMMDD_HHMM.log`). El legacy `AWAKENING_LOG.md` se conserva como histórico
+  (ya no crece).
 - [`notes/`](notes/) — notas de sesión recientes.
 - [`lore/`](lore/) — filosofía y visión del agente.
 - [`docs/`](docs/) — documentos base no ligados a una tarea (tesis, decisiones cerradas).

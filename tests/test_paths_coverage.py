@@ -43,6 +43,42 @@ class TestGetAlethCoreRoot:
 		assert result == tmp_path.parent / "Agent_Core"
 
 
+class TestAwakening:
+	def test_dir_under_agent_core(self, tmp_path, monkeypatch):
+		monkeypatch.setenv("AGENT_CORE_DIR", str(tmp_path))
+		result = paths.get_awakening_dir()
+		assert result == tmp_path / "awakening"
+		assert result.is_dir()
+
+	def test_log_path_names_by_timestamp(self, tmp_path, monkeypatch):
+		monkeypatch.setenv("AGENT_CORE_DIR", str(tmp_path))
+		import datetime
+
+		now = datetime.datetime(2026, 9, 13, 14, 32)
+		result = paths.get_awakening_log_path(now=now)
+		assert result == tmp_path / "awakening" / "20260913_1432.log"
+
+	def test_log_path_creates_dir(self, tmp_path, monkeypatch):
+		monkeypatch.setenv("AGENT_CORE_DIR", str(tmp_path))
+		import datetime
+
+		result = paths.get_awakening_log_path(now=datetime.datetime(2026, 9, 13, 14, 32))
+		assert result.parent.is_dir()
+
+	def test_latest_returns_newest(self, tmp_path, monkeypatch):
+		monkeypatch.setenv("AGENT_CORE_DIR", str(tmp_path))
+		aw = paths.get_awakening_dir()
+		(aw / "20260913_0800.log").touch()
+		(aw / "20260913_1432.log").touch()
+		assert paths.get_latest_awakening_log().name == "20260913_1432.log"
+
+	def test_latest_creates_when_empty(self, tmp_path, monkeypatch):
+		monkeypatch.setenv("AGENT_CORE_DIR", str(tmp_path))
+		result = paths.get_latest_awakening_log()
+		assert result.parent == paths.get_awakening_dir()
+		assert result.suffix == ".log"
+
+
 class TestGetDataDir:
 	def test_creates_directory(self):
 		result = paths.get_data_dir()

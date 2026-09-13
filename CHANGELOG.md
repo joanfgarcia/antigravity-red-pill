@@ -31,6 +31,13 @@ provenir de una fuente canónica que se propaga en las instalaciones.
 - **[FIX] `drive_evaluator.py`**: la entropía de backlog leía `TODO.md` del desk
   (ya inexistente tras la migración a `planner/`); ahora cuenta las carpetas de
   `planner/pending/`. Test actualizado.
+- **[FEAT] Rotación de logs de despertar autónomo**: cada despertar escribe su
+  propio log en `${AGENT_CORE_DIR}/awakening/YYYYMMDD_HHMM.log` (filosofía de
+  carpetas del desk). El `AWAKENING_LOG.md` se conserva como histórico y deja de
+  crecer. Nuevos helpers en `paths.py` (`get_awakening_dir`,
+  `get_awakening_log_path`, `get_latest_awakening_log`); `autonomous_cron.py`
+  apunta la directiva al log de la sesión y `worker.py` apendea `SOVEREIGN_LOG`
+  al log más reciente.
 
 ### 🧹 Chronicle/Memento — nightly solo-Memento, retirada de `archive_memories` + arnés de bake-off
 
