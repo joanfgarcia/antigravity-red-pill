@@ -212,6 +212,7 @@ echo "------------------------------------------------------------------"
 
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 mkdir -p "$HOME/.config/red-pill"
 ENV_FILE="$HOME/.config/red-pill/.env"
 
@@ -567,6 +568,30 @@ chmod 600 "$ENV_FILE"
 
 mkdir -p "$WORKSPACE_ROOT/scripts" "$WORKSPACE_ROOT/backups/qdrant" "$WORKSPACE_ROOT/backups/soul" "$WORKSPACE_ROOT/seeds" "$HOME/.local/share/red-pill/models" "$HOME/.local/share/red-pill/queue" "$HOME/.local/share/red-pill/tmp"
 
+# Desk scaffold (seeds/desk → AGENT_CORE_DIR, copy-if-absent — nunca pisa el
+# contenido que el operador ya ha tocado; las actualizaciones de convención
+# viajan en seeds/desk y se propagan en la próxima instalación).
+if [ -d "$REPO_ROOT/seeds/desk" ]; then
+	echo -e "${BLUE}--- Fase: Scaffold del Desk (${AGENT_CORE_DIR}) ---${NC}"
+	mkdir -p "$AGENT_CORE_DIR"
+	# Copia la estructura de carpetas (vacías) siempre; los ficheros canónicos solo si no existen.
+	(
+		cd "$REPO_ROOT/seeds/desk" || exit 1
+		find . -type d | while read -r d; do
+			mkdir -p "${AGENT_CORE_DIR}/${d#./}"
+		done
+		find . -type f | while read -r f; do
+			rel="${f#./}"
+			if [ ! -f "$AGENT_CORE_DIR/$rel" ]; then
+				cp "$f" "$AGENT_CORE_DIR/$rel"
+				echo -e "  ✓ seed → ${rel}"
+			else
+				echo -e "  · ${rel} (existe, no se pisa)"
+			fi
+		done
+	)
+fi
+
 if [ "$QDRANT_ALIVE" = "false" ]; then
 	QUADLET_DIR="$HOME/.config/containers/systemd"
 	mkdir -p "$QUADLET_DIR"
@@ -652,8 +677,6 @@ USER_RULES_DIR="${RED_PILL_AGENT_DIR:-$HOME/.agent}"
 GEMINI_ROOT="$HOME/.gemini/antigravity"
 echo -e "${BLUE}--- Fase: Despliegue de Infraestructura Soberana (IDE-Agnostic) ---${NC}"
 mkdir -p "$GEMINI_ROOT/rules" "$GEMINI_ROOT/skills"
-
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 if [ -d "$REPO_ROOT/seeds" ]; then
 	cp "$REPO_ROOT/seeds/snapshot_rule.md" "$GEMINI_ROOT/rules/snapshot_rule.md"
