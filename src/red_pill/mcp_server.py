@@ -1882,7 +1882,7 @@ async def handle_job_submit(arguments: Dict[str, Any]):
 							f"[ERROR] job_submit sin modelo configurado (source={source}). "
 							"'flash' es el placeholder del default del harness, no una config activa. "
 							"Indica 'model' con un modelo real (p.ej. opencode-go/deepseek-v4-pro) o configura "
-							"los recipes por rol en .red-pill/jobs/ (ver Aleth_Core/NOTE_MODEL_POLICY_ROLES.md). "
+							"los recipes por rol en .red-pill/jobs/ (ver docs/TECHNICAL/DECISION_LOG.md). "
 							"Bloqueado por seguridad."
 						),
 					)

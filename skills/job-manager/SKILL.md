@@ -5,7 +5,7 @@ description: Encolar, ejecutar, pausar y monitorizar trabajos diferidos y reanud
 
 # Centralized Job Manager Skill
 
-Este skill enseña al Agente a usar el gestor centralizado de trabajos de Red-Pill: una sola cola persistente (`bunker_queue.db`), un runner shot-and-forget disparado por timer, y drivers reanudables por checkpoint. Plan de diseño: `Aleth_Core/IMPLEMENTATION_PLAN_UNIFIED_JOB_MANAGER.md`.
+Este skill enseña al Agente a usar el gestor centralizado de trabajos de Red-Pill: una sola cola persistente (`bunker_queue.db`), un runner shot-and-forget disparado por timer, y drivers reanudables por checkpoint.
 
 ## 1. Decisión previa: ¿esto es un job?
 

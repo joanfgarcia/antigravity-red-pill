@@ -66,7 +66,7 @@ Values are canonical **English** (metadata is machine-consumed; no bilingual val
 **Scope**: Agent_Core + memory banks only. Project documentation follows each
 project's own conventions — this header is not imposed on project docs.
 
-Lifecycle (see `design/RFC_FLUJO_RFCS.md` in Aleth_Core):
+Lifecycle (desk convention):
 - A doc born in the desk starts `draft`; once implemented, the source of truth is the
   project code/docs, and the `.md` is only a design record (never a parallel canonical copy).
 - When its cycle ends, move it to `archive/<project>/` with `status: archived` +

@@ -36,7 +36,7 @@ pausable por etapa (incidente 2026-09-11: la pausa del operador quedó horas en
   Resuelve el revert de `uv run` sobre el venv del repo.
 - **[DOC] Benchmarks** `docs/BENCHMARKS/2026-09-11-*` (destilación: tiny_aya,
   gemma4_e4b, r1-distill; tool-calling: 6 modelos). Diseño del framework de
-  evaluación en `Aleth_Core/design/RFC_INVENTARIO_MODELOS_HARNESS.md`.
+  evaluación en el diseño del framework de evaluación de modelos × tarea del proyecto.
 
 ### 🔌 Arnes Pi (`pi-coding-agent`)
 
@@ -338,7 +338,7 @@ Remediación completa de la auditoría del 21-ago (revisión de RFC_JOB_DAG /
 RFC_SLEEP_JOB_DRIVER / RFC_DOSSIER_IDEACION contra la implementación, hecha la
 mañana siguiente al PRIMER ciclo de sueño 15/15 en producción como receta del
 dag_job). Informe: `.red-pill/memory/REVIEW_2026-08-21_dag-audit.md`; plan
-ejecutado: `Aleth_Core/PLAN_IMPL_DAG_AUDIT_FIXES.md` (v1.1, con segunda vuelta
+ejecutado: plan de auditoría y fixes del DAG (v1.1, con segunda vuelta
 adversarial).
 
 ### ⚙️ Motor del `dag_job`
@@ -436,7 +436,7 @@ adversarial).
 
 ## [7.19.0] - 2026-08-14 (Cierre de Forge, `type: dag` y el Loop de Ideación)
 
-Las tres fases del plan de ejecución (`Aleth_Core/PLAN_IMPL_FORGE_DAG_LOOP.md`):
+Las tres fases del plan de ejecución de la secuenciación forge → type:dag → loop:
 
 ### 🪦 Forge se cierra — la misión completa es `dag_job`
 
@@ -1131,7 +1131,7 @@ Restauración completa de la voz autobiográfica en 1ª/2ª persona (Operador Jo
 - **[FEAT] Subcomando `upgrade-all` en `distill_lab.py`**: Barrido incremental e in-place de recuerdos históricos con soporte para `--smart-audit`, `--force` y `--limit`.
 
 ### 📋 Planificación Arquitectónica
-- **[DOCS] Unified Job Manager Plan**: Guardada la ancla de arquitectura en `Aleth_Core/IMPLEMENTATION_PLAN_UNIFIED_JOB_MANAGER.md` contemplando las 3 Clases de Servicio QoS (`IMMEDIATE`, `QUEUED_SYNC`, `BACKGROUND_DEFERRED`) y el principio *Zero-Daemon / Shot-and-Forget*.
+- **[DOCS] Unified Job Manager Plan**: Guardada la ancla de arquitectura del Job Manager unificado contemplando las 3 Clases de Servicio QoS (`IMMEDIATE`, `QUEUED_SYNC`, `BACKGROUND_DEFERRED`) y el principio *Zero-Daemon / Shot-and-Forget*.
 
 ---
 
@@ -1176,7 +1176,7 @@ Turns the local model (Granite via SIP) into a first-class tool-using minion and
 - **[FEAT] `local-tools` backend** (`LocalToolBridge`): wires `run_local_minion` into `run_agent_task`, invocable like any other backend. `BaseInferenceProvider.chat()` added to the provider contract (`SipInferenceProvider` forwards `tools`/`tool_choice`). `run_agent_task` schema documents `agy|claude|opencode|local|local-tools`.
 
 ### 🐛 Fixes
-- **[FIX] `Failed to create llama_context` on CPU fallback** — root cause was a CUDA-compiled llama.cpp still touching the GPU with `n_gpu_layers=0` (fails even with the GPU free), NOT the context size. Resolved by running the CPU path as a CUDA-detached isolated worker. See `Aleth_Core/DIAGNOSTIC_LLAMA_CONTEXT_FAIL.md`.
+- **[FIX] `Failed to create llama_context` on CPU fallback** — root cause was a CUDA-compiled llama.cpp still touching the GPU with `n_gpu_layers=0` (fails even with the GPU free), NOT the context size. Resolved by running the CPU path as a CUDA-detached isolated worker (diagnóstico documentado en el DECISION_LOG del proyecto).
 - **[FIX] `hermes_8b` profile**: restore the missing `vram_tiers:` key (orphaned sequence made `model_profiles.yaml.example` fail to parse).
 - **[FIX] `bunker update` applies daemon + skills**: a bare `git pull` never regenerated the generated dual-bind daemon (`run_dual_bind.py`) nor redeployed skills, so an existing install's `local-tools` minion (and the daemon device cascade) would break after `update`. `bunker_update()` now re-runs `setup_background_model.sh` (regenerate + restart `redpill-llm.service`) and redeploys `./skills` to the agent skills dir.
 

@@ -1,4 +1,4 @@
-"""Centralized Job Manager (plan: Aleth_Core/IMPLEMENTATION_PLAN_UNIFIED_JOB_MANAGER.md).
+"""Centralized Job Manager.
 
 Centraliza — no duplica — la ejecución de trabajos sobre las piezas vivas del kernel:
 la cola persistente es `CognitiveQueueManager` (bunker_queue.db), el runner es

@@ -1,7 +1,7 @@
 # The Manifest — recursive stage tree (contract)
 
 > Full specification of the `dag_job` payload. Source of truth:
-> `Aleth_Core/RFC_JOB_DAG_PARALLELIZATION.md` §4.1.
+> this contract + the driver (`src/red_pill/jobs/drivers/dag.py`).
 >
 > ⚠️ **Functional but not final**: this contract matches the `feat/job-dag`
 > worktree build (2026-08-07), not yet merged to `main`. The shape is stable and

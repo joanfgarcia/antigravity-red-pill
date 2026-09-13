@@ -13,8 +13,8 @@
 
 Every stage is atomic (`type: agent` with `minion: agent` + `model` + `prompt`,
 or `type: command` with a non-agent minion) or compound (`sub_etapas` + optional
-`parallel: true`). See the SKILL.md §1 for the shape; models per role from
-`Aleth_Core/NOTE_MODEL_POLICY_ROLES.md`.
+`parallel: true`). See the SKILL.md §1 for the shape; models per role come from
+the install-local config in `.red-pill/jobs/`.
 
 ## Submit via MCP
 

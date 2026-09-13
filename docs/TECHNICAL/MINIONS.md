@@ -167,4 +167,4 @@ Is there an LLM decision to make?
 
 See also: `swarm/bridges/` (bridge implementations & the cascade), `swarm/agents/local_minion.py`
 (the in-house loop), `core/providers.py::SipInferenceProvider` (local inference client),
-and `Aleth_Core/DIAGNOSTIC_LLAMA_CONTEXT_FAIL.md` (why CPU fallback runs as an isolated worker).
+and the CPU-fallback worker isolation rationale in `docs/TECHNICAL/DECISION_LOG.md`.

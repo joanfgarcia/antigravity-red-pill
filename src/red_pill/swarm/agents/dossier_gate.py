@@ -1,11 +1,11 @@
-"""DossierGateMinion — el gate del loop de ideación (RFC_DOSSIER_IDEACION §3.4/§3.6).
+"""DossierGateMinion — el gate del loop de ideación.
 
 Pieza de CÓDIGO de la capa de ideación: la tabla de transición determinista que
 decide qué pase sigue (o qué estado de parada alcanza el dossier). El gate NO
 usa LLM — si la transición la eligiera un agente, volvería el goal drift de
-AutoGPT (§1). Los PASES son agénticos; la SELECCIÓN es mecánica.
+AutoGPT. Los PASES son agénticos; la SELECCIÓN es mecánica.
 
-El dossier vive en una CARPETA (`Aleth_Core/ideas/<id>/` según L1): el README.md
+El dossier vive en una CARPETA (`${ALETH_CORE_DIR}/ideas/<id>/`): el README.md
 es la ficha humana; `state.yaml` es el estado de máquina que este minion lee y
 actualiza. Cada pase (germinación/investigación/síntesis/prueba) es una receta
 dag_job (`configs/jobs/dossier-<pase>.yaml`); el gate es la ÚLTIMA etapa de cada
@@ -296,7 +296,7 @@ def enqueue_pass(next_pass: str, dossier_dir: str, mission_id: str, priority: in
 
 	Arranque manual de un dossier (hasta que exista camino de chispa):
 		uv run python -c "from red_pill.swarm.agents.dossier_gate import enqueue_pass; \
-			print(enqueue_pass('germination', '/ruta/a/Aleth_Core/ideas/<id>', 'dossier-<id>'))"
+			print(enqueue_pass('germination', '/ruta/a/${ALETH_CORE_DIR}/ideas/<id>', 'dossier-<id>'))"
 	"""
 	from red_pill.cognitive.queue_manager import CognitiveQueueManager
 	from red_pill.jobs.drivers.dag import DagJobDriver

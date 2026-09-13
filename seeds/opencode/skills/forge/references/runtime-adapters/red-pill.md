@@ -82,7 +82,7 @@ payload = {
 checkpoint = { completed_stage_ids: [...], results: {...}, stage_flags: {...} }
 ```
 
-`forge_job` is RETIRED (2026-08-14) — the burst manifest compiles to `dag_job` stages via `scripts/manifest-compile.mjs`. The full manifest RFC: `Aleth_Core/RFC_JOB_DAG_PARALLELIZATION.md` §4.1.
+`forge_job` is RETIRED (2026-08-14) — the burst manifest compiles to `dag_job` stages via `scripts/manifest-compile.mjs`. The full manifest spec: `seeds/opencode/skills/dag/references/manifest.md` §4.1.
 
 - **Driver in control (background)**: the runner walks the tree alone; each atomic stage executes one minion and the DAG serializes its envelope to `.cell/reports/<stage-path>.envelope.json` (agent stages) or `<stage-path>.json` (logic/command stages) — the agent's own role report at `<stage-path>.json` is never overwritten; telemetry mirrors to `.cell/dag_status.json` (never the resume source — the DB checkpoint is authoritative, RFC SleepJobDriver A2).
 - **`on_fail` per stage** (and per sub-stage): `warn` (default) = mark FAILED and continue WITHOUT burning the circuit breaker (continue-on-error); `stop` = real job failure (attempts++, circuit breaker if it insists).
