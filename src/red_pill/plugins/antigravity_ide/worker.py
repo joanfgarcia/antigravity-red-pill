@@ -1151,9 +1151,9 @@ class IDEWorker:
 		log_matches = re.findall(r"<SOVEREIGN_LOG>(.*?)</SOVEREIGN_LOG>", response, re.DOTALL)
 		for log_msg in log_matches:
 			try:
-				from red_pill.core.paths import get_aleth_core_root
+				from red_pill.core.paths import get_agent_core_root
 
-				log_path = get_aleth_core_root() / "AWAKENING_LOG.md"
+				log_path = get_agent_core_root() / "AWAKENING_LOG.md"
 				if log_path.exists():
 					import datetime
 
@@ -1307,9 +1307,9 @@ class IDEWorker:
 		log_matches = re.findall(r"<SOVEREIGN_LOG>(.*?)</SOVEREIGN_LOG>", response, re.DOTALL)
 		for log_msg in log_matches:
 			try:
-				from red_pill.core.paths import get_aleth_core_root
+				from red_pill.core.paths import get_agent_core_root
 
-				log_path = get_aleth_core_root() / "AWAKENING_LOG.md"
+				log_path = get_agent_core_root() / "AWAKENING_LOG.md"
 				if log_path.exists():
 					import datetime
 
@@ -1424,9 +1424,9 @@ class IDEWorker:
 					log_matches = re.findall(r"<SOVEREIGN_LOG>(.*?)</SOVEREIGN_LOG>", content, re.DOTALL)
 					for log_msg in log_matches:
 						try:
-							from red_pill.core.paths import get_aleth_core_root
+							from red_pill.core.paths import get_agent_core_root
 
-							log_path = get_aleth_core_root() / "AWAKENING_LOG.md"
+							log_path = get_agent_core_root() / "AWAKENING_LOG.md"
 							if log_path.exists():
 								import datetime
 

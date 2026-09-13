@@ -331,8 +331,8 @@ def test_profile_temperature_scaling(mock_curiosity_env, monkeypatch):
 def test_fsrs_decay_calculation(mock_curiosity_env, monkeypatch):
 	queue_manager, tmp_path = mock_curiosity_env
 
-	# Isolate Aleth_Core root to prevent writing to real desk
-	monkeypatch.setattr("red_pill.core.paths.get_aleth_core_root", lambda: tmp_path / "aleth_core")
+	# Isolate Agent_Core root to prevent writing to real desk
+	monkeypatch.setattr("red_pill.core.paths.get_agent_core_root", lambda: tmp_path / "agent_core")
 
 	evaluator = DriveEvaluator(queue_manager)
 
@@ -342,9 +342,9 @@ def test_fsrs_decay_calculation(mock_curiosity_env, monkeypatch):
 		activity_file.unlink()
 
 	# Let's mock the planner pending dir (backlog)
-	from red_pill.core.paths import get_aleth_core_root
+	from red_pill.core.paths import get_agent_core_root
 
-	pending_dir = get_aleth_core_root() / "planner" / "pending"
+	pending_dir = get_agent_core_root() / "planner" / "pending"
 	(pending_dir / "TASK_ONE").mkdir(parents=True, exist_ok=True)
 
 	# Mock git status to return empty (no mods)

@@ -33,14 +33,14 @@ class TestGetBunkerRootStr:
 
 class TestGetAlethCoreRoot:
 	def test_env_override(self, tmp_path, monkeypatch):
-		monkeypatch.setenv("ALETH_CORE_DIR", str(tmp_path))
-		assert paths.get_aleth_core_root() == tmp_path
+		monkeypatch.setenv("AGENT_CORE_DIR", str(tmp_path))
+		assert paths.get_agent_core_root() == tmp_path
 
 	def test_default_relative_to_bunker(self, tmp_path, monkeypatch):
-		monkeypatch.delenv("ALETH_CORE_DIR", raising=False)
+		monkeypatch.delenv("AGENT_CORE_DIR", raising=False)
 		monkeypatch.setenv("IA_DIR", str(tmp_path))
-		result = paths.get_aleth_core_root()
-		assert result == tmp_path.parent / "Aleth_Core"
+		result = paths.get_agent_core_root()
+		assert result == tmp_path.parent / "Agent_Core"
 
 
 class TestGetDataDir:

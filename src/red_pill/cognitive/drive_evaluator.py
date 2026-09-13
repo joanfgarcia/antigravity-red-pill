@@ -381,9 +381,9 @@ class DriveEvaluator:
 
 		# Backlog Entropy: tareas pendientes en el planner del desk (planner/pending/)
 		try:
-			from red_pill.core.paths import get_aleth_core_root
+			from red_pill.core.paths import get_agent_core_root
 
-			pending_dir = get_aleth_core_root() / "planner" / "pending"
+			pending_dir = get_agent_core_root() / "planner" / "pending"
 			if pending_dir.exists():
 				pending_count = sum(1 for e in pending_dir.iterdir() if e.is_dir())
 				backlog_entropy = pending_count * 0.2

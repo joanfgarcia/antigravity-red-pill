@@ -27,7 +27,7 @@ WORKSPACE_ROOT/                  ← The Agent's Sovereign Environment (e.g. ~/D
 ├── atlas/                       ← Transversal Project Log (USER_ATLAS_DIR)
 │   └── <project_name>.md        ← Notes, logs, and artifacts shared across different projects (e.g. pure-mls, neon-link)
 │
-├── Aleth_Core/                  ← Core Identity Transversal Directory (ALETH_CORE_DIR)
+├── Agent_Core/                  ← Core Identity Transversal Directory (AGENT_CORE_DIR)
 │   └── session_snapshots/       ← Saved state for resuming deep workflows across models or reboots
 │
 ├── .agent/                      ← Agentic Identity & Keychains (OS-Level)
@@ -55,7 +55,7 @@ WORKSPACE_ROOT/                  ← The Agent's Sovereign Environment (e.g. ~/D
 ## 3. Key Concepts & Boundaries
 
 ### 3.1 Transversal Directories (`WORKSPACE_ROOT`)
-Directories like `atlas` and `Aleth_Core` are explicitly defined in `.env` as `USER_ATLAS_DIR` and `ALETH_CORE_DIR`. They belong to the `WORKSPACE_ROOT` because they serve as shared memory blocks between different sub-projects (e.g., `pure-mls`, `neon-link`). Deleting or upgrading the `red-pill` codebase (`APP_ROOT`) will **never** affect the Transversal logs.
+Directories like `atlas` and `Agent_Core` are explicitly defined in `.env` as `USER_ATLAS_DIR` and `AGENT_CORE_DIR`. They belong to the `WORKSPACE_ROOT` because they serve as shared memory blocks between different sub-projects (e.g., `pure-mls`, `neon-link`). Deleting or upgrading the `red-pill` codebase (`APP_ROOT`) will **never** affect the Transversal logs.
 
 ### 3.2 Backups
 To protect against accidental code purges or failed autonomous `git merge` updates, the `soul.py` migration pipelines write `.mls` snapshots and Qdrant backups directly to `WORKSPACE_ROOT/backups/`.
@@ -82,7 +82,7 @@ WORKSPACE_ROOT=~/Documents/IA
 APP_ROOT=${WORKSPACE_ROOT}/red-pill
 RED_PILL_PROFILE=user
 USER_ATLAS_DIR=${WORKSPACE_ROOT}/atlas
-ALETH_CORE_DIR=${WORKSPACE_ROOT}/Aleth_Core
+AGENT_CORE_DIR=${WORKSPACE_ROOT}/Agent_Core
 ```
 
 > [!WARNING]

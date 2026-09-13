@@ -517,7 +517,7 @@ The `perform_sleep_cycle()` function in `src/red_pill/metabolism/sleep.py` has t
 
     1.  **Environment File**: Replace `IA_DIR` in `.env` with `WORKSPACE_ROOT` and `APP_ROOT`. For Developer profiles, `WORKSPACE_ROOT=~/Documents/IA` and `APP_ROOT=~/Documents/IA/sharing`.
     2.  **Profiles**: Define `RED_PILL_PROFILE=user` (or `developer`) to ensure scripts can tailor their behavior.
-    3.  **Transversal Directories**: `USER_ATLAS_DIR` and `ALETH_CORE_DIR` now live in `.env` as top-level citizens.
+    3.  **Transversal Directories**: `USER_ATLAS_DIR` and `AGENT_CORE_DIR` now live in `.env` as top-level citizens.
     4.  **Hardware Adaptations**: When performing an update via `upgrade.sh`, ensure you rely on `git merge` instead of overwriting, to preserve hardware-specific PyTorch adaptations.
 
     > [!IMPORTANT]

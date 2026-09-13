@@ -25,7 +25,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from red_pill.core.paths import get_aleth_core_root, get_db_dir  # noqa: E402
+from red_pill.core.paths import get_agent_core_root, get_db_dir  # noqa: E402
 from red_pill.core.queue_manager import MemoryQueueManager  # noqa: E402
 
 ORIGINATOR = "legacy_interactions"
@@ -76,7 +76,7 @@ def main() -> int:
 	args = parser.parse_args()
 
 	db_path = get_db_dir() / "bunker.db"
-	archive = get_aleth_core_root() / "history" / "universal_history.jsonl"
+	archive = get_agent_core_root() / "history" / "universal_history.jsonl"
 
 	live = _rows_from_sqlite(db_path)
 	archived = _rows_from_jsonl(archive)

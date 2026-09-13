@@ -316,8 +316,8 @@ def build_tui_app() -> Application:
 
 	# Paths
 	workspace_root_txt = TextArea(text=env.get("WORKSPACE_ROOT", str(Path.home() / "Documents" / "IA")), multiline=False, style="class:input-field")
-	aleth_core_txt = TextArea(
-		text=env.get("ALETH_CORE_DIR", str(Path.home() / "Documents" / "IA" / "Aleth_Core")), multiline=False, style="class:input-field"
+	agent_core_txt = TextArea(
+		text=env.get("AGENT_CORE_DIR", str(Path.home() / "Documents" / "IA" / "Agent_Core")), multiline=False, style="class:input-field"
 	)
 	cloud_folder_txt = TextArea(text=env.get("CLOUD_VAULT_FOLDER_ID", ""), multiline=False, style="class:input-field")
 
@@ -377,7 +377,7 @@ def build_tui_app() -> Application:
 				body=HSplit(
 					[
 						VSplit([Label(text="Workspace Root:  ", width=18), workspace_root_txt]),
-						VSplit([Label(text="Aleth Core Dir:  ", width=18), aleth_core_txt]),
+						VSplit([Label(text="Agent Core Dir:  ", width=18), agent_core_txt]),
 						Window(height=1),
 						cloud_vault_cb,
 						VSplit([Label(text="Vault Folder ID: ", width=18), cloud_folder_txt]),
@@ -487,7 +487,7 @@ def build_tui_app() -> Application:
 		env.set("CLOUD_VAULT_ENABLED", "True" if cloud_vault_cb.checked else "False")
 		env.set("CLOUD_VAULT_FOLDER_ID", cloud_folder_txt.text.strip())
 		env.set("WORKSPACE_ROOT", workspace_root_txt.text.strip())
-		env.set("ALETH_CORE_DIR", aleth_core_txt.text.strip())
+		env.set("AGENT_CORE_DIR", agent_core_txt.text.strip())
 		env.set("SLEEP_CHUNK_SIZE", str(chunk))
 		env.set("SLEEP_CULL_THRESHOLD", str(cull))
 		env.set("CADENCE_BURST_THRESHOLD", str(burst))

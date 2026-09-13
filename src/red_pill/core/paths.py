@@ -41,15 +41,15 @@ def get_bunker_root_str() -> str:
 	return str(get_bunker_root())
 
 
-def get_aleth_core_root() -> Path:
+def get_agent_core_root() -> Path:
 	"""
-	Resuelve el directorio transversal Aleth_Core.
-	Usa la variable de entorno ALETH_CORE_DIR si existe, sino asume que está al mismo nivel que el bunker_root.
+	Resuelve el directorio transversal Agent_Core.
+	Usa la variable de entorno AGENT_CORE_DIR si existe, sino asume que está al mismo nivel que el bunker_root.
 	"""
-	aleth_core_str = os.getenv("ALETH_CORE_DIR")
-	if aleth_core_str:
-		return Path(aleth_core_str)
-	return get_bunker_root().parent / "Aleth_Core"
+	agent_core_str = os.getenv("AGENT_CORE_DIR")
+	if agent_core_str:
+		return Path(agent_core_str)
+	return get_bunker_root().parent / "Agent_Core"
 
 
 def get_data_dir() -> Path:
