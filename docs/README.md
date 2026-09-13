@@ -102,6 +102,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [DISTILLER_BAKEOFF_PHI.md](BENCHMARKS/DISTILLER_BAKEOFF_PHI.md) | Phi-4-mini individual bake-off results |
 | [DISTILLER_FIDELITY_PHI.md](BENCHMARKS/DISTILLER_FIDELITY_PHI.md) | Phi-4-mini fidelity eval |
 | [2026-08-13-PENDING.md](BENCHMARKS/2026-08-13-PENDING.md) | Open TODOs for next session (SIP-nemo verification, tool-bake-off, more harnesses) |
+| [2026-09-11-TOOL_BAKEOFF.md](BENCHMARKS/2026-09-11-TOOL_BAKEOFF.md) | Tool-calling bake-off 2026-09-11: 6 modelos, template nativo, peculiaridades por modelo (granite/qwen3/gemma4/smollm3/qwen35) |
 
 ### Bünker
 

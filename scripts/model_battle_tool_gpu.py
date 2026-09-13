@@ -11,9 +11,9 @@ Modelos por defecto (2026-09-11): gemma4_e4b, granite_8b, granite_3b,
 smollm3_3b, qwen3_8b, qwen35_9b.
 
 Uso:
-  python scripts/model_battle_tool_gpu.py
-  python scripts/model_battle_tool_gpu.py --models gemma4_e4b,granite_8b
-  python scripts/model_battle_tool_gpu.py --keep-daemon   # no parar el daemon
+python scripts/model_battle_tool_gpu.py
+python scripts/model_battle_tool_gpu.py --models gemma4_e4b,granite_8b
+python scripts/model_battle_tool_gpu.py --keep-daemon   # no parar el daemon
 """
 
 from __future__ import annotations
