@@ -1,10 +1,36 @@
-## [7.22.0] - Unreleased (Memento Chronicle, Despertar autónomo, JOB-001, Bank Janitor & Arnés Pi)
+## [7.22.0] - Unreleased (Memento Chronicle, Despertar autónomo, JOB-001, Bank Janitor, Arnés Pi & Desk)
 
-Cinco frentes: **Memento** (RFC-002, fases 0–3.5 completas — la grabadora vuelve
+Seis frentes: **Memento** (RFC-002, fases 0–3.5 completas — la grabadora vuelve
 al disco y Qdrant emprende el camino a memoria curada), el aislamiento de la
 actividad del operador frente a los runs headless del despertar autónomo, la
-**trazabilidad de jobs** (JOB-001), la **higiene del memory bank** (`bank_janitor`)
-y el **arnés Pi** (kebab-case skills + chronicle source + injector).
+**trazabilidad de jobs** (JOB-001), la **higiene del memory bank** (`bank_janitor`),
+el **arnés Pi** (kebab-case skills + chronicle source + injector) y el **Desk**
+(scaffold `seeds/desk/` + separación proyecto↔despacho + unificación `AGENT_CORE_DIR`).
+
+### 🧹 Desk — scaffold del despacho, separación proyecto↔despacho y `AGENT_CORE_DIR`
+
+El desk (`${AGENT_CORE_DIR}`) deja de ser una plantilla solo local y pasa a
+provenir de una fuente canónica que se propaga en las instalaciones.
+
+- **[NEW] `seeds/desk/`** — scaffold del despacho: `FRONTMATTER_TEMPLATE.md`,
+  `INDEX.md`, `planner/` (README + fases `ideas/research/design/pending/in_progress`
+  + `tools/panel.py`) y `archive/README.md`. `install_neo.sh` lo copia a
+  `${AGENT_CORE_DIR}` **copy-if-absent** (nunca pisa lo que el operador ya tocó);
+  las actualizaciones de convención viajan en el seed y se propagan en la próxima
+  instalación.
+- **[HYG] Separación proyecto↔despacho** (`CONVENTIONS.md` §10.6): el proyecto
+  (público) nunca referencia el despacho (privado) — sin `Agent_Core/...`, sin
+  RFCs del desk, sin su TODO. El proyecto se autodocumenta (`DECISION_LOG.md`,
+  docs propias). Limpiadas las refs a RFCs/rutas del desk en docs, seeds, skills
+  y código; los seeds de `dag`/`forge` apuntan su autoridad al driver + `manifest.md`.
+- **[REF] Unificación `AGENT_CORE_DIR`** (era `ALETH_CORE_DIR`): el kernel Python
+  (`paths.py`, `config_tui.py`, `dossier_gate.py`, `drive_evaluator.py`,
+  `autonomous_cron.py`, `worker.py`) quedaba desalineado con el instalador y los
+  seeds. Renombrada `get_aleth_core_root` → `get_agent_core_root`; `.env` migrado;
+  docs alineadas (SOVEREIGN_ATLAS, ARCHITECTURE, AGENT_UPDATE_GUIDE).
+- **[FIX] `drive_evaluator.py`**: la entropía de backlog leía `TODO.md` del desk
+  (ya inexistente tras la migración a `planner/`); ahora cuenta las carpetas de
+  `planner/pending/`. Test actualizado.
 
 ### 🧹 Chronicle/Memento — nightly solo-Memento, retirada de `archive_memories` + arnés de bake-off
 
