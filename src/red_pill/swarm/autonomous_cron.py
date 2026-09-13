@@ -8,9 +8,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from red_pill.core.paths import (
-	get_awakening_log_path,
-	get_agent_core_root,
 	get_antigravity_brain_dir,
+	get_awakening_log_path,
 	get_config_dir,
 	get_neon_link_config_dir,
 	get_neon_link_db_path,
