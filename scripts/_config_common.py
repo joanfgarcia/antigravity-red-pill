@@ -15,6 +15,24 @@ import re
 import shutil
 from string import Template
 
+# Directorios de skills anteriores al rename kebab-case (Agent Skills standard,
+# 2026-09-10). Los injectors los prunean del arnés destino para que un reseed
+# converja a un único estado (sin legados snake_case) y sea idempotente.
+LEGACY_SKILL_DIRS = (
+	"agent_core",
+	"knowledge_access",
+	"context_distiller",
+	"job_manager",
+	"memory_manager",
+	"memory_manager_template",
+	"minion_delegation",
+	"project_anchor_management",
+	"skill_creation",
+	"sovereign_handshake",
+	"swarm_flow_manager",
+	"workspace_memory",
+)
+
 
 def _data_dir():
 	"""``$XDG_DATA_HOME/red-pill`` (or ``~/.local/share/red-pill``) — matches
@@ -32,14 +50,22 @@ def build_vars(args):
 	# The capture surfaces write turns into THE queue the worker drains; they
 	# have no business touching bunker.db (see seeds/opencode/plugins).
 	queue_db = os.path.join(_data_dir(), "queue", "bunker_queue.db")
+	uv_bin = getattr(args, "uv_path", None) or shutil.which("uv") or os.path.expanduser("~/.local/bin/uv")
+	redpill_dir = getattr(args, "redpill_dir", None) or ""
+	# La norma de invocación del CLI red-pill: el binario NO está en el PATH
+	# (`red-pill` vive en <repo>/.venv/bin/), así que se invoca con uv apuntando
+	# al checkout. Los skills usan ${RED_PILL_CMD}; los injectors lo resuelven.
+	red_pill_cmd = f"{uv_bin} run --no-sync --project {redpill_dir} red-pill" if redpill_dir else ""
 	return {
 		"HOME": home,
-		"UV": getattr(args, "uv_path", None) or shutil.which("uv") or os.path.expanduser("~/.local/bin/uv"),
+		"UV": uv_bin,
 		"NPX": npx or "",
 		"NPX_DIR": os.path.dirname(npx) if npx else "",
 		"CLAUDE_CLI": claude,
 		"GRAPHIFY_PY": os.path.expanduser("~/.local/share/uv/tools/graphifyy/bin/python3"),
-		"REDPILL_DIR": getattr(args, "redpill_dir", None) or "",
+		"REDPILL_DIR": redpill_dir,
+		"RED_PILL_DIR": redpill_dir,  # alias kebab para seeds/extensiones (env PI)
+		"RED_PILL_CMD": red_pill_cmd,
 		"WORKSPACE": os.path.expanduser(args.workspace) if getattr(args, "workspace", None) else "",
 		"BUNKER_DB": bunker_db,
 		"QUEUE_DB": queue_db,

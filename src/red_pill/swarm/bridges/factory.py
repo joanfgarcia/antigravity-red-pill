@@ -30,6 +30,7 @@ def create_bridge(backend: Optional[str] = None, **kwargs) -> AgentBridge:
 		- "agy"      : AgyBridge (requires agy CLI)            [antigravity_ide]
 		- "claude"     : ClaudeBridge (requires claude CLI)
 		- "opencode"   : OpenCodeBridge (requires opencode CLI)
+		- "pi"       : PiBridge (requires pi CLI)
 		- "local"      : LocalBridge (local model via SIP provider — one-shot, no tools)
 		- "local-tools": LocalToolBridge (local model + bounded in-process tool loop)
 		- "grpc"     : GrpcBridge (legacy extraction backend)  [antigravity_ide]
@@ -56,6 +57,10 @@ def create_bridge(backend: Optional[str] = None, **kwargs) -> AgentBridge:
 		from .opencode import OpenCodeBridge
 
 		return OpenCodeBridge(**kwargs)
+	if backend == "pi":
+		from .pi import PiBridge
+
+		return PiBridge(**kwargs)
 	if backend in ("local-tools", "local_tools"):
 		from .local import LocalToolBridge
 

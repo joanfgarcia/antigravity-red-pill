@@ -46,7 +46,7 @@ def test_repo_root_apunta_a_la_raiz_del_repo(adapter) -> None:
 
 
 def test_inject_limpio_despliega_anchor_y_skills(adapter, tmp_path) -> None:
-	"""Instalación limpia: RED_PILL.md + skill job_manager/dag/forge/scout."""
+	"""Instalación limpia: RED_PILL.md + skill job-manager/dag/forge/scout."""
 	import argparse
 	import os
 
@@ -62,7 +62,7 @@ def test_inject_limpio_despliega_anchor_y_skills(adapter, tmp_path) -> None:
 	text = open(redpill, encoding="utf-8").read()
 	assert "job_dag_execution" in text, "anchor job_dag_execution ausente en RED_PILL.md"
 
-	for skill in ("job_manager", "dag", "forge", "scout"):
+	for skill in ("job-manager", "dag", "forge", "scout"):
 		path = os.path.join(tmp, "skills", skill, "SKILL.md")
 		assert os.path.exists(path), f"skill '{skill}' no desplegado en instalación limpia"
 	assert n > 0

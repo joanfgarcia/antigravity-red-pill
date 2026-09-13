@@ -197,13 +197,59 @@ TOOLS_PER_PROBE = [
 # ── Validators ───────────────────────────────────────────────────────────────
 
 
-def _try_parse_tool_call(raw: str) -> dict | None:
-	"""Robustly find a tool_call JSON object in the raw output.
+def _gemma_args(args_str: str) -> dict:
+	"""Args de Gemma → dict JSON.
 
-	llama-cpp with `chatml-function-calling` may emit either:
-	- a single JSON object with {name, arguments}
-	- raw tool_calls array (OpenAI style)
-	- free text that needs to be regex-extracted
+	Formato: `{city:<|"|>Barcelona<|"|>, attendees:<|"|>["Ana","Beti"]<|"|>, duration_min:30}`
+	- claves bare → "clave"; valores `<|"|>X<|"|>` → string (o array/objeto JSON si X lo es).
+	"""
+	s = re.sub(r"(^|[{,]\s*)([A-Za-z_]\w*)\s*:", r'\1"\2":', args_str.strip())
+
+	def _val(m):
+		inner = m.group(1)
+		return inner if inner[:1] in "[{" else json.dumps(inner)
+
+	s = re.sub(r'<\|"\|\>(.*?)<\|"\|\>', _val, s, flags=re.S)
+	try:
+		return json.loads("{" + s + "}")
+	except Exception:
+		return {"_raw": args_str}
+
+
+def _extract_native_tool_call(raw: str) -> dict | None:
+	"""Extrae un tool call de los formatos NATIVOS de cada modelo (no OpenAI).
+
+	- Qwen/SmolLM3 (xml_tools): `<tool_call>{"name":..,"arguments":..}</tool_call>`
+	- chatml:                    `<function_call>{...}</function_call>`
+	- Gemma:                     `<|tool_call>call:NAME{args}<tool_call|>`
+	"""
+	m = re.search(r"<tool_call>\s*(\{[\s\S]*?\})\s*</tool_call>", raw)
+	if m:
+		try:
+			o = json.loads(m.group(1))
+			if isinstance(o, dict) and o.get("name"):
+				return {"name": o["name"], "arguments": o.get("arguments", {})}
+		except Exception:
+			pass
+	m = re.search(r"<function_call>\s*(\{[\s\S]*?\})\s*</function_call>", raw)
+	if m:
+		try:
+			o = json.loads(m.group(1))
+			if isinstance(o, dict) and o.get("name"):
+				return {"name": o["name"], "arguments": o.get("arguments", {})}
+		except Exception:
+			pass
+	m = re.search(r"<\|tool_call>\s*call:([A-Za-z_]\w*)\s*\{([\s\S]*?)\}\s*<tool_call\|>", raw)
+	if m:
+		return {"name": m.group(1), "arguments": _gemma_args(m.group(2))}
+	return None
+
+
+def _try_parse_tool_call(raw: str) -> dict | None:
+	"""Robustly find a tool_call in the raw output.
+
+	Covers: OpenAI shape {name, arguments} / {tool_calls:[...]}, the models' NATIVE
+	formats (<tool_call>, <function_call>, Gemma <|tool_call>), and free text JSON.
 	"""
 	# Try direct JSON parse first.
 	try:
@@ -212,6 +258,10 @@ def _try_parse_tool_call(raw: str) -> dict | None:
 			return obj
 	except Exception:
 		pass
+	# Native XML-ish formats (Qwen/SmolLM3/chatml/Gemma).
+	native = _extract_native_tool_call(raw)
+	if native is not None:
+		return native
 	# Try extracting first JSON object/array.
 	m = re.search(r"(\{[\s\S]*\}|\[[\s\S]*\])", raw)
 	if not m:
@@ -304,10 +354,10 @@ def _validate_no_tool(raw: str) -> dict:
 
 
 def _validate_multi_step(raw: str) -> dict:
-	# Look for at least 2 distinct tool calls (listdir + grep typical).
-	calls = re.findall(r'"name"\s*:\s*"(list_dir|grep)"', raw)
+	# Look for at least 2 distinct tool calls (listdir + grep typical), en JSON o nativo.
+	calls = re.findall(r'"name"\s*:\s*"(list_dir|grep)"', raw) + re.findall(r"call:(list_dir|grep)", raw)
 	if len(set(calls)) >= 2:
-		return {"valid": True, "tools_called": list(set(calls))}
+		return {"valid": True, "tools_called": sorted(set(calls))}
 	# Fallback: single tool_call is acceptable if it's grep (the final step).
 	obj = _try_parse_tool_call(raw)
 	if obj:
@@ -341,7 +391,7 @@ def main(model_name: str, gguf_path: str, chat_format: str | None = None):
 					],
 					tools=tools,
 					temperature=probe.temperature,
-					max_tokens=probe.max_tokens,
+					max_tokens=max(probe.max_tokens, 1024),  # margen para modelos con thinking
 				)
 				raw = out["choices"][0]["message"].get("content") or ""
 				# If the chat-format wraps tool_calls separately, they take priority:

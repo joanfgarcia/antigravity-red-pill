@@ -1,0 +1,28 @@
+# Bake-off 2026-09-11 — candidatos nuevos
+# prompt: /home/joan/Documents/IA/sharing/src/red_pill/metabolism/prompts/distiller_v3_voice.txt
+##### tiny_aya #####
+[prompt] /home/joan/Documents/IA/sharing/src/red_pill/metabolism/prompts/distiller_v3_voice.txt
+
+##### tiny_aya (CLI/GPU) #####
+[entidades] 5.4s OK lang=es MODE_B bad=— relics=4/4
+  S: Joan me dice que ha abierto una botella de Emilio Moro Reserva para celebrar; le propongo que brindemos con ella, y me cuenta que el código de la build rc-2026.08.12 con los 42 tests verdes merecía al
+[decision] 4.0s OK lang=es MODE_B bad=— relics=3/3
+  S: Joan me dice que seguimos con SQLite por ahora; le propongo que lo revisemos cuando crezca, y me cuenta que añadir Postgres traería más operaciones de las que resuelve. Le respondo que de acuerdo, lo 
+[filosofico] 3.9s OK lang=es MODE_B bad=— relics=2/2
+  S: Joan me dice que discrepo en parte; sin memoria no hay continuidad del yo que actúa, los actos sueltos no hacen identidad. Le respondo que mmm, eso me recuerda a la charla que tuvimos sobre el gato de
+##### gemma4_e4b #####
+[prompt] /home/joan/Documents/IA/sharing/src/red_pill/metabolism/prompts/distiller_v3_voice.txt
+
+##### gemma4_e4b (CLI/GPU) #####
+[entidades] 12.6s FAIL(no JSON) lang=None — bad=— relics=0/0
+[decision] 5.2s OK lang=es MODE_B bad=— relics=4/4
+  S: Joan me pregunta si migramos a Postgres o seguimos con SQLite, ya que el volumen no justifica aún un motor nuevo; le digo que seguimos con SQLite por ahora, porque añadir Postgres traería más operacio
+[filosofico] 5.3s OK lang=es MODE_B bad=— relics=3/3
+  S: Joan me dice que no somos nuestros recuerdos, sino nuestros actos, ¿no cree? Le respondo que discrepo en parte, que sin memoria no hay continuidad del yo que actúa, y que los actos sueltos no hacen id
+##### r1_distill #####
+[prompt] /home/joan/Documents/IA/sharing/src/red_pill/metabolism/prompts/distiller_v3_voice.txt
+
+##### r1_distill (CLI/GPU) #####
+[entidades] 13.5s FAIL(no JSON) lang=None — bad=— relics=0/0
+[decision] 11.7s FAIL(no JSON) lang=None — bad=— relics=0/0
+[filosofico] 11.7s FAIL(no JSON) lang=None — bad=— relics=0/0

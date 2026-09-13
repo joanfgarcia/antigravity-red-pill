@@ -28,14 +28,14 @@ def isolated_state(tmp_path, monkeypatch):
 	return state
 
 
-@pytest.mark.parametrize("name, source, priority", [("sleep", "dag_job", 8), ("chronicle", "script_job", 7)])
+@pytest.mark.parametrize("name, source, priority", [("sleep", "dag_job", 8), ("chronicle", "dag_job", 7)])
 def test_kernel_nightly_recipes_are_valid(name, source, priority):
 	"""Las recetas del kernel cargan, validan en el submit y anclan cwd al repo.
 
 	El orden de prioridades es el contrato de la noche: sueño (8) > chronicle
-	(7) > entrenamiento (5) — mayor número = más urgente. El sueño es una
-	receta del `dag_job` (RFC_JOB_DAG — cada unidad del ciclo es una etapa con
-	su minion); el chronicle sigue siendo `script_job`.
+	(7) > entrenamiento (5) — mayor número = más urgente. El sueño y el
+	chronicle son recetas del `dag_job` (RFC_JOB_DAG): el chronicle quedó
+	solo-Memento tras la retirada del legacy de archive_memories (2026-09-11).
 	"""
 	from red_pill.jobs.drivers import get_driver_class
 

@@ -14,6 +14,7 @@ from red_pill.chronicle_sources.antigravity import AntigravitySourcePlugin
 from red_pill.chronicle_sources.base import discover_source_plugins
 from red_pill.chronicle_sources.claude_code import ClaudeCodeSourcePlugin
 from red_pill.chronicle_sources.opencode import OpencodeSourcePlugin
+from red_pill.chronicle_sources.pi import PiSourcePlugin
 
 # ── Antigravity ──────────────────────────────────────────────────────────────
 
@@ -223,12 +224,132 @@ def test_opencode_missing_db_discovers_nothing(tmp_path):
 	assert OpencodeSourcePlugin(db_path=tmp_path / "nope.db").discover() == []
 
 
+# ── Pi (pi-coding-agent JSONL v3) ────────────────────────────────────────────
+
+
+@pytest.fixture
+def pi_sessions(tmp_path):
+	"""Sessions dir real: `sessions/--<cwd-slug>--/<timestamp>_<uuid>.jsonl`."""
+	slug_dir = tmp_path / "sessions" / "--home-joan-Workspace--"
+	slug_dir.mkdir(parents=True)
+	session = slug_dir / "2026-09-10T10-00-00-000Z_01J3SESSION.jsonl"
+	records = [
+		{"type": "session", "version": 3, "id": "sess-1", "timestamp": "2026-09-10T10:00:00.000Z", "cwd": "/home/joan/Workspace"},
+		# Ruido de harness: no message, se ignora
+		{"type": "compaction", "id": "aaaa1111", "parentId": None, "timestamp": "2026-09-10T10:00:05.000Z", "summary": "…", "tokensBefore": 50000},
+		{
+			"type": "model_change",
+			"id": "bbbb2222",
+			"parentId": "aaaa1111",
+			"timestamp": "2026-09-10T10:00:06.000Z",
+			"provider": "opencode",
+			"modelId": "kimi-k2.6",
+		},
+		{
+			"type": "message",
+			"id": "cccc3333",
+			"parentId": "bbbb2222",
+			"timestamp": "2026-09-10T10:00:10.000Z",
+			"message": {"role": "user", "content": "arregla el bug del registro", "timestamp": 1784544151000},
+		},
+		{
+			"type": "message",
+			"id": "dddd4444",
+			"parentId": "cccc3333",
+			"timestamp": "2026-09-10T10:00:20.000Z",
+			"message": {
+				"role": "assistant",
+				"content": [
+					{"type": "text", "text": "Voy a mirar el fichero."},
+					{"type": "thinking", "thinking": "razono…"},
+					{"type": "toolCall", "id": "call_1", "name": "read", "arguments": {"path": "/repo/registry.py"}},
+				],
+				"provider": "opencode",
+				"model": "kimi-k2.6",
+				"timestamp": 1784544152000,
+			},
+		},
+		{
+			"type": "message",
+			"id": "eeee5555",
+			"parentId": "dddd4444",
+			"timestamp": "2026-09-10T10:00:25.000Z",
+			"message": {
+				"role": "toolResult",
+				"toolCallId": "call_1",
+				"toolName": "read",
+				"content": [{"type": "text", "text": "def load():\n" + "x = 1\n" * 200}],
+				"isError": False,
+				"timestamp": 1784544153000,
+			},
+		},
+	]
+	session.write_text("\n".join(json.dumps(r) for r in records) + "\n", encoding="utf-8")
+	return tmp_path / "sessions"
+
+
+def test_pi_discover_counts_lines(pi_sessions):
+	plugin = PiSourcePlugin(base_dir=pi_sessions)
+	# 6 registros (header + 5 entries), pero la clave es la ruta relativa sin extensión
+	assert plugin.discover() == [("--home-joan-Workspace--/2026-09-10T10-00-00-000Z_01J3SESSION", 6)]
+
+
+def test_pi_load_normalizes_and_filters_noise(pi_sessions):
+	plugin = PiSourcePlugin(base_dir=pi_sessions)
+	cid = "--home-joan-Workspace--/2026-09-10T10-00-00-000Z_01J3SESSION"
+	messages = plugin.load(cid)
+
+	assert [m["role"] for m in messages] == ["user", "assistant", "assistant"]
+	assert messages[0]["content"] == "arregla el bug del registro"
+	# Timestamp del ENTRY (ISO), no el Unix ms del message
+	assert messages[0]["timestamp"] == "2026-09-10T10:00:10.000Z"
+	# Solo bloques text del assistant; thinking/toolCall fuera
+	assert "Voy a mirar el fichero." in messages[1]["content"]
+	assert "razono" not in messages[1]["content"]
+	# toolResult compactado con toolName, sin el cuerpo verbatim
+	assert messages[2]["content"].startswith("[TOOL: read] ")
+	assert "x = 1" in messages[2]["content"]  # cabeza incluida
+	assert len(messages[2]["content"]) < 600
+
+	assert plugin.qualify(cid) == "pi:" + cid
+
+
+def test_pi_workspace_of_from_cwd_slug(pi_sessions):
+	plugin = PiSourcePlugin(base_dir=pi_sessions)
+	assert plugin.workspace_of("--home-joan-Workspace--/2026-09-10T10-00-00-000Z_01J3SESSION") == "--home-joan-Workspace--"
+
+
+def test_pi_load_survives_partial_trailing_line(pi_sessions):
+	session = pi_sessions / "--home-joan-Workspace--" / "2026-09-10T10-00-00-000Z_01J3SESSION.jsonl"
+	with open(session, "a", encoding="utf-8") as f:
+		f.write('{"type": "message", "message": {"content": "trunca')
+	plugin = PiSourcePlugin(base_dir=pi_sessions)
+	messages = plugin.load("--home-joan-Workspace--/2026-09-10T10-00-00-000Z_01J3SESSION")
+	assert len(messages) == 3
+
+
+def test_pi_export_and_reload_raw(pi_sessions, tmp_path):
+	plugin = PiSourcePlugin(base_dir=pi_sessions)
+	cid = "--home-joan-Workspace--/2026-09-10T10-00-00-000Z_01J3SESSION"
+	raw_dir = tmp_path / "raw"
+	raw_dir.mkdir()
+	raw_file = plugin.export_raw(cid, raw_dir)
+	assert raw_file is not None and raw_file.name == "raw.jsonl"
+	assert raw_file.exists()
+	# Regeneración sin el store: load_raw renormaliza idéntico
+	assert plugin.load_raw(raw_file) == plugin.load(cid)
+
+
+def test_pi_missing_dir_discovers_nothing(tmp_path):
+	assert PiSourcePlugin(base_dir=tmp_path / "nope").discover() == []
+
+
 # ── Descubrimiento ───────────────────────────────────────────────────────────
 
 
 def test_discovery_finds_all_builtin_sources():
 	plugins = discover_source_plugins(only_enabled=False)
-	assert [p.name for p in plugins] == ["antigravity", "antigravity_export", "claude_code", "memory_queue", "opencode"]
+	assert [p.name for p in plugins] == ["antigravity", "antigravity_export", "claude_code", "memory_queue", "opencode", "pi"]
 
 
 def test_discovery_respects_config_gating(monkeypatch):

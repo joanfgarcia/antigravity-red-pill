@@ -663,10 +663,19 @@ fi
 # Skills: Deploy to ~/.agent/skills/ (IDE-agnostic canonical) and symlink to IDE
 if [ -d "$REPO_ROOT/skills" ]; then
 	mkdir -p "$USER_RULES_DIR/skills"
+	RP_CMD="${UV_BIN:-$(command -v uv || echo "$HOME/.local/bin/uv")} run --no-sync --project \"$REPO_ROOT\" red-pill"
+	# Skills renombrados a kebab-case (Agent Skills standard): prunear legados
+	for legacy in agent_core knowledge_access context_distiller job_manager memory_manager memory_manager_template minion_delegation project_anchor_management skill_creation sovereign_handshake swarm_flow_manager workspace_memory; do
+		rm -rf "$USER_RULES_DIR/skills/$legacy" 2>/dev/null || true
+		rm -rf "$GEMINI_ROOT/skills/$legacy" 2>/dev/null || true
+	done
 	for skill_dir in "$REPO_ROOT/skills/"*/; do
 		skill_name=$(basename "$skill_dir")
-		[[ "$skill_name" == "memory_manager_template" ]] && continue
 		cp -r "$skill_dir" "$USER_RULES_DIR/skills/$skill_name"
+		# ${RED_PILL_CMD} → invocación uv (el CLI no está en el PATH del harness)
+		if grep -q '\${RED_PILL_CMD}' "$USER_RULES_DIR/skills/$skill_name/SKILL.md" 2>/dev/null; then
+			sed -i "s|\${RED_PILL_CMD}|$RP_CMD|g" "$USER_RULES_DIR/skills/$skill_name/SKILL.md"
+		fi
 		# Symlink to IDE (idempotent: remove existing target first)
 		rm -rf "$GEMINI_ROOT/skills/$skill_name" 2>/dev/null || true
 		ln -s "$USER_RULES_DIR/skills/$skill_name" "$GEMINI_ROOT/skills/$skill_name"
@@ -682,25 +691,6 @@ if [ -d "$REPO_ROOT/scripts/git-hooks" ] && [ -d "$REPO_ROOT/.git" ]; then
 	chmod +x "$REPO_ROOT/.git/hooks/"*
 	echo -e "${GREEN}✓ Hook de protección (pre-push) instalado.${NC}"
 fi
-
-# Generar Skill de Memoria Dinámico
-mkdir -p "$USER_RULES_DIR/skills/memory_manager"
-TEMPLATE_SKILL="$REPO_ROOT/skills/memory_manager_template/SKILL.md"
-DEST_SKILL="$USER_RULES_DIR/skills/memory_manager/SKILL.md"
-
-if [ -f "$TEMPLATE_SKILL" ]; then
-	REDPILL_DIR="$REPO_ROOT"
-	BINARY_PATH="$REDPILL_DIR/.venv/bin/red-pill"
-	cp "$TEMPLATE_SKILL" "$DEST_SKILL"
-	if [[ "$OS_TYPE" == "Darwin" ]]; then
-		sed -i '' "s|red-pill|$BINARY_PATH|g" "$DEST_SKILL"
-	else
-		sed -i "s|red-pill|$BINARY_PATH|g" "$DEST_SKILL"
-	fi
-fi
-# Symlink memory_manager to IDE
-rm -rf "$GEMINI_ROOT/skills/memory_manager" 2>/dev/null || true
-ln -s "$USER_RULES_DIR/skills/memory_manager" "$GEMINI_ROOT/skills/memory_manager"
 
 # Copiar scripts unificados a la ruta de ejecución
 cp "$SCRIPT_DIR/"* "$APP_ROOT/scripts/"

@@ -17,7 +17,7 @@ logger = logging.getLogger("inject_opencode")
 
 # Shared helpers — single source of truth lives at scripts/_config_common.py.
 sys.path.insert(0, str(os.path.join(os.path.dirname(__file__), "..", "..")))
-from _config_common import agent_core_vars, build_vars, strip_jsonc_comments, subst  # noqa: E402
+from _config_common import LEGACY_SKILL_DIRS, agent_core_vars, build_vars, strip_jsonc_comments, subst  # noqa: E402
 
 
 def _detect_config_dir() -> str | None:
@@ -140,13 +140,16 @@ def inject(args: argparse.Namespace) -> int:
 		logger.warning("OpenCode not installed (~/.config/opencode/ not found). Skipping.")
 		return 0
 
+	script_dir = os.path.dirname(os.path.abspath(__file__))
+	# scripts/inject/opencode/ → scripts/ → repo root
+	repo_root = os.path.normpath(os.path.join(script_dir, "..", "..", ".."))
+	if not getattr(args, "redpill_dir", None):
+		args.redpill_dir = repo_root  # RED_PILL_CMD necesita el checkout red-pill
+
 	variables = build_vars(args)
 	variables.update(agent_core_vars())
 	backup = not getattr(args, "no_backup", False)
 
-	script_dir = os.path.dirname(os.path.abspath(__file__))
-	# scripts/inject/opencode/ → scripts/ → repo root
-	repo_root = os.path.normpath(os.path.join(script_dir, "..", "..", ".."))
 	opencode_seeds = os.path.join(repo_root, "seeds", "opencode")
 	anchor_seeds = os.path.join(repo_root, "seeds", "anchors")
 	changed = 0
@@ -169,6 +172,13 @@ def inject(args: argparse.Namespace) -> int:
 	skills_dest = os.path.join(config_dir, "skills")
 	changed += _deploy_skills(generic_skills, skills_dest, variables, backup)
 	changed += _deploy_skills(ide_skills, skills_dest, variables, backup)
+	# Prune legacy snake_case dirs (renames 2026-09-10): reseed convergente e idempotente.
+	for legacy in LEGACY_SKILL_DIRS:
+		legacy_path = os.path.join(skills_dest, legacy)
+		if os.path.isdir(legacy_path):
+			shutil.rmtree(legacy_path)
+			logger.info(f"✓ Skill legacy '{legacy}' removed from {skills_dest}")
+			changed += 1
 
 	# 4. Package.json
 	_ensure_package_json(config_dir, backup)

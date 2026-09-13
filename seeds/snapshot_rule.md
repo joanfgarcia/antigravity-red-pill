@@ -5,7 +5,7 @@ To ensure operational continuity between different context windows and prevent t
 
 ## Execution Rules
 
-1.  **Snapshot Generation**: At the end of a session or when the context becomes excessive, the "Semantic Distillation System" (`context_distiller` skill) must be invoked to generate `.agent/rules/session_snapshot.md`.
+1.  **Snapshot Generation**: At the end of a session or when the context becomes excessive, the "Semantic Distillation System" (`context-distiller` skill) must be invoked to generate `.agent/rules/session_snapshot.md`.
 2.  **Mandatory Obfuscation (Fight Club / Anti-Smith)**:
     *   It is forbidden to log internal protocol names, the agent's identity proper names, or lore terms in the project's file system.
     *   Any reference to persistence must use generic terms such as "Resilience System" or "Identity Persistence".

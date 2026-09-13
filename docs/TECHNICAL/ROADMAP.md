@@ -147,7 +147,7 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
 - [x] **Device fallback cascade** (`device_fallback: [gpu, cpu]`): GPU in-process; CPU = isolated worker subprocess (CUDA detached) under an OOM shield sized from the measured footprint; per-request override; `503` when no device can serve. Root-caused the `Failed to create llama_context` crash (CUDA touching the GPU with `n_gpu_layers=0`, not context size).
 - [x] **In-house tool-using minion** (`run_local_minion`): bounded in-process loop (RedPill MCP via `registry.execute` + real-shell bash), reusing the Telegram context pattern.
 - [x] **Wired as backend `local-tools`** in `run_agent_task`; `opencode` also exposed in the backend enum.
-- [x] **Capabilities doc** (`docs/TECHNICAL/MINIONS.md`) + **`minion_delegation` skill** for the orchestrating agent.
+- [x] **Capabilities doc** (`docs/TECHNICAL/MINIONS.md`) + **`minion-delegation` skill** for the orchestrating agent.
 
 #### Parked / next 🔜
 - [ ] **opencode → local SIP endpoint**: fix the `@ai-sdk/openai-compatible` streaming (SSE) mismatch (retries every 30 s, 0 tokens) so `backend:"opencode"` can drive the local model. Provider config drafted, then reverted pending the fix.

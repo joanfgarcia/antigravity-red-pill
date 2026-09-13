@@ -1,14 +1,36 @@
-# Chronicle diario (04:00) como job de la cola central.
+# Chronicle diario (04:00) como RECETA del dag_job (RFC_JOB_DAG).
 #
-# Antes se disparaba por systemd a las 04:00 hubiera acabado el sueño o no
-# (nadie lo controlaba). Como job, si el sueño sigue corriendo espera su turno:
-# el runner es secuencial y la prioridad 7 lo ordena tras el sueño (8) y por
-# delante del entrenamiento (5).
-source: script_job
+# Pipeline = SOLO lo referente a Memento (RFC-002). Las fases del sueño viven en
+# `sleep.yaml` (prio 8). Retirada 2026-09-11 (operador): la maquinaria legacy de
+# `archive_memories` (discover/ingest/finalize + chronicle_distill/refine) queda
+# FUERA — Qdrant ya no se escribe desde el chronicle; el archivo es Memento en
+# disco y `archive_memories` solo queda como fallback de reconstrucción (§5.1.2).
+#
+# Etapas atómicas del DAG:
+#   - memento          → memento_migrate.py  : render delta de sesiones de los IDEs
+#                         (opencode, pi, antigravity, claude) → memento/raw/ + index.md
+#   - memento-agentic  → memento_agentic.py  : distill→refine sobre el árbol (resúmenes
+#                         + significance/emotion/intensity) con gate en sombra (§4.6)
+#
+# job_pause aterriza en la frontera de etapa; job_resume continúa exacto desde la
+# etapa interrumpida (checkpoint por ruta). memento-agentic sale 0 si el LLM local
+# está caído (retry la próxima noche) — nunca falla el job.
+source: dag_job
 priority: 7
 title: Chronicle diario (ingesta de trayectorias)
-step_command: .venv/bin/python scripts/chronicle_daily.py
-progress:
-  mode: single
-control:
-  max_step_minutes: 60
+mission_id: chronicle-daily
+nightly_exempt: true
+manifest:
+  workdir: .
+  stages:
+    - id: memento
+      type: command
+      minion: command_runner
+      command: .venv/bin/python scripts/memento_migrate.py
+      on_fail: warn
+    - id: memento-agentic
+      type: command
+      minion: command_runner
+      command: .venv/bin/python scripts/memento_agentic.py
+      on_fail: warn
+      depends_on: [memento]
