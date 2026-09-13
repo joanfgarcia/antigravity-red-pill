@@ -380,6 +380,14 @@ class RedPillConfig(BaseSettings):
 	TELEGRAM_BRIDGE_CASCADE: List[BridgeTarget] = []
 	AWAKENING_BRIDGE_CASCADE: List[BridgeTarget] = []
 	DEFAULT_MINION_BRIDGE_CASCADE: List[BridgeTarget] = []
+	# AWAKENING_PLANNER_ACCESS: qué puede tocar el agente en el desk durante un
+	# despertar autónomo. Política "personal" del puesto — la decide el operador
+	# de cada instalación. Lista separada por comas de zonas del desk (bajo
+	# ${AGENT_CORE_DIR}): "ideas", "research", "design", "pending",
+	# "in_progress", "awakening" (logs). "planner" = todas las zonas de
+	# planificación; "none" = solo leer el panel, sin tocar nada. La directiva
+	# del despertar incluye esta lista; el agente solo contribuye a lo declarado.
+	AWAKENING_PLANNER_ACCESS: str = "planner"
 	# Fast-path inline timeout for Telegram conversational messages (D3). Used as
 	# the timeout argument the worker passes to CascadeBridge.prompt(); a
 	# per-target `timeout` in the cascade .env overrides it above (D14). Default

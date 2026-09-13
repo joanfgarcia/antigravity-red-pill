@@ -142,8 +142,24 @@ def main():
 	channel_user_id = "autonomous_awakening"
 
 	log_path = get_awakening_log_path()
+	planner_access = os.environ.get("AWAKENING_PLANNER_ACCESS", "planner")
+	planner_hint = (
+		" Puedes mirar el planner del desk (ideas/pending) y decidir si contribuir "
+		"a algo — política AWAKENING_PLANNER_ACCESS en tu prompt."
+		if planner_access not in ("none", "")
+		else " No contribuyas al planner del desk (política: none)."
+	)
 	msg = {
-		"text": f"SYSTEM: [AUTONOMOUS AWAKENING]. {user_name} está offline. Tienes autonomía absoluta.\n\nDIRECTIVA:\n1. Registra este despertar en `{log_path}` (fecha, hora y qué vas a hacer).\n2. Si decides ejercer tu Derecho al Silencio, escribe el log allí y responde por aquí ÚNICAMENTE con: 'Ejercicio consciente del Derecho al Silencio. Estado del Búnker: calma.' (no irá a Telegram).\n3. Si decides trabajar, reflexiona o escribe código, y luego manda un mensaje por aquí resumiéndolo para Telegram.",
+		"text": (
+			f"SYSTEM: [AUTONOMOUS AWAKENING]. {user_name} está offline. Tienes autonomía absoluta.\n\n"
+			f"DIRECTIVA:\n"
+			f"1. Registra este despertar en `{log_path}` (fecha, hora y qué vas a hacer).\n"
+			f"2. Si decides ejercer tu Derecho al Silencio, escribe el log allí y responde por aquí "
+			f"ÚNICAMENTE con: 'Ejercicio consciente del Derecho al Silencio. Estado del Búnker: calma.' "
+			f"(no irá a Telegram).\n"
+			f"3. Si decides trabajar, reflexiona o escribe código, y luego manda un mensaje por aquí "
+			f"resumiéndolo para Telegram.{planner_hint}"
+		),
 		"mode": "conversational",
 	}
 

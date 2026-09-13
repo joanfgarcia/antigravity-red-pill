@@ -38,6 +38,11 @@ provenir de una fuente canónica que se propaga en las instalaciones.
   `get_awakening_log_path`, `get_latest_awakening_log`); `autonomous_cron.py`
   apunta la directiva al log de la sesión y `worker.py` apendea `SOVEREIGN_LOG`
   al log más reciente.
+- **[FEAT] `AWAKENING_PLANNER_ACCESS`** — política configurable (por puesto) de
+  contribución del despertar al desk: qué zonas del planner puede tocar el
+  agente (`ideas/research/design/pending/in_progress/awakening`, `planner` =
+  todas, `none` = no contribuir). La directiva del despertar y el prompt headless
+  la incluyen; default `planner`. Añadida a `.env.example`.
 
 ### 🧹 Chronicle/Memento — nightly solo-Memento, retirada de `archive_memories` + arnés de bake-off
 
