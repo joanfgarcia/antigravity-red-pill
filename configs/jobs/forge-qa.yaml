@@ -14,5 +14,5 @@ manifest:
       type: agent
       minion: agent
       backend: opencode
-      model: flash  # SEED por-instalación. Ver Aleth_Core/NOTE_MODEL_POLICY_ROLES.md (qa-final → opencode-go/mimo-v2.5-pro).
+      model: flash  # SEED por-instalación. decisión por rol en DECISION_LOG.md (qa-final → opencode-go/mimo-v2.5-pro).
       effort: high

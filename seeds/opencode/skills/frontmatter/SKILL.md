@@ -1,6 +1,6 @@
 ---
 name: frontmatter
-description: Use when creating, editing, or reorganizing Markdown documents in Agent_Core (Aleth_Core) or memory banks (.red-pill/memory). Applies the FRONTMATTER_TEMPLATE YAML header convention (canonical English values), lifecycle statuses, and archive rules. Project docs are out of scope.
+description: Use when creating, editing, or reorganizing Markdown documents in Agent_Core (the desk at ${AGENT_CORE_DIR}) or memory banks (.red-pill/memory). Applies the FRONTMATTER_TEMPLATE YAML header convention (canonical English values), lifecycle statuses, and archive rules. Project docs are out of scope.
 ---
 
 ## Frontmatter in Markdown documents (Agent_Core & memory banks)

@@ -22,7 +22,8 @@ description: >-
 > RETIRED physically (FASE 1) — missions are `dag_job` manifests compiled from
 > the forge burst manifest; `sleep_job` remains importable as legacy until the
 > sleep recipe covers it in production. Treat this skill as the design-in-action,
-> not a frozen contract. Authority: `Aleth_Core/RFC_JOB_DAG_PARALLELIZATION.md`.
+> not a frozen contract. Authority: the driver itself
+> (`src/red_pill/jobs/drivers/dag.py`) and `references/manifest.md`.
 
 > The generic composition skill for the red-pill `dag_job`. It sits ON TOP of the
 > forge/scout pieces: every mission — including a Forge mission — is expressed as
@@ -191,7 +192,8 @@ same .cell/reports/<path>.json, same gates) → job_checkpoint {completed_stage_
 EVERY `type: agent` stage in the tree requires a real `model` (not the harness
 placeholder `flash`) and a `prompt`. Validated recursively at submit — a mission
 with an unconfigured agent stage is blocked BEFORE launch. Per-role models come
-from `Aleth_Core/NOTE_MODEL_POLICY_ROLES.md` (decided by operator, not by code).
+from the install-local config in `.red-pill/jobs/` (decided by operator, not by code;
+see `docs/TECHNICAL/DECISION_LOG.md`).
 
 ## 6. GPU per stage (RFC fleco 1)
 
@@ -239,4 +241,5 @@ forge skill and apply unchanged at any depth:
 
 *Skill v0.1.0 (2026-08-07). The DAG is a red-pill piece: a recursive tree of stages
 walked by the `dag_job` driver, consumed by any backend through the kernel
-mechanism. Design authority: `Aleth_Core/RFC_JOB_DAG_PARALLELIZATION.md` v0.7.*
+mechanism. Design authority: `references/manifest.md` + the driver
+(`src/red_pill/jobs/drivers/dag.py`).*

@@ -2,8 +2,8 @@
 
 > 6 modelos vía `scripts/model_battle_tool.py` (bindings llama-cpp-python CUDA,
 > venv sidecar, template NATIVO del GGUF). Resultados crudos por modelo en
-> `TOOL_<modelo>_20260911-185*.jsonl`. Hallazgos que alimentan
-> `Aleth_Core/design/RFC_INVENTARIO_MODELOS_HARNESS.md`.
+> `TOOL_<modelo>_20260911-185*.jsonl`. Hallazgos que alimentan el diseño del
+> framework de evaluación de modelos × tarea del proyecto.
 
 ## Matriz
 

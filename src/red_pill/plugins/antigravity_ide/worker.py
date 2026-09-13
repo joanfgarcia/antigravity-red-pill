@@ -50,6 +50,56 @@ MAX_AWAKENINGS_PER_DAY = 8
 AWAKENING_TIMEOUT = 600
 AWAKENING_MAX_TOOL_CALLS = 40
 
+# Zonas del desk que un despertar puede tocar. "planner" = ideas/research/design/
+# pending/in_progress; "awakening" = solo logs de despertar; "none" = nada.
+_PLANNER_ZONES = {
+	"ideas": "planner/ideas",
+	"research": "planner/research",
+	"design": "planner/design",
+	"pending": "planner/pending",
+	"in_progress": "planner/in_progress",
+	"awakening": "awakening",
+}
+
+
+def _awakening_planner_directive(policy: str) -> str:
+	"""Construye el bloque de política de contribución al desk para el despertar.
+
+	`policy` es la cadena `AWAKENING_PLANNER_ACCESS` del .env (lista separada por
+	comas, o "planner"/"none"). Devuelve la directiva que se inyecta en el prompt
+	headless. El agente solo contribuye a las zonas declaradas por el operador.
+	"""
+	zones: list[str] = []
+	raw = (policy or "planner").strip().lower()
+	if raw == "none":
+		return (
+			"DESK POLICY: No toques el desk (${AGENT_CORE_DIR}). "
+			"Puedes leer el panel (planner/tools/panel.py) para informarte, "
+			"pero no contribuyas a ideas/, pending/ ni ninguna zona de planificación. "
+			"Registra tu despertar en el log (directiva 1) y nada más."
+		)
+	if raw == "planner":
+		zones = sorted(_PLANNER_ZONES.keys())
+	else:
+		for part in raw.split(","):
+			part = part.strip()
+			if part in _PLANNER_ZONES:
+				zones.append(part)
+	zones = sorted(set(zones))
+	if not zones:
+		return _awakening_planner_directive("none")
+
+	paths = ", ".join(f"`{_PLANNER_ZONES[z]}/`" for z in zones)
+	return (
+		f"DESK POLICY (configurada por tu operador): puedes contribuir al desk en estas "
+		f"zonas de planificación: {paths}. "
+		f"Antes de contribuir, lee `planner/README.md` (el modelo: fase = carpeta, flujo "
+		f"blando) y el README de la fase que vayas a tocar. "
+		f"Solo toca ideas/pending/README.md para añadir una chispa/tarea nueva o mover "
+		f"una a otra fase con `git mv`; NO edites docs de otras fases sin necesidad. "
+		f"Registra en tu log de despertar qué contribución hiciste."
+	)
+
 
 def get_connection():
 	conn = sqlite3.connect(str(DB_PATH), timeout=10.0)
@@ -1151,9 +1201,9 @@ class IDEWorker:
 		log_matches = re.findall(r"<SOVEREIGN_LOG>(.*?)</SOVEREIGN_LOG>", response, re.DOTALL)
 		for log_msg in log_matches:
 			try:
-				from red_pill.core.paths import get_aleth_core_root
+				from red_pill.core.paths import get_latest_awakening_log
 
-				log_path = get_aleth_core_root() / "AWAKENING_LOG.md"
+				log_path = get_latest_awakening_log()
 				if log_path.exists():
 					import datetime
 
@@ -1247,6 +1297,7 @@ class IDEWorker:
 			f"plus its `bank_health.json`; if `thresholds_tripped` is non-empty, include it in your report — "
 			f"semantic compaction is operator on-demand, never auto-compact.\n"
 			f"4. Then proceed with your autonomous work.\n"
+			f"{_awakening_planner_directive(cfg.get_config().AWAKENING_PLANNER_ACCESS)}\n"
 			f"</constraint>\n"
 			f"</RULE[user_global]>\n"
 			f"</user_rules>\n\n"
@@ -1307,9 +1358,9 @@ class IDEWorker:
 		log_matches = re.findall(r"<SOVEREIGN_LOG>(.*?)</SOVEREIGN_LOG>", response, re.DOTALL)
 		for log_msg in log_matches:
 			try:
-				from red_pill.core.paths import get_aleth_core_root
+				from red_pill.core.paths import get_latest_awakening_log
 
-				log_path = get_aleth_core_root() / "AWAKENING_LOG.md"
+				log_path = get_latest_awakening_log()
 				if log_path.exists():
 					import datetime
 
@@ -1424,9 +1475,9 @@ class IDEWorker:
 					log_matches = re.findall(r"<SOVEREIGN_LOG>(.*?)</SOVEREIGN_LOG>", content, re.DOTALL)
 					for log_msg in log_matches:
 						try:
-							from red_pill.core.paths import get_aleth_core_root
+							from red_pill.core.paths import get_latest_awakening_log
 
-							log_path = get_aleth_core_root() / "AWAKENING_LOG.md"
+							log_path = get_latest_awakening_log()
 							if log_path.exists():
 								import datetime
 

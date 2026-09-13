@@ -303,7 +303,7 @@ The Sound of Silence protocol is enforced automatically by `test_sound_of_silenc
 ## 10.5 Markdown Metadata — Frontmatter (Desk & Workspace Docs)
 
 Repo `docs/` is reference (bilingual, ALL-CAPS, no frontmatter required). **Desk and
-memory-bank `.md`** (Agent_Core `Aleth_Core/`, `.red-pill/memory/`) MUST start with a
+memory-bank `.md`** (Agent_Core `${AGENT_CORE_DIR}/`, `.red-pill/memory/`) MUST start with a
 YAML frontmatter header. Project docs follow each project's own conventions (out of scope):
 
 ```yaml
@@ -325,9 +325,30 @@ tags: []
 ```
 
 Values are canonical **English** (metadata is machine-consumed). Full template &
-lifecycle: `Aleth_Core/FRONTMATTER_TEMPLATE.md` and `docs/CORE/DOCUMENTATION_MANUAL.md`.
+lifecycle: `docs/CORE/DOCUMENTATION_MANUAL.md` (frontmatter spec resolved from the
+desk via `${AGENT_CORE_DIR}/FRONTMATTER_TEMPLATE.md`).
 Lifecycle: born `draft` in the desk → implemented (source of truth moves to the
 project) → `archive/<project>/` with `status: archived`.
+
+---
+
+## 10.6 Project ↔ Desk Separation (public project hygiene)
+
+The desk (`${AGENT_CORE_DIR}`) is **private**: the operator's workbench (design
+notes, RFCs, state tracking). This repo is **public**: anyone can clone and read
+it. Therefore:
+
+1. **Never reference the desk in project docs, code, comments, or skills** — no
+   `Agent_Core/...` paths, no RFCs that live only in the desk, no `TODO.md` of the
+   desk. A reader of this repo cannot resolve those references.
+2. **The project is self-documenting.** When a design is implemented, its essence
+   is captured here with the project's own conventions (`DECISION_LOG.md` AD entries,
+   repo docs, code docstrings). The desk RFC was the scaffolding; the project is the
+   finished house.
+3. The desk **may** reference the project (it is the private mirror). Never the other
+   way.
+4. `AGENT_CORE_DIR` as a *runtime mechanism* (paths, env, atlas) is legitimately
+   part of the harness and stays. What is forbidden is pointing at desk *documents*.
 
 ---
 

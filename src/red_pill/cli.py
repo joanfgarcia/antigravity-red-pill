@@ -584,7 +584,7 @@ def handle_job(args: argparse.Namespace) -> None:
 					print(
 						f"[ERROR] La receta '{args.recipe}' es un SEED genérico, no una config activa. "
 						f"Activa la configuración real de esta instalación copiándola a .red-pill/jobs/ "
-						f"y ajustando el modelo por rol (ver Aleth_Core/NOTE_MODEL_POLICY_ROLES.md). "
+						f"y ajustando el modelo por rol (ver docs/TECHNICAL/DECISION_LOG.md). "
 						f"Bloqueado por seguridad: no se encola un job agéntico sin modelos configurados."
 					)
 					return

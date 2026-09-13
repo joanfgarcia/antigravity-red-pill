@@ -379,15 +379,13 @@ class DriveEvaluator:
 		# 3. Calcular entropía dinámica del sistema
 		entropy = 0.0
 
-		# Backlog Entropy: tareas pendientes en TODO.md de Aleth_Core
+		# Backlog Entropy: tareas pendientes en el planner del desk (planner/pending/)
 		try:
-			from red_pill.core.paths import get_aleth_core_root
+			from red_pill.core.paths import get_agent_core_root
 
-			todo_path = get_aleth_core_root() / "TODO.md"
-			if todo_path.exists():
-				with open(todo_path, "r", encoding="utf-8") as f:
-					todo_content = f.read()
-				pending_count = todo_content.count("[ ]")
+			pending_dir = get_agent_core_root() / "planner" / "pending"
+			if pending_dir.exists():
+				pending_count = sum(1 for e in pending_dir.iterdir() if e.is_dir())
 				backlog_entropy = pending_count * 0.2
 				entropy += backlog_entropy
 				logger.debug(f"[DRIVE] Backlog Entropy: {backlog_entropy:.2f} (pending tasks: {pending_count})")

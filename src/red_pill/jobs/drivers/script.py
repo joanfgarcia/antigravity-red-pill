@@ -2,7 +2,7 @@
 
 Ejecuta cualquier script por pasos sin que el kernel conozca al proyecto
 satélite: toda la receta (comando, checkpoint, progreso, preflight) viaja
-declarativamente en el payload del job. Ver `Aleth_Core/RFC_GENERIC_SCRIPT_JOB_DRIVER.md`.
+declarativamente en el payload del job.
 
 	kernel (agnóstico)                  satélite (dueño de su lógica)
 	ScriptJobDriver  ←── payload JSON ──  script + checkpoint_file

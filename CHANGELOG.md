@@ -1,10 +1,48 @@
-## [7.22.0] - Unreleased (Memento Chronicle, Despertar autónomo, JOB-001, Bank Janitor & Arnés Pi)
+## [7.22.0] - Unreleased (Memento Chronicle, Despertar autónomo, JOB-001, Bank Janitor, Arnés Pi & Desk)
 
-Cinco frentes: **Memento** (RFC-002, fases 0–3.5 completas — la grabadora vuelve
+Seis frentes: **Memento** (RFC-002, fases 0–3.5 completas — la grabadora vuelve
 al disco y Qdrant emprende el camino a memoria curada), el aislamiento de la
 actividad del operador frente a los runs headless del despertar autónomo, la
-**trazabilidad de jobs** (JOB-001), la **higiene del memory bank** (`bank_janitor`)
-y el **arnés Pi** (kebab-case skills + chronicle source + injector).
+**trazabilidad de jobs** (JOB-001), la **higiene del memory bank** (`bank_janitor`),
+el **arnés Pi** (kebab-case skills + chronicle source + injector) y el **Desk**
+(scaffold `seeds/desk/` + separación proyecto↔despacho + unificación `AGENT_CORE_DIR`).
+
+### 🧹 Desk — scaffold del despacho, separación proyecto↔despacho y `AGENT_CORE_DIR`
+
+El desk (`${AGENT_CORE_DIR}`) deja de ser una plantilla solo local y pasa a
+provenir de una fuente canónica que se propaga en las instalaciones.
+
+- **[NEW] `seeds/desk/`** — scaffold del despacho: `FRONTMATTER_TEMPLATE.md`,
+  `INDEX.md`, `planner/` (README + fases `ideas/research/design/pending/in_progress`
+  + `tools/panel.py`) y `archive/README.md`. `install_neo.sh` lo copia a
+  `${AGENT_CORE_DIR}` **copy-if-absent** (nunca pisa lo que el operador ya tocó);
+  las actualizaciones de convención viajan en el seed y se propagan en la próxima
+  instalación.
+- **[HYG] Separación proyecto↔despacho** (`CONVENTIONS.md` §10.6): el proyecto
+  (público) nunca referencia el despacho (privado) — sin `Agent_Core/...`, sin
+  RFCs del desk, sin su TODO. El proyecto se autodocumenta (`DECISION_LOG.md`,
+  docs propias). Limpiadas las refs a RFCs/rutas del desk en docs, seeds, skills
+  y código; los seeds de `dag`/`forge` apuntan su autoridad al driver + `manifest.md`.
+- **[REF] Unificación `AGENT_CORE_DIR`** (era `ALETH_CORE_DIR`): el kernel Python
+  (`paths.py`, `config_tui.py`, `dossier_gate.py`, `drive_evaluator.py`,
+  `autonomous_cron.py`, `worker.py`) quedaba desalineado con el instalador y los
+  seeds. Renombrada `get_aleth_core_root` → `get_agent_core_root`; `.env` migrado;
+  docs alineadas (SOVEREIGN_ATLAS, ARCHITECTURE, AGENT_UPDATE_GUIDE).
+- **[FIX] `drive_evaluator.py`**: la entropía de backlog leía `TODO.md` del desk
+  (ya inexistente tras la migración a `planner/`); ahora cuenta las carpetas de
+  `planner/pending/`. Test actualizado.
+- **[FEAT] Rotación de logs de despertar autónomo**: cada despertar escribe su
+  propio log en `${AGENT_CORE_DIR}/awakening/YYYYMMDD_HHMM.log` (filosofía de
+  carpetas del desk). El `AWAKENING_LOG.md` se conserva como histórico y deja de
+  crecer. Nuevos helpers en `paths.py` (`get_awakening_dir`,
+  `get_awakening_log_path`, `get_latest_awakening_log`); `autonomous_cron.py`
+  apunta la directiva al log de la sesión y `worker.py` apendea `SOVEREIGN_LOG`
+  al log más reciente.
+- **[FEAT] `AWAKENING_PLANNER_ACCESS`** — política configurable (por puesto) de
+  contribución del despertar al desk: qué zonas del planner puede tocar el
+  agente (`ideas/research/design/pending/in_progress/awakening`, `planner` =
+  todas, `none` = no contribuir). La directiva del despertar y el prompt headless
+  la incluyen; default `planner`. Añadida a `.env.example`.
 
 ### 🧹 Chronicle/Memento — nightly solo-Memento, retirada de `archive_memories` + arnés de bake-off
 
@@ -36,7 +74,7 @@ pausable por etapa (incidente 2026-09-11: la pausa del operador quedó horas en
   Resuelve el revert de `uv run` sobre el venv del repo.
 - **[DOC] Benchmarks** `docs/BENCHMARKS/2026-09-11-*` (destilación: tiny_aya,
   gemma4_e4b, r1-distill; tool-calling: 6 modelos). Diseño del framework de
-  evaluación en `Aleth_Core/design/RFC_INVENTARIO_MODELOS_HARNESS.md`.
+  evaluación en el diseño del framework de evaluación de modelos × tarea del proyecto.
 
 ### 🔌 Arnes Pi (`pi-coding-agent`)
 
@@ -338,7 +376,7 @@ Remediación completa de la auditoría del 21-ago (revisión de RFC_JOB_DAG /
 RFC_SLEEP_JOB_DRIVER / RFC_DOSSIER_IDEACION contra la implementación, hecha la
 mañana siguiente al PRIMER ciclo de sueño 15/15 en producción como receta del
 dag_job). Informe: `.red-pill/memory/REVIEW_2026-08-21_dag-audit.md`; plan
-ejecutado: `Aleth_Core/PLAN_IMPL_DAG_AUDIT_FIXES.md` (v1.1, con segunda vuelta
+ejecutado: plan de auditoría y fixes del DAG (v1.1, con segunda vuelta
 adversarial).
 
 ### ⚙️ Motor del `dag_job`
@@ -436,7 +474,7 @@ adversarial).
 
 ## [7.19.0] - 2026-08-14 (Cierre de Forge, `type: dag` y el Loop de Ideación)
 
-Las tres fases del plan de ejecución (`Aleth_Core/PLAN_IMPL_FORGE_DAG_LOOP.md`):
+Las tres fases del plan de ejecución de la secuenciación forge → type:dag → loop:
 
 ### 🪦 Forge se cierra — la misión completa es `dag_job`
 
@@ -1131,7 +1169,7 @@ Restauración completa de la voz autobiográfica en 1ª/2ª persona (Operador Jo
 - **[FEAT] Subcomando `upgrade-all` en `distill_lab.py`**: Barrido incremental e in-place de recuerdos históricos con soporte para `--smart-audit`, `--force` y `--limit`.
 
 ### 📋 Planificación Arquitectónica
-- **[DOCS] Unified Job Manager Plan**: Guardada la ancla de arquitectura en `Aleth_Core/IMPLEMENTATION_PLAN_UNIFIED_JOB_MANAGER.md` contemplando las 3 Clases de Servicio QoS (`IMMEDIATE`, `QUEUED_SYNC`, `BACKGROUND_DEFERRED`) y el principio *Zero-Daemon / Shot-and-Forget*.
+- **[DOCS] Unified Job Manager Plan**: Guardada la ancla de arquitectura del Job Manager unificado contemplando las 3 Clases de Servicio QoS (`IMMEDIATE`, `QUEUED_SYNC`, `BACKGROUND_DEFERRED`) y el principio *Zero-Daemon / Shot-and-Forget*.
 
 ---
 
@@ -1176,7 +1214,7 @@ Turns the local model (Granite via SIP) into a first-class tool-using minion and
 - **[FEAT] `local-tools` backend** (`LocalToolBridge`): wires `run_local_minion` into `run_agent_task`, invocable like any other backend. `BaseInferenceProvider.chat()` added to the provider contract (`SipInferenceProvider` forwards `tools`/`tool_choice`). `run_agent_task` schema documents `agy|claude|opencode|local|local-tools`.
 
 ### 🐛 Fixes
-- **[FIX] `Failed to create llama_context` on CPU fallback** — root cause was a CUDA-compiled llama.cpp still touching the GPU with `n_gpu_layers=0` (fails even with the GPU free), NOT the context size. Resolved by running the CPU path as a CUDA-detached isolated worker. See `Aleth_Core/DIAGNOSTIC_LLAMA_CONTEXT_FAIL.md`.
+- **[FIX] `Failed to create llama_context` on CPU fallback** — root cause was a CUDA-compiled llama.cpp still touching the GPU with `n_gpu_layers=0` (fails even with the GPU free), NOT the context size. Resolved by running the CPU path as a CUDA-detached isolated worker (diagnóstico documentado en el DECISION_LOG del proyecto).
 - **[FIX] `hermes_8b` profile**: restore the missing `vram_tiers:` key (orphaned sequence made `model_profiles.yaml.example` fail to parse).
 - **[FIX] `bunker update` applies daemon + skills**: a bare `git pull` never regenerated the generated dual-bind daemon (`run_dual_bind.py`) nor redeployed skills, so an existing install's `local-tools` minion (and the daemon device cascade) would break after `update`. `bunker_update()` now re-runs `setup_background_model.sh` (regenerate + restart `redpill-llm.service`) and redeploys `./skills` to the agent skills dir.
 

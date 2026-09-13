@@ -41,15 +41,51 @@ def get_bunker_root_str() -> str:
 	return str(get_bunker_root())
 
 
-def get_aleth_core_root() -> Path:
+def get_agent_core_root() -> Path:
 	"""
-	Resuelve el directorio transversal Aleth_Core.
-	Usa la variable de entorno ALETH_CORE_DIR si existe, sino asume que está al mismo nivel que el bunker_root.
+	Resuelve el directorio transversal Agent_Core.
+	Usa la variable de entorno AGENT_CORE_DIR si existe, sino asume que está al mismo nivel que el bunker_root.
 	"""
-	aleth_core_str = os.getenv("ALETH_CORE_DIR")
-	if aleth_core_str:
-		return Path(aleth_core_str)
-	return get_bunker_root().parent / "Aleth_Core"
+	agent_core_str = os.getenv("AGENT_CORE_DIR")
+	if agent_core_str:
+		return Path(agent_core_str)
+	return get_bunker_root().parent / "Agent_Core"
+
+
+def get_awakening_dir() -> Path:
+	"""Directorio de logs de despertar autónomo (${AGENT_CORE_DIR}/awakening/).
+
+	Rotación por despertar: cada sesión escribe su propio archivo
+	`YYYYMMDD_HHMM.log` (ver `get_awakening_log_path`), coherente con la
+	filosofía de carpetas del desk. El legacy `AWAKENING_LOG.md` se conserva
+	como histórico y deja de crecer.
+	"""
+	path = get_agent_core_root() / "awakening"
+	path.mkdir(parents=True, exist_ok=True)
+	return path
+
+
+def get_awakening_log_path(now=None) -> Path:
+	"""Ruta del log del despertar actual.
+
+	`now` inyectable para tests (datetime). El nombre `YYYYMMDD_HHMM.log`
+	codifica la sesión; cada despertar escribe en un archivo nuevo.
+	"""
+	import datetime
+
+	ts = now or datetime.datetime.now()
+	return get_awakening_dir() / f"{ts.strftime('%Y%m%d_%H%M')}.log"
+
+
+def get_latest_awakening_log() -> Path:
+	"""El log de despertar más reciente (por nombre, orden lexicográfico).
+
+	Útil para que el worker apendee `SOVEREIGN_LOG` a la sesión viva en vez de
+	a un único archivo que crece.
+	"""
+	awakening_dir = get_awakening_dir()
+	logs = sorted(awakening_dir.glob("*.log"))
+	return logs[-1] if logs else get_awakening_log_path()
 
 
 def get_data_dir() -> Path:

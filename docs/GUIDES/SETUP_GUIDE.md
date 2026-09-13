@@ -15,6 +15,12 @@ convention** (a dir or symlink at/above its root), discovered at runtime — nev
 These workspaces live in the **registry**: `~/.config/red-pill/workspaces.yaml`
 (template: `examples/workspaces.yaml`, seeded on install/update if absent).
 
+The **desk scaffold** (`seeds/desk/` → `AGENT_CORE_DIR`) is seeded on install —
+copy-if-absent: `FRONTMATTER_TEMPLATE.md`, `INDEX.md`, the `planner/` phase tree
+(ideas/research/design/pending/in_progress) and `planner/tools/panel.py`. It never
+overwrites what the operator already touched; convention updates travel in `seeds/desk/`
+and propagate on the next install.
+
 ```yaml
 version: 1
 agent_core: ~/Documents/IA/Titanium_Core          # your GLOBAL desk (transversal)

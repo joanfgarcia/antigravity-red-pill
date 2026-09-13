@@ -141,3 +141,35 @@ def test_command_bypasses_debounce(mock_db, monkeypatch):
 	status = cursor.fetchone()[0]
 	assert status == "PROCESSED"
 	conn.close()
+
+
+def test_awakening_planner_directive_policies():
+	"""La política de contribución al desk del despertar es configurable."""
+	import red_pill.plugins.antigravity_ide.worker as worker_module
+
+	directive = worker_module._awakening_planner_directive
+
+	# "planner" (default) → todas las zonas
+	d = directive("planner")
+	assert "planner/ideas/" in d
+	assert "planner/pending/" in d
+	assert "planner/design/" in d
+	assert "no toques" not in d.lower()
+
+	# "none" → no contribuir
+	d = directive("none")
+	assert "No toques el desk" in d
+
+	# lista concreta → solo esas zonas
+	d = directive("ideas, pending")
+	assert "planner/ideas/" in d
+	assert "planner/pending/" in d
+	assert "planner/design/" not in d
+
+	# valor inválido → fallback a none
+	d = directive("basura")
+	assert "No toques el desk" in d
+
+	# vacío → default planner
+	d = directive("")
+	assert "planner/ideas/" in d
