@@ -49,9 +49,9 @@ Este documento establece las reglas soberanas para la creación y organización 
 ## 🗂️ Metadata Headers (Frontmatter)
 
 Repo `docs/` is **reference** (bilingual, ALL-CAPS, no frontmatter required).
-Desk & memory-bank `.md` (Agent_Core `Aleth_Core/`, `.red-pill/memory/`) MUST start
+Desk & memory-bank `.md` (Agent_Core `${AGENT_CORE_DIR}/`, `.red-pill/memory/`) MUST start
 with a YAML frontmatter header. Template & valid fields:
-`Aleth_Core/FRONTMATTER_TEMPLATE.md` (installed via seeds; resolved as `${AGENT_CORE_DIR}/FRONTMATTER_TEMPLATE.md`).
+`${AGENT_CORE_DIR}/FRONTMATTER_TEMPLATE.md` (installed via seeds; resolved as `${AGENT_CORE_DIR}/FRONTMATTER_TEMPLATE.md`).
 
 | Field | Required | Values / Notes |
 |---|---|---|

@@ -303,7 +303,7 @@ The Sound of Silence protocol is enforced automatically by `test_sound_of_silenc
 ## 10.5 Markdown Metadata — Frontmatter (Desk & Workspace Docs)
 
 Repo `docs/` is reference (bilingual, ALL-CAPS, no frontmatter required). **Desk and
-memory-bank `.md`** (Agent_Core `Aleth_Core/`, `.red-pill/memory/`) MUST start with a
+memory-bank `.md`** (Agent_Core `${AGENT_CORE_DIR}/`, `.red-pill/memory/`) MUST start with a
 YAML frontmatter header. Project docs follow each project's own conventions (out of scope):
 
 ```yaml
@@ -339,7 +339,7 @@ notes, RFCs, state tracking). This repo is **public**: anyone can clone and read
 it. Therefore:
 
 1. **Never reference the desk in project docs, code, comments, or skills** — no
-   `Aleth_Core/...` paths, no RFCs that live only in the desk, no `TODO.md` of the
+   `Agent_Core/...` paths, no RFCs that live only in the desk, no `TODO.md` of the
    desk. A reader of this repo cannot resolve those references.
 2. **The project is self-documenting.** When a design is implemented, its essence
    is captured here with the project's own conventions (`DECISION_LOG.md` AD entries,

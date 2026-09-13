@@ -21,8 +21,9 @@ instalación.
 
 - El **seed es canónico y portable** — usa nombres genéricos y `${AGENT_CORE_DIR}`.
   No contiene contenido del operador ni nombres de proyectos concretos.
-- El **desk de cada máquina es la instancia** — puede renombrar (p.ej.
-  `Aleth_Core/`) y rellenar con su contenido real.
+- El **desk de cada máquina es la instancia** — el operador elige el nombre en la
+  instalación (`AGENT_CORE_DIR` en el `.env`; p.ej. `Agent_Core/`, `Titanium_Core/`…)
+  y puede cambiarlo después: el nombre viaja en la variable, no en el contenido.
 - Un seed **nunca** referencia un proyecto ni un desk concretos por nombre
   (regla de separación proyecto↔despacho).
 
@@ -32,4 +33,4 @@ instalación.
 2. El desk local hereda el cambio en la próxima instalación (copy-if-absent) —
    o se propaga manualmente si el cambio debe aplicar ya.
 3. Si el cambio afecta a convenciones, sincronizar también la instancia local
-   del operador (en esta máquina, `Aleth_Core/`).
+   del operador (el desk de esta máquina).
