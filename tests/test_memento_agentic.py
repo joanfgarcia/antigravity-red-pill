@@ -261,3 +261,72 @@ async def test_memento_stale_janitor_emits_muted_signal(tmp_path):
 	kwargs = mem.inject_signal.call_args.kwargs
 	assert kwargs["name"] == "memento_stale_distill" and kwargs["muted"] is True
 	assert json.loads(kwargs["message"]) == ["opencode|opencode:s1"]
+
+
+# --- Fase 4 §5.4.1: distill fragmentado (partición por turnos con solape) ---
+
+
+def test_split_messages_parses_turns():
+	from red_pill.memento.agentic import _split_messages
+
+	content = "## 2026-08-01 10:00:00 — Usuario\nhola\n\n## 2026-08-01 10:01:00 — Asistente\nadiós"
+	msgs = _split_messages(content)
+	assert len(msgs) == 2
+	assert msgs[0][0].startswith("## 2026-08-01 10:00:00")
+	assert msgs[0][1] == "hola"
+	assert msgs[1][1] == "adiós"
+
+
+def test_fragment_messages_overlap():
+	from red_pill.memento.agentic import _fragment_messages
+
+	messages = [(f"h{i}", f"body {i}") for i in range(6)]
+	frags = _fragment_messages(messages, max_chars=30, overlap=2)
+	assert len(frags) >= 2
+	# el solape repite los últimos `overlap` mensajes del fragmento anterior
+	if len(frags) >= 2:
+		prev_tail = [m[0] for m in frags[0][-2:]]
+		next_head = [m[0] for m in frags[1][:2]]
+		assert prev_tail == next_head
+
+
+def test_distill_session_fragments_long_work_unit(tmp_path):
+	from red_pill.memento.agentic import _split_messages, distill_session
+
+	root, _registry, rendered = _tree_with_session(tmp_path, n_messages=0)
+	# Un work unit largo: index con muchos turnos largos
+	dir_rel = rendered.dir_rel
+	index_file = root / dir_rel / "memento" / "index.md"
+	turns = "\n\n".join(f"## 2026-08-01 {10 + i:02d}:00:00 — {'Usuario' if i % 2 == 0 else 'Asistente'}\n{'mensaje ' + 'z' * 800 + str(i)}" for i in range(20))
+	index_file.write_text("---\nsession_id: opencode:s1\n---\n" + turns, encoding="utf-8")
+
+	prompts = []
+
+	def capturing_transport(system, user, max_tokens):
+		prompts.append(user)
+		return json.dumps({"title": f"Fragmento {len(prompts)}", "summary": f"resumen-{len(prompts)}", "keywords": ["frag"]})
+
+	sections = distill_session(root, dir_rel, "opencode:s1", "opencode", capturing_transport, max_chars=5000, overlap=2)
+
+	# partición real: hay turnos y el índice es largo
+	assert len(_split_messages(turns)) >= 4
+	assert len(sections) >= 2, "un work unit largo debe producir varios fragmentos"
+
+	# marcado de parte y slugs NNN-<slug>-fragmento-i-de-N.md
+	frags = [s for s in sections if s["fragments_total"] is not None]
+	assert len(frags) == len(sections)
+	total = frags[0]["fragments_total"]
+	assert all(s["fragments_total"] == total for s in frags)
+	assert all(f"-fragmento-{s['fragment']}-de-{total}" in s["file"] for s in frags)
+
+	# prompt de continuación lleva el resumen anterior (memoria emocional)
+	assert "resumen-1" in prompts[1]
+	assert "continuación" in prompts[1].lower() or "continuation" in prompts[1].lower()
+
+	# los ficheros existen y tienen el marcado en frontmatter
+	distill_dir = root / dir_rel / "distill"
+	for s in frags:
+		text = (distill_dir / s["file"]).read_text(encoding="utf-8")
+		assert f"fragment: {s['fragment']}" in text
+		assert f"fragments_total: {total}" in text
+		assert f"fragment_of: {s['nnn']}" in text

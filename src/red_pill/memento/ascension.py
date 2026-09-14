@@ -24,7 +24,7 @@ from typing import Any, Dict, Optional, Tuple
 import yaml
 from qdrant_client import models
 
-from red_pill.memento.render import update_frontmatter_fields
+from red_pill.memento.render import update_frontmatter_fields  # noqa: F401 (re-export API)
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +113,7 @@ def reinforce_refine(
 	new_stability = decayed + gain
 	last_iso = datetime.fromtimestamp(now, tz=timezone.utc).isoformat()
 
-	update_frontmatter_fields(
+	_stamp_refine(
 		refine_path,
 		{"polaroid_stability": round(new_stability, 2), "last_reinforced_at": last_iso},
 	)
@@ -373,6 +373,36 @@ def _relative_refine_ref(root: Path, refine_path: Path) -> str:
 		return refine_path.name
 
 
+def _stamp_refine(refine_path: Path, fields: Dict[str, Any]) -> None:
+	"""Sella campos en el frontmatter de un refine: reemplaza in-place si la clave
+	existe, o la añade antes del cierre si falta. Seguro para el refine (no tiene
+	line refs ni `memento_hash` como `memento/index.md`), y necesario porque los
+	refine escritos por versiones anteriores no declaran las claves de ascensión."""
+	from red_pill.memento.render import _yaml_value
+
+	text = refine_path.read_text(encoding="utf-8")
+	lines = text.split("\n")
+	if not lines or lines[0].strip() != "---":
+		return
+	close = next((i for i in range(1, len(lines)) if lines[i].strip() == "---"), None)
+	if close is None:
+		return
+	line_of: Dict[str, int] = {}
+	for i in range(1, close):
+		if ":" in lines[i]:
+			line_of[lines[i].split(":", 1)[0].strip()] = i
+	additions = []
+	for key, value in fields.items():
+		rendered = f"{key}: {_yaml_value(value)}"
+		if key in line_of:
+			lines[line_of[key]] = rendered
+		else:
+			additions.append(rendered)
+	if additions:
+		lines = lines[:close] + additions + lines[close:]
+	refine_path.write_text("\n".join(lines), encoding="utf-8")
+
+
 def ascender(
 	root: Path,
 	registry: Any,
@@ -461,7 +491,7 @@ def ascender(
 		return {"ascended": False, "reason": "rejected", "collection": collection}
 
 	# Sello in-place en el frontmatter del refine (no mueve el cuerpo).
-	update_frontmatter_fields(
+	_stamp_refine(
 		refine_path,
 		{
 			"ascended": True,

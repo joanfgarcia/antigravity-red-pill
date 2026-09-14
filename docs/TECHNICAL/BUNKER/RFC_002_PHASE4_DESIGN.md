@@ -363,10 +363,14 @@ los fragmentos se dimensionan para caber, sin recortar contenido.
 
 ## 6. Lo que queda por implementar (checklist Fase 4)
 
-0. **Distill fragmentado** (§5.4.1): partición por turnos con solape (2 msgs,
+0. **Distill fragmentado** (§5.4.1). ✅ **IMPLEMENTADO (2026-09-14)**
+   Partición por turnos con solape (2 msgs,
    parametrizable), prompts por posición (apertura vs continuación con memoria
    emocional), marcado `fragment`/`fragments_total`/`fragment_of`, slugs
-   `NNN-<slug>-fragmento-i-de-N.md`. `MEMENTO_FRAGMENT_OVERLAP_MESSAGES=2`.
+   `NNN-<slug>-fragmento-i-de-N.md`. `MEMENTO_FRAGMENT_OVERLAP_MESSAGES=2` y
+   `MEMENTO_FRAGMENT_MAX_CHARS=12000` (presupuesto por fragmento).
+   En `agentic.py` (`_split_messages`/`_fragment_messages`/`_render_fragment` +
+   prompts `DISTILL_USER_OPENING`/`DISTILL_USER_CONTINUATION`).
 1. **Refine multi-idea** (§5.4.2): `refine_multi()` que lee M fragments y extrae
    N ideas (JSON array), escribe `refine/NNN-<slug>.md` por idea con
    `fragment_ref`. Particionado en lotes si los fragments exceden.

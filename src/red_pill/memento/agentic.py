@@ -45,6 +45,40 @@ Chunk:
 {content}
 """
 
+# Fase 4 §5.4.1: prompts por POSICIÓN del fragmento. El de apertura captura el
+# tono que SIENTA la sesión; el de continuación inyecta el resumen anterior para
+# transmitir la emoción y mantener la continuidad narrativa.
+DISTILL_USER_OPENING = """Distill this OPENING fragment of a conversation chunk into a navigable section.
+
+Rules:
+- "title": specific, ≤80 chars, Spanish.
+- "summary": ≤10 lines, Spanish — core technical decisions, insights, and the EMOTIONAL tone that sets the session. Drop tool noise and filler.
+- "keywords": 3-8 lowercase terms.
+- Output ONLY the JSON object: {{"title": "...", "summary": "...", "keywords": ["..."]}}
+
+Fragment (opening):
+{content}
+"""
+
+DISTILL_USER_CONTINUATION = """Distill this CONTINUATION fragment of a conversation chunk into a navigable section.
+
+The previous fragment distilled to:
+<previous_summary>
+{previous}
+</previous_summary>
+
+Keep narrative and EMOTIONAL continuity with that summary.
+
+Rules:
+- "title": specific, ≤80 chars, Spanish.
+- "summary": ≤10 lines, Spanish — core technical decisions, insights, emotional load. Drop tool noise and filler.
+- "keywords": 3-8 lowercase terms.
+- Output ONLY the JSON object: {{"title": "...", "summary": "...", "keywords": ["..."]}}
+
+Fragment (continuation):
+{content}
+"""
+
 REFINE_SYSTEM = (
 	"You are Samantha, the Bünker Curator. You judge which distilled sections carry durable value for long-term memory. Output ONLY valid JSON."
 )
@@ -165,6 +199,54 @@ def _work_units(session_dir: Path) -> List[Tuple[str, str, str]]:
 	return [("001", f"memento/index.md#l1-{total_lines}", extract_body(index_text).strip())]
 
 
+# ── Fase 4 §5.4.1: partición por turnos con solape ──
+# Sesiones largas exceden la ventana del LLM; en vez de recortar (pierde el
+# final) se particiona por TURNOS (## ts — role) en fragmentos que quepan, con
+# solape de MEMENTO_FRAGMENT_OVERLAP_MESSAGES mensajes (default 2) para no
+# cortar diálogos a medias.
+
+def _split_messages(content: str) -> List[Tuple[str, str]]:
+	"""`## ts — role\nbody` → [(header, body)]. No toca turnos que no arranquen con '## '."""
+	lines = content.split("\n")
+	messages: List[Tuple[str, str]] = []
+	header: Optional[str] = None
+	body_lines: List[str] = []
+	for line in lines:
+		if line.startswith("## ") and " — " in line:
+			if header is not None:
+				messages.append((header, "\n".join(body_lines).strip()))
+			header = line
+			body_lines = []
+		else:
+			body_lines.append(line)
+	if header is not None:
+		messages.append((header, "\n".join(body_lines).strip()))
+	return messages
+
+
+def _fragment_messages(messages: List[Tuple[str, str]], max_chars: int, overlap: int) -> List[List[Tuple[str, str]]]:
+	"""Agrupa turnos en fragmentos ≤ max_chars, repitiendo los últimos `overlap`
+	del fragmento anterior al inicio del siguiente (continuidad del diálogo)."""
+	fragments: List[List[Tuple[str, str]]] = []
+	current: List[Tuple[str, str]] = []
+	current_chars = 0
+	for msg in messages:
+		msg_len = len(msg[0]) + 1 + len(msg[1])
+		if current and current_chars + msg_len > max_chars:
+			fragments.append(current)
+			current = current[-overlap:] if overlap > 0 else []
+			current_chars = sum(len(h) + 1 + len(b) for h, b in current)
+		current.append(msg)
+		current_chars += msg_len
+	if current:
+		fragments.append(current)
+	return fragments
+
+
+def _render_fragment(fragment: List[Tuple[str, str]]) -> str:
+	return "\n\n".join(f"{header}\n{body}" for header, body in fragment)
+
+
 def _frontmatter_block(fields: List[Tuple[str, Any]]) -> str:
 	def value_of(v: Any) -> str:
 		if v is None:
@@ -180,25 +262,58 @@ def _frontmatter_block(fields: List[Tuple[str, Any]]) -> str:
 	return "\n".join(["---"] + [f"{k}: {value_of(v)}" for k, v in fields] + ["---"])
 
 
-def distill_session(root: Path, dir_rel: str, session_id: str, source: str, transport: Transport) -> List[Dict[str, Any]]:
-	"""Escribe distill/NNN-<slug>.md por unidad de trabajo. → metadatos de las secciones."""
+def distill_session(
+	root: Path,
+	dir_rel: str,
+	session_id: str,
+	source: str,
+	transport: Transport,
+	max_chars: Optional[int] = None,
+	overlap: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+	"""Escribe distill/NNN-<slug>.md por unidad de trabajo. → metadatos de las secciones.
+
+	Si un work unit excede `max_chars` (presupuesto de contexto), se particiona por
+	turnos con solape (`overlap` mensajes) y se distilla un fragmento por parte
+	con prompt por posición (Fase 4 §5.4.1). Los fragmentos se marcan
+	`fragment`/`fragments_total`/`fragment_of` y se nombran
+	`NNN-<slug>-fragmento-i-de-N.md`."""
 	session_dir = root / dir_rel
 	distill_dir = session_dir / "distill"
 	distill_dir.mkdir(parents=True, exist_ok=True)
 	for stale in distill_dir.glob("*.md"):
 		stale.unlink()  # regeneración completa, jamás parcheo (§4.5.1)
 
+	import red_pill.config as cfg
+
+	if max_chars is None:
+		max_chars = int(getattr(cfg, "MEMENTO_FRAGMENT_MAX_CHARS", 12000))
+	if overlap is None:
+		overlap = int(getattr(cfg, "MEMENTO_FRAGMENT_OVERLAP_MESSAGES", 2))
+
 	sections = []
 	for nnn, ref, content in _work_units(session_dir):
-		raw = transport(DISTILL_SYSTEM, DISTILL_USER.format(content=content), 512)
-		parsed = _extract_json(raw) or {}
-		title = str(parsed.get("title") or f"Sección {nnn}")[:80]
-		summary = str(parsed.get("summary") or content[:400]).strip()
-		keywords = [str(k) for k in parsed.get("keywords", [])][:8]
-		slug = slugify_title(title)
-		filename = f"{nnn}-{slug}.md"
-		frontmatter = _frontmatter_block(
-			[
+		if len(content) <= max_chars:
+			frag_parts = [(content, 1, 1)]
+		else:
+			messages = _split_messages(content)
+			frags = _fragment_messages(messages, max_chars, overlap)
+			frag_parts = [(_render_fragment(f), i, len(frags)) for i, f in enumerate(frags, 1)]
+
+		prev_summary = ""
+		for frag_text, i, total in frag_parts:
+			if total > 1 and i > 1:
+				prompt = DISTILL_USER_CONTINUATION.format(previous=prev_summary or "(ninguno)", content=frag_text)
+			else:
+				prompt = DISTILL_USER_OPENING.format(content=frag_text)
+			raw = transport(DISTILL_SYSTEM, prompt, 512)
+			parsed = _extract_json(raw) or {}
+			title = str(parsed.get("title") or f"Sección {nnn}")[:80]
+			summary = str(parsed.get("summary") or frag_text[:400]).strip()
+			keywords = [str(k) for k in parsed.get("keywords", [])][:8]
+			slug = slugify_title(title)
+
+			fields = [
 				("session_id", session_id),
 				("source", source),
 				("section", int(nnn)),
@@ -207,9 +322,26 @@ def distill_session(root: Path, dir_rel: str, session_id: str, source: str, tran
 				("source_lines", ref),
 				("source_ref", "memento/index.md"),
 			]
-		)
-		(distill_dir / filename).write_text(f"{frontmatter}\n\n{summary}\n", encoding="utf-8")
-		sections.append({"nnn": nnn, "file": filename, "title": title, "summary": summary, "source_lines": ref})
+			if total > 1:
+				filename = f"{nnn}-{slug}-fragmento-{i}-de-{total}.md"
+				fields.insert(3, ("fragment", i))
+				fields.insert(4, ("fragments_total", total))
+				fields.insert(5, ("fragment_of", str(nnn)))
+			else:
+				filename = f"{nnn}-{slug}.md"
+			(distill_dir / filename).write_text(f"{_frontmatter_block(fields)}\n\n{summary}\n", encoding="utf-8")
+			sections.append(
+				{
+					"nnn": nnn,
+					"file": filename,
+					"title": title,
+					"summary": summary,
+					"source_lines": ref,
+					"fragment": i if total > 1 else None,
+					"fragments_total": total if total > 1 else None,
+				}
+			)
+			prev_summary = summary
 	return sections
 
 
