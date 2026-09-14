@@ -33,8 +33,6 @@ def test_add_memory_no_longer_fragments_large_text():
 	"""Regresión 2026-09-14: add_memory NO fragmenta textos largos. La fragmentación
 	mecánica por chars producía _is_fragment excluidos del recall (ruido muerto);
 	la curaduría debe fragmentar con criterio (LLM), jamás corte ciego."""
-	import json
-
 	manager = MemoryManager()
 	manager.client = MagicMock()
 	manager.client.upsert.return_value = None
