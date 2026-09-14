@@ -52,6 +52,16 @@ catalog:
           capabilities: ["conversational", "logic"]
           not_capable_for: ["coder", "planning", "scout"]
           timeout: 300
+        # Memento agentic-pass distiller/curator (bake-off 2026-09-14):
+        # long-context (32K) European variant for RFC-002 distill/refine.
+        - id: "local/tiny-aya-water"
+          backend: "local"
+          tier: "local"
+          priority: 10
+          roles: ["conversational"]
+          capabilities: ["distillation", "multilingual", "long_context", "logic"]
+          not_capable_for: ["coder", "planning", "scout"]
+          timeout: 300
 
 # Role aliases → ordered cascade of model ids (RFC §2E.3).
 # A message invoking a role uses that cascade with its order/priority/gating.
