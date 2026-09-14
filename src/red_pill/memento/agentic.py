@@ -275,6 +275,10 @@ def refine_session(
 				("ascended_at", None),
 				("ascended_to", None),
 				("ascended_point_id", None),
+				# Estabilidad de refuerzo (Fase 4 §3.2): se actualiza in-place por
+				# `reinforce_refine` en el weaver Memento-consciente.
+				("polaroid_stability", 0.0),
+				("last_reinforced_at", None),
 			]
 		)
 		(refine_dir / section["file"]).write_text(f"{frontmatter}\n\n{section['summary']}\n", encoding="utf-8")

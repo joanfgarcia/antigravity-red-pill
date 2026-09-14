@@ -14,6 +14,8 @@ promoción. El ascenso por refuerzo (`weave_memento_reinforcement`) y el estáti
 from __future__ import annotations
 
 import logging
+import math
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -29,6 +31,100 @@ logger = logging.getLogger(__name__)
 # Se declaran en `refine_session` con defaults para poder actualizarlas in-place
 # (sin mover el cuerpo del refine — §4.5.1).
 ASCENSION_FIELDS = ("ascended", "ascended_at", "ascended_to", "ascended_point_id")
+
+# Estabilidad de refuerzo (RFC-002 Fase 4 §3.2). Provisionales; el experimento de
+# calibración (§6.9) los ajusta antes del enforce.
+POLAROID_TAU_DEFAULT = 90.0  # días: un tema silenciado ~3 meses pierde la mayor parte de la estabilidad
+POLAROID_GAIN_DEFAULT = 1.0  # incremento por reaparición
+POLAROID_REVIVAL_GATE_DEFAULT = 5.0  # umbral de ascenso por refuerzo
+
+
+def _polaroid_cfg(default: float, key: str) -> float:
+	try:
+		import red_pill.config as cfg
+
+		return float(getattr(cfg, key, default))
+	except Exception:
+		return default
+
+
+def polaroid_decay(stability: float, last_reinforced_at: Any, now: float, tau: float) -> float:
+	"""Decaimiento exponencial entre refuerzos: S *= e^(-Δt/τ) (modelo half-life).
+
+	`last_reinforced_at` puede ser None (sin historia → sin decay), epoch float,
+	o ISO string (timezone-aware). `tau` en días, `now` en segundos."""
+	if stability <= 0 or not last_reinforced_at:
+		return stability
+	from datetime import date as _date
+
+	from red_pill.memento.render import _to_datetime
+
+	if isinstance(last_reinforced_at, datetime):
+		last_dt = last_reinforced_at
+	elif isinstance(last_reinforced_at, _date):
+		last_dt = datetime(last_reinforced_at.year, last_reinforced_at.month, last_reinforced_at.day, tzinfo=timezone.utc)
+	else:
+		last_dt = _to_datetime(last_reinforced_at)
+	if last_dt is None:
+		return stability
+	dt_days = max(0.0, (now - last_dt.timestamp()) / 86400.0)
+	return stability * math.exp(-dt_days / max(tau, 0.1))
+
+
+def reinforce_refine(
+	root: Path,
+	registry: Any,
+	refine_path: Path,
+	*,
+	now: Optional[float] = None,
+	tau: Optional[float] = None,
+	gain: Optional[float] = None,
+	memory_manager: Any = None,
+) -> Dict[str, Any]:
+	"""Aplica un refuerzo a un refine NO ascendido: decay temporal + GAIN, y si la
+	estabilidad resultante supera el gate de resurrección, lo asciende (Fase 4 §3.2).
+
+	- `tau`/`gain`/gate: del config (POLAROID_TAU/GAIN/REVIVAL_GATE) con defaults
+	provisionales si no están declarados.
+	- Escribe `polaroid_stability` y `last_reinforced_at` en el frontmatter
+	(in-place, atómico) y los espeja en el registry.
+	- Los refinados ya ascendidos no se refuerzan (dejan de competir).
+	"""
+	if now is None:
+		now = time.time()
+	tau = _polaroid_cfg(POLAROID_TAU_DEFAULT, "POLAROID_TAU") if tau is None else tau
+	gain = _polaroid_cfg(POLAROID_GAIN_DEFAULT, "POLAROID_GAIN") if gain is None else gain
+	gate = _polaroid_cfg(POLAROID_REVIVAL_GATE_DEFAULT, "POLAROID_REVIVAL_GATE")
+
+	refine_path = Path(refine_path)
+	fm, body = parse_refine(refine_path.read_text(encoding="utf-8"))
+	if not body:
+		return {"reinforced": False, "reason": "empty_body"}
+	if fm.get("ascended"):
+		return {"reinforced": False, "reason": "already_ascended", "stability": float(fm.get("polaroid_stability", 0.0) or 0.0)}
+
+	source = str(fm.get("source") or "")
+	session_id = str(fm.get("session_id") or "")
+
+	stability = float(fm.get("polaroid_stability", 0.0) or 0.0)
+	last_reinforced = fm.get("last_reinforced_at")
+	decayed = polaroid_decay(stability, last_reinforced, now, tau)
+	new_stability = decayed + gain
+	last_iso = datetime.fromtimestamp(now, tz=timezone.utc).isoformat()
+
+	update_frontmatter_fields(
+		refine_path,
+		{"polaroid_stability": round(new_stability, 2), "last_reinforced_at": last_iso},
+	)
+	if source and session_id:
+		registry.upsert(source, session_id, {"polaroid_stability": round(new_stability, 2), "last_reinforced_at": last_iso})
+
+	if new_stability >= gate:
+		logger.info(f"[POLAROID] {refine_path.name} estabilidad {new_stability:.2f} ≥ gate {gate} — asciende por refuerzo")
+		ascended = ascender(root, registry, refine_path, memory_manager=memory_manager)
+		return {"reinforced": True, "stability": round(new_stability, 2), "gate": gate, "ascended": ascended.get("ascended", False)}
+
+	return {"reinforced": True, "stability": round(new_stability, 2), "gate": gate, "ascended": False}
 
 
 def parse_refine(text: str) -> Tuple[Dict[str, Any], str]:

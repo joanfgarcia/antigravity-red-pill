@@ -370,14 +370,22 @@ los fragmentos se dimensionan para caber, sin recortar contenido.
 1. **Refine multi-idea** (§5.4.2): `refine_multi()` que lee M fragments y extrae
    N ideas (JSON array), escribe `refine/NNN-<slug>.md` por idea con
    `fragment_ref`. Particionado en lotes si los fragments exceden.
-2. **`ascender()` — promoción refine → engrama curado.** Función que crea/upsert
+2. **`ascender()` — promoción refine → engrama curado.** ✅ **IMPLEMENTADO (2026-09-14)**
+   Función que crea/upsert
    un engrama en `work_memories` **o `social_memories`** (según el tipo del
    contenido: work vs social) a partir de un `refine/*.md` (content = summary
-refinado, payload con `session_id`, `source_lines`, `significance`, `theme`,
-   `emotion`, `intensity`, `cross_refs`, `origin: "memento"`). Idempotente.
-3. **`refine.polaroid_stability`** — campo nuevo en frontmatter de refine + registry
+   refinado, payload con `session_id`, `source_lines`, `significance`, `theme`,
+   `emotion`, `intensity`, `cross_refs`, `origin: "memento"`). Idempotente
+   (point id uuid5 por `session_id`+`source_lines`; upsert, no duplica).
+   Sello `ascended`/`ascended_at`/`ascended_to`/`ascended_point_id` en el
+   frontmatter del refine (in-place). Vive en
+   `src/red_pill/memento/ascension.py`.
+3. **`refine.polaroid_stability`** — ✅ **IMPLEMENTADO (2026-09-14)** campo nuevo en
+   frontmatter de refine + registry
    (float, con `last_reinforced_at`). Escritura atómica (mismo patrón que el sello
-   de significance §4.5.1).
+   de significance §4.5.1). `reinforce_refine()` aplica decay temporal
+   `S *= e^(-Δt/τ)` + `GAIN`, y si `S >= POLAROID_REVIVAL_GATE` asciende.
+   `polaroid_decay()` maneja epoch/ISO/datetime nativo (YAML).
 4. **`weave_memento_reinforcement()`** — el paso Memento-consciente del weaver
    (§4.2). Nuevo, no toca `weave_cross_axons`.
 5. **Ascenso estático** — tras `memento-agentic`, promover refinados con
