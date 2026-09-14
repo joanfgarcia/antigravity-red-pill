@@ -1086,6 +1086,17 @@ class MemoryManager:
 					continue
 				seen_content[content_hash] = str(hit.id)
 
+				# Guard estructural (incidente 2026-09-14): la refracción legacy y
+				# la re-fragmentación de oversized NO deben tocar el ecosistema del
+				# sueño (raw_parent/sequence_chunk/synthesis_hub/texture_shadow y
+				# fragmentos) — esas son material estructural excluido del recall.
+				# Antes, sanitize refractaba TODO: los nodos crudos generados por la
+				# refracción entraban al recall como ruido y el count crecía (1→N).
+				# El dedup (arriba) SÍ aplica a todo; la refracción, solo a 'normal'.
+				lazarus = hit.payload.get("lazarus_phase")
+				if hit.payload.get("_is_fragment") or lazarus in ("raw_parent", "sequence_chunk", "synthesis_hub", "texture_shadow"):
+					continue
+
 				# v6.1: Biological Refraction (Refract legacy monolithic Prompts/Responses)
 				if content.startswith("USER: "):
 					import re
@@ -1141,7 +1152,10 @@ class MemoryManager:
 				# v5.6.3: Fragmentation Guard (Refract oversized legacy engrams)
 				# If an engram exceeds the current high-purity limits (e.g. leftovers from v5.6.2),
 				# we delete and re-add it to trigger the synaptic_split logic.
-				if len(content) > self.cfg.CHUNK_THRESHOLD:
+				# Incidente 2026-09-14: la re-fragmentación degrada los 'normal' legítimos
+				# de memoria de trabajo (los convierte en _is_fragment, excluidos del recall).
+				# Solo aplica a legacy políglota (USER:/ASSISTANT:), nunca a curados largos.
+				if len(content) > self.cfg.CHUNK_THRESHOLD and (content.startswith("USER: ") or content.startswith("ASSISTANT: ")):
 					refracted_count += 1
 					if not dry_run:
 						try:

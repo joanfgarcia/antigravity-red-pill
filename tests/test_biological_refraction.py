@@ -48,3 +48,66 @@ def test_biological_refraction_in_sanitize():
 
 	# 4. Correct refraction stats reported
 	assert res["refracted_records"] == 1
+
+
+def test_sanitize_skips_structural_material():
+	"""Regresión 2026-09-14: la refracción NO debe tocar el ecosistema del sueño
+	(hubs, raw_parents, sequence_chunks, fragmentos) — solo dedup aplica ahí."""
+	manager = MemoryManager()
+	manager.client = MagicMock()
+
+	class MockPoint:
+		def __init__(self, _id, content, lazarus=None, is_fragment=False):
+			self.id = _id
+			self.payload = {"content": content, "lazarus_phase": lazarus, "_is_fragment": is_fragment}
+
+	hub = MockPoint("hub-1", "x" * 2000, lazarus="synthesis_hub")
+	raw = MockPoint("raw-1", "y" * 1200, lazarus="raw_parent")
+	frag = MockPoint("frag-1", "z" * 900, is_fragment=True)
+	manager.client.scroll.side_effect = [([hub, raw, frag], None)]
+	manager.add_memory = MagicMock()
+
+	res = manager.sanitize("work_memories", dry_run=False, strict=False)
+	assert res["refracted_records"] == 0
+	manager.client.delete.assert_not_called()
+	manager.add_memory.assert_not_called()
+
+
+def test_sanitize_skips_oversized_normal_non_legacy():
+	"""Regresión 2026-09-14: un 'normal' legítimo largo (> CHUNK_THRESHOLD) que NO
+	es legacy NO debe re-fragmentarse (se convertiría en _is_fragment, excluido del recall)."""
+	manager = MemoryManager()
+	manager.client = MagicMock()
+
+	class MockPoint:
+		def __init__(self, _id, content, lazarus=None, is_fragment=False):
+			self.id = _id
+			self.payload = {"content": content, "lazarus_phase": lazarus, "_is_fragment": is_fragment}
+
+	normal_largo = MockPoint("n-1", "texto curado legítimo " + "x" * 2000)  # sin prefijo legacy
+	manager.client.scroll.side_effect = [([normal_largo], None)]
+	manager.add_memory = MagicMock()
+
+	res = manager.sanitize("work_memories", dry_run=False, strict=False)
+	assert res["refracted_records"] == 0
+	manager.client.delete.assert_not_called()
+	manager.add_memory.assert_not_called()
+
+
+def test_sanitize_still_refracts_oversized_legacy():
+	"""El Fragmentation Guard SÍ aplica a legacy políglota largo (USER:/ASSISTANT:)."""
+	manager = MemoryManager()
+	manager.client = MagicMock()
+
+	class MockPoint:
+		def __init__(self, _id, content, lazarus=None, is_fragment=False):
+			self.id = _id
+			self.payload = {"content": content, "lazarus_phase": lazarus, "_is_fragment": is_fragment}
+
+	legacy_largo = MockPoint("l-1", "USER: " + "m" * 1500)
+	manager.client.scroll.side_effect = [([legacy_largo], None)]
+	manager.add_memory = MagicMock(return_value="new-id")
+
+	res = manager.sanitize("work_memories", dry_run=False, strict=False)
+	assert res["refracted_records"] == 1
+	manager.client.delete.assert_called_once()
