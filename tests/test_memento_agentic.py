@@ -3,6 +3,7 @@
 import json
 
 from red_pill.memento.agentic import (
+	REFINE_MULTI_SYSTEM,
 	REFINE_SYSTEM,
 	_extract_json,
 	cross_ref_candidates,
@@ -16,6 +17,21 @@ from red_pill.memento.render import compute_hash, extract_body, render_session, 
 
 def fake_transport(significance=0.8):
 	def transport(system, user, max_tokens):
+		if system == REFINE_MULTI_SYSTEM:
+			return json.dumps(
+				[
+					{
+						"title": "Idea única de prueba",
+						"significance": significance,
+						"emotion": "cyan",
+						"intensity": 0.7,
+						"theme": "memento_test",
+						"relics": ["carpaccio"],
+						"cross_refs": [],
+						"fragment_ref": 1,
+					}
+				]
+			)
 		if system == REFINE_SYSTEM:
 			return json.dumps(
 				{
@@ -88,7 +104,7 @@ def test_run_agentic_writes_distill_refine_and_stamps_significance(tmp_path):
 	distill_files = sorted((session_dir / "distill").glob("*.md"))
 	refine_files = sorted((session_dir / "refine").glob("*.md"))
 	assert len(distill_files) == 1 and distill_files[0].name == "001-panel-adversarial-de-prueba.md"
-	assert len(refine_files) == 1 and refine_files[0].name == distill_files[0].name
+	assert len(refine_files) == 1 and refine_files[0].name == "001-idea-nica-de-prueba.md"
 
 	distill_text = distill_files[0].read_text(encoding="utf-8")
 	assert "source_lines: memento/index.md#l" in distill_text and "title: Panel adversarial de prueba" in distill_text
@@ -330,3 +346,78 @@ def test_distill_session_fragments_long_work_unit(tmp_path):
 		assert f"fragment: {s['fragment']}" in text
 		assert f"fragments_total: {total}" in text
 		assert f"fragment_of: {s['nnn']}" in text
+
+
+# --- Fase 4 §5.4.2: refine multi-idea (M destills → N ideas) ---
+
+
+def test_extract_json_array():
+	from red_pill.memento.agentic import _extract_json_array
+
+	assert _extract_json_array('ruido [{"a": 1}, {"b": 2}] cola') == [{"a": 1}, {"b": 2}]
+	assert _extract_json_array("[]") == []
+	assert _extract_json_array("sin array") is None
+
+
+def test_refine_session_multi_idea(tmp_path):
+	"""3 destills que forman 2 ideas → 2 refine (no 3, no 1)."""
+	from red_pill.memento.agentic import REFINE_MULTI_SYSTEM, refine_session
+
+	root, _registry, rendered = _tree_with_session(tmp_path)
+	sections = [
+		{"nnn": "001", "file": "001-a.md", "title": "A", "summary": "sA", "source_lines": "l1-5", "fragment": 1, "fragments_total": 2},
+		{"nnn": "001", "file": "001-b.md", "title": "B", "summary": "sB", "source_lines": "l1-5", "fragment": 2, "fragments_total": 2},
+		{"nnn": "002", "file": "002-c.md", "title": "C", "summary": "sC", "source_lines": "l6-9", "fragment": None, "fragments_total": None},
+	]
+
+	def multi_transport(system, user, max_tokens):
+		if system == REFINE_MULTI_SYSTEM:
+			if "Title: C" in user:  # work unit 002 → sin ideas
+				return "[]"
+			return json.dumps(
+				[
+					{"title": "Idea X", "significance": 0.7, "emotion": "blue", "intensity": 0.5, "theme": "x", "relics": ["r1"], "cross_refs": [], "fragment_ref": 1},
+					{"title": "Idea Y", "significance": 0.6, "emotion": "teal", "intensity": 0.4, "theme": "y", "relics": [], "cross_refs": [], "fragment_ref": 2},
+				]
+			)
+		return json.dumps({})
+
+	msig = refine_session(root, rendered.dir_rel, "opencode:s1", "opencode", sections, [], multi_transport, min_significance=0.3)
+	assert msig == 0.7
+
+	refine_dir = root / rendered.dir_rel / "refine"
+	files = sorted(p.name for p in refine_dir.glob("*.md"))
+	# work unit 001 → 2 ideas (2 ficheros); work unit 002 → transport dict vacío → _extract_json_array devuelve None → 0
+	assert files == ["001-idea-x.md", "001-idea-y.md"]
+
+	text = (refine_dir / "001-idea-y.md").read_text(encoding="utf-8")
+	assert "distill_ref: distill/001-b.md" in text  # fragment_ref=2 → origen del 2º fragment
+	assert "fragment_ref: 2" in text
+	assert "significance: 0.60" in text
+
+
+def test_refine_session_filters_below_min(tmp_path):
+	from red_pill.memento.agentic import refine_session
+
+	root, _registry, rendered = _tree_with_session(tmp_path)
+	sections = [{"nnn": "001", "file": "001-a.md", "title": "A", "summary": "sA", "source_lines": "l1-5", "fragment": None, "fragments_total": None}]
+
+	def low_transport(system, user, max_tokens):
+		return json.dumps([{"title": "Idea baja", "significance": 0.1, "theme": "z", "relics": [], "cross_refs": []}])
+
+	refine_session(root, rendered.dir_rel, "opencode:s1", "opencode", sections, [], low_transport, min_significance=0.3)
+	assert list((root / rendered.dir_rel / "refine").glob("*.md")) == []
+
+
+def test_refine_session_empty_array_no_files(tmp_path):
+	from red_pill.memento.agentic import refine_session
+
+	root, _registry, rendered = _tree_with_session(tmp_path)
+	sections = [{"nnn": "001", "file": "001-a.md", "title": "A", "summary": "sA", "source_lines": "l1-5", "fragment": None, "fragments_total": None}]
+
+	def empty_transport(system, user, max_tokens):
+		return "[]"
+
+	msig = refine_session(root, rendered.dir_rel, "opencode:s1", "opencode", sections, [], empty_transport, min_significance=0.3)
+	assert msig == 0.0
+	assert list((root / rendered.dir_rel / "refine").glob("*.md")) == []

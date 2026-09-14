@@ -371,9 +371,13 @@ los fragmentos se dimensionan para caber, sin recortar contenido.
    `MEMENTO_FRAGMENT_MAX_CHARS=12000` (presupuesto por fragmento).
    En `agentic.py` (`_split_messages`/`_fragment_messages`/`_render_fragment` +
    prompts `DISTILL_USER_OPENING`/`DISTILL_USER_CONTINUATION`).
-1. **Refine multi-idea** (§5.4.2): `refine_multi()` que lee M fragments y extrae
+1. **Refine multi-idea** (§5.4.2). ✅ **IMPLEMENTADO (2026-09-14)**
+   `refine_multi()` que lee M fragments y extrae
    N ideas (JSON array), escribe `refine/NNN-<slug>.md` por idea con
-   `fragment_ref`. Particionado en lotes si los fragments exceden.
+   `fragment_ref`. Particionado en lotes si los fragments exceden
+   (`_split_to_fit`). El 1:1 anterior queda obsoleto.
+   En `agentic.py` (`REFINE_MULTI_SYSTEM`/`REFINE_MULTI_USER`,
+   `_extract_json_array`, `_format_fragments`, `_split_to_fit`, `_refine_multi`).
 2. **`ascender()` — promoción refine → engrama curado.** ✅ **IMPLEMENTADO (2026-09-14)**
    Función que crea/upsert
    un engrama en `work_memories` **o `social_memories`** (según el tipo del

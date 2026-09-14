@@ -97,6 +97,30 @@ Section (title: {title}):
 {summary}
 """
 
+# Fase 4 §5.4.2: refine MULTI-IDEA. Devuelve un ARRAY de ideas (0..N, lo decide el
+# LLM). 2-3 destills que forman una idea → 1 refine (no redundantes); 1 destill
+# con 100 ideas → 100 refine. Cada idea lleva `fragment_ref` (origen).
+REFINE_MULTI_SYSTEM = (
+	"You are Samantha, the Bünker Curator. You extract EVERY durable idea from distilled fragments. Output ONLY valid JSON."
+)
+REFINE_MULTI_USER = """Extract ALL durable ideas from these distilled fragments.
+
+Each idea is an independent durable memory (decision, insight, milestone). Return an ARRAY (may be empty). For each idea:
+- "title": short Spanish title (≤80 chars).
+- "significance": 0.0-1.0 (durable value: decisions, insights, milestones high; routine plumbing low).
+- "emotion": one color of [gray, blue, cyan, green, yellow, orange, red, purple].
+- "intensity": 0.0-1.0.
+- "theme": short snake_case topic.
+- "relics": 0-4 memorable literal phrases.
+- "cross_refs": subset of these candidate session ids that this idea genuinely relates to: {candidates}
+- "fragment_ref": 1-based index of the fragment that contributed most.
+
+Fragments:
+{fragments}
+
+Output ONLY the JSON array: [{{"title": "...", "significance": 0.0, "emotion": "gray", "intensity": 0.0, "theme": "...", "relics": [], "cross_refs": [], "fragment_ref": 1}}]
+"""
+
 
 def slugify_title(title: str, max_len: int = 40) -> str:
 	slug = _TITLE_SLUG_RE.sub("-", title.lower()).strip("-")[:max_len].strip("-")
@@ -177,6 +201,26 @@ def _extract_json(text: str) -> Optional[Dict[str, Any]]:
 				try:
 					parsed = json.loads(text[start : i + 1])
 					return parsed if isinstance(parsed, dict) else None
+				except Exception:
+					return None
+	return None
+
+
+def _extract_json_array(text: str) -> Optional[List[Dict[str, Any]]]:
+	"""Refine multi-idea (§5.4.2): extrae el primer array JSON del texto (puede ser vacío)."""
+	start = text.find("[")
+	if start < 0:
+		return None
+	depth = 0
+	for i in range(start, len(text)):
+		if text[i] == "[":
+			depth += 1
+		elif text[i] == "]":
+			depth -= 1
+			if depth == 0:
+				try:
+					parsed = json.loads(text[start : i + 1])
+					return parsed if isinstance(parsed, list) else None
 				except Exception:
 					return None
 	return None
@@ -362,6 +406,49 @@ def cross_ref_candidates(registry: Any, source: str, session_id: str, limit: int
 	return sorted(candidates)[:limit]
 
 
+# ── Fase 4 §5.4.2: refine multi-idea (map-reduce sobre fragments) ──
+
+
+def _format_fragments(frags: List[Dict[str, Any]], start: int = 1) -> str:
+	"""`FRAGMENT i\nTitle: ...\nSummary: ...` para el prompt (índices globales)."""
+	return "\n\n".join(f"FRAGMENT {start + i}\nTitle: {s['title']}\nSummary: {s['summary']}" for i, s in enumerate(frags))
+
+
+def _split_to_fit(frags: List[Dict[str, Any]], candidates: List[str], max_chars: int) -> List[List[Dict[str, Any]]]:
+	"""Particiona los fragments en lotes que quepan en `max_chars` (map-reduce
+	del refine: no perder ideas por exceso de contexto)."""
+	lots = [frags]
+	while True:
+		next_lots: List[List[Dict[str, Any]]] = []
+		split = False
+		for lot in lots:
+			prompt_len = len(REFINE_MULTI_USER.format(candidates=json.dumps(candidates), fragments=_format_fragments(lot)))
+			if prompt_len <= max_chars or len(lot) <= 1:
+				next_lots.append(lot)
+			else:
+				mid = len(lot) // 2
+				next_lots.append(lot[:mid])
+				next_lots.append(lot[mid:])
+				split = True
+		lots = next_lots
+		if not split:
+			return lots
+
+
+def _refine_multi(transport: Transport, frags: List[Dict[str, Any]], candidates: List[str]) -> List[Dict[str, Any]]:
+	"""Extrae ideas (array JSON) de M fragments, particionando en lotes si el
+	prompt excede el presupuesto. → lista de ideas con `fragment_ref` global."""
+	ideas: List[Dict[str, Any]] = []
+	cursor = 0
+	for lot in _split_to_fit(frags, candidates, MODEL_PROMPT_BUDGET):
+		prompt = REFINE_MULTI_USER.format(candidates=json.dumps(candidates), fragments=_format_fragments(lot, cursor))
+		raw = transport(REFINE_MULTI_SYSTEM, prompt, 1024)
+		parsed = _extract_json_array(raw) or []
+		ideas.extend(parsed)
+		cursor += len(lot)
+	return ideas
+
+
 def refine_session(
 	root: Path,
 	dir_rel: str,
@@ -372,48 +459,60 @@ def refine_session(
 	transport: Transport,
 	min_significance: float,
 ) -> float:
-	"""Escribe refine/NNN-<slug>.md para las secciones con valor durable. → significance máxima."""
+	"""Escribe refine/NNN-<slug>.md por IDEA extraída del work unit (Fase 4 §5.4.2).
+
+	Agrupa los destills de cada work unit (NNN; los fragmentos comparten nnn) y
+	`_refine_multi` extrae N ideas (0..N). Cada idea que supera `min_significance`
+	escribe UN refine. El 1:1 anterior (1 distill → 1 refine) queda obsoleto."""
 	refine_dir = root / dir_rel / "refine"
 	refine_dir.mkdir(parents=True, exist_ok=True)
 	for stale in refine_dir.glob("*.md"):
 		stale.unlink()
 
+	groups: Dict[str, List[Dict[str, Any]]] = {}
+	for s in sections:
+		groups.setdefault(s["nnn"], []).append(s)
+
 	max_significance = 0.0
-	for section in sections:
-		raw = transport(REFINE_SYSTEM, REFINE_USER.format(candidates=json.dumps(candidates), title=section["title"], summary=section["summary"]), 384)
-		parsed = _extract_json(raw) or {}
-		try:
-			significance = max(0.0, min(1.0, float(parsed.get("significance", 0.0))))
-		except (TypeError, ValueError):
-			significance = 0.0
-		max_significance = max(max_significance, significance)
-		if significance < min_significance:
-			continue
-		cross_refs = [c for c in parsed.get("cross_refs", []) if c in candidates]
-		frontmatter = _frontmatter_block(
-			[
-				("session_id", session_id),
-				("source", source),
-				("distill_ref", f"distill/{section['file']}"),
-				("source_lines", section["source_lines"]),
-				("significance", significance),
-				("emotion", str(parsed.get("emotion", "gray"))),
-				("intensity", float(parsed.get("intensity", 0.0) or 0.0)),
-				("texture", {"theme": str(parsed.get("theme", "")), "relics": [str(r) for r in parsed.get("relics", [])][:4]}),
-				("cross_refs", cross_refs),
-				# Estado de ascensión (Fase 4 §3): defaults aquí para poder sellar
-				# in-place tras `ascender()` sin mover el cuerpo del refine.
-				("ascended", False),
-				("ascended_at", None),
-				("ascended_to", None),
-				("ascended_point_id", None),
-				# Estabilidad de refuerzo (Fase 4 §3.2): se actualiza in-place por
-				# `reinforce_refine` en el weaver Memento-consciente.
-				("polaroid_stability", 0.0),
-				("last_reinforced_at", None),
-			]
-		)
-		(refine_dir / section["file"]).write_text(f"{frontmatter}\n\n{section['summary']}\n", encoding="utf-8")
+	for nnn, frags in sorted(groups.items()):
+		for idea in _refine_multi(transport, frags, candidates):
+			try:
+				significance = max(0.0, min(1.0, float(idea.get("significance", 0.0))))
+			except (TypeError, ValueError):
+				significance = 0.0
+			max_significance = max(max_significance, significance)
+			if significance < min_significance:
+				continue
+			title = str(idea.get("title") or f"Idea {nnn}")[:80]
+			slug = slugify_title(title)
+			try:
+				ref_idx = int(idea.get("fragment_ref") or 1)
+			except (TypeError, ValueError):
+				ref_idx = 1
+			origin = frags[ref_idx - 1] if 1 <= ref_idx <= len(frags) else frags[0]
+			cross_refs = [c for c in idea.get("cross_refs", []) if c in candidates]
+			refine_fm = _frontmatter_block(
+				[
+					("session_id", session_id),
+					("source", source),
+					("distill_ref", f"distill/{origin['file']}"),
+					("source_lines", origin["source_lines"]),
+					("significance", significance),
+					("emotion", str(idea.get("emotion", "gray"))),
+					("intensity", float(idea.get("intensity", 0.0) or 0.0)),
+					("texture", {"theme": str(idea.get("theme", "")), "relics": [str(r) for r in idea.get("relics", [])][:4]}),
+					("cross_refs", cross_refs),
+					("fragment_ref", ref_idx if len(frags) > 1 else None),
+					# Estado de ascensión (Fase 4 §3): defaults para sellar in-place.
+					("ascended", False),
+					("ascended_at", None),
+					("ascended_to", None),
+					("ascended_point_id", None),
+					("polaroid_stability", 0.0),
+					("last_reinforced_at", None),
+				]
+			)
+			(refine_dir / f"{nnn}-{slug}.md").write_text(f"{refine_fm}\n\n{origin['summary']}\n", encoding="utf-8")
 	return max_significance
 
 
