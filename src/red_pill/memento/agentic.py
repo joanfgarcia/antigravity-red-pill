@@ -167,6 +167,10 @@ def _work_units(session_dir: Path) -> List[Tuple[str, str, str]]:
 
 def _frontmatter_block(fields: List[Tuple[str, Any]]) -> str:
 	def value_of(v: Any) -> str:
+		if v is None:
+			return "null"
+		if isinstance(v, bool):
+			return "true" if v else "false"
 		if isinstance(v, (list, dict)):
 			return json.dumps(v, ensure_ascii=False)
 		if isinstance(v, float):
@@ -265,6 +269,12 @@ def refine_session(
 				("intensity", float(parsed.get("intensity", 0.0) or 0.0)),
 				("texture", {"theme": str(parsed.get("theme", "")), "relics": [str(r) for r in parsed.get("relics", [])][:4]}),
 				("cross_refs", cross_refs),
+				# Estado de ascensión (Fase 4 §3): defaults aquí para poder sellar
+				# in-place tras `ascender()` sin mover el cuerpo del refine.
+				("ascended", False),
+				("ascended_at", None),
+				("ascended_to", None),
+				("ascended_point_id", None),
 			]
 		)
 		(refine_dir / section["file"]).write_text(f"{frontmatter}\n\n{section['summary']}\n", encoding="utf-8")
