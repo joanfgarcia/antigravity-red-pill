@@ -8,11 +8,13 @@ from pathlib import Path
 import pytest
 
 from red_pill.memento.ascension import (
+	_temas_afines,
 	ascender,
 	parse_refine,
 	polaroid_decay,
 	refine_point_id,
 	reinforce_refine,
+	weave_memento_reinforcement,
 )
 
 REFINE_TEXT = """---
@@ -63,6 +65,9 @@ class FakeRegistry:
 
 	def upsert(self, source, session_id, entry):
 		self.data.setdefault((source, session_id), {}).update(entry)
+
+	def save(self):
+		pass
 
 
 @pytest.fixture
@@ -272,3 +277,93 @@ def test_refine_frontmatter_declares_polaroid_fields():
 	src = inspect.getsource(agentic)
 	assert "polaroid_stability" in src
 	assert "last_reinforced_at" in src
+
+
+# --- Fase 4 §4.2: weave_memento_reinforcement (weaver Memento-consciente) ---
+
+
+class FakeScrollClient:
+	def __init__(self, points: list):
+		self._points = points
+
+	def collection_exists(self, name):
+		return name == "work_memories"
+
+	def scroll(self, **kwargs):
+		class Point:
+			def __init__(self, payload, i):
+				self.payload = payload
+				self.id = f"p{i}"
+
+		return [Point(p, i) for i, p in enumerate(self._points)], None
+
+
+class FakeWeaveMemoryManager(FakeMemoryManager):
+	def __init__(self, points, returns=None):
+		super().__init__(returns=returns)
+		self.client = FakeScrollClient(points)
+
+
+def test_temas_afines_exact_theme():
+	assert _temas_afines("tema_recurrente", set(), {"tema_recurrente", "otra_cosa"}) is True
+	assert _temas_afines("tema_recurrente", set(), {"otra_cosa"}) is False
+
+
+def test_temas_afines_token_overlap():
+	refine_tokens = {"memoria", "curaduria", "archivo"}
+	engram_topics = {"memoria", "curaduria", "otro"}
+	assert _temas_afines("", refine_tokens, engram_topics) is True
+	engram_topics = {"otro", "distinto"}
+	assert _temas_afines("", refine_tokens, engram_topics) is False
+
+
+def test_weave_reinforces_and_ascends(tmp_path: Path):
+	root = tmp_path / "memento"
+	d = root / "2026-09" / "opencode" / "s" / "refine"
+	d.mkdir(parents=True)
+	f = d / "001-x.md"
+	text = REFINE_TEXT.replace("polaroid_stability: 0.0", "polaroid_stability: 4.5")
+	text = text.replace("texture: {\"theme\": \"memoria_curada\"", "texture: {\"theme\": \"tema_recurrente\"")
+	f.write_text(text, encoding="utf-8")
+
+	# Un engrama nuevo en work_memories con el mismo tema → refuerza.
+	engrama = {"texture": {"theme": "tema_recurrente", "relics": ["la idea vuelve a aparecer"]}, "created_at": 1_800_000_000.0}
+	mm = FakeWeaveMemoryManager([engrama])
+	reg = FakeRegistry()
+
+	stats = weave_memento_reinforcement(mm, root=root, registry=reg, now=1_800_000_000.0, window_hours=24, tau=90, gain=1.0)
+	assert stats["refine_evaluados"] == 1
+	assert stats["refuerzos_aplicados"] == 1
+	assert stats["ascensos"] == 1
+
+	fm, _ = parse_refine(f.read_text(encoding="utf-8"))
+	assert fm["ascended"] is True
+	assert fm["polaroid_stability"] >= 5.0
+	# el engrama curado se escribió en social_memories (cuerpo social)
+	assert mm.calls[0]["collection"] == "social_memories"
+
+
+def test_weave_skips_already_ascended(tmp_path: Path):
+	root = tmp_path / "memento"
+	d = root / "2026-09" / "opencode" / "s" / "refine"
+	d.mkdir(parents=True)
+	f = d / "001-x.md"
+	f.write_text(REFINE_TEXT.replace("ascended: false", "ascended: true"), encoding="utf-8")
+
+	engrama = {"texture": {"theme": "memoria_curada"}, "created_at": 1_800_000_000.0}
+	mm = FakeWeaveMemoryManager([engrama])
+	stats = weave_memento_reinforcement(mm, root=root, registry=FakeRegistry(), now=1_800_000_000.0)
+	assert stats["refine_evaluados"] == 0  # skipped antes de evaluar
+	assert stats["refuerzos_aplicados"] == 0
+
+
+def test_weave_no_window_returns_early(tmp_path: Path):
+	root = tmp_path / "memento"
+	d = root / "2026-09" / "opencode" / "s" / "refine"
+	d.mkdir(parents=True)
+	f = d / "001-x.md"
+	f.write_text(REFINE_TEXT, encoding="utf-8")
+	mm = FakeWeaveMemoryManager([])
+	stats = weave_memento_reinforcement(mm, root=root, registry=FakeRegistry(), now=1_800_000_000.0)
+	assert stats["refine_evaluados"] == 0
+	assert stats["engramas_en_ventana"] == 0

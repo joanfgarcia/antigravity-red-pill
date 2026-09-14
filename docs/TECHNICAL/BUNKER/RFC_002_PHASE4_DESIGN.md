@@ -386,8 +386,13 @@ los fragmentos se dimensionan para caber, sin recortar contenido.
    de significance §4.5.1). `reinforce_refine()` aplica decay temporal
    `S *= e^(-Δt/τ)` + `GAIN`, y si `S >= POLAROID_REVIVAL_GATE` asciende.
    `polaroid_decay()` maneja epoch/ISO/datetime nativo (YAML).
-4. **`weave_memento_reinforcement()`** — el paso Memento-consciente del weaver
+4. **`weave_memento_reinforcement()`** — ✅ **IMPLEMENTADO (2026-09-14)** el paso
+   Memento-consciente del weaver
    (§4.2). Nuevo, no toca `weave_cross_axons`.
+   Colecciona temas de engramas nuevos en `work_memories` (ventana
+   `AXON_WINDOW_HOURS`), y para cada refine NO ascendido con afinidad de tema
+   (`_temas_afines`: theme exacto o ≥2 tokens) aplica `reinforce_refine`
+   (decay+GAIN) y asciende si supera el gate. Vive en `ascension.py`.
 5. **Ascenso estático** — tras `memento-agentic`, promover refinados con
    `significance >= umbral` (reemplaza el gate de ingesta, §3.3).
 6. **`nightly.yaml`** — el mega-ciclo composición (§5.2) + `redpill-nightly.timer`

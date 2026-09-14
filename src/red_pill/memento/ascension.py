@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 import yaml
+from qdrant_client import models
 
 from red_pill.memento.render import update_frontmatter_fields
 
@@ -127,6 +128,167 @@ def reinforce_refine(
 	return {"reinforced": True, "stability": round(new_stability, 2), "gate": gate, "ascended": False}
 
 
+# ── Fase 4 §4.2: el paso Memento-consciente del weaver ──
+
+_STOPWORDS = {
+	"para", "esta", "este", "esto", "como", "más", "una", "uno", "cada", "sido",
+	"tiene", "tener", "hacer", "puede", "entre", "sobre", "desde", "todos", "todo",
+	"parte", "nuestro", "nuestra", "quiere", "sistema", "siendo", "estado", "también",
+	"sesión", "sesion", "fase", "fase", "nuevo", "nueva", "mismo", "misma", "forma",
+	"when", "that", "with", "from", "this", "have", "been", "into", "the", "and",
+	"were", "will", "would", "should", "could", "about", "after", "before", "their",
+}
+
+
+def _topic_tokens(text: Any) -> set:
+	"""Tokens normalizados de un texto/tema: minúsculas, ≥4 chars, sin stopwords."""
+	if text is None:
+		return set()
+	out = set()
+	for word in str(text).lower().replace("_", " ").replace("-", " ").split():
+		word = "".join(ch for ch in word if ch.isalnum())
+		if len(word) >= 4 and word not in _STOPWORDS:
+			out.add(word)
+	return out
+
+
+def _engram_topics(payload: Dict[str, Any]) -> set:
+	"""Temas de un engrama: theme, texture (hub), keywords y relics normalizados."""
+	topics: set = set()
+	texture = payload.get("texture")
+	if isinstance(texture, dict):
+		theme = texture.get("theme")
+		if theme:
+			topics.add(str(theme))
+		for relic in texture.get("relics", []) or []:
+			topics.update(_topic_tokens(relic))
+	else:
+		topics.update(_topic_tokens(texture))
+	for key in ("theme", "keywords", "relics"):
+		val = payload.get(key)
+		if isinstance(val, str):
+			topics.update(_topic_tokens(val))
+		elif isinstance(val, list):
+			for item in val:
+				topics.update(_topic_tokens(item))
+	topics.update(_topic_tokens(payload.get("summary") or payload.get("content")))
+	return topics
+
+
+def _refine_topics(fm: Dict[str, Any], body: str) -> set:
+	"""Temas de un refine: el theme exacto (snake_case) es el ancla fuerte;
+	los relics y el cuerpo aportan tokens. → (tema_exacto, tokens)."""
+	texture = fm.get("texture") if isinstance(fm.get("texture"), dict) else {}
+	theme = str(texture.get("theme", "") or "")
+	tokens: set = set()
+	for relic in texture.get("relics", []) or []:
+		tokens.update(_topic_tokens(relic))
+	tokens.update(_topic_tokens(body))
+	return theme, tokens
+
+
+def _temas_afines(refine_theme: str, refine_tokens: set, engrama_topics: set) -> bool:
+	"""Fase 4 §3.2: matching exacto de theme (snake_case) o cruce de ≥2 tokens."""
+	if refine_theme and refine_theme in engrama_topics:
+		return True
+	return len(refine_tokens & engrama_topics) >= 2
+
+
+def weave_memento_reinforcement(
+	memory_manager: Any = None,
+	root: Optional[Path] = None,
+	registry: Any = None,
+	*,
+	now: Optional[float] = None,
+	window_hours: Optional[float] = None,
+	tau: Optional[float] = None,
+	gain: Optional[float] = None,
+) -> Dict[str, Any]:
+	"""Paso Memento-consciente del weaver (Fase 4 §4.2).
+
+	1. Colecciona los temas de los engramas nuevos en `work_memories` (ventana
+	temporal, `AXON_WINDOW_HOURS`).
+	2. Para cada `refine/*.md` NO ascendido del árbol Memento, si hay afinidad de
+	tema (`_temas_afines`) → `reinforce_refine` (decay + GAIN).
+	3. Si la estabilidad supera `POLAROID_REVIVAL_GATE` → `ascender()`.
+
+	No toca `weave_cross_axons`: los axones Qdrant↔Qdrant son cosa de `axons.py`;
+	aquí Memento es la fuente de candidatos a promoción, no un nodo.
+	"""
+	if memory_manager is None:
+		from red_pill.memory import MemoryManager
+
+		memory_manager = MemoryManager()
+	if root is None:
+		from red_pill.memento import get_memento_root
+
+		root = get_memento_root()
+	if registry is None:
+		from red_pill.memento.registry import MementoRegistry
+
+		registry = MementoRegistry()
+	if now is None:
+		now = time.time()
+	if window_hours is None:
+		window_hours = _polaroid_cfg(24.0, "AXON_WINDOW_HOURS")
+
+	client = memory_manager.client
+	stats = {"engramas_en_ventana": 0, "refine_evaluados": 0, "refuerzos_aplicados": 0, "ascensos": 0, "errores": 0}
+
+	window_start = now - window_hours * 3600.0
+	if not client.collection_exists("work_memories"):
+		return stats
+
+	# 1. Temas de los engramas nuevos en work_memories.
+	engrama_topics: set = set()
+	offset = None
+	while True:
+		batch, offset = client.scroll(
+			collection_name="work_memories",
+			scroll_filter=models.Filter(
+				must=[models.FieldCondition(key="created_at", range=models.Range(gte=window_start))],
+				must_not=[models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="raw_parent"))],
+			),
+			limit=64,
+			with_payload=True,
+			with_vectors=False,
+			offset=offset,
+		)
+		for point in batch:
+			engrama_topics.update(_engram_topics(point.payload or {}))
+		stats["engramas_en_ventana"] += len(batch)
+		if offset is None:
+			break
+
+	if not engrama_topics:
+		logger.info("[MEM-REINFORCE] Sin engramas nuevos en la ventana — no hay temas que reforzar.")
+		return stats
+
+	# 2. Refuerzo de refinados no ascendidos con temas afines.
+	for refine_path in sorted(Path(root).rglob("refine/*.md")):
+		try:
+			fm, body = parse_refine(refine_path.read_text(encoding="utf-8"))
+			if not body or fm.get("ascended"):
+				continue
+			stats["refine_evaluados"] += 1
+			refine_theme, refine_tokens = _refine_topics(fm, body)
+			if not _temas_afines(refine_theme, refine_tokens, engrama_topics):
+				continue
+			result = reinforce_refine(root, registry, refine_path, now=now, tau=tau, gain=gain, memory_manager=memory_manager)
+			if result.get("reinforced"):
+				stats["refuerzos_aplicados"] += 1
+				if result.get("ascended"):
+					stats["ascensos"] += 1
+		except Exception as e:
+			stats["errores"] += 1
+			logger.warning(f"[MEM-REINFORCE] fallo en {refine_path}: {e}")
+
+	if stats["refuerzos_aplicados"]:
+		registry.save()
+	logger.info(f"[MEM-REINFORCE] {stats}")
+	return stats
+
+
 def parse_refine(text: str) -> Tuple[Dict[str, Any], str]:
 	"""`refine/*.md` → (frontmatter dict, cuerpo). El frontmatter se serializa como
 	YAML/JSON (flow), así que `yaml.safe_load` lo lee; el cuerpo va tras el cierre."""
@@ -211,6 +373,14 @@ def ascender(
 		from red_pill.memory import MemoryManager
 
 		memory_manager = MemoryManager()
+
+	# La colección destino puede no existir aún (p.ej. un host sin sueño previo):
+	# el gate de escritura lo rechazaría. Asegurarla es idempotente y barato.
+	try:
+		if not memory_manager.client.collection_exists(collection):
+			memory_manager._ensure_collection(collection)
+	except Exception:
+		pass
 
 	metadata: Dict[str, Any] = {
 		"session_id": session_id,
