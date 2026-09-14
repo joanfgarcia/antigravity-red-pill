@@ -351,6 +351,25 @@ def test_fragment_messages_overlap():
 		assert prev_tail == next_head
 
 
+def test_fragment_messages_subparte_un_turno_gigante():
+	"""2026-09-15 (incidente b3f27f38): un único turno de 62K chars (una sola
+	cabecera `## ts — role`) no cabía en 32K y no se fragmentaba. Ahora se
+	sub-particiona por líneas con solape y la cabecera repetida."""
+	from red_pill.memento.agentic import _fragment_messages, _split_long_message
+
+	body = "\n".join(f"línea {i:03d} contenido de prueba" for i in range(10))
+	messages = [("## 2026-03-07 — Usuario", body)]
+	frags = _fragment_messages(messages, max_chars=150, overlap=2)
+	assert len(frags) >= 3, "el turno gigante debe sub-particionarse en varios trozos"
+	for frag in frags:
+		assert frag[0][0] == "## 2026-03-07 — Usuario"  # cabecera repetida en cada trozo
+
+	subs = _split_long_message(messages[0], max_chars=150, overlap=2)
+	assert len(subs) >= 3
+	# el solape repite las últimas líneas del trozo anterior al siguiente
+	assert subs[0][1].split("\n")[-2:] == subs[1][1].split("\n")[:2]
+
+
 def test_distill_session_fragments_long_work_unit(tmp_path):
 	from red_pill.memento.agentic import _split_messages, distill_session
 

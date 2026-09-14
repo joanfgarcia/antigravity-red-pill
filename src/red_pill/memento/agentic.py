@@ -280,7 +280,13 @@ def _split_messages(content: str) -> List[Tuple[str, str]]:
 
 def _fragment_messages(messages: List[Tuple[str, str]], max_chars: int, overlap: int) -> List[List[Tuple[str, str]]]:
 	"""Agrupa turnos en fragmentos ≤ max_chars, repitiendo los últimos `overlap`
-	del fragmento anterior al inicio del siguiente (continuidad del diálogo)."""
+	del fragmento anterior al inicio del siguiente (continuidad del diálogo).
+
+	Un turno individual que EXCEDE max_chars (mensaje gigante, p.ej. un split de
+	antigravity con una sola cabecera `## ts — role` y un body enorme) se
+	sub-particiona por líneas con solape: la cabecera se repite en cada trozo
+	para que el LLM sepa qué turno es (2026-09-15, incidente b3f27f38: 62K chars
+	en un turno que no cabía en 32K)."""
 	fragments: List[List[Tuple[str, str]]] = []
 	current: List[Tuple[str, str]] = []
 	current_chars = 0
@@ -290,11 +296,37 @@ def _fragment_messages(messages: List[Tuple[str, str]], max_chars: int, overlap:
 			fragments.append(current)
 			current = current[-overlap:] if overlap > 0 else []
 			current_chars = sum(len(h) + 1 + len(b) for h, b in current)
+		if msg_len > max_chars:
+			for sub in _split_long_message(msg, max_chars, overlap):
+				fragments.append([sub])
+			current, current_chars = [], 0
+			continue
 		current.append(msg)
 		current_chars += msg_len
 	if current:
 		fragments.append(current)
 	return fragments
+
+
+def _split_long_message(msg: Tuple[str, str], max_chars: int, overlap: int) -> List[Tuple[str, str]]:
+	"""Sub-particiona un turno gigante por líneas: cada trozo ≤ max_chars, con
+	solape de las últimas `overlap` líneas, y la cabecera repetida en cada uno."""
+	header, body = msg
+	lines = body.split("\n")
+	out: List[Tuple[str, str]] = []
+	current: List[str] = []
+	current_chars = 0
+	for line in lines:
+		line_len = len(line) + 1
+		if current and current_chars + line_len > max_chars:
+			out.append((header, "\n".join(current)))
+			current = current[-overlap:] if overlap > 0 else []
+			current_chars = sum(len(ln) + 1 for ln in current)
+		current.append(line)
+		current_chars += line_len
+	if current:
+		out.append((header, "\n".join(current)))
+	return out
 
 
 def _render_fragment(fragment: List[Tuple[str, str]]) -> str:
