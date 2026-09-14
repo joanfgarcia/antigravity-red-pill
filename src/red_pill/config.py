@@ -517,6 +517,10 @@ class RedPillConfig(BaseSettings):
 	# les da una utility inicial alta que tarda años en erodar, frente a ~19 días
 	# de un engrama normal (decisión Fase 4, 2026-09-14: no olvidar lo curado).
 	MEMENTO_CURATED_IMPORTANCE_FACTOR: float = 5.0
+	# Clasificación work/social por LLM (curador): category_score 0-1 (1=work).
+	# score >= umbral → work_memories; si no → social_memories. La heurística por
+	# tokens fue una receta del desastre (los resúmenes técnicos caían a social).
+	MEMENTO_CATEGORY_WORK_THRESHOLD: float = 0.5
 	NIGHTLY_ENABLED: bool = True  # ciclo nocturno chronicle → sleep (nightly.yaml)
 	# raw/ = copia de respaldo provider-nativa y punto único de backup (operador,
 	# 2026-08-26): con él el árbol se regenera desde cero (--from-raw). Sin scrub → jamás en git.

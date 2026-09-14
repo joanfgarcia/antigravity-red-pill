@@ -91,6 +91,20 @@ Estimación dry-run: **~206 work + ~1769 social**. El refuerzo Memento-conscient
 sigue ascendiendo en el sueño. La resiembra espera: fin de la redestilación en
 curso + aprobación del operador.
 
+### 2.4 Clasificación work/social por LLM en el refine (2026-09-14)
+
+La heurística por tokens (R1) fue "una receta para el desastre": los resúmenes
+técnicos perdían la densidad del código crudo y caían a `social` (89% del corpus).
+El **curador LLM clasifica correctamente EN EL REFINE** (ratio `category_score`
+0-1, 1=work; verificado: texto técnico → 0.8). El clasificador standalone es débil
+con el LLM local (tiny_aya devuelve 0.0 siempre), así que el ascenso NO llama al
+LLM: usa `category_score` del frontmatter (umbral `MEMENTO_CATEGORY_WORK_THRESHOLD`,
+default 0.5 → ≥0.5 = work) con heurística R1 como fallback.
+
+`scripts/memento_refine_rescore.py` re-refina SOLO los refine existentes (sin
+re-destilar, mucho más barato) para dotarlos de `category_score` tras la
+redestilación.
+
 ---
 
 ## 3. El ascenso diferido por refuerzo (núcleo del diseño)

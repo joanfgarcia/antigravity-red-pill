@@ -184,6 +184,65 @@ def test_ascender_rejected_by_gate(refine_file: Path):
 	assert fm["ascended"] is False
 
 
+# --- Clasificación work/social por LLM (ratio category_score, 2026-09-14) ---
+
+
+def _write_refine_with_score(tmp_path: Path, name: str, score: float | None, body: str) -> Path:
+	d = tmp_path / "2026-09" / "opencode" / "s" / "refine"
+	d.mkdir(parents=True, exist_ok=True)
+	f = d / f"{name}.md"
+	text = (
+		REFINE_TEXT.replace("opencode:ses_test", f"opencode:ses_{name}")
+		.replace("texture: {\"theme\": \"memoria_curada\"", "texture: {\"theme\": \"cat_score\"")
+		.replace("Una reflexión personal sobre el sentido de la memoria y su curaduría.", body)
+	)
+	if score is not None:
+		text = text.replace("last_reinforced_at: null\n---", f"last_reinforced_at: null\ncategory_score: {score}\n---")
+	f.write_text(text, encoding="utf-8")
+	return f
+
+
+def test_ascender_uses_category_score_from_frontmatter(tmp_path: Path):
+	root = tmp_path / "memento"
+	f_work = _write_refine_with_score(root, "w", 0.9, "Refactor técnico del endpoint.")
+	f_social = _write_refine_with_score(root, "s", 0.1, "Reflexión personal serena.")
+	mm = FakeMemoryManager()
+	assert ascender(root, FakeRegistry(), f_work, memory_manager=mm)["collection"] == "work_memories"
+	assert ascender(root, FakeRegistry(), f_social, memory_manager=mm)["collection"] == "social_memories"
+
+
+def test_ascender_uses_curator_score_over_transport(tmp_path: Path):
+	"""El score del curador (frontmatter) manda; el LLM standalone es débil
+	(tiny_aya da 0.0 siempre) y NO se usa como fallback automático."""
+	import json
+
+	root = tmp_path / "memento"
+	f_work = _write_refine_with_score(root, "w", 0.9, "Refactor técnico del endpoint.")
+
+	def llm_transport(system, user, max_tokens):
+		return json.dumps({"category_score": 0.0})  # standalone falla, pero no debe usarse
+
+	mm = FakeMemoryManager()
+	result = ascender(root, FakeRegistry(), f_work, memory_manager=mm, transport=llm_transport)
+	assert result["collection"] == "work_memories"  # 0.9 del curador, no 0.0 del standalone
+	assert mm.calls[0]["metadata"].get("category_score") == 0.9
+
+
+def test_ascender_falls_back_to_heuristic_without_llm(tmp_path: Path):
+	root = tmp_path / "memento"
+	f = _write_refine_with_score(root, "h", None, "Una idea personal y tranquila.")
+	result = ascender(root, FakeRegistry(), f, memory_manager=FakeMemoryManager())
+	assert result["collection"] == "social_memories"  # heurística: ambigüedad → social
+
+
+def test_category_from_score_threshold():
+	from red_pill.memento.ascension import _category_from_score
+
+	assert _category_from_score(0.9) == "work"
+	assert _category_from_score(0.1) == "social"
+	assert _category_from_score(0.5) == "work"  # umbral >= 0.5 → work
+
+
 # --- Fase 4 §3.2: polaroid_stability (estabilidad de refuerzo) ---
 
 
@@ -292,6 +351,7 @@ def test_fase4_config_keys_declared():
 	assert cfg.MEMENTO_FRAGMENT_MAX_CHARS == 12000
 	assert cfg.MEMENTO_GATE_MIN_SIGNIFICANCE == 0.5
 	assert cfg.MEMENTO_CURATED_IMPORTANCE_FACTOR == 5.0  # curados erodan lento
+	assert cfg.MEMENTO_CATEGORY_WORK_THRESHOLD == 0.5  # ratio LLM: >= 0.5 → work
 	assert cfg.NIGHTLY_ENABLED is True
 
 

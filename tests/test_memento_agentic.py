@@ -394,6 +394,7 @@ def test_refine_session_multi_idea(tmp_path):
 	assert "distill_ref: distill/001-b.md" in text  # fragment_ref=2 → origen del 2º fragment
 	assert "fragment_ref: 2" in text
 	assert "significance: 0.60" in text
+	assert "category_score: 0.50" in text  # default del curador si no lo puntúa
 
 
 def test_refine_session_filters_below_min(tmp_path):

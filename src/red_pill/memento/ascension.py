@@ -83,6 +83,7 @@ def reinforce_refine(
 	gain: Optional[float] = None,
 	gate: Optional[float] = None,
 	memory_manager: Any = None,
+	transport: Any = None,
 ) -> Dict[str, Any]:
 	"""Aplica un refuerzo a un refine NO ascendido: decay temporal + GAIN, y si la
 	estabilidad resultante supera el gate de resurrección, lo asciende (Fase 4 §3.2).
@@ -124,7 +125,7 @@ def reinforce_refine(
 
 	if new_stability >= gate:
 		logger.info(f"[POLAROID] {refine_path.name} estabilidad {new_stability:.2f} ≥ gate {gate} — asciende por refuerzo")
-		ascended = ascender(root, registry, refine_path, memory_manager=memory_manager)
+		ascended = ascender(root, registry, refine_path, memory_manager=memory_manager, transport=transport)
 		return {"reinforced": True, "stability": round(new_stability, 2), "gate": gate, "ascended": ascended.get("ascended", False)}
 
 	return {"reinforced": True, "stability": round(new_stability, 2), "gate": gate, "ascended": False}
@@ -210,6 +211,7 @@ def weave_memento_reinforcement(
 	tau: Optional[float] = None,
 	gain: Optional[float] = None,
 	gate: Optional[float] = None,
+	transport: Any = None,
 ) -> Dict[str, Any]:
 	"""Paso Memento-consciente del weaver (Fase 4 §4.2).
 
@@ -281,7 +283,7 @@ def weave_memento_reinforcement(
 			refine_theme, refine_tokens = _refine_topics(fm, body)
 			if not _temas_afines(refine_theme, refine_tokens, engrama_topics):
 				continue
-			result = reinforce_refine(root, registry, refine_path, now=now, tau=tau, gain=gain, gate=gate, memory_manager=memory_manager)
+			result = reinforce_refine(root, registry, refine_path, now=now, tau=tau, gain=gain, gate=gate, memory_manager=memory_manager, transport=transport)
 			if result.get("reinforced"):
 				stats["refuerzos_aplicados"] += 1
 				if result.get("ascended"):
@@ -306,6 +308,7 @@ def ascend_by_threshold(
 	min_significance: Optional[float] = None,
 	memory_manager: Any = None,
 	limit: Optional[int] = None,
+	transport: Any = None,
 ) -> Dict[str, Any]:
 	"""Ascenso estático (§3.3): promueve los `refine/*.md` NO ascendidos cuya
 	`significance >= MEMENTO_GATE_MIN_SIGNIFICANCE` (default 0.5, provisional).
@@ -335,7 +338,7 @@ def ascend_by_threshold(
 			if significance < min_significance:
 				stats["rechazados_por_umbral"] += 1
 				continue
-			result = ascender(root, registry, refine_path, memory_manager=memory_manager)
+			result = ascender(root, registry, refine_path, memory_manager=memory_manager, transport=transport)
 			if result.get("ascended"):
 				stats["ascendidos"] += 1
 		except Exception as e:
@@ -425,6 +428,50 @@ def _curated_importance(significance: float) -> float:
 	return max(1.0, round(significance * factor, 2))
 
 
+CLASSIFY_SYSTEM = (
+	"You are the Bünker Curator. You score how 'work' vs 'social' a memory is. Output ONLY valid JSON."
+)
+CLASSIFY_USER = """Score how much this distilled memory is "work" (technical/operational) vs "social" (personal/reflective/philosophical).
+
+- 1.0 = purely work (code, systems, architecture, infrastructure).
+- 0.0 = purely social/personal/reflective.
+- Ambiguity sits in the middle.
+
+Memory:
+{body}
+
+Output ONLY the JSON object: {{"category_score": 0.0}}
+"""
+
+
+def _classify_llm(transport: Any, body: str) -> Optional[float]:
+	"""Clasifica work/social como RATIO (0-1, 1 = work) con el LLM — el curador
+	entiende el contexto, a diferencia de la heurística por tokens (receta del
+	desastre 2026-09-14: los resúmenes técnicos perdían la densidad del código y
+	caían a social). None si el LLM no responde un score claro."""
+	if transport is None:
+		return None
+	from red_pill.memento.agentic import _extract_json
+
+	try:
+		raw = transport(CLASSIFY_SYSTEM, CLASSIFY_USER.format(body=body[:6000]), 24)
+		parsed = _extract_json(str(raw or ""))
+		if parsed:
+			score = parsed.get("category_score")
+			if score is None:
+				score = 0.5
+			return max(0.0, min(1.0, float(score)))
+	except Exception:
+		pass
+	return None
+
+
+def _category_from_score(score: float) -> str:
+	"""Ratio (1=work) → colección destino según el umbral configurable."""
+	threshold = _polaroid_cfg(0.5, "MEMENTO_CATEGORY_WORK_THRESHOLD")
+	return "work" if float(score) >= threshold else "social"
+
+
 def ascender(
 	root: Path,
 	registry: Any,
@@ -433,13 +480,17 @@ def ascender(
 	collection: Optional[str] = None,
 	force: bool = False,
 	memory_manager: Any = None,
+	transport: Any = None,
 ) -> Dict[str, Any]:
 	"""Promociona un `refine/*.md` a engrama curado en `work_memories`/`social_memories`.
 
-	- `collection`: destino explícito; si es None, se clasifica el cuerpo con
-	`detect_category_heuristics` (misma heurística que el sueño → consistencia).
+	- `collection`: destino explícito; si es None, se resuelve en este orden:
+	1) `category_score` del frontmatter (etiqueta ratio del curador LLM en refine);
+	2) LLM on-the-fly (`transport`) para refine sin etiqueta;
+	3) fallback: heurística `detect_category_heuristics` (R1).
 	- `force`: re-promueve aunque el refine ya esté sellado como ascendido.
 	- `memory_manager`: inyectable para tests (default `MemoryManager()`).
+	- `transport`: para clasificar por LLM (Fase 4, decisión 2026-09-14).
 
 	Devuelve un dict con `ascended` (bool), `reason`, `collection`, `point_id`.
 	"""
@@ -466,10 +517,19 @@ def ascender(
 	cross_refs = list(fm.get("cross_refs", []) or [])
 	source = str(fm.get("source") or "")
 
+	score = fm.get("category_score")
 	if collection is None:
-		from red_pill.metabolism.categorizer import detect_category_heuristics
+		# La clasificación por LLM vive EN EL REFINE (category_score del curador,
+		# verificado 2026-09-14: técnico → 0.8). El clasificador standalone es débil
+		# con el LLM local (tiny_aya devuelve 0.0 siempre) — por eso el ascenso NO
+		# llama al LLM: usa el score del curador o la heurística R1 (fallback).
+		if score is not None:
+			category = _category_from_score(float(score))
+		else:
+			from red_pill.metabolism.categorizer import detect_category_heuristics
 
-		collection = f"{detect_category_heuristics(body)}_memories"
+			category = detect_category_heuristics(body)
+		collection = f"{category}_memories"
 
 	point_id = refine_point_id(session_id, source_lines)
 
@@ -497,6 +557,8 @@ def ascender(
 		"origin": "memento",
 		"refine_ref": _relative_refine_ref(root, refine_path),
 	}
+	if score is not None:
+		metadata["category_score"] = round(float(score), 2)
 
 	new_id = memory_manager.add_memory(
 		collection=collection,

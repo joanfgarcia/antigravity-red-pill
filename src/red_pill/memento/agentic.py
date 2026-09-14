@@ -114,11 +114,12 @@ Each idea is an independent durable memory (decision, insight, milestone). Retur
 - "relics": 0-4 memorable literal phrases.
 - "cross_refs": subset of these candidate session ids that this idea genuinely relates to: {candidates}
 - "fragment_ref": 1-based index of the fragment that contributed most.
+- "category_score": 0.0-1.0 — qué tan "work" es la idea: 1.0 = puramente técnico/operativo (código, sistemas, arquitectura, infraestructura); 0.0 = puramente personal/social/reflexivo/filosófico.
 
 Fragments:
 {fragments}
 
-Output ONLY the JSON array: [{{"title": "...", "significance": 0.0, "emotion": "gray", "intensity": 0.0, "theme": "...", "relics": [], "cross_refs": [], "fragment_ref": 1}}]
+Output ONLY the JSON array: [{{"title": "...", "significance": 0.0, "emotion": "gray", "intensity": 0.0, "theme": "...", "relics": [], "cross_refs": [], "fragment_ref": 1, "category_score": 0.8}}]
 """
 
 
@@ -491,6 +492,10 @@ def refine_session(
 				ref_idx = 1
 			origin = frags[ref_idx - 1] if 1 <= ref_idx <= len(frags) else frags[0]
 			cross_refs = [c for c in idea.get("cross_refs", []) if c in candidates]
+			try:
+				category_score = max(0.0, min(1.0, float(idea.get("category_score", 0.5) or 0.5)))
+			except (TypeError, ValueError):
+				category_score = 0.5
 			refine_fm = _frontmatter_block(
 				[
 					("session_id", session_id),
@@ -503,6 +508,7 @@ def refine_session(
 					("texture", {"theme": str(idea.get("theme", "")), "relics": [str(r) for r in idea.get("relics", [])][:4]}),
 					("cross_refs", cross_refs),
 					("fragment_ref", ref_idx if len(frags) > 1 else None),
+					("category_score", category_score),
 					# Estado de ascensión (Fase 4 §3): defaults para sellar in-place.
 					("ascended", False),
 					("ascended_at", None),
