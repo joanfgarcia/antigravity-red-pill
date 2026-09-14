@@ -440,10 +440,15 @@ los fragmentos se dimensionan para caber, sin recortar contenido.
    - `POLAROID_GAIN: 1.0 → 0.5`, `POLAROID_REVIVAL_GATE: 5.0 → 7.0`
      (τ se mantiene 90d) → ~6% ascenderían (minoría sostenida).
    El gate sigue en sombra (`MEMENTO_STATIC_ASCENSION_ENABLED=false`).
-10. **Query log / replay de recall** — el corpus de `search_memory_research` sigue
-    acumulándose; el umbral Q4 se confirma con el replay (RFC-002 §4.6). La Fase 4
-    NO flipea el gate "estático" a ciegas: espera el replay O el refuerzo
-    acumulado, lo que llegue primero con evidencia.
+10. **Query log / replay de recall** — ✅ **IMPLEMENTADO (2026-09-14)** — el corpus de
+    `search_memory_research` sigue
+    acumulándose; el umbral Q4 se confirma con el replay (RFC-002 §4.6).
+    `scripts/memento_replay_recall.py` re-ejecuta las queries del log
+    (`search_query_log.jsonl`) contra el corpus curado y mide hit rate, top_score
+    y contribución de engramas ascendidos (`origin: memento`). Estado real: 11
+    queries, 100% hit rate, 0 ascendidos (gate en sombra) → **sin evidencia aún
+    para flipear el gate estático** — se espera el refuerzo acumulado o más
+    queries antes del enforce.
 
 ---
 
