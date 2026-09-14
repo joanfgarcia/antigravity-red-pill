@@ -62,6 +62,23 @@ def test_slugify_and_json_extraction():
 	assert _extract_json("sin json") is None
 
 
+def test_fit_prompt_recorta_al_presupuesto_de_contexto():
+	"""Regresión 2026-09-14: un index.md/split token-denso excedía n_ctx (10240)
+	→ el llama-server devolvía 500 y el backfill no avanzaba. El transporte debe
+	recortar el user content al presupuesto, sin tocar los splits normales."""
+	from red_pill.memento.agentic import _fit_prompt
+
+	# split normal (12k chars ≈ 3k tokens) → sin recorte
+	normal = "x" * 12000
+	assert _fit_prompt(normal) == normal
+
+	# index.md gigante (90k chars ≈ 22k tokens) → recortado + marca
+	big = "y" * 90000
+	fitted = _fit_prompt(big)
+	assert len(fitted) < len(big)
+	assert "[... truncado" in fitted
+
+
 def test_run_agentic_writes_distill_refine_and_stamps_significance(tmp_path):
 	root, registry, rendered = _tree_with_session(tmp_path)
 	stats = run_agentic(root, registry, [("opencode", "opencode:s1")], fake_transport(0.8))

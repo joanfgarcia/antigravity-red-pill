@@ -79,18 +79,54 @@ def llm_available(url: str = EDGE_HEALTH_URL) -> bool:
 		return False
 
 
+# n_ctx del modelo servido (2026-09-14): el llama-server GPU carga Granite-4.1-8B
+# con contexto 10240. El presupuesto por request = n_ctx − sistema − salida. Los
+# splits de 12000 chars (~3k tokens) entran, pero un index.md completo o un split
+# token-denso pueden pedir más → 500. Se recorta el user content al presupuesto.
+MODEL_N_CTX = 10240
+MODEL_PROMPT_BUDGET = MODEL_N_CTX - 4096  # margen: sistema (~600) + salida (512-1024) + colchón
+
+
+def _fit_prompt(user: str, hard_cap: int = 20000) -> str:
+	"""Cap superior de seguridad: recorta solo prompts claramente excesivos.
+	El ajuste fino lo hace el reintento adaptativo de `http_transport` (la ratio
+	chars/token varía 1-4, ningún presupuesto fijo es seguro)."""
+	if len(user) <= hard_cap:
+		return user
+	cut = user[:hard_cap]
+	cut = cut[: cut.rfind(" ")] if " " in cut else cut
+	return cut + "\n[... truncado por presupuesto de contexto]"
+
+
 def http_transport(system: str, user: str, max_tokens: int) -> str:
+	"""Envío al LLM local con recorte adaptativo ante 500 por exceso de contexto.
+
+	El llama-server devuelve 500 si el prompt supera n_ctx (10240); la ratio
+	chars/token es impredecible (1-4), así que si falla se recorta el user y se
+	reintenta (hasta 4 veces) — robusto independientemente de la densidad.
+	"""
 	import requests
 
-	payload = {
-		"model": EDGE_MODEL,
-		"messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-		"temperature": 0.1,
-		"max_tokens": max_tokens,
-	}
-	response = requests.post(EDGE_ENGINE_URL, json=payload, timeout=120)
+	attempt_user = _fit_prompt(user)
+	for _attempt in range(4):
+		payload = {
+			"model": EDGE_MODEL,
+			"messages": [{"role": "system", "content": system}, {"role": "user", "content": attempt_user}],
+			"temperature": 0.1,
+			"max_tokens": max_tokens,
+		}
+		response = requests.post(EDGE_ENGINE_URL, json=payload, timeout=120)
+		if response.status_code == 500 and len(attempt_user) > 1500:
+			# Probable exceso de contexto: recortar y reintentar.
+			new_len = int(len(attempt_user) * 0.6)
+			logger.warning(f"LLM 500 (posible contexto) — recortando prompt {len(attempt_user)}→{new_len} chars y reintentando")
+			attempt_user = attempt_user[:new_len]
+			continue
+		response.raise_for_status()
+		return str(response.json()["choices"][0]["message"]["content"]).strip()
+	# Agotados los reintentos: propagar el error real del último intento.
 	response.raise_for_status()
-	return str(response.json()["choices"][0]["message"]["content"]).strip()
+	return ""
 
 
 def _extract_json(text: str) -> Optional[Dict[str, Any]]:
