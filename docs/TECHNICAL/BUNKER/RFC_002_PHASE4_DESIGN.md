@@ -399,8 +399,10 @@ los fragmentos se dimensionan para caber, sin recortar contenido.
    (§4.2). Nuevo, no toca `weave_cross_axons`.
    Colecciona temas de engramas nuevos en `work_memories` (ventana
    `AXON_WINDOW_HOURS`), y para cada refine NO ascendido con afinidad de tema
-   (`_temas_afines`: theme exacto o ≥2 tokens) aplica `reinforce_refine`
+   (`_temas_afines`: theme exacto o ≥3 tokens) aplica `reinforce_refine`
    (decay+GAIN) y asciende si supera el gate. Vive en `ascension.py`.
+   **Integrado** como etapa `memento-reinforce` del sueño (`sleep.yaml`, tras
+   `finalize`; wrapper `scripts/memento_reinforce.py`).
 5. **Ascenso estático** — ✅ **IMPLEMENTADO (2026-09-14)** tras `memento-agentic`,
    promover refinados con
    `significance >= umbral` (reemplaza el gate de ingesta, §3.3).

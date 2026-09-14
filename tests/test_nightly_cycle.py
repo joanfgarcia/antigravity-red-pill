@@ -47,3 +47,17 @@ def test_schedule_pulse_installs_nightly_not_individuals():
 	assert "_write_calendar_timer(SLEEP_TIMER" not in src
 	assert "_write_calendar_timer(CHRONICLE_TIMER" not in src
 	assert "disable" in src  # migración: retira los individuales
+
+
+def test_sleep_integrates_memento_reinforce_stage():
+	"""Fase 4 §4.2/§4.3: el refuerzo Memento-consciente es una etapa del sueño."""
+	payload = yaml.safe_load(Path("configs/jobs/sleep.yaml").read_text(encoding="utf-8"))
+	stages = payload["manifest"]["stages"]
+	ids = [s["id"] for s in stages]
+	assert "memento-reinforce" in ids
+	stage = next(s for s in stages if s["id"] == "memento-reinforce")
+	assert stage["type"] == "command"
+	assert "memento_reinforce.py" in stage["command"]
+	assert stage["on_fail"] == "warn"
+	assert stage["depends_on"] == ["finalize"]
+	assert Path("scripts/memento_reinforce.py").exists()

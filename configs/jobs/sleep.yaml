@@ -120,3 +120,13 @@ manifest:
       minion: sleep_finalize
       on_fail: warn
       depends_on: [thread]
+    # Fase 4 §4.2/§4.3: refuerzo Memento-consciente. Corre AL FINAL del sueño,
+    # cuando ya hay engramas nuevos consolidados: por cada refine no ascendido
+    # con tema afín a la ventana reciente, decay + GAIN; si supera el gate,
+    # `ascender()` lo promociona a Qdrant. Best-effort (nunca rompe el sueño).
+    - id: memento-reinforce
+      type: command
+      minion: command_runner
+      command: .venv/bin/python scripts/memento_reinforce.py
+      on_fail: warn
+      depends_on: [finalize]
