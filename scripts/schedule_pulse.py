@@ -24,6 +24,10 @@ WAKE_SERVICE = "redpill-wake.service"
 WAKE_TIMER = "redpill-wake.timer"
 SLEEP_SERVICE = "redpill-sleep.service"
 SLEEP_TIMER = "redpill-sleep.timer"
+CHRONICLE_SERVICE = "redpill-chronicle.service"
+CHRONICLE_TIMER = "redpill-chronicle.timer"
+NIGHTLY_SERVICE = "redpill-nightly.service"
+NIGHTLY_TIMER = "redpill-nightly.timer"
 GRAPHIFY_SERVICE = "redpill-graphify.service"
 GRAPHIFY_TIMER = "redpill-graphify.timer"
 BANK_JANITOR_SERVICE = "redpill-bank-janitor.service"
@@ -49,6 +53,8 @@ QUEUE_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "process_queue.py")
 # sueño/chronicle/entrenamiento y nadie roba la VRAM a nadie (28 jul 2026).
 SLEEP_RECIPE = os.path.join(PROJECT_ROOT, "configs", "jobs", "sleep.yaml")
 CHRONICLE_RECIPE = os.path.join(PROJECT_ROOT, "configs", "jobs", "chronicle.yaml")
+# Fase 4 §5.3 (opción A): un ÚNICO ciclo nocturno compone chronicle → sleep.
+NIGHTLY_RECIPE = os.path.join(PROJECT_ROOT, "configs", "jobs", "nightly.yaml")
 
 
 def _find_uv() -> str:
@@ -87,13 +93,23 @@ def _install_linux(interval_hours: int, uv_path: str) -> None:
 	_write_systemd_unit(WAKE_SERVICE, f"{uv_path} run python {TRIGGER_SCRIPT} --cycle wake", "Red Pill Wake Pulse", type="oneshot")
 	_write_systemd_timer(WAKE_TIMER, f"{interval_hours}h", "Timer for Red Pill Wake Pulse (Hourly)")
 
-	# 2. Sleep Pulse (03:00 Daily) — Memory consolidation, Ariadne's Thread.
-	# La unit solo ENCOLA (segundos): el sueño real lo ejecuta el runner de la
-	# cola, con prioridad absoluta sobre el training y singleton anti-duplicados.
+	# 2. Nightly Cycle (03:00 Daily) — Fase 4 §5.2/5.3 (opción A): un ÚNICO job
+	# compone chronicle → sleep. La unit solo ENCOLA (segundos): el ciclo real lo
+	# ejecuta el runner de la cola, con prioridad alta y singleton anti-duplicados.
 	_write_systemd_unit(
-		SLEEP_SERVICE, f"{uv_path} run red-pill job submit --recipe {SLEEP_RECIPE} --singleton", "Red Pill Sleep Pulse (enqueue)", type="oneshot"
+		NIGHTLY_SERVICE,
+		f"{uv_path} run red-pill job submit --recipe {NIGHTLY_RECIPE} --singleton",
+		"Red Pill Nightly Cycle (chronicle → sleep, enqueue)",
+		type="oneshot",
 	)
-	_write_calendar_timer(SLEEP_TIMER, "*-*-* 03:00:00", "Daily Sleep Consolidation Pulse")
+	_write_calendar_timer(NIGHTLY_TIMER, "*-*-* 03:00:00", "Nightly Cycle (chronicle → sleep)")
+	# Migración Fase 4: retirar los pulsos individuales (quedan como recetas manuales).
+	for _legacy in (SLEEP_TIMER, SLEEP_SERVICE, CHRONICLE_TIMER, CHRONICLE_SERVICE):
+		if _is_systemd_available():
+			subprocess.run(["systemctl", "--user", "disable", "--now", _legacy], check=False)
+		_legacy_path = os.path.join(SYSTEMD_USER_DIR, _legacy)
+		if os.path.exists(_legacy_path):
+			os.remove(_legacy_path)
 
 	# 3. Telemetry (Heartbeat) - 10s-30s
 	_write_systemd_unit(
@@ -120,25 +136,16 @@ def _install_linux(interval_hours: int, uv_path: str) -> None:
 	_write_systemd_unit("redpill-worker.service", f"{uv_path} run python {DAEMON_SCRIPT}", "Sovereign Daemon Pulse", type="oneshot", nice=10)
 	_write_systemd_timer("redpill-worker.timer", "1m", "Timer for Sovereign Daemon Pulse")
 
-	# 4. Chronicle Daily (04:00, Persistent — runs on next boot if missed).
-	# También encola: si el sueño sigue corriendo a las 04:00, el chronicle
-	# espera su turno en la cola en vez de pisarlo.
-	_write_systemd_unit(
-		"redpill-chronicle.service",
-		f"{uv_path} run red-pill job submit --recipe {CHRONICLE_RECIPE} --singleton",
-		"Red Pill Chronicle Daily Pipeline (enqueue)",
-		type="oneshot",
-	)
-	_write_calendar_timer("redpill-chronicle.timer", "*-*-* 04:00:00", "Daily Chronicle Ingestion Pipeline")
+	# 4. (retirado Fase 4) Chronicle Daily individual — ahora es la primera etapa
+	# del Nightly Cycle (03:00). `chronicle.yaml` se conserva como receta manual.
 
 	if _is_systemd_available():
 		subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
 		subprocess.run(["systemctl", "--user", "enable", "--now", WAKE_TIMER], check=True)
-		subprocess.run(["systemctl", "--user", "enable", "--now", SLEEP_TIMER], check=True)
+		subprocess.run(["systemctl", "--user", "enable", "--now", NIGHTLY_TIMER], check=True)
 		subprocess.run(["systemctl", "--user", "enable", "--now", "redpill-telemetry.timer"], check=True)
 		subprocess.run(["systemctl", "--user", "enable", "--now", "redpill-queue.timer"], check=True)
 		subprocess.run(["systemctl", "--user", "enable", "--now", "redpill-worker.timer"], check=True)
-		subprocess.run(["systemctl", "--user", "enable", "--now", "redpill-chronicle.timer"], check=True)
 		print("[OK] systemd timers installed. Protocol Zero-Daemon active.")
 	else:
 		print("[WARN] systemd is not available or user D-Bus is unreachable. Timers written to disk but not activated.")
@@ -212,6 +219,7 @@ def _uninstall_linux() -> None:
 	for timer in (
 		WAKE_TIMER,
 		SLEEP_TIMER,
+		NIGHTLY_TIMER,
 		"redpill-telemetry.timer",
 		"redpill-queue.timer",
 		"redpill-worker.timer",
@@ -227,6 +235,8 @@ def _uninstall_linux() -> None:
 		WAKE_SERVICE,
 		SLEEP_TIMER,
 		SLEEP_SERVICE,
+		NIGHTLY_TIMER,
+		NIGHTLY_SERVICE,
 		"redpill-telemetry.timer",
 		"redpill-telemetry.service",
 		"redpill-queue.timer",
@@ -272,8 +282,8 @@ def _uninstall_macos() -> None:
 def _install_macos(interval_hours: int, uv_path: str) -> None:
 	# 1. Wake Pulse (Interval-based, hourly)
 	_write_launchd_plist("com.redpill.wake", f'"{uv_path}" run python "{TRIGGER_SCRIPT}" --cycle wake', interval_hours * 3600)
-	# 2. Sleep Pulse (Calendar-based, 03:00 daily) — encola en la cola central
-	_write_launchd_calendar_plist("com.redpill.sleep", f'"{uv_path}" run red-pill job submit --recipe "{SLEEP_RECIPE}" --singleton', hour=3, minute=0)
+	# 2. Nightly Cycle (Calendar-based, 03:00 daily) — chronicle → sleep, encola
+	_write_launchd_calendar_plist("com.redpill.nightly", f'"{uv_path}" run red-pill job submit --recipe "{NIGHTLY_RECIPE}" --singleton', hour=3, minute=0)
 	# 3. Telemetry
 	_write_launchd_plist("com.redpill.telemetry", f'"{uv_path}" run python "{TELEMETRY_SCRIPT}" --oneshot', 30)
 	# 4. Queue (use module entrypoint — scripts/process_queue.py does not exist; mirror the Linux branch)
@@ -353,8 +363,8 @@ def _write_launchd_calendar_plist(label: str, command: str, hour: int, minute: i
 def _install_windows(interval_hours: int, uv_path: str) -> None:
 	# 1. Wake Pulse (interval — MINUTE-based)
 	_create_win_task("RedPill-Wake", f'"{uv_path}" run python "{TRIGGER_SCRIPT}" --cycle wake', interval_hours * 60)
-	# 2. Sleep Pulse (daily at 03:00) — encola en la cola central
-	_create_win_daily_task("RedPill-Sleep", f'"{uv_path}" run red-pill job submit --recipe "{SLEEP_RECIPE}" --singleton', "03:00")
+	# 2. Nightly Cycle (daily at 03:00) — chronicle → sleep, encola
+	_create_win_daily_task("RedPill-Nightly", f'"{uv_path}" run red-pill job submit --recipe "{NIGHTLY_RECIPE}" --singleton', "03:00")
 	# 3. Telemetry
 	_create_win_task(TASK_NAME_TELEMETRY, f'"{uv_path}" run python "{TELEMETRY_SCRIPT}" --oneshot', 1)
 	# 4. Queue

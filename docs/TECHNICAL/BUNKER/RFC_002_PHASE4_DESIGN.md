@@ -408,9 +408,13 @@ los fragmentos se dimensionan para caber, sin recortar contenido.
    final del pase. **En sombra por defecto** (`MEMENTO_STATIC_ASCENSION_ENABLED`
    default false): solo cuenta cuántos ascenderían; el experimento (§6.9) lo
    flipea a true.
-6. **`nightly.yaml`** — el mega-ciclo composición (§5.2) + `redpill-nightly.timer`
+6. **`nightly.yaml`** — ✅ **IMPLEMENTADO (2026-09-14)** el mega-ciclo
+   composición (§5.2) + `redpill-nightly.timer`
    (03:00). Retirar los timers individuales de sleep/chronicle (decisión §5.3,
-   opción A recomendada).
+   opción A confirmada). `configs/jobs/nightly.yaml` compone chronicle → sleep
+   (`type: dag` + `recipe`, `on_fail: warn`). `schedule_pulse.py` actualizado
+   (Linux/macOS/Windows): registra el nightly y retira los individuales.
+   Timers systemd aplicados en el host.
 7. **Config keys** (provisionales, a ajustar con el experimento): `POLAROID_REVIVAL_GATE`
    (umbral de estabilidad), `POLAROID_TAU` (decaimiento, días), `POLAROID_GAIN`
    (incremento por refuerzo), `MEMENTO_GATE_MIN_SIGNIFICANCE` (ya existe,
