@@ -525,6 +525,16 @@ los fragmentos se dimensionan para caber, sin recortar contenido.
    degradaba hubs y creaba nodos crudos que ensuciaban el recall. Guard
    estructural añadido: la refracción solo aplica a engramas `normal` legacy
    políglota (`USER:`/`ASSISTANT:`).
+8. **`add_memory` ya NO fragmenta mecánicamente** (2026-09-14): `synaptic_split`
+   cortaba por separadores sin criterio y producía `_is_fragment` excluidos del
+   recall (ruido muerto). La fragmentación la hace la curaduría CON CRITERIO
+   (LLM, distill fragmentado §5.4.1). El texto largo se guarda completo.
+   Consecuencia: `core_directives` re-sembrada (3 engramas completos, inmunes,
+   sin fragmentos) y `red_pill_checkpoints`/`soul_memories` (residuos legacy)
+   limpiados.
+9. **Backup obligatorio antes de purgar** `archive_memories` y de resembrar
+   work/social: `memento_purge_archive.py` y `memento_reseed.py` abortan si el
+   snapshot backup falla.
 
 **Todas las preguntas del diseño resueltas.** Listo para integrar como §10 del
 RFC-002 tras la implementación (o antes, como diseño aprobado).

@@ -175,44 +175,13 @@ class MemoryManager:
 		recursion_depth: int = 0,
 	) -> str:
 		"""Stores a new engram with B760 validation and emotional chroma."""
-		# v5.6.3: Synaptic Fragmentation (Anti-Amnesia Logic - Pre-validation)
-		# If the text is a massive block, we split it into sinaptic fragments
-		# before validation to support graceful degradation of oversized inputs.
+		# 2026-09-14: la fragmentación automática por chars quedó ELIMINADA.
+		# `synaptic_split` cortaba por separadores mecánicos (sin criterio) y
+		# producía `_is_fragment` que quedan EXCLUIDOS del recall (ruido muerto).
+		# La curaduría debe fragmentar CON CRITERIO (LLM, p.ej. el distill
+		# fragmentado del pase Memento §5.4.1), jamás un corte ciego. El texto
+		# largo se guarda completo; el embedding trunca a su ventana.
 		metadata = (metadata or {}).copy()
-		if len(text) > self.cfg.CHUNK_THRESHOLD and not metadata.get("_is_fragment"):
-			if recursion_depth >= 3:
-				logger.warning("MEM-002: Max recursion depth (3) reached for engram fragmentation. Truncating.")
-				text = text[: self.cfg.CHUNK_THRESHOLD]
-				# Fall through to the normal single-engram save below with the truncated text.
-			else:
-				fragments = synaptic_split(text)
-				parent_id = point_id if point_id else str(uuid.uuid4())
-
-				for i, frag in enumerate(fragments):
-					frag_metadata = metadata.copy()
-					frag_metadata["_is_fragment"] = True
-					frag_metadata["parent_id"] = parent_id
-					frag_metadata["chunk_index"] = i
-					frag_metadata["total_chunks"] = len(fragments)
-
-					# The first fragment keeps the requested point_id (if any)
-					current_frag_id = parent_id if i == 0 else str(uuid.uuid4())
-
-					self.add_memory(
-						collection=collection,
-						text=frag,
-						importance=importance,
-						metadata=frag_metadata,
-						point_id=current_frag_id,
-						color=color,
-						emotion=emotion,
-						recursion_depth=recursion_depth + 1,
-						intensity=intensity,
-						force_immune=force_immune,
-					)
-
-				# Return the ID of the anchor point (fragmentation path only)
-				return parent_id
 
 		# v6.3.8: Ingestion Quality Gate (Cortex Isolation)
 		# Prevent noise and garbage from entering long-term collections.
