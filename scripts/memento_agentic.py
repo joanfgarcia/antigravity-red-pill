@@ -61,6 +61,13 @@ def main() -> None:
 	parser.add_argument("--limit", type=int, default=None, help="Max sessions this run (default: MEMENTO_AGENTIC_NIGHT_LIMIT)")
 	parser.add_argument("--heal-stale", action="store_true", help="Process only stale sessions (Healer branch, no limit)")
 	parser.add_argument("--force", action="store_true", help="Re-process sessions already distilled on disk (ignore the crash-recovery mark)")
+	parser.add_argument(
+		"--only-long",
+		type=int,
+		default=None,
+		metavar="CHARS",
+		help="Re-distill only sessions whose largest work unit exceeds CHARS (re-process sessions truncated by the old model window; use with --force)",
+	)
 	parser.add_argument("--shadow-report", action="store_true", help="Print the shadow-gate summary and exit")
 	args = parser.parse_args()
 
@@ -76,6 +83,15 @@ def main() -> None:
 
 	root = get_memento_root()
 	pending = pending_agentic(registry, root=root, force=args.force)
+	# --only-long: quedarse solo con las sesiones cuyo work unit más largo excede
+	# el umbral (las truncadas por la ventana del modelo anterior). Requiere --force
+	# para que pending_agentic incluya las ya destiladas.
+	if args.only_long is not None:
+		from red_pill.memento.agentic import session_max_work_unit_chars
+
+		before = len(pending)
+		pending = [(src, sid, r) for src, sid, r in pending if session_max_work_unit_chars(root, registry.get(src, sid).get("dir", "")) > args.only_long]
+		logger.info(f"[--only-long {args.only_long}] {len(pending)}/{before} sesiones superan el umbral.")
 	if args.heal_stale:
 		targets = [(source, session_id) for source, session_id, reason in pending if reason == "stale"]
 	else:

@@ -292,6 +292,10 @@ def pending_agentic(registry: Any, root: Optional[Path] = None, force: bool = Fa
 				pending.append((source, session_id, "missing"))
 			elif agentic.get("hash") != entry.get("memento_hash"):
 				pending.append((source, session_id, "stale"))
+			elif force:
+				# Re-procesado explícito: incluir las ya destiladas válidas
+				# (p.ej. --only-long para re-distillar las truncadas).
+				pending.append((source, session_id, "redistill"))
 	return pending
 
 
@@ -301,6 +305,17 @@ def _distill_refine_present(root: Path, dir_rel: str) -> bool:
 	distill = base / "distill"
 	refine = base / "refine"
 	return (distill.is_dir() and any(distill.glob("*.md"))) and (refine.is_dir() and any(refine.glob("*.md")))
+
+
+def session_max_work_unit_chars(root: Path, dir_rel: str) -> int:
+	"""Longitud (chars) del work unit más largo de una sesión (0 si no hay).
+
+	Se usa para detectar sesiones "cortadas": work units que exceden la ventana
+	del modelo anterior y se truncaron en el transporte (2026-09-14)."""
+	try:
+		return max((len(content) for _nnn, _ref, content in _work_units(root / dir_rel)), default=0)
+	except Exception:
+		return 0
 
 
 def _is_llm_connection_error(exc: Exception) -> bool:
