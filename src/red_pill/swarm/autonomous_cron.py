@@ -143,8 +143,7 @@ def main():
 	log_path = get_awakening_log_path()
 	planner_access = os.environ.get("AWAKENING_PLANNER_ACCESS", "planner")
 	planner_hint = (
-		" Puedes mirar el planner del desk (ideas/pending) y decidir si contribuir "
-		"a algo — política AWAKENING_PLANNER_ACCESS en tu prompt."
+		" Puedes mirar el planner del desk (ideas/pending) y decidir si contribuir a algo — política AWAKENING_PLANNER_ACCESS en tu prompt."
 		if planner_access not in ("none", "")
 		else " No contribuyas al planner del desk (política: none)."
 	)
