@@ -112,7 +112,7 @@ def test_ascender_promotes_to_social(refine_file: Path):
 	assert call["metadata"]["session_id"] == "opencode:ses_test"
 	assert call["metadata"]["origin"] == "memento"
 	assert call["metadata"]["significance"] == 0.72
-	assert call["importance"] == 0.72
+	assert call["importance"] == pytest.approx(3.6)  # curado: 0.72 × 5 → erode lento
 	assert call["emotion"] == "teal"
 	# idempotencia: el point id es el determinista
 	assert call["point_id"] == result["point_id"]
@@ -291,6 +291,7 @@ def test_fase4_config_keys_declared():
 	assert cfg.MEMENTO_FRAGMENT_OVERLAP_MESSAGES == 2
 	assert cfg.MEMENTO_FRAGMENT_MAX_CHARS == 12000
 	assert cfg.MEMENTO_GATE_MIN_SIGNIFICANCE == 0.5
+	assert cfg.MEMENTO_CURATED_IMPORTANCE_FACTOR == 5.0  # curados erodan lento
 	assert cfg.NIGHTLY_ENABLED is True
 
 

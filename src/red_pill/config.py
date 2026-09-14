@@ -512,6 +512,11 @@ class RedPillConfig(BaseSettings):
 	MEMENTO_STATIC_ASCENSION_ENABLED: bool = False  # ascenso estático EN SOMBRA hasta calibrar
 	MEMENTO_FRAGMENT_OVERLAP_MESSAGES: int = 2  # solape de turnos entre fragmentos del distill
 	MEMENTO_FRAGMENT_MAX_CHARS: int = 12000  # presupuesto de contexto por fragmento de distill
+	# Los engramas ascendidos (origin=memento) erodan MUCHO más lento que el ruido:
+	# importance = significance × factor → el motor bayesiano (α=max(1,importance))
+	# les da una utility inicial alta que tarda años en erodar, frente a ~19 días
+	# de un engrama normal (decisión Fase 4, 2026-09-14: no olvidar lo curado).
+	MEMENTO_CURATED_IMPORTANCE_FACTOR: float = 5.0
 	NIGHTLY_ENABLED: bool = True  # ciclo nocturno chronicle → sleep (nightly.yaml)
 	# raw/ = copia de respaldo provider-nativa y punto único de backup (operador,
 	# 2026-08-26): con él el árbol se regenera desde cero (--from-raw). Sin scrub → jamás en git.

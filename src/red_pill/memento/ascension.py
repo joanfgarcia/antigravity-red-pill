@@ -410,6 +410,21 @@ def _stamp_refine(refine_path: Path, fields: Dict[str, Any]) -> None:
 	refine_path.write_text("\n".join(lines), encoding="utf-8")
 
 
+def _curated_importance(significance: float) -> float:
+	"""Importance de un engrama ascendido: significance × factor configurable.
+
+	El motor bayesiano usa α = max(1, importance): con α alta la utility inicial
+	es alta y el engrama tarda años en erodar (vs ~19 días de uno normal). Así lo
+	curado desde Memento no se olvida (decisión Fase 4, 2026-09-14)."""
+	try:
+		import red_pill.config as cfg
+
+		factor = float(getattr(cfg, "MEMENTO_CURATED_IMPORTANCE_FACTOR", 5.0))
+	except Exception:
+		factor = 5.0
+	return max(1.0, round(significance * factor, 2))
+
+
 def ascender(
 	root: Path,
 	registry: Any,
@@ -486,7 +501,7 @@ def ascender(
 	new_id = memory_manager.add_memory(
 		collection=collection,
 		text=body,
-		importance=max(significance, 0.1),
+		importance=_curated_importance(significance),
 		metadata=metadata,
 		point_id=point_id,
 		emotion=emotion,
