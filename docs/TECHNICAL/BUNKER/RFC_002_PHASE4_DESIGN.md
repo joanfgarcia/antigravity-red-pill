@@ -73,6 +73,24 @@ como engrama curado**.
   funciona desde `raw/` (100% cobertura). Solo queda como fallback documental
   durante el cutoff de seguridad.
 
+### 2.3 Resiembra de las colecciones curadas (2026-09-14)
+
+Qdrant `work_memories`/`social_memories` acumularon material estructural
+(raw_parents, sequence_chunks, fragmentos, nodos crudos de refracción legacy):
+solo ~16% de work_memories participa en el recall (5311 hubs + 29 normales de
+33.508). La historia completa vive en Memento; la **resiembra** vacía las
+colecciones y las re-puebla SOLO con engramas curados ascendidos.
+
+**Validación previa (no se borra a ciegas)**: muestra de 60 refine → 60
+ascendidos a una colección de prueba; replay de las 11 queries reales → **hit
+rate 100%** (top_score medio 0.47) y resultados temáticamente relevantes.
+
+`scripts/memento_reseed.py` (dry-run por defecto): verifica cobertura raw →
+snapshot backup → drop+recreate work/social → ascenso estático (sig>=0.5).
+Estimación dry-run: **~206 work + ~1769 social**. El refuerzo Memento-consciente
+sigue ascendiendo en el sueño. La resiembra espera: fin de la redestilación en
+curso + aprobación del operador.
+
 ---
 
 ## 3. El ascenso diferido por refuerzo (núcleo del diseño)
