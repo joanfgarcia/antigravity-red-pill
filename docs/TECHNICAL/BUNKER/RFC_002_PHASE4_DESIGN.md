@@ -4,9 +4,10 @@
 |---|---|
 | **RFC** | 002 (enmienda) |
 | **Title** | Fase 4 — Curaduría dinámica y ascensos diferidos |
-| **Status** | DRAFT (diseño, pre-revisión del operador) |
+| **Status** | DRAFT (diseño aprobado; **implementado 2026-09-14**, pendiente resiembra) |
 | **Author** | Joan García (Operator) / Aleth (Agent) |
 | **Created** | 2026-09-14 |
+| **Updated** | 2026-09-14 |
 | **Related** | [RFC-002](./RFC_002_MEMENTO.md) §4.5 (agentic pass), §4.6 (curation gate), §6 (rollout), §5.1 (sources of truth) |
 
 ---
@@ -449,13 +450,14 @@ los fragmentos se dimensionan para caber, sin recortar contenido.
    (`type: dag` + `recipe`, `on_fail: warn`). `schedule_pulse.py` actualizado
    (Linux/macOS/Windows): registra el nightly y retira los individuales.
    Timers systemd aplicados en el host.
-7. **Config keys** — ✅ **IMPLEMENTADO (2026-09-14)** (provisionales, a ajustar
-   con el experimento):
-   `POLAROID_REVIVAL_GATE=5.0`,
-   `POLAROID_TAU=90`, `POLAROID_GAIN=1.0`,
+7. **Config keys** — ✅ **IMPLEMENTADO (2026-09-14)**, ajustadas por el experimento:
+   `POLAROID_REVIVAL_GATE=7.0` (era 5.0),
+   `POLAROID_TAU=90`, `POLAROID_GAIN=0.5` (era 1.0),
    `MEMENTO_GATE_MIN_SIGNIFICANCE=0.5` (ya existía),
    `MEMENTO_STATIC_ASCENSION_ENABLED=false` (sombra),
    `MEMENTO_FRAGMENT_OVERLAP_MESSAGES=2`, `MEMENTO_FRAGMENT_MAX_CHARS=12000`,
+   `MEMENTO_CURATED_IMPORTANCE_FACTOR=5.0` (curados erodan lento),
+   `MEMENTO_CATEGORY_WORK_THRESHOLD=0.5` (ratio LLM del curador),
    `NIGHTLY_ENABLED=true`. Declaradas en `red_pill.config`.
 8. **Purga de `archive_memories`** — ✅ **SCRIPT LISTO (2026-09-14)** (con **backup
    previo** del collection) +
@@ -502,8 +504,9 @@ los fragmentos se dimensionan para caber, sin recortar contenido.
 ## 8. Decisiones y preguntas
 
 **Resueltas (operador, 2026-09-14):**
-1. **τ/GAIN/gate**: fijar como **provisionales** (τ=90d, GAIN=1.0) y **ajustar con
-   un experimento** de calibración (§6.8) antes de enforce.
+1. **τ/GAIN/gate**: fijados provisionalmente y **ajustados por el experimento de
+   calibración** (§6.9) → τ=90d, **GAIN=0.5**, **gate=7.0** (los provisionales
+   GAIN=1.0/gate=5.0 saturaban el corpus real).
 2. **`archive_memories`**: **backup previo** del collection y **después purga total**.
 3. **Timers**: **Opción A** confirmada (§5.3) — un único `redpill-nightly.timer`;
    se retiran los individuales de sleep/chronicle.
@@ -511,10 +514,73 @@ los fragmentos se dimensionan para caber, sin recortar contenido.
    reconstruidos. El destilado es ~idempotente (la esencia se mantiene si modelo y
    prompt no cambian; el LLM no garantiza byte-identidad, y no hace falta).
    `reconstructed` marca la fidelidad del *raw*, no excluye del pipeline.
+5. **Clasificación work/social por LLM** (§2.4): el curador puntúa `category_score`
+   (ratio 0-1) EN el refine; el ascenso lo consume con umbral
+   `MEMENTO_CATEGORY_WORK_THRESHOLD` (0.5). El clasificador standalone es débil con
+   el LLM local → no se usa on-the-fly; la heurística R1 queda como fallback.
+6. **Los curados no se olvidan**: importance = significance × 5
+   (`MEMENTO_CURATED_IMPORTANCE_FACTOR`) → α bayesiana alta → un engrama curado
+   vive a 365 días vs ~60 de uno normal.
+7. **No usar la refracción del `sanitize` en work/social** (incidente 2026-09-14):
+   degradaba hubs y creaba nodos crudos que ensuciaban el recall. Guard
+   estructural añadido: la refracción solo aplica a engramas `normal` legacy
+   políglota (`USER:`/`ASSISTANT:`).
 
 **Todas las preguntas del diseño resueltas.** Listo para integrar como §10 del
 RFC-002 tras la implementación (o antes, como diseño aprobado).
 
 ---
 
-*Diseño DRAFT 2026-09-14. A integrar en RFC-002 como §10 tras revisión del operador.*
+## 9. Estado actual y pendientes (2026-09-14)
+
+### 9.1 Implementado (todo el checklist §6 + extras)
+
+| Pieza | Ubicación |
+|---|---|
+| `ascender()` (idempotente, sello, importance curado) | `src/red_pill/memento/ascension.py` |
+| `polaroid_decay` / `reinforce_refine` (estabilidad temporal) | `ascension.py` |
+| `weave_memento_reinforcement` (weaver Memento-consciente) | `ascension.py` + etapa `memento-reinforce` en `sleep.yaml` |
+| `ascend_by_threshold` (ascenso estático, en sombra) | `ascension.py` + integrado en `run_agentic` |
+| Distill fragmentado (§5.4.1) | `agentic.py` (`_split_messages`/`_fragment_messages`/prompts por posición) |
+| Refine multi-idea + `category_score` (§5.4.2, §2.4) | `agentic.py` (`refine_session`/`_refine_multi`) |
+| `nightly.yaml` + timers (opción A) | `configs/jobs/nightly.yaml`, `schedule_pulse.py`, systemd |
+| Config keys | `red_pill.config` (POLAROID_*, MEMENTO_*, NIGHTLY_ENABLED) |
+| Purga de `archive_memories` (script listo) | `scripts/memento_purge_archive.py` |
+| Calibración τ/GAIN/gate (experimento) | `scripts/memento_calibrate.py` |
+| Replay de recall (umbral Q4) | `scripts/memento_replay_recall.py` |
+| Re-refinado con `category_score` | `scripts/memento_refine_rescore.py` |
+| Resiembra de work/social (script listo) | `scripts/memento_reseed.py` |
+| Fix sanitize (guard estructural, incidente) | `memory.py` + `tests/test_biological_refraction.py` |
+
+### 9.2 Pendiente (secuencia tras la redestilación `f6493c71`)
+
+1. **Restaurar el daemon LLM a `granite_8b`** — `redpill-llm.service` está en
+   `MINION_PROFILE=tiny_aya_water` (temporal, para la redestilación). Restaurar y
+   reiniciar el servicio al terminar.
+2. **Re-refinado con `category_score`**: `memento_refine_rescore.py --all` — dota
+   a todos los refine de la clasificación LLM del curador (los actuales no la
+   tienen). No re-destila (barato). **No correr mientras la redestilación esté en
+   curso** (carrera de escritura sobre `refine/`).
+3. **Resiembra de las colecciones curadas**: `memento_reseed.py --apply` —
+   backup snapshot → drop+recreate `work_memories`/`social_memories` → ascenso
+   estático (~1900 engramas con score del curador y erosión lenta). Validado en
+   muestra (recall 100%). **Revisión del operador antes de `--apply`**.
+4. **Purga de `archive_memories`**: `memento_purge_archive.py --apply` (backup
+   previo; cobertura raw 100% verificada). Señal del operador (cutoff).
+5. **Flipear el gate estático**: `MEMENTO_STATIC_ASCENSION_ENABLED=true` cuando el
+   replay Q4 o el refuerzo acumulado den evidencia (hoy: 11 queries, 0 ascendidos).
+
+### 9.3 Estado de las colecciones (datos del 2026-09-14)
+
+- `work_memories`: 33.508 pts — solo **~5.340 (16%) es memoria curada real**
+  (5311 hubs + 29 normales legítimos); el resto (83%) es material estructural
+  (raw_parents, sequence_chunks, fragmentos) excluido del recall. Tras el
+  incidente de `sanitize` se borraron ~1.580 nodos crudos de refracción.
+- `social_memories`: 2.483 pts (intacta, ~97 participantes en recall).
+- Memento: **690 sesiones con raw/ (100%)**, 2.030+ refine no ascendidos (la
+  redestilación en curso los está regenerando).
+
+---
+
+*Diseño DRAFT 2026-09-14 (implementado; pendiente la secuencia de resiembra).
+A integrar en RFC-002 como §10 tras revisión del operador.*
