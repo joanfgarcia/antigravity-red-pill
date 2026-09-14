@@ -280,6 +280,20 @@ def test_refine_frontmatter_declares_polaroid_fields():
 	assert "last_reinforced_at" in src
 
 
+def test_fase4_config_keys_declared():
+	"""Fase 4 §6.7: las claves de config deben estar declaradas en red_pill.config."""
+	import red_pill.config as cfg
+
+	assert cfg.POLAROID_TAU == 90.0
+	assert cfg.POLAROID_GAIN == 1.0
+	assert cfg.POLAROID_REVIVAL_GATE == 5.0
+	assert cfg.MEMENTO_STATIC_ASCENSION_ENABLED is False  # en sombra hasta calibrar
+	assert cfg.MEMENTO_FRAGMENT_OVERLAP_MESSAGES == 2
+	assert cfg.MEMENTO_FRAGMENT_MAX_CHARS == 12000
+	assert cfg.MEMENTO_GATE_MIN_SIGNIFICANCE == 0.5
+	assert cfg.NIGHTLY_ENABLED is True
+
+
 # --- Fase 4 §4.2: weave_memento_reinforcement (weaver Memento-consciente) ---
 
 

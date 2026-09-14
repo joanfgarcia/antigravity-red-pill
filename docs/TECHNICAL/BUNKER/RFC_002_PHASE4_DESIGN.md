@@ -415,10 +415,14 @@ los fragmentos se dimensionan para caber, sin recortar contenido.
    (`type: dag` + `recipe`, `on_fail: warn`). `schedule_pulse.py` actualizado
    (Linux/macOS/Windows): registra el nightly y retira los individuales.
    Timers systemd aplicados en el host.
-7. **Config keys** (provisionales, a ajustar con el experimento): `POLAROID_REVIVAL_GATE`
-   (umbral de estabilidad), `POLAROID_TAU` (decaimiento, días), `POLAROID_GAIN`
-   (incremento por refuerzo), `MEMENTO_GATE_MIN_SIGNIFICANCE` (ya existe,
-   provisional), `NIGHTLY_ENABLED`, `MEMENTO_FRAGMENT_OVERLAP_MESSAGES=2`.
+7. **Config keys** — ✅ **IMPLEMENTADO (2026-09-14)** (provisionales, a ajustar
+   con el experimento):
+   `POLAROID_REVIVAL_GATE=5.0`,
+   `POLAROID_TAU=90`, `POLAROID_GAIN=1.0`,
+   `MEMENTO_GATE_MIN_SIGNIFICANCE=0.5` (ya existía),
+   `MEMENTO_STATIC_ASCENSION_ENABLED=false` (sombra),
+   `MEMENTO_FRAGMENT_OVERLAP_MESSAGES=2`, `MEMENTO_FRAGMENT_MAX_CHARS=12000`,
+   `NIGHTLY_ENABLED=true`. Declaradas en `red_pill.config`.
 8. **Purga de `archive_memories`** (con **backup previo** del collection) +
    **eliminación de `chronicle_distill.py` / `chronicle_refine.py`** (tras cutoff
    de seguridad).
