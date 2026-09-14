@@ -163,9 +163,18 @@ def http_transport(system: str, user: str, max_tokens: int) -> str:
 	El llama-server devuelve 500 si el prompt supera n_ctx (10240); la ratio
 	chars/token es impredecible (1-4), así que si falla se recorta el user y se
 	reintenta (hasta 4 veces) — robusto independientemente de la densidad.
+
+	Watchdog (2026-09-15): timeout por llamada `MEMENTO_LLM_TIMEOUT` (default
+	180s). Una generación de distill/refine no debe excederlo; si lo hace, la
+	llamada lanza ReadTimeout y el pase lo cuenta como cuelgue (→ deferral tras
+	3 consecutivos), en vez de quedarse horas esperando a un daemon que generó
+	sin terminar (incidente f6493c71).
 	"""
 	import requests
 
+	import red_pill.config as cfg
+
+	llm_timeout = int(getattr(cfg, "MEMENTO_LLM_TIMEOUT", 180))
 	attempt_user = _fit_prompt(user)
 	for _attempt in range(4):
 		payload = {
@@ -174,7 +183,7 @@ def http_transport(system: str, user: str, max_tokens: int) -> str:
 			"temperature": 0.1,
 			"max_tokens": max_tokens,
 		}
-		response = requests.post(EDGE_ENGINE_URL, json=payload, timeout=120)
+		response = requests.post(EDGE_ENGINE_URL, json=payload, timeout=llm_timeout)
 		if response.status_code == 500 and len(attempt_user) > 1500:
 			# Probable exceso de contexto: recortar y reintentar.
 			new_len = int(len(attempt_user) * 0.6)
@@ -522,7 +531,9 @@ def refine_session(
 	return max_significance
 
 
-def pending_agentic(registry: Any, root: Optional[Path] = None, force: bool = False) -> List[Tuple[str, str, str]]:
+def pending_agentic(
+	registry: Any, root: Optional[Path] = None, force: bool = False, redistill_since: Optional[str] = None
+) -> List[Tuple[str, str, str]]:
 	"""[(source, session_id, reason)] — sesiones renderizadas sin pase agéntico o con distill stale (§4.5.1).
 
 	Recuperación ante crash (2026-09-07): el registry solo se guardaba al final
@@ -530,13 +541,19 @@ def pending_agentic(registry: Any, root: Optional[Path] = None, force: bool = Fa
 	quedaban sin marcado `agentic` y se re-procesaban. Si `root` se pasa, una
 	sesión sin `agentic` pero con `distill/`+`refine/` en disco se considera
 	TERMINADA y no vuelve a la cola salvo `force=True` (re-procesado explícito).
-	"""
+
+	`redistill_since` (ISO): en modo `force`, SOLO se incluyen las sesiones cuyo
+	`agentic.distilled_at` es anterior (o ausente). Así una redestilación
+	reanudable reprocesa únicamente las que faltan, no las ya re-procesadas en
+	la ronda (watchdog de reanudación, 2026-09-15)."""
 	pending = []
 	for source, sessions in registry.state["registry"].items():
 		for session_id, entry in sessions.items():
 			if not entry.get("dir"):
 				continue
 			agentic = entry.get("agentic")
+			if agentic and redistill_since and str(agentic.get("distilled_at") or "") >= redistill_since:
+				continue  # ya re-procesada en esta ronda
 			if not agentic:
 				if not force and root is not None and _distill_refine_present(root, entry["dir"]):
 					continue  # ya destilada en disco, pero el marcado se perdió (crash)
@@ -570,23 +587,40 @@ def session_max_work_unit_chars(root: Path, dir_rel: str) -> int:
 
 
 def _is_llm_connection_error(exc: Exception) -> bool:
-	"""True si la excepción indica que el LLM local no responde (connection refused / aborted).
+	"""True si la excepción indica que el LLM local no responde (connection refused / aborted / TIMEOUT).
 
-	Distingue "el LLM no está" (→ deferral) de un fallo real del trabajo.
+	Distingue "el LLM no está o se colgó" (→ deferral) de un fallo real del
+	trabajo. Los timeouts se incluyen desde 2026-09-15: una generación que
+	excede `MEMENTO_LLM_TIMEOUT` es un cuelgue (watchdog), no un error del job.
 	"""
 	name = type(exc).__name__
 	msg = str(exc)
-	if name in ("NewConnectionError", "ConnectionError", "ConnectionRefusedError", "RemoteDisconnected"):
+	if name in (
+		"NewConnectionError",
+		"ConnectionError",
+		"ConnectionRefusedError",
+		"RemoteDisconnected",
+		"ReadTimeout",
+		"ConnectTimeout",
+		"Timeout",
+	):
 		return True
 	if "Connection refused" in msg or "Failed to establish a new connection" in msg or "Connection aborted" in msg:
 		return True
 	if "Remote end closed connection" in msg:
 		return True
+	if "timed out" in msg or "timedout" in msg.lower():
+		return True
 	return False
 
 
 def run_agentic(
-	root: Path, registry: Any, targets: List[Tuple[str, str]], transport: Transport, checkpoint_path: Optional[Path] = None
+	root: Path,
+	registry: Any,
+	targets: List[Tuple[str, str]],
+	transport: Transport,
+	checkpoint_path: Optional[Path] = None,
+	redistill_since: Optional[str] = None,
 ) -> Dict[str, int]:
 	"""Distill → Refine → sello de significance + decisión shadow del gate, por sesión.
 
@@ -594,7 +628,8 @@ def run_agentic(
 	checkpoint JSON `{"processed": N, "total": T}` tras CADA sesión — la cuenta
 	se lee del registry (no del lote actual), para que el resume tras un
 	pause/kill continúe con el número correcto aunque el `--limit` del
-	relanzamiento cambie.
+	relanzamiento cambie. Con `redistill_since` (ronda), el checkpoint cuenta
+	solo las sesiones de la ronda (reanudación del re-destilado).
 	"""
 	from datetime import datetime, timezone
 
@@ -672,7 +707,7 @@ def run_agentic(
 		if hasattr(registry, "save"):
 			registry.save()
 		if checkpoint_path is not None:
-			_advance_checkpoint(checkpoint_path, registry, len(targets))
+			_advance_checkpoint(checkpoint_path, registry, len(targets), redistill_since=redistill_since)
 
 	# Fase 4 §3.3: ascenso estático tras el pase agéntico. En sombra por defecto
 	# (MEMENTO_STATIC_ASCENSION_ENABLED=false → solo cuenta cuántos ascenderían);
@@ -688,13 +723,17 @@ def run_agentic(
 	return stats
 
 
-def _advance_checkpoint(checkpoint_path: Path, registry: Any, total: int) -> None:
+def _advance_checkpoint(checkpoint_path: Path, registry: Any, total: int, redistill_since: Optional[str] = None) -> None:
 	"""Escribe el checkpoint del modo bounded: `{"processed": N, "total": T}`.
 
 	`processed` = sesiones con marcado `agentic` en el registry (no las del
 	lote actual): así el resume tras pause/kill refleja el progreso GLOBAL y el
 	driver cierra por contador cuando se alcanza el total.
-	"""
+
+	Con `redistill_since` (ronda de re-destilación), `processed` cuenta SOLO las
+	sesiones de la ronda (distilled_at >= ronda): el contador refleja cuántas de
+	las largas se han re-procesado y el bounded cierra al alcanzar el total de la
+	ronda — no al contar todo el registry (que ya tenía agentic de antes)."""
 	import json
 
 	processed = 0
@@ -702,8 +741,12 @@ def _advance_checkpoint(checkpoint_path: Path, registry: Any, total: int) -> Non
 		if not isinstance(sessions, dict):
 			continue
 		for entry in sessions.values():
-			if entry.get("agentic"):
-				processed += 1
+			agentic = entry.get("agentic")
+			if not agentic:
+				continue
+			if redistill_since and str(agentic.get("distilled_at") or "") < redistill_since:
+				continue
+			processed += 1
 	checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
 	tmp = checkpoint_path.with_suffix(checkpoint_path.suffix + ".tmp")
 	tmp.write_text(json.dumps({"processed": processed, "total": total}), encoding="utf-8")

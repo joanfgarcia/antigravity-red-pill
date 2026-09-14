@@ -521,6 +521,9 @@ class RedPillConfig(BaseSettings):
 	# score >= umbral → work_memories; si no → social_memories. La heurística por
 	# tokens fue una receta del desastre (los resúmenes técnicos caían a social).
 	MEMENTO_CATEGORY_WORK_THRESHOLD: float = 0.5
+	# Watchdog del pase agéntico (2026-09-15): timeout por llamada al LLM local.
+	# Una generación que lo excede es un cuelgue → 3 consecutivos → deferral.
+	MEMENTO_LLM_TIMEOUT: int = 180
 	NIGHTLY_ENABLED: bool = True  # ciclo nocturno chronicle → sleep (nightly.yaml)
 	# raw/ = copia de respaldo provider-nativa y punto único de backup (operador,
 	# 2026-08-26): con él el árbol se regenera desde cero (--from-raw). Sin scrub → jamás en git.

@@ -162,6 +162,51 @@ def test_is_llm_connection_error_detecta_errores_de_red():
 	assert not _is_llm_connection_error(ValueError("JSON inválido del LLM"))
 
 
+def test_is_llm_connection_error_detecta_timeouts_watchdog():
+	"""2026-09-15: una generación que excede MEMENTO_LLM_TIMEOUT es un cuelgue
+	(watchdog) → cuenta para el deferral, no un error del trabajo."""
+	from red_pill.memento.agentic import _is_llm_connection_error
+
+	assert _is_llm_connection_error(Exception("HTTPSConnectionPool ... Read timed out"))
+	assert _is_llm_connection_error(Exception("Connection to 127.0.0.1 timed out"))
+	assert _is_llm_connection_error(Exception("requests.exceptions.ReadTimeout: read timed out"))
+
+
+def test_pending_agentic_redistill_since_filtra_lo_ya_reprocesado(tmp_path):
+	"""2026-09-15: --redistill-round solo devuelve las sesiones de la ronda no
+	re-procesadas (distilled_at anterior), para no repetir lo ya hecho al reanudar."""
+	from red_pill.memento.agentic import pending_agentic
+
+	root, registry, _rendered = _tree_with_session(tmp_path)
+	run_agentic(root, registry, [("opencode", "opencode:s1")], fake_transport())
+	# el distilled_at de s1 es ~ahora (>= ronda) → se salta
+	assert pending_agentic(registry, force=True, redistill_since="2026-09-14T00:00:00Z") == []
+	# una ronda futura no la ha alcanzado → vuelve como redistill
+	assert pending_agentic(registry, force=True, redistill_since="2099-01-01T00:00:00Z") == [("opencode", "opencode:s1", "redistill")]
+	# sin redistill_since (--force a pelo) → todas, como antes
+	assert pending_agentic(registry, force=True) == [("opencode", "opencode:s1", "redistill")]
+
+
+def test_advance_checkpoint_cuenta_solo_la_ronda(tmp_path):
+	"""2026-09-15: con redistill_since el checkpoint bounded cuenta las sesiones
+	de la ronda (distilled_at >= ronda), no todo el registry — así el driver
+	cierra por contador de lo re-procesado en el re-destilado."""
+	import json
+
+	from red_pill.memento.agentic import _advance_checkpoint
+
+	root, registry, _rendered = _tree_with_session(tmp_path)
+	run_agentic(root, registry, [("opencode", "opencode:s1")], fake_transport())
+	cp = tmp_path / "prog.json"
+
+	# ronda pasada: s1 ya re-procesada → processed=1
+	_advance_checkpoint(cp, registry, total=1, redistill_since="2026-09-14T00:00:00Z")
+	assert json.loads(cp.read_text())["processed"] == 1
+	# ronda futura: ninguna de la ronda → processed=0 (el driver sigue en curso)
+	_advance_checkpoint(cp, registry, total=1, redistill_since="2099-01-01T00:00:00Z")
+	assert json.loads(cp.read_text())["processed"] == 0
+
+
 def test_pending_agentic_detects_missing_and_stale(tmp_path):
 	root, registry, _rendered = _tree_with_session(tmp_path)
 	assert pending_agentic(registry) == [("opencode", "opencode:s1", "missing")]

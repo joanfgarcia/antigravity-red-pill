@@ -567,17 +567,26 @@ RFC-002 tras la implementación (o antes, como diseño aprobado).
 1. **Restaurar el daemon LLM a `granite_8b`** — `redpill-llm.service` está en
    `MINION_PROFILE=tiny_aya_water` (temporal, para la redestilación). Restaurar y
    reiniciar el servicio al terminar.
-2. **Re-refinado con `category_score`**: `memento_refine_rescore.py --all` — dota
+2. **Redestilación reanudable** (`configs/jobs/memento_redistill.yaml`,
+   2026-09-15): el job `f6493c71` (single, 5h42) se colgó ~2h en una generación
+   del LLM. El nuevo recipe es **pausable por sesión** (`--limit 5` + bounded por
+   ronda via `--redistill-round 2026-09-14T16:58:00Z`), **reanudable sin repetir**
+   (solo reprocesa las ~9 sesiones con `distilled_at` anterior a la ronda), y con
+   **watchdog doble**: `max_step_minutes: 20` (systemd-run mata el cgroup si un
+   step cuelga → JobStepTimeout) + `MEMENTO_LLM_TIMEOUT=180s` (timeout por
+   llamada; 3 timeouts → deferral exit 77). El job quedó PAUSED* (316 de 386
+   re-procesadas; ~377 con la ronda UTC correcta, 9 pendientes).
+3. **Re-refinado con `category_score`**: `memento_refine_rescore.py --all` — dota
    a todos los refine de la clasificación LLM del curador (los actuales no la
    tienen). No re-destila (barato). **No correr mientras la redestilación esté en
    curso** (carrera de escritura sobre `refine/`).
-3. **Resiembra de las colecciones curadas**: `memento_reseed.py --apply` —
+4. **Resiembra de las colecciones curadas**: `memento_reseed.py --apply` —
    backup snapshot → drop+recreate `work_memories`/`social_memories` → ascenso
    estático (~1900 engramas con score del curador y erosión lenta). Validado en
    muestra (recall 100%). **Revisión del operador antes de `--apply`**.
-4. **Purga de `archive_memories`**: `memento_purge_archive.py --apply` (backup
+5. **Purga de `archive_memories`**: `memento_purge_archive.py --apply` (backup
    previo; cobertura raw 100% verificada). Señal del operador (cutoff).
-5. **Flipear el gate estático**: `MEMENTO_STATIC_ASCENSION_ENABLED=true` cuando el
+6. **Flipear el gate estático**: `MEMENTO_STATIC_ASCENSION_ENABLED=true` cuando el
    replay Q4 o el refuerzo acumulado den evidencia (hoy: 11 queries, 0 ascendidos).
 
 ### 9.3 Estado de las colecciones (datos del 2026-09-14)

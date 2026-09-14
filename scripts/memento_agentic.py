@@ -68,6 +68,13 @@ def main() -> None:
 		metavar="CHARS",
 		help="Re-distill only sessions whose largest work unit exceeds CHARS (re-process sessions truncated by the old model window; use with --force)",
 	)
+	parser.add_argument(
+		"--redistill-round",
+		type=str,
+		default=None,
+		metavar="ISO",
+		help="Inicio de la ronda de re-destilación (ISO): con --force, SOLO reprocesa las sesiones con distilled_at anterior a la ronda — reanudación sin repetir lo ya re-procesado (watchdog, 2026-09-15)",
+	)
 	parser.add_argument("--shadow-report", action="store_true", help="Print the shadow-gate summary and exit")
 	args = parser.parse_args()
 
@@ -82,7 +89,7 @@ def main() -> None:
 		return
 
 	root = get_memento_root()
-	pending = pending_agentic(registry, root=root, force=args.force)
+	pending = pending_agentic(registry, root=root, force=args.force, redistill_since=args.redistill_round)
 	# --only-long: quedarse solo con las sesiones cuyo work unit más largo excede
 	# el umbral (las truncadas por la ventana del modelo anterior). Requiere --force
 	# para que pending_agentic incluya las ya destiladas.
@@ -107,7 +114,7 @@ def main() -> None:
 		logger.warning("Local LLM not available — agentic pass deferred to next cycle.")
 		return
 
-	stats = run_agentic(root, registry, targets, http_transport, checkpoint_path=_checkpoint_path())
+	stats = run_agentic(root, registry, targets, http_transport, checkpoint_path=_checkpoint_path(), redistill_since=args.redistill_round)
 	registry.save()
 	logger.info(
 		f"Agentic pass complete: {stats['processed']} session(s) distilled+refined, "
