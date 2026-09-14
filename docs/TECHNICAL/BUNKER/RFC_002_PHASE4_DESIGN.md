@@ -423,9 +423,13 @@ los fragmentos se dimensionan para caber, sin recortar contenido.
    `MEMENTO_STATIC_ASCENSION_ENABLED=false` (sombra),
    `MEMENTO_FRAGMENT_OVERLAP_MESSAGES=2`, `MEMENTO_FRAGMENT_MAX_CHARS=12000`,
    `NIGHTLY_ENABLED=true`. Declaradas en `red_pill.config`.
-8. **Purga de `archive_memories`** (con **backup previo** del collection) +
-   **eliminación de `chronicle_distill.py` / `chronicle_refine.py`** (tras cutoff
-   de seguridad).
+8. **Purga de `archive_memories`** — ✅ **SCRIPT LISTO (2026-09-14)** (con **backup
+   previo** del collection) +
+   **eliminación de `chronicle_distill.py`/`chronicle_refine.py`** (hecho).
+   `scripts/memento_purge_archive.py`: dry-run por defecto, `--apply` hace
+   verificación de cobertura raw → snapshot backup → drop. Cobertura real
+   verificada: 690/690 (100%). La purga efectiva espera la señal del operador
+   (cutoff de seguridad).
 9. **Experimento de calibración** (τ/GAIN/gate): antes de enforce, correr el
    refuerzo en sombra sobre el corpus real y medir cuántos ascenderían con cada
    combinación. Fija los provisionales; el experimento los ajusta.
