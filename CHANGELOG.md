@@ -43,6 +43,11 @@ provenir de una fuente canónica que se propaga en las instalaciones.
   agente (`ideas/research/design/pending/in_progress/awakening`, `planner` =
   todas, `none` = no contribuir). La directiva del despertar y el prompt headless
   la incluyen; default `planner`. Añadida a `.env.example`.
+- **[FIX] Rutas del dossier tras la migración a `planner/`**: `dossier_gate.py`
+  (docstring + ejemplo de arranque manual) aún apuntaba a
+  `${AGENT_CORE_DIR}/ideas/<id>`; ahora `${AGENT_CORE_DIR}/planner/ideas/<id>`.
+  Comentario de `AWAKENING_PLANNER_ACCESS` aclarado (los nombres cortos resuelven
+  a `planner/<zona>` vía `_PLANNER_ZONES`). Sin cambio de comportamiento.
 
 ### 🧹 Chronicle/Memento — nightly solo-Memento, retirada de `archive_memories` + arnés de bake-off
 

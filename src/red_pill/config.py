@@ -382,8 +382,9 @@ class RedPillConfig(BaseSettings):
 	DEFAULT_MINION_BRIDGE_CASCADE: List[BridgeTarget] = []
 	# AWAKENING_PLANNER_ACCESS: qué puede tocar el agente en el desk durante un
 	# despertar autónomo. Política "personal" del puesto — la decide el operador
-	# de cada instalación. Lista separada por comas de zonas del desk (bajo
-	# ${AGENT_CORE_DIR}): "ideas", "research", "design", "pending",
+	# de cada instalación. Lista separada por comas de zonas del desk (nombres
+	# cortos; el worker las resuelve a planner/<zona> vía _PLANNER_ZONES):
+	# "ideas", "research", "design", "pending",
 	# "in_progress", "awakening" (logs). "planner" = todas las zonas de
 	# planificación; "none" = solo leer el panel, sin tocar nada. La directiva
 	# del despertar incluye esta lista; el agente solo contribuye a lo declarado.
