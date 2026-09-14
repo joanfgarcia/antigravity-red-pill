@@ -33,11 +33,12 @@ logger = logging.getLogger(__name__)
 # (sin mover el cuerpo del refine — §4.5.1).
 ASCENSION_FIELDS = ("ascended", "ascended_at", "ascended_to", "ascended_point_id")
 
-# Estabilidad de refuerzo (RFC-002 Fase 4 §3.2). Provisionales; el experimento de
-# calibración (§6.9) los ajusta antes del enforce.
+# Estabilidad de refuerzo (RFC-002 Fase 4 §3.2). Ajustados por el experimento de
+# calibración 2026-09-14 (§6.9): GAIN=1.0/gate=5.0 saturaban el corpus real;
+# GAIN=0.5+gate=7.0 asciende una minoría sostenida.
 POLAROID_TAU_DEFAULT = 90.0  # días: un tema silenciado ~3 meses pierde la mayor parte de la estabilidad
-POLAROID_GAIN_DEFAULT = 1.0  # incremento por reaparición
-POLAROID_REVIVAL_GATE_DEFAULT = 5.0  # umbral de ascenso por refuerzo
+POLAROID_GAIN_DEFAULT = 0.5  # incremento por reaparición
+POLAROID_REVIVAL_GATE_DEFAULT = 7.0  # umbral de ascenso por refuerzo
 
 
 def _polaroid_cfg(default: float, key: str) -> float:
@@ -80,6 +81,7 @@ def reinforce_refine(
 	now: Optional[float] = None,
 	tau: Optional[float] = None,
 	gain: Optional[float] = None,
+	gate: Optional[float] = None,
 	memory_manager: Any = None,
 ) -> Dict[str, Any]:
 	"""Aplica un refuerzo a un refine NO ascendido: decay temporal + GAIN, y si la
@@ -95,7 +97,7 @@ def reinforce_refine(
 		now = time.time()
 	tau = _polaroid_cfg(POLAROID_TAU_DEFAULT, "POLAROID_TAU") if tau is None else tau
 	gain = _polaroid_cfg(POLAROID_GAIN_DEFAULT, "POLAROID_GAIN") if gain is None else gain
-	gate = _polaroid_cfg(POLAROID_REVIVAL_GATE_DEFAULT, "POLAROID_REVIVAL_GATE")
+	gate = _polaroid_cfg(POLAROID_REVIVAL_GATE_DEFAULT, "POLAROID_REVIVAL_GATE") if gate is None else gate
 
 	refine_path = Path(refine_path)
 	fm, body = parse_refine(refine_path.read_text(encoding="utf-8"))
@@ -188,10 +190,14 @@ def _refine_topics(fm: Dict[str, Any], body: str) -> set:
 
 
 def _temas_afines(refine_theme: str, refine_tokens: set, engrama_topics: set) -> bool:
-	"""Fase 4 §3.2: matching exacto de theme (snake_case) o cruce de ≥2 tokens."""
+	"""Fase 4 §3.2: matching exacto de theme (snake_case) o cruce de ≥3 tokens.
+
+	≥2 tokens resultó demasiado amplio en el corpus real (calibración 2026-09-14):
+	con ~12K engramas recientes casi todo refine matcheaba → el gate saturaba.
+	El theme exacto es la señal fuerte; el cruce de tokens exige especificidad."""
 	if refine_theme and refine_theme in engrama_topics:
 		return True
-	return len(refine_tokens & engrama_topics) >= 2
+	return len(refine_tokens & engrama_topics) >= 3
 
 
 def weave_memento_reinforcement(
@@ -203,6 +209,7 @@ def weave_memento_reinforcement(
 	window_hours: Optional[float] = None,
 	tau: Optional[float] = None,
 	gain: Optional[float] = None,
+	gate: Optional[float] = None,
 ) -> Dict[str, Any]:
 	"""Paso Memento-consciente del weaver (Fase 4 §4.2).
 
@@ -274,7 +281,7 @@ def weave_memento_reinforcement(
 			refine_theme, refine_tokens = _refine_topics(fm, body)
 			if not _temas_afines(refine_theme, refine_tokens, engrama_topics):
 				continue
-			result = reinforce_refine(root, registry, refine_path, now=now, tau=tau, gain=gain, memory_manager=memory_manager)
+			result = reinforce_refine(root, registry, refine_path, now=now, tau=tau, gain=gain, gate=gate, memory_manager=memory_manager)
 			if result.get("reinforced"):
 				stats["refuerzos_aplicados"] += 1
 				if result.get("ascended"):

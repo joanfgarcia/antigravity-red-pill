@@ -248,7 +248,7 @@ def test_reinforce_refine_ascends_past_gate(tmp_path: Path):
 
 	mm = FakeMemoryManager()
 	reg = FakeRegistry()
-	result = reinforce_refine(root, reg, f, now=1_800_000_000.0, tau=90, gain=1.0, memory_manager=mm)
+	result = reinforce_refine(root, reg, f, now=1_800_000_000.0, tau=90, gain=1.0, gate=5.0, memory_manager=mm)
 	assert result["reinforced"] is True
 	assert result["stability"] == pytest.approx(5.5)  # decay≈0 (acaba de reforzar) + 1
 	assert result["ascended"] is True
@@ -285,8 +285,8 @@ def test_fase4_config_keys_declared():
 	import red_pill.config as cfg
 
 	assert cfg.POLAROID_TAU == 90.0
-	assert cfg.POLAROID_GAIN == 1.0
-	assert cfg.POLAROID_REVIVAL_GATE == 5.0
+	assert cfg.POLAROID_GAIN == 0.5  # ajustado por el experimento (GAIN=1 saturaba)
+	assert cfg.POLAROID_REVIVAL_GATE == 7.0  # ajustado por el experimento
 	assert cfg.MEMENTO_STATIC_ASCENSION_ENABLED is False  # en sombra hasta calibrar
 	assert cfg.MEMENTO_FRAGMENT_OVERLAP_MESSAGES == 2
 	assert cfg.MEMENTO_FRAGMENT_MAX_CHARS == 12000
@@ -326,9 +326,9 @@ def test_temas_afines_exact_theme():
 
 def test_temas_afines_token_overlap():
 	refine_tokens = {"memoria", "curaduria", "archivo"}
-	engram_topics = {"memoria", "curaduria", "otro"}
+	engram_topics = {"memoria", "curaduria", "archivo", "otro"}
 	assert _temas_afines("", refine_tokens, engram_topics) is True
-	engram_topics = {"otro", "distinto"}
+	engram_topics = {"memoria", "otro", "distinto"}
 	assert _temas_afines("", refine_tokens, engram_topics) is False
 
 
@@ -346,7 +346,7 @@ def test_weave_reinforces_and_ascends(tmp_path: Path):
 	mm = FakeWeaveMemoryManager([engrama])
 	reg = FakeRegistry()
 
-	stats = weave_memento_reinforcement(mm, root=root, registry=reg, now=1_800_000_000.0, window_hours=24, tau=90, gain=1.0)
+	stats = weave_memento_reinforcement(mm, root=root, registry=reg, now=1_800_000_000.0, window_hours=24, tau=90, gain=1.0, gate=5.0)
 	assert stats["refine_evaluados"] == 1
 	assert stats["refuerzos_aplicados"] == 1
 	assert stats["ascensos"] == 1

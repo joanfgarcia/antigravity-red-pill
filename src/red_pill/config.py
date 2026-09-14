@@ -503,10 +503,12 @@ class RedPillConfig(BaseSettings):
 	# True = el chronicle deja de ingerir en archive_memories las sesiones bajo el umbral.
 	MEMENTO_GATE_ENFORCED: bool = False
 	# Fase 4 (§3.2/§5.4): ascensos diferidos, refuerzo temporal y distill fragmentado.
-	# Provisionales; el experimento de calibración (§6.9) los ajusta antes del enforce.
+	# Ajustados por el experimento de calibración 2026-09-14 (§6.9): GAIN=1.0 y
+	# gate=5.0 saturaban (~95% ascenderían en el corpus real); GAIN=0.5+gate=7.0
+	# asciende una minoría sostenida (~6%). El matching se endureció a ≥3 tokens.
 	POLAROID_TAU: float = 90.0  # días de decaimiento de la estabilidad entre refuerzos
-	POLAROID_GAIN: float = 1.0  # incremento de estabilidad por reaparición
-	POLAROID_REVIVAL_GATE: float = 5.0  # umbral: S >= gate → ascenso por refuerzo
+	POLAROID_GAIN: float = 0.5  # incremento de estabilidad por reaparición
+	POLAROID_REVIVAL_GATE: float = 7.0  # umbral: S >= gate → ascenso por refuerzo
 	MEMENTO_STATIC_ASCENSION_ENABLED: bool = False  # ascenso estático EN SOMBRA hasta calibrar
 	MEMENTO_FRAGMENT_OVERLAP_MESSAGES: int = 2  # solape de turnos entre fragmentos del distill
 	MEMENTO_FRAGMENT_MAX_CHARS: int = 12000  # presupuesto de contexto por fragmento de distill

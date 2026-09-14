@@ -430,9 +430,16 @@ los fragmentos se dimensionan para caber, sin recortar contenido.
    verificación de cobertura raw → snapshot backup → drop. Cobertura real
    verificada: 690/690 (100%). La purga efectiva espera la señal del operador
    (cutoff de seguridad).
-9. **Experimento de calibración** (τ/GAIN/gate): antes de enforce, correr el
-   refuerzo en sombra sobre el corpus real y medir cuántos ascenderían con cada
-   combinación. Fija los provisionales; el experimento los ajusta.
+9. **Experimento de calibración** — ✅ **EJECUTADO (2026-09-14)** (τ/GAIN/gate)
+   en sombra sobre el corpus real
+   (1962 refine no ascendidos, 12604 engramas, 30 ciclos). `scripts/memento_calibrate.py`.
+   **Resultado**: los provisionales (τ=90d, GAIN=1.0, gate=5.0) SATURABAN
+   (~95% ascenderían — el matching por ≥2 tokens era demasiado amplio).
+   Ajustes aplicados:
+   - Matching endurecido: theme exacto o **≥3 tokens** (era ≥2).
+   - `POLAROID_GAIN: 1.0 → 0.5`, `POLAROID_REVIVAL_GATE: 5.0 → 7.0`
+     (τ se mantiene 90d) → ~6% ascenderían (minoría sostenida).
+   El gate sigue en sombra (`MEMENTO_STATIC_ASCENSION_ENABLED=false`).
 10. **Query log / replay de recall** — el corpus de `search_memory_research` sigue
     acumulándose; el umbral Q4 se confirma con el replay (RFC-002 §4.6). La Fase 4
     NO flipea el gate "estático" a ciegas: espera el replay O el refuerzo
