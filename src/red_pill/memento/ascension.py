@@ -289,6 +289,58 @@ def weave_memento_reinforcement(
 	return stats
 
 
+# ── Fase 4 §3.3: ascenso estático (gate de significance) ──
+
+
+def ascend_by_threshold(
+	root: Path,
+	registry: Any,
+	*,
+	min_significance: Optional[float] = None,
+	memory_manager: Any = None,
+	limit: Optional[int] = None,
+) -> Dict[str, Any]:
+	"""Ascenso estático (§3.3): promueve los `refine/*.md` NO ascendidos cuya
+	`significance >= MEMENTO_GATE_MIN_SIGNIFICANCE` (default 0.5, provisional).
+
+	Es el heredero del gate "would-ingest" del RFC-002 §4.6, ahora sin
+	`archive_memories`: Memento es el archivo, Qdrant recibe solo lo curado.
+	Idempotente (`ascender` es un upsert por `session_id`+`source_lines`).
+	"""
+	if min_significance is None:
+		min_significance = _polaroid_cfg(0.5, "MEMENTO_GATE_MIN_SIGNIFICANCE")
+	if memory_manager is None:
+		from red_pill.memory import MemoryManager
+
+		memory_manager = MemoryManager()
+
+	stats = {"refine_evaluados": 0, "ascendidos": 0, "rechazados_por_umbral": 0, "errores": 0}
+
+	for refine_path in sorted(Path(root).rglob("refine/*.md")):
+		if limit is not None and stats["ascendidos"] >= limit:
+			break
+		try:
+			fm, body = parse_refine(refine_path.read_text(encoding="utf-8"))
+			if not body or fm.get("ascended"):
+				continue
+			stats["refine_evaluados"] += 1
+			significance = float(fm.get("significance", 0.0) or 0.0)
+			if significance < min_significance:
+				stats["rechazados_por_umbral"] += 1
+				continue
+			result = ascender(root, registry, refine_path, memory_manager=memory_manager)
+			if result.get("ascended"):
+				stats["ascendidos"] += 1
+		except Exception as e:
+			stats["errores"] += 1
+			logger.warning(f"[STATIC-ASCENSION] fallo en {refine_path}: {e}")
+
+	if stats["ascendidos"]:
+		registry.save()
+	logger.info(f"[STATIC-ASCENSION] {stats}")
+	return stats
+
+
 def parse_refine(text: str) -> Tuple[Dict[str, Any], str]:
 	"""`refine/*.md` → (frontmatter dict, cuerpo). El frontmatter se serializa como
 	YAML/JSON (flow), así que `yaml.safe_load` lo lee; el cuerpo va tras el cierre."""

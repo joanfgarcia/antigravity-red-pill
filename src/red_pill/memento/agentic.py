@@ -365,7 +365,7 @@ def run_agentic(
 
 	min_significance = float(getattr(cfg, "MEMENTO_REFINE_MIN_SIGNIFICANCE", 0.3))
 	gate_threshold = float(getattr(cfg, "MEMENTO_GATE_MIN_SIGNIFICANCE", 0.5))
-	stats = {"processed": 0, "failed": 0, "would_ingest": 0}
+	stats = {"processed": 0, "failed": 0, "would_ingest": 0, "static_ascended": 0}
 	# Umbral de deferral por LLM caído (2026-09-08): si N sesiones consecutivas
 	# fallan por conexión al LLM local, el recurso no está disponible y esto NO
 	# es un error del trabajo — abortar para que el runner lo difiera y lo
@@ -436,6 +436,18 @@ def run_agentic(
 			registry.save()
 		if checkpoint_path is not None:
 			_advance_checkpoint(checkpoint_path, registry, len(targets))
+
+	# Fase 4 §3.3: ascenso estático tras el pase agéntico. En sombra por defecto
+	# (MEMENTO_STATIC_ASCENSION_ENABLED=false → solo cuenta cuántos ascenderían);
+	# el experimento de calibración (§6.9) lo flipea a true.
+	if bool(getattr(cfg, "MEMENTO_STATIC_ASCENSION_ENABLED", False)):
+		try:
+			from red_pill.memento.ascension import ascend_by_threshold
+
+			asc_stats = ascend_by_threshold(root, registry)
+			stats["static_ascended"] = asc_stats.get("ascendidos", 0)
+		except Exception as e:
+			logger.warning(f"[STATIC-ASCENSION] fallo en run_agentic: {e}")
 	return stats
 
 

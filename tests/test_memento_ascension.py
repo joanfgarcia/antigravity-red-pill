@@ -9,6 +9,7 @@ import pytest
 
 from red_pill.memento.ascension import (
 	_temas_afines,
+	ascend_by_threshold,
 	ascender,
 	parse_refine,
 	polaroid_decay,
@@ -367,3 +368,70 @@ def test_weave_no_window_returns_early(tmp_path: Path):
 	stats = weave_memento_reinforcement(mm, root=root, registry=FakeRegistry(), now=1_800_000_000.0)
 	assert stats["refine_evaluados"] == 0
 	assert stats["engramas_en_ventana"] == 0
+
+
+# --- Fase 4 §3.3: ascenso estático por umbral de significance ---
+
+
+def _write_refine(root: Path, name: str, significance: float, ascended: bool = False) -> Path:
+	d = root / "2026-09" / "opencode" / "s" / "refine"
+	d.mkdir(parents=True, exist_ok=True)
+	f = d / f"{name}.md"
+	asc = "true" if ascended else "false"
+	f.write_text(
+		f"""---
+session_id: opencode:{name}
+source: opencode
+source_lines: memento/index.md#l1-5
+significance: {significance}
+emotion: gray
+intensity: 0.3
+texture: {{"theme": "tema_{name}", "relics": []}}
+cross_refs: []
+ascended: {asc}
+ascended_at: null
+ascended_to: null
+ascended_point_id: null
+polaroid_stability: 0.0
+last_reinforced_at: null
+---
+Cuerpo social del refine {name}.
+""",
+		encoding="utf-8",
+	)
+	return f
+
+
+def test_ascend_by_threshold_promotes_above_gate(tmp_path: Path):
+	root = tmp_path / "memento"
+	_write_refine(root, "alta", 0.8)
+	_write_refine(root, "media", 0.5)
+	_write_refine(root, "baja", 0.2)
+
+	mm, reg = FakeMemoryManager(), FakeRegistry()
+	stats = ascend_by_threshold(root, reg, min_significance=0.5, memory_manager=mm)
+	assert stats["ascendidos"] == 2  # 0.8 y 0.5 (>= gate)
+	assert stats["rechazados_por_umbral"] == 1  # 0.2
+	assert stats["refine_evaluados"] == 3
+
+	ascended = [c for c in mm.calls]
+	assert len(ascended) == 2
+
+
+def test_ascend_by_threshold_skips_ascended(tmp_path: Path):
+	root = tmp_path / "memento"
+	_write_refine(root, "ya", 0.9, ascended=True)
+	mm, reg = FakeMemoryManager(), FakeRegistry()
+	stats = ascend_by_threshold(root, reg, min_significance=0.5, memory_manager=mm)
+	assert stats["refine_evaluados"] == 0
+	assert stats["ascendidos"] == 0
+
+
+def test_ascend_by_threshold_limit(tmp_path: Path):
+	root = tmp_path / "memento"
+	for i, sig in enumerate((0.9, 0.8, 0.7)):
+		_write_refine(root, f"r{i}", sig)
+	mm, reg = FakeMemoryManager(), FakeRegistry()
+	stats = ascend_by_threshold(root, reg, min_significance=0.5, memory_manager=mm, limit=2)
+	assert stats["ascendidos"] == 2
+	assert len(mm.calls) == 2

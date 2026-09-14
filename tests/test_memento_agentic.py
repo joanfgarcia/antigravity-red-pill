@@ -82,7 +82,7 @@ def test_fit_prompt_recorta_al_presupuesto_de_contexto():
 def test_run_agentic_writes_distill_refine_and_stamps_significance(tmp_path):
 	root, registry, rendered = _tree_with_session(tmp_path)
 	stats = run_agentic(root, registry, [("opencode", "opencode:s1")], fake_transport(0.8))
-	assert stats == {"processed": 1, "failed": 0, "would_ingest": 1}
+	assert stats == {"processed": 1, "failed": 0, "would_ingest": 1, "static_ascended": 0}
 
 	session_dir = root / rendered.dir_rel
 	distill_files = sorted((session_dir / "distill").glob("*.md"))
