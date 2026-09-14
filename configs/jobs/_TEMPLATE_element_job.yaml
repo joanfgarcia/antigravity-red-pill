@@ -1,0 +1,29 @@
+# PLANTILLA — job MAP reanudable sobre exactamente N elementos (driver element_job).
+# seed: true → plantilla por-instalación, NO una config activa. Copia, parametriza
+# y lanza con: red-pill job submit --recipe <tu-nombre> --singleton
+#
+# Patrón (2026-09-15, tras el incidente f6493c71 de la redestilación):
+#   - UN step = UN elemento. La lista sale de `elements` (inline), `elements_file`
+#     (JSON en disco) o `elements_command` (comando que imprime el JSON de la lista).
+#   - La función por elemento es `step_command`, un comando del proyecto que recibe
+#     el elemento por env RP_ELEMENT (JSON) + RP_ELEMENT_INDEX.
+#   - N se congela en el primer step → procesa EXACTAMENTE N, reanudable por
+#     elemento (job_pause/job_resume en la frontera del elemento).
+#   - Watchdog: max_step_minutes mata el step (cgroup, hijos CUDA incluidos) si un
+#     elemento cuelga → JobStepTimeout. defer_exit_code / pause_exit_code señalan.
+source: element_job
+priority: 5
+seed: true
+title: Plantilla MAP reanudable (element_job)
+step_command: uv run python scripts/procesar_un_elemento.py
+# elements_file: state/mis_elementos.json   # O elementos inline:
+# elements:
+#   - {"id": "a"}
+#   - {"id": "b"}
+# elements_command: uv run python scripts/lista_elementos.py   # imprime un array JSON
+defer_exit_code: 77
+pause_exit_code: 78
+preflight:
+  llm_required: false
+control:
+  max_step_minutes: 10   # watchdog por elemento (cuelgue → JobStepTimeout)
