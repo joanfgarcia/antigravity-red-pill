@@ -39,6 +39,14 @@ profiles:
     model_path: "models/Granite-4.1-8B-Q4_K_M.gguf"
     binary_type: "gguf"
     chat_format: "chatml"
+    # IBM Granite-4.1 — Apache-2.0. Uso comercial libre.
+    license:
+      id: "apache-2.0"
+      commercial_ok: true
+      redistribution_ok: true
+      attribution_required: false
+      share_alike: false
+      source: "https://huggingface.co/ibm-granite/granite-4.1-8b-instruct"
     # Distiller/sleep role uses chat_format above. When a request carries tools, the
     # daemon switches to this function-calling formatter (minion role) on the same
     # loaded model. Empirically verified: Granite Q4 emits valid OpenAI tool_calls.
@@ -85,6 +93,14 @@ profiles:
     model_path: "models/Qwen3.5-9B-Q4_K_M.gguf"
     binary_type: "gguf"
     chat_format: "chatml"
+    # Qwen — Apache-2.0. Uso comercial libre.
+    license:
+      id: "apache-2.0"
+      commercial_ok: true
+      redistribution_ok: true
+      attribution_required: false
+      share_alike: false
+      source: "https://huggingface.co/Qwen"
     temperature: 0.3
     max_tokens: 4096
     use_mmap: false
@@ -111,6 +127,14 @@ profiles:
     model_path: "models/Beck-8B-Q4_K_M.gguf"
     binary_type: "gguf"
     chat_format: "chatml"
+    # Finetune of Piaget-8B (Qwen3-8B base) — Apache-2.0. Uso comercial libre.
+    license:
+      id: "apache-2.0"
+      commercial_ok: true
+      redistribution_ok: true
+      attribution_required: false
+      share_alike: false
+      source: "https://huggingface.co/Qwen"
     temperature: 0.3
     max_tokens: 4096
     use_mmap: false
@@ -138,6 +162,14 @@ profiles:
     model_path: "models/Piaget-8B-Q4_K_M.gguf"
     binary_type: "gguf"
     chat_format: "chatml"
+    # Finetune of Qwen3-8B — Apache-2.0. Uso comercial libre.
+    license:
+      id: "apache-2.0"
+      commercial_ok: true
+      redistribution_ok: true
+      attribution_required: false
+      share_alike: false
+      source: "https://huggingface.co/Qwen"
     temperature: 0.3
     max_tokens: 4096
     use_mmap: false
@@ -164,6 +196,14 @@ profiles:
     model_path: "models/Hermes-3-Llama-3.1-8B.Q4_K_M.gguf"
     binary_type: "gguf"
     chat_format: "chatml"
+    # NousResearch Hermes-3 — Apache-2.0. Uso comercial libre.
+    license:
+      id: "apache-2.0"
+      commercial_ok: true
+      redistribution_ok: true
+      attribution_required: false
+      share_alike: false
+      source: "https://huggingface.co/NousResearch/Hermes-3-Llama-3.1-8B"
     temperature: 0.3
     max_tokens: 4096
     use_mmap: false
@@ -203,6 +243,14 @@ profiles:
     model_path: "experimental/Samantha/samantha-mistral-instruct-7b.i1-Q4_K_M.gguf"
     binary_type: "gguf"
     chat_format: "chatml"
+    # Samantha (Eric Hartford / QuixiAI) — Apache-2.0. Uso comercial libre.
+    license:
+      id: "apache-2.0"
+      commercial_ok: true
+      redistribution_ok: true
+      attribution_required: false
+      share_alike: false
+      source: "https://huggingface.co/QuixiAI/samantha-mistral-instruct-7b"
     temperature: 0.7
     max_tokens: 1024
     use_mmap: false
@@ -221,6 +269,14 @@ profiles:
   smith:
     model_path: "3rdparty/BitNet-1.58b/models/2B-4T/ggml-model-i2_s.gguf"
     binary_type: "bitnet"
+    # BitNet-2B-4T — MIT. Uso comercial libre.
+    license:
+      id: "mit"
+      commercial_ok: true
+      redistribution_ok: true
+      attribution_required: true
+      share_alike: false
+      source: "https://huggingface.co/HF1BitLLM/Llama3-2-1B-1.58-4bit"
     temperature: 0.0
     max_tokens: 512
     grammar_path: "3rdparty/BitNet-1.58b/validation/json.gbnf"
@@ -242,6 +298,16 @@ profiles:
     binary_type: "gguf"
     hf_model_repo_id: "CohereLabs/tiny-aya-water-GGUF"
     chat_format: "chatml"
+    # ⛔ CohereLabs Tiny Aya Water — CC-BY-NC-4.0. NO COMERCIAL.
+    # El compliance gate lo BLOQUEA cuando REDPILL_LICENSE_CONTEXT=commercial
+    # (máquina del trabajo). En personal (default) se permite. Requiere atribución.
+    license:
+      id: "cc-by-nc-4.0"
+      commercial_ok: false
+      redistribution_ok: true
+      attribution_required: true
+      share_alike: true
+      source: "https://huggingface.co/CohereLabs/tiny-aya-water"
     device_fallback: ["gpu", "cpu"]
     cpu_n_ctx: 16384
     prompt_file: "distiller_v3_voice.txt"

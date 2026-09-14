@@ -375,6 +375,48 @@ cron es trazable.
 - **[DOCS] `docs/CORE/DOCUMENTATION_MANUAL.md`** (§ Metadata Headers) y
   **`docs/CORE/CONVENTIONS.md`** (§10.5): convención de cabeceras YAML.
 
+### ⚖️ Compliance de licencias de modelos — esquema + gate de contexto
+
+La base de datos de modelos pasa a declarar la licencia de cada modelo como dato
+estructurado, con un gate que impide usar modelos no-comerciales (p.ej.
+CC-BY-NC-4.0) en un contexto comercial sin que nadie se dé cuenta. Origen:
+auditoría de licencias tras incorporar Tiny Aya Water (CC-BY-NC-4.0) como
+distiller y detectar el riesgo de usarlo en la máquina del trabajo.
+
+- **[NEW] `src/red_pill/core/model_license.py`** — normalización de licencias
+  (bloque estructurado o shorthand SPDX), mapa de políticas conocidas
+  (apache-2.0, mit, llama, gemma, deepseek, cc-by-nc, …) y el gate
+  `assert_commercial_ok()`. **Fail-closed**: licencia desconocida/ausente →
+  bloqueada en contexto comercial. Dos dimensiones: redistribución de pesos
+  (`commercial_ok`/`redistribution_ok`/`attribution_required`/`share_alike`) y
+  gobernanza de datos para APIs (`prompts_used_for_training`/`confidential_ok`,
+  informativas — no alimentan el gate comercial).
+- **[FEAT] Contexto por entorno** — `REDPILL_LICENSE_CONTEXT` (`personal`
+  default / `commercial`). En `commercial`, el gate bloquea modelos NC en
+  daemon, distiller y catálogo.
+- **[FEAT] `ModelRegistry`** — `get_license()`, `assert_commercial_ok()`,
+  `get_all_profiles()` y `get_profile_by_capability(commercial_only=True)`: en
+  contexto comercial salta los perfiles NC y elige el siguiente permisivo
+  (verificado: distillation → `granite_8b` en vez de `tiny_aya_water`); lanza
+  `ModelLicenseError` si todos están bloqueados.
+- **[FEAT] `ModelCatalog`** — `license_for()`, `assert_commercial_ok()` y
+  `cascade_for(commercial_only=True)` que filtra NC y eleva error si la cascade
+  quedaría vacía.
+- **[FEAT] Gates anclados** — `hypervisor_daemon.ensure_model()` (selección por
+  capability) y `distill_engram()` (`assert_active_profile_commercial_ok()` al
+  inicio de cada destilación).
+- **[FEAT] CLI `red-pill license [--json]`** — auditoría de contexto + licencias
+  de los perfiles locales y del catálogo, marcando los bloqueados y los riesgos
+  de datos (⚠️ENTRENAMIENTO / 🔒NO-CONFIDENCIAL) solo cuando hay opt-in real.
+- **[DATA] Licencias declaradas** — `license:` en los 17 perfiles de
+  `model_profiles.yaml` y en los 5 modelos del catálogo (vivos + seeds
+  `examples/`). Tiny Aya water/global marcados `cc-by-nc-4.0` (⛔ NO comercial);
+  Big Pickle documentado como API promocional de OpenCode
+  (`opencode-big-pickle-promo`): comercial OK pero con opt-in de entrenamiento →
+  no meter datos NDA/confidenciales.
+- **[TEST] `tests/test_model_license.py`** — 23 tests (normalización, gate,
+  integración registry/catalog). Regresión completa verde.
+
 ## [7.21.0] - 2026-08-21 (Remediación de la auditoría del DAG)
 
 Remediación completa de la auditoría del 21-ago (revisión de RFC_JOB_DAG /

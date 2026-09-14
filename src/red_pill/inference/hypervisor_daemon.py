@@ -51,7 +51,10 @@ class HypervisorManager:
 			return int(s.getsockname()[1])
 
 	async def ensure_model(self, requested_capability: str) -> ActiveModel:
-		profile_name, profile = ModelRegistry.get_profile_by_capability(requested_capability)
+		from red_pill.core.model_license import _env_commercial_context
+
+		commercial_only = _env_commercial_context()
+		profile_name, profile = ModelRegistry.get_profile_by_capability(requested_capability, commercial_only=commercial_only)
 		if not profile_name:
 			raise ValueError(f"No profile found for capability: {requested_capability}")
 

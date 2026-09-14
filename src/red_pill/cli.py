@@ -329,6 +329,84 @@ def handle_ide(args: argparse.Namespace) -> None:
 		print("Usage: red-pill ide [backend|status|test]")
 
 
+def handle_license(args: argparse.Namespace) -> None:
+	"""Compliance audit: license of every curated/cataloged model + context state."""
+	import json
+
+	from red_pill.core.model_catalog import ModelCatalog, ModelCatalogError
+	from red_pill.core.model_license import _env_commercial_context
+	from red_pill.core.model_registry import ModelRegistry
+
+	context = "commercial" if _env_commercial_context() else "personal"
+	profiles = ModelRegistry.get_all_profiles()
+	profile_rows = [
+		{
+			"name": name,
+			"license_id": ModelRegistry.get_license(name).get("id", "undeclared"),
+			"commercial_ok": ModelRegistry.get_license(name).get("commercial_ok", False),
+			"known": ModelRegistry.get_license(name).get("known", False),
+			"prompts_used_for_training": ModelRegistry.get_license(name).get("prompts_used_for_training", False),
+			"confidential_ok": ModelRegistry.get_license(name).get("confidential_ok", False),
+		}
+		for name in sorted(profiles)
+	]
+
+	try:
+		catalog = ModelCatalog()
+		models = catalog.models()
+	except ModelCatalogError:
+		models = []
+	catalog_rows = [
+		{
+			"id": m["id"],
+			"license_id": catalog.license_for(m["id"]).get("id", "undeclared"),
+			"commercial_ok": catalog.license_for(m["id"]).get("commercial_ok", False),
+			"known": catalog.license_for(m["id"]).get("known", False),
+			"prompts_used_for_training": catalog.license_for(m["id"]).get("prompts_used_for_training", False),
+			"confidential_ok": catalog.license_for(m["id"]).get("confidential_ok", False),
+		}
+		for m in models
+	]
+
+	if getattr(args, "json", False):
+		print(json.dumps({"context": context, "profiles": profile_rows, "catalog": catalog_rows}, indent=2, ensure_ascii=False))
+		return
+
+	print(f"⚖️  Contexto de licencia: {context.upper()}  (REDPILL_LICENSE_CONTEXT={'commercial' if context == 'commercial' else 'personal'})")
+	print()
+
+	if profile_rows:
+		print(f"📦 Perfiles locales ({len(profile_rows)}):")
+		for row in profile_rows:
+			flag = "✅ comercial" if row["commercial_ok"] else "⛔ NO comercial"
+			known = "" if row["known"] else " (licencia no reconocida → fail-closed)"
+			print(f"  {row['name']:<22} {flag:<14} {row['license_id']}{known}")
+		print()
+
+	if catalog_rows:
+		print(f"🧠 Catálogo curado ({len(catalog_rows)}):")
+		for row in catalog_rows:
+			flag = "✅" if row["commercial_ok"] else "⛔"
+			priv = ""
+			# Los marcadores de privacidad solo se muestran cuando hay riesgo REAL
+			# declarado (opt-in de entrenamiento). Un API/local sin esa excepción
+			# no merece un icono alarmista.
+			if row["prompts_used_for_training"]:
+				priv += " ⚠️ENTRENAMIENTO"
+				if not row["confidential_ok"]:
+					priv += " 🔒NO-CONFIDENCIAL"
+			print(f"  {row['id']:<40} {flag} {row['license_id']}{priv}")
+		print()
+
+	if context == "commercial":
+		nc_models = [row["name"] for row in profile_rows if not row["commercial_ok"]]
+		if nc_models:
+			print(f"⚠️  EN CONTEXTO COMERCIAL, estos modelos están BLOQUEADOS: {', '.join(nc_models)}")
+			print("    El gate impedirá que el daemon/distiller los use.")
+		else:
+			print("✅ Ningún perfil local bloqueado en contexto comercial.")
+
+
 def handle_telegram(args: argparse.Namespace) -> None:
 	"""Telegram bridge utilities — scripts tontos de solo lectura (RFC §2A/D6/D20)."""
 	if args.telegram_cmd == "models":
@@ -1105,6 +1183,9 @@ def main() -> None:
 	tg_queue = tg_sub.add_parser("queue", help="Show queue + inbox/outbox state")
 	tg_queue.add_argument("--limit", type=int, default=50, help="Max jobs to show (default 50)")
 
+	license_parser = subparsers.add_parser("license", help="Compliance audit: licencias de modelos y contexto")
+	license_parser.add_argument("--json", action="store_true", help="Salida estructurada JSON para parseo agéntico")
+
 	# Centralized Job Manager
 	job_parser = subparsers.add_parser("job", help="Centralized Job Manager (deferred, resumable jobs)")
 	job_sub = job_parser.add_subparsers(dest="job_cmd")
@@ -1474,6 +1555,9 @@ def main() -> None:
 			return
 		elif args.command == "telegram":
 			handle_telegram(args)
+			return
+		elif args.command == "license":
+			handle_license(args)
 			return
 		elif args.command == "job":
 			handle_job(args)

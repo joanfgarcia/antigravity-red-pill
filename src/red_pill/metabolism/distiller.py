@@ -151,6 +151,28 @@ def _resolve_prompt_for_profile(profile_name: Optional[str] = None) -> Optional[
 	return prompt_file if isinstance(prompt_file, str) and prompt_file else None
 
 
+def assert_active_profile_commercial_ok(profile_name: Optional[str] = None) -> None:
+	"""Compliance gate for the distiller entrypoint.
+
+	Raises `ModelLicenseError` when the active profile (MINION_PROFILE, or
+	`profile_name` if passed) is licensed non-commercial and the current run
+	is in a commercial context (REDPILL_LICENSE_CONTEXT=commercial). A no-op
+	in personal context or when no profile is active.
+	"""
+	import os
+
+	if profile_name is None:
+		profile_name = os.getenv("MINION_PROFILE")
+	if not profile_name:
+		return
+	try:
+		from red_pill.core.model_registry import ModelRegistry
+
+		ModelRegistry.assert_commercial_ok(profile_name)
+	except ImportError:
+		return
+
+
 def _validate_relics(relics: Any, raw_content: str, max_relics: int = 2, max_len: int = 200) -> list:
 	"""Keep only quotes that are literal substrings of the source (whitespace-normalized).
 
@@ -208,6 +230,8 @@ def distill_engram(
 	import time
 
 	from red_pill.core.providers import ProviderRegistry
+
+	assert_active_profile_commercial_ok()
 
 	cfg_params = load_distiller_config(config_yaml_path).distill_engram
 	params = cfg_params.model_dump()
