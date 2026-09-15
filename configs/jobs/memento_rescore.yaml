@@ -1,0 +1,25 @@
+# Memento — re-refinado con category_score (REANUDABLE por sesión, element_job).
+#
+# El curador LLM clasifica work/social (category_score 0-1) EN el refine. Este job
+# re-refina SOLO el refine (no el distill) sobre los distill existentes, para dotar
+# a todos los refine de la clasificación. DEBE correr con el modelo que clasifica
+# bien (tiny_aya_water en el daemon), NO granite (decisión 2026-09-15).
+#
+# Es el EJEMPLO REAL del template element_job:
+#   - elements_command lista las sesiones sin category_score (JSON).
+#   - step_command procesa UNA sesión (lee RP_ELEMENT = dir_rel).
+#   - 1 step = 1 sesión → pausable por sesión, reanudable exacto (idempotente:
+#     una sesión ya con category_score se salta).
+#   - Watchdog: max_step_minutes mata el step si una sesión cuelga (JobStepTimeout);
+#     defer_exit_code difiere si el LLM no está.
+source: element_job
+priority: 3
+title: Memento re-refinado con category_score (reanudable por sesión)
+mission_id: memento-rescore
+step_command: uv run python scripts/memento_refine_rescore.py --process-one
+elements_command: uv run python scripts/memento_refine_rescore.py --list-pending
+defer_exit_code: 77
+preflight:
+  llm_required: true
+control:
+  max_step_minutes: 30   # watchdog por sesión (una sesión pesada ≤ ~20 min de refine)
