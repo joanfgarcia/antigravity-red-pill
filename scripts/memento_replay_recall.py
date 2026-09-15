@@ -12,8 +12,8 @@ significativa), el gate no pierde recall. La Fase 4 NO flipea a ciegas — esper
 este replay o el refuerzo acumulado, lo que llegue primero con evidencia.
 
 Uso:
-    uv run python scripts/memento_replay_recall.py
-    uv run python scripts/memento_replay_recall.py --limit 50
+	uv run python scripts/memento_replay_recall.py
+	uv run python scripts/memento_replay_recall.py --limit 50
 """
 
 from __future__ import annotations

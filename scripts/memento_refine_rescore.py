@@ -17,9 +17,9 @@ UNA sesión (idempotente). Es la función por elemento del job element_job
 `configs/jobs/memento_rescore.yaml` (RP_ELEMENT = dir_rel).
 
 Uso:
-    uv run python scripts/memento_refine_rescore.py --list-pending
-    uv run python scripts/memento_refine_rescore.py --process-one 2026-09/opencode/x
-    uv run python scripts/memento_refine_rescore.py --all          # batch (todo)
+	uv run python scripts/memento_refine_rescore.py --list-pending
+	uv run python scripts/memento_refine_rescore.py --process-one 2026-09/opencode/x
+	uv run python scripts/memento_refine_rescore.py --all          # batch (todo)
 """
 
 from __future__ import annotations

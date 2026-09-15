@@ -15,15 +15,15 @@ Orden (validación = la Fase 4 ya la hizo):
 2. Snapshot backup de work/social (obligatorio).
 3. Drop + recreate de work/social.
 4. Resiembra: ascenso estático (refine con significance >= MEMENTO_GATE_MIN_SIGNIFICANCE).
-   El refuerzo Memento-consciente seguirá ascendiendo en el sueño (no aplica aquí:
-   tras vaciar no hay ventana de engramas que refuerce).
+	El refuerzo Memento-consciente seguirá ascendiendo en el sueño (no aplica aquí:
+	tras vaciar no hay ventana de engramas que refuerce).
 5. Reporte.
 
 Dry-run por defecto; `--apply` ejecuta la limpieza + resiembra.
 
 Uso:
-    uv run python scripts/memento_reseed.py          # dry-run (reporta)
-    uv run python scripts/memento_reseed.py --apply  # backup → drop → resiembra
+	uv run python scripts/memento_reseed.py          # dry-run (reporta)
+	uv run python scripts/memento_reseed.py --apply  # backup → drop → resiembra
 """
 
 from __future__ import annotations
