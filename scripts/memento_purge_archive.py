@@ -7,8 +7,8 @@ previo (decisión del operador, 2026-09-14). Dry-run por defecto; `--apply`
 ejecuta: verificación de cobertura → snapshot backup → drop de la colección.
 
 Uso:
-    uv run python scripts/memento_purge_archive.py            # dry-run
-    uv run python scripts/memento_purge_archive.py --apply    # snapshot + drop
+	uv run python scripts/memento_purge_archive.py            # dry-run
+	uv run python scripts/memento_purge_archive.py --apply    # snapshot + drop
 """
 
 from __future__ import annotations

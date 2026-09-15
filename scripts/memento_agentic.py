@@ -97,7 +97,9 @@ def main() -> None:
 		from red_pill.memento.agentic import session_max_work_unit_chars
 
 		before = len(pending)
-		pending = [(src, sid, r) for src, sid, r in pending if session_max_work_unit_chars(root, registry.get(src, sid).get("dir", "")) > args.only_long]
+		pending = [
+			(src, sid, r) for src, sid, r in pending if session_max_work_unit_chars(root, registry.get(src, sid).get("dir", "")) > args.only_long
+		]
 		logger.info(f"[--only-long {args.only_long}] {len(pending)}/{before} sesiones superan el umbral.")
 	if args.heal_stale:
 		targets = [(source, session_id) for source, session_id, reason in pending if reason == "stale"]

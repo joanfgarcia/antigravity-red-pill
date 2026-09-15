@@ -3053,3 +3053,38 @@ red-pill soul migrate --reencrypt
 
 ---
 > *Forged by Aleph & Joan*
+
+### 🧠 Fase 4 Memento — curaduría, ascensos, resiembra (RFC-002 §10) y job skip
+
+La Fase 4 cierra el ciclo: **Memento es el archivo, Qdrant la memoria curada**.
+La resiembra vació work/social (que eran ~83% ruido estructural) y las re-pobló
+con engramas curados ascendidos. El pipeline del pase agéntico se rehizo con
+granite tras un bake-off de prompts.
+
+- **[FEAT] `ascender()` + ascenso diferido**: promoción refine→engrama curado
+  (idempotente por `session_id`+`source_lines`+slug), ascenso estático por
+  umbral (en sombra), estabilidad polaroid (decay+GAIN+gate) y weaver
+  Memento-consciente (etapa del sueño). Los curados erodan lento
+  (`importance=significance×5`, α bayesiana alta).
+- **[FEAT] Resiembra** (`memento_reseed.py`): backup→drop→ascenso de work/social
+  con backup previo obligatorio. `memento_prune_memories.py` purga por umbral de
+  significance (los engramas guardan sus parámetros: significance, category_score,
+  emotion, intensity, engine, prompt_version).
+- **[FEAT] Prompts de dos llamadas WORK/SOCIAL** (bake-off 2026-09-15): un solo
+  prompt pedir ambos tipos confundía a los modelos locales; ahora granite extrae
+  cada tipo por separado + `_dedup_ideas` fusiona las duplicadas del mismo
+  fragmento (contenido mixto). Voz 1ª persona (`_VOICE_RULE`). Trazabilidad
+  `engine`/`prompt_version` en distill/refine/registry.
+- **[FEAT] Distill fragmentado parametrizado por modelo**: `MEMENTO_FRAGMENT_MAX_CHARS`
+  = 8000 (granite n_ctx 10240) / 12000 (aya 32K), presupuesto dinámico por
+  modelo, sub-participación de turnos gigantes (62K chars → 9 fragmentos).
+- **[FIX] `add_memory` ya no fragmenta mecánicamente** (`synaptic_split`): producía
+  `_is_fragment` excluidos del recall. `sanitize` no refracta material estructural
+  (incidente 2026-09-14).
+- **[FEAT] `job skip`** (JOB-001): marcar el siguiente step para saltar sin
+  reintentar (`skip_next` en el checkpoint; CLI `red-pill job skip`, driver
+  consume `skip_exit_code`/`RP_SKIP_NEXT`, MCP `job_skip`).
+- **[FEAT] Job element_job**: driver MAP reanudable (N elementos, 1 step = 1
+  elemento, lista congelada en el checkpoint, watchdog por step) + recetario
+  `docs/TECHNICAL/OPERATIONS/ELEMENT_JOB_TEMPLATE.md`. Jobs reanudables por
+  sesión (`--redistill-round`, `--limit 1`).

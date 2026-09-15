@@ -80,7 +80,9 @@ def test_calibrate_reports_matrix(tmp_path: Path):
 		{"texture": {"theme": "tema_recurrente"}, "created_at": base + 48 * 3600},
 	]
 	mm = FakeMM(engramas)
-	result = mod.calibrate(root=tmp_path, registry=FakeReg(), memory_manager=mm, window_hours=24, n_cycles=30, tau_grid=(90.0,), gain_grid=(1.0,), gate_grid=(1.5, 5.0))
+	result = mod.calibrate(
+		root=tmp_path, registry=FakeReg(), memory_manager=mm, window_hours=24, n_cycles=30, tau_grid=(90.0,), gain_grid=(1.0,), gate_grid=(1.5, 5.0)
+	)
 	assert result["refine_count"] == 1
 	assert result["engramas"] == 3
 	by_gate = {r["gate"]: r["ascensos"] for r in result["matrix"]}

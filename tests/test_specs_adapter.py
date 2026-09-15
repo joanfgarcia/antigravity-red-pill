@@ -36,7 +36,7 @@ def test_memory_management_coverage_gaps(tmp_path):
 			MagicMock(
 				id="1",
 				payload={
-					"content": "x" * (cfg.CHUNK_THRESHOLD + 1),
+					"content": "USER: " + "x" * (cfg.CHUNK_THRESHOLD + 1),
 					"reinforcement_score": 1.0,
 					"color": "blue",
 					"emotion": "joy",

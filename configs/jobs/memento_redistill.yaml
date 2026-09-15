@@ -4,30 +4,32 @@
 # `progress.mode: single` y corrió 5h42 sin pausa posible; una generación del
 # LLM se colgó ~2h sin que el transporte cortara. Este recipe:
 #
-#   1. REANUDABLE POR SESIÓN (pausable): `--limit 5` → cada step procesa 5
-#      sesiones; el driver bounded cierra por contador (`processed` de la ronda
-#      via `--redistill-round`) y el runner relanza el step hasta completar.
+#   1. REANUDABLE POR SESIÓN (pausable): `--limit 1` → UN step = UNA sesión; el
+#      driver bounded cierra por contador (`processed` de la ronda via
+#      `--redistill-round`) y el runner relanza el step hasta completar.
 #      `job_pause`/`job_resume` aterrizan en la frontera de sesión.
 #   2. NO REPITE lo ya hecho: `--redistill-round` filtra solo las sesiones con
 #      `distilled_at` anterior a la ronda → se reanuda exactamente donde quedó.
-#   3. WATCHDOG por step: `max_step_minutes: 20` → systemd-run mata el cgroup
-#      (hijos CUDA incluidos) si un step excede la cota (JobStepTimeout), en
-#      vez de quedarse horas colgado.
-#   4. WATCHDOG de transporte: `MEMENTO_LLM_TIMEOUT` (default 180s) corta la
-#      llamada; 3 timeouts consecutivos → deferral (exit 77) → el runner
-#      reintenta cuando el LLM se libere.
+#   3. WATCHDOG por sesión: `max_step_minutes: 90` → systemd-run mata el cgroup
+#      (hijos CUDA incluidos) si UNA sesión excede (JobStepTimeout). El cuelgue
+#      de llamada lo corta `MEMENTO_LLM_TIMEOUT=180s` (3 timeouts → deferral).
+#      Nota: no bajar a 20 min — las sesiones de antigravity_export tienen 8-32
+#      work units (~30-40 min c/u) y el step se frustraría en trabajo legítimo.
+#   4. Fragmentado de turnos gigantes (fix 2026-09-15): un work unit con una
+#      sola cabecera `## ts — role` y body enorme (62K chars, b3f27f38) se
+#      sub-particiona por líneas — cabe en 32K en vez de colgar.
 source: script_job
 priority: 3
 title: Memento redestilar sesiones truncadas (reanudable por sesión)
 mission_id: memento-redistill
-step_command: uv run python scripts/memento_agentic.py --force --only-long 9000 --redistill-round 2026-09-14T16:58:00Z --limit 5
+step_command: uv run python scripts/memento_agentic.py --force --only-long 9000 --redistill-round 2026-09-14T16:58:00Z --limit 1
 cwd: /home/joan/Documents/IA/sharing
 checkpoint_file: state/memento_redistill_progress.json
 defer_exit_code: 77
 preflight:
   llm_required: true
 control:
-  max_step_minutes: 20   # watchdog por step (5 sesiones); cuelgue → JobStepTimeout
+  max_step_minutes: 90   # watchdog por SESIÓN (una llamada cuelga ≤3 min → no 2h)
 progress:
   mode: bounded
   current_key: processed

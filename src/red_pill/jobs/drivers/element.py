@@ -6,18 +6,18 @@ por elemento" (2026-09-15, diseñado tras el incidente de la redestilación
 job genérico que recorre una lista de elementos con una función por elemento.
 
 - **Inicialización**: obtiene la lista de elementos de forma declarativa:
-  `elements` (lista inline), `elements_file` (JSON en disco) o
-  `elements_command` (un comando que imprime el JSON de la lista). N se fija en
-  el primer step y se guarda en el checkpoint → el bucle procesa EXACTAMENTE N
-  elementos aunque la fuente cambie a mitad.
+	`elements` (lista inline), `elements_file` (JSON en disco) o
+	`elements_command` (un comando que imprime el JSON de la lista). N se fija en
+	el primer step y se guarda en el checkpoint → el bucle procesa EXACTAMENTE N
+	elementos aunque la fuente cambie a mitad.
 - **Bucle**: UN step = UN elemento. La función de invocación es `step_command`
-  (cualquier comando del proyecto), que recibe el elemento por env `RP_ELEMENT`
-  (JSON serializado) y, si el payload lo pide, también como argumento.
+	(cualquier comando del proyecto), que recibe el elemento por env `RP_ELEMENT`
+	(JSON serializado) y, si el payload lo pide, también como argumento.
 - **Watchdog**: `control.max_step_minutes` mata el step (cgroup, hijos CUDA
-  incluidos) si un elemento cuelga → JobStepTimeout. Un elemento que "ahora no
-  puede" (defer_exit_code) o que "exige revisión" (pause_exit_code) se señala.
+	incluidos) si un elemento cuelga → JobStepTimeout. Un elemento que "ahora no
+	puede" (defer_exit_code) o que "exige revisión" (pause_exit_code) se señala.
 - **Pausable / reanudable**: el índice vive en el checkpoint del driver; resume
-  exacto en la frontera del elemento. `job_pause`/`job_resume` operan ahí.
+	exacto en la frontera del elemento. `job_pause`/`job_resume` operan ahí.
 
 El driver es agnóstico del satélite (igual que `script_job`): el proyecto aporta
 el comando por elemento y el origen de la lista en su receta YAML.
@@ -68,10 +68,13 @@ class ElementJobDriver(ResumableJobDriver):
 			path = cls._resolve_path(payload["elements_file"], payload.get("cwd") or os.getcwd())
 			if not path.exists():
 				raise ValueError(f"payload.elements_file no existe: {path}")
-		for code_key in ("defer_exit_code", "pause_exit_code"):
+		for code_key in ("defer_exit_code", "pause_exit_code", "skip_exit_code"):
 			code = payload.get(code_key)
 			if code is not None and (not isinstance(code, int) or not (1 <= code <= 255) or code in (124, 137, 143)):
 				raise ValueError(f"payload.{code_key} debe ser un entero 1-255 distinto de 124/137/143")
+		exit_codes = {k: payload.get(k) for k in ("defer_exit_code", "pause_exit_code", "skip_exit_code") if payload.get(k) is not None}
+		if len(set(exit_codes.values())) != len(exit_codes):
+			raise ValueError("defer_exit_code, pause_exit_code y skip_exit_code no pueden coincidir")
 
 	# ── Preflight (requisitos declarativos) ────────────────────────────────
 
@@ -151,6 +154,7 @@ class ElementJobDriver(ResumableJobDriver):
 		cwd = payload.get("cwd") or os.getcwd()
 		total = int(checkpoint_data.get("total", -1))
 		index = int(checkpoint_data.get("index", 0))
+		skipped: List[int] = list(checkpoint_data.get("skipped") or [])
 
 		if total < 0:
 			# Primer step: fija la LISTA y N, y la congela en el checkpoint.
@@ -164,8 +168,8 @@ class ElementJobDriver(ResumableJobDriver):
 		if index >= total:
 			return StepOutcome(
 				completed=True,
-				new_checkpoint={"index": total, "total": total, "elements": elements},
-				summary=f"{payload.get('title') or self.short_id}: {total} elementos procesados.",
+				new_checkpoint={"index": total, "total": total, "elements": elements, "skipped": skipped},
+				summary=f"{payload.get('title') or self.short_id}: {total} elementos procesados ({len(skipped)} saltados).",
 				progress={"current": total, "total": total, "percent": 100},
 			)
 		if index >= len(elements):
@@ -178,6 +182,21 @@ class ElementJobDriver(ResumableJobDriver):
 			)
 
 		element = elements[index]
+
+		# skip/next del operador (`job_skip`): no ejecutar el elemento actual,
+		# avanzar el índice marcándolo `skipped` y consumir la marca (no viaja
+		# al siguiente step). Es la misma frontera que pause/resume.
+		if checkpoint_data.get("skip_next"):
+			skipped.append(index)
+			index += 1
+			percent = min(100, int(100 * index / total)) if total > 0 else 100
+			return StepOutcome(
+				completed=index >= total,
+				new_checkpoint={"index": index, "total": total, "elements": elements, "skipped": skipped},
+				summary=f"{payload.get('title') or self.short_id}: elemento {index}/{total} saltado (skip del operador).",
+				progress={"current": index, "total": total, "percent": percent},
+			)
+
 		elapsed, returncode = self._run_command(payload, cwd, element, index)
 
 		if returncode != 0:
@@ -185,13 +204,24 @@ class ElementJobDriver(ResumableJobDriver):
 				raise JobDeferred(f"el elemento {index} pidió deferral (exit {returncode})")
 			if returncode == payload.get("pause_exit_code"):
 				raise JobPauseRequested(f"el elemento {index} pidió revisión del operador (exit {returncode})")
+			if returncode == payload.get("skip_exit_code"):
+				# "salta este elemento, no lo reintentes": se marca y avanza el índice.
+				skipped.append(index)
+				index += 1
+				percent = min(100, int(100 * index / total)) if total > 0 else 100
+				return StepOutcome(
+					completed=index >= total,
+					new_checkpoint={"index": index, "total": total, "elements": elements, "skipped": skipped},
+					summary=f"{payload.get('title') or self.short_id}: elemento {index}/{total} saltado (skip_exit_code {returncode}).",
+					progress={"current": index, "total": total, "percent": percent},
+				)
 			if self._looks_like_timeout(elapsed, returncode):
 				raise JobStepTimeout(elapsed_s=elapsed, bound_s=self.step_timeout_s, ema_s=elapsed, attempt=self.attempts + 1)
 			tail = self._log_tail()
 			raise RuntimeError(f"elemento {index} falló (rc={returncode}) tras {elapsed / 60:.1f} min: {tail}")
 
 		index += 1
-		new_checkpoint = {"index": index, "total": total, "elements": elements}
+		new_checkpoint = {"index": index, "total": total, "elements": elements, "skipped": skipped}
 		percent = min(100, int(100 * index / total)) if total > 0 else 100
 		return StepOutcome(
 			completed=index >= total,
@@ -252,6 +282,8 @@ class ElementJobDriver(ResumableJobDriver):
 			env["RP_DEFER_EXIT_CODE"] = str(payload["defer_exit_code"])
 		if payload.get("pause_exit_code") is not None:
 			env["RP_PAUSE_EXIT_CODE"] = str(payload["pause_exit_code"])
+		if payload.get("skip_exit_code") is not None:
+			env["RP_SKIP_EXIT_CODE"] = str(payload["skip_exit_code"])
 		env["PYTHONUNBUFFERED"] = "1"
 		return env
 

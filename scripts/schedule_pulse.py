@@ -283,7 +283,9 @@ def _install_macos(interval_hours: int, uv_path: str) -> None:
 	# 1. Wake Pulse (Interval-based, hourly)
 	_write_launchd_plist("com.redpill.wake", f'"{uv_path}" run python "{TRIGGER_SCRIPT}" --cycle wake', interval_hours * 3600)
 	# 2. Nightly Cycle (Calendar-based, 03:00 daily) — chronicle → sleep, encola
-	_write_launchd_calendar_plist("com.redpill.nightly", f'"{uv_path}" run red-pill job submit --recipe "{NIGHTLY_RECIPE}" --singleton', hour=3, minute=0)
+	_write_launchd_calendar_plist(
+		"com.redpill.nightly", f'"{uv_path}" run red-pill job submit --recipe "{NIGHTLY_RECIPE}" --singleton', hour=3, minute=0
+	)
 	# 3. Telemetry
 	_write_launchd_plist("com.redpill.telemetry", f'"{uv_path}" run python "{TELEMETRY_SCRIPT}" --oneshot', 30)
 	# 4. Queue (use module entrypoint — scripts/process_queue.py does not exist; mirror the Linux branch)

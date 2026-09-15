@@ -1,0 +1,28 @@
+# Memento — RE-DESTILADO + RE-REFINADO completo con GRANITE (2026-09-15).
+#
+# Regenera distill/ + refine/ de TODO el árbol con el pipeline final:
+#   - granite (modelo del bake-off: preciso, separa work/social, voz 1ª persona)
+#   - distill fragmentado a 8000 chars (n_ctx granite 10240) con solape
+#   - refine de dos llamadas (WORK + SOCIAL) + dedup + voz 1ª persona
+#   - trazabilidad engine/prompt_version
+#
+# Reanudable por sesión (`--limit 1`): 1 step = 1 sesión. `--redistill-round`
+# filtra solo las pendientes de esta ronda → no repite lo ya hecho. Prioridad
+# BAJA (1): cualquier otro job de la cola se ejecuta antes (cede entre sesiones).
+# La resiembra (drop + ascenso) va DESPUÉS, cuando esto termine.
+source: script_job
+priority: 1
+title: Memento re-destilado + re-refinado completo (granite)
+mission_id: memento-redistill-full
+step_command: uv run python scripts/memento_agentic.py --force --redistill-round 2026-09-15T15:13:00Z --limit 1
+cwd: /home/joan/Documents/IA/sharing
+checkpoint_file: state/memento_redistill_full_progress.json
+defer_exit_code: 77
+preflight:
+  llm_required: true
+control:
+  max_step_minutes: 30
+progress:
+  mode: bounded
+  current_key: processed
+  total: 699

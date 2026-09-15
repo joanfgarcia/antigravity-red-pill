@@ -16,7 +16,7 @@ Elige y reporta la combinación más cercana a un objetivo de ascensos sostenido
 (no saturar ni vaciar).
 
 Uso:
-    uv run python scripts/memento_calibrate.py
+	uv run python scripts/memento_calibrate.py
 """
 
 from __future__ import annotations
@@ -29,12 +29,56 @@ from typing import Any, Dict, List, Tuple
 from red_pill.memento.ascension import _refine_topics, _temas_afines, parse_refine
 
 _ENGINEERING_STOPWORDS = {
-	"sistema", "también", "nuestra", "nuestro", "cuando", "después", "entonces",
-	"proyecto", "documento", "proceso", "manera", "forma", "mismo", "misma",
-	"porque", "hacer", "puede", "todos", "todo", "cada", "donde", "parte", "entre",
-	"sobre", "desde", "estado", "siendo", "tiempo", "podemos", "necesita", "buena",
-	"bien", "the", "that", "with", "from", "this", "have", "been", "into", "and",
-	"were", "will", "would", "should", "could", "about", "after", "before", "their",
+	"sistema",
+	"también",
+	"nuestra",
+	"nuestro",
+	"cuando",
+	"después",
+	"entonces",
+	"proyecto",
+	"documento",
+	"proceso",
+	"manera",
+	"forma",
+	"mismo",
+	"misma",
+	"porque",
+	"hacer",
+	"puede",
+	"todos",
+	"todo",
+	"cada",
+	"donde",
+	"parte",
+	"entre",
+	"sobre",
+	"desde",
+	"estado",
+	"siendo",
+	"tiempo",
+	"podemos",
+	"necesita",
+	"buena",
+	"bien",
+	"the",
+	"that",
+	"with",
+	"from",
+	"this",
+	"have",
+	"been",
+	"into",
+	"and",
+	"were",
+	"will",
+	"would",
+	"should",
+	"could",
+	"about",
+	"after",
+	"before",
+	"their",
 }
 
 

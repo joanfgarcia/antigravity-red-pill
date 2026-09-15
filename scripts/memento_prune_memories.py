@@ -10,9 +10,9 @@ engramas curados con `significance` por debajo de un umbral.
 Dry-run por defecto; `--apply` ejecuta. Recomendado hacer backup (snapshot) antes.
 
 Uso:
-    uv run python scripts/memento_prune_memories.py --min-significance 0.4
-    uv run python scripts/memento_prune_memories.py --min-significance 0.4 --apply
-    uv run python scripts/memento_prune_memories.py --min-significance 0.4 --max-category-score 0.5 --apply
+	uv run python scripts/memento_prune_memories.py --min-significance 0.4
+	uv run python scripts/memento_prune_memories.py --min-significance 0.4 --apply
+	uv run python scripts/memento_prune_memories.py --min-significance 0.4 --max-category-score 0.5 --apply
 """
 
 from __future__ import annotations
