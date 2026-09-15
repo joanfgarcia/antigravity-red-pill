@@ -193,7 +193,7 @@ def _write_refine_with_score(tmp_path: Path, name: str, score: float | None, bod
 	f = d / f"{name}.md"
 	text = (
 		REFINE_TEXT.replace("opencode:ses_test", f"opencode:ses_{name}")
-		.replace("texture: {\"theme\": \"memoria_curada\"", "texture: {\"theme\": \"cat_score\"")
+		.replace('texture: {"theme": "memoria_curada"', 'texture: {"theme": "cat_score"')
 		.replace("Una reflexión personal sobre el sentido de la memoria y su curaduría.", body)
 	)
 	if score is not None:
@@ -348,7 +348,7 @@ def test_fase4_config_keys_declared():
 	assert cfg.POLAROID_REVIVAL_GATE == 7.0  # ajustado por el experimento
 	assert cfg.MEMENTO_STATIC_ASCENSION_ENABLED is False  # en sombra hasta calibrar
 	assert cfg.MEMENTO_FRAGMENT_OVERLAP_MESSAGES == 2
-	assert cfg.MEMENTO_FRAGMENT_MAX_CHARS == 12000
+	assert cfg.MEMENTO_FRAGMENT_MAX_CHARS == 8000  # granite n_ctx 10240 (destilado por fases solapadas)
 	assert cfg.MEMENTO_GATE_MIN_SIGNIFICANCE == 0.5
 	assert cfg.MEMENTO_CURATED_IMPORTANCE_FACTOR == 5.0  # curados erodan lento
 	assert cfg.MEMENTO_CATEGORY_WORK_THRESHOLD == 0.5  # ratio LLM: >= 0.5 → work
@@ -399,7 +399,7 @@ def test_weave_reinforces_and_ascends(tmp_path: Path):
 	d.mkdir(parents=True)
 	f = d / "001-x.md"
 	text = REFINE_TEXT.replace("polaroid_stability: 0.0", "polaroid_stability: 4.5")
-	text = text.replace("texture: {\"theme\": \"memoria_curada\"", "texture: {\"theme\": \"tema_recurrente\"")
+	text = text.replace('texture: {"theme": "memoria_curada"', 'texture: {"theme": "tema_recurrente"')
 	f.write_text(text, encoding="utf-8")
 
 	# Un engrama nuevo en work_memories con el mismo tema → refuerza.

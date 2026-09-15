@@ -511,7 +511,11 @@ class RedPillConfig(BaseSettings):
 	POLAROID_REVIVAL_GATE: float = 7.0  # umbral: S >= gate → ascenso por refuerzo
 	MEMENTO_STATIC_ASCENSION_ENABLED: bool = False  # ascenso estático EN SOMBRA hasta calibrar
 	MEMENTO_FRAGMENT_OVERLAP_MESSAGES: int = 2  # solape de turnos entre fragmentos del distill
-	MEMENTO_FRAGMENT_MAX_CHARS: int = 12000  # presupuesto de contexto por fragmento de distill
+	# Presupuesto de contexto por fragmento de distill. 2026-09-15: se destila con
+	# granite (n_ctx 10240), no con aya (32K) — 12000 chars apretaba; 8000 chars
+	# (≈ 2000-3200 tokens a ratio 2-2.5) cabe holgado con system + salida. El
+	# destilado por fases solapadas trocea lo que exceda (overlap = continuidad).
+	MEMENTO_FRAGMENT_MAX_CHARS: int = 8000
 	# Los engramas ascendidos (origin=memento) erodan MUCHO más lento que el ruido:
 	# importance = significance × factor → el motor bayesiano (α=max(1,importance))
 	# les da una utility inicial alta que tarda años en erodar, frente a ~19 días

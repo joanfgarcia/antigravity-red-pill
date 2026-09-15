@@ -48,7 +48,7 @@ def engine_id() -> str:
 			_ENGINE_CACHE = str(models[0].get("id") or EDGE_MODEL)
 	except Exception:
 		_ENGINE_CACHE = EDGE_MODEL
-	return _ENGINE_CACHE
+	return str(_ENGINE_CACHE)
 
 
 def _prompt_hash(*texts: str) -> str:
@@ -232,12 +232,17 @@ def llm_available(url: str = EDGE_HEALTH_URL) -> bool:
 		return False
 
 
-# n_ctx del modelo servido (2026-09-14): el llama-server GPU carga Granite-4.1-8B
-# con contexto 10240. El presupuesto por request = n_ctx − sistema − salida. Los
-# splits de 12000 chars (~3k tokens) entran, pero un index.md completo o un split
-# token-denso pueden pedir más → 500. Se recorta el user content al presupuesto.
+# n_ctx del modelo servido (2026-09-15): Granite-4.1-8B sirve 10240; tiny-aya
+# 32768. El presupuesto de prompt del refine es DINÁMICO según el modelo real
+# (engine_id), para que los fragments de un lote quepan en el contexto.
 MODEL_N_CTX = 10240
 MODEL_PROMPT_BUDGET = MODEL_N_CTX - 4096  # margen: sistema (~600) + salida (512-1024) + colchón
+
+
+def model_prompt_budget() -> int:
+	"""Presupuesto de chars del prompt del refine según el modelo servido."""
+	n_ctx = 32768 if "tiny-aya" in engine_id() else MODEL_N_CTX
+	return int(n_ctx - 4096)
 
 
 def _fit_prompt(user: str, hard_cap: int = 20000) -> str:
@@ -584,7 +589,7 @@ def _refine_multi(transport: Transport, frags: List[Dict[str, Any]], candidates:
 	(devuelven [] en contenido mixto); cada llamada enfocada captura su tipo."""
 	ideas: List[Dict[str, Any]] = []
 	cursor = 0
-	for lot in _split_to_fit(frags, candidates, MODEL_PROMPT_BUDGET):
+	for lot in _split_to_fit(frags, candidates, model_prompt_budget()):
 		fragments = _format_fragments(lot, cursor)
 		cands = json.dumps(candidates)
 		for system, template in ((REFINE_WORK_SYSTEM, REFINE_WORK_USER), (REFINE_SOCIAL_SYSTEM, REFINE_SOCIAL_USER)):

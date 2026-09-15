@@ -66,7 +66,7 @@ def polaroid_decay(stability: float, last_reinforced_at: Any, now: float, tau: f
 	elif isinstance(last_reinforced_at, _date):
 		last_dt = datetime(last_reinforced_at.year, last_reinforced_at.month, last_reinforced_at.day, tzinfo=timezone.utc)
 	else:
-		last_dt = _to_datetime(last_reinforced_at)
+		last_dt = _to_datetime(last_reinforced_at) or datetime.now(tz=timezone.utc)
 	if last_dt is None:
 		return stability
 	dt_days = max(0.0, (now - last_dt.timestamp()) / 86400.0)
@@ -134,12 +134,61 @@ def reinforce_refine(
 # ── Fase 4 §4.2: el paso Memento-consciente del weaver ──
 
 _STOPWORDS = {
-	"para", "esta", "este", "esto", "como", "más", "una", "uno", "cada", "sido",
-	"tiene", "tener", "hacer", "puede", "entre", "sobre", "desde", "todos", "todo",
-	"parte", "nuestro", "nuestra", "quiere", "sistema", "siendo", "estado", "también",
-	"sesión", "sesion", "fase", "fase", "nuevo", "nueva", "mismo", "misma", "forma",
-	"when", "that", "with", "from", "this", "have", "been", "into", "the", "and",
-	"were", "will", "would", "should", "could", "about", "after", "before", "their",
+	"para",
+	"esta",
+	"este",
+	"esto",
+	"como",
+	"más",
+	"una",
+	"uno",
+	"cada",
+	"sido",
+	"tiene",
+	"tener",
+	"hacer",
+	"puede",
+	"entre",
+	"sobre",
+	"desde",
+	"todos",
+	"todo",
+	"parte",
+	"nuestro",
+	"nuestra",
+	"quiere",
+	"sistema",
+	"siendo",
+	"estado",
+	"también",
+	"sesión",
+	"sesion",
+	"fase",
+	"fase",
+	"nuevo",
+	"nueva",
+	"mismo",
+	"misma",
+	"forma",
+	"when",
+	"that",
+	"with",
+	"from",
+	"this",
+	"have",
+	"been",
+	"into",
+	"the",
+	"and",
+	"were",
+	"will",
+	"would",
+	"should",
+	"could",
+	"about",
+	"after",
+	"before",
+	"their",
 }
 
 
@@ -178,13 +227,13 @@ def _engram_topics(payload: Dict[str, Any]) -> set:
 	return topics
 
 
-def _refine_topics(fm: Dict[str, Any], body: str) -> set:
+def _refine_topics(fm: Dict[str, Any], body: str):
 	"""Temas de un refine: el theme exacto (snake_case) es el ancla fuerte;
-	los relics y el cuerpo aportan tokens. → (tema_exacto, tokens)."""
+	los relics y el cuerpo aportan tokens. → (tema_exacto: str, tokens: set)."""
 	texture = fm.get("texture") if isinstance(fm.get("texture"), dict) else {}
-	theme = str(texture.get("theme", "") or "")
+	theme = str(texture.get("theme", "") or "") if texture else ""
 	tokens: set = set()
-	for relic in texture.get("relics", []) or []:
+	for relic in texture.get("relics") or [] if texture else []:
 		tokens.update(_topic_tokens(relic))
 	tokens.update(_topic_tokens(body))
 	return theme, tokens
@@ -283,7 +332,9 @@ def weave_memento_reinforcement(
 			refine_theme, refine_tokens = _refine_topics(fm, body)
 			if not _temas_afines(refine_theme, refine_tokens, engrama_topics):
 				continue
-			result = reinforce_refine(root, registry, refine_path, now=now, tau=tau, gain=gain, gate=gate, memory_manager=memory_manager, transport=transport)
+			result = reinforce_refine(
+				root, registry, refine_path, now=now, tau=tau, gain=gain, gate=gate, memory_manager=memory_manager, transport=transport
+			)
 			if result.get("reinforced"):
 				stats["refuerzos_aplicados"] += 1
 				if result.get("ascended"):
@@ -428,9 +479,7 @@ def _curated_importance(significance: float) -> float:
 	return max(1.0, round(significance * factor, 2))
 
 
-CLASSIFY_SYSTEM = (
-	"You are the Bünker Curator. You score how 'work' vs 'social' a memory is. Output ONLY valid JSON."
-)
+CLASSIFY_SYSTEM = "You are the Bünker Curator. You score how 'work' vs 'social' a memory is. Output ONLY valid JSON."
 CLASSIFY_USER = """Score how much this distilled memory is "work" (technical/operational) vs "social" (personal/reflective/philosophical).
 
 - 1.0 = purely work (code, systems, architecture, infrastructure).
