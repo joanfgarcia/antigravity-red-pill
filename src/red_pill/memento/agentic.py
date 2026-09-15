@@ -646,6 +646,14 @@ def refine_session(
 				category_score = max(0.0, min(1.0, float(idea.get("category_score", 0.5) or 0.5)))
 			except (TypeError, ValueError):
 				category_score = 0.5
+			# Sanear relicas: el LLM a veces devuelve un int en vez de un array.
+			raw_relics = idea.get("relics", [])
+			if isinstance(raw_relics, list):
+				relics = [str(r) for r in raw_relics][:4]
+			elif isinstance(raw_relics, str):
+				relics = [raw_relics]
+			else:
+				relics = []
 			refine_fm = _frontmatter_block(
 				[
 					("session_id", session_id),
@@ -655,7 +663,7 @@ def refine_session(
 					("significance", significance),
 					("emotion", str(idea.get("emotion", "gray"))),
 					("intensity", float(idea.get("intensity", 0.0) or 0.0)),
-					("texture", {"theme": str(idea.get("theme", "")), "relics": [str(r) for r in idea.get("relics", [])][:4]}),
+					("texture", {"theme": str(idea.get("theme", "")), "relics": relics}),
 					("cross_refs", cross_refs),
 					("fragment_ref", ref_idx if len(frags) > 1 else None),
 					("category_score", category_score),
