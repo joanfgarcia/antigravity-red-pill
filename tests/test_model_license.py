@@ -44,9 +44,7 @@ class TestNormalizeLicense:
 		assert pol["known"] is False
 
 	def test_structured_block_is_authoritative(self):
-		pol = normalize_license(
-			{"id": "custom", "commercial_ok": True, "redistribution_ok": False, "attribution_required": True}
-		)
+		pol = normalize_license({"id": "custom", "commercial_ok": True, "redistribution_ok": False, "attribution_required": True})
 		assert pol["commercial_ok"] is True
 		assert pol["redistribution_ok"] is False
 		assert pol["known"] is True
@@ -197,10 +195,7 @@ class TestModelCatalogLicense:
 
 	def test_cascade_commercial_filters_nc(self, tmp_path):
 		cat = self._catalog(tmp_path)
-		ids = [
-			m["id"]
-			for m in cat.cascade_for(role="conversational", allow_local=True, commercial_only=True, context="commercial")
-		]
+		ids = [m["id"] for m in cat.cascade_for(role="conversational", allow_local=True, commercial_only=True, context="commercial")]
 		assert ids == ["local/free"]
 
 	def test_cascade_commercial_raises_when_all_blocked(self, tmp_path):

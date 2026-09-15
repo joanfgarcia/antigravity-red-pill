@@ -3,26 +3,26 @@
 Sovereign compliance layer over `model_profiles.yaml` / `model_catalog.yaml`.
 Every model profile/catalog entry may declare a `license:` block:
 
-    license:
-      id: "cc-by-nc-4.0"        # SPDX id when one exists, else friendly id
-      commercial_ok: false      # CANNOT be used in a commercial context
-      redistribution_ok: true
-      attribution_required: true
-      share_alike: true
-      source: "https://huggingface.co/CohereLabs/tiny-aya-water"
+	license:
+	id: "cc-by-nc-4.0"        # SPDX id when one exists, else friendly id
+	commercial_ok: false      # CANNOT be used in a commercial context
+	redistribution_ok: true
+	attribution_required: true
+	share_alike: true
+	source: "https://huggingface.co/CohereLabs/tiny-aya-water"
 
 For cloud/API models (no weights to redistribute) the relevant dimension is data
 governance, not redistribution:
 
-    license:
-      id: "opencode-big-pickle-promo"
-      commercial_ok: true              # API: no NC restriction, usable at work
-      redistribution_ok: false         # N/A: no weights to distribute
-      attribution_required: false
-      share_alike: false
-      prompts_used_for_training: true  # provider may train on your prompts
-      confidential_ok: false           # do NOT send NDA/confidential data
-      source: "https://opencode.ai/docs/zen/"
+	license:
+	id: "opencode-big-pickle-promo"
+	commercial_ok: true              # API: no NC restriction, usable at work
+	redistribution_ok: false         # N/A: no weights to distribute
+	attribution_required: false
+	share_alike: false
+	prompts_used_for_training: true  # provider may train on your prompts
+	confidential_ok: false           # do NOT send NDA/confidential data
+	source: "https://opencode.ai/docs/zen/"
 
 `prompts_used_for_training` / `confidential_ok` default to False (fail-closed on
 confidentiality) but do NOT feed the commercial gate — they are surfaced by the
@@ -72,7 +72,15 @@ _EMPTY_POLICY: Dict[str, Any] = {
 	"confidential_ok": False,
 }
 
-_LICENSE_KEYS = ("commercial_ok", "redistribution_ok", "attribution_required", "share_alike", "source", "prompts_used_for_training", "confidential_ok")
+_LICENSE_KEYS = (
+	"commercial_ok",
+	"redistribution_ok",
+	"attribution_required",
+	"share_alike",
+	"source",
+	"prompts_used_for_training",
+	"confidential_ok",
+)
 
 
 class ModelLicenseError(Exception):

@@ -772,6 +772,21 @@ def handle_job(args: argparse.Namespace) -> None:
 			else:
 				print(f"[WARN] Job {task['id'][:8]} en estado '{task['status']}': reanudación no aplicable.")
 
+	elif args.job_cmd == "skip":
+		task = _find_job(queue, args.job_id)
+		if not task:
+			print(f"[ERROR] Job '{args.job_id}' no encontrado.")
+			return
+		if queue.skip_next_task(task["id"]):
+			updated = queue.get_task(task["id"])
+			st = updated["status"] if updated else task["status"]
+			if st == "PENDING":
+				print(f"[OK] Job {task['id'][:8]}: siguiente step marcado para saltar (skip_next). El runner lo retoma y avanza sin reintentar.")
+			else:
+				print(f"[OK] Job {task['id'][:8]} en '{st}': skip_next marcado. Se consumirá en la frontera del próximo step.")
+		else:
+			print(f"[WARN] Job {task['id'][:8]} no encontrado o sin checkpoint aplicable.")
+
 	elif args.job_cmd == "kill":
 		task = _find_job(queue, args.job_id)
 		if not task:
@@ -799,7 +814,7 @@ def handle_job(args: argparse.Namespace) -> None:
 	elif args.job_cmd == "process-queue":
 		_run_job_queue(queue)
 	else:
-		print("Uso: red-pill job {submit|list|status|pause|resume|kill|logs|purge|process-queue}")
+		print("Uso: red-pill job {submit|list|status|pause|resume|skip|kill|logs|purge|process-queue}")
 
 
 def _print_measurements(task: dict) -> None:
@@ -1221,6 +1236,9 @@ def main() -> None:
 
 	job_resume = job_sub.add_parser("resume", help="Reanudar un job pausado desde su checkpoint")
 	job_resume.add_argument("job_id", help="Id completo o prefijo corto")
+
+	job_skip = job_sub.add_parser("skip", help="Saltar el siguiente elemento/step sin reintentarlo (marca skip_next en el checkpoint)")
+	job_skip.add_argument("job_id", help="Id completo o prefijo corto")
 
 	job_kill = job_sub.add_parser("kill", help="Abatir el step en vuelo (duro): PAUSED* reanudable, con marca de kill sucio")
 	job_kill.add_argument("job_id", help="Id completo o prefijo corto")

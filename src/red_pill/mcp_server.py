@@ -2065,6 +2065,45 @@ async def handle_job_resume(arguments: Dict[str, Any]):
 
 @registry.register_action(
 	parent="job_manager_api",
+	action="job_skip",
+	description="[OFFICIAL] Saltar el siguiente elemento/step sin reintentarlo: escribe skip_next:true en el checkpoint (y devuelve PAUSED/FRUSTRATED a PENDING). El driver consume la marca y avanza el índice marcando 'skipped'.",
+	schema={
+		"type": "object",
+		"properties": {
+			"job_id": {"type": "string"},
+		},
+		"required": ["job_id"],
+	},
+)
+async def handle_job_skip(arguments: Dict[str, Any]):
+	try:
+		qm = _queue()
+		task = _resolve_job(qm, arguments["job_id"])
+		if not task:
+			return [types.TextContent(type="text", text=f"[ERROR] Job '{arguments['job_id']}' no encontrado.")]
+		if qm.skip_next_task(task["id"]):
+			updated = qm.get_task(task["id"])
+			st = updated["status"] if updated else task["status"]
+			if st == "PENDING":
+				return [
+					types.TextContent(
+						type="text",
+						text=f"[OK] Job {task['id'][:8]}: siguiente step marcado para saltar. El runner lo retoma (PENDING) y avanza sin reintentar.",
+					)
+				]
+			return [
+				types.TextContent(
+					type="text",
+					text=f"[OK] Job {task['id'][:8]} en '{st}': skip_next marcado. Se consumirá en la frontera del próximo step.",
+				)
+			]
+		return [types.TextContent(type="text", text=f"[WARN] Job {task['id'][:8]} en '{task['status']}': skip no aplicable.")]
+	except Exception as e:
+		return [types.TextContent(type="text", text=f"[ERROR] job_skip falló: {e}")]
+
+
+@registry.register_action(
+	parent="job_manager_api",
 	action="job_kill",
 	description="[OFFICIAL] Interrupción dura de un job: sella PAUSED* (o descarta) y abate el scope. La unidad en vuelo completa.",
 	schema={

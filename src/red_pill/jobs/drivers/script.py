@@ -131,15 +131,16 @@ class ScriptJobDriver(ResumableJobDriver):
 		if cwd and not os.path.isdir(cwd):
 			raise ValueError(f"payload.cwd no existe: {cwd}")
 
-		for code_key in ("defer_exit_code", "pause_exit_code"):
+		for code_key in ("defer_exit_code", "pause_exit_code", "skip_exit_code"):
 			code = payload.get(code_key)
 			if code is not None:
 				# 124/137/143 son los códigos canónicos de muerte por cota/señal: si el
 				# satélite los usara como señal, un cuelgue real se malinterpretaría eternamente.
 				if not isinstance(code, int) or not (1 <= code <= 255) or code in (124, 137, 143):
 					raise ValueError(f"payload.{code_key} debe ser un entero 1-255 distinto de 124/137/143 (recibido: {code!r})")
-		if payload.get("defer_exit_code") is not None and payload.get("defer_exit_code") == payload.get("pause_exit_code"):
-			raise ValueError("defer_exit_code y pause_exit_code no pueden coincidir: significan cosas distintas")
+		exit_codes = {k: payload.get(k) for k in ("defer_exit_code", "pause_exit_code", "skip_exit_code") if payload.get(k) is not None}
+		if len(set(exit_codes.values())) != len(exit_codes):
+			raise ValueError("defer_exit_code, pause_exit_code y skip_exit_code no pueden coincidir: significan cosas distintas")
 
 		progress = payload.get("progress") or {}
 		mode = progress.get("mode", "single")
@@ -257,6 +258,10 @@ class ScriptJobDriver(ResumableJobDriver):
 		cwd = payload.get("cwd") or os.getcwd()
 		state_path = self._resolve_state_path(payload, cwd)
 		meta = dict(checkpoint_data.get("_rp_meta") or {})
+		# skip/next del operador (`job_skip`): el runner relee `skip_next` en la
+		# frontera del step y lo entrega aquí. Se expone al satélite como
+		# RP_SKIP_NEXT=1 para que salte el item actual y avance su checkpoint.
+		self._skip_next = bool(checkpoint_data.get("skip_next"))
 
 		# Reanudación tras una interrupción dura: el checkpoint del satélite
 		# puede no estar limpio. Se valida ANTES de relanzar — nunca se reinicia
@@ -278,15 +283,25 @@ class ScriptJobDriver(ResumableJobDriver):
 			# PAUSED con checkpoint intacto, reanudable con `job resume` tras revisar.
 			if returncode == payload.get("pause_exit_code"):
 				raise JobPauseRequested(f"el satélite pidió revisión del operador (exit {returncode})")
-			tail = self._log_tail()
-			if self._looks_like_timeout(elapsed, returncode):
-				raise JobStepTimeout(elapsed_s=elapsed, bound_s=self.step_timeout_s, ema_s=elapsed, attempt=self.attempts + 1)
-			raise RuntimeError(f"step_command falló (rc={returncode}) tras {elapsed / 60:.1f} min: {tail}")
+			# ...o "salta este item, no lo reintentes" (skip): el satélite ya avanzó
+			# su checkpoint. No es fallo ni deferral: se lee el estado y se sigue.
+			if returncode == payload.get("skip_exit_code"):
+				skipped = True
+			else:
+				skipped = False
+				tail = self._log_tail()
+				if self._looks_like_timeout(elapsed, returncode):
+					raise JobStepTimeout(elapsed_s=elapsed, bound_s=self.step_timeout_s, ema_s=elapsed, attempt=self.attempts + 1)
+				raise RuntimeError(f"step_command falló (rc={returncode}) tras {elapsed / 60:.1f} min: {tail}")
+		else:
+			skipped = False
 
 		state = self._read_state(state_path)
 		progress, completed = self._evaluate(payload, state)
 		meta = self._record_cadence(cadence, elapsed, meta, progress)
 		meta = self._check_stall(payload, meta, previous_state, state, progress)
+		if skipped:
+			meta["skipped"] = int(meta.get("skipped", 0)) + 1
 
 		new_checkpoint: Dict[str, Any] = dict(state)
 		new_checkpoint["_rp_meta"] = meta
@@ -294,7 +309,7 @@ class ScriptJobDriver(ResumableJobDriver):
 		return StepOutcome(
 			completed=completed,
 			new_checkpoint=new_checkpoint,
-			summary=self._summary(payload, progress, completed, elapsed),
+			summary=self._summary(payload, progress, completed, elapsed, skipped=skipped),
 			progress=progress,
 		)
 
@@ -381,6 +396,12 @@ class ScriptJobDriver(ResumableJobDriver):
 			env["RP_DEFER_EXIT_CODE"] = str(payload["defer_exit_code"])
 		if payload.get("pause_exit_code") is not None:
 			env["RP_PAUSE_EXIT_CODE"] = str(payload["pause_exit_code"])
+		if payload.get("skip_exit_code") is not None:
+			env["RP_SKIP_EXIT_CODE"] = str(payload["skip_exit_code"])
+		# skip/next del operador: el satélite salta el item actual y avanza su
+		# checkpoint en vez de procesarlo (job_skip escribe skip_next en el cp).
+		if getattr(self, "_skip_next", False):
+			env["RP_SKIP_NEXT"] = "1"
 		# Exponer el checkpoint_file al proceso hijo (modo bounded): el satélite
 		# escribe {current_key: N} ahí tras cada avance; el driver lo lee para
 		# el progreso y el resume (R4). Path absoluto resuelto contra cwd.
@@ -580,10 +601,11 @@ class ScriptJobDriver(ResumableJobDriver):
 			raise RuntimeError(f"sin progreso en {limit} steps consecutivos (valor estancado: {marker!r}) — el script sale con éxito pero no avanza")
 		return meta
 
-	def _summary(self, payload: Dict[str, Any], progress: Dict[str, Any], completed: bool, elapsed: float) -> str:
+	def _summary(self, payload: Dict[str, Any], progress: Dict[str, Any], completed: bool, elapsed: float, skipped: bool = False) -> str:
 		title = payload.get("title") or self.short_id
+		skip_note = " (item saltado)" if skipped else ""
 		if progress.get("mode") == "single":
-			return f"{title}: script completado en {elapsed / 60:.1f} min."
+			return f"{title}: script completado en {elapsed / 60:.1f} min.{skip_note}"
 
 		parts = [f"{progress.get('current')}"]
 		if progress.get("total"):
@@ -593,7 +615,7 @@ class ScriptJobDriver(ResumableJobDriver):
 		if progress.get("stage_current") is not None:
 			parts.append(f" · {progress.get('stage_label', 'fase')} {progress['stage_current']}/{progress.get('stage_total')}")
 		state = "completado" if completed else "en curso"
-		return f"{title}: {''.join(parts)} — {state} (step {elapsed / 60:.1f} min)."
+		return f"{title}: {''.join(parts)} — {state} (step {elapsed / 60:.1f} min){skip_note}."
 
 	# ── Log por job ────────────────────────────────────────────────────────
 
