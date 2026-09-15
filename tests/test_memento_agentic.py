@@ -443,6 +443,36 @@ def test_extract_json_array():
 	assert _extract_json_array("sin array") is None
 
 
+def test_trazabilidad_engine_y_prompt_version(tmp_path, monkeypatch):
+	"""2026-09-15: distill y refine guardan el modelo real y la versión del prompt
+	con que se hicieron — permite saber si un engrama se hizo con granite/aya y si
+	los prompts cambiaron desde entonces."""
+	from red_pill.memento import agentic
+	from red_pill.memento.agentic import distill_session, refine_session
+
+	monkeypatch.setattr(agentic, "engine_id", lambda: "Granite-4.1-8B-Q4_K_M.gguf")
+	monkeypatch.setattr(agentic, "distill_prompt_version", lambda: "d123")
+	monkeypatch.setattr(agentic, "refine_prompt_version", lambda: "r456")
+
+	root, _registry, rendered = _tree_with_session(tmp_path)
+	sections = distill_session(root, rendered.dir_rel, "opencode:s1", "opencode", fake_transport())
+	refine_session(root, rendered.dir_rel, "opencode:s1", "opencode", sections, [], fake_transport(), 0.3)
+
+	sd = root / rendered.dir_rel
+	distill_text = next((sd / "distill").glob("*.md")).read_text(encoding="utf-8")
+	refine_text = next((sd / "refine").glob("*.md")).read_text(encoding="utf-8")
+	assert "engine: Granite-4.1-8B-Q4_K_M.gguf" in distill_text
+	assert "prompt_version: d123" in distill_text
+	assert "engine: Granite-4.1-8B-Q4_K_M.gguf" in refine_text
+	assert "prompt_version: r456" in refine_text
+
+	# el registry también lo guarda
+	run_agentic(root, _registry, [("opencode", "opencode:s1")], fake_transport())
+	ag = _registry.get("opencode", "opencode:s1")["agentic"]
+	assert ag["engine"] == "Granite-4.1-8B-Q4_K_M.gguf"
+	assert "distill_prompt_version" in ag and "refine_prompt_version" in ag
+
+
 def test_refine_session_multi_idea(tmp_path):
 	"""3 destills que forman 2 ideas → 2 refine (no 3, no 1)."""
 	from red_pill.memento.agentic import REFINE_SOCIAL_SYSTEM, REFINE_WORK_SYSTEM, refine_session

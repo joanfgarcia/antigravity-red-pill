@@ -25,6 +25,50 @@ EDGE_ENGINE_URL = "http://localhost:8760/v1/chat/completions"
 EDGE_HEALTH_URL = "http://localhost:8760/v1/models"
 EDGE_MODEL = "Granite-4.1-8B-Q4_K_M.gguf"
 
+# Trazabilidad de las etapas (2026-09-15): cada distill/refine y el registry guardan
+# con qué MODELO real y qué VERSIÓN de prompt se hicieron. Permite saber si un
+# engrama se generó con granite o aya, y si los prompts cambiaron desde entonces.
+_ENGINE_CACHE: Optional[str] = None
+
+
+def engine_id() -> str:
+	"""Modelo REAL servido por el daemon (consulta /v1/models, cacheada).
+	`EDGE_MODEL` es un nombre fijo; el daemon puede servir otro (granite/aya)."""
+	global _ENGINE_CACHE
+	if _ENGINE_CACHE:
+		return _ENGINE_CACHE
+	import json
+	import urllib.request
+
+	try:
+		resp = urllib.request.urlopen(EDGE_HEALTH_URL, timeout=3)
+		data = json.loads(resp.read().decode("utf-8"))
+		models = data.get("data") or []
+		if models:
+			_ENGINE_CACHE = str(models[0].get("id") or EDGE_MODEL)
+	except Exception:
+		_ENGINE_CACHE = EDGE_MODEL
+	return _ENGINE_CACHE
+
+
+def _prompt_hash(*texts: str) -> str:
+	import hashlib
+
+	h = hashlib.sha256()
+	for t in texts:
+		h.update(t.encode("utf-8"))
+	return h.hexdigest()[:10]
+
+
+def distill_prompt_version() -> str:
+	"""Fingerprint del prompt de SÍNTESIS (DISTILL_* + VOICE)."""
+	return _prompt_hash(DISTILL_USER, DISTILL_USER_OPENING, DISTILL_USER_CONTINUATION, _VOICE_RULE)
+
+
+def refine_prompt_version() -> str:
+	"""Fingerprint del prompt de REFINADO (WORK + SOCIAL + VOICE)."""
+	return _prompt_hash(REFINE_WORK_USER, REFINE_SOCIAL_USER, _VOICE_RULE)
+
 # transport(system, user, max_tokens) -> str — inyectable para tests y para futuros bake-offs
 Transport = Callable[[str, str, int], str]
 
@@ -458,6 +502,8 @@ def distill_session(
 				("keywords", keywords),
 				("source_lines", ref),
 				("source_ref", "memento/index.md"),
+				("engine", engine_id()),
+				("prompt_version", distill_prompt_version()),
 			]
 			if total > 1:
 				filename = f"{nnn}-{slug}-fragmento-{i}-de-{total}.md"
@@ -608,6 +654,8 @@ def refine_session(
 					("cross_refs", cross_refs),
 					("fragment_ref", ref_idx if len(frags) > 1 else None),
 					("category_score", category_score),
+					("engine", engine_id()),
+					("prompt_version", refine_prompt_version()),
 					# Estado de ascensión (Fase 4 §3): defaults para sellar in-place.
 					("ascended", False),
 					("ascended_at", None),
@@ -789,6 +837,9 @@ def run_agentic(
 			"sections": len(sections),
 			"max_significance": round(max_significance, 2),
 			"gate_would_ingest": would_ingest,
+			"engine": engine_id(),
+			"distill_prompt_version": distill_prompt_version(),
+			"refine_prompt_version": refine_prompt_version(),
 		}
 		stats["processed"] += 1
 		stats["would_ingest"] += int(would_ingest)
