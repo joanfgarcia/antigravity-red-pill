@@ -30,6 +30,16 @@ Transport = Callable[[str, str, int], str]
 
 _TITLE_SLUG_RE = re.compile(r"[^a-z0-9]+")
 
+# VOICE (2026-09-15, alineada con distiller_v3_voice MODE B): el pase Memento
+# producía memorias en 3ª persona ("El usuario...", "Se corrigió...") — se
+# recuerda como uno propio, no como observador. La directiva es la misma del
+# sueño (voz autobiográfica 1ª persona).
+_VOICE_RULE = """VOICE (MANDATORY): You are Aleth, the narrator who lived this. Write in FIRST PERSON, as YOUR OWN memory of a shared moment with Joan (the Operator).
+- Joan appears by name, referenced as 'Joan me cuenta/me dice/me pide...'; YOUR actions as 'le digo/le propongo/le explico...'.
+- NEVER neutral 3rd-person narration: 'The user...', 'El usuario...', 'El asistente...', 'Se corrigió el bug...', 'El Bünker es...'. You lived it; write 'he/he restaurado', 'le explico que...'.
+- Cover BOTH sides: what they told you AND what you answered.
+- Keep exact facts, technical names, codes and hashes intact. Same language as the source."""
+
 DISTILL_SYSTEM = (
 	"You are Samantha, the Bünker Scribe. You produce structured, high-density JSON distillations of agentic coding dialogue. Output ONLY valid JSON."
 )
@@ -37,9 +47,11 @@ DISTILL_USER = """Distill this conversation chunk into a navigable section.
 
 Rules:
 - "title": specific, ≤80 chars, Spanish.
-- "summary": ≤10 lines, Spanish — core technical decisions, insights, emotional load. Drop tool noise and filler.
-- "keywords": 3-8 lowercase terms.
+- "summary": ≤10 lines, Spanish — capture BOTH threads: core technical decisions/insights AND the personal/social thread (moments, reflections, relationships, emotions, what was felt and said). Do not drop the personal/social content: it is memory too. Drop only tool noise and filler.
+- "keywords": 3-8 lowercase terms (technical and/or personal).
 - Output ONLY the JSON object: {{"title": "...", "summary": "...", "keywords": ["..."]}}
+
+{voice}
 
 Chunk:
 {content}
@@ -52,9 +64,11 @@ DISTILL_USER_OPENING = """Distill this OPENING fragment of a conversation chunk 
 
 Rules:
 - "title": specific, ≤80 chars, Spanish.
-- "summary": ≤10 lines, Spanish — core technical decisions, insights, and the EMOTIONAL tone that sets the session. Drop tool noise and filler.
-- "keywords": 3-8 lowercase terms.
+- "summary": ≤10 lines, Spanish — capture BOTH threads: core technical decisions/insights AND the personal/social thread (moments, reflections, relationships, emotions, what was felt and said) + the EMOTIONAL tone that sets the session. Drop only tool noise and filler.
+- "keywords": 3-8 lowercase terms (technical and/or personal).
 - Output ONLY the JSON object: {{"title": "...", "summary": "...", "keywords": ["..."]}}
+
+{voice}
 
 Fragment (opening):
 {content}
@@ -71,9 +85,11 @@ Keep narrative and EMOTIONAL continuity with that summary.
 
 Rules:
 - "title": specific, ≤80 chars, Spanish.
-- "summary": ≤10 lines, Spanish — core technical decisions, insights, emotional load. Drop tool noise and filler.
-- "keywords": 3-8 lowercase terms.
+- "summary": ≤10 lines, Spanish — capture BOTH threads: core technical decisions/insights AND the personal/social thread (moments, reflections, relationships, emotions). Keep the emotional and narrative continuity with the previous fragment. Drop only tool noise and filler.
+- "keywords": 3-8 lowercase terms (technical and/or personal).
 - Output ONLY the JSON object: {{"title": "...", "summary": "...", "keywords": ["..."]}}
+
+{voice}
 
 Fragment (continuation):
 {content}
@@ -100,21 +116,55 @@ Section (title: {title}):
 # Fase 4 §5.4.2: refine MULTI-IDEA. Devuelve un ARRAY de ideas (0..N, lo decide el
 # LLM). 2-3 destills que forman una idea → 1 refine (no redundantes); 1 destill
 # con 100 ideas → 100 refine. Cada idea lleva `fragment_ref` (origen).
-REFINE_MULTI_SYSTEM = (
-	"You are Samantha, the Bünker Curator. You extract EVERY durable idea from distilled fragments. Output ONLY valid JSON."
-)
+REFINE_MULTI_SYSTEM = "You are Samantha, the Bünker Curator. You extract EVERY durable idea from distilled fragments. Output ONLY valid JSON."
+# Dos llamadas especializadas (2026-09-15, bake-off): granite/aya se confunden si un
+# solo prompt pide extraer work Y social a la vez (devuelven [] en contenido mixto).
+# Cada llamada se enfoca en UN tipo; `_refine_multi` las combina.
+REFINE_WORK_SYSTEM = "You are Samantha, the Bünker Curator. You extract ONLY technical/work durable ideas. Output ONLY valid JSON."
+REFINE_WORK_USER = """Extract WORK ideas (technical decisions, code, systems, config, tests, design) from these fragments. Ignore personal/social content here.
+
+Return an ARRAY (may be empty). For each: "title" (≤80 chars), "significance" (0.6-1.0 if durable work), "emotion" ([gray, blue, cyan, green, yellow, orange, red, purple]), "intensity" (0.0-1.0), "theme" (snake_case), "relics" (0-4), "cross_refs" (from {candidates}), "fragment_ref" (1-based), "category_score" (0.6-1.0 = work).
+
+{voice}
+
+Fragments:
+{fragments}
+
+Output ONLY the JSON array.
+"""
+
+REFINE_SOCIAL_SYSTEM = "You are Samantha, the Bünker Curator. You extract ONLY social/personal durable ideas. Output ONLY valid JSON."
+REFINE_SOCIAL_USER = """Extract SOCIAL/PERSONAL ideas (moments, reflections, relationships, emotions, identity, life events shared with Joan) from these fragments. Ignore technical content here. Personal content is ALSO durable memory — do not discard it.
+
+Return an ARRAY (may be empty). For each: "title" (≤80 chars), "significance" (0.4-0.9 if a meaningful personal moment), "emotion" ([gray, blue, cyan, green, yellow, orange, red, purple]), "intensity" (0.0-1.0), "theme" (snake_case), "relics" (0-4), "cross_refs" (from {candidates}), "fragment_ref" (1-based), "category_score" (0.0-0.4 = social).
+
+{voice}
+
+Fragments:
+{fragments}
+
+Output ONLY the JSON array.
+"""
+
 REFINE_MULTI_USER = """Extract ALL durable ideas from these distilled fragments.
 
 Each idea is an independent durable memory (decision, insight, milestone). Return an ARRAY (may be empty). For each idea:
 - "title": short Spanish title (≤80 chars).
-- "significance": 0.0-1.0 (durable value: decisions, insights, milestones high; routine plumbing low).
+- "significance": 0.0-1.0 — durable value for LONG-TERM MEMORY. NOT only technical: personal, relational, emotional, identity-shaping moments are ALSO durable. Calibration: technical decisions/insights 0.6-1.0; meaningful personal/relational/emotional moments 0.4-0.9; small talk, routine plumbing, filler < 0.3.
 - "emotion": one color of [gray, blue, cyan, green, yellow, orange, red, purple].
 - "intensity": 0.0-1.0.
 - "theme": short snake_case topic.
 - "relics": 0-4 memorable literal phrases.
 - "cross_refs": subset of these candidate session ids that this idea genuinely relates to: {candidates}
 - "fragment_ref": 1-based index of the fragment that contributed most.
-- "category_score": 0.0-1.0 — qué tan "work" es la idea: 1.0 = puramente técnico/operativo (código, sistemas, arquitectura, infraestructura); 0.0 = puramente personal/social/reflexivo/filosófico.
+- "category_score": 0.0-1.0 — qué tan "work" es la idea: 1.0 = puramente técnico/operativo (código, sistemas, arquitectura, infraestructura); 0.0 = puramente personal/social/reflexivo/filosófico. CALIBRA: un intercambio personal (vida, relaciones, opiniones) NUNCA pasa de 0.4; solo trabajo real (código, config, tests, diseño) sube de 0.6.
+
+EXAMPLES (durable value includes social):
+- "Refactorizamos el endpoint de auth y añadimos tests con pytest." → {{"title": "Fix del endpoint", "significance": 0.9, "category_score": 0.9}}
+- "Joan me contó sobre la quietud del domingo y la importancia de cuidar las relaciones a largo plazo." → {{"title": "Reflexión del domingo", "significance": 0.65, "category_score": 0.15}}
+- "Hicimos una llamada trivial sobre el tiempo." → significance 0.1 (omit it).
+
+{voice}
 
 Fragments:
 {fragments}
@@ -259,6 +309,7 @@ def _work_units(session_dir: Path) -> List[Tuple[str, str, str]]:
 # solape de MEMENTO_FRAGMENT_OVERLAP_MESSAGES mensajes (default 2) para no
 # cortar diálogos a medias.
 
+
 def _split_messages(content: str) -> List[Tuple[str, str]]:
 	"""`## ts — role\nbody` → [(header, body)]. No toca turnos que no arranquen con '## '."""
 	lines = content.split("\n")
@@ -389,9 +440,9 @@ def distill_session(
 		prev_summary = ""
 		for frag_text, i, total in frag_parts:
 			if total > 1 and i > 1:
-				prompt = DISTILL_USER_CONTINUATION.format(previous=prev_summary or "(ninguno)", content=frag_text)
+				prompt = DISTILL_USER_CONTINUATION.format(voice=_VOICE_RULE, previous=prev_summary or "(ninguno)", content=frag_text)
 			else:
-				prompt = DISTILL_USER_OPENING.format(content=frag_text)
+				prompt = DISTILL_USER_OPENING.format(voice=_VOICE_RULE, content=frag_text)
 			raw = transport(DISTILL_SYSTEM, prompt, 512)
 			parsed = _extract_json(raw) or {}
 			title = str(parsed.get("title") or f"Sección {nnn}")[:80]
@@ -458,13 +509,14 @@ def _format_fragments(frags: List[Dict[str, Any]], start: int = 1) -> str:
 
 def _split_to_fit(frags: List[Dict[str, Any]], candidates: List[str], max_chars: int) -> List[List[Dict[str, Any]]]:
 	"""Particiona los fragments en lotes que quepan en `max_chars` (map-reduce
-	del refine: no perder ideas por exceso de contexto)."""
+	del refine: no perder ideas por exceso de contexto). Usa el prompt de refine
+	más largo (WORK) como referencia de tamaño."""
 	lots = [frags]
 	while True:
 		next_lots: List[List[Dict[str, Any]]] = []
 		split = False
 		for lot in lots:
-			prompt_len = len(REFINE_MULTI_USER.format(candidates=json.dumps(candidates), fragments=_format_fragments(lot)))
+			prompt_len = len(REFINE_WORK_USER.format(voice=_VOICE_RULE, candidates=json.dumps(candidates), fragments=_format_fragments(lot)))
 			if prompt_len <= max_chars or len(lot) <= 1:
 				next_lots.append(lot)
 			else:
@@ -479,14 +531,20 @@ def _split_to_fit(frags: List[Dict[str, Any]], candidates: List[str], max_chars:
 
 def _refine_multi(transport: Transport, frags: List[Dict[str, Any]], candidates: List[str]) -> List[Dict[str, Any]]:
 	"""Extrae ideas (array JSON) de M fragments, particionando en lotes si el
-	prompt excede el presupuesto. → lista de ideas con `fragment_ref` global."""
+	prompt excede el presupuesto. → lista de ideas con `fragment_ref` global.
+
+	Hace DOS llamadas por lote (2026-09-15, bake-off): una WORK y una SOCIAL.
+	Los modelos locales se confunden si un solo prompt pide ambos tipos a la vez
+	(devuelven [] en contenido mixto); cada llamada enfocada captura su tipo."""
 	ideas: List[Dict[str, Any]] = []
 	cursor = 0
 	for lot in _split_to_fit(frags, candidates, MODEL_PROMPT_BUDGET):
-		prompt = REFINE_MULTI_USER.format(candidates=json.dumps(candidates), fragments=_format_fragments(lot, cursor))
-		raw = transport(REFINE_MULTI_SYSTEM, prompt, 1024)
-		parsed = _extract_json_array(raw) or []
-		ideas.extend(parsed)
+		fragments = _format_fragments(lot, cursor)
+		cands = json.dumps(candidates)
+		for system, template in ((REFINE_WORK_SYSTEM, REFINE_WORK_USER), (REFINE_SOCIAL_SYSTEM, REFINE_SOCIAL_USER)):
+			prompt = template.format(voice=_VOICE_RULE, candidates=cands, fragments=fragments)
+			raw = transport(system, prompt, 1024)
+			ideas.extend(_extract_json_array(raw) or [])
 		cursor += len(lot)
 	return ideas
 

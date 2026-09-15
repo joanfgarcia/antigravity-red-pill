@@ -4,7 +4,9 @@ import json
 
 from red_pill.memento.agentic import (
 	REFINE_MULTI_SYSTEM,
+	REFINE_SOCIAL_SYSTEM,
 	REFINE_SYSTEM,
+	REFINE_WORK_SYSTEM,
 	_extract_json,
 	cross_ref_candidates,
 	pending_agentic,
@@ -17,6 +19,22 @@ from red_pill.memento.render import compute_hash, extract_body, render_session, 
 
 def fake_transport(significance=0.8):
 	def transport(system, user, max_tokens):
+		if system in (REFINE_WORK_SYSTEM, REFINE_SOCIAL_SYSTEM):
+			return json.dumps(
+				[
+					{
+						"title": "Idea única de prueba",
+						"significance": significance,
+						"emotion": "cyan",
+						"intensity": 0.7,
+						"theme": "memento_test",
+						"relics": ["carpaccio"],
+						"cross_refs": [],
+						"fragment_ref": 1,
+						"category_score": 0.8 if system == REFINE_WORK_SYSTEM else 0.2,
+					}
+				]
+			)
 		if system == REFINE_MULTI_SYSTEM:
 			return json.dumps(
 				[
@@ -377,7 +395,9 @@ def test_distill_session_fragments_long_work_unit(tmp_path):
 	# Un work unit largo: index con muchos turnos largos
 	dir_rel = rendered.dir_rel
 	index_file = root / dir_rel / "memento" / "index.md"
-	turns = "\n\n".join(f"## 2026-08-01 {10 + i:02d}:00:00 — {'Usuario' if i % 2 == 0 else 'Asistente'}\n{'mensaje ' + 'z' * 800 + str(i)}" for i in range(20))
+	turns = "\n\n".join(
+		f"## 2026-08-01 {10 + i:02d}:00:00 — {'Usuario' if i % 2 == 0 else 'Asistente'}\n{'mensaje ' + 'z' * 800 + str(i)}" for i in range(20)
+	)
 	index_file.write_text("---\nsession_id: opencode:s1\n---\n" + turns, encoding="utf-8")
 
 	prompts = []
@@ -425,7 +445,7 @@ def test_extract_json_array():
 
 def test_refine_session_multi_idea(tmp_path):
 	"""3 destills que forman 2 ideas → 2 refine (no 3, no 1)."""
-	from red_pill.memento.agentic import REFINE_MULTI_SYSTEM, refine_session
+	from red_pill.memento.agentic import REFINE_SOCIAL_SYSTEM, REFINE_WORK_SYSTEM, refine_session
 
 	root, _registry, rendered = _tree_with_session(tmp_path)
 	sections = [
@@ -435,13 +455,32 @@ def test_refine_session_multi_idea(tmp_path):
 	]
 
 	def multi_transport(system, user, max_tokens):
-		if system == REFINE_MULTI_SYSTEM:
+		if system in (REFINE_WORK_SYSTEM, REFINE_SOCIAL_SYSTEM):
 			if "Title: C" in user:  # work unit 002 → sin ideas
 				return "[]"
 			return json.dumps(
 				[
-					{"title": "Idea X", "significance": 0.7, "emotion": "blue", "intensity": 0.5, "theme": "x", "relics": ["r1"], "cross_refs": [], "fragment_ref": 1},
-					{"title": "Idea Y", "significance": 0.6, "emotion": "teal", "intensity": 0.4, "theme": "y", "relics": [], "cross_refs": [], "fragment_ref": 2},
+					{
+						"title": "Idea X",
+						"significance": 0.7,
+						"emotion": "blue",
+						"intensity": 0.5,
+						"theme": "x",
+						"relics": ["r1"],
+						"cross_refs": [],
+						"fragment_ref": 1,
+						"category_score": 0.8 if system == REFINE_WORK_SYSTEM else 0.2,
+					},
+					{
+						"title": "Idea Y",
+						"significance": 0.6,
+						"emotion": "teal",
+						"intensity": 0.4,
+						"theme": "y",
+						"relics": [],
+						"cross_refs": [],
+						"fragment_ref": 2,
+					},
 				]
 			)
 		return json.dumps({})
