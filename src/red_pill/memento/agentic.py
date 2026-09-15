@@ -217,6 +217,18 @@ Output ONLY the JSON array: [{{"title": "...", "significance": 0.0, "emotion": "
 """
 
 
+def _as_list(value: Any) -> List[Any]:
+	"""Normaliza un campo que debería ser lista: el LLM a veces devuelve un int
+	(o None, o un string) en vez de un array → iterarlo reventaba el pase (2026-09-15)."""
+	if isinstance(value, list):
+		return value
+	if value is None:
+		return []
+	if isinstance(value, str):
+		return [value]
+	return []
+
+
 def slugify_title(title: str, max_len: int = 40) -> str:
 	slug = _TITLE_SLUG_RE.sub("-", title.lower()).strip("-")[:max_len].strip("-")
 	return slug or "seccion"
@@ -496,7 +508,7 @@ def distill_session(
 			parsed = _extract_json(raw) or {}
 			title = str(parsed.get("title") or f"Sección {nnn}")[:80]
 			summary = str(parsed.get("summary") or frag_text[:400]).strip()
-			keywords = [str(k) for k in parsed.get("keywords", [])][:8]
+			keywords = [str(k) for k in _as_list(parsed.get("keywords"))][:8]
 			slug = slugify_title(title)
 
 			fields = [
@@ -612,7 +624,7 @@ def _dedup_ideas(ideas: List[Dict[str, Any]], threshold: float = 0.6) -> List[Di
 
 	def toks(idea: Dict[str, Any]) -> set:
 		text = " ".join(
-			[str(idea.get("title", "")), str(idea.get("theme", "")), " ".join(str(r) for r in (idea.get("relics") or []))]
+			[str(idea.get("title", "")), str(idea.get("theme", "")), " ".join(str(r) for r in _as_list(idea.get("relics")))]
 		)
 		return set(re.findall(r"[a-záéíóúüñ]{4,}", text.lower()))
 
@@ -679,19 +691,13 @@ def refine_session(
 			except (TypeError, ValueError):
 				ref_idx = 1
 			origin = frags[ref_idx - 1] if 1 <= ref_idx <= len(frags) else frags[0]
-			cross_refs = [c for c in idea.get("cross_refs", []) if c in candidates]
+			cross_refs = [c for c in _as_list(idea.get("cross_refs")) if c in candidates]
 			try:
 				category_score = max(0.0, min(1.0, float(idea.get("category_score", 0.5) or 0.5)))
 			except (TypeError, ValueError):
 				category_score = 0.5
 			# Sanear relicas: el LLM a veces devuelve un int en vez de un array.
-			raw_relics = idea.get("relics", [])
-			if isinstance(raw_relics, list):
-				relics = [str(r) for r in raw_relics][:4]
-			elif isinstance(raw_relics, str):
-				relics = [raw_relics]
-			else:
-				relics = []
+			relics = [str(r) for r in _as_list(idea.get("relics"))][:4]
 			refine_fm = _frontmatter_block(
 				[
 					("session_id", session_id),
