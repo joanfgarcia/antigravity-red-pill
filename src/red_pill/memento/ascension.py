@@ -605,6 +605,13 @@ def ascender(
 		"cross_refs": cross_refs,
 		"origin": "memento",
 		"refine_ref": _relative_refine_ref(root, refine_path),
+		# Parámetros de la idea (2026-09-15): se guardan en el engrama para poder
+		# filtrar/purgar después (p.ej. bajar el umbral y purgar los engramas con
+		# significance baja, o saber con qué modelo/versión de prompt se curó).
+		"emotion": emotion,
+		"intensity": round(intensity, 2),
+		"engine": str(fm.get("engine") or ""),
+		"prompt_version": str(fm.get("prompt_version") or ""),
 	}
 	if score is not None:
 		metadata["category_score"] = round(float(score), 2)
