@@ -179,3 +179,34 @@ typos). Profiles registered in `model_profiles.yaml` (`tiny_aya_water`,
 > siblings (same backbone, 32K): `tiny-aya-l2-thinker` (thinks in the prompt
 > language) and `tiny-aya-en-thinker` (English reasoning traces) — no official
 > GGUF at the time of this bake-off, so not evaluated.
+
+---
+
+## Pase agéntico Memento (distill + refine file-based) — GRANITE (2026-09-15)
+
+Distinto del distiller del sueño, el **pase Memento** (RFC-002 §4.5) produce los
+`distill/*.md` y `refine/*.md` sobre el árbol. Tras el bake-off de prompts
+(2026-09-15) la decisión es:
+
+- **Modelo**: **Granite-4.1-8B** para TODAS las etapas (distill, refine WORK,
+  refine SOCIAL). tiny-aya quedó descartado: sobre-genera ideas (4-7 por
+  fragmento → ruido) y no separa work/social (clasifica contenido personal como
+  work; la clasificación binaria lo llama `none`). Los parámetros de sampling
+  (repeat_penalty, min_p, presence/frequency_penalty, seed) no corrigen el sesgo.
+
+- **Fraccionado por contexto (n_ctx 10240)**: `MEMENTO_FRAGMENT_MAX_CHARS=8000`
+  (antes 12000 para Aya 32K). El destilado por fases solapadas trocea work units
+  > 8000 en fragmentos con solape de 2 mensajes; un turno individual gigante se
+  sub-particiona por líneas. El presupuesto del refine (`model_prompt_budget`)
+  es dinámico según el modelo servido. Verificado: 62K chars → 9 fragmentos que
+  caben en granite y destilan en 1ª persona.
+
+- **Prompts**: dos llamadas especializadas (`REFINE_WORK_USER` + 
+  `REFINE_SOCIAL_USER`) — un solo prompt pedir ambos tipos confunde a los modelos
+  locales (devuelven `[]` en contenido mixto). Voz en 1ª persona (`_VOICE_RULE`,
+  MODE B: "Joan me cuenta... / le digo..."), alineada con el distiller V3.
+
+- **Trazabilidad**: cada distill/refine guarda `engine` (modelo real) y
+  `prompt_version` (hash de los prompts de la etapa) en el frontmatter; el
+  registry `agentic` guarda `engine`, `distill_prompt_version`,
+  `refine_prompt_version`.

@@ -364,6 +364,24 @@ Cuando un work unit (split o index) excede el presupuesto de contexto:
    `fragment: i`, `fragments_total: N`, `fragment_of: <NNN>` (el work unit).
 4. **Slugs**: `NNN-<slug>-fragmento-i-de-N.md` (orden visible en Obsidian).
 
+**Parametrización por modelo (2026-09-15)** — el tamaño de fragmento depende del
+contexto del modelo servido:
+
+| Modelo | n_ctx | `MEMENTO_FRAGMENT_MAX_CHARS` | Fragmento ≈ tokens |
+|---|---|---|---|
+| **Granite-4.1-8B** (distill/refine Memento) | 10240 | **8000** chars | ~2000-3200 → cabe holgado |
+| tiny-aya-water (solo contexto largo) | 32768 | 12000 chars | ~3000-4800 |
+
+El presupuesto del refine (`model_prompt_budget()`) también es **dinámico según
+el modelo** (`engine_id`): granite → 6144 chars, aya → 28672. Un turno individual
+gigante (una sola cabecera `## ts — role` con body enorme) se sub-particiona por
+líneas con solape y la cabecera repetida (fix 2026-09-15, sesión b3f27f38 de 62K
+chars → 9 fragmentos que caben en granite).
+
+**Trazabilidad**: cada distill/refine guarda `engine` (modelo real servido) y
+`prompt_version` (hash del prompt de la etapa) en el frontmatter; el registry
+`agentic` guarda ambos + `distill_prompt_version`/`refine_prompt_version`.
+
 ### 5.4.2 Refine multi-idea (N ideas de M destills)
 
 Refine lee **todos los fragmentos de un work unit** (M ficheros) y extrae
