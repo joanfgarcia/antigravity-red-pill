@@ -153,19 +153,28 @@ class ElementJobDriver(ResumableJobDriver):
 		index = int(checkpoint_data.get("index", 0))
 
 		if total < 0:
-			# Primer step: fija N y lo congela en el checkpoint (exactamente N).
-			total = len(self._load_elements(payload, cwd))
-		elements = self._load_elements(payload, cwd)  # reanudación: re-lee la fuente
+			# Primer step: fija la LISTA y N, y la congela en el checkpoint.
+			elements = self._load_elements(payload, cwd)
+			total = len(elements)
+		else:
+			elements = checkpoint_data.get("elements")
+			if elements is None:
+				# Reanudación de un checkpoint anterior sin lista congelada: re-lee.
+				elements = self._load_elements(payload, cwd)
 		if index >= total:
 			return StepOutcome(
 				completed=True,
-				new_checkpoint={"index": total, "total": total},
+				new_checkpoint={"index": total, "total": total, "elements": elements},
 				summary=f"{payload.get('title') or self.short_id}: {total} elementos procesados.",
 				progress={"current": total, "total": total, "percent": 100},
 			)
 		if index >= len(elements):
+			# La lista se CONGELÓ en el primer step; si un checkpoint viejo no la
+			# trae y la fuente es dinámica (se encoge al consumir), el índice ya no
+			# existe. Mejor fallar con instrucción que repetir inestable.
 			raise RuntimeError(
-				f"elemento {index} fuera de rango: la fuente devolvió {len(elements)} < {total} (¿cambió la lista a mitad?)"
+				f"elemento {index} fuera de rango: la lista congelada tiene {len(elements)} < {total} "
+				f"(¿checkpoint previo al fix de lista congelada?) — descarta el job y re-encola"
 			)
 
 		element = elements[index]
@@ -182,7 +191,7 @@ class ElementJobDriver(ResumableJobDriver):
 			raise RuntimeError(f"elemento {index} falló (rc={returncode}) tras {elapsed / 60:.1f} min: {tail}")
 
 		index += 1
-		new_checkpoint = {"index": index, "total": total}
+		new_checkpoint = {"index": index, "total": total, "elements": elements}
 		percent = min(100, int(100 * index / total)) if total > 0 else 100
 		return StepOutcome(
 			completed=index >= total,
@@ -201,9 +210,7 @@ class ElementJobDriver(ResumableJobDriver):
 
 		started = time.time()
 		with open(log_path, "a", encoding="utf-8") as log_file:
-			log_file.write(
-				f"\n===== elemento {index} | job {self.short_id} | intento {self.attempts + 1} | cota {self.step_timeout_s}s =====\n"
-			)
+			log_file.write(f"\n===== elemento {index} | job {self.short_id} | intento {self.attempts + 1} | cota {self.step_timeout_s}s =====\n")
 			log_file.flush()
 			try:
 				proc = subprocess.run(
