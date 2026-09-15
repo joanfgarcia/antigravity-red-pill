@@ -600,6 +600,44 @@ def _refine_multi(transport: Transport, frags: List[Dict[str, Any]], candidates:
 	return ideas
 
 
+def _dedup_ideas(ideas: List[Dict[str, Any]], threshold: float = 0.6) -> List[Dict[str, Any]]:
+	"""Deduplica ideas del MISMO work unit (2026-09-15).
+
+	Las dos llamadas (WORK y SOCIAL) sobre el mismo fragmento producen a veces la
+	MISMA idea con clasificaciones distintas (contenido mixto: la técnica en WORK
+	cat~0.9 y su "versión social" en SOCIAL cat~0.3). Se conserva UNA: la de mayor
+	significance; en empate, la de `category_score` más extremo (más lejos del
+	limbo 0.5 → clasificación más clara)."""
+	import re
+
+	def toks(idea: Dict[str, Any]) -> set:
+		text = " ".join(
+			[str(idea.get("title", "")), str(idea.get("theme", "")), " ".join(str(r) for r in (idea.get("relics") or []))]
+		)
+		return set(re.findall(r"[a-záéíóúüñ]{4,}", text.lower()))
+
+	def rank(idea: Dict[str, Any]):
+		try:
+			sig = float(idea.get("significance", 0) or 0)
+		except (TypeError, ValueError):
+			sig = 0.0
+		try:
+			cat = float(idea.get("category_score", 0.5) or 0.5)
+		except (TypeError, ValueError):
+			cat = 0.5
+		return (sig, abs(cat - 0.5))
+
+	kept: List[Dict[str, Any]] = []
+	kept_tokens: List[set] = []
+	for idea in sorted(ideas, key=rank, reverse=True):
+		t = toks(idea)
+		if any(t and kt and len(t & kt) / min(len(t), len(kt)) > threshold for kt in kept_tokens):
+			continue
+		kept.append(idea)
+		kept_tokens.append(t)
+	return kept
+
+
 def refine_session(
 	root: Path,
 	dir_rel: str,
@@ -626,7 +664,7 @@ def refine_session(
 
 	max_significance = 0.0
 	for nnn, frags in sorted(groups.items()):
-		for idea in _refine_multi(transport, frags, candidates):
+		for idea in _dedup_ideas(_refine_multi(transport, frags, candidates)):
 			try:
 				significance = max(0.0, min(1.0, float(idea.get("significance", 0.0))))
 			except (TypeError, ValueError):

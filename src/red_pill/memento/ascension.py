@@ -420,11 +420,16 @@ def parse_refine(text: str) -> Tuple[Dict[str, Any], str]:
 	return fm, "\n".join(lines[close + 1 :]).strip()
 
 
-def refine_point_id(session_id: str, source_lines: str) -> str:
-	"""Point id determinista (uuid5) → idempotencia por (session_id, source_lines).
+def refine_point_id(session_id: str, source_lines: str, discriminator: str = "") -> str:
+	"""Point id determinista (uuid5) → idempotencia por refine.
 
-	Re-promover el mismo refine reutiliza el id y hace upsert (no duplica)."""
-	return str(uuid.uuid5(uuid.NAMESPACE_OID, f"memento:{session_id}:{source_lines}"))
+	Incluye un `discriminator` (el slug del refine) porque un MISMO work unit
+	(`source_lines`) produce VARIAS ideas (multi-idea): sin él, dos ideas del
+	mismo fragmento colisionaban en el mismo id y el segundo upsert sobreescribía
+	al primero (fix 2026-09-15). Re-promover el MISMO refine reutiliza el id
+	(upsert, no duplica)."""
+	key = f"memento:{session_id}:{source_lines}:{discriminator}"
+	return str(uuid.uuid5(uuid.NAMESPACE_OID, key))
 
 
 def _relative_refine_ref(root: Path, refine_path: Path) -> str:
@@ -580,7 +585,7 @@ def ascender(
 			category = detect_category_heuristics(body)
 		collection = f"{category}_memories"
 
-	point_id = refine_point_id(session_id, source_lines)
+	point_id = refine_point_id(session_id, source_lines, refine_path.stem)
 
 	if memory_manager is None:
 		from red_pill.memory import MemoryManager

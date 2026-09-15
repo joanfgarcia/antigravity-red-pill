@@ -105,7 +105,7 @@ def test_ascender_promotes_to_social(refine_file: Path):
 
 	assert result["ascended"] is True
 	assert result["collection"] == "social_memories"
-	assert result["point_id"] == refine_point_id("opencode:ses_test", "memento/index.md#l10-40")
+	assert result["point_id"] == refine_point_id("opencode:ses_test", "memento/index.md#l10-40", "001-x")
 
 	call = mm.calls[0]
 	assert call["collection"] == "social_memories"

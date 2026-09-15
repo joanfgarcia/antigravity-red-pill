@@ -443,6 +443,31 @@ def test_extract_json_array():
 	assert _extract_json_array("sin array") is None
 
 
+def test_dedup_ideas_fusiona_work_y_social_duplicadas():
+	"""2026-09-15: el MISMO fragmento produce la idea técnica en WORK (cat~0.9) y
+	su versión social en SOCIAL (cat~0.3). La dedup conserva UNA (mayor significance)."""
+	from red_pill.memento.agentic import _dedup_ideas
+
+	ideas = [
+		{"title": "Ajustar formato HKDFLabel para alinear", "theme": "hkdf_label_format", "significance": 0.95, "category_score": 0.95, "relics": ["formato HKDFLabel"]},
+		{"title": "Joan me dice que el formato HKDFLabel", "theme": "hkdf_label_format", "significance": 0.85, "category_score": 0.30, "relics": ["formato HKDFLabel"]},
+	]
+	kept = _dedup_ideas(ideas)
+	assert len(kept) == 1
+	assert kept[0]["significance"] == 0.95  # la de mayor significance (work)
+	assert kept[0]["category_score"] == 0.95
+
+
+def test_dedup_ideas_conserva_ideas_distintas():
+	from red_pill.memento.agentic import _dedup_ideas
+
+	ideas = [
+		{"title": "Refactor del endpoint de autenticación", "theme": "auth_endpoint", "significance": 0.9, "category_score": 0.9, "relics": []},
+		{"title": "Reflexión personal sobre el descanso", "theme": "descanso_personal", "significance": 0.6, "category_score": 0.1, "relics": []},
+	]
+	assert len(_dedup_ideas(ideas)) == 2
+
+
 def test_trazabilidad_engine_y_prompt_version(tmp_path, monkeypatch):
 	"""2026-09-15: distill y refine guardan el modelo real y la versión del prompt
 	con que se hicieron — permite saber si un engrama se hizo con granite/aya y si
@@ -491,22 +516,22 @@ def test_refine_session_multi_idea(tmp_path):
 			return json.dumps(
 				[
 					{
-						"title": "Idea X",
+						"title": "Refactor del endpoint de auth",
 						"significance": 0.7,
 						"emotion": "blue",
 						"intensity": 0.5,
-						"theme": "x",
-						"relics": ["r1"],
+						"theme": "auth_endpoint",
+						"relics": ["desbloqueado el lint"],
 						"cross_refs": [],
 						"fragment_ref": 1,
 						"category_score": 0.8 if system == REFINE_WORK_SYSTEM else 0.2,
 					},
 					{
-						"title": "Idea Y",
+						"title": "Reflexión sobre el descanso",
 						"significance": 0.6,
 						"emotion": "teal",
 						"intensity": 0.4,
-						"theme": "y",
+						"theme": "descanso_personal",
 						"relics": [],
 						"cross_refs": [],
 						"fragment_ref": 2,
@@ -521,9 +546,9 @@ def test_refine_session_multi_idea(tmp_path):
 	refine_dir = root / rendered.dir_rel / "refine"
 	files = sorted(p.name for p in refine_dir.glob("*.md"))
 	# work unit 001 → 2 ideas (2 ficheros); work unit 002 → transport dict vacío → _extract_json_array devuelve None → 0
-	assert files == ["001-idea-x.md", "001-idea-y.md"]
+	assert files == ["001-refactor-del-endpoint-de-auth.md", "001-reflexi-n-sobre-el-descanso.md"]
 
-	text = (refine_dir / "001-idea-y.md").read_text(encoding="utf-8")
+	text = (refine_dir / "001-reflexi-n-sobre-el-descanso.md").read_text(encoding="utf-8")
 	assert "distill_ref: distill/001-b.md" in text  # fragment_ref=2 → origen del 2º fragment
 	assert "fragment_ref: 2" in text
 	assert "significance: 0.60" in text
