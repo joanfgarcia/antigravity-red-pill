@@ -443,6 +443,62 @@ def test_extract_json_array():
 	assert _extract_json_array("sin array") is None
 
 
+def test_http_transport_reintenta_recortando_ante_500():
+	from unittest.mock import MagicMock, patch
+
+	from red_pill.memento.agentic import http_transport
+
+	content = "x" * 5000
+
+	def resp(status, text="{}"):
+		m = MagicMock()
+		m.status_code = status
+		m.json.return_value = {"choices": [{"message": {"content": text}}]}
+		m.raise_for_status.side_effect = None if status == 200 else __import__("requests").exceptions.HTTPError()
+		return m
+
+	with patch("requests.post") as mock_post:
+		mock_post.side_effect = [resp(500), resp(200, '{"ok": 1}')]
+		out = http_transport("sys", content, 64)
+		assert out == '{"ok": 1}'
+		# el segundo intento recortó el prompt (0.6 × 5000)
+		assert len(mock_post.call_args_list[1].kwargs["json"]["messages"][1]["content"]) < 4000
+
+
+def test_http_transport_exito():
+	from unittest.mock import MagicMock, patch
+
+	from red_pill.memento.agentic import http_transport
+
+	m = MagicMock()
+	m.status_code = 200
+	m.json.return_value = {"choices": [{"message": {"content": "RESULT"}}]}
+	with patch("requests.post", return_value=m):
+		assert http_transport("sys", "user", 64) == "RESULT"
+
+
+def test_engine_id_detecta_modelo_y_cachea(monkeypatch):
+	from red_pill.memento import agentic
+
+	class FakeResp:
+		def read(self):
+			return b'{"data": [{"id": "modelo-x"}], "object": "list"}'
+
+	monkeypatch.setattr(agentic, "_ENGINE_CACHE", None)
+	monkeypatch.setattr(__import__("urllib.request", fromlist=["request"]), "urlopen", lambda *a, **k: FakeResp())
+	assert agentic.engine_id() == "modelo-x"
+	assert agentic.engine_id() == "modelo-x"  # cacheado (urlopen solo se llama 1 vez)
+
+
+def test_as_list_normaliza():
+	from red_pill.memento.agentic import _as_list
+
+	assert _as_list(["a"]) == ["a"]
+	assert _as_list(None) == []
+	assert _as_list("s") == ["s"]
+	assert _as_list(2) == []  # int (el LLM a veces devuelve int) → no revienta
+
+
 def test_dedup_ideas_fusiona_work_y_social_duplicadas():
 	"""2026-09-15: el MISMO fragmento produce la idea técnica en WORK (cat~0.9) y
 	su versión social en SOCIAL (cat~0.3). La dedup conserva UNA (mayor significance)."""

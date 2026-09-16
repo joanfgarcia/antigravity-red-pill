@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -166,6 +167,67 @@ def test_skip_exit_code_avanza_sin_reintentar():
 def test_driver_registrado():
 	assert ElementJobDriver in get_driver("element_job").__class__.__mro__
 	assert ElementJobDriver.source == "element_job"
+
+
+def test_validate_rechaza_payloads_invalidos(tmp_path):
+	with pytest.raises(ValueError, match="step_command"):
+		ElementJobDriver.validate({"elements": [1]})
+	with pytest.raises(ValueError, match="elements"):
+		ElementJobDriver.validate({"step_command": "x"})
+	with pytest.raises(ValueError, match="elements_file no existe"):
+		ElementJobDriver.validate({"step_command": "x", "elements_file": str(tmp_path / "no.json")})
+	with pytest.raises(ValueError, match="124"):
+		ElementJobDriver.validate({"step_command": "x", "elements": [1], "defer_exit_code": 124})
+
+
+def test_preflight_llm_required_difiere():
+	driver = _bind(ElementJobDriver())
+	from red_pill.jobs.drivers.base import JobDeferred
+
+	driver._llm_healthy = staticmethod(lambda port: False)
+	with pytest.raises(JobDeferred):
+		driver.preflight({"preflight": {"llm_required": True}})
+	driver._llm_healthy = staticmethod(lambda port: True)
+	driver.preflight({"preflight": {"llm_required": True}})  # no lanza
+
+
+def test_load_elements_desde_fichero(tmp_path):
+	driver = _bind(ElementJobDriver())
+	elems = tmp_path / "elems.json"
+	elems.write_text('["a","b"]')
+	payload = _payload()
+	del payload["elements"]
+	payload["elements_file"] = str(elems)
+	assert driver._load_elements(payload, str(tmp_path)) == ["a", "b"]
+
+
+def test_build_argv_con_y_sin_systemd(tmp_path):
+	driver = _bind(ElementJobDriver())
+	driver._has_systemd = staticmethod(lambda: True)
+	argv = driver._build_argv(_payload(), str(tmp_path))
+	assert argv[0] == "systemd-run"
+	assert "--unit=redpill-job-job-1234" in argv
+	driver._has_systemd = staticmethod(lambda: False)
+	argv = driver._build_argv(_payload(), str(tmp_path))
+	assert argv == ["echo", "process"]
+
+
+def test_build_env_expone_elemento_y_codigos():
+	driver = _bind(ElementJobDriver())
+	env = driver._build_env(_payload(), "/tmp", "el-elem", 3)
+	assert json.loads(env["RP_ELEMENT"]) == "el-elem"
+	assert env["RP_ELEMENT_INDEX"] == "3"
+	assert env["RP_DEFER_EXIT_CODE"] == "77"
+
+
+def test_run_command_timeout_retorna_124():
+	import subprocess as sp
+
+	driver = _bind(ElementJobDriver(), timeout=60)
+	driver._has_systemd = staticmethod(lambda: False)
+	with patch("red_pill.jobs.drivers.element.subprocess.run", side_effect=sp.TimeoutExpired("cmd", 60)):
+		elapsed, rc = driver._run_command(_payload(), "/tmp", "x", 0)
+	assert rc == 124 and elapsed >= 0
 
 
 def test_template_yaml_y_recetario_existen():

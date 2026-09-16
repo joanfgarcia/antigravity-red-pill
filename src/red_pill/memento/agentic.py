@@ -323,7 +323,7 @@ def http_transport(system: str, user: str, max_tokens: int) -> str:
 	llm_timeout = int(getattr(cfg, "MEMENTO_LLM_TIMEOUT", 180))
 	attempt_user = _fit_prompt(user)
 	llm = _llm_env()
-	payload = {"messages": [{"role": "system", "content": system}, {"role": "user", "content": attempt_user}],
+	payload: Dict[str, Any] = {"messages": [{"role": "system", "content": system}, {"role": "user", "content": attempt_user}],
 		"temperature": 0.1, "max_tokens": max_tokens}
 	# RFC-HARNESS-002 §7: task/model/thinking desde el env del job (RP_LLM_*).
 	# Sin env → sin task/model → el daemon cae a su default (comportamiento actual).
@@ -340,6 +340,7 @@ def http_transport(system: str, user: str, max_tokens: int) -> str:
 			new_len = int(len(attempt_user) * 0.6)
 			logger.warning(f"LLM 500 (posible contexto) — recortando prompt {len(attempt_user)}→{new_len} chars y reintentando")
 			attempt_user = attempt_user[:new_len]
+			payload["messages"][1]["content"] = attempt_user
 			continue
 		response.raise_for_status()
 		return str(response.json()["choices"][0]["message"]["content"]).strip()
