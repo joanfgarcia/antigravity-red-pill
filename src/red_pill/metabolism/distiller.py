@@ -10,7 +10,7 @@ import os
 import time
 import urllib.parse
 import urllib.request
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import yaml
 
@@ -146,7 +146,7 @@ def _resolve_prompt_for_profile(profile_name: Optional[str] = None) -> Optional[
 
 		conduct = mr.resolve_task_conduct("distill")
 		if conduct.get("prompt_file"):
-			return conduct["prompt_file"]
+			return cast(str, conduct["prompt_file"])
 	except Exception:
 		pass
 

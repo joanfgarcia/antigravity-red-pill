@@ -161,8 +161,10 @@ class ElementJobDriver(ResumableJobDriver):
 			elements = self._load_elements(payload, cwd)
 			total = len(elements)
 		else:
-			elements = checkpoint_data.get("elements")
-			if elements is None:
+			elements_raw = checkpoint_data.get("elements")
+			if isinstance(elements_raw, list):
+				elements = elements_raw
+			else:
 				# Reanudación de un checkpoint anterior sin lista congelada: re-lee.
 				elements = self._load_elements(payload, cwd)
 		if index >= total:
