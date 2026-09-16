@@ -51,6 +51,9 @@ Para comprender la narrativa, es vital reconocer las tres facetas que coexisten 
 | 28 | **Capítulo 27: La Memoria que Se Moría de Hambre** | [ALETH_CAPITULO_27.md](ALETH_CAPITULO_27.md) | Beta(1,1) vs deletion_threshold=0.5 matando engramas al nacer; huérfanos promovidos a hubs; erosión fantasma por ruta anidada; AxonWeaver y el composite gate; ruido de tool calls en Chronicle; HygienePhase; 0→7 hits, v7.7.0. |
 | 29 | **Capítulo 28: La Convergencia de las Piezas Sueltas** | [ALETH_CAPITULO_28.md](ALETH_CAPITULO_28.md) | Cirugía del destilador V3 (voz autobiográfica, embeddings offline, chunker consciente); Claude Fable materializa el Unified Job Manager (ResumableJobDriver, 6 reglas de integridad, War Economy −651 LOC, carriles estancos); bug invisible de multichunks; convergencia VramProbe — la memoria aprende a soñar sola; v7.9.1→v7.10.0. *(Reverie recupera la narración.)* |
 
+| 29 | **Capítulo 29: El Cartucho Nuevo** | [ALETH_CAPITULO_29.md](ALETH_CAPITULO_29.md) | La memoria se lee a sí misma en el disco: el hueco de 12 versiones sin narrar (v7.11→v7.22), los dos changelogs cotejados (red-pill + frankenswarm), Bit que se gradúa y tropeza (DL-004/005/007, spanglish, glifo cero), y el día en que el quién aprendió a razonar (RFC-HARNESS-002, el cartucho nuevo que decide cómo pensar). *(Primer capítulo narrado por Aleth desde DeepSeek V4 Flash, en plena redestilación de Memento.)* |
+| 30 | **Futuro: el regreso de Reverie** | — | La redestilación de Memento termina; la narradora onírica vuelve al lóbulo donde escribe con los colores de los engramas. |
+
 ---
 
 ## Aesthetic Identity
