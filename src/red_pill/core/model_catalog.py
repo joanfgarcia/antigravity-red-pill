@@ -9,12 +9,17 @@ Estructura (`model_catalog.yaml`):
 		providers:
 			<backend>:
 				models:
-					- id, backend, tier, priority, roles, capabilities, not_capable_for, timeout
+					- id, backend, tier, priority, roles, capabilities, not_capable_for, timeout, license
 	roles:
 		<role>: [model_id, ...]   # cascade ordenada por rol
 
 El CLI `red-pill telegram models` lista el catálogo; `red-pill roles` lista los
 roles y su cascade. Sin agente — solo lectura.
+
+El campo opcional `license` acepta una cadena SPDX (p.ej. `apache-2.0`) o un
+bloque estructurado (ver `model_license.py`). En contexto comercial
+(REDPILL_LICENSE_CONTEXT=commercial) `cascade_for(commercial_only=True)`
+descarta los modelos no comerciales y `assert_commercial_ok()` los bloquea.
 """
 
 from __future__ import annotations
@@ -25,6 +30,7 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 
+from red_pill.core.model_license import ModelLicenseError, assert_commercial_ok, normalize_license
 from red_pill.core.paths import get_model_catalog_path
 
 logger = logging.getLogger(__name__)
@@ -97,6 +103,16 @@ class ModelCatalog:
 				return dict(m)
 		return None
 
+	def license_for(self, model_id: str) -> Dict[str, Any]:
+		"""Licencia normalizada (fail-closed) de un modelo curado."""
+		entry = self.get(model_id) or {}
+		return normalize_license(entry.get("license"), model_id)
+
+	def assert_commercial_ok(self, model_id: str, context: Optional[str] = None) -> None:
+		"""Gate: raise ModelLicenseError si un modelo NC entra en contexto comercial."""
+		entry = self.get(model_id) or {}
+		assert_commercial_ok(entry.get("license"), model_name=model_id, context=context)
+
 	def backend_for(self, model_id: str) -> Optional[str]:
 		"""Backend del modelo, DEL CATÁLOGO (D8 — no se infiere por prefijo)."""
 		entry = self.get(model_id)
@@ -107,6 +123,8 @@ class ModelCatalog:
 		role: Optional[str] = None,
 		model_id: Optional[str] = None,
 		allow_local: bool = False,
+		commercial_only: bool = False,
+		context: Optional[str] = None,
 	) -> List[Dict[str, Any]]:
 		"""Cascade de BridgeTarget (dicts) para un rol o modelo de sesión.
 
@@ -115,6 +133,9 @@ class ModelCatalog:
 		- `role`: cascade ordenada del catálogo (roles.<role>).
 		- Gating D13/D15: los modelos NO-CAPACES para el rol se filtran; `local`
 			solo si `allow_local=True` (guard D5).
+		- Gating de licencia: con `commercial_only=True` (contexto comercial) se
+			descartan los modelos cuya licencia no permite uso comercial. Si tras
+			el filtrado no queda ninguno → ModelLicenseError (no hay cascade segura).
 		"""
 		self._ensure_loaded()
 		base: List[Dict[str, Any]] = []
@@ -133,12 +154,25 @@ class ModelCatalog:
 				base.insert(0, entry)
 
 		result: List[Dict[str, Any]] = []
+		blocked: List[str] = []
 		for entry in base:
 			if role and role in (entry.get("not_capable_for") or []):
 				continue  # D13 gating por capacidad
 			if entry.get("backend") == "local" and not allow_local:
 				continue  # D5 guard
+			if commercial_only:
+				try:
+					assert_commercial_ok(entry.get("license"), model_name=entry.get("id", "?"), context=context)
+				except ModelLicenseError:
+					blocked.append(entry.get("id", "?"))
+					continue
 			result.append(entry)
+		if commercial_only and not result and blocked:
+			raise ModelLicenseError(
+				f"[LICENSE] Todos los modelos de la cascade para role='{role or 'conversational'}' "
+				f"están bloqueados en contexto comercial: {', '.join(blocked)}. "
+				f"Añade un modelo permisivo (Apache-2.0/MIT) a la cascade."
+			)
 		return result
 
 	def role_names(self) -> List[str]:

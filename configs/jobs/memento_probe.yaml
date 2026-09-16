@@ -1,0 +1,20 @@
+# Memento — prueba de resíntesis+refinado con prompt corregido (VOICE + calibración).
+#
+# Copia cada sesión de la muestra a /tmp/resintesis y ejecuta distill+refine con
+# el prompt corregido (VOICE_RULE 1ª persona + category_score calibrado). 1 sesión
+# por step (element_job). No toca el árbol sembrado — solo /tmp/resintesis.
+# Se analiza el resultado para decidir el tuning (voz + clasificación).
+source: element_job
+priority: 3
+title: Memento prueba resíntesis+refinado prompt corregido (25 sesiones)
+mission_id: memento-probe
+step_command: uv run python scripts/memento_probe_resynth.py
+elements_command: uv run python scripts/memento_probe_resynth.py --list
+defer_exit_code: 77
+# RFC-HARNESS-002 §7: task refine (el probe resíntesis usa el prompt corregido).
+llm:
+  task: refine
+preflight:
+  llm_required: true
+control:
+  max_step_minutes: 20   # watchdog por sesión

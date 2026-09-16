@@ -10,7 +10,7 @@ import os
 import time
 import urllib.parse
 import urllib.request
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import yaml
 
@@ -125,7 +125,7 @@ def _correct_lang_label(llm_lang: str, source_text: str) -> str:
 def _resolve_prompt_for_profile(profile_name: Optional[str] = None) -> Optional[str]:
 	"""Look up the per-model `prompt_file` field from model_profiles.yaml.
 
-	If the active profile (from MINION_PROFILE env var, or `profile_name` if
+	If the active profile (from MINION_DEFAULT_PROFILE env var (fallback legacy MINION_PROFILE), or `profile_name` if
 	passed) declares a `prompt_file`, return it. Otherwise return None (the
 	caller will fall back to the default `distiller_v3.txt`).
 
@@ -134,11 +134,24 @@ def _resolve_prompt_for_profile(profile_name: Optional[str] = None) -> Optional[
 	granite_8b works better with the lax `distiller_v3.txt`. This helper
 	implements that mapping at runtime without requiring callers to know
 	which prompt each model prefers.
+
+	RFC-HARNESS-002 §8: la conducta de la TAREA `distill` (incl. el prompt_file
+	del candidato default) la resuelve `model_runtime`; este helper cae a eso
+	primero y a la lógica por env solo si la resolución falla.
 	"""
 	import os
 
+	try:
+		from red_pill.core import model_runtime as mr
+
+		conduct = mr.resolve_task_conduct("distill")
+		if conduct.get("prompt_file"):
+			return cast(str, conduct["prompt_file"])
+	except Exception:
+		pass
+
 	if profile_name is None:
-		profile_name = os.getenv("MINION_PROFILE")
+		profile_name = os.getenv("MINION_DEFAULT_PROFILE") or os.getenv("MINION_PROFILE")
 	if not profile_name:
 		return None
 	try:
@@ -149,6 +162,28 @@ def _resolve_prompt_for_profile(profile_name: Optional[str] = None) -> Optional[
 		return None
 	prompt_file = profile.get("prompt_file")
 	return prompt_file if isinstance(prompt_file, str) and prompt_file else None
+
+
+def assert_active_profile_commercial_ok(profile_name: Optional[str] = None) -> None:
+	"""Compliance gate for the distiller entrypoint.
+
+	Raises `ModelLicenseError` when the active profile (MINION_DEFAULT_PROFILE (fallback legacy MINION_PROFILE), or
+	`profile_name` if passed) is licensed non-commercial and the current run
+	is in a commercial context (REDPILL_LICENSE_CONTEXT=commercial). A no-op
+	in personal context or when no profile is active.
+	"""
+	import os
+
+	if profile_name is None:
+		profile_name = os.getenv("MINION_DEFAULT_PROFILE") or os.getenv("MINION_PROFILE")
+	if not profile_name:
+		return
+	try:
+		from red_pill.core.model_registry import ModelRegistry
+
+		ModelRegistry.assert_commercial_ok(profile_name)
+	except ImportError:
+		return
 
 
 def _validate_relics(relics: Any, raw_content: str, max_relics: int = 2, max_len: int = 200) -> list:
@@ -208,6 +243,8 @@ def distill_engram(
 	import time
 
 	from red_pill.core.providers import ProviderRegistry
+
+	assert_active_profile_commercial_ok()
 
 	cfg_params = load_distiller_config(config_yaml_path).distill_engram
 	params = cfg_params.model_dump()
@@ -387,7 +424,7 @@ def synthesize_hub(summaries: List[str]) -> str:
 
 	payload = json.dumps(
 		{
-			"model": "distillation",
+			"task": "hub",
 			"messages": [
 				{
 					"role": "system",
@@ -463,7 +500,7 @@ def distill_session_anchors(memory_manager, hub_summaries: List[str]) -> Optiona
 
 	payload = json.dumps(
 		{
-			"model": "distillation",
+			"task": "hub",
 			"messages": [
 				{
 					"role": "system",

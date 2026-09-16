@@ -415,3 +415,75 @@ def test_handle_pact_show_reads_singleton(mock_mgr, capsys):
 
 	mock_mgr.return_value.client.retrieve.assert_called_once_with(collection_name="social_memories", ids=[ID_BOND], with_payload=True)
 	assert "operating under 760" in capsys.readouterr().out
+
+
+@patch("red_pill.cli._find_job")
+@patch("red_pill.cognitive.queue_manager.CognitiveQueueManager")
+def test_cli_job_skip(mock_qm, mock_find):
+	"""'red-pill job skip' marca el siguiente step (JOBS-001)."""
+	mock_qm.return_value.skip_next_task.return_value = True
+	mock_qm.return_value.get_task.return_value = {"id": "abc-123", "status": "PENDING"}
+	mock_find.return_value = {"id": "abc-123"}
+	with patch("sys.argv", ["red-pill", "job", "skip", "abc"]):
+		main()
+	mock_qm.return_value.skip_next_task.assert_called_once_with("abc-123")
+
+
+@patch("red_pill.cli._find_job")
+@patch("red_pill.cognitive.queue_manager.CognitiveQueueManager")
+def test_cli_job_skip_no_encontrado(mock_qm, mock_find):
+	mock_find.return_value = None
+	with patch("sys.argv", ["red-pill", "job", "skip", "zzz"]):
+		main()  # no lanza
+
+
+@patch("red_pill.cli._find_job")
+@patch("red_pill.cognitive.queue_manager.CognitiveQueueManager")
+def test_cli_job_status(mock_qm, mock_find):
+	mock_find.return_value = {"id": "abc-123", "status": "PROCESSING", "checkpoint_data": "{}"}
+	mock_qm.return_value.get_task.return_value = {"id": "abc-123", "status": "PROCESSING"}
+	with patch("sys.argv", ["red-pill", "job", "status", "abc"]):
+		main()
+
+
+@patch("red_pill.cli._find_job")
+@patch("red_pill.cognitive.queue_manager.CognitiveQueueManager")
+def test_cli_job_resume_kill_purge(mock_qm, mock_find):
+	mock_find.return_value = {"id": "abc-123"}
+	mock_qm.return_value.get_task.return_value = {"id": "abc-123", "status": "PENDING"}
+	mock_qm.return_value.resume_task.return_value = True
+	mock_qm.return_value.kill_task.return_value = True
+	with patch("sys.argv", ["red-pill", "job", "resume", "abc"]):
+		main()
+	with patch("sys.argv", ["red-pill", "job", "kill", "abc"]):
+		main()
+	with patch("sys.argv", ["red-pill", "job", "purge", "--yes"]):
+		main()
+
+
+@patch("red_pill.cli._find_job")
+@patch("red_pill.cognitive.queue_manager.CognitiveQueueManager")
+def test_cli_job_logs_y_sin_log(mock_qm, mock_find, tmp_path):
+	import red_pill.jobs.drivers as drv
+	mock_qm.return_value.get_task.return_value = {"id": "abc-123"}
+	with patch.object(drv, "job_log_path", lambda jid: tmp_path / "nolog.log"):
+		mock_find.return_value = {"id": "abc-123"}
+		with patch("sys.argv", ["red-pill", "job", "logs", "abc"]):
+			main()
+	# con log existente
+	logf = tmp_path / "existe.log"
+	logf.write_text("linea1\nlinea2\n")
+	with patch.object(drv, "job_log_path", lambda jid: logf):
+		with patch("sys.argv", ["red-pill", "job", "logs", "abc", "--tail", "1"]):
+			main()
+
+
+@patch("red_pill.cognitive.queue_manager.CognitiveQueueManager")
+def test_cli_job_list(mock_qm):
+	mock_qm.return_value.list_active.return_value = [{"id": "abc", "source": "x", "status": "PENDING"}]
+	mock_qm.return_value.list_paused.return_value = []
+	mock_qm.return_value.list_frustrated.return_value = []
+	with patch("sys.argv", ["red-pill", "job", "list"]):
+		main()
+	with patch("sys.argv", ["red-pill", "job", "list", "--all"]):
+		main()

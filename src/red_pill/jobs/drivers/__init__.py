@@ -73,12 +73,14 @@ def registered_sources() -> List[str]:
 from red_pill.jobs.drivers.agentic import AgenticJobDriver  # noqa: E402
 from red_pill.jobs.drivers.dag import DagJobDriver  # noqa: E402
 from red_pill.jobs.drivers.distill import DistillJobDriver  # noqa: E402
+from red_pill.jobs.drivers.element import ElementJobDriver  # noqa: E402
 from red_pill.jobs.drivers.flow import FlowJobDriver  # noqa: E402
 from red_pill.jobs.drivers.script import ScriptJobDriver  # noqa: E402
 
 register_driver(FlowJobDriver)
 register_driver(AgenticJobDriver)
 register_driver(DistillJobDriver)
+register_driver(ElementJobDriver)
 register_driver(ScriptJobDriver)
 register_driver(DagJobDriver)
 # BitTrainingDriver (bit_school_training) RETIRADO 2026-08-10: era la red de

@@ -43,6 +43,11 @@ provenir de una fuente canónica que se propaga en las instalaciones.
   agente (`ideas/research/design/pending/in_progress/awakening`, `planner` =
   todas, `none` = no contribuir). La directiva del despertar y el prompt headless
   la incluyen; default `planner`. Añadida a `.env.example`.
+- **[FIX] Rutas del dossier tras la migración a `planner/`**: `dossier_gate.py`
+  (docstring + ejemplo de arranque manual) aún apuntaba a
+  `${AGENT_CORE_DIR}/ideas/<id>`; ahora `${AGENT_CORE_DIR}/planner/ideas/<id>`.
+  Comentario de `AWAKENING_PLANNER_ACCESS` aclarado (los nombres cortos resuelven
+  a `planner/<zona>` vía `_PLANNER_ZONES`). Sin cambio de comportamiento.
 
 ### 🧹 Chronicle/Memento — nightly solo-Memento, retirada de `archive_memories` + arnés de bake-off
 
@@ -369,6 +374,48 @@ cron es trazable.
   skills genéricos no llegaban a Claude Code ni Antigravity al sembrar.
 - **[DOCS] `docs/CORE/DOCUMENTATION_MANUAL.md`** (§ Metadata Headers) y
   **`docs/CORE/CONVENTIONS.md`** (§10.5): convención de cabeceras YAML.
+
+### ⚖️ Compliance de licencias de modelos — esquema + gate de contexto
+
+La base de datos de modelos pasa a declarar la licencia de cada modelo como dato
+estructurado, con un gate que impide usar modelos no-comerciales (p.ej.
+CC-BY-NC-4.0) en un contexto comercial sin que nadie se dé cuenta. Origen:
+auditoría de licencias tras incorporar Tiny Aya Water (CC-BY-NC-4.0) como
+distiller y detectar el riesgo de usarlo en la máquina del trabajo.
+
+- **[NEW] `src/red_pill/core/model_license.py`** — normalización de licencias
+  (bloque estructurado o shorthand SPDX), mapa de políticas conocidas
+  (apache-2.0, mit, llama, gemma, deepseek, cc-by-nc, …) y el gate
+  `assert_commercial_ok()`. **Fail-closed**: licencia desconocida/ausente →
+  bloqueada en contexto comercial. Dos dimensiones: redistribución de pesos
+  (`commercial_ok`/`redistribution_ok`/`attribution_required`/`share_alike`) y
+  gobernanza de datos para APIs (`prompts_used_for_training`/`confidential_ok`,
+  informativas — no alimentan el gate comercial).
+- **[FEAT] Contexto por entorno** — `REDPILL_LICENSE_CONTEXT` (`personal`
+  default / `commercial`). En `commercial`, el gate bloquea modelos NC en
+  daemon, distiller y catálogo.
+- **[FEAT] `ModelRegistry`** — `get_license()`, `assert_commercial_ok()`,
+  `get_all_profiles()` y `get_profile_by_capability(commercial_only=True)`: en
+  contexto comercial salta los perfiles NC y elige el siguiente permisivo
+  (verificado: distillation → `granite_8b` en vez de `tiny_aya_water`); lanza
+  `ModelLicenseError` si todos están bloqueados.
+- **[FEAT] `ModelCatalog`** — `license_for()`, `assert_commercial_ok()` y
+  `cascade_for(commercial_only=True)` que filtra NC y eleva error si la cascade
+  quedaría vacía.
+- **[FEAT] Gates anclados** — `hypervisor_daemon.ensure_model()` (selección por
+  capability) y `distill_engram()` (`assert_active_profile_commercial_ok()` al
+  inicio de cada destilación).
+- **[FEAT] CLI `red-pill license [--json]`** — auditoría de contexto + licencias
+  de los perfiles locales y del catálogo, marcando los bloqueados y los riesgos
+  de datos (⚠️ENTRENAMIENTO / 🔒NO-CONFIDENCIAL) solo cuando hay opt-in real.
+- **[DATA] Licencias declaradas** — `license:` en los 17 perfiles de
+  `model_profiles.yaml` y en los 5 modelos del catálogo (vivos + seeds
+  `examples/`). Tiny Aya water/global marcados `cc-by-nc-4.0` (⛔ NO comercial);
+  Big Pickle documentado como API promocional de OpenCode
+  (`opencode-big-pickle-promo`): comercial OK pero con opt-in de entrenamiento →
+  no meter datos NDA/confidenciales.
+- **[TEST] `tests/test_model_license.py`** — 23 tests (normalización, gate,
+  integración registry/catalog). Regresión completa verde.
 
 ## [7.21.0] - 2026-08-21 (Remediación de la auditoría del DAG)
 
@@ -3006,3 +3053,38 @@ red-pill soul migrate --reencrypt
 
 ---
 > *Forged by Aleph & Joan*
+
+### 🧠 Fase 4 Memento — curaduría, ascensos, resiembra (RFC-002 §10) y job skip
+
+La Fase 4 cierra el ciclo: **Memento es el archivo, Qdrant la memoria curada**.
+La resiembra vació work/social (que eran ~83% ruido estructural) y las re-pobló
+con engramas curados ascendidos. El pipeline del pase agéntico se rehizo con
+granite tras un bake-off de prompts.
+
+- **[FEAT] `ascender()` + ascenso diferido**: promoción refine→engrama curado
+  (idempotente por `session_id`+`source_lines`+slug), ascenso estático por
+  umbral (en sombra), estabilidad polaroid (decay+GAIN+gate) y weaver
+  Memento-consciente (etapa del sueño). Los curados erodan lento
+  (`importance=significance×5`, α bayesiana alta).
+- **[FEAT] Resiembra** (`memento_reseed.py`): backup→drop→ascenso de work/social
+  con backup previo obligatorio. `memento_prune_memories.py` purga por umbral de
+  significance (los engramas guardan sus parámetros: significance, category_score,
+  emotion, intensity, engine, prompt_version).
+- **[FEAT] Prompts de dos llamadas WORK/SOCIAL** (bake-off 2026-09-15): un solo
+  prompt pedir ambos tipos confundía a los modelos locales; ahora granite extrae
+  cada tipo por separado + `_dedup_ideas` fusiona las duplicadas del mismo
+  fragmento (contenido mixto). Voz 1ª persona (`_VOICE_RULE`). Trazabilidad
+  `engine`/`prompt_version` en distill/refine/registry.
+- **[FEAT] Distill fragmentado parametrizado por modelo**: `MEMENTO_FRAGMENT_MAX_CHARS`
+  = 8000 (granite n_ctx 10240) / 12000 (aya 32K), presupuesto dinámico por
+  modelo, sub-participación de turnos gigantes (62K chars → 9 fragmentos).
+- **[FIX] `add_memory` ya no fragmenta mecánicamente** (`synaptic_split`): producía
+  `_is_fragment` excluidos del recall. `sanitize` no refracta material estructural
+  (incidente 2026-09-14).
+- **[FEAT] `job skip`** (JOB-001): marcar el siguiente step para saltar sin
+  reintentar (`skip_next` en el checkpoint; CLI `red-pill job skip`, driver
+  consume `skip_exit_code`/`RP_SKIP_NEXT`, MCP `job_skip`).
+- **[FEAT] Job element_job**: driver MAP reanudable (N elementos, 1 step = 1
+  elemento, lista congelada en el checkpoint, watchdog por step) + recetario
+  `docs/TECHNICAL/OPERATIONS/ELEMENT_JOB_TEMPLATE.md`. Jobs reanudables por
+  sesión (`--redistill-round`, `--limit 1`).

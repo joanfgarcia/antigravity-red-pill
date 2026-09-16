@@ -40,3 +40,45 @@ def test_sanitize_llm_json():
 	sanitized = _sanitize_llm_json(bad_json)
 	assert "\\\\e" in sanitized
 	assert "\\\\s" in sanitized
+
+
+def test_detect_source_lang():
+	from red_pill.metabolism.distiller import _detect_source_lang
+
+	assert _detect_source_lang("¿Qué tal? esto es una ñ") == "es"
+	assert _detect_source_lang("café con música y una canción") == "es"
+	assert _detect_source_lang("the and of is in to that") == "en"
+	assert _detect_source_lang("The quick brown fox jumps over the lazy dog and the cat") == "en"
+	assert _detect_source_lang("1234") == ""
+
+
+def test_correct_lang_label():
+	from red_pill.metabolism.distiller import _correct_lang_label
+
+	# modelo dijo 'en' sobre texto español → corregido a 'es'
+	assert _correct_lang_label("en", "Joan me cuenta que el café está frío") == "es"
+	# modelo dijo 'ca' → no se toca
+	assert _correct_lang_label("ca", "El café és fred") == "ca"
+	# modelo dijo 'es' sobre texto inglés sin marcadores → se mantiene si sin señal fuerte
+	assert _correct_lang_label("es", "The and of is") == "en"
+
+
+def test_load_distiller_config_y_prompt(tmp_path):
+	from red_pill.metabolism import distiller as D
+
+	# defaults cuando no hay fichero
+	cfg = D.load_distiller_config(str(tmp_path / "no.yaml"))
+	assert cfg is not None
+
+	# fichero YAML válido (anidado)
+	y = tmp_path / "p.yaml"
+	y.write_text("distill_engram:\n  temperature: 0.3\n")
+	cfg2 = D.load_distiller_config(str(y))
+	assert cfg2.distill_engram.temperature == 0.3
+
+	# prompt: override gana
+	assert D.load_prompt_text("distiller_v3.txt", fallback_prompt="FB", override_text="OV") == "OV"
+	# prompt desde fichero real
+	assert D.load_prompt_text("distiller_v3_voice.txt", fallback_prompt="FB") != "FB"
+	# prompt inexistente → fallback
+	assert D.load_prompt_text("no_existe.txt", fallback_prompt="FB") == "FB"

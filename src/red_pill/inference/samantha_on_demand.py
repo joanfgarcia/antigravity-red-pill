@@ -182,23 +182,33 @@ def _stop_ephemeral(proc: subprocess.Popen) -> None:
 
 
 def _call_llm(port: int, prompt: str, system_prompt: str = "", max_tokens: int = 300, temperature: float = 0.0) -> Optional[str]:
-	"""Send a completion request to llama-server."""
+	"""Send a completion request to llama-server.
+
+	RFC-HARNESS-002 §6.1: cuando el target es el daemon (puerto 8760), la
+	request usa `task: conversation` (selector de tareas — el modelo lo decide
+	task_profiles.yaml, sin hardcodear el basename). El efímero llama-server
+	(no el daemon) no entiende `task`, así que solo se envía al hypervisor.
+	"""
 	url = f"http://127.0.0.1:{port}/v1/chat/completions"
 	messages = []
 	if system_prompt:
 		messages.append({"role": "system", "content": system_prompt})
 	messages.append({"role": "user", "content": prompt})
 
-	payload = json.dumps(
-		{
-			"model": "samantha",
-			"messages": messages,
-			"temperature": temperature,
-			"max_tokens": max_tokens,
-			"seed": -1,
-			"stop": ["<|im_end|>", "<|endoftext|>"],
-		}
-	).encode("utf-8")
+	payload_dict = {
+		"messages": messages,
+		"temperature": temperature,
+		"max_tokens": max_tokens,
+		"seed": -1,
+		"stop": ["<|im_end|>", "<|endoftext|>"],
+	}
+	# Solo el hypervisor (8760) entiende el selector; el efímero es llama-server.
+	if port == 8760:
+		payload_dict["task"] = "conversation"
+	else:
+		payload_dict["model"] = "samantha"
+
+	payload = json.dumps(payload_dict).encode("utf-8")
 
 	req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
 	try:

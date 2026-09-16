@@ -42,6 +42,8 @@ This is the standard threshold for decent laptops and modern mid-tier desktops. 
 For legacy hardware or machines like a standard corporate laptop/RTX 3050 4GB. Here, loading a 7B model can cause memory overflow, forcing partial offloading to the CPU (which slows inference). We prioritize models under 4B parameters or those with enormous contexts.
 
 *   **Primary Recs:**
+	*   **Tiny Aya Water 3.35B (Q4_K_M)** (`CohereLabs/tiny-aya-water-GGUF`): **~2 GB**, and it carries an **enormous context** (500K in the GGUF; served at 32K). European-language variant → excellent Spanish fidelity. Measured on an RTX 5070: 8K ≈ 3.2 GB VRAM, **32K ≈ 6.3 GB**, ~1.5 s. Fits a whole 16K-token session in the RFC-002 Memento distill pass (bake-off 2026-09-14). Best pick when the task is **summarising long conversations** on a tight VRAM budget.
+	    *   **Language flavours (Cohere Labs official):** `tiny-aya-earth` = strongest for **Africa & West Asia**; `tiny-aya-fire` = strongest for **South Asian** languages; `tiny-aya-water` = strongest for the **Asia-Pacific & Europe** region; `tiny-aya-global` = best overall balance across all regions. All ~2 GB, 3.35B, huge context — pick the flavour by the operator's language family.
 	*   **Phi-3-Mini-128K-Instruct (Q4_K_M)** (`bartowski/Phi-3-mini-128k-instruct-GGUF`): Weighing under 2.5GB in VRAM, it's the absolute king for memory-constrained environments. Its massive 128K context window means it can summarize dense, prolonged conversations without forgetting the beginning.
 	*   **Qwen2.5-1.5B-Instruct / 3B-Instruct**: Small, very capable, and incredibly fast. Make sure to use the `Instruct` variants, *never* the `Coder` variants, unless you exclusively want it to refactor Python. (Using a Coder model for social tasks leads to severe hallucinations).
 
@@ -53,7 +55,16 @@ The local LLM daemon (`redpill-llm.service`) dynamically loads profiles and reso
 
 To configure or change the loaded model:
 1. Edit the active profile (e.g., `samantha`) in your model configuration file (`model_profiles.yaml` located in your bunker configuration directory).
-2. Set the `MINION_PROFILE` environment variable to select which profile the daemon should load (defaults to `samantha`).
+2. Set the `MINION_DEFAULT_PROFILE` environment variable to select the default profile the daemon boots to (fallback legacy `MINION_PROFILE`, defaults to `samantha`).
+
+> **RFC-HARNESS-002 (selector por tarea)**: el daemon ya no sirve UN modelo fijo.
+> El body de una request puede declarar `task` (zona curada en
+> `task_profiles.yaml`), `model` (id de perfil o basename GGUF), `thinking`
+> (`off`/`on`/`low` para modelos de razonamiento como Granite 4.2), o los
+> modos `custom`/`experimental` (perfil virtual completo para probar un GGUF
+> nuevo sin tocar la config). El cambio de modelo es EN CALIENTE bajo lock:
+> el daemon descarga el anterior y carga el pedido sin reiniciar. Ver
+> `GET /status` para el modelo cargado, `thinking_mode` y `last_mode`.
 
 Because the daemon now loads the model **on demand**, you do not need to restart the service to apply changes if the daemon is currently idle. If you wish to force a reload immediately, restart the systemd service:
 

@@ -175,44 +175,13 @@ class MemoryManager:
 		recursion_depth: int = 0,
 	) -> str:
 		"""Stores a new engram with B760 validation and emotional chroma."""
-		# v5.6.3: Synaptic Fragmentation (Anti-Amnesia Logic - Pre-validation)
-		# If the text is a massive block, we split it into sinaptic fragments
-		# before validation to support graceful degradation of oversized inputs.
+		# 2026-09-14: la fragmentación automática por chars quedó ELIMINADA.
+		# `synaptic_split` cortaba por separadores mecánicos (sin criterio) y
+		# producía `_is_fragment` que quedan EXCLUIDOS del recall (ruido muerto).
+		# La curaduría debe fragmentar CON CRITERIO (LLM, p.ej. el distill
+		# fragmentado del pase Memento §5.4.1), jamás un corte ciego. El texto
+		# largo se guarda completo; el embedding trunca a su ventana.
 		metadata = (metadata or {}).copy()
-		if len(text) > self.cfg.CHUNK_THRESHOLD and not metadata.get("_is_fragment"):
-			if recursion_depth >= 3:
-				logger.warning("MEM-002: Max recursion depth (3) reached for engram fragmentation. Truncating.")
-				text = text[: self.cfg.CHUNK_THRESHOLD]
-				# Fall through to the normal single-engram save below with the truncated text.
-			else:
-				fragments = synaptic_split(text)
-				parent_id = point_id if point_id else str(uuid.uuid4())
-
-				for i, frag in enumerate(fragments):
-					frag_metadata = metadata.copy()
-					frag_metadata["_is_fragment"] = True
-					frag_metadata["parent_id"] = parent_id
-					frag_metadata["chunk_index"] = i
-					frag_metadata["total_chunks"] = len(fragments)
-
-					# The first fragment keeps the requested point_id (if any)
-					current_frag_id = parent_id if i == 0 else str(uuid.uuid4())
-
-					self.add_memory(
-						collection=collection,
-						text=frag,
-						importance=importance,
-						metadata=frag_metadata,
-						point_id=current_frag_id,
-						color=color,
-						emotion=emotion,
-						recursion_depth=recursion_depth + 1,
-						intensity=intensity,
-						force_immune=force_immune,
-					)
-
-				# Return the ID of the anchor point (fragmentation path only)
-				return parent_id
 
 		# v6.3.8: Ingestion Quality Gate (Cortex Isolation)
 		# Prevent noise and garbage from entering long-term collections.
@@ -1086,6 +1055,17 @@ class MemoryManager:
 					continue
 				seen_content[content_hash] = str(hit.id)
 
+				# Guard estructural (incidente 2026-09-14): la refracción legacy y
+				# la re-fragmentación de oversized NO deben tocar el ecosistema del
+				# sueño (raw_parent/sequence_chunk/synthesis_hub/texture_shadow y
+				# fragmentos) — esas son material estructural excluido del recall.
+				# Antes, sanitize refractaba TODO: los nodos crudos generados por la
+				# refracción entraban al recall como ruido y el count crecía (1→N).
+				# El dedup (arriba) SÍ aplica a todo; la refracción, solo a 'normal'.
+				lazarus = hit.payload.get("lazarus_phase")
+				if hit.payload.get("_is_fragment") or lazarus in ("raw_parent", "sequence_chunk", "synthesis_hub", "texture_shadow"):
+					continue
+
 				# v6.1: Biological Refraction (Refract legacy monolithic Prompts/Responses)
 				if content.startswith("USER: "):
 					import re
@@ -1141,7 +1121,10 @@ class MemoryManager:
 				# v5.6.3: Fragmentation Guard (Refract oversized legacy engrams)
 				# If an engram exceeds the current high-purity limits (e.g. leftovers from v5.6.2),
 				# we delete and re-add it to trigger the synaptic_split logic.
-				if len(content) > self.cfg.CHUNK_THRESHOLD:
+				# Incidente 2026-09-14: la re-fragmentación degrada los 'normal' legítimos
+				# de memoria de trabajo (los convierte en _is_fragment, excluidos del recall).
+				# Solo aplica a legacy políglota (USER:/ASSISTANT:), nunca a curados largos.
+				if len(content) > self.cfg.CHUNK_THRESHOLD and (content.startswith("USER: ") or content.startswith("ASSISTANT: ")):
 					refracted_count += 1
 					if not dry_run:
 						try:

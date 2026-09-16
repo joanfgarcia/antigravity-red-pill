@@ -169,7 +169,8 @@ class SipCheck(ServiceSentinelPlugin):
 
 		req_data = json.dumps(
 			{
-				"model": "test",
+				# Sin model (RFC-HARNESS-002 §6.1): el probe cae al default y no
+				# dispara switch. "test" era un id sin resolver → 400 con el selector.
 				"messages": [{"role": "user", "content": "OK"}],
 				"max_tokens": 1,
 			}

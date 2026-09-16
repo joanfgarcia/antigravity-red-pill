@@ -4,6 +4,25 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-030] Servicio de Gobierno de la Inferencia Local (RFC-HARNESS-002 v3)
+**Date**: 2026-09-15
+**Status**: ACCEPTED & IMPLEMENTED (v3 fusionado; PR-0/PR-1/PR-2 desplegados).
+**Supersedes**: AD-020 (On-Demand Model Loading) — el mecanismo (lock, unload→load, idle, `/unload`, reaper) se conserva íntegro; cambia la semántica: el daemon ya no sirve UN modelo fijo sino un **selector por tarea×modelo + zona curada + modos custom/experimental + razonamiento nativo**.
+**Context**: el pase agéntico Memento (RFC-002) necesita un modelo de contexto largo (`tiny_aya_water`, 32K) mientras el sueño y la conversación usan `granite_8b`. El daemon fijaba UN modelo por `MINION_PROFILE` (restart para cambiar) y el service file llevaba un parche temporal. Además, la llegada de **Granite 4.2** (razonamiento nativo) requería soportar modos thinking (`enable_thinking`/`low_effort`) que llama-cpp-python no expone en su API pública.
+**Decision** (v3 — fusiona RFC-HARNESS-002 + RFC_INVENTARIO_MODELOS_HARNESS):
+- **Selector sin aliases**: `experimental > custom > model > task > config > env`. `task`/`model`/`thinking`/`custom`/`experimental` mutuamente resolubles; id sin resolver → 400 explícito. `task`+`model` exige que el model sea candidato de la tarea (K1).
+- **Separación de registros**: `model_profiles.yaml` = calibración HARDWARE + conducta de MODELO (`chat_format`/`null` = template nativo, `tool_format`, `thinking`); `task_profiles.yaml` = curación de TAREAS (conducta + candidatos con `default: true`); `model_runtime.yaml` = config en caliente (`default_model`, `fallup`, `hot_reload`).
+- **`model_runtime.py`**: fuente única de resolución compartida daemon+clientes (merge por especificidad: candidato > tarea > perfil-conducta > perfil-calibración > config > env). Incluye parsers `toolcall`/`extract_thinking`, validación de modelos (magic bytes GGUF, `model_validation.json` K5) y presupuesto de contexto dinámico.
+- **Razonamiento nativo (Granite 4.2)**: llama-cpp-python NO expone `chat_template_kwargs`; el daemon registra **chat handlers por modo** (`granite-thinking`/`nothink`/`low`) derivados del template nativo del GGUF, seleccionados por request. El bump a llama.cpp ≥ b10603 resultó **innecesario** (0.3.31 ya carga 4.2, refutado por smoke test) → pendiente opcional.
+- **Modos custom/experimental**: `custom` = modelo curado con params (licencia fail-closed); `experimental` = perfil virtual completo (gap de licencia asumido y registrado en `/status.last_mode`), el borrador de la futura entrada en `model_profiles`.
+- **Fallup CPU→GPU**: ascenso automático al liberarse VRAM (nunca descenso), con re-evaluación del tier tras el unload (evita cargar con el modelo anterior ocupando VRAM).
+- **`MINION_PROFILE` → `MINION_DEFAULT_PROFILE`** (fallback legacy con warning, eliminado tras migración verificada).
+- **`llm:` en recipes de jobs**: `inject_llm_env` traduce el bloque `llm:` a env `RP_LLM_*` (script/element/dag por etapa), incl. fichero de contexto `RP_LLM_CONTEXT_FILE` para custom/experimental. Coherencia con DAG-001 (fan-out futuro).
+- **Endpoint `/v1/tokenize`**: count de tokens reales con el tokenizer del modelo cargado (universal en GGUF) para dimensionar splits del refine por tokens en vez de chars.
+**Por qué esto y no alternativas**: no `llama-server` subproceso (cambiaría VRAM management/fallup); no alias legacy en el selector (compatibilidad se migra refactorizando clientes); no bump obligatorio (refutado empíricamente). El INVENTARIO (RFC-HARNESS-001) quedó **SUPERSEDED y archivado** — su vocabulario (`tool_format`, `thinking`, template nativo) se absorbió en `model_profiles` como conducta de modelo, y su invocador `run_battle` pasa a FASE 2 como consumidor de `model_runtime`.
+
+---
+
 ## [AD-025] Job DAG — el dag_job como plantilla genérica recursiva de composición
 **Date**: 2026-08-08
 **Status**: ACCEPTED — mergeado con el PR #84 (v7.17.0).

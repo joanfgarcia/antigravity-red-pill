@@ -12,6 +12,12 @@ profiles:
   #       fidelity (3/3 both-sides). Granite chosen on tiebreakers: Apache-2.0
   #       license, small-expert fit, efficiency. Hermes kept as arch-risk fallback.
   #       (AD-022; docs/BENCHMARKS/DISTILLER_FIDELITY.md)
+  #   distillation (Memento agentic, LONG-CONTEXT) -> tiny_aya_water [PRIMARY]
+  #       RFC-002 file-based pass faces long sessions (16K+ tokens) that exceed
+  #       Granite's 10240 window. Tiny Aya Water 3.35B (2 GB, 500K ctx in GGUF,
+  #       served at 32K) fits a whole 16K-token session and emits disciplined
+  #       refine JSON (4 relics, 2 cross_refs). gemma_3_4b = contrast lens.
+  #       (bake-off 2026-09-14; docs/TECHNICAL/COGNITIVE/DISTILLER_SELECTION.md)
   #   affective/narrative  -> piaget_8b   [alternative]
   #       4/4 JSON + best 3rd-person abstraction, but emits <think> (token tax).
   #   logic / general      -> hermes_8b
@@ -33,6 +39,14 @@ profiles:
     model_path: "models/Granite-4.1-8B-Q4_K_M.gguf"
     binary_type: "gguf"
     chat_format: "chatml"
+    # IBM Granite-4.1 — Apache-2.0. Uso comercial libre.
+    license:
+      id: "apache-2.0"
+      commercial_ok: true
+      redistribution_ok: true
+      attribution_required: false
+      share_alike: false
+      source: "https://huggingface.co/ibm-granite/granite-4.1-8b-instruct"
     # Distiller/sleep role uses chat_format above. When a request carries tools, the
     # daemon switches to this function-calling formatter (minion role) on the same
     # loaded model. Empirically verified: Granite Q4 emits valid OpenAI tool_calls.
@@ -79,6 +93,14 @@ profiles:
     model_path: "models/Qwen3.5-9B-Q4_K_M.gguf"
     binary_type: "gguf"
     chat_format: "chatml"
+    # Qwen — Apache-2.0. Uso comercial libre.
+    license:
+      id: "apache-2.0"
+      commercial_ok: true
+      redistribution_ok: true
+      attribution_required: false
+      share_alike: false
+      source: "https://huggingface.co/Qwen"
     temperature: 0.3
     max_tokens: 4096
     use_mmap: false
@@ -105,6 +127,14 @@ profiles:
     model_path: "models/Beck-8B-Q4_K_M.gguf"
     binary_type: "gguf"
     chat_format: "chatml"
+    # Finetune of Piaget-8B (Qwen3-8B base) — Apache-2.0. Uso comercial libre.
+    license:
+      id: "apache-2.0"
+      commercial_ok: true
+      redistribution_ok: true
+      attribution_required: false
+      share_alike: false
+      source: "https://huggingface.co/Qwen"
     temperature: 0.3
     max_tokens: 4096
     use_mmap: false
@@ -132,6 +162,14 @@ profiles:
     model_path: "models/Piaget-8B-Q4_K_M.gguf"
     binary_type: "gguf"
     chat_format: "chatml"
+    # Finetune of Qwen3-8B — Apache-2.0. Uso comercial libre.
+    license:
+      id: "apache-2.0"
+      commercial_ok: true
+      redistribution_ok: true
+      attribution_required: false
+      share_alike: false
+      source: "https://huggingface.co/Qwen"
     temperature: 0.3
     max_tokens: 4096
     use_mmap: false
@@ -158,6 +196,14 @@ profiles:
     model_path: "models/Hermes-3-Llama-3.1-8B.Q4_K_M.gguf"
     binary_type: "gguf"
     chat_format: "chatml"
+    # NousResearch Hermes-3 — Apache-2.0. Uso comercial libre.
+    license:
+      id: "apache-2.0"
+      commercial_ok: true
+      redistribution_ok: true
+      attribution_required: false
+      share_alike: false
+      source: "https://huggingface.co/NousResearch/Hermes-3-Llama-3.1-8B"
     temperature: 0.3
     max_tokens: 4096
     use_mmap: false
@@ -197,6 +243,14 @@ profiles:
     model_path: "experimental/Samantha/samantha-mistral-instruct-7b.i1-Q4_K_M.gguf"
     binary_type: "gguf"
     chat_format: "chatml"
+    # Samantha (Eric Hartford / QuixiAI) — Apache-2.0. Uso comercial libre.
+    license:
+      id: "apache-2.0"
+      commercial_ok: true
+      redistribution_ok: true
+      attribution_required: false
+      share_alike: false
+      source: "https://huggingface.co/QuixiAI/samantha-mistral-instruct-7b"
     temperature: 0.7
     max_tokens: 1024
     use_mmap: false
@@ -215,8 +269,62 @@ profiles:
   smith:
     model_path: "3rdparty/BitNet-1.58b/models/2B-4T/ggml-model-i2_s.gguf"
     binary_type: "bitnet"
+    # BitNet-2B-4T — MIT. Uso comercial libre.
+    license:
+      id: "mit"
+      commercial_ok: true
+      redistribution_ok: true
+      attribution_required: true
+      share_alike: false
+      source: "https://huggingface.co/HF1BitLLM/Llama3-2-1B-1.58-4bit"
     temperature: 0.0
     max_tokens: 512
     grammar_path: "3rdparty/BitNet-1.58b/validation/json.gbnf"
     use_mmap: false
     capabilities: ["logic", "fast", "coding"]
+
+  # ── Memento agentic-pass distiller/curator (bake-off 2026-09-14) ──────
+  # Tiny Aya Water 3.35B (CohereLabs). RFC-002's file-based pass faces LONG
+  # sessions that exceed Granite's 10240 window; this 2 GB model carries a
+  # large context (500K in GGUF, served at 32K) and fits a 16K-token session
+  # whole. European-language variant → Spanish fidelity; disciplined refine
+  # JSON (4 relics, 2 cross_refs). Set MINION_PROFILE=tiny_aya_water for the
+  # Memento pass. NOT a replacement of granite_8b as the sleep distiller.
+  # Language flavours (Cohere Labs official): earth = Africa & West Asia;
+  # fire = South Asian; water = Asia-Pacific & Europe (this one); global =
+  # best overall balance. Pick by the operator's language family.
+  tiny_aya_water:
+    model_path: "models/tiny-aya-water-q4_k_m.gguf"
+    binary_type: "gguf"
+    hf_model_repo_id: "CohereLabs/tiny-aya-water-GGUF"
+    chat_format: "chatml"
+    # ⛔ CohereLabs Tiny Aya Water — CC-BY-NC-4.0. NO COMERCIAL.
+    # El compliance gate lo BLOQUEA cuando REDPILL_LICENSE_CONTEXT=commercial
+    # (máquina del trabajo). En personal (default) se permite. Requiere atribución.
+    license:
+      id: "cc-by-nc-4.0"
+      commercial_ok: false
+      redistribution_ok: true
+      attribution_required: true
+      share_alike: true
+      source: "https://huggingface.co/CohereLabs/tiny-aya-water"
+    device_fallback: ["gpu", "cpu"]
+    cpu_n_ctx: 16384
+    prompt_file: "distiller_v3_voice.txt"
+    temperature: 0.3
+    max_tokens: 4096
+    use_mmap: false
+    capabilities: ["distillation", "logic", "multilingual", "emotional_intelligence", "long_context"]
+    hardware_affinity:
+      n_ctx: 32768
+      vram_tiers:
+        # 2.0 GB weights + KV. 8K ≈ 3.2 GB, 32K ≈ 6.3 GB (measured RTX 5070).
+        - min_free_gb: 1.5
+          n_gpu_layers: 0
+          n_ctx: 16384
+        - min_free_gb: 4.0
+          n_gpu_layers: -1
+          n_ctx: 8192
+        - min_free_gb: 7.0
+          n_gpu_layers: -1
+          n_ctx: 32768

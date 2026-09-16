@@ -1,0 +1,36 @@
+# Ciclo nocturno unificado (03:00) como composición del dag_job (Fase 4 §5.2).
+#
+# El orden correcto de la Fase 4 es chronicle → sleep: el chronicle produce los
+# refinados (y el ascenso estático/de operador) ANTES de que el sueño consolide,
+# teja, refuerce (weaver Memento-consciente) y ascienda por refuerzo. Antes el
+# sueño (03:00, prio 8) corría antes que el chronicle (04:00, prio 7) → los
+# refinados de hoy no entraban en la consolidación de esta noche.
+#
+# Composición por referencia (RFC_JOB_DAG §4.5): cada etapa `type: dag` incrusta
+# OTRA receta como compound, expandida en el submit, con depends_on/on_fail por
+# etapa. `on_fail: warn` en ambos: si el chronicle falla, el sueño corre igual
+# (consolida lo existente); si el sueño falla, no hay nada que frenar.
+#
+# Decisión del operador (2026-09-14, §5.3 opción A): UN único `nightly` que
+# dispara este job. Se retiran `redpill-sleep.timer` y `redpill-chronicle.timer`.
+# Los recipes `sleep.yaml`/`chronicle.yaml` se conservan como unidades manuales
+# (`job submit --recipe sleep`) y como componentes de este nightly.
+source: dag_job
+priority: 8
+title: Ciclo nocturno (chronicle → sleep)
+mission_id: nightly-cycle
+nightly_exempt: true   # anti-deadlock: el ciclo no se auto-difiere entre unidades
+control:
+  max_step_minutes: 420
+manifest:
+  workdir: .
+  stages:
+    - id: chronicle
+      type: dag
+      recipe: chronicle        # memento + memento-agentic (render delta → distill→refine)
+      on_fail: warn            # si falla → log + señal, NO bloquea el sueño
+    - id: sleep
+      type: dag
+      recipe: sleep            # 3 rituales + 10 fases + thread + finalize (+ refuerzo Memento)
+      on_fail: warn
+      depends_on: [chronicle]

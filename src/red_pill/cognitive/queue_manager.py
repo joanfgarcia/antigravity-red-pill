@@ -685,6 +685,37 @@ class CognitiveQueueManager:
 			)
 			return cursor.rowcount > 0
 
+	def skip_next_task(self, task_id: str) -> bool:
+		"""Marca el siguiente elemento/step para saltar (operador, `job_skip`).
+
+		Escribe `skip_next: true` en el checkpoint (read-modify-write, sin tocar el
+		resto del avance) y, si el job estaba PAUSED/FRUSTRATED, lo devuelve a
+		PENDING con attempts a cero para que el runner lo recoja. Un job en vuelo
+		(PROCESSING/PAUSING) solo se marca: el runner relee `skip_next` en la
+		frontera del step (R3) y el driver lo consume (avanza índice + `skipped`).
+		"""
+		with self._get_connection() as conn:
+			row = conn.execute("SELECT status, checkpoint_data FROM cognitive_tasks WHERE id = ?", (task_id,)).fetchone()
+			if not row:
+				return False
+			try:
+				checkpoint = json.loads(row["checkpoint_data"]) if row["checkpoint_data"] else {}
+			except (json.JSONDecodeError, TypeError):
+				checkpoint = {}
+			checkpoint["skip_next"] = True
+			status = row["status"]
+			if status in ("PAUSED", "FRUSTRATED"):
+				conn.execute(
+					"UPDATE cognitive_tasks SET checkpoint_data = ?, status = 'PENDING', attempts = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+					(json.dumps(checkpoint), task_id),
+				)
+			else:
+				conn.execute(
+					"UPDATE cognitive_tasks SET checkpoint_data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+					(json.dumps(checkpoint), task_id),
+				)
+			return True
+
 	def has_higher_priority_pending(self, sources: List[str], priority: int) -> bool:
 		"""¿Espera un job PENDING de los carriles dados con prioridad ESTRICTAMENTE mayor?
 

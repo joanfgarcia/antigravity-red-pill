@@ -382,8 +382,9 @@ class RedPillConfig(BaseSettings):
 	DEFAULT_MINION_BRIDGE_CASCADE: List[BridgeTarget] = []
 	# AWAKENING_PLANNER_ACCESS: qué puede tocar el agente en el desk durante un
 	# despertar autónomo. Política "personal" del puesto — la decide el operador
-	# de cada instalación. Lista separada por comas de zonas del desk (bajo
-	# ${AGENT_CORE_DIR}): "ideas", "research", "design", "pending",
+	# de cada instalación. Lista separada por comas de zonas del desk (nombres
+	# cortos; el worker las resuelve a planner/<zona> vía _PLANNER_ZONES):
+	# "ideas", "research", "design", "pending",
 	# "in_progress", "awakening" (logs). "planner" = todas las zonas de
 	# planificación; "none" = solo leer el panel, sin tocar nada. La directiva
 	# del despertar incluye esta lista; el agente solo contribuye a lo declarado.
@@ -501,6 +502,33 @@ class RedPillConfig(BaseSettings):
 	# Fase 4 (§6): el flip REQUIERE aprobación del operador + evidencia de la sombra.
 	# True = el chronicle deja de ingerir en archive_memories las sesiones bajo el umbral.
 	MEMENTO_GATE_ENFORCED: bool = False
+	# Fase 4 (§3.2/§5.4): ascensos diferidos, refuerzo temporal y distill fragmentado.
+	# Ajustados por el experimento de calibración 2026-09-14 (§6.9): GAIN=1.0 y
+	# gate=5.0 saturaban (~95% ascenderían en el corpus real); GAIN=0.5+gate=7.0
+	# asciende una minoría sostenida (~6%). El matching se endureció a ≥3 tokens.
+	POLAROID_TAU: float = 90.0  # días de decaimiento de la estabilidad entre refuerzos
+	POLAROID_GAIN: float = 0.5  # incremento de estabilidad por reaparición
+	POLAROID_REVIVAL_GATE: float = 7.0  # umbral: S >= gate → ascenso por refuerzo
+	MEMENTO_STATIC_ASCENSION_ENABLED: bool = False  # ascenso estático EN SOMBRA hasta calibrar
+	MEMENTO_FRAGMENT_OVERLAP_MESSAGES: int = 2  # solape de turnos entre fragmentos del distill
+	# Presupuesto de contexto por fragmento de distill. 2026-09-15: se destila con
+	# granite (n_ctx 10240), no con aya (32K) — 12000 chars apretaba; 8000 chars
+	# (≈ 2000-3200 tokens a ratio 2-2.5) cabe holgado con system + salida. El
+	# destilado por fases solapadas trocea lo que exceda (overlap = continuidad).
+	MEMENTO_FRAGMENT_MAX_CHARS: int = 8000
+	# Los engramas ascendidos (origin=memento) erodan MUCHO más lento que el ruido:
+	# importance = significance × factor → el motor bayesiano (α=max(1,importance))
+	# les da una utility inicial alta que tarda años en erodar, frente a ~19 días
+	# de un engrama normal (decisión Fase 4, 2026-09-14: no olvidar lo curado).
+	MEMENTO_CURATED_IMPORTANCE_FACTOR: float = 5.0
+	# Clasificación work/social por LLM (curador): category_score 0-1 (1=work).
+	# score >= umbral → work_memories; si no → social_memories. La heurística por
+	# tokens fue una receta del desastre (los resúmenes técnicos caían a social).
+	MEMENTO_CATEGORY_WORK_THRESHOLD: float = 0.5
+	# Watchdog del pase agéntico (2026-09-15): timeout por llamada al LLM local.
+	# Una generación que lo excede es un cuelgue → 3 consecutivos → deferral.
+	MEMENTO_LLM_TIMEOUT: int = 180
+	NIGHTLY_ENABLED: bool = True  # ciclo nocturno chronicle → sleep (nightly.yaml)
 	# raw/ = copia de respaldo provider-nativa y punto único de backup (operador,
 	# 2026-08-26): con él el árbol se regenera desde cero (--from-raw). Sin scrub → jamás en git.
 	MEMENTO_RAW_ENABLED: bool = True

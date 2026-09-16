@@ -29,6 +29,26 @@ def test_add_memory_exception():
 	assert manager.add_memory("col", "text") == ""
 
 
+def test_add_memory_no_longer_fragments_large_text():
+	"""Regresión 2026-09-14: add_memory NO fragmenta textos largos. La fragmentación
+	mecánica por chars producía _is_fragment excluidos del recall (ruido muerto);
+	la curaduría debe fragmentar con criterio (LLM), jamás corte ciego."""
+	manager = MemoryManager()
+	manager.client = MagicMock()
+	manager.client.upsert.return_value = None
+	manager._get_vector = MagicMock(return_value=[0.0] * cfg.VECTOR_SIZE)
+
+	large = "texto largo curado " + ("x" * (cfg.CHUNK_THRESHOLD * 3))
+	pid = manager.add_memory("work_memories", large, importance=5.0, force_immune=True)
+
+	# un único upsert (no recursión de fragmentos)
+	assert manager.client.upsert.call_count == 1
+	point = manager.client.upsert.call_args[1]["points"][0]
+	assert len(point.payload["content"]) == len(large)  # content completo, sin partir
+	assert point.payload.get("_is_fragment") is None
+	assert point.id == pid
+
+
 def test_get_stats_exception_and_success():
 	manager = MemoryManager()
 	manager.client = MagicMock()

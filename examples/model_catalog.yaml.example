@@ -13,6 +13,9 @@
 #   roles         — role aliases this model serves (scout/planning/coder/conversational)
 #   capabilities  — free-form capability tags (code, planning, adversarial, scout, conversational)
 #   not_capable_for — roles/tasks a WITH-QUOTA model is still NOT capable of (D13/D15 gating)
+#   license       — SPDX id o bloque estructurado (ver src/red_pill/core/model_license.py).
+#                   En contexto comercial (REDPILL_LICENSE_CONTEXT=commercial) los modelos
+#                   no-comerciales se bloquean en cascade_for(commercial_only=True).
 #   timeout       — optional generous per-target bridge timeout (s) (D14)
 
 catalog:
@@ -26,6 +29,13 @@ catalog:
           roles: ["planning", "coder", "conversational"]
           capabilities: ["code", "planning", "deep", "conversational"]
           not_capable_for: []
+          license:
+            id: "deepseek-license"
+            commercial_ok: true
+            redistribution_ok: true
+            attribution_required: true
+            share_alike: false
+            source: "https://huggingface.co/deepseek-ai"
           timeout: 300
         - id: "opencode/deepseek-v4-flash-free"
           backend: "opencode"
@@ -34,6 +44,13 @@ catalog:
           roles: ["conversational"]
           capabilities: ["conversational", "quick"]
           not_capable_for: ["coder", "planning"]
+          license:
+            id: "deepseek-license"
+            commercial_ok: true
+            redistribution_ok: true
+            attribution_required: true
+            share_alike: false
+            source: "https://huggingface.co/deepseek-ai"
         - id: "opencode/big-pickle"
           backend: "opencode"
           tier: "free"
@@ -41,6 +58,19 @@ catalog:
           roles: ["scout"]
           capabilities: ["scout", "conversational"]
           not_capable_for: ["coder", "planning"]
+          # API de OpenCode (fase promocional gratis). NO hay pesos que redistribuir
+          # (redistribution_ok=false es N/A). Comercial OK. PERO: excepción de
+          # entrenamiento → tus prompts pueden usarse para mejorar el modelo →
+          # NUNCA meter NDA/confidencial (confidential_ok=false).
+          license:
+            id: "opencode-big-pickle-promo"
+            commercial_ok: true
+            redistribution_ok: false
+            attribution_required: false
+            share_alike: false
+            prompts_used_for_training: true
+            confidential_ok: false
+            source: "https://opencode.ai/docs/zen/"
 
     local:
       models:
@@ -51,6 +81,31 @@ catalog:
           roles: ["conversational"]
           capabilities: ["conversational", "logic"]
           not_capable_for: ["coder", "planning", "scout"]
+          license:
+            id: "apache-2.0"
+            commercial_ok: true
+            redistribution_ok: true
+            attribution_required: false
+            share_alike: false
+            source: "https://huggingface.co/ibm-granite/granite-4.1-8b-instruct"
+          timeout: 300
+        # Memento agentic-pass distiller/curator (bake-off 2026-09-14):
+        # long-context (32K) European variant for RFC-002 distill/refine.
+        # ⛔ CC-BY-NC-4.0 — bloqueado en contexto comercial por el compliance gate.
+        - id: "local/tiny-aya-water"
+          backend: "local"
+          tier: "local"
+          priority: 10
+          roles: ["conversational"]
+          capabilities: ["distillation", "multilingual", "long_context", "logic"]
+          not_capable_for: ["coder", "planning", "scout"]
+          license:
+            id: "cc-by-nc-4.0"
+            commercial_ok: false
+            redistribution_ok: true
+            attribution_required: true
+            share_alike: true
+            source: "https://huggingface.co/CohereLabs/tiny-aya-water"
           timeout: 300
 
 # Role aliases → ordered cascade of model ids (RFC §2E.3).

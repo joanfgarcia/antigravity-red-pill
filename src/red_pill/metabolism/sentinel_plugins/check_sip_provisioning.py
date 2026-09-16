@@ -214,7 +214,7 @@ class SipProvisioningCheck(ServiceSentinelPlugin):
 
 			profiles = data.get("profiles", {})
 			# Check the default profile (samantha) or the one set in env
-			profile_name = os.getenv("MINION_PROFILE", "samantha")
+			profile_name = os.getenv("MINION_DEFAULT_PROFILE") or os.getenv("MINION_PROFILE") or "samantha"
 			profile = profiles.get(profile_name)
 			if not profile:
 				return AuditFinding(

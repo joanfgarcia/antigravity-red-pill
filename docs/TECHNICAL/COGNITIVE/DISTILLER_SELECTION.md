@@ -106,3 +106,107 @@ llama.cpp cannot load Granite's hybrid architecture).
 but ignores the "no reasoning" instruction and rarely closes valid JSON; **hermes_8b** is the
 production distiller (sole `distillation` capability), with **piaget_8b** as the affective-depth
 alternative. `samantha` is retired from the role. See `DISTILLER_BAKEOFF.md` for raw outputs.
+
+---
+
+## Memento agentic pass — distiller/curator selection (bake-off 2026-09-14)
+
+A **second, distinct use** of distillation: the RFC-002 Memento file-based pass
+(`memento/agentic.py` — `distill_session` → `refine_session`), which summarises
+sessions to disk and judges their long-term value. Unlike the sleep distiller
+(short raw interactions, small context), this pass faces **long sessions** that
+exceed the LLM window — so the model must also carry a **large context**.
+
+### Requirements for this role
+1. **Long context** — a session of 16K tokens must fit whole (no lossy truncation).
+2. **Strict JSON** — distill `{title, summary, keywords}` and refine
+   `{significance, emotion, intensity, theme, relics, cross_refs}`.
+3. **Spanish fidelity + cross-refs** — summaries in Spanish; refine must relate a
+   section to genuinely related sessions (`cross_refs`, critical for the
+   reinforcement/weaving of Phase 4).
+4. **Low VRAM** — leave room for the conversational model (Granite) on an 8 GB card.
+
+### Method
+- Load each candidate with `llama_cpp.Llama` (GPU, daemon venv), run the **same
+  real target** (a Spanish implementation section) through the refine prompt at
+  **n_ctx 8192 vs 32768**, and compare outputs (quality + determinism).
+- Then run the **distill** prompt on a **real long split** (56.6K chars = 16049
+  tokens) to confirm it fits whole at 32K.
+- Guarded with `systemd-run --scope -p MemoryMax` (no OOM).
+
+### Findings (GPU RTX 5070 8 GB, 2026-09-14)
+
+**Refine quality** (same section, n_ctx 8192/32768 — output identical at both):
+
+| Model | significance | relics | cross_refs | Typos | Gen |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **tiny-aya-water** | **0.7** | **4** ✓ | **2** ✓ | no | 1.5 s |
+| tiny-aya-global | 0.7 | 6 (over limit) | 2 ✓ | no | 1.7 s |
+| gemma-3-4b | 0.4 | 4 ✓ | 1 | no | 1.3 s |
+| phi-4-mini | 0.2 | 3 ✓ | 1 | no | 1.4 s |
+| llama-3.2-3b | 0.4 | 3 | **0** | yes | 1.1 s |
+
+**Distill on a long session** (56.6K chars / 16049 tokens):
+
+| Model | n_ctx | Fits whole? | VRAM | Gen |
+| :--- | :--- | :--- | :--- | :--- |
+| tiny-aya-water | 32768 | **yes** (16049 tok) | 6.3 GB | 15 s |
+| tiny-aya-global | 32768 | yes | 6.3 GB | 15 s |
+
+> Both Tiny Aya variants carry `context_length: 500000` in the GGUF (served at
+> 32K here). At 8K the long session does **not** fit (16049 > 8192) — the
+> motivation for the 32K profile.
+
+### Decision (operator, 2026-09-14)
+**`tiny_aya_water` is the Memento agentic-pass distiller+curator** at `n_ctx=32768`
+(European-language variant → Spanish fidelity; disciplined format — respects the
+4-relic cap; relates cross-refs). `tiny_aya_global` is the fallback.
+**`gemma_3_4b` is the second (contrast) lens** for refine so the gate has
+independent judges. `llama_3.2` is **discarded** for this role (0 cross_refs,
+typos). Profiles registered in `model_profiles.yaml` (`tiny_aya_water`,
+`tiny_aya_global`); catalog entry `local/tiny-aya-water`.
+
+> This is **not** a replacement of `granite_8b` as the sleep distiller (AD-022) —
+> it is a separate profile for the Memento pass, which needs long context that
+> Granite's 10240 cannot provide.
+
+> **Tiny Aya language flavours (Cohere Labs official).** The family ships four
+> 3.35B variants (~2 GB each, huge context); pick by the operator's language
+> family: **`tiny-aya-water`** = strongest for **Asia-Pacific & Europe** (our pick
+> — Spanish); **`tiny-aya-earth`** = strongest for **Africa & West Asia**;
+> **`tiny-aya-fire`** = strongest for **South Asian** languages;
+> **`tiny-aya-global`** = best overall balance across all regions. Reasoning
+> siblings (same backbone, 32K): `tiny-aya-l2-thinker` (thinks in the prompt
+> language) and `tiny-aya-en-thinker` (English reasoning traces) — no official
+> GGUF at the time of this bake-off, so not evaluated.
+
+---
+
+## Pase agéntico Memento (distill + refine file-based) — GRANITE (2026-09-15)
+
+Distinto del distiller del sueño, el **pase Memento** (RFC-002 §4.5) produce los
+`distill/*.md` y `refine/*.md` sobre el árbol. Tras el bake-off de prompts
+(2026-09-15) la decisión es:
+
+- **Modelo**: **Granite-4.1-8B** para TODAS las etapas (distill, refine WORK,
+  refine SOCIAL). tiny-aya quedó descartado: sobre-genera ideas (4-7 por
+  fragmento → ruido) y no separa work/social (clasifica contenido personal como
+  work; la clasificación binaria lo llama `none`). Los parámetros de sampling
+  (repeat_penalty, min_p, presence/frequency_penalty, seed) no corrigen el sesgo.
+
+- **Fraccionado por contexto (n_ctx 10240)**: `MEMENTO_FRAGMENT_MAX_CHARS=8000`
+  (antes 12000 para Aya 32K). El destilado por fases solapadas trocea work units
+  > 8000 en fragmentos con solape de 2 mensajes; un turno individual gigante se
+  sub-particiona por líneas. El presupuesto del refine (`model_prompt_budget`)
+  es dinámico según el modelo servido. Verificado: 62K chars → 9 fragmentos que
+  caben en granite y destilan en 1ª persona.
+
+- **Prompts**: dos llamadas especializadas (`REFINE_WORK_USER` + 
+  `REFINE_SOCIAL_USER`) — un solo prompt pedir ambos tipos confunde a los modelos
+  locales (devuelven `[]` en contenido mixto). Voz en 1ª persona (`_VOICE_RULE`,
+  MODE B: "Joan me cuenta... / le digo..."), alineada con el distiller V3.
+
+- **Trazabilidad**: cada distill/refine guarda `engine` (modelo real) y
+  `prompt_version` (hash de los prompts de la etapa) en el frontmatter; el
+  registry `agentic` guarda `engine`, `distill_prompt_version`,
+  `refine_prompt_version`.
