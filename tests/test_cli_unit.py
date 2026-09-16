@@ -459,3 +459,31 @@ def test_cli_job_resume_kill_purge(mock_qm, mock_find):
 		main()
 	with patch("sys.argv", ["red-pill", "job", "purge", "--yes"]):
 		main()
+
+
+@patch("red_pill.cli._find_job")
+@patch("red_pill.cognitive.queue_manager.CognitiveQueueManager")
+def test_cli_job_logs_y_sin_log(mock_qm, mock_find, tmp_path):
+	import red_pill.jobs.drivers as drv
+	mock_qm.return_value.get_task.return_value = {"id": "abc-123"}
+	with patch.object(drv, "job_log_path", lambda jid: tmp_path / "nolog.log"):
+		mock_find.return_value = {"id": "abc-123"}
+		with patch("sys.argv", ["red-pill", "job", "logs", "abc"]):
+			main()
+	# con log existente
+	logf = tmp_path / "existe.log"
+	logf.write_text("linea1\nlinea2\n")
+	with patch.object(drv, "job_log_path", lambda jid: logf):
+		with patch("sys.argv", ["red-pill", "job", "logs", "abc", "--tail", "1"]):
+			main()
+
+
+@patch("red_pill.cognitive.queue_manager.CognitiveQueueManager")
+def test_cli_job_list(mock_qm):
+	mock_qm.return_value.list_active.return_value = [{"id": "abc", "source": "x", "status": "PENDING"}]
+	mock_qm.return_value.list_paused.return_value = []
+	mock_qm.return_value.list_frustrated.return_value = []
+	with patch("sys.argv", ["red-pill", "job", "list"]):
+		main()
+	with patch("sys.argv", ["red-pill", "job", "list", "--all"]):
+		main()
