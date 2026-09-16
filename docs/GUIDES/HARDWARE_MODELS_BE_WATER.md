@@ -55,7 +55,16 @@ The local LLM daemon (`redpill-llm.service`) dynamically loads profiles and reso
 
 To configure or change the loaded model:
 1. Edit the active profile (e.g., `samantha`) in your model configuration file (`model_profiles.yaml` located in your bunker configuration directory).
-2. Set the `MINION_PROFILE` environment variable to select which profile the daemon should load (defaults to `samantha`).
+2. Set the `MINION_DEFAULT_PROFILE` environment variable to select the default profile the daemon boots to (fallback legacy `MINION_PROFILE`, defaults to `samantha`).
+
+> **RFC-HARNESS-002 (selector por tarea)**: el daemon ya no sirve UN modelo fijo.
+> El body de una request puede declarar `task` (zona curada en
+> `task_profiles.yaml`), `model` (id de perfil o basename GGUF), `thinking`
+> (`off`/`on`/`low` para modelos de razonamiento como Granite 4.2), o los
+> modos `custom`/`experimental` (perfil virtual completo para probar un GGUF
+> nuevo sin tocar la config). El cambio de modelo es EN CALIENTE bajo lock:
+> el daemon descarga el anterior y carga el pedido sin reiniciar. Ver
+> `GET /status` para el modelo cargado, `thinking_mode` y `last_mode`.
 
 Because the daemon now loads the model **on demand**, you do not need to restart the service to apply changes if the daemon is currently idle. If you wish to force a reload immediately, restart the systemd service:
 

@@ -11,6 +11,9 @@ mission_id: memento-probe
 step_command: uv run python scripts/memento_probe_resynth.py
 elements_command: uv run python scripts/memento_probe_resynth.py --list
 defer_exit_code: 77
+# RFC-HARNESS-002 §7: task refine (el probe resíntesis usa el prompt corregido).
+llm:
+  task: refine
 preflight:
   llm_required: true
 control:

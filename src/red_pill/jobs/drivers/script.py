@@ -389,6 +389,13 @@ class ScriptJobDriver(ResumableJobDriver):
 	def _build_env(self, payload: Dict[str, Any], cwd: str = "") -> Dict[str, str]:
 		env = dict(os.environ)
 		env.update({str(k): str(v) for k, v in (payload.get("env") or {}).items()})
+		# RFC-HARNESS-002 §7: el bloque `llm:` del recipe → env RP_LLM_*.
+		try:
+			from red_pill.jobs.drivers.base import inject_llm_env
+
+			env.update(inject_llm_env(payload, job_id=self.job_id, cwd=cwd))
+		except ValueError as e:
+			raise ValueError(f"llm inválido en recipe '{self.job_id}': {e}") from e
 		# Exponer los códigos de salida declarativos al proceso hijo: el satélite
 		# puede salir con defer_exit_code ("ahora no puedo, reintenta") o
 		# pause_exit_code ("revisión del operador") sin hardcodear el número.

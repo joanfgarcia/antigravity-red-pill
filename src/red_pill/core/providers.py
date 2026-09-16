@@ -174,6 +174,7 @@ class SipInferenceProvider(BaseInferenceProvider):
 				self.sock.connect(self.path)
 
 		payload = {
+			"task": "conversation",  # RFC-HARNESS-002 §6.1: generate → conversation
 			"model": self.model,
 			"messages": kwargs.get("messages", [{"role": "user", "content": prompt}]),
 			"temperature": kwargs.get("temperature", 0.3),
@@ -219,7 +220,7 @@ class SipInferenceProvider(BaseInferenceProvider):
 				self.sock.settimeout(self.timeout)
 				self.sock.connect(self.path)
 
-		payload = {"model": self.model, "messages": messages, "temperature": temperature, "max_tokens": max_tokens}
+		payload = {"task": "minion_tool", "model": self.model, "messages": messages, "temperature": temperature, "max_tokens": max_tokens}
 		if tools:
 			payload["tools"] = tools
 		if tool_choice:

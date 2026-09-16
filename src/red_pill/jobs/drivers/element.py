@@ -275,6 +275,13 @@ class ElementJobDriver(ResumableJobDriver):
 	def _build_env(self, payload: Dict[str, Any], cwd: str, element: Any, index: int) -> Dict[str, str]:
 		env = dict(os.environ)
 		env.update({str(k): str(v) for k, v in (payload.get("env") or {}).items()})
+		# RFC-HARNESS-002 §7: el bloque `llm:` del recipe → env RP_LLM_*.
+		try:
+			from red_pill.jobs.drivers.base import inject_llm_env
+
+			env.update(inject_llm_env(payload, job_id=self.job_id, cwd=cwd))
+		except ValueError as e:
+			raise ValueError(f"llm inválido en recipe '{self.job_id}': {e}") from e
 		# El elemento a tratar: JSON serializado + índice (para logs y selección).
 		env["RP_ELEMENT"] = json.dumps(element, ensure_ascii=False)
 		env["RP_ELEMENT_INDEX"] = str(index)

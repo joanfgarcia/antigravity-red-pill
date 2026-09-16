@@ -81,6 +81,7 @@ def chat(system: str, user: str, max_tokens: int, tag: str = "SYNTH") -> str:
 	"""One deterministic call to the local LLM. Empty string on failure."""
 	payload = json.dumps(
 		{
+			"task": "hub",            # RFC-HARNESS-002 §6.1: síntesis de hubs del sueño
 			"messages": [
 				{"role": "system", "content": system},
 				{"role": "user", "content": user},

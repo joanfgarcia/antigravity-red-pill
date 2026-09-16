@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -68,6 +69,7 @@ def distill_prompt_version() -> str:
 def refine_prompt_version() -> str:
 	"""Fingerprint del prompt de REFINADO (WORK + SOCIAL + VOICE)."""
 	return _prompt_hash(REFINE_WORK_USER, REFINE_SOCIAL_USER, _VOICE_RULE)
+
 
 # transport(system, user, max_tokens) -> str — inyectable para tests y para futuros bake-offs
 Transport = Callable[[str, str, int], str]
@@ -244,15 +246,48 @@ def llm_available(url: str = EDGE_HEALTH_URL) -> bool:
 		return False
 
 
+# ── Transporte selectivo (RFC-HARNESS-002 §7): el pase Memento lee su demanda
+# de inferencia del env RP_LLM_* (inyectado por el driver del job desde la
+# receta `llm:`), o cae a los defaults del daemon si no hay override.
+#
 # n_ctx del modelo servido (2026-09-15): Granite-4.1-8B sirve 10240; tiny-aya
-# 32768. El presupuesto de prompt del refine es DINÁMICO según el modelo real
-# (engine_id), para que los fragments de un lote quepan en el contexto.
-MODEL_N_CTX = 10240
+# 32768. El presupuesto de prompt del refine es DINÁMICO según el modelo real,
+# resuelto vía model_runtime (fin del MODEL_N_CTX hardcodeado y del hack
+# "tiny-aya" en engine_id).
+MODEL_N_CTX = 10240  # fallback solo si model_runtime no puede resolver
 MODEL_PROMPT_BUDGET = MODEL_N_CTX - 4096  # margen: sistema (~600) + salida (512-1024) + colchón
 
 
+def _llm_env() -> dict:
+	"""Demanda de inferencia del job: RP_LLM_TASK / RP_LLM_MODEL / RP_LLM_THINKING.
+
+	Un job que NO declara `llm:` no las define → el transporte cae al default
+	del daemon (comportamiento actual, sin cambios).
+	"""
+	return {
+		"task": os.getenv("RP_LLM_TASK", "").strip(),
+		"model": os.getenv("RP_LLM_MODEL", "").strip(),
+		"thinking": os.getenv("RP_LLM_THINKING", "").strip(),
+	}
+
+
 def model_prompt_budget() -> int:
-	"""Presupuesto de chars del prompt del refine según el modelo servido."""
+	"""Presupuesto de chars del prompt del refine según el modelo resuelto.
+
+	Resuelve la conducta de la tarea (`refine` o `distill` según el env RP_LLM_TASK)
+	vía model_runtime: n_ctx del perfil → presupuesto. Si la resolución falla,
+	usa el presupuesto por engine_id (fallback histórico).
+	"""
+	task = _llm_env()["task"] or "refine"
+	try:
+		from red_pill.core import model_runtime as mr
+
+		resolved = mr.resolve({"task": task})
+		n_ctx = resolved.n_ctx
+		if n_ctx and n_ctx > 0:
+			return int(n_ctx - 4096)
+	except Exception:
+		pass
 	n_ctx = 32768 if "tiny-aya" in engine_id() else MODEL_N_CTX
 	return int(n_ctx - 4096)
 
@@ -287,13 +322,18 @@ def http_transport(system: str, user: str, max_tokens: int) -> str:
 
 	llm_timeout = int(getattr(cfg, "MEMENTO_LLM_TIMEOUT", 180))
 	attempt_user = _fit_prompt(user)
+	llm = _llm_env()
+	payload = {"messages": [{"role": "system", "content": system}, {"role": "user", "content": attempt_user}],
+		"temperature": 0.1, "max_tokens": max_tokens}
+	# RFC-HARNESS-002 §7: task/model/thinking desde el env del job (RP_LLM_*).
+	# Sin env → sin task/model → el daemon cae a su default (comportamiento actual).
+	if llm["task"]:
+		payload["task"] = llm["task"]
+	if llm["model"]:
+		payload["model"] = llm["model"]
+	if llm["thinking"]:
+		payload["thinking"] = llm["thinking"]
 	for _attempt in range(4):
-		payload = {
-			"model": EDGE_MODEL,
-			"messages": [{"role": "system", "content": system}, {"role": "user", "content": attempt_user}],
-			"temperature": 0.1,
-			"max_tokens": max_tokens,
-		}
 		response = requests.post(EDGE_ENGINE_URL, json=payload, timeout=llm_timeout)
 		if response.status_code == 500 and len(attempt_user) > 1500:
 			# Probable exceso de contexto: recortar y reintentar.
@@ -623,9 +663,7 @@ def _dedup_ideas(ideas: List[Dict[str, Any]], threshold: float = 0.6) -> List[Di
 	import re
 
 	def toks(idea: Dict[str, Any]) -> set:
-		text = " ".join(
-			[str(idea.get("title", "")), str(idea.get("theme", "")), " ".join(str(r) for r in _as_list(idea.get("relics")))]
-		)
+		text = " ".join([str(idea.get("title", "")), str(idea.get("theme", "")), " ".join(str(r) for r in _as_list(idea.get("relics")))])
 		return set(re.findall(r"[a-záéíóúüñ]{4,}", text.lower()))
 
 	def rank(idea: Dict[str, Any]):

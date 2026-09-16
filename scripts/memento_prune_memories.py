@@ -28,9 +28,7 @@ def _collect(col: str, mm: Any, min_sig: float, max_cat: float | None) -> List[D
 	offset = None
 	hits = []
 	while True:
-		batch, offset = mm.client.scroll(
-			collection_name=col, limit=256, with_payload=True, with_vectors=False, offset=offset
-		)
+		batch, offset = mm.client.scroll(collection_name=col, limit=256, with_payload=True, with_vectors=False, offset=offset)
 		for p in batch:
 			pl = p.payload or {}
 			if pl.get("origin") != "memento":
@@ -42,7 +40,9 @@ def _collect(col: str, mm: Any, min_sig: float, max_cat: float | None) -> List[D
 				cat = float(pl.get("category_score", 0.5) or 0.5)
 				if cat > max_cat:
 					continue
-			hits.append({"id": str(p.id), "significance": sig, "category_score": pl.get("category_score"), "content": str(pl.get("content") or "")[:60]})
+			hits.append(
+				{"id": str(p.id), "significance": sig, "category_score": pl.get("category_score"), "content": str(pl.get("content") or "")[:60]}
+			)
 		if offset is None:
 			break
 	return hits
@@ -66,8 +66,10 @@ def main() -> None:
 			continue
 		hits = _collect(col, mm, args.min_significance, args.max_category_score)
 		total += len(hits)
-		print(f"[PRUNE] {col}: {len(hits)} engramas con significance < {args.min_significance}"
-			+ (f" y category_score <= {args.max_category_score}" if args.max_category_score is not None else ""))
+		print(
+			f"[PRUNE] {col}: {len(hits)} engramas con significance < {args.min_significance}"
+			+ (f" y category_score <= {args.max_category_score}" if args.max_category_score is not None else "")
+		)
 		for h in hits[:8]:
 			print(f"   sig={h['significance']} cat={h['category_score']} | {h['content']}")
 		if hits and args.apply:

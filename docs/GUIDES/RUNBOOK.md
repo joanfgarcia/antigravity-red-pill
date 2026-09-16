@@ -114,10 +114,20 @@ podman run -d --name qdrant \
 # ¿Está viva?
 curl -s http://localhost:8760/v1/models | python3 -m json.tool
 
-# Test rápido
+# Estado del servicio de gobierno (modelo cargado, thinking_mode, last_mode)
+curl -s http://localhost:8760/status | python3 -m json.tool
+
+# Test rápido (task conversation → default de la tarea en task_profiles.yaml)
 curl -s http://localhost:8760/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model":"samantha","messages":[{"role":"user","content":"Di hola"}],"max_tokens":50}' \
+  -d '{"task":"conversation","messages":[{"role":"user","content":"Di hola"}],"max_tokens":50}' \
+  | python3 -m json.tool
+
+# Probar un modelo NUEVO sin tocar la config (modo experimental, RFC-HARNESS-002)
+# model_path = ruta al GGUF en $XDG_DATA_HOME/red-pill/models/
+curl -s http://localhost:8760/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"experimental":{"model_path":"<XDG_DATA_HOME>/red-pill/models/granite-4.2-8b-Q4_K_M.gguf","n_ctx":8192,"device_fallback":["gpu","cpu"]},"thinking":"on","messages":[{"role":"user","content":"Razona: 12*7?"}],"max_tokens":200}' \
   | python3 -m json.tool
 
 # El hypervisor gestiona Samantha

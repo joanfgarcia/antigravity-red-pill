@@ -11,7 +11,7 @@ Reuses the existing audits (`SentinelAuditor.audit_runtime` + `audit_vitals` →
 sentinel plugins reconcile daemons/ports/LLM/Qdrant/neon and auto-heal) and adds two
 on-demand checks the background flow doesn't frame as "verify":
 - expected `redpill-*.timer` units present AND active,
-- loaded LLM model matches the configured MINION_PROFILE.
+- loaded LLM model matches the configured MINION_DEFAULT_PROFILE (fallback legacy MINION_PROFILE).
 
 `run_doctor()` returns 0 if green/yellow (operational, warnings tolerated), 1 if red
 (something is broken) — usable as an install/update gate.
@@ -55,12 +55,12 @@ def _check_timers() -> list:
 
 
 def _check_model_match() -> list:
-	"""Loaded LLM model == configured MINION_PROFILE. Best-effort; incertidumbre → info, nunca red."""
+	"""Loaded LLM model == configured MINION_DEFAULT_PROFILE. Best-effort; incertidumbre → info, nunca red."""
 	out: list = []
 	try:
 		from red_pill.core.model_registry import ModelRegistry
 
-		profile_name = os.getenv("MINION_PROFILE", "samantha")
+		profile_name = os.getenv("MINION_DEFAULT_PROFILE") or os.getenv("MINION_PROFILE") or "samantha"
 		model_path = (ModelRegistry.get_profile(profile_name) or {}).get("model_path")
 		if not model_path:
 			out.append(("yellow", f"No se pudo resolver el modelo del perfil '{profile_name}' (revisar model_profiles.yaml)."))

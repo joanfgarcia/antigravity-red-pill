@@ -449,8 +449,20 @@ def test_dedup_ideas_fusiona_work_y_social_duplicadas():
 	from red_pill.memento.agentic import _dedup_ideas
 
 	ideas = [
-		{"title": "Ajustar formato HKDFLabel para alinear", "theme": "hkdf_label_format", "significance": 0.95, "category_score": 0.95, "relics": ["formato HKDFLabel"]},
-		{"title": "Joan me dice que el formato HKDFLabel", "theme": "hkdf_label_format", "significance": 0.85, "category_score": 0.30, "relics": ["formato HKDFLabel"]},
+		{
+			"title": "Ajustar formato HKDFLabel para alinear",
+			"theme": "hkdf_label_format",
+			"significance": 0.95,
+			"category_score": 0.95,
+			"relics": ["formato HKDFLabel"],
+		},
+		{
+			"title": "Joan me dice que el formato HKDFLabel",
+			"theme": "hkdf_label_format",
+			"significance": 0.85,
+			"category_score": 0.30,
+			"relics": ["formato HKDFLabel"],
+		},
 	]
 	kept = _dedup_ideas(ideas)
 	assert len(kept) == 1

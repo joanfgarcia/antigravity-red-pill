@@ -13,6 +13,8 @@ historial del propio job y duplicadas por intento.
 
 from __future__ import annotations
 
+import json
+import os
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -146,6 +148,71 @@ def append_job_log(job_id: str, message: str) -> None:
 			log_file.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {message}\n")
 	except Exception:
 		pass
+
+
+def inject_llm_env(payload: Dict[str, Any], job_id: str = "", cwd: str = "") -> Dict[str, str]:
+	"""Traduce el bloque `llm:` de un recipe a env RP_LLM_* para el proceso hijo.
+
+	RFC-HARNESS-002 §7: `llm: {task, model, thinking, fallup | custom |
+	experimental | context_file}`. Los campos simples (task/model/thinking)
+	viajan como variables; los bloques anidados (custom/experimental) se
+	escriben en un fichero de contexto `state/jobs/<job_id>/llm.json` y el env
+	lleva solo `RP_LLM_CONTEXT_FILE`. `llm.context_file` (por referencia) se
+	valida (JSON válido) y pasa tal cual — excluyente con el bloque inline.
+
+	Un job sin `llm:` no devuelve nada (el hijo cae al default del daemon).
+	"""
+	llm = payload.get("llm") or {}
+	env: Dict[str, str] = {}
+	if not isinstance(llm, dict) or not llm:
+		return env
+
+	ref = (llm.get("context_file") or "").strip()
+	inline = {k: v for k, v in llm.items() if k != "context_file" and v not in (None, "", {}, [])}
+	if ref and inline:
+		raise ValueError("llm.context_file es excluyente con el bloque llm: inline (L4)")
+	if ref:
+		path = Path(ref)
+		if not path.is_absolute():
+			path = Path(cwd or os.getcwd()) / path
+		if not path.exists():
+			raise ValueError(f"llm.context_file no existe: {path}")
+		try:
+			json.loads(path.read_text(encoding="utf-8"))
+		except Exception as e:
+			raise ValueError(f"llm.context_file no es JSON válido: {path} ({e})")
+		env["RP_LLM_CONTEXT_FILE"] = str(path)
+		return env
+
+	if "task" in llm:
+		env["RP_LLM_TASK"] = str(llm["task"])
+	if "model" in llm and llm["model"]:
+		env["RP_LLM_MODEL"] = str(llm["model"])
+	if "thinking" in llm and llm["thinking"]:
+		env["RP_LLM_THINKING"] = str(llm["thinking"])
+
+	custom = llm.get("custom")
+	experimental = llm.get("experimental")
+	if custom or experimental:
+		ctx = {"custom": custom} if custom else {"experimental": experimental}
+		if "task" in llm:
+			ctx["task"] = str(llm["task"])
+		if "thinking" in llm and llm["thinking"]:
+			ctx["thinking"] = str(llm["thinking"])
+		from red_pill.core.paths import get_state_dir
+
+		ctx_dir = get_state_dir() / "jobs"
+		ctx_dir.mkdir(parents=True, exist_ok=True)
+		ctx_path = ctx_dir / f"{(job_id or 'unbound')[:16]}_llm.json"
+		tmp = ctx_path.with_suffix(".tmp")
+		try:
+			tmp.write_text(json.dumps(ctx, ensure_ascii=False), encoding="utf-8")
+			tmp.replace(ctx_path)
+		except OSError as e:
+			raise ValueError(f"no se pudo escribir RP_LLM_CONTEXT_FILE: {e}")
+		env["RP_LLM_CONTEXT_FILE"] = str(ctx_path)
+
+	return env
 
 
 def compute_step_timeout(payload: Dict[str, Any], progress: Optional[Dict[str, Any]], attempts: int = 0) -> int:

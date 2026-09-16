@@ -283,6 +283,36 @@ def get_model_profiles_path() -> Path:
 	return get_config_dir() / "model_profiles.yaml"
 
 
+def get_model_runtime_path() -> Path:
+	"""Ruta de la config en caliente del selector de inferencia
+	($XDG_CONFIG_HOME/red-pill/model_runtime.yaml).
+
+	RFC-HARNESS-002 §10: `default_model`, `fallup`, `hot_reload`. El fichero se
+	relee por mtime en cada request (hot reload) cuando `hot_reload: true`.
+	"""
+	return get_config_dir() / "model_runtime.yaml"
+
+
+def get_task_profiles_path() -> Path:
+	"""Ruta de la zona curada de tareas ($XDG_CONFIG_HOME/red-pill/task_profiles.yaml).
+
+	RFC-HARNESS-002 §4: conducta de tarea (prompt_file, temperature, max_tokens,
+	thinking) + candidatos de modelo (referencias a model_profiles.yaml). Se
+	relee por mtime en cada request cuando `hot_reload: true`.
+	"""
+	return get_config_dir() / "task_profiles.yaml"
+
+
+def get_model_validation_path() -> Path:
+	"""Ruta del registro de modelos validados ($XDG_STATE_HOME/red-pill/model_validation.json).
+
+	RFC-HARNESS-002 §10 (K5): clave path+size+mtime+sha256_cabecera →
+	{validado_at, magic, load_verified}. Cap 100, eviction por antigüedad,
+	escritura atómica.
+	"""
+	return get_state_dir() / "model_validation.json"
+
+
 def get_model_catalog_path() -> Path:
 	"""Ruta del catálogo curado de modelos ($XDG_CONFIG_HOME/red-pill/model_catalog.yaml).
 

@@ -14,11 +14,38 @@ logger = logging.getLogger(__name__)
 
 class ModelRegistry:
 	_profiles_cache: Optional[Dict[str, dict]] = None
+	_profiles_mtime: float = 0.0
+
+	@classmethod
+	def reload(cls) -> None:
+		"""Refresca el cache si el mtime de model_profiles.yaml cambió (RFC-HARNESS-002 §10).
+
+		Hot reload por request: los perfiles añadidos sin restart se detectan
+		en la siguiente resolución del selector (`model_runtime._get_profile`).
+		Barato: `stat()` ≈ µs; la recarga solo ocurre si el fichero cambió.
+		"""
+		import os as _os
+
+		try:
+			mtime = _os.stat(get_model_profiles_path()).st_mtime
+		except OSError:
+			return
+		if cls._profiles_cache is not None and abs(mtime - cls._profiles_mtime) < 1e-6:
+			return
+		cls._profiles_cache = None
+		cls._load_profiles()
+		cls._profiles_mtime = mtime
 
 	@classmethod
 	def get_profile(cls, profile_name: str) -> dict:
 		if cls._profiles_cache is None:
 			cls._load_profiles()
+			try:
+				import os as _os
+
+				cls._profiles_mtime = _os.stat(get_model_profiles_path()).st_mtime
+			except OSError:
+				pass
 		if cls._profiles_cache is not None:
 			return cls._profiles_cache.get(profile_name, {})
 		return {}

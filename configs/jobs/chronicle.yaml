@@ -32,5 +32,10 @@ manifest:
       type: command
       minion: command_runner
       command: .venv/bin/python scripts/memento_agentic.py
+      # RFC-HARNESS-002 §7 (v3): `llm:` POR ETAPA del dag_job — el pase
+      # Memento pide task distill/refine (default granite_8b) + fallup.
+      llm:
+        task: distill
+        fallup: true
       on_fail: warn
       depends_on: [memento]

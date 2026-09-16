@@ -93,6 +93,7 @@ import concurrent.futures
 import copy
 import json
 import logging
+import os
 import shutil
 import subprocess
 import threading
@@ -595,6 +596,22 @@ class DagJobDriver(ResumableJobDriver):
 			kwargs["command"] = stage["command"]
 		if isinstance(stage.get("params"), dict):
 			kwargs.update(stage["params"])
+		# RFC-HARNESS-002 §7 (v3): el bloque `llm:` POR ETAPA en el manifest del
+		# dag_job (coherencia DAG-001: cada instancia DISTILL×N/REFINE×M del
+		# fan-out futuro declara su modelo/modo). Los minions command lo reciben
+		# como env RP_LLM_*; los agénticos hablan con el daemon directamente.
+		stage_llm = stage.get("llm") or {}
+		if isinstance(stage_llm, dict) and stage_llm:
+			try:
+				from red_pill.jobs.drivers.base import inject_llm_env
+
+				llm_env = inject_llm_env({"llm": stage_llm}, job_id=self.job_id, cwd=str(workdir))
+			except ValueError as e:
+				raise RuntimeError(f"dag stage '{stage_path}' llm inválido: {e}") from e
+			if llm_env:
+				base_env = dict(os.environ)
+				base_env.update(llm_env)
+				kwargs["env"] = base_env
 		# Contexto del job para minions de lógica (sueño): la sonda de pausa a
 		# mitad de fase (solo si la etapa es `pausable`) y el cutoff que ancla el
 		# drenaje al momento en que ARRANCÓ el job (persistido en el checkpoint,
