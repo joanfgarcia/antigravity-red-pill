@@ -23,8 +23,9 @@ import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO / "scripts"))
-from llama_cli_runner import CliProbe, LlamaCliRunner  # noqa: E402
+sys.path.insert(0, str(REPO))
+from red_pill.core import model_runtime as mr  # noqa: E402
+from red_pill.core.model_runtime import extract_thinking  # noqa: E402
 
 MODELS = Path.home() / ".local" / "share" / "red-pill" / "models"
 PROMPT_VOICE = (REPO / "src" / "red_pill" / "metabolism" / "prompts" / "distiller_v3_voice.txt").read_text()
@@ -36,6 +37,28 @@ FEM_RE = re.compile(
     re.IGNORECASE,
 )
 THIRD_RE = re.compile(r"\b(dijo |respondió |preguntó |comentó |se corrigió |el usuario|el asistente)", re.IGNORECASE)
+
+
+def _extract_payload(raw: str) -> tuple:
+    """Separa el razonamiento (Granite 4.2 thinking) de la respuesta final y
+    extrae el JSON de la respuesta. Devuelve (obj|None, meta) — meta incluye
+    si hubo thinking y su longitud (mide el coste del razonamiento).
+
+    El template CLI de Granite 4.2 abre el razonamiento con `[Start thinking]`
+    (el daemon usa otro marcador ` response` — AD-030). Se limpia ese bloque
+    (hasta `[End thinking]` o fin de salida si el presupuesto se agotó pensando)
+    antes de separar con `extract_thinking`."""
+    clean = re.sub(r"\[Start thinking\][\s\S]*?(?:\[End thinking\]|$)", "", raw, count=1)
+    thinking, answer = extract_thinking(clean)
+    meta = {"has_thinking": bool(thinking), "thinking_chars": len(thinking)}
+    m = re.search(r"\{[\s\S]*\}", answer)
+    if not m:
+        return None, meta
+    try:
+        return json.loads(m.group(0)), meta
+    except Exception as e:
+        meta["json_error"] = str(e)
+        return None, meta
 
 # ── F1: destilador ─────────────────────────────────────────────────────────
 F1_PROBES = {
@@ -50,13 +73,9 @@ def _f1_validator(probe_data: str):
     probe_lower = probe_data.lower()
 
     def _v(raw: str) -> dict:
-        m = re.search(r"\{[\s\S]*\}", raw)
-        if not m:
-            return {"valid": False, "reason": "no JSON"}
-        try:
-            obj = json.loads(m.group(0))
-        except Exception as e:
-            return {"valid": False, "reason": f"json: {e}"}
+        obj, meta = _extract_payload(raw)
+        if obj is None:
+            return {"valid": False, "reason": "no JSON", **meta}
         s = str(obj.get("summary", ""))
         bad_2nd = [w for w in ("te digo", "te pregunto", "te cuento", "contigo", "tú ") if w in s]
         tp = [w for w in ("dijo ", "respondió ", "preguntó ", "comentó ", "Joan me", "le digo") if w in s]
@@ -70,6 +89,7 @@ def _f1_validator(probe_data: str):
             "bad_2nd": bad_2nd,
             "genero_fem": gen_fem,
             "relics": {"got": len(relics), "verbatim": len(verb)},
+            **meta,
         }
 
     return _v
@@ -94,37 +114,47 @@ F2_PROBES = [
 
 def _f2_validator(expected: dict):
     def _v(raw: str) -> dict:
-        m = re.search(r"\{[\s\S]*\}", raw)
-        if not m:
-            return {"valid": False, "reason": "no JSON"}
-        try:
-            obj = json.loads(m.group(0))
-        except Exception as e:
-            return {"valid": False, "reason": f"json: {e}"}
+        obj, meta = _extract_payload(raw)
+        if obj is None:
+            return {"valid": False, "reason": "no JSON", **meta}
         got = {k: bool(obj.get(k)) for k in expected}
         ok = got == expected
-        return {"valid": True, "acierto": ok, "got": got, "esperado": expected}
+        return {"valid": True, "acierto": ok, "got": got, "esperado": expected, **meta}
 
     return _v
 
 
-def _run(name: str, gguf: Path, probes: list, prompt: str, max_tokens: int, ct_file: str | None = None) -> list:
-    print(f"\n##### {name} #####", flush=True)
-    runner = LlamaCliRunner(name, str(gguf), chat_template_file=ct_file)
+def _run(name: str, resolved, probes: list, prompt: str, max_tokens: int, thinking: str) -> list:
+    """Front CLI del núcleo común (src/red_pill/inference/runtime.py): llama-cpp-python
+    con el MISMO renderizado que el daemon (Jinja2ChatFormatter + enable_thinking) —
+    medir aquí es medir producción."""
+    print(f"\n##### {name} (thinking={thinking}) #####", flush=True)
+    import gc
+
+    from llama_cpp import Llama
+
+    from red_pill.inference.runtime import apply_chat_handler, complete, register_thinking_handlers
+
+    llm = Llama(model_path=str(resolved.model_path), n_ctx=6144, n_gpu_layers=-1, verbose=False)
+    register_thinking_handlers(llm, resolved)
     out = []
     for pname, umsg, val in probes:
-        probe = CliProbe(name=pname, system_prompt=prompt, user_message=umsg, validator=val, max_tokens=max_tokens, temperature=0.1)
+        apply_chat_handler(llm, resolved, {"thinking": thinking})
+        messages = [{"role": "system", "content": prompt}, {"role": "user", "content": umsg}]
         t0 = time.time()
         try:
-            r = runner.run(probe)
+            resp = complete(llm, messages, max_tokens=max_tokens, temperature=0.1)
             dt = time.time() - t0
+            content = (resp.get("choices") or [{}])[0].get("message", {}).get("content") or ""
+            v = val(content)
         except Exception as e:
             out.append((pname, {"error": str(e)}))
             print(f"[{pname}] ERROR {e}", flush=True)
             continue
-        v = r.validation
         out.append((pname, v))
         print(f"[{pname}] {dt:.1f}s {v}", flush=True)
+    del llm
+    gc.collect()
     return out
 
 
@@ -145,14 +175,24 @@ def main() -> int:
     _stop_daemon()
     report = []
     try:
-        # F1 — destilador (8B)
         f1_probes = [(p, d, _f1_validator(d)) for p, d in F1_PROBES.items()]
-        for name, gguf in (("granite_4_2_8b", MODELS / "granite-4.2-8b-Q4_K_M.gguf"), ("granite_8b", MODELS / "Granite-4.1-8B-Q4_K_M.gguf")):
-            report.append((name, _run(name, gguf, f1_probes, PROMPT_VOICE, 450)))
+        # Los 4.2 con thinking consumen el presupuesto razonando: darles tokens
+        # de sobra (2000 F1 / 800 F2) para que lleguen a emitir el JSON; el coste
+        # extra del razonamiento es parte de la evaluación (thinking_chars).
+        for name, thinking, mt in (
+            ("granite_4_2_8b", "off", 450),
+            ("granite_8b", "off", 450),
+        ):
+            resolved = mr.resolve({"model": name})
+            report.append((name, _run(name, resolved, f1_probes, PROMPT_VOICE, mt, thinking)))
         # F2 — detector (3B)
         f2_probes = [(p, d, _f2_validator(e)) for p, d, e in F2_PROBES]
-        for name, gguf in (("granite_4_2_3b", MODELS / "granite-4.2-3b-Q4_K_M.gguf"), ("granite_3b", MODELS / "granite-4.1-3b-Q4_K_M.gguf")):
-            report.append((name, _run(name, gguf, f2_probes, F2_SYSTEM, 160)))
+        for name, thinking, mt in (
+            ("granite_4_2_3b", "off", 160),
+            ("granite_3b", "off", 160),
+        ):
+            resolved = mr.resolve({"model": name})
+            report.append((name, _run(name, resolved, f2_probes, F2_SYSTEM, mt, thinking)))
     finally:
         _start_daemon()
 
