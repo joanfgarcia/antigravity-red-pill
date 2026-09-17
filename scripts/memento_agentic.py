@@ -76,6 +76,11 @@ def main() -> None:
 		help="Inicio de la ronda de re-destilación (ISO): con --force, SOLO reprocesa las sesiones con distilled_at anterior a la ronda — reanudación sin repetir lo ya re-procesado (watchdog, 2026-09-15)",
 	)
 	parser.add_argument("--shadow-report", action="store_true", help="Print the shadow-gate summary and exit")
+	parser.add_argument(
+		"--target",
+		metavar="SOURCE:ID",
+		help="Procesar UNA sesión concreta (SOURCE:session_id), ignorando pending_agentic. Sin checkpoint global (el progreso lo lleva el job DAG fan-out).",
+	)
 	args = parser.parse_args()
 
 	import red_pill.config as cfg
@@ -101,7 +106,12 @@ def main() -> None:
 			(src, sid, r) for src, sid, r in pending if session_max_work_unit_chars(root, registry.get(src, sid).get("dir", "")) > args.only_long
 		]
 		logger.info(f"[--only-long {args.only_long}] {len(pending)}/{before} sesiones superan el umbral.")
-	if args.heal_stale:
+	if args.target:
+		source, _, sid = args.target.partition(":")
+		if not source or not sid:
+			parser.error("--target debe ser SOURCE:session_id")
+		targets = [(source, sid)]
+	elif args.heal_stale:
 		targets = [(source, session_id) for source, session_id, reason in pending if reason == "stale"]
 	else:
 		limit = args.limit if args.limit is not None else int(getattr(cfg, "MEMENTO_AGENTIC_NIGHT_LIMIT", 20))
@@ -116,7 +126,10 @@ def main() -> None:
 		logger.warning("Local LLM not available — agentic pass deferred to next cycle.")
 		return
 
-	stats = run_agentic(root, registry, targets, http_transport, checkpoint_path=_checkpoint_path(), redistill_since=args.redistill_round)
+	# Con --target el progreso lo lleva el checkpoint del job DAG fan-out, no el
+	# global de la ronda: run_agentic no escribe checkpoint del progress.
+	cp = None if args.target else _checkpoint_path()
+	stats = run_agentic(root, registry, targets, http_transport, checkpoint_path=cp, redistill_since=args.redistill_round)
 	registry.save()
 	logger.info(
 		f"Agentic pass complete: {stats['processed']} session(s) distilled+refined, "

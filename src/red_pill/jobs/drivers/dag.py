@@ -100,7 +100,7 @@ import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from red_pill.jobs.drivers.base import JobDeferred, JobPauseRequested, ResumableJobDriver, StepOutcome
 
@@ -220,6 +220,18 @@ def _resolve_minion_kind(minion_id: str) -> Optional[str]:
 	return "logic"
 
 
+def _collect_ids(stages: List[Dict[str, Any]]) -> Set[str]:
+	"""Todos los ids de etapa del árbol (únicos globalmente), para validar referencias."""
+	out: Set[str] = set()
+	for s in stages:
+		sid = s.get("id")
+		if isinstance(sid, str):
+			out.add(sid)
+		if s.get("type") == _TYPE_COMPOUND:
+			out |= _collect_ids(s.get("sub_etapas", []))
+	return out
+
+
 def _iter_leaves(stages: List[Dict[str, Any]], prefix: str = ""):
 	"""Itera las etapas ATOMICAS (hojas) del árbol como (ruta, etapa), DFS estable."""
 	for s in stages:
@@ -243,6 +255,30 @@ def _flatten_ids(stages: List[Dict[str, Any]], prefix: str = "") -> List[str]:
 
 def _count_leaves(stages: List[Dict[str, Any]]) -> int:
 	return sum(1 for _ in _iter_leaves(stages))
+
+
+def _id_path_map(stages: List[Dict[str, Any]], prefix: str = "") -> Dict[str, str]:
+	"""Mapa id→path (DFS estable, primer match). Los ids son únicos globalmente
+	por validación; si no lo fueran, el primer match es determinista."""
+	out: Dict[str, str] = {}
+	for s in stages:
+		path = f"{prefix}/{s['id']}" if prefix else s["id"]
+		out.setdefault(s["id"], path)
+		if s.get("type") == _TYPE_COMPOUND:
+			out.update(_id_path_map(s.get("sub_etapas", []), path))
+	return out
+
+
+def _render_item(text: Any, item: Any) -> Any:
+	"""Sustituye `{{item}}` y `{{item.<clave>}}` en strings (prompt/command/params)
+	por el item del fan-out. Los no-strings se devuelven intactos."""
+	if not isinstance(text, str) or "{{item" not in text:
+		return text
+	if isinstance(item, dict):
+		for k, v in item.items():
+			text = text.replace("{{item." + str(k) + "}}", str(v))
+		return text.replace("{{item}}", json.dumps(item, ensure_ascii=False))
+	return text.replace("{{item}}", str(item))
 
 
 def _apply_recipe_defaults(stages: List[Dict[str, Any]], defaults: Dict[str, Any]) -> None:
@@ -314,14 +350,17 @@ class DagJobDriver(ResumableJobDriver):
 		if not isinstance(stages, list) or not stages:
 			raise ValueError("dag_job manifest requires 'stages' (non-empty).")
 		seen: List[str] = []
-		cls._validate_stages(stages, payload, seen, path="")
+		all_ids = _collect_ids(stages)
+		cls._validate_stages(stages, payload, seen, path="", all_ids=all_ids)
 
 	@classmethod
 	def _validate_stages(
-		cls, stages: List[Dict[str, Any]], payload: Dict[str, Any], seen: List[str], path: str, recipe_stack: Optional[List[str]] = None
+		cls, stages: List[Dict[str, Any]], payload: Dict[str, Any], seen: List[str], path: str, recipe_stack: Optional[List[str]] = None, all_ids: Optional[Set[str]] = None
 	) -> None:
 		if recipe_stack is None:
 			recipe_stack = []
+		if all_ids is None:
+			all_ids = set()
 		for s in stages:
 			sid = s.get("id")
 			if not sid:
@@ -357,14 +396,14 @@ class DagJobDriver(ResumableJobDriver):
 				sub_stages = (sub_payload.get("manifest") or {}).get("stages")
 				if not isinstance(sub_stages, list) or not sub_stages:
 					raise ValueError(f"dag_job stage '{stage_path}' recipe '{recipe_ref}' no tiene manifest.stages.")
-				cls._validate_stages(sub_stages, sub_payload, seen, path=stage_path, recipe_stack=recipe_stack + [recipe_ref])
+				cls._validate_stages(sub_stages, sub_payload, seen, path=stage_path, recipe_stack=recipe_stack + [recipe_ref], all_ids=all_ids)
 			elif stype == _TYPE_COMPOUND:
 				if s.get("minion"):
 					raise ValueError(f"dag_job compound stage '{stage_path}' must not carry a minion.")
 				sub = s.get("sub_etapas")
 				if not isinstance(sub, list) or not sub:
 					raise ValueError(f"dag_job compound stage '{stage_path}' requires 'sub_etapas' (non-empty).")
-				cls._validate_stages(sub, payload, seen, path=stage_path)
+				cls._validate_stages(sub, payload, seen, path=stage_path, all_ids=all_ids)
 			else:
 				minion_id = s.get("minion")
 				if not minion_id:
@@ -390,6 +429,21 @@ class DagJobDriver(ResumableJobDriver):
 				else:
 					if kind == _TYPE_AGENT:
 						raise ValueError(f"dag_job stage '{stage_path}' type mismatch: minion '{minion_id}' es agéntico, no '{stype}'.")
+				# Fan-out por items (RFC §4.6): la hoja declara una fuente que
+				# devuelve `items`; el DAG la expande a N instancias en runtime.
+				# Acotación por contrato: referencia existente, distinta de sí
+				# misma, y solo en hojas (este branch). El ciclo fuente↔plantilla
+				# no se permite explícitamente aquí (la plantilla no puede
+				# depender de sí misma); un deadlock por deps cruzadas lo
+				# detectaría el guard "sin frente ejecutable" en runtime.
+				fof = s.get("fan_out_from")
+				if fof is not None:
+					if not isinstance(fof, str) or not fof:
+						raise ValueError(f"dag_job stage '{stage_path}' fan_out_from must be a stage id.")
+					if fof == sid:
+						raise ValueError(f"dag_job stage '{stage_path}' fan_out_from no puede referenciarse a sí misma.")
+					if fof not in all_ids:
+						raise ValueError(f"dag_job stage '{stage_path}' fan_out_from unknown '{fof}' (no existe ningún id de etapa así).")
 			for dep in s.get("depends_on", []):
 				# las deps referencian hermanos (ids del mismo nivel)
 				dep_path = f"{path}/{dep}" if path else dep
@@ -555,6 +609,107 @@ class DagJobDriver(ResumableJobDriver):
 			return declared
 		return max(1, min(declared, int(left)))
 
+	# ── Fan-out por items (RFC §4.6) ──────────────────────────────────────────
+	@staticmethod
+	def _read_report_items(workdir: Path, src_path: str) -> List[Any]:
+		"""Lee la lista `items` del reporte de la etapa fuente (command → .json,
+		agent → .envelope.json). Vacía si el reporte no existe o no trae items."""
+		reports_dir = workdir / ".cell" / "reports"
+		for suffix in (".json", ".envelope.json"):
+			p = reports_dir / f"{src_path}{suffix}"
+			if not p.exists():
+				continue
+			try:
+				data = json.loads(p.read_text(encoding="utf-8"))
+			except Exception:
+				continue
+			items = data.get("items") if isinstance(data, dict) else None
+			if isinstance(items, list):
+				return items
+			# command: el minion pudo volcar JSON con `items` en stdout — es el
+			# contrato de la etapa fuente del fan-out (RFC §4.6).
+			if isinstance(data, dict) and isinstance(data.get("stdout"), str):
+				try:
+					parsed = json.loads(data["stdout"])
+				except Exception:
+					parsed = None
+				if isinstance(parsed, dict) and isinstance(parsed.get("items"), list):
+					return list(parsed["items"])
+		return []
+
+	@classmethod
+	def _expand_fanout(
+		cls,
+		stages: List[Dict[str, Any]],
+		completed: List[str],
+		fanout_items: Dict[str, List[Any]],
+		id_map: Dict[str, str],
+		workdir: Path,
+	) -> Tuple[List[Dict[str, Any]], Dict[str, List[Any]], List[str]]:
+		"""Expande las hojas `fan_out_from` cuyas fuentes ya están completadas.
+
+		Mutación ACOTADA por contrato (RFC §4.6): la hoja plantilla se convierte
+		en un compuesto dinámico con N instancias idénticas (path `<plantilla>/<i>`),
+		cada una con `_item` para que `_run_atomic` la inyecte. La lista de items se
+		CONGELA en `fanout_items[<plantilla>]` la primera vez (del reporte de la
+		fuente); el resume re-expande desde ahí, sin re-leer el reporte → determinista.
+
+		Devuelve (árbol expandido, fanout_items actualizado, paths de plantillas con
+		lista vacía que se marcan done sin ejecutar).
+		"""
+		new_stages: List[Dict[str, Any]] = []
+		skipped: List[str] = []
+		for s in stages:
+			path = s["id"]
+			if s.get("type") == _TYPE_COMPOUND:
+				sub, sub_items, sub_skip = cls._expand_fanout(s.get("sub_etapas", []), completed, fanout_items, id_map, workdir)
+				ns = dict(s)
+				ns["sub_etapas"] = sub
+				new_stages.append(ns)
+				skipped.extend(sub_skip)
+				continue
+			fof = s.get("fan_out_from")
+			if not fof:
+				new_stages.append(s)
+				continue
+			src_path = id_map.get(fof, fof)
+			if src_path not in completed:
+				# la fuente aún no terminó: la plantilla queda como hoja BLOQUEADA
+				# (el frente la ignora) para que el DAG no la ejecute ni finalice
+				# antes de tiempo; el próximo step la expandirá.
+				ns = dict(s)
+				ns["_awaiting_fanout_src"] = True
+				new_stages.append(ns)
+				continue
+			if path not in fanout_items:
+				fanout_items[path] = cls._read_report_items(workdir, src_path)
+			items = fanout_items[path]
+			if not items:
+				skipped.append(path)
+				continue
+			instances = []
+			for i, item in enumerate(items):
+				inst = dict(s)
+				inst["id"] = f"{s['id']}-{i}"
+				inst["_item"] = item
+				# las deps las resuelve el compuesto padre (ancestor deps met), no
+				# cada instancia como hermano: si se heredaran, "discover" se
+				# buscaría como "plantilla/discover" y el frente nunca la lanzaría.
+				inst.pop("depends_on", None)
+				inst.pop("fan_out_from", None)
+				inst.pop("sub_etapas", None)
+				instances.append(inst)
+			comp = dict(s)
+			comp["type"] = _TYPE_COMPOUND
+			comp["sub_etapas"] = instances
+			comp.pop("_item", None)
+			comp.pop("fan_out_from", None)
+			comp.pop("command", None)
+			comp.pop("prompt", None)
+			comp.pop("minion", None)
+			new_stages.append(comp)
+		return new_stages, fanout_items, skipped
+
 	# ── Ejecución de una etapa ATOMICA ────────────────────────────────────────
 	def _run_atomic(self, payload: Dict[str, Any], stage: Dict[str, Any], stage_path: str, gate: Any = None) -> str:
 		"""Ejecuta UN minion (factory + execute directo — decisión 2026-08-07) y
@@ -573,6 +728,10 @@ class DagJobDriver(ResumableJobDriver):
 		`pausable` (default true): una etapa no-pausable nunca se auto-pausa y su
 		trabajo jamás se descarta.
 		"""
+		if stage.get("fan_out_from"):
+			raise RuntimeError(
+				f"dag stage '{stage_path}' es plantilla de fan_out y no debe ejecutarse directa (fuente no completada)."
+			)
 		from red_pill.jobs.drivers.base import build_pause_probe
 		from red_pill.swarm.factory import MinionFactory
 
@@ -584,7 +743,13 @@ class DagJobDriver(ResumableJobDriver):
 			raise RuntimeError(f"dag stage '{stage_path}' minion no registrado.")
 
 		task = stage.get("prompt") or stage.get("command") or ""
+		# Instancia de fan-out (RFC §4.6): inyectar el item y renderizar `{{item}}`
+		# en prompt/command; el minion lo recibe además como kwargs["item"].
+		item = stage.get("_item")
 		kwargs: Dict[str, Any] = {"cwd": str(workdir), "timeout": self._stage_timeout(stage, payload)}
+		if item is not None:
+			task = _render_item(task, item)
+			kwargs["item"] = item
 		for key in ("backend", "model", "effort", "mode"):
 			if stage.get(key) or payload.get(key):
 				kwargs[key] = stage.get(key) or payload.get(key)
@@ -593,9 +758,9 @@ class DagJobDriver(ResumableJobDriver):
 		if stage.get("origin") or payload.get("origin"):
 			kwargs["origin"] = stage.get("origin") or payload.get("origin")
 		if stage.get("command"):
-			kwargs["command"] = stage["command"]
+			kwargs["command"] = task
 		if isinstance(stage.get("params"), dict):
-			kwargs.update(stage["params"])
+			kwargs.update({k: _render_item(v, item) if item is not None else v for k, v in stage["params"].items()})
 		# RFC-HARNESS-002 §7 (v3): el bloque `llm:` POR ETAPA en el manifest del
 		# dag_job (coherencia DAG-001: cada instancia DISTILL×N/REFINE×M del
 		# fan-out futuro declara su modelo/modo). Los minions command lo reciben
@@ -644,6 +809,15 @@ class DagJobDriver(ResumableJobDriver):
 		completed = list(checkpoint_data.get("completed_stage_ids", []))
 		results = dict(checkpoint_data.get("results", {}))
 		flags = dict(checkpoint_data.get("stage_flags", {}))
+		fanout_items = dict(checkpoint_data.get("fanout_items", {}))
+		# Fan-out por items (RFC §4.6): expandir las plantillas `fan_out_from`
+		# cuyas fuentes ya completaron; las de lista vacía se marcan done sin
+		# ejecutar. El árbol resultante alimenta todo lo demás (frente, progreso,
+		# propagación) sin cambios en la mecánica de step.
+		stages, fanout_items, _skip_empty = self._expand_fanout(
+			stages, completed, fanout_items, _id_path_map(stages), self._workdir(payload)
+		)
+		completed = list(completed) + _skip_empty
 		total_leaves = _count_leaves(stages)
 
 		# Drain cutoff del ciclo de sueño: anclado en el PRIMER step del job y
@@ -677,6 +851,10 @@ class DagJobDriver(ResumableJobDriver):
 		for leaf_path, leaf in _iter_leaves(stages):
 			if leaf_path in completed:
 				continue
+			if leaf.get("_awaiting_fanout_src"):
+				# plantilla de fan-out cuya fuente aún no completa: bloqueada, no
+				# es ejecutable todavía (RFC §4.6). Sí cuenta para el total.
+				continue
 			prefix = leaf_path.rsplit("/", 1)[0] if "/" in leaf_path else ""
 			if not self._ancestor_deps_met(stages, prefix, completed):
 				continue
@@ -698,7 +876,14 @@ class DagJobDriver(ResumableJobDriver):
 				)
 			return StepOutcome(
 				completed=True,
-				new_checkpoint=checkpoint_data,
+				# el árbol ya no incluye las plantillas skipped (lista vacía):
+				# persistir el skip y la lista congelada en el checkpoint final
+				# para que el estado sea consistente con lo ejecutado.
+				new_checkpoint={
+					**checkpoint_data,
+					"completed_stage_ids": list(completed),
+					"fanout_items": fanout_items,
+				},
 				summary="dag complete",
 				progress={
 					"current": leaves_done,
@@ -893,6 +1078,7 @@ class DagJobDriver(ResumableJobDriver):
 			"results": new_results,
 			"stage_flags": new_flags,
 			"sleep_cutoff_ts": self._sleep_cutoff_ts,
+			"fanout_items": fanout_items,
 		}
 		if paused:
 			logger.info(

@@ -1057,3 +1057,142 @@ def test_payload_mode_reaches_minions_and_params_win(tmp_path, monkeypatch):
 			break
 	assert record[0][1].get("mode") == "deep"  # hereda del payload
 	assert record[1][1].get("mode") == "lazy"  # params de etapa pisa al payload
+
+
+# ── Fan-out por items (RFC §4.6) ────────────────────────────────────────────
+def _patch_fanout_factory(monkeypatch, record):
+	"""Añade un minion `source` que devuelve `items` (escribe el reporte) al fake."""
+
+	class _FakeSource:
+		def __init__(self, items):
+			self._items = items
+
+		async def execute(self, task, **kwargs):
+			record.append((task, kwargs))
+			return {"status": "success", "returncode": 0, "summary": "ok", "items": self._items}
+
+	class _FakeCommand:
+		async def execute(self, task, **kwargs):
+			record.append((task, kwargs))
+			return {"status": "success", "returncode": 0, "stdout": "ok", "summary": "ok"}
+
+	_sources = {}
+
+	def _create(minion_id, **kw):
+		if minion_id == "source":
+			return _FakeSource(_sources.setdefault("items", ["a", "b", "c"]))
+		if minion_id == "source_empty":
+			return _FakeSource([])
+		if minion_id == "command_runner":
+			return _FakeCommand()
+		raise KeyError(minion_id)
+
+	monkeypatch.setattr("red_pill.swarm.factory.MinionFactory.create", staticmethod(_create))
+	import red_pill.jobs.drivers.dag as dag_mod
+
+	monkeypatch.setattr(dag_mod, "_resolve_minion_kind", lambda mid: "command")
+
+
+def test_fanout_blocked_until_source_completes_then_instances(tmp_path, monkeypatch):
+	d = DagJobDriver()
+	ws = tmp_path / "ws"
+	(ws / ".cell" / "reports").mkdir(parents=True)
+	calls = []
+	_patch_fanout_factory(monkeypatch, calls)
+	payload = _payload(
+		str(ws),
+		[
+			{"id": "discover", "type": "command", "minion": "source", "command": "discover"},
+			{"id": "plant", "type": "command", "minion": "command_runner", "fan_out_from": "discover", "depends_on": ["discover"], "command": "echo {{item}} > out.txt"},
+		],
+	)
+	o1 = d.step(payload, {})
+	# step 1: solo la fuente; la plantilla está bloqueada (no en el frente)
+	assert o1.new_checkpoint["completed_stage_ids"] == ["discover"]
+	assert [t for t, _ in calls] == ["discover"]
+	# step 2: la fuente completa → se expanden 3 instancias, una por item
+	o2 = d.step(payload, o1.new_checkpoint)
+	assert o2.completed
+	ids = o2.new_checkpoint["completed_stage_ids"]
+	for i in range(3):
+		assert f"plant/plant-{i}" in ids
+	assert "plant" in ids  # el compuesto dinámico se propaga done
+	# cada instancia recibió su item y el command renderizado
+	inst_calls = [t for t, _ in calls if t.startswith("echo ")]
+	assert inst_calls == ["echo a > out.txt", "echo b > out.txt", "echo c > out.txt"]
+	items = [k["item"] for t, k in calls if t.startswith("echo ")]
+	assert items == ["a", "b", "c"]
+
+
+def test_fanout_empty_list_marks_plant_done(tmp_path, monkeypatch):
+	d = DagJobDriver()
+	ws = tmp_path / "ws"
+	(ws / ".cell" / "reports").mkdir(parents=True)
+	calls = []
+	_patch_fanout_factory(monkeypatch, calls)
+	payload = _payload(
+		str(ws),
+		[
+			{"id": "discover", "type": "command", "minion": "source_empty", "command": "discover"},
+			{"id": "plant", "type": "command", "minion": "command_runner", "fan_out_from": "discover", "depends_on": ["discover"], "command": "echo {{item}} > out.txt"},
+		],
+	)
+	o1 = d.step(payload, {})
+	o2 = d.step(payload, o1.new_checkpoint)
+	# lista vacía → plantilla marcada done sin ejecutar ninguna instancia
+	assert o2.completed
+	assert "plant" in o2.new_checkpoint["completed_stage_ids"]
+	assert "plant/plant-0" not in o2.new_checkpoint["completed_stage_ids"]
+	assert all("echo " not in t for t, _ in calls)
+
+
+def test_fanout_frozen_items_survive_resume(tmp_path, monkeypatch):
+	"""El resume usa la lista congelada del checkpoint, no re-lee el reporte."""
+	d = DagJobDriver()
+	ws = tmp_path / "ws"
+	(ws / ".cell" / "reports").mkdir(parents=True)
+	calls = []
+	_patch_fanout_factory(monkeypatch, calls)
+	payload = _payload(
+		str(ws),
+		[
+			{"id": "discover", "type": "command", "minion": "source", "command": "discover"},
+			{"id": "plant", "type": "command", "minion": "command_runner", "fan_out_from": "discover", "depends_on": ["discover"], "command": "echo {{item}} > out.txt"},
+		],
+	)
+	o1 = d.step(payload, {})
+	o2 = d.step(payload, o1.new_checkpoint)
+	assert "plant" in o2.new_checkpoint["completed_stage_ids"]
+	# borrar el reporte de la fuente: el resume no debe depender de él
+	(ws / ".cell" / "reports" / "discover.json").unlink()
+	o3 = d.step(payload, o2.new_checkpoint)
+	assert o3.completed
+	assert o3.new_checkpoint["fanout_items"]["plant"] == ["a", "b", "c"]
+	assert len([t for t, _ in calls if t.startswith("echo ")]) == 3  # no re-ejecuta
+
+
+def test_fanout_validate_rejects_bad_reference():
+	from red_pill.jobs.drivers.dag import DagJobDriver as D
+
+	ws = "/tmp/none"
+	with pytest.raises(ValueError, match="fan_out_from unknown"):
+		D.validate(_payload(ws, [{"id": "a", "type": "command", "minion": "command_runner", "command": "x", "fan_out_from": "nope"}]))
+	with pytest.raises(ValueError, match="no puede referenciarse a sí misma"):
+		D.validate(_payload(ws, [{"id": "a", "type": "command", "minion": "command_runner", "command": "x", "fan_out_from": "a"}]))
+	# depends_on sobre la fuente es LEGÍTIMO (la plantilla espera a descubrir)
+	D.validate(_payload(ws, [{"id": "a", "type": "command", "minion": "command_runner", "command": "x"}, {"id": "b", "type": "command", "minion": "command_runner", "command": "y", "fan_out_from": "a", "depends_on": ["a"]}]))
+
+
+def test_read_report_items_from_stdout_json(tmp_path):
+	from red_pill.jobs.drivers.dag import DagJobDriver as D
+
+	ws = tmp_path / "ws"
+	(ws / ".cell" / "reports").mkdir(parents=True)
+	(ws / ".cell" / "reports" / "discover.json").write_text(
+		json.dumps({"status": "success", "stdout": json.dumps({"items": ["a", "b"]})})
+	)
+	assert D._read_report_items(ws, "discover") == ["a", "b"]
+	# reporte sin items → lista vacía
+	(ws / ".cell" / "reports" / "vacio.json").write_text(json.dumps({"stdout": "sin items"}))
+	assert D._read_report_items(ws, "vacio") == []
+	assert D._read_report_items(ws, "inexistente") == []

@@ -1,0 +1,43 @@
+# Memento — RE-DESTILADO por sesión vía fan-out por items (RFC-JOBDAG-001 §4.6).
+#
+# Primer consumidor REAL del DAG dinámico acotado: la etapa `discover` lista las
+# sesiones pendientes de la ronda granite (JSON con `items` en stdout), y la
+# plantilla `redistill` se expande a UNA instancia por sesión (fan_out_from).
+#
+#   - `fan_out_from: discover` → el DAG instancia `redistill` N veces
+#     (path `redistill/redistill-<i>`), 1 step = 1 sesión (como `--limit 1`,
+#     pero con la lista congelada en el checkpoint del DAG).
+#   - `on_fail: warn` → una sesión fallida no corta las demás.
+#   - La lista de items viaja al checkpoint (`fanout_items`) → reanudable y
+#     determinista tras pause/kill/reinicio.
+#   - `max_step_minutes: 90` → las antigravity_export (novelas largas) no se
+#     abaten; la cota atada (§4.4.2) cede en frontera si hace falta.
+#
+# La resiembra (drop + ascenso) va DESPUÉS, cuando esto complete.
+source: dag_job
+priority: 1
+title: Re-destilado Memento por sesión (fan-out RFC-JOBDAG-001 §4.6)
+mission_id: memento-redistill-fanout
+manifest:
+  workdir: /home/joan/Documents/IA/sharing
+  stages:
+    - id: discover
+      type: command
+      minion: command_runner
+      command: uv run python scripts/list_memento_pending.py --redistill-round 2026-09-15T15:13:00Z
+    - id: redistill
+      type: command
+      minion: command_runner
+      fan_out_from: discover
+      depends_on: [discover]
+      on_fail: warn
+      command: uv run python scripts/memento_agentic.py --force --redistill-round 2026-09-15T15:13:00Z --target {{item}}
+# RFC-HARNESS-002 §7: demanda de inferencia del job → env RP_LLM_* → el pase
+# Memento pide granite_8b (task refine, default) sin tocar el default del daemon.
+llm:
+  task: refine
+  fallup: true
+preflight:
+  llm_required: true
+control:
+  max_step_minutes: 90
