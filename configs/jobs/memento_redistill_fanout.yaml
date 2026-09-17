@@ -10,14 +10,15 @@
 #   - `on_fail: warn` → una sesión fallida no corta las demás.
 #   - La lista de items viaja al checkpoint (`fanout_items`) → reanudable y
 #     determinista tras pause/kill/reinicio.
-#   - `max_step_minutes: 90` → las antigravity_export (novelas largas) no se
-#     abaten; la cota atada (§4.4.2) cede en frontera si hace falta.
-#
-# La resiembra (drop + ascenso) va DESPUÉS, cuando esto complete.
+#   - `max_step_minutes: 90` → presupuesto del step (cede en frontera). El
+#     TIMEOUT DE ETAPA (`timeout: 5400`) es el que ata cada instancia: sin él,
+#     el default de 600s abate las antigravity_export largas (>= 10 min de LLM
+#     con splits) y quedan pendientes (incidente 2026-09-17).
 source: dag_job
 priority: 1
 title: Re-destilado Memento por sesión (fan-out RFC-JOBDAG-001 §4.6)
 mission_id: memento-redistill-fanout
+timeout: 5400
 manifest:
   workdir: /home/joan/Documents/IA/sharing
   stages:
