@@ -715,6 +715,8 @@ def handle_job(args: argparse.Namespace) -> None:
 		else:
 			mission_note = f", mission={mission}" if mission else ""
 			print(f"[OK] Job {job_id} encolado (source={source}, priority={priority}{mission_note}).")
+		if getattr(args, "kick", False):
+			_kick_queue()
 
 	elif args.job_cmd == "list":
 		statuses = ["PENDING", "PROCESSING", "PAUSING", "PAUSED", "BLOCKED", "FRUSTRATED", "COMPLETED"] if args.all else None
@@ -813,8 +815,29 @@ def handle_job(args: argparse.Namespace) -> None:
 
 	elif args.job_cmd == "process-queue":
 		_run_job_queue(queue)
+	elif args.job_cmd == "kick":
+		_kick_queue()
 	else:
-		print("Uso: red-pill job {submit|list|status|pause|resume|skip|kill|logs|purge|process-queue}")
+		print("Uso: red-pill job {submit|list|status|pause|resume|skip|kill|logs|purge|process-queue|kick}")
+
+
+def _kick_queue() -> None:
+	"""Dispara el runner de cola AHORA (sin esperar al timer de 1 min).
+
+	Vía oficial: `systemctl --user start --no-block redpill-queue.service` — el
+	oneshot corre desatendido con OOM shield e inhibit del sueño, igual que el
+	timer. `--no-block` devuelve al instante. Si otro runner ya está activo, el
+	flock del worker lo hace ceder (exit 0) sin daño.
+	"""
+	try:
+		subprocess.run(
+			["systemctl", "--user", "start", "--no-block", "redpill-queue.service"],
+			capture_output=True, text=True, timeout=15,
+		)
+	except (subprocess.SubprocessError, OSError) as e:
+		print(f"[WARN] no se pudo disparar el runner al momento: {e} (el timer lo recogerá en ≤1 min)")
+		return
+	print("[OK] Runner disparado — la cola se procesará al momento.")
 
 
 def _print_measurements(task: dict) -> None:
@@ -1216,6 +1239,11 @@ def main() -> None:
 		"--singleton", action="store_true", help="No encolar si ya hay un job vivo (PENDING/PROCESSING/PAUSED/BLOCKED) con el mismo source y title"
 	)
 	job_submit.add_argument("--title", help="Título descriptivo (se guarda en el payload)")
+	job_submit.add_argument(
+		"--kick",
+		action="store_true",
+		help="Disparar el runner de cola al momento (sin esperar al timer de 1 min). Útil al encolar una tarea y querer que la procese ya.",
+	)
 	job_submit.add_argument("--parent", help="Id del job padre: entra BLOCKED y se desbloquea cuando el padre completa (DAG)")
 	job_submit.add_argument("--mission", help="Grupo de aislamiento entre forges (mission_id)")
 
@@ -1255,6 +1283,7 @@ def main() -> None:
 	job_purge.add_argument("--yes", action="store_true", help="Sin confirmación interactiva")
 
 	job_sub.add_parser("process-queue", help="Runner shot-and-forget: procesa la cola y se apaga (exit 0)")
+	job_sub.add_parser("kick", help="Disparar el runner de cola inmediatamente (sin esperar al timer de 1 min)")
 
 	# P2P Sovereign Sync (v7.1.0)
 	p2p_parser = subparsers.add_parser("p2p", help="Sovereign P2P Synchronization (Delta Engine)")

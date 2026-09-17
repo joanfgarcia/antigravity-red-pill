@@ -174,6 +174,59 @@ invocación del CLI se estandariza con el placeholder `${RED_PILL_CMD}`.
   (Memory Optimizer diario, Code Graph Refresh horario) no existían; el de
   graphify ya estaba implementado (`graphify_sync.py`, AD-015) pero sin activar.
 
+### 🔀 DAG dinámico acotado — fan-out por items (`fan_out_from`, RFC-JOBDAG-001 §4.6)
+
+Primer consumidor real del DAG dinámico acotado: el re-destilado Memento por
+sesión (1 instancia por sesión, lista congelada en el checkpoint).
+
+- **[FEAT] `dag.py`**: hoja con `fan_out_from: <fuente>` → compuesto dinámico con
+  N instancias (`<plantilla>/<i>`), item inyectado como `kwargs["item"]` +
+  sustitución `{{item}}` en prompt/command/params. La lista de items se congela
+  en `checkpoint.fanout_items` (resume determinista, no re-lee el reporte). Lista
+  vacía → plantilla done sin ejecutar. Plantilla bloqueada hasta que la fuente
+  completa. Validación: referencia existente, no self, solo en hojas.
+- **[FIX] Timeout de etapa de las instancias de fan-out**: `_stage_timeout` ya NO
+  recorta el timeout de una instancia por el presupuesto restante del step —
+  cada sesión conserva su cota completa (5400s). Antes una antigravity_export
+  larga se abatía a 565s con lo que quedaba del presupuesto (incidente 2026-09-17).
+- **[HYG] `--target` en `memento_agentic.py`**: procesa UNA sesión concreta
+  (`SOURCE:session_id`) sin tocar el checkpoint global de la ronda.
+- **[NEW] `scripts/list_memento_pending.py`**: lista las pendientes de la ronda
+  como `{"items": [...]}` (contrato de la etapa fuente del fan-out).
+- **[NEW] `configs/jobs/memento_redistill_fanout.yaml`**: receta del fan-out.
+
+### ⚡ `job kick` / `submit --kick` — disparo inmediato del runner
+
+- **[FEAT] `red-pill job kick`** y **`red-pill job submit --kick`**: disparan el
+  runner de cola al momento (`systemctl --user start --no-block
+  redpill-queue.service`) — un tick adelantado del timer, sin saltarse
+  prioridades ni tocar lo que ya corre (el `flock` hace ceder al runner nuevo).
+  3 tests nuevos en `test_cli_unit.py`.
+
+### 🛡️ CommandMinion — abatimiento del árbol de procesos (killpg)
+
+- **[FIX]** `CommandMinion` lanza el subproceso en su propia session/process group
+  (`start_new_session=True`) y al expirar el timeout aniquila el árbol completo
+  con `os.killpg(pgid, SIGKILL)` — antes un wrapper (`uv run` → python → LLM)
+  dejaba huérfanos consumiendo GPU y con el pipe abierto, colgando al runner.
+  Test nuevo `test_timeout_kills_process_tree`.
+
+### 🧪 Bake-off Granite 4.2 vs 4.1 (RFC-HARNESS-002 v3, RFC MEM-006)
+
+- **[NEW] `scripts/bakeoff_granite_42.py`** + `configs/jobs/bakeoff_granite_42.yaml`:
+  F1 destilador (4.2-8B vs 4.1-8B, distiller_v3_voice MODE B, incl. probe de
+  género de Joan) + F2 detector (4.2-3B vs 4.1-3B, clasificación de género/voz/
+  identidad). Resultado en `docs/BENCHMARKS/2026-09-17-GRANITE_42_BAKEOFF.md`.
+  **Hallazgo**: los 4.2 con thinking no emiten JSON válido (4/4 y 5/5 "no JSON")
+  → ver AD-032; probarlos con thinking OFF antes de adoptar.
+
+### 🔁 Resiembra Memento (Fase 4, cierre)
+
+- **[FIX] `configs/jobs/memento_reseed.yaml`**: actualizado al cierre de la
+  ronda granite (719 sesiones). Ejecutada: backup → drop → ascenso → `work 4992`
+  / `social 4349` (~53/47, category_score del frontmatter). Auditoría de calidad
+  y RFC de mejoras en `Aleth_Core/planner/design/memento_promotion/`.
+
 ### 🔗 JOB-001 — trazabilidad de jobs (parent, progreso, doble salida)
 
 - `parent_task_id` + `progress` en el queue: encadenamiento y seguimiento de jobs

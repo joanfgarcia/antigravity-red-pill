@@ -1,23 +1,18 @@
-# Memento — RESIEMBRA de las colecciones curadas (Fase 4, 2026-09-15).
+# Resiembra Memento (Fase 4, 2026-09-17) — tras el re-destilado granite completo.
 #
-# Qdrant work/social_memories acumularon material estructural (~83% ruido). La
-# historia completa vive en Memento (raw/index/distill/refine con category_score
-# del curador Aya). Este job:
-#   1. Verifica la cobertura raw (Memento intacto — no se pierde nada).
-#   2. Snapshot backup de work/social (OBLIGATORIO — aborta si falla).
-#   3. Drop + recreate de work/social.
-#   4. Resiembra: ascenso estático (refine con significance >= 0.5 y
-#      category_score del curador). Idempotente (point_id determinista).
-# Validado en muestra 2026-09-14: recall 100% con las queries reales.
+# backup (obligatorio) → drop de work/social_memories → ascenso estático desde
+# refine/*.md (significance >= 0.5, category_score del frontmatter). Idempotente:
+# un resume/re-lanzamiento continúa con los no ascendidos (el frontmatter marca
+# `ascended`). ~0.55s/engrama → ~1.4h para ~9388.
 source: script_job
-priority: 3
-title: Memento resiembra de work/social (backup → drop → ascenso)
+priority: 5
+title: Resiembra Memento (backup → drop → ascenso, Fase 4)
 mission_id: memento-reseed
 step_command: uv run python scripts/memento_reseed.py --apply
 cwd: /home/joan/Documents/IA/sharing
-preflight:
-  llm_required: false   # el ascenso usa embeddings locales (fastembed), no el daemon LLM
-control:
-  max_step_minutes: 90  # ~1900 engramas × ~1-2s de embedding
 progress:
   mode: single
+control:
+  max_step_minutes: 180
+preflight:
+  memory_max: 16G

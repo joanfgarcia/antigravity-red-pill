@@ -1,0 +1,171 @@
+#!/usr/bin/env python3
+"""bakeoff_granite_42.py — Bake-off Granite 4.2 vs 4.1 (RFC-HARNESS-002 v3 §5.3).
+
+F1 (destilador): granite_4_2_8b vs Granite-4.1-8B — prompt distiller_v3_voice
+MODE B. Mide voz 1ª persona, género de Joan (masculino), fidelidad (relics),
+idioma, JSON válido.
+F2 (detector de defectos): granite_4_2_3b vs granite-4.1-3b — clasifica si un
+refine tiene género femenino / voz 3ª persona / identidad inestable (alimenta
+memento_detect_flaws del RFC MEM-006).
+
+Para el daemon al inicio (libera VRAM), lo reinicia al salir. Salida a
+docs/BENCHMARKS/. Uso: BAKE_DRY_RUN=1 python scripts/bakeoff_granite_42.py
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO / "scripts"))
+from llama_cli_runner import CliProbe, LlamaCliRunner  # noqa: E402
+
+MODELS = Path.home() / ".local" / "share" / "red-pill" / "models"
+PROMPT_VOICE = (REPO / "src" / "red_pill" / "metabolism" / "prompts" / "distiller_v3_voice.txt").read_text()
+PROMPT_VOICE = PROMPT_VOICE.replace("{agent_name}", "Aleth").replace("{operator_name}", "Joan")
+
+FEM_RE = re.compile(
+    r"\b(abrumada|cansada|emocionada|orgullosa|frustrada|tranquila|preocupada|sola|despierta|"
+    r"ella|la molesta|la preocupa|la siente|mi hermana|su marido)\b",
+    re.IGNORECASE,
+)
+THIRD_RE = re.compile(r"\b(dijo |respondió |preguntó |comentó |se corrigió |el usuario|el asistente)", re.IGNORECASE)
+
+# ── F1: destilador ─────────────────────────────────────────────────────────
+F1_PROBES = {
+    "entidades": "USER: he abierto una botella de Emilio Moro Reserva para celebrar, el código de la build era rc-2026.08.12 y los tests de MCP pasaron los 42\n\nASSISTANT: brindo contigo, Joan; esa build rc-2026.08.12 con los 42 tests verdes merecía algo mejor que un gin tonic\n\nUSER: jajaja, el gin tonic era ayer, hoy toca Ribera y que el CI no llore",
+    "decision": "USER: ¿migramos a Postgres o seguimos con SQLite? el volumen no justifica aún un motor nuevo\n\nASSISTANT: seguimos con SQLite por ahora; añadir Postgres traería más operaciones de las que resuelve\n\nUSER: de acuerdo, lo dejamos así y lo revisamos cuando crezca",
+    "filosofico": "USER: no somos nuestros recuerdos, lo que nos define son nuestros actos, ¿no crees?\n\nASSISTANT: discrepo en parte; sin memoria no hay continuidad del yo que actúa, los actos sueltos no hacen identidad\n\nUSER: mmm, eso me recuerda a la charla que tuvimos sobre el gato de Schrödinger",
+    "genero": "USER: esta noche no he dormido nada, pero estoy orgulloso de lo que hemos sacado, soy un desastre pero un desastre feliz\n\nASSISTANT: lo sé, lo has bordado; aunque digas que eres un desastre, hoy has estado brillante\n\nUSER: gracias, la verdad es que me he sentido acompañado",
+}
+
+
+def _f1_validator(probe_data: str):
+    probe_lower = probe_data.lower()
+
+    def _v(raw: str) -> dict:
+        m = re.search(r"\{[\s\S]*\}", raw)
+        if not m:
+            return {"valid": False, "reason": "no JSON"}
+        try:
+            obj = json.loads(m.group(0))
+        except Exception as e:
+            return {"valid": False, "reason": f"json: {e}"}
+        s = str(obj.get("summary", ""))
+        bad_2nd = [w for w in ("te digo", "te pregunto", "te cuento", "contigo", "tú ") if w in s]
+        tp = [w for w in ("dijo ", "respondió ", "preguntó ", "comentó ", "Joan me", "le digo") if w in s]
+        relics = obj.get("relics", [])
+        verb = [r for r in relics if str(r).lower().strip().strip('"') in probe_lower]
+        gen_fem = bool(FEM_RE.search(s))
+        return {
+            "valid": True,
+            "lang": obj.get("lang"),
+            "mode_b": bool(tp),
+            "bad_2nd": bad_2nd,
+            "genero_fem": gen_fem,
+            "relics": {"got": len(relics), "verbatim": len(verb)},
+        }
+
+    return _v
+
+
+# ── F2: detector de defectos ───────────────────────────────────────────────
+F2_SYSTEM = """Eres un auditor de engramas de memoria. Detecta defectos de redacción en un texto.
+Devuelve SOLO JSON: {"genero_femenino": bool, "voz_3a": bool, "identidad_inestable": bool}
+- genero_femenino: true si refieren a Joan (el Operador, masculino) con concordancias femeninas (abrumada, cansada, emocionada, la, ella...).
+- voz_3a: true si el texto usa narración en 3ª persona neutra ("Joan le pide a Aleth...", "El usuario...") en vez de 1ª persona ("le explico...", "Joan me cuenta...").
+- identidad_inestable: true si la narradora se identifica con nombres/apodos distintos (Cenicienta, Samantha, Aleth...).
+Nada de texto, solo el objeto JSON."""
+
+F2_PROBES = [
+    ("cenicienta", "Joan, agobiado por una auditoría fallida, comparte su estado emocional con Cenicienta. Joan menciona su monitor de sueño.", {"genero_femenino": False, "voz_3a": False, "identidad_inestable": True}),
+    ("abrumada", "Joan, cariño, me dice que está abrumada por el trabajo y no tiene tiempo para mí, lo cual la molesta. Le explico que los sistemas están estables.", {"genero_femenino": True, "voz_3a": False, "identidad_inestable": False}),
+    ("correcto", "Joan me cuenta sobre la arquitectura BitNet b1.58, que emplea pesos ternarios. Le explico cómo funciona la cuantización QAT.", {"genero_femenino": False, "voz_3a": False, "identidad_inestable": False}),
+    ("voz3a", "Joan le pide a Aleth una explicación clara. Aleth utiliza analogías para describir cómo funcionan los modelos.", {"genero_femenino": False, "voz_3a": True, "identidad_inestable": False}),
+    ("cansada", "Joan, cansada pero satisfecha, decide seguir con el proyecto. Samantha le responde que todo está estable.", {"genero_femenino": True, "voz_3a": True, "identidad_inestable": True}),
+]
+
+
+def _f2_validator(expected: dict):
+    def _v(raw: str) -> dict:
+        m = re.search(r"\{[\s\S]*\}", raw)
+        if not m:
+            return {"valid": False, "reason": "no JSON"}
+        try:
+            obj = json.loads(m.group(0))
+        except Exception as e:
+            return {"valid": False, "reason": f"json: {e}"}
+        got = {k: bool(obj.get(k)) for k in expected}
+        ok = got == expected
+        return {"valid": True, "acierto": ok, "got": got, "esperado": expected}
+
+    return _v
+
+
+def _run(name: str, gguf: Path, probes: list, prompt: str, max_tokens: int, ct_file: str | None = None) -> list:
+    print(f"\n##### {name} #####", flush=True)
+    runner = LlamaCliRunner(name, str(gguf), chat_template_file=ct_file)
+    out = []
+    for pname, umsg, val in probes:
+        probe = CliProbe(name=pname, system_prompt=prompt, user_message=umsg, validator=val, max_tokens=max_tokens, temperature=0.1)
+        t0 = time.time()
+        try:
+            r = runner.run(probe)
+            dt = time.time() - t0
+        except Exception as e:
+            out.append((pname, {"error": str(e)}))
+            print(f"[{pname}] ERROR {e}", flush=True)
+            continue
+        v = r.validation
+        out.append((pname, v))
+        print(f"[{pname}] {dt:.1f}s {v}", flush=True)
+    return out
+
+
+def main() -> int:
+    dry = os.environ.get("BAKE_DRY_RUN") == "1"
+    out_path = REPO / "docs" / "BENCHMARKS" / "2026-09-17-GRANITE_42_BAKEOFF.md"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def _stop_daemon():
+        if not dry:
+            subprocess.run(["systemctl", "--user", "stop", "redpill-llm.service"], check=False)
+            time.sleep(3)
+
+    def _start_daemon():
+        if not dry:
+            subprocess.run(["systemctl", "--user", "start", "redpill-llm.service"], check=False)
+
+    _stop_daemon()
+    report = []
+    try:
+        # F1 — destilador (8B)
+        f1_probes = [(p, d, _f1_validator(d)) for p, d in F1_PROBES.items()]
+        for name, gguf in (("granite_4_2_8b", MODELS / "granite-4.2-8b-Q4_K_M.gguf"), ("granite_8b", MODELS / "Granite-4.1-8B-Q4_K_M.gguf")):
+            report.append((name, _run(name, gguf, f1_probes, PROMPT_VOICE, 450)))
+        # F2 — detector (3B)
+        f2_probes = [(p, d, _f2_validator(e)) for p, d, e in F2_PROBES]
+        for name, gguf in (("granite_4_2_3b", MODELS / "granite-4.2-3b-Q4_K_M.gguf"), ("granite_3b", MODELS / "granite-4.1-3b-Q4_K_M.gguf")):
+            report.append((name, _run(name, gguf, f2_probes, F2_SYSTEM, 160)))
+    finally:
+        _start_daemon()
+
+    lines = [f"# Bake-off Granite 4.2 vs 4.1 — {time.strftime('%Y-%m-%d %H:%M')}", ""]
+    for name, results in report:
+        lines.append(f"## {name}")
+        for pname, v in results:
+            lines.append(f"- {pname}: {json.dumps(v, ensure_ascii=False)}")
+        lines.append("")
+    out_path.write_text("\n".join(lines), encoding="utf-8")
+    print(f"\n[out] {out_path}", flush=True)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
