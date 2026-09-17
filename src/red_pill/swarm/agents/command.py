@@ -1,6 +1,7 @@
 import asyncio
 import os
 import shlex
+import signal
 import time
 from typing import Any, Dict, List, Union
 
@@ -35,7 +36,14 @@ class CommandMinion(Minion):
 		start_time = time.time()
 
 		try:
-			process = await asyncio.create_subprocess_exec(*argv, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, cwd=cwd, env=env)
+			# `start_new_session`: el comando corre en su propia session/process
+			# group (pgid = pid). Es lo que permite abatir el ÁRBOL completo al
+			# expirar el timeout — sin esto, un wrapper (`uv run`, un script que
+			# lanza hijos) deja a sus descendientes huérfanos consumiendo GPU/CPU
+			# y manteniendo el pipe abierto, colgando el communicate() y al runner
+			# (incidente 2026-09-17). No cambia el cgroup: el kill por scope del
+			# job_kill sigue funcionando.
+			process = await asyncio.create_subprocess_exec(*argv, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, cwd=cwd, env=env, start_new_session=True)
 
 			if timeout:
 				try:
@@ -44,7 +52,12 @@ class CommandMinion(Minion):
 					# Sin esto el timeout era decorativo: un comando colgado
 					# bloqueaba al runner indefinidamente (run-lock R6 incluido).
 					# rc 124 = convención de timeout (coherente con ScriptJobDriver).
-					process.kill()
+					# `process.kill()` solo mata al líder; los hijos quedan
+					# huérfanos → killpg al grupo entero (SIGKILL).
+					try:
+						os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+					except ProcessLookupError:
+						pass
 					try:
 						await asyncio.wait_for(process.communicate(), timeout=5)
 					except (asyncio.TimeoutError, ProcessLookupError):
