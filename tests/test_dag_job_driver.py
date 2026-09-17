@@ -1196,3 +1196,16 @@ def test_read_report_items_from_stdout_json(tmp_path):
 	(ws / ".cell" / "reports" / "vacio.json").write_text(json.dumps({"stdout": "sin items"}))
 	assert D._read_report_items(ws, "vacio") == []
 	assert D._read_report_items(ws, "inexistente") == []
+
+
+def test_fanout_instance_not_clipped_by_step_budget():
+	"""Una instancia de fan-out conserva su timeout completo aunque el presupuesto
+	del step esté casi agotado (incidente 2026-09-17: redistill-2 recortada a 565s)."""
+	import time
+
+	d = DagJobDriver()
+	d.step_timeout_s = 60
+	d._step_started = time.monotonic() - 59  # queda 1s de presupuesto
+	assert d._stage_timeout({"_item": "x"}, {}) == 600  # declarado, sin recorte
+	assert d._stage_timeout({}, {}) == 1  # etapa normal sí se recorta
+	assert d._stage_timeout({"_item": "y"}, {"timeout": 5400}) == 5400

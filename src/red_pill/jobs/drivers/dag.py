@@ -602,8 +602,17 @@ class DagJobDriver(ResumableJobDriver):
 		en un grupo paralelo conserva su timeout declarado (recortarlo a cero la
 		haría fallar por una cota que no es suya). El corte real está en la
 		frontera de grupo, cediendo con lo hecho.
+
+		Las instancias de FAN-OUT (`_item`) NO se recortan: cada una es una tarea
+		atómica larga (1 sesión) con su cota completa. Recortarla por lo que
+		quede del presupuesto del step (que comparten N hermanas en secuencia)
+		abate sesiones legítimamente largas — incidente 2026-09-17 (redistill-2
+		recortada a 565s). El watchdog adaptativo del runner sigue cubriendo un
+		colgado real.
 		"""
 		declared = int(stage.get("timeout") or payload.get("timeout", 600))
+		if stage.get("_item") is not None:
+			return declared
 		left = self._budget_left()
 		if left is None or left <= 0:
 			return declared
