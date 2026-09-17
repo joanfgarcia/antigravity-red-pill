@@ -3,9 +3,9 @@
 Dos fronts consumen esta librería (una sola verdad de renderizado):
 
 - **daemon** (`~/.local/share/red-pill/daemon/run_dual_bind.py`): llama-cpp-python
-  con handlers por modo thinking.
+	con handlers por modo thinking.
 - **CLI** (harness de bake-off `scripts/bakeoff_granite_42.py`): llama-cpp-python
-  con el MISMO renderizado → la medición del bake-off es idéntica a producción.
+	con el MISMO renderizado → la medición del bake-off es idéntica a producción.
 
 La pieza que antes divergía (renderizado del template con `enable_thinking` /
 `low_effort` vía `Jinja2ChatFormatter`) vive aquí una sola vez; los fronts solo
