@@ -330,3 +330,29 @@ class TestCommandMinionTimeout:
 	def test_no_timeout_kwarg_still_works(self):
 		result = run(self._minion().execute("", command=["echo", "sin cota"]))
 		assert result["status"] == "success" and result["stdout"] == "sin cota"
+
+	def test_timeout_kills_process_tree(self, tmp_path):
+		"""El abatimiento mata el ÁRBOL, no solo el líder (incidente 2026-09-17:
+		un `uv run`/wrapper dejaba a sus hijos huérfanos consumiendo GPU y
+		manteniendo el pipe abierto → communicate() colgado)."""
+		import time
+
+		pid_file = tmp_path / "child.pid"
+		cmd = [
+			"python3",
+			"-c",
+			(
+				"import subprocess, time;"
+				f"p = subprocess.Popen(['sleep', '4711']);"
+				f"open({str(pid_file)!r}, 'w').write(str(p.pid));"
+				"time.sleep(300)"
+			),
+		]
+		result = run(self._minion().execute("", command=cmd, timeout=2))
+		assert result["returncode"] == 124
+		# dar un instante al SIGKILL del grupo
+		time.sleep(0.3)
+		child_pid = int(pid_file.read_text())
+		# el hijo del wrapper también debe haber muerto
+		with pytest.raises(ProcessLookupError):
+			os.kill(child_pid, 0)

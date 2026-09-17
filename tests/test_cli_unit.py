@@ -487,3 +487,48 @@ def test_cli_job_list(mock_qm):
 		main()
 	with patch("sys.argv", ["red-pill", "job", "list", "--all"]):
 		main()
+
+
+@patch("red_pill.cli.subprocess.run")
+@patch("red_pill.cognitive.queue_manager.CognitiveQueueManager")
+def test_cli_job_kick_dispara_runner(mock_qm, mock_run):
+	"""'red-pill job kick' dispara el service con --no-block (sin esperar al timer)."""
+	mock_run.return_value = MagicMock()
+	with patch("sys.argv", ["red-pill", "job", "kick"]):
+		main()
+	mock_run.assert_called_once()
+	args, _ = mock_run.call_args
+	assert "systemctl" in args[0]
+	assert "--no-block" in args[0]
+
+
+@patch("red_pill.cli.subprocess.run")
+@patch("red_pill.jobs.drivers.get_driver_class")
+@patch("red_pill.cognitive.queue_manager.CognitiveQueueManager")
+def test_cli_job_submit_kick(mock_qm, mock_driver, mock_run):
+	"""'job submit --kick' encola y dispara el runner al momento."""
+	cls = MagicMock()
+	cls.validate.return_value = None
+	cls.expand_manifest.side_effect = lambda p: p
+	mock_driver.return_value = cls
+	mock_qm.return_value.enqueue_task.return_value = "job-xyz"
+	mock_run.return_value = MagicMock()
+	with patch("sys.argv", ["red-pill", "job", "submit", "--source", "script_job", "--payload", '{"x": 1}', "--kick"]):
+		main()
+	mock_qm.return_value.enqueue_task.assert_called_once()
+	mock_run.assert_called_once()
+	args, _ = mock_run.call_args
+	assert "--no-block" in args[0]
+
+
+@patch("red_pill.cli.subprocess.run")
+@patch("red_pill.cognitive.queue_manager.CognitiveQueueManager")
+def test_cli_job_submit_sin_kick_no_dispara(mock_qm, mock_run):
+	cls = MagicMock()
+	cls.validate.return_value = None
+	cls.expand_manifest.side_effect = lambda p: p
+	with patch("red_pill.jobs.drivers.get_driver_class", return_value=cls):
+		mock_qm.return_value.enqueue_task.return_value = "job-xyz"
+		with patch("sys.argv", ["red-pill", "job", "submit", "--source", "script_job", "--payload", '{"x": 1}']):
+			main()
+	mock_run.assert_not_called()

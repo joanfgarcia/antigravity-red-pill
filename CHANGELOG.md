@@ -174,6 +174,71 @@ invocación del CLI se estandariza con el placeholder `${RED_PILL_CMD}`.
   (Memory Optimizer diario, Code Graph Refresh horario) no existían; el de
   graphify ya estaba implementado (`graphify_sync.py`, AD-015) pero sin activar.
 
+### 🔀 DAG dinámico acotado — fan-out por items (`fan_out_from`, RFC-JOBDAG-001 §4.6)
+
+Primer consumidor real del DAG dinámico acotado: el re-destilado Memento por
+sesión (1 instancia por sesión, lista congelada en el checkpoint).
+
+- **[FEAT] `dag.py`**: hoja con `fan_out_from: <fuente>` → compuesto dinámico con
+  N instancias (`<plantilla>/<i>`), item inyectado como `kwargs["item"]` +
+  sustitución `{{item}}` en prompt/command/params. La lista de items se congela
+  en `checkpoint.fanout_items` (resume determinista, no re-lee el reporte). Lista
+  vacía → plantilla done sin ejecutar. Plantilla bloqueada hasta que la fuente
+  completa. Validación: referencia existente, no self, solo en hojas.
+- **[FIX] Timeout de etapa de las instancias de fan-out**: `_stage_timeout` ya NO
+  recorta el timeout de una instancia por el presupuesto restante del step —
+  cada sesión conserva su cota completa (5400s). Antes una antigravity_export
+  larga se abatía a 565s con lo que quedaba del presupuesto (incidente 2026-09-17).
+- **[HYG] `--target` en `memento_agentic.py`**: procesa UNA sesión concreta
+  (`SOURCE:session_id`) sin tocar el checkpoint global de la ronda.
+- **[NEW] `scripts/list_memento_pending.py`**: lista las pendientes de la ronda
+  como `{"items": [...]}` (contrato de la etapa fuente del fan-out).
+- **[NEW] `configs/jobs/memento_redistill_fanout.yaml`**: receta del fan-out.
+
+### ⚡ `job kick` / `submit --kick` — disparo inmediato del runner
+
+- **[FEAT] `red-pill job kick`** y **`red-pill job submit --kick`**: disparan el
+  runner de cola al momento (`systemctl --user start --no-block
+  redpill-queue.service`) — un tick adelantado del timer, sin saltarse
+  prioridades ni tocar lo que ya corre (el `flock` hace ceder al runner nuevo).
+  3 tests nuevos en `test_cli_unit.py`.
+
+### 🛡️ CommandMinion — abatimiento del árbol de procesos (killpg)
+
+- **[FIX]** `CommandMinion` lanza el subproceso en su propia session/process group
+  (`start_new_session=True`) y al expirar el timeout aniquila el árbol completo
+  con `os.killpg(pgid, SIGKILL)` — antes un wrapper (`uv run` → python → LLM)
+  dejaba huérfanos consumiendo GPU y con el pipe abierto, colgando al runner.
+  Test nuevo `test_timeout_kills_process_tree`.
+
+### 🧪 Bake-off Granite 4.2 vs 4.1 (RFC-HARNESS-002 v3, RFC MEM-006)
+
+- **[NEW] `scripts/bakeoff_granite_42.py`** + `configs/jobs/bakeoff_granite_42.yaml`:
+  F1 destilador (4.2-8B vs 4.1-8B, distiller_v3_voice MODE B, incl. probe de
+  género de Joan) + F2 detector (4.2-3B vs 4.1-3B, clasificación de género/voz/
+  identidad). Resultado en `docs/BENCHMARKS/2026-09-17-GRANITE_42_BAKEOFF.md`.
+- **[REF] Harness unificado daemon/CLI**: el front del bake-off pasa de
+  subprocess llama-cli a **llama-cpp-python con el núcleo común**
+  (`src/red_pill/inference/runtime.py`) — misma renderización que el daemon
+  (Jinja2ChatFormatter + enable_thinking). El 4.1-8B pasa de 2/4 a 4/4 válidos
+  en el harness fiel.
+- **[FIX] Thinking del 4.2 resuelto** (AD-033): parámetros oficiales IBM
+  (temp 1.0 / top_p 0.95 / max_tokens 8192), **KV cache cuantizada vía
+  `type_k=GGML_TYPE_Q8_0`** (PR #1307 — la vía real de llama-cpp-python, mal
+  documentada; issues #1335/#1732 abiertos), **n_ctx 12288** (16K no cabe en la
+  5070), y ejecución con **`llmtools-venv` (0.3.35 CUDA)**. Resultado: el
+  4.2-8B con thinking emite JSON correcto y corrige el género de Joan que el
+  4.1-8B mantiene mal en "entidades".
+- **[FIX] Validador del bake-off**: `raw_decode` en vez de `re.search` greedy
+  (fallaba con "Extra data" cuando el modelo añade texto tras el JSON).
+
+### 🔁 Resiembra Memento (Fase 4, cierre)
+
+- **[FIX] `configs/jobs/memento_reseed.yaml`**: actualizado al cierre de la
+  ronda granite (719 sesiones). Ejecutada: backup → drop → ascenso → `work 4992`
+  / `social 4349` (~53/47, category_score del frontmatter). Auditoría de calidad
+  y RFC de mejoras en `Aleth_Core/planner/design/memento_promotion/`.
+
 ### 🔗 JOB-001 — trazabilidad de jobs (parent, progreso, doble salida)
 
 - `parent_task_id` + `progress` en el queue: encadenamiento y seguimiento de jobs
