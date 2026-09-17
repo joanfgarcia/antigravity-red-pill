@@ -48,6 +48,26 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-033] Granite 4.2 thinking — receta completa para hacerlo funcionar (parámetros oficiales, KV cuantizada, llmtools-venv)
+**Date**: 2026-09-17
+**Status**: ACCEPTED — verificado empíricamente.
+**Context**: el 4.2-8B con thinking fallaba "no JSON" en el harness. Tras iterar (temp 0.1, n_ctx 6144/8192/16384, marcadores `[Start thinking]` vs ` response`), el desenlace: eran 4 piezas a la vez, no una.
+**Hallazgos** (fuente: model card oficial ibm-granite/granite-4.2-8b + verificación local):
+1. **Parámetros REQUERIDOS por IBM**: `temperature=1.0`, `top_p=0.95` en todos los modos; `max_new_tokens=8192` thinking / `2048` nothink. Con temp baja el 4.2 queda en bucle de deliberación sin cerrar el reasoning.
+2. **Marcadores**: el reasoning va entre ` thinking` y ` response` (el `extract_thinking` del daemon ya usa el correcto). En llama-cli el marcador es `[Start thinking]` (motor Jinja distinto) — por eso el harness CLI divergía.
+3. **KV cache del 4.2** (GQA, 8 KV heads): 2.62 GB fp16 a 16K. Con pesos 5.35 GB → **16K no cabe en la RTX 5070 (8 GB)** ni con cuantización. **12K + K cuantizada sí cabe**.
+4. **Cuánto cuesta la KV**: `2 × n_layers × n_kv_heads × head_dim` por token (40×8×128 = 81920 valores × 2 B = 160 KB/token fp16).
+5. **Cuantización KV en llama-cpp-python**: vía **`type_k`/`type_v`** (PR #1307, merged desde 0.2.58; NO `kv_cache_type`/`cache_type_k`). Mal documentada (no en la firma pública). Issues relacionados abiertos: **#1335** (KV cuantizada falla en algunas configs) y **#1732** (scores fp32 con KV cuantizada). Verificado: 16K no cabe ni cuantizado en 8 GB; **12K + `type_k=GGML_TYPE_Q8_0` SÍ**.
+6. **Entornos**: el venv del repo es **CPU** (`llama_supports_gpu_offload()=False`). CUDA vive en `~/.local/share/red-pill/daemon/.venv` (0.3.31, sin `type_k`) y **`~/.local/share/red-pill/llmtools-venv` (0.3.35 CUDA, con `type_k`)** — creado por `scripts/setup_cuda_bindings.sh`.
+7. **Verificación**: 4.2-8B + thinking on + 12K + `type_k=q8_0` + temp 1.0 → JSON correcto (voz 1ª persona, **género de Joan correcto** — el 4.1-8B en el mismo probe asigna femenino). El thinking sí aporta en el caso de género.
+8. **Bug del validador del bake-off**: `re.search(r"\{[\s\S]*\}")` fallaba con "Extra data" cuando el modelo añadía texto tras el JSON → arreglado con `json.JSONDecoder().raw_decode` (extrae el primer JSON e ignora el resto).
+**Decision**:
+- Bake-off del 4.2-8B con thinking se ejecuta con `llmtools-venv` (0.3.35 CUDA) + `n_ctx=12288` + `type_k=GGML_TYPE_Q8_0` + temp 1.0/top_p 0.95 + max_tokens 8192.
+- **Roles** (operador, 2026-09-17): el 4.1-8B sigue como distiller de referencia; el 4.2 con thinking se evalúa para donde el reasoning aporta. El 4.2-3B es el mejor detector 3B (3/5).
+- El daemon NO se toca (0.3.31 funciona para lo que sirve); la herramienta de medición usa llmtools-venv.
+
+---
+
 ## [AD-025] Job DAG — el dag_job como plantilla genérica recursiva de composición
 **Date**: 2026-08-08
 **Status**: ACCEPTED — mergeado con el PR #84 (v7.17.0).

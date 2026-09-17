@@ -51,11 +51,15 @@ def _extract_payload(raw: str) -> tuple:
     clean = re.sub(r"\[Start thinking\][\s\S]*?(?:\[End thinking\]|$)", "", raw, count=1)
     thinking, answer = extract_thinking(clean)
     meta = {"has_thinking": bool(thinking), "thinking_chars": len(thinking)}
-    m = re.search(r"\{[\s\S]*\}", answer)
-    if not m:
+    idx = answer.find("{")
+    if idx == -1:
         return None, meta
     try:
-        return json.loads(m.group(0)), meta
+        # raw_decode extrae el PRIMER objeto JSON válido e ignora lo que sigue
+        # ("Extra data" tras el JSON — p.ej. el 4.2 repite o añade texto). El
+        # `re.search` greedy fallaba con ese caso (bake-off 2026-09-17).
+        obj, _ = json.JSONDecoder().raw_decode(answer[idx:])
+        return obj, meta
     except Exception as e:
         meta["json_error"] = str(e)
         return None, meta
@@ -131,11 +135,15 @@ def _run(name: str, resolved, probes: list, prompt: str, max_tokens: int, thinki
     print(f"\n##### {name} (thinking={thinking}) #####", flush=True)
     import gc
 
+    import llama_cpp
     from llama_cpp import Llama
 
     from red_pill.inference.runtime import apply_chat_handler, complete, register_thinking_handlers
 
-    llm = Llama(model_path=str(resolved.model_path), n_ctx=6144, n_gpu_layers=-1, verbose=False)
+    # RTX 5070 (8 GB): 16K no cabe ni cuantizado; 12K con K cuantizada (type_k=q8_0)
+    # sí. `type_k`/`type_v` es la vía de cuantización KV de llama-cpp-python
+    # (PR #1307); sin ella la KV queda fp16 y 12K+ hace OOM.
+    llm = Llama(model_path=str(resolved.model_path), n_ctx=12288, n_gpu_layers=-1, type_k=llama_cpp.GGML_TYPE_Q8_0, verbose=False)
     register_thinking_handlers(llm, resolved)
     out = []
     for pname, umsg, val in probes:
@@ -143,7 +151,10 @@ def _run(name: str, resolved, probes: list, prompt: str, max_tokens: int, thinki
         messages = [{"role": "system", "content": prompt}, {"role": "user", "content": umsg}]
         t0 = time.time()
         try:
-            resp = complete(llm, messages, max_tokens=max_tokens, temperature=0.1)
+            # Parámetros oficiales de IBM (model card 4.2): temperature=1.0,
+            # top_p=0.95 REQUERIDOS en todos los modos. Con temperature baja el
+            # 4.2 queda en bucle de deliberación sin cerrar el reasoning.
+            resp = complete(llm, messages, max_tokens=max_tokens, temperature=1.0, top_p=0.95)
             dt = time.time() - t0
             content = (resp.get("choices") or [{}])[0].get("message", {}).get("content") or ""
             v = val(content)
@@ -180,7 +191,7 @@ def main() -> int:
         # de sobra (2000 F1 / 800 F2) para que lleguen a emitir el JSON; el coste
         # extra del razonamiento es parte de la evaluación (thinking_chars).
         for name, thinking, mt in (
-            ("granite_4_2_8b", "off", 450),
+            ("granite_4_2_8b", "on", 8192),
             ("granite_8b", "off", 450),
         ):
             resolved = mr.resolve({"model": name})

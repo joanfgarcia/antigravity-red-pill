@@ -217,8 +217,20 @@ sesión (1 instancia por sesión, lista congelada en el checkpoint).
   F1 destilador (4.2-8B vs 4.1-8B, distiller_v3_voice MODE B, incl. probe de
   género de Joan) + F2 detector (4.2-3B vs 4.1-3B, clasificación de género/voz/
   identidad). Resultado en `docs/BENCHMARKS/2026-09-17-GRANITE_42_BAKEOFF.md`.
-  **Hallazgo**: los 4.2 con thinking no emiten JSON válido (4/4 y 5/5 "no JSON")
-  → ver AD-032; probarlos con thinking OFF antes de adoptar.
+- **[REF] Harness unificado daemon/CLI**: el front del bake-off pasa de
+  subprocess llama-cli a **llama-cpp-python con el núcleo común**
+  (`src/red_pill/inference/runtime.py`) — misma renderización que el daemon
+  (Jinja2ChatFormatter + enable_thinking). El 4.1-8B pasa de 2/4 a 4/4 válidos
+  en el harness fiel.
+- **[FIX] Thinking del 4.2 resuelto** (AD-033): parámetros oficiales IBM
+  (temp 1.0 / top_p 0.95 / max_tokens 8192), **KV cache cuantizada vía
+  `type_k=GGML_TYPE_Q8_0`** (PR #1307 — la vía real de llama-cpp-python, mal
+  documentada; issues #1335/#1732 abiertos), **n_ctx 12288** (16K no cabe en la
+  5070), y ejecución con **`llmtools-venv` (0.3.35 CUDA)**. Resultado: el
+  4.2-8B con thinking emite JSON correcto y corrige el género de Joan que el
+  4.1-8B mantiene mal en "entidades".
+- **[FIX] Validador del bake-off**: `raw_decode` en vez de `re.search` greedy
+  (fallaba con "Extra data" cuando el modelo añade texto tras el JSON).
 
 ### 🔁 Resiembra Memento (Fase 4, cierre)
 
