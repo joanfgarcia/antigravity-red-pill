@@ -30,6 +30,12 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   hilo de Ariadna), `ascended_at` y `node_type="memento_engram"`; dedup-at-ascension
   (un ganador determinista por grupo `session_id`+`source_lines`, sin borrar
   perdedores).
+- **[M2] Backfill de fechas** (`scripts/memento_backfill_dates.py`): repara los
+  ~9.341 engramas resembrados (`created_at`←fecha real de sesión; `ascended_at`←
+  momento de ascensión). Idempotente, dry-run por defecto.
+- **[M3] Dedup de duplicados sembrados** (`scripts/memento_dedup_qdrant.py`):
+  colapsa réplicas (mismo `session_id`+`source_lines`+cuerpo) dejando un
+  superviviente por score compuesto; in-place, dry-run por defecto.
 - **[PLAN] Hubs de sesión + hilo de Ariadna de dos niveles**, erosión con olvido
   activo, y `interaction_memories` como semáforo de situación por afinidad.
 
