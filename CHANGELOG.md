@@ -68,7 +68,9 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   (~1/min), actualización incremental por `window_start` y evicción por TTL. El
   pre-heating lee el semáforo global (el scoped por afinidad de sesión queda para
   cuando el handshake la aporte, MULTISES-001).
-- **[PLAN] Fase de engramas interactivos.**
+- **[M7] Engramas interactivos** (flag `SW_INTERACTIVE_PHASE_ENABLED`): proceso
+  aparte (`scripts/interactive_refine.py`) que refina/marca los engramas
+  `interactive_engram` — no se agrupan por sesión ni entran en la ingesta normal.
 
 ### 🧹 Desk — scaffold del despacho, separación proyecto↔despacho y `AGENT_CORE_DIR`
 
