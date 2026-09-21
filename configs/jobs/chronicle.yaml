@@ -37,5 +37,9 @@ manifest:
       llm:
         task: distill
         fallup: true
+      # El default de etapa es 600s y abate las sesiones largas (incidente
+      # 2026-09-17, mismo motivo que el fan-out redistill). 5400s como el
+      # resto del pase agéntico; el tope real lo pone control.max_step_minutes.
+      timeout: 5400
       on_fail: warn
       depends_on: [memento]
