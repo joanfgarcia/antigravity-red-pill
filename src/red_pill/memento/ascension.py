@@ -352,6 +352,23 @@ def weave_memento_reinforcement(
 # ── Fase 4 §3.3: ascenso estático (gate de significance) ──
 
 
+def _pick_ascension_winner(entries: list) -> Any:
+	"""Ganador determinista de un grupo duplicado (mismo `session_id`+`source_lines`).
+
+	Criterio: mayor `significance`, luego `category_score`, luego cuerpo más largo;
+	desempate final por hash del cuerpo (estable entre ejecuciones, así reelegir
+	con los mismos datos da el mismo ganador → idempotente).
+	"""
+	import hashlib
+
+	def _key(c: Any) -> Any:
+		_refine_path, fm, body, significance = c
+		cat = float(fm.get("category_score", 0.0) or 0.0)
+		return (significance, cat, len(body), hashlib.sha256(body.encode("utf-8")).hexdigest())
+
+	return max(entries, key=_key)
+
+
 def ascend_by_threshold(
 	root: Path,
 	registry: Any,
@@ -375,11 +392,10 @@ def ascend_by_threshold(
 
 		memory_manager = MemoryManager()
 
-	stats = {"refine_evaluados": 0, "ascendidos": 0, "rechazados_por_umbral": 0, "errores": 0}
+	stats = {"refine_evaluados": 0, "ascendidos": 0, "rechazados_por_umbral": 0, "errores": 0, "duplicados_omitidos": 0}
 
+	candidates = []
 	for refine_path in sorted(Path(root).rglob("refine/*.md")):
-		if limit is not None and stats["ascendidos"] >= limit:
-			break
 		try:
 			fm, body = parse_refine(refine_path.read_text(encoding="utf-8"))
 			if not body or fm.get("ascended"):
@@ -389,6 +405,32 @@ def ascend_by_threshold(
 			if significance < min_significance:
 				stats["rechazados_por_umbral"] += 1
 				continue
+			candidates.append((refine_path, fm, body, significance))
+		except Exception as e:
+			stats["errores"] += 1
+			logger.warning(f"[STATIC-ASCENSION] fallo en {refine_path}: {e}")
+
+	# Dedup-at-ascension (SW_DEDUP_ENABLED, D12): un grupo duplicado
+	# (session_id, source_lines) produce varios refines con el mismo cuerpo y
+	# títulos distintos. Se asciende UN ganador determinista; los perdedores NO
+	# se borran (la selección puede variar con los parámetros).
+	import red_pill.config as _cfg
+
+	if bool(getattr(_cfg, "SW_DEDUP_ENABLED", False)):
+		groups: Dict[Any, list] = {}
+		for c in candidates:
+			key = (str(c[1].get("session_id") or ""), str(c[1].get("source_lines") or ""))
+			groups.setdefault(key, []).append(c)
+		winners = []
+		for entries in groups.values():
+			winners.append(_pick_ascension_winner(entries))
+			stats["duplicados_omitidos"] += len(entries) - 1
+		candidates = winners
+
+	for refine_path, fm, body, significance in candidates:
+		if limit is not None and stats["ascendidos"] >= limit:
+			break
+		try:
 			result = ascender(root, registry, refine_path, memory_manager=memory_manager, transport=transport)
 			if result.get("ascended"):
 				stats["ascendidos"] += 1
@@ -526,6 +568,23 @@ def _category_from_score(score: float) -> str:
 	return "work" if float(score) >= threshold else "social"
 
 
+def _session_created_at(registry: Any, source: str, session_id: str) -> Optional[float]:
+	"""Fecha REAL de la sesión (epoch) desde el registry, o None si no consta.
+
+	El engrama ascendido debe llevar `created_at` = fecha de la sesión (no la de
+	ascensión): es lo que ordena el hilo de Ariadna. El registry guarda ISO.
+	"""
+	try:
+		state = getattr(registry, "state", None) or {}
+		entry = (state.get("registry", {}).get(source, {}) or {}).get(session_id, {})
+		iso = entry.get("created_at")
+		if not iso:
+			return None
+		return datetime.fromisoformat(str(iso).replace("Z", "+00:00")).timestamp()
+	except Exception:
+		return None
+
+
 def ascender(
 	root: Path,
 	registry: Any,
@@ -609,6 +668,8 @@ def ascender(
 		"relics": relics,
 		"cross_refs": cross_refs,
 		"origin": "memento",
+		"node_type": "memento_engram",
+		"ascended_at": datetime.now(timezone.utc).isoformat(),
 		"refine_ref": _relative_refine_ref(root, refine_path),
 		# Parámetros de la idea (2026-09-15): se guardan en el engrama para poder
 		# filtrar/purgar después (p.ej. bajar el umbral y purgar los engramas con
@@ -629,6 +690,7 @@ def ascender(
 		point_id=point_id,
 		emotion=emotion,
 		intensity=intensity,
+		created_at=_session_created_at(registry, source, session_id),
 	)
 	if not new_id:
 		# El quality gate (`is_garbage`) o un fallo de escritura lo rechazó.

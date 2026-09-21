@@ -25,9 +25,13 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   captura (hooks opencode/claude) a `interaction_memories`; el TTL deja de purgar
   a ciegas (solo purga sesiones ya renderizadas en Memento). Deriva afinidad
   determinista (`ws:<workdir>` + `mission:`).
-- **[PLAN] Ascensión con dos fechas + dedup**, hubs de sesión + hilo de Ariadna de
-  dos niveles, erosión con olvido activo, y `interaction_memories` como semáforo
-  de situación por afinidad.
+- **[M1] Ascensión con dos fechas + `node_type` + dedup** (flag `SW_DEDUP_ENABLED`):
+  el engrama ascendido lleva `created_at` = **fecha real de sesión** (ordena el
+  hilo de Ariadna), `ascended_at` y `node_type="memento_engram"`; dedup-at-ascension
+  (un ganador determinista por grupo `session_id`+`source_lines`, sin borrar
+  perdedores).
+- **[PLAN] Hubs de sesión + hilo de Ariadna de dos niveles**, erosión con olvido
+  activo, y `interaction_memories` como semáforo de situación por afinidad.
 
 ### 🧹 Desk — scaffold del despacho, separación proyecto↔despacho y `AGENT_CORE_DIR`
 

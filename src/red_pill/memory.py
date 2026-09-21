@@ -173,8 +173,14 @@ class MemoryManager:
 		intensity: float = 1.0,
 		force_immune: bool = False,
 		recursion_depth: int = 0,
+		created_at: Optional[float] = None,
 	) -> str:
-		"""Stores a new engram with B760 validation and emotional chroma."""
+		"""Stores a new engram with B760 validation and emotional chroma.
+
+		`created_at` permite fijar la fecha REAL de origen (p.ej. la sesión de
+		Memento al ascender), en vez de "ahora". Es un RESERVED_KEY (no entra por
+		metadata), de ahí el parámetro explícito.
+		"""
 		# 2026-09-14: la fragmentación automática por chars quedó ELIMINADA.
 		# `synaptic_split` cortaba por separadores mecánicos (sin criterio) y
 		# producía `_is_fragment` que quedan EXCLUIDOS del recall (ruido muerto).
@@ -300,7 +306,7 @@ class MemoryManager:
 				"content": text,
 				"importance": importance,
 				"reinforcement_score": _initial_score,
-				"created_at": time.time(),
+				"created_at": created_at if created_at is not None else time.time(),
 				"last_recalled_at": time.time(),
 				"immune": force_immune,
 				"color": validated_request.color,
