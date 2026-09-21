@@ -97,6 +97,10 @@ function writeInteraction(db, prompt, response, model, sessionId, cols) {
 
 /** @type {import("@opencode-ai/plugin").Plugin} */
 export const RedPillScribe = async (ctx) => {
+  // Si el proceso fue lanzado por un bridge red-pill (Telegram/awakenings/
+  // minions), el bridge ya relaya el turno a la cola: el plugin se abstiene
+  // para no duplicar (y para no capturar el prompt envuelto sin respuesta).
+  if (process.env.REDPILL_SCRIBE_DISABLE === "1") return {};
   let db;
   let COLS = new Set();
   try {

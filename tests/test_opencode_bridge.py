@@ -179,6 +179,20 @@ class TestRunOpencode:
 			with pytest.raises(RuntimeError):
 				bridge._run_opencode(["hi"], timeout=5)
 
+	def test_disables_plugin_when_relay_captures(self, bridge):
+		fake = MagicMock(returncode=0, stdout="", stderr="")
+		bridge._scribe_plugin = False
+		with patch("subprocess.run", return_value=fake) as run:
+			bridge._run_opencode(["hi"], timeout=5)
+		assert run.call_args.kwargs["env"]["REDPILL_SCRIBE_DISABLE"] == "1"
+
+	def test_keeps_plugin_when_it_captures(self, bridge):
+		fake = MagicMock(returncode=0, stdout="", stderr="")
+		bridge._scribe_plugin = True
+		with patch("subprocess.run", return_value=fake) as run:
+			bridge._run_opencode(["hi"], timeout=5)
+		assert run.call_args.kwargs["env"] is None
+
 
 # ── health_check ──────────────────────────────────────────────────────────────
 class TestHealthCheck:

@@ -202,12 +202,16 @@ class OpenCodeBridge(AgentBridge):
 		)
 
 		try:
+			env = None
+			if not self._scribe_plugin:
+				env = {**os.environ, "REDPILL_SCRIBE_DISABLE": "1"}
 			result = subprocess.run(
 				cmd,
 				capture_output=True,
 				text=True,
 				timeout=timeout + 10,
 				cwd=cwd or str(get_bunker_root().parent),
+				env=env,
 			)
 		except subprocess.TimeoutExpired as e:
 			logger.error(f"[OpenCodeBridge] Command timed out after {timeout + 10}s")
