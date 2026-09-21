@@ -113,3 +113,28 @@ async def test_purge_gate_solo_purga_renderizadas(tmp_path, monkeypatch):
 	survivors = mem.client.retrieve("interaction_memories", ids=[rendered_id, unrendered_id])
 	assert [str(p.id) for p in survivors] == [unrendered_id]
 	mem.client.delete("interaction_memories", points_selector=models.PointIdsList(points=[unrendered_id]), wait=True)
+
+
+async def test_purge_gate_cap_de_edad_purga_no_renderizados(tmp_path, monkeypatch):
+	"""D18/F4: lo NO renderizado más viejo que el cap se purga y se señaliza."""
+	import red_pill.config as cfgmod
+	from red_pill.memory import MemoryManager
+	from red_pill.swarm.agents.janitor_plugins.interaction_ttl import InteractionTTLPlugin
+
+	class FakeJanitor:
+		def __init__(self):
+			self.lines = []
+
+		def log(self, msg):
+			self.lines.append(msg)
+
+	mem = MemoryManager()
+	pid = mem.record_interaction_pair("viejo sin render", "r", originator="opencode", session_id="ses_sin_render")
+	mem.client.set_payload("interaction_memories", payload={"timestamp": int(time.time()) - 10 * 86400}, points=[pid])
+
+	monkeypatch.setattr(cfgmod, "SW_PURGE_GATE_ENABLED", True, raising=False)
+	monkeypatch.setattr(cfgmod, "INTERACTION_MAX_AGE_DAYS", 1, raising=False)
+	result = await InteractionTTLPlugin().execute(FakeJanitor(), {}, memory_manager=mem)
+	assert result["purged"] == 1 and result.get("orphaned") == 1
+
+	assert mem.client.retrieve("interaction_memories", ids=[pid]) == []

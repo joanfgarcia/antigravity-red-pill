@@ -54,11 +54,21 @@ def _default_distiller(text: str) -> Dict[str, Any]:
 
 
 def _default_merger(old: str, delta: str, ratio: float) -> str:
-	"""Solera: conserva ~ratio de lo previo e integra lo nuevo sin desplazarlo."""
+	"""Solera: lo previo DOMINA (1-ratio) e integra lo nuevo (ratio) sin desplazarlo.
+
+	`ratio` = peso de lo NUEVO (0.2 = 20% nuevo / 80% previo, D20/D25). Un delta
+	vacío NO degrada el resumen previo.
+	"""
+	old = (old or "").strip()
+	delta = (delta or "").strip()
+	if not delta:
+		return old[:2000]
 	if not old:
-		return delta
-	keep = int(len(old) * max(0.0, min(1.0, ratio)))
-	return (old[:keep].rstrip() + " " + delta).strip()[:2000]
+		return delta[:2000]
+	r = max(0.0, min(1.0, ratio))
+	old_budget = int(2000 * (1 - r))
+	new_budget = int(2000 * r)
+	return (old[:old_budget].rstrip() + " " + delta[:new_budget]).strip()[:2000]
 
 
 def _group_turns(turns: List[Any]) -> Dict[str, List[Dict[str, Any]]]:
@@ -86,8 +96,11 @@ def _upsert_semaphore(memory_manager: Any, aff: str, new_items: List[Dict[str, A
 		return False
 	text = "\n".join(str(it["content"]) for it in fresh)
 	delta = distiller(text)
+	if not str(delta.get("situation", "")).strip():
+		# Destilado vacío (LLM caído): NO consumir los turnos (reintento).
+		return False
 	new_situation = merger(str(old_payload.get("situation", "")), str(delta.get("situation", "")), ratio)
-	memory_manager.add_memory(
+	new_id = memory_manager.add_memory(
 		collection=COLLECTION,
 		text=new_situation or aff,
 		metadata={
@@ -102,7 +115,7 @@ def _upsert_semaphore(memory_manager: Any, aff: str, new_items: List[Dict[str, A
 		emotion=str(delta.get("emotion", "gray")),
 		intensity=float(delta.get("intensity", 0.5)),
 	)
-	return True
+	return bool(new_id)
 
 
 def update_situation(
@@ -121,6 +134,15 @@ def update_situation(
 	client = memory_manager.client
 	if not client.collection_exists("interaction_memories"):
 		return {"enabled": True, "affinities": 0}
+
+	# Asegura `situation_memories`: no la crea nadie más y `add_memory` no la
+	# auto-crea (solo `record_interaction_pair`). Sin esto, M8 era dead-on-arrival.
+	if not client.collection_exists(COLLECTION):
+		try:
+			memory_manager._ensure_collection(COLLECTION)
+		except Exception as e:
+			logger.warning(f"[SITUATION] no se pudo crear {COLLECTION}: {e}")
+			return {"enabled": True, "affinities": 0}
 
 	turns, _ = client.scroll("interaction_memories", limit=2000, with_payload=True)
 	groups = _group_turns(turns)

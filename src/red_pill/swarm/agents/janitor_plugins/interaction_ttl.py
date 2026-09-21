@@ -74,7 +74,7 @@ class InteractionTTLPlugin(JanitorPlugin):
 						rendered.add(sid.split(":", 1)[1])
 					rendered.add(f"{source}:{sid}")
 
-			to_delete: list = []
+			to_delete: set = set()
 			offset = None
 			while True:
 				points, offset = mem.client.scroll(collection, scroll_filter=stale_filter, limit=500, offset=offset, with_payload=True)
@@ -82,13 +82,48 @@ class InteractionTTLPlugin(JanitorPlugin):
 					meta = (p.payload or {}).get("metadata") or {}
 					sid = meta.get("session_id")
 					if sid and str(sid) in rendered:
-						to_delete.append(str(p.id))
+						to_delete.add(str(p.id))
 				if offset is None:
 					break
-			if to_delete:
-				mem.client.delete(collection, points_selector=models.PointIdsList(points=to_delete), wait=True)
-			janitor.log(f"[Janitor] interaction_ttl (gated): {len(to_delete)} punto(s) renderizados y fríos purgados.")
-			return {"purged": len(to_delete), "ttl_hours": ttl_hours, "gate": True}
+
+			# Tope duro de edad (D18/F4): lo NO renderizado más viejo que el cap se
+			# purga igualmente (el buffer no puede crecer sin fin), y se emite una
+			# señal de dolor para que el operador sepa que el chronicle va atrasado.
+			hard_cutoff = time.time() - int(getattr(cfg, "INTERACTION_MAX_AGE_DAYS", 30)) * 86400
+			hard_filter = models.Filter(
+				should=[
+					models.FieldCondition(key="timestamp", range=models.Range(lt=hard_cutoff)),
+					models.FieldCondition(key="created_at", range=models.Range(lt=hard_cutoff)),
+				]
+			)
+			orphaned = 0
+			offset = None
+			while True:
+				points, offset = mem.client.scroll(collection, scroll_filter=hard_filter, limit=500, offset=offset, with_payload=True)
+				for p in points:
+					sid = ((p.payload or {}).get("metadata") or {}).get("session_id")
+					if not (sid and str(sid) in rendered):
+						orphaned += 1
+					to_delete.add(str(p.id))
+				if offset is None:
+					break
+
+			ids = list(to_delete)
+			if ids:
+				mem.client.delete(collection, points_selector=models.PointIdsList(points=ids), wait=True)
+			if orphaned:
+				try:
+					mem.inject_signal(
+						name="interaction_unrendered_purged",
+						intensity=4.0,
+						signal_type="pain",
+						source="Janitor",
+						message=f"{orphaned} turnos sin renderizar purgados por el tope de {getattr(cfg, 'INTERACTION_MAX_AGE_DAYS', 30)}d (chronicle atrasado).",
+					)
+				except Exception as _e:
+					logger.debug(f"interaction_ttl: señal no inyectada: {_e}")
+			janitor.log(f"[Janitor] interaction_ttl (gated): {len(ids)} purgados ({orphaned} sin renderizar).")
+			return {"purged": len(ids), "orphaned": orphaned, "ttl_hours": ttl_hours, "gate": True}
 
 		stale = mem.client.count(collection, count_filter=stale_filter, exact=True).count
 		if stale:

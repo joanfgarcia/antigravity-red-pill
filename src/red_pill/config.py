@@ -514,6 +514,7 @@ class RedPillConfig(BaseSettings):
 	# Default OFF: nada cambia hasta encender cada pieza por separado.
 	SW_AFFINITY_ENABLED: bool = False  # captura session_id+affinity (memory_queue → interaction_memories)
 	SW_PURGE_GATE_ENABLED: bool = False  # interaction_ttl purga solo sesiones ya renderizadas en Memento
+	INTERACTION_MAX_AGE_DAYS: int = 30  # tope duro: lo no renderizado más viejo se purga (con señal)
 	SW_DEDUP_ENABLED: bool = False  # dedup-at-ascension: un solo ganador por grupo (session_id, source_lines)
 	SW_HUBS_ENABLED: bool = False  # hub synthesis sobre engramas existentes (agrupa por sesión)
 	SW_INGEST_RETIRED: bool = False  # retira la ingesta interaction→work/social (solo ascensión Memento)
