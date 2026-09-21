@@ -373,6 +373,8 @@ MCPs are launched **per-IDE as stdio subprocesses**: N IDEs × M servers = dupli
 ### 2. The Decision (proposed)
 Host red-pill's MCPs in the **SovereignDaemon** as a `DaemonPlugin`, **dual-bind UDS + TCP** (the `run_dual_bind`/hypervisor precedent), with a **stdio↔network proxy** for third-party stdio servers (`server-filesystem`/memory, graphify). `inject_mcp` emits **URL** configs where the client supports them (Claude Code ✓), with a local stdio shim where it does not.
 
+> **Update (2026-09-21):** the "hypervisor" mentioned as precedent was `hypervisor_daemon.py`, an alternative `llama-server`-proxy daemon that was **never wired to a service**. It was purged; the living dual-bind daemon is the generated `run_dual_bind.py` (see `docs/TECHNICAL/COGNITIVE/HYPERVISOR.md`). The decision text above is preserved as historical context.
+
 ### 3. Transparency consequence
 Because memory = one multi-root MCP and graphify = one merged MCP, **toggling a workspace changes roots/graph inside the server, never the MCP set** → the client's tool list is unchanged → **no restart** for memory/graph data. The exception is **`access`/`additionalDirectories`** (an IDE settings-file layer, read at session start, outside MCP) → that still needs a client restart. The daemon cannot change that.
 

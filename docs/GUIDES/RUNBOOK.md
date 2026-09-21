@@ -130,7 +130,7 @@ curl -s http://localhost:8760/v1/chat/completions \
   -d '{"experimental":{"model_path":"<XDG_DATA_HOME>/red-pill/models/granite-4.2-8b-Q4_K_M.gguf","n_ctx":8192,"device_fallback":["gpu","cpu"]},"thinking":"on","messages":[{"role":"user","content":"Razona: 12*7?"}],"max_tokens":200}' \
   | python3 -m json.tool
 
-# El hypervisor gestiona Samantha
+# El daemon dual-bind (run_dual_bind.py) gestiona el modelo local
 systemctl --user restart redpill-llm
 ```
 
