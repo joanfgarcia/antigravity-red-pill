@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import time
 import uuid
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -116,6 +117,7 @@ def _synthesize_one(memory_manager: Any, collection: str, session_id: str, membe
 		"session_id": session_id,
 		"origin": "memento_hub",
 		"members": member_ids,
+		"last_reinforced_at": time.time(),
 	}
 	if hub.get("texture"):
 		metadata["texture"] = hub["texture"]

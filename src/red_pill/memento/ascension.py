@@ -670,6 +670,7 @@ def ascender(
 		"origin": "memento",
 		"node_type": "memento_engram",
 		"ascended_at": datetime.now(timezone.utc).isoformat(),
+		"last_reinforced_at": time.time(),
 		"refine_ref": _relative_refine_ref(root, refine_path),
 		# Parámetros de la idea (2026-09-15): se guardan en el engrama para poder
 		# filtrar/purgar después (p.ej. bajar el umbral y purgar los engramas con

@@ -444,6 +444,10 @@ class MemoryManager:
 					# Ensure updates are included for the batch operation
 					reinforced_updates["last_recalled_at"] = p.payload["last_recalled_at"]
 					reinforced_updates["recall_count"] = p.payload["recall_count"]
+					# Eje de activación de los curados (single-writer): solo se
+					# refresca al RECUPERAR, no en el pulse. Gobierna el demote.
+					if p.payload.get("node_type") in ("memento_engram", "synthesis_hub"):
+						reinforced_updates["last_reinforced_at"] = p.payload["last_recalled_at"]
 
 					updated_points.append(p)
 					update_operations.append(

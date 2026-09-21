@@ -62,7 +62,11 @@ async def maintenance_ritual(mm: MemoryManager) -> None:
 			logger.critical("Pulse: [COMA] Bünker connection lost. Memory injection impossible.")
 
 		# 2. Absence Guard (Proactive TTL refresh)
-		if cfg.METABOLISM_STRATEGY == "LAZY":
+		# SW_ABSENCE_GUARD_CONDITIONAL: el refresh incondicional cada pulse dejaba
+		# `last_recalled_at` siempre fresco → el olvido (erosión/sink) era inerte.
+		# Con el flag ON, NO se refresca aquí; la protección de ausencias reales la
+		# ya hace el guard CONDICIONAL de core/metabolism (gap > ABSENCE_THRESHOLD).
+		if cfg.METABOLISM_STRATEGY == "LAZY" and not getattr(cfg, "SW_ABSENCE_GUARD_CONDITIONAL", False):
 			logger.info("Pulse: Running proactive Absence Guard sync...")
 			for coll in ["work_memories", "social_memories", "story_memories", "directive_memories"]:
 				try:

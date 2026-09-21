@@ -518,6 +518,9 @@ class RedPillConfig(BaseSettings):
 	SW_HUBS_ENABLED: bool = False  # hub synthesis sobre engramas existentes (agrupa por sesión)
 	SW_INGEST_RETIRED: bool = False  # retira la ingesta interaction→work/social (solo ascensión Memento)
 	SW_THREAD_ENABLED: bool = False  # micro-hilo de Ariadna (prev/next_member por sesión, orden de refine)
+	SW_ABSENCE_GUARD_CONDITIONAL: bool = False  # ON: el pulse NO refresca last_recalled_at cada hora (solo tras ausencia real)
+	SW_EROSION_DEMOTE_ENABLED: bool = False  # olvido elegante de los curados: demote a Memento por eje propio
+	CURATED_MIN_LIFETIME_YEARS: float = 5.0  # vida mínima de un curado no reforzado antes del demote
 	MEMENTO_FRAGMENT_OVERLAP_MESSAGES: int = 2  # solape de turnos entre fragmentos del distill
 	# Presupuesto de contexto por fragmento de distill. 2026-09-15: se destila con
 	# granite (n_ctx 10240), no con aya (32K) — 12000 chars apretaba; 8000 chars

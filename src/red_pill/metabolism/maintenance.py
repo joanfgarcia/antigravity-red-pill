@@ -689,3 +689,58 @@ def cleanup_orphan_raw_parents(memory_manager, collections=("work_memories", "so
 			logger.info(f"[GARBAGE COLLECTION] Cleaned up {deleted_count} orphan raw_parent(s) in {col}.")
 
 	return report
+
+
+def erode_curated(memory_manager, collections=("work_memories", "social_memories")) -> dict:
+	"""Olvido elegante de los curados (SW_EROSION_DEMOTE_ENABLED, D11/D23).
+
+	Los engramas ascendidos y los hubs decaen por su **eje propio**
+	(`last_reinforced_at`, que solo se refresca al recuperar — no en el pulse). Un
+	curado nunca reforzado se **demota** (se borra de Qdrant; el gist persiste en
+	Memento) tras `CURATED_MIN_LIFETIME_YEARS`. No es `immune`.
+	"""
+	if not bool(getattr(cfg, "SW_EROSION_DEMOTE_ENABLED", False)):
+		return {"demoted": 0, "enabled": False}
+
+	lifetime_s = float(getattr(cfg, "CURATED_MIN_LIFETIME_YEARS", 5.0)) * 365 * 86400
+	now = time.time()
+	stats = {"demoted": 0, "scanned": 0, "enabled": True}
+
+	from qdrant_client import models as qm
+
+	for collection in collections:
+		try:
+			if not memory_manager.client.collection_exists(collection):
+				continue
+			scroll_filter = qm.Filter(
+				should=[
+					qm.FieldCondition(key="node_type", match=qm.MatchValue(value="memento_engram")),
+					qm.FieldCondition(key="node_type", match=qm.MatchValue(value="synthesis_hub")),
+					qm.FieldCondition(key="lazarus_phase", match=qm.MatchValue(value="synthesis_hub")),
+				]
+			)
+			to_delete = []
+			offset = None
+			while True:
+				points, offset = memory_manager.client.scroll(
+					collection, scroll_filter=scroll_filter, limit=500, offset=offset, with_payload=True, with_vectors=False
+				)
+				for p in points:
+					pl = p.payload or {}
+					if pl.get("immune"):
+						continue
+					stats["scanned"] += 1
+					base = pl.get("last_reinforced_at") or pl.get("created_at")
+					if not isinstance(base, (int, float)):
+						continue
+					if now - float(base) > lifetime_s:
+						to_delete.append(str(p.id))
+				if offset is None:
+					break
+			if to_delete:
+				memory_manager.client.delete(collection, points_selector=qm.PointIdsList(points=to_delete), wait=True)
+				stats["demoted"] += len(to_delete)
+				logger.info(f"[SLEEP ENGINE] Demote a Memento: {len(to_delete)} curados en {collection}.")
+		except Exception as e:
+			logger.error(f"[SLEEP ENGINE] Demote curados falló en {collection}: {e}")
+	return stats

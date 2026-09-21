@@ -49,8 +49,17 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   de cada sesión por **orden de refine** (`refine_ref`) en `prev_member`/`next_member`
   (campo propio, sin colisionar con `associations` = axones). El nivel macro (hubs
   por fecha) y el transversal (`cross_refs`→axones) ya existían.
-- **[PLAN] Erosión con olvido activo**, fase de engramas interactivos, y
-  `interaction_memories` como semáforo de situación por afinidad.
+- **[M9] Olvido elegante + fix de raíz del `last_recalled_at`** (flags
+  `SW_EROSION_DEMOTE_ENABLED`, `SW_ABSENCE_GUARD_CONDITIONAL`):
+  - **Raíz**: el Absence Guard del pulse refrescaba `last_recalled_at` de TODO cada
+    hora → la erosión/sink llevaban tiempo **inertes**. Con el flag ON, el pulse ya
+    no refresca; la protección de ausencias reales la hace el guard condicional de
+    `core/metabolism`.
+  - **Eje propio**: los curados (engramas ascendidos + hubs) decaen por
+    `last_reinforced_at` (solo se refresca al recuperar) y se **demotan** a Memento
+    (borrado de Qdrant) tras `CURATED_MIN_LIFETIME_YEARS` (5 años).
+- **[PLAN] Fase de engramas interactivos y `interaction_memories` como semáforo de
+  situación por afinidad.**
 
 ### 🧹 Desk — scaffold del despacho, separación proyecto↔despacho y `AGENT_CORE_DIR`
 
