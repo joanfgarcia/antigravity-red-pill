@@ -178,7 +178,8 @@ class HubSynthesisPhase(SleepPhase):
 				f"({time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(sleep_cutoff_ts))})"
 			)
 
-		if not client.collection_exists(collection):
+		retired = bool(getattr(cfg, "SW_INGEST_RETIRED", False))
+		if not retired and not client.collection_exists(collection):
 			logger.warning("Sleep cycle aborted: fast buffer does not exist.")
 			return
 
@@ -231,8 +232,12 @@ class HubSynthesisPhase(SleepPhase):
 		# RETIRADA. Esta fase pasa a ser "HubSynthesisPhase": solo sintetiza hubs
 		# sobre los engramas curados ya en Qdrant — sin drenaje, sin staging, sin
 		# raw_parents. La fuente de work/social es la ascensión de Memento.
-		if bool(getattr(cfg, "SW_INGEST_RETIRED", False)):
+		if retired:
 			logger.info("[SLEEP ENGINE] Ingest retired (SW_INGEST_RETIRED): solo hubs + hilo de Ariadna.")
+			if not _check_llm_available():
+				# Sin LLM la síntesis caería al fallback mecánico; se difiere.
+				logger.warning("[SLEEP ENGINE] LLM offline en modo retirado; hubs/hilo diferidos al próximo ciclo.")
+				return
 			_run_hub_and_thread(ctx.memory_manager)
 			return
 
@@ -778,9 +783,10 @@ class HubSynthesisPhase(SleepPhase):
 		if new_work_hubs:
 			distill_session_anchors(memory_manager, new_work_hubs)
 
+		# Hub synthesis + micro-hilo de Ariadna sobre engramas EXISTENTES
+		# (single-writer, SW_HUBS_ENABLED / SW_THREAD_ENABLED). ANTES de apagar el
+		# LLM: la síntesis necesita el modelo (si no, fallback mecánico).
+		_run_hub_and_thread(memory_manager)
+
 		ephemeral_server.stop(memory_manager, total_processed)
 		ctx.total_processed = total_processed
-
-		# Hub synthesis + micro-hilo de Ariadna sobre engramas EXISTENTES
-		# (single-writer, SW_HUBS_ENABLED / SW_THREAD_ENABLED). No-op si off.
-		_run_hub_and_thread(memory_manager)

@@ -31,11 +31,14 @@ class FakeClient:
 
 
 class FakeMM:
-	def __init__(self, client):
+	def __init__(self, client, fail=False):
 		self.client = client
 		self.added: list = []
+		self.fail = fail
 
 	def add_memory(self, **kw):
+		if self.fail:
+			return ""
 		self.added.append(kw)
 		self.client.written[kw["point_id"]] = kw.get("metadata") or {}
 		return kw["point_id"]
@@ -102,3 +105,38 @@ def test_hubs_escribe_marca_e_idempotente(monkeypatch):
 	mm2 = FakeMM(client)
 	stats2 = synthesize_session_hubs(mm2, collections=("work_memories",), synthesizer=synthesizer, affect_fn=affect)
 	assert stats2["hubs_skipped"] == 1 and not mm2.added
+
+
+def test_hub_fallback_no_escribe_ni_marca(monkeypatch):
+	import red_pill.config as cfgmod
+
+	monkeypatch.setattr(cfgmod, "SW_HUBS_ENABLED", True, raising=False)
+	client = FakeClient([_member("s", "idea 1", "m1"), _member("s", "idea 2", "m2")])
+	mm = FakeMM(client)
+
+	def fallback(chunks):
+		return {"title": "", "summary": "concat", "_is_fallback": True}
+
+	stats = synthesize_session_hubs(mm, collections=("work_memories",), synthesizer=fallback, affect_fn=lambda c: ("gray", 0.5))
+	assert stats["hubs_failed"] == 1 and stats["hubs_written"] == 0
+	assert not mm.added and not client.marked  # ni hub ni miembros marcados
+
+
+def test_hub_de_uno_se_omite(monkeypatch):
+	import red_pill.config as cfgmod
+
+	monkeypatch.setattr(cfgmod, "SW_HUBS_ENABLED", True, raising=False)
+	client = FakeClient([_member("s", "única idea", "m1")])
+	mm = FakeMM(client)
+	stats = synthesize_session_hubs(mm, collections=("work_memories",), synthesizer=lambda c: {"title": "T", "summary": "S"}, affect_fn=lambda c: ("gray", 0.5))
+	assert stats["sessions"] == 0 and not mm.added
+
+
+def test_escritura_fallida_no_marca_miembros(monkeypatch):
+	import red_pill.config as cfgmod
+
+	monkeypatch.setattr(cfgmod, "SW_HUBS_ENABLED", True, raising=False)
+	client = FakeClient([_member("s", "idea 1", "m1"), _member("s", "idea 2", "m2")])
+	mm = FakeMM(client, fail=True)
+	stats = synthesize_session_hubs(mm, collections=("work_memories",), synthesizer=lambda c: {"title": "T", "summary": "S"}, affect_fn=lambda c: ("gray", 0.5))
+	assert stats["hubs_failed"] == 1 and not client.marked

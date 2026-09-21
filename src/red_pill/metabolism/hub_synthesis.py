@@ -103,6 +103,12 @@ def _synthesize_one(memory_manager: Any, collection: str, session_id: str, membe
 
 	chunks = _members_to_chunks(members)
 	hub = synthesizer(chunks) or {}
+	if hub.get("_is_fallback"):
+		# El sintetizador cayó al fallback mecánico (LLM caído): NO se escribe un
+		# hub-basura ni se marcan miembros (quedarían ocultos sin hub real). Se
+		# reintenta cuando el LLM esté disponible.
+		logger.warning(f"[HUBS] síntesis fallback en {collection}:{session_id}; se omite (reintento).")
+		return "failed"
 	body = str(hub.get("summary") or "")
 	if hub.get("title"):
 		body = f"{hub['title']}\n{body}"
@@ -124,7 +130,7 @@ def _synthesize_one(memory_manager: Any, collection: str, session_id: str, membe
 	if hub.get("lang"):
 		metadata["lang"] = hub["lang"]
 
-	memory_manager.add_memory(
+	new_id = memory_manager.add_memory(
 		collection=collection,
 		text=body,
 		metadata=metadata,
@@ -133,7 +139,11 @@ def _synthesize_one(memory_manager: Any, collection: str, session_id: str, membe
 		intensity=intensity,
 		created_at=_session_created_at(members),
 	)
-	# F3: marcar los miembros SOLO tras escribir el hub (si no, quedarían invisibles).
+	if not new_id:
+		# Escritura rechazada (quality gate / fallo): NO marcar miembros (F3).
+		logger.warning(f"[HUBS] hub rechazado al escribir en {collection}:{session_id}; miembros intactos.")
+		return "failed"
+	# F3: marcar los miembros SOLO tras escribir el hub CON ÉXITO.
 	_mark_members(memory_manager, collection, members, hid)
 	return "written"
 
@@ -157,7 +167,7 @@ def synthesize_session_hubs(
 ) -> Dict[str, Any]:
 	"""Sintetiza hubs de sesión sobre engramas existentes (tras SW_HUBS_ENABLED)."""
 	if not bool(getattr(cfg, "SW_HUBS_ENABLED", False)):
-		return {"hubs_written": 0, "hubs_skipped": 0, "sessions": 0, "enabled": False}
+		return {"hubs_written": 0, "hubs_skipped": 0, "hubs_failed": 0, "sessions": 0, "enabled": False}
 
 	if synthesizer is None or affect_fn is None:
 		from red_pill.metabolism.distiller import derive_hub_affect, synthesize_hub_v2
@@ -165,7 +175,7 @@ def synthesize_session_hubs(
 		synthesizer = synthesizer or synthesize_hub_v2
 		affect_fn = affect_fn or derive_hub_affect
 
-	stats = {"hubs_written": 0, "hubs_skipped": 0, "sessions": 0, "enabled": True}
+	stats = {"hubs_written": 0, "hubs_skipped": 0, "hubs_failed": 0, "sessions": 0, "enabled": True}
 	for collection in collections:
 		try:
 			if not memory_manager.client.collection_exists(collection):
@@ -181,11 +191,18 @@ def synthesize_session_hubs(
 			for i, (session_id, members) in enumerate(groups.items()):
 				if limit_sessions is not None and i >= limit_sessions:
 					break
-				if len(members) < 1:
+				if len(members) < 2:
+					# Hub de una sola idea: el engrama ya es buscable; no se
+					# parafrasea ni se oculta (evita perder precisión).
 					continue
 				stats["sessions"] += 1
 				result = _synthesize_one(memory_manager, collection, session_id, members, synthesizer, affect_fn)
-				stats["hubs_written" if result == "written" else "hubs_skipped"] += 1
+				if result == "written":
+					stats["hubs_written"] += 1
+				elif result == "failed":
+					stats["hubs_failed"] += 1
+				else:
+					stats["hubs_skipped"] += 1
 		except Exception as e:
 			logger.error(f"[HUBS] fallo sintetizando hubs en {collection}: {e}")
 	return stats

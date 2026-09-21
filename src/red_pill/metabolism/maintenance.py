@@ -720,6 +720,7 @@ def erode_curated(memory_manager, collections=("work_memories", "social_memories
 				]
 			)
 			to_delete = []
+			hub_members: set = set()
 			offset = None
 			while True:
 				points, offset = memory_manager.client.scroll(
@@ -735,12 +736,24 @@ def erode_curated(memory_manager, collections=("work_memories", "social_memories
 						continue
 					if now - float(base) > lifetime_s:
 						to_delete.append(str(p.id))
+						# Si es un hub, liberar sus miembros (hubbed=False) para que
+						# vuelvan al recall primario (D9): si no, quedarían invisibles.
+						if pl.get("lazarus_phase") == "synthesis_hub" or pl.get("node_type") == "synthesis_hub":
+							for mid in pl.get("members") or []:
+								hub_members.add(str(mid))
 				if offset is None:
 					break
 			if to_delete:
 				memory_manager.client.delete(collection, points_selector=qm.PointIdsList(points=to_delete), wait=True)
 				stats["demoted"] += len(to_delete)
 				logger.info(f"[SLEEP ENGINE] Demote a Memento: {len(to_delete)} curados en {collection}.")
+			release = [mid for mid in hub_members if mid not in set(to_delete)]
+			if release:
+				try:
+					memory_manager.client.set_payload(collection_name=collection, payload={"hubbed": False, "hub_id": None}, points=release)
+					stats["released"] = stats.get("released", 0) + len(release)
+				except Exception as e:
+					logger.warning(f"[SLEEP ENGINE] No se pudieron liberar miembros de hubs demotados: {e}")
 		except Exception as e:
 			logger.error(f"[SLEEP ENGINE] Demote curados falló en {collection}: {e}")
 	return stats

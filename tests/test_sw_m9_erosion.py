@@ -12,6 +12,7 @@ class FakeClient:
 	def __init__(self, points):
 		self._points = points
 		self.deleted: list = []
+		self.payloads: dict = {}
 
 	def collection_exists(self, c):
 		return c == "work_memories"
@@ -28,6 +29,10 @@ class FakeClient:
 	def delete(self, collection_name, points_selector, wait=True):
 		ids = getattr(points_selector, "points", [])
 		self.deleted.extend(str(x) for x in ids)
+
+	def set_payload(self, collection_name, payload, points):
+		for p in points:
+			self.payloads.setdefault(str(p), {}).update(payload)
 
 
 class FakeMM:
@@ -69,3 +74,17 @@ def test_demote_por_eje_propio(monkeypatch):
 	stats = erode_curated(FakeMM(client), collections=("work_memories",))
 	assert set(client.deleted) == {"old", "hub"}  # viejos curados; inmune y no-curado se quedan
 	assert stats["demoted"] == 2
+
+
+def test_demote_hub_libera_sus_miembros(monkeypatch):
+	import red_pill.config as cfgmod
+
+	monkeypatch.setattr(cfgmod, "SW_EROSION_DEMOTE_ENABLED", True, raising=False)
+	monkeypatch.setattr(cfgmod, "CURATED_MIN_LIFETIME_YEARS", 5.0, raising=False)
+	old = time.time() - 6 * 365 * 86400
+	hub = ("hub", {"lazarus_phase": "synthesis_hub", "members": ["m1", "m2"], "created_at": old})
+	client = FakeClient([hub])
+	stats = erode_curated(FakeMM(client), collections=("work_memories",))
+	assert client.deleted == ["hub"]
+	assert client.payloads["m1"]["hubbed"] is False and client.payloads["m2"]["hubbed"] is False
+	assert stats.get("released") == 2
