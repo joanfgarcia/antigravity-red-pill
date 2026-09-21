@@ -4,6 +4,21 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-034] Single-writer de memoria — ascensión Memento, hubs, Ariadna, solera y flags por componente
+**Date**: 2026-09-21
+**Status**: ACCEPTED (rama `feat/memento-single-writer`; flags `SW_*` default OFF → producción intacta).
+**Context**: `work_memories`/`social_memories` recibían prompts por DOS vías redundantes (la ingesta `interaction→work/social` del sueño y el chronicle legacy) que sólo añadían ruido y duplicados (la resiembra encontró ~3.000 réplicas). La vía legacy ya estaba retirada; quedaba la del sueño. Además, la **erosión estaba inerte**: el pulse refrescaba `last_recalled_at` de TODO cada hora.
+**Decision**:
+- **Fuente única**: work/social se alimentan **solo** por **ascensión curada de Memento** (`distill→refine→ascend`). Se **retira** la ingesta `interaction→work/social` (`SW_INGEST_RETIRED`); el buffer `interaction_memories` pasa a semáforo transitorio (TTL gateado por render en Memento + **tope de edad** con señal).
+- **Ascensión con dos fechas** (`created_at`=sesión real, `ascended_at`=ascensión) + `node_type`; dedup-at-ascension (ganador determinista por cuerpo); **umbrales por categoría** (work/social).
+- **Navegación**: **hubs de sesión** (macro, idempotentes por `point_id`+`hub_input_hash`) + **micro-hilo de Ariadna** por `refine_ref` (`prev/next_member`) + `cross_refs` (axones). El recall omite los miembros `hubbed` (reversible con el flag).
+- **Olvido elegante**: eje propio `last_reinforced_at` (no lo toca el pulse), **demote a Memento** a 5a (miembros) / 10a (hubs, piso propio), factores por motor; **fix de raíz** del refresh incondicional (`SW_ABSENCE_GUARD_CONDITIONAL`).
+- **Semáforo de situación** (`situation_memories`, solera 20/80 en **dos capas**) leído por el pre-heating (global; scoped pendiente de la afinidad de sesión de MULTISES-001).
+- **Patrón obligatorio**: **feature flag por componente** (CONVENTIONS RULE 4).
+**Por qué**: elimina la redundancia/ruido, conserva la navegación y el archivo (Memento es la fuente de verdad), y **devuelve la vida al olvido**. Verificado con panel adversarial (D1–D12 corregidos).
+
+---
+
 ## [AD-030] Servicio de Gobierno de la Inferencia Local (RFC-HARNESS-002 v3)
 **Date**: 2026-09-15
 **Status**: ACCEPTED & IMPLEMENTED (v3 fusionado; PR-0/PR-1/PR-2 desplegados).

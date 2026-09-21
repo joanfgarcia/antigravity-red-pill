@@ -201,7 +201,7 @@ TARGET:   systemd → runs Aleth (always) ← IDE connects/disconnects
 #### 3.5.3 — Continuous Sleep (Real-Time Context Garbage Collection)
 **Dependency**: OS-level service (persistent process), Qdrant (storage backend)
 
-The current sleep cycle is a **batch process** — a nightly consolidation daemon that distills `interaction_memories` into `social_memories`. In Phase 3.5, sleep becomes **continuous**, running in a background thread within the service:
+The current sleep cycle is a **batch process**. *(Update 2026-09-21, AD-034: `interaction_memories` is **no longer distilled** into work/social — the curated collections are fed by the **Memento ascension** (`distill→refine→ascend`), and the buffer is a TTL'd transient window. The "Tier 3: merged into social_memories" below is historical.)* In Phase 3.5, sleep becomes **continuous**, running in a background thread within the service:
 
 ```
 Tier 1 (0-2h):    Live context window — full resolution in VRAM

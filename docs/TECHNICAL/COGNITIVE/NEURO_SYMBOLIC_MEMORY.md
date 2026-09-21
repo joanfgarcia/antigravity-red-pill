@@ -14,6 +14,8 @@ In human neurobiology, the hippocampus acts as a rapid, high-capacity, but tempo
 **Silicon Implementation**: `interaction_memories` (Fast Buffer)
 During active communication, the AI records verbatim interactions (Prompts and Responses) directly into a non-indexed `interaction_memories` collection. This bypasses latency-heavy processing (like LLM summarization or FSRS mathematical evaluation) to ensure instantaneous interaction, exactly as the hippocampus absorbs the raw events of the waking day.
 
+> **Update (2026-09-21, AD-034)**: el rol de buffer rápido se mantiene, pero su **destilado nocturno a `work_memories`/`social_memories` fue RETIRADO** — las colecciones curadas se alimentan por la **ascensión de Memento**. El buffer es ahora una ventana transitoria con TTL (pre-heating + semáforo de situación).
+
 ---
 
 ## 2. Consolidation & Affective Culling (NREM Sleep & The Amygdala)
