@@ -90,6 +90,10 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   `origin=telegram` siempre, porque el relay del worker es la captura autoritativa
   (el plugin duplicaba el turno con el prompt envuelto y respuesta vacía). La
   afinidad (si se retoma) será **semántica** (keywords del refine), no filesystem.
+  **Cierre de fase (2026-09-22)**: `TelegramSessionManager` → `red_pill/telegram/`;
+  64 filas de ruido de la cola purgadas; cascadas del `.env` corregidas al modelo
+  vivo (`opencode/deepseek-v4-flash`); docs alineadas (AD-034, runbook,
+  `NEON_LINK_ROUTING`, plantilla de memoria sin afinidad).
 
 ### 🧹 Desk — scaffold del despacho, separación proyecto↔despacho y `AGENT_CORE_DIR`
 
