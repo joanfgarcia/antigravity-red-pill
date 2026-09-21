@@ -349,7 +349,7 @@ def test_pi_missing_dir_discovers_nothing(tmp_path):
 
 def test_discovery_finds_all_builtin_sources():
 	plugins = discover_source_plugins(only_enabled=False)
-	assert [p.name for p in plugins] == ["antigravity", "antigravity_export", "claude_code", "memory_queue", "opencode", "pi"]
+	assert [p.name for p in plugins] == ["antigravity", "antigravity_export", "claude_code", "memory_queue", "opencode", "pi", "telegram"]
 
 
 def test_discovery_respects_config_gating(monkeypatch):

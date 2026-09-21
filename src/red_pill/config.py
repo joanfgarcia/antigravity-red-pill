@@ -475,7 +475,7 @@ class RedPillConfig(BaseSettings):
 	# confundir con CHRONICLE_PLUGINS, que gobierna el snatching hacia la
 	# consolidación. La ingesta a archive_memories se retiró 2026-09-11.
 	# "pi" entra por defecto: si Pi no está instalado, su discover() devuelve [].
-	CHRONICLE_ARCHIVE_SOURCES: List[str] = ["antigravity", "claude_code", "opencode", "pi"]
+	CHRONICLE_ARCHIVE_SOURCES: List[str] = ["antigravity", "claude_code", "opencode", "pi", "telegram"]
 
 	# -----------------------------------------------------------------------
 	# MEMENTO CHRONICLE (RFC-002 §4.8)

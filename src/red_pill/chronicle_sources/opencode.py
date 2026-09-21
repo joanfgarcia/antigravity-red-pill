@@ -45,7 +45,19 @@ class OpencodeSourcePlugin(ChronicleSourcePlugin):
 		except sqlite3.Error as e:
 			logger.warning(f"[{self.name}] Could not read database: {e}")
 			return []
-		return [(str(sid), int(count)) for sid, count in rows if sid]
+		# AD-034/D15: las sesiones de Telegram corren vía opencode pero tienen su
+		# propio source (telegram) — se excluyen aquí para no renderizar doble.
+		try:
+			from red_pill.swarm.bridges.opencode import read_opencode_origins
+
+			origins = read_opencode_origins()
+		except Exception:
+			origins = {}
+		return [
+			(str(sid), int(count))
+			for sid, count in rows
+			if sid and (origins.get(str(sid), {}) or {}).get("origin") != "telegram"
+		]
 
 	def _render_part(self, part: Dict[str, Any]) -> str:
 		p_type = part.get("type")
