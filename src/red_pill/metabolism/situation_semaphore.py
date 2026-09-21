@@ -71,19 +71,6 @@ def _default_merger(old: str, delta: str, ratio: float) -> str:
 	return (old[:old_budget].rstrip() + " " + delta[:new_budget]).strip()[:2000]
 
 
-def _group_turns(turns: List[Any]) -> Dict[str, List[Dict[str, Any]]]:
-	groups: Dict[str, List[Dict[str, Any]]] = {}
-	for t in turns:
-		pl = t.payload or {}
-		meta = pl.get("metadata") or {}
-		content = pl.get("content") or ""
-		ts = pl.get("timestamp", 0)
-		affs = meta.get("affinity") or []
-		for aff in affs:
-			groups.setdefault(str(aff), []).append({"content": content, "ts": ts})
-	return groups
-
-
 def _upsert_semaphore(memory_manager: Any, aff: str, new_items: List[Dict[str, Any]], distiller: Callable, merger: Callable, ratio: float) -> bool:
 	client = memory_manager.client
 	pid = situation_point_id(aff)
@@ -130,42 +117,39 @@ def update_situation(
 	distiller: Optional[Callable[[str], Dict[str, Any]]] = None,
 	merger: Optional[Callable[[str, str, float], str]] = None,
 ) -> Dict[str, Any]:
-	"""Actualiza el semáforo por afinidad (y el global de mood) desde los turnos nuevos."""
+	"""Actualiza el semáforo de situación GLOBAL desde los turnos nuevos (AD-034/D15).
+
+	Sin bucket por afinidad: la afinidad por filesystem se retiró (no refleja cómo
+	trabajamos) y el semáforo es una lectura de situación, no navegación. Un único
+	semáforo (`affinity="global"`) que el pre-heating inyecta.
+	"""
 	if not bool(getattr(cfg, "SW_SITUATION_ENABLED", False)):
-		return {"enabled": False, "affinities": 0}
+		return {"enabled": False, "updated": 0}
 
 	distiller = distiller or _default_distiller
 	merger = merger or _default_merger
 	ratio = float(getattr(cfg, "SITUATION_SOLERA_RATIO", 0.2))
-	max_aff = int(getattr(cfg, "SITUATION_MAX_AFFINITIES_PER_CYCLE", 10))
 	client = memory_manager.client
 	if not client.collection_exists("interaction_memories"):
-		return {"enabled": True, "affinities": 0}
+		return {"enabled": True, "updated": 0}
 
 	# Asegura `situation_memories`: no la crea nadie más y `add_memory` no la
-	# auto-crea (solo `record_interaction_pair`). Sin esto, M8 era dead-on-arrival.
+	# auto-crea (solo `record_interaction_pair`).
 	if not client.collection_exists(COLLECTION):
 		try:
 			memory_manager._ensure_collection(COLLECTION)
 		except Exception as e:
 			logger.warning(f"[SITUATION] no se pudo crear {COLLECTION}: {e}")
-			return {"enabled": True, "affinities": 0}
+			return {"enabled": True, "updated": 0}
 
 	turns, _ = client.scroll("interaction_memories", limit=2000, with_payload=True)
-	groups = _group_turns(turns)
-
-	updated = 0
-	for aff, items in list(groups.items())[:max_aff]:
-		if _upsert_semaphore(memory_manager, aff, items, distiller, merger, ratio):
-			updated += 1
-
-	# Semáforo GLOBAL de mood (todos los turnos, cruzando sesiones).
-	all_items = [{"content": (t.payload or {}).get("content") or "", "ts": (t.payload or {}).get("timestamp", 0)} for t in turns]
-	if _upsert_semaphore(memory_manager, GLOBAL_AFFINITY, all_items, distiller, merger, ratio):
-		updated += 1
-
+	all_items = [
+		{"content": (t.payload or {}).get("content") or "", "ts": (t.payload or {}).get("timestamp", 0)}
+		for t in turns
+	]
+	updated = 1 if _upsert_semaphore(memory_manager, GLOBAL_AFFINITY, all_items, distiller, merger, ratio) else 0
 	evict_situation(memory_manager)
-	return {"enabled": True, "affinities": updated}
+	return {"enabled": True, "updated": updated}
 
 
 def evict_situation(memory_manager: Any) -> int:

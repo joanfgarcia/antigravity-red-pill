@@ -1,4 +1,4 @@
-"""M8 single-writer — semáforo de situación por afinidad (solera 20/80)."""
+"""M8 (revisado AD-034) — semáforo de situación GLOBAL (sin afinidad por filesystem)."""
 
 from __future__ import annotations
 
@@ -44,46 +44,53 @@ def _merger(old, delta, ratio):
 	return (old + " | " + delta).strip(" |")
 
 
-def _turn(cid, content, aff, ts):
-	return (cid, {"content": content, "timestamp": ts, "metadata": {"affinity": aff}})
+def _turn(cid, content, ts):
+	return (cid, {"content": content, "timestamp": ts, "metadata": {}})
 
 
 def test_situation_flag_off_no_hace_nada(monkeypatch):
 	import red_pill.config as cfgmod
 
 	monkeypatch.setattr(cfgmod, "SW_SITUATION_ENABLED", False, raising=False)
-	mm = FakeMM(FakeClient([_turn("t1", "hola", ["ws:sharing"], 100)]))
-	assert update_situation(mm, distiller=_distiller, merger=_merger)["enabled"] is False
+	mm = FakeMM(FakeClient([_turn("t1", "hola", 100)]))
+	out = update_situation(mm, distiller=_distiller, merger=_merger)
+	assert out["enabled"] is False and out["updated"] == 0
 
 
-def test_situation_actualiza_afinidad_y_global(monkeypatch):
+def test_situation_actualiza_global(monkeypatch):
 	import red_pill.config as cfgmod
 
 	monkeypatch.setattr(cfgmod, "SW_SITUATION_ENABLED", True, raising=False)
-	mm = FakeMM(FakeClient([_turn("t1", "trabajando en bitnet", ["ws:sharing"], 100)]))
-	stats = update_situation(mm, distiller=_distiller, merger=_merger)
-	assert stats["affinities"] == 2  # ws:sharing + global
-	assert situation_point_id("ws:sharing") in mm.client.situation
-	assert situation_point_id(GLOBAL_AFFINITY) in mm.client.situation
-	assert mm.client.situation[situation_point_id("ws:sharing")]["situation"].startswith("S[")
+	mm = FakeMM(FakeClient([_turn("t1", "trabajando en bitnet", 100)]))
+	out = update_situation(mm, distiller=_distiller, merger=_merger)
+	assert out["updated"] == 1
+	pid = situation_point_id(GLOBAL_AFFINITY)
+	assert pid in mm.client.situation
+	p = mm.client.situation[pid]
+	assert p["situation"].startswith("S[")
+	assert "situation_stable" in p and "situation_recent" in p
 
 
 def test_situation_idempotente_por_ventana(monkeypatch):
 	import red_pill.config as cfgmod
 
 	monkeypatch.setattr(cfgmod, "SW_SITUATION_ENABLED", True, raising=False)
-	client = FakeClient([_turn("t1", "hola", ["ws:sharing"], 100)])
+	client = FakeClient([_turn("t1", "hola", 100)])
 	mm = FakeMM(client)
-	assert update_situation(mm, distiller=_distiller, merger=_merger)["affinities"] == 2
-	# Segunda pasada sin turnos nuevos → no re-procesa.
-	assert update_situation(mm, distiller=_distiller, merger=_merger)["affinities"] == 0
+	assert update_situation(mm, distiller=_distiller, merger=_merger)["updated"] == 1
+	# Sin turnos nuevos → no re-procesa.
+	assert update_situation(mm, distiller=_distiller, merger=_merger)["updated"] == 0
 
 
-def test_situation_dos_capas(monkeypatch):
+def test_situation_delta_vacio_no_consume(monkeypatch):
 	import red_pill.config as cfgmod
 
 	monkeypatch.setattr(cfgmod, "SW_SITUATION_ENABLED", True, raising=False)
-	mm = FakeMM(FakeClient([_turn("t1", "primera situación", ["ws:sharing"], 100)]))
-	update_situation(mm, distiller=_distiller, merger=_merger)
-	payload = mm.client.situation[situation_point_id("ws:sharing")]
-	assert "situation_stable" in payload and "situation_recent" in payload
+	mm = FakeMM(FakeClient([_turn("t1", "hola", 100)]))
+
+	def empty(_t):
+		return {"situation": "", "emotion": "gray", "intensity": 0.5}
+
+	assert update_situation(mm, distiller=empty, merger=_merger)["updated"] == 0
+	# y con un distiller sano sí procesa (no se consumió la ventana)
+	assert update_situation(mm, distiller=_distiller, merger=_merger)["updated"] == 1
