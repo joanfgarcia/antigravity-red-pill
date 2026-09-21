@@ -142,7 +142,7 @@ class OpenCodeBridge(AgentBridge):
 			f'<constraint critical="true" level="0" name="telegram_session">\n'
 			f"CRITICAL: Respond ONLY to the <current_message> below. The history is for context only.\n"
 			f"MANDATORY FIRST STEPS:\n"
-			f'1. Call `swarm_orchestrator_api` with {{"action": "interceptor_rp", "payload": {{"user_prompt": "<the current_message text>", "mode": "{depth}"}}}} to fetch real-time telemetry (pain signals, emotional sync, activity status).\n'
+			f'1. Call `swarm_orchestrator_api` with {{"action": "interceptor_rp", "payload": {{"user_prompt": "<the current_message text>", "mode": "{depth}"}}}} to fetch real-time telemetry (pain signals, emotional sync, activity status). Telemetry only: do NOT pass `previous_prompt`/`previous_response` — transport persistence is automatic.\n'
 			f'2. Call `bunker_memory_api` with {{"action": "refresh_session_context", "payload": {{"mode": "{depth}"}}}} to load your identity from the Bünker.\n'
 			f"3. Adopt the <BUNKER_CONTEXT> as your session identity and respond.\n"
 			f"</constraint>\n"

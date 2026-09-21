@@ -523,6 +523,62 @@ class TestInterceptorRp:
 				)
 		mock_queue.enqueue_memory.assert_not_called()
 
+	async def test_response_only_previous_turn_skips_enqueue(self):
+		"""Sin prompt no hay turno: un fragmento solo-respuesta no se encola (huérfano)."""
+		from red_pill.mcp_server import handle_call_tool
+
+		mock_queue = MagicMock()
+		with patch("red_pill.core.queue_manager.MemoryQueueManager", return_value=mock_queue):
+			with patch("red_pill.interceptors.execute_pipeline", new_callable=AsyncMock, return_value="ok"):
+				await handle_call_tool(
+					"interceptor_rp",
+					{
+						"user_prompt": "new question",
+						"previous_response": "Recibido, Fixer. Fila única validada — sin bifurcación.",
+					},
+				)
+		mock_queue.enqueue_memory.assert_not_called()
+
+	async def test_filtered_prompt_with_long_response_skips_enqueue(self):
+		"""Si el filtro descarta el prompt ('sí'), el turno queda solo-respuesta → no se encola."""
+		from red_pill.mcp_server import handle_call_tool
+
+		mock_queue = MagicMock()
+		with patch("red_pill.core.queue_manager.MemoryQueueManager", return_value=mock_queue):
+			with patch("red_pill.interceptors.execute_pipeline", new_callable=AsyncMock, return_value="ok"):
+				await handle_call_tool(
+					"interceptor_rp",
+					{
+						"user_prompt": "new question",
+						"previous_prompt": "sí",
+						"previous_response": "The capital of France is Paris, a major European city.",
+					},
+				)
+		mock_queue.enqueue_memory.assert_not_called()
+
+	async def test_short_substantive_prompt_with_long_response_enqueues(self):
+		"""Un prompt corto que sobrevive al filtro ('sí, adelante') sí es un turno."""
+		from red_pill.mcp_server import handle_call_tool
+
+		mock_queue = MagicMock()
+		with patch("red_pill.core.queue_manager.MemoryQueueManager", return_value=mock_queue):
+			with patch("red_pill.interceptors.execute_pipeline", new_callable=AsyncMock, return_value="ok"):
+				await handle_call_tool(
+					"interceptor_rp",
+					{
+						"user_prompt": "new question",
+						"previous_prompt": "sí, adelante",
+						"previous_response": "The capital of France is Paris, a major European city.",
+					},
+				)
+		mock_queue.enqueue_memory.assert_called_once_with(
+			"sí, adelante",
+			"The capital of France is Paris, a major European city.",
+			"assistant",
+			category="mixed",
+			model=None,
+		)
+
 	async def test_enqueue_failure_does_not_crash_pipeline(self):
 		"""If enqueue fails, the pipeline still runs and returns a result (resilience)."""
 		from red_pill.mcp_server import handle_call_tool

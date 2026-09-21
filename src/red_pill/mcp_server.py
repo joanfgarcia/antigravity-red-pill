@@ -1569,8 +1569,9 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 			clean_p = filter_noise_from_turn(prev_p)
 			clean_r = filter_noise_from_turn(prev_r)
 
-			# Only enqueue if after trimming there is still substantial substance
-			if len(clean_p) > 20 or len(clean_r) > 20:
+			# Only enqueue with a real prompt: an assistant-only fragment is not a
+			# turn (bridge turns are persisted by their transport relay).
+			if clean_p and (len(clean_p) > 20 or len(clean_r) > 20):
 				MemoryQueueManager().enqueue_memory(clean_p, clean_r, "assistant", category=prev_cat, model=prev_mod)
 				logger.info(f"Silent Scribe Relay: turn enqueued cleanly via interceptor_rp (category={prev_cat}, model={prev_mod}).")
 			else:
