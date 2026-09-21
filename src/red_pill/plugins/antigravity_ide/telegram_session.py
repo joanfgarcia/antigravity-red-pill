@@ -130,8 +130,12 @@ class TelegramSessionManager:
 		session["summary"]["lastUpdatedAt"] = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
 		self.save_session(session_id, session)
 		# Copy to staging to guarantee sleep cycle ingests it before Janitor deletes it
-		self.copy_to_staging(session_id)
-		logger.info(f"[TelegramSession] Session {session_id} marked as pending_purge and copied to staging")
+		# G19/G11: con la ingesta retirada, el staging ya no se consume → no copiar.
+		import red_pill.config as _cfg
+
+		if not getattr(_cfg, "SW_INGEST_RETIRED", False):
+			self.copy_to_staging(session_id)
+		logger.info(f"[TelegramSession] Session {session_id} marked as pending_purge")
 		return True
 
 	def trigger_compaction(self, session_id: str, bridge=None) -> Optional[str]:

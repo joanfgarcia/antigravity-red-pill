@@ -111,6 +111,12 @@ def call_ls_api(port: int, csrf: str, method: str, params: Optional[dict] = None
 
 def snatch_all_trajectories() -> int:
 	"""Discover all active LanguageServers and snatch conversations securely."""
+	# Single-writer: con la ingesta retirada, el staging ya no se consume.
+	import red_pill.config as _cfg
+
+	if getattr(_cfg, "SW_INGEST_RETIRED", False):
+		logger.info("[LS SNATCHER] Ingesta retirada (SW_INGEST_RETIRED); no se snatchea.")
+		return 0
 	logger.info("[LS SNATCHER] Searching for active LanguageServers...")
 	servers = find_language_servers()
 	if not servers:

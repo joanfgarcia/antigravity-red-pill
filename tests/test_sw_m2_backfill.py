@@ -37,8 +37,21 @@ def test_backfill_es_idempotente_y_omite_lo_que_no_puede():
 	mod = _load_module()
 	state = {"registry": {"opencode": {"opencode:ses_a": {"created_at": "2026-08-12T20:35:06.300000Z"}}}}
 	points = [
-		("p1", {"origin": "memento", "session_id": "opencode:ses_a", "source": "opencode", "created_at": 1.0, "ascended_at": "x"}),
+		("p1", {"origin": "memento", "session_id": "opencode:ses_a", "source": "opencode", "created_at": 1.0, "backfilled_dates": True}),
 		("p2", {"origin": "memento", "session_id": "opencode:ses_unknown", "source": "opencode", "created_at": 2.0}),
 		("p3", {"origin": "interactive", "created_at": 3.0}),
 	]
 	assert mod.plan_backfill(points, state) == []
+
+
+def test_backfill_preserva_ascended_at_desde_iso_y_setea_last_reinforced():
+	mod = _load_module()
+	state = {"registry": {"opencode": {"opencode:ses_a": {"created_at": "2026-08-12T20:35:06.300000Z"}}}}
+	points = [("p1", {"origin": "memento", "source": "opencode", "session_id": "opencode:ses_a", "created_at": "2026-09-17T14:06:34+00:00"})]
+	plan = mod.plan_backfill(points, state)
+	upd = plan[0]["payload"]
+	asc = _epoch("2026-09-17T14:06:34+00:00")
+	assert upd["backfilled_dates"] is True
+	assert upd["ascended_at"] == asc
+	assert upd["last_reinforced_at"] == asc
+	assert upd["created_at"] == _epoch("2026-08-12T20:35:06.300000Z")

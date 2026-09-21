@@ -128,6 +128,12 @@ class ClaudeCodeExtractorPlugin(ChronicleExtractorPlugin):
 	"""Chronicle plugin to ingest conversation transcripts from Claude Code JSONL files."""
 
 	def extract(self) -> int:
+		# Single-writer: con la ingesta retirada, el staging ya no se consume.
+		import red_pill.config as _cfg
+
+		if getattr(_cfg, "SW_INGEST_RETIRED", False):
+			logger.info("[Claude Code Plugin] Ingesta retirada (SW_INGEST_RETIRED); no se extrae.")
+			return 0
 		logger.info("[Claude Code Plugin] Scanning for session transcripts...")
 		base_dir = Path.home() / ".claude" / "projects"
 		if not base_dir.exists() or not base_dir.is_dir():

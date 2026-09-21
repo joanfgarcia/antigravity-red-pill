@@ -54,17 +54,26 @@ def plan_backfill(points: List[Tuple[Any, Dict[str, Any]]], registry_state: Dict
 		payload = payload or {}
 		if payload.get("origin") != "memento":
 			continue
-		if payload.get("ascended_at"):
-			continue  # ya backfilled (idempotente)
+		if payload.get("backfilled_dates"):
+			continue  # ya backfilled (idempotencia explícita, no depende del formato)
 		source = str(payload.get("source") or "")
 		sid = str(payload.get("session_id") or "")
 		epoch = _iso_to_epoch((reg.get(source, {}) or {}).get(sid, {}).get("created_at"))
 		if epoch is None:
 			continue  # sin fecha de sesión conocida: no se toca
-		upd: Dict[str, Any] = {"created_at": epoch, "node_type": "memento_engram"}
+		upd: Dict[str, Any] = {"created_at": epoch, "node_type": "memento_engram", "backfilled_dates": True}
+		# Preserva el momento de ascensión (el `created_at` actual, numérico o ISO).
 		current = payload.get("created_at")
 		if isinstance(current, (int, float)):
 			upd["ascended_at"] = float(current)
+		else:
+			iso_cur = _iso_to_epoch(current)
+			if iso_cur is not None:
+				upd["ascended_at"] = iso_cur
+		# Eje de activación para la erosión: la edad de curación (no la de sesión),
+		# para que un engrama viejo recién curado no se demote por edad de sesión.
+		if "ascended_at" in upd:
+			upd["last_reinforced_at"] = upd["ascended_at"]
 		out.append({"id": str(pid), "payload": upd})
 	return out
 
