@@ -96,16 +96,23 @@ def _upsert_semaphore(memory_manager: Any, aff: str, new_items: List[Dict[str, A
 		return False
 	text = "\n".join(str(it["content"]) for it in fresh)
 	delta = distiller(text)
-	if not str(delta.get("situation", "")).strip():
+	recent = str(delta.get("situation", "")).strip()
+	if not recent:
 		# Destilado vacío (LLM caído): NO consumir los turnos (reintento).
 		return False
-	new_situation = merger(str(old_payload.get("situation", "")), str(delta.get("situation", "")), ratio)
+	# D25: dos capas — `situation_stable` (integra lo nuevo con peso ratio, decae
+	# lento) + `situation_recent` (el último delta, volátil). `situation` = estable
+	# (compatibilidad con el pre-heating).
+	stable_old = str(old_payload.get("situation_stable") or old_payload.get("situation", ""))
+	new_situation = merger(stable_old, recent, ratio)
 	new_id = memory_manager.add_memory(
 		collection=COLLECTION,
 		text=new_situation or aff,
 		metadata={
 			"affinity": aff,
 			"situation": new_situation,
+			"situation_stable": new_situation,
+			"situation_recent": recent,
 			"mood": str(delta.get("emotion", "gray")),
 			"node_type": "situation_semaphore",
 			"updated_at": time.time(),

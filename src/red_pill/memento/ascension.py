@@ -379,14 +379,11 @@ def ascend_by_threshold(
 	transport: Any = None,
 ) -> Dict[str, Any]:
 	"""Ascenso estático (§3.3): promueve los `refine/*.md` NO ascendidos cuya
-	`significance >= MEMENTO_GATE_MIN_SIGNIFICANCE` (default 0.5, provisional).
-
-	Es el heredero del gate "would-ingest" del RFC-002 §4.6, ahora sin
-	`archive_memories`: Memento es el archivo, Qdrant recibe solo lo curado.
+	`significance` supera el umbral de su categoría — `MEMENTO_GATE_MIN_SIGNIFICANCE_WORK`
+	o `_SOCIAL` (D24: work y social se comportan distinto). Un `min_significance`
+	explícito (reseeds/tests) gana para todos.
 	Idempotente (`ascender` es un upsert por `session_id`+`source_lines`).
 	"""
-	if min_significance is None:
-		min_significance = _polaroid_cfg(0.5, "MEMENTO_GATE_MIN_SIGNIFICANCE")
 	if memory_manager is None:
 		from red_pill.memory import MemoryManager
 
@@ -402,7 +399,15 @@ def ascend_by_threshold(
 				continue
 			stats["refine_evaluados"] += 1
 			significance = float(fm.get("significance", 0.0) or 0.0)
-			if significance < min_significance:
+			if min_significance is not None:
+				threshold = float(min_significance)
+			else:
+				cat = _candidate_category(fm, body)
+				if cat == "work":
+					threshold = _polaroid_cfg(0.6, "MEMENTO_GATE_MIN_SIGNIFICANCE_WORK")
+				else:
+					threshold = _polaroid_cfg(0.5, "MEMENTO_GATE_MIN_SIGNIFICANCE_SOCIAL")
+			if significance < threshold:
 				stats["rechazados_por_umbral"] += 1
 				continue
 			candidates.append((refine_path, fm, body, significance))
@@ -572,6 +577,19 @@ def _category_from_score(score: float) -> str:
 	"""Ratio (1=work) → colección destino según el umbral configurable."""
 	threshold = _polaroid_cfg(0.5, "MEMENTO_CATEGORY_WORK_THRESHOLD")
 	return "work" if float(score) >= threshold else "social"
+
+
+def _candidate_category(fm: Dict[str, Any], body: str) -> str:
+	"""Categoría work/social de un refine (mismo criterio que el ascenso)."""
+	score = fm.get("category_score")
+	if score is not None:
+		try:
+			return _category_from_score(float(score))
+		except Exception:
+			pass
+	from red_pill.metabolism.categorizer import detect_category_heuristics
+
+	return detect_category_heuristics(body)
 
 
 def _session_created_at(registry: Any, source: str, session_id: str) -> Optional[float]:

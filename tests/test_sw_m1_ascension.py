@@ -131,3 +131,20 @@ def test_dedup_no_colapsa_multi_idea(tmp_path: Path, monkeypatch):
 	stats = ascend_by_threshold(root, FakeReg(), memory_manager=mm)
 	assert stats["ascendidos"] == 2  # ambas ascienden (no son duplicados)
 	assert stats["duplicados_omitidos"] == 0
+
+
+def test_umbral_por_categoria(tmp_path: Path, monkeypatch):
+	"""D24: work exige más significance que social; el explícito anula."""
+	import red_pill.config as cfgmod
+
+	monkeypatch.setattr(cfgmod, "MEMENTO_GATE_MIN_SIGNIFICANCE_WORK", 0.6, raising=False)
+	monkeypatch.setattr(cfgmod, "MEMENTO_GATE_MIN_SIGNIFICANCE_SOCIAL", 0.5, raising=False)
+	root = tmp_path / "m"
+	work = REFINE.format(sig=0.55, body="técnico")  # category_score 0.8 → work
+	social = REFINE.format(sig=0.55, body="personal").replace("category_score: 0.8", "category_score: 0.2")
+	_write(root, "2026-09/opencode/s/refine/001-w.md", work)
+	_write(root, "2026-09/opencode/s/refine/002-s.md", social)
+	mm = FakeMM()
+	stats = ascend_by_threshold(root, FakeReg(), memory_manager=mm)
+	assert stats["ascendidos"] == 1  # solo el social (0.55 ≥ 0.5); el work (0.55 < 0.6) no
+	assert stats["rechazados_por_umbral"] == 1

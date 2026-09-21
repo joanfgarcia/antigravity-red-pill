@@ -77,3 +77,13 @@ def test_situation_idempotente_por_ventana(monkeypatch):
 	assert update_situation(mm, distiller=_distiller, merger=_merger)["affinities"] == 2
 	# Segunda pasada sin turnos nuevos → no re-procesa.
 	assert update_situation(mm, distiller=_distiller, merger=_merger)["affinities"] == 0
+
+
+def test_situation_dos_capas(monkeypatch):
+	import red_pill.config as cfgmod
+
+	monkeypatch.setattr(cfgmod, "SW_SITUATION_ENABLED", True, raising=False)
+	mm = FakeMM(FakeClient([_turn("t1", "primera situación", ["ws:sharing"], 100)]))
+	update_situation(mm, distiller=_distiller, merger=_merger)
+	payload = mm.client.situation[situation_point_id("ws:sharing")]
+	assert "situation_stable" in payload and "situation_recent" in payload
