@@ -114,6 +114,7 @@ from red_pill.core.model_license import ModelLicenseError
 from red_pill.core.model_registry import ModelRegistry
 from red_pill.core.paths import resolve_model_path
 from red_pill.core.vram_probe import VramProbe
+from red_pill.inference.runtime import apply_chat_handler as _apply_chat_handler, register_thinking_handlers as _register_thinking_handlers
 
 # Env del worker CPU (imposición del padre, RFC §10): el worker resuelve con el
 # selector igual que el padre, pero su env lo fija el padre al spawnearlo.
@@ -126,72 +127,9 @@ _CPU_KV_MB_PER_TOKEN = 0.16
 DEFAULT_HIGH_TIMEOUT = 300
 DEFAULT_LOW_TIMEOUT = 10
 
-# ── Chat handlers por modo thinking (v3, RFC §5.3) ─────────────────────────
-# Se registran al cargar cada modelo con template nativo; los nombres
-# `granite-*` son convención, pero el mapeo real lo hace model_runtime.
-def _register_thinking_handlers(llm, resolved: mr.ResolvedModel) -> None:
-	"""Registra chat handlers por modo thinking derivados del template del GGUF.
-
-	llama-cpp-python NO expone chat_template_kwargs en create_chat_completion;
-	el Jinja2ChatFormatter acepta enable_thinking/low_effort vía kwargs. Cada
-	modo queda registrado en el registry GLOBAL de llama_cpp como chat_format
-	y el daemon lo selecciona por request según el `thinking` resuelto. Al
-	cargar un modelo nuevo se re-registran (solo hay UN modelo cargado a la vez).
-	"""
-	if not resolved.extra.get("thinking_supported", False):
-		return
-	try:
-		import llama_cpp.llama_chat_format as lcf
-		from llama_cpp.llama_chat_format import Jinja2ChatFormatter
-
-		tpl = llm.metadata.get("tokenizer.chat_template", "")
-		if not tpl:
-			logger.warning("modelo sin tokenizer.chat_template — no se registran modos thinking")
-			return
-		eos_id = llm.token_eos()
-		eos_str = llm._model.token_get_text(eos_id) if hasattr(llm._model, "token_get_text") else "<|im_end|>"
-		bos_str = "<s>"
-
-		def _mk(et: bool, le: bool = False, name: str = ""):
-			def fmt(*, messages, **kw):
-				return Jinja2ChatFormatter(
-					template=tpl, eos_token=eos_str, bos_token=bos_str,
-					stop_token_ids=[eos_id],
-				)(messages=messages, enable_thinking=et, low_effort=le, **kw)
-			# Registry GLOBAL de llama_cpp: el chat_format debe existir ahí.
-			lcf.register_chat_format(name)(fmt)
-			logger.debug(f"chat handler '{name}' registrado (enable_thinking={et}, low_effort={le})")
-
-		_mk(True, False, "granite-thinking")
-		_mk(False, False, "granite-nothink")
-		_mk(True, True, "granite-low")
-		logger.info(f"registrados chat handlers por modo thinking para '{resolved.profile_name}'")
-	except Exception as e:
-		logger.error(f"no se pudieron registrar chat handlers thinking: {e}")
-
-
-def _apply_chat_handler(llm, resolved: mr.ResolvedModel, body: Dict[str, Any]) -> None:
-	"""Aplica el chat handler / chat_format correcto según la request.
-
-	Orden: template nativo + thinking → handler registrado del modo; si el
-	perfil declara chat_format explícito, gana el perfil (o el override del
-	body). Un request con tools en un modelo sin handler thinking usa el
-	chat_format nativo (llama_cpp autodetecta tools).
-	"""
-	thinking = body.get("thinking") or resolved.thinking or "off"
-	handler_name = mr.apply_thinking_to_template(thinking)
-	explicit = body.get("chat_format") or resolved.chat_format
-
-	if handler_name and explicit is None:
-		# El handler del modo se registró en el registry GLOBAL de llama_cpp
-		# al cargar el modelo; seleccionarlo por nombre como chat_format.
-		llm.chat_format = handler_name
-		return
-	if explicit is not None:
-		llm.chat_format = explicit
-		return
-	# Template nativo por defecto (chat_format=None → llama_cpp usa el del GGUF).
-	llm.chat_format = None
+# Chat handlers por modo thinking: única verdad en red_pill.inference.runtime
+# (compartida con el front CLI del bake-off). Se importan arriba como
+# _apply_chat_handler / _register_thinking_handlers.
 
 
 class BackendUnavailable(RuntimeError):
