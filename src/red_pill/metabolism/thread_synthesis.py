@@ -109,3 +109,8 @@ def follow_member_thread(memory_manager: Any, collection: str, start_id: str, di
 		chain.append(str(nxt))
 		cur = str(nxt)
 	return chain
+
+
+def order_members(entries: List[Tuple[Any, Dict[str, Any]]]) -> List[Tuple[Any, Dict[str, Any]]]:
+	"""Ordena miembros de una sesión: por `member_index` (fallback `refine_ref`)."""
+	return sorted(entries, key=lambda t: (int((t[1] or {}).get("member_index", 10**9)), str((t[1] or {}).get("refine_ref", ""))))

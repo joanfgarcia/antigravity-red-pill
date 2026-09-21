@@ -59,3 +59,14 @@ def test_thread_encadena_por_orden_de_refine(monkeypatch):
 	assert client.payloads["m17"]["prev_member"] == "m2"
 	assert client.payloads["m17"]["member_index"] == 1
 	assert client.payloads["m17"]["member_count"] == 2
+
+
+def test_order_members_por_index_con_fallback():
+	from red_pill.metabolism.thread_synthesis import order_members
+
+	entries = [
+		("b", {"member_index": 2, "refine_ref": "…/009-b.md"}),
+		("a", {"member_index": 1, "refine_ref": "…/003-a.md"}),
+		("c", {"refine_ref": "…/002-c.md"}),  # sin index → al final
+	]
+	assert [mid for mid, _ in order_members(entries)] == ["a", "b", "c"]

@@ -496,7 +496,7 @@ async def handle_search_memento(arguments: Dict[str, Any]):
 @registry.register_action(
 	parent="bunker_memory_api",
 	action="traverse_thread",
-	description="Walk the Ariadne's Thread through work_memories or social_memories. Finds the best matching synthesis_hub for the query and traverses the temporal chain via prev/next_session_hub axons.",
+	description="Walk the Ariadne's Thread through work_memories or social_memories. level='session' (default): best matching synthesis_hub + temporal chain via prev/next_session_hub axons. level='member': the intra-session chain of curated member engrams (order of refine).",
 	schema={
 		"type": "object",
 		"properties": {
@@ -515,6 +515,11 @@ async def handle_search_memento(arguments: Dict[str, Any]):
 				"type": "integer",
 				"description": "Max hops in each direction. Default: 5.",
 			},
+			"level": {
+				"type": "string",
+				"enum": ["session", "member"],
+				"description": "session = cadena de hubs (macro); member = cadena intra-sesión de miembros (micro). Default: session.",
+			},
 		},
 		"required": ["query"],
 	},
@@ -526,6 +531,7 @@ async def handle_traverse_thread(arguments: Dict[str, Any]):
 	collection = arguments.get("collection", "work_memories")
 	direction = arguments.get("direction", "both")
 	depth = int(arguments.get("depth", 5))
+	level = arguments.get("level", "session")
 
 	try:
 		manager = MemoryManager()
@@ -546,6 +552,35 @@ async def handle_traverse_thread(arguments: Dict[str, Any]):
 			]
 
 		start = hub_hits[0]
+
+		# ── MICRO (D8): cadena intra-sesión de miembros (orden de refine) ──────
+		if level == "member":
+			sid = start.payload.get("session_id")
+			if not sid:
+				return [types.TextContent(type="text", text="El nodo inicial no tiene session_id; no hay micro-hilo.")]
+			from qdrant_client.http import models as _qm
+
+			from red_pill.metabolism.thread_synthesis import order_members
+
+			pts, _ = client.scroll(
+				collection,
+				scroll_filter=_qm.Filter(must=[_qm.FieldCondition(key="session_id", match=_qm.MatchValue(value=sid))]),
+				limit=500,
+				with_payload=True,
+			)
+			members = [
+				(str(p.id), p.payload or {})
+				for p in pts
+				if (p.payload or {}).get("lazarus_phase") != "synthesis_hub" and (p.payload or {}).get("node_type") != "synthesis_hub"
+			]
+			ordered = order_members(members)
+			start_id = str(start.id)
+			lines = [f"[THREAD·micro] collection={collection} | session={sid} | {len(ordered)} miembros", ""]
+			for mid, mp in ordered:
+				mark = "  ← START" if mid == start_id else ""
+				lines.append(f"· [{mid[:8]}] {str(mp.get('content', ''))[:200]}{mark}")
+			lines.append(f"\nTotal: {len(ordered)} miembros (orden por member_index/refine)")
+			return [types.TextContent(type="text", text="\n".join(lines))]
 
 		def _fetch(point_id: str) -> dict | None:
 			try:
