@@ -71,6 +71,12 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
 - **[M7] Engramas interactivos** (flag `SW_INTERACTIVE_PHASE_ENABLED`): proceso
   aparte (`scripts/interactive_refine.py`) que refina/marca los engramas
   `interactive_engram` — no se agrupan por sesión ni entran en la ingesta normal.
+- **[FIX panel adversarial] D1–D12**: hubs no ocultan miembros si la escritura
+  falla (ni con fallback mecánico); dedup-at-ascension con body-hash; tope de edad
+  del buffer con señal; `situation_memories` asegurada + solera corregida (lo
+  previo domina) + no consume turnos si el destilado falla; staging writers
+  gated; `erode_curated` libera miembros de hubs demotados; backfill idempotente
+  (marcador) con `last_reinforced_at` = edad de curación.
 
 ### 🧹 Desk — scaffold del despacho, separación proyecto↔despacho y `AGENT_CORE_DIR`
 
