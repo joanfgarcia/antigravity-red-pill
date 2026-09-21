@@ -55,3 +55,11 @@ def test_backfill_preserva_ascended_at_desde_iso_y_setea_last_reinforced():
 	assert upd["ascended_at"] == asc
 	assert upd["last_reinforced_at"] == asc
 	assert upd["created_at"] == _epoch("2026-08-12T20:35:06.300000Z")
+
+
+def test_backfill_salta_lo_ya_backfilleado_por_ascended_at():
+	"""Compat: la 1ª pasada no puso el marcador, solo `ascended_at` → no re-procesar."""
+	mod = _load_module()
+	state = {"registry": {"opencode": {"opencode:ses_a": {"created_at": "2026-08-12T20:35:06.300000Z"}}}}
+	points = [("p1", {"origin": "memento", "source": "opencode", "session_id": "opencode:ses_a", "created_at": 1789000000.0, "ascended_at": 1789000000.0})]
+	assert mod.plan_backfill(points, state) == []

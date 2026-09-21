@@ -54,8 +54,8 @@ def plan_backfill(points: List[Tuple[Any, Dict[str, Any]]], registry_state: Dict
 		payload = payload or {}
 		if payload.get("origin") != "memento":
 			continue
-		if payload.get("backfilled_dates"):
-			continue  # ya backfilled (idempotencia explícita, no depende del formato)
+		if payload.get("backfilled_dates") or payload.get("ascended_at"):
+			continue  # ya backfilled (marcador explícito O `ascended_at` de la 1ª pasada)
 		source = str(payload.get("source") or "")
 		sid = str(payload.get("session_id") or "")
 		epoch = _iso_to_epoch((reg.get(source, {}) or {}).get(sid, {}).get("created_at"))
