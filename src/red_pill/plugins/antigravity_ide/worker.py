@@ -341,7 +341,7 @@ class IDEWorker:
 				self.process_cognitive_queue_agy()
 			# Janitor sweep for local telegram sessions
 			try:
-				from telegram_session import TelegramSessionManager
+				from red_pill.telegram.session import TelegramSessionManager
 
 				tsm = TelegramSessionManager()
 				purged = tsm.run_janitor_sweep()
@@ -587,7 +587,7 @@ class IDEWorker:
 		channel = first_conv["channel"]
 
 		if command == "LIST_CASCADES":
-			from telegram_session import TelegramSessionManager
+			from red_pill.telegram.session import TelegramSessionManager
 
 			tsm = TelegramSessionManager()
 			sessions = tsm.list_sessions(channel_user_id)
@@ -642,7 +642,7 @@ class IDEWorker:
 			return
 
 		elif command == "NEW_CASCADE":
-			from telegram_session import TelegramSessionManager
+			from red_pill.telegram.session import TelegramSessionManager
 
 			tsm = TelegramSessionManager()
 			new_session = tsm.create_session(channel_user_id)
@@ -838,7 +838,7 @@ class IDEWorker:
 			target_id = None
 			title = ""
 
-			from telegram_session import TelegramSessionManager
+			from red_pill.telegram.session import TelegramSessionManager
 
 			tsm = TelegramSessionManager()
 
@@ -987,7 +987,7 @@ class IDEWorker:
 		"""
 		import re
 
-		from telegram_session import TelegramSessionManager
+		from red_pill.telegram.session import TelegramSessionManager
 
 		logger.info(f"[{msg_ids}] Processing via {self._caps.backend.value.upper()} bridge (Local Session Context)")
 
@@ -1193,7 +1193,7 @@ class IDEWorker:
 
 		# External Scribe
 		try:
-			self._scribe_relay(user_prompt=combined_text, agent_response=response, model=result.model)
+			self._scribe_relay(user_prompt=combined_text, agent_response=response, model=result.model, session_id=session_id)
 		except Exception as e:
 			logger.warning(f"[{msg_ids}] Scribe relay failed (non-fatal): {e}")
 
@@ -1393,12 +1393,13 @@ class IDEWorker:
 		for m_id in msg_ids:
 			cursor.execute("UPDATE inbox SET status = 'PROCESSED' WHERE id = ?", (m_id,))
 
-	def _scribe_relay(self, user_prompt: str, agent_response: str, model: Optional[str] = None):
+	def _scribe_relay(self, user_prompt: str, agent_response: str, model: Optional[str] = None, session_id: Optional[str] = None):
 		"""External Scribe: queue prompt+response for ingestion.
 
-		Antigravity exposes no editor hook, so this worker is the capture surface
-		for its headless turns. It queues into the same `memory_queue` every other
-		surface uses, with no dependency on the agent remembering anything.
+		Telegram has no editor hook, so this worker is the capture surface for its
+		headless turns: it queues into the same `memory_queue` every other surface
+		uses, carrying the Telegram session uuid so the purge gate and the
+		`telegram:<uuid>` chronicle source agree.
 		"""
 		try:
 			from red_pill.core.queue_manager import MemoryQueueManager
@@ -1409,6 +1410,7 @@ class IDEWorker:
 				role="assistant",
 				originator="antigravity",
 				model=model,
+				session_id=session_id,
 			)
 			logger.debug("[Scribe] Turn queued for ingestion (originator=antigravity)")
 		except Exception as e:
@@ -1788,7 +1790,7 @@ class IDEWorker:
 		prefijo `telegram:` (D18) + payload.telegram_channel_user_id para el
 		delivery por Telegram.
 		"""
-		from telegram_session import TelegramSessionManager
+		from red_pill.telegram.session import TelegramSessionManager
 
 		from red_pill.cognitive.queue_manager import CognitiveQueueManager
 

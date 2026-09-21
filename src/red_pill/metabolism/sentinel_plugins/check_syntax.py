@@ -43,7 +43,7 @@ CRITICAL_MODULES = [
 	"src/red_pill/plugins/antigravity_ide/factory.py",
 	"src/red_pill/plugins/antigravity_ide/grpc_bridge.py",
 	"src/red_pill/plugins/antigravity_ide/agy_bridge.py",
-	"src/red_pill/plugins/antigravity_ide/telegram_session.py",
+	"src/red_pill/telegram/session.py",
 	"src/red_pill/swarm/daemon.py",
 	"src/red_pill/mcp_server.py",
 	"src/red_pill/interceptors/05_cognitive_router.py",

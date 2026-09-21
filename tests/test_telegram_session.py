@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from red_pill.plugins.antigravity_ide.telegram_session import TelegramSessionManager
+from red_pill.telegram.session import TelegramSessionManager
 from red_pill.plugins.antigravity_ide.worker import IDEWorker
 
 

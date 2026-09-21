@@ -237,7 +237,7 @@ def _run_callbacks(action: str, payload: Dict[str, Any], result: Dict[str, Any])
 		channel_user_id = payload.get("channel_user_id", "")
 		if session_id and summary and channel_user_id:
 			try:
-				from red_pill.plugins.antigravity_ide.telegram_session import TelegramSessionManager
+				from red_pill.telegram.session import TelegramSessionManager
 
 				tsm = TelegramSessionManager()
 				new_session = tsm.create_session(
