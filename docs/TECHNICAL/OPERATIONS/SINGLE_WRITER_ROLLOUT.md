@@ -23,14 +23,14 @@ flags por componente, CONVENTIONS RULE 4). Cada pieza es independiente, default
 
 | # | Flag | Efecto | Verificación |
 |---|------|--------|--------------|
-| 1 | `SW_AFFINITY_ENABLED` | Captura `session_id`+`affinity` en el buffer | Filas nuevas de `memory_queue` con `session_id`+`affinity`; puntos de `interaction_memories` con `metadata.affinity` |
+| 1 | `SW_AFFINITY_ENABLED` | Captura `session_id` en el buffer (afinidad **solo explícita**; la derivación por cwd se retiró — AD-034) | Filas nuevas de `memory_queue` con `session_id` |
 | 2 | `MEMENTO_STATIC_ASCENSION_ENABLED` | Ascensión curada (work/social) | `ascend_by_threshold` asciende refines ≥ umbral de categoría |
 | 3 | `SW_DEDUP_ENABLED` | Dedup-at-ascension (body-hash) | `duplicados_omitidos` > 0 solo para cuerpos idénticos |
 | 4 | `SW_HUBS_ENABLED` | Hubs de sesión (idempotentes) | `node_type=synthesis_hub` creados; miembros `hubbed=true`; recall entra por el hub |
 | 5 | `SW_THREAD_ENABLED` | Micro-hilo de Ariadna | `prev/next_member` en los miembros; `traverse_thread(level='member')` |
 | 6 | `SW_INGEST_RETIRED` | Retira la ingesta `interaction→work/social` | No se escriben chunks/raw_parents desde el buffer; staging no crece |
 | 7 | `SW_ABSENCE_GUARD_CONDITIONAL` + `SW_EROSION_DEMOTE_ENABLED` | Olvido: el pulse no refresca; demote a Memento | `last_recalled_at` envejece; demote a 5a/10a |
-| 8 | `SW_SITUATION_ENABLED` | Semáforo de situación + pre-heating | `situation_memories` con `situation_stable`/`situation_recent`; pre-heating global |
+| 8 | `SW_SITUATION_ENABLED` | Semáforo de situación **GLOBAL** + pre-heating | `situation_memories` (afinidad `global`) con `situation_stable`/`situation_recent` |
 | 9 | `SW_INTERACTIVE_PHASE_ENABLED` | Proceso de engramas interactivos | `red-pill add work ...` → `node_type=interactive_engram`; `interactive_refine.py` los marca |
 
 **Regla**: no encender `SW_INGEST_RETIRED` (6) hasta que 2–5 estén sanos y
@@ -46,7 +46,7 @@ verificados (la fuente debe estar viva antes de cortar la vieja).
 ```
 - `collections.*.hub_coverage_pct` > 0 con hubs encendidos.
 - `solera_age_h` reciente (< 24h) con la solera activa.
-- `affinity_coverage` alta con `SW_AFFINITY_ENABLED`.
+- `affinity_coverage` — informativo: la afinidad es explícita/semántica (diferida), no se deriva del filesystem.
 
 ### Replay de recall (cobertura del agujero)
 ```bash

@@ -13,7 +13,7 @@ This document records the architectural and philosophical pivots of the project.
 - **Ascensión con dos fechas** (`created_at`=sesión real, `ascended_at`=ascensión) + `node_type`; dedup-at-ascension (ganador determinista por cuerpo); **umbrales por categoría** (work/social).
 - **Navegación**: **hubs de sesión** (macro, idempotentes por `point_id`+`hub_input_hash`) + **micro-hilo de Ariadna** por `refine_ref` (`prev/next_member`) + `cross_refs` (axones). El recall omite los miembros `hubbed` (reversible con el flag).
 - **Olvido elegante**: eje propio `last_reinforced_at` (no lo toca el pulse), **demote a Memento** a 5a (miembros) / 10a (hubs, piso propio), factores por motor; **fix de raíz** del refresh incondicional (`SW_ABSENCE_GUARD_CONDITIONAL`).
-- **Semáforo de situación** (`situation_memories`, solera 20/80 en **dos capas**) leído por el pre-heating (global; scoped pendiente de la afinidad de sesión de MULTISES-001).
+- **Semáforo de situación** (`situation_memories`, solera 20/80 en **dos capas**) leído por el pre-heating — **global** (sin buckets de afinidad). **Telegram** deja de montar sobre opencode: **fuente chronicle propia** (`telegram:<uuid>`; el uuid de Telegram es el `session_id`) y el source `opencode` excluye sus sesiones. La afinidad por **filesystem** (cwd/proyecto) se **retiró** — no refleja cómo trabajamos; si se retoma, será **semántica** (keywords del refine).
 - **Patrón obligatorio**: **feature flag por componente** (CONVENTIONS RULE 4).
 **Por qué**: elimina la redundancia/ruido, conserva la navegación y el archivo (Memento es la fuente de verdad), y **devuelve la vida al olvido**. Verificado con panel adversarial (D1–D12 corregidos).
 

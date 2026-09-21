@@ -77,6 +77,12 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   previo domina) + no consume turnos si el destilado falla; staging writers
   gated; `erode_curated` libera miembros de hubs demotados; backfill idempotente
   (marcador) con `last_reinforced_at` = edad de curación.
+- **[REV] D15 — afinidad y Telegram**: retirada la afinidad por **filesystem**
+  (cwd/proyecto; no refleja cómo trabajamos — daba vacío o `ws:IA` espurio). El
+  semáforo de situación pasa a **global** (una sola lectura, sin buckets). Telegram
+  deja de montar sobre opencode: **fuente chronicle propia** `telegram:<uuid>`
+  (session_id = uuid de Telegram) y el source `opencode` excluye sus sesiones. La
+  afinidad (si se retoma) será **semántica** (keywords del refine), no filesystem.
 
 ### 🧹 Desk — scaffold del despacho, separación proyecto↔despacho y `AGENT_CORE_DIR`
 
