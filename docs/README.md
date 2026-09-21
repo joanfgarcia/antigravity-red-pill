@@ -135,6 +135,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [SERVICE_HEALTH_CONTRACT.md](TECHNICAL/OPERATIONS/SERVICE_HEALTH_CONTRACT.md) | Technical reference on service health contract and daemon inventory |
 | [BACKUP_STRATEGIES.md](TECHNICAL/OPERATIONS/BACKUP_STRATEGIES.md) | Soul backup and recovery strategies |
 | [ELEMENT_JOB_TEMPLATE.md](TECHNICAL/OPERATIONS/ELEMENT_JOB_TEMPLATE.md) | Recetario del patrón MAP reanudable (driver element_job) — N elementos, uno por step, pausable y con watchdog |
+| [SINGLE_WRITER_ROLLOUT.md](TECHNICAL/OPERATIONS/SINGLE_WRITER_ROLLOUT.md) | Runbook de encendido del single-writer de memoria (AD-034): flags por componente, verificación y rollback |
 
 ---
 
