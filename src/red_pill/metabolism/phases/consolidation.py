@@ -748,3 +748,15 @@ class ConsolidationPhase(SleepPhase):
 
 		ephemeral_server.stop(memory_manager, total_processed)
 		ctx.total_processed = total_processed
+
+		# Hub synthesis sobre engramas EXISTENTES (single-writer, SW_HUBS_ENABLED):
+		# re-apunta la síntesis de hubs que vivía en el drenaje a los engramas ya
+		# en Qdrant (agrupa por sesión, idempotente). No-op si el flag está off.
+		try:
+			from red_pill.metabolism.hub_synthesis import synthesize_session_hubs
+
+			hub_stats = synthesize_session_hubs(memory_manager)
+			if hub_stats.get("enabled"):
+				logger.info(f"[SLEEP ENGINE] Hub synthesis: {hub_stats}")
+		except Exception as e:
+			logger.error(f"[SLEEP ENGINE] Hub synthesis failed: {e}")

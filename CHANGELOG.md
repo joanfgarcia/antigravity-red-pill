@@ -36,8 +36,12 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
 - **[M3] Dedup de duplicados sembrados** (`scripts/memento_dedup_qdrant.py`):
   colapsa réplicas (mismo `session_id`+`source_lines`+cuerpo) dejando un
   superviviente por score compuesto; in-place, dry-run por defecto.
-- **[PLAN] Hubs de sesión + hilo de Ariadna de dos niveles**, erosión con olvido
-  activo, y `interaction_memories` como semáforo de situación por afinidad.
+- **[M4] Hub synthesis re-apuntada e idempotente** (flag `SW_HUBS_ENABLED`):
+  agrupa los engramas curados ya en Qdrant por **sesión** y sintetiza un hub de
+  sesión (`point_id` determinista + `hub_input_hash` → sin coste LLM si no cambió);
+  marca los miembros (`hubbed`) y el recall los omite (entran por el hub).
+- **[PLAN] Hilo de Ariadna de dos niveles**, erosión con olvido activo, y
+  `interaction_memories` como semáforo de situación por afinidad.
 
 ### 🧹 Desk — scaffold del despacho, separación proyecto↔despacho y `AGENT_CORE_DIR`
 

@@ -515,6 +515,7 @@ class RedPillConfig(BaseSettings):
 	SW_AFFINITY_ENABLED: bool = False  # captura session_id+affinity (memory_queue → interaction_memories)
 	SW_PURGE_GATE_ENABLED: bool = False  # interaction_ttl purga solo sesiones ya renderizadas en Memento
 	SW_DEDUP_ENABLED: bool = False  # dedup-at-ascension: un solo ganador por grupo (session_id, source_lines)
+	SW_HUBS_ENABLED: bool = False  # hub synthesis sobre engramas existentes (agrupa por sesión)
 	MEMENTO_FRAGMENT_OVERLAP_MESSAGES: int = 2  # solape de turnos entre fragmentos del distill
 	# Presupuesto de contexto por fragmento de distill. 2026-09-15: se destila con
 	# granite (n_ctx 10240), no con aya (32K) — 12000 chars apretaba; 8000 chars

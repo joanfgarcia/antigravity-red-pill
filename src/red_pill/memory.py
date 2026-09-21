@@ -660,6 +660,9 @@ class MemoryManager:
 			models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="sequence_chunk")),
 			models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="texture_shadow")),
 			models.FieldCondition(key="_is_fragment", match=models.MatchValue(value=True)),
+			# Miembros ya agrupados en un hub de sesión (D14): el recall entra por
+			# el hub, no por cada idea. Inerte hasta que existan hubs (SW_HUBS_ENABLED).
+			models.FieldCondition(key="hubbed", match=models.MatchValue(value=True)),
 		]
 
 		if not deep_recall:
