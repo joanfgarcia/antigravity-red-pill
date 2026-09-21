@@ -553,7 +553,7 @@ class RedPillConfig(BaseSettings):
 		return v
 
 	METABOLISM_STATE_FILE: str = str(get_state_dir() / "metabolism_state.json")
-	ABSENCE_THRESHOLD: int = 7 * 24 * 3600
+	ABSENCE_THRESHOLD: int = 3 * 24 * 3600
 	ABSENCE_GUARD_SCROLL_LIMIT: int = 500
 	METABOLISM_STRATEGY: str = "LAZY"
 	MAX_SINK_TIME: int = 30 * 24 * 3600
