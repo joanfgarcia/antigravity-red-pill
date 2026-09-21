@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 
-from red_pill.metabolism.phases import ConsolidationPhase, ErosionPhase, EvolutionPhase, SleepContext, WashoutPhase
+from red_pill.metabolism.phases import ErosionPhase, EvolutionPhase, HubSynthesisPhase, SleepContext, WashoutPhase
 from red_pill.metabolism.sleep import perform_sleep_cycle
 
 CONS = "red_pill.metabolism.phases.consolidation"
@@ -15,8 +15,8 @@ EPH = "red_pill.metabolism.ephemeral_server"
 
 
 def test_phase_names_and_gpu_flags():
-	assert ConsolidationPhase().name == "consolidation"
-	assert ConsolidationPhase().requires_gpu is True
+	assert HubSynthesisPhase().name == "consolidation"
+	assert HubSynthesisPhase().requires_gpu is True
 	for phase in (ErosionPhase(), WashoutPhase(), EvolutionPhase()):
 		assert phase.name
 		assert phase.requires_gpu is False  # CPU-only default from SleepPhase
@@ -189,7 +189,7 @@ def test_drain_cutoff_bounds_scroll_filter_and_terminates():
 	):
 		mgr.add_memory.side_effect = ["child-1", "00000000-0000-0000-0000-000000000999"]
 		server.return_value = MagicMock()
-		ConsolidationPhase().execute(ctx)
+		HubSynthesisPhase().execute(ctx)
 
 	# Every drain scroll carried the timestamp bound to the pinned cutoff.
 	assert seen_filters, "drain never scrolled"
@@ -311,3 +311,34 @@ def test_ephemeral_start_timeout_failure():
 	):
 		ddir.return_value = MagicMock()
 		assert EphemeralServer().start(MagicMock()) is False  # never came online
+
+
+# ── M5: retirada de la ingesta (SW_INGEST_RETIRED) ──────────────────────────────
+
+
+def test_ingest_retired_no_drena_y_solo_sintetiza_hubs(monkeypatch):
+	import time as _time
+
+	import red_pill.config as cfgmod
+
+	mgr = MagicMock()
+	mgr.client.collection_exists.return_value = True
+	ctx = SleepContext(memory_manager=mgr, sleep_cutoff_ts=_time.time())
+
+	called = {"hubs": 0}
+
+	def fake_synth(mm, **kw):
+		called["hubs"] += 1
+		return {"enabled": True}
+
+	monkeypatch.setattr(cfgmod, "SW_INGEST_RETIRED", True, raising=False)
+	with (
+		patch(f"{CONS}.VramProbe.get_backend", return_value="cpu"),
+		patch("red_pill.metabolism.hub_synthesis.synthesize_session_hubs", side_effect=fake_synth),
+	):
+		HubSynthesisPhase().execute(ctx)
+
+	assert called["hubs"] == 1
+	# No drena interaction_memories (el único scroll previo es el de signals).
+	drain_scrolls = [c for c in mgr.client.scroll.call_args_list if c.kwargs.get("collection_name") == "interaction_memories"]
+	assert drain_scrolls == []

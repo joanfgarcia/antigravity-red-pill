@@ -40,6 +40,11 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   agrupa los engramas curados ya en Qdrant por **sesión** y sintetiza un hub de
   sesión (`point_id` determinista + `hub_input_hash` → sin coste LLM si no cambió);
   marca los miembros (`hubbed`) y el recall los omite (entran por el hub).
+- **[M5] Retirada de la ingesta `interaction→work/social` + staging** (flag
+  `SW_INGEST_RETIRED`): la fase de sueño deja de drenar el buffer crudo a
+  work/social (sin drenaje, sin staging, sin `raw_parents`); queda **solo** la
+  síntesis de hubs. Fase renombrada `HubSynthesisPhase` conservando el stage-id
+  `consolidation` (G21).
 - **[PLAN] Hilo de Ariadna de dos niveles**, erosión con olvido activo, y
   `interaction_memories` como semáforo de situación por afinidad.
 

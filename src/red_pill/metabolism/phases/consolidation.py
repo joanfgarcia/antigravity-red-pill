@@ -126,8 +126,13 @@ def _promote_lone_chunk_to_hub(memory_manager, client, chunk_col: str, chunk_id,
 		logger.error(f"[SLEEP ENGINE] Lone-chunk promotion failed for {chunk_id} in {chunk_col}: {e}")
 		return False
 
+class HubSynthesisPhase(SleepPhase):
+	"""Fase del sueño: drenaje (legacy, retirable) + síntesis de hubs.
 
-class ConsolidationPhase(SleepPhase):
+	Con `SW_INGEST_RETIRED` solo queda la síntesis de hubs sobre engramas
+	existentes (single-writer). El `name` = "consolidation" se conserva como
+	stage-id del DAG (G21)."""
+
 	@property
 	def name(self) -> str:
 		return "consolidation"
@@ -203,6 +208,20 @@ class ConsolidationPhase(SleepPhase):
 				ctx.deferred = True
 				return
 			logger.debug(f"[SLEEP ENGINE] VRAM preflight OK: {_free_vram_mb} MB free ({_vram_backend}).")
+
+		# Single-writer (SW_INGEST_RETIRED): la ingesta interaction→work/social está
+		# RETIRADA. Esta fase pasa a ser "HubSynthesisPhase": solo sintetiza hubs
+		# sobre los engramas curados ya en Qdrant — sin drenaje, sin staging, sin
+		# raw_parents. La fuente de work/social es la ascensión de Memento.
+		if bool(getattr(cfg, "SW_INGEST_RETIRED", False)):
+			try:
+				from red_pill.metabolism.hub_synthesis import synthesize_session_hubs
+
+				stats = synthesize_session_hubs(ctx.memory_manager)
+				logger.info(f"[SLEEP ENGINE] Ingest retired (SW_INGEST_RETIRED). Hub synthesis: {stats}")
+			except Exception as e:
+				logger.error(f"[SLEEP ENGINE] Hub synthesis (retired path) failed: {e}")
+			return
 
 		# LLM Health Check & Ephemeral Server
 		ephemeral_server = EphemeralServer()

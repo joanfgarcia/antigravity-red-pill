@@ -8,7 +8,7 @@ CPU-only maintenance phases — partial deferral instead of an all-or-nothing ab
 
 from red_pill.metabolism.phases.axon_weaver import AxonWeaverPhase
 from red_pill.metabolism.phases.base import SleepContext, SleepPhase
-from red_pill.metabolism.phases.consolidation import ConsolidationPhase
+from red_pill.metabolism.phases.consolidation import HubSynthesisPhase
 from red_pill.metabolism.phases.evolution_phase import EvolutionPhase
 from red_pill.metabolism.phases.hygiene_phase import HygienePhase
 from red_pill.metabolism.phases.maintenance_phases import ErosionPhase, OrphanPromotionPhase, WashoutPhase
@@ -23,7 +23,7 @@ from red_pill.metabolism.phases.revision_phase import RevisionPhase
 # runs after consolidation (tonight's engrams are weavable) and before
 # erosion (ADR-AXON-001 §5).
 SLEEP_PHASES: list[SleepPhase] = [
-	ConsolidationPhase(),
+	HubSynthesisPhase(),
 	OrphanPromotionPhase(),
 	HygienePhase(),
 	AxonWeaverPhase(),
@@ -38,7 +38,7 @@ SLEEP_PHASES: list[SleepPhase] = [
 __all__ = [
 	"SLEEP_PHASES",
 	"AxonWeaverPhase",
-	"ConsolidationPhase",
+	"HubSynthesisPhase",
 	"ErosionPhase",
 	"EvolutionPhase",
 	"HygienePhase",
