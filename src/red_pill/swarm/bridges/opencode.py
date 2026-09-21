@@ -173,7 +173,15 @@ class OpenCodeBridge(AgentBridge):
 
 	# ── Scribe relay (External Scribe Pattern) ────────────────────────────
 
-	def _scribe_relay(self, user_prompt: str, agent_response: str, model: Optional[str] = None, originator: str = "opencode"):
+	def _scribe_relay(
+		self,
+		user_prompt: str,
+		agent_response: str,
+		model: Optional[str] = None,
+		originator: str = "opencode",
+		session_id: Optional[str] = None,
+		cwd: Optional[str] = None,
+	):
 		"""Queue prompt + response for ingestion, with no dependency on the agent.
 
 		Headless bridges (Telegram, agentic jobs) have no editor hook to capture
@@ -182,6 +190,7 @@ class OpenCodeBridge(AgentBridge):
 		memory instead of landing in a table nobody reads.
 		"""
 		try:
+			from red_pill.core.affinity import derive_affinity
 			from red_pill.core.queue_manager import MemoryQueueManager
 
 			MemoryQueueManager().enqueue_memory(
@@ -190,6 +199,8 @@ class OpenCodeBridge(AgentBridge):
 				role="assistant",
 				originator=originator,
 				model=model,
+				session_id=session_id,
+				affinity=derive_affinity(workdir=cwd) or None,
 			)
 			logger.debug(f"[Scribe] Turn queued for ingestion (originator={originator})")
 		except Exception as e:
@@ -336,7 +347,7 @@ class OpenCodeBridge(AgentBridge):
 		# Skip if redpill-scribe plugin handles persistence via hooks
 		if not self._scribe_plugin:
 			try:
-				self._scribe_relay(user_prompt=text, agent_response=response, model=model)
+				self._scribe_relay(user_prompt=text, agent_response=response, model=model, session_id=session_id, cwd=cwd)
 			except Exception as e:
 				logger.warning(f"[OpenCodeBridge] Scribe relay failed (non-fatal): {e}")
 
@@ -372,7 +383,7 @@ class OpenCodeBridge(AgentBridge):
 		# External Scribe — skip if plugin handles it
 		if not self._scribe_plugin:
 			try:
-				self._scribe_relay(user_prompt=text, agent_response=response)
+				self._scribe_relay(user_prompt=text, agent_response=response, session_id=data.get('session_id', conversation_id))
 			except Exception as e:
 				logger.warning(f"[OpenCodeBridge] Scribe relay failed (non-fatal): {e}")
 

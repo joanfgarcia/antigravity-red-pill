@@ -221,7 +221,13 @@ async def handle_control_bunker(arguments: Dict[str, Any]):
 	description="Record a dialogue pair into the fast interaction buffer (anti-amnesia).",
 	schema={
 		"type": "object",
-		"properties": {"prompt": {"type": "string"}, "response": {"type": "string"}, "role": {"type": "string", "default": "assistant"}},
+		"properties": {
+			"prompt": {"type": "string"},
+			"response": {"type": "string"},
+			"role": {"type": "string", "default": "assistant"},
+			"workdir": {"type": "string", "description": "Directorio del proyecto (default: cwd del server MCP)."},
+			"affinity": {"type": "array", "items": {"type": "string"}, "description": "Afinidad explícita (p.ej. ws:proyecto, mission:id)."},
+		},
 		"required": ["prompt", "response"],
 	},
 )
@@ -247,10 +253,13 @@ async def handle_memorize_interaction(arguments: Dict[str, Any]):
 	# ---------------------------------------
 
 	try:
+		from red_pill.core.affinity import derive_affinity
 		from red_pill.core.queue_manager import MemoryQueueManager
 
 		originator = f"Aleth ({MODEL_NAME})"
-		MemoryQueueManager().enqueue_memory(prompt, response, role, originator=originator)
+		# Afinidad determinista: cwd del server MCP (= directorio del proyecto) o explícita.
+		affinity = derive_affinity(workdir=arguments.get("workdir") or os.getcwd(), explicit=arguments.get("affinity"))
+		MemoryQueueManager().enqueue_memory(prompt, response, role, originator=originator, affinity=affinity or None)
 		return [types.TextContent(type="text", text="Engram queue registration initiated automatically.")]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"Local Async Logging Error: {str(e)}")]
@@ -1562,7 +1571,11 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 
 			# Only enqueue if after trimming there is still substantial substance
 			if len(clean_p) > 20 or len(clean_r) > 20:
-				MemoryQueueManager().enqueue_memory(clean_p, clean_r, "assistant", category=prev_cat, model=prev_mod)
+				from red_pill.core.affinity import derive_affinity
+
+				MemoryQueueManager().enqueue_memory(
+					clean_p, clean_r, "assistant", category=prev_cat, model=prev_mod, affinity=derive_affinity(workdir=os.getcwd()) or None
+				)
 				logger.info(f"Silent Scribe Relay: turn enqueued cleanly via interceptor_rp (category={prev_cat}, model={prev_mod}).")
 			else:
 				logger.info("Silent Scribe Relay: Dropped due to being mostly CI/Noise overhead.")

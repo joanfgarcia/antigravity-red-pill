@@ -9,7 +9,7 @@ dependencies. Each test verifies:
 	- Error paths return a user-facing error string (not an unhandled exception)
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -503,6 +503,7 @@ class TestInterceptorRp:
 			"assistant",
 			category="mixed",
 			model=None,
+			affinity=ANY,
 		)
 		assert result[0].type == "text"
 
