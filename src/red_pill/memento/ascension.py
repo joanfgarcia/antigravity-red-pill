@@ -417,9 +417,15 @@ def ascend_by_threshold(
 	import red_pill.config as _cfg
 
 	if bool(getattr(_cfg, "SW_DEDUP_ENABLED", False)):
+		import hashlib
+
 		groups: Dict[Any, list] = {}
 		for c in candidates:
-			key = (str(c[1].get("session_id") or ""), str(c[1].get("source_lines") or ""))
+			# La clave incluye el HASH DEL CUERPO: un mismo `source_lines` produce
+			# VARIAS ideas (multi-idea); agrupar solo por (session_id, source_lines)
+			# colapsaría ideas legítimamente distintas. Duplicado real = mismo cuerpo.
+			body_hash = hashlib.sha256(str(c[2]).encode("utf-8")).hexdigest()
+			key = (str(c[1].get("session_id") or ""), str(c[1].get("source_lines") or ""), body_hash)
 			groups.setdefault(key, []).append(c)
 		winners = []
 		for entries in groups.values():

@@ -116,3 +116,18 @@ def test_sin_dedup_asciende_ambos(tmp_path: Path, monkeypatch):
 	stats = ascend_by_threshold(root, FakeReg(), memory_manager=mm)
 	assert stats["ascendidos"] == 2
 	assert stats["duplicados_omitidos"] == 0
+
+
+def test_dedup_no_colapsa_multi_idea(tmp_path: Path, monkeypatch):
+	"""Mismo (session_id, source_lines) con CUERPOS distintos = ideas distintas."""
+	import red_pill.config as cfgmod
+
+	root = tmp_path / "m"
+	_write(root, "2026-09/opencode/s/refine/001-a.md", REFINE.format(sig=0.9, body="idea A"))
+	_write(root, "2026-09/opencode/s/refine/002-b.md", REFINE.format(sig=0.8, body="idea B"))
+	mm = FakeMM()
+	monkeypatch.setattr(cfgmod, "SW_DEDUP_ENABLED", True, raising=False)
+
+	stats = ascend_by_threshold(root, FakeReg(), memory_manager=mm)
+	assert stats["ascendidos"] == 2  # ambas ascienden (no son duplicados)
+	assert stats["duplicados_omitidos"] == 0
