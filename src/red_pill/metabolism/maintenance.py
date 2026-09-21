@@ -219,6 +219,13 @@ def run_rhizodb_washout_and_pruning(memory_manager) -> None:
 			if payload.get("immune"):
 				continue
 
+			# D16/D17 (MEM-005 E): los HUBS no se someten al washout genérico —
+			# anclan el hilo y tienen erosión hub-específica (erode_curated, con
+			# piso propio). Sin esto, la poda genérica los mataría antes que a sus
+			# miembros y rompería Ariadne.
+			if payload.get("lazarus_phase") == "synthesis_hub" or payload.get("node_type") == "synthesis_hub":
+				continue
+
 			# 1. Run lazy decay first to get current activation/score
 			decay_updates = engine.calculate_lazy_decay(payload, current_time=now)
 
@@ -702,7 +709,8 @@ def erode_curated(memory_manager, collections=("work_memories", "social_memories
 	if not bool(getattr(cfg, "SW_EROSION_DEMOTE_ENABLED", False)):
 		return {"demoted": 0, "enabled": False}
 
-	lifetime_s = float(getattr(cfg, "CURATED_MIN_LIFETIME_YEARS", 5.0)) * 365 * 86400
+	base_years = float(getattr(cfg, "CURATED_MIN_LIFETIME_YEARS", 5.0))
+	hub_years = float(getattr(cfg, "CURATED_HUB_MIN_LIFETIME_YEARS", 10.0))
 	now = time.time()
 	stats = {"demoted": 0, "scanned": 0, "enabled": True}
 
@@ -712,6 +720,10 @@ def erode_curated(memory_manager, collections=("work_memories", "social_memories
 		try:
 			if not memory_manager.client.collection_exists(collection):
 				continue
+			# Factor por motor (D17): work=Bayesiano, social=RhizoDB.
+			mult = float(getattr(cfg, f"CURATED_LIFETIME_MULTIPLIER_{collection.split('_')[0].upper()}", 1.0))
+			member_lifetime_s = base_years * mult * 365 * 86400
+			hub_lifetime_s = hub_years * mult * 365 * 86400
 			scroll_filter = qm.Filter(
 				should=[
 					qm.FieldCondition(key="node_type", match=qm.MatchValue(value="memento_engram")),
@@ -734,11 +746,13 @@ def erode_curated(memory_manager, collections=("work_memories", "social_memories
 					base = pl.get("last_reinforced_at") or pl.get("created_at")
 					if not isinstance(base, (int, float)):
 						continue
-					if now - float(base) > lifetime_s:
+					is_hub = pl.get("lazarus_phase") == "synthesis_hub" or pl.get("node_type") == "synthesis_hub"
+					life = hub_lifetime_s if is_hub else member_lifetime_s
+					if now - float(base) > life:
 						to_delete.append(str(p.id))
 						# Si es un hub, liberar sus miembros (hubbed=False) para que
 						# vuelvan al recall primario (D9): si no, quedarían invisibles.
-						if pl.get("lazarus_phase") == "synthesis_hub" or pl.get("node_type") == "synthesis_hub":
+						if is_hub:
 							for mid in pl.get("members") or []:
 								hub_members.add(str(mid))
 				if offset is None:

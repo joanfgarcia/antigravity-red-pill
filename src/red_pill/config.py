@@ -522,6 +522,9 @@ class RedPillConfig(BaseSettings):
 	SW_ABSENCE_GUARD_CONDITIONAL: bool = False  # ON: el pulse NO refresca last_recalled_at cada hora (solo tras ausencia real)
 	SW_EROSION_DEMOTE_ENABLED: bool = False  # olvido elegante de los curados: demote a Memento por eje propio
 	CURATED_MIN_LIFETIME_YEARS: float = 5.0  # vida mínima de un curado no reforzado antes del demote
+	CURATED_HUB_MIN_LIFETIME_YEARS: float = 10.0  # piso MAYOR para hubs (anclan el hilo; no mueren antes que sus miembros)
+	CURATED_LIFETIME_MULTIPLIER_WORK: float = 1.0  # factor por motor (work=Bayesiano)
+	CURATED_LIFETIME_MULTIPLIER_SOCIAL: float = 1.0  # factor por motor (social=RhizoDB)
 	SW_SITUATION_ENABLED: bool = False  # semáforo de situación por afinidad (situation_memories)
 	SITUATION_SOLERA_RATIO: float = 0.2  # peso de lo previo en el merge solera (0.2 = 20/80)
 	SITUATION_TTL_DAYS: int = 30  # evicción de semáforos inactivos

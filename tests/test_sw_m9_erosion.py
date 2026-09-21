@@ -62,6 +62,7 @@ def test_demote_por_eje_propio(monkeypatch):
 
 	monkeypatch.setattr(cfgmod, "SW_EROSION_DEMOTE_ENABLED", True, raising=False)
 	monkeypatch.setattr(cfgmod, "CURATED_MIN_LIFETIME_YEARS", 5.0, raising=False)
+	monkeypatch.setattr(cfgmod, "CURATED_HUB_MIN_LIFETIME_YEARS", 10.0, raising=False)
 	client = FakeClient(
 		[
 			_c("s_old", age_days=6 * 365, cid="old"),
@@ -72,8 +73,9 @@ def test_demote_por_eje_propio(monkeypatch):
 		]
 	)
 	stats = erode_curated(FakeMM(client), collections=("work_memories",))
-	assert set(client.deleted) == {"old", "hub"}  # viejos curados; inmune y no-curado se quedan
-	assert stats["demoted"] == 2
+	# El engrama de 6y se demota; el HUB de 6y sobrevive (piso 10y, D16); inmune y no-curado se quedan.
+	assert set(client.deleted) == {"old"}
+	assert stats["demoted"] == 1
 
 
 def test_demote_hub_libera_sus_miembros(monkeypatch):
@@ -81,7 +83,8 @@ def test_demote_hub_libera_sus_miembros(monkeypatch):
 
 	monkeypatch.setattr(cfgmod, "SW_EROSION_DEMOTE_ENABLED", True, raising=False)
 	monkeypatch.setattr(cfgmod, "CURATED_MIN_LIFETIME_YEARS", 5.0, raising=False)
-	old = time.time() - 6 * 365 * 86400
+	monkeypatch.setattr(cfgmod, "CURATED_HUB_MIN_LIFETIME_YEARS", 10.0, raising=False)
+	old = time.time() - 11 * 365 * 86400  # supera el piso de 10y del hub
 	hub = ("hub", {"lazarus_phase": "synthesis_hub", "members": ["m1", "m2"], "created_at": old})
 	client = FakeClient([hub])
 	stats = erode_curated(FakeMM(client), collections=("work_memories",))
