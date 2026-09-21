@@ -257,8 +257,8 @@ async def handle_memorize_interaction(arguments: Dict[str, Any]):
 		from red_pill.core.queue_manager import MemoryQueueManager
 
 		originator = f"Aleth ({MODEL_NAME})"
-		# Afinidad determinista: cwd del server MCP (= directorio del proyecto) o explícita.
-		affinity = derive_affinity(workdir=arguments.get("workdir") or os.getcwd(), explicit=arguments.get("affinity"))
+		# AD-034/D15: afinidad SOLO explícita (la derivación por cwd se retiró).
+		affinity = derive_affinity(explicit=arguments.get("affinity"))
 		MemoryQueueManager().enqueue_memory(prompt, response, role, originator=originator, affinity=affinity or None)
 		return [types.TextContent(type="text", text="Engram queue registration initiated automatically.")]
 	except Exception as e:
@@ -1571,11 +1571,7 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 
 			# Only enqueue if after trimming there is still substantial substance
 			if len(clean_p) > 20 or len(clean_r) > 20:
-				from red_pill.core.affinity import derive_affinity
-
-				MemoryQueueManager().enqueue_memory(
-					clean_p, clean_r, "assistant", category=prev_cat, model=prev_mod, affinity=derive_affinity(workdir=os.getcwd()) or None
-				)
+				MemoryQueueManager().enqueue_memory(clean_p, clean_r, "assistant", category=prev_cat, model=prev_mod)
 				logger.info(f"Silent Scribe Relay: turn enqueued cleanly via interceptor_rp (category={prev_cat}, model={prev_mod}).")
 			else:
 				logger.info("Silent Scribe Relay: Dropped due to being mostly CI/Noise overhead.")

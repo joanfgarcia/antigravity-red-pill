@@ -141,15 +141,7 @@ def _dedup_seen(session_id: str, marker: str) -> bool:
 	return False
 
 
-def _derive_affinity(cwd) -> list:
-	"""Afinidad determinista para Claude Code: ws:<basename(cwd)> (o [])."""
-	if not cwd:
-		return []
-	base = os.path.basename(os.path.normpath(str(cwd)))
-	return [f"ws:{base}"] if base else []
-
-
-def _write(user_prompt: str, agent_response: str, model, session_id: str = "", cwd: str = ""):
+def _write(user_prompt: str, agent_response: str, model, session_id: str = ""):
 	"""Queue the turn. The schema belongs to the kernel; this only INSERTs."""
 	if not DB_PATH.exists():
 		return  # Kernel never ran here: nothing to queue into, and nothing to create.
@@ -184,7 +176,8 @@ def _write(user_prompt: str, agent_response: str, model, session_id: str = "", c
 		if has_sw:
 			fields.extend(["session_id", "affinity"])
 			placeholders.extend(["?", "?"])
-			values.extend([session_id or None, json.dumps(_derive_affinity(cwd))])
+			# AD-034/D15: la afinidad por cwd se retiró; se captura solo session_id.
+			values.extend([session_id or None, None])
 		conn.execute(
 			f"INSERT INTO memory_queue ({', '.join(fields)}) VALUES ({', '.join(placeholders)})",
 			values,
@@ -214,7 +207,7 @@ def main() -> int:
 			return 0
 		if _dedup_seen(session_id, marker):
 			return 0
-		_write(user_prompt, agent_response, model, session_id=session_id, cwd=payload.get("cwd") or "")
+		_write(user_prompt, agent_response, model, session_id=session_id)
 	except Exception:
 		# Never block the turn on a scribe failure.
 		return 0

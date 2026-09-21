@@ -180,7 +180,6 @@ class OpenCodeBridge(AgentBridge):
 		model: Optional[str] = None,
 		originator: str = "opencode",
 		session_id: Optional[str] = None,
-		cwd: Optional[str] = None,
 	):
 		"""Queue prompt + response for ingestion, with no dependency on the agent.
 
@@ -190,9 +189,9 @@ class OpenCodeBridge(AgentBridge):
 		memory instead of landing in a table nobody reads.
 		"""
 		try:
-			from red_pill.core.affinity import derive_affinity
 			from red_pill.core.queue_manager import MemoryQueueManager
 
+			# AD-034/D15: sin afinidad por cwd; solo session_id.
 			MemoryQueueManager().enqueue_memory(
 				prompt=user_prompt,
 				response=agent_response,
@@ -200,7 +199,6 @@ class OpenCodeBridge(AgentBridge):
 				originator=originator,
 				model=model,
 				session_id=session_id,
-				affinity=derive_affinity(workdir=cwd) or None,
 			)
 			logger.debug(f"[Scribe] Turn queued for ingestion (originator={originator})")
 		except Exception as e:
@@ -347,7 +345,7 @@ class OpenCodeBridge(AgentBridge):
 		# Skip if redpill-scribe plugin handles persistence via hooks
 		if not self._scribe_plugin:
 			try:
-				self._scribe_relay(user_prompt=text, agent_response=response, model=model, session_id=session_id, cwd=cwd)
+				self._scribe_relay(user_prompt=text, agent_response=response, model=model, session_id=session_id)
 			except Exception as e:
 				logger.warning(f"[OpenCodeBridge] Scribe relay failed (non-fatal): {e}")
 

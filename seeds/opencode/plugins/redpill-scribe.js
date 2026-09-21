@@ -67,32 +67,25 @@ function queueColumns(db) {
   }
 }
 
-function deriveAffinity(dir) {
-  if (!dir) return [];
-  const base = String(dir).replace(/\/+$/, "").split("/").pop();
-  return base ? ["ws:" + base] : [];
+function deriveAffinity(_dir) {
+  // AD-034/D15: la afinidad por filesystem (cwd/proyecto) se RETIRÓ — no refleja
+  // cómo trabajamos. La afinidad (si se retoma) será semántica (keywords del refine)
+  // o explícita. Aquí se deja vacía.
+  return [];
 }
 
-function writeInteraction(db, prompt, response, model, sessionId, dir, cols) {
+function writeInteraction(db, prompt, response, model, sessionId, cols) {
   if (!prompt && !response) return;
   // Full text on purpose: truncating here would silently mutilate the engram
   // downstream. Noise trimming is the worker's job, at the single drain point.
-  // session_id/affinity are captured when the schema carries them (single-writer);
-  // the kernel decides downstream (SW_AFFINITY_ENABLED) whether to consume them.
+  // session_id se captura cuando el esquema lo lleva (single-writer); la afinidad
+  // del cwd se retiró (AD-034).
   if (cols.has("session_id") && cols.has("affinity")) {
     const stmt = db.prepare(
       "INSERT INTO memory_queue (prompt, response, role, status, created_at, category, originator, model, session_id, affinity) " +
         "VALUES (?, ?, 'assistant', 'pending', ?, 'mixed', ?, ?, ?, ?)"
     );
-    stmt.run(
-      prompt || "",
-      response || "",
-      Date.now() / 1000,
-      ORIGINATOR,
-      model || null,
-      sessionId || null,
-      JSON.stringify(deriveAffinity(dir))
-    );
+    stmt.run(prompt || "", response || "", Date.now() / 1000, ORIGINATOR, model || null, sessionId || null, null);
   } else {
     const stmt = db.prepare(
       "INSERT INTO memory_queue (prompt, response, role, status, created_at, category, originator, model) " +
@@ -121,16 +114,13 @@ export const RedPillScribe = async (ctx) => {
     return {};
   }
 
-  // Project dir for affinity (ws:<basename>). opencode exposes it on the plugin ctx.
-  const PROJECT_DIR = ctx?.worktree || ctx?.directory || ctx?.project?.path || process.cwd();
-
   const sessions = new Map();
 
   return {
     dispose: async () => {
       for (const [sid, state] of sessions) {
         if (state?.prompt) {
-          try { writeInteraction(db, state.prompt, state.response, state.modelID, sid, PROJECT_DIR, COLS); } catch (_) {}
+          try { writeInteraction(db, state.prompt, state.response, state.modelID, sid, COLS); } catch (_) {}
         }
       }
       sessions.clear();
@@ -170,7 +160,7 @@ export const RedPillScribe = async (ctx) => {
         if (msg.role === "assistant") {
           state.modelID = msg.modelID;
           try {
-            writeInteraction(db, state.prompt, state.response, state.modelID, msg.sessionID, PROJECT_DIR, COLS);
+            writeInteraction(db, state.prompt, state.response, state.modelID, msg.sessionID, COLS);
           } catch (e) {
             console.error("[RedPillScribe] Write failed:", e.message);
           }
