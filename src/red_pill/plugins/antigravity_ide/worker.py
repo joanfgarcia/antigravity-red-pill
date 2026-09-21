@@ -1356,11 +1356,11 @@ class IDEWorker:
 				prompt=user_prompt,
 				response=agent_response,
 				role="assistant",
-				originator="antigravity",
+				originator="telegram",
 				model=model,
 				session_id=session_id,
 			)
-			logger.debug("[Scribe] Turn queued for ingestion (originator=antigravity)")
+			logger.debug("[Scribe] Turn queued for ingestion (originator=telegram)")
 		except Exception as e:
 			# Non-fatal: log but don't block the pipeline
 			logger.warning(f"[Scribe] Failed to queue interaction: {e}")

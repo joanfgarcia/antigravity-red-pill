@@ -33,6 +33,7 @@ import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from red_pill.core.origins import PROVIDER_PI, record_origin
 from red_pill.core.paths import get_bunker_root
 
 from .base import AgentBridge, BackendType, BridgeCapabilities, ConversationResult
@@ -149,7 +150,7 @@ class PiBridge(AgentBridge):
 		mapped = {"low": "low", "high": "high"}.get((effort or "").strip().lower())
 		return ["--thinking", mapped] if mapped else []
 
-	def _scribe_relay(self, user_prompt: str, agent_response: str, model: Optional[str] = None):
+	def _scribe_relay(self, user_prompt: str, agent_response: str, model: Optional[str] = None, session_id: Optional[str] = None):
 		"""External Scribe: queue the turn unless the harness extension does it."""
 		if self._extension_present:
 			return
@@ -162,6 +163,7 @@ class PiBridge(AgentBridge):
 				role="assistant",
 				originator="pi",
 				model=model,
+				session_id=session_id,
 			)
 			logger.debug("[PiBridge] Turn queued for ingestion (originator=pi)")
 		except Exception as e:
@@ -187,6 +189,7 @@ class PiBridge(AgentBridge):
 
 		response = data.get("text", "")
 		session_id = data.get("session_id", "")
+		record_origin(PROVIDER_PI, session_id, self._origin)
 
 		if not response:
 			return ConversationResult(
@@ -196,7 +199,7 @@ class PiBridge(AgentBridge):
 			)
 
 		try:
-			self._scribe_relay(user_prompt=text, agent_response=response, model=model)
+			self._scribe_relay(user_prompt=text, agent_response=response, model=model, session_id=session_id)
 		except Exception as e:
 			logger.warning(f"[PiBridge] Scribe relay failed (non-fatal): {e}")
 
@@ -225,6 +228,7 @@ class PiBridge(AgentBridge):
 
 		response = data.get("text", "")
 		session_id = data.get("session_id") or conversation_id
+		record_origin(PROVIDER_PI, session_id, self._origin)
 
 		if not response:
 			return ConversationResult(
@@ -234,7 +238,7 @@ class PiBridge(AgentBridge):
 			)
 
 		try:
-			self._scribe_relay(user_prompt=text, agent_response=response)
+			self._scribe_relay(user_prompt=text, agent_response=response, session_id=session_id)
 		except Exception as e:
 			logger.warning(f"[PiBridge] Scribe relay failed (non-fatal): {e}")
 

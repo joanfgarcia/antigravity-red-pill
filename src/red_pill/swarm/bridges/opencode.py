@@ -35,11 +35,11 @@ import logging
 import os
 import shutil
 import subprocess
-import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from red_pill.core.paths import get_bunker_root, get_state_dir
+from red_pill.core.origins import PROVIDER_OPENCODE, get_origins_path, read_origins, record_origin
+from red_pill.core.paths import get_bunker_root
 
 from .base import AgentBridge, BackendType, BridgeCapabilities, ConversationResult
 
@@ -65,44 +65,24 @@ def _resolve_opencode_bin() -> Optional[str]:
 
 
 def get_opencode_origins_path() -> Path:
-	"""Path to the session→origin sidecar registry used by the autonomous cron.
+	"""Path to the session→origin registry (genérico desde AD-034).
 
 	Maps opencode session_id → {"origin", "ts"} so the cron can tell whether a
 	fresh session is real operator activity ("user"/"job"/…) or merely an
 	autonomous-awakening headless run ("awakening") that should not suppress the
 	next wake-up.
 	"""
-	return get_state_dir() / "opencode_origins.json"
+	return get_origins_path()
 
 
 def record_opencode_origin(session_id: str, origin: str) -> None:
 	"""Persist the origin of an opencode session (non-fatal on failure)."""
-	if not session_id:
-		return
-	path = get_opencode_origins_path()
-	try:
-		data: dict = {}
-		if path.exists():
-			try:
-				data = json.loads(path.read_text())
-			except (json.JSONDecodeError, OSError):
-				data = {}
-		data[session_id] = {"origin": origin, "ts": int(time.time())}
-		path.write_text(json.dumps(data))
-	except Exception as e:
-		logger.warning(f"[OpenCodeBridge] Failed to record origin {origin!r} for {session_id!r}: {e}")
+	record_origin(PROVIDER_OPENCODE, session_id, origin)
 
 
 def read_opencode_origins() -> Dict[str, Any]:
-	"""Load the session→origin registry (empty dict on any failure)."""
-	path = get_opencode_origins_path()
-	if not path.exists():
-		return {}
-	try:
-		data: Any = json.loads(path.read_text())
-		return data if isinstance(data, dict) else {}
-	except (json.JSONDecodeError, OSError):
-		return {}
+	"""Load the opencode session→origin registry (empty dict on any failure)."""
+	return read_origins(PROVIDER_OPENCODE)
 
 
 class OpenCodeBridge(AgentBridge):

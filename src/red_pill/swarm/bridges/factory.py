@@ -52,7 +52,7 @@ def create_bridge(backend: Optional[str] = None, **kwargs) -> AgentBridge:
 	if backend == "claude":
 		from .claude import ClaudeBridge
 
-		return ClaudeBridge()
+		return ClaudeBridge(**kwargs)
 	if backend == "opencode":
 		from .opencode import OpenCodeBridge
 

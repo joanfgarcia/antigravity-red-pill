@@ -80,9 +80,13 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
 - **[REV] D15 — afinidad y Telegram**: retirada la afinidad por **filesystem**
   (cwd/proyecto; no refleja cómo trabajamos — daba vacío o `ws:IA` espurio). El
   semáforo de situación pasa a **global** (una sola lectura, sin buckets). Telegram
-  deja de montar sobre opencode: **fuente chronicle propia** `telegram:<uuid>`
-  (session_id = uuid de Telegram) y el source `opencode` excluye sus sesiones. La
-  afinidad (si se retoma) será **semántica** (keywords del refine), no filesystem.
+  es un canal propio: **fuente chronicle `telegram:<uuid>`** (session_id = uuid de
+  Telegram) y **todos** los sources de providers (opencode/claude_code/pi/antigravity
+  y futuros) ignoran `origin=telegram` vía el **registro genérico
+  `session_origins.json`** (`core/origins.py`). El worker de Telegram deja **un solo
+  camino** (puente; purgada la fusión legacy con cascadas de antigravity) y captura
+  el `session_id` con `originator=telegram`. La afinidad (si se retoma) será
+  **semántica** (keywords del refine), no filesystem.
 
 ### 🧹 Desk — scaffold del despacho, separación proyecto↔despacho y `AGENT_CORE_DIR`
 
