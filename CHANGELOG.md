@@ -45,7 +45,11 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   work/social (sin drenaje, sin staging, sin `raw_parents`); queda **solo** la
   síntesis de hubs. Fase renombrada `HubSynthesisPhase` conservando el stage-id
   `consolidation` (G21).
-- **[PLAN] Hilo de Ariadna de dos niveles**, erosión con olvido activo, y
+- **[M6] Micro-hilo de Ariadna** (flag `SW_THREAD_ENABLED`): encadena los engramas
+  de cada sesión por **orden de refine** (`refine_ref`) en `prev_member`/`next_member`
+  (campo propio, sin colisionar con `associations` = axones). El nivel macro (hubs
+  por fecha) y el transversal (`cross_refs`→axones) ya existían.
+- **[PLAN] Erosión con olvido activo**, fase de engramas interactivos, y
   `interaction_memories` como semáforo de situación por afinidad.
 
 ### 🧹 Desk — scaffold del despacho, separación proyecto↔despacho y `AGENT_CORE_DIR`

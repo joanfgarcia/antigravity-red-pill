@@ -517,6 +517,7 @@ class RedPillConfig(BaseSettings):
 	SW_DEDUP_ENABLED: bool = False  # dedup-at-ascension: un solo ganador por grupo (session_id, source_lines)
 	SW_HUBS_ENABLED: bool = False  # hub synthesis sobre engramas existentes (agrupa por sesión)
 	SW_INGEST_RETIRED: bool = False  # retira la ingesta interaction→work/social (solo ascensión Memento)
+	SW_THREAD_ENABLED: bool = False  # micro-hilo de Ariadna (prev/next_member por sesión, orden de refine)
 	MEMENTO_FRAGMENT_OVERLAP_MESSAGES: int = 2  # solape de turnos entre fragmentos del distill
 	# Presupuesto de contexto por fragmento de distill. 2026-09-15: se destila con
 	# granite (n_ctx 10240), no con aya (32K) — 12000 chars apretaba; 8000 chars

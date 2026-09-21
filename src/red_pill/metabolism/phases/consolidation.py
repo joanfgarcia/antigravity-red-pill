@@ -126,6 +126,24 @@ def _promote_lone_chunk_to_hub(memory_manager, client, chunk_col: str, chunk_id,
 		logger.error(f"[SLEEP ENGINE] Lone-chunk promotion failed for {chunk_id} in {chunk_col}: {e}")
 		return False
 
+def _run_hub_and_thread(memory_manager) -> None:
+	"""Síntesis de hubs + micro-hilo de Ariadna sobre los engramas existentes.
+
+	Ambos trazados con sus propios flags (SW_HUBS_ENABLED / SW_THREAD_ENABLED);
+	no-op secuencial si están off.
+	"""
+	try:
+		from red_pill.metabolism.hub_synthesis import synthesize_session_hubs
+		from red_pill.metabolism.thread_synthesis import weave_member_threads
+
+		hub_stats = synthesize_session_hubs(memory_manager)
+		thread_stats = weave_member_threads(memory_manager)
+		if hub_stats.get("enabled") or thread_stats.get("enabled"):
+			logger.info(f"[SLEEP ENGINE] Hubs: {hub_stats} · Thread: {thread_stats}")
+	except Exception as e:
+		logger.error(f"[SLEEP ENGINE] Hub/thread synthesis failed: {e}")
+
+
 class HubSynthesisPhase(SleepPhase):
 	"""Fase del sueño: drenaje (legacy, retirable) + síntesis de hubs.
 
@@ -214,13 +232,8 @@ class HubSynthesisPhase(SleepPhase):
 		# sobre los engramas curados ya en Qdrant — sin drenaje, sin staging, sin
 		# raw_parents. La fuente de work/social es la ascensión de Memento.
 		if bool(getattr(cfg, "SW_INGEST_RETIRED", False)):
-			try:
-				from red_pill.metabolism.hub_synthesis import synthesize_session_hubs
-
-				stats = synthesize_session_hubs(ctx.memory_manager)
-				logger.info(f"[SLEEP ENGINE] Ingest retired (SW_INGEST_RETIRED). Hub synthesis: {stats}")
-			except Exception as e:
-				logger.error(f"[SLEEP ENGINE] Hub synthesis (retired path) failed: {e}")
+			logger.info("[SLEEP ENGINE] Ingest retired (SW_INGEST_RETIRED): solo hubs + hilo de Ariadna.")
+			_run_hub_and_thread(ctx.memory_manager)
 			return
 
 		# LLM Health Check & Ephemeral Server
@@ -768,14 +781,6 @@ class HubSynthesisPhase(SleepPhase):
 		ephemeral_server.stop(memory_manager, total_processed)
 		ctx.total_processed = total_processed
 
-		# Hub synthesis sobre engramas EXISTENTES (single-writer, SW_HUBS_ENABLED):
-		# re-apunta la síntesis de hubs que vivía en el drenaje a los engramas ya
-		# en Qdrant (agrupa por sesión, idempotente). No-op si el flag está off.
-		try:
-			from red_pill.metabolism.hub_synthesis import synthesize_session_hubs
-
-			hub_stats = synthesize_session_hubs(memory_manager)
-			if hub_stats.get("enabled"):
-				logger.info(f"[SLEEP ENGINE] Hub synthesis: {hub_stats}")
-		except Exception as e:
-			logger.error(f"[SLEEP ENGINE] Hub synthesis failed: {e}")
+		# Hub synthesis + micro-hilo de Ariadna sobre engramas EXISTENTES
+		# (single-writer, SW_HUBS_ENABLED / SW_THREAD_ENABLED). No-op si off.
+		_run_hub_and_thread(memory_manager)
