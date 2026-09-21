@@ -108,6 +108,18 @@ class EmotionalPreHeatingPlugin(BaseInterceptorPlugin):
 				)
 				candidates.extend(interaction_results)
 
+			# 3. Semáforo de situación GLOBAL (mood) — single-writer (SW_SITUATION_ENABLED).
+			# El scoped por afinidad se inyecta cuando el handshake aporte la afinidad
+			# de la sesión (MULTISES-001); de momento, el semáforo global es seguro.
+			if getattr(config, "SW_SITUATION_ENABLED", False) and client.collection_exists("situation_memories"):
+				sit_results, _ = client.scroll(
+					collection_name="situation_memories",
+					scroll_filter=models.Filter(must=[models.FieldCondition(key="affinity", match=models.MatchValue(value="global"))]),
+					limit=1,
+					with_payload=True,
+				)
+				candidates.extend(sit_results)
+
 		except Exception as e:
 			logger.error(f"Pre-heating query failed: {e}")
 			return ""

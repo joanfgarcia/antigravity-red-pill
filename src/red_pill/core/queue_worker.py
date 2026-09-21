@@ -403,6 +403,17 @@ def drain_memory_queue(queue: MemoryQueueManager, memory: MemoryManager, limit: 
 		processed += len(items)
 		if len(items) < limit:
 			break
+
+	# Semáforo de situación (SW_SITUATION_ENABLED): tras drenar, actualiza el
+	# resumen rodante por afinidad. No-op si el flag está off.
+	try:
+		from red_pill.metabolism.situation_semaphore import update_situation
+
+		sstats = update_situation(memory)
+		if sstats.get("enabled"):
+			logger.info(f"[SITUATION] {sstats}")
+	except Exception as e:
+		logger.error(f"[SITUATION] update failed: {e}")
 	return processed
 
 

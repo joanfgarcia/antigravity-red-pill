@@ -521,6 +521,10 @@ class RedPillConfig(BaseSettings):
 	SW_ABSENCE_GUARD_CONDITIONAL: bool = False  # ON: el pulse NO refresca last_recalled_at cada hora (solo tras ausencia real)
 	SW_EROSION_DEMOTE_ENABLED: bool = False  # olvido elegante de los curados: demote a Memento por eje propio
 	CURATED_MIN_LIFETIME_YEARS: float = 5.0  # vida mínima de un curado no reforzado antes del demote
+	SW_SITUATION_ENABLED: bool = False  # semáforo de situación por afinidad (situation_memories)
+	SITUATION_SOLERA_RATIO: float = 0.2  # peso de lo previo en el merge solera (0.2 = 20/80)
+	SITUATION_TTL_DAYS: int = 30  # evicción de semáforos inactivos
+	SITUATION_MAX_AFFINITIES_PER_CYCLE: int = 10
 	MEMENTO_FRAGMENT_OVERLAP_MESSAGES: int = 2  # solape de turnos entre fragmentos del distill
 	# Presupuesto de contexto por fragmento de distill. 2026-09-15: se destila con
 	# granite (n_ctx 10240), no con aya (32K) — 12000 chars apretaba; 8000 chars

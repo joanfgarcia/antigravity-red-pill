@@ -62,8 +62,13 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   `origin="telegram"`; el render de Memento resuelve el originator real
   (`telegram`/`awakening`) desde `opencode_origins.json`; y el staging de Telegram
   deja de archivarse cuando la ingesta está retirada (evita acumulación).
-- **[PLAN] Fase de engramas interactivos y `interaction_memories` como semáforo de
-  situación por afinidad.**
+- **[M8] Semáforo de situación por afinidad** (flag `SW_SITUATION_ENABLED`):
+  `situation_memories` guarda un resumen rodante tipo **solera** (`SITUATION_SOLERA_RATIO`,
+  20/80) por afinidad + un semáforo **global** de mood; trigger en el worker de cola
+  (~1/min), actualización incremental por `window_start` y evicción por TTL. El
+  pre-heating lee el semáforo global (el scoped por afinidad de sesión queda para
+  cuando el handshake la aporte, MULTISES-001).
+- **[PLAN] Fase de engramas interactivos.**
 
 ### 🧹 Desk — scaffold del despacho, separación proyecto↔despacho y `AGENT_CORE_DIR`
 
