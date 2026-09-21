@@ -193,6 +193,14 @@ class TestRunOpencode:
 			bridge._run_opencode(["hi"], timeout=5)
 		assert run.call_args.kwargs["env"] is None
 
+	def test_disables_plugin_for_telegram_origin(self):
+		tg = OpenCodeBridge(opencode_path="/bin/true", origin="telegram")
+		tg._scribe_plugin = True
+		fake = MagicMock(returncode=0, stdout="", stderr="")
+		with patch("subprocess.run", return_value=fake) as run:
+			tg._run_opencode(["hi"], timeout=5)
+		assert run.call_args.kwargs["env"]["REDPILL_SCRIBE_DISABLE"] == "1"
+
 
 # ── health_check ──────────────────────────────────────────────────────────────
 class TestHealthCheck:

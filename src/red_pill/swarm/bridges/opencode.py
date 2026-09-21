@@ -203,7 +203,10 @@ class OpenCodeBridge(AgentBridge):
 
 		try:
 			env = None
-			if not self._scribe_plugin:
+			# El canal Telegram tiene relay autoritativo en el worker (session_id =
+			# uuid de Telegram): el plugin del hijo no debe capturar el prompt
+			# envuelto sin respuesta. En el resto, el flag decide quién captura.
+			if not self._scribe_plugin or self._origin == "telegram":
 				env = {**os.environ, "REDPILL_SCRIBE_DISABLE": "1"}
 			result = subprocess.run(
 				cmd,
