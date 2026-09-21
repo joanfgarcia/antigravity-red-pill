@@ -31,6 +31,28 @@ logger = logging.getLogger("memento_migrate")
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 
+def _originator_for(source: str, session_id: str) -> str:
+	"""Originator real de una sesión (p.ej. `telegram`) desde `opencode_origins`.
+
+	El registro de opencode usa el session id CRUDO; Memento usa el cualificado
+	(`opencode:ses_x`). Se prueban ambos; fallback = `source`.
+	"""
+	try:
+		from red_pill.swarm.bridges.opencode import read_opencode_origins
+
+		origins = read_opencode_origins()
+		candidates = [session_id]
+		if ":" in session_id:
+			candidates.append(session_id.split(":", 1)[1])
+		for c in candidates:
+			entry = origins.get(c)
+			if isinstance(entry, dict) and entry.get("origin"):
+				return str(entry["origin"])
+	except Exception:
+		pass
+	return source
+
+
 def _enabled_plugins(only: List[str]) -> List[Any]:
 	import red_pill.config as cfg
 	from red_pill.chronicle_sources.base import discover_source_plugins
@@ -219,7 +241,7 @@ def _regenerate_from_raw(root: Path, registry: Any, split_max_messages: int, spl
 			rendered = render_session(
 				session_id,
 				plugin.name,
-				plugin.name,
+				_originator_for(plugin.name, session_id),
 				messages,
 				workspace=meta.get("workspace"),
 				prev_session=entry.get("prev_session"),
@@ -399,7 +421,7 @@ def main() -> None:
 		rendered = render_session(
 			session_id,
 			plugin.name,
-			plugin.name,
+			_originator_for(plugin.name, session_id),
 			messages,
 			workspace=workspace,
 			prev_session=entry.get("prev_session"),
@@ -444,7 +466,7 @@ def main() -> None:
 			rendered = render_session(
 				session_id,
 				source,
-				source,
+				_originator_for(source, session_id),
 				messages,
 				reconstructed=True,
 				split_max_messages=split_max_messages,

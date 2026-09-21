@@ -58,6 +58,10 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   - **Eje propio**: los curados (engramas ascendidos + hubs) decaen por
     `last_reinforced_at` (solo se refresca al recuperar) y se **demotan** a Memento
     (borrado de Qdrant) tras `CURATED_MIN_LIFETIME_YEARS` (5 años).
+- **[G19] Procedencia de Telegram**: el cascade de Telegram se etiqueta
+  `origin="telegram"`; el render de Memento resuelve el originator real
+  (`telegram`/`awakening`) desde `opencode_origins.json`; y el staging de Telegram
+  deja de archivarse cuando la ingesta está retirada (evita acumulación).
 - **[PLAN] Fase de engramas interactivos y `interaction_memories` como semáforo de
   situación por afinidad.**
 

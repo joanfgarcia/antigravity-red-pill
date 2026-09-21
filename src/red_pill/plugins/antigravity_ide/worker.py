@@ -218,7 +218,7 @@ class IDEWorker:
 				if len(filtered) != len(telegram_cascade):
 					logger.info("[IDEWorker] D5 guard: filtered local target(s) from TELEGRAM_BRIDGE_CASCADE")
 				telegram_cascade = filtered
-			self._bridge_telegram = create_cascade_bridge(telegram_cascade, name="TELEGRAM_BRIDGE_CASCADE")
+			self._bridge_telegram = create_cascade_bridge(telegram_cascade, name="TELEGRAM_BRIDGE_CASCADE", origin="telegram")
 			self._bridge_awakening = create_cascade_bridge(cfg_inst.AWAKENING_BRIDGE_CASCADE, name="AWAKENING_BRIDGE_CASCADE", origin="awakening")
 			self._bridge_minion = create_cascade_bridge(cfg_inst.DEFAULT_MINION_BRIDGE_CASCADE, name="DEFAULT_MINION_BRIDGE_CASCADE")
 

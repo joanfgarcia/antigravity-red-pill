@@ -159,7 +159,12 @@ class TelegramSessionManager:
 		logger.info(f"[TelegramSession] Enqueueing compaction for {session_id} ({len(steps)} steps, {total_chars} chars)")
 
 		# 1. Archive the old session in Qdrant (by copying to staging)
-		self.copy_to_staging(session_id)
+		# G19: si la ingesta interaction→work/social está RETIRADA (single-writer),
+		# el staging no lo consume nadie → no se archiva ahí (evita acumulación).
+		import red_pill.config as _cfg
+
+		if not getattr(_cfg, "SW_INGEST_RETIRED", False):
+			self.copy_to_staging(session_id)
 
 		# 2. Enqueue summarization to the Samantha Queue
 		history_text = self.get_history_prompt(session)
