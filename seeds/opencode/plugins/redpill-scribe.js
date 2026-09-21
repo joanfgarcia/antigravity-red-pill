@@ -59,20 +59,53 @@ function hasQueue(db) {
   return Boolean(row);
 }
 
-function writeInteraction(db, prompt, response, model) {
+function queueColumns(db) {
+  try {
+    return new Set(db.query("PRAGMA table_info(memory_queue)").all().map((r) => r.name));
+  } catch (_) {
+    return new Set();
+  }
+}
+
+function deriveAffinity(dir) {
+  if (!dir) return [];
+  const base = String(dir).replace(/\/+$/, "").split("/").pop();
+  return base ? ["ws:" + base] : [];
+}
+
+function writeInteraction(db, prompt, response, model, sessionId, dir, cols) {
   if (!prompt && !response) return;
   // Full text on purpose: truncating here would silently mutilate the engram
   // downstream. Noise trimming is the worker's job, at the single drain point.
-  const stmt = db.prepare(
-    "INSERT INTO memory_queue (prompt, response, role, status, created_at, category, originator, model) " +
-      "VALUES (?, ?, 'assistant', 'pending', ?, 'mixed', ?, ?)"
-  );
-  stmt.run(prompt || "", response || "", Date.now() / 1000, ORIGINATOR, model || null);
+  // session_id/affinity are captured when the schema carries them (single-writer);
+  // the kernel decides downstream (SW_AFFINITY_ENABLED) whether to consume them.
+  if (cols.has("session_id") && cols.has("affinity")) {
+    const stmt = db.prepare(
+      "INSERT INTO memory_queue (prompt, response, role, status, created_at, category, originator, model, session_id, affinity) " +
+        "VALUES (?, ?, 'assistant', 'pending', ?, 'mixed', ?, ?, ?, ?)"
+    );
+    stmt.run(
+      prompt || "",
+      response || "",
+      Date.now() / 1000,
+      ORIGINATOR,
+      model || null,
+      sessionId || null,
+      JSON.stringify(deriveAffinity(dir))
+    );
+  } else {
+    const stmt = db.prepare(
+      "INSERT INTO memory_queue (prompt, response, role, status, created_at, category, originator, model) " +
+        "VALUES (?, ?, 'assistant', 'pending', ?, 'mixed', ?, ?)"
+    );
+    stmt.run(prompt || "", response || "", Date.now() / 1000, ORIGINATOR, model || null);
+  }
 }
 
 /** @type {import("@opencode-ai/plugin").Plugin} */
 export const RedPillScribe = async (ctx) => {
   let db;
+  let COLS = new Set();
   try {
     const { Database } = await import("bun:sqlite");
     db = new Database(QUEUE_DB);
@@ -82,10 +115,14 @@ export const RedPillScribe = async (ctx) => {
       db.close();
       return {};
     }
+    COLS = queueColumns(db);
   } catch (e) {
     console.error("[RedPillScribe] Failed to open the queue:", e.message);
     return {};
   }
+
+  // Project dir for affinity (ws:<basename>). opencode exposes it on the plugin ctx.
+  const PROJECT_DIR = ctx?.worktree || ctx?.directory || ctx?.project?.path || process.cwd();
 
   const sessions = new Map();
 
@@ -93,7 +130,7 @@ export const RedPillScribe = async (ctx) => {
     dispose: async () => {
       for (const [sid, state] of sessions) {
         if (state?.prompt) {
-          try { writeInteraction(db, state.prompt, state.response, state.modelID); } catch (_) {}
+          try { writeInteraction(db, state.prompt, state.response, state.modelID, sid, PROJECT_DIR, COLS); } catch (_) {}
         }
       }
       sessions.clear();
@@ -133,7 +170,7 @@ export const RedPillScribe = async (ctx) => {
         if (msg.role === "assistant") {
           state.modelID = msg.modelID;
           try {
-            writeInteraction(db, state.prompt, state.response, state.modelID);
+            writeInteraction(db, state.prompt, state.response, state.modelID, msg.sessionID, PROJECT_DIR, COLS);
           } catch (e) {
             console.error("[RedPillScribe] Write failed:", e.message);
           }

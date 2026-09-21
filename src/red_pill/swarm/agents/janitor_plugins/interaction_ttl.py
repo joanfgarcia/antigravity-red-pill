@@ -51,6 +51,45 @@ class InteractionTTLPlugin(JanitorPlugin):
 				models.FieldCondition(key="created_at", range=models.Range(lt=cutoff)),
 			]
 		)
+
+		# Purge gate (SW_PURGE_GATE_ENABLED): once Sleep no longer drains the buffer,
+		# this TTL is the SOLE purger. Purge by age alone would drop raw turns whose
+		# session was never rendered into Memento (chronicle down/late). Gate: only
+		# purge points whose session is present in `memento_registry`. Points without
+		# `session_id` are NOT purged (can't verify) — the max-age backstop handles them.
+		if bool(getattr(cfg, "SW_PURGE_GATE_ENABLED", False)):
+			from red_pill.memento.registry import MementoRegistry
+
+			registry_path = kwargs.get("registry_path")
+			registry = MementoRegistry(path=registry_path) if registry_path else MementoRegistry()
+			rendered = set()
+			# state["registry"] es anidado: {source: {session_id: entry}}, y el
+			# session_id del registry lleva prefijo de fuente ("opencode:ses_x").
+			# El buffer guarda el id crudo ("ses_x"), así que indexamos ambos.
+			for source, sessions in registry.state.get("registry", {}).items():
+				for sid in sessions:
+					sid = str(sid)
+					rendered.add(sid)
+					if ":" in sid:
+						rendered.add(sid.split(":", 1)[1])
+					rendered.add(f"{source}:{sid}")
+
+			to_delete: list = []
+			offset = None
+			while True:
+				points, offset = mem.client.scroll(collection, scroll_filter=stale_filter, limit=500, offset=offset, with_payload=True)
+				for p in points:
+					meta = (p.payload or {}).get("metadata") or {}
+					sid = meta.get("session_id")
+					if sid and str(sid) in rendered:
+						to_delete.append(str(p.id))
+				if offset is None:
+					break
+			if to_delete:
+				mem.client.delete(collection, points_selector=models.PointIdsList(points=to_delete), wait=True)
+			janitor.log(f"[Janitor] interaction_ttl (gated): {len(to_delete)} punto(s) renderizados y fríos purgados.")
+			return {"purged": len(to_delete), "ttl_hours": ttl_hours, "gate": True}
+
 		stale = mem.client.count(collection, count_filter=stale_filter, exact=True).count
 		if stale:
 			mem.client.delete(collection, points_selector=models.FilterSelector(filter=stale_filter), wait=True)

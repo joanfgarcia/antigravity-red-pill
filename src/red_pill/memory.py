@@ -461,6 +461,8 @@ class MemoryManager:
 		category: str = "mixed",
 		model: Optional[str] = None,
 		originator: Optional[str] = None,
+		session_id: Optional[str] = None,
+		affinity: Optional[List[str]] = None,
 	) -> str:
 		"""
 		Lazarus Phase 1: Encoding (Fast Memory Buffer).
@@ -498,6 +500,8 @@ class MemoryManager:
 				"category": category,
 				"model": model or "unknown",
 				"originator": originator or "unknown",
+				"session_id": session_id,
+				"affinity": affinity or [],
 			},
 		}
 

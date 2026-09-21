@@ -375,6 +375,16 @@ def drain_memory_queue(queue: MemoryQueueManager, memory: MemoryManager, limit: 
 					logger.info(f"Memory {item['id']} dropped: nothing but tooling noise after trimming.")
 					continue
 
+				import red_pill.config as _cfg
+
+				_extra: dict = {}
+				if getattr(_cfg, "SW_AFFINITY_ENABLED", False):
+					from red_pill.core.affinity import parse_affinity
+
+					_extra = {
+						"session_id": item.get("session_id"),
+						"affinity": parse_affinity(item.get("affinity")),
+					}
 				uid = memory.record_interaction_pair(
 					prompt=clean_prompt,
 					response=clean_response,
@@ -382,6 +392,7 @@ def drain_memory_queue(queue: MemoryQueueManager, memory: MemoryManager, limit: 
 					category=item.get("category", "mixed"),
 					model=item.get("model"),
 					originator=item.get("originator"),
+					**_extra,
 				)
 				queue.update_status(item["id"], "completed")
 				logger.info(f"Memory {item['id']} successfully ingested. (ID: {uid})")

@@ -1,4 +1,5 @@
 import hashlib
+import json
 import logging
 import os
 import sqlite3
@@ -61,6 +62,15 @@ class MemoryQueueManager:
 				cursor.execute("ALTER TABLE memory_queue ADD COLUMN content_hash TEXT")
 			except sqlite3.OperationalError:
 				pass
+			# Single-writer: procedencia de sesión + afinidad (CONVENTIONS RULE 4 / SW_AFFINITY_ENABLED).
+			try:
+				cursor.execute("ALTER TABLE memory_queue ADD COLUMN session_id TEXT")
+			except sqlite3.OperationalError:
+				pass
+			try:
+				cursor.execute("ALTER TABLE memory_queue ADD COLUMN affinity TEXT")
+			except sqlite3.OperationalError:
+				pass
 			# Index for fast lookup of pending items
 			cursor.execute("CREATE INDEX IF NOT EXISTS idx_status ON memory_queue (status)")
 			# Idempotency: the same turn can arrive from the deterministic hook AND
@@ -77,6 +87,8 @@ class MemoryQueueManager:
 		category: str = "mixed",
 		originator: Optional[str] = None,
 		model: Optional[str] = None,
+		session_id: Optional[str] = None,
+		affinity: Optional[Any] = None,
 		dedup_window_hours: Optional[float] = 12.0,
 	) -> int:
 		"""Push a fast memory into the queue. Returns row ID (existing one if duplicate).
@@ -110,9 +122,10 @@ class MemoryQueueManager:
 					if existing:
 						logger.debug(f"Duplicate turn ignored (already queued as row {existing[0]}).")
 						return int(existing[0])
+				affinity_json = json.dumps(affinity, ensure_ascii=False) if affinity else None
 				cursor.execute(
-					"INSERT INTO memory_queue (prompt, response, role, status, created_at, category, originator, model, content_hash) VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?)",
-					(prompt, response, role, time.time(), category, originator, model, content_hash),
+					"INSERT INTO memory_queue (prompt, response, role, status, created_at, category, originator, model, content_hash, session_id, affinity) VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)",
+					(prompt, response, role, time.time(), category, originator, model, content_hash, session_id, affinity_json),
 				)
 				conn.commit()
 				return cursor.lastrowid or 0
@@ -128,7 +141,7 @@ class MemoryQueueManager:
 				conn.row_factory = sqlite3.Row
 				cursor = conn.cursor()
 				cursor.execute(
-					"SELECT id, prompt, response, role, category, originator, model FROM memory_queue WHERE status = 'pending' ORDER BY created_at ASC LIMIT ?",
+					"SELECT id, prompt, response, role, category, originator, model, session_id, affinity FROM memory_queue WHERE status = 'pending' ORDER BY created_at ASC LIMIT ?",
 					(limit,),
 				)
 				for row in cursor.fetchall():

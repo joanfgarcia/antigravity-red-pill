@@ -141,7 +141,15 @@ def _dedup_seen(session_id: str, marker: str) -> bool:
 	return False
 
 
-def _write(user_prompt: str, agent_response: str, model):
+def _derive_affinity(cwd) -> list:
+	"""Afinidad determinista para Claude Code: ws:<basename(cwd)> (o [])."""
+	if not cwd:
+		return []
+	base = os.path.basename(os.path.normpath(str(cwd)))
+	return [f"ws:{base}"] if base else []
+
+
+def _write(user_prompt: str, agent_response: str, model, session_id: str = "", cwd: str = ""):
 	"""Queue the turn. The schema belongs to the kernel; this only INSERTs."""
 	if not DB_PATH.exists():
 		return  # Kernel never ran here: nothing to queue into, and nothing to create.
@@ -153,27 +161,34 @@ def _write(user_prompt: str, agent_response: str, model):
 		if not cols:
 			return
 		content_hash = hashlib.sha256(f"{user_prompt}\x00{agent_response}".encode("utf-8", errors="replace")).hexdigest()
+		has_hash = "content_hash" in cols
+		has_sw = "session_id" in cols and "affinity" in cols
 
 		# Second line of defence behind the marker dedup: the same turn can also
 		# reach the queue through the agent's handshake relay.
-		if "content_hash" in cols:
+		if has_hash:
 			row = conn.execute(
 				"SELECT id FROM memory_queue WHERE content_hash = ? AND created_at > ? LIMIT 1",
 				(content_hash, time.time() - DEDUP_WINDOW_S),
 			).fetchone()
 			if row:
 				return
-			conn.execute(
-				"INSERT INTO memory_queue (prompt, response, role, status, created_at, category, originator, model, content_hash)"
-				" VALUES (?, ?, 'assistant', 'pending', ?, 'mixed', ?, ?, ?)",
-				(user_prompt, agent_response, time.time(), ORIGINATOR, model, content_hash),
-			)
-		else:
-			conn.execute(
-				"INSERT INTO memory_queue (prompt, response, role, status, created_at, category, originator, model)"
-				" VALUES (?, ?, 'assistant', 'pending', ?, 'mixed', ?, ?)",
-				(user_prompt, agent_response, time.time(), ORIGINATOR, model),
-			)
+
+		fields = ["prompt", "response", "role", "status", "created_at", "category", "originator", "model"]
+		placeholders = ["?", "?", "'assistant'", "'pending'", "?", "'mixed'", "?", "?"]
+		values = [user_prompt, agent_response, time.time(), ORIGINATOR, model]
+		if has_hash:
+			fields.append("content_hash")
+			placeholders.append("?")
+			values.append(content_hash)
+		if has_sw:
+			fields.extend(["session_id", "affinity"])
+			placeholders.extend(["?", "?"])
+			values.extend([session_id or None, json.dumps(_derive_affinity(cwd))])
+		conn.execute(
+			f"INSERT INTO memory_queue ({', '.join(fields)}) VALUES ({', '.join(placeholders)})",
+			values,
+		)
 		conn.commit()
 	finally:
 		conn.close()
@@ -199,7 +214,7 @@ def main() -> int:
 			return 0
 		if _dedup_seen(session_id, marker):
 			return 0
-		_write(user_prompt, agent_response, model)
+		_write(user_prompt, agent_response, model, session_id=session_id, cwd=payload.get("cwd") or "")
 	except Exception:
 		# Never block the turn on a scribe failure.
 		return 0

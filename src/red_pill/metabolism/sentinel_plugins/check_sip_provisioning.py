@@ -5,9 +5,7 @@ Unlike check_sip.py (which validates runtime health when the service IS running)
 this plugin validates the PROVISIONING CHAIN:
 
 1. start.sh exists in $XDG_RUNTIME_DIR/red-pill/ (volatile — lost on reboot)
-2. run_dual_bind.py exists in same dir (volatile) AND is not corrupt
-   (compiles + defines `manager = ModelManager()` — a partial deploy can leave
-   it present but broken, black-holing sleep/Memento with HTTP 500s)
+2. run_dual_bind.py exists in same dir AND is not corrupt (compiles + defines `manager = ModelManager()`)
 3. .venv/ exists with llama-cpp-python installed (volatile)
 4. systemd service file exists at ~/.config/systemd/user/redpill-llm.service (persistent)
 5. Model GGUF file exists (resolved from model_profiles.yaml)

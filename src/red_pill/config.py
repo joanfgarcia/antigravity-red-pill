@@ -510,6 +510,10 @@ class RedPillConfig(BaseSettings):
 	POLAROID_GAIN: float = 0.5  # incremento de estabilidad por reaparición
 	POLAROID_REVIVAL_GATE: float = 7.0  # umbral: S >= gate → ascenso por refuerzo
 	MEMENTO_STATIC_ASCENSION_ENABLED: bool = False  # ascenso estático EN SOMBRA hasta calibrar
+	# Single-writer de memoria — feature flags por componente (CONVENTIONS RULE 4).
+	# Default OFF: nada cambia hasta encender cada pieza por separado.
+	SW_AFFINITY_ENABLED: bool = False  # captura session_id+affinity (memory_queue → interaction_memories)
+	SW_PURGE_GATE_ENABLED: bool = False  # interaction_ttl purga solo sesiones ya renderizadas en Memento
 	MEMENTO_FRAGMENT_OVERLAP_MESSAGES: int = 2  # solape de turnos entre fragmentos del distill
 	# Presupuesto de contexto por fragmento de distill. 2026-09-15: se destila con
 	# granite (n_ctx 10240), no con aya (32K) — 12000 chars apretaba; 8000 chars

@@ -1,38 +1,3 @@
-## [7.23.0] - Unreleased (Single-writer de memoria — ascensión Memento, hubs y Ariadna)
-
-Diseño cerrado e inicio de implementación del **single-writer curado** de memoria:
-`work_memories`/`social_memories` dejan de recibir la ingesta cruda
-`interaction→work/social` del sueño (que metía prompts por dos vías y sólo añadía
-ruido); su fuente única pasa a ser la **ascensión de engramas curados de Memento**
-(`distill→refine→ascend`). Sobre esos engramas se reconstruye la **navegación**:
-hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones).
-Continuidad con RFC-002 (Memento) y RFC-002 Fase 4 (ascenso curado).
-
-### 🚨 Governance
-
-- **[NEW] CONVENTIONS RULE 4 — Per-Component Feature Flags (STRICT):** todo
-  componente nuevo de un pipeline se despliega tras su **propio** flag, default
-  `OFF`, leído en un único punto; **prohibido** el flag monolítico. Rollout
-  incremental y reversible por pieza.
-
-### 🧠 Memoria (single-writer) — plan de implementación
-
-- **[PLAN] Retirada de la ingesta `interaction→work/social`** del ciclo de sueño;
-  work/social alimentadas **solo** por ascensión Memento.
-- **[PLAN] Ascensión con dos fechas** (`created_at`=fecha real de sesión;
-  `ascended_at`=ascensión) + discriminador `node_type`, e idempotencia por grupo.
-- **[PLAN] Hubs de sesión + hilo de Ariadna de dos niveles** + marcado de miembros
-  (el recall omite los miembros hubbed).
-- **[PLAN] Erosión con olvido activo** (dos veces + RIF + demote a Memento) para los
-  engramas curados.
-- **[PLAN] `interaction_memories` como semáforo de situación por afinidad**
-  (colección `situation_memories`), leído por el pre-heating.
-
-> Implementación por fases; cada componente tras su flag (`SW_*`); tests y
-> documentación al día en cada hito.
-
----
-
 ## [7.22.0] - Unreleased (Memento Chronicle, Despertar autónomo, JOB-001, Bank Janitor, Arnés Pi & Desk)
 
 Seis frentes: **Memento** (RFC-002, fases 0–3.5 completas — la grabadora vuelve
@@ -41,6 +6,28 @@ actividad del operador frente a los runs headless del despertar autónomo, la
 **trazabilidad de jobs** (JOB-001), la **higiene del memory bank** (`bank_janitor`),
 el **arnés Pi** (kebab-case skills + chronicle source + injector) y el **Desk**
 (scaffold `seeds/desk/` + separación proyecto↔despacho + unificación `AGENT_CORE_DIR`).
+
+### 🧩 Single-writer de memoria (ascensión Memento, hubs y Ariadna) — en curso
+
+Diseño cerrado e inicio de implementación del **single-writer curado** de memoria:
+`work_memories`/`social_memories` dejan de recibir la ingesta cruda
+`interaction→work/social` del sueño (que metía prompts por dos vías y sólo añadía
+ruido); su fuente única pasa a ser la **ascensión de engramas curados de Memento**
+(`distill→refine→ascend`). Sobre esos engramas se reconstruye la **navegación**:
+hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones).
+
+- **[NEW] CONVENTIONS RULE 4 — Per-Component Feature Flags (STRICT):** todo
+  componente nuevo de un pipeline se despliega tras su **propio** flag, default
+  `OFF`, leído en un único punto; **prohibido** el flag monolítico. Rollout
+  incremental y reversible por pieza.
+- **[M0] Captura de sesión/afinidad + gate de purga** (flags `SW_AFFINITY_ENABLED`,
+  `SW_PURGE_GATE_ENABLED`, default OFF): `session_id`+`affinity` viajan de la
+  captura (hooks opencode/claude) a `interaction_memories`; el TTL deja de purgar
+  a ciegas (solo purga sesiones ya renderizadas en Memento). Deriva afinidad
+  determinista (`ws:<workdir>` + `mission:`).
+- **[PLAN] Ascensión con dos fechas + dedup**, hubs de sesión + hilo de Ariadna de
+  dos niveles, erosión con olvido activo, y `interaction_memories` como semáforo
+  de situación por afinidad.
 
 ### 🧹 Desk — scaffold del despacho, separación proyecto↔despacho y `AGENT_CORE_DIR`
 
