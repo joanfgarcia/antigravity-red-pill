@@ -1630,7 +1630,11 @@ def main() -> None:
 		# Loop through requested collections
 		for collection in collections:
 			if args.command == "add":
-				manager.add_memory(collection, args.content, color=args.color, emotion=args.emotion, intensity=args.intensity)
+				# D13: un alta manual (operador/agente) es un engrama "especial" →
+				# `interactive_engram` (no se agrupa por sesión; lo trata el proceso
+				# aparte de interactivos).
+				metadata = {"node_type": "interactive_engram"} if collection in ("work_memories", "social_memories", "story_memories") else None
+				manager.add_memory(collection, args.content, color=args.color, emotion=args.emotion, intensity=args.intensity, metadata=metadata)
 			elif args.command == "search":
 				# CQ-003: Use regex with word boundaries for robust trigger detection
 				import re as regex_lib
