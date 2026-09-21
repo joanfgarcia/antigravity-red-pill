@@ -101,3 +101,18 @@ def test_dedup_asciende_solo_un_ganador(tmp_path: Path, monkeypatch):
 	assert stats["ascendidos"] == 1
 	assert stats["duplicados_omitidos"] == 1
 	assert mm.calls[0]["metadata"]["significance"] == 0.9
+
+
+def test_sin_dedup_asciende_ambos(tmp_path: Path, monkeypatch):
+	import red_pill.config as cfgmod
+
+	root = tmp_path / "m"
+	body = "mismo cuerpo duplicado"
+	_write(root, "2026-09/opencode/s/refine/001-a.md", REFINE.format(sig=0.9, body=body))
+	_write(root, "2026-09/opencode/s/refine/002-b.md", REFINE.format(sig=0.6, body=body))
+	mm = FakeMM()
+	monkeypatch.setattr(cfgmod, "SW_DEDUP_ENABLED", False, raising=False)
+
+	stats = ascend_by_threshold(root, FakeReg(), memory_manager=mm)
+	assert stats["ascendidos"] == 2
+	assert stats["duplicados_omitidos"] == 0
