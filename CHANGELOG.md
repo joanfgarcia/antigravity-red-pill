@@ -85,8 +85,11 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   y futuros) ignoran `origin=telegram` vía el **registro genérico
   `session_origins.json`** (`core/origins.py`). El worker de Telegram deja **un solo
   camino** (puente; purgada la fusión legacy con cascadas de antigravity) y captura
-  el `session_id` con `originator=telegram`. La afinidad (si se retoma) será
-  **semántica** (keywords del refine), no filesystem.
+  el `session_id` con `originator=telegram`. **Captura única**: el plugin de opencode
+  se abstiene (`REDPILL_SCRIBE_DISABLE`) cuando el bridge relaya — y para
+  `origin=telegram` siempre, porque el relay del worker es la captura autoritativa
+  (el plugin duplicaba el turno con el prompt envuelto y respuesta vacía). La
+  afinidad (si se retoma) será **semántica** (keywords del refine), no filesystem.
 
 ### 🧹 Desk — scaffold del despacho, separación proyecto↔despacho y `AGENT_CORE_DIR`
 
