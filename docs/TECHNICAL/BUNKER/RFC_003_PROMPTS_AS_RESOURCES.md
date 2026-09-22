@@ -67,6 +67,9 @@ versionado que el código carga por referencia, con parámetros sustituidos en c
   `placeholders` (validación en carga), `description` y notas de versión.
 - **Opción B (alternativa)**: un `.md` con frontmatter YAML (metadatos) + cuerpo =
   prompt (autocontenido, sin sidecar). Decisión abierta (§4).
+- **Primer recurso existente (2026-09-22)**: `memento/agentic/prompts/identity_bio.txt`
+  (Bio de identidad, MEM-006 P0) — hoy lo carga `prompts.py` con un lector mínimo;
+  el loader compartido lo absorberá en la fase 3 de la migración (§2.5).
 
 ### 2.2 Loader compartido
 

@@ -100,9 +100,22 @@ uv run python scripts/memento_recalibrate.py report --work 0.70 --social 0.65
   **sale**, qué queda **al límite**) con muestras.
 - `audit-category` mide el **acuerdo** del `category_score` contra el juicio del
   LLM (work/social) → **base para decidir umbrales**.
+- `audit-dual` mide el enrutado **dual** (ejes work/social con zona muerta) contra
+  el legacy (`category_score ≥ 0.5`) y el juez LLM.
+- `audit-stability` mide **flips de ruta** bajo 3 protocolos de lote (normal /
+  invertido / partido): el anclaje contextual del scorer. Es el arnés para
+  comparar prompts y modelos.
 - `audit-significance` mide el **% trivial** por banda: banda baja trivial →
   subir; banda alta con memoria valiosa → bajar.
-- `--engine` fija `RP_LLM_MODEL` para comparar modelos (selección recurrente).
+- `--engine` fija `RP_LLM_MODEL` para comparar modelos (selección recurrente);
+  `--temp` fija la temperatura del scorer dual.
+
+**Rebuild de anotaciones (MEM-006)**: `scripts/memento_annotate.py` + job
+`configs/jobs/memento_annotate_rebuild.yaml` (`element_job`, checkpoint por
+sesión; pausable/reanudable; las sesiones ya anotadas con el `prompt_version`
+vigente se omiten). Lanzar:
+`uv run red-pill job submit --recipe memento_annotate_rebuild`. Diagnóstico:
+`uv run python tools/memento_lab.py funnel|quality|annotate`.
 
 **Estado 2026-09-22** (cata preliminar): work 0.6 / social 0.5. La banda social
 0.50-0.60 contiene **memoria personal de alto valor** (infancia, Carmen) mientras

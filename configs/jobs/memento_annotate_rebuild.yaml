@@ -1,0 +1,24 @@
+# Memento — rebuild de anotaciones (MEM-006) sobre el árbol completo.
+#
+# Etapa `annotate` (raw → notas idea-level) con Bio de identidad, dedup P1-A, gate
+# de calidad, routing dual con zona muerta y rewrite de voz. Sustituye los refine/
+# legacy por annotate/. Pausable/reanudable: element_job con checkpoint por sesión;
+# las sesiones ya anotadas con el prompt_version vigente se omiten (--list).
+#
+# Lanzar:  uv run red-pill job submit --recipe memento_annotate_rebuild
+# ETA orientativa: ~2 min/sesión × ~665 sesiones (22-30 h); pausar/kill es seguro
+# (resume continúa por checkpoint). Tras el rebuild, ascender (run_agentic/estático)
+# con el flag MEMENTO_ANNOTATE_FROM_RAW ON para que las nuevas anotaciones suban.
+source: element_job
+priority: 3
+title: Memento rebuild annotate (MEM-006, árbol completo)
+mission_id: memento-annotate-rebuild
+step_command: uv run python scripts/memento_annotate.py
+elements_command: uv run python scripts/memento_annotate.py --list
+defer_exit_code: 77
+llm:
+  task: refine
+preflight:
+  llm_required: true
+control:
+  max_step_minutes: 40

@@ -59,3 +59,12 @@ This document catalogs the utility scripts found in the `scripts/` directory. Th
 
 ### `distiller_bakeoff.py`
 **Purpose:** Aptitude harness for the sleep-cycle distiller. Runs a battery of probes (technical, philosophical, noise-culling, emotional) against each candidate GGUF and scores outputs with deterministic heuristics (JSON, ES/EN, `<think>` tags, prompt-echo, valid emotion/intensity, latency). Writes `docs/BENCHMARKS/DISTILLER_BAKEOFF.md`. Defaults to CPU to spare the live daemon's VRAM.
+
+### `memento_recalibrate.py`
+**Purpose:** Recurring curation recalibration for Memento (run whenever the distill/refine models change): `stats`/`bands`/`report` (deterministic) plus LLM audits — `audit-category` (classifier agreement), `audit-dual` (two-axis work/social routing vs the legacy ratio) and `audit-stability` (route flips across 3 batch protocols → contextual anchoring). `--engine` compares models, `--temp` pins temperature. Documented in the single-writer runbook §5.
+
+### `memento_annotate.py`
+**Purpose:** Rebuild of the `annotate` stage (MEM-006) over the whole Memento tree: idea-level notes extracted from the RAW (one compression) with the identity Bio (P0), dedup P1-A, quality gate, dual routing with dead zone and first-person voice rewrite. Session-by-session, pausable/resumable via the `memento_annotate_rebuild` element_job (per-session checkpoint); sessions already annotated with the current `annotate_prompt_version` are skipped (freshness). `--list` prints pending sessions; `--all` ignores freshness; `--root` points at an alternate tree.
+
+### `../tools/memento_lab.py`
+**Purpose:** Diagnostic workbench (NOT CI) for the memory pipeline, born from the 2026-09-22 recalibration session (MEM-006 + RFC-003) to rescue the throwaway `/tmp` scripts: `funnel` (sessions → splits → distills → notes; unique bodies, duplication ratio, ideas per source), `quality` (near-dups, lengths, first-person %, quality flags over `annotate/`+`refine/`) and `annotate` (annotate ONE session into a temp tree — prompt workbench). Deterministic except the `annotate` subcommand.

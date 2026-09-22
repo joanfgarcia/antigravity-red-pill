@@ -139,6 +139,13 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
     el engrama guarda `work_score`/`social_score`/`dual_route`/`quality_flags`.
   - **Tool**: `load_rows` escanea `annotate/` (normaliza `cat_score` al eje work).
   - Documento de diseño: **MEM-006 §6** (desk) con evidencia y refs cruzadas.
+- **[TOOL] Rebuild de anotaciones + workbench**: `scripts/memento_annotate.py`
+  (rebuild MEM-006 sesión a sesión; `--list` con frescura por `prompt_version`;
+  job `configs/jobs/memento_annotate_rebuild.yaml` — element_job pausable/
+  reanudable por checkpoint, las sesiones ya anotadas se omiten) y
+  `tools/memento_lab.py` (workbench diagnóstico: `funnel` de segmentación,
+  `quality` de notas con proxies de voz/near-dups/flags y `annotate` de UNA
+  sesión en árbol temporal). Índice de scripts actualizado.
 - **[DOC] RFC-003 Prompts as Resources (DRAFT)**: prompts como recurso (ficheros +
   loader con placeholders `${var}`, hash de contenido, overrides explícitos);
   norma propuesta (RULE 5) y migración por fases. La Bio de identidad ya vive en
