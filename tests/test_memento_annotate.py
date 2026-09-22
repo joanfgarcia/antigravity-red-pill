@@ -1,0 +1,181 @@
+"""Etapa annotate (MEM-006): dedup P1-A, gate de calidad, routing dual y writer."""
+
+from __future__ import annotations
+
+import json
+import re
+from pathlib import Path
+
+from red_pill.memento.agentic import (
+	ANNOTATE_SOCIAL_SYSTEM,
+	ANNOTATE_WORK_SYSTEM,
+	DUAL_SCORE_SYSTEM,
+	annotate_session,
+	dedup_annotations,
+	quality_flags,
+	runtime,
+)
+
+
+def _idea(title, text, sig, theme="t"):
+	return {"title": title, "text": text, "significance": sig, "emotion": "cyan", "intensity": 0.6, "theme": theme, "relics": []}
+
+
+def _fake_transport():
+	def transport(system, user, max_tokens):
+		if system == ANNOTATE_WORK_SYSTEM:
+			return json.dumps(
+				[
+					_idea("Fix del endpoint", "Joan me pide arreglar el endpoint de auth; le explico el fix y lo despliego.", 0.9, "endpoint"),
+					_idea("Ruido", "Hablamos del tiempo y de nada más.", 0.2, "smalltalk"),
+				]
+			)
+		if system == ANNOTATE_SOCIAL_SYSTEM:
+			return json.dumps(
+				[
+					_idea("Fix del endpoint (dup)", "Joan me pide arreglar el endpoint de auth; le explico el fix y lo despliego.", 0.85, "endpoint"),
+					_idea("Samantha opina", "Samantha propone una idea sobre el vínculo y el cuidado.", 0.8, "vinculo"),
+				]
+			)
+		if system == DUAL_SCORE_SYSTEM:
+			return json.dumps(
+				[
+					{"i": 0, "work_score": 0.9, "social_score": 0.1},
+					{"i": 1, "work_score": 0.3, "social_score": 0.7},
+					{"i": 2, "work_score": 0.2, "social_score": 0.2},
+				]
+			)
+		return "[]"
+
+	return transport
+
+
+def _tree(tmp_path: Path) -> str:
+	dir_rel = "2026-09/opencode/s1"
+	splits = tmp_path / dir_rel / "memento"
+	splits.mkdir(parents=True)
+	(splits / "001-split.md").write_text("> [!ref] memento/index.md#l1-20\nJoan me pide arreglar el endpoint.\n", encoding="utf-8")
+	return dir_rel
+
+
+def test_quality_flags_detecta_genero_identidad_voz():
+	assert "gender" in quality_flags("Joan me dijo, cansada, que paraba.")
+	assert "identity" in quality_flags("Samantha propone una idea.")
+	assert "voice" in quality_flags("Aleth ha implementado el protocolo.")
+	assert "voice" in quality_flags("Se creó la rama y se generó el PR.")
+	assert "voice" in quality_flags("Aleth creó un branch para aislar cambios.")
+	assert quality_flags("Joan me pide el fix y le explico el plan.") == []
+	assert quality_flags("Creé la rama y generé el PR #37.") == []
+
+
+def test_extract_tolera_relics_int(monkeypatch):
+	from red_pill.memento.agentic import annotate
+
+	def transport(system, user, max_tokens):
+		if system == ANNOTATE_WORK_SYSTEM:
+			return json.dumps(["texto suelto sin objeto", {"title": "T", "text": "Joan me pide algo.", "significance": 0.9, "relics": 3}])
+		return "[]"
+
+	ideas = annotate._extract(transport, "fragmento")
+	assert len(ideas) == 1
+	assert ideas[0]["relics"] == []
+
+
+def test_dedup_annotations_colapsa_exactos_y_near_dups():
+	items = [
+		{"title": "Fix", "text": "Joan me pide arreglar el endpoint de auth y le explico el fix completo.", "significance": 0.9, "flags": []},
+		{"title": "Fix dup", "text": "Joan me pide arreglar el endpoint de auth y le explico el fix completo.", "significance": 0.8, "flags": []},
+		{"title": "Otra", "text": "Hablamos del tiempo y de nada más.", "significance": 0.2, "flags": []},
+	]
+	kept = dedup_annotations(items)
+	assert len(kept) == 2
+	assert kept[0]["significance"] == 0.9
+
+
+def test_annotate_session_escribe_con_rutas_y_gate(tmp_path, monkeypatch):
+	monkeypatch.setattr(runtime, "engine_id", lambda: "test-engine")
+	dir_rel = _tree(tmp_path)
+	max_sig = annotate_session(tmp_path, dir_rel, "opencode:s1", "opencode", _fake_transport())
+	assert max_sig == 0.9
+	files = sorted((tmp_path / dir_rel / "annotate").glob("*.md"))
+	assert len(files) == 3  # dedup colapsa el gemelo exacto
+	by_route = {}
+	for f in files:
+		txt = f.read_text(encoding="utf-8")
+		fm = dict(re.findall(r"^(\w+):\s*(.*)$", txt.split("---")[1], re.M))
+		body = txt.split("---", 2)[2].strip()
+		by_route[fm["dual_route"]] = (fm, body)
+	assert "work" in by_route
+	fm, body = by_route["work"]
+	assert fm["work_score"] == "0.90"
+	assert fm["prompt_version"]
+	assert "Joan me pide arreglar el endpoint" in body
+	assert by_route["none"][0]["quality_flags"] != "[]"  # Samantha → identity → sin ruta
+
+
+def test_score_dual_reintenta_faltantes(monkeypatch):
+	from red_pill.memento.agentic import annotate
+
+	anns = [{"text": f"nota {i}"} for i in range(4)]
+	calls = {"n": 0}
+
+	def transport(system, user, max_tokens):
+		calls["n"] += 1
+		if calls["n"] == 1:
+			return json.dumps([{"i": 0, "work_score": 0.9, "social_score": 0.1}])
+		pending_n = sum(1 for a in anns if "work_score" not in a)
+		return json.dumps([{"i": i, "work_score": 0.8, "social_score": 0.1} for i in range(pending_n)])
+
+	annotate._score_dual(transport, anns)
+	assert all("work_score" in a for a in anns)
+	assert calls["n"] == 2
+
+
+def test_rewrite_voice_notes_reescribe_no_primera_persona(monkeypatch):
+	from red_pill.memento.agentic import annotate
+
+	anns = [
+		{"text": "Se creó la rama y se generó el PR.", "flags": ["voice"]},
+		{"text": "Joan me pide el fix y le explico el plan.", "flags": []},
+	]
+	calls = {"n": 0}
+
+	def transport(system, user, max_tokens):
+		calls["n"] += 1
+		return json.dumps([{"i": 0, "text": "Creé la rama y generé el PR #37."}])
+
+	rewritten = annotate.rewrite_voice_notes(transport, anns)
+	assert rewritten == 1
+	assert anns[0]["text"].startswith("Creé la rama")
+	assert calls["n"] == 1
+
+
+def test_rewrite_voice_notes_reintenta_hasta_cubrir(monkeypatch):
+	from red_pill.memento.agentic import annotate
+
+	anns = [{"text": f"Se implementó la tarea {i} en el sistema.", "flags": []} for i in range(3)]
+
+	def transport(system, user, max_tokens):
+		idx = [int(m) for m in re.findall(r"^\[(\d+)\]", user, re.M)]
+		if len(idx) > 1:
+			idx = idx[:-1]
+		return json.dumps([{"i": i, "text": f"Implementé la tarea {i} en el sistema."} for i in idx])
+
+	rewritten = annotate.rewrite_voice_notes(transport, anns)
+	assert all(annotate.is_first_person(a["text"]) for a in anns)
+	assert rewritten == 3
+
+
+def test_is_first_person():
+	from red_pill.memento.agentic import is_first_person
+
+	assert is_first_person("Joan me pide algo y le explico.")
+	assert is_first_person("Creé la rama y generé el PR.")
+	assert not is_first_person("Se creó la rama y se generó el PR.")
+
+
+def test_candidate_category_prefiere_dual_route():
+	from red_pill.memento.ascension import _candidate_category
+
+	assert _candidate_category({"dual_route": "work"}, "contenido personal y emocional") == "work"
+	assert _candidate_category({"dual_route": "social"}, "código y tests") == "social"

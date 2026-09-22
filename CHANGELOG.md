@@ -100,6 +100,49 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   (acuerdo del clasificador vs el LLM) y `audit-significance` (% trivial por banda);
   `--engine` compara modelos y `--dry-run` hace la cata manual. Determinista salvo
   los `audit-*`. Documentado en el runbook del single-writer §5.
+- **[FIX] Clasificador de categoría (prompts de refine)**: los prompts WORK/SOCIAL
+  anclaban `category_score` a **la llamada**, no al contenido (WORK 0.6-1.0 / SOCIAL
+  0.0-0.4): el modelo puntuaba por pasada, el mismo fragmento generaba gemelos
+  (work 0.9 / social 0.3) y la dedup no siempre los fundía → contenido técnico
+  ascendía a `social_memories` (acuerdo del auditor: **0.40**). Ahora ambas llamadas
+  puntúan el CONTENIDO (work ≥0.6 / personal ≤0.4), sin fabricar ideas del tipo
+  contrario. `prompt_version` de refine: `85209a6c9e`.
+- **[FIX] Auditor de recalibración**: `audit-category` juzga solo work/social (el
+  label `personal-history` contaba desacuerdos fantasma) y `audit-significance`
+  deja de equiparar "no operativo" con trivial (marcaba infancia/Carmen/salud como
+  trivial: 30% → **5%** en la banda 0.55-0.65, misma muestra).
+- **[REF] `memento/agentic/` (paquete)**: el monolito `agentic.py` (1.033 líneas) se
+  parte en `prompts` / `runtime` / `fragments` / `distill` / `refine` / `runner` +
+  fachada `__init__` que conserva la API (imports externos intactos). Sin cambio de
+  comportamiento: fingerprints idénticos (`66c679f1bb` / `85209a6c9e`). Prepara el
+  scorer dual.
+- **[MEM-006] Etapa `annotate` (annotate/NNN-*.md) — anotaciones desde el RAW**:
+  flag `MEMENTO_ANNOTATE_FROM_RAW` (RULE 4, default OFF; OFF → refine legacy). Una
+  sola compresión (antes: raw→summary→refine, doble): la nota es idea-level
+  (≤600 chars, p90 medido 439) en vez de re-resumen del fragmento; verificado en
+  pilotos (8 sesiones: 422 notas, únicas 100%, >600 7,5%). Incluye:
+  - **Bio de identidad** (`prompts/identity_bio.txt`, MEM-006 P0): Joan
+    masculino/catalán, Aleth narradora en 1ª persona, Samantha/Cenicienta no son
+    identidad, tono cercano legítimo. Inyectada en los prompts de annotate.
+  - **Dedup P1-A** (`dedup_annotations`): hash normalizado + solape de tokens;
+    conserva la mejor variante (1ª persona > significance > longitud).
+  - **Gate de calidad**: género/identidad → `dual_route: none` (no asciende, queda
+    en el árbol); voz 3ª → registrada. **Piloto 8 sesiones**: near-dups 16,1% →
+    **1,9%** (dedup P1-A), >600 7,5% → **~1,7%**, pero la **voz no mejora** con la
+    Bio (36,2% vs 36,3% 1ª persona) → **resuelto con el paso de re-escritura**
+    (`MEMENTO_ANNOTATE_VOICE_REWRITE`, default OFF; job 2decafb1: **100% 1ª
+    persona en 5 sesiones** — work/mixta/social + 2 problemáticas — con hechos
+    preservados). Rutas work 328 / social 19 / none 25 (sesgo a auditar).
+  - **Routing dual con zona muerta** (`MEMENTO_ANNOTATE_DEAD_ZONE=0.05`): margen
+    bajo δ → `none` (inestable, recuperable por re-scoring futuro).
+  - **Ascensión**: escanea `annotate/` además de `refine/`; prefiere `dual_route`;
+    el engrama guarda `work_score`/`social_score`/`dual_route`/`quality_flags`.
+  - **Tool**: `load_rows` escanea `annotate/` (normaliza `cat_score` al eje work).
+  - Documento de diseño: **MEM-006 §6** (desk) con evidencia y refs cruzadas.
+- **[DOC] RFC-003 Prompts as Resources (DRAFT)**: prompts como recurso (ficheros +
+  loader con placeholders `${var}`, hash de contenido, overrides explícitos);
+  norma propuesta (RULE 5) y migración por fases. La Bio de identidad ya vive en
+  fichero; el loader compartido la absorberá. Índice de docs actualizado.
 - **Ascensión**: `refine_session` **preserva el sello** (`ascended`) por
   `source_lines` al re-destilar (antes lo reseteaba → re-ascenso pendiente eterno);
   el refuerzo polaroid recolecta temas de **work + social** (antes solo work).

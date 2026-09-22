@@ -334,7 +334,7 @@ def test_refine_frontmatter_declares_polaroid_fields():
 
 	from red_pill.memento import agentic
 
-	src = inspect.getsource(agentic)
+	src = inspect.getsource(agentic.refine)
 	assert "polaroid_stability" in src
 	assert "last_reinforced_at" in src
 

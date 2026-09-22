@@ -117,6 +117,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [RFC_001_FIRMWARE_PROTECTION.md](TECHNICAL/BUNKER/RFC_001_FIRMWARE_PROTECTION.md) | Firmware partition protection RFC to prevent agent-induced code corruption (Project BIOS) |
 | [RFC_002_MEMENTO.md](TECHNICAL/BUNKER/RFC_002_MEMENTO.md) | Memento Chronicle RFC (formerly Sovereign Vault) — disk-based chronicle, Qdrant as curated-only memory, TTL buffer |
 | [RFC_002_PHASE4_DESIGN.md](TECHNICAL/BUNKER/RFC_002_PHASE4_DESIGN.md) | RFC-002 Amendment — Phase 4: dynamic curation, deferred ascension, Memento-conscious weaving (DRAFT design) |
+| [RFC_003_PROMPTS_AS_RESOURCES.md](TECHNICAL/BUNKER/RFC_003_PROMPTS_AS_RESOURCES.md) | Prompts as Resources — prompts en ficheros, loader con placeholders y RULE 5 de convención (DRAFT) |
 
 ### Certification
 

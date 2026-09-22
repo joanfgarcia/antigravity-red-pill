@@ -1,0 +1,152 @@
+"""Pase agéntico Memento: Distill → Refine sobre ficheros (RFC-002 §4.5, Fase 3.5).
+
+Reescritura file-based de los chronicle_distill/refine de Qdrant: entrada
+`memento/index.md`, unidades de trabajo = los splits mecánicos (ya dimensionados
+a la ventana del modelo local, Q8), salida `distill/NNN-*.md` y `refine/NNN-*.md`
+con los esquemas del RFC. Prompts v1 — las técnicas por-hardware se afinarán
+según diseño §4.5. El gate de curación corre EN SOMBRA (§4.6): la decisión
+would-ingest se calcula, se sella `significance` en el frontmatter (in-place,
+sin mover line refs) y se cuenta en el registry — nada cambia en Qdrant.
+
+Paquete: `prompts` (textos), `runtime` (modelo/transporte/fingerprints),
+`fragments` (partición y render), `distill`/`refine` (pipelines) y `runner`
+(orquestación). La fachada conserva la API del antiguo módulo `agentic.py`.
+"""
+
+from __future__ import annotations
+
+from .annotate import annotate_session, dedup_annotations, is_first_person, quality_flags, rewrite_voice_notes
+from .distill import distill_session
+from .fragments import (
+	_as_list,
+	_fragment_messages,
+	_frontmatter_block,
+	_render_fragment,
+	_split_long_message,
+	_split_messages,
+	_work_units,
+	slugify_title,
+)
+from .prompts import (
+	_VOICE_RULE,
+	ANNOTATE_SOCIAL_SYSTEM,
+	ANNOTATE_SOCIAL_USER,
+	ANNOTATE_WORK_SYSTEM,
+	ANNOTATE_WORK_USER,
+	DISTILL_SYSTEM,
+	DISTILL_USER,
+	DISTILL_USER_CONTINUATION,
+	DISTILL_USER_OPENING,
+	DUAL_SCORE_SYSTEM,
+	DUAL_SCORE_USER,
+	IDENTITY_BIO,
+	REFINE_MULTI_SYSTEM,
+	REFINE_MULTI_USER,
+	REFINE_SOCIAL_SYSTEM,
+	REFINE_SOCIAL_USER,
+	REFINE_SYSTEM,
+	REFINE_USER,
+	REFINE_WORK_SYSTEM,
+	REFINE_WORK_USER,
+)
+from .refine import (
+	_dedup_ideas,
+	_format_fragments,
+	_refine_multi,
+	_split_to_fit,
+	cross_ref_candidates,
+	refine_session,
+)
+from .runner import (
+	_advance_checkpoint,
+	_distill_refine_present,
+	_is_llm_connection_error,
+	pending_agentic,
+	run_agentic,
+	session_max_work_unit_chars,
+)
+from .runtime import (
+	EDGE_ENGINE_URL,
+	EDGE_HEALTH_URL,
+	EDGE_MODEL,
+	MODEL_N_CTX,
+	MODEL_PROMPT_BUDGET,
+	Transport,
+	_extract_json,
+	_extract_json_array,
+	_fit_prompt,
+	_llm_env,
+	annotate_prompt_version,
+	distill_prompt_version,
+	engine_id,
+	http_transport,
+	llm_available,
+	model_prompt_budget,
+	refine_prompt_version,
+)
+
+__all__ = [
+	"_VOICE_RULE",
+	"ANNOTATE_SOCIAL_SYSTEM",
+	"ANNOTATE_SOCIAL_USER",
+	"ANNOTATE_WORK_SYSTEM",
+	"ANNOTATE_WORK_USER",
+	"DISTILL_SYSTEM",
+	"DISTILL_USER",
+	"DISTILL_USER_CONTINUATION",
+	"DISTILL_USER_OPENING",
+	"DUAL_SCORE_SYSTEM",
+	"DUAL_SCORE_USER",
+	"IDENTITY_BIO",
+	"REFINE_MULTI_SYSTEM",
+	"REFINE_MULTI_USER",
+	"REFINE_SOCIAL_SYSTEM",
+	"REFINE_SOCIAL_USER",
+	"REFINE_SYSTEM",
+	"REFINE_USER",
+	"REFINE_WORK_SYSTEM",
+	"REFINE_WORK_USER",
+	"EDGE_ENGINE_URL",
+	"EDGE_HEALTH_URL",
+	"EDGE_MODEL",
+	"MODEL_N_CTX",
+	"MODEL_PROMPT_BUDGET",
+	"Transport",
+	"annotate_prompt_version",
+	"distill_prompt_version",
+	"engine_id",
+	"http_transport",
+	"llm_available",
+	"model_prompt_budget",
+	"refine_prompt_version",
+	"_extract_json",
+	"_extract_json_array",
+	"_fit_prompt",
+	"_llm_env",
+	"_as_list",
+	"_fragment_messages",
+	"_frontmatter_block",
+	"_render_fragment",
+	"_split_long_message",
+	"_split_messages",
+	"_work_units",
+	"slugify_title",
+	"annotate_session",
+	"dedup_annotations",
+	"is_first_person",
+	"quality_flags",
+	"rewrite_voice_notes",
+	"distill_session",
+	"cross_ref_candidates",
+	"_format_fragments",
+	"_refine_multi",
+	"_split_to_fit",
+	"_dedup_ideas",
+	"refine_session",
+	"pending_agentic",
+	"_distill_refine_present",
+	"session_max_work_unit_chars",
+	"_is_llm_connection_error",
+	"run_agentic",
+	"_advance_checkpoint",
+]

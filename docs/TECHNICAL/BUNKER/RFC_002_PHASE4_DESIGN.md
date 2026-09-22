@@ -420,15 +420,15 @@ los fragmentos se dimensionan para caber, sin recortar contenido.
    emocional), marcado `fragment`/`fragments_total`/`fragment_of`, slugs
    `NNN-<slug>-fragmento-i-de-N.md`. `MEMENTO_FRAGMENT_OVERLAP_MESSAGES=2` y
    `MEMENTO_FRAGMENT_MAX_CHARS=12000` (presupuesto por fragmento).
-   En `agentic.py` (`_split_messages`/`_fragment_messages`/`_render_fragment` +
-   prompts `DISTILL_USER_OPENING`/`DISTILL_USER_CONTINUATION`).
+   En `memento/agentic/` (`fragments.py`: `_split_messages`/`_fragment_messages`/`_render_fragment`;
+   prompts `DISTILL_USER_OPENING`/`DISTILL_USER_CONTINUATION` en `prompts.py`).
 1. **Refine multi-idea** (§5.4.2). ✅ **IMPLEMENTADO (2026-09-14)**
    `refine_multi()` que lee M fragments y extrae
    N ideas (JSON array), escribe `refine/NNN-<slug>.md` por idea con
    `fragment_ref`. Particionado en lotes si los fragments exceden
    (`_split_to_fit`). El 1:1 anterior queda obsoleto.
-   En `agentic.py` (`REFINE_MULTI_SYSTEM`/`REFINE_MULTI_USER`,
-   `_extract_json_array`, `_format_fragments`, `_split_to_fit`, `_refine_multi`).
+   En `memento/agentic/` (`prompts.py`: `REFINE_MULTI_SYSTEM`/`REFINE_MULTI_USER`;
+   `refine.py`: `_extract_json_array`, `_format_fragments`, `_split_to_fit`, `_refine_multi`).
 2. **`ascender()` — promoción refine → engrama curado.** ✅ **IMPLEMENTADO (2026-09-14)**
    Función que crea/upsert
    un engrama en `work_memories` **o `social_memories`** (según el tipo del
@@ -569,8 +569,8 @@ RFC-002 tras la implementación (o antes, como diseño aprobado).
 | `polaroid_decay` / `reinforce_refine` (estabilidad temporal) | `ascension.py` |
 | `weave_memento_reinforcement` (weaver Memento-consciente) | `ascension.py` + etapa `memento-reinforce` en `sleep.yaml` |
 | `ascend_by_threshold` (ascenso estático, en sombra) | `ascension.py` + integrado en `run_agentic` |
-| Distill fragmentado (§5.4.1) | `agentic.py` (`_split_messages`/`_fragment_messages`/prompts por posición) |
-| Refine multi-idea + `category_score` (§5.4.2, §2.4) | `agentic.py` (`refine_session`/`_refine_multi`) |
+| Distill fragmentado (§5.4.1) | `memento/agentic/` (`fragments.py`: `_split_messages`/`_fragment_messages`; prompts por posición en `prompts.py`) |
+| Refine multi-idea + `category_score` (§5.4.2, §2.4) | `memento/agentic/` (`refine.py`: `refine_session`/`_refine_multi`) |
 | `nightly.yaml` + timers (opción A) | `configs/jobs/nightly.yaml`, `schedule_pulse.py`, systemd |
 | Config keys | `red_pill.config` (POLAROID_*, MEMENTO_*, NIGHTLY_ENABLED) |
 | Purga de `archive_memories` (script listo) | `scripts/memento_purge_archive.py` |

@@ -119,6 +119,78 @@ def test_audit_significance_con_mock(monkeypatch):
 	assert res["triviales"][0]["sig"] == 0.60
 
 
+def test_score_dual_con_mock(monkeypatch):
+	mod = _load_module()
+	items = [{"snippet": "x", "cat": "work", "cat_score": 0.9, "sig": 0.9, "asc": True}]
+	monkeypatch.setattr(mod, "_llm_json", lambda system, user, temperature=0.1: [{"i": 0, "work_score": 0.9, "social_score": 0.1}])
+	assert mod.score_dual(items, dry_run=False) == [{"i": 0, "work": 0.9, "social": 0.1}]
+
+
+def test_dual_metrics_mejora_sobre_legacy():
+	mod = _load_module()
+	items = [
+		{"cat": "social", "cat_score": 0.3, "snippet": "técnico mal etiquetado", "sig": 0.9, "asc": True},
+		{"cat": "work", "cat_score": 0.9, "snippet": "técnico bien etiquetado", "sig": 0.9, "asc": True},
+		{"cat": "social", "cat_score": 0.2, "snippet": "personal", "sig": 0.7, "asc": True},
+	]
+	dual = [
+		{"i": 0, "work": 0.85, "social": 0.1},
+		{"i": 1, "work": 0.9, "social": 0.2},
+		{"i": 2, "work": 0.1, "social": 0.7},
+	]
+	judge = [{"i": 0, "category": "work"}, {"i": 1, "category": "work"}, {"i": 2, "category": "social"}]
+	res = mod.dual_metrics(items, dual, judge)
+	assert res["n"] == 3
+	assert res["legacy"] == round(2 / 3, 3)
+	assert res["dual"] == 1.0
+	assert res["sin_ruta"] == 0
+
+
+def test_dual_metrics_sin_ruta_y_dominante():
+	mod = _load_module()
+	items = [
+		{"cat": "work", "cat_score": 0.9, "snippet": "mixto", "sig": 0.9, "asc": True},
+		{"cat": "work", "cat_score": 0.9, "snippet": "ruido", "sig": 0.4, "asc": False},
+	]
+	dual = [{"i": 0, "work": 0.8, "social": 0.7}, {"i": 1, "work": 0.2, "social": 0.3}]
+	judge = [{"i": 0, "category": "work"}, {"i": 1, "category": "social"}]
+	res = mod.dual_metrics(items, dual, judge)
+	assert res["dual_alto"] == 1
+	assert res["dual"] == 1.0
+	assert res["sin_ruta"] == 1
+
+
+def test_dual_route_dominante_por_margen():
+	mod = _load_module()
+	# Margen sobre el propio gate (0.6/0.5): el max crudo sesgaría a work.
+	assert mod._dual_route(0.62, 0.56, 0.6, 0.5) == "social"  # 0.02 vs 0.06
+	assert mod._dual_route(0.70, 0.80, 0.6, 0.5) == "social"  # 0.10 vs 0.30
+	assert mod._dual_route(0.75, 0.60, 0.6, 0.5) == "work"  # 0.15 vs 0.10
+	assert mod._dual_route(0.80, 0.70, 0.6, 0.5) == "work"  # empate de margen → work
+	assert mod._dual_route(0.10, 0.10, 0.6, 0.5) is None  # ruido
+
+
+def test_audit_stability_detecta_flip(monkeypatch):
+	mod = _load_module()
+	items = [{"snippet": f"n{i}"} for i in range(6)]
+
+	def fake_score(part, dry_run, temperature=0.1):
+		out = []
+		for i, it in enumerate(part):
+			w, s = 0.9, 0.1
+			if it["snippet"] == "n0" and part[0]["snippet"] != "n0":
+				w, s = 0.1, 0.9
+			out.append({"i": i, "work": w, "social": s})
+		return out
+
+	monkeypatch.setattr(mod, "score_dual", fake_score)
+	res = mod.audit_stability(items)
+	assert res["n"] == 6
+	assert 0 in res["flip_rev"]
+	assert res["n_flips"] >= 1
+	assert mod.audit_stability(items[:3])["n_flips"] is None
+
+
 def test_cli_stats_smoke(tmp_path):
 	import subprocess
 	import sys

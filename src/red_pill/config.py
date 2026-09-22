@@ -549,6 +549,16 @@ class RedPillConfig(BaseSettings):
 	# score >= umbral → work_memories; si no → social_memories. La heurística por
 	# tokens fue una receta del desastre (los resúmenes técnicos caían a social).
 	MEMENTO_CATEGORY_WORK_THRESHOLD: float = 0.5
+	# Etapa annotate (MEM-006, RULE 4): extrae anotaciones del RAW (una sola
+	# compresión) con Bio de identidad, dedup P1-A y gate de calidad; routing por
+	# ejes work/social con zona muerta. OFF → refine legacy (desde summaries).
+	MEMENTO_ANNOTATE_FROM_RAW: bool = False
+	# Zona muerta del routing dual (annotate): margen mínimo sobre el gate para
+	# enrutar; por debajo → `unstable` (no asciende, queda en el árbol).
+	MEMENTO_ANNOTATE_DEAD_ZONE: float = 0.05
+	# Paso de re-escritura de voz (annotate, MEM-006): re-escribe en 1ª persona las
+	# notas que no lo están (la Bio sola no basta con granite). Default OFF.
+	MEMENTO_ANNOTATE_VOICE_REWRITE: bool = False
 	# Watchdog del pase agéntico (2026-09-15): timeout por llamada al LLM local.
 	# Una generación que lo excede es un cuelgue → 3 consecutivos → deferral.
 	MEMENTO_LLM_TIMEOUT: int = 180

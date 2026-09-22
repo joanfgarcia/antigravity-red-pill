@@ -393,7 +393,8 @@ def ascend_by_threshold(
 	stats = {"refine_evaluados": 0, "ascendidos": 0, "rechazados_por_umbral": 0, "errores": 0, "duplicados_omitidos": 0}
 
 	candidates = []
-	for refine_path in sorted(Path(root).rglob("refine/*.md")):
+	paths = sorted(set(Path(root).rglob("refine/*.md")) | set(Path(root).rglob("annotate/*.md")))
+	for refine_path in paths:
 		try:
 			fm, body = parse_refine(refine_path.read_text(encoding="utf-8"))
 			if not body or fm.get("ascended"):
@@ -581,7 +582,14 @@ def _category_from_score(score: float) -> str:
 
 
 def _candidate_category(fm: Dict[str, Any], body: str) -> str:
-	"""Categoría work/social de un refine (mismo criterio que el ascenso)."""
+	"""Categoría work/social de un refine/anotación (mismo criterio que el ascenso).
+
+	Prioridad: `dual_route` (annotate, MEM-006) → `category_score` (refine) →
+	heurística.
+	"""
+	route = str(fm.get("dual_route") or "").strip().lower()
+	if route in ("work", "social"):
+		return route
 	score = fm.get("category_score")
 	if score is not None:
 		try:
@@ -656,12 +664,14 @@ def ascender(
 	source = str(fm.get("source") or "")
 
 	score = fm.get("category_score")
+	dual_route = str(fm.get("dual_route") or "").strip().lower()
 	if collection is None:
-		# La clasificación por LLM vive EN EL REFINE (category_score del curador,
-		# verificado 2026-09-14: técnico → 0.8). El clasificador standalone es débil
-		# con el LLM local (tiny_aya devuelve 0.0 siempre) — por eso el ascenso NO
-		# llama al LLM: usa el score del curador o la heurística R1 (fallback).
-		if score is not None:
+		# La clasificación vive EN el refine/anotación (category_score del curador,
+		# verificado 2026-09-14: técnico → 0.8; dual_route en annotate, MEM-006).
+		# El ascenso NO llama al LLM: usa la etiqueta o la heurística R1 (fallback).
+		if dual_route in ("work", "social"):
+			category = dual_route
+		elif score is not None:
 			category = _category_from_score(float(score))
 		else:
 			from red_pill.metabolism.categorizer import detect_category_heuristics
@@ -707,6 +717,17 @@ def ascender(
 	}
 	if score is not None:
 		metadata["category_score"] = round(float(score), 2)
+	for axis in ("work_score", "social_score"):
+		val = fm.get(axis)
+		if val is not None:
+			try:
+				metadata[axis] = round(float(val), 2)
+			except (TypeError, ValueError):
+				pass
+	if dual_route in ("work", "social", "none"):
+		metadata["dual_route"] = dual_route
+	if fm.get("quality_flags"):
+		metadata["quality_flags"] = list(fm.get("quality_flags") or [])
 
 	new_id = memory_manager.add_memory(
 		collection=collection,

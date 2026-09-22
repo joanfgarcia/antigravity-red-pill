@@ -484,7 +484,7 @@ def test_engine_id_detecta_modelo_y_cachea(monkeypatch):
 		def read(self):
 			return b'{"data": [{"id": "modelo-x"}], "object": "list"}'
 
-	monkeypatch.setattr(agentic, "_ENGINE_CACHE", None)
+	monkeypatch.setattr(agentic.runtime, "_ENGINE_CACHE", None)
 	monkeypatch.setattr(__import__("urllib.request", fromlist=["request"]), "urlopen", lambda *a, **k: FakeResp())
 	assert agentic.engine_id() == "modelo-x"
 	assert agentic.engine_id() == "modelo-x"  # cacheado (urlopen solo se llama 1 vez)
@@ -543,9 +543,9 @@ def test_trazabilidad_engine_y_prompt_version(tmp_path, monkeypatch):
 	from red_pill.memento import agentic
 	from red_pill.memento.agentic import distill_session, refine_session
 
-	monkeypatch.setattr(agentic, "engine_id", lambda: "Granite-4.1-8B-Q4_K_M.gguf")
-	monkeypatch.setattr(agentic, "distill_prompt_version", lambda: "d123")
-	monkeypatch.setattr(agentic, "refine_prompt_version", lambda: "r456")
+	monkeypatch.setattr(agentic.runtime, "engine_id", lambda: "Granite-4.1-8B-Q4_K_M.gguf")
+	monkeypatch.setattr(agentic.runtime, "distill_prompt_version", lambda: "d123")
+	monkeypatch.setattr(agentic.runtime, "refine_prompt_version", lambda: "r456")
 
 	root, _registry, rendered = _tree_with_session(tmp_path)
 	sections = distill_session(root, rendered.dir_rel, "opencode:s1", "opencode", fake_transport())

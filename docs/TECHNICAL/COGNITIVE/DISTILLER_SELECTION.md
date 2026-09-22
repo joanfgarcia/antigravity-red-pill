@@ -112,7 +112,7 @@ alternative. `samantha` is retired from the role. See `DISTILLER_BAKEOFF.md` for
 ## Memento agentic pass — distiller/curator selection (bake-off 2026-09-14)
 
 A **second, distinct use** of distillation: the RFC-002 Memento file-based pass
-(`memento/agentic.py` — `distill_session` → `refine_session`), which summarises
+(`memento/agentic/` — `distill_session` → `refine_session`), which summarises
 sessions to disk and judges their long-term value. Unlike the sleep distiller
 (short raw interactions, small context), this pass faces **long sessions** that
 exceed the LLM window — so the model must also carry a **large context**.

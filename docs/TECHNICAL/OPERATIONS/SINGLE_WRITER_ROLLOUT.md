@@ -99,7 +99,7 @@ uv run python scripts/memento_recalibrate.py report --work 0.70 --social 0.65
   significance (ascendidos vs no), y escenarios de umbral (qué **entra**, qué
   **sale**, qué queda **al límite**) con muestras.
 - `audit-category` mide el **acuerdo** del `category_score` contra el juicio del
-  LLM (work/social/personal-history) → **base para decidir umbrales**.
+  LLM (work/social) → **base para decidir umbrales**.
 - `audit-significance` mide el **% trivial** por banda: banda baja trivial →
   subir; banda alta con memoria valiosa → bajar.
 - `--engine` fija `RP_LLM_MODEL` para comparar modelos (selección recurrente).
