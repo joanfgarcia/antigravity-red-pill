@@ -8,6 +8,9 @@
 > [!IMPORTANT]
 > **v6.8.6 - Agentic Self-Assembly Architecture**: This version decouples the monolithic `IA_DIR` into a dual-layered hierarchy (`WORKSPACE_ROOT` and `APP_ROOT`), enabling sovereign agentic self-assembly. It formally integrates `USER_ATLAS_DIR` and `AGENT_CORE_DIR` as first-class transversal elements, empowering dynamic environments like Silverblue while preserving source-based updates and custom hardware adaptations.
 
+> [!IMPORTANT]
+> **v7.22+ — Single-Writer (AD-034)**: la memoria curada (`work_memories`/`social_memories`) crece **solo por ascensión de Memento** (`distill→refine→ascend`). El buffer `interaction_memories` es una ventana transitoria con TTL (pre-heating + semáforo de situación), el archivo es Memento en disco y el tejido del hilo (hubs/axones) lo mantiene el ritual `thread` del sueño. Las entradas históricas de chronicle/`archive_memories` (v6.2.x) quedaron retiradas el 2026-09-11. Detalle: [DECISION_LOG](DECISION_LOG.md) (AD-034) y [OPERATIONS/SINGLE_WRITER_ROLLOUT.md](OPERATIONS/SINGLE_WRITER_ROLLOUT.md).
+
 > [!NOTE]
 > **Terminology Mapping**: The Red Pill protocol utilizes an immersive nomenclature (Lore). For a direct translation of terms like *The Bünker*, *Metabolism*, or *Lazarus Bridge* into standard engineering definitions (Vector DB, GC/Erosion, Snapshotting), please refer to the [ यूनिवर्सल Dictionary (GLOSSARY_760)](../LORE/GLOSSARY_760.md).
 >

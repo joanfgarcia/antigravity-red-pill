@@ -48,6 +48,15 @@ Today the Bünker records *everything* twice, and both times into Qdrant vectors
   buffer self-drains; only failed points (`failed_ids`, kept permanently and
   excluded from later scrolls) and VRAM-deferred nights linger.
 
+  > **Update (2026-09-22, AD-034)**: con el single-writer encendido
+  > (`SW_INGEST_RETIRED=ON`) este drenaje **desaparece**: `work_memories`/
+  > `social_memories` crecen SOLO por **ascensión de Memento**
+  > (`distill→refine→ascend`) y el buffer queda como ventana transitoria con
+  > TTL (72h) para el pre-heating + el semáforo de situación. Hoy (flags OFF)
+  > el camino legacy sigue activo como fallback. Ver
+  > [DECISION_LOG](../DECISION_LOG.md) (AD-034) y el runbook del single-writer
+  > (`OPERATIONS/SINGLE_WRITER_ROLLOUT.md`).
+
 **Pipeline B — Chronicle (`archive_memories`)**
 
 - The 04:00 timer no longer runs the script directly: `schedule_pulse.py:125-131`

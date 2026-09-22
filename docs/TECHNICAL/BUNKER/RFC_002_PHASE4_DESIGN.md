@@ -4,10 +4,10 @@
 |---|---|
 | **RFC** | 002 (enmienda) |
 | **Title** | Fase 4 — Curaduría dinámica y ascensos diferidos |
-| **Status** | DRAFT (diseño aprobado; **implementado 2026-09-14**, pendiente resiembra) |
+| **Status** | DRAFT (diseño aprobado; **implementado** — ascensión + refuerzo polaroid en producción desde el reseed 2026-09-17; **la ascensión estática sigue en sombra** hasta calibrar clasificador/umbrales — ver `OPERATIONS/SINGLE_WRITER_ROLLOUT.md` §5) |
 | **Author** | Joan García (Operator) / Aleth (Agent) |
 | **Created** | 2026-09-14 |
-| **Updated** | 2026-09-14 |
+| **Updated** | 2026-09-22 |
 | **Related** | [RFC-002](./RFC_002_MEMENTO.md) §4.5 (agentic pass), §4.6 (curation gate), §6 (rollout), §5.1 (sources of truth) |
 
 ---
