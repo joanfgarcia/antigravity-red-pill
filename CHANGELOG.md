@@ -413,6 +413,13 @@ sesión (1 instancia por sesión, lista congelada en el checkpoint).
   updated_at/title) para parseo agéntico (Aleth/IDE/Telegram).
 - Fix: `handle_job_list` importaba `json` sin declararlo (NameError en la salida
   JSON) + `ruff format` en verde (el CI del PR fallaba en lint).
+- `job submit --paused`: encolar un job **nacido PAUSADO** (el runner no lo toca
+  hasta `job resume`) — para preparar trabajos largos y lanzarlos a mano cuando
+  toque. El borrado de terminales usa `job purge --terminal` (FRUSTRATED/
+  COMPLETED; PAUSED solo por id con `--force`).
+  ⚠️ Hallazgo conocido (nota desk `JOB-KILL-CLAIM-RACE`): `kill --discard` sobre
+  PENDING/PROCESSING puede no persistir (el claim del runner lo resucita);
+  mitigación: `--singleton` en recetas y revisar `job list` tras matar.
 
 ### 📼 Memento Chronicle (RFC-002, ex "Sovereign Vault")
 

@@ -712,6 +712,11 @@ def handle_job(args: argparse.Namespace) -> None:
 		job_id = queue.enqueue_task(source=source, payload=payload, priority=priority, parent_task_id=parent, mission_id=mission)
 		if parent:
 			print(f"[OK] Job {job_id} encolado como BLOCKED (se desbloquea al completar {parent[:8]}).")
+		elif getattr(args, "paused", False):
+			# Nace PAUSADO: el runner no lo toca hasta `job resume` (encolado en
+			# frío para lanzar a mano cuando toque).
+			queue.pause_task(job_id)
+			print(f"[OK] Job {job_id} encolado PAUSADO (source={source}, priority={priority}). Lánzalo con: red-pill job resume {job_id[:8]}")
 		else:
 			mission_note = f", mission={mission}" if mission else ""
 			print(f"[OK] Job {job_id} encolado (source={source}, priority={priority}{mission_note}).")
@@ -1246,6 +1251,9 @@ def main() -> None:
 	)
 	job_submit.add_argument("--parent", help="Id del job padre: entra BLOCKED y se desbloquea cuando el padre completa (DAG)")
 	job_submit.add_argument("--mission", help="Grupo de aislamiento entre forges (mission_id)")
+	job_submit.add_argument(
+		"--paused", action="store_true", help="Encolar el job ya PAUSADO: nace sin que el runner lo toque hasta `job resume`."
+	)
 
 	job_list = job_sub.add_parser("list", help="Listar jobs activos, pausados y en cola")
 	job_list.add_argument("--all", action="store_true", help="Incluir también COMPLETED")
