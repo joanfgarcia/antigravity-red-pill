@@ -4,13 +4,13 @@
 Herramienta recurrente: cada vez que se cambian los modelos de las fases Memento
 (distill/refine) hay que re-medir. Acciones:
 
-  stats                        distribución de significance (ascendidos / no) por categoría
-  bands --work TH --social TH  escenarios de umbral: qué entra / sale / queda al límite
-  audit-category -n N          el LLM re-etiqueta la categoría → matriz de confusión vs
-                               `category_score` (calibración del CLASIFICADOR)
-  audit-significance -n N      el LLM juzga trivial/importante en una banda de significance
-      --lo 0.55 --hi 0.65        → % trivial por banda (guía para fijar el UMBRAL)
-  report --work TH --social TH reporte markdown (stats + bands + muestras) para el desk
+	stats                        distribución de significance (ascendidos / no) por categoría
+	bands --work TH --social TH  escenarios de umbral: qué entra / sale / queda al límite
+	audit-category -n N          el LLM re-etiqueta la categoría → matriz de confusión vs
+	                             `category_score` (calibración del CLASIFICADOR)
+	audit-significance -n N      el LLM juzga trivial/importante en una banda de significance
+		--lo 0.55 --hi 0.65        → % trivial por banda (guía para fijar el UMBRAL)
+	report --work TH --social TH reporte markdown (stats + bands + muestras) para el desk
 
 Determinista: stats/bands/report (sin LLM). Los audit-* usan el LLM local vía
 `http_transport` (task=distill) y `--engine` fija RP_LLM_MODEL para comparar modelos.

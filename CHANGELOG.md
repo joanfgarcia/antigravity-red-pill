@@ -94,6 +94,15 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   64 filas de ruido de la cola purgadas; cascadas del `.env` corregidas al modelo
   vivo (`opencode/deepseek-v4-flash`); docs alineadas (AD-034, runbook,
   `NEON_LINK_ROUTING`, plantilla de memoria sin afinidad).
+- **[TOOL] Recalibración de curaduría** (`scripts/memento_recalibrate.py`): cata y
+  re-medición recurrente (cada cambio de modelos de las fases Memento) — `stats`
+  (distribución), `bands` (escenarios de umbral: entra/sale/límite), `audit-category`
+  (acuerdo del clasificador vs el LLM) y `audit-significance` (% trivial por banda);
+  `--engine` compara modelos y `--dry-run` hace la cata manual. Determinista salvo
+  los `audit-*`. Documentado en el runbook del single-writer §5.
+- **Ascensión**: `refine_session` **preserva el sello** (`ascended`) por
+  `source_lines` al re-destilar (antes lo reseteaba → re-ascenso pendiente eterno);
+  el refuerzo polaroid recolecta temas de **work + social** (antes solo work).
 
 ### 🧹 Desk — scaffold del despacho, separación proyecto↔despacho y `AGENT_CORE_DIR`
 

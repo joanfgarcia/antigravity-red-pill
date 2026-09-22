@@ -63,3 +63,69 @@ def test_stats_y_bands(tmp_path):
 	assert b["work"]["entran"][0]["sig"] == 0.75
 	assert len(b["social"]["salen"]) == 1
 	assert len(b["social"]["limite"]) == 1
+
+
+def test_parse_frontmatter_y_pct():
+	mod = _load_module()
+	fm = mod._parse_frontmatter("---\nsignificance: '0.8'\nascended: true\n---\ncuerpo")
+	assert fm["significance"] == "0.8"
+	assert fm["ascended"] == "true"
+	assert mod._parse_frontmatter("sin frontmatter") == {}
+	assert mod._pct([], 0.5) is None
+	assert mod._pct([0.2, 0.4, 0.6, 0.8], 0.5) == 0.4
+	assert mod._pct([1.0], 0.9) == 1.0
+
+
+def test_sample_determinista_y_limite():
+	mod = _load_module()
+	items = [{"sig": i / 10} for i in range(10)]
+	assert mod._sample(items, 3, 7) == mod._sample(items, 3, 7)
+	assert len(mod._sample(items, 50, 7)) == 10
+
+
+def test_audit_category_con_mock(monkeypatch, capsys):
+	mod = _load_module()
+	items = [
+		{"sig": 0.9, "cat_score": 0.9, "cat": "work", "asc": True, "snippet": "técnico"},
+		{"sig": 0.8, "cat_score": 0.2, "cat": "social", "asc": False, "snippet": "personal"},
+	]
+	monkeypatch.setattr(mod, "_llm_json", lambda system, user: [{"i": 0, "category": "work"}, {"i": 1, "category": "personal-history"}])
+	res = mod.audit_category(items, seed=7, dry_run=False)
+	assert res["n"] == 2
+	assert res["acuerdo"] == 0.5
+	assert res["confusion"]["social"]["personal-history"] == 1
+	assert len(res["desacuerdos"]) == 1
+
+	def _boom(system, user):
+		raise AssertionError("dry-run no debe llamar al LLM")
+
+	monkeypatch.setattr(mod, "_llm_json", _boom)
+	assert mod.audit_category(items, seed=7, dry_run=True) == {}
+	assert "técnico" in capsys.readouterr().out
+
+
+def test_audit_significance_con_mock(monkeypatch):
+	mod = _load_module()
+	items = [
+		{"sig": 0.60, "cat": "social", "cat_score": 0.2, "asc": False, "snippet": "a"},
+		{"sig": 0.62, "cat": "social", "cat_score": 0.2, "asc": False, "snippet": "b"},
+	]
+	monkeypatch.setattr(
+		mod, "_llm_json", lambda system, user: [{"i": 0, "verdict": "trivial", "reason": "ops"}, {"i": 1, "verdict": "important", "reason": "vida"}]
+	)
+	res = mod.audit_significance(items, seed=7, dry_run=False)
+	assert res["n"] == 2
+	assert res["pct_trivial"] == 0.5
+	assert res["triviales"][0]["sig"] == 0.60
+
+
+def test_cli_stats_smoke(tmp_path):
+	import subprocess
+	import sys
+
+	_write(tmp_path, "w1", 0.9, 0.9, True)
+	out = subprocess.run(
+		[sys.executable, "scripts/memento_recalibrate.py", "stats", "--root", str(tmp_path)], capture_output=True, text=True, timeout=120
+	)
+	assert out.returncode == 0
+	assert "ascendidos" in out.stdout
