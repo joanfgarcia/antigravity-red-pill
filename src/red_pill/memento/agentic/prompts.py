@@ -9,25 +9,21 @@ _PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
 
 
 def _load_identity_bio() -> str:
-	"""Bio de identidad (MEM-006 P0) con precedencia:
+	"""Bio de identidad (MEM-006 P0) desde la config del operador:
 
 	1. `RP_IDENTITY_BIO` (ruta explícita; tests/avanzado)
 	2. `~/.config/red-pill/identity_bio.md` (config del operador — XDG)
-	3. `~/.local/share/red-pill/identity_bio.md` (data dir, alternativa)
-	4. `prompts/identity_bio.txt` (local, gitignored)
-	5. `prompts/identity_bio.template.txt` (plantilla neutra del repo)
+	3. `prompts/identity_bio.template.txt` (plantilla neutra del repo)
 
 	Los datos personales (nombre/género) NO viven en el repo público: la Bio real
 	se siembra en la instalación/onboarding (RFC-003 §4.7).
 	"""
-	from red_pill.core.paths import get_config_dir, get_data_dir
+	from red_pill.core.paths import get_config_dir
 
 	override = os.getenv("RP_IDENTITY_BIO", "").strip()
 	candidates = [Path(override)] if override else []
 	candidates += [
 		Path(get_config_dir()) / "identity_bio.md",
-		Path(get_data_dir()) / "identity_bio.md",
-		_PROMPTS_DIR / "identity_bio.txt",
 		_PROMPTS_DIR / "identity_bio.template.txt",
 	]
 	for path in candidates:

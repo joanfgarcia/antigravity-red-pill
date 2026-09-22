@@ -103,4 +103,3 @@ storage_backup_seguridad.tar.gz
 # runtime (checkpoints de jobs, descargas temporales)
 state/
 *.part
-src/red_pill/memento/agentic/prompts/identity_bio.txt

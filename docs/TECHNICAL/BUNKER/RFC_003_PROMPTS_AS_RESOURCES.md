@@ -176,12 +176,11 @@ text = p.render(voice=VOICE_RULE, candidates=cands, fragments=frags)
    renderiza los placeholders y cae a una plantilla neutra si no hay
    materialización. Afecta a `install_neo.sh`, seeds, ENV_REFERENCE y
    AGENT_UPDATE_GUIDE.
-   **Interino implementado (2026-09-22)**: la Bio real vive fuera del repo —
-   `~/.config/red-pill/identity_bio.md` (preferente) o
-   `~/.local/share/red-pill/identity_bio.md`; override `RP_IDENTITY_BIO`; el repo
-   solo guarda la plantilla neutra (`identity_bio.template.txt`), la ruta local
-   `identity_bio.txt` está gitignored, y `prompts._load_identity_bio()` resuelve la
-   precedencia. La siembra con placeholders sigue pendiente.
+   **Interino implementado (2026-09-22)**: la Bio real vive fuera del repo en
+   `~/.config/red-pill/identity_bio.md`; override `RP_IDENTITY_BIO`; el repo solo
+   guarda la plantilla neutra (`identity_bio.template.txt`) y
+   `prompts._load_identity_bio()` resuelve la precedencia. La siembra con
+   placeholders sigue pendiente.
 
 ---
 
