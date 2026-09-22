@@ -319,6 +319,7 @@ def annotate_session(
 		"annotated_at": datetime.now(timezone.utc).isoformat(),
 		"engine": runtime.engine_id(),
 		"annotate_prompt_version": runtime.annotate_prompt_version(),
+		"identity_bio_source": prompts.IDENTITY_BIO_SOURCE,
 		"voice_rewrite": bool(voice_rewrite),
 		"splits": len(units),
 		"notas": len(annotations),

@@ -2,18 +2,21 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 _PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
 
 
-def _load_identity_bio() -> str:
-	"""Bio de identidad (MEM-006 P0) desde la config del operador:
+def _identity_bio_with_source() -> tuple[str, str]:
+	"""Bio de identidad (MEM-006 P0) y su origen:
 
-	1. `RP_IDENTITY_BIO` (ruta explícita; tests/avanzado)
-	2. `~/.config/red-pill/identity_bio.md` (config del operador — XDG)
-	3. `prompts/identity_bio.template.txt` (plantilla neutra del repo)
+	1. `RP_IDENTITY_BIO` (ruta explícita; tests/avanzado) → "override:<path>"
+	2. `~/.config/red-pill/identity_bio.md` (config del operador — XDG) → "config"
+	3. `prompts/identity_bio.template.txt` (plantilla neutra del repo) → "template"
 
 	Los datos personales (nombre/género) NO viven en el repo público: la Bio real
 	se siembra en la instalación/onboarding (RFC-003 §4.7).
@@ -21,25 +24,39 @@ def _load_identity_bio() -> str:
 	from red_pill.core.paths import get_config_dir
 
 	override = os.getenv("RP_IDENTITY_BIO", "").strip()
-	candidates = [Path(override)] if override else []
-	candidates += [
-		Path(get_config_dir()) / "identity_bio.md",
-		_PROMPTS_DIR / "identity_bio.template.txt",
-	]
-	for path in candidates:
+	if override:
 		try:
-			text = path.read_text(encoding="utf-8").strip()
+			text = Path(override).read_text(encoding="utf-8").strip()
+			if text:
+				return text, f"override:{override}"
 		except OSError:
-			continue
+			pass
+	config_path = Path(get_config_dir()) / "identity_bio.md"
+	try:
+		text = config_path.read_text(encoding="utf-8").strip()
 		if text:
-			return text
-	return "IDENTIDAD: usa el nombre y el género reales del Operador y del agente."
+			return text, "config"
+	except OSError:
+		pass
+	try:
+		text = (_PROMPTS_DIR / "identity_bio.template.txt").read_text(encoding="utf-8").strip()
+		if text:
+			return text, "template"
+	except OSError:
+		pass
+	return "IDENTIDAD: usa el nombre y el género reales del Operador y del agente.", "none"
+
+
+def _load_identity_bio() -> str:
+	return _identity_bio_with_source()[0]
 
 
 # Bio de identidad (MEM-006 P0): ancla quién es quién (nombre/género correctos,
 # narrador en 1ª persona, apodos que no sustituyen identidad). Fichero por
 # RFC-003; el loader compartido la absorberá.
-IDENTITY_BIO = _load_identity_bio()
+IDENTITY_BIO, IDENTITY_BIO_SOURCE = _identity_bio_with_source()
+if IDENTITY_BIO_SOURCE == "template":
+	logger.warning("[MEMENTO] Bio de identidad no encontrada en la config (~/.config/red-pill/identity_bio.md) — usando plantilla neutra: la voz y el género pierden anclaje.")
 
 # VOICE (2026-09-15, alineada con distiller_v3_voice MODE B): el pase Memento
 # producía memorias en 3ª persona ("El usuario...", "Se corrigió...") — se

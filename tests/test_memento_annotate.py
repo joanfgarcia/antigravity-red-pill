@@ -117,6 +117,7 @@ def test_annotate_session_escribe_con_rutas_y_gate(tmp_path, monkeypatch):
 	assert meta["flags"].get("identity") == 1
 	assert meta["annotate_prompt_version"]
 	assert meta["annotated_at"]
+	assert meta["identity_bio_source"] in ("config", "template") or str(meta["identity_bio_source"]).startswith("override:")
 	record = json.loads((tmp_path / dir_rel / "_session.json").read_text(encoding="utf-8"))
 	assert record["stages"]["annotate"]["notas"] == 3
 	assert record["updated_at"]
@@ -206,9 +207,10 @@ def test_identity_bio_precedencia_env(tmp_path, monkeypatch):
 	bio.write_text("BIO DE PRUEBA", encoding="utf-8")
 	monkeypatch.setenv("RP_IDENTITY_BIO", str(bio))
 	assert prompts._load_identity_bio() == "BIO DE PRUEBA"
+	assert prompts._identity_bio_with_source()[1].startswith("override:")
 	monkeypatch.delenv("RP_IDENTITY_BIO")
-	# Sin override cae a config/data/repo/template (siempre no vacío).
-	assert prompts._load_identity_bio()
+	# Sin override: config del operador o plantilla neutra (nunca vacío).
+	assert prompts._identity_bio_with_source()[1] in ("config", "template")
 	assert "IDENTIDAD" in prompts._load_identity_bio()
 
 

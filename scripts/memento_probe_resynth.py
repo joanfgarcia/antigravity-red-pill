@@ -24,17 +24,25 @@ import shutil
 import sys
 from pathlib import Path
 
-SAMPLE = "/tmp/muestra_100.json"
 TMP = Path("/tmp/resintesis")
 SEED = 11
 COUNT = 25
 
 
 def _selected() -> list:
-	with open(SAMPLE) as f:
-		muestra = json.load(f)
-	random.seed(SEED)
-	return random.sample(muestra, COUNT)
+	"""Muestra determinista del árbol (sin ficheros /tmp efímeros): N sesiones."""
+	from red_pill.memento import get_memento_root
+
+	root = Path(get_memento_root())
+	dirs = sorted(
+		{
+			str(p.parent.parent.relative_to(root))
+			for p in root.rglob("memento/index.md")
+			if len(p.parent.parent.relative_to(root).parts) >= 3
+		}
+	)
+	rnd = random.Random(SEED)
+	return rnd.sample(dirs, min(COUNT, len(dirs)))
 
 
 def process_one(dir_rel: str) -> dict:
@@ -50,11 +58,9 @@ def process_one(dir_rel: str) -> dict:
 		shutil.rmtree(dst)
 	shutil.copytree(src, dst)
 
-	sid = source = dir_rel
-	for s in _selected():
-		if s[2] == dir_rel:
-			source, sid, _ = s
-			break
+	parts = Path(dir_rel).parts
+	source = parts[1] if len(parts) > 1 else "unknown"
+	sid = parts[2] if len(parts) > 2 else dir_rel
 
 	max_sig = annotate_session(TMP, dir_rel, sid, source, http_transport, voice_rewrite=True)
 	n_notes = len(list((dst / "annotate").glob("*.md"))) if (dst / "annotate").is_dir() else 0
@@ -63,7 +69,7 @@ def process_one(dir_rel: str) -> dict:
 
 def main() -> None:
 	if len(sys.argv) > 1 and sys.argv[1] == "--list":
-		print(json.dumps([s[2] for s in _selected()]))
+		print(json.dumps(_selected()))
 		return
 	dir_rel = json.loads(os.environ.get("RP_ELEMENT", "null"))
 	if not dir_rel:
