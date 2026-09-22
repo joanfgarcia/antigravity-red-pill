@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
-"""memento_probe_resynth.py — prueba de resíntesis+refinado con prompt corregido.
+"""memento_probe_resynth.py — prueba de la etapa ANNOTATE (MEM-006).
 
-Copia UNA sesión de la muestra a /tmp/resintesis (árbol temporal, sin tocar lo
-sembrado) y ejecuta distill_session + refine_session con el prompt corregido
-(VOICE_RULE 1ª persona + category_score calibrado). Se usa como step_command del
-job element_job `memento_probe.yaml` (RP_ELEMENT = dir_rel).
+Copia UNA sesión de la muestra a /tmp (árbol temporal, sin tocar el sembrado) y
+ejecuta la etapa real `annotate_session`: anotaciones idea-level desde el RAW con
+Bio de identidad, dedup P1-A, gate de calidad, routing dual y rewrite de voz. Se
+usa como step_command del job element_job `memento_probe.yaml` (RP_ELEMENT = dir_rel).
+
+Historia: era la prueba del refine legacy (distill→refine con prompt corregido);
+desde la retirada del refine (2026-09-22) prueba el camino que SÍ corre en
+producción (annotate). El refine queda solo para repair/reinforce/rescore.
 
 Uso:
 	uv run python scripts/memento_probe_resynth.py --list
@@ -35,7 +39,7 @@ def _selected() -> list:
 
 def process_one(dir_rel: str) -> dict:
 	from red_pill.memento import get_memento_root
-	from red_pill.memento.agentic import distill_session, http_transport, refine_session
+	from red_pill.memento.agentic import annotate_session, http_transport
 
 	root = get_memento_root()
 	src = Path(root) / dir_rel
@@ -46,17 +50,15 @@ def process_one(dir_rel: str) -> dict:
 		shutil.rmtree(dst)
 	shutil.copytree(src, dst)
 
-	# session_id/source del registro de la muestra
 	sid = source = dir_rel
 	for s in _selected():
 		if s[2] == dir_rel:
 			source, sid, _ = s
 			break
 
-	sections = distill_session(TMP, dir_rel, sid, source, http_transport)
-	refine_session(TMP, dir_rel, sid, source, sections, [], http_transport, 0.3)
-	n_refine = len(list((dst / "refine").glob("*.md"))) if (dst / "refine").is_dir() else 0
-	return {"dir": dir_rel, "distill": len(sections), "refine": n_refine}
+	max_sig = annotate_session(TMP, dir_rel, sid, source, http_transport, voice_rewrite=True)
+	n_notes = len(list((dst / "annotate").glob("*.md"))) if (dst / "annotate").is_dir() else 0
+	return {"dir": dir_rel, "anotaciones": n_notes, "max_significance": round(float(max_sig), 2)}
 
 
 def main() -> None:

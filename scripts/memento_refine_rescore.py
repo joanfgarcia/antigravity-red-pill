@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
 """memento_refine_rescore.py — re-refinado con category_score (Fase 4, 2026-09-14).
 
+LEGACY / SOLO REPARACIÓN (2026-09-22): desde la retirada del refine (MEM-006) no se
+generan refines nuevos — el camino es `annotate/` (idea-level desde el RAW). Este
+script queda **solo** para reparar/re-puntuar la capa legacy de `refine/` cuando
+haga falta (re-inferir `category_score` sobre distills existentes). No forma parte
+del ciclo nocturno ni del rebuild; no lanzarlo para producir memoria nueva.
+
 El curador LLM clasifica work/social correctamente EN EL REFINE (ratio category_score
 0-1; verificado: técnico → 0.8). El clasificador standalone (`_classify_llm`) es
 débil con el LLM local (tiny_aya devuelve 0.0 siempre). Por eso la clasificación
-debe vivir en el refine.
+debe vivir en el refine (legacy) o en los ejes de annotate (estado actual).
 
 Este script re-ejecuta SOLO el refine (no el distill — mucho más barato) sobre los
 distill existentes para regenerar los refine con `category_score`. Sin LLM no se

@@ -1,17 +1,17 @@
-# Memento — prueba de resíntesis+refinado con prompt corregido (VOICE + calibración).
+# Memento — prueba de la etapa ANNOTATE (MEM-006) sobre una muestra.
 #
-# Copia cada sesión de la muestra a /tmp/resintesis y ejecuta distill+refine con
-# el prompt corregido (VOICE_RULE 1ª persona + category_score calibrado). 1 sesión
-# por step (element_job). No toca el árbol sembrado — solo /tmp/resintesis.
-# Se analiza el resultado para decidir el tuning (voz + clasificación).
+# Copia cada sesión de la muestra a /tmp/resintesis y ejecuta la etapa real
+# `annotate_session` (Bio de identidad + dedup P1-A + gate + routing dual + rewrite
+# de voz). 1 sesión por step (element_job). No toca el árbol sembrado.
+# Se analiza el resultado para tuning de prompts (voz, longitud, duplicados).
 source: element_job
 priority: 3
-title: Memento prueba resíntesis+refinado prompt corregido (25 sesiones)
+title: Memento probe annotate (25 sesiones, MEM-006)
 mission_id: memento-probe
 step_command: uv run python scripts/memento_probe_resynth.py
 elements_command: uv run python scripts/memento_probe_resynth.py --list
 defer_exit_code: 77
-# RFC-HARNESS-002 §7: task refine (el probe resíntesis usa el prompt corregido).
+# RFC-HARNESS-002 §7: task refine (los prompts de annotate se sirven por ese carril).
 llm:
   task: refine
 preflight:

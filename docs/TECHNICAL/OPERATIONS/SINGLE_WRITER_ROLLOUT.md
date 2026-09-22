@@ -122,6 +122,12 @@ pendientes/errores + notas). Ascensión post-rebuild encadenada:
 `dual_route: none` no ascienden). Diagnóstico:
 `uv run python tools/memento_lab.py funnel|quality|annotate`.
 
+**Política refine (2026-09-22)**: **no se generan refines nuevos** — el pase
+agéntico usa annotate (`MEMENTO_ANNOTATE_FROM_RAW=true`). El código de refine queda
+solo para (a) rollback explícito (flag OFF) y (b) reparación de la capa legacy
+(`memento_refine_rescore.py`). El probe (`memento_probe`) también prueba annotate.
+La ascensión y el reinforce leen `annotate/` **y** el `refine/` legacy.
+
 **Registro por sesión**: cada sesión lleva `_session.json` en la raíz de su
 directorio (portada del expediente: bloques `stages.distill` / `stages.annotate`
 / `stages.ascend` + `updated_at`, escritos por cada etapa). El
