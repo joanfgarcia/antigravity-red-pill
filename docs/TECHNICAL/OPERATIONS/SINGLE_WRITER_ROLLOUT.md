@@ -80,3 +80,34 @@ Cada flag se apaga en `config`/`.env` y se reinicia el servicio correspondiente:
 - `sw_hub_coverage` (status) — cobertura de hubs por colección.
 - `interaction_unrendered_purged` — turnos sin renderizar purgados por el tope de edad (chronicle atrasado).
 - `jobs_frustrated` / `task_failure` — ya existentes.
+
+## 5. Recalibración de curaduría (recurrente)
+
+Los umbrales de ascensión y el clasificador de categoría dependen del **modelo**
+de las fases Memento (distill/refine): al cambiarlo, re-medir. Herramienta:
+`scripts/memento_recalibrate.py`.
+
+```bash
+uv run python scripts/memento_recalibrate.py stats                        # distribución por categoría
+uv run python scripts/memento_recalibrate.py bands --work 0.70 --social 0.65
+uv run python scripts/memento_recalibrate.py audit-category -n 40 --engine <modelo>
+uv run python scripts/memento_recalibrate.py audit-significance -n 30 --lo 0.55 --hi 0.65
+uv run python scripts/memento_recalibrate.py report --work 0.70 --social 0.65
+```
+
+- `stats` / `bands` / `report` son deterministas (sin LLM): distribución de
+  significance (ascendidos vs no), y escenarios de umbral (qué **entra**, qué
+  **sale**, qué queda **al límite**) con muestras.
+- `audit-category` mide el **acuerdo** del `category_score` contra el juicio del
+  LLM (work/social/personal-history) → **base para decidir umbrales**.
+- `audit-significance` mide el **% trivial** por banda: banda baja trivial →
+  subir; banda alta con memoria valiosa → bajar.
+- `--engine` fija `RP_LLM_MODEL` para comparar modelos (selección recurrente).
+
+**Estado 2026-09-22** (cata preliminar): work 0.6 / social 0.5. La banda social
+0.50-0.60 contiene **memoria personal de alto valor** (infancia, Carmen) mientras
+el tramo work 0.60-0.65 es mayormente operativo → **antes de subir social hay que
+calibrar el clasificador** (MEM-008, desk): hay contenido técnico cayendo en
+`social` (umbral más bajo) y eso distorsiona la decisión. La estática sigue en
+sombra; el backlog pendiente se recupera al encenderla con los umbrales vigentes
+(upsert idempotente).
