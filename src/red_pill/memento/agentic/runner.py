@@ -204,6 +204,18 @@ def run_agentic(
 			"distill_prompt_version": runtime.distill_prompt_version(),
 			"refine_prompt_version": runtime.refine_prompt_version(),
 		}
+		if use_annotate:
+			# Trazabilidad del pase real (MEM-006): versión de prompt y notas del
+			# meta por sesión, para que el registry diga la verdad con el flag ON.
+			meta_notes = None
+			try:
+				import json as _json
+
+				meta_notes = _json.loads((root / entry["dir"] / "annotate" / "_meta.json").read_text(encoding="utf-8")).get("notas")
+			except Exception:
+				pass
+			entry["agentic"]["annotate_prompt_version"] = runtime.annotate_prompt_version()
+			entry["agentic"]["annotate_notes"] = meta_notes
 		stats["processed"] += 1
 		stats["would_ingest"] += int(would_ingest)
 		# Guardado incremental (2026-09-07): persistir el marcado POR SESIÓN para

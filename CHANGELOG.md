@@ -140,12 +140,16 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   - **Tool**: `load_rows` escanea `annotate/` (normaliza `cat_score` al eje work).
   - Documento de diseño: **MEM-006 §6** (desk) con evidencia y refs cruzadas.
 - **[TOOL] Rebuild de anotaciones + workbench**: `scripts/memento_annotate.py`
-  (rebuild MEM-006 sesión a sesión; `--list` con frescura por `prompt_version`;
-  job `configs/jobs/memento_annotate_rebuild.yaml` — element_job pausable/
-  reanudable por checkpoint, las sesiones ya anotadas se omiten) y
-  `tools/memento_lab.py` (workbench diagnóstico: `funnel` de segmentación,
-  `quality` de notas con proxies de voz/near-dups/flags y `annotate` de UNA
-  sesión en árbol temporal). Índice de scripts actualizado.
+  (rebuild MEM-006 sesión a sesión; `--status` de control y frescura por **meta
+  por sesión** `annotate/_meta.json` — annotated_at, prompt_version, engine,
+  voice_rewrite, notas, routes, flags; job
+  `configs/jobs/memento_annotate_rebuild.yaml` — element_job pausable/reanudable
+  por checkpoint, las sesiones ya anotadas se omiten) y `tools/memento_lab.py`
+  (workbench diagnóstico: `funnel` de segmentación, `quality` de notas con
+  proxies de voz/near-dups/flags y `annotate` de UNA sesión en árbol temporal).
+  El registry (`memento_registry.json`) registra `annotate_prompt_version` y
+  `annotate_notes` cuando `MEMENTO_ANNOTATE_FROM_RAW` está ON. Índice de scripts
+  actualizado.
 - **[DOC] RFC-003 Prompts as Resources (DRAFT)**: prompts como recurso (ficheros +
   loader con placeholders `${var}`, hash de contenido, overrides explícitos);
   norma propuesta (RULE 5) y migración por fases. La Bio de identidad ya vive en

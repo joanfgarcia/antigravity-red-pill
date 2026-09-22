@@ -22,14 +22,17 @@ HISTORIA (por qué nació)
 	(36%→100% 1ª persona en 5 sesiones). Evidencia en MEM-006 §6 (desk).
 
 USO
+	uv run python scripts/memento_annotate.py --status           # control: anotadas/stale/pendientes/errores + notas
 	uv run python scripts/memento_annotate.py --list             # sesiones pendientes (JSON)
 	uv run python scripts/memento_annotate.py --list --all       # ignora la frescura
 	uv run python scripts/memento_annotate.py                    # procesa RP_ELEMENT (job)
 	uv run python scripts/memento_annotate.py --root /tmp/x      # árbol alternativo (pruebas)
 
 	Job: `configs/jobs/memento_annotate_rebuild.yaml` (element_job, checkpoint por
-	sesión, pausable/reanudable). Frescura: una sesión ya anotada con el
-	`annotate_prompt_version` vigente se omite (idempotente y reanudable).
+	sesión, pausable/reanudable). Control del rebuild: `--status` lee el **meta por
+	sesión** (`annotate/_meta.json`: annotated_at, annotate_prompt_version, engine,
+	voice_rewrite, splits, notas, routes, flags) — una sesión con meta de la versión
+	vigente se considera anotada y se omite (idempotente y reanudable).
 """
 
 from __future__ import annotations
@@ -56,20 +59,43 @@ def _sessions(root: Path) -> list:
 
 
 def _fresh(root: Path, dir_rel: str) -> bool:
-	ann = root / dir_rel / "annotate"
-	files = sorted(ann.glob("*.md"))
-	if not files:
+	"""Frescura por meta de sesión: `annotate/_meta.json` con el prompt_version vigente."""
+	meta = root / dir_rel / "annotate" / "_meta.json"
+	if not meta.exists():
 		return False
-	version = annotate_prompt_version()
-	for f in files:
-		txt = f.read_text(encoding="utf-8", errors="replace")
-		if f"prompt_version: {version}" not in txt:
-			return False
-	return True
+	try:
+		data = json.loads(meta.read_text(encoding="utf-8"))
+	except (OSError, json.JSONDecodeError):
+		return False
+	return data.get("annotate_prompt_version") == annotate_prompt_version()
 
 
 def pending(root: Path, force: bool = False) -> list:
 	return [d for d in _sessions(root) if force or not _fresh(root, d)]
+
+
+def status(root: Path) -> dict:
+	"""Control del rebuild: anotadas (versión vigente) / stale / pendientes / errores."""
+	current = annotate_prompt_version()
+	out = {"prompt_version": current, "sesiones": 0, "anotadas": 0, "stale": 0, "pendientes": 0, "errores": 0, "notas": 0, "ultima": ""}
+	for d in _sessions(root):
+		out["sesiones"] += 1
+		meta = root / d / "annotate" / "_meta.json"
+		if not meta.exists():
+			out["stale" if list((root / d / "annotate").glob("*.md")) else "pendientes"] += 1
+			continue
+		try:
+			data = json.loads(meta.read_text(encoding="utf-8"))
+		except (OSError, json.JSONDecodeError):
+			out["errores"] += 1
+			continue
+		if data.get("annotate_prompt_version") == current:
+			out["anotadas"] += 1
+			out["notas"] += int(data.get("notas") or 0)
+			out["ultima"] = max(out["ultima"], str(data.get("annotated_at") or ""))
+		else:
+			out["stale"] += 1
+	return out
 
 
 def process_one(root: Path, dir_rel: str, force: bool = False) -> dict:
@@ -86,11 +112,15 @@ def process_one(root: Path, dir_rel: str, force: bool = False) -> dict:
 def main() -> None:
 	parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 	parser.add_argument("--list", action="store_true", help="Imprime las sesiones pendientes (JSON).")
+	parser.add_argument("--status", action="store_true", help="Control del rebuild: anotadas/stale/pendientes/errores y notas.")
 	parser.add_argument("--all", action="store_true", help="Ignora la frescura (re-anota todo).")
 	parser.add_argument("--root", type=Path, default=None, help="Raíz Memento (default: la configurada).")
 	args = parser.parse_args()
 	root = args.root or get_memento_root()
 
+	if args.status:
+		print(json.dumps(status(root), indent=2, ensure_ascii=False))
+		return
 	if args.list:
 		print(json.dumps([{"dir": d} for d in pending(root, force=args.all)], ensure_ascii=False))
 		return

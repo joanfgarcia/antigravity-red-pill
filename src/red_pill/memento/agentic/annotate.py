@@ -15,8 +15,10 @@ sigue usando `refine_session` legacy.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -259,7 +261,8 @@ def annotate_session(
 		stale.unlink()
 
 	annotations: List[Dict[str, Any]] = []
-	for nnn, ref, content in _work_units(root / dir_rel):
+	units = _work_units(root / dir_rel)
+	for nnn, ref, content in units:
 		for idea in _extract(transport, content):
 			idea["split_ref"] = ref
 			idea["nnn"] = nnn
@@ -272,11 +275,16 @@ def annotate_session(
 	_score_dual(transport, annotations)
 
 	max_significance = 0.0
+	route_count: Dict[str, int] = {"work": 0, "social": 0, "none": 0}
+	flag_count: Dict[str, int] = {}
 	for a in annotations:
 		work = float(a.get("work_score", 0.0) or 0.0)
 		social = float(a.get("social_score", 0.0) or 0.0)
 		flags = sorted(set(a["flags"]) | ({"unscored"} if "work_score" not in a else set()))
 		route = None if ({"gender", "identity"} & set(flags)) else _route(work, social, th_work, th_social, dead_zone)
+		route_count[route or "none"] += 1
+		for fl in flags:
+			flag_count[fl] = flag_count.get(fl, 0) + 1
 		significance = round(max(work, social), 2)
 		max_significance = max(max_significance, significance)
 		slug = slugify_title(a["title"])
@@ -305,4 +313,20 @@ def annotate_session(
 			]
 		)
 		(annotate_dir / f"{a['nnn']}-{slug}.md").write_text(f"{refine_fm}\n\n{a['text']}\n", encoding="utf-8")
+	meta = {
+		"session_id": session_id,
+		"source": source,
+		"annotated_at": datetime.now(timezone.utc).isoformat(),
+		"engine": runtime.engine_id(),
+		"annotate_prompt_version": runtime.annotate_prompt_version(),
+		"voice_rewrite": bool(voice_rewrite),
+		"splits": len(units),
+		"notas": len(annotations),
+		"max_significance": round(max_significance, 2),
+		"routes": route_count,
+		"flags": flag_count,
+	}
+	meta_tmp = (annotate_dir / "_meta.json").with_suffix(".json.tmp")
+	meta_tmp.write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
+	meta_tmp.replace(annotate_dir / "_meta.json")
 	return max_significance

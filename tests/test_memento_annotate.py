@@ -111,6 +111,12 @@ def test_annotate_session_escribe_con_rutas_y_gate(tmp_path, monkeypatch):
 	assert fm["prompt_version"]
 	assert "Joan me pide arreglar el endpoint" in body
 	assert by_route["none"][0]["quality_flags"] != "[]"  # Samantha → identity → sin ruta
+	meta = json.loads((tmp_path / dir_rel / "annotate" / "_meta.json").read_text(encoding="utf-8"))
+	assert meta["notas"] == 3
+	assert meta["routes"] == {"work": 1, "social": 0, "none": 2}
+	assert meta["flags"].get("identity") == 1
+	assert meta["annotate_prompt_version"]
+	assert meta["annotated_at"]
 
 
 def test_score_dual_reintenta_faltantes(monkeypatch):
