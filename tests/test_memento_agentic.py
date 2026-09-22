@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from red_pill.memento.agentic import (
 	REFINE_MULTI_SYSTEM,
 	REFINE_SOCIAL_SYSTEM,
@@ -15,6 +17,16 @@ from red_pill.memento.agentic import (
 )
 from red_pill.memento.registry import MementoRegistry
 from red_pill.memento.render import compute_hash, extract_body, render_session, write_session
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_pipeline_flags(monkeypatch):
+	"""Los tests del pase legacy (refine) no deben depender del .env del operador:
+	fija los flags a los defaults de sombra (annotate OFF, ascensión OFF)."""
+	import red_pill.config as cfg
+
+	monkeypatch.setattr(cfg, "MEMENTO_ANNOTATE_FROM_RAW", False)
+	monkeypatch.setattr(cfg, "MEMENTO_STATIC_ASCENSION_ENABLED", False)
 
 
 def fake_transport(significance=0.8):

@@ -346,7 +346,10 @@ def test_fase4_config_keys_declared():
 	assert cfg.POLAROID_TAU == 90.0
 	assert cfg.POLAROID_GAIN == 0.5  # ajustado por el experimento (GAIN=1 saturaba)
 	assert cfg.POLAROID_REVIVAL_GATE == 7.0  # ajustado por el experimento
-	assert cfg.MEMENTO_STATIC_ASCENSION_ENABLED is False  # en sombra hasta calibrar
+	# El DEFAULT declarado es sombra (el .env del operador puede activarla).
+	assert cfg.RedPillConfig.model_fields["MEMENTO_STATIC_ASCENSION_ENABLED"].default is False
+	assert cfg.RedPillConfig.model_fields["MEMENTO_ANNOTATE_FROM_RAW"].default is False
+	assert cfg.RedPillConfig.model_fields["MEMENTO_ANNOTATE_VOICE_REWRITE"].default is False
 	assert cfg.MEMENTO_FRAGMENT_OVERLAP_MESSAGES == 2
 	assert cfg.MEMENTO_FRAGMENT_MAX_CHARS == 8000  # granite n_ctx 10240 (destilado por fases solapadas)
 	assert cfg.MEMENTO_GATE_MIN_SIGNIFICANCE == 0.5
