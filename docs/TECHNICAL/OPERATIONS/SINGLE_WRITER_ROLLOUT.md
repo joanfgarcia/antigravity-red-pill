@@ -122,6 +122,12 @@ pendientes/errores + notas). Ascensión post-rebuild encadenada:
 `dual_route: none` no ascienden). Diagnóstico:
 `uv run python tools/memento_lab.py funnel|quality|annotate`.
 
+**Registro por sesión**: cada sesión lleva `_session.json` en la raíz de su
+directorio (portada del expediente: bloques `stages.distill` / `stages.annotate`
+/ `stages.ascend` + `updated_at`, escritos por cada etapa). El
+`memento_registry.json` global es solo el índice cross-sesión (hilo prev/next,
+staleness); la verdad vive en el expediente de la sesión.
+
 **Sueño con la versión nueva (flags, `.env`)**: para que el ciclo nocturno use
 annotate en vez de refine y ascienda las notas:
 `MEMENTO_ANNOTATE_FROM_RAW=true` (run_agentic anota), `MEMENTO_ANNOTATE_VOICE_REWRITE=true`

@@ -92,4 +92,19 @@ def distill_session(
 				}
 			)
 			prev_summary = summary
+	from datetime import datetime, timezone
+
+	from red_pill.memento.record import update_session_record
+
+	update_session_record(
+		root,
+		dir_rel,
+		"distill",
+		{
+			"engine": runtime.engine_id(),
+			"prompt_version": runtime.distill_prompt_version(),
+			"sections": len(sections),
+			"distilled_at": datetime.now(timezone.utc).isoformat(),
+		},
+	)
 	return sections

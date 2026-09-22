@@ -158,6 +158,13 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   próximo sueño: `MEMENTO_ANNOTATE_FROM_RAW=true`, `MEMENTO_ANNOTATE_VOICE_REWRITE=true`,
   `MEMENTO_STATIC_ASCENSION_ENABLED=true` → el ciclo nocturno anota (no refine) y
   asciende.
+- **[TOOL] Registro por sesión (`_session.json`)**: la portada del expediente de
+  cada sesión en la raíz de su directorio (`memento/<AAAA-MM>/<source>/<session>/`),
+  escrita atómicamente por cada etapa: `stages.distill` (engine, prompt_version,
+  sections), `stages.annotate` (engine, annotate_prompt_version, notas, routes,
+  flags), `stages.ascend` (ascendidos acumulados). El `memento_registry.json`
+  global queda como **índice cross-sesión** (hilo prev/next, staleness), no como
+  verdad: el expediente viaja con la sesión y sobrevive a rebuilds parciales.
 - **[DOC] RFC-003 Prompts as Resources (DRAFT)**: prompts como recurso (ficheros +
   loader con placeholders `${var}`, hash de contenido, overrides explícitos);
   norma propuesta (RULE 5) y migración por fases. La Bio de identidad ya vive en

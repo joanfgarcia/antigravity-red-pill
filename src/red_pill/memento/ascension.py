@@ -325,6 +325,7 @@ def weave_memento_reinforcement(
 
 	# 2. Refuerzo de refinados/anotaciones no ascendidos con temas afines.
 	paths = sorted(set(Path(root).rglob("refine/*.md")) | set(Path(root).rglob("annotate/*.md")))
+	per_session_asc: Dict[str, int] = {}
 	for refine_path in paths:
 		try:
 			fm, body = parse_refine(refine_path.read_text(encoding="utf-8"))
@@ -341,9 +342,19 @@ def weave_memento_reinforcement(
 				stats["refuerzos_aplicados"] += 1
 				if result.get("ascended"):
 					stats["ascensos"] += 1
+					rel = refine_path.relative_to(root).parts
+					if len(rel) >= 3:
+						dir_rel = str(Path(*rel[:3]))
+						per_session_asc[dir_rel] = per_session_asc.get(dir_rel, 0) + 1
 		except Exception as e:
 			stats["errores"] += 1
 			logger.warning(f"[MEM-REINFORCE] fallo en {refine_path}: {e}")
+
+	if per_session_asc:
+		from red_pill.memento.record import bump_session_record
+
+		for dir_rel, count in per_session_asc.items():
+			bump_session_record(root, dir_rel, "ascend", {"ascendidos": count, "por_refuerzo": count})
 
 	if stats["refuerzos_aplicados"]:
 		registry.save()
@@ -454,6 +465,7 @@ def ascend_by_threshold(
 		logger.info(f"[STATIC-ASCENSION][dry-run] {stats}")
 		return stats
 
+	per_session: Dict[str, int] = {}
 	for refine_path, fm, body, significance in candidates:
 		if limit is not None and stats["ascendidos"] >= limit:
 			break
@@ -461,10 +473,19 @@ def ascend_by_threshold(
 			result = ascender(root, registry, refine_path, memory_manager=memory_manager, transport=transport)
 			if result.get("ascended"):
 				stats["ascendidos"] += 1
+				rel = refine_path.relative_to(root).parts
+				if len(rel) >= 3:
+					dir_rel = str(Path(*rel[:3]))
+					per_session[dir_rel] = per_session.get(dir_rel, 0) + 1
 		except Exception as e:
 			stats["errores"] += 1
 			logger.warning(f"[STATIC-ASCENSION] fallo en {refine_path}: {e}")
 
+	if per_session:
+		from red_pill.memento.record import bump_session_record
+
+		for dir_rel, count in per_session.items():
+			bump_session_record(root, dir_rel, "ascend", {"ascendidos": count})
 	if stats["ascendidos"]:
 		registry.save()
 	logger.info(f"[STATIC-ASCENSION] {stats}")

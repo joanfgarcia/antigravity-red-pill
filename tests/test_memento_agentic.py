@@ -138,6 +138,9 @@ def test_run_agentic_writes_distill_refine_and_stamps_significance(tmp_path):
 
 	distill_text = distill_files[0].read_text(encoding="utf-8")
 	assert "source_lines: memento/index.md#l" in distill_text and "title: Panel adversarial de prueba" in distill_text
+	record = json.loads((session_dir / "_session.json").read_text(encoding="utf-8"))
+	assert record["stages"]["distill"]["sections"] == 1
+	assert record["stages"]["distill"]["prompt_version"]
 	refine_text = refine_files[0].read_text(encoding="utf-8")
 	assert "significance: 0.80" in refine_text and "distill_ref: distill/001-panel-adversarial-de-prueba.md" in refine_text
 

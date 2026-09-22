@@ -117,6 +117,25 @@ def test_annotate_session_escribe_con_rutas_y_gate(tmp_path, monkeypatch):
 	assert meta["flags"].get("identity") == 1
 	assert meta["annotate_prompt_version"]
 	assert meta["annotated_at"]
+	record = json.loads((tmp_path / dir_rel / "_session.json").read_text(encoding="utf-8"))
+	assert record["stages"]["annotate"]["notas"] == 3
+	assert record["updated_at"]
+
+
+def test_session_record_fusiona_etapas(tmp_path):
+	from red_pill.memento.record import bump_session_record, read_session_record, update_session_record
+
+	dir_rel = "2026-09/opencode/s1"
+	(tmp_path / dir_rel).mkdir(parents=True)
+	update_session_record(tmp_path, dir_rel, "distill", {"sections": 2})
+	update_session_record(tmp_path, dir_rel, "annotate", {"notas": 5})
+	bump_session_record(tmp_path, dir_rel, "ascend", {"ascendidos": 3})
+	bump_session_record(tmp_path, dir_rel, "ascend", {"ascendidos": 2})
+	record = read_session_record(tmp_path, dir_rel)
+	assert record["stages"]["distill"]["sections"] == 2
+	assert record["stages"]["annotate"]["notas"] == 5
+	assert record["stages"]["ascend"]["ascendidos"] == 5
+	assert record["updated_at"]
 
 
 def test_score_dual_reintenta_faltantes(monkeypatch):

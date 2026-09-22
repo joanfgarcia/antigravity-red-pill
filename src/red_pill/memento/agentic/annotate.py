@@ -329,4 +329,7 @@ def annotate_session(
 	meta_tmp = (annotate_dir / "_meta.json").with_suffix(".json.tmp")
 	meta_tmp.write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
 	meta_tmp.replace(annotate_dir / "_meta.json")
+	from red_pill.memento.record import update_session_record
+
+	update_session_record(root, dir_rel, "annotate", meta)
 	return max_significance
