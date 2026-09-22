@@ -4,7 +4,7 @@ Seis frentes: **Memento** (RFC-002, fases 0–3.5 completas — la grabadora vue
 al disco y Qdrant emprende el camino a memoria curada), el aislamiento de la
 actividad del operador frente a los runs headless del despertar autónomo, la
 **trazabilidad de jobs** (JOB-001), la **higiene del memory bank** (`bank_janitor`),
-el **arnés Pi** (kebab-case skills + chronicle source + injector) y el **Desk**
+el **arnés Pi** (kebab-case skills + chronicle source + injector + ancla propia) y el **Desk**
 (scaffold `seeds/desk/` + separación proyecto↔despacho + unificación `AGENT_CORE_DIR`).
 
 ### 🧩 Single-writer de memoria (ascensión Memento, hubs y Ariadna) — en curso
@@ -197,6 +197,24 @@ invocación del CLI se estandariza con el placeholder `${RED_PILL_CMD}`.
   convergente e idempotente (prune de legados snake_case). Tests en sandbox
   (`tests/test_inject_pi.py`) y validación con el loader real de Pi
   (`tests/test_pi_skills_loader.py`, skip si no hay node/pi).
+- **[NEW] Ancla propia de Pi (`AGENTS.override.md`)**: `inject_anchor.py` gana el
+  target `pi` (workspace-scoped) y override de semillas por IDE (`ide_seed_path`:
+  `seeds/pi/anchors/<anchor>.md` gana al genérico). Pi ≥0.87 carga
+  `AGENTS.override.md` **en vez de** `CLAUDE.md` del mismo directorio, así que el
+  adapter siembra ahí el ancla con texto Pi (handshake automático,
+  `bunker_search`/`bunker_save`; sin tools MCP) y sombrea el ancla
+  `claude-code-project`. Overrides de skills Pi en `seeds/pi/skills/` para
+  `sovereign-handshake`, `workspace-memory`, `minion-delegation`, `job-manager`,
+  `swarm-flow-manager` (mapean MCP→tools/CLI); el `_deploy_skills` genérico ahora
+  salta los ficheros pisados por un override (reseed convergente). Tests:
+  `tests/test_inject_anchor.py`, `tests/test_inject_pi.py`.
+- **[FIX] Silent Scribe Relay por hook final (prompt→respuesta)**: el relay deja
+  de colgar de `agent_end` (por-run: dispara en cada reintento/aborto →
+  duplicados) y pasa a `agent_before_settle` con guard `outcome == "completed"`
+  (salta abort/error), con `agent_settled` como fallback <0.87. La respuesta se
+  captura de los bloques de texto del assistant en `message_end` (sin thinking
+  ni tool calls). Sigue siendo 100% hook (no depende del LLM) y garantiza un
+  único engrama limpio (prompt + respuesta, `originator=pi`, `session_id`).
 - **[NEW] Backend agéntico `pi`**: `PiBridge` (`src/red_pill/swarm/bridges/pi.py`,
   registrado en la factory) ejecuta prompts headless vía `pi --mode json`
   (sesiones persistidas → las archiva `chronicle_sources/pi`; la extensión

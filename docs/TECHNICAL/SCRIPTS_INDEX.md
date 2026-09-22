@@ -28,6 +28,9 @@ This document catalogs the utility scripts found in the `scripts/` directory. Th
 ### `setup_torch.py`
 **Purpose:** Dynamically detects the host's CUDA/ROCm environment and installs the correct `torch` dependencies to maintain `BE_WATER` adaptability.
 
+### `inject_cli.py` + `inject/<ide>/`
+**Purpose:** IDE/CLI anchor & harness injectors. `inject_cli.py` autodetects present surfaces and dispatches to per-IDE adapters under `scripts/inject/<ide>/` (antigravity, claude-code, opencode, **pi**). Each adapter is idempotent and supports `--remove`. Pi's adapter seeds `~/.pi/agent/extensions/red-pill.ts`, the merged skills and the workspace anchor `<ws>/AGENTS.override.md`; it never touches `~/.pi/agent/settings.json` and never configures MCP (Pi has no MCP). The shared anchor splicer is `inject_anchor.py` (target `pi` = `<ws>/AGENTS.override.md`; per-IDE seed overrides under `seeds/<ide>/anchors/`).
+
 ## 🧠 Memory & Cognitive Maintenance
 
 ### `update_ritual.py`

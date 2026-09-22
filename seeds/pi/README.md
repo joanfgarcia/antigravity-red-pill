@@ -26,10 +26,19 @@ opencode/claude-code) hace:
 1. **Extension** → `~/.pi/agent/extensions/red-pill.ts` (con `${RED_PILL_DIR}` /
    `${UV}` resueltos). Pi auto-descubre `~/.pi/agent/extensions/*.ts`.
 2. **Skills** → `~/.pi/agent/skills/` (dir único fusionado): copia `skills/`
-   (genérico) y luego `seeds/pi/skills/` (override específico-IDE, gana). Pi
-   auto-descubre `~/.pi/agent/skills/`. Los legados snake_case (pre-rename a
-   kebab-case) se prunean: el reseed converge e es idempotente.
-3. **No toca** `~/.pi/agent/settings.json` (proveedor/modelos = del operador)
+   (genérico) y luego `seeds/pi/skills/` (override específico-IDE, gana). Los
+   ficheros pisados por un override se saltan en la pasada genérica, así que el
+   reseed converge e es idempotente. Los legados snake_case se prunean. Los
+   overrides de Pi adaptan los skills que hablan MCP: `sovereign-handshake`,
+   `workspace-memory`, `minion-delegation`, `job-manager`, `swarm-flow-manager`.
+3. **Anchor** → `<workspace>/AGENTS.override.md`. Pi ≥0.87 carga
+   `AGENTS.override.md` **en vez de** `AGENTS.md`/`CLAUDE.md` del mismo
+   directorio: esto sombrea el ancla `claude-code-project` (que habla MCP) con
+   texto propio de Pi (handshake automático, `bunker_search`/`bunker_save`).
+   Semillas: `seeds/pi/anchors/<anchor>.md` (gana) → `seeds/anchors/<anchor>.md`
+   (genérico). El workspace se resuelve de `--workspace` → `WORKSPACE_ROOT`
+   (`.env`); sin ninguno, el ancla se omite.
+4. **No toca** `~/.pi/agent/settings.json` (proveedor/modelos = del operador)
    ni configura MCP.
 
 ## Verificación tras el seed
@@ -39,7 +48,10 @@ opencode/claude-code) hace:
 2. Aparece `[BÚNKER IDENTIDAD — resync completo]` al inicio.
 3. `/bunker` responde el estado del interceptor.
 4. `bunker_search` devuelve resultados del Búnker.
-5. Desactivar temporalmente: `RED_PILL_ENABLED=0`.
+5. Pi carga `<ws>/AGENTS.override.md` y NO `CLAUDE.md`: en `pi --mode json` el
+   system message trae `project_instructions path="<ws>/AGENTS.override.md"` y no
+   debe contener `MUST call the `sovereign_handshake` tool`.
+6. Desactivar temporalmente: `RED_PILL_ENABLED=0`.
 
 ## Fuente chronicle
 

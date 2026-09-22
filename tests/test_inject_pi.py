@@ -86,3 +86,39 @@ def test_remove_borra_extension_y_skills(sandbox_home, adapter):
 	pi_dir = sandbox_home / ".pi" / "agent"
 	assert not (pi_dir / "extensions" / "red-pill.ts").exists()
 	assert not (pi_dir / "skills" / "job-manager").exists()
+
+
+def test_inject_despliega_anchor_pi(sandbox_home, adapter):
+	"""El ancla va a <workspace>/AGENTS.override.md (sombra CLAUDE.md) y usa la semilla Pi."""
+	ws = sandbox_home / "ws"
+	adapter.inject(_args(workspace=str(ws)))
+	override = ws / "AGENTS.override.md"
+	assert override.exists()
+	text = override.read_text(encoding="utf-8")
+	assert text.count("<!-- REDPILL:BEGIN") == 5
+	assert "bunker_search" in text
+	assert "AUTOMÁTICO en Pi" in text  # semilla pi gana sobre la genérica
+	assert "call the `sovereign_handshake`" not in text  # no hereda el ancla MCP de Claude
+	assert "${AGENT_CORE_DIR}" not in text  # placeholder resuelto
+
+
+def test_inject_skills_override_pi(sandbox_home, adapter):
+	"""Los skills con MCP se sustituyen por las versiones Pi (tools/CLI)."""
+	adapter.inject(_args())
+	skills = sandbox_home / ".pi" / "agent" / "skills"
+	job_mgr = (skills / "job-manager" / "SKILL.md").read_text(encoding="utf-8")
+	assert "leer vía `check_minion_inbox`" not in job_mgr  # ya no se invoca el MCP
+	assert "NO existe el MCP" in job_mgr
+	assert "Adaptación Pi" in job_mgr
+	wm = (skills / "workspace-memory" / "SKILL.md").read_text(encoding="utf-8")
+	assert "list_workspace_memory" not in wm  # MCP fuera
+	assert "bunker_save" in wm
+	sh = (skills / "sovereign-handshake" / "SKILL.md").read_text(encoding="utf-8")
+	assert "bunker_search" in sh
+	assert "${RED_PILL_CMD}" not in sh  # invocación resuelta
+
+
+def test_inject_idempotente_con_workspace(sandbox_home, adapter):
+	ws = sandbox_home / "ws"
+	adapter.inject(_args(workspace=str(ws)))
+	assert adapter.inject(_args(workspace=str(ws))) == 0  # el override converge

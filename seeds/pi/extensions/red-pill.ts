@@ -84,26 +84,30 @@ async function recall(query: string, collection: string, limit: number): Promise
 }
 
 /** Silent Scribe Relay: encola el turno anterior (fire-and-forget, nunca bloquea). */
-function relay(prevPrompt: string, prevResponse: string, model: string) {
+function relay(prevPrompt: string, prevResponse: string, model: string, sessionId: string) {
 	if (prevPrompt.trim().length < 20 && prevResponse.trim().length < 20) return;
 	const code = `
-import json, sys
+import sys
 from red_pill.core.queue_manager import MemoryQueueManager
 from red_pill.utils.telemetry_filter import filter_noise_from_turn
-p, r, m = sys.argv[1], sys.argv[2], sys.argv[3] or None
+p, r, m, s = sys.argv[1], sys.argv[2], sys.argv[3] or None, sys.argv[4] or None
 cp, cr = filter_noise_from_turn(p), filter_noise_from_turn(r)
 if len(cp) > 20 or len(cr) > 20:
-    MemoryQueueManager().enqueue_memory(cp, cr, "assistant", category="mixed", model=m)
+    MemoryQueueManager().enqueue_memory(cp, cr, "assistant", category="mixed", originator="pi", model=m, session_id=s)
 `;
-	execFileAsync(UV, ["run", "--no-sync", "python", "-c", code, prevPrompt.slice(0, 4000), prevResponse.slice(0, 8000), model], {
+	execFileAsync(UV, ["run", "--no-sync", "python", "-c", code, prevPrompt.slice(0, 4000), prevResponse.slice(0, 8000), model, sessionId], {
 		timeout: LIGHT_TIMEOUT_MS,
 		cwd: RED_PILL_DIR,
 	}).catch(() => {});
 }
 
 function assistantTextOf(messages: any[]): string {
+	// Solo el texto del assistant: concatenar user/system/custom_message (el
+	// blob de identidad+RAG inyectado) contamina el engrama con el contexto
+	// en vez de la respuesta real.
 	let out = "";
 	for (const m of messages ?? []) {
+		if (m?.role !== "assistant") continue;
 		const c = m?.content;
 		if (typeof c === "string") out += c + "\n";
 		else if (Array.isArray(c))
@@ -135,14 +139,27 @@ export default function (pi: ExtensionAPI) {
 		needFull = !!pendingIdentity;
 	});
 
-	// ── Turno: guardamos prompt previo; el relay se dispara al cerrar el turno ──
+	// ── Turno: prompt + respuesta del assistant. El relay va por HOOKS (nunca por
+	//    el LLM): no hay que acordarse de llamar a nada. ──
 	let prevPrompt = "";
 	let lastModel = "";
+	let turnResponse = ""; // último texto NO vacío del assistant (sin thinking/tool calls)
+	let boundarySeen = false;
+
+	const sessionIdOf = (ctx: any): string => {
+		try {
+			return ctx?.sessionManager?.getSessionId() ?? "";
+		} catch {
+			return ""; // sesión efímera (--no-session)
+		}
+	};
 
 	pi.on("before_agent_start", async (event, ctx) => {
 		const prompt = event.prompt ?? "";
 		if (prompt.trim().length < 3) return;
 		prevPrompt = prompt;
+		turnResponse = "";
+		boundarySeen = false;
 		lastModel = ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : "";
 
 		const chunks: string[] = [];
@@ -172,9 +189,28 @@ export default function (pi: ExtensionAPI) {
 		};
 	});
 
-	pi.on("agent_end", async (event) => {
-		relay(prevPrompt, assistantTextOf(event.messages as any[]), lastModel);
-		prevPrompt = "";
+	// Respuesta = SOLO bloques de texto del assistant (message_end, no streaming;
+	// gana el último no vacío). Thinking y tool calls quedan fuera.
+	pi.on("message_end", async (event) => {
+		if ((event.message as any)?.role !== "assistant") return;
+		const text = assistantTextOf([event.message as any]);
+		if (text) turnResponse = text;
+	});
+
+	// Boundary final CON outcome: guarda solo turnos COMPLETADOS (salta abort/error).
+	// `agent_before_settle` es el último punto con la proyección reparada (tras
+	// reintentos/compactación) y dispara una vez por settle.
+	pi.on("agent_before_settle", async (event, ctx) => {
+		boundarySeen = true;
+		if (event.outcome !== "completed") return;
+		relay(prevPrompt, turnResponse, lastModel, sessionIdOf(ctx));
+	});
+
+	// Fallback para Pi <0.87 (sin `agent_before_settle`): `agent_settled` es el
+	// hook final y garantiza UNA ejecución cuando Pi ya no va a seguir solo.
+	pi.on("agent_settled", async (_event, ctx) => {
+		if (boundarySeen) return;
+		relay(prevPrompt, turnResponse, lastModel, sessionIdOf(ctx));
 	});
 
 	// Búsqueda manual bajo demanda

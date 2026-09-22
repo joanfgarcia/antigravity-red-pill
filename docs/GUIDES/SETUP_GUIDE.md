@@ -52,7 +52,8 @@ manifest, not `atlas:`, is the fleet map.
 ## What install wires up
 
 1. **Identity & anchors** — the Sovereign Handshake + Agent_Core blocks are merged (never
-   overwritten) into your IDE anchors (`~/.gemini/GEMINI.md`, `~/.claude/CLAUDE.md`) via
+   overwritten) into your IDE anchors (`~/.gemini/GEMINI.md`, `~/.claude/CLAUDE.md`,
+   `~/.config/opencode/RED_PILL.md`, and Pi's `<workspace>/AGENTS.override.md`) via
    `inject_anchor.py`.
 2. **Transversal access** — Claude Code's `settings.json` gets `permissions.additionalDirectories`
    for Agent_Core + the red-pill XDG dirs (`~/.local/share`, `~/.config`, `~/.cache`), via
@@ -99,5 +100,5 @@ registry entirely.
 |------|------|
 | `~/.config/red-pill/workspaces.yaml` | the registry (source of truth; the `access` switch). |
 | `~/.claude/settings.json`            | Claude Code permissions (`.bak` on every change). |
-| `~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md` | IDE anchors (Sovereign Handshake + Agent_Core). |
+| `~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md`, `~/.config/opencode/RED_PILL.md`, `<ws>/AGENTS.override.md` | IDE anchors (Sovereign Handshake + Agent_Core; Pi's override shadows `CLAUDE.md` for Pi only). |
 | `examples/workspaces.yaml`           | the seeded template. |

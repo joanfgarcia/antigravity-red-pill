@@ -60,6 +60,7 @@ ANCHOR_REGISTRY = [
 	AnchorTarget("antigravity", "~/.gemini/GEMINI.md", False, True),  # user-level, global
 	AnchorTarget("claude-code", "~/.claude/CLAUDE.md", False, True),  # user memory: global, cwd-independent
 	AnchorTarget("claude-code-project", None, True, True),  # <workspace>/CLAUDE.md (project-scoped, opt-in)
+	AnchorTarget("pi", None, True, True),  # <workspace>/AGENTS.override.md (project-scoped; shadows CLAUDE.md for Pi)
 	AnchorTarget("claude-desktop-project", None, False, False),  # Project instructions: UI/DB, only --print
 	AnchorTarget("opencode", "~/.config/opencode/RED_PILL.md", False, True),  # user-level, global
 ]
@@ -81,7 +82,9 @@ def detect_present_ides(workspace):
 	"""IDEs to target under --ide auto. antigravity + claude-code anchors are user-level/global
 	(cwd-independent). claude-desktop-project is included when Desktop is installed so we can REMIND
 	the user to paste it (its Project instructions aren't scriptable). claude-code-project is opt-in
-	only (never auto): it would duplicate the handshake already in user memory."""
+	only (never auto): it would duplicate the handshake already in user memory. pi is workspace-scoped
+	too (it writes <ws>/AGENTS.override.md, which SHADOWS CLAUDE.md for Pi only), so it needs
+	--workspace and is skipped otherwise."""
 	present = []
 	if os.path.isdir(os.path.expanduser("~/.gemini")):
 		present.append("antigravity")
@@ -91,13 +94,24 @@ def detect_present_ides(workspace):
 		present.append("claude-desktop-project")
 	if os.path.isdir(os.path.expanduser("~/.config/opencode")):
 		present.append("opencode")
+	if workspace and os.path.isdir(os.path.expanduser("~/.pi/agent")):
+		present.append("pi")
 	return present
 
 
 def resolve_target_path(target, workspace):
 	if target.ide == "claude-code-project":
 		return os.path.join(os.path.expanduser(workspace), "CLAUDE.md") if workspace else None
+	if target.ide == "pi":
+		# AGENTS.override.md REPLACES AGENTS.md/CLAUDE.md from that directory (pi ≥0.87).
+		return os.path.join(os.path.expanduser(workspace), "AGENTS.override.md") if workspace else None
 	return os.path.expanduser(target.path) if target.path else None
+
+
+def ide_seed_path(seeds_dir: str, ide: str, anchor: str) -> str:
+	"""Per-IDE seed override: seeds/<ide>/anchors/<anchor>.md wins over seeds/anchors/<anchor>.md."""
+	override = os.path.join(os.path.dirname(seeds_dir), ide, "anchors", anchor + ".md")
+	return override if os.path.exists(override) else os.path.join(seeds_dir, anchor + ".md")
 
 
 def ide_call_vars(ide):
@@ -113,6 +127,14 @@ def ide_call_vars(ide):
 			"RELAY_CALL": "`mcp_RedPill-Kernel_sovereign_handshake`",
 			"WAKE_CALL": "`mcp_RedPill-Kernel_refresh_session_context`",
 			"RELAY_INSTRUCTION": "Call passing `user_prompt`, `previous_prompt` and `previous_response` (no editor hook — the handshake is the persistence relay).",
+		}
+	# Pi has NO MCP and NO handshake tool: the harness extension IS the relay (identity
+	# on session_start/model_select/session_compact, per-turn RAG, agent_end scribe).
+	if ide == "pi":
+		return {
+			"RELAY_CALL": "el handshake automático de la extensión `red-pill.ts` (no hay tool que llamar)",
+			"WAKE_CALL": "`bunker_search` para leer / `bunker_save` para escribir",
+			"RELAY_INSTRUCTION": "No hace falta ninguna llamada: la extensión inyecta identidad/RAG y encola el turno automáticamente.",
 		}
 	# Claude Code / OpenCode have editor hooks that capture prompt+response automatically.
 	return {
@@ -244,19 +266,46 @@ def remove_block(path, anchor, backup=True):
 	return "removed-block"
 
 
+def splice_ide(ide, anchors, seeds_dir, workspace, variables, backup=True, update=False, remove=False):
+	"""Splice (or remove) the anchors for one IDE. Returns the number of blocks written/modified.
+
+	Shared by ``main()`` and the per-IDE adapters (e.g. ``scripts/inject/pi``) so the
+	per-IDE seed override + ``ide_call_vars`` resolution lives in exactly one place.
+	"""
+	target = REGISTRY_BY_IDE[ide]
+	path = resolve_target_path(target, workspace)
+	if target.requires_workspace and not workspace:
+		logger.warning(f"• {ide}: requiere --workspace; omitido.")
+		return 0
+	changed = 0
+	for a in anchors:
+		if remove:
+			status = remove_block(path, a, backup=backup)
+		else:
+			with open(ide_seed_path(seeds_dir, ide, a), encoding="utf-8") as f:
+				body = subst(f.read(), {**variables, **ide_call_vars(ide)})
+			status = splice_block(path, a, body, _version(a), backup=backup, update=update)
+		if status not in ("unchanged", "absent"):
+			changed += 1
+		logger.info(f"✓ {ide}:{a} [{path}] → {status}")
+	return changed
+
+
 def _csv(value):
 	return [x.strip() for x in value.split(",") if x.strip()]
 
 
 def main():
 	parser = argparse.ArgumentParser(description="Inject/merge red-pill anchor blocks into IDE instruction files.")
-	parser.add_argument("--ide", default="auto", help="csv: auto|all|antigravity|claude-code|claude-desktop-project")
+	parser.add_argument("--ide", default="auto", help="csv: auto|all|antigravity|claude-code|claude-code-project|pi|claude-desktop-project|opencode")
 	parser.add_argument(
 		"--anchor",
 		default="sovereign_handshake,agent_core,knowledge_access,job_dag_execution",
 		help="csv of anchor seeds to inject (file names in --seeds-dir)",
 	)
-	parser.add_argument("--workspace", help="Workspace root: resolves ${WORKSPACE} and targets Claude Code <ws>/CLAUDE.md")
+	parser.add_argument(
+		"--workspace", help="Workspace root: resolves ${WORKSPACE} and targets Claude Code <ws>/CLAUDE.md or Pi <ws>/AGENTS.override.md"
+	)
 	parser.add_argument("--redpill-dir", help="Red Pill source dir (resolves ${REDPILL_DIR}).")
 	parser.add_argument("--uv-path", help="Path to uv (shared build_vars; current anchors don't use it).")
 	parser.add_argument("--seeds-dir", help="Dir with <anchor>.md seeds. Default: ../seeds/anchors next to this script.")
@@ -299,11 +348,10 @@ def main():
 	variables = build_vars(args)
 	variables.update(agent_core_vars())
 
-	raw_bodies = {}
-	if not args.remove:
-		for a in anchors:
-			with open(os.path.join(seeds_dir, a + ".md"), encoding="utf-8") as f:
-				raw_bodies[a] = f.read()
+	def _body(ide: str, anchor: str) -> str:
+		"""Per-IDE seed override: seeds/<ide>/anchors/<anchor>.md wins over seeds/anchors/<anchor>.md."""
+		with open(ide_seed_path(seeds_dir, ide, anchor), encoding="utf-8") as f:
+			return f.read()
 
 	backup = not args.no_backup
 	changed = 0
@@ -311,8 +359,9 @@ def main():
 	for ide in ides:
 		target = REGISTRY_BY_IDE[ide]
 		path = resolve_target_path(target, args.workspace)
-		# Resolve bodies per-IDE: ${RELAY_CALL}/${WAKE_CALL} differ by client (see ide_call_vars).
-		bodies = {a: subst(raw_bodies[a], {**variables, **ide_call_vars(ide)}) for a in anchors} if not args.remove else {}
+		# Resolve bodies per-IDE: seeds/<ide>/anchors/<anchor>.md overrides the generic seed,
+		# and ${RELAY_CALL}/${WAKE_CALL} differ by client (see ide_call_vars).
+		bodies = {a: subst(_body(ide, a), {**variables, **ide_call_vars(ide)}) for a in anchors} if not args.remove else {}
 
 		# Non-scriptable target (Claude Desktop Project instructions live in the app UI/DB).
 		if not target.scriptable:

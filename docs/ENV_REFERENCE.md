@@ -172,10 +172,11 @@ Plugins 05–10. Each is independently toggleable.
 
 | Parameter | Default | Description |
 | :--- | :--- | :--- |
-| `IDE_BACKEND` | `auto` | Execution backend selector (`auto`, `agy`, `grpc`, `claude`, `opencode`, or `local`). `auto` prefers `agy` if available. |
+| `IDE_BACKEND` | `auto` | Execution backend selector (`auto`, `agy`, `grpc`, `claude`, `opencode`, `pi`, or `local`). `auto` prefers `agy` if available. |
 | `OPENCODE_SERVER_URL` | | URL of persistent `opencode serve` instance (e.g. `http://localhost:4096`). Enables attached mode, avoiding MCP cold-start. |
 | `OPENCODE_BIN` | | Explicit path to the `opencode` binary. Wins over PATH resolution — the robust option for service-manager contexts. |
 | `OPENCODE_SCRIBE_PLUGIN` | `False` | Set to `true` when the `redpill-scribe` OpenCode plugin handles persistence. Disables bridge `_scribe_relay()` to avoid double-writes. |
+| `PI_BIN` | | Explicit path to the `pi` binary (pi-coding-agent). Wins over PATH resolution — the robust option for service-manager contexts. |
 | `AUTONOMOUS_AGY_ENABLED` | `False` | Gathers and gates autonomous Flash-consuming operations like cognitive queue or entropy executor. |
 | `TELEGRAM_BRIDGE_CASCADE` | `[]` | JSON-encoded fallback cascade of model targets for Telegram/inbox processing. Per-target fields: `backend`, `model`, `effort`, `timeout` (optional, overrides the method timeout for that target). Example: `'[{"backend":"opencode","model":"opencode-go/deepseek-v4-pro","timeout":300},{"backend":"opencode","model":"opencode/deepseek-v4-flash-free"}]'`. |
 | `TELEGRAM_INLINE_TIMEOUT` | `120` | Fast-path inline timeout (s) for Telegram conversational messages (D3). Passed as the method timeout to `CascadeBridge.prompt()`; a per-target `timeout` in `TELEGRAM_BRIDGE_CASCADE` overrides it for that target (D14). |
@@ -200,6 +201,10 @@ Plugins 05–10. Each is independently toggleable.
 > - **Windows (Task Scheduler)**: put the install dir on the user/machine PATH, or set `OPENCODE_BIN`.
 >
 > Resolution order: `OPENCODE_BIN` env → `$PATH` → `~/.opencode/bin` (probed as last resort). If the binary is missing, bridge construction now fails **loudly** in the logs and the worker never falls back to the legacy Antigravity IDE path for non-IDE cascades — before v7.15.x this degraded silently and pulses crashed against a dead IDE.
+
+> **⚠️ pi + service managers (PATH requirement)**
+>
+> Same rule as `opencode`: when `pi` is used (as `IDE_BACKEND` or in any `*_BRIDGE_CASCADE`), the `pi` binary must be resolvable from the **service manager's** environment. Add its install dir (e.g. `~/.nvm/versions/node/<ver>/bin`) to `Environment="PATH=..."`, or set `PI_BIN`. Pi's provider/model come from `~/.pi/agent/settings.json`; the Búnker bridge is the harness extension seeded by `scripts/inject/pi/` (Pi has no MCP).
 
 ---
 

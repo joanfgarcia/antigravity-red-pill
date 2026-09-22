@@ -10,7 +10,9 @@ Identity loading and RAG are NOT injected by the bridge: when the red-pill
 harness extension is deployed (``~/.pi/agent/extensions/red-pill.ts``, seeded by
 ``scripts/inject/pi/``), Pi fires the extension's events on every headless run —
 ``before_agent_start`` injects ``[BÚNKER IDENTIDAD]`` / ``[BÚNKER CONTEXTO]``,
-``agent_end`` relays the turn to the memory queue. The bridge skips its own
+``agent_before_settle`` relays the completed turn to the memory queue (only
+``outcome == "completed"``; aborted/errored runs are skipped), with
+``agent_settled`` as the <0.87 fallback. The bridge skips its own
 scribe relay when that extension is present (no double-queueing).
 
 Pi does not support MCP; the extension is the Búnker bridge. This backend is
@@ -72,7 +74,7 @@ class PiBridge(AgentBridge):
 		self._pi_path = resolved
 		self._origin = origin
 		# When the red-pill harness extension is deployed, Pi itself relays the
-		# turn (agent_end) and injects identity/RAG (before_agent_start) — the
+		# turn (agent_before_settle / agent_settled) and injects identity/RAG — the
 		# bridge skips its own scribe to avoid double-queueing.
 		self._extension_present = os.path.exists(Path.home() / ".pi" / "agent" / "extensions" / "red-pill.ts")
 

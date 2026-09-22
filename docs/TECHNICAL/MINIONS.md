@@ -9,7 +9,7 @@ Red Pill can delegate work to **minions**. This document is written for two read
 
 > **TL;DR for the orchestrator:** match the task to the weakest minion that can do
 > it. One-shot text → `local`. Complex tool-using work you can supervise → external
-> agent (`claude`/`agy`/`opencode`). Sovereign in-house tool loop → `run_local_minion`
+> agent (`claude`/`agy`/`opencode`/`pi`). Sovereign in-house tool loop → `run_local_minion`
 > (not yet MCP-exposed; see §5). Never assign a multi-turn, many-tool, long-context
 > task to the local 8B model.
 
@@ -115,7 +115,7 @@ result = await run_local_minion("…", cwd="/path/to/dir")
   file Y and extract Z", "search the Bünker for W and summarize". Bit/frankenswarm-style
   chores of a few turns.
 
-### External agentic (`claude` / `agy` / `opencode`)
+### External agentic (`claude` / `agy` / `opencode` / `pi`)
 - **Can:** full multi-turn agent work — many tools, files, long context, real
   reasoning. The vendor CLI owns the agent loop; red-pill runs it headless with
   auto-approved permissions.
@@ -125,6 +125,11 @@ result = await run_local_minion("…", cwd="/path/to/dir")
   - **`opencode`** works via the bridge factory but is **not yet listed** in the
     `run_agent_task` backend enum (you can still pass it). Uses OpenCode Zen models
     (e.g. free `big-pickle`) or a local endpoint.
+  - **`pi`** (pi-coding-agent) runs headless (`pi --mode json`) on a provider/model
+    configured in `~/.pi/agent/settings.json`. Pi has **no MCP**: the red-pill
+    harness extension (`~/.pi/agent/extensions/red-pill.ts`) injects Búnker
+    identity/RAG and relays the completed turn. Needs `pi` on the service
+    manager's PATH (or `PI_BIN`).
   - **`claude`** uses cloud inference (capable but has cost/latency).
   - High per-invocation overhead (CLI + MCP server boot). Prefer `async_mode:true`.
 - **Best for:** genuinely complex, multi-file, multi-tool tasks where the local 8B
@@ -143,7 +148,7 @@ Is there an LLM decision to make?
                   ├─ Short, concrete, few steps, headless, tolerant of retries
                   │    → run_local_minion (sovereign, free, in-process).  [§5: not MCP yet]
                   └─ Complex, multi-file, long, needs strong reasoning
-                       → external agentic (claude; or opencode/agy). async_mode:true.
+                       → external agentic (claude; or opencode/agy/pi). async_mode:true.
 ```
 
 **Golden rules for the orchestrator:**
