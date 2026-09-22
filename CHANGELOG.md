@@ -150,6 +150,14 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   El registry (`memento_registry.json`) registra `annotate_prompt_version` y
   `annotate_notes` cuando `MEMENTO_ANNOTATE_FROM_RAW` está ON. Índice de scripts
   actualizado.
+- **[TOOL] Ascensión post-rebuild + sueño versión nueva**: `scripts/memento_ascend.py`
+  (+ receta `memento_ascend_post_rebuild`, encadenable con `--parent` al rebuild;
+  `--dry-run` informa `would_ascend`; las anotaciones `dual_route: none` no
+  ascienden). `weave_memento_reinforcement` escanea `annotate/` además de
+  `refine/` (el rebuild sueño refuerza/asciende notas). Flags en `.env` para el
+  próximo sueño: `MEMENTO_ANNOTATE_FROM_RAW=true`, `MEMENTO_ANNOTATE_VOICE_REWRITE=true`,
+  `MEMENTO_STATIC_ASCENSION_ENABLED=true` → el ciclo nocturno anota (no refine) y
+  asciende.
 - **[DOC] RFC-003 Prompts as Resources (DRAFT)**: prompts como recurso (ficheros +
   loader con placeholders `${var}`, hash de contenido, overrides explícitos);
   norma propuesta (RULE 5) y migración por fases. La Bio de identidad ya vive en

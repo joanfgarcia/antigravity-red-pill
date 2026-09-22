@@ -113,9 +113,21 @@ uv run python scripts/memento_recalibrate.py report --work 0.70 --social 0.65
 **Rebuild de anotaciones (MEM-006)**: `scripts/memento_annotate.py` + job
 `configs/jobs/memento_annotate_rebuild.yaml` (`element_job`, checkpoint por
 sesión; pausable/reanudable; las sesiones ya anotadas con el `prompt_version`
-vigente se omiten). Lanzar:
-`uv run red-pill job submit --recipe memento_annotate_rebuild`. Diagnóstico:
+vigente se omiten vía `annotate/_meta.json`). Lanzar:
+`uv run red-pill job submit --recipe memento_annotate_rebuild [--paused]`.
+Control: `uv run python scripts/memento_annotate.py --status` (anotadas/stale/
+pendientes/errores + notas). Ascensión post-rebuild encadenada:
+`uv run red-pill job submit --recipe memento_ascend_post_rebuild --parent <id>`
+(BLOCKED hasta que el rebuild completa; sin LLM, idempotente; las anotaciones
+`dual_route: none` no ascienden). Diagnóstico:
 `uv run python tools/memento_lab.py funnel|quality|annotate`.
+
+**Sueño con la versión nueva (flags, `.env`)**: para que el ciclo nocturno use
+annotate en vez de refine y ascienda las notas:
+`MEMENTO_ANNOTATE_FROM_RAW=true` (run_agentic anota), `MEMENTO_ANNOTATE_VOICE_REWRITE=true`
+(rewrite de voz) y `MEMENTO_STATIC_ASCENSION_ENABLED=true` (ascenso estático al
+final del pase). El paso `memento-reinforce` del sueño también refuerza/asciende
+anotaciones (`weave_memento_reinforcement` escanea `refine/` **y** `annotate/`).
 
 **Estado 2026-09-22** (cata preliminar): work 0.6 / social 0.5. La banda social
 0.50-0.60 contiene **memoria personal de alto valor** (infancia, Carmen) mientras

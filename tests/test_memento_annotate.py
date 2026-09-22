@@ -185,3 +185,17 @@ def test_candidate_category_prefiere_dual_route():
 
 	assert _candidate_category({"dual_route": "work"}, "contenido personal y emocional") == "work"
 	assert _candidate_category({"dual_route": "social"}, "código y tests") == "social"
+
+
+def test_ascender_dual_route_none_no_asciende(tmp_path):
+	from red_pill.memento.ascension import ascender
+
+	refine = tmp_path / "refine" / "001-x.md"
+	refine.parent.mkdir(parents=True)
+	refine.write_text(
+		"---\nsession_id: s1\nsource: opencode\nsource_lines: memento/index.md#l1-10\n"
+		"significance: 0.9\nemotion: gray\nintensity: 0.5\nascended: false\ndual_route: none\n---\nNota sin ruta.\n",
+		encoding="utf-8",
+	)
+	res = ascender(tmp_path, None, refine)
+	assert res == {"ascended": False, "reason": "dual_route_none"}

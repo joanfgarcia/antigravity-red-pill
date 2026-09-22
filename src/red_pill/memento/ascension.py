@@ -323,8 +323,9 @@ def weave_memento_reinforcement(
 		logger.info("[MEM-REINFORCE] Sin engramas nuevos en la ventana — no hay temas que reforzar.")
 		return stats
 
-	# 2. Refuerzo de refinados no ascendidos con temas afines.
-	for refine_path in sorted(Path(root).rglob("refine/*.md")):
+	# 2. Refuerzo de refinados/anotaciones no ascendidos con temas afines.
+	paths = sorted(set(Path(root).rglob("refine/*.md")) | set(Path(root).rglob("annotate/*.md")))
+	for refine_path in paths:
 		try:
 			fm, body = parse_refine(refine_path.read_text(encoding="utf-8"))
 			if not body or fm.get("ascended"):
@@ -378,19 +379,22 @@ def ascend_by_threshold(
 	memory_manager: Any = None,
 	limit: Optional[int] = None,
 	transport: Any = None,
+	dry_run: bool = False,
 ) -> Dict[str, Any]:
-	"""Ascenso estático (§3.3): promueve los `refine/*.md` NO ascendidos cuya
-	`significance` supera el umbral de su categoría — `MEMENTO_GATE_MIN_SIGNIFICANCE_WORK`
-	o `_SOCIAL` (D24: work y social se comportan distinto). Un `min_significance`
-	explícito (reseeds/tests) gana para todos.
-	Idempotente (`ascender` es un upsert por `session_id`+`source_lines`).
+	"""Ascenso estático (§3.3): promueve los `refine/*.md` y `annotate/*.md` NO
+	ascendidos cuya `significance` supera el umbral de su categoría —
+	`MEMENTO_GATE_MIN_SIGNIFICANCE_WORK` o `_SOCIAL` (D24: work y social se
+	comportan distinto). Un `min_significance` explícito (reseeds/tests) gana para
+	todos. Las anotaciones con `dual_route: none` no ascienden (MEM-006).
+	`dry_run` informa (`would_ascend`) sin escribir. Idempotente (`ascender` es un
+	upsert por `session_id`+`source_lines`+slug).
 	"""
 	if memory_manager is None:
 		from red_pill.memory import MemoryManager
 
 		memory_manager = MemoryManager()
 
-	stats = {"refine_evaluados": 0, "ascendidos": 0, "rechazados_por_umbral": 0, "errores": 0, "duplicados_omitidos": 0}
+	stats = {"refine_evaluados": 0, "ascendidos": 0, "rechazados_por_umbral": 0, "rechazados_por_ruta": 0, "errores": 0, "duplicados_omitidos": 0}
 
 	candidates = []
 	paths = sorted(set(Path(root).rglob("refine/*.md")) | set(Path(root).rglob("annotate/*.md")))
@@ -400,6 +404,10 @@ def ascend_by_threshold(
 			if not body or fm.get("ascended"):
 				continue
 			stats["refine_evaluados"] += 1
+			# MEM-006: las anotaciones sin ruta (ruido/zona muerta) NO ascienden.
+			if str(fm.get("dual_route") or "").strip().lower() == "none":
+				stats["rechazados_por_ruta"] += 1
+				continue
 			significance = float(fm.get("significance", 0.0) or 0.0)
 			if min_significance is not None:
 				threshold = float(min_significance)
@@ -439,6 +447,12 @@ def ascend_by_threshold(
 			winners.append(_pick_ascension_winner(entries))
 			stats["duplicados_omitidos"] += len(entries) - 1
 		candidates = winners
+
+	if dry_run:
+		stats["would_ascend"] = len(candidates)
+		stats["ascendidos"] = 0
+		logger.info(f"[STATIC-ASCENSION][dry-run] {stats}")
+		return stats
 
 	for refine_path, fm, body, significance in candidates:
 		if limit is not None and stats["ascendidos"] >= limit:
@@ -669,6 +683,8 @@ def ascender(
 		# La clasificación vive EN el refine/anotación (category_score del curador,
 		# verificado 2026-09-14: técnico → 0.8; dual_route en annotate, MEM-006).
 		# El ascenso NO llama al LLM: usa la etiqueta o la heurística R1 (fallback).
+		if dual_route == "none":
+			return {"ascended": False, "reason": "dual_route_none"}
 		if dual_route in ("work", "social"):
 			category = dual_route
 		elif score is not None:
