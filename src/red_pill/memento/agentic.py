@@ -706,6 +706,26 @@ def refine_session(
 	escribe UN refine. El 1:1 anterior (1 distill → 1 refine) queda obsoleto."""
 	refine_dir = root / dir_rel / "refine"
 	refine_dir.mkdir(parents=True, exist_ok=True)
+	# Preservar el sello de ascensión de los refines previos con la MISMA identidad
+	# (`source_lines`): la re-destilización no debe des-ascender lo que ya está
+	# promocionado — `ascender` es un upsert idempotente por esa clave.
+	prev_seals: Dict[str, Dict[str, Any]] = {}
+	for prev in refine_dir.glob("*.md"):
+		try:
+			from red_pill.memento.ascension import parse_refine as _parse_refine
+
+			pfm, _ = _parse_refine(prev.read_text(encoding="utf-8"))
+		except Exception:
+			continue
+		if pfm.get("ascended"):
+			prev_seals[str(pfm.get("source_lines") or "")] = {
+				"ascended": True,
+				"ascended_at": pfm.get("ascended_at"),
+				"ascended_to": pfm.get("ascended_to"),
+				"ascended_point_id": pfm.get("ascended_point_id"),
+				"polaroid_stability": pfm.get("polaroid_stability") or 0.0,
+				"last_reinforced_at": pfm.get("last_reinforced_at"),
+			}
 	for stale in refine_dir.glob("*.md"):
 		stale.unlink()
 
@@ -737,6 +757,7 @@ def refine_session(
 				category_score = 0.5
 			# Sanear relicas: el LLM a veces devuelve un int en vez de un array.
 			relics = [str(r) for r in _as_list(idea.get("relics"))][:4]
+			seal = prev_seals.get(str(origin["source_lines"]), {})
 			refine_fm = _frontmatter_block(
 				[
 					("session_id", session_id),
@@ -752,13 +773,13 @@ def refine_session(
 					("category_score", category_score),
 					("engine", engine_id()),
 					("prompt_version", refine_prompt_version()),
-					# Estado de ascensión (Fase 4 §3): defaults para sellar in-place.
-					("ascended", False),
-					("ascended_at", None),
-					("ascended_to", None),
-					("ascended_point_id", None),
-					("polaroid_stability", 0.0),
-					("last_reinforced_at", None),
+					# Estado de ascensión (Fase 4 §3): se preserva si la identidad (source_lines) no cambió.
+					("ascended", bool(seal.get("ascended", False))),
+					("ascended_at", seal.get("ascended_at")),
+					("ascended_to", seal.get("ascended_to")),
+					("ascended_point_id", seal.get("ascended_point_id")),
+					("polaroid_stability", seal.get("polaroid_stability", 0.0)),
+					("last_reinforced_at", seal.get("last_reinforced_at")),
 				]
 			)
 			(refine_dir / f"{nnn}-{slug}.md").write_text(f"{refine_fm}\n\n{origin['summary']}\n", encoding="utf-8")

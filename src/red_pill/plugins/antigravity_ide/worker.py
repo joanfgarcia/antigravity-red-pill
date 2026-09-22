@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 import requests
 from dotenv import load_dotenv
 
+from red_pill.core.inbox_adapters import parse_payload
 from red_pill.core.paths import get_config_dir, get_neon_link_config_dir, get_neon_link_db_path, get_state_dir
 
 # Cargar la configuración agnóstica de Neon-Link primero (Single Source of Truth)
@@ -530,15 +531,13 @@ class IDEWorker:
 
 		conversational_msgs = []
 		background_msgs = []
+		parsed_msgs = {}
 		for r in rows:
-			try:
-				p = json.loads(r["payload"])
-				mode = p.get("mode", "conversational")
-				if mode == "background":
-					background_msgs.append(r)
-				else:
-					conversational_msgs.append(r)
-			except Exception:
+			msg = parse_payload(r["channel"], r["channel_user_id"], r["payload"])
+			parsed_msgs[r["id"]] = msg
+			if msg.mode == "background":
+				background_msgs.append(r)
+			else:
 				conversational_msgs.append(r)
 
 		# Handle Background Messages
@@ -549,9 +548,9 @@ class IDEWorker:
 			for r in background_msgs:
 				msg_id = r["id"]
 				try:
-					p = json.loads(r["payload"])
-					text = p.get("text", "")
-					sender_id = p.get("sender_id", r["channel_user_id"])
+					msg = parsed_msgs.get(msg_id)
+					text = msg.text if msg else ""
+					sender_id = (msg.sender_id if msg else None) or r["channel_user_id"]
 					channel = r["channel"]
 
 					inbox.drop_report(
@@ -569,20 +568,11 @@ class IDEWorker:
 
 		# Handle Conversational Messages (Compaction)
 		first_conv = conversational_msgs[0]
-		first_payload = json.loads(first_conv["payload"])
-		command = first_payload.get("command")
+		first_msg = parsed_msgs.get(first_conv["id"]) or parse_payload(first_conv["channel"], first_conv["channel_user_id"], first_conv["payload"])
+		first_payload = first_msg.payload
+		command = first_msg.command
 
-		# If it's a bridged message, the command might be a JSON string inside 'text'
-		if not command and "text" in first_payload:
-			try:
-				nested = json.loads(first_payload["text"])
-				if isinstance(nested, dict) and "command" in nested:
-					command = nested["command"]
-					first_payload = nested
-			except Exception as e:
-				logger.error(f"[Worker Debug] json.loads failed: {e} on {first_payload['text']}")
-
-		logger.info(f"[Worker Debug] Extracted command: {command}, payload: {first_payload}")
+		logger.debug(f"[Worker] command={command}, channel={first_msg.channel}, payload={first_payload}")
 
 		channel = first_conv["channel"]
 
@@ -1738,9 +1728,8 @@ class IDEWorker:
 		prefijo `telegram:` (D18) + payload.telegram_channel_user_id para el
 		delivery por Telegram.
 		"""
-		from red_pill.telegram.session import TelegramSessionManager
-
 		from red_pill.cognitive.queue_manager import CognitiveQueueManager
+		from red_pill.telegram.session import TelegramSessionManager
 
 		if not text:
 			logger.error(f"[{msg_ids}] HEAVY_PATH sin texto — ignorando")

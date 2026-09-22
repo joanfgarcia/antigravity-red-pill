@@ -294,29 +294,30 @@ def weave_memento_reinforcement(
 	stats = {"engramas_en_ventana": 0, "refine_evaluados": 0, "refuerzos_aplicados": 0, "ascensos": 0, "errores": 0}
 
 	window_start = now - window_hours * 3600.0
-	if not client.collection_exists("work_memories"):
-		return stats
 
-	# 1. Temas de los engramas nuevos en work_memories.
+	# 1. Temas de los engramas nuevos en la ventana curada (work + social).
 	engrama_topics: set = set()
-	offset = None
-	while True:
-		batch, offset = client.scroll(
-			collection_name="work_memories",
-			scroll_filter=models.Filter(
-				must=[models.FieldCondition(key="created_at", range=models.Range(gte=window_start))],
-				must_not=[models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="raw_parent"))],
-			),
-			limit=64,
-			with_payload=True,
-			with_vectors=False,
-			offset=offset,
-		)
-		for point in batch:
-			engrama_topics.update(_engram_topics(point.payload or {}))
-		stats["engramas_en_ventana"] += len(batch)
-		if offset is None:
-			break
+	for collection in ("work_memories", "social_memories"):
+		if not client.collection_exists(collection):
+			continue
+		offset = None
+		while True:
+			batch, offset = client.scroll(
+				collection_name=collection,
+				scroll_filter=models.Filter(
+					must=[models.FieldCondition(key="created_at", range=models.Range(gte=window_start))],
+					must_not=[models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="raw_parent"))],
+				),
+				limit=64,
+				with_payload=True,
+				with_vectors=False,
+				offset=offset,
+			)
+			for point in batch:
+				engrama_topics.update(_engram_topics(point.payload or {}))
+			stats["engramas_en_ventana"] += len(batch)
+			if offset is None:
+				break
 
 	if not engrama_topics:
 		logger.info("[MEM-REINFORCE] Sin engramas nuevos en la ventana — no hay temas que reforzar.")

@@ -648,3 +648,44 @@ def test_refine_session_empty_array_no_files(tmp_path):
 	msig = refine_session(root, rendered.dir_rel, "opencode:s1", "opencode", sections, [], empty_transport, min_significance=0.3)
 	assert msig == 0.0
 	assert list((root / rendered.dir_rel / "refine").glob("*.md")) == []
+
+
+def _alta(system, user, max_tokens):
+	return json.dumps([{"title": "Idea alta", "significance": 0.9, "theme": "t", "relics": [], "cross_refs": []}])
+
+
+def test_refine_preserva_sello_de_ascension_en_redistill(tmp_path):
+	"""La re-destilización no debe des-ascender: si la identidad (`source_lines`)
+	no cambió, el refine conserva el sello (ascender es upsert idempotente)."""
+	from red_pill.memento.agentic import refine_session
+	from red_pill.memento.render import update_frontmatter_fields
+
+	root, _registry, rendered = _tree_with_session(tmp_path)
+	sections = [{"nnn": "001", "file": "001-a.md", "title": "A", "summary": "sA", "source_lines": "l1-5", "fragment": None, "fragments_total": None}]
+
+	refine_session(root, rendered.dir_rel, "opencode:s1", "opencode", sections, [], _alta, min_significance=0.3)
+	refine_path = next((root / rendered.dir_rel / "refine").glob("*.md"))
+	update_frontmatter_fields(refine_path, {"ascended": True, "ascended_at": "2026-09-17T00:00:00Z", "ascended_to": "work_memories"})
+
+	refine_session(root, rendered.dir_rel, "opencode:s1", "opencode", sections, [], _alta, min_significance=0.3)
+	text = next((root / rendered.dir_rel / "refine").glob("*.md")).read_text(encoding="utf-8")
+	assert "ascended: true" in text
+	assert "ascended_to: work_memories" in text
+
+
+def test_refine_no_preserva_sello_si_cambia_source_lines(tmp_path):
+	"""Si el contenido avanzó (otro `source_lines`), el refine es nuevo: sin sello."""
+	from red_pill.memento.agentic import refine_session
+	from red_pill.memento.render import update_frontmatter_fields
+
+	root, _registry, rendered = _tree_with_session(tmp_path)
+	s1 = [{"nnn": "001", "file": "001-a.md", "title": "A", "summary": "sA", "source_lines": "l1-5", "fragment": None, "fragments_total": None}]
+	s2 = [{"nnn": "001", "file": "001-a.md", "title": "A", "summary": "sA", "source_lines": "l1-9", "fragment": None, "fragments_total": None}]
+
+	refine_session(root, rendered.dir_rel, "opencode:s1", "opencode", s1, [], _alta, min_significance=0.3)
+	refine_path = next((root / rendered.dir_rel / "refine").glob("*.md"))
+	update_frontmatter_fields(refine_path, {"ascended": True, "ascended_at": "2026-09-17T00:00:00Z", "ascended_to": "work_memories"})
+
+	refine_session(root, rendered.dir_rel, "opencode:s1", "opencode", s2, [], _alta, min_significance=0.3)
+	text = next((root / rendered.dir_rel / "refine").glob("*.md")).read_text(encoding="utf-8")
+	assert "ascended: false" in text
