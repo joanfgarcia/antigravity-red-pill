@@ -5,6 +5,9 @@ import json
 import pytest
 
 from red_pill.memento.agentic import (
+	ANNOTATE_SOCIAL_SYSTEM,
+	ANNOTATE_WORK_SYSTEM,
+	DUAL_SCORE_SYSTEM,
 	REFINE_MULTI_SYSTEM,
 	REFINE_SOCIAL_SYSTEM,
 	REFINE_SYSTEM,
@@ -249,6 +252,51 @@ def test_pending_agentic_detects_missing_and_stale(tmp_path):
 
 	registry.get("opencode", "opencode:s1")["memento_hash"] = "otro-hash"  # simula re-render con contenido nuevo
 	assert pending_agentic(registry) == [("opencode", "opencode:s1", "stale")]
+
+
+def test_run_agentic_con_annotate_flag_escribe_notas_registro_y_registry(tmp_path, monkeypatch):
+	"""E2E del camino nocturno con `MEMENTO_ANNOTATE_FROM_RAW=ON`: run_agentic debe
+	anotar (no refinar), dejar `_session.json` + `annotate/`, y registrar la versión
+	de annotate en el registry."""
+	import red_pill.config as cfg
+
+	monkeypatch.setattr(cfg, "MEMENTO_ANNOTATE_FROM_RAW", True)
+	monkeypatch.setattr(cfg, "MEMENTO_STATIC_ASCENSION_ENABLED", False)
+
+	def transport(system, user, max_tokens):
+		if system == ANNOTATE_WORK_SYSTEM:
+			return json.dumps(
+				[
+					{
+						"title": "Fix del endpoint",
+						"text": "Joan me pide el fix del endpoint y le explico el plan.",
+						"significance": 0.9,
+						"emotion": "cyan",
+						"intensity": 0.6,
+						"theme": "fix",
+						"relics": [],
+					}
+				]
+			)
+		if system == ANNOTATE_SOCIAL_SYSTEM:
+			return "[]"
+		if system == DUAL_SCORE_SYSTEM:
+			return json.dumps([{"i": 0, "work_score": 0.9, "social_score": 0.1}])
+		return json.dumps({"title": "Panel adversarial de prueba", "summary": "Resumen denso de la sección.", "keywords": ["memento", "test"]})
+
+	root, registry, rendered = _tree_with_session(tmp_path)
+	stats = run_agentic(root, registry, [("opencode", "opencode:s1")], transport)
+	assert stats["processed"] == 1 and stats["failed"] == 0
+	session_dir = root / rendered.dir_rel
+	notes = sorted((session_dir / "annotate").glob("*.md"))
+	assert len(notes) == 1
+	assert "Joan me pide el fix" in notes[0].read_text(encoding="utf-8")
+	assert list((session_dir / "refine").glob("*.md")) == []  # el refine legacy no corre
+	record = json.loads((session_dir / "_session.json").read_text(encoding="utf-8"))
+	assert record["stages"]["annotate"]["notas"] == 1
+	entry = registry.get("opencode", "opencode:s1")
+	assert entry["agentic"]["annotate_prompt_version"]
+	assert entry["agentic"]["annotate_notes"] == 1
 
 
 def test_run_agentic_no_muere_con_memento_hash_stale(tmp_path):
