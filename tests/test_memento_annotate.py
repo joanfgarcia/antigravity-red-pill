@@ -199,6 +199,19 @@ def test_is_first_person():
 	assert not is_first_person("Se creó la rama y se generó el PR.")
 
 
+def test_identity_bio_precedencia_env(tmp_path, monkeypatch):
+	from red_pill.memento.agentic import prompts
+
+	bio = tmp_path / "bio.md"
+	bio.write_text("BIO DE PRUEBA", encoding="utf-8")
+	monkeypatch.setenv("RP_IDENTITY_BIO", str(bio))
+	assert prompts._load_identity_bio() == "BIO DE PRUEBA"
+	monkeypatch.delenv("RP_IDENTITY_BIO")
+	# Sin override cae a config/data/repo/template (siempre no vacío).
+	assert prompts._load_identity_bio()
+	assert "IDENTIDAD" in prompts._load_identity_bio()
+
+
 def test_candidate_category_prefiere_dual_route():
 	from red_pill.memento.ascension import _candidate_category
 

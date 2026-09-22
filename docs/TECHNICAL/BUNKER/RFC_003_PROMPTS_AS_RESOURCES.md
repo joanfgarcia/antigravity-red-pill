@@ -172,10 +172,16 @@ text = p.render(voice=VOICE_RULE, candidates=cands, fragments=frags)
    que **no deben vivir en el repo público**. Propuesta: plantilla en `seeds/` con
    placeholders (`${OPERATOR_NAME}`, `${OPERATOR_GENDER}`, `${AGENT_NAME}`,
    `${AGENT_GENDER}`, `${PACT}`), materializada en el onboarding (install/update)
-   a la config privada (`~/.config/red-pill/identity_bio.md`) y actualizada cuando
-   el agente elige su nombre/género (Pacto/bond). El loader renderiza los
-   placeholders y cae a una plantilla neutra si no hay materialización. Afecta a
-   `install_neo.sh`, seeds, ENV_REFERENCE y AGENT_UPDATE_GUIDE.
+   y actualizada cuando el agente elige su nombre/género (Pacto/bond). El loader
+   renderiza los placeholders y cae a una plantilla neutra si no hay
+   materialización. Afecta a `install_neo.sh`, seeds, ENV_REFERENCE y
+   AGENT_UPDATE_GUIDE.
+   **Interino implementado (2026-09-22)**: la Bio real vive fuera del repo —
+   `~/.config/red-pill/identity_bio.md` (preferente) o
+   `~/.local/share/red-pill/identity_bio.md`; override `RP_IDENTITY_BIO`; el repo
+   solo guarda la plantilla neutra (`identity_bio.template.txt`), la ruta local
+   `identity_bio.txt` está gitignored, y `prompts._load_identity_bio()` resuelve la
+   precedencia. La siembra con placeholders sigue pendiente.
 
 ---
 

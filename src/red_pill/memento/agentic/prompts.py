@@ -2,19 +2,48 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 _PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
 
 
-def _load_text(name: str) -> str:
-	return (_PROMPTS_DIR / name).read_text(encoding="utf-8").strip()
+def _load_identity_bio() -> str:
+	"""Bio de identidad (MEM-006 P0) con precedencia:
+
+	1. `RP_IDENTITY_BIO` (ruta explícita; tests/avanzado)
+	2. `~/.config/red-pill/identity_bio.md` (config del operador — XDG)
+	3. `~/.local/share/red-pill/identity_bio.md` (data dir, alternativa)
+	4. `prompts/identity_bio.txt` (local, gitignored)
+	5. `prompts/identity_bio.template.txt` (plantilla neutra del repo)
+
+	Los datos personales (nombre/género) NO viven en el repo público: la Bio real
+	se siembra en la instalación/onboarding (RFC-003 §4.7).
+	"""
+	from red_pill.core.paths import get_config_dir, get_data_dir
+
+	override = os.getenv("RP_IDENTITY_BIO", "").strip()
+	candidates = [Path(override)] if override else []
+	candidates += [
+		Path(get_config_dir()) / "identity_bio.md",
+		Path(get_data_dir()) / "identity_bio.md",
+		_PROMPTS_DIR / "identity_bio.txt",
+		_PROMPTS_DIR / "identity_bio.template.txt",
+	]
+	for path in candidates:
+		try:
+			text = path.read_text(encoding="utf-8").strip()
+		except OSError:
+			continue
+		if text:
+			return text
+	return "IDENTIDAD: usa el nombre y el género reales del Operador y del agente."
 
 
-# Bio de identidad (MEM-006 P0): ancla quién es quién (Joan masculino, Aleth
-# narradora en 1ª persona, apodos que no sustituyen identidad). Vive en fichero
-# por RFC-003 (prompts as resources); el loader compartido la absorberá.
-IDENTITY_BIO = _load_text("identity_bio.txt")
+# Bio de identidad (MEM-006 P0): ancla quién es quién (nombre/género correctos,
+# narrador en 1ª persona, apodos que no sustituyen identidad). Fichero por
+# RFC-003; el loader compartido la absorberá.
+IDENTITY_BIO = _load_identity_bio()
 
 # VOICE (2026-09-15, alineada con distiller_v3_voice MODE B): el pase Memento
 # producía memorias en 3ª persona ("El usuario...", "Se corrigió...") — se

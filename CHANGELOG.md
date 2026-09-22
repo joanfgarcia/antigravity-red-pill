@@ -165,6 +165,12 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   flags), `stages.ascend` (ascendidos acumulados). El `memento_registry.json`
   global queda como **índice cross-sesión** (hilo prev/next, staleness), no como
   verdad: el expediente viaja con la sesión y sobrevive a rebuilds parciales.
+- **[SEC] Bio de identidad fuera del repo público**: la Bio real (nombres/género)
+  vive en `~/.config/red-pill/identity_bio.md` (preferente) o el data dir; override
+  `RP_IDENTITY_BIO`; el repo guarda solo la plantilla neutra
+  (`identity_bio.template.txt`) y la ruta local está gitignored. Precedencia en
+  `prompts._load_identity_bio()`; hash del prompt intacto (`07a5c9b529`) → el
+  rebuild no se invalida. Siembra con placeholders pendiente (RFC-003 §4.7).
 - **[DOC] RFC-003 Prompts as Resources (DRAFT)**: prompts como recurso (ficheros +
   loader con placeholders `${var}`, hash de contenido, overrides explícitos);
   norma propuesta (RULE 5) y migración por fases. La Bio de identidad ya vive en
