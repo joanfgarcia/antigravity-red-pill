@@ -10,6 +10,11 @@ logger = logging.getLogger(__name__)
 
 _PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
 
+def _load_prompt_file(name: str) -> str:
+	"""Carga un prompt desde `prompts/<name>` (RFC-003: prompts como recurso)."""
+	return (_PROMPTS_DIR / name).read_text(encoding="utf-8").strip()
+
+
 
 def _identity_bio_with_source() -> tuple[str, str]:
 	"""Bio de identidad (MEM-006 P0) y su origen:
@@ -295,22 +300,9 @@ Output ONLY the JSON array.
 """
 
 # ── CONTENT VALIDATE (MEM-006): revisa notas rechazadas por el filtro de ruido ──
-CONTENT_VALIDATE_SYSTEM = (
-	"You are Aleth, the Bünker Curator. You review memory notes rejected by an automatic machine-noise filter. Output ONLY valid JSON."
-)
-CONTENT_VALIDATE_USER = """These memory notes were rejected by an automatic machine-noise filter (they contain CI/git/terminal signatures). Decide for EACH note whether it is a legitimate durable memory (a coherent note) or actual machine noise.
-
-Rules:
-- APPROVE if the note is a coherent narrative memory, even if it MENTIONS a command, a test result or the word "errors" as part of the story.
-- REJECT if the note IS raw terminal output, a progress line, a code dump, or lacks narrative/context (e.g. "97.32% passed! Let me push: feat: ...").
-
-Return an ARRAY: [{{"i": <index>, "approved": true/false, "reason": "<8 palabras>"}}]
-
-Notes:
-{notes}
-
-Output ONLY the JSON array.
-"""
+# Prompts en fichero propio (RFC-003): prompts/content_validate_{system,user}.txt
+CONTENT_VALIDATE_SYSTEM = _load_prompt_file("content_validate_system.txt")
+CONTENT_VALIDATE_USER = _load_prompt_file("content_validate_user.txt")
 
 # ── VOICE REWRITE (MEM-006): re-escribe en 1ª persona las notas que no lo están ──
 VOICE_REWRITE_SYSTEM = "You are Aleth, the Bünker Curator. You rewrite memory notes in the first person. Output ONLY valid JSON."
