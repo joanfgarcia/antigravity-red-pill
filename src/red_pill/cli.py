@@ -709,9 +709,26 @@ def handle_job(args: argparse.Namespace) -> None:
 			expander = getattr(driver_cls, "expand_manifest", None)
 			if expander:
 				payload = expander(payload)
-		job_id = queue.enqueue_task(source=source, payload=payload, priority=priority, parent_task_id=parent, mission_id=mission)
+		# Resolver el padre a su UUID COMPLETO: las comparaciones del DAG (desbloqueo
+		# y cascada de cancelación) van contra `parent_task_id` exacto — guardar un
+		# prefijo corto dejaba hijos BLOCKED eternos (bug 2026-09-23).
 		if parent:
-			print(f"[OK] Job {job_id} encolado como BLOCKED (se desbloquea al completar {parent[:8]}).")
+			parent_task = _find_job(queue, parent)
+			if not parent_task:
+				print(f"[ERROR] --parent '{parent}' no encontrado (usa el id completo o un prefijo corto válido).")
+				return
+			parent = parent_task["id"]
+
+		try:
+			job_id = queue.enqueue_task(source=source, payload=payload, priority=priority, parent_task_id=parent, mission_id=mission)
+		except ValueError as e:
+			print(f"[ERROR] {e}")
+			return
+		if parent:
+			if (queue.get_task(job_id) or {}).get("status") == "PENDING":
+				print(f"[OK] Job {job_id} encolado (padre {parent[:8]} ya completado: arranca directo).")
+			else:
+				print(f"[OK] Job {job_id} encolado como BLOCKED (se desbloquea al completar {parent[:8]}).")
 		elif getattr(args, "paused", False):
 			# Nace PAUSADO: el runner no lo toca hasta `job resume` (encolado en
 			# frío para lanzar a mano cuando toque).
