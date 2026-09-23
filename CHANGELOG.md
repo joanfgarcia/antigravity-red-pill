@@ -253,6 +253,16 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   estrato histórico — la cata del 40% la da como la capa más limpia (0,1%
   duplicados, 8,3% trivial vs 17,4% granite); la limpieza de duplicados es
   **MEM-006 P1-B** (G5).
+- **[NEW] P1-B — dedup de Qdrant ejecutado (`scripts/memento_dedup_qdrant.py`)**:
+  limpieza in-place por hash de body con scopes `source` (RFC) / `collection` /
+  `global` (cruza work↔social: el mismo engrama sembrado en ambas — 1.311
+  bodies). Superviviente determinista: ruta de la nota (`dual_route`/
+  `category_score`) > protección de referencias > score compuesto
+  (significance/categoría/longitud/voz/intensidad/engine). **1.483 réplicas
+  borradas** (work 6.105→5.880 · social 2.798→1.540) + **1.402 sellos
+  `ascended_point_id` repuntados**, con snapshots previos. Duplicación por body
+  tras la limpieza: 0. Tests: 8 (incl. regresión del borrado por colección del
+  perdedor).
 - **[NEW] `examples/task_profiles.yaml.example`**: el contrato de tasks
   (incluida `validate`, requerida por `memento_validate.yaml`) deja de ser
   implícito del entorno del operador.
