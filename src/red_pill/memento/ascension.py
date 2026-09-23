@@ -335,6 +335,9 @@ def weave_memento_reinforcement(
 			fm, body = parse_refine(refine_path.read_text(encoding="utf-8"))
 			if not body or fm.get("ascended"):
 				continue
+			# Veredicto de validación negativo: no se refuerza ni reintenta.
+			if str(fm.get("validator_approved") or "").strip().lower() == "false":
+				continue
 			stats["refine_evaluados"] += 1
 			refine_theme, refine_tokens = _refine_topics(fm, body)
 			if not _temas_afines(refine_theme, refine_tokens, engrama_topics):
@@ -409,7 +412,7 @@ def ascend_by_threshold(
 
 		memory_manager = MemoryManager()
 
-	stats = {"refine_evaluados": 0, "ascendidos": 0, "rechazados_por_umbral": 0, "rechazados_por_ruta": 0, "errores": 0, "duplicados_omitidos": 0, "refines_omitidos_por_annotate": 0}
+	stats = {"refine_evaluados": 0, "ascendidos": 0, "rechazados_por_umbral": 0, "rechazados_por_ruta": 0, "rechazados_por_validador": 0, "errores": 0, "duplicados_omitidos": 0, "refines_omitidos_por_annotate": 0}
 
 	# MEM-006: política annotate-first POR SESIÓN — si la sesión tiene notas, sus
 	# `refine/` legacy se ignoran (fallback a refine solo si no hay annotate).
@@ -428,6 +431,10 @@ def ascend_by_threshold(
 			# MEM-006: las anotaciones sin ruta (ruido/zona muerta) NO ascienden.
 			if str(fm.get("dual_route") or "").strip().lower() == "none":
 				stats["rechazados_por_ruta"] += 1
+				continue
+			# Veredicto de validación negativo (gate/LLM): terminal, sin reintento.
+			if str(fm.get("validator_approved") or "").strip().lower() == "false":
+				stats["rechazados_por_validador"] += 1
 				continue
 			significance = float(fm.get("significance", 0.0) or 0.0)
 			if min_significance is not None:
@@ -699,6 +706,31 @@ def ascender(
 	if fm.get("ascended") and not force:
 		return {"ascended": False, "reason": "already_ascended", "point_id": fm.get("ascended_point_id")}
 
+	# MEM-006: veredicto de validación de contenido.
+	verdict = str(fm.get("validator_approved", "")).strip().lower()
+	if verdict == "false":
+		# Ya hay veredicto negativo (gate de ruido o validador LLM): terminal, no
+		# se reintenta ni se re-sella.
+		return {"ascended": False, "reason": "validator_rejected", "validator": str(fm.get("validator") or "")}
+	approved = verdict == "true"
+	if not approved:
+		# Pre-detección determinista del gate de ruido: sella el rechazo (con su
+		# firma) y no escribe. El validador LLM lo revisará en la fase de validación.
+		from red_pill.utils.telemetry_filter import is_garbage_reason
+
+		gate_reason = is_garbage_reason(body)
+		if gate_reason:
+			_stamp_refine(
+				refine_path,
+				{
+					"validator_approved": False,
+					"validator": "is_garbage",
+					"validator_reason": f"machine-noise: {gate_reason}",
+					"validated_at": datetime.now(timezone.utc).isoformat(),
+				},
+			)
+			return {"ascended": False, "reason": "gate_rejected", "gate_reason": gate_reason}
+
 	significance = float(fm.get("significance", 0.0) or 0.0)
 	emotion = str(fm.get("emotion", "gray"))
 	intensity = float(fm.get("intensity", 0.0) or 0.0)
@@ -775,6 +807,10 @@ def ascender(
 		metadata["dual_route"] = dual_route
 	if fm.get("quality_flags"):
 		metadata["quality_flags"] = list(fm.get("quality_flags") or [])
+	if approved:
+		# Excepción auditada: entró al margen del filtro de ruido con validación.
+		metadata["content_verified"] = True
+		metadata["ascended_by"] = "validated"
 
 	new_id = memory_manager.add_memory(
 		collection=collection,
@@ -784,6 +820,7 @@ def ascender(
 		point_id=point_id,
 		emotion=emotion,
 		intensity=intensity,
+		content_verified=approved,
 		created_at=_session_created_at(registry, source, session_id),
 	)
 	if not new_id:

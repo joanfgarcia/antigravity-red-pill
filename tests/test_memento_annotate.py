@@ -138,6 +138,81 @@ class _FakeReg:
 		return None
 
 
+def test_is_garbage_reason_expoene_la_firma():
+	from red_pill.utils.telemetry_filter import is_garbage_reason
+
+	assert is_garbage_reason("hice git commit --amend y luego push") == "ci-signature:git commit"
+	assert is_garbage_reason("Joan me pide revisar el endpoint y le explico el plan.") is None
+
+
+def _note(path, body, extra=""):
+	path.parent.mkdir(parents=True, exist_ok=True)
+	path.write_text(
+		"---\nsession_id: s1\nsource: opencode\nsource_lines: memento/index.md#l10-20\n"
+		f"split_ref: memento/index.md#l10-20\nsignificance: 0.9\nemotion: gray\nintensity: 0.5\n"
+		f"ascended: false\ndual_route: work\nwork_score: 0.9\nsocial_score: 0.05\n{extra}---\n{body}\n",
+		encoding="utf-8",
+	)
+
+
+def test_ascender_sella_rechazo_del_gate_sin_escribir(tmp_path):
+	from red_pill.memento.ascension import ascender
+
+	note = tmp_path / "annotate" / "001-git.md"
+	_note(note, "Joan me pide hacer git commit con los cambios del endpoint.")
+	mm = _FakeMM()
+	res = ascender(tmp_path, _FakeReg(), note, memory_manager=mm)
+	assert res["ascended"] is False and res["reason"] == "gate_rejected"
+	assert mm.calls == []  # no se intentó escribir
+	txt = note.read_text(encoding="utf-8")
+	assert "validator_approved: false" in txt
+	assert "validator: is_garbage" in txt
+	assert "machine-noise" in txt
+
+
+def test_ascender_validadora_usa_bypass_y_sella_engrama(tmp_path):
+	from red_pill.memento.ascension import ascender
+
+	note = tmp_path / "annotate" / "002-ok.md"
+	_note(note, "Joan me pide hacer git commit con los cambios del endpoint.", extra="validator_approved: true\nvalidator: granite_8b\n")
+	mm = _FakeMM()
+	res = ascender(tmp_path, _FakeReg(), note, memory_manager=mm)
+	assert res["ascended"] is True
+	assert mm.calls[0]["content_verified"] is True
+	assert mm.calls[0]["metadata"]["content_verified"] is True
+	assert mm.calls[0]["metadata"]["ascended_by"] == "validated"
+
+
+def test_validate_notes_aprueba_y_rechaza(tmp_path, monkeypatch):
+	from red_pill.memento.agentic import validate
+	from red_pill.memento.agentic.validate import pending_validations, validate_notes
+
+	monkeypatch.setattr(validate.runtime, "engine_id", lambda: "test-engine")
+	good = tmp_path / "annotate" / "001-ok.md"
+	bad = tmp_path / "annotate" / "002-no.md"
+	_note(good, "Joan me pide hacer git commit con los cambios del endpoint.")
+	_note(bad, "collected 5 items / 2 errors")
+
+	def transport(system, user, max_tokens):
+		return json.dumps(
+			[
+				{"i": 0, "approved": True, "reason": "narración con comando citado"},
+				{"i": 1, "approved": False, "reason": "salida cruda de tests"},
+			]
+		)
+
+	pend = pending_validations(tmp_path)
+	assert len(pend) == 2
+	stats = validate_notes(transport, pend)
+	assert stats == {"pending": 2, "approved": 1, "rejected": 1, "sin_respuesta": 0}
+	txt_good = good.read_text(encoding="utf-8")
+	assert "validator_approved: true" in txt_good
+	assert "validator: test-engine" in txt_good
+	assert "validator_prompt_version:" in txt_good
+	assert "validator_approved: false" in bad.read_text(encoding="utf-8")
+	assert pending_validations(tmp_path) == []
+
+
 def test_ascender_acepta_anotacion_con_source_lines(tmp_path):
 	"""Regresión (incidente 2026-09-23): las notas annotate deben escribir
 	`source_lines` (= split_ref); sin él `ascender` devolvía missing_key y el

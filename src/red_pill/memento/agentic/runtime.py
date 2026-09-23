@@ -73,6 +73,11 @@ def annotate_prompt_version() -> str:
 	return _prompt_hash(prompts.ANNOTATE_WORK_USER, prompts.ANNOTATE_SOCIAL_USER, prompts._VOICE_RULE, prompts.IDENTITY_BIO)
 
 
+def validate_prompt_version() -> str:
+	"""Fingerprint del prompt del VALIDADOR de contenido (MEM-006)."""
+	return _prompt_hash(prompts.CONTENT_VALIDATE_USER)
+
+
 
 
 def refine_prompt_version() -> str:

@@ -1,0 +1,19 @@
+# Memento — validación de contenido (MEM-006): revisa las notas que el filtro de
+# ruido rechazó al ascender y emite veredicto LLM (approve/reject, sellado en la
+# nota). Aprobadas → el ascenso las sube con content_verified=True.
+#
+# element_job: UN elemento = UNA nota → checkpoint POR NOTA (pausable/reanudable).
+# Lanzar:  uv run red-pill job submit --recipe memento_validate [--paused]
+source: element_job
+priority: 3
+title: Memento validación de contenido (MEM-006)
+mission_id: memento-validate
+step_command: uv run python scripts/memento_validate.py
+elements_command: uv run python scripts/memento_validate.py --list
+defer_exit_code: 77
+llm:
+  task: refine
+preflight:
+  llm_required: true
+control:
+  max_step_minutes: 20

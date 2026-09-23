@@ -294,6 +294,24 @@ Raw fragment:
 Output ONLY the JSON array.
 """
 
+# ── CONTENT VALIDATE (MEM-006): revisa notas rechazadas por el filtro de ruido ──
+CONTENT_VALIDATE_SYSTEM = (
+	"You are Aleth, the Bünker Curator. You review memory notes rejected by an automatic machine-noise filter. Output ONLY valid JSON."
+)
+CONTENT_VALIDATE_USER = """These memory notes were rejected by an automatic machine-noise filter (they contain CI/git/terminal signatures). Decide for EACH note whether it is a legitimate durable memory (a coherent note) or actual machine noise.
+
+Rules:
+- APPROVE if the note is a coherent narrative memory, even if it MENTIONS a command, a test result or the word "errors" as part of the story.
+- REJECT if the note IS raw terminal output, a progress line, a code dump, or lacks narrative/context (e.g. "97.32% passed! Let me push: feat: ...").
+
+Return an ARRAY: [{{"i": <index>, "approved": true/false, "reason": "<8 palabras>"}}]
+
+Notes:
+{notes}
+
+Output ONLY the JSON array.
+"""
+
 # ── VOICE REWRITE (MEM-006): re-escribe en 1ª persona las notas que no lo están ──
 VOICE_REWRITE_SYSTEM = "You are Aleth, the Bünker Curator. You rewrite memory notes in the first person. Output ONLY valid JSON."
 VOICE_REWRITE_USER = """{identity}

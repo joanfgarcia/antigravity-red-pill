@@ -33,6 +33,8 @@ from .prompts import (
 	ANNOTATE_SOCIAL_USER,
 	ANNOTATE_WORK_SYSTEM,
 	ANNOTATE_WORK_USER,
+	CONTENT_VALIDATE_SYSTEM,
+	CONTENT_VALIDATE_USER,
 	DISTILL_SYSTEM,
 	DISTILL_USER,
 	DISTILL_USER_CONTINUATION,
@@ -83,7 +85,9 @@ from .runtime import (
 	llm_available,
 	model_prompt_budget,
 	refine_prompt_version,
+	validate_prompt_version,
 )
+from .validate import pending_validations, validate_note, validate_notes
 
 __all__ = [
 	"_VOICE_RULE",
@@ -136,6 +140,12 @@ __all__ = [
 	"is_first_person",
 	"quality_flags",
 	"rewrite_voice_notes",
+	"pending_validations",
+	"validate_note",
+	"validate_notes",
+	"CONTENT_VALIDATE_SYSTEM",
+	"CONTENT_VALIDATE_USER",
+	"validate_prompt_version",
 	"distill_session",
 	"cross_ref_candidates",
 	"_format_fragments",

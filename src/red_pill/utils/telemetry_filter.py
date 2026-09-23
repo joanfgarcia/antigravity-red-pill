@@ -18,17 +18,17 @@ def calculate_entropy(text: str) -> float:
 	return entropy
 
 
-def is_garbage(content: str) -> bool:
+def is_garbage_reason(content: str) -> "str | None":
 	"""
 	Dictates if a chunk of text is machine noise/garbage.
 	It evaluates CI strings, ANSI ratios, and repetition loops.
 	"""
 	content_stripped = content.strip()
 	if not content_stripped:
-		return False
+		return None
 
 	if len(content_stripped) < 5:
-		return True  # Very short content is essentially noise for memory
+		return "too-short"  # Very short content is essentially noise for memory
 
 	# ANSI removal for clean evaluation
 	ansi_stripped = ANSI_ESCAPE.sub("", content_stripped)
@@ -62,8 +62,9 @@ def is_garbage(content: str) -> bool:
 		"E    AssertionError:",
 		"E     +  where ",
 	]
-	if any(sig in content_lower for sig in ci_definitive):
-		return True
+	for sig in ci_definitive:
+		if sig in content_lower:
+			return f"ci-signature:{sig.strip()}"
 
 	# Weighted noise markers
 	ci_markers = [
@@ -86,11 +87,11 @@ def is_garbage(content: str) -> bool:
 	]
 	ci_hits = sum(1 for m in ci_markers if m.lower() in content_lower)
 	if ci_hits >= 2:
-		return True
+		return f"ci-markers:{ci_hits}"
 
 	# ANSI noise threshold: If >40% of the string was ANSI escapes, it's a terminal dump
 	if len(content_stripped) > 30 and len(ansi_stripped) < len(content_stripped) * 0.6:
-		return True
+		return "ansi-dump"
 
 	# Repetition check: Detect local loops or highly repetitive logs
 	words = content_lower.split()
@@ -98,7 +99,7 @@ def is_garbage(content: str) -> bool:
 		freq = Counter(words)
 		most_common_count = freq.most_common(1)[0][1]
 		if most_common_count > len(words) * 0.35:
-			return True
+			return "repetition"
 
 	# Entropy check: Low entropy usually means repetitive/boilerplate content (e.g. "........")
 	# High entropy on small strings can also mean random noise/hashes.
@@ -107,9 +108,14 @@ def is_garbage(content: str) -> bool:
 		# 2.5 is a very low threshold (repetitive),
 		# average English is ~4.0-5.0. Code can be lower but <3.0 is suspicious.
 		if entropy < 2.5:
-			return True
+			return "low-entropy"
 
-	return False
+	return None
+
+
+def is_garbage(content: str) -> bool:
+	"""True si el texto es ruido de máquina (firma CI/ANSI/repetición)."""
+	return is_garbage_reason(content) is not None
 
 
 def filter_noise_from_turn(text: str) -> str:

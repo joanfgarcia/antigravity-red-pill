@@ -172,6 +172,7 @@ class MemoryManager:
 		emotion: str = cfg.DEFAULT_EMOTION,
 		intensity: float = 1.0,
 		force_immune: bool = False,
+		content_verified: bool = False,
 		recursion_depth: int = 0,
 		created_at: Optional[float] = None,
 	) -> str:
@@ -191,7 +192,9 @@ class MemoryManager:
 
 		# v6.3.8: Ingestion Quality Gate (Cortex Isolation)
 		# Prevent noise and garbage from entering long-term collections.
-		if not force_immune and collection in ["work_memories", "social_memories"]:
+		# `content_verified` (MEM-006): exención quirúrgica para notas CUradas que un
+		# validador LLM revisó y aprobó — salta SOLO este filtro, nunca `immune`.
+		if not force_immune and not content_verified and collection in ["work_memories", "social_memories"]:
 			from red_pill.utils.telemetry_filter import is_garbage
 
 			if is_garbage(text):
