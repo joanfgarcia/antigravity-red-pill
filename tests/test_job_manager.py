@@ -717,6 +717,41 @@ def test_purge_task_force_never_touches_live_rows(queue):
 	assert queue.get_task(ids["processing"]) is not None
 
 
+def test_kill_blocked_cancela_limpio_y_en_cascada(queue):
+	"""BLOCKED (DAG en espera del padre) se puede cancelar: FRUSTRATED sin marca
+	de kill sucio y con cascada a los hijos BLOCKED (nadie espera a un padre caído)."""
+	parent = queue.enqueue_task(source="samantha", payload={})
+	child = queue.enqueue_task(source="samantha", payload={}, parent_task_id=parent)
+	grand = queue.enqueue_task(source="samantha", payload={}, parent_task_id=child)
+	assert queue.get_task(child)["status"] == "BLOCKED"
+
+	assert queue.kill_task(parent, discard=True) is True
+	parent_row = queue.get_task(parent)
+	assert parent_row["status"] == "FRUSTRATED"
+	assert not parent_row.get("dirty_kill")  # cancelar en espera no es kill sucio
+	assert queue.get_task(child)["status"] == "FRUSTRATED"
+	assert queue.get_task(child)["error_log"] == "parent cancelled"
+	assert queue.get_task(grand)["status"] == "FRUSTRATED"
+
+
+def test_kill_blocked_sin_discard_queda_paused(queue):
+	parent = queue.enqueue_task(source="samantha", payload={})
+	child = queue.enqueue_task(source="samantha", payload={}, parent_task_id=parent)
+
+	assert queue.kill_task(child) is True
+	assert queue.get_task(child)["status"] == "PAUSED"
+	assert not queue.get_task(child).get("dirty_kill")
+
+
+def test_purge_blocked_requiere_force(queue):
+	parent = queue.enqueue_task(source="samantha", payload={})
+	child = queue.enqueue_task(source="samantha", payload={}, parent_task_id=parent)
+
+	assert queue.purge_task(child) is False
+	assert queue.purge_task(child, force=True) is True
+	assert queue.get_task(child) is None
+
+
 def test_purge_terminal_sweeps_frustrated_and_completed(queue):
 	"""El barrido retira todo lo terminal de una vez y respeta el resto de la cola."""
 	ids = _seed_statuses(

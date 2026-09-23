@@ -463,6 +463,12 @@ sesión (1 instancia por sesión, lista congelada en el checkpoint).
   hasta `job resume`) — para preparar trabajos largos y lanzarlos a mano cuando
   toque. El borrado de terminales usa `job purge --terminal` (FRUSTRATED/
   COMPLETED; PAUSED solo por id con `--force`).
+- `job cancel <id>`: cancelación **limpia** de jobs en espera (PENDING/BLOCKED) —
+  `FRUSTRATED` sin marca de kill sucio y **cascada a hijos BLOCKED** (ningún hijo
+  queda esperando a un padre caído). `kill` acepta ya BLOCKED y solo marca dirty
+  cuando la transición es válida (antes marcaba incluso si fallaba); `purge
+  --force` retira también BLOCKED. Cierra el colateral de hijos huérfanos del
+  chaining (`--parent`).
   ⚠️ Hallazgo conocido (nota desk `JOB-KILL-CLAIM-RACE`): `kill --discard` sobre
   PENDING/PROCESSING puede no persistir (el claim del runner lo resucita);
   mitigación: `--singleton` en recetas y revisar `job list` tras matar.

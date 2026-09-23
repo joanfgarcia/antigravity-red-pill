@@ -801,6 +801,15 @@ def handle_job(args: argparse.Namespace) -> None:
 			return
 		_kill_job(queue, task, discard=args.discard)
 
+	elif args.job_cmd == "cancel":
+		task = _find_job(queue, args.job_id)
+		if not task:
+			print(f"[ERROR] Job '{args.job_id}' no encontrado.")
+			return
+		# Cancelación limpia (sin marca de kill sucio en PENDING/BLOCKED) y con
+		# cascada a hijos BLOCKED: equivalente a `kill --discard`.
+		_kill_job(queue, task, discard=True)
+
 	elif args.job_cmd == "logs":
 		task = _find_job(queue, args.job_id)
 		if not task:
@@ -823,7 +832,7 @@ def handle_job(args: argparse.Namespace) -> None:
 	elif args.job_cmd == "kick":
 		_kick_queue()
 	else:
-		print("Uso: red-pill job {submit|list|status|pause|resume|skip|kill|logs|purge|process-queue|kick}")
+		print("Uso: red-pill job {submit|list|status|pause|resume|skip|kill|cancel|logs|purge|process-queue|kick}")
 
 
 def _kick_queue() -> None:
@@ -1279,6 +1288,10 @@ def main() -> None:
 	job_kill = job_sub.add_parser("kill", help="Abatir el step en vuelo (duro): PAUSED* reanudable, con marca de kill sucio")
 	job_kill.add_argument("job_id", help="Id completo o prefijo corto")
 	job_kill.add_argument("--discard", action="store_true", help="Cancelar definitivamente: FRUSTRATED en lugar de reanudable")
+	job_cancel = job_sub.add_parser(
+		"cancel", help="Cancelar un job en espera (PENDING/BLOCKED u otros): FRUSTRATED limpio + cascada a hijos BLOCKED"
+	)
+	job_cancel.add_argument("job_id", help="Id completo o prefijo corto")
 
 	job_logs = job_sub.add_parser("logs", help="Salida del proceso hijo de un job (stdout/stderr por step)")
 	job_logs.add_argument("job_id", help="Id completo o prefijo corto")
