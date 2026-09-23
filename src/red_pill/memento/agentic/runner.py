@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -31,7 +32,19 @@ def pending_agentic(
 	`redistill_since` (ISO): en modo `force`, SOLO se incluyen las sesiones cuyo
 	`agentic.distilled_at` es anterior (o ausente). Así una redestilación
 	reanudable reprocesa únicamente las que faltan, no las ya re-procesadas en
-	la ronda (watchdog de reanudación, 2026-09-15)."""
+	la ronda (watchdog de reanudación, 2026-09-15).
+
+	MEM-006 (2026-09-23): con `MEMENTO_ANNOTATE_FROM_RAW` ON, una sesión con
+	`annotate/_meta.json` fresco (prompt_version vigente) se considera ya
+	procesada aunque falte el marcado `agentic` — el rebuild masivo y el
+	nocturno comparten el criterio de frescura y no se pisan (antes: solape
+	31/31 en las never-distilled)."""
+	import red_pill.config as cfg
+
+	annotate_version: Optional[str] = None
+	if root is not None and bool(getattr(cfg, "MEMENTO_ANNOTATE_FROM_RAW", False)):
+		annotate_version = runtime.annotate_prompt_version()
+
 	pending = []
 	for source, sessions in registry.state["registry"].items():
 		for session_id, entry in sessions.items():
@@ -43,6 +56,8 @@ def pending_agentic(
 			if not agentic:
 				if not force and root is not None and _distill_refine_present(root, entry["dir"]):
 					continue  # ya destilada en disco, pero el marcado se perdió (crash)
+				if not force and annotate_version is not None and _annotate_fresh(root, entry["dir"], annotate_version):
+					continue  # ya anotada desde raw (rebuild/nocturno) — no re-procesar
 				pending.append((source, session_id, "missing"))
 			elif agentic.get("hash") != entry.get("memento_hash"):
 				pending.append((source, session_id, "stale"))
@@ -61,6 +76,19 @@ def _distill_refine_present(root: Path, dir_rel: str) -> bool:
 	distill = base / "distill"
 	refine = base / "refine"
 	return (distill.is_dir() and any(distill.glob("*.md"))) and (refine.is_dir() and any(refine.glob("*.md")))
+
+
+def _annotate_fresh(root: Path, dir_rel: str, current_version: str) -> bool:
+	"""MEM-006: `annotate/_meta.json` con el prompt_version vigente → la sesión ya
+	pasó por el pase annotate (rebuild o nocturno); el nocturno no debe repetirla."""
+	meta = root / dir_rel / "annotate" / "_meta.json"
+	if not meta.exists():
+		return False
+	try:
+		data = json.loads(meta.read_text(encoding="utf-8"))
+	except (OSError, json.JSONDecodeError):
+		return False
+	return data.get("annotate_prompt_version") == current_version
 
 
 

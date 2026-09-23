@@ -208,6 +208,30 @@ def test_is_llm_connection_error_detecta_timeouts_watchdog():
 	assert _is_llm_connection_error(Exception("requests.exceptions.ReadTimeout: read timed out"))
 
 
+def test_pending_agentic_omite_anotadas_frescas_con_from_raw(tmp_path, monkeypatch):
+	"""MEM-006: con FROM_RAW ON, una sesión con annotate/_meta.json fresco no
+	vuelve a la cola del nocturno (la anotó el rebuild o el propio nocturno)."""
+	import json as _json
+
+	import red_pill.config as cfg
+	from red_pill.memento.agentic import annotate_prompt_version, pending_agentic
+
+	monkeypatch.setattr(cfg, "MEMENTO_ANNOTATE_FROM_RAW", True)
+	root, registry, rendered = _tree_with_session(tmp_path)
+	assert pending_agentic(registry, root=root) == [("opencode", "opencode:s1", "missing")]
+
+	annotate_dir = root / rendered.dir_rel / "annotate"
+	annotate_dir.mkdir(parents=True, exist_ok=True)
+	(annotate_dir / "_meta.json").write_text(
+		_json.dumps({"annotate_prompt_version": annotate_prompt_version(), "engine": "granite_8b", "notas": 2}),
+		encoding="utf-8",
+	)
+	assert pending_agentic(registry, root=root) == []
+
+	monkeypatch.setattr(cfg, "MEMENTO_ANNOTATE_FROM_RAW", False)
+	assert pending_agentic(registry, root=root) == [("opencode", "opencode:s1", "missing")]
+
+
 def test_pending_agentic_redistill_since_filtra_lo_ya_reprocesado(tmp_path):
 	"""2026-09-15: --redistill-round solo devuelve las sesiones de la ronda no
 	re-procesadas (distilled_at anterior), para no repetir lo ya hecho al reanudar."""
