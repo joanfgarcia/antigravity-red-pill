@@ -10,4 +10,3 @@ Notes:
 {notes}
 
 Output ONLY the JSON array.
-

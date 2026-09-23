@@ -192,6 +192,17 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   `refine/` de sesiones anotadas** (fallback a refine solo si no hay notas).
   Receta `memento_ascend_post_rebuild` actualizada; job encadenado nuevo
   `d362df77` (el viejo `3756270a`, sin replace, queda BLOCKED y converge).
+- **[RFC-003] Fase 3 ejecutada — prompts de memento a fichero (byte-exacto)**:
+  los 21 prompts inline de `agentic/prompts.py` (distill/refine/annotate/dual/
+  voice-rewrite + `_VOICE_RULE`) viven ya en `agentic/prompts/*.txt`, cargados con
+  `_load_prompt_file` **byte-exacto (sin strip: los fingerprints hashean el texto
+  tal cual)**. Verificado: `distill 66c679f1bb` · `refine 85209a6c9e` ·
+  `annotate 07a5c9b529` · `validate 521a6c19b4` — **sin cambios**, así que ni la
+  frescura del rebuild (103 anotadas) ni la trazabilidad de artefactos se alteran.
+  Guardia nuevo: `test_prompt_fingerprints_estables` (hash mapping a mano si algún
+  día se cambia un prompt a propósito). Con la Bio y el validador, ya son 24
+  recursos en `prompts/`. El loader **compartido** de core y las fases 2/4/5/6 del
+  RFC siguen pendientes.
 - **[DOC] RFC-003 Prompts as Resources (DRAFT)**: prompts como recurso (ficheros +
   loader con placeholders `${var}`, hash de contenido, overrides explícitos);
   norma propuesta (RULE 5) y migración por fases. La Bio de identidad ya vive en

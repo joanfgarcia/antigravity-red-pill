@@ -138,6 +138,25 @@ class _FakeReg:
 		return None
 
 
+def test_prompt_fingerprints_estables():
+	"""Fase 3 RFC-003: mover prompts constante→fichero NO cambia los fingerprints.
+
+	Si cambias un prompt a propósito, actualiza esta tabla (hash mapping) y
+	documenta el cambio en el CHANGELOG (los artefactos sellados lo referencian).
+	"""
+	from red_pill.memento.agentic import (
+		annotate_prompt_version,
+		distill_prompt_version,
+		refine_prompt_version,
+		validate_prompt_version,
+	)
+
+	assert distill_prompt_version() == "66c679f1bb"
+	assert refine_prompt_version() == "85209a6c9e"
+	assert annotate_prompt_version() == "07a5c9b529"
+	assert validate_prompt_version() == "521a6c19b4"
+
+
 def test_is_garbage_reason_expoene_la_firma():
 	from red_pill.utils.telemetry_filter import is_garbage_reason
 

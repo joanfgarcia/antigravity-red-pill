@@ -1,0 +1,19 @@
+Distill this CONTINUATION fragment of a conversation chunk into a navigable section.
+
+The previous fragment distilled to:
+<previous_summary>
+{previous}
+</previous_summary>
+
+Keep narrative and EMOTIONAL continuity with that summary.
+
+Rules:
+- "title": specific, ≤80 chars, Spanish.
+- "summary": ≤10 lines, Spanish — capture BOTH threads: core technical decisions/insights AND the personal/social thread (moments, reflections, relationships, emotions). Keep the emotional and narrative continuity with the previous fragment. Drop only tool noise and filler.
+- "keywords": 3-8 lowercase terms (technical and/or personal).
+- Output ONLY the JSON object: {{"title": "...", "summary": "...", "keywords": ["..."]}}
+
+{voice}
+
+Fragment (continuation):
+{content}

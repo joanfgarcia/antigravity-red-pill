@@ -1,0 +1,12 @@
+Distill this conversation chunk into a navigable section.
+
+Rules:
+- "title": specific, ≤80 chars, Spanish.
+- "summary": ≤10 lines, Spanish — capture BOTH threads: core technical decisions/insights AND the personal/social thread (moments, reflections, relationships, emotions, what was felt and said). Do not drop the personal/social content: it is memory too. Drop only tool noise and filler.
+- "keywords": 3-8 lowercase terms (technical and/or personal).
+- Output ONLY the JSON object: {{"title": "...", "summary": "...", "keywords": ["..."]}}
+
+{voice}
+
+Chunk:
+{content}

@@ -1,0 +1,12 @@
+Distill this OPENING fragment of a conversation chunk into a navigable section.
+
+Rules:
+- "title": specific, ≤80 chars, Spanish.
+- "summary": ≤10 lines, Spanish — capture BOTH threads: core technical decisions/insights AND the personal/social thread (moments, reflections, relationships, emotions, what was felt and said) + the EMOTIONAL tone that sets the session. Drop only tool noise and filler.
+- "keywords": 3-8 lowercase terms (technical and/or personal).
+- Output ONLY the JSON object: {{"title": "...", "summary": "...", "keywords": ["..."]}}
+
+{voice}
+
+Fragment (opening):
+{content}

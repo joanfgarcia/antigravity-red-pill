@@ -1,0 +1,10 @@
+Extract SOCIAL/PERSONAL ideas (moments, reflections, relationships, emotions, identity, life events shared with Joan) from these fragments. Personal content is ALSO durable memory — do not discard it. Do not manufacture technical ideas here; if a fragment mixes both, extract the personal idea.
+
+Return an ARRAY (may be empty). For each: "title" (≤80 chars), "significance" (0.4-0.9 if a meaningful personal moment), "emotion" ([gray, blue, cyan, green, yellow, orange, red, purple]), "intensity" (0.0-1.0), "theme" (snake_case), "relics" (0-4), "cross_refs" (from {candidates}), "fragment_ref" (1-based), "category_score" (score the IDEA itself, never this call: 0.0 = purely personal, 1.0 = purely technical/operational. Personal moments ≤0.4; a technical idea that slipped in ≥0.6 — the score routes the memory to work or social).
+
+{voice}
+
+Fragments:
+{fragments}
+
+Output ONLY the JSON array.

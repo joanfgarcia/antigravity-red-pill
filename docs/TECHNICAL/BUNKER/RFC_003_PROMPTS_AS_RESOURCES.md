@@ -67,9 +67,12 @@ versionado que el código carga por referencia, con parámetros sustituidos en c
   `placeholders` (validación en carga), `description` y notas de versión.
 - **Opción B (alternativa)**: un `.md` con frontmatter YAML (metadatos) + cuerpo =
   prompt (autocontenido, sin sidecar). Decisión abierta (§4).
-- **Primer recurso existente (2026-09-22)**: `memento/agentic/prompts/identity_bio.txt`
-  (Bio de identidad, MEM-006 P0) — hoy lo carga `prompts.py` con un lector mínimo;
-  el loader compartido lo absorberá en la fase 3 de la migración (§2.5).
+- **Primeros recursos existentes (2026-09-22/23)**: `memento/agentic/prompts/`
+  con la Bio de identidad (`identity_bio.template.txt`, MEM-006 P0), el validador
+  de contenido (`content_validate_{system,user}.txt`) y — desde la fase 3 — los 21
+  prompts del pase (distill/refine/annotate/dual/voice-rewrite + `_VOICE_RULE`),
+  cargados por `_load_prompt_file` **byte-exacto** (los fingerprints no cambian).
+  El loader compartido los absorberá en la fase 1 de la migración (§2.5).
 
 ### 2.2 Loader compartido
 
@@ -119,7 +122,7 @@ text = p.render(voice=VOICE_RULE, candidates=cands, fragments=frags)
 |---|---|---|
 | 1 | Loader + tests (core) | Bajo |
 | 2 | `metabolism`: sustituir `load_prompt_text` local por el loader (los ficheros ya existen) | Bajo |
-| 3 | `memento/agentic`: mover constantes a `prompts/*.txt` **byte-exactas** + tabla de hashes | Medio (fingerprints) |
+| 3 | `memento/agentic`: mover constantes a `prompts/*.txt` **byte-exactas** + tabla de hashes | Medio (fingerprints) — ✅ **ejecutada 2026-09-23** (21 prompts a fichero con loader mínimo del paquete, **fingerprints intactos**; el loader compartido de la fase 1 sigue pendiente) |
 | 4 | Tool de recalibración: prompts de auditoría a ficheros (elimina duplicación tool/producción) | Bajo |
 | 5 | Scripts/probes: mismo loader | Bajo |
 | 6 | CI: `validate_all()` + (opcional) lint anti-inline | Bajo |

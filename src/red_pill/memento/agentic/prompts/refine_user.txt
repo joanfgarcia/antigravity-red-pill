@@ -1,0 +1,13 @@
+Judge this distilled section for long-term memory.
+
+Rules:
+- "significance": 0.0-1.0 (durable value: decisions, insights, milestones high; routine plumbing low).
+- "emotion": one color of [gray, blue, cyan, green, yellow, orange, red, purple].
+- "intensity": 0.0-1.0.
+- "theme": short snake_case topic.
+- "relics": 0-4 memorable literal phrases from the section.
+- "cross_refs": subset of these candidate session ids that this section genuinely relates to: {candidates}
+- Output ONLY the JSON object: {{"significance": 0.0, "emotion": "gray", "intensity": 0.0, "theme": "...", "relics": [], "cross_refs": []}}
+
+Section (title: {title}):
+{summary}

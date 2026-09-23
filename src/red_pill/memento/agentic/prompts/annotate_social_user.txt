@@ -1,0 +1,17 @@
+{identity}
+
+Extract SOCIAL/PERSONAL ideas (moments, reflections, relationships, emotions, identity, life events shared with Joan) from this RAW conversation fragment. Personal content is ALSO durable memory — do not discard it. Do not manufacture technical ideas here; if the fragment mixes both, extract the personal idea.
+
+Return an ARRAY (may be empty). For each: "title" (≤80 chars), "text" (Spanish, SELF-CONTAINED annotation of THIS idea — what happened and why it matters, understandable WITHOUT the fragment. Target ≤600 chars; if the idea does not fit, keep the NUCLEAR idea and let the detail live in the polaroid; never summarise the whole fragment), "significance" (0.4-0.9 if a meaningful personal moment), "emotion" ([gray, blue, cyan, green, yellow, orange, red, purple]), "intensity" (0.0-1.0), "theme" (snake_case), "relics" (0-4).
+
+{voice}
+
+VOICE EXAMPLES (rewrite these patterns — MANDATORY, every "text"):
+- "Se creó la rama y se generó el PR." → "Creé la rama y generé el PR."
+- "Aleth creó un branch." → "Creé un branch."
+- "Joan implementó X." → "Joan me pidió X y lo implementé."
+
+Raw fragment:
+{fragment}
+
+Output ONLY the JSON array.

@@ -1,0 +1,10 @@
+Extract WORK ideas (technical decisions, code, systems, config, tests, design) from these fragments. Do not manufacture personal/social ideas here; if a fragment mixes both, extract the technical idea.
+
+Return an ARRAY (may be empty). For each: "title" (≤80 chars), "significance" (0.6-1.0 if durable work), "emotion" ([gray, blue, cyan, green, yellow, orange, red, purple]), "intensity" (0.0-1.0), "theme" (snake_case), "relics" (0-4), "cross_refs" (from {candidates}), "fragment_ref" (1-based), "category_score" (score the IDEA itself, never this call: 1.0 = purely technical/operational, 0.0 = purely personal/relational. Real technical work ≥0.6; a personal idea that slipped in ≤0.4 — the score routes the memory to work or social).
+
+{voice}
+
+Fragments:
+{fragments}
+
+Output ONLY the JSON array.
