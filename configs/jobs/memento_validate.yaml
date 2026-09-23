@@ -13,6 +13,7 @@ elements_command: uv run python scripts/memento_validate.py --list
 defer_exit_code: 77
 llm:
   task: refine
+  model: granite_8b
 preflight:
   llm_required: true
 control:

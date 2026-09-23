@@ -10,15 +10,29 @@ filtro de ruido (`is_garbage`) y emite veredicto LLM.
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from . import prompts, runtime
 
 logger = logging.getLogger(__name__)
 
 BATCH = 10
+
+# Pre-check determinista: volcados obvios que no merecen ni llamada al LLM
+# (el caso 001-stash-check: meta-comentario en inglés; 019: línea de progreso).
+_RAW_DUMP_RE = re.compile(
+	r"(^|\n)\s*##\s*\d{4}-\d{2}-\d{2}.*—\s*Tool|(^|\n)\s*\d{1,3}(\.\d+)?\s*%\s*—|passed the \d+\s*%\s*threshold|"
+	r"\bthe user asks\b|\blet me (check|push|see|fix)\b|file:/{3}|file:/{2}[^/]",
+	re.I,
+)
+
+
+def looks_like_raw_dump(body: str) -> bool:
+	"""True para volcados de terminal/meta-comentarios evidentes (sin LLM)."""
+	return bool(_RAW_DUMP_RE.search(body))
 
 
 def _gate(route: str) -> float:
@@ -87,14 +101,14 @@ def pending_validations(root: Path) -> List[Path]:
 	return out
 
 
-def _stamp_verdict(path: Path, approved: bool, reason: str) -> None:
+def _stamp_verdict(path: Path, approved: bool, reason: str, validator: Optional[str] = None) -> None:
 	from red_pill.memento.ascension import _stamp_refine
 
 	_stamp_refine(
 		path,
 		{
 			"validator_approved": bool(approved),
-			"validator": runtime.engine_id(),
+			"validator": validator or runtime.engine_id(),
 			"validator_prompt_version": runtime.validate_prompt_version(),
 			"validator_reason": reason,
 			"validated_at": datetime.now(timezone.utc).isoformat(),
@@ -110,10 +124,22 @@ def _body(path: Path) -> str:
 
 
 def validate_notes(transport: runtime.Transport, paths: List[Path], batch: int = BATCH) -> Dict[str, Any]:
-	"""Valida en lotes; sella el veredicto. Las no contestadas quedan pendientes."""
-	stats: Dict[str, Any] = {"pending": len(paths), "approved": 0, "rejected": 0, "sin_respuesta": 0}
-	for start in range(0, len(paths), batch):
-		chunk = paths[start : start + batch]
+	"""Valida en lotes; sella el veredicto. Las no contestadas quedan pendientes.
+
+	Pre-check determinista: los volcados obvios (`looks_like_raw_dump`) se rechazan
+	sin llamar al LLM (razón `raw-dump heuristic`).
+	"""
+	stats: Dict[str, Any] = {"pending": len(paths), "approved": 0, "rejected": 0, "sin_respuesta": 0, "heuristic_rejected": 0}
+	pendientes: List[Path] = []
+	for p in paths:
+		if looks_like_raw_dump(_body(p)):
+			_stamp_verdict(p, False, "raw-dump heuristic", validator="raw-dump-heuristic")
+			stats["rejected"] += 1
+			stats["heuristic_rejected"] += 1
+		else:
+			pendientes.append(p)
+	for start in range(0, len(pendientes), batch):
+		chunk = pendientes[start : start + batch]
 		listing = "\n\n".join(f"[{i}] {_body(p)[:600]}" for i, p in enumerate(chunk))
 		raw = transport(prompts.CONTENT_VALIDATE_SYSTEM, prompts.CONTENT_VALIDATE_USER.format(notes=listing), 2048)
 		answered = set()

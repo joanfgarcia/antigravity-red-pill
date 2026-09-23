@@ -14,6 +14,7 @@ defer_exit_code: 77
 # RFC-HARNESS-002 §7: task refine (los prompts de annotate se sirven por ese carril).
 llm:
   task: refine
+  model: granite_8b
 preflight:
   llm_required: true
 control:

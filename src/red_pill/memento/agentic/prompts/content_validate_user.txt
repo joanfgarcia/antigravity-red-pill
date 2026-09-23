@@ -1,8 +1,15 @@
-These memory notes were rejected by an automatic machine-noise filter (they contain CI/git/terminal signatures). Decide for EACH note whether it is a legitimate durable memory (a coherent note) or actual machine noise.
+These memory notes were rejected by an automatic machine-noise filter (CI/git/terminal signatures). Decide for EACH note: is it a legitimate durable memory, or actual machine noise?
 
-Rules:
-- APPROVE if the note is a coherent narrative memory, even if it MENTIONS a command, a test result or the word "errors" as part of the story.
-- REJECT if the note IS raw terminal output, a progress line, a code dump, or lacks narrative/context (e.g. "97.32% passed! Let me push: feat: ...").
+REJECT (this is the default when in doubt) if the note is any of:
+- raw terminal output or a tool dump (lines starting with "## <timestamp> — Tool", file:/// URLs, ANSI fragments);
+- a progress/status line ("97.32% passed...", "Let me push: feat: ...", "688 tests, 0 failures");
+- bare commands or commit/push instructions with no lived story around them;
+- meta-commentary about the task in English ("The user asks...", "Let me check...") instead of a memory;
+- a code/test dump with no narrative context.
+
+APPROVE only if the note is a coherent memory OF THE OPERATOR'S DAY told in first person (Joan/me), even when it MENTIONS a command, a test result or the word "errors" as part of the story.
+
+For every APPROVE, the reason MUST quote the narrative element (who told/asked what). If you cannot quote it, REJECT.
 
 Return an ARRAY: [{{"i": <index>, "approved": true/false, "reason": "<8 palabras>"}}]
 

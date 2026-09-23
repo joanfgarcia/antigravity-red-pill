@@ -203,6 +203,20 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   día se cambia un prompt a propósito). Con la Bio y el validador, ya son 24
   recursos en `prompts/`. El loader **compartido** de core y las fases 2/4/5/6 del
   RFC siguen pendientes.
+- **[FIX] Modelos pinneados en recetas + hallazgo `tiny_aya`**: las recetas con
+  `llm: task: refine` (validate / annotate_rebuild / probe) no fijaban modelo y
+  el daemon resolvía ese task a **`tiny_aya_water`** (mapeo legacy del refine) →
+  el rebuild anotó **95 sesiones con tiny_aya** (8 con granite, del delta
+  nocturno) y el validador validó con él (0/3 controles). Pinneado
+  `model: granite_8b` en las tres recetas (el `engine` queda sellado por nota).
+  Validador con granite: 2/3 controles; + pre-check determinista
+  `looks_like_raw_dump` (líneas de progreso, meta-comentarios en inglés, tool
+  dumps, `file:/…`) → **3/3**, sin gastar LLM en lo obvio.
+- **[MEM-006] Piloto de validación (31 pendientes) — cerrado**: prompt v2
+  (`217aafd8dd`: rechazo primero + obligar a citar la narrativa para aprobar),
+  validador granite + heurística → **28 aprobadas / 3 rechazadas** (019 progreso,
+  001-stash meta-inglés, 001 tool-dump). Los 28 quedan listos para ascender con
+  `content_verified=True` (`memento_ascend --replace-legacy`).
 - **[DOC] RFC-003 Prompts as Resources (DRAFT)**: prompts como recurso (ficheros +
   loader con placeholders `${var}`, hash de contenido, overrides explícitos);
   norma propuesta (RULE 5) y migración por fases. La Bio de identidad ya vive en

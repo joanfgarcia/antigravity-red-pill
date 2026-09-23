@@ -154,7 +154,7 @@ def test_prompt_fingerprints_estables():
 	assert distill_prompt_version() == "66c679f1bb"
 	assert refine_prompt_version() == "85209a6c9e"
 	assert annotate_prompt_version() == "07a5c9b529"
-	assert validate_prompt_version() == "521a6c19b4"
+	assert validate_prompt_version() == "217aafd8dd"  # v2 endurecido (2026-09-23)
 
 
 def test_is_garbage_reason_expoene_la_firma():
@@ -223,13 +223,31 @@ def test_validate_notes_aprueba_y_rechaza(tmp_path, monkeypatch):
 	pend = pending_validations(tmp_path)
 	assert len(pend) == 2
 	stats = validate_notes(transport, pend)
-	assert stats == {"pending": 2, "approved": 1, "rejected": 1, "sin_respuesta": 0}
+	assert stats == {"pending": 2, "approved": 1, "rejected": 1, "sin_respuesta": 0, "heuristic_rejected": 0}
 	txt_good = good.read_text(encoding="utf-8")
 	assert "validator_approved: true" in txt_good
 	assert "validator: test-engine" in txt_good
 	assert "validator_prompt_version:" in txt_good
 	assert "validator_approved: false" in bad.read_text(encoding="utf-8")
 	assert pending_validations(tmp_path) == []
+
+
+def test_validate_notes_rechaza_volcado_evidente_sin_llm(tmp_path):
+	from red_pill.memento.agentic.validate import pending_validations, validate_notes
+
+	note = tmp_path / "annotate" / "001-stash.md"
+	_note(note, "The user asks about pending commits. Let me check the git status. Todo limpio.")
+	pend = pending_validations(tmp_path)
+	assert len(pend) == 1
+
+	def transport(system, user, max_tokens):
+		raise AssertionError("el pre-check determinista no debe llamar al LLM")
+
+	stats = validate_notes(transport, pend)
+	assert stats["heuristic_rejected"] == 1 and stats["rejected"] == 1
+	txt = note.read_text(encoding="utf-8")
+	assert "validator: raw-dump-heuristic" in txt
+	assert "validator_approved: false" in txt
 
 
 def test_ascender_acepta_anotacion_con_source_lines(tmp_path):
