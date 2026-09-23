@@ -109,6 +109,7 @@ def test_annotate_session_escribe_con_rutas_y_gate(tmp_path, monkeypatch):
 	fm, body = by_route["work"]
 	assert fm["work_score"] == "0.90"
 	assert fm["prompt_version"]
+	assert fm["source_lines"]  # obligatorio para el ascenso (regresión 2026-09-23)
 	assert "Joan me pide arreglar el endpoint" in body
 	assert by_route["none"][0]["quality_flags"] != "[]"  # Samantha → identity → sin ruta
 	meta = json.loads((tmp_path / dir_rel / "annotate" / "_meta.json").read_text(encoding="utf-8"))
@@ -121,6 +122,42 @@ def test_annotate_session_escribe_con_rutas_y_gate(tmp_path, monkeypatch):
 	record = json.loads((tmp_path / dir_rel / "_session.json").read_text(encoding="utf-8"))
 	assert record["stages"]["annotate"]["notas"] == 3
 	assert record["updated_at"]
+
+
+class _FakeMM:
+	def __init__(self):
+		self.calls = []
+
+	def add_memory(self, **kw):
+		self.calls.append(kw)
+		return kw.get("point_id") or "pid"
+
+
+class _FakeReg:
+	def upsert(self, *a, **k):
+		return None
+
+
+def test_ascender_acepta_anotacion_con_source_lines(tmp_path):
+	"""Regresión (incidente 2026-09-23): las notas annotate deben escribir
+	`source_lines` (= split_ref); sin él `ascender` devolvía missing_key y el
+	borrado legacy dejaba las sesiones sin engramas."""
+	from red_pill.memento.ascension import ascender
+
+	note = tmp_path / "annotate" / "002-filtro-de-empatia.md"
+	note.parent.mkdir(parents=True)
+	note.write_text(
+		"---\nsession_id: s1\nsource: opencode\nsource_lines: memento/index.md#l10-20\n"
+		"split_ref: memento/index.md#l10-20\nsignificance: 0.9\nemotion: gray\nintensity: 0.5\n"
+		"ascended: false\ndual_route: work\nwork_score: 0.9\nsocial_score: 0.05\n---\nJoan me pide el fix y le explico.\n",
+		encoding="utf-8",
+	)
+	mm = _FakeMM()
+	res = ascender(tmp_path, _FakeReg(), note, memory_manager=mm)
+	assert res["ascended"] is True
+	assert res["collection"] == "work_memories"
+	assert mm.calls[0]["metadata"]["dual_route"] == "work"
+	assert mm.calls[0]["metadata"]["source_lines"] == "memento/index.md#l10-20"
 
 
 def test_session_record_fusiona_etapas(tmp_path):

@@ -176,6 +176,22 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   marcado legacy/repair-only); el probe `memento_probe_resynth.py` pasa a probar
   `annotate_session`; el reseed documenta ascenso annotate-first. Ascensión y
   reinforce leen `annotate/` + `refine/` legacy.
+- **[FIX] annotate → ascenso (`source_lines`)** — incidente 2026-09-23: las notas
+  escribían `split_ref` pero no `source_lines`, que `ascender` exige → el primer
+  `--replace-legacy` borró los 1.870 engramas legacy y ascendió **0** (missing_key).
+  Detectado en la validación inmediata; datos a salvo en el árbol. Fix: el writer
+  escribe ambos campos; migración de 4.801 notas (`source_lines` = `split_ref`);
+  test de regresión (`ascender` acepta una nota). Re-ejecutado: **4.232 notas
+  ascendidas**. Efecto: work 2.953→6.085, social 3.560→2.790 (el legacy mal
+  enrutado a social por el clasificador viejo desaparece; las notas van a work).
+- **[MEM-006] Sustitución legacy (`--replace-legacy`) + política annotate-first**:
+  por sesión con notas: normaliza `session_id` al canónico del registry (980),
+  borra los engramas legacy (`origin=memento` + `refine_ref: …/refine/…`; 1.870),
+  asciende las notas y sella los `refine/` como `replaced_by_annotate` (2.146).
+  Convergente (re-ejecutar = no-op). `ascend_by_threshold` y el weave **omiten los
+  `refine/` de sesiones anotadas** (fallback a refine solo si no hay notas).
+  Receta `memento_ascend_post_rebuild` actualizada; job encadenado nuevo
+  `d362df77` (el viejo `3756270a`, sin replace, queda BLOCKED y converge).
 - **[DOC] RFC-003 Prompts as Resources (DRAFT)**: prompts como recurso (ficheros +
   loader con placeholders `${var}`, hash de contenido, overrides explícitos);
   norma propuesta (RULE 5) y migración por fases. La Bio de identidad ya vive en

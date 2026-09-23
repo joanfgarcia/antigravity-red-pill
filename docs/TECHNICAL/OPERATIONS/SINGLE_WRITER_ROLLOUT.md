@@ -128,6 +128,13 @@ solo para (a) rollback explícito (flag OFF) y (b) reparación de la capa legacy
 (`memento_refine_rescore.py`). El probe (`memento_probe`) también prueba annotate.
 La ascensión y el reinforce leen `annotate/` **y** el `refine/` legacy.
 
+**Sustitución legacy (`--replace-legacy`)**: además del ascenso, por cada sesión
+con notas: normaliza el `session_id` al canónico del registry, borra sus engramas
+legacy de `refine/` en Qdrant y sella esos refines (`replaced_by_annotate`).
+Convergente (re-ejecutar = no-op). Política **annotate-first por sesión**: la
+ascensión y el reinforce omiten los `refine/` de sesiones anotadas (fallback a
+refine solo si no hay notas). La receta post-rebuild ya la usa.
+
 **Registro por sesión**: cada sesión lleva `_session.json` en la raíz de su
 directorio (portada del expediente: bloques `stages.distill` / `stages.annotate`
 / `stages.ascend` + `updated_at`, escritos por cada etapa). El

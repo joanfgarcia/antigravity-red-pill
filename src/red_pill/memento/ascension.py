@@ -324,9 +324,13 @@ def weave_memento_reinforcement(
 		return stats
 
 	# 2. Refuerzo de refinados/anotaciones no ascendidos con temas afines.
+	# Política annotate-first: los `refine/` legacy de sesiones ya anotadas se omiten.
+	annotated_sessions = {str(p.parent.parent) for p in Path(root).rglob("annotate/*.md")}
 	paths = sorted(set(Path(root).rglob("refine/*.md")) | set(Path(root).rglob("annotate/*.md")))
 	per_session_asc: Dict[str, int] = {}
 	for refine_path in paths:
+		if "/refine/" in str(refine_path) and str(refine_path.parent.parent) in annotated_sessions:
+			continue
 		try:
 			fm, body = parse_refine(refine_path.read_text(encoding="utf-8"))
 			if not body or fm.get("ascended"):
@@ -405,11 +409,17 @@ def ascend_by_threshold(
 
 		memory_manager = MemoryManager()
 
-	stats = {"refine_evaluados": 0, "ascendidos": 0, "rechazados_por_umbral": 0, "rechazados_por_ruta": 0, "errores": 0, "duplicados_omitidos": 0}
+	stats = {"refine_evaluados": 0, "ascendidos": 0, "rechazados_por_umbral": 0, "rechazados_por_ruta": 0, "errores": 0, "duplicados_omitidos": 0, "refines_omitidos_por_annotate": 0}
 
+	# MEM-006: política annotate-first POR SESIÓN — si la sesión tiene notas, sus
+	# `refine/` legacy se ignoran (fallback a refine solo si no hay annotate).
+	annotated_sessions = {str(p.parent.parent) for p in Path(root).rglob("annotate/*.md")}
 	candidates = []
 	paths = sorted(set(Path(root).rglob("refine/*.md")) | set(Path(root).rglob("annotate/*.md")))
 	for refine_path in paths:
+		if "/refine/" in str(refine_path) and str(refine_path.parent.parent) in annotated_sessions:
+			stats["refines_omitidos_por_annotate"] += 1
+			continue
 		try:
 			fm, body = parse_refine(refine_path.read_text(encoding="utf-8"))
 			if not body or fm.get("ascended"):

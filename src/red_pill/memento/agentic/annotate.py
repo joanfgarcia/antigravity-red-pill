@@ -293,6 +293,7 @@ def annotate_session(
 			[
 				("session_id", session_id),
 				("source", source),
+				("source_lines", a["split_ref"]),
 				("split_ref", a["split_ref"]),
 				("distill_ref", _distill_ref(root, dir_rel, a["nnn"])),
 				("title", a["title"]),

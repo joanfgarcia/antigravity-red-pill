@@ -98,12 +98,27 @@ def status(root: Path) -> dict:
 	return out
 
 
+def _canonical_ids() -> dict:
+	"""dir_rel → session_id canónico (del registry); evita escribir ids derivados de la ruta."""
+	from red_pill.memento.registry import MementoRegistry
+
+	mapping: dict = {}
+	for _source, sessions in (MementoRegistry().state.get("registry") or {}).items():
+		if not isinstance(sessions, dict):
+			continue
+		for sid, entry in sessions.items():
+			dir_rel = str((entry or {}).get("dir") or "")
+			if dir_rel:
+				mapping[dir_rel] = sid
+	return mapping
+
+
 def process_one(root: Path, dir_rel: str, force: bool = False) -> dict:
 	if not force and _fresh(root, dir_rel):
 		return {"dir": dir_rel, "skipped": "fresh"}
 	parts = Path(dir_rel).parts
 	source = parts[1] if len(parts) > 1 else "unknown"
-	session_id = parts[2] if len(parts) > 2 else dir_rel
+	session_id = _canonical_ids().get(dir_rel) or (parts[2] if len(parts) > 2 else dir_rel)
 	max_sig = annotate_session(root, dir_rel, session_id, source, http_transport, voice_rewrite=True)
 	n = len(list((root / dir_rel / "annotate").glob("*.md")))
 	return {"dir": dir_rel, "anotaciones": n, "max_significance": round(float(max_sig), 2)}

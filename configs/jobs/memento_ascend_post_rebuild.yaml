@@ -1,7 +1,9 @@
 # Memento — ascensión masiva post-rebuild (annotate → Qdrant).
 #
 # Promueve las anotaciones del árbol (dual_route work/social, significance sobre
-# el gate) a work_memories/social_memories. Idempotente. Sin LLM.
+# el gate) a work_memories/social_memories Y SUSTITUYE la capa legacy: borra los
+# engramas de refine/ de cada sesión anotada y sella esos refines. Idempotente
+# (convergente: re-ejecutar es no-op). Sin LLM. Política annotate-first por sesión.
 # Encadenado al rebuild con --parent: queda BLOCKED hasta que el rebuild COMPLETA
 # y entonces corre solo:
 #   uv run red-pill job submit --recipe memento_ascend_post_rebuild --parent <rebuild_id>
@@ -9,7 +11,7 @@
 source: script_job
 priority: 3
 title: Memento ascensión post-rebuild (MEM-006)
-step_command: uv run python scripts/memento_ascend.py
+step_command: uv run python scripts/memento_ascend.py --replace-legacy
 progress:
   mode: single
 control:
