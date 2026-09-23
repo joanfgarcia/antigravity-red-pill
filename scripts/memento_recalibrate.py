@@ -17,14 +17,14 @@ Herramienta recurrente: cada vez que se cambian los modelos de las fases Memento
 	report --work TH --social TH reporte markdown (stats + bands + muestras) para el desk
 
 Determinista: stats/bands/report (sin LLM). Los audit-* usan el LLM local vía
-`http_transport` (task=distill) y `--engine` fija RP_LLM_MODEL para comparar modelos.
+`http_transport` (task=distill, o `--task` para otro contrato como `validate`) y
+`--engine` fija RP_LLM_MODEL para comparar modelos.
 `--dry-run` imprime la muestra sin llamar al LLM (cata manual).
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import random
 import re
@@ -154,20 +154,36 @@ def _sample(items: List[Dict[str, Any]], n: int, seed: int) -> List[Dict[str, An
 	return random.Random(seed).sample(items, min(n, len(items)))
 
 
+def _extract_rows(text: str) -> Optional[List[Dict[str, Any]]]:
+	"""Primer array JSON de OBJETOS — escanea candidatos desde cada `[`.
+
+	`runtime._extract_json_array` se detiene en el primer array balanceado, que
+	puede ser prosa con corchetes (un índice `[1]`, un enlace markdown) → antes
+	devolvía métricas vacías en silencio (auditoría adversarial 2026-09-23).
+	"""
+	from red_pill.memento.agentic import runtime
+
+	search = 0
+	while True:
+		pos = text.find("[", search)
+		if pos < 0:
+			return None
+		candidate = runtime._extract_json_array(text[pos:])
+		if candidate and all(isinstance(x, dict) for x in candidate):
+			return candidate
+		search = pos + 1
+
+
 def _llm_json(system: str, user: str, temperature: float = 0.1) -> List[Dict[str, Any]]:
 	from red_pill.memento.agentic import http_transport, llm_available
 
 	if not llm_available():
 		raise SystemExit("[recalibrate] LLM local no disponible — audit cancelado.")
 	raw = http_transport(system, user, max_tokens=2048, temperature=temperature)
-	m = re.search(r"\[.*\]", raw, re.S)
-	if not m:
-		raise SystemExit(f"[recalibrate] respuesta no parseable: {raw[:200]}")
-	try:
-		data = json.loads(m.group(0))
-	except json.JSONDecodeError as e:
-		raise SystemExit(f"[recalibrate] JSON inválido: {e}")
-	return data if isinstance(data, list) else []
+	rows = _extract_rows(raw)
+	if rows is None:
+		raise SystemExit(f"[recalibrate] respuesta no parseable (sin array de objetos): {raw[:200]}")
+	return rows
 
 
 def _listing(items: List[Dict[str, Any]], chars: int = 500) -> str:
@@ -404,11 +420,15 @@ def main() -> None:
 	parser.add_argument("--samples", type=int, default=8, help="Muestras impresas por banda.")
 	parser.add_argument("--seed", type=int, default=7, help="Semilla del muestreo.")
 	parser.add_argument("--engine", default="", help="Modelo para el LLM (RP_LLM_MODEL).")
+	parser.add_argument("--task", default="", help="Contrato task del LLM (RP_LLM_TASK; p. ej. validate).")
 	parser.add_argument("--dry-run", action="store_true", help="Solo imprime la muestra (sin LLM).")
 	args = parser.parse_args()
 
 	if args.engine:
 		os.environ["RP_LLM_MODEL"] = args.engine
+	if args.task:
+		os.environ["RP_LLM_TASK"] = args.task
+	else:
 		os.environ.setdefault("RP_LLM_TASK", "distill")
 
 	rows = load_rows(args.root or _memento_root())

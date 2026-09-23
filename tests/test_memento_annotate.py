@@ -21,6 +21,47 @@ def _idea(title, text, sig, theme="t"):
 	return {"title": title, "text": text, "significance": sig, "emotion": "cyan", "intensity": 0.6, "theme": theme, "relics": []}
 
 
+def _load_annotate_script():
+	import importlib.util
+
+	spec = importlib.util.spec_from_file_location("memento_annotate_script", Path("scripts/memento_annotate.py"))
+	mod = importlib.util.module_from_spec(spec)
+	assert spec.loader is not None
+	spec.loader.exec_module(mod)
+	return mod
+
+
+def test_stale_engine_reanota_solo_sesiones_de_otro_motor(tmp_path, monkeypatch):
+	"""`--stale-engine`: la frescura por prompt_version ignora el motor que anotó;
+	con el flag, las sesiones anotadas por OTRO motor cuentan como stale."""
+	mod = _load_annotate_script()
+	root = tmp_path / "memento_root"
+	for sid, engine in (("s1", "tiny_aya_water"), ("s2", "granite_8b")):
+		d = root / "2026-09" / "opencode" / sid
+		(d / "memento").mkdir(parents=True)
+		(d / "memento" / "index.md").write_text("# idx", encoding="utf-8")
+		(d / "annotate").mkdir()
+		(d / "annotate" / "001-note.md").write_text("---\n---\nnota", encoding="utf-8")
+		(d / "annotate" / "_meta.json").write_text(
+			json.dumps(
+				{
+					"annotate_prompt_version": mod.annotate_prompt_version(),
+					"engine": engine,
+					"notas": 1,
+					"annotated_at": "2026-01-01T00:00:00Z",
+				}
+			),
+			encoding="utf-8",
+		)
+	monkeypatch.setattr(mod, "_current_engine", lambda: "granite_8b")
+
+	assert mod.pending(root) == []
+	assert mod.pending(root, stale_engine=True) == ["2026-09/opencode/s1"]
+	stats = mod.status(root)
+	assert stats["anotadas"] == 2
+	assert stats["stale_engine"] == 1
+
+
 def _fake_transport():
 	def transport(system, user, max_tokens):
 		if system == ANNOTATE_WORK_SYSTEM:

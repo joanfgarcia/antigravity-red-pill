@@ -216,7 +216,46 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   (`217aafd8dd`: rechazo primero + obligar a citar la narrativa para aprobar),
   validador granite + heurística → **28 aprobadas / 3 rechazadas** (019 progreso,
   001-stash meta-inglés, 001 tool-dump). Los 28 quedan listos para ascender con
-  `content_verified=True` (`memento_ascend --replace-legacy`).
+  `content_verified=True` (ascendidos el mismo 2026-09-23 vía
+  `memento_ascend --replace-legacy`: work +20 / social +8, `ascended_by=validated`).
+- **[FIX] Ascensión — `validator_approved: false` (bool YAML) no se saltaba**: los
+  checks de `ascend_by_threshold`/`weave` hacían `str(fm.get(...) or "")` → el
+  `False` booleano se convertía en `""` y nunca casaba con `"false"`; el rechazo
+  recaía igualmente en `ascender`, pero sin contarse ni ahorrarse la valoración.
+  Ahora el skip es terminal y se contabiliza en `rechazados_por_validador`.
+- **[FIX] `job submit --parent` guardaba el prefijo corto**: el desbloqueo del
+  hijo BLOCKED y la cascada de cancelación comparan contra el UUID completo y
+  nunca casaban (hijo huérfano eterno — incidente del rebuild `ad037051` →
+  `d362df77`). El CLI resuelve ahora el prefijo con `_find_job` antes de encolar.
+- **[FIX] Auditor de recalibración — parser loud + `--task`**:
+  `memento_recalibrate` usaba `re.search(r"\[.*\]")` + `json.loads` → "Extra
+  data" con modelos que añaden texto tras el JSON (el 4.2-3B); y el "parser
+  robusto" intermedio se detenía en prosa con corchetes (`[1]`) devolviendo
+  métricas vacías en silencio. Ahora `_extract_rows` escanea arrays de OBJETOS
+  y falla con mensaje si no hay ninguno; acepta `--task` (p. ej. `--engine
+  granite_4_2_3b --task validate`).
+- **[FIX] Huérfanos BLOCKED — clase cerrada (auditoría adversarial O2)**:
+  `enqueue_task` con `parent_task_id` terminal creaba hijos BLOCKED eternos (el
+  desbloqueo vive en `mark_completed`). Ahora: guard transaccional
+  (`BEGIN IMMEDIATE` cierra el TOCTOU lectura→INSERT; padre COMPLETED → hijo
+  PENDING directo; padre FRUSTRATED/fantasma → rechazo limpio) + cascada de
+  cancelación en TODAS las transiciones a terminal-fallo (disyuntor del
+  breaker, colgado→FRUSTRATED de `queue_hygiene`, `purge_terminal`, purga con
+  ventana y `job purge --force` de un PAUSED/BLOCKED). El CLI reporta el estado
+  real del hijo.
+- **[FIX] `weave` contabiliza `rechazados_por_validador`**: el skip terminal del
+  veredicto negativo ya suma en el contador del weave (antes solo en
+  `ascend_by_threshold`).
+- **[NEW] `memento_annotate --stale-engine`**: frescura consciente del motor —
+  las sesiones anotadas por otro motor (las 95 con `tiny_aya_water`) cuentan
+  como stale; `--status` reporta `stale_engine`. Opt-in: el rebuild pineado NO
+  las re-anota. Decisión (**AD-036**): la cohorte tiny_aya se acepta como
+  estrato histórico — la cata del 40% la da como la capa más limpia (0,1%
+  duplicados, 8,3% trivial vs 17,4% granite); la limpieza de duplicados es
+  **MEM-006 P1-B** (G5).
+- **[NEW] `examples/task_profiles.yaml.example`**: el contrato de tasks
+  (incluida `validate`, requerida por `memento_validate.yaml`) deja de ser
+  implícito del entorno del operador.
 - **[DOC] RFC-003 Prompts as Resources (DRAFT)**: prompts como recurso (ficheros +
   loader con placeholders `${var}`, hash de contenido, overrides explícitos);
   norma propuesta (RULE 5) y migración por fases. La Bio de identidad ya vive en
@@ -467,6 +506,13 @@ sesión (1 instancia por sesión, lista congelada en el checkpoint).
   4.1-8B mantiene mal en "entidades".
 - **[FIX] Validador del bake-off**: `raw_decode` en vez de `re.search` greedy
   (fallaba con "Extra data" cuando el modelo añade texto tras el JSON).
+- **[NEW] Task `validate` — el 4.2-3B como juez de validación (AD-035)**: el 3B
+  suspendió distill/refine (AD-032), pero la validación de contenido es otra
+  familia de tarea (juez, no generación). Nueva task `validate` en
+  `task_profiles.yaml` (default `granite_8b`; candidato `granite_4_2_3b` con
+  thinking off y receta IBM temp 1.0) y `memento_validate.yaml` pasa de
+  `task: refine` (apaño) a `task: validate`. Medido en la golden set:
+  `granite_8b` **5/5**, `granite_4_2_3b` **4/5** (falso negativo en la 005).
 
 ### 🔁 Resiembra Memento (Fase 4, cierre)
 

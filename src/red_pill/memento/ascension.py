@@ -291,7 +291,7 @@ def weave_memento_reinforcement(
 		window_hours = _polaroid_cfg(24.0, "AXON_WINDOW_HOURS")
 
 	client = memory_manager.client
-	stats = {"engramas_en_ventana": 0, "refine_evaluados": 0, "refuerzos_aplicados": 0, "ascensos": 0, "errores": 0}
+	stats = {"engramas_en_ventana": 0, "refine_evaluados": 0, "refuerzos_aplicados": 0, "ascensos": 0, "errores": 0, "rechazados_por_validador": 0}
 
 	window_start = now - window_hours * 3600.0
 
@@ -336,7 +336,8 @@ def weave_memento_reinforcement(
 			if not body or fm.get("ascended"):
 				continue
 			# Veredicto de validación negativo: no se refuerza ni reintenta.
-			if str(fm.get("validator_approved") or "").strip().lower() == "false":
+			if str(fm.get("validator_approved")).strip().lower() == "false":
+				stats["rechazados_por_validador"] += 1
 				continue
 			stats["refine_evaluados"] += 1
 			refine_theme, refine_tokens = _refine_topics(fm, body)
@@ -433,7 +434,7 @@ def ascend_by_threshold(
 				stats["rechazados_por_ruta"] += 1
 				continue
 			# Veredicto de validación negativo (gate/LLM): terminal, sin reintento.
-			if str(fm.get("validator_approved") or "").strip().lower() == "false":
+			if str(fm.get("validator_approved")).strip().lower() == "false":
 				stats["rechazados_por_validador"] += 1
 				continue
 			significance = float(fm.get("significance", 0.0) or 0.0)

@@ -4,6 +4,40 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-036] Anotaciones del motor equivocado (tiny_aya) — aceptadas como estrato histórico
+**Date**: 2026-09-23
+**Status**: ACCEPTED (2026-09-23) — opción (c): se acepta la cohorte tal cual.
+**Context**: auditoría adversarial pre-commit (panel O2) del rebuild MEM-006. El incidente `tiny_aya` dejó **95 sesiones anotadas con `tiny_aya_water`** (sello `engine`), de las cuales **~4.1k engramas ya fueron ascendidos** en el barrido legacy. La frescura del rebuild era solo por `prompt_version` → el job pineado (granite_8b) NO las re-anotaría: el plan "el rebuild arregla el corpus" quedaba incompleto en silencio.
+**Decision**:
+- **Se acepta la cohorte tiny_aya (4.128 engramas) sin purga ni re-anotación**: la cata la muestra como la capa MÁS LIMPIA del corpus, y purgarla rompería los hilos de Ariadna/hubs (navegación tejida sobre esos point ids) para ganar solo longitud; el contexto completo vive en Memento (`source_lines`/`refine_ref`) y se puede enriquecer on-demand.
+- `memento_annotate --stale-engine` (y `--status.stale_engine`) queda como **bisturí opt-in**, no como camino por defecto.
+- La limpieza de duplicados del corpus granite/legacy **NO es decisión nueva**: es **MEM-006 P1-B** (script `memento_dedup_qdrant.py`: agrupa por `session_id+source_lines`, superviviente por score compuesto, dry-run previo; Q2/Q3 abiertas) + **MEM-007 D12** (dedup-at-ascension) / **G5** (P1-B por escribir). La cata corrobora su magnitud.
+**Evidence (cata 40% de la cohorte tiny_aya, 2026-09-23)**:
+- Determinista (1.651 de 4.128; semilla 7): 98,7% ES · 0,5% raw-dump · 0,4% <120 chars · mediana 300 chars (p10 193 / p90 472) · **3 duplicados exactos (0,1%)** · emoción/theme 100% · `content_verified` 0,2%.
+- Juez LLM (granite_8b, submuestra 120 de la cata): **8,3% triviales** vs **17,4%** en la cohorte `granite_8b` (n=46).
+- Contraste de duplicación del corpus: tiny_aya **0,1%** (3/4.128) vs `Granite-4.1-8B` **29,7%** (976/3.287) y `granite_8b` **33,9%** (504/1.487) — consistente con los ~1.500 pares work / 678 grupos social de la ronda de redestilado que P1-B debe limpiar.
+- Debilidad tiny: notas cortas/uniformes (mediana 300 vs 739 del granite) y sin validación de contenido.
+**Por qué**: registra la limitación y la decisión (hallazgo A1 del panel) sin big-bang sobre datos canónicos; la dedup pendiente ya tiene dueño (P1-B) y la cata le da munición (dry-run con números reales).
+
+---
+
+## [AD-035] Task `validate` — la validación de notas Memento y el 4.2-3B como juez
+**Date**: 2026-09-23
+**Status**: ACCEPTED — medido (golden set).
+**Context**: el 4.2-3B suspendió distill/refine (AD-032) y **no era candidato de ninguna task** → `task+model` lo rechazaba (K1: "model … no es candidato de la task … usa custom"), de modo que el validador de contenido (que corría bajo el task legacy `refine`) nunca pudo usarlo. Pero la validación de notas es una **familia de tarea distinta** (juez/detector, no generación) y el 3B es el mejor detector 3B medido (3/5, AD-033).
+**Evidence** (golden set 5 casos, `task=validate`, temp 0.1 del transporte):
+- `granite_8b`: **5/5** (baseline intacto).
+- `granite_4_2_3b`: **4/5** — único fallo: falso negativo sobre `005-investigate-transcript-hash-rfc-9420-8-2` (rechaza una nota válida).
+**Decision**:
+- Nueva task `validate` en `task_profiles.yaml`: default `granite_8b`; candidato `granite_4_2_3b` (thinking off; receta IBM en el candidato — temp 1.0; la task deja 0.1 para el 4.1; top_p 0.95 = default del daemon: el body del transporte manda los sampling params, verificado en `run_dual_bind.py`).
+- `configs/jobs/memento_validate.yaml` pasa de `task: refine` (apaño histórico) a `task: validate`.
+- El contrato `validate` debe existir en el `task_profiles.yaml` del entorno (documentado en `examples/task_profiles.yaml.example`); una instalación limpia sin esa task falla con 400 «task 'validate' no existe» (hallazgo de la auditoría adversarial O2).
+- El 4.2-3B queda **habilitado** como juez alternativo barato (2.24 GB, cabe entero en GPU); el default del validador sigue el 4.1-8B (5/5) hasta que el operador decida adoptarlo.
+- `memento_recalibrate.py` gana `--task` (medir con otro contrato) y parser JSON robusto (`_extract_json_array`, patrón AD-033 #8).
+**Por qué**: separa semánticamente validación de generación, permite medir/reemplazar el juez sin tocar distill/refine, y **persiste la receta** que antes solo vivía en el script del bake-off.
+
+---
+
 ## [AD-034] Single-writer de memoria — ascensión Memento, hubs, Ariadna, solera y flags por componente
 **Date**: 2026-09-21
 **Status**: ACCEPTED (rama `feat/memento-single-writer`; flags `SW_*` default OFF → producción intacta).

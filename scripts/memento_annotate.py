@@ -58,8 +58,24 @@ def _sessions(root: Path) -> list:
 	return out
 
 
-def _fresh(root: Path, dir_rel: str) -> bool:
-	"""Frescura por meta de sesión: `annotate/_meta.json` con el prompt_version vigente."""
+def _current_engine() -> str:
+	"""Motor servido actual (mismo origen que el sello `engine` de `_meta.json`)."""
+	try:
+		from red_pill.memento.agentic import runtime
+
+		return str(runtime.engine_id() or "").strip()
+	except Exception:
+		return ""
+
+
+def _fresh(root: Path, dir_rel: str, engine_aware: bool = False) -> bool:
+	"""Frescura por meta de sesión: `annotate/_meta.json` con el prompt_version vigente.
+
+	Con `engine_aware`, una sesión anotada por OTRO motor también es stale — el
+	rebuild pineado re-anota las anotaciones del modelo equivocado (auditoría
+	adversarial 2026-09-23). Si el motor actual no se puede resolver, no se
+	marca stale (conservador).
+	"""
 	meta = root / dir_rel / "annotate" / "_meta.json"
 	if not meta.exists():
 		return False
@@ -67,17 +83,24 @@ def _fresh(root: Path, dir_rel: str) -> bool:
 		data = json.loads(meta.read_text(encoding="utf-8"))
 	except (OSError, json.JSONDecodeError):
 		return False
-	return data.get("annotate_prompt_version") == annotate_prompt_version()
+	if data.get("annotate_prompt_version") != annotate_prompt_version():
+		return False
+	if engine_aware:
+		current = _current_engine()
+		if current and str(data.get("engine") or "") != current:
+			return False
+	return True
 
 
-def pending(root: Path, force: bool = False) -> list:
-	return [d for d in _sessions(root) if force or not _fresh(root, d)]
+def pending(root: Path, force: bool = False, stale_engine: bool = False) -> list:
+	return [d for d in _sessions(root) if force or not _fresh(root, d, engine_aware=stale_engine)]
 
 
 def status(root: Path) -> dict:
 	"""Control del rebuild: anotadas (versión vigente) / stale / pendientes / errores."""
 	current = annotate_prompt_version()
-	out = {"prompt_version": current, "sesiones": 0, "anotadas": 0, "stale": 0, "pendientes": 0, "errores": 0, "notas": 0, "ultima": ""}
+	current_engine = _current_engine()
+	out = {"prompt_version": current, "engine": current_engine, "sesiones": 0, "anotadas": 0, "stale": 0, "stale_engine": 0, "pendientes": 0, "errores": 0, "notas": 0, "ultima": ""}
 	for d in _sessions(root):
 		out["sesiones"] += 1
 		meta = root / d / "annotate" / "_meta.json"
@@ -93,6 +116,8 @@ def status(root: Path) -> dict:
 			out["anotadas"] += 1
 			out["notas"] += int(data.get("notas") or 0)
 			out["ultima"] = max(out["ultima"], str(data.get("annotated_at") or ""))
+			if current_engine and str(data.get("engine") or "") != current_engine:
+				out["stale_engine"] += 1
 		else:
 			out["stale"] += 1
 	return out
@@ -113,8 +138,8 @@ def _canonical_ids() -> dict:
 	return mapping
 
 
-def process_one(root: Path, dir_rel: str, force: bool = False) -> dict:
-	if not force and _fresh(root, dir_rel):
+def process_one(root: Path, dir_rel: str, force: bool = False, stale_engine: bool = False) -> dict:
+	if not force and _fresh(root, dir_rel, engine_aware=stale_engine):
 		return {"dir": dir_rel, "skipped": "fresh"}
 	parts = Path(dir_rel).parts
 	source = parts[1] if len(parts) > 1 else "unknown"
@@ -129,6 +154,11 @@ def main() -> None:
 	parser.add_argument("--list", action="store_true", help="Imprime las sesiones pendientes (JSON).")
 	parser.add_argument("--status", action="store_true", help="Control del rebuild: anotadas/stale/pendientes/errores y notas.")
 	parser.add_argument("--all", action="store_true", help="Ignora la frescura (re-anota todo).")
+	parser.add_argument(
+		"--stale-engine",
+		action="store_true",
+		help="Re-anota también las sesiones cuyo motor difiere del actual (p. ej. las anotadas con tiny_aya).",
+	)
 	parser.add_argument("--root", type=Path, default=None, help="Raíz Memento (default: la configurada).")
 	args = parser.parse_args()
 	root = args.root or get_memento_root()
@@ -137,7 +167,7 @@ def main() -> None:
 		print(json.dumps(status(root), indent=2, ensure_ascii=False))
 		return
 	if args.list:
-		print(json.dumps([{"dir": d} for d in pending(root, force=args.all)], ensure_ascii=False))
+		print(json.dumps([{"dir": d} for d in pending(root, force=args.all, stale_engine=args.stale_engine)], ensure_ascii=False))
 		return
 	raw = os.environ.get("RP_ELEMENT")
 	if not raw:
@@ -145,7 +175,7 @@ def main() -> None:
 		sys.exit(2)
 	el = json.loads(raw)
 	try:
-		res = process_one(root, str(el["dir"]), force=args.all)
+		res = process_one(root, str(el["dir"]), force=args.all, stale_engine=args.stale_engine)
 	except Exception as e:
 		from red_pill.memento.agentic.runner import _is_llm_connection_error
 
