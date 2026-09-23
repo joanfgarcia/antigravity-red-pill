@@ -624,7 +624,9 @@ class CognitiveQueueManager:
 		current = str(row["status"])
 		if current not in ("PENDING", "PROCESSING", "PAUSED", "PAUSING", "BLOCKED"):
 			return False
-		if current not in ("PENDING", "BLOCKED"):
+		if current != "BLOCKED":
+			# BLOCKED nunca arrancó un step: cancelarlo es limpio. El resto lleva
+			# la marca dirty (un PENDING puede tener checkpoint previo a validar).
 			self.mark_dirty_kill(task_id, {"reason": "operator"})
 		status, error_log = ("FRUSTRATED", "cancelled by operator") if discard else ("PAUSED", None)
 		with self._get_connection() as conn:

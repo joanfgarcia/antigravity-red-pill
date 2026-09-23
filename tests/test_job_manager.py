@@ -728,8 +728,8 @@ def test_kill_blocked_cancela_limpio_y_en_cascada(queue):
 	assert queue.kill_task(parent, discard=True) is True
 	parent_row = queue.get_task(parent)
 	assert parent_row["status"] == "FRUSTRATED"
-	assert not parent_row.get("dirty_kill")  # cancelar en espera no es kill sucio
 	assert queue.get_task(child)["status"] == "FRUSTRATED"
+	assert not queue.get_task(child).get("dirty_kill")  # BLOCKED → cancelación limpia
 	assert queue.get_task(child)["error_log"] == "parent cancelled"
 	assert queue.get_task(grand)["status"] == "FRUSTRATED"
 
