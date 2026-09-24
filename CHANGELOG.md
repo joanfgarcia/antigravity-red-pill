@@ -277,6 +277,13 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   → abatido a 1799s). `compute_step_timeout` respeta `control.max_step_minutes`
   como suelo del presupuesto y las etapas internas conservan su timeout propio
   (misma filosofía que el fan-out `_item`). Test: nightly 420 → 25200s.
+- **[REF] Task `annotate` propia (MEM-006)**: la etapa annotate deja el carril
+  `refine`/`distill` (apaño de RFC-HARNESS-002 §7). Nueva task `annotate`
+  (`granite_8b` default, temp 0.1, thinking off) en config + example; recetas
+  `memento_annotate_rebuild`/`memento_probe` → `task: annotate`; y
+  `annotate_session` fija `RP_LLM_TASK=annotate` **por llamada** (así el
+  nocturno, que comparte stage con distill, también la usa sin partir el stage).
+  Verificado en vivo: `task=annotate` → 200; `annotate+tiny_aya_water` → 400 K1.
 - **[FIX] `refine` default → `granite_8b`**: el default seguía siendo
   `tiny_aya_water` (config del operador + seed de instalación) → cualquier
   llamada con `task: refine` sin modelo cargaba tiny (origen del modelo

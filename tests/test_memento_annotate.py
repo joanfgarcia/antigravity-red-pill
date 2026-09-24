@@ -133,6 +133,25 @@ def test_dedup_annotations_colapsa_exactos_y_near_dups():
 	assert kept[0]["significance"] == 0.9
 
 
+def test_annotate_fija_su_propio_contrato(tmp_path, monkeypatch):
+	"""2026-09-24: annotate fija `task=annotate` en cada llamada (el carril
+	refine/distill era un apaño) y restaura el env al salir."""
+	import os as _os
+
+	monkeypatch.setattr(runtime, "engine_id", lambda: "test-engine")
+	monkeypatch.setenv("RP_LLM_TASK", "refine")
+	seen = []
+
+	def transport(system, user, max_tokens):
+		seen.append(_os.environ.get("RP_LLM_TASK"))
+		return _fake_transport()(system, user, max_tokens)
+
+	dir_rel = _tree(tmp_path)
+	annotate_session(tmp_path, dir_rel, "opencode:s1", "opencode", transport)
+	assert seen and all(t == "annotate" for t in seen)
+	assert _os.environ.get("RP_LLM_TASK") == "refine"
+
+
 def test_annotate_session_escribe_con_rutas_y_gate(tmp_path, monkeypatch):
 	monkeypatch.setattr(runtime, "engine_id", lambda: "test-engine")
 	dir_rel = _tree(tmp_path)

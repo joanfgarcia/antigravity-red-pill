@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -218,6 +219,28 @@ def _distill_ref(root: Path, dir_rel: str, nnn: str) -> str:
 	return str(files[0].relative_to(root)) if files else ""
 
 
+def _with_annotate_task(transport: runtime.Transport) -> runtime.Transport:
+	"""Envuelve el transporte fijando `RP_LLM_TASK=annotate` durante cada llamada.
+
+	Annotate tiene su PROPIO contrato task (el carril refine/distill era un apaño
+	de RFC-HARNESS-002 §7). Se fija por llamada: el nocturno (stage task=distill)
+	y el rebuild (task=annotate) usan el mismo contrato sin cambiar sus recipes.
+	"""
+
+	def call(system: str, user: str, max_tokens: int) -> str:
+		previous = os.environ.get("RP_LLM_TASK")
+		os.environ["RP_LLM_TASK"] = "annotate"
+		try:
+			return transport(system, user, max_tokens)
+		finally:
+			if previous is None:
+				os.environ.pop("RP_LLM_TASK", None)
+			else:
+				os.environ["RP_LLM_TASK"] = previous
+
+	return call
+
+
 def annotate_session(
 	root: Path,
 	dir_rel: str,
@@ -233,6 +256,9 @@ def annotate_session(
 	en 1ª persona las notas que no lo están antes de puntuar.
 	"""
 	import red_pill.config as cfg
+
+	# 2026-09-24: contrato propio de annotate (ver `_with_annotate_task`).
+	transport = _with_annotate_task(transport)
 
 	th_work = float(getattr(cfg, "MEMENTO_GATE_MIN_SIGNIFICANCE_WORK", 0.6))
 	th_social = float(getattr(cfg, "MEMENTO_GATE_MIN_SIGNIFICANCE_SOCIAL", 0.5))

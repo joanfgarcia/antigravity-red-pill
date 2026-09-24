@@ -17,7 +17,7 @@ step_command: uv run python scripts/memento_annotate.py
 elements_command: uv run python scripts/memento_annotate.py --list
 defer_exit_code: 77
 llm:
-  task: refine
+  task: annotate
   model: granite_8b
 preflight:
   llm_required: true
