@@ -280,6 +280,37 @@ def deletions_by_collection(plan: Dict[str, Any], limit: int = 0) -> Dict[str, L
 	return out
 
 
+def plan_dedup(points: List[tuple]) -> Dict[str, Any]:
+	"""Planner M3 (contrato single-writer, commit f1441c7c): `points` = [(id, payload)].
+
+	Agrupa SOLO candidatos `origin == "memento"` por (session_id, source_lines,
+	body-hash); deja el de mayor significance (empate → id) y marca el resto en
+	`to_delete`. No toca otros orígenes ni singletons. Es la vista estricta
+	(P1-B original); el CLI usa `build_plan` (scopes/routing/referencias).
+	"""
+	groups: Dict[tuple, List[tuple]] = defaultdict(list)
+	for point_id, payload in points:
+		pl = dict(payload or {})
+		if str(pl.get("origin") or "") != "memento":
+			continue
+		session_id = str(pl.get("session_id") or "").strip()
+		lines = str(pl.get("source_lines") or "").strip()
+		if not session_id or not lines:
+			continue
+		groups[(session_id, lines, body_hash(pl.get("content")))].append((str(point_id), pl))
+
+	to_delete: List[str] = []
+	detail: List[Dict[str, Any]] = []
+	for key, items in groups.items():
+		if len(items) < 2:
+			continue
+		ranked = sorted(items, key=lambda item: (-_f(item[1], "significance"), item[0]))
+		keep, losers = ranked[0][0], [pid for pid, _pl in ranked[1:]]
+		to_delete.extend(losers)
+		detail.append({"session_id": key[0], "source_lines": key[1], "body_hash": key[2], "keep": keep, "delete": losers})
+	return {"to_delete": to_delete, "groups": detail, "totals": {"grupos": len(detail), "borrados": len(to_delete)}}
+
+
 def _make_route_resolver(root: Path):
 	"""Resuelve la colección ENRUTADA de un punto leyendo su nota fuente (dual_route
 	del annotate o category_score del refine). Cache por refine_ref."""
