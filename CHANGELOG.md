@@ -284,6 +284,16 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   `annotate_session` fija `RP_LLM_TASK=annotate` **por llamada** (así el
   nocturno, que comparte stage con distill, también la usa sin partir el stage).
   Verificado en vivo: `task=annotate` → 200; `annotate+tiny_aya_water` → 400 K1.
+- **[REF] `memento_rescore` — notes-first (2026-09-24)**: el rescore deja de
+  re-refinar sesiones anotadas (antes: 75 sesiones en la lista, 15 con notas →
+  tocaba `refine/`). Ahora `--target notes` (default) re-puntúa las notas
+  `dual_route: none` sin ascender con el contrato de annotate (**task=annotate +
+  granite_8b**, forzado en el script) y actualiza
+  `work_score/social_score/dual_route`; `--target refines` queda como reparación
+  legacy (tiny, 15-sep) y **nunca toca sesiones con notas**. Candidatos reales:
+  **145 sesiones de notas** / 60 de refines. Modelo: tiny no se valida para
+  notas (su evidencia es débil — el clasificador standalone devuelve 0.0).
+  Tests: 4.
 - **[DOC] Revisión de flujos Memento/sueño (2026-09-24)**: flujo activo
   **raw → distill + annotate** confirmado: chronicle (stage `distill` real;
   annotate fija su propio task) y rebuild (`task: annotate`); **sin refine** en
