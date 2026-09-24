@@ -1,3 +1,7 @@
+# ⚠️ LEGACY conservado (carril refine DELIBERADO): el clasificador de
+# category_score usa tiny_aya_water a propósito (decisión 2026-09-15). NO forma
+# parte del flujo raw→distill+annotate; no lanzar sin revisar.
+#
 # Memento — re-refinado con category_score (REANUDABLE por sesión, element_job).
 #
 # El curador LLM clasifica work/social (category_score 0-1) EN el refine. Este job
@@ -19,6 +23,11 @@ mission_id: memento-rescore
 step_command: uv run python scripts/memento_refine_rescore.py --process-one
 elements_command: uv run python scripts/memento_refine_rescore.py --list-pending
 defer_exit_code: 77
+llm:
+  # Clasificador deliberado del carril refine (decisión 2026-09-15): tiny_aya_water
+  # clasifica mejor el category_score. NO es el flujo raw→distill+annotate.
+  task: refine
+  model: tiny_aya_water
 preflight:
   llm_required: true
 control:

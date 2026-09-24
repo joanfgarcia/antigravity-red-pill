@@ -1,3 +1,7 @@
+# ⚠️ LEGACY (backfill de la era sombra/refine, CONSERVADO): con
+# MEMENTO_ANNOTATE_FROM_RAW=ON hoy ejecutaría ANNOTATE; solaparía con el rebuild
+# de annotate. No lanzar sin revisar.
+#
 # Backfill del pase agéntico de Memento (RFC-002 §4.5 / §6, Fase 3.5) como job
 # de la cola central — regla job_dag_execution: tarea larga, jamás nohup.
 #

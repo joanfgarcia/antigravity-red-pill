@@ -1,3 +1,8 @@
+# ⚠️ LEGACY (carril refine pre-annotate, CONSERVADO — no borrar): con
+# MEMENTO_ANNOTATE_FROM_RAW=ON (producción actual) este job ejecutaría ANNOTATE,
+# no refine. Su propósito original (re-destilado/re-refinado) queda para cuando
+# se recupere el carril refine. No lanzar sin revisar.
+#
 # Memento — RE-DESTILADO + RE-REFINADO completo con GRANITE (2026-09-15).
 #
 # Regenera distill/ + refine/ de TODO el árbol con el pipeline final:

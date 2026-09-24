@@ -284,6 +284,14 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   `annotate_session` fija `RP_LLM_TASK=annotate` **por llamada** (así el
   nocturno, que comparte stage con distill, también la usa sin partir el stage).
   Verificado en vivo: `task=annotate` → 200; `annotate+tiny_aya_water` → 400 K1.
+- **[DOC] Revisión de flujos Memento/sueño (2026-09-24)**: flujo activo
+  **raw → distill + annotate** confirmado: chronicle (stage `distill` real;
+  annotate fija su propio task) y rebuild (`task: annotate`); **sin refine** en
+  el flujo activo. Recetas legacy del carril refine **conservadas y anotadas**
+  (redistill ×3, backfill); `memento_rescore` recupera su pin explícito
+  `refine + tiny_aya_water` (clasificador deliberado, 2026-09-15). Validación de
+  cable: con `RP_LLM_TASK=refine` el **100%** de las llamadas de annotate salen
+  como `task=annotate` + `granite_8b` (servidor capturador).
 - **[FIX] `refine` default → `granite_8b`**: el default seguía siendo
   `tiny_aya_water` (config del operador + seed de instalación) → cualquier
   llamada con `task: refine` sin modelo cargaba tiny (origen del modelo
