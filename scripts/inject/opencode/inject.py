@@ -17,7 +17,7 @@ logger = logging.getLogger("inject_opencode")
 
 # Shared helpers — single source of truth lives at scripts/_config_common.py.
 sys.path.insert(0, str(os.path.join(os.path.dirname(__file__), "..", "..")))
-from _config_common import LEGACY_SKILL_DIRS, agent_core_vars, build_vars, strip_jsonc_comments, subst  # noqa: E402
+from _config_common import LEGACY_SKILL_DIRS, PLUGIN_PIN, agent_core_vars, build_vars, strip_jsonc_comments, subst  # noqa: E402
 
 
 def _detect_config_dir() -> str | None:
@@ -122,14 +122,29 @@ def _deploy_skills(src_dir: str, dest_dir: str, variables: dict, backup: bool) -
 
 
 def _ensure_package_json(config_dir: str, backup: bool) -> bool:
+	"""Create package.json or refresh the @opencode-ai/plugin pin (merge, keep foreign deps)."""
 	pkg_path = os.path.join(config_dir, "package.json")
+	pkg: dict = {}
 	if os.path.exists(pkg_path):
+		try:
+			with open(pkg_path, encoding="utf-8") as f:
+				pkg = json.load(f)
+		except (OSError, json.JSONDecodeError):
+			logger.warning(f"  {pkg_path}: unreadable JSON, not touching it")
+			return False
+		if not isinstance(pkg, dict):
+			logger.warning(f"  {pkg_path}: unexpected shape, not touching it")
+			return False
+	deps = pkg.setdefault("dependencies", {})
+	if deps.get("@opencode-ai/plugin") == PLUGIN_PIN:
 		return False
-	pkg = {"dependencies": {"@opencode-ai/plugin": "1.18.3"}}
+	if backup and os.path.exists(pkg_path):
+		shutil.copy2(pkg_path, pkg_path + ".bak")
+	deps["@opencode-ai/plugin"] = PLUGIN_PIN
 	with open(pkg_path, "w", encoding="utf-8") as f:
 		json.dump(pkg, f, indent=2)
 		f.write("\n")
-	logger.info(f"  {pkg_path}: created")
+	logger.info(f"  {pkg_path}: @opencode-ai/plugin → {PLUGIN_PIN}")
 	return True
 
 

@@ -19,6 +19,16 @@ Two execution modes:
 	``opencode serve`` instance, avoiding MCP cold-start.  Set
 	``OPENCODE_SERVER_URL`` env var or pass ``server_url`` to the constructor.
 
+CLI version adaptation (OpenCode v2, beta):
+
+- v1: effort is its own flag (``--variant <v>``) and the server is ``--attach``.
+- v2: the variant is embedded in the model reference
+	(``-m provider/model#variant``) and the server flag is ``--server``.
+	Direct mode adds ``--standalone`` so each run gets a private server whose
+	env the bridge controls (the v2 shared background service would ignore
+	``REDPILL_SCRIBE_DISABLE``, breaking the capture contract).
+	The ``--format json`` stream and its event shape are identical in both.
+
 Requirements:
 - opencode CLI installed and configured (~/.config/opencode/).
 - The `opencode` binary must be resolvable from the CALLING process. Service
@@ -33,6 +43,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -118,6 +129,31 @@ class OpenCodeBridge(AgentBridge):
 		# plugin already captures the turn. Skipping here is the cheap guard; the
 		# hash check in enqueue_memory is the one that actually guarantees it.
 		self._scribe_plugin = os.environ.get("OPENCODE_SCRIBE_PLUGIN", "").lower() == "true"
+		# Detected CLI major (1|2), cached per instance; see _cli_major().
+		self._cli_major_cache: Optional[int] = None
+
+	def _cli_major(self) -> int:
+		"""Major version of the resolved CLI (1 or 2), cached per instance.
+
+		Detection failure falls back to 1: the v1 flags are the known-good
+		baseline and are also what the currently deployed plugin expects.
+		"""
+		if self._cli_major_cache is None:
+			major = 1
+			try:
+				out = subprocess.run(
+					[self._opencode_path, "--version"],
+					capture_output=True,
+					text=True,
+					timeout=15,
+				).stdout
+				match = re.search(r"(\d+)\.\d+", out or "")
+				if match:
+					major = int(match.group(1))
+			except Exception:
+				pass
+			self._cli_major_cache = major
+		return self._cli_major_cache
 
 	# ── Handshake preamble ────────────────────────────────────────────────
 	# OpenCode does NOT prefix MCP tools (unlike Antigravity's mcp_<server>_<tool>).
@@ -191,9 +227,16 @@ class OpenCodeBridge(AgentBridge):
 		Returns a dict with ``session_id`` and ``text`` (concatenated response).
 		"""
 		cmd = [self._opencode_path, "run", *args, "--format", "json", "--auto"]
+		major = self._cli_major()
 
 		if self._server_url:
-			cmd.extend(["--attach", self._server_url])
+			# v1: --attach <url>; v2: --server <url> (--attach was removed).
+			cmd.extend(["--server" if major >= 2 else "--attach", self._server_url])
+		elif major >= 2:
+			# v2 defaults to a shared background service whose env the bridge
+			# cannot control (REDPILL_SCRIBE_DISABLE would never reach the
+			# plugin). --standalone restores v1 semantics: private server per run.
+			cmd.append("--standalone")
 
 		logger.debug(
 			f"[OpenCodeBridge] Running: {' '.join(cmd[:4])}... "
@@ -292,6 +335,21 @@ class OpenCodeBridge(AgentBridge):
 		mapped = cls._EFFORT_MAP.get((effort or "").strip().lower())
 		return ["--variant", mapped] if mapped else []
 
+	def _model_effort_args(self, model: str, effort: Optional[str]) -> list:
+		"""Compose -m/--variant flags for the detected CLI major.
+
+		v1: ``--variant <v>`` is its own flag.
+		v2: the variant is embedded in the model reference
+		(``provider/model#variant``); without a model there is nowhere to put it.
+		"""
+		model_args = self._model_args(model)
+		mapped = self._EFFORT_MAP.get((effort or "").strip().lower())
+		if self._cli_major() >= 2:
+			if mapped and model_args:
+				return [model_args[0], f"{model_args[1]}#{mapped}"]
+			return model_args
+		return [*model_args, *self._effort_args(effort)]
+
 	def prompt(
 		self,
 		text: str,
@@ -310,7 +368,7 @@ class OpenCodeBridge(AgentBridge):
 
 		try:
 			data = self._run_opencode(
-				[wrapped_prompt, *self._model_args(model), *self._effort_args(effort)],
+				[wrapped_prompt, *self._model_effort_args(model, effort)],
 				timeout,
 				cwd=cwd,
 			)

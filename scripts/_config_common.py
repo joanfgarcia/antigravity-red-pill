@@ -15,6 +15,11 @@ import re
 import shutil
 from string import Template
 
+# Pin del paquete de plugins de opencode 1.18.x. El mínimo 1.18.29 habilita los
+# entrypoints duales (server() para v1, setup() para v2) que preparan la
+# migración a OpenCode V2 sin romper v1.
+PLUGIN_PIN = "1.18.32"
+
 # Directorios de skills anteriores al rename kebab-case (Agent Skills standard,
 # 2026-09-10). Los injectors los prunean del arnés destino para que un reseed
 # converja a un único estado (sin legados snake_case) y sea idempotente.

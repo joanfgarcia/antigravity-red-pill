@@ -40,7 +40,8 @@ def test_repo_root_apunta_a_la_raiz_del_repo(adapter) -> None:
 	# checkout (local: sharing, CI: antigravity-red-pill), así que se valida por
 	# contenido, no por nombre.
 	resolved = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(adapter.__file__)), "..", "..", ".."))
-	assert os.path.isdir(os.path.join(resolved, ".git")), f"no es la raíz del repo: {resolved}"
+	# .git es directorio en un checkout normal y fichero en un worktree: ambos valen.
+	assert os.path.exists(os.path.join(resolved, ".git")), f"no es la raíz del repo: {resolved}"
 	assert os.path.isdir(os.path.join(resolved, "seeds", "opencode", "skills", "dag"))
 	assert os.path.exists(os.path.join(resolved, "seeds", "anchors", "job_dag_execution.md"))
 
@@ -84,3 +85,45 @@ def test_inject_idempotente(adapter, tmp_path) -> None:
 	n2 = adapter.inject(args)
 	assert n2 == 0, "segunda pasada debería ser idempotente (sin bloques modificados)"
 	assert open(redpill, encoding="utf-8").read() == original
+
+
+def test_package_json_pin_fresco(adapter, tmp_path) -> None:
+	"""Instalación limpia: package.json con el pin compartido PLUGIN_PIN."""
+	import argparse
+	import json
+	import os
+
+	tmp = str(tmp_path)
+	adapter._detect_config_dir = lambda: tmp  # noqa: E731
+	args = argparse.Namespace(redpill_dir=REPO_ROOT, workspace=None, no_backup=True, update=False)
+	adapter.inject(args)
+
+	pkg_path = os.path.join(tmp, "package.json")
+	assert os.path.exists(pkg_path), "package.json no creado"
+	pkg = json.load(open(pkg_path, encoding="utf-8"))
+	assert pkg["dependencies"]["@opencode-ai/plugin"] == adapter.PLUGIN_PIN
+
+
+def test_package_json_pin_actualiza_y_preserva_deps(adapter, tmp_path) -> None:
+	"""Instalación existente: sube el pin viejo sin tocar deps ajenas (merge + .bak)."""
+	import argparse
+	import json
+	import os
+
+	tmp = str(tmp_path)
+	pkg_path = os.path.join(tmp, "package.json")
+	with open(pkg_path, "w", encoding="utf-8") as f:
+		json.dump({"dependencies": {"@opencode-ai/plugin": "1.18.3", "better-sqlite3": "^12.11.1"}}, f)
+
+	adapter._detect_config_dir = lambda: tmp  # noqa: E731
+	args = argparse.Namespace(redpill_dir=REPO_ROOT, workspace=None, no_backup=False, update=False)
+	adapter.inject(args)
+
+	pkg = json.load(open(pkg_path, encoding="utf-8"))
+	assert pkg["dependencies"]["@opencode-ai/plugin"] == adapter.PLUGIN_PIN
+	assert pkg["dependencies"]["better-sqlite3"] == "^12.11.1", "dep ajena perdida"
+	assert os.path.exists(pkg_path + ".bak"), "backup no creado"
+
+	before = open(pkg_path, encoding="utf-8").read()
+	adapter.inject(args)
+	assert open(pkg_path, encoding="utf-8").read() == before, "no idempotente"

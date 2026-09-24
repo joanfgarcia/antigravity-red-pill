@@ -1,5 +1,5 @@
 /**
- * Red Pill Scribe Plugin for OpenCode
+ * Red Pill Scribe Plugin for OpenCode — dual entrypoint (v1 + v2)
  *
  * ── ROLE IN THE ARCHITECTURE ─────────────────────────────────────────────
  * This plugin is the RAW CAPTURE LAYER for opencode sessions. It queues
@@ -29,21 +29,37 @@
  * this plugin only INSERTs. It degrades to a no-op if the table is missing,
  * which happens only before the kernel has ever run.
  *
- * ── HOOK LIFECYCLE ───────────────────────────────────────────────────────
+ * ── HOOK LIFECYCLE (v1 — server()) ───────────────────────────────────────
  *   chat.message         → capture user prompt
- *   message.updated      → on user: track msg ID; on assistant: FLUSH to DB
+ *   message.updated      → on user: track msg ID; on assistant: track model
  *   message.part.updated → accumulate assistant response text (streaming)
+ *   session.idle         → FLUSH to DB (status.idle as fallback)
  *   dispose              → flush remaining buffers on plugin unload
  *
- * NOTE: session.idle / session.status events do NOT fire reliably in
- * opencode 1.18.x. We use message.updated(role=assistant) as the flush
- * trigger instead.
+ * NOTE: the flush trigger is the END of the turn (session.idle, verified in
+ * 1.18.32 — also fires on tool-heavy turns). Flushing on the first assistant
+ * message.updated captured the message at creation time, before its text
+ * parts existed → empty responses (bug fixed 2026-09-24).
+ *
+ * ── HOOK LIFECYCLE (v2 — setup(ctx)) ─────────────────────────────────────
+ *   ctx.session.hook("prompt")   → capture user prompt
+ *   session.step.started         → capture model (providerID/id)
+ *   session.text.delta           → accumulate assistant response text
+ *   session.execution.succeeded  → FLUSH to DB (also on .failed)
+ *   cleanup (returned)           → abort event stream + flush + close
+ *
+ * v1 calls server(); v2 calls setup(). Both share the queue writer and the
+ * per-session buffer. setup() is defensive on purpose: v1 ALSO calls it with
+ * a v1 context (no session.hook / event.subscribe), where it must no-op so
+ * the v1 server() hooks stay the single capture path. The entrypoint is a
+ * plain object (no @opencode/plugin import): the same file loads on both
+ * runtimes without npm dependencies.
  *
  * ── WHY NOT CALL PYTHON DIRECTLY? ───────────────────────────────────────
  * Bun.spawn per turn adds ~50-100ms overhead. The plugin is intentionally
- * minimal (~80 lines of logic): capture hooks + single INSERT. All heavy
- * processing (embeddings, Qdrant, sleep) lives in tested Python code.
- * DRY is maintained by keeping this plugin as a thin capture shim only.
+ * minimal: capture hooks + single INSERT. All heavy processing (embeddings,
+ * Qdrant, sleep) lives in tested Python code. DRY is maintained by keeping
+ * this plugin as a thin capture shim only.
  *
  * QUEUE_DB path is injected at deploy time by inject_opencode.py.
  * Runtime: Bun — uses bun:sqlite.
@@ -51,6 +67,7 @@
 
 const QUEUE_DB = "${QUEUE_DB}";
 const ORIGINATOR = "opencode";
+const DISABLED = process.env.REDPILL_SCRIBE_DISABLE === "1";
 
 function hasQueue(db) {
   const row = db
@@ -65,13 +82,6 @@ function queueColumns(db) {
   } catch (_) {
     return new Set();
   }
-}
-
-function deriveAffinity(_dir) {
-  // AD-034/D15: la afinidad por filesystem (cwd/proyecto) se RETIRÓ — no refleja
-  // cómo trabajamos. La afinidad (si se retoma) será semántica (keywords del refine)
-  // o explícita. Aquí se deja vacía.
-  return [];
 }
 
 function writeInteraction(db, prompt, response, model, sessionId, cols) {
@@ -95,95 +105,198 @@ function writeInteraction(db, prompt, response, model, sessionId, cols) {
   }
 }
 
-/** @type {import("@opencode-ai/plugin").Plugin} */
-export const RedPillScribe = async (ctx) => {
-  // Si el proceso fue lanzado por un bridge red-pill (Telegram/awakenings/
-  // minions), el bridge ya relaya el turno a la cola: el plugin se abstiene
-  // para no duplicar (y para no capturar el prompt envuelto sin respuesta).
-  if (process.env.REDPILL_SCRIBE_DISABLE === "1") return {};
-  let db;
-  let COLS = new Set();
+let storePromise = null;
+
+async function initStore() {
   try {
     const { Database } = await import("bun:sqlite");
-    db = new Database(QUEUE_DB);
+    const db = new Database(QUEUE_DB);
     db.exec("PRAGMA journal_mode=WAL");
     if (!hasQueue(db)) {
       console.error("[RedPillScribe] memory_queue missing; run the red-pill kernel once. Capture disabled.");
       db.close();
-      return {};
+      return null;
     }
-    COLS = queueColumns(db);
+    return { db, cols: queueColumns(db) };
   } catch (e) {
     console.error("[RedPillScribe] Failed to open the queue:", e.message);
-    return {};
+    return null;
+  }
+}
+
+function getStore() {
+  if (!storePromise) storePromise = initStore();
+  return storePromise;
+}
+
+function closeStore() {
+  if (!storePromise) return;
+  storePromise
+    .then((store) => {
+      try {
+        store?.db?.close();
+      } catch (_) {}
+    })
+    .catch(() => {});
+  storePromise = null;
+}
+
+const sessions = new Map();
+
+async function flushSession(sessionId) {
+  const state = sessions.get(sessionId);
+  if (!state) return;
+  sessions.delete(sessionId);
+  if (!state.prompt && !state.response) return;
+  const store = await getStore();
+  if (!store) return;
+  try {
+    writeInteraction(store.db, state.prompt, state.response, state.modelID, sessionId, store.cols);
+  } catch (e) {
+    console.error("[RedPillScribe] Write failed:", e.message);
+  }
+}
+
+async function handleV2Event(event) {
+  const type = event?.type;
+  const data = event?.data;
+  const sessionId = data?.sessionID;
+  if (!type || !sessionId) return;
+  const state = sessions.get(sessionId);
+  if (!state) return;
+
+  if (type === "session.step.started") {
+    const model = data.model;
+    if (model?.id) state.modelID = model.providerID ? `${model.providerID}/${model.id}` : model.id;
+    return;
   }
 
-  const sessions = new Map();
+  if (type === "session.text.delta") {
+    if (typeof data.delta === "string" && data.delta) state.response += data.delta;
+    return;
+  }
 
-  return {
-    dispose: async () => {
-      for (const [sid, state] of sessions) {
-        if (state?.prompt) {
-          try { writeInteraction(db, state.prompt, state.response, state.modelID, sid, COLS); } catch (_) {}
+  if (type === "session.execution.succeeded" || type === "session.execution.failed") {
+    await flushSession(sessionId);
+  }
+}
+
+export default {
+  id: "redpill-scribe",
+
+  async setup(ctx) {
+    // Si el proceso fue lanzado por un bridge red-pill (Telegram/awakenings/
+    // minions), el bridge ya relaya el turno a la cola: el plugin se abstiene
+    // para no duplicar (y para no capturar el prompt envuelto sin respuesta).
+    if (DISABLED) return;
+    if (typeof ctx?.session?.hook !== "function" || typeof ctx?.event?.subscribe !== "function") return;
+
+    await ctx.session.hook("prompt", (event) => {
+      const sessionId = event?.sessionID;
+      const text = event?.prompt?.text;
+      if (sessionId && text) {
+        sessions.set(sessionId, { prompt: text, response: "", modelID: null, userMsgIDs: new Set() });
+      }
+    });
+
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
+          try {
+            await handleV2Event(event);
+          } catch (e) {
+            console.error("[RedPillScribe] Event handling failed:", e.message);
+          }
         }
+      } catch (_) {
+        // stream abortado (cleanup) o servidor caído: sin ruido
       }
-      sessions.clear();
-      if (db) db.close();
-    },
+    })();
 
-    "chat.message": async (input, output) => {
-      const { sessionID } = input;
-      const parts = output.parts || [];
-      const textParts = parts
-        .filter((p) => p.type === "text")
-        .map((p) => p.text)
-        .join("\n");
-      if (textParts) {
-        sessions.set(sessionID, {
-          prompt: textParts,
-          response: "",
-          userMsgIDs: new Set(),
-          modelID: input.modelID || output.modelID || null,
-        });
-      }
-    },
+    return () => {
+      controller.abort();
+      for (const sessionId of Array.from(sessions.keys())) void flushSession(sessionId);
+      closeStore();
+    };
+  },
 
-    event: async ({ event }) => {
-      if (event.type === "message.updated") {
-        const msg = event.properties?.info;
-        if (!msg?.sessionID) return;
+  async server() {
+    if (DISABLED) return {};
 
-        const state = sessions.get(msg.sessionID);
-        if (!state) return;
+    return {
+      dispose: async () => {
+        for (const [sid, state] of sessions) {
+          if (state?.prompt) {
+            try {
+              await flushSession(sid);
+            } catch (_) {}
+          }
+        }
+        sessions.clear();
+        closeStore();
+      },
 
-        if (msg.role === "user") {
-          state.userMsgIDs.add(msg.id);
+      "chat.message": async (input, output) => {
+        const { sessionID } = input;
+        const parts = output.parts || [];
+        const textParts = parts
+          .filter((p) => p.type === "text")
+          .map((p) => p.text)
+          .join("\n");
+        if (textParts) {
+          sessions.set(sessionID, {
+            prompt: textParts,
+            response: "",
+            userMsgIDs: new Set(),
+            modelID: input.modelID || output.modelID || null,
+          });
+        }
+      },
+
+      event: async ({ event }) => {
+        if (event.type === "message.updated") {
+          const msg = event.properties?.info;
+          if (!msg?.sessionID) return;
+
+          const state = sessions.get(msg.sessionID);
+          if (!state) return;
+
+          if (msg.role === "user") {
+            state.userMsgIDs.add(msg.id);
+            return;
+          }
+
+          if (msg.role === "assistant" && msg.modelID) {
+            state.modelID = msg.modelID;
+          }
           return;
         }
 
-        if (msg.role === "assistant") {
-          state.modelID = msg.modelID;
-          try {
-            writeInteraction(db, state.prompt, state.response, state.modelID, msg.sessionID, COLS);
-          } catch (e) {
-            console.error("[RedPillScribe] Write failed:", e.message);
-          }
-          sessions.delete(msg.sessionID);
-        }
-        return;
-      }
+        if (event.type === "message.part.updated") {
+          const part = event.properties?.part;
+          if (part?.type === "text" && part?.text && part?.sessionID) {
+            const state = sessions.get(part.sessionID);
+            if (!state) return;
 
-      if (event.type === "message.part.updated") {
-        const part = event.properties?.part;
-        if (part?.type === "text" && part?.text && part?.sessionID) {
-          const state = sessions.get(part.sessionID);
-          if (!state) return;
-
-          if (!state.userMsgIDs.has(part.messageID)) {
-            state.response += part.text;
+            if (!state.userMsgIDs.has(part.messageID)) {
+              state.response += part.text;
+            }
           }
+          return;
         }
-      }
-    },
-  };
+
+        // Fin de turno real (verificado en 1.18.32, también en turnos con
+        // herramientas): idle por sesión. status.idle es el mismo cierre por
+        // otra vía; flushSession es idempotente (la segunda vez no hay state).
+        if (
+          event.type === "session.idle" ||
+          (event.type === "session.status" && event.properties?.status?.type === "idle")
+        ) {
+          const sessionId = event.properties?.sessionID;
+          if (sessionId) await flushSession(sessionId);
+        }
+      },
+    };
+  },
 };
