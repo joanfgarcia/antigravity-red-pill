@@ -294,6 +294,11 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   **145 sesiones de notas** / 60 de refines. Modelo: tiny no se valida para
   notas (su evidencia es débil — el clasificador standalone devuelve 0.0).
   Tests: 4.
+- **[NEW] Rescore de notas — piloto validado + barrido completo**: piloto de 5
+  sesiones (`memento_rescore_notes.yaml`, prio 5): **31 notas → 29 resueltas
+  (94%)**, 0 malformadas, 29 pendientes de ascender. Barrido completo
+  (**170 elementos**) encolado con prioridad 5 (por delante del rebuild);
+  `--limit` añadido a `--list-pending` para pilotos.
 - **[DOC] Revisión de flujos Memento/sueño (2026-09-24)**: flujo activo
   **raw → distill + annotate** confirmado: chronicle (stage `distill` real;
   annotate fija su propio task) y rebuild (`task: annotate`); **sin refine** en

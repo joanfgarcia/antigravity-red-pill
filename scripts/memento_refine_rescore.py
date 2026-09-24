@@ -157,8 +157,8 @@ def _update_note_scores(path: Path, work: float, social: float, route: str) -> N
 		tmp.replace(path)
 
 
-def list_pending(registry: Any, root: Path, target: str = "notes") -> List[str]:
-	"""Sesiones candidatas según `target` (notes-first)."""
+def list_pending(registry: Any, root: Path, target: str = "notes", limit: Optional[int] = None) -> List[str]:
+	"""Sesiones candidatas según `target` (notes-first); `limit` acota (pilotos)."""
 	pending = []
 	for _src, _sid, dir_rel, session_dir in _session_dirs(registry, root):
 		if target == "notes":
@@ -167,7 +167,8 @@ def list_pending(registry: Any, root: Path, target: str = "notes") -> List[str]:
 		else:  # refines (legacy): solo sesiones SIN notas
 			if not _has_annotate_notes(session_dir) and not _has_category_score(session_dir):
 				pending.append(dir_rel)
-	return sorted(pending)
+	pending = sorted(pending)
+	return pending[:limit] if limit else pending
 
 
 def process_one(root: Path, registry: Any, dir_rel: str, target: str = "notes", transport: Optional[Any] = None) -> Dict[str, Any]:
@@ -240,7 +241,7 @@ def main() -> None:
 	parser.add_argument("--list-pending", action="store_true", help="Imprime el JSON de sesiones candidatas")
 	parser.add_argument("--process-one", action="store_true", help="Procesa UNA sesión (dir_rel desde RP_ELEMENT)")
 	parser.add_argument("--target", choices=("notes", "refines"), default="notes", help="notes (default, annotate) | refines (legacy)")
-	parser.add_argument("--limit", type=int, default=None, help="Batch: solo las primeras N sesiones")
+	parser.add_argument("--limit", type=int, default=None, help="Batch/listado: solo las primeras N sesiones")
 	parser.add_argument("--all", action="store_true", help="Batch: todo el árbol")
 	args = parser.parse_args()
 
@@ -251,7 +252,7 @@ def main() -> None:
 	registry = MementoRegistry()
 
 	if args.list_pending:
-		print(json.dumps(list_pending(registry, root, target=args.target)))
+		print(json.dumps(list_pending(registry, root, target=args.target, limit=args.limit)))
 		return
 
 	if args.process_one or os.environ.get("RP_ELEMENT"):

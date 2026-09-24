@@ -90,3 +90,17 @@ def test_refines_sin_notas_es_el_fallback(tmp_path):
 	root, reg, dir_rel = _tree(tmp_path, with_note=False)
 	assert mod.list_pending(reg, root, target="notes") == []
 	assert mod.list_pending(reg, root, target="refines") == [dir_rel]
+
+
+def test_limit_acota_el_listado(tmp_path):
+	mod = _load_module()
+	root, reg, dir_rel = _tree(tmp_path)
+	# segunda sesión con nota pendiente
+	d2 = root / "2026-09/opencode/s2"
+	(d2 / "distill").mkdir(parents=True)
+	(d2 / "distill" / "001-x.md").write_text("---\nsection: 001\n---\nResumen.\n", encoding="utf-8")
+	(d2 / "annotate").mkdir()
+	(d2 / "annotate" / "001-idea.md").write_text(NOTE.format(ascended="false"), encoding="utf-8")
+	reg.upsert("opencode", "opencode:s2", {"dir": "2026-09/opencode/s2", "memento_hash": "h2", "message_count": 3})
+	assert len(mod.list_pending(reg, root, target="notes")) == 2
+	assert len(mod.list_pending(reg, root, target="notes", limit=1)) == 1
