@@ -266,6 +266,22 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
 - **[NEW] `examples/task_profiles.yaml.example`**: el contrato de tasks
   (incluida `validate`, requerida por `memento_validate.yaml`) deja de ser
   implícito del entorno del operador.
+- **[FIX] Hysteresis del daemon (thrash VRAM, 2026-09-24)**: `_same_model`
+  comparaba `n_ctx`, que el resolve fija midiendo la VRAM **ya ocupada por el
+  propio modelo** → tier menor → unload/reload en bucle (**2.590 ciclos** en una
+  noche, 724 en 50 min; mató el elemento 159 del rebuild). Ahora mismo
+  fichero+modo reutiliza el modelo cargado. Desplegado (heredoc + daemon) y
+  verificado en vivo: 1 carga + 3 requests sin unload.
+- **[FIX] Cota de step: lo declarado es un SUELO**: la EMA de pasos rápidos
+  recortaba etapas compuestas largas (nightly `memento-agentic` declarado 5400s
+  → abatido a 1799s). `compute_step_timeout` respeta `control.max_step_minutes`
+  como suelo del presupuesto y las etapas internas conservan su timeout propio
+  (misma filosofía que el fan-out `_item`). Test: nightly 420 → 25200s.
+- **[FIX] `refine` default → `granite_8b`**: el default seguía siendo
+  `tiny_aya_water` (config del operador + seed de instalación) → cualquier
+  llamada con `task: refine` sin modelo cargaba tiny (origen del modelo
+  equivocado a las 22:12, que disparó el thrash). tiny queda como candidato
+  NO-default (lo usa el rescore deliberadamente).
 - **[DOC] RFC-003 Prompts as Resources (DRAFT)**: prompts como recurso (ficheros +
   loader con placeholders `${var}`, hash de contenido, overrides explícitos);
   norma propuesta (RULE 5) y migración por fases. La Bio de identidad ya vive en

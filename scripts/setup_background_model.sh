@@ -162,7 +162,11 @@ class ModelManager:
 
 	@staticmethod
 	def _same_model(a: mr.ResolvedModel, b: mr.ResolvedModel) -> bool:
-		return a.model_path == b.model_path and a.n_ctx == b.n_ctx and a.mode == b.mode
+		# Hysteresis (2026-09-24): NO comparar n_ctx. El resolve mide la VRAM con
+		# el modelo ya cargado y elige un tier menor; comparar n_ctx forzaba
+		# unload/reload en bucle (2.590 ciclos en una noche). Mismo fichero+modo →
+		# se sirve con el modelo actual sin recargar.
+		return a.model_path == b.model_path and a.mode == b.mode
 
 	def _apply_resolved(self, body: Dict[str, Any], resolved: mr.ResolvedModel) -> None:
 		if self.model is not None:

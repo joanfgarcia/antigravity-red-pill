@@ -690,7 +690,7 @@ def seed_task_profiles() -> dict:
 
 	if free_gb >= 6.5:
 		distill = pick([("granite_8b", True), ("tiny_aya_water", False), ("granite_3b", False)])
-		refine = pick([("tiny_aya_water", True), ("granite_8b", False)])
+		refine = pick([("granite_8b", True), ("tiny_aya_water", False)])
 		conv = pick([("granite_8b", True)])
 		tool = pick([("granite_8b", True)])
 		hub = pick([("granite_8b", True)])
