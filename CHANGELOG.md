@@ -320,6 +320,29 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   `source_lines` al re-destilar (antes lo reseteaba → re-ascenso pendiente eterno);
   el refuerzo polaroid recolecta temas de **work + social** (antes solo work).
 
+- **[MEM-009 D5] Flash Attention tri-estado por modelo**: `flash_attn: auto|true|false`
+  en `model_profiles.yaml`, resuelto en `model_runtime.effective_flash_attn` (fuente
+  única daemon+clientes): `auto` = solo GPU y si el perfil declara `fa_capable`; el
+  worker CPU nunca lo activa. El daemon lo pasa a `Llama()`, lo expone en `/status`
+  y lo cuenta en `_same_model` (estático del perfil → sin riesgo de thrash).
+  `granite_8b` → `true`. Causa raíz (autopsia 2026-09-25): sin FA, a n_ctx 10240
+  quedaban 248 MiB de headroom y el scratch de prefill de ~6.3-6.5K tokens
+  abortaba con `CUDA error: out of memory` → restart loop (contador 240) → los
+  "venenos" 444/495 eran muro de serving, no contenido. Con FA: 742 MiB, 8K pasan.
+  **Requiere redesplegar el heredoc del daemon** (`setup_background_model.sh`).
+- **[MEM-009 F1] Annotate reanudable por splits**: `annotate_session` ya no borra
+  las notas al empezar; checkpointa en `annotate/_partial.json` (atómico) cada
+  split extraído, keyed por **rango de mensajes** del filename y revalidado por
+  `content_hash` al retomar, más el estado de cada fase (extract/rewrite/score).
+  Un kill pierde como mucho un split; un contrato distinto (prompt/engine/voice)
+  resetea con aviso. La salida del LLM pasa `scrub_secrets`+`normalize_noise`
+  antes de persistirse (S1). Al completar: notas + `_meta.json`, huérfanas fuera,
+  parcial borrado. `memento_annotate --from=extract|rewrite|score` entra en esa
+  fase reutilizando parcial o notas del contrato vigente, con degradado gracioso
+  (nunca fallo duro); `--all` sigue siendo "desde cero" (borra el parcial).
+  `_meta.json` gana audit trail (`thresholds`, `from_phase`, `from_requested`,
+  `reason`) e `identity_bio_source` saneado a basename. Tests: 9.
+
 ### 🧹 Desk — scaffold del despacho, separación proyecto↔despacho y `AGENT_CORE_DIR`
 
 El desk (`${AGENT_CORE_DIR}`) deja de ser una plantilla solo local y pasa a

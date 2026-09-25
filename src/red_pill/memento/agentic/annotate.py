@@ -241,6 +241,149 @@ def _with_annotate_task(transport: runtime.Transport) -> runtime.Transport:
 	return call
 
 
+_PARTIAL = "_partial.json"
+PHASES = ("extract", "rewrite", "score")
+_SCRUB_FIELDS = ("title", "text", "theme", "emotion")
+
+
+def _range_keys(session_dir: Path) -> List[str]:
+	"""Clave por rango de mensajes de cada unidad, en el MISMO orden que `_work_units`.
+
+	`NNN-mensajes-0366-0443.md` → `0366-0443` (MEM-009 §2.1): inmune a
+	renumeraciones del NNN. Sin splits (sesión pequeña) → `index`.
+	"""
+	splits = sorted((session_dir / "memento").glob("[0-9][0-9][0-9]-*.md"))
+	keys = []
+	for split in splits:
+		m = re.search(r"(\d+-\d+)$", split.stem)
+		keys.append(m.group(1) if m else split.stem)
+	return keys or ["index"]
+
+
+def _scrub_idea(idea: Dict[str, Any]) -> Dict[str, Any]:
+	"""Scrub de la salida cruda del LLM antes de persistirla (MEM-009 S1, MUST-9).
+
+	Solo campos de texto de la idea: los hashes/refs no pasan por el scrub (un
+	sha256 podría parecer un token y corromperse).
+	"""
+	from red_pill.memento.clean import normalize_noise
+	from red_pill.memento.scrub import scrub_secrets
+
+	for key in _SCRUB_FIELDS:
+		if isinstance(idea.get(key), str):
+			idea[key] = scrub_secrets(normalize_noise(idea[key]))
+	if isinstance(idea.get("relics"), list):
+		idea["relics"] = [scrub_secrets(normalize_noise(str(r))) for r in idea["relics"]]
+	return idea
+
+
+def _contract(voice_rewrite: bool) -> Dict[str, Any]:
+	return {"prompt_version": runtime.annotate_prompt_version(), "engine": runtime.engine_id(), "voice_rewrite": bool(voice_rewrite)}
+
+
+def _empty_partial(contract: Dict[str, Any]) -> Dict[str, Any]:
+	return {"contract": contract, "splits": {}, "phases": {ph: "pending" for ph in PHASES}, "annotations": []}
+
+
+def _load_partial(annotate_dir: Path, contract: Dict[str, Any]) -> Dict[str, Any]:
+	"""Parcial compatible con el contrato vigente, o uno vacío (reset con aviso)."""
+	empty = _empty_partial(contract)
+	path = annotate_dir / _PARTIAL
+	if not path.exists():
+		return empty
+	try:
+		data: Dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+	except (OSError, json.JSONDecodeError):
+		logger.warning("annotate: parcial ilegible en %s — se reinicia", annotate_dir)
+		return empty
+	if data.get("contract") != contract:
+		logger.warning("annotate: contrato del parcial distinto (%s ≠ %s) — reset", data.get("contract"), contract)
+		return empty
+	data.setdefault("splits", {})
+	data.setdefault("annotations", [])
+	data["phases"] = {ph: (data.get("phases") or {}).get(ph, "pending") for ph in PHASES}
+	return data
+
+
+def _save_partial(annotate_dir: Path, partial: Dict[str, Any]) -> None:
+	"""Escritura atómica (tmp+replace). Las ideas ya vienen scrubbeadas de `_extract`."""
+	partial["updated_at"] = datetime.now(timezone.utc).isoformat()
+	tmp = annotate_dir / (_PARTIAL + ".tmp")
+	tmp.write_text(json.dumps(partial, ensure_ascii=False, indent=1), encoding="utf-8")
+	tmp.replace(annotate_dir / _PARTIAL)
+
+
+def _annotations_from_notes(annotate_dir: Path, contract: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
+	"""Reconstruye las anotaciones desde las notas materializadas (prerrequisito de `--from`).
+
+	Solo si `_meta.json` casa con el contrato vigente: si no, las notas son de otro
+	motor/prompt y no valen como estado previo. None → no hay prerrequisito.
+	"""
+	meta_path = annotate_dir / "_meta.json"
+	if not meta_path.exists():
+		return None
+	try:
+		meta = json.loads(meta_path.read_text(encoding="utf-8"))
+	except (OSError, json.JSONDecodeError):
+		return None
+	if meta.get("annotate_prompt_version") != contract["prompt_version"] or meta.get("engine") != contract["engine"]:
+		return None
+	from red_pill.memento.ascension import parse_refine as _parse_refine
+
+	out: List[Dict[str, Any]] = []
+	for note in sorted(annotate_dir.glob("[0-9][0-9][0-9]-*.md")):
+		try:
+			fm, body = _parse_refine(note.read_text(encoding="utf-8"))
+		except Exception:
+			continue
+		raw_texture = fm.get("texture")
+		texture: Dict[str, Any] = raw_texture if isinstance(raw_texture, dict) else {}
+		idea: Dict[str, Any] = {
+			"title": str(fm.get("title") or "Anotación"),
+			"text": str(body or "").strip(),
+			"significance": fm.get("significance"),
+			"emotion": str(fm.get("emotion") or "gray"),
+			"intensity": fm.get("intensity"),
+			"theme": str(texture.get("theme") or ""),
+			"relics": [str(r) for r in _as_list(texture.get("relics"))][:4],
+			"split_ref": str(fm.get("split_ref") or fm.get("source_lines") or ""),
+			"nnn": note.name[:3],
+		}
+		idea["flags"] = quality_flags(idea["text"])
+		if fm.get("work_score") is not None and "unscored" not in _as_list(fm.get("quality_flags")):
+			idea["work_score"] = float(fm.get("work_score") or 0.0)
+			idea["social_score"] = float(fm.get("social_score") or 0.0)
+		out.append(idea)
+	return out
+
+
+def _resolve_from(from_phase: Optional[str], partial: Dict[str, Any], notes: Optional[List[Dict[str, Any]]], voice_rewrite: bool) -> Tuple[str, Optional[List[Dict[str, Any]]]]:
+	"""`--from`: fase de entrada efectiva + anotaciones previas (degradado gracioso).
+
+	Las fases son secuenciales y mandan los prerrequisitos: la bandera pide
+	intención, el estado decide. Sin prerrequisitos → fase factible más temprana,
+	avisando. `rewrite` sin voice_rewrite activo se trata como `score`.
+	"""
+	if from_phase in (None, "extract"):
+		return "extract", None
+	if from_phase not in PHASES:
+		raise ValueError(f"--from inválido: {from_phase!r} (extract|rewrite|score)")
+	if from_phase == "rewrite" and not voice_rewrite:
+		from_phase = "score"
+	prior: Optional[List[Dict[str, Any]]] = None
+	if partial["phases"]["extract"] == "done" and partial["annotations"]:
+		prior = partial["annotations"]
+		if from_phase == "score" and voice_rewrite and partial["phases"]["rewrite"] != "done":
+			logger.warning("annotate --from=score: rewrite no completado en el parcial — degrado a rewrite")
+			from_phase = "rewrite"
+	elif notes:
+		prior = notes
+	if prior is None:
+		logger.warning("annotate --from=%s sin prerrequisitos (ni parcial ni notas del contrato vigente) — degrado a extract", from_phase)
+		return "extract", None
+	return from_phase, [dict(a) for a in prior]
+
+
 def annotate_session(
 	root: Path,
 	dir_rel: str,
@@ -248,14 +391,24 @@ def annotate_session(
 	source: str,
 	transport: runtime.Transport,
 	voice_rewrite: Optional[bool] = None,
+	from_phase: Optional[str] = None,
+	reason: Optional[str] = None,
 ) -> float:
 	"""Anota una sesión desde el RAW → `annotate/NNN-<slug>.md`. Devuelve la max significance.
 
 	Los ficheros de anotación llevan el sello de ascensión preservado por fichero
 	(stem) para que re-anotar sea idempotente. `voice_rewrite` (None → cfg) re-escribe
 	en 1ª persona las notas que no lo están antes de puntuar.
+
+	MEM-009 F1 — reanudable: nada se borra al empezar; `annotate/_partial.json`
+	checkpointa cada split extraído (keyed por rango de mensajes, revalidado por
+	`content_hash`) y cada fase (extract/rewrite/score). Un kill pierde como mucho
+	un split. Al completar se materializan notas + `_meta.json`, se borran las notas
+	huérfanas y el parcial. `from_phase` (extract|rewrite|score) re-ejecuta desde esa
+	fase reutilizando el estado persistido de las anteriores (parcial o notas).
 	"""
 	import red_pill.config as cfg
+	from red_pill.memento.render import compute_hash
 
 	# 2026-09-24: contrato propio de annotate (ver `_with_annotate_task`).
 	transport = _with_annotate_task(transport)
@@ -283,26 +436,82 @@ def annotate_session(
 				"ascended_to": pfm.get("ascended_to"),
 				"ascended_point_id": pfm.get("ascended_point_id"),
 			}
-	for stale in annotate_dir.glob("*.md"):
-		stale.unlink()
 
-	annotations: List[Dict[str, Any]] = []
+	contract = _contract(voice_rewrite)
+	partial = _load_partial(annotate_dir, contract)
+	entry, prior = _resolve_from(from_phase, partial, _annotations_from_notes(annotate_dir, contract) if from_phase else None, voice_rewrite)
+
 	units = _work_units(root / dir_rel)
-	for nnn, ref, content in units:
-		for idea in _extract(transport, content):
-			idea["split_ref"] = ref
-			idea["nnn"] = nnn
-			idea["flags"] = quality_flags(idea["text"])
-			annotations.append(idea)
+	if entry == "extract":
+		if from_phase == "extract":
+			partial = _empty_partial(contract)  # --from=extract: todo desde cero
+		keys = _range_keys(root / dir_rel)
+		fresh_splits: Dict[str, Any] = {}
+		reused = extracted = 0
+		for key, (nnn, ref, content) in zip(keys, units):
+			chash = compute_hash(content)
+			saved = partial["splits"].get(key)
+			if saved and saved.get("status") == "extracted" and saved.get("content_hash") == chash:
+				saved["nnn"] = nnn
+				saved["split_ref"] = ref
+				for idea in saved.get("ideas") or []:
+					idea["split_ref"], idea["nnn"] = ref, nnn
+				fresh_splits[key] = saved
+				reused += 1
+				continue
+			ideas = []
+			for idea in _extract(transport, content):
+				idea = _scrub_idea(idea)
+				idea["split_ref"] = ref
+				idea["nnn"] = nnn
+				idea["flags"] = quality_flags(idea["text"])
+				ideas.append(idea)
+			fresh_splits[key] = {"nnn": nnn, "split_ref": ref, "content_hash": chash, "status": "extracted", "ideas": ideas}
+			# Rangos desaparecidos se descartan: solo sobreviven los de este run.
+			partial["splits"] = {k: v for k, v in partial["splits"].items() if k in keys}
+			partial["splits"][key] = fresh_splits[key]
+			partial["phases"] = {ph: "pending" for ph in PHASES}
+			_save_partial(annotate_dir, partial)
+			extracted += 1
+		if reused:
+			logger.info("annotate %s: %d splits reanudados del parcial, %d extraídos", dir_rel, reused, extracted)
+		ordered = [idea for key in keys if key in fresh_splits for idea in fresh_splits[key]["ideas"]]
+		if extracted or partial["phases"]["extract"] != "done":
+			annotations = dedup_annotations([dict(i) for i in ordered])
+			partial["splits"] = fresh_splits
+			partial["annotations"] = annotations
+			partial["phases"] = {"extract": "done", "rewrite": "pending", "score": "pending"}
+			_save_partial(annotate_dir, partial)
+		else:
+			annotations = partial["annotations"]
+	else:
+		annotations = prior or []
+		partial["annotations"] = annotations
+		partial["phases"] = {"extract": "done", "rewrite": "pending" if entry == "rewrite" else "done", "score": "pending"}
+		if entry == "score":
+			for a in annotations:
+				a.pop("work_score", None)
+				a.pop("social_score", None)
+		_save_partial(annotate_dir, partial)
 
-	annotations = dedup_annotations(annotations)
-	if voice_rewrite:
+	if voice_rewrite and partial["phases"]["rewrite"] != "done":
 		rewrite_voice_notes(transport, annotations)
-	_score_dual(transport, annotations)
+		partial["phases"]["rewrite"] = "done"
+		_save_partial(annotate_dir, partial)
+	if partial["phases"]["score"] != "done":
+		if entry != "score" and partial["phases"]["rewrite"] == "done" and voice_rewrite:
+			# El rewrite cambia el texto: un score previo ya no vale.
+			for a in annotations:
+				a.pop("work_score", None)
+				a.pop("social_score", None)
+		_score_dual(transport, annotations)
+		partial["phases"]["score"] = "done"
+		_save_partial(annotate_dir, partial)
 
 	max_significance = 0.0
 	route_count: Dict[str, int] = {"work": 0, "social": 0, "none": 0}
 	flag_count: Dict[str, int] = {}
+	written: set = set()
 	for a in annotations:
 		work = float(a.get("work_score", 0.0) or 0.0)
 		social = float(a.get("social_score", 0.0) or 0.0)
@@ -339,24 +548,37 @@ def annotate_session(
 				("ascended_point_id", seal.get("ascended_point_id")),
 			]
 		)
-		(annotate_dir / f"{a['nnn']}-{slug}.md").write_text(f"{refine_fm}\n\n{a['text']}\n", encoding="utf-8")
+		name = f"{a['nnn']}-{slug}.md"
+		(annotate_dir / name).write_text(f"{refine_fm}\n\n{a['text']}\n", encoding="utf-8")
+		written.add(name)
 	meta = {
 		"session_id": session_id,
 		"source": source,
 		"annotated_at": datetime.now(timezone.utc).isoformat(),
 		"engine": runtime.engine_id(),
 		"annotate_prompt_version": runtime.annotate_prompt_version(),
-		"identity_bio_source": prompts.IDENTITY_BIO_SOURCE,
+		# Sanitizado (MEM-009 §3.4): nunca la ruta absoluta del operador.
+		"identity_bio_source": Path(str(prompts.IDENTITY_BIO_SOURCE)).name if prompts.IDENTITY_BIO_SOURCE else prompts.IDENTITY_BIO_SOURCE,
 		"voice_rewrite": bool(voice_rewrite),
 		"splits": len(units),
 		"notas": len(annotations),
 		"max_significance": round(max_significance, 2),
 		"routes": route_count,
 		"flags": flag_count,
+		# Audit trail (MEM-009 §2.1): umbrales efectivos + punto de entrada + motivo.
+		"thresholds": {"work": th_work, "social": th_social, "dead_zone": dead_zone},
+		"from_phase": entry if from_phase else None,
+		"from_requested": from_phase,
+		"reason": reason,
 	}
 	meta_tmp = (annotate_dir / "_meta.json").with_suffix(".json.tmp")
 	meta_tmp.write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
 	meta_tmp.replace(annotate_dir / "_meta.json")
+	# Solo tras el `_meta` verificado: huérfanos fuera y parcial plegado.
+	for stale in annotate_dir.glob("*.md"):
+		if stale.name not in written:
+			stale.unlink()
+	(annotate_dir / _PARTIAL).unlink(missing_ok=True)
 	from red_pill.memento.record import update_session_record
 
 	update_session_record(root, dir_rel, "annotate", meta)

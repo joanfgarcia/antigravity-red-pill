@@ -25,6 +25,8 @@ USO
 	uv run python scripts/memento_annotate.py --status           # control: anotadas/stale/pendientes/errores + notas
 	uv run python scripts/memento_annotate.py --list             # sesiones pendientes (JSON)
 	uv run python scripts/memento_annotate.py --list --all       # ignora la frescura
+	RP_ELEMENT='{"dir": "..."}' uv run python scripts/memento_annotate.py --from=score --reason "umbrales nuevos"
+	# re-puntúa sin re-extraer (MEM-009)
 	uv run python scripts/memento_annotate.py                    # procesa RP_ELEMENT (job)
 	uv run python scripts/memento_annotate.py --root /tmp/x      # árbol alternativo (pruebas)
 
@@ -42,6 +44,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import Optional
 
 from red_pill.memento import get_memento_root
 from red_pill.memento.agentic import annotate_prompt_version, http_transport
@@ -138,13 +141,25 @@ def _canonical_ids() -> dict:
 	return mapping
 
 
-def process_one(root: Path, dir_rel: str, force: bool = False, stale_engine: bool = False) -> dict:
-	if not force and _fresh(root, dir_rel, engine_aware=stale_engine):
+def process_one(
+	root: Path,
+	dir_rel: str,
+	force: bool = False,
+	stale_engine: bool = False,
+	from_phase: Optional[str] = None,
+	reason: Optional[str] = None,
+) -> dict:
+	# `--from` implica reproceso (MEM-009 §2.1): apuntar a una fase hecha la re-ejecuta.
+	if not force and not from_phase and _fresh(root, dir_rel, engine_aware=stale_engine):
 		return {"dir": dir_rel, "skipped": "fresh"}
+	if force:
+		# `--all` = fuerza total desde cero: borra el parcial (con `--from`, el
+		# prerrequisito sale entonces de las notas materializadas, no del parcial).
+		(root / dir_rel / "annotate" / "_partial.json").unlink(missing_ok=True)
 	parts = Path(dir_rel).parts
 	source = parts[1] if len(parts) > 1 else "unknown"
 	session_id = _canonical_ids().get(dir_rel) or (parts[2] if len(parts) > 2 else dir_rel)
-	max_sig = annotate_session(root, dir_rel, session_id, source, http_transport, voice_rewrite=True)
+	max_sig = annotate_session(root, dir_rel, session_id, source, http_transport, voice_rewrite=True, from_phase=from_phase, reason=reason)
 	n = len(list((root / dir_rel / "annotate").glob("*.md")))
 	return {"dir": dir_rel, "anotaciones": n, "max_significance": round(float(max_sig), 2)}
 
@@ -159,6 +174,14 @@ def main() -> None:
 		action="store_true",
 		help="Re-anota también las sesiones cuyo motor difiere del actual (p. ej. las anotadas con tiny_aya).",
 	)
+	parser.add_argument(
+		"--from",
+		dest="from_phase",
+		choices=("extract", "rewrite", "score"),
+		default=None,
+		help="Entra al pipeline en esa fase reutilizando el estado persistido (parcial o notas); degrada con aviso si faltan prerrequisitos.",
+	)
+	parser.add_argument("--reason", default=None, help="Motivo de la invocación (audit trail en _meta.json).")
 	parser.add_argument("--root", type=Path, default=None, help="Raíz Memento (default: la configurada).")
 	args = parser.parse_args()
 	root = args.root or get_memento_root()
@@ -175,7 +198,7 @@ def main() -> None:
 		sys.exit(2)
 	el = json.loads(raw)
 	try:
-		res = process_one(root, str(el["dir"]), force=args.all, stale_engine=args.stale_engine)
+		res = process_one(root, str(el["dir"]), force=args.all, stale_engine=args.stale_engine, from_phase=args.from_phase, reason=args.reason)
 	except Exception as e:
 		from red_pill.memento.agentic.runner import _is_llm_connection_error
 
