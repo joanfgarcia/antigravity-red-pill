@@ -143,6 +143,7 @@ class ModelManager:
 		self.worker_port = None
 		self.mode = None
 		self.n_ctx = None
+		self.flash_attn = False
 		self.current: Optional[mr.ResolvedModel] = None
 		self.lock = asyncio.Lock()
 		self.last_active = time.time()
@@ -166,7 +167,9 @@ class ModelManager:
 		# el modelo ya cargado y elige un tier menor; comparar n_ctx forzaba
 		# unload/reload en bucle (2.590 ciclos en una noche). Mismo fichero+modo →
 		# se sirve con el modelo actual sin recargar.
-		return a.model_path == b.model_path and a.mode == b.mode
+		# flash_attn sí cuenta (MEM-009 D5): es estático del perfil (no depende de
+		# la VRAM medida) y cambia el sobre de serving → exige recarga.
+		return a.model_path == b.model_path and a.mode == b.mode and a.flash_attn == b.flash_attn
 
 	def _apply_resolved(self, body: Dict[str, Any], resolved: mr.ResolvedModel) -> None:
 		if self.model is not None:
@@ -224,13 +227,16 @@ class ModelManager:
 		if not os.path.exists(resolved.model_path):
 			raise BackendUnavailable(f"model file not found: {resolved.model_path}")
 		from llama_cpp import Llama
+		flash_attn = mr.effective_flash_attn(resolved, "cpu" if IS_CPU_WORKER else "gpu")
 		self.model = Llama(
 			model_path=resolved.model_path,
 			chat_format=resolved.chat_format,
 			n_ctx=n_ctx,
 			n_gpu_layers=n_gpu_layers,
+			flash_attn=flash_attn,
 			verbose=False,
 		)
+		self.flash_attn = flash_attn
 		_register_thinking_handlers(self.model, resolved)
 		self.mode = "cpu" if IS_CPU_WORKER else "gpu"
 		self.n_ctx = n_ctx
@@ -301,6 +307,7 @@ class ModelManager:
 			self.worker_port = None
 		self.mode = None
 		self.n_ctx = None
+		self.flash_attn = False
 		self.current = None
 		logger.info("Backend released.")
 
@@ -372,6 +379,7 @@ async def status():
 		"loaded_model": os.path.basename(res.model_path) if res else None,
 		"mode": manager.mode,
 		"n_ctx": manager.n_ctx,
+		"flash_attn": manager.flash_attn,
 		"busy": manager.lock.locked(),
 		"thinking_mode": res.thinking if res else None,
 		"last_mode": res.last_mode if res else "none",
