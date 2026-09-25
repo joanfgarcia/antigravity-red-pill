@@ -11,7 +11,7 @@ from red_pill.memento.render import compute_hash, extract_body, update_frontmatt
 
 from . import runtime
 from .distill import distill_session
-from .fragments import _work_units
+from .fragments import work_units
 from .refine import cross_ref_candidates, refine_session
 from .runtime import Transport
 
@@ -99,7 +99,7 @@ def session_max_work_unit_chars(root: Path, dir_rel: str) -> int:
 	Se usa para detectar sesiones "cortadas": work units que exceden la ventana
 	del modelo anterior y se truncaron en el transporte (2026-09-14)."""
 	try:
-		return max((len(content) for _nnn, _ref, content in _work_units(root / dir_rel)), default=0)
+		return max((len(unit.content) for unit in work_units(root / dir_rel)), default=0)
 	except Exception:
 		return 0
 

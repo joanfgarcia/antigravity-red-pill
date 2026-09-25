@@ -18,14 +18,15 @@ from __future__ import annotations
 from .annotate import annotate_session, dedup_annotations, is_first_person, quality_flags, rewrite_voice_notes
 from .distill import distill_session
 from .fragments import (
+	WorkUnit,
 	_as_list,
 	_fragment_messages,
 	_frontmatter_block,
 	_render_fragment,
 	_split_long_message,
 	_split_messages,
-	_work_units,
 	slugify_title,
+	work_units,
 )
 from .prompts import (
 	_VOICE_RULE,
@@ -133,8 +134,9 @@ __all__ = [
 	"_render_fragment",
 	"_split_long_message",
 	"_split_messages",
-	"_work_units",
+	"WorkUnit",
 	"slugify_title",
+	"work_units",
 	"annotate_session",
 	"dedup_annotations",
 	"is_first_person",

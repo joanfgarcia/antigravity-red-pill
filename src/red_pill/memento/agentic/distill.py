@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from . import prompts, runtime
-from .fragments import _as_list, _fragment_messages, _frontmatter_block, _render_fragment, _split_messages, _work_units, slugify_title
+from .fragments import _as_list, _fragment_messages, _frontmatter_block, _render_fragment, _split_messages, slugify_title, work_units
 from .runtime import Transport
 
 
@@ -40,7 +40,8 @@ def distill_session(
 		overlap = int(getattr(cfg, "MEMENTO_FRAGMENT_OVERLAP_MESSAGES", 2))
 
 	sections = []
-	for nnn, ref, content in _work_units(session_dir):
+	for unit in work_units(session_dir):
+		nnn, ref, content = unit.nnn, unit.ref, unit.content
 		if len(content) <= max_chars:
 			frag_parts = [(content, 1, 1)]
 		else:

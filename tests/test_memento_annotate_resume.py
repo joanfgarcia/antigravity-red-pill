@@ -188,6 +188,58 @@ def test_contrato_distinto_resetea_el_parcial(tmp_path, monkeypatch):
 	assert retry.calls["extract"] == 6
 
 
+def test_work_units_clave_del_mismo_fichero(tmp_path):
+	"""`work_units` es la fuente única: la clave sale del MISMO fichero que el contenido."""
+	from red_pill.memento.agentic import work_units
+
+	session = tmp_path / "s"
+	(session / "memento").mkdir(parents=True)
+	for name, body in (
+		("001-mensajes-0001-0030.md", "uno"),
+		("002-mensajes-0031-0060.md", "dos"),
+		("003-sin-rango.md", "tres"),
+		("004-mensajes-0031-0060.md", "cuatro"),  # rango repetido (resto de re-render)
+	):
+		(session / "memento" / name).write_text(f"> [!ref] memento/index.md#l1-2\n{body}\n", encoding="utf-8")
+	units = work_units(session)
+	assert [(u.nnn, u.key, u.content) for u in units] == [
+		("001", "0001-0030", "uno"),
+		("002", "0031-0060", "dos"),
+		("003", "003-sin-rango", "tres"),
+		("004", "004-mensajes-0031-0060", "cuatro"),
+	]
+	assert len({u.key for u in units}) == len(units)
+
+
+def test_work_units_sin_splits_usa_index(tmp_path):
+	from red_pill.memento.agentic import work_units
+
+	session = tmp_path / "s"
+	(session / "memento").mkdir(parents=True)
+	(session / "memento" / "index.md").write_text("---\nid: x\n---\ncuerpo\n", encoding="utf-8")
+	(unit,) = work_units(session)
+	assert unit.key == "index"
+	assert unit.nnn == "001"
+
+
+def test_renumeracion_de_nnn_no_invalida_el_parcial(tmp_path):
+	"""Un split nuevo delante desplaza los NNN; los rangos ya extraídos se reutilizan
+	y las notas salen con el NNN nuevo."""
+	dir_rel = _tree(tmp_path, 3)
+	with pytest.raises(_Killed):
+		_run(tmp_path, dir_rel, _Transport(die_after_extracts=4))  # rangos 0001-0010 y 0011-0020
+	splits = tmp_path / dir_rel / "memento"
+	for old in sorted(splits.glob("*.md"), reverse=True):
+		nnn, rest = old.name.split("-", 1)
+		old.rename(splits / f"{int(nnn) + 1:03d}-{rest}")
+	(splits / "001-mensajes-0000-0000.md").write_text("> [!ref] memento/index.md#l0-0\nContenido único del split 4.\n", encoding="utf-8")
+	retry = _Transport()
+	_run(tmp_path, dir_rel, retry)
+	assert retry.calls["extract"] == 4  # nuevo 0000-0000 + pendiente 0021-0030
+	notes = sorted(p.name for p in (tmp_path / dir_rel / "annotate").glob("*.md"))
+	assert notes[0].startswith("001-") and notes[1].startswith("002-")  # el reutilizado 0001-0010 ahora es 002
+
+
 # ── D5: flash_attn tri-estado ──
 
 

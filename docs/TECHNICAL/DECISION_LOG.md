@@ -4,6 +4,20 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-037] Rebuild annotate reanudable + Flash Attention por modelo (MEM-009)
+**Date**: 2026-09-25
+**Status**: ACCEPTED (2026-09-25) — D5 y F1 implementados y D5 desplegado; F0, F2 y F3 en versión mínima pendientes; F4 y F5 aplazados.
+**Context**: el rebuild `7b587370` (MEM-006) se atascó en tres sesiones. La 420 era lenta y cada reintento repetía 40-80 min de extract bueno, porque `annotate_session` era todo-o-nada y **borraba las notas al empezar**. La 444 y la 495 entraban en bucle de DEFER con el daemon reiniciándose (contador 240). La autopsia fuera del daemon (`daemon/.venv`, `verbose=True`) dio con la causa: **`CUDA error: out of memory` en el scratch de prefill**. A n_ctx 10240 y sin FA quedaban 248 MiB libres; un prompt de ~6,3-6,5K tokens (~17,0-17,3K chars) los agotaba. No era contenido "venenoso": era el límite de VRAM del servidor (la 420 pasó por 272 chars).
+**Decision**:
+- **D5 — `flash_attn: auto|true|false` por perfil** (`model_profiles.yaml`), resuelto en `model_runtime.effective_flash_attn` como fuente única de daemon y clientes. `auto` = GPU ∧ `fa_capable: true`; el worker CPU nunca lo activa; sin declarar = conducta previa. El daemon lo pasa a `Llama()`, lo expone en `/status` y lo cuenta en `_same_model` (es estático del perfil, así que no reabre el thrash de AD-030). `granite_8b → true`.
+- **F1 — annotate reanudable**: `annotate/_partial.json` (atómico), con una entrada por split keyed por **rango de mensajes** y revalidada por `content_hash`, más el estado de cada fase (extract/rewrite/score). Un contrato distinto (prompt/engine/voice) resetea el parcial. La salida del LLM pasa `scrub_secrets`+`normalize_noise` antes de persistirse. Las notas huérfanas se borran solo tras el `_meta` verificado. `--from=extract|rewrite|score` degrada con aviso y nunca falla duro; su prerrequisito sale del parcial o de las notas del contrato vigente. `--all` no cambia (desde cero, borra el parcial). Audit trail en `_meta` (umbrales, `from_phase`, `reason`).
+- **`work_units()` como fuente única de la unidad de trabajo**: devuelve `WorkUnit(nnn, ref, content, key)`, con la clave derivada del MISMO fichero en la MISMA iteración (el rango repetido cae al stem). Sustituye a `_work_units` + `_range_keys`, que había que mantener en el mismo orden a mano.
+- **Aplazado / no se hace**: F2 completo (el registro persistente de venenos con contrato de seis campos se diseñó para un caso que resultó ser VRAM → queda en versión mínima: motivo del skip + distinción muro/veneno), F4 (snap + overlap de boundaries) y F5 (índice por rangos + backfill de 535 sesiones: con el parcial, la frescura binaria por `_meta` basta hoy). F3 se reduce a aplicar en annotate el `prompt_budget()` que refine ya usa (`_split_to_fit`).
+**Evidence**: autopsia en proceso limpio: sin FA 7459 MiB usados / 248 libres → ABORT; con FA 6965 / 742 → 6,5K y 8K tokens OK. Tras desplegar (2026-09-25 15:54): `/status.flash_attn=true`, 718-726 MiB libres; el split 001 de la 495 (prompt de 17.420 chars) extrae 7 ideas en 34,6 s con `NRestarts=0`. Tests: `tests/test_memento_annotate_resume.py` (kill a mitad de extract → solo los splits restantes; hash cambiado; scrub del parcial; degradado de `--from`; renumeración de NNN; tri-estado FA).
+**Por qué**: la causa del atasco era de configuración (FA), así que se arregla primero; F1 elimina la clase de coste "reintento = rehacer todo". El resto del RFC se queda en lo mínimo que justifican los datos, sin maquinaria especulativa.
+
+---
+
 ## [AD-036] Anotaciones del motor equivocado (tiny_aya) — aceptadas como estrato histórico
 **Date**: 2026-09-23
 **Status**: ACCEPTED (2026-09-23) — opción (c): se acepta la cohorte tal cual.

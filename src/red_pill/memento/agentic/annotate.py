@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import prompts, runtime
-from .fragments import _as_list, _frontmatter_block, _work_units, slugify_title
+from .fragments import _as_list, _frontmatter_block, slugify_title, work_units
 
 logger = logging.getLogger(__name__)
 
@@ -246,20 +246,6 @@ PHASES = ("extract", "rewrite", "score")
 _SCRUB_FIELDS = ("title", "text", "theme", "emotion")
 
 
-def _range_keys(session_dir: Path) -> List[str]:
-	"""Clave por rango de mensajes de cada unidad, en el MISMO orden que `_work_units`.
-
-	`NNN-mensajes-0366-0443.md` → `0366-0443` (MEM-009 §2.1): inmune a
-	renumeraciones del NNN. Sin splits (sesión pequeña) → `index`.
-	"""
-	splits = sorted((session_dir / "memento").glob("[0-9][0-9][0-9]-*.md"))
-	keys = []
-	for split in splits:
-		m = re.search(r"(\d+-\d+)$", split.stem)
-		keys.append(m.group(1) if m else split.stem)
-	return keys or ["index"]
-
-
 def _scrub_idea(idea: Dict[str, Any]) -> Dict[str, Any]:
 	"""Scrub de la salida cruda del LLM antes de persistirla (MEM-009 S1, MUST-9).
 
@@ -441,14 +427,15 @@ def annotate_session(
 	partial = _load_partial(annotate_dir, contract)
 	entry, prior = _resolve_from(from_phase, partial, _annotations_from_notes(annotate_dir, contract) if from_phase else None, voice_rewrite)
 
-	units = _work_units(root / dir_rel)
+	units = work_units(root / dir_rel)
 	if entry == "extract":
 		if from_phase == "extract":
 			partial = _empty_partial(contract)  # --from=extract: todo desde cero
-		keys = _range_keys(root / dir_rel)
+		keys = [unit.key for unit in units]
 		fresh_splits: Dict[str, Any] = {}
 		reused = extracted = 0
-		for key, (nnn, ref, content) in zip(keys, units):
+		for unit in units:
+			key, nnn, ref, content = unit.key, unit.nnn, unit.ref, unit.content
 			chash = compute_hash(content)
 			saved = partial["splits"].get(key)
 			if saved and saved.get("status") == "extracted" and saved.get("content_hash") == chash:

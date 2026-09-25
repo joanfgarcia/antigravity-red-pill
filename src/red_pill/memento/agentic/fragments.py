@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, NamedTuple, Optional, Tuple
 
 from red_pill.memento.render import extract_body
 
@@ -35,21 +35,52 @@ def slugify_title(title: str, max_len: int = 40) -> str:
 
 
 
-def _work_units(session_dir: Path) -> List[Tuple[str, str, str]]:
-	"""[(NNN, source_lines_ref, content)] — los splits si existen; si no, el index entero."""
+class WorkUnit(NamedTuple):
+	"""Unidad de trabajo de una sesión: un split de `memento/` (o el index entero).
+
+	`key` es la identidad estable de la unidad (MEM-009 §2.1): el rango de
+	mensajes del filename (`NNN-mensajes-0366-0443.md` → `0366-0443`), inmune a
+	renumeraciones del NNN; `index` si la sesión no tiene splits. Se deriva del
+	MISMO fichero y en la MISMA iteración que `nnn`/`ref`/`content`, así que
+	clave y contenido no pueden desincronizarse.
+	"""
+
+	nnn: str
+	ref: str
+	content: str
+	key: str
+
+
+_RANGE_KEY_RE = re.compile(r"(\d+-\d+)$")
+
+
+def _range_key(split: Path) -> str:
+	m = _RANGE_KEY_RE.search(split.stem)
+	return m.group(1) if m else split.stem
+
+
+def work_units(session_dir: Path) -> List[WorkUnit]:
+	"""Los splits de la sesión si existen; si no, el index entero (fuente única)."""
 	memento_dir = session_dir / "memento"
 	splits = sorted(memento_dir.glob("[0-9][0-9][0-9]-*.md"))
 	units = []
+	seen: set = set()
 	for i, split in enumerate(splits, start=1):
 		text = split.read_text(encoding="utf-8")
 		first_line, _, rest = text.partition("\n")
 		ref = first_line.replace("> [!ref] ", "").strip() if first_line.startswith("> [!ref]") else "memento/index.md"
-		units.append((f"{i:03d}", ref, rest.strip()))
+		# Clave única por sesión: dos ficheros con el mismo rango (resto de un
+		# re-render) fundirían sus ideas en el parcial → el repetido cae al stem.
+		key = _range_key(split)
+		if key in seen:
+			key = split.stem
+		seen.add(key)
+		units.append(WorkUnit(f"{i:03d}", ref, rest.strip(), key))
 	if units:
 		return units
 	index_text = (memento_dir / "index.md").read_text(encoding="utf-8")
 	total_lines = index_text.count("\n") + 1
-	return [("001", f"memento/index.md#l1-{total_lines}", extract_body(index_text).strip())]
+	return [WorkUnit("001", f"memento/index.md#l1-{total_lines}", extract_body(index_text).strip(), "index")]
 
 
 

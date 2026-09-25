@@ -122,6 +122,23 @@ pendientes/errores + notas). Ascensión post-rebuild encadenada:
 `dual_route: none` no ascienden). Diagnóstico:
 `uv run python tools/memento_lab.py funnel|quality|annotate`.
 
+**Reanudable por splits (MEM-009 F1, AD-037)**: dentro de cada sesión el paso ya no
+es todo-o-nada. `annotate/_partial.json` guarda cada split extraído (clave =
+rango de mensajes, revalidado por `content_hash`) y el estado de cada fase: un
+kill o timeout pierde como mucho un split, y el reintento del `element_job`
+continúa donde quedó. Nada se borra al empezar; las notas huérfanas y el parcial
+se van solo tras el `_meta.json` verificado. **Parcial presente sin `_meta` =
+trabajo a medias** (no borrarlo a mano; `--all` lo descarta). Re-puntuar sin
+re-extraer (p. ej. umbrales nuevos):
+`RP_ELEMENT='{"dir": "<dir_rel>"}' uv run python scripts/memento_annotate.py --from=score --reason "<motivo>"`
+(degrada con aviso si faltan prerrequisitos; el motivo queda en `_meta.json`).
+
+**Muro de serving ≠ veneno (MEM-009, AD-037)**: defers repetidos del mismo
+elemento con el daemon reiniciándose (`NRestarts` subiendo, `CUDA error: out of
+memory` en el journal) son **VRAM**, no contenido: se curan con config
+(`flash_attn`/`n_ctx` del perfil), no con `job_skip`. Comprobar
+`curl -s localhost:8760/status` → `flash_attn: true` para `granite_8b`.
+
 **Política refine (2026-09-22)**: **no se generan refines nuevos** — el pase
 agéntico usa annotate (`MEMENTO_ANNOTATE_FROM_RAW=true`). El código de refine queda
 solo para (a) rollback explícito (flag OFF) y (b) reparación de la capa legacy

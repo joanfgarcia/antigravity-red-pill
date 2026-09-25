@@ -341,7 +341,21 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   fase reutilizando parcial o notas del contrato vigente, con degradado gracioso
   (nunca fallo duro); `--all` sigue siendo "desde cero" (borra el parcial).
   `_meta.json` gana audit trail (`thresholds`, `from_phase`, `from_requested`,
-  `reason`) e `identity_bio_source` saneado a basename. Tests: 9.
+  `reason`) e `identity_bio_source` saneado a basename. Tests: 12.
+- **[REF] `work_units()` — fuente única de la unidad de trabajo (MEM-009)**:
+  sustituye a `_work_units` (3-tupla) + `_range_keys` (lista paralela que había
+  que mantener en el mismo orden a mano). Devuelve `WorkUnit(nnn, ref, content,
+  key)` con la clave derivada del MISMO fichero en la MISMA iteración; un rango
+  repetido (resto de un re-render) cae al stem para no fundir ideas en el
+  parcial. Migrados los tres consumidores (`distill`, `annotate`,
+  `runner.session_max_work_unit_chars`) y la fachada. Sin cambio de conducta
+  en distill.
+- **[DOC] AD-037** (DECISION_LOG) + runbook del single-writer (reanudable,
+  `--from`, muro de serving ≠ veneno) + `SCRIPTS_INDEX`.
+- **[CHORE] Daemon desplegado con D5** (2026-09-25 15:54, solo `run_dual_bind.py`)
+  y validado en vivo: el split de la 495 que tumbaba el daemon (17.420 chars)
+  extrae con `NRestarts=0`. Comentario del template de `redpill-llm.service`
+  alineado con el desplegado.
 
 ### 🧹 Desk — scaffold del despacho, separación proyecto↔despacho y `AGENT_CORE_DIR`
 
