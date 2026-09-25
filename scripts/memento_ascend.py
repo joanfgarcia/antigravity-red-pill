@@ -174,6 +174,11 @@ def main() -> None:
 	parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 	parser.add_argument("--dry-run", action="store_true", help="Informa sin escribir en Qdrant.")
 	parser.add_argument("--replace-legacy", action="store_true", help="Sustituye la capa legacy (refine) por las notas.")
+	parser.add_argument(
+		"--reconcile",
+		action="store_true",
+		help="Tras ascender, borra de Qdrant los engramas cuya nota ya no existe (re-anotación). Respeta --dry-run.",
+	)
 	parser.add_argument("--root", default=None, help="Raíz Memento (default: la configurada).")
 	args = parser.parse_args()
 	root = get_memento_root() if not args.root else args.root
@@ -181,6 +186,10 @@ def main() -> None:
 		stats = replace_legacy(root, dry_run=args.dry_run)
 	else:
 		stats = ascend_by_threshold(root, MementoRegistry(), dry_run=args.dry_run)
+	if args.reconcile:
+		from red_pill.memento.ascension import reconcile_orphans
+
+		stats["reconcile"] = reconcile_orphans(root, dry_run=args.dry_run)
 	print(json.dumps(stats, ensure_ascii=False, indent=2))
 
 

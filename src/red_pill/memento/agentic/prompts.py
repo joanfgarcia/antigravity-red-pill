@@ -71,6 +71,11 @@ if IDENTITY_BIO_SOURCE == "template":
 # recuerda como uno propio, no como observador. La directiva es la misma del
 # sueño (voz autobiográfica 1ª persona).
 _VOICE_RULE = _load_prompt_file("voice_rule.txt")
+# Regla de voz PROPIA de annotate (feedback de recall 2026-09-25): el sujeto es quien
+# actuó, sin muletilla de apertura y nombrando la entidad. distill/refine conservan
+# `voice_rule.txt` (y sus fingerprints) — el cambio no toca el carril legacy.
+_VOICE_RULE_ANNOTATE = _load_prompt_file("voice_rule_annotate.txt")
+VOICE_REWRITE_USER_V2 = _load_prompt_file("voice_rewrite_user_v2.txt")
 
 
 

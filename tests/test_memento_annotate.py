@@ -213,7 +213,7 @@ def test_prompt_fingerprints_estables():
 
 	assert distill_prompt_version() == "66c679f1bb"
 	assert refine_prompt_version() == "85209a6c9e"
-	assert annotate_prompt_version() == "07a5c9b529"
+	assert annotate_prompt_version() == "07a5c9b529"  # voz v1 (MEMENTO_ANNOTATE_VOICE_V2 OFF)
 	assert validate_prompt_version() == "217aafd8dd"  # v2 endurecido (2026-09-23)
 
 

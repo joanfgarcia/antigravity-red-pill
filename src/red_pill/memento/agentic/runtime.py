@@ -70,7 +70,23 @@ def distill_prompt_version() -> str:
 
 def annotate_prompt_version() -> str:
 	"""Fingerprint del prompt de ANNOTATE (WORK + SOCIAL + VOICE + Bio de identidad)."""
+	if voice_v2_enabled():
+		# Voz v2 (2026-09-25): regla propia de annotate + re-escritura v2, ambas en
+		# la huella (la re-escritura forma parte del contrato; antes quedaba fuera).
+		return _prompt_hash(prompts.ANNOTATE_WORK_USER, prompts.ANNOTATE_SOCIAL_USER, prompts._VOICE_RULE_ANNOTATE, prompts.IDENTITY_BIO, prompts.VOICE_REWRITE_USER_V2)
 	return _prompt_hash(prompts.ANNOTATE_WORK_USER, prompts.ANNOTATE_SOCIAL_USER, prompts._VOICE_RULE, prompts.IDENTITY_BIO)
+
+
+def voice_v2_enabled() -> bool:
+	"""`MEMENTO_ANNOTATE_VOICE_V2` (RULE 4, default OFF): voz v2 de annotate.
+
+	v2 = el sujeto es quien actuó, sin muletilla "Joan me…" y nombrando la entidad
+	(regla `voice_rule_annotate.txt` + `voice_rewrite_user_v2.txt`), y la re-escritura
+	solo toca notas con bandera `voice`. OFF → voz v1 intacta (fingerprint 07a5c9b529).
+	"""
+	import red_pill.config as cfg
+
+	return bool(getattr(cfg, "MEMENTO_ANNOTATE_VOICE_V2", False))
 
 
 def validate_prompt_version() -> str:

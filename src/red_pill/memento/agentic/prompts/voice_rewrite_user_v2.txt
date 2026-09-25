@@ -1,0 +1,13 @@
+{identity}
+
+Rewrite each note as Aleth's OWN memory, in Spanish. Keep ALL facts, names, dates, codes, hashes and technical detail intact; do NOT add facts that are not in the note.
+- THE SUBJECT IS WHOEVER ACTED: Joan's actions with Joan as subject ("Joan corrigió…"); Aleth's actions in first person ("Implementé…", "Le propuse…"). Never move an action from one to the other.
+- Go straight to the fact; avoid opening with "Joan me dijo/explicó/pidió que…" or "Le expliqué que…".
+- NEVER: "Se creó", "Se omitió", "Aleth creó", "El asistente", "El usuario".
+
+Return an ARRAY: [{{"i": <index>, "text": "..."}}]
+
+Notes:
+{notes}
+
+Output ONLY the JSON array.

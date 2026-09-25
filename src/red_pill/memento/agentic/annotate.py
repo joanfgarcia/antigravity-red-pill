@@ -126,7 +126,8 @@ def _route(work: float, social: float, th_work: float, th_social: float, dead_zo
 def _extract(transport: runtime.Transport, content: str) -> List[Dict[str, Any]]:
 	ideas: List[Dict[str, Any]] = []
 	for system, template in ((prompts.ANNOTATE_WORK_SYSTEM, prompts.ANNOTATE_WORK_USER), (prompts.ANNOTATE_SOCIAL_SYSTEM, prompts.ANNOTATE_SOCIAL_USER)):
-		prompt = template.format(identity=prompts.IDENTITY_BIO, voice=prompts._VOICE_RULE, fragment=content)
+		voice = prompts._VOICE_RULE_ANNOTATE if runtime.voice_v2_enabled() else prompts._VOICE_RULE
+		prompt = template.format(identity=prompts.IDENTITY_BIO, voice=voice, fragment=content)
 		raw = transport(system, prompt, 1024)
 		for idea in runtime._extract_json_array(raw) or []:
 			if not isinstance(idea, dict):
@@ -148,8 +149,23 @@ def _extract(transport: runtime.Transport, content: str) -> List[Dict[str, Any]]
 	return ideas
 
 
+def _needs_voice_rewrite(text: str) -> bool:
+	"""¿La nota necesita re-escritura de voz? Solo si tiene la bandera `voice`.
+
+	2026-09-25: antes el criterio era "no está en 1ª persona", y el prompt exigía
+	empezar por "Joan me…" y prohibía "Joan implementó". Resultado medido: el 50,2%
+	de las notas abría con la muletilla y había inversiones de sujeto ("Joan me
+	comprometió dos cambios" por commits de Aleth). Una nota que narra una acción de
+	Joan con Joan como sujeto ya es correcta; se reescriben solo las impersonales o
+	en 3ª persona de Aleth (`quality_flags` → `voice`).
+	"""
+	if not runtime.voice_v2_enabled():
+		return not is_first_person(text)  # voz v1
+	return "voice" in quality_flags(text)
+
+
 def rewrite_voice_notes(transport: runtime.Transport, annotations: List[Dict[str, Any]], batch_size: int = 10) -> int:
-	"""Re-escribe en 1ª persona las notas que no lo están (MEM-006 Q8, lever b).
+	"""Re-escribe la voz de las notas con bandera `voice` (MEM-006 Q8, lever b).
 
 	Reintenta con lotes decrecientes hasta individual (el modelo responde a veces
 	solo una parte). Actualiza `text` y recalcula `flags` in-place. Devuelve cuántas
@@ -157,13 +173,14 @@ def rewrite_voice_notes(transport: runtime.Transport, annotations: List[Dict[str
 	"""
 	rewritten = 0
 	for size in (batch_size, 4, 1):
-		pending = [a for a in annotations if not is_first_person(str(a.get("text") or ""))]
+		pending = [a for a in annotations if _needs_voice_rewrite(str(a.get("text") or ""))]
 		if not pending:
 			break
 		for start in range(0, len(pending), size):
 			chunk = pending[start : start + size]
 			listing = "\n\n".join(f"[{i}] {a['text'][:600]}" for i, a in enumerate(chunk))
-			raw = transport(prompts.VOICE_REWRITE_SYSTEM, prompts.VOICE_REWRITE_USER.format(identity=prompts.IDENTITY_BIO, notes=listing), 2048)
+			template = prompts.VOICE_REWRITE_USER_V2 if runtime.voice_v2_enabled() else prompts.VOICE_REWRITE_USER
+			raw = transport(prompts.VOICE_REWRITE_SYSTEM, template.format(identity=prompts.IDENTITY_BIO, notes=listing), 2048)
 			for row in runtime._extract_json_array(raw) or []:
 				if not isinstance(row, dict):
 					continue
@@ -180,6 +197,55 @@ def rewrite_voice_notes(transport: runtime.Transport, annotations: List[Dict[str
 					chunk[idx]["flags"] = quality_flags(new_text)
 					rewritten += 1
 	return rewritten
+
+
+def dedup_post_rewrite(
+	annotations: List[Dict[str, Any]],
+	threshold: float = 0.90,
+	embed_fn: Optional[Any] = None,
+) -> List[Dict[str, Any]]:
+	"""Dedup DESPUÉS de la re-escritura de voz (feedback de recall 2026-09-25).
+
+	La dedup P1-A corre sobre las ideas crudas; la re-escritura puede hacer que dos
+	ideas distintas acaben con el mismo texto (7 duplicados exactos en el corpus) o
+	con paráfrasis casi idénticas. Dos pasadas: (1) P1-A otra vez (hash normalizado
+	+ solape de tokens); (2) casi-duplicados por embedding dentro de la sesión:
+	coseno ≥ `threshold` entre cuerpos sin muletilla → se queda la mejor variante
+	(mismo orden de `_rank`). Umbral 0,90 medido: en el corpus, los pares de la
+	misma sesión en 0,90-0,93 son el mismo hecho dicho dos veces.
+
+	`embed_fn(textos) -> vectores` inyectable (tests); por defecto, el embedder vigente.
+	"""
+	kept = dedup_annotations(annotations)
+	if threshold <= 0 or len(kept) < 2:
+		return kept
+	from red_pill.memento.embed_text import strip_lead
+
+	texts = [strip_lead(str(a.get("text") or "")) or str(a.get("text") or "") for a in kept]
+	if embed_fn is None:
+		from red_pill.core.embeddings import EmbeddingEngine
+
+		engine = EmbeddingEngine()
+		engine.get_vector("warmup")
+		encoder: Any = engine.encoder
+		vectors = list(encoder.embed(texts, batch_size=64))
+	else:
+		vectors = list(embed_fn(texts))
+	import numpy as np
+
+	units = []
+	for v in vectors:
+		arr = np.asarray(v, dtype=float)
+		n = float(np.linalg.norm(arr))
+		units.append(arr / n if n else arr)
+	out: List[Dict[str, Any]] = []
+	out_units: List[Any] = []
+	for a, u in zip(kept, units):  # `kept` ya viene ordenado por `_rank` (mejor primero)
+		if any(float(u @ w) >= threshold for w in out_units):
+			continue
+		out.append(a)
+		out_units.append(u)
+	return out
 
 
 def _score_dual(transport: runtime.Transport, annotations: List[Dict[str, Any]]) -> None:
@@ -485,6 +551,14 @@ def annotate_session(
 		rewrite_voice_notes(transport, annotations)
 		partial["phases"]["rewrite"] = "done"
 		_save_partial(annotate_dir, partial)
+	if bool(getattr(cfg, "MEMENTO_ANNOTATE_POST_REWRITE_DEDUP", False)) and partial["phases"]["score"] != "done":
+		# Idempotente: re-ejecutarla sobre una lista ya deduplicada no cambia nada.
+		deduped = dedup_post_rewrite(annotations, float(getattr(cfg, "MEMENTO_ANNOTATE_EMBED_DEDUP_THRESHOLD", 0.90)))
+		if len(deduped) != len(annotations):
+			logger.info("annotate %s: dedup post-rewrite %d → %d notas", dir_rel, len(annotations), len(deduped))
+			annotations = deduped
+			partial["annotations"] = annotations
+			_save_partial(annotate_dir, partial)
 	if partial["phases"]["score"] != "done":
 		if entry != "score" and partial["phases"]["rewrite"] == "done" and voice_rewrite:
 			# El rewrite cambia el texto: un score previo ya no vale.

@@ -19,7 +19,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 from qdrant_client import models
@@ -849,3 +849,70 @@ def ascender(
 
 	logger.info(f"[ASCENSION] {refine_path.name} → {collection} (point {point_id[:8]}…)")
 	return {"ascended": True, "reason": "ok", "collection": collection, "point_id": point_id}
+
+
+def reconcile_orphans(
+	root: Path,
+	memory_manager: Any = None,
+	*,
+	dry_run: bool = False,
+	collections: Tuple[str, ...] = ("work_memories", "social_memories"),
+) -> Dict[str, Any]:
+	"""Borra de Qdrant los engramas de Memento cuya nota ya no existe en el árbol.
+
+	Re-anotar una sesión (prompt nuevo → títulos nuevos → stems nuevos) borra las
+	notas viejas del árbol (MEM-009 F1: huérfanas fuera tras el `_meta`), pero sus
+	puntos en Qdrant seguían vivos con `ascended_point_id` distinto → memoria
+	duplicada. Esta pasada cierra el ciclo: un punto `origin=memento` cuyo
+	`refine_ref` apunta a `annotate/` y cuyo fichero ya no existe es huérfano.
+
+	Seguridad: solo se considera huérfano si la sesión tiene `annotate/_meta.json`
+	(la re-anotación terminó) y NO tiene `annotate/_partial.json` (no está a medias).
+	Los `refine/` legacy no se tocan (su ciclo es `--replace-legacy`).
+	"""
+	from qdrant_client import models
+
+	if memory_manager is None:
+		from red_pill.memory import MemoryManager
+
+		memory_manager = MemoryManager()
+	root = Path(root)
+	stats: Dict[str, Any] = {"revisados": 0, "huerfanos": 0, "omitidos_sesion_a_medias": 0, "por_coleccion": {}, "dry_run": dry_run}
+	for collection in collections:
+		try:
+			if not memory_manager.client.collection_exists(collection):
+				continue
+		except Exception:
+			continue
+		orphans: List[Any] = []
+		offset = None
+		while True:
+			points, offset = memory_manager.client.scroll(
+				collection_name=collection,
+				scroll_filter=models.Filter(must=[models.FieldCondition(key="origin", match=models.MatchValue(value="memento"))]),
+				limit=1000,
+				offset=offset,
+				with_payload=["refine_ref"],
+				with_vectors=False,
+			)
+			for p in points:
+				stats["revisados"] += 1
+				ref = str((p.payload or {}).get("refine_ref") or "")
+				if "/annotate/" not in ref:
+					continue
+				note = root / ref
+				if note.exists():
+					continue
+				annotate_dir = note.parent
+				if not (annotate_dir / "_meta.json").exists() or (annotate_dir / "_partial.json").exists():
+					stats["omitidos_sesion_a_medias"] += 1
+					continue
+				orphans.append(p.id)
+			if offset is None:
+				break
+		stats["por_coleccion"][collection] = len(orphans)
+		stats["huerfanos"] += len(orphans)
+		if orphans and not dry_run:
+			memory_manager.client.delete(collection_name=collection, points_selector=models.PointIdsList(points=orphans))
+			logger.info(f"[ASCENSION] reconcile: {len(orphans)} engramas huérfanos borrados de {collection}")
+	return stats
