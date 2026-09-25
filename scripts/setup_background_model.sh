@@ -154,12 +154,23 @@ class ModelManager:
 		"""Resuelve el selector y carga el modelo si difiere del actual (bajo lock)."""
 		self.last_active = time.time()
 		resolved = mr.resolve(body)
-		if self.mode is not None and self.current and self._same_model(self.current, resolved):
+		if self.mode is not None and self.current and self._same_model(self.current, resolved) and self._backend_alive():
 			# Mismo modelo: solo aplicar chat handler/thinking de la request.
 			self._apply_resolved(body, resolved)
 			return resolved
 		await self._switch_to(resolved, prefs)
 		return resolved
+
+	def _backend_alive(self) -> bool:
+		"""¿El backend actual puede servir? (2026-09-25: worker CPU muerto = 500 eterno).
+
+		La histéresis de `_same_model` reutilizaba el modelo "cargado" aunque el
+		worker CPU hubiera muerto (p.ej. scope de systemd que no arrancó): cada
+		petición acababa en `Connection refused` → 500, sin recarga, hasta reiniciar.
+		"""
+		if self.mode == "cpu" and not IS_CPU_WORKER:
+			return self.worker is not None and self.worker.poll() is None
+		return self.model is not None
 
 	@staticmethod
 	def _same_model(a: mr.ResolvedModel, b: mr.ResolvedModel) -> bool:
@@ -205,6 +216,13 @@ class ModelManager:
 					self._load_in_process(resolved, resolved.n_ctx, ngl)
 					return
 				elif device == "cpu":
+					if IS_CPU_WORKER:
+						# El worker CPU carga EN SU PROCESO. Antes (desde RFC-HARNESS-002
+						# v3, 2026-09-17) llamaba a _start_cpu_worker → intentaba lanzar
+						# otro worker con su mismo scope → "already loaded" → exited
+						# early → 500 en todo el fallback a CPU.
+						self._load_in_process(resolved, FORCED_NCTX or resolved.cpu_n_ctx or resolved.n_ctx, 0)
+						return
 					self._start_cpu_worker(resolved)
 					return
 				elif device in ("igpu", "npu"):
@@ -245,11 +263,17 @@ class ModelManager:
 		logger.info(f"Model {resolved.profile_name} successfully loaded ({where}).")
 
 	def _start_cpu_worker(self, resolved: mr.ResolvedModel):
+		if IS_CPU_WORKER:
+			raise RuntimeError("un worker CPU nunca lanza otro worker (carga en su proceso)")
 		n_ctx = resolved.cpu_n_ctx or resolved.n_ctx
 		shield = math.ceil((_CPU_BASE_GB + (n_ctx * _CPU_KV_MB_PER_TOKEN) / 1024.0) * 1.15)
 		logger.warning(f"GPU unavailable for {resolved.profile_name}: falling back to CPU (n_ctx={n_ctx}, shield={shield}G).")
 		unit = f"redpill-cpu-worker-{CPU_WORKER_PORT}"
 		if shutil.which("systemctl"):
+			# Un scope previo aún cargado hace fallar el systemd-run nuevo
+			# ("already loaded", 2026-09-25): pararlo antes, no solo reset-failed.
+			subprocess.run(["systemctl", "--user", "stop", f"{unit}.scope"],
+				stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 			subprocess.run(["systemctl", "--user", "reset-failed", f"{unit}.scope"],
 				stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 		env = dict(os.environ)
