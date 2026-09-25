@@ -350,6 +350,15 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   parcial. Migrados los tres consumidores (`distill`, `annotate`,
   `runner.session_max_work_unit_chars`) y la fachada. Sin cambio de conducta
   en distill.
+- **[TOOL] `scripts/qdrant_reembed.py` + receta `archive_reembed`**: re-embebido
+  desde `content` de los vectores que no casan con su texto. Hallazgo
+  2026-09-25: en `archive_memories` los puntos anteriores a julio (fuente
+  antigravity) no se corresponden con ningún campo guardado (coseno 0,1-0,5) y
+  son inencontrables para las consultas; desde julio casan (1,000), igual que
+  `work_memories`/`social_memories`. Dry-run por defecto; `--apply` solo
+  reescribe coseno < 0,99, snapshot previo, tramos de 10.000 reanudables por
+  offset. Dry-run de 5.120 puntos: 1.129 a reescribir (22%), ~55 pts/s (≈24 min
+  el archivo entero). Tests: 3.
 - **[DOC] AD-037** (DECISION_LOG) + runbook del single-writer (reanudable,
   `--from`, muro de serving ≠ veneno) + `SCRIPTS_INDEX`.
 - **[CHORE] Daemon desplegado con D5** (2026-09-25 15:54, solo `run_dual_bind.py`)

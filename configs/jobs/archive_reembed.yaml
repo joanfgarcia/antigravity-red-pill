@@ -1,0 +1,27 @@
+# Re-embebido de archive_memories desde `content` (hallazgo 2026-09-25).
+#
+# Los puntos anteriores a julio de 2026 (fuente antigravity) tienen vectores que
+# no corresponden a ningún campo de texto guardado (coseno 0,1-0,5 re-embebidos
+# con el modelo vigente): son inencontrables para las consultas actuales. El
+# script solo reescribe los vectores con coseno < 0,99 (idempotente), hace
+# snapshot de la colección antes de la primera escritura y avanza por tramos de
+# 10.000 puntos: cada tramo es un step → `pause` corta limpio entre tramos y el
+# resume continúa por el offset del checkpoint.
+#
+# Sin LLM ni GPU (fastembed/ONNX en CPU). Prioridad baja: diferible.
+#   Dry-run previo:  uv run python scripts/qdrant_reembed.py --collection archive_memories
+#   Encolar:         red-pill job submit --recipe archive_reembed
+#   Revertir:        restaurar el snapshot cuyo nombre queda en el checkpoint (`snapshot`).
+source: script_job
+priority: 3
+title: Re-embebido de archive_memories desde content (vectores pre-julio inconsistentes)
+step_command: uv run python scripts/qdrant_reembed.py --collection archive_memories --apply --max-points 10000
+checkpoint_file: state/archive_reembed.json
+progress:
+  mode: bounded
+  current_key: scanned
+  total_key: total
+completion:
+  key: done
+control:
+  max_step_minutes: 30
