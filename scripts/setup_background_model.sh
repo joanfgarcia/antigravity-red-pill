@@ -621,8 +621,9 @@ After=network.target
 
 [Service]
 Type=simple
-# Distiller profile served by the background daemon. Overrides run_dual_bind's
-# "samantha" default. granite_8b is the AD-022 primary; hermes_8b is the fallback.
+# RFC-HARNESS-002 v3: default de arranque (MINION_DEFAULT_PROFILE). El selector
+# por tarea/modelo lo sobreescribe por request; el pase Memento pide su modelo
+# vía task (RP_LLM_*) sin tocar este default.
 Environment=MINION_DEFAULT_PROFILE=granite_8b
 ExecStart=/bin/bash _PERSISTENT_DIR_/start.sh
 Restart=always
