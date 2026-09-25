@@ -350,6 +350,58 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   parcial. Migrados los tres consumidores (`distill`, `annotate`,
   `runner.session_max_work_unit_chars`) y la fachada. Sin cambio de conducta
   en distill.
+- **[FIX] Fallback a CPU del daemon, roto desde el 2026-09-17** (RFC-HARNESS-002 v3):
+  el worker CPU, al recibir la petición, recorría la misma cascada que el
+  supervisor y en el paso `cpu` intentaba lanzar **otro** worker con su mismo scope
+  de systemd → "already loaded" → exited early → **500 en todas las peticiones**
+  mientras la GPU no estuviera disponible (detectado con un juego ocupando 1,7 GB de
+  VRAM). Ahora el worker carga en su proceso (`n_gpu_layers=0`); un worker nunca
+  lanza otro (guarda); `_backend_alive` impide que la histéresis reutilice un
+  worker muerto; el scope rancio se para antes de relanzar. Verificado en vivo:
+  CPU responde (13 s la carga, 1,8 s la siguiente petición, sin recarga).
+- **[NEW] Recall híbrido + MMR (feedback de recall 2026-09-25, AD-038)**:
+  `memento/hybrid.py` — términos distintivos de la consulta (identificadores y
+  nombres propios, idf), `rg -c` sobre los `index.md` del árbol, mapeo línea →
+  nota ascendida → punto de Qdrant (vía `source_lines` + `ascended_point_id` del
+  árbol, sin índice nuevo), fusión RRF con el ranking semántico y selección MMR
+  con relevancia por rango. Integrado en `search_and_reinforce(hybrid=True)` —
+  solo lo piden oracle y el CLI, nunca los interceptores del handshake. Flags
+  `MEMORY_HYBRID_RECALL_ENABLED`, `MEMORY_RECALL_MMR_ENABLED`,
+  `MEMORY_RECALL_MMR_LAMBDA=0.85`. **Banco de 13 consultas: 9/13 → 12/13 hit@3**
+  (recupera Hotetec, DL-007 y la graduación de Bit, antes fuera del top-5).
+- **[FIX] `search_memento` caía siempre al escaneo python**: `rg` evalúa `-g`
+  relativo al directorio de trabajo, no a la ruta buscada → desde otro cwd no
+  casaba nada y el fallback daba 1 hit por fichero. Ahora `cwd=root` (0,03 s).
+- **[TOOL] `tools/memento_recall_bench.py`**: banco de recall de solo lectura
+  (6 configuraciones; `--model` para bake-off de embedders, `--lambda`). El banco
+  de consultas es del operador (`~/.config/red-pill/recall_probes.yaml`); el repo
+  solo lleva la plantilla `examples/recall_probes.yaml.example`.
+- **[NEW] Dedup de notas post-rewrite** (`MEMENTO_ANNOTATE_POST_REWRITE_DEDUP`):
+  P1-A otra vez tras la re-escritura de voz + casi-duplicados por embedding dentro
+  de la sesión (coseno ≥ 0,90, medido: 0,90-0,93 = mismo hecho). Caza los 7
+  duplicados exactos que la re-escritura creaba.
+- **[NEW] Voz v2 de annotate** (`MEMENTO_ANNOTATE_VOICE_V2`, default OFF): el
+  sujeto es quien actuó, sin muletilla "Joan me…", nombrando la entidad
+  (`voice_rule_annotate.txt`, `voice_rewrite_user_v2.txt`); la re-escritura solo
+  toca notas con bandera `voice`. Causa medida: el prompt v1 exigía abrir con
+  "Joan me…" y prohibía "Joan implementó" → 50,2% de notas con la muletilla e
+  inversiones de sujeto ("Joan me comprometió dos cambios" por commits de Aleth).
+  Fingerprint v2 `488a3ceb9c` (incluye por fin el prompt de re-escritura); v1
+  intacto `07a5c9b529`; distill/refine no cambian. **Piloto pendiente** (la GPU
+  estaba ocupada).
+- **[NEW] `memento_ascend --reconcile`** (`ascension.reconcile_orphans`): borra de
+  Qdrant los engramas de Memento cuya nota ya no existe (re-anotar con otro
+  prompt cambia títulos → stems → los puntos viejos quedaban huérfanos). Solo en
+  sesiones con `_meta.json` y sin `_partial.json`; no toca `refine/` legacy. En
+  seco sobre el corpus: 0 huérfanos en 13.036 puntos.
+- **[MEASURED] Texto enriquecido para embeber** (`memento/embed_text.py`,
+  `MEMENTO_EMBED_ENRICHED`, OFF): `tema · reliquias · cuerpo sin muletilla`.
+  **Refutado por el banco** (8/13 vs 9/13 hit@3 solo; no suma sobre el híbrido):
+  queda apagado. `embedding_text_for` es el punto único de qué se embebe
+  (escritura, soul kit, `qdrant_reembed`).
+- **[OPS] Re-embebido de `archive_memories` ejecutado**: 17.595 de 77.833 vectores
+  reescritos (snapshot previo); todos los meses dan coseno 1,000. Causa raíz:
+  `reembed_collections.py` (cambio de modelo del 14-jul) excluía el archivo.
 - **[TOOL] `scripts/qdrant_reembed.py` + receta `archive_reembed`**: re-embebido
   desde `content` de los vectores que no casan con su texto. Hallazgo
   2026-09-25: en `archive_memories` los puntos anteriores a julio (fuente

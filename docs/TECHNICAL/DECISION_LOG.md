@@ -4,6 +4,20 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-038] Recall de la memoria curada: híbrido + MMR sí, texto enriquecido no (medido)
+**Date**: 2026-09-25
+**Status**: ACCEPTED (2026-09-25) — híbrido, MMR y dedup post-rewrite encendidos en el operador; voz v2 detrás de flag hasta el piloto; texto enriquecido refutado y apagado.
+**Context**: tras la resiembra (AD-037) la memoria estaba íntegra (vectores coherentes, fechas, 0 cruces, 0 sellos rotos) pero recordaba mal: de 13 hechos conocidos, 9 en el top-3. Diagnóstico medido: (1) solo el 28,8% de las notas nombra el proyecto — la nota del anexo de Hotetec no dice "Hotetec" (coseno 0,17 contra su consulta); (2) el 50,2% abre con "Joan me dijo/explicó/pidió…", porque el prompt de voz v1 lo exigía y prohibía "Joan implementó" → muletilla e inversiones de sujeto; (3) el embedder trunca a 128 tokens; (4) paráfrasis del mismo hecho ocupan el top-k. Memento sí tenía todos los hechos (captura completa).
+**Decision**:
+- **Recall híbrido** (semántico + palabras clave sobre el árbol, RRF) y **MMR** con relevancia por rango, solo en llamantes explícitos (oracle/CLI). El árbol es la verdad y ya sabe qué punto de Qdrant cubre cada línea (`source_lines` + `ascended_point_id`): sin índice nuevo.
+- **Texto enriquecido para embeber: NO.** Hipótesis razonable (poner la entidad delante), refutada por el banco: empeora el semántico solo (8/13 vs 9/13) y no suma sobre el híbrido. Se conserva apagado por si otro embedder cambia el resultado.
+- **Voz v2** (sujeto = quien actuó, sin muletilla, entidad nombrada) detrás de `MEMENTO_ANNOTATE_VOICE_V2`: cambia el fingerprint de annotate, así que migrar el corpus es un rebuild explícito (el nocturno no re-anota sesiones con pase agéntico) + `memento_ascend --reconcile` para no dejar huérfanos.
+- **Método**: medir antes de encender (`tools/memento_recall_bench.py`, solo lectura; el banco de consultas es del operador y no va al repo).
+**Evidence**: banco de 13 consultas — plano 9/13 · plano+MMR 9/13 · **plano+híbrido+MMR 12/13** (λ=0,85; 11/13 con 0,7) · enriquecido 8/13 · enriquecido+híbrido+MMR 11/13 hit@3. Verificado en vivo con `search_and_reinforce(hybrid=True)`: Hotetec y DL-007 entran en el top-3 en ~0,26 s.
+**Por qué**: el fallo era de la interfaz nota→vector, no de captura ni de curación; el híbrido lo ataca sin re-embeber nada ni re-anotar. Lo que no mejoró se apaga en vez de mantenerse por intuición.
+
+---
+
 ## [AD-037] Rebuild annotate reanudable + Flash Attention por modelo (MEM-009)
 **Date**: 2026-09-25
 **Status**: ACCEPTED (2026-09-25) — D5 y F1 implementados y D5 desplegado; F0, F2 y F3 en versión mínima pendientes; F4 y F5 aplazados.

@@ -133,6 +133,13 @@ re-extraer (p. ej. umbrales nuevos):
 `RP_ELEMENT='{"dir": "<dir_rel>"}' uv run python scripts/memento_annotate.py --from=score --reason "<motivo>"`
 (degrada con aviso si faltan prerrequisitos; el motivo queda en `_meta.json`).
 
+**Recall (AD-038)**: `MEMORY_HYBRID_RECALL_ENABLED` + `MEMORY_RECALL_MMR_ENABLED`
+(oracle/CLI). Antes de tocar cómo se embebe o recupera, mide con
+`uv run python tools/memento_recall_bench.py` (solo lectura). **Migrar a voz v2**:
+encender `MEMENTO_ANNOTATE_VOICE_V2`, lanzar el rebuild (las sesiones quedan stale
+por fingerprint) y encadenar `memento_ascend.py --replace-legacy --reconcile` —
+sin `--reconcile` los puntos de las notas viejas quedarían huérfanos en Qdrant.
+
 **Muro de serving ≠ veneno (MEM-009, AD-037)**: defers repetidos del mismo
 elemento con el daemon reiniciándose (`NRestarts` subiendo, `CUDA error: out of
 memory` en el journal) son **VRAM**, no contenido: se curan con config
