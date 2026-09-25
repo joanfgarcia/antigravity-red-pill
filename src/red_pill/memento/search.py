@@ -52,9 +52,12 @@ def _rg_search(root: Path, query: str, globs: List[str], prefix: str, limit: int
 	cmd = [rg, "-n", "-i", "--no-heading", "--max-count", "3", "-m", str(limit)]
 	for glob in globs:
 		cmd += ["-g", f"{prefix}{glob}"]
-	cmd += ["-e", query, str(root)]
+	# cwd=root y ruta ".": rg evalúa `-g` relativo al directorio de trabajo, no a la
+	# ruta buscada — con la ruta absoluta desde otro cwd no casaba nada y todo caía
+	# al escaneo python (1 hit por fichero). Las rutas de salida se re-anclan a root.
+	cmd += ["-e", query, "."]
 	try:
-		proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+		proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30, cwd=str(root))
 	except Exception as e:
 		logger.warning(f"rg search failed, falling back to python scan: {e}")
 		return None
@@ -66,7 +69,7 @@ def _rg_search(root: Path, query: str, globs: List[str], prefix: str, limit: int
 		path_str, _, rest = raw_line.partition(":")
 		line_no, _, snippet = rest.partition(":")
 		if path_str and line_no.isdigit():
-			hits.append({"file": Path(path_str), "line": int(line_no), "snippet": snippet.strip()})
+			hits.append({"file": root / Path(path_str), "line": int(line_no), "snippet": snippet.strip()})
 	return hits
 
 

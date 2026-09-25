@@ -269,7 +269,11 @@ class MemoryManager:
 
 		actual_id = point_id if point_id else str(uuid.uuid4())
 		try:
-			vector = self._get_vector(text)
+			# El texto que se embebe puede no ser el que se guarda: los engramas de
+			# Memento embeben `tema · reliquias · cuerpo` (MEMENTO_EMBED_ENRICHED).
+			from red_pill.memento.embed_text import embedding_text_for
+
+			vector = self._get_vector(embedding_text_for(text, clean_metadata))
 
 			for key in CreateEngramRequest.RESERVED_KEYS:
 				clean_metadata.pop(key, None)
@@ -547,17 +551,21 @@ class MemoryManager:
 		strict: bool = True,
 		caller: str = "unknown",
 		search_space: str = "summary",
+		hybrid: bool = False,
 	) -> List[Any]:
 		"""Single exit point: run the search, then emit a lightweight recall metric.
 
 		search_space: 'summary' (default) searches the factual space as always;
 		'texture' searches the resonance space (T5) — texture_shadow points —
 		and resolves each match back to its parent engram.
+		hybrid: el llamante pide recall híbrido (semántico + palabras clave sobre
+		Memento); solo actúa si `MEMORY_HYBRID_RECALL_ENABLED`. Los interceptores del
+		handshake no lo piden (hot path).
 		"""
 		if search_space == "texture":
 			results = self._search_texture_space(collection, query, limit=limit, strict=strict)
 		else:
-			results = self._search_and_reinforce_impl(collection, query, limit=limit, deep_recall=deep_recall, strict=strict)
+			results = self._search_and_reinforce_impl(collection, query, limit=limit, deep_recall=deep_recall, strict=strict, hybrid=hybrid)
 		try:
 			top_score = getattr(results[0], "score", None) if results else None
 			get_event_bus().emit(RecallEvent(collection=collection, caller=caller, query_len=len(query), hits=len(results), top_score=top_score))
@@ -647,7 +655,9 @@ class MemoryManager:
 		results.sort(key=lambda r: (r.payload or {}).get("_texture_score", 0.0), reverse=True)
 		return results
 
-	def _search_and_reinforce_impl(self, collection: str, query: str, limit: int = 3, deep_recall: bool = False, strict: bool = True) -> List[Any]:
+	def _search_and_reinforce_impl(
+		self, collection: str, query: str, limit: int = 3, deep_recall: bool = False, strict: bool = True, hybrid: bool = False
+	) -> List[Any]:
 		if not deep_recall:
 			import re as regex_lib
 
@@ -682,13 +692,18 @@ class MemoryManager:
 		else:
 			search_filter = models.Filter(must_not=list(structural_exclusions))
 
+		use_hybrid = bool(hybrid and getattr(self.cfg, "MEMORY_HYBRID_RECALL_ENABLED", False) and collection in ("work_memories", "social_memories"))
+		use_mmr = bool(getattr(self.cfg, "MEMORY_RECALL_MMR_ENABLED", False))
+		fetch = limit * max(1, int(getattr(self.cfg, "MEMORY_RECALL_CANDIDATES_FACTOR", 4))) if (use_hybrid or use_mmr) else limit
 		try:
 			results = self.client.query_points(
-				collection_name=collection, query=vector, query_filter=search_filter, limit=limit, with_payload=True, with_vectors=False
+				collection_name=collection, query=vector, query_filter=search_filter, limit=fetch, with_payload=True, with_vectors=use_hybrid or use_mmr
 			).points
 		except Exception as e:
 			logger.error(f"Query failed: {_mask_pii_exception(e)}")
 			return []
+		if use_hybrid or use_mmr:
+			results = self._rerank_hybrid_mmr(collection, query, vector, results, limit, use_hybrid, use_mmr, deep_recall, structural_exclusions)
 
 		increment_map: Dict[str, float] = {}
 		decayed_results = []
@@ -899,6 +914,74 @@ class MemoryManager:
 
 		# 3. Unified Stream (Direct Hits + Branching Memories)
 		return decayed_results + cascade_results
+
+	def _rerank_hybrid_mmr(
+		self,
+		collection: str,
+		query: str,
+		vector: List[float],
+		semantic: List[Any],
+		limit: int,
+		use_hybrid: bool,
+		use_mmr: bool,
+		deep_recall: bool,
+		structural_exclusions: List[Any],
+	) -> List[Any]:
+		"""Fusión RRF semántico + palabras clave (Memento) y selección MMR del top-k.
+
+		Los candidatos por palabra clave pasan los mismos filtros que la consulta
+		semántica (exclusiones estructurales y `reinforcement_score` sin deep recall).
+		Nunca rompe el recall: cualquier fallo devuelve el top semántico.
+		"""
+		import numpy as np
+
+		from red_pill.memento import hybrid as hy
+
+		try:
+			candidates = {str(h.id): h for h in semantic}
+			ranking_sem = [str(h.id) for h in semantic]
+			rankings = [ranking_sem]
+			if use_hybrid:
+				kw = hy.memento_keyword_hits(query, collection, limit=len(semantic) or limit * 4)
+				missing = [pid for pid, _ in kw if pid not in candidates]
+				if missing:
+					q = np.asarray(vector, dtype=float)
+					qn = float(np.linalg.norm(q)) or 1.0
+					for rec in self.client.retrieve(collection_name=collection, ids=missing, with_payload=True, with_vectors=True):
+						pl = rec.payload or {}
+						if self._excluded_by(pl, structural_exclusions) or (not deep_recall and float(pl.get("reinforcement_score", 1.0) or 0.0) < 0.2):
+							continue
+						vec: Any = rec.vector if not isinstance(rec.vector, dict) else next(iter(rec.vector.values()), None)
+						v = np.asarray(vec, dtype=float) if vec is not None else None
+						score = float(v @ q / ((float(np.linalg.norm(v)) or 1.0) * qn)) if v is not None else 0.0
+						candidates[str(rec.id)] = models.ScoredPoint(id=rec.id, version=0, score=score, payload=pl, vector=vec)
+				rankings.append([pid for pid, _ in kw if pid in candidates])
+			fused = [(pid, sc) for pid, sc in hy.rrf_scores(rankings) if pid in candidates]
+			ordered = [candidates[pid] for pid, _ in fused]
+			if use_mmr:
+				lam = float(getattr(self.cfg, "MEMORY_RECALL_MMR_LAMBDA", 0.7))
+				ordered = hy.mmr_select(vector, ordered, [h.vector for h in ordered], limit, lam=lam, relevance=[sc for _, sc in fused])
+			else:
+				ordered = ordered[:limit]
+			for h in ordered:
+				h.vector = None  # no arrastrar vectores fuera del recall
+			return ordered
+		except Exception as e:
+			logger.warning(f"[RECALL] rerank híbrido/MMR falló, uso el top semántico: {e}")
+			for h in semantic:
+				h.vector = None
+			return semantic[:limit]
+
+	@staticmethod
+	def _excluded_by(payload: Dict[str, Any], exclusions: List[Any]) -> bool:
+		"""¿El payload cae en alguna exclusión estructural (FieldCondition MatchValue)?"""
+		for cond in exclusions:
+			try:
+				if payload.get(cond.key) == cond.match.value:
+					return True
+			except AttributeError:
+				continue
+		return False
 
 	def dream(self, collection: str, limit: int = 10) -> Dict[str, Any]:
 		# PERF-01: Prevent O(N) sequential vector search blowup (Sound of Silence formatting)

@@ -12,17 +12,25 @@ lo guardado y con la búsqueda.
 
 Contrato:
 - **Dry-run por defecto**: mide cuántos vectores no casan (coseno < umbral) sin
-  escribir nada. `--apply` escribe.
+escribir nada. `--apply` escribe.
 - **Solo toca lo que no casa**: un punto con coseno >= umbral no se reescribe →
-  idempotente y convergente (re-ejecutar tras completar = 0 escrituras).
+idempotente y convergente (re-ejecutar tras completar = 0 escrituras).
 - **Solo el vector**: `update_vectors`; payload, ids y estabilidad intactos.
 - **Snapshot antes de la primera escritura** (una vez por barrido; su nombre queda
-  en el checkpoint). `--no-snapshot` solo para fixtures.
+en el checkpoint). `--no-snapshot` solo para fixtures.
 - **Reanudable**: checkpoint JSON (`$RP_CHECKPOINT_FILE` o `--checkpoint`) con el
-  offset de scroll; cada invocación procesa como mucho `--max-points` y sale 0 →
-  el `script_job` encadena pasos y `pause` corta limpio entre tramos. Al terminar
-  escribe `done: true`.
+offset de scroll; cada invocación procesa como mucho `--max-points` y sale 0 →
+el `script_job` encadena pasos y `pause` corta limpio entre tramos. Al terminar
+escribe `done: true`.
 - Puntos sin `content` → se cuentan (`sin_texto`) y no se tocan.
+- **Qué se embebe** lo decide `red_pill.memento.embed_text.embedding_text_for`, el
+mismo punto único que usa la escritura: los engramas de Memento con
+`MEMENTO_EMBED_ENRICHED=true` embeben `tema · reliquias · cuerpo sin muletilla`;
+el resto, el `content` tal cual. Así un re-embebido sigue siempre al flag.
+
+Supera a `scripts/reembed_collections.py` (v7.5.0, cambio de modelo del 14-jul),
+que re-embebía sin comparar ni snapshot y **excluía `archive_memories` por
+defecto** — de ahí los vectores del modelo inglés antiguo que siguen en el archivo.
 
 Uso:
 	uv run python scripts/qdrant_reembed.py --collection archive_memories                  # dry-run completo
@@ -84,6 +92,8 @@ def reembed_page(points: List[Any], encoder: Any, field: str, threshold: float) 
 	Devuelve los puntos a reescribir (id + vector nuevo) y los contadores. Puro
 	respecto a Qdrant: no escribe nada (lo hace el llamante con `--apply`).
 	"""
+	from red_pill.memento.embed_text import embedding_text_for
+
 	texts: List[str] = []
 	candidates: List[Any] = []
 	sin_texto = 0
@@ -92,7 +102,7 @@ def reembed_page(points: List[Any], encoder: Any, field: str, threshold: float) 
 		if not text or _vector_of(p) is None:
 			sin_texto += 1
 			continue
-		texts.append(text)
+		texts.append(embedding_text_for(text, p.payload))
 		candidates.append(p)
 	updates: List[Dict[str, Any]] = []
 	cosines: List[float] = []
@@ -148,7 +158,7 @@ def run(
 	low = 0
 	offset = state.get("offset")
 	while True:
-		points, next_offset = client.scroll(collection_name=collection, limit=_SCROLL_PAGE, offset=offset, with_vectors=True, with_payload=[field])
+		points, next_offset = client.scroll(collection_name=collection, limit=_SCROLL_PAGE, offset=offset, with_vectors=True, with_payload=[field, "node_type", "theme", "relics"])
 		if not points:
 			next_offset = None
 		page = reembed_page(points, encoder, field, threshold)
@@ -191,7 +201,14 @@ def main() -> None:
 	parser.add_argument("--no-snapshot", action="store_true", help="Omite el snapshot previo (no recomendado).")
 	args = parser.parse_args()
 
+	collection = args.collection
+	element = os.environ.get("RP_ELEMENT")
+	if element:
+		# element_job (una colección por elemento): checkpoint propio por colección.
+		collection = str(json.loads(element).get("collection") or collection)
 	checkpoint = args.checkpoint or (Path(os.environ["RP_CHECKPOINT_FILE"]) if os.environ.get("RP_CHECKPOINT_FILE") else None)
+	if checkpoint is None and element:
+		checkpoint = Path("state") / f"qdrant_reembed_{collection}.json"
 	if args.apply and checkpoint is None:
 		sys.exit("[reembed] --apply exige checkpoint (--checkpoint o $RP_CHECKPOINT_FILE): el barrido debe ser reanudable")
 
@@ -202,7 +219,7 @@ def main() -> None:
 	run(
 		mm.client,
 		mm.embeddings.encoder,
-		args.collection,
+		collection,
 		apply=args.apply,
 		checkpoint=checkpoint,
 		threshold=args.threshold,

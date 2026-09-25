@@ -559,6 +559,31 @@ class RedPillConfig(BaseSettings):
 	# Paso de re-escritura de voz (annotate, MEM-006): re-escribe en 1ª persona las
 	# notas que no lo están (la Bio sola no basta con granite). Default OFF.
 	MEMENTO_ANNOTATE_VOICE_REWRITE: bool = False
+	# Recall de Memento (feedback 2026-09-25, RULE 4: un flag por pieza, default OFF).
+	# Texto a embeber de los engramas curados: `tema · reliquias · cuerpo sin
+	# muletilla` (el `content` guardado no cambia). MEDIDO 2026-09-25 y REFUTADO:
+	# en el banco de 13 consultas empeora el recall semántico (8/13 vs 9/13 hit@3)
+	# y no suma sobre el híbrido. Se conserva apagado; encenderlo exige re-embeber
+	# work/social con `scripts/qdrant_reembed.py` (sigue el flag).
+	MEMENTO_EMBED_ENRICHED: bool = False
+	# Recall híbrido: semántico (Qdrant) + palabras clave sobre el árbol Memento,
+	# fusionados por RRF. Solo en llamantes explícitos (oracle/CLI/traverse), nunca
+	# en los interceptores del handshake (hot path).
+	MEMORY_HYBRID_RECALL_ENABLED: bool = False
+	# Diversidad del top-k por MMR (evita que tres paráfrasis del mismo hecho
+	# ocupen los tres huecos). λ = peso de la relevancia frente a la novedad.
+	MEMORY_RECALL_MMR_ENABLED: bool = False
+	MEMORY_RECALL_MMR_LAMBDA: float = 0.85  # banco 2026-09-25: 0,85 > 0,7 (12/13 vs 11/13 hit@3 con híbrido)
+	MEMORY_RECALL_CANDIDATES_FACTOR: int = 4  # candidatos = limit × factor antes de MMR/fusión
+	# Dedup de notas DESPUÉS de la re-escritura de voz (annotate): exacta + tokens
+	# (P1-A) + casi-duplicados por embedding dentro de la sesión (coseno ≥ umbral).
+	MEMENTO_ANNOTATE_POST_REWRITE_DEDUP: bool = False
+	# Voz v2 de annotate: el sujeto es quien actuó, sin muletilla "Joan me…" y
+	# nombrando la entidad; la re-escritura solo toca notas con bandera `voice`.
+	# Cambia el fingerprint de annotate → las sesiones anotadas quedan stale para el
+	# rebuild (NO para el nocturno). Encender tras validar el piloto.
+	MEMENTO_ANNOTATE_VOICE_V2: bool = False
+	MEMENTO_ANNOTATE_EMBED_DEDUP_THRESHOLD: float = 0.90  # medido 2026-09-25: 0,90-0,93 = mismo hecho
 	# Watchdog del pase agéntico (2026-09-15): timeout por llamada al LLM local.
 	# Una generación que lo excede es un cuelgue → 3 consecutivos → deferral.
 	MEMENTO_LLM_TIMEOUT: int = 180
