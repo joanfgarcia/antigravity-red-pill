@@ -4,6 +4,7 @@ import importlib.metadata
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime
@@ -29,6 +30,14 @@ logger = logging.getLogger(__name__)
 # v6.0.1: Robust Script Resolution
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+
+
+_VOLATILE_RE = re.compile(r"(?<![\w/.~-])/(?:tmp|dev/shm|run/user/\d+)/[^\s\"']*")
+
+
+def _volatile_paths(payload: Dict[str, Any]) -> List[str]:
+	"""Rutas del payload que no sobreviven a un reinicio (/tmp, /dev/shm, /run/user/N)."""
+	return sorted(set(_VOLATILE_RE.findall(json.dumps(payload, ensure_ascii=False))))
 
 def switch_skin(skin_name: str) -> str:
 	"""Switch Lore Skin and persist in Bünker."""
@@ -692,6 +701,16 @@ def handle_job(args: argparse.Namespace) -> None:
 				print(f"[OK] Ya hay un job vivo equivalente ({twin['id'][:8]}, {twin['status']}); no se encola otro (--singleton).")
 				return
 
+		# Un job sobrevive a los reinicios; /tmp no (incidente 2026-09-26: un piloto
+		# con su árbol en el scratchpad de /tmp acabó FRUSTRATED tras un reboot).
+		volatile = _volatile_paths(payload)
+		if volatile and not getattr(args, "allow_tmp", False):
+			print(
+				f"[ERROR] el payload apunta a rutas volátiles ({', '.join(volatile[:3])}): no sobreviven a un "
+				f"reinicio y el job sí. Usa una ruta persistente (p.ej. ~/.local/share/red-pill/…) o --allow-tmp si es deliberado."
+			)
+			return
+
 		# Validar AQUÍ: un payload malformado debe morir al encolar, no tres
 		# intentos después y FRUSTRATED de madrugada.
 		from red_pill.jobs.drivers import get_driver_class
@@ -1279,6 +1298,9 @@ def main() -> None:
 	job_submit.add_argument("--mission", help="Grupo de aislamiento entre forges (mission_id)")
 	job_submit.add_argument(
 		"--paused", action="store_true", help="Encolar el job ya PAUSADO: nace sin que el runner lo toque hasta `job resume`."
+	)
+	job_submit.add_argument(
+		"--allow-tmp", action="store_true", help="Permitir rutas volátiles (/tmp, /dev/shm, /run/user) en el payload: no sobreviven a un reinicio."
 	)
 
 	job_list = job_sub.add_parser("list", help="Listar jobs activos, pausados y en cola")

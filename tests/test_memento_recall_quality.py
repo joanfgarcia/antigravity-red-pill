@@ -172,3 +172,41 @@ def test_voz_v2_detras_de_flag(monkeypatch):
 	monkeypatch.setattr(cfg, "MEMENTO_ANNOTATE_VOICE_V2", True, raising=False)
 	assert runtime.annotate_prompt_version() != v1
 	assert not annotate._needs_voice_rewrite("Joan corrigió el bug.")
+
+
+# ── voz v2.1 (piloto 2026-09-26) ──
+
+
+def test_v21_plantillas_con_alcance_del_operador(monkeypatch):
+	"""El alcance WORK/SOCIAL sale de la config (oficio del operador) y entra en la huella."""
+	import red_pill.config as cfg
+	from red_pill.memento.agentic import prompts, runtime
+
+	monkeypatch.setattr(cfg, "MEMENTO_ANNOTATE_VOICE_V2", True, raising=False)
+	monkeypatch.setattr(cfg, "MEMENTO_WORK_SCOPE", "derecho laboral y contratos", raising=False)
+	monkeypatch.setattr(cfg, "MEMENTO_SOCIAL_SCOPE", "vida personal", raising=False)
+	jurista = runtime.annotate_prompt_version()
+	work = prompts.ANNOTATE_WORK_USER_V2.format(identity="", voice="", fragment="x", work_scope="derecho laboral y contratos", social_scope="")
+	assert "WORK here means: derecho laboral y contratos" in work
+	assert '"Joan implementó X." → "Joan implementó X."' in work  # sin la muletilla v1
+	assert "{work_scope}" not in prompts.DUAL_SCORE_USER_V2.format(memories="m", work_scope="w", social_scope="s")
+	monkeypatch.setattr(cfg, "MEMENTO_WORK_SCOPE", "código y sistemas", raising=False)
+	assert runtime.annotate_prompt_version() != jurista  # otro oficio, otra huella
+
+
+def test_v21_reescribe_ingles_y_aleth_en_tercera(monkeypatch):
+	import red_pill.config as cfg
+
+	monkeypatch.setattr(cfg, "MEMENTO_ANNOTATE_VOICE_V2", True, raising=False)
+	assert annotate.looks_english("Aleth updated the CHANGELOG.md to document the Sentinel Auditor validation")
+	assert not annotate.looks_english("Joan corrigió el bug de tree_hash en la rama de la release")
+	assert annotate._needs_voice_rewrite("Aleth updated the CHANGELOG.")
+	assert annotate._needs_voice_rewrite("Aleth verificó la jurisprudencia del anexo.")
+	assert not annotate._needs_voice_rewrite("Joan corrigió el bug de tree_hash.")
+
+
+def test_job_submit_rechaza_rutas_volatiles():
+	from red_pill.cli import _volatile_paths
+
+	assert _volatile_paths({"step_command": "x --root /tmp/claude-1000/pilot"}) == ["/tmp/claude-1000/pilot"]
+	assert _volatile_paths({"a": "/dev/shm/q", "b": "/var/tmp/ok", "c": "~/tmp/ok", "d": "/home/joan/tmp/ok"}) == ["/dev/shm/q"]

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from . import prompts
 
@@ -71,10 +71,33 @@ def distill_prompt_version() -> str:
 def annotate_prompt_version() -> str:
 	"""Fingerprint del prompt de ANNOTATE (WORK + SOCIAL + VOICE + Bio de identidad)."""
 	if voice_v2_enabled():
-		# Voz v2 (2026-09-25): regla propia de annotate + re-escritura v2, ambas en
-		# la huella (la re-escritura forma parte del contrato; antes quedaba fuera).
-		return _prompt_hash(prompts.ANNOTATE_WORK_USER, prompts.ANNOTATE_SOCIAL_USER, prompts._VOICE_RULE_ANNOTATE, prompts.IDENTITY_BIO, prompts.VOICE_REWRITE_USER_V2)
+		# Voz v2.1 (2026-09-26): plantillas v2 + regla propia + re-escritura v2 + scorer
+		# dual v2 + el alcance WORK/SOCIAL del operador — todo lo que decide la nota
+		# entra en la huella (antes la re-escritura y el scorer quedaban fuera).
+		work_scope, social_scope = annotate_scopes()
+		return _prompt_hash(
+			prompts.ANNOTATE_WORK_USER_V2,
+			prompts.ANNOTATE_SOCIAL_USER_V2,
+			prompts._VOICE_RULE_ANNOTATE,
+			prompts.IDENTITY_BIO,
+			prompts.VOICE_REWRITE_USER_V2,
+			prompts.DUAL_SCORE_USER_V2,
+			work_scope,
+			social_scope,
+		)
 	return _prompt_hash(prompts.ANNOTATE_WORK_USER, prompts.ANNOTATE_SOCIAL_USER, prompts._VOICE_RULE, prompts.IDENTITY_BIO)
+
+
+def annotate_scopes() -> Tuple[str, str]:
+	"""Alcance WORK/SOCIAL del operador (`MEMENTO_WORK_SCOPE`/`MEMENTO_SOCIAL_SCOPE`).
+
+	Qué cuenta como "trabajo" depende del oficio: para un ingeniero de software, lo
+	legal/laboral propio (contratos, RRHH, anexos) es vida personal → SOCIAL; para un
+	jurista sería WORK. Decisión del operador 2026-09-26; nunca hardcodeado en el prompt.
+	"""
+	import red_pill.config as cfg
+
+	return str(getattr(cfg, "MEMENTO_WORK_SCOPE", "")), str(getattr(cfg, "MEMENTO_SOCIAL_SCOPE", ""))
 
 
 def voice_v2_enabled() -> bool:

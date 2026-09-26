@@ -583,6 +583,18 @@ class RedPillConfig(BaseSettings):
 	# Cambia el fingerprint de annotate → las sesiones anotadas quedan stale para el
 	# rebuild (NO para el nocturno). Encender tras validar el piloto.
 	MEMENTO_ANNOTATE_VOICE_V2: bool = False
+	# Alcance WORK/SOCIAL del curador (voz v2.1). Qué es "trabajo" depende del oficio
+	# del operador: para un ingeniero de software, lo legal/laboral propio (contratos,
+	# RRHH, anexos) es vida personal → SOCIAL; un jurista lo pondría en WORK.
+	MEMENTO_WORK_SCOPE: str = (
+		"the operator's technical craft — code, systems, configuration, tests, architecture, "
+		"infrastructure, tooling, engineering and product decisions"
+	)
+	MEMENTO_SOCIAL_SCOPE: str = (
+		"the operator's personal life — bond, emotions, identity, biography, relationships, family, health, "
+		"and his own personal affairs even when formal or serious: legal, labour/HR, employment contracts, "
+		"housing, personal finances, bureaucracy"
+	)
 	MEMENTO_ANNOTATE_EMBED_DEDUP_THRESHOLD: float = 0.90  # medido 2026-09-25: 0,90-0,93 = mismo hecho
 	# Watchdog del pase agéntico (2026-09-15): timeout por llamada al LLM local.
 	# Una generación que lo excede es un cuelgue → 3 consecutivos → deferral.

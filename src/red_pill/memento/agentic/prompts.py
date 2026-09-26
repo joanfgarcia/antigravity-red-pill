@@ -76,6 +76,12 @@ _VOICE_RULE = _load_prompt_file("voice_rule.txt")
 # `voice_rule.txt` (y sus fingerprints) — el cambio no toca el carril legacy.
 _VOICE_RULE_ANNOTATE = _load_prompt_file("voice_rule_annotate.txt")
 VOICE_REWRITE_USER_V2 = _load_prompt_file("voice_rewrite_user_v2.txt")
+# v2.1 (2026-09-26): plantillas con los ejemplos de voz coherentes y el alcance
+# WORK/SOCIAL como placeholders `{work_scope}`/`{social_scope}` (config del operador:
+# qué es "trabajo" depende del oficio — lo legal/laboral propio es SOCIAL salvo jurista).
+ANNOTATE_WORK_USER_V2 = _load_prompt_file("annotate_work_user_v2.txt")
+ANNOTATE_SOCIAL_USER_V2 = _load_prompt_file("annotate_social_user_v2.txt")
+DUAL_SCORE_USER_V2 = _load_prompt_file("dual_score_user_v2.txt")
 
 
 

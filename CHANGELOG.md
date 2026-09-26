@@ -389,6 +389,20 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   Fingerprint v2 `488a3ceb9c` (incluye por fin el prompt de re-escritura); v1
   intacto `07a5c9b529`; distill/refine no cambian. **Piloto pendiente** (la GPU
   estaba ocupada).
+- **[NEW] Voz v2.1 de annotate (piloto 2026-09-26: NO apta aún, flag OFF)**:
+  plantillas v2 con ejemplos coherentes ("Joan implementó X" se queda), scorer
+  dual v2, re-escritura también si la nota está en inglés o abre con "Aleth
+  <verbo>", y **alcance WORK/SOCIAL configurable** (`MEMENTO_WORK_SCOPE`,
+  `MEMENTO_SOCIAL_SCOPE`; decisión del operador: lo legal/laboral propio es
+  SOCIAL salvo jurista). Fingerprint v2.1 `4ddeefe66a` (incluye scorer y alcance).
+  Piloto (3 sesiones, árbol persistente): inglés 0%, "Joan me" 58/44% → 2/0%,
+  entidad 32→27% y 18→36%, +29/+52% de notas; **pero** el sujeto sigue sin ser
+  fiable (una nota atribuye a Joan ediciones `[Code Edit]` de Aleth) y la nota del
+  anexo sigue enrutándose a work. El piloto v2 (sin .1) había dado inglés en 3ª
+  persona y 0 notas en Hotetec.
+- **[NEW] `job submit` rechaza rutas volátiles** (`/tmp`, `/dev/shm`, `/run/user`)
+  salvo `--allow-tmp`: un job sobrevive al reinicio y `/tmp` no (un piloto acabó
+  FRUSTRATED por eso).
 - **[NEW] `memento_ascend --reconcile`** (`ascension.reconcile_orphans`): borra de
   Qdrant los engramas de Memento cuya nota ya no existe (re-anotar con otro
   prompt cambia títulos → stems → los puntos viejos quedaban huérfanos). Solo en

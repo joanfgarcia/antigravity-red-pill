@@ -47,6 +47,19 @@ _FIRST_PERSON = re.compile(
 )
 
 
+_ALETH_OPENER = re.compile(r"^\s*Aleth\s+\w+", re.I)
+_EN_WORDS = set("the and of to in is was for with that this from have has had were are by on as it he she they".split())
+_ES_WORDS = set("el la los las de que y en un una por para con me le lo se del al es fue su sus como".split())
+
+
+def looks_english(text: str) -> bool:
+	"""¿La nota está en inglés? Recuento de palabras vacías EN vs ES (determinista)."""
+	words = re.findall(r"[a-záéíóúüñ]+", text.lower())
+	en = sum(w in _EN_WORDS for w in words)
+	es = sum(w in _ES_WORDS for w in words)
+	return en > es and en >= 3
+
+
 def is_first_person(text: str) -> bool:
 	"""True si la nota tiene marcadores de 1ª persona (criterio del rewrite)."""
 	return bool(_FIRST_PERSON.search(text))
@@ -125,9 +138,16 @@ def _route(work: float, social: float, th_work: float, th_social: float, dead_zo
 
 def _extract(transport: runtime.Transport, content: str) -> List[Dict[str, Any]]:
 	ideas: List[Dict[str, Any]] = []
-	for system, template in ((prompts.ANNOTATE_WORK_SYSTEM, prompts.ANNOTATE_WORK_USER), (prompts.ANNOTATE_SOCIAL_SYSTEM, prompts.ANNOTATE_SOCIAL_USER)):
-		voice = prompts._VOICE_RULE_ANNOTATE if runtime.voice_v2_enabled() else prompts._VOICE_RULE
-		prompt = template.format(identity=prompts.IDENTITY_BIO, voice=voice, fragment=content)
+	v2 = runtime.voice_v2_enabled()
+	work_scope, social_scope = runtime.annotate_scopes()
+	templates = (
+		((prompts.ANNOTATE_WORK_SYSTEM, prompts.ANNOTATE_WORK_USER_V2), (prompts.ANNOTATE_SOCIAL_SYSTEM, prompts.ANNOTATE_SOCIAL_USER_V2))
+		if v2
+		else ((prompts.ANNOTATE_WORK_SYSTEM, prompts.ANNOTATE_WORK_USER), (prompts.ANNOTATE_SOCIAL_SYSTEM, prompts.ANNOTATE_SOCIAL_USER))
+	)
+	voice = prompts._VOICE_RULE_ANNOTATE if v2 else prompts._VOICE_RULE
+	for system, template in templates:
+		prompt = template.format(identity=prompts.IDENTITY_BIO, voice=voice, fragment=content, work_scope=work_scope, social_scope=social_scope)
 		raw = transport(system, prompt, 1024)
 		for idea in runtime._extract_json_array(raw) or []:
 			if not isinstance(idea, dict):
@@ -161,7 +181,11 @@ def _needs_voice_rewrite(text: str) -> bool:
 	"""
 	if not runtime.voice_v2_enabled():
 		return not is_first_person(text)  # voz v1
-	return "voice" in quality_flags(text)
+	# v2.1 (piloto 2026-09-26): el detector `voice` solo conoce patrones en español;
+	# las notas que el modelo escribió en inglés y en 3ª persona ("Aleth updated…")
+	# pasaban sin reescribir. También se reescriben si están en inglés o si abren
+	# con "Aleth <verbo>" (el narrador hablando de sí mismo en 3ª persona).
+	return "voice" in quality_flags(text) or looks_english(text) or bool(_ALETH_OPENER.match(text))
 
 
 def rewrite_voice_notes(transport: runtime.Transport, annotations: List[Dict[str, Any]], batch_size: int = 10) -> int:
@@ -262,7 +286,12 @@ def _score_dual(transport: runtime.Transport, annotations: List[Dict[str, Any]])
 		for start in range(0, len(pending), batch_size):
 			chunk = pending[start : start + batch_size]
 			listing = "\n\n".join(f"[{i}] {a['text'][:400]}" for i, a in enumerate(chunk))
-			raw = transport(prompts.DUAL_SCORE_SYSTEM, prompts.DUAL_SCORE_USER.format(memories=listing), 2048)
+			if runtime.voice_v2_enabled():
+				work_scope, social_scope = runtime.annotate_scopes()
+				user = prompts.DUAL_SCORE_USER_V2.format(memories=listing, work_scope=work_scope, social_scope=social_scope)
+			else:
+				user = prompts.DUAL_SCORE_USER.format(memories=listing)
+			raw = transport(prompts.DUAL_SCORE_SYSTEM, user, 2048)
 			for row in runtime._extract_json_array(raw) or []:
 				if not isinstance(row, dict):
 					continue
