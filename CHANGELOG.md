@@ -400,6 +400,20 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   fiable (una nota atribuye a Joan ediciones `[Code Edit]` de Aleth) y la nota del
   anexo sigue enrutándose a work. El piloto v2 (sin .1) había dado inglés en 3ª
   persona y 0 notas en Hotetec.
+- **[NEW] Vista del fragmento de annotate** (`MEMENTO_ANNOTATE_FRAGMENT_VIEW`:
+  `raw` por defecto | `actors` | `pairs`; nombres en `MEMENTO_OPERATOR_LABEL` /
+  `MEMENTO_AGENT_LABEL`): `actors` pone el actor en cada turno; `pairs` deja solo
+  lo que pide el operador y la respuesta final del agente (74,7% del texto del
+  árbol). Reclasifica como herramienta los turnos `— Usuario` hechos solo de
+  `[TOOL RESULT…]`. No toca el árbol; si el modo no es `raw`, entra en la huella.
+- **[FOUND] El renderer de `claude_code` atribuye al operador los resultados de
+  herramienta**: Claude Code los transporta en mensajes con rol `user` y Memento
+  los pinta como `— Usuario` (5.889 líneas en el árbol; en una sesión, 169 de 178
+  "turnos del operador"). Causa de raíz de las inversiones de sujeto en las notas
+  de sesiones Claude Code. Mitigado en la vista de annotate; el arreglo en el
+  renderer exige migrar el árbol (cambian las líneas y las `source_lines`).
+  Pilotos de voz (sesión Claude Code): inversiones sospechosas v2.1 16 → actores
+  5 → pares 1 (v1: 1); la v2 sigue OFF.
 - **[NEW] `job submit` rechaza rutas volátiles** (`/tmp`, `/dev/shm`, `/run/user`)
   salvo `--allow-tmp`: un job sobrevive al reinicio y `/tmp` no (un piloto acabó
   FRUSTRATED por eso).

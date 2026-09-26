@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import prompts, runtime
-from .fragments import _as_list, _frontmatter_block, slugify_title, work_units
+from .fragments import _as_list, _frontmatter_block, fragment_view, slugify_title, work_units
 
 logger = logging.getLogger(__name__)
 
@@ -542,7 +542,8 @@ def annotate_session(
 				reused += 1
 				continue
 			ideas = []
-			for idea in _extract(transport, content):
+			view_mode, operator_label, agent_label = runtime.fragment_view_settings()
+			for idea in _extract(transport, fragment_view(content, view_mode, operator_label, agent_label)):
 				idea = _scrub_idea(idea)
 				idea["split_ref"] = ref
 				idea["nnn"] = nnn

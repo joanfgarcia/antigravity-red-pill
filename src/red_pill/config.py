@@ -586,6 +586,11 @@ class RedPillConfig(BaseSettings):
 	# Alcance WORK/SOCIAL del curador (voz v2.1). Qué es "trabajo" depende del oficio
 	# del operador: para un ingeniero de software, lo legal/laboral propio (contratos,
 	# RRHH, anexos) es vida personal → SOCIAL; un jurista lo pondría en WORK.
+	# Vista del fragmento que ve annotate: raw (tal cual) | actors (actor en cada
+	# turno) | pairs (solo operador + respuesta final del agente). No toca el árbol.
+	MEMENTO_ANNOTATE_FRAGMENT_VIEW: str = "raw"
+	MEMENTO_OPERATOR_LABEL: str = "Joan"
+	MEMENTO_AGENT_LABEL: str = "Aleth"
 	MEMENTO_WORK_SCOPE: str = (
 		"the operator's technical craft — code, systems, configuration, tests, architecture, "
 		"infrastructure, tooling, engineering and product decisions"

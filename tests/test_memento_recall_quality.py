@@ -210,3 +210,67 @@ def test_job_submit_rechaza_rutas_volatiles():
 
 	assert _volatile_paths({"step_command": "x --root /tmp/claude-1000/pilot"}) == ["/tmp/claude-1000/pilot"]
 	assert _volatile_paths({"a": "/dev/shm/q", "b": "/var/tmp/ok", "c": "~/tmp/ok", "d": "/home/joan/tmp/ok"}) == ["/dev/shm/q"]
+
+
+# ── vista del fragmento (piloto v2.2) ──
+
+_FRAG = "\n".join(
+	[
+		"## 2026-07-09 07:00:32 — Usuario",
+		"arregla tree.py",
+		"## (sin fecha) — Asistente",
+		"voy a mirar",
+		"## (sin fecha) — Tool",
+		"[Code Edit] tree.py",
+		"## Resultado — cerrado",
+		"## (sin fecha) — Asistente",
+		"He corregido tree.py.",
+		"## 2026-07-09 07:10:00 — Usuario",
+		"gracias",
+	]
+)
+
+
+def test_fragment_view_actores_y_pares():
+	from red_pill.memento.agentic.fragments import fragment_view
+
+	assert fragment_view(_FRAG, "raw") == _FRAG
+	actors = fragment_view(_FRAG, "actors", "Joan", "Aleth")
+	assert "— Aleth (herramienta)" in actors and "— Usuario" not in actors
+	assert "## Resultado — cerrado" in actors  # título markdown: sigue siendo cuerpo
+	pairs = fragment_view(_FRAG, "pairs", "Joan", "Aleth")
+	assert "voy a mirar" not in pairs and "[Code Edit]" not in pairs  # sin intermedios ni herramientas
+	assert "He corregido tree.py." in pairs and pairs.count("— Joan") == 2
+
+
+def test_vista_no_raw_entra_en_la_huella(monkeypatch):
+	import red_pill.config as cfg
+	from red_pill.memento.agentic import runtime
+
+	monkeypatch.setattr(cfg, "MEMENTO_ANNOTATE_VOICE_V2", False, raising=False)
+	monkeypatch.setattr(cfg, "MEMENTO_ANNOTATE_FRAGMENT_VIEW", "raw", raising=False)
+	raw = runtime.annotate_prompt_version()
+	monkeypatch.setattr(cfg, "MEMENTO_ANNOTATE_FRAGMENT_VIEW", "pairs", raising=False)
+	assert runtime.annotate_prompt_version() != raw
+
+
+def test_fragment_view_tool_results_de_claude_code_no_son_del_operador():
+	from red_pill.memento.agentic.fragments import fragment_view
+
+	frag = "\n".join(
+		[
+			"## 2026-08-14 12:39:00 — Usuario",
+			"revisa el repo",
+			"## 2026-08-14 12:39:05 — Asistente",
+			"miro el estado",
+			"## 2026-08-14 12:39:06 — Usuario",
+			"[TOOL RESULT: On branch main, nothing to commit]",
+			"## 2026-08-14 12:39:09 — Asistente",
+			"El repo está limpio.",
+		]
+	)
+	actors = fragment_view(frag, "actors", "Joan", "Aleth")
+	assert actors.count("— Joan") == 1 and "— Aleth (herramienta)" in actors
+	pairs = fragment_view(frag, "pairs", "Joan", "Aleth")
+	assert "[TOOL RESULT" not in pairs and "miro el estado" not in pairs  # el intermedio ya no es "final"
+	assert "El repo está limpio." in pairs

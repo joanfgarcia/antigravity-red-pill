@@ -75,7 +75,9 @@ def annotate_prompt_version() -> str:
 		# dual v2 + el alcance WORK/SOCIAL del operador — todo lo que decide la nota
 		# entra en la huella (antes la re-escritura y el scorer quedaban fuera).
 		work_scope, social_scope = annotate_scopes()
+		view = fragment_view_settings()
 		return _prompt_hash(
+			*(view if view[0] != "raw" else ()),
 			prompts.ANNOTATE_WORK_USER_V2,
 			prompts.ANNOTATE_SOCIAL_USER_V2,
 			prompts._VOICE_RULE_ANNOTATE,
@@ -85,7 +87,23 @@ def annotate_prompt_version() -> str:
 			work_scope,
 			social_scope,
 		)
+	view = fragment_view_settings()
+	if view[0] != "raw":
+		return _prompt_hash(prompts.ANNOTATE_WORK_USER, prompts.ANNOTATE_SOCIAL_USER, prompts._VOICE_RULE, prompts.IDENTITY_BIO, *view)
 	return _prompt_hash(prompts.ANNOTATE_WORK_USER, prompts.ANNOTATE_SOCIAL_USER, prompts._VOICE_RULE, prompts.IDENTITY_BIO)
+
+
+def fragment_view_settings() -> Tuple[str, str, str]:
+	"""(modo, etiqueta del operador, etiqueta del agente) de la vista del fragmento.
+
+	`MEMENTO_ANNOTATE_FRAGMENT_VIEW` = raw | actors | pairs (default raw = conducta
+	previa). Los nombres salen de config (`MEMENTO_OPERATOR_LABEL`, `MEMENTO_AGENT_LABEL`),
+	nunca del código. Si el modo no es `raw`, entra en la huella de annotate.
+	"""
+	import red_pill.config as cfg
+
+	mode = str(getattr(cfg, "MEMENTO_ANNOTATE_FRAGMENT_VIEW", "raw") or "raw").strip().lower()
+	return mode, str(getattr(cfg, "MEMENTO_OPERATOR_LABEL", "Joan")), str(getattr(cfg, "MEMENTO_AGENT_LABEL", "Aleth"))
 
 
 def annotate_scopes() -> Tuple[str, str]:
