@@ -4,6 +4,40 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-040] Etiquetado emocional/temático en tiempo real (Laya) — señalizar, no garantizar
+**Date**: 2026-09-27
+**Status**: ACCEPTED — pendiente de implementar (plan abajo).
+**Context**: el pre-heating (Ferrari 11) calibraba con la ventana caliente de
+`interaction_memories` (tier 2, 48h) + heurísticas. La purga del buffer
+(53 turnos varados, 2026-09-27) dejó el tier 2 vacío: degrada con gracia pero
+el hilo emocional en vivo pierde fuelle. El RFC pedía calibración en tiempo
+real del estado emocional + temática.
+**Decision**: tag en captura vía sidecar `laya-serve` (emoción/tema/confianza
+por turno, ms en CPU), consumido por solera (M8) y pre-heating. Laya aquí SÍ
+encaja (al contrario que AD-039): presupuesto de ms, respuestas mínimas,
+fallo contenido (tono desviado, no recuerdo corrupto).
+**Contrato anti-ingeniería** (decisión explícita del operador):
+1. El registro nunca espera: `record_interaction_pair` escribe SIEMPRE; el tag
+   va fuera del camino crítico (timeout corto, try/except total).
+2. El engrama lleva `tag_status: ok/degraded/failed` + motivo (timeout,
+   sidecar caído, confianza baja). Fallo silencioso prohibido; fallo
+   señalizado = parte del diseño.
+3. Qdrant como ventana: últimos N por solera; trima lo existente (janitor TTL
+   + sueño). Sin garantías nuevas ni operaciones exóticas.
+4. El interceptor comunica: si ve fallos recientes, añade
+   `CALIBRATION WEAK: últimos N turnos sin tag (motivo)` al enriquecimiento.
+   Visibilidad en vez de reintentos; sin fallback en caliente.
+**Plan**: P1 sidecar `laya-serve` (unit systemd + sentinel que lo vigile) →
+P2 tag en `queue_worker` (punto único de drenaje) → P3 solera consume tags →
+P4 pre-heating lee tags + línea WEAK. Heurísticas actuales quedan como
+lectura por defecto cuando no hay tag (no es fallback: es ausencia de dato).
+**Por qué esto y no alternativas**: no tag en el interceptor (torch en el
+proceso caliente; los workers oneshot pagarían 18 s de carga por tick) — por
+eso sidecar; no reintentos (el dato tardío no vale en tiempo real); no
+garantizar el servicio (decisión explícita: lo que se asegura es el registro).
+
+---
+
 ## [AD-039] Router System One (Laya) para elegir prompt — bake-off primero
 **Date**: 2026-09-27
 **Status**: PARKED 2026-09-27 — F1 completo, zero-shot insuficiente; evidencia en `docs/TECHNICAL/LAYA_ROUTER_BAKEOFF_F1.md`; revisit en ~1 mes o si cambia el supuesto.

@@ -368,6 +368,9 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   0,85 del dual actual; 4 prompts y 3 checkpoints probados). Evidencia en
   `docs/TECHNICAL/LAYA_ROUTER_BAKEOFF_F1.md`; revisit con mejores
   checkpoints o fine-tune (14k labels como fuel).
+- **[NEW] Etiquetado en tiempo real (AD-040, aceptado pendiente):** sidecar
+  `laya-serve` + tag emoción/tema en captura; contrato: el registro nunca
+  espera, el fallo se señaliza (`tag_status`, línea WEAK), no se reintenta.
 - **[NEW] Recall híbrido + MMR (feedback de recall 2026-09-25, AD-038)**:
   `memento/hybrid.py` — términos distintivos de la consulta (identificadores y
   nombres propios, idf), `rg -c` sobre los `index.md` del árbol, mapeo línea →
