@@ -1,0 +1,16 @@
+# Adjudicación F1b (AD-039): el juez LLM dirime baseline vs Laya en la misma
+# muestra del bake-off. Tarea LLM (daemon GPU) en 5 lotes de 25.
+source: script_job
+priority: 4
+title: Adjudicación F1b router System One (juez LLM, 120 notas)
+mission_id: laya-router-bakeoff
+step_command: .venv/bin/python scripts/laya_adjudicate.py
+cwd: /home/joan/Documents/IA/sharing
+progress:
+  mode: single
+control:
+  max_step_minutes: 120
+preflight:
+  llm_required: true
+  memory_max: 16G
+defer_exit_code: 77

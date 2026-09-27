@@ -4,6 +4,18 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-039] Router System One (Laya) para elegir prompt — bake-off primero
+**Date**: 2026-09-27
+**Status**: PARKED 2026-09-27 — F1 completo, zero-shot insuficiente; evidencia en `docs/TECHNICAL/LAYA_ROUTER_BAKEOFF_F1.md`; revisit en ~1 mes o si cambia el supuesto.
+**Context**: el prompt único de annotate exigía "Joan me…" y prohibía "Joan implementó" → 50,2% muletilla + sujetos invertidos (voz v2 lo parchea con re-escritura, 100% 1ª persona en piloto pero a coste GPU por nota). El operador propone un clasificador previo barato que elija el prompt (y, si llega a hacer falta, el modelo) por fragmento.
+**Decision**: arquitectura en dos capas — System One (Laya-multilingual, CPU, ~33ms) clasifica `dominio × voz` y alimenta el triple `(prompt, model, thinking)` del selector existente (`model_runtime.resolve`, AD-030); System Two (daemon GPU) ejecuta. Confianza baja → prompt default actual (fallback = conducta de hoy, reversible). Jev (TypeSafe) descartado: pesos cerrados + API hosted = egress incompatible con soberanía; Laya (Apache 2.0, auto-alojable) es el equivalente local. Laya NO genera texto: la voz la siguen escribiendo los prompts generativos, el router solo elige cuál.
+**Ejes del router**: dominio `work/social/otro` × voz `actúa-Joan/actúa-Aleth/tercero/externo` (+ confianzas). Matriz 2×4 sobre los prompts existentes (`annotate_work/social_*`, `voice_rule_annotate.txt`, `voice_rewrite_user_v2.txt`).
+**Objeciones registradas**: benchmark independiente (LargitData) da a Laya-322M 0-36% zero-shot en routing multiturno vs Jev 61-91% — base sin tunear ≠ producción; obliga a multilingual (contenido ca/es) y a medir calibración antes de encender; stack nuevo (torch/transformers, no GGUF → venv aparte, nunca el daemon); a favor: 14.101 notas etiquetadas como fuel de fine-tune + arnés `audit-category`/`audit-dual` ya existente.
+**Plan**: F1 bake-off (factibilidad + calidad esperada, este job) → F2 matriz de prompts + flag `MEMENTO_CLASSIFY_ROUTER` (RULE 4, OFF) si el gate pasa → F3 piloto 3 sesiones → F4 migración con `--reconcile` si gana. Gate F1→F2: acuerdo con juez ≥0,80 en dominio + calibración sana + tasa de escalado aceptable; si no pasa: fine-tune con las 14k o se aparca (decisión explícita, no deriva).
+**Por qué esto y no alternativas**: no Jev hosted (egress); no otro LLM generativo como clasificador (cuesta GPU por nota y alucina formatos); no prompt único más largo (ya medido: reglas que sirven a medias para todos los casos).
+
+---
+
 ## [AD-030.F1] Fallup-watcher v2 (anti-flapping, TOCTOU-safe)
 **Date**: 2026-09-27
 **Status**: DEPLOYED 2026-09-27 (script ejecutado, service reiniciado en ventana segura: nightly `c3c52f33` COMPLETED 18/18 + daemon idle; `/status` expone `"fallup":{"enabled":true,...}` y el desplegado contiene el watcher verificado por grep).

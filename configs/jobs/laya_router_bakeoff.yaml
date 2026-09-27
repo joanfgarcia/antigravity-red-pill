@@ -1,0 +1,20 @@
+# Bake-off F1 del router System One (AD-039).
+#
+# Laya-multilingual (CPU, venv propio) clasifica `dominio × voz` sobre una
+# muestra estratificada de notas annotate → acuerdo vs dual_route actual +
+# calibración + latencia + tasa de escalado. Gate F1→F2 explícito en el reporte.
+#
+# Job 100% CPU (torch CPU, sin CUDA): NO requiere GPU ni LLM local, corre en
+# paralelo a la noche sin contienda de VRAM. Prioridad baja y diferible.
+source: script_job
+priority: 3
+title: Bake-off F1 router System One (Laya-multilingual CPU, 120 notas)
+mission_id: laya-router-bakeoff
+step_command: /home/joan/.local/share/red-pill/laya-venv/bin/python scripts/laya_router_bakeoff.py --n 120 --seed 7
+cwd: /home/joan/Documents/IA/sharing
+progress:
+  mode: single
+control:
+  max_step_minutes: 240
+preflight:
+  memory_max: 8G

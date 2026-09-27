@@ -363,6 +363,11 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   (5 s) asciende a GPU tras 60 s idle + 12 checks estables con margen 0,5 GB
   sobre entrada/peor-caso 6,5 GB; solo fallup, TOCTOU-safe, con estado en
   `/status.fallup`. Desplegado 2026-09-27 (33 tests en verde).
+- **[PLAN] Router System One para annotate (AD-039, PARKED 2026-09-27)**: Laya
+  zero-shot no separa la distribución (dominio 0,36; vs juez 0,69 frente a
+  0,85 del dual actual; 4 prompts y 3 checkpoints probados). Evidencia en
+  `docs/TECHNICAL/LAYA_ROUTER_BAKEOFF_F1.md`; revisit con mejores
+  checkpoints o fine-tune (14k labels como fuel).
 - **[NEW] Recall híbrido + MMR (feedback de recall 2026-09-25, AD-038)**:
   `memento/hybrid.py` — términos distintivos de la consulta (identificadores y
   nombres propios, idf), `rg -c` sobre los `index.md` del árbol, mapeo línea →
