@@ -6,7 +6,7 @@ This document records the architectural and philosophical pivots of the project.
 
 ## [AD-040] Etiquetado emocional/temático en tiempo real (Laya) — señalizar, no garantizar
 **Date**: 2026-09-27
-**Status**: ACCEPTED — pendiente de implementar (plan abajo).
+**Status**: ACCEPTED — pendiente de implementar (plan abajo). Anclado en **RFC-004** (`docs/TECHNICAL/BUNKER/RFC_004_REALTIME_TAG_SIDECAR.md`).
 **Context**: el pre-heating (Ferrari 11) calibraba con la ventana caliente de
 `interaction_memories` (tier 2, 48h) + heurísticas. La purga del buffer
 (53 turnos varados, 2026-09-27) dejó el tier 2 vacío: degrada con gracia pero
@@ -31,6 +31,9 @@ fallo contenido (tono desviado, no recuerdo corrupto).
 P2 tag en `queue_worker` (punto único de drenaje) → P3 solera consume tags →
 P4 pre-heating lee tags + línea WEAK. Heurísticas actuales quedan como
 lectura por defecto cuando no hay tag (no es fallback: es ausencia de dato).
+**Revisión 2026-09-27 (operador):** sin puerto TCP — sidecar **UDS**
+(`/run/user/1000/red-pill/laya_tag.sock`, 0600) con servidor asyncio crudo
+(sin fastapi/uvicorn, que el venv no trae). Ver RFC-004 §2.1.
 **Por qué esto y no alternativas**: no tag en el interceptor (torch en el
 proceso caliente; los workers oneshot pagarían 18 s de carga por tick) — por
 eso sidecar; no reintentos (el dato tardío no vale en tiempo real); no
