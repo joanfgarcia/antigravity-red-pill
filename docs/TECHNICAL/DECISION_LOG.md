@@ -4,6 +4,28 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-030.F1] Fallup-watcher v2 (anti-flapping, TOCTOU-safe)
+**Date**: 2026-09-27
+**Status**: DEPLOYED 2026-09-27 (script ejecutado, service reiniciado en ventana segura: nightly `c3c52f33` COMPLETED 18/18 + daemon idle; `/status` expone `"fallup":{"enabled":true,...}` y el desplegado contiene el watcher verificado por grep).
+**Context**: el fallup CPU→GPU (AD-030) evictaba el worker CPU con 5.2G en plena noche y flapeaba con la VRAM viva 7.27GB↔0.73GB (swing 6.5GB). Panel adversarial 3/3 BLOCKER (11 hallazgos R1-R4/E1-E3/P1-P5).
+**Decision**: watcher v2 en `src/red_pill/core/fallup.py` (testeable, sin deps de daemon) + bloque fallup en el generador `scripts/setup_background_model.sh` (heredoc DUAL_BIND_EOF, fuente de verdad; PROHIBIDO editar el generado a mano) + `tests/test_fallup_watcher.py` (mocks, nunca 8760 ni systemctl).
+- **R1 flapping**: margen global 500MB insuficiente → `FALLUP_MARGIN_GB=0.5` sobre tier de ENTRADA + peor-caso dinámico (`worst_case_gpu_min_free_gb()`, peor entrada GPU entre perfiles distillation con tiers; hoy granite_8b 6.5) + `FALLUP_STABLE_CHECKS=12` + `FALLUP_MIN_IDLE_S=60` (tiers granite_8b 1.5/6.5/7.2/7.7/8.2; VRAM viva 7.27↔0.73). Corrección del juez: margen sobre el tier máximo (7.2+1.0=8.2) es código muerto en tarjeta de 8.15GB y habría bloqueado el fallup real de esta noche (7.27GB→GPU 10240, estable sin OOM); el margen va sobre la entrada (6.5+0.5=7.0).
+- **R2 TOCTOU**: `last_active` se actualiza dentro del lock → re-chequeo `elapsed2=time.time()-last_active` tras adquirir el lock + `lock._waiters` (si hay waiters → `stable=0`, `last_result="waiters-busy"`, return sin unload).
+- **R3 prioridad**: `LOW_TIMEOUT=10s`/`HIGH=300s` → umbral fijo 15s era código muerto en low y evicción prematura en high → watcher exige `idle>=60` y excluye `last_priority=="low"` (`"low-priority-idle-unloads-anyway"`, el timeout de low ya descarga).
+- **R4 perfil**: en CPU `current.n_gpu_layers==0` (dead-code) → `dry_run_gpu_tier(profile)` (copia vía `ModelRegistry.get_resolved_hardware_affinity`, nunca muta; `None` si toca CPU); el próximo request puede ser otro perfil (tiny_aya 4.0GB, llama_32 3.5GB) o experimental sin tiers (`"experimental-no-tiers"`/`"no-gpu-tier-fits"`).
+- **E1 worker**: reaper gated solo por `IS_CPU_WORKER` (env) → `main()` con `--serve-cpu` fija `os.environ["MINION_CPU_WORKER"]="1"` + `global IS_CPU_WORKER=True` ANTES de arrancar.
+- **E2 cola/reserva**: `check_idle` ignoraba `queue_worker --oneshot` en vuelo y `GpuReservationManager` → gate por proceso (`"queue_worker"`+`"oneshot"` → `"queue-busy"`, sin unload) + `is_exclusive_active()` → `"gpu-reserved"` (nunca por puerto 8760).
+- **P1 regen**: editar el generator sin regenerar deja divergencia → tests compilan el generado desde la fuente (`compile()`) y exigen las cadenas del watcher.
+- **P2 /status**: sin observabilidad → `"fallup": {"enabled", "stable", "required": 12, "last_result", "last_check_ts", "last_fallup_ts"}`.
+- **P3 ramas None/experimental + `_fallup_enabled()` muerto** (model_runtime.py:161, cero usos) → gatea el watcher (`mr._fallup_enabled()`); `None`→`"nothing-loaded"`, experimental→`"experimental-no-tiers"`.
+- **P4 sin tests**: `tests/test_fallup_watcher.py` cubre las 12 ramas de `should_fallup`, `worst_case>=6.5`, generator (compila + cadenas) y regresión 2590 (`_same_model` ignora `n_ctx`).
+- **P5 tunables sin documentar**: aquí + docstring del heredoc + RUNBOOK §8760.
+- **Tunables**: `FALLUP_MIN_IDLE_S=60`, `FALLUP_STABLE_CHECKS=12`, `FALLUP_MARGIN_GB=0.5` (sobre entrada y sobre peor-caso), `FALLUP_WORST_CASE_MIN_FREE_GB=6.5` (piso; dinámico vía `worst_case_gpu_min_free_gb()`).
+- **Ventana de deploy**: solo con nightly idle + daemon idle (job `c3c52f33` fuera de GPU, sin requests en vuelo, `/status.busy==false`); deploy = ejecutar el script (hace restart) + verificar `/status.fallup`.
+**Por qué esto y no alternativas**: no margen 500MB (flap medido 6.5GB); no umbral fijo 15s (muerto en low/prematuro en high); no chequear `n_gpu_layers` en CPU (dead-code); no matar PID con reserva/cola en vuelo (5.2G nocturnos); no editar el generado a mano (divergencia P1).
+
+---
+
 ## [AD-038] Recall de la memoria curada: híbrido + MMR sí, texto enriquecido no (medido)
 **Date**: 2026-09-25
 **Status**: ACCEPTED (2026-09-25) — híbrido, MMR y dedup post-rewrite encendidos en el operador; voz v2 detrás de flag hasta el piloto; texto enriquecido refutado y apagado.

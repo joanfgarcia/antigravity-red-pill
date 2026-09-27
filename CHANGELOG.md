@@ -357,8 +357,12 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   mientras la GPU no estuviera disponible (detectado con un juego ocupando 1,7 GB de
   VRAM). Ahora el worker carga en su proceso (`n_gpu_layers=0`); un worker nunca
   lanza otro (guarda); `_backend_alive` impide que la histéresis reutilice un
-  worker muerto; el scope rancio se para antes de relanzar. Verificado en vivo:
-  CPU responde (13 s la carga, 1,8 s la siguiente petición, sin recarga).
+   worker muerto; el scope rancio se para antes de relanzar. Verificado en vivo:
+   CPU responde (13 s la carga, 1,8 s la siguiente petición, sin recarga).
+- **[NEW] Fallup-watcher CPU→GPU del daemon (AD-030.F1, 2026-09-27)**: el reaper
+  (5 s) asciende a GPU tras 60 s idle + 12 checks estables con margen 0,5 GB
+  sobre entrada/peor-caso 6,5 GB; solo fallup, TOCTOU-safe, con estado en
+  `/status.fallup`. Desplegado 2026-09-27 (33 tests en verde).
 - **[NEW] Recall híbrido + MMR (feedback de recall 2026-09-25, AD-038)**:
   `memento/hybrid.py` — términos distintivos de la consulta (identificadores y
   nombres propios, idf), `rg -c` sobre los `index.md` del árbol, mapeo línea →

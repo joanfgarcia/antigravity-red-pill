@@ -82,6 +82,7 @@ Selector `(task, model, thinking, custom, experimental)` resuelto SIEMPRE bajo
 el lock vía `model_runtime`; cambio de modelo sin reiniciar; chat handlers por
 modo thinking (template nativo); `/status` con thinking_mode; fallup CPU→GPU;
 worker CPU aislado; health liveness 200 incondicional.
+Fallup-watcher v2 (anti-flapping): idle>=60s, 12 checks estables, margen 0.5GB sobre tier de entrada + peor-caso dinámico; TOCTOU-safe (re-chequeo + _waiters), gates E1/E2/P3.
 
 Generado desde setup_background_model.sh (fuente de verdad). NO editar a mano.
 """
@@ -110,6 +111,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Red Pill Inference Governance Proxy")
 
 from red_pill.core import model_runtime as mr
+from red_pill.core.fallup import should_fallup, FALLUP_MIN_IDLE_S, FALLUP_STABLE_CHECKS, FALLUP_MARGIN_GB, fallup_enabled
 from red_pill.core.model_license import ModelLicenseError
 from red_pill.core.model_registry import ModelRegistry
 from red_pill.core.paths import resolve_model_path
@@ -149,6 +151,10 @@ class ModelManager:
 		self.last_active = time.time()
 		self.last_priority = "high"
 		self._last_status_error: Optional[str] = None
+		self.fallup_stable = 0
+		self.fallup_last_check = None
+		self.fallup_last_result = None
+		self.fallup_last_at = None
 
 	async def resolve_and_ensure(self, body: Dict[str, Any], prefs: Optional[List[str]] = None):
 		"""Resuelve el selector y carga el modelo si difiere del actual (bajo lock)."""
@@ -343,6 +349,100 @@ class ModelManager:
 				if elapsed > timeout:
 					logger.info(f"Idle timeout reached ({elapsed:.0f}s > {timeout}s, priority={self.last_priority}). Auto-unloading...")
 					self.unload_under_lock()
+				# Fallup-watcher v2 (anti-flapping R1-R4): solo ascenso CPU→GPU,
+				# nunca descenso; idle>=60s, 12 estables, margen 0.5GB sobre
+				# entrada + peor-caso.
+				# TOCTOU-safe (R2): re-chequeo tras lock + _waiters. E2: cola y reserva.
+				if (not IS_CPU_WORKER and self.mode == "cpu" and self.current is not None
+						and getattr(self.current, "mode", None) != "experimental"
+						and self.last_priority != "low"):
+					# R2: la request encolada esperando el lock aún no bumpeó
+					# last_active cuando el watcher evaluó → re-chequear en lock.
+					elapsed2 = time.time() - self.last_active
+					_waiters = getattr(self.lock, "_waiters", None)
+					try:
+						_has_waiters = bool(len(_waiters)) if _waiters is not None else False
+					except Exception:
+						_has_waiters = False
+					if _has_waiters:
+						self.fallup_stable = 0
+						self.fallup_last_result = "waiters-busy"
+						self.fallup_last_check = time.time()
+						return
+					# E2: cola queue_worker --oneshot en vuelo → no evictar (5.2G
+					# en plena noche). Gate por proceso, nunca por puerto 8760.
+					try:
+						_queue_busy = False
+						try:
+							import psutil as _psutil
+							for _p in _psutil.process_iter(["cmdline"]):
+								try:
+									_cmd = " ".join(_p.info.get("cmdline") or [])
+								except Exception:
+									continue
+								if "queue_worker" in _cmd and "oneshot" in _cmd:
+									_queue_busy = True
+									break
+						except Exception:
+							_queue_busy = False
+						if _queue_busy:
+							self.fallup_stable = 0
+							self.fallup_last_result = "queue-busy"
+							self.fallup_last_check = time.time()
+							return
+					except Exception:
+						pass
+					# E2b: reserva exclusiva GPU → no fallup (GpuReservationManager).
+					try:
+						from red_pill.core.gpu_reservation import GpuReservationManager
+						_reserved = bool(GpuReservationManager.is_exclusive_active())
+					except Exception as _e:
+						logger.warning(f"fallup: reservation check failed ({_e}); assuming free")
+						_reserved = False
+					# P3: _fallup_enabled() antes muerto (cero usos) → ahora gatea.
+					try:
+						_fallup_on = bool(mr._fallup_enabled())
+					except Exception:
+						try:
+							_fallup_on = bool(fallup_enabled())
+						except Exception:
+							_fallup_on = True
+					try:
+						_free_mb = VramProbe.get_free_mb()
+					except Exception:
+						_free_mb = 0
+					_prof = getattr(self.current, "profile_name", None)
+					_is_exp = getattr(self.current, "mode", None) == "experimental"
+					try:
+						_ok, _reason = should_fallup(
+							self.mode, _prof, _is_exp, self.last_priority,
+							elapsed2, _free_mb, self.fallup_stable,
+							_reserved, _fallup_on,
+						)
+					except Exception as _e:
+						logger.warning(f"fallup: should_fallup failed ({_e}); resetting stability")
+						self.fallup_stable = 0
+						self.fallup_last_result = "checker-error"
+						self.fallup_last_check = time.time()
+						return
+					self.fallup_last_check = time.time()
+					self.fallup_last_result = _reason
+					if _ok:
+						# reason == "stable-fallup": 12 estables seguidas → ascenso.
+						self.fallup_stable += 1
+						if self.fallup_stable >= FALLUP_STABLE_CHECKS:
+							logger.info(f"Fallup watcher: CPU→GPU estable ({_reason}, idle={elapsed2:.0f}s, free={_free_mb}MB). Unloading CPU worker for GPU reload on next request...")
+							self.unload_under_lock()
+							self.fallup_last_at = time.time()
+							self.fallup_stable = 0
+					else:
+						# Histéresis: solo ("unstable", "stable-fallup") suma
+						# estabilidad (tier encaja pero falta conteo); otro False
+						# resetea a 0 (R1 flapping: margen/worst-case/not-idle...).
+						if _reason in ("unstable", "stable-fallup"):
+							self.fallup_stable += 1
+						else:
+							self.fallup_stable = 0
 
 
 manager = ModelManager()
@@ -398,6 +498,13 @@ async def models():
 @app.get("/status")
 async def status():
 	res = manager.current
+	try:
+		_fallup_on = bool(mr._fallup_enabled())
+	except Exception:
+		try:
+			_fallup_on = bool(fallup_enabled())
+		except Exception:
+			_fallup_on = True
 	return {
 		"loaded_profile": res.profile_name if res else None,
 		"loaded_model": os.path.basename(res.model_path) if res else None,
@@ -409,6 +516,14 @@ async def status():
 		"last_mode": res.last_mode if res else "none",
 		"vram_free_mb": VramProbe.get_free_mb(),
 		"effective_default": mr.effective_default().profile_name,
+		"fallup": {
+			"enabled": _fallup_on,
+			"stable": getattr(manager, "fallup_stable", 0),
+			"required": FALLUP_STABLE_CHECKS,
+			"last_result": getattr(manager, "fallup_last_result", None),
+			"last_check_ts": getattr(manager, "fallup_last_check", None),
+			"last_fallup_ts": getattr(manager, "fallup_last_at", None),
+		},
 	}
 
 
@@ -540,11 +655,18 @@ async def chat_completions(request: Request):
 
 
 def main():
+	global IS_CPU_WORKER
 	from red_pill.core.paths import get_daemon_dir
 	parser = argparse.ArgumentParser()
 	parser.add_argument("--serve-cpu", action="store_true", help="Run as an isolated CPU worker.")
 	parser.add_argument("--port", type=int, default=None)
 	args, _ = parser.parse_known_args()
+
+	# E1: invocación manual --serve-cpu sin env arrancaba el reaper en el
+	# worker (gated solo por env). Fijar env+global ANTES de arrancar.
+	if args.serve_cpu:
+		os.environ["MINION_CPU_WORKER"] = "1"
+		IS_CPU_WORKER = True
 
 	if args.serve_cpu or IS_CPU_WORKER:
 		port = args.port or CPU_WORKER_PORT
