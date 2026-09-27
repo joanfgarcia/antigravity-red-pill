@@ -4,7 +4,7 @@
 |---|---|
 | **RFC** | 004 |
 | **Title** | Tag emoción/tema en captura vía sidecar UDS — señalizar, no garantizar |
-| **Status** | ACCEPTED (diseño; implementación P1+P2 tras aprobación) |
+| **Status** | P1 DONE+DEPLOYED (2026-09-28); P2-P4 pendientes |
 | **Author** | Joan García (Operator) / Aleth (Agent) |
 | **Created** | 2026-09-27 |
 | **Related** | AD-040 (DECISION_LOG), AD-039 (router System One, parked), RFC-HARNESS-002 (daemon UDS) |
@@ -67,12 +67,28 @@ daemon, `run_dual_bind.py`).
 
 ## 3. Plan de implementación
 
-| Fase | Contenido | Gate |
-|---|---|---|
-| P1 | `laya_tag_server.py` + unit systemd + `MEMENTO_REALTIME_TAG_ENABLED` | Socket responde; carga <60s en frío |
-| P2 | Tag en `queue_worker` (fire-and-forget, 2s) | Engramas con `tag_status` fluyendo |
-| P3 | Solera consume tags | Situación se actualiza con tags |
-| P4 | Pre-heating lee tags + línea WEAK | `CALIBRATION WEAK` visible en handshake |
+| Fase | Contenido | Gate | Estado |
+|---|---|---|---|
+| P1 | `laya_tag_server.py` + unit systemd + `MEMENTO_REALTIME_TAG_ENABLED` | Socket responde; carga <60s en frío | **DONE+DEPLOYED 2026-09-28** |
+| P2 | Tag en `queue_worker` (fire-and-forget, timeout de cliente) | Engramas con `tag_status` fluyendo | pendiente |
+| P3 | Solera consume tags | Situación se actualiza con tags | pendiente |
+| P4 | Pre-heating lee tags + línea WEAK | `CALIBRATION WEAK` visible en handshake | pendiente |
+
+**Evidencia P1** (2026-09-28): unit `redpill-laya-tag.service` activa; socket
+`/run/user/<uid>/red-pill/laya_tag.sock` 0600; `--check` = `model_loaded:true`;
+tag real correcto (frustrated/meta, positive/personal, focused/meta; 0.5–1.1 s CPU);
+`stop` con cliente UDS conectado sale 0 en ~1 s y retira el socket. 25 tests
+(`tests/test_laya_tag_server.py`), ruff limpio. **4 pasadas adversarial**
+(forge-devil's-advocate): la última CLEARED 8/0 tras corregir 5+4+5 hallazgos
+(línea larga muda, `--check` sin modelo, split-brain de socket, crash-loop sin
+StartLimit, unit no instalable; y luego stop colgado por `wait_closed` con cliente
+ocioso, loop sordo durante el import de torch, SIGTERM diferido en carga, unlink
+sin verificación de inodo).
+
+**Caveats registrados**: (a) `stop` no acota el tiempo si hay un `predict` en
+vuelo (drena el executor; un predict > TimeoutStopUSec=90s acabaría en SIGKILL con
+socket rancio recuperable); (b) el primer turno tras reinicio puede quedar sin tag
+mientras carga (señalizado como `model-not-loaded`, nunca oculto).
 
 ## 4. Rollback
 
