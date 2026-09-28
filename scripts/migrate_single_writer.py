@@ -8,11 +8,11 @@ instalación en el estado nuevo.
 
 Pasos (dry-run por defecto):
 1. COBERTURA: cada sesión del registry debe tener `raw/` o render en Memento; si
-   falta alguna → ABORTA (no migrar con memoria sin archivar).
+	falta alguna → ABORTA (no migrar con memoria sin archivar).
 2. STAGING: lo que quede en `staging/` se archiva en `staging/_migrated_<ts>/`
-   (no se borra).
+	(no se borra).
 3. BUFFER: `interaction_memories` más viejo que `INTERACTION_MAX_AGE_DAYS` se
-   trima (el buffer es ventana corta; el archivo es Memento).
+	trima (el buffer es ventana corta; el archivo es Memento).
 4. MARCA: escribe `state/single_writer_migrated.json` (idempotencia).
 
 	uv run python scripts/migrate_single_writer.py            # dry-run

@@ -22,9 +22,11 @@ if [ ! -x "$LAYA_VENV/bin/python" ]; then
 fi
 
 mkdir -p "$HOME/.config/systemd/user"
-sed -e "s|/home/joan/Documents/IA/sharing|$APP_ROOT|g" \
-    -e "s|/home/joan/.local/share/red-pill/laya-venv|$LAYA_VENV|g" \
-    "$UNIT_SRC" > "$UNIT_DST"
+REPO_LITERAL="$HOME/Documents/IA/sharing"
+VENV_LITERAL="$HOME/.local/share/red-pill/laya-venv"
+sed -e "s|$REPO_LITERAL|$APP_ROOT|g" \
+	-e "s|$VENV_LITERAL|$LAYA_VENV|g" \
+	"$UNIT_SRC" > "$UNIT_DST"
 
 systemctl --user daemon-reload
 echo "Instalada: $UNIT_DST"

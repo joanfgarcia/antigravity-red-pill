@@ -33,6 +33,8 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [DISTILLER_SELECTION.md](TECHNICAL/COGNITIVE/DISTILLER_SELECTION.md) | How the sleep-cycle distiller model is chosen: bake-off method, findings, GPU/CPU/hybrid execution |
 | [TESTS.md](TECHNICAL/TESTS.md) | Test suite philosophy and structure |
 | [SOUND_OF_SILENCE.md](TECHNICAL/SOUND_OF_SILENCE.md) | The Python coding standard enforced by `ruff` in this project |
+| [LAYA_ROUTER_BAKEOFF_F1.md](TECHNICAL/LAYA_ROUTER_BAKEOFF_F1.md) | AD-039: bake-off del router System One (Laya) — evidencia F1, PARKED |
+| [MIGRATION_SINGLE_WRITER.md](TECHNICAL/OPERATIONS/MIGRATION_SINGLE_WRITER.md) | Migración al single-writer (v8.0.0): instalación nueva vs actualización |
 | [SOVEREIGN_PLUGINS.md](TECHNICAL/SOVEREIGN_PLUGINS.md) | Defining the dual-path architecture: Code vs. State separation |
 | [GOVERNANCE.md](TECHNICAL/GOVERNANCE.md) | What is fixed (immune to impulse) and what is fluid (open to evolution) |
 

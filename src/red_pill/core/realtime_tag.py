@@ -4,10 +4,10 @@ Etiqueta cada turno capturado (emoción/tema) con el sidecar Laya y lo persiste
 como metadata aditiva del engrama. Contrato RFC-004:
 
 1. El registro NUNCA espera al tag: `record_interaction_pair` escribe primero y
-   el tag se aplica después con un timeout corto; si falla, el engrama queda
-   escrito igual.
+	el tag se aplica después con un timeout corto; si falla, el engrama queda
+	escrito igual.
 2. Fallo señalizado, nunca oculto: el engrama lleva `tag_status`
-   (`ok|degraded|failed`) + `tag_reason`; el interceptor lo comunica (WEAK).
+	(`ok|degraded|failed`) + `tag_reason`; el interceptor lo comunica (WEAK).
 3. Sin reintentos en caliente y sin garantizar el servicio.
 
 Este módulo NO importa torch ni el daemon: habla el protocolo JSON newline del

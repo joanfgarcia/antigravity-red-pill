@@ -7,22 +7,22 @@ tests puros), y nunca muta perfiles.
 
 Corrige los blockers del panel adversarial (FALLUP-WATCHER v2, 2026-09-27):
 - R1 flapping: margen 0.5GB sobre tier de ENTRADA + peor-caso dinámico
-  + 12 checks estables + idle 60s (el margen global de 500MB era
-  insuficiente frente al swing 6.5GB de la VRAM viva 7.27GB↔0.73GB;
-  tiers granite_8b 1.5(n gl 0)/6.5(-1 6144)/7.2(10240)/7.7(12288)/8.2(16384);
-  margen sobre el tier máximo exigiría 8.2GB en tarjeta de 8.15GB —
-  corrección del juez 2026-09-27 con el fallup real 7.27GB→10240).
+	+ 12 checks estables + idle 60s (el margen global de 500MB era
+	insuficiente frente al swing 6.5GB de la VRAM viva 7.27GB↔0.73GB;
+	tiers granite_8b 1.5(n gl 0)/6.5(-1 6144)/7.2(10240)/7.7(12288)/8.2(16384);
+	margen sobre el tier máximo exigiría 8.2GB en tarjeta de 8.15GB —
+	corrección del juez 2026-09-27 con el fallup real 7.27GB→10240).
 - R2 TOCTOU: el caller re-chequea `elapsed2` tras adquirir el lock y mira
-  `lock._waiters` (una request encolada aún no bumpeó `last_active`).
+	`lock._waiters` (una request encolada aún no bumpeó `last_active`).
 - R3 prioridad: LOW_TIMEOUT=10s/HIGH=300s → umbral fijo 15s era código muerto
-  en low y evicción prematura en high; el watcher exige idle>=60s y excluye
-  `low` (el timeout de low ya descarga de todos modos).
+	en low y evicción prematura en high; el watcher exige idle>=60s y excluye
+	`low` (el timeout de low ya descarga de todos modos).
 - R4 perfil: en CPU `current.n_gpu_layers==0`, chequearlo es dead-code; aquí
-  dry-run de la resolución sobre copia (`ModelRegistry`), y el próximo request
-  puede ser otro perfil (tiny_aya 4.0GB, llama_32 3.5GB) o experimental sin
-  tiers (→ `no-gpu-tier-fits` / `experimental-no-tiers`).
+	dry-run de la resolución sobre copia (`ModelRegistry`), y el próximo request
+	puede ser otro perfil (tiny_aya 4.0GB, llama_32 3.5GB) o experimental sin
+	tiers (→ `no-gpu-tier-fits` / `experimental-no-tiers`).
 - P3: `_fallup_enabled()` (model_runtime.py:161, antes cero usos) ahora gatea
-  vía `fallup_enabled()`.
+	vía `fallup_enabled()`.
 
 Tunables: FALLUP_MIN_IDLE_S=60, FALLUP_STABLE_CHECKS=12, FALLUP_MARGIN_GB=0.5.
 Ventana de deploy: solo con nightly idle + daemon idle (ver AD-030.F1).

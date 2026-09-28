@@ -5,11 +5,11 @@ Servidor asyncio crudo sobre AF_UNIX; carga Laya una vez y responde JSON
 newline-delimited. Sin fastapi/uvicorn (el venv no los trae) y sin puerto TCP.
 
 Protocolo (una línea JSON por request, la conexión admite varias):
-    → {"id": "<str>", "text": "<turno>"}
-    ← {"id": "<str>", "ok": true, "emotion": {...}, "theme": {...}, "lat_s": 0.2}
-    ← {"id": "<str>", "ok": false, "error": "<motivo>"}
-    → {"id": "<str>", "ping": true}
-    ← {"id": "<str>", "ok": true, "pong": true, "model_loaded": true|false}
+	→ {"id": "<str>", "text": "<turno>"}
+	← {"id": "<str>", "ok": true, "emotion": {...}, "theme": {...}, "lat_s": 0.2}
+	← {"id": "<str>", "ok": false, "error": "<motivo>"}
+	→ {"id": "<str>", "ping": true}
+	← {"id": "<str>", "ok": true, "pong": true, "model_loaded": true|false}
 
 Contrato RFC-004: el servidor NUNCA bloquea al cliente de forma silenciosa; si
 no puede responder devuelve ok=false con motivo. El cliente (queue_worker, P2)

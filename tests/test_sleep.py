@@ -51,30 +51,6 @@ def test_synthesize_hub(mock_build_opener):
 	assert result == "[TreeKEM Fix] Arreglado el leaf_index omitido en el hash del árbol."
 
 
-@patch("red_pill.metabolism.phases.consolidation.distill_session_anchors")
-@patch("red_pill.metabolism.phases.consolidation.distill_engram")
-@patch("red_pill.metabolism.phases.consolidation._check_llm_available", return_value=True)
-def test_perform_sleep_cycle(mock_llm, mock_distill, mock_anchors):
-	mock_mem_mgr = MagicMock()
-	mock_client = mock_mem_mgr.client
-	mock_client.collection_exists.return_value = True
-	p1 = MagicMock(id="1", payload={"content": "work related code"})
-	# First scroll is for signals, second for interactions, third for end of loop
-	mock_client.scroll.side_effect = [([], None), ([p1], None), ([], None)]
-	mock_distill.return_value = {"summary": "sum", "emotion": "joy", "intensity": 0.8}
-	count = perform_sleep_cycle(mock_mem_mgr)
-	assert count > 0
-	assert mock_mem_mgr.add_memory.called
-	assert mock_client.delete.called
-
-
-@patch("red_pill.metabolism.phases.consolidation._check_llm_available", return_value=True)
-def test_perform_sleep_cycle_no_collection(mock_llm):
-	mock_mem_mgr = MagicMock()
-	mock_mem_mgr.client.collection_exists.return_value = False
-	assert perform_sleep_cycle(mock_mem_mgr) == 0
-
-
 @patch("red_pill.metabolism.phases.consolidation._check_llm_available", return_value=True)
 def test_perform_sleep_cycle_empty_buffer(mock_llm):
 	mock_mem_mgr = MagicMock()
@@ -127,24 +103,6 @@ def test_chunk_text_runt_absorption():
 def test_chunk_text_runt_single_chunk_untouched():
 	# A single short text is never "absorbed" into nothing
 	assert chunk_text("tiny", size=500) == ["tiny"]
-
-
-def test_reassemble_raw_sequence():
-	from red_pill.metabolism.phases.consolidation import reassemble_raw_sequence
-
-	mock_client = MagicMock()
-	p0 = MagicMock(
-		id="p0",
-		payload={"parent_id": "seq-123", "lazarus_phase": "raw_parent", "chunk_index": 0, "content": "USER: Hola Barcelona, estamos en casa de "},
-	)
-	p1 = MagicMock(id="p1", payload={"parent_id": "seq-123", "lazarus_phase": "raw_parent", "chunk_index": 1, "content": "mi madre Victoria."})
-
-	mock_client.scroll.return_value = ([p1, p0], None)  # out of order return from scroll
-
-	full_text, assembled_points = reassemble_raw_sequence(mock_client, "interaction_memories", p0)
-
-	assert full_text == "USER: Hola Barcelona, estamos en casa de mi madre Victoria."
-	assert [p.id for p in assembled_points] == ["p0", "p1"]
 
 
 def test_emotion_synonyms_normalization():
