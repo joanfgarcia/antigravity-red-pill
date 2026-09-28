@@ -113,7 +113,7 @@ This document provides a comprehensive list of all parameters available in the `
 ### MCP Kernel & Interceptor
 | Parameter | Default | Description |
 | :--- | :--- | :--- |
-| `INTERCEPTOR_ENABLED`| `False` | Toggles the Bünker's active middleware injection via MCP. If `True`, intercepts IDE prompts to dynamically load context from Qdrant. |
+| `INTERCEPTOR_ENABLED`| `False` | **Master switch PARCIAL del pipeline de interceptor.** Gatea SOLO: `02_rag_enrichment` (+`INTERCEPTOR_RAG_ENABLED`), `03_circuit_breaker` (+`INTERCEPTOR_CIRCUIT_BREAKER_ENABLED`), `04_mystique`, y las señales Korsakoff/amnesia (`vitals.py`/`rituals.py`). **NO** gatea el core (telemetría `bunker_context`, mood/router/tone, pre-heating): esos corren siempre vía `interceptor_rp`. |
 | `COMPACTION_THRESHOLD`| `10` | The number of consecutive context compactions to wait before executing a full session context refresh (prevents feedback loops). |
 | `SEMANTIC_INTENT_THRESHOLD`| `Low` (0.5) | `High` (0.75) or `Low` (0.5). Sets how literal the matching needs to be for context injection. |
 | `PULSE_ENABLED` | `True` | Activates autonomous background synthesis and maintenance operations. |
@@ -227,6 +227,26 @@ Plugins 05–10. Each is independently toggleable.
 | `MEMENTO_ANNOTATE_DEAD_ZONE` | `0.05` | Dual routing dead zone: margin below this over the gate → `dual_route: none` (unstable/noise; it does NOT ascend, stays in the tree for future re-scoring). |
 | `RP_IDENTITY_BIO` | `""` (→ config dir) | Explicit path to the identity Bio file. Default precedence: `~/.config/red-pill/identity_bio.md` → neutral `identity_bio.template.txt` in the repo. Personal data never lives in the public repo. |
 | `MEMENTO_STATIC_ASCENSION_ENABLED` | `False` | Static ascension after the agentic pass (`ascend_by_threshold`, scans `refine/` + `annotate/`; `dual_route: none` never ascends). Shadow until calibration. |
+
+### Single-Writer de memoria (AD-034) & RFC-004 (tags en vivo)
+| Parameter | Default | Description |
+| :--- | :--- | :--- |
+| `SW_AFFINITY_ENABLED` | `False` | Captura `session_id`+`affinity` en el buffer (memory_queue → interaction_memories). |
+| `SW_PURGE_GATE_ENABLED` | `False` | El TTL del janitor solo purga sesiones ya renderizadas en Memento (+ tope de edad con señal). |
+| `SW_DEDUP_ENABLED` | `False` | Dedup-at-ascension: un ganador por grupo `session_id`+`source_lines`. |
+| `SW_HUBS_ENABLED` | `False` | Síntesis de hubs de sesión sobre engramas curados (idempotente por `hub_input_hash`). |
+| `SW_HUBS_MAX_SESSIONS_PER_CYCLE` | `0` | Tope de sesiones sintetizadas por ciclo (0 = sin tope). Acota el backfill inicial. |
+| `SW_THREAD_ENABLED` | `False` | Micro-hilo de Ariadna (`prev_member`/`next_member` por sesión, orden de refine). |
+| `SW_ABSENCE_GUARD_CONDITIONAL` | `False` | ON: el pulse NO refresca `last_recalled_at` cada hora (solo tras ausencia real). |
+| `SW_EROSION_DEMOTE_ENABLED` | `False` | Olvido elegante de los curados (demote a Memento tras `CURATED_MIN_LIFETIME_YEARS`). |
+| `SW_SITUATION_ENABLED` | `False` | Semáforo de situación global (`situation_memories`) + pre-heating. |
+| `SW_INTERACTIVE_PHASE_ENABLED` | `False` | Proceso aparte de engramas interactivos (`interactive_refine.py`). |
+| `INTERACTION_MAX_AGE_DAYS` | `30` | Tope duro de edad del buffer: lo no renderizado más viejo se purga (con señal). |
+| `MEMENTO_REALTIME_TAG_ENABLED` | `False` | **RFC-004.** Etiqueta emoción/tema por turno vía el sidecar UDS Laya (`scripts/laya_tag_server.py`). |
+| `MEMENTO_REALTIME_TAG_TIMEOUT_S` | `3.0` | Timeout del cliente UDS por turno. |
+| `MEMENTO_REALTIME_TAG_MAX_CHARS` | `1500` | Recorte del turno etiquetado (cabeza+cola); si recorta → `degraded/truncated`. |
+| `MEMENTO_REALTIME_TAG_BUDGET_S` | `20` | Presupuesto agregado de etiquetado por drenaje (cota N×timeout). |
+| `LAYA_TAG_SOCKET` | `""` | Ruta del socket UDS del sidecar (vacío → `$XDG_RUNTIME_DIR/red-pill/laya_tag.sock`). |
 
 > ℹ️ **Agentic pass backend.** The file-based distill/refine (`memento/agentic/`)
 > talks to the local llama-server via `EDGE_ENGINE_URL`

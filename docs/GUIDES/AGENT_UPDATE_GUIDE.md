@@ -916,12 +916,11 @@ Send `red_pill_changes_clean.patch` to the Developer profile for review.
     *   **`redpill-wake.timer`**: Triggers the wake sequence and biological startup.
         *   **Frequency**: Governed by `schedule_pulse.py` (typically every 1 minute if acting as the primary biological clock).
         *   **Cometido**: Mantiene la telemetría viva y evalúa el enrutamiento cognitivo basándose en el estado del Operador.
-    *   **`redpill-sleep.timer`**: Triggers the metabolic consolidation layer.
-        *   **Frequency**: Configured in parallel with the wake cycle for continuous memory consolidation.
-        *   **Cometido**: Inicia la consolidación de memorias (FSRS), evaporación de señales y re-estructuración de la base de datos vectorial mediante los Sleep Plugins.
-    *   **`redpill-chronicle.timer`**: Nightly batch distillation.
-        *   **Frequency**: Every night at **04:00 AM**.
-        *   **Cometido**: Ingesta y destilación de logs de conversación crudos del día anterior hacia los `archive_memories`. (Persistent: fires on boot if missed).
+    *   **`redpill-nightly.timer`**: Ciclo metabólico nocturno (03:00 → `chronicle → sleep`).
+        *   **Frequency**: cada noche a las **03:00** (`Persistent=true`: se dispara al arrancar si se perdió).
+        *   **Cometido**: renderiza el delta a Memento (chronicle) y consolida/teje/asciende (sueño: hubs + hilo). Sustituye a los retirados `redpill-sleep.timer` y `redpill-chronicle.timer`.
+    *   `redpill-extractor.timer` (horario): produce `unencrypted_conversations/` (fuente antigravity de Memento) vía `chronicle_extractor.py`.
+    *   `redpill-laya-tag.service` (RFC-004): sidecar UDS de etiquetado emoción/tema.
 
     ### 8.2 Legacy Daemons (DEPRECATED)
     *   `deploy_pulse.py`, `deploy_queue.py`, `memory_daemon.py` are fully deprecated and should be cleaned up. All temporal workflows run out of the new timer system defined in `schedule_pulse.py`.
