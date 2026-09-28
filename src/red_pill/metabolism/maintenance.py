@@ -491,7 +491,7 @@ def compact_tool_noise(text: str) -> str:
 	import json as json_lib
 	import re
 
-	from red_pill.metabolism.chronicle.claude_code_plugin import _render_tool_result, _render_tool_use
+	from red_pill.utils.chronicle_render import _render_tool_result, _render_tool_use
 
 	out: list = []
 	result_buf: list = []

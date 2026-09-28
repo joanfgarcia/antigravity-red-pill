@@ -1,7 +1,7 @@
 """Chronicle noise pre-filter: compact tool markers instead of full payload dumps."""
 
 import red_pill.config as cfg
-from red_pill.metabolism.chronicle.claude_code_plugin import (
+from red_pill.utils.chronicle_render import (
 	_render_tool_result,
 	_render_tool_use,
 	extract_assistant_blocks,

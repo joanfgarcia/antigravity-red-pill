@@ -56,17 +56,19 @@ def test_extract_assistant_blocks_texto_y_tool(monkeypatch):
 
 
 def test_fuentes_memento_no_importan_legacy():
-	"""Guardarraíl estructural: chronicle_sources no debe depender del paquete legacy."""
-	root = Path(__file__).resolve().parents[1] / "src" / "red_pill" / "chronicle_sources"
+	"""Guardarraíl estructural: ningún módulo de `src/` importa los helpers desde
+	el paquete legacy (solo el propio plugin los re-exporta). Garantiza que la
+	demolición de `metabolism/chronicle/*` no rompe a nadie."""
+	root = Path(__file__).resolve().parents[1] / "src" / "red_pill"
+	helpers = ("_render_tool_use", "_render_tool_result", "extract_user_content", "extract_assistant_blocks")
 	offenders = []
-	for py in root.glob("*.py"):
-		txt = py.read_text(encoding="utf-8")
-		# ignorar menciones en docstrings: solo líneas de import reales
-		for line in txt.splitlines():
+	for py in root.rglob("*.py"):
+		for line in py.read_text(encoding="utf-8").splitlines():
 			ls = line.strip()
-			if ls.startswith(("import ", "from ")) and "metabolism.chronicle" in ls:
-				offenders.append(f"{py.name}: {ls}")
-	assert offenders == [], f"imports legacy en chronicle_sources: {offenders}"
+			if ls.startswith(("import ", "from ")) and "metabolism.chronicle.claude_code_plugin" in ls:
+				if any(h in ls for h in helpers):
+					offenders.append(f"{py.relative_to(root)}: {ls}")
+	assert offenders == [], f"imports de helpers desde el legacy: {offenders}"
 
 
 def test_reexport_legacy_es_la_misma_funcion():
