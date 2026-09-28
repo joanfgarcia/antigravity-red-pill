@@ -67,8 +67,13 @@ daemon, `run_dual_bind.py`).
   toca el socket (comportamiento actual intacto, verificado).
 
 ### 2.3 Consumo
-- **Solera (M8):** promedia tags en vez de destilar texto. Sin tag → la entrada
-  no entra en la media (ausencia de dato, no fallback).
+- **Solera (M8):** con el flag ON agrega los tags (`aggregate_tags`: mood =
+  emoción de mayor peso por confianza, tema dominante, cobertura) en vez de
+  destilar texto; **sin fallback tag→LLM**: si no hay turnos etiquetados, no se
+  actualiza (más vale no actualizar que inventar). El chroma del tag se fija
+  explícitamente (`TAG_EMOTION_CHROMA`) y se re-escribe tras el alta para que la
+  re-detección de `add_memory` (mood `neutral` == DEFAULT_EMOTION) no lo pise.
+  Con el flag OFF, el camino LLM queda intacto.
 - **Pre-heating (Ferrari 11):** tier 2 lee `tag_status: ok` recientes; si ve
   fallos, añade `CALIBRATION WEAK: últimos N turnos sin tag (motivo)`.
 - Las heurísticas actuales quedan como **lectura por defecto cuando no hay
@@ -85,7 +90,7 @@ daemon, `run_dual_bind.py`).
 |---|---|---|---|
 | P1 | `laya_tag_server.py` + unit systemd + `MEMENTO_REALTIME_TAG_ENABLED` | Socket responde; carga <60s en frío | **DONE+DEPLOYED 2026-09-28** |
 | P2 | Tag en `queue_worker` (post-write acotado, timeout de cliente) | Engramas con `tag_status` fluyendo (flag ON) | **DONE 2026-09-28** (flag OFF en prod por RULE 4) |
-| P3 | Solera consume tags | Situación se actualiza con tags | pendiente |
+| P3 | Solera consume tags (aggregate_tags) | Situación se actualiza con tags (flag ON) | **DONE 2026-09-28** |
 | P4 | Pre-heating lee tags + línea WEAK | `CALIBRATION WEAK` visible en handshake | pendiente |
 
 **Evidencia P1** (2026-09-28): unit `redpill-laya-tag.service` activa; socket

@@ -27,6 +27,20 @@ _NS = uuid.NAMESPACE_OID
 COLLECTION = "situation_memories"
 GLOBAL_AFFINITY = "global"
 
+# Chroma para las etiquetas del tag RFC-004 (taxonomía propia; NO la del modelo
+# de emociones local). Necesario porque `add_memory` puede re-detectar `emotion`
+# cuando mood coincide con DEFAULT_EMOTION ("neutral") — el `color` explícito no
+# se pisa si difiere del default, y es lo que puntúa el pre-heating.
+TAG_EMOTION_CHROMA = {
+	"calm": "cyan",
+	"neutral": "gray",
+	"positive": "yellow",
+	"tense": "purple",
+	"frustrated": "red",
+	"sad": "blue",
+	"focused": "emerald",
+}
+
 
 def situation_point_id(affinity: str) -> str:
 	return str(uuid.uuid5(_NS, f"situation:{affinity}"))
@@ -51,6 +65,56 @@ def _default_distiller(text: str) -> Dict[str, Any]:
 	except Exception as e:
 		logger.warning(f"[SITUATION] distiller falló: {e}")
 		return {"situation": "", "emotion": "gray", "intensity": 0.5}
+
+
+def aggregate_tags(items: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+	"""Agrega los tags RFC-004 de los turnos (`ok`/`degraded` con emoción).
+
+	Puro (sin I/O) para test. Devuelve None si no hay NI UN turno etiquetado →
+	el llamante NO consume la ventana (ausencia de dato, no fallback: no se
+	inventa situación sin señal). El mood es la emoción de mayor peso por
+	confianza acumulada (conteo como desempate)."""
+	from collections import Counter
+
+	tagged = [
+		it
+		for it in items
+		if str(it.get("tag_status") or "") in ("ok", "degraded") and it.get("tag_emotion")
+	]
+	if not tagged:
+		return None
+	total = len([it for it in items if str(it.get("content") or "").strip()]) or len(items)
+	emo_count: Counter = Counter()
+	emo_weight: Counter = Counter()
+	themes: Counter = Counter()
+	confs: List[float] = []
+	for it in tagged:
+		emo = str(it["tag_emotion"])
+		raw = it.get("tag_confidence")
+		if raw is None:
+			c = 0.5
+		else:
+			try:
+				c = float(raw)
+			except (TypeError, ValueError):
+				c = 0.5
+		emo_count[emo] += 1
+		emo_weight[emo] += c
+		confs.append(c)
+		themes[str(it.get("tag_theme") or "?")] += 1
+	mood = max(emo_count, key=lambda k: (emo_weight[k], emo_count[k]))
+	theme = themes.most_common(1)[0][0]
+	conf = sum(confs) / len(confs)
+	return {
+		"mood": mood,
+		"theme": theme,
+		"descriptor": f"{theme} · {mood} (n={len(tagged)})",
+		"confidence": round(conf, 3),
+		"n": len(tagged),
+		"coverage": round(len(tagged) / max(1, total), 3),
+		"theme_counts": dict(themes),
+		"emotion_counts": dict(emo_count),
+	}
 
 
 def _default_merger(old: str, delta: str, ratio: float) -> str:
@@ -81,12 +145,46 @@ def _upsert_semaphore(memory_manager: Any, aff: str, new_items: List[Dict[str, A
 	fresh = [it for it in new_items if float(it["ts"]) > window]
 	if not fresh:
 		return False
-	text = "\n".join(str(it["content"]) for it in fresh)
-	delta = distiller(text)
-	recent = str(delta.get("situation", "")).strip()
-	if not recent:
-		# Destilado vacío (LLM caído): NO consumir los turnos (reintento).
-		return False
+
+	# Dos modos (RFC-004 §2.3): con tags (flag ON) la solera promedia tags; sin
+	# tags (flag OFF) mantiene el destilado LLM. NO hay fallback tag→LLM: si el
+	# modo tag está activo y no hay turnos etiquetados, no se actualiza (más
+	# vale no actualizar que inventar la situación con el LLM).
+	tag_mode = bool(getattr(cfg, "MEMENTO_REALTIME_TAG_ENABLED", False))
+	extra_meta: Dict[str, Any] = {}
+	tag_color = None
+	if tag_mode:
+		agg = aggregate_tags(fresh)
+		if agg is None:
+			return False
+		recent = str(agg["descriptor"]).strip()
+		mood = str(agg["mood"])
+		intensity = float(agg["confidence"])
+		# El chroma lleva la señal del tag de forma fiable: `add_memory` puede
+		# re-detectar `emotion` si coincide con DEFAULT_EMOTION ("neutral") — el
+		# color explícito NO se pisa si no es el default, y es lo que puntúa el
+		# pre-heating. `mood` (y `tag_mood`) quedan como fuente autoritativa.
+		tag_color = TAG_EMOTION_CHROMA.get(mood, cfg.DEFAULT_COLOR)
+		# El esquema de metadata RECHAZA dicts anidados (salvo associations/
+		# emotional_vector): los recuentos van como JSON en string.
+		extra_meta = {
+			"tag_mode": True,
+			"tag_theme": agg["theme"],
+			"tag_mood": agg["mood"],
+			"tag_themes_json": json.dumps(agg["theme_counts"], ensure_ascii=False),
+			"tag_emotions_json": json.dumps(agg["emotion_counts"], ensure_ascii=False),
+			"tagged_n": agg["n"],
+			"tag_coverage": agg["coverage"],
+		}
+	else:
+		text = "\n".join(str(it["content"]) for it in fresh)
+		delta = distiller(text)
+		recent = str(delta.get("situation", "")).strip()
+		if not recent:
+			# Destilado vacío (LLM caído): NO consumir los turnos (reintento).
+			return False
+		mood = str(delta.get("emotion", "gray"))
+		intensity = float(delta.get("intensity", 0.5))
 	# D25: dos capas — `situation_stable` (integra lo nuevo con peso ratio, decae
 	# lento) + `situation_recent` (el último delta, volátil). `situation` = estable
 	# (compatibilidad con el pre-heating).
@@ -100,15 +198,30 @@ def _upsert_semaphore(memory_manager: Any, aff: str, new_items: List[Dict[str, A
 			"situation": new_situation,
 			"situation_stable": new_situation,
 			"situation_recent": recent,
-			"mood": str(delta.get("emotion", "gray")),
+			"mood": mood,
 			"node_type": "situation_semaphore",
 			"updated_at": time.time(),
 			"window_start": max(float(it["ts"]) for it in fresh),
+			**extra_meta,
 		},
 		point_id=pid,
-		emotion=str(delta.get("emotion", "gray")),
-		intensity=float(delta.get("intensity", 0.5)),
+		emotion=mood,
+		intensity=intensity,
+		color=tag_color if tag_color else cfg.DEFAULT_COLOR,
 	)
+	if tag_mode and new_id:
+		# `add_memory` re-detecta `emotion` cuando coincide con DEFAULT_EMOTION
+		# ("neutral") y eso arrastra también el chroma a uno detectado del texto.
+		# Forzamos el payload a la señal del tag (fuente autoritativa) tras el
+		# alta. Escritura barata (1 por actualización de solera).
+		try:
+			client.set_payload(
+				collection_name=COLLECTION,
+				payload={"emotion": mood, "color": tag_color or cfg.DEFAULT_COLOR, "intensity": intensity},
+				points=[pid],
+			)
+		except Exception as e:
+			logger.warning(f"[SITUATION] no se pudo fijar el tag en el payload: {e}")
 	return bool(new_id)
 
 
@@ -144,7 +257,15 @@ def update_situation(
 
 	turns, _ = client.scroll("interaction_memories", limit=2000, with_payload=True)
 	all_items = [
-		{"content": (t.payload or {}).get("content") or "", "ts": (t.payload or {}).get("timestamp", 0)}
+		{
+			"content": (t.payload or {}).get("content") or "",
+			"ts": (t.payload or {}).get("timestamp", 0),
+			# RFC-004: los tags se agregan por solera (modo tag) sin destilar texto.
+			"tag_status": (t.payload or {}).get("tag_status"),
+			"tag_emotion": (t.payload or {}).get("tag_emotion"),
+			"tag_theme": (t.payload or {}).get("tag_theme"),
+			"tag_confidence": (t.payload or {}).get("tag_confidence"),
+		}
 		for t in turns
 	]
 	updated = 1 if _upsert_semaphore(memory_manager, GLOBAL_AFFINITY, all_items, distiller, merger, ratio) else 0

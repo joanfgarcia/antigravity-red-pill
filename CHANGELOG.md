@@ -373,6 +373,10 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   `realtime_tag` en el drenaje (`queue_worker`, post-write acotado, gated OFF por
   RULE 4). Contrato: el registro nunca espera; el fallo se señaliza
   (`tag_status`/`tag_persisted`), no se reintenta. P3-P4 pendientes. RFC-004.
+- **[NEW] Solera consume tags (RFC-004 P3, 2026-09-28):** `aggregate_tags` agrega
+  emoción/tema de los tags (sin destilar texto, sin fallback tag→LLM); chroma del
+  tag fijado (`TAG_EMOTION_CHROMA`) e inmune a la re-detección de `add_memory`.
+  P4 (pre-heating + línea WEAK) pendiente.
 - **[NEW] Recall híbrido + MMR (feedback de recall 2026-09-25, AD-038)**:
   `memento/hybrid.py` — términos distintivos de la consulta (identificadores y
   nombres propios, idf), `rg -c` sobre los `index.md` del árbol, mapeo línea →
