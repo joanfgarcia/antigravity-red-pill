@@ -47,6 +47,26 @@ class _FakeAgent:
 		return self.result
 
 
+SERVER_TIMEOUT = 10.0
+
+
+def _wait_ready(sock: str, timeout: float = 10.0) -> None:
+	"""Espera a que el sidecar ACEPTE conexiones (no basta con que exista el fichero):
+	elimina la carrera del runner entre `start_unix_server` y el primer `connect`."""
+	deadline = time.time() + timeout
+	while time.time() < deadline:
+		probe = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+		probe.settimeout(0.2)
+		try:
+			probe.connect(sock)
+			return
+		except OSError:
+			time.sleep(0.01)
+		finally:
+			probe.close()
+	raise AssertionError(f"sidecar no aceptó conexiones en {sock}")
+
+
 class _ServerThread:
 	"""Servidor UDS real en un hilo con su propio event loop."""
 
@@ -79,11 +99,7 @@ class _ServerThread:
 
 		self.t = threading.Thread(target=_run, daemon=True)
 		self.t.start()
-		for _ in range(300):
-			if Path(self.sock).exists():
-				break
-			time.sleep(0.01)
-		assert Path(self.sock).exists()
+		_wait_ready(self.sock)
 		return self
 
 	def __exit__(self, *a):
@@ -131,7 +147,7 @@ def test_default_socket_path(monkeypatch):
 
 def test_ok(monkeypatch, tmp_path):
 	sock = str(tmp_path / "ok.sock")
-	_set_enabled(monkeypatch, True, sock=sock, timeout=3.0)
+	_set_enabled(monkeypatch, True, sock=sock, timeout=SERVER_TIMEOUT)
 	with _ServerThread(sock, CANNED):
 		tag = realtime_tag.tag_turn("hola")
 	assert tag["tag_status"] == "ok"
@@ -141,7 +157,7 @@ def test_ok(monkeypatch, tmp_path):
 
 def test_degraded_por_baja_confianza(monkeypatch, tmp_path):
 	sock = str(tmp_path / "low.sock")
-	_set_enabled(monkeypatch, True, sock=sock, timeout=3.0)
+	_set_enabled(monkeypatch, True, sock=sock, timeout=SERVER_TIMEOUT)
 	with _ServerThread(sock, LOWCONF):
 		tag = realtime_tag.tag_turn("hola")
 	assert tag["tag_status"] == "degraded"
@@ -194,7 +210,7 @@ def test_apply_tag_no_lanza_si_falla():
 
 def test_maybe_tag_ok_escribe(monkeypatch, tmp_path):
 	sock = str(tmp_path / "mt.sock")
-	_set_enabled(monkeypatch, True, sock=sock, timeout=3.0)
+	_set_enabled(monkeypatch, True, sock=sock, timeout=SERVER_TIMEOUT)
 	mem = _FakeMemory()
 	with _ServerThread(sock, CANNED):
 		tag = realtime_tag.maybe_tag(mem, "u9", "hola")
@@ -219,21 +235,27 @@ def test_sin_texto_no_llama(monkeypatch, tmp_path):
 	assert tag == {"tag_status": "failed", "tag_reason": "empty-text"}
 
 
+def _canned_ok_response():
+	return {"ok": True, "emotion": {"label": "calm"}, "theme": {"label": "work"}, "confidence": 0.9}
+
+
 def test_texto_largo_no_revienta(monkeypatch, tmp_path):
-	sock = str(tmp_path / "big2.sock")
-	_set_enabled(monkeypatch, True, sock=sock, timeout=3.0)
-	with _ServerThread(sock, CANNED):
-		tag = realtime_tag.tag_turn("A" * 20000)
+	"""Texto enorme: el cliente recorta antes de enviar (hermético, sin servidor)."""
+	_set_enabled(monkeypatch, True, sock=str(tmp_path / "big2.sock"))
+	sent = {}
+	monkeypatch.setattr(realtime_tag, "_send", lambda payload, sock_path, timeout: (sent.update(text=payload["text"]), _canned_ok_response())[1])
+	tag = realtime_tag.tag_turn("A" * 20000)
 	assert tag["tag_status"] in ("ok", "degraded")
+	assert len(sent["text"]) < 20000  # se recortó
 
 
 def test_texto_largo_se_recorta_y_marca_degraded(monkeypatch, tmp_path):
-	"""Recorte: no se miente con un `ok` sobre una vista parcial."""
-	sock = str(tmp_path / "big.sock")
-	_set_enabled(monkeypatch, True, sock=sock, timeout=3.0)
+	"""Recorte: no se miente con un `ok` sobre una vista parcial (lógica de cliente)."""
+	_set_enabled(monkeypatch, True, sock=str(tmp_path / "big.sock"))
 	monkeypatch.setattr(cfg, "MEMENTO_REALTIME_TAG_MAX_CHARS", 100)
-	with _ServerThread(sock, CANNED):
-		tag = realtime_tag.tag_turn("A" * 20000)
+	sent = {}
+	monkeypatch.setattr(realtime_tag, "_send", lambda payload, sock_path, timeout: (sent.update(text=payload["text"]), _canned_ok_response())[1])
+	tag = realtime_tag.tag_turn("A" * 20000)
 	assert tag["tag_status"] == "degraded"
 	assert tag["tag_reason"] == "truncated"
 	assert tag["tag_emotion"] == "calm"
@@ -275,7 +297,7 @@ def test_max_chars(monkeypatch):
 def test_maybe_tag_reporta_persistencia(monkeypatch, tmp_path):
 	"""Un set_payload fallido no debe devolverse como si se hubiera escrito."""
 	sock = str(tmp_path / "np.sock")
-	_set_enabled(monkeypatch, True, sock=sock, timeout=3.0)
+	_set_enabled(monkeypatch, True, sock=sock, timeout=SERVER_TIMEOUT)
 	with _ServerThread(sock, CANNED):
 		tag = realtime_tag.maybe_tag(_FakeMemory(boom=True), "u1", "hola")
 	assert tag["tag_status"] == "ok"
@@ -369,7 +391,7 @@ def test_worker_gate_on_etiqueta(monkeypatch, tmp_path):
 	from red_pill.core.queue_worker import drain_memory_queue
 
 	sock = str(tmp_path / "w.sock")
-	_set_enabled(monkeypatch, True, sock=sock, timeout=3.0)
+	_set_enabled(monkeypatch, True, sock=sock, timeout=SERVER_TIMEOUT)
 	client = _FakeClient()
 	mem = _FakeWorkerMemory(client)
 	q = _FakeQueue([dict(_ITEM)])
