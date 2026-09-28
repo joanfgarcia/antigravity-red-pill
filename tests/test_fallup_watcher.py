@@ -12,7 +12,24 @@ Todo VRAM/registry se inyecta por parámetro (free_mb/tier/worst_case_gb).
 
 from pathlib import Path
 
+import pytest
+
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "setup_background_model.sh"
+
+# Perfiles sintéticos: CI no tiene el model_profiles.yaml de la máquina, así que
+# get_profile() devolvía {} → sin vram_tiers → "no-gpu-tier-fits". Los tests son
+# puros y no deben depender del host.
+_PROFILES = {
+	"llama_32": {"hardware_affinity": {"vram_tiers": [{"min_free_gb": 3.5, "n_gpu_layers": 20, "n_ctx": 8192}]}},
+	"granite_8b": {"hardware_affinity": {"vram_tiers": [{"min_free_gb": 6.5, "n_gpu_layers": 24, "n_ctx": 8192}]}},
+}
+
+
+@pytest.fixture(autouse=True)
+def _perfiles_sinteticos(monkeypatch):
+	from red_pill.core.model_registry import ModelRegistry
+
+	monkeypatch.setattr(ModelRegistry, "get_profile", classmethod(lambda cls, name: dict(_PROFILES.get(name, {}))))
 
 
 def _generated_daemon() -> str:

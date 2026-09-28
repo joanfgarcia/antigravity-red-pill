@@ -198,22 +198,31 @@ class _FakeReg:
 		return None
 
 
-def test_prompt_fingerprints_estables():
+def test_prompt_fingerprints_estables(monkeypatch):
 	"""Fase 3 RFC-003: mover prompts constante→fichero NO cambia los fingerprints.
 
+	Hermético: la Bio de identidad (`identity_bio.md`) y el gate de voz v2 viven
+	en la config del operador; aquí se fijan para que el fingerprint no dependa
+	del host (en CI no hay identity_bio.md → plantilla → otro hash).
 	Si cambias un prompt a propósito, actualiza esta tabla (hash mapping) y
 	documenta el cambio en el CHANGELOG (los artefactos sellados lo referencian).
 	"""
 	from red_pill.memento.agentic import (
 		annotate_prompt_version,
 		distill_prompt_version,
+		prompts,
 		refine_prompt_version,
+		runtime,
 		validate_prompt_version,
 	)
 
+	monkeypatch.setattr(prompts, "IDENTITY_BIO", "TEST-BIO-FIXED")
+	monkeypatch.setattr(runtime, "voice_v2_enabled", lambda: False)
+	monkeypatch.setattr(runtime, "fragment_view_settings", lambda: ("raw", "op", "ag"))
+
 	assert distill_prompt_version() == "66c679f1bb"
 	assert refine_prompt_version() == "85209a6c9e"
-	assert annotate_prompt_version() == "07a5c9b529"  # voz v1 (MEMENTO_ANNOTATE_VOICE_V2 OFF)
+	assert annotate_prompt_version() == "3282c538f8"  # v1 + Bio fija (test)
 	assert validate_prompt_version() == "217aafd8dd"  # v2 endurecido (2026-09-23)
 
 
