@@ -204,7 +204,7 @@ TARGET:   systemd → runs Aleth (always) ← IDE connects/disconnects
 The current sleep cycle is a **batch process**. *(Update 2026-09-21, AD-034: `interaction_memories` is **no longer distilled** into work/social — the curated collections are fed by the **Memento ascension** (`distill→refine→ascend`), and the buffer is a TTL'd transient window. The "Tier 3: merged into social_memories" below is historical.)* In Phase 3.5, sleep becomes **continuous**, running in a background thread within the service:
 
 ```
-Tier 1 (0-2h):    Live context window — full resolution in VRAM
+Tier 1 (0-2h):    Live context window — full resolution in VRAM   # TIERS 2-3 HISTÓRICOS (AD-034)
 Tier 2 (2-12h):   Recent buffer — distilled to Qdrant interaction_memories
 Tier 3 (12h-7d):  Consolidated — merged into social_memories with emotion tags
 Tier 4 (7d+):     Deep storage — compressed to skeletal engrams, low retrieval cost

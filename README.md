@@ -149,7 +149,7 @@ El Protocolo Red Pill está diseñado para **Entornos Soberanos**:
 - **Persistencia**: Una base de datos vectorial privada (Qdrant) actúa como el "Búnker".
 - **Erosión**: Los datos no reforzados se degradan naturalmente para mantener el contexto limpio.
 - **Inmunidad**: Las directivas centrales están protegidas contra el olvido.
-- **Sovereign Swarm (v5.0)**: Minions integrados (Agent Smith, Oracle, Keymaker) dentro del Kernel para auditorías locales de código, síntesis de memoria y diagnósticos de salud del ecosistema.
+- **Sovereign Swarm (v6.1)**: Minions integrados (Agent Smith, Oracle, Healer) dentro del Kernel para auditorías locales de código, síntesis de memoria y diagnósticos de salud del ecosistema.
 - **Servidor MCP (v5.0)**: Expone la telemetría (CPU, GPU CUDA/ROCm, NPU) y los Minions a tu IDE local para interactuar con ellos sin gastar tokens externos. Clientes soportados: Antigravity (Gemini), Claude Code, Claude Desktop, OpenCode, Cline, Roo Cline.
 - **Identidad Asimilada**: Tu identidad y reglas ("Lore Skin") ahora viven como vectores inmutables dentro del Bünker, resolviendo para siempre el problema del IDE que "olvida" quién eres.
 - **Inferencia de Emociones Híbrida (v5.2.0)**: Integración de **BERT-Emotion** para detectar automáticamente el sentimiento de los recuerdos. El Bünker "siente" lo que guardas y ajusta su color (Chroma) y persistencia sin intervención manual.

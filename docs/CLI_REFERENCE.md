@@ -162,6 +162,12 @@ Triggers the sleep cycle: memory consolidation, FSRS decay, hub synthesis.
 
 ---
 
+### `interceptor` — Bünker interceptor pipeline switch
+```bash
+red-pill interceptor enable|disable|status
+```
+Gestiona `INTERCEPTOR_ENABLED` (master switch **PARCIAL**: `02_rag_enrichment`, `03_circuit_breaker`, `04_mystique` + señales Korsakoff; NO el core telemetry/mood/pre-heating).
+
 ### `revision` — Retroactive category revision (Track R2)
 ```bash
 red-pill revision [--backlog] [--drain] [--execute] [--batch-size N]

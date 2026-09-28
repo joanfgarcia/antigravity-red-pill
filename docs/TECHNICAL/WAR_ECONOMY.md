@@ -520,7 +520,7 @@ The system consolidated from 3 daemons (2 already dead) + 1 redundant timer into
 
 | Plugin | Replaces | interval_s | timeout_s |
 |--------|----------|:----------:|:---------:|
-| `telemetry` | `bunker_telemetry.py` + `redpill-telemetry.timer` | 30 | 10 |
+| `telemetry` | (en el daemon; `redpill-telemetry.timer` retirado v7.2.1) | 30 | 10 |
 | `echo` | `redpill-echo.service` | 60 | 15 |
 | `vitals` | `heartbeat.py` `_maintenance_ritual()` | 120 | 15 |
 | `swarm_monitor` | `heartbeat.py` `_swarm_ritual()` + `_hygiene_ritual()` | 300 | 5 |

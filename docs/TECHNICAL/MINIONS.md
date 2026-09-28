@@ -162,6 +162,8 @@ Is there an LLM decision to make?
 
 ## 5. Current gaps (state as of 2026-07-22)
 
+> **Resueltos (v7.22, AD-030):** el enrutado de modelo por request ya existe (selector `experimental>custom>model>task>config>env`; `MINION_DEFAULT_PROFILE`). Snapshot fechado abajo.
+
 - **No context compaction** in the local tool loop (bounded by the 8-call cap instead).
 - Local endpoint model selection is fixed at daemon boot (`MINION_PROFILE`); the
   request `model` field is ignored (no per-request model routing yet).
