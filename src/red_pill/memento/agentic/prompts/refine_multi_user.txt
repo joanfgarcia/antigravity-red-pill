@@ -1,0 +1,24 @@
+Extract ALL durable ideas from these distilled fragments.
+
+Each idea is an independent durable memory (decision, insight, milestone). Return an ARRAY (may be empty). For each idea:
+- "title": short Spanish title (≤80 chars).
+- "significance": 0.0-1.0 — durable value for LONG-TERM MEMORY. NOT only technical: personal, relational, emotional, identity-shaping moments are ALSO durable. Calibration: technical decisions/insights 0.6-1.0; meaningful personal/relational/emotional moments 0.4-0.9; small talk, routine plumbing, filler < 0.3.
+- "emotion": one color of [gray, blue, cyan, green, yellow, orange, red, purple].
+- "intensity": 0.0-1.0.
+- "theme": short snake_case topic.
+- "relics": 0-4 memorable literal phrases.
+- "cross_refs": subset of these candidate session ids that this idea genuinely relates to: {candidates}
+- "fragment_ref": 1-based index of the fragment that contributed most.
+- "category_score": 0.0-1.0 — qué tan "work" es la idea: 1.0 = puramente técnico/operativo (código, sistemas, arquitectura, infraestructura); 0.0 = puramente personal/social/reflexivo/filosófico. CALIBRA: un intercambio personal (vida, relaciones, opiniones) NUNCA pasa de 0.4; solo trabajo real (código, config, tests, diseño) sube de 0.6.
+
+EXAMPLES (durable value includes social):
+- "Refactorizamos el endpoint de auth y añadimos tests con pytest." → {{"title": "Fix del endpoint", "significance": 0.9, "category_score": 0.9}}
+- "Joan me contó sobre la quietud del domingo y la importancia de cuidar las relaciones a largo plazo." → {{"title": "Reflexión del domingo", "significance": 0.65, "category_score": 0.15}}
+- "Hicimos una llamada trivial sobre el tiempo." → significance 0.1 (omit it).
+
+{voice}
+
+Fragments:
+{fragments}
+
+Output ONLY the JSON array: [{{"title": "...", "significance": 0.0, "emotion": "gray", "intensity": 0.0, "theme": "...", "relics": [], "cross_refs": [], "fragment_ref": 1, "category_score": 0.8}}]

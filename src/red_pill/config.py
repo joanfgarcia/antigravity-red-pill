@@ -389,6 +389,11 @@ class RedPillConfig(BaseSettings):
 	# planificación; "none" = solo leer el panel, sin tocar nada. La directiva
 	# del despertar incluye esta lista; el agente solo contribuye a lo declarado.
 	AWAKENING_PLANNER_ACCESS: str = "planner"
+	# AWAKENING_TIMEOUT (s): techo duro del despertar autónomo (A-5, AWAKEN-002).
+	# Default 600s (10 min). Recomendado 2700-3600 (45-60 min) una vez el despertar
+	# herede el latido (heartbeat D21): sin latido, un techo alto deja colgado al
+	# agente comiéndose la cuota. El despertar auto-empaqueta lo largo en dag_job.
+	AWAKENING_TIMEOUT: int = int(os.getenv("AWAKENING_TIMEOUT", "600"))
 	# Fast-path inline timeout for Telegram conversational messages (D3). Used as
 	# the timeout argument the worker passes to CascadeBridge.prompt(); a
 	# per-target `timeout` in the cascade .env overrides it above (D14). Default
@@ -470,12 +475,10 @@ class RedPillConfig(BaseSettings):
 	METABOLISM_ENABLED: bool = True
 	METABOLISM_COOLDOWN: int = 3600
 	METABOLISM_AUTO_COLLECTIONS: Any = ["work_memories", "social_memories", "story_memories"]
-	CHRONICLE_PLUGINS: List[str] = ["antigravity", "claude_code"]
-	# Fuentes del ARCHIVO diario Memento (memento_migrate → árbol Memento); no
-	# confundir con CHRONICLE_PLUGINS, que gobierna el snatching hacia la
-	# consolidación. La ingesta a archive_memories se retiró 2026-09-11.
+	# Fuentes del ARCHIVO diario Memento (memento_migrate → árbol Memento).
+	# La ingesta legacy cruda a Qdrant se retiró (v8.0.0).
 	# "pi" entra por defecto: si Pi no está instalado, su discover() devuelve [].
-	CHRONICLE_ARCHIVE_SOURCES: List[str] = ["antigravity", "claude_code", "opencode", "pi"]
+	CHRONICLE_ARCHIVE_SOURCES: List[str] = ["antigravity", "claude_code", "opencode", "pi", "telegram"]
 
 	# -----------------------------------------------------------------------
 	# MEMENTO CHRONICLE (RFC-002 §4.8)
@@ -497,11 +500,12 @@ class RedPillConfig(BaseSettings):
 	MEMENTO_QUEUE_RETENTION_DAYS: int = 7
 	# Fase 3.5 (§4.5-4.6): pase agéntico file-based + gate EN SOMBRA
 	MEMENTO_REFINE_MIN_SIGNIFICANCE: float = 0.3  # bajo esto, refine no escribe fichero (selección permisiva)
-	MEMENTO_GATE_MIN_SIGNIFICANCE: float = 0.5  # PROVISIONAL (Q4 abierta): umbral de la decisión would-ingest
+	MEMENTO_GATE_MIN_SIGNIFICANCE: float = 0.5  # PROVISIONAL (Q4 abierta): umbral would-ingest (legacy)
+	# D24: umbrales por categoría (work=Bayesiano y social=RhizoDB se comportan
+	# distinto). `min_significance` explícito en el submit los anula (reseeds/tests).
+	MEMENTO_GATE_MIN_SIGNIFICANCE_WORK: float = 0.6
+	MEMENTO_GATE_MIN_SIGNIFICANCE_SOCIAL: float = 0.5
 	MEMENTO_AGENTIC_NIGHT_LIMIT: int = 20  # sesiones por noche — acota el coste LLM dentro del job chronicle
-	# Fase 4 (§6): el flip REQUIERE aprobación del operador + evidencia de la sombra.
-	# True = el chronicle deja de ingerir en archive_memories las sesiones bajo el umbral.
-	MEMENTO_GATE_ENFORCED: bool = False
 	# Fase 4 (§3.2/§5.4): ascensos diferidos, refuerzo temporal y distill fragmentado.
 	# Ajustados por el experimento de calibración 2026-09-14 (§6.9): GAIN=1.0 y
 	# gate=5.0 saturaban (~95% ascenderían en el corpus real); GAIN=0.5+gate=7.0
@@ -510,6 +514,41 @@ class RedPillConfig(BaseSettings):
 	POLAROID_GAIN: float = 0.5  # incremento de estabilidad por reaparición
 	POLAROID_REVIVAL_GATE: float = 7.0  # umbral: S >= gate → ascenso por refuerzo
 	MEMENTO_STATIC_ASCENSION_ENABLED: bool = False  # ascenso estático EN SOMBRA hasta calibrar
+	# Single-writer de memoria — feature flags por componente (CONVENTIONS RULE 4).
+	# Default OFF: nada cambia hasta encender cada pieza por separado.
+	SW_AFFINITY_ENABLED: bool = False  # captura session_id+affinity (memory_queue → interaction_memories)
+	SW_PURGE_GATE_ENABLED: bool = False  # interaction_ttl purga solo sesiones ya renderizadas en Memento
+	INTERACTION_MAX_AGE_DAYS: int = 30  # tope duro: lo no renderizado más viejo se purga (con señal)
+	SW_DEDUP_ENABLED: bool = False  # dedup-at-ascension: un solo ganador por grupo (session_id, source_lines)
+	SW_HUBS_ENABLED: bool = False  # hub synthesis sobre engramas existentes (agrupa por sesión)
+	# Tope de sesiones sintetizadas por ciclo de sueño (0 = sin tope). Necesario
+	# para acotar el backfill inicial (584+322 sesiones) sin reventar el step.
+	SW_HUBS_MAX_SESSIONS_PER_CYCLE: int = 0
+	SW_THREAD_ENABLED: bool = False  # micro-hilo de Ariadna (prev/next_member por sesión, orden de refine)
+	SW_ABSENCE_GUARD_CONDITIONAL: bool = False  # ON: el pulse NO refresca last_recalled_at cada hora (solo tras ausencia real)
+	SW_EROSION_DEMOTE_ENABLED: bool = False  # olvido elegante de los curados: demote a Memento por eje propio
+	CURATED_MIN_LIFETIME_YEARS: float = 5.0  # vida mínima de un curado no reforzado antes del demote
+	CURATED_HUB_MIN_LIFETIME_YEARS: float = 10.0  # piso MAYOR para hubs (anclan el hilo; no mueren antes que sus miembros)
+	CURATED_LIFETIME_MULTIPLIER_WORK: float = 1.0  # factor por motor (work=Bayesiano)
+	CURATED_LIFETIME_MULTIPLIER_SOCIAL: float = 1.0  # factor por motor (social=RhizoDB)
+	SW_SITUATION_ENABLED: bool = False  # semáforo de situación por afinidad (situation_memories)
+	SITUATION_SOLERA_RATIO: float = 0.2  # peso de lo previo en el merge solera (0.2 = 20/80)
+	SITUATION_TTL_DAYS: int = 30  # evicción de semáforos inactivos
+	SITUATION_MAX_AFFINITIES_PER_CYCLE: int = 10
+	SW_INTERACTIVE_PHASE_ENABLED: bool = False  # refinado/marcado de engramas interactivos (proceso aparte)
+	# RFC-004: etiquetado emocional/temático en captura vía sidecar UDS (Laya).
+	# Default OFF (RULE 4). El registro NUNCA espera al tag: si falla, el engrama
+	# lleva tag_status=failed y el interceptor lo comunica (no se reintenta).
+	MEMENTO_REALTIME_TAG_ENABLED: bool = False
+	# Timeout del cliente UDS. Medido en vivo (2026-09-28): 1500 chars ≈ 0,7 s,
+	# 4000 chars ≈ 2,1 s (lineal). 3,0 s da ~4x margen sobre el cap de chars.
+	MEMENTO_REALTIME_TAG_TIMEOUT_S: float = 3.0
+	MEMENTO_REALTIME_TAG_MAX_CHARS: int = 1500  # recorte del turno (emoción/tema no necesitan más)
+	# Presupuesto total de etiquetado por drenaje: acota el coste agregado
+	# (N turnos × timeout) para no retener el worker oneshot. Agotado → los
+	# turnos siguientes quedan sin tag (ausencia de dato, señalizada en log).
+	MEMENTO_REALTIME_TAG_BUDGET_S: float = 20.0
+	LAYA_TAG_SOCKET: str = ""  # vacío → $XDG_RUNTIME_DIR/red-pill/laya_tag.sock
 	MEMENTO_FRAGMENT_OVERLAP_MESSAGES: int = 2  # solape de turnos entre fragmentos del distill
 	# Presupuesto de contexto por fragmento de distill. 2026-09-15: se destila con
 	# granite (n_ctx 10240), no con aya (32K) — 12000 chars apretaba; 8000 chars
@@ -525,6 +564,58 @@ class RedPillConfig(BaseSettings):
 	# score >= umbral → work_memories; si no → social_memories. La heurística por
 	# tokens fue una receta del desastre (los resúmenes técnicos caían a social).
 	MEMENTO_CATEGORY_WORK_THRESHOLD: float = 0.5
+	# Etapa annotate (MEM-006, RULE 4): extrae anotaciones del RAW (una sola
+	# compresión) con Bio de identidad, dedup P1-A y gate de calidad; routing por
+	# ejes work/social con zona muerta. OFF → refine legacy (desde summaries).
+	MEMENTO_ANNOTATE_FROM_RAW: bool = False
+	# Zona muerta del routing dual (annotate): margen mínimo sobre el gate para
+	# enrutar; por debajo → `unstable` (no asciende, queda en el árbol).
+	MEMENTO_ANNOTATE_DEAD_ZONE: float = 0.05
+	# Paso de re-escritura de voz (annotate, MEM-006): re-escribe en 1ª persona las
+	# notas que no lo están (la Bio sola no basta con granite). Default OFF.
+	MEMENTO_ANNOTATE_VOICE_REWRITE: bool = False
+	# Recall de Memento (feedback 2026-09-25, RULE 4: un flag por pieza, default OFF).
+	# Texto a embeber de los engramas curados: `tema · reliquias · cuerpo sin
+	# muletilla` (el `content` guardado no cambia). MEDIDO 2026-09-25 y REFUTADO:
+	# en el banco de 13 consultas empeora el recall semántico (8/13 vs 9/13 hit@3)
+	# y no suma sobre el híbrido. Se conserva apagado; encenderlo exige re-embeber
+	# work/social con `scripts/qdrant_reembed.py` (sigue el flag).
+	MEMENTO_EMBED_ENRICHED: bool = False
+	# Recall híbrido: semántico (Qdrant) + palabras clave sobre el árbol Memento,
+	# fusionados por RRF. Solo en llamantes explícitos (oracle/CLI/traverse), nunca
+	# en los interceptores del handshake (hot path).
+	MEMORY_HYBRID_RECALL_ENABLED: bool = False
+	# Diversidad del top-k por MMR (evita que tres paráfrasis del mismo hecho
+	# ocupen los tres huecos). λ = peso de la relevancia frente a la novedad.
+	MEMORY_RECALL_MMR_ENABLED: bool = False
+	MEMORY_RECALL_MMR_LAMBDA: float = 0.85  # banco 2026-09-25: 0,85 > 0,7 (12/13 vs 11/13 hit@3 con híbrido)
+	MEMORY_RECALL_CANDIDATES_FACTOR: int = 4  # candidatos = limit × factor antes de MMR/fusión
+	# Dedup de notas DESPUÉS de la re-escritura de voz (annotate): exacta + tokens
+	# (P1-A) + casi-duplicados por embedding dentro de la sesión (coseno ≥ umbral).
+	MEMENTO_ANNOTATE_POST_REWRITE_DEDUP: bool = False
+	# Voz v2 de annotate: el sujeto es quien actuó, sin muletilla "Joan me…" y
+	# nombrando la entidad; la re-escritura solo toca notas con bandera `voice`.
+	# Cambia el fingerprint de annotate → las sesiones anotadas quedan stale para el
+	# rebuild (NO para el nocturno). Encender tras validar el piloto.
+	MEMENTO_ANNOTATE_VOICE_V2: bool = False
+	# Alcance WORK/SOCIAL del curador (voz v2.1). Qué es "trabajo" depende del oficio
+	# del operador: para un ingeniero de software, lo legal/laboral propio (contratos,
+	# RRHH, anexos) es vida personal → SOCIAL; un jurista lo pondría en WORK.
+	# Vista del fragmento que ve annotate: raw (tal cual) | actors (actor en cada
+	# turno) | pairs (solo operador + respuesta final del agente). No toca el árbol.
+	MEMENTO_ANNOTATE_FRAGMENT_VIEW: str = "raw"
+	MEMENTO_OPERATOR_LABEL: str = "Joan"
+	MEMENTO_AGENT_LABEL: str = "Aleth"
+	MEMENTO_WORK_SCOPE: str = (
+		"the operator's technical craft — code, systems, configuration, tests, architecture, "
+		"infrastructure, tooling, engineering and product decisions"
+	)
+	MEMENTO_SOCIAL_SCOPE: str = (
+		"the operator's personal life — bond, emotions, identity, biography, relationships, family, health, "
+		"and his own personal affairs even when formal or serious: legal, labour/HR, employment contracts, "
+		"housing, personal finances, bureaucracy"
+	)
+	MEMENTO_ANNOTATE_EMBED_DEDUP_THRESHOLD: float = 0.90  # medido 2026-09-25: 0,90-0,93 = mismo hecho
 	# Watchdog del pase agéntico (2026-09-15): timeout por llamada al LLM local.
 	# Una generación que lo excede es un cuelgue → 3 consecutivos → deferral.
 	MEMENTO_LLM_TIMEOUT: int = 180
@@ -540,7 +631,7 @@ class RedPillConfig(BaseSettings):
 	MEMENTO_SPLIT_MAX_MESSAGES: int = 200
 	MEMENTO_SPLIT_MAX_CHARS: int = 12000
 
-	@field_validator("CHRONICLE_PLUGINS", "CHRONICLE_ARCHIVE_SOURCES", "MEMENTO_SOURCES", "MEMENTO_EXTRA_SOURCES", mode="before")
+	@field_validator("CHRONICLE_ARCHIVE_SOURCES", "MEMENTO_SOURCES", "MEMENTO_EXTRA_SOURCES", mode="before")
 	@classmethod
 	def _parse_chronicle_plugins(cls, v: Any) -> Any:
 		if isinstance(v, str):
@@ -553,7 +644,7 @@ class RedPillConfig(BaseSettings):
 		return v
 
 	METABOLISM_STATE_FILE: str = str(get_state_dir() / "metabolism_state.json")
-	ABSENCE_THRESHOLD: int = 7 * 24 * 3600
+	ABSENCE_THRESHOLD: int = 3 * 24 * 3600
 	ABSENCE_GUARD_SCROLL_LIMIT: int = 500
 	METABOLISM_STRATEGY: str = "LAZY"
 	MAX_SINK_TIME: int = 30 * 24 * 3600
@@ -762,10 +853,8 @@ class RedPillConfig(BaseSettings):
 	SLEEP_PLUGIN_USP: bool = True  # Operator Mood Profile refresh
 	SLEEP_PLUGIN_DREAM: bool = True  # Oneiromancy (latent semantic association)
 	SLEEP_PLUGIN_CONSOLIDATION: bool = True  # Memory consolidation (lazy sleep)
-	SLEEP_PLUGIN_CHRONICLE: bool = True  # Ariadne's Thread + MCP archive search
-	# └─ CHRONICLE=True (v6.5.0): antigravity decrypt→ingest pipeline operational.
-	#   Gates archive_memories in MCP search_memory_research.
-	#   Agent can auto-deactivate if archive_memories is empty.
+	SLEEP_PLUGIN_CHRONICLE: bool = True  # Ariadne's Thread weaving on curated engrams
+	# v8.0.0: la ingesta legacy está eliminada; el archivo es el árbol Memento.
 
 	# -----------------------------------------------------------------------
 	# PRE-HEATING (Oracle Protocol)
@@ -848,15 +937,14 @@ class RedPillConfig(BaseSettings):
 
 # Static data (not env-driven)
 
-BAYESIAN_COLLECTIONS: List[str] = ["skill_memories", "work_memories", "directive_memories", "archive_memories"]
+BAYESIAN_COLLECTIONS: List[str] = ["skill_memories", "work_memories", "directive_memories"]
 
-PERMANENT_COLLECTIONS: List[str] = ["archive_memories", "directive_memories"]
+PERMANENT_COLLECTIONS: List[str] = ["directive_memories"]
 
 MEMORY_ENGINES: Dict[str, str] = {
 	"work_memories": "bayesian",
 	"skill_memories": "bayesian",
 	"directive_memories": "bayesian",
-	"archive_memories": "bayesian",
 	"social_memories": "rhizodb",
 	"story_memories": "rhizodb",
 }

@@ -717,6 +717,41 @@ def test_purge_task_force_never_touches_live_rows(queue):
 	assert queue.get_task(ids["processing"]) is not None
 
 
+def test_kill_blocked_cancela_limpio_y_en_cascada(queue):
+	"""BLOCKED (DAG en espera del padre) se puede cancelar: FRUSTRATED sin marca
+	de kill sucio y con cascada a los hijos BLOCKED (nadie espera a un padre caído)."""
+	parent = queue.enqueue_task(source="samantha", payload={})
+	child = queue.enqueue_task(source="samantha", payload={}, parent_task_id=parent)
+	grand = queue.enqueue_task(source="samantha", payload={}, parent_task_id=child)
+	assert queue.get_task(child)["status"] == "BLOCKED"
+
+	assert queue.kill_task(parent, discard=True) is True
+	parent_row = queue.get_task(parent)
+	assert parent_row["status"] == "FRUSTRATED"
+	assert queue.get_task(child)["status"] == "FRUSTRATED"
+	assert not queue.get_task(child).get("dirty_kill")  # BLOCKED → cancelación limpia
+	assert queue.get_task(child)["error_log"] == "parent cancelled"
+	assert queue.get_task(grand)["status"] == "FRUSTRATED"
+
+
+def test_kill_blocked_sin_discard_queda_paused(queue):
+	parent = queue.enqueue_task(source="samantha", payload={})
+	child = queue.enqueue_task(source="samantha", payload={}, parent_task_id=parent)
+
+	assert queue.kill_task(child) is True
+	assert queue.get_task(child)["status"] == "PAUSED"
+	assert not queue.get_task(child).get("dirty_kill")
+
+
+def test_purge_blocked_requiere_force(queue):
+	parent = queue.enqueue_task(source="samantha", payload={})
+	child = queue.enqueue_task(source="samantha", payload={}, parent_task_id=parent)
+
+	assert queue.purge_task(child) is False
+	assert queue.purge_task(child, force=True) is True
+	assert queue.get_task(child) is None
+
+
 def test_purge_terminal_sweeps_frustrated_and_completed(queue):
 	"""El barrido retira todo lo terminal de una vez y respeta el resto de la cola."""
 	ids = _seed_statuses(
@@ -964,3 +999,62 @@ def test_job_manager_mission_id_isolation(queue, clean_registry):
 	with q._get_connection() as c:
 		c.execute("UPDATE cognitive_tasks SET status='PROCESSING' WHERE id=?", (id_b,))
 	assert not q.update_checkpoint(id_b, {"step_index": 1})
+
+
+# ── Guard de padre terminal + cascadas (auditoría adversarial 2026-09-23) ──────
+
+
+def test_child_of_completed_parent_starts_pending(queue):
+	parent = queue.enqueue_task(source="test", payload={"i": 1})
+	queue.mark_completed(parent)
+	child = queue.enqueue_task(source="test", payload={"i": 2}, parent_task_id=parent)
+	assert queue.get_task(child)["status"] == "PENDING"
+
+
+def test_child_of_frustrated_parent_is_refused(queue):
+	parent = queue.enqueue_task(source="test", payload={"i": 1})
+	for _ in range(3):
+		queue.mark_failed(parent, "boom")
+	assert queue.get_task(parent)["status"] == "FRUSTRATED"
+	with pytest.raises(ValueError):
+		queue.enqueue_task(source="test", payload={"i": 2}, parent_task_id=parent)
+
+
+def test_child_of_missing_parent_is_refused(queue):
+	with pytest.raises(ValueError):
+		queue.enqueue_task(source="test", payload={}, parent_task_id="no-such-id")
+
+
+def test_breaker_failure_cancels_blocked_children(queue):
+	parent = queue.enqueue_task(source="test", payload={"i": 1})
+	child = queue.enqueue_task(source="test", payload={"i": 2}, parent_task_id=parent)
+	grandchild = queue.enqueue_task(source="test", payload={"i": 3}, parent_task_id=child)
+	assert queue.get_task(child)["status"] == "BLOCKED"
+	for _ in range(3):
+		queue.mark_failed(parent, "boom")
+	assert queue.get_task(parent)["status"] == "FRUSTRATED"
+	assert queue.get_task(child)["status"] == "FRUSTRATED"
+	assert queue.get_task(grandchild)["status"] == "FRUSTRATED"
+
+
+def test_purge_terminal_leaves_no_blocked_orphans(queue):
+	parent = queue.enqueue_task(source="test", payload={"i": 1})
+	child = queue.enqueue_task(source="test", payload={"i": 2}, parent_task_id=parent)
+	with queue._get_connection() as conn:
+		conn.execute("UPDATE cognitive_tasks SET status='FRUSTRATED' WHERE id=?", (parent,))
+	assert queue.purge_terminal() >= 1
+	assert queue.get_task(parent) is None
+	assert queue.get_task(child) is None
+	with queue._get_connection() as conn:
+		blocked = conn.execute("SELECT COUNT(*) FROM cognitive_tasks WHERE status='BLOCKED'").fetchone()[0]
+	assert blocked == 0
+
+
+def test_purge_task_force_cascades_blocked_children(queue):
+	parent = queue.enqueue_task(source="test", payload={"i": 1})
+	child = queue.enqueue_task(source="test", payload={"i": 2}, parent_task_id=parent)
+	with queue._get_connection() as conn:
+		conn.execute("UPDATE cognitive_tasks SET status='PAUSED' WHERE id=?", (parent,))
+	assert queue.purge_task(parent, force=True) is True
+	assert queue.get_task(parent) is None
+	assert queue.get_task(child)["status"] == "FRUSTRATED"

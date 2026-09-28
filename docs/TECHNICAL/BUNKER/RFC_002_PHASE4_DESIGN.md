@@ -4,11 +4,11 @@
 |---|---|
 | **RFC** | 002 (enmienda) |
 | **Title** | Fase 4 — Curaduría dinámica y ascensos diferidos |
-| **Status** | DRAFT (diseño aprobado; **implementado 2026-09-14**, pendiente resiembra) |
+| **Status** | DRAFT → **EN ROLLOUT** (diseño implementado; single-writer activado por piezas 2026-09-28; queda retirar la ingesta legacy y demoler). Estado real: §10. |
 | **Author** | Joan García (Operator) / Aleth (Agent) |
 | **Created** | 2026-09-14 |
-| **Updated** | 2026-09-14 |
-| **Related** | [RFC-002](./RFC_002_MEMENTO.md) §4.5 (agentic pass), §4.6 (curation gate), §6 (rollout), §5.1 (sources of truth) |
+| **Updated** | 2026-09-28 |
+| **Related** | [RFC-002](./RFC_002_MEMENTO.md) §4.5 (agentic pass), §4.6 (curation gate), §6 (rollout), §5.1 (sources of truth), [RFC-004](./RFC_004_REALTIME_TAG_SIDECAR.md), `OPERATIONS/SINGLE_WRITER_ROLLOUT.md` |
 
 ---
 
@@ -420,15 +420,15 @@ los fragmentos se dimensionan para caber, sin recortar contenido.
    emocional), marcado `fragment`/`fragments_total`/`fragment_of`, slugs
    `NNN-<slug>-fragmento-i-de-N.md`. `MEMENTO_FRAGMENT_OVERLAP_MESSAGES=2` y
    `MEMENTO_FRAGMENT_MAX_CHARS=12000` (presupuesto por fragmento).
-   En `agentic.py` (`_split_messages`/`_fragment_messages`/`_render_fragment` +
-   prompts `DISTILL_USER_OPENING`/`DISTILL_USER_CONTINUATION`).
+   En `memento/agentic/` (`fragments.py`: `_split_messages`/`_fragment_messages`/`_render_fragment`;
+   prompts `DISTILL_USER_OPENING`/`DISTILL_USER_CONTINUATION` en `prompts.py`).
 1. **Refine multi-idea** (§5.4.2). ✅ **IMPLEMENTADO (2026-09-14)**
    `refine_multi()` que lee M fragments y extrae
    N ideas (JSON array), escribe `refine/NNN-<slug>.md` por idea con
    `fragment_ref`. Particionado en lotes si los fragments exceden
    (`_split_to_fit`). El 1:1 anterior queda obsoleto.
-   En `agentic.py` (`REFINE_MULTI_SYSTEM`/`REFINE_MULTI_USER`,
-   `_extract_json_array`, `_format_fragments`, `_split_to_fit`, `_refine_multi`).
+   En `memento/agentic/` (`prompts.py`: `REFINE_MULTI_SYSTEM`/`REFINE_MULTI_USER`;
+   `refine.py`: `_extract_json_array`, `_format_fragments`, `_split_to_fit`, `_refine_multi`).
 2. **`ascender()` — promoción refine → engrama curado.** ✅ **IMPLEMENTADO (2026-09-14)**
    Función que crea/upsert
    un engrama en `work_memories` **o `social_memories`** (según el tipo del
@@ -569,8 +569,8 @@ RFC-002 tras la implementación (o antes, como diseño aprobado).
 | `polaroid_decay` / `reinforce_refine` (estabilidad temporal) | `ascension.py` |
 | `weave_memento_reinforcement` (weaver Memento-consciente) | `ascension.py` + etapa `memento-reinforce` en `sleep.yaml` |
 | `ascend_by_threshold` (ascenso estático, en sombra) | `ascension.py` + integrado en `run_agentic` |
-| Distill fragmentado (§5.4.1) | `agentic.py` (`_split_messages`/`_fragment_messages`/prompts por posición) |
-| Refine multi-idea + `category_score` (§5.4.2, §2.4) | `agentic.py` (`refine_session`/`_refine_multi`) |
+| Distill fragmentado (§5.4.1) | `memento/agentic/` (`fragments.py`: `_split_messages`/`_fragment_messages`; prompts por posición en `prompts.py`) |
+| Refine multi-idea + `category_score` (§5.4.2, §2.4) | `memento/agentic/` (`refine.py`: `refine_session`/`_refine_multi`) |
 | `nightly.yaml` + timers (opción A) | `configs/jobs/nightly.yaml`, `schedule_pulse.py`, systemd |
 | Config keys | `red_pill.config` (POLAROID_*, MEMENTO_*, NIGHTLY_ENABLED) |
 | Purga de `archive_memories` (script listo) | `scripts/memento_purge_archive.py` |
@@ -621,3 +621,181 @@ RFC-002 tras la implementación (o antes, como diseño aprobado).
 
 *Diseño DRAFT 2026-09-14 (implementado; pendiente la secuencia de resiembra).
 A integrar en RFC-002 como §10 tras revisión del operador.*
+---
+
+## 10. Estado de rollout, demolición y release (2026-09-28)
+
+> Este apartado es la **fuente de verdad del estado**. La checklist de §6 queda
+> como registro histórico de implementación (2026-09-14).
+
+### 10.1 HECHO
+
+| Pieza | Estado | Evidencia |
+|---|---|---|
+| Fase 4 core (§6.0–§6.7): fragmentación, refine multi-idea, `ascender()`, polaroid, weaver Memento-consciente, ascenso estático, `nightly.yaml` | ✅ implementado (2026-09-14) | §6; producción desde el reseed |
+| Single-writer M0–M9 (captura, ascensión, dedup, hubs, hilo, ingesta retirada, situación, erosión, interactivos, observabilidad D26) | ✅ implementado | `CHANGELOG` 7.22.0; 50 tests `test_sw_*` |
+| Activación por piezas (G1–G4 en `.env`) | ✅ ACTIVO 2026-09-28 | `OPERATIONS/SINGLE_WRITER_ROLLOUT.md` §6 |
+| RFC-004 (sidecar UDS Laya + tag en captura + solera + aviso WEAK) | ✅ COMPLETE (P1–P4) | `RFC_004_REALTIME_TAG_SIDECAR.md` |
+| Ascenso estático (`MEMENTO_STATIC_ASCENSION_ENABLED`) | ✅ ON | `.env` |
+
+### 10.2 QUEDA (inmediato, en orden)
+
+1. **Verificar tras el nightly** (03:00): `hub_coverage_pct > 0` en work/social,
+   ascensión Memento fluyendo, hilo de Ariadna presente.
+2. **Validar el punto de riesgo**: que `chronicle_sources/` (Memento) cubre
+   **todos** los providers (opencode/claude_code/pi/antigravity). Si algún
+   provider solo entraba por `staging`, no se puede retirar la ingesta.
+3. **Encender `SW_INGEST_RETIRED`** (punto de no retorno operativo) una vez 1–2
+   esté probado.
+4. **Demolición + release** (§10.4–§10.5).
+
+### 10.3 Semántica de `SW_INGEST_RETIRED` (5 puntos)
+
+Retira la **ingesta legacy de material crudo → memoria curada** y el `staging`
+que la alimentaba:
+
+| # | Punto | Efecto con el flag ON |
+|---|---|---|
+| 1 | `phases/consolidation.py` | deja de drenar `interaction_memories`→`work/social` (sin distill/chunks/raw_parents); queda solo hub synthesis + hilo |
+| 2 | `metabolism/ls_snatcher.py` | no snatchea trayectorias de LanguageServers |
+| 3 | `metabolism/chronicle/claude_code_plugin.py` | no extrae JSONL de Claude Code a staging |
+| 4 | `telegram/session.py::mark_for_deletion` | no copia a staging |
+| 5 | `telegram/session.py::trigger_compaction` | no copia a staging |
+
+**NO toca**: la captura a `interaction_memories` (`queue_worker`), el pipeline
+Memento (chronicle→distill→refine/annotate→ascensión), hubs/hilo/erosión/
+situación/tags. No borra datos. El buffer pasa a tener como único trimmador el
+janitor TTL (`SW_PURGE_GATE_ENABLED`, ya ON).
+
+### 10.4 Demolición (inventario de "obras")
+
+Cuando 10.2.3 esté probado, un PR dedicado (no mezclado con features) elimina:
+
+1. `consolidation.py`: rama drain/distill/staging + el `if retired` (queda hubs+hilo).
+2. `ls_snatcher.py` + `chronicle/antigravity_plugin.py` (llamada) + **la clase
+   `ClaudeCodeExtractorPlugin`** de `chronicle/claude_code_plugin.py` (los
+   **helpers** ya viven en `utils/chronicle_render.py` — ver SHARD-01 resuelto).
+3. `paths.get_staging_dir` + directorio `staging/` (+ `paths_to_wipe`/`migration_map`).
+   **CORREGIDO (SHARD-10, 2026-09-28)**: `scripts/chronicle_extractor.py` (+`_ls`/`_aes`)
+   NO se borra — es el **productor de Memento** para antigravity: escribe
+   `unencrypted_conversations/` que consume `chronicle_sources/antigravity.py`
+   (vivo, `redpill-extractor.timer`). Es distinto de `ls_snatcher.py` (ESE sí es
+   la vía legacy a `staging/`).
+4. `telegram/session.py`: `copy_to_staging` + sus dos ramas.
+5. Flags sin consumidor (`SW_INGEST_RETIRED` y los de migración) + sus tests.
+
+### 10.5 Release y migración
+
+**Asimetría clave** (dos públicos):
+
+- **Instalación nueva**: recibe el código **sin legacy y sin flags de
+  migración**; Memento→ascensión→hubs es el único camino por defecto. **Cero
+  ritual.** Seeds/`install_neo.sh` nacen limpios.
+- **Actualización** (instalación con datos legacy): necesita un camino de
+  migración **automático e idempotente**, no un runbook manual:
+  `scripts/migrate_single_writer.py` (dry-run por defecto):
+  1. Verifica que Memento cubre las sesiones de todos los providers (si falta
+     alguna → **para** y avisa; no demoler con memoria sin archivar).
+  2. **Absorb único** de lo que quede en `staging/` (archivar en Memento) antes de
+     descartarlo.
+  3. Trima el buffer `interaction_memories` (tope de edad).
+  4. Marca estado "migrado" (no repetir).
+
+- **Flags de feature, no de migración**: hubs/thread/situación/erosión/tags pasan
+  a default ON o config — un recién llegado no debe "encender hubs".
+- **Release**: bump **major** (cambio de comportamiento) + `docs/.../MIGRATION_SINGLE_WRITER.md`
+  + sección "Upgrading" en el CHANGELOG.
+
+**Secuencia de release**: observar (esta semana) → PR de demolición (quita legacy
++ flags de migración + añade migrador y doc) → release major. La activación de
+G1–G4 es **banco de pruebas del operador**, no el entregable.
+
+### 10.6 Hallazgos del scout (2026-09-28) — la demolición está BLOQUEADA
+
+Scout (lentes architecture + consistency) sobre `src/` vs §10.3/§10.4 → **14
+shards** en `.cell/shards.json` (reportes `.cell/reports/scout-architecture.json`
+y `scout-consistency.json`). Veredicto: **NO demoler y NO encender
+`SW_INGEST_RETIRED` todavía**; el inventario de §10.4 era optimista.
+
+**Bloqueadores críticos (consent `operator`):**
+
+| Shard | Qué | Por qué bloquea |
+|---|---|---|
+| SHARD-01 | `chronicle/claude_code_plugin.py` aloja **helpers compartidos** (`extract_user_content`, `extract_assistant_blocks`, `_render_tool_use/_result`) que consume Memento | §10.4.2 decía borrar el módulo entero → rompería la fuente Memento. Hay que mover los helpers a un módulo neutral y borrar solo la clase extractora |
+| SHARD-10 | `scripts/chronicle_extractor.py` **es el productor real** de `unencrypted_conversations/` que consume `chronicle_sources/antigravity.py` (vivo, `redpill-extractor.timer` horario) | §10.4.3 lo daba por muerto con un "revisar qué queda". No lo está: hay que decidir si `chronicle_extractor_ls.py`/`_aes.py` se mantienen como productor de Memento |
+| SHARD-02 | `get_staging_dir` tiene consumidores **fuera** del drenaje (`paths_to_wipe` en `memory.py:1342`, `migration_map.staging_buffer`) | Borrarlo sin quitar esos consumidores deja referencias colgando |
+
+**Funcional bajo `SW_INGEST_RETIRED` (arreglar ANTES de encenderlo):**
+
+| Shard | Qué | Efecto |
+|---|---|---|
+| SHARD-13 | `telegram/session.py::run_janitor_sweep` decide la purga por `metadata.source_buffer_id` del drenaje legacy | Con RETIRED ON, las sesiones Telegram `pending_purge` **nunca se purgarían** (acumulación). Hacer el predicado Memento-consciente (`telegram:<uuid>` en el registro) |
+| SHARD-12 | `TelegramSessionManager.__init__` llama `get_staging_dir()` (no cubierto por §10.4.4) | Ampliar el inventario de Telegram (import + atributo `staging_dir`) |
+
+**Correcciones al inventario §10.4 (medios):**
+- **SHARD-03**: falta `rituals.py::consolidation_ritual` (Phase 0 'snatch' a staging), `scripts/trigger_pulse.py` y la config `CHRONICLE_*`.
+- **SHARD-04/05**: enumerar flags de migración vs feature; añadir `MEMENTO_GATE_ENFORCED` (sin consumidor).
+- **SHARD-06**: listar tests huérfanos (`tests/test_claude_code_plugin.py`; reescribir los de drain en `test_sleep_phases.py`/`test_sleep.py`).
+- **SHARD-11**: docstrings de `consolidation.py` describen aún el pipeline legacy.
+
+**Docs desactualizadas (bajos/medios):** SHARD-08
+(`CHRONICLE_INGESTION_GUIDE.md`), SHARD-09 (`AGENT_UPDATE_GUIDE.md` +
+`SERVICE_HEALTH_CONTRACT.md` citan timers retirados), SHARD-14
+(`RFC_002_MEMENTO.md` cita `chronicle_daily.py` inexistente).
+
+**Consecuencia para la secuencia:** el orden de §10.2 cambia — **antes** de
+encender `SW_INGEST_RETIRED` hay que resolver SHARD-13 (purga Telegram) y
+SHARD-10/01 (autonomía de las fuentes Memento). El resto son obras de demolición
+sin riesgo funcional.
+
+### 10.7 Resueltos post-scout (2026-09-28)
+
+- **SHARD-13 CERRADO**: el janitor de Telegram (`session.py::_is_archived`) es
+  Memento-consciente cuando `SW_INGEST_RETIRED` está ON, **acotado a la fuente
+  `telegram`** (sin falsos positivos por UUIDs crudos repetidos en antigravity);
+  fail-safe (no purga si no puede verificar) y el janitor ya no instancia
+  `MemoryManager` en modo retirado. `MementoRegistry.is_rendered(sid, sources=)`
+  nuevo. Tests `test_telegram_janitor_purge.py` + suite de Telegram hermética.
+- **Deuda de hermetismo detectada**: `tests/test_sleep_phases.py::test_drain_cutoff…`
+  asume el drenaje legacy y falla con `SW_INGEST_RETIRED=true` (pre-existente, no
+  introducido por SHARD-13). Entra en SHARD-06 (tests huérfanos a reescribir).
+
+**Pendiente para desbloquear RETIRED**: SHARD-10/01 (autonomía de las fuentes
+Memento) y verificar la cobertura de `chronicle_sources/telegram.py` (existe y
+está en `CHRONICLE_ARCHIVE_SOURCES`).
+
+- **SHARD-01 CERRADO (2026-09-28)**: los helpers compartidos
+  (`extract_user_content`, `extract_assistant_blocks`, `_render_tool_use`,
+  `_render_tool_result`) se movieron de `metabolism/chronicle/claude_code_plugin.py`
+  a **`src/red_pill/utils/chronicle_render.py`** (módulo neutral). Las fuentes de
+  Memento (`chronicle_sources/{opencode,claude_code}.py`) ya NO importan del
+  paquete legacy (guardarraíl de test); el plugin legacy los re-exporta
+  (mismas funciones, sin duplicar). Ya se puede borrar la clase extractora sin
+  romper Memento.
+- **SHARD-10 CERRADO (2026-09-28)**: `scripts/chronicle_extractor*.py` es el
+  **productor de Memento** (antigravity → `unencrypted_conversations/`), NO
+  legacy; §10.4.3 corregido. Queda desbloqueado borrar `staging/` y
+  `ls_snatcher` sin tocar el extractor.
+
+### 10.8 Demolición por lotes (2026-09-28)
+
+- **Lote 1 (docs/docstrings)**: SHARD-08/09/11/14 — `CHRONICLE_INGESTION_GUIDE`,
+  `AGENT_UPDATE_GUIDE` §4.11, `SERVICE_HEALTH_CONTRACT`, `RFC_002_MEMENTO` §1.1,
+  docstrings de `consolidation`/`phases`. ✅
+- **Lote 2 (retiradas seguras)**: SHARD-12 (`TelegramSessionManager.copy_to_staging`
+  + `staging_dir` + ramas), SHARD-03 (Phase 0 'snatch' de `consolidation_ritual`),
+  SHARD-04/05 (`CHRONICLE_PLUGINS` y `MEMENTO_GATE_ENFORCED` sin consumidor;
+  filas de `ENV_REFERENCE`). ✅
+- **Lote 3 (destructivo)**: ✅ **COMPLETADO 2026-09-28**.
+  - 3a: borrado `metabolism/chronicle/*` (base + claude_code + antigravity) y
+    `ls_snatcher` (+ su test). Helpers en `utils/chronicle_render`.
+  - 3b: `consolidation.py` reescrito a **hubs-only** (fuera el drenaje completo);
+    eliminados/reescritos los tests del drenaje; `conftest` hermético a los flags.
+  - 3c: fuera `get_staging_dir` y sus consumidores (`paths_to_wipe`/`migration_map`);
+    queda `get_legacy_staging_dir` (solo lectura) para el migrador.
+  - 3d: fuera `SW_INGEST_RETIRED` (y `MEMENTO_GATE_ENFORCED`/`CHRONICLE_PLUGINS`);
+    el janitor de Telegram verifica Memento sin flag.
+  - **Verificación**: suite completa **2205 passed** (con flags del `.env`), ruff
+    limpio, Sound of Silence OK. Commits locales (sin push).
+  - **Nota**: `scripts/chronicle_extractor*.py` se conserva — es el productor de
+    Memento para antigravity (`unencrypted_conversations/`), NO legacy (SHARD-10).

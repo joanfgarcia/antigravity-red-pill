@@ -1,4 +1,4 @@
-# Red Pill Protocol: Environment Configuration Reference (v7.0)
+# Red Pill Protocol: Environment Configuration Reference (v8.0.0)
 
 This document provides a comprehensive list of all parameters available in the `.env` file, their purposes, default values, and what specific behaviors they activate or deactivate within the Bünker ecosystem.
 
@@ -96,7 +96,7 @@ This document provides a comprehensive list of all parameters available in the `
 ### Bayesian Core (Logic & Work Memories)
 | Parameter | Default | Description |
 | :--- | :--- | :--- |
-| `BAYESIAN_COLLECTIONS` | `skill,work,directive` | Comma-separated list of collections that use technical Bayesian inference instead of affect-based FSRS logic. |
+| `BAYESIAN_COLLECTIONS` | `skill_memories,work_memories,directive_memories` | Comma-separated list of collections that use technical Bayesian inference instead of affect-based FSRS logic. |
 | `BAYESIAN_STABILITY_KAPPA`| `0.05` | Rate of uncertainty accumulation (`beta`) per day. Higher means faster forgetting of technical utility. |
 | `BAYESIAN_REINFORCEMENT_GAIN`| `1.0` | Amount of certainty (`alpha`) added when an operator actively uses this technical knowledge. |
 
@@ -113,7 +113,7 @@ This document provides a comprehensive list of all parameters available in the `
 ### MCP Kernel & Interceptor
 | Parameter | Default | Description |
 | :--- | :--- | :--- |
-| `INTERCEPTOR_ENABLED`| `False` | Toggles the Bünker's active middleware injection via MCP. If `True`, intercepts IDE prompts to dynamically load context from Qdrant. |
+| `INTERCEPTOR_ENABLED`| `False` | **Master switch PARCIAL del pipeline de interceptor.** Gatea SOLO: `02_rag_enrichment` (+`INTERCEPTOR_RAG_ENABLED`), `03_circuit_breaker` (+`INTERCEPTOR_CIRCUIT_BREAKER_ENABLED`), `04_mystique`, y las señales Korsakoff/amnesia (`vitals.py`/`rituals.py`). **NO** gatea el core (telemetría `bunker_context`, mood/router/tone, pre-heating): esos corren siempre vía `interceptor_rp`. |
 | `COMPACTION_THRESHOLD`| `10` | The number of consecutive context compactions to wait before executing a full session context refresh (prevents feedback loops). |
 | `SEMANTIC_INTENT_THRESHOLD`| `Low` (0.5) | `High` (0.75) or `Low` (0.5). Sets how literal the matching needs to be for context injection. |
 | `PULSE_ENABLED` | `True` | Activates autonomous background synthesis and maintenance operations. |
@@ -172,16 +172,18 @@ Plugins 05–10. Each is independently toggleable.
 
 | Parameter | Default | Description |
 | :--- | :--- | :--- |
-| `IDE_BACKEND` | `auto` | Execution backend selector (`auto`, `agy`, `grpc`, `claude`, `opencode`, or `local`). `auto` prefers `agy` if available. |
+| `IDE_BACKEND` | `auto` | Execution backend selector (`auto`, `agy`, `grpc`, `claude`, `opencode`, `pi`, or `local`). `auto` prefers `agy` if available. |
 | `OPENCODE_SERVER_URL` | | URL of persistent `opencode serve` instance (e.g. `http://localhost:4096`). Enables attached mode, avoiding MCP cold-start. |
 | `OPENCODE_BIN` | | Explicit path to the `opencode` binary. Wins over PATH resolution — the robust option for service-manager contexts. |
 | `OPENCODE_SCRIBE_PLUGIN` | `False` | Set to `true` when the `redpill-scribe` OpenCode plugin handles persistence. Disables bridge `_scribe_relay()` to avoid double-writes. |
+| `PI_BIN` | | Explicit path to the `pi` binary (pi-coding-agent). Wins over PATH resolution — the robust option for service-manager contexts. |
 | `AUTONOMOUS_AGY_ENABLED` | `False` | Gathers and gates autonomous Flash-consuming operations like cognitive queue or entropy executor. |
 | `TELEGRAM_BRIDGE_CASCADE` | `[]` | JSON-encoded fallback cascade of model targets for Telegram/inbox processing. Per-target fields: `backend`, `model`, `effort`, `timeout` (optional, overrides the method timeout for that target). Example: `'[{"backend":"opencode","model":"opencode-go/deepseek-v4-pro","timeout":300},{"backend":"opencode","model":"opencode/deepseek-v4-flash-free"}]'`. |
 | `TELEGRAM_INLINE_TIMEOUT` | `120` | Fast-path inline timeout (s) for Telegram conversational messages (D3). Passed as the method timeout to `CascadeBridge.prompt()`; a per-target `timeout` in `TELEGRAM_BRIDGE_CASCADE` overrides it for that target (D14). |
 | `AWAKENING_BRIDGE_CASCADE` | `[]` | JSON-encoded fallback cascade of model targets for autonomous awakening runs. |
+| `AWAKENING_PLANNER_ACCESS` | `planner` | Qué puede tocar el despertar autónomo en el desk: CSV de zonas (`ideas`, `research`, `design`, `pending`, `in_progress`, `awakening`) o `planner` (todas) / `none` (solo lectura). |
+| `AWAKENING_TIMEOUT` | `600` | Techo duro (s) del despertar autónomo (A-5, AWAKEN-002). Recomendado `2700`-`3600` (45-60 min) una vez el despertar herede el latido (heartbeat D21); sin latido un techo alto deja colgado al agente. El despertar auto-empaqueta lo largo en `dag_job`. |
 | `DEFAULT_MINION_BRIDGE_CASCADE` | `[]` | JSON-encoded fallback cascade of model targets for background agéntic minions if no model is explicitly requested. |
-| `CHRONICLE_PLUGINS` | `["antigravity", "claude_code"]` | List of enabled sequential extraction plugins to pull transcripts during sleep cycle. |
 
 > **Catálogo curado de modelos (RFC_TELEGRAM_RESILIENCE §2A/D6/D20)**: el archivo
 > `$XDG_CONFIG_HOME/red-pill/model_catalog.yaml` (auto-seeded desde
@@ -201,6 +203,10 @@ Plugins 05–10. Each is independently toggleable.
 >
 > Resolution order: `OPENCODE_BIN` env → `$PATH` → `~/.opencode/bin` (probed as last resort). If the binary is missing, bridge construction now fails **loudly** in the logs and the worker never falls back to the legacy Antigravity IDE path for non-IDE cascades — before v7.15.x this degraded silently and pulses crashed against a dead IDE.
 
+> **⚠️ pi + service managers (PATH requirement)**
+>
+> Same rule as `opencode`: when `pi` is used (as `IDE_BACKEND` or in any `*_BRIDGE_CASCADE`), the `pi` binary must be resolvable from the **service manager's** environment. Add its install dir (e.g. `~/.nvm/versions/node/<ver>/bin`) to `Environment="PATH=..."`, or set `PI_BIN`. Pi's provider/model come from `~/.pi/agent/settings.json`; the Búnker bridge is the harness extension seeded by `scripts/inject/pi/` (Pi has no MCP).
+
 ---
 
 ## 📼 Memento Chronicle (RFC-002)
@@ -218,16 +224,40 @@ Plugins 05–10. Each is independently toggleable.
 | `MEMENTO_REFINE_MIN_SIGNIFICANCE` | `0.3` | Below this, refine writes no file for the section (permissive selection). |
 | `MEMENTO_GATE_MIN_SIGNIFICANCE` | `0.5` | **Provisional (Q4 open)**: threshold of the shadow would-ingest decision. |
 | `MEMENTO_AGENTIC_NIGHT_LIMIT` | `20` | Sessions distilled+refined per nightly chronicle run (bounds local-LLM cost). |
-| `MEMENTO_GATE_ENFORCED` | `False` | **Phase 4 switch.** Flip ONLY with operator approval backed by shadow evidence: chronicle stops ingesting below-threshold sessions into archive_memories. |
+| `MEMENTO_ANNOTATE_FROM_RAW` | `False` | **MEM-006 stage switch.** ON: the agentic pass writes `annotate/` (idea-level notes from the RAW, one compression) instead of the legacy `refine/` (re-summaries of distill sections). OFF keeps legacy. |
+| `MEMENTO_ANNOTATE_VOICE_REWRITE` | `False` | Within annotate: rewrite notes that are not first-person (MEM-006 Q8 lever). The identity Bio alone does not fix voice with granite; pilot: 36% → 100% first person. |
+| `MEMENTO_ANNOTATE_DEAD_ZONE` | `0.05` | Dual routing dead zone: margin below this over the gate → `dual_route: none` (unstable/noise; it does NOT ascend, stays in the tree for future re-scoring). |
+| `RP_IDENTITY_BIO` | `""` (→ config dir) | Explicit path to the identity Bio file. Default precedence: `~/.config/red-pill/identity_bio.md` → neutral `identity_bio.template.txt` in the repo. Personal data never lives in the public repo. |
+| `MEMENTO_STATIC_ASCENSION_ENABLED` | `False` | Static ascension after the agentic pass (`ascend_by_threshold`, scans `refine/` + `annotate/`; `dual_route: none` never ascends). Shadow until calibration. |
 
-> ℹ️ **Agentic pass backend.** The file-based distill/refine (`memento/agentic.py`)
+### Single-Writer de memoria (AD-034) & RFC-004 (tags en vivo)
+| Parameter | Default | Description |
+| :--- | :--- | :--- |
+| `SW_AFFINITY_ENABLED` | `False` | Captura `session_id`+`affinity` en el buffer (memory_queue → interaction_memories). |
+| `SW_PURGE_GATE_ENABLED` | `False` | El TTL del janitor solo purga sesiones ya renderizadas en Memento (+ tope de edad con señal). |
+| `SW_DEDUP_ENABLED` | `False` | Dedup-at-ascension: un ganador por grupo `session_id`+`source_lines`. |
+| `SW_HUBS_ENABLED` | `False` | Síntesis de hubs de sesión sobre engramas curados (idempotente por `hub_input_hash`). |
+| `SW_HUBS_MAX_SESSIONS_PER_CYCLE` | `0` | Tope de sesiones sintetizadas por ciclo (0 = sin tope). Acota el backfill inicial. |
+| `SW_THREAD_ENABLED` | `False` | Micro-hilo de Ariadna (`prev_member`/`next_member` por sesión, orden de refine). |
+| `SW_ABSENCE_GUARD_CONDITIONAL` | `False` | ON: el pulse NO refresca `last_recalled_at` cada hora (solo tras ausencia real). |
+| `SW_EROSION_DEMOTE_ENABLED` | `False` | Olvido elegante de los curados (demote a Memento tras `CURATED_MIN_LIFETIME_YEARS`). |
+| `SW_SITUATION_ENABLED` | `False` | Semáforo de situación global (`situation_memories`) + pre-heating. |
+| `SW_INTERACTIVE_PHASE_ENABLED` | `False` | Proceso aparte de engramas interactivos (`interactive_refine.py`). |
+| `INTERACTION_MAX_AGE_DAYS` | `30` | Tope duro de edad del buffer: lo no renderizado más viejo se purga (con señal). |
+| `MEMENTO_REALTIME_TAG_ENABLED` | `False` | **RFC-004.** Etiqueta emoción/tema por turno vía el sidecar UDS Laya (`scripts/laya_tag_server.py`). |
+| `MEMENTO_REALTIME_TAG_TIMEOUT_S` | `3.0` | Timeout del cliente UDS por turno. |
+| `MEMENTO_REALTIME_TAG_MAX_CHARS` | `1500` | Recorte del turno etiquetado (cabeza+cola); si recorta → `degraded/truncated`. |
+| `MEMENTO_REALTIME_TAG_BUDGET_S` | `20` | Presupuesto agregado de etiquetado por drenaje (cota N×timeout). |
+| `LAYA_TAG_SOCKET` | `""` | Ruta del socket UDS del sidecar (vacío → `$XDG_RUNTIME_DIR/red-pill/laya_tag.sock`). |
+
+> ℹ️ **Agentic pass backend.** The file-based distill/refine (`memento/agentic/`)
 > talks to the local llama-server via `EDGE_ENGINE_URL`
 > (`http://localhost:8760/v1/chat/completions`); availability is probed at
 > `EDGE_HEALTH_URL` (`http://localhost:8760/v1/models` — the server returns 404
 > on the bare `/v1` base, so the probe must target `/v1/models` or `/health`).
 > `EDGE_MODEL` must match the profile served by `redpill-llm.service` (default
 > `Granite-4.1-8B-Q4_K_M.gguf`, AD-022). If you change the served model, update
-> `EDGE_MODEL` in `src/red_pill/memento/agentic.py`.
+> `EDGE_MODEL` in `src/red_pill/memento/agentic/runtime.py`.
 
 > ⚠️ **`MEMENTO_SPLIT_MAX_CHARS` is NOT universal.** Splits are the work units
 > the local distill LLM consumes (RFC-002 §4.2), so the budget must be derived

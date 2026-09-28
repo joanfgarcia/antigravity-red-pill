@@ -88,6 +88,7 @@ class ResolvedModel:
 	cpu_n_ctx: Optional[int] = None
 	device_fallback: List[str] = field(default_factory=lambda: ["gpu", "cpu"])
 	n_gpu_layers: int = -1
+	flash_attn: str = "auto"  # auto | true | false (MEM-009 D5)
 	license: Dict[str, Any] = field(default_factory=dict)
 	mode: str = "curated"  # curated | custom | experimental
 	last_mode: str = "curated"  # para /status.last_mode
@@ -224,8 +225,9 @@ def _base_from_profile(name: str, profile: dict, tier: dict) -> ResolvedModel:
 		cpu_n_ctx=int(profile.get("cpu_n_ctx") or 0) or None,
 		device_fallback=list(profile.get("device_fallback") or ["gpu", "cpu"]),
 		n_gpu_layers=int(tier.get("n_gpu_layers") or -1),
+		flash_attn=_normalize_flash_attn(profile.get("flash_attn")),
 		license=normalize_license(profile.get("license"), name),
-		extra={"tier": tier, "thinking_supported": thinking != "off"},
+		extra={"tier": tier, "thinking_supported": thinking != "off", "fa_capable": bool(profile.get("fa_capable"))},
 	)
 
 
@@ -238,6 +240,39 @@ def _normalize_thinking(value: Any) -> str:
 	if v in ("low", "brief"):
 		return "low"
 	return "on"
+
+
+def _normalize_flash_attn(value: Any) -> str:
+	"""Tri-estado de Flash Attention (MEM-009 D5): auto | true | false.
+
+	YAML entrega `true`/`false` como bool; cualquier otro valor cae en `auto`.
+	"""
+	if isinstance(value, bool):
+		return "true" if value else "false"
+	v = str(value if value is not None else "auto").strip().lower()
+	if v in ("true", "on", "1", "yes"):
+		return "true"
+	if v in ("false", "off", "0", "no"):
+		return "false"
+	return "auto"
+
+
+def effective_flash_attn(resolved: "ResolvedModel", device: str) -> bool:
+	"""Resuelve el tri-estado a bool para el binding (MEM-009 D5).
+
+	El binding 0.3.31 solo expone bool (el AUTO del C no está expuesto), así que
+	el `auto` lo decidimos aquí: solo en GPU y si el perfil declara
+	`fa_capable: true`. El worker CPU nunca activa FA (experimental en CPU y el
+	`device_fallback: [gpu, cpu]` es común). Sin declarar nada → False, que es
+	la conducta previa a D5.
+	"""
+	if device != "gpu":
+		return False
+	if resolved.flash_attn == "true":
+		return True
+	if resolved.flash_attn == "false":
+		return False
+	return bool(resolved.extra.get("fa_capable"))
 
 
 def _normalize_tool_format(value: Any) -> str:
@@ -437,6 +472,7 @@ def _resolve_experimental(exp: dict, body: dict) -> ResolvedModel:
 		cpu_n_ctx=int(exp.get("cpu_n_ctx") or 0) or None,
 		device_fallback=list(exp.get("device_fallback") or ["gpu", "cpu"]),
 		n_gpu_layers=int(exp.get("n_gpu_layers") or -1),
+		flash_attn=_normalize_flash_attn(exp.get("flash_attn")),
 		license=normalize_license(exp.get("license"), path.name),
 		mode="experimental",
 		last_mode="experimental",
@@ -472,6 +508,8 @@ def _resolve_custom(custom: dict, body: dict) -> ResolvedModel:
 		resolved.n_gpu_layers = int(custom["n_gpu_layers"])
 	if "chat_format" in custom:
 		resolved.chat_format = custom["chat_format"]
+	if "flash_attn" in custom:
+		resolved.flash_attn = _normalize_flash_attn(custom["flash_attn"])
 	if "device_fallback" in custom:
 		resolved.device_fallback = list(custom["device_fallback"])
 	if "thinking" in custom:
@@ -690,7 +728,7 @@ def seed_task_profiles() -> dict:
 
 	if free_gb >= 6.5:
 		distill = pick([("granite_8b", True), ("tiny_aya_water", False), ("granite_3b", False)])
-		refine = pick([("tiny_aya_water", True), ("granite_8b", False)])
+		refine = pick([("granite_8b", True), ("tiny_aya_water", False)])
 		conv = pick([("granite_8b", True)])
 		tool = pick([("granite_8b", True)])
 		hub = pick([("granite_8b", True)])

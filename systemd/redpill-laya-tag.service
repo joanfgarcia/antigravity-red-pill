@@ -1,0 +1,27 @@
+[Unit]
+Description=Red Pill Laya Tag Sidecar (RFC-004, UDS)
+After=network.target
+# Converge a `failed` ante fallo persistente (reimportar torch + chequeo HF en
+# cada intento): con RestartSec=10 no se alcanza el límite por defecto 5/10s,
+# así que se declara una ventana amplia y observable en vez de bucle infinito.
+# (StartLimit* vive en [Unit] desde systemd 230.)
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=/home/joan/Documents/IA/sharing
+ExecStart=/home/joan/.local/share/red-pill/laya-venv/bin/python /home/joan/Documents/IA/sharing/scripts/laya_tag_server.py
+Environment=PYTHONPATH=/home/joan/Documents/IA/sharing/src
+Restart=always
+RestartSec=10
+Nice=19
+IOSchedulingClass=idle
+NoNewPrivileges=yes
+StandardOutput=journal
+StandardError=journal
+# NO usar RuntimeDirectory=red-pill: systemd la borra al parar el servicio y se
+# llevaría el socket del daemon (/run/user/<uid>/red-pill/red_pill.sock).
+
+[Install]
+WantedBy=default.target

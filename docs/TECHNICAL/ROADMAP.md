@@ -152,7 +152,7 @@ The Red Pill Protocol is not just a tool; it is a **cognitive amplifier** design
 #### Parked / next 🔜
 - [ ] **opencode → local SIP endpoint**: fix the `@ai-sdk/openai-compatible` streaming (SSE) mismatch (retries every 30 s, 0 tokens) so `backend:"opencode"` can drive the local model. Provider config drafted, then reverted pending the fix.
 - [ ] **Context compaction for the local minion loop** (v2): today bounded only by the ≤8 tool-call cap. Ties into the Phase 3.1 §2 compaction items.
-- [ ] **Per-request model routing** in the dual-bind daemon (swap-on-demand): today one model is fixed at boot via `MINION_PROFILE`; the request `model` field is ignored.
+- [x] **Per-request model routing** (AD-030, v7.22): selector `experimental>custom>model>task>config>env`; `MINION_DEFAULT_PROFILE`.
 - [ ] **Promote `run_dual_bind.py`** from the setup-script heredoc to a versioned, linted, tested source file the installer copies (kills the drift class; the daemon is currently generated, un-linted, un-tested).
 - [ ] **iGPU device** (Vulkan + unified memory) — parked until the 64 GB RAM upgrade (BIOS reserve). Cascade slot already recognised.
 - [ ] **NPU device wiring for minions** — `FastFlowLMInferenceProvider` exists but no minion-assigned model is NPU-ready yet. Ties to the open NPU benchmark / `memlock` items in Phase 3.
@@ -201,10 +201,10 @@ TARGET:   systemd → runs Aleth (always) ← IDE connects/disconnects
 #### 3.5.3 — Continuous Sleep (Real-Time Context Garbage Collection)
 **Dependency**: OS-level service (persistent process), Qdrant (storage backend)
 
-The current sleep cycle is a **batch process** — a nightly consolidation daemon that distills `interaction_memories` into `social_memories`. In Phase 3.5, sleep becomes **continuous**, running in a background thread within the service:
+The current sleep cycle is a **batch process**. *(Update 2026-09-21, AD-034: `interaction_memories` is **no longer distilled** into work/social — the curated collections are fed by the **Memento ascension** (`distill→refine→ascend`), and the buffer is a TTL'd transient window. The "Tier 3: merged into social_memories" below is historical.)* In Phase 3.5, sleep becomes **continuous**, running in a background thread within the service:
 
 ```
-Tier 1 (0-2h):    Live context window — full resolution in VRAM
+Tier 1 (0-2h):    Live context window — full resolution in VRAM   # TIERS 2-3 HISTÓRICOS (AD-034)
 Tier 2 (2-12h):   Recent buffer — distilled to Qdrant interaction_memories
 Tier 3 (12h-7d):  Consolidated — merged into social_memories with emotion tags
 Tier 4 (7d+):     Deep storage — compressed to skeletal engrams, low retrieval cost

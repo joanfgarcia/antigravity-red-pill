@@ -34,7 +34,7 @@ fi
 if confirm "Quitar el bloque red-pill (Sovereign Handshake/Agent_Core) de las anclas de IDE?"; then
 	RP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 	if command -v uv &> /dev/null && [ -f "$RP_DIR/scripts/inject_anchor.py" ]; then
-		(cd "$RP_DIR" && uv run python scripts/inject_anchor.py --remove --ide antigravity || true)
+		(cd "$RP_DIR" && uv run python scripts/inject_anchor.py --remove --ide all || true)
 	else
 		rm -f "$HOME/.gemini/GEMINI.md"
 	fi

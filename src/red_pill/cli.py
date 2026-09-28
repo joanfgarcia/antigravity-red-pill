@@ -4,6 +4,7 @@ import importlib.metadata
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime
@@ -28,6 +29,14 @@ logger = logging.getLogger(__name__)
 
 # v6.0.1: Robust Script Resolution
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+_VOLATILE_RE = re.compile(r"(?<![\w/.~-])/(?:tmp|dev/shm|run/user/\d+)/[^\s\"']*")
+
+
+def _volatile_paths(payload: Dict[str, Any]) -> List[str]:
+	"""Rutas del payload que no sobreviven a un reinicio (/tmp, /dev/shm, /run/user/N)."""
+	return sorted(set(_VOLATILE_RE.findall(json.dumps(payload, ensure_ascii=False))))
 
 
 def switch_skin(skin_name: str) -> str:
@@ -618,19 +627,6 @@ def _dispatch_plugins(args: argparse.Namespace) -> bool:
 	return False
 
 
-def handle_tools(args: argparse.Namespace) -> None:
-	"""Caja de herramientas de mantenimiento one-shot del Bünker."""
-	if args.tools_cmd == "dedup-archive":
-		import logging as _logging
-
-		from red_pill.tools.dedup_archive import run
-
-		_logging.basicConfig(level=_logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-		run(execute=args.execute, snapshot=not args.no_snapshot)
-	else:
-		print("Herramientas disponibles: dedup-archive. Uso: red-pill tools <herramienta> [--execute]")
-
-
 def handle_job(args: argparse.Namespace) -> None:
 	"""Centralized Job Manager: cola persistente compartida (bunker_queue.db)."""
 	import json as _json
@@ -692,6 +688,16 @@ def handle_job(args: argparse.Namespace) -> None:
 				print(f"[OK] Ya hay un job vivo equivalente ({twin['id'][:8]}, {twin['status']}); no se encola otro (--singleton).")
 				return
 
+		# Un job sobrevive a los reinicios; /tmp no (incidente 2026-09-26: un piloto
+		# con su árbol en el scratchpad de /tmp acabó FRUSTRATED tras un reboot).
+		volatile = _volatile_paths(payload)
+		if volatile and not getattr(args, "allow_tmp", False):
+			print(
+				f"[ERROR] el payload apunta a rutas volátiles ({', '.join(volatile[:3])}): no sobreviven a un "
+				f"reinicio y el job sí. Usa una ruta persistente (p.ej. ~/.local/share/red-pill/…) o --allow-tmp si es deliberado."
+			)
+			return
+
 		# Validar AQUÍ: un payload malformado debe morir al encolar, no tres
 		# intentos después y FRUSTRATED de madrugada.
 		from red_pill.jobs.drivers import get_driver_class
@@ -709,9 +715,31 @@ def handle_job(args: argparse.Namespace) -> None:
 			expander = getattr(driver_cls, "expand_manifest", None)
 			if expander:
 				payload = expander(payload)
-		job_id = queue.enqueue_task(source=source, payload=payload, priority=priority, parent_task_id=parent, mission_id=mission)
+		# Resolver el padre a su UUID COMPLETO: las comparaciones del DAG (desbloqueo
+		# y cascada de cancelación) van contra `parent_task_id` exacto — guardar un
+		# prefijo corto dejaba hijos BLOCKED eternos (bug 2026-09-23).
 		if parent:
-			print(f"[OK] Job {job_id} encolado como BLOCKED (se desbloquea al completar {parent[:8]}).")
+			parent_task = _find_job(queue, parent)
+			if not parent_task:
+				print(f"[ERROR] --parent '{parent}' no encontrado (usa el id completo o un prefijo corto válido).")
+				return
+			parent = parent_task["id"]
+
+		try:
+			job_id = queue.enqueue_task(source=source, payload=payload, priority=priority, parent_task_id=parent, mission_id=mission)
+		except ValueError as e:
+			print(f"[ERROR] {e}")
+			return
+		if parent:
+			if (queue.get_task(job_id) or {}).get("status") == "PENDING":
+				print(f"[OK] Job {job_id} encolado (padre {parent[:8]} ya completado: arranca directo).")
+			else:
+				print(f"[OK] Job {job_id} encolado como BLOCKED (se desbloquea al completar {parent[:8]}).")
+		elif getattr(args, "paused", False):
+			# Nace PAUSADO: el runner no lo toca hasta `job resume` (encolado en
+			# frío para lanzar a mano cuando toque).
+			queue.pause_task(job_id)
+			print(f"[OK] Job {job_id} encolado PAUSADO (source={source}, priority={priority}). Lánzalo con: red-pill job resume {job_id[:8]}")
 		else:
 			mission_note = f", mission={mission}" if mission else ""
 			print(f"[OK] Job {job_id} encolado (source={source}, priority={priority}{mission_note}).")
@@ -796,6 +824,15 @@ def handle_job(args: argparse.Namespace) -> None:
 			return
 		_kill_job(queue, task, discard=args.discard)
 
+	elif args.job_cmd == "cancel":
+		task = _find_job(queue, args.job_id)
+		if not task:
+			print(f"[ERROR] Job '{args.job_id}' no encontrado.")
+			return
+		# Cancelación limpia (sin marca de kill sucio en PENDING/BLOCKED) y con
+		# cascada a hijos BLOCKED: equivalente a `kill --discard`.
+		_kill_job(queue, task, discard=True)
+
 	elif args.job_cmd == "logs":
 		task = _find_job(queue, args.job_id)
 		if not task:
@@ -818,7 +855,7 @@ def handle_job(args: argparse.Namespace) -> None:
 	elif args.job_cmd == "kick":
 		_kick_queue()
 	else:
-		print("Uso: red-pill job {submit|list|status|pause|resume|skip|kill|logs|purge|process-queue|kick}")
+		print("Uso: red-pill job {submit|list|status|pause|resume|skip|kill|cancel|logs|purge|process-queue|kick}")
 
 
 def _kick_queue() -> None:
@@ -832,7 +869,9 @@ def _kick_queue() -> None:
 	try:
 		subprocess.run(
 			["systemctl", "--user", "start", "--no-block", "redpill-queue.service"],
-			capture_output=True, text=True, timeout=15,
+			capture_output=True,
+			text=True,
+			timeout=15,
 		)
 	except (subprocess.SubprocessError, OSError) as e:
 		print(f"[WARN] no se pudo disparar el runner al momento: {e} (el timer lo recogerá en ≤1 min)")
@@ -1077,14 +1116,6 @@ def main() -> None:
 	diag_parser = subparsers.add_parser("diag", help="Diagnostics")
 	diag_parser.add_argument("type", choices=["work", "social", "directive", "story", "interaction"])
 
-	# Herramientas de mantenimiento one-shot (reparaciones post-actualización
-	# que cualquier Bünker de la Legión puede necesitar)
-	tools_parser = subparsers.add_parser("tools", help="Bünker maintenance toolbox")
-	tools_sub = tools_parser.add_subparsers(dest="tools_cmd")
-	dedup_parser = tools_sub.add_parser("dedup-archive", help="Colapsar duplicados de archive_memories (dry-run por defecto)")
-	dedup_parser.add_argument("--execute", action="store_true", help="Aplicar de verdad (default: dry-run)")
-	dedup_parser.add_argument("--no-snapshot", action="store_true", help="No crear snapshot previo (bajo tu responsabilidad)")
-
 	sanitize_parser = subparsers.add_parser("sanitize", help="Sanitation & Migration Protocol")
 	sanitize_parser.add_argument("type", choices=["work", "social", "directive", "story", "interaction"])
 	sanitize_parser.add_argument("--dry-run", action="store_true", help="Report without changes")
@@ -1246,6 +1277,10 @@ def main() -> None:
 	)
 	job_submit.add_argument("--parent", help="Id del job padre: entra BLOCKED y se desbloquea cuando el padre completa (DAG)")
 	job_submit.add_argument("--mission", help="Grupo de aislamiento entre forges (mission_id)")
+	job_submit.add_argument("--paused", action="store_true", help="Encolar el job ya PAUSADO: nace sin que el runner lo toque hasta `job resume`.")
+	job_submit.add_argument(
+		"--allow-tmp", action="store_true", help="Permitir rutas volátiles (/tmp, /dev/shm, /run/user) en el payload: no sobreviven a un reinicio."
+	)
 
 	job_list = job_sub.add_parser("list", help="Listar jobs activos, pausados y en cola")
 	job_list.add_argument("--all", action="store_true", help="Incluir también COMPLETED")
@@ -1271,6 +1306,8 @@ def main() -> None:
 	job_kill = job_sub.add_parser("kill", help="Abatir el step en vuelo (duro): PAUSED* reanudable, con marca de kill sucio")
 	job_kill.add_argument("job_id", help="Id completo o prefijo corto")
 	job_kill.add_argument("--discard", action="store_true", help="Cancelar definitivamente: FRUSTRATED en lugar de reanudable")
+	job_cancel = job_sub.add_parser("cancel", help="Cancelar un job en espera (PENDING/BLOCKED u otros): FRUSTRATED limpio + cascada a hijos BLOCKED")
+	job_cancel.add_argument("job_id", help="Id completo o prefijo corto")
 
 	job_logs = job_sub.add_parser("logs", help="Salida del proceso hijo de un job (stdout/stderr por step)")
 	job_logs.add_argument("job_id", help="Id completo o prefijo corto")
@@ -1609,9 +1646,6 @@ def main() -> None:
 		elif args.command == "job":
 			handle_job(args)
 			return
-		elif args.command == "tools":
-			handle_tools(args)
-			return
 		elif args.command == "p2p":
 			handle_p2p(args)
 			return
@@ -1630,7 +1664,11 @@ def main() -> None:
 		# Loop through requested collections
 		for collection in collections:
 			if args.command == "add":
-				manager.add_memory(collection, args.content, color=args.color, emotion=args.emotion, intensity=args.intensity)
+				# D13: un alta manual (operador/agente) es un engrama "especial" →
+				# `interactive_engram` (no se agrupa por sesión; lo trata el proceso
+				# aparte de interactivos).
+				metadata = {"node_type": "interactive_engram"} if collection in ("work_memories", "social_memories", "story_memories") else None
+				manager.add_memory(collection, args.content, color=args.color, emotion=args.emotion, intensity=args.intensity, metadata=metadata)
 			elif args.command == "search":
 				# CQ-003: Use regex with word boundaries for robust trigger detection
 				import re as regex_lib
@@ -1643,7 +1681,9 @@ def main() -> None:
 							is_deep = True
 							break
 
-				search_results = manager.search_and_reinforce(collection, args.query, limit=args.limit, deep_recall=is_deep, caller="cli_search")
+				search_results = manager.search_and_reinforce(
+					collection, args.query, limit=args.limit, deep_recall=is_deep, caller="cli_search", hybrid=True
+				)
 				if is_deep:
 					print(f"--- [DEEP RECALL ACTIVATED: {collection.upper()}] ---")
 				else:

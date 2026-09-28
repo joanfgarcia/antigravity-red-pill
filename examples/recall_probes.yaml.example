@@ -1,0 +1,12 @@
+# Plantilla del banco de recall (tools/memento_recall_bench.py).
+# Copia a ~/.config/red-pill/recall_probes.yaml y sustituye por hechos REALES de
+# tu memoria cuya fecha conozcas. Ese fichero es del operador: no se versiona.
+#
+# id:       etiqueta corta de la consulta
+# query:    la pregunta, en lenguaje natural, como la harías de verdad
+# patterns: expresiones regulares que debe contener la nota que TRATA el hecho
+#           (AND entre ellas, sin distinguir mayúsculas). Describen el hecho, no
+#           repiten la consulta: así el banco no premia el eco de palabras.
+probes:
+  - {id: ejemplo-bug, query: "el fallo que hacía que el daemon perdiera la VRAM", patterns: ["VRAM", "daemon"]}
+  - {id: ejemplo-release, query: "la release que publicamos en PyPI", patterns: ["PyPI"]}

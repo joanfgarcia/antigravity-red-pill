@@ -28,9 +28,7 @@ def main() -> int:
 
 	registry = MementoRegistry()
 	root = get_memento_root()
-	pending = pending_agentic(
-		registry, root=root, force=True, redistill_since=args.redistill_round
-	)
+	pending = pending_agentic(registry, root=root, force=True, redistill_since=args.redistill_round)
 	items = [f"{src}:{sid}" for src, sid, _reason in pending]
 	print(json.dumps({"items": items}, ensure_ascii=False))
 	return 0

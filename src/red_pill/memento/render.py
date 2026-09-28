@@ -44,7 +44,7 @@ def _to_datetime(ts: Any) -> Optional[datetime]:
 			return None
 	if isinstance(ts, str):
 		try:
-			return _to_datetime(float(ts))  # epoch serializado como string (payloads de archive_memories)
+			return _to_datetime(float(ts))  # epoch serializado como string (payloads legacy)
 		except ValueError:
 			pass
 		try:

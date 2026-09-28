@@ -148,7 +148,7 @@ class TestProcessViaBridgeRouting:
 		assert "implementa el modulo X" in enqueued["prompt"]
 
 		# El historial conserva la versión ORIGINAL (con keyword, D11).
-		from red_pill.plugins.antigravity_ide.telegram_session import TelegramSessionManager
+		from red_pill.telegram.session import TelegramSessionManager
 
 		conn.close()
 		conn2 = sqlite3.connect(str(mock_db))

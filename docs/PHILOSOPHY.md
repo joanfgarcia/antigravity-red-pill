@@ -1,6 +1,6 @@
 # Red Pill Protocol: Sovereign Trade-offs & Philosophical Architecture
 
-The Red Pill Protocol (v6.1.0) represents a paradigm shift in AI persistent memory, prioritizing the "sovereignty" of the local Operator over centralized homogenization. In pursuit of an unbreakable, localized, neuro-symbolic OS, the architecture deliberately embraces certain structural and philosophical trade-offs. 
+The Red Pill Protocol (v8.0.0) represents a paradigm shift in AI persistent memory, prioritizing the "sovereignty" of the local Operator over centralized homogenization. In pursuit of an unbreakable, localized, neuro-symbolic OS, the architecture deliberately embraces certain structural and philosophical trade-offs. 
 
 This document exists to provide absolute transparency regarding the deliberate friction points and "weaknesses" identified in external engineering audits (like *Operation A+*), formalizing them as **Sovereign Trade-offs**.
 

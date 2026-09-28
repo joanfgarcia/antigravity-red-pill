@@ -35,7 +35,7 @@ def migrate(dry_run: bool = False) -> None:
 	from red_pill.memory import MemoryManager
 
 	thread_state_path = get_thread_state_path()
-	collections = ["archive_memories", "work_memories", "social_memories", "directive_memories"]
+	collections = ["work_memories", "social_memories", "directive_memories"]
 	mem = MemoryManager()
 	client = mem.client
 	thread_state: dict = {}
@@ -50,10 +50,7 @@ def migrate(dry_run: bool = False) -> None:
 			continue
 
 		# Collection-specific hub selection
-		if col == "archive_memories":
-			# Chain chronicle and monolith nodes in temporal sequence
-			hubs = [p for p in all_pts if p.payload.get("type", "") in ("chronicle_node", "monolith_parent")]
-		elif col == "directive_memories":
+		if col == "directive_memories":
 			# Directives are all woven indiscriminately
 			hubs = list(all_pts)
 		else:

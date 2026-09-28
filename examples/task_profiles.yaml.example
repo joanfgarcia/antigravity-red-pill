@@ -1,0 +1,60 @@
+# task_profiles.yaml — curación de TAREAS (contrato task×modelo del daemon).
+#
+# Copia este ejemplo a ~/.config/red-pill/task_profiles.yaml y ajústalo a tu
+# hardware/modelos. Cada task fija conducta (temperature, max_tokens, thinking,
+# prompt_file) y sus modelos CANDIDATOS; el `default: true` es el que resuelve
+# `task` sin `model`. Las recetas de configs/jobs/ referencian estos tasks:
+#   - memento_annotate_rebuild / memento_redistill* → `refine`
+#   - memento_validate                             → `validate`
+#   - memento_probe                                → `refine`
+# `validate` es juicio de notas (juez), no generación: no comparte task con
+# distill/refine a propósito (AD-035).
+tasks:
+  distill:
+    temperature: 0.3
+    max_tokens: 2048
+    thinking: 'off'
+    prompt_file: distiller_v3.txt
+    models:
+    - profile: granite_8b
+      default: true
+    - profile: tiny_aya_water
+      prompt_file: distiller_v3_voice.txt
+  annotate:
+    # Etapa annotate (MEM-006): notas desde el RAW — contrato propio (el carril
+    # refine/distill era un apaño de RFC-HARNESS-002 §7). Requerida por las
+    # recetas memento_annotate_rebuild / memento_probe.
+    temperature: 0.1
+    max_tokens: 1024
+    thinking: 'off'
+    models:
+    - profile: granite_8b
+      default: true
+  refine:
+    temperature: 0.1
+    max_tokens: 1024
+    thinking: 'off'
+    prompt_file: distiller_v3_voice.txt
+    models:
+    - profile: granite_8b
+      default: true
+    - profile: tiny_aya_water
+  validate:
+    temperature: 0.1
+    max_tokens: 2048
+    thinking: 'off'
+    models:
+    - profile: granite_8b
+      default: true
+  conversation:
+    thinking: low
+    models:
+    - profile: granite_8b
+  minion_tool:
+    thinking: 'off'
+    models:
+    - profile: granite_8b
+  hub:
+    temperature: 0.1
+    models:
+    - profile: granite_8b

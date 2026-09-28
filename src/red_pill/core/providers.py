@@ -143,11 +143,27 @@ class OpenAIInferenceProvider(BaseInferenceProvider):
 
 
 class SipInferenceProvider(BaseInferenceProvider):
-	"""Provider for Sovereign Inference Proxy (SIP) over Unix Sockets."""
+	"""Provider for Sovereign Inference Proxy (SIP) over Unix Sockets.
 
-	def __init__(self, socket_path: str, model: str = "*Q4_K_M.gguf"):
+	`model` vacío (default) = NO se envía el campo `model`: el daemon resuelve el
+	selector por `task`/config/env. Un `model` inválido tiene prioridad sobre
+	`task` (AD-030) y tumbaba la llamada con HTTP 500 — el viejo default
+	`"*Q4_K_M.gguf"` (glob muerto) rompía la síntesis de hubs (2026-09-28).
+	"""
+
+	def __init__(self, socket_path: str, model: str = ""):
 		self.socket_path = socket_path
 		self.model = model
+
+	def _build_payload(self, *, task: str, messages: list, temperature: float, **extra) -> dict:
+		"""Payload OpenAI-compatible para el daemon (sin `model` si está vacío)."""
+		payload: dict = {"task": task, "messages": messages, "temperature": temperature}
+		if self.model:
+			payload["model"] = self.model
+		for key in ("max_tokens", "stop", "seed", "response_format", "tools", "tool_choice"):
+			if extra.get(key) is not None:
+				payload[key] = extra[key]
+		return payload
 
 	def generate(self, prompt: str, **kwargs) -> str:
 		import http.client
@@ -173,20 +189,15 @@ class SipInferenceProvider(BaseInferenceProvider):
 				self.sock.settimeout(self.timeout)
 				self.sock.connect(self.path)
 
-		payload = {
-			"task": "conversation",  # RFC-HARNESS-002 §6.1: generate → conversation
-			"model": self.model,
-			"messages": kwargs.get("messages", [{"role": "user", "content": prompt}]),
-			"temperature": kwargs.get("temperature", 0.3),
-		}
-		if "max_tokens" in kwargs:
-			payload["max_tokens"] = kwargs["max_tokens"]
-		if "stop" in kwargs:
-			payload["stop"] = kwargs["stop"]
-		if "seed" in kwargs:
-			payload["seed"] = kwargs["seed"]
-		if "response_format" in kwargs:
-			payload["response_format"] = kwargs["response_format"]
+		payload = self._build_payload(
+			task=str(kwargs.get("task") or "conversation"),  # RFC-HARNESS-002 §6.1
+			messages=kwargs.get("messages", [{"role": "user", "content": prompt}]),
+			temperature=kwargs.get("temperature", 0.3),
+			max_tokens=kwargs.get("max_tokens"),
+			stop=kwargs.get("stop"),
+			seed=kwargs.get("seed"),
+			response_format=kwargs.get("response_format"),
+		)
 
 		conn = UnixHTTPConnection(self.socket_path, timeout=timeout)
 		headers = {"Content-Type": "application/json"}
@@ -220,13 +231,15 @@ class SipInferenceProvider(BaseInferenceProvider):
 				self.sock.settimeout(self.timeout)
 				self.sock.connect(self.path)
 
-		payload = {"task": "minion_tool", "model": self.model, "messages": messages, "temperature": temperature, "max_tokens": max_tokens}
-		if tools:
-			payload["tools"] = tools
-		if tool_choice:
-			payload["tool_choice"] = tool_choice
-		if response_format:
-			payload["response_format"] = response_format
+		payload = self._build_payload(
+			task="minion_tool",
+			messages=messages,
+			temperature=temperature,
+			max_tokens=max_tokens,
+			tools=tools,
+			tool_choice=tool_choice,
+			response_format=response_format,
+		)
 
 		conn = UnixHTTPConnection(self.socket_path, timeout=timeout)
 		conn.request("POST", "/v1/chat/completions", body=json.dumps(payload), headers={"Content-Type": "application/json"})

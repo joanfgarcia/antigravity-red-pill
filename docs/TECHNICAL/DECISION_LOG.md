@@ -4,6 +4,154 @@ This document records the architectural and philosophical pivots of the project.
 
 ---
 
+## [AD-040] Etiquetado emocional/temático en tiempo real (Laya) — señalizar, no garantizar
+**Date**: 2026-09-27
+**Status**: IMPLEMENTADO — RFC-004 P1-P4 DONE (sidecar `redpill-laya-tag.service` desplegado 2026-09-28; flags OFF en prod por RULE 4). Anclado en **RFC-004** (`docs/TECHNICAL/BUNKER/RFC_004_REALTIME_TAG_SIDECAR.md`).
+**Context**: el pre-heating (Ferrari 11) calibraba con la ventana caliente de
+`interaction_memories` (tier 2, 48h) + heurísticas. La purga del buffer
+(53 turnos varados, 2026-09-27) dejó el tier 2 vacío: degrada con gracia pero
+el hilo emocional en vivo pierde fuelle. El RFC pedía calibración en tiempo
+real del estado emocional + temática.
+**Decision**: tag en captura vía sidecar `laya-serve` (emoción/tema/confianza
+por turno, ms en CPU), consumido por solera (M8) y pre-heating. Laya aquí SÍ
+encaja (al contrario que AD-039): presupuesto de ms, respuestas mínimas,
+fallo contenido (tono desviado, no recuerdo corrupto).
+**Contrato anti-ingeniería** (decisión explícita del operador):
+1. El registro nunca espera: `record_interaction_pair` escribe SIEMPRE; el tag
+   va fuera del camino crítico (timeout corto, try/except total).
+2. El engrama lleva `tag_status: ok/degraded/failed` + motivo (timeout,
+   sidecar caído, confianza baja). Fallo silencioso prohibido; fallo
+   señalizado = parte del diseño.
+3. Qdrant como ventana: últimos N por solera; trima lo existente (janitor TTL
+   + sueño). Sin garantías nuevas ni operaciones exóticas.
+4. El interceptor comunica: si ve fallos recientes, añade
+   `CALIBRATION WEAK: últimos N turnos sin tag (motivo)` al enriquecimiento.
+   Visibilidad en vez de reintentos; sin fallback en caliente.
+**Plan**: P1 sidecar `laya-serve` (unit systemd + sentinel que lo vigile) →
+P2 tag en `queue_worker` (punto único de drenaje) → P3 solera consume tags →
+P4 pre-heating lee tags + línea WEAK. Heurísticas actuales quedan como
+lectura por defecto cuando no hay tag (no es fallback: es ausencia de dato).
+**Revisión 2026-09-27 (operador):** sin puerto TCP — sidecar **UDS**
+(`/run/user/1000/red-pill/laya_tag.sock`, 0600) con servidor asyncio crudo
+(sin fastapi/uvicorn, que el venv no trae). Ver RFC-004 §2.1.
+**Por qué esto y no alternativas**: no tag en el interceptor (torch en el
+proceso caliente; los workers oneshot pagarían 18 s de carga por tick) — por
+eso sidecar; no reintentos (el dato tardío no vale en tiempo real); no
+garantizar el servicio (decisión explícita: lo que se asegura es el registro).
+
+---
+
+## [AD-039] Router System One (Laya) para elegir prompt — bake-off primero
+**Date**: 2026-09-27
+**Status**: PARKED 2026-09-27 — F1 completo, zero-shot insuficiente; evidencia en `docs/TECHNICAL/LAYA_ROUTER_BAKEOFF_F1.md`; revisit en ~1 mes o si cambia el supuesto.
+**Context**: el prompt único de annotate exigía "Joan me…" y prohibía "Joan implementó" → 50,2% muletilla + sujetos invertidos (voz v2 lo parchea con re-escritura, 100% 1ª persona en piloto pero a coste GPU por nota). El operador propone un clasificador previo barato que elija el prompt (y, si llega a hacer falta, el modelo) por fragmento.
+**Decision**: arquitectura en dos capas — System One (Laya-multilingual, CPU, ~33ms) clasifica `dominio × voz` y alimenta el triple `(prompt, model, thinking)` del selector existente (`model_runtime.resolve`, AD-030); System Two (daemon GPU) ejecuta. Confianza baja → prompt default actual (fallback = conducta de hoy, reversible). Jev (TypeSafe) descartado: pesos cerrados + API hosted = egress incompatible con soberanía; Laya (Apache 2.0, auto-alojable) es el equivalente local. Laya NO genera texto: la voz la siguen escribiendo los prompts generativos, el router solo elige cuál.
+**Ejes del router**: dominio `work/social/otro` × voz `actúa-Joan/actúa-Aleth/tercero/externo` (+ confianzas). Matriz 2×4 sobre los prompts existentes (`annotate_work/social_*`, `voice_rule_annotate.txt`, `voice_rewrite_user_v2.txt`).
+**Objeciones registradas**: benchmark independiente (LargitData) da a Laya-322M 0-36% zero-shot en routing multiturno vs Jev 61-91% — base sin tunear ≠ producción; obliga a multilingual (contenido ca/es) y a medir calibración antes de encender; stack nuevo (torch/transformers, no GGUF → venv aparte, nunca el daemon); a favor: 14.101 notas etiquetadas como fuel de fine-tune + arnés `audit-category`/`audit-dual` ya existente.
+**Plan**: F1 bake-off (factibilidad + calidad esperada, este job) → F2 matriz de prompts + flag `MEMENTO_CLASSIFY_ROUTER` (RULE 4, OFF) si el gate pasa → F3 piloto 3 sesiones → F4 migración con `--reconcile` si gana. Gate F1→F2: acuerdo con juez ≥0,80 en dominio + calibración sana + tasa de escalado aceptable; si no pasa: fine-tune con las 14k o se aparca (decisión explícita, no deriva).
+**Por qué esto y no alternativas**: no Jev hosted (egress); no otro LLM generativo como clasificador (cuesta GPU por nota y alucina formatos); no prompt único más largo (ya medido: reglas que sirven a medias para todos los casos).
+
+---
+
+## [AD-030.F1] Fallup-watcher v2 (anti-flapping, TOCTOU-safe)
+**Date**: 2026-09-27
+**Status**: DEPLOYED 2026-09-27 (script ejecutado, service reiniciado en ventana segura: nightly `c3c52f33` COMPLETED 18/18 + daemon idle; `/status` expone `"fallup":{"enabled":true,...}` y el desplegado contiene el watcher verificado por grep).
+**Context**: el fallup CPU→GPU (AD-030) evictaba el worker CPU con 5.2G en plena noche y flapeaba con la VRAM viva 7.27GB↔0.73GB (swing 6.5GB). Panel adversarial 3/3 BLOCKER (11 hallazgos R1-R4/E1-E3/P1-P5).
+**Decision**: watcher v2 en `src/red_pill/core/fallup.py` (testeable, sin deps de daemon) + bloque fallup en el generador `scripts/setup_background_model.sh` (heredoc DUAL_BIND_EOF, fuente de verdad; PROHIBIDO editar el generado a mano) + `tests/test_fallup_watcher.py` (mocks, nunca 8760 ni systemctl).
+- **R1 flapping**: margen global 500MB insuficiente → `FALLUP_MARGIN_GB=0.5` sobre tier de ENTRADA + peor-caso dinámico (`worst_case_gpu_min_free_gb()`, peor entrada GPU entre perfiles distillation con tiers; hoy granite_8b 6.5) + `FALLUP_STABLE_CHECKS=12` + `FALLUP_MIN_IDLE_S=60` (tiers granite_8b 1.5/6.5/7.2/7.7/8.2; VRAM viva 7.27↔0.73). Corrección del juez: margen sobre el tier máximo (7.2+1.0=8.2) es código muerto en tarjeta de 8.15GB y habría bloqueado el fallup real de esta noche (7.27GB→GPU 10240, estable sin OOM); el margen va sobre la entrada (6.5+0.5=7.0).
+- **R2 TOCTOU**: `last_active` se actualiza dentro del lock → re-chequeo `elapsed2=time.time()-last_active` tras adquirir el lock + `lock._waiters` (si hay waiters → `stable=0`, `last_result="waiters-busy"`, return sin unload).
+- **R3 prioridad**: `LOW_TIMEOUT=10s`/`HIGH=300s` → umbral fijo 15s era código muerto en low y evicción prematura en high → watcher exige `idle>=60` y excluye `last_priority=="low"` (`"low-priority-idle-unloads-anyway"`, el timeout de low ya descarga).
+- **R4 perfil**: en CPU `current.n_gpu_layers==0` (dead-code) → `dry_run_gpu_tier(profile)` (copia vía `ModelRegistry.get_resolved_hardware_affinity`, nunca muta; `None` si toca CPU); el próximo request puede ser otro perfil (tiny_aya 4.0GB, llama_32 3.5GB) o experimental sin tiers (`"experimental-no-tiers"`/`"no-gpu-tier-fits"`).
+- **E1 worker**: reaper gated solo por `IS_CPU_WORKER` (env) → `main()` con `--serve-cpu` fija `os.environ["MINION_CPU_WORKER"]="1"` + `global IS_CPU_WORKER=True` ANTES de arrancar.
+- **E2 cola/reserva**: `check_idle` ignoraba `queue_worker --oneshot` en vuelo y `GpuReservationManager` → gate por proceso (`"queue_worker"`+`"oneshot"` → `"queue-busy"`, sin unload) + `is_exclusive_active()` → `"gpu-reserved"` (nunca por puerto 8760).
+- **P1 regen**: editar el generator sin regenerar deja divergencia → tests compilan el generado desde la fuente (`compile()`) y exigen las cadenas del watcher.
+- **P2 /status**: sin observabilidad → `"fallup": {"enabled", "stable", "required": 12, "last_result", "last_check_ts", "last_fallup_ts"}`.
+- **P3 ramas None/experimental + `_fallup_enabled()` muerto** (model_runtime.py:161, cero usos) → gatea el watcher (`mr._fallup_enabled()`); `None`→`"nothing-loaded"`, experimental→`"experimental-no-tiers"`.
+- **P4 sin tests**: `tests/test_fallup_watcher.py` cubre las 12 ramas de `should_fallup`, `worst_case>=6.5`, generator (compila + cadenas) y regresión 2590 (`_same_model` ignora `n_ctx`).
+- **P5 tunables sin documentar**: aquí + docstring del heredoc + RUNBOOK §8760.
+- **Tunables**: `FALLUP_MIN_IDLE_S=60`, `FALLUP_STABLE_CHECKS=12`, `FALLUP_MARGIN_GB=0.5` (sobre entrada y sobre peor-caso), `FALLUP_WORST_CASE_MIN_FREE_GB=6.5` (piso; dinámico vía `worst_case_gpu_min_free_gb()`).
+- **Ventana de deploy**: solo con nightly idle + daemon idle (job `c3c52f33` fuera de GPU, sin requests en vuelo, `/status.busy==false`); deploy = ejecutar el script (hace restart) + verificar `/status.fallup`.
+**Por qué esto y no alternativas**: no margen 500MB (flap medido 6.5GB); no umbral fijo 15s (muerto en low/prematuro en high); no chequear `n_gpu_layers` en CPU (dead-code); no matar PID con reserva/cola en vuelo (5.2G nocturnos); no editar el generado a mano (divergencia P1).
+
+---
+
+## [AD-038] Recall de la memoria curada: híbrido + MMR sí, texto enriquecido no (medido)
+**Date**: 2026-09-25
+**Status**: ACCEPTED (2026-09-25) — híbrido, MMR y dedup post-rewrite encendidos en el operador; voz v2 detrás de flag hasta el piloto; texto enriquecido refutado y apagado.
+**Context**: tras la resiembra (AD-037) la memoria estaba íntegra (vectores coherentes, fechas, 0 cruces, 0 sellos rotos) pero recordaba mal: de 13 hechos conocidos, 9 en el top-3. Diagnóstico medido: (1) solo el 28,8% de las notas nombra el proyecto — la nota del anexo de Hotetec no dice "Hotetec" (coseno 0,17 contra su consulta); (2) el 50,2% abre con "Joan me dijo/explicó/pidió…", porque el prompt de voz v1 lo exigía y prohibía "Joan implementó" → muletilla e inversiones de sujeto; (3) el embedder trunca a 128 tokens; (4) paráfrasis del mismo hecho ocupan el top-k. Memento sí tenía todos los hechos (captura completa).
+**Decision**:
+- **Recall híbrido** (semántico + palabras clave sobre el árbol, RRF) y **MMR** con relevancia por rango, solo en llamantes explícitos (oracle/CLI). El árbol es la verdad y ya sabe qué punto de Qdrant cubre cada línea (`source_lines` + `ascended_point_id`): sin índice nuevo.
+- **Texto enriquecido para embeber: NO.** Hipótesis razonable (poner la entidad delante), refutada por el banco: empeora el semántico solo (8/13 vs 9/13) y no suma sobre el híbrido. Se conserva apagado por si otro embedder cambia el resultado.
+- **Voz v2** (sujeto = quien actuó, sin muletilla, entidad nombrada) detrás de `MEMENTO_ANNOTATE_VOICE_V2`: cambia el fingerprint de annotate, así que migrar el corpus es un rebuild explícito (el nocturno no re-anota sesiones con pase agéntico) + `memento_ascend --reconcile` para no dejar huérfanos.
+- **Método**: medir antes de encender (`tools/memento_recall_bench.py`, solo lectura; el banco de consultas es del operador y no va al repo).
+**Evidence**: banco de 13 consultas — plano 9/13 · plano+MMR 9/13 · **plano+híbrido+MMR 12/13** (λ=0,85; 11/13 con 0,7) · enriquecido 8/13 · enriquecido+híbrido+MMR 11/13 hit@3. Verificado en vivo con `search_and_reinforce(hybrid=True)`: Hotetec y DL-007 entran en el top-3 en ~0,26 s.
+**Por qué**: el fallo era de la interfaz nota→vector, no de captura ni de curación; el híbrido lo ataca sin re-embeber nada ni re-anotar. Lo que no mejoró se apaga en vez de mantenerse por intuición.
+
+---
+
+## [AD-037] Rebuild annotate reanudable + Flash Attention por modelo (MEM-009)
+**Date**: 2026-09-25
+**Status**: ACCEPTED (2026-09-25) — D5 y F1 implementados y D5 desplegado; F0, F2 y F3 en versión mínima pendientes; F4 y F5 aplazados.
+**Context**: el rebuild `7b587370` (MEM-006) se atascó en tres sesiones. La 420 era lenta y cada reintento repetía 40-80 min de extract bueno, porque `annotate_session` era todo-o-nada y **borraba las notas al empezar**. La 444 y la 495 entraban en bucle de DEFER con el daemon reiniciándose (contador 240). La autopsia fuera del daemon (`daemon/.venv`, `verbose=True`) dio con la causa: **`CUDA error: out of memory` en el scratch de prefill**. A n_ctx 10240 y sin FA quedaban 248 MiB libres; un prompt de ~6,3-6,5K tokens (~17,0-17,3K chars) los agotaba. No era contenido "venenoso": era el límite de VRAM del servidor (la 420 pasó por 272 chars).
+**Decision**:
+- **D5 — `flash_attn: auto|true|false` por perfil** (`model_profiles.yaml`), resuelto en `model_runtime.effective_flash_attn` como fuente única de daemon y clientes. `auto` = GPU ∧ `fa_capable: true`; el worker CPU nunca lo activa; sin declarar = conducta previa. El daemon lo pasa a `Llama()`, lo expone en `/status` y lo cuenta en `_same_model` (es estático del perfil, así que no reabre el thrash de AD-030). `granite_8b → true`.
+- **F1 — annotate reanudable**: `annotate/_partial.json` (atómico), con una entrada por split keyed por **rango de mensajes** y revalidada por `content_hash`, más el estado de cada fase (extract/rewrite/score). Un contrato distinto (prompt/engine/voice) resetea el parcial. La salida del LLM pasa `scrub_secrets`+`normalize_noise` antes de persistirse. Las notas huérfanas se borran solo tras el `_meta` verificado. `--from=extract|rewrite|score` degrada con aviso y nunca falla duro; su prerrequisito sale del parcial o de las notas del contrato vigente. `--all` no cambia (desde cero, borra el parcial). Audit trail en `_meta` (umbrales, `from_phase`, `reason`).
+- **`work_units()` como fuente única de la unidad de trabajo**: devuelve `WorkUnit(nnn, ref, content, key)`, con la clave derivada del MISMO fichero en la MISMA iteración (el rango repetido cae al stem). Sustituye a `_work_units` + `_range_keys`, que había que mantener en el mismo orden a mano.
+- **Aplazado / no se hace**: F2 completo (el registro persistente de venenos con contrato de seis campos se diseñó para un caso que resultó ser VRAM → queda en versión mínima: motivo del skip + distinción muro/veneno), F4 (snap + overlap de boundaries) y F5 (índice por rangos + backfill de 535 sesiones: con el parcial, la frescura binaria por `_meta` basta hoy). F3 se reduce a aplicar en annotate el `prompt_budget()` que refine ya usa (`_split_to_fit`).
+**Evidence**: autopsia en proceso limpio: sin FA 7459 MiB usados / 248 libres → ABORT; con FA 6965 / 742 → 6,5K y 8K tokens OK. Tras desplegar (2026-09-25 15:54): `/status.flash_attn=true`, 718-726 MiB libres; el split 001 de la 495 (prompt de 17.420 chars) extrae 7 ideas en 34,6 s con `NRestarts=0`. Tests: `tests/test_memento_annotate_resume.py` (kill a mitad de extract → solo los splits restantes; hash cambiado; scrub del parcial; degradado de `--from`; renumeración de NNN; tri-estado FA).
+**Por qué**: la causa del atasco era de configuración (FA), así que se arregla primero; F1 elimina la clase de coste "reintento = rehacer todo". El resto del RFC se queda en lo mínimo que justifican los datos, sin maquinaria especulativa.
+
+---
+
+## [AD-036] Anotaciones del motor equivocado (tiny_aya) — aceptadas como estrato histórico
+**Date**: 2026-09-23
+**Status**: ACCEPTED (2026-09-23) — opción (c): se acepta la cohorte tal cual.
+**Context**: auditoría adversarial pre-commit (panel O2) del rebuild MEM-006. El incidente `tiny_aya` dejó **95 sesiones anotadas con `tiny_aya_water`** (sello `engine`), de las cuales **~4.1k engramas ya fueron ascendidos** en el barrido legacy. La frescura del rebuild era solo por `prompt_version` → el job pineado (granite_8b) NO las re-anotaría: el plan "el rebuild arregla el corpus" quedaba incompleto en silencio.
+**Decision**:
+- **Se acepta la cohorte tiny_aya (4.128 engramas) sin purga ni re-anotación**: la cata la muestra como la capa MÁS LIMPIA del corpus, y purgarla rompería los hilos de Ariadna/hubs (navegación tejida sobre esos point ids) para ganar solo longitud; el contexto completo vive en Memento (`source_lines`/`refine_ref`) y se puede enriquecer on-demand.
+- `memento_annotate --stale-engine` (y `--status.stale_engine`) queda como **bisturí opt-in**, no como camino por defecto.
+- La limpieza de duplicados del corpus granite/legacy **NO es decisión nueva**: es **MEM-006 P1-B** (script `memento_dedup_qdrant.py`: agrupa por `session_id+source_lines`, superviviente por score compuesto, dry-run previo; Q2/Q3 abiertas) + **MEM-007 D12** (dedup-at-ascension) / **G5** (P1-B por escribir). La cata corrobora su magnitud.
+**Evidence (cata 40% de la cohorte tiny_aya, 2026-09-23)**:
+- Determinista (1.651 de 4.128; semilla 7): 98,7% ES · 0,5% raw-dump · 0,4% <120 chars · mediana 300 chars (p10 193 / p90 472) · **3 duplicados exactos (0,1%)** · emoción/theme 100% · `content_verified` 0,2%.
+- Juez LLM (granite_8b, submuestra 120 de la cata): **8,3% triviales** vs **17,4%** en la cohorte `granite_8b` (n=46).
+- Contraste de duplicación del corpus: tiny_aya **0,1%** (3/4.128) vs `Granite-4.1-8B` **29,7%** (976/3.287) y `granite_8b` **33,9%** (504/1.487) — consistente con los ~1.500 pares work / 678 grupos social de la ronda de redestilado que P1-B debe limpiar.
+- Debilidad tiny: notas cortas/uniformes (mediana 300 vs 739 del granite) y sin validación de contenido.
+**Por qué**: registra la limitación y la decisión (hallazgo A1 del panel) sin big-bang sobre datos canónicos; la dedup pendiente ya tiene dueño (P1-B) y la cata le da munición (dry-run con números reales).
+
+---
+
+## [AD-035] Task `validate` — la validación de notas Memento y el 4.2-3B como juez
+**Date**: 2026-09-23
+**Status**: ACCEPTED — medido (golden set).
+**Context**: el 4.2-3B suspendió distill/refine (AD-032) y **no era candidato de ninguna task** → `task+model` lo rechazaba (K1: "model … no es candidato de la task … usa custom"), de modo que el validador de contenido (que corría bajo el task legacy `refine`) nunca pudo usarlo. Pero la validación de notas es una **familia de tarea distinta** (juez/detector, no generación) y el 3B es el mejor detector 3B medido (3/5, AD-033).
+**Evidence** (golden set 5 casos, `task=validate`, temp 0.1 del transporte):
+- `granite_8b`: **5/5** (baseline intacto).
+- `granite_4_2_3b`: **4/5** — único fallo: falso negativo sobre `005-investigate-transcript-hash-rfc-9420-8-2` (rechaza una nota válida).
+**Decision**:
+- Nueva task `validate` en `task_profiles.yaml`: default `granite_8b`; candidato `granite_4_2_3b` (thinking off; receta IBM en el candidato — temp 1.0; la task deja 0.1 para el 4.1; top_p 0.95 = default del daemon: el body del transporte manda los sampling params, verificado en `run_dual_bind.py`).
+- `configs/jobs/memento_validate.yaml` pasa de `task: refine` (apaño histórico) a `task: validate`.
+- El contrato `validate` debe existir en el `task_profiles.yaml` del entorno (documentado en `examples/task_profiles.yaml.example`); una instalación limpia sin esa task falla con 400 «task 'validate' no existe» (hallazgo de la auditoría adversarial O2).
+- El 4.2-3B queda **habilitado** como juez alternativo barato (2.24 GB, cabe entero en GPU); el default del validador sigue el 4.1-8B (5/5) hasta que el operador decida adoptarlo.
+- `memento_recalibrate.py` gana `--task` (medir con otro contrato) y parser JSON robusto (`_extract_json_array`, patrón AD-033 #8).
+**Por qué**: separa semánticamente validación de generación, permite medir/reemplazar el juez sin tocar distill/refine, y **persiste la receta** que antes solo vivía en el script del bake-off.
+
+---
+
+## [AD-034] Single-writer de memoria — ascensión Memento, hubs, Ariadna, solera y flags por componente
+**Date**: 2026-09-21
+**Status**: ACCEPTED (rama `feat/memento-single-writer`; flags `SW_*` default OFF → producción intacta).
+**Context**: `work_memories`/`social_memories` recibían prompts por DOS vías redundantes (la ingesta `interaction→work/social` del sueño y el chronicle legacy) que sólo añadían ruido y duplicados (la resiembra encontró ~3.000 réplicas). La vía legacy ya estaba retirada; quedaba la del sueño. Además, la **erosión estaba inerte**: el pulse refrescaba `last_recalled_at` de TODO cada hora.
+**Decision**:
+- **Fuente única**: work/social se alimentan **solo** por **ascensión curada de Memento** (`distill→refine→ascend`). Se **retira** la ingesta `interaction→work/social` (`SW_INGEST_RETIRED`); el buffer `interaction_memories` pasa a semáforo transitorio (TTL gateado por render en Memento + **tope de edad** con señal).
+- **Ascensión con dos fechas** (`created_at`=sesión real, `ascended_at`=ascensión) + `node_type`; dedup-at-ascension (ganador determinista por cuerpo); **umbrales por categoría** (work/social).
+- **Navegación**: **hubs de sesión** (macro, idempotentes por `point_id`+`hub_input_hash`) + **micro-hilo de Ariadna** por `refine_ref` (`prev/next_member`) + `cross_refs` (axones). El recall omite los miembros `hubbed` (reversible con el flag).
+- **Olvido elegante**: eje propio `last_reinforced_at` (no lo toca el pulse), **demote a Memento** a 5a (miembros) / 10a (hubs, piso propio), factores por motor; **fix de raíz** del refresh incondicional (`SW_ABSENCE_GUARD_CONDITIONAL`).
+- **Semáforo de situación** (`situation_memories`, solera 20/80 en **dos capas**) leído por el pre-heating — **global** (sin buckets de afinidad). **Telegram** es un canal propio: **fuente chronicle `telegram:<uuid>`** (el uuid de Telegram es el `session_id`) y **registro genérico de orígenes** (`session_origins.json`, `core/origins.py`) que hace que **todos** los sources de providers (opencode/claude_code/pi/antigravity y futuros) ignoren `origin=telegram` — la renderiza solo el source `telegram`. El worker de Telegram queda con un único camino (puente) y captura `session_id` con `originator=telegram`. La afinidad por **filesystem** (cwd/proyecto) se **retiró** — no refleja cómo trabajamos; si se retoma, será **semántica** (keywords del refine).
+- **Patrón obligatorio**: **feature flag por componente** (CONVENTIONS RULE 4).
+**Por qué**: elimina la redundancia/ruido, conserva la navegación y el archivo (Memento es la fuente de verdad), y **devuelve la vida al olvido**. Verificado con panel adversarial (D1–D12 corregidos).
+
+---
+
 ## [AD-030] Servicio de Gobierno de la Inferencia Local (RFC-HARNESS-002 v3)
 **Date**: 2026-09-15
 **Status**: ACCEPTED & IMPLEMENTED (v3 fusionado; PR-0/PR-1/PR-2 desplegados).
@@ -372,6 +520,8 @@ MCPs are launched **per-IDE as stdio subprocesses**: N IDEs × M servers = dupli
 
 ### 2. The Decision (proposed)
 Host red-pill's MCPs in the **SovereignDaemon** as a `DaemonPlugin`, **dual-bind UDS + TCP** (the `run_dual_bind`/hypervisor precedent), with a **stdio↔network proxy** for third-party stdio servers (`server-filesystem`/memory, graphify). `inject_mcp` emits **URL** configs where the client supports them (Claude Code ✓), with a local stdio shim where it does not.
+
+> **Update (2026-09-21):** the "hypervisor" mentioned as precedent was `hypervisor_daemon.py`, an alternative `llama-server`-proxy daemon that was **never wired to a service**. It was purged; the living dual-bind daemon is the generated `run_dual_bind.py` (see `docs/TECHNICAL/COGNITIVE/HYPERVISOR.md`). The decision text above is preserved as historical context.
 
 ### 3. Transparency consequence
 Because memory = one multi-root MCP and graphify = one merged MCP, **toggling a workspace changes roots/graph inside the server, never the MCP set** → the client's tool list is unchanged → **no restart** for memory/graph data. The exception is **`access`/`additionalDirectories`** (an IDE settings-file layer, read at session start, outside MCP) → that still needs a client restart. The daemon cannot change that.

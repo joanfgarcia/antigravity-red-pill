@@ -219,6 +219,13 @@ def run_rhizodb_washout_and_pruning(memory_manager) -> None:
 			if payload.get("immune"):
 				continue
 
+			# D16/D17 (MEM-005 E): los HUBS no se someten al washout genérico —
+			# anclan el hilo y tienen erosión hub-específica (erode_curated, con
+			# piso propio). Sin esto, la poda genérica los mataría antes que a sus
+			# miembros y rompería Ariadne.
+			if payload.get("lazarus_phase") == "synthesis_hub" or payload.get("node_type") == "synthesis_hub":
+				continue
+
 			# 1. Run lazy decay first to get current activation/score
 			decay_updates = engine.calculate_lazy_decay(payload, current_time=now)
 
@@ -484,7 +491,7 @@ def compact_tool_noise(text: str) -> str:
 	import json as json_lib
 	import re
 
-	from red_pill.metabolism.chronicle.claude_code_plugin import _render_tool_result, _render_tool_use
+	from red_pill.utils.chronicle_render import _render_tool_result, _render_tool_use
 
 	out: list = []
 	result_buf: list = []
@@ -641,7 +648,7 @@ def cleanup_orphan_raw_parents(memory_manager, collections=("work_memories", "so
 	When all synthesized child engrams (sequence_chunks / synthesis_hubs) associated with
 	a raw_parent have eroded away due to lack of recall/utility, the raw_parent
 	no longer has active children in the memory graph and is safely garbage collected
-	(since the raw verbatim interaction is already archived in archive_memories).
+	(the Memento tree retains the verbatim interaction).
 	"""
 	from qdrant_client import models as qm
 
@@ -689,3 +696,78 @@ def cleanup_orphan_raw_parents(memory_manager, collections=("work_memories", "so
 			logger.info(f"[GARBAGE COLLECTION] Cleaned up {deleted_count} orphan raw_parent(s) in {col}.")
 
 	return report
+
+
+def erode_curated(memory_manager, collections=("work_memories", "social_memories")) -> dict:
+	"""Olvido elegante de los curados (SW_EROSION_DEMOTE_ENABLED, D11/D23).
+
+	Los engramas ascendidos y los hubs decaen por su **eje propio**
+	(`last_reinforced_at`, que solo se refresca al recuperar — no en el pulse). Un
+	curado nunca reforzado se **demota** (se borra de Qdrant; el gist persiste en
+	Memento) tras `CURATED_MIN_LIFETIME_YEARS`. No es `immune`.
+	"""
+	if not bool(getattr(cfg, "SW_EROSION_DEMOTE_ENABLED", False)):
+		return {"demoted": 0, "enabled": False}
+
+	base_years = float(getattr(cfg, "CURATED_MIN_LIFETIME_YEARS", 5.0))
+	hub_years = float(getattr(cfg, "CURATED_HUB_MIN_LIFETIME_YEARS", 10.0))
+	now = time.time()
+	stats = {"demoted": 0, "scanned": 0, "enabled": True}
+
+	from qdrant_client import models as qm
+
+	for collection in collections:
+		try:
+			if not memory_manager.client.collection_exists(collection):
+				continue
+			# Factor por motor (D17): work=Bayesiano, social=RhizoDB.
+			mult = float(getattr(cfg, f"CURATED_LIFETIME_MULTIPLIER_{collection.split('_')[0].upper()}", 1.0))
+			member_lifetime_s = base_years * mult * 365 * 86400
+			hub_lifetime_s = hub_years * mult * 365 * 86400
+			scroll_filter = qm.Filter(
+				should=[
+					qm.FieldCondition(key="node_type", match=qm.MatchValue(value="memento_engram")),
+					qm.FieldCondition(key="node_type", match=qm.MatchValue(value="synthesis_hub")),
+					qm.FieldCondition(key="lazarus_phase", match=qm.MatchValue(value="synthesis_hub")),
+				]
+			)
+			to_delete = []
+			hub_members: set = set()
+			offset = None
+			while True:
+				points, offset = memory_manager.client.scroll(
+					collection, scroll_filter=scroll_filter, limit=500, offset=offset, with_payload=True, with_vectors=False
+				)
+				for p in points:
+					pl = p.payload or {}
+					if pl.get("immune"):
+						continue
+					stats["scanned"] += 1
+					base = pl.get("last_reinforced_at") or pl.get("created_at")
+					if not isinstance(base, (int, float)):
+						continue
+					is_hub = pl.get("lazarus_phase") == "synthesis_hub" or pl.get("node_type") == "synthesis_hub"
+					life = hub_lifetime_s if is_hub else member_lifetime_s
+					if now - float(base) > life:
+						to_delete.append(str(p.id))
+						# Si es un hub, liberar sus miembros (hubbed=False) para que
+						# vuelvan al recall primario (D9): si no, quedarían invisibles.
+						if is_hub:
+							for mid in pl.get("members") or []:
+								hub_members.add(str(mid))
+				if offset is None:
+					break
+			if to_delete:
+				memory_manager.client.delete(collection, points_selector=qm.PointIdsList(points=to_delete), wait=True)  # type: ignore[arg-type]
+				stats["demoted"] += len(to_delete)
+				logger.info(f"[SLEEP ENGINE] Demote a Memento: {len(to_delete)} curados en {collection}.")
+			release = [mid for mid in hub_members if mid not in set(to_delete)]
+			if release:
+				try:
+					memory_manager.client.set_payload(collection_name=collection, payload={"hubbed": False, "hub_id": None}, points=release)
+					stats["released"] = stats.get("released", 0) + len(release)
+				except Exception as e:
+					logger.warning(f"[SLEEP ENGINE] No se pudieron liberar miembros de hubs demotados: {e}")
+		except Exception as e:
+			logger.error(f"[SLEEP ENGINE] Demote curados falló en {collection}: {e}")
+	return stats

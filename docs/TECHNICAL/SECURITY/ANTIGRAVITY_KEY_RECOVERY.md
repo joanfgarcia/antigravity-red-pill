@@ -91,19 +91,20 @@ uv run python scripts/antigravity_decrypt.py --source ~/.gemini/antigravity/conv
 
 ---
 
-## 🔄 Chronicle Daily Pipeline
+## 🔄 Antigravity → Memento pipeline (v8.0.0)
 
-The automated pipeline runs daily at 04:00 via `redpill-chronicle.timer`:
-```
-~/.gemini/antigravity/conversations/*.pb
-  → antigravity_decrypt.py (ANTIGRAVITY_KEY) → /tmp/chronicle_today/*.json
-  → antigravity_ingest.py → archive_memories
-```
+El productor de la fuente Memento de antigravity es
+`scripts/chronicle_extractor.py` (orquesta `_aes.py` si hay `ANTIGRAVITY_KEY`, si no
+`_ls.py`), que escribe `unencrypted_conversations/*.json`. El **ciclo nocturno**
+(`redpill-nightly.timer`, 03:00 → `chronicle → sleep`) los renderiza al árbol
+Memento en disco. La antigua ingesta cruda a Qdrant está **retirada**.
 
 > [!IMPORTANT]
-> `ANTIGRAVITY_KEY` **IS required** for the Chronicle timer. The pipeline decrypts `.pb` files directly — it does NOT need the IDE to be open. This is the advantage over Method 1 (aghistory), which requires an active IDE session.
+> `ANTIGRAVITY_KEY` habilita el descifrado AES en `chronicle_extractor_aes.py`;
+> sin ella cae a la extracción por Language Server. En ambos casos **no** hace
+> falta el IDE abierto (la vía `_ls` usa la infraestructura, no la UI).
 
-If `ANTIGRAVITY_KEY` is missing from `.env`, a pain signal (severity 8.5) is emitted and the pipeline aborts.
+Si falta `ANTIGRAVITY_KEY`, **no se aborta**: el extractor cae a la vía Language Server (`chronicle_extractor_ls.py`).
 
 > [!NOTE]
 > `antigravity_ingest.py` reads the **plaintext JSON** files produced by `antigravity_decrypt.py`, not the `.pb` files directly. The aghistory HTTP method (Method 1) is an alternative that also produces plaintext JSON — both feed the same ingest step.

@@ -39,6 +39,10 @@ profiles:
     model_path: "models/Granite-4.1-8B-Q4_K_M.gguf"
     binary_type: "gguf"
     chat_format: "chatml"
+    # MEM-009 D5 (autopsia 2026-09-25): sin FA, el scratch de prefill agota el
+    # headroom a n_ctx 10240 (~6.3-6.5K tokens de prompt → CUDA OOM → restart
+    # loop). Con FA, 8K tokens pasan (742 MiB libres). auto|true|false.
+    flash_attn: true
     # IBM Granite-4.1 — Apache-2.0. Uso comercial libre.
     license:
       id: "apache-2.0"

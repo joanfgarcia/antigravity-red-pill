@@ -15,13 +15,10 @@ Fix, two prongs:
    flagged hub_rebuild_pending for a future LLM re-synthesis.
 """
 
-from unittest.mock import MagicMock, patch
-
 from qdrant_client.http import models
 
 from red_pill.memory import MemoryManager
 from red_pill.metabolism.maintenance import promote_orphan_chunks
-from red_pill.metabolism.sleep import perform_sleep_cycle
 
 _LONE_CHUNK = "00000000-0000-0000-0000-0000000000b1"
 _MULTI_1 = "00000000-0000-0000-0000-0000000000b2"
@@ -124,47 +121,3 @@ def test_promoted_chunk_becomes_searchable(memory_manager):
 
 	after = memory_manager.search_and_reinforce("work_memories", "chunk solitario", limit=10, deep_recall=True)
 	assert any(str(r.id) == _LONE_CHUNK for r in after), "promoted chunk must be reachable by direct recall"
-
-
-@patch("red_pill.metabolism.phases.consolidation.distill_session_anchors")
-@patch("red_pill.metabolism.phases.consolidation._check_llm_available", return_value=True)
-@patch(
-	"red_pill.metabolism.phases.consolidation.chunk_text",
-	side_effect=lambda text: ["destilado solitario"] if "unico" in text else [],
-)
-def test_consolidation_promotes_lone_survivor_inline(mock_chunk, mock_llm, mock_anchors):
-	"""The drain loop itself promotes a single-survivor turn — no orphan is born."""
-	mock_mgr = MagicMock()
-	mock_client = mock_mgr.client
-	mock_client.collection_exists.return_value = True
-
-	raw_point = MagicMock()
-	raw_point.id = "raw-lone"
-	raw_point.payload = {"content": "USER: apunte unico\n\nASSISTANT: ok", "metadata": {"model": "opus", "category": "work"}}
-
-	interaction_calls = 0
-
-	def mock_scroll(collection_name, *args, **kwargs):
-		nonlocal interaction_calls
-		if collection_name == "interaction_memories":
-			if interaction_calls == 0:
-				interaction_calls += 1
-				return ([raw_point], None)
-			return ([], None)
-		return ([], None)
-
-	mock_client.scroll.side_effect = mock_scroll
-
-	with patch("red_pill.metabolism.phases.consolidation.distill_engram") as mock_distill:
-		mock_distill.return_value = {"summary": "destilado solitario", "emotion": "neutral", "intensity": 0.8, "category": "work"}
-		mock_mgr.add_memory.side_effect = ["lone-child-1", "raw-parent-1"]
-
-		with patch("red_pill.metabolism.phases.consolidation._load_thread_state", return_value={}):
-			with patch("red_pill.metabolism.phases.consolidation._save_thread_state"):
-				perform_sleep_cycle(mock_mgr)
-
-	mock_client.set_payload.assert_any_call(
-		collection_name="work_memories",
-		payload={"lazarus_phase": "synthesis_hub", "node_type": "synthesis_hub", "promoted_from": "sequence_chunk"},
-		points=["lone-child-1"],
-	)

@@ -117,6 +117,8 @@ curl -s http://localhost:8760/v1/models | python3 -m json.tool
 # Estado del servicio de gobierno (modelo cargado, thinking_mode, last_mode)
 curl -s http://localhost:8760/status | python3 -m json.tool
 
+# Fallup-watcher v2 (anti-flapping): `status.fallup` muestra `enabled/stable(0-12)/last_result`; tunables idle 60s + 12 estables + margen 0.5GB sobre entrada/peor-caso 6.5GB. Deploy solo con nightly idle + daemon idle (nunca con job en GPU).
+
 # Test rápido (task conversation → default de la tarea en task_profiles.yaml)
 curl -s http://localhost:8760/v1/chat/completions \
   -H "Content-Type: application/json" \
@@ -130,7 +132,7 @@ curl -s http://localhost:8760/v1/chat/completions \
   -d '{"experimental":{"model_path":"<XDG_DATA_HOME>/red-pill/models/granite-4.2-8b-Q4_K_M.gguf","n_ctx":8192,"device_fallback":["gpu","cpu"]},"thinking":"on","messages":[{"role":"user","content":"Razona: 12*7?"}],"max_tokens":200}' \
   | python3 -m json.tool
 
-# El hypervisor gestiona Samantha
+# El daemon dual-bind (run_dual_bind.py) gestiona el modelo local
 systemctl --user restart redpill-llm
 ```
 

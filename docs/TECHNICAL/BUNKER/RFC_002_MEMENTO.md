@@ -48,6 +48,15 @@ Today the Bünker records *everything* twice, and both times into Qdrant vectors
   buffer self-drains; only failed points (`failed_ids`, kept permanently and
   excluded from later scrolls) and VRAM-deferred nights linger.
 
+  > **Update (2026-09-22, AD-034)**: con el single-writer encendido
+  > (`SW_INGEST_RETIRED=ON`) este drenaje **desaparece**: `work_memories`/
+  > `social_memories` crecen SOLO por **ascensión de Memento**
+  > (`distill→refine→ascend`) y el buffer queda como ventana transitoria con
+  > TTL (72h) para el pre-heating + el semáforo de situación. Hoy (flags OFF)
+  > el camino legacy sigue activo como fallback. Ver
+  > [DECISION_LOG](../DECISION_LOG.md) (AD-034) y el runbook del single-writer
+  > (`OPERATIONS/SINGLE_WRITER_ROLLOUT.md`).
+
 **Pipeline B — Chronicle (`archive_memories`)**
 
 - The 04:00 timer no longer runs the script directly: `schedule_pulse.py:125-131`
@@ -58,6 +67,13 @@ Today the Bünker records *everything* twice, and both times into Qdrant vectors
   (opencode.db SQLite, Claude Code JSONL, Antigravity exports), normalizes them,
   and archives them atomized into `archive_memories`
   (chronicle_node / monolith_parent / idea_fragment with sequential axon threading).
+> **Actualización v8.0.0 (2026-09-28).** El pipeline B descrito arriba está
+> **RETIRADO**: `scripts/chronicle_daily.py` ya no existe (fue eliminado), la
+> ingesta a `archive_memories` está retirada y `archive_memories` está **purgada**
+> (snapshot previo). El productor real es el **ciclo nocturno** (03:00 →
+> `chronicle` recipe, que renderiza el árbol Memento en disco) + scripting
+> manual con `scripts/memento_migrate.py`. Este apartado se conserva como
+> contexto histórico del problema que motivó Memento.
 - The codebase itself already acknowledges the redundancy:
   `src/red_pill/metabolism/maintenance.py:644` notes that the raw verbatim
   interaction is already archived in `archive_memories`.
@@ -815,9 +831,9 @@ plugins, file-based distill/refine (`memento_agentic.py`, nightly LLM-gated,
 `MEMENTO_AGENTIC_NIGHT_LIMIT`/night), `memento_stale` Janitor + `auto_heal_ritual`
 branch, and the shadow gate (significance stamped in-place — the frontmatter
 reserves a fixed `significance: null` slot so the stamp never moves line refs).
-**Phase 4 is wired but OFF**: `MEMENTO_GATE_ENFORCED=False` guards the
-chronicle-ingest filter (fail-open for unjudged sessions); the flip remains an
-operator decision once the shadow window yields evidence (Q4). Legacy
+**Phase 4 (v8.0.0)**: el switch `MEMENTO_GATE_ENFORCED` fue **eliminado** — la
+propia ingesta a `archive_memories` está retirada (la curaduría pasa por
+ascensión de Memento + hubs). Histórico: el gate en sombra se describía aquí. Legacy
 `chronicle_distill.py`/`chronicle_refine.py` keep running until then.
 
 ---

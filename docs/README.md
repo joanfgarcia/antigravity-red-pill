@@ -28,11 +28,13 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [NEON_LINK_EDGE_HUB.md](TECHNICAL/NEON_LINK_EDGE_HUB.md) | Technical architecture of the Neon-Link Edge Hub middleware |
 | [ANTIGRAVITY_LS_PROXY.md](TECHNICAL/ANTIGRAVITY_LS_PROXY.md) | Language Server Proxy architecture for Antigravity IDE |
 | [ROADMAP.md](TECHNICAL/ROADMAP.md) | Vision, mission, backlog, and the path forward |
-| [v7_PLAN.md](TECHNICAL/v7_PLAN.md) | Red Pill v7.0: Foundation & Autonomous Drive Plan |
+| [v7_PLAN.md](TECHNICAL/v7_PLAN.md) | (Histórico) Red Pill v7.0 Plan |
 | [DECISION_LOG.md](TECHNICAL/DECISION_LOG.md) | Record of every major architectural pivot and the reasoning behind it |
 | [DISTILLER_SELECTION.md](TECHNICAL/COGNITIVE/DISTILLER_SELECTION.md) | How the sleep-cycle distiller model is chosen: bake-off method, findings, GPU/CPU/hybrid execution |
 | [TESTS.md](TECHNICAL/TESTS.md) | Test suite philosophy and structure |
 | [SOUND_OF_SILENCE.md](TECHNICAL/SOUND_OF_SILENCE.md) | The Python coding standard enforced by `ruff` in this project |
+| [LAYA_ROUTER_BAKEOFF_F1.md](TECHNICAL/LAYA_ROUTER_BAKEOFF_F1.md) | AD-039: bake-off del router System One (Laya) — evidencia F1, PARKED |
+| [MIGRATION_SINGLE_WRITER.md](TECHNICAL/OPERATIONS/MIGRATION_SINGLE_WRITER.md) | Migración al single-writer (v8.0.0): instalación nueva vs actualización |
 | [SOVEREIGN_PLUGINS.md](TECHNICAL/SOVEREIGN_PLUGINS.md) | Defining the dual-path architecture: Code vs. State separation |
 | [GOVERNANCE.md](TECHNICAL/GOVERNANCE.md) | What is fixed (immune to impulse) and what is fluid (open to evolution) |
 
@@ -76,7 +78,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [MINIONS.md](TECHNICAL/MINIONS.md) | Minions taxonomy, usage guidelines, and resource limitations |
 
 > [!WARNING]
-> **Swarm E2EE is a Proof-of-Concept.** The current MLS/TreeKEM implementation does not yet provide Perfect Forward Secrecy (PFS) or Post-Compromise Security (PCS). Production-grade MLS is planned for v7.0. See `MLS_ESTIMATION.md` for details.
+> **Swarm E2EE is a Proof-of-Concept.** The current MLS/TreeKEM implementation does not yet provide Perfect Forward Secrecy (PFS) or Post-Compromise Security (PCS). Production-grade MLS remains a PoC (no planificado aún). See `MLS_ESTIMATION.md`.
 
 ### Cognitive (Research)
 
@@ -117,6 +119,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [RFC_001_FIRMWARE_PROTECTION.md](TECHNICAL/BUNKER/RFC_001_FIRMWARE_PROTECTION.md) | Firmware partition protection RFC to prevent agent-induced code corruption (Project BIOS) |
 | [RFC_002_MEMENTO.md](TECHNICAL/BUNKER/RFC_002_MEMENTO.md) | Memento Chronicle RFC (formerly Sovereign Vault) — disk-based chronicle, Qdrant as curated-only memory, TTL buffer |
 | [RFC_002_PHASE4_DESIGN.md](TECHNICAL/BUNKER/RFC_002_PHASE4_DESIGN.md) | RFC-002 Amendment — Phase 4: dynamic curation, deferred ascension, Memento-conscious weaving (DRAFT design) |
+| [RFC_003_PROMPTS_AS_RESOURCES.md](TECHNICAL/BUNKER/RFC_003_PROMPTS_AS_RESOURCES.md) | Prompts as Resources — prompts en ficheros, loader con placeholders y RULE 5 de convención (DRAFT) |
 
 ### Certification
 
@@ -135,6 +138,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [SERVICE_HEALTH_CONTRACT.md](TECHNICAL/OPERATIONS/SERVICE_HEALTH_CONTRACT.md) | Technical reference on service health contract and daemon inventory |
 | [BACKUP_STRATEGIES.md](TECHNICAL/OPERATIONS/BACKUP_STRATEGIES.md) | Soul backup and recovery strategies |
 | [ELEMENT_JOB_TEMPLATE.md](TECHNICAL/OPERATIONS/ELEMENT_JOB_TEMPLATE.md) | Recetario del patrón MAP reanudable (driver element_job) — N elementos, uno por step, pausable y con watchdog |
+| [SINGLE_WRITER_ROLLOUT.md](TECHNICAL/OPERATIONS/SINGLE_WRITER_ROLLOUT.md) | Runbook de encendido del single-writer de memoria (AD-034): flags por componente, verificación y rollback |
 
 ---
 

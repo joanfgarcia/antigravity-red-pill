@@ -71,7 +71,7 @@ New payload fields you will see appear organically after updating (additive; all
 *   **Async Queues**: `get_queue_dir()` -> `~/.local/share/red-pill/queue/`
 *   **Config & Env**: `get_config_dir()` -> `~/.config/red-pill/`
 *   **Thread State**: `get_thread_state_path()` -> `~/.local/share/red-pill/thread_state.json`
-*   **Staging Buffer**: `get_staging_dir()` -> `~/.cache/red-pill/staging/`
+*   **Staging (legacy, solo lectura)**: `get_legacy_staging_dir()` -> `~/.cache/red-pill/staging/` (la ingesta que lo consumía fue eliminada; solo el migrador lo lee).
 *   **Ingestion Path**: `get_ingestion_dir()` -> `~/.local/share/red-pill/ingestion/`
 *   **Model Profiles**: `get_model_profiles_path()` -> `~/.config/red-pill/model_profiles.yaml`
 *   **Swarm Config**: `get_swarm_config_path()` -> `~/.config/red-pill/swarm_communities.json`
@@ -251,26 +251,28 @@ Replace old version with new in all 6 file locations before pushing.
     
     This ensures the Bünker frontfrontal context remains clean of stale anomalies.
 
-    #### §4.11 Chronicle Timer (v6.2.5)
+    #### §4.11 Nightly Cycle Timer (v8.0.0)
 
-    The `redpill-chronicle.timer` runs `chronicle_daily.py` every night at **04:00** to ingest and distill the previous day's conversation logs into `archive_memories`. It is installed automatically by `schedule_pulse.py`.
+    El único timer metabólico es `redpill-nightly.timer`: encola `nightly.yaml`
+    (chronicle → sleep) cada noche a las **03:00**. Sustituye a los antiguos
+    `redpill-chronicle.timer` y `redpill-sleep.timer` (retirados).
 
     **Install/verify:**
     ```bash
     uv run python scripts/schedule_pulse.py --interval-hours 1
-    systemctl --user list-timers | grep chronicle
-    # Expected: redpill-chronicle.timer  → NEXT: tomorrow 04:00
+    systemctl --user list-timers | grep nightly
+    # Expected: redpill-nightly.timer  → NEXT: tomorrow 03:00
     ```
 
     **Run manually (catch-up):**
     ```bash
-    uv run python scripts/chronicle_daily.py --yesterday
-    uv run python scripts/chronicle_daily.py --all   # process all unprocessed sessions
+    uv run red-pill job submit --recipe nightly --kick
+    uv run python scripts/memento_migrate.py            # solo render delta a Memento
     ```
 
     > [!IMPORTANT]
-    > The timer uses `Persistent=true` — if the laptop was off at 04:00, it fires on next boot.
-    > If the timer is missing (`list-timers` shows nothing for chronicle), re-run `schedule_pulse.py`.
+    > Persistent=true: si el portátil estaba apagado a las 03:00, se dispara al arrancar.
+    > Si falta el timer, re-ejecuta `schedule_pulse.py`.
 
 
     #### §4.12 Emotional Ferrari & Biological Wake/Sleep (v6.3.0)
@@ -281,7 +283,7 @@ Replace old version with new in all 6 file locations before pushing.
     ```bash
     uv run python scripts/schedule_pulse.py --interval-hours 1
     systemctl --user list-timers | grep redpill
-    # Expected: redpill-wake.timer + redpill-sleep.timer
+    # Expected: redpill-wake.timer + redpill-nightly.timer
     ```
 
     **Ferrari defaults** (all `True`):
@@ -452,15 +454,16 @@ The CI enforces a `fail_under = 96` coverage threshold. New modules that require
 
 ### 4.6 IDE Anchors & Global Rules Sync
 Each detected IDE's instruction file carries the agent's boot protocol via the sovereign anchors
-(e.g. `~/.gemini/GEMINI.md` for Antigravity, `~/.claude/CLAUDE.md` for Claude Code/Desktop — the
+(e.g. `~/.gemini/GEMINI.md` for Antigravity, `~/.claude/CLAUDE.md` for Claude Code/Desktop,
+`~/.config/opencode/RED_PILL.md` for OpenCode, `<workspace>/AGENTS.override.md` for Pi — the
 anchor blocks are IDE-agnostic and rendered per IDE by `inject_anchor.py`). After major protocol changes:
 1.  **Review**: Ensure the anchor blocks contain the 2 active rules:
-    - **Rule 1 — The Sovereign Handshake**: Mandates `mcp_RedPill-Kernel_interceptor_rp` as the FIRST tool call of every turn. Passes `user_prompt` + previous turn for Silent Scribe Relay.
+    - **Rule 1 — The Sovereign Handshake**: Mandates `sovereign_handshake` (que internamente usa `interceptor_rp`) como PRIMERA llamada de cada turno. Pasa `user_prompt` + turno previo (Silent Scribe Relay). Nota: `INTERCEPTOR_ENABLED` es un master switch **PARCIAL** (solo `02_rag`/`03_circuit_breaker`/`04_mystique` + Korsakoff); NO gatea el core (telemetría/mood/pre-heating).
     - **Rule 2 — Model Change Identity Resync**: On model switch, call `refresh_session_context` immediately.
     - ~~Rule 3~~ — **REMOVED** (v6.2.5): deprecated End-of-Turn logging. Start-of-Turn Relay (Rule 1) is the canonical mechanism.
 
 2.  **Rules & Skills directory**: Check `~/.agent/rules/` and `~/.agent/skills/` for missing files. Verify symlinks to IDE directory (`~/.gemini/config/skills/`) are intact.
-3.  **Re-inject**: If any rule is missing, run `uv run python scripts/inject_anchor.py --ide auto --update` (or re-run `scripts/install_neo.sh`).
+3.  **Re-inject**: If any rule is missing, run `uv run python scripts/inject_anchor.py --ide auto --update` (or re-run `scripts/install_neo.sh`). Pi's anchor is **workspace-scoped**: `--ide pi --workspace <ws>` writes `<ws>/AGENTS.override.md`, which Pi ≥0.87 loads *instead of* `AGENTS.md`/`CLAUDE.md` from that directory (so it shadows the Claude Code anchor for Pi only).
 
 ### 4.7 Merge Reconciliation Protocol
 When merging branches (especially reverse merges like `Target ← Source`):
@@ -499,7 +502,7 @@ mock_queue.enqueue_memory.assert_called_once()  # Verify it reached the queue
 
 The `perform_sleep_cycle()` function in `src/red_pill/metabolism/sleep.py` has two critical safety rules that must be preserved in any future modification:
 
-1.  **LLM-gated deletion**: A raw `interaction_memories` node is **only deleted** after `chunks_saved > 0` (i.e., at least one engram was successfully written to `work_memories` or `social_memories`). If the local LLM is down or all chunks are culled with no saves, the raw node is **preserved** for the next cycle. Never remove the `chunks_saved` guard.
+1.  **Buffer = ventana corta (v8.0.0)**: el drenaje legacy `interaction_memories → work/social` fue **eliminado**. El buffer ya no se consolida a `work/social`: se recorta por **TTL** (`INTERACTION_MAX_AGE_DAYS=30`, con señal para lo no renderizado). `work/social` crecen SOLO por ascensión de Memento + hubs/hilo. El `chunks_saved*` guard ya no existe.
 
 2.  **LLM health check before processing**: At the start of each cycle, `_check_llm_available()` probes the UDS socket or TCP endpoint of the local distillation model. If unreachable:
     - Injects a `local_llm_offline` pain signal (intensity 7.0) into `signal_memories`.
@@ -621,7 +624,7 @@ The `perform_sleep_cycle()` function in `src/red_pill/metabolism/sleep.py` has t
       ```bash
       uv run python scripts/inject_anchor.py --workspace /path/to/workspace
       ```
-    - **Verify**: Inspect the instruction files of your installed IDEs (e.g. `~/.gemini/GEMINI.md`, `~/.claude/CLAUDE.md`) to ensure the new Bünker-First Priority directive is present.
+    - **Verify**: Inspect the instruction files of your installed IDEs (e.g. `~/.gemini/GEMINI.md`, `~/.claude/CLAUDE.md`, `<ws>/AGENTS.override.md` for Pi) to ensure the new Bünker-First Priority directive is present.
 
     #### §4.26 Lore Refactoring & Version Engram Consolidation (v7.3.1)
 
@@ -913,12 +916,11 @@ Send `red_pill_changes_clean.patch` to the Developer profile for review.
     *   **`redpill-wake.timer`**: Triggers the wake sequence and biological startup.
         *   **Frequency**: Governed by `schedule_pulse.py` (typically every 1 minute if acting as the primary biological clock).
         *   **Cometido**: Mantiene la telemetría viva y evalúa el enrutamiento cognitivo basándose en el estado del Operador.
-    *   **`redpill-sleep.timer`**: Triggers the metabolic consolidation layer.
-        *   **Frequency**: Configured in parallel with the wake cycle for continuous memory consolidation.
-        *   **Cometido**: Inicia la consolidación de memorias (FSRS), evaporación de señales y re-estructuración de la base de datos vectorial mediante los Sleep Plugins.
-    *   **`redpill-chronicle.timer`**: Nightly batch distillation.
-        *   **Frequency**: Every night at **04:00 AM**.
-        *   **Cometido**: Ingesta y destilación de logs de conversación crudos del día anterior hacia los `archive_memories`. (Persistent: fires on boot if missed).
+    *   **`redpill-nightly.timer`**: Ciclo metabólico nocturno (03:00 → `chronicle → sleep`).
+        *   **Frequency**: cada noche a las **03:00** (`Persistent=true`: se dispara al arrancar si se perdió).
+        *   **Cometido**: renderiza el delta a Memento (chronicle) y consolida/teje/asciende (sueño: hubs + hilo). Sustituye a los retirados `redpill-sleep.timer` y `redpill-chronicle.timer`.
+    *   `redpill-extractor.timer` (horario): produce `unencrypted_conversations/` (fuente antigravity de Memento) vía `chronicle_extractor.py`.
+    *   `redpill-laya-tag.service` (RFC-004): sidecar UDS de etiquetado emoción/tema.
 
     ### 8.2 Legacy Daemons (DEPRECATED)
     *   `deploy_pulse.py`, `deploy_queue.py`, `memory_daemon.py` are fully deprecated and should be cleaned up. All temporal workflows run out of the new timer system defined in `schedule_pulse.py`.

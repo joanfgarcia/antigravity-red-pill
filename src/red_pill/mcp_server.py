@@ -221,7 +221,13 @@ async def handle_control_bunker(arguments: Dict[str, Any]):
 	description="Record a dialogue pair into the fast interaction buffer (anti-amnesia).",
 	schema={
 		"type": "object",
-		"properties": {"prompt": {"type": "string"}, "response": {"type": "string"}, "role": {"type": "string", "default": "assistant"}},
+		"properties": {
+			"prompt": {"type": "string"},
+			"response": {"type": "string"},
+			"role": {"type": "string", "default": "assistant"},
+			"workdir": {"type": "string", "description": "Directorio del proyecto (default: cwd del server MCP)."},
+			"affinity": {"type": "array", "items": {"type": "string"}, "description": "Afinidad explícita (p.ej. ws:proyecto, mission:id)."},
+		},
 		"required": ["prompt", "response"],
 	},
 )
@@ -247,10 +253,13 @@ async def handle_memorize_interaction(arguments: Dict[str, Any]):
 	# ---------------------------------------
 
 	try:
+		from red_pill.core.affinity import derive_affinity
 		from red_pill.core.queue_manager import MemoryQueueManager
 
 		originator = f"Aleth ({MODEL_NAME})"
-		MemoryQueueManager().enqueue_memory(prompt, response, role, originator=originator)
+		# AD-034/D15: afinidad SOLO explícita (la derivación por cwd se retiró).
+		affinity = derive_affinity(explicit=arguments.get("affinity"))
+		MemoryQueueManager().enqueue_memory(prompt, response, role, originator=originator, affinity=affinity or None)
 		return [types.TextContent(type="text", text="Engram queue registration initiated automatically.")]
 	except Exception as e:
 		return [types.TextContent(type="text", text=f"Local Async Logging Error: {str(e)}")]
@@ -317,7 +326,7 @@ async def handle_run_security_audit(arguments: Dict[str, Any]):
 			"query": {"type": "string"},
 			"collection": {
 				"type": "string",
-				"description": "Optional. Restrict search to a specific collection (e.g. 'archive_memories', 'work_memories', 'social_memories'). Default: searches work_memories + social_memories.",
+				"description": "Optional. Restrict search to a specific collection (e.g. 'work_memories', 'social_memories', 'directive_memories'). Default: searches work_memories + social_memories.",
 			},
 		},
 		"required": ["query"],
@@ -496,7 +505,7 @@ async def handle_search_memento(arguments: Dict[str, Any]):
 @registry.register_action(
 	parent="bunker_memory_api",
 	action="traverse_thread",
-	description="Walk the Ariadne's Thread through work_memories or social_memories. Finds the best matching synthesis_hub for the query and traverses the temporal chain via prev/next_session_hub axons.",
+	description="Walk the Ariadne's Thread through work_memories or social_memories. level='session' (default): best matching synthesis_hub + temporal chain via prev/next_session_hub axons. level='member': the intra-session chain of curated member engrams (order of refine).",
 	schema={
 		"type": "object",
 		"properties": {
@@ -515,6 +524,11 @@ async def handle_search_memento(arguments: Dict[str, Any]):
 				"type": "integer",
 				"description": "Max hops in each direction. Default: 5.",
 			},
+			"level": {
+				"type": "string",
+				"enum": ["session", "member"],
+				"description": "session = cadena de hubs (macro); member = cadena intra-sesión de miembros (micro). Default: session.",
+			},
 		},
 		"required": ["query"],
 	},
@@ -526,6 +540,7 @@ async def handle_traverse_thread(arguments: Dict[str, Any]):
 	collection = arguments.get("collection", "work_memories")
 	direction = arguments.get("direction", "both")
 	depth = int(arguments.get("depth", 5))
+	level = arguments.get("level", "session")
 
 	try:
 		manager = MemoryManager()
@@ -546,6 +561,35 @@ async def handle_traverse_thread(arguments: Dict[str, Any]):
 			]
 
 		start = hub_hits[0]
+
+		# ── MICRO (D8): cadena intra-sesión de miembros (orden de refine) ──────
+		if level == "member":
+			sid = start.payload.get("session_id")
+			if not sid:
+				return [types.TextContent(type="text", text="El nodo inicial no tiene session_id; no hay micro-hilo.")]
+			from qdrant_client.http import models as _qm
+
+			from red_pill.metabolism.thread_synthesis import order_members
+
+			pts, _ = client.scroll(
+				collection,
+				scroll_filter=_qm.Filter(must=[_qm.FieldCondition(key="session_id", match=_qm.MatchValue(value=sid))]),
+				limit=500,
+				with_payload=True,
+			)
+			members = [
+				(str(p.id), p.payload or {})
+				for p in pts
+				if (p.payload or {}).get("lazarus_phase") != "synthesis_hub" and (p.payload or {}).get("node_type") != "synthesis_hub"
+			]
+			ordered = order_members(members)
+			start_id = str(start.id)
+			lines = [f"[THREAD·micro] collection={collection} | session={sid} | {len(ordered)} miembros", ""]
+			for mid, mp in ordered:
+				mark = "  ← START" if mid == start_id else ""
+				lines.append(f"· [{mid[:8]}] {str(mp.get('content', ''))[:200]}{mark}")
+			lines.append(f"\nTotal: {len(ordered)} miembros (orden por member_index/refine)")
+			return [types.TextContent(type="text", text="\n".join(lines))]
 
 		def _fetch(point_id: str) -> dict | None:
 			try:
@@ -742,8 +786,10 @@ async def handle_check_system_health(arguments: Dict[str, Any]):
 	schema={"type": "object", "properties": {}},
 )
 async def handle_read_core_directives(arguments: Dict[str, Any]):
+	from red_pill.core.directives import active_directive_contents
+
 	points, _ = MemoryManager().client.scroll(collection_name="directive_memories", limit=100, with_payload=True)
-	directives = [p.payload.get("content", "") for p in points if p.payload and p.payload.get("immune")]
+	directives = active_directive_contents(points)
 	return [types.TextContent(type="text", text="--- BÜNKER CORE DIRECTIVES ---\n" + "\n\n".join(directives))]
 
 
@@ -1525,8 +1571,9 @@ async def handle_interceptor_rp(arguments: Dict[str, Any]):
 			clean_p = filter_noise_from_turn(prev_p)
 			clean_r = filter_noise_from_turn(prev_r)
 
-			# Only enqueue if after trimming there is still substantial substance
-			if len(clean_p) > 20 or len(clean_r) > 20:
+			# Only enqueue with a real prompt: an assistant-only fragment is not a
+			# turn (bridge turns are persisted by their transport relay).
+			if clean_p and (len(clean_p) > 20 or len(clean_r) > 20):
 				MemoryQueueManager().enqueue_memory(clean_p, clean_r, "assistant", category=prev_cat, model=prev_mod)
 				logger.info(f"Silent Scribe Relay: turn enqueued cleanly via interceptor_rp (category={prev_cat}, model={prev_mod}).")
 			else:

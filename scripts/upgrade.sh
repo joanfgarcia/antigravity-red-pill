@@ -312,6 +312,9 @@ p._purge_leaked_duplicates()
 	# Cierra el hueco: hasta ahora el update aplicaba cambios pero nunca verificaba el resultado.
 	echo -e "${BLUE}Verificando salud post-update (doctor)...${NC}"
 	uv run python scripts/doctor.py || echo -e "${YELLOW}[doctor] reportó incidencias — revísalas arriba.${NC}"
+
+	# 7.5 Refrescar el engrama PROTOCOL VERSION desde CHANGELOG (paso de release).
+	uv run python -m red_pill.bunker_lifecycle || echo -e "${YELLOW}[lifecycle] no se pudo refrescar PROTOCOL VERSION.${NC}"
 else
 	echo -e "${RED}[ERROR] 'uv' no encontrado. Por favor, instala astral/uv para completar el upgrade.${NC}"
 fi

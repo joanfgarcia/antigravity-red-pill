@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from red_pill.chronicle_sources.base import ChronicleSourcePlugin
+from red_pill.core.origins import PROVIDER_CLAUDE, telegram_sessions
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +42,11 @@ class ClaudeCodeSourcePlugin(ChronicleSourcePlugin):
 		return self._paths
 
 	def discover(self) -> List[Tuple[str, int]]:
+		telegram = telegram_sessions(PROVIDER_CLAUDE)
 		discovered = []
 		for cid, path in self._index_sessions().items():
+			if cid in telegram:
+				continue
 			try:
 				with open(path, "rb") as f:
 					step_count = sum(1 for _ in f)
@@ -82,7 +86,7 @@ class ClaudeCodeSourcePlugin(ChronicleSourcePlugin):
 		return self._parse_transcript(raw_file)
 
 	def _parse_transcript(self, path: Path) -> List[Dict[str, Any]]:
-		from red_pill.metabolism.chronicle.claude_code_plugin import extract_assistant_blocks, extract_user_content
+		from red_pill.utils.chronicle_render import extract_assistant_blocks, extract_user_content
 
 		messages: List[Dict[str, Any]] = []
 		with open(path, "r", encoding="utf-8") as f:

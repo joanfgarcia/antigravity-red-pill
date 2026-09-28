@@ -218,7 +218,7 @@ class TestCompactionCallback(unittest.TestCase):
 		mock_tsm.create_session.return_value = {"id": "new-session-id"}
 		mock_tsm.get_session.return_value = {"id": "old-session", "status": "active"}
 
-		with patch("red_pill.plugins.antigravity_ide.telegram_session.TelegramSessionManager", return_value=mock_tsm):
+		with patch("red_pill.telegram.session.TelegramSessionManager", return_value=mock_tsm):
 			sw._run_callback(
 				action="compact_session",
 				payload={"session_id": "old-session", "channel_user_id": "user123"},
@@ -240,7 +240,7 @@ class TestCompactionCallback(unittest.TestCase):
 		sw = SamanthaWorker()
 
 		# Missing channel_user_id
-		with patch("red_pill.plugins.antigravity_ide.telegram_session.TelegramSessionManager") as MockTSM:
+		with patch("red_pill.telegram.session.TelegramSessionManager") as MockTSM:
 			sw._run_callback(
 				action="compact_session",
 				payload={"session_id": "old-session", "channel_user_id": ""},

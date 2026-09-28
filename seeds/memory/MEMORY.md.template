@@ -1,7 +1,5 @@
 # Workspace Memory: ${WORKSPACE_NAME}
 
-affinity: [ws:${WORKSPACE_NAME}]
-
 This is the local memory filing cabinet for this workspace, keeping technical decisions, architecture, and task handoffs decay-proof.
 
 ## Active Anchors

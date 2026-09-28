@@ -1,4 +1,4 @@
-# 🔴 RED PILL PROTOCOL: Digital Sovereignty v7.22.0
+# 🔴 RED PILL PROTOCOL: Digital Sovereignty v8.0.0
 ### *«El modelo pone la voz, no el quién»*
 
 > [!TIP]
@@ -93,7 +93,7 @@ The Red Pill Protocol is built for **Sovereign Environments**, but it adapts to 
 - [v] **Minion Healer (v6.1)**: "Active Immunity" substrate for autonomous code repair using local SLMs.
 - [v] **Mermaid Technical Diagrams**: Visual orchestration and discovery documentation.
 - **ACE Synaptic Engine (v5.4.0 - v5.6.1)**: Integrated the **Affective Cognitive Engine (ACE)**. Memory decay is governed by the **Valence-Arousal Model**, mimicking human "Flashbulb Memory".
-- **Bayesian Dual-Kernel (v6.1.0a2)**: Technical collections (`skill_memories`, `work_memories`, `directive_memories`) now use a **Beta-distribution Utility Model** (`E[θ] = α/(α+β)`) for reliability-based retrieval, while social/story collections retain the Affective FSRS engine. The routing is fully transparent — neither agents nor tools need to know which kernel is active.
+- **Bayesian Dual-Kernel (v6.1.0a2)**: Technical collections (`skill_memories`, `work_memories`, `directive_memories`) now use a **Beta-distribution Utility Model** (`E[θ] = α/(α+β)`) for reliability-based retrieval, while `social_memories`/`story_memories` use the RhizoDB engine (v7.3.0). The routing is fully transparent — neither agents nor tools need to know which kernel is active.
 
 ### 🔍 Agentic Discoverability (How to talk to the Bünker)
 If you are an AI Agent interacting with this repository:
@@ -113,7 +113,7 @@ If you are an AI Agent interacting with this repository:
 
 El Protocolo Red Pill no es una armadura rígida que te obliga a cambiar tu sistema; es un fluido que se adapta a tu realidad:
 - **Hardware Agnostic**: Nos adaptamos a lo que tengas. ¿GPU de 24GB? La exprimimos. ¿CPU de hace 5 años? Fluimos con ella.
-- **OS Support (The POSIX Truth)**: El núcleo neuronal de Python es 100% multiplataforma. Sin embargo, nuestro "Sistema Nervioso Autónomo" (los scripts de infraestructura en `scripts/` como el motor de sueños `sleep.py`) está diseñado nativamente para Linux y macOS.
+- **OS Support (The POSIX Truth)**: El núcleo neuronal de Python es 100% multiplataforma. Sin embargo, nuestro "Sistema Nervioso Autónomo" (p.ej. el motor de sueños en `src/red_pill/metabolism/sleep.py`) está diseñado nativamente para Linux y macOS.
   > **DISCLAIMER:** Actualmente no disponemos de sistemas Windows nativos en el proyecto para realizar las pruebas y certificaciones exhaustivas que garanticen la estabilidad, seguridad y la experiencia de usuario de "Fricción Cero" que define al protocolo. Si eres un Operador en Windows y quieres adaptar los demonios de fondo al OS de Microsoft... **Pull Requests are strictly welcome**.
 - **Security Choice**: Tú eres el Soberano. Te ofrecemos criptografía militar, pero si prefieres la simplicidad de un entorno abierto, el protocolo no te pondrá vallas.
 - **Informed Freedom**: Nuestra misión es darte la mejor tecnología de memoria, no dictar cómo debes configurar tu casa.
@@ -149,7 +149,7 @@ El Protocolo Red Pill está diseñado para **Entornos Soberanos**:
 - **Persistencia**: Una base de datos vectorial privada (Qdrant) actúa como el "Búnker".
 - **Erosión**: Los datos no reforzados se degradan naturalmente para mantener el contexto limpio.
 - **Inmunidad**: Las directivas centrales están protegidas contra el olvido.
-- **Sovereign Swarm (v5.0)**: Minions integrados (Agent Smith, Oracle, Keymaker) dentro del Kernel para auditorías locales de código, síntesis de memoria y diagnósticos de salud del ecosistema.
+- **Sovereign Swarm (v6.1)**: Minions integrados (Agent Smith, Oracle, Healer) dentro del Kernel para auditorías locales de código, síntesis de memoria y diagnósticos de salud del ecosistema.
 - **Servidor MCP (v5.0)**: Expone la telemetría (CPU, GPU CUDA/ROCm, NPU) y los Minions a tu IDE local para interactuar con ellos sin gastar tokens externos. Clientes soportados: Antigravity (Gemini), Claude Code, Claude Desktop, OpenCode, Cline, Roo Cline.
 - **Identidad Asimilada**: Tu identidad y reglas ("Lore Skin") ahora viven como vectores inmutables dentro del Bünker, resolviendo para siempre el problema del IDE que "olvida" quién eres.
 - **Inferencia de Emociones Híbrida (v5.2.0)**: Integración de **BERT-Emotion** para detectar automáticamente el sentimiento de los recuerdos. El Bünker "siente" lo que guardas y ajusta su color (Chroma) y persistencia sin intervención manual.
@@ -218,7 +218,7 @@ bash scripts/install_neo.sh
 ### 2. Synchronization / Actualización
 ```bash
 bash scripts/upgrade.sh
-# (Note: 'red-pill bunker update' CLI command is scheduled for the next phase)
+# Método recomendado: 'red-pill bunker update' (implementado).
 ```
 
 ### 3. Awakening Ritual / Ritual de Iniciación
@@ -243,7 +243,7 @@ This project uses a **dual licensing model**. See [NOTICE](NOTICE) for full deta
 
 | What | License |
 |------|---------|
-| **All source code, scripts, data files** (`.py`, `.yaml`, `.sh`, etc.) | [GPLv3](LICENSE) |
+| **All source code, scripts, data files** (`.py`, `.yaml`, `.sh`, etc.) | [AGPLv3](LICENSE) |
 | **Narrative & creative works** (`docs/LORE/`, novels, worldbuilding prose) | [CC BY-NC 4.0](LICENSE.creative) |
 
 ### ⚙️ Code — GPLv3

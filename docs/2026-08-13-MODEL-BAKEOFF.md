@@ -5,7 +5,7 @@
 > `2026-08-13-model-bakeoff.patch` (mismos cambios, formato git).
 >
 > **Host**: este documento es la memoria del patch de Titanium y describe SU
-> máquina (RTX 3050 4GB, wheel llama-cpp-python, llama_32 como primario). La
+> **Superado (v8.0.0): el modelo servido es Granite‑4.1‑8B; ver `model_profiles.yaml`.** Documento histórico de la máquina (RTX 3050 4GB, wheel llama-cpp-python, llama_32 como primario). La
 > adaptación a este host (RTX 8GB compartida con entrenamiento, backend CLI
 > llama.cpp, granite_8b primario) está en el CHANGELOG 7.18.0.
 

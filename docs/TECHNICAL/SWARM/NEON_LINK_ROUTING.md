@@ -38,7 +38,7 @@ sequenceDiagram
     participant SQLite (events.db)
     participant Worker (Red-Pill)
     participant MinionInbox
-    participant Antigravity (IDE)
+    participant Bridge (opencode)
 
     User->>NeonLink (Telegram/Firebase): Envía Mensaje
     Note over NeonLink (Telegram/Firebase): Routing Policy Engine evalúa<br/>chat_type, prefix, bot_mention y priority.
@@ -52,8 +52,10 @@ sequenceDiagram
     else mode == 'conversational'
         Worker (Red-Pill)->>SQLite (events.db): SELECT all PENDING for channel_user_id
         Note over Worker (Red-Pill): [14:02] @alice: hi<br/>[14:03] @peter: yes
-        Worker (Red-Pill)->>Antigravity (IDE): client.send_user_message(compacted_text)
-        Worker (Red-Pill)->>SQLite (events.db): UPDATE status = 'WAITING_FOR_RESPONSE'
+        Worker (Red-Pill)->>Bridge (opencode): prompt(texto compactado)
+        Bridge (opencode)-->>Worker (Red-Pill): respuesta síncrona
+        Worker (Red-Pill)->>SQLite (events.db): INSERT INTO outbox (payload)
+        Worker (Red-Pill)->>SQLite (events.db): UPDATE status = 'PROCESSED'
     end
 ```
 
@@ -63,14 +65,14 @@ El sistema aprovecha la inteligencia contextual del LLM para resolver la interac
 
 ```mermaid
 sequenceDiagram
-    participant Antigravity (IDE)
+    participant Bridge (opencode)
     participant Worker (Red-Pill)
     participant SQLite (events.db)
     participant NeonLink (Telegram)
     participant Alice & Peter
 
-    Note over Antigravity (IDE): La IA lee el prompt compactado.<br/>Decide mencionar a los autores.
-    Antigravity (IDE)-->>Worker (Red-Pill): Genera: "@alice entendido.\n@peter luego lo miro."
+    Note over Bridge (opencode): La IA lee el prompt compactado.<br/>Decide mencionar a los autores.
+    Bridge (opencode)-->>Worker (Red-Pill): Genera: "@alice entendido.\n@peter luego lo miro."
     Worker (Red-Pill)->>SQLite (events.db): INSERT INTO outbox (payload)
     Worker (Red-Pill)->>SQLite (events.db): UPDATE inbox SET status='PROCESSED' WHERE cascade_id=X
     NeonLink (Telegram)->>SQLite (events.db): SELECT FROM outbox (PENDING)

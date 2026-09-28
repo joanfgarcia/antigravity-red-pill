@@ -6,7 +6,7 @@ This document outlines the training programs available to verify the integrity o
 ## 1. Unit Tests (The Dojo)
 **Objective**: Verify functional correctness of individual components.
 **Tools**: `pytest`, `pytest-cov`
-**Coverage Status**: >80% Core Logic (memory.py, schemas.py, seed.py, config.py). `cli.py` and `memory_daemon.py` are excluded from unit test coverage targets as they are integration points.
+**Coverage Status**: >80% Core Logic (memory.py, schemas.py, seed.py, config.py). `cli.py` is excluded from unit test coverage targets (integration point). (`memory_daemon.py` está retirado.)
 
 ```bash
 # Run the standard test suite with coverage
@@ -30,7 +30,7 @@ uv run python3 tests/stress_test_smith.py
 
 ## 3. Installation Verification (The Keymaker)
 **Objective**: Verify that a clean installation works for a new user.
-**Tools**: `tests/Dockerfile.keymaker`
+**Tools**: flujo de instalación `scripts/install_neo.sh` + smoke tests (el antiguo `tests/Dockerfile.keymaker` ya no existe).
 
 This test builds a Docker container from scratch, installs `red-pill` via `pip`, and attempts to connect to the host's Qdrant instance.
 
@@ -44,4 +44,4 @@ podman run --network host keymaker-test red-pill diag work
 
 ## 4. Manual Audits
 - **Architecture**: `ARCHITECTURE.md` (Scalability Analysis)
-- **Security**: `SECURITY.md` (Vulnerability Reporting)
+- **Security**: `TECHNICAL/SECURITY/OVERVIEW.md` (Vulnerability Reporting)

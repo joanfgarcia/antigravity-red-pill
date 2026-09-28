@@ -19,6 +19,16 @@ Two execution modes:
 	``opencode serve`` instance, avoiding MCP cold-start.  Set
 	``OPENCODE_SERVER_URL`` env var or pass ``server_url`` to the constructor.
 
+CLI version adaptation (OpenCode v2, beta):
+
+- v1: effort is its own flag (``--variant <v>``) and the server is ``--attach``.
+- v2: the variant is embedded in the model reference
+	(``-m provider/model#variant``) and the server flag is ``--server``.
+	Direct mode adds ``--standalone`` so each run gets a private server whose
+	env the bridge controls (the v2 shared background service would ignore
+	``REDPILL_SCRIBE_DISABLE``, breaking the capture contract).
+	The ``--format json`` stream and its event shape are identical in both.
+
 Requirements:
 - opencode CLI installed and configured (~/.config/opencode/).
 - The `opencode` binary must be resolvable from the CALLING process. Service
@@ -33,13 +43,14 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
-import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from red_pill.core.paths import get_bunker_root, get_state_dir
+from red_pill.core.origins import PROVIDER_OPENCODE, get_origins_path, read_origins, record_origin
+from red_pill.core.paths import get_bunker_root
 
 from .base import AgentBridge, BackendType, BridgeCapabilities, ConversationResult
 
@@ -65,44 +76,24 @@ def _resolve_opencode_bin() -> Optional[str]:
 
 
 def get_opencode_origins_path() -> Path:
-	"""Path to the session→origin sidecar registry used by the autonomous cron.
+	"""Path to the session→origin registry (genérico desde AD-034).
 
 	Maps opencode session_id → {"origin", "ts"} so the cron can tell whether a
 	fresh session is real operator activity ("user"/"job"/…) or merely an
 	autonomous-awakening headless run ("awakening") that should not suppress the
 	next wake-up.
 	"""
-	return get_state_dir() / "opencode_origins.json"
+	return get_origins_path()
 
 
 def record_opencode_origin(session_id: str, origin: str) -> None:
 	"""Persist the origin of an opencode session (non-fatal on failure)."""
-	if not session_id:
-		return
-	path = get_opencode_origins_path()
-	try:
-		data: dict = {}
-		if path.exists():
-			try:
-				data = json.loads(path.read_text())
-			except (json.JSONDecodeError, OSError):
-				data = {}
-		data[session_id] = {"origin": origin, "ts": int(time.time())}
-		path.write_text(json.dumps(data))
-	except Exception as e:
-		logger.warning(f"[OpenCodeBridge] Failed to record origin {origin!r} for {session_id!r}: {e}")
+	record_origin(PROVIDER_OPENCODE, session_id, origin)
 
 
 def read_opencode_origins() -> Dict[str, Any]:
-	"""Load the session→origin registry (empty dict on any failure)."""
-	path = get_opencode_origins_path()
-	if not path.exists():
-		return {}
-	try:
-		data: Any = json.loads(path.read_text())
-		return data if isinstance(data, dict) else {}
-	except (json.JSONDecodeError, OSError):
-		return {}
+	"""Load the opencode session→origin registry (empty dict on any failure)."""
+	return read_origins(PROVIDER_OPENCODE)
 
 
 class OpenCodeBridge(AgentBridge):
@@ -138,6 +129,32 @@ class OpenCodeBridge(AgentBridge):
 		# plugin already captures the turn. Skipping here is the cheap guard; the
 		# hash check in enqueue_memory is the one that actually guarantees it.
 		self._scribe_plugin = os.environ.get("OPENCODE_SCRIBE_PLUGIN", "").lower() == "true"
+		# Detected CLI major (1|2), cached per instance; see _cli_major().
+		self._cli_major_cache: Optional[int] = None
+
+	def _cli_major(self) -> int:
+		"""Major version of the resolved CLI (1 or 2), cached per instance.
+
+		Detection failure falls back to 1: the v1 flags are the known-good
+		baseline and are also what the currently deployed plugin expects.
+		"""
+		if self._cli_major_cache is None:
+			assert self._opencode_path is not None
+			major = 1
+			try:
+				out = subprocess.run(
+					[self._opencode_path, "--version"],
+					capture_output=True,
+					text=True,
+					timeout=15,
+				).stdout
+				match = re.search(r"(\d+)\.\d+", out or "")
+				if match:
+					major = int(match.group(1))
+			except Exception:
+				pass
+			self._cli_major_cache = major
+		return self._cli_major_cache
 
 	# ── Handshake preamble ────────────────────────────────────────────────
 	# OpenCode does NOT prefix MCP tools (unlike Antigravity's mcp_<server>_<tool>).
@@ -162,7 +179,7 @@ class OpenCodeBridge(AgentBridge):
 			f'<constraint critical="true" level="0" name="telegram_session">\n'
 			f"CRITICAL: Respond ONLY to the <current_message> below. The history is for context only.\n"
 			f"MANDATORY FIRST STEPS:\n"
-			f'1. Call `swarm_orchestrator_api` with {{"action": "interceptor_rp", "payload": {{"user_prompt": "<the current_message text>", "mode": "{depth}"}}}} to fetch real-time telemetry (pain signals, emotional sync, activity status).\n'
+			f'1. Call `swarm_orchestrator_api` with {{"action": "interceptor_rp", "payload": {{"user_prompt": "<the current_message text>", "mode": "{depth}"}}}} to fetch real-time telemetry (pain signals, emotional sync, activity status). Telemetry only: do NOT pass `previous_prompt`/`previous_response` — transport persistence is automatic.\n'
 			f'2. Call `bunker_memory_api` with {{"action": "refresh_session_context", "payload": {{"mode": "{depth}"}}}} to load your identity from the Bünker.\n'
 			f"3. Adopt the <BUNKER_CONTEXT> as your session identity and respond.\n"
 			f"</constraint>\n"
@@ -173,7 +190,14 @@ class OpenCodeBridge(AgentBridge):
 
 	# ── Scribe relay (External Scribe Pattern) ────────────────────────────
 
-	def _scribe_relay(self, user_prompt: str, agent_response: str, model: Optional[str] = None, originator: str = "opencode"):
+	def _scribe_relay(
+		self,
+		user_prompt: str,
+		agent_response: str,
+		model: Optional[str] = None,
+		originator: str = "opencode",
+		session_id: Optional[str] = None,
+	):
 		"""Queue prompt + response for ingestion, with no dependency on the agent.
 
 		Headless bridges (Telegram, agentic jobs) have no editor hook to capture
@@ -184,12 +208,14 @@ class OpenCodeBridge(AgentBridge):
 		try:
 			from red_pill.core.queue_manager import MemoryQueueManager
 
+			# AD-034/D15: sin afinidad por cwd; solo session_id.
 			MemoryQueueManager().enqueue_memory(
 				prompt=user_prompt,
 				response=agent_response,
 				role="assistant",
 				originator=originator,
 				model=model,
+				session_id=session_id,
 			)
 			logger.debug(f"[Scribe] Turn queued for ingestion (originator={originator})")
 		except Exception as e:
@@ -202,9 +228,16 @@ class OpenCodeBridge(AgentBridge):
 		Returns a dict with ``session_id`` and ``text`` (concatenated response).
 		"""
 		cmd = [self._opencode_path, "run", *args, "--format", "json", "--auto"]
+		major = self._cli_major()
 
 		if self._server_url:
-			cmd.extend(["--attach", self._server_url])
+			# v1: --attach <url>; v2: --server <url> (--attach was removed).
+			cmd.extend(["--server" if major >= 2 else "--attach", self._server_url])
+		elif major >= 2:
+			# v2 defaults to a shared background service whose env the bridge
+			# cannot control (REDPILL_SCRIBE_DISABLE would never reach the
+			# plugin). --standalone restores v1 semantics: private server per run.
+			cmd.append("--standalone")
 
 		logger.debug(
 			f"[OpenCodeBridge] Running: {' '.join(cmd[:4])}... "
@@ -213,12 +246,19 @@ class OpenCodeBridge(AgentBridge):
 		)
 
 		try:
+			env = None
+			# El canal Telegram tiene relay autoritativo en el worker (session_id =
+			# uuid de Telegram): el plugin del hijo no debe capturar el prompt
+			# envuelto sin respuesta. En el resto, el flag decide quién captura.
+			if not self._scribe_plugin or self._origin == "telegram":
+				env = {**os.environ, "REDPILL_SCRIBE_DISABLE": "1"}
 			result = subprocess.run(
 				cmd,
 				capture_output=True,
 				text=True,
 				timeout=timeout + 10,
 				cwd=cwd or str(get_bunker_root().parent),
+				env=env,
 			)
 		except subprocess.TimeoutExpired as e:
 			logger.error(f"[OpenCodeBridge] Command timed out after {timeout + 10}s")
@@ -296,6 +336,21 @@ class OpenCodeBridge(AgentBridge):
 		mapped = cls._EFFORT_MAP.get((effort or "").strip().lower())
 		return ["--variant", mapped] if mapped else []
 
+	def _model_effort_args(self, model: str, effort: Optional[str]) -> list:
+		"""Compose -m/--variant flags for the detected CLI major.
+
+		v1: ``--variant <v>`` is its own flag.
+		v2: the variant is embedded in the model reference
+		(``provider/model#variant``); without a model there is nowhere to put it.
+		"""
+		model_args = self._model_args(model)
+		mapped = self._EFFORT_MAP.get((effort or "").strip().lower())
+		if self._cli_major() >= 2:
+			if mapped and model_args:
+				return [model_args[0], f"{model_args[1]}#{mapped}"]
+			return model_args
+		return [*model_args, *self._effort_args(effort)]
+
 	def prompt(
 		self,
 		text: str,
@@ -314,7 +369,7 @@ class OpenCodeBridge(AgentBridge):
 
 		try:
 			data = self._run_opencode(
-				[wrapped_prompt, *self._model_args(model), *self._effort_args(effort)],
+				[wrapped_prompt, *self._model_effort_args(model, effort)],
 				timeout,
 				cwd=cwd,
 			)
@@ -336,7 +391,7 @@ class OpenCodeBridge(AgentBridge):
 		# Skip if redpill-scribe plugin handles persistence via hooks
 		if not self._scribe_plugin:
 			try:
-				self._scribe_relay(user_prompt=text, agent_response=response, model=model)
+				self._scribe_relay(user_prompt=text, agent_response=response, model=model, session_id=session_id)
 			except Exception as e:
 				logger.warning(f"[OpenCodeBridge] Scribe relay failed (non-fatal): {e}")
 
@@ -372,7 +427,7 @@ class OpenCodeBridge(AgentBridge):
 		# External Scribe — skip if plugin handles it
 		if not self._scribe_plugin:
 			try:
-				self._scribe_relay(user_prompt=text, agent_response=response)
+				self._scribe_relay(user_prompt=text, agent_response=response, session_id=data.get("session_id", conversation_id))
 			except Exception as e:
 				logger.warning(f"[OpenCodeBridge] Scribe relay failed (non-fatal): {e}")
 

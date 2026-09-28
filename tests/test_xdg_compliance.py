@@ -39,14 +39,12 @@ def test_xdg_paths():
 		get_config_dir,
 		get_ingestion_dir,
 		get_model_profiles_path,
-		get_staging_dir,
 		get_swarm_config_path,
 		get_thread_state_path,
 	)
 
 	assert ".agent" not in str(get_config_dir())
 	assert ".agent" not in str(get_thread_state_path())
-	assert ".agent" not in str(get_staging_dir())
 	assert ".agent" not in str(get_ingestion_dir())
 	assert ".agent" not in str(get_swarm_config_path())
 	assert ".agent" not in str(get_model_profiles_path())

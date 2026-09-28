@@ -1,8 +1,5 @@
 """Memento Chronicle (RFC-002 Fase 1): renderer, scrubber, registry e hilo prev/next."""
 
-import sys
-from pathlib import Path
-
 from red_pill.memento.clean import normalize_noise
 from red_pill.memento.registry import MementoRegistry, recompute_chain
 from red_pill.memento.render import (
@@ -14,8 +11,6 @@ from red_pill.memento.render import (
 	write_session,
 )
 from red_pill.memento.scrub import REDACTED, scrub_secrets
-
-SCRIPTS_DIR = Path(__file__).parent.parent / "scripts"
 
 
 def _messages(n=3, base_ts=1787234592.0):
@@ -67,14 +62,11 @@ def test_scrub_private_key_block():
 # ── Limpieza compartida §5.2 (paridad byte-idéntica con el ingester) ─────────
 
 
-def test_normalize_noise_matches_ingester_refine_content():
-	sys.path.insert(0, str(SCRIPTS_DIR))
-	from antigravity_ingest import ChronicleIngester
-
+def test_normalize_noise_limpia_ansi_telemetria_y_blobs():
 	dirty = "\x1b[31mrojo\x1b[0m\n[2026-08-26] DEBUG basura\nreal\n\n\n\n" + "A" * 250
-	assert ChronicleIngester._refine_content(object(), dirty) == normalize_noise(dirty)
 	assert "\x1b" not in normalize_noise(dirty)
 	assert "[CONTENT_BLOB_REDACTED]" in normalize_noise(dirty)
+	assert "DEBUG basura" not in normalize_noise(dirty)
 
 
 # ── Renderer §4.2 ────────────────────────────────────────────────────────────

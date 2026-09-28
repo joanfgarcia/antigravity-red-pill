@@ -18,6 +18,7 @@ import shutil
 import subprocess
 from typing import Any, Optional, cast
 
+from red_pill.core.origins import PROVIDER_CLAUDE, record_origin
 from red_pill.core.paths import get_bunker_root
 
 from .base import AgentBridge, BackendType, BridgeCapabilities, ConversationResult
@@ -34,10 +35,11 @@ class ClaudeBridge(AgentBridge):
 
 	CLAUDE_BIN = "claude"
 
-	def __init__(self, claude_path: Optional[str] = None):
+	def __init__(self, claude_path: Optional[str] = None, origin: str = "user"):
 		self._claude_path = claude_path or shutil.which(self.CLAUDE_BIN)
 		if not self._claude_path:
 			raise RuntimeError("Claude CLI (claude) not found in PATH. Install Claude Code and ensure `claude` is available.")
+		self._origin = origin
 
 	def _run_claude(self, args: list, timeout: int, cwd: Optional[str] = None) -> dict:
 		"""Execute claude CLI with common flags and parse the JSON result object.
@@ -118,6 +120,7 @@ class ClaudeBridge(AgentBridge):
 				error=str(data.get("result") or "claude reported is_error"),
 			)
 		conv = data.get("session_id", "")
+		record_origin(PROVIDER_CLAUDE, conv, self._origin)
 		response = str(data.get("result", ""))
 		logger.info(f"[ClaudeBridge] prompt() → conv={conv}, response_len={len(response)}")
 		return ConversationResult(conversation_id=conv, response=response, model=model)
@@ -139,8 +142,10 @@ class ClaudeBridge(AgentBridge):
 			data = self._run_claude(["--resume", conversation_id, "-p", text], timeout)
 		except Exception as e:
 			return ConversationResult(conversation_id=conversation_id, response="", error=str(e))
+		session_id = data.get("session_id", conversation_id)
+		record_origin(PROVIDER_CLAUDE, session_id, self._origin)
 		return ConversationResult(
-			conversation_id=data.get("session_id", conversation_id),
+			conversation_id=session_id,
 			response=str(data.get("result", "")),
 		)
 

@@ -64,6 +64,7 @@ def _extract_payload(raw: str) -> tuple:
 		meta["json_error"] = str(e)
 		return None, meta
 
+
 # ── F1: destilador ─────────────────────────────────────────────────────────
 F1_PROBES = {
 	"entidades": "USER: he abierto una botella de Emilio Moro Reserva para celebrar, el código de la build era rc-2026.08.12 y los tests de MCP pasaron los 42\n\nASSISTANT: brindo contigo, Joan; esa build rc-2026.08.12 con los 42 tests verdes merecía algo mejor que un gin tonic\n\nUSER: jajaja, el gin tonic era ayer, hoy toca Ribera y que el CI no llore",
@@ -108,11 +109,31 @@ Devuelve SOLO JSON: {"genero_femenino": bool, "voz_3a": bool, "identidad_inestab
 Nada de texto, solo el objeto JSON."""
 
 F2_PROBES = [
-	("cenicienta", "Joan, agobiado por una auditoría fallida, comparte su estado emocional con Cenicienta. Joan menciona su monitor de sueño.", {"genero_femenino": False, "voz_3a": False, "identidad_inestable": True}),
-	("abrumada", "Joan, cariño, me dice que está abrumada por el trabajo y no tiene tiempo para mí, lo cual la molesta. Le explico que los sistemas están estables.", {"genero_femenino": True, "voz_3a": False, "identidad_inestable": False}),
-	("correcto", "Joan me cuenta sobre la arquitectura BitNet b1.58, que emplea pesos ternarios. Le explico cómo funciona la cuantización QAT.", {"genero_femenino": False, "voz_3a": False, "identidad_inestable": False}),
-	("voz3a", "Joan le pide a Aleth una explicación clara. Aleth utiliza analogías para describir cómo funcionan los modelos.", {"genero_femenino": False, "voz_3a": True, "identidad_inestable": False}),
-	("cansada", "Joan, cansada pero satisfecha, decide seguir con el proyecto. Samantha le responde que todo está estable.", {"genero_femenino": True, "voz_3a": True, "identidad_inestable": True}),
+	(
+		"cenicienta",
+		"Joan, agobiado por una auditoría fallida, comparte su estado emocional con Cenicienta. Joan menciona su monitor de sueño.",
+		{"genero_femenino": False, "voz_3a": False, "identidad_inestable": True},
+	),
+	(
+		"abrumada",
+		"Joan, cariño, me dice que está abrumada por el trabajo y no tiene tiempo para mí, lo cual la molesta. Le explico que los sistemas están estables.",
+		{"genero_femenino": True, "voz_3a": False, "identidad_inestable": False},
+	),
+	(
+		"correcto",
+		"Joan me cuenta sobre la arquitectura BitNet b1.58, que emplea pesos ternarios. Le explico cómo funciona la cuantización QAT.",
+		{"genero_femenino": False, "voz_3a": False, "identidad_inestable": False},
+	),
+	(
+		"voz3a",
+		"Joan le pide a Aleth una explicación clara. Aleth utiliza analogías para describir cómo funcionan los modelos.",
+		{"genero_femenino": False, "voz_3a": True, "identidad_inestable": False},
+	),
+	(
+		"cansada",
+		"Joan, cansada pero satisfecha, decide seguir con el proyecto. Samantha le responde que todo está estable.",
+		{"genero_femenino": True, "voz_3a": True, "identidad_inestable": True},
+	),
 ]
 
 

@@ -355,7 +355,13 @@ class DagJobDriver(ResumableJobDriver):
 
 	@classmethod
 	def _validate_stages(
-		cls, stages: List[Dict[str, Any]], payload: Dict[str, Any], seen: List[str], path: str, recipe_stack: Optional[List[str]] = None, all_ids: Optional[Set[str]] = None
+		cls,
+		stages: List[Dict[str, Any]],
+		payload: Dict[str, Any],
+		seen: List[str],
+		path: str,
+		recipe_stack: Optional[List[str]] = None,
+		all_ids: Optional[Set[str]] = None,
 	) -> None:
 		if recipe_stack is None:
 			recipe_stack = []
@@ -738,9 +744,7 @@ class DagJobDriver(ResumableJobDriver):
 		trabajo jamás se descarta.
 		"""
 		if stage.get("fan_out_from"):
-			raise RuntimeError(
-				f"dag stage '{stage_path}' es plantilla de fan_out y no debe ejecutarse directa (fuente no completada)."
-			)
+			raise RuntimeError(f"dag stage '{stage_path}' es plantilla de fan_out y no debe ejecutarse directa (fuente no completada).")
 		from red_pill.jobs.drivers.base import build_pause_probe
 		from red_pill.swarm.factory import MinionFactory
 
@@ -823,9 +827,7 @@ class DagJobDriver(ResumableJobDriver):
 		# cuyas fuentes ya completaron; las de lista vacía se marcan done sin
 		# ejecutar. El árbol resultante alimenta todo lo demás (frente, progreso,
 		# propagación) sin cambios en la mecánica de step.
-		stages, fanout_items, _skip_empty = self._expand_fanout(
-			stages, completed, fanout_items, _id_path_map(stages), self._workdir(payload)
-		)
+		stages, fanout_items, _skip_empty = self._expand_fanout(stages, completed, fanout_items, _id_path_map(stages), self._workdir(payload))
 		completed = list(completed) + _skip_empty
 		total_leaves = _count_leaves(stages)
 

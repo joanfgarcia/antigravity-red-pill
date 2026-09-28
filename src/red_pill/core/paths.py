@@ -332,11 +332,14 @@ def get_thread_state_path() -> Path:
 	return get_data_dir() / "thread_state.json"
 
 
-def get_staging_dir() -> Path:
-	"""Resuelve el directorio de almacenamiento temporal staging ($XDG_CACHE_HOME/red-pill/staging)."""
-	path = Path(platformdirs.user_cache_dir("red-pill")) / "staging"
-	path.mkdir(parents=True, exist_ok=True)
-	return path
+def get_legacy_staging_dir() -> Path:
+	"""Directorio de staging LEGACY ($XDG_CACHE_HOME/red-pill/staging) — solo lectura.
+
+	La ingesta que lo consumía fue retirada (v8.0.0). Se mantiene este getter
+	centralizado únicamente para el migrador (`scripts/migrate_single_writer.py`),
+	que archiva el staging residual de instalaciones previas. NO se crea.
+	"""
+	return Path(platformdirs.user_cache_dir("red-pill")) / "staging"
 
 
 def get_ingestion_dir() -> Path:
@@ -407,7 +410,6 @@ def migrate_legacy_agent_dirs() -> None:
 	# Define migration map: (source, target)
 	migration_map = [
 		(legacy_agent / "thread_state.json", get_thread_state_path()),
-		(legacy_agent / "staging_buffer", get_staging_dir()),
 		(legacy_agent / "ingestion", get_ingestion_dir()),
 		(legacy_agent / "config" / "swarm_communities.json", get_swarm_config_path()),
 		(legacy_agent / "model_profiles.yaml", get_model_profiles_path()),

@@ -2,125 +2,119 @@
 
 This guide documents the full pipeline to preserve and query historical Antigravity conversations in the Bünker memory substrate.
 
-> **Memento Chronicle (RFC-002).** Since v7.22.0 the raw layer lives on disk:
-> the nightly chronicle also renders every session to the Memento tree
-> (`~/.local/share/red-pill/memento/`, canonical `memento/index.md` + `raw/`
-> provider backups) before ingesting into Qdrant. Exact recall is served by the
-> `search_memento` MCP action; Qdrant ingestion described below continues
-> unchanged until the Phase-4 curation gate is enforced. See
-> [RFC_002_MEMENTO](../TECHNICAL/BUNKER/RFC_002_MEMENTO.md) and the Memento
-> section of [ENV_REFERENCE](../ENV_REFERENCE.md).
+> **⚠️ ESTADO v8.0.0 (2026-09-28).** La ingesta legacy ha sido **retirada**:
+> la colección legacy de archivo está **retirada** (snapshot previo) y el destino
+> de la memoria es el **árbol Memento en disco** + ascensión + hubs/hilo. El pipeline
+> real lo ejecuta el **ciclo nocturno** (`redpill-nightly.timer`, 03:00 →
+> `chronicle → sleep`). Los pasos manuales de más abajo son **HISTÓRICOS**
+> (el descifrado/extracción sigue siendo útil como productor de
+> `unencrypted_conversations/` para la fuente Memento de antigravity).
+
+> **Memento Chronicle (RFC-002).** El chronicle **no escribe Qdrant**: renderiza
+> cada sesión al árbol Memento en disco (`~/.local/share/red-pill/memento/`,
+> canónico `memento/index.md` + `raw/`). El recall exacto lo sirve `search_memento`.
+> La ingesta cruda a Qdrant fue **retirada** (v8.0.0).
+> Ver [RFC_002_MEMENTO](../TECHNICAL/BUNKER/RFC_002_MEMENTO.md) y
+> [ENV_REFERENCE](../ENV_REFERENCE.md).
 
 ## Prerequisites
 
--   Red Pill Protocol v6.2.0+ installed and running
+-   Red Pill Protocol v8.0.0+ installed and running
 -   Qdrant accessible at `$QDRANT_HOST:$QDRANT_PORT`
 -   The Antigravity decryption key (see below)
 
 ---
 
-## 🤖 Automated Mode (Recommended)
+## 🤖 Automated Mode (nightly, 03:00)
 
-The `redpill-chronicle.timer` runs **automatically every night at 04:00** via `chronicle_daily.py`. It handles Steps 1–4 autonomously (decrypt → ingest → distill → refine).
+El **ciclo nocturno** (`redpill-nightly.timer` → `redpill-nightly.service`) es la
+única entrada automática: encola `configs/jobs/nightly.yaml` (composition
+`chronicle → sleep`). El chronicle renderiza el delta a Memento (disco) y el
+sueño consolida, teje y asciende (hubs/hilo) — ya **sin** ingesta a
+la colección legacy de archivo (retirada).
 
-**Install the timer (once after installation or update):**
+**Verificar el timer (una vez por instalación/actualización):**
 ```bash
 uv run python scripts/schedule_pulse.py --interval-hours 1
-systemctl --user list-timers | grep chronicle
-# Expected output: redpill-chronicle.timer  NEXT: tomorrow 04:00
+systemctl --user list-timers | grep nightly
+# Esperado: redpill-nightly.timer  NEXT: tomorrow 03:00
 ```
 
-**Manual catch-up (if the timer missed a day):**
+**Catch-up manual:**
 ```bash
-uv run python scripts/chronicle_daily.py --yesterday
-uv run python scripts/chronicle_daily.py --all   # all unprocessed sessions
+uv run python scripts/memento_migrate.py                 # render delta a Memento
+uv run python scripts/memento_migrate.py --all           # reproceso completo
+uv run red-pill job submit --recipe nightly --kick       # ciclo completo ahora
 ```
 
-> [!NOTE]
-> The timer uses `Persistent=true` — if the laptop was off at 04:00, it fires on next boot.
-> See [AGENT_UPDATE_GUIDE §4.11](AGENT_UPDATE_GUIDE.md) for full maintenance instructions.
+> **Persistent=true**: si el portátil estaba apagado a las 03:00, el timer se
+> dispara al arrancar. Los timers individuales `redpill-chronicle.timer` y
+> `redpill-sleep.timer` fueron **retirados** (decisión §5.3 opción A, AD-025).
 
 ---
 
 ## Step 1 — Obtain the Antigravity Key
 
-The `.pb` conversation files are AES-encrypted. You need the key to decrypt them.
-
-**Option A: CDP Hook (automated)**  
-The key can be extracted via the Chrome DevTools Protocol hook at startup. See `docs/ANTIGRAVITY_KEY_RECOVERY.md` for details.
-
-**Option B: Manual extraction**  
-```bash
-# Run the capture script and follow the on-screen instructions
-uv run python /tmp/capture_antigravity_key.py
-# The key will be printed and can be set in .env:
-# ANTIGRAVITY_KEY=<key>
-```
+The `.pb` conversation files are AES-encrypted. The key (`ANTIGRAVITY_KEY`) enables
+the AES extraction path; without it the extractor falls back to the Language
+Server. See [ANTIGRAVITY_KEY_RECOVERY](../TECHNICAL/SECURITY/ANTIGRAVITY_KEY_RECOVERY.md).
 
 ---
 
-## Step 2 — Decrypt the Conversation Files
+## Step 2 — Extract to `unencrypted_conversations/`
 
 ```bash
-# Decrypt all .pb files in the Antigravity conversations directory
-uv run python scripts/antigravity_decrypt.py \
-    ~/.gemini/antigravity/conversations/ \
-    --output ./decrypted
-
-# Or decrypt a single file
-uv run python scripts/antigravity_decrypt.py \
-    ~/.gemini/antigravity/conversations/some_conversation.pb \
-    --output ./decrypted
+# Orchestrator: AES if ANTIGRAVITY_KEY is set, else Language Server.
+uv run python scripts/chronicle_extractor.py
 ```
 
-Output: JSON files in `./decrypted/`, one per conversation.
-
----
-
-## Step 3 — Ingest into archive_memories
-
-```bash
-uv run python scripts/antigravity_ingest.py --dir ./decrypted
-```
-
-This injects all conversation turns into the `archive_memories` collection, creating Axon Thread associations between sequential turns. The collection is **PERMANENT** (exempt from lazy metabolic decay).
-
----
-
-## Step 4 — Cognitive Distillation (optional but recommended)
-
-Raw archive nodes are useful for search but noisy. Run the distillation pipeline to produce clean `work_memories` and `social_memories` engrams:
-
-```bash
-# Stage 1: Edge-engine distillation (requires local LLM running)
-uv run python scripts/chronicle_distill.py
-
-# Stage 2: Fragmentation + cognitive refinement
-uv run python scripts/chronicle_refine.py
-```
+Output: `~/.local/share/red-pill/unencrypted_conversations/*.json` (one per
+conversation). This is the **producer** of Memento's antigravity source.
 
 > [!NOTE]
-> Distillation requires the local LLM endpoint (UDS socket or TCP) to be reachable. Check with `uv run red-pill status`.
+> La vía legacy de ingesta a Qdrant está **RETIRADA** en v8.0.0; el productor
+> vigente es `scripts/chronicle_extractor.py` → `unencrypted_conversations/`.
 
 ---
 
-## Step 5 — Explore the Chronicle
+## Step 3 — Render to Memento
 
 ```bash
-# Semantic search across archive_memories
-uv run python scripts/chronicle_explorer.py "your query here"
+uv run python scripts/memento_migrate.py            # delta
+uv run python scripts/memento_migrate.py --all      # reproceso completo
+uv run red-pill job submit --recipe nightly --kick  # ciclo completo ahora
+```
 
-# Walk the Ariadne's Thread (sequential association traversal)
-uv run python scripts/chronicle_explorer.py --thread <point_id>
+El **ciclo nocturno** (`redpill-nightly.timer`, 03:00) hace esto automáticamente:
+renderiza el delta al árbol Memento en disco y consolida (ascensión + hubs/hilo).
+No hay ingesta a Qdrant en el chronicle.
+
+---
+
+## Step 4 — Ascensión a la memoria curada
+
+`work_memories`/`social_memories` crecen **solo por ascensión de Memento**
+(`distill→refine/annotate→ascend`) + síntesis de hubs. No se produce por drenaje
+del buffer. Detalle: [OPERATIONS/SINGLE_WRITER_ROLLOUT.md](../TECHNICAL/OPERATIONS/SINGLE_WRITER_ROLLOUT.md).
+
+---
+
+## Step 5 — Consultar el archivo
+
+```bash
+# Recall exacto sobre el árbol Memento (MCP)
+#   acción `search_memento`
+# Consulta directa del árbol en disco:
+ls ~/.local/share/red-pill/memento/
 ```
 
 ---
 
 ## Performance Notes
 
--   `archive_memories` uses the **Bayesian Beta-distribution utility model** (same as `work_memories`) — no FSRS decay.
--   `PERMANENT_COLLECTIONS` in `config.py` prevents any metabolic erosion of this collection.
--   Large ingestion (>10k nodes) may take several minutes. Use `--batch-size` to control throughput.
+-   El archivo es **Memento en disco** (markdown + `raw/`); su destino es
+    navegable y greppable. `work_memories`/`social_memories` son la capa curada.
+-   El buffer `interaction_memories` es ventana corta (TTL `INTERACTION_MAX_AGE_DAYS`).
 
 ---
 

@@ -82,6 +82,7 @@ Selector `(task, model, thinking, custom, experimental)` resuelto SIEMPRE bajo
 el lock vía `model_runtime`; cambio de modelo sin reiniciar; chat handlers por
 modo thinking (template nativo); `/status` con thinking_mode; fallup CPU→GPU;
 worker CPU aislado; health liveness 200 incondicional.
+Fallup-watcher v2 (anti-flapping): idle>=60s, 12 checks estables, margen 0.5GB sobre tier de entrada + peor-caso dinámico; TOCTOU-safe (re-chequeo + _waiters), gates E1/E2/P3.
 
 Generado desde setup_background_model.sh (fuente de verdad). NO editar a mano.
 """
@@ -110,10 +111,12 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Red Pill Inference Governance Proxy")
 
 from red_pill.core import model_runtime as mr
+from red_pill.core.fallup import should_fallup, FALLUP_MIN_IDLE_S, FALLUP_STABLE_CHECKS, FALLUP_MARGIN_GB, fallup_enabled
 from red_pill.core.model_license import ModelLicenseError
 from red_pill.core.model_registry import ModelRegistry
 from red_pill.core.paths import resolve_model_path
 from red_pill.core.vram_probe import VramProbe
+from red_pill.inference.runtime import apply_chat_handler as _apply_chat_handler, register_thinking_handlers as _register_thinking_handlers
 
 # Env del worker CPU (imposición del padre, RFC §10): el worker resuelve con el
 # selector igual que el padre, pero su env lo fija el padre al spawnearlo.
@@ -126,72 +129,9 @@ _CPU_KV_MB_PER_TOKEN = 0.16
 DEFAULT_HIGH_TIMEOUT = 300
 DEFAULT_LOW_TIMEOUT = 10
 
-# ── Chat handlers por modo thinking (v3, RFC §5.3) ─────────────────────────
-# Se registran al cargar cada modelo con template nativo; los nombres
-# `granite-*` son convención, pero el mapeo real lo hace model_runtime.
-def _register_thinking_handlers(llm, resolved: mr.ResolvedModel) -> None:
-	"""Registra chat handlers por modo thinking derivados del template del GGUF.
-
-	llama-cpp-python NO expone chat_template_kwargs en create_chat_completion;
-	el Jinja2ChatFormatter acepta enable_thinking/low_effort vía kwargs. Cada
-	modo queda registrado en el registry GLOBAL de llama_cpp como chat_format
-	y el daemon lo selecciona por request según el `thinking` resuelto. Al
-	cargar un modelo nuevo se re-registran (solo hay UN modelo cargado a la vez).
-	"""
-	if not resolved.extra.get("thinking_supported", False):
-		return
-	try:
-		import llama_cpp.llama_chat_format as lcf
-		from llama_cpp.llama_chat_format import Jinja2ChatFormatter
-
-		tpl = llm.metadata.get("tokenizer.chat_template", "")
-		if not tpl:
-			logger.warning("modelo sin tokenizer.chat_template — no se registran modos thinking")
-			return
-		eos_id = llm.token_eos()
-		eos_str = llm._model.token_get_text(eos_id) if hasattr(llm._model, "token_get_text") else "<|im_end|>"
-		bos_str = "<s>"
-
-		def _mk(et: bool, le: bool = False, name: str = ""):
-			def fmt(*, messages, **kw):
-				return Jinja2ChatFormatter(
-					template=tpl, eos_token=eos_str, bos_token=bos_str,
-					stop_token_ids=[eos_id],
-				)(messages=messages, enable_thinking=et, low_effort=le, **kw)
-			# Registry GLOBAL de llama_cpp: el chat_format debe existir ahí.
-			lcf.register_chat_format(name)(fmt)
-			logger.debug(f"chat handler '{name}' registrado (enable_thinking={et}, low_effort={le})")
-
-		_mk(True, False, "granite-thinking")
-		_mk(False, False, "granite-nothink")
-		_mk(True, True, "granite-low")
-		logger.info(f"registrados chat handlers por modo thinking para '{resolved.profile_name}'")
-	except Exception as e:
-		logger.error(f"no se pudieron registrar chat handlers thinking: {e}")
-
-
-def _apply_chat_handler(llm, resolved: mr.ResolvedModel, body: Dict[str, Any]) -> None:
-	"""Aplica el chat handler / chat_format correcto según la request.
-
-	Orden: template nativo + thinking → handler registrado del modo; si el
-	perfil declara chat_format explícito, gana el perfil (o el override del
-	body). Un request con tools en un modelo sin handler thinking usa el
-	chat_format nativo (llama_cpp autodetecta tools).
-	"""
-	thinking = body.get("thinking") or resolved.thinking or "off"
-	handler_name = mr.apply_thinking_to_template(thinking)
-	explicit = body.get("chat_format") or resolved.chat_format
-
-	if handler_name and explicit is None:
-		# El handler del modo se registró en el registry GLOBAL de llama_cpp
-		# al cargar el modelo; seleccionarlo por nombre como chat_format.
-		llm.chat_format = handler_name
-		return
-	if explicit is not None:
-		llm.chat_format = explicit
-		return
-	# Template nativo por defecto (chat_format=None → llama_cpp usa el del GGUF).
-	llm.chat_format = None
+# Chat handlers por modo thinking: única verdad en red_pill.inference.runtime
+# (compartida con el front CLI del bake-off). Se importan arriba como
+# _apply_chat_handler / _register_thinking_handlers.
 
 
 class BackendUnavailable(RuntimeError):
@@ -205,26 +145,48 @@ class ModelManager:
 		self.worker_port = None
 		self.mode = None
 		self.n_ctx = None
+		self.flash_attn = False
 		self.current: Optional[mr.ResolvedModel] = None
 		self.lock = asyncio.Lock()
 		self.last_active = time.time()
 		self.last_priority = "high"
 		self._last_status_error: Optional[str] = None
+		self.fallup_stable = 0
+		self.fallup_last_check = None
+		self.fallup_last_result = None
+		self.fallup_last_at = None
 
 	async def resolve_and_ensure(self, body: Dict[str, Any], prefs: Optional[List[str]] = None):
 		"""Resuelve el selector y carga el modelo si difiere del actual (bajo lock)."""
 		self.last_active = time.time()
 		resolved = mr.resolve(body)
-		if self.mode is not None and self.current and self._same_model(self.current, resolved):
+		if self.mode is not None and self.current and self._same_model(self.current, resolved) and self._backend_alive():
 			# Mismo modelo: solo aplicar chat handler/thinking de la request.
 			self._apply_resolved(body, resolved)
 			return resolved
 		await self._switch_to(resolved, prefs)
 		return resolved
 
+	def _backend_alive(self) -> bool:
+		"""¿El backend actual puede servir? (2026-09-25: worker CPU muerto = 500 eterno).
+
+		La histéresis de `_same_model` reutilizaba el modelo "cargado" aunque el
+		worker CPU hubiera muerto (p.ej. scope de systemd que no arrancó): cada
+		petición acababa en `Connection refused` → 500, sin recarga, hasta reiniciar.
+		"""
+		if self.mode == "cpu" and not IS_CPU_WORKER:
+			return self.worker is not None and self.worker.poll() is None
+		return self.model is not None
+
 	@staticmethod
 	def _same_model(a: mr.ResolvedModel, b: mr.ResolvedModel) -> bool:
-		return a.model_path == b.model_path and a.n_ctx == b.n_ctx and a.mode == b.mode
+		# Hysteresis (2026-09-24): NO comparar n_ctx. El resolve mide la VRAM con
+		# el modelo ya cargado y elige un tier menor; comparar n_ctx forzaba
+		# unload/reload en bucle (2.590 ciclos en una noche). Mismo fichero+modo →
+		# se sirve con el modelo actual sin recargar.
+		# flash_attn sí cuenta (MEM-009 D5): es estático del perfil (no depende de
+		# la VRAM medida) y cambia el sobre de serving → exige recarga.
+		return a.model_path == b.model_path and a.mode == b.mode and a.flash_attn == b.flash_attn
 
 	def _apply_resolved(self, body: Dict[str, Any], resolved: mr.ResolvedModel) -> None:
 		if self.model is not None:
@@ -260,6 +222,13 @@ class ModelManager:
 					self._load_in_process(resolved, resolved.n_ctx, ngl)
 					return
 				elif device == "cpu":
+					if IS_CPU_WORKER:
+						# El worker CPU carga EN SU PROCESO. Antes (desde RFC-HARNESS-002
+						# v3, 2026-09-17) llamaba a _start_cpu_worker → intentaba lanzar
+						# otro worker con su mismo scope → "already loaded" → exited
+						# early → 500 en todo el fallback a CPU.
+						self._load_in_process(resolved, FORCED_NCTX or resolved.cpu_n_ctx or resolved.n_ctx, 0)
+						return
 					self._start_cpu_worker(resolved)
 					return
 				elif device in ("igpu", "npu"):
@@ -282,13 +251,16 @@ class ModelManager:
 		if not os.path.exists(resolved.model_path):
 			raise BackendUnavailable(f"model file not found: {resolved.model_path}")
 		from llama_cpp import Llama
+		flash_attn = mr.effective_flash_attn(resolved, "cpu" if IS_CPU_WORKER else "gpu")
 		self.model = Llama(
 			model_path=resolved.model_path,
 			chat_format=resolved.chat_format,
 			n_ctx=n_ctx,
 			n_gpu_layers=n_gpu_layers,
+			flash_attn=flash_attn,
 			verbose=False,
 		)
+		self.flash_attn = flash_attn
 		_register_thinking_handlers(self.model, resolved)
 		self.mode = "cpu" if IS_CPU_WORKER else "gpu"
 		self.n_ctx = n_ctx
@@ -297,11 +269,17 @@ class ModelManager:
 		logger.info(f"Model {resolved.profile_name} successfully loaded ({where}).")
 
 	def _start_cpu_worker(self, resolved: mr.ResolvedModel):
+		if IS_CPU_WORKER:
+			raise RuntimeError("un worker CPU nunca lanza otro worker (carga en su proceso)")
 		n_ctx = resolved.cpu_n_ctx or resolved.n_ctx
 		shield = math.ceil((_CPU_BASE_GB + (n_ctx * _CPU_KV_MB_PER_TOKEN) / 1024.0) * 1.15)
 		logger.warning(f"GPU unavailable for {resolved.profile_name}: falling back to CPU (n_ctx={n_ctx}, shield={shield}G).")
 		unit = f"redpill-cpu-worker-{CPU_WORKER_PORT}"
 		if shutil.which("systemctl"):
+			# Un scope previo aún cargado hace fallar el systemd-run nuevo
+			# ("already loaded", 2026-09-25): pararlo antes, no solo reset-failed.
+			subprocess.run(["systemctl", "--user", "stop", f"{unit}.scope"],
+				stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 			subprocess.run(["systemctl", "--user", "reset-failed", f"{unit}.scope"],
 				stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 		env = dict(os.environ)
@@ -359,6 +337,7 @@ class ModelManager:
 			self.worker_port = None
 		self.mode = None
 		self.n_ctx = None
+		self.flash_attn = False
 		self.current = None
 		logger.info("Backend released.")
 
@@ -370,6 +349,100 @@ class ModelManager:
 				if elapsed > timeout:
 					logger.info(f"Idle timeout reached ({elapsed:.0f}s > {timeout}s, priority={self.last_priority}). Auto-unloading...")
 					self.unload_under_lock()
+				# Fallup-watcher v2 (anti-flapping R1-R4): solo ascenso CPU→GPU,
+				# nunca descenso; idle>=60s, 12 estables, margen 0.5GB sobre
+				# entrada + peor-caso.
+				# TOCTOU-safe (R2): re-chequeo tras lock + _waiters. E2: cola y reserva.
+				if (not IS_CPU_WORKER and self.mode == "cpu" and self.current is not None
+						and getattr(self.current, "mode", None) != "experimental"
+						and self.last_priority != "low"):
+					# R2: la request encolada esperando el lock aún no bumpeó
+					# last_active cuando el watcher evaluó → re-chequear en lock.
+					elapsed2 = time.time() - self.last_active
+					_waiters = getattr(self.lock, "_waiters", None)
+					try:
+						_has_waiters = bool(len(_waiters)) if _waiters is not None else False
+					except Exception:
+						_has_waiters = False
+					if _has_waiters:
+						self.fallup_stable = 0
+						self.fallup_last_result = "waiters-busy"
+						self.fallup_last_check = time.time()
+						return
+					# E2: cola queue_worker --oneshot en vuelo → no evictar (5.2G
+					# en plena noche). Gate por proceso, nunca por puerto 8760.
+					try:
+						_queue_busy = False
+						try:
+							import psutil as _psutil
+							for _p in _psutil.process_iter(["cmdline"]):
+								try:
+									_cmd = " ".join(_p.info.get("cmdline") or [])
+								except Exception:
+									continue
+								if "queue_worker" in _cmd and "oneshot" in _cmd:
+									_queue_busy = True
+									break
+						except Exception:
+							_queue_busy = False
+						if _queue_busy:
+							self.fallup_stable = 0
+							self.fallup_last_result = "queue-busy"
+							self.fallup_last_check = time.time()
+							return
+					except Exception:
+						pass
+					# E2b: reserva exclusiva GPU → no fallup (GpuReservationManager).
+					try:
+						from red_pill.core.gpu_reservation import GpuReservationManager
+						_reserved = bool(GpuReservationManager.is_exclusive_active())
+					except Exception as _e:
+						logger.warning(f"fallup: reservation check failed ({_e}); assuming free")
+						_reserved = False
+					# P3: _fallup_enabled() antes muerto (cero usos) → ahora gatea.
+					try:
+						_fallup_on = bool(mr._fallup_enabled())
+					except Exception:
+						try:
+							_fallup_on = bool(fallup_enabled())
+						except Exception:
+							_fallup_on = True
+					try:
+						_free_mb = VramProbe.get_free_mb()
+					except Exception:
+						_free_mb = 0
+					_prof = getattr(self.current, "profile_name", None)
+					_is_exp = getattr(self.current, "mode", None) == "experimental"
+					try:
+						_ok, _reason = should_fallup(
+							self.mode, _prof, _is_exp, self.last_priority,
+							elapsed2, _free_mb, self.fallup_stable,
+							_reserved, _fallup_on,
+						)
+					except Exception as _e:
+						logger.warning(f"fallup: should_fallup failed ({_e}); resetting stability")
+						self.fallup_stable = 0
+						self.fallup_last_result = "checker-error"
+						self.fallup_last_check = time.time()
+						return
+					self.fallup_last_check = time.time()
+					self.fallup_last_result = _reason
+					if _ok:
+						# reason == "stable-fallup": 12 estables seguidas → ascenso.
+						self.fallup_stable += 1
+						if self.fallup_stable >= FALLUP_STABLE_CHECKS:
+							logger.info(f"Fallup watcher: CPU→GPU estable ({_reason}, idle={elapsed2:.0f}s, free={_free_mb}MB). Unloading CPU worker for GPU reload on next request...")
+							self.unload_under_lock()
+							self.fallup_last_at = time.time()
+							self.fallup_stable = 0
+					else:
+						# Histéresis: solo ("unstable", "stable-fallup") suma
+						# estabilidad (tier encaja pero falta conteo); otro False
+						# resetea a 0 (R1 flapping: margen/worst-case/not-idle...).
+						if _reason in ("unstable", "stable-fallup"):
+							self.fallup_stable += 1
+						else:
+							self.fallup_stable = 0
 
 
 manager = ModelManager()
@@ -425,16 +498,32 @@ async def models():
 @app.get("/status")
 async def status():
 	res = manager.current
+	try:
+		_fallup_on = bool(mr._fallup_enabled())
+	except Exception:
+		try:
+			_fallup_on = bool(fallup_enabled())
+		except Exception:
+			_fallup_on = True
 	return {
 		"loaded_profile": res.profile_name if res else None,
 		"loaded_model": os.path.basename(res.model_path) if res else None,
 		"mode": manager.mode,
 		"n_ctx": manager.n_ctx,
+		"flash_attn": manager.flash_attn,
 		"busy": manager.lock.locked(),
 		"thinking_mode": res.thinking if res else None,
 		"last_mode": res.last_mode if res else "none",
 		"vram_free_mb": VramProbe.get_free_mb(),
 		"effective_default": mr.effective_default().profile_name,
+		"fallup": {
+			"enabled": _fallup_on,
+			"stable": getattr(manager, "fallup_stable", 0),
+			"required": FALLUP_STABLE_CHECKS,
+			"last_result": getattr(manager, "fallup_last_result", None),
+			"last_check_ts": getattr(manager, "fallup_last_check", None),
+			"last_fallup_ts": getattr(manager, "fallup_last_at", None),
+		},
 	}
 
 
@@ -566,11 +655,18 @@ async def chat_completions(request: Request):
 
 
 def main():
+	global IS_CPU_WORKER
 	from red_pill.core.paths import get_daemon_dir
 	parser = argparse.ArgumentParser()
 	parser.add_argument("--serve-cpu", action="store_true", help="Run as an isolated CPU worker.")
 	parser.add_argument("--port", type=int, default=None)
 	args, _ = parser.parse_known_args()
+
+	# E1: invocación manual --serve-cpu sin env arrancaba el reaper en el
+	# worker (gated solo por env). Fijar env+global ANTES de arrancar.
+	if args.serve_cpu:
+		os.environ["MINION_CPU_WORKER"] = "1"
+		IS_CPU_WORKER = True
 
 	if args.serve_cpu or IS_CPU_WORKER:
 		port = args.port or CPU_WORKER_PORT
@@ -671,8 +767,9 @@ After=network.target
 
 [Service]
 Type=simple
-# Distiller profile served by the background daemon. Overrides run_dual_bind's
-# "samantha" default. granite_8b is the AD-022 primary; hermes_8b is the fallback.
+# RFC-HARNESS-002 v3: default de arranque (MINION_DEFAULT_PROFILE). El selector
+# por tarea/modelo lo sobreescribe por request; el pase Memento pide su modelo
+# vía task (RP_LLM_*) sin tocar este default.
 Environment=MINION_DEFAULT_PROFILE=granite_8b
 ExecStart=/bin/bash _PERSISTENT_DIR_/start.sh
 Restart=always

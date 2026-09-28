@@ -477,6 +477,11 @@ def test_adaptive_timeout_bound_progression():
 	# Cada intento consumido duplica la cota: auto-cura el fallback GPU→CPU
 	assert compute_step_timeout({"control": {"max_step_minutes": 10}}, None, 2) == 600 * 4
 
+	# 2026-09-24: lo declarado es un SUELO — la EMA de pasos rápidos no puede
+	# recortar etapas compuestas largas (nightly: annotate declarado 5400s → 1799s).
+	assert compute_step_timeout({"control": {"max_step_minutes": 420}}, {"step_seconds_ema": 8.2}, 0) == 25200
+	assert compute_step_timeout({"control": {"max_step_minutes": 40}}, {"step_seconds_ema": 935.1}, 0) == 3740
+
 
 def test_step_ema_feeds_eta_only_when_total_is_known():
 	first = update_step_ema({"current": 10, "total": 20}, 600)

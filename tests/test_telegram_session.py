@@ -4,8 +4,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from red_pill.plugins.antigravity_ide.telegram_session import TelegramSessionManager
 from red_pill.plugins.antigravity_ide.worker import IDEWorker
+from red_pill.telegram.session import TelegramSessionManager
 
 
 @pytest.fixture
@@ -22,11 +22,10 @@ def mock_telegram_env(tmp_path, monkeypatch):
 	monkeypatch.setenv("XDG_CACHE_HOME", str(cache_dir))
 	monkeypatch.setenv("IA_DIR", str(tmp_path))
 
-	# Re-import get_data_dir / get_staging_dir to check if paths are correct
-	from red_pill.core.paths import get_data_dir, get_staging_dir
+	# Re-import get_data_dir to check if paths are correct
+	from red_pill.core.paths import get_data_dir
 
 	assert str(get_data_dir()).startswith(str(data_dir))
-	assert str(get_staging_dir()).startswith(str(cache_dir))
 
 	# Setup events.db for worker commands
 	db_path = tmp_path / "events.db"
@@ -126,23 +125,17 @@ def test_append_message_and_prompt(mock_telegram_env):
 	assert prompt == "USER: Hola, Aleth\n\nASSISTANT: Hola, Joan. ¿En qué trabajamos hoy?"
 
 
-def test_copy_to_staging(mock_telegram_env):
+def test_staging_retirado(mock_telegram_env):
+	"""Single-writer: Telegram ya NO copia a staging (ingesta retirada)."""
 	mock_telegram_env
+	from red_pill.core.paths import get_legacy_staging_dir
+
 	tsm = TelegramSessionManager()
+	assert not hasattr(tsm, "copy_to_staging")
 	session = tsm.create_session("user123")
-	session_id = session["id"]
-
-	tsm.append_message(session_id, "user", "Test message")
-
-	success = tsm.copy_to_staging(session_id)
-	assert success
-
-	staging_path = tsm.staging_dir / f"{session_id}.json"
-	assert staging_path.exists()
-	with open(staging_path, "r", encoding="utf-8") as f:
-		staged = json.load(f)
-	assert staged["id"] == session_id
-	assert staged["steps"][0]["message"]["text"] == "Test message"
+	tsm.append_message(session["id"], "user", "Test message")
+	tsm.mark_for_deletion(session["id"])
+	assert not (get_legacy_staging_dir() / f"{session['id']}.json").exists()
 
 
 def test_mark_for_deletion(mock_telegram_env):
@@ -158,9 +151,10 @@ def test_mark_for_deletion(mock_telegram_env):
 	saved = tsm.get_session(session_id)
 	assert saved["status"] == "pending_purge"
 
-	# Verify it copied to staging
-	staging_path = tsm.staging_dir / f"{session_id}.json"
-	assert staging_path.exists()
+	# Single-writer: ya no existe staging (infra retirada)
+	from red_pill.core.paths import get_legacy_staging_dir
+
+	assert not (get_legacy_staging_dir() / f"{session_id}.json").exists()
 
 
 def test_trigger_compaction(mock_telegram_env):
@@ -191,13 +185,16 @@ def test_trigger_compaction(mock_telegram_env):
 		assert payload["channel_user_id"] == "user123"
 		assert len(payload["history_text"]) > 0
 
-	# Verify old session was copied to staging (archival)
-	assert (tsm.staging_dir / f"{session_id}.json").exists()
+	# Single-writer: no se archiva a staging (infra retirada)
+	from red_pill.core.paths import get_legacy_staging_dir
+
+	assert not (get_legacy_staging_dir() / f"{session_id}.json").exists()
 
 
-@patch("red_pill.memory.MemoryManager")
-def test_run_janitor_sweep(mock_mm_class, mock_telegram_env):
+def test_run_janitor_sweep(mock_telegram_env):
 	mock_telegram_env
+	from red_pill.memento.registry import MementoRegistry
+
 	tsm = TelegramSessionManager()
 
 	# Create two sessions marked for deletion
@@ -207,32 +204,15 @@ def test_run_janitor_sweep(mock_mm_class, mock_telegram_env):
 	tsm.mark_for_deletion(sess_archived["id"])
 	tsm.mark_for_deletion(sess_kept["id"])
 
-	# Mock MemoryManager and client scroll behavior
-	mock_mm = MagicMock()
-	mock_client = MagicMock()
-	mock_mm.client = mock_client
-	mock_mm_class.return_value = mock_mm
-
-	# Custom scroll mock to return points only for sess_archived
-	def mock_scroll(collection_name, scroll_filter, limit):
-		# Extract target session_id from filter
-		try:
-			conditions = scroll_filter.must
-			target_val = conditions[0].match.value
-			if target_val == sess_archived["id"]:
-				return ([MagicMock()], None)
-		except Exception:
-			pass
-		return ([], None)
-
-	mock_client.scroll.side_effect = mock_scroll
+	# Only sess_archived is rendered in Memento (fuente telegram) → purgable
+	reg = MementoRegistry()
+	reg.upsert("telegram", sess_archived["id"], {"dir": "d"})
+	reg.save()
 
 	purged = tsm.run_janitor_sweep()
 	assert purged == 1
 
-	# Archived session file should be unlinked
 	assert not tsm._get_path(sess_archived["id"]).exists()
-	# Non-archived session file should still exist
 	assert tsm._get_path(sess_kept["id"]).exists()
 
 

@@ -1,3 +1,8 @@
+# ⚠️ LEGACY (carril refine pre-annotate, CONSERVADO — no borrar): con
+# MEMENTO_ANNOTATE_FROM_RAW=ON (producción actual) este job ejecutaría ANNOTATE,
+# no refine. Su propósito original (re-destilado/re-refinado) queda para cuando
+# se recupere el carril refine. No lanzar sin revisar.
+#
 # Memento — RE-DESTILADO por sesión vía fan-out por items (RFC-JOBDAG-001 §4.6).
 #
 # Primer consumidor REAL del DAG dinámico acotado: la etapa `discover` lista las

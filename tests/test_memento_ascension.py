@@ -334,7 +334,7 @@ def test_refine_frontmatter_declares_polaroid_fields():
 
 	from red_pill.memento import agentic
 
-	src = inspect.getsource(agentic)
+	src = inspect.getsource(agentic.refine)
 	assert "polaroid_stability" in src
 	assert "last_reinforced_at" in src
 
@@ -346,7 +346,10 @@ def test_fase4_config_keys_declared():
 	assert cfg.POLAROID_TAU == 90.0
 	assert cfg.POLAROID_GAIN == 0.5  # ajustado por el experimento (GAIN=1 saturaba)
 	assert cfg.POLAROID_REVIVAL_GATE == 7.0  # ajustado por el experimento
-	assert cfg.MEMENTO_STATIC_ASCENSION_ENABLED is False  # en sombra hasta calibrar
+	# El DEFAULT declarado es sombra (el .env del operador puede activarla).
+	assert cfg.RedPillConfig.model_fields["MEMENTO_STATIC_ASCENSION_ENABLED"].default is False
+	assert cfg.RedPillConfig.model_fields["MEMENTO_ANNOTATE_FROM_RAW"].default is False
+	assert cfg.RedPillConfig.model_fields["MEMENTO_ANNOTATE_VOICE_REWRITE"].default is False
 	assert cfg.MEMENTO_FRAGMENT_OVERLAP_MESSAGES == 2
 	assert cfg.MEMENTO_FRAGMENT_MAX_CHARS == 8000  # granite n_ctx 10240 (destilado por fases solapadas)
 	assert cfg.MEMENTO_GATE_MIN_SIGNIFICANCE == 0.5
@@ -448,11 +451,12 @@ def test_weave_no_window_returns_early(tmp_path: Path):
 # --- Fase 4 §3.3: ascenso estático por umbral de significance ---
 
 
-def _write_refine(root: Path, name: str, significance: float, ascended: bool = False) -> Path:
+def _write_refine(root: Path, name: str, significance: float, ascended: bool = False, validator_approved: bool | None = None) -> Path:
 	d = root / "2026-09" / "opencode" / "s" / "refine"
 	d.mkdir(parents=True, exist_ok=True)
 	f = d / f"{name}.md"
 	asc = "true" if ascended else "false"
+	vline = "" if validator_approved is None else f"validator_approved: {'true' if validator_approved else 'false'}\n"
 	f.write_text(
 		f"""---
 session_id: opencode:{name}
@@ -464,7 +468,7 @@ intensity: 0.3
 texture: {{"theme": "tema_{name}", "relics": []}}
 cross_refs: []
 ascended: {asc}
-ascended_at: null
+{vline}ascended_at: null
 ascended_to: null
 ascended_point_id: null
 polaroid_stability: 0.0
@@ -510,3 +514,14 @@ def test_ascend_by_threshold_limit(tmp_path: Path):
 	stats = ascend_by_threshold(root, reg, min_significance=0.5, memory_manager=mm, limit=2)
 	assert stats["ascendidos"] == 2
 	assert len(mm.calls) == 2
+
+
+def test_ascend_by_threshold_skips_validator_rejected(tmp_path: Path):
+	"""`validator_approved: false` (bool YAML) es terminal: no asciende y se cuenta."""
+	root = tmp_path / "memento"
+	_write_refine(root, "veta", 0.9, validator_approved=False)
+	mm, reg = FakeMemoryManager(), FakeRegistry()
+	stats = ascend_by_threshold(root, reg, min_significance=0.5, memory_manager=mm)
+	assert stats["ascendidos"] == 0
+	assert stats["rechazados_por_validador"] == 1
+	assert mm.calls == []

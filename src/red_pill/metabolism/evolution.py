@@ -27,7 +27,7 @@ class IdentityEvaluator:
 
 		_manager = manager if manager is not None else MemoryManager()
 
-		# We will sample the last N memories from archive and social
+		# We will sample the last N memories from the curated collections
 		sample_limit = 100
 
 		# Color & emotion frequencies, weighted by intensity
@@ -36,7 +36,7 @@ class IdentityEvaluator:
 
 		total_memories = 0
 
-		for collection in ["archive_memories", "social_memories"]:
+		for collection in ["work_memories", "social_memories"]:
 			try:
 				# We need payloads to read color, intensity, and emotion.
 				from qdrant_client.http import models

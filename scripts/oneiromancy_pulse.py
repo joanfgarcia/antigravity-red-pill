@@ -19,7 +19,7 @@ logger = logging.getLogger("oneiromancy_pulse")
 
 def main():
 	parser = argparse.ArgumentParser(description="Run a Dream Cycle (Oneiromancy) on a Bünker collection.")
-	parser.add_argument("--collection", type=str, default="archive_memories", help="Target collection.")
+	parser.add_argument("--collection", type=str, default="work_memories", help="Target collection.")
 	parser.add_argument("--limit", type=int, default=50, help="Points per dream batch.")
 	parser.add_argument("--sleep", type=float, default=2.0, help="Seconds to sleep between batches.")
 	parser.add_argument("--duration", type=int, default=300, help="Total duration in seconds to run the pulse.")

@@ -6,7 +6,7 @@ GPU-heavy consolidation phase is deferred (the partial-deferral win of ADR-SLEEP
 
 import logging
 
-from red_pill.metabolism.maintenance import erode_work_hubs, promote_orphan_chunks, run_rhizodb_washout_and_pruning
+from red_pill.metabolism.maintenance import erode_curated, erode_work_hubs, promote_orphan_chunks, run_rhizodb_washout_and_pruning
 from red_pill.metabolism.phases.base import SleepContext, SleepPhase
 
 logger = logging.getLogger(__name__)
@@ -37,6 +37,12 @@ class ErosionPhase(SleepPhase):
 			erode_work_hubs(ctx.memory_manager)
 		except Exception as e:
 			logger.error(f"[SLEEP ENGINE] Failed to run Bayesian hub erosion: {e}")
+		try:
+			stats = erode_curated(ctx.memory_manager)
+			if stats.get("enabled"):
+				logger.info(f"[SLEEP ENGINE] Curated demote: {stats}")
+		except Exception as e:
+			logger.error(f"[SLEEP ENGINE] Failed to run curated demote: {e}")
 
 
 class WashoutPhase(SleepPhase):

@@ -14,6 +14,32 @@ os.environ["QDRANT_PORT"] = "0"
 os.environ["APP_ROOT"] = tempfile.gettempdir()  # Redirect all storage to /tmp
 
 
+_SW_FLAGS = (
+	"SW_AFFINITY_ENABLED",
+	"SW_PURGE_GATE_ENABLED",
+	"SW_DEDUP_ENABLED",
+	"SW_HUBS_ENABLED",
+	"SW_THREAD_ENABLED",
+	"SW_ABSENCE_GUARD_CONDITIONAL",
+	"SW_EROSION_DEMOTE_ENABLED",
+	"SW_SITUATION_ENABLED",
+	"SW_INTERACTIVE_PHASE_ENABLED",
+	"MEMENTO_REALTIME_TAG_ENABLED",
+)
+
+
+@pytest.fixture(autouse=True)
+def _default_ingest_not_retired(monkeypatch):
+	"""Hermético a los flags single-writer/RFC-004: la suite corre con el default
+	de fábrica (OFF) aunque el `.env` del operador los tenga ON. Los tests que
+	necesitan un flag lo activan con monkeypatch en su cuerpo (gana al fixture)."""
+	import red_pill.config as _cfg
+
+	for name in _SW_FLAGS:
+		if hasattr(_cfg, name):
+			monkeypatch.setattr(_cfg, name, False)
+
+
 @pytest.fixture(autouse=True)
 def bunker_isolation(monkeypatch):
 	"""

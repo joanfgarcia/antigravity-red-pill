@@ -465,6 +465,7 @@ def test_cli_job_resume_kill_purge(mock_qm, mock_find):
 @patch("red_pill.cognitive.queue_manager.CognitiveQueueManager")
 def test_cli_job_logs_y_sin_log(mock_qm, mock_find, tmp_path):
 	import red_pill.jobs.drivers as drv
+
 	mock_qm.return_value.get_task.return_value = {"id": "abc-123"}
 	with patch.object(drv, "job_log_path", lambda jid: tmp_path / "nolog.log"):
 		mock_find.return_value = {"id": "abc-123"}

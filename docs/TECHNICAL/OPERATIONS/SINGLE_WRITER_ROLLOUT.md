@@ -1,0 +1,209 @@
+# Single-Writer Rollout Runbook (AD-034)
+
+Guía operativa para **encender** el single-writer de memoria pieza a pieza (feature
+flags por componente, CONVENTIONS RULE 4). Cada pieza es independiente, default
+`OFF`, y **reversible**: se enciende, se verifica, y se pasa a la siguiente.
+
+> **Estado final (v8.0.0):** la ingesta legacy fue **ELIMINADA**; `SW_INGEST_RETIRED` ya no existe. Los flags `SW_*` de feature quedan como configuración (default ON en el operador). Este runbook conserva valor histórico; el estado vigente está en §6 y en [RFC-002 Fase 4 §10](../BUNKER/RFC_002_PHASE4_DESIGN.md).
+
+> Producción intacta mientras los flags estén `OFF`. Los scripts operativos
+> (`memento_backfill_dates.py`, `memento_dedup_qdrant.py`) ya se aplicaron sobre el
+> corpus (2026-09-21) con snapshots de Qdrant.
+
+## 0. Precondiciones
+
+- Rama `feat/memento-single-writer` desplegada en la máquina.
+- Qdrant UP y **snapshot** reciente de `work_memories`/`social_memories`:
+  ```bash
+  .venv/bin/python -c "import red_pill.config as c; from qdrant_client import QdrantClient; \
+    q=QdrantClient(url=c.QDRANT_URL, api_key=c.QDRANT_API_KEY); \
+    print(q.create_snapshot('work_memories'), q.create_snapshot('social_memories'))"
+  ```
+- Suite verde: `.venv/bin/python -m pytest -q`.
+
+## 1. Orden de encendido (dependencias)
+
+| # | Flag | Efecto | Verificación |
+|---|------|--------|--------------|
+| 1 | `SW_AFFINITY_ENABLED` | Captura `session_id` en el buffer (afinidad **solo explícita**; la derivación por cwd se retiró — AD-034) | Filas nuevas de `memory_queue` con `session_id` |
+| 2 | `MEMENTO_STATIC_ASCENSION_ENABLED` | Ascensión curada (work/social) | `ascend_by_threshold` asciende refines ≥ umbral de categoría |
+| 3 | `SW_DEDUP_ENABLED` | Dedup-at-ascension (body-hash) | `duplicados_omitidos` > 0 solo para cuerpos idénticos |
+| 4 | `SW_HUBS_ENABLED` | Hubs de sesión (idempotentes) | `node_type=synthesis_hub` creados; miembros `hubbed=true`; recall entra por el hub |
+| 5 | `SW_THREAD_ENABLED` | Micro-hilo de Ariadna | `prev/next_member` en los miembros; `traverse_thread(level='member')` |
+| 6 | `SW_INGEST_RETIRED` | Retira la ingesta `interaction→work/social` | No se escriben chunks/raw_parents desde el buffer; staging no crece |
+| 7 | `SW_ABSENCE_GUARD_CONDITIONAL` + `SW_EROSION_DEMOTE_ENABLED` | Olvido: el pulse no refresca; demote a Memento | `last_recalled_at` envejece; demote a 5a/10a |
+| 8 | `SW_SITUATION_ENABLED` | Semáforo de situación **GLOBAL** + pre-heating | `situation_memories` (afinidad `global`) con `situation_stable`/`situation_recent` |
+| 9 | `SW_INTERACTIVE_PHASE_ENABLED` | Proceso de engramas interactivos | `red-pill add work ...` → `node_type=interactive_engram`; `interactive_refine.py` los marca |
+
+**Regla**: no encender `SW_INGEST_RETIRED` (6) hasta que 2–5 estén sanos y
+verificados (la fuente debe estar viva antes de cortar la vieja).
+
+## 2. Verificación por paso
+
+### Salud del single-writer (D26)
+```bash
+.venv/bin/python -c "from red_pill.memory import MemoryManager; \
+  from red_pill.metabolism.sw_observability import compute_sw_health; \
+  import json; print(json.dumps(compute_sw_health(MemoryManager()), indent=2))"
+```
+- `collections.*.hub_coverage_pct` > 0 con hubs encendidos.
+- `solera_age_h` reciente (< 24h) con la solera activa.
+- `affinity_coverage` — informativo: la afinidad es explícita/semántica (diferida), no se deriva del filesystem.
+
+### Replay de recall (cobertura del agujero)
+```bash
+.venv/bin/python scripts/memento_replay_recall.py --limit 20
+```
+Debe devolver hits temáticamente relevantes (el replay de referencia dio 100% en 11 queries).
+
+### Idempotencia de los scripts
+```bash
+.venv/bin/python scripts/memento_backfill_dates.py   # esperado: 0
+.venv/bin/python scripts/memento_dedup_qdrant.py     # esperado: 0 réplicas
+```
+
+## 3. Rollback (por pieza)
+
+Cada flag se apaga en `config`/`.env` y se reinicia el servicio correspondiente:
+- `SW_HUBS_ENABLED=OFF` → el recall **vuelve a incluir** los miembros (la exclusión
+  `hubbed` está gated); los hubs quedan inertes.
+- `SW_EROSION_DEMOTE_ENABLED=OFF` → ningún demote.
+- `SW_SITUATION_ENABLED=OFF` → el pre-heating no lee la solera.
+
+> **Nota**: `SW_INGEST_RETIRED` es el único con "punto de no retorno" operativo:
+> una vez retirado y con el buffer TTL'd, reactivarlo no recupera lo no destilado
+> (Memento sigue siendo el archivo).
+
+## 4. Señales de dolor
+
+- `sw_solera_stale` — solera sin actualizar > 168h (¿drenaje/LLM parados?).
+- `sw_hub_coverage` (status) — cobertura de hubs por colección.
+- `interaction_unrendered_purged` — turnos sin renderizar purgados por el tope de edad (chronicle atrasado).
+- `jobs_frustrated` / `task_failure` — ya existentes.
+
+## 5. Recalibración de curaduría (recurrente)
+
+Los umbrales de ascensión y el clasificador de categoría dependen del **modelo**
+de las fases Memento (distill/refine): al cambiarlo, re-medir. Herramienta:
+`scripts/memento_recalibrate.py`.
+
+```bash
+uv run python scripts/memento_recalibrate.py stats                        # distribución por categoría
+uv run python scripts/memento_recalibrate.py bands --work 0.70 --social 0.65
+uv run python scripts/memento_recalibrate.py audit-category -n 40 --engine <modelo>
+uv run python scripts/memento_recalibrate.py audit-significance -n 30 --lo 0.55 --hi 0.65
+uv run python scripts/memento_recalibrate.py report --work 0.70 --social 0.65
+```
+
+- `stats` / `bands` / `report` son deterministas (sin LLM): distribución de
+  significance (ascendidos vs no), y escenarios de umbral (qué **entra**, qué
+  **sale**, qué queda **al límite**) con muestras.
+- `audit-category` mide el **acuerdo** del `category_score` contra el juicio del
+  LLM (work/social) → **base para decidir umbrales**.
+- `audit-dual` mide el enrutado **dual** (ejes work/social con zona muerta) contra
+  el legacy (`category_score ≥ 0.5`) y el juez LLM.
+- `audit-stability` mide **flips de ruta** bajo 3 protocolos de lote (normal /
+  invertido / partido): el anclaje contextual del scorer. Es el arnés para
+  comparar prompts y modelos.
+- `audit-significance` mide el **% trivial** por banda: banda baja trivial →
+  subir; banda alta con memoria valiosa → bajar.
+- `--engine` fija `RP_LLM_MODEL` para comparar modelos (selección recurrente);
+  `--temp` fija la temperatura del scorer dual.
+
+**Rebuild de anotaciones (MEM-006)**: `scripts/memento_annotate.py` + job
+`configs/jobs/memento_annotate_rebuild.yaml` (`element_job`, checkpoint por
+sesión; pausable/reanudable; las sesiones ya anotadas con el `prompt_version`
+vigente se omiten vía `annotate/_meta.json`). Lanzar:
+`uv run red-pill job submit --recipe memento_annotate_rebuild [--paused]`.
+Control: `uv run python scripts/memento_annotate.py --status` (anotadas/stale/
+pendientes/errores + notas). Ascensión post-rebuild encadenada:
+`uv run red-pill job submit --recipe memento_ascend_post_rebuild --parent <id>`
+(BLOCKED hasta que el rebuild completa; sin LLM, idempotente; las anotaciones
+`dual_route: none` no ascienden). Diagnóstico:
+`uv run python tools/memento_lab.py funnel|quality|annotate`.
+
+**Reanudable por splits (MEM-009 F1, AD-037)**: dentro de cada sesión el paso ya no
+es todo-o-nada. `annotate/_partial.json` guarda cada split extraído (clave =
+rango de mensajes, revalidado por `content_hash`) y el estado de cada fase: un
+kill o timeout pierde como mucho un split, y el reintento del `element_job`
+continúa donde quedó. Nada se borra al empezar; las notas huérfanas y el parcial
+se van solo tras el `_meta.json` verificado. **Parcial presente sin `_meta` =
+trabajo a medias** (no borrarlo a mano; `--all` lo descarta). Re-puntuar sin
+re-extraer (p. ej. umbrales nuevos):
+`RP_ELEMENT='{"dir": "<dir_rel>"}' uv run python scripts/memento_annotate.py --from=score --reason "<motivo>"`
+(degrada con aviso si faltan prerrequisitos; el motivo queda en `_meta.json`).
+
+**Recall (AD-038)**: `MEMORY_HYBRID_RECALL_ENABLED` + `MEMORY_RECALL_MMR_ENABLED`
+(oracle/CLI). Antes de tocar cómo se embebe o recupera, mide con
+`uv run python tools/memento_recall_bench.py` (solo lectura). **Migrar a voz v2**:
+encender `MEMENTO_ANNOTATE_VOICE_V2`, lanzar el rebuild (las sesiones quedan stale
+por fingerprint) y encadenar `memento_ascend.py --replace-legacy --reconcile` —
+sin `--reconcile` los puntos de las notas viejas quedarían huérfanos en Qdrant.
+
+**Muro de serving ≠ veneno (MEM-009, AD-037)**: defers repetidos del mismo
+elemento con el daemon reiniciándose (`NRestarts` subiendo, `CUDA error: out of
+memory` en el journal) son **VRAM**, no contenido: se curan con config
+(`flash_attn`/`n_ctx` del perfil), no con `job_skip`. Comprobar
+`curl -s localhost:8760/status` → `flash_attn: true` para `granite_8b`.
+
+**Política refine (2026-09-22)**: **no se generan refines nuevos** — el pase
+agéntico usa annotate (`MEMENTO_ANNOTATE_FROM_RAW=true`). El código de refine queda
+solo para (a) rollback explícito (flag OFF) y (b) reparación de la capa legacy
+(`memento_refine_rescore.py`). El probe (`memento_probe`) también prueba annotate.
+La ascensión y el reinforce leen `annotate/` **y** el `refine/` legacy.
+
+**Sustitución legacy (`--replace-legacy`)**: además del ascenso, por cada sesión
+con notas: normaliza el `session_id` al canónico del registry, borra sus engramas
+legacy de `refine/` en Qdrant y sella esos refines (`replaced_by_annotate`).
+Convergente (re-ejecutar = no-op). Política **annotate-first por sesión**: la
+ascensión y el reinforce omiten los `refine/` de sesiones anotadas (fallback a
+refine solo si no hay notas). La receta post-rebuild ya la usa.
+
+**Registro por sesión**: cada sesión lleva `_session.json` en la raíz de su
+directorio (portada del expediente: bloques `stages.distill` / `stages.annotate`
+/ `stages.ascend` + `updated_at`, escritos por cada etapa). El
+`memento_registry.json` global es solo el índice cross-sesión (hilo prev/next,
+staleness); la verdad vive en el expediente de la sesión.
+
+**Sueño con la versión nueva (flags, `.env`)**: para que el ciclo nocturno use
+annotate en vez de refine y ascienda las notas:
+`MEMENTO_ANNOTATE_FROM_RAW=true` (run_agentic anota), `MEMENTO_ANNOTATE_VOICE_REWRITE=true`
+(rewrite de voz) y `MEMENTO_STATIC_ASCENSION_ENABLED=true` (ascenso estático al
+final del pase). El paso `memento-reinforce` del sueño también refuerza/asciende
+anotaciones (`weave_memento_reinforcement` escanea `refine/` **y** `annotate/`).
+
+**Estado 2026-09-22** (cata preliminar): work 0.6 / social 0.5. La banda social
+0.50-0.60 contiene **memoria personal de alto valor** (infancia, Carmen) mientras
+el tramo work 0.60-0.65 es mayormente operativo → **antes de subir social hay que
+calibrar el clasificador** (MEM-008, desk): hay contenido técnico cayendo en
+`social` (umbral más bajo) y eso distorsiona la decisión. La estática sigue en
+sombra; el backlog pendiente se recupera al encenderla con los umbrales vigentes
+(upsert idempotente).
+
+---
+
+## 6. Estado de activación (2026-09-28)
+
+Activación ejecutada por el operador (snapshots previos de work/social/
+interaction). Piezas ON en `.env`:
+
+| Grupo | Flags | Verificación |
+|-------|-------|--------------|
+| G1 captura | `SW_AFFINITY_ENABLED`, `SW_PURGE_GATE_ENABLED`, `SW_DEDUP_ENABLED` | engrama real con `session_id` capturado en el drenaje |
+| G2 navegación | `SW_HUBS_ENABLED`, `SW_THREAD_ENABLED` | hubs/hilo se sintetizan en el próximo nightly (cobertura >0) |
+| G3 olvido/situación | `SW_ABSENCE_GUARD_CONDITIONAL`, `SW_EROSION_DEMOTE_ENABLED`, `SW_SITUATION_ENABLED`, `SW_INTERACTIVE_PHASE_ENABLED` | `update_situation` crea `situation_memories` (`updated:1`) |
+| G4 tags RFC-004 | `MEMENTO_REALTIME_TAG_ENABLED` | engrama con `tag_status`/`tag_emotion`/`tag_theme` |
+
+**Hecho**: la ingesta legacy fue **ELIMINADA** (`SW_INGEST_RETIRED` retirado, sin
+rollback; la demolición quitó drenaje/staging/`ls_snatcher`/chronicle legacy). El
+buffer es ventana corta y `work/social` crecen por ascensión Memento + hubs/hilo.
+
+**Procesos que deben releer `.env`**: los oneshot
+(`redpill-queue`/`extractor`/`nightly`/`janitor`) lo hacen solos en su tick; los
+long-running (`redpill.service` daemon) requieren restart — hecho 2026-09-28. El
+servidor MCP (recall) debe reiniciarse **después** del primer nightly con hubs
+para que aplique la exclusión de miembros `hubbed`.
+
+> **Demolición y release**: el inventario de código legacy a eliminar y la
+> asimetría instalación-nueva vs actualización (migrador idempotente, bump major)
+> están en [RFC-002 Fase 4 §10](../BUNKER/RFC_002_PHASE4_DESIGN.md#10-estado-de-rollout-demolición-y-release-2026-09-28).

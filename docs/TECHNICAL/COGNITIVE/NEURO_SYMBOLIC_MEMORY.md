@@ -14,6 +14,8 @@ In human neurobiology, the hippocampus acts as a rapid, high-capacity, but tempo
 **Silicon Implementation**: `interaction_memories` (Fast Buffer)
 During active communication, the AI records verbatim interactions (Prompts and Responses) directly into a non-indexed `interaction_memories` collection. This bypasses latency-heavy processing (like LLM summarization or FSRS mathematical evaluation) to ensure instantaneous interaction, exactly as the hippocampus absorbs the raw events of the waking day.
 
+> **Update (2026-09-21, AD-034)**: el rol de buffer rápido se mantiene, pero su **destilado nocturno a `work_memories`/`social_memories` fue RETIRADO** — las colecciones curadas se alimentan por la **ascensión de Memento**. El buffer es ahora una ventana transitoria con TTL (pre-heating + semáforo de situación).
+
 ---
 
 ## 2. Consolidation & Affective Culling (NREM Sleep & The Amygdala)
@@ -24,8 +26,10 @@ During sleep, the hippocampus replays the day's events to the neocortex. However
 **Silicon Implementation**: `sleep.py` (The Essence Filter)
 During idle time, the system invokes the profile carrying the `distillation` capability (default `granite_8b` — Granite-4.1-8B, IBM, Apache-2.0 — the primary distiller per AD-022; `hermes_8b` is the arch-risk fallback) via ProviderRegistry to read the fast buffer. It does not just match keywords: it understands the interaction and distills the raw text into a strict JSON essence (classifying it as `work` or `social`).
 
+> **Update (2026-09-22, AD-034)**: este "Essence Filter" del buffer queda retirado con el single-writer: el sueño ya **no** destila `interaction_memories` a `work_memories`/`social_memories` — la curada crece por **ascensión de Memento** (`distill→refine→ascend`). El resumen rodante que alimenta el pre-heating es la **solera de situación** (`situation_memories`), no el destilado del buffer. Ver [DECISION_LOG](../DECISION_LOG.md) (AD-034) y [OPERATIONS/SINGLE_WRITER_ROLLOUT.md](../OPERATIONS/SINGLE_WRITER_ROLLOUT.md).
+
 *   **Phase Pipeline & Partial Deferral (ADR-SLEEP-001, extended in v7.7.0)**: `perform_sleep_cycle` is a thin, agnostic runner over an ordered `SleepPhase` pipeline (mirroring the JanitorPlugin / SentinelPlugin pattern), not a monolith. The v7.7.0 pipeline runs **eight ordered phases**:
-    1. **Consolidation** (`requires_gpu`) — the coupled drain → staging → gamma logic, intact per ADR-SLEEP-001. Lone surviving chunks are promoted to `synthesis_hub` inline so every turn keeps a searchable representative.
+    1. **Consolidation** (`requires_gpu`) — **v8.0.0**: ya NO drena `interaction→work/social` (eliminado). Sintetiza **hubs de sesión** + hilo de Ariadna sobre los engramas curados existentes.
     2. **OrphanPromotion** — idempotent safety net: any hub-less consolidated turn (from legacy data or a future synthesis failure) gets its newest chunk flipped to `synthesis_hub` (AD-023 §4).
     3. **Hygiene** — purges empty/whitespace engrams (zero recall value), re-stitching the `prev/next_raw_parent` temporal chain around each victim first; inherited-immunity fragment shrapnel is purged, deliberate immune empties and **murky pointers** (see §3.3) are only reported.
     4. **AxonWeaver** — weaves cross-collection synaptic axons (see §3.2). CPU-only; runs after Hygiene so it never weaves what is about to vanish.

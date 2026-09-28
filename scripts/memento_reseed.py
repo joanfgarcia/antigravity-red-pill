@@ -4,8 +4,9 @@
 Qdrant `work_memories`/`social_memories` acumularon material estructural (raw_parents,
 sequence_chunks, fragmentos, nodos crudos) que ensucia la memoria curada — solo el
 ~16% participa en el recall. La historia completa vive en Memento (raw/index/distill/
-refine); la resiembra borra el ruido y re-puebla las colecciones SOLO con los engramas
-curados ascendidos desde Memento.
+annotate+refine legacy); la resiembra borra el ruido y re-puebla las colecciones SOLO
+con los engramas curados ascendidos desde Memento (prioridad annotate; `ascend_by_threshold`
+escanea `annotate/` y `refine/` legacy, y las notas `dual_route: none` no ascienden).
 
 Validación previa (2026-09-14): muestra de 60 refine → 60 ascendidos; replay de las
 11 queries reales → hit rate 100% (top_score medio 0.47). El pipeline sirve.
@@ -14,7 +15,7 @@ Orden (validación = la Fase 4 ya la hizo):
 1. Verificación de cobertura raw (Memento intacto, no se pierde nada).
 2. Snapshot backup de work/social (obligatorio).
 3. Drop + recreate de work/social.
-4. Resiembra: ascenso estático (refine con significance >= MEMENTO_GATE_MIN_SIGNIFICANCE).
+4. Resiembra: ascenso estático (annotate/ + refine/ legacy con significance >= gate).
 	El refuerzo Memento-consciente seguirá ascendiendo en el sueño (no aplica aquí:
 	tras vaciar no hay ventana de engramas que refuerce).
 5. Reporte.

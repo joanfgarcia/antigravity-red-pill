@@ -35,7 +35,7 @@ def test_kernel_nightly_recipes_are_valid(name, source, priority):
 	El orden de prioridades es el contrato de la noche: sueño (8) > chronicle
 	(7) > entrenamiento (5) — mayor número = más urgente. El sueño y el
 	chronicle son recetas del `dag_job` (RFC_JOB_DAG): el chronicle quedó
-	solo-Memento tras la retirada del legacy de archive_memories (2026-09-11).
+	solo-Memento tras la retirada del legacy (2026-09-11).
 	"""
 	from red_pill.jobs.drivers import get_driver_class
 

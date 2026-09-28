@@ -43,7 +43,9 @@ class CommandMinion(Minion):
 			# y manteniendo el pipe abierto, colgando el communicate() y al runner
 			# (incidente 2026-09-17). No cambia el cgroup: el kill por scope del
 			# job_kill sigue funcionando.
-			process = await asyncio.create_subprocess_exec(*argv, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, cwd=cwd, env=env, start_new_session=True)
+			process = await asyncio.create_subprocess_exec(
+				*argv, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, cwd=cwd, env=env, start_new_session=True
+			)
 
 			if timeout:
 				try:

@@ -55,9 +55,12 @@ def register_thinking_handlers(llm: Any, resolved: mr.ResolvedModel) -> None:
 		def _mk(et: bool, le: bool = False, name: str = "") -> None:
 			def fmt(*, messages: list, **kw: Any) -> Any:
 				return Jinja2ChatFormatter(
-					template=tpl, eos_token=eos_str, bos_token=bos_str,
+					template=tpl,
+					eos_token=eos_str,
+					bos_token=bos_str,
 					stop_token_ids=[eos_id],
 				)(messages=messages, enable_thinking=et, low_effort=le, **kw)
+
 			lcf.register_chat_format(name)(fmt)
 			logger.debug("chat handler '%s' registrado (enable_thinking=%s, low_effort=%s)", name, et, le)
 

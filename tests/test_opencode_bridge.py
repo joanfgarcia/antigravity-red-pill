@@ -84,6 +84,36 @@ class TestCapabilitiesAndArgs:
 		assert bridge._effort_args("medium") == []
 		assert bridge._effort_args(None) == []
 
+	def test_model_effort_args_v1(self, bridge):
+		bridge._cli_major_cache = 1
+		assert bridge._model_effort_args("anthropic/claude-opus", "high") == ["-m", "anthropic/claude-opus", "--variant", "high"]
+		assert bridge._model_effort_args("flash", "high") == ["--variant", "high"]
+		assert bridge._model_effort_args("flash", "medium") == []
+
+	def test_model_effort_args_v2(self, bridge):
+		bridge._cli_major_cache = 2
+		# v2 embebe la variante en la referencia del modelo (#variant).
+		assert bridge._model_effort_args("anthropic/claude-opus", "high") == ["-m", "anthropic/claude-opus#high"]
+		assert bridge._model_effort_args("anthropic/claude-opus", "medium") == ["-m", "anthropic/claude-opus"]
+		# Sin modelo no hay dónde embeberla: se omite.
+		assert bridge._model_effort_args("flash", "high") == []
+
+
+# ── CLI major detection (mock subprocess) ─────────────────────────────────────
+class TestCliMajor:
+	def test_detects_v2_and_caches(self):
+		b = OpenCodeBridge(opencode_path="/bin/true")
+		fake = MagicMock(returncode=0, stdout="opencode v2.0.16", stderr="")
+		with patch("subprocess.run", return_value=fake) as run:
+			assert b._cli_major() == 2
+			assert b._cli_major() == 2
+		assert run.call_count == 1  # cacheado por instancia
+
+	def test_fallback_a_v1_si_falla(self):
+		b = OpenCodeBridge(opencode_path="/bin/true")
+		with patch("subprocess.run", side_effect=OSError("no bin")):
+			assert b._cli_major() == 1
+
 
 # ── Scribe relay (temp sqlite) ────────────────────────────────────────────────
 class TestScribeRelay:
@@ -178,6 +208,54 @@ class TestRunOpencode:
 		with patch("subprocess.run", return_value=fake):
 			with pytest.raises(RuntimeError):
 				bridge._run_opencode(["hi"], timeout=5)
+
+	def test_disables_plugin_when_relay_captures(self, bridge):
+		fake = MagicMock(returncode=0, stdout="", stderr="")
+		bridge._scribe_plugin = False
+		with patch("subprocess.run", return_value=fake) as run:
+			bridge._run_opencode(["hi"], timeout=5)
+		assert run.call_args.kwargs["env"]["REDPILL_SCRIBE_DISABLE"] == "1"
+
+	def test_keeps_plugin_when_it_captures(self, bridge):
+		fake = MagicMock(returncode=0, stdout="", stderr="")
+		bridge._scribe_plugin = True
+		with patch("subprocess.run", return_value=fake) as run:
+			bridge._run_opencode(["hi"], timeout=5)
+		assert run.call_args.kwargs["env"] is None
+
+	def test_disables_plugin_for_telegram_origin(self):
+		tg = OpenCodeBridge(opencode_path="/bin/true", origin="telegram")
+		tg._scribe_plugin = True
+		fake = MagicMock(returncode=0, stdout="", stderr="")
+		with patch("subprocess.run", return_value=fake) as run:
+			tg._run_opencode(["hi"], timeout=5)
+		assert run.call_args.kwargs["env"]["REDPILL_SCRIBE_DISABLE"] == "1"
+
+	def test_v2_attached_uses_server_flag(self, bridge):
+		fake = MagicMock(returncode=0, stdout="", stderr="")
+		bridge._cli_major_cache = 2
+		bridge._server_url = "http://127.0.0.1:4096"
+		with patch("subprocess.run", return_value=fake) as run:
+			bridge._run_opencode(["hi"], timeout=5)
+		cmd = run.call_args.args[0]
+		assert "--server" in cmd and "--attach" not in cmd and "--standalone" not in cmd
+
+	def test_v2_direct_uses_standalone(self, bridge):
+		fake = MagicMock(returncode=0, stdout="", stderr="")
+		bridge._cli_major_cache = 2
+		bridge._server_url = ""
+		with patch("subprocess.run", return_value=fake) as run:
+			bridge._run_opencode(["hi"], timeout=5)
+		assert "--standalone" in run.call_args.args[0]
+
+	def test_v1_attach_unchanged(self, bridge):
+		fake = MagicMock(returncode=0, stdout="", stderr="")
+		bridge._cli_major_cache = 1
+		bridge._server_url = "http://127.0.0.1:4096"
+		with patch("subprocess.run", return_value=fake) as run:
+			bridge._run_opencode(["hi"], timeout=5)
+		cmd = run.call_args.args[0]
+		assert "--attach" in cmd and "--server" not in cmd and "--standalone" not in cmd
 
 
 # ── health_check ──────────────────────────────────────────────────────────────

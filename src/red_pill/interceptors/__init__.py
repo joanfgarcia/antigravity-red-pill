@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import importlib
 import logging
 import pkgutil
@@ -16,6 +17,9 @@ logger = logging.getLogger(__name__)
 
 # Cache loaded plugins to avoid I/O on every prompt
 _PLUGINS: list[BaseInterceptorPlugin] = []
+
+# Diff-aware: hash del último contexto emitido. Si no cambia, no se enriquece.
+_LAST_CONTEXT_HASH: str = ""
 
 sovereign_registry = PluginRegistry()
 _sovereign_loaded = False
@@ -206,6 +210,15 @@ async def execute_pipeline(user_prompt: str) -> str:
 
 	if not merged.strip():
 		return user_prompt
+
+	# Diff-aware (2026-09-28): si el contexto compuesto no cambió respecto al
+	# último turno, NO se añade nada — se devuelve el prompt tal cual. Evita
+	# re-inyectar el mismo bloque de estado en cada turno.
+	global _LAST_CONTEXT_HASH
+	_ctx_hash = hashlib.sha256(merged.encode("utf-8")).hexdigest()
+	if _ctx_hash == _LAST_CONTEXT_HASH:
+		return user_prompt
+	_LAST_CONTEXT_HASH = _ctx_hash
 
 	# Wrap passively
 	wrapper = f"<bunker_context>\n{merged}\n</bunker_context>\n\n<user_request>\n{user_prompt}\n</user_request>"

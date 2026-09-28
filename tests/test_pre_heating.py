@@ -12,7 +12,10 @@ from red_pill.utils.pre_heating_scorer import composite_score, extract_contextua
 
 
 @pytest.fixture(autouse=True)
-def reset_plugin_state():
+def reset_plugin_state(monkeypatch):
+	# Hermético: el flag RFC-004 arranca OFF en cada test (los tests de WEAK lo
+	# encienden explícitamente). Evita fallos según el entorno del runner.
+	monkeypatch.setattr(config, "MEMENTO_REALTIME_TAG_ENABLED", False)
 	EmotionalPreHeatingPlugin._has_fired = False
 	yield
 	EmotionalPreHeatingPlugin._has_fired = False
@@ -134,6 +137,89 @@ def mock_interaction_point(content, ts, category="social"):
 		"metadata": {"type": "raw_interaction", "category": category},
 	}
 	return point
+
+
+def mock_interaction_tagged(content, ts, tag_status, reason=None, category="social"):
+	point = mock_interaction_point(content, ts, category=category)
+	point.payload["tag_status"] = tag_status
+	if reason:
+		point.payload["tag_reason"] = reason
+	return point
+
+
+@pytest.mark.asyncio
+async def test_weak_line_sin_fragmentos(monkeypatch):
+	"""RFC-004 P4: con fallos de tag y sin fragmentos, se emite el aviso."""
+	monkeypatch.setattr(config, "MEMENTO_REALTIME_TAG_ENABLED", True)
+	now = time.time()
+	plugin = EmotionalPreHeatingPlugin()
+
+	def scroll_side_effect(collection_name=None, **kwargs):
+		if collection_name == "interaction_memories":
+			return ([mock_interaction_tagged("USER: fix\n\nASSISTANT: ok", now, "failed", "sidecar-down", category="work")], None)
+		return ([], None)
+
+	with patch("red_pill.memory.MemoryManager") as mock_mgr, patch("red_pill.core.workspaces.list_tracked_workspaces", return_value=[]):
+		mock_client = MagicMock()
+		mock_client.collection_exists.return_value = True
+		mock_client.scroll.side_effect = scroll_side_effect
+		mock_mgr.return_value.client = mock_client
+		res = await plugin.execute("hello")
+
+	assert "CALIBRATION WEAK" in res
+	assert "con tag fallido" in res and "sidecar-down" in res
+
+
+@pytest.mark.asyncio
+async def test_weak_line_con_fragmentos(monkeypatch):
+	"""RFC-004 P4: el aviso acompaña al bloque enriquecido."""
+	monkeypatch.setattr(config, "MEMENTO_REALTIME_TAG_ENABLED", True)
+	now = time.time()
+	plugin = EmotionalPreHeatingPlugin()
+
+	def scroll_side_effect(collection_name=None, **kwargs):
+		if collection_name == "social_memories":
+			return ([mock_qdrant_point("purple", 10.0, now)], None)
+		if collection_name == "interaction_memories":
+			return ([mock_interaction_tagged("USER: hola\n\nASSISTANT: hey", now, "failed", "timeout")], None)
+		return ([], None)
+
+	with patch("red_pill.memory.MemoryManager") as mock_mgr, patch("red_pill.core.workspaces.list_tracked_workspaces", return_value=[]):
+		mock_client = MagicMock()
+		mock_client.collection_exists.return_value = True
+		mock_client.scroll.side_effect = scroll_side_effect
+		mock_mgr.return_value.client = mock_client
+		res = await plugin.execute("hello")
+
+	assert "EMOTIONAL PRE-HEATING" in res
+	assert "CALIBRATION WEAK" in res
+
+
+@pytest.mark.asyncio
+async def test_weak_line_off_por_flag(monkeypatch):
+	"""Flag OFF: sin aviso y sin scroll extra (comportamiento intacto)."""
+	monkeypatch.setattr(config, "MEMENTO_REALTIME_TAG_ENABLED", False)
+	now = time.time()
+	plugin = EmotionalPreHeatingPlugin()
+
+	def scroll_side_effect(collection_name=None, **kwargs):
+		if collection_name == "interaction_memories":
+			return ([mock_interaction_tagged("USER: fix\n\nASSISTANT: ok", now, "failed", "sidecar-down", category="work")], None)
+		return ([], None)
+
+	with patch("red_pill.memory.MemoryManager") as mock_mgr, patch("red_pill.core.workspaces.list_tracked_workspaces", return_value=[]):
+		mock_client = MagicMock()
+		mock_client.collection_exists.return_value = True
+		mock_client.scroll.side_effect = scroll_side_effect
+		mock_mgr.return_value.client = mock_client
+		res = await plugin.execute("hello")
+
+	assert "CALIBRATION WEAK" not in res
+	assert res == ""
+	inter_calls = [c for c in mock_client.scroll.call_args_list if c.kwargs.get("collection_name") == "interaction_memories"]
+	# sin fragmentos solo corre el tier-1; lo importante: NO hay query de salud
+	# (esa usa limit=100) porque el flag está OFF.
+	assert 100 not in [c.kwargs.get("limit") for c in inter_calls]
 
 
 @pytest.mark.asyncio

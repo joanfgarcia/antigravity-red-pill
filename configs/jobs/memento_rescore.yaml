@@ -1,4 +1,12 @@
-# Memento — re-refinado con category_score (REANUDABLE por sesión, element_job).
+# Memento — re-scoring NOTES-FIRST (2026-09-24): re-puntúa las notas annotate sin
+# ruta (`dual_route: none`, sin ascender) con el contrato de annotate
+# (task=annotate + granite_8b, forzado por el script) y actualiza
+# work_score/social_score/dual_route. Las que resuelven quedan ascendibles por el
+# flujo normal. `--target refines` (LEGACY, solo reparación): re-refina sesiones
+# SIN notas cuyo refine/ no tiene category_score (clasificador legacy tiny,
+# decisión 2026-09-15); NUNCA toca sesiones con notas.
+#
+# Memento — re-scoring de notas + reparación legacy de refine (element_job).
 #
 # El curador LLM clasifica work/social (category_score 0-1) EN el refine. Este job
 # re-refina SOLO el refine (no el distill) sobre los distill existentes, para dotar
@@ -16,9 +24,14 @@ source: element_job
 priority: 3
 title: Memento re-refinado con category_score (reanudable por sesión)
 mission_id: memento-rescore
-step_command: uv run python scripts/memento_refine_rescore.py --process-one
-elements_command: uv run python scripts/memento_refine_rescore.py --list-pending
+step_command: uv run python scripts/memento_refine_rescore.py --process-one --target notes
+elements_command: uv run python scripts/memento_refine_rescore.py --list-pending --target notes
 defer_exit_code: 77
+llm:
+  # Solo aplica al fallback `--target refines` (tiny, decisión 2026-09-15); el
+  # path de notas fuerza task=annotate + granite_8b en el propio script.
+  task: refine
+  model: tiny_aya_water
 preflight:
   llm_required: true
 control:

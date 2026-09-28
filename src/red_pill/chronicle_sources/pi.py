@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from red_pill.chronicle_sources.base import ChronicleSourcePlugin
+from red_pill.core.origins import PROVIDER_PI, telegram_sessions
 
 logger = logging.getLogger(__name__)
 
@@ -61,8 +62,11 @@ class PiSourcePlugin(ChronicleSourcePlugin):
 		return path if path is not None and path.exists() else None
 
 	def discover(self) -> List[Tuple[str, int]]:
+		telegram = telegram_sessions(PROVIDER_PI)
 		discovered = []
 		for cid, path in self._index_sessions().items():
+			if cid in telegram:
+				continue
 			try:
 				with open(path, "rb") as f:
 					step_count = sum(1 for _ in f)

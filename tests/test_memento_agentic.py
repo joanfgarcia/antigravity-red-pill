@@ -2,7 +2,12 @@
 
 import json
 
+import pytest
+
 from red_pill.memento.agentic import (
+	ANNOTATE_SOCIAL_SYSTEM,
+	ANNOTATE_WORK_SYSTEM,
+	DUAL_SCORE_SYSTEM,
 	REFINE_MULTI_SYSTEM,
 	REFINE_SOCIAL_SYSTEM,
 	REFINE_SYSTEM,
@@ -15,6 +20,16 @@ from red_pill.memento.agentic import (
 )
 from red_pill.memento.registry import MementoRegistry
 from red_pill.memento.render import compute_hash, extract_body, render_session, write_session
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_pipeline_flags(monkeypatch):
+	"""Los tests del pase legacy (refine) no deben depender del .env del operador:
+	fija los flags a los defaults de sombra (annotate OFF, ascensión OFF)."""
+	import red_pill.config as cfg
+
+	monkeypatch.setattr(cfg, "MEMENTO_ANNOTATE_FROM_RAW", False)
+	monkeypatch.setattr(cfg, "MEMENTO_STATIC_ASCENSION_ENABLED", False)
 
 
 def fake_transport(significance=0.8):
@@ -126,6 +141,9 @@ def test_run_agentic_writes_distill_refine_and_stamps_significance(tmp_path):
 
 	distill_text = distill_files[0].read_text(encoding="utf-8")
 	assert "source_lines: memento/index.md#l" in distill_text and "title: Panel adversarial de prueba" in distill_text
+	record = json.loads((session_dir / "_session.json").read_text(encoding="utf-8"))
+	assert record["stages"]["distill"]["sections"] == 1
+	assert record["stages"]["distill"]["prompt_version"]
 	refine_text = refine_files[0].read_text(encoding="utf-8")
 	assert "significance: 0.80" in refine_text and "distill_ref: distill/001-panel-adversarial-de-prueba.md" in refine_text
 
@@ -190,6 +208,30 @@ def test_is_llm_connection_error_detecta_timeouts_watchdog():
 	assert _is_llm_connection_error(Exception("requests.exceptions.ReadTimeout: read timed out"))
 
 
+def test_pending_agentic_omite_anotadas_frescas_con_from_raw(tmp_path, monkeypatch):
+	"""MEM-006: con FROM_RAW ON, una sesión con annotate/_meta.json fresco no
+	vuelve a la cola del nocturno (la anotó el rebuild o el propio nocturno)."""
+	import json as _json
+
+	import red_pill.config as cfg
+	from red_pill.memento.agentic import annotate_prompt_version, pending_agentic
+
+	monkeypatch.setattr(cfg, "MEMENTO_ANNOTATE_FROM_RAW", True)
+	root, registry, rendered = _tree_with_session(tmp_path)
+	assert pending_agentic(registry, root=root) == [("opencode", "opencode:s1", "missing")]
+
+	annotate_dir = root / rendered.dir_rel / "annotate"
+	annotate_dir.mkdir(parents=True, exist_ok=True)
+	(annotate_dir / "_meta.json").write_text(
+		_json.dumps({"annotate_prompt_version": annotate_prompt_version(), "engine": "granite_8b", "notas": 2}),
+		encoding="utf-8",
+	)
+	assert pending_agentic(registry, root=root) == []
+
+	monkeypatch.setattr(cfg, "MEMENTO_ANNOTATE_FROM_RAW", False)
+	assert pending_agentic(registry, root=root) == [("opencode", "opencode:s1", "missing")]
+
+
 def test_pending_agentic_redistill_since_filtra_lo_ya_reprocesado(tmp_path):
 	"""2026-09-15: --redistill-round solo devuelve las sesiones de la ronda no
 	re-procesadas (distilled_at anterior), para no repetir lo ya hecho al reanudar."""
@@ -234,6 +276,51 @@ def test_pending_agentic_detects_missing_and_stale(tmp_path):
 
 	registry.get("opencode", "opencode:s1")["memento_hash"] = "otro-hash"  # simula re-render con contenido nuevo
 	assert pending_agentic(registry) == [("opencode", "opencode:s1", "stale")]
+
+
+def test_run_agentic_con_annotate_flag_escribe_notas_registro_y_registry(tmp_path, monkeypatch):
+	"""E2E del camino nocturno con `MEMENTO_ANNOTATE_FROM_RAW=ON`: run_agentic debe
+	anotar (no refinar), dejar `_session.json` + `annotate/`, y registrar la versión
+	de annotate en el registry."""
+	import red_pill.config as cfg
+
+	monkeypatch.setattr(cfg, "MEMENTO_ANNOTATE_FROM_RAW", True)
+	monkeypatch.setattr(cfg, "MEMENTO_STATIC_ASCENSION_ENABLED", False)
+
+	def transport(system, user, max_tokens):
+		if system == ANNOTATE_WORK_SYSTEM:
+			return json.dumps(
+				[
+					{
+						"title": "Fix del endpoint",
+						"text": "Joan me pide el fix del endpoint y le explico el plan.",
+						"significance": 0.9,
+						"emotion": "cyan",
+						"intensity": 0.6,
+						"theme": "fix",
+						"relics": [],
+					}
+				]
+			)
+		if system == ANNOTATE_SOCIAL_SYSTEM:
+			return "[]"
+		if system == DUAL_SCORE_SYSTEM:
+			return json.dumps([{"i": 0, "work_score": 0.9, "social_score": 0.1}])
+		return json.dumps({"title": "Panel adversarial de prueba", "summary": "Resumen denso de la sección.", "keywords": ["memento", "test"]})
+
+	root, registry, rendered = _tree_with_session(tmp_path)
+	stats = run_agentic(root, registry, [("opencode", "opencode:s1")], transport)
+	assert stats["processed"] == 1 and stats["failed"] == 0
+	session_dir = root / rendered.dir_rel
+	notes = sorted((session_dir / "annotate").glob("*.md"))
+	assert len(notes) == 1
+	assert "Joan me pide el fix" in notes[0].read_text(encoding="utf-8")
+	assert list((session_dir / "refine").glob("*.md")) == []  # el refine legacy no corre
+	record = json.loads((session_dir / "_session.json").read_text(encoding="utf-8"))
+	assert record["stages"]["annotate"]["notas"] == 1
+	entry = registry.get("opencode", "opencode:s1")
+	assert entry["agentic"]["annotate_prompt_version"]
+	assert entry["agentic"]["annotate_notes"] == 1
 
 
 def test_run_agentic_no_muere_con_memento_hash_stale(tmp_path):
@@ -484,7 +571,7 @@ def test_engine_id_detecta_modelo_y_cachea(monkeypatch):
 		def read(self):
 			return b'{"data": [{"id": "modelo-x"}], "object": "list"}'
 
-	monkeypatch.setattr(agentic, "_ENGINE_CACHE", None)
+	monkeypatch.setattr(agentic.runtime, "_ENGINE_CACHE", None)
 	monkeypatch.setattr(__import__("urllib.request", fromlist=["request"]), "urlopen", lambda *a, **k: FakeResp())
 	assert agentic.engine_id() == "modelo-x"
 	assert agentic.engine_id() == "modelo-x"  # cacheado (urlopen solo se llama 1 vez)
@@ -543,9 +630,9 @@ def test_trazabilidad_engine_y_prompt_version(tmp_path, monkeypatch):
 	from red_pill.memento import agentic
 	from red_pill.memento.agentic import distill_session, refine_session
 
-	monkeypatch.setattr(agentic, "engine_id", lambda: "Granite-4.1-8B-Q4_K_M.gguf")
-	monkeypatch.setattr(agentic, "distill_prompt_version", lambda: "d123")
-	monkeypatch.setattr(agentic, "refine_prompt_version", lambda: "r456")
+	monkeypatch.setattr(agentic.runtime, "engine_id", lambda: "Granite-4.1-8B-Q4_K_M.gguf")
+	monkeypatch.setattr(agentic.runtime, "distill_prompt_version", lambda: "d123")
+	monkeypatch.setattr(agentic.runtime, "refine_prompt_version", lambda: "r456")
 
 	root, _registry, rendered = _tree_with_session(tmp_path)
 	sections = distill_session(root, rendered.dir_rel, "opencode:s1", "opencode", fake_transport())
@@ -648,3 +735,44 @@ def test_refine_session_empty_array_no_files(tmp_path):
 	msig = refine_session(root, rendered.dir_rel, "opencode:s1", "opencode", sections, [], empty_transport, min_significance=0.3)
 	assert msig == 0.0
 	assert list((root / rendered.dir_rel / "refine").glob("*.md")) == []
+
+
+def _alta(system, user, max_tokens):
+	return json.dumps([{"title": "Idea alta", "significance": 0.9, "theme": "t", "relics": [], "cross_refs": []}])
+
+
+def test_refine_preserva_sello_de_ascension_en_redistill(tmp_path):
+	"""La re-destilización no debe des-ascender: si la identidad (`source_lines`)
+	no cambió, el refine conserva el sello (ascender es upsert idempotente)."""
+	from red_pill.memento.agentic import refine_session
+	from red_pill.memento.render import update_frontmatter_fields
+
+	root, _registry, rendered = _tree_with_session(tmp_path)
+	sections = [{"nnn": "001", "file": "001-a.md", "title": "A", "summary": "sA", "source_lines": "l1-5", "fragment": None, "fragments_total": None}]
+
+	refine_session(root, rendered.dir_rel, "opencode:s1", "opencode", sections, [], _alta, min_significance=0.3)
+	refine_path = next((root / rendered.dir_rel / "refine").glob("*.md"))
+	update_frontmatter_fields(refine_path, {"ascended": True, "ascended_at": "2026-09-17T00:00:00Z", "ascended_to": "work_memories"})
+
+	refine_session(root, rendered.dir_rel, "opencode:s1", "opencode", sections, [], _alta, min_significance=0.3)
+	text = next((root / rendered.dir_rel / "refine").glob("*.md")).read_text(encoding="utf-8")
+	assert "ascended: true" in text
+	assert "ascended_to: work_memories" in text
+
+
+def test_refine_no_preserva_sello_si_cambia_source_lines(tmp_path):
+	"""Si el contenido avanzó (otro `source_lines`), el refine es nuevo: sin sello."""
+	from red_pill.memento.agentic import refine_session
+	from red_pill.memento.render import update_frontmatter_fields
+
+	root, _registry, rendered = _tree_with_session(tmp_path)
+	s1 = [{"nnn": "001", "file": "001-a.md", "title": "A", "summary": "sA", "source_lines": "l1-5", "fragment": None, "fragments_total": None}]
+	s2 = [{"nnn": "001", "file": "001-a.md", "title": "A", "summary": "sA", "source_lines": "l1-9", "fragment": None, "fragments_total": None}]
+
+	refine_session(root, rendered.dir_rel, "opencode:s1", "opencode", s1, [], _alta, min_significance=0.3)
+	refine_path = next((root / rendered.dir_rel / "refine").glob("*.md"))
+	update_frontmatter_fields(refine_path, {"ascended": True, "ascended_at": "2026-09-17T00:00:00Z", "ascended_to": "work_memories"})
+
+	refine_session(root, rendered.dir_rel, "opencode:s1", "opencode", s2, [], _alta, min_significance=0.3)
+	text = next((root / rendered.dir_rel / "refine").glob("*.md")).read_text(encoding="utf-8")
+	assert "ascended: false" in text

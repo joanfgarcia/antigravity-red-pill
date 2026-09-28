@@ -1,0 +1,22 @@
+# Memento — re-scoring de notas (notes-first): barrido completo.
+#
+# Re-puntúa las notas sin ruta (`dual_route: none`, sin ascender) con el contrato
+# annotate (task=annotate + granite_8b, forzado en el script) y actualiza
+# work_score/social_score/dual_route. Las que resuelven quedan ascendibles por el
+# flujo normal (la cadena de ascensión las sube).
+# Piloto previo (2026-09-24): 5 sesiones, 31 notas → 29 resueltas (94%), 0
+# malformadas. Prioridad 5: por delante del rebuild (3).
+source: element_job
+priority: 5
+title: Memento rescore notas (barrido completo)
+mission_id: memento-rescore-notes
+step_command: uv run python scripts/memento_refine_rescore.py --process-one --target notes
+elements_command: uv run python scripts/memento_refine_rescore.py --list-pending --target notes
+defer_exit_code: 77
+llm:
+  task: annotate
+  model: granite_8b
+preflight:
+  llm_required: true
+control:
+  max_step_minutes: 20

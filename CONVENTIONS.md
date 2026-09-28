@@ -89,7 +89,28 @@ def _sd_notify(state: str) -> None:
 ### Why This Matters
 
 On 2026-05-22, two identical Neon-Link services (`neon-link.service` + `redpill-neonlink.service`) ran in parallel for 10+ hours undetected, causing 4x duplicate Telegram responses. This rule exists to prevent exactly that class of incident.
+---
+
+*Failure to comply will be detected by the Sentinel's `ServiceHealthCheck` plugin during the hourly audit cycle.*
 
 ---
-*Failure to comply will be detected by the Sentinel's `ServiceHealthCheck` plugin during the hourly audit cycle.*
+
+## 🚨 RULE 4: Per-Component Feature Flags (STRICT)
+
+Every **new pipeline component** MUST ship behind its **own independent flag**, default **OFF** (= current behaviour), read at a **single point** at the component's boundary. A **monolithic** flag that toggles several pieces is **forbidden**. Rollout is incremental and independently reversible per piece.
+
+**Naming:** `<AREA>_<COMPONENT>_ENABLED` (e.g. `SW_ASCENSION_ENABLED`, `SW_HUBS_ENABLED`).
+
+### Mandatory Requirements
+
+1. **One flag per component** — never group several components behind one switch.
+2. **Default `False`** — nothing changes until explicitly enabled.
+3. **Read in one place** (the component edge), not scattered across the codebase.
+4. **Documented** in `config` with a comment stating what it turns on, plus the flag table of the owning design doc (with its turn-on **dependency**).
+
+### Why This Matters
+
+On 2026-09-21 the nightly dag_job reported **"18/18 success"** while its `chronicle/memento-agentic` stage had silently **timed out** (`on_fail: warn`) — a false positive that distilled **zero** memory. A multi-component refactor with a single on/off switch is all-or-nothing: one silent regression in one piece forces a full rollback, and there is no way to verify a piece in isolation. Independent flags let us **enable → verify → advance** one piece at a time.
+
+**Reference:** the owning design doc of the component (per project self-documentation).
 

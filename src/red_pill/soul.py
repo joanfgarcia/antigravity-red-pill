@@ -289,7 +289,9 @@ class SoulManager:
 						content = record.payload.get("content", "") if record.payload else ""
 						if not content:
 							content = "Empty Engram"  # Fallback if payload corrupt
-						new_vector = memory_manager._get_vector(content)
+						from red_pill.memento.embed_text import embedding_text_for
+
+						new_vector = memory_manager._get_vector(embedding_text_for(content, record.payload))
 						new_points.append(models.PointStruct(id=record.id, vector=new_vector, payload=record.payload))
 
 					# 4.3 Drop and Recreate Collection with NEW dimensionality

@@ -1,11 +1,491 @@
-## [7.22.0] - Unreleased (Memento Chronicle, Despertar autónomo, JOB-001, Bank Janitor, Arnés Pi & Desk)
+## [8.0.0] - 2026-09-28 (Memento single-writer, RFC-004 tags, JOB-001, Bank Janitor, Arnés Pi & Desk)
+
+### ⬆️ Upgrading (BREAKING — single-writer de memoria)
+
+Esta release **retira la ingesta legacy** (`staging/` → consolidación) y el flujo
+de memoria pasa a ser **Memento → ascensión → hubs/hilo**. Afecta a instalaciones
+que se **actualizan** con datos legacy.
+
+- **Instalación nueva**: nace sin legacy; no requiere ninguna acción (cero ritual).
+- **Actualización**: ejecuta el migrador (dry-run por defecto):
+  `uv run python scripts/migrate_single_writer.py` → revisa → `--apply`.
+  Verifica la cobertura de Memento, archiva `staging/`, trima el buffer y sella la
+  marca. Detalle en `docs/TECHNICAL/OPERATIONS/MIGRATION_SINGLE_WRITER.md`.
+  Si un store de IDE ya no existe, el migrador aborta nombrando las sesiones sin
+  archivar; se reconstruyen desde una colección Qdrant legacy con
+  `scripts/memento_import_legacy.py --collection <nombre>` (genérico, sin nombres
+  hardcodeados) y la colección se retira con
+  `migrate_single_writer.py --drop-collection <nombre>` (snapshot previo).
+- **Flags**: los de **migración** (`SW_INGEST_RETIRED`) desaparecen en la
+  demolición; los de **feature** (hubs/thread/situación/erosión/tags) pasan a
+  default ON o config — un recién llegado no debe "encender hubs".
+
 
 Seis frentes: **Memento** (RFC-002, fases 0–3.5 completas — la grabadora vuelve
 al disco y Qdrant emprende el camino a memoria curada), el aislamiento de la
 actividad del operador frente a los runs headless del despertar autónomo, la
 **trazabilidad de jobs** (JOB-001), la **higiene del memory bank** (`bank_janitor`),
-el **arnés Pi** (kebab-case skills + chronicle source + injector) y el **Desk**
+el **arnés Pi** (kebab-case skills + chronicle source + injector + ancla propia) y el **Desk**
 (scaffold `seeds/desk/` + separación proyecto↔despacho + unificación `AGENT_CORE_DIR`).
+
+### 🧩 Single-writer de memoria (ascensión Memento, hubs y Ariadna) — en curso
+
+Diseño cerrado e inicio de implementación del **single-writer curado** de memoria:
+`work_memories`/`social_memories` dejan de recibir la ingesta cruda
+`interaction→work/social` del sueño (que metía prompts por dos vías y sólo añadía
+ruido); su fuente única pasa a ser la **ascensión de engramas curados de Memento**
+(`distill→refine→ascend`). Sobre esos engramas se reconstruye la **navegación**:
+hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones).
+
+- **[NEW] CONVENTIONS RULE 4 — Per-Component Feature Flags (STRICT):** todo
+  componente nuevo de un pipeline se despliega tras su **propio** flag, default
+  `OFF`, leído en un único punto; **prohibido** el flag monolítico. Rollout
+  incremental y reversible por pieza.
+- **[M0] Captura de sesión/afinidad + gate de purga** (flags `SW_AFFINITY_ENABLED`,
+  `SW_PURGE_GATE_ENABLED`, default OFF): `session_id`+`affinity` viajan de la
+  captura (hooks opencode/claude) a `interaction_memories`; el TTL deja de purgar
+  a ciegas (solo purga sesiones ya renderizadas en Memento). Deriva afinidad
+  determinista (`ws:<workdir>` + `mission:`).
+- **[M1] Ascensión con dos fechas + `node_type` + dedup** (flag `SW_DEDUP_ENABLED`):
+  el engrama ascendido lleva `created_at` = **fecha real de sesión** (ordena el
+  hilo de Ariadna), `ascended_at` y `node_type="memento_engram"`; dedup-at-ascension
+  (un ganador determinista por grupo `session_id`+`source_lines`, sin borrar
+  perdedores).
+- **[M2] Backfill de fechas** (`scripts/memento_backfill_dates.py`): repara los
+  ~9.341 engramas resembrados (`created_at`←fecha real de sesión; `ascended_at`←
+  momento de ascensión). Idempotente, dry-run por defecto.
+- **[M3] Dedup de duplicados sembrados** (`scripts/memento_dedup_qdrant.py`):
+  colapsa réplicas (mismo `session_id`+`source_lines`+cuerpo) dejando un
+  superviviente por score compuesto; in-place, dry-run por defecto.
+- **[M4] Hub synthesis re-apuntada e idempotente** (flag `SW_HUBS_ENABLED`):
+  agrupa los engramas curados ya en Qdrant por **sesión** y sintetiza un hub de
+  sesión (`point_id` determinista + `hub_input_hash` → sin coste LLM si no cambió);
+  marca los miembros (`hubbed`) y el recall los omite (entran por el hub).
+- **[M5] Retirada de la ingesta `interaction→work/social` + staging** (flag
+  `SW_INGEST_RETIRED`): la fase de sueño deja de drenar el buffer crudo a
+  work/social (sin drenaje, sin staging, sin `raw_parents`); queda **solo** la
+  síntesis de hubs. Fase renombrada `HubSynthesisPhase` conservando el stage-id
+  `consolidation` (G21).
+- **[M6] Micro-hilo de Ariadna** (flag `SW_THREAD_ENABLED`): encadena los engramas
+  de cada sesión por **orden de refine** (`refine_ref`) en `prev_member`/`next_member`
+  (campo propio, sin colisionar con `associations` = axones). El nivel macro (hubs
+  por fecha) y el transversal (`cross_refs`→axones) ya existían.
+- **[M9] Olvido elegante + fix de raíz del `last_recalled_at`** (flags
+  `SW_EROSION_DEMOTE_ENABLED`, `SW_ABSENCE_GUARD_CONDITIONAL`):
+  - **Raíz**: el Absence Guard del pulse refrescaba `last_recalled_at` de TODO cada
+    hora → la erosión/sink llevaban tiempo **inertes**. Con el flag ON, el pulse ya
+    no refresca; la protección de ausencias reales la hace el guard condicional de
+    `core/metabolism`.
+  - **Eje propio**: los curados (engramas ascendidos + hubs) decaen por
+    `last_reinforced_at` (solo se refresca al recuperar) y se **demotan** a Memento
+    (borrado de Qdrant) tras `CURATED_MIN_LIFETIME_YEARS` (5 años).
+- **[G19] Procedencia de Telegram**: el cascade de Telegram se etiqueta
+  `origin="telegram"`; el render de Memento resuelve el originator real
+  (`telegram`/`awakening`) desde `opencode_origins.json`; y el staging de Telegram
+  deja de archivarse cuando la ingesta está retirada (evita acumulación).
+- **[M8] Semáforo de situación por afinidad** (flag `SW_SITUATION_ENABLED`):
+  `situation_memories` guarda un resumen rodante tipo **solera** (`SITUATION_SOLERA_RATIO`,
+  20/80) por afinidad + un semáforo **global** de mood; trigger en el worker de cola
+  (~1/min), actualización incremental por `window_start` y evicción por TTL. El
+  pre-heating lee el semáforo global (el scoped por afinidad de sesión queda para
+  cuando el handshake la aporte, MULTISES-001).
+- **[M7] Engramas interactivos** (flag `SW_INTERACTIVE_PHASE_ENABLED`): proceso
+  aparte (`scripts/interactive_refine.py`) que refina/marca los engramas
+  `interactive_engram` — no se agrupan por sesión ni entran en la ingesta normal.
+- **[FIX panel adversarial] D1–D12**: hubs no ocultan miembros si la escritura
+  falla (ni con fallback mecánico); dedup-at-ascension con body-hash; tope de edad
+  del buffer con señal; `situation_memories` asegurada + solera corregida (lo
+  previo domina) + no consume turnos si el destilado falla; staging writers
+  gated; `erode_curated` libera miembros de hubs demotados; backfill idempotente
+  (marcador) con `last_reinforced_at` = edad de curación.
+- **[REV] D15 — afinidad y Telegram**: retirada la afinidad por **filesystem**
+  (cwd/proyecto; no refleja cómo trabajamos — daba vacío o `ws:IA` espurio). El
+  semáforo de situación pasa a **global** (una sola lectura, sin buckets). Telegram
+  es un canal propio: **fuente chronicle `telegram:<uuid>`** (session_id = uuid de
+  Telegram) y **todos** los sources de providers (opencode/claude_code/pi/antigravity
+  y futuros) ignoran `origin=telegram` vía el **registro genérico
+  `session_origins.json`** (`core/origins.py`). El worker de Telegram deja **un solo
+  camino** (puente; purgada la fusión legacy con cascadas de antigravity) y captura
+  el `session_id` con `originator=telegram`. **Captura única**: el plugin de opencode
+  se abstiene (`REDPILL_SCRIBE_DISABLE`) cuando el bridge relaya — y para
+  `origin=telegram` siempre, porque el relay del worker es la captura autoritativa
+  (el plugin duplicaba el turno con el prompt envuelto y respuesta vacía). La
+  afinidad (si se retoma) será **semántica** (keywords del refine), no filesystem.
+  **Cierre de fase (2026-09-22)**: `TelegramSessionManager` → `red_pill/telegram/`;
+  64 filas de ruido de la cola purgadas; cascadas del `.env` corregidas al modelo
+  vivo (`opencode/deepseek-v4-flash`); docs alineadas (AD-034, runbook,
+  `NEON_LINK_ROUTING`, plantilla de memoria sin afinidad).
+- **[TOOL] Recalibración de curaduría** (`scripts/memento_recalibrate.py`): cata y
+  re-medición recurrente (cada cambio de modelos de las fases Memento) — `stats`
+  (distribución), `bands` (escenarios de umbral: entra/sale/límite), `audit-category`
+  (acuerdo del clasificador vs el LLM) y `audit-significance` (% trivial por banda);
+  `--engine` compara modelos y `--dry-run` hace la cata manual. Determinista salvo
+  los `audit-*`. Documentado en el runbook del single-writer §5.
+- **[FIX] Clasificador de categoría (prompts de refine)**: los prompts WORK/SOCIAL
+  anclaban `category_score` a **la llamada**, no al contenido (WORK 0.6-1.0 / SOCIAL
+  0.0-0.4): el modelo puntuaba por pasada, el mismo fragmento generaba gemelos
+  (work 0.9 / social 0.3) y la dedup no siempre los fundía → contenido técnico
+  ascendía a `social_memories` (acuerdo del auditor: **0.40**). Ahora ambas llamadas
+  puntúan el CONTENIDO (work ≥0.6 / personal ≤0.4), sin fabricar ideas del tipo
+  contrario. `prompt_version` de refine: `85209a6c9e`.
+- **[FIX] Auditor de recalibración**: `audit-category` juzga solo work/social (el
+  label `personal-history` contaba desacuerdos fantasma) y `audit-significance`
+  deja de equiparar "no operativo" con trivial (marcaba infancia/Carmen/salud como
+  trivial: 30% → **5%** en la banda 0.55-0.65, misma muestra).
+- **[REF] `memento/agentic/` (paquete)**: el monolito `agentic.py` (1.033 líneas) se
+  parte en `prompts` / `runtime` / `fragments` / `distill` / `refine` / `runner` +
+  fachada `__init__` que conserva la API (imports externos intactos). Sin cambio de
+  comportamiento: fingerprints idénticos (`66c679f1bb` / `85209a6c9e`). Prepara el
+  scorer dual.
+- **[MEM-006] Etapa `annotate` (annotate/NNN-*.md) — anotaciones desde el RAW**:
+  flag `MEMENTO_ANNOTATE_FROM_RAW` (RULE 4, default OFF; OFF → refine legacy). Una
+  sola compresión (antes: raw→summary→refine, doble): la nota es idea-level
+  (≤600 chars, p90 medido 439) en vez de re-resumen del fragmento; verificado en
+  pilotos (8 sesiones: 422 notas, únicas 100%, >600 7,5%). Incluye:
+  - **Bio de identidad** (`prompts/identity_bio.txt`, MEM-006 P0): Joan
+    masculino/catalán, Aleth narradora en 1ª persona, Samantha/Cenicienta no son
+    identidad, tono cercano legítimo. Inyectada en los prompts de annotate.
+  - **Dedup P1-A** (`dedup_annotations`): hash normalizado + solape de tokens;
+    conserva la mejor variante (1ª persona > significance > longitud).
+  - **Gate de calidad**: género/identidad → `dual_route: none` (no asciende, queda
+    en el árbol); voz 3ª → registrada. **Piloto 8 sesiones**: near-dups 16,1% →
+    **1,9%** (dedup P1-A), >600 7,5% → **~1,7%**, pero la **voz no mejora** con la
+    Bio (36,2% vs 36,3% 1ª persona) → **resuelto con el paso de re-escritura**
+    (`MEMENTO_ANNOTATE_VOICE_REWRITE`, default OFF; job 2decafb1: **100% 1ª
+    persona en 5 sesiones** — work/mixta/social + 2 problemáticas — con hechos
+    preservados). Rutas work 328 / social 19 / none 25 (sesgo a auditar).
+  - **Routing dual con zona muerta** (`MEMENTO_ANNOTATE_DEAD_ZONE=0.05`): margen
+    bajo δ → `none` (inestable, recuperable por re-scoring futuro).
+  - **Ascensión**: escanea `annotate/` además de `refine/`; prefiere `dual_route`;
+    el engrama guarda `work_score`/`social_score`/`dual_route`/`quality_flags`.
+  - **Tool**: `load_rows` escanea `annotate/` (normaliza `cat_score` al eje work).
+  - Documento de diseño: **MEM-006 §6** (desk) con evidencia y refs cruzadas.
+- **[TOOL] Rebuild de anotaciones + workbench**: `scripts/memento_annotate.py`
+  (rebuild MEM-006 sesión a sesión; `--status` de control y frescura por **meta
+  por sesión** `annotate/_meta.json` — annotated_at, prompt_version, engine,
+  voice_rewrite, notas, routes, flags; job
+  `configs/jobs/memento_annotate_rebuild.yaml` — element_job pausable/reanudable
+  por checkpoint, las sesiones ya anotadas se omiten) y `tools/memento_lab.py`
+  (workbench diagnóstico: `funnel` de segmentación, `quality` de notas con
+  proxies de voz/near-dups/flags y `annotate` de UNA sesión en árbol temporal).
+  El registry (`memento_registry.json`) registra `annotate_prompt_version` y
+  `annotate_notes` cuando `MEMENTO_ANNOTATE_FROM_RAW` está ON. Índice de scripts
+  actualizado.
+- **[TOOL] Ascensión post-rebuild + sueño versión nueva**: `scripts/memento_ascend.py`
+  (+ receta `memento_ascend_post_rebuild`, encadenable con `--parent` al rebuild;
+  `--dry-run` informa `would_ascend`; las anotaciones `dual_route: none` no
+  ascienden). `weave_memento_reinforcement` escanea `annotate/` además de
+  `refine/` (el rebuild sueño refuerza/asciende notas). Flags en `.env` para el
+  próximo sueño: `MEMENTO_ANNOTATE_FROM_RAW=true`, `MEMENTO_ANNOTATE_VOICE_REWRITE=true`,
+  `MEMENTO_STATIC_ASCENSION_ENABLED=true` → el ciclo nocturno anota (no refine) y
+  asciende.
+- **[TOOL] Registro por sesión (`_session.json`)**: la portada del expediente de
+  cada sesión en la raíz de su directorio (`memento/<AAAA-MM>/<source>/<session>/`),
+  escrita atómicamente por cada etapa: `stages.distill` (engine, prompt_version,
+  sections), `stages.annotate` (engine, annotate_prompt_version, notas, routes,
+  flags), `stages.ascend` (ascendidos acumulados). El `memento_registry.json`
+  global queda como **índice cross-sesión** (hilo prev/next, staleness), no como
+  verdad: el expediente viaja con la sesión y sobrevive a rebuilds parciales.
+- **[SEC] Bio de identidad fuera del repo público**: la Bio real (nombres/género)
+  vive en `~/.config/red-pill/identity_bio.md`; override `RP_IDENTITY_BIO`; el repo
+  guarda solo la plantilla neutra (`identity_bio.template.txt`). Precedencia en
+  `prompts._load_identity_bio()`; hash del prompt intacto (`07a5c9b529`) → el
+  rebuild no se invalida. Siembra con placeholders pendiente (RFC-003 §4.7).
+- **[RET] Refine legacy retirado del camino activo**: no se generan refines nuevos
+  — el pase agéntico usa annotate (flag ON). El código de refine queda solo para
+  rollback (flag OFF) y reparación de la capa legacy (`memento_refine_rescore.py`,
+  marcado legacy/repair-only); el probe `memento_probe_resynth.py` pasa a probar
+  `annotate_session`; el reseed documenta ascenso annotate-first. Ascensión y
+  reinforce leen `annotate/` + `refine/` legacy.
+- **[FIX] annotate → ascenso (`source_lines`)** — incidente 2026-09-23: las notas
+  escribían `split_ref` pero no `source_lines`, que `ascender` exige → el primer
+  `--replace-legacy` borró los 1.870 engramas legacy y ascendió **0** (missing_key).
+  Detectado en la validación inmediata; datos a salvo en el árbol. Fix: el writer
+  escribe ambos campos; migración de 4.801 notas (`source_lines` = `split_ref`);
+  test de regresión (`ascender` acepta una nota). Re-ejecutado: **4.232 notas
+  ascendidas**. Efecto: work 2.953→6.085, social 3.560→2.790 (el legacy mal
+  enrutado a social por el clasificador viejo desaparece; las notas van a work).
+- **[MEM-006] Sustitución legacy (`--replace-legacy`) + política annotate-first**:
+  por sesión con notas: normaliza `session_id` al canónico del registry (980),
+  borra los engramas legacy (`origin=memento` + `refine_ref: …/refine/…`; 1.870),
+  asciende las notas y sella los `refine/` como `replaced_by_annotate` (2.146).
+  Convergente (re-ejecutar = no-op). `ascend_by_threshold` y el weave **omiten los
+  `refine/` de sesiones anotadas** (fallback a refine solo si no hay notas).
+  Receta `memento_ascend_post_rebuild` actualizada; job encadenado nuevo
+  `d362df77` (el viejo `3756270a`, sin replace, queda BLOCKED y converge).
+- **[RFC-003] Fase 3 ejecutada — prompts de memento a fichero (byte-exacto)**:
+  los 21 prompts inline de `agentic/prompts.py` (distill/refine/annotate/dual/
+  voice-rewrite + `_VOICE_RULE`) viven ya en `agentic/prompts/*.txt`, cargados con
+  `_load_prompt_file` **byte-exacto (sin strip: los fingerprints hashean el texto
+  tal cual)**. Verificado: `distill 66c679f1bb` · `refine 85209a6c9e` ·
+  `annotate 07a5c9b529` · `validate 521a6c19b4` — **sin cambios**, así que ni la
+  frescura del rebuild (103 anotadas) ni la trazabilidad de artefactos se alteran.
+  Guardia nuevo: `test_prompt_fingerprints_estables` (hash mapping a mano si algún
+  día se cambia un prompt a propósito). Con la Bio y el validador, ya son 24
+  recursos en `prompts/`. El loader **compartido** de core y las fases 2/4/5/6 del
+  RFC siguen pendientes.
+- **[FIX] Modelos pinneados en recetas + hallazgo `tiny_aya`**: las recetas con
+  `llm: task: refine` (validate / annotate_rebuild / probe) no fijaban modelo y
+  el daemon resolvía ese task a **`tiny_aya_water`** (mapeo legacy del refine) →
+  el rebuild anotó **95 sesiones con tiny_aya** (8 con granite, del delta
+  nocturno) y el validador validó con él (0/3 controles). Pinneado
+  `model: granite_8b` en las tres recetas (el `engine` queda sellado por nota).
+  Validador con granite: 2/3 controles; + pre-check determinista
+  `looks_like_raw_dump` (líneas de progreso, meta-comentarios en inglés, tool
+  dumps, `file:/…`) → **3/3**, sin gastar LLM en lo obvio.
+- **[MEM-006] Piloto de validación (31 pendientes) — cerrado**: prompt v2
+  (`217aafd8dd`: rechazo primero + obligar a citar la narrativa para aprobar),
+  validador granite + heurística → **28 aprobadas / 3 rechazadas** (019 progreso,
+  001-stash meta-inglés, 001 tool-dump). Los 28 quedan listos para ascender con
+  `content_verified=True` (ascendidos el mismo 2026-09-23 vía
+  `memento_ascend --replace-legacy`: work +20 / social +8, `ascended_by=validated`).
+- **[FIX] Ascensión — `validator_approved: false` (bool YAML) no se saltaba**: los
+  checks de `ascend_by_threshold`/`weave` hacían `str(fm.get(...) or "")` → el
+  `False` booleano se convertía en `""` y nunca casaba con `"false"`; el rechazo
+  recaía igualmente en `ascender`, pero sin contarse ni ahorrarse la valoración.
+  Ahora el skip es terminal y se contabiliza en `rechazados_por_validador`.
+- **[FIX] `job submit --parent` guardaba el prefijo corto**: el desbloqueo del
+  hijo BLOCKED y la cascada de cancelación comparan contra el UUID completo y
+  nunca casaban (hijo huérfano eterno — incidente del rebuild `ad037051` →
+  `d362df77`). El CLI resuelve ahora el prefijo con `_find_job` antes de encolar.
+- **[FIX] Auditor de recalibración — parser loud + `--task`**:
+  `memento_recalibrate` usaba `re.search(r"\[.*\]")` + `json.loads` → "Extra
+  data" con modelos que añaden texto tras el JSON (el 4.2-3B); y el "parser
+  robusto" intermedio se detenía en prosa con corchetes (`[1]`) devolviendo
+  métricas vacías en silencio. Ahora `_extract_rows` escanea arrays de OBJETOS
+  y falla con mensaje si no hay ninguno; acepta `--task` (p. ej. `--engine
+  granite_4_2_3b --task validate`).
+- **[FIX] Huérfanos BLOCKED — clase cerrada (auditoría adversarial O2)**:
+  `enqueue_task` con `parent_task_id` terminal creaba hijos BLOCKED eternos (el
+  desbloqueo vive en `mark_completed`). Ahora: guard transaccional
+  (`BEGIN IMMEDIATE` cierra el TOCTOU lectura→INSERT; padre COMPLETED → hijo
+  PENDING directo; padre FRUSTRATED/fantasma → rechazo limpio) + cascada de
+  cancelación en TODAS las transiciones a terminal-fallo (disyuntor del
+  breaker, colgado→FRUSTRATED de `queue_hygiene`, `purge_terminal`, purga con
+  ventana y `job purge --force` de un PAUSED/BLOCKED). El CLI reporta el estado
+  real del hijo.
+- **[FIX] `weave` contabiliza `rechazados_por_validador`**: el skip terminal del
+  veredicto negativo ya suma en el contador del weave (antes solo en
+  `ascend_by_threshold`).
+- **[NEW] `memento_annotate --stale-engine`**: frescura consciente del motor —
+  las sesiones anotadas por otro motor (las 95 con `tiny_aya_water`) cuentan
+  como stale; `--status` reporta `stale_engine`. Opt-in: el rebuild pineado NO
+  las re-anota. Decisión (**AD-036**): la cohorte tiny_aya se acepta como
+  estrato histórico — la cata del 40% la da como la capa más limpia (0,1%
+  duplicados, 8,3% trivial vs 17,4% granite); la limpieza de duplicados es
+  **MEM-006 P1-B** (G5).
+- **[NEW] P1-B — dedup de Qdrant ejecutado (`scripts/memento_dedup_qdrant.py`)**:
+  limpieza in-place por hash de body con scopes `source` (RFC) / `collection` /
+  `global` (cruza work↔social: el mismo engrama sembrado en ambas — 1.311
+  bodies). Superviviente determinista: ruta de la nota (`dual_route`/
+  `category_score`) > protección de referencias > score compuesto
+  (significance/categoría/longitud/voz/intensidad/engine). **1.483 réplicas
+  borradas** (work 6.105→5.880 · social 2.798→1.540) + **1.402 sellos
+  `ascended_point_id` repuntados**, con snapshots previos. Duplicación por body
+  tras la limpieza: 0. Tests: 8 (incl. regresión del borrado por colección del
+  perdedor).
+- **[NEW] `examples/task_profiles.yaml.example`**: el contrato de tasks
+  (incluida `validate`, requerida por `memento_validate.yaml`) deja de ser
+  implícito del entorno del operador.
+- **[FIX] Hysteresis del daemon (thrash VRAM, 2026-09-24)**: `_same_model`
+  comparaba `n_ctx`, que el resolve fija midiendo la VRAM **ya ocupada por el
+  propio modelo** → tier menor → unload/reload en bucle (**2.590 ciclos** en una
+  noche, 724 en 50 min; mató el elemento 159 del rebuild). Ahora mismo
+  fichero+modo reutiliza el modelo cargado. Desplegado (heredoc + daemon) y
+  verificado en vivo: 1 carga + 3 requests sin unload.
+- **[FIX] Cota de step: lo declarado es un SUELO**: la EMA de pasos rápidos
+  recortaba etapas compuestas largas (nightly `memento-agentic` declarado 5400s
+  → abatido a 1799s). `compute_step_timeout` respeta `control.max_step_minutes`
+  como suelo del presupuesto y las etapas internas conservan su timeout propio
+  (misma filosofía que el fan-out `_item`). Test: nightly 420 → 25200s.
+- **[REF] Task `annotate` propia (MEM-006)**: la etapa annotate deja el carril
+  `refine`/`distill` (apaño de RFC-HARNESS-002 §7). Nueva task `annotate`
+  (`granite_8b` default, temp 0.1, thinking off) en config + example; recetas
+  `memento_annotate_rebuild`/`memento_probe` → `task: annotate`; y
+  `annotate_session` fija `RP_LLM_TASK=annotate` **por llamada** (así el
+  nocturno, que comparte stage con distill, también la usa sin partir el stage).
+  Verificado en vivo: `task=annotate` → 200; `annotate+tiny_aya_water` → 400 K1.
+- **[REF] `memento_rescore` — notes-first (2026-09-24)**: el rescore deja de
+  re-refinar sesiones anotadas (antes: 75 sesiones en la lista, 15 con notas →
+  tocaba `refine/`). Ahora `--target notes` (default) re-puntúa las notas
+  `dual_route: none` sin ascender con el contrato de annotate (**task=annotate +
+  granite_8b**, forzado en el script) y actualiza
+  `work_score/social_score/dual_route`; `--target refines` queda como reparación
+  legacy (tiny, 15-sep) y **nunca toca sesiones con notas**. Candidatos reales:
+  **145 sesiones de notas** / 60 de refines. Modelo: tiny no se valida para
+  notas (su evidencia es débil — el clasificador standalone devuelve 0.0).
+  Tests: 4.
+- **[NEW] Rescore de notas — piloto validado + barrido completo**: piloto de 5
+  sesiones (`memento_rescore_notes.yaml`, prio 5): **31 notas → 29 resueltas
+  (94%)**, 0 malformadas, 29 pendientes de ascender. Barrido completo
+  (**170 elementos**) encolado con prioridad 5 (por delante del rebuild);
+  `--limit` añadido a `--list-pending` para pilotos.
+- **[DOC] Revisión de flujos Memento/sueño (2026-09-24)**: flujo activo
+  **raw → distill + annotate** confirmado: chronicle (stage `distill` real;
+  annotate fija su propio task) y rebuild (`task: annotate`); **sin refine** en
+  el flujo activo. Recetas legacy del carril refine **conservadas y anotadas**
+  (redistill ×3, backfill); `memento_rescore` recupera su pin explícito
+  `refine + tiny_aya_water` (clasificador deliberado, 2026-09-15). Validación de
+  cable: con `RP_LLM_TASK=refine` el **100%** de las llamadas de annotate salen
+  como `task=annotate` + `granite_8b` (servidor capturador).
+- **[FIX] `refine` default → `granite_8b`**: el default seguía siendo
+  `tiny_aya_water` (config del operador + seed de instalación) → cualquier
+  llamada con `task: refine` sin modelo cargaba tiny (origen del modelo
+  equivocado a las 22:12, que disparó el thrash). tiny queda como candidato
+  NO-default (lo usa el rescore deliberadamente).
+- **[DOC] RFC-003 Prompts as Resources (DRAFT)**: prompts como recurso (ficheros +
+  loader con placeholders `${var}`, hash de contenido, overrides explícitos);
+  norma propuesta (RULE 5) y migración por fases. La Bio de identidad ya vive en
+  fichero; el loader compartido la absorberá. Índice de docs actualizado.
+- **Ascensión**: `refine_session` **preserva el sello** (`ascended`) por
+  `source_lines` al re-destilar (antes lo reseteaba → re-ascenso pendiente eterno);
+  el refuerzo polaroid recolecta temas de **work + social** (antes solo work).
+
+- **[MEM-009 D5] Flash Attention tri-estado por modelo**: `flash_attn: auto|true|false`
+  en `model_profiles.yaml`, resuelto en `model_runtime.effective_flash_attn` (fuente
+  única daemon+clientes): `auto` = solo GPU y si el perfil declara `fa_capable`; el
+  worker CPU nunca lo activa. El daemon lo pasa a `Llama()`, lo expone en `/status`
+  y lo cuenta en `_same_model` (estático del perfil → sin riesgo de thrash).
+  `granite_8b` → `true`. Causa raíz (autopsia 2026-09-25): sin FA, a n_ctx 10240
+  quedaban 248 MiB de headroom y el scratch de prefill de ~6.3-6.5K tokens
+  abortaba con `CUDA error: out of memory` → restart loop (contador 240) → los
+  "venenos" 444/495 eran muro de serving, no contenido. Con FA: 742 MiB, 8K pasan.
+  **Requiere redesplegar el heredoc del daemon** (`setup_background_model.sh`).
+- **[MEM-009 F1] Annotate reanudable por splits**: `annotate_session` ya no borra
+  las notas al empezar; checkpointa en `annotate/_partial.json` (atómico) cada
+  split extraído, keyed por **rango de mensajes** del filename y revalidado por
+  `content_hash` al retomar, más el estado de cada fase (extract/rewrite/score).
+  Un kill pierde como mucho un split; un contrato distinto (prompt/engine/voice)
+  resetea con aviso. La salida del LLM pasa `scrub_secrets`+`normalize_noise`
+  antes de persistirse (S1). Al completar: notas + `_meta.json`, huérfanas fuera,
+  parcial borrado. `memento_annotate --from=extract|rewrite|score` entra en esa
+  fase reutilizando parcial o notas del contrato vigente, con degradado gracioso
+  (nunca fallo duro); `--all` sigue siendo "desde cero" (borra el parcial).
+  `_meta.json` gana audit trail (`thresholds`, `from_phase`, `from_requested`,
+  `reason`) e `identity_bio_source` saneado a basename. Tests: 12.
+- **[REF] `work_units()` — fuente única de la unidad de trabajo (MEM-009)**:
+  sustituye a `_work_units` (3-tupla) + `_range_keys` (lista paralela que había
+  que mantener en el mismo orden a mano). Devuelve `WorkUnit(nnn, ref, content,
+  key)` con la clave derivada del MISMO fichero en la MISMA iteración; un rango
+  repetido (resto de un re-render) cae al stem para no fundir ideas en el
+  parcial. Migrados los tres consumidores (`distill`, `annotate`,
+  `runner.session_max_work_unit_chars`) y la fachada. Sin cambio de conducta
+  en distill.
+- **[FIX] Fallback a CPU del daemon, roto desde el 2026-09-17** (RFC-HARNESS-002 v3):
+  el worker CPU, al recibir la petición, recorría la misma cascada que el
+  supervisor y en el paso `cpu` intentaba lanzar **otro** worker con su mismo scope
+  de systemd → "already loaded" → exited early → **500 en todas las peticiones**
+  mientras la GPU no estuviera disponible (detectado con un juego ocupando 1,7 GB de
+  VRAM). Ahora el worker carga en su proceso (`n_gpu_layers=0`); un worker nunca
+  lanza otro (guarda); `_backend_alive` impide que la histéresis reutilice un
+   worker muerto; el scope rancio se para antes de relanzar. Verificado en vivo:
+   CPU responde (13 s la carga, 1,8 s la siguiente petición, sin recarga).
+- **[NEW] Fallup-watcher CPU→GPU del daemon (AD-030.F1, 2026-09-27)**: el reaper
+  (5 s) asciende a GPU tras 60 s idle + 12 checks estables con margen 0,5 GB
+  sobre entrada/peor-caso 6,5 GB; solo fallup, TOCTOU-safe, con estado en
+  `/status.fallup`. Desplegado 2026-09-27 (33 tests en verde).
+- **[PLAN] Router System One para annotate (AD-039, PARKED 2026-09-27)**: Laya
+  zero-shot no separa la distribución (dominio 0,36; vs juez 0,69 frente a
+  0,85 del dual actual; 4 prompts y 3 checkpoints probados). Evidencia en
+  `docs/TECHNICAL/LAYA_ROUTER_BAKEOFF_F1.md`; revisit con mejores
+  checkpoints o fine-tune (14k labels como fuel).
+- **[NEW] Etiquetado en tiempo real (AD-040, P1+P2 DONE 2026-09-28):** sidecar Laya
+  por UDS (`scripts/laya_tag_server.py` + `redpill-laya-tag.service`) + cliente
+  `realtime_tag` en el drenaje (`queue_worker`, post-write acotado, gated OFF por
+  RULE 4). Contrato: el registro nunca espera; el fallo se señaliza
+  (`tag_status`/`tag_persisted`), no se reintenta. RFC-004.
+- **[NEW] Solera consume tags (RFC-004 P3, 2026-09-28):** `aggregate_tags` agrega
+  emoción/tema de los tags (sin destilar texto, sin fallback tag→LLM); chroma del
+  tag fijado (`TAG_EMOTION_CHROMA`) e inmune a la re-detección de `add_memory`.
+- **[NEW] Aviso de calibración en vivo (RFC-004 P4, 2026-09-28):** el pre-heating
+  lee el estado de los tags y emite `CALIBRATION WEAK` si hay fallos recientes
+  (`_tag_health`/`_weak_line`). RFC-004 COMPLETE (flags OFF en prod, RULE 4).
+- **[NEW] Recall híbrido + MMR (feedback de recall 2026-09-25, AD-038)**:
+  `memento/hybrid.py` — términos distintivos de la consulta (identificadores y
+  nombres propios, idf), `rg -c` sobre los `index.md` del árbol, mapeo línea →
+  nota ascendida → punto de Qdrant (vía `source_lines` + `ascended_point_id` del
+  árbol, sin índice nuevo), fusión RRF con el ranking semántico y selección MMR
+  con relevancia por rango. Integrado en `search_and_reinforce(hybrid=True)` —
+  solo lo piden oracle y el CLI, nunca los interceptores del handshake. Flags
+  `MEMORY_HYBRID_RECALL_ENABLED`, `MEMORY_RECALL_MMR_ENABLED`,
+  `MEMORY_RECALL_MMR_LAMBDA=0.85`. **Banco de 13 consultas: 9/13 → 12/13 hit@3**
+  (recupera Hotetec, DL-007 y la graduación de Bit, antes fuera del top-5).
+- **[FIX] `search_memento` caía siempre al escaneo python**: `rg` evalúa `-g`
+  relativo al directorio de trabajo, no a la ruta buscada → desde otro cwd no
+  casaba nada y el fallback daba 1 hit por fichero. Ahora `cwd=root` (0,03 s).
+- **[TOOL] `tools/memento_recall_bench.py`**: banco de recall de solo lectura
+  (6 configuraciones; `--model` para bake-off de embedders, `--lambda`). El banco
+  de consultas es del operador (`~/.config/red-pill/recall_probes.yaml`); el repo
+  solo lleva la plantilla `examples/recall_probes.yaml.example`.
+- **[NEW] Dedup de notas post-rewrite** (`MEMENTO_ANNOTATE_POST_REWRITE_DEDUP`):
+  P1-A otra vez tras la re-escritura de voz + casi-duplicados por embedding dentro
+  de la sesión (coseno ≥ 0,90, medido: 0,90-0,93 = mismo hecho). Caza los 7
+  duplicados exactos que la re-escritura creaba.
+- **[NEW] Voz v2 de annotate** (`MEMENTO_ANNOTATE_VOICE_V2`, default OFF): el
+  sujeto es quien actuó, sin muletilla "Joan me…", nombrando la entidad
+  (`voice_rule_annotate.txt`, `voice_rewrite_user_v2.txt`); la re-escritura solo
+  toca notas con bandera `voice`. Causa medida: el prompt v1 exigía abrir con
+  "Joan me…" y prohibía "Joan implementó" → 50,2% de notas con la muletilla e
+  inversiones de sujeto ("Joan me comprometió dos cambios" por commits de Aleth).
+  Fingerprint v2 `488a3ceb9c` (incluye por fin el prompt de re-escritura); v1
+  intacto `07a5c9b529`; distill/refine no cambian. **Piloto pendiente** (la GPU
+  estaba ocupada).
+- **[NEW] Voz v2.1 de annotate (piloto 2026-09-26: NO apta aún, flag OFF)**:
+  plantillas v2 con ejemplos coherentes ("Joan implementó X" se queda), scorer
+  dual v2, re-escritura también si la nota está en inglés o abre con "Aleth
+  <verbo>", y **alcance WORK/SOCIAL configurable** (`MEMENTO_WORK_SCOPE`,
+  `MEMENTO_SOCIAL_SCOPE`; decisión del operador: lo legal/laboral propio es
+  SOCIAL salvo jurista). Fingerprint v2.1 `4ddeefe66a` (incluye scorer y alcance).
+  Piloto (3 sesiones, árbol persistente): inglés 0%, "Joan me" 58/44% → 2/0%,
+  entidad 32→27% y 18→36%, +29/+52% de notas; **pero** el sujeto sigue sin ser
+  fiable (una nota atribuye a Joan ediciones `[Code Edit]` de Aleth) y la nota del
+  anexo sigue enrutándose a work. El piloto v2 (sin .1) había dado inglés en 3ª
+  persona y 0 notas en Hotetec.
+- **[NEW] Vista del fragmento de annotate** (`MEMENTO_ANNOTATE_FRAGMENT_VIEW`:
+  `raw` por defecto | `actors` | `pairs`; nombres en `MEMENTO_OPERATOR_LABEL` /
+  `MEMENTO_AGENT_LABEL`): `actors` pone el actor en cada turno; `pairs` deja solo
+  lo que pide el operador y la respuesta final del agente (74,7% del texto del
+  árbol). Reclasifica como herramienta los turnos `— Usuario` hechos solo de
+  `[TOOL RESULT…]`. No toca el árbol; si el modo no es `raw`, entra en la huella.
+- **[FOUND] El renderer de `claude_code` atribuye al operador los resultados de
+  herramienta**: Claude Code los transporta en mensajes con rol `user` y Memento
+  los pinta como `— Usuario` (5.889 líneas en el árbol; en una sesión, 169 de 178
+  "turnos del operador"). Causa de raíz de las inversiones de sujeto en las notas
+  de sesiones Claude Code. Mitigado en la vista de annotate; el arreglo en el
+  renderer exige migrar el árbol (cambian las líneas y las `source_lines`).
+  Pilotos de voz (sesión Claude Code): inversiones sospechosas v2.1 16 → actores
+  5 → pares 1 (v1: 1); la v2 sigue OFF.
+- **[NEW] `job submit` rechaza rutas volátiles** (`/tmp`, `/dev/shm`, `/run/user`)
+  salvo `--allow-tmp`: un job sobrevive al reinicio y `/tmp` no (un piloto acabó
+  FRUSTRATED por eso).
+- **[NEW] `memento_ascend --reconcile`** (`ascension.reconcile_orphans`): borra de
+  Qdrant los engramas de Memento cuya nota ya no existe (re-anotar con otro
+  prompt cambia títulos → stems → los puntos viejos quedaban huérfanos). Solo en
+  sesiones con `_meta.json` y sin `_partial.json`; no toca `refine/` legacy. En
+  seco sobre el corpus: 0 huérfanos en 13.036 puntos.
+- **[MEASURED] Texto enriquecido para embeber** (`memento/embed_text.py`,
+  `MEMENTO_EMBED_ENRICHED`, OFF): `tema · reliquias · cuerpo sin muletilla`.
+  **Refutado por el banco** (8/13 vs 9/13 hit@3 solo; no suma sobre el híbrido):
+  queda apagado. `embedding_text_for` es el punto único de qué se embebe
+  (escritura, soul kit, `qdrant_reembed`).
+- **[OPS] Re-embebido de `archive_memories` ejecutado**: 17.595 de 77.833 vectores
+  reescritos (snapshot previo); todos los meses dan coseno 1,000. Causa raíz:
+  `reembed_collections.py` (cambio de modelo del 14-jul) excluía el archivo.
+- **[TOOL] `scripts/qdrant_reembed.py` + receta `archive_reembed`**: re-embebido
+  desde `content` de los vectores que no casan con su texto. Hallazgo
+  2026-09-25: en `archive_memories` los puntos anteriores a julio (fuente
+  antigravity) no se corresponden con ningún campo guardado (coseno 0,1-0,5) y
+  son inencontrables para las consultas; desde julio casan (1,000), igual que
+  `work_memories`/`social_memories`. Dry-run por defecto; `--apply` solo
+  reescribe coseno < 0,99, snapshot previo, tramos de 10.000 reanudables por
+  offset. Dry-run de 5.120 puntos: 1.129 a reescribir (22%), ~55 pts/s (≈24 min
+  el archivo entero). Tests: 3.
+- **[DOC] AD-037** (DECISION_LOG) + runbook del single-writer (reanudable,
+  `--from`, muro de serving ≠ veneno) + `SCRIPTS_INDEX`.
+- **[CHORE] Daemon desplegado con D5** (2026-09-25 15:54, solo `run_dual_bind.py`)
+  y validado en vivo: el split de la 495 que tumbaba el daemon (17.420 chars)
+  extrae con `NRestarts=0`. Comentario del template de `redpill-llm.service`
+  alineado con el desplegado.
 
 ### 🧹 Desk — scaffold del despacho, separación proyecto↔despacho y `AGENT_CORE_DIR`
 
@@ -63,11 +543,21 @@ pausable por etapa (incidente 2026-09-11: la pausa del operador quedó horas en
   `chronicle_distill.py`/`chronicle_refine.py` (barrido no acotado de
   `archive_memories`, causa de los timeouts nocturnos) y la ingesta legacy
   (`antigravity_ingest`). El pase agéntico moderno es `memento-agentic` sobre el
-  árbol Memento (RFC-002 §4.5); `archive_memories` queda como fallback de
-  reconstrucción (§5.1.2). Eliminados `scripts/chronicle_daily.py` y
+  árbol Memento (RFC-002 §4.5). Eliminados `scripts/chronicle_daily.py` y
   `tests/test_chronicle_registry.py`; limpiadas referencias (`schedule_pulse.py`,
   `chronicle_sources/base.py`, `memento/registry.py`, `config.py`,
   `seeds/pi/README.md`).
+- **[ARCH] Retirada TOTAL de la maquinaria legacy de archivo**: nadie produce ya
+  la colección archival ni la referencia en el código. Fuera productores/tools
+  (`scripts/antigravity_ingest.py`, `quarantine_fragments.py`,
+  `chronicle_explorer.py`, `red-pill tools dedup-archive`,
+  `configs/jobs/archive_reembed.yaml`) y el purgador (`memento_purge_archive.py`;
+  su helper de cobertura raw/render vive ahora en `red_pill.memento.coverage`).
+  `memento_migrate.py` pierde el fallback de reconstrucción y
+  `--reconstruct-orphans` (el archivado es el árbol Memento); `evolution.py`
+  muestrea work+social; limpiados los readers (`thread_weave_migrate`,
+  `oneiromancy_pulse`, `qdrant_reembed`, `reembed_collections`, `backup_qdrant.sh`)
+  y las docs operativas.
 - **[NEW] Arnés de bake-off de modelos**: `scripts/model_battle_tool.py`
   (tool-calling vía bindings, con parser de formatos nativos — `<tool_call>`,
   `<|tool_call>` de Gemma, `<function_call>`, OpenAI); `scripts/model_battle_tool_gpu.py`
@@ -100,6 +590,24 @@ invocación del CLI se estandariza con el placeholder `${RED_PILL_CMD}`.
   convergente e idempotente (prune de legados snake_case). Tests en sandbox
   (`tests/test_inject_pi.py`) y validación con el loader real de Pi
   (`tests/test_pi_skills_loader.py`, skip si no hay node/pi).
+- **[NEW] Ancla propia de Pi (`AGENTS.override.md`)**: `inject_anchor.py` gana el
+  target `pi` (workspace-scoped) y override de semillas por IDE (`ide_seed_path`:
+  `seeds/pi/anchors/<anchor>.md` gana al genérico). Pi ≥0.87 carga
+  `AGENTS.override.md` **en vez de** `CLAUDE.md` del mismo directorio, así que el
+  adapter siembra ahí el ancla con texto Pi (handshake automático,
+  `bunker_search`/`bunker_save`; sin tools MCP) y sombrea el ancla
+  `claude-code-project`. Overrides de skills Pi en `seeds/pi/skills/` para
+  `sovereign-handshake`, `workspace-memory`, `minion-delegation`, `job-manager`,
+  `swarm-flow-manager` (mapean MCP→tools/CLI); el `_deploy_skills` genérico ahora
+  salta los ficheros pisados por un override (reseed convergente). Tests:
+  `tests/test_inject_anchor.py`, `tests/test_inject_pi.py`.
+- **[FIX] Silent Scribe Relay por hook final (prompt→respuesta)**: el relay deja
+  de colgar de `agent_end` (por-run: dispara en cada reintento/aborto →
+  duplicados) y pasa a `agent_before_settle` con guard `outcome == "completed"`
+  (salta abort/error), con `agent_settled` como fallback <0.87. La respuesta se
+  captura de los bloques de texto del assistant en `message_end` (sin thinking
+  ni tool calls). Sigue siendo 100% hook (no depende del LLM) y garantiza un
+  único engrama limpio (prompt + respuesta, `originator=pi`, `session_id`).
 - **[NEW] Backend agéntico `pi`**: `PiBridge` (`src/red_pill/swarm/bridges/pi.py`,
   registrado en la factory) ejecuta prompts headless vía `pi --mode json`
   (sesiones persistidas → las archiva `chronicle_sources/pi`; la extensión
@@ -231,6 +739,13 @@ sesión (1 instancia por sesión, lista congelada en el checkpoint).
   4.1-8B mantiene mal en "entidades".
 - **[FIX] Validador del bake-off**: `raw_decode` en vez de `re.search` greedy
   (fallaba con "Extra data" cuando el modelo añade texto tras el JSON).
+- **[NEW] Task `validate` — el 4.2-3B como juez de validación (AD-035)**: el 3B
+  suspendió distill/refine (AD-032), pero la validación de contenido es otra
+  familia de tarea (juez, no generación). Nueva task `validate` en
+  `task_profiles.yaml` (default `granite_8b`; candidato `granite_4_2_3b` con
+  thinking off y receta IBM temp 1.0) y `memento_validate.yaml` pasa de
+  `task: refine` (apaño) a `task: validate`. Medido en la golden set:
+  `granite_8b` **5/5**, `granite_4_2_3b` **4/5** (falso negativo en la 005).
 
 ### 🔁 Resiembra Memento (Fase 4, cierre)
 
@@ -248,6 +763,19 @@ sesión (1 instancia por sesión, lista congelada en el checkpoint).
   updated_at/title) para parseo agéntico (Aleth/IDE/Telegram).
 - Fix: `handle_job_list` importaba `json` sin declararlo (NameError en la salida
   JSON) + `ruff format` en verde (el CI del PR fallaba en lint).
+- `job submit --paused`: encolar un job **nacido PAUSADO** (el runner no lo toca
+  hasta `job resume`) — para preparar trabajos largos y lanzarlos a mano cuando
+  toque. El borrado de terminales usa `job purge --terminal` (FRUSTRATED/
+  COMPLETED; PAUSED solo por id con `--force`).
+- `job cancel <id>`: cancelación **limpia** de jobs en espera (PENDING/BLOCKED) —
+  `FRUSTRATED` sin marca de kill sucio y **cascada a hijos BLOCKED** (ningún hijo
+  queda esperando a un padre caído). `kill` acepta ya BLOCKED y solo marca dirty
+  cuando la transición es válida (antes marcaba incluso si fallaba); `purge
+  --force` retira también BLOCKED. Cierra el colateral de hijos huérfanos del
+  chaining (`--parent`).
+  ⚠️ Hallazgo conocido (nota desk `JOB-KILL-CLAIM-RACE`): `kill --discard` sobre
+  PENDING/PROCESSING puede no persistir (el claim del runner lo resucita);
+  mitigación: `--singleton` en recetas y revisar `job list` tras matar.
 
 ### 📼 Memento Chronicle (RFC-002, ex "Sovereign Vault")
 
@@ -397,6 +925,24 @@ cron es trazable.
   monitorizarlo (`job_status`) y escanear otros problemas (señales, inbox,
   health). Si lanza un DAG sin ninguno en vuelo, incluye `origin: "awakening"`
   en su payload.
+- **[FEAT] Canal de notas (AWAKEN-002)**: buzón de mano a mano en el desk
+  (`awakening/notes/` + `done/`); dirección 1 (deberes del Fixer → despertar),
+  dirección 3 (decisión pendiente → Operador, `para: <Operador>`); firmas
+  `— <nombre> · <ts>`; el digest del handshake cuenta las notas `para: <Operador>`
+  sin `## Leída` y las muestra como decisiones pendientes (A-1).
+- **[FEAT] Vigilancia del planner (AWAKEN-002)**: directiva delgada + puntero al
+  índice en el prompt; pre-pase determinista `scripts/planner_state_audit.py`
+  (A-4, sin LLM) que compara el `status:` del frontmatter con ramas/commits/
+  ficheros y **propone** transiciones con su evidencia — nunca las aplica.
+- **[FEAT] Latido durante la vigilancia (§5)**: `_lease_keeper` mantiene el lease
+  D21 fresco mientras el despertar trabaja; sin él un run > `HEARTBEAT_LEASE`
+  enmudecía el latido y neon-link declaraba un falso "Córtex Offline".
+- **[FEAT] Techo configurable + Git Golden Rule (A-5)**: `AWAKENING_TIMEOUT`
+  env-driven (default 600s; 45-60 min seguro con el latido); regla explícita
+  "commit local sí en tu rama/worktree (`awaken/<ts>`), push nunca sin orden".
+- **[FEAT] Vocabulario de estados (A-3)**: `blocked`/`paused` exigen `reason`
+  obligatorio en el ancla del kernel; `ready` no es estado (→ `ratified`).
+- **[FIX] mypy limpio**: 11 errores preexistentes resueltos (gate de CI verde).
 
 ### 🔗 Propagación del origen por la cola
 

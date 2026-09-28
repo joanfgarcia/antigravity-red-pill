@@ -97,6 +97,21 @@ class CognitiveQueueManager:
 		mission = mission_id or payload.get("mission_id")
 
 		with self._get_connection() as conn:
+			if parent_task_id:
+				# Guard de padre terminal (auditoría adversarial 2026-09-23): un hijo
+				# de un padre ya terminado quedaría BLOCKED eterno — nadie lo
+				# desbloqueará (el desbloqueo vive en mark_completed). BEGIN
+				# IMMEDIATE cierra además el TOCTOU lectura→INSERT frente a un
+				# mark_completed concurrente.
+				conn.execute("BEGIN IMMEDIATE")
+				row = conn.execute("SELECT status FROM cognitive_tasks WHERE id = ?", (parent_task_id,)).fetchone()
+				if row is None:
+					raise ValueError(f"parent_task_id '{parent_task_id}' no existe en la cola")
+				parent_status = str(row["status"])
+				if parent_status == "COMPLETED":
+					initial_status = "PENDING"
+				elif parent_status == "FRUSTRATED":
+					raise ValueError(f"el padre {parent_task_id} está FRUSTRATED: el hijo nunca arrancaría (re-encola el padre primero)")
 			conn.execute(
 				"""
 				INSERT INTO cognitive_tasks (id, source, priority, payload, status, parent_task_id, mission_id)
@@ -355,6 +370,9 @@ class CognitiveQueueManager:
 
 			if row and row["attempts"] >= 3:
 				conn.execute("UPDATE cognitive_tasks SET status = 'FRUSTRATED' WHERE id = ?", (task_id,))
+				# Un padre FRUSTRATED no completará jamás: sus hijos BLOCKED se
+				# cancelan en cascada (auditoría adversarial 2026-09-23).
+				self._cancel_blocked_children(conn, task_id)
 				logger.error(f"[QUEUE] Task {task_id} marked as FRUSTRATED (Circuit Breaker Activated).")
 			else:
 				conn.execute("UPDATE cognitive_tasks SET status = 'PENDING' WHERE id = ?", (task_id,))
@@ -460,20 +478,36 @@ class CognitiveQueueManager:
 				"DELETE FROM cognitive_tasks WHERE status = 'COMPLETED' AND updated_at < datetime('now', ?)",
 				(f"-{int(completed_days)} days",),
 			).rowcount
+			frustrated_ids = [
+				r["id"]
+				for r in conn.execute(
+					"SELECT id FROM cognitive_tasks WHERE status = 'FRUSTRATED' AND updated_at < datetime('now', ?)",
+					(f"-{int(frustrated_days)} days",),
+				).fetchall()
+			]
+			for _r in frustrated_ids:
+				self._cancel_blocked_children(conn, _r)
 			frustrated = conn.execute(
 				"DELETE FROM cognitive_tasks WHERE status = 'FRUSTRATED' AND updated_at < datetime('now', ?)",
 				(f"-{int(frustrated_days)} days",),
 			).rowcount
-			stuck = conn.execute(
-				"""
-				UPDATE cognitive_tasks
-				SET status = 'FRUSTRATED',
-					error_log = COALESCE(error_log, '') || ' [queue_hygiene: colgado en PROCESSING > ' || ? || 'h]',
-					updated_at = CURRENT_TIMESTAMP
-				WHERE status = 'PROCESSING' AND updated_at < datetime('now', ?)
-				""",
-				(int(stale_processing_hours), f"-{int(stale_processing_hours)} hours"),
-			).rowcount
+			stuck_rows = conn.execute(
+				"SELECT id FROM cognitive_tasks WHERE status = 'PROCESSING' AND updated_at < datetime('now', ?)",
+				(f"-{int(stale_processing_hours)} hours",),
+			).fetchall()
+			for _r in stuck_rows:
+				conn.execute(
+					"""
+					UPDATE cognitive_tasks
+					SET status = 'FRUSTRATED',
+						error_log = COALESCE(error_log, '') || ' [queue_hygiene: colgado en PROCESSING > ' || ? || 'h]',
+						updated_at = CURRENT_TIMESTAMP
+					WHERE id = ?
+					""",
+					(int(stale_processing_hours), _r["id"]),
+				)
+				self._cancel_blocked_children(conn, _r["id"])
+			stuck = len(stuck_rows)
 		if completed or frustrated or stuck:
 			logger.info(f"[QUEUE-HYGIENE] purged completed={completed} frustrated={frustrated}, stuck→FRUSTRATED={stuck}")
 		return {"completed_purged": completed, "frustrated_purged": frustrated, "stuck_marked": stuck}
@@ -487,9 +521,19 @@ class CognitiveQueueManager:
 		Complementa a purge_hygiene (temporal, nocturna): esto es la versión en
 		caliente y dirigida.
 		"""
-		allowed = ("FRUSTRATED", "COMPLETED", "PAUSED") if force else ("FRUSTRATED", "COMPLETED")
+		allowed = ("FRUSTRATED", "COMPLETED", "PAUSED", "BLOCKED") if force else ("FRUSTRATED", "COMPLETED")
 		placeholders = ",".join("?" for _ in allowed)
 		with self._get_connection() as conn:
+			# Auditoría adversarial (2026-09-23): borrar un padre PAUSED/BLOCKED con
+			# `force` dejaría huérfanos BLOCKED eternos — cascada antes del DELETE
+			# (idempotente para terminales: sus hijos ya no están BLOCKED).
+			row = conn.execute(
+				f"SELECT status FROM cognitive_tasks WHERE id = ? AND status IN ({placeholders})",
+				(task_id, *allowed),
+			).fetchone()
+			if row is None:
+				return False
+			self._cancel_blocked_children(conn, task_id)
 			cursor = conn.execute(
 				f"DELETE FROM cognitive_tasks WHERE id = ? AND status IN ({placeholders})",
 				(task_id, *allowed),
@@ -503,6 +547,8 @@ class CognitiveQueueManager:
 		PENDING, PAUSED, BLOCKED ni PROCESSING. Devuelve filas retiradas.
 		"""
 		with self._get_connection() as conn:
+			for _r in conn.execute("SELECT id FROM cognitive_tasks WHERE status = 'FRUSTRATED'").fetchall():
+				self._cancel_blocked_children(conn, _r["id"])
 			removed = conn.execute("DELETE FROM cognitive_tasks WHERE status IN ('FRUSTRATED', 'COMPLETED')").rowcount
 		if removed:
 			logger.info(f"[QUEUE-PURGE] operator purge removed {removed} terminal job(s)")
@@ -611,19 +657,53 @@ class CognitiveQueueManager:
 		actual antes de soltar). Si el operador mata en ese intervalo, la pausa
 		prevalece y debe poder convertirse en PAUSED/FRUSTRATED sin esperar al
 		checkpoint del runner.
+
+		BLOCKED (DAG a la espera del padre) también se puede matar: no hay step en
+		vuelo, así que NO se marca dirty kill (el asterisco mentiría) y, con
+		`discard`, se cancelan en cascada sus hijos BLOCKED (si el padre cae, los
+		hijos esperarían para siempre a un padre que ya no completará).
 		"""
-		self.mark_dirty_kill(task_id, {"reason": "operator"})
+		with self._get_connection() as conn:
+			row = conn.execute("SELECT status FROM cognitive_tasks WHERE id = ?", (task_id,)).fetchone()
+		if not row:
+			return False
+		current = str(row["status"])
+		if current not in ("PENDING", "PROCESSING", "PAUSED", "PAUSING", "BLOCKED"):
+			return False
+		if current != "BLOCKED":
+			# BLOCKED nunca arrancó un step: cancelarlo es limpio. El resto lleva
+			# la marca dirty (un PENDING puede tener checkpoint previo a validar).
+			self.mark_dirty_kill(task_id, {"reason": "operator"})
 		status, error_log = ("FRUSTRATED", "cancelled by operator") if discard else ("PAUSED", None)
 		with self._get_connection() as conn:
 			cursor = conn.execute(
-				"""
-				UPDATE cognitive_tasks
-				SET status = ?, error_log = COALESCE(?, error_log), updated_at = CURRENT_TIMESTAMP
-				WHERE id = ? AND status IN ('PENDING', 'PROCESSING', 'PAUSED', 'PAUSING')
-				""",
+				"UPDATE cognitive_tasks SET status = ?, error_log = COALESCE(?, error_log), updated_at = CURRENT_TIMESTAMP WHERE id = ?",
 				(status, error_log, task_id),
 			)
-			return cursor.rowcount > 0
+			if not (cursor.rowcount > 0):
+				return False
+			if discard:
+				self._cancel_blocked_children(conn, task_id)
+			return True
+
+	def _cancel_blocked_children(self, conn: Any, parent_id: str) -> int:
+		"""Cancela en cascada los hijos BLOCKED de un job descartado (ninguno
+		resucitará: el desbloqueo filtra status='BLOCKED')."""
+		queue = [parent_id]
+		cancelled = 0
+		while queue:
+			current = queue.pop()
+			rows = conn.execute("SELECT id FROM cognitive_tasks WHERE parent_task_id = ? AND status = 'BLOCKED'", (current,)).fetchall()
+			for r in rows:
+				conn.execute(
+					"UPDATE cognitive_tasks SET status = 'FRUSTRATED', error_log = 'parent cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+					(r["id"],),
+				)
+				cancelled += 1
+				queue.append(r["id"])
+		if cancelled:
+			logger.info(f"[QUEUE-DAG] parent {parent_id[:8]} discarded → {cancelled} blocked child(ren) cancelled")
+		return cancelled
 
 	def pause_task(self, task_id: str) -> bool:
 		"""Solicitud de pausa del operador.

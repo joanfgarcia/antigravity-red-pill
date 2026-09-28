@@ -51,6 +51,80 @@ class InteractionTTLPlugin(JanitorPlugin):
 				models.FieldCondition(key="created_at", range=models.Range(lt=cutoff)),
 			]
 		)
+
+		# Purge gate (SW_PURGE_GATE_ENABLED): once Sleep no longer drains the buffer,
+		# this TTL is the SOLE purger. Purge by age alone would drop raw turns whose
+		# session was never rendered into Memento (chronicle down/late). Gate: only
+		# purge points whose session is present in `memento_registry`. Points without
+		# `session_id` are NOT purged (can't verify) — the max-age backstop handles them.
+		if bool(getattr(cfg, "SW_PURGE_GATE_ENABLED", False)):
+			from red_pill.memento.registry import MementoRegistry
+
+			registry_path = kwargs.get("registry_path")
+			registry = MementoRegistry(path=registry_path) if registry_path else MementoRegistry()
+			rendered = set()
+			# state["registry"] es anidado: {source: {session_id: entry}}, y el
+			# session_id del registry lleva prefijo de fuente ("opencode:ses_x").
+			# El buffer guarda el id crudo ("ses_x"), así que indexamos ambos.
+			for source, sessions in registry.state.get("registry", {}).items():
+				for sid in sessions:
+					sid = str(sid)
+					rendered.add(sid)
+					if ":" in sid:
+						rendered.add(sid.split(":", 1)[1])
+					rendered.add(f"{source}:{sid}")
+
+			to_delete: set = set()
+			offset = None
+			while True:
+				points, offset = mem.client.scroll(collection, scroll_filter=stale_filter, limit=500, offset=offset, with_payload=True)
+				for p in points:
+					meta = (p.payload or {}).get("metadata") or {}
+					sid = meta.get("session_id")
+					if sid and str(sid) in rendered:
+						to_delete.add(str(p.id))
+				if offset is None:
+					break
+
+			# Tope duro de edad (D18/F4): lo NO renderizado más viejo que el cap se
+			# purga igualmente (el buffer no puede crecer sin fin), y se emite una
+			# señal de dolor para que el operador sepa que el chronicle va atrasado.
+			hard_cutoff = time.time() - int(getattr(cfg, "INTERACTION_MAX_AGE_DAYS", 30)) * 86400
+			hard_filter = models.Filter(
+				should=[
+					models.FieldCondition(key="timestamp", range=models.Range(lt=hard_cutoff)),
+					models.FieldCondition(key="created_at", range=models.Range(lt=hard_cutoff)),
+				]
+			)
+			orphaned = 0
+			offset = None
+			while True:
+				points, offset = mem.client.scroll(collection, scroll_filter=hard_filter, limit=500, offset=offset, with_payload=True)
+				for p in points:
+					sid = ((p.payload or {}).get("metadata") or {}).get("session_id")
+					if not (sid and str(sid) in rendered):
+						orphaned += 1
+					to_delete.add(str(p.id))
+				if offset is None:
+					break
+
+			ids = list(to_delete)
+			if ids:
+				mem.client.delete(collection, points_selector=models.PointIdsList(points=ids), wait=True)
+			if orphaned:
+				try:
+					mem.inject_signal(
+						name="interaction_unrendered_purged",
+						intensity=4.0,
+						signal_type="pain",
+						source="Janitor",
+						message=f"{orphaned} turnos sin renderizar purgados por el tope de {getattr(cfg, 'INTERACTION_MAX_AGE_DAYS', 30)}d (chronicle atrasado).",
+					)
+				except Exception as _e:
+					logger.debug(f"interaction_ttl: señal no inyectada: {_e}")
+			janitor.log(f"[Janitor] interaction_ttl (gated): {len(ids)} purgados ({orphaned} sin renderizar).")
+			return {"purged": len(ids), "orphaned": orphaned, "ttl_hours": ttl_hours, "gate": True}
+
 		stale = mem.client.count(collection, count_filter=stale_filter, exact=True).count
 		if stale:
 			mem.client.delete(collection, points_selector=models.FilterSelector(filter=stale_filter), wait=True)

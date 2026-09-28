@@ -19,7 +19,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 from qdrant_client import models
@@ -291,42 +291,53 @@ def weave_memento_reinforcement(
 		window_hours = _polaroid_cfg(24.0, "AXON_WINDOW_HOURS")
 
 	client = memory_manager.client
-	stats = {"engramas_en_ventana": 0, "refine_evaluados": 0, "refuerzos_aplicados": 0, "ascensos": 0, "errores": 0}
+	stats = {"engramas_en_ventana": 0, "refine_evaluados": 0, "refuerzos_aplicados": 0, "ascensos": 0, "errores": 0, "rechazados_por_validador": 0}
 
 	window_start = now - window_hours * 3600.0
-	if not client.collection_exists("work_memories"):
-		return stats
 
-	# 1. Temas de los engramas nuevos en work_memories.
+	# 1. Temas de los engramas nuevos en la ventana curada (work + social).
 	engrama_topics: set = set()
-	offset = None
-	while True:
-		batch, offset = client.scroll(
-			collection_name="work_memories",
-			scroll_filter=models.Filter(
-				must=[models.FieldCondition(key="created_at", range=models.Range(gte=window_start))],
-				must_not=[models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="raw_parent"))],
-			),
-			limit=64,
-			with_payload=True,
-			with_vectors=False,
-			offset=offset,
-		)
-		for point in batch:
-			engrama_topics.update(_engram_topics(point.payload or {}))
-		stats["engramas_en_ventana"] += len(batch)
-		if offset is None:
-			break
+	for collection in ("work_memories", "social_memories"):
+		if not client.collection_exists(collection):
+			continue
+		offset = None
+		while True:
+			batch, offset = client.scroll(
+				collection_name=collection,
+				scroll_filter=models.Filter(
+					must=[models.FieldCondition(key="created_at", range=models.Range(gte=window_start))],
+					must_not=[models.FieldCondition(key="lazarus_phase", match=models.MatchValue(value="raw_parent"))],
+				),
+				limit=64,
+				with_payload=True,
+				with_vectors=False,
+				offset=offset,
+			)
+			for point in batch:
+				engrama_topics.update(_engram_topics(point.payload or {}))
+			stats["engramas_en_ventana"] += len(batch)
+			if offset is None:
+				break
 
 	if not engrama_topics:
 		logger.info("[MEM-REINFORCE] Sin engramas nuevos en la ventana — no hay temas que reforzar.")
 		return stats
 
-	# 2. Refuerzo de refinados no ascendidos con temas afines.
-	for refine_path in sorted(Path(root).rglob("refine/*.md")):
+	# 2. Refuerzo de refinados/anotaciones no ascendidos con temas afines.
+	# Política annotate-first: los `refine/` legacy de sesiones ya anotadas se omiten.
+	annotated_sessions = {str(p.parent.parent) for p in Path(root).rglob("annotate/*.md")}
+	paths = sorted(set(Path(root).rglob("refine/*.md")) | set(Path(root).rglob("annotate/*.md")))
+	per_session_asc: Dict[str, int] = {}
+	for refine_path in paths:
+		if "/refine/" in str(refine_path) and str(refine_path.parent.parent) in annotated_sessions:
+			continue
 		try:
 			fm, body = parse_refine(refine_path.read_text(encoding="utf-8"))
 			if not body or fm.get("ascended"):
+				continue
+			# Veredicto de validación negativo: no se refuerza ni reintenta.
+			if str(fm.get("validator_approved")).strip().lower() == "false":
+				stats["rechazados_por_validador"] += 1
 				continue
 			stats["refine_evaluados"] += 1
 			refine_theme, refine_tokens = _refine_topics(fm, body)
@@ -339,9 +350,19 @@ def weave_memento_reinforcement(
 				stats["refuerzos_aplicados"] += 1
 				if result.get("ascended"):
 					stats["ascensos"] += 1
+					rel = refine_path.relative_to(root).parts
+					if len(rel) >= 3:
+						dir_rel = str(Path(*rel[:3]))
+						per_session_asc[dir_rel] = per_session_asc.get(dir_rel, 0) + 1
 		except Exception as e:
 			stats["errores"] += 1
 			logger.warning(f"[MEM-REINFORCE] fallo en {refine_path}: {e}")
+
+	if per_session_asc:
+		from red_pill.memento.record import bump_session_record
+
+		for dir_rel, count in per_session_asc.items():
+			bump_session_record(root, dir_rel, "ascend", {"ascendidos": count, "por_refuerzo": count})
 
 	if stats["refuerzos_aplicados"]:
 		registry.save()
@@ -352,6 +373,23 @@ def weave_memento_reinforcement(
 # ── Fase 4 §3.3: ascenso estático (gate de significance) ──
 
 
+def _pick_ascension_winner(entries: list) -> Any:
+	"""Ganador determinista de un grupo duplicado (mismo `session_id`+`source_lines`).
+
+	Criterio: mayor `significance`, luego `category_score`, luego cuerpo más largo;
+	desempate final por hash del cuerpo (estable entre ejecuciones, así reelegir
+	con los mismos datos da el mismo ganador → idempotente).
+	"""
+	import hashlib
+
+	def _key(c: Any) -> Any:
+		_refine_path, fm, body, significance = c
+		cat = float(fm.get("category_score", 0.0) or 0.0)
+		return (significance, cat, len(body), hashlib.sha256(body.encode("utf-8")).hexdigest())
+
+	return max(entries, key=_key)
+
+
 def ascend_by_threshold(
 	root: Path,
 	registry: Any,
@@ -360,42 +398,121 @@ def ascend_by_threshold(
 	memory_manager: Any = None,
 	limit: Optional[int] = None,
 	transport: Any = None,
+	dry_run: bool = False,
 ) -> Dict[str, Any]:
-	"""Ascenso estático (§3.3): promueve los `refine/*.md` NO ascendidos cuya
-	`significance >= MEMENTO_GATE_MIN_SIGNIFICANCE` (default 0.5, provisional).
-
-	Es el heredero del gate "would-ingest" del RFC-002 §4.6, ahora sin
-	`archive_memories`: Memento es el archivo, Qdrant recibe solo lo curado.
-	Idempotente (`ascender` es un upsert por `session_id`+`source_lines`).
+	"""Ascenso estático (§3.3): promueve los `refine/*.md` y `annotate/*.md` NO
+	ascendidos cuya `significance` supera el umbral de su categoría —
+	`MEMENTO_GATE_MIN_SIGNIFICANCE_WORK` o `_SOCIAL` (D24: work y social se
+	comportan distinto). Un `min_significance` explícito (reseeds/tests) gana para
+	todos. Las anotaciones con `dual_route: none` no ascienden (MEM-006).
+	`dry_run` informa (`would_ascend`) sin escribir. Idempotente (`ascender` es un
+	upsert por `session_id`+`source_lines`+slug).
 	"""
-	if min_significance is None:
-		min_significance = _polaroid_cfg(0.5, "MEMENTO_GATE_MIN_SIGNIFICANCE")
 	if memory_manager is None:
 		from red_pill.memory import MemoryManager
 
 		memory_manager = MemoryManager()
 
-	stats = {"refine_evaluados": 0, "ascendidos": 0, "rechazados_por_umbral": 0, "errores": 0}
+	stats = {
+		"refine_evaluados": 0,
+		"ascendidos": 0,
+		"rechazados_por_umbral": 0,
+		"rechazados_por_ruta": 0,
+		"rechazados_por_validador": 0,
+		"errores": 0,
+		"duplicados_omitidos": 0,
+		"refines_omitidos_por_annotate": 0,
+	}
 
-	for refine_path in sorted(Path(root).rglob("refine/*.md")):
-		if limit is not None and stats["ascendidos"] >= limit:
-			break
+	# MEM-006: política annotate-first POR SESIÓN — si la sesión tiene notas, sus
+	# `refine/` legacy se ignoran (fallback a refine solo si no hay annotate).
+	annotated_sessions = {str(p.parent.parent) for p in Path(root).rglob("annotate/*.md")}
+	candidates = []
+	paths = sorted(set(Path(root).rglob("refine/*.md")) | set(Path(root).rglob("annotate/*.md")))
+	for refine_path in paths:
+		if "/refine/" in str(refine_path) and str(refine_path.parent.parent) in annotated_sessions:
+			stats["refines_omitidos_por_annotate"] += 1
+			continue
 		try:
 			fm, body = parse_refine(refine_path.read_text(encoding="utf-8"))
 			if not body or fm.get("ascended"):
 				continue
 			stats["refine_evaluados"] += 1
+			# MEM-006: las anotaciones sin ruta (ruido/zona muerta) NO ascienden.
+			if str(fm.get("dual_route") or "").strip().lower() == "none":
+				stats["rechazados_por_ruta"] += 1
+				continue
+			# Veredicto de validación negativo (gate/LLM): terminal, sin reintento.
+			if str(fm.get("validator_approved")).strip().lower() == "false":
+				stats["rechazados_por_validador"] += 1
+				continue
 			significance = float(fm.get("significance", 0.0) or 0.0)
-			if significance < min_significance:
+			if min_significance is not None:
+				threshold = float(min_significance)
+			else:
+				cat = _candidate_category(fm, body)
+				if cat == "work":
+					threshold = _polaroid_cfg(0.6, "MEMENTO_GATE_MIN_SIGNIFICANCE_WORK")
+				else:
+					threshold = _polaroid_cfg(0.5, "MEMENTO_GATE_MIN_SIGNIFICANCE_SOCIAL")
+			if significance < threshold:
 				stats["rechazados_por_umbral"] += 1
 				continue
-			result = ascender(root, registry, refine_path, memory_manager=memory_manager, transport=transport)
-			if result.get("ascended"):
-				stats["ascendidos"] += 1
+			candidates.append((refine_path, fm, body, significance))
 		except Exception as e:
 			stats["errores"] += 1
 			logger.warning(f"[STATIC-ASCENSION] fallo en {refine_path}: {e}")
 
+	# Dedup-at-ascension (SW_DEDUP_ENABLED, D12): un grupo duplicado
+	# (session_id, source_lines) produce varios refines con el mismo cuerpo y
+	# títulos distintos. Se asciende UN ganador determinista; los perdedores NO
+	# se borran (la selección puede variar con los parámetros).
+	import red_pill.config as _cfg
+
+	if bool(getattr(_cfg, "SW_DEDUP_ENABLED", False)):
+		import hashlib
+
+		groups: Dict[Any, list] = {}
+		for c in candidates:
+			# La clave incluye el HASH DEL CUERPO: un mismo `source_lines` produce
+			# VARIAS ideas (multi-idea); agrupar solo por (session_id, source_lines)
+			# colapsaría ideas legítimamente distintas. Duplicado real = mismo cuerpo.
+			body_hash = hashlib.sha256(str(c[2]).encode("utf-8")).hexdigest()
+			key = (str(c[1].get("session_id") or ""), str(c[1].get("source_lines") or ""), body_hash)
+			groups.setdefault(key, []).append(c)
+		winners = []
+		for entries in groups.values():
+			winners.append(_pick_ascension_winner(entries))
+			stats["duplicados_omitidos"] += len(entries) - 1
+		candidates = winners
+
+	if dry_run:
+		stats["would_ascend"] = len(candidates)
+		stats["ascendidos"] = 0
+		logger.info(f"[STATIC-ASCENSION][dry-run] {stats}")
+		return stats
+
+	per_session: Dict[str, int] = {}
+	for refine_path, fm, body, significance in candidates:
+		if limit is not None and stats["ascendidos"] >= limit:
+			break
+		try:
+			result = ascender(root, registry, refine_path, memory_manager=memory_manager, transport=transport)
+			if result.get("ascended"):
+				stats["ascendidos"] += 1
+				rel = refine_path.relative_to(root).parts
+				if len(rel) >= 3:
+					dir_rel = str(Path(*rel[:3]))
+					per_session[dir_rel] = per_session.get(dir_rel, 0) + 1
+		except Exception as e:
+			stats["errores"] += 1
+			logger.warning(f"[STATIC-ASCENSION] fallo en {refine_path}: {e}")
+
+	if per_session:
+		from red_pill.memento.record import bump_session_record
+
+		for dir_rel, count in per_session.items():
+			bump_session_record(root, dir_rel, "ascend", {"ascendidos": count})
 	if stats["ascendidos"]:
 		registry.save()
 	logger.info(f"[STATIC-ASCENSION] {stats}")
@@ -526,6 +643,43 @@ def _category_from_score(score: float) -> str:
 	return "work" if float(score) >= threshold else "social"
 
 
+def _candidate_category(fm: Dict[str, Any], body: str) -> str:
+	"""Categoría work/social de un refine/anotación (mismo criterio que el ascenso).
+
+	Prioridad: `dual_route` (annotate, MEM-006) → `category_score` (refine) →
+	heurística.
+	"""
+	route = str(fm.get("dual_route") or "").strip().lower()
+	if route in ("work", "social"):
+		return route
+	score = fm.get("category_score")
+	if score is not None:
+		try:
+			return _category_from_score(float(score))
+		except Exception:
+			pass
+	from red_pill.metabolism.categorizer import detect_category_heuristics
+
+	return detect_category_heuristics(body)
+
+
+def _session_created_at(registry: Any, source: str, session_id: str) -> Optional[float]:
+	"""Fecha REAL de la sesión (epoch) desde el registry, o None si no consta.
+
+	El engrama ascendido debe llevar `created_at` = fecha de la sesión (no la de
+	ascensión): es lo que ordena el hilo de Ariadna. El registry guarda ISO.
+	"""
+	try:
+		state = getattr(registry, "state", None) or {}
+		entry = (state.get("registry", {}).get(source, {}) or {}).get(session_id, {})
+		iso = entry.get("created_at")
+		if not iso:
+			return None
+		return datetime.fromisoformat(str(iso).replace("Z", "+00:00")).timestamp()
+	except Exception:
+		return None
+
+
 def ascender(
 	root: Path,
 	registry: Any,
@@ -562,6 +716,31 @@ def ascender(
 	if fm.get("ascended") and not force:
 		return {"ascended": False, "reason": "already_ascended", "point_id": fm.get("ascended_point_id")}
 
+	# MEM-006: veredicto de validación de contenido.
+	verdict = str(fm.get("validator_approved", "")).strip().lower()
+	if verdict == "false":
+		# Ya hay veredicto negativo (gate de ruido o validador LLM): terminal, no
+		# se reintenta ni se re-sella.
+		return {"ascended": False, "reason": "validator_rejected", "validator": str(fm.get("validator") or "")}
+	approved = verdict == "true"
+	if not approved:
+		# Pre-detección determinista del gate de ruido: sella el rechazo (con su
+		# firma) y no escribe. El validador LLM lo revisará en la fase de validación.
+		from red_pill.utils.telemetry_filter import is_garbage_reason
+
+		gate_reason = is_garbage_reason(body)
+		if gate_reason:
+			_stamp_refine(
+				refine_path,
+				{
+					"validator_approved": False,
+					"validator": "is_garbage",
+					"validator_reason": f"machine-noise: {gate_reason}",
+					"validated_at": datetime.now(timezone.utc).isoformat(),
+				},
+			)
+			return {"ascended": False, "reason": "gate_rejected", "gate_reason": gate_reason}
+
 	significance = float(fm.get("significance", 0.0) or 0.0)
 	emotion = str(fm.get("emotion", "gray"))
 	intensity = float(fm.get("intensity", 0.0) or 0.0)
@@ -572,12 +751,16 @@ def ascender(
 	source = str(fm.get("source") or "")
 
 	score = fm.get("category_score")
+	dual_route = str(fm.get("dual_route") or "").strip().lower()
 	if collection is None:
-		# La clasificación por LLM vive EN EL REFINE (category_score del curador,
-		# verificado 2026-09-14: técnico → 0.8). El clasificador standalone es débil
-		# con el LLM local (tiny_aya devuelve 0.0 siempre) — por eso el ascenso NO
-		# llama al LLM: usa el score del curador o la heurística R1 (fallback).
-		if score is not None:
+		# La clasificación vive EN el refine/anotación (category_score del curador,
+		# verificado 2026-09-14: técnico → 0.8; dual_route en annotate, MEM-006).
+		# El ascenso NO llama al LLM: usa la etiqueta o la heurística R1 (fallback).
+		if dual_route == "none":
+			return {"ascended": False, "reason": "dual_route_none"}
+		if dual_route in ("work", "social"):
+			category = dual_route
+		elif score is not None:
 			category = _category_from_score(float(score))
 		else:
 			from red_pill.metabolism.categorizer import detect_category_heuristics
@@ -609,6 +792,9 @@ def ascender(
 		"relics": relics,
 		"cross_refs": cross_refs,
 		"origin": "memento",
+		"node_type": "memento_engram",
+		"ascended_at": datetime.now(timezone.utc).isoformat(),
+		"last_reinforced_at": time.time(),
 		"refine_ref": _relative_refine_ref(root, refine_path),
 		# Parámetros de la idea (2026-09-15): se guardan en el engrama para poder
 		# filtrar/purgar después (p.ej. bajar el umbral y purgar los engramas con
@@ -620,6 +806,21 @@ def ascender(
 	}
 	if score is not None:
 		metadata["category_score"] = round(float(score), 2)
+	for axis in ("work_score", "social_score"):
+		val = fm.get(axis)
+		if val is not None:
+			try:
+				metadata[axis] = round(float(val), 2)
+			except (TypeError, ValueError):
+				pass
+	if dual_route in ("work", "social", "none"):
+		metadata["dual_route"] = dual_route
+	if fm.get("quality_flags"):
+		metadata["quality_flags"] = list(fm.get("quality_flags") or [])
+	if approved:
+		# Excepción auditada: entró al margen del filtro de ruido con validación.
+		metadata["content_verified"] = True
+		metadata["ascended_by"] = "validated"
 
 	new_id = memory_manager.add_memory(
 		collection=collection,
@@ -629,6 +830,8 @@ def ascender(
 		point_id=point_id,
 		emotion=emotion,
 		intensity=intensity,
+		content_verified=approved,
+		created_at=_session_created_at(registry, source, session_id),
 	)
 	if not new_id:
 		# El quality gate (`is_garbage`) o un fallo de escritura lo rechazó.
@@ -655,3 +858,70 @@ def ascender(
 
 	logger.info(f"[ASCENSION] {refine_path.name} → {collection} (point {point_id[:8]}…)")
 	return {"ascended": True, "reason": "ok", "collection": collection, "point_id": point_id}
+
+
+def reconcile_orphans(
+	root: Path,
+	memory_manager: Any = None,
+	*,
+	dry_run: bool = False,
+	collections: Tuple[str, ...] = ("work_memories", "social_memories"),
+) -> Dict[str, Any]:
+	"""Borra de Qdrant los engramas de Memento cuya nota ya no existe en el árbol.
+
+	Re-anotar una sesión (prompt nuevo → títulos nuevos → stems nuevos) borra las
+	notas viejas del árbol (MEM-009 F1: huérfanas fuera tras el `_meta`), pero sus
+	puntos en Qdrant seguían vivos con `ascended_point_id` distinto → memoria
+	duplicada. Esta pasada cierra el ciclo: un punto `origin=memento` cuyo
+	`refine_ref` apunta a `annotate/` y cuyo fichero ya no existe es huérfano.
+
+	Seguridad: solo se considera huérfano si la sesión tiene `annotate/_meta.json`
+	(la re-anotación terminó) y NO tiene `annotate/_partial.json` (no está a medias).
+	Los `refine/` legacy no se tocan (su ciclo es `--replace-legacy`).
+	"""
+	from qdrant_client import models
+
+	if memory_manager is None:
+		from red_pill.memory import MemoryManager
+
+		memory_manager = MemoryManager()
+	root = Path(root)
+	stats: Dict[str, Any] = {"revisados": 0, "huerfanos": 0, "omitidos_sesion_a_medias": 0, "por_coleccion": {}, "dry_run": dry_run}
+	for collection in collections:
+		try:
+			if not memory_manager.client.collection_exists(collection):
+				continue
+		except Exception:
+			continue
+		orphans: List[Any] = []
+		offset = None
+		while True:
+			points, offset = memory_manager.client.scroll(
+				collection_name=collection,
+				scroll_filter=models.Filter(must=[models.FieldCondition(key="origin", match=models.MatchValue(value="memento"))]),
+				limit=1000,
+				offset=offset,
+				with_payload=["refine_ref"],
+				with_vectors=False,
+			)
+			for p in points:
+				stats["revisados"] += 1
+				ref = str((p.payload or {}).get("refine_ref") or "")
+				if "/annotate/" not in ref:
+					continue
+				note = root / ref
+				if note.exists():
+					continue
+				annotate_dir = note.parent
+				if not (annotate_dir / "_meta.json").exists() or (annotate_dir / "_partial.json").exists():
+					stats["omitidos_sesion_a_medias"] += 1
+					continue
+				orphans.append(p.id)
+			if offset is None:
+				break
+		stats["por_coleccion"][collection] = len(orphans)
+		stats["huerfanos"] += len(orphans)
+		if orphans and not dry_run:
+			memory_manager.client.delete(collection_name=collection, points_selector=models.PointIdsList(points=orphans))
+			logger.info(f"[ASCENSION] reconcile: {len(orphans)} engramas huérfanos borrados de {collection}")
+	return stats

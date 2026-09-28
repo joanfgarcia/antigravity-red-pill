@@ -236,6 +236,14 @@ def compute_step_timeout(payload: Dict[str, Any], progress: Optional[Dict[str, A
 	else:
 		bound = int(cfg.JOB_STEP_TIMEOUT_DEFAULT)
 
+	# 2026-09-24: el `max_step_minutes` declarado es un SUELO, no solo el fallback
+	# sin historial. La EMA de pasos rápidos recortaba etapas compuestas largas
+	# (nightly: el pase annotate declarado 5400s quedó abatido a 1799s por el
+	# floor de 1800). Con esto, el presupuesto del step respeta lo declarado y
+	# las etapas internas conservan su propio timeout (`_stage_timeout`).
+	if declared:
+		bound = max(bound, int(declared) * 60)
+
 	return int(bound * (2 ** max(0, int(attempts))))
 
 
