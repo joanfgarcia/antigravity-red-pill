@@ -2,7 +2,15 @@
 
 This guide documents the full pipeline to preserve and query historical Antigravity conversations in the Bünker memory substrate.
 
-> **Memento Chronicle (RFC-002).** Since v7.22.0 the raw layer lives on disk:
+> **⚠️ ESTADO v8.0.0 (2026-09-28).** La ingesta legacy ha sido **retirada**:
+> `archive_memories` está **purgada** (snapshot previo) y el destino de la
+> memoria es el **árbol Memento en disco** + ascensión + hubs/hilo. El pipeline
+> real lo ejecuta el **ciclo nocturno** (`redpill-nightly.timer`, 03:00 →
+> `chronicle → sleep`). Los pasos manuales de más abajo son **HISTÓRICOS**
+> (el descifrado/extracción sigue siendo útil como productor de
+> `unencrypted_conversations/` para la fuente Memento de antigravity).
+
+> **Memento Chronicle (RFC-002).** Since v8.0.0 the raw layer lives on disk:
 > the nightly chronicle also renders every session to the Memento tree
 > (`~/.local/share/red-pill/memento/`, canonical `memento/index.md` + `raw/`
 > provider backups) before ingesting into Qdrant. Exact recall is served by the
@@ -19,26 +27,31 @@ This guide documents the full pipeline to preserve and query historical Antigrav
 
 ---
 
-## 🤖 Automated Mode (Recommended)
+## 🤖 Automated Mode (nightly, 03:00)
 
-The `redpill-chronicle.timer` runs **automatically every night at 04:00** via `chronicle_daily.py`. It handles Steps 1–4 autonomously (decrypt → ingest → distill → refine).
+El **ciclo nocturno** (`redpill-nightly.timer` → `redpill-nightly.service`) es la
+única entrada automática: encola `configs/jobs/nightly.yaml` (composition
+`chronicle → sleep`). El chronicle renderiza el delta a Memento (disco) y el
+sueño consolida, teje y asciende (hubs/hilo) — ya **sin** ingesta a
+`archive_memories` (retirada).
 
-**Install the timer (once after installation or update):**
+**Verificar el timer (una vez por instalación/actualización):**
 ```bash
 uv run python scripts/schedule_pulse.py --interval-hours 1
-systemctl --user list-timers | grep chronicle
-# Expected output: redpill-chronicle.timer  NEXT: tomorrow 04:00
+systemctl --user list-timers | grep nightly
+# Esperado: redpill-nightly.timer  NEXT: tomorrow 03:00
 ```
 
-**Manual catch-up (if the timer missed a day):**
+**Catch-up manual:**
 ```bash
-uv run python scripts/chronicle_daily.py --yesterday
-uv run python scripts/chronicle_daily.py --all   # all unprocessed sessions
+uv run python scripts/memento_migrate.py                 # render delta a Memento
+uv run python scripts/memento_migrate.py --all           # reproceso completo
+uv run red-pill job submit --recipe nightly --kick       # ciclo completo ahora
 ```
 
-> [!NOTE]
-> The timer uses `Persistent=true` — if the laptop was off at 04:00, it fires on next boot.
-> See [AGENT_UPDATE_GUIDE §4.11](AGENT_UPDATE_GUIDE.md) for full maintenance instructions.
+> **Persistent=true**: si el portátil estaba apagado a las 03:00, el timer se
+> dispara al arrancar. Los timers individuales `redpill-chronicle.timer` y
+> `redpill-sleep.timer` fueron **retirados** (decisión §5.3 opción A, AD-025).
 
 ---
 

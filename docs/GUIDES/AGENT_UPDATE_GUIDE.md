@@ -251,26 +251,28 @@ Replace old version with new in all 6 file locations before pushing.
     
     This ensures the Bünker frontfrontal context remains clean of stale anomalies.
 
-    #### §4.11 Chronicle Timer (v6.2.5)
+    #### §4.11 Nightly Cycle Timer (v8.0.0)
 
-    The `redpill-chronicle.timer` runs `chronicle_daily.py` every night at **04:00** to ingest and distill the previous day's conversation logs into `archive_memories`. It is installed automatically by `schedule_pulse.py`.
+    El único timer metabólico es `redpill-nightly.timer`: encola `nightly.yaml`
+    (chronicle → sleep) cada noche a las **03:00**. Sustituye a los antiguos
+    `redpill-chronicle.timer` y `redpill-sleep.timer` (retirados).
 
     **Install/verify:**
     ```bash
     uv run python scripts/schedule_pulse.py --interval-hours 1
-    systemctl --user list-timers | grep chronicle
-    # Expected: redpill-chronicle.timer  → NEXT: tomorrow 04:00
+    systemctl --user list-timers | grep nightly
+    # Expected: redpill-nightly.timer  → NEXT: tomorrow 03:00
     ```
 
     **Run manually (catch-up):**
     ```bash
-    uv run python scripts/chronicle_daily.py --yesterday
-    uv run python scripts/chronicle_daily.py --all   # process all unprocessed sessions
+    uv run red-pill job submit --recipe nightly --kick
+    uv run python scripts/memento_migrate.py            # solo render delta a Memento
     ```
 
     > [!IMPORTANT]
-    > The timer uses `Persistent=true` — if the laptop was off at 04:00, it fires on next boot.
-    > If the timer is missing (`list-timers` shows nothing for chronicle), re-run `schedule_pulse.py`.
+    > Persistent=true: si el portátil estaba apagado a las 03:00, se dispara al arrancar.
+    > Si falta el timer, re-ejecuta `schedule_pulse.py`.
 
 
     #### §4.12 Emotional Ferrari & Biological Wake/Sleep (v6.3.0)
@@ -281,7 +283,7 @@ Replace old version with new in all 6 file locations before pushing.
     ```bash
     uv run python scripts/schedule_pulse.py --interval-hours 1
     systemctl --user list-timers | grep redpill
-    # Expected: redpill-wake.timer + redpill-sleep.timer
+    # Expected: redpill-wake.timer + redpill-nightly.timer
     ```
 
     **Ferrari defaults** (all `True`):

@@ -1,10 +1,15 @@
-"""GPU-heavy consolidation: drain -> staging -> gamma (session anchors).
+"""Fase `consolidation` = HubSynthesisPhase (single-writer).
 
-The tightly-coupled drain loop (chunk -> distill -> fixate -> link -> hub) stays
-intact here as ADR-SLEEP-001 requires; only total_processed crosses the phase
-boundary. requires_gpu=True, so the runner defers this phase (benign vram_busy
-status signal) when the card is committed to training, while the CPU-only
-maintenance phases still run.
+Con `SW_INGEST_RETIRED` (v8.0.0, estado recomendado) esta fase **solo** sintetiza
+hubs de sesión + hilo de Ariadna sobre los engramas curados ya en Qdrant
+(`_run_hub_and_thread`); sin drenaje, sin staging, sin raw_parents. La fuente de
+work/social es la ascensión de Memento.
+
+El **drenaje legacy** (`interaction_memories` → distill → work/social, con
+staging) sigue presente para el rollback (flag OFF) hasta la demolición; queda
+marcado y es retirable. `requires_gpu=True`: el runner difiere la fase (señal
+benigna `vram_busy`) si la GPU está comprometida, mientras las fases CPU
+(mantenimiento) siguen corriendo.
 """
 
 import json
@@ -146,11 +151,11 @@ def _run_hub_and_thread(memory_manager) -> None:
 
 
 class HubSynthesisPhase(SleepPhase):
-	"""Fase del sueño: drenaje (legacy, retirable) + síntesis de hubs.
+	"""Fase del sueño: hubs+hilo (single-writer) o drenaje legacy (rollback).
 
 	Con `SW_INGEST_RETIRED` solo queda la síntesis de hubs sobre engramas
-	existentes (single-writer). El `name` = "consolidation" se conserva como
-	stage-id del DAG (G21)."""
+	existentes. El `name` = "consolidation" se conserva como stage-id del DAG
+	(G21)."""
 
 	@property
 	def name(self) -> str:

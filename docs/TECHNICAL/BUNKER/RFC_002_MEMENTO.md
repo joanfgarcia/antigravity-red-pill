@@ -67,6 +67,13 @@ Today the Bünker records *everything* twice, and both times into Qdrant vectors
   (opencode.db SQLite, Claude Code JSONL, Antigravity exports), normalizes them,
   and archives them atomized into `archive_memories`
   (chronicle_node / monolith_parent / idea_fragment with sequential axon threading).
+> **Actualización v8.0.0 (2026-09-28).** El pipeline B descrito arriba está
+> **RETIRADO**: `scripts/chronicle_daily.py` ya no existe (fue eliminado), la
+> ingesta a `archive_memories` está retirada y `archive_memories` está **purgada**
+> (snapshot previo). El productor real es el **ciclo nocturno** (03:00 →
+> `chronicle` recipe, que renderiza el árbol Memento en disco) + scripting
+> manual con `scripts/memento_migrate.py`. Este apartado se conserva como
+> contexto histórico del problema que motivó Memento.
 - The codebase itself already acknowledges the redundancy:
   `src/red_pill/metabolism/maintenance.py:644` notes that the raw verbatim
   interaction is already archived in `archive_memories`.

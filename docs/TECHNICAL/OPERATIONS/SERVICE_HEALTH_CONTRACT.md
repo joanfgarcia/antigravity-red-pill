@@ -216,8 +216,7 @@ The manifest is loaded via `red_pill.core.service_contract.load_manifest()` whic
 | `redpill-auditor` | oneshot | 120s | ❌ | ❌ | core | ✅ | — |
 | `redpill-queue` | oneshot | 120s | ❌ | ❌ | core | ❌ | — |
 | `redpill-wake` | oneshot | 30s | ❌ | ❌ | core | ❌ | — |
-| `redpill-sleep` | oneshot | 120s | ❌ | ❌ | core | ❌ | — |
-| `redpill-chronicle` | oneshot | 60s | ❌ | ❌ | core | ❌ | — |
+| `redpill-nightly` | oneshot | 120s | ❌ | ❌ | core | ❌ | — (sustituye a sleep+chronicle, retirados) |
 | `redpill-extractor` | oneshot | 120s | ❌ | ❌ | core | ❌ | — |
 | `redpill-janitor` | oneshot | 60s | ❌ | ❌ | core | ✅ | — |
 
