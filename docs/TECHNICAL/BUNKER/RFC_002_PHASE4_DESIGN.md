@@ -672,8 +672,15 @@ janitor TTL (`SW_PURGE_GATE_ENABLED`, ya ON).
 Cuando 10.2.3 esté probado, un PR dedicado (no mezclado con features) elimina:
 
 1. `consolidation.py`: rama drain/distill/staging + el `if retired` (queda hubs+hilo).
-2. `ls_snatcher.py` + `chronicle/antigravity_plugin.py` (llamada) + `chronicle/claude_code_plugin.py`.
-3. `paths.get_staging_dir` + directorio `staging/` + `scripts/chronicle_extractor.py` (revisar qué queda por extraer).
+2. `ls_snatcher.py` + `chronicle/antigravity_plugin.py` (llamada) + **la clase
+   `ClaudeCodeExtractorPlugin`** de `chronicle/claude_code_plugin.py` (los
+   **helpers** ya viven en `utils/chronicle_render.py` — ver SHARD-01 resuelto).
+3. `paths.get_staging_dir` + directorio `staging/` (+ `paths_to_wipe`/`migration_map`).
+   **CORREGIDO (SHARD-10, 2026-09-28)**: `scripts/chronicle_extractor.py` (+`_ls`/`_aes`)
+   NO se borra — es el **productor de Memento** para antigravity: escribe
+   `unencrypted_conversations/` que consume `chronicle_sources/antigravity.py`
+   (vivo, `redpill-extractor.timer`). Es distinto de `ls_snatcher.py` (ESE sí es
+   la vía legacy a `staging/`).
 4. `telegram/session.py`: `copy_to_staging` + sus dos ramas.
 5. Flags sin consumidor (`SW_INGEST_RETIRED` y los de migración) + sus tests.
 
@@ -756,3 +763,16 @@ sin riesgo funcional.
 **Pendiente para desbloquear RETIRED**: SHARD-10/01 (autonomía de las fuentes
 Memento) y verificar la cobertura de `chronicle_sources/telegram.py` (existe y
 está en `CHRONICLE_ARCHIVE_SOURCES`).
+
+- **SHARD-01 CERRADO (2026-09-28)**: los helpers compartidos
+  (`extract_user_content`, `extract_assistant_blocks`, `_render_tool_use`,
+  `_render_tool_result`) se movieron de `metabolism/chronicle/claude_code_plugin.py`
+  a **`src/red_pill/utils/chronicle_render.py`** (módulo neutral). Las fuentes de
+  Memento (`chronicle_sources/{opencode,claude_code}.py`) ya NO importan del
+  paquete legacy (guardarraíl de test); el plugin legacy los re-exporta
+  (mismas funciones, sin duplicar). Ya se puede borrar la clase extractora sin
+  romper Memento.
+- **SHARD-10 CERRADO (2026-09-28)**: `scripts/chronicle_extractor*.py` es el
+  **productor de Memento** (antigravity → `unencrypted_conversations/`), NO
+  legacy; §10.4.3 corregido. Queda desbloqueado borrar `staging/` y
+  `ls_snatcher` sin tocar el extractor.

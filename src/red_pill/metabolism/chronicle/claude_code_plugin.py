@@ -13,6 +13,25 @@ from typing import Any, Dict, List
 from red_pill.core.paths import get_data_dir, get_staging_dir
 from red_pill.metabolism.chronicle.base import ChronicleExtractorPlugin
 
+# SHARD-01 (2026-09-28): helpers COMPARTIDOS con las fuentes de Memento
+# (chronicle_sources/*) movidos a un módulo neutral; se re-exportan aquí
+# para no romper imports existentes. NO borrar hasta demoler la vía legacy.
+from red_pill.utils.chronicle_render import (
+	_render_tool_result,
+	_render_tool_use,
+	extract_assistant_blocks,
+	extract_user_content,
+)
+
+# Re-export para compatibilidad (quien importaba los helpers desde este módulo).
+__all__ = [
+	"ClaudeCodeExtractorPlugin",
+	"extract_assistant_blocks",
+	"extract_user_content",
+	"_render_tool_use",
+	"_render_tool_result",
+]
+
 logger = logging.getLogger(__name__)
 
 
@@ -37,91 +56,6 @@ def save_offsets(offsets: Dict[str, int]) -> None:
 			json.dump(offsets, f, indent=4)
 	except Exception as e:
 		logger.error(f"[Claude Code Plugin] Failed to save offsets: {e}")
-
-
-def _render_tool_use(name: str, inp: Dict[str, Any]) -> str:
-	"""Compact tool-use marker for the Chronicle (noise pre-filter).
-
-	Full input JSON (file contents, diffs, scripts) used to enter the Bünker
-	verbatim as immune raw_parents — thousands of machine-noise engrams per
-	agentic session (the retrospective's 87%-raw-material problem). The narrative
-	only needs WHAT tool acted on WHAT target; the code itself lives in git.
-	"""
-	import red_pill.config as cfg
-
-	if not getattr(cfg, "CHRONICLE_STRIP_TOOL_PAYLOADS", True):
-		return f"[TOOL USE: {name}({json.dumps(inp)})]"
-	hint = ""
-	if isinstance(inp, dict):
-		for key in ("file_path", "path", "command", "query", "pattern", "url", "description", "subject"):
-			value = inp.get(key)
-			if isinstance(value, str) and value.strip():
-				hint = f" {key}={value.strip()[:80]}"
-				break
-	return f"[TOOL: {name}{hint}]"
-
-
-def _render_tool_result(tool_use_id: str, output: str) -> str:
-	"""Compact tool-result marker: keep the head (where failures/verdicts live),
-	drop the bulk."""
-	import red_pill.config as cfg
-
-	if not getattr(cfg, "CHRONICLE_STRIP_TOOL_PAYLOADS", True):
-		return f"[TOOL RESULT: id={tool_use_id} output={output}]"
-	head = " ".join(str(output).split())[:160]
-	omitted = len(output) - len(head)
-	suffix = f" (+{omitted} chars omitted)" if omitted > 0 else ""
-	return f"[TOOL RESULT: {head}{suffix}]"
-
-
-def extract_user_content(message: Dict[str, Any]) -> str:
-	content = message.get("content", "")
-	if isinstance(content, str):
-		return content
-	elif isinstance(content, list):
-		parts = []
-		for block in content:
-			if not isinstance(block, dict):
-				continue
-			b_type = block.get("type")
-			if b_type == "text":
-				parts.append(block.get("text", ""))
-			elif b_type == "tool_result":
-				tool_use_id = block.get("tool_use_id", "")
-				sub_content = block.get("content", "")
-				if isinstance(sub_content, str):
-					parts.append(_render_tool_result(tool_use_id, sub_content))
-				elif isinstance(sub_content, list):
-					sub_parts = []
-					for sub_block in sub_content:
-						if not isinstance(sub_block, dict):
-							continue
-						if sub_block.get("type") == "text":
-							sub_parts.append(sub_block.get("text", ""))
-						elif sub_block.get("type") == "tool_reference":
-							sub_parts.append(f"tool_ref:{sub_block.get('tool_name')}")
-					parts.append(_render_tool_result(tool_use_id, ", ".join(sub_parts)))
-		return "\n".join(parts)
-	return ""
-
-
-def extract_assistant_blocks(message: Dict[str, Any]) -> List[Dict[str, Any]]:
-	blocks = []
-	content = message.get("content", [])
-	if isinstance(content, list):
-		for block in content:
-			if not isinstance(block, dict):
-				continue
-			b_type = block.get("type")
-			if b_type == "text":
-				blocks.append({"intent": "ASSISTANT", "message": {"text": block.get("text", "")}})
-			elif b_type == "tool_use":
-				name = block.get("name", "")
-				inp = block.get("input", {})
-				blocks.append({"intent": "ASSISTANT", "message": {"text": _render_tool_use(name, inp)}})
-	elif isinstance(content, str):
-		blocks.append({"intent": "ASSISTANT", "message": {"text": content}})
-	return blocks
 
 
 class ClaudeCodeExtractorPlugin(ChronicleExtractorPlugin):

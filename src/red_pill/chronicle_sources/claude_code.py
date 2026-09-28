@@ -86,7 +86,7 @@ class ClaudeCodeSourcePlugin(ChronicleSourcePlugin):
 		return self._parse_transcript(raw_file)
 
 	def _parse_transcript(self, path: Path) -> List[Dict[str, Any]]:
-		from red_pill.metabolism.chronicle.claude_code_plugin import extract_assistant_blocks, extract_user_content
+		from red_pill.utils.chronicle_render import extract_assistant_blocks, extract_user_content
 
 		messages: List[Dict[str, Any]] = []
 		with open(path, "r", encoding="utf-8") as f:

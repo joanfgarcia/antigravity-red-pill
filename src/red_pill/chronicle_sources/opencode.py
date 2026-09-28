@@ -64,7 +64,7 @@ class OpencodeSourcePlugin(ChronicleSourcePlugin):
 		if p_type == "text":
 			return part.get("text", "") or ""
 		if p_type == "tool":
-			from red_pill.metabolism.chronicle.claude_code_plugin import _render_tool_use
+			from red_pill.utils.chronicle_render import _render_tool_use
 
 			state = part.get("state") or {}
 			return _render_tool_use(part.get("tool", ""), state.get("input") or {})
