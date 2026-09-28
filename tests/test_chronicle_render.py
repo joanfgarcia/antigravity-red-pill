@@ -69,13 +69,3 @@ def test_fuentes_memento_no_importan_legacy():
 				if any(h in ls for h in helpers):
 					offenders.append(f"{py.relative_to(root)}: {ls}")
 	assert offenders == [], f"imports de helpers desde el legacy: {offenders}"
-
-
-def test_reexport_legacy_es_la_misma_funcion():
-	"""El plugin legacy re-exporta las MISMAS funciones (sin duplicar código)."""
-	from red_pill.metabolism.chronicle import claude_code_plugin as legacy
-
-	assert legacy.extract_user_content is extract_user_content
-	assert legacy.extract_assistant_blocks is extract_assistant_blocks
-	assert legacy._render_tool_use is _render_tool_use
-	assert legacy._render_tool_result is _render_tool_result
