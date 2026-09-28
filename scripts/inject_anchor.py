@@ -24,6 +24,7 @@ import os
 import re
 import shutil
 import sys
+import time
 from dataclasses import dataclass
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -174,11 +175,29 @@ def _legacy_constraint_re(name):
 	)
 
 
+def _backup_file(path):
+	"""Respalda el contenido ANTERIOR antes de editar.
+
+	- `<path>.bak`: copia PRISTINA (solo se crea una vez; nunca se pisa) — sirve
+	para convivir con terceros y revertir al original del usuario.
+	- `<path>.bak.<YYYYMMDD_HHMMSS>`: copia por edicion (historico).
+	"""
+	if not os.path.exists(path):
+		return
+	pristine = path + ".bak"
+	if not os.path.exists(pristine):
+		shutil.copy2(path, pristine)
+	try:
+		shutil.copy2(path, f"{path}.bak.{time.strftime('%Y%m%d_%H%M%S')}")
+	except OSError:
+		pass
+
+
 def _atomic_write(path, content, backup=True):
 	parent = os.path.dirname(os.path.abspath(path))
 	os.makedirs(parent, exist_ok=True)
 	if backup and os.path.exists(path):
-		shutil.copy2(path, path + ".bak")
+		_backup_file(path)
 	tmp = path + ".tmp"
 	with open(tmp, "w", encoding="utf-8") as f:
 		f.write(content)

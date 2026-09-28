@@ -51,3 +51,22 @@ def test_splice_ide_pi_escribe_override_y_es_idempotente(tmp_path):
 	assert text.count("<!-- REDPILL:BEGIN") == 2
 	assert "AUTOMÁTICO en Pi" in text  # semilla pi, no la genérica MCP
 	assert m.splice_ide("pi", anchors, SEEDS_DIR, ws, VARS, backup=False) == 0  # converge
+
+
+def test_backup_pristino_y_por_edicion(tmp_path):
+	"""Primera edición crea .bak prístino; cada edición deja .bak.<ts>."""
+	import glob
+
+	m = _load()
+	f = tmp_path / "CLAUDE.md"
+	f.write_text("contenido original\n", encoding="utf-8")
+
+	m._atomic_write(str(f), "version 1\n", backup=True)
+	assert f.read_text(encoding="utf-8") == "version 1\n"
+	assert (tmp_path / "CLAUDE.md.bak").read_text(encoding="utf-8") == "contenido original\n"
+
+	m._atomic_write(str(f), "version 2\n", backup=True)
+	# el .bak prístino NO se pisa
+	assert (tmp_path / "CLAUDE.md.bak").read_text(encoding="utf-8") == "contenido original\n"
+	# hay al menos una copia por edición
+	assert glob.glob(str(tmp_path / "CLAUDE.md.bak.*"))

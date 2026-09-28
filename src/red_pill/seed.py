@@ -26,6 +26,34 @@ ID_OPERATOR_MOOD = "00000000-0000-0000-0000-000000000060"
 ID_PROTOCOL_VERSION = "00000000-0000-0000-0000-000000000070"
 
 
+def _protocol_version_text() -> str:
+	"""Texto del engrama PROTOCOL VERSION derivado del CHANGELOG (no hardcodeado).
+
+	Así la siembra nunca publica una versión falsa: lee la última release del
+	CHANGELOG; si falla, cae a `red_pill.__version__`.
+	"""
+	from pathlib import Path as _Path
+
+	from red_pill import __version__
+
+	try:
+		from red_pill.bunker_lifecycle import parse_changelog_release
+
+		root = _Path(__file__).resolve().parent.parent.parent
+		rel = parse_changelog_release((root / "CHANGELOG.md").read_text(encoding="utf-8"))
+		if rel and rel.get("version"):
+			return (
+				f"PROTOCOL VERSION: Red Pill Protocol v{rel['version']}. Released {rel['date']}."
+				+ (f" Codename: {rel['codename']}." if rel.get("codename") else "")
+				+ (f" Key features: {rel['features']}." if rel.get("features") else "")
+				+ (f" Previous stable: v{rel['previous']}." if rel.get("previous") else "")
+				+ " This engram MUST be updated on every version bump."
+			)
+	except Exception:
+		pass
+	return f"PROTOCOL VERSION: Red Pill Protocol v{__version__}. This engram MUST be updated on every version bump."
+
+
 def seed_project(manager: MemoryManager) -> None:
 	"""Initializes memory collections and genesis engrams."""
 	collections = [
@@ -186,7 +214,7 @@ def inject_genesis(manager: MemoryManager) -> None:
 		{
 			"id": ID_PROTOCOL_VERSION,
 			"coll": "directive_memories",
-			"text": "PROTOCOL VERSION: Red Pill Protocol v7.3.1. Released 2026-06-26. Codename: Declarative Lore Skins & Directives Refactoring. Key features: Structured lore_skins.yaml refractions, Token-optimized system prompts, Test-validated skins and compaction, Ariadne's Thread resilience. Previous stable: v7.3.0. This engram MUST be updated on every version bump.",
+			"text": _protocol_version_text(),
 			"meta": {
 				"importance": 10.0,
 				"color": "gray",

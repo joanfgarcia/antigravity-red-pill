@@ -786,8 +786,10 @@ async def handle_check_system_health(arguments: Dict[str, Any]):
 	schema={"type": "object", "properties": {}},
 )
 async def handle_read_core_directives(arguments: Dict[str, Any]):
+	from red_pill.core.directives import active_directive_contents
+
 	points, _ = MemoryManager().client.scroll(collection_name="directive_memories", limit=100, with_payload=True)
-	directives = [p.payload.get("content", "") for p in points if p.payload and p.payload.get("immune")]
+	directives = active_directive_contents(points)
 	return [types.TextContent(type="text", text="--- BÜNKER CORE DIRECTIVES ---\n" + "\n\n".join(directives))]
 
 
