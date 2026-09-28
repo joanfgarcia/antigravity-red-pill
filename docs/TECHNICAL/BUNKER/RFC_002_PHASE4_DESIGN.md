@@ -702,3 +702,41 @@ Cuando 10.2.3 esté probado, un PR dedicado (no mezclado con features) elimina:
 **Secuencia de release**: observar (esta semana) → PR de demolición (quita legacy
 + flags de migración + añade migrador y doc) → release major. La activación de
 G1–G4 es **banco de pruebas del operador**, no el entregable.
+
+### 10.6 Hallazgos del scout (2026-09-28) — la demolición está BLOQUEADA
+
+Scout (lentes architecture + consistency) sobre `src/` vs §10.3/§10.4 → **14
+shards** en `.cell/shards.json` (reportes `.cell/reports/scout-architecture.json`
+y `scout-consistency.json`). Veredicto: **NO demoler y NO encender
+`SW_INGEST_RETIRED` todavía**; el inventario de §10.4 era optimista.
+
+**Bloqueadores críticos (consent `operator`):**
+
+| Shard | Qué | Por qué bloquea |
+|---|---|---|
+| SHARD-01 | `chronicle/claude_code_plugin.py` aloja **helpers compartidos** (`extract_user_content`, `extract_assistant_blocks`, `_render_tool_use/_result`) que consume Memento | §10.4.2 decía borrar el módulo entero → rompería la fuente Memento. Hay que mover los helpers a un módulo neutral y borrar solo la clase extractora |
+| SHARD-10 | `scripts/chronicle_extractor.py` **es el productor real** de `unencrypted_conversations/` que consume `chronicle_sources/antigravity.py` (vivo, `redpill-extractor.timer` horario) | §10.4.3 lo daba por muerto con un "revisar qué queda". No lo está: hay que decidir si `chronicle_extractor_ls.py`/`_aes.py` se mantienen como productor de Memento |
+| SHARD-02 | `get_staging_dir` tiene consumidores **fuera** del drenaje (`paths_to_wipe` en `memory.py:1342`, `migration_map.staging_buffer`) | Borrarlo sin quitar esos consumidores deja referencias colgando |
+
+**Funcional bajo `SW_INGEST_RETIRED` (arreglar ANTES de encenderlo):**
+
+| Shard | Qué | Efecto |
+|---|---|---|
+| SHARD-13 | `telegram/session.py::run_janitor_sweep` decide la purga por `metadata.source_buffer_id` del drenaje legacy | Con RETIRED ON, las sesiones Telegram `pending_purge` **nunca se purgarían** (acumulación). Hacer el predicado Memento-consciente (`telegram:<uuid>` en el registro) |
+| SHARD-12 | `TelegramSessionManager.__init__` llama `get_staging_dir()` (no cubierto por §10.4.4) | Ampliar el inventario de Telegram (import + atributo `staging_dir`) |
+
+**Correcciones al inventario §10.4 (medios):**
+- **SHARD-03**: falta `rituals.py::consolidation_ritual` (Phase 0 'snatch' a staging), `scripts/trigger_pulse.py` y la config `CHRONICLE_*`.
+- **SHARD-04/05**: enumerar flags de migración vs feature; añadir `MEMENTO_GATE_ENFORCED` (sin consumidor).
+- **SHARD-06**: listar tests huérfanos (`tests/test_claude_code_plugin.py`; reescribir los de drain en `test_sleep_phases.py`/`test_sleep.py`).
+- **SHARD-11**: docstrings de `consolidation.py` describen aún el pipeline legacy.
+
+**Docs desactualizadas (bajos/medios):** SHARD-08
+(`CHRONICLE_INGESTION_GUIDE.md`), SHARD-09 (`AGENT_UPDATE_GUIDE.md` +
+`SERVICE_HEALTH_CONTRACT.md` citan timers retirados), SHARD-14
+(`RFC_002_MEMENTO.md` cita `chronicle_daily.py` inexistente).
+
+**Consecuencia para la secuencia:** el orden de §10.2 cambia — **antes** de
+encender `SW_INGEST_RETIRED` hay que resolver SHARD-13 (purga Telegram) y
+SHARD-10/01 (autonomía de las fuentes Memento). El resto son obras de demolición
+sin riesgo funcional.
