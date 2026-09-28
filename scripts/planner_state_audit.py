@@ -11,9 +11,9 @@ candidato a `in-progress`; un `implemented` sin merge, un `closed` sin evidencia
 un `blocked`/`paused` sin `reason` son banderas.
 
 Uso:
-    uv run python scripts/planner_state_audit.py                       # desk por defecto, repo = git root del cwd
-    uv run python scripts/planner_state_audit.py --repo ~/src/neon-link --json
-    uv run python scripts/planner_state_audit.py --only AWAKEN-002 --strict
+uv run python scripts/planner_state_audit.py
+uv run python scripts/planner_state_audit.py --repo ~/src/neon-link --json
+uv run python scripts/planner_state_audit.py --only AWAKEN-002 --strict
 """
 
 from __future__ import annotations

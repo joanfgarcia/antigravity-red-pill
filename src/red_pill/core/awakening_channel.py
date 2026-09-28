@@ -1,18 +1,10 @@
 """Canal de notas del despertar (AWAKEN-002, direcciones 1 y 3).
 
-El desk (`${AGENT_CORE_DIR}/awakening/notes/`) es un buzón de mano a mano:
+El desk (`${AGENT_CORE_DIR}/awakening/notes/`) es un buzón de mano a mano.
+Dirección 1 (operador → despertar): una nota sin `para:` (o `para: despertar`) son deberes que el Fixer deja para el siguiente despertar; el despertar las lee como primer paso de su plan.
+Dirección 3 (despertar → operador): una nota `para: <Operador>` es una decisión pendiente; el handshake interactivo cuenta las que aún no llevan `## Leída` del operador y lo dice en una línea del digest.
 
-- **Dirección 1 (operador → despertar)**: una nota sin `para:` (o `para: despertar`)
-  son deberes que el Fixer deja para el siguiente despertar. El despertar las lee
-  como primer paso de su plan.
-- **Dirección 3 (despertar → operador)**: una nota `para: <Operador>` es una
-  decisión pendiente. El handshake interactivo cuenta las que aún no llevan
-  `## Leída` del operador y lo dice en una línea del digest.
-
-Diseño (AWAKEN-002): una nota por archivo; `done/` no es barrera (se puede
-releer); las notas admiten comentarios en medio; cada nota y anotación se firma
-(`— <nombre> · <ISO ts>`). Sin git. Solo lo firmado por el Operador es deber; el
-despertar nunca firma como el Operador.
+Diseño (AWAKEN-002): una nota por archivo; `done/` no es barrera (se puede releer); las notas admiten comentarios en medio; cada nota y anotación se firma (`— <nombre> · <ISO ts>`). Sin git. Solo lo firmado por el Operador es deber; el despertar nunca firma como el Operador.
 """
 
 from __future__ import annotations
