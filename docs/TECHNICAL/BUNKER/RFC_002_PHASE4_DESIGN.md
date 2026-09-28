@@ -4,11 +4,11 @@
 |---|---|
 | **RFC** | 002 (enmienda) |
 | **Title** | Fase 4 — Curaduría dinámica y ascensos diferidos |
-| **Status** | DRAFT (diseño aprobado; **implementado** — ascensión + refuerzo polaroid en producción desde el reseed 2026-09-17; **la ascensión estática sigue en sombra** hasta calibrar clasificador/umbrales — ver `OPERATIONS/SINGLE_WRITER_ROLLOUT.md` §5) |
+| **Status** | DRAFT → **EN ROLLOUT** (diseño implementado; single-writer activado por piezas 2026-09-28; queda retirar la ingesta legacy y demoler). Estado real: §10. |
 | **Author** | Joan García (Operator) / Aleth (Agent) |
 | **Created** | 2026-09-14 |
-| **Updated** | 2026-09-22 |
-| **Related** | [RFC-002](./RFC_002_MEMENTO.md) §4.5 (agentic pass), §4.6 (curation gate), §6 (rollout), §5.1 (sources of truth) |
+| **Updated** | 2026-09-28 |
+| **Related** | [RFC-002](./RFC_002_MEMENTO.md) §4.5 (agentic pass), §4.6 (curation gate), §6 (rollout), §5.1 (sources of truth), [RFC-004](./RFC_004_REALTIME_TAG_SIDECAR.md), `OPERATIONS/SINGLE_WRITER_ROLLOUT.md` |
 
 ---
 
@@ -621,3 +621,84 @@ RFC-002 tras la implementación (o antes, como diseño aprobado).
 
 *Diseño DRAFT 2026-09-14 (implementado; pendiente la secuencia de resiembra).
 A integrar en RFC-002 como §10 tras revisión del operador.*
+---
+
+## 10. Estado de rollout, demolición y release (2026-09-28)
+
+> Este apartado es la **fuente de verdad del estado**. La checklist de §6 queda
+> como registro histórico de implementación (2026-09-14).
+
+### 10.1 HECHO
+
+| Pieza | Estado | Evidencia |
+|---|---|---|
+| Fase 4 core (§6.0–§6.7): fragmentación, refine multi-idea, `ascender()`, polaroid, weaver Memento-consciente, ascenso estático, `nightly.yaml` | ✅ implementado (2026-09-14) | §6; producción desde el reseed |
+| Single-writer M0–M9 (captura, ascensión, dedup, hubs, hilo, ingesta retirada, situación, erosión, interactivos, observabilidad D26) | ✅ implementado | `CHANGELOG` 7.22.0; 50 tests `test_sw_*` |
+| Activación por piezas (G1–G4 en `.env`) | ✅ ACTIVO 2026-09-28 | `OPERATIONS/SINGLE_WRITER_ROLLOUT.md` §6 |
+| RFC-004 (sidecar UDS Laya + tag en captura + solera + aviso WEAK) | ✅ COMPLETE (P1–P4) | `RFC_004_REALTIME_TAG_SIDECAR.md` |
+| Ascenso estático (`MEMENTO_STATIC_ASCENSION_ENABLED`) | ✅ ON | `.env` |
+
+### 10.2 QUEDA (inmediato, en orden)
+
+1. **Verificar tras el nightly** (03:00): `hub_coverage_pct > 0` en work/social,
+   ascensión Memento fluyendo, hilo de Ariadna presente.
+2. **Validar el punto de riesgo**: que `chronicle_sources/` (Memento) cubre
+   **todos** los providers (opencode/claude_code/pi/antigravity). Si algún
+   provider solo entraba por `staging`, no se puede retirar la ingesta.
+3. **Encender `SW_INGEST_RETIRED`** (punto de no retorno operativo) una vez 1–2
+   esté probado.
+4. **Demolición + release** (§10.4–§10.5).
+
+### 10.3 Semántica de `SW_INGEST_RETIRED` (5 puntos)
+
+Retira la **ingesta legacy de material crudo → memoria curada** y el `staging`
+que la alimentaba:
+
+| # | Punto | Efecto con el flag ON |
+|---|---|---|
+| 1 | `phases/consolidation.py` | deja de drenar `interaction_memories`→`work/social` (sin distill/chunks/raw_parents); queda solo hub synthesis + hilo |
+| 2 | `metabolism/ls_snatcher.py` | no snatchea trayectorias de LanguageServers |
+| 3 | `metabolism/chronicle/claude_code_plugin.py` | no extrae JSONL de Claude Code a staging |
+| 4 | `telegram/session.py::mark_for_deletion` | no copia a staging |
+| 5 | `telegram/session.py::trigger_compaction` | no copia a staging |
+
+**NO toca**: la captura a `interaction_memories` (`queue_worker`), el pipeline
+Memento (chronicle→distill→refine/annotate→ascensión), hubs/hilo/erosión/
+situación/tags. No borra datos. El buffer pasa a tener como único trimmador el
+janitor TTL (`SW_PURGE_GATE_ENABLED`, ya ON).
+
+### 10.4 Demolición (inventario de "obras")
+
+Cuando 10.2.3 esté probado, un PR dedicado (no mezclado con features) elimina:
+
+1. `consolidation.py`: rama drain/distill/staging + el `if retired` (queda hubs+hilo).
+2. `ls_snatcher.py` + `chronicle/antigravity_plugin.py` (llamada) + `chronicle/claude_code_plugin.py`.
+3. `paths.get_staging_dir` + directorio `staging/` + `scripts/chronicle_extractor.py` (revisar qué queda por extraer).
+4. `telegram/session.py`: `copy_to_staging` + sus dos ramas.
+5. Flags sin consumidor (`SW_INGEST_RETIRED` y los de migración) + sus tests.
+
+### 10.5 Release y migración
+
+**Asimetría clave** (dos públicos):
+
+- **Instalación nueva**: recibe el código **sin legacy y sin flags de
+  migración**; Memento→ascensión→hubs es el único camino por defecto. **Cero
+  ritual.** Seeds/`install_neo.sh` nacen limpios.
+- **Actualización** (instalación con datos legacy): necesita un camino de
+  migración **automático e idempotente**, no un runbook manual:
+  `scripts/migrate_single_writer.py` (dry-run por defecto):
+  1. Verifica que Memento cubre las sesiones de todos los providers (si falta
+     alguna → **para** y avisa; no demoler con memoria sin archivar).
+  2. **Absorb único** de lo que quede en `staging/` (archivar en Memento) antes de
+     descartarlo.
+  3. Trima el buffer `interaction_memories` (tope de edad).
+  4. Marca estado "migrado" (no repetir).
+
+- **Flags de feature, no de migración**: hubs/thread/situación/erosión/tags pasan
+  a default ON o config — un recién llegado no debe "encender hubs".
+- **Release**: bump **major** (cambio de comportamiento) + `docs/.../MIGRATION_SINGLE_WRITER.md`
+  + sección "Upgrading" en el CHANGELOG.
+
+**Secuencia de release**: observar (esta semana) → PR de demolición (quita legacy
++ flags de migración + añade migrador y doc) → release major. La activación de
+G1–G4 es **banco de pruebas del operador**, no el entregable.
