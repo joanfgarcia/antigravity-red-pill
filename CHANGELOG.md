@@ -372,11 +372,13 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   por UDS (`scripts/laya_tag_server.py` + `redpill-laya-tag.service`) + cliente
   `realtime_tag` en el drenaje (`queue_worker`, post-write acotado, gated OFF por
   RULE 4). Contrato: el registro nunca espera; el fallo se señaliza
-  (`tag_status`/`tag_persisted`), no se reintenta. P3-P4 pendientes. RFC-004.
+  (`tag_status`/`tag_persisted`), no se reintenta. RFC-004.
 - **[NEW] Solera consume tags (RFC-004 P3, 2026-09-28):** `aggregate_tags` agrega
   emoción/tema de los tags (sin destilar texto, sin fallback tag→LLM); chroma del
   tag fijado (`TAG_EMOTION_CHROMA`) e inmune a la re-detección de `add_memory`.
-  P4 (pre-heating + línea WEAK) pendiente.
+- **[NEW] Aviso de calibración en vivo (RFC-004 P4, 2026-09-28):** el pre-heating
+  lee el estado de los tags y emite `CALIBRATION WEAK` si hay fallos recientes
+  (`_tag_health`/`_weak_line`). RFC-004 COMPLETE (flags OFF en prod, RULE 4).
 - **[NEW] Recall híbrido + MMR (feedback de recall 2026-09-25, AD-038)**:
   `memento/hybrid.py` — términos distintivos de la consulta (identificadores y
   nombres propios, idf), `rg -c` sobre los `index.md` del árbol, mapeo línea →

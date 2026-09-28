@@ -4,7 +4,7 @@
 |---|---|
 | **RFC** | 004 |
 | **Title** | Tag emoción/tema en captura vía sidecar UDS — señalizar, no garantizar |
-| **Status** | P1 DONE+DEPLOYED (2026-09-28); P2-P4 pendientes |
+| **Status** | COMPLETE (P1-P4 DONE 2026-09-28; flags OFF en producción por RULE 4) |
 | **Author** | Joan García (Operator) / Aleth (Agent) |
 | **Created** | 2026-09-27 |
 | **Related** | AD-040 (DECISION_LOG), AD-039 (router System One, parked), RFC-HARNESS-002 (daemon UDS) |
@@ -91,7 +91,7 @@ daemon, `run_dual_bind.py`).
 | P1 | `laya_tag_server.py` + unit systemd + `MEMENTO_REALTIME_TAG_ENABLED` | Socket responde; carga <60s en frío | **DONE+DEPLOYED 2026-09-28** |
 | P2 | Tag en `queue_worker` (post-write acotado, timeout de cliente) | Engramas con `tag_status` fluyendo (flag ON) | **DONE 2026-09-28** (flag OFF en prod por RULE 4) |
 | P3 | Solera consume tags (aggregate_tags) | Situación se actualiza con tags (flag ON) | **DONE 2026-09-28** |
-| P4 | Pre-heating lee tags + línea WEAK | `CALIBRATION WEAK` visible en handshake | pendiente |
+| P4 | Pre-heating lee tags + línea WEAK | `CALIBRATION WEAK` visible en handshake | **DONE 2026-09-28** |
 
 **Evidencia P1** (2026-09-28): unit `redpill-laya-tag.service` activa; socket
 `/run/user/<uid>/red-pill/laya_tag.sock` 0600; `--check` = `model_loaded:true`;
@@ -120,7 +120,24 @@ gate por grep en vez de comportamiento; fallo de `set_payload` no visible; recor
 que perdía la señal y daba `ok` falso; coste agregado N×timeout; reloj no
 monotónico) — corregidos con cap 1500 cabeza+cola + timeout 3,0 + `truncated`→
 `degraded`, presupuesto monotónico, `maybe_tag.tag_persisted`, tests
-mutación-resistentes y esta redacción. Total 23 tests.
+ mutación-resistentes y esta redacción. Total 23 tests.
+
+**Evidencia P3** (2026-09-28): `aggregate_tags` + modo tag en
+`_upsert_semaphore` (11 tests). Adversarial: BLOCKER con un CRITICAL que los
+tests no veían — el metadata llevaba dicts anidados que `CreateEngramRequest`
+rechaza (la solera NUNCA se habría actualizado en producción); + chroma pisado
+por re-detección (mood `neutral` == DEFAULT_EMOTION) y `tag_confidence=0.0`
+inflado. Corregidos: counts como JSON string, `TAG_EMOTION_CHROMA` +
+`set_payload` post-alta, 0.0 válido; el fake ahora valida color/emotion/intensity
+con el esquema real (mutación de chroma cazada). Verificado contra Qdrant real.
+
+**Evidencia P4** (2026-09-28): `_tag_health` + `_weak_line` en el pre-heating
+(Ferrari 11); aviso `CALIBRATION WEAK` cuando hay tags `failed` recientes (solo
+`failed`, no `missing`); la avería del bloque principal no se lleva el aviso;
+solo corre con el flag ON. 12 tests (3 nuevos), hermético con el flag ON u OFF.
+Verificado en vivo: `CALIBRATION WEAK: 1/4 turnos recientes con tag fallido
+(sidecar-down×1)`. Adversarial: CLEARED con 3 arreglos (suite no hermética al
+flag ON, WEAK perdido en avería parcial, denominador del aviso).
 
 ## 4. Rollback
 

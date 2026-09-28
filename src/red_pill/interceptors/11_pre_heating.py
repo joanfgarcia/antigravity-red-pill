@@ -48,6 +48,8 @@ class EmotionalPreHeatingPlugin(BaseInterceptorPlugin):
 
 		candidates = []
 		now = time.time()
+		# RFC-004: aviso de calibración débil (si el sidecar de tags falló).
+		weak = self._weak_line(client, now)
 
 		quality_threshold = getattr(config, "PRE_HEATING_QUALITY_THRESHOLD", 5.0)
 		scoring_strategy = getattr(config, "PRE_HEATING_SCORING_STRATEGY", "composite")
@@ -122,7 +124,9 @@ class EmotionalPreHeatingPlugin(BaseInterceptorPlugin):
 
 		except Exception as e:
 			logger.error(f"Pre-heating query failed: {e}")
-			return ""
+			# La avería del bloque principal no debe llevarse el aviso de
+			# calibración (avería parcial: el tag ya se midió).
+			return weak
 
 		# Score and compile finalizing fragments
 		scored_fragments = []
@@ -154,9 +158,11 @@ class EmotionalPreHeatingPlugin(BaseInterceptorPlugin):
 		top_fragments = top_fragments[:max_fragments]
 
 		if not top_fragments:
-			# Graceful degradation - better cold than hallucinating
+			# Graceful degradation - better cold than hallucinating. El aviso de
+			# calibración débil SÍ se emite aunque no haya fragmentos (es una
+			# señal para el operador, no contenido fabricado).
 			self.__class__._has_fired = True
-			return ""
+			return weak
 
 		parts = []
 		parts.append("=== EMOTIONAL PRE-HEATING (ORACLE PROTOCOL) ===")
@@ -184,6 +190,8 @@ class EmotionalPreHeatingPlugin(BaseInterceptorPlugin):
 				parts.append(f"  Content: {repr(raw_text)}")
 
 		parts.append(f"\nCALIBRATION: Quality threshold is {quality_threshold}. Material is reliable.")
+		if weak:
+			parts.append(weak)
 		parts.append("---")
 
 		# ── PROJECT STATUS (tracked workspaces) ──
@@ -227,6 +235,52 @@ class EmotionalPreHeatingPlugin(BaseInterceptorPlugin):
 		# Mark as fired so it doesn't trigger on subsequent turns
 		self.__class__._has_fired = True
 		return "\n".join(parts)
+
+	def _tag_health(self, client, now: float) -> dict:
+		"""Salud del etiquetado RFC-004 en la ventana reciente (fallos explícitos).
+
+		`missing` (turnos sin tag) es ausencia de dato por diseño: NO se señala.
+		Solo `failed` (el sidecar respondió con error o cayó) merece el aviso.
+		"""
+		lookback = getattr(config, "PRE_HEATING_LOOKBACK_HOURS", 48)
+		cutoff = now - (lookback * 3600)
+		try:
+			pts, _ = client.scroll(
+				collection_name="interaction_memories",
+				scroll_filter=models.Filter(must=[models.FieldCondition(key="timestamp", range=models.Range(gte=cutoff))]),
+				limit=100,
+				with_payload=True,
+			)
+		except Exception as e:
+			logger.debug(f"tag_health query failed: {e}")
+			return {}
+		total = ok = failed = 0
+		reasons: dict = {}
+		for p in pts:
+			pay = p.payload or {}
+			total += 1
+			st = pay.get("tag_status")
+			if st == "ok":
+				ok += 1
+			elif st == "failed":
+				failed += 1
+				r = str(pay.get("tag_reason") or "?")[:40]
+				reasons[r] = reasons.get(r, 0) + 1
+		return {"total": total, "ok": ok, "failed": failed, "reasons": reasons}
+
+	def _weak_line(self, client, now: float) -> str:
+		"""Línea de aviso si el etiquetado (calibración en vivo) falló. '' si no."""
+		if not getattr(config, "MEMENTO_REALTIME_TAG_ENABLED", False):
+			return ""
+		try:
+			h = self._tag_health(client, now)
+		except Exception as e:
+			logger.debug(f"weak_line failed: {e}")
+			return ""
+		if not h or not h.get("failed"):
+			return ""
+		reasons = ", ".join(f"{k}×{v}" for k, v in sorted(h["reasons"].items(), key=lambda kv: -kv[1]))
+		return f"CALIBRATION WEAK: {h['failed']}/{h['total']} turnos recientes con tag fallido ({reasons or 'motivo desconocido'})"
 
 	def _query_recent_work(self, client, now: float) -> str:
 		"""Query recent work with cascading fallback: work_memories → interaction_memories → omit."""
