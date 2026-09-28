@@ -4,7 +4,7 @@
 
 <a id="english"></a>
 
-# Red Pill v7.2 — War Economy: System Anatomy
+# Red Pill v8 — War Economy: System Anatomy
 
 > **Version**: v7.2.1 (Sovereign Daemon)
 > **Date**: 2026-05-29
@@ -58,7 +58,7 @@ graph TB
     end
 
     subgraph "🦴 SKELETON (Storage)"
-        QDRANT["Qdrant<br/>Vector DB (5 collections)"]
+        QDRANT["Qdrant<br/>Vector DB (8+ collections)"]
         SQLITE["SQLite<br/>Queues + State"]
         DISK["Disk<br/>Sessions + Config"]
     end

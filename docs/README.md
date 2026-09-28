@@ -28,7 +28,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [NEON_LINK_EDGE_HUB.md](TECHNICAL/NEON_LINK_EDGE_HUB.md) | Technical architecture of the Neon-Link Edge Hub middleware |
 | [ANTIGRAVITY_LS_PROXY.md](TECHNICAL/ANTIGRAVITY_LS_PROXY.md) | Language Server Proxy architecture for Antigravity IDE |
 | [ROADMAP.md](TECHNICAL/ROADMAP.md) | Vision, mission, backlog, and the path forward |
-| [v7_PLAN.md](TECHNICAL/v7_PLAN.md) | Red Pill v7.0: Foundation & Autonomous Drive Plan |
+| [v7_PLAN.md](TECHNICAL/v7_PLAN.md) | (Histórico) Red Pill v7.0 Plan |
 | [DECISION_LOG.md](TECHNICAL/DECISION_LOG.md) | Record of every major architectural pivot and the reasoning behind it |
 | [DISTILLER_SELECTION.md](TECHNICAL/COGNITIVE/DISTILLER_SELECTION.md) | How the sleep-cycle distiller model is chosen: bake-off method, findings, GPU/CPU/hybrid execution |
 | [TESTS.md](TECHNICAL/TESTS.md) | Test suite philosophy and structure |
@@ -78,7 +78,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | [MINIONS.md](TECHNICAL/MINIONS.md) | Minions taxonomy, usage guidelines, and resource limitations |
 
 > [!WARNING]
-> **Swarm E2EE is a Proof-of-Concept.** The current MLS/TreeKEM implementation does not yet provide Perfect Forward Secrecy (PFS) or Post-Compromise Security (PCS). Production-grade MLS is planned for v7.0. See `MLS_ESTIMATION.md` for details.
+> **Swarm E2EE is a Proof-of-Concept.** The current MLS/TreeKEM implementation does not yet provide Perfect Forward Secrecy (PFS) or Post-Compromise Security (PCS). Production-grade MLS remains a PoC (no planificado aún). See `MLS_ESTIMATION.md`.
 
 ### Cognitive (Research)
 

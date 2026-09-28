@@ -10,18 +10,16 @@ This guide documents the full pipeline to preserve and query historical Antigrav
 > (el descifrado/extracción sigue siendo útil como productor de
 > `unencrypted_conversations/` para la fuente Memento de antigravity).
 
-> **Memento Chronicle (RFC-002).** Since v8.0.0 the raw layer lives on disk:
-> the nightly chronicle also renders every session to the Memento tree
-> (`~/.local/share/red-pill/memento/`, canonical `memento/index.md` + `raw/`
-> provider backups) before ingesting into Qdrant. Exact recall is served by the
-> `search_memento` MCP action; Qdrant ingestion described below continues
-> unchanged until the Phase-4 curation gate is enforced. See
-> [RFC_002_MEMENTO](../TECHNICAL/BUNKER/RFC_002_MEMENTO.md) and the Memento
-> section of [ENV_REFERENCE](../ENV_REFERENCE.md).
+> **Memento Chronicle (RFC-002).** El chronicle **no escribe Qdrant**: renderiza
+> cada sesión al árbol Memento en disco (`~/.local/share/red-pill/memento/`,
+> canónico `memento/index.md` + `raw/`). El recall exacto lo sirve `search_memento`.
+> La ingesta `archive_memories` fue **retirada** (v8.0.0) y la colección **purgada**.
+> Ver [RFC_002_MEMENTO](../TECHNICAL/BUNKER/RFC_002_MEMENTO.md) y
+> [ENV_REFERENCE](../ENV_REFERENCE.md).
 
 ## Prerequisites
 
--   Red Pill Protocol v6.2.0+ installed and running
+-   Red Pill Protocol v8.0.0+ installed and running
 -   Qdrant accessible at `$QDRANT_HOST:$QDRANT_PORT`
 -   The Antigravity decryption key (see below)
 
@@ -57,83 +55,66 @@ uv run red-pill job submit --recipe nightly --kick       # ciclo completo ahora
 
 ## Step 1 — Obtain the Antigravity Key
 
-The `.pb` conversation files are AES-encrypted. You need the key to decrypt them.
-
-**Option A: CDP Hook (automated)**  
-The key can be extracted via the Chrome DevTools Protocol hook at startup. See `docs/ANTIGRAVITY_KEY_RECOVERY.md` for details.
-
-**Option B: Manual extraction**  
-```bash
-# Run the capture script and follow the on-screen instructions
-uv run python /tmp/capture_antigravity_key.py
-# The key will be printed and can be set in .env:
-# ANTIGRAVITY_KEY=<key>
-```
+The `.pb` conversation files are AES-encrypted. The key (`ANTIGRAVITY_KEY`) enables
+the AES extraction path; without it the extractor falls back to the Language
+Server. See [ANTIGRAVITY_KEY_RECOVERY](../TECHNICAL/SECURITY/ANTIGRAVITY_KEY_RECOVERY.md).
 
 ---
 
-## Step 2 — Decrypt the Conversation Files
+## Step 2 — Extract to `unencrypted_conversations/`
 
 ```bash
-# Decrypt all .pb files in the Antigravity conversations directory
-uv run python scripts/antigravity_decrypt.py \
-    ~/.gemini/antigravity/conversations/ \
-    --output ./decrypted
-
-# Or decrypt a single file
-uv run python scripts/antigravity_decrypt.py \
-    ~/.gemini/antigravity/conversations/some_conversation.pb \
-    --output ./decrypted
+# Orchestrator: AES if ANTIGRAVITY_KEY is set, else Language Server.
+uv run python scripts/chronicle_extractor.py
 ```
 
-Output: JSON files in `./decrypted/`, one per conversation.
-
----
-
-## Step 3 — Ingest into archive_memories
-
-```bash
-uv run python scripts/antigravity_ingest.py --dir ./decrypted
-```
-
-This injects all conversation turns into the `archive_memories` collection, creating Axon Thread associations between sequential turns. The collection is **PERMANENT** (exempt from lazy metabolic decay).
-
----
-
-## Step 4 — Cognitive Distillation (optional but recommended)
-
-Raw archive nodes are useful for search but noisy. Run the distillation pipeline to produce clean `work_memories` and `social_memories` engrams:
-
-```bash
-# Stage 1: Edge-engine distillation (requires local LLM running)
-uv run python scripts/chronicle_distill.py
-
-# Stage 2: Fragmentation + cognitive refinement
-uv run python scripts/chronicle_refine.py
-```
+Output: `~/.local/share/red-pill/unencrypted_conversations/*.json` (one per
+conversation). This is the **producer** of Memento's antigravity source.
 
 > [!NOTE]
-> Distillation requires the local LLM endpoint (UDS socket or TCP) to be reachable. Check with `uv run red-pill status`.
+> `antigravity_decrypt.py` / `antigravity_ingest.py` (la vía que escribía a
+> `archive_memories`) están **RETIRADOS** en v8.0.0.
 
 ---
 
-## Step 5 — Explore the Chronicle
+## Step 3 — Render to Memento
 
 ```bash
-# Semantic search across archive_memories
-uv run python scripts/chronicle_explorer.py "your query here"
+uv run python scripts/memento_migrate.py            # delta
+uv run python scripts/memento_migrate.py --all      # reproceso completo
+uv run red-pill job submit --recipe nightly --kick  # ciclo completo ahora
+```
 
-# Walk the Ariadne's Thread (sequential association traversal)
-uv run python scripts/chronicle_explorer.py --thread <point_id>
+El **ciclo nocturno** (`redpill-nightly.timer`, 03:00) hace esto automáticamente:
+renderiza el delta al árbol Memento en disco y consolida (ascensión + hubs/hilo).
+No hay ingesta a Qdrant en el chronicle.
+
+---
+
+## Step 4 — Ascensión a la memoria curada
+
+`work_memories`/`social_memories` crecen **solo por ascensión de Memento**
+(`distill→refine/annotate→ascend`) + síntesis de hubs. No se produce por drenaje
+del buffer. Detalle: [OPERATIONS/SINGLE_WRITER_ROLLOUT.md](../TECHNICAL/OPERATIONS/SINGLE_WRITER_ROLLOUT.md).
+
+---
+
+## Step 5 — Consultar el archivo
+
+```bash
+# Recall exacto sobre el árbol Memento (MCP)
+#   acción `search_memento`
+# Consulta directa del árbol en disco:
+ls ~/.local/share/red-pill/memento/
 ```
 
 ---
 
 ## Performance Notes
 
--   `archive_memories` uses the **Bayesian Beta-distribution utility model** (same as `work_memories`) — no FSRS decay.
--   `PERMANENT_COLLECTIONS` in `config.py` prevents any metabolic erosion of this collection.
--   Large ingestion (>10k nodes) may take several minutes. Use `--batch-size` to control throughput.
+-   El archivo es **Memento en disco** (markdown + `raw/`); su destino es
+    navegable y greppable. `work_memories`/`social_memories` son la capa curada.
+-   El buffer `interaction_memories` es ventana corta (TTL `INTERACTION_MAX_AGE_DAYS`).
 
 ---
 

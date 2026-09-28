@@ -6,7 +6,7 @@ This document records the architectural and philosophical pivots of the project.
 
 ## [AD-040] Etiquetado emocional/temático en tiempo real (Laya) — señalizar, no garantizar
 **Date**: 2026-09-27
-**Status**: ACCEPTED — pendiente de implementar (plan abajo). Anclado en **RFC-004** (`docs/TECHNICAL/BUNKER/RFC_004_REALTIME_TAG_SIDECAR.md`).
+**Status**: IMPLEMENTADO — RFC-004 P1-P4 DONE (sidecar `redpill-laya-tag.service` desplegado 2026-09-28; flags OFF en prod por RULE 4). Anclado en **RFC-004** (`docs/TECHNICAL/BUNKER/RFC_004_REALTIME_TAG_SIDECAR.md`).
 **Context**: el pre-heating (Ferrari 11) calibraba con la ventana caliente de
 `interaction_memories` (tier 2, 48h) + heurísticas. La purga del buffer
 (53 turnos varados, 2026-09-27) dejó el tier 2 vacío: degrada con gracia pero

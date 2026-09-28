@@ -43,7 +43,7 @@ This document catalogs the utility scripts found in the `scripts/` directory. Th
 **Purpose:** Diagnostic workbench (NOT CI) for the sleep/distillation pipeline. Calls the PRODUCTION functions so diagnostics never drift from what the kernel runs at night: `pipeline` (gen-0/1/2 simulation over a text), `probe` (golden mini-set after any prompt change), `engram` (hot before/after quality test on a live engram, dry-run default).
 
 ### `antigravity_ingest.py` & `antigravity_decrypt.py`
-**Purpose:** Pipes and decrypts logs and session snapshots into the Qdrant Bünker (vector database) to ensure long-term persistence without amnesia.
+**Purpose:** (Histórico/retirado v8.0.0) Piping a `archive_memories`. La vía vigente es `chronicle_extractor.py` → `unencrypted_conversations/` → Memento.
 
 ### `chronicle_*.py`
 **Purpose:** (Histórico) `chronicle_daily.py`/`chronicle_distill.py` fueron **eliminados** en v8.0.0: la compresión/consolidación la hace el pase Memento + la ascensión. Ver `docs/TECHNICAL/OPERATIONS/SINGLE_WRITER_ROLLOUT.md`.
@@ -57,7 +57,7 @@ This document catalogs the utility scripts found in the `scripts/` directory. Th
 **Purpose:** Recompute stored vectors after an `EMBEDDING_MODEL` change (e.g. English-only → multilingual). Same 384-dim → no schema migration. Resumable via a persisted cursor, `--dry-run` by default (`--execute` to write), excludes `archive_memories` unless listed.
 
 ### `quarantine_fragments.py`
-**Purpose:** Move `_is_fragment` shrapnel (oversized-engram chunks) out of `work_memories`/`social_memories` into `archive_memories`. Order is upsert→verify→delete (no data loss), `--dry-run` by default. Run after a Qdrant snapshot.
+**Purpose:** (Obsoleto: destino `archive_memories` purgada v8.0.0) Move `_is_fragment` shrapnel fuera de `work_memories`/`social_memories` (antes a `archive_memories`). Order is upsert→verify→delete (no data loss), `--dry-run` by default. Run after a Qdrant snapshot.
 
 ### `distiller_bakeoff.py`
 **Purpose:** Aptitude harness for the sleep-cycle distiller. Runs a battery of probes (technical, philosophical, noise-culling, emotional) against each candidate GGUF and scores outputs with deterministic heuristics (JSON, ES/EN, `<think>` tags, prompt-echo, valid emotion/intensity, latency). Writes `docs/BENCHMARKS/DISTILLER_BAKEOFF.md`. Defaults to CPU to spare the live daemon's VRAM.

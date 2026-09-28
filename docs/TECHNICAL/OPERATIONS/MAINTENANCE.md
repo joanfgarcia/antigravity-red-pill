@@ -5,10 +5,10 @@ This document dictates the maintenance rituals required to keep the Red Pill Bü
 ## 1. The Pulse (Heartbeat)
 The system does not run 24/7. It breathes in cycles (Pulses) triggered by the OS.
 
-- **Tasks**: `redpill-pulse` (Hourly), `redpill-telemetry` (Every 30s), `redpill-queue` (Every 10m).
-- **Log Inspection**: 
-  - `journalctl --user -u redpill-telemetry.service -f`
-  - `journalctl --user -u redpill-pulse.service -f`
+- **Tasks**: `redpill-wake` (hourly), `redpill-queue` (cada 1 min, AD-031), `redpill-nightly` (03:00 → chronicle→sleep), `redpill-extractor` (hourly), `redpill-laya-tag` (sidecar RFC-004).
+- **Log Inspection**:
+  - `journalctl --user -u redpill-wake.service -f`
+  - `journalctl --user -u redpill-queue.service -f`
 
 > **⚠️ CRITICAL: Crontab & Virtual Environments**  
 > If you are scheduling autonomous pulses via `cron`, remember that the cron daemon executes from the user's `$HOME` by default. Using `uv run python src/red_pill/swarm/autonomous_cron.py` directly will trigger `ModuleNotFoundError` (`dotenv`, `platformdirs`, etc.) because the virtual environment is not resolved.  

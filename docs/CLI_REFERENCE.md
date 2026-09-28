@@ -30,7 +30,7 @@ red-pill add <type> <content> [--color COLOR] [--emotion EMOTION] [--intensity F
 
 | Argument | Values | Description |
 |----------|--------|-------------|
-| `type` | `work` `social` `directive` `story` | Memory collection |
+| `type` | `work` `social` `directive` `story` `interaction` | Memory collection |
 | `content` | string | The engram text |
 | `--color` | `orange` `yellow` `purple` `cyan` `blue` `gray` | Emotional color tag |
 | `--emotion` | string | Explicit emotion label |
@@ -45,7 +45,7 @@ red-pill search <type> <query> [--limit N] [--deep]
 
 | Argument | Description |
 |----------|-------------|
-| `type` | Collection to search (`work` `social` `directive` `story`) |
+| `type` | Collection to search (`work` `social` `directive` `story` `interaction`) |
 | `query` | Semantic search string |
 | `--limit N` | Max results (default: 3) |
 | `--deep` | Bypass Deep Recall threshold — forces full semantic sweep |
@@ -162,7 +162,7 @@ Triggers the sleep cycle: memory consolidation, FSRS decay, hub synthesis.
 
 ---
 
-### `revision` — Retroactive category revision (Track R2, v7.7.0)
+### `revision` — Retroactive category revision (Track R2)
 ```bash
 red-pill revision [--backlog] [--drain] [--execute] [--batch-size N]
 ```

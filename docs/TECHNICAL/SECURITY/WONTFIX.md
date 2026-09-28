@@ -21,8 +21,9 @@ The **Red Pill Protocol** embraces a Sovereign/Nomad threat model. This means th
 - **Threat Model Scope**: Personal backup (Nomad model).
 - **Accepted Rationale**: Symmetric passphrase encryption allows an operator to restore their Bünker on any new machine instantly, without needing to transport or recover a private GPG master key pair first. It optimizes for disaster recovery friction. (Hardened with `--s2k-digest-algo SHA512` in v6.1).
 
-## SEC-W04: Antigravity Language Server SSL Certificate Bypass
-- **Description**: `ls_snatcher.py` disables SSL certificate verification (`check_hostname = False`, `CERT_NONE`) when connecting to the Antigravity Language Server's local gRPC-Web endpoint.
+## SEC-W04: Antigravity Language Server SSL Certificate Bypass — RETIRADO (v8.0.0)
+- **Estado**: `ls_snatcher.py` fue **eliminado** con la ingesta legacy; ya no hay bypass. Excepción cerrada.
+- **Description**: (histórico) `ls_snatcher.py` desactivaba la verificación de certificado SSL (`check_hostname = False`, `CERT_NONE`) al conectar al endpoint gRPC-Web local del Language Server.
 - **Risk Level**: Low.
 - **Threat Model Scope**: Single-user workstation; the target endpoint is bound to `localhost` and uses a dynamically generated, self-signed TLS certificate negotiated per IDE session.
 - **Accepted Rationale**: The Antigravity Language Server generates an ephemeral, session-scoped self-signed certificate. There is no CA chain to validate, and the endpoint is unreachable from the external network. Implementing custom CA pinning would require either shipping the IDE's internal certificate issuer or parsing the IDE's internal keystore — an unreasonable coupling to a private IDE internals API. Full certificate verification would cause every connection to fail.

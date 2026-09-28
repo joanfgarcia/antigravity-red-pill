@@ -5,7 +5,7 @@ This guide outlines strategies to minimize token usage (and cost) while maintain
 ## 1. Asymmetric Model Usage
 The B-760 Protocol is designed to offload specific tasks to local, smaller models (SLMs).
 
-- **Local Embeddings**: Always use the `MemoryDaemon` (ROCm/CUDA/CPU) for semantic processing. This prevents thousands of tokens from being sent to external embedding APIs.
+- **Local Embeddings**: los embeddings se computan en local (FastEmbed) — nunca salen a APIs externas. (El antiguo `MemoryDaemon` está deprecado.)
 - **Surgical Compression**: Use the `compress_prompt` tool. This uses a local `Qwen2.5-Coder-1.5B` to distill your verbose text into its technical essence before sending it to a heavy cloud model.
 
 ## 2. Chroma-Tone Optimization

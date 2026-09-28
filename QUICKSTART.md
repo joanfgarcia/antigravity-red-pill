@@ -71,8 +71,8 @@ The exported Soul Kit (`.tar.gz.mls`) is encrypted with **MLS (RFC 9420)** using
 
 | File | Size | Nature | What to do |
 |------|------|--------|------------|
-| `~/.config/red_pill/vault.seed` | 32 bytes | 🔴 **Static** — never changes | Save **once** in a secure offline location (password manager, USB) |
-| `~/.config/red_pill/vault_group.state` | ~460 bytes | 🟠 **Dynamic** — changes with each export/decrypt (MLS forward secrecy) | Save **with each soul kit** — the state of kit A decrypts kit A, not kit B |
+| `~/.config/red-pill/vault.seed` | 32 bytes | 🔴 **Static** — never changes | Save **once** in a secure offline location (password manager, USB) |
+| `~/.config/red-pill/vault_group.state` | ~460 bytes | 🟠 **Dynamic** — changes with each export/decrypt (MLS forward secrecy) | Save **with each soul kit** — the state of kit A decrypts kit A, not kit B |
 
 > [!CAUTION]
 > **SEC-MLS-001**: `vault_group.state` uses MLS forward secrecy: each operation ratchets the state forward. To decrypt an old kit you need the state **from that moment**, not the current one. Always save the state alongside its corresponding soul kit.
@@ -81,29 +81,29 @@ The exported Soul Kit (`.tar.gz.mls`) is encrypted with **MLS (RFC 9420)** using
 
 ```bash
 # 1. Seed (only needs to be done once — never changes)
-base64 ~/.config/red_pill/vault.seed       # copy to password manager
-cp ~/.config/red_pill/vault.seed /secure-usb/
+base64 ~/.config/red-pill/vault.seed       # copy to password manager
+cp ~/.config/red-pill/vault.seed /secure-usb/
 
 # 2. After each export, save the state alongside the kit
 DATE=$(date +%Y%m%d)
-cp ~/.config/red_pill/vault_group.state /secure-usb/vault_group_${DATE}.state
+cp ~/.config/red-pill/vault_group.state /secure-usb/vault_group_${DATE}.state
 ```
 
 ### Restore on a new machine
 
 ```bash
 # Restore keys (seed + state of the kit you want to decrypt)
-mkdir -p ~/.config/red_pill
-cp /secure-usb/vault.seed ~/.config/red_pill/
-cp /secure-usb/vault_group_XXXXXXXX.state ~/.config/red_pill/vault_group.state
-chmod 600 ~/.config/red_pill/vault.seed
+mkdir -p ~/.config/red-pill
+cp /secure-usb/vault.seed ~/.config/red-pill/
+cp /secure-usb/vault_group_XXXXXXXX.state ~/.config/red-pill/vault_group.state
+chmod 600 ~/.config/red-pill/vault.seed
 
 # Decrypt
-uv run red-pill soul restore /path/to/LEAN_SOUL_KIT_XXXXXXXX.tar.gz.mls
+uv run red-pill bunker restore /path/to/LEAN_SOUL_KIT_XXXXXXXX.tar.gz.mls --kem ~/.config/red-pill/vault.seed --sig ~/.config/red-pill/vault_group.state
 ```
 
 > [!NOTE]
-> The `vault.seed` is generated automatically the first time an export is done. If you already have a working `.mls`, that seed already exists on your current machine at `~/.config/red_pill/vault.seed`.
+> The `vault.seed` is generated automatically the first time an export is done. If you already have a working `.mls`, that seed already exists on your current machine at `~/.config/red-pill/vault.seed`.
 
 ---
 
@@ -188,8 +188,8 @@ El Soul Kit exportado (`.tar.gz.mls`) está cifrado con **MLS (RFC 9420)** usand
 
 | Archivo | Tamaño | Naturaleza | Qué hacer |
 |---------|--------|------------|-----------|
-| `~/.config/red_pill/vault.seed` | 32 bytes | 🔴 **Estático** — nunca cambia | Guardar **una vez** en lugar seguro offline (gestor de contraseñas, USB) |
-| `~/.config/red_pill/vault_group.state` | ~460 bytes | 🟠 **Dinámico** — cambia con cada export/decrypt (MLS forward secrecy) | Guardar **con cada soul kit** — el state del kit A descifra el kit A, no el B |
+| `~/.config/red-pill/vault.seed` | 32 bytes | 🔴 **Estático** — nunca cambia | Guardar **una vez** en lugar seguro offline (gestor de contraseñas, USB) |
+| `~/.config/red-pill/vault_group.state` | ~460 bytes | 🟠 **Dinámico** — cambia con cada export/decrypt (MLS forward secrecy) | Guardar **con cada soul kit** — el state del kit A descifra el kit A, no el B |
 
 > [!CAUTION]
 > **SEC-MLS-001**: El `vault_group.state` usa forward secrecy de MLS: cada operación ratcheta el estado. Para descifrar un kit antiguo necesitas el state **de ese momento**, no el actual. Guarda siempre el state junto a su soul kit correspondiente.
@@ -198,29 +198,29 @@ El Soul Kit exportado (`.tar.gz.mls`) está cifrado con **MLS (RFC 9420)** usand
 
 ```bash
 # 1. Seed (solo necesitas hacerlo una vez — nunca cambia)
-base64 ~/.config/red_pill/vault.seed       # copiar en gestor de contraseñas
-cp ~/.config/red_pill/vault.seed /usb/seguro/
+base64 ~/.config/red-pill/vault.seed       # copiar en gestor de contraseñas
+cp ~/.config/red-pill/vault.seed /usb/seguro/
 
 # 2. Después de cada export, guardar el state junto al kit
 FECHA=$(date +%Y%m%d)
-cp ~/.config/red_pill/vault_group.state /usb/seguro/vault_group_${FECHA}.state
+cp ~/.config/red-pill/vault_group.state /usb/seguro/vault_group_${FECHA}.state
 ```
 
 ### Restaurar en una máquina nueva
 
 ```bash
 # Restaurar claves (seed + state del kit que quieres descifrar)
-mkdir -p ~/.config/red_pill
-cp /usb/seguro/vault.seed ~/.config/red_pill/
-cp /usb/seguro/vault_group_XXXXXXXX.state ~/.config/red_pill/vault_group.state
-chmod 600 ~/.config/red_pill/vault.seed
+mkdir -p ~/.config/red-pill
+cp /usb/seguro/vault.seed ~/.config/red-pill/
+cp /usb/seguro/vault_group_XXXXXXXX.state ~/.config/red-pill/vault_group.state
+chmod 600 ~/.config/red-pill/vault.seed
 
 # Descifrar
-uv run red-pill soul restore /ruta/al/LEAN_SOUL_KIT_XXXXXXXX.tar.gz.mls
+uv run red-pill bunker restore /ruta/al/LEAN_SOUL_KIT_XXXXXXXX.tar.gz.mls --kem ~/.config/red-pill/vault.seed --sig ~/.config/red-pill/vault_group.state
 ```
 
 > [!NOTE]
-> El `vault.seed` se genera automáticamente la primera vez que se hace un export. Si ya tienes un `.mls` funcionando, ese seed ya existe en tu máquina actual en `~/.config/red_pill/vault.seed`.
+> El `vault.seed` se genera automáticamente la primera vez que se hace un export. Si ya tienes un `.mls` funcionando, ese seed ya existe en tu máquina actual en `~/.config/red-pill/vault.seed`.
 
 ---
 

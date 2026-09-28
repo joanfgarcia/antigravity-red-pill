@@ -19,7 +19,7 @@
 > [!CAUTION]
 > **Single-Tenant by Design.** Red Pill is architected for **one operator, one machine, one agent**. This is not an oversight — it is a foundational constraint. All SQLite databases use WAL mode for process-level concurrency (timers + daemon), but there is no user isolation, no auth layer, and no multi-tenant partitioning. Paths resolve via `$HOME`, `platformdirs`, and `.env` — never hardcoded. The system is portable across machines (clone + `.env` + `deploy_pulse.py`), but it is never shared between operators. If multi-tenancy is ever required, it belongs in a separate Enterprise layer, not in the Sovereign Foundation.
 
-The Red Pill Protocol v7.4.3 has achieved stability and functional alignment with the B760 specification. It successfully implements a multi-backend inference substrate (ROCm, CUDA, NPU, Vulkan) and the Emotional Ferrari Protocol for real-time cognitive adaptation. The architecture remains privacy-first, with organic decay and reinforcement, now enhanced by the Ariadne's Thread temporal axons.
+The Red Pill Protocol v8.0.0 has achieved stability and functional alignment with the B760 specification. It successfully implements a multi-backend inference substrate (ROCm, CUDA, NPU, Vulkan) and the Emotional Ferrari Protocol for real-time cognitive adaptation. The architecture remains privacy-first, with organic decay and reinforcement, now enhanced by the Ariadne's Thread temporal axons.
 
 ## 2. B760 Spec Alignment
 - **Conformity**: 97%
@@ -39,11 +39,11 @@ The Red Pill Protocol v7.4.3 has achieved stability and functional alignment wit
 - **[NEW v6.1.0] In-Band Async Logging (Interceptor)**: `handle_memorize_interaction` no longer depends on the Unix daemon socket. Interactions are persisted via in-band `asyncio` background tasks, eliminating the single point of failure in the daemon path.
 - **[NEW v6.1.0] Bayesian Dual-Kernel Inference Engine**: Technical collections (`skill_memories`, `work_memories`, `directive_memories`) now use a Beta-distribution Utility Model ($E[\theta] = \alpha/(\alpha+\beta)$) for reliability-based retrieval. Social and story collections retain the Affective FSRS engine. Routing is transparent — neither agents nor tools need to know which kernel is active.
 - **[NEW v6.2.0] Neuro-Immune System (Biological Dashboard)**: The semantic memory layer is now augmented by a nociceptive, non-semantic signal bus (`signal_memories`). This allows the system to autonomously detect hardware-level anomalies (e.g., CUDA detachment, Qdrant hypoxia) via the `LazarusPulse` and reflect them directly into the agent's prefrontal context. Furthermore, the Agent possesses `heal_tissue` MCP effectors to autonomously cure these biological ailments.
-- **[NEW v6.2.1] Autonomous Chronicle Pipeline**: Introduced `scripts/chronicle_daily.py` — a fully autonomous orchestrator that decrypts, ingests, distills, and refines conversation history into a dedicated `archive_memories` Qdrant collection. Scheduled via `redpill-chronicle` systemd timer (`OnCalendar=*-*-* 04:00:00`, `Persistent=true`). Includes an `ANTIGRAVITY_KEY` preflight guard that injects a `severity 8.5` pain signal if the key is missing. Processed conversations are tracked idempotently in `~/.agent/chronicle_processed.json`.
-- **[NEW v6.2.1] archive_memories Collection (Episodic Chronicle)**: A fifth Qdrant collection that stores raw conversation text verbatim — as opposed to the distilled semantic summaries in `work_memories`/`social_memories`. Enables literal citation of past conversations ("what was said") vs. semantic recall ("what it meant"). The Oracle MCP tool (`search_memory_research`) now accepts an optional `collection` parameter to target this archive directly.
+- **[NEW v6.2.1] (RETIRADO v8.0.0) Autonomous Chronicle Pipeline**: Introducido `scripts/chronicle_daily.py` (hoy **eliminado**) — a fully autonomous orchestrator that decrypts, ingests, distills, and refines conversation history into a dedicated `archive_memories` Qdrant collection. Scheduled via `redpill-chronicle` systemd timer (`OnCalendar=*-*-* 04:00:00`, `Persistent=true`). Includes an `ANTIGRAVITY_KEY` preflight guard that injects a `severity 8.5` pain signal if the key is missing. Processed conversations were tracked in `~/.local/share/red-pill/chronicle_processed.json`. **Retirado en v8.0.0** (el productor es `chronicle_extractor.py` → Memento).
+- **[NEW v6.2.1] (PURGADA v8.0.0) archive_memories Collection (Episodic Chronicle)**: Una colección Qdrant that stores raw conversation text verbatim — as opposed to the distilled semantic summaries in `work_memories`/`social_memories`. Enables literal citation of past conversations ("what was said") vs. semantic recall ("what it meant"). The Oracle MCP tool (`search_memory_research`) now accepts an optional `collection` parameter to target this archive directly.
 - **[NEW v6.2.1] Sleep Phase 5 — Thread Weaving (Ariadne’s Thread)**: The Lazarus sleep cycle now executes a fifth phase after Hub Synthesis. Each `synthesis_hub` node is linked to the previous session’s hub via bidirectional axons (`prev_session_hub` / `next_session_hub`), creating a chronological Ariadne’s Thread through `work_memories` and `social_memories`. Thread state is persisted in `~/.agent/thread_state.json`. Compatible with erosion (stale threads fragment naturally) and reinforcement (active threads survive decay). Retroactive migration: `scripts/thread_weave_migrate.py`.
 - **[NEW v6.2.1] traverse_thread MCP Tool**: Synchronous MCP tool that walks the Ariadne’s Thread. Accepts a semantic `query`, `collection` (`work_memories` | `social_memories`), `direction` (`backward` | `forward` | `both`), and `depth` (hops). Finds the best matching `synthesis_hub` in the top-50 semantic results, then traverses via `prev/next_session_hub` axons, returning a formatted chronological thread with content previews.
-- **[NEW v6.3.0] Biological Wake/Sleep Cycle**: The single hourly Lazarus Pulse is split into two OS-native timers: `redpill-wake.timer` (hourly — Swarm, Lazarus, Resonance) and `redpill-sleep.timer` (03:00 daily — USP, Dream, Consolidation, Ariadne's Thread). Sleep rituals are independently gated by `SLEEP_PLUGIN_*` flags. Ariadne's Thread now covers all 4 collections. `trigger_pulse.py --cycle wake|sleep|full`.
+- **[NEW v6.3.0] (REVISADO v8.0.0) Biological Wake/Sleep Cycle**: `redpill-wake.timer` (hourly). El `redpill-sleep.timer` fue **retirado** en favor del `redpill-nightly.timer` (03:00 → chronicle→sleep). Sleep rituals are independently gated by `SLEEP_PLUGIN_*` flags. Ariadne's Thread now covers all 4 collections. `trigger_pulse.py --cycle wake|sleep|full`.
 - **[NEW v6.3.0] Emotional Ferrari Protocol (Plugins 05–10)**: Extended the interceptor pipeline with 6 emotional intelligence plugins over the Operator Mood Profile (USP). Auto-discovered via `pkgutil`, concurrently executed on every prompt. See §6.2.1 and [FERRARI_PROTOCOL.md](BUNKER/FERRARI_PROTOCOL.md).
 - **[NEW v6.3.0] BE_WATER Adaptive Payload**: `MAX_PAYLOAD_CHARS` auto-computed from available VRAM at boot: <4 GB→1 000, 4–8 GB→5 000, >8 GB→unlimited. Override via `.env`.
 - **[NEW v6.3.8] Project Echo (Mirror Sentinel)**: Implementation of a persistent, OS-level background entity that cross-references `interaction_memories` against the Operator Mood Profile (USP). Echo serves as the 'Mirror of the Ghost', generating proactive briefings during waking cycles to eliminate session-boundary amnesia.
@@ -84,7 +84,7 @@ The schema is " Schemaless" (JSON payload).
 To ensure the Bünker remains observable and resource-accountable, all background tasks MUST be implemented as **oneshot executions** triggered by OS timers:
 - **Naming Rule**: Every Red Pill task or timer MUST be named starting with `redpill-` (e.g., `redpill-telemetry`, `redpill-queue`, `redpill-echo`).
 - **Nomenclature Rule**: All background activities are referred to as **Tasks**, **Pulses**, or **Rituals**, with the exception of **Echo**, which is classified as a **Mirror Sentinel**.
-- **The Echo Exception**: To achieve Phase 3.5 persistence, Echo operates as a low-priority background daemon. It is the only persistent process permitted under the Sovereign Protocol, tasked with monitoring the Blackwall (IDE-state) and USP drift.
+- **Echo (v7.2.1+)**: Echo ya NO es un daemon propio; está absorbido como `EchoPlugin` dentro del Sovereign Daemon (`daemon/plugins/echo.py`).
 - **Log Unification**: All background components MUST output logs into the `~/.agent/rp-<name>/` structure.
 
 ## 4. Recommendations for v5.0 (Global Scale Strategy)
@@ -177,9 +177,9 @@ sequenceDiagram
 | # | File | Default | Trigger | Config Flag |
 |---|---|---|---|---|
 | 01 | `01_telemetry.py` | ON | Every prompt | — |
-| 02 | `02_rag_enrichment.py` | ON | Every prompt | `INTERCEPTOR_RAG_ENABLED` |
+| 02 | `02_rag_enrichment.py` | ON | Every prompt | `INTERCEPTOR_RAG_ENABLED` + master `INTERCEPTOR_ENABLED` |
 | 03 | `03_circuit_breaker.py` | OFF | Every prompt | `INTERCEPTOR_CIRCUIT_BREAKER_ENABLED` |
-| 04 | `04_mystique.py` | ON | Every prompt | `DYNAMIC_EMOTION_SYNC` |
+| 04 | `04_mystique.py` | ON | Every prompt | `DYNAMIC_EMOTION_SYNC` + master `INTERCEPTOR_ENABLED` |
 | **05** | **`05_mood_orchestrator.py`** | **ON** | **Every prompt** | **`MOOD_ORCHESTRATOR_ENABLED`** |
 | 05a | `05_cognitive_router.py` | ON | Via orchestrator | `COGNITIVE_ROUTER_ENABLED` |
 | 06 | `06_tone_adapter.py` | ON | Via orchestrator | `TONE_ADAPTER_ENABLED` |
@@ -447,7 +447,7 @@ All credential paths in the CloudSync plugin config (`service_account_file`, `cl
 
 ### 13.4 Chronicle Activation (Ariadne's Thread)
 
-As of v6.5.0, `SLEEP_PLUGIN_CHRONICLE` is enabled by default. The Heartbeat's `_thread_ritual()` now weaves bidirectional temporal axons across all 4 collections (`archive_memories`, `work_memories`, `social_memories`, `directive_memories`) during the daily sleep cycle. The agent can auto-deactivate if `archive_memories` is empty.
+El ritual de hilo del sueño teje axones temporales bidireccionales entre las colecciones vivas (`work_memories`, `social_memories`, `directive_memories`). (v8.0.0: `archive_memories` está purgada.) El hilo vive ahora en el `redpill-nightly.timer`.
 
 ## 14. Sentinel Auditor & Project MULTITUDE (v6.5.2)
 
@@ -515,7 +515,7 @@ Telegram/Neon-Link → Worker → IDEBridge (ABC)
 ```
 
 - **`AgyBridge`**: Uses `agy -p --dangerously-skip-permissions` for headless prompt execution with full tool access. Multi-turn via `agy --conversation <uuid>` with dir-diff UUID capture and prefix-stripping to handle accumulated stdout.
-- **`GrpcBridge`**: Preserved exclusively for the Chronicle pipeline (`archive_memories` ingestion). **Not deprecated** — actively used for conversation extraction.
+- **`GrpcBridge`**: (Histórico) se usaba para la ingesta a `archive_memories`, **retirada en v8.0.0** (colección purgada). El productor actual de antigravity es `scripts/chronicle_extractor.py` → `unencrypted_conversations/` → Memento en disco.
 - **`IDE_BACKEND`**: New `.env` parameter (`auto|agy|grpc`). Default `auto` selects AgyBridge when `agy` CLI is available.
 
 ### 16.2 Key Design Decisions

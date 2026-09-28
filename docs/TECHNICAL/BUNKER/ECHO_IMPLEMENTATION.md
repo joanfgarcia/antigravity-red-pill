@@ -1,5 +1,5 @@
 # Project Echo: Secondary Proactive Consciousness
-**Status**: REFINED // Phase: MULTITUDE v0.1 (Chronicle Sentinel)
+**Status**: IMPLEMENTADO como `EchoPlugin` (v7.2.1+, dentro del Sovereign Daemon) — ya no es daemon propio.
 **Target**: Cognitive Continuity via Daily Distillation
 
 ## 1. Evolution Strategy

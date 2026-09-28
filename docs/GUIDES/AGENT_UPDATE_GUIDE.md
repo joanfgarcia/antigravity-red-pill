@@ -71,7 +71,7 @@ New payload fields you will see appear organically after updating (additive; all
 *   **Async Queues**: `get_queue_dir()` -> `~/.local/share/red-pill/queue/`
 *   **Config & Env**: `get_config_dir()` -> `~/.config/red-pill/`
 *   **Thread State**: `get_thread_state_path()` -> `~/.local/share/red-pill/thread_state.json`
-*   **Staging Buffer**: `get_staging_dir()` -> `~/.cache/red-pill/staging/`
+*   **Staging (legacy, solo lectura)**: `get_legacy_staging_dir()` -> `~/.cache/red-pill/staging/` (la ingesta que lo consumía fue eliminada; solo el migrador lo lee).
 *   **Ingestion Path**: `get_ingestion_dir()` -> `~/.local/share/red-pill/ingestion/`
 *   **Model Profiles**: `get_model_profiles_path()` -> `~/.config/red-pill/model_profiles.yaml`
 *   **Swarm Config**: `get_swarm_config_path()` -> `~/.config/red-pill/swarm_communities.json`
@@ -458,7 +458,7 @@ Each detected IDE's instruction file carries the agent's boot protocol via the s
 `~/.config/opencode/RED_PILL.md` for OpenCode, `<workspace>/AGENTS.override.md` for Pi — the
 anchor blocks are IDE-agnostic and rendered per IDE by `inject_anchor.py`). After major protocol changes:
 1.  **Review**: Ensure the anchor blocks contain the 2 active rules:
-    - **Rule 1 — The Sovereign Handshake**: Mandates `mcp_RedPill-Kernel_interceptor_rp` as the FIRST tool call of every turn. Passes `user_prompt` + previous turn for Silent Scribe Relay.
+    - **Rule 1 — The Sovereign Handshake**: Mandates `sovereign_handshake` (que internamente usa `interceptor_rp`) como PRIMERA llamada de cada turno. Pasa `user_prompt` + turno previo (Silent Scribe Relay). Nota: `INTERCEPTOR_ENABLED` es un master switch **PARCIAL** (solo `02_rag`/`03_circuit_breaker`/`04_mystique` + Korsakoff); NO gatea el core (telemetría/mood/pre-heating).
     - **Rule 2 — Model Change Identity Resync**: On model switch, call `refresh_session_context` immediately.
     - ~~Rule 3~~ — **REMOVED** (v6.2.5): deprecated End-of-Turn logging. Start-of-Turn Relay (Rule 1) is the canonical mechanism.
 
@@ -502,7 +502,7 @@ mock_queue.enqueue_memory.assert_called_once()  # Verify it reached the queue
 
 The `perform_sleep_cycle()` function in `src/red_pill/metabolism/sleep.py` has two critical safety rules that must be preserved in any future modification:
 
-1.  **LLM-gated deletion**: A raw `interaction_memories` node is **only deleted** after `chunks_saved > 0` (i.e., at least one engram was successfully written to `work_memories` or `social_memories`). If the local LLM is down or all chunks are culled with no saves, the raw node is **preserved** for the next cycle. Never remove the `chunks_saved` guard.
+1.  **Buffer = ventana corta (v8.0.0)**: el drenaje legacy `interaction_memories → work/social` fue **eliminado**. El buffer ya no se consolida a `work/social`: se recorta por **TTL** (`INTERACTION_MAX_AGE_DAYS=30`, con señal para lo no renderizado). `work/social` crecen SOLO por ascensión de Memento + hubs/hilo. El `chunks_saved*` guard ya no existe.
 
 2.  **LLM health check before processing**: At the start of each cycle, `_check_llm_available()` probes the UDS socket or TCP endpoint of the local distillation model. If unreachable:
     - Injects a `local_llm_offline` pain signal (intensity 7.0) into `signal_memories`.

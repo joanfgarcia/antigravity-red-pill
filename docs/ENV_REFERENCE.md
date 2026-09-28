@@ -1,4 +1,4 @@
-# Red Pill Protocol: Environment Configuration Reference (v7.0)
+# Red Pill Protocol: Environment Configuration Reference (v8.0.0)
 
 This document provides a comprehensive list of all parameters available in the `.env` file, their purposes, default values, and what specific behaviors they activate or deactivate within the Bünker ecosystem.
 
@@ -96,7 +96,7 @@ This document provides a comprehensive list of all parameters available in the `
 ### Bayesian Core (Logic & Work Memories)
 | Parameter | Default | Description |
 | :--- | :--- | :--- |
-| `BAYESIAN_COLLECTIONS` | `skill,work,directive` | Comma-separated list of collections that use technical Bayesian inference instead of affect-based FSRS logic. |
+| `BAYESIAN_COLLECTIONS` | `skill_memories,work_memories,directive_memories` | Comma-separated list of collections that use technical Bayesian inference instead of affect-based FSRS logic. |
 | `BAYESIAN_STABILITY_KAPPA`| `0.05` | Rate of uncertainty accumulation (`beta`) per day. Higher means faster forgetting of technical utility. |
 | `BAYESIAN_REINFORCEMENT_GAIN`| `1.0` | Amount of certainty (`alpha`) added when an operator actively uses this technical knowledge. |
 

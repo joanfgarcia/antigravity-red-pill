@@ -105,7 +105,7 @@ Memento en disco. La antigua ingesta a `archive_memories` está **retirada**
 > sin ella cae a la extracción por Language Server. En ambos casos **no** hace
 > falta el IDE abierto (la vía `_ls` usa la infraestructura, no la UI).
 
-If `ANTIGRAVITY_KEY` is missing from `.env`, a pain signal (severity 8.5) is emitted and the pipeline aborts.
+Si falta `ANTIGRAVITY_KEY`, **no se aborta**: el extractor cae a la vía Language Server (`chronicle_extractor_ls.py`).
 
 > [!NOTE]
 > `antigravity_ingest.py` reads the **plaintext JSON** files produced by `antigravity_decrypt.py`, not the `.pb` files directly. The aghistory HTTP method (Method 1) is an alternative that also produces plaintext JSON — both feed the same ingest step.

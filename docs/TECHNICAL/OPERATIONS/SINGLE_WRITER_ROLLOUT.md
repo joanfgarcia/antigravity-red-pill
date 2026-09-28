@@ -4,6 +4,8 @@ Guía operativa para **encender** el single-writer de memoria pieza a pieza (fea
 flags por componente, CONVENTIONS RULE 4). Cada pieza es independiente, default
 `OFF`, y **reversible**: se enciende, se verifica, y se pasa a la siguiente.
 
+> **Estado final (v8.0.0):** la ingesta legacy fue **ELIMINADA**; `SW_INGEST_RETIRED` ya no existe. Los flags `SW_*` de feature quedan como configuración (default ON en el operador). Este runbook conserva valor histórico; el estado vigente está en §6 y en [RFC-002 Fase 4 §10](../BUNKER/RFC_002_PHASE4_DESIGN.md).
+
 > Producción intacta mientras los flags estén `OFF`. Los scripts operativos
 > (`memento_backfill_dates.py`, `memento_dedup_qdrant.py`) ya se aplicaron sobre el
 > corpus (2026-09-21) con snapshots de Qdrant.
@@ -65,8 +67,6 @@ Debe devolver hits temáticamente relevantes (el replay de referencia dio 100% e
 Cada flag se apaga en `config`/`.env` y se reinicia el servicio correspondiente:
 - `SW_HUBS_ENABLED=OFF` → el recall **vuelve a incluir** los miembros (la exclusión
   `hubbed` está gated); los hubs quedan inertes.
-- `SW_INGEST_RETIRED=OFF` → vuelve la ingesta `interaction→work/social` (solo si NO
-  se ha purgado el buffer; es la vía que se desea retirar definitivamente).
 - `SW_EROSION_DEMOTE_ENABLED=OFF` → ningún demote.
 - `SW_SITUATION_ENABLED=OFF` → el pre-heating no lee la solera.
 
@@ -194,9 +194,9 @@ interaction). Piezas ON en `.env`:
 | G3 olvido/situación | `SW_ABSENCE_GUARD_CONDITIONAL`, `SW_EROSION_DEMOTE_ENABLED`, `SW_SITUATION_ENABLED`, `SW_INTERACTIVE_PHASE_ENABLED` | `update_situation` crea `situation_memories` (`updated:1`) |
 | G4 tags RFC-004 | `MEMENTO_REALTIME_TAG_ENABLED` | engrama con `tag_status`/`tag_emotion`/`tag_theme` |
 
-**Pendiente y deliberadamente OFF**: `SW_INGEST_RETIRED` (punto de no retorno) —
-se enciende tras **una noche con hubs sanos** (`hub_coverage_pct > 0`). Con la
-ingesta legacy aún viva, el modo tag de la solera convive sin problema.
+**Hecho**: la ingesta legacy fue **ELIMINADA** (`SW_INGEST_RETIRED` retirado, sin
+rollback; la demolición quitó drenaje/staging/`ls_snatcher`/chronicle legacy). El
+buffer es ventana corta y `work/social` crecen por ascensión Memento + hubs/hilo.
 
 **Procesos que deben releer `.env`**: los oneshot
 (`redpill-queue`/`extractor`/`nightly`/`janitor`) lo hacen solos en su tick; los
