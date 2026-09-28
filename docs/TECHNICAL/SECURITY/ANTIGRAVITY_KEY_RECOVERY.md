@@ -97,8 +97,7 @@ El productor de la fuente Memento de antigravity es
 `scripts/chronicle_extractor.py` (orquesta `_aes.py` si hay `ANTIGRAVITY_KEY`, si no
 `_ls.py`), que escribe `unencrypted_conversations/*.json`. El **ciclo nocturno**
 (`redpill-nightly.timer`, 03:00 → `chronicle → sleep`) los renderiza al árbol
-Memento en disco. La antigua ingesta a `archive_memories` está **retirada**
-(colección purgada).
+Memento en disco. La antigua ingesta cruda a Qdrant está **retirada**.
 
 > [!IMPORTANT]
 > `ANTIGRAVITY_KEY` habilita el descifrado AES en `chronicle_extractor_aes.py`;

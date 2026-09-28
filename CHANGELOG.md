@@ -538,11 +538,21 @@ pausable por etapa (incidente 2026-09-11: la pausa del operador quedó horas en
   `chronicle_distill.py`/`chronicle_refine.py` (barrido no acotado de
   `archive_memories`, causa de los timeouts nocturnos) y la ingesta legacy
   (`antigravity_ingest`). El pase agéntico moderno es `memento-agentic` sobre el
-  árbol Memento (RFC-002 §4.5); `archive_memories` queda como fallback de
-  reconstrucción (§5.1.2). Eliminados `scripts/chronicle_daily.py` y
+  árbol Memento (RFC-002 §4.5). Eliminados `scripts/chronicle_daily.py` y
   `tests/test_chronicle_registry.py`; limpiadas referencias (`schedule_pulse.py`,
   `chronicle_sources/base.py`, `memento/registry.py`, `config.py`,
   `seeds/pi/README.md`).
+- **[ARCH] Retirada TOTAL de la maquinaria legacy de archivo**: nadie produce ya
+  la colección archival ni la referencia en el código. Fuera productores/tools
+  (`scripts/antigravity_ingest.py`, `quarantine_fragments.py`,
+  `chronicle_explorer.py`, `red-pill tools dedup-archive`,
+  `configs/jobs/archive_reembed.yaml`) y el purgador (`memento_purge_archive.py`;
+  su helper de cobertura raw/render vive ahora en `red_pill.memento.coverage`).
+  `memento_migrate.py` pierde el fallback de reconstrucción y
+  `--reconstruct-orphans` (el archivado es el árbol Memento); `evolution.py`
+  muestrea work+social; limpiados los readers (`thread_weave_migrate`,
+  `oneiromancy_pulse`, `qdrant_reembed`, `reembed_collections`, `backup_qdrant.sh`)
+  y las docs operativas.
 - **[NEW] Arnés de bake-off de modelos**: `scripts/model_battle_tool.py`
   (tool-calling vía bindings, con parser de formatos nativos — `<tool_call>`,
   `<|tool_call>` de Gemma, `<function_call>`, OpenAI); `scripts/model_battle_tool_gpu.py`

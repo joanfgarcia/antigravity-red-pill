@@ -27,7 +27,7 @@ Pasos que ejecuta:
 
 1. **Cobertura**: cada sesión del registro Memento debe tener `raw/` o contenido
    **render** en Memento. Si falta alguna → **ABORTA** (no se migra con memoria
-   sin archivar). Mismo criterio que la purga de `archive_memories`.
+   sin archivar).
 2. **Staging**: lo que quede en `staging/` se **archiva** en
    `staging/_migrated_<ts>/` (nunca se borra).
 3. **Buffer**: `interaction_memories` más viejo que `INTERACTION_MAX_AGE_DAYS`
@@ -59,7 +59,7 @@ uv run python -c "from red_pill.memory import MemoryManager; from red_pill.metab
 
 - Con el código nuevo no hay vuelta a la ingesta legacy (se elimina en la
   demolición). El archivo **Memento** (disco) y las copias `raw/` son el respaldo
-  permanente; `archive_memories` se purga con snapshot previo.
+  permanente.
 - Si la migración aborta por cobertura, **no** se ha tocado nada: resuelve las
   sesiones sin archivar (p. ej. renderizar su store) y reintenta.
 

@@ -9,6 +9,7 @@ abortar si hay memoria sin archivar antes de completar la migración.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 
 def classify_session(root: Path, dir_rel: str) -> str | None:
@@ -28,7 +29,7 @@ def classify_session(root: Path, dir_rel: str) -> str | None:
 	return None
 
 
-def coverage(root: Path, registry: object | None = None) -> dict:
+def coverage(root: Path, registry: Any | None = None) -> dict:
 	"""Cobertura por sesión del registry: raw + rendered (0-100%)."""
 	from red_pill.memento.registry import MementoRegistry
 

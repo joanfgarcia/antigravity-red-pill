@@ -3,8 +3,8 @@
 This guide documents the full pipeline to preserve and query historical Antigravity conversations in the Bünker memory substrate.
 
 > **⚠️ ESTADO v8.0.0 (2026-09-28).** La ingesta legacy ha sido **retirada**:
-> `archive_memories` está **purgada** (snapshot previo) y el destino de la
-> memoria es el **árbol Memento en disco** + ascensión + hubs/hilo. El pipeline
+> la colección legacy de archivo está **retirada** (snapshot previo) y el destino
+> de la memoria es el **árbol Memento en disco** + ascensión + hubs/hilo. El pipeline
 > real lo ejecuta el **ciclo nocturno** (`redpill-nightly.timer`, 03:00 →
 > `chronicle → sleep`). Los pasos manuales de más abajo son **HISTÓRICOS**
 > (el descifrado/extracción sigue siendo útil como productor de
@@ -13,7 +13,7 @@ This guide documents the full pipeline to preserve and query historical Antigrav
 > **Memento Chronicle (RFC-002).** El chronicle **no escribe Qdrant**: renderiza
 > cada sesión al árbol Memento en disco (`~/.local/share/red-pill/memento/`,
 > canónico `memento/index.md` + `raw/`). El recall exacto lo sirve `search_memento`.
-> La ingesta `archive_memories` fue **retirada** (v8.0.0) y la colección **purgada**.
+> La ingesta cruda a Qdrant fue **retirada** (v8.0.0).
 > Ver [RFC_002_MEMENTO](../TECHNICAL/BUNKER/RFC_002_MEMENTO.md) y
 > [ENV_REFERENCE](../ENV_REFERENCE.md).
 
@@ -31,7 +31,7 @@ El **ciclo nocturno** (`redpill-nightly.timer` → `redpill-nightly.service`) es
 única entrada automática: encola `configs/jobs/nightly.yaml` (composition
 `chronicle → sleep`). El chronicle renderiza el delta a Memento (disco) y el
 sueño consolida, teje y asciende (hubs/hilo) — ya **sin** ingesta a
-`archive_memories` (retirada).
+la colección legacy de archivo (retirada).
 
 **Verificar el timer (una vez por instalación/actualización):**
 ```bash
@@ -72,8 +72,8 @@ Output: `~/.local/share/red-pill/unencrypted_conversations/*.json` (one per
 conversation). This is the **producer** of Memento's antigravity source.
 
 > [!NOTE]
-> `antigravity_decrypt.py` / `antigravity_ingest.py` (la vía que escribía a
-> `archive_memories`) están **RETIRADOS** en v8.0.0.
+> La vía legacy de ingesta a Qdrant está **RETIRADA** en v8.0.0; el productor
+> vigente es `scripts/chronicle_extractor.py` → `unencrypted_conversations/`.
 
 ---
 

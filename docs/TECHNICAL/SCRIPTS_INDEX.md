@@ -42,8 +42,8 @@ This document catalogs the utility scripts found in the `scripts/` directory. Th
 ### `../tools/distill_lab.py`
 **Purpose:** Diagnostic workbench (NOT CI) for the sleep/distillation pipeline. Calls the PRODUCTION functions so diagnostics never drift from what the kernel runs at night: `pipeline` (gen-0/1/2 simulation over a text), `probe` (golden mini-set after any prompt change), `engram` (hot before/after quality test on a live engram, dry-run default).
 
-### `antigravity_ingest.py` & `antigravity_decrypt.py`
-**Purpose:** (Histórico/retirado v8.0.0) Piping a `archive_memories`. La vía vigente es `chronicle_extractor.py` → `unencrypted_conversations/` → Memento.
+### `antigravity_decrypt.py`
+**Purpose:** Descifra los exports de antigravity a JSON plano para la vía de extracción de Memento (`chronicle_extractor.py` → `unencrypted_conversations/`).
 
 ### `chronicle_*.py`
 **Purpose:** (Histórico) `chronicle_daily.py`/`chronicle_distill.py` fueron **eliminados** en v8.0.0: la compresión/consolidación la hace el pase Memento + la ascensión. Ver `docs/TECHNICAL/OPERATIONS/SINGLE_WRITER_ROLLOUT.md`.
@@ -52,12 +52,9 @@ This document catalogs the utility scripts found in the `scripts/` directory. Th
 **Purpose:** Mechanical hygiene of the per-workspace memory bank (`<ws>/.red-pill/memory/`, no LLM): archives `.md` files >90d unreferenced from `MEMORY.md` (canonical `@refs`), detects exact duplicates (sha256) and broken index refs, writes `bank_health.json` per workspace and emits a `memory_bank_bloat_<ws>` pain signal on threshold. Dry-run by default (`--apply` to archive; a bank without index only ever reports — `archive_suppressed_no_index`). Opt-in nightly timer via `schedule_pulse.py --with-bank-janitor` (03:30). Index convention: `@fichero.md` (see `skills/workspace-memory` §1b–§1d).
 
 ### `reembed_collections.py`
-> **Superseded (2026-09-25) by `qdrant_reembed.py`** (selective, snapshot, job). Its default excluded `archive_memories`, which left the pre-July archive on the old English model.
+> **Superseded (2026-09-25) by `qdrant_reembed.py`** (selective, snapshot, job).
 
-**Purpose:** Recompute stored vectors after an `EMBEDDING_MODEL` change (e.g. English-only → multilingual). Same 384-dim → no schema migration. Resumable via a persisted cursor, `--dry-run` by default (`--execute` to write), excludes `archive_memories` unless listed.
-
-### `quarantine_fragments.py`
-**Purpose:** (Obsoleto: destino `archive_memories` purgada v8.0.0) Move `_is_fragment` shrapnel fuera de `work_memories`/`social_memories` (antes a `archive_memories`). Order is upsert→verify→delete (no data loss), `--dry-run` by default. Run after a Qdrant snapshot.
+**Purpose:** Recompute stored vectors after an `EMBEDDING_MODEL` change (e.g. English-only → multilingual). Same 384-dim → no schema migration. Resumable via a persisted cursor, `--dry-run` by default (`--execute` to write).
 
 ### `distiller_bakeoff.py`
 **Purpose:** Aptitude harness for the sleep-cycle distiller. Runs a battery of probes (technical, philosophical, noise-culling, emotional) against each candidate GGUF and scores outputs with deterministic heuristics (JSON, ES/EN, `<think>` tags, prompt-echo, valid emotion/intensity, latency). Writes `docs/BENCHMARKS/DISTILLER_BAKEOFF.md`. Defaults to CPU to spare the live daemon's VRAM.
@@ -69,7 +66,7 @@ This document catalogs the utility scripts found in the `scripts/` directory. Th
 **Purpose:** Rebuild of the `annotate` stage (MEM-006) over the whole Memento tree: idea-level notes extracted from the RAW (one compression) with the identity Bio (P0), dedup P1-A, quality gate, dual routing with dead zone and first-person voice rewrite. Session-by-session, pausable/resumable via the `memento_annotate_rebuild` element_job (per-session checkpoint); sessions already annotated with the current `annotate_prompt_version` are skipped (freshness). `--list` prints pending sessions; `--status` reports annotated/stale/pending/errors + notes; `--all` ignores freshness (from scratch, discards the partial); `--from=extract|rewrite|score` re-enters the pipeline at that phase reusing persisted state (partial or current-contract notes), degrading gracefully when prerequisites are missing; `--reason` records the invocation motive in `_meta.json`; `--root` points at an alternate tree. Resumable within a session (MEM-009 F1): `annotate/_partial.json` checkpoints each extracted split (keyed by message range, revalidated by content hash) and each phase.
 
 ### `qdrant_reembed.py`
-**Purpose:** Re-embeds a Qdrant collection from its `content` payload with the current embedding model. Found 2026-09-25: `archive_memories` points older than July 2026 (antigravity source) hold vectors that match none of their stored text fields (cosine 0.1-0.5 against `content`/`raw_content`/`refined_content`), so current queries can't find them. Dry-run by default (`would_update` count); `--apply` rewrites **only** vectors with cosine < `--threshold` (0.99) via `update_vectors` (payload untouched), takes a collection snapshot before the first write (name kept in the checkpoint), and advances in `--max-points` chunks from a scroll-offset checkpoint (`$RP_CHECKPOINT_FILE`) → idempotent and resumable. Job: `configs/jobs/archive_reembed.yaml` (`red-pill job submit --recipe archive_reembed`). What gets embedded is decided by `memento.embed_text.embedding_text_for` (the same single point as writes). Supersedes `reembed_collections.py` (v7.5.0), which excluded `archive_memories` by default — the root cause of the stale pre-July archive vectors (old English model). Ran 2026-09-25: 17,595 of 77,833 archive vectors rewritten; all months now cosine 1.000.
+**Purpose:** Re-embeds a Qdrant collection (given with `--collection`, obligatorio) from its `content` payload with the current embedding model. Dry-run by default (`would_update` count); `--apply` rewrites **only** vectors with cosine < `--threshold` (0.99) via `update_vectors` (payload untouched), takes a collection snapshot before the first write (name kept in the checkpoint), and advances in `--max-points` chunks from a scroll-offset checkpoint (`$RP_CHECKPOINT_FILE`) → idempotent and resumable. What gets embedded is decided by `memento.embed_text.embedding_text_for` (the same single point as writes). Supersedes `reembed_collections.py` (v7.5.0).
 
 ### `memento_ascend.py`
 **Purpose:** Static mass ascension of the Memento tree (`refine/` + `annotate/`) into Qdrant: promotes non-ascended notes whose significance passes the per-category gate. `dual_route: none` notes never ascend (MEM-006). Idempotent, no LLM, `--dry-run` reports `would_ascend`. Job `memento_ascend_post_rebuild.yaml` (chainable to the rebuild with `--parent`). Writes the per-session `_session.json` (`stages.ascend`).
