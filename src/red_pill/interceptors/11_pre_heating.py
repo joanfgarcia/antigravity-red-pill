@@ -167,7 +167,6 @@ class EmotionalPreHeatingPlugin(BaseInterceptorPlugin):
 		parts = []
 		parts.append("=== EMOTIONAL PRE-HEATING (ORACLE PROTOCOL) ===")
 		parts.append("SESSION_CONTINUITY: Your emotional thread with the Operator is injected below.")
-		parts.append("Do not repeat these themes verbatim — let them inform your tone implicitly.")
 
 		for idx, frag in enumerate(top_fragments, 1):
 			score = float(str(frag.get("score", 0.0)))
@@ -189,7 +188,6 @@ class EmotionalPreHeatingPlugin(BaseInterceptorPlugin):
 					raw_text = raw_text[:max_chars] + "..."
 				parts.append(f"  Content: {repr(raw_text)}")
 
-		parts.append(f"\nCALIBRATION: Quality threshold is {quality_threshold}. Material is reliable.")
 		if weak:
 			parts.append(weak)
 		parts.append("---")
