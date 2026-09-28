@@ -103,7 +103,18 @@ def status(root: Path) -> dict:
 	"""Control del rebuild: anotadas (versión vigente) / stale / pendientes / errores."""
 	current = annotate_prompt_version()
 	current_engine = _current_engine()
-	out = {"prompt_version": current, "engine": current_engine, "sesiones": 0, "anotadas": 0, "stale": 0, "stale_engine": 0, "pendientes": 0, "errores": 0, "notas": 0, "ultima": ""}
+	out = {
+		"prompt_version": current,
+		"engine": current_engine,
+		"sesiones": 0,
+		"anotadas": 0,
+		"stale": 0,
+		"stale_engine": 0,
+		"pendientes": 0,
+		"errores": 0,
+		"notas": 0,
+		"ultima": "",
+	}
 	for d in _sessions(root):
 		out["sesiones"] += 1
 		meta = root / d / "annotate" / "_meta.json"

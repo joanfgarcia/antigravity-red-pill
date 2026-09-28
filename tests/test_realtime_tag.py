@@ -174,7 +174,9 @@ def test_timeout(monkeypatch, tmp_path):
 
 def test_apply_tag_escribe_campos():
 	mem = _FakeMemory()
-	ok = realtime_tag.apply_tag(mem, "u1", {"tag_status": "ok", "tag_emotion": "calm", "tag_theme": "work", "tag_confidence": 0.9, "tag_reason": None})
+	ok = realtime_tag.apply_tag(
+		mem, "u1", {"tag_status": "ok", "tag_emotion": "calm", "tag_theme": "work", "tag_confidence": 0.9, "tag_reason": None}
+	)
 	assert ok is True
 	c = mem.client.calls[0]
 	assert c["collection"] == "interaction_memories" and c["points"] == ["u1"]
@@ -281,6 +283,7 @@ def test_maybe_tag_reporta_persistencia(monkeypatch, tmp_path):
 
 
 # ── wiring del worker (comportamiento, no grep) ────────────────────────────
+
 
 class _FakeQueue:
 	def __init__(self, items):

@@ -14,7 +14,16 @@ def _load_module():
 	return mod
 
 
-def _p(pid, coll="work_memories", content="Joan me pide arreglar el endpoint de auth y lo despliego", sig=0.8, engine="granite_8b", sid="s1", lines="memento/index.md#l1-5", **extra):
+def _p(
+	pid,
+	coll="work_memories",
+	content="Joan me pide arreglar el endpoint de auth y lo despliego",
+	sig=0.8,
+	engine="granite_8b",
+	sid="s1",
+	lines="memento/index.md#l1-5",
+	**extra,
+):
 	payload = {
 		"content": content,
 		"significance": sig,

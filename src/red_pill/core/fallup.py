@@ -116,10 +116,7 @@ def worst_case_gpu_min_free_gb() -> float:
 		return outs
 
 	try:
-		distill_subset = {
-			n: p for n, p in (profiles or {}).items()
-			if isinstance(p, dict) and "distillation" in (p.get("capabilities") or [])
-		}
+		distill_subset = {n: p for n, p in (profiles or {}).items() if isinstance(p, dict) and "distillation" in (p.get("capabilities") or [])}
 		per_profile_entry = _entries(distill_subset) or _entries(profiles or {})
 	except Exception as e:
 		logger.warning(f"[fallup] cálculo de peor caso falló ({e}); piso 6.5")

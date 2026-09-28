@@ -36,7 +36,7 @@ SYSTEM_CLASSIFY = (
 	"work (técnico/operativo: código, tests, comandos, sistemas, configs, arquitectura, infraestructura, "
 	"decisiones de ingeniería) o social (vínculo, emociones, vida personal, biografía, relaciones, familia). "
 	"Juzga el CONTENIDO, nunca el tono conversacional: un fragmento técnico narrado en primera persona sigue siendo work. "
-	"Responde SOLO un JSON array: [{\"i\": <índice>, \"category\": \"work|social\"}]."
+	'Responde SOLO un JSON array: [{"i": <índice>, "category": "work|social"}].'
 )
 SYSTEM_JUDGE = (
 	"Eres el curador de memoria del operador. Para cada fragmento decide si es memoria valiosa y "
@@ -44,7 +44,7 @@ SYSTEM_JUDGE = (
 	"decisiones, insights y milestones de ingeniería, Y momentos personales/relacionales/emocionales con "
 	"significado (infancia, vínculos, salud, identidad, familia) también son important. "
 	"Trivial = small talk, plumbing rutinario, duplicado o relleno. "
-	"Responde SOLO un JSON array: [{\"i\": <índice>, \"verdict\": \"important|trivial\", \"reason\": \"<8 palabras>\"}]."
+	'Responde SOLO un JSON array: [{"i": <índice>, "verdict": "important|trivial", "reason": "<8 palabras>"}].'
 )
 
 
@@ -143,9 +143,7 @@ def bands(rows: List[Dict[str, Any]], th_work: float, th_social: float) -> Dict[
 		out[cat] = {
 			"entran": sorted([r for r in rows if r["cat"] == cat and not r["asc"] and r["sig"] >= th[cat]], key=lambda r: -r["sig"]),
 			"salen": sorted([r for r in rows if r["cat"] == cat and r["asc"] and r["sig"] < th[cat]], key=lambda r: r["sig"]),
-			"limite": sorted(
-				[r for r in rows if r["cat"] == cat and not r["asc"] and th[cat] - 0.05 <= r["sig"] < th[cat]], key=lambda r: -r["sig"]
-			),
+			"limite": sorted([r for r in rows if r["cat"] == cat and not r["asc"] and th[cat] - 0.05 <= r["sig"] < th[cat]], key=lambda r: -r["sig"]),
 		}
 	return out
 
@@ -360,7 +358,14 @@ def audit_stability(items: List[Dict[str, Any]], th_work: float = 0.6, th_social
 	flip_rev = sorted(i for i in rb if rr.get(i) != rb[i])
 	flip_split = sorted(i for i in rb if rs.get(i) != rb[i])
 	union = sorted(set(flip_rev) | set(flip_split))
-	return {"n": n, "flip_rev": flip_rev, "flip_split": flip_split, "union": union, "n_flips": len(union), "scores": {"base": base, "rev": rev, "split": split}}
+	return {
+		"n": n,
+		"flip_rev": flip_rev,
+		"flip_split": flip_split,
+		"union": union,
+		"n_flips": len(union),
+		"scores": {"base": base, "rev": rev, "split": split},
+	}
 
 
 def audit_significance(items: List[Dict[str, Any]], seed: int, dry_run: bool) -> Dict[str, Any]:

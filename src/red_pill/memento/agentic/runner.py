@@ -68,8 +68,6 @@ def pending_agentic(
 	return pending
 
 
-
-
 def _distill_refine_present(root: Path, dir_rel: str) -> bool:
 	"""True si la sesión ya tiene distill/ y refine/ con contenido en disco."""
 	base = root / dir_rel
@@ -91,8 +89,6 @@ def _annotate_fresh(root: Path, dir_rel: str, current_version: str) -> bool:
 	return bool(data.get("annotate_prompt_version") == current_version)
 
 
-
-
 def session_max_work_unit_chars(root: Path, dir_rel: str) -> int:
 	"""Longitud (chars) del work unit más largo de una sesión (0 si no hay).
 
@@ -102,8 +98,6 @@ def session_max_work_unit_chars(root: Path, dir_rel: str) -> int:
 		return max((len(unit.content) for unit in work_units(root / dir_rel)), default=0)
 	except Exception:
 		return 0
-
-
 
 
 def _is_llm_connection_error(exc: Exception) -> bool:
@@ -132,8 +126,6 @@ def _is_llm_connection_error(exc: Exception) -> bool:
 	if "timed out" in msg or "timedout" in msg.lower():
 		return True
 	return False
-
-
 
 
 def run_agentic(
@@ -265,8 +257,6 @@ def run_agentic(
 		except Exception as e:
 			logger.warning(f"[STATIC-ASCENSION] fallo en run_agentic: {e}")
 	return stats
-
-
 
 
 def _advance_checkpoint(checkpoint_path: Path, registry: Any, total: int, redistill_since: Optional[str] = None) -> None:

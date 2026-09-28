@@ -23,6 +23,7 @@ def xdg(tmp_path, monkeypatch):
 
 # ── registry.is_rendered ───────────────────────────────────────────────────
 
+
 def test_is_rendered_falso_sin_registro(tmp_path):
 	reg = MementoRegistry(path=tmp_path / "r.json")
 	assert reg.is_rendered("abc") is False
@@ -56,6 +57,7 @@ def test_is_rendered_tolera_registro_malformado(tmp_path):
 
 
 # ── _is_archived (siempre Memento) ─────────────────────────────────────────
+
 
 def test_archived_usa_memento(xdg):
 	reg = MementoRegistry()

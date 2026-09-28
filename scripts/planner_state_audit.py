@@ -53,7 +53,10 @@ def _git(repo: Path, *args: str) -> list[str]:
 	try:
 		out = subprocess.run(
 			["git", "-C", str(repo), *args],
-			capture_output=True, text=True, timeout=30, check=False,
+			capture_output=True,
+			text=True,
+			timeout=30,
+			check=False,
 		)
 	except (OSError, subprocess.SubprocessError):
 		return []
@@ -99,11 +102,14 @@ def _propose(status: str, ev: dict, has_reason: bool, has_token: bool = True) ->
 	if not has_token:
 		return out
 	if status == "draft" and has_impl_evidence:
-		out.append({
-			"kind": "stale-status", "severity": "medium",
-			"suggest": "in-progress",
-			"reason": "draft sin evidencia de trabajo, pero hay rama/commit/fichero",
-		})
+		out.append(
+			{
+				"kind": "stale-status",
+				"severity": "medium",
+				"suggest": "in-progress",
+				"reason": "draft sin evidencia de trabajo, pero hay rama/commit/fichero",
+			}
+		)
 	if status == "ready" and has_impl_evidence:
 		out.append({"kind": "stale-status", "severity": "medium", "suggest": "in-progress", "reason": "ready con trabajo ya iniciado"})
 	if status == "in-progress" and ev["merges"]:
@@ -137,13 +143,15 @@ def audit(desk: Path, repos: list[Path], only: str | None = None, max_commits: i
 		ev = _evidence(repos, token, max_commits) if token else {"branches": [], "commits": [], "merges": [], "files": []}
 		props = _propose(status, ev, has_reason, has_token=bool(token))
 		if props:
-			results.append({
-				"doc": str(doc),
-				"id": token or doc.stem,
-				"status": status,
-				"evidence": ev,
-				"proposals": props,
-			})
+			results.append(
+				{
+					"doc": str(doc),
+					"id": token or doc.stem,
+					"status": status,
+					"evidence": ev,
+					"proposals": props,
+				}
+			)
 	return results
 
 

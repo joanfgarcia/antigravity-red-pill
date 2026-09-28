@@ -64,7 +64,9 @@ def _tokens(text: str) -> set:
 
 
 def _sessions(root: Path) -> list:
-	return sorted({str(p.parent.parent.relative_to(root)) for p in root.rglob("memento/index.md") if len(p.parent.parent.relative_to(root).parts) >= 3})
+	return sorted(
+		{str(p.parent.parent.relative_to(root)) for p in root.rglob("memento/index.md") if len(p.parent.parent.relative_to(root).parts) >= 3}
+	)
 
 
 def cmd_funnel(args) -> None:
@@ -133,10 +135,17 @@ def cmd_quality(args) -> None:
 						flags_count[fl] += 1
 		sessions_hit += int(hit)
 	toks = [_tokens(t) for t in texts]
-	near = sum(1 for i in range(len(toks)) for j in range(i + 1, len(toks)) if toks[i] and toks[j] and len(toks[i] & toks[j]) / min(len(toks[i]), len(toks[j])) > 0.6)
+	near = sum(
+		1
+		for i in range(len(toks))
+		for j in range(i + 1, len(toks))
+		if toks[i] and toks[j] and len(toks[i] & toks[j]) / min(len(toks[i]), len(toks[j])) > 0.6
+	)
 	lens = sorted(len(t) for t in texts)
+
 	def q(p: float):
 		return lens[int((len(lens) - 1) * p)] if lens else None
+
 	print(
 		json.dumps(
 			{
@@ -168,7 +177,12 @@ def cmd_annotate(args) -> None:
 	rewrite = not args.no_rewrite
 	max_sig = annotate_session(out, args.session, "lab", "lab", http_transport, voice_rewrite=rewrite)
 	files = sorted((dst / "annotate").glob("*.md"))
-	print(json.dumps({"sesion": args.session, "voice_rewrite": rewrite, "notas": len(files), "max_significance": round(float(max_sig), 2), "salida": str(dst)}, indent=2))
+	print(
+		json.dumps(
+			{"sesion": args.session, "voice_rewrite": rewrite, "notas": len(files), "max_significance": round(float(max_sig), 2), "salida": str(dst)},
+			indent=2,
+		)
+	)
 	for f in files[:5]:
 		_fm, body = _parse(f.read_text(encoding="utf-8", errors="replace"))
 		print(f"  - {body[:160]}")

@@ -39,7 +39,8 @@ _IMPERSONAL = re.compile(
 	r"^\s*(se\s+(creó|omitió|implementó|generó|corrigió|configuró|eliminó|añadió|actualizó|desplegó|sincronizó|ejecutó|arregló|restauró))\b", re.I
 )
 _ALETH_PAST = re.compile(
-	r"\bAleth\s+(creó|implementó|propuso|explicó|desplegó|configuró|generó|corrigió|añadió|actualizó|sincronizó|ejecutó|arregló|restauró|omitió)\b", re.I
+	r"\bAleth\s+(creó|implementó|propuso|explicó|desplegó|configuró|generó|corrigió|añadió|actualizó|sincronizó|ejecutó|arregló|restauró|omitió)\b",
+	re.I,
 )
 _FIRST_PERSON = re.compile(
 	r"\b(me|mi|mis|nos|le|les|he|creé|implementé|propuso|expliqué|dije|hice|desplegué|generé|corregí|configuré|actualicé|sincronicé|ejecuté|arreglé|restauré)\b",
@@ -438,7 +439,9 @@ def _annotations_from_notes(annotate_dir: Path, contract: Dict[str, Any]) -> Opt
 	return out
 
 
-def _resolve_from(from_phase: Optional[str], partial: Dict[str, Any], notes: Optional[List[Dict[str, Any]]], voice_rewrite: bool) -> Tuple[str, Optional[List[Dict[str, Any]]]]:
+def _resolve_from(
+	from_phase: Optional[str], partial: Dict[str, Any], notes: Optional[List[Dict[str, Any]]], voice_rewrite: bool
+) -> Tuple[str, Optional[List[Dict[str, Any]]]]:
 	"""`--from`: fase de entrada efectiva + anotaciones previas (degradado gracioso).
 
 	Las fases son secuenciales y mandan los prerrequisitos: la bandera pide

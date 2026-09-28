@@ -697,7 +697,12 @@ class MemoryManager:
 		fetch = limit * max(1, int(getattr(self.cfg, "MEMORY_RECALL_CANDIDATES_FACTOR", 4))) if (use_hybrid or use_mmr) else limit
 		try:
 			results = self.client.query_points(
-				collection_name=collection, query=vector, query_filter=search_filter, limit=fetch, with_payload=True, with_vectors=use_hybrid or use_mmr
+				collection_name=collection,
+				query=vector,
+				query_filter=search_filter,
+				limit=fetch,
+				with_payload=True,
+				with_vectors=use_hybrid or use_mmr,
 			).points
 		except Exception as e:
 			logger.error(f"Query failed: {_mask_pii_exception(e)}")
@@ -949,7 +954,9 @@ class MemoryManager:
 					qn = float(np.linalg.norm(q)) or 1.0
 					for rec in self.client.retrieve(collection_name=collection, ids=missing, with_payload=True, with_vectors=True):
 						pl = rec.payload or {}
-						if self._excluded_by(pl, structural_exclusions) or (not deep_recall and float(pl.get("reinforcement_score", 1.0) or 0.0) < 0.2):
+						if self._excluded_by(pl, structural_exclusions) or (
+							not deep_recall and float(pl.get("reinforcement_score", 1.0) or 0.0) < 0.2
+						):
 							continue
 						vec: Any = rec.vector if not isinstance(rec.vector, dict) else next(iter(rec.vector.values()), None)
 						v = np.asarray(vec, dtype=float) if vec is not None else None

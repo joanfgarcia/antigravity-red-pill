@@ -20,8 +20,10 @@ def _load():
 def _git_repo(tmp_path: Path, token: str) -> Path:
 	repo = tmp_path / "repo"
 	repo.mkdir()
+
 	def g(*a):
 		subprocess.run(["git", "-C", str(repo), *a], check=True, capture_output=True, text=True)
+
 	g("init", "-q", "-b", "main")
 	g("config", "user.email", "t@t")
 	g("config", "user.name", "t")

@@ -8,15 +8,25 @@ from red_pill.chronicle_sources.telegram import TelegramSourcePlugin
 
 
 def _write(conv_dir, sid, steps, created="2026-05-28T18:01:17.970534Z"):
-	d = {"id": sid, "status": "active", "channel_user_id": "u1", "summary": {"createdAt": created, "lastUpdatedAt": created, "summary": "x"}, "steps": steps}
+	d = {
+		"id": sid,
+		"status": "active",
+		"channel_user_id": "u1",
+		"summary": {"createdAt": created, "lastUpdatedAt": created, "summary": "x"},
+		"steps": steps,
+	}
 	(conv_dir / f"{sid}.json").write_text(json.dumps(d), encoding="utf-8")
 
 
 def test_telegram_source_discover_load_y_prefix(tmp_path):
-	_write(tmp_path, "abc", [
-		{"intent": "USER", "message": {"text": "hola"}},
-		{"intent": "ASSISTANT", "message": {"text": "qué tal"}},
-	])
+	_write(
+		tmp_path,
+		"abc",
+		[
+			{"intent": "USER", "message": {"text": "hola"}},
+			{"intent": "ASSISTANT", "message": {"text": "qué tal"}},
+		],
+	)
 	sp = TelegramSourcePlugin(conv_dir=tmp_path)
 	assert sp.discover() == [("abc", 2)]
 	msgs = sp.load("abc")

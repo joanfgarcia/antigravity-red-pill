@@ -15,6 +15,10 @@ Pasos (dry-run por defecto):
 	trima (el buffer es ventana corta; el archivo es Memento).
 4. MARCA: escribe `state/single_writer_migrated.json` (idempotencia).
 
+Opcional: `--drop-collection <nombre>` retira (snapshot previo + drop) una
+colección Qdrant legacy tras verificar la cobertura; el nombre entra por CLI,
+el migrador no asume ninguna colección.
+
 	uv run python scripts/migrate_single_writer.py            # dry-run
 	uv run python scripts/migrate_single_writer.py --apply    # ejecuta
 	uv run python scripts/migrate_single_writer.py --apply --force  # re-ejecutar
@@ -103,6 +107,7 @@ def main() -> int:
 	ap = argparse.ArgumentParser(description="Migración al single-writer (dry-run por defecto).")
 	ap.add_argument("--apply", action="store_true", help="Ejecuta (por defecto: dry-run)")
 	ap.add_argument("--force", action="store_true", help="Re-ejecutar aunque ya esté migrado")
+	ap.add_argument("--drop-collection", default=None, help="Snapshot + drop de una colección Qdrant legacy (opcional; el nombre lo das tú)")
 	args = ap.parse_args()
 
 	marker = _marker_path()
@@ -118,6 +123,23 @@ def main() -> int:
 			print(f"  - {m}")
 		return 1
 	print("[MIGRATE]    cobertura OK")
+
+	if args.drop_collection:
+		from red_pill.memory import MemoryManager
+
+		mm = MemoryManager()
+		if not mm.client.collection_exists(args.drop_collection):
+			print(f"[MIGRATE] drop: '{args.drop_collection}' no existe — nada que hacer.")
+		elif not args.apply:
+			print(f"[MIGRATE] drop: se snapshotearía y borraría '{args.drop_collection}' (usa --apply).")
+		else:
+			snap = mm.create_bunker_snapshot([args.drop_collection])
+			desc = snap.get(args.drop_collection, "?")
+			if str(desc).startswith("ERROR"):
+				print(f"[MIGRATE] ABORT drop: snapshot falló — NO se borra '{args.drop_collection}': {desc}")
+				return 1
+			mm.client.delete_collection(collection_name=args.drop_collection)
+			print(f"[MIGRATE] drop: '{args.drop_collection}' snapshot ({desc}) + borrada.")
 
 	staging = _staging_files()
 	print(f"[MIGRATE] 2) staging: {len(staging)} fichero(s) pendiente(s) de la vía legacy")

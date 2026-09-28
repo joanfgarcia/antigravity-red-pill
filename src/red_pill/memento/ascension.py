@@ -413,7 +413,16 @@ def ascend_by_threshold(
 
 		memory_manager = MemoryManager()
 
-	stats = {"refine_evaluados": 0, "ascendidos": 0, "rechazados_por_umbral": 0, "rechazados_por_ruta": 0, "rechazados_por_validador": 0, "errores": 0, "duplicados_omitidos": 0, "refines_omitidos_por_annotate": 0}
+	stats = {
+		"refine_evaluados": 0,
+		"ascendidos": 0,
+		"rechazados_por_umbral": 0,
+		"rechazados_por_ruta": 0,
+		"rechazados_por_validador": 0,
+		"errores": 0,
+		"duplicados_omitidos": 0,
+		"refines_omitidos_por_annotate": 0,
+	}
 
 	# MEM-006: política annotate-first POR SESIÓN — si la sesión tiene notas, sus
 	# `refine/` legacy se ignoran (fallback a refine solo si no hay annotate).

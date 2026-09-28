@@ -451,9 +451,7 @@ def test_weave_no_window_returns_early(tmp_path: Path):
 # --- Fase 4 §3.3: ascenso estático por umbral de significance ---
 
 
-def _write_refine(
-	root: Path, name: str, significance: float, ascended: bool = False, validator_approved: bool | None = None
-) -> Path:
+def _write_refine(root: Path, name: str, significance: float, ascended: bool = False, validator_approved: bool | None = None) -> Path:
 	d = root / "2026-09" / "opencode" / "s" / "refine"
 	d.mkdir(parents=True, exist_ok=True)
 	f = d / f"{name}.md"

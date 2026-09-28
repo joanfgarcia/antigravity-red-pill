@@ -128,9 +128,7 @@ def run_turn(binary: str, home: str, project: str, timeout: int) -> subprocess.C
 
 def verify_capture(queue_db: str) -> tuple[bool, str]:
 	con = sqlite3.connect(queue_db)
-	row = con.execute(
-		"SELECT prompt, response, originator, session_id FROM memory_queue ORDER BY id DESC LIMIT 1"
-	).fetchone()
+	row = con.execute("SELECT prompt, response, originator, session_id FROM memory_queue ORDER BY id DESC LIMIT 1").fetchone()
 	con.close()
 	if not row:
 		return False, "sin filas en memory_queue"

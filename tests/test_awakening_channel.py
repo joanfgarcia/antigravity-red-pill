@@ -23,7 +23,9 @@ def test_nota_para_operador_pendiente_y_leida(tmp_path):
 	ch.ensure_channel(tmp_path)
 	f = _write(
 		tmp_path / "awakening" / "notes" / "20260928_0600_job-muerto.md",
-		"---\ntitle: Job muerto\npara: Joan\n---\n\n# Decisión pendiente\n\nEl job bd6dc260 murió por disyuntor.\n\n" + ch.signature("Aleth", "2026-09-28T06:00") + "\n",
+		"---\ntitle: Job muerto\npara: Joan\n---\n\n# Decisión pendiente\n\nEl job bd6dc260 murió por disyuntor.\n\n"
+		+ ch.signature("Aleth", "2026-09-28T06:00")
+		+ "\n",
 	)
 	n = ch.parse_note(f)
 	assert n.title == "Job muerto"
@@ -31,7 +33,10 @@ def test_nota_para_operador_pendiente_y_leida(tmp_path):
 	assert n.pending_for_operator("Joan")
 	assert ch.count_for_operator(tmp_path, operator="Joan") == 1
 
-	f.write_text(f.read_text(encoding="utf-8") + f"\n## Leída 2026-09-28T07:00\n\nVisto, re-encolo.\n\n{ch.signature('Joan', '2026-09-28T07:00')}\n", encoding="utf-8")
+	f.write_text(
+		f.read_text(encoding="utf-8") + f"\n## Leída 2026-09-28T07:00\n\nVisto, re-encolo.\n\n{ch.signature('Joan', '2026-09-28T07:00')}\n",
+		encoding="utf-8",
+	)
 	assert not ch.parse_note(f).pending_for_operator("Joan")
 	assert ch.count_for_operator(tmp_path, operator="Joan") == 0
 

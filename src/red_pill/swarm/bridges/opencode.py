@@ -427,7 +427,7 @@ class OpenCodeBridge(AgentBridge):
 		# External Scribe — skip if plugin handles it
 		if not self._scribe_plugin:
 			try:
-				self._scribe_relay(user_prompt=text, agent_response=response, session_id=data.get('session_id', conversation_id))
+				self._scribe_relay(user_prompt=text, agent_response=response, session_id=data.get("session_id", conversation_id))
 			except Exception as e:
 				logger.warning(f"[OpenCodeBridge] Scribe relay failed (non-fatal): {e}")
 

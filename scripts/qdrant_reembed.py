@@ -153,7 +153,9 @@ def run(
 	low = 0
 	offset = state.get("offset")
 	while True:
-		points, next_offset = client.scroll(collection_name=collection, limit=_SCROLL_PAGE, offset=offset, with_vectors=True, with_payload=[field, "node_type", "theme", "relics"])
+		points, next_offset = client.scroll(
+			collection_name=collection, limit=_SCROLL_PAGE, offset=offset, with_vectors=True, with_payload=[field, "node_type", "theme", "relics"]
+		)
 		if not points:
 			next_offset = None
 		page = reembed_page(points, encoder, field, threshold)

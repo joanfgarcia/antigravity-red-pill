@@ -84,7 +84,9 @@ def _session_created_at(members: List[Tuple[Any, Dict[str, Any]]]) -> Optional[f
 	return min(vals) if vals else None
 
 
-def _synthesize_one(memory_manager: Any, collection: str, session_id: str, members: List[Tuple[Any, Dict[str, Any]]], synthesizer: Callable, affect_fn: Callable) -> str:
+def _synthesize_one(
+	memory_manager: Any, collection: str, session_id: str, members: List[Tuple[Any, Dict[str, Any]]], synthesizer: Callable, affect_fn: Callable
+) -> str:
 	"""Escribe (upsert) el hub de un grupo de sesión y marca sus miembros."""
 	member_ids = [pid for pid, _ in members]
 	hid = hub_point_id(collection, session_id)

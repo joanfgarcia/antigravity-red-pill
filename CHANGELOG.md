@@ -11,6 +11,11 @@ que se **actualizan** con datos legacy.
   `uv run python scripts/migrate_single_writer.py` → revisa → `--apply`.
   Verifica la cobertura de Memento, archiva `staging/`, trima el buffer y sella la
   marca. Detalle en `docs/TECHNICAL/OPERATIONS/MIGRATION_SINGLE_WRITER.md`.
+  Si un store de IDE ya no existe, el migrador aborta nombrando las sesiones sin
+  archivar; se reconstruyen desde una colección Qdrant legacy con
+  `scripts/memento_import_legacy.py --collection <nombre>` (genérico, sin nombres
+  hardcodeados) y la colección se retira con
+  `migrate_single_writer.py --drop-collection <nombre>` (snapshot previo).
 - **Flags**: los de **migración** (`SW_INGEST_RETIRED`) desaparecen en la
   demolición; los de **feature** (hubs/thread/situación/erosión/tags) pasan a
   default ON o config — un recién llegado no debe "encender hubs".

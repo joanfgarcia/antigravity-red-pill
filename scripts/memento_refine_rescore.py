@@ -277,7 +277,9 @@ def main() -> None:
 		except Exception as e:
 			stats["errores"] += 1
 			print(f"[RESCORE] error en {dir_rel}: {e}")
-	print(f"[RESCORE] sesiones: {stats['sesiones']} | notas resueltas: {stats['resueltas']} | refine escritos: {stats['refine_escritos']} | errores: {stats['errores']}")
+	print(
+		f"[RESCORE] sesiones: {stats['sesiones']} | notas resueltas: {stats['resueltas']} | refine escritos: {stats['refine_escritos']} | errores: {stats['errores']}"
+	)
 
 
 if __name__ == "__main__":

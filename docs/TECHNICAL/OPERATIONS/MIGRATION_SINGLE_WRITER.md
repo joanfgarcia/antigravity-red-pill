@@ -36,6 +36,34 @@ Pasos que ejecuta:
 
 Es **idempotente**: si la marca existe, no hace nada (salvo `--force`).
 
+## Reconstrucción de `raw/` (upgrade 7.x → 8.x)
+
+El migrador exige **cobertura** (cada sesión con `raw/` o render). Un 7.x no tiene
+árbol Memento: se construye en la primera pasada desde los **stores nativos** de
+los IDEs/CLI (la vía normal):
+
+```bash
+uv run python scripts/memento_migrate.py            # construye el delta (o todo si el árbol está vacío)
+```
+
+Si el store de un IDE ya no existe (rotado/purgado) y la sesión no tiene `raw/` ni
+render, el migrador **abortará** nombrando las sesiones ausentes. Para recuperarlas
+desde una colección Qdrant legacy que guarde turnos verbatim
+(`session_id`/`sequence_index`/`role`/`raw_content`):
+
+```bash
+# El nombre de la colección lo das tú; nada está hardcodeado en el código.
+uv run python scripts/memento_import_legacy.py --collection <coleccion>            # dry-run
+uv run python scripts/memento_import_legacy.py --collection <coleccion> --apply    # reconstruye raw/ + render
+uv run python scripts/migrate_single_writer.py --apply --drop-collection <coleccion>   # snapshot + drop
+```
+
+El importador infiere la fuente por el prefijo del `session_id` (`telegram:<uuid>` →
+`telegram`) o usa `--source` para ids sin prefijo. Es idempotente: salta lo ya
+cubierto (`--force` re-importa). `--drop-collection` toma **snapshot antes** de
+borrar y aborta si el snapshot falla.
+
+
 ## Verificación post-migración
 
 ```bash
@@ -61,7 +89,8 @@ uv run python -c "from red_pill.memory import MemoryManager; from red_pill.metab
   demolición). El archivo **Memento** (disco) y las copias `raw/` son el respaldo
   permanente.
 - Si la migración aborta por cobertura, **no** se ha tocado nada: resuelve las
-  sesiones sin archivar (p. ej. renderizar su store) y reintenta.
+  sesiones sin archivar (renderiza su store con `memento_migrate.py`, o importa
+  de una colección legacy con `memento_import_legacy.py`) y reintenta.
 
 ## Referencias
 

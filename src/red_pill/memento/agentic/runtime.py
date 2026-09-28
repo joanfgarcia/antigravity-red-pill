@@ -21,13 +21,10 @@ EDGE_HEALTH_URL = "http://localhost:8760/v1/models"
 EDGE_MODEL = "Granite-4.1-8B-Q4_K_M.gguf"
 
 
-
 # Trazabilidad de las etapas (2026-09-15): cada distill/refine y el registry guardan
 # con qué MODELO real y qué VERSIÓN de prompt se hicieron. Permite saber si un
 # engrama se generó con granite o aya, y si los prompts cambiaron desde entonces.
 _ENGINE_CACHE: Optional[str] = None
-
-
 
 
 def engine_id() -> str:
@@ -50,8 +47,6 @@ def engine_id() -> str:
 	return str(_ENGINE_CACHE)
 
 
-
-
 def _prompt_hash(*texts: str) -> str:
 	import hashlib
 
@@ -59,8 +54,6 @@ def _prompt_hash(*texts: str) -> str:
 	for t in texts:
 		h.update(t.encode("utf-8"))
 	return h.hexdigest()[:10]
-
-
 
 
 def distill_prompt_version() -> str:
@@ -135,19 +128,13 @@ def validate_prompt_version() -> str:
 	return _prompt_hash(prompts.CONTENT_VALIDATE_USER)
 
 
-
-
 def refine_prompt_version() -> str:
 	"""Fingerprint del prompt de REFINADO (WORK + SOCIAL + VOICE)."""
 	return _prompt_hash(prompts.REFINE_WORK_USER, prompts.REFINE_SOCIAL_USER, prompts._VOICE_RULE)
 
 
-
-
 # transport(system, user, max_tokens) -> str — inyectable para tests y para futuros bake-offs
 Transport = Callable[[str, str, int], str]
-
-
 
 
 def llm_available(url: str = EDGE_HEALTH_URL) -> bool:
@@ -158,8 +145,6 @@ def llm_available(url: str = EDGE_HEALTH_URL) -> bool:
 		return True
 	except Exception:
 		return False
-
-
 
 
 # ── Transporte selectivo (RFC-HARNESS-002 §7): el pase Memento lee su demanda
@@ -176,8 +161,6 @@ MODEL_N_CTX = 10240  # fallback solo si model_runtime no puede resolver
 MODEL_PROMPT_BUDGET = MODEL_N_CTX - 4096  # margen: sistema (~600) + salida (512-1024) + colchón
 
 
-
-
 def _llm_env() -> dict:
 	"""Demanda de inferencia del job: RP_LLM_TASK / RP_LLM_MODEL / RP_LLM_THINKING.
 
@@ -189,8 +172,6 @@ def _llm_env() -> dict:
 		"model": os.getenv("RP_LLM_MODEL", "").strip(),
 		"thinking": os.getenv("RP_LLM_THINKING", "").strip(),
 	}
-
-
 
 
 def model_prompt_budget() -> int:
@@ -214,8 +195,6 @@ def model_prompt_budget() -> int:
 	return int(n_ctx - 4096)
 
 
-
-
 def _fit_prompt(user: str, hard_cap: int = 20000) -> str:
 	"""Cap superior de seguridad: recorta solo prompts claramente excesivos.
 	El ajuste fino lo hace el reintento adaptativo de `http_transport` (la ratio
@@ -225,8 +204,6 @@ def _fit_prompt(user: str, hard_cap: int = 20000) -> str:
 	cut = user[:hard_cap]
 	cut = cut[: cut.rfind(" ")] if " " in cut else cut
 	return cut + "\n[... truncado por presupuesto de contexto]"
-
-
 
 
 def http_transport(system: str, user: str, max_tokens: int, temperature: float = 0.1) -> str:
@@ -249,8 +226,11 @@ def http_transport(system: str, user: str, max_tokens: int, temperature: float =
 	llm_timeout = int(getattr(cfg, "MEMENTO_LLM_TIMEOUT", 180))
 	attempt_user = _fit_prompt(user)
 	llm = _llm_env()
-	payload: Dict[str, Any] = {"messages": [{"role": "system", "content": system}, {"role": "user", "content": attempt_user}],
-		"temperature": temperature, "max_tokens": max_tokens}
+	payload: Dict[str, Any] = {
+		"messages": [{"role": "system", "content": system}, {"role": "user", "content": attempt_user}],
+		"temperature": temperature,
+		"max_tokens": max_tokens,
+	}
 	# RFC-HARNESS-002 §7: task/model/thinking desde el env del job (RP_LLM_*).
 	# Sin env → sin task/model → el daemon cae a su default (comportamiento actual).
 	if llm["task"]:
@@ -275,8 +255,6 @@ def http_transport(system: str, user: str, max_tokens: int, temperature: float =
 	return ""
 
 
-
-
 def _extract_json(text: str) -> Optional[Dict[str, Any]]:
 	start = text.find("{")
 	if start < 0:
@@ -294,8 +272,6 @@ def _extract_json(text: str) -> Optional[Dict[str, Any]]:
 				except Exception:
 					return None
 	return None
-
-
 
 
 def _extract_json_array(text: str) -> Optional[List[Dict[str, Any]]]:

@@ -20,9 +20,7 @@ class FakeClient:
 	def scroll(self, c, scroll_filter=None, limit=500, offset=None, with_payload=True, with_vectors=False):
 		# Como Qdrant: solo devuelve los curados que el filtro `should` selecciona.
 		curated = [
-			(i, p)
-			for i, p in self._points
-			if p.get("node_type") in ("memento_engram", "synthesis_hub") or p.get("lazarus_phase") == "synthesis_hub"
+			(i, p) for i, p in self._points if p.get("node_type") in ("memento_engram", "synthesis_hub") or p.get("lazarus_phase") == "synthesis_hub"
 		]
 		return [SimpleNamespace(id=i, payload=p) for i, p in curated], None
 

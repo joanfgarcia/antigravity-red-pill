@@ -59,6 +59,7 @@ def _boom(_text):
 
 # ── aggregate_tags (puro) ──────────────────────────────────────────────────
 
+
 def test_aggregate_sin_tags_devuelve_none():
 	assert aggregate_tags([{"content": "a", "ts": 1}]) is None
 	assert aggregate_tags([]) is None
@@ -94,6 +95,7 @@ def test_aggregate_desempate_por_conteo():
 
 
 # ── _upsert_semaphore en modo tag / legacy ─────────────────────────────────
+
 
 def test_tag_mode_no_destila_y_usa_tags(monkeypatch):
 	monkeypatch.setattr(cfg, "MEMENTO_REALTIME_TAG_ENABLED", True)

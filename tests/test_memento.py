@@ -1,6 +1,5 @@
 """Memento Chronicle (RFC-002 Fase 1): renderer, scrubber, registry e hilo prev/next."""
 
-
 from red_pill.memento.clean import normalize_noise
 from red_pill.memento.registry import MementoRegistry, recompute_chain
 from red_pill.memento.render import (

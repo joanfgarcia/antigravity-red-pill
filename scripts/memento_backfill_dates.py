@@ -109,10 +109,7 @@ def main() -> int:
 
 			for i in range(0, len(plan), args.batch):
 				chunk = plan[i : i + args.batch]
-				ops = [
-					_m.SetPayloadOperation(set_payload=_m.SetPayload(payload=it["payload"], points=[it["id"]]))
-					for it in chunk
-				]
+				ops = [_m.SetPayloadOperation(set_payload=_m.SetPayload(payload=it["payload"], points=[it["id"]])) for it in chunk]
 				mem.client.batch_update_points(collection_name=coll, update_operations=ops)
 			logger.info(f"{coll}: aplicados {len(plan)}.")
 	logger.info(f"TOTAL a backfillear: {total}. {'APLICADO' if args.apply else 'DRY-RUN (usa --apply)'}.")

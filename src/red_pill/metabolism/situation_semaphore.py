@@ -76,11 +76,7 @@ def aggregate_tags(items: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
 	confianza acumulada (conteo como desempate)."""
 	from collections import Counter
 
-	tagged = [
-		it
-		for it in items
-		if str(it.get("tag_status") or "") in ("ok", "degraded") and it.get("tag_emotion")
-	]
+	tagged = [it for it in items if str(it.get("tag_status") or "") in ("ok", "degraded") and it.get("tag_emotion")]
 	if not tagged:
 		return None
 	total = len([it for it in items if str(it.get("content") or "").strip()]) or len(items)

@@ -12,8 +12,6 @@ from red_pill.memento.render import extract_body
 _TITLE_SLUG_RE = re.compile(r"[^a-z0-9]+")
 
 
-
-
 def _as_list(value: Any) -> List[Any]:
 	"""Normaliza un campo que debería ser lista: el LLM a veces devuelve un int
 	(o None, o un string) en vez de un array → iterarlo reventaba el pase (2026-09-15)."""
@@ -26,13 +24,9 @@ def _as_list(value: Any) -> List[Any]:
 	return []
 
 
-
-
 def slugify_title(title: str, max_len: int = 40) -> str:
 	slug = _TITLE_SLUG_RE.sub("-", title.lower()).strip("-")[:max_len].strip("-")
 	return slug or "seccion"
-
-
 
 
 class WorkUnit(NamedTuple):
@@ -83,8 +77,6 @@ def work_units(session_dir: Path) -> List[WorkUnit]:
 	return [WorkUnit("001", f"memento/index.md#l1-{total_lines}", extract_body(index_text).strip(), "index")]
 
 
-
-
 # ── Fase 4 §5.4.1: partición por turnos con solape ──
 # Sesiones largas exceden la ventana del LLM; en vez de recortar (pierde el
 # final) se particiona por TURNOS (## ts — role) en fragmentos que quepan, con
@@ -127,9 +119,7 @@ def fragment_view(content: str, mode: str = "raw", operator: str = "Joan", agent
 	# y el renderer los pinta como `— Usuario` (2026-09-26: 5.889 líneas, 169 de 178
 	# "turnos del operador" de una sesión eran salidas de herramienta del agente).
 	# Un turno del operador cuyo cuerpo son SOLO `[TOOL RESULT…]` es de herramienta.
-	turns = [
-		("Tool", prefix, body) if role == "Usuario" and _only_tool_results(body) else (role, prefix, body) for role, prefix, body in turns
-	]
+	turns = [("Tool", prefix, body) if role == "Usuario" and _only_tool_results(body) else (role, prefix, body) for role, prefix, body in turns]
 	if mode == "pairs":
 		kept = []
 		for i, turn in enumerate(turns):
@@ -171,8 +161,6 @@ def _split_messages(content: str) -> List[Tuple[str, str]]:
 	return messages
 
 
-
-
 def _fragment_messages(messages: List[Tuple[str, str]], max_chars: int, overlap: int) -> List[List[Tuple[str, str]]]:
 	"""Agrupa turnos en fragmentos ≤ max_chars, repitiendo los últimos `overlap`
 	del fragmento anterior al inicio del siguiente (continuidad del diálogo).
@@ -203,8 +191,6 @@ def _fragment_messages(messages: List[Tuple[str, str]], max_chars: int, overlap:
 	return fragments
 
 
-
-
 def _split_long_message(msg: Tuple[str, str], max_chars: int, overlap: int) -> List[Tuple[str, str]]:
 	"""Sub-particiona un turno gigante por líneas: cada trozo ≤ max_chars, con
 	solape de las últimas `overlap` líneas, y la cabecera repetida en cada uno."""
@@ -226,12 +212,8 @@ def _split_long_message(msg: Tuple[str, str], max_chars: int, overlap: int) -> L
 	return out
 
 
-
-
 def _render_fragment(fragment: List[Tuple[str, str]]) -> str:
 	return "\n\n".join(f"{header}\n{body}" for header, body in fragment)
-
-
 
 
 def _frontmatter_block(fields: List[Tuple[str, Any]]) -> str:

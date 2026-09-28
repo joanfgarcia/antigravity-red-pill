@@ -15,7 +15,6 @@ Fix, two prongs:
    flagged hub_rebuild_pending for a future LLM re-synthesis.
 """
 
-
 from qdrant_client.http import models
 
 from red_pill.memory import MemoryManager

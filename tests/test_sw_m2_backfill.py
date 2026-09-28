@@ -61,5 +61,7 @@ def test_backfill_salta_lo_ya_backfilleado_por_ascended_at():
 	"""Compat: la 1ª pasada no puso el marcador, solo `ascended_at` → no re-procesar."""
 	mod = _load_module()
 	state = {"registry": {"opencode": {"opencode:ses_a": {"created_at": "2026-08-12T20:35:06.300000Z"}}}}
-	points = [("p1", {"origin": "memento", "source": "opencode", "session_id": "opencode:ses_a", "created_at": 1789000000.0, "ascended_at": 1789000000.0})]
+	points = [
+		("p1", {"origin": "memento", "source": "opencode", "session_id": "opencode:ses_a", "created_at": 1789000000.0, "ascended_at": 1789000000.0})
+	]
 	assert mod.plan_backfill(points, state) == []

@@ -341,12 +341,7 @@ class TestCommandMinionTimeout:
 		cmd = [
 			"python3",
 			"-c",
-			(
-				"import subprocess, time;"
-				f"p = subprocess.Popen(['sleep', '4711']);"
-				f"open({str(pid_file)!r}, 'w').write(str(p.pid));"
-				"time.sleep(300)"
-			),
+			(f"import subprocess, time;p = subprocess.Popen(['sleep', '4711']);open({str(pid_file)!r}, 'w').write(str(p.pid));time.sleep(300)"),
 		]
 		result = run(self._minion().execute("", command=cmd, timeout=2))
 		assert result["returncode"] == 124

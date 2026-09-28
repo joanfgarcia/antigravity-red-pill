@@ -304,8 +304,7 @@ class SipProvisioningCheck(ServiceSentinelPlugin):
 				type="sip_corrupt_dual_bind",
 				severity=8.0,
 				message=(
-					f"{self.name}: run_dual_bind.py at {dual_bind} does not compile "
-					f"(line {e.lineno}: {e.msg}). The generated daemon is corrupt."
+					f"{self.name}: run_dual_bind.py at {dual_bind} does not compile (line {e.lineno}: {e.msg}). The generated daemon is corrupt."
 				),
 				metadata={"service": self.service_unit, "path": str(dual_bind)},
 			)

@@ -128,7 +128,9 @@ def test_hub_de_uno_se_omite(monkeypatch):
 	monkeypatch.setattr(cfgmod, "SW_HUBS_ENABLED", True, raising=False)
 	client = FakeClient([_member("s", "única idea", "m1")])
 	mm = FakeMM(client)
-	stats = synthesize_session_hubs(mm, collections=("work_memories",), synthesizer=lambda c: {"title": "T", "summary": "S"}, affect_fn=lambda c: ("gray", 0.5))
+	stats = synthesize_session_hubs(
+		mm, collections=("work_memories",), synthesizer=lambda c: {"title": "T", "summary": "S"}, affect_fn=lambda c: ("gray", 0.5)
+	)
 	assert stats["sessions"] == 0 and not mm.added
 
 
@@ -138,5 +140,7 @@ def test_escritura_fallida_no_marca_miembros(monkeypatch):
 	monkeypatch.setattr(cfgmod, "SW_HUBS_ENABLED", True, raising=False)
 	client = FakeClient([_member("s", "idea 1", "m1"), _member("s", "idea 2", "m2")])
 	mm = FakeMM(client, fail=True)
-	stats = synthesize_session_hubs(mm, collections=("work_memories",), synthesizer=lambda c: {"title": "T", "summary": "S"}, affect_fn=lambda c: ("gray", 0.5))
+	stats = synthesize_session_hubs(
+		mm, collections=("work_memories",), synthesizer=lambda c: {"title": "T", "summary": "S"}, affect_fn=lambda c: ("gray", 0.5)
+	)
 	assert stats["hubs_failed"] == 1 and not client.marked

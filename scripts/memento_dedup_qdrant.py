@@ -361,9 +361,7 @@ def _load_points(memory_manager: Any) -> List[Dict[str, Any]]:
 	for coll in ("work_memories", "social_memories"):
 		offset = None
 		while True:
-			batch, offset = memory_manager.client.scroll(
-				collection_name=coll, limit=1000, offset=offset, with_payload=True, with_vectors=False
-			)
+			batch, offset = memory_manager.client.scroll(collection_name=coll, limit=1000, offset=offset, with_payload=True, with_vectors=False)
 			for p in batch:
 				points.append({"id": str(p.id), "collection": coll, "payload": dict(p.payload or {})})
 			if offset is None:
@@ -398,8 +396,12 @@ def main() -> None:
 	route_resolver = _make_route_resolver(Path(get_memento_root())) if args.scope == "global" else None
 	plan = build_plan(points, weights, scope=args.scope, route_resolver=route_resolver)
 	totals = plan["totals"]
-	print(f"[dedup] scope={args.scope} · puntos={totals['points']} · grupos_dup={totals['grupos_dup']} · borrados_planificados={totals['borrados_planificados']}")
-	print(f"[dedup] sin_clave={totals['sin_clave']} · fuentes_con_body_distinto={totals['fuentes_con_body_distinto']} · grupos_protegidos={totals['grupos_protegidos_por_referencia']}")
+	print(
+		f"[dedup] scope={args.scope} · puntos={totals['points']} · grupos_dup={totals['grupos_dup']} · borrados_planificados={totals['borrados_planificados']}"
+	)
+	print(
+		f"[dedup] sin_clave={totals['sin_clave']} · fuentes_con_body_distinto={totals['fuentes_con_body_distinto']} · grupos_protegidos={totals['grupos_protegidos_por_referencia']}"
+	)
 	print(f"[dedup] por_coleccion={totals['por_coleccion']} · por_engine={totals['por_engine_borrados']}")
 	print(f"[dedup] superviventes={totals['survivores_por_coleccion']} · con_ruta_ok={totals['survivores_con_ruta_ok']}")
 

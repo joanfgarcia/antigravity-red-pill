@@ -35,11 +35,7 @@ def _selected() -> list:
 
 	root = Path(get_memento_root())
 	dirs = sorted(
-		{
-			str(p.parent.parent.relative_to(root))
-			for p in root.rglob("memento/index.md")
-			if len(p.parent.parent.relative_to(root).parts) >= 3
-		}
+		{str(p.parent.parent.relative_to(root)) for p in root.rglob("memento/index.md") if len(p.parent.parent.relative_to(root).parts) >= 3}
 	)
 	rnd = random.Random(SEED)
 	return rnd.sample(dirs, min(COUNT, len(dirs)))

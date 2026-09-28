@@ -28,16 +28,12 @@ def cross_ref_candidates(registry: Any, source: str, session_id: str, limit: int
 	return sorted(candidates)[:limit]
 
 
-
-
 # ── Fase 4 §5.4.2: refine multi-idea (map-reduce sobre fragments) ──
 
 
 def _format_fragments(frags: List[Dict[str, Any]], start: int = 1) -> str:
 	"""`FRAGMENT i\nTitle: ...\nSummary: ...` para el prompt (índices globales)."""
 	return "\n\n".join(f"FRAGMENT {start + i}\nTitle: {s['title']}\nSummary: {s['summary']}" for i, s in enumerate(frags))
-
-
 
 
 def _split_to_fit(frags: List[Dict[str, Any]], candidates: List[str], max_chars: int) -> List[List[Dict[str, Any]]]:
@@ -49,7 +45,9 @@ def _split_to_fit(frags: List[Dict[str, Any]], candidates: List[str], max_chars:
 		next_lots: List[List[Dict[str, Any]]] = []
 		split = False
 		for lot in lots:
-			prompt_len = len(prompts.REFINE_WORK_USER.format(voice=prompts._VOICE_RULE, candidates=json.dumps(candidates), fragments=_format_fragments(lot)))
+			prompt_len = len(
+				prompts.REFINE_WORK_USER.format(voice=prompts._VOICE_RULE, candidates=json.dumps(candidates), fragments=_format_fragments(lot))
+			)
 			if prompt_len <= max_chars or len(lot) <= 1:
 				next_lots.append(lot)
 			else:
@@ -60,8 +58,6 @@ def _split_to_fit(frags: List[Dict[str, Any]], candidates: List[str], max_chars:
 		lots = next_lots
 		if not split:
 			return lots
-
-
 
 
 def _refine_multi(transport: Transport, frags: List[Dict[str, Any]], candidates: List[str]) -> List[Dict[str, Any]]:
@@ -82,8 +78,6 @@ def _refine_multi(transport: Transport, frags: List[Dict[str, Any]], candidates:
 			ideas.extend(runtime._extract_json_array(raw) or [])
 		cursor += len(lot)
 	return ideas
-
-
 
 
 def _dedup_ideas(ideas: List[Dict[str, Any]], threshold: float = 0.6) -> List[Dict[str, Any]]:
@@ -120,8 +114,6 @@ def _dedup_ideas(ideas: List[Dict[str, Any]], threshold: float = 0.6) -> List[Di
 		kept.append(idea)
 		kept_tokens.append(t)
 	return kept
-
-
 
 
 def refine_session(

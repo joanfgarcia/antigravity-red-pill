@@ -53,11 +53,7 @@ class OpencodeSourcePlugin(ChronicleSourcePlugin):
 			origins = read_opencode_origins()
 		except Exception:
 			origins = {}
-		return [
-			(str(sid), int(count))
-			for sid, count in rows
-			if sid and (origins.get(str(sid), {}) or {}).get("origin") != "telegram"
-		]
+		return [(str(sid), int(count)) for sid, count in rows if sid and (origins.get(str(sid), {}) or {}).get("origin") != "telegram"]
 
 	def _render_part(self, part: Dict[str, Any]) -> str:
 		p_type = part.get("type")

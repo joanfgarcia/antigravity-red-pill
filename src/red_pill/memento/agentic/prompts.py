@@ -10,13 +10,13 @@ logger = logging.getLogger(__name__)
 
 _PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
 
+
 def _load_prompt_file(name: str) -> str:
 	"""Carga un prompt desde `prompts/<name>` (RFC-003: prompts como recurso).
 
 	Byte-exacto (sin strip): los fingerprints hashean el texto tal cual, así la
 	migración constante→fichero no cambia ningún `*_prompt_version` sellado."""
 	return (_PROMPTS_DIR / name).read_text(encoding="utf-8")
-
 
 
 def _identity_bio_with_source() -> tuple[str, str]:
@@ -64,7 +64,9 @@ def _load_identity_bio() -> str:
 # RFC-003; el loader compartido la absorberá.
 IDENTITY_BIO, IDENTITY_BIO_SOURCE = _identity_bio_with_source()
 if IDENTITY_BIO_SOURCE == "template":
-	logger.warning("[MEMENTO] Bio de identidad no encontrada en la config (~/.config/red-pill/identity_bio.md) — usando plantilla neutra: la voz y el género pierden anclaje.")
+	logger.warning(
+		"[MEMENTO] Bio de identidad no encontrada en la config (~/.config/red-pill/identity_bio.md) — usando plantilla neutra: la voz y el género pierden anclaje."
+	)
 
 # VOICE (2026-09-15, alineada con distiller_v3_voice MODE B): el pase Memento
 # producía memorias en 3ª persona ("El usuario...", "Se corrigió...") — se
@@ -84,12 +86,10 @@ ANNOTATE_SOCIAL_USER_V2 = _load_prompt_file("annotate_social_user_v2.txt")
 DUAL_SCORE_USER_V2 = _load_prompt_file("dual_score_user_v2.txt")
 
 
-
 DISTILL_SYSTEM = _load_prompt_file("distill_system.txt")
 
 
 DISTILL_USER = _load_prompt_file("distill_user.txt")
-
 
 
 # Fase 4 §5.4.1: prompts por POSICIÓN del fragmento. El de apertura captura el
@@ -98,16 +98,13 @@ DISTILL_USER = _load_prompt_file("distill_user.txt")
 DISTILL_USER_OPENING = _load_prompt_file("distill_user_opening.txt")
 
 
-
 DISTILL_USER_CONTINUATION = _load_prompt_file("distill_user_continuation.txt")
-
 
 
 REFINE_SYSTEM = _load_prompt_file("refine_system.txt")
 
 
 REFINE_USER = _load_prompt_file("refine_user.txt")
-
 
 
 # Fase 4 §5.4.2: refine MULTI-IDEA. Devuelve un ARRAY de ideas (0..N, lo decide el
@@ -125,19 +122,16 @@ REFINE_WORK_SYSTEM = _load_prompt_file("refine_work_system.txt")
 REFINE_WORK_USER = _load_prompt_file("refine_work_user.txt")
 
 
-
 REFINE_SOCIAL_SYSTEM = _load_prompt_file("refine_social_system.txt")
 
 
 REFINE_SOCIAL_USER = _load_prompt_file("refine_social_user.txt")
 
 
-
 DUAL_SCORE_SYSTEM = _load_prompt_file("dual_score_system.txt")
 
 
 DUAL_SCORE_USER = _load_prompt_file("dual_score_user.txt")
-
 
 
 REFINE_MULTI_USER = _load_prompt_file("refine_multi_user.txt")

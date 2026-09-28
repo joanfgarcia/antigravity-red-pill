@@ -31,13 +31,13 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-
 _VOLATILE_RE = re.compile(r"(?<![\w/.~-])/(?:tmp|dev/shm|run/user/\d+)/[^\s\"']*")
 
 
 def _volatile_paths(payload: Dict[str, Any]) -> List[str]:
 	"""Rutas del payload que no sobreviven a un reinicio (/tmp, /dev/shm, /run/user/N)."""
 	return sorted(set(_VOLATILE_RE.findall(json.dumps(payload, ensure_ascii=False))))
+
 
 def switch_skin(skin_name: str) -> str:
 	"""Switch Lore Skin and persist in Bünker."""
@@ -869,7 +869,9 @@ def _kick_queue() -> None:
 	try:
 		subprocess.run(
 			["systemctl", "--user", "start", "--no-block", "redpill-queue.service"],
-			capture_output=True, text=True, timeout=15,
+			capture_output=True,
+			text=True,
+			timeout=15,
 		)
 	except (subprocess.SubprocessError, OSError) as e:
 		print(f"[WARN] no se pudo disparar el runner al momento: {e} (el timer lo recogerá en ≤1 min)")
@@ -1275,9 +1277,7 @@ def main() -> None:
 	)
 	job_submit.add_argument("--parent", help="Id del job padre: entra BLOCKED y se desbloquea cuando el padre completa (DAG)")
 	job_submit.add_argument("--mission", help="Grupo de aislamiento entre forges (mission_id)")
-	job_submit.add_argument(
-		"--paused", action="store_true", help="Encolar el job ya PAUSADO: nace sin que el runner lo toque hasta `job resume`."
-	)
+	job_submit.add_argument("--paused", action="store_true", help="Encolar el job ya PAUSADO: nace sin que el runner lo toque hasta `job resume`.")
 	job_submit.add_argument(
 		"--allow-tmp", action="store_true", help="Permitir rutas volátiles (/tmp, /dev/shm, /run/user) en el payload: no sobreviven a un reinicio."
 	)
@@ -1306,9 +1306,7 @@ def main() -> None:
 	job_kill = job_sub.add_parser("kill", help="Abatir el step en vuelo (duro): PAUSED* reanudable, con marca de kill sucio")
 	job_kill.add_argument("job_id", help="Id completo o prefijo corto")
 	job_kill.add_argument("--discard", action="store_true", help="Cancelar definitivamente: FRUSTRATED en lugar de reanudable")
-	job_cancel = job_sub.add_parser(
-		"cancel", help="Cancelar un job en espera (PENDING/BLOCKED u otros): FRUSTRATED limpio + cascada a hijos BLOCKED"
-	)
+	job_cancel = job_sub.add_parser("cancel", help="Cancelar un job en espera (PENDING/BLOCKED u otros): FRUSTRATED limpio + cascada a hijos BLOCKED")
 	job_cancel.add_argument("job_id", help="Id completo o prefijo corto")
 
 	job_logs = job_sub.add_parser("logs", help="Salida del proceso hijo de un job (stdout/stderr por step)")
@@ -1683,7 +1681,9 @@ def main() -> None:
 							is_deep = True
 							break
 
-				search_results = manager.search_and_reinforce(collection, args.query, limit=args.limit, deep_recall=is_deep, caller="cli_search", hybrid=True)
+				search_results = manager.search_and_reinforce(
+					collection, args.query, limit=args.limit, deep_recall=is_deep, caller="cli_search", hybrid=True
+				)
 				if is_deep:
 					print(f"--- [DEEP RECALL ACTIVATED: {collection.upper()}] ---")
 				else:

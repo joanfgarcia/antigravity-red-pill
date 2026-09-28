@@ -81,12 +81,7 @@ def test_import_no_arrastra_torch():
 	assert "laya" not in top_level
 	fns = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "load_agent"]
 	assert fns, "load_agent debe existir"
-	imported_in_load = {
-		a.name.split(".")[0]
-		for n in ast.walk(fns[0])
-		if isinstance(n, ast.Import)
-		for a in n.names
-	}
+	imported_in_load = {a.name.split(".")[0] for n in ast.walk(fns[0]) if isinstance(n, ast.Import) for a in n.names}
 	assert "laya" in imported_in_load
 
 

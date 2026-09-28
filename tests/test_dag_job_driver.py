@@ -1103,7 +1103,14 @@ def test_fanout_blocked_until_source_completes_then_instances(tmp_path, monkeypa
 		str(ws),
 		[
 			{"id": "discover", "type": "command", "minion": "source", "command": "discover"},
-			{"id": "plant", "type": "command", "minion": "command_runner", "fan_out_from": "discover", "depends_on": ["discover"], "command": "echo {{item}} > out.txt"},
+			{
+				"id": "plant",
+				"type": "command",
+				"minion": "command_runner",
+				"fan_out_from": "discover",
+				"depends_on": ["discover"],
+				"command": "echo {{item}} > out.txt",
+			},
 		],
 	)
 	o1 = d.step(payload, {})
@@ -1134,7 +1141,14 @@ def test_fanout_empty_list_marks_plant_done(tmp_path, monkeypatch):
 		str(ws),
 		[
 			{"id": "discover", "type": "command", "minion": "source_empty", "command": "discover"},
-			{"id": "plant", "type": "command", "minion": "command_runner", "fan_out_from": "discover", "depends_on": ["discover"], "command": "echo {{item}} > out.txt"},
+			{
+				"id": "plant",
+				"type": "command",
+				"minion": "command_runner",
+				"fan_out_from": "discover",
+				"depends_on": ["discover"],
+				"command": "echo {{item}} > out.txt",
+			},
 		],
 	)
 	o1 = d.step(payload, {})
@@ -1157,7 +1171,14 @@ def test_fanout_frozen_items_survive_resume(tmp_path, monkeypatch):
 		str(ws),
 		[
 			{"id": "discover", "type": "command", "minion": "source", "command": "discover"},
-			{"id": "plant", "type": "command", "minion": "command_runner", "fan_out_from": "discover", "depends_on": ["discover"], "command": "echo {{item}} > out.txt"},
+			{
+				"id": "plant",
+				"type": "command",
+				"minion": "command_runner",
+				"fan_out_from": "discover",
+				"depends_on": ["discover"],
+				"command": "echo {{item}} > out.txt",
+			},
 		],
 	)
 	o1 = d.step(payload, {})
@@ -1180,7 +1201,15 @@ def test_fanout_validate_rejects_bad_reference():
 	with pytest.raises(ValueError, match="no puede referenciarse a sí misma"):
 		D.validate(_payload(ws, [{"id": "a", "type": "command", "minion": "command_runner", "command": "x", "fan_out_from": "a"}]))
 	# depends_on sobre la fuente es LEGÍTIMO (la plantilla espera a descubrir)
-	D.validate(_payload(ws, [{"id": "a", "type": "command", "minion": "command_runner", "command": "x"}, {"id": "b", "type": "command", "minion": "command_runner", "command": "y", "fan_out_from": "a", "depends_on": ["a"]}]))
+	D.validate(
+		_payload(
+			ws,
+			[
+				{"id": "a", "type": "command", "minion": "command_runner", "command": "x"},
+				{"id": "b", "type": "command", "minion": "command_runner", "command": "y", "fan_out_from": "a", "depends_on": ["a"]},
+			],
+		)
+	)
 
 
 def test_read_report_items_from_stdout_json(tmp_path):
@@ -1188,9 +1217,7 @@ def test_read_report_items_from_stdout_json(tmp_path):
 
 	ws = tmp_path / "ws"
 	(ws / ".cell" / "reports").mkdir(parents=True)
-	(ws / ".cell" / "reports" / "discover.json").write_text(
-		json.dumps({"status": "success", "stdout": json.dumps({"items": ["a", "b"]})})
-	)
+	(ws / ".cell" / "reports" / "discover.json").write_text(json.dumps({"status": "success", "stdout": json.dumps({"items": ["a", "b"]})}))
 	assert D._read_report_items(ws, "discover") == ["a", "b"]
 	# reporte sin items → lista vacía
 	(ws / ".cell" / "reports" / "vacio.json").write_text(json.dumps({"stdout": "sin items"}))

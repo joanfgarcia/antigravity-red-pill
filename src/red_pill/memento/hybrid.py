@@ -108,7 +108,9 @@ def _term_lines(root: Path, session_dir: str, term: str, max_lines: int = 40) ->
 	rg = _rg()
 	if rg is None:
 		try:
-			return [i for i, line in enumerate(index.read_text(encoding="utf-8", errors="ignore").split("\n"), start=1) if term.lower() in line.lower()][:max_lines]
+			return [
+				i for i, line in enumerate(index.read_text(encoding="utf-8", errors="ignore").split("\n"), start=1) if term.lower() in line.lower()
+			][:max_lines]
 		except OSError:
 			return []
 	try:
