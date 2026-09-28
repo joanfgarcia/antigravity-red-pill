@@ -51,6 +51,9 @@ class TelegramSourcePlugin(ChronicleSourcePlugin):
 			d = json.loads(f.read_text(encoding="utf-8"))
 		except Exception:
 			return []
+		return self._messages_from(d)
+
+	def _messages_from(self, d: Dict[str, Any]) -> List[Dict[str, Any]]:
 		ts = self._created_at(d)
 		out: List[Dict[str, Any]] = []
 		for s in d.get("steps") or []:
@@ -60,6 +63,32 @@ class TelegramSourcePlugin(ChronicleSourcePlugin):
 			role = "user" if "USER" in str(s.get("intent", "")).upper() else "assistant"
 			out.append({"role": role, "content": text, "timestamp": ts})
 		return out
+
+	def export_raw(self, conversation_id: str, dest_dir: "Path") -> Optional["Path"]:
+		"""Copia verbatim el JSON nativo de la sesión de Telegram a `raw/`.
+
+		Telegram no tenía `export_raw` (el base devuelve None) → sus sesiones se
+		registraban sin `raw/`, y la purga de `archive_memories` abortaba por
+		cobertura incompleta (9/829, 2026-09-28). El store nativo ES el JSON.
+		"""
+		import shutil
+
+		src = self.conv_dir / f"{conversation_id}.json"
+		if not src.exists():
+			return None
+		dest_dir = Path(dest_dir)
+		dest_dir.mkdir(parents=True, exist_ok=True)
+		dest = dest_dir / f"{conversation_id}.json"
+		shutil.copy2(src, dest)
+		return dest
+
+	def load_raw(self, raw_file: "Path") -> List[Dict[str, Any]]:
+		"""Renormaliza mensajes desde la copia `raw/` (regeneración sin store)."""
+		try:
+			d = json.loads(Path(raw_file).read_text(encoding="utf-8"))
+		except Exception:
+			return []
+		return self._messages_from(d)
 
 	@staticmethod
 	def _created_at(d: Dict[str, Any]) -> Optional[float]:
