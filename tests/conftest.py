@@ -15,6 +15,17 @@ os.environ["APP_ROOT"] = tempfile.gettempdir()  # Redirect all storage to /tmp
 
 
 @pytest.fixture(autouse=True)
+def _default_ingest_not_retired(monkeypatch):
+	"""Hermético al flag single-writer: por defecto la suite corre con la ingesta
+	legacy NO retirada (los tests del modo retirado lo activan explícitamente con
+	monkeypatch en su cuerpo). Sin esto, activar `SW_INGEST_RETIRED` en el entorno
+	del runner rompería los tests de la vía legacy."""
+	import red_pill.config as _cfg
+
+	monkeypatch.setattr(_cfg, "SW_INGEST_RETIRED", False)
+
+
+@pytest.fixture(autouse=True)
 def bunker_isolation(monkeypatch):
 	"""
 	Universal isolation fixture (AUTO-USE).

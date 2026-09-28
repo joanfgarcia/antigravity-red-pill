@@ -136,7 +136,8 @@ def _run_hub_and_thread(memory_manager) -> None:
 		from red_pill.metabolism.hub_synthesis import synthesize_session_hubs
 		from red_pill.metabolism.thread_synthesis import weave_member_threads
 
-		hub_stats = synthesize_session_hubs(memory_manager)
+		_cap = int(getattr(cfg, "SW_HUBS_MAX_SESSIONS_PER_CYCLE", 0) or 0)
+		hub_stats = synthesize_session_hubs(memory_manager, limit_sessions=(_cap or None))
 		thread_stats = weave_member_threads(memory_manager)
 		if hub_stats.get("enabled") or thread_stats.get("enabled"):
 			logger.info(f"[SLEEP ENGINE] Hubs: {hub_stats} · Thread: {thread_stats}")

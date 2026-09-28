@@ -521,6 +521,9 @@ class RedPillConfig(BaseSettings):
 	INTERACTION_MAX_AGE_DAYS: int = 30  # tope duro: lo no renderizado más viejo se purga (con señal)
 	SW_DEDUP_ENABLED: bool = False  # dedup-at-ascension: un solo ganador por grupo (session_id, source_lines)
 	SW_HUBS_ENABLED: bool = False  # hub synthesis sobre engramas existentes (agrupa por sesión)
+	# Tope de sesiones sintetizadas por ciclo de sueño (0 = sin tope). Necesario
+	# para acotar el backfill inicial (584+322 sesiones) sin reventar el step.
+	SW_HUBS_MAX_SESSIONS_PER_CYCLE: int = 0
 	SW_INGEST_RETIRED: bool = False  # retira la ingesta interaction→work/social (solo ascensión Memento)
 	SW_THREAD_ENABLED: bool = False  # micro-hilo de Ariadna (prev/next_member por sesión, orden de refine)
 	SW_ABSENCE_GUARD_CONDITIONAL: bool = False  # ON: el pulse NO refresca last_recalled_at cada hora (solo tras ausencia real)
