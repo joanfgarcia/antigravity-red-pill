@@ -102,6 +102,34 @@ def _awakening_planner_directive(policy: str) -> str:
 	)
 
 
+def _awakening_channel_directive(operator: str | None = None) -> str:
+	"""Bloque delgado (AWAKEN-002): canal de notas + puntero al índice del desk.
+
+	Patrón deliberado: el prompt NO lleva la directiva entera de vigilancia; lleva
+	el buzón (direcciones 1 y 3) y un puntero al índice AWAKEN-002 que el despertar
+	lee solo si le apetece. Nunca lanza: si el desk no está, devuelve el puntero.
+	"""
+	pointer = (
+		"CANAL DE NOTAS Y TIEMPO LIBRE (AWAKEN-002, opcional — NADA obligatorio):\n"
+		"PRIMER PASO opcional: revisa el buzón `${AGENT_CORE_DIR}/awakening/notes/` "
+		"(las notas sin `para:` son deberes del Fixer para ti). Registra `## Leída <ts>` "
+		"con estado (hecho / no hecho + porqué / visto) y firma `— <nombre> · <ts>`.\n"
+		"Si algo necesita una DECISIÓN del Fixer, déjale una nota `para: <Operador>` en ese "
+		"buzón: su próxima sesión la verá en el digest.\n"
+		"Índice completo de tu tiempo libre (vigilancia del planner + pre-pase determinista "
+		"`scripts/planner_state_audit.py`): `planner/design/AWAKEN-002-despertares-utiles/README.md`."
+	)
+	try:
+		from red_pill.core import awakening_channel as ch
+
+		operator = operator or ch.operator_name()
+		pending = ch.count_for_operator(operator=operator)
+		duties = len(ch.duty_notes(operator=operator))
+	except Exception:
+		return pointer
+	return f"{pointer}\nRecuento ahora: {pending} nota(s) para {operator} sin leer; {duties} deber(es) sin marcar."
+
+
 def get_connection():
 	conn = sqlite3.connect(str(DB_PATH), timeout=10.0)
 	conn.row_factory = sqlite3.Row
@@ -1236,6 +1264,7 @@ class IDEWorker:
 			f"semantic compaction is operator on-demand, never auto-compact.\n"
 			f"4. Then proceed with your autonomous work.\n"
 			f"{_awakening_planner_directive(cfg.get_config().AWAKENING_PLANNER_ACCESS)}\n"
+			f"{_awakening_channel_directive()}\n"
 			f"</constraint>\n"
 			f"</RULE[user_global]>\n"
 			f"</user_rules>\n\n"
