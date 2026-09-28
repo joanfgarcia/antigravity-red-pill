@@ -45,10 +45,15 @@ def _marker_path() -> Path:
 	return get_state_dir() / "single_writer_migrated.json"
 
 
-def _staging_files() -> list[Path]:
-	from red_pill.core.paths import get_staging_dir
+def _legacy_staging_dir() -> Path:
+	"""Directorio de staging legacy (getter centralizado en `core.paths`)."""
+	from red_pill.core.paths import get_legacy_staging_dir
 
-	d = get_staging_dir()
+	return get_legacy_staging_dir()
+
+
+def _staging_files() -> list[Path]:
+	d = _legacy_staging_dir()
 	if not d.is_dir():
 		return []
 	return [p for p in d.iterdir() if p.is_file()]
@@ -129,9 +134,7 @@ def main() -> int:
 		return 0
 
 	if staging:
-		from red_pill.core.paths import get_staging_dir
-
-		dest = get_staging_dir() / f"_migrated_{int(time.time())}"
+		dest = _legacy_staging_dir() / f"_migrated_{int(time.time())}"
 		dest.mkdir(parents=True, exist_ok=True)
 		for p in staging:
 			try:

@@ -1,17 +1,13 @@
-"""SHARD-13 — purga de Telegram Memento-consciente bajo SW_INGEST_RETIRED.
+"""Purga de Telegram Memento-consciente (infra de staging retirada).
 
-Con la ingesta retirada, `metadata.source_buffer_id` (drenaje legacy) ya no se
-escribe: el janitor debe verificar la archivación en Memento, o las sesiones
-`pending_purge` nunca se purgarían.
+El janitor purga del disco las sesiones `pending_purge` ya renderizadas en Memento
+(acotado a la fuente `telegram`); fail-safe si no puede verificar.
 """
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-
 import pytest
 
-import red_pill.config as cfg
 from red_pill.memento.registry import MementoRegistry
 from red_pill.telegram.session import TelegramSessionManager
 
@@ -59,39 +55,34 @@ def test_is_rendered_tolera_registro_malformado(tmp_path):
 	assert reg.is_rendered("x") is False
 
 
-# ── _is_archived con SW_INGEST_RETIRED ON ──────────────────────────────────
+# ── _is_archived (siempre Memento) ─────────────────────────────────────────
 
-def test_archived_retired_usa_memento(xdg, monkeypatch):
-	monkeypatch.setattr(cfg, "SW_INGEST_RETIRED", True)
+def test_archived_usa_memento(xdg):
 	reg = MementoRegistry()
 	reg.upsert("telegram", "s1", {"dir": "d"})
 	reg.save()
 	mgr = TelegramSessionManager()
-	# sin cliente: en modo retirado NO se usa Qdrant
-	assert mgr._is_archived(client=None, session_id="s1") is True
-	assert mgr._is_archived(client=None, session_id="no-existe") is False
+	assert mgr._is_archived(session_id="s1") is True
+	assert mgr._is_archived(session_id="no-existe") is False
 
 
-def test_archived_retired_registry_roto_no_purga(xdg, monkeypatch):
+def test_archived_registry_roto_no_purga(xdg, monkeypatch):
 	"""Fail-safe: si no se puede verificar, se retiene (no se borra)."""
-	monkeypatch.setattr(cfg, "SW_INGEST_RETIRED", True)
 	monkeypatch.setattr(MementoRegistry, "is_rendered", lambda self, sid, sources=None: (_ for _ in ()).throw(RuntimeError("boom")))
 	mgr = TelegramSessionManager()
-	assert mgr._is_archived(client=None, session_id="s1") is False
+	assert mgr._is_archived(session_id="s1") is False
 
 
-def test_archived_retired_no_falso_positivo_cross_source(xdg, monkeypatch):
+def test_archived_no_falso_positivo_cross_source(xdg):
 	"""UUID presente en OTRA fuente (antigravity) NO debe purgar un pendiente de Telegram."""
-	monkeypatch.setattr(cfg, "SW_INGEST_RETIRED", True)
 	reg = MementoRegistry()
 	reg.state["registry"] = {"antigravity": {"s1": {"dir": "d"}}}
 	reg.save()
 	mgr = TelegramSessionManager()
-	assert mgr._is_archived(client=None, session_id="s1") is False
+	assert mgr._is_archived(session_id="s1") is False
 
 
-def test_run_janitor_retired_purga_solo_renderizadas(xdg, monkeypatch):
-	monkeypatch.setattr(cfg, "SW_INGEST_RETIRED", True)
+def test_run_janitor_purga_solo_renderizadas(xdg):
 	mgr = TelegramSessionManager()
 	s1 = mgr.create_session("u")
 	s2 = mgr.create_session("u")
@@ -100,38 +91,7 @@ def test_run_janitor_retired_purga_solo_renderizadas(xdg, monkeypatch):
 	reg = MementoRegistry()
 	reg.upsert("telegram", s1["id"], {"dir": "d"})
 	reg.save()
-	n = mgr.run_janitor_sweep()  # sin Qdrant: la vía Memento no lo necesita
+	n = mgr.run_janitor_sweep()
 	assert n == 1
 	assert not mgr._get_path(s1["id"]).exists()
 	assert mgr._get_path(s2["id"]).exists()
-
-
-# ── _is_archived con SW_INGEST_RETIRED OFF (legacy) ────────────────────────
-
-def test_archived_legacy_usa_source_buffer_id(xdg, monkeypatch):
-	monkeypatch.setattr(cfg, "SW_INGEST_RETIRED", False)
-	mgr = TelegramSessionManager()
-	client = MagicMock()
-	client.scroll.return_value = ([object()], None)
-	assert mgr._is_archived(client=client, session_id="s1") is True
-	# el filtro consulta source_buffer_id en work/social
-	key = client.scroll.call_args.kwargs["scroll_filter"].must[0].key
-	assert key == "metadata.source_buffer_id"
-
-
-def test_archived_legacy_sin_hit_no_purga(xdg, monkeypatch):
-	monkeypatch.setattr(cfg, "SW_INGEST_RETIRED", False)
-	mgr = TelegramSessionManager()
-	client = MagicMock()
-	client.scroll.return_value = ([], None)
-	assert mgr._is_archived(client=client, session_id="s1") is False
-
-
-def test_archived_legacy_no_consulta_memento(xdg, monkeypatch):
-	"""Con RETIRED OFF, el path Memento no se toca (comportamiento intacto)."""
-	monkeypatch.setattr(cfg, "SW_INGEST_RETIRED", False)
-	monkeypatch.setattr(MementoRegistry, "is_rendered", lambda self, sid: (_ for _ in ()).throw(AssertionError("no debe llamarse")))
-	mgr = TelegramSessionManager()
-	client = MagicMock()
-	client.scroll.return_value = ([], None)
-	assert mgr._is_archived(client=client, session_id="s1") is False

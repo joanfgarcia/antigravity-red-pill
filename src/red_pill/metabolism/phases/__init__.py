@@ -16,8 +16,8 @@ from red_pill.metabolism.phases.operator_profile_phase import OperatorProfilePha
 from red_pill.metabolism.phases.recent_activity_phase import RecentActivityPhase
 from red_pill.metabolism.phases.revision_phase import RevisionPhase
 
-# Ordered pipeline. HubSynthesisPhase first (hubs+hilo; con SW_INGEST_RETIRED
-# ya SIN drain→staging), then CPU-only housekeeping that runs even while it is deferred.
+# Ordered pipeline. HubSynthesisPhase first (hubs + hilo; sin drain ni
+# staging), then CPU-only housekeeping that runs even while it is deferred.
 # OrphanPromotion rescues hub-less turns right after consolidation so the
 # weaver and erosion see them as first-class hubs the same cycle. AxonWeaver
 # runs after consolidation (tonight's engrams are weavable) and before

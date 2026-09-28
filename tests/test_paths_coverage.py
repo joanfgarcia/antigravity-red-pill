@@ -226,13 +226,6 @@ class TestGetThreadStatePath:
 		assert result.name == "thread_state.json"
 
 
-class TestGetStagingDir:
-	def test_creates_subdirectory(self):
-		result = paths.get_staging_dir()
-		assert result.exists()
-		assert result.name == "staging"
-
-
 class TestGetIngestionDir:
 	def test_creates_subdirectory(self):
 		result = paths.get_ingestion_dir()

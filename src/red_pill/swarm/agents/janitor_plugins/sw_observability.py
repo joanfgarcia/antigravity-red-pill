@@ -23,7 +23,7 @@ class SwObservabilityPlugin(JanitorPlugin):
 
 		active = any(
 			bool(getattr(cfg, k, False))
-			for k in ("SW_HUBS_ENABLED", "SW_SITUATION_ENABLED", "SW_EROSION_DEMOTE_ENABLED", "SW_INGEST_RETIRED", "SW_THREAD_ENABLED")
+			for k in ("SW_HUBS_ENABLED", "SW_SITUATION_ENABLED", "SW_EROSION_DEMOTE_ENABLED", "SW_THREAD_ENABLED")
 		)
 		if not active:
 			return {"skipped": "sw_disabled"}

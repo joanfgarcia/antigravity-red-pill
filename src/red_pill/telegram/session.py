@@ -164,79 +164,38 @@ class TelegramSessionManager:
 		# here because it's asynchronous now.
 		return None
 
-	def _is_archived(self, client, session_id: str) -> bool:
-		"""¿La sesión está ya archivada y es seguro borrarla del disco?
+	def _is_archived(self, session_id: str) -> bool:
+		"""¿La sesión está ya archivada en Memento y es seguro borrarla del disco?
 
-		Con `SW_INGEST_RETIRED` OFF se comprueba `metadata.source_buffer_id` en
-		work/social (lo escribe el drenaje de consolidación legacy). Con
-		`SW_INGEST_RETIRED` ON ese campo ya NO se escribe, así que la comprobación
-		pasa a Memento (`memento_registry`, la fuente viva); sin esto las sesiones
-		`pending_purge` nunca se purgarían (SHARD-13, 2026-09-28).
+		Se consulta el `memento_registry` acotado a la fuente `telegram` (los UUID
+		crudos se repiten en otras fuentes —antigravity— y mirar todas daría
+		falsos positivos). El drenaje legacy que estampaba `source_buffer_id` fue
+		retirado (v8.0.0).
 
 		Fail-safe: si no se puede verificar, NO se purga (preferimos retener a
 		borrar algo no archivado).
 		"""
-		import red_pill.config as _cfg
+		try:
+			from red_pill.memento.registry import MementoRegistry
 
-		if getattr(_cfg, "SW_INGEST_RETIRED", False):
-			try:
-				from red_pill.memento.registry import MementoRegistry
-
-				# Acotado a la fuente `telegram`: los UUIDs crudos se repiten en
-				# otras fuentes (antigravity) y mirar todas borraría sesiones no
-				# renderizadas (falso positivo).
-				if MementoRegistry().is_rendered(str(session_id), sources=["telegram"]):
-					return True
-				logger.info(f"[TelegramSession] {session_id} aún no renderizada en Memento; no se purga.")
-				return False
-			except Exception as e:
-				logger.warning(f"[TelegramSession] no se pudo verificar Memento para {session_id}: {e}; no se purga.")
-				return False
-
-		# Vía legacy: el drenaje de consolidación estampaba `source_buffer_id`.
-		from qdrant_client.models import FieldCondition, Filter, MatchValue
-
-		for coll in ["work_memories", "social_memories"]:
-			try:
-				res, _ = client.scroll(
-					collection_name=coll,
-					scroll_filter=Filter(must=[FieldCondition(key="metadata.source_buffer_id", match=MatchValue(value=session_id))]),
-					limit=1,
-				)
-				if res:
-					return True
-			except Exception:
-				continue
-		return False
+			if MementoRegistry().is_rendered(str(session_id), sources=["telegram"]):
+				return True
+			logger.info(f"[TelegramSession] {session_id} aún no renderizada en Memento; no se purga.")
+			return False
+		except Exception as e:
+			logger.warning(f"[TelegramSession] no se pudo verificar Memento para {session_id}: {e}; no se purga.")
+			return False
 
 	def run_janitor_sweep(self) -> int:
-		"""
-		Checks for sessions marked as pending_purge.
-		If they are already archived (Qdrant legacy, o Memento con la ingesta
-		retirada), permanently delete them from disk.
-		"""
+		"""Purga del disco las sesiones `pending_purge` ya archivadas en Memento."""
 		purged_count = 0
-		import red_pill.config as _cfg
-
-		retired = bool(getattr(_cfg, "SW_INGEST_RETIRED", False))
-		client = None
-		if not retired:
-			# La vía legacy necesita Qdrant; la vía Memento (retirada) no.
-			try:
-				from red_pill.memory import MemoryManager
-
-				client = MemoryManager().client
-			except Exception as e:
-				logger.warning(f"[TelegramSession] Janitor skipped (cannot connect to MemoryManager): {e}")
-				return 0
-
 		for p in self.conv_dir.glob("*.json"):
 			try:
 				with open(p, "r", encoding="utf-8") as f:
 					sess = json.load(f)
 				if sess.get("status") == "pending_purge":
 					session_id = sess.get("id")
-					if self._is_archived(client, session_id):
+					if self._is_archived(session_id):
 						p.unlink()
 						purged_count += 1
 						logger.info(f"[TelegramSession] Janitor purged archived session: {session_id}")

@@ -786,7 +786,16 @@ está en `CHRONICLE_ARCHIVE_SOURCES`).
   + `staging_dir` + ramas), SHARD-03 (Phase 0 'snatch' de `consolidation_ritual`),
   SHARD-04/05 (`CHRONICLE_PLUGINS` y `MEMENTO_GATE_ENFORCED` sin consumidor;
   filas de `ENV_REFERENCE`). ✅
-- **Lote 3 (destructivo)**: pendiente — borrar `ls_snatcher`, `chronicle/*` legacy,
-  la rama drain de `consolidation`, `get_staging_dir` + `staging/` (consumidores
-  `paths_to_wipe`/`migration_map`), retirar flags de migración y ajustar
-  `scripts/chronicle_extractor.py`.
+- **Lote 3 (destructivo)**: ✅ **COMPLETADO 2026-09-28**.
+  - 3a: borrado `metabolism/chronicle/*` (base + claude_code + antigravity) y
+    `ls_snatcher` (+ su test). Helpers en `utils/chronicle_render`.
+  - 3b: `consolidation.py` reescrito a **hubs-only** (fuera el drenaje completo);
+    eliminados/reescritos los tests del drenaje; `conftest` hermético a los flags.
+  - 3c: fuera `get_staging_dir` y sus consumidores (`paths_to_wipe`/`migration_map`);
+    queda `get_legacy_staging_dir` (solo lectura) para el migrador.
+  - 3d: fuera `SW_INGEST_RETIRED` (y `MEMENTO_GATE_ENFORCED`/`CHRONICLE_PLUGINS`);
+    el janitor de Telegram verifica Memento sin flag.
+  - **Verificación**: suite completa **2205 passed** (con flags del `.env`), ruff
+    limpio, Sound of Silence OK. Commits locales (sin push).
+  - **Nota**: `scripts/chronicle_extractor*.py` se conserva — es el productor de
+    Memento para antigravity (`unencrypted_conversations/`), NO legacy (SHARD-10).
