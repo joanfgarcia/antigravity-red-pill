@@ -1,4 +1,4 @@
-## [8.0.0] - Unreleased (Memento single-writer, RFC-004 tags, JOB-001, Bank Janitor, Arnés Pi & Desk)
+## [8.0.0] - 2026-09-28 (Memento single-writer, RFC-004 tags, JOB-001, Bank Janitor, Arnés Pi & Desk)
 
 ### ⬆️ Upgrading (BREAKING — single-writer de memoria)
 
