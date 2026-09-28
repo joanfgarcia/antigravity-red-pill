@@ -179,3 +179,27 @@ calibrar el clasificador** (MEM-008, desk): hay contenido técnico cayendo en
 `social` (umbral más bajo) y eso distorsiona la decisión. La estática sigue en
 sombra; el backlog pendiente se recupera al encenderla con los umbrales vigentes
 (upsert idempotente).
+
+---
+
+## 6. Estado de activación (2026-09-28)
+
+Activación ejecutada por el operador (snapshots previos de work/social/
+interaction). Piezas ON en `.env`:
+
+| Grupo | Flags | Verificación |
+|-------|-------|--------------|
+| G1 captura | `SW_AFFINITY_ENABLED`, `SW_PURGE_GATE_ENABLED`, `SW_DEDUP_ENABLED` | engrama real con `session_id` capturado en el drenaje |
+| G2 navegación | `SW_HUBS_ENABLED`, `SW_THREAD_ENABLED` | hubs/hilo se sintetizan en el próximo nightly (cobertura >0) |
+| G3 olvido/situación | `SW_ABSENCE_GUARD_CONDITIONAL`, `SW_EROSION_DEMOTE_ENABLED`, `SW_SITUATION_ENABLED`, `SW_INTERACTIVE_PHASE_ENABLED` | `update_situation` crea `situation_memories` (`updated:1`) |
+| G4 tags RFC-004 | `MEMENTO_REALTIME_TAG_ENABLED` | engrama con `tag_status`/`tag_emotion`/`tag_theme` |
+
+**Pendiente y deliberadamente OFF**: `SW_INGEST_RETIRED` (punto de no retorno) —
+se enciende tras **una noche con hubs sanos** (`hub_coverage_pct > 0`). Con la
+ingesta legacy aún viva, el modo tag de la solera convive sin problema.
+
+**Procesos que deben releer `.env`**: los oneshot
+(`redpill-queue`/`extractor`/`nightly`/`janitor`) lo hacen solos en su tick; los
+long-running (`redpill.service` daemon) requieren restart — hecho 2026-09-28. El
+servidor MCP (recall) debe reiniciarse **después** del primer nightly con hubs
+para que aplique la exclusión de miembros `hubbed`.
