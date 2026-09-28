@@ -1,4 +1,20 @@
-## [7.22.0] - Unreleased (Memento Chronicle, Despertar autónomo, JOB-001, Bank Janitor, Arnés Pi & Desk)
+## [8.0.0] - Unreleased (Memento single-writer, RFC-004 tags, JOB-001, Bank Janitor, Arnés Pi & Desk)
+
+### ⬆️ Upgrading (BREAKING — single-writer de memoria)
+
+Esta release **retira la ingesta legacy** (`staging/` → consolidación) y el flujo
+de memoria pasa a ser **Memento → ascensión → hubs/hilo**. Afecta a instalaciones
+que se **actualizan** con datos legacy.
+
+- **Instalación nueva**: nace sin legacy; no requiere ninguna acción (cero ritual).
+- **Actualización**: ejecuta el migrador (dry-run por defecto):
+  `uv run python scripts/migrate_single_writer.py` → revisa → `--apply`.
+  Verifica la cobertura de Memento, archiva `staging/`, trima el buffer y sella la
+  marca. Detalle en `docs/TECHNICAL/OPERATIONS/MIGRATION_SINGLE_WRITER.md`.
+- **Flags**: los de **migración** (`SW_INGEST_RETIRED`) desaparecen en la
+  demolición; los de **feature** (hubs/thread/situación/erosión/tags) pasan a
+  default ON o config — un recién llegado no debe "encender hubs".
+
 
 Seis frentes: **Memento** (RFC-002, fases 0–3.5 completas — la grabadora vuelve
 al disco y Qdrant emprende el camino a memoria curada), el aislamiento de la
