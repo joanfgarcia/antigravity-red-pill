@@ -1,3 +1,4 @@
+import contextlib
 import json
 import logging
 import os
@@ -298,6 +299,28 @@ class IDEWorker:
 				self._lease_touch = time.monotonic()
 		except Exception as e:
 			logger.debug(f"[IDEWorker] lease touch failed: {e}")
+
+	@contextlib.contextmanager
+	def _lease_keeper(self, interval: float | None = None):
+		"""D21 (AWAKEN-002 §5): mantiene el lease fresco durante una llamada de
+		puente larga (el despertar vigilando el planner). Sin esto, un despertar
+		de más de HEARTBEAT_LEASE (900s) hace que el latido enmudezca y neon-link
+		declare un falso "Córtex Offline". El keeper solo late mientras vive esta
+		sección; si el hilo principal muere, deja de latir y el offline se detecta.
+		"""
+		stop = threading.Event()
+		every = interval if interval is not None else max(20.0, cfg.get_config().HEARTBEAT_LEASE / 3.0)
+
+		def _beat():
+			while not stop.wait(every):
+				self._touch_lease()
+
+		th = threading.Thread(target=_beat, name="awakening-lease-keeper", daemon=True)
+		th.start()
+		try:
+			yield
+		finally:
+			stop.set()
 
 	def _heartbeat_thread_main(self):
 		"""Daemon thread: update system_health while the process lives and the
@@ -1288,7 +1311,8 @@ class IDEWorker:
 		self._touch_lease()
 
 		try:
-			result = self._bridge_awakening.prompt(prompt, timeout=cfg.get_config().AWAKENING_TIMEOUT)
+			with self._lease_keeper():
+				result = self._bridge_awakening.prompt(prompt, timeout=cfg.get_config().AWAKENING_TIMEOUT)
 		except Exception as e:
 			duration = time.time() - start_time
 			logger.error(f"[{msg_ids}] AWAKENING execution failed after {duration:.0f}s: {e}")

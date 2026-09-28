@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import time
 from pathlib import Path
 
 from red_pill.core import awakening_channel as ch
@@ -53,3 +54,22 @@ def test_telemetry_digest_sin_notas(tmp_path, monkeypatch):
 	monkeypatch.setenv("AGENT_CORE_DIR", str(tmp_path))
 	mod = importlib.import_module("red_pill.interceptors.01_telemetry")
 	assert mod.TelemetryPlugin()._notes_line() == ""
+
+
+def test_lease_keeper_mantiene_el_latido_y_lo_para():
+	worker = importlib.import_module("red_pill.plugins.antigravity_ide.worker")
+
+	class Fake:
+		def __init__(self):
+			self.n = 0
+
+		def _touch_lease(self):
+			self.n += 1
+
+	f = Fake()
+	with worker.IDEWorker._lease_keeper(f, interval=0.02):
+		time.sleep(0.12)
+	n = f.n
+	assert n >= 2
+	time.sleep(0.08)
+	assert f.n == n
