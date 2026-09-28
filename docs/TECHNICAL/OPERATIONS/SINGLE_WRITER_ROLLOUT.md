@@ -203,3 +203,7 @@ ingesta legacy aún viva, el modo tag de la solera convive sin problema.
 long-running (`redpill.service` daemon) requieren restart — hecho 2026-09-28. El
 servidor MCP (recall) debe reiniciarse **después** del primer nightly con hubs
 para que aplique la exclusión de miembros `hubbed`.
+
+> **Demolición y release**: el inventario de código legacy a eliminar y la
+> asimetría instalación-nueva vs actualización (migrador idempotente, bump major)
+> están en [RFC-002 Fase 4 §10](../../BUNKER/RFC_002_PHASE4_DESIGN.md#10-estado-de-rollout-demolición-y-release-2026-09-28).
