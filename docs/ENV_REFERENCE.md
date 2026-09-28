@@ -181,6 +181,8 @@ Plugins 05–10. Each is independently toggleable.
 | `TELEGRAM_BRIDGE_CASCADE` | `[]` | JSON-encoded fallback cascade of model targets for Telegram/inbox processing. Per-target fields: `backend`, `model`, `effort`, `timeout` (optional, overrides the method timeout for that target). Example: `'[{"backend":"opencode","model":"opencode-go/deepseek-v4-pro","timeout":300},{"backend":"opencode","model":"opencode/deepseek-v4-flash-free"}]'`. |
 | `TELEGRAM_INLINE_TIMEOUT` | `120` | Fast-path inline timeout (s) for Telegram conversational messages (D3). Passed as the method timeout to `CascadeBridge.prompt()`; a per-target `timeout` in `TELEGRAM_BRIDGE_CASCADE` overrides it for that target (D14). |
 | `AWAKENING_BRIDGE_CASCADE` | `[]` | JSON-encoded fallback cascade of model targets for autonomous awakening runs. |
+| `AWAKENING_PLANNER_ACCESS` | `planner` | Qué puede tocar el despertar autónomo en el desk: CSV de zonas (`ideas`, `research`, `design`, `pending`, `in_progress`, `awakening`) o `planner` (todas) / `none` (solo lectura). |
+| `AWAKENING_TIMEOUT` | `600` | Techo duro (s) del despertar autónomo (A-5, AWAKEN-002). Recomendado `2700`-`3600` (45-60 min) una vez el despertar herede el latido (heartbeat D21); sin latido un techo alto deja colgado al agente. El despertar auto-empaqueta lo largo en `dag_job`. |
 | `DEFAULT_MINION_BRIDGE_CASCADE` | `[]` | JSON-encoded fallback cascade of model targets for background agéntic minions if no model is explicitly requested. |
 
 > **Catálogo curado de modelos (RFC_TELEGRAM_RESILIENCE §2A/D6/D20)**: el archivo

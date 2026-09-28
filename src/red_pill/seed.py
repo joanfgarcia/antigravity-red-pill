@@ -171,7 +171,7 @@ def inject_genesis(manager: MemoryManager) -> None:
 		{
 			"id": ID_DIR_GIT_RULE,
 			"coll": "directive_memories",
-			"text": "Git Golden Rule: Never commit to main. Flow: branch -> local commit -> PR. Push only on Operator command.",
+			"text": "Git Golden Rule: Never commit to main. Work on a branch — autonomous work runs in a worktree on branch `awaken/<ts>`. Local commit YES on your branch; push NEVER without an explicit Operator command. Flow: branch -> local commit -> PR.",
 			"meta": {"type": "git_workflow", "priority": "critical"},
 		},
 		{

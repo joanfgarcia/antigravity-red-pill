@@ -48,8 +48,8 @@ DB_PATH = Path(os.environ.get("NEON_LINK_DB_PATH", default_db))
 
 # Budget guard defaults
 MAX_AWAKENINGS_PER_DAY = 8
-AWAKENING_TIMEOUT = 600
 AWAKENING_MAX_TOOL_CALLS = 40
+# AWAKENING_TIMEOUT es configurable (A-5): cfg.get_config().AWAKENING_TIMEOUT
 
 # Zonas del desk que un despertar puede tocar. "planner" = ideas/research/design/
 # pending/in_progress; "awakening" = solo logs de despertar; "none" = nada.
@@ -1288,7 +1288,7 @@ class IDEWorker:
 		self._touch_lease()
 
 		try:
-			result = self._bridge_awakening.prompt(prompt, timeout=AWAKENING_TIMEOUT)
+			result = self._bridge_awakening.prompt(prompt, timeout=cfg.get_config().AWAKENING_TIMEOUT)
 		except Exception as e:
 			duration = time.time() - start_time
 			logger.error(f"[{msg_ids}] AWAKENING execution failed after {duration:.0f}s: {e}")

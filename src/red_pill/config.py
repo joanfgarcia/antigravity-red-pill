@@ -389,6 +389,11 @@ class RedPillConfig(BaseSettings):
 	# planificación; "none" = solo leer el panel, sin tocar nada. La directiva
 	# del despertar incluye esta lista; el agente solo contribuye a lo declarado.
 	AWAKENING_PLANNER_ACCESS: str = "planner"
+	# AWAKENING_TIMEOUT (s): techo duro del despertar autónomo (A-5, AWAKEN-002).
+	# Default 600s (10 min). Recomendado 2700-3600 (45-60 min) una vez el despertar
+	# herede el latido (heartbeat D21): sin latido, un techo alto deja colgado al
+	# agente comiéndose la cuota. El despertar auto-empaqueta lo largo en dag_job.
+	AWAKENING_TIMEOUT: int = int(os.getenv("AWAKENING_TIMEOUT", "600"))
 	# Fast-path inline timeout for Telegram conversational messages (D3). Used as
 	# the timeout argument the worker passes to CascadeBridge.prompt(); a
 	# per-target `timeout` in the cascade .env overrides it above (D14). Default
