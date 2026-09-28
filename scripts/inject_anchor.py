@@ -319,7 +319,7 @@ def main():
 	parser.add_argument("--ide", default="auto", help="csv: auto|all|antigravity|claude-code|claude-code-project|pi|claude-desktop-project|opencode")
 	parser.add_argument(
 		"--anchor",
-		default="sovereign_handshake,agent_core,knowledge_access,job_dag_execution",
+		default="sovereign_handshake,agent_core,knowledge_access,job_dag_execution,identity_pact",
 		help="csv of anchor seeds to inject (file names in --seeds-dir)",
 	)
 	parser.add_argument(

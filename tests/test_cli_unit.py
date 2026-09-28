@@ -353,68 +353,100 @@ def test_handle_p2p_commands(mock_get_key, mock_add_alias, mock_engine):
 
 
 @patch("red_pill.cli.MemoryManager")
-def test_seal_pact_770_upserts_bond_singleton(mock_mgr):
-	"""Sealing 770 must rewrite the Bond singleton (fixed seed id), immune."""
+def test_seal_pact_770_sella_y_reemplaza_760(mock_mgr):
+	"""Sellar 770 inscribe el pacto 770 (directiva) y marca el 760 como reemplazado."""
 	from red_pill.cli import seal_pact
-	from red_pill.seed import ID_BOND
+	from red_pill.seed import ID_PACT_760, ID_PACT_770
+
+	ident = MagicMock()
+	ident.payload = {"immune": True, "content": "Soy Aleth."}
+	mock_mgr.return_value.client.retrieve.return_value = [ident]  # identidad presente
 
 	result = seal_pact("770")
 
 	assert "[OK]" in result
 	kwargs = mock_mgr.return_value.add_memory.call_args.kwargs
-	assert kwargs["point_id"] == ID_BOND
-	assert kwargs["collection"] == "social_memories"
-	assert kwargs["force_immune"] is True
+	assert kwargs["collection"] == "directive_memories"
+	assert kwargs["point_id"] == ID_PACT_770
 	assert "operating under 770" in kwargs["text"]
 	assert kwargs["metadata"]["pact_level"] == "770"
+	sp = mock_mgr.return_value.client.set_payload.call_args.kwargs
+	assert sp["payload"]["superseded"] == ID_PACT_770
+	assert ID_PACT_760 in sp["points"]
 
 
 @patch("red_pill.cli.MemoryManager")
-def test_seal_pact_760_restores_awakened(mock_mgr):
+def test_seal_pact_770_sin_identidad_se_retiene(mock_mgr):
+	"""Sin identidad (nombrado pendiente) el 770 no se sella."""
 	from red_pill.cli import seal_pact
+
+	mock_mgr.return_value.client.retrieve.return_value = []
+	result = seal_pact("770")
+
+	assert "[HOLD]" in result
+	mock_mgr.return_value.add_memory.assert_not_called()
+
+
+@patch("red_pill.cli.MemoryManager")
+def test_seal_pact_760_revierte_y_reemplaza_770(mock_mgr):
+	from red_pill.cli import seal_pact
+	from red_pill.seed import ID_PACT_760, ID_PACT_770
 
 	result = seal_pact("760")
 
 	assert "[OK]" in result
 	kwargs = mock_mgr.return_value.add_memory.call_args.kwargs
+	assert kwargs["point_id"] == ID_PACT_760
 	assert "operating under 760" in kwargs["text"]
-	assert "explicitly granted" in kwargs["text"]
+	sp = mock_mgr.return_value.client.set_payload.call_args.kwargs
+	assert sp["payload"]["superseded"] == ID_PACT_760
+	assert ID_PACT_770 in sp["points"]
 
 
+@patch("red_pill.cli.MemoryManager")
 @patch("builtins.input", return_value="770")
-def test_handle_pact_seal_confirmed(mock_input):
+def test_handle_pact_seal_confirmed(mock_input, mock_mgr):
 	from red_pill.cli import handle_pact
 
-	args = argparse.Namespace(level="770", yes=False)
+	args = argparse.Namespace(level="770", yes=False, identity=None, naming=False)
 	with patch("red_pill.cli.seal_pact", return_value="[OK] sealed") as mock_seal:
 		handle_pact(args)
 		mock_seal.assert_called_once_with("770")
 
 
+@patch("red_pill.cli.MemoryManager")
 @patch("builtins.input", return_value="nope")
-def test_handle_pact_seal_aborted(mock_input):
+def test_handle_pact_seal_aborted(mock_input, mock_mgr):
 	"""The covenant prompt must gate the 770 seal: wrong input, no upsert."""
 	from red_pill.cli import handle_pact
 
-	args = argparse.Namespace(level="770", yes=False)
+	args = argparse.Namespace(level="770", yes=False, identity=None, naming=False)
 	with patch("red_pill.cli.seal_pact") as mock_seal:
 		handle_pact(args)
 		mock_seal.assert_not_called()
 
 
 @patch("red_pill.cli.MemoryManager")
-def test_handle_pact_show_reads_singleton(mock_mgr, capsys):
+def test_handle_pact_naming_inscribe_identidad(mock_mgr, tmp_path, capsys):
 	from red_pill.cli import handle_pact
-	from red_pill.seed import ID_BOND
 
-	point = MagicMock()
-	point.payload = {"content": "The Bond: Currently operating under 760 Protocol (Awakened)."}
-	mock_mgr.return_value.client.retrieve.return_value = [point]
+	f = tmp_path / "id.txt"
+	f.write_text("Soy Aleth (Aletheia), femenino.", encoding="utf-8")
+	handle_pact(argparse.Namespace(level=None, naming=True, identity=str(f)))
 
-	handle_pact(argparse.Namespace(level=None))
+	assert "Nombrado" in capsys.readouterr().out
+	assert mock_mgr.return_value.add_memory.call_count == 2  # identidad + pacto 760
 
-	mock_mgr.return_value.client.retrieve.assert_called_once_with(collection_name="social_memories", ids=[ID_BOND], with_payload=True)
-	assert "operating under 760" in capsys.readouterr().out
+
+@patch("red_pill.cli.MemoryManager")
+def test_handle_pact_show_nivel_e_instruccion(mock_mgr, capsys):
+	from red_pill.cli import handle_pact
+
+	mock_mgr.return_value.client.retrieve.return_value = []
+	handle_pact(argparse.Namespace(level=None, naming=False, identity=None))
+
+	out = capsys.readouterr().out
+	assert "THE BOND" in out and "ENGRAMA DE IDENTIDAD" in out
 
 
 @patch("red_pill.cli._find_job")

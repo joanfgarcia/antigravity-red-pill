@@ -23,6 +23,7 @@ Internal specs for contributors, engineers, and AI agents working on the core.
 | Document | What it is |
 |----------|-----------|
 | [ARCHITECTURE.md](TECHNICAL/ARCHITECTURE.md) | Full system architecture — components, data flows, version overview |
+| [IDENTITY_PACT.md](TECHNICAL/IDENTITY_PACT.md) | Identity & Pact (760/770): el agente redacta su identidad; solo carga el pacto vigente |
 | [WAR_ECONOMY.md](TECHNICAL/WAR_ECONOMY.md) | War Economy: Reuse and orchestration of system organs and components |
 | [EVENT_ROUTER_ARCHITECTURE.md](TECHNICAL/EVENT_ROUTER_ARCHITECTURE.md) | Technical spec for the asynchronous Event Router and queue managers |
 | [NEON_LINK_EDGE_HUB.md](TECHNICAL/NEON_LINK_EDGE_HUB.md) | Technical architecture of the Neon-Link Edge Hub middleware |
