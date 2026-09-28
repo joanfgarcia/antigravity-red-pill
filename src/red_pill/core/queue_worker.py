@@ -4,6 +4,7 @@ import logging
 import time
 
 from red_pill.cognitive.queue_manager import CognitiveQueueManager
+from red_pill.core import realtime_tag as _rt_tag
 from red_pill.core.queue_manager import MemoryQueueManager
 from red_pill.memory import MemoryManager
 from red_pill.swarm.factory import MinionFactory
@@ -359,6 +360,9 @@ def drain_memory_queue(queue: MemoryQueueManager, memory: MemoryManager, limit: 
 	un lote llega incompleto o al agotar los lotes concedidos.
 	"""
 	processed = 0
+	# Cota con reloj MONOTÓNICO: un retroceso de reloj (NTP/manual) no debe
+	# desactivar el presupuesto del etiquetado a mitad de drenaje.
+	_tag_deadline = time.monotonic() + _rt_tag.budget_s()
 	for _ in range(max_batches):
 		items = queue.dequeue_pending(limit=limit)
 		for item in items:
@@ -396,6 +400,24 @@ def drain_memory_queue(queue: MemoryQueueManager, memory: MemoryManager, limit: 
 				)
 				queue.update_status(item["id"], "completed")
 				logger.info(f"Memory {item['id']} successfully ingested. (ID: {uid})")
+
+				# RFC-004 P2: etiquetado en captura (emoción/tema) — fail-visible.
+				# El registro YA está hecho y la cola marcada `completed`: el tag
+				# es aditivo (set_payload) y NUNCA cambia el estado del drenaje.
+				# Coste agregado acotado por el presupuesto del drenaje; si se
+				# agota, los turnos siguientes quedan SIN tag (ausencia, log).
+				try:
+					if _rt_tag.enabled():
+						if time.monotonic() < _tag_deadline:
+							_t = _rt_tag.maybe_tag(memory, uid, f"{clean_prompt}\n{clean_response}")
+							if _t.get("tag_status") == "failed":
+								logger.info(f"realtime_tag {uid}: failed ({_t.get('tag_reason')})")
+							elif not _t.get("tag_persisted", True):
+								logger.warning(f"realtime_tag {uid}: etiquetado pero NO persistido (set_payload falló)")
+						else:
+							logger.warning(f"realtime_tag: presupuesto de drenaje agotado; {uid} sin tag")
+				except Exception as _tag_e:  # nunca romper el drenaje por el tag
+					logger.error(f"realtime_tag {item['id']}: error inesperado: {_tag_e}")
 			except Exception as ingest_error:
 				logger.error(f"Memory {item['id']} ingestion failed: {ingest_error}")
 				queue.update_status(item["id"], "error")

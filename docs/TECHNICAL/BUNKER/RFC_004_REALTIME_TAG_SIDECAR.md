@@ -45,12 +45,26 @@ daemon, `run_dual_bind.py`).
 - El cliente del worker: `socket.AF_UNIX` + timeout 2s + try/except total.
 
 ### 2.2 Tag en captura (`queue_worker.py`, punto único de drenaje)
-- Tras `record_interaction_pair` (que **siempre** escribe), llamada
-  fire-and-forget al sidecar. El registro nunca espera.
-- El engrama lleva en `metadata`: `tag_status: ok|degraded|failed`, `reason`
-  (timeout|sidecar-down|low-confidence), y si ok: `emotion`, `theme`,
-  `confidence`.
-- Flag `MEMENTO_REALTIME_TAG_ENABLED` (RULE 4, default OFF).
+- Tras `record_interaction_pair` (que **siempre** escribe y marca la cola
+  `completed`), se etiqueta el turno y se persiste con `set_payload`. **El
+  registro nunca espera**: el tag es posterior y aditivo. Precisión: NO es
+  fire-and-forget — el drenaje (worker oneshot) paga un coste **acotado** por
+  turno (`timeout`, con el texto recortado), nunca ilimitado.
+- El engrama lleva `tag_status: ok|degraded|failed`, `tag_reason`
+  (timeout|sidecar-down|low-confidence|truncated|empty-text|...), `tag_persisted`
+  (False si `set_payload` falló) y, si hay etiqueta: `tag_emotion`,
+  `tag_theme`, `tag_confidence`, `tag_engine`, `tagged_at`.
+- Tunables medidos (2026-09-28, sidecar vivo): latencia CPU ~0,5 s + ~0,4 ms/char
+  (1500 ch ≈ 0,7 s; 4000 ch ≈ 2,1 s). `MEMENTO_REALTIME_TAG_MAX_CHARS=1500`
+  (recorte cabeza+cola; emoción/tema no necesitan más) y
+  `MEMENTO_REALTIME_TAG_TIMEOUT_S=3.0` (~4× margen), en vez del 1,5 s inicial que
+  cortaba turnos largos. Un recorte efectivo marca el tag `degraded/truncated`
+  (nunca un `ok` falso sobre una vista parcial).
+- `MEMENTO_REALTIME_TAG_BUDGET_S=20` acota el coste **agregado** del drenaje
+  (N×timeout); agotado, los turnos siguientes quedan sin tag (ausencia, log).
+  Cota con reloj monotónico (inmune a saltos de reloj).
+- Flag `MEMENTO_REALTIME_TAG_ENABLED` (RULE 4, default OFF). OFF → el drenaje no
+  toca el socket (comportamiento actual intacto, verificado).
 
 ### 2.3 Consumo
 - **Solera (M8):** promedia tags en vez de destilar texto. Sin tag → la entrada
@@ -70,7 +84,7 @@ daemon, `run_dual_bind.py`).
 | Fase | Contenido | Gate | Estado |
 |---|---|---|---|
 | P1 | `laya_tag_server.py` + unit systemd + `MEMENTO_REALTIME_TAG_ENABLED` | Socket responde; carga <60s en frío | **DONE+DEPLOYED 2026-09-28** |
-| P2 | Tag en `queue_worker` (fire-and-forget, timeout de cliente) | Engramas con `tag_status` fluyendo | pendiente |
+| P2 | Tag en `queue_worker` (post-write acotado, timeout de cliente) | Engramas con `tag_status` fluyendo (flag ON) | **DONE 2026-09-28** (flag OFF en prod por RULE 4) |
 | P3 | Solera consume tags | Situación se actualiza con tags | pendiente |
 | P4 | Pre-heating lee tags + línea WEAK | `CALIBRATION WEAK` visible en handshake | pendiente |
 
@@ -89,6 +103,19 @@ sin verificación de inodo).
 vuelo (drena el executor; un predict > TimeoutStopUSec=90s acabaría en SIGKILL con
 socket rancio recuperable); (b) el primer turno tras reinicio puede quedar sin tag
 mientras carga (señalizado como `model-not-loaded`, nunca oculto).
+
+**Evidencia P2** (2026-09-28): cliente `src/red_pill/core/realtime_tag.py`
+(`tag_turn`/`apply_tag`/`maybe_tag`, sin torch) + wiring en `queue_worker`
+(post-write, gated, nunca rompe el drenaje). 19 tests
+(`tests/test_realtime_tag.py`) incl. comportamiento real de RULE 4 (gate OFF →
+0 `set_payload`; ON → `tag_status=ok`; sidecar caído → engrama escrito con
+`failed`). Adversarial: 2 pasadas BLOCKER con 4+5 hallazgos (timeout 1,5 s por
+debajo de la latencia real de turnos largos; "fire-and-forget" inexacto; test de
+gate por grep en vez de comportamiento; fallo de `set_payload` no visible; recorte
+que perdía la señal y daba `ok` falso; coste agregado N×timeout; reloj no
+monotónico) — corregidos con cap 1500 cabeza+cola + timeout 3,0 + `truncated`→
+`degraded`, presupuesto monotónico, `maybe_tag.tag_persisted`, tests
+mutación-resistentes y esta redacción. Total 23 tests.
 
 ## 4. Rollback
 

@@ -534,6 +534,19 @@ class RedPillConfig(BaseSettings):
 	SITUATION_TTL_DAYS: int = 30  # evicción de semáforos inactivos
 	SITUATION_MAX_AFFINITIES_PER_CYCLE: int = 10
 	SW_INTERACTIVE_PHASE_ENABLED: bool = False  # refinado/marcado de engramas interactivos (proceso aparte)
+	# RFC-004: etiquetado emocional/temático en captura vía sidecar UDS (Laya).
+	# Default OFF (RULE 4). El registro NUNCA espera al tag: si falla, el engrama
+	# lleva tag_status=failed y el interceptor lo comunica (no se reintenta).
+	MEMENTO_REALTIME_TAG_ENABLED: bool = False
+	# Timeout del cliente UDS. Medido en vivo (2026-09-28): 1500 chars ≈ 0,7 s,
+	# 4000 chars ≈ 2,1 s (lineal). 3,0 s da ~4x margen sobre el cap de chars.
+	MEMENTO_REALTIME_TAG_TIMEOUT_S: float = 3.0
+	MEMENTO_REALTIME_TAG_MAX_CHARS: int = 1500  # recorte del turno (emoción/tema no necesitan más)
+	# Presupuesto total de etiquetado por drenaje: acota el coste agregado
+	# (N turnos × timeout) para no retener el worker oneshot. Agotado → los
+	# turnos siguientes quedan sin tag (ausencia de dato, señalizada en log).
+	MEMENTO_REALTIME_TAG_BUDGET_S: float = 20.0
+	LAYA_TAG_SOCKET: str = ""  # vacío → $XDG_RUNTIME_DIR/red-pill/laya_tag.sock
 	MEMENTO_FRAGMENT_OVERLAP_MESSAGES: int = 2  # solape de turnos entre fragmentos del distill
 	# Presupuesto de contexto por fragmento de distill. 2026-09-15: se destila con
 	# granite (n_ctx 10240), no con aya (32K) — 12000 chars apretaba; 8000 chars

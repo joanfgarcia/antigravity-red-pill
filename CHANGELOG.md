@@ -368,11 +368,11 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   0,85 del dual actual; 4 prompts y 3 checkpoints probados). Evidencia en
   `docs/TECHNICAL/LAYA_ROUTER_BAKEOFF_F1.md`; revisit con mejores
   checkpoints o fine-tune (14k labels como fuel).
-- **[NEW] Etiquetado en tiempo real (AD-040, P1 DONE 2026-09-28):** sidecar Laya
-  por UDS (`scripts/laya_tag_server.py` + `redpill-laya-tag.service`), tag
-  emoción/tema en captura; contrato: el registro nunca espera, el fallo se
-  señaliza (`tag_status`, línea WEAK), no se reintenta. P2-P4 pendientes.
-  Evidencia: 25 tests, 4 pasadas adversarial (CLEARED). RFC-004.
+- **[NEW] Etiquetado en tiempo real (AD-040, P1+P2 DONE 2026-09-28):** sidecar Laya
+  por UDS (`scripts/laya_tag_server.py` + `redpill-laya-tag.service`) + cliente
+  `realtime_tag` en el drenaje (`queue_worker`, post-write acotado, gated OFF por
+  RULE 4). Contrato: el registro nunca espera; el fallo se señaliza
+  (`tag_status`/`tag_persisted`), no se reintenta. P3-P4 pendientes. RFC-004.
 - **[NEW] Recall híbrido + MMR (feedback de recall 2026-09-25, AD-038)**:
   `memento/hybrid.py` — términos distintivos de la consulta (identificadores y
   nombres propios, idf), `rg -c` sobre los `index.md` del árbol, mapeo línea →
