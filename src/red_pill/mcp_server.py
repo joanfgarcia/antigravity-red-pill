@@ -326,7 +326,7 @@ async def handle_run_security_audit(arguments: Dict[str, Any]):
 			"query": {"type": "string"},
 			"collection": {
 				"type": "string",
-				"description": "Optional. Restrict search to a specific collection (e.g. 'archive_memories', 'work_memories', 'social_memories'). Default: searches work_memories + social_memories.",
+				"description": "Optional. Restrict search to a specific collection (e.g. 'work_memories', 'social_memories', 'directive_memories'). Default: searches work_memories + social_memories.",
 			},
 		},
 		"required": ["query"],

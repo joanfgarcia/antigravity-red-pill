@@ -4,7 +4,7 @@ NO confundir con `red_pill.metabolism.chronicle` (ChronicleExtractorPlugin):
 aquello snatchea trayectorias hacia staging para alimentar la CONSOLIDACIÓN;
 esto enumera y carga conversaciones completas para que `memento_migrate.py`
 las vuelque al árbol Memento (raw/ + index.md, RFC-002). Desde 2026-09-11 la
-ingesta a `archive_memories` está retirada. Mismo patrón agnóstico que
+ingesta cruda a Qdrant está retirada. Mismo patrón agnóstico que
 JanitorMinion: añadir un orquestador nuevo (IDE/CLI) = un archivo nuevo en
 este paquete, sin tocar el pipeline.
 """
@@ -26,14 +26,14 @@ class ChronicleSourcePlugin(ABC):
 
 	name: str = "base"
 
-	# Prefijo del session_id lógico en archive_memories. Antigravity queda SIN
+	# Prefijo del session_id lógico en el árbol Memento. Antigravity queda SIN
 	# prefijo porque sus puntos ya acuñados usan el cascade_id desnudo y el evict
 	# de copias previas casa por session_id; toda fuente nueva DEBE prefijar para
 	# que la clave lógica (session_id, sequence_index, role) no colisione entre IDEs.
 	session_prefix: str = ""
 
 	def qualify(self, conversation_id: str) -> str:
-		"""session_id namespaced con el que la conversación vive en archive_memories."""
+		"""session_id namespaced con el que la conversación vive en el árbol Memento."""
 		return f"{self.session_prefix}{conversation_id}"
 
 	def is_enabled(self) -> bool:

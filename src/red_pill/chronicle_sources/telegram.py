@@ -68,8 +68,8 @@ class TelegramSourcePlugin(ChronicleSourcePlugin):
 		"""Copia verbatim el JSON nativo de la sesión de Telegram a `raw/`.
 
 		Telegram no tenía `export_raw` (el base devuelve None) → sus sesiones se
-		registraban sin `raw/`, y la purga de `archive_memories` abortaba por
-		cobertura incompleta (9/829, 2026-09-28). El store nativo ES el JSON.
+		registraban sin `raw/`, y la verificación de cobertura del migrador abortaba
+		por cobertura incompleta (9/829, 2026-09-28). El store nativo ES el JSON.
 		"""
 		import shutil
 

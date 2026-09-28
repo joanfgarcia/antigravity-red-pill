@@ -648,7 +648,7 @@ def cleanup_orphan_raw_parents(memory_manager, collections=("work_memories", "so
 	When all synthesized child engrams (sequence_chunks / synthesis_hubs) associated with
 	a raw_parent have eroded away due to lack of recall/utility, the raw_parent
 	no longer has active children in the memory graph and is safely garbage collected
-	(since the raw verbatim interaction is already archived in archive_memories).
+	(the Memento tree retains the verbatim interaction).
 	"""
 	from qdrant_client import models as qm
 

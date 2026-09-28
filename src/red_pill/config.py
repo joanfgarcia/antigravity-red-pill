@@ -476,7 +476,7 @@ class RedPillConfig(BaseSettings):
 	METABOLISM_COOLDOWN: int = 3600
 	METABOLISM_AUTO_COLLECTIONS: Any = ["work_memories", "social_memories", "story_memories"]
 	# Fuentes del ARCHIVO diario Memento (memento_migrate → árbol Memento).
-	# La ingesta legacy a archive_memories se retiró (v8.0.0).
+	# La ingesta legacy cruda a Qdrant se retiró (v8.0.0).
 	# "pi" entra por defecto: si Pi no está instalado, su discover() devuelve [].
 	CHRONICLE_ARCHIVE_SOURCES: List[str] = ["antigravity", "claude_code", "opencode", "pi", "telegram"]
 
@@ -854,7 +854,7 @@ class RedPillConfig(BaseSettings):
 	SLEEP_PLUGIN_DREAM: bool = True  # Oneiromancy (latent semantic association)
 	SLEEP_PLUGIN_CONSOLIDATION: bool = True  # Memory consolidation (lazy sleep)
 	SLEEP_PLUGIN_CHRONICLE: bool = True  # Ariadne's Thread weaving on curated engrams
-	# v8.0.0: archive_memories purgada; la ingesta legacy está eliminada.
+	# v8.0.0: la ingesta legacy está eliminada; el archivo es el árbol Memento.
 
 	# -----------------------------------------------------------------------
 	# PRE-HEATING (Oracle Protocol)

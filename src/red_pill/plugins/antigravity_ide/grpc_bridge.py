@@ -2,7 +2,7 @@
 GrpcBridge — gRPC-Web bridge to Antigravity LanguageServer
 
 NOT @Deprecated — actively used for:
-	- Chronicle pipeline: conversation extraction → archive_memories
+	- Chronicle pipeline: conversation extraction → Memento (unencrypted_conversations/)
 	- GetAllCascadeTrajectories: list all IDE conversations
 	- GetCascadeTrajectorySteps: extract conversation content
 
