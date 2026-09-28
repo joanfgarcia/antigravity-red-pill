@@ -21,7 +21,7 @@ import logging
 import os
 import socket
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import red_pill.config as cfg
 
@@ -109,7 +109,7 @@ def _send(payload: dict, sock_path: str, timeout: float) -> dict:
 			buf += chunk
 		if not buf.strip():
 			raise RuntimeError("empty-response")
-		return json.loads(buf.decode("utf-8"))
+		return cast("dict[Any, Any]", json.loads(buf.decode("utf-8")))
 	finally:
 		s.close()
 

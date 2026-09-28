@@ -56,7 +56,7 @@ def pending_agentic(
 			if not agentic:
 				if not force and root is not None and _distill_refine_present(root, entry["dir"]):
 					continue  # ya destilada en disco, pero el marcado se perdió (crash)
-				if not force and annotate_version is not None and _annotate_fresh(root, entry["dir"], annotate_version):
+				if not force and root is not None and annotate_version is not None and _annotate_fresh(root, entry["dir"], annotate_version):
 					continue  # ya anotada desde raw (rebuild/nocturno) — no re-procesar
 				pending.append((source, session_id, "missing"))
 			elif agentic.get("hash") != entry.get("memento_hash"):
@@ -88,7 +88,7 @@ def _annotate_fresh(root: Path, dir_rel: str, current_version: str) -> bool:
 		data = json.loads(meta.read_text(encoding="utf-8"))
 	except (OSError, json.JSONDecodeError):
 		return False
-	return data.get("annotate_prompt_version") == current_version
+	return bool(data.get("annotate_prompt_version") == current_version)
 
 
 

@@ -758,7 +758,7 @@ def erode_curated(memory_manager, collections=("work_memories", "social_memories
 				if offset is None:
 					break
 			if to_delete:
-				memory_manager.client.delete(collection, points_selector=qm.PointIdsList(points=to_delete), wait=True)
+				memory_manager.client.delete(collection, points_selector=qm.PointIdsList(points=to_delete), wait=True)  # type: ignore[arg-type]
 				stats["demoted"] += len(to_delete)
 				logger.info(f"[SLEEP ENGINE] Demote a Memento: {len(to_delete)} curados en {collection}.")
 			release = [mid for mid in hub_members if mid not in set(to_delete)]

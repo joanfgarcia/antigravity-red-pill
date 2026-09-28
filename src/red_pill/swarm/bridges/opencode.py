@@ -139,6 +139,7 @@ class OpenCodeBridge(AgentBridge):
 		baseline and are also what the currently deployed plugin expects.
 		"""
 		if self._cli_major_cache is None:
+			assert self._opencode_path is not None
 			major = 1
 			try:
 				out = subprocess.run(

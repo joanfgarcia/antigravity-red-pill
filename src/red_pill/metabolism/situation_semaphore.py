@@ -85,7 +85,7 @@ def aggregate_tags(items: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
 		return None
 	total = len([it for it in items if str(it.get("content") or "").strip()]) or len(items)
 	emo_count: Counter = Counter()
-	emo_weight: Counter = Counter()
+	emo_weight: dict[str, float] = {}
 	themes: Counter = Counter()
 	confs: List[float] = []
 	for it in tagged:
@@ -99,7 +99,7 @@ def aggregate_tags(items: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
 			except (TypeError, ValueError):
 				c = 0.5
 		emo_count[emo] += 1
-		emo_weight[emo] += c
+		emo_weight[emo] = emo_weight.get(emo, 0.0) + c
 		confs.append(c)
 		themes[str(it.get("tag_theme") or "?")] += 1
 	mood = max(emo_count, key=lambda k: (emo_weight[k], emo_count[k]))
@@ -286,7 +286,7 @@ def evict_situation(memory_manager: Any) -> int:
 		res, _ = client.scroll(COLLECTION, scroll_filter=flt, limit=1000, with_payload=False)
 		ids = [str(p.id) for p in res]
 		if ids:
-			client.delete(COLLECTION, points_selector=_m.PointIdsList(points=ids), wait=True)
+			client.delete(COLLECTION, points_selector=_m.PointIdsList(points=ids), wait=True)  # type: ignore[arg-type]
 		return len(ids)
 	except Exception as e:
 		logger.warning(f"[SITUATION] evicción falló: {e}")

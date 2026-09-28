@@ -599,7 +599,7 @@ class IDEWorker:
 			for r in background_msgs:
 				msg_id = r["id"]
 				try:
-					msg = parsed_msgs.get(msg_id)
+					msg = parsed_msgs.get(msg_id)  # type: ignore[assignment]
 					text = msg.text if msg else ""
 					sender_id = (msg.sender_id if msg else None) or r["channel_user_id"]
 					channel = r["channel"]
@@ -657,7 +657,7 @@ class IDEWorker:
 			return
 
 		elif command == "SWITCH_CASCADE":
-			idx = first_payload.get("index")
+			idx = first_payload.get("index")  # type: ignore[assignment]
 			cursor.execute(
 				"SELECT cascade_id, title FROM cascade_mappings WHERE channel_user_id = ? AND id = (SELECT id FROM cascade_mappings WHERE channel_user_id = ? ORDER BY id ASC LIMIT 1 OFFSET ?)",
 				(channel_user_id, channel_user_id, idx - 1),
@@ -904,7 +904,7 @@ class IDEWorker:
 				session_row = cursor.fetchone()
 				if session_row:
 					target_id = session_row["cascade_id"]
-					sess = tsm.get_session(target_id)
+					sess = tsm.get_session(target_id)  # type: ignore[assignment]
 					if sess:
 						title = sess.get("summary", {}).get("summary", "Sin Título")
 				else:
@@ -1810,7 +1810,7 @@ class IDEWorker:
 			)
 		prompt = text
 		if session_id:
-			session = tsm.get_session(session_id)
+			session = tsm.get_session(session_id)  # type: ignore[assignment]
 			if session:
 				steps = session.get("steps", [])
 				history = "\n".join(
