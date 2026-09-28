@@ -64,7 +64,6 @@ def seed_project(manager: MemoryManager) -> None:
 		"skill_memories",
 		"core_directives",
 		"signal_memories",
-		"archive_memories",
 		"interaction_memories",
 	]
 	for coll in collections:

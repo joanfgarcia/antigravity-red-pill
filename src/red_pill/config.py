@@ -848,10 +848,8 @@ class RedPillConfig(BaseSettings):
 	SLEEP_PLUGIN_USP: bool = True  # Operator Mood Profile refresh
 	SLEEP_PLUGIN_DREAM: bool = True  # Oneiromancy (latent semantic association)
 	SLEEP_PLUGIN_CONSOLIDATION: bool = True  # Memory consolidation (lazy sleep)
-	SLEEP_PLUGIN_CHRONICLE: bool = True  # Ariadne's Thread + MCP archive search
-	# └─ CHRONICLE=True (v6.5.0): antigravity decrypt→ingest pipeline operational.
-	#   Gates archive_memories in MCP search_memory_research.
-	#   Agent can auto-deactivate if archive_memories is empty.
+	SLEEP_PLUGIN_CHRONICLE: bool = True  # Ariadne's Thread weaving on curated engrams
+	# v8.0.0: archive_memories purgada; la ingesta legacy está eliminada.
 
 	# -----------------------------------------------------------------------
 	# PRE-HEATING (Oracle Protocol)
@@ -934,15 +932,14 @@ class RedPillConfig(BaseSettings):
 
 # Static data (not env-driven)
 
-BAYESIAN_COLLECTIONS: List[str] = ["skill_memories", "work_memories", "directive_memories", "archive_memories"]
+BAYESIAN_COLLECTIONS: List[str] = ["skill_memories", "work_memories", "directive_memories"]
 
-PERMANENT_COLLECTIONS: List[str] = ["archive_memories", "directive_memories"]
+PERMANENT_COLLECTIONS: List[str] = ["directive_memories"]
 
 MEMORY_ENGINES: Dict[str, str] = {
 	"work_memories": "bayesian",
 	"skill_memories": "bayesian",
 	"directive_memories": "bayesian",
-	"archive_memories": "bayesian",
 	"social_memories": "rhizodb",
 	"story_memories": "rhizodb",
 }
