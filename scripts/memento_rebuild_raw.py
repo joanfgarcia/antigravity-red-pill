@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Reconstruye `raw/` de sesiones antigravity sin copia verbatim a partir de su
-`memento/index.md` (texto refinado reconstruido desde archive_memories).
+`memento/index.md` (texto renderizado en la propia sesión).
 
 Origen (2026-09-10): el pipeline nocturno exportó 98 sesiones antigravity con
 `messages=[]` (descifrado fallido) y el store nativo se purgó → no hay verbatim

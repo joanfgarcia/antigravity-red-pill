@@ -1,14 +1,10 @@
 #!/usr/bin/env python3
 """qdrant_reembed.py — re-embebido de una colección de Qdrant desde su `content`.
 
-Hallazgo 2026-09-25: en `archive_memories` los puntos anteriores a julio de 2026
-(fuente antigravity) tienen vectores que NO corresponden a ningún campo de texto
-guardado (coseno 0,1-0,5 contra `content`, `raw_content` y `refined_content`
-re-embebidos con el modelo vigente); desde julio casan (1,000). Se embebieron con
-otro modelo/pooling o desde un texto que no se guardó: su semántica original no
-es recuperable, y con el codificador de las consultas actuales esos puntos son
-prácticamente inencontrables. Re-embeber desde `content` los deja coherentes con
-lo guardado y con la búsqueda.
+Motivación (2026-09-25): al cambiar el modelo de embeddings, los vectores
+antiguos pueden no corresponder a ningún campo de texto guardado (coseno bajo
+contra `content` re-embebido con el modelo vigente) y quedan prácticamente
+inencontrables. Re-embeber desde `content` los deja coherentes con la búsqueda.
 
 Contrato:
 - **Dry-run por defecto**: mide cuántos vectores no casan (coseno < umbral) sin
@@ -29,13 +25,12 @@ mismo punto único que usa la escritura: los engramas de Memento con
 el resto, el `content` tal cual. Así un re-embebido sigue siempre al flag.
 
 Supera a `scripts/reembed_collections.py` (v7.5.0, cambio de modelo del 14-jul),
-que re-embebía sin comparar ni snapshot y **excluía `archive_memories` por
-defecto** — de ahí los vectores del modelo inglés antiguo que siguen en el archivo.
+que re-embebía sin comparar ni snapshot.
 
 Uso:
-	uv run python scripts/qdrant_reembed.py --collection archive_memories                  # dry-run completo
-	uv run python scripts/qdrant_reembed.py --collection archive_memories --max-points 5000 # dry-run de un tramo
-	red-pill job submit --recipe archive_reembed                                           # barrido real (--apply)
+	uv run python scripts/qdrant_reembed.py --collection <col>                  # dry-run completo
+	uv run python scripts/qdrant_reembed.py --collection <col> --max-points 5000 # dry-run de un tramo
+	uv run python scripts/qdrant_reembed.py --collection <col> --apply           # escribe
 """
 
 from __future__ import annotations
@@ -192,7 +187,7 @@ def run(
 
 def main() -> None:
 	parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-	parser.add_argument("--collection", default="archive_memories", help="Colección a re-embeber (default: archive_memories).")
+	parser.add_argument("--collection", required=True, help="Colección a re-embeber (obligatorio).")
 	parser.add_argument("--apply", action="store_true", help="Escribe los vectores nuevos (sin esto: dry-run).")
 	parser.add_argument("--threshold", type=float, default=0.99, help="Coseno por debajo del cual se reescribe (default 0.99).")
 	parser.add_argument("--field", default="content", help="Campo del payload que se embebe (default: content, como memory.py).")

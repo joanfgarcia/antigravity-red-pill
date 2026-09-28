@@ -43,7 +43,7 @@ Google released the `agy` CLI (`antigravity-history`) which allows **headless, n
 > **Decision**: Both backends coexist. They serve different purposes.
 
 - `AgyBridge` → **Execution** (Telegram, AWAKENINGs, Neon-Link commands)
-- `GrpcBridge` → **Extraction** (Chronicle pipeline, `archive_memories`)
+- `GrpcBridge` → **Extraction** (Chronicle pipeline → Memento en disco)
 
 The `GrpcBridge` is **NOT deprecated**. It remains the only way to call `GetAllCascadeTrajectories` and `GetCascadeTrajectorySteps` for the Chronicle ingestion pipeline.
 

@@ -47,18 +47,14 @@ MODE="all"
 while [[ $# -gt 0 ]]; do
 	case $1 in
 		--soul-only) MODE="soul"; shift ;;
-		--chronicle-only) MODE="chronicle"; shift ;;
 		*) shift ;;
 	esac
 done
 
 SOUL_COLLECTIONS="work_memories social_memories directive_memories skill_memories"
-CHRONICLE_COLLECTIONS="archive_memories"
 
 if [[ "$MODE" == "soul" ]]; then
 	TARGET_COLLECTIONS="$SOUL_COLLECTIONS"
-elif [[ "$MODE" == "chronicle" ]]; then
-	TARGET_COLLECTIONS="$CHRONICLE_COLLECTIONS"
 else
 	# Get all collections from API
 	TARGET_COLLECTIONS=$(curl -sf "${QDRANT_URL}/collections" \

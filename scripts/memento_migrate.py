@@ -5,8 +5,8 @@ memento_migrate.py — Memento Chronicle backfill & delta render (RFC-002 §5.4,
 Recorre los ChronicleSourcePlugin habilitados y vuelca cada sesión al árbol
 Memento (`<memento>/<AAAA-MM>/<source>/<session>/memento/index.md`). Delta por
 defecto (espejo del registry propio); `--all` fuerza el reproceso completo.
-Si un provider store no responde, reconstruye desde `archive_memories`
-(`reconstructed: true`). La pasada agéntica (distill/refine) NO vive aquí
+Si un provider store no responde, re-renderiza desde la copia `raw/` (verbatim).
+La pasada agéntica (distill/refine) NO vive aquí
 (Fase 3.5); Qdrant no se toca jamás en modo escritura.
 
 Usage:
@@ -101,72 +101,6 @@ def _queue_census() -> Dict[str, int]:
 	except Exception as e:
 		logger.debug(f"memory_queue census unavailable: {e}")
 		return {}
-
-
-def _reconstruct(session_id: str) -> Optional[List[Dict[str, Any]]]:
-	"""Fallback §5.1.2: reconstruye la sesión desde archive_memories (texto refinado, no verbatim)."""
-	try:
-		from qdrant_client.http import models
-
-		from red_pill.memory import MemoryManager
-
-		mem = MemoryManager()
-		session_filter = models.Filter(
-			must=[models.FieldCondition(key="session_id", match=models.MatchValue(value=session_id))],
-			must_not=[models.FieldCondition(key="type", match=models.MatchValue(value="idea_fragment"))],
-		)
-		points, offset = [], None
-		while True:
-			batch, offset = mem.client.scroll("archive_memories", scroll_filter=session_filter, limit=256, with_payload=True, offset=offset)
-			points.extend(batch)
-			if offset is None:
-				break
-		if not points:
-			return None
-		points.sort(key=lambda p: int((p.payload or {}).get("sequence_index") or 0))
-		messages = []
-		for point in points:
-			payload = point.payload or {}
-			content = payload.get("raw_content") or payload.get("refined_content") or ""
-			if not str(content).strip():
-				continue
-			messages.append({"role": payload.get("role"), "content": content, "timestamp": payload.get("created_at")})
-		return messages or None
-	except Exception as e:
-		logger.warning(f"Reconstruction from archive_memories failed for {session_id}: {e}")
-		return None
-
-
-def _orphan_sessions(registry: Any) -> List[Tuple[str, str]]:
-	"""[(source, session_id)] presentes en archive_memories pero en ningún provider store ni en el registry.
-
-	Prioridad de fuentes §5.1: los stores mandan; esto rescata SOLO lo que ya no
-	retiene ningún IDE. La fuente se infiere del prefijo del session_id
-	(antigravity acuñó los suyos sin prefijo, ver ChronicleSourcePlugin.session_prefix).
-	"""
-	known = {session_id for sessions in registry.state["registry"].values() for session_id in sessions}
-	try:
-		from red_pill.memory import MemoryManager
-
-		mem = MemoryManager()
-		session_ids, offset = set(), None
-		while True:
-			batch, offset = mem.client.scroll("archive_memories", limit=1000, with_payload=["session_id", "type"], offset=offset)
-			for point in batch:
-				payload = point.payload or {}
-				if payload.get("session_id") and payload.get("type") != "idea_fragment":
-					session_ids.add(str(payload["session_id"]))
-			if offset is None:
-				break
-	except Exception as e:
-		logger.error(f"archive_memories unavailable for orphan discovery: {e}")
-		return []
-
-	orphans = []
-	for session_id in sorted(session_ids - known):
-		source = session_id.split(":", 1)[0] if ":" in session_id else "antigravity"
-		orphans.append((source, session_id))
-	return orphans
 
 
 def _export_raw(plugin: Any, cid: str, session_id: str, step_count: Optional[int], workspace: Optional[str], session_dir: Path, now: str) -> None:
@@ -329,11 +263,6 @@ def main() -> None:
 	parser.add_argument("--source", action="append", default=[], help="Limit to a specific source (repeatable)")
 	parser.add_argument("--cata", action="store_true", help="Print the Q8 calibration report (markdown) and exit")
 	parser.add_argument(
-		"--reconstruct-orphans",
-		action="store_true",
-		help="Render sessions that exist only in archive_memories (no provider store retains them) as reconstructed: true (§5.1.2)",
-	)
-	parser.add_argument(
 		"--from-raw",
 		action="store_true",
 		help="Regenerate the whole tree from the raw/ backup copies (no provider stores needed) and exit",
@@ -385,7 +314,7 @@ def main() -> None:
 		logger.info("[DRY RUN] No changes made.")
 		return
 
-	if not pending and not args.reconstruct_orphans:
+	if not pending:
 		registry.save()
 		return
 
@@ -401,12 +330,10 @@ def main() -> None:
 		try:
 			messages = plugin.load(cid)
 		except Exception as e:
-			# Prioridad §5.1: store vivo > raw/ (verbatim) > archive_memories (refinado)
+			# Prioridad §5.1: store vivo > raw/ (verbatim). Sin ambos, se omite.
 			messages = _load_from_raw(root, registry, plugin, session_id)
 			if messages is None:
-				logger.warning(f"[{plugin.name}] load({cid}) failed ({e}); attempting reconstruction from archive_memories.")
-				messages = _reconstruct(session_id)
-				reconstructed = messages is not None
+				logger.warning(f"[{plugin.name}] load({cid}) failed ({e}); sin store ni raw/ — se omite.")
 			else:
 				logger.info(f"[{plugin.name}] load({cid}) failed; re-rendered from raw/ backup.")
 
@@ -453,44 +380,6 @@ def main() -> None:
 		)
 		touched_sources.add(plugin.name)
 		rendered_count += 1
-
-	if args.reconstruct_orphans:
-		orphans = _orphan_sessions(registry)
-		logger.info(f"Orphan sessions in archive_memories without provider store: {len(orphans)}")
-		for source, session_id in orphans:
-			messages = _reconstruct(session_id)
-			if not messages:
-				registry.upsert(source, session_id, {"rendered_at": now, "reconstructed": True})
-				skipped += 1
-				continue
-			rendered = render_session(
-				session_id,
-				source,
-				_originator_for(source, session_id),
-				messages,
-				reconstructed=True,
-				split_max_messages=split_max_messages,
-				split_max_chars=split_max_chars,
-				month_override=(registry.get(source, session_id) or {}).get("month"),
-			)
-			write_session(root, rendered)
-			registry.upsert(
-				source,
-				session_id,
-				{
-					"dir": rendered.dir_rel,
-					"month": rendered.month,
-					"created_at": rendered.created_at,
-					"rendered_at": now,
-					"message_count": rendered.message_count,
-					"body_chars": rendered.body_chars,
-					"has_splits": rendered.has_splits,
-					"memento_hash": rendered.memento_hash,
-					"reconstructed": True,
-				},
-			)
-			touched_sources.add(source)
-			rendered_count += 1
 
 	for source in sorted(touched_sources):
 		updated = recompute_chain(root, registry, source)

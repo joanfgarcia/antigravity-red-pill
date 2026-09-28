@@ -10,7 +10,6 @@ NO schema migration — only the vectors change, payloads and ids are untouched.
 Safe by default:
 - --dry-run is the DEFAULT. Pass --execute to actually write.
 - Resumable: a cursor is saved after every batch; re-running continues.
-- archive_memories (huge) is excluded unless explicitly listed.
 
 The operator runs `--execute` with the system idle. Do not run it from tests.
 """
@@ -129,7 +128,7 @@ def reembed_collection(
 def main() -> None:
 	parser = argparse.ArgumentParser(description="Re-embed stored engrams with the current EMBEDDING_MODEL.")
 	parser.add_argument(
-		"--collections", default=",".join(DEFAULT_COLLECTIONS), help="Comma-separated collections. archive_memories excluded by default."
+		"--collections", default=",".join(DEFAULT_COLLECTIONS), help="Comma-separated collections."
 	)
 	parser.add_argument("--execute", action="store_true", help="Actually write vectors. Without it, runs a dry-run.")
 	parser.add_argument("--batch-size", type=int, default=256)
@@ -147,8 +146,6 @@ def main() -> None:
 	cursor = {} if args.reset_cursor else load_cursor(cursor_path)
 
 	logger.info(f"Model: {cfg.EMBEDDING_MODEL} | mode: {'DRY-RUN' if dry_run else 'EXECUTE'} | collections: {collections}")
-	if "archive_memories" in collections:
-		logger.warning("archive_memories included explicitly — this is very large.")
 
 	client = QdrantClient(url=cfg.QDRANT_URL, api_key=cfg.QDRANT_API_KEY)
 	engine = EmbeddingEngine()

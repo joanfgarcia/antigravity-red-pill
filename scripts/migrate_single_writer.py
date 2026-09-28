@@ -32,11 +32,7 @@ import sys
 import time
 from pathlib import Path
 
-# Permitir `python scripts/migrate_single_writer.py` (sys.path[0]=scripts/):
-# el repo root entra en path para importar el helper de cobertura del purgador.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from scripts.memento_purge_archive import _classify_session  # noqa: E402
+from red_pill.memento.coverage import classify_session
 
 
 def _marker_path() -> Path:
@@ -74,7 +70,7 @@ def _coverage_missing() -> list[str]:
 			dir_rel = (entry or {}).get("dir")
 			if not dir_rel:
 				continue
-			if _classify_session(root, dir_rel) is None:
+			if classify_session(root, dir_rel) is None:
 				missing.append(f"{source}|{sid}")
 	return missing
 

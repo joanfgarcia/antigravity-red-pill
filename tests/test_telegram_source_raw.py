@@ -1,7 +1,7 @@
 """Telegram chronicle source: export_raw/load_raw (desbloquea la purga).
 
 El base devolvía None para export_raw → las sesiones de Telegram no tenían
-`raw/` y la purga de archive_memories abortaba por cobertura incompleta.
+`raw/` y la verificación de cobertura abortaba por cobertura incompleta.
 """
 
 from __future__ import annotations

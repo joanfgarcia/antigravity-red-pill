@@ -1,8 +1,7 @@
 """Normalización de ruido compartida (RFC-002 §5.2).
 
-Extraída de `ChronicleIngester._refine_content` (scripts/antigravity_ingest.py)
-para que el ingester y el renderer Memento produzcan texto limpio byte-idéntico.
-Cualquier cambio aquí afecta a AMBOS pipelines a la vez — esa es la gracia.
+Normaliza ANSI, blobs y telemetría para que el renderer Memento produzca
+texto limpio. Punto único de la limpieza de contenido (RFC-002 §5.2).
 """
 
 from __future__ import annotations

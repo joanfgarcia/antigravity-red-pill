@@ -63,7 +63,7 @@ activada por defecto vía `CHRONICLE_ARCHIVE_SOURCES` (incluye `"pi"`) →
 `memento_migrate` (etapa `memento` del chronicle diario) la vuelca al árbol
 Memento con `export_raw`/`load_raw` (backup `raw/` + `--from-raw`), y
 `memento_agentic` la destila/refina. Desde 2026-09-11 la ingesta a
-`archive_memories` (Qdrant) está retirada del pipeline.
+La colección legacy de archivo en Qdrant está retirada del pipeline.
 
 ## Uso agéntico (minion backend `pi`)
 
