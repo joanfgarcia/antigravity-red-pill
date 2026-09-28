@@ -18,13 +18,33 @@ import sys
 from pathlib import Path
 
 
-def _raw_coverage(root: Path) -> dict:
-	"""Cobertura de raw/ por sesión del registry (0-100%)."""
+def _classify_session(root: Path, dir_rel: str) -> str | None:
+	"""'raw' si hay copia verbatim; 'rendered' si solo marcas renderizadas; None si nada.
+
+	`rendered` cuenta como cubierta: si la sesión está renderizada en Memento
+	(`memento/`/`annotate/`/`refine/`), su contenido se conserva aunque el store
+	nativo se haya purgado y `raw/` esté vacío (caso de 3 sesiones Telegram del
+	2026-05, ausentes de `archive_memories`, 2026-09-28).
+	"""
+	d = Path(root) / dir_rel
+	raw_dir = d / "raw"
+	if raw_dir.is_dir() and any(raw_dir.iterdir()):
+		return "raw"
+	for sub in ("memento", "annotate", "refine"):
+		p = d / sub
+		if p.is_dir() and any(p.iterdir()):
+			return "rendered"
+	return None
+
+
+def _coverage(root: Path, registry: object | None = None) -> dict:
+	"""Cobertura por sesión del registry: raw + rendered (0-100%)."""
 	from red_pill.memento.registry import MementoRegistry
 
-	reg = MementoRegistry()
+	reg = registry if registry is not None else MementoRegistry()
 	total = 0
-	with_raw = 0
+	raw_n = 0
+	rendered_n = 0
 	missing = []
 	for source, sessions in reg.state["registry"].items():
 		if not isinstance(sessions, dict):
@@ -34,13 +54,14 @@ def _raw_coverage(root: Path) -> dict:
 			if not dir_rel:
 				continue
 			total += 1
-			raw_dir = Path(root) / dir_rel / "raw"
-			has = raw_dir.is_dir() and any(raw_dir.iterdir())  # raw.jsonl + meta.json (no *.md)
-			if has:
-				with_raw += 1
+			kind = _classify_session(root, dir_rel)
+			if kind == "raw":
+				raw_n += 1
+			elif kind == "rendered":
+				rendered_n += 1
 			else:
 				missing.append(f"{source}|{sid}")
-	return {"total": total, "with_raw": with_raw, "missing": missing}
+	return {"total": total, "raw": raw_n, "rendered": rendered_n, "covered": raw_n + rendered_n, "missing": missing}
 
 
 def main() -> None:
@@ -52,10 +73,10 @@ def main() -> None:
 	from red_pill.memory import MemoryManager
 
 	root = get_memento_root()
-	cov = _raw_coverage(root)
-	print(f"[PURGE] cobertura raw/: {cov['with_raw']}/{cov['total']} sesiones")
+	cov = _coverage(root)
+	print(f"[PURGE] cobertura: {cov['covered']}/{cov['total']} sesiones (raw {cov['raw']}, rendered {cov['rendered']})")
 	if cov["missing"]:
-		print("[PURGE] ABORT: hay sesiones sin raw/ — la reconstrucción desde raw/ NO es viable.")
+		print("[PURGE] ABORT: hay sesiones sin raw/ ni render — la reconstrucción NO es viable.")
 		for m in cov["missing"][:10]:
 			print(f"  - {m}")
 		sys.exit(1)
