@@ -910,6 +910,24 @@ cron es trazable.
   monitorizarlo (`job_status`) y escanear otros problemas (señales, inbox,
   health). Si lanza un DAG sin ninguno en vuelo, incluye `origin: "awakening"`
   en su payload.
+- **[FEAT] Canal de notas (AWAKEN-002)**: buzón de mano a mano en el desk
+  (`awakening/notes/` + `done/`); dirección 1 (deberes del Fixer → despertar),
+  dirección 3 (decisión pendiente → Operador, `para: <Operador>`); firmas
+  `— <nombre> · <ts>`; el digest del handshake cuenta las notas `para: <Operador>`
+  sin `## Leída` y las muestra como decisiones pendientes (A-1).
+- **[FEAT] Vigilancia del planner (AWAKEN-002)**: directiva delgada + puntero al
+  índice en el prompt; pre-pase determinista `scripts/planner_state_audit.py`
+  (A-4, sin LLM) que compara el `status:` del frontmatter con ramas/commits/
+  ficheros y **propone** transiciones con su evidencia — nunca las aplica.
+- **[FEAT] Latido durante la vigilancia (§5)**: `_lease_keeper` mantiene el lease
+  D21 fresco mientras el despertar trabaja; sin él un run > `HEARTBEAT_LEASE`
+  enmudecía el latido y neon-link declaraba un falso "Córtex Offline".
+- **[FEAT] Techo configurable + Git Golden Rule (A-5)**: `AWAKENING_TIMEOUT`
+  env-driven (default 600s; 45-60 min seguro con el latido); regla explícita
+  "commit local sí en tu rama/worktree (`awaken/<ts>`), push nunca sin orden".
+- **[FEAT] Vocabulario de estados (A-3)**: `blocked`/`paused` exigen `reason`
+  obligatorio en el ancla del kernel; `ready` no es estado (→ `ratified`).
+- **[FIX] mypy limpio**: 11 errores preexistentes resueltos (gate de CI verde).
 
 ### 🔗 Propagación del origen por la cola
 
