@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from red_pill.memento.render import update_frontmatter_links
 
@@ -47,6 +47,30 @@ class MementoRegistry:
 
 	def get(self, source: str, session_id: str) -> Optional[Dict[str, Any]]:
 		return self.sessions_of(source).get(session_id)
+
+	def is_rendered(self, session_id: str, sources: Optional[List[str]] = None) -> bool:
+		"""¿La sesión aparece renderizada en Memento?
+
+		Indexa `sid` crudo y `source:sid` (el registry usa la forma con prefijo en
+		algunas fuentes). `sources` acota la búsqueda a esas fuentes — necesario
+		para el janitor de Telegram: UUIDs crudos se repiten entre fuentes
+		(p.ej. `antigravity` guarda uuids crudos), así que mirar TODAS daría
+		falsos positivos y borraría una sesión de Telegram no renderizada.
+		"""
+		sid = str(session_id)
+		if not sid:
+			return False
+		reg = self.state.get("registry") or {}
+		if sources is not None:
+			items = [(s, reg.get(s, {})) for s in sources]
+		else:
+			items = list(reg.items())
+		for source, sessions in items:
+			if not isinstance(sessions, dict):
+				continue
+			if sid in sessions or f"{source}:{sid}" in sessions:
+				return True
+		return False
 
 	def upsert(self, source: str, session_id: str, entry: Dict[str, Any]) -> None:
 		sessions = self.sessions_of(source)

@@ -740,3 +740,19 @@ y `scout-consistency.json`). Veredicto: **NO demoler y NO encender
 encender `SW_INGEST_RETIRED` hay que resolver SHARD-13 (purga Telegram) y
 SHARD-10/01 (autonomía de las fuentes Memento). El resto son obras de demolición
 sin riesgo funcional.
+
+### 10.7 Resueltos post-scout (2026-09-28)
+
+- **SHARD-13 CERRADO**: el janitor de Telegram (`session.py::_is_archived`) es
+  Memento-consciente cuando `SW_INGEST_RETIRED` está ON, **acotado a la fuente
+  `telegram`** (sin falsos positivos por UUIDs crudos repetidos en antigravity);
+  fail-safe (no purga si no puede verificar) y el janitor ya no instancia
+  `MemoryManager` en modo retirado. `MementoRegistry.is_rendered(sid, sources=)`
+  nuevo. Tests `test_telegram_janitor_purge.py` + suite de Telegram hermética.
+- **Deuda de hermetismo detectada**: `tests/test_sleep_phases.py::test_drain_cutoff…`
+  asume el drenaje legacy y falla con `SW_INGEST_RETIRED=true` (pre-existente, no
+  introducido por SHARD-13). Entra en SHARD-06 (tests huérfanos a reescribir).
+
+**Pendiente para desbloquear RETIRED**: SHARD-10/01 (autonomía de las fuentes
+Memento) y verificar la cobertura de `chronicle_sources/telegram.py` (existe y
+está en `CHRONICLE_ARCHIVE_SOURCES`).

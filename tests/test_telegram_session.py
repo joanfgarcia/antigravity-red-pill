@@ -8,6 +8,14 @@ from red_pill.plugins.antigravity_ide.worker import IDEWorker
 from red_pill.telegram.session import TelegramSessionManager
 
 
+@pytest.fixture(autouse=True)
+def _force_ingest_not_retired(monkeypatch):
+	# Hermético: la purga legacy (Qdrant mockeado) asume SW_INGEST_RETIRED OFF.
+	import red_pill.config as cfg
+
+	monkeypatch.setattr(cfg, "SW_INGEST_RETIRED", False)
+
+
 @pytest.fixture
 def mock_telegram_env(tmp_path, monkeypatch):
 	# Isolate XDG directories to tmp_path
