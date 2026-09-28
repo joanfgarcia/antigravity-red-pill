@@ -182,7 +182,6 @@ Plugins 05–10. Each is independently toggleable.
 | `TELEGRAM_INLINE_TIMEOUT` | `120` | Fast-path inline timeout (s) for Telegram conversational messages (D3). Passed as the method timeout to `CascadeBridge.prompt()`; a per-target `timeout` in `TELEGRAM_BRIDGE_CASCADE` overrides it for that target (D14). |
 | `AWAKENING_BRIDGE_CASCADE` | `[]` | JSON-encoded fallback cascade of model targets for autonomous awakening runs. |
 | `DEFAULT_MINION_BRIDGE_CASCADE` | `[]` | JSON-encoded fallback cascade of model targets for background agéntic minions if no model is explicitly requested. |
-| `CHRONICLE_PLUGINS` | `["antigravity", "claude_code"]` | List of enabled sequential extraction plugins to pull transcripts during sleep cycle. |
 
 > **Catálogo curado de modelos (RFC_TELEGRAM_RESILIENCE §2A/D6/D20)**: el archivo
 > `$XDG_CONFIG_HOME/red-pill/model_catalog.yaml` (auto-seeded desde
@@ -228,7 +227,6 @@ Plugins 05–10. Each is independently toggleable.
 | `MEMENTO_ANNOTATE_DEAD_ZONE` | `0.05` | Dual routing dead zone: margin below this over the gate → `dual_route: none` (unstable/noise; it does NOT ascend, stays in the tree for future re-scoring). |
 | `RP_IDENTITY_BIO` | `""` (→ config dir) | Explicit path to the identity Bio file. Default precedence: `~/.config/red-pill/identity_bio.md` → neutral `identity_bio.template.txt` in the repo. Personal data never lives in the public repo. |
 | `MEMENTO_STATIC_ASCENSION_ENABLED` | `False` | Static ascension after the agentic pass (`ascend_by_threshold`, scans `refine/` + `annotate/`; `dual_route: none` never ascends). Shadow until calibration. |
-| `MEMENTO_GATE_ENFORCED` | `False` | **Phase 4 switch.** Flip ONLY with operator approval backed by shadow evidence: chronicle stops ingesting below-threshold sessions into archive_memories. |
 
 > ℹ️ **Agentic pass backend.** The file-based distill/refine (`memento/agentic/`)
 > talks to the local llama-server via `EDGE_ENGINE_URL`

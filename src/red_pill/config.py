@@ -470,10 +470,8 @@ class RedPillConfig(BaseSettings):
 	METABOLISM_ENABLED: bool = True
 	METABOLISM_COOLDOWN: int = 3600
 	METABOLISM_AUTO_COLLECTIONS: Any = ["work_memories", "social_memories", "story_memories"]
-	CHRONICLE_PLUGINS: List[str] = ["antigravity", "claude_code"]
-	# Fuentes del ARCHIVO diario Memento (memento_migrate → árbol Memento); no
-	# confundir con CHRONICLE_PLUGINS, que gobierna el snatching hacia la
-	# consolidación. La ingesta a archive_memories se retiró 2026-09-11.
+	# Fuentes del ARCHIVO diario Memento (memento_migrate → árbol Memento).
+	# La ingesta legacy a archive_memories se retiró (v8.0.0).
 	# "pi" entra por defecto: si Pi no está instalado, su discover() devuelve [].
 	CHRONICLE_ARCHIVE_SOURCES: List[str] = ["antigravity", "claude_code", "opencode", "pi", "telegram"]
 
@@ -503,9 +501,6 @@ class RedPillConfig(BaseSettings):
 	MEMENTO_GATE_MIN_SIGNIFICANCE_WORK: float = 0.6
 	MEMENTO_GATE_MIN_SIGNIFICANCE_SOCIAL: float = 0.5
 	MEMENTO_AGENTIC_NIGHT_LIMIT: int = 20  # sesiones por noche — acota el coste LLM dentro del job chronicle
-	# Fase 4 (§6): el flip REQUIERE aprobación del operador + evidencia de la sombra.
-	# True = el chronicle deja de ingerir en archive_memories las sesiones bajo el umbral.
-	MEMENTO_GATE_ENFORCED: bool = False
 	# Fase 4 (§3.2/§5.4): ascensos diferidos, refuerzo temporal y distill fragmentado.
 	# Ajustados por el experimento de calibración 2026-09-14 (§6.9): GAIN=1.0 y
 	# gate=5.0 saturaban (~95% ascenderían en el corpus real); GAIN=0.5+gate=7.0
@@ -632,7 +627,7 @@ class RedPillConfig(BaseSettings):
 	MEMENTO_SPLIT_MAX_MESSAGES: int = 200
 	MEMENTO_SPLIT_MAX_CHARS: int = 12000
 
-	@field_validator("CHRONICLE_PLUGINS", "CHRONICLE_ARCHIVE_SOURCES", "MEMENTO_SOURCES", "MEMENTO_EXTRA_SOURCES", mode="before")
+	@field_validator("CHRONICLE_ARCHIVE_SOURCES", "MEMENTO_SOURCES", "MEMENTO_EXTRA_SOURCES", mode="before")
 	@classmethod
 	def _parse_chronicle_plugins(cls, v: Any) -> Any:
 		if isinstance(v, str):

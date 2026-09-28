@@ -5,7 +5,7 @@ import uuid
 from pathlib import Path
 from typing import List, Optional
 
-from red_pill.core.paths import get_data_dir, get_staging_dir
+from red_pill.core.paths import get_data_dir
 
 logger = logging.getLogger(__name__)
 
@@ -14,13 +14,12 @@ class TelegramSessionManager:
 	"""
 	Manages local, disk-based conversation history for Telegram.
 	Stores history under XDG data dir to preserve context headlessly.
-	Ingests via STAGING_DIR when compacted or marked for deletion.
+	Single-writer: ya NO ingesta a staging (retirado); lo consume Memento.
 	"""
 
 	def __init__(self):
 		self.conv_dir = get_data_dir() / "telegram_conversations"
 		self.conv_dir.mkdir(parents=True, exist_ok=True)
-		self.staging_dir = get_staging_dir()
 
 	def _get_path(self, session_id: str) -> Path:
 		return self.conv_dir / f"{session_id}.json"
@@ -108,20 +107,6 @@ class TelegramSessionManager:
 				lines.append(f"{role}: {txt}")
 		return "\n\n".join(lines)
 
-	def copy_to_staging(self, session_id: str) -> bool:
-		session = self.get_session(session_id)
-		if not session:
-			return False
-		staging_path = self.staging_dir / f"{session_id}.json"
-		try:
-			with open(staging_path, "w", encoding="utf-8") as f:
-				json.dump(session, f, indent=2)
-			logger.info(f"[TelegramSession] Copied session {session_id} to staging for ingestion")
-			return True
-		except Exception as e:
-			logger.error(f"[TelegramSession] Failed to copy session {session_id} to staging: {e}")
-			return False
-
 	def mark_for_deletion(self, session_id: str) -> bool:
 		session = self.get_session(session_id)
 		if not session:
@@ -129,12 +114,6 @@ class TelegramSessionManager:
 		session["status"] = "pending_purge"
 		session["summary"]["lastUpdatedAt"] = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
 		self.save_session(session_id, session)
-		# Copy to staging to guarantee sleep cycle ingests it before Janitor deletes it
-		# G19/G11: con la ingesta retirada, el staging ya no se consume → no copiar.
-		import red_pill.config as _cfg
-
-		if not getattr(_cfg, "SW_INGEST_RETIRED", False):
-			self.copy_to_staging(session_id)
 		logger.info(f"[TelegramSession] Session {session_id} marked as pending_purge")
 		return True
 
@@ -161,14 +140,6 @@ class TelegramSessionManager:
 			return None
 
 		logger.info(f"[TelegramSession] Enqueueing compaction for {session_id} ({len(steps)} steps, {total_chars} chars)")
-
-		# 1. Archive the old session in Qdrant (by copying to staging)
-		# G19: si la ingesta interaction→work/social está RETIRADA (single-writer),
-		# el staging no lo consume nadie → no se archiva ahí (evita acumulación).
-		import red_pill.config as _cfg
-
-		if not getattr(_cfg, "SW_INGEST_RETIRED", False):
-			self.copy_to_staging(session_id)
 
 		# 2. Enqueue summarization to the Samantha Queue
 		history_text = self.get_history_prompt(session)

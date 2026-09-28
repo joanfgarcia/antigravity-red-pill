@@ -776,3 +776,17 @@ está en `CHRONICLE_ARCHIVE_SOURCES`).
   **productor de Memento** (antigravity → `unencrypted_conversations/`), NO
   legacy; §10.4.3 corregido. Queda desbloqueado borrar `staging/` y
   `ls_snatcher` sin tocar el extractor.
+
+### 10.8 Demolición por lotes (2026-09-28)
+
+- **Lote 1 (docs/docstrings)**: SHARD-08/09/11/14 — `CHRONICLE_INGESTION_GUIDE`,
+  `AGENT_UPDATE_GUIDE` §4.11, `SERVICE_HEALTH_CONTRACT`, `RFC_002_MEMENTO` §1.1,
+  docstrings de `consolidation`/`phases`. ✅
+- **Lote 2 (retiradas seguras)**: SHARD-12 (`TelegramSessionManager.copy_to_staging`
+  + `staging_dir` + ramas), SHARD-03 (Phase 0 'snatch' de `consolidation_ritual`),
+  SHARD-04/05 (`CHRONICLE_PLUGINS` y `MEMENTO_GATE_ENFORCED` sin consumidor;
+  filas de `ENV_REFERENCE`). ✅
+- **Lote 3 (destructivo)**: pendiente — borrar `ls_snatcher`, `chronicle/*` legacy,
+  la rama drain de `consolidation`, `get_staging_dir` + `staging/` (consumidores
+  `paths_to_wipe`/`migration_map`), retirar flags de migración y ajustar
+  `scripts/chronicle_extractor.py`.

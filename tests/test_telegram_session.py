@@ -134,23 +134,17 @@ def test_append_message_and_prompt(mock_telegram_env):
 	assert prompt == "USER: Hola, Aleth\n\nASSISTANT: Hola, Joan. ¿En qué trabajamos hoy?"
 
 
-def test_copy_to_staging(mock_telegram_env):
+def test_staging_retirado(mock_telegram_env):
+	"""Single-writer: Telegram ya NO copia a staging (ingesta retirada)."""
 	mock_telegram_env
+	from red_pill.core.paths import get_staging_dir
+
 	tsm = TelegramSessionManager()
+	assert not hasattr(tsm, "copy_to_staging")
 	session = tsm.create_session("user123")
-	session_id = session["id"]
-
-	tsm.append_message(session_id, "user", "Test message")
-
-	success = tsm.copy_to_staging(session_id)
-	assert success
-
-	staging_path = tsm.staging_dir / f"{session_id}.json"
-	assert staging_path.exists()
-	with open(staging_path, "r", encoding="utf-8") as f:
-		staged = json.load(f)
-	assert staged["id"] == session_id
-	assert staged["steps"][0]["message"]["text"] == "Test message"
+	tsm.append_message(session["id"], "user", "Test message")
+	tsm.mark_for_deletion(session["id"])
+	assert not (get_staging_dir() / f"{session['id']}.json").exists()
 
 
 def test_mark_for_deletion(mock_telegram_env):
@@ -166,9 +160,10 @@ def test_mark_for_deletion(mock_telegram_env):
 	saved = tsm.get_session(session_id)
 	assert saved["status"] == "pending_purge"
 
-	# Verify it copied to staging
-	staging_path = tsm.staging_dir / f"{session_id}.json"
-	assert staging_path.exists()
+	# Single-writer: NO se copia a staging (la ingesta está retirada)
+	from red_pill.core.paths import get_staging_dir
+
+	assert not (get_staging_dir() / f"{session_id}.json").exists()
 
 
 def test_trigger_compaction(mock_telegram_env):
@@ -199,8 +194,10 @@ def test_trigger_compaction(mock_telegram_env):
 		assert payload["channel_user_id"] == "user123"
 		assert len(payload["history_text"]) > 0
 
-	# Verify old session was copied to staging (archival)
-	assert (tsm.staging_dir / f"{session_id}.json").exists()
+	# Single-writer: no se archiva a staging (ingesta retirada)
+	from red_pill.core.paths import get_staging_dir
+
+	assert not (get_staging_dir() / f"{session_id}.json").exists()
 
 
 @patch("red_pill.memory.MemoryManager")

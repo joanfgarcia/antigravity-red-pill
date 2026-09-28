@@ -831,9 +831,9 @@ plugins, file-based distill/refine (`memento_agentic.py`, nightly LLM-gated,
 `MEMENTO_AGENTIC_NIGHT_LIMIT`/night), `memento_stale` Janitor + `auto_heal_ritual`
 branch, and the shadow gate (significance stamped in-place — the frontmatter
 reserves a fixed `significance: null` slot so the stamp never moves line refs).
-**Phase 4 is wired but OFF**: `MEMENTO_GATE_ENFORCED=False` guards the
-chronicle-ingest filter (fail-open for unjudged sessions); the flip remains an
-operator decision once the shadow window yields evidence (Q4). Legacy
+**Phase 4 (v8.0.0)**: el switch `MEMENTO_GATE_ENFORCED` fue **eliminado** — la
+propia ingesta a `archive_memories` está retirada (la curaduría pasa por
+ascensión de Memento + hubs). Histórico: el gate en sombra se describía aquí. Legacy
 `chronicle_distill.py`/`chronicle_refine.py` keep running until then.
 
 ---
