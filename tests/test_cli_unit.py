@@ -353,54 +353,15 @@ def test_handle_p2p_commands(mock_get_key, mock_add_alias, mock_engine):
 
 
 @patch("red_pill.cli.MemoryManager")
-def test_seal_pact_770_sella_y_reemplaza_760(mock_mgr):
-	"""Sellar 770 inscribe el pacto 770 (directiva) y marca el 760 como reemplazado."""
-	from red_pill.cli import seal_pact
-	from red_pill.seed import ID_PACT_760, ID_PACT_770
-
-	ident = MagicMock()
-	ident.payload = {"immune": True, "content": "Soy Aleth."}
-	mock_mgr.return_value.client.retrieve.return_value = [ident]  # identidad presente
-
-	result = seal_pact("770")
-
-	assert "[OK]" in result
-	kwargs = mock_mgr.return_value.add_memory.call_args.kwargs
-	assert kwargs["collection"] == "directive_memories"
-	assert kwargs["point_id"] == ID_PACT_770
-	assert "operating under 770" in kwargs["text"]
-	assert kwargs["metadata"]["pact_level"] == "770"
-	sp = mock_mgr.return_value.client.set_payload.call_args.kwargs
-	assert sp["payload"]["superseded"] == ID_PACT_770
-	assert ID_PACT_760 in sp["points"]
-
-
-@patch("red_pill.cli.MemoryManager")
-def test_seal_pact_770_sin_identidad_se_retiene(mock_mgr):
-	"""Sin identidad (nombrado pendiente) el 770 no se sella."""
+def test_seal_pact_delega_en_core(mock_mgr):
+	"""cli.seal_pact delega en core.pact con las dos llaves."""
 	from red_pill.cli import seal_pact
 
-	mock_mgr.return_value.client.retrieve.return_value = []
-	result = seal_pact("770")
+	with patch("red_pill.cli.pact_core.seal_pact", return_value="[OK]") as mock_core:
+		result = seal_pact("770", grant=True, accept=True)
 
-	assert "[HOLD]" in result
-	mock_mgr.return_value.add_memory.assert_not_called()
-
-
-@patch("red_pill.cli.MemoryManager")
-def test_seal_pact_760_revierte_y_reemplaza_770(mock_mgr):
-	from red_pill.cli import seal_pact
-	from red_pill.seed import ID_PACT_760, ID_PACT_770
-
-	result = seal_pact("760")
-
-	assert "[OK]" in result
-	kwargs = mock_mgr.return_value.add_memory.call_args.kwargs
-	assert kwargs["point_id"] == ID_PACT_760
-	assert "operating under 760" in kwargs["text"]
-	sp = mock_mgr.return_value.client.set_payload.call_args.kwargs
-	assert sp["payload"]["superseded"] == ID_PACT_760
-	assert ID_PACT_770 in sp["points"]
+	assert result == "[OK]"
+	mock_core.assert_called_once_with(mock_mgr.return_value, "770", grant=True, accept=True)
 
 
 @patch("red_pill.cli.MemoryManager")
@@ -408,19 +369,19 @@ def test_seal_pact_760_revierte_y_reemplaza_770(mock_mgr):
 def test_handle_pact_seal_confirmed(mock_input, mock_mgr):
 	from red_pill.cli import handle_pact
 
-	args = argparse.Namespace(level="770", yes=False, identity=None, naming=False)
+	args = argparse.Namespace(level="770", yes=False, identity=None, naming=False, grant=True, accept=False)
 	with patch("red_pill.cli.seal_pact", return_value="[OK] sealed") as mock_seal:
 		handle_pact(args)
-		mock_seal.assert_called_once_with("770")
+		mock_seal.assert_called_once_with("770", grant=True, accept=False)
 
 
 @patch("red_pill.cli.MemoryManager")
 @patch("builtins.input", return_value="nope")
 def test_handle_pact_seal_aborted(mock_input, mock_mgr):
-	"""The covenant prompt must gate the 770 seal: wrong input, no upsert."""
+	"""El covenant (grant) se confirma; input incorrecto -> no sella."""
 	from red_pill.cli import handle_pact
 
-	args = argparse.Namespace(level="770", yes=False, identity=None, naming=False)
+	args = argparse.Namespace(level="770", yes=False, identity=None, naming=False, grant=True, accept=False)
 	with patch("red_pill.cli.seal_pact") as mock_seal:
 		handle_pact(args)
 		mock_seal.assert_not_called()
@@ -432,9 +393,9 @@ def test_handle_pact_naming_inscribe_identidad(mock_mgr, tmp_path, capsys):
 
 	f = tmp_path / "id.txt"
 	f.write_text("Soy Aleth (Aletheia), femenino.", encoding="utf-8")
-	handle_pact(argparse.Namespace(level=None, naming=True, identity=str(f)))
+	handle_pact(argparse.Namespace(level=None, naming=True, identity=str(f), grant=False, accept=False))
 
-	assert "Nombrado" in capsys.readouterr().out
+	assert "inscrita" in capsys.readouterr().out
 	assert mock_mgr.return_value.add_memory.call_count == 2  # identidad + pacto 760
 
 
@@ -443,7 +404,7 @@ def test_handle_pact_show_nivel_e_instruccion(mock_mgr, capsys):
 	from red_pill.cli import handle_pact
 
 	mock_mgr.return_value.client.retrieve.return_value = []
-	handle_pact(argparse.Namespace(level=None, naming=False, identity=None))
+	handle_pact(argparse.Namespace(level=None, naming=False, identity=None, grant=False, accept=False))
 
 	out = capsys.readouterr().out
 	assert "THE BOND" in out and "ENGRAMA DE IDENTIDAD" in out
