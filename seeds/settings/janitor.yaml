@@ -10,5 +10,8 @@ plugins:
     enabled: true
     max_size_bytes: 10485760  # 10MB
     days_to_keep: 7           # Retención de logs rotados
+  awakening_logs:
+    enabled: true
+    days_to_keep: 30          # TTL de los logs por despertar (${AGENT_CORE_DIR}/awakening/)
   orphaned_parents_sweep:
     enabled: true

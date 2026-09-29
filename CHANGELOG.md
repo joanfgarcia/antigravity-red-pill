@@ -1,3 +1,32 @@
+## Unreleased
+
+### 🔇 Despertar autónomo — el Derecho al Silencio no consume el tope (AWAKEN-002)
+
+- **[FIX] Budget Guard cuenta solo despertares productivos:** el portero corría
+  *antes* de arrancar al agente, así que un día tranquilo con muchos silencios
+  agotaba las 8 plazas y bloqueaba el trabajo real de la tarde. Ahora
+  `execution_ledger` gana una columna `counted` (`ALTER TABLE` idempotente): el
+  turno se ejecuta siempre, se clasifica al responder, y si ejerció el Derecho
+  al Silencio queda `counted=0` y **no** consume tope. Los errores sí cuentan
+  (gastaron recursos). `MAX_AWAKENINGS_PER_DAY` pasa a significar *despertares
+  productivos/día*.
+- **[NEW] Flag `AWAKENING_SILENCE_COUNTS`** (default `false`, `config.py`): a
+  `true` restaura el cómputo antiguo (todo despertar consume tope).
+- **[FIX] Frontera del día en hora local:** el tope se reiniciaba a las 00:00 UTC
+  (02:00 CEST); ahora usa `date(started_at,'localtime')` → medianoche local.
+
+### 🧹 Janitor — TTL de los logs de despertar (AWAKEN-001)
+
+- **[NEW] `awakening_logs` JanitorPlugin:** purga de `${AGENT_CORE_DIR}/awakening/*.log`
+  más antiguos que `plugins.awakening_logs.days_to_keep` (default 30). La edad se
+  lee del **nombre** (`YYYYMMDD_HHMM.log`), no del mtime que `git` puede tocar.
+  Solo toca logs con el patrón del esquema; nunca `notes/`, `done/` ni `README.md`.
+- **[FIX] La config del operador por fin se aplica:** ningún runner cargaba
+  `${CONFIG_DIR}/janitor.yaml` (el *seed* documentado quedaba inerte). El
+  `JanitorMinion` la lee ahora y la mergea con un `config` explícito del caller.
+- **[DOCS] `seeds/settings/janitor.yaml` + `RUNBOOK` §6** actualizados con
+  `awakening_logs`.
+
 ## [8.0.0] - 2026-09-28 (Memento single-writer, RFC-004 tags, JOB-001, Bank Janitor, Arnés Pi & Desk)
 
 ### ⬆️ Upgrading (BREAKING — single-writer de memoria)

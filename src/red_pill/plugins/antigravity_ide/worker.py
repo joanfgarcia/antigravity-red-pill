@@ -148,6 +148,12 @@ def get_connection():
 		"status TEXT DEFAULT 'started'"
 		")"
 	)
+	# Migración AWAKEN-002: `counted` distingue los despertares productivos de
+	# los que ejercen el Derecho al Silencio (estos no consumen el tope salvo
+	# AWAKENING_SILENCE_COUNTS=true). DEFAULT 1 preserva el cómputo previo.
+	ledger_cols = {row[1] for row in conn.execute("PRAGMA table_info(execution_ledger)")}
+	if "counted" not in ledger_cols:
+		conn.execute("ALTER TABLE execution_ledger ADD COLUMN counted INTEGER DEFAULT 1")
 	return conn
 
 
@@ -1240,9 +1246,15 @@ class IDEWorker:
 
 		logger.info(f"[{msg_ids}] Processing AWAKENING in isolated context")
 
-		# ── Budget Guard: check daily AWAKENING limit ──
+		# ── Budget Guard: check daily AWAKENING limit (día local) ──
+		# `started_at` es UTC (CURRENT_TIMESTAMP); se compara en hora local
+		# ('localtime') para alinear el reinicio del tope con el operador.
+		# Solo cuentan los despertares productivos (`counted=1`): los que
+		# ejercen el Derecho al Silencio quedan a 0 salvo política
+		# AWAKENING_SILENCE_COUNTS (AWAKEN-002).
 		today_count = cursor.execute(
-			"SELECT COUNT(*) FROM execution_ledger WHERE exec_type = 'awakening' AND date(started_at) = date('now')"
+			"SELECT COUNT(*) FROM execution_ledger WHERE exec_type = 'awakening' "
+			"AND date(started_at, 'localtime') = date('now', 'localtime') AND counted = 1"
 		).fetchone()[0]
 
 		if today_count >= MAX_AWAKENINGS_PER_DAY:
@@ -1366,6 +1378,12 @@ class IDEWorker:
 
 		# Derecho al Silencio: don't send to Telegram
 		is_silence = "Ejercicio consciente del Derecho al Silencio" in clean_content
+
+		# El silencio no consume el tope diario salvo política explícita. Los
+		# errores sí cuentan (consumieron recursos) — el INSERT ya dejó counted=1.
+		if is_silence and not cfg.get_config().AWAKENING_SILENCE_COUNTS:
+			cursor.execute("UPDATE execution_ledger SET counted = 0 WHERE id = ?", (ledger_id,))
+			logger.info(f"[{msg_ids}] AWAKENING silence — no consume tope (counted=0)")
 
 		if clean_content and not is_silence:
 			# Route to Telegram outbox — find the user's telegram channel_user_id

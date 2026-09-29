@@ -1,3 +1,4 @@
+import asyncio
 import os
 import tempfile
 from datetime import datetime, timedelta
@@ -62,6 +63,60 @@ def test_janitor_log_rotation_and_cleanup(temp_dir):
 	assert purged == 2
 	assert not rotated_2.exists()
 	assert rotated_1.exists()
+
+
+def test_awakening_logs_purges_older_than_ttl(temp_dir, monkeypatch):
+	"""El plugin borra los logs de despertar > days_to_keep y respeta el resto."""
+	from red_pill.swarm.agents.janitor_plugins import awakening_logs as mod
+
+	monkeypatch.setattr(mod, "get_awakening_dir", lambda: temp_dir)
+
+	old = temp_dir / f"{(datetime.now() - timedelta(days=40)).strftime('%Y%m%d')}_0000.log"
+	old.write_text("old")
+	recent = temp_dir / f"{datetime.now().strftime('%Y%m%d')}_1200.log"
+	recent.write_text("recent")
+	# Fichero no conforme: se ignora (fallback mtime, reciente → se conserva)
+	stray = temp_dir / "stray.log"
+	stray.write_text("x")
+	# Subcarpetas y docs del buzón: nunca se tocan
+	notes = temp_dir / "notes"
+	notes.mkdir()
+	(notes / "hola.md").write_text("nota")
+
+	janitor = JanitorMinion()
+	object.__setattr__(janitor, "log", MagicMock())
+
+	cfg = {"plugins": {"awakening_logs": {"days_to_keep": 30}}}
+	result = asyncio.run(mod.AwakeningLogsPlugin().execute(janitor, cfg))
+
+	assert result["awakening_logs_purged"] == 1
+	assert not old.exists()
+	assert recent.exists()
+	assert stray.exists()
+	assert (notes / "hola.md").exists()
+
+
+def test_awakening_logs_missing_dir_is_safe(tmp_path, monkeypatch):
+	"""Sin directorio de awakening, el plugin no falla ni borra nada."""
+	from red_pill.swarm.agents.janitor_plugins import awakening_logs as mod
+
+	monkeypatch.setattr(mod, "get_awakening_dir", lambda: tmp_path / "does-not-exist")
+	janitor = JanitorMinion()
+	object.__setattr__(janitor, "log", MagicMock())
+
+	res = asyncio.run(mod.AwakeningLogsPlugin().execute(janitor, {}))
+	assert res["awakening_logs_purged"] == 0
+
+
+def test_load_janitor_config_reads_operator_yaml(tmp_path, monkeypatch):
+	"""El minion carga ${CONFIG_DIR}/janitor.yaml (antes quedaba inerte)."""
+	from red_pill.swarm.agents import janitor as mod
+
+	(tmp_path / "janitor.yaml").write_text("plugins:\n  awakening_logs:\n    days_to_keep: 45\n")
+	monkeypatch.setattr(mod, "get_config_dir", lambda: tmp_path)
+
+	cfg = mod._load_janitor_config()
+	assert cfg["plugins"]["awakening_logs"]["days_to_keep"] == 45
 
 
 def test_janitor_discovers_all_plugins():

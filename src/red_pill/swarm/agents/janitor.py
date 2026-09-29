@@ -12,10 +12,30 @@ import logging
 import pkgutil
 from typing import Any, Dict, List
 
+from red_pill.core.paths import get_config_dir
 from red_pill.swarm.agents.janitor_plugins.base import JanitorPlugin
 from red_pill.swarm.base import Minion
 
 logger = logging.getLogger(__name__)
+
+
+def _load_janitor_config() -> Dict[str, Any]:
+	"""Carga la config del operador `${CONFIG_DIR}/janitor.yaml`.
+
+	Seed: `seeds/settings/janitor.yaml`. Ningún runner la inyectaba, así que
+	`plugins.<name>.days_to_keep` / `enabled` del YAML no surtían efecto; el
+	minion la lee aquí para que la configuración del operador mande.
+	"""
+	path = get_config_dir() / "janitor.yaml"
+	try:
+		if path.is_file():
+			import yaml
+
+			data = yaml.safe_load(path.read_text(encoding="utf-8"))
+			return data if isinstance(data, dict) else {}
+	except Exception as e:
+		logger.error(f"[Janitor] Failed to load {path}: {e}")
+	return {}
 
 
 def discover_plugins() -> List[JanitorPlugin]:
@@ -53,6 +73,14 @@ class JanitorMinion(Minion):
 		self.log("--- [Janitor] Initializing Cleaning Cycle (plugin sweep) ---")
 
 		config_dict: Dict[str, Any] = dict(kwargs.get("config", {}))
+		# YAML del operador como fuente por defecto; un `config` explícito del
+		# caller gana a nivel de plugin (merge superficial por nombre de plugin).
+		file_plugins = _load_janitor_config().get("plugins", {})
+		if file_plugins:
+			merged = dict(file_plugins)
+			for plugin_name, plugin_cfg in config_dict.get("plugins", {}).items():
+				merged[plugin_name] = {**file_plugins.get(plugin_name, {}), **plugin_cfg}
+			config_dict["plugins"] = merged
 		# Retrocompat: run_janitor_sweep pasa days_to_keep como kwarg global — se
 		# inyecta como default de los plugins de retención corta sin pisar una
 		# config explícita del operador.
