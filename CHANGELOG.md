@@ -1,5 +1,18 @@
 ## Unreleased
 
+### 📦 Modelos y arnés — Granite 4.2 en los seeds + regla «desk-first» (DOCS)
+
+- **[DOCS] Granite 4.2 en los seeds de modelos:** `examples/model_profiles.yaml.example`
+  gana `granite_4_2_8b`/`granite_4_2_3b` (template nativo + thinking; `minion_chat_format: null`
+  = nativo; `tool_format: qwen`; nota del presupuesto ~1200 tok del 3B) y
+  `examples/model_catalog.yaml.example` da de alta `local/granite-4.2-8b`/`-3b` (+ cascade
+  `conversational`). La config viva ya los tenía; ahora una instalación nueva también.
+- **[DOCS] Anclaje `knowledge_access` §4 «Plans & RFCs — Desk-First»** (+ bump `v2→v3` en
+  `inject_anchor`/`inject_opencode`, re-splice en las configs inyectadas): los planes y RFCs
+  viven en el árbol `planner/` del desk (una fase = una carpeta; los RFC en `design/<familia>/`),
+  se consulta **primero** antes de buscar en el repo, y el proyecto **nunca** aloja ni referencia
+  el RFC del desk — solo su esencia implementada (`AD-NNN`, docs del repo).
+
 ### 🛰️ Tablón de sesiones — índice + handshake-mini + MCP `session_board` (RFC-DESPERTAR-001, P1a)
 
 - **[NEW] `red_pill.core.session_index`:** parte del latido y lo enriquece
