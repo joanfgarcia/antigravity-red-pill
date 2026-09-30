@@ -25,6 +25,19 @@
 - **[DOCS] Granite 4.2 fuera del loop de tools por ahora:** emite el tool-call nativo
   (`<function=...>`) como texto y llama_cpp no lo parsea; requiere parser dedicado.
 
+### 🔎 Observabilidad del single-writer — la señal de hubs era una falsa alarma (SW-OBS-001)
+
+- **[FIX] `hub_coverage_pct` medía hubs/content (densidad), no cobertura:** con
+  ~1 hub por cada ~26 miembros daba 3.8% y se leía como alarma ("cobertura baja").
+  Ahora `hub_coverage_pct` = hubbed_members/content (la lectura real: ~98% en
+  work, ~90% en social) y la densidad queda en el nuevo `hub_ratio_pct`. Coincide
+  con lo que ya asumían los runbooks (`hub_coverage_pct > 0` como check de salud).
+- **[FIX] El heartbeat `sw_hub_coverage` se emitía como WARNING:** `inject_signal`
+  tiene `criticality="WARNING"` por defecto y el plugin no lo sobreescribía, así
+  que un status benigno se pintaba como alerta. Ahora va con `criticality="INFO"`.
+  Además se emite una señal de dolor REAL (`sw_hub_coverage_low`) solo si algún
+  collection cae por debajo del 50% de cobertura real.
+
 ### 🔇 Despertar autónomo — el Derecho al Silencio no consume el tope (AWAKEN-002)
 
 - **[FIX] Budget Guard cuenta solo despertares productivos:** el portero corría
