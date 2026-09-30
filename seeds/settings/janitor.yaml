@@ -13,5 +13,8 @@ plugins:
   awakening_logs:
     enabled: true
     days_to_keep: 30          # TTL de los logs por despertar (${AGENT_CORE_DIR}/awakening/)
+  session_liveness:
+    enabled: true
+    ttl_h: 48                 # TTL de los latidos de sesión (${STATE_DIR}/sessions/live/)
   orphaned_parents_sweep:
     enabled: true

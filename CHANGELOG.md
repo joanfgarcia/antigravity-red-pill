@@ -1,5 +1,23 @@
 ## Unreleased
 
+### 🫀 Latido de sesión — `.start`/`.end` (RFC-DESPERTAR-001, P4)
+
+- **[NEW] Latido de sesión:** cada turno deja **dos ficheros vacíos** por sesión en
+  `${STATE_DIR}/sessions/live/<provider>__<session_id>.{start,end}`; la `mtime` es
+  la señal. Claude (`UserPromptSubmit`/`Stop`) y opencode (v1+v2) hacen el touch en
+  los **bordes** del turno (ignoran herramientas/thinking). El par distingue
+  "turno en vuelo" (`.start` > `.end` y reciente) de "última actividad" (`.end`).
+- **[NEW] `red_pill.core.session_liveness`** (`get_sessions_live_dir`, `touch_session`,
+  `list_sessions`, `SessionSignal.in_flight/is_active`) + config `SESSION_ACTIVE_MIN`
+  (10) y `SESSION_LIVENESS_TTL_H` (48).
+- **[NEW] Janitor `session_liveness`:** purga los latidos con `mtime` > TTL (por
+  mtime, distinto del umbral de "activo ahora"). `seeds/settings/janitor.yaml`.
+- **[NEW] Hooks/injectores:** `seeds/settings/hooks/redpill_turn_start.py` +
+  touch `.end` en `redpill_scribe.py`; `STATE_DIR` en `build_vars` y touch en
+  `seeds/opencode/plugins/redpill-scribe.js`.
+- **Nota:** es la base del digest P1 (sesiones vivas) y la capa mínima del tablón
+  de MULTISES-001. Sin contenido ni resumen: solo presencia.
+
 ### 🛠️ Minion de herramientas local — el tool-calling de Granite estaba roto y en silencio (HARNESS-003)
 
 - **[FIX] `apply_chat_handler` ignoraba `minion_chat_format` y los `tools`:** desde
