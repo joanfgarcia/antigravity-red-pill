@@ -70,7 +70,46 @@ async def test_bash_then_finalize(monkeypatch):
 	assert res["answer"] == "51"
 	# last chat() call is the finalize pass → no tools forwarded
 	assert provider.calls[-1].get("tools") is None
-	assert sum(1 for m in res["messages"] if m.get("role") == "tool") == 1
+	assert res["used_tools"] is True and res["tool_calls"] == 1
+	# the tool result is fed back as a USER turn (the handler drops role="tool")
+	assert any(m.get("role") == "user" and "Tool `run_bash` result" in str(m.get("content")) for m in res["messages"])
+
+
+async def test_native_text_toolcall_is_parsed(monkeypatch):
+	# Granite 4.2 native template: the tool call arrives as TEXT, not tool_calls.
+	native = (
+		"<think>leo el fichero</think>\n"
+		"<tool_call>\n<function=run_bash>\n<parameter=command>\ncat manifest.txt\n"
+		"</parameter>\n</function>\n</tool_call>"
+	)
+	provider = FakeProvider(
+		[
+			{"role": "assistant", "content": native, "tool_calls": None},
+			{"role": "assistant", "content": "", "tool_calls": None},
+			{"role": "assistant", "content": "vault-7731"},
+		]
+	)
+	_use_provider(monkeypatch, provider)
+	_fake_shell(monkeypatch, FakeProc(rc=0, out=b"vault-7731\n"))
+	res = await local_minion.run_local_minion("lee manifest.txt")
+	assert res["ok"] is True and res["used_tools"] is True
+	assert res["answer"] == "vault-7731"
+	# the parsed call reached run_bash
+	assert provider.calls[0].get("tools") is not None
+
+
+def test_parse_native_toolcalls_granite():
+	text = (
+		"<tool_call>\n<function=run_bash>\n<parameter=command>\nls -1\n"
+		"</parameter>\n</function>\n</tool_call>"
+	)
+	calls = local_minion._parse_native_toolcalls(text)
+	assert len(calls) == 1
+	assert calls[0]["function"]["name"] == "run_bash"
+	# arguments stay a MAPPING (the native template renders them via |items)
+	assert calls[0]["function"]["arguments"] == {"command": "ls -1"}
+	# prose with no tool-call markup → []
+	assert local_minion._parse_native_toolcalls("solo una respuesta") == []
 
 
 async def test_mcp_tool_dispatch(monkeypatch):

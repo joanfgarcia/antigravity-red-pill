@@ -108,6 +108,49 @@ def _pretty_result(raw: str) -> str:
 	return raw
 
 
+def _normalize_native_toolcalls(parsed: List[dict]) -> List[Dict[str, Any]]:
+	"""Convert `extract_toolcalls()` output into OpenAI tool_calls.
+
+	The shared parser returns {"function": {"name", "arguments": <dict>}}; the
+	loop expects OpenAI shape with a JSON-string arguments field.
+	"""
+	out: List[Dict[str, Any]] = []
+	for i, tc in enumerate(parsed):
+		fn = tc.get("function", tc) or {}
+		args = fn.get("arguments", {})
+		if isinstance(args, str):
+			try:
+				args = json.loads(args)
+			except (TypeError, ValueError):
+				args = {}
+		# Keep arguments as a MAPPING (not a JSON string): the Granite native
+		# template renders assistant tool_calls via `tool_call.arguments|items`,
+		# which raises on a string. `_dispatch` accepts both shapes.
+		out.append({
+			"id": f"call_native_{i}",
+			"type": "function",
+			"function": {"name": fn.get("name", ""), "arguments": args},
+		})
+	return out
+
+
+def _parse_native_toolcalls(text: str) -> List[Dict[str, Any]]:
+	"""Recover tool_calls emitted as TEXT.
+
+	Some models use a native Jinja template whose tool-call output llama_cpp does
+	NOT parse into structured `tool_calls` — Granite 4.2 emits
+	`<tool_call><function=NAME><parameter=k>v</parameter></function></tool_call>`
+	as plain content. `model_runtime.extract_toolcalls` knows that format (and the
+	qwen/gemma/openai ones); it was defined and tested but never wired in. Empty
+	→ no tool call (the caller then treats the content as the final answer).
+	"""
+	if not text or ("<tool_call" not in text and "<|tool_call|>" not in text):
+		return []
+	from red_pill.core.model_runtime import extract_toolcalls
+
+	return _normalize_native_toolcalls(extract_toolcalls(text, "auto"))
+
+
 def _finalize(provider, task: str, tool_results: List[str]) -> str:
 	"""Extract a plain-text final answer from the collected tool results.
 
@@ -160,8 +203,16 @@ async def _dispatch(name: str, args: Dict[str, Any], cwd: Optional[str]) -> str:
 			import red_pill.mcp_server  # noqa: F401 — side-effect: registers tool handlers
 			from red_pill.registry import registry
 
-			payload = {"action": args.get("action"), "payload": args.get("payload", {})}
-			res = await registry.execute(name, payload)
+			payload = args.get("payload", {})
+			if isinstance(payload, str):
+				# Some models emit the MCP payload as a JSON string, not an object.
+				try:
+					payload = json.loads(payload)
+				except (TypeError, ValueError):
+					payload = {}
+			if not isinstance(payload, dict):
+				payload = {}
+			res = await registry.execute(name, {"action": args.get("action"), "payload": payload})
 			return _clamp(res if isinstance(res, str) else json.dumps(res, default=str))
 		return f"ERROR: unknown tool {name}"
 	except asyncio.TimeoutError:
@@ -187,11 +238,21 @@ async def run_local_minion(task: str, *, cwd: Optional[str] = None, provider_nam
 
 	for step in range(MAX_TOOL_ITERS):
 		msg = await loop.run_in_executor(None, lambda: provider.chat(messages, tools=TOOLS, tool_choice="auto"))
-		messages.append(msg)
 		tool_calls = msg.get("tool_calls") or []
+		if not tool_calls:
+			# Native-text tool call (e.g. Granite 4.2 template) → structured.
+			native = _parse_native_toolcalls(msg.get("content") or "")
+			if native:
+				msg = {**msg, "tool_calls": native, "content": None}
+				tool_calls = native
+		messages.append(msg)
 
 		if not tool_calls:
 			answer = (msg.get("content") or "").strip()
+			if answer:
+				from red_pill.core.model_runtime import extract_thinking
+
+				answer = extract_thinking(answer)[1]
 			if not answer:
 				# Handler returned empty when done; recover the answer in plain chatml.
 				answer = await loop.run_in_executor(None, lambda: _finalize(provider, task, tool_results))
@@ -207,10 +268,14 @@ async def run_local_minion(task: str, *, cwd: Optional[str] = None, provider_nam
 		for tc in tool_calls:
 			fn = tc.get("function", {})
 			name = fn.get("name", "")
-			try:
-				args = json.loads(fn.get("arguments") or "{}")
-			except (TypeError, ValueError):
-				args = {}
+			raw_args = fn.get("arguments")
+			if isinstance(raw_args, dict):
+				args = raw_args
+			else:
+				try:
+					args = json.loads(raw_args or "{}")
+				except (TypeError, ValueError):
+					args = {}
 			logger.info("[local-minion] step %d: %s(%s)", step, name, args)
 			result = await _dispatch(name, args, cwd)
 			tool_calls_made += 1

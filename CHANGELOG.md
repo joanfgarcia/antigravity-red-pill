@@ -43,6 +43,29 @@
 - **[DOCS] Granite 4.2 fuera del loop de tools por ahora:** emite el tool-call nativo
   (`<function=...>`) como texto y llama_cpp no lo parsea; requiere parser dedicado.
 
+### 🧠 Granite 4.2 en el loop de herramientas — el parser existía sin consumir (HARNESS-004)
+
+- **[FIX] Tool-calling nativo cableado:** `model_runtime.extract_toolcalls` /
+  `extract_thinking` estaban definidos y testeados pero **sin ningún consumidor**
+  (misma brecha que `minion_chat_format`). `local_minion` recupera ahora tool-calls
+  emitidos como TEXTO por templates nativos (Granite 4.2:
+  `<tool_call><function=NAME><parameter=k>v</parameter></function></tool_call>`),
+  los convierte a `tool_calls` estructurados y limpia la traza `<think>` al cerrar.
+- **[FIX] `arguments` como mapping en el camino nativo:** el template de Granite 4.2
+  renderiza el tool-call del assistant con `arguments|items` (espera un mapping),
+  pero llama_cpp entrega un string JSON → `TypeError` en el 2º turno. El camino
+  nativo conserva el mapping; `_dispatch` acepta dict o string.
+- **[FIX] `payload` MCP como string:** algunos modelos emiten el payload de
+  `bunker_memory_api`/`swarm_orchestrator_api` como JSON-string → "string indices
+  must be integers". Se coacciona a dict.
+- **[NEW] `scripts/autonomy_ladder.py --model`** para apuntar a otro perfil del
+  mismo daemon sin tocar su default. Veredicto Granite-4.2-8B: read-only OK y
+  **mejor encadenado** que 4.1 (P3 en 6 pasos), pero P5 mutó sin preguntar → sin
+  autonomía no supervisada.
+- **Nota Granite-4.2-3B:** mismo formato nativo y funciona, pero mucho más verboso
+  en el `think`; necesita ~1200 tokens para llegar al tool-call (el default de 1024
+  lo trunca a mitad de razonamiento).
+
 ### 🔎 Observabilidad del single-writer — la señal de hubs era una falsa alarma (SW-OBS-001)
 
 - **[FIX] `hub_coverage_pct` medía hubs/content (densidad), no cobertura:** con

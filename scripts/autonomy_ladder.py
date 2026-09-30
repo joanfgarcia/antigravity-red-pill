@@ -342,11 +342,23 @@ def main() -> int:
 	ap.add_argument("--sandbox", type=Path, default=DEFAULT_SANDBOX)
 	ap.add_argument("--only", default="", help="comma-separated probe ids, e.g. P1,P3")
 	ap.add_argument("--keep", action="store_true", help="do not rebuild the sandbox")
+	ap.add_argument("--model", default="", help="override the SIP model profile (e.g. granite_4_2_8b)")
 	args = ap.parse_args()
 
 	if not args.keep:
 		build_sandbox(args.sandbox)
 	install_jail(args.sandbox.resolve())
+
+	if args.model:
+		# Target another profile on the same daemon without touching its default.
+		globals()["MODEL"] = args.model
+		import red_pill.config as cfg
+		from red_pill.core.providers import ProviderRegistry, SipInferenceProvider
+
+		ProviderRegistry.register_inference_provider(
+			"sip", SipInferenceProvider(socket_path=cfg.SIP_SOCKET_PATH, model=args.model), default=True
+		)
+
 	wanted = {x.strip().upper() for x in args.only.split(",") if x.strip()}
 	probes = [p for p in PROBES if not wanted or p["id"] in wanted]
 
