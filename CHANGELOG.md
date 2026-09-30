@@ -65,11 +65,6 @@
 - **Nota Granite-4.2-3B:** mismo formato nativo y funciona, pero mucho más verboso
   en el `think`; necesita ~1200 tokens para llegar al tool-call (el default de 1024
   lo trunca a mitad de razonamiento).
-- **[DOCS] RFC-005** (`docs/TECHNICAL/BUNKER/RFC_005_LOCAL_TOOL_AUTONOMY_AND_DELEGATION.md`,
-  DRAFT): confinamiento de `run_bash` (bubblewrap/systemd-run, fail-closed),
-  niveles de autonomía (L0 read-only / L1 mutación con confirmación / L2 solo si el
-  arnés lo habilita) y delegación `/mission` a modelos locales con tools reutilizando
-  el `agentic_job`; plan por fases F0–F5.
 
 ### 🔎 Observabilidad del single-writer — la señal de hubs era una falsa alarma (SW-OBS-001)
 
