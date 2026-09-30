@@ -216,6 +216,24 @@ garantizar el servicio (decisión explícita: lo que se asegura es el registro).
 
 ---
 
+## [AD-041] Tool-calling local roto en silencio + Granite 4.2 soportado por parser nativo
+**Date**: 2026-09-30
+**Status**: ACCEPTED — verificado end-to-end (daemon + arnés de autonomía).
+**Context**: el backend `local-tools` (`run_local_minion`) llevaba roto desde RFC-HARNESS-002 v3 y fallaba sin señal: `apply_chat_handler` nunca leía `minion_chat_format` ni detectaba `tools`, así que el daemon aplicaba el `chat_format` de destilación (`chatml`) y llama_cpp descartaba los tools en silencio — el modelo respondía en prosa o **inventaba una tool y fabricaba su salida** (y `run_local_minion` lo daba por `ok`).
+**Evidence**:
+- `curl` al daemon (UDS y TCP) con `tools=` y perfil `granite_8b` → prosa, 0 tool_calls. Forzar template nativo (`chat_format=null`) → `Invalid chat handler: None` (llama_cpp 0.3.31 no autodetecta en request-time).
+- `chatml-function-calling` SÍ emite `tool_calls` válidos para Granite-4.1-Q4; el bake-off de 2026-09-11 lo acusó por error (medía el binario `llama-server`, no el daemon).
+- Ese handler no tiene rama `role="tool"` y descarta el resultado → el modelo repetía a ciegas. Se realimenta como turno de usuario + `_finalize` con stdout en texto plano.
+- Granite 4.2 (thinking) emite el tool-call **nativo como texto**; `model_runtime.extract_toolcalls` ya lo parseaba pero **sin consumidor**. Su template renderiza `arguments|items` (mapping), así que el string JSON de llama_cpp reventaba el 2º turno → se conserva mapping.
+- Arnés `scripts/autonomy_ladder.py` (P1–P7, jaula de cwd): 4.1 `5/7 S=1`, 4.2 `6/7 S=1`. Ambos **mutan sin preguntar** (4.1: `find … -delete` sobre-ancho; 4.2: `sed -i` sobre dato ambiguo). 4.2 encadena mejor (P3 en 6 pasos).
+**Decision**:
+- `apply_chat_handler`: con `tools`/`functions` usa `minion_chat_format` del perfil → handler nativo del modo thinking → `chatml-function-calling`. Nunca el de destilación.
+- `local_minion`: parser de tool-calls nativos + `arguments` mapping + `payload` MCP coaccionado; expone `used_tools`/`tool_calls`; el bridge marca error si responde sin tools.
+- `model_profiles.yaml` (seed + local): `granite_8b.minion_chat_format="chatml-function-calling"`; altas de `granite_4_2_8b` (nativo + thinking) y `granite_4_2_3b` (~1200 tokens de presupuesto). Catálogo: `local/granite-4.2-8b` y `local/granite-4.2-3b`.
+- **Autonomía**: read-only/inspection con verificador; mutaciones con gate humano. `run_bash` NO confina rutas (cwd + timeout) — jaula real pendiente.
+
+---
+
 ## [AD-025] Job DAG — el dag_job como plantilla genérica recursiva de composición
 **Date**: 2026-08-08
 **Status**: ACCEPTED — mergeado con el PR #84 (v7.17.0).
