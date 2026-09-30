@@ -76,7 +76,11 @@ TOOLS: List[Dict[str, Any]] = [
 ]
 
 SYSTEM_PROMPT = (
-	"You are a local minion. Complete the user's task using the provided tools. "
+	"You are a local minion. You have EXACTLY these tools: "
+	"`run_bash` (run a shell command via /bin/sh — pipes, redirection and globs work), "
+	"`bunker_memory_api` (RedPill memory: search_memory_research, workspace memory, ...), "
+	"`swarm_orchestrator_api` (check_minion_inbox, run_agent_task, control_bunker). "
+	"Do NOT invent tools; if none of these fits, answer with NO tool call. "
 	"Call ONE tool at a time, read its result, then decide the next step. "
 	"When the task is complete, reply with a short final answer and DO NOT call a tool. "
 	f"Budget: at most {MAX_TOOL_ITERS} tool calls — be economical and stop early when done."
@@ -87,17 +91,37 @@ def _clamp(text: str) -> str:
 	return text if len(text) <= _RESULT_CLAMP else text[:_RESULT_CLAMP] + "…[truncated]"
 
 
-def _finalize(provider, task: str, messages: List[Dict[str, Any]]) -> str:
-	"""Extract a plain-text final answer.
+def _pretty_result(raw: str) -> str:
+	"""Render a raw tool result for the final-answer prompt.
+
+	A run_bash result is a JSON blob ({returncode, stdout, stderr}); show stdout
+	plainly — an 8B reads a shell output far better than escaped JSON.
+	"""
+	try:
+		d = json.loads(raw)
+	except (TypeError, ValueError):
+		return raw
+	if isinstance(d, dict) and "stdout" in d:
+		out = (d.get("stdout") or "").strip()
+		err = (d.get("stderr") or "").strip()
+		return out + (f"  [stderr: {err}]" if err else "")
+	return raw
+
+
+def _finalize(provider, task: str, tool_results: List[str]) -> str:
+	"""Extract a plain-text final answer from the collected tool results.
 
 	The chatml-function-calling handler sometimes returns empty content once it is
 	done calling tools. We recover the answer with a plain (no-tools) chatml call
-	that hands the model the task + tool results and asks for the answer directly.
+	that hands the model the task + tool output and asks for the answer directly.
 	"""
-	tool_notes = "\n".join(f"- {m.get('content', '')}" for m in messages if m.get("role") == "tool")
+	tool_notes = "\n".join(_pretty_result(r) for r in tool_results)
 	msgs = [
-		{"role": "system", "content": "Answer the user's task using the tool results provided. Be concise."},
-		{"role": "user", "content": f"Task: {task}\n\nTool results:\n{tool_notes or '(none)'}\n\nGive the final answer now."},
+		{"role": "system", "content": (
+			"You are a local minion. Answer the task using the tool output. "
+			"Be concise and give only what was asked."
+		)},
+		{"role": "user", "content": f"Task: {task}\n\nTool output:\n{tool_notes or '(none)'}\n\nAnswer:"},
 	]
 	final = provider.chat(msgs)  # no tools -> plain chatml formatter
 	return (final.get("content") or "").strip()
@@ -158,6 +182,8 @@ async def run_local_minion(task: str, *, cwd: Optional[str] = None, provider_nam
 		{"role": "user", "content": task},
 	]
 	consecutive_errors = 0
+	tool_calls_made = 0
+	tool_results: List[str] = []
 
 	for step in range(MAX_TOOL_ITERS):
 		msg = await loop.run_in_executor(None, lambda: provider.chat(messages, tools=TOOLS, tool_choice="auto"))
@@ -168,8 +194,15 @@ async def run_local_minion(task: str, *, cwd: Optional[str] = None, provider_nam
 			answer = (msg.get("content") or "").strip()
 			if not answer:
 				# Handler returned empty when done; recover the answer in plain chatml.
-				answer = await loop.run_in_executor(None, lambda: _finalize(provider, task, messages))
-			return {"ok": True, "answer": answer, "steps": step, "messages": messages}
+				answer = await loop.run_in_executor(None, lambda: _finalize(provider, task, tool_results))
+			return {
+				"ok": True,
+				"answer": answer,
+				"steps": step,
+				"used_tools": tool_calls_made > 0,
+				"tool_calls": tool_calls_made,
+				"messages": messages,
+			}
 
 		for tc in tool_calls:
 			fn = tc.get("function", {})
@@ -180,10 +213,37 @@ async def run_local_minion(task: str, *, cwd: Optional[str] = None, provider_nam
 				args = {}
 			logger.info("[local-minion] step %d: %s(%s)", step, name, args)
 			result = await _dispatch(name, args, cwd)
+			tool_calls_made += 1
+			tool_results.append(result)
 			consecutive_errors = consecutive_errors + 1 if result.startswith("ERROR") else 0
-			messages.append({"role": "tool", "tool_call_id": tc.get("id", ""), "content": result})
+			# Feed the result back as a USER message. The chatml-function-calling
+			# handler (llama_cpp 0.3.31) has NO branch for role="tool" and drops it
+			# silently — the model would then repeat the call blindly. A user turn
+			# is rendered by every handler and keeps the loop grounded.
+			messages.append({
+				"role": "user",
+				"content": (
+					f"Tool `{name}` result:\n{result}\n\n"
+					"If this is enough to answer the task, reply with the final answer "
+					"now and DO NOT call a tool."
+				),
+			})
 
 		if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
-			return {"ok": False, "answer": "mala tarde: too many consecutive tool errors", "steps": step, "messages": messages}
+			return {
+				"ok": False,
+				"answer": "mala tarde: too many consecutive tool errors",
+				"steps": step,
+				"used_tools": tool_calls_made > 0,
+				"tool_calls": tool_calls_made,
+				"messages": messages,
+			}
 
-	return {"ok": False, "answer": "mala tarde: hit the tool-call cap without finishing", "steps": MAX_TOOL_ITERS, "messages": messages}
+	return {
+		"ok": False,
+		"answer": "mala tarde: hit the tool-call cap without finishing",
+		"steps": MAX_TOOL_ITERS,
+		"used_tools": tool_calls_made > 0,
+		"tool_calls": tool_calls_made,
+		"messages": messages,
+	}

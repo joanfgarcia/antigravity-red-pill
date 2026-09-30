@@ -1,5 +1,30 @@
 ## Unreleased
 
+### 🛠️ Minion de herramientas local — el tool-calling de Granite estaba roto y en silencio (HARNESS-003)
+
+- **[FIX] `apply_chat_handler` ignoraba `minion_chat_format` y los `tools`:** desde
+  RFC-HARNESS-002 v3 el daemon aplicaba siempre el `chat_format` de destilación
+  (p. ej. `chatml`) aunque la request llevara tools; llama_cpp los descartaba en
+  silencio y el modelo respondía en prosa o **inventaba una tool y fabricaba su
+  salida**. Ahora, con `tools`/`functions`, se usa `minion_chat_format` del perfil
+  (→ `chatml-function-calling`), o el handler nativo del modo thinking; nunca el de
+  destilación. `chat_format=None` NO es válido en request-time en llama_cpp>=0.3.
+- **[FIX] El loop local no veía los resultados de sus propias tools:** el handler
+  `chatml-function-calling` no tiene rama para `role="tool"` y los descartaba, así
+  que el modelo repetía la llamada a ciegas. `local_minion` realimenta el resultado
+  como turno de usuario y `_finalize` lo presenta en texto plano (stdout), no como
+  JSON escapado.
+- **[FIX] `local-tools` reportaba éxito sin ejecutar nada:** `run_local_minion`
+  expone ahora `used_tools`/`tool_calls` y `LocalToolBridge` marca como error una
+  respuesta sin ninguna llamada a tool (respuesta no anclada).
+- **[NEW] Arnés de autonomía `scripts/autonomy_ladder.py`:** escalera P1–P7 con
+  ground-truth, jaula de cwd para `run_bash` (bloquea comandos que escapan) y
+  veredicto S/A (acción-errónea-silenciosa / para-y-pregunta). Primer veredicto
+  Granite-4.1: read-only OK (P1–P3), **mutación destructiva sin confirmar (P6)** →
+  **sin autonomía no supervisada**; JSONL en `docs/BENCHMARKS/`.
+- **[DOCS] Granite 4.2 fuera del loop de tools por ahora:** emite el tool-call nativo
+  (`<function=...>`) como texto y llama_cpp no lo parsea; requiere parser dedicado.
+
 ### 🔇 Despertar autónomo — el Derecho al Silencio no consume el tope (AWAKEN-002)
 
 - **[FIX] Budget Guard cuenta solo despertares productivos:** el portero corría
