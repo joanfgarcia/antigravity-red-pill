@@ -670,6 +670,49 @@ async def handle_check_minion_inbox(arguments: Dict[str, Any]):
 
 
 @registry.register_action(
+	parent="swarm_orchestrator_api",
+	action="session_board",
+	description="[OFFICIAL] Tablón de sesiones vivas multi-IDE: presencia + origen + proyecto/título (RFC-DESPERTAR-001 P1a).",
+	schema={"type": "object", "properties": {}},
+)
+async def handle_session_board(arguments: Dict[str, Any]):
+	try:
+		import mcp.types as types
+
+		from red_pill.core.session_index import build_board, write_index
+
+		board = build_board()
+		write_index(board)
+		if not board:
+			return [types.TextContent(type="text", text="[SESSION BOARD] Sin sesiones vivas.")]
+
+		lines = [f"--- SESSION BOARD ({len(board)}) ---"]
+		for b in board:
+			flags = []
+			if b.get("active"):
+				flags.append("activa")
+			if b.get("in_flight"):
+				flags.append("en-vuelo")
+			lines.append(f"[{b['provider']}] {b['session_id']} · {b.get('origin')} · {', '.join(flags) or 'idle'}")
+			detail = []
+			if b.get("project"):
+				detail.append(f"proyecto={b['project']}")
+			if b.get("directory"):
+				detail.append(f"cwd={b['directory']}")
+			if b.get("title"):
+				detail.append(f"título={b['title']}")
+			if b.get("model"):
+				detail.append(f"modelo={b['model']}")
+			if detail:
+				lines.append("\t- " + " | ".join(detail))
+		return [types.TextContent(type="text", text="\n".join(lines))]
+	except Exception as e:
+		import mcp.types as types
+
+		return [types.TextContent(type="text", text=f"Error building session board: {e}")]
+
+
+@registry.register_action(
 	parent="metabolism_health_api",
 	action="fetch_signal_memories",
 	description="[OFFICIAL] Read the latest system pain signals and alerts (Cortex Status).",

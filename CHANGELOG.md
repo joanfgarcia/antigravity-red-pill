@@ -1,5 +1,21 @@
 ## Unreleased
 
+### 🛰️ Tablón de sesiones — índice + handshake-mini + MCP `session_board` (RFC-DESPERTAR-001, P1a)
+
+- **[NEW] `red_pill.core.session_index`:** parte del latido y lo enriquece
+  (**quién/dónde/qué**) → `sessions_index.json`. Para opencode cruza su DB local
+  (`directory`/`title`/`model`); origen vía `core/origins.py`; proyecto vía
+  `workspaces.yaml` (por cwd, primera aproximación). Determinista, non-fatal.
+- **[NEW] Handshake-mini:** `interceptors/01_telemetry.py` inyecta
+  `[BOARD: N sesiones vivas]` **solo si hay otra** sesión activa (SILENT con una);
+  coste ~10 tokens. El detalle va por pull.
+- **[NEW] MCP `session_board`** (`swarm_orchestrator_api`): tablón multi-IDE
+  on-demand con presencia, origen, cwd, proyecto, título y modelo. Evita ir a mano
+  a `opencode.db`.
+- **Pendiente (P1b):** adaptadores claude/telegram/pi/antigravity; proyecto por
+  **rutas tocadas** (el cwd no discrimina); tema rodante por Laya tags.
+- Tests: `tests/test_session_index.py` (4).
+
 ### 🫀 Latido de sesión — `.start`/`.end` (RFC-DESPERTAR-001, P4)
 
 - **[NEW] Latido de sesión:** cada turno deja **dos ficheros vacíos** por sesión en
