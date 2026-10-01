@@ -246,7 +246,7 @@ class TestD5LocalGuard:
 			return _FakeBridge()
 
 		with patch("red_pill.core.agent_worker.create_cascade_bridge", side_effect=_fake_create):
-			with patch("red_pill.core.agent_worker.AntigravityIDEClient"):
+			with patch("red_pill.plugins.antigravity_ide.pulse.AntigravityIDEClient"):
 				with patch("red_pill.inference.samantha_worker.SamanthaWorker") as mock_sam:
 					mock_sam.return_value.start = MagicMock()
 					worker = IDEWorker()

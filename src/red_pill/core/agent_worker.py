@@ -27,7 +27,6 @@ load_dotenv()  # Override local si existiera
 
 import red_pill.config as cfg  # noqa: E402
 from red_pill.core.pulse_strategy import NullPulseStrategy, PulseStrategy  # noqa: E402
-from red_pill.plugins.antigravity_ide.ide_client import AntigravityIDEClient  # noqa: E402
 from red_pill.swarm.bridges import (  # noqa: E402
 	AgentBridge,  # noqa: E402
 	AllModelsExhausted,
@@ -259,7 +258,6 @@ def _detect_escalate_marker(response: str, window: int = 64) -> bool:
 
 class IDEWorker:
 	def __init__(self):
-		self.client = AntigravityIDEClient()
 		self.running = True
 		self._bridge_telegram: AgentBridge | None = None
 		self._bridge_awakening: AgentBridge | None = None
@@ -329,13 +327,14 @@ class IDEWorker:
 
 		The Antigravity strategy owns **both** original paths and picks between
 		them per tick (legacy gRPC polling when ``_caps.backend == GRPC``, agy
-		autonomous ops otherwise) — exactly mirroring the old inline branch. A
-		no-op is used only if the Antigravity strategy cannot be imported.
+		autonomous ops otherwise) — exactly mirroring the old inline branch. It
+		constructs its own Antigravity client, so the core stays backend-agnostic.
+		A no-op is used only if the Antigravity strategy cannot be imported.
 		"""
 		try:
 			from red_pill.plugins.antigravity_ide.pulse import AntigravityPulseStrategy
 
-			return AntigravityPulseStrategy(self.client, self._bridge_minion)
+			return AntigravityPulseStrategy(self._bridge_minion)
 		except Exception as e:
 			logger.error(f"[IDEWorker] Antigravity strategy unavailable, using no-op: {e}")
 			_emit_strategy_fallback_signal(e)
@@ -395,7 +394,7 @@ class IDEWorker:
 				time.sleep(20)
 
 	def run(self):
-		logger.info("Red-Pill AntigravityIDEPlugin Worker started.")
+		logger.info("Red-Pill Agent Worker started.")
 		while self.running:
 			try:
 				self.run_once()
@@ -948,7 +947,7 @@ class IDEWorker:
 		# ---- System channel: AWAKENINGs run in isolation (no Telegram session) ----
 		# A configured AWAKENING cascade forces the bridge path even when
 		# capabilities degraded (bridge construction failed) — never fall through
-		# to the Antigravity-only legacy path on behalf of non-IDE backends.
+		# to a backend's legacy polling path on behalf of other backends.
 		if channel == "system" and ((self._caps and self._caps.auto_approve) or cfg.get_config().AWAKENING_BRIDGE_CASCADE):
 			self._process_awakening(combined_text, msg_ids_to_process, cursor, conn)
 			conn.commit()
@@ -967,7 +966,7 @@ class IDEWorker:
 
 		# ---- AgentBridge: Direct execution path (bridge cascade) ----
 		# Telegram is served by the configured bridge cascade (opencode, AD-034):
-		# the legacy antigravity-cascade fusion is gone.
+		# the legacy interactive-cascade fusion is gone.
 		if (self._caps and self._caps.auto_approve) or cfg.get_config().TELEGRAM_BRIDGE_CASCADE:
 			self._process_via_bridge(combined_text, msg_ids_to_process, channel, channel_user_id, cursor, conn)
 			conn.commit()
@@ -975,7 +974,7 @@ class IDEWorker:
 			return
 
 		# No bridge configured: Telegram is served through the bridge (AD-034). The
-		# legacy antigravity-cascade fusion (interactive cascade binding) was removed.
+		# legacy interactive-cascade fusion (cascade binding) was removed.
 		logger.error(f"[{msg_ids_to_process}] No TELEGRAM_BRIDGE_CASCADE configured — cannot process Telegram message.")
 		for m_id in msg_ids_to_process:
 			cursor.execute("UPDATE inbox SET status = 'DEAD' WHERE id = ?", (m_id,))
@@ -985,8 +984,8 @@ class IDEWorker:
 	def _process_via_bridge(self, combined_text, msg_ids, channel, channel_user_id, cursor, conn):
 		"""External Scribe Pattern: direct prompt → response → scribe → outbox.
 
-		Uses AgyBridge for synchronous, auto-approved prompt execution.
-		Uses TelegramSessionManager for local context preservation on disk.
+		Uses the configured bridge for synchronous, auto-approved prompt
+		execution. Uses TelegramSessionManager for local context preservation.
 		"""
 		import re
 
@@ -1246,7 +1245,7 @@ class IDEWorker:
 	def _process_awakening(self, combined_text, msg_ids, cursor, conn):
 		"""Process AWAKENING messages in isolation — no Telegram session history.
 
-		Each AWAKENING gets a fresh agy conversation. Output is still
+		Each AWAKENING gets a fresh bridge conversation. Output is still
 		routed to the Telegram outbox so the user sees the result, but
 		the conversation history is never mixed with user sessions.
 		"""

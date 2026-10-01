@@ -43,15 +43,26 @@ def test_null_strategy_satisfies_protocol():
 
 
 def test_antigravity_strategy_satisfies_protocol():
-	assert isinstance(AntigravityPulseStrategy(None, None), PulseStrategy)
+	assert isinstance(AntigravityPulseStrategy(None), PulseStrategy)
 
 
 def test_build_strategy_returns_antigravity():
 	worker = IDEWorker.__new__(IDEWorker)
-	worker.client = object()
 	worker._bridge_minion = None
 	strategy = worker._build_strategy()
 	assert isinstance(strategy, AntigravityPulseStrategy)
+
+
+def test_core_worker_is_backend_agnostic():
+	"""El core NO debe importar ni instanciar Antigravity: la estrategia se
+	autoconstruye su cliente. Fija la regla de agnosticismo de red_pill.core."""
+	import inspect
+
+	from red_pill.core import agent_worker as aw
+
+	src = inspect.getsource(aw)
+	assert "ide_client" not in src, "core/agent_worker no debe importar ide_client"
+	assert "AntigravityIDEClient" not in src, "core/agent_worker no debe construir el cliente Antigravity"
 
 
 # ── Behavioral parity (BLOCKER del panel adversarial, 2026-10-01) ────────────
@@ -86,7 +97,7 @@ def _instrumented_strategy(backend, monkeypatch, *, cascade_on, agy_on):
 	worker._touch_lease = lambda: None
 	worker._signal_samantha_worker = lambda: calls.append("samantha")
 
-	strategy = AntigravityPulseStrategy(SimpleNamespace(), object())
+	strategy = AntigravityPulseStrategy(object(), client=SimpleNamespace())
 	for name in (
 		"check_for_replies",
 		"check_minion_inbox_auto_inject",

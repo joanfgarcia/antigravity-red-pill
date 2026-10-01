@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING
 import requests
 
 import red_pill.config as cfg
+from red_pill.plugins.antigravity_ide.ide_client import AntigravityIDEClient
 from red_pill.swarm.bridges import BackendType, BridgeCapabilities
 
 if TYPE_CHECKING:
@@ -38,10 +39,15 @@ logger = logging.getLogger(__name__)
 
 
 class AntigravityPulseStrategy:
-	"""Pulse steps that speak to the Antigravity IDE (legacy gRPC + agy)."""
+	"""Pulse steps that speak to the Antigravity IDE (legacy gRPC + agy).
 
-	def __init__(self, client, bridge_minion) -> None:
-		self._client = client
+	Owns its own `AntigravityIDEClient`: the neutral core never constructs or
+	imports Antigravity code — it only hands over the minion bridge and receives
+	this strategy. This keeps `red_pill.core` backend-agnostic.
+	"""
+
+	def __init__(self, bridge_minion, client=None) -> None:
+		self._client = client if client is not None else AntigravityIDEClient()
 		self._bridge_minion = bridge_minion
 		self._cascade_degraded_logged = False
 
