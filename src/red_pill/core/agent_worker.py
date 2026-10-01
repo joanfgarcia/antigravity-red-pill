@@ -206,6 +206,30 @@ def _emit_d24_pain_signal(msg_ids, error_text: str) -> None:
 		logger.warning(f"[D24] Failed to emit pain signal: {e}")
 
 
+def _emit_strategy_fallback_signal(exc: Exception) -> None:
+	"""The Antigravity pulse strategy failed to import → the worker silently
+	degrades to NullPulseStrategy and Antigravity polling dies. Emit a typed
+	pain signal (dedup via has_signal) so it is not a silent failure."""
+	try:
+		from red_pill.memory import MemoryManager
+
+		mm = MemoryManager()
+		name = "awakening_pulse_strategy_fallback"
+		if mm.has_signal(name):
+			return
+		mm.inject_signal(
+			name=name,
+			intensity=7.0,
+			signal_type="pain",
+			source="IDEWorker",
+			originator="worker._build_strategy",
+			criticality="CRITICAL",
+			message=f"AntigravityPulseStrategy no disponible — polling Antigravity desactivado (NullPulseStrategy). error={str(exc)[:300]}",
+		)
+	except Exception as e:
+		logger.warning(f"[ARCH-001] Failed to emit strategy-fallback pain signal: {e}")
+
+
 def _detect_routing_keyword(text: str) -> Optional[str]:
 	"""Detect an explicit routing keyword at the START of a Telegram message
 	(D2/D10). Case-insensitive, first token. In Fase 1 this is signal-only:
@@ -313,7 +337,8 @@ class IDEWorker:
 
 			return AntigravityPulseStrategy(self.client, self._bridge_minion)
 		except Exception as e:
-			logger.warning(f"[IDEWorker] Antigravity strategy unavailable, using no-op: {e}")
+			logger.error(f"[IDEWorker] Antigravity strategy unavailable, using no-op: {e}")
+			_emit_strategy_fallback_signal(e)
 			return NullPulseStrategy()
 
 	def _get_connection(self):
@@ -397,24 +422,13 @@ class IDEWorker:
 			self._check_telegram_jobs()
 		except Exception:
 			logger.exception("[IDEWorker] _check_telegram_jobs failed — pulse continues")
-		# Backend-specific pulse (ARCH-001 paso B): Antigravity legacy gRPC
-		# polling + agy autonomous ops, or a no-op for neutral backends.
+		# Backend-specific pulse (ARCH-001 paso B). This carries the ENTIRE
+		# original branch (legacy gRPC polling vs agy + janitor/samantha):
+		# the worker stays neutral, the strategy preserves behavior exactly.
 		try:
 			self._strategy.pulse(self)
 		except Exception:
 			logger.exception("[IDEWorker] backend pulse failed — pulse continues")
-		# Janitor sweep for local telegram sessions
-		try:
-			from red_pill.telegram.session import TelegramSessionManager
-
-			tsm = TelegramSessionManager()
-			purged = tsm.run_janitor_sweep()
-			if purged > 0:
-				logger.info(f"[Janitor] Sweep complete. Purged {purged} archived conversations.")
-		except Exception as e:
-			logger.error(f"Janitor sweep failed: {e}")
-		# Samantha Queue: signal worker if there are pending tasks (NON-BLOCKING)
-		self._signal_samantha_worker()
 		# Watchdog: verify SamanthaWorker thread health
 		self._watchdog_samantha()
 		self.update_heartbeat()

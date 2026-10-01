@@ -9,9 +9,9 @@ The strategy is constructed with the worker's bridges + client and is invoked
 once per pulse via ``pulse(worker)``. It mirrors the original branching:
 
 - **legacy gRPC** backend → ``check_for_replies`` + ``check_minion_inbox_auto_inject``
-  + ``process_cognitive_queue`` (guarded by ``TELEGRAM_BRIDGE_CASCADE``).
++ ``process_cognitive_queue`` (guarded by ``TELEGRAM_BRIDGE_CASCADE``).
 - **non-gRPC** backend → ``agy`` autonomous operations, gated by
-  ``AUTONOMOUS_AGY_ENABLED``.
++ ``AUTONOMOUS_AGY_ENABLED``, plus the janitor sweep and samantha signal.
 
 Trajectory helpers (``get_trajectory_data`` / ``get_all_trajectories``) are
 passed through here too because they read the Antigravity gRPC client.
@@ -68,6 +68,18 @@ class AntigravityPulseStrategy:
 			if cfg.get_config().AUTONOMOUS_AGY_ENABLED:
 				self.check_minion_inbox_auto_inject_agy(worker)
 				self.process_cognitive_queue_agy(worker)
+			# Janitor sweep for local telegram sessions
+			try:
+				from red_pill.telegram.session import TelegramSessionManager
+
+				tsm = TelegramSessionManager()
+				purged = tsm.run_janitor_sweep()
+				if purged > 0:
+					logger.info(f"[Janitor] Sweep complete. Purged {purged} archived conversations.")
+			except Exception as e:
+				logger.error(f"Janitor sweep failed: {e}")
+			# Samantha Queue: signal worker if there are pending tasks (NON-BLOCKING)
+			worker._signal_samantha_worker()
 
 	@staticmethod
 	def _is_legacy_grpc(caps: BridgeCapabilities) -> bool:

@@ -9,9 +9,9 @@ That backend-specific work is delegated to a `PulseStrategy` (ARCH-001 paso B).
 Two implementations exist:
 
 - ``NullPulseStrategy`` (here): a no-op for backends with nothing to poll
-  (e.g. opencode/claude/local) — the generic pulse is enough.
-- ``AntigravityPulseStrategy`` (``red_pill.plugins.antigravity_ide.pulse``): the
-  legacy gRPC polling + `agy` autonomous operations + trajectory access.
+(e.g. opencode/claude/local) — the generic pulse is enough.
+- ``AntigravityPulseStrategy`` (``red_pill.plugins.antigravity_ide.pulse``):
+the legacy gRPC polling + `agy` autonomous operations + trajectory access.
 
 `IDEWorker.run_once()` orchestrates the generic steps and then calls
 ``strategy.pulse(worker)`` once per tick. Selecting the strategy is the only
