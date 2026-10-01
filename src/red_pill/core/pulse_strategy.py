@@ -14,8 +14,8 @@ be discovered, the core falls back to `NullPulseStrategy`.
 
 Discovery order (first match wins):
 1. Explicitly registered strategies (`register_pulse_strategy`).
-2. Auto-discovery of `red_pill.plugins.<pkg>.pulse` modules exposing a
-   `PulseStrategy` implementation.
+2. Auto-discovery of `red_pill.plugins.<pkg>.pulse` modules exposing a `PulseStrategy`
+implementation.
 
 A strategy constructor must accept a single positional arg: the minion bridge
 (or None).
