@@ -62,25 +62,9 @@ def _owning_workspace(directory: Optional[str]) -> Optional[str]:
 	"""Nombre del workspace registrado que contiene `directory` (el más específico)."""
 	if not directory:
 		return None
-	try:
-		from red_pill.core.workspaces import list_workspaces
+	from red_pill.core.workspaces import owning_workspace
 
-		target = Path(directory).resolve()
-	except Exception:
-		return None
-	best: Optional[str] = None
-	best_len = -1
-	try:
-		for ws in list_workspaces():
-			try:
-				root = ws.root.resolve()
-			except Exception:
-				continue
-			if (target == root or root in target.parents) and len(str(root)) > best_len:
-				best, best_len = ws.name, len(str(root))
-	except Exception:
-		return None
-	return best
+	return owning_workspace(directory)
 
 
 def _origin_for(provider: str, session_id: str) -> Optional[str]:

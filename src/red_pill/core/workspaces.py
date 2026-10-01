@@ -16,7 +16,7 @@ This is ORTHOGONAL to `config.WORKSPACE_ROOT` (which is red-pill's own ecosystem
 import logging
 import os
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import Iterable, List, Optional, Union
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -320,3 +320,57 @@ def remove_workspace(name_or_path: str) -> Optional[Workspace]:
 def list_tracked_workspaces() -> List[Workspace]:
 	"""Return workspaces with track=True (for Pre-Heating PROJECT_STATUS)."""
 	return [w for w in load_registry().workspaces if w.track]
+
+
+def owning_workspace(path: Optional[Union[str, Path]]) -> Optional[str]:
+	"""Nombre del workspace registrado que contiene `path` (archivo o carpeta).
+
+	Devuelve el más específico (root más largo que sea ancestro de `path`).
+	Un archivo resuelve contra su carpeta padre. None si no resuelve o está
+	fuera de todo workspace. Es la fuente única de verdad para "¿de qué
+	proyecto es este path?" (RFC-DESPERTAR-001 §8.2).
+	"""
+	if path is None:
+		return None
+	try:
+		target = _expand(path).resolve()
+	except Exception:
+		return None
+	try:
+		if target.is_file():
+			target = target.parent
+	except OSError:
+		pass
+	best: Optional[str] = None
+	best_len = -1
+	try:
+		for ws in list_workspaces():
+			try:
+				root = ws.root.resolve()
+			except Exception:
+				continue
+			if (target == root or root in target.parents) and len(str(root)) > best_len:
+				best, best_len = ws.name, len(str(root))
+	except Exception:
+		return None
+	return best
+
+
+def infer_workspaces(paths: Iterable[Optional[Union[str, Path]]]) -> List[str]:
+	"""`rutas tocadas` → nombres de workspace, en orden de primera aparición.
+
+	Resuelve el workspace dueño de cada path y acumula sin duplicados; los que
+	no resuelven (None, vacío, fuera de todo workspace) se descartan. Determinista.
+	Materializa el P1b de RFC-DESPERTAR-001 §8.2: el cwd no discrimina, el
+	**proyecto se infiere por los ficheros tocados** en los últimos turnos.
+	"""
+	out: List[str] = []
+	seen: set = set()
+	for p in paths:
+		if p is None:
+			continue
+		name = owning_workspace(p)
+		if name and name not in seen:
+			seen.add(name)
+			out.append(name)
+	return out
