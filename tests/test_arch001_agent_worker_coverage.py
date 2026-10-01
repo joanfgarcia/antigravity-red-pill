@@ -411,6 +411,121 @@ def test_watchdog_samantha_without_worker(worker):
 	w._watchdog_samantha()
 
 
+def test_process_inbox_list_models(worker, monkeypatch):
+	w, db_path = worker
+	w._bridge_telegram = MagicMock()
+	import red_pill.core.model_catalog as mc
+
+	catalog = MagicMock()
+	catalog.models.return_value = [{"id": "m1", "tier": "pro", "priority": 1, "roles": ["chat"]}]
+	monkeypatch.setattr(mc, "ModelCatalog", lambda: catalog)
+	_enqueue_cmd(db_path, "LIST_MODELS")
+	w.process_inbox()
+	assert any("Modelos" in t or "m1" in t for t in _outbox_texts(db_path))
+
+
+def test_process_inbox_list_models_empty(worker, monkeypatch):
+	w, db_path = worker
+	w._bridge_telegram = MagicMock()
+	import red_pill.core.model_catalog as mc
+
+	catalog = MagicMock()
+	catalog.models.return_value = []
+	monkeypatch.setattr(mc, "ModelCatalog", lambda: catalog)
+	_enqueue_cmd(db_path, "LIST_MODELS")
+	w.process_inbox()
+	assert any("No hay" in t for t in _outbox_texts(db_path))
+
+
+def test_process_inbox_list_models_error(worker, monkeypatch):
+	w, db_path = worker
+	w._bridge_telegram = MagicMock()
+	import red_pill.core.model_catalog as mc
+
+	monkeypatch.setattr(mc, "ModelCatalog", MagicMock(side_effect=RuntimeError("no cat")))
+	_enqueue_cmd(db_path, "LIST_MODELS")
+	w.process_inbox()
+	assert any("catálogo" in t for t in _outbox_texts(db_path))
+
+
+def test_process_inbox_show_queue_empty(worker, monkeypatch):
+	w, db_path = worker
+	w._bridge_telegram = MagicMock()
+	import red_pill.cognitive.queue_manager as qm
+
+	fake = MagicMock()
+	fake.list_tasks.return_value = []
+	monkeypatch.setattr(qm, "CognitiveQueueManager", lambda: fake)
+	_enqueue_cmd(db_path, "SHOW_QUEUE")
+	w.process_inbox()
+	assert any("vacía" in t or "cola" in t.lower() for t in _outbox_texts(db_path))
+
+
+def test_process_inbox_show_queue_with_tasks(worker, monkeypatch):
+	w, db_path = worker
+	w._bridge_telegram = MagicMock()
+	import red_pill.cognitive.queue_manager as qm
+
+	fake = MagicMock()
+	fake.list_tasks.return_value = [{"id": "abcdef123", "status": "PENDING", "priority": 5, "title": "tarea"}]
+	monkeypatch.setattr(qm, "CognitiveQueueManager", lambda: fake)
+	_enqueue_cmd(db_path, "SHOW_QUEUE")
+	w.process_inbox()
+	assert any("PENDING" in t for t in _outbox_texts(db_path))
+
+
+def test_process_inbox_show_queue_error(worker, monkeypatch):
+	w, db_path = worker
+	w._bridge_telegram = MagicMock()
+	import red_pill.cognitive.queue_manager as qm
+
+	monkeypatch.setattr(qm, "CognitiveQueueManager", MagicMock(side_effect=RuntimeError("no queue")))
+	_enqueue_cmd(db_path, "SHOW_QUEUE")
+	w.process_inbox()
+	assert any("cola" in t.lower() for t in _outbox_texts(db_path))
+
+
+def test_enqueue_heavy_path_empty_text_dead(worker, monkeypatch):
+	w, db_path = worker
+	conn = _conn(db_path)
+	conn.execute("INSERT INTO inbox (message_id, channel, channel_user_id, payload, status) VALUES ('h1','telegram','u1','{}','PENDING')")
+	conn.commit()
+	m_id = conn.execute("SELECT id FROM inbox WHERE message_id='h1'").fetchone()[0]
+	cursor = conn.cursor()
+	w._enqueue_heavy_path("", "telegram", "u1", [m_id], cursor, conn)
+	check = _conn(db_path)
+	status = check.execute("SELECT status FROM inbox WHERE id=?", (m_id,)).fetchone()[0]
+	check.close()
+	assert status == "DEAD"
+
+
+def test_enqueue_heavy_path_normal(worker, monkeypatch):
+	w, db_path = worker
+	import red_pill.cognitive.queue_manager as qm
+	import red_pill.telegram.session as tsm_mod
+
+	fake_q = MagicMock()
+	monkeypatch.setattr(qm, "CognitiveQueueManager", lambda: fake_q)
+	fake_tsm = MagicMock()
+	fake_tsm.create_session.return_value = {"id": "s1"}
+	fake_tsm.get_session.return_value = {"id": "s1", "steps": []}
+	monkeypatch.setattr(tsm_mod, "TelegramSessionManager", lambda: fake_tsm)
+	monkeypatch.setattr(w, "_session_cascade_specs", lambda *a, **k: [])
+
+	conn = _conn(db_path)
+	conn.execute("INSERT INTO inbox (message_id, channel, channel_user_id, payload, status) VALUES ('h2','telegram','u1','{}','PENDING')")
+	conn.commit()
+	m_id = conn.execute("SELECT id FROM inbox WHERE message_id='h2'").fetchone()[0]
+	cursor = conn.cursor()
+	w._enqueue_heavy_path("tarea larga", "telegram", "u1", [m_id], cursor, conn)
+	enq = fake_q.enqueue_task.called
+	check = _conn(db_path)
+	outbox = check.execute("SELECT COUNT(*) FROM outbox").fetchone()[0]
+	check.close()
+	assert enq, "debe encolar el agentic_job"
+	assert outbox == 1, "debe acusar '⏳ en cola'"
+
+
 def test_run_loop_stops_after_one_tick(worker, monkeypatch):
 	w, _ = worker
 	ticks = {"n": 0}
