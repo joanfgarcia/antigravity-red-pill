@@ -130,6 +130,10 @@ def _awakening_channel_directive(operator: str | None = None) -> str:
 
 
 def get_connection():
+	# Last line of defence: a test must never open/write the production events.db.
+	from red_pill.core.paths import _assert_not_production_dir
+
+	_assert_not_production_dir(DB_PATH, "agent_worker.get_connection() DB_PATH")
 	conn = sqlite3.connect(str(DB_PATH), timeout=10.0)
 	conn.row_factory = sqlite3.Row
 	conn.execute("PRAGMA journal_mode=WAL;")
