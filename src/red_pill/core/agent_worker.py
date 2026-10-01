@@ -26,7 +26,7 @@ if red_pill_config.exists():
 load_dotenv()  # Override local si existiera
 
 import red_pill.config as cfg  # noqa: E402
-from red_pill.core.pulse_strategy import NullPulseStrategy, PulseStrategy  # noqa: E402
+from red_pill.core.pulse_strategy import NullPulseStrategy, PulseStrategy, build_pulse_strategy  # noqa: E402
 from red_pill.swarm.bridges import (  # noqa: E402
 	AgentBridge,  # noqa: E402
 	AllModelsExhausted,
@@ -205,30 +205,6 @@ def _emit_d24_pain_signal(msg_ids, error_text: str) -> None:
 		logger.warning(f"[D24] Failed to emit pain signal: {e}")
 
 
-def _emit_strategy_fallback_signal(exc: Exception) -> None:
-	"""The Antigravity pulse strategy failed to import → the worker silently
-	degrades to NullPulseStrategy and Antigravity polling dies. Emit a typed
-	pain signal (dedup via has_signal) so it is not a silent failure."""
-	try:
-		from red_pill.memory import MemoryManager
-
-		mm = MemoryManager()
-		name = "awakening_pulse_strategy_fallback"
-		if mm.has_signal(name):
-			return
-		mm.inject_signal(
-			name=name,
-			intensity=7.0,
-			signal_type="pain",
-			source="IDEWorker",
-			originator="worker._build_strategy",
-			criticality="CRITICAL",
-			message=f"AntigravityPulseStrategy no disponible — polling Antigravity desactivado (NullPulseStrategy). error={str(exc)[:300]}",
-		)
-	except Exception as e:
-		logger.warning(f"[ARCH-001] Failed to emit strategy-fallback pain signal: {e}")
-
-
 def _detect_routing_keyword(text: str) -> Optional[str]:
 	"""Detect an explicit routing keyword at the START of a Telegram message
 	(D2/D10). Case-insensitive, first token. In Fase 1 this is signal-only:
@@ -285,12 +261,15 @@ class IDEWorker:
 			logger.info(f"[IDEWorker] Awakening Bridge: {self._bridge_awakening.get_capabilities().backend.value.upper()}")
 			logger.info(f"[IDEWorker] Minion Bridge: {self._bridge_minion.get_capabilities().backend.value.upper()}")
 		except Exception as e:
-			logger.warning(f"[IDEWorker] Bridge creation failed, falling back to gRPC-only: {e}")
+			# Fallback is backend-agnostic: retry with a single default backend
+			# (the configured IDE_BACKEND), never a hardcoded transport name.
+			logger.warning(f"[IDEWorker] Bridge creation failed, falling back to default backend: {e}")
 			from red_pill.swarm.bridges.factory import create_bridge
 
-			self._bridge_telegram = create_bridge("grpc")
-			self._bridge_awakening = create_bridge("grpc")
-			self._bridge_minion = create_bridge("grpc")
+			default_backend = cfg.get_config().IDE_BACKEND
+			self._bridge_telegram = create_bridge(default_backend)
+			self._bridge_awakening = create_bridge(default_backend)
+			self._bridge_minion = create_bridge(default_backend)
 			self._caps = self._bridge_telegram.get_capabilities()
 		# SamanthaWorker: background thread for local LLM tasks (non-blocking)
 		try:
@@ -317,28 +296,25 @@ class IDEWorker:
 		self._heartbeat_thread.start()
 		logger.info("[IDEWorker] Heartbeat thread started (D21, lease=%ss)", cfg.get_config().HEARTBEAT_LEASE)
 
-		# ARCH-001 paso B: the backend-specific pulse (Antigravity legacy gRPC +
-		# agy) is delegated to a strategy. The worker stays neutral; selecting
-		# the strategy here is the only place it looks at the backend type.
+		# ARCH-001: backend-specific pulse work is delegated to a strategy
+		# resolved via the provider-agnostic registry. The core never names a
+		# concrete backend.
 		self._strategy: PulseStrategy = self._build_strategy()
 
 	def _build_strategy(self) -> PulseStrategy:
-		"""Pick the backend-specific pulse strategy.
+		"""Resolve the backend-specific pulse strategy via the core registry.
 
-		The Antigravity strategy owns **both** original paths and picks between
-		them per tick (legacy gRPC polling when ``_caps.backend == GRPC``, agy
-		autonomous ops otherwise) — exactly mirroring the old inline branch. It
-		constructs its own Antigravity client, so the core stays backend-agnostic.
-		A no-op is used only if the Antigravity strategy cannot be imported.
+		The core does NOT name any backend: `build_pulse_strategy` returns the
+		first strategy registered/discovered by a plugin (or NullPulseStrategy if
+		none applies). This keeps `red_pill.core` provider-agnostic.
 		"""
-		try:
-			from red_pill.plugins.antigravity_ide.pulse import AntigravityPulseStrategy
-
-			return AntigravityPulseStrategy(self._bridge_minion)
-		except Exception as e:
-			logger.error(f"[IDEWorker] Antigravity strategy unavailable, using no-op: {e}")
-			_emit_strategy_fallback_signal(e)
-			return NullPulseStrategy()
+		strategy = build_pulse_strategy(self._bridge_minion)
+		if isinstance(strategy, NullPulseStrategy):
+			# No backend strategy applied: this is legitimate for neutral
+			# backends, but worth a debug breadcrumb (not a pain signal — that is
+			# the job of a plugin that FAILED to register, handled inside).
+			logger.debug("[IDEWorker] no pulse strategy registered; using no-op")
+		return strategy
 
 	def _get_connection(self):
 		"""Connection helper exposed to pulse strategies (they run SQL directly)."""
@@ -421,9 +397,8 @@ class IDEWorker:
 			self._check_telegram_jobs()
 		except Exception:
 			logger.exception("[IDEWorker] _check_telegram_jobs failed — pulse continues")
-		# Backend-specific pulse (ARCH-001 paso B). This carries the ENTIRE
-		# original branch (legacy gRPC polling vs agy + janitor/samantha):
-		# the worker stays neutral, the strategy preserves behavior exactly.
+		# Backend-specific pulse delegated to the registered strategy: the core
+		# stays neutral and the strategy preserves the original behavior exactly.
 		try:
 			self._strategy.pulse(self)
 		except Exception:

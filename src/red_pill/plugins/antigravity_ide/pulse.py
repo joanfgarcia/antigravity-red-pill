@@ -423,4 +423,15 @@ class AntigravityPulseStrategy:
 			queue_manager.mark_failed(task["id"], result.error or "Empty response")
 
 
+def _register() -> None:
+	"""Self-register this backend's strategy with the core registry. Imported
+	by the core's discovery (`red_pill.core.pulse_strategy`), never hardcoded."""
+	from red_pill.core.pulse_strategy import register_pulse_strategy
+
+	register_pulse_strategy(lambda bridge_minion: AntigravityPulseStrategy(bridge_minion))
+
+
+_register()
+
+
 __all__ = ["AntigravityPulseStrategy"]

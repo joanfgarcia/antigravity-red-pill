@@ -46,7 +46,10 @@ def test_antigravity_strategy_satisfies_protocol():
 	assert isinstance(AntigravityPulseStrategy(None), PulseStrategy)
 
 
-def test_build_strategy_returns_antigravity():
+def test_build_strategy_resolves_registered_backend():
+	"""El core resuelve la estrategia por el registro (auto-descubrimiento del
+	plugin), NO por un import directo. Con el plugin antigravity disponible, la
+	estrategia resultante es la suya — evidencia de que el registro funciona."""
 	worker = IDEWorker.__new__(IDEWorker)
 	worker._bridge_minion = None
 	strategy = worker._build_strategy()
@@ -54,13 +57,12 @@ def test_build_strategy_returns_antigravity():
 
 
 def test_core_worker_is_backend_agnostic():
-	"""El core NO debe importar ni instanciar Antigravity.
+	"""El core NO debe importar NI NOMBRAR ningún backend/plugin concreto.
 
-	Versión robusta (el grep de substrings original era un falso positivo
-	demostrado por el panel: un `importlib` + `chr()` pasaba). Aquí se parsea el
-	AST y se resuelven TODOS los imports de módulo — incluye aliases (`import x as
-	y`, `from x import Y as Z`) y el nivel de módulo únicamente (los imports lazy
-	dentro de funciones son el límite legítimo backend→core).
+	Versión estricta (el grep de substrings era un falso positivo demostrado por
+	el panel). Aquí se parsea el AST del módulo y se comprueba que NINGÚN import
+	(a cualquier nivel) referencia un proveedor/plugin. Los backends se enganchan
+	por el registro (`red_pill.core.pulse_strategy`), nunca importándose aquí.
 	"""
 	import ast
 	import inspect
@@ -68,18 +70,27 @@ def test_core_worker_is_backend_agnostic():
 	from red_pill.core import agent_worker as aw
 
 	tree = ast.parse(inspect.getsource(aw))
+	_BACKEND_HINTS = ("antigravity", "ide_client", "agy_bridge", "grpc_bridge")
 
-	def _module_level_imports(node):
-		for child in node.body:  # body top-level: excluye imports dentro de funciones
-			if isinstance(child, ast.Import):
-				for alias in child.names:
-					yield alias.name
-			elif isinstance(child, ast.ImportFrom):
-				yield child.module or ""
+	offenders = []
+	for node in ast.walk(tree):  # cualquier nivel, no solo módulo
+		if isinstance(node, ast.Import):
+			offenders += [a.name for a in node.names if any(h in a.name.lower() for h in _BACKEND_HINTS)]
+		elif isinstance(node, ast.ImportFrom):
+			mod = node.module or ""
+			if any(h in mod.lower() for h in _BACKEND_HINTS):
+				offenders.append(mod)
 
-	imports = list(_module_level_imports(tree))
-	offenders = [m for m in imports if m and ("antigravity" in m.lower() or "ide_client" in m.lower())]
-	assert not offenders, f"core/agent_worker no debe importar módulos de backend a nivel de módulo: {offenders}"
+	assert not offenders, f"core/agent_worker no debe importar módulos de backend concreto: {offenders}"
+
+
+def test_pulse_strategy_registry_discovers_plugins():
+	"""El registro descubre estrategias de plugins vía pkgutil, sin que el core
+	los nombre. `build_pulse_strategy` devuelve la estrategia del plugin real."""
+	from red_pill.core.pulse_strategy import build_pulse_strategy
+
+	strategy = build_pulse_strategy(None)
+	assert type(strategy).__name__ != "NullPulseStrategy", "el registro debe descubrir la estrategia del plugin"
 
 
 # ── Behavioral parity (BLOCKER del panel adversarial, 2026-10-01) ────────────
