@@ -99,7 +99,9 @@ def _awakening_planner_directive(policy: str) -> str:
 		f"blando) y el README de la fase que vayas a tocar. "
 		f"Solo toca ideas/pending/README.md para añadir una chispa/tarea nueva o mover "
 		f"una a otra fase con `git mv`; NO edites docs de otras fases sin necesidad. "
-		f"Registra en tu log de despertar qué contribución hiciste."
+		f"Registra en tu log de despertar qué contribución hiciste. Si esa contribución "
+		f"avanza un RFC de proyecto, anota TAMBIÉN en el propio RFC la rama + ruta del "
+		f"worktree + último commit, para que el siguiente despertar retome el hilo."
 	)
 
 
@@ -1280,6 +1282,15 @@ class IDEWorker:
 			f"Plan your work efficiently. If the task requires more, stop and leave a summary for the next awakening.\n"
 			f"DO NOT use `run_command` or any tool that requires user approval.\n"
 			f"PERMITTED: File tools (write_to_file, replace_file_content) and MCP RedPill-Kernel tools.\n"
+			f"WORKTREE RULE (HARD): any work that writes to a PROJECT/kernel repo is created and done in a "
+			f"`git worktree` on its own branch (`awaken/<ts>` or the designated feature branch) — NEVER in the live "
+			f"tree, never change the live branch's HEAD. The DESK (${{AGENT_CORE_DIR}}) is exempt (commit to `main`+push allowed).\n"
+			f"RESUME-FIRST: at the start, before new work, read the last awakening logs "
+			f"(`${{AGENT_CORE_DIR}}/awakening/`) and any RFC/note they point to; if a previous awakening left work "
+			f"in progress (worktree/branch/commit), RESUME it there instead of starting fresh.\n"
+			f"RECORD-WHERE-YOU-WORKED (HARD): every time you start or resume work in a worktree, write in your "
+			f"awakening log AND in the RFC/note owning that work: the branch, the worktree path, and the last commit. "
+			f"This is the handoff — without it the next awakening cannot find the work.\n"
 			f"WORK OVERLAP GUARD: BEFORE submitting any `job_manager_api job_submit` (especially a dag_job), "
 			f"call `job_manager_api job_list` and check for any in-flight DAG job (source=dag_job, status PENDING/PROCESSING/RESUMING). "
 			f"If one is running, DO NOT launch a new DAG job — dedicate this awakening to monitoring that DAG (job_status) "
@@ -1293,11 +1304,14 @@ class IDEWorker:
 			f"MANDATORY FIRST STEPS:\n"
 			f'1. Call `mcp_RedPill-Kernel_interceptor_rp` with user_prompt=<your awakening directive> and mode="{cfg.get_config().IDENTITY_DEPTH_HEADLESS}".\n'
 			f'2. Call `mcp_RedPill-Kernel_refresh_session_context` with mode="{cfg.get_config().IDENTITY_DEPTH_HEADLESS}" to load your identity from the Bünker.\n'
-			f"3. Hydrate the workspace bank (max 2 calls, skip if CWD is outside every registered workspace): "
+			f"3. RESUME CHECK: read the last awakening logs `${{AGENT_CORE_DIR}}/awakening/` and any RFC/note they "
+			f"point to; if a prior awakening left work in a worktree (branch + path + commit), note it and resume "
+			f"THERE before starting anything new.\n"
+			f"4. Hydrate the workspace bank (max 2 calls, skip if CWD is outside every registered workspace): "
 			f"call `bunker_memory_api read_workspace_memory` for `MEMORY.md` of the workspace owning your CWD, "
 			f"plus its `bank_health.json`; if `thresholds_tripped` is non-empty, include it in your report — "
 			f"semantic compaction is operator on-demand, never auto-compact.\n"
-			f"4. Then proceed with your autonomous work.\n"
+			f"5. Then proceed with your autonomous work.\n"
 			f"{_awakening_planner_directive(cfg.get_config().AWAKENING_PLANNER_ACCESS)}\n"
 			f"{_awakening_channel_directive()}\n"
 			f"</constraint>\n"
