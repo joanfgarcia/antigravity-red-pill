@@ -485,6 +485,84 @@ def test_process_inbox_show_queue_error(worker, monkeypatch):
 	assert any("cola" in t.lower() for t in _outbox_texts(db_path))
 
 
+def test_process_via_bridge_cascade_exhausted_defers(worker, monkeypatch):
+	w, db_path = worker
+	import red_pill.telegram.session as tsm_mod
+	from red_pill.swarm.bridges import NoModelsConfigured
+
+	class _Sess:
+		def __init__(self, *a, **k):
+			pass
+
+		def get_session(self, sid):
+			return {"id": sid, "status": "active", "steps": []}
+
+		def create_session(self, uid):
+			return {"id": "s1", "status": "active", "steps": []}
+
+		def append_message(self, *a, **k):
+			pass
+
+		def trigger_compaction(self, *a, **k):
+			return None
+
+	monkeypatch.setattr(tsm_mod, "TelegramSessionManager", _Sess)
+
+	class _ExhaustedBridge:
+		def prompt(self, *a, **k):
+			raise NoModelsConfigured("no quotas left")
+
+	w._bridge_telegram = _ExhaustedBridge()
+	conn = w._get_connection()
+	cursor = conn.cursor()
+	w._process_via_bridge("hola", [1], "telegram", "u1", cursor, conn)
+	conn.commit()
+	rows = conn.execute("SELECT COUNT(*) FROM outbox").fetchone()[0]
+	conn.close()
+	assert rows == 1, "la cascade exhausta debe dejar aviso DEFERRED en outbox"
+
+
+def test_process_via_bridge_generic_error_retries(worker, monkeypatch):
+	w, db_path = worker
+	import red_pill.telegram.session as tsm_mod
+
+	class _Sess:
+		def __init__(self, *a, **k):
+			pass
+
+		def get_session(self, sid):
+			return {"id": sid, "status": "active", "steps": []}
+
+		def create_session(self, uid):
+			return {"id": "s1", "status": "active", "steps": []}
+
+		def append_message(self, *a, **k):
+			pass
+
+		def trigger_compaction(self, *a, **k):
+			return None
+
+	monkeypatch.setattr(tsm_mod, "TelegramSessionManager", _Sess)
+
+	class _BoomBridge:
+		def prompt(self, *a, **k):
+			raise RuntimeError("boom")
+
+	retried = {}
+
+	def _fake_retry(*a, **k):
+		retried["hit"] = True
+		return False
+
+	w._handle_retry_failure = _fake_retry
+	w._bridge_telegram = _BoomBridge()
+	conn = w._get_connection()
+	cursor = conn.cursor()
+	w._process_via_bridge("hola", [1], "telegram", "u1", cursor, conn)
+	conn.close()
+	assert retried.get("hit"), "un error del bridge debe pasar por _handle_retry_failure"
+
+
 def test_enqueue_heavy_path_empty_text_dead(worker, monkeypatch):
 	w, db_path = worker
 	conn = _conn(db_path)
