@@ -15,8 +15,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import red_pill.plugins.antigravity_ide.worker as worker_module
-from red_pill.plugins.antigravity_ide.worker import IDEWorker
+import red_pill.core.agent_worker as worker_module
+from red_pill.core.agent_worker import IDEWorker
 
 
 @pytest.fixture

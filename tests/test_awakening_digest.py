@@ -18,7 +18,7 @@ def _note(desk: Path, target: str) -> Path:
 
 def test_directiva_canal_apunta_al_indice(tmp_path, monkeypatch):
 	monkeypatch.setenv("AGENT_CORE_DIR", str(tmp_path))
-	worker = importlib.import_module("red_pill.plugins.antigravity_ide.worker")
+	worker = importlib.import_module("red_pill.core.agent_worker")
 	out = worker._awakening_channel_directive()
 	assert "AWAKEN-002" in out
 	assert "planner/design/AWAKEN-002-despertares-utiles/README.md" in out
@@ -29,14 +29,14 @@ def test_directiva_cuenta_notas_pendientes(tmp_path, monkeypatch):
 	monkeypatch.setenv("AGENT_CORE_DIR", str(tmp_path))
 	operator = ch.operator_name()
 	_note(tmp_path, operator)
-	worker = importlib.import_module("red_pill.plugins.antigravity_ide.worker")
+	worker = importlib.import_module("red_pill.core.agent_worker")
 	out = worker._awakening_channel_directive()
 	assert "1 nota(s)" in out
 
 
 def test_directiva_sin_desk_no_lanza(tmp_path, monkeypatch):
 	monkeypatch.setenv("AGENT_CORE_DIR", str(tmp_path / "no-existe"))
-	worker = importlib.import_module("red_pill.plugins.antigravity_ide.worker")
+	worker = importlib.import_module("red_pill.core.agent_worker")
 	assert "AWAKEN-002" in worker._awakening_channel_directive()
 
 
@@ -57,7 +57,7 @@ def test_telemetry_digest_sin_notas(tmp_path, monkeypatch):
 
 
 def test_lease_keeper_mantiene_el_latido_y_lo_para():
-	worker = importlib.import_module("red_pill.plugins.antigravity_ide.worker")
+	worker = importlib.import_module("red_pill.core.agent_worker")
 
 	class Fake:
 		def __init__(self):

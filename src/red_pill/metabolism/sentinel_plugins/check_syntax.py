@@ -38,7 +38,7 @@ CRITICAL_MODULES = [
 	"src/red_pill/core/queue_worker.py",
 	"src/red_pill/metabolism/auditor.py",
 	"src/red_pill/metabolism/sleep.py",
-	"src/red_pill/plugins/antigravity_ide/worker.py",
+	"src/red_pill/core/agent_worker.py",
 	"src/red_pill/plugins/antigravity_ide/bridge.py",
 	"src/red_pill/plugins/antigravity_ide/factory.py",
 	"src/red_pill/plugins/antigravity_ide/grpc_bridge.py",
