@@ -54,15 +54,32 @@ def test_build_strategy_returns_antigravity():
 
 
 def test_core_worker_is_backend_agnostic():
-	"""El core NO debe importar ni instanciar Antigravity: la estrategia se
-	autoconstruye su cliente. Fija la regla de agnosticismo de red_pill.core."""
+	"""El core NO debe importar ni instanciar Antigravity.
+
+	Versión robusta (el grep de substrings original era un falso positivo
+	demostrado por el panel: un `importlib` + `chr()` pasaba). Aquí se parsea el
+	AST y se resuelven TODOS los imports de módulo — incluye aliases (`import x as
+	y`, `from x import Y as Z`) y el nivel de módulo únicamente (los imports lazy
+	dentro de funciones son el límite legítimo backend→core).
+	"""
+	import ast
 	import inspect
 
 	from red_pill.core import agent_worker as aw
 
-	src = inspect.getsource(aw)
-	assert "ide_client" not in src, "core/agent_worker no debe importar ide_client"
-	assert "AntigravityIDEClient" not in src, "core/agent_worker no debe construir el cliente Antigravity"
+	tree = ast.parse(inspect.getsource(aw))
+
+	def _module_level_imports(node):
+		for child in node.body:  # body top-level: excluye imports dentro de funciones
+			if isinstance(child, ast.Import):
+				for alias in child.names:
+					yield alias.name
+			elif isinstance(child, ast.ImportFrom):
+				yield child.module or ""
+
+	imports = list(_module_level_imports(tree))
+	offenders = [m for m in imports if m and ("antigravity" in m.lower() or "ide_client" in m.lower())]
+	assert not offenders, f"core/agent_worker no debe importar módulos de backend a nivel de módulo: {offenders}"
 
 
 # ── Behavioral parity (BLOCKER del panel adversarial, 2026-10-01) ────────────
@@ -138,6 +155,51 @@ def test_parity_degraded_cascade_falls_to_agy_branch(monkeypatch):
 		"janitor",
 		"samantha",
 	]
+
+
+def test_check_for_replies_behavioral(monkeypatch, tmp_path):
+	"""Conductual REAL de la lógica migrada (hueco 0% cobertura del panel).
+
+	sqlite temporal + cliente mock: una cascade IDLE con un PlannerResponse de
+	tipo 15 debe escribirse en `outbox` y marcarse PROCESSED. Si `check_for_replies`
+	se vaciara a `pass`, este test FALLA (a diferencia de los de paridad)."""
+	import sqlite3
+
+	conn = sqlite3.connect(tmp_path / "events.db")
+	conn.execute("CREATE TABLE inbox (message_id TEXT, channel TEXT, channel_user_id TEXT, payload TEXT, cascade_id TEXT, status TEXT)")
+	conn.execute("CREATE TABLE outbox (id INTEGER PRIMARY KEY AUTOINCREMENT, channel TEXT, channel_user_id TEXT, cascade_id TEXT, payload TEXT)")
+	conn.execute("INSERT INTO inbox (channel, channel_user_id, cascade_id, status) VALUES ('telegram', 'u1', 'cascade-1', 'WAITING_FOR_RESPONSE')")
+	conn.commit()
+
+	class FakeClient:
+		def get_cascade_trajectory(self, cascade_id):
+			return {
+				"status": "CASCADE_RUN_STATUS_IDLE",
+				"numTotalSteps": 1,
+				"trajectory": {"steps": [{"type": "15", "plannerResponse": {"response": "hola mundo"}}]},
+			}
+
+	class FakeExtractor:
+		def __init__(self, *a, **k):
+			pass
+
+		def get_latest_response(self, cascade_id):
+			return None
+
+	monkeypatch.setattr("red_pill.plugins.antigravity_ide.telegram_extractor.TelegramResponseExtractor", FakeExtractor)
+
+	class FakeWorker:
+		def _get_connection(self):
+			return sqlite3.connect(tmp_path / "events.db")
+
+	strategy = AntigravityPulseStrategy(object(), client=FakeClient())
+	strategy.check_for_replies(FakeWorker())
+
+	check = sqlite3.connect(tmp_path / "events.db")
+	status = check.execute("SELECT status FROM inbox WHERE cascade_id='cascade-1'").fetchone()[0]
+	out = check.execute("SELECT channel, payload FROM outbox").fetchall()
+	assert status == "PROCESSED", "la respuesta IDLE debe marcar el inbox como PROCESSED"
+	assert len(out) == 1 and "hola mundo" in out[0][1], "la respuesta debe escribirse en outbox"
 
 
 def test_run_once_executes_with_null_strategy(monkeypatch):
