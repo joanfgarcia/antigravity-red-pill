@@ -57,7 +57,8 @@ antigravity_ide/
 ├── grpc_bridge.py           # GrpcBridge: extraction via gRPC-Web + legacy execution
 ├── factory.py               # create_bridge() / create_extraction_bridge() / preflight_check()
 ├── ide_client.py            # Low-level gRPC-Web client (AntigravityIDEClient)
-├── worker.py                # IDEWorker: inbox → bridge → outbox orchestration
+├── pulse.py                 # AntigravityPulseStrategy: legacy gRPC polling + agy autonomous ops
+├── worker.py                # Deprecated shim → red_pill.core.agent_worker (generic IDEWorker)
 └── telegram_extractor.py    # TelegramResponseExtractor (gRPC response fallback)
 ```
 
@@ -121,6 +122,14 @@ An earlier approach (by Gemini Flash 3.5, operating via Telegram) added `_find_a
 Prefix-stripping is deterministic, O(1), and requires no filesystem scanning.
 
 ## 5. Worker Architecture (IDEWorker)
+
+> **ARCH-001**: `IDEWorker` lives in the neutral core (`red_pill/core/agent_worker.py`; this
+> package's `worker.py` is only a re-export shim). Everything Antigravity-specific (legacy gRPC
+> polling, `agy` autonomous operations, trajectory helpers) is `AntigravityPulseStrategy` in
+> `pulse.py`, registered through `red_pill/core/pulse_strategy.py`. Its factory declines when no
+> bridge needs it (no gRPC bridge and `AUTONOMOUS_AGY_ENABLED=false`); the generic housekeeping
+> (Telegram session janitor + Samantha signal) always runs in the core. The diagram below is the
+> historical v1/v2 routing.
 
 ### Dual-Path Routing
 
@@ -317,7 +326,7 @@ AWAKENINGs and Telegram conversations are now **completely separate**:
 ### Files changed
 
 - `autonomous_cron.py`: AWAKENINGs use `channel="system"` instead of copying the last user's channel
-- `worker.py`: New `_process_awakening()` method routes system-channel messages to isolated agy execution
+- `worker.py` (today `core/agent_worker.py`): New `_process_awakening()` method routes system-channel messages to isolated agy execution
 
 ## 13. Budget Guard
 

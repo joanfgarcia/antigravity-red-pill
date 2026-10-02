@@ -14,12 +14,31 @@ os.environ["QDRANT_PORT"] = "0"
 os.environ["APP_ROOT"] = tempfile.gettempdir()  # Redirect all storage to /tmp
 
 # TEST ISOLATION (module level, BEFORE any red_pill import in collection):
-# redirect XDG data/cache to a tmp dir AND arm the production-write guard, so
-# that even module-import-time calls to paths.py cannot touch the operator's
-# real storage. The fixture below re-applies per-test dirs on top of this.
+# redirect every operator location to a tmp dir AND arm the production-write
+# guard, so that even module-import-time code cannot touch the operator's real
+# storage. The fixture below re-applies per-test dirs on top of this.
+# - XDG_CONFIG_HOME: importing agent_worker/config loads `<config>/.env`; with the
+#   real one, AGENT_CORE_DIR / NEON_LINK_DB_PATH / cascades leaked into the suite.
+# - XDG_STATE_HOME: get_log_dir().
+# - AGENT_CORE_DIR: the operator's desk (awakening notes and logs).
+# - IA_DIR: the bunker root (bunker_export wrote kits into the live repo).
 _TEST_ISOLATION_DIR = tempfile.mkdtemp(prefix="redpill_test_iso_")
-os.environ["XDG_DATA_HOME"] = os.path.join(_TEST_ISOLATION_DIR, "data")
-os.environ["XDG_CACHE_HOME"] = os.path.join(_TEST_ISOLATION_DIR, "cache")
+
+
+def _isolated_locations(base: str) -> dict:
+	return {
+		"XDG_DATA_HOME": os.path.join(base, "data"),
+		"XDG_CACHE_HOME": os.path.join(base, "cache"),
+		"XDG_CONFIG_HOME": os.path.join(base, "config"),
+		"XDG_STATE_HOME": os.path.join(base, "state"),
+		"AGENT_CORE_DIR": os.path.join(base, "desk"),
+		"IA_DIR": os.path.join(base, "ia", "sharing"),
+	}
+
+
+os.environ.update(_isolated_locations(_TEST_ISOLATION_DIR))
+# An operator shell that exported its .env must not aim the worker at the real events.db.
+os.environ.pop("NEON_LINK_DB_PATH", None)
 os.environ["REDPILL_TESTING"] = "1"
 
 
@@ -74,8 +93,9 @@ def bunker_isolation(monkeypatch):
 	test_dir = tempfile.mkdtemp(prefix="bunker_test_")
 	monkeypatch.setenv("APP_ROOT", test_dir)
 	monkeypatch.setenv("WORKSPACE_ROOT", test_dir)
-	monkeypatch.setenv("XDG_DATA_HOME", os.path.join(test_dir, "data"))
-	monkeypatch.setenv("XDG_CACHE_HOME", os.path.join(test_dir, "cache"))
+	for name, value in _isolated_locations(test_dir).items():
+		monkeypatch.setenv(name, value)
+	monkeypatch.delenv("NEON_LINK_DB_PATH", raising=False)
 	# Explicit isolation flag: paths.py aborts if a test resolves to the real
 	# production data dir (defence in depth beyond the env redirect above).
 	monkeypatch.setenv("REDPILL_TESTING", "1")
@@ -91,6 +111,22 @@ def bunker_isolation(monkeypatch):
 
 	# 4. Clean cache after test finishes
 	get_config.cache_clear()
+
+
+@pytest.fixture
+def isolated_pulse_registry(monkeypatch):
+	"""Empty pulse-strategy registry for one test, restored afterwards.
+
+	Plugin discovery registers factories as an import side effect, once per
+	process: run the real discovery BEFORE swapping the registry so a plugin's
+	first import never lands in (and dies with) the test's temporary list."""
+	import red_pill.core.pulse_strategy as ps
+
+	if not ps._discovered:
+		ps._discover_plugin_strategies()
+	monkeypatch.setattr(ps, "_STRATEGY_FACTORIES", [])
+	monkeypatch.setattr(ps, "_discovered", True)
+	return ps
 
 
 @pytest.fixture

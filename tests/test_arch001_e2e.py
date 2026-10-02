@@ -72,9 +72,8 @@ class _RecordingBridge:
 		return SimpleNamespace(ok=True, response=self.response, text=self.response, error=None, model="fake")
 
 
-@pytest.fixture
-def worker_env(tmp_path, monkeypatch):
-	"""Worker REAL + DB real + bridges deterministas. Devuelve (worker, db_path)."""
+def _build_worker_env(tmp_path, monkeypatch):
+	"""Worker REAL + DB real + bridges deterministas. Devuelve (worker, db_path, bridge)."""
 	db_path = tmp_path / "events.db"
 	_seed_events_db(db_path)
 
@@ -117,6 +116,11 @@ def worker_env(tmp_path, monkeypatch):
 	return worker, db_path, recording
 
 
+@pytest.fixture
+def worker_env(tmp_path, monkeypatch):
+	return _build_worker_env(tmp_path, monkeypatch)
+
+
 def _conn(db_path: Path):
 	c = sqlite3.connect(str(db_path), timeout=10.0)
 	c.row_factory = sqlite3.Row
@@ -133,13 +137,25 @@ def _enqueue(db_path: Path, payload: dict, status: str = "PENDING") -> None:
 	conn.close()
 
 
-def test_e2e_worker_constructed_with_antigravity_strategy(worker_env):
-	"""La pieza se construye como en producción y la estrategia real está activa
-	(no degradó al no-op)."""
+def test_e2e_worker_constructed_with_antigravity_strategy(tmp_path, monkeypatch):
+	"""Con un backend que la necesita (operaciones agy autónomas activadas), la
+	pieza se construye como en producción y la estrategia real del plugin está
+	activa: el registro la descubrió (no degradó al no-op)."""
 	from red_pill.plugins.antigravity_ide.pulse import AntigravityPulseStrategy
 
-	worker, _, _ = worker_env
+	monkeypatch.setenv("AUTONOMOUS_AGY_ENABLED", "true")
+	cfg.get_config.cache_clear()
+	worker, _, _ = _build_worker_env(tmp_path, monkeypatch)
 	assert isinstance(worker._strategy, AntigravityPulseStrategy)
+
+
+def test_e2e_worker_without_antigravity_needs_uses_null_strategy(worker_env):
+	"""Config de producción (bridge opencode, AUTONOMOUS_AGY_ENABLED=False): la
+	fábrica del plugin declina y el pulse genérico corre con el no-op."""
+	from red_pill.core.pulse_strategy import NullPulseStrategy
+
+	worker, _, _ = worker_env
+	assert isinstance(worker._strategy, NullPulseStrategy)
 
 
 def test_e2e_message_flows_inbox_to_outbox(worker_env):

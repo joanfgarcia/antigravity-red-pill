@@ -85,9 +85,9 @@ graph TB
 
 ## 2. Each Organ and Its Multiple Functions
 
-### 2.1 The Worker (worker.py) — The Brain
+### 2.1 The Worker (agent_worker.py) — The Brain
 
-**Location**: [worker.py](../../src/red_pill/plugins/antigravity_ide/worker.py)
+**Location**: [agent_worker.py](../../src/red_pill/core/agent_worker.py) (generic, provider-agnostic) + the backend pulse strategy resolved by [pulse_strategy.py](../../src/red_pill/core/pulse_strategy.py) (Antigravity: [pulse.py](../../src/red_pill/plugins/antigravity_ide/pulse.py), owner of the `*_agy` rows)
 
 The worker is the **central nervous system**. A single process with a 2-second poll loop that orchestrates everything:
 
@@ -236,13 +236,13 @@ elif config_says_disabled AND service_is_running:
 
 ### 2.5 AWAKENINGs — The Circadian Clock
 
-**Location**: [autonomous_cron.py](../../src/red_pill/swarm/autonomous_cron.py) → [worker.py:_process_awakening()](../../src/red_pill/plugins/antigravity_ide/worker.py)
+**Location**: [autonomous_cron.py](../../src/red_pill/swarm/autonomous_cron.py) → [agent_worker.py:_process_awakening()](../../src/red_pill/core/agent_worker.py)
 
 | Layer | Function | Guard |
 |-------|----------|-------|
 | **Cron** | Injects AWAKENING every hour | idle ≥ 1h + queue empty |
 | **Idle check** | `is_ide_idle()` multi-signal | ignores `awakening`-origin opencode sessions |
-| **Worker** | Processes AWAKENING via Flash | Budget Guard: 8/day |
+| **Worker** | Processes AWAKENING via Flash | Budget Guard: 8 productive/day (silence does not count) |
 | **Identity** | Loads identity `mode=low` (~530 tokens) | Persona cache |
 | **Timeout** | Cuts execution after 600s | Timeout enforced |
 | **Tool cap** | Limits to 40 tool calls | Advisory (prompt) |
@@ -617,9 +617,9 @@ graph TB
 
 ## 2. Cada Órgano y Sus Múltiples Funciones
 
-### 2.1 El Worker (worker.py) — El Cerebro
+### 2.1 El Worker (agent_worker.py) — El Cerebro
 
-**Ubicación**: [worker.py](../../src/red_pill/plugins/antigravity_ide/worker.py)
+**Ubicación**: [agent_worker.py](../../src/red_pill/core/agent_worker.py) (genérico, agnóstico del proveedor) + la estrategia de pulse del backend que resuelve [pulse_strategy.py](../../src/red_pill/core/pulse_strategy.py) (Antigravity: [pulse.py](../../src/red_pill/plugins/antigravity_ide/pulse.py), dueña de las filas `*_agy`)
 
 El worker es el **sistema nervioso central**. Un solo proceso con un poll loop de 2 segundos que orquesta todo:
 
@@ -768,13 +768,13 @@ elif config_says_disabled AND service_is_running:
 
 ### 2.5 Los AWAKENINGs — El Reloj Circadiano
 
-**Ubicación**: [autonomous_cron.py](../../src/red_pill/swarm/autonomous_cron.py) → [worker.py:_process_awakening()](../../src/red_pill/plugins/antigravity_ide/worker.py)
+**Ubicación**: [autonomous_cron.py](../../src/red_pill/swarm/autonomous_cron.py) → [agent_worker.py:_process_awakening()](../../src/red_pill/core/agent_worker.py)
 
 | Capa | Función | Guard |
 |------|---------|-------|
 | **Cron** | Inyecta AWAKENING cada hora | idle ≥ 1h + cola vacía |
 | **Idle check** | `is_ide_idle()` multi-señal | ignora sesiones opencode de origen `awakening` |
-| **Worker** | Procesa AWAKENING vía Flash | Budget Guard: 8/día |
+| **Worker** | Procesa AWAKENING vía Flash | Budget Guard: 8 productivos/día (el silencio no cuenta) |
 | **Identity** | Carga identidad `mode=low` (~530 tokens) | Cache de persona |
 | **Timeout** | Corta ejecución tras 600s | Timeout enforced |
 | **Tool cap** | Limita a 40 tool calls | Advisory (prompt) |

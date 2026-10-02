@@ -17,33 +17,83 @@ def _is_test_context() -> bool:
 	return "pytest" in sys.modules
 
 
+def _production_dirs() -> list[Path]:
+	"""The operator's REAL red-pill/neon-link locations (default XDG layout under
+	the home dir, bypassing any XDG override): data, config and state."""
+	home = Path.home()
+	return [
+		home / ".local" / "share" / "red-pill",
+		home / ".local" / "share" / "neon-link",
+		home / ".config" / "red-pill",
+		home / ".config" / "neon-link",
+		home / ".local" / "state" / "red-pill",
+	]
+
+
+def _is_within(path: Path, root: Path) -> bool:
+	return path == root or root in path.parents
+
+
 def _assert_not_production_dir(path: Path, what: str) -> None:
-	"""Fail loudly if a test context resolves a storage path to the REAL
-	production data dir. This is the last line of defence: even a test run
-	outside the conftest (bare `python` on a test file) cannot silently write to
-	production.
+	"""Fail loudly if a test context resolves a storage path to a REAL production
+	dir (data, config or state). This is the last line of defence: even a test
+	run outside the conftest (bare `python` on a test file) cannot silently read
+	the operator's config or write to production.
 
 	Only fires when the test harness has NOT redirected storage: if the operator's
-	real XDG_DATA_HOME is still in effect under a test context, aborting is the
-	point. When conftest has redirected XDG_DATA_HOME to a tmp dir, `path` will
-	not be under the production dir and this is a no-op."""
+	real XDG dirs are still in effect under a test context, aborting is the
+	point. When conftest has redirected XDG_* to a tmp dir, `path` will not be
+	under a production dir and this is a no-op."""
 	if not _is_test_context():
 		return
-	# Compare against the REAL production dir (bypassing any XDG override), so
-	# this fires only when a test actually resolves to the operator's storage.
-	prod_data = Path.home() / ".local" / "share"
 	try:
 		resolved = path.resolve()
 	except Exception:
 		return
-	prod_red_pill = (prod_data / "red-pill").resolve()
-	prod_neon = (prod_data / "neon-link").resolve()
-	if resolved == prod_red_pill or prod_red_pill in resolved.parents or resolved == prod_neon or prod_neon in resolved.parents:
-		raise RuntimeError(
-			f"[TEST ISOLATION] {what} resolved to the PRODUCTION data dir ({resolved}). "
-			"A test is trying to write to the operator's real storage. "
-			"Set XDG_DATA_HOME/APP_ROOT to a tmp dir (conftest does this) or pass an explicit db_path."
-		)
+	for prod in _production_dirs():
+		if _is_within(resolved, prod.resolve()):
+			raise RuntimeError(
+				f"[TEST ISOLATION] {what} resolved to a PRODUCTION dir ({resolved}). "
+				"A test is reaching the operator's real storage/config. "
+				"Set XDG_DATA_HOME/XDG_CONFIG_HOME/XDG_STATE_HOME to a tmp dir (conftest does this) or pass an explicit path."
+			)
+
+
+def _assert_not_production_desk(path: Path, what: str) -> None:
+	"""The operator's desk (${AGENT_CORE_DIR}) can live anywhere, so it cannot be
+	compared against a fixed default: under a test context it must resolve to the
+	temp dir or outside the real home. A desk inside the home (the real one, or
+	the ghost sibling of the bunker root) means a test escaped the redirect."""
+	if not _is_test_context():
+		return
+	import tempfile
+
+	try:
+		resolved = path.resolve()
+		tmp = Path(tempfile.gettempdir()).resolve()
+		home = Path.home().resolve()
+	except Exception:
+		return
+	if _is_within(resolved, tmp) or not _is_within(resolved, home):
+		return
+	raise RuntimeError(
+		f"[TEST ISOLATION] {what} resolved to a desk inside the operator's home ({resolved}). Set AGENT_CORE_DIR to a tmp dir (conftest does this)."
+	)
+
+
+def _legacy_source_allowed(legacy_dir: Path) -> bool:
+	"""Import-time legacy migrations read the operator's old dirs (~/.config/red_pill
+	with the vault seed, ~/.agent). Under a test context they would copy secrets
+	into — or move state out to — the test's tmp dirs: only a legacy dir inside
+	the temp dir (a test's fake home) may be migrated."""
+	if not _is_test_context():
+		return True
+	import tempfile
+
+	try:
+		return _is_within(legacy_dir.resolve(), Path(tempfile.gettempdir()).resolve())
+	except Exception:
+		return False
 
 
 def get_bunker_root() -> Path:
@@ -88,6 +138,12 @@ def get_agent_core_root() -> Path:
 	.env: leer solo la env hacía que el Janitor cayera al hermano y creara un
 	desk fantasma (`~/Documents/IA/Agent_Core`).
 	"""
+	path = _resolve_agent_core_root()
+	_assert_not_production_desk(path, "get_agent_core_root()")
+	return path
+
+
+def _resolve_agent_core_root() -> Path:
 	agent_core_str = os.getenv("AGENT_CORE_DIR")
 	if agent_core_str:
 		return Path(os.path.expanduser(agent_core_str))
@@ -176,6 +232,7 @@ def get_log_dir() -> Path:
 		path = Path(platformdirs.user_state_dir("red-pill")) / "logs"
 	except AttributeError:
 		path = get_data_dir() / "state" / "logs"
+	_assert_not_production_dir(path, "get_log_dir()")
 	path.mkdir(parents=True, exist_ok=True)
 	return path
 
@@ -216,12 +273,16 @@ def get_backups_dir() -> Path:
 
 def get_config_dir() -> Path:
 	"""Resuelve el directorio de configuración XDG base para red-pill."""
-	return Path(platformdirs.user_config_dir("red-pill"))
+	path = Path(platformdirs.user_config_dir("red-pill"))
+	_assert_not_production_dir(path, "get_config_dir()")
+	return path
 
 
 def get_neon_link_config_dir() -> Path:
 	"""Resuelve el directorio de configuración XDG base para el plugin neon-link."""
-	return Path(platformdirs.user_config_dir("neon-link"))
+	path = Path(platformdirs.user_config_dir("neon-link"))
+	_assert_not_production_dir(path, "get_neon_link_config_dir()")
+	return path
 
 
 def get_neon_link_data_dir() -> Path:
@@ -248,6 +309,8 @@ def migrate_legacy_xdg_config() -> None:
 	logger = logging.getLogger(__name__)
 
 	legacy_dir = Path.home() / ".config" / "red_pill"
+	if not _legacy_source_allowed(legacy_dir):
+		return
 	target_dir = get_config_dir()
 
 	if legacy_dir.exists() and legacy_dir.is_dir():
@@ -457,7 +520,7 @@ def migrate_legacy_agent_dirs() -> None:
 	import shutil
 
 	legacy_agent = Path.home() / ".agent"
-	if not legacy_agent.exists() or not legacy_agent.is_dir():
+	if not _legacy_source_allowed(legacy_agent) or not legacy_agent.exists() or not legacy_agent.is_dir():
 		return
 
 	# Define migration map: (source, target)

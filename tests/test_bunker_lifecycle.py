@@ -84,12 +84,22 @@ def test_bunker_export_stub(capsys):
 
 
 def test_bunker_restore_stub(capsys):
-	"""Test that the restore stub outputs the correct plan safely."""
-	# Since it's a stub, it doesn't do anything yet, but we test the skeleton.
+	"""Restore of a kit exported in this same (isolated) bunker root.
+
+	It used to restore the newest kit of the operator's REAL bunker root, copying
+	that kit's .env files over the real ~/.config/{red-pill,neon-link}/.env: the
+	kit must come from the test's own export."""
+	bunker_export()
+	capsys.readouterr()
 	bunker_restore()
 	captured = capsys.readouterr()
 	assert "[BÜNKER RESTORE: SMART REHYDRATION]" in captured.out
 	assert "Decrypting .mls package" in captured.out
+
+
+def test_bunker_restore_without_kits_reports_missing_backups(capsys):
+	bunker_restore()
+	assert "No backups directory found" in capsys.readouterr().out
 
 
 def test_bunker_install(tmp_path, monkeypatch):

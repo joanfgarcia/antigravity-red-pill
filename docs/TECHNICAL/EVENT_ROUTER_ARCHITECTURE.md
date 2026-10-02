@@ -8,7 +8,7 @@ The system is decoupled. No external source speaks directly with Red-Pill, and R
 - **outbox:** Receives the results (Antigravity Cortex, Background Scripts).
 
 ## 2. The JSON Contract (Unified Event Bus Contract)
-For the Red-Pill `worker.py` daemon to process a message appearing in the `inbox` table, the source must format the `payload` column with the following JSON schema:
+For the Red-Pill worker (`core/agent_worker.py`) to process a message appearing in the `inbox` table, the source must format the `payload` column with the following JSON schema:
 
 ```json
 {
@@ -23,7 +23,7 @@ For the Red-Pill `worker.py` daemon to process a message appearing in the `inbox
 ```
 
 ### 2.1. The Critical Attribute: `mode`
-The Red-Pill engine (`worker.py`) performs strict demultiplexing based on the `mode` value:
+The Red-Pill engine (`core/agent_worker.py`) performs strict demultiplexing based on the `mode` value:
 
 - **`mode: "conversational"`**
   - **Usage:** The user is chatting (Telegram) or requiring a real-time response.

@@ -22,6 +22,7 @@ import pytest
 from red_pill.core.agent_worker import IDEWorker
 from red_pill.core.pulse_strategy import (
 	NullPulseStrategy,
+	PulseContext,
 	PulseStrategy,
 	build_pulse_strategy,
 	register_pulse_strategy,
@@ -79,30 +80,21 @@ def worker(tmp_path, monkeypatch):
 # ── pulse_strategy registry ─────────────────────────────────────────────────
 
 
-def test_build_pulse_strategy_returns_registered():
-	def factory(bridge):
-		return NullPulseStrategy()
-
-	register_pulse_strategy(factory)
-	# Debe devolver la primera que aplique (la registrada o una descubierta).
-	assert isinstance(build_pulse_strategy(None), PulseStrategy)
-
-
-def test_build_pulse_strategy_falls_back_to_null(monkeypatch):
-	import red_pill.core.pulse_strategy as ps
-
-	monkeypatch.setattr(ps, "_STRATEGY_FACTORIES", [])
-	monkeypatch.setattr(ps, "_discover_plugin_strategies", lambda: None)
-	assert isinstance(build_pulse_strategy(None), NullPulseStrategy)
+def test_build_pulse_strategy_returns_registered(isolated_pulse_registry):
+	"""Registro aislado (antes mutaba el registro global sin monkeypatch y
+	envenenaba el E2E que corría después: test dependiente del orden)."""
+	chosen = NullPulseStrategy()
+	register_pulse_strategy(lambda context: chosen)
+	assert build_pulse_strategy(PulseContext()) is chosen
 
 
-def test_factory_returning_none_is_skipped(monkeypatch):
-	import red_pill.core.pulse_strategy as ps
+def test_build_pulse_strategy_falls_back_to_null(isolated_pulse_registry):
+	assert isinstance(build_pulse_strategy(PulseContext()), NullPulseStrategy)
 
-	monkeypatch.setattr(ps, "_STRATEGY_FACTORIES", [])
-	register_pulse_strategy(lambda bridge: None)
-	monkeypatch.setattr(ps, "_discover_plugin_strategies", lambda: None)
-	assert isinstance(build_pulse_strategy(None), NullPulseStrategy)
+
+def test_factory_returning_none_is_skipped(isolated_pulse_registry):
+	register_pulse_strategy(lambda context: None)
+	assert isinstance(build_pulse_strategy(PulseContext()), NullPulseStrategy)
 
 
 # ── worker helpers ──────────────────────────────────────────────────────────
@@ -739,3 +731,128 @@ def test_process_inbox_background_message(worker, monkeypatch):
 	status = conn.execute("SELECT status FROM inbox WHERE message_id='bg1'").fetchone()[0]
 	conn.close()
 	assert status == "DELIVERED_BACKGROUND"
+
+
+# ── Puentes degradados (hallazgo BAJA: fallback agnóstico) ───────────────────
+
+
+def _cfg_ns(**overrides):
+	from types import SimpleNamespace
+
+	base = dict(
+		TELEGRAM_BRIDGE_CASCADE=[],
+		AWAKENING_BRIDGE_CASCADE=[],
+		DEFAULT_MINION_BRIDGE_CASCADE=[],
+		LOCAL_ALLOWED_FOR_HEAVY=False,
+		IDE_BACKEND="claude",
+		AUTONOMOUS_AGY_ENABLED=False,
+		HEARTBEAT_LEASE=900,
+	)
+	base.update(overrides)
+	return SimpleNamespace(**base)
+
+
+class _CapsBridge:
+	def __init__(self, backend):
+		self.backend = backend
+
+	def get_capabilities(self):
+		return BridgeCapabilities(backend=self.backend, auto_approve=True)
+
+
+@pytest.fixture
+def build_real_worker(monkeypatch):
+	"""Construye un IDEWorker REAL con config/puentes controlados, sin hilos ni red."""
+	import red_pill.config as cfg
+	import red_pill.core.agent_worker as aw
+
+	monkeypatch.setattr(IDEWorker, "_heartbeat_thread_main", lambda self: None)
+	monkeypatch.setattr("red_pill.inference.samantha_worker.SamanthaWorker", MagicMock(side_effect=RuntimeError("no samantha in tests")))
+	signals: list = []
+	monkeypatch.setattr(aw, "_emit_pain_signal_once", lambda name, **kw: signals.append((name, kw)))
+
+	def _build(cfg_ns, *, cascade_bridge=None, bridge_factory=None):
+		monkeypatch.setattr(cfg, "get_config", lambda: cfg_ns)
+		if cascade_bridge is not None:
+			monkeypatch.setattr(aw, "create_cascade_bridge", cascade_bridge)
+		if bridge_factory is not None:
+			monkeypatch.setattr("red_pill.swarm.bridges.factory.create_bridge", bridge_factory)
+		return IDEWorker(), signals
+
+	return _build
+
+
+def test_cascade_degradation_is_backend_agnostic():
+	from types import SimpleNamespace
+
+	from red_pill.core.agent_worker import _cascade_degradation
+
+	cascade = [SimpleNamespace(backend="opencode"), SimpleNamespace(backend="claude")]
+	assert _cascade_degradation([], None) is None
+	assert _cascade_degradation(cascade, BridgeCapabilities(backend=BackendType.CLAUDE)) is None
+	assert _cascade_degradation(cascade, BridgeCapabilities(backend=BackendType.GRPC))
+	assert _cascade_degradation(cascade, None)
+
+
+def test_degraded_cascade_reported_by_core(build_real_worker):
+	"""Cascada configurada cuyos targets no construyen (caps fuera de la cascada):
+	el core lo reporta (error + señal deduplicada) sin depender de ningún plugin."""
+	from types import SimpleNamespace
+
+	ns = _cfg_ns(TELEGRAM_BRIDGE_CASCADE=[SimpleNamespace(backend="opencode")])
+	worker, signals = build_real_worker(ns, cascade_bridge=lambda *a, **k: _CapsBridge(BackendType.GRPC))
+	assert [name for name, _ in signals] == ["worker_bridge_cascade_degraded"]
+	assert isinstance(worker._strategy, NullPulseStrategy), "la cascada degradada nunca resucita el polling legacy"
+
+
+def test_healthy_cascade_reports_nothing(build_real_worker):
+	from types import SimpleNamespace
+
+	ns = _cfg_ns(TELEGRAM_BRIDGE_CASCADE=[SimpleNamespace(backend="opencode")])
+	worker, signals = build_real_worker(ns, cascade_bridge=lambda *a, **k: _CapsBridge(BackendType.OPENCODE))
+	assert signals == []
+	assert worker._caps.backend == BackendType.OPENCODE
+
+
+def test_bridge_failure_falls_back_to_ide_backend(build_real_worker):
+	"""El fallback usa IDE_BACKEND (nunca un transporte fijo) y avisa."""
+	built: list = []
+
+	def _boom(*a, **k):
+		raise RuntimeError("cascade exploded")
+
+	def _factory(backend, **kw):
+		built.append(backend)
+		return _CapsBridge(BackendType.CLAUDE)
+
+	worker, signals = build_real_worker(_cfg_ns(IDE_BACKEND="claude"), cascade_bridge=_boom, bridge_factory=_factory)
+	assert built == ["claude", "claude", "claude"]
+	assert worker._caps.backend == BackendType.CLAUDE
+	assert [name for name, _ in signals] == ["worker_bridge_cascade_degraded"]
+
+
+def test_fallback_to_local_respects_d5_guard(build_real_worker):
+	"""IDE_BACKEND=local: el fallback NO sirve Telegram con un modelo local (D5)."""
+	built: list = []
+
+	def _boom(*a, **k):
+		raise RuntimeError("cascade exploded")
+
+	def _factory(backend, **kw):
+		built.append(backend)
+		return _CapsBridge(BackendType.LOCAL)
+
+	worker, _ = build_real_worker(_cfg_ns(IDE_BACKEND="local"), cascade_bridge=_boom, bridge_factory=_factory)
+	assert worker._bridge_telegram is None and worker._caps is None
+	assert built == ["local", "local"], "solo despertar y minion caen al backend local"
+
+
+def test_fallback_bridge_failure_does_not_kill_worker(build_real_worker):
+	def _boom(*a, **k):
+		raise RuntimeError("nothing builds")
+
+	worker, signals = build_real_worker(_cfg_ns(), cascade_bridge=_boom, bridge_factory=_boom)
+	assert worker._bridge_telegram is None and worker._bridge_awakening is None and worker._bridge_minion is None
+	assert worker._caps is None
+	assert isinstance(worker._strategy, NullPulseStrategy)
+	assert signals, "el worker degradado debe dejar señal"
