@@ -180,8 +180,9 @@ class AntigravityPulseStrategy:
 					clean_content = re.sub(r"<SOVEREIGN_LOG>.*?</SOVEREIGN_LOG>", "", content, flags=re.DOTALL).strip()
 
 					# Evitar enviar respuestas de Derecho al Silencio a Telegram
-					is_silence = "Ejercicio consciente del Derecho al Silencio" in clean_content
-					if row["channel"] != "system" and clean_content and not is_silence:
+					from red_pill.core.agent_worker import is_silence_response
+
+					if row["channel"] != "system" and clean_content and not is_silence_response(clean_content):
 						cursor.execute(
 							"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
 							(row["channel"], row["channel_user_id"], cascade_id, json.dumps({"text": clean_content})),

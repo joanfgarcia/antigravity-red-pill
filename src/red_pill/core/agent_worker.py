@@ -47,6 +47,17 @@ MAX_AWAKENINGS_PER_DAY = 8
 AWAKENING_MAX_TOOL_CALLS = 40
 # AWAKENING_TIMEOUT es configurable (A-5): cfg.get_config().AWAKENING_TIMEOUT
 
+# Derecho al Silencio (AWAKEN-002): la directiva del despertar pide responder
+# ÚNICAMENTE con la frase canónica ("Ejercicio consciente del Derecho al
+# Silencio. Estado del Búnker: calma.", ~71 caracteres).
+SILENCE_PHRASE = "Ejercicio consciente del Derecho al Silencio"
+# Techo de longitud de una respuesta de silencio. Los silencios reales miden ~71
+# caracteres; los despertares productivos son informes largos (y duran 130-407 s
+# frente a 42-74 s, pero la duración no hace falta: la longitud ya separa). 200
+# deja margen a variaciones menores del estado sin admitir un informe que cite
+# la frase o termine con ella.
+SILENCE_MAX_CHARS = 200
+
 # Zonas del desk que un despertar puede tocar. "planner" = ideas/research/design/
 # pending/in_progress; "awakening" = solo logs de despertar; "none" = nada.
 _PLANNER_ZONES = {
@@ -57,6 +68,17 @@ _PLANNER_ZONES = {
 	"in_progress": "planner/in_progress",
 	"awakening": "awakening",
 }
+
+
+def is_silence_response(text: str) -> bool:
+	"""True si la respuesta ejerce el Derecho al Silencio: EMPIEZA por la frase
+	canónica (tolerando comillas/énfasis markdown) y es corta. Un informe que la
+	cita, la entrecomilla a mitad o termina con ella NO es silencio: se entrega y
+	consume tope como cualquier despertar productivo."""
+	body = (text or "").strip()
+	if not body or len(body) >= SILENCE_MAX_CHARS:
+		return False
+	return body.lstrip("'\"`*_> ").casefold().startswith(SILENCE_PHRASE.casefold())
 
 
 def _awakening_planner_directive(policy: str) -> str:
@@ -1293,8 +1315,7 @@ class IDEWorker:
 			clean_content = "⚠️ El agente procesó tu mensaje pero no generó respuesta. Reintenta en unos segundos."
 
 		# Evitar enviar respuestas de Derecho al Silencio a Telegram
-		is_silence = "Ejercicio consciente del Derecho al Silencio" in clean_content
-		if channel != "system" and not is_silence:
+		if channel != "system" and not is_silence_response(clean_content):
 			cursor.execute(
 				"INSERT INTO outbox (channel, channel_user_id, cascade_id, payload) VALUES (?, ?, ?, ?)",
 				(channel, channel_user_id, None, json.dumps({"text": clean_content})),
@@ -1467,7 +1488,7 @@ class IDEWorker:
 		clean_content = re.sub(r"<SOVEREIGN_LOG>.*?</SOVEREIGN_LOG>", "", response, flags=re.DOTALL).strip()
 
 		# Derecho al Silencio: don't send to Telegram
-		is_silence = "Ejercicio consciente del Derecho al Silencio" in clean_content
+		is_silence = is_silence_response(clean_content)
 
 		# El silencio no consume el tope diario salvo política explícita. Los
 		# errores sí cuentan (consumieron recursos) — el INSERT ya dejó counted=1.
