@@ -200,7 +200,14 @@ class SamanthaWorker(threading.Thread):
 				self._drain_cycle()
 			except Exception as e:
 				logger.error(f"[SamanthaWorker] Cycle error: {e}")
-				time.sleep(5)  # Back-off before retrying
+				# Interruptible back-off: the original time.sleep(5) ignored
+				# stop() for the full 5s (e.g. transient DB errors like
+				# "unable to open database file" delayed teardown and flaked
+				# lifecycle tests). Sleep in slices so shutdown stays prompt
+				# while a pending wake() is never consumed here.
+				deadline = time.monotonic() + 5
+				while self._running and time.monotonic() < deadline:
+					time.sleep(0.1)
 
 		logger.info(f"[SamanthaWorker] Thread stopped. Stats: {self._stats}")
 
