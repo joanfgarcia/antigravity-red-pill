@@ -22,6 +22,8 @@ os.environ["APP_ROOT"] = tempfile.gettempdir()  # Redirect all storage to /tmp
 # - XDG_STATE_HOME: get_log_dir().
 # - AGENT_CORE_DIR: the operator's desk (awakening notes and logs).
 # - IA_DIR: the bunker root (bunker_export wrote kits into the live repo).
+# - XDG_RUNTIME_DIR: /run/user/<uid> (gpu_reservations.json of a live GPU job,
+#   bunker_state.json). It must EXIST: RUNTIME_DIR falls back past a missing one.
 _TEST_ISOLATION_DIR = tempfile.mkdtemp(prefix="redpill_test_iso_")
 
 
@@ -31,12 +33,19 @@ def _isolated_locations(base: str) -> dict:
 		"XDG_CACHE_HOME": os.path.join(base, "cache"),
 		"XDG_CONFIG_HOME": os.path.join(base, "config"),
 		"XDG_STATE_HOME": os.path.join(base, "state"),
+		"XDG_RUNTIME_DIR": os.path.join(base, "runtime"),
 		"AGENT_CORE_DIR": os.path.join(base, "desk"),
 		"IA_DIR": os.path.join(base, "ia", "sharing"),
 	}
 
 
-os.environ.update(_isolated_locations(_TEST_ISOLATION_DIR))
+def _make_runtime_dir(locations: dict) -> None:
+	os.makedirs(locations["XDG_RUNTIME_DIR"], mode=0o700, exist_ok=True)
+
+
+_SESSION_LOCATIONS = _isolated_locations(_TEST_ISOLATION_DIR)
+_make_runtime_dir(_SESSION_LOCATIONS)
+os.environ.update(_SESSION_LOCATIONS)
 # An operator shell that exported its .env must not aim the worker at the real events.db.
 os.environ.pop("NEON_LINK_DB_PATH", None)
 os.environ["REDPILL_TESTING"] = "1"
@@ -93,7 +102,9 @@ def bunker_isolation(monkeypatch):
 	test_dir = tempfile.mkdtemp(prefix="bunker_test_")
 	monkeypatch.setenv("APP_ROOT", test_dir)
 	monkeypatch.setenv("WORKSPACE_ROOT", test_dir)
-	for name, value in _isolated_locations(test_dir).items():
+	locations = _isolated_locations(test_dir)
+	_make_runtime_dir(locations)
+	for name, value in locations.items():
 		monkeypatch.setenv(name, value)
 	monkeypatch.delenv("NEON_LINK_DB_PATH", raising=False)
 	# Explicit isolation flag: paths.py aborts if a test resolves to the real

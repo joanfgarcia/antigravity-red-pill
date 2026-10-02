@@ -297,6 +297,8 @@ class TestConfigValidators:
 		assert cfg.RUNTIME_DIR == str(tmp_path)
 
 	def test_runtime_dir_posix_fallback(self, monkeypatch):
+		# Comportamiento de PRODUCCIÓN: bajo tests la guarda prohíbe caer en /run/user/<uid>.
+		monkeypatch.setattr("red_pill.core.paths._is_test_context", lambda: False)
 		monkeypatch.delenv("XDG_RUNTIME_DIR", raising=False)
 		uid_dir = "/run/user/999"
 		with patch("red_pill.config.os.path.exists", side_effect=lambda p: p == uid_dir):
@@ -304,6 +306,17 @@ class TestConfigValidators:
 				with patch("red_pill.config.os.name", "posix"):
 					cfg = RedPillConfig()
 					assert cfg.RUNTIME_DIR == uid_dir
+
+	def test_runtime_dir_posix_fallback_rejected_under_tests(self, monkeypatch):
+		"""Sin XDG_RUNTIME_DIR, un test caía al runtime REAL (reservas de GPU, bunker_state)."""
+		from red_pill.core.paths import _operator_runtime_dir
+
+		monkeypatch.delenv("XDG_RUNTIME_DIR", raising=False)
+		real = str(_operator_runtime_dir())
+		with patch("red_pill.config.os.path.exists", side_effect=lambda p: p == real):
+			with patch("red_pill.config.os.name", "posix"):
+				with pytest.raises(RuntimeError, match="TEST ISOLATION"):
+					_ = RedPillConfig().RUNTIME_DIR
 
 	def test_runtime_dir_tempdir_fallback(self, monkeypatch, tmp_path):
 		monkeypatch.delenv("XDG_RUNTIME_DIR", raising=False)

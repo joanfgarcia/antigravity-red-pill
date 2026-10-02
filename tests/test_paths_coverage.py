@@ -202,10 +202,19 @@ class TestResolveLlamaBinary:
 
 
 class TestGetDaemonDir:
-	def test_creates_directory(self):
+	def test_creates_directory(self, tmp_path, monkeypatch):
+		# Explícito: no depender de que el entorno que lanza la suite traiga XDG_RUNTIME_DIR
+		monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "run"))
 		result = paths.get_daemon_dir()
 		assert result.exists()
-		assert result.name == "red-pill"
+		assert result == tmp_path / "run" / "red-pill"
+
+	def test_without_runtime_dir_uses_cache(self, tmp_path, monkeypatch):
+		monkeypatch.delenv("XDG_RUNTIME_DIR", raising=False)
+		monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+		result = paths.get_daemon_dir()
+		assert result.exists()
+		assert result == tmp_path / "cache" / "red-pill" / "daemons"
 
 
 class TestGetDaemonPersistentDir:

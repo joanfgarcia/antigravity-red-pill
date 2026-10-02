@@ -81,6 +81,32 @@ def _assert_not_production_desk(path: Path, what: str) -> None:
 	)
 
 
+def _operator_runtime_dir() -> Path:
+	"""The operator's REAL runtime dir (/run/user/<uid>), deliberately computed
+	without looking at XDG_RUNTIME_DIR: daemon sockets, the GPU reservations of a
+	live job and bunker_state.json live there."""
+	return Path("/run/user") / str(os.getuid())
+
+
+def _assert_not_production_runtime(path: Path, what: str) -> None:
+	"""Fail loudly if a test context resolves a RUNTIME path inside the operator's
+	real /run/user/<uid>. conftest redirects XDG_RUNTIME_DIR to a tmp dir; a test
+	that drops it (or points it at a dir that does not exist) used to fall back
+	silently to the real runtime dir and wipe gpu_reservations.json or overwrite
+	bunker_state.json."""
+	if not _is_test_context() or os.name != "posix":
+		return
+	try:
+		resolved = path.resolve()
+		real = _operator_runtime_dir().resolve()
+	except Exception:
+		return
+	if _is_within(resolved, real):
+		raise RuntimeError(
+			f"[TEST ISOLATION] {what} resolved to the operator's REAL runtime dir ({resolved}). Set XDG_RUNTIME_DIR to an existing tmp dir (conftest does this)."
+		)
+
+
 def _legacy_source_allowed(legacy_dir: Path) -> bool:
 	"""Import-time legacy migrations read the operator's old dirs (~/.config/red_pill
 	with the vault seed, ~/.agent). Under a test context they would copy secrets
@@ -374,6 +400,7 @@ def get_daemon_dir() -> Path:
 		path = Path(runtime_dir) / "red-pill"
 	else:
 		path = Path(platformdirs.user_cache_dir("red-pill")) / "daemons"
+	_assert_not_production_runtime(path, "get_daemon_dir()")
 	path.mkdir(parents=True, exist_ok=True)
 	return path
 
