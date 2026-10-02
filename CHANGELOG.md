@@ -345,7 +345,7 @@ hubs de sesión (macro) + hilo de Ariadna de dos niveles + `cross_refs` (axones)
   contrario. `prompt_version` de refine: `85209a6c9e`.
 - **[FIX] Auditor de recalibración**: `audit-category` juzga solo work/social (el
   label `personal-history` contaba desacuerdos fantasma) y `audit-significance`
-  deja de equiparar "no operativo" con trivial (marcaba infancia/Carmen/salud como
+  deja de equiparar "no operativo" con trivial (marcaba recuerdos personales como
   trivial: 30% → **5%** en la banda 0.55-0.65, misma muestra).
 - **[REF] `memento/agentic/` (paquete)**: el monolito `agentic.py` (1.033 líneas) se
   parte en `prompts` / `runtime` / `fragments` / `distill` / `refine` / `runner` +
