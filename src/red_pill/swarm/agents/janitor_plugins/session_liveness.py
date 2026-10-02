@@ -27,7 +27,7 @@ class SessionLivenessPlugin(JanitorPlugin):
 		plugin_cfg = config_dict.get("plugins", {}).get(self.name, {})
 		ttl_h = int(plugin_cfg.get("ttl_h", getattr(cfg.get_config(), "SESSION_LIVENESS_TTL_H", 48)))
 
-		live = get_sessions_live_dir()
+		live = get_sessions_live_dir(create=False)
 		if not live.is_dir():
 			return {"session_liveness_purged": 0}
 
