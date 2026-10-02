@@ -322,16 +322,55 @@ def list_tracked_workspaces() -> List[Workspace]:
 	return [w for w in load_registry().workspaces if w.track]
 
 
-def owning_workspace(path: Optional[Union[str, Path]]) -> Optional[str]:
-	"""Nombre del workspace registrado que contiene `path` (archivo o carpeta).
+def _git_worktree_main_root(path: Path) -> Optional[tuple]:
+	"""(worktree_root, main_repo_root) si `path` vive en un `git worktree` enlazado.
 
-	Devuelve el más específico (root más largo que sea ancestro de `path`).
-	Un archivo resuelve contra su carpeta padre. None si no resuelve o está
-	fuera de todo workspace. Es la fuente única de verdad para "¿de qué
-	proyecto es este path?" (RFC-DESPERTAR-001 §8.2).
+	Un worktree enlazado tiene un FICHERO `.git` con `gitdir: <main>/.git/worktrees/<n>`;
+	el repo principal es el padre de ese `.git`. None si no es un worktree enlazado.
 	"""
-	if path is None:
-		return None
+	for candidate in (path, *path.parents):
+		marker = candidate / ".git"
+		try:
+			if marker.is_dir():
+				return None
+			if not marker.is_file():
+				continue
+			line = marker.read_text(encoding="utf-8").strip()
+		except OSError:
+			return None
+		if not line.startswith("gitdir:"):
+			return None
+		gitdir = Path(line.split(":", 1)[1].strip())
+		if not gitdir.is_absolute():
+			gitdir = (candidate / gitdir).resolve()
+		if gitdir.parent.name != "worktrees" or gitdir.parent.parent.name != ".git":
+			return None
+		return candidate, gitdir.parent.parent.parent
+	return None
+
+
+def _resolved_roots() -> List[tuple]:
+	"""(root resuelto, nombre) de cada workspace registrado; una sola carga del registro."""
+	roots: List[tuple] = []
+	for ws in list_workspaces():
+		try:
+			roots.append((ws.root.resolve(), ws.name))
+		except Exception:
+			continue
+	return roots
+
+
+def _owner_in(roots: List[tuple], target: Path) -> Optional[str]:
+	"""El workspace más específico (root más largo) que contiene `target`."""
+	best: Optional[str] = None
+	best_len = -1
+	for root, name in roots:
+		if (target == root or root in target.parents) and len(str(root)) > best_len:
+			best, best_len = name, len(str(root))
+	return best
+
+
+def _owner_of(roots: List[tuple], path: Union[str, Path]) -> Optional[str]:
 	try:
 		target = _expand(path).resolve()
 	except Exception:
@@ -341,19 +380,33 @@ def owning_workspace(path: Optional[Union[str, Path]]) -> Optional[str]:
 			target = target.parent
 	except OSError:
 		pass
-	best: Optional[str] = None
-	best_len = -1
+	owner = _owner_in(roots, target)
+	if owner is None:
+		# El trabajo autónomo vive en worktrees fuera de toda raíz registrada:
+		# se atribuye al repo principal del que cuelgan.
+		linked = _git_worktree_main_root(target)
+		if linked:
+			worktree_root, main_root = linked
+			owner = _owner_in(roots, (main_root / target.relative_to(worktree_root)).resolve())
+	return owner
+
+
+def owning_workspace(path: Optional[Union[str, Path]]) -> Optional[str]:
+	"""Nombre del workspace registrado que contiene `path` (archivo o carpeta).
+
+	Devuelve el más específico (root más largo que sea ancestro de `path`).
+	Un archivo resuelve contra su carpeta padre; un `git worktree` enlazado,
+	contra su repo principal. None si no resuelve o está fuera de todo
+	workspace. Es la fuente única de verdad para "¿de qué proyecto es este
+	path?" (RFC-DESPERTAR-001 §8.2).
+	"""
+	if path is None:
+		return None
 	try:
-		for ws in list_workspaces():
-			try:
-				root = ws.root.resolve()
-			except Exception:
-				continue
-			if (target == root or root in target.parents) and len(str(root)) > best_len:
-				best, best_len = ws.name, len(str(root))
+		roots = _resolved_roots()
 	except Exception:
 		return None
-	return best
+	return _owner_of(roots, path)
 
 
 def infer_workspaces(paths: Iterable[Optional[Union[str, Path]]]) -> List[str]:
@@ -361,15 +414,20 @@ def infer_workspaces(paths: Iterable[Optional[Union[str, Path]]]) -> List[str]:
 
 	Resuelve el workspace dueño de cada path y acumula sin duplicados; los que
 	no resuelven (None, vacío, fuera de todo workspace) se descartan. Determinista.
-	Materializa el P1b de RFC-DESPERTAR-001 §8.2: el cwd no discrimina, el
-	**proyecto se infiere por los ficheros tocados** en los últimos turnos.
+	El registro se carga una sola vez por llamada (antes, una vez POR RUTA: ~1 s
+	en sesiones de ~900 rutas). Materializa el P1b de RFC-DESPERTAR-001 §8.2: el cwd no
+	discrimina, el **proyecto se infiere por los ficheros tocados**.
 	"""
+	try:
+		roots = _resolved_roots()
+	except Exception:
+		return []
 	out: List[str] = []
 	seen: set = set()
 	for p in paths:
-		if p is None:
+		if not p:
 			continue
-		name = owning_workspace(p)
+		name = _owner_of(roots, p)
 		if name and name not in seen:
 			seen.add(name)
 			out.append(name)

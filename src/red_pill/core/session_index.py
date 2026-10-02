@@ -15,6 +15,7 @@ import json
 import logging
 import os
 import re
+import shlex
 import sqlite3
 import time
 from pathlib import Path
@@ -63,18 +64,42 @@ def _opencode_meta(session_id: str) -> Dict[str, Any]:
 # samples de opencode.db: read/write/edit → filePath, glob/grep → path, bash → workdir).
 _PATH_KEYS = ("filePath", "file_path", "path", "workdir")
 
-# Rutas absolutas embebidas en comandos bash. Heurística deliberadamente ancha:
-# el ruido (URLs, /usr/bin, heredocs) no mapea a ningún workspace y `infer_workspaces`
-# lo descarta. Lo que importa es no perder la ruta real tocada.
-_ABS_PATH_RE = re.compile(r"/[A-Za-z0-9._~@/-]+")
+# Rutas embebidas en comandos bash (absolutas o `~/`). Heurística deliberadamente
+# ancha: el ruido (URLs, /usr/bin, heredocs) no mapea a ningún workspace y
+# `infer_workspaces` lo descarta. Lo que importa es no perder la ruta real tocada.
+_ABS_PATH_RE = re.compile(r"~?/[A-Za-z0-9._~@/-]+")
+# Operadores shell pegados a una ruta sin espacios (`cd /x&&ls`, `/x;rm`).
+_SHELL_META_RE = re.compile(r"[&;|<>()`$]")
+
+# El proyecto se infiere de las últimas N rutas tocadas ("en los últimos turnos").
+_RECENT_PATHS = 200
 
 
-def _touched_paths(session_id: str) -> List[str]:
+def _command_paths(cmd: str) -> List[str]:
+	"""Rutas de un comando bash: tokens shell completos (respeta comillas y
+	espacios) que empiezan por `/` o `~/`, y rutas embebidas en el resto
+	(`--file=/x`, `cd /x&&ls`)."""
+	try:
+		tokens = shlex.split(cmd)
+	except ValueError:
+		tokens = cmd.split()
+	out: List[str] = []
+	for tok in tokens:
+		if tok.startswith(("/", "~/")) and not _SHELL_META_RE.search(tok):
+			out.append(tok)
+		else:
+			out.extend(_ABS_PATH_RE.findall(tok))
+	return out
+
+
+def _touched_paths(session_id: str, base_dir: Optional[str] = None) -> List[str]:
 	"""Rutas tocadas por la sesión, extraídas de los tool parts de opencode.db.
 
 	Lee las keys estructuradas de los inputs (`filePath`/`path`/`workdir`) y, para
-	`bash`, las rutas absolutas del comando. Orden de primera aparición, sin
-	duplicados. Determinista y non-fatal: cualquier fallo devuelve [] y el proyecto
+	`bash`, las rutas del comando. Las relativas se resuelven contra `base_dir`
+	(el directorio de la sesión), nunca contra el cwd de este proceso; sin él se
+	descartan. Sin duplicados y ordenadas por su ÚLTIMA aparición (la más reciente
+	al final). Determinista y non-fatal: cualquier fallo devuelve [] y el proyecto
 	cae al fallback del cwd (RFC-DESPERTAR-001 §8.2).
 	"""
 	db = _opencode_db_path()
@@ -93,13 +118,17 @@ def _touched_paths(session_id: str) -> List[str]:
 		logger.debug(f"[SessionIndex] touched_paths failed for {session_id}: {e}")
 		return []
 
-	out: List[str] = []
-	seen: set = set()
+	ordered: Dict[str, None] = {}
 
 	def _add(p: str) -> None:
-		if p and p not in seen:
-			seen.add(p)
-			out.append(p)
+		if not p:
+			return
+		if not p.startswith(("/", "~")):
+			if not base_dir:
+				return
+			p = os.path.normpath(os.path.join(base_dir, p))
+		ordered.pop(p, None)
+		ordered[p] = None
 
 	for (raw,) in rows:
 		try:
@@ -117,16 +146,22 @@ def _touched_paths(session_id: str) -> List[str]:
 				_add(v)
 		cmd = inp.get("command")
 		if isinstance(cmd, str):
-			for m in _ABS_PATH_RE.findall(cmd):
+			for m in _command_paths(cmd):
 				_add(m)
-	return out
+	return list(ordered)
+
+
+# Tope de puntos leídos por sesión al buscar el último tema (paginando).
+_THEME_SCAN_MAX = 2000
 
 
 def _query_latest_theme(session_id: str, client: Any = None) -> Optional[str]:
 	"""Último `tag_theme` Laya de la sesión (interaction_memories), por timestamp.
 
 	El tema rodante es "último turno gana": se toma el engrama etiquetado más
-	reciente (`tagged_at`/`timestamp`). None si no hay tags para la sesión.
+	reciente (`tagged_at`/`timestamp`). El scroll de Qdrant no ordena por payload
+	(ids uuid4), así que se pagina la sesión entera (hasta `_THEME_SCAN_MAX`) en
+	vez de mirar 50 puntos arbitrarios. None si no hay tags para la sesión.
 	"""
 	try:
 		if client is None:
@@ -135,18 +170,26 @@ def _query_latest_theme(session_id: str, client: Any = None) -> Optional[str]:
 			client = MemoryManager().client
 		from qdrant_client.http import models as _qm
 
-		pts, _ = client.scroll(
-			"interaction_memories",
-			scroll_filter=_qm.Filter(
-				must=[
-					_qm.FieldCondition(key="metadata.session_id", match=_qm.MatchValue(value=session_id)),
-					_qm.FieldCondition(key="tag_status", match=_qm.MatchValue(value="ok")),
-				]
-			),
-			limit=50,
-			with_payload=True,
-			with_vectors=False,
+		flt = _qm.Filter(
+			must=[
+				_qm.FieldCondition(key="metadata.session_id", match=_qm.MatchValue(value=session_id)),
+				_qm.FieldCondition(key="tag_status", match=_qm.MatchValue(value="ok")),
+			]
 		)
+		pts: List[Any] = []
+		offset = None
+		while len(pts) < _THEME_SCAN_MAX:
+			page, offset = client.scroll(
+				"interaction_memories",
+				scroll_filter=flt,
+				limit=256,
+				offset=offset,
+				with_payload=True,
+				with_vectors=False,
+			)
+			pts.extend(page)
+			if offset is None:
+				break
 	except Exception as e:
 		logger.debug(f"[SessionIndex] theme query failed for {session_id}: {e}")
 		return None
@@ -200,21 +243,44 @@ def _origin_for(provider: str, session_id: str) -> Optional[str]:
 		return None
 
 
+def _theme_client() -> Any:
+	"""Un único cliente Qdrant por tablón (None si el etiquetado está apagado o no hay Qdrant)."""
+	try:
+		from red_pill.core.realtime_tag import enabled as _rt_enabled
+
+		if not _rt_enabled():
+			return None
+		from red_pill.memory import MemoryManager
+
+		return MemoryManager().client
+	except Exception as e:
+		logger.debug(f"[SessionIndex] theme client unavailable: {e}")
+		return None
+
+
 def build_board(active_seconds: Optional[int] = None) -> List[Dict[str, Any]]:
-	"""Lista enriquecida de sesiones (más reciente primero)."""
+	"""Lista enriquecida de sesiones (más reciente primero).
+
+	`projects` va del más reciente al más antiguo según las últimas
+	`_RECENT_PATHS` rutas tocadas; `project` es el más reciente.
+	"""
 	if active_seconds is None:
 		active_seconds = _active_seconds()
 	board: List[Dict[str, Any]] = []
+	client = None
+	client_ready = False
 	for s in list_sessions():
 		is_opencode = s.provider == "opencode"
 		extra = _opencode_meta(s.session_id) if is_opencode else {}
-		touched = _touched_paths(s.session_id) if is_opencode else []
-		projects = infer_workspaces(touched)
 		directory = extra.get("directory")
+		touched = _touched_paths(s.session_id, base_dir=directory) if is_opencode else []
+		projects = infer_workspaces(list(reversed(touched[-_RECENT_PATHS:])))
 		if not projects and directory:
 			owner = _owning_workspace(directory)
 			if owner:
 				projects = [owner]
+		if not client_ready:
+			client, client_ready = _theme_client(), True
 		board.append(
 			{
 				"provider": s.provider,
@@ -226,7 +292,7 @@ def build_board(active_seconds: Optional[int] = None) -> List[Dict[str, Any]]:
 				"directory": directory,
 				"project": projects[0] if projects else None,
 				"projects": projects,
-				"topic": _rolling_topic(s.session_id),
+				"topic": _rolling_topic(s.session_id, client=client) if client is not None else None,
 				"title": extra.get("title"),
 				"model": extra.get("model"),
 				"touched_files": len(touched),
