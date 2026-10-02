@@ -2,8 +2,29 @@
 
 import asyncio
 
+import pytest
+
 import red_pill.core.providers as providers_mod
 from red_pill.swarm.agents import local_minion
+
+_REAL_CONDUCT = local_minion._minion_conduct
+_DEFAULT_CONDUCT = {
+	"profile": "",
+	"temperature": local_minion.DEFAULT_TEMPERATURE,
+	"max_tokens": local_minion.DEFAULT_MAX_TOKENS,
+	"tool_format": "auto",
+	"chat_format": "chatml-function-calling",
+}
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_conduct(monkeypatch):
+	"""The loop never reads the operator's task/model profiles in these tests."""
+	monkeypatch.setattr(local_minion, "_minion_conduct", lambda model="": dict(_DEFAULT_CONDUCT))
+
+
+def _use_conduct(monkeypatch, **overrides):
+	monkeypatch.setattr(local_minion, "_minion_conduct", lambda model="": {**_DEFAULT_CONDUCT, **overrides})
 
 
 class FakeProvider:
@@ -294,3 +315,89 @@ async def test_used_tools_no_cuenta_llamadas_fallidas(monkeypatch):
 	assert res["ok"] is True
 	assert res["tool_calls"] == 1
 	assert res["used_tools"] is False
+
+
+_TASK = {
+	"thinking": "off",
+	"max_tokens": 2048,
+	"models": [{"profile": "granite_8b", "default": True}, {"profile": "granite_4_2_8b"}, {"profile": "granite_4_2_3b", "max_tokens": 3000}],
+}
+_PROFILES = {
+	"granite_8b": {"temperature": 0.3, "max_tokens": 4096, "minion_chat_format": "chatml-function-calling", "tool_format": "qwen"},
+	"granite_4_2_8b": {"temperature": 1.0, "max_tokens": 8192, "thinking": "on", "minion_chat_format": None, "tool_format": "qwen"},
+	"granite_4_2_3b": {"temperature": 1.0, "max_tokens": 8192, "thinking": "on", "tool_format": "qwen"},
+}
+
+
+def _fake_profiles(monkeypatch, task=_TASK, profiles=_PROFILES):
+	import red_pill.core.model_runtime as mr
+	from red_pill.core.model_registry import ModelRegistry
+
+	if isinstance(task, Exception):
+		def _raise(task_id):
+			raise task
+
+		monkeypatch.setattr(mr, "task_conduct", _raise)
+	else:
+		monkeypatch.setattr(mr, "task_conduct", lambda task_id: dict(task))
+	monkeypatch.setattr(ModelRegistry, "reload", classmethod(lambda cls: None))
+	monkeypatch.setattr(ModelRegistry, "get_profile", classmethod(lambda cls, name: dict(profiles.get(name, {}))))
+
+
+def test_conduct_merge_candidato_task_perfil(monkeypatch):
+	_fake_profiles(monkeypatch)
+	c = _REAL_CONDUCT()
+	# default = primer candidato: temperatura del perfil, max_tokens de la task
+	assert (c["profile"], c["temperature"], c["max_tokens"]) == ("granite_8b", 0.3, 2048)
+	assert c["tool_format"] == "qwen" and c["chat_format"] == "chatml-function-calling"
+	# model explícito (K1): ese candidato; receta IBM del 4.2 desde su perfil
+	c = _REAL_CONDUCT("granite_4_2_8b")
+	assert (c["temperature"], c["max_tokens"]) == (1.0, 2048)
+	assert c["chat_format"] == "granite-nothink"  # template nativo, thinking off de la task
+	# el candidato gana a la task
+	assert _REAL_CONDUCT("granite_4_2_3b")["max_tokens"] == 3000
+
+
+def test_conduct_sin_task_usa_defaults(monkeypatch):
+	from red_pill.core.model_runtime import ModelRuntimeConfigError
+
+	_fake_profiles(monkeypatch, task=ModelRuntimeConfigError("task 'minion_tool' no existe"))
+	c = _REAL_CONDUCT()
+	assert (c["temperature"], c["max_tokens"], c["tool_format"]) == (0.3, 1024, "auto")
+	# sin max_tokens en task ni perfil → fallback 1024
+	_fake_profiles(monkeypatch, task={"models": [{"profile": "p"}]}, profiles={"p": {}})
+	assert _REAL_CONDUCT()["max_tokens"] == 1024
+
+
+async def test_la_conducta_viaja_en_cada_peticion(monkeypatch):
+	# Regresión: el minion mandaba siempre temperature=0.3 / max_tokens=1024.
+	_use_conduct(monkeypatch, temperature=1.0, max_tokens=2048)
+	provider = FakeProvider(
+		[
+			_tool_call("run_bash", '{"command": "true"}'),
+			{"role": "assistant", "content": ""},
+			{"role": "assistant", "content": "ok"},
+		]
+	)
+	_use_provider(monkeypatch, provider)
+	_fake_shell(monkeypatch, FakeProc(rc=0, out=b""))
+	await local_minion.run_local_minion("x")
+	assert all(c["temperature"] == 1.0 and c["max_tokens"] == 2048 for c in provider.calls)
+
+
+async def test_tool_format_del_perfil_se_respeta(monkeypatch):
+	# Regresión: el parser corría siempre en "auto". Con tool_format=openai un
+	# JSON de función en texto ES una llamada (en "auto" sin markup no se parsea).
+	_use_conduct(monkeypatch, tool_format="openai")
+	text_call = '{"type": "function", "function": {"name": "run_bash", "arguments": "{\\"command\\": \\"ls\\"}"}}'
+	provider = FakeProvider([{"role": "assistant", "content": text_call}, {"role": "assistant", "content": "listo"}])
+	_use_provider(monkeypatch, provider)
+	ran = []
+
+	async def fake(cmd, **kwargs):
+		ran.append(cmd)
+		return FakeProc(rc=0, out=b"a\n")
+
+	monkeypatch.setattr(asyncio, "create_subprocess_shell", fake)
+	res = await local_minion.run_local_minion("lista")
+	assert ran == ["ls"] and res["answer"] == "listo"

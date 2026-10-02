@@ -23,6 +23,13 @@ MAX_CONSECUTIVE_ERRORS = 3  # give up if the model keeps producing failing tool 
 BASH_TIMEOUT = 60  # seconds per command
 _RESULT_CLAMP = 4000  # chars of tool output fed back to the model
 
+# Conduct (temperature / max_tokens / tool_format) comes from task_profiles ×
+# model_profiles for the task SipInferenceProvider.chat sends; these are the
+# fallbacks when neither resolves.
+MINION_TASK = "minion_tool"
+DEFAULT_TEMPERATURE = 0.3
+DEFAULT_MAX_TOKENS = 1024
+
 TOOLS: List[Dict[str, Any]] = [
 	{
 		"type": "function",
@@ -162,7 +169,61 @@ def _parse_native_toolcalls(text: str, tool_format: str = "auto", turn: int = 0)
 	return calls, max(0, opened - len(calls))
 
 
-def _finalize(provider, task: str, tool_results: List[str]) -> str:
+def _minion_conduct(model: str = "") -> Dict[str, Any]:
+	"""Conduct of the minion request: candidate > task `minion_tool` > model profile.
+
+	Same merge by specificity as the daemon (`model_runtime._resolve_task`), but
+	in-process and without probing hardware. The daemon does NOT apply the
+	profile's temperature/max_tokens (clients derive conduct, RFC-HARNESS-002 §8):
+	without this the minion always sent 0.3/1024 (IBM's Granite 4.2 recipe needs
+	1.0, and the 4.2-3B spends ~1200 tokens reasoning before the tool call).
+	Also returns the profile `tool_format` (text tool-call parser) and the
+	chat_format the daemon will serve tools with. `model` = the provider's
+	explicit model (K1: the daemon serves THAT candidate). Nothing resolvable →
+	the defaults.
+	"""
+	from red_pill.inference.runtime import TOOL_CHAT_FALLBACK, tool_chat_format
+
+	conduct: Dict[str, Any] = {
+		"profile": "",
+		"temperature": DEFAULT_TEMPERATURE,
+		"max_tokens": DEFAULT_MAX_TOKENS,
+		"tool_format": "auto",
+		"chat_format": TOOL_CHAT_FALLBACK,
+	}
+	try:
+		from red_pill.core import model_runtime as mr
+		from red_pill.core.model_registry import ModelRegistry
+
+		task = mr.task_conduct(MINION_TASK)
+		ModelRegistry.reload()
+		candidates = [c for c in task.get("models") or [] if isinstance(c, dict)]
+		if model:
+			chosen = next((c for c in candidates if c.get("profile") == model), {"profile": model})
+		else:
+			# K4: first candidate whose profile exists, as the daemon picks it.
+			chosen = next((c for c in candidates if c.get("profile") and ModelRegistry.get_profile(c["profile"])), {})
+		name = chosen.get("profile") or ""
+		profile = ModelRegistry.get_profile(name) if name else {}
+
+		def pick(key: str) -> Any:
+			return chosen.get(key) or task.get(key) or profile.get(key)
+
+		supported = mr._normalize_thinking(profile.get("thinking", "off")) != "off"
+		thinking = mr._normalize_thinking(chosen.get("thinking") or task.get("thinking") or profile.get("thinking"))
+		conduct.update(
+			profile=name,
+			temperature=float(pick("temperature") or DEFAULT_TEMPERATURE),
+			max_tokens=int(pick("max_tokens") or DEFAULT_MAX_TOKENS),
+			tool_format=mr._normalize_tool_format(profile.get("tool_format")),
+			chat_format=tool_chat_format(profile.get("minion_chat_format"), supported, thinking if supported else "off"),
+		)
+	except Exception as e:  # noqa: BLE001 — conduct is best effort; the daemon still validates the request
+		logger.warning("[local-minion] conduct for task '%s' not resolved (%s); using defaults", MINION_TASK, e)
+	return conduct
+
+
+def _finalize(provider, task: str, tool_results: List[str], conduct: Dict[str, Any]) -> str:
 	"""Extract a plain-text final answer from the collected tool results.
 
 	The chatml-function-calling handler sometimes returns empty content once it is
@@ -177,7 +238,8 @@ def _finalize(provider, task: str, tool_results: List[str]) -> str:
 		)},
 		{"role": "user", "content": f"Task: {task}\n\nTool output:\n{tool_notes or '(none)'}\n\nAnswer:"},
 	]
-	final = provider.chat(msgs)  # no tools -> plain chatml formatter
+	# no tools -> the profile's plain chat formatter
+	final = provider.chat(msgs, temperature=conduct["temperature"], max_tokens=conduct["max_tokens"])
 	return (final.get("content") or "").strip()
 
 
@@ -237,6 +299,8 @@ async def run_local_minion(task: str, *, cwd: Optional[str] = None, provider_nam
 	from red_pill.core.providers import ProviderRegistry
 
 	provider = ProviderRegistry.get_inference_provider(provider_name)
+	model = getattr(provider, "model", "")
+	conduct = _minion_conduct(model if isinstance(model, str) else "")
 	loop = asyncio.get_event_loop()
 
 	messages: List[Dict[str, Any]] = [
@@ -259,12 +323,21 @@ async def run_local_minion(task: str, *, cwd: Optional[str] = None, provider_nam
 		}
 
 	for step in range(MAX_TOOL_ITERS):
-		msg = await loop.run_in_executor(None, lambda: provider.chat(messages, tools=TOOLS, tool_choice="auto"))
+		msg = await loop.run_in_executor(
+			None,
+			lambda: provider.chat(
+				messages,
+				tools=TOOLS,
+				tool_choice="auto",
+				temperature=conduct["temperature"],
+				max_tokens=conduct["max_tokens"],
+			),
+		)
 		tool_calls = msg.get("tool_calls") or []
 		malformed = 0
 		if not tool_calls:
 			# Native-text tool calls (e.g. Granite 4.2 template) → structured, ALL of them.
-			native, malformed = _parse_native_toolcalls(msg.get("content") or "", turn=step)
+			native, malformed = _parse_native_toolcalls(msg.get("content") or "", conduct["tool_format"], turn=step)
 			if native:
 				msg = {**msg, "tool_calls": native, "content": None}
 				tool_calls = native
@@ -278,7 +351,7 @@ async def run_local_minion(task: str, *, cwd: Optional[str] = None, provider_nam
 				answer = extract_thinking(answer)[1]
 			if not answer:
 				# Handler returned empty when done; recover the answer in plain chatml.
-				answer = await loop.run_in_executor(None, lambda: _finalize(provider, task, tool_results))
+				answer = await loop.run_in_executor(None, lambda: _finalize(provider, task, tool_results, conduct))
 			return _done(True, answer, step)
 
 		for tc in tool_calls:
