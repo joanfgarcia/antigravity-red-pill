@@ -342,20 +342,31 @@ def extract_toolcalls(text: str, tool_format: str = "qwen") -> List[dict]:
 	return []
 
 
-_THINKING_SPLIT = re.compile(r"(?:\s+response\s*|\s*</think>\s*|\s* response\s*)(.*)", re.DOTALL)
+_THINK_OPEN = "<think>"
+_THINK_CLOSE = "</think>"
+_CLI_THINKING = re.compile(r"\[Start thinking\](.*?)(?:\[End thinking\]|$)", re.DOTALL)
 
 
 def extract_thinking(text: str) -> Tuple[str, str]:
 	"""Separa la traza de razonamiento de la respuesta final.
 
-	Granite 4.2 cierra el razonamiento con ` response` (3B) o ` response`
-	(8B) antes de la respuesta; algunos GGUF usan `</think>`. Tolerante a los
-	tres. Devuelve (thinking, answer); sin marcador → ("", text).
+	Granite 4.2 (template nativo del GGUF) razona entre `<think>` y `</think>`
+	—tokens que el detokenizador emite literales—; el prompt de generación ya
+	abre `<think>`, así que la salida suele traer solo el cierre. llama-cli usa
+	`[Start thinking]…[End thinking]`. Solo se parte por esos marcadores
+	explícitos, nunca por palabras de la prosa. Un `<think>` sin cerrar
+	(presupuesto agotado razonando) → todo es razonamiento y la respuesta queda
+	vacía. Devuelve (thinking, answer); sin marcador → ("", text).
 	"""
-	m = _THINKING_SPLIT.search(text)
-	if m and m.group(1).strip():
-		thinking = text[: m.start()].strip()
-		return thinking, m.group(1).strip()
+	if _THINK_CLOSE in text:
+		thinking, _, answer = text.rpartition(_THINK_CLOSE)
+		return thinking.replace(_THINK_OPEN, "").strip(), answer.strip()
+	stripped = text.lstrip()
+	if stripped.startswith(_THINK_OPEN):
+		return stripped[len(_THINK_OPEN):].strip(), ""
+	m = _CLI_THINKING.search(text)
+	if m:
+		return m.group(1).strip(), (text[: m.start()] + text[m.end():]).strip()
 	return "", text.strip()
 
 

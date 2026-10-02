@@ -38,13 +38,31 @@ def test_extract_toolcalls_openai():
 
 
 def test_extract_thinking():
-	thinking, answer = extract_thinking("paso a paso response la respuesta")
-	assert "paso a paso" in thinking
-	assert "la respuesta" in answer
+	thinking, answer = extract_thinking("paso a paso</think>la respuesta")
+	assert thinking == "paso a paso"
+	assert answer == "la respuesta"
+	# con apertura explícita
+	thinking, answer = extract_thinking("<think>\nrazono\n</think>\n\nAnswer: 42")
+	assert (thinking, answer) == ("razono", "Answer: 42")
 	# sin marcador → todo es respuesta
 	thinking2, answer2 = extract_thinking("solo respuesta")
 	assert thinking2 == ""
 	assert "solo respuesta" in answer2
+
+
+def test_extract_thinking_no_parte_por_palabras_de_la_prosa():
+	# Regresión: la regex vieja partía por la palabra "response" en cualquier sitio.
+	for prose in ("The HTTP response code was 200", "No responses found", "Response time: 3s"):
+		assert extract_thinking(prose) == ("", prose)
+	thinking, answer = extract_thinking("<think>I should write a response</think>Answer: 42")
+	assert thinking == "I should write a response"
+	assert answer == "Answer: 42"
+
+
+def test_extract_thinking_sin_cerrar_y_cli():
+	# Presupuesto agotado razonando: nada del razonamiento se filtra como respuesta.
+	assert extract_thinking("<think>sigo pensando y me corto") == ("sigo pensando y me corto", "")
+	assert extract_thinking("[Start thinking]razono[End thinking]\n{\"ok\": 1}") == ("razono", '{"ok": 1}')
 
 
 def test_resolve_rechaza_experimental_y_custom_juntos():
