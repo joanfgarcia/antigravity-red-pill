@@ -116,3 +116,23 @@ def test_resolve_sin_nada_lanza_config_error():
 		assert False, "debe lanzar (sin modelo/task/default)"
 	except ModelRuntimeConfigError:
 		pass
+
+
+def test_seeds_minion_tool_candidatos_coherentes():
+	# Regresión: el seed de `minion_tool` solo listaba granite_8b → con
+	# model=granite_4_2_8b el daemon devolvía 400 (K1) en una instalación limpia.
+	from pathlib import Path
+
+	import yaml
+
+	examples = Path(__file__).resolve().parents[1] / "examples"
+	tasks = yaml.safe_load((examples / "task_profiles.yaml.example").read_text())["tasks"]
+	profiles = yaml.safe_load((examples / "model_profiles.yaml.example").read_text())["profiles"]
+	for task_id, task in tasks.items():
+		for cand in task["models"]:
+			assert cand["profile"] in profiles, f"{task_id}: candidato sin perfil {cand['profile']}"
+	minion = [c["profile"] for c in tasks["minion_tool"]["models"]]
+	assert minion[0] == "granite_8b" and tasks["minion_tool"]["models"][0].get("default") is True
+	assert {"granite_4_2_8b", "granite_4_2_3b"} <= set(minion)
+	# Receta IBM del 4.2 (AD-033): temperature 1.0 en ambos perfiles.
+	assert profiles["granite_4_2_8b"]["temperature"] == 1.0 == profiles["granite_4_2_3b"]["temperature"]

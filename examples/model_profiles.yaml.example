@@ -54,9 +54,10 @@ profiles:
     # Distiller/sleep role uses chat_format above. A request carrying tools
     # (minion role) switches to minion_chat_format on the SAME loaded model.
     # Empirically verified 2026-09-30 (daemon UDS): "chatml-function-calling"
-    # emits valid OpenAI tool_calls for Granite-4.1-Q4. Do NOT use
-    # chat_format=None ("native") at request time: llama_cpp>=0.3 raises
-    # get_chat_completion_handler(None). The paired parser is tool_format.
+    # emits valid OpenAI tool_calls for Granite-4.1-Q4. `null` here only means
+    # "native template" for a thinking profile (Granite 4.2); a non-thinking
+    # model falls back to chatml-function-calling anyway. tool_format is the
+    # parser local_minion applies to tool calls emitted as TEXT.
     minion_chat_format: "chatml-function-calling"
     tool_format: "qwen"
     # Ordered device preference. First that can serve wins; if none can → 503.
@@ -100,7 +101,8 @@ profiles:
   #   <tool_call><function=NAME><parameter=k>v</parameter></function></tool_call>
   # y `local_minion` lo parsea con model_runtime.extract_toolcalls (tool_format).
   # El parser conserva arguments como MAPPING: el template nativo renderiza
-  # `tool_call.arguments|items` y un string JSON revienta el 2º turno.
+  # `tool_call.arguments|items` y un string JSON revienta el 2º turno. Los
+  # resultados vuelven con rol `tool` (el template los envuelve en <tool_response>).
   # Encadena mejor que 4.1 (P3 del arnés en 6 pasos) pero muta sin confirmar bajo
   # instrucciones ambiguas → SIN autonomía no supervisada (ver arnés de autonomía).
   granite_4_2_8b:
@@ -121,7 +123,8 @@ profiles:
       source: "https://huggingface.co/ibm-granite/granite-4.2-8b"
     device_fallback: ["gpu", "cpu"]
     cpu_n_ctx: 16384
-    temperature: 0.3
+    # Receta IBM 4.2 (AD-033): temp 1.0 obligatoria; top_p 0.95 = default del daemon.
+    temperature: 1.0
     max_tokens: 8192
     use_mmap: false
     capabilities: ["distillation", "logic", "reasoning", "emotional_intelligence", "deep", "tool_calling"]
@@ -152,7 +155,8 @@ profiles:
   # ── Granite 4.2 3B (IBM, Apache-2.0) — razonamiento compacto + tool-calling ──
   # Mismo formato nativo de tool-calling que el 8B y FUNCIONA (verificado
   # 2026-09-30), pero MUCHO más verboso en el think: necesita ~1200 tokens para
-  # llegar al tool-call (con el default de 1024 se trunca a mitad de razonamiento).
+  # llegar al tool-call (con 1024 se trunca a mitad de razonamiento) — el
+  # max_tokens de la task/candidato debe cubrirlo.
   # Cabe 100% en GPU (2.24 GB). No usar como tool-agent con presupuesto ajustado.
   granite_4_2_3b:
     model_path: "models/granite-4.2-3b-Q4_K_M.gguf"
