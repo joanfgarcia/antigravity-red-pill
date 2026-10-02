@@ -206,6 +206,9 @@ def _tool_result_name(content: str) -> str | None:
 
 def _is_error_result(content: str) -> bool:
 	body = content.split("result:", 1)[-1].lstrip()
+	if body.startswith("<tool_output"):
+		# local_minion fences the output as untrusted data: judge what is inside.
+		body = body.split("\n", 1)[-1].lstrip()
 	return body.startswith("ERROR") or "text=\"Error:" in body or "text='Error:" in body
 
 

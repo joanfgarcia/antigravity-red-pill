@@ -288,57 +288,77 @@ _TOOLCALL_RE = {
 }
 
 
+def _coerce_arguments(args: Any) -> dict:
+	"""`arguments` de un tool-call → mapping.
+
+	Llega como objeto o como string JSON (convención OpenAI); los templates
+	nativos renderizan `arguments|items`, así que el resultado es SIEMPRE un
+	dict (string ilegible / no-objeto → {}).
+	"""
+	if isinstance(args, str):
+		try:
+			args = json.loads(args) if args.strip() else {}
+		except ValueError:
+			return {}
+	return args if isinstance(args, dict) else {}
+
+
+def _parse_qwen_block(inner: str) -> Optional[dict]:
+	"""Un bloque `<tool_call>…</tool_call>`: JSON o `<function=NAME><parameter=k>v…`."""
+	try:
+		obj = json.loads(inner)
+	except ValueError:
+		obj = None
+	if isinstance(obj, dict):
+		name = obj.get("function", obj.get("name", ""))
+		args = obj.get("arguments", obj.get("parameters", {}))
+		return {"function": {"name": name, "arguments": _coerce_arguments(args)}}
+	# Formato "<function=NAME><parameter=k>v</parameter></function>" (Granite 4.2)
+	fn = re.search(r"<function=([^>]+)>", inner)
+	if fn:
+		params = re.findall(r"<parameter=([^>]+)>\s*(.*?)\s*</parameter>", inner, re.DOTALL)
+		return {"function": {"name": fn.group(1).strip(), "arguments": {k.strip(): v.strip() for k, v in params}}}
+	return None
+
+
 def extract_toolcalls(text: str, tool_format: str = "qwen") -> List[dict]:
-	"""Extrae tool-calls del texto según el formato nativo del modelo.
+	"""Extrae TODOS los tool-calls del texto según el formato nativo del modelo.
 
 	- `qwen`: `<tool_call>{json}</tool_call>` (Granite 3.x/4.x, Qwen).
 	- `gemma`: `<|tool_call|>call:NAME{args}`.
 	- `openai`: intenta parsear como JSON tool_calls estructurados.
 	- `auto`: prueba en orden qwen → gemma → openai.
-	Vacío → [] (el caller decide si es tool-call real o prosa).
+	Devuelve las llamadas del primer formato que case, en orden de aparición;
+	un bloque ilegible se omite (el caller compara con los bloques abiertos).
+	`arguments` siempre es un mapping. Vacío → [] (tool-call real o prosa: lo
+	decide el caller).
 	"""
 	formats = TOOL_FORMATS if tool_format == "auto" else [tool_format]
 	for fmt in formats:
+		calls: List[dict] = []
 		if fmt == "qwen":
-			m = _TOOLCALL_RE["qwen"].search(text)
-			if m:
-				inner = m.group(1).strip()
-				try:
-					obj = json.loads(inner)
-					name = obj.get("function", obj.get("name", ""))
-					args = obj.get("arguments", obj.get("parameters", {}))
-					return [{"function": {"name": name, "arguments": args if isinstance(args, dict) else {}}}]
-				except Exception:
-					# Formato "<function=NAME><parameter=k>v</parameter></function>"
-					fn = re.search(r"<function=([^>]+)>", inner)
-					if fn:
-						params = re.findall(r"<parameter=([^>]+)>\s*(.*?)\s*</parameter>", inner, re.DOTALL)
-						args = {k.strip(): v.strip() for k, v in params}
-						return [{"function": {"name": fn.group(1).strip(), "arguments": args}}]
+			for m in _TOOLCALL_RE["qwen"].finditer(text):
+				call = _parse_qwen_block(m.group(1).strip())
+				if call:
+					calls.append(call)
 		elif fmt == "gemma":
-			m = _TOOLCALL_RE["gemma"].search(text)
-			if m:
+			for m in _TOOLCALL_RE["gemma"].finditer(text):
 				try:
 					args = json.loads("{" + m.group(2) + "}") if m.group(2).strip() else {}
-				except Exception:
+				except ValueError:
 					args = {}
-				return [{"function": {"name": m.group(1).strip(), "arguments": args}}]
+				calls.append({"function": {"name": m.group(1).strip(), "arguments": _coerce_arguments(args)}})
 		elif fmt == "openai":
 			try:
 				obj = json.loads(text)
-				if isinstance(obj, list):
-					obj = obj[0] if obj else None
-				if isinstance(obj, dict) and obj.get("type") == "function":
-					fn = obj.get("function", {})
-					args = fn.get("arguments")
-					if isinstance(args, str):
-						try:
-							args = json.loads(args)
-						except Exception:
-							args = {}
-					return [{"function": {"name": fn.get("name", ""), "arguments": args}}]
-			except Exception:
-				pass
+			except ValueError:
+				obj = None
+			for item in obj if isinstance(obj, list) else [obj]:
+				fn = item.get("function") if isinstance(item, dict) and item.get("type") == "function" else None
+				if isinstance(fn, dict):
+					calls.append({"function": {"name": fn.get("name", ""), "arguments": _coerce_arguments(fn.get("arguments"))}})
+		if calls:
+			return calls
 	return []
 
 
