@@ -426,6 +426,31 @@ def owning_workspace(path: Optional[Union[str, Path]]) -> Optional[str]:
 	return _owner_of(roots, path)
 
 
+def workspace_owners(paths: Iterable[Optional[Union[str, Path]]]) -> List[Optional[str]]:
+	"""Dueño (`owning_workspace`) de cada path, alineado con la entrada.
+
+	Una sola carga del registro por llamada y una sola resolución por path
+	distinto (las repeticiones salen de memoria). None para los que no
+	resuelven (None, vacío, fuera de todo workspace).
+	"""
+	items = list(paths)
+	try:
+		roots = _resolved_roots()
+	except Exception:
+		return [None] * len(items)
+	memo: dict = {}
+	out: List[Optional[str]] = []
+	for p in items:
+		if not p:
+			out.append(None)
+			continue
+		key = str(p)
+		if key not in memo:
+			memo[key] = _owner_of(roots, p)
+		out.append(memo[key])
+	return out
+
+
 def infer_workspaces(paths: Iterable[Optional[Union[str, Path]]]) -> List[str]:
 	"""`rutas tocadas` → nombres de workspace, en orden de primera aparición.
 
@@ -435,16 +460,9 @@ def infer_workspaces(paths: Iterable[Optional[Union[str, Path]]]) -> List[str]:
 	en sesiones de ~900 rutas). Materializa el P1b de RFC-DESPERTAR-001 §8.2: el cwd no
 	discrimina, el **proyecto se infiere por los ficheros tocados**.
 	"""
-	try:
-		roots = _resolved_roots()
-	except Exception:
-		return []
 	out: List[str] = []
 	seen: set = set()
-	for p in paths:
-		if not p:
-			continue
-		name = _owner_of(roots, p)
+	for name in workspace_owners(paths):
 		if name and name not in seen:
 			seen.add(name)
 			out.append(name)

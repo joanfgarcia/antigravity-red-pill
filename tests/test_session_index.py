@@ -50,14 +50,15 @@ def test_touched_paths_extraction(monkeypatch):
 		{"type": "text", "text": "no soy tool"},
 	]
 	monkeypatch.setattr(si, "_opencode_db_path", lambda: Path(_make_db(rows)))
-	assert si._touched_paths("s1") == [
+	assert si._touched_sequence("s1") == [
 		"/home/user/proj/a.md",
-		"/home/user/proj/b",
+		"/home/user/proj/b",  # workdir
+		"/home/user/proj/b",  # `cd` del comando
 		"/home/user/proj/c",
 	]
 
 
-def test_touched_paths_ordered_by_last_use_and_relative_to_session(monkeypatch):
+def test_touched_sequence_keeps_repeats_and_resolves_relative_to_session(monkeypatch):
 	rows = [
 		{"type": "tool", "tool": "read", "state": {"input": {"filePath": "/srv/a/x.py"}}},
 		{"type": "tool", "tool": "read", "state": {"input": {"filePath": "/srv/b/y.py"}}},
@@ -65,9 +66,9 @@ def test_touched_paths_ordered_by_last_use_and_relative_to_session(monkeypatch):
 		{"type": "tool", "tool": "glob", "state": {"input": {"path": ".", "pattern": "*"}}},
 	]
 	monkeypatch.setattr(si, "_opencode_db_path", lambda: Path(_make_db(rows)))
-	assert si._touched_paths("s1", base_dir="/srv/c") == ["/srv/b/y.py", "/srv/a/x.py", "/srv/c"]
+	assert si._touched_sequence("s1", base_dir="/srv/c") == ["/srv/a/x.py", "/srv/b/y.py", "/srv/a/x.py", "/srv/c"]
 	# sin directorio de sesión, las relativas no se resuelven contra el cwd del proceso
-	assert si._touched_paths("s1") == ["/srv/b/y.py", "/srv/a/x.py"]
+	assert si._touched_sequence("s1") == ["/srv/a/x.py", "/srv/b/y.py", "/srv/a/x.py"]
 
 
 def test_command_paths_keeps_tilde_and_quoted_spaces():
@@ -95,9 +96,26 @@ def test_command_paths_only_embedded_after_separator(cmd, expected):
 	assert si._command_paths(cmd) == expected
 
 
-def test_touched_paths_missing_db(monkeypatch):
+def test_touched_sequence_missing_db(monkeypatch):
 	monkeypatch.setattr(si, "_opencode_db_path", lambda: Path("/no/existe/opencode.db"))
-	assert si._touched_paths("s1") == []
+	assert si._touched_sequence("s1") == []
+
+
+def _owner_by_prefix(paths):
+	"""`workspace_owners` de juguete: el dueño es el 3er componente (`/home/user/<ws>/...`)."""
+	return [p.split("/")[3] if p.startswith("/home/user/") else None for p in paths]
+
+
+def test_rank_projects_by_frequency_then_recency(monkeypatch):
+	monkeypatch.setattr(si, "workspace_owners", _owner_by_prefix)
+	work = [f"/home/user/sharing/f{i}.py" for i in range(5)]
+	# un `ls` suelto al final no le roba la sesión al proyecto en curso
+	assert si._rank_projects(work + ["/home/user/school"]) == ["sharing", "school"]
+	# empate de frecuencia → gana el tocado más recientemente
+	assert si._rank_projects(["/home/user/a/x", "/home/user/b/y"]) == ["b", "a"]
+	assert si._rank_projects(["/home/user/b/y", "/home/user/a/x"]) == ["a", "b"]
+	# las rutas sin dueño no puntúan
+	assert si._rank_projects(["/usr/bin/ls", "/tmp/x"]) == []
 
 
 def test_build_board_projects_by_paths(monkeypatch):
@@ -106,25 +124,43 @@ def test_build_board_projects_by_paths(monkeypatch):
 	monkeypatch.setattr(si, "list_sessions", lambda: [SessionSignal("opencode", "sx", now - 1, None)])
 	monkeypatch.setattr(si, "_opencode_meta", lambda sid: {"directory": "/home/user/IA", "title": "T", "model": "m"})
 	monkeypatch.setattr(si, "_origin_for", lambda p, s: "user")
-	monkeypatch.setattr(si, "_owning_workspace", lambda d: "sharing")
-	monkeypatch.setattr(si, "_touched_paths", lambda sid, base_dir=None: ["/home/user/school/x.py", "/home/user/sharing/y.py"])
+	monkeypatch.setattr(si, "_owning_workspace", lambda d: "cwd-ws")
+	seq = ["/home/user/sharing/y.py"] * 3 + ["/home/user/school/x.py"]
+	monkeypatch.setattr(si, "_touched_sequence", lambda sid, base_dir=None: seq)
 	monkeypatch.setattr(si, "_theme_client", lambda: object())
 	monkeypatch.setattr(si, "_rolling_topic", lambda sid, client=None: "un tema")
 	captured = {}
 
-	def _fake_infer(paths):
+	def _fake_owners(paths):
 		captured["paths"] = list(paths)
-		return ["sharing", "school"]
+		return _owner_by_prefix(paths)
 
-	monkeypatch.setattr(si, "infer_workspaces", _fake_infer)
+	monkeypatch.setattr(si, "workspace_owners", _fake_owners)
 
 	b = si.build_board()[0]
-	# más reciente primero: el proyecto es el de la última ruta tocada
-	assert captured["paths"] == ["/home/user/sharing/y.py", "/home/user/school/x.py"]
+	assert captured["paths"] == seq  # cronológicas, con repeticiones
+	# el más frecuente manda aunque la última ruta sea de otro proyecto
 	assert b["project"] == "sharing"
 	assert b["projects"] == ["sharing", "school"]
 	assert b["topic"] == "un tema"
-	assert b["touched_files"] == 2
+	assert b["touched_files"] == 2  # rutas distintas
+
+
+def test_build_board_window_is_recent_paths(monkeypatch):
+	"""Solo las últimas `_RECENT_PATHS` rutas deciden el proyecto."""
+	now = time.time()
+	monkeypatch.setattr(si, "_active_seconds", lambda: 600)
+	monkeypatch.setattr(si, "list_sessions", lambda: [SessionSignal("opencode", "sx", now - 1, None)])
+	monkeypatch.setattr(si, "_opencode_meta", lambda sid: {"directory": None})
+	monkeypatch.setattr(si, "_origin_for", lambda p, s: "user")
+	monkeypatch.setattr(si, "_theme_client", lambda: None)
+	monkeypatch.setattr(si, "_RECENT_PATHS", 4)
+	seq = ["/home/user/old/a"] * 10 + ["/home/user/new/b"] * 3 + ["/home/user/old/a"]
+	monkeypatch.setattr(si, "_touched_sequence", lambda sid, base_dir=None: seq)
+	monkeypatch.setattr(si, "workspace_owners", _owner_by_prefix)
+	b = si.build_board()[0]
+	assert b["project"] == "new"
+	assert b["projects"] == ["new", "old"]
 
 
 def test_build_board_without_theme_client_has_no_topic(monkeypatch):
@@ -212,7 +248,7 @@ def test_build_board_enriched(tmp_path, monkeypatch):
 	monkeypatch.setattr(si, "_opencode_meta", lambda sid: {"directory": workdir, "title": "T", "model": "m"})
 	monkeypatch.setattr(si, "_origin_for", lambda p, s: "awakening")
 	monkeypatch.setattr(si, "_owning_workspace", lambda d: "sharing")
-	monkeypatch.setattr(si, "_touched_paths", lambda sid, base_dir=None: [])
+	monkeypatch.setattr(si, "_touched_sequence", lambda sid, base_dir=None: [])
 	monkeypatch.setattr(si, "_rolling_topic", lambda sid, client=None: None)
 
 	board = si.build_board()
@@ -233,7 +269,7 @@ def test_build_board_non_opencode_has_no_meta(monkeypatch):
 	now = time.time()
 	monkeypatch.setattr(si, "_active_seconds", lambda: 600)
 	monkeypatch.setattr(si, "list_sessions", lambda: [SessionSignal("claude_code", "uuid-1", now - 2, now - 1)])
-	monkeypatch.setattr(si, "_touched_paths", lambda sid, base_dir=None: [])
+	monkeypatch.setattr(si, "_touched_sequence", lambda sid, base_dir=None: [])
 	monkeypatch.setattr(si, "_rolling_topic", lambda sid, client=None: None)
 	called = {"n": 0}
 

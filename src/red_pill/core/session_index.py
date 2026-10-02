@@ -4,7 +4,7 @@ Parte del latido (`session_liveness`) y lo enriquece para responder **quién /
 dónde / qué** sin que el agente tenga que ir a mano a `opencode.db`.
 
 - **presencia** (`board_line`, barato): nº de sesiones activas para el handshake-mini; SILENT salvo que haya **otra** viva.
-- **detalle** (`build_board`): por sesión `provider`, `origin`, `directory`, `project`/`projects` (inferidos por **rutas tocadas** → `infer_workspaces`, fallback cwd), `topic` (tema rodante Laya), `title`, `model`, `in_flight`, `last_activity`, `touched_files`; consumido por MCP `session_board`.
+- **detalle** (`build_board`): por sesión `provider`, `origin`, `directory`, `project`/`projects` (inferidos por **rutas tocadas**, ponderados por frecuencia → `workspace_owners`, fallback cwd), `topic` (tema rodante Laya), `title`, `model`, `in_flight`, `last_activity`, `touched_files`; consumido por MCP `session_board`.
 
 Determinista; non-fatal (RFC-DESPERTAR-001 P1b core).
 """
@@ -25,7 +25,7 @@ import red_pill.config as cfg
 from red_pill.core import origins
 from red_pill.core.paths import get_state_dir
 from red_pill.core.session_liveness import SessionSignal, list_sessions
-from red_pill.core.workspaces import infer_workspaces
+from red_pill.core.workspaces import workspace_owners
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +136,8 @@ _ABS_PATH_RE = re.compile(r"(?<![^\s=:&;|<>(`'\"])~?/(?!/)[A-Za-z0-9._~@/-]+")
 # Operadores shell pegados a una ruta sin espacios (`cd /x&&ls`, `/x;rm`).
 _SHELL_META_RE = re.compile(r"[&;|<>()`$]")
 
-# El proyecto se infiere de las últimas N rutas tocadas ("en los últimos turnos").
+# El proyecto se infiere de las últimas N rutas tocadas ("en los últimos turnos"),
+# contando repeticiones: es una ventana de actividad, no de rutas distintas.
 _RECENT_PATHS = 200
 
 
@@ -148,7 +149,7 @@ def _command_paths(cmd: str) -> List[str]:
 	Los tokens RELATIVOS de un comando no se extraen ni se resuelven: no se sabe
 	contra qué cwd corrió cada uno (un `cd` previo lo cambia). Solo las keys
 	estructuradas relativas (`filePath`/`path`/`workdir`) se resuelven, contra el
-	directorio de la sesión (`_touched_paths`)."""
+	directorio de la sesión (`_touched_sequence`)."""
 	try:
 		tokens = shlex.split(cmd)
 	except ValueError:
@@ -162,15 +163,15 @@ def _command_paths(cmd: str) -> List[str]:
 	return out
 
 
-def _touched_paths(session_id: str, base_dir: Optional[str] = None) -> List[str]:
-	"""Rutas tocadas por la sesión, extraídas de los tool parts de opencode.db.
+def _touched_sequence(session_id: str, base_dir: Optional[str] = None) -> List[str]:
+	"""Rutas tocadas por la sesión, CON repeticiones y en orden cronológico.
 
-	Lee las keys estructuradas de los inputs (`filePath`/`path`/`workdir`) y, para
-	`bash`, las rutas del comando. Las relativas se resuelven contra `base_dir`
+	Extraídas de los tool parts de opencode.db: las keys estructuradas de los
+	inputs (`filePath`/`path`/`workdir`) y, para `bash`, las rutas absolutas del
+	comando (`_command_paths`). Las keys relativas se resuelven contra `base_dir`
 	(el directorio de la sesión), nunca contra el cwd de este proceso; sin él se
-	descartan. Sin duplicados y ordenadas por su ÚLTIMA aparición (la más reciente
-	al final). Determinista y non-fatal: cualquier fallo devuelve [] y el proyecto
-	cae al fallback del cwd (RFC-DESPERTAR-001 §8.2).
+	descartan. Determinista y non-fatal: cualquier fallo devuelve [] y el
+	proyecto cae al fallback del cwd (RFC-DESPERTAR-001 §8.2).
 	"""
 	db = _opencode_db_path()
 	if not db.exists():
@@ -188,7 +189,7 @@ def _touched_paths(session_id: str, base_dir: Optional[str] = None) -> List[str]
 		logger.debug(f"[SessionIndex] touched_paths failed for {session_id}: {e}")
 		return []
 
-	ordered: Dict[str, None] = {}
+	seq: List[str] = []
 
 	def _add(p: str) -> None:
 		if not p:
@@ -197,8 +198,7 @@ def _touched_paths(session_id: str, base_dir: Optional[str] = None) -> List[str]
 			if not base_dir:
 				return
 			p = os.path.normpath(os.path.join(base_dir, p))
-		ordered.pop(p, None)
-		ordered[p] = None
+		seq.append(p)
 
 	for (raw,) in rows:
 		try:
@@ -218,7 +218,24 @@ def _touched_paths(session_id: str, base_dir: Optional[str] = None) -> List[str]
 		if isinstance(cmd, str):
 			for m in _command_paths(cmd):
 				_add(m)
-	return list(ordered)
+	return seq
+
+
+def _rank_projects(paths: List[str]) -> List[str]:
+	"""Workspaces dueños de `paths` (cronológicas), del más al menos relevante.
+
+	Relevancia = nº de apariciones en la ventana; empate → el tocado más
+	recientemente. Así un `ls` suelto en otro proyecto no le roba la sesión al
+	proyecto en el que se está trabajando. Las rutas sin dueño no puntúan.
+	"""
+	score: Dict[str, List[int]] = {}
+	for i, name in enumerate(workspace_owners(paths)):
+		if name is None:
+			continue
+		hits = score.setdefault(name, [0, -1])
+		hits[0] += 1
+		hits[1] = i
+	return sorted(score, key=lambda n: (-score[n][0], -score[n][1]))
 
 
 # Tope de puntos leídos por sesión al buscar el último tema (paginando).
@@ -331,8 +348,9 @@ def _theme_client() -> Any:
 def build_board(active_seconds: Optional[int] = None) -> List[Dict[str, Any]]:
 	"""Lista enriquecida de sesiones (más reciente primero).
 
-	`projects` va del más reciente al más antiguo según las últimas
-	`_RECENT_PATHS` rutas tocadas; `project` es el más reciente.
+	`projects` ordena los workspaces de las últimas `_RECENT_PATHS` rutas
+	tocadas por frecuencia (empate → el más reciente, `_rank_projects`);
+	`project` es el primero. Sin rutas atribuibles, el dueño del cwd.
 	"""
 	if active_seconds is None:
 		active_seconds = _active_seconds()
@@ -343,8 +361,8 @@ def build_board(active_seconds: Optional[int] = None) -> List[Dict[str, Any]]:
 		is_opencode = s.provider == "opencode"
 		extra = _opencode_meta(s.session_id) if is_opencode else {}
 		directory = extra.get("directory")
-		touched = _touched_paths(s.session_id, base_dir=directory) if is_opencode else []
-		projects = infer_workspaces(list(reversed(touched[-_RECENT_PATHS:])))
+		touched = _touched_sequence(s.session_id, base_dir=directory) if is_opencode else []
+		projects = _rank_projects(touched[-_RECENT_PATHS:])
 		if not projects and directory:
 			owner = _owning_workspace(directory)
 			if owner:
@@ -365,7 +383,7 @@ def build_board(active_seconds: Optional[int] = None) -> List[Dict[str, Any]]:
 				"topic": _rolling_topic(s.session_id, client=client) if client is not None else None,
 				"title": extra.get("title"),
 				"model": extra.get("model"),
-				"touched_files": len(touched),
+				"touched_files": len(set(touched)),
 			}
 		)
 	return board

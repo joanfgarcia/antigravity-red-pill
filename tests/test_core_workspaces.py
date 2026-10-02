@@ -296,6 +296,21 @@ class TestPathOwnershipInference:
 		]
 		assert ws.infer_workspaces(paths) == ["ab", "z"]
 
+	def test_workspace_owners_aligned_and_memoized(self, tmp_path, monkeypatch):
+		base = self._registry(monkeypatch, tmp_path)
+		calls = {"n": 0}
+		real = ws._owner_of
+
+		def _counting(roots, path):
+			calls["n"] += 1
+			return real(roots, path)
+
+		monkeypatch.setattr(ws, "_owner_of", _counting)
+		f = str(base / "a" / "b" / "f")
+		out = ws.workspace_owners([f, None, str(base / "z" / "g"), f, "", str(base / "outside"), f])
+		assert out == ["ab", None, "z", "ab", None, None, "ab"]
+		assert calls["n"] == 3  # una resolución por ruta distinta
+
 	def test_infer_workspaces_empty(self, tmp_path, monkeypatch):
 		self._registry(monkeypatch, tmp_path)
 		assert ws.infer_workspaces([]) == []
