@@ -235,6 +235,15 @@ print(f'Total hoy: {len(rows)} | productivos (consumen tope): {productive}/8')
 # transitorio: 3 intentos) antes de quedar DEAD en dead_letters.
 ```
 
+**Logs de despertar:** uno por sesión en `${AGENT_CORE_DIR}/awakening/YYYYMMDD_HHMM.log`.
+El Janitor diario (plugin `awakening_logs`) borra los de más de `days_to_keep` días
+(30 por defecto, en `~/.config/red-pill/janitor.yaml`); la edad sale del **nombre**,
+así que un `*.log` fuera de ese esquema no se toca. El desk se resuelve por
+`workspaces.yaml:agent_core` aunque el servicio no exporte `AGENT_CORE_DIR`.
+
+**Mensajes que no llegaron a Telegram:** neon-link reintenta con backoff durante
+24 h y después los deja en `dead_letters` (`neon-link redrive` los devuelve a la cola).
+
 ---
 
 ## 7. Git — Estado del código

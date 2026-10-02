@@ -256,6 +256,19 @@ garantizar el servicio (decisión explícita: lo que se asegura es el registro).
 
 ---
 
+## [AD-044] Worker agnóstico (ex «ARCH-001» del PR #103): el core hace el housekeeping, el plugin solo su pulse
+**Date**: 2026-10-02
+**Status**: ACCEPTED — remediación de la auditoría del lote DeepSeek.
+**Context**: el PR #103 movió el worker a `core/agent_worker.py` con la lógica de Antigravity tras un registro de estrategias de pulse (`core/pulse_strategy.py`). La auditoría encontró trabajo genérico (janitor de sesiones Telegram, señal a Samantha) atrapado dentro de `AntigravityPulseStrategy`, un fallback a `NullPulseStrategy` que se tragaba fallos de import sin señal, un descubrimiento que dependía del orden de imports e importaba ~900 módulos por oneshot, restos de proveedor en el core (`BackendType.GRPC` por defecto, nombres de tools de Antigravity en los prompts) y el Derecho al Silencio clasificado por subcadena.
+**Decision**:
+- El housekeeping genérico vive en `run_once` del core; una estrategia solo puede declinarlo explícitamente (`allows_core_housekeeping()`, rama gRPC legacy). Las fábricas reciben un `PulseContext` y pueden devolver `None`: con la config real (opencode) no se construye cliente IDE alguno.
+- Descubrimiento una vez por proceso (`_discovered`), solo de paquetes con `pulse.py` en disco; un `pulse.py` roto → `logger.error` + señal `pulse_strategy_fallback_<plugin>` (dedup).
+- Fallback de puentes por `IDE_BACKEND`, puente a puente; la cascada degradada se detecta sin conocer proveedores (backend efectivo ∉ cascada configurada) → señal `worker_bridge_cascade_degraded`.
+- AWAKEN-002: silencio = respuesta < 200 caracteres que EMPIEZA por la frase canónica; recuento + INSERT bajo `BEGIN IMMEDIATE`; los despertares fallidos siguen D24 y acaban en `dead_letters`.
+- Prompts de despertar/Telegram sin nombres de cliente (`sovereign_handshake`, shell no interactivo acotado al worktree/desk, tests desde la raíz del worktree). Un test AST vigila imports y literales del core.
+
+---
+
 ## [AD-025] Job DAG — el dag_job como plantilla genérica recursiva de composición
 **Date**: 2026-08-08
 **Status**: ACCEPTED — mergeado con el PR #84 (v7.17.0).
