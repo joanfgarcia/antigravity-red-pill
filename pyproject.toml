@@ -257,6 +257,9 @@ show_missing = true
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
+# Import the checkout under test, not whatever `red_pill` the venv has installed
+# (editable installs point at the main checkout: a worktree would test main).
+pythonpath = ["src"]
 norecursedirs = ["prototypes", "scripts", "docs", "3rdparty"]
 timeout = 10
 markers = [
