@@ -1,6 +1,6 @@
 # Motor de Políticas de Enrutamiento (Neon-Link Routing Engine)
 
-Este documento detalla el diseño y flujo asíncrono del **Routing Policy Engine** implementado en `neon-link` y cómo interactúa con el `worker.py` del núcleo Soberano (Red-Pill).
+Este documento detalla el diseño y flujo asíncrono del **Routing Policy Engine** implementado en `neon-link` y cómo interactúa con el worker del núcleo Soberano (Red-Pill, `core/agent_worker.py`).
 
 La arquitectura está diseñada para proteger el contexto del LLM frente a picos de mensajes, separar intenciones inter-agencia de intenciones conversacionales y habilitar dinámicas emergentes (Agentic Emergence) en canales multi-usuario.
 
