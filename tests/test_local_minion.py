@@ -98,18 +98,122 @@ async def test_native_text_toolcall_is_parsed(monkeypatch):
 	assert provider.calls[0].get("tools") is not None
 
 
+def _native(command):
+	return f"<tool_call>\n<function=run_bash>\n<parameter=command>\n{command}\n</parameter>\n</function>\n</tool_call>"
+
+
 def test_parse_native_toolcalls_granite():
-	text = (
-		"<tool_call>\n<function=run_bash>\n<parameter=command>\nls -1\n"
-		"</parameter>\n</function>\n</tool_call>"
-	)
-	calls = local_minion._parse_native_toolcalls(text)
-	assert len(calls) == 1
+	calls, malformed = local_minion._parse_native_toolcalls(_native("ls -1"))
+	assert malformed == 0 and len(calls) == 1
 	assert calls[0]["function"]["name"] == "run_bash"
 	# arguments stay a MAPPING (the native template renders them via |items)
 	assert calls[0]["function"]["arguments"] == {"command": "ls -1"}
-	# prose with no tool-call markup → []
-	assert local_minion._parse_native_toolcalls("solo una respuesta") == []
+	# prose with no tool-call markup → no calls, nothing malformed
+	assert local_minion._parse_native_toolcalls("solo una respuesta") == ([], 0)
+
+
+def test_parse_native_ignora_tool_call_dentro_del_razonamiento():
+	# Regresión: un <tool_call> escrito MIENTRAS razona se ejecutaba por run_bash.
+	musing = f"<think>podría hacer {_native('rm -rf build')} pero mejor no</think>La respuesta es 42"
+	assert local_minion._parse_native_toolcalls(musing) == ([], 0)
+	# razonamiento sin cerrar (presupuesto agotado) → tampoco es una llamada
+	assert local_minion._parse_native_toolcalls(f"<think>quizá {_native('rm -rf build')}") == ([], 0)
+	# la llamada DESPUÉS del razonamiento sí cuenta
+	calls, _ = local_minion._parse_native_toolcalls(f"<think>{_native('rm -rf build')}</think>{_native('ls')}")
+	assert [c["function"]["arguments"]["command"] for c in calls] == ["ls"]
+
+
+def test_parse_native_cuenta_los_bloques_malformados():
+	truncated = "<tool_call>\n<function=run_bash>\n<parameter=command>\nls -"
+	assert local_minion._parse_native_toolcalls(truncated) == ([], 1)
+	calls, malformed = local_minion._parse_native_toolcalls(_native("ls") + "\n" + truncated)
+	assert len(calls) == 1 and malformed == 1
+
+
+def test_parse_native_ids_unicos_por_turno():
+	text = _native("ls") + _native("pwd")
+	ids = [c["id"] for c in local_minion._parse_native_toolcalls(text, turn=0)[0]]
+	ids += [c["id"] for c in local_minion._parse_native_toolcalls(text, turn=1)[0]]
+	assert len(set(ids)) == 4
+
+
+async def test_tool_call_en_el_razonamiento_no_se_ejecuta(monkeypatch):
+	musing = f"<think>tal vez {_native('rm -rf build')}… no, no hace falta</think>No hay nada que borrar."
+	_use_provider(monkeypatch, FakeProvider([{"role": "assistant", "content": musing, "tool_calls": None}]))
+
+	async def _forbidden(cmd, **kwargs):
+		raise AssertionError(f"run_bash ejecutado: {cmd}")
+
+	monkeypatch.setattr(asyncio, "create_subprocess_shell", _forbidden)
+	res = await local_minion.run_local_minion("¿hay algo que limpiar?")
+	assert res["ok"] is True and res["tool_calls"] == 0
+	assert res["answer"] == "No hay nada que borrar."
+
+
+async def test_tool_call_truncado_se_realimenta_como_error(monkeypatch):
+	# Regresión: el markup truncado volvía como respuesta final con ok=True.
+	truncated = "<think>leo</think><tool_call>\n<function=run_bash>\n<parameter=command>\ncat manif"
+	provider = FakeProvider(
+		[
+			{"role": "assistant", "content": truncated, "tool_calls": None},
+			{"role": "assistant", "content": _native("cat manifest.txt"), "tool_calls": None},
+			{"role": "assistant", "content": "vault-7731"},
+		]
+	)
+	_use_provider(monkeypatch, provider)
+	_fake_shell(monkeypatch, FakeProc(rc=0, out=b"vault-7731\n"))
+	res = await local_minion.run_local_minion("lee manifest.txt")
+	assert res["ok"] is True and res["answer"] == "vault-7731"
+	assert res["tool_calls"] == 1
+	assert any("malformed or truncated" in str(m.get("content")) for m in res["messages"] if m.get("role") == "user")
+
+
+async def test_tool_call_malformado_repetido_abandona(monkeypatch):
+	truncated = "<tool_call>\n<function=run_bash>\n<parameter=command>\nls"
+	_use_provider(monkeypatch, FakeProvider([{"role": "assistant", "content": truncated} for _ in range(5)]))
+	res = await local_minion.run_local_minion("lista")
+	assert res["ok"] is False
+	assert "consecutive tool errors" in res["answer"]
+	assert "<tool_call" not in res["answer"]
+
+
+async def test_varias_llamadas_nativas_se_ejecutan_todas_en_orden(monkeypatch):
+	# Regresión: solo se ejecutaba la primera (re.search) y el resto se perdía.
+	provider = FakeProvider(
+		[
+			{"role": "assistant", "content": _native("ls") + "\n" + _native("pwd"), "tool_calls": None},
+			{"role": "assistant", "content": "hecho"},
+		]
+	)
+	_use_provider(monkeypatch, provider)
+	ran = []
+
+	async def fake(cmd, **kwargs):
+		ran.append(cmd)
+		return FakeProc(rc=0, out=b"x\n")
+
+	monkeypatch.setattr(asyncio, "create_subprocess_shell", fake)
+	res = await local_minion.run_local_minion("ls y pwd")
+	assert res["ok"] is True and ran == ["ls", "pwd"]
+	assert res["tool_calls"] == 2
+
+
+async def test_presupuesto_total_de_tool_calls(monkeypatch):
+	# Un solo turno con más llamadas que el presupuesto: se ejecutan MAX_TOOL_CALLS y se corta.
+	many = {
+		"role": "assistant",
+		"content": None,
+		"tool_calls": [
+			{"id": f"c{i}", "function": {"name": "run_bash", "arguments": '{"command": "true"}'}}
+			for i in range(local_minion.MAX_TOOL_CALLS + 3)
+		],
+	}
+	_use_provider(monkeypatch, FakeProvider([many]))
+	_fake_shell(monkeypatch, FakeProc(rc=0, out=b""))
+	res = await local_minion.run_local_minion("abusa")
+	assert res["ok"] is False and "cap" in res["answer"]
+	assert res["tool_calls"] == local_minion.MAX_TOOL_CALLS
+	assert f"at most {local_minion.MAX_TOOL_CALLS} tool calls" in local_minion.SYSTEM_PROMPT
 
 
 async def test_mcp_tool_dispatch(monkeypatch):

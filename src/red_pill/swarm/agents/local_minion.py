@@ -12,11 +12,13 @@ bash runner (real shell, sandboxed by cwd + timeout).
 import asyncio
 import json
 import logging
-from typing import Any, Dict, List, Optional
+import re
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
 MAX_TOOL_ITERS = 8  # hard cap on model turns (enforced, not just prompted)
+MAX_TOOL_CALLS = 8  # hard cap on EXECUTED tool calls per run (the budget SYSTEM_PROMPT announces)
 MAX_CONSECUTIVE_ERRORS = 3  # give up if the model keeps producing failing tool calls
 BASH_TIMEOUT = 60  # seconds per command
 _RESULT_CLAMP = 4000  # chars of tool output fed back to the model
@@ -83,7 +85,17 @@ SYSTEM_PROMPT = (
 	"Do NOT invent tools; if none of these fits, answer with NO tool call. "
 	"Call ONE tool at a time, read its result, then decide the next step. "
 	"When the task is complete, reply with a short final answer and DO NOT call a tool. "
-	f"Budget: at most {MAX_TOOL_ITERS} tool calls — be economical and stop early when done."
+	f"Budget: at most {MAX_TOOL_CALLS} tool calls — be economical and stop early when done."
+)
+
+# Opening of a text tool-call block (qwen/Granite `<tool_call>`, gemma `<|tool_call|>`).
+# Counted against the parsed calls to detect truncated/garbled ones.
+_TOOLCALL_OPEN = re.compile(r"<tool_call\b|<\|tool_call\|>")
+
+_MALFORMED_NOTE = (
+	"ERROR: your last reply contained {n} malformed or truncated tool call(s); they were NOT "
+	"executed. Re-emit the tool call complete (opening and closing tags, every required "
+	"parameter), or reply with the final answer and NO tool call."
 )
 
 
@@ -108,47 +120,46 @@ def _pretty_result(raw: str) -> str:
 	return raw
 
 
-def _normalize_native_toolcalls(parsed: List[dict]) -> List[Dict[str, Any]]:
-	"""Convert `extract_toolcalls()` output into OpenAI tool_calls.
+def _normalize_native_toolcalls(parsed: List[dict], turn: int) -> List[Dict[str, Any]]:
+	"""Convert `extract_toolcalls()` output into OpenAI-shaped tool_calls.
 
-	The shared parser returns {"function": {"name", "arguments": <dict>}}; the
-	loop expects OpenAI shape with a JSON-string arguments field.
+	`arguments` stays a MAPPING (the shared parser always yields one): the Granite
+	native template renders assistant tool_calls via `tool_call.arguments|items`,
+	which raises on a JSON string. `_dispatch` accepts both shapes. Ids are unique
+	per run (`call_native_<turn>_<i>`) — the fed-back results reference them.
 	"""
 	out: List[Dict[str, Any]] = []
 	for i, tc in enumerate(parsed):
-		fn = tc.get("function", tc) or {}
-		args = fn.get("arguments", {})
-		if isinstance(args, str):
-			try:
-				args = json.loads(args)
-			except (TypeError, ValueError):
-				args = {}
-		# Keep arguments as a MAPPING (not a JSON string): the Granite native
-		# template renders assistant tool_calls via `tool_call.arguments|items`,
-		# which raises on a string. `_dispatch` accepts both shapes.
+		fn = tc.get("function") or {}
 		out.append({
-			"id": f"call_native_{i}",
+			"id": f"call_native_{turn}_{i}",
 			"type": "function",
-			"function": {"name": fn.get("name", ""), "arguments": args},
+			"function": {"name": fn.get("name", ""), "arguments": fn.get("arguments") or {}},
 		})
 	return out
 
 
-def _parse_native_toolcalls(text: str) -> List[Dict[str, Any]]:
-	"""Recover tool_calls emitted as TEXT.
+def _parse_native_toolcalls(text: str, tool_format: str = "auto", turn: int = 0) -> Tuple[List[Dict[str, Any]], int]:
+	"""Recover tool_calls emitted as TEXT → (calls, malformed).
 
 	Some models use a native Jinja template whose tool-call output llama_cpp does
 	NOT parse into structured `tool_calls` — Granite 4.2 emits
 	`<tool_call><function=NAME><parameter=k>v</parameter></function></tool_call>`
-	as plain content. `model_runtime.extract_toolcalls` knows that format (and the
-	qwen/gemma/openai ones); it was defined and tested but never wired in. Empty
-	→ no tool call (the caller then treats the content as the final answer).
+	as plain content; `model_runtime.extract_toolcalls` knows that format (and the
+	qwen/gemma/openai ones). Only the ANSWER is parsed: a `<tool_call>` the model
+	writes while musing inside `<think>…</think>` (or in an unclosed `<think>`) is
+	NOT a call. `malformed` counts tool-call blocks opened in the answer that did
+	not parse (truncated by max_tokens, garbled) — the caller must never return
+	that markup as a final answer. No markup → ([], 0): the content is the answer.
 	"""
-	if not text or ("<tool_call" not in text and "<|tool_call|>" not in text):
-		return []
-	from red_pill.core.model_runtime import extract_toolcalls
+	from red_pill.core.model_runtime import extract_thinking, extract_toolcalls
 
-	return _normalize_native_toolcalls(extract_toolcalls(text, "auto"))
+	answer = extract_thinking(text or "")[1]
+	opened = len(_TOOLCALL_OPEN.findall(answer))
+	if not opened and tool_format != "openai":
+		return [], 0
+	calls = _normalize_native_toolcalls(extract_toolcalls(answer, tool_format), turn)
+	return calls, max(0, opened - len(calls))
 
 
 def _finalize(provider, task: str, tool_results: List[str]) -> str:
@@ -236,18 +247,29 @@ async def run_local_minion(task: str, *, cwd: Optional[str] = None, provider_nam
 	tool_calls_made = 0
 	tool_results: List[str] = []
 
+	def _done(ok: bool, answer: str, steps: int) -> Dict[str, Any]:
+		return {
+			"ok": ok,
+			"answer": answer,
+			"steps": steps,
+			"used_tools": tool_calls_made > 0,
+			"tool_calls": tool_calls_made,
+			"messages": messages,
+		}
+
 	for step in range(MAX_TOOL_ITERS):
 		msg = await loop.run_in_executor(None, lambda: provider.chat(messages, tools=TOOLS, tool_choice="auto"))
 		tool_calls = msg.get("tool_calls") or []
+		malformed = 0
 		if not tool_calls:
-			# Native-text tool call (e.g. Granite 4.2 template) → structured.
-			native = _parse_native_toolcalls(msg.get("content") or "")
+			# Native-text tool calls (e.g. Granite 4.2 template) → structured, ALL of them.
+			native, malformed = _parse_native_toolcalls(msg.get("content") or "", turn=step)
 			if native:
 				msg = {**msg, "tool_calls": native, "content": None}
 				tool_calls = native
 		messages.append(msg)
 
-		if not tool_calls:
+		if not tool_calls and not malformed:
 			answer = (msg.get("content") or "").strip()
 			if answer:
 				from red_pill.core.model_runtime import extract_thinking
@@ -256,16 +278,12 @@ async def run_local_minion(task: str, *, cwd: Optional[str] = None, provider_nam
 			if not answer:
 				# Handler returned empty when done; recover the answer in plain chatml.
 				answer = await loop.run_in_executor(None, lambda: _finalize(provider, task, tool_results))
-			return {
-				"ok": True,
-				"answer": answer,
-				"steps": step,
-				"used_tools": tool_calls_made > 0,
-				"tool_calls": tool_calls_made,
-				"messages": messages,
-			}
+			return _done(True, answer, step)
 
 		for tc in tool_calls:
+			if tool_calls_made >= MAX_TOOL_CALLS:
+				# Enforced, not just prompted: extra calls in a turn are never run.
+				return _done(False, "mala tarde: hit the tool-call cap without finishing", step)
 			fn = tc.get("function", {})
 			name = fn.get("name", "")
 			raw_args = fn.get("arguments")
@@ -294,21 +312,12 @@ async def run_local_minion(task: str, *, cwd: Optional[str] = None, provider_nam
 				),
 			})
 
-		if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
-			return {
-				"ok": False,
-				"answer": "mala tarde: too many consecutive tool errors",
-				"steps": step,
-				"used_tools": tool_calls_made > 0,
-				"tool_calls": tool_calls_made,
-				"messages": messages,
-			}
+		if malformed:
+			# A truncated/garbled tool call is a failed tool call, never an answer.
+			consecutive_errors += 1
+			messages.append({"role": "user", "content": _MALFORMED_NOTE.format(n=malformed)})
 
-	return {
-		"ok": False,
-		"answer": "mala tarde: hit the tool-call cap without finishing",
-		"steps": MAX_TOOL_ITERS,
-		"used_tools": tool_calls_made > 0,
-		"tool_calls": tool_calls_made,
-		"messages": messages,
-	}
+		if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+			return _done(False, "mala tarde: too many consecutive tool errors", step)
+
+	return _done(False, "mala tarde: hit the tool-call cap without finishing", MAX_TOOL_ITERS)
