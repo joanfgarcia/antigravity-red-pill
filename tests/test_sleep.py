@@ -131,7 +131,7 @@ def test_audit_engram_quality():
 
 		# Scenario 2: LLM deems memory clean 1st-person -> needs_redistillation = False
 		mock_provider.generate.return_value = '{"needs_redistillation": false, "reason": "Clean 1st-person voice"}'
-		assert audit_engram_quality("Me dijiste que en Barcelona estabas de visita...") is False
+		assert audit_engram_quality("Me dijiste que en Zaragoza estabas de visita...") is False
 
 
 def test_multi_hub_batching_partitioning():
