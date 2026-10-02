@@ -76,6 +76,25 @@ def test_command_paths_keeps_tilde_and_quoted_spaces():
 	assert si._command_paths("echo 'unterminated /srv/z") == ["/srv/z"]
 
 
+@pytest.mark.parametrize(
+	"cmd, expected",
+	[
+		# relativo con una barra dentro: no es una ruta absoluta embebida
+		("tail awakening/2026-10-01T03.log", []),
+		("ls ./src/red_pill/x.py ../a/b", []),
+		# URLs: ni `//host/...` ni el path de la URL
+		("curl -s https://example.com/api/v1", []),
+		# embebidas tras separador: `=`, `:`, operador shell, blanco de un token entrecomillado
+		("PATH=/a/bin:/b/bin cmd", ["/a/bin", "/b/bin"]),
+		('bash -c "cd /srv/x && ls"', ["/srv/x"]),
+		("cat <(sort /srv/f)", ["/srv/f"]),
+		("tar -C/srv/out -xf x.tgz", []),
+	],
+)
+def test_command_paths_only_embedded_after_separator(cmd, expected):
+	assert si._command_paths(cmd) == expected
+
+
 def test_touched_paths_missing_db(monkeypatch):
 	monkeypatch.setattr(si, "_opencode_db_path", lambda: Path("/no/existe/opencode.db"))
 	assert si._touched_paths("s1") == []

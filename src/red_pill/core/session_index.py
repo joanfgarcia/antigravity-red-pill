@@ -126,10 +126,13 @@ def _top_level(signals: List[SessionSignal]) -> List[SessionSignal]:
 # samples de opencode.db: read/write/edit → filePath, glob/grep → path, bash → workdir).
 _PATH_KEYS = ("filePath", "file_path", "path", "workdir")
 
-# Rutas embebidas en comandos bash (absolutas o `~/`). Heurística deliberadamente
-# ancha: el ruido (URLs, /usr/bin, heredocs) no mapea a ningún workspace y
-# `infer_workspaces` lo descarta. Lo que importa es no perder la ruta real tocada.
-_ABS_PATH_RE = re.compile(r"~?/[A-Za-z0-9._~@/-]+")
+# Rutas absolutas (o `~/`) EMBEBIDAS en un token bash. Solo cuentan si empiezan
+# el token o siguen a un separador: blanco (token entrecomillado con espacios),
+# comillas, `=`/`:` (`--file=/x`, `PATH=/a:/b`) u operador shell (`&;|<>(`,
+# `cd /x&&ls`). Así un relativo como `awakening/2026….log` no aporta un `/2026….log`
+# falso. `//` (URLs) se descarta. El ruido que quede (/usr/bin, heredocs) no
+# mapea a ningún workspace y la atribución lo ignora.
+_ABS_PATH_RE = re.compile(r"(?<![^\s=:&;|<>(`'\"])~?/(?!/)[A-Za-z0-9._~@/-]+")
 # Operadores shell pegados a una ruta sin espacios (`cd /x&&ls`, `/x;rm`).
 _SHELL_META_RE = re.compile(r"[&;|<>()`$]")
 
@@ -138,9 +141,14 @@ _RECENT_PATHS = 200
 
 
 def _command_paths(cmd: str) -> List[str]:
-	"""Rutas de un comando bash: tokens shell completos (respeta comillas y
-	espacios) que empiezan por `/` o `~/`, y rutas embebidas en el resto
-	(`--file=/x`, `cd /x&&ls`)."""
+	"""Rutas ABSOLUTAS (o `~/`) de un comando bash: tokens shell completos
+	(respeta comillas y espacios) que empiezan por `/` o `~/`, y rutas embebidas
+	en el resto tras un separador (`--file=/x`, `cd /x&&ls`; ver `_ABS_PATH_RE`).
+
+	Los tokens RELATIVOS de un comando no se extraen ni se resuelven: no se sabe
+	contra qué cwd corrió cada uno (un `cd` previo lo cambia). Solo las keys
+	estructuradas relativas (`filePath`/`path`/`workdir`) se resuelven, contra el
+	directorio de la sesión (`_touched_paths`)."""
 	try:
 		tokens = shlex.split(cmd)
 	except ValueError:
