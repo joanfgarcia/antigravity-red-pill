@@ -17,6 +17,7 @@ import os
 import re
 import shlex
 import sqlite3
+import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
@@ -241,6 +242,25 @@ def _rank_projects(paths: List[str]) -> List[str]:
 # Tope de puntos leídos por sesión al buscar el último tema (paginando).
 _THEME_SCAN_MAX = 2000
 
+# Cliente Qdrant del módulo, creado al primer uso y reutilizado: el MCP server
+# es de larga vida y el tablón se pide muchas veces. Un fallo al crearlo no se
+# cachea (se reintenta en la siguiente petición).
+_QDRANT_CLIENT: Any = None
+_QDRANT_CLIENT_LOCK = threading.Lock()
+
+
+def _qdrant_client() -> Any:
+	"""Cliente Qdrant compartido (lazy). Solo el cliente (`StorageEngine`, con su
+	kill-switch SEC-CR-02): nada de `MemoryManager`, que carga embeddings/torch
+	para una consulta que no los necesita. Propaga el error si no se puede crear."""
+	global _QDRANT_CLIENT
+	with _QDRANT_CLIENT_LOCK:
+		if _QDRANT_CLIENT is None:
+			from red_pill.core.storage import StorageEngine
+
+			_QDRANT_CLIENT = StorageEngine(url=cfg.QDRANT_URL).client
+		return _QDRANT_CLIENT
+
 
 def _query_latest_theme(session_id: str, client: Any = None) -> Optional[str]:
 	"""Último `tag_theme` Laya de la sesión (interaction_memories), por timestamp.
@@ -252,9 +272,7 @@ def _query_latest_theme(session_id: str, client: Any = None) -> Optional[str]:
 	"""
 	try:
 		if client is None:
-			from red_pill.memory import MemoryManager
-
-			client = MemoryManager().client
+			client = _qdrant_client()
 		from qdrant_client.http import models as _qm
 
 		flt = _qm.Filter(
@@ -331,15 +349,14 @@ def _origin_for(provider: str, session_id: str) -> Optional[str]:
 
 
 def _theme_client() -> Any:
-	"""Un único cliente Qdrant por tablón (None si el etiquetado está apagado o no hay Qdrant)."""
+	"""El cliente Qdrant del módulo para el tema rodante (None si el etiquetado
+	está apagado o no se puede crear el cliente)."""
 	try:
 		from red_pill.core.realtime_tag import enabled as _rt_enabled
 
 		if not _rt_enabled():
 			return None
-		from red_pill.memory import MemoryManager
-
-		return MemoryManager().client
+		return _qdrant_client()
 	except Exception as e:
 		logger.debug(f"[SessionIndex] theme client unavailable: {e}")
 		return None

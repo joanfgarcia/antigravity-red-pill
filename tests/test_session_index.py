@@ -13,8 +13,44 @@ from red_pill.core.session_liveness import SessionSignal
 
 @pytest.fixture(autouse=True)
 def _isolated_opencode_db(tmp_path, monkeypatch):
-	"""Nunca leer el `opencode.db` real del operador: por defecto, una ruta inexistente."""
+	"""Nunca leer el `opencode.db` real del operador: por defecto, una ruta inexistente.
+	Tampoco heredar entre tests el cliente Qdrant cacheado del módulo."""
 	monkeypatch.setattr(si, "_opencode_db_path", lambda: tmp_path / "no-opencode.db")
+	monkeypatch.setattr(si, "_QDRANT_CLIENT", None)
+
+
+class _FakeStorage:
+	built = 0
+	fail = False
+
+	def __init__(self, url=None):
+		if _FakeStorage.fail:
+			raise RuntimeError("SEC-CR-02")
+		_FakeStorage.built += 1
+		self.client = object()
+
+
+def test_theme_client_is_reused_and_failures_not_cached(monkeypatch):
+	"""Un solo cliente para todos los tablones; un fallo al crearlo se reintenta."""
+	monkeypatch.setattr("red_pill.core.storage.StorageEngine", _FakeStorage)
+	monkeypatch.setattr("red_pill.core.realtime_tag.enabled", lambda: True)
+	monkeypatch.setattr(_FakeStorage, "built", 0)
+	monkeypatch.setattr(_FakeStorage, "fail", True)
+	assert si._theme_client() is None
+	assert si._QDRANT_CLIENT is None  # el fallo no se cachea
+	monkeypatch.setattr(_FakeStorage, "fail", False)
+	first = si._theme_client()
+	assert first is not None and si._theme_client() is first
+	assert si._qdrant_client() is first
+	assert _FakeStorage.built == 1
+
+
+def test_theme_client_none_when_tagging_disabled(monkeypatch):
+	monkeypatch.setattr("red_pill.core.storage.StorageEngine", _FakeStorage)
+	monkeypatch.setattr("red_pill.core.realtime_tag.enabled", lambda: False)
+	monkeypatch.setattr(_FakeStorage, "built", 0)
+	assert si._theme_client() is None
+	assert _FakeStorage.built == 0
 
 
 def _opencode_db(path, rows):
