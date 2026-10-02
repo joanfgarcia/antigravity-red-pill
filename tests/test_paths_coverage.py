@@ -37,7 +37,14 @@ class TestGetAlethCoreRoot:
 		assert paths.get_agent_core_root() == tmp_path
 
 	def test_default_relative_to_bunker(self, tmp_path, monkeypatch):
+		"""Último recurso: sin env y sin registro legible, hermano del bunker_root."""
+		from red_pill.core import workspaces
+
+		def _broken():
+			raise RuntimeError("registry unavailable")
+
 		monkeypatch.delenv("AGENT_CORE_DIR", raising=False)
+		monkeypatch.setattr(workspaces, "agent_core_dir", _broken)
 		monkeypatch.setenv("IA_DIR", str(tmp_path))
 		result = paths.get_agent_core_root()
 		assert result == tmp_path.parent / "Agent_Core"

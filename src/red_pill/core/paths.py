@@ -80,26 +80,38 @@ def get_bunker_root_str() -> str:
 
 
 def get_agent_core_root() -> Path:
-	"""
-	Resuelve el directorio transversal Agent_Core.
-	Usa la variable de entorno AGENT_CORE_DIR si existe, sino asume que está al mismo nivel que el bunker_root.
+	"""Resuelve el desk transversal del agente (${AGENT_CORE_DIR}).
+
+	Precedencia: env `AGENT_CORE_DIR` → registro `workspaces.yaml:agent_core`
+	(fuente de verdad; sin registro, su back-compat lee la config/.env) →
+	hermano `Agent_Core` del bunker_root. Los servicios systemd no exportan el
+	.env: leer solo la env hacía que el Janitor cayera al hermano y creara un
+	desk fantasma (`~/Documents/IA/Agent_Core`).
 	"""
 	agent_core_str = os.getenv("AGENT_CORE_DIR")
 	if agent_core_str:
-		return Path(agent_core_str)
+		return Path(os.path.expanduser(agent_core_str))
+	try:
+		from red_pill.core.workspaces import agent_core_dir  # lazy: workspaces imports this module
+
+		return agent_core_dir()
+	except Exception as exc:
+		logger.warning(f"[PATHS] workspace registry unavailable for AGENT_CORE_DIR: {exc}")
 	return get_bunker_root().parent / "Agent_Core"
 
 
-def get_awakening_dir() -> Path:
+def get_awakening_dir(create: bool = True) -> Path:
 	"""Directorio de logs de despertar autónomo (${AGENT_CORE_DIR}/awakening/).
 
 	Rotación por despertar: cada sesión escribe su propio archivo
 	`YYYYMMDD_HHMM.log` (ver `get_awakening_log_path`), coherente con la
 	filosofía de carpetas del desk. El legacy `AWAKENING_LOG.md` se conserva
-	como histórico y deja de crecer.
+	como histórico y deja de crecer. `create=False` para lectores/limpiadores:
+	resolver una ruta no debe fabricar directorios.
 	"""
 	path = get_agent_core_root() / "awakening"
-	path.mkdir(parents=True, exist_ok=True)
+	if create:
+		path.mkdir(parents=True, exist_ok=True)
 	return path
 
 

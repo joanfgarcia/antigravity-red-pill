@@ -69,15 +69,17 @@ def test_awakening_logs_purges_older_than_ttl(temp_dir, monkeypatch):
 	"""El plugin borra los logs de despertar > days_to_keep y respeta el resto."""
 	from red_pill.swarm.agents.janitor_plugins import awakening_logs as mod
 
-	monkeypatch.setattr(mod, "get_awakening_dir", lambda: temp_dir)
+	monkeypatch.setattr(mod, "get_awakening_dir", lambda create=True: temp_dir)
 
 	old = temp_dir / f"{(datetime.now() - timedelta(days=40)).strftime('%Y%m%d')}_0000.log"
 	old.write_text("old")
 	recent = temp_dir / f"{datetime.now().strftime('%Y%m%d')}_1200.log"
 	recent.write_text("recent")
-	# Fichero no conforme: se ignora (fallback mtime, reciente → se conserva)
+	# Fichero no conforme: nunca se toca, aunque sea viejo (la edad sale del nombre)
 	stray = temp_dir / "stray.log"
 	stray.write_text("x")
+	ancient = (datetime.now() - timedelta(days=400)).timestamp()
+	os.utime(stray, (ancient, ancient))
 	# Subcarpetas y docs del buzón: nunca se tocan
 	notes = temp_dir / "notes"
 	notes.mkdir()
@@ -100,7 +102,7 @@ def test_awakening_logs_missing_dir_is_safe(tmp_path, monkeypatch):
 	"""Sin directorio de awakening, el plugin no falla ni borra nada."""
 	from red_pill.swarm.agents.janitor_plugins import awakening_logs as mod
 
-	monkeypatch.setattr(mod, "get_awakening_dir", lambda: tmp_path / "does-not-exist")
+	monkeypatch.setattr(mod, "get_awakening_dir", lambda create=True: tmp_path / "does-not-exist")
 	janitor = JanitorMinion()
 	object.__setattr__(janitor, "log", MagicMock())
 
@@ -129,3 +131,30 @@ def test_janitor_discovers_all_plugins():
 		"queue_hygiene",
 		"scratch_purge",
 	} <= names
+
+
+def test_awakening_logs_never_creates_the_desk(tmp_path, monkeypatch):
+	"""Regresión: resolver el dir de awakening creaba un desk fantasma."""
+	from red_pill.swarm.agents.janitor_plugins import awakening_logs as mod
+
+	ghost = tmp_path / "Agent_Core"
+	monkeypatch.setenv("AGENT_CORE_DIR", str(ghost))
+	janitor = JanitorMinion()
+	object.__setattr__(janitor, "log", MagicMock())
+
+	res = asyncio.run(mod.AwakeningLogsPlugin().execute(janitor, {}))
+
+	assert res["awakening_logs_purged"] == 0
+	assert not ghost.exists()
+
+
+def test_agent_core_root_reads_registry_without_env(tmp_path, monkeypatch):
+	"""Sin env (servicios systemd), la fuente es el registro, no el hermano Agent_Core."""
+	from red_pill.core import paths, workspaces
+
+	monkeypatch.delenv("AGENT_CORE_DIR", raising=False)
+	monkeypatch.setattr(workspaces, "agent_core_dir", lambda: tmp_path / "desk")
+	assert paths.get_agent_core_root() == tmp_path / "desk"
+
+	monkeypatch.setenv("AGENT_CORE_DIR", str(tmp_path / "env-desk"))
+	assert paths.get_agent_core_root() == tmp_path / "env-desk"

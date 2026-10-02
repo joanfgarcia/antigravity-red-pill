@@ -33,7 +33,7 @@ class AwakeningLogsPlugin(JanitorPlugin):
 		plugin_cfg = config_dict.get("plugins", {}).get(self.name, {})
 		days_to_keep = int(plugin_cfg.get("days_to_keep", 30))
 
-		awakening_dir = get_awakening_dir()
+		awakening_dir = get_awakening_dir(create=False)
 		if not awakening_dir.is_dir():
 			janitor.log(f"[Janitor] Awakening dir {awakening_dir} not found. Skipping.")
 			return {"awakening_logs_purged": 0}
@@ -56,14 +56,11 @@ class AwakeningLogsPlugin(JanitorPlugin):
 		return {"awakening_logs_purged": purged}
 
 	def _log_timestamp(self, path: Path) -> Optional[datetime]:
+		"""Fecha codificada en el nombre; None (= no se toca) si no sigue el esquema."""
 		match = _AWAKENING_LOG_RE.match(path.name)
-		if match:
-			try:
-				return datetime.strptime(match.group(1), "%Y%m%d")
-			except ValueError:
-				pass
-		# Fallback: mtime, por si el esquema de nombres cambiara.
+		if not match:
+			return None
 		try:
-			return datetime.fromtimestamp(path.stat().st_mtime)
-		except Exception:
+			return datetime.strptime(match.group(1), "%Y%m%d")
+		except ValueError:
 			return None
