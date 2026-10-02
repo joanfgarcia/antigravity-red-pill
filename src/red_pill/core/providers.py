@@ -142,6 +142,10 @@ class OpenAIInferenceProvider(BaseInferenceProvider):
 		return iter([])
 
 
+class SipInferenceError(RuntimeError):
+	"""El daemon SIP respondió sin `choices` (400/503 con `error`, o no-JSON)."""
+
+
 class SipInferenceProvider(BaseInferenceProvider):
 	"""Provider for Sovereign Inference Proxy (SIP) over Unix Sockets.
 
@@ -244,8 +248,18 @@ class SipInferenceProvider(BaseInferenceProvider):
 		conn = UnixHTTPConnection(self.socket_path, timeout=timeout)
 		conn.request("POST", "/v1/chat/completions", body=json.dumps(payload), headers={"Content-Type": "application/json"})
 		response = conn.getresponse()
-		data = json.loads(response.read().decode())
-		return data["choices"][0]["message"]
+		raw = response.read().decode(errors="replace")
+		try:
+			data = json.loads(raw)
+		except ValueError:
+			data = None
+		choices = data.get("choices") if isinstance(data, dict) else None
+		if not choices:
+			# El daemon rechaza con {"error": ...} (p. ej. K1: model no candidato
+			# de la task → 400; sin dispositivo → 503). Antes: KeyError 'choices'.
+			detail = data.get("error") if isinstance(data, dict) and data.get("error") else raw[:500]
+			raise SipInferenceError(f"SIP chat failed (HTTP {response.status}): {detail}")
+		return choices[0]["message"]
 
 	def stream(self, prompt: str, **kwargs) -> Iterator[str]:
 		return iter([])
