@@ -179,7 +179,7 @@ def inject_genesis(manager: MemoryManager) -> None:
 		{
 			"id": ID_DIR_GIT_RULE,
 			"coll": "directive_memories",
-			"text": "Git Golden Rule: Never commit to main. Work on a branch — autonomous work runs in a worktree on branch `awaken/<ts>`. Local commit YES on your branch; push NEVER without an explicit Operator command. Flow: branch -> local commit -> PR.",
+			"text": "Git Golden Rule: NEVER commit to main in PROJECT/kernel repos — work on a branch; autonomous (awakening) work ALWAYS runs in a `git worktree` on a branch (`awaken/<ts>` or the designated feature branch). Local commit YES on your branch; push NEVER without an explicit Operator command; flow: branch -> local commit -> PR. EXCEPTION — the DESK (${AGENT_CORE_DIR}): it is a backup repo, not strict version control: commit directly to `main` and push is allowed there. Whenever you work in a worktree, RECORD it (branch + worktree path + commit) in your awakening log and in the RFC/note of the work, so the next awakening can find and resume it.",
 			"meta": {"type": "git_workflow", "priority": "critical"},
 		},
 		{

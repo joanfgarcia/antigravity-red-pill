@@ -8,6 +8,44 @@ import platformdirs
 logger = logging.getLogger(__name__)
 
 
+def _is_test_context() -> bool:
+	"""True if we are running under a test harness (pytest, or the explicit
+	REDPILL_TESTING flag). Used to enforce write isolation: a test must NEVER
+	touch the operator's production data dir."""
+	if os.environ.get("REDPILL_TESTING") == "1":
+		return True
+	return "pytest" in sys.modules
+
+
+def _assert_not_production_dir(path: Path, what: str) -> None:
+	"""Fail loudly if a test context resolves a storage path to the REAL
+	production data dir. This is the last line of defence: even a test run
+	outside the conftest (bare `python` on a test file) cannot silently write to
+	production.
+
+	Only fires when the test harness has NOT redirected storage: if the operator's
+	real XDG_DATA_HOME is still in effect under a test context, aborting is the
+	point. When conftest has redirected XDG_DATA_HOME to a tmp dir, `path` will
+	not be under the production dir and this is a no-op."""
+	if not _is_test_context():
+		return
+	# Compare against the REAL production dir (bypassing any XDG override), so
+	# this fires only when a test actually resolves to the operator's storage.
+	prod_data = Path.home() / ".local" / "share"
+	try:
+		resolved = path.resolve()
+	except Exception:
+		return
+	prod_red_pill = (prod_data / "red-pill").resolve()
+	prod_neon = (prod_data / "neon-link").resolve()
+	if resolved == prod_red_pill or prod_red_pill in resolved.parents or resolved == prod_neon or prod_neon in resolved.parents:
+		raise RuntimeError(
+			f"[TEST ISOLATION] {what} resolved to the PRODUCTION data dir ({resolved}). "
+			"A test is trying to write to the operator's real storage. "
+			"Set XDG_DATA_HOME/APP_ROOT to a tmp dir (conftest does this) or pass an explicit db_path."
+		)
+
+
 def get_bunker_root() -> Path:
 	"""
 	Resuelve el directorio maestro del Bünker Soberano.
@@ -91,6 +129,7 @@ def get_latest_awakening_log() -> Path:
 def get_data_dir() -> Path:
 	"""Resuelve el directorio de datos XDG base para red-pill."""
 	path = Path(platformdirs.user_data_dir("red-pill"))
+	_assert_not_production_dir(path, "get_data_dir()")
 	path.mkdir(parents=True, exist_ok=True)
 	return path
 
@@ -180,7 +219,9 @@ def get_neon_link_data_dir() -> Path:
 
 def get_neon_link_db_path() -> Path:
 	"""Resuelve la ruta a la base de datos de eventos de neon-link."""
-	return get_neon_link_data_dir() / "events.db"
+	path = get_neon_link_data_dir() / "events.db"
+	_assert_not_production_dir(path, "get_neon_link_db_path()")
+	return path
 
 
 def migrate_legacy_xdg_config() -> None:

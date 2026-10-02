@@ -17,8 +17,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-import red_pill.plugins.antigravity_ide.worker as worker_module
-from red_pill.plugins.antigravity_ide.worker import IDEWorker, _detect_escalate_marker, _detect_routing_keyword
+import red_pill.core.agent_worker as worker_module
+from red_pill.core.agent_worker import IDEWorker, _detect_escalate_marker, _detect_routing_keyword
 
 
 @pytest.fixture
@@ -245,8 +245,8 @@ class TestD5LocalGuard:
 			built["name"] = name
 			return _FakeBridge()
 
-		with patch("red_pill.plugins.antigravity_ide.worker.create_cascade_bridge", side_effect=_fake_create):
-			with patch("red_pill.plugins.antigravity_ide.worker.AntigravityIDEClient"):
+		with patch("red_pill.core.agent_worker.create_cascade_bridge", side_effect=_fake_create):
+			with patch("red_pill.plugins.antigravity_ide.pulse.AntigravityIDEClient"):
 				with patch("red_pill.inference.samantha_worker.SamanthaWorker") as mock_sam:
 					mock_sam.return_value.start = MagicMock()
 					worker = IDEWorker()

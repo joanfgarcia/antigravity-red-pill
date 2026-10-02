@@ -15,9 +15,9 @@ from unittest.mock import patch
 
 import pytest
 
-import red_pill.plugins.antigravity_ide.worker as worker_module
+import red_pill.core.agent_worker as worker_module
 from red_pill.cognitive.queue_manager import CognitiveQueueManager
-from red_pill.plugins.antigravity_ide.worker import IDEWorker
+from red_pill.core.agent_worker import IDEWorker
 
 
 @pytest.fixture

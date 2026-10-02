@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from red_pill.plugins.antigravity_ide.worker import IDEWorker
+from red_pill.core.agent_worker import IDEWorker
 from red_pill.telegram.session import TelegramSessionManager
 
 
@@ -79,7 +79,7 @@ def mock_telegram_env(tmp_path, monkeypatch):
 	conn.commit()
 	conn.close()
 
-	import red_pill.plugins.antigravity_ide.worker as worker_module
+	import red_pill.core.agent_worker as worker_module
 
 	monkeypatch.setattr(worker_module, "DB_PATH", db_path)
 

@@ -18,8 +18,8 @@ from unittest.mock import patch
 
 import pytest
 
-import red_pill.plugins.antigravity_ide.worker as worker_module
-from red_pill.plugins.antigravity_ide.worker import IDEWorker, _is_bridge_timeout
+import red_pill.core.agent_worker as worker_module
+from red_pill.core.agent_worker import IDEWorker, _is_bridge_timeout
 
 
 @pytest.fixture
