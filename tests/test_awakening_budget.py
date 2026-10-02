@@ -340,3 +340,67 @@ def test_budget_check_and_insert_are_atomic(events_db, monkeypatch):
 	conn.commit()
 	conn.close()
 	assert cursor.probe == "database is locked", "otro proceso no puede colarse entre el recuento y el INSERT"
+
+
+# ── Reintentos acotados de un despertar fallido ──────────────────────────────
+
+
+def _retry_same_awakening(events_db, monkeypatch, bridge, attempts: int):
+	"""Reprocesa el MISMO mensaje de despertar `attempts` veces (un pulse por minuto)."""
+	monkeypatch.setattr(aw, "_awakening_channel_directive", lambda operator=None: "CANAL")
+	worker = IDEWorker.__new__(IDEWorker)
+	worker._touch_lease = lambda: None
+	worker._bridge_awakening = bridge
+	conn = aw.get_connection()
+	conn.execute("INSERT INTO inbox (channel, channel_user_id, payload) VALUES ('system', 'autonomous_awakening', '{}')")
+	conn.commit()
+	for _ in range(attempts):
+		worker._process_awakening("despierta", [1], conn.cursor(), conn, channel_user_id="autonomous_awakening")
+		conn.commit()
+	state = SimpleNamespace(
+		inbox=conn.execute("SELECT status, retries FROM inbox WHERE id = 1").fetchone(),
+		ledger=conn.execute("SELECT status, counted FROM execution_ledger").fetchall(),
+		dead=conn.execute("SELECT channel, channel_user_id, error_reason FROM dead_letters").fetchall(),
+		outbox=conn.execute("SELECT COUNT(*) FROM outbox").fetchone()[0],
+	)
+	conn.close()
+	return state
+
+
+def test_first_failure_stays_pending_for_retry(events_db, monkeypatch):
+	first = _retry_same_awakening(events_db, monkeypatch, _Bridge(ok=False, error="spawn failed"), attempts=1)
+	assert first.inbox["status"] == "PENDING" and first.inbox["retries"] == 1
+
+
+def test_transient_failures_capped_at_three_attempts(events_db, monkeypatch):
+	"""Hallazgo BAJA: un despertar fallido quedaba PENDING sin límite y cada
+	intento contaba: una caída del puente quemaba los 8 cupos en ~8 minutos."""
+	state = _retry_same_awakening(events_db, monkeypatch, _Bridge(ok=False, error="spawn failed"), attempts=3)
+	assert state.inbox["status"] == "DEAD"
+	assert [tuple(r) for r in state.ledger] == [("error", 1)] * 3, "cada intento fallido consumió recursos"
+	assert [tuple(r)[:2] for r in state.dead] == [("system", "autonomous_awakening")]
+	assert state.outbox == 0, "el canal system no avisa por Telegram"
+
+
+def test_timeout_gets_a_single_retry(events_db, monkeypatch):
+	bridge = _Bridge(exc=RuntimeError("opencode timed out after 600s"))
+	state = _retry_same_awakening(events_db, monkeypatch, bridge, attempts=2)
+	assert state.inbox["status"] == "DEAD"
+	assert len(state.ledger) == 2
+
+
+def test_dead_awakening_stops_consuming_budget(events_db, monkeypatch):
+	"""Tras morir, los pulses siguientes no lo reintentan (ni consumen tope):
+	process_inbox solo recoge PENDING."""
+	state = _retry_same_awakening(events_db, monkeypatch, _Bridge(ok=False, error="spawn failed"), attempts=3)
+	assert state.inbox["status"] == "DEAD"
+	conn = aw.get_connection()
+	pending = conn.execute("SELECT COUNT(*) FROM inbox WHERE status = 'PENDING'").fetchone()[0]
+	conn.close()
+	assert pending == 0
+
+
+def test_missing_bridge_is_capped_too(events_db, monkeypatch):
+	state = _retry_same_awakening(events_db, monkeypatch, None, attempts=3)
+	assert state.inbox["status"] == "DEAD"
+	assert state.dead and state.dead[0]["error_reason"] == "no bridge available"

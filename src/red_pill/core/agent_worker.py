@@ -1047,7 +1047,7 @@ class IDEWorker:
 		# capabilities degraded (bridge construction failed) — never fall through
 		# to a backend's legacy polling path on behalf of other backends.
 		if channel == "system" and ((self._caps and self._caps.auto_approve) or cfg.get_config().AWAKENING_BRIDGE_CASCADE):
-			self._process_awakening(combined_text, msg_ids_to_process, cursor, conn)
+			self._process_awakening(combined_text, msg_ids_to_process, cursor, conn, channel_user_id=channel_user_id)
 			conn.commit()
 			conn.close()
 			return
@@ -1340,12 +1340,17 @@ class IDEWorker:
 
 		logger.info(f"[{msg_ids}] Processed via bridge. Response length: {len(clean_content)} chars")
 
-	def _process_awakening(self, combined_text, msg_ids, cursor, conn):
+	def _process_awakening(self, combined_text, msg_ids, cursor, conn, channel_user_id: str = "system"):
 		"""Process AWAKENING messages in isolation — no Telegram session history.
 
 		Each AWAKENING gets a fresh bridge conversation. Output is still
 		routed to the Telegram outbox so the user sees the result, but
 		the conversation history is never mixed with user sessions.
+
+		A failed attempt counts against the daily cap (it consumed resources)
+		and is retried with the same D24 policy as Telegram messages: a timeout
+		gets one retry, a transient error up to three attempts; then the message
+		goes DEAD (+ dead_letters) so an outage cannot burn the whole day's cap.
 		"""
 		import re
 
@@ -1435,8 +1440,7 @@ class IDEWorker:
 				"UPDATE execution_ledger SET status = 'error', duration_s = 0 WHERE id = ?",
 				(ledger_id,),
 			)
-			for m_id in msg_ids:
-				cursor.execute("UPDATE inbox SET retries = retries + 1 WHERE id = ?", (m_id,))
+			self._handle_retry_failure(msg_ids, "system", channel_user_id, cursor, error_text="no bridge available")
 			return
 
 		# D23: commit-pre-prompt — release the events.db write-lock (execution_ledger
@@ -1455,8 +1459,7 @@ class IDEWorker:
 				"UPDATE execution_ledger SET status = 'error', duration_s = ? WHERE id = ?",
 				(duration, ledger_id),
 			)
-			for m_id in msg_ids:
-				cursor.execute("UPDATE inbox SET retries = retries + 1 WHERE id = ?", (m_id,))
+			self._handle_retry_failure(msg_ids, "system", channel_user_id, cursor, exc=e)
 			return
 
 		duration = time.time() - start_time
@@ -1467,8 +1470,7 @@ class IDEWorker:
 				"UPDATE execution_ledger SET status = 'error', duration_s = ? WHERE id = ?",
 				(duration, ledger_id),
 			)
-			for m_id in msg_ids:
-				cursor.execute("UPDATE inbox SET retries = retries + 1 WHERE id = ?", (m_id,))
+			self._handle_retry_failure(msg_ids, "system", channel_user_id, cursor, error_text=result.error or "unknown error")
 			return
 
 		response = result.response
