@@ -58,17 +58,23 @@ def is_content_node(payload: Dict[str, Any]) -> bool:
 	return payload.get("node_type") in _CONTENT_NODE_TYPES or payload.get("origin") == "memento"
 
 
+def is_groupable(payload: Dict[str, Any]) -> bool:
+	"""Contenido que la síntesis PUEDE agrupar: contenido con `session_id`.
+
+	Es el denominador honesto de la cobertura D26: un legacy sin sesión nunca
+	entrará en un hub, así que contarlo hundiría la cobertura (falsa alarma).
+	"""
+	return is_content_node(payload) and bool(payload.get("session_id"))
+
+
 def group_by_session(points: List[Tuple[Any, Dict[str, Any]]]) -> Dict[str, List[Tuple[Any, Dict[str, Any]]]]:
 	"""Agrupa engramas de contenido por `session_id` (excluye hubs y sin sesión)."""
 	groups: Dict[str, List[Tuple[Any, Dict[str, Any]]]] = {}
 	for pid, payload in points:
 		payload = payload or {}
-		if not is_content_node(payload):
+		if not is_groupable(payload):
 			continue
-		sid = str(payload.get("session_id") or "")
-		if not sid:
-			continue
-		groups.setdefault(sid, []).append((pid, payload))
+		groups.setdefault(str(payload["session_id"]), []).append((pid, payload))
 	return groups
 
 

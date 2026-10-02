@@ -28,12 +28,12 @@ def test_compute_sw_health():
 	now = time.time()
 	data = {
 		"work_memories": [
-			("c1", {"node_type": "memento_engram", "origin": "memento"}),
-			("c2", {"node_type": "memento_engram", "origin": "memento"}),
-			("c3", {"node_type": "memento_engram", "origin": "memento"}),
+			("c1", {"node_type": "memento_engram", "origin": "memento", "session_id": "s"}),
+			("c2", {"node_type": "memento_engram", "origin": "memento", "session_id": "s"}),
+			("c3", {"node_type": "memento_engram", "origin": "memento", "session_id": "s"}),
 			("h1", {"node_type": "synthesis_hub", "lazarus_phase": "synthesis_hub"}),
-			("m1", {"node_type": "memento_engram", "origin": "memento", "hubbed": True}),
-			("m2", {"node_type": "memento_engram", "origin": "memento", "hubbed": True}),
+			("m1", {"node_type": "memento_engram", "origin": "memento", "session_id": "s", "hubbed": True}),
+			("m2", {"node_type": "memento_engram", "origin": "memento", "session_id": "s", "hubbed": True}),
 		],
 		"situation_memories": [("s1", {"updated_at": now - 3600})],
 		"interaction_memories": [
@@ -58,8 +58,8 @@ def test_coverage_uses_the_synthesis_content_predicate():
 	`hubbed` fuera del contenido no infla el numerador: cobertura <= 100%."""
 	data = {
 		"work_memories": [
-			("l1", {"hubbed": True}),  # legacy sin node_type: contenido para la síntesis
-			("l2", {"hubbed": True}),
+			("l1", {"session_id": "s", "hubbed": True}),  # legacy sin node_type: contenido para la síntesis
+			("l2", {"session_id": "s", "hubbed": True}),
 			("x1", {"node_type": "otro", "hubbed": True}),  # no es contenido
 			("h1", {"node_type": "synthesis_hub", "hubbed": True}),  # hub: nunca contenido
 		],
@@ -113,9 +113,26 @@ def test_plugin_pain_below_threshold(monkeypatch):
 	"""El dolor real (<50%) se mantiene."""
 	data = {
 		"work_memories": [
-			("c1", {"node_type": "memento_engram"}),
-			("c2", {"node_type": "memento_engram"}),
-			("c3", {"node_type": "memento_engram", "hubbed": True}),
+			("c1", {"node_type": "memento_engram", "session_id": "s"}),
+			("c2", {"node_type": "memento_engram", "session_id": "s"}),
+			("c3", {"node_type": "memento_engram", "session_id": "s", "hubbed": True}),
 		],
 	}
 	assert "sw_hub_coverage_low" in _run_plugin(monkeypatch, data)
+
+
+def test_coverage_ignores_content_the_synthesis_can_never_group():
+	"""Un legacy sin `session_id` es contenido pero nunca entrará en un hub: no
+	cuenta en el denominador (si contara, 10 legacy hundirían la cobertura al 16.7%)."""
+	data = {
+		"work_memories": [(f"l{i}", {}) for i in range(10)]
+		+ [
+			("m1", {"node_type": "memento_engram", "session_id": "s", "hubbed": True}),
+			("m2", {"node_type": "memento_engram", "session_id": "s", "hubbed": True}),
+		],
+	}
+	wm = compute_sw_health(FakeMM(FakeClient(data)))["collections"]["work_memories"]
+	assert wm["content"] == 12
+	assert wm["groupable"] == 2
+	assert wm["hub_coverage_pct"] == 100.0
+
