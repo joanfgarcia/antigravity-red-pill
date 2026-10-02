@@ -71,15 +71,10 @@ def _merge_config(config_path: str, template: dict, backup: bool) -> bool:
 
 def _write_instructions(instructions_path: str, seeds_dir: str, variables: dict, backup: bool, update: bool) -> int:
 	sys.path.insert(0, str(os.path.join(os.path.dirname(__file__), "..", "..")))
-	from inject_anchor import splice_block  # noqa: E402
+	# Versiones de bloque: fuente única en inject_anchor.BLOCK_VERSION (este es el
+	# camino de `inject_cli.py`, o sea de install y `red-pill bunker update`).
+	from inject_anchor import BLOCK_VERSION, splice_block  # noqa: E402
 
-	BLOCK_VERSION = {
-		"sovereign_handshake": 1,
-		"agent_core": 2,
-		"knowledge_access": 2,
-		"frontmatter_docs": 3,
-		"job_dag_execution": 1,
-	}
 	changed = 0
 	for anchor in ["sovereign_handshake", "agent_core", "knowledge_access", "frontmatter_docs", "job_dag_execution"]:
 		seed_path = os.path.join(seeds_dir, anchor + ".md")
