@@ -264,3 +264,40 @@ def test_read_log_new_lines_handles_truncation(auditor, tmp_path):
 
 	log.write_text("error: after truncation\n", encoding="utf-8")  # smaller than before
 	assert auditor._read_log_new_lines(log) == ["error: after truncation"]
+
+
+def _green():
+	res = MagicMock()
+	res.returncode = 0
+	res.stdout = ""
+	return res
+
+
+@patch("subprocess.run")
+def test_tests_are_not_run_by_default(mock_run, auditor, monkeypatch):
+	"""El timer horario no corre la suite del checkout vivo (AUDITOR_RUN_TESTS off)."""
+	import red_pill.config as cfg
+
+	monkeypatch.setattr(cfg.get_config(), "AUDITOR_RUN_TESTS", False, raising=False)
+	auditor.memory_mgr = MagicMock()
+	mock_run.side_effect = [_green(), _green()]
+
+	auditor.audit_repo(".")
+
+	cmds = [c.args[0] for c in mock_run.call_args_list]
+	assert not any("pytest" in cmd for cmd in cmds)
+	auditor.memory_mgr.evaporate_signals.assert_any_call("signal_test_failure")
+
+
+@patch("subprocess.run")
+def test_tests_run_unit_only_when_enabled(mock_run, auditor, monkeypatch):
+	import red_pill.config as cfg
+
+	monkeypatch.setattr(cfg.get_config(), "AUDITOR_RUN_TESTS", True, raising=False)
+	auditor.memory_mgr = MagicMock()
+	mock_run.side_effect = [_green(), _green(), _green()]
+
+	auditor.audit_repo(".")
+
+	pytest_cmd = [c.args[0] for c in mock_run.call_args_list if "pytest" in c.args[0]][0]
+	assert "--ignore=tests/integration" in pytest_cmd and "not integration" in pytest_cmd

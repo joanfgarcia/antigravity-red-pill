@@ -190,12 +190,39 @@ class SentinelAuditor:
 				)
 			)
 
-		# 3. Testing (Pytest)
+		# 3. Testing (Pytest) — opt-in (AUDITOR_RUN_TESTS): tests belong to CI.
+		import red_pill.config as cfg
+
+		if not cfg.get_config().AUDITOR_RUN_TESTS:
+			self.logger.info(f"Skipping tests for {repo_path} (AUDITOR_RUN_TESTS off)")
+			# A stale "suite timed out" pain from the old always-on step must not linger.
+			self.memory_mgr.evaporate_signals("signal_test_failure")
+		else:
+			self._audit_tests(repo_path, report)
+
+		# Calculate global intensity based on findings
+		report.intensity = sum(f.severity for f in report.findings)
+		if any(f.severity >= 8.0 for f in report.findings):
+			report.status = "red"
+		elif report.findings:
+			report.status = "yellow"
+
+		# Update Cache if audit ran
+		self._update_cached_mtime(repo_path, current_mtime)
+
+		return report
+
+	def _audit_tests(self, repo_path: str, report: AuditReport) -> None:
+		"""Pytest of the live checkout, unit tests only (integration excluded)."""
 		self.logger.info(f"Auditing tests for {repo_path}")
-		# Run standard tests (removed xdist to ensure universal compatibility)
 		try:
 			pytest = subprocess.run(
-				[self.uv_path, "run", "pytest"], cwd=repo_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=120
+				[self.uv_path, "run", "pytest", "-q", "-p", "no:cacheprovider", "-m", "not integration", "--ignore=tests/integration"],
+				cwd=repo_path,
+				stdout=subprocess.PIPE,
+				stderr=subprocess.STDOUT,
+				text=True,
+				timeout=120,
 			)
 			if pytest.returncode != 0:
 				report.status = "yellow"
@@ -219,18 +246,6 @@ class SentinelAuditor:
 					metadata={"stdout": te.stdout.decode() if isinstance(te.stdout, bytes) else (te.stdout or "")},
 				)
 			)
-
-		# Calculate global intensity based on findings
-		report.intensity = sum(f.severity for f in report.findings)
-		if any(f.severity >= 8.0 for f in report.findings):
-			report.status = "red"
-		elif report.findings:
-			report.status = "yellow"
-
-		# Update Cache if audit ran
-		self._update_cached_mtime(repo_path, current_mtime)
-
-		return report
 
 	def _load_log_offsets(self) -> Dict[str, int]:
 		try:

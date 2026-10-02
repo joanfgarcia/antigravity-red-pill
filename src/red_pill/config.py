@@ -403,6 +403,12 @@ class RedPillConfig(BaseSettings):
 	# ledger al clasificarlo (AWAKEN-002). Ponlo a True para el cómputo antiguo
 	# (todo despertar, silencioso o no, consume tope).
 	AWAKENING_SILENCE_COUNTS: bool = False
+	# AUDITOR_RUN_TESTS: si True, el Sentinel Auditor horario corre también la
+	# suite de pytest del checkout vivo. OFF por defecto: los tests son de CI,
+	# no de un timer de producción con 120 s de tope (siempre moría por timeout
+	# a media suite, y una suite no hermética descargaba el modelo y pedía
+	# inferencia real cada hora). Lint (ruff) y tipos (mypy) siguen auditándose.
+	AUDITOR_RUN_TESTS: bool = False
 	# SESSION_ACTIVE_MIN: umbral del latido de sesión (RFC-DESPERTAR-001 P4).
 	# Un `.start` más nuevo que su `.end` y dentro de esta ventana = "alguien
 	# está tocando" (turno en vuelo). El `.end` reciente = "alguien ha tocado".
