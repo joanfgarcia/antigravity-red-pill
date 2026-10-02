@@ -42,11 +42,18 @@ class EventsDbPurgePlugin(JanitorPlugin):
 
 				cursor.execute("DELETE FROM outbox WHERE status = 'SENT' AND created_at < ?", (cutoff_date,))
 				outbox_deleted = cursor.rowcount
-				# neon-link marks undeliverable outbox rows FAILED (never DEAD).
-				cursor.execute("DELETE FROM outbox WHERE status = 'FAILED' AND created_at < ?", (dead_cutoff,))
-				outbox_deleted += cursor.rowcount
+				# neon-link marks undeliverable outbox rows FAILED (never DEAD). Dead
+				# letters first, on their own clock; a FAILED row goes only once no
+				# dead letter still points at it (its letter can be up to a day
+				# younger than the row) — `neon-link redrive` keeps working meanwhile.
 				cursor.execute("DELETE FROM dead_letters WHERE created_at < ?", (dead_cutoff,))
 				dead_deleted = cursor.rowcount
+				cursor.execute(
+					"DELETE FROM outbox WHERE status = 'FAILED' AND created_at < ? AND id NOT IN "
+					"(SELECT original_id FROM dead_letters WHERE original_table = 'outbox')",
+					(dead_cutoff,),
+				)
+				outbox_deleted += cursor.rowcount
 
 				cursor.execute("DELETE FROM processed_firebase_messages WHERE processed_at < ?", (cutoff_date,))
 				processed_fb_deleted = cursor.rowcount

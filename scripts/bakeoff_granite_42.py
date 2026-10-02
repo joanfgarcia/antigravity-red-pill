@@ -45,7 +45,7 @@ def _extract_payload(raw: str) -> tuple:
 	si hubo thinking y su longitud (mide el coste del razonamiento).
 
 	El template CLI de Granite 4.2 abre el razonamiento con `[Start thinking]`
-	(el daemon usa otro marcador ` response` — AD-030). Se limpia ese bloque
+	(el daemon, con el template del GGUF, usa `<think>`/`</think>` — AD-033). Se limpia ese bloque
 	(hasta `[End thinking]` o fin de salida si el presupuesto se agotó pensando)
 	antes de separar con `extract_thinking`."""
 	clean = re.sub(r"\[Start thinking\][\s\S]*?(?:\[End thinking\]|$)", "", raw, count=1)
