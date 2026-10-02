@@ -204,7 +204,12 @@ def test_load_elements_desde_fichero(tmp_path):
 def test_build_argv_con_y_sin_systemd(tmp_path):
 	driver = _bind(ElementJobDriver())
 	driver._has_systemd = staticmethod(lambda: True)
-	argv = driver._build_argv(_payload(), str(tmp_path))
+	# La limpieza del scope rancio habla con systemctl: mockeada (nunca el systemd real)
+	with patch("red_pill.jobs.drivers.element.subprocess.run") as run:
+		run.return_value.returncode = 3  # is-active: inactivo → sin stop
+		argv = driver._build_argv(_payload(), str(tmp_path))
+	verbs = [c.args[0][2] for c in run.call_args_list]
+	assert verbs == ["is-active", "reset-failed"]
 	assert argv[0] == "systemd-run"
 	assert "--unit=redpill-job-job-1234" in argv
 	driver._has_systemd = staticmethod(lambda: False)
