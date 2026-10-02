@@ -279,6 +279,24 @@ async def update_metrics_loop(app: Application):
 
 
 # 3. TUI APPLICATION LAYOUT
+
+def sync_registry_desk(desk: str) -> None:
+	"""Keep `workspaces.yaml:agent_core` in step with the .env's AGENT_CORE_DIR.
+
+	The registry is the desk's source of truth for the Janitor and the anchor
+	injectors (systemd services do not load the .env); writing only the .env
+	would split readers between the old and the new desk. Without a registry the
+	back-compat path already derives the desk from the .env.
+	"""
+	from red_pill.core import workspaces as ws
+
+	if not desk or not ws.registry_path().exists():
+		return
+	target = Path(os.path.expanduser(desk))
+	registry = ws.load_registry()
+	if registry.agent_core != target:
+		ws.save_registry(registry.model_copy(update={"agent_core": target}))
+
 def build_tui_app() -> Application:
 	env_path = get_config_dir() / ".env"
 	env = EnvConfig(env_path)
@@ -496,6 +514,7 @@ def build_tui_app() -> Application:
 
 		try:
 			env.save()
+			sync_registry_desk(agent_core_txt.text.strip())
 			save_status_text = "✓ Configuration saved atomically to ~/.config/red-pill/.env. Backup created."
 			save_status_style = "class:success"
 
