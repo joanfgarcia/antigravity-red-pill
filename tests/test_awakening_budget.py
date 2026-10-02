@@ -231,3 +231,112 @@ def test_daily_cap_resets_at_local_midnight(awaken, events_db, local_tz):
 	_fill_ledger(events_db, MAX_AWAKENINGS_PER_DAY, counted=1, started_at=started_at)
 	run = awaken(response=REPORT)
 	assert (run.bridge.calls == 0) is expect_exhausted
+
+
+# ── Migración de `counted` sobre un esquema antiguo ──────────────────────────
+
+_OLD_LEDGER = (
+	"CREATE TABLE execution_ledger (id INTEGER PRIMARY KEY AUTOINCREMENT, exec_type TEXT NOT NULL, "
+	"conversation_id TEXT, started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, duration_s REAL, "
+	"response_len INTEGER DEFAULT 0, status TEXT DEFAULT 'started')"
+)
+
+
+def _old_schema_db(db_path: Path, rows: int = 0) -> None:
+	"""events.db con el ledger previo a AWAKEN-002, en WAL como lo crea neon-link."""
+	_seed_events_db(db_path)
+	conn = sqlite3.connect(str(db_path))
+	conn.execute("PRAGMA journal_mode=WAL")
+	conn.execute(_OLD_LEDGER)
+	for _ in range(rows):
+		conn.execute("INSERT INTO execution_ledger (exec_type, status) VALUES ('awakening', 'completed')")
+	conn.commit()
+	conn.close()
+
+
+def test_migration_adds_counted_to_old_schema(tmp_path, monkeypatch, awaken):
+	"""El ALTER TABLE real (los fixtures antiguos precreaban la columna): las
+	filas previas quedan counted=1 y siguen contando contra el tope."""
+	db_path = tmp_path / "old.db"
+	_old_schema_db(db_path, rows=MAX_AWAKENINGS_PER_DAY)
+	monkeypatch.setattr(aw, "DB_PATH", db_path)
+
+	conn = aw.get_connection()
+	cols = {row[1] for row in conn.execute("PRAGMA table_info(execution_ledger)")}
+	counted = {row[0] for row in conn.execute("SELECT counted FROM execution_ledger")}
+	conn.close()
+	assert "counted" in cols
+	assert counted == {1}
+	assert awaken(response=REPORT).bridge.calls == 0, "las filas migradas agotan el tope"
+
+
+def test_concurrent_migration_does_not_fail(tmp_path, monkeypatch):
+	"""Hallazgo BAJA: varios get_connection a la vez sobre un esquema antiguo
+	competían por el ALTER y uno moría con `duplicate column name: counted`."""
+	import threading
+
+	errors: list = []
+	for attempt in range(10):
+		db_path = tmp_path / f"race_{attempt}.db"
+		_old_schema_db(db_path)
+		monkeypatch.setattr(aw, "DB_PATH", db_path)
+		barrier = threading.Barrier(4)
+
+		def _open():
+			barrier.wait()
+			try:
+				aw.get_connection().close()
+			except Exception as e:  # noqa: BLE001 — el test recoge cualquier fallo
+				errors.append(e)
+
+		threads = [threading.Thread(target=_open) for _ in range(4)]
+		for t in threads:
+			t.start()
+		for t in threads:
+			t.join()
+	assert errors == []
+
+
+# ── Check + insert del tope, atómicos ────────────────────────────────────────
+
+
+class _ProbeCursor:
+	"""Cursor real que, justo tras contar el tope, intenta escribir desde otra
+	conexión (otro worker): debe encontrarse el lock de escritura tomado."""
+
+	def __init__(self, cursor, db_path):
+		self._cursor = cursor
+		self._db_path = db_path
+		self.probe = None
+
+	def execute(self, sql, *args):
+		result = self._cursor.execute(sql, *args)
+		if "COUNT(*) FROM execution_ledger" in sql:
+			other = sqlite3.connect(str(self._db_path), timeout=0)
+			try:
+				other.execute("BEGIN IMMEDIATE")
+				self.probe = "acquired"
+				other.rollback()
+			except sqlite3.OperationalError as e:
+				self.probe = str(e)
+			finally:
+				other.close()
+		return result
+
+	def __getattr__(self, name):
+		return getattr(self._cursor, name)
+
+
+def test_budget_check_and_insert_are_atomic(events_db, monkeypatch):
+	monkeypatch.setattr(aw, "_awakening_channel_directive", lambda operator=None: "CANAL")
+	worker = IDEWorker.__new__(IDEWorker)
+	worker._touch_lease = lambda: None
+	worker._bridge_awakening = _Bridge(response=REPORT)
+	conn = aw.get_connection()
+	conn.execute("INSERT INTO inbox (channel, channel_user_id, payload) VALUES ('system', 'autonomous_awakening', '{}')")
+	conn.commit()
+	cursor = _ProbeCursor(conn.cursor(), events_db)
+	worker._process_awakening("despierta", [1], cursor, conn)
+	conn.commit()
+	conn.close()
+	assert cursor.probe == "database is locked", "otro proceso no puede colarse entre el recuento y el INSERT"

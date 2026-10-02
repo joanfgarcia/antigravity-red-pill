@@ -176,7 +176,13 @@ def get_connection():
 	# AWAKENING_SILENCE_COUNTS=true). DEFAULT 1 preserva el cómputo previo.
 	ledger_cols = {row[1] for row in conn.execute("PRAGMA table_info(execution_ledger)")}
 	if "counted" not in ledger_cols:
-		conn.execute("ALTER TABLE execution_ledger ADD COLUMN counted INTEGER DEFAULT 1")
+		try:
+			conn.execute("ALTER TABLE execution_ledger ADD COLUMN counted INTEGER DEFAULT 1")
+		except sqlite3.OperationalError as e:
+			# Carrera entre conexiones (heartbeat + pulse, o dos procesos): otra
+			# migró entre el PRAGMA y el ALTER. La columna ya está: nada que hacer.
+			if "duplicate column" not in str(e).lower():
+				raise
 	return conn
 
 
@@ -1351,6 +1357,12 @@ class IDEWorker:
 		# Solo cuentan los despertares productivos (`counted=1`): los que
 		# ejercen el Derecho al Silencio quedan a 0 salvo política
 		# AWAKENING_SILENCE_COUNTS (AWAKEN-002).
+		# Recuento + INSERT atómicos entre procesos: BEGIN IMMEDIATE toma el lock
+		# de escritura ANTES de contar, así dos workers no leen ambos 7/8 y pasan
+		# los dos. Si la conexión ya está en una transacción, ya escribió y tiene
+		# el lock. Se libera en el commit previo a la llamada al puente (D23).
+		if not conn.in_transaction:
+			conn.execute("BEGIN IMMEDIATE")
 		today_count = cursor.execute(
 			"SELECT COUNT(*) FROM execution_ledger WHERE exec_type = 'awakening' "
 			"AND date(started_at, 'localtime') = date('now', 'localtime') AND counted = 1"
