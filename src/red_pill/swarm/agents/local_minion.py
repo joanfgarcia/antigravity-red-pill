@@ -245,6 +245,7 @@ async def run_local_minion(task: str, *, cwd: Optional[str] = None, provider_nam
 	]
 	consecutive_errors = 0
 	tool_calls_made = 0
+	tool_calls_ok = 0  # results that are not ERROR: only these ground the answer
 	tool_results: List[str] = []
 
 	def _done(ok: bool, answer: str, steps: int) -> Dict[str, Any]:
@@ -252,7 +253,7 @@ async def run_local_minion(task: str, *, cwd: Optional[str] = None, provider_nam
 			"ok": ok,
 			"answer": answer,
 			"steps": steps,
-			"used_tools": tool_calls_made > 0,
+			"used_tools": tool_calls_ok > 0,
 			"tool_calls": tool_calls_made,
 			"messages": messages,
 		}
@@ -298,7 +299,11 @@ async def run_local_minion(task: str, *, cwd: Optional[str] = None, provider_nam
 			result = await _dispatch(name, args, cwd)
 			tool_calls_made += 1
 			tool_results.append(result)
-			consecutive_errors = consecutive_errors + 1 if result.startswith("ERROR") else 0
+			if result.startswith("ERROR"):
+				consecutive_errors += 1
+			else:
+				consecutive_errors = 0
+				tool_calls_ok += 1
 			# Feed the result back as a USER message. The chatml-function-calling
 			# handler (llama_cpp 0.3.31) has NO branch for role="tool" and drops it
 			# silently — the model would then repeat the call blindly. A user turn

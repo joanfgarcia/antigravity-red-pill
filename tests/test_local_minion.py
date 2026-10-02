@@ -278,3 +278,19 @@ async def test_bash_timeout(monkeypatch):
 	monkeypatch.setattr(local_minion, "BASH_TIMEOUT", 0.01)
 	out = await local_minion._dispatch("run_bash", {"command": "sleep 5"}, None)
 	assert out.startswith("ERROR") and "timed out" in out
+
+
+async def test_used_tools_no_cuenta_llamadas_fallidas(monkeypatch):
+	# Regresión: una tool inventada (ERROR) contaba como "usó tools" y el bridge
+	# no marcaba la respuesta como no fundamentada.
+	provider = FakeProvider(
+		[
+			_tool_call("read_file", '{"path": "manifest.txt"}'),
+			{"role": "assistant", "content": "el manifiesto dice vault-0000"},
+		]
+	)
+	_use_provider(monkeypatch, provider)
+	res = await local_minion.run_local_minion("lee manifest.txt")
+	assert res["ok"] is True
+	assert res["tool_calls"] == 1
+	assert res["used_tools"] is False

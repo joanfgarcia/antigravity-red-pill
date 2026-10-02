@@ -133,11 +133,12 @@ class LocalToolBridge(AgentBridge):
 		answer = result.get("answer", "")
 		used_tools = result.get("used_tools")
 		if result.get("ok"):
-			# A tool-using backend that never called a tool produced an
-			# UNGROUNDED answer — the model can invent a tool and fabricate its
-			# output. Flag it so callers don't treat it as a verified result.
-			# (Only when the loop reported it explicitly; older/other callers omit it.)
-			error = "local-tools produced no tool call (ungrounded answer)" if used_tools is False else None
+			# A tool-using backend with no SUCCESSFUL tool call produced an
+			# UNGROUNDED answer — the model can invent a tool (or only collect
+			# errors) and fabricate the output. Flag it so callers don't treat it
+			# as a verified result. (Only when the loop reported it explicitly;
+			# older/other callers omit it.)
+			error = "local-tools produced no successful tool call (ungrounded answer)" if used_tools is False else None
 		else:
 			error = answer or "minion did not finish"
 		return ConversationResult(
