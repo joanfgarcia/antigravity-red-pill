@@ -18,14 +18,17 @@ import os
 import sqlite3
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 import red_pill.config as cfg
 from red_pill.core import origins
 from red_pill.core.paths import get_state_dir
-from red_pill.core.session_liveness import list_sessions
+from red_pill.core.session_liveness import SessionSignal, list_sessions
 
 logger = logging.getLogger(__name__)
+
+# Tope de parámetros por `IN (...)`: holgado bajo el límite histórico de SQLite (999).
+_SQL_CHUNK = 500
 
 
 def _active_seconds() -> int:
@@ -56,6 +59,43 @@ def _opencode_meta(session_id: str) -> Dict[str, Any]:
 	except Exception as e:
 		logger.debug(f"[SessionIndex] opencode meta failed for {session_id}: {e}")
 		return {}
+
+
+def _opencode_subsessions(session_ids: List[str]) -> Set[str]:
+	"""Ids (de `session_ids`) que en `opencode.db` son **sub-sesiones** (`parent_id` no nulo).
+
+	`chat.message` salta también en las sesiones hijas (tool `task`, paneles de
+	subagentes), así que dejan latido propio; pero no son sesiones del operador:
+	mientras corren, el turno del padre ya está en vuelo. Read-only y non-fatal:
+	ante cualquier fallo devuelve vacío (mejor contar de más que esconder una sesión).
+	"""
+	ids = [sid for sid in dict.fromkeys(session_ids) if sid]
+	db = _opencode_db_path()
+	if not ids or not db.exists():
+		return set()
+	children: Set[str] = set()
+	try:
+		con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+		try:
+			for i in range(0, len(ids), _SQL_CHUNK):
+				chunk = ids[i : i + _SQL_CHUNK]
+				marks = ",".join("?" * len(chunk))
+				rows = con.execute(f"SELECT id FROM session WHERE parent_id IS NOT NULL AND id IN ({marks})", chunk).fetchall()
+				children.update(r[0] for r in rows)
+		finally:
+			con.close()
+	except Exception as e:
+		logger.debug(f"[SessionIndex] opencode subsessions lookup failed: {e}")
+		return set()
+	return children
+
+
+def _top_level(signals: List[SessionSignal]) -> List[SessionSignal]:
+	"""Descarta los latidos de sub-sesiones opencode (el padre ya representa el trabajo)."""
+	children = _opencode_subsessions([s.session_id for s in signals if s.provider == "opencode"])
+	if not children:
+		return list(signals)
+	return [s for s in signals if not (s.provider == "opencode" and s.session_id in children)]
 
 
 def _owning_workspace(directory: Optional[str]) -> Optional[str]:
@@ -96,7 +136,7 @@ def build_board(active_seconds: Optional[int] = None) -> List[Dict[str, Any]]:
 	if active_seconds is None:
 		active_seconds = _active_seconds()
 	board: List[Dict[str, Any]] = []
-	for s in list_sessions():
+	for s in _top_level(list_sessions()):
 		extra = _opencode_meta(s.session_id) if s.provider == "opencode" else {}
 		board.append(
 			{
@@ -119,12 +159,18 @@ def board_line() -> str:
 	"""Línea de presencia para el handshake-mini (barata — solo el latido).
 
 	SILENT salvo que haya **otra** sesión viva (>= 2 activas incluyendo la mía):
-	"1" es lo normal y no aporta; el detalle va por MCP `session_board`.
+	"1" es lo normal y no aporta; el detalle va por MCP `session_board`. Las
+	sub-sesiones opencode no cuentan; `opencode.db` solo se consulta cuando hay
+	>= 2 candidatas (el caso normal no sale del directorio de latidos).
 	"""
 	try:
-		n = sum(1 for s in list_sessions() if s.is_active(active_seconds=_active_seconds()))
+		active_seconds = _active_seconds()
+		active = [s for s in list_sessions() if s.is_active(active_seconds=active_seconds)]
+		if len(active) >= 2:
+			active = _top_level(active)
 	except Exception:
 		return ""
+	n = len(active)
 	if n >= 2:
 		return f"[BOARD: {n} sesiones vivas] (detalle: MCP `session_board`)"
 	return ""
