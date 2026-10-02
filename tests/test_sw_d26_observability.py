@@ -51,3 +51,71 @@ def test_compute_sw_health():
 	assert wm["hub_ratio_pct"] == 20.0
 	assert h["solera_age_h"] == 1.0
 	assert h["affinity_coverage"] == 0.5
+
+
+def test_coverage_uses_the_synthesis_content_predicate():
+	"""Legacy sin node_type cuenta como contenido (igual que hub_synthesis) y un
+	`hubbed` fuera del contenido no infla el numerador: cobertura <= 100%."""
+	data = {
+		"work_memories": [
+			("l1", {"hubbed": True}),  # legacy sin node_type: contenido para la síntesis
+			("l2", {"hubbed": True}),
+			("x1", {"node_type": "otro", "hubbed": True}),  # no es contenido
+			("h1", {"node_type": "synthesis_hub", "hubbed": True}),  # hub: nunca contenido
+		],
+	}
+	wm = compute_sw_health(FakeMM(FakeClient(data)))["collections"]["work_memories"]
+	assert wm["content"] == 2
+	assert wm["hubbed_members"] == 2
+	assert wm["hub_coverage_pct"] == 100.0
+	assert wm["hub_coverage_pct"] <= 100.0
+
+
+def test_empty_collection_coverage_is_na():
+	"""Sin contenido no hay cobertura que medir: None ("n/a"), no un 0% falso."""
+	data = {"work_memories": [("h1", {"node_type": "synthesis_hub"})], "social_memories": []}
+	cols = compute_sw_health(FakeMM(FakeClient(data)))["collections"]
+	for c in ("work_memories", "social_memories"):
+		assert cols[c]["content"] == 0
+		assert cols[c]["hub_coverage_pct"] is None
+		assert cols[c]["hub_ratio_pct"] is None
+
+
+class _SignalMM(FakeMM):
+	def __init__(self, client):
+		super().__init__(client)
+		self.signals = []
+
+	def inject_signal(self, **kw):
+		self.signals.append(kw)
+
+
+def _run_plugin(monkeypatch, data):
+	import asyncio
+	from unittest.mock import MagicMock
+
+	import red_pill.config as cfg
+	from red_pill.swarm.agents.janitor_plugins.sw_observability import SwObservabilityPlugin
+
+	monkeypatch.setattr(cfg, "SW_HUBS_ENABLED", True, raising=False)
+	mm = _SignalMM(FakeClient(data))
+	asyncio.run(SwObservabilityPlugin().execute(MagicMock(), {}, memory_manager=mm))
+	return {s["name"] for s in mm.signals}
+
+
+def test_plugin_no_pain_on_empty_collection(monkeypatch):
+	names = _run_plugin(monkeypatch, {"work_memories": [], "situation_memories": [("s1", {"updated_at": time.time()})]})
+	assert "sw_hub_coverage" in names
+	assert "sw_hub_coverage_low" not in names
+
+
+def test_plugin_pain_below_threshold(monkeypatch):
+	"""El dolor real (<50%) se mantiene."""
+	data = {
+		"work_memories": [
+			("c1", {"node_type": "memento_engram"}),
+			("c2", {"node_type": "memento_engram"}),
+			("c3", {"node_type": "memento_engram", "hubbed": True}),
+		],
+	}
+	assert "sw_hub_coverage_low" in _run_plugin(monkeypatch, data)
