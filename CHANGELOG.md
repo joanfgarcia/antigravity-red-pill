@@ -79,6 +79,18 @@ Varias entradas de más abajo quedan **matizadas** por esta sección.
   se consulta **primero** antes de buscar en el repo, y el proyecto **nunca** aloja ni referencia
   el RFC del desk — solo su esencia implementada (`AD-NNN`, docs del repo).
 
+### 🧭 Tablón de sesiones — proyecto por rutas tocadas + tema rodante (RFC-DESPERTAR-001, P1b)
+
+- **[NEW] Proyecto inferido por las rutas que la sesión toca**, no por su cwd
+  (`workspaces.owning_workspace`/`infer_workspaces`): `project` es el workspace de la ruta más
+  reciente y `projects` los demás, de más a menos reciente (últimas 200 rutas). Un `git worktree`
+  enlazado se atribuye a su repo principal. Rutas de opencode.db: keys estructuradas de los tools
+  + rutas de los comandos bash (`~/`, comillas, operadores pegados); las relativas, contra el
+  directorio de la sesión.
+- **[NEW] Tema rodante (Laya):** el `tag_theme` del turno etiquetado más reciente de la sesión
+  (paginando `interaction_memories`), solo si el etiquetado está activo. `session_board` muestra
+  `proyecto=… (+otros)` y `tema=…`.
+
 ### 🛰️ Tablón de sesiones — índice + handshake-mini + MCP `session_board` (RFC-DESPERTAR-001, P1a)
 
 - **[NEW] `red_pill.core.session_index`:** parte del latido y lo enriquece
