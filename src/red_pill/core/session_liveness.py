@@ -13,9 +13,18 @@ Interpretación con el par:
 - `.end` reciente → *alguien ha tocado*; `end - start` = duración del turno.
 - solo `.start` viejo → sesión muerta a medio turno (huérfana).
 
-Los hooks que escriben (Claude `UserPromptSubmit`/`Stop`, opencode) son
-standalone y replican la resolución de `${STATE_DIR}`; este módulo es para el
-kernel (índice, janitor, tools) y los tests.
+Los hooks que escriben son standalone y replican la resolución de
+`${STATE_DIR}`; este módulo es para el kernel (índice, janitor, tools) y los tests:
+
+- Claude Code: `UserPromptSubmit` → `.start`; `Stop`, `SessionEnd` y
+`StopFailure` (error de API: salta *en lugar de* `Stop`) → `.end`.
+- opencode: `chat.message` → `.start`; `session.idle` (v1) o
+`session.execution.succeeded|failed` (v2) → `.end`. Las sub-sesiones
+(`parentID`) no laten.
+
+Limitación conocida: en Claude Code una interrupción con Esc no dispara ningún
+hook (verificado en 2.1.217), así que ese `.start` queda "en vuelo" hasta el
+siguiente turno o hasta `SESSION_ACTIVE_MIN` (`is_active`), que es la cota.
 """
 
 from __future__ import annotations

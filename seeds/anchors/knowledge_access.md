@@ -28,7 +28,7 @@ Reach for the right space; do NOT mix them:
   implemented, its essence lives in the project's own docs (`DECISION_LOG` `AD-NNN`, repo docs).
 - The repo may carry a **legacy** spec series (`docs/.../RFC_0NN`); it is **not** the plan/RFC
   home. Lifecycle: `draft → ratified → implemented → closed → archived`
-  (`planner/design/governance/RFC_FLUJO_RFCS.md`).
+  (if your desk carries `planner/design/governance/RFC_FLUJO_RFCS.md`, it details it).
 
 </constraint>
 

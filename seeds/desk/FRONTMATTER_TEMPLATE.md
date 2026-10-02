@@ -52,7 +52,7 @@ El vocabulario de estados depende de la **fase** del ítem en el planner
 
 | Status | Meaning |
 |---|---|
-| `draft` | Born in the desk, decisions open (see `planner/design/governance/RFC_FLUJO_RFCS.md`) |
+| `draft` | Born in the desk, decisions open (lifecycle: see `planner/README.md`) |
 | `ratified` | Business decisions closed, ready to implement |
 | `in-design` | Design in progress, iterating with the Operator |
 | `implemented` | Code merged in the target project |

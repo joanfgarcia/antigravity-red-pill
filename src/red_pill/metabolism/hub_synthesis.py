@@ -42,15 +42,28 @@ def hub_input_hash(member_ids: List[Any]) -> str:
 	return hashlib.sha256("\x00".join(sorted(str(i) for i in member_ids)).encode("utf-8")).hexdigest()
 
 
+def is_hub_node(payload: Dict[str, Any]) -> bool:
+	"""El punto es un hub de síntesis (marcado por fase Lazarus o por `node_type`)."""
+	return payload.get("lazarus_phase") == HUB_NODE_TYPE or payload.get("node_type") == HUB_NODE_TYPE
+
+
+def is_content_node(payload: Dict[str, Any]) -> bool:
+	"""Engrama de contenido agrupable en un hub: Memento o legacy sin `node_type`; nunca un hub.
+
+	Predicado único: lo usan la síntesis (qué se agrupa) y la observabilidad D26
+	(sobre qué se mide la cobertura), para que numerador y denominador casen.
+	"""
+	if is_hub_node(payload):
+		return False
+	return payload.get("node_type") in _CONTENT_NODE_TYPES or payload.get("origin") == "memento"
+
+
 def group_by_session(points: List[Tuple[Any, Dict[str, Any]]]) -> Dict[str, List[Tuple[Any, Dict[str, Any]]]]:
 	"""Agrupa engramas de contenido por `session_id` (excluye hubs y sin sesión)."""
 	groups: Dict[str, List[Tuple[Any, Dict[str, Any]]]] = {}
 	for pid, payload in points:
 		payload = payload or {}
-		if payload.get("lazarus_phase") == HUB_NODE_TYPE or payload.get("node_type") == HUB_NODE_TYPE:
-			continue
-		node_type = payload.get("node_type")
-		if node_type not in _CONTENT_NODE_TYPES and payload.get("origin") != "memento":
+		if not is_content_node(payload):
 			continue
 		sid = str(payload.get("session_id") or "")
 		if not sid:

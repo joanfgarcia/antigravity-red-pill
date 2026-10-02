@@ -158,3 +158,64 @@ def test_agent_core_root_reads_registry_without_env(tmp_path, monkeypatch):
 
 	monkeypatch.setenv("AGENT_CORE_DIR", str(tmp_path / "env-desk"))
 	assert paths.get_agent_core_root() == tmp_path / "env-desk"
+
+
+def test_normalize_plugins_tolerates_bad_yaml(caplog):
+	"""`plugins` como lista o valores escalares no tumban el merge: se ignoran con warning."""
+	from red_pill.swarm.agents import janitor as mod
+
+	assert mod._normalize_plugins(["events_db_purge"], "janitor.yaml") == {}
+	assert mod._normalize_plugins(None, "janitor.yaml") == {}
+	out = mod._normalize_plugins(
+		{"a": {"days_to_keep": 3}, "b": False, "c": None, "d": 7, "e": "texto", "f": [1]},
+		"janitor.yaml",
+	)
+	assert out == {"a": {"days_to_keep": 3}, "b": {"enabled": False}, "c": {}}
+	assert "'d'" in caplog.text and "'e'" in caplog.text and "'f'" in caplog.text
+
+
+def test_janitor_execute_survives_malformed_config(tmp_path, monkeypatch):
+	"""YAML con `plugins` escalares + caller con config inválida → el barrido corre y el
+	atajo `nombre: false` sigue desactivando el plugin."""
+	from red_pill.swarm.agents import janitor as mod
+	from red_pill.swarm.agents.janitor_plugins.base import JanitorPlugin
+
+	seen = {}
+
+	class _Probe(JanitorPlugin):
+		@property
+		def name(self):
+			return "probe"
+
+		async def execute(self, janitor, config_dict, **kwargs):
+			seen["cfg"] = config_dict["plugins"].get("probe")
+			return {}
+
+	class _Off(_Probe):
+		@property
+		def name(self):
+			return "apagado"
+
+	(tmp_path / "janitor.yaml").write_text("plugins:\n  probe: true\n  apagado: false\n  broken: 3\n")
+	monkeypatch.setattr(mod, "get_config_dir", lambda: tmp_path)
+	monkeypatch.setattr(mod, "discover_plugins", lambda: [_Probe(), _Off()])
+
+	janitor = JanitorMinion()
+	object.__setattr__(janitor, "log", MagicMock())
+	res = asyncio.run(janitor.execute("sweep", config={"plugins": {"probe": {"ttl_h": 1}, "bad": [1, 2]}}))
+
+	assert res["status"] == "success"
+	assert res["plugins_run"] == 1  # `apagado: false` desactiva; `broken`/`bad` se ignoran
+	assert seen["cfg"] == {"enabled": True, "ttl_h": 1}
+
+
+def test_janitor_execute_plugins_list_in_yaml(tmp_path, monkeypatch):
+	from red_pill.swarm.agents import janitor as mod
+
+	(tmp_path / "janitor.yaml").write_text("plugins:\n  - events_db_purge\n")
+	monkeypatch.setattr(mod, "get_config_dir", lambda: tmp_path)
+	monkeypatch.setattr(mod, "discover_plugins", lambda: [])
+	janitor = JanitorMinion()
+	object.__setattr__(janitor, "log", MagicMock())
+	res = asyncio.run(janitor.execute("sweep", days_to_keep=3))
+	assert res["status"] == "success"

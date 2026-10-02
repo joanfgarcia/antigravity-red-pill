@@ -3,7 +3,7 @@ type: index
 title: "${AGENT_CORE_DIR} — Índice"
 status: active
 created: 2026-09-13
-updated: 2026-09-13
+updated: 2026-10-02
 author: "Joan García (Operator) / Aleth (Agent)"
 project: aleth-core
 tags: [index]
@@ -17,8 +17,9 @@ en cada proyecto; aquí viven las ideas, las decisiones de diseño y la memoria 
 agente.
 
 > Los `.md` de este despacho llevan frontmatter YAML — ver
-> [`FRONTMATTER_TEMPLATE.md`](FRONTMATTER_TEMPLATE.md) y el ciclo de vida de RFCs
-> en [`planner/design/governance/RFC_FLUJO_RFCS.md`](planner/design/governance/RFC_FLUJO_RFCS.md).
+> [`FRONTMATTER_TEMPLATE.md`](FRONTMATTER_TEMPLATE.md). El ciclo de vida de RFCs
+> está resumido en [`planner/README.md`](planner/README.md) (y detallado en
+> `planner/design/governance/RFC_FLUJO_RFCS.md` si tu despacho lo tiene).
 
 > **Seguimiento de estados**: no hay un panel físico — el árbol ES el panel.
 > La fase de cada ítem es su carpeta (ver [`planner/README.md`](planner/README.md)).

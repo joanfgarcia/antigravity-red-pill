@@ -8,6 +8,10 @@ project workspace.
 
 Guest principle (same as the others): deep-merge, never overwrite. Arrays under
 ``permissions`` are unioned (append + dedupe); every unrelated key is preserved.
+Hook blocks are the one exception: the blocks red-pill owns (every command runs a
+``~/.claude/hooks/redpill_*.py`` script) are *replaced* by the seed's current
+ones, so a changed block never stays behind next to its new version (the hook
+would run twice). The operator's own blocks are never touched.
 
 SECURITY: this never writes ``defaultMode``/``bypassPermissions``. Autonomous
 permission bypass is a per-launch CLI flag for the headless awakening runner
@@ -21,6 +25,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import shutil
 import sys
 
@@ -31,6 +36,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _config_common import agent_core_vars, build_vars, subst, workspace_access_dirs, workspace_memory_dirs  # noqa: E402
 
 PERMISSION_LIST_KEYS = ("allow", "ask", "deny", "additionalDirectories")
+
+# Marcador de propiedad de un hook: el script que despliega deploy_hook_scripts
+# (seeds/settings/hooks/redpill_*.py → ~/.claude/hooks/).
+_MANAGED_HOOK_RE = re.compile(r"/\.claude/hooks/redpill_[\w.-]*\.py\b")
 
 
 def _strip_comments(value):
@@ -62,6 +71,59 @@ def deep_merge(base, frag):
 	return base
 
 
+def _is_managed_block(block):
+	"""Un matcher-block es de red-pill si TODOS sus comandos ejecutan un script redpill_*.py.
+
+	Un bloque mixto (red-pill + algo del operador) no se considera nuestro: no se toca.
+	"""
+	if not isinstance(block, dict):
+		return False
+	hooks = block.get("hooks")
+	if not isinstance(hooks, list) or not hooks:
+		return False
+	return all(isinstance(h, dict) and isinstance(h.get("command"), str) and _MANAGED_HOOK_RE.search(h["command"]) for h in hooks)
+
+
+def prune_managed_hooks(settings, keep=None):
+	"""Quita los bloques de hook de red-pill que no estén en `keep` (evento → bloques).
+
+	Con `keep=None` los quita todos (desinstalación). Los duplicados de un bloque
+	vigente se colapsan a uno. Los bloques del operador quedan intactos, y un
+	evento o `hooks` vacíos solo se borran si los vació esta poda.
+	"""
+	hooks_s = settings.get("hooks")
+	if not isinstance(hooks_s, dict):
+		return settings
+	keep = keep or {}
+	emptied = False
+	for event in list(hooks_s):
+		blocks = hooks_s[event]
+		if not isinstance(blocks, list):
+			continue
+		wanted = keep.get(event) or []
+		kept = []
+		for block in blocks:
+			if _is_managed_block(block) and (block not in wanted or block in kept):
+				continue
+			kept.append(block)
+		if len(kept) == len(blocks):
+			continue
+		if kept:
+			hooks_s[event] = kept
+		else:
+			del hooks_s[event]
+			emptied = True
+	if emptied and not hooks_s:
+		del settings["hooks"]
+	return settings
+
+
+def merge_fragment(settings, frag):
+	"""Mergea el fragmento: poda los hooks de red-pill obsoletos y luego deep-merge."""
+	prune_managed_hooks(settings, frag.get("hooks") or {})
+	return deep_merge(settings, frag)
+
+
 def remove_fragment(settings, frag):
 	"""Remove only the fragment's own list items; leave everything else intact."""
 	perms_f = frag.get("permissions", {})
@@ -86,6 +148,9 @@ def remove_fragment(settings, frag):
 					del hooks_s[event]
 		if not hooks_s:
 			del settings["hooks"]
+		# También los bloques de red-pill de seeds anteriores (comando cambiado,
+		# evento movido): ya no son iguales al fragmento pero siguen siendo nuestros.
+		prune_managed_hooks(settings)
 	return settings
 
 
@@ -221,7 +286,7 @@ def main():
 		else:
 			remove_fragment(after, fragment)
 	else:
-		deep_merge(after, fragment)
+		merge_fragment(after, fragment)
 
 	if after == before:
 		logger.info(f"• {target}: sin cambios.")

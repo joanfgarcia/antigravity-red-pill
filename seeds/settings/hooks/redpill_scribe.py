@@ -200,33 +200,39 @@ def _write(user_prompt: str, agent_response: str, model, session_id: str = ""):
 		conn.close()
 
 
-def main() -> int:
+def _run() -> None:
 	try:
 		payload = json.load(sys.stdin)
 	except Exception:
-		return 0
+		return
+	if not isinstance(payload, dict):
+		return
 
 	transcript_path = payload.get("transcript_path")
-	session_id = payload.get("session_id", "")
+	session_id = payload.get("session_id")
+	session_id = session_id if isinstance(session_id, str) else ""
 	# P4: el fin de turno se marca SIEMPRE (aunque el parseo del transcript falle
 	# o Stop venga de clear/resume/compact → un `.end` extra es inocuo).
 	_touch_liveness(session_id, "end")
-	if not transcript_path or not os.path.isfile(transcript_path):
-		return 0
+	if not isinstance(transcript_path, str) or not os.path.isfile(transcript_path):
+		return
 
+	parsed = _parse_transcript(transcript_path)
+	if not parsed:
+		return
+	user_prompt, agent_response, model, marker = parsed
+	if not user_prompt and not agent_response:
+		return
+	if _dedup_seen(session_id, marker):
+		return
+	_write(user_prompt, agent_response, model, session_id=session_id)
+
+
+def main() -> int:
 	try:
-		parsed = _parse_transcript(transcript_path)
-		if not parsed:
-			return 0
-		user_prompt, agent_response, model, marker = parsed
-		if not user_prompt and not agent_response:
-			return 0
-		if _dedup_seen(session_id, marker):
-			return 0
-		_write(user_prompt, agent_response, model, session_id=session_id)
+		_run()
 	except Exception:
-		# Never block the turn on a scribe failure.
-		return 0
+		pass  # Never block the turn on a scribe failure.
 	return 0
 
 

@@ -34,6 +34,7 @@
  *   message.updated      → on user: track msg ID; on assistant: track model
  *   message.part.updated → accumulate assistant response text (streaming)
  *   session.idle         → FLUSH to DB (status.idle as fallback)
+ *   session.created/updated/deleted → track sub-sessions (parentID): no heartbeat
  *   dispose              → flush remaining buffers on plugin unload
  *
  * NOTE: the flush trigger is the END of the turn (session.idle, verified in
@@ -70,14 +71,30 @@ import { mkdirSync, writeFileSync } from "node:fs";
 const QUEUE_DB = "${QUEUE_DB}";
 const STATE_DIR = "${STATE_DIR}";
 const ORIGINATOR = "opencode";
-const DISABLED = process.env.REDPILL_SCRIBE_DISABLE === "1";
+// Apaga SOLO la captura (el bridge ya relaya el turno). El latido sigue: una
+// sesión sin captura (p.ej. Telegram) sigue viva y debe verse en el tablón.
+const CAPTURE_DISABLED = process.env.REDPILL_SCRIBE_DISABLE === "1";
 
 // ── SESSION LIVENESS (RFC-DESPERTAR-001, P4) ────────────────────────────────
 // Touch de un fichero vacío por turno: `.start` al recibir el prompt, `.end` al
 // terminar el turno. mtime = señal; el par detecta "en vuelo". Best-effort:
 // nunca rompe el turno. Ver red_pill/core/session_liveness.py.
+//
+// Las sub-sesiones (tool `task`, paneles de subagentes: `parentID`) no laten:
+// mientras corren, el turno del padre ya está en vuelo. Se conocen por los
+// eventos session.created/updated (v1); si un `.start` se cuela antes del
+// evento, el tablón las descarta igualmente por `parent_id` en opencode.db.
+const childSessions = new Set();
+
+function trackSessionInfo(event) {
+  const info = event?.properties?.info;
+  if (!info?.id) return;
+  if (event.type === "session.deleted") childSessions.delete(info.id);
+  else if (info.parentID) childSessions.add(info.id);
+}
+
 function touchLiveness(sessionId, phase) {
-  if (!sessionId || !STATE_DIR || STATE_DIR.includes("${")) return;
+  if (!sessionId || childSessions.has(sessionId) || !STATE_DIR || STATE_DIR.includes("${")) return;
   try {
     const safe = String(sessionId).replace(/\//g, "_").replace(/__/g, "_");
     const dir = `${STATE_DIR}/sessions/live`;
@@ -179,6 +196,15 @@ async function handleV2Event(event) {
   const data = event?.data;
   const sessionId = data?.sessionID;
   if (!type || !sessionId) return;
+
+  // Fin de turno: el latido va antes del estado de captura (sin captura no hay
+  // state, pero la sesión sí ha terminado su turno). flushSession sin state = no-op.
+  if (type === "session.execution.succeeded" || type === "session.execution.failed") {
+    touchLiveness(sessionId, "end");
+    await flushSession(sessionId);
+    return;
+  }
+
   const state = sessions.get(sessionId);
   if (!state) return;
 
@@ -190,12 +216,6 @@ async function handleV2Event(event) {
 
   if (type === "session.text.delta") {
     if (typeof data.delta === "string" && data.delta) state.response += data.delta;
-    return;
-  }
-
-  if (type === "session.execution.succeeded" || type === "session.execution.failed") {
-    touchLiveness(sessionId, "end");
-    await flushSession(sessionId);
   }
 }
 
@@ -204,16 +224,15 @@ export default {
 
   async setup(ctx) {
     // Si el proceso fue lanzado por un bridge red-pill (Telegram/awakenings/
-    // minions), el bridge ya relaya el turno a la cola: el plugin se abstiene
-    // para no duplicar (y para no capturar el prompt envuelto sin respuesta).
-    if (DISABLED) return;
+    // minions), el bridge ya relaya el turno a la cola: el plugin no captura
+    // (no duplica ni guarda el prompt envuelto sin respuesta), pero sí late.
     if (typeof ctx?.session?.hook !== "function" || typeof ctx?.event?.subscribe !== "function") return;
 
     await ctx.session.hook("prompt", (event) => {
       const sessionId = event?.sessionID;
       const text = event?.prompt?.text;
       if (sessionId) touchLiveness(sessionId, "start");
-      if (sessionId && text) {
+      if (sessionId && text && !CAPTURE_DISABLED) {
         sessions.set(sessionId, { prompt: text, response: "", modelID: null, userMsgIDs: new Set() });
       }
     });
@@ -241,8 +260,8 @@ export default {
   },
 
   async server() {
-    if (DISABLED) return {};
-
+    // Sin captura no se crea state: los hooks de captura quedan inertes
+    // (`!state`) y solo se marca el latido.
     return {
       dispose: async () => {
         for (const [sid, state] of sessions) {
@@ -259,6 +278,7 @@ export default {
       "chat.message": async (input, output) => {
         const { sessionID } = input;
         if (sessionID) touchLiveness(sessionID, "start");
+        if (CAPTURE_DISABLED) return;
         const parts = output.parts || [];
         const textParts = parts
           .filter((p) => p.type === "text")
@@ -275,6 +295,11 @@ export default {
       },
 
       event: async ({ event }) => {
+        if (event.type === "session.created" || event.type === "session.updated" || event.type === "session.deleted") {
+          trackSessionInfo(event);
+          return;
+        }
+
         if (event.type === "message.updated") {
           const msg = event.properties?.info;
           if (!msg?.sessionID) return;

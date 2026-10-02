@@ -38,7 +38,7 @@ from _config_common import agent_core_vars, build_vars, subst  # noqa: E402
 BLOCK_VERSION = {
 	"sovereign_handshake": 3,
 	"agent_core": 2,
-	"knowledge_access": 3,
+	"knowledge_access": 4,
 	"frontmatter_docs": 3,
 	"job_dag_execution": 1,
 }
