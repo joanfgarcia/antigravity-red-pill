@@ -13,10 +13,10 @@ Varias entradas de más abajo quedan **matizadas** por esta sección.
   escribe por defecto en `scratch/benchmarks/` (git-ignored; `--out-dir` para publicar). Los
   `AUTONOMY_*.jsonl` ya commiteados, redactados. P4 exige ≥1 resultado del Bünker sin error:
   el 4.2 pasa de `6/7` a `5/7` (DECISION_LOG AD-041).
-- **[FIX] La suite de tests ya no toca producción:** `conftest` redirige `XDG_CONFIG_HOME`,
-  `XDG_STATE_HOME`, `AGENT_CORE_DIR` e `IA_DIR`, y la guardia cubre config, state y desk.
-  `test_bunker_restore_stub` restauraba un kit sobre los `.env` reales y `test_bunker_export_stub`
-  dejaba un kit por ejecución en `backups/export/` del checkout vivo.
+- **[FIX] La suite de tests es hermética** (completado en la segunda revisión, abajo): `conftest`
+  redirige `XDG_CONFIG_HOME`, `XDG_STATE_HOME`, `XDG_RUNTIME_DIR`, `AGENT_CORE_DIR` e `IA_DIR`, y la
+  guardia cubre config, state, runtime y desk. `test_bunker_restore_stub` restauraba un kit sobre los
+  `.env` reales y `test_bunker_export_stub` dejaba un kit por ejecución en `backups/export/`.
 
 **Minion `local-tools` y Granite 4.2** (AD-042)
 - **[FIX] `extract_thinking`** partía la prosa por la palabra «response» (`"No responses found"` →
@@ -78,6 +78,69 @@ Varias entradas de más abajo quedan **matizadas** por esta sección.
   viven en el árbol `planner/` del desk (una fase = una carpeta; los RFC en `design/<familia>/`),
   se consulta **primero** antes de buscar en el repo, y el proyecto **nunca** aloja ni referencia
   el RFC del desk — solo su esencia implementada (`AD-NNN`, docs del repo).
+
+### 🔁 Segunda revisión de la remediación — colaterales (2026-10-02)
+
+Cinco revisores sobre la rama ya remediada (consumidores entre repos, ruta de actualización,
+datos reales en solo lectura, privacidad del repo público, neon-link). Lo encontrado y corregido:
+
+**Producción tocada desde los tests y el auditor** (AD-045)
+- **[FIX] `redpill-auditor` corría cada hora la suite completa del checkout vivo** en una unit
+  con 120 s de tope: nunca terminaba («falla por timeout» desde el 21-sep) y, a media pasada,
+  reescribía los `.env`, dejaba un kit en `backups/export` (de ahí los ~1170), vaciaba
+  `gpu_reservations.json`, descargaba el modelo (`/v1/unload`) y pedía inferencia `hub` con memorias
+  reales — con la GPU ocupada eso tiró a CPU y acabó en un OOM. La suite pasa a ser opt-in
+  (`AUDITOR_RUN_TESTS`, default `false`; solo unitarios) y cada paso (ruff, mypy, tests) se repite
+  **solo si el código cambió** desde que ese paso terminó (huella de git; la caché por mtime nunca
+  llegaba a guardarse porque la unit mataba la pasada).
+- **[FIX] Guarda de red y de host en la suite:** conexiones a Qdrant, al LLM local y a neon-link
+  (6333/6334/8760/8761/8770/8771), a sockets UNIX fuera del sandbox o a hosts remotos hacen fallar
+  el test aunque el código se trague el error (opt-out `@pytest.mark.allow_local_services`);
+  `systemctl`/`journalctl`/`podman`/`docker`/`systemd-run` emulados (lectura → `inactive`
+  determinista; verbos que mutan → fallo); `XDG_RUNTIME_DIR` redirigido; sandbox temporal por
+  sesión que se borra al acabar (cada pasada dejaba ~2.5k `bunker_test_*` en `/tmp`, tmpfs);
+  HF/CUDA offline.
+- **[FIX]** Las fases de síntesis del sueño y `BitTrainingDriver` resuelven Qdrant, clave, LLM y
+  unload desde config (llevaban `localhost:6333`/`127.0.0.1:8760` a fuego y cargaban el `.env` del home).
+
+**Despertar y minion**
+- **[FIX] Regresión del Derecho al Silencio introducida por la primera remediación:** la regla
+  «empieza por la frase y < 200 caracteres» perdía 21 de 61 silencios reales (el bridge pega la
+  narración intermedia delante de la frase). Ahora: termina con la frase, o empieza por ella y
+  mide < 400. Validado contra los 163 despertares reales: 61/61, 0 discrepancias.
+- **[FIX]** `max_tokens` del minion sale de candidato > task > 1024, nunca del `max_tokens` del
+  perfil (es un knob de contexto: llegaba a 4096/8192 por turno). `temperature: 0` ya se respeta.
+- **[SEC]** Minion local: allowlist de acciones de solo lectura por API MCP (fuera
+  `run_agent_task`/`control_bunker`) y jaula de `run_bash` por defecto en producción (directorio de
+  trabajo propio; rutas absolutas fuera, `..`, `~`/`$HOME` bloqueados). El arnés de autonomía
+  reutiliza esa política y ya no filtra el resumen del asistente de las sondas vivas.
+
+**Tablón, Janitor, instalación**
+- **[NEW] `workspaces.yaml: worktrees:`** por workspace: atribuye al proyecto las sesiones en
+  worktrees ya borrados (la detección por `.git` vivo queda de respaldo). `serialize_registry` ya
+  no pierde `track`.
+- **[FIX]** Proyecto de sesión = el más frecuente en las últimas 200 rutas (un `ls` suelto ya no lo
+  cambia); rutas embebidas en bash solo tras separador; un cliente Qdrant por proceso;
+  `list_sessions` no crea directorios al leer.
+- **[FIX]** `awakening_logs` prepara la baja en el git del desk (`git rm --cached`) y compara fechas.
+- **[FIX]** Cobertura de hubs sobre lo que la síntesis puede agrupar (contenido con `session_id`):
+  el legacy sin sesión hundía el denominador.
+- **[FIX]** `events_db_purge` no deja huérfana una dead letter viva (borra las cartas por su reloj y
+  la fila `FAILED` solo cuando ya no la referencia ninguna).
+- **[FIX]** `red-pill p2p advertise` anuncia la identidad viva de neon-link (bóveda XDG), no la
+  seed pre-XDG.
+- **[FIX]** `bunker install|update`, `install_neo.sh` y `upgrade.sh` siembran `task_profiles.yaml` y
+  `model_catalog.yaml` si faltan (una instalación nueva daba 400 en toda task); fuera el
+  `seed_task_profiles()` muerto.
+- **[FIX]** Cambiar el desk en `config_tui` actualiza también `workspaces.yaml:agent_core`.
+- **[FIX]** Versiones de bloque de opencode desde `inject_anchor.BLOCK_VERSION` (el adapter que usa
+  `bunker update` dejaba `knowledge_access v=2`); el ancla de Pi recupera el §4 Desk-First.
+
+**Privacidad del repo público**
+- **[PRIVACY]** Fixtures, tests, prompts distribuidos y docs sin datos personales del operador
+  (familiares, lugares, empresa, asuntos laborales): casos sintéticos que miden lo mismo.
+  Plantillas `systemd/` con `%h` y recetas de `configs/jobs/` portables (sin rutas de usuario).
+  La historia de git no se ha reescrito.
 
 ### 🧭 Tablón de sesiones — proyecto por rutas tocadas + tema rodante (RFC-DESPERTAR-001, P1b)
 

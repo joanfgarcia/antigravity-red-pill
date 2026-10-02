@@ -269,6 +269,17 @@ garantizar el servicio (decisión explícita: lo que se asegura es el registro).
 
 ---
 
+## [AD-045] La suite es hermética y el auditor horario no la corre
+**Date**: 2026-10-02
+**Status**: ACCEPTED — segunda revisión de la remediación del lote DeepSeek.
+**Context**: `redpill-auditor.timer` ejecutaba cada hora `uv run pytest` en el checkout vivo. La suite no era hermética (síntesis y BitTraining con URLs a fuego, `/run/user` real, stubs de backup sobre los `.env` reales) y la unit la mataba a los 120 s: el resultado nunca servía y los efectos sí ocurrían — kits acumulados, `.env` reescritos, reservas de GPU vaciadas, modelo descargado y peticiones `hub` con memorias reales; el 2-oct, con la GPU ocupada, el fallback a CPU llevó a un OOM. La caché diferencial por mtime nunca se guardaba (se escribía al final de la pasada que la unit mataba).
+**Decision**:
+- La suite es hermética **por construcción**: `conftest` instala antes de importar red-pill una guarda de red (Qdrant, LLM local, neon-link, UNIX fuera del sandbox, hosts remotos), emula los comandos de host (`systemctl`/`journalctl`/`podman`/`docker`/`systemd-run`) y redirige config, state, runtime, desk y TMPDIR. Un test que necesite un servicio local real lo declara (`@pytest.mark.allow_local_services`).
+- El auditor horario audita lint y tipos; la suite queda en CI salvo `AUDITOR_RUN_TESTS=true` (solo unitarios).
+- Cada paso del auditor se repite solo si cambió el código desde que ese paso terminó (huella de git), con caché guardada al acabar cada paso.
+
+---
+
 ## [AD-025] Job DAG — el dag_job como plantilla genérica recursiva de composición
 **Date**: 2026-08-08
 **Status**: ACCEPTED — mergeado con el PR #84 (v7.17.0).
