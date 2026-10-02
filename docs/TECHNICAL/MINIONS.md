@@ -129,7 +129,11 @@ as *ungrounded* (`error` set), so an invented or failing tool never passes as ve
     tasks read-only.
   - **Conduct comes from the profiles:** `temperature`, `max_tokens` and `tool_format`
     are resolved in-process for the task `minion_tool` (candidate > task > model
-    profile, fallback 0.3 / 1024 / `auto`); the daemon does not apply them itself. A
+    profile, fallback 0.3 / 1024 / `auto`; a defined `0` counts); the daemon does not
+    apply them itself. `max_tokens` is the exception: candidate > task > 1024, never
+    the model profile (there it is model_runtime's n_ctx fallback, a context knob),
+    clamped to ¼ of the smallest context the profile can be served with (2048 if it
+    declares none) so a rambling turn cannot fill the context. A
     daemon rejection (e.g. a `model` that is not a `minion_tool` candidate → K1, 400)
     surfaces as a readable `SipInferenceError`.
   - **Tool-calling routing (HARNESS-003/004, 2026-09-30):** the daemon MUST pick a

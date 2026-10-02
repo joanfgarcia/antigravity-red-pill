@@ -324,10 +324,13 @@ _TASK = {
 	"max_tokens": 2048,
 	"models": [{"profile": "granite_8b", "default": True}, {"profile": "granite_4_2_8b"}, {"profile": "granite_4_2_3b", "max_tokens": 3000}],
 }
+# Contexto holgado (techo de generación = 16384 // 4 = 4096): estos perfiles
+# prueban la precedencia, no el recorte.
+_WIDE_CTX = {"n_ctx": 16384}
 _PROFILES = {
-	"granite_8b": {"temperature": 0.3, "max_tokens": 4096, "minion_chat_format": "chatml-function-calling", "tool_format": "qwen"},
-	"granite_4_2_8b": {"temperature": 1.0, "max_tokens": 8192, "thinking": "on", "minion_chat_format": None, "tool_format": "qwen"},
-	"granite_4_2_3b": {"temperature": 1.0, "max_tokens": 8192, "thinking": "on", "tool_format": "qwen"},
+	"granite_8b": {"temperature": 0.3, "max_tokens": 4096, "minion_chat_format": "chatml-function-calling", "tool_format": "qwen", "hardware_affinity": _WIDE_CTX},
+	"granite_4_2_8b": {"temperature": 1.0, "max_tokens": 8192, "thinking": "on", "minion_chat_format": None, "tool_format": "qwen", "hardware_affinity": _WIDE_CTX},
+	"granite_4_2_3b": {"temperature": 1.0, "max_tokens": 8192, "thinking": "on", "tool_format": "qwen", "hardware_affinity": _WIDE_CTX},
 }
 
 
@@ -369,6 +372,81 @@ def test_conduct_sin_task_usa_defaults(monkeypatch):
 	# sin max_tokens en task ni perfil → fallback 1024
 	_fake_profiles(monkeypatch, task={"models": [{"profile": "p"}]}, profiles={"p": {}})
 	assert _REAL_CONDUCT()["max_tokens"] == 1024
+
+
+# Perfiles con la forma real del operador: `max_tokens` del perfil es el n_ctx
+# de reserva de model_runtime (perilla de contexto), no un tope de generación.
+_REAL_SHAPED = {
+	"granite_8b": {
+		"temperature": 0.3,
+		"max_tokens": 4096,
+		"cpu_n_ctx": 16384,
+		"hardware_affinity": {
+			"n_ctx": 16384,
+			"vram_tiers": [
+				{"min_free_gb": 1.5, "n_ctx": 16384, "n_gpu_layers": 0},
+				{"min_free_gb": 6.5, "n_ctx": 6144, "n_gpu_layers": -1},
+				{"min_free_gb": 8.2, "n_ctx": 16384, "n_gpu_layers": -1},
+			],
+		},
+	},
+	"granite_4_2_8b": {
+		"temperature": 0.3,
+		"max_tokens": 8192,
+		"thinking": "on",
+		"cpu_n_ctx": 16384,
+		"hardware_affinity": {"n_ctx": 32768, "vram_tiers": [{"min_free_gb": 6.5, "n_ctx": 6144, "n_gpu_layers": -1}]},
+	},
+}
+_REAL_TASK = {"thinking": "off", "models": [{"profile": "granite_8b", "default": True}, {"profile": "granite_4_2_8b"}]}
+
+
+def test_max_tokens_nunca_sale_del_perfil(monkeypatch):
+	"""Regresión MEDIA: con la task real (sin max_tokens) el minion generaba hasta
+	4096 (granite_8b) u 8192 (granite_4_2_8b, ≥ su n_ctx de tier GPU) por turno."""
+	_fake_profiles(monkeypatch, task=_REAL_TASK, profiles=_REAL_SHAPED)
+	assert _REAL_CONDUCT()["max_tokens"] == local_minion.DEFAULT_MAX_TOKENS
+	assert _REAL_CONDUCT("granite_4_2_8b")["max_tokens"] == local_minion.DEFAULT_MAX_TOKENS
+
+
+def test_max_tokens_recortado_al_contexto_mas_pequeno(monkeypatch):
+	"""Un max_tokens explícito enorme se recorta a 1/4 del contexto más pequeño
+	con el que el daemon puede servir el perfil (tier de 6144 → 1536)."""
+	task = {**_REAL_TASK, "max_tokens": 6000, "models": [{"profile": "granite_8b", "max_tokens": 9000}]}
+	_fake_profiles(monkeypatch, task=task, profiles=_REAL_SHAPED)
+	assert _REAL_CONDUCT()["max_tokens"] == 6144 // local_minion.MAX_TOKENS_CTX_FRACTION
+
+
+def test_max_tokens_sin_contexto_declarado_usa_el_tope_constante(monkeypatch):
+	_fake_profiles(monkeypatch, task={"max_tokens": 9000, "models": [{"profile": "p"}]}, profiles={"p": {"temperature": 0.5}})
+	assert _REAL_CONDUCT()["max_tokens"] == local_minion.MAX_TOKENS_CAP
+	# perfil desconocido (model explícito que no está en el registro): mismo tope
+	assert _REAL_CONDUCT("no_existe")["max_tokens"] == local_minion.MAX_TOKENS_CAP
+
+
+def test_context_floor():
+	floor = local_minion._context_floor
+	assert floor(_REAL_SHAPED["granite_8b"]) == 6144
+	assert floor({"max_tokens": 4096}) == 4096  # sin n_ctx: la reserva de model_runtime
+	assert floor({"hardware_affinity": {"n_ctx": True}}) == 0  # bool no es tamaño
+	assert floor({}) == 0
+
+
+def test_temperatura_cero_es_un_valor(monkeypatch):
+	"""`temperature: 0` (greedy) no se pisa con la del siguiente nivel."""
+	task = {"temperature": 0, "models": [{"profile": "granite_8b"}]}
+	_fake_profiles(monkeypatch, task=task, profiles=_REAL_SHAPED)
+	assert _REAL_CONDUCT()["temperature"] == 0.0
+	task = {"temperature": 0.7, "models": [{"profile": "granite_8b", "temperature": 0}]}
+	_fake_profiles(monkeypatch, task=task, profiles=_REAL_SHAPED)
+	assert _REAL_CONDUCT()["temperature"] == 0.0
+
+
+def test_thinking_false_del_candidato_gana_a_la_task(monkeypatch):
+	"""YAML `thinking: off` llega como False: es un valor, no un hueco."""
+	task = {"thinking": "on", "models": [{"profile": "granite_4_2_8b", "thinking": False}]}
+	_fake_profiles(monkeypatch, task=task, profiles=_REAL_SHAPED)
+	assert _REAL_CONDUCT()["chat_format"] == "granite-nothink"
 
 
 async def test_la_conducta_viaja_en_cada_peticion(monkeypatch):

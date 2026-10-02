@@ -30,6 +30,16 @@ _RESULT_CLAMP = 4000  # chars of tool output fed back to the model
 MINION_TASK = "minion_tool"
 DEFAULT_TEMPERATURE = 0.3
 DEFAULT_MAX_TOKENS = 1024
+# Generation cap per minion turn. The profile's `max_tokens` is NOT a generation
+# cap: model_runtime uses it as the n_ctx fallback (`_merge_tier` /
+# `_base_from_profile`), so it is a context knob (4096-8192 on the Granite
+# profiles). One turn may use at most 1/MAX_TOKENS_CTX_FRACTION of the smallest
+# context the profile can be served with (static config, no VRAM probe): a
+# rambling turn must leave room for the prompt, the tool schema and the tool
+# results of the next turns. No declared context → the constant cap.
+MAX_TOKENS_CTX_FRACTION = 4
+MAX_TOKENS_CAP = 2048
+_MIN_TOKENS = 256
 
 TOOLS: List[Dict[str, Any]] = [
 	{
@@ -206,6 +216,31 @@ def _parse_native_toolcalls(text: str, tool_format: str = "auto", turn: int = 0)
 	return calls, max(0, opened - len(calls))
 
 
+def _context_floor(profile: Dict[str, Any]) -> int:
+	"""Smallest n_ctx the daemon may serve `profile` with, from static config.
+
+	vram_tiers / hardware_affinity.n_ctx / cpu_n_ctx; without any of them the
+	profile `max_tokens` (model_runtime's n_ctx fallback). 0 = unknown. The
+	smallest tier is the honest bound: the daemon picks it when VRAM is
+	contended, and probing VRAM here would cost a hardware query per run.
+	"""
+
+	def size(value: Any) -> int:
+		return int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0 else 0
+
+	hw = profile.get("hardware_affinity") or {}
+	declared = [t.get("n_ctx") for t in hw.get("vram_tiers") or [] if isinstance(t, dict)]
+	sizes = [n for n in map(size, [*declared, hw.get("n_ctx"), profile.get("cpu_n_ctx")]) if n]
+	return min(sizes) if sizes else size(profile.get("max_tokens"))
+
+
+def _max_tokens_ceiling(profile: Dict[str, Any]) -> int:
+	ctx = _context_floor(profile)
+	if not ctx:
+		return MAX_TOKENS_CAP
+	return max(_MIN_TOKENS, ctx // MAX_TOKENS_CTX_FRACTION)
+
+
 def _minion_conduct(model: str = "") -> Dict[str, Any]:
 	"""Conduct of the minion request: candidate > task `minion_tool` > model profile.
 
@@ -214,6 +249,10 @@ def _minion_conduct(model: str = "") -> Dict[str, Any]:
 	profile's temperature/max_tokens (clients derive conduct, RFC-HARNESS-002 §8):
 	without this the minion always sent 0.3/1024 (IBM's Granite 4.2 recipe needs
 	1.0, and the 4.2-3B spends ~1200 tokens reasoning before the tool call).
+	Precedence is by presence (`is not None`), so `temperature: 0` counts.
+	`max_tokens` comes from candidate > task > DEFAULT_MAX_TOKENS — never from the
+	profile, whose `max_tokens` is a context knob — and is clamped to
+	`_max_tokens_ceiling` (a fraction of the profile's smallest context).
 	Also returns the profile `tool_format` (text tool-call parser) and the
 	chat_format the daemon will serve tools with. `model` = the provider's
 	explicit model (K1: the daemon serves THAT candidate). Nothing resolvable →
@@ -224,7 +263,7 @@ def _minion_conduct(model: str = "") -> Dict[str, Any]:
 	conduct: Dict[str, Any] = {
 		"profile": "",
 		"temperature": DEFAULT_TEMPERATURE,
-		"max_tokens": DEFAULT_MAX_TOKENS,
+		"max_tokens": min(DEFAULT_MAX_TOKENS, MAX_TOKENS_CAP),
 		"tool_format": "auto",
 		"chat_format": TOOL_CHAT_FALLBACK,
 	}
@@ -243,15 +282,22 @@ def _minion_conduct(model: str = "") -> Dict[str, Any]:
 		name = chosen.get("profile") or ""
 		profile = ModelRegistry.get_profile(name) if name else {}
 
-		def pick(key: str) -> Any:
-			return chosen.get(key) or task.get(key) or profile.get(key)
+		def pick(key: str, *sources: Dict[str, Any]) -> Any:
+			"""First source that DEFINES the key (0 / False are values, not gaps)."""
+			for src in sources:
+				value = src.get(key)
+				if value is not None:
+					return value
+			return None
 
+		temperature = pick("temperature", chosen, task, profile)
+		max_tokens = pick("max_tokens", chosen, task)  # never the profile: context knob
 		supported = mr._normalize_thinking(profile.get("thinking", "off")) != "off"
-		thinking = mr._normalize_thinking(chosen.get("thinking") or task.get("thinking") or profile.get("thinking"))
+		thinking = mr._normalize_thinking(pick("thinking", chosen, task, profile))
 		conduct.update(
 			profile=name,
-			temperature=float(pick("temperature") or DEFAULT_TEMPERATURE),
-			max_tokens=int(pick("max_tokens") or DEFAULT_MAX_TOKENS),
+			temperature=float(temperature) if temperature is not None else DEFAULT_TEMPERATURE,
+			max_tokens=min(int(max_tokens or DEFAULT_MAX_TOKENS), _max_tokens_ceiling(profile)),
 			tool_format=mr._normalize_tool_format(profile.get("tool_format")),
 			chat_format=tool_chat_format(profile.get("minion_chat_format"), supported, thinking if supported else "off"),
 		)
