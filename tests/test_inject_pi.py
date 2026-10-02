@@ -122,3 +122,23 @@ def test_inject_idempotente_con_workspace(sandbox_home, adapter):
 	ws = sandbox_home / "ws"
 	adapter.inject(_args(workspace=str(ws)))
 	assert adapter.inject(_args(workspace=str(ws))) == 0  # el override converge
+
+
+def test_pi_knowledge_access_tiene_las_mismas_secciones_que_el_generico():
+	"""El override Pi de knowledge_access no puede perder secciones del ancla genérica
+	(le faltaba el §4 «Plans & RFCs — Desk-First»); solo adapta las herramientas."""
+	import re
+
+	def _sections(rel):
+		with open(os.path.join(REPO_ROOT, rel), encoding="utf-8") as f:
+			return re.findall(r"^## (\d+\.\s.+)$", f.read(), flags=re.M)
+
+	generic = _sections("seeds/anchors/knowledge_access.md")
+	pi = _sections("seeds/pi/anchors/knowledge_access.md")
+	assert [s.split(" ", 1)[0] for s in pi] == [s.split(" ", 1)[0] for s in generic]
+	assert any("Desk-First" in s for s in pi)
+	with open(os.path.join(REPO_ROOT, "seeds/pi/anchors/knowledge_access.md"), encoding="utf-8") as f:
+		text = f.read()
+	assert "${AGENT_CORE_DIR}/planner/design/<family>/" in text
+	# sin puntero colgante: RFC_FLUJO_RFCS solo se cita condicionado a que exista en el desk
+	assert "if your desk carries `planner/design/governance/RFC_FLUJO_RFCS.md`" in text
