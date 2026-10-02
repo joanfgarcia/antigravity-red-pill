@@ -22,8 +22,10 @@ if [ ! -x "$LAYA_VENV/bin/python" ]; then
 fi
 
 mkdir -p "$HOME/.config/systemd/user"
-REPO_LITERAL="$HOME/Documents/IA/sharing"
-VENV_LITERAL="$HOME/.local/share/red-pill/laya-venv"
+# La plantilla usa el especificador %h de systemd (válida tal cual con la
+# disposición por defecto); aquí se fijan las rutas reales de esta máquina.
+REPO_LITERAL="%h/Documents/IA/sharing"
+VENV_LITERAL="%h/.local/share/red-pill/laya-venv"
 sed -e "s|$REPO_LITERAL|$APP_ROOT|g" \
 	-e "s|$VENV_LITERAL|$LAYA_VENV|g" \
 	"$UNIT_SRC" > "$UNIT_DST"
