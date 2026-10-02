@@ -234,6 +234,28 @@ garantizar el servicio (decisión explícita: lo que se asegura es el registro).
 
 ---
 
+## [AD-042] Minion local-tools: los resultados de tools son DATO, no órdenes del operador
+**Date**: 2026-10-02
+**Status**: ACCEPTED — remediación de la auditoría del lote DeepSeek (rama `fix/deepseek-audit-remediation`). Pendiente re-pasar `autonomy_ladder.py --model granite_4_2_8b` contra el modelo real.
+**Context**: AD-041 dejó los resultados realimentados como turno `user` (el handler `chatml-function-calling` no tiene rama `tool`): contenido de ficheros o del Bünker llegaba con autoridad de operador a un bucle con `run_bash` sin jaula y `auto_approve`. Además el parser corría sobre todo el texto (un `<tool_call>` *pensado* dentro de `<think>` se ejecutaba), un tool-call truncado salía como respuesta final, y `extract_thinking` partía la prosa por la palabra «response» (los marcadores reales se habían perdido; verificados en el GGUF: `<think>`/`</think>`).
+**Decision**:
+- Template nativo con rol `tool` (Granite 4.2) → `role="tool"` + `tool_call_id`/`name`. Sin rol `tool` (`chatml-function-calling`) → turno `user` con el resultado **cercado** (`<tool_output id=nonce>`, nonce por ejecución) y etiquetado como no fiable; `_finalize` recibe lo mismo.
+- Los tool-calls se extraen solo de la RESPUESTA (fuera del razonamiento); todos los del turno, con tope total `MAX_TOOL_CALLS=8`; un bloque abierto sin parsear vuelve al modelo como error, nunca como respuesta. `used_tools` solo cuenta resultados válidos.
+- La conducta (temperature, max_tokens, tool_format) sale de candidato > task `minion_tool` > perfil, como en el daemon; el 0.3/1024 fijo queda como fallback.
+
+---
+
+## [AD-043] `janitor.yaml` es config viva y el latido de sesión cierra turnos sin `Stop`
+**Date**: 2026-10-02
+**Status**: ACCEPTED — remediación de la auditoría del lote DeepSeek.
+**Context**: AWAKEN-001 hizo que `JanitorMinion` cargue por fin `${CONFIG_DIR}/janitor.yaml` (el seed estaba inerte) y P4 introdujo el latido `.start/.end`. La auditoría encontró: el plugin `awakening_logs` resolvía el desk solo por env (systemd no la exporta) y fabricaba un desk fantasma; el merge reventaba con tipos inválidos; las sub-sesiones de opencode contaban como vivas; el latido dependía del flag de captura; y en Claude Code un turno que acaba en error de API no dispara `Stop`.
+**Decision**:
+- `janitor.yaml`: merge por plugin (el caller gana), `nombre: bool` = `{enabled: bool}`, tipos inválidos ignorados con warning. TTLs: `awakening_logs` 30 d por **nombre** (`YYYYMMDD_HHMM.log`; lo que no casa no se toca), `session_liveness` 48 h, `events_db_purge` 7 d entregado / 30 d `FAILED`+`dead_letters` (margen para `neon-link redrive`).
+- El desk se resuelve env → `workspaces.yaml:agent_core` → hermano del bunker; los lectores/limpiadores no crean directorios.
+- Latido: independiente de la captura (`REDPILL_SCRIBE_DISABLE` solo apaga la captura); sub-sesiones (`parent_id`) fuera del tablón; `StopFailure` y `SessionEnd` marcan `.end`. Esc no dispara hook alguno → cota `SESSION_ACTIVE_MIN`.
+
+---
+
 ## [AD-025] Job DAG — el dag_job como plantilla genérica recursiva de composición
 **Date**: 2026-08-08
 **Status**: ACCEPTED — mergeado con el PR #84 (v7.17.0).
